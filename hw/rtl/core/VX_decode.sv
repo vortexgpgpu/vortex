@@ -21,12 +21,11 @@ module VX_decode  #(
     input wire              reset,
 
     // inputs
-    VX_ifetch_rsp_if.slave  ifetch_rsp_if,
+    VX_fetch_if.slave       fetch_if,
 
     // outputs      
     VX_decode_if.master     decode_if,
-    VX_wrelease_if.master   wrelease_if,
-    VX_join_if.master       join_if
+    VX_decode_sched_if.master decode_sched_if
 );
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (clk)
@@ -40,7 +39,7 @@ module VX_decode  #(
     reg use_rd, use_PC, use_imm;
     reg is_join, is_wstall;
 
-    wire [31:0] instr = ifetch_rsp_if.data;
+    wire [31:0] instr = fetch_if.data;
     wire [6:0] opcode = instr[6:0];  
     wire [1:0] func2  = instr[26:25];
     wire [2:0] func3  = instr[14:12];
@@ -528,11 +527,11 @@ module VX_decode  #(
     // disable write to integer register r0
     wire wb = use_rd && (rd_r != 0);
 
-    assign decode_if.valid     = ifetch_rsp_if.valid;
-    assign decode_if.uuid      = ifetch_rsp_if.uuid;
-    assign decode_if.wid       = ifetch_rsp_if.wid;
-    assign decode_if.tmask     = ifetch_rsp_if.tmask;
-    assign decode_if.PC        = ifetch_rsp_if.PC;
+    assign decode_if.valid     = fetch_if.valid;
+    assign decode_if.uuid      = fetch_if.uuid;
+    assign decode_if.wid       = fetch_if.wid;
+    assign decode_if.tmask     = fetch_if.tmask;
+    assign decode_if.PC        = fetch_if.PC;
     assign decode_if.ex_type   = ex_type;
     assign decode_if.op_type   = op_type;
     assign decode_if.op_mod    = op_mod;
@@ -547,16 +546,15 @@ module VX_decode  #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire ifetch_rsp_fire = ifetch_rsp_if.valid && ifetch_rsp_if.ready;
+    wire fetch_fire = fetch_if.valid && fetch_if.ready;
 
-    assign join_if.valid = ifetch_rsp_fire && is_join;
-    assign join_if.wid   = ifetch_rsp_if.wid;
-
-    assign wrelease_if.valid = ifetch_rsp_fire && ~is_wstall;
-    assign wrelease_if.wid   = ifetch_rsp_if.wid;
-
-    assign ifetch_rsp_if.ibuf_pop = decode_if.ibuf_pop;
-    assign ifetch_rsp_if.ready = decode_if.ready;
+    assign decode_sched_if.valid    = fetch_fire;
+    assign decode_sched_if.wid      = fetch_if.wid;
+    assign decode_sched_if.is_wstall = is_wstall;
+    assign decode_sched_if.is_join  =  is_join;
+    
+    assign fetch_if.ibuf_pop = decode_if.ibuf_pop;
+    assign fetch_if.ready = decode_if.ready;
 
 `ifdef DBG_TRACE_CORE_PIPELINE
     always @(posedge clk) begin

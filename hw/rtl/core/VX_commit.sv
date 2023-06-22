@@ -18,8 +18,8 @@ module VX_commit #(
 
     // outputs
     VX_writeback_if.master  writeback_if,
-    VX_cmt_to_csr_if.master cmt_to_csr_if,
-    VX_cmt_to_fetch_if.master cmt_to_fetch_if,
+    VX_commit_csr_if.master commit_csr_if,
+    VX_commit_sched_if.master commit_sched_if,
 
     // simulation helper signals
     output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value
@@ -87,7 +87,7 @@ module VX_commit #(
         end
     end
     
-    assign cmt_to_csr_if.instret = instret;
+    assign commit_csr_if.instret = instret;
 
     // Committed instructions
 
@@ -127,8 +127,8 @@ module VX_commit #(
         .data_out ({final_commit_fire_r, final_commit_size_r})
     );
 
-    assign cmt_to_fetch_if.valid = final_commit_fire_r;
-    assign cmt_to_fetch_if.committed = final_commit_size_r;
+    assign commit_sched_if.valid = final_commit_fire_r;
+    assign commit_sched_if.committed = final_commit_size_r;
 
     // Writeback
 

@@ -6,12 +6,8 @@ module VX_gpr_stage #(
     input wire              clk,
     input wire              reset,
 
-    // inputs    
     VX_writeback_if.slave   writeback_if,  
-    VX_gpr_req_if.slave     gpr_req_if,
-
-    // outputs
-    VX_gpr_rsp_if.master    gpr_rsp_if
+    VX_gpr_stage_if.slave   gpr_stage_if
 );
 
     `UNUSED_PARAM (CORE_ID)
@@ -31,14 +27,14 @@ module VX_gpr_stage #(
     wire [RAM_ADDRW-1:0] waddr, raddr1, raddr2;
     if (`NUM_WARPS > 1) begin
         assign waddr  = {writeback_if.wid, writeback_if.rd};
-        assign raddr1 = {gpr_req_if.wid, gpr_req_if.rs1};
-        assign raddr2 = {gpr_req_if.wid, gpr_req_if.rs2};
+        assign raddr1 = {gpr_stage_if.wid, gpr_stage_if.rs1};
+        assign raddr2 = {gpr_stage_if.wid, gpr_stage_if.rs2};
     end else begin
         `UNUSED_VAR (writeback_if.wid)
-        `UNUSED_VAR (gpr_req_if.wid)
+        `UNUSED_VAR (gpr_stage_if.wid)
         assign waddr  = writeback_if.rd;
-        assign raddr1 = gpr_req_if.rs1;
-        assign raddr2 = gpr_req_if.rs2;
+        assign raddr1 = gpr_stage_if.rs1;
+        assign raddr2 = gpr_stage_if.rs2;
     end
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
@@ -54,7 +50,7 @@ module VX_gpr_stage #(
             .waddr (waddr),
             .wdata (writeback_if.data[i]),
             .raddr (raddr1),
-            .rdata (gpr_rsp_if.rs1_data[i])
+            .rdata (gpr_stage_if.rs1_data[i])
         );
 
         VX_dp_ram #(
@@ -69,16 +65,16 @@ module VX_gpr_stage #(
             .waddr (waddr),
             .wdata (writeback_if.data[i]),
             .raddr (raddr2),
-            .rdata (gpr_rsp_if.rs2_data[i])
+            .rdata (gpr_stage_if.rs2_data[i])
         );
     end
     
 `ifdef EXT_F_ENABLE
     wire [RAM_ADDRW-1:0] raddr3;
     if (`NUM_WARPS > 1) begin
-        assign raddr3 = {gpr_req_if.wid, gpr_req_if.rs3};
+        assign raddr3 = {gpr_stage_if.wid, gpr_stage_if.rs3};
     end else begin
-        assign raddr3 = gpr_req_if.rs3;
+        assign raddr3 = gpr_stage_if.rs3;
     end
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
@@ -94,12 +90,12 @@ module VX_gpr_stage #(
             .waddr (waddr),
             .wdata (writeback_if.data[i][`FLEN-1:0]),
             .raddr (raddr3),
-            .rdata (gpr_rsp_if.rs3_data[i][`FLEN-1:0])
+            .rdata (gpr_stage_if.rs3_data[i][`FLEN-1:0])
         );
     end
 `else    
-    `UNUSED_VAR (gpr_req_if.rs3)    
-    assign gpr_rsp_if.rs3_data = '0;
+    `UNUSED_VAR (gpr_stage_if.rs3)    
+    assign gpr_stage_if.rs3_data = '0;
 `endif
     
     assign writeback_if.ready = 1'b1;

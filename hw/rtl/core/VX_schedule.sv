@@ -5,27 +5,27 @@
 import VX_gpu_types::*;
 `IGNORE_WARNINGS_END
 
-module VX_warp_sched #(
+module VX_schedule #(
     parameter CORE_ID = 0
 ) (    
     input wire              clk,
     input wire              reset,
 
+    // configuration
     input base_dcrs_t       base_dcrs,
 
-    VX_warp_ctl_if.slave    warp_ctl_if,
-    VX_wrelease_if.slave    wrelease_if,
-    VX_join_if.slave        join_if,
+    // inputsdecode_if
+    VX_warp_ctl_if.slave    warp_ctl_if,    
     VX_branch_ctl_if.slave  branch_ctl_if,
+    VX_decode_sched_if.slave decode_sched_if,
+    VX_commit_sched_if.slave commit_sched_if,
 
-    VX_ifetch_req_if.master ifetch_req_if,
+    // outputs
+    VX_schedule_if.master   schedule_if,
     VX_gbar_bus_if.master   gbar_bus_if,
+    VX_sched_csr_if.master  sched_csr_if,
 
-    VX_fetch_to_csr_if.master fetch_to_csr_if,
-
-    VX_cmt_to_fetch_if.slave cmt_to_fetch_if,
-
-    // Status
+    // status
     output wire             busy
 );
     `UNUSED_PARAM (CORE_ID)
@@ -69,8 +69,7 @@ module VX_warp_sched #(
     wire [UUID_WIDTH-1:0] instr_uuid;
 
     wire schedule_fire = schedule_valid && schedule_ready;
-
-    wire ifetch_req_fire = ifetch_req_if.valid && ifetch_req_if.ready;
+    wire schedule_if_fire = schedule_if.valid && schedule_if.ready;
 
     wire tmc_active = (warp_ctl_if.tmc.tmask != 0);   
 
@@ -104,11 +103,11 @@ module VX_warp_sched #(
             thread_masks[0] <= 1;
         end else begin
             // join handling
-            if (join_if.valid) begin
+            if (decode_sched_if.valid && decode_sched_if.is_join) begin
                 if (join_else) begin
-                    warp_pcs[join_if.wid] <= `XLEN'(join_pc);
+                    warp_pcs[decode_sched_if.wid] <= `XLEN'(join_pc);
                 end
-                thread_masks[join_if.wid] <= join_tmask;
+                thread_masks[decode_sched_if.wid] <= join_tmask;
             end
 
             if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
@@ -172,12 +171,12 @@ module VX_warp_sched #(
                 issued_instrs[schedule_wid] <= issued_instrs[schedule_wid] + UUID_WIDTH'(1);
             end
 
-            if (ifetch_req_fire) begin
-                warp_pcs[ifetch_req_if.wid] <= `XLEN'(`XLEN'(ifetch_req_if.PC) + 4);
+            if (schedule_if_fire) begin
+                warp_pcs[schedule_if.wid] <= `XLEN'(`XLEN'(schedule_if.PC) + 4);
             end
 
-            if (wrelease_if.valid) begin
-                stalled_warps[wrelease_if.wid] <= 0;
+            if (decode_sched_if.valid && ~decode_sched_if.is_wstall) begin
+                stalled_warps[decode_sched_if.wid] <= 0;
             end
 
             if (busy) begin
@@ -193,7 +192,7 @@ module VX_warp_sched #(
     end
 
     // export cycles counter
-    assign fetch_to_csr_if.cycles = cycles;
+    assign sched_csr_if.cycles = cycles;
 
     // barrier handling
 
@@ -222,14 +221,14 @@ module VX_warp_sched #(
     wire [(`XLEN+`NUM_THREADS)-1:0] ipdom_data [`NUM_WARPS-1:0]; 
     wire ipdom_index [`NUM_WARPS-1:0];
 
-    `RESET_RELAY (ipdom_stack_reset, reset);
+    `RESET_RELAY (ipdom_reset, reset);
     
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin
         wire push = warp_ctl_if.valid 
                  && warp_ctl_if.split.valid
                  && (i == warp_ctl_if.wid);
 
-        wire pop = join_if.valid && (i == join_if.wid);
+        wire pop = decode_sched_if.valid && decode_sched_if.is_join && (i == decode_sched_if.wid);
 
         wire [`NUM_THREADS-1:0] else_tmask = warp_ctl_if.split.else_tmask;
         wire [`NUM_THREADS-1:0] orig_tmask = thread_masks[warp_ctl_if.wid];
@@ -237,12 +236,12 @@ module VX_warp_sched #(
         wire [(`XLEN+`NUM_THREADS)-1:0] q_else = {warp_ctl_if.split.pc, else_tmask};
         wire [(`XLEN+`NUM_THREADS)-1:0] q_end  = {`XLEN'(0),            orig_tmask};
 
-        VX_ipdom_stack #(
+        VX_ipdom #(
             .WIDTH (`XLEN+`NUM_THREADS), 
             .DEPTH (`IPDOM_STACK_SIZE)
-        ) ipdom_stack (
+        ) ipdom (
             .clk   (clk),
-            .reset (ipdom_stack_reset),
+            .reset (ipdom_reset),
             .push  (push),
             .pop   (pop),
             .pair  (warp_ctl_if.split.diverged),
@@ -255,8 +254,8 @@ module VX_warp_sched #(
         );
     end
 
-    assign {join_pc, join_tmask} = ipdom_data[join_if.wid];
-    assign join_else = ~ipdom_index[join_if.wid];
+    assign {join_pc, join_tmask} = ipdom_data[decode_sched_if.wid];
+    assign join_else = ~ipdom_index[decode_sched_if.wid];
 
     // schedule the next ready warp
 
@@ -298,10 +297,10 @@ module VX_warp_sched #(
         .reset    (reset),
         .valid_in (schedule_valid),
         .ready_in (schedule_ready),
-        .data_in  ({instr_uuid,         schedule_tmask,      schedule_pc,      schedule_wid}),
-        .data_out ({ifetch_req_if.uuid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.wid}),
-        .valid_out (ifetch_req_if.valid),
-        .ready_out (ifetch_req_if.ready)
+        .data_in  ({instr_uuid,       schedule_tmask,    schedule_pc,    schedule_wid}),
+        .data_out ({schedule_if.uuid, schedule_if.tmask, schedule_if.PC, schedule_if.wid}),
+        .valid_out (schedule_if.valid),
+        .ready_out (schedule_if.ready)
     );
 
     reg [7:0] pending_instrs;
@@ -312,7 +311,7 @@ module VX_warp_sched #(
 		end else begin
 			pending_instrs <= pending_instrs 
                             + 8'(schedule_fire) 
-                            - ({8{cmt_to_fetch_if.valid}} & 8'(cmt_to_fetch_if.committed));
+                            - ({8{commit_sched_if.valid}} & 8'(commit_sched_if.committed));
 		end
 	end
 
@@ -325,7 +324,7 @@ module VX_warp_sched #(
             timeout_ctr    <= '0;
             timeout_enable <= 0;
         end else begin
-            if (wrelease_if.valid) begin
+            if (decode_sched_if.valid && ~decode_sched_if.is_wstall) begin
                 timeout_enable <= 1;
             end
             if (timeout_enable && active_warps !=0 && active_warps == stalled_warps) begin

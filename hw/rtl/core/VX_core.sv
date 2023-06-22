@@ -80,13 +80,12 @@ module VX_core #(
     // Status
     output wire             busy
 );
-    VX_fetch_to_csr_if  fetch_to_csr_if();
-    VX_cmt_to_fetch_if  cmt_to_fetch_if();
-    VX_cmt_to_csr_if    cmt_to_csr_if();
-    VX_decode_if        decode_if();
+    VX_sched_csr_if     sched_csr_if();
+    VX_decode_sched_if  decode_sched_if();
+    VX_commit_sched_if  commit_sched_if();
+    VX_commit_csr_if    commit_csr_if();
     VX_branch_ctl_if    branch_ctl_if();
-    VX_warp_ctl_if      warp_ctl_if();
-    VX_ifetch_rsp_if    ifetch_rsp_if();
+    VX_warp_ctl_if      warp_ctl_if();    
     VX_alu_req_if       alu_req_if();
     VX_lsu_req_if       lsu_req_if();
     VX_csr_req_if       csr_req_if();
@@ -94,9 +93,9 @@ module VX_core #(
     VX_fpu_agent_if     fpu_agent_if();
 `endif
     VX_gpu_req_if       gpu_req_if();
-    VX_writeback_if     writeback_if();     
-    VX_wrelease_if      wrelease_if();
-    VX_join_if          join_if();
+    VX_schedule_if      schedule_if();
+    VX_fetch_if         fetch_if();
+    VX_decode_if        decode_if();
     VX_commit_if        alu_commit_if();
     VX_commit_if        ld_commit_if();
     VX_commit_if        st_commit_if();
@@ -104,13 +103,15 @@ module VX_core #(
 `ifdef EXT_F_ENABLE
     VX_commit_if        fpu_commit_if();     
 `endif
-    VX_commit_if        gpu_commit_if();     
+    VX_commit_if        gpu_commit_if();    
+    VX_writeback_if     writeback_if();   
 
 `ifdef PERF_ENABLE
     VX_perf_pipeline_if perf_pipeline_if();
 `endif
 
     `RESET_RELAY (dcr_data_reset, reset);
+    `RESET_RELAY (schedule_reset, reset);
     `RESET_RELAY (fetch_reset, reset);
     `RESET_RELAY (decode_reset, reset);
     `RESET_RELAY (issue_reset, reset);
@@ -128,38 +129,49 @@ module VX_core #(
 
     `SCOPE_IO_SWITCH (3)
 
+    VX_schedule #(
+        .CORE_ID (CORE_ID)
+    ) schedule (
+        .clk            (clk),
+        .reset          (schedule_reset),   
+
+        .base_dcrs      (base_dcrs),  
+
+        .warp_ctl_if    (warp_ctl_if),        
+        .branch_ctl_if  (branch_ctl_if),
+        .decode_sched_if(decode_sched_if),
+        .commit_sched_if(commit_sched_if),
+
+        .schedule_if    (schedule_if),
+        .gbar_bus_if    (gbar_bus_if),
+        .sched_csr_if   (sched_csr_if),        
+
+        .busy           (busy)
+    );
+
     VX_fetch #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) fetch (
         `SCOPE_IO_BIND  (0)
         .clk            (clk),
         .reset          (fetch_reset),
-        .base_dcrs      (base_dcrs),
-        .icache_bus_if  (icache_bus_if), 
-        .wrelease_if    (wrelease_if),
-        .join_if        (join_if),        
-        .warp_ctl_if    (warp_ctl_if),
-        .gbar_bus_if    (gbar_bus_if),
-        .branch_ctl_if  (branch_ctl_if),
-        .ifetch_rsp_if  (ifetch_rsp_if),
-        .fetch_to_csr_if(fetch_to_csr_if),
-        .cmt_to_fetch_if(cmt_to_fetch_if),
-        .busy           (busy)
+        .icache_bus_if  (icache_bus_if),
+        .schedule_if    (schedule_if),
+        .fetch_if       (fetch_if)
     );
 
     VX_decode #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) decode (
         .clk            (clk),
         .reset          (decode_reset),
-        .ifetch_rsp_if  (ifetch_rsp_if),
+        .fetch_if       (fetch_if),
         .decode_if      (decode_if),
-        .wrelease_if    (wrelease_if),
-        .join_if        (join_if)
+        .decode_sched_if(decode_sched_if)
     );
 
     VX_issue #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) issue (
         `SCOPE_IO_BIND  (1)
 
@@ -183,7 +195,7 @@ module VX_core #(
     );
 
     VX_execute #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) execute (
         `SCOPE_IO_BIND  (2)
         
@@ -229,8 +241,8 @@ module VX_core #(
     `endif
     `endif
 
-        .cmt_to_csr_if  (cmt_to_csr_if),   
-        .fetch_to_csr_if(fetch_to_csr_if),              
+        .commit_csr_if  (commit_csr_if),   
+        .sched_csr_if   (sched_csr_if),              
         
         .alu_req_if     (alu_req_if),
         .lsu_req_if     (lsu_req_if),        
@@ -249,7 +261,7 @@ module VX_core #(
     );    
 
     VX_commit #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) commit (
         .clk            (clk),
         .reset          (commit_reset),
@@ -264,9 +276,9 @@ module VX_core #(
         .gpu_commit_if  (gpu_commit_if),
         
         .writeback_if   (writeback_if),
-        .cmt_to_csr_if  (cmt_to_csr_if),
-
-        .cmt_to_fetch_if(cmt_to_fetch_if),
+        
+        .commit_csr_if  (commit_csr_if),
+        .commit_sched_if(commit_sched_if),
 
         .sim_wb_value   (sim_wb_value)
     );

@@ -6,7 +6,6 @@ module VX_dispatch (
 
     // inputs
     VX_dispatch_if.slave    dispatch_if,
-    VX_gpr_rsp_if.slave     gpr_rsp_if,
 
     // outputs
     VX_alu_req_if.master    alu_req_if,
@@ -53,7 +52,7 @@ module VX_dispatch (
         .reset     (reset),
         .valid_in  (alu_req_valid),
         .ready_in  (alu_req_ready),
-        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, next_PC,            alu_op_type,        dispatch_if.op_mod, dispatch_if.imm, dispatch_if.use_PC, dispatch_if.use_imm, dispatch_if.rd, dispatch_if.wb, tid,            gpr_rsp_if.rs1_data, gpr_rsp_if.rs2_data}),
+        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, next_PC,            alu_op_type,        dispatch_if.op_mod, dispatch_if.imm, dispatch_if.use_PC, dispatch_if.use_imm, dispatch_if.rd, dispatch_if.wb, tid,            dispatch_if.rs1_data, dispatch_if.rs2_data}),
         .data_out  ({alu_req_if.uuid,  alu_req_if.wid,  alu_req_if.tmask,  alu_req_if.PC,  alu_req_if.next_PC, alu_req_if.op_type, alu_req_if.op_mod,  alu_req_if.imm,  alu_req_if.use_PC,  alu_req_if.use_imm,  alu_req_if.rd,  alu_req_if.wb,  alu_req_if.tid, alu_req_if.rs1_data, alu_req_if.rs2_data}),
         .valid_out (alu_req_if.valid),
         .ready_out (alu_req_if.ready)
@@ -72,7 +71,7 @@ module VX_dispatch (
         .reset     (reset),
         .valid_in  (lsu_req_valid),
         .ready_in  (lsu_req_ready),
-        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, lsu_op_type,        dispatch_if.imm,    dispatch_if.rd, dispatch_if.wb, gpr_rsp_if.rs1_data,  gpr_rsp_if.rs2_data}),
+        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, lsu_op_type,        dispatch_if.imm,    dispatch_if.rd, dispatch_if.wb, dispatch_if.rs1_data,  dispatch_if.rs2_data}),
         .data_out  ({lsu_req_if.uuid,  lsu_req_if.wid,  lsu_req_if.tmask,  lsu_req_if.PC,  lsu_req_if.op_type, lsu_req_if.offset,  lsu_req_if.rd,  lsu_req_if.wb,  lsu_req_if.base_addr, lsu_req_if.store_data}),
         .valid_out (lsu_req_if.valid),
         .ready_out (lsu_req_if.ready)
@@ -87,7 +86,7 @@ module VX_dispatch (
     wire [`NUM_THREADS-1:0][31:0] csr_data;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign csr_data[i] = gpr_rsp_if.rs1_data[i][31:0];
+        assign csr_data[i] = dispatch_if.rs1_data[i][31:0];
     end
 
     VX_skid_buffer #(
@@ -120,13 +119,13 @@ module VX_dispatch (
         .reset     (reset),
         .valid_in  (fpu_req_valid),
         .ready_in  (fpu_req_ready),
-        .data_in   ({dispatch_if.uuid,   dispatch_if.wid,   dispatch_if.tmask,   dispatch_if.PC,   fpu_op_type,          fpu_fmt,          fpu_frm,          dispatch_if.rd,  gpr_rsp_if.rs1_data,   gpr_rsp_if.rs2_data,   gpr_rsp_if.rs3_data}),
-        .data_out  ({fpu_agent_if.uuid,  fpu_agent_if.wid,  fpu_agent_if.tmask,  fpu_agent_if.PC,  fpu_agent_if.op_type, fpu_agent_if.fmt, fpu_agent_if.frm, fpu_agent_if.rd, fpu_agent_if.rs1_data, fpu_agent_if.rs2_data, fpu_agent_if.rs3_data}),
+        .data_in   ({dispatch_if.uuid,  dispatch_if.wid,  dispatch_if.tmask,  dispatch_if.PC,   fpu_op_type,          fpu_fmt,          fpu_frm,          dispatch_if.rd,  dispatch_if.rs1_data,  dispatch_if.rs2_data, dispatch_if.rs3_data}),
+        .data_out  ({fpu_agent_if.uuid, fpu_agent_if.wid, fpu_agent_if.tmask, fpu_agent_if.PC,  fpu_agent_if.op_type, fpu_agent_if.fmt, fpu_agent_if.frm, fpu_agent_if.rd, fpu_agent_if.rs1_data, fpu_agent_if.rs2_data, fpu_agent_if.rs3_data}),
         .valid_out (fpu_agent_if.valid),
         .ready_out (fpu_agent_if.ready)
     );
 `else
-    `UNUSED_VAR (gpr_rsp_if.rs3_data)
+    `UNUSED_VAR (dispatch_if.rs3_data)
 `endif
 
     // gpu unit
@@ -142,8 +141,8 @@ module VX_dispatch (
         .reset     (reset),
         .valid_in  (gpu_req_valid),
         .ready_in  (gpu_req_ready),
-        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, next_PC,            gpu_op_type,        dispatch_if.op_mod, dispatch_if.rd, dispatch_if.wb, tid,            gpr_rsp_if.rs1_data, gpr_rsp_if.rs2_data, gpr_rsp_if.rs3_data}),
-        .data_out  ({gpu_req_if.uuid,  gpu_req_if.wid,  gpu_req_if.tmask,  gpu_req_if.PC,  gpu_req_if.next_PC, gpu_req_if.op_type, gpu_req_if.op_mod,  gpu_req_if.rd,  gpu_req_if.wb,  gpu_req_if.tid, gpu_req_if.rs1_data, gpu_req_if.rs2_data, gpu_req_if.rs3_data}),
+        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, next_PC,            gpu_op_type,        dispatch_if.op_mod, dispatch_if.rd, dispatch_if.wb, tid,            dispatch_if.rs1_data, dispatch_if.rs2_data, dispatch_if.rs3_data}),
+        .data_out  ({gpu_req_if.uuid,  gpu_req_if.wid,  gpu_req_if.tmask,  gpu_req_if.PC,  gpu_req_if.next_PC, gpu_req_if.op_type, gpu_req_if.op_mod,  gpu_req_if.rd,  gpu_req_if.wb,  gpu_req_if.tid, gpu_req_if.rs1_data,  gpu_req_if.rs2_data,  gpu_req_if.rs3_data}),
         .valid_out (gpu_req_if.valid),
         .ready_out (gpu_req_if.ready)
     ); 

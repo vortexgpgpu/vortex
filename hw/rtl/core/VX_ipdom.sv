@@ -1,6 +1,6 @@
 `include "VX_platform.vh"
 
-module VX_ipdom_stack #(
+module VX_ipdom #(
     parameter WIDTH = 1,
     parameter DEPTH = 1
 ) (

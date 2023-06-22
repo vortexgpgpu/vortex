@@ -33,8 +33,8 @@ module VX_csr_data #(
 `endif
 `endif
 
-    VX_cmt_to_csr_if.slave              cmt_to_csr_if,
-    VX_fetch_to_csr_if.slave            fetch_to_csr_if,
+    VX_commit_csr_if.slave              commit_csr_if,
+    VX_sched_csr_if.slave               sched_csr_if,
 
 `ifdef EXT_F_ENABLE
     VX_fpu_to_csr_if.slave              fpu_to_csr_if,
@@ -136,12 +136,12 @@ module VX_csr_data #(
             `CSR_NW         : read_data_ro_r = 32'(`NUM_WARPS);
             `CSR_NC         : read_data_ro_r = 32'(`NUM_CORES * `NUM_CLUSTERS);
             
-            `CSR_MCYCLE     : read_data_ro_r = 32'(fetch_to_csr_if.cycles[31:0]);
-            `CSR_MCYCLE_H   : read_data_ro_r = 32'(fetch_to_csr_if.cycles[`PERF_CTR_BITS-1:32]);
+            `CSR_MCYCLE     : read_data_ro_r = 32'(sched_csr_if.cycles[31:0]);
+            `CSR_MCYCLE_H   : read_data_ro_r = 32'(sched_csr_if.cycles[`PERF_CTR_BITS-1:32]);
             `CSR_MPM_RESERVED : read_data_ro_r = 'x;
             `CSR_MPM_RESERVED_H : read_data_ro_r = 'x;  
-            `CSR_MINSTRET   : read_data_ro_r = 32'(cmt_to_csr_if.instret[31:0]);
-            `CSR_MINSTRET_H : read_data_ro_r = 32'(cmt_to_csr_if.instret[`PERF_CTR_BITS-1:32]);       
+            `CSR_MINSTRET   : read_data_ro_r = 32'(commit_csr_if.instret[31:0]);
+            `CSR_MINSTRET_H : read_data_ro_r = 32'(commit_csr_if.instret[`PERF_CTR_BITS-1:32]);       
             
             `CSR_SATP       : read_data_ro_r = 32'(csr_satp);
             

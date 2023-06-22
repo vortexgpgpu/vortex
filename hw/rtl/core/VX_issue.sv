@@ -27,8 +27,7 @@ module VX_issue #(
     VX_gpu_req_if.master    gpu_req_if
 );
     VX_ibuffer_if       ibuffer_if();    
-    VX_gpr_req_if       gpr_req_if();
-    VX_gpr_rsp_if       gpr_rsp_if();
+    VX_gpr_stage_if     gpr_stage_if();
     VX_writeback_if     sboard_wb_if();
     VX_scoreboard_if    scoreboard_if();
     VX_dispatch_if      dispatch_if();
@@ -36,10 +35,10 @@ module VX_issue #(
     wire [3:0] in_use_regs;
 
     // GPR request interface
-    assign gpr_req_if.wid       = ibuffer_if.wid;
-    assign gpr_req_if.rs1       = ibuffer_if.rs1;
-    assign gpr_req_if.rs2       = ibuffer_if.rs2;
-    assign gpr_req_if.rs3       = ibuffer_if.rs3;
+    assign gpr_stage_if.wid     = ibuffer_if.wid;
+    assign gpr_stage_if.rs1     = ibuffer_if.rs1;
+    assign gpr_stage_if.rs2     = ibuffer_if.rs2;
+    assign gpr_stage_if.rs3     = ibuffer_if.rs3;
 
     // scoreboard writeback interface
     assign sboard_wb_if.valid   = writeback_if.valid;
@@ -80,6 +79,9 @@ module VX_issue #(
     assign dispatch_if.use_imm  = ibuffer_if.use_imm;
     assign dispatch_if.imm      = ibuffer_if.imm;
     assign dispatch_if.rd       = ibuffer_if.rd;
+    assign dispatch_if.rs1_data = gpr_stage_if.rs1_data;
+    assign dispatch_if.rs2_data = gpr_stage_if.rs2_data;
+    assign dispatch_if.rs3_data = gpr_stage_if.rs3_data;
 
     // issue the instruction
     assign ibuffer_if.ready = scoreboard_if.ready && dispatch_if.ready;
@@ -90,7 +92,7 @@ module VX_issue #(
     `RESET_RELAY (dispatch_reset, reset);
 
     VX_ibuffer #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) ibuffer (
         .clk        (clk),
         .reset      (ibuf_reset), 
@@ -99,7 +101,7 @@ module VX_issue #(
     );
 
     VX_scoreboard #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) scoreboard (
         .clk           (clk),
         .reset         (scoreboard_reset),         
@@ -109,20 +111,18 @@ module VX_issue #(
     );
 
     VX_gpr_stage #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) gpr_stage (
         .clk          (clk),      
         .reset        (gpr_reset),          
         .writeback_if (writeback_if),
-        .gpr_req_if   (gpr_req_if),
-        .gpr_rsp_if   (gpr_rsp_if)
+        .gpr_stage_if (gpr_stage_if)
     );
 
     VX_dispatch dispatch (
         .clk        (clk),      
         .reset      (dispatch_reset),
         .dispatch_if(dispatch_if),
-        .gpr_rsp_if (gpr_rsp_if),
         .alu_req_if (alu_req_if),
         .lsu_req_if (lsu_req_if),        
         .csr_req_if (csr_req_if),
@@ -195,9 +195,9 @@ module VX_issue #(
                 ibuffer_if.imm,
                 ibuffer_if.use_PC,
                 ibuffer_if.use_imm,
-                gpr_rsp_if.rs1_data,
-                gpr_rsp_if.rs2_data,
-                gpr_rsp_if.rs3_data,
+                dispatch_if.rs1_data,
+                dispatch_if.rs2_data,
+                dispatch_if.rs3_data,
                 writeback_if.uuid,
                 writeback_if.tmask,
                 writeback_if.rd,
@@ -283,11 +283,11 @@ module VX_issue #(
             `TRACE(1, (", op="));
             trace_ex_op(1, dispatch_if.ex_type, dispatch_if.op_type, dispatch_if.op_mod, dispatch_if.imm);
             `TRACE(1, (", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1_data=",  dispatch_if.op_mod, dispatch_if.tmask, dispatch_if.wb, dispatch_if.rd));
-            `TRACE_ARRAY1D(1, gpr_rsp_if.rs1_data, `NUM_THREADS);
+            `TRACE_ARRAY1D(1, dispatch_if.rs1_data, `NUM_THREADS);
             `TRACE(1, (", rs2_data="));
-            `TRACE_ARRAY1D(1, gpr_rsp_if.rs2_data, `NUM_THREADS);
+            `TRACE_ARRAY1D(1, dispatch_if.rs2_data, `NUM_THREADS);
             `TRACE(1, (", rs3_data="));
-            `TRACE_ARRAY1D(1, gpr_rsp_if.rs3_data, `NUM_THREADS);
+            `TRACE_ARRAY1D(1, dispatch_if.rs3_data, `NUM_THREADS);
             `TRACE(1, (" (#%0d)\n", dispatch_if.uuid));
         end
     end

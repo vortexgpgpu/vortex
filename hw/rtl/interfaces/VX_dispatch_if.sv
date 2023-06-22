@@ -16,6 +16,10 @@ interface VX_dispatch_if ();
     wire [`XLEN-1:0]            imm;
     wire [`NR_BITS-1:0]         rd;
 
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data;
+
     wire                        ready;
 
     modport master (
@@ -32,6 +36,9 @@ interface VX_dispatch_if ();
         output use_imm,
         output imm,
         output rd,
+        output rs1_data,
+        output rs2_data,
+        output rs3_data,
         input  ready
     );
 
@@ -49,6 +56,9 @@ interface VX_dispatch_if ();
         input  use_imm,
         input  imm,
         input  rd,
+        input  rs1_data,
+        input  rs2_data,
+        input  rs3_data,
         output ready
     );
     

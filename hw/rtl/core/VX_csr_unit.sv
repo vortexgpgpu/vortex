@@ -41,8 +41,8 @@ module VX_csr_unit #(
 `endif
 `endif
 
-    VX_cmt_to_csr_if.slave      cmt_to_csr_if,
-    VX_fetch_to_csr_if.slave    fetch_to_csr_if,
+    VX_commit_csr_if.slave      commit_csr_if,
+    VX_sched_csr_if.slave       sched_csr_if,
     VX_csr_req_if.slave         csr_req_if,
     VX_commit_if.master         csr_commit_if,
     
@@ -140,7 +140,7 @@ module VX_csr_unit #(
 `endif
 
     VX_csr_data #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) csr_data (
         .clk            (clk),
         .reset          (reset),
@@ -165,8 +165,8 @@ module VX_csr_unit #(
     `endif
     `endif
 
-        .cmt_to_csr_if  (cmt_to_csr_if),
-        .fetch_to_csr_if(fetch_to_csr_if),
+        .commit_csr_if  (commit_csr_if),
+        .sched_csr_if   (sched_csr_if),
     
     `ifdef EXT_F_ENABLE
         .fpu_to_csr_if  (fpu_to_csr_if), 

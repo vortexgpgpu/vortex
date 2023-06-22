@@ -19,10 +19,10 @@ module VX_execute #(
     VX_cache_bus_if.master  dcache_bus_if,
 
     // commit interface
-    VX_cmt_to_csr_if.slave  cmt_to_csr_if,
+    VX_commit_csr_if.slave  commit_csr_if,
 
     // fetch interface
-    VX_fetch_to_csr_if.slave fetch_to_csr_if,
+    VX_sched_csr_if.slave   sched_csr_if,
 
 `ifdef PERF_ENABLE
     VX_perf_memsys_if.slave perf_memsys_if,
@@ -108,7 +108,7 @@ module VX_execute #(
     `RESET_RELAY (gpu_reset, reset);
     
     VX_alu_unit #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) alu_unit (
         .clk            (clk),
         .reset          (alu_reset),
@@ -120,7 +120,7 @@ module VX_execute #(
     `SCOPE_IO_SWITCH (1)
 
     VX_lsu_unit #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) lsu_unit (
         `SCOPE_IO_BIND  (0)
         .clk            (clk),
@@ -132,7 +132,7 @@ module VX_execute #(
     );
 
     VX_csr_unit #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) csr_unit (
         .clk            (clk),
         .reset          (csr_reset),
@@ -178,8 +178,8 @@ module VX_execute #(
     `endif
     `endif
 
-        .cmt_to_csr_if  (cmt_to_csr_if),
-        .fetch_to_csr_if(fetch_to_csr_if),
+        .commit_csr_if  (commit_csr_if),
+        .sched_csr_if   (sched_csr_if),
         .csr_req_if     (csr_req_if),   
         .csr_commit_if  (csr_commit_if)
     );
@@ -188,7 +188,7 @@ module VX_execute #(
     `RESET_RELAY (fpu_reset, reset);
 
     VX_fpu_agent #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) fpu_agent (
         .clk            (clk),
         .reset          (fpu_reset),    
@@ -202,7 +202,7 @@ module VX_execute #(
 `endif
 
     VX_gpu_unit #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) gpu_unit (
         .clk            (clk),
         .reset          (gpu_reset),    

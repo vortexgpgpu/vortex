@@ -1,18 +1,18 @@
 `include "VX_define.vh"
 
-interface VX_wrelease_if();
+interface VX_commit_sched_if ();
 
-    wire                    valid;    
-    wire [`UP(`NW_BITS)-1:0] wid;
+    wire valid;
+    wire [`EX_UNITS_BITS-1:0] committed;
 
     modport master (
         output valid,
-        output wid
+        output committed
     );
 
     modport slave (
         input valid,
-        input wid
+        input committed
     );
 
 endinterface
