@@ -13,8 +13,7 @@ module VX_fpu_unit #(
     input wire          clk,
     input wire          reset,
 
-    VX_fpu_req_if.slave fpu_req_if,
-    VX_fpu_rsp_if.master fpu_rsp_if
+    VX_fpu_bus_if.slave fpu_bus_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -27,22 +26,22 @@ module VX_fpu_unit #(
         .clk        (clk),
         .reset      (reset),
 
-        .valid_in   (fpu_req_if.valid),
-        .op_type    (fpu_req_if.op_type),
-        .fmt        (fpu_req_if.fmt),
-        .frm        (fpu_req_if.frm),
-        .dataa      (fpu_req_if.dataa),
-        .datab      (fpu_req_if.datab),
-        .datac      (fpu_req_if.datac),
-        .tag_in     (fpu_req_if.tag),
-        .ready_in   (fpu_req_if.ready),
+        .valid_in   (fpu_bus_if.req_valid),
+        .op_type    (fpu_bus_if.req_type),
+        .fmt        (fpu_bus_if.req_fmt),
+        .frm        (fpu_bus_if.req_frm),
+        .dataa      (fpu_bus_if.req_dataa),
+        .datab      (fpu_bus_if.req_datab),
+        .datac      (fpu_bus_if.req_datac),
+        .tag_in     (fpu_bus_if.req_tag),
+        .ready_in   (fpu_bus_if.req_ready),
 
-        .valid_out  (fpu_rsp_if.valid),
-        .result     (fpu_rsp_if.result),
-        .has_fflags (fpu_rsp_if.has_fflags),
-        .fflags     (fpu_rsp_if.fflags),
-        .tag_out    (fpu_rsp_if.tag),
-        .ready_out  (fpu_rsp_if.ready)     
+        .valid_out  (fpu_bus_if.rsp_valid),
+        .result     (fpu_bus_if.rsp_result),
+        .has_fflags (fpu_bus_if.rsp_has_fflags),
+        .fflags     (fpu_bus_if.rsp_fflags),
+        .tag_out    (fpu_bus_if.rsp_tag),
+        .ready_out  (fpu_bus_if.rsp_ready)     
     );   
 
 `elsif FPU_FPNEW
@@ -54,22 +53,22 @@ module VX_fpu_unit #(
         .clk        (clk),
         .reset      (reset),   
 
-        .valid_in   (fpu_req_if.valid),
-        .op_type    (fpu_req_if.op_type),
-        .fmt        (fpu_req_if.fmt),
-        .frm        (fpu_req_if.frm),
-        .dataa      (fpu_req_if.dataa),
-        .datab      (fpu_req_if.datab),
-        .datac      (fpu_req_if.datac),         
-        .tag_in     (fpu_req_if.tag),
-        .ready_in   (fpu_req_if.ready),
+        .valid_in   (fpu_bus_if.req_valid),
+        .op_type    (fpu_bus_if.req_op_type),
+        .fmt        (fpu_bus_if.req_fmt),
+        .frm        (fpu_bus_if.req_frm),
+        .dataa      (fpu_bus_if.req_dataa),
+        .datab      (fpu_bus_if.req_datab),
+        .datac      (fpu_bus_if.req_datac),         
+        .tag_in     (fpu_bus_if.req_tag),
+        .ready_in   (fpu_bus_if.req_ready),
 
-        .valid_out  (fpu_rsp_if.valid),        
-        .result     (fpu_rsp_if.result),
-        .has_fflags (fpu_rsp_if.has_fflags),
-        .fflags     (fpu_rsp_if.fflags),
-        .tag_out    (fpu_rsp_if.tag),        
-        .ready_out  (fpu_rsp_if.ready)        
+        .valid_out  (fpu_bus_if.rsp_valid),        
+        .result     (fpu_bus_if.rsp_result),
+        .has_fflags (fpu_bus_if.rsp_has_fflags),
+        .fflags     (fpu_bus_if.rsp_fflags),
+        .tag_out    (fpu_bus_if.rsp_tag),        
+        .ready_out  (fpu_bus_if.rsp_ready)        
     );
 
 `elsif FPU_DSP
@@ -81,22 +80,22 @@ module VX_fpu_unit #(
         .clk        (clk),
         .reset      (reset),   
 
-        .valid_in   (fpu_req_if.valid),
-        .op_type    (fpu_req_if.op_type),
-        .fmt        (fpu_req_if.fmt),
-        .frm        (fpu_req_if.frm),
-        .dataa      (fpu_req_if.dataa),
-        .datab      (fpu_req_if.datab),
-        .datac      (fpu_req_if.datac),        
-        .tag_in     (fpu_req_if.tag),
-        .ready_in   (fpu_req_if.ready),
+        .valid_in   (fpu_bus_if.req_valid),
+        .op_type    (fpu_bus_if.req_op_type),
+        .fmt        (fpu_bus_if.req_fmt),
+        .frm        (fpu_bus_if.req_frm),
+        .dataa      (fpu_bus_if.req_dataa),
+        .datab      (fpu_bus_if.req_datab),
+        .datac      (fpu_bus_if.req_datac),        
+        .tag_in     (fpu_bus_if.req_tag),
+        .ready_in   (fpu_bus_if.req_ready),
 
-        .valid_out  (fpu_rsp_if.valid),        
-        .result     (fpu_rsp_if.result), 
-        .has_fflags (fpu_rsp_if.has_fflags),
-        .fflags     (fpu_rsp_if.fflags),
-        .tag_out    (fpu_rsp_if.tag),
-        .ready_out  (fpu_rsp_if.ready)
+        .valid_out  (fpu_bus_if.rsp_valid),        
+        .result     (fpu_bus_if.rsp_result), 
+        .has_fflags (fpu_bus_if.rsp_has_fflags),
+        .fflags     (fpu_bus_if.rsp_fflags),
+        .tag_out    (fpu_bus_if.rsp_tag),
+        .ready_out  (fpu_bus_if.rsp_ready)
     );
     
 `endif

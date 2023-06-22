@@ -31,8 +31,7 @@ module VX_execute #(
 
 `ifdef EXT_F_ENABLE
     VX_fpu_agent_if.slave   fpu_agent_if,
-    VX_fpu_req_if.master    fpu_req_if,
-    VX_fpu_rsp_if.slave     fpu_rsp_if,
+    VX_fpu_bus_if.master    fpu_bus_if,
     VX_commit_if.master     fpu_commit_if,
 `endif
 
@@ -195,8 +194,7 @@ module VX_execute #(
         .clk            (clk),
         .reset          (fpu_reset),    
         .fpu_agent_if   (fpu_agent_if), 
-        .fpu_req_if     (fpu_req_if),
-        .fpu_rsp_if     (fpu_rsp_if),
+        .fpu_bus_if     (fpu_bus_if),
         .fpu_to_csr_if  (fpu_to_csr_if), 
         .fpu_commit_if  (fpu_commit_if),
         .csr_pending    (csr_pending),

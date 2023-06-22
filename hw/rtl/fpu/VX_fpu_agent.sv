@@ -15,8 +15,7 @@ module VX_fpu_agent #(
     VX_fpu_to_csr_if.master fpu_to_csr_if,
     VX_commit_if.master     fpu_commit_if,
 
-    VX_fpu_req_if.master    fpu_req_if,
-    VX_fpu_rsp_if.slave     fpu_rsp_if,
+    VX_fpu_bus_if.master    fpu_bus_if,
 
     input wire              csr_pending,
     output wire             req_pending
@@ -38,9 +37,9 @@ module VX_fpu_agent #(
     wire mdata_full;
 
     wire fpu_agent_fire = fpu_agent_if.valid && fpu_agent_if.ready;
-    wire fpu_rsp_fire = fpu_rsp_if.valid && fpu_rsp_if.ready;
+    wire fpu_rsp_fire = fpu_bus_if.rsp_valid && fpu_bus_if.rsp_ready;
 
-    assign rsp_tag = fpu_rsp_if.tag;
+    assign rsp_tag = fpu_bus_if.rsp_tag;
 
     VX_index_buffer #(
         .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS),
@@ -82,9 +81,9 @@ module VX_fpu_agent #(
         .valid_in  (valid_in),
         .ready_in  (ready_in),
         .data_in   ({fpu_agent_if.op_type, fpu_agent_if.fmt, req_op_frm,     fpu_agent_if.rs1_data, fpu_agent_if.rs2_data, fpu_agent_if.rs3_data, req_tag}),
-        .data_out  ({fpu_req_if.op_type,   fpu_req_if.fmt,   fpu_req_if.frm, fpu_req_if.dataa,      fpu_req_if.datab,      fpu_req_if.datac,      fpu_req_if.tag}),
-        .valid_out (fpu_req_if.valid),
-        .ready_out (fpu_req_if.ready)
+        .data_out  ({fpu_bus_if.req_type,   fpu_bus_if.req_fmt,   fpu_bus_if.req_frm, fpu_bus_if.req_dataa,      fpu_bus_if.req_datab,      fpu_bus_if.req_datac,      fpu_bus_if.req_tag}),
+        .valid_out (fpu_bus_if.req_valid),
+        .ready_out (fpu_bus_if.req_ready)
     );
 
     // handle FPU response
@@ -94,16 +93,16 @@ module VX_fpu_agent #(
         rsp_fflags = '0;        
         for (integer i = 0; i < `NUM_THREADS; ++i) begin
             if (rsp_tmask[i]) begin
-                rsp_fflags.NX |= fpu_rsp_if.fflags[i].NX;
-                rsp_fflags.UF |= fpu_rsp_if.fflags[i].UF;
-                rsp_fflags.OF |= fpu_rsp_if.fflags[i].OF;
-                rsp_fflags.DZ |= fpu_rsp_if.fflags[i].DZ;
-                rsp_fflags.NV |= fpu_rsp_if.fflags[i].NV;
+                rsp_fflags.NX |= fpu_bus_if.rsp_fflags[i].NX;
+                rsp_fflags.UF |= fpu_bus_if.rsp_fflags[i].UF;
+                rsp_fflags.OF |= fpu_bus_if.rsp_fflags[i].OF;
+                rsp_fflags.DZ |= fpu_bus_if.rsp_fflags[i].DZ;
+                rsp_fflags.NV |= fpu_bus_if.rsp_fflags[i].NV;
             end
         end
     end
     
-    assign fpu_to_csr_if.write_enable = fpu_rsp_fire && fpu_rsp_if.has_fflags;
+    assign fpu_to_csr_if.write_enable = fpu_rsp_fire && fpu_bus_if.rsp_has_fflags;
     assign fpu_to_csr_if.write_wid    = rsp_wid;     
     assign fpu_to_csr_if.write_fflags = rsp_fflags;
 
@@ -114,9 +113,9 @@ module VX_fpu_agent #(
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (fpu_rsp_if.valid),
-        .ready_in  (fpu_rsp_if.ready),
-        .data_in   ({rsp_uuid,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           fpu_rsp_if.result}),
+        .valid_in  (fpu_bus_if.rsp_valid),
+        .ready_in  (fpu_bus_if.rsp_ready),
+        .data_in   ({rsp_uuid,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           fpu_bus_if.rsp_result}),
         .data_out  ({fpu_commit_if.uuid, fpu_commit_if.wid, fpu_commit_if.tmask, fpu_commit_if.PC, fpu_commit_if.rd, fpu_commit_if.data}),
         .valid_out (fpu_commit_if.valid),
         .ready_out (fpu_commit_if.ready)

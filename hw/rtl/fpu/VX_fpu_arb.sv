@@ -13,17 +13,8 @@ module VX_fpu_arb #(
     input wire              clk,
     input wire              reset,
 
-    // input requests        
-    VX_fpu_req_if.slave     req_in_if [NUM_INPUTS],
-
-    // input responses
-    VX_fpu_rsp_if.master    rsp_in_if [NUM_INPUTS],
-    
-    // output request
-    VX_fpu_req_if.master    req_out_if [NUM_OUTPUTS],
-
-    // output response
-    VX_fpu_rsp_if.slave     rsp_out_if [NUM_OUTPUTS]
+    VX_fpu_bus_if.slave     bus_in_if [NUM_INPUTS],
+    VX_fpu_bus_if.master    bus_out_if [NUM_OUTPUTS]
 );   
     
     localparam LOG_NUM_REQS  = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
@@ -44,8 +35,8 @@ module VX_fpu_arb #(
 
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin
         
-        assign req_valid_in[i] = req_in_if[i].valid;        
-        assign req_in_if[i].ready = req_ready_in[i];
+        assign req_valid_in[i] = bus_in_if[i].req_valid;        
+        assign bus_in_if[i].req_ready = req_ready_in[i];
 
         if (NUM_INPUTS > NUM_OUTPUTS) begin
             wire [TAG_OUT_WIDTH-1:0] req_tag_in;
@@ -55,13 +46,13 @@ module VX_fpu_arb #(
                 .S   (LOG_NUM_REQS),
                 .POS (TAG_SEL_IDX)
             ) bits_insert (
-                .data_in  (req_in_if[i].tag),
+                .data_in  (bus_in_if[i].req_tag),
                 .sel_in   (LOG_NUM_REQS'(r)),
                 .data_out (req_tag_in)
             );
-            assign req_data_in[i] = {req_tag_in, req_in_if[i].op_type, req_in_if[i].fmt, req_in_if[i].frm, req_in_if[i].dataa, req_in_if[i].datab, req_in_if[i].datac};
+            assign req_data_in[i] = {req_tag_in, bus_in_if[i].req_type, bus_in_if[i].req_fmt, bus_in_if[i].req_frm, bus_in_if[i].req_dataa, bus_in_if[i].req_datab, bus_in_if[i].req_datac};
         end else begin
-            assign req_data_in[i] = {req_in_if[i].tag, req_in_if[i].op_type, req_in_if[i].fmt, req_in_if[i].frm, req_in_if[i].dataa, req_in_if[i].datab, req_in_if[i].datac};
+            assign req_data_in[i] = {bus_in_if[i].req_tag, bus_in_if[i].req_type, bus_in_if[i].req_fmt, bus_in_if[i].req_frm, bus_in_if[i].req_dataa, bus_in_if[i].req_datab, bus_in_if[i].req_datac};
         end
     end
 
@@ -84,9 +75,9 @@ module VX_fpu_arb #(
     );
     
     for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-        assign req_out_if[i].valid = req_valid_out[i];
-        assign {req_out_if[i].tag, req_out_if[i].op_type, req_out_if[i].fmt, req_out_if[i].frm, req_out_if[i].dataa, req_out_if[i].datab, req_out_if[i].datac} = req_data_out[i];
-        assign req_ready_out[i] = req_out_if[i].ready;
+        assign bus_out_if[i].req_valid = req_valid_out[i];
+        assign {bus_out_if[i].req_tag, bus_out_if[i].req_type, bus_out_if[i].req_fmt, bus_out_if[i].req_frm, bus_out_if[i].req_dataa, bus_out_if[i].req_datab, bus_out_if[i].req_datac} = req_data_out[i];
+        assign req_ready_out[i] = bus_out_if[i].req_ready;
     end
 
     ///////////////////////////////////////////////////////////////////////////
@@ -111,16 +102,16 @@ module VX_fpu_arb #(
                 .S   (LOG_NUM_REQS),
                 .POS (TAG_SEL_IDX)
             ) bits_remove (
-                .data_in  (rsp_out_if[i].tag),
+                .data_in  (bus_out_if[i].rsp_tag),
                 .data_out (rsp_tag_out)
             );
 
-            assign rsp_valid_in[i] = rsp_out_if[i].valid;
-            assign rsp_data_in[i] = {rsp_tag_out, rsp_out_if[i].result, rsp_out_if[i].fflags, rsp_out_if[i].has_fflags};
-            assign rsp_out_if[i].ready = rsp_ready_in[i];
+            assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;
+            assign rsp_data_in[i] = {rsp_tag_out, bus_out_if[i].rsp_result, bus_out_if[i].rsp_fflags, bus_out_if[i].rsp_has_fflags};
+            assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
 
             if (NUM_INPUTS > 1) begin
-                assign rsp_sel_in[i] = rsp_out_if[i].tag[TAG_SEL_IDX +: LOG_NUM_REQS];
+                assign rsp_sel_in[i] = bus_out_if[i].rsp_tag[TAG_SEL_IDX +: LOG_NUM_REQS];
             end else begin
                 assign rsp_sel_in[i] = '0;
             end            
@@ -147,9 +138,9 @@ module VX_fpu_arb #(
     end else begin
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-            assign rsp_valid_in[i] = rsp_out_if[i].valid;        
-            assign rsp_data_in[i]  = {rsp_out_if[i].tag, rsp_out_if[i].result, rsp_out_if[i].fflags, rsp_out_if[i].has_fflags};
-            assign rsp_out_if[i].ready = rsp_ready_in[i];
+            assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;        
+            assign rsp_data_in[i]  = {bus_out_if[i].rsp_tag, bus_out_if[i].rsp_result, bus_out_if[i].rsp_fflags, bus_out_if[i].rsp_has_fflags};
+            assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
         end
 
         VX_stream_arb #(            
@@ -173,9 +164,9 @@ module VX_fpu_arb #(
     end
     
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-        assign rsp_in_if[i].valid = rsp_valid_out[i];
-        assign {rsp_in_if[i].tag, rsp_in_if[i].result, rsp_in_if[i].fflags, rsp_in_if[i].has_fflags} = rsp_data_out[i];        
-        assign rsp_ready_out[i] = rsp_in_if[i].ready;
+        assign bus_in_if[i].rsp_valid = rsp_valid_out[i];
+        assign {bus_in_if[i].rsp_tag, bus_in_if[i].rsp_result, bus_in_if[i].rsp_fflags, bus_in_if[i].rsp_has_fflags} = rsp_data_out[i];        
+        assign rsp_ready_out[i] = bus_in_if[i].rsp_ready;
     end
 
 endmodule

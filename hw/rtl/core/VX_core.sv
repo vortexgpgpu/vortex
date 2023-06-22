@@ -44,8 +44,7 @@ module VX_core #(
     VX_cache_bus_if.master  icache_bus_if,    
 
 `ifdef EXT_F_ENABLE
-    VX_fpu_req_if.master    fpu_req_if,
-    VX_fpu_rsp_if.slave     fpu_rsp_if,
+    VX_fpu_bus_if.master    fpu_bus_if,
 `endif
 
 `ifdef EXT_TEX_ENABLE
@@ -203,8 +202,7 @@ module VX_core #(
     
     `ifdef EXT_F_ENABLE
         .fpu_agent_if   (fpu_agent_if),
-        .fpu_req_if     (fpu_req_if),
-        .fpu_rsp_if     (fpu_rsp_if),
+        .fpu_bus_if     (fpu_bus_if),
         .fpu_commit_if  (fpu_commit_if),
     `endif   
 
@@ -514,32 +512,27 @@ module VX_core_top #(
     assign icache_rsp_ready = icache_bus_if.rsp_ready;
 
 `ifdef EXT_F_ENABLE
-    VX_fpu_req_if #(
+    VX_fpu_bus_if #(
         .NUM_LANES (`NUM_THREADS),
         .TAG_WIDTH (`FPU_REQ_TAG_WIDTH)
-    ) fpu_req_if();
+    ) fpu_bus_if();
 
-    VX_fpu_rsp_if #(
-        .NUM_LANES (`NUM_THREADS),
-        .TAG_WIDTH (`FPU_REQ_TAG_WIDTH)
-    ) fpu_rsp_if();
+    assign fpu_req_valid = fpu_bus_if.req_valid;
+    assign fpu_req_op_type = fpu_bus_if.req_op_type;
+    assign fpu_req_fmt   = fpu_bus_if.req_fmt;
+    assign fpu_req_frm   = fpu_bus_if.req_frm;
+    assign fpu_req_dataa = fpu_bus_if.req_dataa;
+    assign fpu_req_datab = fpu_bus_if.req_datab;
+    assign fpu_req_datac = fpu_bus_if.req_datac;
+    assign fpu_req_tag = fpu_bus_if.req_tag; 
+    assign fpu_bus_if.req_ready = fpu_req_ready;
 
-    assign fpu_req_valid = fpu_req_if.valid;
-    assign fpu_req_op_type = fpu_req_if.op_type;
-    assign fpu_req_fmt   = fpu_req_if.fmt;
-    assign fpu_req_frm   = fpu_req_if.frm;
-    assign fpu_req_dataa = fpu_req_if.dataa;
-    assign fpu_req_datab = fpu_req_if.datab;
-    assign fpu_req_datac = fpu_req_if.datac;
-    assign fpu_req_tag = fpu_req_if.tag; 
-    assign fpu_req_if.ready = fpu_req_ready;
-
-    assign fpu_rsp_if.valid = fpu_rsp_valid;
-    assign fpu_rsp_if.result = fpu_rsp_result; 
-    assign fpu_rsp_if.fflags = fpu_rsp_fflags;
-    assign fpu_rsp_if.has_fflags = fpu_rsp_has_fflags;
-    assign fpu_rsp_if.tag = fpu_rsp_tag;  
-    assign fpu_rsp_ready = fpu_rsp_if.ready;
+    assign fpu_bus_if.rsp_valid = fpu_rsp_valid;
+    assign fpu_bus_if.rsp_result = fpu_rsp_result; 
+    assign fpu_bus_if.rsp_fflags = fpu_rsp_fflags;
+    assign fpu_bus_if.rsp_has_fflags = fpu_rsp_has_fflags;
+    assign fpu_bus_if.rsp_tag = fpu_rsp_tag;  
+    assign fpu_rsp_ready = fpu_bus_if.rsp_ready;
 `endif
 
 `ifdef EXT_TEX_ENABLE
@@ -615,8 +608,7 @@ module VX_core_top #(
         .icache_bus_if  (icache_bus_if),
 
     `ifdef EXT_F_ENABLE
-        .fpu_req_if     (fpu_req_if),
-        .fpu_rsp_if     (fpu_rsp_if),
+        .fpu_bus_if     (fpu_bus_if),
     `endif
 
     `ifdef EXT_TEX_ENABLE

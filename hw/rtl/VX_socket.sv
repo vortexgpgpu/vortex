@@ -25,8 +25,7 @@ module VX_socket #(
     VX_cache_bus_if.master  icache_bus_if,
 
 `ifdef EXT_F_ENABLE
-    VX_fpu_req_if.master    fpu_req_if,
-    VX_fpu_rsp_if.slave     fpu_rsp_if,
+    VX_fpu_bus_if.master    fpu_bus_if,
 `endif
 
 `ifdef EXT_TEX_ENABLE
@@ -174,25 +173,15 @@ module VX_socket #(
 
 `ifdef EXT_F_ENABLE
 
-    VX_fpu_req_if #(
+    VX_fpu_bus_if #(
         .NUM_LANES (`NUM_THREADS),
         .TAG_WIDTH (`FPU_REQ_TAG_WIDTH)
-    ) per_core_fpu_req_if[`SOCKET_SIZE]();
+    ) per_core_fpu_bus_if[`SOCKET_SIZE]();
 
-    VX_fpu_rsp_if #(
-        .NUM_LANES (`NUM_THREADS),
-        .TAG_WIDTH (`FPU_REQ_TAG_WIDTH)
-    ) per_core_fpu_rsp_if[`SOCKET_SIZE]();
-
-    VX_fpu_req_if #(
+    VX_fpu_bus_if #(
         .NUM_LANES (`NUM_THREADS),
         .TAG_WIDTH (`FPU_REQ_ARB1_TAG_WIDTH)
-    ) fpu_req_tmp_if[1]();
-
-    VX_fpu_rsp_if #(
-        .NUM_LANES (`NUM_THREADS),
-        .TAG_WIDTH (`FPU_REQ_ARB1_TAG_WIDTH)
-    ) fpu_rsp_tmp_if[1]();
+    ) fpu_bus_tmp_if[1]();
 
     `RESET_RELAY (fpu_arb_reset, reset);
 
@@ -206,13 +195,11 @@ module VX_socket #(
     ) fpu_arb (
         .clk        (clk),
         .reset      (fpu_arb_reset),
-        .req_in_if  (per_core_fpu_req_if),
-        .rsp_in_if  (per_core_fpu_rsp_if),
-        .req_out_if (fpu_req_tmp_if),
-        .rsp_out_if (fpu_rsp_tmp_if)
+        .bus_in_if  (per_core_fpu_bus_if),
+        .bus_out_if (fpu_bus_tmp_if)
     );
 
-    `ASSIGN_VX_FPU_REQ_IF (fpu_req_if, fpu_req_tmp_if[0]);
+    `ASSIGN_VX_FPU_BUS_IF (fpu_bus_if, fpu_bus_tmp_if[0]);
 
 `endif
 
@@ -325,8 +312,7 @@ module VX_socket #(
             .icache_bus_if  (per_core_icache_bus_if[i]),
 
         `ifdef EXT_F_ENABLE
-            .fpu_req_if     (per_core_fpu_req_if[i]),
-            .fpu_rsp_if     (per_core_fpu_rsp_if[i]),
+            .fpu_bus_if     (per_core_fpu_bus_if[i]),
         `endif
 
         `ifdef EXT_TEX_ENABLE

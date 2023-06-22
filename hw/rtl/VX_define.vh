@@ -415,24 +415,22 @@
     assign dst.tag   = src.tag; \
     assign src.ready = dst.ready
 
-`define ASSIGN_VX_FPU_REQ_IF(dst, src) \
-    assign dst.valid = src.valid; \
-    assign dst.op_type= src.op_type; \
-    assign dst.fmt   = src.fmt; \
-    assign dst.frm   = src.frm; \
-    assign dst.dataa = src.dataa; \
-    assign dst.datab = src.datab; \
-    assign dst.datac = src.datac; \
-    assign dst.tag   = src.tag; \
-    assign src.ready = dst.ready
-
-`define ASSIGN_VX_FPU_RSP_IF(dst, src) \
-    assign dst.valid = src.valid; \
-    assign dst.result= src.result; \
-    assign dst.fflags= src.fflags; \
-    assign dst.has_fflags = src.has_fflags; \
-    assign dst.tag   = src.tag; \
-    assign src.ready = dst.ready
+`define ASSIGN_VX_FPU_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_type  = src.req_type; \
+    assign dst.req_fmt   = src.req_fmt; \
+    assign dst.req_frm   = src.req_frm; \
+    assign dst.req_dataa = src.req_dataa; \
+    assign dst.req_datab = src.req_datab; \
+    assign dst.req_datac = src.req_datac; \
+    assign dst.req_tag   = src.req_tag; \
+    assign src.req_ready = dst.req_ready; \
+    assign src.rsp_valid = dst.rsp_valid; \
+    assign src.rsp_result = dst.rsp_result; \
+    assign src.rsp_fflags = dst.rsp_fflags; \
+    assign src.rsp_has_fflags = dst.rsp_has_fflags; \
+    assign src.rsp_tag   = dst.rsp_tag; \
+    assign dst.rsp_ready = src.rsp_ready
 
 `define REDUCE_ADD(dst, src, field, width, count) \
     wire [count-1:0][width-1:0] __reduce_add_i_``src``field; \
