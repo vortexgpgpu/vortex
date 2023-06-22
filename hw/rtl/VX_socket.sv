@@ -15,7 +15,7 @@ module VX_socket #(
     input wire              reset,
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if.slave perf_memsys_if,
+    VX_mem_perf_if.slave    mem_perf_if,
 `endif
 
     VX_dcr_write_if.slave   dcr_write_if,
@@ -31,7 +31,7 @@ module VX_socket #(
 `ifdef EXT_TEX_ENABLE
 `ifdef PERF_ENABLE
     VX_tex_perf_if.slave    perf_tex_if,
-    VX_perf_cache_if.slave  perf_tcache_if,
+    VX_cache_perf_if.slave  perf_tcache_if,
 `endif
     VX_tex_bus_if.master    tex_bus_if,
 `endif
@@ -39,7 +39,7 @@ module VX_socket #(
 `ifdef EXT_RASTER_ENABLE
 `ifdef PERF_ENABLE
     VX_raster_perf_if.slave perf_raster_if,
-    VX_perf_cache_if.slave  perf_rcache_if,
+    VX_cache_perf_if.slave  perf_rcache_if,
 `endif
     VX_raster_bus_if.slave  raster_bus_if,
 `endif
@@ -47,7 +47,7 @@ module VX_socket #(
 `ifdef EXT_ROP_ENABLE
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave    perf_rop_if,
-    VX_perf_cache_if.slave  perf_ocache_if,
+    VX_cache_perf_if.slave  perf_ocache_if,
 `endif
     VX_rop_bus_if.master    rop_bus_if,
 `endif
@@ -289,7 +289,7 @@ module VX_socket #(
             .reset          (core_reset),
 
         `ifdef PERF_ENABLE
-            .perf_memsys_if (perf_memsys_if),
+            .mem_perf_if    (mem_perf_if),
         `endif
             
             .dcr_write_if   (core_dcr_write_if),

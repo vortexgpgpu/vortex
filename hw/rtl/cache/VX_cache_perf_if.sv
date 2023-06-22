@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-interface VX_perf_cache_if ();
+interface VX_cache_perf_if ();
 
     wire [`PERF_CTR_BITS-1:0] reads;
     wire [`PERF_CTR_BITS-1:0] writes;

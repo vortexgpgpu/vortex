@@ -47,7 +47,7 @@ module VX_cache #(
  ) (    
     // PERF
 `ifdef PERF_ENABLE
-    VX_perf_cache_if.master perf_cache_if,
+    VX_cache_perf_if.master cache_perf_if,
 `endif
     
     input wire clk,
@@ -240,7 +240,7 @@ module VX_cache #(
         .clk        (clk),
         .reset      (reset),
     `ifdef PERF_ENABLE        
-        .bank_stalls (perf_cache_if.bank_stalls),
+        .bank_stalls (cache_perf_if.bank_stalls),
     `endif     
         .core_req_valid          (core_req_valid),
         .core_req_rw             (core_req_rw), 
@@ -591,13 +591,13 @@ module VX_cache #(
         end
     end
 
-    assign perf_cache_if.reads        = perf_core_reads;
-    assign perf_cache_if.writes       = perf_core_writes;
-    assign perf_cache_if.read_misses  = perf_read_misses;
-    assign perf_cache_if.write_misses = perf_write_misses;
-    assign perf_cache_if.mshr_stalls  = perf_mshr_stalls;
-    assign perf_cache_if.mem_stalls   = perf_mem_stalls;
-    assign perf_cache_if.crsp_stalls  = perf_crsp_stalls;
+    assign cache_perf_if.reads        = perf_core_reads;
+    assign cache_perf_if.writes       = perf_core_writes;
+    assign cache_perf_if.read_misses  = perf_read_misses;
+    assign cache_perf_if.write_misses = perf_write_misses;
+    assign cache_perf_if.mshr_stalls  = perf_mshr_stalls;
+    assign cache_perf_if.mem_stalls   = perf_mem_stalls;
+    assign cache_perf_if.crsp_stalls  = perf_crsp_stalls;
 `endif
 
 endmodule

@@ -30,7 +30,7 @@ module VX_shared_mem #(
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_perf_cache_if.master perf_cache_if,
+    VX_cache_perf_if.master cache_perf_if,
 `endif
 
     // Core request    
@@ -80,7 +80,7 @@ module VX_shared_mem #(
         .clk        (clk),
         .reset      (reset),
     `ifdef PERF_ENABLE        
-        .bank_stalls (perf_cache_if.bank_stalls),
+        .bank_stalls (cache_perf_if.bank_stalls),
     `endif     
         .core_req_valid          (req_valid),
         .core_req_rw             (req_rw),
@@ -245,13 +245,13 @@ module VX_shared_mem #(
         end
     end
 
-    assign perf_cache_if.reads        = perf_reads;
-    assign perf_cache_if.writes       = perf_writes;
-    assign perf_cache_if.read_misses  = '0;
-    assign perf_cache_if.write_misses = '0;
-    assign perf_cache_if.mshr_stalls  = '0;
-    assign perf_cache_if.mem_stalls   = '0;
-    assign perf_cache_if.crsp_stalls  = perf_crsp_stalls;
+    assign cache_perf_if.reads        = perf_reads;
+    assign cache_perf_if.writes       = perf_writes;
+    assign cache_perf_if.read_misses  = '0;
+    assign cache_perf_if.write_misses = '0;
+    assign cache_perf_if.mshr_stalls  = '0;
+    assign cache_perf_if.mem_stalls   = '0;
+    assign cache_perf_if.crsp_stalls  = perf_crsp_stalls;
 
 `endif
 

@@ -14,30 +14,30 @@ module VX_csr_unit #(
     input base_dcrs_t           base_dcrs,
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if.slave     perf_memsys_if,
-    VX_perf_pipeline_if.slave   perf_pipeline_if,
-    VX_perf_gpu_if.slave        perf_gpu_if,
+    VX_mem_perf_if.slave        mem_perf_if,
+    VX_pipeline_perf_if.slave   pipeline_perf_if,
+    VX_gpu_perf_if.slave        gpu_perf_if,
 `endif
 
 `ifdef EXT_TEX_ENABLE
     VX_gpu_csr_if.master        tex_csr_if,
 `ifdef PERF_ENABLE
     VX_tex_perf_if.slave        perf_tex_if,
-    VX_perf_cache_if.slave      perf_tcache_if,
+    VX_cache_perf_if.slave      perf_tcache_if,
 `endif
 `endif
 `ifdef EXT_RASTER_ENABLE
     VX_gpu_csr_if.master        raster_csr_if,
 `ifdef PERF_ENABLE
     VX_raster_perf_if.slave     perf_raster_if,
-    VX_perf_cache_if.slave      perf_rcache_if,
+    VX_cache_perf_if.slave      perf_rcache_if,
 `endif
 `endif
 `ifdef EXT_ROP_ENABLE
     VX_gpu_csr_if.master        rop_csr_if,
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave        perf_rop_if,
-    VX_perf_cache_if.slave      perf_ocache_if,
+    VX_cache_perf_if.slave      perf_ocache_if,
 `endif
 `endif
 
@@ -148,9 +148,9 @@ module VX_csr_unit #(
         .base_dcrs      (base_dcrs),
 
     `ifdef PERF_ENABLE
-        .perf_memsys_if (perf_memsys_if),
-        .perf_pipeline_if(perf_pipeline_if),
-        .perf_gpu_if    (perf_gpu_if),
+        .mem_perf_if    (mem_perf_if),
+        .pipeline_perf_if(pipeline_perf_if),
+        .gpu_perf_if    (gpu_perf_if),
     `ifdef EXT_TEX_ENABLE        
         .perf_tex_if    (perf_tex_if),
         .perf_tcache_if (perf_tcache_if),

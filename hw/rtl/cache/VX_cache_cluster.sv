@@ -57,7 +57,7 @@ module VX_cache_cluster #(
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_perf_cache_if.master perf_cache_if,
+    VX_cache_perf_if.master cache_perf_if,
 `endif
 
     VX_cache_bus_if.slave   core_bus_if [NUM_INPUTS],
@@ -74,8 +74,8 @@ module VX_cache_cluster #(
     `STATIC_ASSERT(NUM_INPUTS >= NUM_CACHES, ("invalid parameter"))
 
 `ifdef PERF_ENABLE
-    VX_perf_cache_if perf_cache_unit_if[NUM_CACHES]();
-    `PERF_CACHE_ADD (perf_cache_if, perf_cache_unit_if, NUM_CACHES);
+    VX_cache_perf_if perf_cache_unit_if[NUM_CACHES]();
+    `PERF_CACHE_ADD (cache_perf_if, perf_cache_unit_if, NUM_CACHES);
 `endif
 
     VX_mem_bus_if #(
@@ -144,7 +144,7 @@ module VX_cache_cluster #(
             .PASSTHRU     (PASSTHRU)
         ) cache_wrap (
         `ifdef PERF_ENABLE
-            .perf_cache_if (perf_cache_unit_if[i]),
+            .cache_perf_if (perf_cache_unit_if[i]),
         `endif
             
             .clk         (clk),
@@ -337,7 +337,7 @@ module VX_cache_cluster_top #(
         .MEM_OUT_REG    (MEM_OUT_REG)
     ) cache (
     `ifdef PERF_ENABLE
-        .perf_cache_if  (perf_icache_if),
+        .cache_perf_if  (perf_icache_if),
     `endif
         .clk            (clk),
         .reset          (reset),

@@ -12,7 +12,7 @@ module VX_issue #(
     input wire              reset,
 
 `ifdef PERF_ENABLE
-    VX_perf_pipeline_if.issue perf_issue_if,
+    VX_pipeline_perf_if.issue perf_issue_if,
 `endif
 
     VX_decode_if.slave      decode_if,

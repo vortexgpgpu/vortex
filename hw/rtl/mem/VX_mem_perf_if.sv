@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-interface VX_perf_memsys_if ();
+interface VX_mem_perf_if ();
 
     wire [`PERF_CTR_BITS-1:0] icache_reads;
     wire [`PERF_CTR_BITS-1:0] icache_read_misses;

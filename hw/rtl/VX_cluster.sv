@@ -27,8 +27,8 @@ module VX_cluster #(
     input  wire                 reset,
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if.master    perf_memsys_if,
-    VX_perf_memsys_if.slave     perf_memsys_total_if,
+    VX_mem_perf_if.master       mem_perf_if,
+    VX_mem_perf_if.slave        perf_memsys_total_if,
 `endif
 
     VX_dcr_write_if.slave       dcr_write_if,
@@ -36,27 +36,27 @@ module VX_cluster #(
 `ifdef EXT_TEX_ENABLE
 `ifdef PERF_ENABLE
     VX_tex_perf_if.master       perf_tex_if,
-    VX_perf_cache_if.master     perf_tcache_if,
+    VX_cache_perf_if.master     perf_tcache_if,
     VX_tex_perf_if.slave        perf_tex_total_if,
-    VX_perf_cache_if.slave      perf_tcache_total_if,
+    VX_cache_perf_if.slave      perf_tcache_total_if,
 `endif
 `endif
 
 `ifdef EXT_RASTER_ENABLE
 `ifdef PERF_ENABLE
     VX_raster_perf_if.master    perf_raster_if,
-    VX_perf_cache_if.master     perf_rcache_if,
+    VX_cache_perf_if.master     perf_rcache_if,
     VX_raster_perf_if.slave     perf_raster_total_if,
-    VX_perf_cache_if.slave      perf_rcache_total_if,
+    VX_cache_perf_if.slave      perf_rcache_total_if,
 `endif
 `endif
 
 `ifdef EXT_ROP_ENABLE
 `ifdef PERF_ENABLE
     VX_rop_perf_if.master       perf_rop_if,
-    VX_perf_cache_if.master     perf_ocache_if,
+    VX_cache_perf_if.master     perf_ocache_if,
     VX_rop_perf_if.slave        perf_rop_total_if,
-    VX_perf_cache_if.slave      perf_ocache_total_if,
+    VX_cache_perf_if.slave      perf_ocache_total_if,
 `endif
 `endif
 
@@ -371,7 +371,7 @@ module VX_cluster #(
         .reset              (mem_unit_reset),
 
     `ifdef PERF_ENABLE
-        .perf_memsys_if     (perf_memsys_if),
+        .mem_perf_if        (mem_perf_if),
     `endif
 
         .dcache_bus_if      (per_socket_dcache_bus_if),
@@ -434,7 +434,7 @@ module VX_cluster #(
             .reset          (socket_reset),
 
         `ifdef PERF_ENABLE
-            .perf_memsys_if (perf_memsys_total_if),
+            .mem_perf_if    (perf_memsys_total_if),
         `endif
             
             .dcr_write_if   (socket_dcr_write_if),

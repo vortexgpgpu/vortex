@@ -12,7 +12,7 @@ module VX_mem_unit # (
     input wire              reset,
     
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if.master perf_memsys_if,
+    VX_mem_perf_if.master mem_perf_if,
 `endif    
 
     VX_cache_bus_if.slave   icache_bus_if [`NUM_SOCKETS],
@@ -21,21 +21,21 @@ module VX_mem_unit # (
 
 `ifdef EXT_TEX_ENABLE
 `ifdef PERF_ENABLE
-    VX_perf_cache_if.master perf_tcache_if,
+    VX_cache_perf_if.master perf_tcache_if,
 `endif
     VX_cache_bus_if.slave   tcache_bus_if [`NUM_TEX_UNITS],
 `endif
 
 `ifdef EXT_RASTER_ENABLE
 `ifdef PERF_ENABLE
-    VX_perf_cache_if.master perf_rcache_if,
+    VX_cache_perf_if.master perf_rcache_if,
 `endif
     VX_cache_bus_if.slave   rcache_bus_if [`NUM_RASTER_UNITS],
 `endif 
 
 `ifdef EXT_ROP_ENABLE
 `ifdef PERF_ENABLE
-    VX_perf_cache_if.master perf_ocache_if,
+    VX_cache_perf_if.master perf_ocache_if,
 `endif
     VX_cache_bus_if.slave   ocache_bus_if [`NUM_ROP_UNITS],
 `endif
@@ -44,10 +44,10 @@ module VX_mem_unit # (
 );
 
 `ifdef PERF_ENABLE
-    VX_perf_cache_if perf_icache_if();
-    VX_perf_cache_if perf_dcache_if();
-    VX_perf_cache_if perf_smem_if();
-    VX_perf_cache_if perf_l2cache_if();
+    VX_cache_perf_if perf_icache_if();
+    VX_cache_perf_if perf_dcache_if();
+    VX_cache_perf_if perf_smem_if();
+    VX_cache_perf_if perf_l2cache_if();
 `endif   
 
 /////////////////////////////// I-Cache ///////////////////////////////////
@@ -82,7 +82,7 @@ module VX_mem_unit # (
         .MEM_OUT_REG    (3)
     ) icache (
     `ifdef PERF_ENABLE
-        .perf_cache_if  (perf_icache_if),
+        .cache_perf_if  (perf_icache_if),
     `endif
         .clk            (clk),
         .reset          (icache_reset),
@@ -130,7 +130,7 @@ module VX_mem_unit # (
         .MEM_OUT_REG    (3)
     ) dcache (
     `ifdef PERF_ENABLE
-        .perf_cache_if  (perf_dcache_if),
+        .cache_perf_if  (perf_dcache_if),
     `endif
         
         .clk            (clk),
@@ -210,7 +210,7 @@ module VX_mem_unit # (
             .reset      (smem_reset),
 
         `ifdef PERF_ENABLE
-            .perf_cache_if(perf_smem_if),
+            .cache_perf_if(perf_smem_if),
         `endif
 
             // Core request
@@ -274,7 +274,7 @@ module VX_mem_unit # (
         .MEM_OUT_REG    (3)
     ) tcache (
     `ifdef PERF_ENABLE
-        .perf_cache_if  (perf_tcache_if),
+        .cache_perf_if  (perf_tcache_if),
     `endif        
         .clk            (clk),
         .reset          (tcache_reset),
@@ -320,7 +320,7 @@ module VX_mem_unit # (
         .MEM_OUT_REG    (3)
     ) ocache (
     `ifdef PERF_ENABLE
-        .perf_cache_if  (perf_ocache_if),
+        .cache_perf_if  (perf_ocache_if),
     `endif        
         .clk            (clk),
         .reset          (ocache_reset),
@@ -367,7 +367,7 @@ module VX_mem_unit # (
         .MEM_OUT_REG    (3)
     ) rcache (
     `ifdef PERF_ENABLE
-        .perf_cache_if  (perf_rcache_if),
+        .cache_perf_if  (perf_rcache_if),
     `endif        
         .clk            (clk),
         .reset          (rcache_reset),
@@ -435,7 +435,7 @@ module VX_mem_unit # (
         .clk            (clk),
         .reset          (l2_reset),
     `ifdef PERF_ENABLE
-        .perf_cache_if  (perf_l2cache_if),
+        .cache_perf_if  (perf_l2cache_if),
     `endif
         .core_bus_if    (l2_mem_bus_if),
         .mem_bus_if     (mem_bus_if)
@@ -446,52 +446,52 @@ module VX_mem_unit # (
     `UNUSED_VAR (perf_dcache_if.mem_stalls)
     `UNUSED_VAR (perf_dcache_if.crsp_stalls)
 
-    assign perf_memsys_if.icache_reads       = perf_icache_if.reads;
-    assign perf_memsys_if.icache_read_misses = perf_icache_if.read_misses;
+    assign mem_perf_if.icache_reads       = perf_icache_if.reads;
+    assign mem_perf_if.icache_read_misses = perf_icache_if.read_misses;
     
-    assign perf_memsys_if.dcache_reads       = perf_dcache_if.reads;
-    assign perf_memsys_if.dcache_writes      = perf_dcache_if.writes;
-    assign perf_memsys_if.dcache_read_misses = perf_dcache_if.read_misses;
-    assign perf_memsys_if.dcache_write_misses= perf_dcache_if.write_misses;
-    assign perf_memsys_if.dcache_bank_stalls = perf_dcache_if.bank_stalls;
-    assign perf_memsys_if.dcache_mshr_stalls = perf_dcache_if.mshr_stalls;
+    assign mem_perf_if.dcache_reads       = perf_dcache_if.reads;
+    assign mem_perf_if.dcache_writes      = perf_dcache_if.writes;
+    assign mem_perf_if.dcache_read_misses = perf_dcache_if.read_misses;
+    assign mem_perf_if.dcache_write_misses= perf_dcache_if.write_misses;
+    assign mem_perf_if.dcache_bank_stalls = perf_dcache_if.bank_stalls;
+    assign mem_perf_if.dcache_mshr_stalls = perf_dcache_if.mshr_stalls;
 
 `ifdef SM_ENABLE
-    assign perf_memsys_if.smem_reads         = perf_smem_if.reads;
-    assign perf_memsys_if.smem_writes        = perf_smem_if.writes;
-    assign perf_memsys_if.smem_bank_stalls   = perf_smem_if.bank_stalls;    
+    assign mem_perf_if.smem_reads         = perf_smem_if.reads;
+    assign mem_perf_if.smem_writes        = perf_smem_if.writes;
+    assign mem_perf_if.smem_bank_stalls   = perf_smem_if.bank_stalls;    
 `else
-    assign perf_memsys_if.smem_reads         = '0;
-    assign perf_memsys_if.smem_writes        = '0;
-    assign perf_memsys_if.smem_bank_stalls   = '0;
+    assign mem_perf_if.smem_reads         = '0;
+    assign mem_perf_if.smem_writes        = '0;
+    assign mem_perf_if.smem_bank_stalls   = '0;
 `endif
 
 `ifdef L2_ENABLE
-    assign perf_memsys_if.l2cache_reads       = perf_l2cache_if.reads;
-    assign perf_memsys_if.l2cache_writes      = perf_l2cache_if.writes;
-    assign perf_memsys_if.l2cache_read_misses = perf_l2cache_if.read_misses;
-    assign perf_memsys_if.l2cache_write_misses= perf_l2cache_if.write_misses;
-    assign perf_memsys_if.l2cache_bank_stalls = perf_l2cache_if.bank_stalls;
-    assign perf_memsys_if.l2cache_mshr_stalls = perf_l2cache_if.mshr_stalls;
+    assign mem_perf_if.l2cache_reads       = perf_l2cache_if.reads;
+    assign mem_perf_if.l2cache_writes      = perf_l2cache_if.writes;
+    assign mem_perf_if.l2cache_read_misses = perf_l2cache_if.read_misses;
+    assign mem_perf_if.l2cache_write_misses= perf_l2cache_if.write_misses;
+    assign mem_perf_if.l2cache_bank_stalls = perf_l2cache_if.bank_stalls;
+    assign mem_perf_if.l2cache_mshr_stalls = perf_l2cache_if.mshr_stalls;
 `else
-    assign perf_memsys_if.l2cache_reads       = '0;
-    assign perf_memsys_if.l2cache_writes      = '0;
-    assign perf_memsys_if.l2cache_read_misses = '0;
-    assign perf_memsys_if.l2cache_write_misses= '0;
-    assign perf_memsys_if.l2cache_bank_stalls = '0;
-    assign perf_memsys_if.l2cache_mshr_stalls = '0;
+    assign mem_perf_if.l2cache_reads       = '0;
+    assign mem_perf_if.l2cache_writes      = '0;
+    assign mem_perf_if.l2cache_read_misses = '0;
+    assign mem_perf_if.l2cache_write_misses= '0;
+    assign mem_perf_if.l2cache_bank_stalls = '0;
+    assign mem_perf_if.l2cache_mshr_stalls = '0;
 `endif
     
-    assign perf_memsys_if.l3cache_reads       = '0;
-    assign perf_memsys_if.l3cache_writes      = '0;
-    assign perf_memsys_if.l3cache_read_misses = '0;
-    assign perf_memsys_if.l3cache_write_misses= '0;
-    assign perf_memsys_if.l3cache_bank_stalls = '0;
-    assign perf_memsys_if.l3cache_mshr_stalls = '0;
+    assign mem_perf_if.l3cache_reads       = '0;
+    assign mem_perf_if.l3cache_writes      = '0;
+    assign mem_perf_if.l3cache_read_misses = '0;
+    assign mem_perf_if.l3cache_write_misses= '0;
+    assign mem_perf_if.l3cache_bank_stalls = '0;
+    assign mem_perf_if.l3cache_mshr_stalls = '0;
 
-    assign perf_memsys_if.mem_reads   = '0;       
-    assign perf_memsys_if.mem_writes  = '0;
-    assign perf_memsys_if.mem_latency = '0;
+    assign mem_perf_if.mem_reads   = '0;       
+    assign mem_perf_if.mem_writes  = '0;
+    assign mem_perf_if.mem_latency = '0;
     
 `endif
     

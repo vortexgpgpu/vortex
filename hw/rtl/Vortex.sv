@@ -49,9 +49,9 @@ module Vortex (
 );
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if perf_memsys_if[`NUM_CLUSTERS]();
-    VX_perf_memsys_if perf_memsys_total_if();    
-    VX_perf_cache_if  perf_l3cache_if();    
+    VX_mem_perf_if mem_perf_if[`NUM_CLUSTERS]();
+    VX_mem_perf_if perf_memsys_total_if();    
+    VX_cache_perf_if perf_l3cache_if();    
 `endif
 
     VX_mem_bus_if #(
@@ -80,9 +80,9 @@ module Vortex (
 `ifdef EXT_TEX_ENABLE
 `ifdef PERF_ENABLE    
     VX_tex_perf_if      perf_tex_if[`NUM_CLUSTERS]();
-    VX_perf_cache_if    perf_tcache_if[`NUM_CLUSTERS]();
+    VX_cache_perf_if    perf_tcache_if[`NUM_CLUSTERS]();
     VX_tex_perf_if      perf_tex_total_if();
-    VX_perf_cache_if    perf_tcache_total_if();
+    VX_cache_perf_if    perf_tcache_total_if();
     `PERF_TEX_ADD (perf_tex_total_if, perf_tex_if, `NUM_CLUSTERS);
     `PERF_CACHE_ADD (perf_tcache_total_if, perf_tcache_if, `NUM_CLUSTERS);
 `endif
@@ -91,9 +91,9 @@ module Vortex (
 `ifdef EXT_RASTER_ENABLE
 `ifdef PERF_ENABLE    
     VX_raster_perf_if   perf_raster_if[`NUM_CLUSTERS]();
-    VX_perf_cache_if    perf_rcache_if[`NUM_CLUSTERS]();
+    VX_cache_perf_if    perf_rcache_if[`NUM_CLUSTERS]();
     VX_raster_perf_if   perf_raster_total_if();
-    VX_perf_cache_if    perf_rcache_total_if();
+    VX_cache_perf_if    perf_rcache_total_if();
     `PERF_RASTER_ADD (perf_raster_total_if, perf_raster_if, `NUM_CLUSTERS);
     `PERF_CACHE_ADD (perf_rcache_total_if, perf_rcache_if, `NUM_CLUSTERS);
 `endif
@@ -102,9 +102,9 @@ module Vortex (
 `ifdef EXT_ROP_ENABLE
 `ifdef PERF_ENABLE    
     VX_rop_perf_if      perf_rop_if[`NUM_CLUSTERS]();
-    VX_perf_cache_if    perf_ocache_if[`NUM_CLUSTERS]();
+    VX_cache_perf_if    perf_ocache_if[`NUM_CLUSTERS]();
     VX_rop_perf_if      perf_rop_total_if();
-    VX_perf_cache_if    perf_ocache_total_if();
+    VX_cache_perf_if    perf_ocache_total_if();
     `PERF_ROP_ADD (perf_rop_total_if, perf_rop_if, `NUM_CLUSTERS);
     `PERF_CACHE_ADD (perf_ocache_total_if, perf_ocache_if, `NUM_CLUSTERS);
 `endif
@@ -149,7 +149,7 @@ module Vortex (
             .reset              (cluster_reset),
 
         `ifdef PERF_ENABLE
-            .perf_memsys_if     (perf_memsys_if[i]),
+            .mem_perf_if        (mem_perf_if[i]),
             .perf_memsys_total_if (perf_memsys_total_if),
         `endif
             
@@ -221,7 +221,7 @@ module Vortex (
         .reset          (l3_reset),
 
     `ifdef PERF_ENABLE
-        .perf_cache_if  (perf_l3cache_if),
+        .cache_perf_if  (perf_l3cache_if),
     `endif
 
         .core_bus_if    (per_cluster_mem_bus_if),
@@ -230,23 +230,23 @@ module Vortex (
 
 `ifdef PERF_ENABLE
 
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, icache_reads, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, icache_read_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, dcache_reads, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, dcache_writes, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, dcache_read_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, dcache_write_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, dcache_bank_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, dcache_mshr_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, smem_reads, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, smem_writes, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, smem_bank_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, l2cache_reads, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, l2cache_writes, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, l2cache_read_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, l2cache_write_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, l2cache_bank_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
-    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, l2cache_mshr_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, icache_reads, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, icache_read_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, dcache_reads, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, dcache_writes, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, dcache_read_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, dcache_write_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, dcache_bank_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, dcache_mshr_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, smem_reads, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, smem_writes, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, smem_bank_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, l2cache_reads, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, l2cache_writes, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, l2cache_read_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, l2cache_write_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, l2cache_bank_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, mem_perf_if, l2cache_mshr_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
 
 `ifdef L3_ENABLE
     assign perf_memsys_total_if.l3cache_reads       = perf_l3cache_if.reads;

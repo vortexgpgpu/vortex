@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-interface VX_perf_gpu_if ();
+interface VX_gpu_perf_if ();
 
 `ifdef EXT_TEX_ENABLE
     wire [`PERF_CTR_BITS-1:0] tex_stalls;

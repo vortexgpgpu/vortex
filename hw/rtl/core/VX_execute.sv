@@ -25,8 +25,8 @@ module VX_execute #(
     VX_sched_csr_if.slave   sched_csr_if,
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if.slave perf_memsys_if,
-    VX_perf_pipeline_if.slave perf_pipeline_if,
+    VX_mem_perf_if.slave    mem_perf_if,
+    VX_pipeline_perf_if.slave pipeline_perf_if,
 `endif
 
 `ifdef EXT_F_ENABLE
@@ -39,7 +39,7 @@ module VX_execute #(
     VX_tex_bus_if.master    tex_bus_if,
 `ifdef PERF_ENABLE
     VX_tex_perf_if.slave    perf_tex_if,
-    VX_perf_cache_if.slave  perf_tcache_if,
+    VX_cache_perf_if.slave  perf_tcache_if,
 `endif
 `endif
 
@@ -47,7 +47,7 @@ module VX_execute #(
     VX_raster_bus_if.slave  raster_bus_if,
 `ifdef PERF_ENABLE
     VX_raster_perf_if.slave perf_raster_if,
-    VX_perf_cache_if.slave  perf_rcache_if,
+    VX_cache_perf_if.slave  perf_rcache_if,
 `endif
 `endif
 
@@ -55,7 +55,7 @@ module VX_execute #(
     VX_rop_bus_if.master    rop_bus_if,
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave    perf_rop_if,
-    VX_perf_cache_if.slave  perf_ocache_if,
+    VX_cache_perf_if.slave  perf_ocache_if,
 `endif
 `endif    
   
@@ -99,7 +99,7 @@ module VX_execute #(
 `endif
 
 `ifdef PERF_ENABLE
-    VX_perf_gpu_if perf_gpu_if();
+    VX_gpu_perf_if gpu_perf_if();
 `endif
 
     `RESET_RELAY (alu_reset, reset);
@@ -140,9 +140,9 @@ module VX_execute #(
         .base_dcrs      (base_dcrs),
     
     `ifdef PERF_ENABLE
-        .perf_memsys_if (perf_memsys_if),
-        .perf_pipeline_if(perf_pipeline_if),
-        .perf_gpu_if    (perf_gpu_if),
+        .mem_perf_if    (mem_perf_if),
+        .pipeline_perf_if(pipeline_perf_if),
+        .gpu_perf_if    (gpu_perf_if),
     `endif
 
         .gpu_pending    (gpu_pending),
@@ -209,7 +209,7 @@ module VX_execute #(
         .gpu_req_if     (gpu_req_if),
 
     `ifdef PERF_ENABLE
-        .perf_gpu_if    (perf_gpu_if),
+        .gpu_perf_if    (gpu_perf_if),
     `endif
     
     `ifdef EXT_TEX_ENABLE

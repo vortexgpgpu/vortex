@@ -16,20 +16,20 @@ module VX_csr_data #(
     input base_dcrs_t                   base_dcrs,
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if.slave             perf_memsys_if,
-    VX_perf_pipeline_if.slave           perf_pipeline_if,
-    VX_perf_gpu_if.slave                perf_gpu_if,
+    VX_mem_perf_if.slave                mem_perf_if,
+    VX_pipeline_perf_if.slave           pipeline_perf_if,
+    VX_gpu_perf_if.slave                gpu_perf_if,
 `ifdef EXT_TEX_ENABLE
     VX_tex_perf_if.slave                perf_tex_if,
-    VX_perf_cache_if.slave              perf_tcache_if,
+    VX_cache_perf_if.slave              perf_tcache_if,
 `endif
 `ifdef EXT_RASTER_ENABLE
     VX_raster_perf_if.slave             perf_raster_if,
-    VX_perf_cache_if.slave              perf_rcache_if,
+    VX_cache_perf_if.slave              perf_rcache_if,
 `endif
 `ifdef EXT_ROP_ENABLE
     VX_rop_perf_if.slave                perf_rop_if,
-    VX_perf_cache_if.slave              perf_ocache_if,
+    VX_cache_perf_if.slave              perf_ocache_if,
 `endif
 `endif
 
@@ -172,99 +172,99 @@ module VX_csr_data #(
                     `DCR_MPM_CLASS_CORE: begin
                         case (read_addr)
                         // PERF: pipeline
-                        `CSR_MPM_IBUF_ST        : read_data_ro_r = perf_pipeline_if.ibf_stalls[31:0];
-                        `CSR_MPM_IBUF_ST_H      : read_data_ro_r = 32'(perf_pipeline_if.ibf_stalls[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_SCRB_ST        : read_data_ro_r = perf_pipeline_if.scb_stalls[31:0];
-                        `CSR_MPM_SCRB_ST_H      : read_data_ro_r = 32'(perf_pipeline_if.scb_stalls[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_ALU_ST         : read_data_ro_r = perf_pipeline_if.alu_stalls[31:0];
-                        `CSR_MPM_ALU_ST_H       : read_data_ro_r = 32'(perf_pipeline_if.alu_stalls[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_LSU_ST         : read_data_ro_r = perf_pipeline_if.lsu_stalls[31:0];
-                        `CSR_MPM_LSU_ST_H       : read_data_ro_r = 32'(perf_pipeline_if.lsu_stalls[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_CSR_ST         : read_data_ro_r = perf_pipeline_if.csr_stalls[31:0];
-                        `CSR_MPM_CSR_ST_H       : read_data_ro_r = 32'(perf_pipeline_if.csr_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_IBUF_ST        : read_data_ro_r = pipeline_perf_if.ibf_stalls[31:0];
+                        `CSR_MPM_IBUF_ST_H      : read_data_ro_r = 32'(pipeline_perf_if.ibf_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_SCRB_ST        : read_data_ro_r = pipeline_perf_if.scb_stalls[31:0];
+                        `CSR_MPM_SCRB_ST_H      : read_data_ro_r = 32'(pipeline_perf_if.scb_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_ALU_ST         : read_data_ro_r = pipeline_perf_if.alu_stalls[31:0];
+                        `CSR_MPM_ALU_ST_H       : read_data_ro_r = 32'(pipeline_perf_if.alu_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_LSU_ST         : read_data_ro_r = pipeline_perf_if.lsu_stalls[31:0];
+                        `CSR_MPM_LSU_ST_H       : read_data_ro_r = 32'(pipeline_perf_if.lsu_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_CSR_ST         : read_data_ro_r = pipeline_perf_if.csr_stalls[31:0];
+                        `CSR_MPM_CSR_ST_H       : read_data_ro_r = 32'(pipeline_perf_if.csr_stalls[`PERF_CTR_BITS-1:32]);
                     `ifdef EXT_F_ENABLE
-                        `CSR_MPM_FPU_ST         : read_data_ro_r = perf_pipeline_if.fpu_stalls[31:0];
-                        `CSR_MPM_FPU_ST_H       : read_data_ro_r = 32'(perf_pipeline_if.fpu_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_FPU_ST         : read_data_ro_r = pipeline_perf_if.fpu_stalls[31:0];
+                        `CSR_MPM_FPU_ST_H       : read_data_ro_r = 32'(pipeline_perf_if.fpu_stalls[`PERF_CTR_BITS-1:32]);
                     `else
                         `CSR_MPM_FPU_ST         : read_data_ro_r = '0;
                         `CSR_MPM_FPU_ST_H       : read_data_ro_r = '0;
                     `endif
-                        `CSR_MPM_GPU_ST         : read_data_ro_r = perf_pipeline_if.gpu_stalls[31:0];
-                        `CSR_MPM_GPU_ST_H       : read_data_ro_r = 32'(perf_pipeline_if.gpu_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_GPU_ST         : read_data_ro_r = pipeline_perf_if.gpu_stalls[31:0];
+                        `CSR_MPM_GPU_ST_H       : read_data_ro_r = 32'(pipeline_perf_if.gpu_stalls[`PERF_CTR_BITS-1:32]);
                         // PERF: memory
-                        `CSR_MPM_IFETCHES       : read_data_ro_r = perf_pipeline_if.ifetches[31:0];
-                        `CSR_MPM_IFETCHES_H     : read_data_ro_r = 32'(perf_pipeline_if.ifetches[`PERF_CTR_BITS-1:32]); 
-                        `CSR_MPM_LOADS          : read_data_ro_r = perf_pipeline_if.loads[31:0];
-                        `CSR_MPM_LOADS_H        : read_data_ro_r = 32'(perf_pipeline_if.loads[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_STORES         : read_data_ro_r = perf_pipeline_if.stores[31:0];
-                        `CSR_MPM_STORES_H       : read_data_ro_r = 32'(perf_pipeline_if.stores[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_IFETCH_LAT     : read_data_ro_r = perf_pipeline_if.ifetch_latency[31:0];
-                        `CSR_MPM_IFETCH_LAT_H   : read_data_ro_r = 32'(perf_pipeline_if.ifetch_latency[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_LOAD_LAT       : read_data_ro_r = perf_pipeline_if.load_latency[31:0];
-                        `CSR_MPM_LOAD_LAT_H     : read_data_ro_r = 32'(perf_pipeline_if.load_latency[`PERF_CTR_BITS-1:32]);                
+                        `CSR_MPM_IFETCHES       : read_data_ro_r = pipeline_perf_if.ifetches[31:0];
+                        `CSR_MPM_IFETCHES_H     : read_data_ro_r = 32'(pipeline_perf_if.ifetches[`PERF_CTR_BITS-1:32]); 
+                        `CSR_MPM_LOADS          : read_data_ro_r = pipeline_perf_if.loads[31:0];
+                        `CSR_MPM_LOADS_H        : read_data_ro_r = 32'(pipeline_perf_if.loads[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_STORES         : read_data_ro_r = pipeline_perf_if.stores[31:0];
+                        `CSR_MPM_STORES_H       : read_data_ro_r = 32'(pipeline_perf_if.stores[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_IFETCH_LAT     : read_data_ro_r = pipeline_perf_if.ifetch_latency[31:0];
+                        `CSR_MPM_IFETCH_LAT_H   : read_data_ro_r = 32'(pipeline_perf_if.ifetch_latency[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_LOAD_LAT       : read_data_ro_r = pipeline_perf_if.load_latency[31:0];
+                        `CSR_MPM_LOAD_LAT_H     : read_data_ro_r = 32'(pipeline_perf_if.load_latency[`PERF_CTR_BITS-1:32]);                
                         default:;
                         endcase
                     end
                     `DCR_MPM_CLASS_MEM: begin
                         case (read_addr)
                         // PERF: icache
-                        `CSR_MPM_ICACHE_READS       : read_data_ro_r = perf_memsys_if.icache_reads[31:0];
-                        `CSR_MPM_ICACHE_READS_H     : read_data_ro_r = 32'(perf_memsys_if.icache_reads[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_ICACHE_MISS_R      : read_data_ro_r = perf_memsys_if.icache_read_misses[31:0];
-                        `CSR_MPM_ICACHE_MISS_R_H    : read_data_ro_r = 32'(perf_memsys_if.icache_read_misses[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_ICACHE_READS       : read_data_ro_r = mem_perf_if.icache_reads[31:0];
+                        `CSR_MPM_ICACHE_READS_H     : read_data_ro_r = 32'(mem_perf_if.icache_reads[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_ICACHE_MISS_R      : read_data_ro_r = mem_perf_if.icache_read_misses[31:0];
+                        `CSR_MPM_ICACHE_MISS_R_H    : read_data_ro_r = 32'(mem_perf_if.icache_read_misses[`PERF_CTR_BITS-1:32]);
                         // PERF: dcache
-                        `CSR_MPM_DCACHE_READS       : read_data_ro_r = perf_memsys_if.dcache_reads[31:0];
-                        `CSR_MPM_DCACHE_READS_H     : read_data_ro_r = 32'(perf_memsys_if.dcache_reads[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_DCACHE_WRITES      : read_data_ro_r = perf_memsys_if.dcache_writes[31:0];
-                        `CSR_MPM_DCACHE_WRITES_H    : read_data_ro_r = 32'(perf_memsys_if.dcache_writes[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_DCACHE_MISS_R      : read_data_ro_r = perf_memsys_if.dcache_read_misses[31:0];
-                        `CSR_MPM_DCACHE_MISS_R_H    : read_data_ro_r = 32'(perf_memsys_if.dcache_read_misses[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_DCACHE_MISS_W      : read_data_ro_r = perf_memsys_if.dcache_write_misses[31:0];
-                        `CSR_MPM_DCACHE_MISS_W_H    : read_data_ro_r = 32'(perf_memsys_if.dcache_write_misses[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_DCACHE_BANK_ST     : read_data_ro_r = perf_memsys_if.dcache_bank_stalls[31:0];
-                        `CSR_MPM_DCACHE_BANK_ST_H   : read_data_ro_r = 32'(perf_memsys_if.dcache_bank_stalls[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_DCACHE_MSHR_ST     : read_data_ro_r = perf_memsys_if.dcache_mshr_stalls[31:0];
-                        `CSR_MPM_DCACHE_MSHR_ST_H   : read_data_ro_r = 32'(perf_memsys_if.dcache_mshr_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_DCACHE_READS       : read_data_ro_r = mem_perf_if.dcache_reads[31:0];
+                        `CSR_MPM_DCACHE_READS_H     : read_data_ro_r = 32'(mem_perf_if.dcache_reads[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_DCACHE_WRITES      : read_data_ro_r = mem_perf_if.dcache_writes[31:0];
+                        `CSR_MPM_DCACHE_WRITES_H    : read_data_ro_r = 32'(mem_perf_if.dcache_writes[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_DCACHE_MISS_R      : read_data_ro_r = mem_perf_if.dcache_read_misses[31:0];
+                        `CSR_MPM_DCACHE_MISS_R_H    : read_data_ro_r = 32'(mem_perf_if.dcache_read_misses[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_DCACHE_MISS_W      : read_data_ro_r = mem_perf_if.dcache_write_misses[31:0];
+                        `CSR_MPM_DCACHE_MISS_W_H    : read_data_ro_r = 32'(mem_perf_if.dcache_write_misses[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_DCACHE_BANK_ST     : read_data_ro_r = mem_perf_if.dcache_bank_stalls[31:0];
+                        `CSR_MPM_DCACHE_BANK_ST_H   : read_data_ro_r = 32'(mem_perf_if.dcache_bank_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_DCACHE_MSHR_ST     : read_data_ro_r = mem_perf_if.dcache_mshr_stalls[31:0];
+                        `CSR_MPM_DCACHE_MSHR_ST_H   : read_data_ro_r = 32'(mem_perf_if.dcache_mshr_stalls[`PERF_CTR_BITS-1:32]);
                         // PERF: smem          
-                        `CSR_MPM_SMEM_READS         : read_data_ro_r = perf_memsys_if.smem_reads[31:0];
-                        `CSR_MPM_SMEM_READS_H       : read_data_ro_r = 32'(perf_memsys_if.smem_reads[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_SMEM_WRITES        : read_data_ro_r = perf_memsys_if.smem_writes[31:0];
-                        `CSR_MPM_SMEM_WRITES_H      : read_data_ro_r = 32'(perf_memsys_if.smem_writes[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_SMEM_BANK_ST       : read_data_ro_r = perf_memsys_if.smem_bank_stalls[31:0];
-                        `CSR_MPM_SMEM_BANK_ST_H     : read_data_ro_r = 32'(perf_memsys_if.smem_bank_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_SMEM_READS         : read_data_ro_r = mem_perf_if.smem_reads[31:0];
+                        `CSR_MPM_SMEM_READS_H       : read_data_ro_r = 32'(mem_perf_if.smem_reads[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_SMEM_WRITES        : read_data_ro_r = mem_perf_if.smem_writes[31:0];
+                        `CSR_MPM_SMEM_WRITES_H      : read_data_ro_r = 32'(mem_perf_if.smem_writes[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_SMEM_BANK_ST       : read_data_ro_r = mem_perf_if.smem_bank_stalls[31:0];
+                        `CSR_MPM_SMEM_BANK_ST_H     : read_data_ro_r = 32'(mem_perf_if.smem_bank_stalls[`PERF_CTR_BITS-1:32]);
                         // PERF: l2cache                        
-                        `CSR_MPM_L2CACHE_READS      : read_data_ro_r = perf_memsys_if.l2cache_reads[31:0];
-                        `CSR_MPM_L2CACHE_READS_H    : read_data_ro_r = 32'(perf_memsys_if.l2cache_reads[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_L2CACHE_WRITES     : read_data_ro_r = perf_memsys_if.l2cache_writes[31:0];
-                        `CSR_MPM_L2CACHE_WRITES_H   : read_data_ro_r = 32'(perf_memsys_if.l2cache_writes[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_L2CACHE_MISS_R     : read_data_ro_r = perf_memsys_if.l2cache_read_misses[31:0];
-                        `CSR_MPM_L2CACHE_MISS_R_H   : read_data_ro_r = 32'(perf_memsys_if.l2cache_read_misses[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_L2CACHE_MISS_W     : read_data_ro_r = perf_memsys_if.l2cache_write_misses[31:0];
-                        `CSR_MPM_L2CACHE_MISS_W_H   : read_data_ro_r = 32'(perf_memsys_if.l2cache_write_misses[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_L2CACHE_BANK_ST    : read_data_ro_r = perf_memsys_if.l2cache_bank_stalls[31:0];
-                        `CSR_MPM_L2CACHE_BANK_ST_H  : read_data_ro_r = 32'(perf_memsys_if.l2cache_bank_stalls[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_L2CACHE_MSHR_ST    : read_data_ro_r = perf_memsys_if.l2cache_mshr_stalls[31:0];
-                        `CSR_MPM_L2CACHE_MSHR_ST_H  : read_data_ro_r = 32'(perf_memsys_if.l2cache_mshr_stalls[`PERF_CTR_BITS-1:32]);      
+                        `CSR_MPM_L2CACHE_READS      : read_data_ro_r = mem_perf_if.l2cache_reads[31:0];
+                        `CSR_MPM_L2CACHE_READS_H    : read_data_ro_r = 32'(mem_perf_if.l2cache_reads[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_L2CACHE_WRITES     : read_data_ro_r = mem_perf_if.l2cache_writes[31:0];
+                        `CSR_MPM_L2CACHE_WRITES_H   : read_data_ro_r = 32'(mem_perf_if.l2cache_writes[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_L2CACHE_MISS_R     : read_data_ro_r = mem_perf_if.l2cache_read_misses[31:0];
+                        `CSR_MPM_L2CACHE_MISS_R_H   : read_data_ro_r = 32'(mem_perf_if.l2cache_read_misses[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_L2CACHE_MISS_W     : read_data_ro_r = mem_perf_if.l2cache_write_misses[31:0];
+                        `CSR_MPM_L2CACHE_MISS_W_H   : read_data_ro_r = 32'(mem_perf_if.l2cache_write_misses[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_L2CACHE_BANK_ST    : read_data_ro_r = mem_perf_if.l2cache_bank_stalls[31:0];
+                        `CSR_MPM_L2CACHE_BANK_ST_H  : read_data_ro_r = 32'(mem_perf_if.l2cache_bank_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_L2CACHE_MSHR_ST    : read_data_ro_r = mem_perf_if.l2cache_mshr_stalls[31:0];
+                        `CSR_MPM_L2CACHE_MSHR_ST_H  : read_data_ro_r = 32'(mem_perf_if.l2cache_mshr_stalls[`PERF_CTR_BITS-1:32]);      
                         // PERF: l3cache
-                        `CSR_MPM_L3CACHE_READS      : read_data_ro_r = perf_memsys_if.l3cache_reads[31:0];
-                        `CSR_MPM_L3CACHE_READS_H    : read_data_ro_r = 32'(perf_memsys_if.l3cache_reads[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_L3CACHE_WRITES     : read_data_ro_r = perf_memsys_if.l3cache_writes[31:0];
-                        `CSR_MPM_L3CACHE_WRITES_H   : read_data_ro_r = 32'(perf_memsys_if.l3cache_writes[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_L3CACHE_MISS_R     : read_data_ro_r = perf_memsys_if.l3cache_read_misses[31:0];
-                        `CSR_MPM_L3CACHE_MISS_R_H   : read_data_ro_r = 32'(perf_memsys_if.l3cache_read_misses[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_L3CACHE_MISS_W     : read_data_ro_r = perf_memsys_if.l3cache_write_misses[31:0];
-                        `CSR_MPM_L3CACHE_MISS_W_H   : read_data_ro_r = 32'(perf_memsys_if.l3cache_write_misses[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_L3CACHE_BANK_ST    : read_data_ro_r = perf_memsys_if.l3cache_bank_stalls[31:0];
-                        `CSR_MPM_L3CACHE_BANK_ST_H  : read_data_ro_r = 32'(perf_memsys_if.l3cache_bank_stalls[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_L3CACHE_MSHR_ST    : read_data_ro_r = perf_memsys_if.l3cache_mshr_stalls[31:0];
-                        `CSR_MPM_L3CACHE_MSHR_ST_H  : read_data_ro_r = 32'(perf_memsys_if.l3cache_mshr_stalls[`PERF_CTR_BITS-1:32]); 
+                        `CSR_MPM_L3CACHE_READS      : read_data_ro_r = mem_perf_if.l3cache_reads[31:0];
+                        `CSR_MPM_L3CACHE_READS_H    : read_data_ro_r = 32'(mem_perf_if.l3cache_reads[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_L3CACHE_WRITES     : read_data_ro_r = mem_perf_if.l3cache_writes[31:0];
+                        `CSR_MPM_L3CACHE_WRITES_H   : read_data_ro_r = 32'(mem_perf_if.l3cache_writes[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_L3CACHE_MISS_R     : read_data_ro_r = mem_perf_if.l3cache_read_misses[31:0];
+                        `CSR_MPM_L3CACHE_MISS_R_H   : read_data_ro_r = 32'(mem_perf_if.l3cache_read_misses[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_L3CACHE_MISS_W     : read_data_ro_r = mem_perf_if.l3cache_write_misses[31:0];
+                        `CSR_MPM_L3CACHE_MISS_W_H   : read_data_ro_r = 32'(mem_perf_if.l3cache_write_misses[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_L3CACHE_BANK_ST    : read_data_ro_r = mem_perf_if.l3cache_bank_stalls[31:0];
+                        `CSR_MPM_L3CACHE_BANK_ST_H  : read_data_ro_r = 32'(mem_perf_if.l3cache_bank_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_L3CACHE_MSHR_ST    : read_data_ro_r = mem_perf_if.l3cache_mshr_stalls[31:0];
+                        `CSR_MPM_L3CACHE_MSHR_ST_H  : read_data_ro_r = 32'(mem_perf_if.l3cache_mshr_stalls[`PERF_CTR_BITS-1:32]); 
                         // PERF: memory
-                        `CSR_MPM_MEM_READS          : read_data_ro_r = perf_memsys_if.mem_reads[31:0];
-                        `CSR_MPM_MEM_READS_H        : read_data_ro_r = 32'(perf_memsys_if.mem_reads[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_MEM_WRITES         : read_data_ro_r = perf_memsys_if.mem_writes[31:0];
-                        `CSR_MPM_MEM_WRITES_H       : read_data_ro_r = 32'(perf_memsys_if.mem_writes[`PERF_CTR_BITS-1:32]);
-                        `CSR_MPM_MEM_LAT            : read_data_ro_r = perf_memsys_if.mem_latency[31:0];
-                        `CSR_MPM_MEM_LAT_H          : read_data_ro_r = 32'(perf_memsys_if.mem_latency[`PERF_CTR_BITS-1:32]);     
+                        `CSR_MPM_MEM_READS          : read_data_ro_r = mem_perf_if.mem_reads[31:0];
+                        `CSR_MPM_MEM_READS_H        : read_data_ro_r = 32'(mem_perf_if.mem_reads[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_MEM_WRITES         : read_data_ro_r = mem_perf_if.mem_writes[31:0];
+                        `CSR_MPM_MEM_WRITES_H       : read_data_ro_r = 32'(mem_perf_if.mem_writes[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_MEM_LAT            : read_data_ro_r = mem_perf_if.mem_latency[31:0];
+                        `CSR_MPM_MEM_LAT_H          : read_data_ro_r = 32'(mem_perf_if.mem_latency[`PERF_CTR_BITS-1:32]);     
                         default:;
                         endcase
                     end
@@ -288,8 +288,8 @@ module VX_csr_data #(
                         `CSR_MPM_TCACHE_MSHR_ST  :read_data_ro_r = perf_tcache_if.mshr_stalls[31:0];
                         `CSR_MPM_TCACHE_MSHR_ST_H:read_data_ro_r = 32'(perf_tcache_if.mshr_stalls[`PERF_CTR_BITS-1:32]);
                     `endif
-                        `CSR_MPM_TEX_ISSUE_ST   : read_data_ro_r = perf_gpu_if.tex_stalls[31:0];
-                        `CSR_MPM_TEX_ISSUE_ST_H : read_data_ro_r = 32'(perf_gpu_if.tex_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_TEX_ISSUE_ST   : read_data_ro_r = gpu_perf_if.tex_stalls[31:0];
+                        `CSR_MPM_TEX_ISSUE_ST_H : read_data_ro_r = 32'(gpu_perf_if.tex_stalls[`PERF_CTR_BITS-1:32]);
                         default:;
                         endcase
                     `endif
@@ -314,8 +314,8 @@ module VX_csr_data #(
                         `CSR_MPM_RCACHE_MSHR_ST  :read_data_ro_r = perf_rcache_if.mshr_stalls[31:0];
                         `CSR_MPM_RCACHE_MSHR_ST_H:read_data_ro_r = 32'(perf_rcache_if.mshr_stalls[`PERF_CTR_BITS-1:32]);
                     `endif
-                        `CSR_MPM_RASTER_ISSUE_ST   : read_data_ro_r = perf_gpu_if.raster_stalls[31:0];
-                        `CSR_MPM_RASTER_ISSUE_ST_H : read_data_ro_r = 32'(perf_gpu_if.raster_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_RASTER_ISSUE_ST   : read_data_ro_r = gpu_perf_if.raster_stalls[31:0];
+                        `CSR_MPM_RASTER_ISSUE_ST_H : read_data_ro_r = 32'(gpu_perf_if.raster_stalls[`PERF_CTR_BITS-1:32]);
                         default:;
                         endcase
                     `endif
@@ -346,8 +346,8 @@ module VX_csr_data #(
                         `CSR_MPM_OCACHE_MSHR_ST  :read_data_ro_r = perf_ocache_if.mshr_stalls[31:0];
                         `CSR_MPM_OCACHE_MSHR_ST_H:read_data_ro_r = 32'(perf_ocache_if.mshr_stalls[`PERF_CTR_BITS-1:32]);
                     `endif
-                        `CSR_MPM_ROP_ISSUE_ST   : read_data_ro_r = perf_gpu_if.rop_stalls[31:0];
-                        `CSR_MPM_ROP_ISSUE_ST_H : read_data_ro_r = 32'(perf_gpu_if.rop_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_ROP_ISSUE_ST   : read_data_ro_r = gpu_perf_if.rop_stalls[31:0];
+                        `CSR_MPM_ROP_ISSUE_ST_H : read_data_ro_r = 32'(gpu_perf_if.rop_stalls[`PERF_CTR_BITS-1:32]);
                         default:;
                         endcase
                     `endif
@@ -373,10 +373,10 @@ module VX_csr_data #(
 
 `ifdef PERF_ENABLE
 `ifdef EXT_IMADD_ENABLE
-    wire [`PERF_CTR_BITS-1:0] perf_imadd_stalls = perf_gpu_if.imadd_stalls;
+    wire [`PERF_CTR_BITS-1:0] perf_imadd_stalls = gpu_perf_if.imadd_stalls;
     `UNUSED_VAR (perf_imadd_stalls);
 `endif
-    wire [`PERF_CTR_BITS-1:0] perf_wctl_stalls = perf_gpu_if.wctl_stalls;
+    wire [`PERF_CTR_BITS-1:0] perf_wctl_stalls = gpu_perf_if.wctl_stalls;
     `UNUSED_VAR (perf_wctl_stalls);
 `endif
 

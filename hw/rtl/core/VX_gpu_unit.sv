@@ -12,7 +12,7 @@ module VX_gpu_unit #(
     input wire              reset,
 
 `ifdef PERF_ENABLE
-    VX_perf_gpu_if.master   perf_gpu_if,
+    VX_gpu_perf_if.master   gpu_perf_if,
 `endif
 
     // Inputs
@@ -381,7 +381,7 @@ module VX_gpu_unit #(
             perf_tex_stalls <= perf_tex_stalls + `PERF_CTR_BITS'(tex_agent_if.valid && ~tex_agent_if.ready);
         end
     end
-    assign perf_gpu_if.tex_stalls = perf_tex_stalls;
+    assign gpu_perf_if.tex_stalls = perf_tex_stalls;
 `endif
 `ifdef EXT_RASTER_ENABLE
     reg [`PERF_CTR_BITS-1:0] perf_raster_stalls;
@@ -392,7 +392,7 @@ module VX_gpu_unit #(
             perf_raster_stalls <= perf_raster_stalls + `PERF_CTR_BITS'(raster_agent_if.valid && ~raster_agent_if.ready);
         end
     end
-    assign perf_gpu_if.raster_stalls = perf_raster_stalls;
+    assign gpu_perf_if.raster_stalls = perf_raster_stalls;
 `endif
 `ifdef EXT_ROP_ENABLE
     reg [`PERF_CTR_BITS-1:0] perf_rop_stalls;
@@ -403,7 +403,7 @@ module VX_gpu_unit #(
             perf_rop_stalls <= perf_rop_stalls + `PERF_CTR_BITS'(rop_agent_if.valid && ~rop_agent_if.ready);
         end
     end
-    assign perf_gpu_if.rop_stalls = perf_rop_stalls;
+    assign gpu_perf_if.rop_stalls = perf_rop_stalls;
 `endif
 `ifdef EXT_IMADD_ENABLE
     reg [`PERF_CTR_BITS-1:0] perf_imadd_stalls;
@@ -414,7 +414,7 @@ module VX_gpu_unit #(
             perf_imadd_stalls <= perf_imadd_stalls + `PERF_CTR_BITS'(imadd_valid_in && ~imadd_ready_in);
         end
     end
-    assign perf_gpu_if.imadd_stalls = perf_imadd_stalls;
+    assign gpu_perf_if.imadd_stalls = perf_imadd_stalls;
 `endif
     reg [`PERF_CTR_BITS-1:0] perf_wctl_stalls;
     always @(posedge clk) begin
@@ -424,7 +424,7 @@ module VX_gpu_unit #(
             perf_wctl_stalls <= perf_wctl_stalls + `PERF_CTR_BITS'(wctl_req_valid && ~wctl_req_ready);
         end
     end
-    assign perf_gpu_if.wctl_stalls = perf_wctl_stalls;
+    assign gpu_perf_if.wctl_stalls = perf_wctl_stalls;
 `endif
 
 endmodule

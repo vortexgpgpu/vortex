@@ -34,7 +34,7 @@ module VX_core #(
     input wire              reset,
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if.slave perf_memsys_if,
+    VX_mem_perf_if.slave    mem_perf_if,
 `endif
 
     VX_dcr_write_if.slave   dcr_write_if,
@@ -50,7 +50,7 @@ module VX_core #(
 `ifdef EXT_TEX_ENABLE
 `ifdef PERF_ENABLE
     VX_tex_perf_if.slave    perf_tex_if,
-    VX_perf_cache_if.slave  perf_tcache_if,
+    VX_cache_perf_if.slave  perf_tcache_if,
 `endif
     VX_tex_bus_if.master    tex_bus_if,
 `endif
@@ -58,7 +58,7 @@ module VX_core #(
 `ifdef EXT_RASTER_ENABLE
 `ifdef PERF_ENABLE
     VX_raster_perf_if.slave perf_raster_if,
-    VX_perf_cache_if.slave  perf_rcache_if,
+    VX_cache_perf_if.slave  perf_rcache_if,
 `endif
     VX_raster_bus_if.slave  raster_bus_if,
 `endif
@@ -66,7 +66,7 @@ module VX_core #(
 `ifdef EXT_ROP_ENABLE
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave    perf_rop_if,
-    VX_perf_cache_if.slave  perf_ocache_if,
+    VX_cache_perf_if.slave  perf_ocache_if,
 `endif
     VX_rop_bus_if.master    rop_bus_if,
 `endif
@@ -107,7 +107,7 @@ module VX_core #(
     VX_writeback_if     writeback_if();   
 
 `ifdef PERF_ENABLE
-    VX_perf_pipeline_if perf_pipeline_if();
+    VX_pipeline_perf_if pipeline_perf_if();
 `endif
 
     `RESET_RELAY (dcr_data_reset, reset);
@@ -179,7 +179,7 @@ module VX_core #(
         .reset          (issue_reset),
 
     `ifdef PERF_ENABLE
-        .perf_issue_if  (perf_pipeline_if.issue),
+        .perf_issue_if  (pipeline_perf_if.issue),
     `endif
 
         .decode_if      (decode_if),
@@ -205,8 +205,8 @@ module VX_core #(
         .base_dcrs      (base_dcrs),
 
     `ifdef PERF_ENABLE
-        .perf_memsys_if (perf_memsys_if),        
-        .perf_pipeline_if(perf_pipeline_if),
+        .mem_perf_if (mem_perf_if),        
+        .pipeline_perf_if(pipeline_perf_if),
     `endif 
 
         .dcache_bus_if  (dcache_bus_if),
@@ -348,12 +348,12 @@ module VX_core #(
         end
     end
 
-    assign perf_pipeline_if.ifetches = perf_ifetches;
-    assign perf_pipeline_if.loads = perf_loads;
-    assign perf_pipeline_if.stores = perf_stores;
-    assign perf_pipeline_if.load_latency = perf_dcache_lat;
-    assign perf_pipeline_if.ifetch_latency = perf_icache_lat;
-    assign perf_pipeline_if.load_latency = perf_dcache_lat;
+    assign pipeline_perf_if.ifetches = perf_ifetches;
+    assign pipeline_perf_if.loads = perf_loads;
+    assign pipeline_perf_if.stores = perf_stores;
+    assign pipeline_perf_if.load_latency = perf_dcache_lat;
+    assign pipeline_perf_if.ifetch_latency = perf_icache_lat;
+    assign pipeline_perf_if.load_latency = perf_dcache_lat;
 
 `endif
     
