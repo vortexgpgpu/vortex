@@ -111,9 +111,9 @@ module VX_cluster #(
         .TAG_WIDTH (RCACHE_TAG_WIDTH)
     ) rcache_bus_if[`NUM_RASTER_UNITS]();
 
-    VX_raster_req_if #(
+    VX_raster_bus_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) raster_req_if[`NUM_RASTER_UNITS]();
+    ) raster_bus_if[`NUM_RASTER_UNITS]();
 
     VX_dcr_write_if raster_dcr_write_tmp_if();
     assign raster_dcr_write_tmp_if.valid = dcr_write_if.valid && (dcr_write_if.addr >= `DCR_RASTER_STATE_BEGIN && dcr_write_if.addr < `DCR_RASTER_STATE_END);
@@ -145,14 +145,14 @@ module VX_cluster #(
             .perf_raster_if(perf_raster_unit_if[i]),
         `endif
             .dcr_write_if  (raster_dcr_write_if),
-            .raster_req_if (raster_req_if[i]),
+            .raster_bus_if (raster_bus_if[i]),
             .cache_bus_if  (rcache_bus_if[i])
         );
     end
 
-    VX_raster_req_if #(
+    VX_raster_bus_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) per_socket_raster_req_if[`NUM_SOCKETS]();
+    ) per_socket_raster_bus_if[`NUM_SOCKETS]();
 
     `RESET_RELAY (raster_arb_reset, reset);
 
@@ -165,8 +165,8 @@ module VX_cluster #(
     ) raster_arb (
         .clk        (clk),
         .reset      (raster_arb_reset),
-        .req_in_if  (raster_req_if),
-        .req_out_if (per_socket_raster_req_if)
+        .bus_in_if  (raster_bus_if),
+        .bus_out_if (per_socket_raster_bus_if)
     );   
 `endif
 
@@ -183,13 +183,13 @@ module VX_cluster #(
         .TAG_WIDTH (OCACHE_TAG_WIDTH)
     ) ocache_bus_if[`NUM_ROP_UNITS]();
 
-    VX_rop_req_if #(
+    VX_rop_bus_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) per_socket_rop_req_if[`NUM_SOCKETS]();
+    ) per_socket_rop_bus_if[`NUM_SOCKETS]();
 
-    VX_rop_req_if #(
+    VX_rop_bus_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) rop_req_if[`NUM_ROP_UNITS]();
+    ) rop_bus_if[`NUM_ROP_UNITS]();
 
     `RESET_RELAY (rop_arb_reset, reset);
 
@@ -202,8 +202,8 @@ module VX_cluster #(
     ) rop_arb (
         .clk        (clk),
         .reset      (rop_arb_reset),
-        .req_in_if  (per_socket_rop_req_if),
-        .req_out_if (rop_req_if)
+        .bus_in_if  (per_socket_rop_bus_if),
+        .bus_out_if (rop_bus_if)
     );
 
     VX_dcr_write_if rop_dcr_write_tmp_if();
@@ -228,7 +228,7 @@ module VX_cluster #(
             .perf_rop_if   (perf_rop_unit_if[i]),
         `endif
             .dcr_write_if  (rop_dcr_write_if),
-            .rop_req_if    (rop_req_if[i]),            
+            .rop_bus_if    (rop_bus_if[i]),            
             .cache_bus_if  (ocache_bus_if[i])
         );
     end
@@ -460,7 +460,7 @@ module VX_cluster #(
             .perf_raster_if (perf_raster_total_if),
             .perf_rcache_if (perf_rcache_total_if),
         `endif
-            .raster_req_if  (per_socket_raster_req_if[i]),
+            .raster_bus_if  (per_socket_raster_bus_if[i]),
         `endif
         
         `ifdef EXT_ROP_ENABLE
@@ -468,7 +468,7 @@ module VX_cluster #(
             .perf_rop_if    (perf_rop_total_if),
             .perf_ocache_if (perf_ocache_total_if),
         `endif
-            .rop_req_if     (per_socket_rop_req_if[i]),
+            .rop_bus_if     (per_socket_rop_bus_if[i]),
         `endif
 
             .gbar_bus_if    (per_socket_gbar_bus_if[i]),

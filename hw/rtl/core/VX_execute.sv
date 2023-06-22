@@ -44,7 +44,7 @@ module VX_execute #(
 `endif
 
 `ifdef EXT_RASTER_ENABLE        
-    VX_raster_req_if.slave  raster_req_if,
+    VX_raster_bus_if.slave  raster_bus_if,
 `ifdef PERF_ENABLE
     VX_raster_perf_if.slave perf_raster_if,
     VX_perf_cache_if.slave  perf_rcache_if,
@@ -52,7 +52,7 @@ module VX_execute #(
 `endif
 
 `ifdef EXT_ROP_ENABLE        
-    VX_rop_req_if.master    rop_req_if,
+    VX_rop_bus_if.master    rop_bus_if,
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave    perf_rop_if,
     VX_perf_cache_if.slave  perf_ocache_if,
@@ -219,12 +219,12 @@ module VX_execute #(
     
     `ifdef EXT_RASTER_ENABLE        
         .raster_csr_if  (raster_csr_if),
-        .raster_req_if  (raster_req_if),
+        .raster_bus_if  (raster_bus_if),
     `endif
 
     `ifdef EXT_ROP_ENABLE        
         .rop_csr_if     (rop_csr_if),
-        .rop_req_if     (rop_req_if),
+        .rop_bus_if     (rop_bus_if),
     `endif
     
         .warp_ctl_if    (warp_ctl_if),

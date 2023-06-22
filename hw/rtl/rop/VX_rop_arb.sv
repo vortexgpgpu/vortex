@@ -11,10 +11,10 @@ module VX_rop_arb #(
     input wire              reset,
 
     // input requests    
-    VX_rop_req_if.slave     req_in_if [NUM_INPUTS],
+    VX_rop_bus_if.slave     bus_in_if [NUM_INPUTS],
 
     // output request
-    VX_rop_req_if.master    req_out_if [NUM_OUTPUTS]
+    VX_rop_bus_if.master    bus_out_if [NUM_OUTPUTS]
 );
 
     localparam UUID_WIDTH = `UP(`UUID_BITS);
@@ -29,9 +29,9 @@ module VX_rop_arb #(
     wire [NUM_OUTPUTS-1:0]                req_ready_out;
 
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-        assign req_valid_in[i] = req_in_if[i].valid;
-        assign req_data_in[i] = {req_in_if[i].uuid, req_in_if[i].mask, req_in_if[i].pos_x, req_in_if[i].pos_y, req_in_if[i].color, req_in_if[i].depth, req_in_if[i].face};
-        assign req_in_if[i].ready = req_ready_in[i];
+        assign req_valid_in[i] = bus_in_if[i].req_valid;
+        assign req_data_in[i] = {bus_in_if[i].req_uuid, bus_in_if[i].req_mask, bus_in_if[i].req_pos_x, bus_in_if[i].req_pos_y, bus_in_if[i].req_color, bus_in_if[i].req_depth, bus_in_if[i].req_face};
+        assign bus_in_if[i].req_ready = req_ready_in[i];
     end
 
     VX_stream_arb #(            
@@ -53,9 +53,9 @@ module VX_rop_arb #(
     );
     
     for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-        assign req_out_if[i].valid = req_valid_out[i];
-        assign {req_out_if[i].uuid, req_out_if[i].mask, req_out_if[i].pos_x, req_out_if[i].pos_y, req_out_if[i].color, req_out_if[i].depth, req_out_if[i].face} = req_data_out[i];
-        assign req_ready_out[i] = req_out_if[i].ready;
+        assign bus_out_if[i].req_valid = req_valid_out[i];
+        assign {bus_out_if[i].req_uuid, bus_out_if[i].req_mask, bus_out_if[i].req_pos_x, bus_out_if[i].req_pos_y, bus_out_if[i].req_color, bus_out_if[i].req_depth, bus_out_if[i].req_face} = req_data_out[i];
+        assign req_ready_out[i] = bus_out_if[i].req_ready;
     end
 
 endmodule

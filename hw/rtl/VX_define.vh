@@ -383,22 +383,22 @@
     assign src.rsp_tag[i] = dst[i].rsp_tag; \
     assign dst[i].rsp_ready = src.rsp_ready[i]
 
-`define ASSIGN_VX_RASTER_REQ_IF(dst, src) \
-    assign dst.valid = src.valid; \
-    assign dst.stamps = src.stamps; \
-    assign dst.done = src.done; \
-    assign src.ready = dst.ready
+`define ASSIGN_VX_RASTER_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_stamps = src.req_stamps; \
+    assign dst.req_done = src.req_done; \
+    assign src.req_ready = dst.req_ready
 
-`define ASSIGN_VX_ROP_REQ_IF(dst, src) \
-    assign dst.valid = src.valid; \
-    assign dst.uuid  = src.uuid;  \
-    assign dst.mask  = src.mask;  \
-    assign dst.pos_x = src.pos_x; \
-    assign dst.pos_y = src.pos_y; \
-    assign dst.color = src.color; \
-    assign dst.depth = src.depth; \
-    assign dst.face  = src.face;  \
-    assign src.ready = dst.ready
+`define ASSIGN_VX_ROP_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_uuid  = src.req_uuid;  \
+    assign dst.req_mask  = src.req_mask;  \
+    assign dst.req_pos_x = src.req_pos_x; \
+    assign dst.req_pos_y = src.req_pos_y; \
+    assign dst.req_color = src.req_color; \
+    assign dst.req_depth = src.req_depth; \
+    assign dst.req_face  = src.req_face;  \
+    assign src.req_ready = dst.req_ready
 
 `define ASSIGN_VX_TEX_BUS_IF(dst, src) \
     assign dst.req_valid = src.req_valid; \

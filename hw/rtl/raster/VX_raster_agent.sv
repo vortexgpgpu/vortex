@@ -8,7 +8,7 @@ module VX_raster_agent #(
 
     // Inputs    
     VX_raster_agent_if.slave raster_agent_if,    
-    VX_raster_req_if.slave raster_req_if,
+    VX_raster_bus_if.slave raster_bus_if,
         
     // Outputs
     VX_commit_if.master    raster_commit_if,
@@ -23,7 +23,7 @@ module VX_raster_agent #(
 
     // CSRs access
 
-    wire csr_write_enable = raster_req_if.valid && raster_agent_if.valid && raster_rsp_ready;
+    wire csr_write_enable = raster_bus_if.req_valid && raster_agent_if.valid && raster_rsp_ready;
 
     VX_raster_csr #(
         .CORE_ID (CORE_ID)
@@ -35,7 +35,7 @@ module VX_raster_agent #(
         .write_uuid     (raster_agent_if.uuid),
         .write_wid      (raster_agent_if.wid),
         .write_tmask    (raster_agent_if.tmask),
-        .write_data     (raster_req_if.stamps),
+        .write_data     (raster_bus_if.req_stamps),
         // outputs
         .raster_csr_if  (raster_csr_if)
     );
@@ -43,16 +43,16 @@ module VX_raster_agent #(
     // it is possible to have ready = f(valid) when using arbiters, 
     // because of that we need to decouple raster_agent_if and raster_commit_if handshake with a pipe register
 
-    assign raster_agent_if.ready = raster_req_if.valid && raster_rsp_ready;
+    assign raster_agent_if.ready = raster_bus_if.req_valid && raster_rsp_ready;
 
-    assign raster_req_if.ready = raster_agent_if.valid && raster_rsp_ready;
+    assign raster_bus_if.req_ready = raster_agent_if.valid && raster_rsp_ready;
 
-    assign raster_rsp_valid = raster_agent_if.valid && raster_req_if.valid;
+    assign raster_rsp_valid = raster_agent_if.valid && raster_bus_if.req_valid;
 
     wire [`NUM_THREADS-1:0][31:0] response_data;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign response_data[i] = {31'(raster_req_if.stamps[i].pid), ~raster_req_if.done};
+        assign response_data[i] = {31'(raster_bus_if.req_stamps[i].pid), ~raster_bus_if.req_done};
     end
 
     VX_skid_buffer #(
@@ -77,12 +77,12 @@ module VX_raster_agent #(
             for (integer i = 0; i < `NUM_THREADS; ++i) begin
                 `TRACE(1, ("%d: core%0d-raster-stamp[%0d]: wid=%0d, PC=0x%0h, tmask=%b, done=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}} (#%0d)\n", 
                     $time, CORE_ID, i, raster_agent_if.wid, raster_agent_if.PC, raster_agent_if.tmask,
-                    raster_req_if.done,
-                    raster_req_if.stamps[i].pos_x,  raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].mask, raster_req_if.stamps[i].pid,
-                    raster_req_if.stamps[i].bcoords[0][0], raster_req_if.stamps[i].bcoords[1][0], raster_req_if.stamps[i].bcoords[2][0], 
-                    raster_req_if.stamps[i].bcoords[0][1], raster_req_if.stamps[i].bcoords[1][1], raster_req_if.stamps[i].bcoords[2][1], 
-                    raster_req_if.stamps[i].bcoords[0][2], raster_req_if.stamps[i].bcoords[1][2], raster_req_if.stamps[i].bcoords[2][2], 
-                    raster_req_if.stamps[i].bcoords[0][3], raster_req_if.stamps[i].bcoords[1][3], raster_req_if.stamps[i].bcoords[2][3], raster_agent_if.uuid));
+                    raster_bus_if.req_done,
+                    raster_bus_if.req_stamps[i].pos_x,  raster_bus_if.req_stamps[i].pos_y, raster_bus_if.req_stamps[i].mask, raster_bus_if.req_stamps[i].pid,
+                    raster_bus_if.req_stamps[i].bcoords[0][0], raster_bus_if.req_stamps[i].bcoords[1][0], raster_bus_if.req_stamps[i].bcoords[2][0], 
+                    raster_bus_if.req_stamps[i].bcoords[0][1], raster_bus_if.req_stamps[i].bcoords[1][1], raster_bus_if.req_stamps[i].bcoords[2][1], 
+                    raster_bus_if.req_stamps[i].bcoords[0][2], raster_bus_if.req_stamps[i].bcoords[1][2], raster_bus_if.req_stamps[i].bcoords[2][2], 
+                    raster_bus_if.req_stamps[i].bcoords[0][3], raster_bus_if.req_stamps[i].bcoords[1][3], raster_bus_if.req_stamps[i].bcoords[2][3], raster_agent_if.uuid));
             end
         end
     end

@@ -25,12 +25,12 @@ module VX_gpu_unit #(
 
 `ifdef EXT_RASTER_ENABLE        
     VX_gpu_csr_if.slave     raster_csr_if,
-    VX_raster_req_if.slave  raster_req_if,
+    VX_raster_bus_if.slave  raster_bus_if,
 `endif
 
 `ifdef EXT_ROP_ENABLE        
     VX_gpu_csr_if.slave     rop_csr_if,
-    VX_rop_req_if.master    rop_req_if,
+    VX_rop_bus_if.master    rop_bus_if,
 `endif
 
     // Outputs
@@ -205,7 +205,7 @@ module VX_gpu_unit #(
         .clk              (clk),
         .reset            (raster_reset),
         .raster_csr_if    (raster_csr_if),
-        .raster_req_if    (raster_req_if),
+        .raster_bus_if    (raster_bus_if),
         .raster_agent_if  (raster_agent_if),        
         .raster_commit_if (raster_commit_if)        
     );
@@ -245,7 +245,7 @@ module VX_gpu_unit #(
         .rop_csr_if    (rop_csr_if),
         .rop_agent_if  (rop_agent_if),
         .rop_commit_if (rop_commit_if),
-        .rop_req_if    (rop_req_if)        
+        .rop_bus_if    (rop_bus_if)        
     );
 
     assign rsp_arb_valid_in[RSP_ARB_IDX_ROP] = rop_commit_if.valid;

@@ -60,7 +60,7 @@ module VX_core #(
     VX_raster_perf_if.slave perf_raster_if,
     VX_perf_cache_if.slave  perf_rcache_if,
 `endif
-    VX_raster_req_if.slave  raster_req_if,
+    VX_raster_bus_if.slave  raster_bus_if,
 `endif
 
 `ifdef EXT_ROP_ENABLE
@@ -68,7 +68,7 @@ module VX_core #(
     VX_rop_perf_if.slave    perf_rop_if,
     VX_perf_cache_if.slave  perf_ocache_if,
 `endif
-    VX_rop_req_if.master    rop_req_if,
+    VX_rop_bus_if.master    rop_bus_if,
 `endif
 
     VX_gbar_bus_if.master   gbar_bus_if,
@@ -214,7 +214,7 @@ module VX_core #(
     `endif
     
     `ifdef EXT_RASTER_ENABLE        
-        .raster_req_if  (raster_req_if),
+        .raster_bus_if  (raster_bus_if),
     `ifdef PERF_ENABLE
         .perf_raster_if (perf_raster_if),
         .perf_rcache_if (perf_rcache_if),
@@ -222,7 +222,7 @@ module VX_core #(
     `endif
 
     `ifdef EXT_ROP_ENABLE        
-        .rop_req_if     (rop_req_if),
+        .rop_bus_if     (rop_bus_if),
     `ifdef PERF_ENABLE
         .perf_rop_if    (perf_rop_if),
         .perf_ocache_if (perf_ocache_if),
@@ -554,30 +554,30 @@ module VX_core_top #(
 `endif
 
 `ifdef EXT_RASTER_ENABLE
-    VX_raster_req_if #(
+    VX_raster_bus_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) raster_req_if();
+    ) raster_bus_if();
 
-    assign raster_req_if.valid = raster_req_valid;  
-    assign raster_req_if.stamps = raster_req_stamps;
-    assign raster_req_if.done = raster_req_done;
-    assign raster_req_ready = raster_req_if.ready;
+    assign raster_bus_if.valid = raster_req_valid;  
+    assign raster_bus_if.stamps = raster_req_stamps;
+    assign raster_bus_if.done = raster_req_done;
+    assign raster_req_ready = raster_bus_if.ready;
 `endif
 
 `ifdef EXT_ROP_ENABLE
-    VX_rop_req_if #(
+    VX_rop_bus_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) rop_req_if();
+    ) rop_bus_if();
     
-    assign rop_req_valid = rop_req_if.valid;    
-    assign rop_req_uuid = rop_req_if.uuid;
-    assign rop_req_mask = rop_req_if.mask; 
-    assign rop_req_pos_x = rop_req_if.pos_x;
-    assign rop_req_pos_y = rop_req_if.pos_y;
-    assign rop_req_color = rop_req_if.color;
-    assign rop_req_depth = rop_req_if.depth;
-    assign rop_req_face = rop_req_if.face;
-    assign rop_req_if.ready = rop_req_ready;
+    assign rop_req_valid = rop_bus_if.valid;    
+    assign rop_req_uuid = rop_bus_if.uuid;
+    assign rop_req_mask = rop_bus_if.mask; 
+    assign rop_req_pos_x = rop_bus_if.pos_x;
+    assign rop_req_pos_y = rop_bus_if.pos_y;
+    assign rop_req_color = rop_bus_if.color;
+    assign rop_req_depth = rop_bus_if.depth;
+    assign rop_req_face = rop_bus_if.face;
+    assign rop_bus_if.ready = rop_req_ready;
 `endif
 
 `ifdef SCOPE
@@ -609,11 +609,11 @@ module VX_core_top #(
     `endif
 
     `ifdef EXT_RASTER_ENABLE
-        .raster_req_if  (raster_req_if),
+        .raster_bus_if  (raster_bus_if),
     `endif
     
     `ifdef EXT_ROP_ENABLE
-        .rop_req_if     (rop_req_if),
+        .rop_bus_if     (rop_bus_if),
     `endif
         .gbar_bus_if    (gbar_bus_if),
 

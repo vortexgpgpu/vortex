@@ -11,10 +11,10 @@ module VX_raster_arb #(
     input wire              reset,
 
     // input request   
-    VX_raster_req_if.slave  req_in_if [NUM_INPUTS],
+    VX_raster_bus_if.slave  bus_in_if [NUM_INPUTS],
 
     // output requests
-    VX_raster_req_if.master req_out_if [NUM_OUTPUTS]
+    VX_raster_bus_if.master bus_out_if [NUM_OUTPUTS]
 );
     localparam REQ_DATAW = NUM_LANES * $bits(raster_stamp_t) + 1;
 
@@ -28,14 +28,14 @@ module VX_raster_arb #(
 
     wire [NUM_INPUTS-1:0] done_mask;
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-        assign done_mask[i] = req_in_if[i].done;
+        assign done_mask[i] = bus_in_if[i].req_done;
     end
     wire done_all = (& done_mask);
 
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-        assign req_valid_in[i] = req_in_if[i].valid;
-        assign req_data_in[i]  = {req_in_if[i].stamps, done_all};
-        assign req_in_if[i].ready = req_ready_in[i];
+        assign req_valid_in[i] = bus_in_if[i].req_valid;
+        assign req_data_in[i]  = {bus_in_if[i].req_stamps, done_all};
+        assign bus_in_if[i].req_ready = req_ready_in[i];
     end
 
     VX_stream_arb #(
@@ -57,9 +57,9 @@ module VX_raster_arb #(
     );
     
     for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-        assign req_out_if[i].valid = req_valid_out[i];
-        assign {req_out_if[i].stamps, req_out_if[i].done} = req_data_out[i];
-        assign req_ready_out[i] = req_out_if[i].ready;
+        assign bus_out_if[i].req_valid = req_valid_out[i];
+        assign {bus_out_if[i].req_stamps, bus_out_if[i].req_done} = req_data_out[i];
+        assign req_ready_out[i] = bus_out_if[i].req_ready;
     end
 
 endmodule

@@ -12,7 +12,7 @@ module VX_rop_agent #(
 
     // Outputs    
     VX_commit_if.master   rop_commit_if,
-    VX_rop_req_if.master  rop_req_if
+    VX_rop_bus_if.master  rop_bus_if
 );
     `UNUSED_PARAM (CORE_ID)
     
@@ -52,10 +52,10 @@ module VX_rop_agent #(
         .reset     (reset),
         .valid_in  (rop_req_valid),
         .ready_in  (rop_req_ready),
-        .data_in   ({rop_agent_if.uuid, rop_agent_if.tmask, rop_agent_if.pos_x, rop_agent_if.pos_y, rop_agent_if.color, rop_agent_if.depth, rop_agent_if.face}),
-        .data_out  ({rop_req_if.uuid,   rop_req_if.mask,    rop_req_if.pos_x,   rop_req_if.pos_y,   rop_req_if.color,   rop_req_if.depth,   rop_req_if.face}),
-        .valid_out (rop_req_if.valid),
-        .ready_out (rop_req_if.ready)
+        .data_in   ({rop_agent_if.uuid,   rop_agent_if.tmask,  rop_agent_if.pos_x,   rop_agent_if.pos_y,   rop_agent_if.color,   rop_agent_if.depth,   rop_agent_if.face}),
+        .data_out  ({rop_bus_if.req_uuid, rop_bus_if.req_mask, rop_bus_if.req_pos_x, rop_bus_if.req_pos_y, rop_bus_if.req_color, rop_bus_if.req_depth, rop_bus_if.req_face}),
+        .valid_out (rop_bus_if.req_valid),
+        .ready_out (rop_bus_if.req_ready)
     );
 
     assign rop_req_valid = rop_agent_if.valid && rop_rsp_ready;

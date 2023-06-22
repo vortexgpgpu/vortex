@@ -17,7 +17,7 @@ module VX_rop_unit #(
 
     // Inputs
     VX_dcr_write_if.slave   dcr_write_if,
-    VX_rop_req_if.slave     rop_req_if
+    VX_rop_bus_if.slave     rop_bus_if
 );
     localparam UUID_WIDTH = `UP(`UUID_BITS);
     localparam MEM_TAG_WIDTH = UUID_WIDTH + NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 32 + `ROP_DEPTH_BITS + 1);
@@ -223,7 +223,7 @@ module VX_rop_unit #(
 
     wire pending_reads_full;
     
-    assign mem_req_tag = {rop_req_if.uuid, rop_req_if.pos_x, rop_req_if.pos_y, rop_req_if.color, rop_req_if.depth, rop_req_if.face};
+    assign mem_req_tag = {rop_bus_if.req_uuid, rop_bus_if.req_pos_x, rop_bus_if.req_pos_y, rop_bus_if.req_color, rop_bus_if.req_depth, rop_bus_if.req_face};
     assign {mem_rsp_uuid, mem_rsp_pos_x, mem_rsp_pos_y, blend_src_color, ds_depth_ref, ds_face} = mem_rsp_tag;
 
     assign ds_tag_in = {mem_rsp_pos_x, mem_rsp_pos_y, mem_rsp_mask, ds_face, blend_src_color};
@@ -232,9 +232,9 @@ module VX_rop_unit #(
     assign blend_tag_in = {mem_rsp_pos_x, mem_rsp_pos_y, mem_rsp_mask};
     assign {blend_write_pos_x, blend_write_pos_y, blend_rsp_mask} = blend_tag_out;
 
-    wire color_write = write_bypass && rop_req_if.valid;
+    wire color_write = write_bypass && rop_bus_if.req_valid;
 
-    wire ds_blend_read = mem_readen && rop_req_if.valid && ~pending_reads_full;
+    wire ds_blend_read = mem_readen && rop_bus_if.req_valid && ~pending_reads_full;
 
     wire ds_blend_write = (ds_color_writeen && blend_writeen) ? (ds_valid_out && blend_valid_out) :
                             (ds_color_writeen ? ds_valid_out :
@@ -246,11 +246,11 @@ module VX_rop_unit #(
     wire [NUM_LANES-1:0] color_bypass_mask, ds_color_write_mask;
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin      
-        assign ds_read_mask[i]        = rop_req_if.mask[i] && ds_enable;
-        assign blend_read_mask[i]     = rop_req_if.mask[i] && blend_writeen;
+        assign ds_read_mask[i]        = rop_bus_if.req_mask[i] && ds_enable;
+        assign blend_read_mask[i]     = rop_bus_if.req_mask[i] && blend_writeen;
         assign ds_write_mask[i]       = ds_rsp_mask[i] && (stencil_writeen || (depth_writeen && ds_pass_out[i]));
         assign blend_write_mask[i]    = blend_rsp_mask[i] && blend_writeen && (~ds_enable || ds_pass_out[i]);  
-        assign color_bypass_mask[i]   = rop_req_if.mask[i] && color_writeen;
+        assign color_bypass_mask[i]   = rop_bus_if.req_mask[i] && color_writeen;
         assign ds_color_write_mask[i] = ds_rsp_mask[i] && ds_pass_out[i];
     end
 
@@ -259,15 +259,15 @@ module VX_rop_unit #(
     assign mem_req_c_mask   = write_bypass ? color_bypass_mask : (blend_valid_out ? blend_write_mask : (ds_valid_out ? ds_color_write_mask : blend_read_mask));
     assign mem_req_rw       = ds_blend_write || write_bypass;
     assign mem_req_face     = ds_write_face;
-    assign mem_req_pos_x    = ds_valid_out ? ds_write_pos_x : (blend_valid_out ? blend_write_pos_x : rop_req_if.pos_x);
-    assign mem_req_pos_y    = ds_valid_out ? ds_write_pos_y : (blend_valid_out ? blend_write_pos_y : rop_req_if.pos_y);
-    assign mem_req_color    = blend_enable ? blend_color_out : (ds_enable ? ds_write_color : rop_req_if.color);
+    assign mem_req_pos_x    = ds_valid_out ? ds_write_pos_x : (blend_valid_out ? blend_write_pos_x : rop_bus_if.req_pos_x);
+    assign mem_req_pos_y    = ds_valid_out ? ds_write_pos_y : (blend_valid_out ? blend_write_pos_y : rop_bus_if.req_pos_y);
+    assign mem_req_color    = blend_enable ? blend_color_out : (ds_enable ? ds_write_color : rop_bus_if.req_color);
     assign mem_req_depth    = ds_depth_out;
     assign mem_req_stencil  = ds_stencil_out;
     
     assign ds_ready_out     = mem_req_ready && (~blend_writeen || blend_valid_out);
     assign blend_ready_out  = mem_req_ready && (~ds_color_writeen || ds_valid_out);
-    assign rop_req_if.ready = mem_req_ready && ~ds_blend_write && ~pending_reads_full;
+    assign rop_bus_if.req_ready = mem_req_ready && ~ds_blend_write && ~pending_reads_full;
 
     assign ds_valid_in      = ds_enable && mem_rsp_valid && (~blend_enable || blend_ready_in);
     assign blend_valid_in   = blend_enable && mem_rsp_valid && (~ds_enable || ds_ready_in);
@@ -346,7 +346,7 @@ module VX_rop_unit #(
         end
     end
 
-    wire perf_stall_cycle = rop_req_if.valid & ~rop_req_if.ready;
+    wire perf_stall_cycle = rop_bus_if.req_valid & ~rop_bus_if.req_ready;
 
     reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
     reg [`PERF_CTR_BITS-1:0] perf_mem_writes;
@@ -421,19 +421,19 @@ module VX_rop_unit_top #(
     assign dcr_write_if.addr = dcr_write_addr;
     assign dcr_write_if.data = dcr_write_data;
 
-    VX_rop_req_if #(
+    VX_rop_bus_if #(
         .NUM_LANES (NUM_LANES)
-    ) rop_req_if();
+    ) rop_bus_if();
     
-    assign rop_req_if.valid = rop_req_valid;    
-    assign rop_req_if.uuid = rop_req_uuid;
-    assign rop_req_if.mask = rop_req_mask; 
-    assign rop_req_if.pos_x = rop_req_pos_x;
-    assign rop_req_if.pos_y = rop_req_pos_y;
-    assign rop_req_if.color = rop_req_color;
-    assign rop_req_if.depth = rop_req_depth;
-    assign rop_req_if.face = rop_req_face;
-    assign rop_req_ready = rop_req_if.ready;
+    assign rop_bus_if.req_valid = rop_req_valid;    
+    assign rop_bus_if.req_uuid = rop_req_uuid;
+    assign rop_bus_if.req_mask = rop_req_mask; 
+    assign rop_bus_if.req_pos_x = rop_req_pos_x;
+    assign rop_bus_if.req_pos_y = rop_req_pos_y;
+    assign rop_bus_if.req_color = rop_req_color;
+    assign rop_bus_if.req_depth = rop_req_depth;
+    assign rop_bus_if.req_face = rop_req_face;
+    assign rop_req_ready = rop_bus_if.req_ready;
 
     VX_cache_bus_if #(
         .NUM_REQS  (OCACHE_NUM_REQS), 
@@ -464,7 +464,7 @@ module VX_rop_unit_top #(
         .perf_rop_if   (perf_rop_if),
     `endif 
         .dcr_write_if  (dcr_write_if),
-        .rop_req_if    (rop_req_if),
+        .rop_bus_if    (rop_bus_if),
         .cache_bus_if  (cache_bus_if)
     );
 

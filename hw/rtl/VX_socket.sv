@@ -41,7 +41,7 @@ module VX_socket #(
     VX_raster_perf_if.slave perf_raster_if,
     VX_perf_cache_if.slave  perf_rcache_if,
 `endif
-    VX_raster_req_if.slave  raster_req_if,
+    VX_raster_bus_if.slave  raster_bus_if,
 `endif
 
 `ifdef EXT_ROP_ENABLE
@@ -49,7 +49,7 @@ module VX_socket #(
     VX_rop_perf_if.slave    perf_rop_if,
     VX_perf_cache_if.slave  perf_ocache_if,
 `endif
-    VX_rop_req_if.master    rop_req_if,
+    VX_rop_bus_if.master    rop_bus_if,
 `endif
 
     VX_gbar_bus_if.master   gbar_bus_if,
@@ -78,9 +78,9 @@ module VX_socket #(
 
 `ifdef EXT_RASTER_ENABLE
 
-    VX_raster_req_if #(
+    VX_raster_bus_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) per_core_raster_req_if[`SOCKET_SIZE](), raster_req_tmp_if[1]();
+    ) per_core_raster_bus_if[`SOCKET_SIZE](), raster_bus_tmp_if[1]();
 
     `RESET_RELAY (raster_arb_reset, reset);
 
@@ -93,19 +93,19 @@ module VX_socket #(
     ) raster_arb (
         .clk        (clk),
         .reset      (raster_arb_reset),
-        .req_in_if  (raster_req_tmp_if),
-        .req_out_if (per_core_raster_req_if)
+        .bus_in_if  (raster_bus_tmp_if),
+        .bus_out_if (per_core_raster_bus_if)
     );
 
-    `ASSIGN_VX_RASTER_REQ_IF (raster_req_tmp_if[0], raster_req_if);
+    `ASSIGN_VX_RASTER_BUS_IF (raster_bus_tmp_if[0], raster_bus_if);
 
 `endif
 
 `ifdef EXT_ROP_ENABLE
 
-    VX_rop_req_if #(
+    VX_rop_bus_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) per_core_rop_req_if[`SOCKET_SIZE](), rop_req_tmp_if[1]();
+    ) per_core_rop_bus_if[`SOCKET_SIZE](), rop_bus_tmp_if[1]();
 
     `RESET_RELAY (rop_arb_reset, reset);
 
@@ -118,11 +118,11 @@ module VX_socket #(
     ) rop_arb (
         .clk        (clk),
         .reset      (rop_arb_reset),
-        .req_in_if  (per_core_rop_req_if),
-        .req_out_if (rop_req_tmp_if)
+        .bus_in_if  (per_core_rop_bus_if),
+        .bus_out_if (rop_bus_tmp_if)
     );
 
-    `ASSIGN_VX_ROP_REQ_IF (rop_req_if, rop_req_tmp_if[0]);
+    `ASSIGN_VX_ROP_BUS_IF (rop_bus_if, rop_bus_tmp_if[0]);
 
 `endif
 
@@ -315,7 +315,7 @@ module VX_socket #(
             .perf_raster_if (perf_raster_if),
             .perf_rcache_if (perf_rcache_if),
         `endif
-            .raster_req_if  (per_core_raster_req_if[i]),
+            .raster_bus_if  (per_core_raster_bus_if[i]),
         `endif
         
         `ifdef EXT_ROP_ENABLE
@@ -323,7 +323,7 @@ module VX_socket #(
             .perf_rop_if    (perf_rop_if),
             .perf_ocache_if (perf_ocache_if),
         `endif
-            .rop_req_if     (per_core_rop_req_if[i]),
+            .rop_bus_if     (per_core_rop_bus_if[i]),
         `endif
 
             .gbar_bus_if    (per_core_gbar_bus_if[i]),

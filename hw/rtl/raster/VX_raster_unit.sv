@@ -29,7 +29,7 @@ module VX_raster_unit #(
     VX_dcr_write_if.slave   dcr_write_if,
 
     // Outputs
-    VX_raster_req_if.master raster_req_if
+    VX_raster_bus_if.master raster_bus_if
 );
     localparam EDGE_FUNC_LATENCY = `LATENCY_IMUL;
     localparam SLICES_BITS = $clog2(NUM_SLICES+1);
@@ -199,13 +199,13 @@ module VX_raster_unit #(
                            || mem_unit_valid 
                            || ~no_pending_tiledata;
 
-    VX_raster_req_if #(
+    VX_raster_bus_if #(
         .NUM_LANES (OUTPUT_QUADS)
-    ) slice_raster_req_if[NUM_SLICES]();
+    ) slice_raster_bus_if[NUM_SLICES]();
 
-    VX_raster_req_if #(
+    VX_raster_bus_if #(
         .NUM_LANES (OUTPUT_QUADS)
-    ) raster_req_tmp_if[1]();
+    ) raster_bus_tmp_if[1]();
 
     wire [NUM_SLICES-1:0] slice_valid_in;
     wire [NUM_SLICES-1:0] slice_busy_out;
@@ -251,19 +251,19 @@ module VX_raster_unit #(
             .ready_in   (slice_ready_in),
 
             .valid_out  (slice_valid_out[i]),
-            .stamps_out (slice_raster_req_if[i].stamps),
+            .stamps_out (slice_raster_bus_if[i].req_stamps),
             .busy_out   (slice_busy_out[i]),
-            .ready_out  (slice_raster_req_if[i].ready)
+            .ready_out  (slice_raster_bus_if[i].req_ready)
         );
 
-        assign slice_raster_req_if[i].done = running
-                                          && ~has_pending_inputs
-                                          && ~(| slice_valid_in)
-                                          && ~(| slice_busy_out)
-                                          && ~(| slice_valid_out);
+        assign slice_raster_bus_if[i].req_done = running
+                                              && ~has_pending_inputs
+                                              && ~(| slice_valid_in)
+                                              && ~(| slice_busy_out)
+                                              && ~(| slice_valid_out);
 
-        assign slice_raster_req_if[i].valid = slice_valid_out[i] 
-                                           || slice_raster_req_if[i].done;
+        assign slice_raster_bus_if[i].req_valid = slice_valid_out[i] 
+                                               || slice_raster_bus_if[i].req_done;
     end
 
     `RESET_RELAY (raster_arb_reset, reset);
@@ -276,18 +276,18 @@ module VX_raster_unit #(
     ) raster_arb (
         .clk        (clk),
         .reset      (raster_arb_reset),
-        .req_in_if  (slice_raster_req_if),
-        .req_out_if (raster_req_tmp_if)
+        .bus_in_if  (slice_raster_bus_if),
+        .bus_out_if (raster_bus_tmp_if)
     );
 
-    `ASSIGN_VX_RASTER_REQ_IF (raster_req_if, raster_req_tmp_if[0]);
+    `ASSIGN_VX_RASTER_BUS_IF (raster_bus_if, raster_bus_tmp_if[0]);
 
 `ifdef DBG_SCOPE_RASTER
     if (INSTANCE_ID == "cluster0-raster0") begin
     `ifdef SCOPE
         wire cache_req_fire = cache_bus_if.req_valid && cache_bus_if.req_ready;
         wire cache_rsp_fire = cache_bus_if.rsp_valid && cache_bus_if.rsp_ready;
-        wire raster_req_fire = raster_req_if.valid && raster_req_if.ready;
+        wire raster_req_fire = raster_bus_if.req_valid && raster_bus_if.req_ready;
         VX_scope_tap #(
             .SCOPE_ID (4),
             .TRIGGERW (9),
@@ -306,7 +306,7 @@ module VX_raster_unit #(
                 mem_unit_ready,
                 mem_unit_start,
                 mem_unit_valid,
-                raster_req_if.done
+                raster_bus_if.req_done
             }),
             .probes({
                 cache_bus_if.rsp_data,
@@ -324,7 +324,7 @@ module VX_raster_unit #(
         ila_raster ila_raster_inst (
             .clk    (clk),
             .probe0 ({cache_bus_if.rsp_data, cache_bus_if.rsp_tag, cache_bus_if.rsp_ready, cache_bus_if.rsp_valid, cache_bus_if.req_tag, cache_bus_if.req_addr, cache_bus_if.req_rw, cache_bus_if.req_valid, cache_bus_if.req_ready}),
-            .probe1 ({no_pending_tiledata, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, raster_req_if.done, raster_req_if.valid, raster_req_if.ready})
+            .probe1 ({no_pending_tiledata, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, raster_bus_if.req_done, raster_bus_if.req_valid, raster_bus_if.req_ready})
         );
     `endif
     end
@@ -352,7 +352,7 @@ module VX_raster_unit #(
         end
     end
 
-    wire perf_stall_cycle = raster_req_if.valid && ~raster_req_if.ready && ~raster_req_if.done;
+    wire perf_stall_cycle = raster_bus_if.req_valid && ~raster_bus_if.req_ready && ~raster_bus_if.req_done;
 
     reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
     reg [`PERF_CTR_BITS-1:0] perf_mem_latency;
@@ -377,15 +377,15 @@ module VX_raster_unit #(
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
-        if (raster_req_if.valid && raster_req_if.ready) begin
+        if (raster_bus_if.req_valid && raster_bus_if.req_ready) begin
             for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
                 `TRACE(1, ("%d: %s-out[%0d]: done=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
-                    $time, INSTANCE_ID, i, raster_req_if.done,
-                    raster_req_if.stamps[i].pos_x, raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].mask, raster_req_if.stamps[i].pid,
-                    raster_req_if.stamps[i].bcoords[0][0], raster_req_if.stamps[i].bcoords[1][0], raster_req_if.stamps[i].bcoords[2][0], 
-                    raster_req_if.stamps[i].bcoords[0][1], raster_req_if.stamps[i].bcoords[1][1], raster_req_if.stamps[i].bcoords[2][1], 
-                    raster_req_if.stamps[i].bcoords[0][2], raster_req_if.stamps[i].bcoords[1][2], raster_req_if.stamps[i].bcoords[2][2], 
-                    raster_req_if.stamps[i].bcoords[0][3], raster_req_if.stamps[i].bcoords[1][3], raster_req_if.stamps[i].bcoords[2][3]));
+                    $time, INSTANCE_ID, i, raster_bus_if.req_done,
+                    raster_bus_if.req_stamps[i].pos_x, raster_bus_if.req_stamps[i].pos_y, raster_bus_if.req_stamps[i].mask, raster_bus_if.req_stamps[i].pid,
+                    raster_bus_if.req_stamps[i].bcoords[0][0], raster_bus_if.req_stamps[i].bcoords[1][0], raster_bus_if.req_stamps[i].bcoords[2][0], 
+                    raster_bus_if.req_stamps[i].bcoords[0][1], raster_bus_if.req_stamps[i].bcoords[1][1], raster_bus_if.req_stamps[i].bcoords[2][1], 
+                    raster_bus_if.req_stamps[i].bcoords[0][2], raster_bus_if.req_stamps[i].bcoords[1][2], raster_bus_if.req_stamps[i].bcoords[2][2], 
+                    raster_bus_if.req_stamps[i].bcoords[0][3], raster_bus_if.req_stamps[i].bcoords[1][3], raster_bus_if.req_stamps[i].bcoords[2][3]));
             end
         end
     end
@@ -440,14 +440,14 @@ module VX_raster_unit_top #(
     assign dcr_write_if.addr = dcr_write_addr;
     assign dcr_write_if.data = dcr_write_data;
 
-    VX_raster_req_if #(
+    VX_raster_bus_if #(
         .NUM_LANES (OUTPUT_QUADS)
-    ) raster_req_if();
+    ) raster_bus_if();
 
-    assign raster_req_valid = raster_req_if.valid;
-    assign raster_req_stamps = raster_req_if.stamps;
-    assign raster_req_if.done = raster_req_done;
-    assign raster_req_if.ready = raster_req_ready;
+    assign raster_req_valid = raster_bus_if.valid;
+    assign raster_req_stamps = raster_bus_if.stamps;
+    assign raster_bus_if.done = raster_req_done;
+    assign raster_bus_if.ready = raster_req_ready;
 
     VX_cache_bus_if #(
         .NUM_REQS  (RCACHE_NUM_REQS), 
@@ -493,7 +493,7 @@ module VX_raster_unit_top #(
         .perf_raster_if(perf_raster_if),
     `endif 
         .dcr_write_if  (dcr_write_if),
-        .raster_req_if (raster_req_if),
+        .raster_bus_if (raster_bus_if),
         .cache_bus_if  (cache_bus_if)
     );
 
