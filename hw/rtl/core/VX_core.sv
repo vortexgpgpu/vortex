@@ -52,8 +52,7 @@ module VX_core #(
     VX_tex_perf_if.slave    perf_tex_if,
     VX_perf_cache_if.slave  perf_tcache_if,
 `endif
-    VX_tex_req_if.master    tex_req_if,
-    VX_tex_rsp_if.slave     tex_rsp_if,
+    VX_tex_bus_if.master    tex_bus_if,
 `endif
 
 `ifdef EXT_RASTER_ENABLE
@@ -207,8 +206,7 @@ module VX_core #(
     `endif   
 
     `ifdef EXT_TEX_ENABLE
-        .tex_req_if     (tex_req_if),
-        .tex_rsp_if     (tex_rsp_if),
+        .tex_bus_if     (tex_bus_if),
     `ifdef PERF_ENABLE
         .perf_tex_if    (perf_tex_if),
         .perf_tcache_if (perf_tcache_if),
@@ -536,28 +534,23 @@ module VX_core_top #(
 `endif
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_req_if #(
+    VX_tex_bus_if #(
         .NUM_LANES (`NUM_THREADS),
         .TAG_WIDTH (`TEX_REQ_TAG_WIDTH)
-    ) tex_req_if();
+    ) tex_bus_if();
 
-    VX_tex_rsp_if #(
-        .NUM_LANES (`NUM_THREADS),
-        .TAG_WIDTH (`TEX_REQ_TAG_WIDTH)
-    ) tex_rsp_if();
+    assign tex_req_valid = tex_bus_if.req_req_valid;
+    assign tex_req_mask = tex_bus_if.req_req_mask;
+    assign tex_req_coords = tex_bus_if.req_req_coords;
+    assign tex_req_lod = tex_bus_if.req_req_lod;
+    assign tex_req_stage = tex_bus_if.req_req_stage;
+    assign tex_req_tag = tex_bus_if.req_req_tag;  
+    assign tex_bus_if.req_req_ready = tex_req_ready;
 
-    assign tex_req_valid = tex_req_if.valid;
-    assign tex_req_mask = tex_req_if.mask;
-    assign tex_req_coords = tex_req_if.coords;
-    assign tex_req_lod = tex_req_if.lod;
-    assign tex_req_stage = tex_req_if.stage;
-    assign tex_req_tag = tex_req_if.tag;  
-    assign tex_req_if.ready = tex_req_ready;
-
-    assign tex_rsp_if.valid = tex_rsp_valid;
-    assign tex_rsp_if.texels = tex_rsp_texels;
-    assign tex_rsp_if.tag = tex_rsp_tag; 
-    assign tex_rsp_ready = tex_rsp_if.ready;
+    assign tex_bus_if.rsp_valid = tex_rsp_valid;
+    assign tex_bus_if.rsp_texels = tex_rsp_texels;
+    assign tex_bus_if.rsp_tag = tex_rsp_tag; 
+    assign tex_rsp_ready = tex_bus_if.rsp_ready;
 `endif
 
 `ifdef EXT_RASTER_ENABLE
@@ -612,8 +605,7 @@ module VX_core_top #(
     `endif
 
     `ifdef EXT_TEX_ENABLE
-        .tex_req_if     (tex_req_if),
-        .tex_rsp_if     (tex_rsp_if),
+        .tex_bus_if     (tex_bus_if),
     `endif
 
     `ifdef EXT_RASTER_ENABLE

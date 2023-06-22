@@ -80,8 +80,8 @@ module VX_fpu_agent #(
         .reset     (reset),
         .valid_in  (valid_in),
         .ready_in  (ready_in),
-        .data_in   ({fpu_agent_if.op_type, fpu_agent_if.fmt, req_op_frm,     fpu_agent_if.rs1_data, fpu_agent_if.rs2_data, fpu_agent_if.rs3_data, req_tag}),
-        .data_out  ({fpu_bus_if.req_type,   fpu_bus_if.req_fmt,   fpu_bus_if.req_frm, fpu_bus_if.req_dataa,      fpu_bus_if.req_datab,      fpu_bus_if.req_datac,      fpu_bus_if.req_tag}),
+        .data_in   ({fpu_agent_if.op_type, fpu_agent_if.fmt,   req_op_frm,         fpu_agent_if.rs1_data, fpu_agent_if.rs2_data, fpu_agent_if.rs3_data, req_tag}),
+        .data_out  ({fpu_bus_if.req_type,  fpu_bus_if.req_fmt, fpu_bus_if.req_frm, fpu_bus_if.req_dataa,  fpu_bus_if.req_datab,  fpu_bus_if.req_datac,  fpu_bus_if.req_tag}),
         .valid_out (fpu_bus_if.req_valid),
         .ready_out (fpu_bus_if.req_ready)
     );

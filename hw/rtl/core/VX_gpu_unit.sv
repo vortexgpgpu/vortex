@@ -20,8 +20,7 @@ module VX_gpu_unit #(
 
 `ifdef EXT_TEX_ENABLE
     VX_gpu_csr_if.slave     tex_csr_if,
-    VX_tex_req_if.master    tex_req_if,
-    VX_tex_rsp_if.slave     tex_rsp_if,
+    VX_tex_bus_if.master    tex_bus_if,
 `endif
 
 `ifdef EXT_RASTER_ENABLE        
@@ -177,8 +176,7 @@ module VX_gpu_unit #(
         .tex_csr_if    (tex_csr_if),
         .tex_agent_if  (tex_agent_if),        
         .tex_commit_if (tex_commit_if),
-        .tex_req_if    (tex_req_if),
-        .tex_rsp_if    (tex_rsp_if)
+        .tex_bus_if    (tex_bus_if)
     );     
 
     assign rsp_arb_valid_in[RSP_ARB_IDX_TEX] = tex_commit_if.valid;

@@ -33,8 +33,7 @@ module VX_socket #(
     VX_tex_perf_if.slave    perf_tex_if,
     VX_perf_cache_if.slave  perf_tcache_if,
 `endif
-    VX_tex_req_if.master    tex_req_if,
-    VX_tex_rsp_if.slave     tex_rsp_if,
+    VX_tex_bus_if.master    tex_bus_if,
 `endif
 
 `ifdef EXT_RASTER_ENABLE
@@ -129,25 +128,15 @@ module VX_socket #(
 
 `ifdef EXT_TEX_ENABLE
 
-    VX_tex_req_if #(
+    VX_tex_bus_if #(
         .NUM_LANES (`NUM_THREADS),
         .TAG_WIDTH (`TEX_REQ_TAG_WIDTH)
-    ) per_core_tex_req_if[`SOCKET_SIZE]();
+    ) per_core_tex_bus_if[`SOCKET_SIZE]();
 
-    VX_tex_rsp_if #(
-        .NUM_LANES (`NUM_THREADS),
-        .TAG_WIDTH (`TEX_REQ_TAG_WIDTH)
-    ) per_core_tex_rsp_if[`SOCKET_SIZE]();
-
-    VX_tex_req_if #(
+    VX_tex_bus_if #(
         .NUM_LANES (`NUM_THREADS),
         .TAG_WIDTH (`TEX_REQ_ARB1_TAG_WIDTH)
-    ) tex_req_tmp_if[1]();
-
-    VX_tex_rsp_if #(
-        .NUM_LANES (`NUM_THREADS),
-        .TAG_WIDTH (`TEX_REQ_ARB1_TAG_WIDTH)
-    ) tex_rsp_tmp_if[1]();
+    ) tex_bus_tmp_if[1]();
 
     `RESET_RELAY (tex_arb_reset, reset);
 
@@ -161,13 +150,11 @@ module VX_socket #(
     ) tex_arb (
         .clk        (clk),
         .reset      (tex_arb_reset),
-        .req_in_if  (per_core_tex_req_if),
-        .rsp_in_if  (per_core_tex_rsp_if),
-        .req_out_if (tex_req_tmp_if),
-        .rsp_out_if (tex_rsp_tmp_if)
+        .bus_in_if  (per_core_tex_bus_if),
+        .bus_out_if (tex_bus_tmp_if)
     );
 
-    `ASSIGN_VX_TEX_REQ_IF (tex_req_if, tex_req_tmp_if[0]);
+    `ASSIGN_VX_TEX_BUS_IF (tex_bus_if, tex_bus_tmp_if[0]);
             
 `endif
 
@@ -320,8 +307,7 @@ module VX_socket #(
             .perf_tex_if    (perf_tex_if),
             .perf_tcache_if (perf_tcache_if),
         `endif
-            .tex_req_if     (per_core_tex_req_if[i]),
-            .tex_rsp_if     (per_core_tex_rsp_if[i]),
+            .tex_bus_if     (per_core_tex_bus_if[i]),
         `endif
 
         `ifdef EXT_RASTER_ENABLE

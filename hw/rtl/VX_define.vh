@@ -400,20 +400,18 @@
     assign dst.face  = src.face;  \
     assign src.ready = dst.ready
 
-`define ASSIGN_VX_TEX_REQ_IF(dst, src) \
-    assign dst.valid = src.valid; \
-    assign dst.mask  = src.mask; \
-    assign dst.coords= src.coords; \
-    assign dst.lod   = src.lod; \
-    assign dst.stage = src.stage; \
-    assign dst.tag   = src.tag; \
-    assign src.ready = dst.ready
-
-`define ASSIGN_VX_TEX_RSP_IF(dst, src) \
-    assign dst.valid = src.valid; \
-    assign dst.texels= src.texels; \
-    assign dst.tag   = src.tag; \
-    assign src.ready = dst.ready
+`define ASSIGN_VX_TEX_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_mask  = src.req_mask; \
+    assign dst.req_coords= src.req_coords; \
+    assign dst.req_lod   = src.req_lod; \
+    assign dst.req_stage = src.req_stage; \
+    assign dst.req_tag   = src.req_tag; \
+    assign src.req_ready = dst.req_ready; \
+    assign src.rsp_valid = dst.rsp_valid; \
+    assign src.rsp_texels= dst.rsp_texels; \
+    assign src.rsp_tag   = dst.rsp_tag; \
+    assign dst.rsp_ready = src.rsp_ready
 
 `define ASSIGN_VX_FPU_BUS_IF(dst, src) \
     assign dst.req_valid = src.req_valid; \

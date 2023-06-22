@@ -8,11 +8,10 @@ module VX_tex_agent #(
 
     // Inputs
     VX_gpu_csr_if.slave     tex_csr_if,
-    VX_tex_agent_if.slave   tex_agent_if,    
-    VX_tex_rsp_if.slave     tex_rsp_if,
+    VX_tex_agent_if.slave   tex_agent_if,
         
     // Outputs
-    VX_tex_req_if.master    tex_req_if,
+    VX_tex_bus_if.master    tex_bus_if,
     VX_commit_if.master     tex_commit_if
 );
     `UNUSED_PARAM (CORE_ID)
@@ -53,7 +52,7 @@ module VX_tex_agent #(
     wire mdata_full;
 
     wire mdata_push = tex_agent_if.valid && tex_agent_if.ready;
-    wire mdata_pop  = tex_rsp_if.valid && tex_rsp_if.ready;
+    wire mdata_pop  = tex_bus_if.rsp_valid && tex_bus_if.rsp_ready;
 
     VX_index_buffer #(
         .DATAW (NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS),
@@ -88,25 +87,25 @@ module VX_tex_agent #(
         .reset     (reset),
         .valid_in  (valid_in),
         .ready_in  (ready_in),
-        .data_in   ({tex_agent_if.tmask, tex_agent_if.coords, tex_agent_if.lod, tex_agent_if.stage, req_tag}),
-        .data_out  ({tex_req_if.mask,    tex_req_if.coords,   tex_req_if.lod,   tex_req_if.stage,   tex_req_if.tag}),
-        .valid_out (tex_req_if.valid),
-        .ready_out (tex_req_if.ready)
+        .data_in   ({tex_agent_if.tmask,  tex_agent_if.coords,   tex_agent_if.lod,   tex_agent_if.stage,   req_tag}),
+        .data_out  ({tex_bus_if.req_mask, tex_bus_if.req_coords, tex_bus_if.req_lod, tex_bus_if.req_stage, tex_bus_if.req_tag}),
+        .valid_out (tex_bus_if.req_valid),
+        .ready_out (tex_bus_if.req_ready)
     );
 
     // handle texture response
 
-    assign mdata_raddr = tex_rsp_if.tag[0 +: REQ_QUEUE_BITS];
-    assign rsp_uuid    = tex_rsp_if.tag[REQ_QUEUE_BITS +: UUID_WIDTH];
+    assign mdata_raddr = tex_bus_if.rsp_tag[0 +: REQ_QUEUE_BITS];
+    assign rsp_uuid    = tex_bus_if.rsp_tag[REQ_QUEUE_BITS +: UUID_WIDTH];
 
     VX_skid_buffer #(
         .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (tex_rsp_if.valid),
-        .ready_in  (tex_rsp_if.ready),
-        .data_in   ({rsp_uuid,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           tex_rsp_if.texels}),
+        .valid_in  (tex_bus_if.rsp_valid),
+        .ready_in  (tex_bus_if.rsp_ready),
+        .data_in   ({rsp_uuid,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           tex_bus_if.rsp_texels}),
         .data_out  ({tex_commit_if.uuid, tex_commit_if.wid, tex_commit_if.tmask, tex_commit_if.PC, tex_commit_if.rd, tex_commit_if.data}),
         .valid_out (tex_commit_if.valid),
         .ready_out (tex_commit_if.ready)

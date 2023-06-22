@@ -93,7 +93,7 @@ module VX_icache_stage #(
         .reset     (reset),
         .valid_in  (icache_req_valid),
         .ready_in  (icache_req_ready),
-        .data_in   ({icache_req_addr, icache_req_tag}),
+        .data_in   ({icache_req_addr,        icache_req_tag}),
         .data_out  ({icache_bus_if.req_addr, icache_bus_if.req_tag}),
         .valid_out (icache_bus_if.req_valid),
         .ready_out (icache_bus_if.req_ready)

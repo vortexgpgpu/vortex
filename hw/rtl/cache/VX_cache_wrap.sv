@@ -119,7 +119,7 @@ module VX_cache_wrap #(
             .reset     (core_rsp_reset),
             .valid_in  (core_rsp_valid_s[i]),
             .ready_in  (core_rsp_ready_s[i]),
-            .data_in   ({core_rsp_data_s[i], core_rsp_tag_s[i]}),
+            .data_in   ({core_rsp_data_s[i],      core_rsp_tag_s[i]}),
             .data_out  ({core_bus_if[i].rsp_data, core_bus_if[i].rsp_tag}), 
             .valid_out (core_bus_if[i].rsp_valid),
             .ready_out (core_bus_if[i].rsp_ready)
@@ -146,7 +146,7 @@ module VX_cache_wrap #(
         .reset     (reset),
         .valid_in  (mem_req_valid_s),        
         .ready_in  (mem_req_ready_s),      
-        .data_in   ({mem_req_rw_s,  mem_req_byteen_s,  mem_req_addr_s,  mem_req_data_s,  mem_req_tag_s}),
+        .data_in   ({mem_req_rw_s,      mem_req_byteen_s,      mem_req_addr_s,      mem_req_data_s,      mem_req_tag_s}),
         .data_out  ({mem_bus_if.req_rw, mem_bus_if.req_byteen, mem_bus_if.req_addr, mem_bus_if.req_data, mem_bus_if.req_tag}),        
         .valid_out (mem_bus_if.req_valid),        
         .ready_out (mem_bus_if.req_ready)

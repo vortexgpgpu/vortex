@@ -13,15 +13,11 @@ module VX_tex_unit #(
     VX_tex_perf_if.master   perf_tex_if,
 `endif
 
-    // Memory interface
     VX_cache_bus_if.master  cache_bus_if,
 
-    // Inputs
     VX_dcr_write_if.slave   dcr_write_if,
-    VX_tex_req_if.slave     tex_req_if,
-    
-    // Outputs
-    VX_tex_rsp_if.master    tex_rsp_if
+
+    VX_tex_bus_if.slave     tex_bus_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     
@@ -38,7 +34,7 @@ module VX_tex_unit #(
         .clk        (clk),
         .reset      (reset),
         .dcr_write_if(dcr_write_if),
-        .stage      (tex_req_if.stage),
+        .stage      (tex_bus_if.req_stage),
         .tex_dcrs   (tex_dcrs)
     );
 
@@ -58,7 +54,7 @@ module VX_tex_unit #(
     wire                                        req_ready;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign sel_miplevel[i] = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];
+        assign sel_miplevel[i] = tex_bus_if.req_lod[i][`TEX_LOD_BITS-1:0];
         assign sel_mipoff[i] = tex_dcrs.mipoff[sel_miplevel[i]];
     end
 
@@ -68,10 +64,10 @@ module VX_tex_unit #(
     ) pipe_reg (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (tex_req_if.valid),
-        .ready_in  (tex_req_if.ready),
-        .data_in   ({tex_req_if.mask, tex_dcrs.filter, tex_dcrs.format, tex_dcrs.wraps, tex_dcrs.logdims, tex_dcrs.baseaddr, tex_req_if.coords, sel_miplevel, sel_mipoff, tex_req_if.tag}),
-        .data_out  ({req_mask,        req_filter,      req_format,      req_wraps,      req_logdims,      req_baseaddr,      req_coords,        req_miplevel, req_mipoff, req_tag}),
+        .valid_in  (tex_bus_if.req_valid),
+        .ready_in  (tex_bus_if.req_ready),
+        .data_in   ({tex_bus_if.req_mask, tex_dcrs.filter, tex_dcrs.format, tex_dcrs.wraps, tex_dcrs.logdims, tex_dcrs.baseaddr, tex_bus_if.req_coords, sel_miplevel, sel_mipoff, tex_bus_if.req_tag}),
+        .data_out  ({req_mask,            req_filter,      req_format,      req_wraps,      req_logdims,      req_baseaddr,      req_coords,            req_miplevel, req_mipoff, req_tag}),
         .valid_out (req_valid),
         .ready_out (req_ready)
     );
@@ -201,10 +197,10 @@ module VX_tex_unit #(
         .reset     (reset),
         .valid_in  (sampler_rsp_valid),
         .ready_in  (sampler_rsp_ready),
-        .data_in   ({sampler_rsp_data,  sampler_rsp_info}),
-        .data_out  ({tex_rsp_if.texels, tex_rsp_if.tag}),
-        .valid_out (tex_rsp_if.valid),
-        .ready_out (tex_rsp_if.ready)
+        .data_in   ({sampler_rsp_data,      sampler_rsp_info}),
+        .data_out  ({tex_bus_if.rsp_texels, tex_bus_if.rsp_tag}),
+        .valid_out (tex_bus_if.rsp_valid),
+        .ready_out (tex_bus_if.rsp_ready)
     );
 
 `ifdef PERF_ENABLE
@@ -229,7 +225,7 @@ module VX_tex_unit #(
         end
     end
 
-    wire perf_stall_cycle = tex_req_if.valid & ~tex_req_if.ready;
+    wire perf_stall_cycle = tex_bus_if.req_valid & ~tex_bus_if.req_ready;
 
     reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
     reg [`PERF_CTR_BITS-1:0] perf_mem_latency;
@@ -254,18 +250,18 @@ module VX_tex_unit #(
 
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin
-        if (tex_req_if.valid && tex_req_if.ready) begin
+        if (tex_bus_if.req_valid && tex_bus_if.req_ready) begin
             `TRACE(1, ("%d: %s-req: mask=%b, stage=%0d, lod=0x%0h, u=", 
-                    $time, INSTANCE_ID, tex_req_if.mask, tex_req_if.stage, tex_req_if.lod));
-            `TRACE_ARRAY1D(1, tex_req_if.coords[0], NUM_LANES);
+                    $time, INSTANCE_ID, tex_bus_if.req_mask, tex_bus_if.req_stage, tex_bus_if.req_lod));
+            `TRACE_ARRAY1D(1, tex_bus_if.req_coords[0], NUM_LANES);
             `TRACE(1, (", v="));
-            `TRACE_ARRAY1D(1, tex_req_if.coords[1], NUM_LANES);
-            `TRACE(1, (", tag=0x%0h (#%0d)\n", tex_req_if.tag, tex_req_if.tag[TAG_WIDTH-1 -: `UUID_BITS]));
+            `TRACE_ARRAY1D(1, tex_bus_if.req_coords[1], NUM_LANES);
+            `TRACE(1, (", tag=0x%0h (#%0d)\n", tex_bus_if.req_tag, tex_bus_if.req_tag[TAG_WIDTH-1 -: `UUID_BITS]));
         end
-        if (tex_rsp_if.valid && tex_rsp_if.ready) begin
+        if (tex_bus_if.rsp_valid && tex_bus_if.rsp_ready) begin
             `TRACE(1, ("%d: %s-rsp: texels=", $time, INSTANCE_ID));
-            `TRACE_ARRAY1D(1, tex_rsp_if.texels, NUM_LANES);
-            `TRACE(1, (", tag=0x%0h (#%0d)\n", tex_rsp_if.tag, tex_rsp_if.tag[TAG_WIDTH-1 -: `UUID_BITS]));
+            `TRACE_ARRAY1D(1, tex_bus_if.rsp_texels, NUM_LANES);
+            `TRACE(1, (", tag=0x%0h (#%0d)\n", tex_bus_if.rsp_tag, tex_bus_if.rsp_tag[TAG_WIDTH-1 -: `UUID_BITS]));
         end
     end
 `endif
@@ -321,28 +317,23 @@ module VX_tex_unit_top #(
     assign dcr_write_if.addr = dcr_write_addr;
     assign dcr_write_if.data = dcr_write_data;
 
-    VX_tex_req_if #(
+    VX_tex_bus_if #(
         .NUM_LANES (NUM_LANES),
         .TAG_WIDTH (TAG_WIDTH)
-    ) tex_req_if();
+    ) tex_bus_if();
 
-    VX_tex_rsp_if #(
-        .NUM_LANES (NUM_LANES),
-        .TAG_WIDTH (TAG_WIDTH)
-    ) tex_rsp_if();
+    assign tex_bus_if.req_valid = tex_req_valid;
+    assign tex_bus_if.req_mask = tex_req_mask;
+    assign tex_bus_if.req_coords = tex_req_coords;
+    assign tex_bus_if.req_lod = tex_req_lod;
+    assign tex_bus_if.req_stage = tex_req_stage;
+    assign tex_bus_if.req_tag = tex_req_tag;  
+    assign tex_req_ready = tex_bus_if.req_ready;
 
-    assign tex_req_if.valid = tex_req_valid;
-    assign tex_req_if.mask = tex_req_mask;
-    assign tex_req_if.coords = tex_req_coords;
-    assign tex_req_if.lod = tex_req_lod;
-    assign tex_req_if.stage = tex_req_stage;
-    assign tex_req_if.tag = tex_req_tag;  
-    assign tex_req_ready = tex_req_if.ready;
-
-    assign tex_rsp_valid = tex_rsp_if.valid;
-    assign tex_rsp_texels = tex_rsp_if.texels;
-    assign tex_rsp_tag = tex_rsp_if.tag; 
-    assign tex_rsp_if.ready = tex_rsp_ready;
+    assign tex_rsp_valid = tex_bus_if.rsp_valid;
+    assign tex_rsp_texels = tex_bus_if.rsp_texels;
+    assign tex_rsp_tag = tex_bus_if.rsp_tag; 
+    assign tex_bus_if.rsp_ready = tex_rsp_ready;
 
     VX_cache_bus_if #(
         .NUM_REQS  (TCACHE_NUM_REQS), 
@@ -374,8 +365,7 @@ module VX_tex_unit_top #(
         .perf_tex_if  (perf_tex_if),
     `endif
         .dcr_write_if (dcr_write_if),
-        .tex_req_if   (tex_req_if),
-        .tex_rsp_if   (tex_rsp_if),
+        .tex_bus_if   (tex_bus_if),
         .cache_bus_if (cache_bus_if)
     );
 

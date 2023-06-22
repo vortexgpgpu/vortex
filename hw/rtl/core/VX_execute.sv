@@ -36,8 +36,7 @@ module VX_execute #(
 `endif
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_req_if.master    tex_req_if,
-    VX_tex_rsp_if.slave     tex_rsp_if,
+    VX_tex_bus_if.master    tex_bus_if,
 `ifdef PERF_ENABLE
     VX_tex_perf_if.slave    perf_tex_if,
     VX_perf_cache_if.slave  perf_tcache_if,
@@ -215,8 +214,7 @@ module VX_execute #(
     
     `ifdef EXT_TEX_ENABLE
         .tex_csr_if     (tex_csr_if),
-        .tex_req_if     (tex_req_if),
-        .tex_rsp_if     (tex_rsp_if),
+        .tex_bus_if     (tex_bus_if),
     `endif
     
     `ifdef EXT_RASTER_ENABLE        

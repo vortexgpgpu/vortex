@@ -248,25 +248,15 @@ module VX_cluster #(
         .TAG_WIDTH (TCACHE_TAG_WIDTH)
     ) tcache_bus_if[`NUM_TEX_UNITS]();
 
-    VX_tex_req_if #(
+    VX_tex_bus_if #(
         .NUM_LANES (`NUM_THREADS),
         .TAG_WIDTH (`TEX_REQ_ARB1_TAG_WIDTH)
-    ) per_socket_tex_req_if[`NUM_SOCKETS]();
+    ) per_socket_tex_bus_if[`NUM_SOCKETS]();
 
-    VX_tex_rsp_if #(
-        .NUM_LANES (`NUM_THREADS),
-        .TAG_WIDTH (`TEX_REQ_ARB1_TAG_WIDTH)
-    ) per_socket_tex_rsp_if[`NUM_SOCKETS]();
-
-    VX_tex_req_if #(
+    VX_tex_bus_if #(
         .NUM_LANES (`NUM_THREADS),
         .TAG_WIDTH (`TEX_REQ_ARB2_TAG_WIDTH)
-    ) tex_req_if[`NUM_TEX_UNITS]();
-
-    VX_tex_rsp_if #(
-        .NUM_LANES (`NUM_THREADS),
-        .TAG_WIDTH (`TEX_REQ_ARB2_TAG_WIDTH)
-    ) tex_rsp_if[`NUM_TEX_UNITS]();
+    ) tex_bus_if[`NUM_TEX_UNITS]();
 
     `RESET_RELAY (tex_arb_reset, reset);
 
@@ -280,10 +270,8 @@ module VX_cluster #(
     ) tex_arb (
         .clk        (clk),
         .reset      (tex_arb_reset),
-        .req_in_if  (per_socket_tex_req_if),
-        .rsp_in_if  (per_socket_tex_rsp_if),
-        .req_out_if (tex_req_if),
-        .rsp_out_if (tex_rsp_if)
+        .bus_in_if  (per_socket_tex_bus_if),
+        .bus_out_if (tex_bus_if)
     );
 
     VX_dcr_write_if tex_dcr_write_tmp_if();
@@ -309,8 +297,7 @@ module VX_cluster #(
             .perf_tex_if  (perf_tex_unit_if[i]),
         `endif 
             .dcr_write_if (tex_dcr_write_if),
-            .tex_req_if   (tex_req_if[i]),
-            .tex_rsp_if   (tex_rsp_if[i]),
+            .tex_bus_if   (tex_bus_if[i]),
             .cache_bus_if (tcache_bus_if[i])
         );
     end
@@ -465,8 +452,7 @@ module VX_cluster #(
             .perf_tex_if    (perf_tex_total_if),
             .perf_tcache_if (perf_tcache_total_if),
         `endif
-            .tex_req_if     (per_socket_tex_req_if[i]),
-            .tex_rsp_if     (per_socket_tex_rsp_if[i]),
+            .tex_bus_if     (per_socket_tex_bus_if[i]),
         `endif
 
         `ifdef EXT_RASTER_ENABLE
