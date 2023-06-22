@@ -87,7 +87,7 @@ module VX_fetch #(
         VX_scope_tap #(
             .SCOPE_ID (1),
             .TRIGGERW (7),
-            .PROBEW   (3*UUID_WIDTH + 236)
+            .PROBEW   (3*UUID_WIDTH + 237)
         ) scope_tap (
             .clk(clk),
             .reset(scope_reset),

@@ -4,8 +4,7 @@
 module VX_find_first #(
     parameter N       = 1,
     parameter DATAW   = 1,
-    parameter REVERSE = 0
-    
+    parameter REVERSE = 0    
 ) (
     input  wire [N-1:0][DATAW-1:0] data_in,
     input  wire [N-1:0]            valid_in,    

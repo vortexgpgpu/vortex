@@ -447,6 +447,14 @@ module VX_core_top #(
     input  wire                             rop_req_ready,
 `endif
 
+    output wire                             gbar_req_valid,
+    output wire [`NB_BITS-1:0]              gbar_req_id,
+    output wire [`UP(`NC_BITS)-1:0]         gbar_req_size_m1,    
+    output wire [`UP(`NC_BITS)-1:0]         gbar_req_core_id,
+    input wire                              gbar_req_ready,
+    input wire                              gbar_rsp_valid,
+    input wire [`NB_BITS-1:0]               gbar_rsp_id,
+
     // simulation helper signals
     output wire                             sim_ebreak,
     output wire [`NUM_REGS-1:0][`XLEN-1:0]  sim_wb_value,
@@ -454,6 +462,17 @@ module VX_core_top #(
     // Status
     output wire                             busy
 );
+    
+    VX_gbar_if gbar_if();
+
+    assign gbar_req_valid = gbar_if.req_valid;
+    assign gbar_req_id = gbar_if.req_id;
+    assign gbar_req_size_m1 = gbar_if.req_size_m1;   
+    assign gbar_req_core_id =  gbar_if.req_core_id;
+    assign gbar_if.req_ready = gbar_req_ready;
+    assign gbar_if.rsp_valid = gbar_rsp_valid;
+    assign gbar_if.rsp_id = gbar_rsp_id;
+
     VX_dcr_write_if dcr_write_if(); 
 
     assign dcr_write_if.valid = dcr_write_valid;
@@ -630,6 +649,7 @@ module VX_core_top #(
     `ifdef EXT_ROP_ENABLE
         .rop_req_if     (rop_req_if),
     `endif
+        .gbar_if        (gbar_if),
 
         .sim_ebreak     (sim_ebreak),
         .sim_wb_value   (sim_wb_value),

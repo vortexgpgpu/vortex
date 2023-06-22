@@ -59,7 +59,7 @@ module VX_fpu_div #(
     end    
     
     assign has_fflags = 0;
-    assign fflags = 'x
+    assign fflags = 'x;
 
 `elsif VIVADO
 

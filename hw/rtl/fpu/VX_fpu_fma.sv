@@ -90,7 +90,7 @@ module VX_fpu_fma #(
     end
     
     assign has_fflags = 0;
-    assign fflags = 'x
+    assign fflags = 'x;
 
 `elsif VIVADO
 
