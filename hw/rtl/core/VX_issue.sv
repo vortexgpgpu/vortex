@@ -18,13 +18,13 @@ module VX_issue #(
     VX_decode_if.slave      decode_if,
     VX_writeback_if.slave   writeback_if,   
     
-    VX_alu_req_if.master    alu_req_if,
-    VX_lsu_req_if.master    lsu_req_if,    
-    VX_csr_req_if.master    csr_req_if,
+    VX_alu_exe_if.master    alu_exe_if,
+    VX_lsu_exe_if.master    lsu_exe_if,    
+    VX_csr_exe_if.master    csr_exe_if,
 `ifdef EXT_F_ENABLE
-    VX_fpu_agent_if.master  fpu_agent_if,    
+    VX_fpu_exe_if.master    fpu_exe_if,    
 `endif
-    VX_gpu_req_if.master    gpu_req_if
+    VX_gpu_exe_if.master    gpu_exe_if
 );
     VX_ibuffer_if       ibuffer_if();    
     VX_gpr_stage_if     gpr_stage_if();
@@ -123,13 +123,13 @@ module VX_issue #(
         .clk        (clk),      
         .reset      (dispatch_reset),
         .dispatch_if(dispatch_if),
-        .alu_req_if (alu_req_if),
-        .lsu_req_if (lsu_req_if),        
-        .csr_req_if (csr_req_if),
+        .alu_exe_if (alu_exe_if),
+        .lsu_exe_if (lsu_exe_if),        
+        .csr_exe_if (csr_exe_if),
     `ifdef EXT_F_ENABLE
-        .fpu_agent_if(fpu_agent_if),
+        .fpu_exe_if (fpu_exe_if),
     `endif
-        .gpu_req_if (gpu_req_if)
+        .gpu_exe_if (gpu_exe_if)
     );
 
     wire ibuffer_if_fire = ibuffer_if.valid && ibuffer_if.ready;

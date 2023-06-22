@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-interface VX_alu_req_if ();
+interface VX_alu_exe_if ();
 
     wire                        valid;  
     wire [`UP(`UUID_BITS)-1:0]  uuid; 

@@ -8,13 +8,13 @@ module VX_dispatch (
     VX_dispatch_if.slave    dispatch_if,
 
     // outputs
-    VX_alu_req_if.master    alu_req_if,
-    VX_lsu_req_if.master    lsu_req_if,
-    VX_csr_req_if.master    csr_req_if,
+    VX_alu_exe_if.master    alu_exe_if,
+    VX_lsu_exe_if.master    lsu_exe_if,
+    VX_csr_exe_if.master    csr_exe_if,
 `ifdef EXT_F_ENABLE
-    VX_fpu_agent_if.master  fpu_agent_if,
+    VX_fpu_exe_if.master    fpu_exe_if,
 `endif
-    VX_gpu_req_if.master    gpu_req_if    
+    VX_gpu_exe_if.master    gpu_exe_if    
 );
     localparam UUID_WIDTH = `UP(`UUID_BITS);
     localparam NW_WIDTH   = `UP(`NW_BITS);
@@ -53,9 +53,9 @@ module VX_dispatch (
         .valid_in  (alu_req_valid),
         .ready_in  (alu_req_ready),
         .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, next_PC,            alu_op_type,        dispatch_if.op_mod, dispatch_if.imm, dispatch_if.use_PC, dispatch_if.use_imm, dispatch_if.rd, dispatch_if.wb, tid,            dispatch_if.rs1_data, dispatch_if.rs2_data}),
-        .data_out  ({alu_req_if.uuid,  alu_req_if.wid,  alu_req_if.tmask,  alu_req_if.PC,  alu_req_if.next_PC, alu_req_if.op_type, alu_req_if.op_mod,  alu_req_if.imm,  alu_req_if.use_PC,  alu_req_if.use_imm,  alu_req_if.rd,  alu_req_if.wb,  alu_req_if.tid, alu_req_if.rs1_data, alu_req_if.rs2_data}),
-        .valid_out (alu_req_if.valid),
-        .ready_out (alu_req_if.ready)
+        .data_out  ({alu_exe_if.uuid,  alu_exe_if.wid,  alu_exe_if.tmask,  alu_exe_if.PC,  alu_exe_if.next_PC, alu_exe_if.op_type, alu_exe_if.op_mod,  alu_exe_if.imm,  alu_exe_if.use_PC,  alu_exe_if.use_imm,  alu_exe_if.rd,  alu_exe_if.wb,  alu_exe_if.tid, alu_exe_if.rs1_data, alu_exe_if.rs2_data}),
+        .valid_out (alu_exe_if.valid),
+        .ready_out (alu_exe_if.ready)
     );
 
     // lsu unit
@@ -72,9 +72,9 @@ module VX_dispatch (
         .valid_in  (lsu_req_valid),
         .ready_in  (lsu_req_ready),
         .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, lsu_op_type,        dispatch_if.imm,    dispatch_if.rd, dispatch_if.wb, dispatch_if.rs1_data,  dispatch_if.rs2_data}),
-        .data_out  ({lsu_req_if.uuid,  lsu_req_if.wid,  lsu_req_if.tmask,  lsu_req_if.PC,  lsu_req_if.op_type, lsu_req_if.offset,  lsu_req_if.rd,  lsu_req_if.wb,  lsu_req_if.base_addr, lsu_req_if.store_data}),
-        .valid_out (lsu_req_if.valid),
-        .ready_out (lsu_req_if.ready)
+        .data_out  ({lsu_exe_if.uuid,  lsu_exe_if.wid,  lsu_exe_if.tmask,  lsu_exe_if.PC,  lsu_exe_if.op_type, lsu_exe_if.offset,  lsu_exe_if.rd,  lsu_exe_if.wb,  lsu_exe_if.base_addr, lsu_exe_if.store_data}),
+        .valid_out (lsu_exe_if.valid),
+        .ready_out (lsu_exe_if.ready)
     );
 
     // csr unit
@@ -98,9 +98,9 @@ module VX_dispatch (
         .valid_in  (csr_req_valid),
         .ready_in  (csr_req_ready),
         .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, csr_op_type,        csr_addr,        dispatch_if.rd, dispatch_if.wb, dispatch_if.use_imm, csr_imm,        tid,            csr_data}),
-        .data_out  ({csr_req_if.uuid,  csr_req_if.wid,  csr_req_if.tmask,  csr_req_if.PC,  csr_req_if.op_type, csr_req_if.addr, csr_req_if.rd,  csr_req_if.wb,  csr_req_if.use_imm,  csr_req_if.imm, csr_req_if.tid, csr_req_if.rs1_data}),
-        .valid_out (csr_req_if.valid),
-        .ready_out (csr_req_if.ready)
+        .data_out  ({csr_exe_if.uuid,  csr_exe_if.wid,  csr_exe_if.tmask,  csr_exe_if.PC,  csr_exe_if.op_type, csr_exe_if.addr, csr_exe_if.rd,  csr_exe_if.wb,  csr_exe_if.use_imm,  csr_exe_if.imm, csr_exe_if.tid, csr_exe_if.rs1_data}),
+        .valid_out (csr_exe_if.valid),
+        .ready_out (csr_exe_if.ready)
     );
 
     // fpu unit
@@ -119,10 +119,10 @@ module VX_dispatch (
         .reset     (reset),
         .valid_in  (fpu_req_valid),
         .ready_in  (fpu_req_ready),
-        .data_in   ({dispatch_if.uuid,  dispatch_if.wid,  dispatch_if.tmask,  dispatch_if.PC,   fpu_op_type,          fpu_fmt,          fpu_frm,          dispatch_if.rd,  dispatch_if.rs1_data,  dispatch_if.rs2_data, dispatch_if.rs3_data}),
-        .data_out  ({fpu_agent_if.uuid, fpu_agent_if.wid, fpu_agent_if.tmask, fpu_agent_if.PC,  fpu_agent_if.op_type, fpu_agent_if.fmt, fpu_agent_if.frm, fpu_agent_if.rd, fpu_agent_if.rs1_data, fpu_agent_if.rs2_data, fpu_agent_if.rs3_data}),
-        .valid_out (fpu_agent_if.valid),
-        .ready_out (fpu_agent_if.ready)
+        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, fpu_op_type,        fpu_fmt,        fpu_frm,        dispatch_if.rd, dispatch_if.rs1_data, dispatch_if.rs2_data, dispatch_if.rs3_data}),
+        .data_out  ({fpu_exe_if.uuid,  fpu_exe_if.wid,  fpu_exe_if.tmask,  fpu_exe_if.PC,  fpu_exe_if.op_type, fpu_exe_if.fmt, fpu_exe_if.frm, fpu_exe_if.rd,  fpu_exe_if.rs1_data,  fpu_exe_if.rs2_data,  fpu_exe_if.rs3_data}),
+        .valid_out (fpu_exe_if.valid),
+        .ready_out (fpu_exe_if.ready)
     );
 `else
     `UNUSED_VAR (dispatch_if.rs3_data)
@@ -142,9 +142,9 @@ module VX_dispatch (
         .valid_in  (gpu_req_valid),
         .ready_in  (gpu_req_ready),
         .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, next_PC,            gpu_op_type,        dispatch_if.op_mod, dispatch_if.rd, dispatch_if.wb, tid,            dispatch_if.rs1_data, dispatch_if.rs2_data, dispatch_if.rs3_data}),
-        .data_out  ({gpu_req_if.uuid,  gpu_req_if.wid,  gpu_req_if.tmask,  gpu_req_if.PC,  gpu_req_if.next_PC, gpu_req_if.op_type, gpu_req_if.op_mod,  gpu_req_if.rd,  gpu_req_if.wb,  gpu_req_if.tid, gpu_req_if.rs1_data,  gpu_req_if.rs2_data,  gpu_req_if.rs3_data}),
-        .valid_out (gpu_req_if.valid),
-        .ready_out (gpu_req_if.ready)
+        .data_out  ({gpu_exe_if.uuid,  gpu_exe_if.wid,  gpu_exe_if.tmask,  gpu_exe_if.PC,  gpu_exe_if.next_PC, gpu_exe_if.op_type, gpu_exe_if.op_mod,  gpu_exe_if.rd,  gpu_exe_if.wb,  gpu_exe_if.tid, gpu_exe_if.rs1_data,  gpu_exe_if.rs2_data,  gpu_exe_if.rs3_data}),
+        .valid_out (gpu_exe_if.valid),
+        .ready_out (gpu_exe_if.ready)
     ); 
 
     // can take next request?

@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-interface VX_fpu_agent_if ();
+interface VX_fpu_exe_if ();
 
     wire                            valid;
     wire [`UP(`UUID_BITS)-1:0]      uuid;

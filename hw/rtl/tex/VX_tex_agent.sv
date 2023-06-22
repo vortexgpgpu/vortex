@@ -8,7 +8,7 @@ module VX_tex_agent #(
 
     // Inputs
     VX_gpu_csr_if.slave     tex_csr_if,
-    VX_tex_agent_if.slave   tex_agent_if,
+    VX_tex_exe_if.slave     tex_exe_if,
         
     // Outputs
     VX_tex_bus_if.master    tex_bus_if,
@@ -51,7 +51,7 @@ module VX_tex_agent #(
     
     wire mdata_full;
 
-    wire mdata_push = tex_agent_if.valid && tex_agent_if.ready;
+    wire mdata_push = tex_exe_if.valid && tex_exe_if.ready;
     wire mdata_pop  = tex_bus_if.rsp_valid && tex_bus_if.rsp_ready;
 
     VX_index_buffer #(
@@ -64,8 +64,8 @@ module VX_tex_agent #(
         .write_addr   (mdata_waddr),                
         .read_addr    (mdata_raddr),
         .release_addr (mdata_raddr),        
-        .write_data   ({tex_agent_if.wid, tex_agent_if.tmask, tex_agent_if.PC, tex_agent_if.rd}),                    
-        .read_data    ({rsp_wid,          rsp_tmask,          rsp_PC,          rsp_rd}), 
+        .write_data   ({tex_exe_if.wid, tex_exe_if.tmask, tex_exe_if.PC, tex_exe_if.rd}),
+        .read_data    ({rsp_wid,        rsp_tmask,        rsp_PC,        rsp_rd}),
         .release_slot (mdata_pop),     
         .full         (mdata_full),
         `UNUSED_PIN (empty)
@@ -74,10 +74,10 @@ module VX_tex_agent #(
     // submit texture request
 
     wire valid_in, ready_in;    
-    assign valid_in = tex_agent_if.valid && ~mdata_full;
-    assign tex_agent_if.ready = ready_in && ~mdata_full;    
+    assign valid_in = tex_exe_if.valid && ~mdata_full;
+    assign tex_exe_if.ready = ready_in && ~mdata_full;    
 
-    wire [`TEX_REQ_TAG_WIDTH-1:0] req_tag = {tex_agent_if.uuid, mdata_waddr};
+    wire [`TEX_REQ_TAG_WIDTH-1:0] req_tag = {tex_exe_if.uuid, mdata_waddr};
 
     VX_skid_buffer #(
         .DATAW   (`NUM_THREADS * (1 + 2 * 32 + `TEX_LOD_BITS) + `TEX_STAGE_BITS + `TEX_REQ_TAG_WIDTH),
@@ -87,7 +87,7 @@ module VX_tex_agent #(
         .reset     (reset),
         .valid_in  (valid_in),
         .ready_in  (ready_in),
-        .data_in   ({tex_agent_if.tmask,  tex_agent_if.coords,   tex_agent_if.lod,   tex_agent_if.stage,   req_tag}),
+        .data_in   ({tex_exe_if.tmask,    tex_exe_if.coords,     tex_exe_if.lod,     tex_exe_if.stage,     req_tag}),
         .data_out  ({tex_bus_if.req_mask, tex_bus_if.req_coords, tex_bus_if.req_lod, tex_bus_if.req_stage, tex_bus_if.req_tag}),
         .valid_out (tex_bus_if.req_valid),
         .ready_out (tex_bus_if.req_ready)
@@ -116,14 +116,14 @@ module VX_tex_agent #(
 
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin
-        if (tex_agent_if.valid && tex_agent_if.ready) begin
-            `TRACE(1, ("%d: core%0d-tex-req: wid=%0d, PC=0x%0h, tmask=%b, u=", $time, CORE_ID, tex_agent_if.wid, tex_agent_if.PC, tex_agent_if.tmask));
-            `TRACE_ARRAY1D(1, tex_agent_if.coords[0], `NUM_THREADS);
+        if (tex_exe_if.valid && tex_exe_if.ready) begin
+            `TRACE(1, ("%d: core%0d-tex-req: wid=%0d, PC=0x%0h, tmask=%b, u=", $time, CORE_ID, tex_exe_if.wid, tex_exe_if.PC, tex_exe_if.tmask));
+            `TRACE_ARRAY1D(1, tex_exe_if.coords[0], `NUM_THREADS);
             `TRACE(1, (", v="));
-            `TRACE_ARRAY1D(1, tex_agent_if.coords[1], `NUM_THREADS);
+            `TRACE_ARRAY1D(1, tex_exe_if.coords[1], `NUM_THREADS);
             `TRACE(1, (", lod="));
-            `TRACE_ARRAY1D(1, tex_agent_if.lod, `NUM_THREADS);
-            `TRACE(1, (", stage=%0d, tag=0x%0h (#%0d)\n", tex_agent_if.stage, req_tag, tex_agent_if.uuid));
+            `TRACE_ARRAY1D(1, tex_exe_if.lod, `NUM_THREADS);
+            `TRACE(1, (", stage=%0d, tag=0x%0h (#%0d)\n", tex_exe_if.stage, req_tag, tex_exe_if.uuid));
         end
         if (tex_commit_if.valid && tex_commit_if.ready) begin
             `TRACE(1, ("%d: core%0d-tex-rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, texels=", $time, CORE_ID, tex_commit_if.wid, tex_commit_if.PC, tex_commit_if.tmask, tex_commit_if.rd));

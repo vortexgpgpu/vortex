@@ -30,7 +30,7 @@ module VX_execute #(
 `endif
 
 `ifdef EXT_F_ENABLE
-    VX_fpu_agent_if.slave   fpu_agent_if,
+    VX_fpu_exe_if.slave     fpu_exe_if,
     VX_fpu_bus_if.master    fpu_bus_if,
     VX_commit_if.master     fpu_commit_if,
 `endif
@@ -59,18 +59,18 @@ module VX_execute #(
 `endif
 `endif    
   
-    VX_alu_req_if.slave     alu_req_if,
+    VX_alu_exe_if.slave     alu_exe_if,
     VX_branch_ctl_if.master branch_ctl_if,    
     VX_commit_if.master     alu_commit_if,
     
-    VX_lsu_req_if.slave     lsu_req_if,    
+    VX_lsu_exe_if.slave     lsu_exe_if,    
     VX_commit_if.master     ld_commit_if,
     VX_commit_if.master     st_commit_if,
     
-    VX_csr_req_if.slave     csr_req_if,
+    VX_csr_exe_if.slave     csr_exe_if,
     VX_commit_if.master     csr_commit_if,
     
-    VX_gpu_req_if.slave     gpu_req_if,
+    VX_gpu_exe_if.slave     gpu_exe_if,
     VX_warp_ctl_if.master   warp_ctl_if,
     VX_commit_if.master     gpu_commit_if,    
 
@@ -112,7 +112,7 @@ module VX_execute #(
     ) alu_unit (
         .clk            (clk),
         .reset          (alu_reset),
-        .alu_req_if     (alu_req_if),
+        .alu_exe_if     (alu_exe_if),
         .branch_ctl_if  (branch_ctl_if),
         .alu_commit_if  (alu_commit_if)
     );
@@ -126,7 +126,7 @@ module VX_execute #(
         .clk            (clk),
         .reset          (lsu_reset),
         .cache_bus_if   (dcache_bus_if),
-        .lsu_req_if     (lsu_req_if),
+        .lsu_exe_if     (lsu_exe_if),
         .ld_commit_if   (ld_commit_if),
         .st_commit_if   (st_commit_if)
     );
@@ -180,7 +180,7 @@ module VX_execute #(
 
         .commit_csr_if  (commit_csr_if),
         .sched_csr_if   (sched_csr_if),
-        .csr_req_if     (csr_req_if),   
+        .csr_exe_if     (csr_exe_if),   
         .csr_commit_if  (csr_commit_if)
     );
 
@@ -192,7 +192,7 @@ module VX_execute #(
     ) fpu_agent (
         .clk            (clk),
         .reset          (fpu_reset),    
-        .fpu_agent_if   (fpu_agent_if), 
+        .fpu_exe_if     (fpu_exe_if), 
         .fpu_bus_if     (fpu_bus_if),
         .fpu_to_csr_if  (fpu_to_csr_if), 
         .fpu_commit_if  (fpu_commit_if),
@@ -206,7 +206,7 @@ module VX_execute #(
     ) gpu_unit (
         .clk            (clk),
         .reset          (gpu_reset),    
-        .gpu_req_if     (gpu_req_if),
+        .gpu_exe_if     (gpu_exe_if),
 
     `ifdef PERF_ENABLE
         .gpu_perf_if    (gpu_perf_if),
@@ -235,9 +235,9 @@ module VX_execute #(
     );
 
     // simulation helper signal to get RISC-V tests Pass/Fail status
-    assign sim_ebreak = alu_req_if.valid && alu_req_if.ready
-                     && `INST_ALU_IS_BR(alu_req_if.op_mod)
-                     && (`INST_BR_BITS'(alu_req_if.op_type) == `INST_BR_EBREAK
-                      || `INST_BR_BITS'(alu_req_if.op_type) == `INST_BR_ECALL);
+    assign sim_ebreak = alu_exe_if.valid && alu_exe_if.ready
+                     && `INST_ALU_IS_BR(alu_exe_if.op_mod)
+                     && (`INST_BR_BITS'(alu_exe_if.op_type) == `INST_BR_EBREAK
+                      || `INST_BR_BITS'(alu_exe_if.op_type) == `INST_BR_ECALL);
 
 endmodule

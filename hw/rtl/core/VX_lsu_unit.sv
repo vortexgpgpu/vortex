@@ -17,7 +17,7 @@ module VX_lsu_unit #(
     VX_cache_bus_if.master  cache_bus_if,
 
     // inputs
-    VX_lsu_req_if.slave     lsu_req_if,
+    VX_lsu_exe_if.slave     lsu_exe_if,
 
     // outputs
     VX_commit_if.master     ld_commit_if,
@@ -61,7 +61,7 @@ module VX_lsu_unit #(
 
     wire [`NUM_THREADS-1:0][`XLEN-1:0] full_addr;    
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign full_addr[i] = lsu_req_if.base_addr[i][`XLEN-1:0] + lsu_req_if.offset;
+        assign full_addr[i] = lsu_exe_if.base_addr[i][`XLEN-1:0] + lsu_exe_if.offset;
     end
 
     // detect duplicate addresses
@@ -70,9 +70,9 @@ module VX_lsu_unit #(
     if (`NUM_THREADS > 1) begin    
         wire [`NUM_THREADS-2:0] addr_matches;
         for (genvar i = 0; i < (`NUM_THREADS-1); ++i) begin
-            assign addr_matches[i] = (lsu_req_if.base_addr[i+1] == lsu_req_if.base_addr[0]) || ~lsu_req_if.tmask[i+1];
+            assign addr_matches[i] = (lsu_exe_if.base_addr[i+1] == lsu_exe_if.base_addr[0]) || ~lsu_exe_if.tmask[i+1];
         end
-        assign lsu_is_dup = lsu_req_if.tmask[0] && (& addr_matches);
+        assign lsu_is_dup = lsu_exe_if.tmask[0] && (& addr_matches);
     end else begin
         assign lsu_is_dup = 0;
     end
@@ -101,11 +101,11 @@ module VX_lsu_unit #(
     wire lsu_valid, lsu_ready;
 
     // fence: stall the pipeline until all pending requests are sent
-    wire is_fence = `INST_LSU_IS_FENCE(lsu_req_if.op_type);
+    wire is_fence = `INST_LSU_IS_FENCE(lsu_exe_if.op_type);
     wire fence_wait = is_fence && ~mem_req_empty;
     
-    assign lsu_valid = lsu_req_if.valid && ~fence_wait;
-    assign lsu_req_if.ready = lsu_ready && ~fence_wait;
+    assign lsu_valid = lsu_exe_if.valid && ~fence_wait;
+    assign lsu_exe_if.ready = lsu_ready && ~fence_wait;
 
     // schedule memory request    
 
@@ -129,10 +129,10 @@ module VX_lsu_unit #(
     assign lsu_ready = mem_req_ready;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign mem_req_mask[i] = lsu_req_if.tmask[i] && (~lsu_is_dup || (i == 0));
+        assign mem_req_mask[i] = lsu_exe_if.tmask[i] && (~lsu_is_dup || (i == 0));
     end
 
-    assign mem_req_rw = ~lsu_req_if.wb;
+    assign mem_req_rw = ~lsu_exe_if.wb;
 
     // address formatting
 
@@ -146,8 +146,8 @@ module VX_lsu_unit #(
     // data formatting
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         always @(*) begin
-            mem_req_byteen[i] = {DCACHE_WORD_SIZE{lsu_req_if.wb}};
-            case (`INST_LSU_WSIZE(lsu_req_if.op_type))
+            mem_req_byteen[i] = {DCACHE_WORD_SIZE{lsu_exe_if.wb}};
+            case (`INST_LSU_WSIZE(lsu_exe_if.op_type))
                 0: begin // 8-bit   
                     mem_req_byteen[i][req_align[i]] = 1;
                 end
@@ -168,28 +168,28 @@ module VX_lsu_unit #(
         end
 
         // memory misalignment not supported!
-        wire lsu_req_fire = lsu_req_if.valid && lsu_req_if.ready;        
-        `RUNTIME_ASSERT((~lsu_req_fire || ~lsu_req_if.tmask[i] || is_fence || (full_addr[i] % (1 << `INST_LSU_WSIZE(lsu_req_if.op_type))) == 0), 
-            ("misaligned memory access, PC=0x%0h, addr=0x%0h, wsize=%0d!", lsu_req_if.PC, full_addr[i], `INST_LSU_WSIZE(lsu_req_if.op_type)));
+        wire lsu_req_fire = lsu_exe_if.valid && lsu_exe_if.ready;        
+        `RUNTIME_ASSERT((~lsu_req_fire || ~lsu_exe_if.tmask[i] || is_fence || (full_addr[i] % (1 << `INST_LSU_WSIZE(lsu_exe_if.op_type))) == 0), 
+            ("misaligned memory access, PC=0x%0h, addr=0x%0h, wsize=%0d!", lsu_exe_if.PC, full_addr[i], `INST_LSU_WSIZE(lsu_exe_if.op_type)));
 
         always @(*) begin
-            mem_req_data[i] = lsu_req_if.store_data[i];
+            mem_req_data[i] = lsu_exe_if.store_data[i];
             case (req_align[i])
-                1: mem_req_data[i][`XLEN-1:8]  = lsu_req_if.store_data[i][`XLEN-9:0];
-                2: mem_req_data[i][`XLEN-1:16] = lsu_req_if.store_data[i][`XLEN-17:0];
-                3: mem_req_data[i][`XLEN-1:24] = lsu_req_if.store_data[i][`XLEN-25:0];
+                1: mem_req_data[i][`XLEN-1:8]  = lsu_exe_if.store_data[i][`XLEN-9:0];
+                2: mem_req_data[i][`XLEN-1:16] = lsu_exe_if.store_data[i][`XLEN-17:0];
+                3: mem_req_data[i][`XLEN-1:24] = lsu_exe_if.store_data[i][`XLEN-25:0];
             `ifdef XLEN_64
-                4: mem_req_data[i][`XLEN-1:32] = lsu_req_if.store_data[i][`XLEN-33:0];
-                5: mem_req_data[i][`XLEN-1:40] = lsu_req_if.store_data[i][`XLEN-41:0];
-                6: mem_req_data[i][`XLEN-1:48] = lsu_req_if.store_data[i][`XLEN-49:0];
-                7: mem_req_data[i][`XLEN-1:56] = lsu_req_if.store_data[i][`XLEN-57:0];
+                4: mem_req_data[i][`XLEN-1:32] = lsu_exe_if.store_data[i][`XLEN-33:0];
+                5: mem_req_data[i][`XLEN-1:40] = lsu_exe_if.store_data[i][`XLEN-41:0];
+                6: mem_req_data[i][`XLEN-1:48] = lsu_exe_if.store_data[i][`XLEN-49:0];
+                7: mem_req_data[i][`XLEN-1:56] = lsu_exe_if.store_data[i][`XLEN-57:0];
             `endif
                 default:;
             endcase
         end
     end
 
-    assign mem_req_tag = {lsu_req_if.uuid, lsu_addr_type, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, lsu_req_if.rd, lsu_req_if.op_type, req_align, lsu_is_dup};
+    assign mem_req_tag = {lsu_exe_if.uuid, lsu_addr_type, lsu_exe_if.wid, lsu_exe_if.tmask, lsu_exe_if.PC, lsu_exe_if.rd, lsu_exe_if.op_type, req_align, lsu_is_dup};
 
      VX_cache_bus_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
@@ -324,10 +324,10 @@ module VX_lsu_unit #(
     // send store commit
 
     assign st_commit_if.valid = mem_req_fire && mem_req_rw;
-    assign st_commit_if.uuid  = lsu_req_if.uuid;
-    assign st_commit_if.wid   = lsu_req_if.wid;
-    assign st_commit_if.tmask = lsu_req_if.tmask;
-    assign st_commit_if.PC    = lsu_req_if.PC;
+    assign st_commit_if.uuid  = lsu_exe_if.uuid;
+    assign st_commit_if.wid   = lsu_exe_if.wid;
+    assign st_commit_if.tmask = lsu_exe_if.tmask;
+    assign st_commit_if.PC    = lsu_exe_if.PC;
     assign st_commit_if.rd    = '0;
     assign st_commit_if.wb    = 0;
     assign st_commit_if.eop   = 1;
@@ -405,7 +405,7 @@ module VX_lsu_unit #(
             .start(1'b0),
             .stop(1'b0),
             .triggers({reset, mem_req_fire, mem_rsp_fire}),
-            .probes({lsu_req_if.uuid, full_addr, mem_req_rw, mem_req_byteen, mem_req_data, rsp_uuid, rsp_data}),
+            .probes({lsu_exe_if.uuid, full_addr, mem_req_rw, mem_req_byteen, mem_req_data, rsp_uuid, rsp_data}),
             .bus_in(scope_bus_in),
             .bus_out(scope_bus_out)
         );
@@ -416,7 +416,7 @@ module VX_lsu_unit #(
         wire [31:0] rsp_data_0 = rsp_data[0];
         ila_lsu ila_lsu_inst (
             .clk    (clk),
-            .probe0 ({mem_req_data_0, lsu_req_if.uuid, lsu_req_if.wid, lsu_req_if.PC, mem_req_mask, full_addr_0, mem_req_byteen, mem_req_rw, mem_req_ready, mem_req_valid}),
+            .probe0 ({mem_req_data_0, lsu_exe_if.uuid, lsu_exe_if.wid, lsu_exe_if.PC, mem_req_mask, full_addr_0, mem_req_byteen, mem_req_rw, mem_req_ready, mem_req_valid}),
             .probe1 ({rsp_data_0, rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, rsp_tmask, rsp_wid, mem_rsp_ready, mem_rsp_valid}),
             .probe2 ({cache_bus_if.req_data, cache_bus_if.req_tag, cache_bus_if.req_byteen, cache_bus_if.req_addr, cache_bus_if.req_rw, cache_bus_if.req_ready, cache_bus_if.req_valid}),
             .probe3 ({cache_bus_if.rsp_data, cache_bus_if.rsp_tag, cache_bus_if.rsp_ready, cache_bus_if.rsp_valid})
@@ -429,24 +429,24 @@ module VX_lsu_unit #(
   
 `ifdef DBG_TRACE_CORE_DCACHE
     always @(posedge clk) begin    
-        if (lsu_req_if.valid && fence_wait) begin
+        if (lsu_exe_if.valid && fence_wait) begin
             `TRACE(1, ("%d: *** D$%0d fence wait\n", $time, CORE_ID));
         end
         if (mem_req_fire) begin
             if (mem_req_rw) begin
-                `TRACE(1, ("%d: D$%0d Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, lsu_req_if.wid, lsu_req_if.PC, mem_req_mask));
+                `TRACE(1, ("%d: D$%0d Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, lsu_exe_if.wid, lsu_exe_if.PC, mem_req_mask));
                 `TRACE_ARRAY1D(1, full_addr, `NUM_THREADS);
                 `TRACE(1, (", tag=0x%0h, byteen=0x%0h, type=", mem_req_tag, mem_req_byteen));
                 `TRACE_ARRAY1D(1, lsu_addr_type, `NUM_THREADS);
                 `TRACE(1, (", data="));
                 `TRACE_ARRAY1D(1, mem_req_data, `NUM_THREADS);
-                `TRACE(1, (", is_dup=%b (#%0d)\n", lsu_is_dup, lsu_req_if.uuid));
+                `TRACE(1, (", is_dup=%b (#%0d)\n", lsu_is_dup, lsu_exe_if.uuid));
             end else begin
-                `TRACE(1, ("%d: D$%0d Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, lsu_req_if.wid, lsu_req_if.PC, mem_req_mask));
+                `TRACE(1, ("%d: D$%0d Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, lsu_exe_if.wid, lsu_exe_if.PC, mem_req_mask));
                 `TRACE_ARRAY1D(1, full_addr, `NUM_THREADS);
                 `TRACE(1, (", tag=0x%0h, byteen=0x%0h, type=", mem_req_tag, mem_req_byteen));
                 `TRACE_ARRAY1D(1, lsu_addr_type, `NUM_THREADS);
-                `TRACE(1, (", rd=%0d, is_dup=%b (#%0d)\n", lsu_req_if.rd, lsu_is_dup, lsu_req_if.uuid));
+                `TRACE(1, (", rd=%0d, is_dup=%b (#%0d)\n", lsu_exe_if.rd, lsu_is_dup, lsu_exe_if.uuid));
             end
         end
         if (mem_rsp_fire) begin

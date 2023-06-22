@@ -11,7 +11,7 @@ module VX_fpu_agent #(
     input wire clk,
     input wire reset,
 
-    VX_fpu_agent_if.slave   fpu_agent_if,
+    VX_fpu_exe_if.slave     fpu_exe_if,
     VX_fpu_to_csr_if.master fpu_to_csr_if,
     VX_commit_if.master     fpu_commit_if,
 
@@ -36,7 +36,7 @@ module VX_fpu_agent #(
     wire [`FPU_REQ_TAG_WIDTH-1:0] req_tag, rsp_tag;    
     wire mdata_full;
 
-    wire fpu_agent_fire = fpu_agent_if.valid && fpu_agent_if.ready;
+    wire fpu_agent_fire = fpu_exe_if.valid && fpu_exe_if.ready;
     wire fpu_rsp_fire = fpu_bus_if.rsp_valid && fpu_bus_if.rsp_ready;
 
     assign rsp_tag = fpu_bus_if.rsp_tag;
@@ -51,8 +51,8 @@ module VX_fpu_agent #(
         .write_addr   (req_tag),                
         .read_addr    (rsp_tag),
         .release_addr (rsp_tag),        
-        .write_data   ({fpu_agent_if.uuid, fpu_agent_if.wid, fpu_agent_if.tmask, fpu_agent_if.PC, fpu_agent_if.rd}),                    
-        .read_data    ({rsp_uuid,          rsp_wid,          rsp_tmask,          rsp_PC,          rsp_rd}), 
+        .write_data   ({fpu_exe_if.uuid, fpu_exe_if.wid, fpu_exe_if.tmask, fpu_exe_if.PC, fpu_exe_if.rd}),                    
+        .read_data    ({rsp_uuid,        rsp_wid,        rsp_tmask,        rsp_PC,        rsp_rd}), 
         .release_slot (fpu_rsp_fire),     
         .full         (mdata_full),
         `UNUSED_PIN (empty)
@@ -60,17 +60,17 @@ module VX_fpu_agent #(
 
     // resolve dynamic FRM from CSR   
     wire [`INST_FRM_BITS-1:0] req_op_frm;
-    assign fpu_to_csr_if.read_wid = fpu_agent_if.wid;    
-    assign req_op_frm = (fpu_agent_if.op_type != `INST_FPU_MISC 
-                      && fpu_agent_if.frm == `INST_FRM_DYN) ? fpu_to_csr_if.read_frm : fpu_agent_if.frm;
+    assign fpu_to_csr_if.read_wid = fpu_exe_if.wid;    
+    assign req_op_frm = (fpu_exe_if.op_type != `INST_FPU_MISC 
+                      && fpu_exe_if.frm == `INST_FRM_DYN) ? fpu_to_csr_if.read_frm : fpu_exe_if.frm;
 
     // submit FPU request
 
     wire mdata_and_csr_ready = ~mdata_full && ~csr_pending;
 
     wire valid_in, ready_in;    
-    assign valid_in = fpu_agent_if.valid && mdata_and_csr_ready;
-    assign fpu_agent_if.ready = ready_in && mdata_and_csr_ready;    
+    assign valid_in = fpu_exe_if.valid && mdata_and_csr_ready;
+    assign fpu_exe_if.ready = ready_in && mdata_and_csr_ready;    
 
     VX_skid_buffer #(
         .DATAW   (`INST_FPU_BITS + `INST_FMT_BITS + `INST_FRM_BITS + `NUM_THREADS * 3 * `XLEN + `FPU_REQ_TAG_WIDTH),
@@ -80,8 +80,8 @@ module VX_fpu_agent #(
         .reset     (reset),
         .valid_in  (valid_in),
         .ready_in  (ready_in),
-        .data_in   ({fpu_agent_if.op_type, fpu_agent_if.fmt,   req_op_frm,         fpu_agent_if.rs1_data, fpu_agent_if.rs2_data, fpu_agent_if.rs3_data, req_tag}),
-        .data_out  ({fpu_bus_if.req_type,  fpu_bus_if.req_fmt, fpu_bus_if.req_frm, fpu_bus_if.req_dataa,  fpu_bus_if.req_datab,  fpu_bus_if.req_datac,  fpu_bus_if.req_tag}),
+        .data_in   ({fpu_exe_if.op_type,  fpu_exe_if.fmt,     req_op_frm,         fpu_exe_if.rs1_data,  fpu_exe_if.rs2_data,  fpu_exe_if.rs3_data,  req_tag}),
+        .data_out  ({fpu_bus_if.req_type, fpu_bus_if.req_fmt, fpu_bus_if.req_frm, fpu_bus_if.req_dataa, fpu_bus_if.req_datab, fpu_bus_if.req_datac, fpu_bus_if.req_tag}),
         .valid_out (fpu_bus_if.req_valid),
         .ready_out (fpu_bus_if.req_ready)
     );

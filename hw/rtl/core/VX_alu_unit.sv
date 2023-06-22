@@ -7,7 +7,7 @@ module VX_alu_unit #(
     input wire              reset,
     
     // Inputs
-    VX_alu_req_if.slave     alu_req_if,
+    VX_alu_exe_if.slave     alu_exe_if,
 
     // Outputs
     VX_branch_ctl_if.master branch_ctl_if,
@@ -37,26 +37,26 @@ module VX_alu_unit #(
     wire ready_in;
 
 `ifdef XLEN_64
-    wire is_alu_w = `INST_ALU_IS_W(alu_req_if.op_mod);
+    wire is_alu_w = `INST_ALU_IS_W(alu_exe_if.op_mod);
 `else
     wire is_alu_w = 0;
 `endif
 
-    `UNUSED_VAR (alu_req_if.op_mod)
+    `UNUSED_VAR (alu_exe_if.op_mod)
 
-    wire [`INST_ALU_BITS-1:0] alu_op = `INST_ALU_BITS'(alu_req_if.op_type);
-    wire [`INST_BR_BITS-1:0]   br_op = `INST_BR_BITS'(alu_req_if.op_type);
-     wire                    is_br_op = `INST_ALU_IS_BR(alu_req_if.op_mod);
+    wire [`INST_ALU_BITS-1:0] alu_op = `INST_ALU_BITS'(alu_exe_if.op_type);
+    wire [`INST_BR_BITS-1:0]   br_op = `INST_BR_BITS'(alu_exe_if.op_type);
+     wire                    is_br_op = `INST_ALU_IS_BR(alu_exe_if.op_mod);
     wire                   is_sub_op = `INST_ALU_IS_SUB(alu_op);
     wire                  alu_signed = `INST_ALU_SIGNED(alu_op);   
     wire [1:0]          alu_op_class = `INST_ALU_CLASS(alu_op);
     
-    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in1 = alu_req_if.rs1_data;
-    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in2 = alu_req_if.rs2_data;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in1 = alu_exe_if.rs1_data;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in2 = alu_exe_if.rs2_data;
 
-    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in1_PC  = alu_req_if.use_PC ? {`NUM_THREADS{alu_req_if.PC}} : alu_in1;
-    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in2_imm = alu_req_if.use_imm ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
-    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in2_br  = (alu_req_if.use_imm && ~is_br_op) ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in1_PC  = alu_exe_if.use_PC ? {`NUM_THREADS{alu_exe_if.PC}} : alu_in1;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in2_imm = alu_exe_if.use_imm ? {`NUM_THREADS{alu_exe_if.imm}} : alu_in2;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in2_br  = (alu_exe_if.use_imm && ~is_br_op) ? {`NUM_THREADS{alu_exe_if.imm}} : alu_in2;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign add_result[i] = alu_in1_PC[i] + alu_in2_imm[i];
@@ -108,8 +108,8 @@ module VX_alu_unit #(
 
     // branch
 
-    wire [`XLEN-1:0] br_dest  = add_result[alu_req_if.tid][`XLEN-1:0];
-    wire [`XLEN:0] cmp_result = sub_result[alu_req_if.tid][`XLEN:0];
+    wire [`XLEN-1:0] br_dest  = add_result[alu_exe_if.tid][`XLEN-1:0];
+    wire [`XLEN:0] cmp_result = sub_result[alu_exe_if.tid][`XLEN:0];
     
     wire is_less  = cmp_result[`XLEN];
     wire is_equal = ~(| cmp_result[`XLEN-1:0]);
@@ -117,7 +117,7 @@ module VX_alu_unit #(
     
     wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_jal_result;
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign alu_jal_result[i] = (is_br_op && is_br_static) ? alu_req_if.next_PC : alu_result[i]; 
+        assign alu_jal_result[i] = (is_br_op && is_br_static) ? alu_exe_if.next_PC : alu_result[i]; 
     end   
 
     // output
@@ -149,7 +149,7 @@ module VX_alu_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (alu_ready_in),
-        .data_in  ({alu_valid_in,  alu_req_if.uuid, alu_req_if.wid, alu_req_if.tmask, alu_req_if.PC, alu_req_if.rd, alu_req_if.wb, alu_jal_result, is_br_op,   br_op,   is_less,   is_equal,   br_dest}),
+        .data_in  ({alu_valid_in,  alu_exe_if.uuid, alu_exe_if.wid, alu_exe_if.tmask, alu_exe_if.PC, alu_exe_if.rd, alu_exe_if.wb, alu_jal_result, is_br_op,   br_op,   is_less,   is_equal,   br_dest}),
         .data_out ({alu_valid_out, alu_uuid,        alu_wid,        alu_tmask,        alu_PC,        alu_rd,        alu_wb,        alu_data,       is_br_op_r, br_op_r, is_less_r, is_equal_r, br_dest_r})
     );
 
@@ -177,7 +177,7 @@ module VX_alu_unit #(
     wire                    muldiv_wb;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] muldiv_data;
 
-    wire [`INST_M_BITS-1:0] muldiv_op = `INST_M_BITS'(alu_req_if.op_type);
+    wire [`INST_M_BITS-1:0] muldiv_op = `INST_M_BITS'(alu_exe_if.op_type);
 
     `RESET_RELAY (muldiv_reset, reset);
 
@@ -188,15 +188,15 @@ module VX_alu_unit #(
         // Inputs
         .valid_in   (muldiv_valid_in),
         .alu_op     (muldiv_op),
-        .op_mod     (alu_req_if.op_mod),
-        .uuid_in    (alu_req_if.uuid),
-        .wid_in     (alu_req_if.wid),
-        .tmask_in   (alu_req_if.tmask),
-        .PC_in      (alu_req_if.PC),
-        .rd_in      (alu_req_if.rd),
-        .wb_in      (alu_req_if.wb),
-        .alu_in1    (alu_req_if.rs1_data), 
-        .alu_in2    (alu_req_if.rs2_data),
+        .op_mod     (alu_exe_if.op_mod),
+        .uuid_in    (alu_exe_if.uuid),
+        .wid_in     (alu_exe_if.wid),
+        .tmask_in   (alu_exe_if.tmask),
+        .PC_in      (alu_exe_if.PC),
+        .rd_in      (alu_exe_if.rd),
+        .wb_in      (alu_exe_if.wb),
+        .alu_in1    (alu_exe_if.rs1_data), 
+        .alu_in2    (alu_exe_if.rs2_data),
         .ready_in   (muldiv_ready_in),
 
         // Outputs
@@ -211,15 +211,15 @@ module VX_alu_unit #(
         .ready_out  (muldiv_ready_out)
     );
 
-    wire is_muldiv_op = `INST_ALU_IS_M(alu_req_if.op_mod);
+    wire is_muldiv_op = `INST_ALU_IS_M(alu_exe_if.op_mod);
 
-    assign alu_valid_in = alu_req_if.valid && ~is_muldiv_op;
-    assign muldiv_valid_in = alu_req_if.valid && is_muldiv_op;
+    assign alu_valid_in = alu_exe_if.valid && ~is_muldiv_op;
+    assign muldiv_valid_in = alu_exe_if.valid && is_muldiv_op;
     assign ready_in = is_muldiv_op ? muldiv_ready_in : alu_ready_in;
 
 `else 
 
-    assign alu_valid_in = alu_req_if.valid;
+    assign alu_valid_in = alu_exe_if.valid;
     assign ready_in = alu_ready_in;
 
 `endif
@@ -260,7 +260,7 @@ module VX_alu_unit #(
     assign alu_commit_if.eop = 1'b1;
 
     // can accept new request?
-    assign alu_req_if.ready = ready_in;
+    assign alu_exe_if.ready = ready_in;
 
 `ifdef DBG_TRACE_CORE_PIPELINE
     always @(posedge clk) begin

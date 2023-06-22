@@ -86,13 +86,13 @@ module VX_core #(
     VX_commit_csr_if    commit_csr_if();
     VX_branch_ctl_if    branch_ctl_if();
     VX_warp_ctl_if      warp_ctl_if();    
-    VX_alu_req_if       alu_req_if();
-    VX_lsu_req_if       lsu_req_if();
-    VX_csr_req_if       csr_req_if();
+    VX_alu_exe_if       alu_exe_if();
+    VX_lsu_exe_if       lsu_exe_if();
+    VX_csr_exe_if       csr_exe_if();
 `ifdef EXT_F_ENABLE 
-    VX_fpu_agent_if     fpu_agent_if();
+    VX_fpu_exe_if       fpu_exe_if();
 `endif
-    VX_gpu_req_if       gpu_req_if();
+    VX_gpu_exe_if       gpu_exe_if();
     VX_schedule_if      schedule_if();
     VX_fetch_if         fetch_if();
     VX_decode_if        decode_if();
@@ -185,13 +185,13 @@ module VX_core #(
         .decode_if      (decode_if),
         .writeback_if   (writeback_if),
 
-        .alu_req_if     (alu_req_if),
-        .lsu_req_if     (lsu_req_if),        
-        .csr_req_if     (csr_req_if),
+        .alu_exe_if     (alu_exe_if),
+        .lsu_exe_if     (lsu_exe_if),        
+        .csr_exe_if     (csr_exe_if),
     `ifdef EXT_F_ENABLE
-        .fpu_agent_if   (fpu_agent_if),
+        .fpu_exe_if     (fpu_exe_if),
     `endif
-        .gpu_req_if     (gpu_req_if)
+        .gpu_exe_if     (gpu_exe_if)
     );
 
     VX_execute #(
@@ -212,7 +212,7 @@ module VX_core #(
         .dcache_bus_if  (dcache_bus_if),
     
     `ifdef EXT_F_ENABLE
-        .fpu_agent_if   (fpu_agent_if),
+        .fpu_exe_if     (fpu_exe_if),
         .fpu_bus_if     (fpu_bus_if),
         .fpu_commit_if  (fpu_commit_if),
     `endif   
@@ -244,10 +244,10 @@ module VX_core #(
         .commit_csr_if  (commit_csr_if),   
         .sched_csr_if   (sched_csr_if),              
         
-        .alu_req_if     (alu_req_if),
-        .lsu_req_if     (lsu_req_if),        
-        .csr_req_if     (csr_req_if),
-        .gpu_req_if     (gpu_req_if),
+        .alu_exe_if     (alu_exe_if),
+        .lsu_exe_if     (lsu_exe_if),        
+        .csr_exe_if     (csr_exe_if),
+        .gpu_exe_if     (gpu_exe_if),
 
         .warp_ctl_if    (warp_ctl_if),
         .branch_ctl_if  (branch_ctl_if),        
