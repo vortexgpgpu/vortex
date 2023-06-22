@@ -124,10 +124,10 @@ module Vortex (
         .TAG_WIDTH  (L2_MEM_TAG_WIDTH)
     ) per_cluster_mem_bus_if[`NUM_CLUSTERS]();        
 
-    VX_dcr_write_if dcr_write_if();
-    assign dcr_write_if.valid = dcr_wr_valid;
-    assign dcr_write_if.addr  = dcr_wr_addr;
-    assign dcr_write_if.data  = dcr_wr_data;
+    VX_dcr_bus_if dcr_bus_if();
+    assign dcr_bus_if.write_valid = dcr_wr_valid;
+    assign dcr_bus_if.write_addr  = dcr_wr_addr;
+    assign dcr_bus_if.write_data  = dcr_wr_data;
 
     wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
 
@@ -138,7 +138,7 @@ module Vortex (
 
         `RESET_RELAY (cluster_reset, reset);
 
-        `BUFFER_DCR_WRITE_IF (cluster_dcr_write_if, dcr_write_if, (`NUM_CLUSTERS > 1));
+        `BUFFER_DCR_BUS_IF (cluster_dcr_bus_if, dcr_bus_if, (`NUM_CLUSTERS > 1));
 
         VX_cluster #(
             .CLUSTER_ID (i)
@@ -153,7 +153,7 @@ module Vortex (
             .perf_memsys_total_if (perf_memsys_total_if),
         `endif
             
-            .dcr_write_if       (cluster_dcr_write_if),
+            .dcr_bus_if         (cluster_dcr_bus_if),
 
         `ifdef EXT_TEX_ENABLE
         `ifdef PERF_ENABLE

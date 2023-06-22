@@ -16,7 +16,7 @@ module VX_rop_unit #(
     VX_cache_bus_if.master  cache_bus_if,
 
     // Inputs
-    VX_dcr_write_if.slave   dcr_write_if,
+    VX_dcr_bus_if.slave     dcr_bus_if,
     VX_rop_bus_if.slave     rop_bus_if
 );
     localparam UUID_WIDTH = `UP(`UUID_BITS);
@@ -33,7 +33,7 @@ module VX_rop_unit #(
     ) rop_dcr (
         .clk        (clk),
         .reset      (reset),
-        .dcr_write_if(dcr_write_if),
+        .dcr_bus_if (dcr_bus_if),
         .rop_dcrs   (rop_dcrs)
     );
 
@@ -415,11 +415,11 @@ module VX_rop_unit_top #(
 
     VX_rop_perf_if perf_rop_if();
     
-    VX_dcr_write_if dcr_write_if();
+    VX_dcr_bus_if dcr_bus_if();
 
-    assign dcr_write_if.valid = dcr_write_valid;
-    assign dcr_write_if.addr = dcr_write_addr;
-    assign dcr_write_if.data = dcr_write_data;
+    assign dcr_bus_if.write_valid = dcr_write_valid;
+    assign dcr_bus_if.write_addr = dcr_write_addr;
+    assign dcr_bus_if.write_data = dcr_write_data;
 
     VX_rop_bus_if #(
         .NUM_LANES (NUM_LANES)
@@ -463,7 +463,7 @@ module VX_rop_unit_top #(
     `ifdef PERF_ENABLE
         .perf_rop_if   (perf_rop_if),
     `endif 
-        .dcr_write_if  (dcr_write_if),
+        .dcr_bus_if    (dcr_bus_if),
         .rop_bus_if    (rop_bus_if),
         .cache_bus_if  (cache_bus_if)
     );

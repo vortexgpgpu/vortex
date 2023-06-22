@@ -13,7 +13,7 @@ module VX_dcr_data (
     input wire              reset,
 
     // Inputs
-    VX_dcr_write_if.slave   dcr_write_if,
+    VX_dcr_bus_if.slave     dcr_bus_if,
 
     // Outputs
     output base_dcrs_t      base_dcrs
@@ -24,13 +24,13 @@ module VX_dcr_data (
     base_dcrs_t dcrs;
 
     always @(posedge clk) begin
-       if (dcr_write_if.valid) begin
-            case (dcr_write_if.addr)
-            `DCR_BASE_STARTUP_ADDR0 : dcrs.startup_addr[31:0] <= dcr_write_if.data;
+       if (dcr_bus_if.write_valid) begin
+            case (dcr_bus_if.write_addr)
+            `DCR_BASE_STARTUP_ADDR0 : dcrs.startup_addr[31:0] <= dcr_bus_if.write_data;
         `ifdef XLEN_64
-            `DCR_BASE_STARTUP_ADDR1 : dcrs.startup_addr[63:32] <= dcr_write_if.data;
+            `DCR_BASE_STARTUP_ADDR1 : dcrs.startup_addr[63:32] <= dcr_bus_if.write_data;
         `endif
-            `DCR_BASE_MPM_CLASS     : dcrs.mpm_class <= dcr_write_if.data[7:0];
+            `DCR_BASE_MPM_CLASS     : dcrs.mpm_class <= dcr_bus_if.write_data[7:0];
             default:;
             endcase
         end
@@ -40,10 +40,10 @@ module VX_dcr_data (
 
 `ifdef DBG_TRACE_CORE_PIPELINE
     always @(posedge clk) begin
-        if (dcr_write_if.valid) begin
+        if (dcr_bus_if.write_valid) begin
             `TRACE(1, ("%d: base-dcr: state=", $time));
-            trace_base_dcr(1, dcr_write_if.addr);
-            `TRACE(1, (", data=0x%0h\n", dcr_write_if.data));
+            trace_base_dcr(1, dcr_bus_if.write_addr);
+            `TRACE(1, (", data=0x%0h\n", dcr_bus_if.write_data));
         end
     end
 `endif

@@ -7,7 +7,7 @@ module VX_rop_dcr #(
     input wire reset,
 
     // Inputs
-    VX_dcr_write_if.slave   dcr_write_if,
+    VX_dcr_bus_if.slave     dcr_bus_if,
 
     // Output
     output rop_dcrs_t       rop_dcrs
@@ -37,82 +37,82 @@ module VX_rop_dcr #(
     // DCRs write
 
     always @(posedge clk) begin
-        if (dcr_write_if.valid) begin
-            case (dcr_write_if.addr)                
+        if (dcr_bus_if.write_valid) begin
+            case (dcr_bus_if.write_addr)                
                 `DCR_ROP_CBUF_ADDR: begin 
-                    dcrs.cbuf_addr <= dcr_write_if.data[31:0];
+                    dcrs.cbuf_addr <= dcr_bus_if.write_data[31:0];
                 end
                 `DCR_ROP_CBUF_PITCH: begin 
-                    dcrs.cbuf_pitch <= dcr_write_if.data[`ROP_PITCH_BITS-1:0];
+                    dcrs.cbuf_pitch <= dcr_bus_if.write_data[`ROP_PITCH_BITS-1:0];
                 end
                 `DCR_ROP_CBUF_WRITEMASK: begin 
-                    dcrs.cbuf_writemask <= dcr_write_if.data[3:0];
+                    dcrs.cbuf_writemask <= dcr_bus_if.write_data[3:0];
                 end
                 `DCR_ROP_ZBUF_ADDR: begin 
-                    dcrs.zbuf_addr <= dcr_write_if.data[31:0];
+                    dcrs.zbuf_addr <= dcr_bus_if.write_data[31:0];
                 end
                 `DCR_ROP_ZBUF_PITCH: begin 
-                    dcrs.zbuf_pitch <= dcr_write_if.data[`ROP_PITCH_BITS-1:0];
+                    dcrs.zbuf_pitch <= dcr_bus_if.write_data[`ROP_PITCH_BITS-1:0];
                 end
                 `DCR_ROP_DEPTH_FUNC: begin 
-                    dcrs.depth_func   <= dcr_write_if.data[0 +: `ROP_DEPTH_FUNC_BITS];
-                    dcrs.depth_enable <= `DEPTH_TEST_ENABLE(dcr_write_if.data[0 +: `ROP_DEPTH_FUNC_BITS], dcrs.depth_writemask);
+                    dcrs.depth_func   <= dcr_bus_if.write_data[0 +: `ROP_DEPTH_FUNC_BITS];
+                    dcrs.depth_enable <= `DEPTH_TEST_ENABLE(dcr_bus_if.write_data[0 +: `ROP_DEPTH_FUNC_BITS], dcrs.depth_writemask);
                 end
                 `DCR_ROP_DEPTH_WRITEMASK: begin 
-                    dcrs.depth_writemask <= dcr_write_if.data[0];
-                    dcrs.depth_enable    <= `DEPTH_TEST_ENABLE(dcrs.depth_func, dcr_write_if.data[0]);
+                    dcrs.depth_writemask <= dcr_bus_if.write_data[0];
+                    dcrs.depth_enable    <= `DEPTH_TEST_ENABLE(dcrs.depth_func, dcr_bus_if.write_data[0]);
                 end
                 `DCR_ROP_STENCIL_FUNC: begin 
-                    dcrs.stencil_func[0]   <= dcr_write_if.data[0 +: `ROP_DEPTH_FUNC_BITS];
-                    dcrs.stencil_func[1]   <= dcr_write_if.data[16 +: `ROP_DEPTH_FUNC_BITS];
-                    dcrs.stencil_enable[0] <= `STENCIL_TEST_ENABLE(dcr_write_if.data[0 +: `ROP_DEPTH_FUNC_BITS], dcrs.stencil_zpass[0], dcrs.stencil_zfail[0]);
-                    dcrs.stencil_enable[1] <= `STENCIL_TEST_ENABLE(dcr_write_if.data[16 +: `ROP_DEPTH_FUNC_BITS], dcrs.stencil_zpass[1], dcrs.stencil_zfail[1]);
+                    dcrs.stencil_func[0]   <= dcr_bus_if.write_data[0 +: `ROP_DEPTH_FUNC_BITS];
+                    dcrs.stencil_func[1]   <= dcr_bus_if.write_data[16 +: `ROP_DEPTH_FUNC_BITS];
+                    dcrs.stencil_enable[0] <= `STENCIL_TEST_ENABLE(dcr_bus_if.write_data[0 +: `ROP_DEPTH_FUNC_BITS], dcrs.stencil_zpass[0], dcrs.stencil_zfail[0]);
+                    dcrs.stencil_enable[1] <= `STENCIL_TEST_ENABLE(dcr_bus_if.write_data[16 +: `ROP_DEPTH_FUNC_BITS], dcrs.stencil_zpass[1], dcrs.stencil_zfail[1]);
                 end
                 `DCR_ROP_STENCIL_ZPASS: begin 
-                    dcrs.stencil_zpass[0]  <= dcr_write_if.data[0 +: `ROP_STENCIL_OP_BITS];
-                    dcrs.stencil_zpass[1]  <= dcr_write_if.data[16 +: `ROP_STENCIL_OP_BITS];
-                    dcrs.stencil_enable[0] <= `STENCIL_TEST_ENABLE(dcrs.stencil_func[0], dcr_write_if.data[0 +: `ROP_STENCIL_OP_BITS], dcrs.stencil_zfail[0]);
-                    dcrs.stencil_enable[1] <= `STENCIL_TEST_ENABLE(dcrs.stencil_func[1], dcr_write_if.data[16 +: `ROP_STENCIL_OP_BITS], dcrs.stencil_zfail[1]);
+                    dcrs.stencil_zpass[0]  <= dcr_bus_if.write_data[0 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_zpass[1]  <= dcr_bus_if.write_data[16 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_enable[0] <= `STENCIL_TEST_ENABLE(dcrs.stencil_func[0], dcr_bus_if.write_data[0 +: `ROP_STENCIL_OP_BITS], dcrs.stencil_zfail[0]);
+                    dcrs.stencil_enable[1] <= `STENCIL_TEST_ENABLE(dcrs.stencil_func[1], dcr_bus_if.write_data[16 +: `ROP_STENCIL_OP_BITS], dcrs.stencil_zfail[1]);
                 end
                 `DCR_ROP_STENCIL_ZFAIL: begin 
-                    dcrs.stencil_zfail[0]  <= dcr_write_if.data[0 +: `ROP_STENCIL_OP_BITS];
-                    dcrs.stencil_zfail[1]  <= dcr_write_if.data[16 +: `ROP_STENCIL_OP_BITS];
-                    dcrs.stencil_enable[0] <= `STENCIL_TEST_ENABLE(dcrs.stencil_func[0], dcrs.stencil_zpass[0], dcr_write_if.data[0 +: `ROP_STENCIL_OP_BITS]);
-                    dcrs.stencil_enable[1] <= `STENCIL_TEST_ENABLE(dcrs.stencil_func[1], dcrs.stencil_zpass[1], dcr_write_if.data[16 +: `ROP_STENCIL_OP_BITS]);
+                    dcrs.stencil_zfail[0]  <= dcr_bus_if.write_data[0 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_zfail[1]  <= dcr_bus_if.write_data[16 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_enable[0] <= `STENCIL_TEST_ENABLE(dcrs.stencil_func[0], dcrs.stencil_zpass[0], dcr_bus_if.write_data[0 +: `ROP_STENCIL_OP_BITS]);
+                    dcrs.stencil_enable[1] <= `STENCIL_TEST_ENABLE(dcrs.stencil_func[1], dcrs.stencil_zpass[1], dcr_bus_if.write_data[16 +: `ROP_STENCIL_OP_BITS]);
                 end
                 `DCR_ROP_STENCIL_FAIL: begin 
-                    dcrs.stencil_fail[0] <= dcr_write_if.data[0 +: `ROP_STENCIL_OP_BITS];
-                    dcrs.stencil_fail[1] <= dcr_write_if.data[16 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_fail[0] <= dcr_bus_if.write_data[0 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_fail[1] <= dcr_bus_if.write_data[16 +: `ROP_STENCIL_OP_BITS];
                 end                
                 `DCR_ROP_STENCIL_REF: begin 
-                    dcrs.stencil_ref[0] <= dcr_write_if.data[0 +: `ROP_STENCIL_BITS];
-                    dcrs.stencil_ref[1] <= dcr_write_if.data[16 +: `ROP_STENCIL_BITS];
+                    dcrs.stencil_ref[0] <= dcr_bus_if.write_data[0 +: `ROP_STENCIL_BITS];
+                    dcrs.stencil_ref[1] <= dcr_bus_if.write_data[16 +: `ROP_STENCIL_BITS];
                 end
                 `DCR_ROP_STENCIL_MASK: begin 
-                    dcrs.stencil_mask[0] <= dcr_write_if.data[0 +: `ROP_STENCIL_BITS];
-                    dcrs.stencil_mask[1] <= dcr_write_if.data[16 +: `ROP_STENCIL_BITS];
+                    dcrs.stencil_mask[0] <= dcr_bus_if.write_data[0 +: `ROP_STENCIL_BITS];
+                    dcrs.stencil_mask[1] <= dcr_bus_if.write_data[16 +: `ROP_STENCIL_BITS];
                 end
                 `DCR_ROP_STENCIL_WRITEMASK: begin 
-                    dcrs.stencil_writemask[0] <= dcr_write_if.data[0 +: `ROP_STENCIL_BITS];
-                    dcrs.stencil_writemask[1] <= dcr_write_if.data[16 +: `ROP_STENCIL_BITS];
+                    dcrs.stencil_writemask[0] <= dcr_bus_if.write_data[0 +: `ROP_STENCIL_BITS];
+                    dcrs.stencil_writemask[1] <= dcr_bus_if.write_data[16 +: `ROP_STENCIL_BITS];
                 end
                 `DCR_ROP_BLEND_MODE: begin 
-                    dcrs.blend_mode_rgb <= dcr_write_if.data[0  +: `ROP_BLEND_MODE_BITS];
-                    dcrs.blend_mode_a   <= dcr_write_if.data[16 +: `ROP_BLEND_MODE_BITS];
-                    dcrs.blend_enable   <= `BLEND_ENABLE(dcr_write_if.data[0  +: `ROP_BLEND_MODE_BITS], dcr_write_if.data[16 +: `ROP_BLEND_MODE_BITS], dcrs.blend_src_rgb, dcrs.blend_src_a, dcrs.blend_dst_rgb, dcrs.blend_dst_a);
+                    dcrs.blend_mode_rgb <= dcr_bus_if.write_data[0  +: `ROP_BLEND_MODE_BITS];
+                    dcrs.blend_mode_a   <= dcr_bus_if.write_data[16 +: `ROP_BLEND_MODE_BITS];
+                    dcrs.blend_enable   <= `BLEND_ENABLE(dcr_bus_if.write_data[0  +: `ROP_BLEND_MODE_BITS], dcr_bus_if.write_data[16 +: `ROP_BLEND_MODE_BITS], dcrs.blend_src_rgb, dcrs.blend_src_a, dcrs.blend_dst_rgb, dcrs.blend_dst_a);
                 end
                 `DCR_ROP_BLEND_FUNC: begin 
-                    dcrs.blend_src_rgb <= dcr_write_if.data[0  +: `ROP_BLEND_FUNC_BITS];
-                    dcrs.blend_src_a   <= dcr_write_if.data[8  +: `ROP_BLEND_FUNC_BITS];
-                    dcrs.blend_dst_rgb <= dcr_write_if.data[16 +: `ROP_BLEND_FUNC_BITS];
-                    dcrs.blend_dst_a   <= dcr_write_if.data[24 +: `ROP_BLEND_FUNC_BITS];
-                    dcrs.blend_enable  <= `BLEND_ENABLE(dcrs.blend_mode_rgb, dcrs.blend_mode_a, dcr_write_if.data[0 +: `ROP_BLEND_FUNC_BITS], dcr_write_if.data[8 +: `ROP_BLEND_FUNC_BITS], dcr_write_if.data[16 +: `ROP_BLEND_FUNC_BITS], dcr_write_if.data[24 +: `ROP_BLEND_FUNC_BITS]);
+                    dcrs.blend_src_rgb <= dcr_bus_if.write_data[0  +: `ROP_BLEND_FUNC_BITS];
+                    dcrs.blend_src_a   <= dcr_bus_if.write_data[8  +: `ROP_BLEND_FUNC_BITS];
+                    dcrs.blend_dst_rgb <= dcr_bus_if.write_data[16 +: `ROP_BLEND_FUNC_BITS];
+                    dcrs.blend_dst_a   <= dcr_bus_if.write_data[24 +: `ROP_BLEND_FUNC_BITS];
+                    dcrs.blend_enable  <= `BLEND_ENABLE(dcrs.blend_mode_rgb, dcrs.blend_mode_a, dcr_bus_if.write_data[0 +: `ROP_BLEND_FUNC_BITS], dcr_bus_if.write_data[8 +: `ROP_BLEND_FUNC_BITS], dcr_bus_if.write_data[16 +: `ROP_BLEND_FUNC_BITS], dcr_bus_if.write_data[24 +: `ROP_BLEND_FUNC_BITS]);
                 end
                 `DCR_ROP_BLEND_CONST: begin 
-                    dcrs.blend_const <= dcr_write_if.data[0 +: 32];
+                    dcrs.blend_const <= dcr_bus_if.write_data[0 +: 32];
                 end
                 `DCR_ROP_LOGIC_OP: begin
-                    dcrs.logic_op <= dcr_write_if.data[0 +: `ROP_LOGIC_OP_BITS];
+                    dcrs.logic_op <= dcr_bus_if.write_data[0 +: `ROP_LOGIC_OP_BITS];
                 end
             endcase
         end
@@ -123,10 +123,10 @@ module VX_rop_dcr #(
 
 `ifdef DBG_TRACE_ROP
     always @(posedge clk) begin
-        if (dcr_write_if.valid) begin
+        if (dcr_bus_if.write_valid) begin
             `TRACE(1, ("%d: %s-rop-dcr: state=", $time, INSTANCE_ID));
-            `TRACE_ROP_DCR(1, dcr_write_if.addr);
-            `TRACE(1, (", data=0x%0h\n", dcr_write_if.data));
+            `TRACE_ROP_DCR(1, dcr_bus_if.write_addr);
+            `TRACE(1, (", data=0x%0h\n", dcr_bus_if.write_data));
         end
     end
 `endif

@@ -15,7 +15,7 @@ module VX_tex_unit #(
 
     VX_cache_bus_if.master  cache_bus_if,
 
-    VX_dcr_write_if.slave   dcr_write_if,
+    VX_dcr_bus_if.slave     dcr_bus_if,
 
     VX_tex_bus_if.slave     tex_bus_if
 );
@@ -33,7 +33,7 @@ module VX_tex_unit #(
     ) tex_dcr (
         .clk        (clk),
         .reset      (reset),
-        .dcr_write_if(dcr_write_if),
+        .dcr_bus_if (dcr_bus_if),
         .stage      (tex_bus_if.req_stage),
         .tex_dcrs   (tex_dcrs)
     );
@@ -311,11 +311,11 @@ module VX_tex_unit_top #(
     
     VX_tex_perf_if perf_tex_if();
 
-    VX_dcr_write_if dcr_write_if();
+    VX_dcr_bus_if dcr_bus_if();
 
-    assign dcr_write_if.valid = dcr_write_valid;
-    assign dcr_write_if.addr = dcr_write_addr;
-    assign dcr_write_if.data = dcr_write_data;
+    assign dcr_bus_if.write_valid = dcr_write_valid;
+    assign dcr_bus_if.write_addr = dcr_write_addr;
+    assign dcr_bus_if.write_data = dcr_write_data;
 
     VX_tex_bus_if #(
         .NUM_LANES (NUM_LANES),
@@ -364,7 +364,7 @@ module VX_tex_unit_top #(
     `ifdef PERF_ENABLE
         .perf_tex_if  (perf_tex_if),
     `endif
-        .dcr_write_if (dcr_write_if),
+        .dcr_bus_if   (dcr_bus_if),
         .tex_bus_if   (tex_bus_if),
         .cache_bus_if (cache_bus_if)
     );

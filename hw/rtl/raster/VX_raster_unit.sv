@@ -26,7 +26,7 @@ module VX_raster_unit #(
     VX_cache_bus_if.master  cache_bus_if,
 
     // Inputs
-    VX_dcr_write_if.slave   dcr_write_if,
+    VX_dcr_bus_if.slave     dcr_bus_if,
 
     // Outputs
     VX_raster_bus_if.master raster_bus_if
@@ -48,7 +48,7 @@ module VX_raster_unit #(
     ) raster_dcr (
         .clk        (clk),
         .reset      (reset),
-        .dcr_write_if(dcr_write_if),
+        .dcr_bus_if (dcr_bus_if),
         .raster_dcrs(raster_dcrs)
     );
 
@@ -434,11 +434,11 @@ module VX_raster_unit_top #(
 
     VX_raster_perf_if perf_raster_if();
 
-    VX_dcr_write_if dcr_write_if();
+    VX_dcr_bus_if dcr_bus_if();
 
-    assign dcr_write_if.valid = dcr_write_valid;
-    assign dcr_write_if.addr = dcr_write_addr;
-    assign dcr_write_if.data = dcr_write_data;
+    assign dcr_bus_if.write_valid = dcr_write_valid;
+    assign dcr_bus_if.write_addr = dcr_write_addr;
+    assign dcr_bus_if.write_data = dcr_write_data;
 
     VX_raster_bus_if #(
         .NUM_LANES (OUTPUT_QUADS)
@@ -492,7 +492,7 @@ module VX_raster_unit_top #(
     `ifdef PERF_ENABLE
         .perf_raster_if(perf_raster_if),
     `endif 
-        .dcr_write_if  (dcr_write_if),
+        .dcr_bus_if    (dcr_bus_if),
         .raster_bus_if (raster_bus_if),
         .cache_bus_if  (cache_bus_if)
     );

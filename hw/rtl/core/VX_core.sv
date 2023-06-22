@@ -37,7 +37,7 @@ module VX_core #(
     VX_mem_perf_if.slave    mem_perf_if,
 `endif
 
-    VX_dcr_write_if.slave   dcr_write_if,
+    VX_dcr_bus_if.slave     dcr_bus_if,
 
     VX_cache_bus_if.master  dcache_bus_if,
 
@@ -123,7 +123,7 @@ module VX_core #(
     VX_dcr_data dcr_data (
         .clk        (clk),
         .reset      (dcr_data_reset),
-        .dcr_write_if(dcr_write_if),
+        .dcr_bus_if (dcr_bus_if),
         .base_dcrs  (base_dcrs)
     );
 
@@ -477,11 +477,11 @@ module VX_core_top #(
     assign gbar_bus_if.rsp_valid = gbar_rsp_valid;
     assign gbar_bus_if.rsp_id = gbar_rsp_id;
 
-    VX_dcr_write_if dcr_write_if(); 
+    VX_dcr_bus_if dcr_bus_if(); 
 
-    assign dcr_write_if.valid = dcr_write_valid;
-    assign dcr_write_if.addr = dcr_write_addr;
-    assign dcr_write_if.data = dcr_write_data;
+    assign dcr_bus_if.write_valid = dcr_write_valid;
+    assign dcr_bus_if.write_addr = dcr_write_addr;
+    assign dcr_bus_if.write_data = dcr_write_data;
 
     VX_cache_bus_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
@@ -606,7 +606,7 @@ module VX_core_top #(
         .clk            (clk),
         .reset          (reset),
         
-        .dcr_write_if   (dcr_write_if),
+        .dcr_bus_if     (dcr_bus_if),
 
         .dcache_bus_if  (dcache_bus_if),
 

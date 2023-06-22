@@ -445,17 +445,17 @@
     end \
     assign ``dst.``field = __reduce_add_r_``dst``field
 
-`define BUFFER_DCR_WRITE_IF(dst, src, enable) \
+`define BUFFER_DCR_BUS_IF(dst, src, enable) \
     logic [(1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH)-1:0] __``dst; \
     if (enable) begin \
         always @(posedge clk) begin \
-            __``dst <= {src.valid, src.addr, src.data}; \
+            __``dst <= {src.write_valid, src.write_addr, src.write_data}; \
         end \
     end else begin \
-        assign __``dst = {src.valid, src.addr, src.data}; \
+        assign __``dst = {src.write_valid, src.write_addr, src.write_data}; \
     end \
-    VX_dcr_write_if dst(); \
-    assign {dst.valid, dst.addr, dst.data} = __``dst
+    VX_dcr_bus_if dst(); \
+    assign {dst.write_valid, dst.write_addr, dst.write_data} = __``dst
 
 `define BUFFER_BUSY(src, enable) \
     logic __busy; \

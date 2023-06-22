@@ -18,7 +18,7 @@ module VX_socket #(
     VX_mem_perf_if.slave    mem_perf_if,
 `endif
 
-    VX_dcr_write_if.slave   dcr_write_if,
+    VX_dcr_bus_if.slave     dcr_bus_if,
 
     VX_cache_bus_if.master  dcache_bus_if,
 
@@ -271,7 +271,7 @@ module VX_socket #(
 
     wire [`SOCKET_SIZE-1:0] per_core_busy;
 
-    `BUFFER_DCR_WRITE_IF (core_dcr_write_if, dcr_write_if, (`SOCKET_SIZE > 1));
+    `BUFFER_DCR_BUS_IF (core_dcr_bus_if, dcr_bus_if, (`SOCKET_SIZE > 1));
 
     `SCOPE_IO_SWITCH (`SOCKET_SIZE)
 
@@ -292,7 +292,7 @@ module VX_socket #(
             .mem_perf_if    (mem_perf_if),
         `endif
             
-            .dcr_write_if   (core_dcr_write_if),
+            .dcr_bus_if     (core_dcr_bus_if),
 
             .dcache_bus_if  (per_core_dcache_bus_if[i]),
 
