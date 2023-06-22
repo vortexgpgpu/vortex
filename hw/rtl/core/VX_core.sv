@@ -75,7 +75,7 @@ module VX_core #(
     VX_rop_req_if.master    rop_req_if,
 `endif
 
-    VX_gbar_if.master       gbar_if,
+    VX_gbar_bus_if.master   gbar_bus_if,
 
     // simulation helper signals
     output wire             sim_ebreak,
@@ -144,7 +144,7 @@ module VX_core #(
         .wrelease_if    (wrelease_if),
         .join_if        (join_if),        
         .warp_ctl_if    (warp_ctl_if),
-        .gbar_if        (gbar_if),
+        .gbar_bus_if    (gbar_bus_if),
         .branch_ctl_if  (branch_ctl_if),
         .ifetch_rsp_if  (ifetch_rsp_if),
         .fetch_to_csr_if(fetch_to_csr_if),
@@ -463,15 +463,15 @@ module VX_core_top #(
     output wire                             busy
 );
     
-    VX_gbar_if gbar_if();
+    VX_gbar_bus_if gbar_bus_if();
 
-    assign gbar_req_valid = gbar_if.req_valid;
-    assign gbar_req_id = gbar_if.req_id;
-    assign gbar_req_size_m1 = gbar_if.req_size_m1;   
-    assign gbar_req_core_id =  gbar_if.req_core_id;
-    assign gbar_if.req_ready = gbar_req_ready;
-    assign gbar_if.rsp_valid = gbar_rsp_valid;
-    assign gbar_if.rsp_id = gbar_rsp_id;
+    assign gbar_req_valid = gbar_bus_if.req_valid;
+    assign gbar_req_id = gbar_bus_if.req_id;
+    assign gbar_req_size_m1 = gbar_bus_if.req_size_m1;   
+    assign gbar_req_core_id =  gbar_bus_if.req_core_id;
+    assign gbar_bus_if.req_ready = gbar_req_ready;
+    assign gbar_bus_if.rsp_valid = gbar_rsp_valid;
+    assign gbar_bus_if.rsp_id = gbar_rsp_id;
 
     VX_dcr_write_if dcr_write_if(); 
 
@@ -649,7 +649,7 @@ module VX_core_top #(
     `ifdef EXT_ROP_ENABLE
         .rop_req_if     (rop_req_if),
     `endif
-        .gbar_if        (gbar_if),
+        .gbar_bus_if    (gbar_bus_if),
 
         .sim_ebreak     (sim_ebreak),
         .sim_wb_value   (sim_wb_value),

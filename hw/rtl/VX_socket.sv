@@ -56,7 +56,7 @@ module VX_socket #(
     VX_rop_req_if.master    rop_req_if,
 `endif
 
-    VX_gbar_if.master       gbar_if,
+    VX_gbar_bus_if.master   gbar_bus_if,
 
 
     // simulation helper signals
@@ -67,7 +67,7 @@ module VX_socket #(
     output wire             busy
 );
 
-    VX_gbar_if per_core_gbar_if[`SOCKET_SIZE]();
+    VX_gbar_bus_if per_core_gbar_bus_if[`SOCKET_SIZE]();
 
     `RESET_RELAY (gbar_arb_reset, reset);
 
@@ -76,8 +76,8 @@ module VX_socket #(
     ) gbar_arb (
         .clk        (clk),
         .reset      (gbar_arb_reset),
-        .req_in_if  (per_core_gbar_if),
-        .req_out_if (gbar_if)
+        .bus_in_if  (per_core_gbar_bus_if),
+        .bus_out_if (gbar_bus_if)
     );
 
 `ifdef EXT_RASTER_ENABLE
@@ -390,7 +390,7 @@ module VX_socket #(
             .rop_req_if     (per_core_rop_req_if[i]),
         `endif
 
-            .gbar_if        (per_core_gbar_if[i]),
+            .gbar_bus_if    (per_core_gbar_bus_if[i]),
 
             .sim_ebreak     (per_core_sim_ebreak[i]),
             .sim_wb_value   (per_core_sim_wb_value[i]),

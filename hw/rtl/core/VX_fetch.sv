@@ -27,7 +27,7 @@ module VX_fetch #(
     
     // outputs
     VX_ifetch_rsp_if.master ifetch_rsp_if,
-    VX_gbar_if.master       gbar_if,
+    VX_gbar_bus_if.master   gbar_bus_if,
 
     // csr interface
     VX_fetch_to_csr_if.master fetch_to_csr_if,
@@ -55,7 +55,7 @@ module VX_fetch #(
         .branch_ctl_if  (branch_ctl_if),
 
         .ifetch_req_if  (ifetch_req_if),
-        .gbar_if        (gbar_if),
+        .gbar_bus_if    (gbar_bus_if),
 
         .fetch_to_csr_if(fetch_to_csr_if),
 

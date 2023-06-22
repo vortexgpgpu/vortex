@@ -5,11 +5,11 @@ module VX_gbar_arb #(
     parameter BUFFERED_REQ = 0,
     parameter `STRING ARBITER = "R"
 ) (
-    input wire          clk,
-    input wire          reset,
+    input wire              clk,
+    input wire              reset,
 
-    VX_gbar_if.slave    req_in_if[NUM_REQS],
-    VX_gbar_if.master   req_out_if
+    VX_gbar_bus_if.slave    bus_in_if[NUM_REQS],
+    VX_gbar_bus_if.master   bus_out_if
 );
 
     localparam REQ_DATAW = `NB_BITS + `UP(`NC_BITS) + `UP(`NC_BITS);
@@ -21,9 +21,9 @@ module VX_gbar_arb #(
     wire [NUM_REQS-1:0]                req_ready_in;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign req_valid_in[i] = req_in_if[i].req_valid;
-        assign req_data_in[i]  = {req_in_if[i].req_id, req_in_if[i].req_size_m1, req_in_if[i].req_core_id};
-        assign req_in_if[i].req_ready = req_ready_in[i];
+        assign req_valid_in[i] = bus_in_if[i].req_valid;
+        assign req_data_in[i]  = {bus_in_if[i].req_id, bus_in_if[i].req_size_m1, bus_in_if[i].req_core_id};
+        assign bus_in_if[i].req_ready = req_ready_in[i];
     end
 
     VX_stream_arb #(
@@ -39,9 +39,9 @@ module VX_gbar_arb #(
         .valid_in   (req_valid_in),
         .ready_in   (req_ready_in),
         .data_in    (req_data_in),
-        .data_out   ({req_out_if.req_id, req_out_if.req_size_m1, req_out_if.req_core_id}),
-        .valid_out  (req_out_if.req_valid),
-        .ready_out  (req_out_if.req_ready)
+        .data_out   ({bus_out_if.req_id, bus_out_if.req_size_m1, bus_out_if.req_core_id}),
+        .valid_out  (bus_out_if.req_valid),
+        .ready_out  (bus_out_if.req_ready)
     );
 
     // broadcast response
@@ -53,14 +53,14 @@ module VX_gbar_arb #(
         if (reset) begin
             rsp_valid <= 0;
         end else begin
-            rsp_valid <= req_out_if.rsp_valid;
+            rsp_valid <= bus_out_if.rsp_valid;
         end
-        rsp_id <= req_out_if.rsp_id;
+        rsp_id <= bus_out_if.rsp_id;
     end
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign req_in_if[i].rsp_valid = rsp_valid;
-        assign req_in_if[i].rsp_id = rsp_id;
+        assign bus_in_if[i].rsp_valid = rsp_valid;
+        assign bus_in_if[i].rsp_id = rsp_id;
     end
 
 endmodule

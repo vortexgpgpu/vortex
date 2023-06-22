@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-interface VX_gbar_if ();
+interface VX_gbar_bus_if ();
 
     wire                     req_valid;
     wire [`NB_BITS-1:0]      req_id;

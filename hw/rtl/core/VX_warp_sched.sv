@@ -19,7 +19,7 @@ module VX_warp_sched #(
     VX_branch_ctl_if.slave  branch_ctl_if,
 
     VX_ifetch_req_if.master ifetch_req_if,
-    VX_gbar_if.master       gbar_if,
+    VX_gbar_bus_if.master   gbar_bus_if,
 
     VX_fetch_to_csr_if.master fetch_to_csr_if,
 
@@ -133,8 +133,8 @@ module VX_warp_sched #(
                     barrier_masks[warp_ctl_if.barrier.id][warp_ctl_if.wid] <= 1;
                 end
             end
-            if (gbar_if.rsp_valid && (gbar_req_id == gbar_if.rsp_id)) begin
-                barrier_masks[gbar_if.rsp_id] <= '0;
+            if (gbar_bus_if.rsp_valid && (gbar_req_id == gbar_bus_if.rsp_id)) begin
+                barrier_masks[gbar_bus_if.rsp_id] <= '0;
             end
             
             // TMC handling
@@ -187,7 +187,7 @@ module VX_warp_sched #(
             active_warps <= active_warps_n;
         end
 
-        if (gbar_if.req_valid && gbar_if.req_ready) begin
+        if (gbar_bus_if.req_valid && gbar_bus_if.req_ready) begin
             gbar_req_valid <= 0;
         end 
     end
@@ -212,10 +212,10 @@ module VX_warp_sched #(
         end
     end
 
-    assign gbar_if.req_valid   = gbar_req_valid;
-    assign gbar_if.req_id      = gbar_req_id;
-    assign gbar_if.req_size_m1 = gbar_req_size_m1;
-    assign gbar_if.req_core_id = NC_WIDTH'(CORE_ID % `NUM_CORES);
+    assign gbar_bus_if.req_valid   = gbar_req_valid;
+    assign gbar_bus_if.req_id      = gbar_req_id;
+    assign gbar_bus_if.req_size_m1 = gbar_req_size_m1;
+    assign gbar_bus_if.req_core_id = NC_WIDTH'(CORE_ID % `NUM_CORES);
 
     // split/join stack management    
 
