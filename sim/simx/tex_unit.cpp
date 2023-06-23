@@ -122,7 +122,7 @@ private:
 
   void texture_read(
     uint32_t* out,
-    const uint32_t* addr,    
+    const uint64_t* addr,    
     uint32_t stride,
     uint32_t size) {
     for (uint32_t i = 0; i < size; ++i) {
@@ -133,7 +133,7 @@ private:
 
   static void memoryCB(    
     uint32_t* out,
-    const uint32_t* addr,    
+    const uint64_t* addr,    
     uint32_t stride,
     uint32_t size,
     void* cb_arg) {

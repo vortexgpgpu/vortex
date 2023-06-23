@@ -11,13 +11,13 @@ using namespace vortex;
 #define STAMP_POOL_MAX_SIZE   1024
 
 struct prim_mem_trace_t {
-  uint32_t              prim_addr;
-  std::vector<uint32_t> edge_addrs;
+  uint64_t              prim_addr;
+  std::vector<uint64_t> edge_addrs;
   uint32_t              stamps;
 };
 
 struct tile_mem_trace_t {
-  std::vector<uint32_t>       header_addrs;
+  std::vector<uint64_t>       header_addrs;
   std::list<prim_mem_trace_t> primitives;
   bool end_of_tile;
 };
@@ -89,8 +89,8 @@ public:
     // get device configuration    
     graphics::Rasterizer::configure(dcrs);
     num_tiles_     = dcrs.read(DCR_RASTER_TILE_COUNT);
-    tbuf_baseaddr_ = dcrs.read(DCR_RASTER_TBUF_ADDR);
-    pbuf_baseaddr_ = dcrs.read(DCR_RASTER_PBUF_ADDR);
+    tbuf_baseaddr_ = uint64_t(dcrs.read(DCR_RASTER_TBUF_ADDR)) << 6;
+    pbuf_baseaddr_ = uint64_t(dcrs.read(DCR_RASTER_PBUF_ADDR)) << 6;
     pbuf_stride_   = dcrs.read(DCR_RASTER_PBUF_STRIDE);
 
     tbuf_addr_  = tbuf_baseaddr_ + raster_index_ * sizeof(graphics::rast_tile_header_t);
@@ -252,10 +252,10 @@ private:
   uint32_t raster_count_;
   RAM*     mem_;  
   uint32_t num_tiles_;
-  uint32_t tbuf_baseaddr_;    
-  uint32_t pbuf_baseaddr_;
+  uint64_t tbuf_baseaddr_;    
+  uint64_t pbuf_baseaddr_;
   uint32_t pbuf_stride_;
-  uint32_t tbuf_addr_;
+  uint64_t tbuf_addr_;
   uint32_t tile_x_;
   uint32_t tile_y_;
   uint32_t pids_offset_;
@@ -388,7 +388,7 @@ public:
 
     auto& mem_trace = mem_traces.front();
 
-    std::vector<uint32_t> addresses;
+    std::vector<uint64_t> addresses;
 
     switch (mem_trace_state_) {
     case e_mem_trace_state::header: {

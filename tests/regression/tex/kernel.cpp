@@ -15,7 +15,7 @@ typedef struct {
 } tile_info_t;
 
 static void memory_cb(uint32_t* out,
-                      const uint32_t* addr,    
+                      const uint64_t* addr,    
                       uint32_t stride,
                       uint32_t size,
                       void* /*cb_arg*/) {

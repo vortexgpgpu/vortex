@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <cocogfx/include/fixed.hpp>
 #include <cocogfx/include/math.hpp>
 #include <VX_types.h>
@@ -174,7 +173,7 @@ class TextureSampler {
 public:
   typedef void (*MemoryCB)(
     uint32_t* out,
-    const uint32_t* addr,    
+    const uint64_t* addr,    
     uint32_t stride,
     uint32_t size,
     void* cb_arg

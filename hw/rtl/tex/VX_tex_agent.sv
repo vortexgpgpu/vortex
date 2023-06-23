@@ -55,7 +55,7 @@ module VX_tex_agent #(
     wire mdata_pop  = tex_bus_if.rsp_valid && tex_bus_if.rsp_ready;
 
     VX_index_buffer #(
-        .DATAW (NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS),
+        .DATAW (NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS),
         .SIZE  (`TEX_REQ_QUEUE_SIZE)
     ) tag_store (
         .clk          (clk),
@@ -98,18 +98,24 @@ module VX_tex_agent #(
     assign mdata_raddr = tex_bus_if.rsp_tag[0 +: REQ_QUEUE_BITS];
     assign rsp_uuid    = tex_bus_if.rsp_tag[REQ_QUEUE_BITS +: UUID_WIDTH];
 
+    wire [`NUM_THREADS-1:0][31:0] commit_data;
+
     VX_skid_buffer #(
-        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
+        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + (`NUM_THREADS * 32))
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (tex_bus_if.rsp_valid),
         .ready_in  (tex_bus_if.rsp_ready),
         .data_in   ({rsp_uuid,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           tex_bus_if.rsp_texels}),
-        .data_out  ({tex_commit_if.uuid, tex_commit_if.wid, tex_commit_if.tmask, tex_commit_if.PC, tex_commit_if.rd, tex_commit_if.data}),
+        .data_out  ({tex_commit_if.uuid, tex_commit_if.wid, tex_commit_if.tmask, tex_commit_if.PC, tex_commit_if.rd, commit_data}),
         .valid_out (tex_commit_if.valid),
         .ready_out (tex_commit_if.ready)
     );
+
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        assign tex_commit_if.data[i] = `XLEN'(commit_data[i]);
+    end
 
     assign tex_commit_if.wb  = 1'b1;
     assign tex_commit_if.eop = 1'b1;

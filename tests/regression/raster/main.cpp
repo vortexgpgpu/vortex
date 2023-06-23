@@ -173,9 +173,9 @@ int render(const CGLTrace& trace) {
     uint32_t primbuf_stride = sizeof(graphics::rast_prim_t);
 
     // configure raster units
-    vx_dcr_write(device, DCR_RASTER_TBUF_ADDR,   tilebuf_addr);
+    vx_dcr_write(device, DCR_RASTER_TBUF_ADDR,   tilebuf_addr / 64);  // block address
     vx_dcr_write(device, DCR_RASTER_TILE_COUNT,  num_tiles);
-    vx_dcr_write(device, DCR_RASTER_PBUF_ADDR,   primbuf_addr);
+    vx_dcr_write(device, DCR_RASTER_PBUF_ADDR,   primbuf_addr / 64);  // block address
     vx_dcr_write(device, DCR_RASTER_PBUF_STRIDE, primbuf_stride);    
     vx_dcr_write(device, DCR_RASTER_SCISSOR_X, (dst_width << 16) | 0);
     vx_dcr_write(device, DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0);

@@ -59,6 +59,9 @@ jobs:
       name: graphics
       script: cp -r ../build32 ../build32_graphics && cd ../build32_graphics && ./ci/travis_run.py ./ci/regression.sh -graphics
     - stage: test
+      name: graphics64
+      script: cp -r ../build64 ../build64_graphics && cd ../build64_graphics && XLEN=64 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -graphics
+    - stage: test
       name: tex
       script: cp -r ../build32 ../build32_tex && cd ../build32_tex && ./ci/travis_run.py ./ci/regression.sh -tex
     - stage: test

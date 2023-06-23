@@ -3,6 +3,12 @@
 
 `include "VX_define.vh"
 
+`ifdef XLEN_64
+`define ROP_ADDR_BITS 32
+`else
+`define ROP_ADDR_BITS 25
+`endif
+
 package VX_rop_types;
 
 typedef struct packed {
@@ -13,11 +19,11 @@ typedef struct packed {
 } rgba_t;
 
 typedef struct packed {
-    logic [31:0]                        cbuf_addr;
+    logic [`ROP_ADDR_BITS-1:0]          cbuf_addr;
     logic [`ROP_PITCH_BITS-1:0]         cbuf_pitch;
     logic [3:0]                         cbuf_writemask;
 
-    logic [31:0]                        zbuf_addr;
+    logic [`ROP_ADDR_BITS-1:0]          zbuf_addr;
     logic [`ROP_PITCH_BITS-1:0]         zbuf_pitch;
 
     logic                               depth_enable;

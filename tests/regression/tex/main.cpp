@@ -268,7 +268,7 @@ int main(int argc, char *argv[]) {
 	TEX_DCR_WRITE(DCR_TEX_FORMAT,  format);
 	TEX_DCR_WRITE(DCR_TEX_WRAP,    (wrap << 16) | wrap);
 	TEX_DCR_WRITE(DCR_TEX_FILTER,  (filter ? TEX_FILTER_BILINEAR : TEX_FILTER_POINT));
-	TEX_DCR_WRITE(DCR_TEX_ADDR,    src_addr);
+	TEX_DCR_WRITE(DCR_TEX_ADDR,    src_addr / 64); // block address
 	for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
     assert(i < TEX_LOD_MAX);
 		TEX_DCR_WRITE(DCR_TEX_MIPOFF(i), mip_offsets.at(i));

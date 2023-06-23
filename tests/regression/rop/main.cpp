@@ -147,12 +147,12 @@ int render(uint32_t num_tasks) {
   staging_buf = nullptr;
 
   // configure rop color buffer
-  vx_dcr_write(device, DCR_ROP_CBUF_ADDR,  cbuf_addr);
+  vx_dcr_write(device, DCR_ROP_CBUF_ADDR,  cbuf_addr / 64); // block address
   vx_dcr_write(device, DCR_ROP_CBUF_PITCH, cbuf_pitch);
   vx_dcr_write(device, DCR_ROP_CBUF_WRITEMASK, 0xf);
 
   // configure rop depth buffer to default
-  vx_dcr_write(device, DCR_ROP_ZBUF_ADDR,  zbuf_addr);
+  vx_dcr_write(device, DCR_ROP_ZBUF_ADDR,  zbuf_addr / 64); // block address
   vx_dcr_write(device, DCR_ROP_ZBUF_PITCH, zbuf_pitch);   
   if (depth_enable) {
     vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, ROP_DEPTH_FUNC_LESS);

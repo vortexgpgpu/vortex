@@ -238,14 +238,14 @@ void TextureSampler::configure(const TexDCRS& dcrs) {
 }
 
 uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod) const {
-  auto mip_off   = dcrs_.read(stage, DCR_TEX_MIPOFF(lod));
-  auto base_addr = dcrs_.read(stage, DCR_TEX_ADDR);
-  auto logdim    = dcrs_.read(stage, DCR_TEX_LOGDIM);      
-  auto format    = dcrs_.read(stage, DCR_TEX_FORMAT);    
-  auto filter    = dcrs_.read(stage, DCR_TEX_FILTER);    
-  auto wrap      = dcrs_.read(stage, DCR_TEX_WRAP);
+  auto mip_off  = dcrs_.read(stage, DCR_TEX_MIPOFF(lod));
+  auto mip_base = uint64_t(dcrs_.read(stage, DCR_TEX_ADDR)) << 6;
+  auto logdim   = dcrs_.read(stage, DCR_TEX_LOGDIM);      
+  auto format   = dcrs_.read(stage, DCR_TEX_FORMAT);    
+  auto filter   = dcrs_.read(stage, DCR_TEX_FILTER);    
+  auto wrap     = dcrs_.read(stage, DCR_TEX_WRAP);
   
-  base_addr += mip_off;
+  auto base_addr = mip_base + mip_off;
 
   auto log_width  = std::max<int32_t>((logdim & 0xffff) - lod, 0);
   auto log_height = std::max<int32_t>((logdim >> 16) - lod, 0);
@@ -270,7 +270,7 @@ uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod
     
     // memory lookup
     uint32_t texel[4];
-    uint32_t addr[4] = {
+    uint64_t addr[4] = {
       base_addr + offset00 * stride,
       base_addr + offset01 * stride,
       base_addr + offset10 * stride,
@@ -290,7 +290,7 @@ uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod
     
     // memory lookup
     uint32_t texel;
-    uint32_t addr = base_addr + offset * stride;
+    uint64_t addr = base_addr + offset * stride;
     mem_cb_(&texel, &addr, stride, 1, cb_arg_);
 
     // filtering

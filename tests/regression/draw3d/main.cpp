@@ -222,21 +222,21 @@ int render(const CGLTrace& trace) {
     uint32_t primbuf_stride = sizeof(graphics::rast_prim_t);
 
     // configure raster units
-    RASTER_DCR_WRITE(DCR_RASTER_TBUF_ADDR,   tilebuf_addr);
+    RASTER_DCR_WRITE(DCR_RASTER_TBUF_ADDR,   tilebuf_addr / 64); // block address
     RASTER_DCR_WRITE(DCR_RASTER_TILE_COUNT,  num_tiles);
-    RASTER_DCR_WRITE(DCR_RASTER_PBUF_ADDR,   primbuf_addr);
+    RASTER_DCR_WRITE(DCR_RASTER_PBUF_ADDR,   primbuf_addr / 64); // block address
     RASTER_DCR_WRITE(DCR_RASTER_PBUF_STRIDE, primbuf_stride);
     RASTER_DCR_WRITE(DCR_RASTER_SCISSOR_X, (dst_width << 16) | 0);
     RASTER_DCR_WRITE(DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0);
 
     // configure rop color buffer
-    ROP_DCR_WRITE(DCR_ROP_CBUF_ADDR,  cbuf_addr);
+    ROP_DCR_WRITE(DCR_ROP_CBUF_ADDR,  cbuf_addr / 64); // block address
     ROP_DCR_WRITE(DCR_ROP_CBUF_PITCH, cbuf_pitch);
     ROP_DCR_WRITE(DCR_ROP_CBUF_WRITEMASK, states.color_writemask);
 
     if (states.depth_test || states.stencil_test) {
       // configure rop depth buffer
-      ROP_DCR_WRITE(DCR_ROP_ZBUF_ADDR,  zbuf_addr);
+      ROP_DCR_WRITE(DCR_ROP_ZBUF_ADDR,  zbuf_addr / 64); // block address
       ROP_DCR_WRITE(DCR_ROP_ZBUF_PITCH, zbuf_pitch);    
     }
 
@@ -338,7 +338,7 @@ int render(const CGLTrace& trace) {
       TEX_DCR_WRITE(DCR_TEX_FORMAT, tex_format);
       TEX_DCR_WRITE(DCR_TEX_WRAP,   (tex_wrapV << 16) | tex_wrapU);
       TEX_DCR_WRITE(DCR_TEX_FILTER, tex_filter ? TEX_FILTER_BILINEAR : TEX_FILTER_POINT);
-      TEX_DCR_WRITE(DCR_TEX_ADDR,   texbuf_addr);
+      TEX_DCR_WRITE(DCR_TEX_ADDR,   texbuf_addr / 64); // block address
       for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
         assert(i < TEX_LOD_MAX);
         TEX_DCR_WRITE(DCR_TEX_MIPOFF(i), mip_offsets.at(i));
@@ -525,17 +525,6 @@ int main(int argc, char *argv[]) {
   kernel_arg.sw_rast       = sw_rast;
   kernel_arg.sw_rop        = sw_rop;
   kernel_arg.sw_interp     = sw_interp;
-
-  kernel_arg.dst_width     = dst_width;
-  kernel_arg.dst_height    = dst_height;
-
-  kernel_arg.cbuf_stride   = cbuf_stride;
-  kernel_arg.cbuf_pitch    = cbuf_pitch;    
-  kernel_arg.cbuf_addr     = cbuf_addr;
-
-  kernel_arg.zbuf_stride   = zbuf_stride;
-  kernel_arg.zbuf_pitch    = zbuf_pitch;    
-  kernel_arg.zbuf_addr     = zbuf_addr;
 
   // run tests
   RT_CHECK(render(trace));

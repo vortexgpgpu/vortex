@@ -18,7 +18,8 @@ module VX_multiplier #(
 
     wire [A_WIDTH-1:0] dataa_w;
     wire [B_WIDTH-1:0] datab_w;
-    wire [R_WIDTH-1:0] result_w;
+    wire [A_WIDTH+B_WIDTH-1:0] result_w;
+    `UNUSED_VAR (result_w)
 
     if (SIGNED != 0) begin
         assign result_w = $signed(dataa_w) * $signed(datab_w);
@@ -29,7 +30,7 @@ module VX_multiplier #(
     if (LATENCY == 0) begin
         assign dataa_w = dataa;
         assign datab_w = datab;
-        assign result  = result_w;
+        assign result  = R_WIDTH'(result_w);
     end else begin        
         if (LATENCY >= 2) begin
             reg [A_WIDTH-1:0] dataa_p [LATENCY-2:0];
@@ -57,7 +58,7 @@ module VX_multiplier #(
         reg [R_WIDTH-1:0] result_r;
         always @(posedge clk) begin
             if (enable) begin
-                result_r <= result_w;
+                result_r <= R_WIDTH'(result_w);
             end
         end
         assign result = result_r; 

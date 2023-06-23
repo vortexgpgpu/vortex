@@ -63,13 +63,13 @@ module VX_rop_agent #(
     assign rop_rsp_valid = rop_exe_if.valid && rop_req_ready;
 
     VX_skid_buffer #(
-        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32)
+        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (rop_rsp_valid),
         .ready_in  (rop_rsp_ready),
-        .data_in   ({rop_exe_if.uuid,  rop_exe_if.wid,  rop_exe_if.tmask,  rop_exe_if.PC}),
+        .data_in   ({rop_exe_if.uuid,    rop_exe_if.wid,    rop_exe_if.tmask,    rop_exe_if.PC}),
         .data_out  ({rop_commit_if.uuid, rop_commit_if.wid, rop_commit_if.tmask, rop_commit_if.PC}),
         .valid_out (rop_commit_if.valid),
         .ready_out (rop_commit_if.ready)

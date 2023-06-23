@@ -13,7 +13,6 @@ module VX_raster_dcr #(
     output raster_dcrs_t    raster_dcrs
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-
     `UNUSED_VAR (reset)  
 
     // DCR registers
@@ -24,13 +23,13 @@ module VX_raster_dcr #(
         if (dcr_bus_if.write_valid) begin
             case (dcr_bus_if.write_addr)
                 `DCR_RASTER_TBUF_ADDR: begin 
-                    dcrs.tbuf_addr <= dcr_bus_if.write_data[`RASTER_DCR_DATA_BITS-1:0];
+                    dcrs.tbuf_addr <= dcr_bus_if.write_data[`RASTER_ADDR_BITS-1:0];
                 end
                 `DCR_RASTER_TILE_COUNT: begin 
                     dcrs.tile_count <= dcr_bus_if.write_data[`RASTER_TILE_BITS-1:0];
                 end
                 `DCR_RASTER_PBUF_ADDR: begin 
-                    dcrs.pbuf_addr <= dcr_bus_if.write_data[`RASTER_DCR_DATA_BITS-1:0];
+                    dcrs.pbuf_addr <= dcr_bus_if.write_data[`RASTER_ADDR_BITS-1:0];
                 end
                 `DCR_RASTER_PBUF_STRIDE: begin 
                     dcrs.pbuf_stride <= dcr_bus_if.write_data[`RASTER_STRIDE_BITS-1:0];

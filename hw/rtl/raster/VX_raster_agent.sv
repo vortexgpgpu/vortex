@@ -49,24 +49,28 @@ module VX_raster_agent #(
 
     assign raster_rsp_valid = raster_exe_if.valid && raster_bus_if.req_valid;
 
-    wire [`NUM_THREADS-1:0][31:0] response_data;
+    wire [`NUM_THREADS-1:0][31:0] response_data, commit_data;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign response_data[i] = {31'(raster_bus_if.req_stamps[i].pid), ~raster_bus_if.req_done};
     end
 
     VX_skid_buffer #(
-        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
+        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + (`NUM_THREADS * 32))
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (raster_rsp_valid),
         .ready_in  (raster_rsp_ready), 
         .data_in   ({raster_exe_if.uuid,    raster_exe_if.wid,    raster_exe_if.tmask,    raster_exe_if.PC,    raster_exe_if.rd,    response_data}),
-        .data_out  ({raster_commit_if.uuid, raster_commit_if.wid, raster_commit_if.tmask, raster_commit_if.PC, raster_commit_if.rd, raster_commit_if.data}),
+        .data_out  ({raster_commit_if.uuid, raster_commit_if.wid, raster_commit_if.tmask, raster_commit_if.PC, raster_commit_if.rd, commit_data}),
         .valid_out (raster_commit_if.valid),
         .ready_out (raster_commit_if.ready)
     );
+
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        assign raster_commit_if.data[i] = `XLEN'(commit_data[i]);
+    end
 
     assign raster_commit_if.wb  = 1'b1;
     assign raster_commit_if.eop = 1'b1;

@@ -16,7 +16,13 @@
 class GpuSW;
 
 typedef struct {
-  uint32_t log_num_tasks;   
+#ifdef SW_ENABLE
+  graphics::RasterDCRS raster_dcrs;
+  graphics::RopDCRS    rop_dcrs;
+  graphics::TexDCRS    tex_dcrs;
+#endif
+  uint32_t log_num_tasks;
+  uint64_t prim_addr;
 
   bool depth_enabled;
   bool color_enabled;
@@ -26,25 +32,6 @@ typedef struct {
   bool sw_rast;
   bool sw_rop;
   bool sw_interp;
-  
-  uint32_t dst_width;
-  uint32_t dst_height;
-
-  uint64_t cbuf_addr;  
-  uint8_t  cbuf_stride;  
-  uint32_t cbuf_pitch;    
-
-  uint64_t zbuf_addr;  
-  uint8_t  zbuf_stride;  
-  uint32_t zbuf_pitch; 
-
-  uint64_t prim_addr;
-
-#ifdef SW_ENABLE
-  graphics::RasterDCRS raster_dcrs;
-  graphics::RopDCRS    rop_dcrs;
-  graphics::TexDCRS    tex_dcrs;
-#endif
 } kernel_arg_t;
 
 #endif

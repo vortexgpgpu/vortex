@@ -224,7 +224,7 @@ int main(int argc, char *argv[]) {
   for (uint32_t i = 0; i < num_points; ++i) {
     auto ref = ((a[i] * b[i]) >> (s[i] * 8)) + c[i];
     if (d[i] != ref) {
-      std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << ", c=" << c[i] << ", s=" << s[i] << std::endl;
+      std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << d[i] << ", a=" << a[i] << ", b=" << b[i] << ", c=" << c[i] << ", s=" << s[i] << std::endl;
       ++errors;
     }
   }

@@ -18,13 +18,13 @@ public:
     depthStencil_.configure(dcrs);
     blender_.configure(dcrs);
 
-    zbuf_baseaddr_ = dcrs.read(DCR_ROP_ZBUF_ADDR);
+    zbuf_baseaddr_ = uint64_t(dcrs.read(DCR_ROP_ZBUF_ADDR)) << 6;
     zbuf_pitch_    = dcrs.read(DCR_ROP_ZBUF_PITCH);
     depth_writemask_ = dcrs.read(DCR_ROP_DEPTH_WRITEMASK) & 0x1;
     stencil_front_writemask_ = dcrs.read(DCR_ROP_STENCIL_WRITEMASK) & 0xffff;
     stencil_back_writemask_ = dcrs.read(DCR_ROP_STENCIL_WRITEMASK) >> 16;
 
-    cbuf_baseaddr_ = dcrs.read(DCR_ROP_CBUF_ADDR);
+    cbuf_baseaddr_ = uint64_t(dcrs.read(DCR_ROP_CBUF_ADDR)) << 6;
     cbuf_pitch_    = dcrs.read(DCR_ROP_CBUF_PITCH);
     auto cbuf_writemask = dcrs.read(DCR_ROP_CBUF_WRITEMASK) & 0xf;
     cbuf_writemask_ = (((cbuf_writemask >> 0) & 0x1) * 0x000000ff) 
@@ -78,14 +78,16 @@ private:
             uint32_t* color, 
             RopUnit::TraceData::Ptr trace_data) {
     if (depth_enable || stencil_enable) {
-      uint32_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;
+      uint64_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;
       mem_->read(depthstencil, zbuf_addr, 4);     
       trace_data->mem_rd_addrs.push_back(zbuf_addr);
+      DT(3, "rop-depthstencil-read: x=" << std::dec << x << ", y=" << y << ", addr=0x" << std::hex << zbuf_addr << ", depthstencil=0x" << *depthstencil);
     }
     if (color_write_ && (color_read_ || blend_enable)) {
-      uint32_t cbuf_addr = cbuf_baseaddr_ + y * cbuf_pitch_ + x * 4;
+      uint64_t cbuf_addr = cbuf_baseaddr_ + y * cbuf_pitch_ + x * 4;
       mem_->read(color, cbuf_addr, 4);
       trace_data->mem_rd_addrs.push_back(cbuf_addr);
+      DT(3, "rop-color-read: x=" << std::dec << x << ", y=" << y << ", addr=0x" << std::hex << cbuf_addr << ", color=0x" << *color);
     }
   }
 
@@ -105,18 +107,18 @@ private:
                       | (stencil_enable ? (stencil_writemask << ROP_DEPTH_BITS) : 0);
     if (ds_writeMask != 0) {      
       uint32_t write_value = (dst_depthstencil & ~ds_writeMask) | (depthstencil & ds_writeMask);
-      uint32_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;        
+      uint64_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;        
       mem_->write(&write_value, zbuf_addr, 4);
       trace_data->mem_wr_addrs.push_back(zbuf_addr);
-      DT(3, "rop-depthstencil: x=" << std::dec << x << ", y=" << y << ", depthstencil=0x" << std::hex << write_value);
+      DT(3, "rop-depthstencil-write: x=" << std::dec << x << ", y=" << y << ", addr=0x" << std::hex << zbuf_addr << ", depthstencil=0x" << write_value);
     }
 
     if (color_write_ && ds_passed) {   
       uint32_t write_value = (dst_color & ~cbuf_writemask_) | (color & cbuf_writemask_);
-      uint32_t cbuf_addr = cbuf_baseaddr_ + y * cbuf_pitch_ + x * 4;
+      uint64_t cbuf_addr = cbuf_baseaddr_ + y * cbuf_pitch_ + x * 4;
       mem_->write(&write_value, cbuf_addr, 4);
       trace_data->mem_wr_addrs.push_back(cbuf_addr);
-      DT(3, "rop-color: x=" << std::dec << x << ", y=" << y << ", color=0x" << std::hex << write_value);
+      DT(3, "rop-color-write: x=" << std::dec << x << ", y=" << y << ", addr=0x" << std::hex << cbuf_addr << ", color=0x" << write_value);
     }
   }
 

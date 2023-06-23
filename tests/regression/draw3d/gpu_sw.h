@@ -25,8 +25,8 @@ public:
   void configure(const graphics::RasterDCRS& dcrs, uint32_t log_num_tasks) {    
     graphics::Rasterizer::configure(dcrs);    
     num_tiles_     = dcrs.read(DCR_RASTER_TILE_COUNT);
-    tbuf_baseaddr_ = dcrs.read(DCR_RASTER_TBUF_ADDR);
-    pbuf_baseaddr_ = dcrs.read(DCR_RASTER_PBUF_ADDR);
+    tbuf_baseaddr_ = uint64_t(dcrs.read(DCR_RASTER_TBUF_ADDR)) << 6;
+    pbuf_baseaddr_ = uint64_t(dcrs.read(DCR_RASTER_PBUF_ADDR)) << 6;
     pbuf_stride_   = dcrs.read(DCR_RASTER_PBUF_STRIDE);
     log_num_tasks_ = log_num_tasks;
   }
@@ -64,8 +64,8 @@ public:
 private:
 
   uint32_t num_tiles_;
-  uint32_t tbuf_baseaddr_;    
-  uint32_t pbuf_baseaddr_;
+  uint64_t tbuf_baseaddr_;    
+  uint64_t pbuf_baseaddr_;
   uint32_t pbuf_stride_;
   uint32_t log_num_tasks_;
 };
@@ -80,13 +80,13 @@ public:
     blender_.configure(dcrs);
 
     // get device configuration
-    zbuf_baseaddr_ = dcrs.read(DCR_ROP_ZBUF_ADDR);
+    zbuf_baseaddr_ = uint64_t(dcrs.read(DCR_ROP_ZBUF_ADDR)) << 6;
     zbuf_pitch_    = dcrs.read(DCR_ROP_ZBUF_PITCH);
     depth_writemask_ = dcrs.read(DCR_ROP_DEPTH_WRITEMASK) & 0x1;
     stencil_front_writemask_ = dcrs.read(DCR_ROP_STENCIL_WRITEMASK) & 0xffff;
     stencil_back_writemask_ = dcrs.read(DCR_ROP_STENCIL_WRITEMASK) >> 16;
 
-    cbuf_baseaddr_ = dcrs.read(DCR_ROP_CBUF_ADDR);
+    cbuf_baseaddr_ = uint64_t(dcrs.read(DCR_ROP_CBUF_ADDR)) << 6;
     cbuf_pitch_    = dcrs.read(DCR_ROP_CBUF_PITCH);
     auto cbuf_writemask = dcrs.read(DCR_ROP_CBUF_WRITEMASK) & 0xf;
     cbuf_writemask_ = (((cbuf_writemask >> 0) & 0x1) * 0x000000ff) 
@@ -132,12 +132,12 @@ private:
             uint32_t* depthstencil,
             uint32_t* color) const {
     if (depth_enable || stencil_enable) {
-      uint32_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;
+      uint64_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;
       *depthstencil = *reinterpret_cast<const uint32_t*>(zbuf_addr);
     }
 
     if (color_write_ && (color_read_ || blend_enable)) {
-      uint32_t cbuf_addr = cbuf_baseaddr_ + y * cbuf_pitch_ + x * 4;
+      uint64_t cbuf_addr = cbuf_baseaddr_ + y * cbuf_pitch_ + x * 4;
       *color = *reinterpret_cast<const uint32_t*>(cbuf_addr);
     }
   }
@@ -157,12 +157,12 @@ private:
                       | (stencil_enable ? (stencil_writemask << ROP_DEPTH_BITS) : 0);
     if (ds_writeMask != 0) {      
       uint32_t write_value = (dst_depthstencil & ~ds_writeMask) | (depthstencil & ds_writeMask);
-      uint32_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;        
+      uint64_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;        
       *reinterpret_cast<uint32_t*>(zbuf_addr) = write_value;
     }
     if (color_write_ && ds_passed) {   
       uint32_t write_value = (dst_color & ~cbuf_writemask_) | (color & cbuf_writemask_);
-      uint32_t cbuf_addr = cbuf_baseaddr_ + y * cbuf_pitch_ + x * 4;
+      uint64_t cbuf_addr = cbuf_baseaddr_ + y * cbuf_pitch_ + x * 4;
       *reinterpret_cast<uint32_t*>(cbuf_addr) = write_value;
     }
   }
@@ -170,13 +170,13 @@ private:
   graphics::DepthTencil depthStencil_;
   graphics::Blender     blender_;
 
-  uint32_t zbuf_baseaddr_;
+  uint64_t zbuf_baseaddr_;
   uint32_t zbuf_pitch_;
   bool     depth_writemask_;
   uint32_t stencil_front_writemask_; 
   uint32_t stencil_back_writemask_;
 
-  uint32_t cbuf_baseaddr_;
+  uint64_t cbuf_baseaddr_;
   uint32_t cbuf_pitch_;
   uint32_t cbuf_writemask_;
   bool     color_read_;
@@ -196,7 +196,7 @@ public:
 
 private:
   static void memory_cb(uint32_t* out,
-                        const uint32_t* addr,    
+                        const uint64_t* addr,
                         uint32_t stride,
                         uint32_t size,
                         void* /*cb_arg*/) {

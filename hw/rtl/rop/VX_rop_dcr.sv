@@ -13,7 +13,6 @@ module VX_rop_dcr #(
     output rop_dcrs_t       rop_dcrs
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-
     `UNUSED_VAR (reset)
 
 `define DEPTH_TEST_ENABLE(func, writemask) \
@@ -40,7 +39,7 @@ module VX_rop_dcr #(
         if (dcr_bus_if.write_valid) begin
             case (dcr_bus_if.write_addr)                
                 `DCR_ROP_CBUF_ADDR: begin 
-                    dcrs.cbuf_addr <= dcr_bus_if.write_data[31:0];
+                    dcrs.cbuf_addr <= dcr_bus_if.write_data[`ROP_ADDR_BITS-1:0];
                 end
                 `DCR_ROP_CBUF_PITCH: begin 
                     dcrs.cbuf_pitch <= dcr_bus_if.write_data[`ROP_PITCH_BITS-1:0];
@@ -49,7 +48,7 @@ module VX_rop_dcr #(
                     dcrs.cbuf_writemask <= dcr_bus_if.write_data[3:0];
                 end
                 `DCR_ROP_ZBUF_ADDR: begin 
-                    dcrs.zbuf_addr <= dcr_bus_if.write_data[31:0];
+                    dcrs.zbuf_addr <= dcr_bus_if.write_data[`ROP_ADDR_BITS-1:0];
                 end
                 `DCR_ROP_ZBUF_PITCH: begin 
                     dcrs.zbuf_pitch <= dcr_bus_if.write_data[`ROP_PITCH_BITS-1:0];

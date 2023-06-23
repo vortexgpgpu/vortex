@@ -42,6 +42,7 @@ module VX_rop_mem #(
 
     localparam UUID_WIDTH = `UP(`UUID_BITS);
     localparam NUM_REQS   = ROP_MEM_REQS;
+    localparam W_ADDR_BITS = (`ROP_ADDR_BITS + 6) - 2;
 
     wire                        mreq_valid, mreq_valid_r;
     wire                        mreq_rw, mreq_rw_r;
@@ -72,7 +73,8 @@ module VX_rop_mem #(
 
     // depth/stencil values submission
     for (genvar i = 0;  i < NUM_LANES; ++i) begin
-        wire [31:0] m_y_pitch, baddr_s;
+        wire [31:0] m_y_pitch;
+        `UNUSED_VAR (m_y_pitch)
 
         VX_multiplier #(
             .A_WIDTH (`ROP_DIM_BITS),
@@ -87,13 +89,15 @@ module VX_rop_mem #(
             .result (m_y_pitch)
         );
 
-        wire        mask   = req_ds_mask[i];
-        wire [31:0] baddr  = dcrs.zbuf_addr + (req_pos_x[i] * 4);
-        wire [3:0]  byteen = req_rw ? {stencil_byteen[i], depth_byteen} : 4'b1111;
-        wire [31:0] data   = {req_stencil[i], req_depth[i]};      
+        wire [W_ADDR_BITS-1:0] baddr, baddr_s;
+        assign baddr = {dcrs.zbuf_addr, 4'b0} + W_ADDR_BITS'(req_pos_x[i]);
+
+        wire [3:0] byteen = req_rw ? {stencil_byteen[i], depth_byteen} : 4'b1111;
+        wire [31:0] data = {req_stencil[i], req_depth[i]};      
+        wire mask = req_ds_mask[i];
 
         VX_shift_register #(
-            .DATAW (1 + 4 + 32 + 32),
+            .DATAW (1 + 4 + W_ADDR_BITS + 32),
             .DEPTH (`LATENCY_IMUL)
         ) shift_reg (
             .clk      (clk),
@@ -103,15 +107,14 @@ module VX_rop_mem #(
             .data_out ({mreq_mask[i], mreq_byteen[i], baddr_s, mreq_data[i]})
         );
 
-        wire [31:0] addr = baddr_s + m_y_pitch;
-
-        assign mreq_addr[i] = addr[(32-OCACHE_ADDR_WIDTH) +: OCACHE_ADDR_WIDTH];
-        `UNUSED_VAR (addr)
+        wire [W_ADDR_BITS-1:0] addr = baddr_s + W_ADDR_BITS'(m_y_pitch[31:2]);
+        assign mreq_addr[i] = OCACHE_ADDR_WIDTH'(addr);
     end
 
     // blend color submission
     for (genvar i = NUM_LANES; i < NUM_REQS; ++i) begin
-        wire [31:0] m_y_pitch, baddr_s;
+        wire [31:0] m_y_pitch;
+        `UNUSED_VAR (m_y_pitch)
 
         VX_multiplier #(
             .A_WIDTH (`ROP_DIM_BITS),
@@ -126,13 +129,15 @@ module VX_rop_mem #(
             .result (m_y_pitch)
         );
 
-        wire        mask   = req_c_mask[i - NUM_LANES];
-        wire [31:0] baddr  = dcrs.cbuf_addr + (req_pos_x[i - NUM_LANES] * 4);   
+        wire [W_ADDR_BITS-1:0] baddr, baddr_s;
+        assign baddr = {dcrs.cbuf_addr, 4'b0} + W_ADDR_BITS'(req_pos_x[i - NUM_LANES]);
+
         wire [3:0]  byteen = req_rw ? color_byteen : 4'b1111;
-        wire [31:0] data   = req_color[i - NUM_LANES];        
+        wire [31:0] data = req_color[i - NUM_LANES];        
+        wire mask = req_c_mask[i - NUM_LANES];
 
         VX_shift_register #(
-            .DATAW (1 + 4 + 32 + 32),
+            .DATAW (1 + 4 + W_ADDR_BITS + 32),
             .DEPTH (`LATENCY_IMUL)
         ) shift_reg (
             .clk      (clk),
@@ -142,10 +147,8 @@ module VX_rop_mem #(
             .data_out ({mreq_mask[i], mreq_byteen[i], baddr_s,  mreq_data[i]})
         );
 
-        wire [31:0] addr = baddr_s + m_y_pitch;
-
-        assign mreq_addr[i] = addr[(32-OCACHE_ADDR_WIDTH) +: OCACHE_ADDR_WIDTH];
-        `UNUSED_VAR (addr)
+        wire [W_ADDR_BITS-1:0] addr = baddr_s + W_ADDR_BITS'(m_y_pitch[31:2]);
+        assign mreq_addr[i] = OCACHE_ADDR_WIDTH'(addr);
     end
 
     VX_shift_register #(

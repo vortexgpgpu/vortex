@@ -22,6 +22,7 @@ module VX_tex_unit #(
     `UNUSED_SPARAM (INSTANCE_ID)
     
     localparam BLEND_FRAC_W = (2 * NUM_LANES * `TEX_BLEND_FRAC);  
+    localparam W_ADDR_BITS = `TEX_ADDR_BITS + 6;
 
     // DCRs
     
@@ -80,7 +81,7 @@ module VX_tex_unit #(
     wire [`TEX_LGSTRIDE_BITS-1:0] mem_req_lgstride;
     wire [NUM_LANES-1:0][1:0][`TEX_BLEND_FRAC-1:0] mem_req_blends;
     wire [NUM_LANES-1:0][3:0][31:0] mem_req_addr;
-    wire [NUM_LANES-1:0][31:0] mem_req_baseaddr;
+    wire [NUM_LANES-1:0][W_ADDR_BITS-1:0] mem_req_baseaddr;
     wire [(TAG_WIDTH + `TEX_FORMAT_BITS)-1:0] mem_req_info;
     wire mem_req_ready;
 

@@ -14,8 +14,7 @@ module VX_tex_dcr #(
     input wire [`TEX_STAGE_BITS-1:0]    stage,
     output tex_dcrs_t                   tex_dcrs
 );
-    `UNUSED_SPARAM (INSTANCE_ID)
-    
+    `UNUSED_SPARAM (INSTANCE_ID)    
     `UNUSED_VAR (reset)
 
     // DCR registers

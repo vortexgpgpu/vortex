@@ -1542,7 +1542,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       for (uint32_t t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
-        rddata[t].i = (WordI)(((int64_t)rsdata[t][0].i * (int64_t)rsdata[t][1].i) >> shift) + rsdata[t][2].i;
+        rddata[t].i = (int32_t)(((int64_t)rsdata[t][0].i32 * (int64_t)rsdata[t][1].i32) >> shift) + rsdata[t][2].i32;
       }
       rd_write = true;
     } break;        

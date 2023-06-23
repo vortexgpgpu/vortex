@@ -150,7 +150,7 @@ module VX_gpu_unit #(
 `ifdef EXT_TEX_ENABLE
 
     VX_tex_exe_if tex_exe_if();
-    VX_commit_if    tex_commit_if();
+    VX_commit_if  tex_commit_if();
 
     assign tex_exe_if.valid = gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_TEX);
     assign tex_exe_if.uuid  = gpu_exe_if.uuid;
@@ -161,8 +161,8 @@ module VX_gpu_unit #(
     assign tex_exe_if.stage = gpu_exe_if.op_mod[`TEX_STAGE_BITS-1:0];
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign tex_exe_if.coords[0][i] = gpu_exe_if.rs1_data[i];
-        assign tex_exe_if.coords[1][i] = gpu_exe_if.rs2_data[i];
+        assign tex_exe_if.coords[0][i] = gpu_exe_if.rs1_data[i][31:0];
+        assign tex_exe_if.coords[1][i] = gpu_exe_if.rs2_data[i][31:0];
         assign tex_exe_if.lod[i]       = gpu_exe_if.rs3_data[i][0 +: `TEX_LOD_BITS];        
     end
 
@@ -206,7 +206,7 @@ module VX_gpu_unit #(
         .reset            (raster_reset),
         .raster_csr_if    (raster_csr_if),
         .raster_bus_if    (raster_bus_if),
-        .raster_exe_if  (raster_exe_if),        
+        .raster_exe_if    (raster_exe_if),        
         .raster_commit_if (raster_commit_if)        
     );
 
@@ -231,7 +231,7 @@ module VX_gpu_unit #(
         assign rop_exe_if.face[i]  = gpu_exe_if.rs1_data[i][0];
         assign rop_exe_if.pos_x[i] = gpu_exe_if.rs1_data[i][1 +: `ROP_DIM_BITS];
         assign rop_exe_if.pos_y[i] = gpu_exe_if.rs1_data[i][16 +: `ROP_DIM_BITS];
-        assign rop_exe_if.color[i] = gpu_exe_if.rs2_data[i];
+        assign rop_exe_if.color[i] = gpu_exe_if.rs2_data[i][31:0];
         assign rop_exe_if.depth[i] = gpu_exe_if.rs3_data[i][`ROP_DEPTH_BITS-1:0];
     end
 
@@ -258,6 +258,7 @@ module VX_gpu_unit #(
 
     wire                          imadd_valid_in;
     wire                          imadd_ready_in;
+    wire [`NUM_THREADS-1:0][31:0] imadd_data_in [3];
 
     wire                          imadd_valid_out;
     wire [UUID_WIDTH-1:0]         imadd_uuid_out;
@@ -269,6 +270,12 @@ module VX_gpu_unit #(
     wire                          imadd_ready_out;
 
     assign imadd_valid_in = gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_IMADD);
+
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        assign imadd_data_in[0][i] = gpu_exe_if.rs1_data[i][31:0];
+        assign imadd_data_in[1][i] = gpu_exe_if.rs2_data[i][31:0];
+        assign imadd_data_in[2][i] = gpu_exe_if.rs3_data[i][31:0];
+    end
 
     `RESET_RELAY (imadd_reset, reset);
 
@@ -285,9 +292,9 @@ module VX_gpu_unit #(
         // Inputs
         .valid_in   (imadd_valid_in),
         .shift_in   ({gpu_exe_if.op_mod[1:0], 3'b0}),
-        .data1_in   (gpu_exe_if.rs1_data),
-        .data2_in   (gpu_exe_if.rs2_data),
-        .data3_in   (gpu_exe_if.rs3_data),
+        .data1_in   (imadd_data_in[0]),
+        .data2_in   (imadd_data_in[1]),
+        .data3_in   (imadd_data_in[2]),
         .tag_in     ({gpu_exe_if.uuid, gpu_exe_if.wid, gpu_exe_if.tmask, gpu_exe_if.PC, gpu_exe_if.rd}),
         .ready_in   (imadd_ready_in),
 
@@ -298,11 +305,18 @@ module VX_gpu_unit #(
         .ready_out  (imadd_ready_out)
     );
 
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] imadd_data_out_x;
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        assign imadd_data_out_x[i] = `XLEN'(imadd_data_out[i]);
+    end
+
     assign rsp_arb_valid_in[RSP_ARB_IDX_IMADD] = imadd_valid_out;
-    assign rsp_arb_data_in[RSP_ARB_IDX_IMADD] = {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, 1'b1, RSP_DATAW'(imadd_data_out), 1'b1, 1'b0};
+    assign rsp_arb_data_in[RSP_ARB_IDX_IMADD] = {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, 1'b1, RSP_DATAW'(imadd_data_out_x), 1'b1, 1'b0};
     assign imadd_ready_out = rsp_arb_ready_in[RSP_ARB_IDX_IMADD];
 
 `endif
+
+
 
     // can accept new request?
     

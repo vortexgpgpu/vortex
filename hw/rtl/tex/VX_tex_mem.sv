@@ -2,8 +2,9 @@
 
 module VX_tex_mem #(
     parameter `STRING INSTANCE_ID = "",
-    parameter REQ_INFOW = 1,
-    parameter NUM_LANES  = 1
+    parameter REQ_INFOW   = 1,
+    parameter NUM_LANES   = 1,
+    parameter W_ADDR_BITS = `TEX_ADDR_BITS + 6
 ) (    
     input wire clk,
     input wire reset,
@@ -16,7 +17,7 @@ module VX_tex_mem #(
     input wire [NUM_LANES-1:0]          req_mask,
     input wire [`TEX_FILTER_BITS-1:0]   req_filter,
     input wire [`TEX_LGSTRIDE_BITS-1:0] req_lgstride,
-    input wire [NUM_LANES-1:0][31:0]    req_baseaddr,
+    input wire [NUM_LANES-1:0][W_ADDR_BITS-1:0] req_baseaddr,
     input wire [NUM_LANES-1:0][3:0][31:0] req_addr,
     input wire [REQ_INFOW-1:0]          req_info,
     output wire                         req_ready,
@@ -33,7 +34,7 @@ module VX_tex_mem #(
 
     wire                           mem_req_valid;
     wire [3:0][NUM_LANES-1:0]      mem_req_mask;
-    wire [3:0][NUM_LANES-1:0][29:0] mem_req_addr;
+    wire [3:0][NUM_LANES-1:0][TCACHE_ADDR_WIDTH-1:0] mem_req_addr;
     wire [3:0][NUM_LANES-1:0][3:0] mem_req_byteen;
     wire [TAG_WIDTH-1:0]           mem_req_tag;
     wire                           mem_req_ready;
@@ -45,11 +46,11 @@ module VX_tex_mem #(
     
     // full address calculation
 
-    wire [NUM_LANES-1:0][3:0][31:0] full_addr;    
+    wire [NUM_LANES-1:0][3:0][W_ADDR_BITS-1:0] full_addr;    
     
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         for (genvar j = 0; j < 4; ++j) begin
-            assign full_addr[i][j] = req_baseaddr[i] + req_addr[i][j];
+            assign full_addr[i][j] = req_baseaddr[i] + W_ADDR_BITS'(req_addr[i][j]);
         end
     end
     
@@ -59,7 +60,7 @@ module VX_tex_mem #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         for (genvar j = 0; j < 4; ++j) begin
-            assign mem_req_addr[j][i]   = full_addr[i][j][31:2];       
+            assign mem_req_addr[j][i]   = TCACHE_ADDR_WIDTH'(full_addr[i][j][W_ADDR_BITS-1:2]);
             assign mem_req_align[j][i]  = full_addr[i][j][1:0];
             assign mem_req_byteen[j][i] = 4'b1111;
         end

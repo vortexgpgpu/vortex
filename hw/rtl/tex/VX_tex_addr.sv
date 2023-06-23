@@ -3,7 +3,8 @@
 module VX_tex_addr #(
     parameter `STRING INSTANCE_ID = "",
     parameter REQ_INFOW = 1,
-    parameter NUM_LANES = 1
+    parameter NUM_LANES = 1,
+    parameter W_ADDR_BITS = `TEX_ADDR_BITS + 6
 ) (
     input wire clk,
     input wire reset,
@@ -29,7 +30,7 @@ module VX_tex_addr #(
     output wire [NUM_LANES-1:0]         rsp_mask,
     output wire [`TEX_FILTER_BITS-1:0]  rsp_filter,
     output wire [`TEX_LGSTRIDE_BITS-1:0] rsp_lgstride,
-    output wire [NUM_LANES-1:0][31:0]    rsp_baseaddr,
+    output wire [NUM_LANES-1:0][W_ADDR_BITS-1:0] rsp_baseaddr,
     output wire [NUM_LANES-1:0][3:0][31:0] rsp_addr,
     output wire [NUM_LANES-1:0][1:0][`TEX_BLEND_FRAC-1:0] rsp_blends,
     output wire [REQ_INFOW-1:0]         rsp_info,  
@@ -52,7 +53,7 @@ module VX_tex_addr #(
     wire [NUM_LANES-1:0][1:0][`TEX_FXD_FRAC-1:0] clamped_hi, clamped_hi_s0;
     wire [NUM_LANES-1:0][1:0][SHIFT_BITS-1:0] dim_shift, dim_shift_s0;
     wire [`TEX_LGSTRIDE_BITS-1:0] log_stride, log_stride_s0;
-    wire [NUM_LANES-1:0][31:0] mip_addr, mip_addr_s0;
+    wire [NUM_LANES-1:0][W_ADDR_BITS-1:0] mip_addr, mip_addr_s0;
     wire [NUM_LANES-1:0][PITCH_BITS-1:0] log_pitch, log_pitch_s0;
     
     wire stall_out;
@@ -90,11 +91,11 @@ module VX_tex_addr #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign log_pitch[i] = PITCH_BITS'(req_logdims[0] - req_miplevel[i]) + PITCH_BITS'(log_stride);        
-        assign mip_addr[i]  = req_baseaddr + `TEX_ADDR_BITS'(req_mipoff[i]);
+        assign mip_addr[i]  = {req_baseaddr, 6'b0} + W_ADDR_BITS'(req_mipoff[i]);
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + REQ_INFOW + NUM_LANES * (PITCH_BITS + 2 * SHIFT_BITS + `TEX_ADDR_BITS + 2 * 2 * `TEX_FXD_FRAC)),
+        .DATAW  (1 + NUM_LANES + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + REQ_INFOW + NUM_LANES * (PITCH_BITS + 2 * SHIFT_BITS + W_ADDR_BITS + 2 * 2 * `TEX_FXD_FRAC)),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -140,7 +141,7 @@ module VX_tex_addr #(
     assign stall_out = rsp_valid && ~rsp_ready;
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + (NUM_LANES * 32) + (NUM_LANES * 4 * 32) + (2 * NUM_LANES * `TEX_BLEND_FRAC) + REQ_INFOW),
+        .DATAW  (1 + NUM_LANES + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + (NUM_LANES * W_ADDR_BITS) + (NUM_LANES * 4 * 32) + (2 * NUM_LANES * `TEX_BLEND_FRAC) + REQ_INFOW),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
