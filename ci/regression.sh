@@ -26,7 +26,7 @@ make -C sim/rtlsim clean
 CONFIGS="-DFPU_DSP" make -C sim/rtlsim
 make -C tests/riscv/isa run-rtlsim-32f
 
-if [ "$XLEN" -eq "64" ] 
+if [ "$XLEN" == "64" ] 
 then
         make -C sim/rtlsim clean
         CONFIGS="-DFPU_DPI" make -C sim/rtlsim

@@ -44,7 +44,7 @@ void Warp::reset() {
 pipeline_trace_t* Warp::eval() {
   assert(tmask_.any());
 
-  uint64_t uuid = (issued_instrs_++ * arch_.num_cores() + core_->id()) * arch_.num_warps() + warp_id_;
+  uint64_t uuid = (issued_instrs_++ * arch_.num_clusters() * arch_.num_cores() + core_->id()) * arch_.num_warps() + warp_id_;
   
   DPH(1, "Fetch: cid=" << core_->id() << ", wid=" << warp_id_ << ", tmask=");
   for (uint32_t i = 0, n = arch_.num_threads(); i < n; ++i)

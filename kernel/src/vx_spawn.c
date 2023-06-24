@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 
-#define NUM_CORES_MAX 32
+#define NUM_CORES_MAX 1024
 
 #ifndef MIN
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -46,8 +46,8 @@ inline int fast_log2(int x) {
   return (*(int*)(&f)>>23) - 127;
 }
 
-static void __attribute__ ((noinline)) spawn_tasks_all_stub() { 
-  int core_id = vx_core_id();
+static void __attribute__ ((noinline)) spawn_tasks_all_stub() {
+  int core_id = vx_cluster_id() * vx_num_cores() + vx_core_id();
   int wid     = vx_warp_id();
   int tid     = vx_thread_id(); 
   int NT      = vx_num_threads();
@@ -69,12 +69,10 @@ static void __attribute__ ((noinline)) spawn_tasks_all_stub() {
 }
 
 static void __attribute__ ((noinline)) spawn_tasks_rem_stub() {  
-  int core_id = vx_core_id(); 
-  int tid = vx_thread_gid();
-
+  int core_id = vx_cluster_id() * vx_num_cores() + vx_core_id(); 
+  int hart_id = vx_hart_id();
   wspawn_tasks_args_t* p_wspawn_args = (wspawn_tasks_args_t*)g_wspawn_args[core_id];
-
-  int task_id = p_wspawn_args->offset + tid;
+  int task_id = p_wspawn_args->offset + hart_id;
   (p_wspawn_args->callback)(task_id, p_wspawn_args->arg);
 }
 
@@ -103,26 +101,29 @@ static void spawn_tasks_rem_cb(int thread_mask) {
 
 void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
 	// device specs
+  int NG = vx_num_clusters();
   int NC = vx_num_cores();
   int NW = vx_num_warps();
   int NT = vx_num_threads();
 
+  int NGC = NG * NC;
+
   // current core id
-  int core_id = vx_core_id();  
+  int core_id = vx_cluster_id() * NC + vx_core_id();
   if (core_id >= NUM_CORES_MAX)
     return;
 
   // calculate necessary active cores
   int WT = NW * NT;
   int nC = (num_tasks > WT) ? (num_tasks / WT) : 1;
-  int nc = MIN(nC, NC);
+  int nc = MIN(nC, NGC);
   if (core_id >= nc)
     return; // terminate extra cores
 
   // number of tasks per core
   int tasks_per_core = num_tasks / nc;
   int tasks_per_core0 = tasks_per_core;  
-  if (core_id == (NC-1)) {    
+  if (core_id == (NGC-1)) {    
     int QC_r = num_tasks - (nc * tasks_per_core0); 
     tasks_per_core0 += QC_r; // last core executes remaining tasks
   }
@@ -158,7 +159,7 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
 ///////////////////////////////////////////////////////////////////////////////
 
 static void __attribute__ ((noinline)) spawn_kernel_all_stub() {
-  int core_id = vx_core_id();
+  int core_id = vx_cluster_id() * vx_num_cores() + vx_core_id();
   int wid     = vx_warp_id();
   int tid     = vx_thread_id(); 
   int NT      = vx_num_threads();
@@ -191,12 +192,12 @@ static void __attribute__ ((noinline)) spawn_kernel_all_stub() {
 }
 
 static void __attribute__ ((noinline)) spawn_kernel_rem_stub() {
-  int core_id = vx_core_id(); 
-  int tid = vx_thread_gid();
+  int core_id = vx_cluster_id() * vx_num_cores() + vx_core_id(); 
+  int hart_id = vx_hart_id();
 
   wspawn_kernel_args_t* p_wspawn_args = (wspawn_kernel_args_t*)g_wspawn_args[core_id];
 
-  int wg_id = p_wspawn_args->offset + tid;
+  int wg_id = p_wspawn_args->offset + hart_id;
 
   int X = p_wspawn_args->ctx->num_groups[0];
   int Y = p_wspawn_args->ctx->num_groups[1];
@@ -246,26 +247,29 @@ void vx_spawn_kernel(context_t * ctx, vx_spawn_kernel_cb callback, void * arg) {
   int Q  = XY * Z;
   
   // device specs
+  int NG = vx_num_clusters();
   int NC = vx_num_cores();
   int NW = vx_num_warps();
   int NT = vx_num_threads();
 
+  int NGC = NG * NC;
+
   // current core id
-  int core_id = vx_core_id();  
+  int core_id = vx_cluster_id() * NC + vx_core_id();  
   if (core_id >= NUM_CORES_MAX)
     return;
 
   // calculate necessary active cores
   int WT = NW * NT;
   int nC = (Q > WT) ? (Q / WT) : 1;
-  int nc = MIN(nC, NC);
+  int nc = MIN(nC, NGC);
   if (core_id >= nc)
     return; // terminate extra cores
 
   // number of workgroups per core
   int wgs_per_core = Q / nc;
   int wgs_per_core0 = wgs_per_core;  
-  if (core_id == (NC-1)) {    
+  if (core_id == (NGC-1)) {    
     int QC_r = Q - (nc * wgs_per_core0); 
     wgs_per_core0 += QC_r; // last core executes remaining WGs
   }

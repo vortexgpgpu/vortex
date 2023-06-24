@@ -11,9 +11,10 @@ namespace vortex {
 
 class Arch {  
 private:
-  uint16_t num_cores_;
-  uint16_t num_warps_;
   uint16_t num_threads_;
+  uint16_t num_warps_;
+  uint16_t num_cores_;  
+  uint16_t num_clusters_;  
   uint16_t vsize_;
   uint16_t num_regs_;
   uint16_t num_csrs_;
@@ -21,12 +22,11 @@ private:
   uint16_t ipdom_size_;
   
 public:
-  Arch(uint16_t num_cores, 
-       uint16_t num_warps, 
-       uint16_t num_threads)   
-    : num_cores_(num_cores)
+  Arch(uint16_t num_threads, uint16_t num_warps, uint16_t num_cores, uint16_t num_clusters)   
+    : num_threads_(num_threads)
     , num_warps_(num_warps)
-    , num_threads_(num_threads)
+    , num_cores_(num_cores)
+    , num_clusters_(num_clusters)
     , vsize_(16)
     , num_regs_(32)
     , num_csrs_(4096)
@@ -64,6 +64,10 @@ public:
 
   uint16_t num_cores() const {
     return num_cores_;
+  }
+  
+  uint16_t num_clusters() const {
+    return num_clusters_;
   }
 };
 

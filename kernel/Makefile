@@ -26,10 +26,11 @@ LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex -mllvm -vortex-branch-div
 #DP  = $(LLVM_VORTEX)/bin/llvm-objdump
 #CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
-CC = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
-AR = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar
-DP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
-CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
+CC  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
+CXX = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-g++
+AR  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar
+DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
+CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 CFLAGS += -I./include -I../hw
@@ -48,6 +49,9 @@ $(PROJECT).dump: $(PROJECT).a
 
 %.S.o: src/%.S
 	$(CC) $(CFLAGS) -c $< -o $@
+
+%.cpp.o: src/%.cpp
+	$(CXX) $(CFLAGS) -c $< -o $@
 
 %.c.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@

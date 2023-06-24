@@ -3,8 +3,7 @@
 using namespace vortex;
 
 Cluster::Cluster(const SimContext& ctx, 
-                 uint32_t cluster_id, 
-                 uint32_t num_cores, 
+                 uint32_t cluster_id,
                  ProcessorImpl* processor, 
                  const Arch &arch, const 
                  DCRS &dcrs) 
@@ -12,14 +11,16 @@ Cluster::Cluster(const SimContext& ctx,
   , mem_req_port(this)
   , mem_rsp_port(this)
   , cluster_id_(cluster_id)
-  , cores_(num_cores)  
+  , cores_(arch.num_cores())  
   , barriers_(arch.num_barriers(), 0)
   , raster_units_(NUM_RASTER_UNITS)
   , rop_units_(NUM_ROP_UNITS)
   , tex_units_(NUM_TEX_UNITS)
-  , sharedmems_(num_cores)
+  , sharedmems_(arch.num_cores())
   , processor_(processor)
 {
+  auto num_cores = arch.num_cores();
+  
   char sname[100];
   snprintf(sname, 100, "cluster%d-l2cache", cluster_id);
   l2cache_ = CacheSim::Create(sname, CacheSim::Config{
@@ -153,7 +154,7 @@ Cluster::Cluster(const SimContext& ctx,
   for (uint32_t i = 0; i < NUM_RASTER_UNITS; ++i) {
     snprintf(sname, 100, "cluster%d-raster_unit%d", cluster_id, i);
     uint32_t raster_idx = cluster_id * NUM_RASTER_UNITS + i;      
-    uint32_t raster_count = NUM_CLUSTERS * NUM_RASTER_UNITS;     
+    uint32_t raster_count = arch.num_clusters() * NUM_RASTER_UNITS;     
     raster_units_.at(i) = RasterUnit::Create(sname, raster_idx, raster_count, arch, dcrs.raster_dcrs, RasterUnit::Config{
       RASTER_TILE_LOGSIZE, 
       RASTER_BLOCK_LOGSIZE
@@ -201,8 +202,7 @@ Cluster::Cluster(const SimContext& ctx,
 
   // create cores 
 
-  for (uint32_t raster_idx = 0, rop_idx = 0, tex_idx = 0, 
-                i = 0; i < num_cores; ++i) {  
+  for (uint32_t raster_idx = 0, rop_idx = 0, tex_idx = 0, i = 0; i < num_cores; ++i) {  
     auto per_core_raster_units = std::max<uint32_t>((NUM_RASTER_UNITS + num_cores - 1 - i) / num_cores, 1);
     auto per_core_rop_units = std::max<uint32_t>((NUM_ROP_UNITS + num_cores - 1 - i) / num_cores, 1);
     auto per_core_tex_units = std::max<uint32_t>((NUM_TEX_UNITS + num_cores - 1 - i) / num_cores, 1);
@@ -290,12 +290,12 @@ bool Cluster::running() const {
   return false;
 }
 
-bool Cluster::check_exit(Word* exitcode, int reg) const {
+bool Cluster::check_exit(Word* exitcode, bool riscv_test) const {
   bool done = true;
   Word exitcode_ = 0;
   for (auto& core : cores_) {
     Word ec;
-    if (core->check_exit(&ec, reg)) {
+    if (core->check_exit(&ec, riscv_test)) {
       exitcode_ |= ec;
     } else {
       done = false;

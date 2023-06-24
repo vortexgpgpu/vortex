@@ -354,7 +354,7 @@ AddrType Core::get_addr_type(uint64_t addr) {
   }
   if (SM_ENABLED) {
     // check if address is a stack address
-    uint32_t total_threads    = arch_.num_cores() * arch_.num_warps() * arch_.num_threads();
+    uint32_t total_threads    = arch_.num_clusters() * arch_.num_cores() * arch_.num_warps() * arch_.num_threads();
     uint64_t total_stack_size = STACK_SIZE * total_threads;
     uint64_t stack_end        = STACK_BASE_ADDR - total_stack_size;
     if (addr >= stack_end && addr < STACK_BASE_ADDR) {     
@@ -452,26 +452,26 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
     return (fcsrs_.at(wid) >> 5);
   case CSR_FCSR:
     return fcsrs_.at(wid);
-  case CSR_WTID: // Warp threadID
-    return tid;
-  case CSR_LTID: // Core threadID
-    return tid + (wid * arch_.num_threads());
-  case CSR_GTID: // Processor threadID
+  case CSR_MHARTID: // global thread ID
     return (core_id_ * arch_.num_warps() + wid) * arch_.num_threads() + tid;
-  case CSR_LWID: // Core warpID
+  case CSR_THREAD_ID: // thread ID
+    return tid;
+  case CSR_WARP_ID: // warp ID
     return wid;
-  case CSR_GWID: // Processor warpID        
-    return core_id_ * arch_.num_warps() + wid;
-  case CSR_GCID: // Processor coreID
-    return core_id_;
-  case CSR_TMASK: // Processor coreID
+  case CSR_CORE_ID: // core ID
+    return core_id_ % arch_.num_cores();
+  case CSR_CLUSTER_ID: // cluster ID
+    return core_id_ / arch_.num_cores();
+  case CSR_TMASK: // thread mask
     return warps_.at(wid)->getTmask();
-  case CSR_NT: // Number of threads per warp
+  case CSR_NUM_THREADS: // Number of threads per warp
     return arch_.num_threads();
-  case CSR_NW: // Number of warps per core
+  case CSR_NUM_WARPS: // Number of warps per core
     return arch_.num_warps();
-  case CSR_NC: // Number of cores
+  case CSR_NUM_CORES: // Number of cores per cluster
     return arch_.num_cores();
+  case CSR_NUM_CLUSTERS: // Number of cluster
+    return arch_.num_clusters();
   case CSR_MCYCLE: // NumCycles
     return perf_stats_.cycles & 0xffffffff;
   case CSR_MCYCLE_H: // NumCycles
@@ -731,9 +731,14 @@ void Core::trigger_ebreak() {
   exited_ = true;
 }
 
-bool Core::check_exit(Word* exitcode, int reg) const {
+bool Core::check_exit(Word* exitcode, bool riscv_test) const {
   if (exited_) {
-    *exitcode = warps_.at(0)->getIRegValue(reg);
+    Word ec = warps_.at(0)->getIRegValue(3);
+    if (riscv_test) {
+      *exitcode = (1 - ec);
+    } else {
+      *exitcode = ec;
+    }
     return true;
   }
   return false;

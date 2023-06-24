@@ -124,18 +124,15 @@ module VX_csr_data #(
             `CSR_FFLAGS     : read_data_rw_r = 32'(fcsr[read_wid][`FP_FLAGS_BITS-1:0]);
             `CSR_FRM        : read_data_rw_r = 32'(fcsr[read_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS]);
             `CSR_FCSR       : read_data_rw_r = 32'(fcsr[read_wid]);
-        `endif    
-            `CSR_LWID       : read_data_ro_r = 32'(read_wid);
-            /*`CSR_MHARTID ,*/
-            `CSR_GWID       : read_data_ro_r = (32'(CORE_ID) << `NW_BITS) + 32'(read_wid);
-            `CSR_GCID       : read_data_ro_r = 32'(CORE_ID);
-
+        `endif
+            `CSR_WARP_ID    : read_data_ro_r = 32'(read_wid);
+            `CSR_CORE_ID    : read_data_ro_r = 32'(CORE_ID % `NUM_CORES);
+            `CSR_CLUSTER_ID : read_data_ro_r = 32'(CORE_ID / `NUM_CORES);
             `CSR_TMASK      : read_data_ro_r = 32'(read_tmask);
-
-            `CSR_NT         : read_data_ro_r = 32'(`NUM_THREADS);
-            `CSR_NW         : read_data_ro_r = 32'(`NUM_WARPS);
-            `CSR_NC         : read_data_ro_r = 32'(`NUM_CORES * `NUM_CLUSTERS);
-            
+            `CSR_NUM_THREADS: read_data_ro_r = 32'(`NUM_THREADS);
+            `CSR_NUM_WARPS  : read_data_ro_r = 32'(`NUM_WARPS);
+            `CSR_NUM_CORES  : read_data_ro_r = 32'(`NUM_CORES);
+            `CSR_NUM_CLUSTERS:read_data_ro_r = 32'(`NUM_CLUSTERS);            
             `CSR_MCYCLE     : read_data_ro_r = 32'(sched_csr_if.cycles[31:0]);
             `CSR_MCYCLE_H   : read_data_ro_r = 32'(sched_csr_if.cycles[`PERF_CTR_BITS-1:32]);
             `CSR_MPM_RESERVED : read_data_ro_r = 'x;
@@ -161,6 +158,7 @@ module VX_csr_data #(
             `CSR_MVENDORID  : read_data_ro_r = 32'(`VENDOR_ID);
             `CSR_MARCHID    : read_data_ro_r = 32'(`ARCHITECTURE_ID);
             `CSR_MIMPID     : read_data_ro_r = 32'(`IMPLEMENTATION_ID);
+            `CSR_MHARTID    : read_data_ro_r = 32'(`IMPLEMENTATION_ID);
 
             default: begin
                 read_addr_valid_r = 0;

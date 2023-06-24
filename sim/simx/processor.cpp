@@ -5,16 +5,14 @@ using namespace vortex;
 
 ProcessorImpl::ProcessorImpl(const Arch& arch) 
   : arch_(arch)
-  , clusters_(NUM_CLUSTERS)
+  , clusters_(arch.num_clusters())
 {
   SimPlatform::instance().initialize();
-
-  uint32_t cores_per_cluster = arch.num_cores() / NUM_CLUSTERS;
 
   // create memory simulator
   memsim_ = MemSim::Create("dram", MemSim::Config{
     MEMORY_BANKS,
-    arch.num_cores()
+    uint32_t(arch.num_clusters()) * arch.num_cores()
   });
 
   // create L3 cache
@@ -27,7 +25,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     XLEN,                   // address bits  
     L3_NUM_BANKS,           // number of banks
     L3_NUM_PORTS,           // number of ports
-    NUM_CLUSTERS,           // request size 
+    uint8_t(arch.num_clusters()), // request size 
     true,                   // write-through
     false,                  // write response
     0,                      // victim size
@@ -41,8 +39,8 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
   memsim_->MemRspPort.bind(&l3cache_->MemRspPort);
 
   // create clusters
-  for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {
-    clusters_.at(i) = Cluster::Create(i, cores_per_cluster, this, arch, dcrs_);
+  for (uint32_t i = 0; i < arch.num_clusters(); ++i) {
+    clusters_.at(i) = Cluster::Create(i, this, arch, dcrs_);
     // connect L3 core ports
     clusters_.at(i)->mem_req_port.bind(&l3cache_->CoreReqPorts.at(i));
     l3cache_->CoreRspPorts.at(i).bind(&clusters_.at(i)->mem_rsp_port);
@@ -73,7 +71,7 @@ void ProcessorImpl::attach_ram(RAM* ram) {
   }
 }
 
-int ProcessorImpl::run() {
+int ProcessorImpl::run(bool riscv_test) {
   SimPlatform::instance().reset();
   this->reset();
   
@@ -85,7 +83,7 @@ int ProcessorImpl::run() {
     for (auto cluster : clusters_) {
       if (cluster->running()) {
         Word ec;   
-        if (cluster->check_exit(&ec, 3)) {
+        if (cluster->check_exit(&ec, riscv_test)) {
           exitcode |= ec;
         } else {
           done = false;
@@ -135,8 +133,8 @@ void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-int Processor::run() {
-  return impl_->run();
+int Processor::run(bool riscv_test) {
+  return impl_->run(riscv_test);
 }
 
 void Processor::write_dcr(uint32_t addr, uint32_t value) {

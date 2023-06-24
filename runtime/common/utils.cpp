@@ -312,10 +312,17 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
 #endif
 #endif
 
-  uint64_t num_cores;
-  ret = vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores);
+  uint64_t num_clusters;
+  ret = vx_dev_caps(device, VX_CAPS_NUM_CLUSTERS, &num_clusters);
   if (ret != 0)
     return ret;
+
+  uint64_t num_cores_per_cluster;
+  ret = vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores_per_cluster);
+  if (ret != 0)
+    return ret;
+
+  auto num_cores = num_clusters * num_cores_per_cluster;
 
   uint64_t mpm_mem_size = 64 * sizeof(uint32_t);
 
@@ -636,10 +643,17 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
 extern int vx_perf_counter(vx_device_h device, int counter, int core_id, uint64_t* value) {
   int ret = 0;
 
-  uint64_t num_cores;
-  ret = vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores);
+  uint64_t num_clusters;
+  ret = vx_dev_caps(device, VX_CAPS_NUM_CLUSTERS, &num_clusters);
   if (ret != 0)
     return ret;
+
+  uint64_t num_cores_per_cluster;
+  ret = vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores_per_cluster);
+  if (ret != 0)
+    return ret;
+
+  auto num_cores = num_clusters * num_cores_per_cluster;
 
   if (core_id >= (int)num_cores) {
     std::cout << "error: core_id out of range" << std::endl;

@@ -222,16 +222,16 @@
 
 // GPGU CSRs
 
-`define CSR_WTID                    12'hCC0
-`define CSR_LTID                    12'hCC1
-`define CSR_GTID                    12'hCC2
-`define CSR_LWID                    12'hCC3
-`define CSR_GWID                    `CSR_MHARTID
-`define CSR_GCID                    12'hCC5
+`define CSR_THREAD_ID               12'hCC0
+`define CSR_WARP_ID                 12'hCC1
+`define CSR_CORE_ID                 12'hCC2
+`define CSR_CLUSTER_ID              12'hCC3
 `define CSR_TMASK                   12'hCC4
-`define CSR_NT                      12'hFC0
-`define CSR_NW                      12'hFC1
-`define CSR_NC                      12'hFC2
+
+`define CSR_NUM_THREADS             12'hFC0
+`define CSR_NUM_WARPS               12'hFC1
+`define CSR_NUM_CORES               12'hFC2
+`define CSR_NUM_CLUSTERS            12'hFC3
 
 // Raster unit CSRs
 

@@ -37,7 +37,8 @@ int _write(int file, char *ptr, int len) {
 int _kill(int pid, int sig) { return -1; }
 
 int _getpid() {
-  return vx_warp_gid();
+  int result;
+    return vx_hart_id();
 }
 
 void __init_tls(void) {  

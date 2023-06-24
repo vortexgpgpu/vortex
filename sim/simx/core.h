@@ -136,7 +136,7 @@ public:
 
   void trigger_ebreak();
 
-  bool check_exit(Word* exitcode, int reg) const;
+  bool check_exit(Word* exitcode, bool riscv_test) const;
 
   uint32_t raster_idx();
 

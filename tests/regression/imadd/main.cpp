@@ -118,10 +118,12 @@ int main(int argc, char *argv[]) {
   std::cout << "workitem size: " << count << std::endl;
   std::cout << "using kernel: " << kernel_file << std::endl;
 
-  uint64_t num_cores, num_warps, num_threads;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
+  uint64_t num_clusters, num_cores_per_cluster, num_warps, num_threads;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CLUSTERS, &num_clusters));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores_per_cluster));  
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps));
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
+  auto num_cores = num_clusters * num_cores_per_cluster;
 
   uint32_t num_tasks  = num_cores * num_warps * num_threads;
   uint32_t num_points = count * num_tasks;

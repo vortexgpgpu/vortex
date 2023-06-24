@@ -89,10 +89,12 @@ module vortex_afu #(
 
     wire [127:0] afu_id = `AFU_ACCEL_UUID;
 
-    wire [63:0] dev_caps = {16'(`NUM_THREADS), 
-                            16'(`NUM_WARPS), 
-                            16'(`NUM_CORES * `NUM_CLUSTERS), 
-                            16'(`IMPLEMENTATION_ID)};
+    wire [63:0] dev_caps = {24'b0,
+                            8'(`NUM_CLUSTERS), 
+                            8'(`NUM_CORES), 
+                            8'(`NUM_WARPS), 
+                            8'(`NUM_THREADS), 
+                            8'(`IMPLEMENTATION_ID)};
 
     wire [63:0] isa_caps = {32'(`MISA_EXT), 2'($clog2(`XLEN)-4), 30'(`MISA_STD)};
 

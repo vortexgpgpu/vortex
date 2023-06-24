@@ -80,10 +80,7 @@ public:
     fpga_handle fpga;
     vortex::MemoryAllocator mem_allocator;    
     DeviceConfig dcrs;
-    unsigned version;
-    unsigned num_cores;
-    unsigned num_warps;
-    unsigned num_threads;
+    uint64_t dev_caps;
     uint64_t isa_caps;
     uint64_t mem_size;
 };
@@ -108,16 +105,19 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
 
     switch (caps_id) {
     case VX_CAPS_VERSION:
-        *value = device->version;
-        break;
-    case VX_CAPS_NUM_CORES:
-        *value = device->num_cores;
-        break;
-    case VX_CAPS_NUM_WARPS:
-        *value = device->num_warps;
+        *value = (device->dev_caps >> 0) & 0xff;
         break;
     case VX_CAPS_NUM_THREADS:
-        *value = device->num_threads;
+        *value = (device->dev_caps >> 8) & 0xff;
+        break;
+    case VX_CAPS_NUM_WARPS:
+        *value = (device->dev_caps >> 16) & 0xff;
+        break;
+    case VX_CAPS_NUM_CORES:
+        *value = (device->dev_caps >> 32) & 0xff;
+        break;
+    case VX_CAPS_NUM_CLUSTERS:
+        *value = (device->dev_caps >> 40) & 0xff;
         break;
     case VX_CAPS_CACHE_LINE_SIZE:
         *value = CACHE_BLOCK_SIZE;
@@ -232,20 +232,11 @@ extern int vx_dev_open(vx_device_h* hdevice) {
         });
 
         // Load device CAPS
-        uint64_t dev_caps;
-        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_DEV_CAPS, &dev_caps), {
+        
+        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_DEV_CAPS, &device->dev_caps), {
             api.fpgaClose(accel_handle);
             return -1;
         });
-
-        device->version     = (dev_caps >> 0)  & 0xffff;
-        device->num_cores   = (dev_caps >> 16) & 0xffff;
-        device->num_warps   = (dev_caps >> 32) & 0xffff;
-        device->num_threads = (dev_caps >> 48) & 0xffff;
-    #ifndef NDEBUG    
-        fprintf(stdout, "[VXDRV] DEVCAPS: version=%d, num_cores=%d, num_warps=%d, num_threads=%d isa=%ld\n", 
-                device->version, device->num_cores, device->num_warps, device->num_threads, device->isa_caps);
-    #endif
     }
     
 #ifdef SCOPE

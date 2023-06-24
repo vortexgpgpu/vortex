@@ -18,25 +18,29 @@ static void show_usage() {
    std::cout << "Usage: [-c <cores>] [-w <warps>] [-t <threads>] [-r: riscv-test] [-s: stats] [-h: help] <program>" << std::endl;
 }
 
-uint32_t num_cores = NUM_CORES * NUM_CLUSTERS;
-uint32_t num_warps = NUM_WARPS;
 uint32_t num_threads = NUM_THREADS;
+uint32_t num_warps = NUM_WARPS;
+uint32_t num_cores = NUM_CORES;
+uint32_t num_clusters = NUM_CLUSTERS;
 bool showStats = false;;
 bool riscv_test = false;
 const char* program = nullptr;
 
 static void parse_args(int argc, char **argv) {
   	int c;
-  	while ((c = getopt(argc, argv, "c:w:t:rsh?")) != -1) {
+  	while ((c = getopt(argc, argv, "t:w:c:g:rsh?")) != -1) {
     	switch (c) {
-		  case 'c':
-        num_cores = atoi(optarg);
+      case 't':
+        num_threads = atoi(optarg);
         break;
       case 'w':
         num_warps = atoi(optarg);
         break;
-      case 't':
-        num_threads = atoi(optarg);
+		  case 'c':
+        num_cores = atoi(optarg);
+        break;
+		  case 'g':
+        num_clusters = atoi(optarg);
         break;
       case 'r':
         riscv_test = true;
@@ -71,7 +75,7 @@ int main(int argc, char **argv) {
 
   {
     // create processor configuation
-    Arch arch(num_cores, num_warps, num_threads);
+    Arch arch(num_threads, num_warps, num_cores, num_clusters);
 
     // create memory module
     RAM ram(RAM_PAGE_SIZE);
@@ -104,22 +108,12 @@ int main(int argc, char **argv) {
     }
 
     // run simulation
-    exitcode = processor.run();
-  } 
+    exitcode = processor.run(riscv_test);
+  }   
 
-  if (riscv_test) {
-    if (1 == exitcode) {
-      std::cout << "Passed." << std::endl;
-      exitcode = 0;
-    } else {
-      std::cout << "Failed." << std::endl;
-      exitcode = 1;
-    }
-  } else {
-    if (exitcode != 0) {
-      std::cout << "*** error: exitcode=" << exitcode << std::endl;
-    }
-  }  
+  if (exitcode != 0) {
+    std::cout << "*** error: exitcode=" << exitcode << std::endl;
+  } 
 
   return exitcode;
 }

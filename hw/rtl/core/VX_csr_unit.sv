@@ -189,11 +189,10 @@ module VX_csr_unit #(
 
     // CSR read
 
-    wire [`NUM_THREADS-1:0][31:0] wtid, ltid, gtid;
+    wire [`NUM_THREADS-1:0][31:0] wtid, gtid;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign wtid[i] = 32'(i);
-        assign ltid[i] = (32'(csr_exe_if.wid) << `NT_BITS) + i;
         assign gtid[i] = 32'((CORE_ID << (`NW_BITS + `NT_BITS)) + (32'(csr_exe_if.wid) << `NT_BITS) + i);
     end  
 
@@ -205,9 +204,8 @@ module VX_csr_unit #(
         end else
     `endif
         case (csr_exe_if.addr)
-        `CSR_WTID : csr_read_data = wtid;
-        `CSR_LTID : csr_read_data = ltid;
-        `CSR_GTID : csr_read_data = gtid;
+        `CSR_THREAD_ID : csr_read_data = wtid;
+        `CSR_MHARTID   : csr_read_data = gtid;
         default : begin
             csr_read_data = {`NUM_THREADS{csr_read_data_ro | csr_read_data_rw}};
             csr_rd_enable = 1;

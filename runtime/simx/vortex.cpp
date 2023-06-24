@@ -74,7 +74,7 @@ private:
 class vx_device {    
 public:
     vx_device() 
-        : arch_(NUM_CORES * NUM_CLUSTERS, NUM_WARPS, NUM_THREADS)
+        : arch_(NUM_THREADS, NUM_WARPS, NUM_CORES, NUM_CLUSTERS)
         , ram_(RAM_PAGE_SIZE)
         , processor_(arch_)
         , mem_allocator_(
@@ -143,7 +143,7 @@ public:
         
         // start new run
         future_ = std::async(std::launch::async, [&]{
-            processor_.run();
+            processor_.run(false);
         });
         
         return 0;
@@ -240,14 +240,17 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
     case VX_CAPS_VERSION:
         *value = IMPLEMENTATION_ID;
         break;
-    case VX_CAPS_NUM_CORES:
-        *value = NUM_CORES * NUM_CLUSTERS;        
+    case VX_CAPS_NUM_THREADS:
+        *value = NUM_THREADS;
         break;
     case VX_CAPS_NUM_WARPS:
         *value = NUM_WARPS;
         break;
-    case VX_CAPS_NUM_THREADS:
-        *value = NUM_THREADS;
+    case VX_CAPS_NUM_CORES:
+        *value = NUM_CORES;
+        break;
+    case VX_CAPS_NUM_CLUSTERS:
+        *value = NUM_CLUSTERS;
         break;
     case VX_CAPS_CACHE_LINE_SIZE:
         *value = CACHE_BLOCK_SIZE;

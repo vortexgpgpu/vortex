@@ -48,8 +48,7 @@ public:
   SimPort<MemRsp> mem_rsp_port;
 
   Cluster(const SimContext& ctx, 
-          uint32_t cluster_id, 
-          uint32_t num_cores, 
+          uint32_t cluster_id,
           ProcessorImpl* processor, 
           const Arch &arch, 
           const DCRS &dcrs);
@@ -64,7 +63,7 @@ public:
 
   bool running() const;
 
-  bool check_exit(Word* exitcode, int reg) const;  
+  bool check_exit(Word* exitcode, bool riscv_test) const;  
 
   void barrier(uint32_t bar_id, uint32_t count, uint32_t core_id);
 

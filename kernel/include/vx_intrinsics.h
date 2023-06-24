@@ -264,74 +264,74 @@ inline void vx_barrier(unsigned barried_id, unsigned num_warps) {
     RISCV_INSN_R_011(RISCV_CUSTOM0, 4, 0, barried_id, num_warps);
 }
 
-// Return active warp's thread id 
+// Return current thread identifier
 inline int vx_thread_id() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_WTID));
-    return result;   
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_THREAD_ID));
+    return result;
 }
 
-// Return active core's local thread id
-inline int vx_thread_lid() {
-    int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_LTID));
-    return result;   
-}
-
-// Return processsor global thread id
-inline int vx_thread_gid() {
-    int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_GTID));
-    return result;   
-}
-
-// Return active core's local warp id
+// Return current warp identifier
 inline int vx_warp_id() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_LWID));
-    return result;   
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_WARP_ID));
+    return result;
 }
 
-// Return processsor's global warp id
-inline int vx_warp_gid() {
-    int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_GWID));
-    return result;   
-}
-
-// Return processsor core id
+// Return current core identifier
 inline int vx_core_id() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_GCID));
-    return result; 
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_CORE_ID));
+    return result;
+}
+
+// Return current cluster identifier
+inline int vx_cluster_id() {
+    int result;
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_CLUSTER_ID));
+    return result;
 }
 
 // Return current threadk mask
 inline int vx_thread_mask() {
     int result;
     asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_TMASK));
-    return result; 
+    return result;
 }
 
-// Return the number of threads in a warp
+// Return the number of threads per warp
 inline int vx_num_threads() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_NT));
-    return result; 
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_NUM_THREADS));
+    return result;
 }
 
-// Return the number of warps in a core
+// Return the number of warps per core
 inline int vx_num_warps() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_NW));
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_NUM_WARPS));
     return result;   
 }
 
-// Return the number of cores in the processsor
+// Return the number of cores per cluster
 inline int vx_num_cores() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_NC));
-    return result;   
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_NUM_CORES));
+    return result;
+}
+
+// Return the number of clusters
+inline int vx_num_clusters() {
+    int result;
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_NUM_CLUSTERS));
+    return result;
+}
+
+// Return the hart identifier (thread id accross the processor)
+inline int vx_hart_id() {
+    int result;
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_MHARTID));
+    return result;
 }
 
 inline void vx_fence() {
