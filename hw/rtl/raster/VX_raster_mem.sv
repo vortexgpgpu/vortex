@@ -42,6 +42,7 @@ module VX_raster_mem #(
     localparam FSM_BITS         = 2;
     localparam FETCH_FLAG_BITS  = 2;
     localparam TAG_WIDTH        = `RASTER_PID_BITS + FETCH_FLAG_BITS;
+    localparam W_ADDR_BITS      = (`RASTER_ADDR_BITS + 6) - 2;
 
     localparam STATE_IDLE       = 2'b00;
     localparam STATE_TILE       = 2'b01;
@@ -57,8 +58,8 @@ module VX_raster_mem #(
     localparam PRIM_DATA_WIDTH = 2 * `RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS + `RASTER_PID_BITS;
 
     // Storage to cycle through all primitives and tiles
-    reg [RCACHE_ADDR_WIDTH-1:0] next_tbuf_addr;
-    reg [RCACHE_ADDR_WIDTH-1:0] curr_pbuf_addr;
+    reg [W_ADDR_BITS-1:0]       next_tbuf_addr;
+    reg [W_ADDR_BITS-1:0]       curr_pbuf_addr;
     reg [`RASTER_PID_BITS-1:0]  curr_pid_reqs;
     reg [`RASTER_PID_BITS-1:0]  curr_pid_rsps;
     reg [`RASTER_TILE_BITS-1:0] curr_num_tiles;
@@ -72,7 +73,7 @@ module VX_raster_mem #(
     // Memory request
     reg mem_req_valid, mem_req_valid_qual;
     reg [NUM_REQS-1:0] mem_req_mask;
-    reg [8:0][RCACHE_ADDR_WIDTH-1:0] mem_req_addr;
+    reg [8:0][W_ADDR_BITS-1:0] mem_req_addr;
     reg [TAG_WIDTH-1:0] mem_req_tag;
     wire mem_req_ready;
     
@@ -83,12 +84,12 @@ module VX_raster_mem #(
     wire mem_rsp_ready;
     
      // Primitive info
-    wire [RCACHE_ADDR_WIDTH-1:0] pids_addr;
+    wire [W_ADDR_BITS-1:0] pids_addr;
     wire prim_id_rsp_valid;
     wire prim_data_rsp_valid;
     wire prim_addr_rsp_valid;
     wire prim_addr_rsp_ready;
-    wire [8:0][RCACHE_ADDR_WIDTH-1:0] prim_mem_addr;
+    wire [8:0][W_ADDR_BITS-1:0] prim_mem_addr;
     wire [`RASTER_PID_BITS-1:0] primitive_id;
 
     // Memory fetch FSM
@@ -115,10 +116,10 @@ module VX_raster_mem #(
 
     // calculate tile start info
     wire [`RASTER_TILE_BITS-1:0] start_tile_count = (dcrs.tile_count + `RASTER_TILE_BITS'(NUM_INSTANCES - 1 - INSTANCE_IDX)) >> LOG2_NUM_INSTANCES;
-    wire [RCACHE_ADDR_WIDTH-1:0] start_tbuf_addr = RCACHE_ADDR_WIDTH'({dcrs.tbuf_addr, 4'b0}) + RCACHE_ADDR_WIDTH'(INSTANCE_IDX * TILE_HEADER_SIZEW);
+    wire [W_ADDR_BITS-1:0] start_tbuf_addr = {dcrs.tbuf_addr, 4'b0} + W_ADDR_BITS'(INSTANCE_IDX * TILE_HEADER_SIZEW);
 
     // calculate address of primitive ids
-    assign pids_addr = (mem_req_addr[1] + 1) + RCACHE_ADDR_WIDTH'(th_pids_offset);
+    assign pids_addr = (mem_req_addr[1] + 1) + W_ADDR_BITS'(th_pids_offset);
     
     // scheduler FSM
     always @(posedge clk) begin
@@ -143,7 +144,7 @@ module VX_raster_mem #(
                 mem_req_mask    <= 9'b11;
                 mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
                 // update tile counters
-                next_tbuf_addr  <= start_tbuf_addr + RCACHE_ADDR_WIDTH'(NUM_INSTANCES * TILE_HEADER_SIZEW);
+                next_tbuf_addr  <= start_tbuf_addr + W_ADDR_BITS'(NUM_INSTANCES * TILE_HEADER_SIZEW);
                 curr_num_tiles  <= start_tile_count;
             end
             STATE_TILE: begin
@@ -204,7 +205,7 @@ module VX_raster_mem #(
                             mem_req_addr[0] <= next_tbuf_addr;
                             mem_req_addr[1] <= next_tbuf_addr + 1;                            
                             mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
-                            next_tbuf_addr  <= next_tbuf_addr + RCACHE_ADDR_WIDTH'(NUM_INSTANCES * TILE_HEADER_SIZEW);
+                            next_tbuf_addr  <= next_tbuf_addr + W_ADDR_BITS'(NUM_INSTANCES * TILE_HEADER_SIZEW);
                         end
                         // update tile counter
                         curr_num_tiles <= curr_num_tiles - `RASTER_TILE_BITS'(1);
@@ -252,8 +253,10 @@ module VX_raster_mem #(
     assign mem_rsp_ready = (~prim_id_rsp_valid || prim_addr_rsp_ready) 
                         && (~prim_data_rsp_valid || buf_in_ready);
 
+    wire [8:0][RCACHE_ADDR_WIDTH-1:0] mem_req_addr_w;
     wire [8:0][RCACHE_WORD_SIZE-1:0] mem_req_byteen;
     for (genvar i = 0; i < 9; ++i) begin
+        assign mem_req_addr_w[i] = RCACHE_ADDR_WIDTH'(mem_req_addr[i]);
         assign mem_req_byteen[i] = {RCACHE_WORD_SIZE{1'b1}};
     end
 
@@ -277,7 +280,7 @@ module VX_raster_mem #(
         .req_rw         (1'b0),
         .req_mask       (mem_req_mask),
         .req_byteen     (mem_req_byteen),
-        .req_addr       (mem_req_addr),
+        .req_addr       (mem_req_addr_w),
         `UNUSED_PIN     (req_data),
         .req_tag        (mem_req_tag),
         `UNUSED_PIN     (req_empty),
@@ -308,12 +311,13 @@ module VX_raster_mem #(
         .mem_rsp_ready  (cache_bus_if.rsp_ready)
     );
 
-    wire [RCACHE_ADDR_WIDTH-1:0] prim_mem_offset;
+    wire [31:0] prim_mem_offset;
+    `UNUSED_VAR (prim_mem_offset)
 
     VX_multiplier #(
         .A_WIDTH (`RASTER_DATA_BITS),
         .B_WIDTH (`RASTER_STRIDE_BITS),
-        .R_WIDTH (RCACHE_ADDR_WIDTH),
+        .R_WIDTH (32),
         .LATENCY (`LATENCY_IMUL)
     ) multiplier (
         .clk    (clk),
@@ -324,8 +328,8 @@ module VX_raster_mem #(
     );
 
     for (genvar i = 0; i < 9; ++i) begin
-        wire [RCACHE_ADDR_WIDTH-1:0] offset = prim_mem_offset + RCACHE_ADDR_WIDTH'(1 * i);
-        assign prim_mem_addr[i] = RCACHE_ADDR_WIDTH'({dcrs.pbuf_addr, 4'b0}) + offset;
+        wire [W_ADDR_BITS-1:0] offset = W_ADDR_BITS'(prim_mem_offset[31:2]) + W_ADDR_BITS'(1 * i);
+        assign prim_mem_addr[i] = {dcrs.pbuf_addr, 4'b0} + offset;
     end
 
     VX_shift_register #(
