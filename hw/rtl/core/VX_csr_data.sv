@@ -110,7 +110,12 @@ module VX_csr_data #(
         read_data_ro_r    = '0;
         read_data_rw_r    = '0;
         read_addr_valid_r = 1;
-        case (read_addr)
+        case (read_addr)            
+            `VX_CSR_MVENDORID  : read_data_ro_r = 32'(`VENDOR_ID);
+            `VX_CSR_MARCHID    : read_data_ro_r = 32'(`ARCHITECTURE_ID);
+            `VX_CSR_MIMPID     : read_data_ro_r = 32'(`IMPLEMENTATION_ID);
+            `VX_CSR_MISA       : read_data_ro_r = ((($clog2(`XLEN)-4) << (`XLEN-2)) | `MISA_STD);
+
         `ifdef EXT_F_ENABLE
             `VX_CSR_FFLAGS     : read_data_rw_r = 32'(fcsr[read_wid][`FP_FLAGS_BITS-1:0]);
             `VX_CSR_FRM        : read_data_rw_r = 32'(fcsr[read_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS]);
@@ -141,11 +146,6 @@ module VX_csr_data #(
             `VX_CSR_MEPC,
             `VX_CSR_PMPCFG0,
             `VX_CSR_PMPADDR0   : read_data_ro_r = 32'(0);
-            
-            `VX_CSR_MVENDORID  : read_data_ro_r = 32'(`VENDOR_ID);
-            `VX_CSR_MARCHID    : read_data_ro_r = 32'(`ARCHITECTURE_ID);
-            `VX_CSR_MIMPID     : read_data_ro_r = 32'(`IMPLEMENTATION_ID);
-            `VX_CSR_MISA       : read_data_ro_r = ((($clog2(`XLEN)-4) << (`XLEN-2)) | `MISA_STD);
 
             default: begin
                 read_addr_valid_r = 0;

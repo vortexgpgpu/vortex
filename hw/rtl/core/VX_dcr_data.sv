@@ -1,7 +1,7 @@
 `include "VX_define.vh"
 `include "VX_gpu_types.vh"
 `ifndef NDEBUG
-`include "VX_trace_info.vh"
+`include "VX_trace.vh"
 `endif
 
 `IGNORE_WARNINGS_BEGIN

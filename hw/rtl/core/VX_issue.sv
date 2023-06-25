@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 `ifndef NDEBUG
-`include "VX_trace_info.vh"
+`include "VX_trace.vh"
 `endif
 
 module VX_issue #(
