@@ -35,7 +35,7 @@ module VX_raster_unit #(
     localparam SLICES_BITS = $clog2(NUM_SLICES+1);
 
     // A primitive data contains (xloc, yloc, pid, edges, extents)
-    localparam PRIM_DATA_WIDTH = 2 * `RASTER_DIM_BITS + `RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS;
+    localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS;
 
     `STATIC_ASSERT(TILE_LOGSIZE > BLOCK_LOGSIZE, ("invalid parameter"))
 
@@ -55,10 +55,10 @@ module VX_raster_unit #(
     ///////////////////////////////////////////////////////////////////////////
 
     // Output from the request
-    wire [`RASTER_DIM_BITS-1:0] mem_xloc;
-    wire [`RASTER_DIM_BITS-1:0] mem_yloc;
+    wire [`VX_RASTER_DIM_BITS-1:0] mem_xloc;
+    wire [`VX_RASTER_DIM_BITS-1:0] mem_yloc;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] mem_edges;
-    wire [`RASTER_PID_BITS-1:0] mem_pid;
+    wire [`VX_RASTER_PID_BITS-1:0] mem_pid;
     
     // Memory unit status
     reg running;
@@ -125,16 +125,16 @@ module VX_raster_unit #(
         .result (edge_eval)
     );
 
-    wire                        slice_arb_valid_in;  
-    wire [`RASTER_DIM_BITS-1:0] slice_arb_xloc;
-    wire [`RASTER_DIM_BITS-1:0] slice_arb_yloc;
-    wire [`RASTER_PID_BITS-1:0] slice_arb_pid;
+    wire                            slice_arb_valid_in;  
+    wire [`VX_RASTER_DIM_BITS-1:0]  slice_arb_xloc;
+    wire [`VX_RASTER_DIM_BITS-1:0]  slice_arb_yloc;
+    wire [`VX_RASTER_PID_BITS-1:0]  slice_arb_pid;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] slice_arb_edges, slice_arb_edges_e;
     wire [2:0][`RASTER_DATA_BITS-1:0] slice_arb_extents;
-    wire                        slice_arb_ready_in;
+    wire                            slice_arb_ready_in;
 
     VX_shift_register #(
-        .DATAW  (1 + 2 * `RASTER_DIM_BITS + `RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS),
+        .DATAW  (1 + 2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS),
         .DEPTH  (EDGE_FUNC_LATENCY),
         .RESETW (1)
     ) edge_func_shift_reg (
@@ -213,9 +213,9 @@ module VX_raster_unit #(
 
     // Generate all slices
     for (genvar i = 0; i < NUM_SLICES; ++i) begin
-        wire [`RASTER_DIM_BITS-1:0] slice_xloc_in;
-        wire [`RASTER_DIM_BITS-1:0] slice_yloc_in;
-        wire [`RASTER_PID_BITS-1:0] slice_pid_in;
+        wire [`VX_RASTER_DIM_BITS-1:0] slice_xloc_in;
+        wire [`VX_RASTER_DIM_BITS-1:0] slice_yloc_in;
+        wire [`VX_RASTER_PID_BITS-1:0] slice_pid_in;
         wire [2:0][2:0][`RASTER_DATA_BITS-1:0] slice_edges_in;
         wire [2:0][`RASTER_DATA_BITS-1:0] slice_extents_in;
         wire slice_ready_in;

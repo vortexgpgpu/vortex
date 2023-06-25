@@ -22,9 +22,9 @@ Warp::Warp(Core *core, uint32_t warp_id)
 }
 
 void Warp::reset() {
-  PC_ = core_->dcrs().base_dcrs.read(DCR_BASE_STARTUP_ADDR0);
+  PC_ = core_->dcrs().base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR0);
   #if (XLEN == 64)
-    PC_ = (uint64_t(core_->dcrs().base_dcrs.read(DCR_BASE_STARTUP_ADDR1)) << 32) | PC_;
+    PC_ = (uint64_t(core_->dcrs().base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR1)) << 32) | PC_;
   #endif
   tmask_.reset();  
   issued_instrs_ = 0;

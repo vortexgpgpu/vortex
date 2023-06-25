@@ -23,8 +23,8 @@ vx_serial:
 #endif
     mv   s4, a0                 # s4 <- callback
     mv   s3, a1                 # s3 <- arg
-    csrr s2, CSR_NUM_THREADS    # s2 <- NT
-    csrr s1, CSR_THREAD_ID      # s1 <- tid    
+    csrr s2, VX_CSR_NUM_THREADS # s2 <- NT
+    csrr s1, VX_CSR_THREAD_ID   # s1 <- tid    
     li	 s0, 0                  # s0 <- index
 label_loop:
     sub	 t0, s0, s1

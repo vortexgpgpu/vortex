@@ -66,7 +66,7 @@ module testbench;
             case (cycles)
             1:  begin
                 dcr_wr_valid <= 1;
-                dcr_wr_addr  <= `DCR_BASE_STARTUP_ADDR0;
+                dcr_wr_addr  <= `VX_DCR_BASE_STARTUP_ADDR0;
                 dcr_wr_data  <= `STARTUP_ADDR;                    
             end
             2: begin

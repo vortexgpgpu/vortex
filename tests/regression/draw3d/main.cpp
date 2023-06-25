@@ -222,32 +222,32 @@ int render(const CGLTrace& trace) {
     uint32_t primbuf_stride = sizeof(graphics::rast_prim_t);
 
     // configure raster units
-    RASTER_DCR_WRITE(DCR_RASTER_TBUF_ADDR,   tilebuf_addr / 64); // block address
-    RASTER_DCR_WRITE(DCR_RASTER_TILE_COUNT,  num_tiles);
-    RASTER_DCR_WRITE(DCR_RASTER_PBUF_ADDR,   primbuf_addr / 64); // block address
-    RASTER_DCR_WRITE(DCR_RASTER_PBUF_STRIDE, primbuf_stride);
-    RASTER_DCR_WRITE(DCR_RASTER_SCISSOR_X, (dst_width << 16) | 0);
-    RASTER_DCR_WRITE(DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0);
+    RASTER_DCR_WRITE(VX_DCR_RASTER_TBUF_ADDR,   tilebuf_addr / 64); // block address
+    RASTER_DCR_WRITE(VX_DCR_RASTER_TILE_COUNT,  num_tiles);
+    RASTER_DCR_WRITE(VX_DCR_RASTER_PBUF_ADDR,   primbuf_addr / 64); // block address
+    RASTER_DCR_WRITE(VX_DCR_RASTER_PBUF_STRIDE, primbuf_stride);
+    RASTER_DCR_WRITE(VX_DCR_RASTER_SCISSOR_X, (dst_width << 16) | 0);
+    RASTER_DCR_WRITE(VX_DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0);
 
     // configure rop color buffer
-    ROP_DCR_WRITE(DCR_ROP_CBUF_ADDR,  cbuf_addr / 64); // block address
-    ROP_DCR_WRITE(DCR_ROP_CBUF_PITCH, cbuf_pitch);
-    ROP_DCR_WRITE(DCR_ROP_CBUF_WRITEMASK, states.color_writemask);
+    ROP_DCR_WRITE(VX_DCR_ROP_CBUF_ADDR,  cbuf_addr / 64); // block address
+    ROP_DCR_WRITE(VX_DCR_ROP_CBUF_PITCH, cbuf_pitch);
+    ROP_DCR_WRITE(VX_DCR_ROP_CBUF_WRITEMASK, states.color_writemask);
 
     if (states.depth_test || states.stencil_test) {
       // configure rop depth buffer
-      ROP_DCR_WRITE(DCR_ROP_ZBUF_ADDR,  zbuf_addr / 64); // block address
-      ROP_DCR_WRITE(DCR_ROP_ZBUF_PITCH, zbuf_pitch);    
+      ROP_DCR_WRITE(VX_DCR_ROP_ZBUF_ADDR,  zbuf_addr / 64); // block address
+      ROP_DCR_WRITE(VX_DCR_ROP_ZBUF_PITCH, zbuf_pitch);    
     }
 
     if (states.depth_test) {    
       // configure rop depth states
       auto depth_func = graphics::toVXCompare(states.depth_func);
-      ROP_DCR_WRITE(DCR_ROP_DEPTH_FUNC, depth_func);
-      ROP_DCR_WRITE(DCR_ROP_DEPTH_WRITEMASK, states.depth_writemask);
+      ROP_DCR_WRITE(VX_DCR_ROP_DEPTH_FUNC, depth_func);
+      ROP_DCR_WRITE(VX_DCR_ROP_DEPTH_WRITEMASK, states.depth_writemask);
     } else {
-      ROP_DCR_WRITE(DCR_ROP_DEPTH_FUNC, ROP_DEPTH_FUNC_ALWAYS);
-      ROP_DCR_WRITE(DCR_ROP_DEPTH_WRITEMASK, 0);
+      ROP_DCR_WRITE(VX_DCR_ROP_DEPTH_FUNC, VX_ROP_DEPTH_FUNC_ALWAYS);
+      ROP_DCR_WRITE(VX_DCR_ROP_DEPTH_WRITEMASK, 0);
     }
 
     if (states.stencil_test) {
@@ -256,40 +256,40 @@ int render(const CGLTrace& trace) {
       auto stencil_zpass = graphics::toVXStencilOp(states.stencil_zpass);
       auto stencil_zfail = graphics::toVXStencilOp(states.stencil_zfail);
       auto stencil_fail  = graphics::toVXStencilOp(states.stencil_fail);
-      ROP_DCR_WRITE(DCR_ROP_STENCIL_FUNC, stencil_func);
-      ROP_DCR_WRITE(DCR_ROP_STENCIL_ZPASS, stencil_zpass);
-      ROP_DCR_WRITE(DCR_ROP_STENCIL_ZPASS, stencil_zfail);
-      ROP_DCR_WRITE(DCR_ROP_STENCIL_FAIL, stencil_fail);
-      ROP_DCR_WRITE(DCR_ROP_STENCIL_REF, states.stencil_ref);
-      ROP_DCR_WRITE(DCR_ROP_STENCIL_MASK, states.stencil_mask);
-      ROP_DCR_WRITE(DCR_ROP_STENCIL_WRITEMASK, states.stencil_writemask);      
+      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_FUNC, stencil_func);
+      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_ZPASS, stencil_zpass);
+      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_ZPASS, stencil_zfail);
+      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_FAIL, stencil_fail);
+      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_REF, states.stencil_ref);
+      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_MASK, states.stencil_mask);
+      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_WRITEMASK, states.stencil_writemask);      
     } else {
-      ROP_DCR_WRITE(DCR_ROP_STENCIL_FUNC, ROP_DEPTH_FUNC_ALWAYS);
-      ROP_DCR_WRITE(DCR_ROP_STENCIL_ZPASS, ROP_STENCIL_OP_KEEP);
-      ROP_DCR_WRITE(DCR_ROP_STENCIL_ZPASS, ROP_STENCIL_OP_KEEP);
-      ROP_DCR_WRITE(DCR_ROP_STENCIL_FAIL, ROP_STENCIL_OP_KEEP);
-      ROP_DCR_WRITE(DCR_ROP_STENCIL_REF, 0);
-      ROP_DCR_WRITE(DCR_ROP_STENCIL_MASK, ROP_STENCIL_MASK);
-      ROP_DCR_WRITE(DCR_ROP_STENCIL_WRITEMASK, 0);
+      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_FUNC, VX_ROP_DEPTH_FUNC_ALWAYS);
+      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_ZPASS, VX_ROP_STENCIL_OP_KEEP);
+      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_ZPASS, VX_ROP_STENCIL_OP_KEEP);
+      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_FAIL, VX_ROP_STENCIL_OP_KEEP);
+      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_REF, 0);
+      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_MASK, VX_ROP_STENCIL_MASK);
+      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_WRITEMASK, 0);
     }
 
     if (states.blend_enabled) {
       // configure rop blend states
       auto blend_src = graphics::toVXBlendFunc(states.blend_src);
       auto blend_dst = graphics::toVXBlendFunc(states.blend_dst);
-      ROP_DCR_WRITE(DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
-                                      | (ROP_BLEND_MODE_ADD << 0));  // SRC
-      ROP_DCR_WRITE(DCR_ROP_BLEND_FUNC, (blend_dst << 24)            // DST_A
-                                      | (blend_dst << 16)            // DST_RGB 
-                                      | (blend_src << 8)             // SRC_A
-                                      | (blend_src << 0));           // SRC_RGB
+      ROP_DCR_WRITE(VX_DCR_ROP_BLEND_MODE, (VX_ROP_BLEND_MODE_ADD << 16)   // DST
+                                         | (VX_ROP_BLEND_MODE_ADD << 0));  // SRC
+      ROP_DCR_WRITE(VX_DCR_ROP_BLEND_FUNC, (blend_dst << 24)            // DST_A
+                                         | (blend_dst << 16)            // DST_RGB 
+                                         | (blend_src << 8)             // SRC_A
+                                         | (blend_src << 0));           // SRC_RGB
     } else {
-      ROP_DCR_WRITE(DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
-                                      | (ROP_BLEND_MODE_ADD << 0));  // SRC
-      ROP_DCR_WRITE(DCR_ROP_BLEND_FUNC, (ROP_BLEND_FUNC_ZERO << 24)  // DST_A
-                                      | (ROP_BLEND_FUNC_ZERO << 16)  // DST_RGB 
-                                      | (ROP_BLEND_FUNC_ONE << 8)    // SRC_A
-                                      | (ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
+      ROP_DCR_WRITE(VX_DCR_ROP_BLEND_MODE, (VX_ROP_BLEND_MODE_ADD << 16)   // DST
+                                         | (VX_ROP_BLEND_MODE_ADD << 0));  // SRC
+      ROP_DCR_WRITE(VX_DCR_ROP_BLEND_FUNC, (VX_ROP_BLEND_FUNC_ZERO << 24)  // DST_A
+                                         | (VX_ROP_BLEND_FUNC_ZERO << 16)  // DST_RGB 
+                                         | (VX_ROP_BLEND_FUNC_ONE << 8)    // SRC_A
+                                         | (VX_ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
     }
     
     if (states.texture_enabled) {
@@ -333,15 +333,15 @@ int render(const CGLTrace& trace) {
       }
 
       // configure texture units
-      TEX_DCR_WRITE(DCR_TEX_STAGE,  0);
-      TEX_DCR_WRITE(DCR_TEX_LOGDIM, (tex_logheight << 16) | tex_logwidth);	
-      TEX_DCR_WRITE(DCR_TEX_FORMAT, tex_format);
-      TEX_DCR_WRITE(DCR_TEX_WRAP,   (tex_wrapV << 16) | tex_wrapU);
-      TEX_DCR_WRITE(DCR_TEX_FILTER, tex_filter ? TEX_FILTER_BILINEAR : TEX_FILTER_POINT);
-      TEX_DCR_WRITE(DCR_TEX_ADDR,   texbuf_addr / 64); // block address
+      TEX_DCR_WRITE(VX_DCR_TEX_STAGE,  0);
+      TEX_DCR_WRITE(VX_DCR_TEX_LOGDIM, (tex_logheight << 16) | tex_logwidth);	
+      TEX_DCR_WRITE(VX_DCR_TEX_FORMAT, tex_format);
+      TEX_DCR_WRITE(VX_DCR_TEX_WRAP,   (tex_wrapV << 16) | tex_wrapU);
+      TEX_DCR_WRITE(VX_DCR_TEX_FILTER, tex_filter ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT);
+      TEX_DCR_WRITE(VX_DCR_TEX_ADDR,   texbuf_addr / 64); // block address
       for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
-        assert(i < TEX_LOD_MAX);
-        TEX_DCR_WRITE(DCR_TEX_MIPOFF(i), mip_offsets.at(i));
+        assert(i < VX_TEX_LOD_MAX);
+        TEX_DCR_WRITE(VX_DCR_TEX_MIPOFF(i), mip_offsets.at(i));
       };
     }   
 
@@ -386,8 +386,8 @@ int render(const CGLTrace& trace) {
 
     uint64_t instrs_;
     uint64_t cycles_;
-    RT_CHECK(vx_perf_counter(device, CSR_MCYCLE, -1, &cycles_));
-    RT_CHECK(vx_perf_counter(device, CSR_MINSTRET, -1, &instrs_));
+    RT_CHECK(vx_perf_counter(device, VX_CSR_MCYCLE, -1, &cycles_));
+    RT_CHECK(vx_perf_counter(device, VX_CSR_MINSTRET, -1, &instrs_));
     cycles += cycles_;
     instrs += instrs_;
   }

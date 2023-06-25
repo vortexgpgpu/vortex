@@ -28,9 +28,9 @@ module VX_raster_mem #(
 
     // Outputs
     output wire                         valid_out,
-    output wire [`RASTER_PID_BITS-1:0]  pid_out,
-    output wire [`RASTER_DIM_BITS-1:0]  xloc_out,
-    output wire [`RASTER_DIM_BITS-1:0]  yloc_out,
+    output wire [`VX_RASTER_PID_BITS-1:0] pid_out,
+    output wire [`VX_RASTER_DIM_BITS-1:0] xloc_out,
+    output wire [`VX_RASTER_DIM_BITS-1:0] yloc_out,
     output wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_out,    
     input wire                          ready_out
 );
@@ -41,7 +41,7 @@ module VX_raster_mem #(
     localparam NUM_REQS         = RASTER_MEM_REQS;
     localparam FSM_BITS         = 2;
     localparam FETCH_FLAG_BITS  = 2;
-    localparam TAG_WIDTH        = `RASTER_PID_BITS + FETCH_FLAG_BITS;
+    localparam TAG_WIDTH        = `VX_RASTER_PID_BITS + FETCH_FLAG_BITS;
     localparam W_ADDR_BITS      = (`RASTER_ADDR_BITS + 6) - 2;
 
     localparam STATE_IDLE       = 2'b00;
@@ -55,16 +55,16 @@ module VX_raster_mem #(
     localparam TILE_HEADER_SIZEW = 8 / 4;
     
     // A primitive data contains (xloc, yloc, pid, edges)
-    localparam PRIM_DATA_WIDTH = 2 * `RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS + `RASTER_PID_BITS;
+    localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS + `VX_RASTER_PID_BITS;
 
     // Storage to cycle through all primitives and tiles
     reg [W_ADDR_BITS-1:0]       next_tbuf_addr;
     reg [W_ADDR_BITS-1:0]       curr_pbuf_addr;
-    reg [`RASTER_PID_BITS-1:0]  curr_pid_reqs;
-    reg [`RASTER_PID_BITS-1:0]  curr_pid_rsps;
+    reg [`VX_RASTER_PID_BITS-1:0] curr_pid_reqs;
+    reg [`VX_RASTER_PID_BITS-1:0] curr_pid_rsps;
     reg [`RASTER_TILE_BITS-1:0] curr_num_tiles;
-    reg [`RASTER_DIM_BITS-1:0]  curr_xloc;
-    reg [`RASTER_DIM_BITS-1:0]  curr_yloc;
+    reg [`VX_RASTER_DIM_BITS-1:0] curr_xloc;
+    reg [`VX_RASTER_DIM_BITS-1:0] curr_yloc;
 
     // Output buffer
     wire buf_in_valid;
@@ -90,7 +90,7 @@ module VX_raster_mem #(
     wire prim_addr_rsp_valid;
     wire prim_addr_rsp_ready;
     wire [8:0][W_ADDR_BITS-1:0] prim_mem_addr;
-    wire [`RASTER_PID_BITS-1:0] primitive_id;
+    wire [`VX_RASTER_PID_BITS-1:0] primitive_id;
 
     // Memory fetch FSM
 
@@ -151,8 +151,8 @@ module VX_raster_mem #(
                 if (mem_rsp_valid) begin
                     // handle tile header response
                     state           <= STATE_PRIM;
-                    curr_xloc       <= `RASTER_DIM_BITS'(th_tile_pos_x << TILE_LOGSIZE);
-                    curr_yloc       <= `RASTER_DIM_BITS'(th_tile_pos_y << TILE_LOGSIZE);                    
+                    curr_xloc       <= `VX_RASTER_DIM_BITS'(th_tile_pos_x << TILE_LOGSIZE);
+                    curr_yloc       <= `VX_RASTER_DIM_BITS'(th_tile_pos_y << TILE_LOGSIZE);                    
                     // fetch next primitive pid
                     mem_req_valid   <= 1;   
                     mem_req_addr[0] <= pids_addr;
@@ -160,8 +160,8 @@ module VX_raster_mem #(
                     mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_PID);
                     // set primitive counters
                     curr_pbuf_addr  <= pids_addr;
-                    curr_pid_reqs   <= `RASTER_PID_BITS'(th_pids_count);
-                    curr_pid_rsps   <= `RASTER_PID_BITS'(th_pids_count);
+                    curr_pid_reqs   <= `VX_RASTER_PID_BITS'(th_pids_count);
+                    curr_pid_rsps   <= `VX_RASTER_PID_BITS'(th_pids_count);
                 end
             end
             STATE_PRIM: begin
@@ -170,7 +170,7 @@ module VX_raster_mem #(
                     if (is_prim_id_req) begin
                         // update pid counters
                         curr_pbuf_addr <= curr_pbuf_addr + 1;
-                        curr_pid_reqs  <= curr_pid_reqs - `RASTER_PID_BITS'(1);
+                        curr_pid_reqs  <= curr_pid_reqs - `VX_RASTER_PID_BITS'(1);
                     end
 
                     if ((curr_pid_reqs > 1) 
@@ -211,7 +211,7 @@ module VX_raster_mem #(
                         curr_num_tiles <= curr_num_tiles - `RASTER_TILE_BITS'(1);
                     end
                     // update pid counter
-                    curr_pid_rsps <= curr_pid_rsps - `RASTER_PID_BITS'(1);
+                    curr_pid_rsps <= curr_pid_rsps - `VX_RASTER_PID_BITS'(1);
                 end
             end
             default:;
@@ -316,7 +316,7 @@ module VX_raster_mem #(
 
     VX_multiplier #(
         .A_WIDTH (`RASTER_DATA_BITS),
-        .B_WIDTH (`RASTER_STRIDE_BITS),
+        .B_WIDTH (`VX_RASTER_STRIDE_BITS),
         .R_WIDTH (32),
         .LATENCY (`LATENCY_IMUL)
     ) multiplier (
@@ -333,14 +333,14 @@ module VX_raster_mem #(
     end
 
     VX_shift_register #(
-        .DATAW  (1 + `RASTER_PID_BITS),
+        .DATAW  (1 + `VX_RASTER_PID_BITS),
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) mul_shift_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (prim_addr_rsp_ready),
-        .data_in  ({prim_id_rsp_valid,   mem_rsp_data[0][`RASTER_PID_BITS-1:0]}),
+        .data_in  ({prim_id_rsp_valid,   mem_rsp_data[0][`VX_RASTER_PID_BITS-1:0]}),
         .data_out ({prim_addr_rsp_valid, primitive_id})
     );   
 
@@ -354,7 +354,7 @@ module VX_raster_mem #(
         .reset      (reset),
         .valid_in   (buf_in_valid),
         .ready_in   (buf_in_ready),
-        .data_in    ({curr_xloc, curr_yloc, mem_rsp_data, mem_rsp_tag[FETCH_FLAG_BITS +: `RASTER_PID_BITS]}),                
+        .data_in    ({curr_xloc, curr_yloc, mem_rsp_data, mem_rsp_tag[FETCH_FLAG_BITS +: `VX_RASTER_PID_BITS]}),                
         .data_out   ({xloc_out,  yloc_out,  edges_out,    pid_out}),
         .valid_out  (valid_out),
         .ready_out  (ready_out)

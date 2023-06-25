@@ -7,7 +7,7 @@
 _start:  
 
   # initialize per-thread registers
-  csrr a0, CSR_NUM_WARPS  # get num warps
+  csrr a0, VX_CSR_NUM_WARPS  # get num warps
   la a1, init_regs
   .insn r 0x0b, 1, 0, x0, a0, a1  # wspawn a0, a1
   jal init_regs
@@ -16,7 +16,7 @@ _start:
   .insn r 0x0b, 0, 0, x0, a0, x0  # tmc a0
   
   # initialize TLS for all warps
-  csrr a0, CSR_NUM_WARPS  # get num warps
+  csrr a0, VX_CSR_NUM_WARPS  # get num warps
   la a1, __init_tls
   .insn r 0x0b, 1, 0, x0, a0, a1  # wspawn a0, a1
   call __init_tls
@@ -82,7 +82,7 @@ init_regs:
 #else
   li sp, STACK_BASE_ADDR # load stack base address
 #endif
-  csrr a0, CSR_MHARTID
+  csrr a0, VX_CSR_MHARTID
   sll  a1, a0, STACK_LOG2_SIZE
   sub  sp, sp, a1
 
@@ -96,7 +96,7 @@ init_regs:
   and     tp, tp, -64
 
   # disable active warps except warp0
-  csrr a0, CSR_WARP_ID
+  csrr a0, VX_CSR_WARP_ID
   beqz a0, RETURN
   li a0, 0
   .insn r 0x0b, 0, 0, x0, a0, x0  # tmc a0

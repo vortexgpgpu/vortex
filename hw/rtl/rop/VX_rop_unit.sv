@@ -19,10 +19,10 @@ module VX_rop_unit #(
     VX_dcr_bus_if.slave     dcr_bus_if,
     VX_rop_bus_if.slave     rop_bus_if
 );
-    localparam UUID_WIDTH = `UP(`UUID_BITS);
-    localparam MEM_TAG_WIDTH = UUID_WIDTH + NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 32 + `ROP_DEPTH_BITS + 1);
-    localparam DS_TAG_WIDTH = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 1 + 1 + 32);
-    localparam BLEND_TAG_WIDTH  = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 1);
+    localparam UUID_WIDTH       = `UP(`UUID_BITS);
+    localparam MEM_TAG_WIDTH    = UUID_WIDTH + NUM_LANES * (`VX_ROP_DIM_BITS + `VX_ROP_DIM_BITS + 32 + `VX_ROP_DEPTH_BITS + 1);
+    localparam DS_TAG_WIDTH     = NUM_LANES * (`VX_ROP_DIM_BITS + `VX_ROP_DIM_BITS + 1 + 1 + 32);
+    localparam BLEND_TAG_WIDTH  = NUM_LANES * (`VX_ROP_DIM_BITS + `VX_ROP_DIM_BITS + 1);
 
     // DCRs
 
@@ -43,11 +43,11 @@ module VX_rop_unit #(
     wire [NUM_LANES-1:0]                    mem_req_ds_mask, mem_req_ds_mask_r;
     wire [NUM_LANES-1:0]                    mem_req_c_mask, mem_req_c_mask_r;
     wire                                    mem_req_rw, mem_req_rw_r;
-    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_req_pos_x, mem_req_pos_x_r;
-    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_req_pos_y, mem_req_pos_y_r;
+    wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] mem_req_pos_x, mem_req_pos_x_r;
+    wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] mem_req_pos_y, mem_req_pos_y_r;
     rgba_t [NUM_LANES-1:0]                  mem_req_color, mem_req_color_r;
-    wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] mem_req_depth, mem_req_depth_r;
-    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] mem_req_stencil, mem_req_stencil_r;
+    wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] mem_req_depth, mem_req_depth_r;
+    wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0] mem_req_stencil, mem_req_stencil_r;
     wire [NUM_LANES-1:0]                    mem_req_face, mem_req_face_r;
     wire [MEM_TAG_WIDTH-1:0]                mem_req_tag, mem_req_tag_r;
     wire                                    mem_req_ready, mem_req_ready_r;
@@ -55,8 +55,8 @@ module VX_rop_unit #(
     wire                                    mem_rsp_valid;
     wire [NUM_LANES-1:0]                    mem_rsp_mask;
     rgba_t [NUM_LANES-1:0]                  mem_rsp_color;
-    wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] mem_rsp_depth;
-    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] mem_rsp_stencil;
+    wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] mem_rsp_depth;
+    wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0] mem_rsp_stencil;
     wire [MEM_TAG_WIDTH-1:0]                mem_rsp_tag;
     wire                                    mem_rsp_ready;
     wire                                    mem_write_notify;
@@ -109,13 +109,13 @@ module VX_rop_unit #(
 
     wire [NUM_LANES-1:0]    ds_face;
 
-    wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]   ds_depth_ref;
-    wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]   ds_depth_val;
-    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] ds_stencil_val;
+    wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0]    ds_depth_ref;
+    wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0]    ds_depth_val;
+    wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0]  ds_stencil_val;
 
-    wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]   ds_depth_out;      
-    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] ds_stencil_out;
-    wire [NUM_LANES-1:0]                        ds_pass_out;
+    wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0]    ds_depth_out;      
+    wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0]  ds_stencil_out;
+    wire [NUM_LANES-1:0]                            ds_pass_out;
 
     `RESET_RELAY (ds_reset, reset);
 
@@ -210,15 +210,15 @@ module VX_rop_unit #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_rsp_pos_x, mem_rsp_pos_y;
+    wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] mem_rsp_pos_x, mem_rsp_pos_y;
     wire [UUID_WIDTH-1:0] mem_rsp_uuid;
     `UNUSED_VAR (mem_rsp_uuid)
 
-    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] ds_write_pos_x, ds_write_pos_y;
+    wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] ds_write_pos_x, ds_write_pos_y;
     wire [NUM_LANES-1:0] ds_write_face, ds_rsp_mask;
     rgba_t [NUM_LANES-1:0] ds_write_color;
 
-    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] blend_write_pos_x, blend_write_pos_y;
+    wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] blend_write_pos_x, blend_write_pos_y;
     wire [NUM_LANES-1:0] blend_rsp_mask;
 
     wire pending_reads_full;
@@ -301,7 +301,7 @@ module VX_rop_unit #(
     wire mem_req_valid_unqual_r;
 
     VX_generic_buffer #(
-        .DATAW	 (1 + NUM_LANES * (1 + 1 + 2 * `ROP_DIM_BITS + $bits(rgba_t) + `ROP_DEPTH_BITS + `ROP_STENCIL_BITS + 1) + MEM_TAG_WIDTH),
+        .DATAW	 (1 + NUM_LANES * (1 + 1 + 2 * `VX_ROP_DIM_BITS + $bits(rgba_t) + `VX_ROP_DEPTH_BITS + `VX_ROP_STENCIL_BITS + 1) + MEM_TAG_WIDTH),
         .OUT_REG (1)
     ) mem_req_buf (
         .clk       (clk),
@@ -392,10 +392,10 @@ module VX_rop_unit_top #(
     input  wire                             rop_req_valid,    
     input  wire [`UP(`UUID_BITS)-1:0]       rop_req_uuid,
     input  wire [NUM_LANES-1:0]             rop_req_mask, 
-    input  wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] rop_req_pos_x,
-    input  wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] rop_req_pos_y,
+    input  wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] rop_req_pos_x,
+    input  wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] rop_req_pos_y,
     input  rgba_t [NUM_LANES-1:0]           rop_req_color,
-    input  wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] rop_req_depth,
+    input  wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] rop_req_depth,
     input  wire [NUM_LANES-1:0]             rop_req_face,
     output wire                             rop_req_ready,
 

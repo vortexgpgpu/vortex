@@ -80,7 +80,7 @@ module VX_tex_agent #(
     wire [`TEX_REQ_TAG_WIDTH-1:0] req_tag = {tex_exe_if.uuid, mdata_waddr};
 
     VX_skid_buffer #(
-        .DATAW   (`NUM_THREADS * (1 + 2 * 32 + `TEX_LOD_BITS) + `TEX_STAGE_BITS + `TEX_REQ_TAG_WIDTH),
+        .DATAW   (`NUM_THREADS * (1 + 2 * 32 + `VX_TEX_LOD_BITS) + `VX_TEX_STAGE_BITS + `TEX_REQ_TAG_WIDTH),
         .OUT_REG (1)
     ) req_sbuf (
         .clk       (clk),

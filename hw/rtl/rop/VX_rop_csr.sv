@@ -25,8 +25,8 @@ module VX_rop_csr #(
             reg_csrs <= '0;
         end else if (rop_csr_if.write_enable) begin
             case (rop_csr_if.write_addr)
-                `CSR_ROP_RT_IDX:;
-                `CSR_ROP_SAMPLE_IDX:;
+                `VX_CSR_ROP_RT_IDX:;
+                `VX_CSR_ROP_SAMPLE_IDX:;
                 default:;
             endcase
         end

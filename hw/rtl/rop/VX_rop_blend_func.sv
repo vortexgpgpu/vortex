@@ -3,7 +3,7 @@
 module VX_blend_func #(
     parameter INDEX = 0
 ) (
-    input wire [`ROP_BLEND_FUNC_BITS-1:0] func, 
+    input wire [`VX_ROP_BLEND_FUNC_BITS-1:0] func, 
     input wire [3:0][7:0]  src, 
     input wire [3:0][7:0]  dst, 
     input wire [3:0][7:0]  cst,
@@ -16,21 +16,21 @@ module VX_blend_func #(
 
     always @(*) begin
         case (func)
-            `ROP_BLEND_FUNC_ZERO:                 result_r = 8'h0;
-            `ROP_BLEND_FUNC_ONE:                  result_r = 8'hFF;
-            `ROP_BLEND_FUNC_SRC_RGB:              result_r = src[INDEX];
-            `ROP_BLEND_FUNC_ONE_MINUS_SRC_RGB:    result_r = 8'hFF - src[INDEX];
-            `ROP_BLEND_FUNC_SRC_A:                result_r = src[3];
-            `ROP_BLEND_FUNC_ONE_MINUS_SRC_A:      result_r = 8'hFF - src[3];
-            `ROP_BLEND_FUNC_DST_RGB:              result_r = dst[INDEX];
-            `ROP_BLEND_FUNC_ONE_MINUS_DST_RGB:    result_r = 8'hFF - dst[INDEX];
-            `ROP_BLEND_FUNC_DST_A:                result_r = dst[3];
-            `ROP_BLEND_FUNC_ONE_MINUS_DST_A:      result_r = one_minus_dst_a;
-            `ROP_BLEND_FUNC_CONST_RGB:            result_r = cst[INDEX];
-            `ROP_BLEND_FUNC_ONE_MINUS_CONST_RGB:  result_r = 8'hFF - cst[INDEX];
-            `ROP_BLEND_FUNC_CONST_A:              result_r = cst[3];
-            `ROP_BLEND_FUNC_ONE_MINUS_CONST_A:    result_r = 8'hFF - cst[3];
-            `ROP_BLEND_FUNC_ALPHA_SAT: begin
+            `VX_ROP_BLEND_FUNC_ZERO:                 result_r = 8'h0;
+            `VX_ROP_BLEND_FUNC_ONE:                  result_r = 8'hFF;
+            `VX_ROP_BLEND_FUNC_SRC_RGB:              result_r = src[INDEX];
+            `VX_ROP_BLEND_FUNC_ONE_MINUS_SRC_RGB:    result_r = 8'hFF - src[INDEX];
+            `VX_ROP_BLEND_FUNC_SRC_A:                result_r = src[3];
+            `VX_ROP_BLEND_FUNC_ONE_MINUS_SRC_A:      result_r = 8'hFF - src[3];
+            `VX_ROP_BLEND_FUNC_DST_RGB:              result_r = dst[INDEX];
+            `VX_ROP_BLEND_FUNC_ONE_MINUS_DST_RGB:    result_r = 8'hFF - dst[INDEX];
+            `VX_ROP_BLEND_FUNC_DST_A:                result_r = dst[3];
+            `VX_ROP_BLEND_FUNC_ONE_MINUS_DST_A:      result_r = one_minus_dst_a;
+            `VX_ROP_BLEND_FUNC_CONST_RGB:            result_r = cst[INDEX];
+            `VX_ROP_BLEND_FUNC_ONE_MINUS_CONST_RGB:  result_r = 8'hFF - cst[INDEX];
+            `VX_ROP_BLEND_FUNC_CONST_A:              result_r = cst[3];
+            `VX_ROP_BLEND_FUNC_ONE_MINUS_CONST_A:    result_r = 8'hFF - cst[3];
+            `VX_ROP_BLEND_FUNC_ALPHA_SAT: begin
                 if (INDEX < 3) begin
                     result_r = (src[3] < one_minus_dst_a) ? src[3] : one_minus_dst_a;
                 end else begin
@@ -48,8 +48,8 @@ endmodule
 module VX_rop_blend_func #(
     //--
 ) (
-    input wire [`ROP_BLEND_FUNC_BITS-1:0] func_rgb,
-    input wire [`ROP_BLEND_FUNC_BITS-1:0] func_a,
+    input wire [`VX_ROP_BLEND_FUNC_BITS-1:0] func_rgb,
+    input wire [`VX_ROP_BLEND_FUNC_BITS-1:0] func_a,
 
     input rgba_t src_color,
     input rgba_t dst_color,

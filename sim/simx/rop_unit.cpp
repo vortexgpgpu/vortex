@@ -18,15 +18,15 @@ public:
     depthStencil_.configure(dcrs);
     blender_.configure(dcrs);
 
-    zbuf_baseaddr_ = uint64_t(dcrs.read(DCR_ROP_ZBUF_ADDR)) << 6;
-    zbuf_pitch_    = dcrs.read(DCR_ROP_ZBUF_PITCH);
-    depth_writemask_ = dcrs.read(DCR_ROP_DEPTH_WRITEMASK) & 0x1;
-    stencil_front_writemask_ = dcrs.read(DCR_ROP_STENCIL_WRITEMASK) & 0xffff;
-    stencil_back_writemask_ = dcrs.read(DCR_ROP_STENCIL_WRITEMASK) >> 16;
+    zbuf_baseaddr_ = uint64_t(dcrs.read(VX_DCR_ROP_ZBUF_ADDR)) << 6;
+    zbuf_pitch_    = dcrs.read(VX_DCR_ROP_ZBUF_PITCH);
+    depth_writemask_ = dcrs.read(VX_DCR_ROP_DEPTH_WRITEMASK) & 0x1;
+    stencil_front_writemask_ = dcrs.read(VX_DCR_ROP_STENCIL_WRITEMASK) & 0xffff;
+    stencil_back_writemask_ = dcrs.read(VX_DCR_ROP_STENCIL_WRITEMASK) >> 16;
 
-    cbuf_baseaddr_ = uint64_t(dcrs.read(DCR_ROP_CBUF_ADDR)) << 6;
-    cbuf_pitch_    = dcrs.read(DCR_ROP_CBUF_PITCH);
-    auto cbuf_writemask = dcrs.read(DCR_ROP_CBUF_WRITEMASK) & 0xf;
+    cbuf_baseaddr_ = uint64_t(dcrs.read(VX_DCR_ROP_CBUF_ADDR)) << 6;
+    cbuf_pitch_    = dcrs.read(VX_DCR_ROP_CBUF_PITCH);
+    auto cbuf_writemask = dcrs.read(VX_DCR_ROP_CBUF_WRITEMASK) & 0xf;
     cbuf_writemask_ = (((cbuf_writemask >> 0) & 0x1) * 0x000000ff) 
                     | (((cbuf_writemask >> 1) & 0x1) * 0x0000ff00) 
                     | (((cbuf_writemask >> 2) & 0x1) * 0x00ff0000) 
@@ -103,8 +103,8 @@ private:
              uint32_t color, 
              RopUnit::TraceData::Ptr trace_data) {
     auto stencil_writemask = is_backface ? stencil_back_writemask_ : stencil_front_writemask_;
-    auto ds_writeMask = ((depth_enable && ds_passed && depth_writemask_) ? ROP_DEPTH_MASK : 0) 
-                      | (stencil_enable ? (stencil_writemask << ROP_DEPTH_BITS) : 0);
+    auto ds_writeMask = ((depth_enable && ds_passed && depth_writemask_) ? VX_ROP_DEPTH_MASK : 0) 
+                      | (stencil_enable ? (stencil_writemask << VX_ROP_DEPTH_BITS) : 0);
     if (ds_writeMask != 0) {      
       uint32_t write_value = (dst_depthstencil & ~ds_writeMask) | (depthstencil & ds_writeMask);
       uint64_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;        

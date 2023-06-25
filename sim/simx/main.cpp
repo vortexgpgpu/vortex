@@ -88,11 +88,11 @@ int main(int argc, char **argv) {
 
 	  // setup base DCRs
     const uint64_t startup_addr(STARTUP_ADDR);
-    processor.write_dcr(DCR_BASE_STARTUP_ADDR0, startup_addr & 0xffffffff);
+    processor.write_dcr(VX_DCR_BASE_STARTUP_ADDR0, startup_addr & 0xffffffff);
   #if (XLEN == 64)
-    processor.write_dcr(DCR_BASE_STARTUP_ADDR1, startup_addr >> 32);
+    processor.write_dcr(VX_DCR_BASE_STARTUP_ADDR1, startup_addr >> 32);
   #endif
-	  processor.write_dcr(DCR_BASE_MPM_CLASS, 0);
+	  processor.write_dcr(VX_DCR_BASE_MPM_CLASS, 0);
 
     // load program
     {      

@@ -8,9 +8,9 @@ module VX_raster_edge #(
     input wire clk,
     input wire reset,
 
-    input wire                        enable,
-    input wire [`RASTER_DIM_BITS-1:0] xloc,
-    input wire [`RASTER_DIM_BITS-1:0] yloc,
+    input wire enable,
+    input wire [`VX_RASTER_DIM_BITS-1:0] xloc,
+    input wire [`VX_RASTER_DIM_BITS-1:0] yloc,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges,
 
     output wire [2:0][`RASTER_DATA_BITS-1:0] result
@@ -30,7 +30,7 @@ module VX_raster_edge #(
     for (genvar i = 0; i < 3; ++i) begin
         VX_multiplier #(
             .A_WIDTH (`RASTER_DATA_BITS),
-            .B_WIDTH (`RASTER_DIM_BITS),
+            .B_WIDTH (`VX_RASTER_DIM_BITS),
             .R_WIDTH (PROD_WIDTH),
             .SIGNED  (1),
             .LATENCY (`LATENCY_IMUL)
@@ -44,7 +44,7 @@ module VX_raster_edge #(
 
         VX_multiplier #(
             .A_WIDTH (`RASTER_DATA_BITS),
-            .B_WIDTH (`RASTER_DIM_BITS),
+            .B_WIDTH (`VX_RASTER_DIM_BITS),
             .R_WIDTH (PROD_WIDTH),
             .SIGNED  (1),
             .LATENCY (`LATENCY_IMUL)

@@ -12,12 +12,12 @@ import VX_tex_types::*;
 
 `define TRACE_TEX_DCR(level, addr) \
     case (addr) \
-        `DCR_TEX_ADDR:      `TRACE(level, ("ADDR")); \
-        `DCR_TEX_LOGDIM:    `TRACE(level, ("LOGDIM")); \
-        `DCR_TEX_FORMAT:    `TRACE(level, ("FORMAT")); \
-        `DCR_TEX_FILTER:    `TRACE(level, ("FILTER")); \
-        `DCR_TEX_WRAP:      `TRACE(level, ("WRAP")); \
-        //`DCR_TEX_MIPOFF \
+        `VX_DCR_TEX_ADDR:   `TRACE(level, ("ADDR")); \
+        `VX_DCR_TEX_LOGDIM: `TRACE(level, ("LOGDIM")); \
+        `VX_DCR_TEX_FORMAT: `TRACE(level, ("FORMAT")); \
+        `VX_DCR_TEX_FILTER: `TRACE(level, ("FILTER")); \
+        `VX_DCR_TEX_WRAP:   `TRACE(level, ("WRAP")); \
+        //`VX_DCR_TEX_MIPOFF \
         default:            `TRACE(level, ("MIPOFF")); \
     endcase
 
@@ -27,8 +27,8 @@ import VX_tex_types::*;
     endcase
 
 `define PERF_TEX_ADD(dst, src, count) \
-    `REDUCE_ADD (dst, src, mem_reads, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, mem_reads,   `PERF_CTR_BITS, count); \
     `REDUCE_ADD (dst, src, mem_latency, `PERF_CTR_BITS, count); \
-    `REDUCE_ADD (dst, src, stall_cycles, `PERF_CTR_BITS, count)
+    `REDUCE_ADD (dst, src, stall_cycles,`PERF_CTR_BITS, count)
 
 `endif // VX_TEX_DEFINE_VH

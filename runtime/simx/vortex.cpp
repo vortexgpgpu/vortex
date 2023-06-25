@@ -259,8 +259,8 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         *value = LOCAL_MEM_SIZE;
         break;
     case VX_CAPS_KERNEL_BASE_ADDR:
-        *value = (uint64_t(device->read_dcr(DCR_BASE_STARTUP_ADDR1)) << 32) | 
-                device->read_dcr(DCR_BASE_STARTUP_ADDR0);
+        *value = (uint64_t(device->read_dcr(VX_DCR_BASE_STARTUP_ADDR1)) << 32) | 
+                device->read_dcr(VX_DCR_BASE_STARTUP_ADDR0);
         break;    
     case VX_CAPS_ISA_FLAGS:
         *value = ((uint64_t(MISA_EXT))<<32) | ((log2floor(XLEN)-4) << 30) | MISA_STD;

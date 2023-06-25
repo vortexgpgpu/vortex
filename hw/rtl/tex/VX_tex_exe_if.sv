@@ -10,8 +10,8 @@ interface VX_tex_exe_if ();
     wire [`NR_BITS-1:0]                 rd;
 
     wire [1:0][`NUM_THREADS-1:0][31:0]  coords;
-    wire [`NUM_THREADS-1:0][`TEX_LOD_BITS-1:0] lod;
-    wire [`TEX_STAGE_BITS-1:0]          stage;
+    wire [`NUM_THREADS-1:0][`VX_TEX_LOD_BITS-1:0] lod;
+    wire [`VX_TEX_STAGE_BITS-1:0]       stage;
     
     wire                                ready;
 

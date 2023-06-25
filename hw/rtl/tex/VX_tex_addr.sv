@@ -13,14 +13,14 @@ module VX_tex_addr #(
 
     input wire                          req_valid,    
     input wire [NUM_LANES-1:0]          req_mask,
-    input wire [1:0][NUM_LANES-1:0][`TEX_FXD_BITS-1:0] req_coords,    
+    input wire [1:0][NUM_LANES-1:0][`VX_TEX_FXD_BITS-1:0] req_coords,    
     input wire [`TEX_FORMAT_BITS-1:0]   req_format,
     input wire [`TEX_FILTER_BITS-1:0]   req_filter,
     input wire [1:0][`TEX_WRAP_BITS-1:0] req_wraps,
     input wire [`TEX_ADDR_BITS-1:0]     req_baseaddr,
-    input wire [NUM_LANES-1:0][`TEX_LOD_BITS-1:0] req_miplevel,
+    input wire [NUM_LANES-1:0][`VX_TEX_LOD_BITS-1:0] req_miplevel,
     input wire [NUM_LANES-1:0][`TEX_MIPOFF_BITS-1:0] req_mipoff,    
-    input wire [1:0][`TEX_LOD_BITS-1:0] req_logdims,
+    input wire [1:0][`VX_TEX_LOD_BITS-1:0] req_logdims,
     input wire [REQ_INFOW-1:0]          req_info,    
     output wire                         req_ready,
 
@@ -38,19 +38,19 @@ module VX_tex_addr #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    localparam SHIFT_BITS = $clog2(`TEX_FXD_FRAC+1);
-    localparam PITCH_BITS = `MAX(`TEX_LOD_BITS, `TEX_LGSTRIDE_BITS) + 1;
-    localparam SCALED_DIM = `TEX_FXD_FRAC + `TEX_DIM_BITS;
-    localparam SCALED_X_W = `TEX_DIM_BITS + `TEX_BLEND_FRAC;
-    localparam OFFSET_U_W = `TEX_DIM_BITS + `TEX_LGSTRIDE_MAX;
-    localparam OFFSET_V_W = `TEX_DIM_BITS + `TEX_DIM_BITS + `TEX_LGSTRIDE_MAX;
+    localparam SHIFT_BITS = $clog2(`VX_TEX_FXD_FRAC+1);
+    localparam PITCH_BITS = `MAX(`VX_TEX_LOD_BITS, `TEX_LGSTRIDE_BITS) + 1;
+    localparam SCALED_DIM = `VX_TEX_FXD_FRAC + `VX_TEX_DIM_BITS;
+    localparam SCALED_X_W = `VX_TEX_DIM_BITS + `TEX_BLEND_FRAC;
+    localparam OFFSET_U_W = `VX_TEX_DIM_BITS + `TEX_LGSTRIDE_MAX;
+    localparam OFFSET_V_W = `VX_TEX_DIM_BITS + `VX_TEX_DIM_BITS + `TEX_LGSTRIDE_MAX;
 
     wire                valid_s0;   
     wire [NUM_LANES-1:0] mask_s0; 
     wire [`TEX_FILTER_BITS-1:0] filter_s0;
     wire [REQ_INFOW-1:0] req_info_s0;
-    wire [NUM_LANES-1:0][1:0][`TEX_FXD_FRAC-1:0] clamped_lo, clamped_lo_s0;
-    wire [NUM_LANES-1:0][1:0][`TEX_FXD_FRAC-1:0] clamped_hi, clamped_hi_s0;
+    wire [NUM_LANES-1:0][1:0][`VX_TEX_FXD_FRAC-1:0] clamped_lo, clamped_lo_s0;
+    wire [NUM_LANES-1:0][1:0][`VX_TEX_FXD_FRAC-1:0] clamped_hi, clamped_hi_s0;
     wire [NUM_LANES-1:0][1:0][SHIFT_BITS-1:0] dim_shift, dim_shift_s0;
     wire [`TEX_LGSTRIDE_BITS-1:0] log_stride, log_stride_s0;
     wire [NUM_LANES-1:0][W_ADDR_BITS-1:0] mip_addr, mip_addr_s0;
@@ -69,9 +69,9 @@ module VX_tex_addr #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
-            wire [`TEX_FXD_FRAC-1:0] delta = `TEX_FXD_FRAC'((SCALED_DIM'(`TEX_FXD_HALF) << req_miplevel[i]) >> req_logdims[j]);
-            wire [`TEX_FXD_BITS-1:0] coord_lo = req_filter ? (req_coords[j][i] - `TEX_FXD_BITS'(delta)) : req_coords[j][i];
-            wire [`TEX_FXD_BITS-1:0] coord_hi = req_filter ? (req_coords[j][i] + `TEX_FXD_BITS'(delta)) : req_coords[j][i];
+            wire [`VX_TEX_FXD_FRAC-1:0] delta = `VX_TEX_FXD_FRAC'((SCALED_DIM'(`TEX_FXD_HALF) << req_miplevel[i]) >> req_logdims[j]);
+            wire [`VX_TEX_FXD_BITS-1:0] coord_lo = req_filter ? (req_coords[j][i] - `VX_TEX_FXD_BITS'(delta)) : req_coords[j][i];
+            wire [`VX_TEX_FXD_BITS-1:0] coord_hi = req_filter ? (req_coords[j][i] + `VX_TEX_FXD_BITS'(delta)) : req_coords[j][i];
 
             VX_tex_wrap tex_wrap_lo (
                 .wrap_i  (req_wraps[j]),
@@ -85,7 +85,7 @@ module VX_tex_addr #(
                 .coord_o (clamped_hi[i][j])
             );
 
-            assign dim_shift[i][j] = SHIFT_BITS'(`TEX_FXD_FRAC - `TEX_BLEND_FRAC) - (req_logdims[j] - req_miplevel[i]);
+            assign dim_shift[i][j] = SHIFT_BITS'(`VX_TEX_FXD_FRAC - `TEX_BLEND_FRAC) - (req_logdims[j] - req_miplevel[i]);
         end
     end
 
@@ -95,7 +95,7 @@ module VX_tex_addr #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + REQ_INFOW + NUM_LANES * (PITCH_BITS + 2 * SHIFT_BITS + W_ADDR_BITS + 2 * 2 * `TEX_FXD_FRAC)),
+        .DATAW  (1 + NUM_LANES + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + REQ_INFOW + NUM_LANES * (PITCH_BITS + 2 * SHIFT_BITS + W_ADDR_BITS + 2 * 2 * `VX_TEX_FXD_FRAC)),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -125,10 +125,10 @@ module VX_tex_addr #(
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign offset_u_lo[i] = OFFSET_U_W'(scaled_lo[i][0][`TEX_BLEND_FRAC +: `TEX_DIM_BITS]) << log_stride_s0;
-        assign offset_u_hi[i] = OFFSET_U_W'(scaled_hi[i][0][`TEX_BLEND_FRAC +: `TEX_DIM_BITS]) << log_stride_s0;        
-        assign offset_v_lo[i] = OFFSET_V_W'(scaled_lo[i][1][`TEX_BLEND_FRAC +: `TEX_DIM_BITS]) << log_pitch_s0[i];
-        assign offset_v_hi[i] = OFFSET_V_W'(scaled_hi[i][1][`TEX_BLEND_FRAC +: `TEX_DIM_BITS]) << log_pitch_s0[i];
+        assign offset_u_lo[i] = OFFSET_U_W'(scaled_lo[i][0][`TEX_BLEND_FRAC +: `VX_TEX_DIM_BITS]) << log_stride_s0;
+        assign offset_u_hi[i] = OFFSET_U_W'(scaled_hi[i][0][`TEX_BLEND_FRAC +: `VX_TEX_DIM_BITS]) << log_stride_s0;        
+        assign offset_v_lo[i] = OFFSET_V_W'(scaled_lo[i][1][`TEX_BLEND_FRAC +: `VX_TEX_DIM_BITS]) << log_pitch_s0[i];
+        assign offset_v_hi[i] = OFFSET_V_W'(scaled_hi[i][1][`TEX_BLEND_FRAC +: `VX_TEX_DIM_BITS]) << log_pitch_s0[i];
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin

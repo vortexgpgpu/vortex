@@ -158,12 +158,12 @@ module VX_gpu_unit #(
     assign tex_exe_if.tmask = gpu_exe_if.tmask;
     assign tex_exe_if.PC    = gpu_exe_if.PC;
     assign tex_exe_if.rd    = gpu_exe_if.rd;
-    assign tex_exe_if.stage = gpu_exe_if.op_mod[`TEX_STAGE_BITS-1:0];
+    assign tex_exe_if.stage = gpu_exe_if.op_mod[`VX_TEX_STAGE_BITS-1:0];
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign tex_exe_if.coords[0][i] = gpu_exe_if.rs1_data[i][31:0];
         assign tex_exe_if.coords[1][i] = gpu_exe_if.rs2_data[i][31:0];
-        assign tex_exe_if.lod[i]       = gpu_exe_if.rs3_data[i][0 +: `TEX_LOD_BITS];        
+        assign tex_exe_if.lod[i]       = gpu_exe_if.rs3_data[i][0 +: `VX_TEX_LOD_BITS];        
     end
 
     `RESET_RELAY (tex_reset, reset);
@@ -229,10 +229,10 @@ module VX_gpu_unit #(
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign rop_exe_if.face[i]  = gpu_exe_if.rs1_data[i][0];
-        assign rop_exe_if.pos_x[i] = gpu_exe_if.rs1_data[i][1 +: `ROP_DIM_BITS];
-        assign rop_exe_if.pos_y[i] = gpu_exe_if.rs1_data[i][16 +: `ROP_DIM_BITS];
+        assign rop_exe_if.pos_x[i] = gpu_exe_if.rs1_data[i][1 +: `VX_ROP_DIM_BITS];
+        assign rop_exe_if.pos_y[i] = gpu_exe_if.rs1_data[i][16 +: `VX_ROP_DIM_BITS];
         assign rop_exe_if.color[i] = gpu_exe_if.rs2_data[i][31:0];
-        assign rop_exe_if.depth[i] = gpu_exe_if.rs3_data[i][`ROP_DEPTH_BITS-1:0];
+        assign rop_exe_if.depth[i] = gpu_exe_if.rs3_data[i][`VX_ROP_DEPTH_BITS-1:0];
     end
 
     `RESET_RELAY (rop_reset, reset);

@@ -145,24 +145,24 @@ module VX_rop_blend #(
         always @(*) begin
             // RGB Component
             case (dcrs.blend_mode_rgb)
-                `ROP_BLEND_MODE_ADD, 
-                `ROP_BLEND_MODE_SUB, 
-                `ROP_BLEND_MODE_REV_SUB: begin
+                `VX_ROP_BLEND_MODE_ADD, 
+                `VX_ROP_BLEND_MODE_SUB, 
+                `VX_ROP_BLEND_MODE_REV_SUB: begin
                     color_out_s2[i].r = mult_add_color_s2[i].r;
                     color_out_s2[i].g = mult_add_color_s2[i].g;
                     color_out_s2[i].b = mult_add_color_s2[i].b;
                     end
-                `ROP_BLEND_MODE_MIN: begin
+                `VX_ROP_BLEND_MODE_MIN: begin
                     color_out_s2[i].r = min_color_s2[i].r;
                     color_out_s2[i].g = min_color_s2[i].g;
                     color_out_s2[i].b = min_color_s2[i].b;
                     end
-                `ROP_BLEND_MODE_MAX: begin
+                `VX_ROP_BLEND_MODE_MAX: begin
                     color_out_s2[i].r = max_color_s2[i].r;
                     color_out_s2[i].g = max_color_s2[i].g;
                     color_out_s2[i].b = max_color_s2[i].b;
                     end
-                `ROP_BLEND_MODE_LOGICOP: begin
+                `VX_ROP_BLEND_MODE_LOGICOP: begin
                     color_out_s2[i].r = logic_op_color_s2[i].r;
                     color_out_s2[i].g = logic_op_color_s2[i].g;
                     color_out_s2[i].b = logic_op_color_s2[i].b;
@@ -175,18 +175,18 @@ module VX_rop_blend #(
             endcase
             // Alpha Component
             case (dcrs.blend_mode_a)
-                `ROP_BLEND_MODE_ADD, 
-                `ROP_BLEND_MODE_SUB, 
-                `ROP_BLEND_MODE_REV_SUB: begin
+                `VX_ROP_BLEND_MODE_ADD, 
+                `VX_ROP_BLEND_MODE_SUB, 
+                `VX_ROP_BLEND_MODE_REV_SUB: begin
                     color_out_s2[i].a = mult_add_color_s2[i].a;
                     end
-                `ROP_BLEND_MODE_MIN: begin
+                `VX_ROP_BLEND_MODE_MIN: begin
                     color_out_s2[i].a = min_color_s2[i].a;
                     end
-                `ROP_BLEND_MODE_MAX: begin
+                `VX_ROP_BLEND_MODE_MAX: begin
                     color_out_s2[i].a = max_color_s2[i].a;
                     end
-                `ROP_BLEND_MODE_LOGICOP: begin
+                `VX_ROP_BLEND_MODE_LOGICOP: begin
                     color_out_s2[i].a = logic_op_color_s2[i].a;
                     end
                 default: begin

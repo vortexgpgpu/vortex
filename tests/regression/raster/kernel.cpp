@@ -16,10 +16,10 @@ using namespace graphics;
 	}
 
 #define OUTPUT(color) \
-	auto __DIVERGENT__ pos_mask = csr_read(CSR_RASTER_POS_MASK);  \
+	auto __DIVERGENT__ pos_mask = csr_read(VX_CSR_RASTER_POS_MASK);  \
 	auto mask = (pos_mask >> 0) & 0xf;                            \
-	auto x    = (pos_mask >> 4) & ((1 << (RASTER_DIM_BITS-1))-1); \
-	auto y    = (pos_mask >> (4 + (RASTER_DIM_BITS-1))) & ((1 << (RASTER_DIM_BITS-1))-1); \
+	auto x    = (pos_mask >> 4) & ((1 << (VX_RASTER_DIM_BITS-1))-1); \
+	auto y    = (pos_mask >> (4 + (VX_RASTER_DIM_BITS-1))) & ((1 << (VX_RASTER_DIM_BITS-1))-1); \
 	OUTPUT_i(0, mask, x, y, color) \
 	OUTPUT_i(1, mask, x, y, color) \
 	OUTPUT_i(2, mask, x, y, color) \

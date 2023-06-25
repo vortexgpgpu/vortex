@@ -27,10 +27,6 @@
 
 `define NR_BITS         `CLOG2(`NUM_REGS)
 
-`define CSR_ADDR_BITS   12
-
-`define DCR_ADDR_BITS   12
-
 `define PERF_CTR_BITS   44
 
 `ifndef NDEBUG
@@ -310,7 +306,7 @@
 `define VX_MEM_DATA_WIDTH       (`L3_LINE_SIZE * 8)
 `define VX_MEM_TAG_WIDTH        L3_MEM_TAG_WIDTH
 
-`define VX_DCR_ADDR_WIDTH       `DCR_ADDR_BITS
+`define VX_DCR_ADDR_WIDTH       `VX_DCR_ADDR_BITS
 `define VX_DCR_DATA_WIDTH       32
 
 `define TO_FULL_ADDR(x)         {x, (`XLEN-$bits(x))'(0)}

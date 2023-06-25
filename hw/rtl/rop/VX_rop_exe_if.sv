@@ -9,11 +9,11 @@ interface VX_rop_exe_if ();
     wire [`NUM_THREADS-1:0]                     tmask;    
     wire [`XLEN-1:0]                            PC;
 
-    wire [`NUM_THREADS-1:0][`ROP_DIM_BITS-1:0]  pos_x;
-    wire [`NUM_THREADS-1:0][`ROP_DIM_BITS-1:0]  pos_y;
+    wire [`NUM_THREADS-1:0][`VX_ROP_DIM_BITS-1:0] pos_x;
+    wire [`NUM_THREADS-1:0][`VX_ROP_DIM_BITS-1:0] pos_y;
     wire [`NUM_THREADS-1:0]                     face;
     wire [`NUM_THREADS-1:0][31:0]               color;
-    wire [`NUM_THREADS-1:0][`ROP_DEPTH_BITS-1:0] depth;
+    wire [`NUM_THREADS-1:0][`VX_ROP_DEPTH_BITS-1:0] depth;
     
     wire                                        ready;
 

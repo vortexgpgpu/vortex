@@ -19,13 +19,13 @@ module VX_raster_be #(
     raster_dcrs_t dcrs,
 
     input wire                          valid_in, 
-    input wire [`RASTER_DIM_BITS-1:0]   xloc_in,
-    input wire [`RASTER_DIM_BITS-1:0]   yloc_in,
-    input wire [`RASTER_DIM_BITS-1:0]   xmin_in,
-    input wire [`RASTER_DIM_BITS-1:0]   xmax_in,
-    input wire [`RASTER_DIM_BITS-1:0]   ymin_in,   
-    input wire [`RASTER_DIM_BITS-1:0]   ymax_in,
-    input wire [`RASTER_PID_BITS-1:0]   pid_in,
+    input wire [`VX_RASTER_DIM_BITS-1:0] xloc_in,
+    input wire [`VX_RASTER_DIM_BITS-1:0] yloc_in,
+    input wire [`VX_RASTER_DIM_BITS-1:0] xmin_in,
+    input wire [`VX_RASTER_DIM_BITS-1:0] xmax_in,
+    input wire [`VX_RASTER_DIM_BITS-1:0] ymin_in,   
+    input wire [`VX_RASTER_DIM_BITS-1:0] ymax_in,
+    input wire [`VX_RASTER_PID_BITS-1:0] pid_in,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_in,
     output wire                         ready_in,    
     
@@ -45,17 +45,17 @@ module VX_raster_be #(
     wire stall;
 
     wire valid_r;
-    wire [`RASTER_PID_BITS-1:0] pid_r;
-    wire [PER_BLOCK_QUADS-1:0][`RASTER_DIM_BITS-1:0] quad_xloc, quad_xloc_r;
-    wire [PER_BLOCK_QUADS-1:0][`RASTER_DIM_BITS-1:0] quad_yloc, quad_yloc_r;        
+    wire [`VX_RASTER_PID_BITS-1:0] pid_r;
+    wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] quad_xloc, quad_xloc_r;
+    wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] quad_yloc, quad_yloc_r;        
     wire [PER_BLOCK_QUADS-1:0][2:0][2:0][`RASTER_DATA_BITS-1:0] quad_edges, quad_edges_r;
     
     // Per-quad edge evaluation
     for (genvar i = 0; i < PER_BLOCK_QUADS; ++i) begin
         localparam ii = i % NUM_QUADS_DIM;
         localparam jj = i / NUM_QUADS_DIM;
-        assign quad_xloc[i] = xloc_in + `RASTER_DIM_BITS'(2 * ii);
-        assign quad_yloc[i] = yloc_in + `RASTER_DIM_BITS'(2 * jj);
+        assign quad_xloc[i] = xloc_in + `VX_RASTER_DIM_BITS'(2 * ii);
+        assign quad_yloc[i] = yloc_in + `VX_RASTER_DIM_BITS'(2 * jj);
         wire [2:0][`RASTER_DATA_BITS-1:0] quad_edge_eval;
         for (genvar k = 0; k < 3; ++k) begin
             assign quad_edge_eval[k] = ii * 2 * edges_in[k][0] + jj * 2 * edges_in[k][1] + edges_in[k][2];
@@ -64,7 +64,7 @@ module VX_raster_be #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + `RASTER_PID_BITS + PER_BLOCK_QUADS * (2 * `RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
+        .DATAW  (1 + `VX_RASTER_PID_BITS + PER_BLOCK_QUADS * (2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
         .RESETW (1)   
     ) pipe_reg (
         .clk      (clk),
@@ -76,10 +76,10 @@ module VX_raster_be #(
 
     wire qe_valid;
     wire [PER_BLOCK_QUADS-1:0]  qe_overlap;    
-    wire [`RASTER_PID_BITS-1:0] qe_pid;
+    wire [`VX_RASTER_PID_BITS-1:0] qe_pid;
     wire [PER_BLOCK_QUADS-1:0][3:0] qe_mask;
-    wire [PER_BLOCK_QUADS-1:0][`RASTER_DIM_BITS-1:0] qe_xloc;
-    wire [PER_BLOCK_QUADS-1:0][`RASTER_DIM_BITS-1:0] qe_yloc;    
+    wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] qe_xloc;
+    wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] qe_yloc;    
     wire [PER_BLOCK_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] qe_bcoords;
     
     VX_raster_qe #(
@@ -122,8 +122,8 @@ module VX_raster_be #(
         localparam b = i / OUTPUT_QUADS;
         if (i < PER_BLOCK_QUADS) begin
             assign fifo_mask_in [b][q]         = qe_overlap[i];
-            assign fifo_stamp_in[b][q].pos_x   = qe_xloc[i][`RASTER_DIM_BITS-1:1];
-            assign fifo_stamp_in[b][q].pos_y   = qe_yloc[i][`RASTER_DIM_BITS-1:1];
+            assign fifo_stamp_in[b][q].pos_x   = qe_xloc[i][`VX_RASTER_DIM_BITS-1:1];
+            assign fifo_stamp_in[b][q].pos_y   = qe_yloc[i][`VX_RASTER_DIM_BITS-1:1];
             assign fifo_stamp_in[b][q].mask    = qe_mask[i];
             assign fifo_stamp_in[b][q].pid     = qe_pid;
             assign fifo_stamp_in[b][q].bcoords = qe_bcoords[i];

@@ -21,7 +21,7 @@ module VX_raster_csr #(
     `UNUSED_VAR (reset)
 
     localparam NW_WIDTH      = `UP(`NW_BITS);
-    localparam NUM_CSRS_BITS = `CLOG2(`CSR_RASTER_COUNT);
+    localparam NUM_CSRS_BITS = `CLOG2(`VX_CSR_RASTER_COUNT);
 
     raster_csrs_t [`NUM_THREADS-1:0] wdata;
     raster_csrs_t [`NUM_THREADS-1:0] rdata;
@@ -63,7 +63,7 @@ module VX_raster_csr #(
     wire [NUM_CSRS_BITS-1:0] csr_addr = raster_csr_if.read_addr[NUM_CSRS_BITS-1:0];
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        wire [`CSR_RASTER_COUNT-1:0][31:0] indexable_rdata = rdata[i];
+        wire [`VX_CSR_RASTER_COUNT-1:0][31:0] indexable_rdata = rdata[i];
         assign raster_csr_if.read_data[i] = indexable_rdata[csr_addr];
     end
 
@@ -82,8 +82,8 @@ module VX_raster_csr #(
     `UNUSED_VAR (raster_csr_if.write_tmask)
 
 `ifdef DBG_TRACE_RASTER
-    wire [`NUM_THREADS-1:0][`RASTER_DIM_BITS-2:0] pos_x;
-    wire [`NUM_THREADS-1:0][`RASTER_DIM_BITS-2:0] pos_y;
+    wire [`NUM_THREADS-1:0][`VX_RASTER_DIM_BITS-2:0] pos_x;
+    wire [`NUM_THREADS-1:0][`VX_RASTER_DIM_BITS-2:0] pos_y;
     wire [`NUM_THREADS-1:0][3:0]                  mask;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin

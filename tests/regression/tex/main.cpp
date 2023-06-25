@@ -29,10 +29,10 @@ const char* kernel_file = "kernel.bin";
 const char* input_file  = "palette64.png";
 const char* output_file = "output.png";
 const char* reference_file  = nullptr;
-int wrap    = TEX_WRAP_CLAMP;
-int filter  = TEX_FILTER_POINT;
+int wrap    = VX_TEX_WRAP_CLAMP;
+int filter  = VX_TEX_FILTER_POINT;
 float scale = 1.0f;
-int format  = TEX_FORMAT_A8R8G8B8;
+int format  = VX_TEX_FORMAT_A8R8G8B8;
 ePixelFormat eformat = FORMAT_A8R8G8B8;
 bool use_sw = false;
 
@@ -72,13 +72,13 @@ static void parse_args(int argc, char **argv) {
     case 'f': {
       format  = std::atoi(optarg);
       switch (format) {
-      case TEX_FORMAT_A8R8G8B8: eformat = FORMAT_A8R8G8B8; break;
-      case TEX_FORMAT_R5G6B5: eformat = FORMAT_R5G6B5; break;
-      case TEX_FORMAT_A1R5G5B5: eformat = FORMAT_A1R5G5B5; break;
-      case TEX_FORMAT_A4R4G4B4: eformat = FORMAT_A4R4G4B4; break;
-      case TEX_FORMAT_A8L8: eformat = FORMAT_A8L8; break;
-      case TEX_FORMAT_L8: eformat = FORMAT_L8; break;
-      case TEX_FORMAT_A8: eformat = FORMAT_A8; break;
+      case VX_TEX_FORMAT_A8R8G8B8:  eformat = FORMAT_A8R8G8B8; break;
+      case VX_TEX_FORMAT_R5G6B5:    eformat = FORMAT_R5G6B5; break;
+      case VX_TEX_FORMAT_A1R5G5B5:  eformat = FORMAT_A1R5G5B5; break;
+      case VX_TEX_FORMAT_A4R4G4B4:  eformat = FORMAT_A4R4G4B4; break;
+      case VX_TEX_FORMAT_A8L8:      eformat = FORMAT_A8L8; break;
+      case VX_TEX_FORMAT_L8:        eformat = FORMAT_L8; break;
+      case VX_TEX_FORMAT_A8:        eformat = FORMAT_A8; break;
       default:
         std::cout << "Error: invalid format: " << format << std::endl;
         exit(1);
@@ -265,15 +265,15 @@ int main(int argc, char *argv[]) {
   kernel_arg.dst_addr   = dst_addr;
 
 	// configure texture units
-	TEX_DCR_WRITE(DCR_TEX_STAGE,   0);
-	TEX_DCR_WRITE(DCR_TEX_LOGDIM,  (src_logheight << 16) | src_logwidth);	
-	TEX_DCR_WRITE(DCR_TEX_FORMAT,  format);
-	TEX_DCR_WRITE(DCR_TEX_WRAP,    (wrap << 16) | wrap);
-	TEX_DCR_WRITE(DCR_TEX_FILTER,  (filter ? TEX_FILTER_BILINEAR : TEX_FILTER_POINT));
-	TEX_DCR_WRITE(DCR_TEX_ADDR,    src_addr / 64); // block address
+	TEX_DCR_WRITE(VX_DCR_TEX_STAGE,   0);
+	TEX_DCR_WRITE(VX_DCR_TEX_LOGDIM,  (src_logheight << 16) | src_logwidth);	
+	TEX_DCR_WRITE(VX_DCR_TEX_FORMAT,  format);
+	TEX_DCR_WRITE(VX_DCR_TEX_WRAP,    (wrap << 16) | wrap);
+	TEX_DCR_WRITE(VX_DCR_TEX_FILTER,  (filter ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT));
+	TEX_DCR_WRITE(VX_DCR_TEX_ADDR,    src_addr / 64); // block address
 	for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
-    assert(i < TEX_LOD_MAX);
-		TEX_DCR_WRITE(DCR_TEX_MIPOFF(i), mip_offsets.at(i));
+    assert(i < VX_TEX_LOD_MAX);
+		TEX_DCR_WRITE(VX_DCR_TEX_MIPOFF(i), mip_offsets.at(i));
 	};
   
   // upload kernel argument

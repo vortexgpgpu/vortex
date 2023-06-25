@@ -52,13 +52,13 @@ static bool HasDivergentThreads(const ThreadMask &thread_mask,
 }
 
 inline uint32_t get_fpu_rm(uint32_t func3, Core* core, uint32_t tid, uint32_t wid) {
-  return (func3 == 0x7) ? core->get_csr(CSR_FRM, tid, wid) : func3;
+  return (func3 == 0x7) ? core->get_csr(VX_CSR_FRM, tid, wid) : func3;
 }
 
 inline void update_fcrs(uint32_t fflags, Core* core, uint32_t tid, uint32_t wid) {
   if (fflags) {
-    core->set_csr(CSR_FCSR, core->get_csr(CSR_FCSR, tid, wid) | fflags, tid, wid);
-    core->set_csr(CSR_FFLAGS, core->get_csr(CSR_FFLAGS, tid, wid) | fflags, tid, wid);
+    core->set_csr(VX_CSR_FCSR, core->get_csr(VX_CSR_FCSR, tid, wid) | fflags, tid, wid);
+    core->set_csr(VX_CSR_FFLAGS, core->get_csr(VX_CSR_FFLAGS, tid, wid) | fflags, tid, wid);
   }
 }
 

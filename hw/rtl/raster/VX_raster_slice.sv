@@ -21,13 +21,13 @@ module VX_raster_slice #(
 
     // Inputs
     input wire                                      valid_in,
-    input wire [`RASTER_DIM_BITS-1:0]               xloc_in,
-    input wire [`RASTER_DIM_BITS-1:0]               yloc_in,
-    input wire [`RASTER_DIM_BITS-1:0]               xmin_in,
-    input wire [`RASTER_DIM_BITS-1:0]               xmax_in,  
-    input wire [`RASTER_DIM_BITS-1:0]               ymin_in,  
-    input wire [`RASTER_DIM_BITS-1:0]               ymax_in,
-    input wire [`RASTER_PID_BITS-1:0]               pid_in,
+    input wire [`VX_RASTER_DIM_BITS-1:0]            xloc_in,
+    input wire [`VX_RASTER_DIM_BITS-1:0]            yloc_in,
+    input wire [`VX_RASTER_DIM_BITS-1:0]            xmin_in,
+    input wire [`VX_RASTER_DIM_BITS-1:0]            xmax_in,  
+    input wire [`VX_RASTER_DIM_BITS-1:0]            ymin_in,  
+    input wire [`VX_RASTER_DIM_BITS-1:0]            ymax_in,
+    input wire [`VX_RASTER_PID_BITS-1:0]            pid_in,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0]    edges_in,    
     input wire [2:0][`RASTER_DATA_BITS-1:0]         extents_in,    
     output wire                                     ready_in, 
@@ -46,9 +46,9 @@ module VX_raster_slice #(
     wire be_busy;
 
     wire                        block_valid;
-    wire [`RASTER_DIM_BITS-1:0] block_xloc;
-    wire [`RASTER_DIM_BITS-1:0] block_yloc;
-    wire [`RASTER_PID_BITS-1:0] block_pid;
+    wire [`VX_RASTER_DIM_BITS-1:0] block_xloc;
+    wire [`VX_RASTER_DIM_BITS-1:0] block_yloc;
+    wire [`VX_RASTER_PID_BITS-1:0] block_pid;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] block_edges;
     wire                        block_ready;
     
@@ -77,14 +77,14 @@ module VX_raster_slice #(
     );
 
     wire                        block_valid_b;
-    wire [`RASTER_DIM_BITS-1:0] block_xloc_b;
-    wire [`RASTER_DIM_BITS-1:0] block_yloc_b;
-    wire [`RASTER_PID_BITS-1:0] block_pid_b;
+    wire [`VX_RASTER_DIM_BITS-1:0] block_xloc_b;
+    wire [`VX_RASTER_DIM_BITS-1:0] block_yloc_b;
+    wire [`VX_RASTER_PID_BITS-1:0] block_pid_b;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] block_edges_b;
     wire                        block_ready_b;
 
     VX_elastic_buffer #(
-        .DATAW (2 * `RASTER_DIM_BITS + `RASTER_PID_BITS + 9 * `RASTER_DATA_BITS),
+        .DATAW (2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS),
         .SIZE  (BLOCK_BUF_SIZE)
     ) block_req_buf (
         .clk        (clk),

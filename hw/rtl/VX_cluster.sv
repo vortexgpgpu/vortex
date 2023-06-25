@@ -116,7 +116,7 @@ module VX_cluster #(
     ) raster_bus_if[`NUM_RASTER_UNITS]();
 
     VX_dcr_bus_if raster_dcr_bus_tmp_if();
-    assign raster_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `DCR_RASTER_STATE_BEGIN && dcr_bus_if.write_addr < `DCR_RASTER_STATE_END);
+    assign raster_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `VX_DCR_RASTER_STATE_BEGIN && dcr_bus_if.write_addr < `VX_DCR_RASTER_STATE_END);
     assign raster_dcr_bus_tmp_if.write_addr  = dcr_bus_if.write_addr;
     assign raster_dcr_bus_tmp_if.write_data  = dcr_bus_if.write_data;
 
@@ -207,7 +207,7 @@ module VX_cluster #(
     );
 
     VX_dcr_bus_if rop_dcr_bus_tmp_if();
-    assign rop_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `DCR_ROP_STATE_BEGIN && dcr_bus_if.write_addr < `DCR_ROP_STATE_END);
+    assign rop_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `VX_DCR_ROP_STATE_BEGIN && dcr_bus_if.write_addr < `VX_DCR_ROP_STATE_END);
     assign rop_dcr_bus_tmp_if.write_addr  = dcr_bus_if.write_addr;
     assign rop_dcr_bus_tmp_if.write_data  = dcr_bus_if.write_data;
 
@@ -275,7 +275,7 @@ module VX_cluster #(
     );
 
     VX_dcr_bus_if tex_dcr_bus_tmp_if();
-    assign tex_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `DCR_TEX_STATE_BEGIN && dcr_bus_if.write_addr < `DCR_TEX_STATE_END);
+    assign tex_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `VX_DCR_TEX_STATE_BEGIN && dcr_bus_if.write_addr < `VX_DCR_TEX_STATE_END);
     assign tex_dcr_bus_tmp_if.write_addr  = dcr_bus_if.write_addr;
     assign tex_dcr_bus_tmp_if.write_data  = dcr_bus_if.write_data;
 
@@ -412,7 +412,7 @@ module VX_cluster #(
     `UNUSED_VAR (per_socket_sim_wb_value)
 
     VX_dcr_bus_if socket_dcr_bus_tmp_if();
-    assign socket_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `DCR_BASE_STATE_BEGIN && dcr_bus_if.write_addr < `DCR_BASE_STATE_END);
+    assign socket_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `VX_DCR_BASE_STATE_BEGIN && dcr_bus_if.write_addr < `VX_DCR_BASE_STATE_END);
     assign socket_dcr_bus_tmp_if.write_addr  = dcr_bus_if.write_addr;
     assign socket_dcr_bus_tmp_if.write_data  = dcr_bus_if.write_data;
 

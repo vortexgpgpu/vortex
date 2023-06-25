@@ -87,19 +87,19 @@ public:
   }
 
   uint32_t read(uint32_t addr) const {    
-    uint32_t state = DCR_RASTER_STATE(addr);
-    assert(state < DCR_RASTER_STATE_COUNT);
+    uint32_t state = VX_DCR_RASTER_STATE(addr);
+    assert(state < VX_DCR_RASTER_STATE_COUNT);
     return states_[state];
   }
 
   void write(uint32_t addr, uint32_t value) {    
-    uint32_t state = DCR_RASTER_STATE(addr);
-    assert(state < DCR_RASTER_STATE_COUNT);
+    uint32_t state = VX_DCR_RASTER_STATE(addr);
+    assert(state < VX_DCR_RASTER_STATE_COUNT);
     states_[state] = value;
   }
 
 private:
-  uint32_t states_[DCR_RASTER_STATE_COUNT];
+  uint32_t states_[VX_DCR_RASTER_STATE_COUNT];
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -117,19 +117,19 @@ public:
   }
 
   uint32_t read(uint32_t addr) const {    
-    uint32_t state = DCR_ROP_STATE(addr);
-    assert(state < DCR_ROP_STATE_COUNT);
+    uint32_t state = VX_DCR_ROP_STATE(addr);
+    assert(state < VX_DCR_ROP_STATE_COUNT);
     return states_[state];
   }
 
   void write(uint32_t addr, uint32_t value) {    
-    uint32_t state = DCR_ROP_STATE(addr);
-    assert(state < DCR_ROP_STATE_COUNT);
+    uint32_t state = VX_DCR_ROP_STATE(addr);
+    assert(state < VX_DCR_ROP_STATE_COUNT);
     states_[state] = value;
   }
 
 private:
-  uint32_t states_[DCR_ROP_STATE_COUNT];
+  uint32_t states_[VX_DCR_ROP_STATE_COUNT];
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -137,33 +137,33 @@ private:
 class TexDCRS {
 public:
   uint32_t read(uint32_t stage, uint32_t addr) const {
-    uint32_t state = DCR_TEX_STATE(addr-1);
-    assert(stage < TEX_STAGE_COUNT);
-    assert(state < DCR_TEX_STATE_COUNT);
+    uint32_t state = VX_DCR_TEX_STATE(addr-1);
+    assert(stage < VX_TEX_STAGE_COUNT);
+    assert(state < VX_DCR_TEX_STATE_COUNT);
     return states_[stage][state];
   }
 
   uint32_t read(uint32_t addr) const {
-    if (addr == DCR_TEX_STAGE)
+    if (addr == VX_DCR_TEX_STAGE)
       return stage_;
-    uint32_t state = DCR_TEX_STATE(addr-1);
-    assert(state < DCR_TEX_STATE_COUNT);
+    uint32_t state = VX_DCR_TEX_STATE(addr-1);
+    assert(state < VX_DCR_TEX_STATE_COUNT);
     return states_[stage_][state];
   }
 
   void write(uint32_t addr, uint32_t value) {
-    if (addr == DCR_TEX_STAGE) {
-      assert(value < TEX_STAGE_COUNT);
+    if (addr == VX_DCR_TEX_STAGE) {
+      assert(value < VX_TEX_STAGE_COUNT);
       stage_ = value;
       return;
     }
-    uint32_t state = DCR_TEX_STATE(addr-1);
-    assert(state < DCR_TEX_STATE_COUNT);
+    uint32_t state = VX_DCR_TEX_STATE(addr-1);
+    assert(state < VX_DCR_TEX_STATE_COUNT);
     states_[stage_][state] = value;
   }
 
 private:
-  uint32_t states_[TEX_STAGE_COUNT][DCR_TEX_STATE_COUNT-1];
+  uint32_t states_[VX_TEX_STAGE_COUNT][VX_DCR_TEX_STATE_COUNT-1];
   uint32_t stage_;
 };
 

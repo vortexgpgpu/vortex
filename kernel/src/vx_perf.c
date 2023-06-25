@@ -27,8 +27,8 @@ extern "C" {
 void vx_perf_dump() {
     int core_id = vx_core_id();
     uint32_t* const csr_mem = (uint32_t*)(IO_CSR_ADDR + 64 * sizeof(uint32_t) * core_id);
-    DUMP_CSR_32(0,  CSR_MPM_BASE)
-    DUMP_CSR_32(32, CSR_MPM_BASE_H)
+    DUMP_CSR_32(0,  VX_CSR_MPM_BASE)
+    DUMP_CSR_32(32, VX_CSR_MPM_BASE_H)
 }
 
 #ifdef __cplusplus

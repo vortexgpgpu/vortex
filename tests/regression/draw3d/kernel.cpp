@@ -11,7 +11,7 @@ static GpuSW g_gpu_sw;
 
 using namespace graphics;
 
-using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
+using fixeduv_t = cocogfx::TFixed<VX_TEX_FXD_FRAC>;
 
 inline int32_t imadd_sw(int32_t a, int32_t b, int32_t c, int32_t s) {
 	int32_t p = ((int64_t)a * (int64_t)b) >> (s << 3);
@@ -28,9 +28,9 @@ inline int32_t imadd_sw(int32_t a, int32_t b, int32_t c, int32_t s) {
 	v[i] = FloatA(0.0f)
 
 #define GRADIENTS_HW_i(i) { \
-    int32_t f0 = csr_read(CSR_RASTER_BCOORD_X##i); \
-	int32_t f1 = csr_read(CSR_RASTER_BCOORD_Y##i); \
-	int32_t f2 = csr_read(CSR_RASTER_BCOORD_Z##i); \
+    int32_t f0 = csr_read(VX_CSR_RASTER_BCOORD_X##i); \
+	int32_t f1 = csr_read(VX_CSR_RASTER_BCOORD_Y##i); \
+	int32_t f2 = csr_read(VX_CSR_RASTER_BCOORD_Z##i); \
 	auto F0 = static_cast<float>(*reinterpret_cast<const FloatA*>(&f0)); \
 	auto F1 = static_cast<float>(*reinterpret_cast<const FloatA*>(&f1)); \
 	auto F2 = static_cast<float>(*reinterpret_cast<const FloatA*>(&f2)); \
@@ -161,8 +161,8 @@ inline int32_t imadd_sw(int32_t a, int32_t b, int32_t c, int32_t s) {
 
 #define OUTPUT(pos_mask, face, color, depth, func) \
 	auto mask = (pos_mask >> 0) & 0xf; \
-	auto x    = (pos_mask >> 4) & ((1 << (RASTER_DIM_BITS-1))-1); \
-	auto y    = (pos_mask >> (4 + (RASTER_DIM_BITS-1))) & ((1 << (RASTER_DIM_BITS-1))-1); \
+	auto x    = (pos_mask >> 4) & ((1 << (VX_RASTER_DIM_BITS-1))-1); \
+	auto y    = (pos_mask >> (4 + (VX_RASTER_DIM_BITS-1))) & ((1 << (VX_RASTER_DIM_BITS-1))-1); \
 	OUTPUT_i(0, mask, x, y, face, color, depth, func) \
 	OUTPUT_i(1, mask, x, y, face, color, depth, func) \
 	OUTPUT_i(2, mask, x, y, face, color, depth, func) \
@@ -239,7 +239,7 @@ void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
 			TO_RGBA(out_color, r, g, b, a);
 		}
 
-		auto __DIVERGENT__ pos_mask = csr_read(CSR_RASTER_POS_MASK);
+		auto __DIVERGENT__ pos_mask = csr_read(VX_CSR_RASTER_POS_MASK);
 	#ifdef SW_ENABLE
 		if (arg->sw_rop) {
 			OUTPUT(pos_mask, 0, out_color, z, g_gpu_sw.rop);

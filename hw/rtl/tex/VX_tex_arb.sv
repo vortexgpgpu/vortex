@@ -20,7 +20,7 @@ module VX_tex_arb #(
     localparam LOG_NUM_REQS  = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
     localparam NUM_REQS      = 1 << LOG_NUM_REQS;
     localparam TAG_OUT_WIDTH = TAG_WIDTH + LOG_NUM_REQS;
-    localparam REQ_DATAW     = TAG_OUT_WIDTH + NUM_LANES * (1 + 2 * 32 + `TEX_LOD_BITS) + `TEX_STAGE_BITS;
+    localparam REQ_DATAW     = TAG_OUT_WIDTH + NUM_LANES * (1 + 2 * 32 + `VX_TEX_LOD_BITS) + `VX_TEX_STAGE_BITS;
     localparam RSP_DATAW     = TAG_WIDTH + NUM_LANES * 32;
     
     ///////////////////////////////////////////////////////////////////////

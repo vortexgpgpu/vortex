@@ -264,13 +264,13 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
 
 uint32_t toVXFormat(ePixelFormat format) {
   switch (format) {
-  case FORMAT_A8R8G8B8: return TEX_FORMAT_A8R8G8B8; break;
-  case FORMAT_R5G6B5: return TEX_FORMAT_R5G6B5; break;
-  case FORMAT_A1R5G5B5: return TEX_FORMAT_A1R5G5B5; break;
-  case FORMAT_A4R4G4B4: return TEX_FORMAT_A4R4G4B4; break;
-  case FORMAT_A8L8: return TEX_FORMAT_A8L8; break;
-  case FORMAT_L8: return TEX_FORMAT_L8; break;
-  case FORMAT_A8: return TEX_FORMAT_A8; break;
+  case FORMAT_A8R8G8B8: return VX_TEX_FORMAT_A8R8G8B8; break;
+  case FORMAT_R5G6B5: return VX_TEX_FORMAT_R5G6B5; break;
+  case FORMAT_A1R5G5B5: return VX_TEX_FORMAT_A1R5G5B5; break;
+  case FORMAT_A4R4G4B4: return VX_TEX_FORMAT_A4R4G4B4; break;
+  case FORMAT_A8L8: return VX_TEX_FORMAT_A8L8; break;
+  case FORMAT_L8: return VX_TEX_FORMAT_L8; break;
+  case FORMAT_A8: return VX_TEX_FORMAT_A8; break;
   default:
     std::cout << "Error: invalid format: " << format << std::endl;
     exit(1);
@@ -280,14 +280,14 @@ uint32_t toVXFormat(ePixelFormat format) {
 
 uint32_t toVXCompare(CGLTrace::ecompare compare) {
   switch (compare) {
-  case CGLTrace::COMPARE_NEVER: return ROP_DEPTH_FUNC_NEVER; break;
-  case CGLTrace::COMPARE_LESS: return ROP_DEPTH_FUNC_LESS; break;
-  case CGLTrace::COMPARE_EQUAL: return ROP_DEPTH_FUNC_EQUAL; break;
-  case CGLTrace::COMPARE_LEQUAL: return ROP_DEPTH_FUNC_LEQUAL; break;
-  case CGLTrace::COMPARE_GREATER: return ROP_DEPTH_FUNC_GREATER; break;
-  case CGLTrace::COMPARE_NOTEQUAL: return ROP_DEPTH_FUNC_NOTEQUAL; break;
-  case CGLTrace::COMPARE_GEQUAL: return ROP_DEPTH_FUNC_GEQUAL; break;
-  case CGLTrace::COMPARE_ALWAYS: return ROP_DEPTH_FUNC_ALWAYS; break;
+  case CGLTrace::COMPARE_NEVER: return VX_ROP_DEPTH_FUNC_NEVER; break;
+  case CGLTrace::COMPARE_LESS: return VX_ROP_DEPTH_FUNC_LESS; break;
+  case CGLTrace::COMPARE_EQUAL: return VX_ROP_DEPTH_FUNC_EQUAL; break;
+  case CGLTrace::COMPARE_LEQUAL: return VX_ROP_DEPTH_FUNC_LEQUAL; break;
+  case CGLTrace::COMPARE_GREATER: return VX_ROP_DEPTH_FUNC_GREATER; break;
+  case CGLTrace::COMPARE_NOTEQUAL: return VX_ROP_DEPTH_FUNC_NOTEQUAL; break;
+  case CGLTrace::COMPARE_GEQUAL: return VX_ROP_DEPTH_FUNC_GEQUAL; break;
+  case CGLTrace::COMPARE_ALWAYS: return VX_ROP_DEPTH_FUNC_ALWAYS; break;
   default:
     std::cout << "Error: invalid compare function: " << compare << std::endl;
     exit(1);
@@ -297,12 +297,12 @@ uint32_t toVXCompare(CGLTrace::ecompare compare) {
 
 uint32_t toVXStencilOp(CGLTrace::eStencilOp op) {
   switch (op) {
-  case CGLTrace::STENCIL_KEEP: return ROP_STENCIL_OP_KEEP; break;
-  case CGLTrace::STENCIL_REPLACE: return ROP_STENCIL_OP_REPLACE; break;
-  case CGLTrace::STENCIL_INCR: return ROP_STENCIL_OP_INCR; break;
-  case CGLTrace::STENCIL_DECR: return ROP_STENCIL_OP_DECR; break;
-  case CGLTrace::STENCIL_ZERO: return ROP_STENCIL_OP_ZERO; break;
-  case CGLTrace::STENCIL_INVERT: return ROP_STENCIL_OP_INVERT; break;
+  case CGLTrace::STENCIL_KEEP: return VX_ROP_STENCIL_OP_KEEP; break;
+  case CGLTrace::STENCIL_REPLACE: return VX_ROP_STENCIL_OP_REPLACE; break;
+  case CGLTrace::STENCIL_INCR: return VX_ROP_STENCIL_OP_INCR; break;
+  case CGLTrace::STENCIL_DECR: return VX_ROP_STENCIL_OP_DECR; break;
+  case CGLTrace::STENCIL_ZERO: return VX_ROP_STENCIL_OP_ZERO; break;
+  case CGLTrace::STENCIL_INVERT: return VX_ROP_STENCIL_OP_INVERT; break;
   default:
     std::cout << "Error: invalid stencil operation: " << op << std::endl;
     exit(1);
@@ -312,17 +312,17 @@ uint32_t toVXStencilOp(CGLTrace::eStencilOp op) {
 
 uint32_t toVXBlendFunc(CGLTrace::eBlendOp op) {
   switch (op) {
-  case CGLTrace::BLEND_ZERO: return ROP_BLEND_FUNC_ZERO;
-  case CGLTrace::BLEND_ONE: return ROP_BLEND_FUNC_ONE;
-  case CGLTrace::BLEND_SRC_COLOR: return ROP_BLEND_FUNC_SRC_RGB;
-  case CGLTrace::BLEND_ONE_MINUS_SRC_COLOR: return ROP_BLEND_FUNC_ONE_MINUS_SRC_RGB;
-  case CGLTrace::BLEND_SRC_ALPHA: return ROP_BLEND_FUNC_SRC_A;
-  case CGLTrace::BLEND_ONE_MINUS_SRC_ALPHA: return ROP_BLEND_FUNC_ONE_MINUS_SRC_A;
-  case CGLTrace::BLEND_DST_ALPHA: return ROP_BLEND_FUNC_DST_A;
-  case CGLTrace::BLEND_ONE_MINUS_DST_ALPHA: return ROP_BLEND_FUNC_ONE_MINUS_DST_A;
-  case CGLTrace::BLEND_DST_COLOR: return ROP_BLEND_FUNC_DST_RGB;
-  case CGLTrace::BLEND_ONE_MINUS_DST_COLOR: return ROP_BLEND_FUNC_ONE_MINUS_DST_RGB;
-  case CGLTrace::BLEND_SRC_ALPHA_SATURATE: return ROP_BLEND_FUNC_ALPHA_SAT;
+  case CGLTrace::BLEND_ZERO: return VX_ROP_BLEND_FUNC_ZERO;
+  case CGLTrace::BLEND_ONE: return VX_ROP_BLEND_FUNC_ONE;
+  case CGLTrace::BLEND_SRC_COLOR: return VX_ROP_BLEND_FUNC_SRC_RGB;
+  case CGLTrace::BLEND_ONE_MINUS_SRC_COLOR: return VX_ROP_BLEND_FUNC_ONE_MINUS_SRC_RGB;
+  case CGLTrace::BLEND_SRC_ALPHA: return VX_ROP_BLEND_FUNC_SRC_A;
+  case CGLTrace::BLEND_ONE_MINUS_SRC_ALPHA: return VX_ROP_BLEND_FUNC_ONE_MINUS_SRC_A;
+  case CGLTrace::BLEND_DST_ALPHA: return VX_ROP_BLEND_FUNC_DST_A;
+  case CGLTrace::BLEND_ONE_MINUS_DST_ALPHA: return VX_ROP_BLEND_FUNC_ONE_MINUS_DST_A;
+  case CGLTrace::BLEND_DST_COLOR: return VX_ROP_BLEND_FUNC_DST_RGB;
+  case CGLTrace::BLEND_ONE_MINUS_DST_COLOR: return VX_ROP_BLEND_FUNC_ONE_MINUS_DST_RGB;
+  case CGLTrace::BLEND_SRC_ALPHA_SATURATE: return VX_ROP_BLEND_FUNC_ALPHA_SAT;
   default:
     std::cout << "Error: invalid blend function: " << op << std::endl;
     exit(1);

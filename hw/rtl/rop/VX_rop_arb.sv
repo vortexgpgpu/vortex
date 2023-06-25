@@ -18,7 +18,7 @@ module VX_rop_arb #(
 );
 
     localparam UUID_WIDTH = `UP(`UUID_BITS);
-    localparam REQ_DATAW  = UUID_WIDTH + NUM_LANES * (1 + 2 * `ROP_DIM_BITS + $bits(rgba_t) + `ROP_DEPTH_BITS + 1);
+    localparam REQ_DATAW  = UUID_WIDTH + NUM_LANES * (1 + 2 * `VX_ROP_DIM_BITS + $bits(rgba_t) + `VX_ROP_DEPTH_BITS + 1);
 
     wire [NUM_INPUTS-1:0]                 req_valid_in;
     wire [NUM_INPUTS-1:0][REQ_DATAW-1:0]  req_data_in;

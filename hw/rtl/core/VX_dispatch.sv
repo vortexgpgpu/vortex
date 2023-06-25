@@ -81,8 +81,8 @@ module VX_dispatch (
 
     wire csr_req_valid = dispatch_if.valid && (dispatch_if.ex_type == `EX_CSR);
     wire [`INST_CSR_BITS-1:0] csr_op_type = `INST_CSR_BITS'(dispatch_if.op_type);
-    wire [`CSR_ADDR_BITS-1:0] csr_addr = dispatch_if.imm[`CSR_ADDR_BITS-1:0];
-    wire [`NRI_BITS-1:0] csr_imm = dispatch_if.imm[`CSR_ADDR_BITS +: `NRI_BITS];
+    wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = dispatch_if.imm[`VX_CSR_ADDR_BITS-1:0];
+    wire [`NRI_BITS-1:0] csr_imm = dispatch_if.imm[`VX_CSR_ADDR_BITS +: `NRI_BITS];
     wire [`NUM_THREADS-1:0][31:0] csr_data;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
@@ -90,7 +90,7 @@ module VX_dispatch (
     end
 
     VX_skid_buffer #(
-        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `INST_CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NRI_BITS + `UP(`NT_BITS) + (`NUM_THREADS * 32)),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `INST_CSR_BITS + `VX_CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NRI_BITS + `UP(`NT_BITS) + (`NUM_THREADS * 32)),
         .OUT_REG (1)
     ) csr_buffer (
         .clk       (clk),

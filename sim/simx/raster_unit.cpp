@@ -88,10 +88,10 @@ public:
   void configure(const graphics::RasterDCRS& dcrs) {
     // get device configuration    
     graphics::Rasterizer::configure(dcrs);
-    num_tiles_     = dcrs.read(DCR_RASTER_TILE_COUNT);
-    tbuf_baseaddr_ = uint64_t(dcrs.read(DCR_RASTER_TBUF_ADDR)) << 6;
-    pbuf_baseaddr_ = uint64_t(dcrs.read(DCR_RASTER_PBUF_ADDR)) << 6;
-    pbuf_stride_   = dcrs.read(DCR_RASTER_PBUF_STRIDE);
+    num_tiles_     = dcrs.read(VX_DCR_RASTER_TILE_COUNT);
+    tbuf_baseaddr_ = uint64_t(dcrs.read(VX_DCR_RASTER_TBUF_ADDR)) << 6;
+    pbuf_baseaddr_ = uint64_t(dcrs.read(VX_DCR_RASTER_PBUF_ADDR)) << 6;
+    pbuf_stride_   = dcrs.read(VX_DCR_RASTER_PBUF_STRIDE);
 
     tbuf_addr_  = tbuf_baseaddr_ + raster_index_ * sizeof(graphics::rast_tile_header_t);
     cur_tile_   = raster_index_;
@@ -437,19 +437,19 @@ public:
       return 0;
 
     // update CSRs
-    csrs[CSR_RASTER_POS_MASK]  = stamp->pos_mask;
-    csrs[CSR_RASTER_BCOORD_X0] = *(uint32_t*)&stamp->bcoords[0].x;
-    csrs[CSR_RASTER_BCOORD_Y0] = *(uint32_t*)&stamp->bcoords[0].y;
-    csrs[CSR_RASTER_BCOORD_Z0] = *(uint32_t*)&stamp->bcoords[0].z;
-    csrs[CSR_RASTER_BCOORD_X1] = *(uint32_t*)&stamp->bcoords[1].x;
-    csrs[CSR_RASTER_BCOORD_Y1] = *(uint32_t*)&stamp->bcoords[1].y;
-    csrs[CSR_RASTER_BCOORD_Z1] = *(uint32_t*)&stamp->bcoords[1].z;
-    csrs[CSR_RASTER_BCOORD_X2] = *(uint32_t*)&stamp->bcoords[2].x;
-    csrs[CSR_RASTER_BCOORD_Y2] = *(uint32_t*)&stamp->bcoords[2].y;    
-    csrs[CSR_RASTER_BCOORD_Z2] = *(uint32_t*)&stamp->bcoords[2].z;
-    csrs[CSR_RASTER_BCOORD_X3] = *(uint32_t*)&stamp->bcoords[3].x;
-    csrs[CSR_RASTER_BCOORD_Y3] = *(uint32_t*)&stamp->bcoords[3].y;
-    csrs[CSR_RASTER_BCOORD_Z3] = *(uint32_t*)&stamp->bcoords[3].z;
+    csrs[VX_CSR_RASTER_POS_MASK]  = stamp->pos_mask;
+    csrs[VX_CSR_RASTER_BCOORD_X0] = *(uint32_t*)&stamp->bcoords[0].x;
+    csrs[VX_CSR_RASTER_BCOORD_Y0] = *(uint32_t*)&stamp->bcoords[0].y;
+    csrs[VX_CSR_RASTER_BCOORD_Z0] = *(uint32_t*)&stamp->bcoords[0].z;
+    csrs[VX_CSR_RASTER_BCOORD_X1] = *(uint32_t*)&stamp->bcoords[1].x;
+    csrs[VX_CSR_RASTER_BCOORD_Y1] = *(uint32_t*)&stamp->bcoords[1].y;
+    csrs[VX_CSR_RASTER_BCOORD_Z1] = *(uint32_t*)&stamp->bcoords[1].z;
+    csrs[VX_CSR_RASTER_BCOORD_X2] = *(uint32_t*)&stamp->bcoords[2].x;
+    csrs[VX_CSR_RASTER_BCOORD_Y2] = *(uint32_t*)&stamp->bcoords[2].y;    
+    csrs[VX_CSR_RASTER_BCOORD_Z2] = *(uint32_t*)&stamp->bcoords[2].z;
+    csrs[VX_CSR_RASTER_BCOORD_X3] = *(uint32_t*)&stamp->bcoords[3].x;
+    csrs[VX_CSR_RASTER_BCOORD_Y3] = *(uint32_t*)&stamp->bcoords[3].y;
+    csrs[VX_CSR_RASTER_BCOORD_Z3] = *(uint32_t*)&stamp->bcoords[3].z;
 
     return (stamp->pid << 1) | 1;
   }

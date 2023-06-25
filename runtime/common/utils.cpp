@@ -41,7 +41,7 @@ public:
       auto perf_class_s = getenv("PERF_CLASS");
       if (perf_class_s) {
         perf_class_ = std::atoi(perf_class_s);
-        vx_dcr_write(device, DCR_BASE_MPM_CLASS, perf_class_);
+        vx_dcr_write(device, VX_DCR_BASE_MPM_CLASS, perf_class_);
       }
       devices_.push_back(device);
     }
@@ -171,36 +171,36 @@ uint32_t DeviceConfig::read(uint32_t addr) const {
 
 int dcr_initialize(vx_device_h device) {
   const uint64_t startup_addr(STARTUP_ADDR);
-  RT_CHECK(vx_dcr_write(device, DCR_BASE_STARTUP_ADDR0, startup_addr & 0xffffffff), {
+  RT_CHECK(vx_dcr_write(device, VX_DCR_BASE_STARTUP_ADDR0, startup_addr & 0xffffffff), {
     return -1;
   });
 
-  RT_CHECK(vx_dcr_write(device, DCR_BASE_STARTUP_ADDR1, startup_addr >> 32), {
+  RT_CHECK(vx_dcr_write(device, VX_DCR_BASE_STARTUP_ADDR1, startup_addr >> 32), {
     return -1;
   });
 
-  RT_CHECK(vx_dcr_write(device, DCR_BASE_MPM_CLASS, 0), {
+  RT_CHECK(vx_dcr_write(device, VX_DCR_BASE_MPM_CLASS, 0), {
     return -1;
   });
 
-  for (int i = 0; i < DCR_RASTER_STATE_COUNT; ++i) {
-    RT_CHECK(vx_dcr_write(device, DCR_RASTER_STATE_BEGIN + i, 0), {
+  for (int i = 0; i < VX_DCR_RASTER_STATE_COUNT; ++i) {
+    RT_CHECK(vx_dcr_write(device, VX_DCR_RASTER_STATE_BEGIN + i, 0), {
       return -1;
     });
   }
 
-  for (int i = 0; i < DCR_ROP_STATE_COUNT; ++i) {
-    RT_CHECK(vx_dcr_write(device, DCR_ROP_STATE_BEGIN + i, 0), {
+  for (int i = 0; i < VX_DCR_ROP_STATE_COUNT; ++i) {
+    RT_CHECK(vx_dcr_write(device, VX_DCR_ROP_STATE_BEGIN + i, 0), {
       return -1;
     });
   }
 
-  for (int i = 0; i < TEX_STAGE_COUNT; ++i) {
-    RT_CHECK(vx_dcr_write(device, DCR_TEX_STAGE, i), {
+  for (int i = 0; i < VX_TEX_STAGE_COUNT; ++i) {
+    RT_CHECK(vx_dcr_write(device, VX_DCR_TEX_STAGE, i), {
       return -1;
     });
-    for (int j = 1; j < DCR_TEX_STATE_COUNT; ++j) {
-      RT_CHECK(vx_dcr_write(device, DCR_TEX_STATE_BEGIN + j, 0), {
+    for (int j = 1; j < VX_DCR_TEX_STATE_COUNT; ++j) {
+      RT_CHECK(vx_dcr_write(device, VX_DCR_TEX_STATE_BEGIN + j, 0), {
         return -1;
       });
     }
@@ -211,8 +211,8 @@ int dcr_initialize(vx_device_h device) {
 ///////////////////////////////////////////////////////////////////////////////
 
 static uint64_t get_csr_64(const uint32_t* buffer, int addr) {
-  uint32_t value_lo = buffer[addr - CSR_MPM_BASE];
-  uint32_t value_hi = buffer[addr - CSR_MPM_BASE + 32];
+  uint32_t value_lo = buffer[addr - VX_CSR_MPM_BASE];
+  uint32_t value_hi = buffer[addr - VX_CSR_MPM_BASE + 32];
   return (uint64_t(value_hi) << 32) | value_lo;
 }
 
@@ -341,8 +341,8 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
       return ret;
     }
 
-    uint64_t instrs_per_core = get_csr_64(staging_ptr, CSR_MINSTRET);
-    uint64_t cycles_per_core = get_csr_64(staging_ptr, CSR_MCYCLE);
+    uint64_t instrs_per_core = get_csr_64(staging_ptr, VX_CSR_MINSTRET);
+    uint64_t cycles_per_core = get_csr_64(staging_ptr, VX_CSR_MCYCLE);
     float IPC = (float)(double(instrs_per_core) / double(cycles_per_core));
     if (num_cores > 1) fprintf(stream, "PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs_per_core, cycles_per_core, IPC);            
     instrs += instrs_per_core;
@@ -350,158 +350,158 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
 
   #ifdef PERF_ENABLE
     switch (perf_class) {
-    case DCR_MPM_CLASS_CORE: {
+    case VX_DCR_MPM_CLASS_CORE: {
       // PERF: pipeline    
       // ibuffer_stall
-      uint64_t ibuffer_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_IBUF_ST);
+      uint64_t ibuffer_stalls_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_IBUF_ST);
       if (num_cores > 1) fprintf(stream, "PERF: core%d: ibuffer stalls=%ld\n", core_id, ibuffer_stalls_per_core);
       ibuffer_stalls += ibuffer_stalls_per_core;
       // scoreboard_stall
-      uint64_t scoreboard_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_SCRB_ST);
+      uint64_t scoreboard_stalls_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_SCRB_ST);
       if (num_cores > 1) fprintf(stream, "PERF: core%d: scoreboard stalls=%ld\n", core_id, scoreboard_stalls_per_core);
       scoreboard_stalls += scoreboard_stalls_per_core;
       // alu_stall
-      uint64_t alu_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_ALU_ST);
+      uint64_t alu_stalls_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_ALU_ST);
       if (num_cores > 1) fprintf(stream, "PERF: core%d: alu unit stalls=%ld\n", core_id, alu_stalls_per_core);
       alu_stalls += alu_stalls_per_core;      
       // lsu_stall
-      uint64_t lsu_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_LSU_ST);
+      uint64_t lsu_stalls_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_LSU_ST);
       if (num_cores > 1) fprintf(stream, "PERF: core%d: lsu unit stalls=%ld\n", core_id, lsu_stalls_per_core);
       lsu_stalls += lsu_stalls_per_core;
       // csr_stall
-      uint64_t csr_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_CSR_ST);
+      uint64_t csr_stalls_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_CSR_ST);
       if (num_cores > 1) fprintf(stream, "PERF: core%d: csr unit stalls=%ld\n", core_id, csr_stalls_per_core);
       csr_stalls += csr_stalls_per_core;    
       // fpu_stall
-      uint64_t fpu_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_FPU_ST);
+      uint64_t fpu_stalls_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_FPU_ST);
       if (num_cores > 1) fprintf(stream, "PERF: core%d: fpu unit stalls=%ld\n", core_id, fpu_stalls_per_core);
       fpu_stalls += fpu_stalls_per_core;      
       // gpu_stall
-      uint64_t gpu_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_GPU_ST);
+      uint64_t gpu_stalls_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_GPU_ST);
       if (num_cores > 1) fprintf(stream, "PERF: core%d: gpu unit stalls=%ld\n", core_id, gpu_stalls_per_core);
       gpu_stalls += gpu_stalls_per_core;
       // PERF: memory
       // ifetches
-      uint64_t ifetches_per_core = get_csr_64(staging_ptr, CSR_MPM_LOADS);
+      uint64_t ifetches_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_LOADS);
       if (num_cores > 1) fprintf(stream, "PERF: core%d: ifetches=%ld\n", core_id, ifetches_per_core);
       ifetches += ifetches_per_core;
       // loads
-      uint64_t loads_per_core = get_csr_64(staging_ptr, CSR_MPM_LOADS);
+      uint64_t loads_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_LOADS);
       if (num_cores > 1) fprintf(stream, "PERF: core%d: loads=%ld\n", core_id, loads_per_core);
       loads += loads_per_core;
       // stores
-      uint64_t stores_per_core = get_csr_64(staging_ptr, CSR_MPM_STORES);
+      uint64_t stores_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_STORES);
       if (num_cores > 1) fprintf(stream, "PERF: core%d: stores=%ld\n", core_id, stores_per_core);
       stores += stores_per_core;
       // ifetch latency
-      uint64_t ifetch_lat_per_core = get_csr_64(staging_ptr, CSR_MPM_IFETCH_LAT);
+      uint64_t ifetch_lat_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_IFETCH_LAT);
       if (num_cores > 1) {
         int mem_avg_lat = (int)(double(ifetch_lat_per_core) / double(ifetches_per_core));
         fprintf(stream, "PERF: core%d: ifetch latency=%d cycles\n", core_id, mem_avg_lat);
       }
       ifetch_lat += ifetch_lat_per_core;
       // load latency
-      uint64_t load_lat_per_core = get_csr_64(staging_ptr, CSR_MPM_LOAD_LAT);
+      uint64_t load_lat_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_LOAD_LAT);
       if (num_cores > 1) {
         int mem_avg_lat = (int)(double(load_lat_per_core) / double(loads_per_core));
         fprintf(stream, "PERF: core%d: load latency=%d cycles\n", core_id, mem_avg_lat);
       }
       load_lat += load_lat_per_core;      
     } break;
-    case DCR_MPM_CLASS_MEM: {      
+    case VX_DCR_MPM_CLASS_MEM: {      
       if (0 == core_id) {
         // PERF: Icache
-        icache_reads = get_csr_64(staging_ptr, CSR_MPM_ICACHE_READS);
-        icache_read_misses = get_csr_64(staging_ptr, CSR_MPM_ICACHE_MISS_R);
+        icache_reads = get_csr_64(staging_ptr, VX_CSR_MPM_ICACHE_READS);
+        icache_read_misses = get_csr_64(staging_ptr, VX_CSR_MPM_ICACHE_MISS_R);
       
         // PERF: Dcache
-        dcache_reads = get_csr_64(staging_ptr, CSR_MPM_DCACHE_READS);
-        dcache_writes = get_csr_64(staging_ptr, CSR_MPM_DCACHE_WRITES);
-        dcache_read_misses = get_csr_64(staging_ptr, CSR_MPM_DCACHE_MISS_R);
-        dcache_write_misses = get_csr_64(staging_ptr, CSR_MPM_DCACHE_MISS_W);
-        dcache_bank_stalls = get_csr_64(staging_ptr, CSR_MPM_DCACHE_BANK_ST);
-        dcache_mshr_stalls = get_csr_64(staging_ptr, CSR_MPM_DCACHE_MSHR_ST);
+        dcache_reads = get_csr_64(staging_ptr, VX_CSR_MPM_DCACHE_READS);
+        dcache_writes = get_csr_64(staging_ptr, VX_CSR_MPM_DCACHE_WRITES);
+        dcache_read_misses = get_csr_64(staging_ptr, VX_CSR_MPM_DCACHE_MISS_R);
+        dcache_write_misses = get_csr_64(staging_ptr, VX_CSR_MPM_DCACHE_MISS_W);
+        dcache_bank_stalls = get_csr_64(staging_ptr, VX_CSR_MPM_DCACHE_BANK_ST);
+        dcache_mshr_stalls = get_csr_64(staging_ptr, VX_CSR_MPM_DCACHE_MSHR_ST);
       
         // PERF: smem
-        smem_reads = get_csr_64(staging_ptr, CSR_MPM_SMEM_READS);
-        smem_writes = get_csr_64(staging_ptr, CSR_MPM_SMEM_WRITES);
-        smem_bank_stalls = get_csr_64(staging_ptr, CSR_MPM_SMEM_BANK_ST);
+        smem_reads = get_csr_64(staging_ptr, VX_CSR_MPM_SMEM_READS);
+        smem_writes = get_csr_64(staging_ptr, VX_CSR_MPM_SMEM_WRITES);
+        smem_bank_stalls = get_csr_64(staging_ptr, VX_CSR_MPM_SMEM_BANK_ST);
       
         // PERF: L2cache
-        l2cache_reads = get_csr_64(staging_ptr, CSR_MPM_L2CACHE_READS);
-        l2cache_writes = get_csr_64(staging_ptr, CSR_MPM_L2CACHE_WRITES);
-        l2cache_read_misses = get_csr_64(staging_ptr, CSR_MPM_L2CACHE_MISS_R);
-        l2cache_write_misses = get_csr_64(staging_ptr, CSR_MPM_L2CACHE_MISS_W);
-        l2cache_bank_stalls = get_csr_64(staging_ptr, CSR_MPM_L2CACHE_BANK_ST);
-        l2cache_mshr_stalls = get_csr_64(staging_ptr, CSR_MPM_L2CACHE_MSHR_ST);
+        l2cache_reads = get_csr_64(staging_ptr, VX_CSR_MPM_L2CACHE_READS);
+        l2cache_writes = get_csr_64(staging_ptr, VX_CSR_MPM_L2CACHE_WRITES);
+        l2cache_read_misses = get_csr_64(staging_ptr, VX_CSR_MPM_L2CACHE_MISS_R);
+        l2cache_write_misses = get_csr_64(staging_ptr, VX_CSR_MPM_L2CACHE_MISS_W);
+        l2cache_bank_stalls = get_csr_64(staging_ptr, VX_CSR_MPM_L2CACHE_BANK_ST);
+        l2cache_mshr_stalls = get_csr_64(staging_ptr, VX_CSR_MPM_L2CACHE_MSHR_ST);
       
         // PERF: L3cache
-        l3cache_reads = get_csr_64(staging_ptr, CSR_MPM_L3CACHE_READS);
-        l3cache_writes = get_csr_64(staging_ptr, CSR_MPM_L3CACHE_WRITES);
-        l3cache_read_misses = get_csr_64(staging_ptr, CSR_MPM_L3CACHE_MISS_R);
-        l3cache_write_misses = get_csr_64(staging_ptr, CSR_MPM_L3CACHE_MISS_W);
-        l3cache_bank_stalls = get_csr_64(staging_ptr, CSR_MPM_L3CACHE_BANK_ST);
-        l3cache_mshr_stalls = get_csr_64(staging_ptr, CSR_MPM_L3CACHE_MSHR_ST);
+        l3cache_reads = get_csr_64(staging_ptr, VX_CSR_MPM_L3CACHE_READS);
+        l3cache_writes = get_csr_64(staging_ptr, VX_CSR_MPM_L3CACHE_WRITES);
+        l3cache_read_misses = get_csr_64(staging_ptr, VX_CSR_MPM_L3CACHE_MISS_R);
+        l3cache_write_misses = get_csr_64(staging_ptr, VX_CSR_MPM_L3CACHE_MISS_W);
+        l3cache_bank_stalls = get_csr_64(staging_ptr, VX_CSR_MPM_L3CACHE_BANK_ST);
+        l3cache_mshr_stalls = get_csr_64(staging_ptr, VX_CSR_MPM_L3CACHE_MSHR_ST);
       
         // PERF: memory
-        mem_reads  = get_csr_64(staging_ptr, CSR_MPM_MEM_READS);
-        mem_writes = get_csr_64(staging_ptr, CSR_MPM_MEM_WRITES);
-        mem_lat    = get_csr_64(staging_ptr, CSR_MPM_MEM_LAT);
+        mem_reads  = get_csr_64(staging_ptr, VX_CSR_MPM_MEM_READS);
+        mem_writes = get_csr_64(staging_ptr, VX_CSR_MPM_MEM_WRITES);
+        mem_lat    = get_csr_64(staging_ptr, VX_CSR_MPM_MEM_LAT);
       }
     } break;
-    case DCR_MPM_CLASS_TEX: { 
+    case VX_DCR_MPM_CLASS_TEX: { 
     #ifdef EXT_TEX_ENABLE
       if (0 == core_id) {
-        tex_mem_reads = get_csr_64(staging_ptr, CSR_MPM_TEX_READS);
-        tex_mem_lat   = get_csr_64(staging_ptr, CSR_MPM_TEX_LAT);
-        tex_stall_cycles = get_csr_64(staging_ptr, CSR_MPM_TEX_STALL);
+        tex_mem_reads = get_csr_64(staging_ptr, VX_CSR_MPM_TEX_READS);
+        tex_mem_lat   = get_csr_64(staging_ptr, VX_CSR_MPM_TEX_LAT);
+        tex_stall_cycles = get_csr_64(staging_ptr, VX_CSR_MPM_TEX_STALL);
         // cache perf counters
-        tcache_reads       = get_csr_64(staging_ptr, CSR_MPM_TCACHE_READS);
-        tcache_read_misses = get_csr_64(staging_ptr, CSR_MPM_TCACHE_MISS_R);
-        tcache_bank_stalls = get_csr_64(staging_ptr, CSR_MPM_TCACHE_BANK_ST);
-        tcache_mshr_stalls = get_csr_64(staging_ptr, CSR_MPM_TCACHE_MSHR_ST);
+        tcache_reads       = get_csr_64(staging_ptr, VX_CSR_MPM_TCACHE_READS);
+        tcache_read_misses = get_csr_64(staging_ptr, VX_CSR_MPM_TCACHE_MISS_R);
+        tcache_bank_stalls = get_csr_64(staging_ptr, VX_CSR_MPM_TCACHE_BANK_ST);
+        tcache_mshr_stalls = get_csr_64(staging_ptr, VX_CSR_MPM_TCACHE_MSHR_ST);
       }
       // issue_stall
-      uint64_t issue_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_TEX_ISSUE_ST);
+      uint64_t issue_stalls_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_TEX_ISSUE_ST);
       if (num_cores > 1) fprintf(stream, "PERF: core%d: tex issue stalls=%ld\n", core_id, issue_stalls_per_core);
       tex_issue_stalls += issue_stalls_per_core;
     #endif
     } break;
-    case DCR_MPM_CLASS_RASTER: {
+    case VX_DCR_MPM_CLASS_RASTER: {
     #ifdef EXT_RASTER_ENABLE
       if (0 == core_id) {
-        raster_mem_reads    = get_csr_64(staging_ptr, CSR_MPM_RASTER_READS);
-        raster_mem_lat      = get_csr_64(staging_ptr, CSR_MPM_RASTER_LAT);
-        raster_stall_cycles = get_csr_64(staging_ptr, CSR_MPM_RASTER_STALL);
+        raster_mem_reads    = get_csr_64(staging_ptr, VX_CSR_MPM_RASTER_READS);
+        raster_mem_lat      = get_csr_64(staging_ptr, VX_CSR_MPM_RASTER_LAT);
+        raster_stall_cycles = get_csr_64(staging_ptr, VX_CSR_MPM_RASTER_STALL);
         // cache perf counters
-        rcache_reads        = get_csr_64(staging_ptr, CSR_MPM_RCACHE_READS);
-        rcache_read_misses  = get_csr_64(staging_ptr, CSR_MPM_RCACHE_MISS_R);
-        rcache_bank_stalls  = get_csr_64(staging_ptr, CSR_MPM_RCACHE_BANK_ST);
-        rcache_mshr_stalls  = get_csr_64(staging_ptr, CSR_MPM_RCACHE_MSHR_ST);
+        rcache_reads        = get_csr_64(staging_ptr, VX_CSR_MPM_RCACHE_READS);
+        rcache_read_misses  = get_csr_64(staging_ptr, VX_CSR_MPM_RCACHE_MISS_R);
+        rcache_bank_stalls  = get_csr_64(staging_ptr, VX_CSR_MPM_RCACHE_BANK_ST);
+        rcache_mshr_stalls  = get_csr_64(staging_ptr, VX_CSR_MPM_RCACHE_MSHR_ST);
       }
       // issue_stall
-      uint64_t raster_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_RASTER_ISSUE_ST);
+      uint64_t raster_stalls_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_RASTER_ISSUE_ST);
       if (num_cores > 1) fprintf(stream, "PERF: core%d: raster issue stalls=%ld\n", core_id, raster_stalls_per_core);
       raster_issue_stalls += raster_stalls_per_core;
     #endif
     } break;
-    case DCR_MPM_CLASS_ROP: {
+    case VX_DCR_MPM_CLASS_ROP: {
     #ifdef EXT_ROP_ENABLE
       if (0 == core_id) {
-        rop_mem_reads       = get_csr_64(staging_ptr, CSR_MPM_ROP_READS);
-        rop_mem_writes      = get_csr_64(staging_ptr, CSR_MPM_ROP_WRITES);
-        rop_mem_lat         = get_csr_64(staging_ptr, CSR_MPM_ROP_LAT);
-        rop_stall_cycles    = get_csr_64(staging_ptr, CSR_MPM_ROP_STALL);
+        rop_mem_reads       = get_csr_64(staging_ptr, VX_CSR_MPM_ROP_READS);
+        rop_mem_writes      = get_csr_64(staging_ptr, VX_CSR_MPM_ROP_WRITES);
+        rop_mem_lat         = get_csr_64(staging_ptr, VX_CSR_MPM_ROP_LAT);
+        rop_stall_cycles    = get_csr_64(staging_ptr, VX_CSR_MPM_ROP_STALL);
         // cache perf counters
-        ocache_reads        = get_csr_64(staging_ptr, CSR_MPM_OCACHE_READS);
-        ocache_writes       = get_csr_64(staging_ptr, CSR_MPM_OCACHE_WRITES);
-        ocache_read_misses  = get_csr_64(staging_ptr, CSR_MPM_OCACHE_MISS_R);
-        ocache_write_misses = get_csr_64(staging_ptr, CSR_MPM_OCACHE_MISS_W);
-        ocache_bank_stalls  = get_csr_64(staging_ptr, CSR_MPM_OCACHE_BANK_ST);
-        ocache_mshr_stalls  = get_csr_64(staging_ptr, CSR_MPM_OCACHE_MSHR_ST);
+        ocache_reads        = get_csr_64(staging_ptr, VX_CSR_MPM_OCACHE_READS);
+        ocache_writes       = get_csr_64(staging_ptr, VX_CSR_MPM_OCACHE_WRITES);
+        ocache_read_misses  = get_csr_64(staging_ptr, VX_CSR_MPM_OCACHE_MISS_R);
+        ocache_write_misses = get_csr_64(staging_ptr, VX_CSR_MPM_OCACHE_MISS_W);
+        ocache_bank_stalls  = get_csr_64(staging_ptr, VX_CSR_MPM_OCACHE_BANK_ST);
+        ocache_mshr_stalls  = get_csr_64(staging_ptr, VX_CSR_MPM_OCACHE_MSHR_ST);
       }
       // issue_stall
-      uint64_t rop_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_ROP_ISSUE_ST);
+      uint64_t rop_stalls_per_core = get_csr_64(staging_ptr, VX_CSR_MPM_ROP_ISSUE_ST);
       if (num_cores > 1) fprintf(stream, "PERF: core%d: rop issue stalls=%ld\n", core_id, rop_stalls_per_core);
       rop_issue_stalls += rop_stalls_per_core;
     #endif
@@ -517,7 +517,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
       
 #ifdef PERF_ENABLE
   switch (perf_class) {
-  case DCR_MPM_CLASS_CORE: {    
+  case VX_DCR_MPM_CLASS_CORE: {    
     int ifetch_avg_lat = (int)(double(ifetch_lat) / double(ifetches));
     int load_avg_lat = (int)(double(load_lat) / double(loads));
     fprintf(stream, "PERF: ibuffer stalls=%ld\n", ibuffer_stalls);
@@ -534,7 +534,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: load latency=%d cycles\n", load_avg_lat);
     
   } break;  
-  case DCR_MPM_CLASS_MEM: {
+  case VX_DCR_MPM_CLASS_MEM: {
     int icache_read_hit_ratio = (int)((1.0 - (double(icache_read_misses) / double(icache_reads))) * 100);    
     int dcache_read_hit_ratio = (int)((1.0 - (double(dcache_read_misses) / double(dcache_reads))) * 100);
     int dcache_write_hit_ratio = (int)((1.0 - (double(dcache_write_misses) / double(dcache_writes))) * 100);
@@ -573,7 +573,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: memory requests=%ld (reads=%ld, writes=%ld)\n", (mem_reads + mem_writes), mem_reads, mem_writes);
     fprintf(stream, "PERF: memory latency=%d cycles\n", mem_avg_lat);
   } break;
-  case DCR_MPM_CLASS_TEX: {
+  case VX_DCR_MPM_CLASS_TEX: {
   #ifdef EXT_TEX_ENABLE
     int tex_avg_lat = (int)(double(tex_mem_lat) / double(tex_mem_reads));
     int tex_stall_cycles_ratio = (int)(100 * double(tex_stall_cycles) / cycles);
@@ -589,7 +589,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: tcache mshr stalls=%ld\n", tcache_mshr_stalls);
   #endif
   } break;
-  case DCR_MPM_CLASS_RASTER: {
+  case VX_DCR_MPM_CLASS_RASTER: {
   #ifdef EXT_RASTER_ENABLE
     int raster_mem_avg_lat = (int)(double(raster_mem_lat) / double(raster_mem_reads));
     int raster_stall_cycles_ratio = (int)(100 * double(raster_stall_cycles) / cycles);
@@ -606,7 +606,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: rcache mshr stalls=%ld\n", rcache_mshr_stalls);
   #endif
   } break;
-  case DCR_MPM_CLASS_ROP: {
+  case VX_DCR_MPM_CLASS_ROP: {
   #ifdef EXT_ROP_ENABLE
     int rop_mem_avg_lat = (int)(double(rop_mem_lat) / double(rop_mem_reads + rop_mem_writes));
     int rop_stall_cycles_ratio = (int)(100 * double(rop_stall_cycles) / cycles);
@@ -686,7 +686,7 @@ extern int vx_perf_counter(vx_device_h device, int counter, int core_id, uint64_
     }
 
     auto per_core_value = get_csr_64(staging_ptr, counter);     
-    if (counter == CSR_MCYCLE) {
+    if (counter == VX_CSR_MCYCLE) {
       _value = std::max<uint64_t>(per_core_value, _value);
     } else {
       _value += per_core_value;

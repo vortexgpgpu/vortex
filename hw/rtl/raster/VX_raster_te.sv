@@ -16,18 +16,18 @@ module VX_raster_te #(
 
     // Inputs
     input wire                          valid_in,
-    input wire [`RASTER_DIM_BITS-1:0]   xloc_in,
-    input wire [`RASTER_DIM_BITS-1:0]   yloc_in,
-    input wire [`RASTER_PID_BITS-1:0]   pid_in,
+    input wire [`VX_RASTER_DIM_BITS-1:0] xloc_in,
+    input wire [`VX_RASTER_DIM_BITS-1:0] yloc_in,
+    input wire [`VX_RASTER_PID_BITS-1:0] pid_in,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_in,
     input wire [2:0][`RASTER_DATA_BITS-1:0] extents_in,
     output wire                         ready_in,
     
     // Outputs
     output wire                         valid_out,
-    output wire [`RASTER_DIM_BITS-1:0]  xloc_out,
-    output wire [`RASTER_DIM_BITS-1:0]  yloc_out,
-    output wire [`RASTER_PID_BITS-1:0]  pid_out,
+    output wire [`VX_RASTER_DIM_BITS-1:0] xloc_out,
+    output wire [`VX_RASTER_DIM_BITS-1:0] yloc_out,
+    output wire [`VX_RASTER_PID_BITS-1:0] pid_out,
     output wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_out,
     input wire                          ready_out
 );
@@ -35,31 +35,31 @@ module VX_raster_te #(
 
     localparam LEVEL_BITS      = (TILE_LOGSIZE - BLOCK_LOGSIZE) + 1;
     localparam TILE_FIFO_DEPTH = 1 << (2 * (TILE_LOGSIZE - BLOCK_LOGSIZE));
-    localparam FIFO_DATA_WIDTH = 2 * `RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS + LEVEL_BITS;
+    localparam FIFO_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS + LEVEL_BITS;
 
     wire stall;
 
     reg [2:0][`RASTER_DATA_BITS-1:0] tile_extents;
     reg [2:0][2:0][`RASTER_DATA_BITS-1:0] tile_edges;
-    reg [`RASTER_PID_BITS-1:0]       tile_pid;
-    reg [`RASTER_DIM_BITS-1:0]       tile_xloc;
-    reg [`RASTER_DIM_BITS-1:0]       tile_yloc;
-    reg [2:0][`RASTER_DATA_BITS-1:0] tile_edge_eval;
-    reg [LEVEL_BITS-1:0]             tile_level;
+    reg [`VX_RASTER_PID_BITS-1:0]       tile_pid;
+    reg [`VX_RASTER_DIM_BITS-1:0]       tile_xloc;
+    reg [`VX_RASTER_DIM_BITS-1:0]       tile_yloc;
+    reg [2:0][`RASTER_DATA_BITS-1:0]    tile_edge_eval;
+    reg [LEVEL_BITS-1:0]                tile_level;
 
-    wire [`RASTER_DIM_BITS-1:0]       tile_xloc_r;
-    wire [`RASTER_DIM_BITS-1:0]       tile_yloc_r;
-    wire [2:0][`RASTER_DATA_BITS-1:0] tile_edge_eval_r;
-    wire [LEVEL_BITS-1:0]             tile_level_r;
+    wire [`VX_RASTER_DIM_BITS-1:0]      tile_xloc_r;
+    wire [`VX_RASTER_DIM_BITS-1:0]      tile_yloc_r;
+    wire [2:0][`RASTER_DATA_BITS-1:0]   tile_edge_eval_r;
+    wire [LEVEL_BITS-1:0]               tile_level_r;
 
-    wire [3:0][`RASTER_DIM_BITS-1:0] subtile_xloc, subtile_xloc_r;
-    wire [3:0][`RASTER_DIM_BITS-1:0] subtile_yloc, subtile_yloc_r;
+    wire [3:0][`VX_RASTER_DIM_BITS-1:0] subtile_xloc, subtile_xloc_r;
+    wire [3:0][`VX_RASTER_DIM_BITS-1:0] subtile_yloc, subtile_yloc_r;
     wire [3:0][2:0][`RASTER_DATA_BITS-1:0] subtile_edge_eval, subtile_edge_eval_r;
     wire [LEVEL_BITS-1:0] subtile_level, subtile_level_r;
 
-    wire [`RASTER_DIM_BITS-1:0] fifo_xloc;
-    wire [`RASTER_DIM_BITS-1:0] fifo_yloc;
-    wire [2:0][`RASTER_DATA_BITS-1:0] fifo_edge_eval;
+    wire [`VX_RASTER_DIM_BITS-1:0]      fifo_xloc;
+    wire [`VX_RASTER_DIM_BITS-1:0]      fifo_yloc;
+    wire [2:0][`RASTER_DATA_BITS-1:0]   fifo_edge_eval;
     wire [LEVEL_BITS-1:0]  fifo_level;
 
     wire       fifo_arb_valid;    
@@ -113,13 +113,13 @@ module VX_raster_te #(
     end
 
     // Generate sub-tile info
-    wire [`RASTER_DIM_BITS-1:0] tile_logsize = `RASTER_DIM_BITS'(TILE_LOGSIZE-1) - `RASTER_DIM_BITS'(tile_level);
-    wire is_block = (tile_logsize < `RASTER_DIM_BITS'(BLOCK_LOGSIZE));
+    wire [`VX_RASTER_DIM_BITS-1:0] tile_logsize = `VX_RASTER_DIM_BITS'(TILE_LOGSIZE-1) - `VX_RASTER_DIM_BITS'(tile_level);
+    wire is_block = (tile_logsize < `VX_RASTER_DIM_BITS'(BLOCK_LOGSIZE));
     assign subtile_level = tile_level + LEVEL_BITS'(1);
     for (genvar i = 0; i < 2; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
-            assign subtile_xloc[2 * i + j] = tile_xloc + (`RASTER_DIM_BITS'(i) << tile_logsize);
-            assign subtile_yloc[2 * i + j] = tile_yloc + (`RASTER_DIM_BITS'(j) << tile_logsize);
+            assign subtile_xloc[2 * i + j] = tile_xloc + (`VX_RASTER_DIM_BITS'(i) << tile_logsize);
+            assign subtile_yloc[2 * i + j] = tile_yloc + (`VX_RASTER_DIM_BITS'(j) << tile_logsize);
             for (genvar k = 0; k < 3; ++k) begin
                 assign subtile_edge_eval[2 * i + j][k] = i * (tile_edges[k][0] << tile_logsize) + j * (tile_edges[k][1] << tile_logsize) + tile_edge_eval[k];
             end
@@ -138,7 +138,7 @@ module VX_raster_te #(
     wire tile_valid_e = tile_valid && overlap;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 4 * (2 * `RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS) + LEVEL_BITS + 2 * `RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS + LEVEL_BITS),
+        .DATAW  (1 + 1 + 4 * (2 * `VX_RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS) + LEVEL_BITS + 2 * `VX_RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS + LEVEL_BITS),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),

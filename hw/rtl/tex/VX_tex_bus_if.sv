@@ -8,8 +8,8 @@ interface VX_tex_bus_if #(
     wire                            req_valid;
     wire [NUM_LANES-1:0]            req_mask;
     wire [1:0][NUM_LANES-1:0][31:0] req_coords;
-    wire [NUM_LANES-1:0][`TEX_LOD_BITS-1:0] req_lod;
-    wire [`TEX_STAGE_BITS-1:0]      req_stage;
+    wire [NUM_LANES-1:0][`VX_TEX_LOD_BITS-1:0] req_lod;
+    wire [`VX_TEX_STAGE_BITS-1:0]   req_stage;
     wire [TAG_WIDTH-1:0]            req_tag;    
     wire                            req_ready;
 

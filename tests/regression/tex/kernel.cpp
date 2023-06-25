@@ -65,11 +65,11 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 		auto fu = (x_start + 0.5f) * deltaX;
 		for (uint32_t x = x_start; x < x_end; ++x) {
 			uint32_t color;
-			cocogfx::TFixed<TEX_FXD_FRAC> xu(fu);
-			cocogfx::TFixed<TEX_FXD_FRAC> xv(fv);			
+			cocogfx::TFixed<VX_TEX_FXD_FRAC> xu(fu);
+			cocogfx::TFixed<VX_TEX_FXD_FRAC> xv(fv);			
 			
 			if (arg->filter == 2) {        
-				uint32_t lodn = std::min<uint32_t>(lod + 1, TEX_LOD_MAX);
+				uint32_t lodn = std::min<uint32_t>(lod + 1, VX_TEX_LOD_MAX);
 				uint32_t texel0, texel1;
 				if (arg->use_sw) {
 					texel0 = g_sampler.read(0, xu.data(), xv.data(), lod);  
@@ -110,14 +110,14 @@ int main() {
 	g_tileinfo.deltaY      = 1.0f / arg->dst_height;
 
 	{
-		auto tex_logdim    = arg->dcrs.read(0, DCR_TEX_LOGDIM);
+		auto tex_logdim    = arg->dcrs.read(0, VX_DCR_TEX_LOGDIM);
 		auto tex_logwidth  = tex_logdim & 0xffff;
   		auto tex_logheight = tex_logdim >> 16;
 		auto width_ratio   = float(1 << tex_logwidth) / arg->dst_width;
 		auto height_ratio  = float(1 << tex_logheight) / arg->dst_height;
 		auto minification  = std::max(width_ratio, height_ratio);
 		auto j             = static_cast<fixed16_t>(std::max(minification, 1.0f));
-		auto lod           = std::min<uint32_t>(log2floor(j.data()) - 16, TEX_LOD_MAX);
+		auto lod           = std::min<uint32_t>(log2floor(j.data()) - 16, VX_TEX_LOD_MAX);
 		auto frac          = (j.data() - (1 << (lod + 16))) >> (lod + 16 - 8);
 		g_tileinfo.lod     = lod;
 		g_tileinfo.frac    = frac;

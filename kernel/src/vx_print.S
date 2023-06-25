@@ -4,7 +4,7 @@
 .type vx_putchar, @function
 .global vx_putchar
 vx_putchar:
-    csrr t0, CSR_MHARTID
+    csrr t0, VX_CSR_MHARTID
     andi t0, t0, %lo(IO_COUT_SIZE-1)
 #if (XLEN == 64)
     li t1, (IO_COUT_ADDR >> 32)        

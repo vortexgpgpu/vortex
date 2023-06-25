@@ -8,10 +8,10 @@ interface VX_rop_bus_if #(
     
     wire [`UP(`UUID_BITS)-1:0]              req_uuid;
     wire [NUM_LANES-1:0]                    req_mask; 
-    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] req_pos_x;
-    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] req_pos_y;
+    wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] req_pos_x;
+    wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] req_pos_y;
     rgba_t [NUM_LANES-1:0]                  req_color;
-    wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] req_depth;
+    wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] req_depth;
     wire [NUM_LANES-1:0]                    req_face;
 
     wire                                    req_ready;

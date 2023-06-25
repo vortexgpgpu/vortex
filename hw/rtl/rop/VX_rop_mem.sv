@@ -20,11 +20,11 @@ module VX_rop_mem #(
     input wire [NUM_LANES-1:0]                      req_ds_mask,
     input wire [NUM_LANES-1:0]                      req_c_mask,
     input wire                                      req_rw,
-    input wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0]   req_pos_x,
-    input wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0]   req_pos_y,
+    input wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] req_pos_x,
+    input wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] req_pos_y,
     input rgba_t [NUM_LANES-1:0]                    req_color, 
-    input wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] req_depth,
-    input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] req_stencil,
+    input wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] req_depth,
+    input wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0] req_stencil,
     input wire [NUM_LANES-1:0]                      req_face,
     input wire [TAG_WIDTH-1:0]                      req_tag,
     output wire                                     req_ready,
@@ -34,8 +34,8 @@ module VX_rop_mem #(
     output wire                                     rsp_valid,
     output wire [NUM_LANES-1:0]                     rsp_mask,
     output rgba_t [NUM_LANES-1:0]                   rsp_color, 
-    output wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] rsp_depth,
-    output wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] rsp_stencil,
+    output wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] rsp_depth,
+    output wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0] rsp_stencil,
     output wire [TAG_WIDTH-1:0]                     rsp_tag,
     input wire                                      rsp_ready    
 );
@@ -77,8 +77,8 @@ module VX_rop_mem #(
         `UNUSED_VAR (m_y_pitch)
 
         VX_multiplier #(
-            .A_WIDTH (`ROP_DIM_BITS),
-            .B_WIDTH (`ROP_PITCH_BITS),
+            .A_WIDTH (`VX_ROP_DIM_BITS),
+            .B_WIDTH (`VX_ROP_PITCH_BITS),
             .R_WIDTH (32),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
@@ -117,8 +117,8 @@ module VX_rop_mem #(
         `UNUSED_VAR (m_y_pitch)
 
         VX_multiplier #(
-            .A_WIDTH (`ROP_DIM_BITS),
-            .B_WIDTH (`ROP_PITCH_BITS),
+            .A_WIDTH (`VX_ROP_DIM_BITS),
+            .B_WIDTH (`VX_ROP_PITCH_BITS),
             .R_WIDTH (32),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
@@ -234,8 +234,8 @@ module VX_rop_mem #(
     assign rsp_mask = (mrsp_mask[0 +: NUM_LANES] | mrsp_mask[NUM_LANES +: NUM_LANES]);
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin        
-        assign rsp_depth[i]   = `ROP_DEPTH_BITS'(mrsp_data[i] >> 0) & `ROP_DEPTH_BITS'(`ROP_DEPTH_MASK);
-        assign rsp_stencil[i] = `ROP_STENCIL_BITS'(mrsp_data[i] >> `ROP_DEPTH_BITS) & `ROP_STENCIL_BITS'(`ROP_STENCIL_MASK);        
+        assign rsp_depth[i]   = `VX_ROP_DEPTH_BITS'(mrsp_data[i] >> 0) & `VX_ROP_DEPTH_BITS'(`VX_ROP_DEPTH_MASK);
+        assign rsp_stencil[i] = `VX_ROP_STENCIL_BITS'(mrsp_data[i] >> `VX_ROP_DEPTH_BITS) & `VX_ROP_STENCIL_BITS'(`VX_ROP_STENCIL_MASK);        
     end
 
     for (genvar i = NUM_LANES; i < NUM_REQS; ++i) begin

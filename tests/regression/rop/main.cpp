@@ -147,45 +147,45 @@ int render(uint32_t num_tasks) {
   staging_buf = nullptr;
 
   // configure rop color buffer
-  vx_dcr_write(device, DCR_ROP_CBUF_ADDR,  cbuf_addr / 64); // block address
-  vx_dcr_write(device, DCR_ROP_CBUF_PITCH, cbuf_pitch);
-  vx_dcr_write(device, DCR_ROP_CBUF_WRITEMASK, 0xf);
+  vx_dcr_write(device, VX_DCR_ROP_CBUF_ADDR,  cbuf_addr / 64); // block address
+  vx_dcr_write(device, VX_DCR_ROP_CBUF_PITCH, cbuf_pitch);
+  vx_dcr_write(device, VX_DCR_ROP_CBUF_WRITEMASK, 0xf);
 
   // configure rop depth buffer to default
-  vx_dcr_write(device, DCR_ROP_ZBUF_ADDR,  zbuf_addr / 64); // block address
-  vx_dcr_write(device, DCR_ROP_ZBUF_PITCH, zbuf_pitch);   
+  vx_dcr_write(device, VX_DCR_ROP_ZBUF_ADDR,  zbuf_addr / 64); // block address
+  vx_dcr_write(device, VX_DCR_ROP_ZBUF_PITCH, zbuf_pitch);   
   if (depth_enable) {
-    vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, ROP_DEPTH_FUNC_LESS);
-    vx_dcr_write(device, DCR_ROP_DEPTH_WRITEMASK, 1);
+    vx_dcr_write(device, VX_DCR_ROP_DEPTH_FUNC, VX_ROP_DEPTH_FUNC_LESS);
+    vx_dcr_write(device, VX_DCR_ROP_DEPTH_WRITEMASK, 1);
   } else {
-    vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, ROP_DEPTH_FUNC_ALWAYS);
-    vx_dcr_write(device, DCR_ROP_DEPTH_WRITEMASK, 0);
+    vx_dcr_write(device, VX_DCR_ROP_DEPTH_FUNC, VX_ROP_DEPTH_FUNC_ALWAYS);
+    vx_dcr_write(device, VX_DCR_ROP_DEPTH_WRITEMASK, 0);
   }
   
   // configure rop stencil states to default
-  vx_dcr_write(device, DCR_ROP_STENCIL_FUNC,  ROP_DEPTH_FUNC_ALWAYS);
-  vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, ROP_STENCIL_OP_KEEP);
-  vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, ROP_STENCIL_OP_KEEP);
-  vx_dcr_write(device, DCR_ROP_STENCIL_FAIL,  ROP_STENCIL_OP_KEEP);
-  vx_dcr_write(device, DCR_ROP_STENCIL_REF,   0);
-  vx_dcr_write(device, DCR_ROP_STENCIL_MASK,  ROP_STENCIL_MASK);
-  vx_dcr_write(device, DCR_ROP_STENCIL_WRITEMASK, 0);
+  vx_dcr_write(device, VX_DCR_ROP_STENCIL_FUNC,  VX_ROP_DEPTH_FUNC_ALWAYS);
+  vx_dcr_write(device, VX_DCR_ROP_STENCIL_ZPASS, VX_ROP_STENCIL_OP_KEEP);
+  vx_dcr_write(device, VX_DCR_ROP_STENCIL_ZPASS, VX_ROP_STENCIL_OP_KEEP);
+  vx_dcr_write(device, VX_DCR_ROP_STENCIL_FAIL,  VX_ROP_STENCIL_OP_KEEP);
+  vx_dcr_write(device, VX_DCR_ROP_STENCIL_REF,   0);
+  vx_dcr_write(device, VX_DCR_ROP_STENCIL_MASK,  VX_ROP_STENCIL_MASK);
+  vx_dcr_write(device, VX_DCR_ROP_STENCIL_WRITEMASK, 0);
 
   // configure rop blend states to default
   if (blend_enable) {
-    vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
-                                           | (ROP_BLEND_MODE_ADD << 0));  // SRC
-    vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (ROP_BLEND_FUNC_ONE_MINUS_SRC_A << 24)  // DST_A
-                                           | (ROP_BLEND_FUNC_ONE_MINUS_SRC_A << 16)  // DST_RGB 
-                                           | (ROP_BLEND_FUNC_ONE << 8)    // SRC_A
-                                           | (ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
+    vx_dcr_write(device, VX_DCR_ROP_BLEND_MODE, (VX_ROP_BLEND_MODE_ADD << 16)   // DST
+                                              | (VX_ROP_BLEND_MODE_ADD << 0));  // SRC
+    vx_dcr_write(device, VX_DCR_ROP_BLEND_FUNC, (VX_ROP_BLEND_FUNC_ONE_MINUS_SRC_A << 24)  // DST_A
+                                              | (VX_ROP_BLEND_FUNC_ONE_MINUS_SRC_A << 16)  // DST_RGB 
+                                              | (VX_ROP_BLEND_FUNC_ONE << 8)    // SRC_A
+                                              | (VX_ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
   } else {
-    vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
-                                           | (ROP_BLEND_MODE_ADD << 0));  // SRC
-    vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (ROP_BLEND_FUNC_ZERO << 24)  // DST_A
-                                           | (ROP_BLEND_FUNC_ZERO << 16)  // DST_RGB 
-                                           | (ROP_BLEND_FUNC_ONE << 8)    // SRC_A
-                                           | (ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
+    vx_dcr_write(device, VX_DCR_ROP_BLEND_MODE, (VX_ROP_BLEND_MODE_ADD << 16)   // DST
+                                              | (VX_ROP_BLEND_MODE_ADD << 0));  // SRC
+    vx_dcr_write(device, VX_DCR_ROP_BLEND_FUNC, (VX_ROP_BLEND_FUNC_ZERO << 24)  // DST_A
+                                              | (VX_ROP_BLEND_FUNC_ZERO << 16)  // DST_RGB 
+                                              | (VX_ROP_BLEND_FUNC_ONE << 8)    // SRC_A
+                                              | (VX_ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
   }
   
   auto time_start = std::chrono::high_resolution_clock::now();

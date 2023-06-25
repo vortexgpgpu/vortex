@@ -85,7 +85,7 @@ module VX_csr_unit #(
 
 `ifdef EXT_TEX_ENABLE
 
-    wire tex_addr_enable = (csr_exe_if.addr >= `CSR_TEX_BEGIN && csr_exe_if.addr < `CSR_TEX_END);
+    wire tex_addr_enable = (csr_exe_if.addr >= `VX_CSR_TEX_BEGIN && csr_exe_if.addr < `VX_CSR_TEX_END);
 
     assign tex_csr_if.read_enable = csr_req_valid && ~csr_write_enable && tex_addr_enable;
     assign tex_csr_if.read_uuid   = csr_exe_if.uuid;
@@ -104,7 +104,7 @@ module VX_csr_unit #(
 
 `ifdef EXT_RASTER_ENABLE
 
-    wire raster_addr_enable = (csr_exe_if.addr >= `CSR_RASTER_BEGIN && csr_exe_if.addr < `CSR_RASTER_END);
+    wire raster_addr_enable = (csr_exe_if.addr >= `VX_CSR_RASTER_BEGIN && csr_exe_if.addr < `VX_CSR_RASTER_END);
     
     assign raster_csr_if.read_enable = csr_req_valid && ~csr_write_enable && raster_addr_enable;
     assign raster_csr_if.read_uuid   = csr_exe_if.uuid;
@@ -122,7 +122,7 @@ module VX_csr_unit #(
 
 `ifdef EXT_ROP_ENABLE
 
-    wire rop_addr_enable = (csr_exe_if.addr >= `CSR_ROP_BEGIN && csr_exe_if.addr < `CSR_ROP_END);
+    wire rop_addr_enable = (csr_exe_if.addr >= `VX_CSR_ROP_BEGIN && csr_exe_if.addr < `VX_CSR_ROP_END);
 
     assign rop_csr_if.read_enable = csr_req_valid && ~csr_write_enable && rop_addr_enable;
     assign rop_csr_if.read_uuid   = csr_exe_if.uuid;
@@ -204,8 +204,8 @@ module VX_csr_unit #(
         end else
     `endif
         case (csr_exe_if.addr)
-        `CSR_THREAD_ID : csr_read_data = wtid;
-        `CSR_MHARTID   : csr_read_data = gtid;
+        `VX_CSR_THREAD_ID : csr_read_data = wtid;
+        `VX_CSR_MHARTID   : csr_read_data = gtid;
         default : begin
             csr_read_data = {`NUM_THREADS{csr_read_data_ro | csr_read_data_rw}};
             csr_rd_enable = 1;

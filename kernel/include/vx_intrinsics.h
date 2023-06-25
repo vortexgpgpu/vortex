@@ -267,70 +267,70 @@ inline void vx_barrier(unsigned barried_id, unsigned num_warps) {
 // Return current thread identifier
 inline int vx_thread_id() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_THREAD_ID));
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(VX_CSR_THREAD_ID));
     return result;
 }
 
 // Return current warp identifier
 inline int vx_warp_id() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_WARP_ID));
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(VX_CSR_WARP_ID));
     return result;
 }
 
 // Return current core identifier
 inline int vx_core_id() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_CORE_ID));
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(VX_CSR_CORE_ID));
     return result;
 }
 
 // Return current cluster identifier
 inline int vx_cluster_id() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_CLUSTER_ID));
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(VX_CSR_CLUSTER_ID));
     return result;
 }
 
 // Return current threadk mask
 inline int vx_thread_mask() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_TMASK));
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(VX_CSR_TMASK));
     return result;
 }
 
 // Return the number of threads per warp
 inline int vx_num_threads() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_NUM_THREADS));
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(VX_CSR_NUM_THREADS));
     return result;
 }
 
 // Return the number of warps per core
 inline int vx_num_warps() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_NUM_WARPS));
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(VX_CSR_NUM_WARPS));
     return result;   
 }
 
 // Return the number of cores per cluster
 inline int vx_num_cores() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_NUM_CORES));
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(VX_CSR_NUM_CORES));
     return result;
 }
 
 // Return the number of clusters
 inline int vx_num_clusters() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_NUM_CLUSTERS));
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(VX_CSR_NUM_CLUSTERS));
     return result;
 }
 
 // Return the hart identifier (thread id accross the processor)
 inline int vx_hart_id() {
     int result;
-    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_MHARTID));
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(VX_CSR_MHARTID));
     return result;
 }
 

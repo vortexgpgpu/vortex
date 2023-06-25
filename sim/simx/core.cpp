@@ -433,227 +433,227 @@ void Core::cout_flush() {
 
 uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   switch (addr) {
-  case CSR_SATP:
-  case CSR_PMPCFG0:
-  case CSR_PMPADDR0:
-  case CSR_MSTATUS:
-  case CSR_MISA:
-  case CSR_MEDELEG:
-  case CSR_MIDELEG:
-  case CSR_MIE:
-  case CSR_MTVEC:
-  case CSR_MEPC:
-  case CSR_MNSTATUS:
+  case VX_CSR_SATP:
+  case VX_CSR_PMPCFG0:
+  case VX_CSR_PMPADDR0:
+  case VX_CSR_MSTATUS:
+  case VX_CSR_MISA:
+  case VX_CSR_MEDELEG:
+  case VX_CSR_MIDELEG:
+  case VX_CSR_MIE:
+  case VX_CSR_MTVEC:
+  case VX_CSR_MEPC:
+  case VX_CSR_MNSTATUS:
     return 0;
 
-  case CSR_FFLAGS:
+  case VX_CSR_FFLAGS:
     return fcsrs_.at(wid) & 0x1F;
-  case CSR_FRM:
+  case VX_CSR_FRM:
     return (fcsrs_.at(wid) >> 5);
-  case CSR_FCSR:
+  case VX_CSR_FCSR:
     return fcsrs_.at(wid);
-  case CSR_MHARTID: // global thread ID
+  case VX_CSR_MHARTID: // global thread ID
     return (core_id_ * arch_.num_warps() + wid) * arch_.num_threads() + tid;
-  case CSR_THREAD_ID: // thread ID
+  case VX_CSR_THREAD_ID: // thread ID
     return tid;
-  case CSR_WARP_ID: // warp ID
+  case VX_CSR_WARP_ID: // warp ID
     return wid;
-  case CSR_CORE_ID: // core ID
+  case VX_CSR_CORE_ID: // core ID
     return core_id_ % arch_.num_cores();
-  case CSR_CLUSTER_ID: // cluster ID
+  case VX_CSR_CLUSTER_ID: // cluster ID
     return core_id_ / arch_.num_cores();
-  case CSR_TMASK: // thread mask
+  case VX_CSR_TMASK: // thread mask
     return warps_.at(wid)->getTmask();
-  case CSR_NUM_THREADS: // Number of threads per warp
+  case VX_CSR_NUM_THREADS: // Number of threads per warp
     return arch_.num_threads();
-  case CSR_NUM_WARPS: // Number of warps per core
+  case VX_CSR_NUM_WARPS: // Number of warps per core
     return arch_.num_warps();
-  case CSR_NUM_CORES: // Number of cores per cluster
+  case VX_CSR_NUM_CORES: // Number of cores per cluster
     return arch_.num_cores();
-  case CSR_NUM_CLUSTERS: // Number of cluster
+  case VX_CSR_NUM_CLUSTERS: // Number of cluster
     return arch_.num_clusters();
-  case CSR_MCYCLE: // NumCycles
+  case VX_CSR_MCYCLE: // NumCycles
     return perf_stats_.cycles & 0xffffffff;
-  case CSR_MCYCLE_H: // NumCycles
+  case VX_CSR_MCYCLE_H: // NumCycles
     return (uint32_t)(perf_stats_.cycles >> 32);
-  case CSR_MINSTRET: // NumInsts
+  case VX_CSR_MINSTRET: // NumInsts
     return perf_stats_.instrs & 0xffffffff;
-  case CSR_MINSTRET_H: // NumInsts
+  case VX_CSR_MINSTRET_H: // NumInsts
     return (uint32_t)(perf_stats_.instrs >> 32);
   default:
-    if ((addr >= CSR_MPM_BASE && addr < (CSR_MPM_BASE + 32))
-     || (addr >= CSR_MPM_BASE_H && addr < (CSR_MPM_BASE_H + 32))) {
+    if ((addr >= VX_CSR_MPM_BASE && addr < (VX_CSR_MPM_BASE + 32))
+     || (addr >= VX_CSR_MPM_BASE_H && addr < (VX_CSR_MPM_BASE_H + 32))) {
       // user-defined MPM CSRs
-      auto perf_class = dcrs_.base_dcrs.read(DCR_BASE_MPM_CLASS);
+      auto perf_class = dcrs_.base_dcrs.read(VX_DCR_BASE_MPM_CLASS);
       switch (perf_class) {                
-      case DCR_MPM_CLASS_NONE: 
+      case VX_DCR_MPM_CLASS_NONE: 
         break;    
-      case DCR_MPM_CLASS_CORE: {
+      case VX_DCR_MPM_CLASS_CORE: {
         switch (addr) {
-        case CSR_MPM_IBUF_ST:   return perf_stats_.ibuf_stalls & 0xffffffff; 
-        case CSR_MPM_IBUF_ST_H: return perf_stats_.ibuf_stalls >> 32; 
-        case CSR_MPM_SCRB_ST:   return perf_stats_.scrb_stalls & 0xffffffff; 
-        case CSR_MPM_SCRB_ST_H: return perf_stats_.scrb_stalls >> 32; 
-        case CSR_MPM_ALU_ST:    return perf_stats_.alu_stalls & 0xffffffff; 
-        case CSR_MPM_ALU_ST_H:  return perf_stats_.alu_stalls >> 32; 
-        case CSR_MPM_LSU_ST:    return perf_stats_.lsu_stalls & 0xffffffff; 
-        case CSR_MPM_LSU_ST_H:  return perf_stats_.lsu_stalls >> 32; 
-        case CSR_MPM_CSR_ST:    return perf_stats_.csr_stalls & 0xffffffff; 
-        case CSR_MPM_CSR_ST_H:  return perf_stats_.csr_stalls >> 32; 
-        case CSR_MPM_FPU_ST:    return perf_stats_.fpu_stalls & 0xffffffff; 
-        case CSR_MPM_FPU_ST_H:  return perf_stats_.fpu_stalls >> 32; 
-        case CSR_MPM_GPU_ST:    return perf_stats_.gpu_stalls & 0xffffffff; 
-        case CSR_MPM_GPU_ST_H:  return perf_stats_.gpu_stalls >> 32; 
+        case VX_CSR_MPM_IBUF_ST:   return perf_stats_.ibuf_stalls & 0xffffffff; 
+        case VX_CSR_MPM_IBUF_ST_H: return perf_stats_.ibuf_stalls >> 32; 
+        case VX_CSR_MPM_SCRB_ST:   return perf_stats_.scrb_stalls & 0xffffffff; 
+        case VX_CSR_MPM_SCRB_ST_H: return perf_stats_.scrb_stalls >> 32; 
+        case VX_CSR_MPM_ALU_ST:    return perf_stats_.alu_stalls & 0xffffffff; 
+        case VX_CSR_MPM_ALU_ST_H:  return perf_stats_.alu_stalls >> 32; 
+        case VX_CSR_MPM_LSU_ST:    return perf_stats_.lsu_stalls & 0xffffffff; 
+        case VX_CSR_MPM_LSU_ST_H:  return perf_stats_.lsu_stalls >> 32; 
+        case VX_CSR_MPM_CSR_ST:    return perf_stats_.csr_stalls & 0xffffffff; 
+        case VX_CSR_MPM_CSR_ST_H:  return perf_stats_.csr_stalls >> 32; 
+        case VX_CSR_MPM_FPU_ST:    return perf_stats_.fpu_stalls & 0xffffffff; 
+        case VX_CSR_MPM_FPU_ST_H:  return perf_stats_.fpu_stalls >> 32; 
+        case VX_CSR_MPM_GPU_ST:    return perf_stats_.gpu_stalls & 0xffffffff; 
+        case VX_CSR_MPM_GPU_ST_H:  return perf_stats_.gpu_stalls >> 32; 
         
-        case CSR_MPM_IFETCHES:  return perf_stats_.ifetches & 0xffffffff; 
-        case CSR_MPM_IFETCHES_H: return perf_stats_.ifetches >> 32; 
-        case CSR_MPM_LOADS:     return perf_stats_.loads & 0xffffffff; 
-        case CSR_MPM_LOADS_H:   return perf_stats_.loads >> 32; 
-        case CSR_MPM_STORES:    return perf_stats_.stores & 0xffffffff; 
-        case CSR_MPM_STORES_H:  return perf_stats_.stores >> 32;
-        case CSR_MPM_IFETCH_LAT: return perf_stats_.ifetch_latency & 0xffffffff; 
-        case CSR_MPM_IFETCH_LAT_H: return perf_stats_.ifetch_latency >> 32; 
-        case CSR_MPM_LOAD_LAT:  return perf_stats_.load_latency & 0xffffffff; 
-        case CSR_MPM_LOAD_LAT_H: return perf_stats_.load_latency >> 32;
+        case VX_CSR_MPM_IFETCHES:  return perf_stats_.ifetches & 0xffffffff; 
+        case VX_CSR_MPM_IFETCHES_H: return perf_stats_.ifetches >> 32; 
+        case VX_CSR_MPM_LOADS:     return perf_stats_.loads & 0xffffffff; 
+        case VX_CSR_MPM_LOADS_H:   return perf_stats_.loads >> 32; 
+        case VX_CSR_MPM_STORES:    return perf_stats_.stores & 0xffffffff; 
+        case VX_CSR_MPM_STORES_H:  return perf_stats_.stores >> 32;
+        case VX_CSR_MPM_IFETCH_LAT: return perf_stats_.ifetch_latency & 0xffffffff; 
+        case VX_CSR_MPM_IFETCH_LAT_H: return perf_stats_.ifetch_latency >> 32; 
+        case VX_CSR_MPM_LOAD_LAT:  return perf_stats_.load_latency & 0xffffffff; 
+        case VX_CSR_MPM_LOAD_LAT_H: return perf_stats_.load_latency >> 32;
        }
       } break; 
-      case DCR_MPM_CLASS_MEM: {
+      case VX_DCR_MPM_CLASS_MEM: {
         auto proc_perf = cluster_->processor()->perf_stats();
         switch (addr) {
-        case CSR_MPM_ICACHE_READS:    return proc_perf.clusters.icache.reads & 0xffffffff; 
-        case CSR_MPM_ICACHE_READS_H:  return proc_perf.clusters.icache.reads >> 32; 
-        case CSR_MPM_ICACHE_MISS_R:   return proc_perf.clusters.icache.read_misses & 0xffffffff;
-        case CSR_MPM_ICACHE_MISS_R_H: return proc_perf.clusters.icache.read_misses >> 32;
+        case VX_CSR_MPM_ICACHE_READS:    return proc_perf.clusters.icache.reads & 0xffffffff; 
+        case VX_CSR_MPM_ICACHE_READS_H:  return proc_perf.clusters.icache.reads >> 32; 
+        case VX_CSR_MPM_ICACHE_MISS_R:   return proc_perf.clusters.icache.read_misses & 0xffffffff;
+        case VX_CSR_MPM_ICACHE_MISS_R_H: return proc_perf.clusters.icache.read_misses >> 32;
         
-        case CSR_MPM_DCACHE_READS:    return proc_perf.clusters.dcache.reads & 0xffffffff; 
-        case CSR_MPM_DCACHE_READS_H:  return proc_perf.clusters.dcache.reads >> 32; 
-        case CSR_MPM_DCACHE_WRITES:   return proc_perf.clusters.dcache.writes & 0xffffffff; 
-        case CSR_MPM_DCACHE_WRITES_H: return proc_perf.clusters.dcache.writes >> 32; 
-        case CSR_MPM_DCACHE_MISS_R:   return proc_perf.clusters.dcache.read_misses & 0xffffffff; 
-        case CSR_MPM_DCACHE_MISS_R_H: return proc_perf.clusters.dcache.read_misses >> 32; 
-        case CSR_MPM_DCACHE_MISS_W:   return proc_perf.clusters.dcache.write_misses & 0xffffffff; 
-        case CSR_MPM_DCACHE_MISS_W_H: return proc_perf.clusters.dcache.write_misses >> 32; 
-        case CSR_MPM_DCACHE_BANK_ST:  return proc_perf.clusters.dcache.bank_stalls & 0xffffffff; 
-        case CSR_MPM_DCACHE_BANK_ST_H:return proc_perf.clusters.dcache.bank_stalls >> 32;
-        case CSR_MPM_DCACHE_MSHR_ST:  return proc_perf.clusters.dcache.mshr_stalls & 0xffffffff; 
-        case CSR_MPM_DCACHE_MSHR_ST_H:return proc_perf.clusters.dcache.mshr_stalls >> 32;
+        case VX_CSR_MPM_DCACHE_READS:    return proc_perf.clusters.dcache.reads & 0xffffffff; 
+        case VX_CSR_MPM_DCACHE_READS_H:  return proc_perf.clusters.dcache.reads >> 32; 
+        case VX_CSR_MPM_DCACHE_WRITES:   return proc_perf.clusters.dcache.writes & 0xffffffff; 
+        case VX_CSR_MPM_DCACHE_WRITES_H: return proc_perf.clusters.dcache.writes >> 32; 
+        case VX_CSR_MPM_DCACHE_MISS_R:   return proc_perf.clusters.dcache.read_misses & 0xffffffff; 
+        case VX_CSR_MPM_DCACHE_MISS_R_H: return proc_perf.clusters.dcache.read_misses >> 32; 
+        case VX_CSR_MPM_DCACHE_MISS_W:   return proc_perf.clusters.dcache.write_misses & 0xffffffff; 
+        case VX_CSR_MPM_DCACHE_MISS_W_H: return proc_perf.clusters.dcache.write_misses >> 32; 
+        case VX_CSR_MPM_DCACHE_BANK_ST:  return proc_perf.clusters.dcache.bank_stalls & 0xffffffff; 
+        case VX_CSR_MPM_DCACHE_BANK_ST_H:return proc_perf.clusters.dcache.bank_stalls >> 32;
+        case VX_CSR_MPM_DCACHE_MSHR_ST:  return proc_perf.clusters.dcache.mshr_stalls & 0xffffffff; 
+        case VX_CSR_MPM_DCACHE_MSHR_ST_H:return proc_perf.clusters.dcache.mshr_stalls >> 32;
         
-        case CSR_MPM_SMEM_READS:    return proc_perf.clusters.sharedmem.reads & 0xffffffff;
-        case CSR_MPM_SMEM_READS_H:  return proc_perf.clusters.sharedmem.reads >> 32;
-        case CSR_MPM_SMEM_WRITES:   return proc_perf.clusters.sharedmem.writes & 0xffffffff;
-        case CSR_MPM_SMEM_WRITES_H: return proc_perf.clusters.sharedmem.writes >> 32;
-        case CSR_MPM_SMEM_BANK_ST:  return proc_perf.clusters.sharedmem.bank_stalls & 0xffffffff; 
-        case CSR_MPM_SMEM_BANK_ST_H:return proc_perf.clusters.sharedmem.bank_stalls >> 32; 
+        case VX_CSR_MPM_SMEM_READS:    return proc_perf.clusters.sharedmem.reads & 0xffffffff;
+        case VX_CSR_MPM_SMEM_READS_H:  return proc_perf.clusters.sharedmem.reads >> 32;
+        case VX_CSR_MPM_SMEM_WRITES:   return proc_perf.clusters.sharedmem.writes & 0xffffffff;
+        case VX_CSR_MPM_SMEM_WRITES_H: return proc_perf.clusters.sharedmem.writes >> 32;
+        case VX_CSR_MPM_SMEM_BANK_ST:  return proc_perf.clusters.sharedmem.bank_stalls & 0xffffffff; 
+        case VX_CSR_MPM_SMEM_BANK_ST_H:return proc_perf.clusters.sharedmem.bank_stalls >> 32; 
 
-        case CSR_MPM_L2CACHE_READS:    return proc_perf.clusters.l2cache.reads & 0xffffffff; 
-        case CSR_MPM_L2CACHE_READS_H:  return proc_perf.clusters.l2cache.reads >> 32; 
-        case CSR_MPM_L2CACHE_WRITES:   return proc_perf.clusters.l2cache.writes & 0xffffffff; 
-        case CSR_MPM_L2CACHE_WRITES_H: return proc_perf.clusters.l2cache.writes >> 32; 
-        case CSR_MPM_L2CACHE_MISS_R:   return proc_perf.clusters.l2cache.read_misses & 0xffffffff; 
-        case CSR_MPM_L2CACHE_MISS_R_H: return proc_perf.clusters.l2cache.read_misses >> 32; 
-        case CSR_MPM_L2CACHE_MISS_W:   return proc_perf.clusters.l2cache.write_misses & 0xffffffff; 
-        case CSR_MPM_L2CACHE_MISS_W_H: return proc_perf.clusters.l2cache.write_misses >> 32; 
-        case CSR_MPM_L2CACHE_BANK_ST:  return proc_perf.clusters.l2cache.bank_stalls & 0xffffffff; 
-        case CSR_MPM_L2CACHE_BANK_ST_H:return proc_perf.clusters.l2cache.bank_stalls >> 32;
-        case CSR_MPM_L2CACHE_MSHR_ST:  return proc_perf.clusters.l2cache.mshr_stalls & 0xffffffff; 
-        case CSR_MPM_L2CACHE_MSHR_ST_H:return proc_perf.clusters.l2cache.mshr_stalls >> 32;
+        case VX_CSR_MPM_L2CACHE_READS:    return proc_perf.clusters.l2cache.reads & 0xffffffff; 
+        case VX_CSR_MPM_L2CACHE_READS_H:  return proc_perf.clusters.l2cache.reads >> 32; 
+        case VX_CSR_MPM_L2CACHE_WRITES:   return proc_perf.clusters.l2cache.writes & 0xffffffff; 
+        case VX_CSR_MPM_L2CACHE_WRITES_H: return proc_perf.clusters.l2cache.writes >> 32; 
+        case VX_CSR_MPM_L2CACHE_MISS_R:   return proc_perf.clusters.l2cache.read_misses & 0xffffffff; 
+        case VX_CSR_MPM_L2CACHE_MISS_R_H: return proc_perf.clusters.l2cache.read_misses >> 32; 
+        case VX_CSR_MPM_L2CACHE_MISS_W:   return proc_perf.clusters.l2cache.write_misses & 0xffffffff; 
+        case VX_CSR_MPM_L2CACHE_MISS_W_H: return proc_perf.clusters.l2cache.write_misses >> 32; 
+        case VX_CSR_MPM_L2CACHE_BANK_ST:  return proc_perf.clusters.l2cache.bank_stalls & 0xffffffff; 
+        case VX_CSR_MPM_L2CACHE_BANK_ST_H:return proc_perf.clusters.l2cache.bank_stalls >> 32;
+        case VX_CSR_MPM_L2CACHE_MSHR_ST:  return proc_perf.clusters.l2cache.mshr_stalls & 0xffffffff; 
+        case VX_CSR_MPM_L2CACHE_MSHR_ST_H:return proc_perf.clusters.l2cache.mshr_stalls >> 32;
 
-        case CSR_MPM_L3CACHE_READS:    return proc_perf.l3cache.reads & 0xffffffff; 
-        case CSR_MPM_L3CACHE_READS_H:  return proc_perf.l3cache.reads >> 32; 
-        case CSR_MPM_L3CACHE_WRITES:   return proc_perf.l3cache.writes & 0xffffffff; 
-        case CSR_MPM_L3CACHE_WRITES_H: return proc_perf.l3cache.writes >> 32; 
-        case CSR_MPM_L3CACHE_MISS_R:   return proc_perf.l3cache.read_misses & 0xffffffff; 
-        case CSR_MPM_L3CACHE_MISS_R_H: return proc_perf.l3cache.read_misses >> 32; 
-        case CSR_MPM_L3CACHE_MISS_W:   return proc_perf.l3cache.write_misses & 0xffffffff; 
-        case CSR_MPM_L3CACHE_MISS_W_H: return proc_perf.l3cache.write_misses >> 32; 
-        case CSR_MPM_L3CACHE_BANK_ST:  return proc_perf.l3cache.bank_stalls & 0xffffffff; 
-        case CSR_MPM_L3CACHE_BANK_ST_H:return proc_perf.l3cache.bank_stalls >> 32;
-        case CSR_MPM_L3CACHE_MSHR_ST:  return proc_perf.l3cache.mshr_stalls & 0xffffffff; 
-        case CSR_MPM_L3CACHE_MSHR_ST_H:return proc_perf.l3cache.mshr_stalls >> 32;
+        case VX_CSR_MPM_L3CACHE_READS:    return proc_perf.l3cache.reads & 0xffffffff; 
+        case VX_CSR_MPM_L3CACHE_READS_H:  return proc_perf.l3cache.reads >> 32; 
+        case VX_CSR_MPM_L3CACHE_WRITES:   return proc_perf.l3cache.writes & 0xffffffff; 
+        case VX_CSR_MPM_L3CACHE_WRITES_H: return proc_perf.l3cache.writes >> 32; 
+        case VX_CSR_MPM_L3CACHE_MISS_R:   return proc_perf.l3cache.read_misses & 0xffffffff; 
+        case VX_CSR_MPM_L3CACHE_MISS_R_H: return proc_perf.l3cache.read_misses >> 32; 
+        case VX_CSR_MPM_L3CACHE_MISS_W:   return proc_perf.l3cache.write_misses & 0xffffffff; 
+        case VX_CSR_MPM_L3CACHE_MISS_W_H: return proc_perf.l3cache.write_misses >> 32; 
+        case VX_CSR_MPM_L3CACHE_BANK_ST:  return proc_perf.l3cache.bank_stalls & 0xffffffff; 
+        case VX_CSR_MPM_L3CACHE_BANK_ST_H:return proc_perf.l3cache.bank_stalls >> 32;
+        case VX_CSR_MPM_L3CACHE_MSHR_ST:  return proc_perf.l3cache.mshr_stalls & 0xffffffff; 
+        case VX_CSR_MPM_L3CACHE_MSHR_ST_H:return proc_perf.l3cache.mshr_stalls >> 32;
 
-        case CSR_MPM_MEM_READS:   return proc_perf.mem_reads & 0xffffffff; 
-        case CSR_MPM_MEM_READS_H: return proc_perf.mem_reads >> 32; 
-        case CSR_MPM_MEM_WRITES:  return proc_perf.mem_writes & 0xffffffff; 
-        case CSR_MPM_MEM_WRITES_H:return proc_perf.mem_writes >> 32; 
-        case CSR_MPM_MEM_LAT:     return proc_perf.mem_latency & 0xffffffff; 
-        case CSR_MPM_MEM_LAT_H:   return proc_perf.mem_latency >> 32;
+        case VX_CSR_MPM_MEM_READS:   return proc_perf.mem_reads & 0xffffffff; 
+        case VX_CSR_MPM_MEM_READS_H: return proc_perf.mem_reads >> 32; 
+        case VX_CSR_MPM_MEM_WRITES:  return proc_perf.mem_writes & 0xffffffff; 
+        case VX_CSR_MPM_MEM_WRITES_H:return proc_perf.mem_writes >> 32; 
+        case VX_CSR_MPM_MEM_LAT:     return proc_perf.mem_latency & 0xffffffff; 
+        case VX_CSR_MPM_MEM_LAT_H:   return proc_perf.mem_latency >> 32;
         }
       } break;
-      case DCR_MPM_CLASS_TEX: {
+      case VX_DCR_MPM_CLASS_TEX: {
         auto proc_perf = cluster_->processor()->perf_stats();
         switch (addr) {
-        case CSR_MPM_TEX_READS:   return proc_perf.clusters.tex_unit.reads & 0xffffffff;
-        case CSR_MPM_TEX_READS_H: return proc_perf.clusters.tex_unit.reads >> 32;
-        case CSR_MPM_TEX_LAT:     return proc_perf.clusters.tex_unit.latency & 0xffffffff;
-        case CSR_MPM_TEX_LAT_H:   return proc_perf.clusters.tex_unit.latency >> 32;
-        case CSR_MPM_TEX_STALL:   return proc_perf.clusters.tex_unit.stalls & 0xffffffff;
-        case CSR_MPM_TEX_STALL_H: return proc_perf.clusters.tex_unit.stalls >> 32;
+        case VX_CSR_MPM_TEX_READS:   return proc_perf.clusters.tex_unit.reads & 0xffffffff;
+        case VX_CSR_MPM_TEX_READS_H: return proc_perf.clusters.tex_unit.reads >> 32;
+        case VX_CSR_MPM_TEX_LAT:     return proc_perf.clusters.tex_unit.latency & 0xffffffff;
+        case VX_CSR_MPM_TEX_LAT_H:   return proc_perf.clusters.tex_unit.latency >> 32;
+        case VX_CSR_MPM_TEX_STALL:   return proc_perf.clusters.tex_unit.stalls & 0xffffffff;
+        case VX_CSR_MPM_TEX_STALL_H: return proc_perf.clusters.tex_unit.stalls >> 32;
 
-        case CSR_MPM_TCACHE_READS:    return proc_perf.clusters.tcache.reads & 0xffffffff; 
-        case CSR_MPM_TCACHE_READS_H:  return proc_perf.clusters.tcache.reads >> 32;
-        case CSR_MPM_TCACHE_MISS_R:   return proc_perf.clusters.tcache.read_misses & 0xffffffff; 
-        case CSR_MPM_TCACHE_MISS_R_H: return proc_perf.clusters.tcache.read_misses >> 32;
-        case CSR_MPM_TCACHE_BANK_ST:  return proc_perf.clusters.tcache.bank_stalls & 0xffffffff; 
-        case CSR_MPM_TCACHE_BANK_ST_H:return proc_perf.clusters.tcache.bank_stalls >> 32;
-        case CSR_MPM_TCACHE_MSHR_ST:  return proc_perf.clusters.tcache.mshr_stalls & 0xffffffff; 
-        case CSR_MPM_TCACHE_MSHR_ST_H:return proc_perf.clusters.tcache.mshr_stalls >> 32;
+        case VX_CSR_MPM_TCACHE_READS:    return proc_perf.clusters.tcache.reads & 0xffffffff; 
+        case VX_CSR_MPM_TCACHE_READS_H:  return proc_perf.clusters.tcache.reads >> 32;
+        case VX_CSR_MPM_TCACHE_MISS_R:   return proc_perf.clusters.tcache.read_misses & 0xffffffff; 
+        case VX_CSR_MPM_TCACHE_MISS_R_H: return proc_perf.clusters.tcache.read_misses >> 32;
+        case VX_CSR_MPM_TCACHE_BANK_ST:  return proc_perf.clusters.tcache.bank_stalls & 0xffffffff; 
+        case VX_CSR_MPM_TCACHE_BANK_ST_H:return proc_perf.clusters.tcache.bank_stalls >> 32;
+        case VX_CSR_MPM_TCACHE_MSHR_ST:  return proc_perf.clusters.tcache.mshr_stalls & 0xffffffff; 
+        case VX_CSR_MPM_TCACHE_MSHR_ST_H:return proc_perf.clusters.tcache.mshr_stalls >> 32;
 
-        case CSR_MPM_TEX_ISSUE_ST:    return perf_stats_.tex_issue_stalls & 0xffffffff;
-        case CSR_MPM_TEX_ISSUE_ST_H:  return perf_stats_.tex_issue_stalls >> 32;
+        case VX_CSR_MPM_TEX_ISSUE_ST:    return perf_stats_.tex_issue_stalls & 0xffffffff;
+        case VX_CSR_MPM_TEX_ISSUE_ST_H:  return perf_stats_.tex_issue_stalls >> 32;
         }
       } break;
-      case DCR_MPM_CLASS_RASTER: {
+      case VX_DCR_MPM_CLASS_RASTER: {
         auto proc_perf = cluster_->processor()->perf_stats();
         switch (addr) {        
-        case CSR_MPM_RASTER_READS:   return proc_perf.clusters.raster_unit.reads & 0xffffffff;
-        case CSR_MPM_RASTER_READS_H: return proc_perf.clusters.raster_unit.reads >> 32;
-        case CSR_MPM_RASTER_LAT:     return proc_perf.clusters.raster_unit.latency & 0xffffffff;
-        case CSR_MPM_RASTER_LAT_H:   return proc_perf.clusters.raster_unit.latency >> 32;
-        case CSR_MPM_RASTER_STALL:   return proc_perf.clusters.raster_unit.stalls & 0xffffffff;
-        case CSR_MPM_RASTER_STALL_H: return proc_perf.clusters.raster_unit.stalls >> 32;
+        case VX_CSR_MPM_RASTER_READS:   return proc_perf.clusters.raster_unit.reads & 0xffffffff;
+        case VX_CSR_MPM_RASTER_READS_H: return proc_perf.clusters.raster_unit.reads >> 32;
+        case VX_CSR_MPM_RASTER_LAT:     return proc_perf.clusters.raster_unit.latency & 0xffffffff;
+        case VX_CSR_MPM_RASTER_LAT_H:   return proc_perf.clusters.raster_unit.latency >> 32;
+        case VX_CSR_MPM_RASTER_STALL:   return proc_perf.clusters.raster_unit.stalls & 0xffffffff;
+        case VX_CSR_MPM_RASTER_STALL_H: return proc_perf.clusters.raster_unit.stalls >> 32;
 
-        case CSR_MPM_RCACHE_READS:    return proc_perf.clusters.rcache.reads & 0xffffffff; 
-        case CSR_MPM_RCACHE_READS_H:  return proc_perf.clusters.rcache.reads >> 32; 
-        case CSR_MPM_RCACHE_MISS_R:   return proc_perf.clusters.rcache.read_misses & 0xffffffff; 
-        case CSR_MPM_RCACHE_MISS_R_H: return proc_perf.clusters.rcache.read_misses >> 32;  
-        case CSR_MPM_RCACHE_BANK_ST:  return proc_perf.clusters.rcache.bank_stalls & 0xffffffff; 
-        case CSR_MPM_RCACHE_BANK_ST_H:return proc_perf.clusters.rcache.bank_stalls >> 32;
-        case CSR_MPM_RCACHE_MSHR_ST:  return proc_perf.clusters.rcache.mshr_stalls & 0xffffffff; 
-        case CSR_MPM_RCACHE_MSHR_ST_H:return proc_perf.clusters.rcache.mshr_stalls >> 32;
+        case VX_CSR_MPM_RCACHE_READS:    return proc_perf.clusters.rcache.reads & 0xffffffff; 
+        case VX_CSR_MPM_RCACHE_READS_H:  return proc_perf.clusters.rcache.reads >> 32; 
+        case VX_CSR_MPM_RCACHE_MISS_R:   return proc_perf.clusters.rcache.read_misses & 0xffffffff; 
+        case VX_CSR_MPM_RCACHE_MISS_R_H: return proc_perf.clusters.rcache.read_misses >> 32;  
+        case VX_CSR_MPM_RCACHE_BANK_ST:  return proc_perf.clusters.rcache.bank_stalls & 0xffffffff; 
+        case VX_CSR_MPM_RCACHE_BANK_ST_H:return proc_perf.clusters.rcache.bank_stalls >> 32;
+        case VX_CSR_MPM_RCACHE_MSHR_ST:  return proc_perf.clusters.rcache.mshr_stalls & 0xffffffff; 
+        case VX_CSR_MPM_RCACHE_MSHR_ST_H:return proc_perf.clusters.rcache.mshr_stalls >> 32;
 
-        case CSR_MPM_RASTER_ISSUE_ST: return perf_stats_.raster_issue_stalls & 0xffffffff;
-        case CSR_MPM_RASTER_ISSUE_ST_H: return perf_stats_.raster_issue_stalls >> 32;
+        case VX_CSR_MPM_RASTER_ISSUE_ST: return perf_stats_.raster_issue_stalls & 0xffffffff;
+        case VX_CSR_MPM_RASTER_ISSUE_ST_H: return perf_stats_.raster_issue_stalls >> 32;
         default:
           return 0;
         }
       } break;
-      case DCR_MPM_CLASS_ROP: {
+      case VX_DCR_MPM_CLASS_ROP: {
         auto proc_perf = cluster_->processor()->perf_stats();
         switch (addr) { 
-        case CSR_MPM_ROP_READS:   return proc_perf.clusters.rop_unit.reads & 0xffffffff;
-        case CSR_MPM_ROP_READS_H: return proc_perf.clusters.rop_unit.reads >> 32;
-        case CSR_MPM_ROP_WRITES:  return proc_perf.clusters.rop_unit.writes & 0xffffffff;
-        case CSR_MPM_ROP_WRITES_H:return proc_perf.clusters.rop_unit.writes >> 32;
-        case CSR_MPM_ROP_LAT:     return proc_perf.clusters.rop_unit.latency & 0xffffffff;
-        case CSR_MPM_ROP_LAT_H:   return proc_perf.clusters.rop_unit.latency >> 32;
-        case CSR_MPM_ROP_STALL:   return proc_perf.clusters.rop_unit.stalls & 0xffffffff;
-        case CSR_MPM_ROP_STALL_H: return proc_perf.clusters.rop_unit.stalls >> 32;
+        case VX_CSR_MPM_ROP_READS:   return proc_perf.clusters.rop_unit.reads & 0xffffffff;
+        case VX_CSR_MPM_ROP_READS_H: return proc_perf.clusters.rop_unit.reads >> 32;
+        case VX_CSR_MPM_ROP_WRITES:  return proc_perf.clusters.rop_unit.writes & 0xffffffff;
+        case VX_CSR_MPM_ROP_WRITES_H:return proc_perf.clusters.rop_unit.writes >> 32;
+        case VX_CSR_MPM_ROP_LAT:     return proc_perf.clusters.rop_unit.latency & 0xffffffff;
+        case VX_CSR_MPM_ROP_LAT_H:   return proc_perf.clusters.rop_unit.latency >> 32;
+        case VX_CSR_MPM_ROP_STALL:   return proc_perf.clusters.rop_unit.stalls & 0xffffffff;
+        case VX_CSR_MPM_ROP_STALL_H: return proc_perf.clusters.rop_unit.stalls >> 32;
 
-        case CSR_MPM_OCACHE_READS:    return proc_perf.clusters.ocache.reads & 0xffffffff; 
-        case CSR_MPM_OCACHE_READS_H:  return proc_perf.clusters.ocache.reads >> 32; 
-        case CSR_MPM_OCACHE_WRITES:   return proc_perf.clusters.ocache.writes & 0xffffffff; 
-        case CSR_MPM_OCACHE_WRITES_H: return proc_perf.clusters.ocache.writes >> 32; 
-        case CSR_MPM_OCACHE_MISS_R:   return proc_perf.clusters.ocache.read_misses & 0xffffffff; 
-        case CSR_MPM_OCACHE_MISS_R_H: return proc_perf.clusters.ocache.read_misses >> 32; 
-        case CSR_MPM_OCACHE_MISS_W:   return proc_perf.clusters.ocache.write_misses & 0xffffffff; 
-        case CSR_MPM_OCACHE_MISS_W_H: return proc_perf.clusters.ocache.write_misses >> 32; 
-        case CSR_MPM_OCACHE_BANK_ST:  return proc_perf.clusters.ocache.bank_stalls & 0xffffffff; 
-        case CSR_MPM_OCACHE_BANK_ST_H:return proc_perf.clusters.ocache.bank_stalls >> 32;
-        case CSR_MPM_OCACHE_MSHR_ST:  return proc_perf.clusters.ocache.mshr_stalls & 0xffffffff; 
-        case CSR_MPM_OCACHE_MSHR_ST_H:return proc_perf.clusters.ocache.mshr_stalls >> 32;
+        case VX_CSR_MPM_OCACHE_READS:    return proc_perf.clusters.ocache.reads & 0xffffffff; 
+        case VX_CSR_MPM_OCACHE_READS_H:  return proc_perf.clusters.ocache.reads >> 32; 
+        case VX_CSR_MPM_OCACHE_WRITES:   return proc_perf.clusters.ocache.writes & 0xffffffff; 
+        case VX_CSR_MPM_OCACHE_WRITES_H: return proc_perf.clusters.ocache.writes >> 32; 
+        case VX_CSR_MPM_OCACHE_MISS_R:   return proc_perf.clusters.ocache.read_misses & 0xffffffff; 
+        case VX_CSR_MPM_OCACHE_MISS_R_H: return proc_perf.clusters.ocache.read_misses >> 32; 
+        case VX_CSR_MPM_OCACHE_MISS_W:   return proc_perf.clusters.ocache.write_misses & 0xffffffff; 
+        case VX_CSR_MPM_OCACHE_MISS_W_H: return proc_perf.clusters.ocache.write_misses >> 32; 
+        case VX_CSR_MPM_OCACHE_BANK_ST:  return proc_perf.clusters.ocache.bank_stalls & 0xffffffff; 
+        case VX_CSR_MPM_OCACHE_BANK_ST_H:return proc_perf.clusters.ocache.bank_stalls >> 32;
+        case VX_CSR_MPM_OCACHE_MSHR_ST:  return proc_perf.clusters.ocache.mshr_stalls & 0xffffffff; 
+        case VX_CSR_MPM_OCACHE_MSHR_ST_H:return proc_perf.clusters.ocache.mshr_stalls >> 32;
 
-        case CSR_MPM_ROP_ISSUE_ST:    return perf_stats_.rop_issue_stalls & 0xffffffff;
-        case CSR_MPM_ROP_ISSUE_ST_H:  return perf_stats_.rop_issue_stalls >> 32;
+        case VX_CSR_MPM_ROP_ISSUE_ST:    return perf_stats_.rop_issue_stalls & 0xffffffff;
+        case VX_CSR_MPM_ROP_ISSUE_ST_H:  return perf_stats_.rop_issue_stalls >> 32;
         default:
           return 0;
         }
@@ -665,8 +665,8 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
       }
     } else
   #ifdef EXT_RASTER_ENABLE
-    if (addr >= CSR_RASTER_BEGIN
-     && addr < CSR_RASTER_END) {
+    if (addr >= VX_CSR_RASTER_BEGIN
+     && addr < VX_CSR_RASTER_END) {
       return csrs_.at(wid).at(tid).at(addr);
     } else
   #endif
@@ -681,36 +681,36 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
 void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
   __unused (tid);
   switch (addr) {
-  case CSR_FFLAGS:
+  case VX_CSR_FFLAGS:
     fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0x1F) | (value & 0x1F);
     break;
-  case CSR_FRM:
+  case VX_CSR_FRM:
     fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0xE0) | (value << 5);
     break;
-  case CSR_FCSR:
+  case VX_CSR_FCSR:
     fcsrs_.at(wid) = value & 0xff;
     break;
-  case CSR_SATP:
-  case CSR_MSTATUS:
-  case CSR_MEDELEG:
-  case CSR_MIDELEG:
-  case CSR_MIE:
-  case CSR_MTVEC:
-  case CSR_MEPC:
-  case CSR_PMPCFG0:
-  case CSR_PMPADDR0:
-  case CSR_MNSTATUS:
+  case VX_CSR_SATP:
+  case VX_CSR_MSTATUS:
+  case VX_CSR_MEDELEG:
+  case VX_CSR_MIDELEG:
+  case VX_CSR_MIE:
+  case VX_CSR_MTVEC:
+  case VX_CSR_MEPC:
+  case VX_CSR_PMPCFG0:
+  case VX_CSR_PMPADDR0:
+  case VX_CSR_MNSTATUS:
     break;
   default:
   #ifdef EXT_ROP_ENABLE
-    if (addr >= CSR_ROP_BEGIN
-     && addr < CSR_ROP_END) {
+    if (addr >= VX_CSR_ROP_BEGIN
+     && addr < VX_CSR_ROP_END) {
       csrs_.at(wid).at(tid)[addr] = value;
     } else
   #endif
   #ifdef EXT_TEX_ENABLE
-    if (addr >= CSR_TEX_BEGIN
-     && addr < CSR_TEX_END) {
+    if (addr >= VX_CSR_TEX_BEGIN
+     && addr < VX_CSR_TEX_END) {
       csrs_.at(wid).at(tid)[addr] = value;
     } else
   #endif

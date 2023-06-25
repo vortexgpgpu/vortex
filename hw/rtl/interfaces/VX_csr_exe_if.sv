@@ -8,7 +8,7 @@ interface VX_csr_exe_if ();
     wire [`NUM_THREADS-1:0]     tmask;
     wire [`XLEN-1:0]            PC;
     wire [`INST_CSR_BITS-1:0]   op_type;
-    wire [`CSR_ADDR_BITS-1:0]   addr;
+    wire [`VX_CSR_ADDR_BITS-1:0] addr;
     wire [`UP(`NT_BITS)-1:0]    tid;
     wire [`NUM_THREADS-1:0][31:0] rs1_data;    
     wire                        use_imm;

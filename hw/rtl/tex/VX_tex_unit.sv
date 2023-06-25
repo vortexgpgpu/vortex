@@ -30,7 +30,7 @@ module VX_tex_unit #(
 
     VX_tex_dcr #(
         .INSTANCE_ID (INSTANCE_ID),
-        .NUM_STAGES  (`TEX_STAGE_COUNT)
+        .NUM_STAGES  (`VX_TEX_STAGE_COUNT)
     ) tex_dcr (
         .clk        (clk),
         .reset      (reset),
@@ -46,21 +46,21 @@ module VX_tex_unit #(
     wire [`TEX_FILTER_BITS-1:0]                 req_filter;    
     wire [`TEX_FORMAT_BITS-1:0]                 req_format;    
     wire [1:0][`TEX_WRAP_BITS-1:0]              req_wraps;
-    wire [1:0][`TEX_LOD_BITS-1:0]               req_logdims;
+    wire [1:0][`VX_TEX_LOD_BITS-1:0]            req_logdims;
     wire [`TEX_ADDR_BITS-1:0]                   req_baseaddr;
     wire [1:0][NUM_LANES-1:0][31:0]             req_coords;
-    wire [NUM_LANES-1:0][`TEX_LOD_BITS-1:0]     req_miplevel, sel_miplevel;
+    wire [NUM_LANES-1:0][`VX_TEX_LOD_BITS-1:0]  req_miplevel, sel_miplevel;
     wire [NUM_LANES-1:0][`TEX_MIPOFF_BITS-1:0]  req_mipoff, sel_mipoff;    
     wire [TAG_WIDTH-1:0]                        req_tag;
     wire                                        req_ready;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign sel_miplevel[i] = tex_bus_if.req_lod[i][`TEX_LOD_BITS-1:0];
+        assign sel_miplevel[i] = tex_bus_if.req_lod[i][`VX_TEX_LOD_BITS-1:0];
         assign sel_mipoff[i] = tex_dcrs.mipoff[sel_miplevel[i]];
     end
 
     VX_generic_buffer #(
-        .DATAW   (NUM_LANES  + `TEX_FILTER_BITS + `TEX_FORMAT_BITS + 2 * `TEX_WRAP_BITS + 2 * `TEX_LOD_BITS + `TEX_ADDR_BITS + NUM_LANES * (2 * 32 + `TEX_LOD_BITS + `TEX_MIPOFF_BITS) + TAG_WIDTH),
+        .DATAW   (NUM_LANES  + `TEX_FILTER_BITS + `TEX_FORMAT_BITS + 2 * `TEX_WRAP_BITS + 2 * `VX_TEX_LOD_BITS + `TEX_ADDR_BITS + NUM_LANES * (2 * 32 + `VX_TEX_LOD_BITS + `TEX_MIPOFF_BITS) + TAG_WIDTH),
         .OUT_REG (1)
     ) pipe_reg (
         .clk       (clk),
@@ -286,8 +286,8 @@ module VX_tex_unit_top #(
     input  wire                             tex_req_valid,
     input  wire [NUM_LANES-1:0]             tex_req_mask,
     input  wire [1:0][NUM_LANES-1:0][31:0]  tex_req_coords,
-    input  wire [NUM_LANES-1:0][`TEX_LOD_BITS-1:0] tex_req_lod,
-    input  wire [`TEX_STAGE_BITS-1:0]       tex_req_stage,
+    input  wire [NUM_LANES-1:0][`VX_TEX_LOD_BITS-1:0] tex_req_lod,
+    input  wire [`VX_TEX_STAGE_BITS-1:0]    tex_req_stage,
     input  wire [TAG_WIDTH-1:0]             tex_req_tag,  
     output wire                             tex_req_ready,
 
