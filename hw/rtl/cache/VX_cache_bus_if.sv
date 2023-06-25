@@ -4,7 +4,7 @@ interface VX_cache_bus_if #(
     parameter NUM_REQS   = 1,
     parameter WORD_SIZE  = 1,
     parameter TAG_WIDTH  = 1,    
-    parameter ADDR_WIDTH = `XLEN - `CLOG2(WORD_SIZE),
+    parameter ADDR_WIDTH = `MEM_ADDR_WIDTH - `CLOG2(WORD_SIZE),
     parameter DATA_WIDTH = WORD_SIZE * 8
 ) ();
 

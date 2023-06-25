@@ -16,7 +16,7 @@ module VX_smem_switch #(
     VX_cache_bus_if.slave   bus_in_if,
     VX_cache_bus_if.master  bus_out_if [NUM_REQS]
 );  
-    localparam ADDR_WIDTH    = (`XLEN-`CLOG2(DATA_SIZE));
+    localparam ADDR_WIDTH    = (`MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE));
     localparam DATA_WIDTH    = (8 * DATA_SIZE);
     localparam LOG_NUM_REQS  = `CLOG2(NUM_REQS);
     localparam TAG_OUT_WIDTH = TAG_WIDTH - LOG_NUM_REQS;

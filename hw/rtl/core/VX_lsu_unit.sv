@@ -112,7 +112,7 @@ module VX_lsu_unit #(
     wire                           mem_req_valid;
     wire [`NUM_THREADS-1:0]        mem_req_mask;
     wire                           mem_req_rw;  
-    wire [`NUM_THREADS-1:0][`XLEN-REQ_ASHIFT-1:0] mem_req_addr;
+    wire [`NUM_THREADS-1:0][`MEM_ADDR_WIDTH-REQ_ASHIFT-1:0] mem_req_addr;
     reg  [`NUM_THREADS-1:0][DCACHE_WORD_SIZE-1:0] mem_req_byteen;
     reg  [`NUM_THREADS-1:0][`XLEN-1:0] mem_req_data;
     wire [TAG_WIDTH-1:0]           mem_req_tag;
@@ -140,7 +140,7 @@ module VX_lsu_unit #(
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin  
         assign req_align[i] = full_addr[i][REQ_ASHIFT-1:0];
-        assign mem_req_addr[i] = full_addr[i][`XLEN-1:REQ_ASHIFT];
+        assign mem_req_addr[i] = full_addr[i][`MEM_ADDR_WIDTH-1:REQ_ASHIFT];
     end
 
     // data formatting

@@ -42,7 +42,7 @@ typedef struct packed {
 
 // Word size in bytes
 localparam ICACHE_WORD_SIZE	    = 4;
-localparam ICACHE_ADDR_WIDTH	= (`XLEN - `CLOG2(ICACHE_WORD_SIZE));
+localparam ICACHE_ADDR_WIDTH	= (`MEM_ADDR_WIDTH - `CLOG2(ICACHE_WORD_SIZE));
 
 // Block size in bytes
 localparam ICACHE_LINE_SIZE	    = `L1_LINE_SIZE;
@@ -71,7 +71,7 @@ localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_TAG_WIDTH(ICACHE_NUM_REQ
 
 // Word size in bytes
 localparam DCACHE_WORD_SIZE	    = (`XLEN / 8);
-localparam DCACHE_ADDR_WIDTH	= (`XLEN - `CLOG2(DCACHE_WORD_SIZE));
+localparam DCACHE_ADDR_WIDTH	= (`MEM_ADDR_WIDTH - `CLOG2(DCACHE_WORD_SIZE));
 
 // Block size in bytes
 localparam DCACHE_LINE_SIZE 	= `L1_LINE_SIZE;
@@ -109,7 +109,7 @@ localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_BYPASS_TAG_WIDTH(DCACHE_NUM_
 
 // Word size in bytes
 localparam TCACHE_WORD_SIZE	    = 4;
-localparam TCACHE_ADDR_WIDTH	= (`XLEN - `CLOG2(TCACHE_WORD_SIZE));
+localparam TCACHE_ADDR_WIDTH	= (`MEM_ADDR_WIDTH - `CLOG2(TCACHE_WORD_SIZE));
 
 // Block size in bytes
 localparam TCACHE_LINE_SIZE	    = `L1_LINE_SIZE;
@@ -143,7 +143,7 @@ localparam TCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_TAG_WIDTH(TCACHE_NUM_REQ
 
 // Word size in bytes
 localparam RCACHE_WORD_SIZE	    = 4;
-localparam RCACHE_ADDR_WIDTH	= (`XLEN - `CLOG2(RCACHE_WORD_SIZE));
+localparam RCACHE_ADDR_WIDTH	= (`MEM_ADDR_WIDTH - `CLOG2(RCACHE_WORD_SIZE));
 
 // Block size in bytes
 localparam RCACHE_LINE_SIZE	    = `L1_LINE_SIZE;
@@ -177,7 +177,7 @@ localparam RCACHE_MEM_TAG_WIDTH	= `CACHE_CLUSTER_BYPASS_TAG_WIDTH(RCACHE_NUM_REQ
 
 // Word size in bytes
 localparam OCACHE_WORD_SIZE	    = 4;
-localparam OCACHE_ADDR_WIDTH	= (`XLEN - `CLOG2(OCACHE_WORD_SIZE));
+localparam OCACHE_ADDR_WIDTH	= (`MEM_ADDR_WIDTH - `CLOG2(OCACHE_WORD_SIZE));
 
 // Block size in bytes
 localparam OCACHE_LINE_SIZE	    = `L1_LINE_SIZE;

@@ -18,7 +18,7 @@ module VX_cache_arb #(
     VX_cache_bus_if.master  bus_out_if [NUM_OUTPUTS]
 );     
 
-    localparam ADDR_WIDTH    = (`XLEN-`CLOG2(DATA_SIZE));
+    localparam ADDR_WIDTH    = (`MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE));
     localparam DATA_WIDTH    = (8 * DATA_SIZE);
     localparam LOG_NUM_REQS  = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
     localparam NUM_REQS      = 1 << LOG_NUM_REQS;

@@ -83,7 +83,7 @@ module VX_fetch #(
     // Icache Request
     
     assign icache_req_valid = schedule_if.valid && ~pending_ibuf_full[schedule_if.wid];
-    assign icache_req_addr  = schedule_if.PC[`XLEN-1:2];
+    assign icache_req_addr  = schedule_if.PC[`MEM_ADDR_WIDTH-1:2];
     assign icache_req_tag   = {schedule_if.uuid, req_tag};
     assign schedule_if.ready = icache_req_ready && ~pending_ibuf_full[schedule_if.wid];
 

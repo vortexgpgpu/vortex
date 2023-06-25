@@ -94,6 +94,14 @@
 `define MEM_BLOCK_SIZE 64
 `endif
 
+`ifndef MEM_ADDR_WIDTH
+`ifdef XLEN_64
+`define MEM_ADDR_WIDTH 48
+`else
+`define MEM_ADDR_WIDTH 32
+`endif
+`endif
+
 `ifndef L1_LINE_SIZE
 `ifdef L1_DISABLE
 `define L1_LINE_SIZE ((`L2_ENABLED || `L3_ENABLED) ? 4 : `MEM_BLOCK_SIZE)

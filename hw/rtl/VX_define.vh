@@ -302,14 +302,14 @@
 `endif
 
 `define VX_MEM_BYTEEN_WIDTH     `L3_LINE_SIZE   
-`define VX_MEM_ADDR_WIDTH       (`XLEN - `CLOG2(`L3_LINE_SIZE))
+`define VX_MEM_ADDR_WIDTH       (`MEM_ADDR_WIDTH - `CLOG2(`L3_LINE_SIZE))
 `define VX_MEM_DATA_WIDTH       (`L3_LINE_SIZE * 8)
 `define VX_MEM_TAG_WIDTH        L3_MEM_TAG_WIDTH
 
 `define VX_DCR_ADDR_WIDTH       `VX_DCR_ADDR_BITS
 `define VX_DCR_DATA_WIDTH       32
 
-`define TO_FULL_ADDR(x)         {x, (`XLEN-$bits(x))'(0)}
+`define TO_FULL_ADDR(x)         {x, (`MEM_ADDR_WIDTH-$bits(x))'(0)}
 
 ///////////////////////////////////////////////////////////////////////////////
 
