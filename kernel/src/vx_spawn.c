@@ -47,11 +47,15 @@ inline int fast_log2(int x) {
 }
 
 static void __attribute__ ((noinline)) spawn_tasks_all_stub() {
-  int core_id = vx_cluster_id() * vx_num_cores() + vx_core_id();
-  int wid     = vx_warp_id();
-  int tid     = vx_thread_id(); 
-  int NT      = vx_num_threads();
-  
+  int NC  = vx_num_cores();
+  int NT  = vx_num_threads();
+  int gid = vx_cluster_id();
+  int cid = vx_core_id();
+  int wid = vx_warp_id();
+  int tid = vx_thread_id();
+
+  int core_id = gid * NC + cid;
+    
   wspawn_tasks_args_t* p_wspawn_args = (wspawn_tasks_args_t*)g_wspawn_args[core_id];
 
   int wK = (p_wspawn_args->N * wid) + MIN(p_wspawn_args->R, wid);
@@ -68,9 +72,14 @@ static void __attribute__ ((noinline)) spawn_tasks_all_stub() {
   vx_barrier(0, p_wspawn_args->NW);
 }
 
-static void __attribute__ ((noinline)) spawn_tasks_rem_stub() {  
-  int core_id = vx_cluster_id() * vx_num_cores() + vx_core_id(); 
+static void __attribute__ ((noinline)) spawn_tasks_rem_stub() {
+  int NC  = vx_num_cores();
+  int gid = vx_cluster_id();
+  int cid = vx_core_id();
+
+  int core_id = gid * NC + cid;
   int hart_id = vx_hart_id();
+  
   wspawn_tasks_args_t* p_wspawn_args = (wspawn_tasks_args_t*)g_wspawn_args[core_id];
   int task_id = p_wspawn_args->offset + hart_id;
   (p_wspawn_args->callback)(task_id, p_wspawn_args->arg);
@@ -159,10 +168,14 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
 ///////////////////////////////////////////////////////////////////////////////
 
 static void __attribute__ ((noinline)) spawn_kernel_all_stub() {
-  int core_id = vx_cluster_id() * vx_num_cores() + vx_core_id();
-  int wid     = vx_warp_id();
-  int tid     = vx_thread_id(); 
-  int NT      = vx_num_threads();
+  int NC  = vx_num_cores();
+  int NT  = vx_num_threads();
+  int gid = vx_cluster_id();
+  int cid = vx_core_id();
+  int wid = vx_warp_id();
+  int tid = vx_thread_id();
+
+  int core_id = gid * NC + cid;
   
   wspawn_kernel_args_t* p_wspawn_args = (wspawn_kernel_args_t*)g_wspawn_args[core_id];
 
@@ -192,7 +205,11 @@ static void __attribute__ ((noinline)) spawn_kernel_all_stub() {
 }
 
 static void __attribute__ ((noinline)) spawn_kernel_rem_stub() {
-  int core_id = vx_cluster_id() * vx_num_cores() + vx_core_id(); 
+  int NC  = vx_num_cores();
+  int gid = vx_cluster_id();
+  int cid = vx_core_id();
+
+  int core_id = gid * NC + cid;
   int hart_id = vx_hart_id();
 
   wspawn_kernel_args_t* p_wspawn_args = (wspawn_kernel_args_t*)g_wspawn_args[core_id];

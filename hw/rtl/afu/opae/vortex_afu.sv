@@ -96,7 +96,9 @@ module vortex_afu #(
                             8'(`NUM_THREADS), 
                             8'(`IMPLEMENTATION_ID)};
 
-    wire [63:0] isa_caps = {32'(`MISA_EXT), 2'($clog2(`XLEN)-4), 30'(`MISA_STD)};
+    wire [63:0] isa_caps = {32'(`MISA_EXT), 
+                            2'($clog2(`XLEN)-4), 
+                            30'(`MISA_STD)};
 
     reg [STATE_WIDTH-1:0] state;
 

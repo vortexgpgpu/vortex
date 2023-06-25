@@ -114,10 +114,10 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         *value = (device->dev_caps >> 16) & 0xff;
         break;
     case VX_CAPS_NUM_CORES:
-        *value = (device->dev_caps >> 32) & 0xff;
+        *value = (device->dev_caps >> 24) & 0xff;
         break;
     case VX_CAPS_NUM_CLUSTERS:
-        *value = (device->dev_caps >> 40) & 0xff;
+        *value = (device->dev_caps >> 32) & 0xff;
         break;
     case VX_CAPS_CACHE_LINE_SIZE:
         *value = CACHE_BLOCK_SIZE;
@@ -231,8 +231,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
             return -1;
         });
 
-        // Load device CAPS
-        
+        // Load device CAPS        
         CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_DEV_CAPS, &device->dev_caps), {
             api.fpgaClose(accel_handle);
             return -1;

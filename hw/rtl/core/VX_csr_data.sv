@@ -57,22 +57,13 @@ module VX_csr_data #(
 
     `UNUSED_VAR (reset)
     `UNUSED_VAR (write_wid)
+    `UNUSED_VAR (write_data)
 
     // CSRs Write /////////////////////////////////////////////////////////////
 
 `ifdef EXT_F_ENABLE    
     reg [`NUM_WARPS-1:0][`INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr;
 `endif
-
-    reg [31:0] csr_satp;
-    reg [31:0] csr_mstatus;
-    reg [31:0] csr_medeleg;
-    reg [31:0] csr_mideleg;
-    reg [31:0] csr_mie;
-    reg [31:0] csr_mtvec;
-    reg [31:0] csr_mepc;    
-    reg [31:0] csr_pmpcfg;
-    reg [31:0] csr_pmpaddr;
 
     always @(posedge clk) begin
     `ifdef EXT_F_ENABLE
@@ -81,7 +72,7 @@ module VX_csr_data #(
         end else begin
             if (fpu_to_csr_if.write_enable) begin
                 fcsr[fpu_to_csr_if.write_wid][`FP_FLAGS_BITS-1:0] <= fcsr[fpu_to_csr_if.write_wid][`FP_FLAGS_BITS-1:0]
-                                                                 | fpu_to_csr_if.write_fflags;
+                                                                   | fpu_to_csr_if.write_fflags;
             end
         end
     `endif
@@ -92,16 +83,16 @@ module VX_csr_data #(
                 `VX_CSR_FRM:      fcsr[write_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS] <= write_data[`INST_FRM_BITS-1:0];
                 `VX_CSR_FCSR:     fcsr[write_wid] <= write_data[`FP_FLAGS_BITS+`INST_FRM_BITS-1:0];
             `endif
-                `VX_CSR_SATP:     csr_satp     <= write_data;
+                `VX_CSR_SATP,
                 `VX_CSR_MSTATUS,
-                `VX_CSR_MNSTATUS: csr_mstatus  <= write_data;
-                `VX_CSR_MEDELEG:  csr_medeleg  <= write_data;
-                `VX_CSR_MIDELEG:  csr_mideleg  <= write_data;
-                `VX_CSR_MIE:      csr_mie      <= write_data;
-                `VX_CSR_MTVEC:    csr_mtvec    <= write_data;
-                `VX_CSR_MEPC:     csr_mepc     <= write_data;
-                `VX_CSR_PMPCFG0:  csr_pmpcfg   <= write_data;
-                `VX_CSR_PMPADDR0: csr_pmpaddr  <= write_data;
+                `VX_CSR_MNSTATUS,
+                `VX_CSR_MEDELEG,
+                `VX_CSR_MIDELEG,
+                `VX_CSR_MIE,
+                `VX_CSR_MTVEC,
+                `VX_CSR_MEPC,
+                `VX_CSR_PMPCFG0,
+                `VX_CSR_PMPADDR0: /* do nothing!*/;
                 default: begin
                     `ASSERT(0, ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
                 end
@@ -140,25 +131,21 @@ module VX_csr_data #(
             `VX_CSR_MINSTRET   : read_data_ro_r = 32'(commit_csr_if.instret[31:0]);
             `VX_CSR_MINSTRET_H : read_data_ro_r = 32'(commit_csr_if.instret[`PERF_CTR_BITS-1:32]);       
             
-            `VX_CSR_SATP       : read_data_ro_r = 32'(csr_satp);
-            
+            `VX_CSR_SATP,
             `VX_CSR_MSTATUS,
-            `VX_CSR_MNSTATUS   : read_data_ro_r = 32'(csr_mstatus);
-            `VX_CSR_MISA       : read_data_ro_r = ((($clog2(`XLEN)-4) << (`XLEN-2)) | `MISA_STD);
-            `VX_CSR_MEDELEG    : read_data_ro_r = 32'(csr_medeleg);
-            `VX_CSR_MIDELEG    : read_data_ro_r = 32'(csr_mideleg);
-            `VX_CSR_MIE        : read_data_ro_r = 32'(csr_mie);
-            `VX_CSR_MTVEC      : read_data_ro_r = 32'(csr_mtvec);
-
-            `VX_CSR_MEPC       : read_data_ro_r = 32'(csr_mepc);
-
-            `VX_CSR_PMPCFG0    : read_data_ro_r = 32'(csr_pmpcfg);
-            `VX_CSR_PMPADDR0   : read_data_ro_r = 32'(csr_pmpaddr);
+            `VX_CSR_MNSTATUS,
+            `VX_CSR_MEDELEG,
+            `VX_CSR_MIDELEG,
+            `VX_CSR_MIE,
+            `VX_CSR_MTVEC,
+            `VX_CSR_MEPC,
+            `VX_CSR_PMPCFG0,
+            `VX_CSR_PMPADDR0   : read_data_ro_r = 32'(0);
             
             `VX_CSR_MVENDORID  : read_data_ro_r = 32'(`VENDOR_ID);
             `VX_CSR_MARCHID    : read_data_ro_r = 32'(`ARCHITECTURE_ID);
             `VX_CSR_MIMPID     : read_data_ro_r = 32'(`IMPLEMENTATION_ID);
-            `VX_CSR_MHARTID    : read_data_ro_r = 32'(`IMPLEMENTATION_ID);
+            `VX_CSR_MISA       : read_data_ro_r = ((($clog2(`XLEN)-4) << (`XLEN-2)) | `MISA_STD);
 
             default: begin
                 read_addr_valid_r = 0;

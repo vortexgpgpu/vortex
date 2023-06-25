@@ -510,10 +510,10 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         *value = (device->dev_caps >> 16) & 0xff;
         break;
     case VX_CAPS_NUM_CORES:
-        *value = (device->dev_caps >> 32) & 0xff;
+        *value = (device->dev_caps >> 24) & 0xff;
         break;
     case VX_CAPS_NUM_CLUSTERS:
-        *value = (device->dev_caps >> 40) & 0xff;
+        *value = (device->dev_caps >> 32) & 0xff;
         break;
     case VX_CAPS_CACHE_LINE_SIZE:
         *value = CACHE_BLOCK_SIZE;
