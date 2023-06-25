@@ -68,24 +68,24 @@ module VX_cache_wrap #(
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))    
     `STATIC_ASSERT(NUM_BANKS == (1 << $clog2(NUM_BANKS)), ("invalid parameter"))
     `STATIC_ASSERT(NUM_PORTS <= NUM_REQS, ("invalid parameter"))
-    `STATIC_ASSERT(NUM_PORTS <= `WORDS_PER_LINE, ("invalid parameter"))
+    `STATIC_ASSERT(NUM_PORTS <= `CS_WORDS_PER_LINE, ("invalid parameter"))
 
     localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE);    
     localparam CORE_TAG_X_WIDTH = TAG_WIDTH - NC_ENABLE;
-    localparam MEM_TAG_X_WIDTH  = MSHR_ADDR_WIDTH + `BANK_SEL_BITS;
+    localparam MEM_TAG_X_WIDTH  = MSHR_ADDR_WIDTH + `CS_BANK_SEL_BITS;
     localparam MEM_TAG_WIDTH    = PASSTHRU ? (NC_ENABLE ? `CACHE_NC_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH) : 
                                                           `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH)) : 
                                              (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH) :
                                                           `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS));
 
     localparam NC_BYPASS = (NC_ENABLE || PASSTHRU);
-    localparam DIRECT_PASSTHRU = PASSTHRU && (`WORD_SEL_BITS == 0) && (NUM_REQS == 1);
+    localparam DIRECT_PASSTHRU = PASSTHRU && (`CS_WORD_SEL_BITS == 0) && (NUM_REQS == 1);
 
     wire [NUM_REQS-1:0]                     core_req_valid;
     wire [NUM_REQS-1:0]                     core_req_rw;
-    wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0] core_req_addr;
+    wire [NUM_REQS-1:0][`CS_WORD_ADDR_WIDTH-1:0] core_req_addr;
     wire [NUM_REQS-1:0][WORD_SIZE-1:0]      core_req_byteen;
-    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_req_data;
+    wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_req_data;
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0]      core_req_tag;
     wire [NUM_REQS-1:0]                     core_req_ready;
 
@@ -103,7 +103,7 @@ module VX_cache_wrap #(
 
     // Core response buffering
     wire [NUM_REQS-1:0]                  core_rsp_valid_s;
-    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_s;
+    wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_rsp_data_s;
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   core_rsp_tag_s;
     wire [NUM_REQS-1:0]                  core_rsp_ready_s;
 
@@ -111,7 +111,7 @@ module VX_cache_wrap #(
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_generic_buffer #(
-            .DATAW   (`WORD_WIDTH + TAG_WIDTH),
+            .DATAW   (`CS_WORD_WIDTH + TAG_WIDTH),
             .SKID    ((NC_BYPASS && !DIRECT_PASSTHRU) ? (CORE_OUT_REG >> 1) : 0),
             .OUT_REG ((NC_BYPASS && !DIRECT_PASSTHRU) ? (CORE_OUT_REG & 1) : 0)
         ) core_rsp_buf (
@@ -132,13 +132,13 @@ module VX_cache_wrap #(
     wire                             mem_req_valid_s;
     wire                             mem_req_rw_s;
     wire [LINE_SIZE-1:0]             mem_req_byteen_s;   
-    wire [`MEM_ADDR_WIDTH-1:0]       mem_req_addr_s;
-    wire [`LINE_WIDTH-1:0]           mem_req_data_s;
+    wire [`CS_MEM_ADDR_WIDTH-1:0]    mem_req_addr_s;
+    wire [`CS_LINE_WIDTH-1:0]        mem_req_data_s;
     wire [MEM_TAG_WIDTH-1:0]         mem_req_tag_s;
     wire                             mem_req_ready_s;
 
     VX_generic_buffer #(
-        .DATAW   (1 + LINE_SIZE + `MEM_ADDR_WIDTH + `LINE_WIDTH + MEM_TAG_WIDTH),
+        .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_WIDTH),
         .SKID    ((NC_BYPASS && !DIRECT_PASSTHRU) ? (MEM_OUT_REG >> 1) : 0),
         .OUT_REG ((NC_BYPASS && !DIRECT_PASSTHRU) ? (MEM_OUT_REG & 1) : 0)
     ) mem_req_buf (
@@ -157,30 +157,30 @@ module VX_cache_wrap #(
     // Core request    
     wire [NUM_REQS-1:0]                     core_req_valid_b;
     wire [NUM_REQS-1:0]                     core_req_rw_b;
-    wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0] core_req_addr_b;
+    wire [NUM_REQS-1:0][`CS_WORD_ADDR_WIDTH-1:0] core_req_addr_b;
     wire [NUM_REQS-1:0][WORD_SIZE-1:0]      core_req_byteen_b;
-    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_req_data_b;
+    wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_req_data_b;
     wire [NUM_REQS-1:0][CORE_TAG_X_WIDTH-1:0] core_req_tag_b;
     wire [NUM_REQS-1:0]                     core_req_ready_b;
 
     // Core response
     wire [NUM_REQS-1:0]                     core_rsp_valid_b;
-    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_rsp_data_b;
+    wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_rsp_data_b;
     wire [NUM_REQS-1:0][CORE_TAG_X_WIDTH-1:0] core_rsp_tag_b;
     wire [NUM_REQS-1:0]                     core_rsp_ready_b;
 
     // Memory request
     wire                            mem_req_valid_b;
     wire                            mem_req_rw_b;
-    wire [`MEM_ADDR_WIDTH-1:0]      mem_req_addr_b;
+    wire [`CS_MEM_ADDR_WIDTH-1:0]   mem_req_addr_b;
     wire [LINE_SIZE-1:0]            mem_req_byteen_b;
-    wire [`LINE_WIDTH-1:0]          mem_req_data_b;
+    wire [`CS_LINE_WIDTH-1:0]       mem_req_data_b;
     wire [MEM_TAG_X_WIDTH-1:0]      mem_req_tag_b;
     wire                            mem_req_ready_b;
     
     // Memory response
     wire                            mem_rsp_valid_b;
-    wire [`LINE_WIDTH-1:0]          mem_rsp_data_b;
+    wire [`CS_LINE_WIDTH-1:0]       mem_rsp_data_b;
     wire [MEM_TAG_X_WIDTH-1:0]      mem_rsp_tag_b;
     wire                            mem_rsp_ready_b;
 
@@ -195,11 +195,11 @@ module VX_cache_wrap #(
             .NC_ENABLE         (NC_ENABLE),
             .PASSTHRU          (PASSTHRU),
 
-            .CORE_ADDR_WIDTH   (`WORD_ADDR_WIDTH),
+            .CORE_ADDR_WIDTH   (`CS_WORD_ADDR_WIDTH),
             .CORE_DATA_SIZE    (WORD_SIZE),    
             .CORE_TAG_IN_WIDTH (TAG_WIDTH),
                 
-            .MEM_ADDR_WIDTH    (`MEM_ADDR_WIDTH),
+            .MEM_ADDR_WIDTH    (`CS_MEM_ADDR_WIDTH),
             .MEM_DATA_SIZE     (LINE_SIZE),
             .MEM_TAG_IN_WIDTH  (MEM_TAG_X_WIDTH),
             .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH),
@@ -358,12 +358,12 @@ module VX_cache_wrap #(
     end else begin
 
         VX_mem_bus_if #(
-            .DATA_WIDTH (`WORD_WIDTH),
+            .DATA_WIDTH (`CS_WORD_WIDTH),
             .TAG_WIDTH  (CORE_TAG_X_WIDTH)
         ) core_bus_wrap_if[NUM_REQS]();
 
         VX_mem_bus_if #(
-            .DATA_WIDTH (`LINE_WIDTH), 
+            .DATA_WIDTH (`CS_LINE_WIDTH), 
             .TAG_WIDTH  (MEM_TAG_X_WIDTH)
         ) mem_bus_wrap_if();
 

@@ -36,27 +36,27 @@ module VX_cache_mshr #(
 
     // allocate
     input wire                          allocate_valid,
-    input wire [`LINE_ADDR_WIDTH-1:0]   allocate_addr,
-    input wire [`MSHR_DATA_WIDTH-1:0]   allocate_data,
+    input wire [`CS_LINE_ADDR_WIDTH-1:0] allocate_addr,
+    input wire [`CS_MSHR_DATA_WIDTH-1:0] allocate_data,
     output wire [MSHR_ADDR_WIDTH-1:0]   allocate_id,   
     output wire                         allocate_ready,
 
     // fill
     input wire                          fill_valid,
     input wire [MSHR_ADDR_WIDTH-1:0]    fill_id,
-    output wire [`LINE_ADDR_WIDTH-1:0]  fill_addr,
+    output wire [`CS_LINE_ADDR_WIDTH-1:0] fill_addr,
 
     // lookup
     input wire                          lookup_find,
     input wire                          lookup_replay,
-    input wire [`LINE_ADDR_WIDTH-1:0]   lookup_addr,
+    input wire [`CS_LINE_ADDR_WIDTH-1:0] lookup_addr,
     output wire [MSHR_SIZE-1:0]         lookup_matches,
     
     // dequeue    
     output wire                         dequeue_valid,
     output wire [MSHR_ADDR_WIDTH-1:0]   dequeue_id,
-    output wire [`LINE_ADDR_WIDTH-1:0]  dequeue_addr,
-    output wire [`MSHR_DATA_WIDTH-1:0]  dequeue_data,
+    output wire [`CS_LINE_ADDR_WIDTH-1:0] dequeue_addr,
+    output wire [`CS_MSHR_DATA_WIDTH-1:0] dequeue_data,
     input wire                          dequeue_ready,
 
     // release
@@ -65,7 +65,7 @@ module VX_cache_mshr #(
 );
     `UNUSED_PARAM (BANK_ID)    
     
-    reg [`LINE_ADDR_WIDTH-1:0] addr_table [MSHR_SIZE-1:0];
+    reg [`CS_LINE_ADDR_WIDTH-1:0] addr_table [MSHR_SIZE-1:0];
 
     reg [MSHR_SIZE-1:0] valid_table, valid_table_n;
     reg [MSHR_SIZE-1:0] ready_table, ready_table_n;
@@ -170,13 +170,13 @@ module VX_cache_mshr #(
     end
     
     `RUNTIME_ASSERT((!allocate_fire || ~valid_table[allocate_id_r]), ("%t: *** %s:%0d in-use allocation: addr=0x%0h, id=%0d", $time, INSTANCE_ID, BANK_ID, 
-        `LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id_r))
+        `CS_LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id_r))
     
     `RUNTIME_ASSERT((!fill_valid || valid_table[fill_id]), ("%t: *** %s:%0d invalid fill: addr=0x%0h, id=%0d", $time, INSTANCE_ID, BANK_ID, 
-        `LINE_TO_BYTE_ADDR(addr_table[fill_id], BANK_ID), fill_id))
+        `CS_LINE_TO_BYTE_ADDR(addr_table[fill_id], BANK_ID), fill_id))
 
     VX_dp_ram #(
-        .DATAW  (`MSHR_DATA_WIDTH),
+        .DATAW  (`CS_MSHR_DATA_WIDTH),
         .SIZE   (MSHR_SIZE),
         .LUTRAM (1)
     ) entries (
@@ -207,19 +207,19 @@ module VX_cache_mshr #(
         if (allocate_fire || fill_valid || dequeue_fire || lookup_replay || lookup_find || release_valid) begin
             if (allocate_fire)
                 `TRACE(3, ("%d: %s:%0d mshr-allocate: addr=0x%0h, id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID,
-                    `LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id_r, lkp_req_uuid));
+                    `CS_LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id_r, lkp_req_uuid));
             if (fill_valid)
                 `TRACE(3, ("%d: %s:%0d mshr-fill: addr=0x%0h, id=%0d, addr=0x%0h\n", $time, INSTANCE_ID, BANK_ID, 
-                    `LINE_TO_BYTE_ADDR(addr_table[fill_id], BANK_ID), fill_id, `LINE_TO_BYTE_ADDR(fill_addr, BANK_ID)));
+                    `CS_LINE_TO_BYTE_ADDR(addr_table[fill_id], BANK_ID), fill_id, `CS_LINE_TO_BYTE_ADDR(fill_addr, BANK_ID)));
             if (dequeue_fire)
                 `TRACE(3, ("%d: %s:%0d mshr-dequeue: addr=0x%0h, id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, 
-                    `LINE_TO_BYTE_ADDR(dequeue_addr, BANK_ID), dequeue_id_r, deq_req_uuid));
+                    `CS_LINE_TO_BYTE_ADDR(dequeue_addr, BANK_ID), dequeue_id_r, deq_req_uuid));
             if (lookup_replay)
                 `TRACE(3, ("%d: %s:%0d mshr-replay: addr=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, 
-                    `LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lkp_req_uuid));
+                    `CS_LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lkp_req_uuid));
             if (lookup_find)
                 `TRACE(3, ("%d: %s:%0d mshr-lookup: addr=0x%0h, matches=%b (#%0d)\n", $time, INSTANCE_ID, BANK_ID, 
-                    `LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lookup_matches, lkp_req_uuid));
+                    `CS_LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lookup_matches, lkp_req_uuid));
             if (release_valid)
                 `TRACE(3, ("%d: %s:%0d mshr-release id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, release_id, rel_req_uuid));
             `TRACE(3, ("%d: %s:%0d mshr-table", $time, INSTANCE_ID, BANK_ID));
@@ -228,7 +228,7 @@ module VX_cache_mshr #(
                     `TRACE(3, (" "));                    
                     if (ready_table[i]) 
                         `TRACE(3, ("*"));
-                    `TRACE(3, ("%0d=0x%0h", i, `LINE_TO_BYTE_ADDR(addr_table[i], BANK_ID)));
+                    `TRACE(3, ("%0d=0x%0h", i, `CS_LINE_TO_BYTE_ADDR(addr_table[i], BANK_ID)));
                 end
             end
             `TRACE(3, ("\n"));

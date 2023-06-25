@@ -12,11 +12,11 @@ module VX_cache_init #(
 ) (
     input  wire clk,
     input  wire reset,    
-    output wire [`LINE_SEL_BITS-1:0] addr_out,
+    output wire [`CS_LINE_SEL_BITS-1:0] addr_out,
     output wire valid_out
 );
     reg enabled;
-    reg [`LINE_SEL_BITS-1:0] line_ctr;
+    reg [`CS_LINE_SEL_BITS-1:0] line_ctr;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -24,10 +24,10 @@ module VX_cache_init #(
             line_ctr <= '0;
         end else begin
             if (enabled) begin
-                if (line_ctr == ((2 ** `LINE_SEL_BITS)-1)) begin
+                if (line_ctr == ((2 ** `CS_LINE_SEL_BITS)-1)) begin
                     enabled <= 0;
                 end
-                line_ctr <= line_ctr + `LINE_SEL_BITS'(1);           
+                line_ctr <= line_ctr + `CS_LINE_SEL_BITS'(1);           
             end
         end
     end

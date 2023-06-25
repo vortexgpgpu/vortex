@@ -17,7 +17,7 @@ interface VX_cache_bus_if #(
     wire [NUM_REQS-1:0]                 req_ready;
 
     wire [NUM_REQS-1:0]                 rsp_valid;
-    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0] rsp_data;
+    wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] rsp_data;
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0]  rsp_tag;
     wire [NUM_REQS-1:0]                 rsp_ready;
 

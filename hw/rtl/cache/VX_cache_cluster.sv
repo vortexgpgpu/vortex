@@ -79,7 +79,7 @@ module VX_cache_cluster #(
 `endif
 
     VX_mem_bus_if #(
-        .DATA_WIDTH (`LINE_WIDTH),
+        .DATA_WIDTH (`CS_LINE_WIDTH),
         .TAG_WIDTH  (MEM_TAG_WIDTH)
     ) cache_mem_bus_if[NUM_CACHES]();
 
@@ -111,7 +111,7 @@ module VX_cache_cluster #(
     for (genvar i = 0; i < NUM_CACHES; ++i) begin
 
         VX_mem_bus_if #(
-            .DATA_WIDTH (`WORD_WIDTH),
+            .DATA_WIDTH (`CS_WORD_WIDTH),
             .TAG_WIDTH  (ARB_TAG_WIDTH)
         ) arb_core_bus_m_if[NUM_REQS]();
 
@@ -159,7 +159,7 @@ module VX_cache_cluster #(
 
     VX_mem_arb #(
         .NUM_REQS     (NUM_CACHES),
-        .DATA_WIDTH   (`LINE_WIDTH),
+        .DATA_WIDTH   (`CS_LINE_WIDTH),
         .TAG_WIDTH    (MEM_TAG_WIDTH),
         .TAG_SEL_IDX  (1), // Skip 0 for NC flag
         .ARBITER      ("R"),
@@ -243,14 +243,14 @@ module VX_cache_cluster_top #(
     input  wire [NUM_INPUTS-1:0][NUM_REQS-1:0]                 core_req_valid,
     input  wire [NUM_INPUTS-1:0][NUM_REQS-1:0]                 core_req_rw,
     input  wire [NUM_INPUTS-1:0][NUM_REQS-1:0][WORD_SIZE-1:0]  core_req_byteen,
-    input  wire [NUM_INPUTS-1:0][NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0] core_req_addr,
-    input  wire [NUM_INPUTS-1:0][NUM_REQS-1:0][`WORD_WIDTH-1:0] core_req_data,
+    input  wire [NUM_INPUTS-1:0][NUM_REQS-1:0][`CS_WORD_ADDR_WIDTH-1:0] core_req_addr,
+    input  wire [NUM_INPUTS-1:0][NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_req_data,
     input  wire [NUM_INPUTS-1:0][NUM_REQS-1:0][TAG_WIDTH-1:0]  core_req_tag,
     output wire [NUM_INPUTS-1:0][NUM_REQS-1:0]                 core_req_ready,
 
     // Core response
     output wire [NUM_INPUTS-1:0][NUM_REQS-1:0]                 core_rsp_valid,
-    output wire [NUM_INPUTS-1:0][NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data,
+    output wire [NUM_INPUTS-1:0][NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_rsp_data,
     output wire [NUM_INPUTS-1:0][NUM_REQS-1:0][TAG_WIDTH-1:0]  core_rsp_tag,
     input  wire [NUM_INPUTS-1:0][NUM_REQS-1:0]                 core_rsp_ready,
 
@@ -258,14 +258,14 @@ module VX_cache_cluster_top #(
     output wire                    mem_req_valid,
     output wire                    mem_req_rw, 
     output wire [LINE_SIZE-1:0]    mem_req_byteen,
-    output wire [`MEM_ADDR_WIDTH-1:0] mem_req_addr,
-    output wire [`LINE_WIDTH-1:0]  mem_req_data,  
+    output wire [`CS_MEM_ADDR_WIDTH-1:0] mem_req_addr,
+    output wire [`CS_LINE_WIDTH-1:0] mem_req_data,  
     output wire [MEM_TAG_WIDTH-1:0] mem_req_tag, 
     input  wire                    mem_req_ready,
     
     // Memory response
     input  wire                    mem_rsp_valid,    
-    input  wire [`LINE_WIDTH-1:0]  mem_rsp_data,
+    input  wire [`CS_LINE_WIDTH-1:0] mem_rsp_data,
     input  wire [MEM_TAG_WIDTH-1:0] mem_rsp_tag, 
     output wire                    mem_rsp_ready
 );
@@ -276,7 +276,7 @@ module VX_cache_cluster_top #(
     ) core_bus_if[NUM_INPUTS]();
 
     VX_mem_bus_if #(
-        .DATA_WIDTH (`LINE_WIDTH),
+        .DATA_WIDTH (`CS_LINE_WIDTH),
         .TAG_WIDTH  (MEM_TAG_WIDTH)
     ) mem_bus_if();
 

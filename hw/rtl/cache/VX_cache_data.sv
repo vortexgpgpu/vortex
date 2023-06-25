@@ -32,15 +32,15 @@ module VX_cache_data #(
     input wire                          read,
     input wire                          fill, 
     input wire                          write,
-    input wire [`LINE_ADDR_WIDTH-1:0]   addr,
-    input wire [NUM_PORTS-1:0][`UP(`WORD_SEL_BITS)-1:0] wsel,
+    input wire [`CS_LINE_ADDR_WIDTH-1:0] addr,
+    input wire [NUM_PORTS-1:0][`UP(`CS_WORD_SEL_BITS)-1:0] wsel,
     input wire [NUM_PORTS-1:0]          pmask,
     input wire [NUM_PORTS-1:0][WORD_SIZE-1:0] byteen,
-    input wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] fill_data,
-    input wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] write_data,
+    input wire [`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] fill_data,
+    input wire [NUM_PORTS-1:0][`CS_WORD_WIDTH-1:0] write_data,
     input wire [NUM_WAYS-1:0]           way_sel,
 
-    output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] read_data
+    output wire [NUM_PORTS-1:0][`CS_WORD_WIDTH-1:0] read_data
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (BANK_ID)
@@ -51,15 +51,15 @@ module VX_cache_data #(
 
     localparam BYTEENW = WRITE_ENABLE ? LINE_SIZE : 1;
 
-    wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] rdata;
-    wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] wdata;
+    wire [`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] rdata;
+    wire [`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] wdata;
     wire [BYTEENW-1:0] wren;
-    wire [`LINE_SEL_BITS-1:0] line_addr = addr[`LINE_SEL_BITS-1:0];
+    wire [`CS_LINE_SEL_BITS-1:0] line_addr = addr[`CS_LINE_SEL_BITS-1:0];
 
     if (WRITE_ENABLE != 0) begin
-        if (`WORDS_PER_LINE > 1) begin
-            reg [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] wdata_r;
-            reg [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] wren_r;
+        if (`CS_WORDS_PER_LINE > 1) begin
+            reg [`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] wdata_r;
+            reg [`CS_WORDS_PER_LINE-1:0][WORD_SIZE-1:0] wren_r;
             if (NUM_PORTS > 1) begin
                 always @(*) begin
                     wdata_r = 'x;
@@ -74,7 +74,7 @@ module VX_cache_data #(
             end else begin
                 `UNUSED_VAR (pmask)
                 always @(*) begin                
-                    wdata_r = {`WORDS_PER_LINE{write_data}};
+                    wdata_r = {`CS_WORDS_PER_LINE{write_data}};
                     wren_r  = '0;
                     wren_r[wsel] = byteen;
                 end
@@ -96,12 +96,12 @@ module VX_cache_data #(
         assign wren  = fill;
     end
 
-    wire [NUM_WAYS-1:0][`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] per_way_rdata;
+    wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] per_way_rdata;
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin
         VX_sp_ram #(
-            .DATAW      (`LINE_WIDTH),
-            .SIZE       (`LINES_PER_BANK),
+            .DATAW      (`CS_LINE_WIDTH),
+            .SIZE       (`CS_LINES_PER_BANK),
             .WRENW      (BYTEENW),
             .NO_RWCHECK (1)
         ) data_store (
@@ -115,7 +115,7 @@ module VX_cache_data #(
     end
    
     VX_onehot_mux #(
-        .DATAW (`WORDS_PER_LINE * `WORD_WIDTH),
+        .DATAW (`CS_WORDS_PER_LINE * `CS_WORD_WIDTH),
         .N     (NUM_WAYS)
     ) rdata_select (
         .data_in  (per_way_rdata),
@@ -123,7 +123,7 @@ module VX_cache_data #(
         .data_out (rdata)
     );
 
-    if (`WORDS_PER_LINE > 1) begin
+    if (`CS_WORDS_PER_LINE > 1) begin
         for (genvar i = 0; i < NUM_PORTS; ++i) begin
             assign read_data[i] = rdata[wsel[i]];
         end
@@ -137,13 +137,13 @@ module VX_cache_data #(
 `ifdef DBG_TRACE_CACHE_DATA
     always @(posedge clk) begin 
         if (fill && ~stall) begin
-            `TRACE(3, ("%d: %s:%0d data-fill: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, fill_data));
+            `TRACE(3, ("%d: %s:%0d data-fill: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, fill_data));
         end
         if (read && ~stall) begin
-            `TRACE(3, ("%d: %s:%0d data-read: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, read_data, req_uuid));
+            `TRACE(3, ("%d: %s:%0d data-read: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, read_data, req_uuid));
         end 
         if (write && ~stall) begin
-            `TRACE(3, ("%d: %s:%0d data-write: addr=0x%0h, way=%b, blk_addr=%0d, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, byteen, write_data, req_uuid));
+            `TRACE(3, ("%d: %s:%0d data-write: addr=0x%0h, way=%b, blk_addr=%0d, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, byteen, write_data, req_uuid));
         end      
     end    
 `endif

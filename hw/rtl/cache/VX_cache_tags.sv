@@ -27,7 +27,7 @@ module VX_cache_tags #(
 
     // read/fill
     input wire                          lookup,
-    input wire [`LINE_ADDR_WIDTH-1:0]   addr,
+    input wire [`CS_LINE_ADDR_WIDTH-1:0] addr,
     input wire                          fill,    
     input wire                          init,
     output wire [NUM_WAYS-1:0]          way_sel,
@@ -38,11 +38,11 @@ module VX_cache_tags #(
     `UNUSED_VAR (reset)
     `UNUSED_VAR (lookup)
 
-    localparam TAG_WIDTH = 1 + `TAG_SEL_BITS;
+    localparam TAG_WIDTH = 1 + `CS_TAG_SEL_BITS;
 
     wire [NUM_WAYS-1:0]       tag_matches;
-    wire [`LINE_SEL_BITS-1:0] line_addr = addr[`LINE_SEL_BITS-1:0];
-    wire [`TAG_SEL_BITS-1:0]  line_tag = `LINE_TAG_ADDR(addr);    
+    wire [`CS_LINE_SEL_BITS-1:0] line_addr = addr[`CS_LINE_SEL_BITS-1:0];
+    wire [`CS_TAG_SEL_BITS-1:0] line_tag = `CS_LINE_TAG_ADDR(addr);    
     wire [NUM_WAYS-1:0]       fill_way;
 
     if (NUM_WAYS > 1)  begin
@@ -64,12 +64,12 @@ module VX_cache_tags #(
     end
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin
-        wire [`TAG_SEL_BITS-1:0] read_tag;
+        wire [`CS_TAG_SEL_BITS-1:0] read_tag;
         wire read_valid;
 
         VX_sp_ram #(
             .DATAW (TAG_WIDTH),
-            .SIZE  (`LINES_PER_BANK),
+            .SIZE  (`CS_LINES_PER_BANK),
             .NO_RWCHECK (1)
         ) tag_store (
             .clk   (clk), 
@@ -92,16 +92,16 @@ module VX_cache_tags #(
 `ifdef DBG_TRACE_CACHE_TAG
     always @(posedge clk) begin
         if (fill && ~stall) begin
-            `TRACE(3, ("%d: %s:%0d tag-fill: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, line_tag));
+            `TRACE(3, ("%d: %s:%0d tag-fill: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, line_tag));
         end
         if (init) begin
-            `TRACE(3, ("%d: %s:%0d tag-init: addr=0x%0h, blk_addr=%0d\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr));
+            `TRACE(3, ("%d: %s:%0d tag-init: addr=0x%0h, blk_addr=%0d\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr));
         end
         if (lookup && ~stall) begin
             if (tag_match) begin
-                `TRACE(3, ("%d: %s:%0d tag-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, line_tag, req_uuid));
+                `TRACE(3, ("%d: %s:%0d tag-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, line_tag, req_uuid));
             end else begin
-                `TRACE(3, ("%d: %s:%0d tag-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, req_uuid));
+                `TRACE(3, ("%d: %s:%0d tag-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, req_uuid));
             end
         end          
     end    
