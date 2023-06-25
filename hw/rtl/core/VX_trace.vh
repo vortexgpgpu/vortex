@@ -1,5 +1,5 @@
-`ifndef VX_TRACE_INFO_VH
-`define VX_TRACE_INFO_VH
+`ifndef VX_TRACE_VH
+`define VX_TRACE_VH
 
 `include "VX_define.vh"
 
@@ -326,4 +326,4 @@ task trace_base_dcr(input int level, input [`VX_DCR_ADDR_WIDTH-1:0] addr);
     endcase
 endtask 
 
-`endif // VX_TRACE_INFO_VH
+`endif // VX_TRACE_VH
