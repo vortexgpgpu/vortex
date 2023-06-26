@@ -68,7 +68,8 @@ module VX_socket #(
     `RESET_RELAY (gbar_arb_reset, reset);
 
     VX_gbar_arb #(
-        .NUM_REQS (`SOCKET_SIZE)
+        .NUM_REQS (`SOCKET_SIZE),
+        .BUFFERED ((`SOCKET_SIZE > 1) ? 2 : 0)
     ) gbar_arb (
         .clk        (clk),
         .reset      (gbar_arb_reset),

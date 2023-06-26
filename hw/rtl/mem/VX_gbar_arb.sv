@@ -2,7 +2,7 @@
 
 module VX_gbar_arb #(
     parameter NUM_REQS = 1,
-    parameter BUFFERED_REQ = 0,
+    parameter BUFFERED = 0,
     parameter `STRING ARBITER = "R"
 ) (
     input wire              clk,
@@ -32,7 +32,7 @@ module VX_gbar_arb #(
         .NUM_LANES   (1),
         .DATAW       (REQ_DATAW),
         .ARBITER     (ARBITER),
-        .BUFFERED    (BUFFERED_REQ)
+        .BUFFERED    (BUFFERED)
     ) req_arb (
         .clk        (clk),
         .reset      (reset),

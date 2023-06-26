@@ -82,7 +82,8 @@ module VX_cluster #(
     `RESET_RELAY (gbar_reset, reset);
 
     VX_gbar_arb #(
-        .NUM_REQS (`NUM_SOCKETS)
+        .NUM_REQS (`NUM_SOCKETS),
+        .BUFFERED ((`NUM_SOCKETS > 1) ? 2 : 0)
     ) gbar_arb (
         .clk        (clk),
         .reset      (gbar_reset),
