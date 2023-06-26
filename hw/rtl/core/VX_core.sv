@@ -551,13 +551,13 @@ module VX_core_top #(
         .TAG_WIDTH (`TEX_REQ_TAG_WIDTH)
     ) tex_bus_if();
 
-    assign tex_req_valid = tex_bus_if.req_req_valid;
-    assign tex_req_mask = tex_bus_if.req_req_mask;
-    assign tex_req_coords = tex_bus_if.req_req_coords;
-    assign tex_req_lod = tex_bus_if.req_req_lod;
-    assign tex_req_stage = tex_bus_if.req_req_stage;
-    assign tex_req_tag = tex_bus_if.req_req_tag;  
-    assign tex_bus_if.req_req_ready = tex_req_ready;
+    assign tex_req_valid = tex_bus_if.req_valid;
+    assign tex_req_mask = tex_bus_if.req_mask;
+    assign tex_req_coords = tex_bus_if.req_coords;
+    assign tex_req_lod = tex_bus_if.req_lod;
+    assign tex_req_stage = tex_bus_if.req_stage;
+    assign tex_req_tag = tex_bus_if.req_tag;  
+    assign tex_bus_if.req_ready = tex_req_ready;
 
     assign tex_bus_if.rsp_valid = tex_rsp_valid;
     assign tex_bus_if.rsp_texels = tex_rsp_texels;
@@ -570,10 +570,10 @@ module VX_core_top #(
         .NUM_LANES (`NUM_THREADS)
     ) raster_bus_if();
 
-    assign raster_bus_if.valid = raster_req_valid;  
-    assign raster_bus_if.stamps = raster_req_stamps;
-    assign raster_bus_if.done = raster_req_done;
-    assign raster_req_ready = raster_bus_if.ready;
+    assign raster_bus_if.req_valid = raster_req_valid;  
+    assign raster_bus_if.req_stamps = raster_req_stamps;
+    assign raster_bus_if.req_done = raster_req_done;
+    assign raster_req_ready = raster_bus_if.req_ready;
 `endif
 
 `ifdef EXT_ROP_ENABLE
@@ -581,15 +581,15 @@ module VX_core_top #(
         .NUM_LANES (`NUM_THREADS)
     ) rop_bus_if();
     
-    assign rop_req_valid = rop_bus_if.valid;    
-    assign rop_req_uuid = rop_bus_if.uuid;
-    assign rop_req_mask = rop_bus_if.mask; 
-    assign rop_req_pos_x = rop_bus_if.pos_x;
-    assign rop_req_pos_y = rop_bus_if.pos_y;
-    assign rop_req_color = rop_bus_if.color;
-    assign rop_req_depth = rop_bus_if.depth;
-    assign rop_req_face = rop_bus_if.face;
-    assign rop_bus_if.ready = rop_req_ready;
+    assign rop_req_valid = rop_bus_if.req_valid;    
+    assign rop_req_uuid = rop_bus_if.req_uuid;
+    assign rop_req_mask = rop_bus_if.req_mask; 
+    assign rop_req_pos_x = rop_bus_if.req_pos_x;
+    assign rop_req_pos_y = rop_bus_if.req_pos_y;
+    assign rop_req_color = rop_bus_if.req_color;
+    assign rop_req_depth = rop_bus_if.req_depth;
+    assign rop_req_face = rop_bus_if.req_face;
+    assign rop_bus_if.req_ready = rop_req_ready;
 `endif
 
 `ifdef SCOPE

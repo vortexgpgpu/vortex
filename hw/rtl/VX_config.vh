@@ -310,7 +310,7 @@
 // Pipeline latencies /////////////////////////////////////////////////////////
 
 `ifndef LATENCY_IMUL
-`define LATENCY_IMUL 3
+`define LATENCY_IMUL 1
 `endif
 
 `ifndef LATENCY_FNCP

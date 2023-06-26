@@ -444,10 +444,10 @@ module VX_raster_unit_top #(
         .NUM_LANES (OUTPUT_QUADS)
     ) raster_bus_if();
 
-    assign raster_req_valid = raster_bus_if.valid;
-    assign raster_req_stamps = raster_bus_if.stamps;
-    assign raster_bus_if.done = raster_req_done;
-    assign raster_bus_if.ready = raster_req_ready;
+    assign raster_req_valid = raster_bus_if.req_valid;
+    assign raster_req_stamps = raster_bus_if.req_stamps;
+    assign raster_bus_if.req_done = raster_req_done;
+    assign raster_bus_if.req_ready = raster_req_ready;
 
     VX_cache_bus_if #(
         .NUM_REQS  (RCACHE_NUM_REQS), 

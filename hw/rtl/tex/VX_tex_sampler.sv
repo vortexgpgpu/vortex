@@ -45,6 +45,7 @@ module VX_tex_sampler #(
 
     VX_pipe_register #(
         .DATAW  (1 + REQ_INFOW + (NUM_LANES * 2 * `TEX_BLEND_FRAC) + (NUM_LANES * 4 * 32)),
+        .DEPTH  (2),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -83,7 +84,7 @@ module VX_tex_sampler #(
 
     VX_shift_register #(
         .DATAW  (1 + REQ_INFOW + (NUM_LANES * `TEX_BLEND_FRAC)),
-        .DEPTH  (3),
+        .DEPTH  (2),
         .RESETW (1)
     ) shift_reg1 (
         .clk      (clk),
@@ -111,7 +112,7 @@ module VX_tex_sampler #(
     
     VX_shift_register #(
         .DATAW  (1 + REQ_INFOW),
-        .DEPTH  (3),
+        .DEPTH  (1),
         .RESETW (1)
     ) shift_reg2 (
         .clk      (clk),
