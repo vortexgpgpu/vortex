@@ -406,6 +406,18 @@ module VX_cache_bank #(
         .lkp_req_uuid   (req_uuid_st0),
         .rel_req_uuid   (req_uuid_st1),
 
+        // fill
+        .fill_valid     (mem_rsp_fire),
+        .fill_id        (mem_rsp_id),
+        .fill_addr      (mem_rsp_addr),
+
+        // dequeue
+        .dequeue_valid  (mshr_deq_valid),
+        .dequeue_id     (mshr_deq_id),
+        .dequeue_addr   (mshr_deq_addr),
+        .dequeue_data   ({mshr_wsel, mshr_tag, mshr_idx, mshr_pmask}),
+        .dequeue_ready  (mshr_deq_ready),
+
         // allocate
         .allocate_valid (mshr_allocate_st0),
         .allocate_addr  (addr_st0),
@@ -418,18 +430,6 @@ module VX_cache_bank #(
         .lookup_replay  (mshr_replay_st0),
         .lookup_addr    (addr_st0),
         .lookup_matches (mshr_matches_st0),
-
-        // fill
-        .fill_valid     (mem_rsp_fire),
-        .fill_id        (mem_rsp_id),
-        .fill_addr      (mem_rsp_addr),
-
-        // dequeue
-        .dequeue_valid  (mshr_deq_valid),
-        .dequeue_id     (mshr_deq_id),
-        .dequeue_addr   (mshr_deq_addr),
-        .dequeue_data   ({mshr_wsel, mshr_tag, mshr_idx, mshr_pmask}),
-        .dequeue_ready  (mshr_deq_ready),
 
         // release
         .release_valid  (mshr_release_st1),

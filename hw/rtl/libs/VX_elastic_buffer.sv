@@ -29,6 +29,29 @@ module VX_elastic_buffer #(
         assign data_out  = data_in;
         assign ready_in  = ready_out;
 
+    end else if (SIZE == 1) begin
+
+        reg [DATAW-1:0] data_out_r;
+        reg             valid_out_r;
+        
+        wire push = valid_in && ready_in;
+        wire stall_out = valid_out_r && ~ready_out;
+        
+        always @(posedge clk) begin
+            if (reset) begin
+                valid_out_r <= 0;
+            end else begin
+                valid_out_r <= valid_in || stall_out;
+            end
+            if (push) begin
+                data_out_r <= data_in;
+            end
+        end
+
+        assign ready_in  = ~valid_out_r || ready_out;
+        assign valid_out = valid_out_r;
+        assign data_out  = data_out_r;
+
     end else if (SIZE == 2) begin
 
         VX_skid_buffer #(

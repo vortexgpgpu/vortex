@@ -41,16 +41,16 @@ module VX_cache_mshr #(
     output wire [MSHR_ADDR_WIDTH-1:0]   allocate_id,   
     output wire                         allocate_ready,
 
-    // fill
-    input wire                          fill_valid,
-    input wire [MSHR_ADDR_WIDTH-1:0]    fill_id,
-    output wire [`CS_LINE_ADDR_WIDTH-1:0] fill_addr,
-
     // lookup
     input wire                          lookup_find,
     input wire                          lookup_replay,
     input wire [`CS_LINE_ADDR_WIDTH-1:0] lookup_addr,
     output wire [MSHR_SIZE-1:0]         lookup_matches,
+
+    // fill
+    input wire                          fill_valid,
+    input wire [MSHR_ADDR_WIDTH-1:0]    fill_id,
+    output wire [`CS_LINE_ADDR_WIDTH-1:0] fill_addr,
     
     // dequeue    
     output wire                         dequeue_valid,

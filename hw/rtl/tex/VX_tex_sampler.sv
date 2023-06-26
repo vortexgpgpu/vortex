@@ -45,7 +45,6 @@ module VX_tex_sampler #(
 
     VX_pipe_register #(
         .DATAW  (1 + REQ_INFOW + (NUM_LANES * 2 * `TEX_BLEND_FRAC) + (NUM_LANES * 4 * 32)),
-        .DEPTH  (2),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -57,7 +56,9 @@ module VX_tex_sampler #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         for (genvar j = 0; j < 4; ++j) begin
-            VX_tex_lerp tex_lerp_ul (
+            VX_tex_lerp #(
+                .LATENCY (3)
+            ) tex_lerp_ul (
                 .clk  (clk),
                 .reset(reset),
                 .enable(~stall_out),
@@ -66,7 +67,9 @@ module VX_tex_sampler #(
                 .frac (req_blends_s0[i][0]),
                 .out  (texel_ul[i][j*8 +: 8])
             );                
-            VX_tex_lerp tex_lerp_uh (
+            VX_tex_lerp #(
+                .LATENCY (3)
+            ) tex_lerp_uh (
                 .clk  (clk),
                 .reset(reset),
                 .enable(~stall_out),
@@ -84,7 +87,7 @@ module VX_tex_sampler #(
 
     VX_shift_register #(
         .DATAW  (1 + REQ_INFOW + (NUM_LANES * `TEX_BLEND_FRAC)),
-        .DEPTH  (2),
+        .DEPTH  (3),
         .RESETW (1)
     ) shift_reg1 (
         .clk      (clk),
@@ -96,7 +99,9 @@ module VX_tex_sampler #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         for (genvar j = 0; j < 4; ++j) begin
-            VX_tex_lerp tex_lerp_v (
+            VX_tex_lerp #(
+                .LATENCY (3)
+            ) tex_lerp_v (
                 .clk  (clk),
                 .reset(reset),
                 .enable(~stall_out),
@@ -112,7 +117,7 @@ module VX_tex_sampler #(
     
     VX_shift_register #(
         .DATAW  (1 + REQ_INFOW),
-        .DEPTH  (1),
+        .DEPTH  (3),
         .RESETW (1)
     ) shift_reg2 (
         .clk      (clk),

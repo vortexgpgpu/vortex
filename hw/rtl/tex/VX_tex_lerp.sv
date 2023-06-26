@@ -1,7 +1,9 @@
 `include "VX_platform.vh"
 
 `TRACING_OFF
-module VX_tex_lerp (
+module VX_tex_lerp #(
+    parameter LATENCY = 3   
+) (
     input wire clk,
     input wire reset,
     input wire enable,
@@ -11,6 +13,7 @@ module VX_tex_lerp (
     output wire [7:0] out
 );
     `UNUSED_VAR (reset)
+    `STATIC_ASSERT(LATENCY == 3, ("invalid value"));
     
     reg [15:0] p1, p2;
     reg [15:0] sum;
