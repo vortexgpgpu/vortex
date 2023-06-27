@@ -242,14 +242,17 @@ module VX_dp_ram #(
     // RAM emulation
     reg [DATAW-1:0] ram [SIZE-1:0];
     `RAM_INITIALIZATION
+
+    wire [DATAW-1:0] ram_n;
+    for (genvar i = 0; i < WRENW; ++i) begin
+        assign ram_n[i * WSELW +: WSELW] = ((WRENW == 1) | wren[i]) ? wdata[i * WSELW +: WSELW] : ram[waddr][i * WSELW +: WSELW];
+    end
+
     if (OUT_REG != 0) begin        
         reg [DATAW-1:0] rdata_r;        
         always @(posedge clk) begin
             if (write) begin
-                for (integer i = 0; i < WRENW; ++i) begin
-                    if ((WRENW == 1) || wren[i])
-                        ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
-                end
+                ram[waddr] <= ram_n;
             end
             rdata_r <= ram[raddr];
         end
@@ -260,10 +263,7 @@ module VX_dp_ram #(
         reg prev_write;
         always @(posedge clk) begin
             if (write) begin
-                for (integer i = 0; i < WRENW; ++i) begin
-                    if ((WRENW == 1) || wren[i])
-                        ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
-                end
+                ram[waddr] <= ram_n;
             end
             prev_write <= (| wren);
             prev_data  <= ram[waddr];

@@ -156,8 +156,7 @@ module VX_cache_bank #(
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_id_st0, mshr_id_st1;
     wire                            req_valid, valid_st0, valid_st1;        
     wire                            is_fill_st0, is_fill_st1;
-    wire                            is_mshr_st0, is_mshr_st1;    
-    wire                            is_hit_st0, is_hit_st1;
+    wire                            is_mshr_st0, is_mshr_st1;
     wire                            is_init_st0;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_alloc_id_st0;
     wire                            mshr_pending_st0, mshr_pending_st1;
@@ -250,16 +249,12 @@ module VX_cache_bank #(
     end
 
     wire do_read_st0   = valid_st0 && is_read_st0;
-    wire do_mshr_st0   = valid_st0 && is_mshr_st0;
     wire do_fill_st0   = valid_st0 && is_fill_st0;
     wire do_init_st0   = valid_st0 && is_init_st0;
     wire do_lookup_st0 = valid_st0 && ~(is_fill_st0 || is_init_st0);
 
-    wire tag_match_st0;
-
-    // added for associativity
-    wire [NUM_WAYS-1:0] way_sel_st0;
-    wire [NUM_WAYS-1:0] way_sel_st1;
+    wire [NUM_WAYS-1:0] tag_matches_st0, tag_matches_st1;
+    wire [NUM_WAYS-1:0] way_sel_st0, way_sel_st1;
 
     VX_cache_tags #(
         .INSTANCE_ID(INSTANCE_ID),
@@ -284,27 +279,24 @@ module VX_cache_bank #(
         .fill       (do_fill_st0),
         .init       (do_init_st0),
         .way_sel    (way_sel_st0),
-        .tag_match  (tag_match_st0)
+        .tag_matches(tag_matches_st0)
     );
-
-    // we have a tag match
-    assign is_hit_st0 = tag_match_st0;
-
-    // ensure mshr replay always get a hit
-    `RUNTIME_ASSERT (~do_mshr_st0 || is_hit_st0, ("runtime error: invalid mshr replay"));
 
     wire [MSHR_ADDR_WIDTH-1:0] mshr_id_a_st0 = is_read_st0 ? mshr_alloc_id_st0 : mshr_id_st0;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + NUM_PORTS * (WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + 1 + TAG_WIDTH) + MSHR_ADDR_WIDTH + 1 + NUM_WAYS + 1),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + NUM_PORTS * (WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + 1 + TAG_WIDTH) + MSHR_ADDR_WIDTH + NUM_WAYS + NUM_WAYS + 1),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~pipe_stall),
-        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, is_read_st0, is_write_st0, addr_st0, data_st0, byteen_st0, wsel_st0, req_idx_st0, pmask_st0, tag_st0, mshr_id_a_st0, is_hit_st0, way_sel_st0, mshr_pending_st0}),
-        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, is_read_st1, is_write_st1, addr_st1, data_st1, byteen_st1, wsel_st1, req_idx_st1, pmask_st1, tag_st1, mshr_id_st1,   is_hit_st1, way_sel_st1, mshr_pending_st1})
+        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, is_read_st0, is_write_st0, addr_st0, data_st0, byteen_st0, wsel_st0, req_idx_st0, pmask_st0, tag_st0, mshr_id_a_st0, tag_matches_st0, way_sel_st0, mshr_pending_st0}),
+        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, is_read_st1, is_write_st1, addr_st1, data_st1, byteen_st1, wsel_st1, req_idx_st1, pmask_st1, tag_st1, mshr_id_st1,   tag_matches_st1, way_sel_st1, mshr_pending_st1})
     );
+
+    // we have a tag match
+    wire is_hit_st1 = | tag_matches_st1;
 
     if (UUID_WIDTH != 0) begin
         assign req_uuid_st1 = tag_st1[0][TAG_WIDTH-1 -: UUID_WIDTH];
@@ -324,6 +316,9 @@ module VX_cache_bank #(
     wire do_write_miss_st1 = do_write_st1 && ~is_hit_st1;
 
     `UNUSED_VAR (do_write_miss_st1)
+
+    // ensure mshr replay always get a hit
+    `RUNTIME_ASSERT (~do_mshr_st1 || is_hit_st1, ("runtime error: invalid mshr replay"));
 
     // detect BRAM's read-during-write hazard
     assign rdw_hazard_st0 = do_fill_st0; // after a fill
@@ -357,7 +352,7 @@ module VX_cache_bank #(
         .read       (do_read_hit_st1 || do_mshr_st1),      
         .fill       (do_fill_st1),        
         .write      (do_write_hit_st1),
-        .way_sel    (way_sel_st1),
+        .way_sel    (way_sel_st1 | tag_matches_st1),
         .addr       (addr_st1),
         .wsel       (wsel_st1),
         .pmask      (pmask_st1),

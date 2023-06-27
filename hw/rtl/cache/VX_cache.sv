@@ -150,7 +150,7 @@ module VX_cache #(
 
     // Memory response buffering
     wire                         mem_rsp_valid_s;
-    wire [`CS_LINE_WIDTH-1:0]       mem_rsp_data_s;
+    wire [`CS_LINE_WIDTH-1:0]    mem_rsp_data_s;
     wire [MEM_TAG_WIDTH-1:0]     mem_rsp_tag_s;
     wire                         mem_rsp_ready_s;
         

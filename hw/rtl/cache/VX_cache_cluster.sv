@@ -195,7 +195,7 @@ module VX_cache_cluster_top #(
     // Number of ports per banks
     parameter NUM_PORTS             = 1,
     // Number of associative ways
-    parameter NUM_WAYS              = 2,
+    parameter NUM_WAYS              = 4,
     // Size of a word in bytes
     parameter WORD_SIZE             = 4, 
 

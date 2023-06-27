@@ -2,9 +2,9 @@
 
 interface VX_mem_bus_if #(
     parameter DATA_WIDTH = 1,    
+    parameter DATA_SIZE  = DATA_WIDTH / 8,
     parameter ADDR_WIDTH = `MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE),
-    parameter TAG_WIDTH  = 1,
-    parameter DATA_SIZE  = DATA_WIDTH / 8   
+    parameter TAG_WIDTH  = 1    
 ) ();
 
     wire                    req_valid;    

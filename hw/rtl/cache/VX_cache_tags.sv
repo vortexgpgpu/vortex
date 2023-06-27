@@ -31,7 +31,7 @@ module VX_cache_tags #(
     input wire                          fill,    
     input wire                          init,
     output wire [NUM_WAYS-1:0]          way_sel,
-    output wire                         tag_match
+    output wire [NUM_WAYS-1:0]          tag_matches
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (BANK_ID)
@@ -40,10 +40,8 @@ module VX_cache_tags #(
 
     localparam TAG_WIDTH = 1 + `CS_TAG_SEL_BITS;
 
-    wire [NUM_WAYS-1:0]       tag_matches;
     wire [`CS_LINE_SEL_BITS-1:0] line_addr = addr[`CS_LINE_SEL_BITS-1:0];
-    wire [`CS_TAG_SEL_BITS-1:0] line_tag = `CS_LINE_TAG_ADDR(addr);    
-    wire [NUM_WAYS-1:0]       fill_way;
+    wire [`CS_TAG_SEL_BITS-1:0] line_tag = `CS_LINE_TAG_ADDR(addr);
 
     if (NUM_WAYS > 1)  begin
         reg [NUM_WAYS-1:0] repl_way;
@@ -56,11 +54,11 @@ module VX_cache_tags #(
             end
         end        
         for (genvar i = 0; i < NUM_WAYS; ++i) begin
-            assign fill_way[i] = fill && repl_way[i];
+            assign way_sel[i] = fill && repl_way[i];
         end
     end else begin
         `UNUSED_VAR (stall)
-        assign fill_way = fill;
+        assign way_sel = fill;
     end
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin
@@ -73,7 +71,7 @@ module VX_cache_tags #(
             .NO_RWCHECK (1)
         ) tag_store (
             .clk   (clk), 
-            .write (fill_way[i] || init),
+            .write (way_sel[i] || init),
             `UNUSED_PIN (wren),                
             .addr  (line_addr),
             .wdata ({~init, line_tag}), 
@@ -82,12 +80,6 @@ module VX_cache_tags #(
         
         assign tag_matches[i] = read_valid && (line_tag == read_tag);
     end
-
-    // found a tag match?
-    assign tag_match = (| tag_matches);
-
-    // return the selected way
-    assign way_sel = fill_way | tag_matches;
     
 `ifdef DBG_TRACE_CACHE_TAG
     always @(posedge clk) begin
