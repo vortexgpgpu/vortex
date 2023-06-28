@@ -149,7 +149,7 @@ endif
 
 .PHONY: all clean gen-sources gen-ast emconfig check-devices
 
-all: check-devices emconfig $(XCLBIN_CONTAINER)
+all: check-devices emconfig $(XCLBIN_CONTAINER) report
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
@@ -173,6 +173,13 @@ emconfig: $(BIN_DIR)/emconfig.json
 $(BIN_DIR)/emconfig.json:
 	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); emconfigutil --platform $(PLATFORM) --od ../$(BIN_DIR)
 
+report: $(XCLBIN_CONTAINER)
+ifeq ($(TARGET),$(findstring $(TARGET), hw))
+	cp $(BUILD_DIR)/_x/logs/link/syn/ulp_vortex_afu_1_0_synth_1_runme.log $(BUILD_DIR)/bin/runme.log
+	cp $(BUILD_DIR)/_x/reports/link/syn/ulp_vortex_afu_1_0_synth_1_ulp_vortex_afu_1_0_utilization_synth.rpt $(BUILD_DIR)/bin/synthesis.log
+	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt $(BUILD_DIR)/bin/timing.log	
+endif
+	
 hwserver:
 	debug_hw --xvc_pcie /dev/xfpga/xvc_pub.u2305.0 --hw_server &
 
