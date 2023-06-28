@@ -141,11 +141,13 @@ module VX_muldiv (
     wire mul_ready_in = ~stall_out || ~mul_valid_out;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        wire [`XLEN:0] mul_in1 = is_alu_w ? {{(`XLEN-31){alu_in1[i][31]}}, alu_in1[i][31:0]} : {is_signed_mul_a && alu_in1[i][`XLEN-1], alu_in1[i]};
-        wire [`XLEN:0] mul_in2 = is_alu_w ? {{(`XLEN-31){alu_in2[i][31]}}, alu_in2[i][31:0]} : {is_signed_mul_b && alu_in2[i][`XLEN-1], alu_in2[i]};
+        wire [`XLEN:0] mul_in1 = {is_signed_mul_a && alu_in1[i][`XLEN-1], alu_in1[i]};
+        wire [`XLEN:0] mul_in2 = {is_signed_mul_b && alu_in2[i][`XLEN-1], alu_in2[i]};
     
         VX_multiplier #(
             .A_WIDTH (`XLEN+1),
+            .B_WIDTH (`XLEN+1),
+            .R_WIDTH (2*(`XLEN+1)),
             .SIGNED  (1),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (

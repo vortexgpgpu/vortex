@@ -90,7 +90,7 @@ module VX_cache_tags #(
             `TRACE(3, ("%d: %s:%0d tag-init: addr=0x%0h, blk_addr=%0d\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr));
         end
         if (lookup && ~stall) begin
-            if (tag_match) begin
+            if (tag_matches) begin
                 `TRACE(3, ("%d: %s:%0d tag-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, line_tag, req_uuid));
             end else begin
                 `TRACE(3, ("%d: %s:%0d tag-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, req_uuid));
