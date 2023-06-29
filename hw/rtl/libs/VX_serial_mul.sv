@@ -15,11 +15,8 @@ module VX_serial_mul #(
     input wire                          clk,
     input wire                          reset,
 
-    input wire                          valid_in,
-    output wire                         ready_in,
-        
-    input wire                          ready_out,
-    output wire                         valid_out,
+    input wire                          strobe,
+    output wire                         busy,
 
     input wire [LANES-1:0][A_WIDTH-1:0] dataa,
     input wire [LANES-1:0][B_WIDTH-1:0] datab,
@@ -36,29 +33,21 @@ module VX_serial_mul #(
 	reg [LANES-1:0][P_WIDTH-1:0] p;
 
     reg [CNTRW-1:0] cntr;
-    reg busy, done;
-
-    wire push = valid_in && ready_in;
-    wire pop = valid_out && ready_out;
+    reg busy_r;
 
     always @(posedge clk) begin
         if (reset) begin
-            busy  <= 0;
-            done  <= 0;
+            busy_r <= 0;
         end else begin
-            if (push) begin
-                busy <= 1;
+            if (strobe) begin
+                busy_r <= 1;
             end
-            if (busy && cntr == 0) begin
-                done <= 1;
-            end
-            if (pop) begin                
-                busy <= 0;
-                done <= 0;
+            if (busy_r && cntr == 0) begin
+                busy_r <= 0;
             end
         end
         cntr <= cntr - CNTRW'(1);
-        if (push) begin
+        if (strobe) begin
             cntr <= CNTRW'(X_WIDTH-1);
         end
     end
@@ -67,7 +56,7 @@ module VX_serial_mul #(
         wire [X_WIDTH-1:0] axb = b[i][0] ? a[i] : '0;
 
         always @(posedge clk) begin
-            if (push) begin
+            if (strobe) begin
                 if (SIGNED) begin
                     a[i] <= X_WIDTH'($signed(dataa[i]));
                     b[i] <= Y_WIDTH'($signed(datab[i]));
@@ -76,7 +65,7 @@ module VX_serial_mul #(
                     b[i] <= datab[i];
                 end
                 p[i] <= 0;
-            end else if (busy) begin			
+            end else if (busy_r) begin			
                 b[i] <= (b[i] >> 1);
                 p[i][Y_WIDTH-2:0] <= p[i][Y_WIDTH-1:1];
                 if (SIGNED) begin
@@ -99,8 +88,7 @@ module VX_serial_mul #(
     end
     `UNUSED_VAR (p)
 
-    assign ready_in  = ~busy && ~done;
-    assign valid_out = done;
+    assign busy = busy_r;
 
 endmodule
 `TRACING_ON

@@ -11,11 +11,8 @@ module VX_serial_div #(
     input wire                      clk,
     input wire                      reset,
 
-    input wire                      valid_in,
-    output wire                     ready_in,
-        
-    input wire                      ready_out,
-    output wire                     valid_out,
+    input wire                      strobe,
+    output wire                     busy,
 
     input wire                      is_signed,
     input wire [LANES-1:0][WIDTHN-1:0] numer,
@@ -37,7 +34,7 @@ module VX_serial_div #(
     reg [LANES-1:0] inv_quot, inv_rem;
 
     reg [CNTRW-1:0] cntr;
-    reg busy, done;
+    reg busy_r;
 
     for (genvar i = 0; i < LANES; ++i) begin
         wire negate_numer = is_signed && numer[i][WIDTHN-1];
@@ -46,40 +43,32 @@ module VX_serial_div #(
         assign denom_qual[i] = negate_denom ? -$signed(denom[i]) : denom[i];
         assign sub_result[i] = working[i][WIDTHN + MIN_ND : WIDTHN] - denom_r[i];
     end
-
-    wire push = valid_in && ready_in;
-    wire pop = valid_out && ready_out;
     
     always @(posedge clk) begin
         if (reset) begin
-            busy  <= 0;
-            done  <= 0;
+            busy_r <= 0;
         end else begin
-            if (push) begin
-                busy <= 1;
+            if (strobe) begin
+                busy_r <= 1;
             end
             if (busy && cntr == 0) begin
-                busy <= 0;
-                done <= 1;
-            end
-            if (pop) begin                
-                done <= 0;
+                busy_r <= 0;
             end
         end
         cntr <= cntr - CNTRW'(1);
-        if (push) begin
+        if (strobe) begin
             cntr <= CNTRW'(WIDTHN-1);
         end
     end
 
     for (genvar i = 0; i < LANES; ++i) begin
         always @(posedge clk) begin
-            if (push) begin
+            if (strobe) begin
                 working[i]  <= {{WIDTHD{1'b0}}, numer_qual[i], 1'b0};
                 denom_r[i]  <= denom_qual[i];
                 inv_quot[i] <= (denom[i] != 0) && is_signed && (numer[i][31] ^ denom[i][31]);
                 inv_rem[i]  <= is_signed && numer[i][31];
-            end else if (busy) begin                    
+            end else if (busy_r) begin                    
                 working[i]  <= sub_result[i][WIDTHD] ? {working[i][WIDTHN+MIN_ND-1:0], 1'b0} :
                                                        {sub_result[i][WIDTHD-1:0], working[i][WIDTHN-1:0], 1'b1};
             end
@@ -89,9 +78,8 @@ module VX_serial_div #(
         assign quotient[i]  = inv_quot[i] ? -$signed(q) : q;
         assign remainder[i] = inv_rem[i] ? -$signed(r) : r;
     end
-    
-    assign ready_in  = ~busy && ~done;
-    assign valid_out = done;
+
+    assign busy = busy_r;
 
 endmodule
 `TRACING_ON

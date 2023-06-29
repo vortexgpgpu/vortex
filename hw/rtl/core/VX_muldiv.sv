@@ -111,17 +111,33 @@ module VX_muldiv (
     wire mul_ready_in;
     wire mul_ready_out = ~stall_out;
 
-    VX_serial_mul #(
-        .A_WIDTH (`XLEN+1),
-        .LANES   (`NUM_THREADS),
-        .SIGNED  (1)
-    ) multiplier (
+    wire mul_strode;
+    wire mul_busy;
+
+    VX_elastic_adapter mul_elastic_adapter (
         .clk       (clk),
-        .reset     (reset),            
+        .reset     (reset),
+        
         .valid_in  (mul_valid_in),
         .ready_in  (mul_ready_in),        
         .valid_out (mul_valid_out),
         .ready_out (mul_ready_out),
+
+        .strobe    (mul_strode),
+        .busy      (mul_busy)
+    );
+
+    VX_serial_mul #(
+        .A_WIDTH (`XLEN+1),
+        .LANES   (`NUM_THREADS),
+        .SIGNED  (1)
+    ) serial_mul (
+        .clk       (clk),
+        .reset     (reset),  
+
+        .strobe    (mul_strode),
+        .busy      (mul_busy),     
+        
         .dataa     (mul_in1),
         .datab     (mul_in2),
         .result    (mul_result_tmp)
@@ -142,7 +158,7 @@ module VX_muldiv (
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [`XLEN:0] mul_in1 = {is_signed_mul_a && alu_in1[i][`XLEN-1], alu_in1[i]};
-        wire [`XLEN:0] mul_in2 = {is_signed_mul_b && alu_in2[i][`XLEN-1], alu_in2[i]};
+        wire [`XLEN:0] mul_in2 = {is_signed_mul_b && alu_in2[i][`XLEN-1], alu_in2[i]};        
     
         VX_multiplier #(
             .A_WIDTH (`XLEN+1),
@@ -244,14 +260,10 @@ module VX_muldiv (
     wire [`NUM_THREADS-1:0][`XLEN-1:0] div_quotient, div_remainder;
     wire is_rem_op_out;    
     wire is_div_w_out;
+    wire div_strode;
+    wire div_busy;
 
-    VX_serial_div #(
-        .WIDTHN (`XLEN),
-        .WIDTHD (`XLEN),
-        .WIDTHQ (`XLEN),
-        .WIDTHR (`XLEN),
-        .LANES  (`NUM_THREADS)
-    ) divide (
+    VX_elastic_adapter div_elastic_adapter (
         .clk       (clk),
         .reset     (reset),
         
@@ -260,6 +272,23 @@ module VX_muldiv (
 
         .valid_out (div_valid_out),
         .ready_out (div_ready_out),
+
+        .strobe    (div_strode),
+        .busy      (div_busy)
+    );
+
+    VX_serial_div #(
+        .WIDTHN (`XLEN),
+        .WIDTHD (`XLEN),
+        .WIDTHQ (`XLEN),
+        .WIDTHR (`XLEN),
+        .LANES  (`NUM_THREADS)
+    ) serial_div (
+        .clk       (clk),
+        .reset     (reset),
+        
+        .strobe    (div_strode),
+        .busy      (div_busy),
 
         .is_signed (is_signed_op),        
         .numer     (div_in1),
