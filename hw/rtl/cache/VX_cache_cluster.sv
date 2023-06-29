@@ -19,7 +19,7 @@ module VX_cache_cluster #(
     // Number of ports per banks
     parameter NUM_PORTS             = 1,
     // Number of associative ways
-    parameter NUM_WAYS              = 1,
+    parameter NUM_WAYS              = 4,
     // Size of a word in bytes
     parameter WORD_SIZE             = 4, 
 
@@ -179,8 +179,8 @@ endmodule
 module VX_cache_cluster_top #(
     parameter `STRING INSTANCE_ID    = "",
 
-    parameter NUM_UNITS             = 8,
-    parameter NUM_INPUTS            = 16,
+    parameter NUM_UNITS             = 2,
+    parameter NUM_INPUTS            = 4,
     parameter TAG_SEL_IDX           = 0,
 
     // Number of Word requests per cycle

@@ -295,8 +295,8 @@ module VX_cache_bank #(
         .data_out ({valid_st1, is_mshr_st1, is_fill_st1, is_read_st1, is_write_st1, addr_st1, data_st1, byteen_st1, wsel_st1, req_idx_st1, pmask_st1, tag_st1, mshr_id_st1,   tag_matches_st1, way_sel_st1, mshr_pending_st1})
     );
 
-    // we have a tag match
-    wire is_hit_st1 = | tag_matches_st1;
+    // we have a tag hit
+    wire is_hit_st1 = (| tag_matches_st1);
 
     if (UUID_WIDTH != 0) begin
         assign req_uuid_st1 = tag_st1[0][TAG_WIDTH-1 -: UUID_WIDTH];

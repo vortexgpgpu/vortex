@@ -16,52 +16,27 @@ module VX_multiplier #(
 );
     `STATIC_ASSERT ((LATENCY <= 3), ("invalid parameter"))
 
-    wire [A_WIDTH-1:0] dataa_w;
-    wire [B_WIDTH-1:0] datab_w;
-    wire [A_WIDTH+B_WIDTH-1:0] result_w;
-    `UNUSED_VAR (result_w)
+    wire [R_WIDTH-1:0] prod_w;
 
     if (SIGNED != 0) begin
-        assign result_w = $signed(dataa_w) * $signed(datab_w);
+        assign prod_w = R_WIDTH'($signed(dataa) * $signed(datab));
     end else begin
-        assign result_w = dataa_w * datab_w;
+        assign prod_w = R_WIDTH'(dataa * datab);
     end
     
     if (LATENCY == 0) begin
-        assign dataa_w = dataa;
-        assign datab_w = datab;
-        assign result  = R_WIDTH'(result_w);
+        assign result = prod_w;
     end else begin        
-        if (LATENCY >= 2) begin
-            reg [A_WIDTH-1:0] dataa_p [LATENCY-2:0];
-            reg [B_WIDTH-1:0] datab_p [LATENCY-2:0];
-            always @(posedge clk) begin
-                if (enable) begin
-                    dataa_p[0] <= dataa;
-                    datab_p[0] <= datab;
-                end
-            end
-            for (genvar i = 2; i < LATENCY; ++i) begin
-                always @(posedge clk) begin
-                    if (enable) begin
-                        dataa_p[i-1] <= dataa_p[i-2];
-                        datab_p[i-1] <= datab_p[i-2];
-                    end
-                end
-            end
-            assign dataa_w = dataa_p[LATENCY-2];
-            assign datab_w = datab_p[LATENCY-2];
-        end else begin
-            assign dataa_w = dataa;
-            assign datab_w = datab;
-        end
-        reg [R_WIDTH-1:0] result_r;
+        reg [R_WIDTH-1:0] prod_r [LATENCY-1:0];
         always @(posedge clk) begin
             if (enable) begin
-                result_r <= R_WIDTH'(result_w);
+                prod_r[0] <= prod_w;
+                for (integer i = 1; i < LATENCY; ++i) begin
+                    prod_r[i] <= prod_r[i-1];
+                end
             end
-        end
-        assign result = result_r; 
+        end        
+        assign result = prod_r[LATENCY-1]; 
     end
 
 endmodule

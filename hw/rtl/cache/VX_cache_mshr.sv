@@ -1,5 +1,11 @@
 `include "VX_cache_define.vh"
 
+// this is a desgin for a pipelined cache architecture
+// we allocate a free slot from the MSHR at the entry of the bank pipeline
+// and only release the slot when we get a cache hit.
+// during a memory fill response we initiate the replay sequence 
+// and dequeue all pending entries with that fill address.
+
 module VX_cache_mshr #(
     parameter `STRING INSTANCE_ID= "",
     parameter BANK_ID           = 0, 
