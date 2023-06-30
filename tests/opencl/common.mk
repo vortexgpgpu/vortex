@@ -8,13 +8,13 @@ ifeq ($(XLEN),64)
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
 VX_CFLAGS += -march=rv64imafd -mabi=lp64d
 K_CFLAGS += -march=rv64imafd -mabi=ilp64d
-K_LLCFLAGS += -O3 -march=riscv64 -target-abi=ilp64d -mcpu=generic-rv64
+K_LLCFLAGS += -march=riscv64 -target-abi=ilp64d -mcpu=generic-rv64
 STARTUP_ADDR = 0x180000000
 else
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
 K_CFLAGS += -march=rv32imaf -mabi=ilp32f
-K_LLCFLAGS += -O3 -march=riscv32 -target-abi=ilp32f -mcpu=generic-rv32
+K_LLCFLAGS += -march=riscv32 -target-abi=ilp32f -mcpu=generic-rv32
 STARTUP_ADDR = 0x80000000
 endif
 

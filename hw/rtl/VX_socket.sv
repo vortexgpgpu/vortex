@@ -88,6 +88,7 @@ module VX_socket #(
     VX_raster_arb #(
         .NUM_INPUTS  (1),
         .NUM_LANES   (`NUM_THREADS),
+        .NUM_INPUTS  (1),
         .NUM_OUTPUTS (`SOCKET_SIZE),
         .ARBITER     ("R"),
         .BUFFERED    ((`SOCKET_SIZE > 1) ? 2 : 0)
@@ -112,8 +113,8 @@ module VX_socket #(
 
     VX_rop_arb #(
         .NUM_INPUTS  (`SOCKET_SIZE),
-        .NUM_LANES   (`NUM_THREADS),
         .NUM_OUTPUTS (1),
+        .NUM_LANES   (`NUM_THREADS),        
         .ARBITER     ("R"),
         .BUFFERED    ((`SOCKET_SIZE > 1) ? 2 : 0)
     ) rop_arb (
@@ -142,9 +143,9 @@ module VX_socket #(
     `RESET_RELAY (tex_arb_reset, reset);
 
     VX_tex_arb #(
-        .NUM_INPUTS   (`SOCKET_SIZE),
-        .NUM_LANES    (`NUM_THREADS),
+        .NUM_INPUTS   (`SOCKET_SIZE),        
         .NUM_OUTPUTS  (1),
+        .NUM_LANES    (`NUM_THREADS),
         .TAG_WIDTH    (`TEX_REQ_TAG_WIDTH),
         .ARBITER      ("R"),
         .BUFFERED_REQ ((`SOCKET_SIZE > 1) ? 2 : 0)
@@ -174,9 +175,9 @@ module VX_socket #(
     `RESET_RELAY (fpu_arb_reset, reset);
 
     VX_fpu_arb #(
-        .NUM_INPUTS   (`SOCKET_SIZE),
-        .NUM_LANES    (`NUM_THREADS),
+        .NUM_INPUTS   (`SOCKET_SIZE),        
         .NUM_OUTPUTS  (1),
+        .NUM_LANES    (`NUM_THREADS),
         .TAG_WIDTH    (`FPU_REQ_TAG_WIDTH),
         .ARBITER      ("R"),
         .BUFFERED_REQ ((`SOCKET_SIZE > 1) ? 2 : 0)

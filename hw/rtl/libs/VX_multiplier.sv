@@ -14,8 +14,6 @@ module VX_multiplier #(
     input wire [B_WIDTH-1:0]  datab,
     output wire [R_WIDTH-1:0] result
 );
-    `STATIC_ASSERT ((LATENCY <= 3), ("invalid parameter"))
-
     wire [R_WIDTH-1:0] prod_w;
 
     if (SIGNED != 0) begin

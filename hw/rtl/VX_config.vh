@@ -310,7 +310,15 @@
 // Pipeline latencies /////////////////////////////////////////////////////////
 
 `ifndef LATENCY_IMUL
-`define LATENCY_IMUL 1
+`ifdef VIVADO
+`define LATENCY_IMUL 4
+`endif
+`ifdef QUARTUS
+`define LATENCY_IMUL 3
+`endif
+`ifndef LATENCY_IMUL
+`define LATENCY_IMUL 4
+`endif
 `endif
 
 `ifndef LATENCY_FNCP

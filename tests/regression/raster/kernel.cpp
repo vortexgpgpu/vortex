@@ -16,7 +16,7 @@ using namespace graphics;
 	}
 
 #define OUTPUT(color) \
-	auto __DIVERGENT__ pos_mask = csr_read(VX_CSR_RASTER_POS_MASK);  \
+	auto pos_mask = csr_read(VX_CSR_RASTER_POS_MASK);  \
 	auto mask = (pos_mask >> 0) & 0xf;                            \
 	auto x    = (pos_mask >> 4) & ((1 << (VX_RASTER_DIM_BITS-1))-1); \
 	auto y    = (pos_mask >> (4 + (VX_RASTER_DIM_BITS-1))) & ((1 << (VX_RASTER_DIM_BITS-1))-1); \
@@ -29,7 +29,7 @@ void shader_function(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	const cocogfx::ColorARGB out_color[4] = {0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff};
 
 	for (;;) {
-		auto __DIVERGENT__ status = vx_rast();
+		auto status = vx_rast();
 		if (0 == (status & 0x1))
 			return;
 		OUTPUT(out_color)

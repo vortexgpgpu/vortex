@@ -178,7 +178,7 @@ void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
 	auto prim_ptr = (rast_prim_t*)arg->prim_addr;
 
 	for (;;) {
-		auto __DIVERGENT__ status = vx_rast();
+		auto status = vx_rast();
 		auto stanp_valid = status & 0x1;
 		if (!stanp_valid)
 			return;
@@ -239,7 +239,7 @@ void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
 			TO_RGBA(out_color, r, g, b, a);
 		}
 
-		auto __DIVERGENT__ pos_mask = csr_read(VX_CSR_RASTER_POS_MASK);
+		auto pos_mask = csr_read(VX_CSR_RASTER_POS_MASK);
 	#ifdef SW_ENABLE
 		if (arg->sw_rop) {
 			OUTPUT(pos_mask, 0, out_color, z, g_gpu_sw.rop);
