@@ -29,13 +29,22 @@ riscv64()
     rm riscv64-gnu-toolchain.tar.bz2
 }
 
-llvm() 
+llvm-vortex() 
 {
     echo "prebuilt llvm-vortex..."
     tar -C $SRCDIR -cvjf llvm-vortex.tar.bz2 llvm-vortex
     split -b 50M llvm-vortex.tar.bz2 "llvm-vortex.tar.bz2.part"    
     mv llvm-vortex.tar.bz2.part* $DESTDIR/llvm-vortex/$OS_DIR
     rm llvm-vortex.tar.bz2
+}
+
+llvm-pocl() 
+{
+    echo "prebuilt llvm-pocl..."
+    tar -C $SRCDIR -cvjf llvm-pocl.tar.bz2 llvm-pocl
+    split -b 50M llvm-pocl.tar.bz2 "llvm-pocl.tar.bz2.part"    
+    mv llvm-pocl.tar.bz2.part* $DESTDIR/llvm-pocl/$OS_DIR
+    rm llvm-pocl.tar.bz2
 }
 
 pocl() 
@@ -55,32 +64,35 @@ verilator()
 show_usage()
 {
     echo "Setup Pre-built Vortex Toolchain"
-    echo "Usage: $0 [[-riscv] [-llvm] [-pocl] [-verilator] [-all] [-h|--help]]"
+    echo "Usage: $0 [[--riscv] [--llvm-vortex] [--llvm-pocl] [--pocl] [--verilator] [--all] [-h|--help]]"
 }
 
 while [ "$1" != "" ]; do
     case $1 in
-        -pocl ) pocl
+        --pocl ) pocl
                 ;;
-        -verilator ) verilator
-                     ;;
-        -riscv ) riscv
-                 ;;
-        -riscv64 ) riscv64
-                 ;;
-        -llvm ) llvm
+        --verilator ) verilator
                 ;;
-        -all ) riscv
-               riscv64
-               llvm
-               pocl
-               verilator
-               ;;
+        --riscv ) riscv
+                ;;
+        --riscv64 ) riscv64
+                ;;
+        --llvm-vortex ) llvm-vortex
+                ;;
+        --llvm-pocl ) llvm-pocl
+                ;;
+        --all ) riscv
+                riscv64
+                llvm-vortex
+                llvm-pocl
+                pocl
+                verilator
+                ;;
         -h | --help ) show_usage
-                      exit
-                      ;;
-        * )           show_usage
-                      exit 1
+                exit
+                ;;
+        * ) show_usage
+                exit 1
     esac
     shift
 done

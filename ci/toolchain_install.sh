@@ -45,7 +45,7 @@ riscv64()
     rm -rf riscv64-gnu-toolchain
 }
 
-llvm()
+llvm-vortex()
 {
     case $OS in
     "centos/7") parts=$(eval echo {a..b}) ;;
@@ -62,6 +62,25 @@ llvm()
     cp -r llvm-vortex $DESTDIR
     rm -f llvm-vortex.tar.bz2*    
     rm -rf llvm-vortex
+}
+
+llvm-pocl()
+{
+    case $OS in
+    "centos/7") parts=$(eval echo {a..b}) ;;
+    *)          parts=$(eval echo {a..b}) ;;
+    esac
+    echo $parts
+    rm -f llvm-pocl.tar.bz2.parta*
+    for x in $parts
+    do
+        wget $REPOSITORY/llvm-pocl/$OS/llvm-pocl.tar.bz2.parta$x
+    done
+    cat llvm-pocl.tar.bz2.parta* > llvm-pocl.tar.bz2
+    tar -xvf llvm-pocl.tar.bz2
+    cp -r llvm-vorpocltex $DESTDIR
+    rm -f llvm-pocl.tar.bz2*    
+    rm -rf llvm-pocl
 }
 
 pocl()
@@ -85,32 +104,35 @@ verilator()
 show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
-    echo "Usage: $0 [[-riscv] [-riscv64] [-llvm] [-pocl] [-verilator] [-all] [-h|--help]]"
+    echo "Usage: $0 [[--riscv] [--riscv64] [--llvm-vortex] [--llvm-pocl] [--pocl] [--verilator] [--all] [-h|--help]]"
 }
 
 while [ "$1" != "" ]; do
     case $1 in
-        -pocl ) pocl
+        --pocl ) pocl
                 ;;
-        -verilator ) verilator
-                     ;;
-        -riscv ) riscv
-                 ;;
-        -riscv64 ) riscv64
-                 ;;
-        -llvm ) llvm
+        --verilator ) verilator
                 ;;
-        -all ) riscv
-               riscv64
-               llvm
-               pocl
-               verilator
-               ;;
+        --riscv ) riscv
+                ;;
+        --riscv64 ) riscv64
+                ;;
+        --llvm-vortex ) llvm-vortex
+                ;;
+        --llvm-pocl ) llvm-pocl
+                ;;
+        --all ) riscv
+                riscv64
+                llvm-vortex
+                llvm-pocl
+                pocl
+                verilator
+                ;;
         -h | --help ) show_usage
-                      exit
-                      ;;
-        * )           show_usage
-                      exit 1
+                exit
+                ;;
+        * ) show_usage
+                exit 1
     esac
     shift
 done
