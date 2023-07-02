@@ -29,9 +29,9 @@ int main() {
 	errors += test_tls();
 
 	if (0 == errors) {	
-		vx_printf("Passed!\n");
+		PRINTF("Passed!\n");
 	} else {
-		vx_printf("Failed!\n");
+		PRINTF("Failed!\n");
 	}
 	
 	return errors;

@@ -28,29 +28,6 @@ union reg_data_t {
   int64_t  i64;
 };
 
-static bool HasDivergentThreads(const ThreadMask &thread_mask,                                
-                                const std::vector<std::vector<Word>> &reg_file,
-                                unsigned reg) {
-  bool cond;
-  size_t thread_idx = 0;
-  size_t num_threads = reg_file.size();
-  for (; thread_idx < num_threads; ++thread_idx) {
-    if (thread_mask[thread_idx]) {
-      cond = bool(reg_file[thread_idx][reg]);
-      break;
-    }
-  }  
-  assert(thread_idx != num_threads);  
-  for (; thread_idx < num_threads; ++thread_idx) {
-    if (thread_mask[thread_idx]) {
-      if (cond != (bool(reg_file[thread_idx][reg]))) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 inline uint32_t get_fpu_rm(uint32_t func3, Core* core, uint32_t tid, uint32_t wid) {
   return (func3 == 0x7) ? core->get_csr(VX_CSR_FRM, tid, wid) : func3;
 }
@@ -80,7 +57,8 @@ inline int64_t check_boxing(int64_t a) {
 void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   assert(tmask_.any());
 
-  auto nextPC = PC_ + 4;
+  auto next_pc = PC_ + 4;
+  auto next_tmask = tmask_; 
 
   auto func2  = instr.getFunc2();
   auto func3  = instr.getFunc3();
@@ -97,6 +75,12 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   auto vmask  = instr.getVmask();
 
   auto num_threads = arch_.num_threads();
+
+  uint32_t thread_start = 0;
+  for (; thread_start < num_threads; ++thread_start) {
+      if (tmask_.test(thread_start))
+        break;
+  }
 
   std::vector<reg_data_t[3]> rsdata(num_threads);
   std::vector<reg_data_t> rddata(num_threads);
@@ -149,7 +133,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     // RV32I: LUI
     trace->exe_type = ExeType::ALU;
     trace->alu_type = AluType::ARITH;
-    for (uint32_t t = 0; t < num_threads; ++t) {
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       rddata[t].i = immsrc << 12;
@@ -161,7 +145,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     // RV32I: AUIPC
     trace->exe_type = ExeType::ALU;
     trace->alu_type = AluType::ARITH;
-    for (uint32_t t = 0; t < num_threads; ++t) {
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       rddata[t].i = (immsrc << 12) + PC_;
@@ -174,7 +158,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->alu_type = AluType::ARITH;
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
-    for (uint32_t t = 0; t < num_threads; ++t) {
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       if (func7 & 0x1) {
@@ -334,7 +318,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->exe_type = ExeType::ALU;    
     trace->alu_type = AluType::ARITH;    
     trace->used_iregs.set(rsrc0);
-    for (uint32_t t = 0; t < num_threads; ++t) {
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       switch (func3) {
@@ -395,7 +379,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->alu_type = AluType::ARITH;
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
-    for (uint32_t t = 0; t < num_threads; ++t) {
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       if (func7 & 0x1) {
@@ -521,7 +505,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->exe_type = ExeType::ALU;    
     trace->alu_type = AluType::ARITH;    
     trace->used_iregs.set(rsrc0);
-    for (uint32_t t = 0; t < num_threads; ++t) {
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       switch (func3) {
@@ -565,49 +549,49 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->alu_type = AluType::BRANCH;    
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
-    for (uint32_t t = 0; t < num_threads; ++t) {
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       switch (func3) {
       case 0: {
         // RV32I: BEQ
         if (rsdata[t][0].i == rsdata[t][1].i) {
-          nextPC = PC_ + immsrc;
+          next_pc = PC_ + immsrc;
         }
         break;
       }
       case 1: {
         // RV32I: BNE
         if (rsdata[t][0].i != rsdata[t][1].i) {
-          nextPC = PC_ + immsrc;
+          next_pc = PC_ + immsrc;
         }
         break;
       }
       case 4: {
         // RV32I: BLT
         if (rsdata[t][0].i < rsdata[t][1].i) {
-          nextPC = PC_ + immsrc;
+          next_pc = PC_ + immsrc;
         }
         break;
       }
       case 5: {
         // RV32I: BGE
         if (rsdata[t][0].i >= rsdata[t][1].i) {
-          nextPC = PC_ + immsrc;
+          next_pc = PC_ + immsrc;
         }
         break;
       }
       case 6: {
         // RV32I: BLTU
         if (rsdata[t][0].u < rsdata[t][1].u) {
-          nextPC = PC_ + immsrc;
+          next_pc = PC_ + immsrc;
         }
         break;
       }
       case 7: {
         // RV32I: BGEU
         if (rsdata[t][0].u >= rsdata[t][1].u) {
-          nextPC = PC_ + immsrc;
+          next_pc = PC_ + immsrc;
         }
         break;
       }
@@ -623,11 +607,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     // RV32I: JAL
     trace->exe_type = ExeType::ALU;    
     trace->alu_type = AluType::BRANCH;
-    for (uint32_t t = 0; t < num_threads; ++t) {
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
-      rddata[t].i = nextPC;
-      nextPC = PC_ + immsrc;
+      rddata[t].i = next_pc;
+      next_pc = PC_ + immsrc;
       trace->fetch_stall = true;
       break; // runonce
     }
@@ -639,11 +623,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->exe_type = ExeType::ALU;    
     trace->alu_type = AluType::BRANCH;
     trace->used_iregs.set(rsrc0);
-    for (uint32_t t = 0; t < num_threads; ++t) {
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
-      rddata[t].i = nextPC;
-      nextPC = rsdata[t][0].i + immsrc;
+      rddata[t].i = next_pc;
+      next_pc = rsdata[t][0].i + immsrc;
       trace->fetch_stall = true;
       break; // runOnce
     }
@@ -662,7 +646,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
      || (opcode == FL && func3 == 3)) {
       uint32_t data_bytes = 1 << (func3 & 0x3);
       uint32_t data_width = 8 * data_bytes;
-      for (uint32_t t = 0; t < num_threads; ++t) {
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
         uint64_t mem_addr = rsdata[t][0].i + immsrc;         
@@ -726,7 +710,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
      || (opcode == FS && func3 == 2)
      || (opcode == FS && func3 == 3)) {
       uint32_t data_bytes = 1 << (func3 & 0x3);
-      for (uint32_t t = 0; t < num_threads; ++t) {
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
         uint64_t mem_addr = rsdata[t][0].i + immsrc;
@@ -769,7 +753,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->data = trace_data;
     uint32_t data_bytes = 1 << (func3 & 0x3);
     uint32_t data_width = 8 * data_bytes;
-    for (uint32_t t = 0; t < num_threads; ++t) {
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       uint64_t mem_addr = rsdata[t][0].u;
@@ -834,7 +818,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     break;
   }
   case SYS_INST: {
-    for (uint32_t t = 0; t < num_threads; ++t) {
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       uint32_t csr_addr = immsrc;
@@ -931,7 +915,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   }
   case FCI: {     
     trace->exe_type = ExeType::FPU;     
-    for (uint32_t t = 0; t < num_threads; ++t) {
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue; 
       uint32_t frm = get_fpu_rm(func3, core_, t, warp_id_);
@@ -1264,7 +1248,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->used_fregs.set(rsrc0);
     trace->used_fregs.set(rsrc1);
     trace->used_fregs.set(rsrc2);
-    for (uint32_t t = 0; t < num_threads; ++t) {
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       uint32_t frm = get_fpu_rm(func3, core_, t, warp_id_);
@@ -1312,14 +1296,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   }
   case EXT1: {   
     switch (func7) {
-    case 0: {    
-      uint32_t ts = 0;
-      for (uint32_t t = 0; t < num_threads; ++t) {
-        if (tmask_.test(t)) {
-          ts = t;
-          break;
-        }
-      }
+    case 0: {
       switch (func3) {
       case 0: {
         // TMC   
@@ -1334,21 +1311,13 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             pred[t] = tmask_.test(t) ? (ireg_file_.at(t).at(rsrc0) != 0) : 0;
           }
           if (pred.any()) {
-            tmask_ &= pred;
+            next_tmask &= pred;
           }
         } else {
-          tmask_.reset();
+          next_tmask.reset();
           for (uint32_t t = 0; t < num_threads; ++t) {
-            tmask_.set(t, rsdata.at(ts)[0].i & (1 << t));
+            next_tmask.set(t, rsdata.at(thread_start)[0].i & (1 << t));
           }
-        }
-        DPH(3, "*** New TMC: ");
-        for (uint32_t i = 0; i < num_threads; ++i)
-          DPN(3, tmask_.test(i));
-        DPN(3, std::endl);
-
-        if (!tmask_.any()) {
-          core_->active_warps_.reset(warp_id_);
         }
       } break;
       case 1: {
@@ -1358,70 +1327,70 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->fetch_stall = true;
-        core_->wspawn(rsdata.at(ts)[0].i, rsdata.at(ts)[1].i);
+        core_->wspawn(rsdata.at(thread_start)[0].i, rsdata.at(thread_start)[1].i);
       } break;
       case 2: {
-        // SPLIT    
-        if (ipdom_stack_.size() == arch_.ipdom_size()) {
-          std::cout << "IPDOM stack is full! (size=" << std::dec << ipdom_stack_.size() << ")\n" << std::flush;
-          std::abort();
-        }
+        // SPLIT
         trace->exe_type = ExeType::GPU;
         trace->gpu_type = GpuType::SPLIT;
         trace->used_iregs.set(rsrc0);
         trace->fetch_stall = true;
-        if (HasDivergentThreads(tmask_, ireg_file_, rsrc0)) {          
-          ThreadMask tmask;
-          for (uint32_t t = 0; t < num_threads; ++t) {
-            tmask[t] = tmask_.test(t) && !ireg_file_.at(t).at(rsrc0);
-          }
 
-          DomStackEntry e(tmask, nextPC);
-          ipdom_stack_.push(tmask_);
-          ipdom_stack_.push(e);
-          for (uint32_t t = 0, n = e.tmask.size(); t < n; ++t) {
-            tmask_.set(t, !e.tmask.test(t) && tmask_.test(t));
-          }
+        auto stack_size = ipdom_stack_.size();
 
-          DPH(3, "*** Split: New TM=");
-          for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(t));
-          DPN(3, ", Pushed TM=");
-          for (uint32_t t = 0; t < num_threads; ++t) DPN(3, e.tmask.test(t));
-          DPN(3, ", PC=0x" << std::hex << e.PC << "\n");
+        ThreadMask then_tmask, else_tmask;
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          auto cond = ireg_file_.at(t).at(rsrc0);
+          then_tmask[t] = tmask_.test(t) && cond;
+          else_tmask[t] = tmask_.test(t) && !cond;
+        }
+
+        if (then_tmask.count() != tmask_.count() 
+         && else_tmask.count() != tmask_.count()) {             
+          if (ipdom_stack_.size() == arch_.ipdom_size()) {
+            std::cout << "IPDOM stack is full! (size=" << std::dec << ipdom_stack_.size() << ")\n" << std::flush;
+            std::abort();
+          }
+          if (then_tmask.count() >= else_tmask.count()) {
+            next_tmask = then_tmask;        
+          } else {
+            next_tmask = else_tmask;          
+          }
+          // push reconvergence thread mask
+          ipdom_stack_.emplace(tmask_);
+          // push flipped thread mask
+          auto join_tmask = ~next_tmask & tmask_;
+          ipdom_stack_.emplace(join_tmask, next_pc);
         } else {
-          DP(3, "*** Unanimous pred");
-          DomStackEntry e(tmask_);
-          e.unanimous = true;
-          ipdom_stack_.push(e);
-        }        
+          // Uniform control-flow
+        }
+
+        for (uint32_t t = thread_start; t < num_threads; ++t) {
+          rddata[t].i = stack_size;
+        }
+        rd_write = true;
       } break;
       case 3: {
         // JOIN
-        if (ipdom_stack_.empty()) {
-          std::cout << "IPDOM stack is empty!\n" << std::flush;
-          std::abort();
-        }
         trace->exe_type = ExeType::GPU;
-        trace->gpu_type = GpuType::JOIN;        
-        trace->fetch_stall = true;        
-        if (!ipdom_stack_.empty() && ipdom_stack_.top().unanimous) {
-          DP(3, "*** Unanimous branch at join");
-          tmask_ = ipdom_stack_.top().tmask;
+        trace->gpu_type = GpuType::JOIN;
+        trace->used_iregs.set(rsrc0);
+        trace->fetch_stall = true;
+
+        uint32_t stack_ptr = ireg_file_.at(thread_start).at(rsrc0);
+        if (stack_ptr != ipdom_stack_.size()) {
+          if (ipdom_stack_.empty()) {
+            std::cout << "IPDOM stack is empty!\n" << std::flush;
+            std::abort();
+          }
+          next_tmask = ipdom_stack_.top().tmask;
+          if (!ipdom_stack_.top().fallthrough) {
+            next_pc = ipdom_stack_.top().PC;
+          }          
           ipdom_stack_.pop();
         } else {
-          if (!ipdom_stack_.top().fallThrough) {
-            nextPC = ipdom_stack_.top().PC;
-            DP(3, "*** Join: next PC: " << std::hex << nextPC << std::dec);
-          }
-
-          tmask_ = ipdom_stack_.top().tmask;
-
-          DPH(3, "*** Join: New TM=");
-          for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(t));
-          DPN(3, "\n");
-
-          ipdom_stack_.pop();
-        }        
+          // Uniform control-flow
+        }     
       } break;
       case 4: {
         // BAR
@@ -1430,7 +1399,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->fetch_stall = true;
-        trace->data = std::make_shared<GPUTraceData>(rsdata[ts][0].i, rsdata[ts][1].i);
+        trace->data = std::make_shared<GPUTraceData>(rsdata[thread_start][0].i, rsdata[thread_start][1].i);
       } break;
       default:
         std::abort();
@@ -1446,7 +1415,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         for (uint32_t ri = 0, rn = core_->raster_units_.size(); ri < rn; ++ri) {
           trace_data->raster_idx = core_->raster_idx();
           bool has_stamps = false;
-          for (uint32_t t = 0; t < num_threads; ++t) {
+          for (uint32_t t = thread_start; t < num_threads; ++t) {
             if (!tmask_.test(t))
               continue;          
             auto result = core_->raster_units_.at(trace_data->raster_idx)->fetch(
@@ -1478,7 +1447,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       auto trace_data = std::make_shared<TexUnit::TraceData>(num_threads);
       trace->data = trace_data;
       trace_data->tex_idx = core_->tex_idx();
-      for (uint32_t t = 0; t < num_threads; ++t) {
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;        
         auto u     = rsdata[t][0].i;
@@ -1499,7 +1468,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->used_iregs.set(rsrc2);
-        for (uint32_t t = 0; t < num_threads; ++t) {
+        for (uint32_t t = thread_start; t < num_threads; ++t) {
           if (!tmask_.test(t))
             continue;     
           rddata[t].i = rsdata[t][0].i ? rsdata[t][1].i : rsdata[t][2].i;
@@ -1515,7 +1484,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto trace_data = std::make_shared<RopUnit::TraceData>();
         trace->data = trace_data;
         trace_data->rop_idx = core_->rop_idx();
-        for (uint32_t t = 0; t < num_threads; ++t) {
+        for (uint32_t t = thread_start; t < num_threads; ++t) {
           if (!tmask_.test(t))
             continue;
           auto pos_face = rsdata[t][0].i;
@@ -1539,7 +1508,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       trace->used_iregs.set(rsrc1);
       trace->used_iregs.set(rsrc2);
       uint32_t shift = func2 * 8;
-      for (uint32_t t = 0; t < num_threads; ++t) {
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
         rddata[t].i = (int32_t)(((int64_t)rsdata[t][0].i32 * (int64_t)rsdata[t][1].i32) >> shift) + rsdata[t][2].i32;
@@ -2444,8 +2413,18 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   }
 
   PC_ += 4;
-  if (PC_ != nextPC) {
-    DP(3, "*** Next PC: " << std::hex << nextPC << std::dec);
-    PC_ = nextPC;
+  if (PC_ != next_pc) {
+    DP(3, "*** Next PC=0x" << std::hex << next_pc << std::dec);
+    PC_ = next_pc;
+  }
+  if (tmask_ != next_tmask) {    
+    DPH(3, "*** New Tmask=");
+    for (uint32_t i = 0; i < num_threads; ++i)
+      DPN(3, next_tmask.test(i));
+    DPN(3, std::endl);
+    tmask_ = next_tmask;
+    if (!next_tmask.any()) {
+      core_->active_warps_.reset(warp_id_);
+    }
   }
 }

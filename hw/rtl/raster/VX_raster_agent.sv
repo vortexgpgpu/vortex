@@ -10,9 +10,9 @@ module VX_raster_agent #(
     VX_raster_exe_if.slave raster_exe_if,    
     VX_raster_bus_if.slave raster_bus_if,
         
-    // Outputs
-    VX_commit_if.master    raster_commit_if,
-    VX_gpu_csr_if.slave    raster_csr_if    
+    // Outputs    
+    VX_gpu_csr_if.slave    raster_csr_if,
+    VX_commit_if.master    commit_if
 );
     `UNUSED_PARAM (CORE_ID)
 
@@ -41,7 +41,7 @@ module VX_raster_agent #(
     );
 
     // it is possible to have ready = f(valid) when using arbiters, 
-    // because of that we need to decouple raster_exe_if and raster_commit_if handshake with a pipe register
+    // because of that we need to decouple raster_exe_if and commit_if handshake with a pipe register
 
     assign raster_exe_if.ready = raster_bus_if.req_valid && raster_rsp_ready;
 
@@ -62,18 +62,18 @@ module VX_raster_agent #(
         .reset     (reset),
         .valid_in  (raster_rsp_valid),
         .ready_in  (raster_rsp_ready), 
-        .data_in   ({raster_exe_if.uuid,    raster_exe_if.wid,    raster_exe_if.tmask,    raster_exe_if.PC,    raster_exe_if.rd,    response_data}),
-        .data_out  ({raster_commit_if.uuid, raster_commit_if.wid, raster_commit_if.tmask, raster_commit_if.PC, raster_commit_if.rd, commit_data}),
-        .valid_out (raster_commit_if.valid),
-        .ready_out (raster_commit_if.ready)
+        .data_in   ({raster_exe_if.uuid, raster_exe_if.wid, raster_exe_if.tmask, raster_exe_if.PC, raster_exe_if.rd, response_data}),
+        .data_out  ({commit_if.uuid,     commit_if.wid,     commit_if.tmask,     commit_if.PC,     commit_if.rd,     commit_data}),
+        .valid_out (commit_if.valid),
+        .ready_out (commit_if.ready)
     );
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign raster_commit_if.data[i] = `XLEN'(commit_data[i]);
+        assign commit_if.data[i] = `XLEN'(commit_data[i]);
     end
 
-    assign raster_commit_if.wb  = 1'b1;
-    assign raster_commit_if.eop = 1'b1;
+    assign commit_if.wb  = 1'b1;
+    assign commit_if.eop = 1'b1;
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin

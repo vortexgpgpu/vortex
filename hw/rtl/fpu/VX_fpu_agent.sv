@@ -13,12 +13,13 @@ module VX_fpu_agent #(
 
     VX_fpu_exe_if.slave     fpu_exe_if,
     VX_fpu_to_csr_if.master fpu_to_csr_if,
-    VX_commit_if.master     fpu_commit_if,
-
+    
     VX_fpu_bus_if.master    fpu_bus_if,
 
     input wire              csr_pending,
-    output wire             req_pending
+    output wire             req_pending,
+
+    VX_commit_if.master     commit_if
 );
     `UNUSED_PARAM (CORE_ID)
     
@@ -115,18 +116,18 @@ module VX_fpu_agent #(
         .reset     (reset),
         .valid_in  (fpu_bus_if.rsp_valid),
         .ready_in  (fpu_bus_if.rsp_ready),
-        .data_in   ({rsp_uuid,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           fpu_bus_if.rsp_result}),
-        .data_out  ({fpu_commit_if.uuid, fpu_commit_if.wid, fpu_commit_if.tmask, fpu_commit_if.PC, fpu_commit_if.rd, fpu_commit_if.data}),
-        .valid_out (fpu_commit_if.valid),
-        .ready_out (fpu_commit_if.ready)
+        .data_in   ({rsp_uuid,       rsp_wid,       rsp_tmask,       rsp_PC,       rsp_rd,       fpu_bus_if.rsp_result}),
+        .data_out  ({commit_if.uuid, commit_if.wid, commit_if.tmask, commit_if.PC, commit_if.rd, commit_if.data}),
+        .valid_out (commit_if.valid),
+        .ready_out (commit_if.ready)
     );
 
-    assign fpu_commit_if.wb  = 1'b1; 
-    assign fpu_commit_if.eop = 1'b1;
+    assign commit_if.wb  = 1'b1; 
+    assign commit_if.eop = 1'b1;
 
     // pending request
 
-    wire fpu_commit_fire = fpu_commit_if.valid && fpu_commit_if.ready;
+    wire fpu_commit_fire = commit_if.valid && commit_if.ready;
 
     reg req_pending_r;
     always @(posedge clk) begin

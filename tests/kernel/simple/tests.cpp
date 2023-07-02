@@ -5,31 +5,26 @@
 #include <vx_print.h>
 #include <vx_spawn.h>
 
-#define __if(b) vx_split(b); \
-                if (b) 
-#define __else else
-#define __endif vx_join();
-
-int __attribute__ ((noinline)) check_error(const int* buffer, int offset, int size) {
+int __attribute__((noinline)) check_error(const int* buffer, int offset, int size) {
 	int errors = 0;
 	for (int i = offset; i < size; i++)	{
 		int value = buffer[i];
 		int ref_value = 65 + i;
 		if (value == ref_value)	{
-			//vx_printf("[%d] %c\n", i, value);
+			//PRINTF("[%d] %c\n", i, value);
 		} else {
-			vx_printf("*** error: [%d] 0x%x, expected 0x%x\n", i, value, ref_value);
+			PRINTF("*** error: [%d] 0x%x, expected 0x%x\n", i, value, ref_value);
 			++errors;
 		}
 	}
 	return errors;
 }
 
-int __attribute__ ((noinline)) make_select_tmask(int tid) {
+int __attribute__((noinline)) make_select_tmask(int tid) {
 	return (1 << tid);
 }
 
-int __attribute__ ((noinline)) make_full_tmask(int num_threads) {
+int __attribute__((noinline)) make_full_tmask(int num_threads) {
 	return (1 << num_threads) - 1;
 }
 
@@ -39,7 +34,7 @@ int __attribute__ ((noinline)) make_full_tmask(int num_threads) {
 int global_buffer[GLOBAL_MEM_SZ];
 
 int test_global_memory() {
-	vx_printf("Global Memory Test\n");
+	PRINTF("Global Memory Test\n");
 
 	for (int i = 0; i < GLOBAL_MEM_SZ; i++) {
 		global_buffer[i] = 65 + i;
@@ -51,7 +46,7 @@ int test_global_memory() {
 ///////////////////////////////////////////////////////////////////////////////
 
 int test_stack_memory() {
-	vx_printf("Stack Memory Test\n");
+	PRINTF("Stack Memory Test\n");
 
 	static const int STACK_MEM_SZ = 8;
 	int stack_buffer[STACK_MEM_SZ];
@@ -69,7 +64,7 @@ int test_shared_memory() {
 	static const int SHARED_MEM_SZ = 8;
 	int* shared_buffer = (int*)(STACK_BASE_ADDR-(128*4)-SHARED_MEM_SZ*4);
 
-	vx_printf("Shared Memory Test\n");	
+	PRINTF("Shared Memory Test\n");	
 	
 	for (int i = 0; i < SHARED_MEM_SZ; i++) {
 		shared_buffer[i] = 65 + i;
@@ -82,13 +77,13 @@ int test_shared_memory() {
 
 int tmc_buffer[8];
 
-void __attribute__ ((noinline)) do_tmc() {
+void __attribute__((noinline)) do_tmc() {
 	unsigned tid = vx_thread_id();
 	tmc_buffer[tid] = 65 + tid;
 }
 
 int test_tmc() {
-	vx_printf("TMC Test\n");
+	PRINTF("TMC Test\n");
 
 	int num_threads = std::min(vx_num_threads(), 8);
 	int tmask = make_full_tmask(num_threads);
@@ -103,13 +98,13 @@ int test_tmc() {
 
 int pred_buffer[8];
 
-void __attribute__ ((noinline)) do_pred() {
+void __attribute__((noinline)) do_pred() {
 	unsigned tid = vx_thread_id();
 	pred_buffer[tid] = 65 + tid;
 }
 
 int test_pred() {
-	vx_printf("PRED Test\n");
+	PRINTF("PRED Test\n");
 
 	int num_threads = std::min(vx_num_threads(), 8);
 	int tmask = make_full_tmask(num_threads);
@@ -138,7 +133,7 @@ void wspawn_kernel() {
 }
 
 int test_wsapwn() {
-	vx_printf("Wspawn Test\n");
+	PRINTF("Wspawn Test\n");
 	int num_warps = std::min(vx_num_warps(), 8);
 	vx_wspawn(num_warps, wspawn_kernel);
 	wspawn_kernel();
@@ -150,33 +145,46 @@ int test_wsapwn() {
 
 int dvg_buffer[4];
 
-void __attribute__ ((noinline)) do_divergence() {
-
-	unsigned tid = vx_thread_id();
-
-	__if (tid < 2) {
-		__if (tid < 1) {
-			dvg_buffer[tid] = 65;			
+void __attribute__((noinline)) do_divergence() {
+	int tid = vx_thread_id();
+	int cond1 = tid < 2;
+	int sp1 = vx_split(cond1);	
+	if (cond1) {
+		{
+			int cond2 = tid < 1;
+			int sp2 = vx_split(cond2);
+			if (cond2) {
+				dvg_buffer[tid] = 65; // A
+			} else {
+				dvg_buffer[tid] = 66; // B
+			}
+			vx_join(sp2);
 		}
-		__else {
-			dvg_buffer[tid] = 66;
+		{
+			int cond3 = tid < 0;
+			int sp3 = vx_split(cond3);
+			if (cond3) {
+				dvg_buffer[tid] = 67; // C
+			}
+			vx_join(sp3);
 		}
-		__endif
+	} else {
+		{
+			int cond2 = tid < 3;
+			int sp2 = vx_split(cond2);
+			if (cond2) {
+				dvg_buffer[tid] = 67; // C
+			} else {
+				dvg_buffer[tid] = 68; // D
+			}
+			vx_join(sp2);
+		}
 	}
-	__else {
-		__if (tid < 3) {
-			dvg_buffer[tid] = 67;
-		}
-		__else {
-			dvg_buffer[tid] = 68;
-		}
-		__endif
-	}
-	__endif
+	vx_join(sp1);
 }
 
 int test_divergence() {
-	vx_printf("Control Divergence Test\n");
+	PRINTF("Control Divergence Test\n");
 
 	int num_threads = std::min(vx_num_threads(), 4);
 	int tmask = make_full_tmask(num_threads);	
@@ -203,7 +211,7 @@ void st_kernel(int task_id, const st_args_t * __UNIFORM__ arg) {
 }
 
 int test_spawn_tasks() {
-	vx_printf("SpawnTasks Test\n");
+	PRINTF("SpawnTasks Test\n");
 
 	st_args_t arg;
 	arg.src = st_buffer_src;
@@ -232,14 +240,14 @@ void sr_kernel(const sr_args_t * arg) {
   	arg->buf[tid] = 65 + tid;
 }
 
-void __attribute__ ((noinline)) do_serial() {
+void __attribute__((noinline)) do_serial() {
 	sr_args_t arg;
 	arg.buf = sr_buffer;
 	vx_serial((vx_serial_cb)sr_kernel, &arg);
 }
 
 int test_serial() {
-	vx_printf("Serial Test\n");	
+	PRINTF("Serial Test\n");	
 	int num_threads = std::min(vx_num_threads(), 8);
 	int tmask = make_full_tmask(num_threads);	
 	vx_tmc(tmask);
@@ -253,7 +261,7 @@ int test_serial() {
 
 int tmask_buffer[8];
 
-int __attribute__ ((noinline)) do_tmask() {					
+int __attribute__((noinline)) do_tmask() {					
 	int tid = vx_thread_id();
 	int tmask = make_select_tmask(tid);
 	int cur_tmask = vx_thread_mask();
@@ -262,7 +270,7 @@ int __attribute__ ((noinline)) do_tmask() {
 }
 
 int test_tmask() {
-	vx_printf("Thread Mask Test\n");
+	PRINTF("Thread Mask Test\n");
 
 	// activate all thread to populate shared variables
 	vx_tmc(-1);
@@ -298,7 +306,7 @@ void barrier_kernel() {
 }
 
 int test_barrier() {
-	vx_printf("Barrier Test\n");
+	PRINTF("Barrier Test\n");
 	int num_warps = std::min(vx_num_warps(), 8);
 	barrier_ctr = num_warps;
 	barrier_stall = 0;
@@ -312,7 +320,7 @@ int test_barrier() {
 int tls_buffer[8];
 __thread int tls_var;
 
-__attribute__ ((noinline)) void print_tls_var() {
+__attribute__((noinline)) void print_tls_var() {
 	unsigned wid = vx_warp_id();
 	tls_buffer[wid] = 65 + tls_var;
 }
@@ -325,7 +333,7 @@ void tls_kernel() {
 }
 
 int test_tls() {
-	vx_printf("TLS Test\n");
+	PRINTF("TLS Test\n");
 	int num_warps = std::min(vx_num_warps(), 8);
 	vx_wspawn(num_warps, tls_kernel);
 	tls_kernel();

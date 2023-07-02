@@ -26,27 +26,12 @@
 `endif
 `endif
 
-// 32 bit FLEN as default.
-`ifndef FLEN_32
-`ifndef FLEN_64
-`define FLEN_32
-`endif
-`endif
-
 `ifdef XLEN_64
 `define XLEN 64
 `endif
 
 `ifdef XLEN_32
 `define XLEN 32
-`endif
-
-`ifdef FLEN_64
-`define FLEN 64
-`endif
-
-`ifdef FLEN_32
-`define FLEN 32
 `endif
 
 `ifndef NUM_CLUSTERS
@@ -183,6 +168,20 @@
 
 `ifndef EXT_F_DISABLE
 `define EXT_F_ENABLE
+`endif
+
+`ifdef EXT_D_ENABLE
+`define FLEN_64
+`else
+`define FLEN_32
+`endif
+
+`ifdef FLEN_64
+`define FLEN 64
+`endif
+
+`ifdef FLEN_32
+`define FLEN 32
 `endif
 
 `ifdef EXT_GFX_ENABLE
@@ -399,11 +398,6 @@
 // Size of LSU Request Queue
 `ifndef LSUQ_SIZE
 `define LSUQ_SIZE `MAX(2, `NUM_WARPS * 2)
-`endif
-
-// Size of divergence Stack
-`ifndef IPDOM_STACK_SIZE
-`define IPDOM_STACK_SIZE 32
 `endif
 
 // Floating-Point Units ///////////////////////////////////////////////////////

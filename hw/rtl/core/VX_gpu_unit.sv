@@ -44,13 +44,11 @@ module VX_gpu_unit #(
 
     localparam UUID_WIDTH    = `UP(`UUID_BITS);
     localparam NW_WIDTH      = `UP(`NW_BITS);
-    localparam WCTL_DATAW    = `GPU_TMC_BITS + `GPU_WSPAWN_BITS + `GPU_SPLIT_BITS + `GPU_BARRIER_BITS;
-    localparam RSP_DATAW     = `MAX(`NUM_THREADS * `XLEN, WCTL_DATAW);
-    localparam RSP_ARB_DATAW = UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + RSP_DATAW + 1 + 1;
+    localparam RSP_ARB_DATAW = UUID_WIDTH + NW_WIDTH + `NUM_THREADS + (`NUM_THREADS * `XLEN) + `NR_BITS + 1 + `XLEN + 1;
     localparam RSP_ARB_SIZE  = 1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED + `EXT_IMADD_ENABLED;
 
-    localparam RSP_ARB_IDX_GPU    = 0;
-    localparam RSP_ARB_IDX_RASTER = RSP_ARB_IDX_GPU + 1;
+    localparam RSP_ARB_IDX_WCTL   = 0;
+    localparam RSP_ARB_IDX_RASTER = RSP_ARB_IDX_WCTL + 1;
     localparam RSP_ARB_IDX_ROP    = RSP_ARB_IDX_RASTER + `EXT_RASTER_ENABLED;    
     localparam RSP_ARB_IDX_TEX    = RSP_ARB_IDX_ROP + `EXT_ROP_ENABLED;    
     localparam RSP_ARB_IDX_IMADD  = RSP_ARB_IDX_TEX + `EXT_TEX_ENABLED;
@@ -63,89 +61,46 @@ module VX_gpu_unit #(
     wire [RSP_ARB_SIZE-1:0] rsp_arb_ready_in;
     wire [RSP_ARB_SIZE-1:0][RSP_ARB_DATAW-1:0] rsp_arb_data_in;
 
-    wire [RSP_DATAW-1:0] rsp_data;
-    wire                 rsp_is_wctl;
-
     wire gpu_req_valid;
     reg gpu_req_ready;
 
     wire csr_ready = ~csr_pending;
     assign gpu_req_valid = gpu_exe_if.valid && csr_ready;
 
-    // Warp control block
-
-    gpu_tmc_t       tmc;
-    gpu_wspawn_t    wspawn;
-    gpu_barrier_t   barrier;
-    gpu_split_t     split;
-    
-    wire is_wspawn = (gpu_exe_if.op_type == `INST_GPU_WSPAWN);
-    wire is_tmc    = (gpu_exe_if.op_type == `INST_GPU_TMC);
-    wire is_split  = (gpu_exe_if.op_type == `INST_GPU_SPLIT);
-    wire is_join   = (gpu_exe_if.op_type == `INST_GPU_JOIN);
-    wire is_bar    = (gpu_exe_if.op_type == `INST_GPU_BAR);
-    wire is_pred   = (gpu_exe_if.op_type == `INST_GPU_PRED);
-
-    wire [`XLEN-1:0] rs1_data = gpu_exe_if.rs1_data[gpu_exe_if.tid];
-    wire [`XLEN-1:0] rs2_data = gpu_exe_if.rs2_data[gpu_exe_if.tid];
-    
-    wire [`NUM_THREADS-1:0] taken_tmask;
-    wire [`NUM_THREADS-1:0] not_taken_tmask;
-
-    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        wire taken = (gpu_exe_if.rs1_data[i] != 0);
-        assign taken_tmask[i]     = gpu_exe_if.tmask[i] && taken;
-        assign not_taken_tmask[i] = gpu_exe_if.tmask[i] && ~taken;
-    end
-
-    // tmc
-
-    wire [`NUM_THREADS-1:0] pred_mask = (taken_tmask != 0) ? taken_tmask : gpu_exe_if.tmask;
-
-    assign tmc.valid = is_tmc || is_pred;
-    assign tmc.tmask = is_pred ? pred_mask : rs1_data[`NUM_THREADS-1:0];
-
-    // wspawn
-
-    wire [`XLEN-1:0] wspawn_pc = rs2_data;
-    wire [`NUM_WARPS-1:0] wspawn_wmask;
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
-        assign wspawn_wmask[i] = (i < rs1_data);
-    end
-    assign wspawn.valid = is_wspawn;
-    assign wspawn.wmask = wspawn_wmask;
-    assign wspawn.pc    = wspawn_pc;
-
-    // split
-
-    assign split.valid      = is_split;
-    assign split.diverged   = (| taken_tmask) && (| not_taken_tmask);
-    assign split.then_tmask = taken_tmask;
-    assign split.else_tmask = not_taken_tmask;
-    assign split.pc         = gpu_exe_if.next_PC;
-
-    // barrier
-    
-    assign barrier.valid    = is_bar;
-    assign barrier.id       = rs1_data[`NB_BITS-1:0];
-    assign barrier.is_global = rs1_data[31];
-    assign barrier.size_m1  = $bits(barrier.size_m1)'(rs2_data - 1);       
-
-    // Warp control response
-    wire wctl_req_valid = gpu_req_valid && (is_wspawn || is_tmc || is_split || is_join || is_bar || is_pred);
-    wire wctl_rsp_valid = wctl_req_valid;
-    wire [WCTL_DATAW-1:0] wctl_rsp_data = {tmc, wspawn, split, barrier};
-    wire wctl_rsp_ready;
-    wire wctl_req_ready = wctl_rsp_ready;
-
-    assign rsp_arb_valid_in[RSP_ARB_IDX_GPU] = wctl_rsp_valid;
-    assign rsp_arb_data_in[RSP_ARB_IDX_GPU] = {gpu_exe_if.uuid, gpu_exe_if.wid, gpu_exe_if.tmask, gpu_exe_if.PC, `NR_BITS'(0), 1'b0, RSP_DATAW'(wctl_rsp_data), 1'b1, ~is_join};
-    assign wctl_rsp_ready = rsp_arb_ready_in[RSP_ARB_IDX_GPU];
-
     `UNUSED_VAR (gpu_exe_if.op_mod)
     `UNUSED_VAR (gpu_exe_if.rs3_data)
-    `UNUSED_VAR (gpu_exe_if.wb)
-    `UNUSED_VAR (gpu_exe_if.rd)
+
+    // Warp control block    
+
+    VX_gpu_exe_if wctl_exe_if();
+    VX_commit_if wctl_commit_if();
+
+    assign wctl_exe_if.valid    = gpu_req_valid && `INST_GPU_IS_WCTL(gpu_exe_if.op_type);
+    assign wctl_exe_if.op_type  = gpu_exe_if.op_type;
+    assign wctl_exe_if.uuid     = gpu_exe_if.uuid;
+    assign wctl_exe_if.wid      = gpu_exe_if.wid;
+    assign wctl_exe_if.tmask    = gpu_exe_if.tmask;
+    assign wctl_exe_if.tid      = gpu_exe_if.tid;
+    assign wctl_exe_if.PC       = gpu_exe_if.PC;
+    assign wctl_exe_if.next_PC  = gpu_exe_if.next_PC;
+    assign wctl_exe_if.rd       = gpu_exe_if.rd;
+    assign wctl_exe_if.wb       = gpu_exe_if.wb;
+    assign wctl_exe_if.rs1_data = gpu_exe_if.rs1_data;
+    assign wctl_exe_if.rs2_data = gpu_exe_if.rs2_data;
+    
+    VX_wctl_unit #(
+        .OUTPUT_REG (RSP_ARB_SIZE > 1)
+    ) wctl_unit (
+        .clk        (clk),
+        .reset      (reset),
+        .gpu_exe_if (wctl_exe_if),  
+        .warp_ctl_if(warp_ctl_if),      
+        .commit_if  (wctl_commit_if)
+    );
+
+    assign rsp_arb_valid_in[RSP_ARB_IDX_WCTL] = wctl_commit_if.valid;
+    assign rsp_arb_data_in[RSP_ARB_IDX_WCTL] = {wctl_commit_if.uuid, wctl_commit_if.wid, wctl_commit_if.tmask, wctl_commit_if.PC, wctl_commit_if.rd, wctl_commit_if.wb, wctl_commit_if.data, 1'b1};
+    assign wctl_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_WCTL];
     
 `ifdef EXT_TEX_ENABLE
 
@@ -171,16 +126,16 @@ module VX_gpu_unit #(
     VX_tex_agent #(
         .CORE_ID (CORE_ID)
     ) tex_agent (
-        .clk           (clk),
-        .reset         (tex_reset),
-        .tex_csr_if    (tex_csr_if),
-        .tex_exe_if    (tex_exe_if),        
-        .tex_commit_if (tex_commit_if),
-        .tex_bus_if    (tex_bus_if)
+        .clk        (clk),
+        .reset      (tex_reset),
+        .tex_csr_if (tex_csr_if),
+        .tex_exe_if (tex_exe_if),
+        .tex_bus_if (tex_bus_if),
+        .commit_if  (tex_commit_if)        
     );     
 
     assign rsp_arb_valid_in[RSP_ARB_IDX_TEX] = tex_commit_if.valid;
-    assign rsp_arb_data_in[RSP_ARB_IDX_TEX] = {tex_commit_if.uuid, tex_commit_if.wid, tex_commit_if.tmask, tex_commit_if.PC, tex_commit_if.rd, tex_commit_if.wb, RSP_DATAW'(tex_commit_if.data), tex_commit_if.eop, 1'b0};
+    assign rsp_arb_data_in[RSP_ARB_IDX_TEX] = {tex_commit_if.uuid, tex_commit_if.wid, tex_commit_if.tmask, tex_commit_if.PC, tex_commit_if.rd, tex_commit_if.wb, tex_commit_if.data, tex_commit_if.eop};
     assign tex_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_TEX];
 
 `endif
@@ -202,16 +157,16 @@ module VX_gpu_unit #(
     VX_raster_agent #(
         .CORE_ID (CORE_ID)
     ) raster_agent (
-        .clk              (clk),
-        .reset            (raster_reset),
-        .raster_csr_if    (raster_csr_if),
-        .raster_bus_if    (raster_bus_if),
-        .raster_exe_if    (raster_exe_if),        
-        .raster_commit_if (raster_commit_if)        
+        .clk            (clk),
+        .reset          (raster_reset),
+        .raster_csr_if  (raster_csr_if),
+        .raster_bus_if  (raster_bus_if),
+        .raster_exe_if  (raster_exe_if),        
+        .commit_if      (raster_commit_if)       
     );
 
     assign rsp_arb_valid_in[RSP_ARB_IDX_RASTER] = raster_commit_if.valid;
-    assign rsp_arb_data_in[RSP_ARB_IDX_RASTER] = {raster_commit_if.uuid, raster_commit_if.wid, raster_commit_if.tmask, raster_commit_if.PC, raster_commit_if.rd, raster_commit_if.wb, RSP_DATAW'(raster_commit_if.data), raster_commit_if.eop, 1'b0};
+    assign rsp_arb_data_in[RSP_ARB_IDX_RASTER] = {raster_commit_if.uuid, raster_commit_if.wid, raster_commit_if.tmask, raster_commit_if.PC, raster_commit_if.rd, raster_commit_if.wb, raster_commit_if.data, raster_commit_if.eop};
     assign raster_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_RASTER];
 
 `endif
@@ -240,16 +195,16 @@ module VX_gpu_unit #(
     VX_rop_agent #(
         .CORE_ID (CORE_ID)
     ) rop_agent (
-        .clk           (clk),
-        .reset         (rop_reset),
-        .rop_csr_if    (rop_csr_if),
-        .rop_exe_if    (rop_exe_if),
-        .rop_commit_if (rop_commit_if),
-        .rop_bus_if    (rop_bus_if)        
+        .clk        (clk),
+        .reset      (rop_reset),
+        .rop_csr_if (rop_csr_if),
+        .rop_exe_if (rop_exe_if),
+        .rop_bus_if (rop_bus_if),
+        .commit_if  (rop_commit_if)
     );
 
     assign rsp_arb_valid_in[RSP_ARB_IDX_ROP] = rop_commit_if.valid;
-    assign rsp_arb_data_in[RSP_ARB_IDX_ROP] = {rop_commit_if.uuid, rop_commit_if.wid, rop_commit_if.tmask, rop_commit_if.PC, rop_commit_if.rd, rop_commit_if.wb, RSP_DATAW'(rop_commit_if.data), rop_commit_if.eop, 1'b0};
+    assign rsp_arb_data_in[RSP_ARB_IDX_ROP] = {rop_commit_if.uuid, rop_commit_if.wid, rop_commit_if.tmask, rop_commit_if.PC, rop_commit_if.rd, rop_commit_if.wb, rop_commit_if.data, rop_commit_if.eop};
     assign rop_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_ROP];
 
 `endif
@@ -311,12 +266,10 @@ module VX_gpu_unit #(
     end
 
     assign rsp_arb_valid_in[RSP_ARB_IDX_IMADD] = imadd_valid_out;
-    assign rsp_arb_data_in[RSP_ARB_IDX_IMADD] = {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, 1'b1, RSP_DATAW'(imadd_data_out_x), 1'b1, 1'b0};
+    assign rsp_arb_data_in[RSP_ARB_IDX_IMADD] = {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, 1'b1, imadd_data_out_x, 1'b1};
     assign imadd_ready_out = rsp_arb_ready_in[RSP_ARB_IDX_IMADD];
 
 `endif
-
-
 
     // can accept new request?
     
@@ -334,7 +287,7 @@ module VX_gpu_unit #(
     `ifdef EXT_IMADD_ENABLE
         `INST_GPU_IMADD: gpu_req_ready = imadd_ready_in;
     `endif
-        default: gpu_req_ready = wctl_req_ready;
+        default: gpu_req_ready = wctl_exe_if.ready;
         endcase
     end   
     assign gpu_exe_if.ready = gpu_req_ready && csr_ready;
@@ -352,21 +305,13 @@ module VX_gpu_unit #(
         .valid_in  (rsp_arb_valid_in),
         .ready_in  (rsp_arb_ready_in),
         .data_in   (rsp_arb_data_in),
-        .data_out  ({gpu_commit_if.uuid, gpu_commit_if.wid, gpu_commit_if.tmask, gpu_commit_if.PC, gpu_commit_if.rd, gpu_commit_if.wb, rsp_data, gpu_commit_if.eop, rsp_is_wctl}),
+        .data_out  ({gpu_commit_if.uuid, gpu_commit_if.wid, gpu_commit_if.tmask, gpu_commit_if.PC, gpu_commit_if.rd, gpu_commit_if.wb, gpu_commit_if.data, gpu_commit_if.eop}),
         .valid_out (gpu_commit_if.valid),
         .ready_out (gpu_commit_if.ready)
     );
 
-    assign gpu_commit_if.data = rsp_data[(`NUM_THREADS * `XLEN)-1:0];
-
-    // warp control reponse
-
     wire gpu_req_fire = gpu_exe_if.valid && gpu_exe_if.ready;
     wire gpu_commit_fire = gpu_commit_if.valid && gpu_commit_if.ready;
-         
-    assign warp_ctl_if.valid = gpu_commit_fire && rsp_is_wctl;
-    assign warp_ctl_if.wid   = gpu_commit_if.wid;    
-    assign {warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.barrier} = rsp_data[WCTL_DATAW-1:0];
 
     // pending request
 

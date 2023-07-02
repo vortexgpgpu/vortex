@@ -16,21 +16,17 @@ struct DomStackEntry {
   DomStackEntry(const ThreadMask &tmask, Word PC) 
     : tmask(tmask)
     , PC(PC)
-    , fallThrough(false)
-    , unanimous(false) 
+    , fallthrough(false)
   {}
 
-  DomStackEntry(const ThreadMask &tmask)
-      : tmask(tmask)
-      , PC(0)
-      , fallThrough(true)
-      , unanimous(false) 
+  DomStackEntry(const ThreadMask &tmask) 
+    : tmask(tmask)
+    , fallthrough(true)
   {}
 
   ThreadMask tmask;
   Word PC;
-  bool fallThrough;
-  bool unanimous;
+  bool fallthrough;
 };
 
 struct vtype {

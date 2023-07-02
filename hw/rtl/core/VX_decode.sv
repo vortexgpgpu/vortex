@@ -37,7 +37,7 @@ module VX_decode  #(
     reg [`NR_BITS-1:0] rd_r, rs1_r, rs2_r, rs3_r;
     reg [`XLEN-1:0] imm;    
     reg use_rd, use_PC, use_imm;
-    reg is_join, is_wstall;
+    reg is_wstall;
 
     wire [31:0] instr = fetch_if.data;
     wire [6:0] opcode = instr[6:0];  
@@ -137,7 +137,6 @@ module VX_decode  #(
         use_imm   = 0;
         use_PC    = 0;
         use_rd    = 0;
-        is_join   = 0;
         is_wstall = 0;
 
         case (opcode)            
@@ -437,11 +436,14 @@ module VX_decode  #(
                             3'h2: begin // SPLIT
                                 op_type = `INST_OP_BITS'(`INST_GPU_SPLIT);
                                 is_wstall = 1;
-                                `USED_IREG (rs1);
+                                use_rd    = 1;
+                                `USED_IREG (rs1);                                
+                                `USED_IREG (rd);                                
                             end
                             3'h3: begin // JOIN
                                 op_type = `INST_OP_BITS'(`INST_GPU_JOIN);
-                                is_join = 1;
+                                is_wstall = 1;
+                                `USED_IREG (rs1);
                             end
                             3'h4: begin // BAR
                                 op_type = `INST_OP_BITS'(`INST_GPU_BAR);
@@ -551,7 +553,6 @@ module VX_decode  #(
     assign decode_sched_if.valid    = fetch_fire;
     assign decode_sched_if.wid      = fetch_if.wid;
     assign decode_sched_if.is_wstall = is_wstall;
-    assign decode_sched_if.is_join  =  is_join;
     
     assign fetch_if.ibuf_pop = decode_if.ibuf_pop;
     assign fetch_if.ready = decode_if.ready;

@@ -27,6 +27,9 @@
 
 `define NR_BITS         `CLOG2(`NUM_REGS)
 
+`define PD_STACK_SIZE   `UP(`NT_BITS)
+`define PD_STACK_SIZEW  `CLOG2(`PD_STACK_SIZE)
+
 `define PERF_CTR_BITS   44
 
 `ifndef NDEBUG
@@ -215,6 +218,7 @@
 `define INST_GPU_JOIN        4'h3
 `define INST_GPU_BAR         4'h4
 `define INST_GPU_PRED        4'h5
+`define INST_GPU_IS_WCTL(op) (op <= 5)
 
 `define INST_GPU_TEX         4'h6
 `define INST_GPU_RASTER      4'h7

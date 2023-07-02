@@ -1,6 +1,8 @@
 #ifndef TESTS
 #define TESTS
 
+#define PRINTF vx_printf
+
 int test_global_memory();
 
 int test_stack_memory();

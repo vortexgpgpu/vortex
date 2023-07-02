@@ -11,25 +11,31 @@ interface VX_warp_ctl_if ();
     wire [`UP(`NW_BITS)-1:0] wid;
     gpu_tmc_t           tmc;
     gpu_wspawn_t        wspawn;
-    gpu_barrier_t       barrier;
     gpu_split_t         split;
+    gpu_join_t          sjoin;
+    gpu_barrier_t       barrier;
+    wire [`PD_STACK_SIZEW-1:0] split_ret;
 
     modport master (
         output valid,
         output wid,
-        output tmc,
         output wspawn,
+        output tmc,
+        output split,
+        output sjoin,
         output barrier,
-        output split
+        input  split_ret
     );
 
     modport slave (
-        input valid,
-        input wid,
-        input tmc,
-        input wspawn,
-        input barrier,
-        input split
+        input  valid,
+        input  wid,
+        input  wspawn,
+        input  tmc,
+        input  split,
+        input  sjoin,
+        input  barrier,
+        output split_ret
     );
 
 endinterface

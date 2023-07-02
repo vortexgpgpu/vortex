@@ -194,10 +194,10 @@ module VX_execute #(
         .reset          (fpu_reset),    
         .fpu_exe_if     (fpu_exe_if), 
         .fpu_bus_if     (fpu_bus_if),
-        .fpu_to_csr_if  (fpu_to_csr_if), 
-        .fpu_commit_if  (fpu_commit_if),
+        .fpu_to_csr_if  (fpu_to_csr_if),
         .csr_pending    (csr_pending),
-        .req_pending    (fpu_pending) 
+        .req_pending    (fpu_pending),
+        .commit_if      (fpu_commit_if)
     );
 `endif
 

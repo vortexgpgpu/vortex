@@ -12,7 +12,7 @@ module VX_tex_agent #(
         
     // Outputs
     VX_tex_bus_if.master    tex_bus_if,
-    VX_commit_if.master     tex_commit_if
+    VX_commit_if.master     commit_if
 );
     `UNUSED_PARAM (CORE_ID)
 
@@ -107,18 +107,18 @@ module VX_tex_agent #(
         .reset     (reset),
         .valid_in  (tex_bus_if.rsp_valid),
         .ready_in  (tex_bus_if.rsp_ready),
-        .data_in   ({rsp_uuid,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           tex_bus_if.rsp_texels}),
-        .data_out  ({tex_commit_if.uuid, tex_commit_if.wid, tex_commit_if.tmask, tex_commit_if.PC, tex_commit_if.rd, commit_data}),
-        .valid_out (tex_commit_if.valid),
-        .ready_out (tex_commit_if.ready)
+        .data_in   ({rsp_uuid,       rsp_wid,       rsp_tmask,       rsp_PC,       rsp_rd,       tex_bus_if.rsp_texels}),
+        .data_out  ({commit_if.uuid, commit_if.wid, commit_if.tmask, commit_if.PC, commit_if.rd, commit_data}),
+        .valid_out (commit_if.valid),
+        .ready_out (commit_if.ready)
     );
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign tex_commit_if.data[i] = `XLEN'(commit_data[i]);
+        assign commit_if.data[i] = `XLEN'(commit_data[i]);
     end
 
-    assign tex_commit_if.wb  = 1'b1;
-    assign tex_commit_if.eop = 1'b1;
+    assign commit_if.wb  = 1'b1;
+    assign commit_if.eop = 1'b1;
 
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin
@@ -131,10 +131,10 @@ module VX_tex_agent #(
             `TRACE_ARRAY1D(1, tex_exe_if.lod, `NUM_THREADS);
             `TRACE(1, (", stage=%0d, tag=0x%0h (#%0d)\n", tex_exe_if.stage, req_tag, tex_exe_if.uuid));
         end
-        if (tex_commit_if.valid && tex_commit_if.ready) begin
-            `TRACE(1, ("%d: core%0d-tex-rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, texels=", $time, CORE_ID, tex_commit_if.wid, tex_commit_if.PC, tex_commit_if.tmask, tex_commit_if.rd));
-            `TRACE_ARRAY1D(1, tex_commit_if.data, `NUM_THREADS);
-            `TRACE(1, (" (#%0d)\n", tex_commit_if.uuid));
+        if (commit_if.valid && commit_if.ready) begin
+            `TRACE(1, ("%d: core%0d-tex-rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, texels=", $time, CORE_ID, commit_if.wid, commit_if.PC, commit_if.tmask, commit_if.rd));
+            `TRACE_ARRAY1D(1, commit_if.data, `NUM_THREADS);
+            `TRACE(1, (" (#%0d)\n", commit_if.uuid));
         end
     end
 `endif

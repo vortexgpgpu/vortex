@@ -11,8 +11,8 @@ module VX_rop_agent #(
     VX_gpu_csr_if.slave   rop_csr_if,  
 
     // Outputs    
-    VX_commit_if.master   rop_commit_if,
-    VX_rop_bus_if.master  rop_bus_if
+    VX_rop_bus_if.master  rop_bus_if,
+    VX_commit_if.master   commit_if
 );
     `UNUSED_PARAM (CORE_ID)
     
@@ -42,7 +42,7 @@ module VX_rop_agent #(
     wire rop_rsp_valid, rop_rsp_ready;
 
     // it is possible to have ready = f(valid) when using arbiters, 
-    // because of that we need to decouple rop_exe_if and rop_commit_if handshake with a pipe register
+    // because of that we need to decouple rop_exe_if and commit_if handshake with a pipe register
 
     VX_skid_buffer #(
         .DATAW   (UUID_WIDTH + `NUM_THREADS * (1 + 2 * `VX_ROP_DIM_BITS + 32 + `VX_ROP_DEPTH_BITS + 1)),
@@ -69,16 +69,16 @@ module VX_rop_agent #(
         .reset     (reset),
         .valid_in  (rop_rsp_valid),
         .ready_in  (rop_rsp_ready),
-        .data_in   ({rop_exe_if.uuid,    rop_exe_if.wid,    rop_exe_if.tmask,    rop_exe_if.PC}),
-        .data_out  ({rop_commit_if.uuid, rop_commit_if.wid, rop_commit_if.tmask, rop_commit_if.PC}),
-        .valid_out (rop_commit_if.valid),
-        .ready_out (rop_commit_if.ready)
+        .data_in   ({rop_exe_if.uuid, rop_exe_if.wid, rop_exe_if.tmask, rop_exe_if.PC}),
+        .data_out  ({commit_if.uuid,  commit_if.wid,  commit_if.tmask,  commit_if.PC}),
+        .valid_out (commit_if.valid),
+        .ready_out (commit_if.ready)
     );
 
-    assign rop_commit_if.data = '0;
-    assign rop_commit_if.rd   = '0;
-    assign rop_commit_if.wb   = 0;
-    assign rop_commit_if.eop  = 1;
+    assign commit_if.data = '0;
+    assign commit_if.rd   = '0;
+    assign commit_if.wb   = 0;
+    assign commit_if.eop  = 1;
 
 `ifdef DBG_TRACE_ROP
     always @(posedge clk) begin
