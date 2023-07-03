@@ -309,7 +309,6 @@ task trace_ex_op(input int level,
             `INST_GPU_TEX:   `TRACE(level, ("TEX"));
             `INST_GPU_RASTER:`TRACE(level, ("RASTER"));
             `INST_GPU_ROP:   `TRACE(level, ("ROP"));
-            `INST_GPU_IMADD: `TRACE(level, ("IMADD"));
             default:         `TRACE(level, ("?"));
         endcase
     end

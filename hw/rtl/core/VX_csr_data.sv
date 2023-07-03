@@ -356,13 +356,4 @@ module VX_csr_data #(
     assign fpu_to_csr_if.read_frm = fcsr[fpu_to_csr_if.read_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS];
 `endif
 
-`ifdef PERF_ENABLE
-`ifdef EXT_IMADD_ENABLE
-    wire [`PERF_CTR_BITS-1:0] perf_imadd_stalls = gpu_perf_if.imadd_stalls;
-    `UNUSED_VAR (perf_imadd_stalls);
-`endif
-    wire [`PERF_CTR_BITS-1:0] perf_wctl_stalls = gpu_perf_if.wctl_stalls;
-    `UNUSED_VAR (perf_wctl_stalls);
-`endif
-
 endmodule

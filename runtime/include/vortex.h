@@ -39,7 +39,6 @@ typedef void* vx_buffer_h;
 #define VX_ISA_EXT_TEX            (1ull << 32)
 #define VX_ISA_EXT_RASTER         (1ull << 33)
 #define VX_ISA_EXT_ROP            (1ull << 34)
-#define VX_ISA_EXT_IMADD          (1ull << 35)
 
 #define MAX_TIMEOUT               (24*60*60*1000)   // 24hr 
 

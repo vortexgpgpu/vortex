@@ -313,9 +313,6 @@ void GpuUnit::tick() {
     case GpuType::CMOV:
         Output.send(trace, 3);
         break;
-    case GpuType::IMADD:
-        Output.send(trace, 3);
-        break;
     default:
         std::abort();
     }

@@ -224,7 +224,6 @@
 `define INST_GPU_RASTER      4'h7
 `define INST_GPU_ROP         4'h8
 `define INST_GPU_CMOV        4'h9
-`define INST_GPU_IMADD       4'hA
 `define INST_GPU_BITS        4
 
 ///////////////////////////////////////////////////////////////////////////////

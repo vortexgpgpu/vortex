@@ -177,8 +177,7 @@ enum class GpuType {
   TEX,
   RASTER,
   ROP,    
-  CMOV,
-  IMADD
+  CMOV  
 };
 
 inline std::ostream &operator<<(std::ostream &os, const GpuType& type) {
@@ -192,7 +191,6 @@ inline std::ostream &operator<<(std::ostream &os, const GpuType& type) {
   case GpuType::RASTER: os << "RASTER"; break;
   case GpuType::ROP:    os << "ROP"; break;
   case GpuType::CMOV:   os << "CMOV"; break;
-  case GpuType::IMADD:  os << "IMADD"; break;
   }
   return os;
 }

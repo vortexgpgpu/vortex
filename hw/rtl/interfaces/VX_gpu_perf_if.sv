@@ -11,9 +11,6 @@ interface VX_gpu_perf_if ();
 `ifdef EXT_ROP_ENABLE
     wire [`PERF_CTR_BITS-1:0] rop_stalls;
 `endif
-`ifdef EXT_IMADD_ENABLE
-    wire [`PERF_CTR_BITS-1:0] imadd_stalls;
-`endif
     wire [`PERF_CTR_BITS-1:0] wctl_stalls;
 
     modport master (
@@ -25,9 +22,6 @@ interface VX_gpu_perf_if ();
     `endif
     `ifdef EXT_ROP_ENABLE
         output rop_stalls,
-    `endif
-    `ifdef EXT_IMADD_ENABLE
-        output imadd_stalls,       
     `endif
         output wctl_stalls
     );
@@ -41,9 +35,6 @@ interface VX_gpu_perf_if ();
     `endif
     `ifdef EXT_ROP_ENABLE
         input rop_stalls,
-    `endif
-    `ifdef EXT_IMADD_ENABLE
-        input imadd_stalls,
     `endif
         input wctl_stalls
     );

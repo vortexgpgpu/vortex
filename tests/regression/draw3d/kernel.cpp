@@ -13,11 +13,6 @@ using namespace graphics;
 
 using fixeduv_t = cocogfx::TFixed<VX_TEX_FXD_FRAC>;
 
-inline int32_t imadd_sw(int32_t a, int32_t b, int32_t c, int32_t s) {
-	int32_t p = ((int64_t)a * (int64_t)b) >> (s << 3);
-	return p + c;
-}
-
 #define DEFAULTS_i(i) \
 	z[i] = FloatA(0.0f); \
 	r[i] = FloatA(1.0f); \
@@ -48,18 +43,20 @@ inline int32_t imadd_sw(int32_t a, int32_t b, int32_t c, int32_t s) {
     dy[i] = FloatA(r * F1); \
 }
 
-#define INTERPOLATE_i(i, dst, src, func) { \
-	auto tmp = func(src.x, dx[i], src.z);  \
-	dst[i]   = func(src.y, dy[i], tmp);    \
-}
-
 #ifdef FIXEDPOINT_RASTERIZER
 
-#define multadd_hw(a, b, c) \
-	fixed24_t::make(vx_imadd(a.data(), b.data(), c.data(), 3))
+inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
+	int32_t p = ((int64_t)a * (int64_t)b) >> (s << 3);
+	return p + c;
+}
 
-#define multadd_sw(a, b, c) \
-	fixed24_t::make(imadd_sw(a.data(), b.data(), c.data(), 3))
+#define multadd_fx(a, b, c) \
+	fixed24_t::make(imadd(a.data(), b.data(), c.data(), 3))
+
+#define INTERPOLATE_i(i, dst, src) { \
+	auto tmp = multadd_fx(src.x, dx[i], src.z);  \
+	dst[i]   = multadd_fx(src.y, dy[i], tmp);    \
+}
 
 #define MODULATE_i(i, dst, src1_r, src1_g, src1_b, src1_a, src2) \
 	dst[i].r = (src1_r[i].data() * src2[i].r) >> fixed24_t::FRAC; \
@@ -83,11 +80,10 @@ inline int32_t imadd_sw(int32_t a, int32_t b, int32_t c, int32_t s) {
 
 #else
 
-#define multadd_hw(a, b, c) \
-	a * b + c
-
-#define multadd_sw(a, b, c) \
-	a * b + c
+#define INTERPOLATE_i(i, dst, src) { \
+	auto tmp = src.x * dx[i] + src.z;  \
+	dst[i]   = src.y * dy[i] + tmp;    \
+}
 
 #define MODULATE_i(i, dst, src1_r, src1_g, src1_b, src1_a, src2) \
 	dst[i].r = static_cast<uint8_t>(src1_r[i] * src2[i].r); \
@@ -129,11 +125,11 @@ inline int32_t imadd_sw(int32_t a, int32_t b, int32_t c, int32_t s) {
 	GRADIENTS_SW_i(2) \
 	GRADIENTS_SW_i(3) \
 
-#define INTERPOLATE(dst, src, func) \
-	INTERPOLATE_i(0, dst, src, func); \
-	INTERPOLATE_i(1, dst, src, func); \
-	INTERPOLATE_i(2, dst, src, func); \
-	INTERPOLATE_i(3, dst, src, func)
+#define INTERPOLATE(dst, src) \
+	INTERPOLATE_i(0, dst, src); \
+	INTERPOLATE_i(1, dst, src); \
+	INTERPOLATE_i(2, dst, src); \
+	INTERPOLATE_i(3, dst, src)
 
 #define MODULATE(dst, src1_r, src1_g, src1_b, src1_a, src2) \
 	MODULATE_i(0, dst, src1_r, src1_g, src1_b, src1_a, src2); \
@@ -188,37 +184,18 @@ void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
 
 		GRADIENTS_HW
 
-	#ifdef SW_ENABLE
-		if (arg->sw_interp) {
-			if (arg->depth_enabled) {
-				INTERPOLATE(z, attribs.z, multadd_sw);
-			}
-			if (arg->color_enabled) {
-				INTERPOLATE(r, attribs.r, multadd_sw);
-				INTERPOLATE(g, attribs.g, multadd_sw);
-				INTERPOLATE(b, attribs.b, multadd_sw);
-				INTERPOLATE(a, attribs.a, multadd_sw);
-			}			
-			if (arg->tex_enabled) {
-				INTERPOLATE(u, attribs.u, multadd_sw);
-				INTERPOLATE(v, attribs.v, multadd_sw);
-			}
-		} else 
-	#endif	
-		{
-			if (arg->depth_enabled) {
-				INTERPOLATE(z, attribs.z, multadd_hw);
-			}
-			if (arg->color_enabled) {
-				INTERPOLATE(r, attribs.r, multadd_hw);
-				INTERPOLATE(g, attribs.g, multadd_hw);
-				INTERPOLATE(b, attribs.b, multadd_hw);
-				INTERPOLATE(a, attribs.a, multadd_hw);
-			}			
-			if (arg->tex_enabled) {
-				INTERPOLATE(u, attribs.u, multadd_hw);
-				INTERPOLATE(v, attribs.v, multadd_hw);				
-			}
+		if (arg->depth_enabled) {
+			INTERPOLATE(z, attribs.z);
+		}
+		if (arg->color_enabled) {
+			INTERPOLATE(r, attribs.r);
+			INTERPOLATE(g, attribs.g);
+			INTERPOLATE(b, attribs.b);
+			INTERPOLATE(a, attribs.a);
+		}			
+		if (arg->tex_enabled) {
+			INTERPOLATE(u, attribs.u);
+			INTERPOLATE(v, attribs.v);
 		}
 
 		if (arg->tex_enabled) {
@@ -268,34 +245,18 @@ void shader_function_sw_rast_cb(uint32_t pos_mask,
 
 	GRADIENTS_SW
 
-	if (arg->sw_interp) {
-		if (arg->depth_enabled) {
-			INTERPOLATE(z, attribs.z, multadd_sw);
-		}
-		if (arg->color_enabled) {
-			INTERPOLATE(r, attribs.r, multadd_sw);
-			INTERPOLATE(g, attribs.g, multadd_sw);
-			INTERPOLATE(b, attribs.b, multadd_sw);
-			INTERPOLATE(a, attribs.a, multadd_sw);
-		}			
-		if (arg->tex_enabled) {
-			INTERPOLATE(u, attribs.u, multadd_sw);
-			INTERPOLATE(v, attribs.v, multadd_sw);
-		}
-	} else {
-		if (arg->depth_enabled) {
-			INTERPOLATE(z, attribs.z, multadd_hw);
-		}
-		if (arg->color_enabled) {
-			INTERPOLATE(r, attribs.r, multadd_hw);
-			INTERPOLATE(g, attribs.g, multadd_hw);
-			INTERPOLATE(b, attribs.b, multadd_hw);
-			INTERPOLATE(a, attribs.a, multadd_hw);
-		}			
-		if (arg->tex_enabled) {
-			INTERPOLATE(u, attribs.u, multadd_hw);
-			INTERPOLATE(v, attribs.v, multadd_hw);				
-		}
+	if (arg->depth_enabled) {
+		INTERPOLATE(z, attribs.z);
+	}
+	if (arg->color_enabled) {
+		INTERPOLATE(r, attribs.r);
+		INTERPOLATE(g, attribs.g);
+		INTERPOLATE(b, attribs.b);
+		INTERPOLATE(a, attribs.a);
+	}			
+	if (arg->tex_enabled) {
+		INTERPOLATE(u, attribs.u);
+		INTERPOLATE(v, attribs.v);
 	}
 
 	if (arg->tex_enabled) {

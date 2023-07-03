@@ -36,7 +36,6 @@ const char* reference_file = nullptr;
 bool sw_tex = false;
 bool sw_rast = false;
 bool sw_rop = false;
-bool sw_interp = false;
 
 uint32_t start_draw = 0;
 uint32_t end_draw = -1;
@@ -70,7 +69,7 @@ uint32_t tileLogSize = RASTER_TILE_LOGSIZE;
 
 static void show_usage() {
    std::cout << "Vortex 3D Rendering Test." << std::endl;
-   std::cout << "Usage: [-t trace] [-s startdraw] [-e enddraw] [-o output] [-r reference] [-w width] [-h height] [-e empty] [-x s/w rast] [-y s/w rop] [-z s/w interp] [-k tilelogsize]" << std::endl;
+   std::cout << "Usage: [-t trace] [-s startdraw] [-e enddraw] [-o output] [-r reference] [-w width] [-h height] [-e empty] [-x s/w rast] [-y s/w rop] [-k tilelogsize]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
@@ -106,9 +105,6 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'y':
       sw_rop = true;
-      break;
-    case 'z':
-      sw_interp = true;
       break;
     case 'k':
       tileLogSize = std::atoi(optarg);
@@ -429,8 +425,8 @@ int main(int argc, char *argv[]) {
 
   uint64_t isa_flags;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-  if (0 == (isa_flags & (VX_ISA_EXT_RASTER | VX_ISA_EXT_ROP | VX_ISA_EXT_IMADD))) {
-    std::cout << "RASTER or ROP or IMADD extensions not supported!" << std::endl;
+  if (0 == (isa_flags & (VX_ISA_EXT_TEX | VX_ISA_EXT_RASTER | VX_ISA_EXT_ROP))) {
+    std::cout << "TEX, RASTER, and ROP ISA extensions are needed!" << std::endl;
     cleanup();
     return -1;
   }
@@ -526,7 +522,6 @@ int main(int argc, char *argv[]) {
   kernel_arg.sw_tex        = sw_tex;
   kernel_arg.sw_rast       = sw_rast;
   kernel_arg.sw_rop        = sw_rop;
-  kernel_arg.sw_interp     = sw_interp;
 
   // run tests
   RT_CHECK(render(trace));

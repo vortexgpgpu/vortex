@@ -1500,21 +1500,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       default:
         std::abort();
       }
-      break;      
-    case 2: { // IMADD
-      trace->exe_type = ExeType::GPU;
-      trace->gpu_type = GpuType::IMADD;
-      trace->used_iregs.set(rsrc0);
-      trace->used_iregs.set(rsrc1);
-      trace->used_iregs.set(rsrc2);
-      uint32_t shift = func2 * 8;
-      for (uint32_t t = thread_start; t < num_threads; ++t) {
-        if (!tmask_.test(t))
-          continue;
-        rddata[t].i = (int32_t)(((int64_t)rsdata[t][0].i32 * (int64_t)rsdata[t][1].i32) >> shift) + rsdata[t][2].i32;
-      }
-      rd_write = true;
-    } break;        
+      break;       
     default:
       std::abort();
     }

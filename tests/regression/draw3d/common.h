@@ -31,7 +31,6 @@ typedef struct {
   bool sw_tex;
   bool sw_rast;
   bool sw_rop;
-  bool sw_interp;
 } kernel_arg_t;
 
 #endif

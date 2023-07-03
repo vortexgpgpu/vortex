@@ -413,9 +413,7 @@ static const char* op_string(const Instr &instr) {
       default:
         std::abort();
       }
-    }    
-    case 2: 
-      return "IMADD";
+    }
     default:
       std::abort();
     }

@@ -40,17 +40,15 @@ module VX_gpu_unit #(
     localparam UUID_WIDTH    = `UP(`UUID_BITS);
     localparam NW_WIDTH      = `UP(`NW_BITS);
     localparam RSP_ARB_DATAW = UUID_WIDTH + NW_WIDTH + `NUM_THREADS + (`NUM_THREADS * `XLEN) + `NR_BITS + 1 + `XLEN + 1;
-    localparam RSP_ARB_SIZE  = 1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED + `EXT_IMADD_ENABLED;
+    localparam RSP_ARB_SIZE  = 1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED;
 
     localparam RSP_ARB_IDX_WCTL   = 0;
     localparam RSP_ARB_IDX_RASTER = RSP_ARB_IDX_WCTL + 1;
     localparam RSP_ARB_IDX_ROP    = RSP_ARB_IDX_RASTER + `EXT_RASTER_ENABLED;    
-    localparam RSP_ARB_IDX_TEX    = RSP_ARB_IDX_ROP + `EXT_ROP_ENABLED;    
-    localparam RSP_ARB_IDX_IMADD  = RSP_ARB_IDX_TEX + `EXT_TEX_ENABLED;
+    localparam RSP_ARB_IDX_TEX    = RSP_ARB_IDX_ROP + `EXT_ROP_ENABLED;
     `UNUSED_PARAM (RSP_ARB_IDX_RASTER)
     `UNUSED_PARAM (RSP_ARB_IDX_ROP)
     `UNUSED_PARAM (RSP_ARB_IDX_TEX)
-    `UNUSED_PARAM (RSP_ARB_IDX_IMADD)
 
     wire [RSP_ARB_SIZE-1:0] rsp_arb_valid_in;
     wire [RSP_ARB_SIZE-1:0] rsp_arb_ready_in;
@@ -160,68 +158,6 @@ module VX_gpu_unit #(
 
 `endif
 
-`ifdef EXT_IMADD_ENABLE    
-
-    wire                          imadd_valid_in;
-    wire                          imadd_ready_in;
-    wire [`NUM_THREADS-1:0][31:0] imadd_data_in [3];
-
-    wire                          imadd_valid_out;
-    wire [UUID_WIDTH-1:0]         imadd_uuid_out;
-    wire [NW_WIDTH-1:0]           imadd_wid_out;
-    wire [`NUM_THREADS-1:0]       imadd_tmask_out;
-    wire [`XLEN-1:0]              imadd_PC_out;
-    wire [`NR_BITS-1:0]           imadd_rd_out; 
-    wire [`NUM_THREADS-1:0][31:0] imadd_data_out;
-    wire                          imadd_ready_out;
-
-    assign imadd_valid_in = gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_IMADD);
-
-    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign imadd_data_in[0][i] = gpu_exe_if.rs1_data[i][31:0];
-        assign imadd_data_in[1][i] = gpu_exe_if.rs2_data[i][31:0];
-        assign imadd_data_in[2][i] = gpu_exe_if.rs3_data[i][31:0];
-    end
-
-    `RESET_RELAY (imadd_reset, reset);
-
-    VX_imadd #(
-        .NUM_LANES  (`NUM_THREADS),
-        .DATA_WIDTH (32),
-        .MAX_SHIFT  (24),
-        .SIGNED     (1),
-        .TAG_WIDTH  (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS)
-    ) imadd (
-        .clk        (clk),
-        .reset      (imadd_reset),
-        
-        // Inputs
-        .valid_in   (imadd_valid_in),
-        .shift_in   ({gpu_exe_if.op_mod[1:0], 3'b0}),
-        .data1_in   (imadd_data_in[0]),
-        .data2_in   (imadd_data_in[1]),
-        .data3_in   (imadd_data_in[2]),
-        .tag_in     ({gpu_exe_if.uuid, gpu_exe_if.wid, gpu_exe_if.tmask, gpu_exe_if.PC, gpu_exe_if.rd}),
-        .ready_in   (imadd_ready_in),
-
-        // Outputs
-        .valid_out  (imadd_valid_out),
-        .tag_out    ({imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out}),
-        .data_out   (imadd_data_out),
-        .ready_out  (imadd_ready_out)
-    );
-
-    wire [`NUM_THREADS-1:0][`XLEN-1:0] imadd_data_out_x;
-    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign imadd_data_out_x[i] = `XLEN'(imadd_data_out[i]);
-    end
-
-    assign rsp_arb_valid_in[RSP_ARB_IDX_IMADD] = imadd_valid_out;
-    assign rsp_arb_data_in[RSP_ARB_IDX_IMADD] = {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, 1'b1, imadd_data_out_x, 1'b1};
-    assign imadd_ready_out = rsp_arb_ready_in[RSP_ARB_IDX_IMADD];
-
-`endif
-
     // can accept new request?
 
     always @(*) begin
@@ -234,9 +170,6 @@ module VX_gpu_unit #(
     `endif
     `ifdef EXT_ROP_ENABLE
         `INST_GPU_ROP: gpu_req_ready = rop_exe_if.ready;
-    `endif
-    `ifdef EXT_IMADD_ENABLE
-        `INST_GPU_IMADD: gpu_req_ready = imadd_ready_in;
     `endif
         default: gpu_req_ready = wctl_exe_if.ready;
         endcase
@@ -314,17 +247,6 @@ module VX_gpu_unit #(
         end
     end
     assign gpu_perf_if.rop_stalls = perf_rop_stalls;
-`endif
-`ifdef EXT_IMADD_ENABLE
-    reg [`PERF_CTR_BITS-1:0] perf_imadd_stalls;
-    always @(posedge clk) begin
-        if (reset) begin
-            perf_imadd_stalls <= '0;
-        end else begin
-            perf_imadd_stalls <= perf_imadd_stalls + `PERF_CTR_BITS'(imadd_valid_in && ~imadd_ready_in);
-        end
-    end
-    assign gpu_perf_if.imadd_stalls = perf_imadd_stalls;
 `endif
     reg [`PERF_CTR_BITS-1:0] perf_wctl_stalls;
     always @(posedge clk) begin
