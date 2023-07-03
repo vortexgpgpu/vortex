@@ -1,9 +1,4 @@
 `include "VX_define.vh"
-`include "VX_gpu_types.vh"
-
-`IGNORE_WARNINGS_BEGIN
-import VX_gpu_types::*;
-`IGNORE_WARNINGS_END
 
 module VX_gpu_unit #(
     parameter CORE_ID = 0
@@ -67,26 +62,11 @@ module VX_gpu_unit #(
     wire csr_ready = ~csr_pending;
     assign gpu_req_valid = gpu_exe_if.valid && csr_ready;
 
-    `UNUSED_VAR (gpu_exe_if.op_mod)
-    `UNUSED_VAR (gpu_exe_if.rs3_data)
-
     // Warp control block    
-
     VX_gpu_exe_if wctl_exe_if();
     VX_commit_if wctl_commit_if();
-
-    assign wctl_exe_if.valid    = gpu_req_valid && `INST_GPU_IS_WCTL(gpu_exe_if.op_type);
-    assign wctl_exe_if.op_type  = gpu_exe_if.op_type;
-    assign wctl_exe_if.uuid     = gpu_exe_if.uuid;
-    assign wctl_exe_if.wid      = gpu_exe_if.wid;
-    assign wctl_exe_if.tmask    = gpu_exe_if.tmask;
-    assign wctl_exe_if.tid      = gpu_exe_if.tid;
-    assign wctl_exe_if.PC       = gpu_exe_if.PC;
-    assign wctl_exe_if.next_PC  = gpu_exe_if.next_PC;
-    assign wctl_exe_if.rd       = gpu_exe_if.rd;
-    assign wctl_exe_if.wb       = gpu_exe_if.wb;
-    assign wctl_exe_if.rs1_data = gpu_exe_if.rs1_data;
-    assign wctl_exe_if.rs2_data = gpu_exe_if.rs2_data;
+    
+    `ASSIGN_VX_GPU_EXE_IF_V(wctl_exe_if, gpu_exe_if, gpu_req_valid && `INST_GPU_IS_WCTL(gpu_exe_if.op_type));
     
     VX_wctl_unit #(
         .OUTPUT_REG (RSP_ARB_SIZE > 1)
@@ -104,22 +84,10 @@ module VX_gpu_unit #(
     
 `ifdef EXT_TEX_ENABLE
 
-    VX_tex_exe_if tex_exe_if();
-    VX_commit_if  tex_commit_if();
+    VX_gpu_exe_if tex_exe_if();
+    VX_commit_if tex_commit_if();
 
-    assign tex_exe_if.valid = gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_TEX);
-    assign tex_exe_if.uuid  = gpu_exe_if.uuid;
-    assign tex_exe_if.wid   = gpu_exe_if.wid;
-    assign tex_exe_if.tmask = gpu_exe_if.tmask;
-    assign tex_exe_if.PC    = gpu_exe_if.PC;
-    assign tex_exe_if.rd    = gpu_exe_if.rd;
-    assign tex_exe_if.stage = gpu_exe_if.op_mod[`VX_TEX_STAGE_BITS-1:0];
-
-    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign tex_exe_if.coords[0][i] = gpu_exe_if.rs1_data[i][31:0];
-        assign tex_exe_if.coords[1][i] = gpu_exe_if.rs2_data[i][31:0];
-        assign tex_exe_if.lod[i]       = gpu_exe_if.rs3_data[i][0 +: `VX_TEX_LOD_BITS];        
-    end
+    `ASSIGN_VX_GPU_EXE_IF_V(tex_exe_if, gpu_exe_if, gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_TEX));
 
     `RESET_RELAY (tex_reset, reset);
 
@@ -128,8 +96,8 @@ module VX_gpu_unit #(
     ) tex_agent (
         .clk        (clk),
         .reset      (tex_reset),
+        .gpu_exe_if (tex_exe_if),
         .tex_csr_if (tex_csr_if),
-        .tex_exe_if (tex_exe_if),
         .tex_bus_if (tex_bus_if),
         .commit_if  (tex_commit_if)        
     );     
@@ -142,15 +110,10 @@ module VX_gpu_unit #(
 
 `ifdef EXT_RASTER_ENABLE
     
-    VX_raster_exe_if raster_exe_if();
-    VX_commit_if     raster_commit_if();
+    VX_gpu_exe_if raster_exe_if();
+    VX_commit_if raster_commit_if();
 
-    assign raster_exe_if.valid = gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_RASTER);
-    assign raster_exe_if.uuid  = gpu_exe_if.uuid;
-    assign raster_exe_if.wid   = gpu_exe_if.wid;
-    assign raster_exe_if.tmask = gpu_exe_if.tmask;
-    assign raster_exe_if.PC    = gpu_exe_if.PC;
-    assign raster_exe_if.rd    = gpu_exe_if.rd;
+    `ASSIGN_VX_GPU_EXE_IF_V(raster_exe_if, gpu_exe_if, gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_RASTER));
 
     `RESET_RELAY (raster_reset, reset);
 
@@ -159,9 +122,9 @@ module VX_gpu_unit #(
     ) raster_agent (
         .clk            (clk),
         .reset          (raster_reset),
+        .gpu_exe_if     (raster_exe_if),
         .raster_csr_if  (raster_csr_if),
-        .raster_bus_if  (raster_bus_if),
-        .raster_exe_if  (raster_exe_if),        
+        .raster_bus_if  (raster_bus_if),        
         .commit_if      (raster_commit_if)       
     );
 
@@ -173,22 +136,10 @@ module VX_gpu_unit #(
 
 `ifdef EXT_ROP_ENABLE
     
-    VX_rop_exe_if rop_exe_if();
-    VX_commit_if  rop_commit_if();
+    VX_gpu_exe_if rop_exe_if();
+    VX_commit_if rop_commit_if();
 
-    assign rop_exe_if.valid = gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_ROP);
-    assign rop_exe_if.uuid  = gpu_exe_if.uuid;
-    assign rop_exe_if.wid   = gpu_exe_if.wid;
-    assign rop_exe_if.tmask = gpu_exe_if.tmask;
-    assign rop_exe_if.PC    = gpu_exe_if.PC;
-
-    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign rop_exe_if.face[i]  = gpu_exe_if.rs1_data[i][0];
-        assign rop_exe_if.pos_x[i] = gpu_exe_if.rs1_data[i][1 +: `VX_ROP_DIM_BITS];
-        assign rop_exe_if.pos_y[i] = gpu_exe_if.rs1_data[i][16 +: `VX_ROP_DIM_BITS];
-        assign rop_exe_if.color[i] = gpu_exe_if.rs2_data[i][31:0];
-        assign rop_exe_if.depth[i] = gpu_exe_if.rs3_data[i][`VX_ROP_DEPTH_BITS-1:0];
-    end
+    `ASSIGN_VX_GPU_EXE_IF_V(rop_exe_if, gpu_exe_if, gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_ROP));
 
     `RESET_RELAY (rop_reset, reset);
             
@@ -197,8 +148,8 @@ module VX_gpu_unit #(
     ) rop_agent (
         .clk        (clk),
         .reset      (rop_reset),
+        .gpu_exe_if (rop_exe_if),
         .rop_csr_if (rop_csr_if),
-        .rop_exe_if (rop_exe_if),
         .rop_bus_if (rop_bus_if),
         .commit_if  (rop_commit_if)
     );
@@ -272,7 +223,7 @@ module VX_gpu_unit #(
 `endif
 
     // can accept new request?
-    
+
     always @(*) begin
         case (gpu_exe_if.op_type)
     `ifdef EXT_TEX_ENABLE

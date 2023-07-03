@@ -88,7 +88,6 @@ module VX_socket #(
     VX_raster_arb #(
         .NUM_INPUTS  (1),
         .NUM_LANES   (`NUM_THREADS),
-        .NUM_INPUTS  (1),
         .NUM_OUTPUTS (`SOCKET_SIZE),
         .ARBITER     ("R"),
         .BUFFERED    ((`SOCKET_SIZE > 1) ? 2 : 0)

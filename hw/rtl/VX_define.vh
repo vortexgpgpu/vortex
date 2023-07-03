@@ -430,6 +430,23 @@
     assign src.rsp_tag   = dst.rsp_tag; \
     assign dst.rsp_ready = src.rsp_ready
 
+`define ASSIGN_VX_GPU_EXE_IF_V(dst, src, src_valid) \
+    assign dst.valid    = src_valid; \
+    assign dst.uuid     = src.uuid;  \
+    assign dst.wid      = src.wid;  \
+    assign dst.tmask    = src.tmask;  \
+    assign dst.PC       = src.PC;  \
+    assign dst.next_PC  = src.next_PC;  \
+    assign dst.op_type  = src.op_type;  \
+    assign dst.op_mod   = src.op_mod;  \
+    assign dst.tid      = src.tid;  \
+    assign dst.rs1_data = src.rs1_data;  \
+    assign dst.rs2_data = src.rs2_data;  \
+    assign dst.rs3_data = src.rs3_data;  \
+    assign dst.rd       = src.rd;  \
+    assign dst.wb       = src.wb;  \
+    assign src.ready    = dst.ready
+
 `define REDUCE_ADD(dst, src, field, width, count) \
     wire [count-1:0][width-1:0] __reduce_add_i_``src``field; \
     wire [width-1:0] __reduce_add_o_``dst``field; \

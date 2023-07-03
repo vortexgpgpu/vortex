@@ -7,9 +7,9 @@ module VX_tex_agent #(
     input wire reset,
 
     // Inputs
+    VX_gpu_exe_if.slave     gpu_exe_if,
     VX_gpu_csr_if.slave     tex_csr_if,
-    VX_tex_exe_if.slave     tex_exe_if,
-        
+            
     // Outputs
     VX_tex_bus_if.master    tex_bus_if,
     VX_commit_if.master     commit_if
@@ -41,17 +41,27 @@ module VX_tex_agent #(
 
     // Store request info
 
+    wire [1:0][`NUM_THREADS-1:0][31:0] gpu_exe_coords;
+    wire [`NUM_THREADS-1:0][`VX_TEX_LOD_BITS-1:0] gpu_exe_lod;
+    wire [`VX_TEX_STAGE_BITS-1:0] gpu_exe_stage;
+
     wire [UUID_WIDTH-1:0]   rsp_uuid;
     wire [NW_WIDTH-1:0]     rsp_wid;
     wire [`NUM_THREADS-1:0] rsp_tmask;
     wire [`XLEN-1:0]        rsp_PC;
     wire [`NR_BITS-1:0]     rsp_rd;
  
-    wire [REQ_QUEUE_BITS-1:0] mdata_waddr, mdata_raddr;
-    
+    wire [REQ_QUEUE_BITS-1:0] mdata_waddr, mdata_raddr;    
     wire mdata_full;
 
-    wire mdata_push = tex_exe_if.valid && tex_exe_if.ready;
+    assign gpu_exe_stage = gpu_exe_if.op_mod[`VX_TEX_STAGE_BITS-1:0];
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        assign gpu_exe_coords[0][i] = gpu_exe_if.rs1_data[i][31:0];
+        assign gpu_exe_coords[1][i] = gpu_exe_if.rs2_data[i][31:0];
+        assign gpu_exe_lod[i]       = gpu_exe_if.rs3_data[i][0 +: `VX_TEX_LOD_BITS];        
+    end
+
+    wire mdata_push = gpu_exe_if.valid && gpu_exe_if.ready;
     wire mdata_pop  = tex_bus_if.rsp_valid && tex_bus_if.rsp_ready;
 
     VX_index_buffer #(
@@ -64,7 +74,7 @@ module VX_tex_agent #(
         .write_addr   (mdata_waddr),                
         .read_addr    (mdata_raddr),
         .release_addr (mdata_raddr),        
-        .write_data   ({tex_exe_if.wid, tex_exe_if.tmask, tex_exe_if.PC, tex_exe_if.rd}),
+        .write_data   ({gpu_exe_if.wid, gpu_exe_if.tmask, gpu_exe_if.PC, gpu_exe_if.rd}),
         .read_data    ({rsp_wid,        rsp_tmask,        rsp_PC,        rsp_rd}),
         .release_slot (mdata_pop),     
         .full         (mdata_full),
@@ -74,10 +84,10 @@ module VX_tex_agent #(
     // submit texture request
 
     wire valid_in, ready_in;    
-    assign valid_in = tex_exe_if.valid && ~mdata_full;
-    assign tex_exe_if.ready = ready_in && ~mdata_full;    
+    assign valid_in = gpu_exe_if.valid && ~mdata_full;
+    assign gpu_exe_if.ready = ready_in && ~mdata_full;    
 
-    wire [`TEX_REQ_TAG_WIDTH-1:0] req_tag = {tex_exe_if.uuid, mdata_waddr};
+    wire [`TEX_REQ_TAG_WIDTH-1:0] req_tag = {gpu_exe_if.uuid, mdata_waddr};
 
     VX_skid_buffer #(
         .DATAW   (`NUM_THREADS * (1 + 2 * 32 + `VX_TEX_LOD_BITS) + `VX_TEX_STAGE_BITS + `TEX_REQ_TAG_WIDTH),
@@ -87,7 +97,7 @@ module VX_tex_agent #(
         .reset     (reset),
         .valid_in  (valid_in),
         .ready_in  (ready_in),
-        .data_in   ({tex_exe_if.tmask,    tex_exe_if.coords,     tex_exe_if.lod,     tex_exe_if.stage,     req_tag}),
+        .data_in   ({gpu_exe_if.tmask,    gpu_exe_coords,        gpu_exe_lod,        gpu_exe_stage,        req_tag}),
         .data_out  ({tex_bus_if.req_mask, tex_bus_if.req_coords, tex_bus_if.req_lod, tex_bus_if.req_stage, tex_bus_if.req_tag}),
         .valid_out (tex_bus_if.req_valid),
         .ready_out (tex_bus_if.req_ready)
@@ -122,14 +132,14 @@ module VX_tex_agent #(
 
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin
-        if (tex_exe_if.valid && tex_exe_if.ready) begin
-            `TRACE(1, ("%d: core%0d-tex-req: wid=%0d, PC=0x%0h, tmask=%b, u=", $time, CORE_ID, tex_exe_if.wid, tex_exe_if.PC, tex_exe_if.tmask));
-            `TRACE_ARRAY1D(1, tex_exe_if.coords[0], `NUM_THREADS);
+        if (gpu_exe_if.valid && gpu_exe_if.ready) begin
+            `TRACE(1, ("%d: core%0d-tex-req: wid=%0d, PC=0x%0h, tmask=%b, u=", $time, CORE_ID, gpu_exe_if.wid, gpu_exe_if.PC, gpu_exe_if.tmask));
+            `TRACE_ARRAY1D(1, gpu_exe_if.coords[0], `NUM_THREADS);
             `TRACE(1, (", v="));
-            `TRACE_ARRAY1D(1, tex_exe_if.coords[1], `NUM_THREADS);
+            `TRACE_ARRAY1D(1, gpu_exe_if.coords[1], `NUM_THREADS);
             `TRACE(1, (", lod="));
-            `TRACE_ARRAY1D(1, tex_exe_if.lod, `NUM_THREADS);
-            `TRACE(1, (", stage=%0d, tag=0x%0h (#%0d)\n", tex_exe_if.stage, req_tag, tex_exe_if.uuid));
+            `TRACE_ARRAY1D(1, gpu_exe_if.lod, `NUM_THREADS);
+            `TRACE(1, (", stage=%0d, tag=0x%0h (#%0d)\n", gpu_exe_if.stage, req_tag, gpu_exe_if.uuid));
         end
         if (commit_if.valid && commit_if.ready) begin
             `TRACE(1, ("%d: core%0d-tex-rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, texels=", $time, CORE_ID, commit_if.wid, commit_if.PC, commit_if.tmask, commit_if.rd));
