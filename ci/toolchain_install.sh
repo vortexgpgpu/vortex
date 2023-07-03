@@ -78,7 +78,7 @@ llvm-pocl()
     done
     cat llvm-pocl.tar.bz2.parta* > llvm-pocl.tar.bz2
     tar -xvf llvm-pocl.tar.bz2
-    cp -r llvm-vorpocltex $DESTDIR
+    cp -r llvm-pocl $DESTDIR
     rm -f llvm-pocl.tar.bz2*    
     rm -rf llvm-pocl
 }
