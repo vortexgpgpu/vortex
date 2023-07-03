@@ -7,7 +7,6 @@ import VX_gpu_types::*;
 
 interface VX_warp_ctl_if ();
 
-    wire                valid;
     wire [`UP(`NW_BITS)-1:0] wid;
     gpu_tmc_t           tmc;
     gpu_wspawn_t        wspawn;
@@ -17,7 +16,6 @@ interface VX_warp_ctl_if ();
     wire [`PD_STACK_SIZEW-1:0] split_ret;
 
     modport master (
-        output valid,
         output wid,
         output wspawn,
         output tmc,
@@ -28,7 +26,6 @@ interface VX_warp_ctl_if ();
     );
 
     modport slave (
-        input  valid,
         input  wid,
         input  wspawn,
         input  tmc,

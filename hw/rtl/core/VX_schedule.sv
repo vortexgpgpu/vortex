@@ -60,9 +60,9 @@ module VX_schedule #(
     wire                    schedule_ready;
 
     // split/join
-    wire                    split_is_divergent;
-    wire [`NUM_THREADS-1:0] split_tmask0;
-    wire                    join_is_divergent;
+    wire                    split_is_dvg;
+    wire [`NUM_THREADS-1:0] split_tmask;
+    wire                    join_is_dvg;
     wire                    join_is_else;    
     wire [`NUM_THREADS-1:0] join_tmask;
     wire [`XLEN-1:0]        join_pc;
@@ -79,10 +79,10 @@ module VX_schedule #(
 
     always @(*) begin
         active_warps_n = active_warps;
-        if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
+        if (warp_ctl_if.wspawn.valid) begin
             active_warps_n = warp_ctl_if.wspawn.wmask;
         end
-        if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
+        if (warp_ctl_if.tmc.valid) begin
             active_warps_n[warp_ctl_if.wid] = tmc_active;
         end
     end
@@ -107,9 +107,9 @@ module VX_schedule #(
             thread_masks[0] <= 1;
         end else begin
             // join handling
-            if (warp_ctl_if.valid && warp_ctl_if.sjoin.valid) begin
+            if (warp_ctl_if.sjoin.valid) begin
                 stalled_warps[warp_ctl_if.wid] <= 0;
-                if (join_is_divergent) begin
+                if (join_is_dvg) begin
                     if (join_is_else) begin
                         warp_pcs[warp_ctl_if.wid] <= `XLEN'(join_pc);
                     end
@@ -117,13 +117,13 @@ module VX_schedule #(
                 end
             end
 
-            if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
+            if (warp_ctl_if.wspawn.valid) begin
                 use_wspawn <= warp_ctl_if.wspawn.wmask & (~`NUM_WARPS'(1));
                 wspawn_pc  <= warp_ctl_if.wspawn.pc;
             end
 
             // barrier handling
-            if (warp_ctl_if.valid && warp_ctl_if.barrier.valid) begin
+            if (warp_ctl_if.barrier.valid) begin
                 stalled_warps[warp_ctl_if.wid] <= 0;
                 if (warp_ctl_if.barrier.is_global 
                  && (curr_barrier_mask_n == active_warps)) begin
@@ -144,16 +144,16 @@ module VX_schedule #(
             end
             
             // TMC handling
-            if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
+            if (warp_ctl_if.tmc.valid) begin
                 thread_masks[warp_ctl_if.wid]  <= warp_ctl_if.tmc.tmask;
                 stalled_warps[warp_ctl_if.wid] <= 0;
             end 
             
             // split handling
-            if (warp_ctl_if.valid && warp_ctl_if.split.valid) begin
+            if (warp_ctl_if.split.valid) begin
                 stalled_warps[warp_ctl_if.wid] <= 0;
-                if (split_is_divergent) begin
-                    thread_masks[warp_ctl_if.wid] <= split_tmask0;
+                if (split_is_dvg) begin
+                    thread_masks[warp_ctl_if.wid] <= split_tmask;
                 end
             end
 
@@ -225,59 +225,22 @@ module VX_schedule #(
 
     // split/join handling  
 
-    wire [(`XLEN+`NUM_THREADS)-1:0] ipdom_data [`NUM_WARPS-1:0];     
-    wire [`PD_STACK_SIZEW-1:0] ipdom_q_ptr [`NUM_WARPS-1:0];
-    wire ipdom_index [`NUM_WARPS-1:0];
-
-    wire [`NUM_THREADS-1:0] then_tmask;
-    wire [`NUM_THREADS-1:0] else_tmask;
-
-    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign then_tmask[i] = warp_ctl_if.split.tmask[i] && warp_ctl_if.split.taken[i];
-        assign else_tmask[i] = warp_ctl_if.split.tmask[i] && ~warp_ctl_if.split.taken[i];
-    end
-
-    wire [`CLOG2(`NUM_THREADS+1)-1:0] then_tmask_cnt, else_tmask_cnt;
-    `POP_COUNT(then_tmask_cnt, then_tmask);
-    `POP_COUNT(else_tmask_cnt, else_tmask);
-    wire then_first = (then_tmask_cnt >= else_tmask_cnt);
-    
-    assign split_is_divergent = (then_tmask != 0) && (else_tmask != 0);
-    assign split_tmask0 = then_first ? then_tmask : else_tmask;
-    assign warp_ctl_if.split_ret = ipdom_q_ptr[warp_ctl_if.wid];
-
-    assign join_is_divergent = (warp_ctl_if.sjoin.stack_ptr != ipdom_q_ptr[warp_ctl_if.wid]);
-    assign {join_pc, join_tmask} = ipdom_data[warp_ctl_if.wid];
-    assign join_is_else = (ipdom_index[warp_ctl_if.wid] == 0);
-
-    wire [`NUM_THREADS-1:0] split_tmask1 = then_first ? else_tmask : then_tmask;
-    wire [(`XLEN+`NUM_THREADS)-1:0] ipdom_q0 = {warp_ctl_if.split.next_pc, split_tmask1};
-    wire [(`XLEN+`NUM_THREADS)-1:0] ipdom_q1 = {`XLEN'(0),                 warp_ctl_if.split.tmask};
-
-    wire ipdom_push = warp_ctl_if.valid && warp_ctl_if.split.valid && split_is_divergent;
-    wire ipdom_pop = warp_ctl_if.valid  && warp_ctl_if.sjoin.valid && join_is_divergent;
-
-    `RESET_RELAY (ipdom_reset, reset);
-    
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
-        VX_ipdom_stack #(
-            .WIDTH (`XLEN+`NUM_THREADS), 
-            .DEPTH (`PD_STACK_SIZE)
-        ) ipdom_stack (
-            .clk   (clk),
-            .reset (ipdom_reset),
-            .push  (ipdom_push && (i == warp_ctl_if.wid)),
-            .pop   (ipdom_pop && (i == warp_ctl_if.wid)),
-            .q0    (ipdom_q0),
-            .q1    (ipdom_q1),
-            .d     (ipdom_data[i]),
-            .d_idx (ipdom_index[i]),
-            .q_ptr (ipdom_q_ptr[i]),
-            `UNUSED_PIN (d_ptr),
-            `UNUSED_PIN (empty),
-            `UNUSED_PIN (full)
-        );
-    end
+    VX_split_join #(
+        .CORE_ID (CORE_ID)
+    ) split_join (
+        .clk        (clk),
+        .reset      (reset),
+        .wid        (warp_ctl_if.wid),
+        .split      (warp_ctl_if.split),
+        .sjoin      (warp_ctl_if.sjoin),
+        .split_is_dvg (split_is_dvg),
+        .split_tmask (split_tmask),
+        .split_ret  (warp_ctl_if.split_ret),
+        .join_is_dvg (join_is_dvg),
+        .join_is_else (join_is_else),
+        .join_tmask (join_tmask),
+        .join_pc    (join_pc)
+    );
 
     // schedule the next ready warp
 

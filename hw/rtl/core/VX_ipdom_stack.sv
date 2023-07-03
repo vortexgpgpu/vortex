@@ -3,7 +3,7 @@
 module VX_ipdom_stack #(
     parameter WIDTH = 1,
     parameter DEPTH = 1,
-    parameter ADDRW = $clog2(DEPTH)
+    parameter ADDRW = `UP($clog2(DEPTH))
 ) (
     input  wire               clk,
     input  wire               reset,
