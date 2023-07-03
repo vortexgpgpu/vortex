@@ -30,6 +30,7 @@ module VX_wctl_unit #(
     
     wire [`XLEN-1:0] rs1_data = gpu_exe_if.rs1_data[gpu_exe_if.tid];
     wire [`XLEN-1:0] rs2_data = gpu_exe_if.rs2_data[gpu_exe_if.tid];
+    `UNUSED_VAR (rs1_data)
     
     wire [`NUM_THREADS-1:0] taken;
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin

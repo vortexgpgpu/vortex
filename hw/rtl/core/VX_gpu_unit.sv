@@ -64,7 +64,8 @@ module VX_gpu_unit #(
     VX_gpu_exe_if wctl_exe_if();
     VX_commit_if wctl_commit_if();
     
-    `ASSIGN_VX_GPU_EXE_IF_V(wctl_exe_if, gpu_exe_if, gpu_req_valid && `INST_GPU_IS_WCTL(gpu_exe_if.op_type));
+    assign wctl_exe_if.valid = gpu_req_valid && `INST_GPU_IS_WCTL(gpu_exe_if.op_type);
+    `ASSIGN_VX_GPU_EXE_IF_DATA(wctl_exe_if, gpu_exe_if);
     
     VX_wctl_unit #(
         .OUTPUT_REG (RSP_ARB_SIZE > 1)
@@ -85,7 +86,8 @@ module VX_gpu_unit #(
     VX_gpu_exe_if tex_exe_if();
     VX_commit_if tex_commit_if();
 
-    `ASSIGN_VX_GPU_EXE_IF_V(tex_exe_if, gpu_exe_if, gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_TEX));
+    assign tex_exe_if.valid = gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_TEX);
+    `ASSIGN_VX_GPU_EXE_IF_DATA(tex_exe_if, gpu_exe_if);
 
     `RESET_RELAY (tex_reset, reset);
 
@@ -111,7 +113,8 @@ module VX_gpu_unit #(
     VX_gpu_exe_if raster_exe_if();
     VX_commit_if raster_commit_if();
 
-    `ASSIGN_VX_GPU_EXE_IF_V(raster_exe_if, gpu_exe_if, gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_RASTER));
+    assign raster_exe_if.valid = gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_RASTER);
+    `ASSIGN_VX_GPU_EXE_IF_DATA(raster_exe_if, gpu_exe_if);
 
     `RESET_RELAY (raster_reset, reset);
 
@@ -137,7 +140,8 @@ module VX_gpu_unit #(
     VX_gpu_exe_if rop_exe_if();
     VX_commit_if rop_commit_if();
 
-    `ASSIGN_VX_GPU_EXE_IF_V(rop_exe_if, gpu_exe_if, gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_ROP));
+    assign rop_exe_if.valid = gpu_req_valid && (gpu_exe_if.op_type == `INST_GPU_ROP);
+    `ASSIGN_VX_GPU_EXE_IF_DATA(rop_exe_if, gpu_exe_if);
 
     `RESET_RELAY (rop_reset, reset);
             
