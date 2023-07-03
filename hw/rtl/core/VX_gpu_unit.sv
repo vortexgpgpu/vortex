@@ -253,7 +253,7 @@ module VX_gpu_unit #(
         if (reset) begin
             perf_wctl_stalls <= '0;
         end else begin
-            perf_wctl_stalls <= perf_wctl_stalls + `PERF_CTR_BITS'(wctl_req_valid && ~wctl_req_ready);
+            perf_wctl_stalls <= perf_wctl_stalls + `PERF_CTR_BITS'(wctl_exe_if.valid && ~wctl_exe_if.ready);
         end
     end
     assign gpu_perf_if.wctl_stalls = perf_wctl_stalls;
