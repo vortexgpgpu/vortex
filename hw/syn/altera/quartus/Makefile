@@ -4,7 +4,7 @@ BUILD_DIR=$(PREFIX)_$(DEVICE_FAMILY)
 
 IP_CACHE_DIR=../ip_cache/$(DEVICE_FAMILY)
 
-.PHONY: dogfood unittest pipeline smem cache fpu tex raster rop core vortex vortex-gfx top top-gfx test
+.PHONY: dogfood unittest pipeline smem cache fpu tex raster rop core vortex top test
 
 ip-gen: $(IP_CACHE_DIR)/ip_gen.log
 $(IP_CACHE_DIR)/ip_gen.log:
@@ -65,20 +65,10 @@ vortex: ip-gen
 	cp vortex/Makefile vortex/$(BUILD_DIR)
 	$(MAKE) -C vortex/$(BUILD_DIR) clean && $(MAKE) -C vortex/$(BUILD_DIR) > vortex/$(BUILD_DIR)/build.log 2>&1 &
 
-vortex-gfx: ip-gen
-	mkdir -p vortex-gfx/$(BUILD_DIR)
-	cp vortex-gfx/Makefile vortex-gfx/$(BUILD_DIR)
-	$(MAKE) -C vortex-gfx/$(BUILD_DIR) clean && $(MAKE) -C vortex-gfx/$(BUILD_DIR) > vortex-gfx/$(BUILD_DIR)/build.log 2>&1 &
-
 top: ip-gen
 	mkdir -p top/$(BUILD_DIR)
 	cp top/Makefile top/$(BUILD_DIR)
 	$(MAKE) -C top/$(BUILD_DIR) clean && $(MAKE) -C top/$(BUILD_DIR) > top/$(BUILD_DIR)/build.log 2>&1 &
-
-top-gfx: ip-gen
-	mkdir -p top-gfx/$(BUILD_DIR)
-	cp top-gfx/Makefile top-gfx/$(BUILD_DIR)
-	$(MAKE) -C top-gfx/$(BUILD_DIR) clean && $(MAKE) -C top-gfx/$(BUILD_DIR) > top-gfx/$(BUILD_DIR)/build.log 2>&1 &
 
 test: ip-gen
 	mkdir -p test/$(BUILD_DIR)
