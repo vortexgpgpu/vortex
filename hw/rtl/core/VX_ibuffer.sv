@@ -156,7 +156,7 @@ module VX_ibuffer #(
     end
 
     wire warp_added   = enq_fire && q_empty[decode_if.wid];
-    wire warp_removed = deq_fire && ~(enq_fire && decode_if.wid == deq_wid) && q_alm_empty[deq_wid];
+    wire warp_removed = deq_fire && q_alm_empty[deq_wid] && ~(enq_fire && decode_if.wid == deq_wid);
     
     always @(posedge clk) begin
         if (reset)  begin            

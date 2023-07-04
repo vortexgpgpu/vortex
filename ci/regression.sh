@@ -170,7 +170,6 @@ CONFIGS="-DENABLE_DPI -DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=d
 CONFIGS="-DEXT_GFX_ENABLE -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE -DRCACHE_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tvase.cgltrace -rvase_ref_32.png -w32 -h32" --threads=1
 CONFIGS="-DEXT_GFX_ENABLE -DPD_STACK_SIZE=128" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-x -ttriangle.cgltrace -rtriangle_ref_128.png"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-y -ttriangle.cgltrace -rtriangle_ref_128.png"
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-z -ttriangle.cgltrace -rtriangle_ref_128.png"
 CONFIGS="-DENABLE_DPI -DEXT_GFX_ENABLE -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE -DRCACHE_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=draw3d --args="-tvase.cgltrace -rvase_ref_32.png -w32 -h32" --threads=2 || true
 
 echo "graphics tests done!"

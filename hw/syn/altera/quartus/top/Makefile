@@ -10,11 +10,10 @@ CONFIGS += -DEXT_GFX_ENABLE
 
 CONFIGS += -DNUM_CORES=4
 
-CONFIGS += -DL2_ENABLE
-
 #CONFIGS += -DL1_DISABLE 
 #CONFIGS += -DSM_DISABLE
 #CONFIGS += -DRCACHE_DISABLE -DOCACHE_DISABLE -DTCACHE_DISABLE
+#CONFIGS += -DL2_ENABLE
 
 FPU_INCLUDE = -I$(RTL_DIR)/fpu -J$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -J$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -J$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/fpnew/src
 TEX_INCLUDE = -I$(RTL_DIR)/tex -I$(RTL_DIR)/raster -I$(RTL_DIR)/rop
