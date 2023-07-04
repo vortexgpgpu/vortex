@@ -18,8 +18,6 @@ module VX_ipdom_stack #(
     output wire               empty,
     output wire               full
 );
-    `STATIC_ASSERT(`ISPOW2(DEPTH), ("depth must be a power of 2!"))   
-
     reg slot_idx [DEPTH-1:0];
     
     reg [ADDRW-1:0] rd_ptr, wr_ptr;
