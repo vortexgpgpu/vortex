@@ -7,13 +7,11 @@ module VX_scoreboard  #(
     input wire              reset,
 
     VX_scoreboard_if.slave  scoreboard_if,
-    VX_writeback_if.slave   writeback_if,
-    output wire [3:0]       in_use_regs
+    VX_writeback_if.slave   writeback_if
 );
     reg [`NUM_WARPS-1:0][`NUM_REGS-1:0] inuse_regs, inuse_regs_n;
 
     wire reserve_reg = scoreboard_if.valid && scoreboard_if.ready && scoreboard_if.wb;
-
     wire release_reg = writeback_if.valid && writeback_if.ready && writeback_if.eop;
     
     always @(*) begin
@@ -46,19 +44,19 @@ module VX_scoreboard  #(
     assign writeback_if.ready = 1'b1;
 
     assign scoreboard_if.ready = ~(deq_inuse_rd 
-                               | deq_inuse_rs1 
-                               | deq_inuse_rs2 
-                               | deq_inuse_rs3);
+                                 | deq_inuse_rs1 
+                                 | deq_inuse_rs2 
+                                 | deq_inuse_rs3);
+
+    assign scoreboard_if.used_regs[0] = deq_inuse_rd;
+    assign scoreboard_if.used_regs[1] = deq_inuse_rs1;
+    assign scoreboard_if.used_regs[2] = deq_inuse_rs2;
+    assign scoreboard_if.used_regs[3] = deq_inuse_rs3;
 
     `UNUSED_VAR (writeback_if.PC)
     `UNUSED_VAR (scoreboard_if.PC)
     `UNUSED_VAR (scoreboard_if.tmask)    
     `UNUSED_VAR (scoreboard_if.uuid)
-
-    assign in_use_regs[0] = deq_inuse_rd;
-    assign in_use_regs[1] = deq_inuse_rs1;
-    assign in_use_regs[2] = deq_inuse_rs2;
-    assign in_use_regs[3] = deq_inuse_rs3;
 
     always @(posedge clk) begin  
         if (release_reg) begin

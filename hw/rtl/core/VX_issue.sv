@@ -26,30 +26,10 @@ module VX_issue #(
 `endif
     VX_gpu_exe_if.master    gpu_exe_if
 );
-    VX_ibuffer_if       ibuffer_if();    
+    VX_ibuffer_if       ibuffer_if();
     VX_gpr_stage_if     gpr_stage_if();
-    VX_writeback_if     sboard_wb_if();
     VX_scoreboard_if    scoreboard_if();
     VX_dispatch_if      dispatch_if();
-
-    wire [3:0] in_use_regs;
-
-    // GPR request interface
-    assign gpr_stage_if.wid     = ibuffer_if.wid;
-    assign gpr_stage_if.rs1     = ibuffer_if.rs1;
-    assign gpr_stage_if.rs2     = ibuffer_if.rs2;
-    assign gpr_stage_if.rs3     = ibuffer_if.rs3;
-
-    // scoreboard writeback interface
-    assign sboard_wb_if.valid   = writeback_if.valid;
-    assign sboard_wb_if.uuid    = writeback_if.uuid;
-    assign sboard_wb_if.wid     = writeback_if.wid;
-    assign sboard_wb_if.tmask   = writeback_if.tmask;
-    assign sboard_wb_if.PC      = writeback_if.PC;
-    assign sboard_wb_if.rd      = writeback_if.rd;
-    assign sboard_wb_if.data    = writeback_if.data;
-    assign sboard_wb_if.eop     = writeback_if.eop;
-    `UNUSED_VAR (sboard_wb_if.ready)
         
     // scoreboard interface
     assign scoreboard_if.valid  = ibuffer_if.valid && dispatch_if.ready;
@@ -64,6 +44,12 @@ module VX_issue #(
     assign scoreboard_if.rs2_n  = ibuffer_if.rs2_n;        
     assign scoreboard_if.rs3_n  = ibuffer_if.rs3_n;        
     assign scoreboard_if.wid_n  = ibuffer_if.wid_n;
+
+    // GPR request interface
+    assign gpr_stage_if.wid     = ibuffer_if.wid;
+    assign gpr_stage_if.rs1     = ibuffer_if.rs1;
+    assign gpr_stage_if.rs2     = ibuffer_if.rs2;
+    assign gpr_stage_if.rs3     = ibuffer_if.rs3;
     
     // dispatch interface
     assign dispatch_if.valid    = ibuffer_if.valid && scoreboard_if.ready;
@@ -106,8 +92,7 @@ module VX_issue #(
         .clk           (clk),
         .reset         (scoreboard_reset),         
         .writeback_if  (writeback_if),
-        .scoreboard_if (scoreboard_if),
-        .in_use_regs   (in_use_regs)
+        .scoreboard_if (scoreboard_if)
     );
 
     VX_gpr_stage #(
@@ -143,7 +128,7 @@ module VX_issue #(
             `ifdef DBG_TRACE_CORE_PIPELINE
                 `TRACE(3, ("%d: *** core%0d-stall: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, cycles=%0d, inuse=%b%b%b%b, dispatch=%b (#%0d)\n",
                     $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.rd, ibuffer_if.wb, timeout_ctr,
-                    in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));
+                    scoreboard_if.used_regs[0], scoreboard_if.used_regs[1], scoreboard_if.used_regs[2], scoreboard_if.used_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));
             `endif
                 timeout_ctr <= timeout_ctr + 1;
             end else if (ibuffer_if_fire) begin
@@ -154,7 +139,7 @@ module VX_issue #(
     `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT,
                     ("%t: *** core%0d-issue-timeout: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, inuse=%b%b%b%b, dispatch=%b (#%0d)",
                         $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.rd, ibuffer_if.wb, 
-                        in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));    
+                        scoreboard_if.used_regs[0], scoreboard_if.used_regs[1], scoreboard_if.used_regs[2], scoreboard_if.used_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));    
 
 `ifdef DBG_SCOPE_ISSUE
     if (CORE_ID == 0) begin
@@ -211,7 +196,7 @@ module VX_issue #(
     `ifdef CHIPSCOPE
         ila_issue ila_issue_inst (
             .clk    (clk),
-            .probe0 ({ibuffer_if.uuid, ibuffer.rs3, ibuffer.rs2, ibuffer.rs1, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.wid, ibuffer_if.ex_type, ibuffer_if.op_type, ibuffer_if.ready, ibuffer_if.valid, in_use_regs, scoreboard_if.ready, dispatch_if.ready, ibuffer_if.ready, ibuffer_if.valid}),
+            .probe0 ({ibuffer_if.uuid, ibuffer.rs3, ibuffer.rs2, ibuffer.rs1, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.wid, ibuffer_if.ex_type, ibuffer_if.op_type, ibuffer_if.ready, ibuffer_if.valid, scoreboard_if.used_regs, scoreboard_if.ready, dispatch_if.ready, ibuffer_if.ready, ibuffer_if.valid}),
             .probe1 ({writeback_if.uuid, writeback_if.data[0], writeback_if.PC, writeback_if.tmask, writeback_if.wid, writeback_if.eop, writeback_if.valid})
         );
     `endif

@@ -16,6 +16,8 @@ interface VX_scoreboard_if ();
     wire [`NR_BITS-1:0]         rs3_n;
     wire [`UP(`NW_BITS)-1:0]    wid_n;
 
+    wire [3:0]                  used_regs;
+
     wire                        ready;
 
     modport master (
@@ -30,7 +32,8 @@ interface VX_scoreboard_if ();
         output rs1_n,
         output rs2_n,
         output rs3_n,
-        output wid_n,        
+        output wid_n,
+        input  used_regs, 
         input  ready
     );
 
@@ -46,7 +49,8 @@ interface VX_scoreboard_if ();
         input  rs1_n,
         input  rs2_n,
         input  rs3_n,
-        input  wid_n,        
+        input  wid_n,
+        output used_regs,        
         output ready
     );
     

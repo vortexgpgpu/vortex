@@ -23,9 +23,10 @@ module VX_writeback #(
 );
     `UNUSED_PARAM (CORE_ID)
 
-    localparam NW_WIDTH = `UP(`NW_BITS);
-    localparam DATAW    = NW_WIDTH + `XLEN + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * `XLEN) + 1;
-    localparam NUM_RSPS = 4 + `EXT_F_ENABLED;
+    localparam UUID_WIDTH = `UP(`UUID_BITS);
+    localparam NW_WIDTH   = `UP(`NW_BITS);
+    localparam DATAW      = UUID_WIDTH + NW_WIDTH + `XLEN + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * `XLEN) + 1;
+    localparam NUM_RSPS   = 4 + `EXT_F_ENABLED;
 
 `ifdef EXT_F_ENABLE
     wire wb_fpu_ready_in;
@@ -63,14 +64,14 @@ module VX_writeback #(
         }),
         .data_in   ({
         `ifdef EXT_F_ENABLE
-            {fpu_commit_if.wid, fpu_commit_if.PC, fpu_commit_if.tmask, fpu_commit_if.rd, fpu_commit_if.data, fpu_commit_if.eop},
+            {fpu_commit_if.uuid, fpu_commit_if.wid, fpu_commit_if.PC, fpu_commit_if.tmask, fpu_commit_if.rd, fpu_commit_if.data, fpu_commit_if.eop},
         `endif     
-            {gpu_commit_if.wid, gpu_commit_if.PC, gpu_commit_if.tmask, gpu_commit_if.rd, gpu_commit_if.data, gpu_commit_if.eop},
-            {csr_commit_if.wid, csr_commit_if.PC, csr_commit_if.tmask, csr_commit_if.rd, csr_commit_if.data, csr_commit_if.eop},
-            {alu_commit_if.wid, alu_commit_if.PC, alu_commit_if.tmask, alu_commit_if.rd, alu_commit_if.data, alu_commit_if.eop},
-            {ld_commit_if.wid,  ld_commit_if.PC,  ld_commit_if.tmask,  ld_commit_if.rd,  ld_commit_if.data,  ld_commit_if.eop}
+            {gpu_commit_if.uuid, gpu_commit_if.wid, gpu_commit_if.PC, gpu_commit_if.tmask, gpu_commit_if.rd, gpu_commit_if.data, gpu_commit_if.eop},
+            {csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.PC, csr_commit_if.tmask, csr_commit_if.rd, csr_commit_if.data, csr_commit_if.eop},
+            {alu_commit_if.uuid, alu_commit_if.wid, alu_commit_if.PC, alu_commit_if.tmask, alu_commit_if.rd, alu_commit_if.data, alu_commit_if.eop},
+            {ld_commit_if.uuid,  ld_commit_if.wid,  ld_commit_if.PC,  ld_commit_if.tmask,  ld_commit_if.rd,  ld_commit_if.data,  ld_commit_if.eop}
         }),
-        .data_out  ({writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.data, writeback_if.eop}),
+        .data_out  ({writeback_if.uuid, writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.data, writeback_if.eop}),
         .valid_out (writeback_if.valid),        
         .ready_out (writeback_if.ready)
     );

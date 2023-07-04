@@ -62,7 +62,7 @@ module VX_fetch #(
     // Ensure that the ibuffer doesn't fill up.
     // This resolves potential deadlock if ibuffer fills and the LSU stalls the execute stage due to pending dcache request.
     // This issue is particularly prevalent when the icache and dcache is disabled and both requests share the same bus.
-    wire [`NUM_WARPS-1:0] pending_ibuf_full = 0;
+    wire [`NUM_WARPS-1:0] pending_ibuf_full;
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin
         VX_pending_size #( 
             .SIZE (`IBUF_SIZE + 1)
