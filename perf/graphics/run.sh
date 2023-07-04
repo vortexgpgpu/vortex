@@ -34,7 +34,7 @@ gpusw()
     SUFFIX=${TEST}_${DRIVER}_${CORES}c_${WIDTH}x${HEIGHT}
     LOG_FILE=${LOG_DIR}/${SUFFIX}.log
         
-    declare -a modes=("" "-z" "-y" "-x")
+    declare -a modes=("" "-x" "-y")
 
     echo > $LOG_FILE # clear log
     for mode in "${modes[@]}"
