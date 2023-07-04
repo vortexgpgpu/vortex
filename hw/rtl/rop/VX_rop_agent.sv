@@ -98,16 +98,16 @@ module VX_rop_agent #(
     always @(posedge clk) begin
         if (gpu_exe_if.valid && gpu_exe_if.ready) begin
             `TRACE(1, ("%d: core%0d-rop-req: wid=%0d, PC=0x%0h, tmask=%b, x=", $time, CORE_ID, gpu_exe_if.wid, gpu_exe_if.PC, gpu_exe_if.tmask));
-            `TRACE_ARRAY1D(1, gpu_exe_if.pos_x, `NUM_THREADS);
+            `TRACE_ARRAY1D(1, gpu_exe_pos_x, `NUM_THREADS);
             `TRACE(1, (", y="));
-            `TRACE_ARRAY1D(1, gpu_exe_if.pos_y, `NUM_THREADS);
+            `TRACE_ARRAY1D(1, gpu_exe_pos_y, `NUM_THREADS);
             `TRACE(1, (", face="));
-            `TRACE_ARRAY1D(1, gpu_exe_if.face, `NUM_THREADS);
+            `TRACE_ARRAY1D(1, gpu_exe_face, `NUM_THREADS);
             `TRACE(1, (", color="));
-            `TRACE_ARRAY1D(1, gpu_exe_if.color, `NUM_THREADS);
+            `TRACE_ARRAY1D(1, gpu_exe_color, `NUM_THREADS);
             `TRACE(1, (", depth="));
-            `TRACE_ARRAY1D(1, gpu_exe_if.depth, `NUM_THREADS);
-            `TRACE(1, (", face=%b (#%0d)\n", gpu_exe_if.face, gpu_exe_if.uuid));
+            `TRACE_ARRAY1D(1, gpu_exe_depth, `NUM_THREADS);
+            `TRACE(1, (", face=%b (#%0d)\n", gpu_exe_face, gpu_exe_if.uuid));
         end
     end
 `endif

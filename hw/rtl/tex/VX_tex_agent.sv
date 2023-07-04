@@ -134,12 +134,12 @@ module VX_tex_agent #(
     always @(posedge clk) begin
         if (gpu_exe_if.valid && gpu_exe_if.ready) begin
             `TRACE(1, ("%d: core%0d-tex-req: wid=%0d, PC=0x%0h, tmask=%b, u=", $time, CORE_ID, gpu_exe_if.wid, gpu_exe_if.PC, gpu_exe_if.tmask));
-            `TRACE_ARRAY1D(1, gpu_exe_if.coords[0], `NUM_THREADS);
+            `TRACE_ARRAY1D(1, gpu_exe_coords[0], `NUM_THREADS);
             `TRACE(1, (", v="));
-            `TRACE_ARRAY1D(1, gpu_exe_if.coords[1], `NUM_THREADS);
+            `TRACE_ARRAY1D(1, gpu_exe_coords[1], `NUM_THREADS);
             `TRACE(1, (", lod="));
-            `TRACE_ARRAY1D(1, gpu_exe_if.lod, `NUM_THREADS);
-            `TRACE(1, (", stage=%0d, tag=0x%0h (#%0d)\n", gpu_exe_if.stage, req_tag, gpu_exe_if.uuid));
+            `TRACE_ARRAY1D(1, gpu_exe_lod, `NUM_THREADS);
+            `TRACE(1, (", stage=%0d, tag=0x%0h (#%0d)\n", gpu_exe_stage, req_tag, gpu_exe_if.uuid));
         end
         if (commit_if.valid && commit_if.ready) begin
             `TRACE(1, ("%d: core%0d-tex-rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, texels=", $time, CORE_ID, commit_if.wid, commit_if.PC, commit_if.tmask, commit_if.rd));

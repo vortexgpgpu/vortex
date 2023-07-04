@@ -63,7 +63,7 @@ module VX_raster_agent #(
         .valid_in  (raster_rsp_valid),
         .ready_in  (raster_rsp_ready), 
         .data_in   ({gpu_exe_if.uuid, gpu_exe_if.wid, gpu_exe_if.tmask, gpu_exe_if.PC, gpu_exe_if.rd, response_data}),
-        .data_out  ({commit_if.uuid,     commit_if.wid,     commit_if.tmask,     commit_if.PC,     commit_if.rd,     commit_data}),
+        .data_out  ({commit_if.uuid,  commit_if.wid,  commit_if.tmask,  commit_if.PC,  commit_if.rd,  commit_data}),
         .valid_out (commit_if.valid),
         .ready_out (commit_if.ready)
     );
