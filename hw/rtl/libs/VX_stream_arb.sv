@@ -22,6 +22,8 @@ module VX_stream_arb #(
     output wire [NUM_OUTPUTS-1:0][NUM_LANES-1:0][DATAW-1:0] data_out,    
     input  wire [NUM_OUTPUTS-1:0][NUM_LANES-1:0]            ready_out
 );
+    localparam BUF_SIZE = (BUFFERED == 3) ? 1 : ((BUFFERED != 0) ? 2 : 0);
+
     if (NUM_INPUTS > NUM_OUTPUTS) begin
 
         if (NUM_OUTPUTS > 1) begin
@@ -135,7 +137,7 @@ module VX_stream_arb #(
 
             VX_generic_arbiter #(
                 .NUM_REQS    (NUM_REQS),
-                .LOCK_ENABLE (1),
+                .LOCK_ENABLE (LOCK_ENABLE),
                 .TYPE        (ARBITER)
             ) arbiter (
                 .clk          (clk),
@@ -163,11 +165,11 @@ module VX_stream_arb #(
 
             `RESET_RELAY_EX (out_buf_reset, reset, 1, (NUM_LANES > MAX_FANOUT) ? 0 : -1);
 
-            for (genvar i = 0; i < NUM_LANES; ++i) begin
-                VX_skid_buffer #(
+            for (genvar i = 0; i < NUM_LANES; ++i) begin                
+                VX_elastic_buffer #(
                     .DATAW    (DATAW),
-                    .PASSTHRU (BUFFERED == 0),
-                    .OUT_REG  (BUFFERED > 1)
+                    .SIZE     (BUF_SIZE),
+                    .OUT_REG  (BUFFERED != 1)
                 ) out_buf (
                     .clk       (clk),
                     .reset     (out_buf_reset),
@@ -317,10 +319,10 @@ module VX_stream_arb #(
 
             for (genvar i = 0; i < NUM_REQS; ++i) begin
                 for (genvar j = 0; j < NUM_LANES; ++j) begin
-                    VX_skid_buffer #(
+                    VX_elastic_buffer #(
                         .DATAW    (DATAW),
-                        .PASSTHRU (BUFFERED == 0),
-                        .OUT_REG  (BUFFERED > 1)
+                        .SIZE     (BUF_SIZE),
+                        .OUT_REG  (BUFFERED != 1)
                     ) out_buf (
                         .clk       (clk),
                         .reset     (out_buf_reset),
@@ -341,10 +343,10 @@ module VX_stream_arb #(
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             for (genvar j = 0; j < NUM_LANES; ++j) begin
-                VX_skid_buffer #(
+                VX_elastic_buffer #(
                     .DATAW    (DATAW),
-                    .PASSTHRU (BUFFERED == 0),
-                    .OUT_REG  (BUFFERED > 1)
+                    .SIZE     (BUF_SIZE),
+                    .OUT_REG  (BUFFERED != 1)
                 ) out_buf (
                     .clk       (clk),
                     .reset     (out_buf_reset),

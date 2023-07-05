@@ -7,7 +7,7 @@ You can query the commandline options of the tool using:
 
     $ ./ci/blakcbox.sh --help
 
-To execute a simple sgemm test program on the simx driver and passing "-n10" as argument to sgemm:
+To execute sgemm test program on the simx driver and passing "-n10" as argument to sgemm:
 
     $ ./ci/blakcbox.sh --driver=simx --app=sgemm --args="-n10"
 

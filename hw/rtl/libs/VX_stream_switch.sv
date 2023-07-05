@@ -25,6 +25,8 @@ module VX_stream_switch #(
     output wire [NUM_OUTPUTS-1:0][NUM_LANES-1:0][DATAW-1:0] data_out,    
     input  wire [NUM_OUTPUTS-1:0][NUM_LANES-1:0]            ready_out
 );
+    localparam BUF_SIZE = (BUFFERED == 3) ? 1 : ((BUFFERED != 0) ? 2 : 0);
+
     if (NUM_INPUTS > NUM_OUTPUTS) begin
 
         wire [NUM_OUTPUTS-1:0][NUM_REQS-1:0][NUM_LANES-1:0]             valid_in_r;
@@ -66,10 +68,10 @@ module VX_stream_switch #(
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             for (genvar j = 0; j < NUM_LANES; ++j) begin
                 localparam ii = i * NUM_LANES + j;
-                VX_skid_buffer #(
+                VX_elastic_buffer #(
                     .DATAW    (DATAW),
-                    .PASSTHRU (BUFFERED == 0),
-                    .OUT_REG  (BUFFERED > 1)
+                    .SIZE     (BUF_SIZE),
+                    .OUT_REG  (BUFFERED != 1)
                 ) out_buf (
                     .clk       (clk),
                     .reset     (out_buf_reset),
@@ -102,10 +104,10 @@ module VX_stream_switch #(
                 localparam ii = i * NUM_REQS + j;
                 if (ii < NUM_OUTPUTS) begin
                     for (genvar k = 0; k < NUM_LANES; ++k) begin
-                        VX_skid_buffer #(
+                        VX_elastic_buffer #(
                             .DATAW    (DATAW),
-                            .PASSTHRU (BUFFERED == 0),
-                            .OUT_REG  (BUFFERED > 1)
+                            .SIZE     (BUF_SIZE),
+                            .OUT_REG  (BUFFERED != 1)
                         ) out_buf (
                             .clk       (clk),
                             .reset     (out_buf_reset),
@@ -132,10 +134,10 @@ module VX_stream_switch #(
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             for (genvar j = 0; j < NUM_LANES; ++j) begin
-                VX_skid_buffer #(
+                VX_elastic_buffer #(
                     .DATAW    (DATAW),
-                    .PASSTHRU (BUFFERED == 0),
-                    .OUT_REG  (BUFFERED > 1)
+                    .SIZE     (BUF_SIZE),
+                    .OUT_REG  (BUFFERED != 1)
                 ) out_buf (
                     .clk       (clk),
                     .reset     (out_buf_reset),

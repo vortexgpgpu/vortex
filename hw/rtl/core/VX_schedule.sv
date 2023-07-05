@@ -43,7 +43,6 @@ module VX_schedule #(
     // barriers
     reg [`NUM_BARRIERS-1:0][`NUM_WARPS-1:0] barrier_masks;
     wire [$clog2(`NUM_WARPS+1)-1:0] active_barrier_count;
-    wire [`NUM_WARPS-1:0] curr_barrier_mask;
     reg [`NUM_WARPS-1:0] curr_barrier_mask_n;
     reg gbar_req_valid;
     reg [`NB_BITS-1:0] gbar_req_id;
@@ -203,7 +202,7 @@ module VX_schedule #(
 
     // barrier handling
 
-    assign curr_barrier_mask = barrier_masks[warp_ctl_if.barrier.id];
+    wire [`NUM_WARPS-1:0] curr_barrier_mask = barrier_masks[warp_ctl_if.barrier.id];
     `POP_COUNT(active_barrier_count, curr_barrier_mask);
     `UNUSED_VAR (active_barrier_count)
 
