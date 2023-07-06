@@ -40,6 +40,11 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 		value = 0;
 	}
 
+	// loop
+	for (int i = 0, n = task_id; i < n; ++i) {
+		value += src_ptr[i];
+	}	
+
 	dst_ptr[task_id] = value;
 }
 

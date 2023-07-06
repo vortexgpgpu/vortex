@@ -110,6 +110,11 @@ void gen_ref_data(uint32_t num_points) {
       value = 0;
     }
 
+    // loop
+    for (int j = 0, n = i; j < n; ++j) {
+      value += src_data.at(j);
+    }	
+
     ref_data[i] = value;
     //std::cout << std::dec << i << ": result=0x" << std::hex << value << std::endl;
   }
