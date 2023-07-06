@@ -6,18 +6,22 @@ module VX_scoreboard  #(
     input wire              clk,
     input wire              reset,
 
+    VX_writeback_if.slave   writeback_if,
     VX_scoreboard_if.slave  scoreboard_if,
-    VX_writeback_if.slave   writeback_if
+    VX_ibuffer_if.scoreboard ibuffer_if,
+    output wire [3:0]       used_regs    
 );
+    localparam NW_WIDTH = `UP(`NW_BITS);
+
     reg [`NUM_WARPS-1:0][`NUM_REGS-1:0] inuse_regs, inuse_regs_n;
 
-    wire reserve_reg = scoreboard_if.valid && scoreboard_if.ready && scoreboard_if.wb;
+    wire reserve_reg = ibuffer_if.valid && ibuffer_if.ready && ibuffer_if.wb;
     wire release_reg = writeback_if.valid && writeback_if.ready && writeback_if.eop;
     
     always @(*) begin
         inuse_regs_n = inuse_regs;
         if (reserve_reg) begin
-            inuse_regs_n[scoreboard_if.wid][scoreboard_if.rd] = 1; 
+            inuse_regs_n[ibuffer_if.wid][ibuffer_if.rd] = 1; 
         end       
         if (release_reg) begin
             inuse_regs_n[writeback_if.wid][writeback_if.rd] = 0;
@@ -31,32 +35,30 @@ module VX_scoreboard  #(
             inuse_regs <= inuse_regs_n;
         end
     end
-    
-    reg deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3;
 
-    always @(posedge clk) begin
-        deq_inuse_rd  <= inuse_regs_n[scoreboard_if.wid_n][scoreboard_if.rd_n];
-        deq_inuse_rs1 <= inuse_regs_n[scoreboard_if.wid_n][scoreboard_if.rs1_n];
-        deq_inuse_rs2 <= inuse_regs_n[scoreboard_if.wid_n][scoreboard_if.rs2_n];
-        deq_inuse_rs3 <= inuse_regs_n[scoreboard_if.wid_n][scoreboard_if.rs3_n];
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
+        assign scoreboard_if.ready[i] = ~(inuse_regs_n[i][scoreboard_if.rd[i]]
+                                        | inuse_regs_n[i][scoreboard_if.rs1[i]]
+                                        | inuse_regs_n[i][scoreboard_if.rs2[i]]
+                                        | inuse_regs_n[i][scoreboard_if.rs3[i]]);
     end
 
-    assign writeback_if.ready = 1'b1;
+    wire [NW_WIDTH-1:0] wid_sel;
+    VX_lzc #(
+        .N       (`NUM_WARPS),
+        .REVERSE (1)
+    ) wid_select (
+        .data_in  (scoreboard_if.valid),
+        .data_out (wid_sel),
+        `UNUSED_PIN (valid_out)
+    );
 
-    assign scoreboard_if.ready = ~(deq_inuse_rd 
-                                 | deq_inuse_rs1 
-                                 | deq_inuse_rs2 
-                                 | deq_inuse_rs3);
-
-    assign scoreboard_if.used_regs[0] = deq_inuse_rd;
-    assign scoreboard_if.used_regs[1] = deq_inuse_rs1;
-    assign scoreboard_if.used_regs[2] = deq_inuse_rs2;
-    assign scoreboard_if.used_regs[3] = deq_inuse_rs3;
+    assign used_regs[0] = inuse_regs_n[wid_sel][scoreboard_if.rd[wid_sel]];
+    assign used_regs[1] = inuse_regs_n[wid_sel][scoreboard_if.rs1[wid_sel]];
+    assign used_regs[2] = inuse_regs_n[wid_sel][scoreboard_if.rs2[wid_sel]];
+    assign used_regs[3] = inuse_regs_n[wid_sel][scoreboard_if.rs3[wid_sel]];
 
     `UNUSED_VAR (writeback_if.PC)
-    `UNUSED_VAR (scoreboard_if.PC)
-    `UNUSED_VAR (scoreboard_if.tmask)    
-    `UNUSED_VAR (scoreboard_if.uuid)
 
     always @(posedge clk) begin  
         if (release_reg) begin

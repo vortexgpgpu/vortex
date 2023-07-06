@@ -7,6 +7,7 @@ module VX_gpr_stage #(
     input wire              reset,
 
     VX_writeback_if.slave   writeback_if,  
+    VX_ibuffer_if.gpr       ibuffer_if,
     VX_gpr_stage_if.slave   gpr_stage_if
 );
 
@@ -27,14 +28,14 @@ module VX_gpr_stage #(
     wire [RAM_ADDRW-1:0] waddr, raddr1, raddr2;
     if (`NUM_WARPS > 1) begin
         assign waddr  = {writeback_if.wid, writeback_if.rd};
-        assign raddr1 = {gpr_stage_if.wid, gpr_stage_if.rs1};
-        assign raddr2 = {gpr_stage_if.wid, gpr_stage_if.rs2};
+        assign raddr1 = {ibuffer_if.wid, ibuffer_if.rs1};
+        assign raddr2 = {ibuffer_if.wid, ibuffer_if.rs2};
     end else begin
         `UNUSED_VAR (writeback_if.wid)
-        `UNUSED_VAR (gpr_stage_if.wid)
+        `UNUSED_VAR (ibuffer_if.wid)
         assign waddr  = writeback_if.rd;
-        assign raddr1 = gpr_stage_if.rs1;
-        assign raddr2 = gpr_stage_if.rs2;
+        assign raddr1 = ibuffer_if.rs1;
+        assign raddr2 = ibuffer_if.rs2;
     end
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
@@ -72,9 +73,9 @@ module VX_gpr_stage #(
 `ifdef EXT_F_ENABLE
     wire [RAM_ADDRW-1:0] raddr3;
     if (`NUM_WARPS > 1) begin
-        assign raddr3 = {gpr_stage_if.wid, gpr_stage_if.rs3};
+        assign raddr3 = {ibuffer_if.wid, ibuffer_if.rs3};
     end else begin
-        assign raddr3 = gpr_stage_if.rs3;
+        assign raddr3 = ibuffer_if.rs3;
     end
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
@@ -94,7 +95,7 @@ module VX_gpr_stage #(
         );
     end
 `else    
-    `UNUSED_VAR (gpr_stage_if.rs3)    
+    `UNUSED_VAR (ibuffer_if.rs3)    
     assign gpr_stage_if.rs3_data = '0;
 `endif
     

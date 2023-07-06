@@ -5,7 +5,8 @@ module VX_dispatch (
     input wire              reset,
 
     // inputs
-    VX_dispatch_if.slave    dispatch_if,
+    VX_ibuffer_if.slave     ibuffer_if,
+    VX_gpr_stage_if.slave   gpr_stage_if,
 
     // outputs
     VX_alu_exe_if.master    alu_exe_if,
@@ -32,17 +33,17 @@ module VX_dispatch (
         .N       (`NUM_THREADS),
         .REVERSE (1)
     ) tid_select (
-        .data_in  (dispatch_if.tmask),
+        .data_in  (ibuffer_if.tmask),
         .data_out (tid),
         `UNUSED_PIN (valid_out)
     );
 
-    wire [`XLEN-1:0] next_PC = dispatch_if.PC + 4;
+    wire [`XLEN-1:0] next_PC = ibuffer_if.PC + 4;
 
     // ALU unit
 
-    wire alu_req_valid = dispatch_if.valid && (dispatch_if.ex_type == `EX_ALU);
-    wire [`INST_ALU_BITS-1:0] alu_op_type = `INST_ALU_BITS'(dispatch_if.op_type);
+    wire alu_req_valid = ibuffer_if.valid && (ibuffer_if.ex_type == `EX_ALU);
+    wire [`INST_ALU_BITS-1:0] alu_op_type = `INST_ALU_BITS'(ibuffer_if.op_type);
     
     VX_skid_buffer #(
         .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `XLEN + `INST_ALU_BITS + `INST_MOD_BITS + `XLEN + 1 + 1 + `NR_BITS + 1 + `UP(`NT_BITS) + (2 * `NUM_THREADS * `XLEN)),
@@ -52,16 +53,16 @@ module VX_dispatch (
         .reset     (reset),
         .valid_in  (alu_req_valid),
         .ready_in  (alu_req_ready),
-        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, next_PC,            alu_op_type,        dispatch_if.op_mod, dispatch_if.imm, dispatch_if.use_PC, dispatch_if.use_imm, dispatch_if.rd, dispatch_if.wb, tid,            dispatch_if.rs1_data, dispatch_if.rs2_data}),
-        .data_out  ({alu_exe_if.uuid,  alu_exe_if.wid,  alu_exe_if.tmask,  alu_exe_if.PC,  alu_exe_if.next_PC, alu_exe_if.op_type, alu_exe_if.op_mod,  alu_exe_if.imm,  alu_exe_if.use_PC,  alu_exe_if.use_imm,  alu_exe_if.rd,  alu_exe_if.wb,  alu_exe_if.tid, alu_exe_if.rs1_data, alu_exe_if.rs2_data}),
+        .data_in   ({ibuffer_if.uuid, ibuffer_if.wid, ibuffer_if.tmask, ibuffer_if.PC, next_PC,            alu_op_type,        ibuffer_if.op_mod, ibuffer_if.imm, ibuffer_if.use_PC, ibuffer_if.use_imm, ibuffer_if.rd, ibuffer_if.wb, tid,            gpr_stage_if.rs1_data, gpr_stage_if.rs2_data}),
+        .data_out  ({alu_exe_if.uuid, alu_exe_if.wid, alu_exe_if.tmask, alu_exe_if.PC, alu_exe_if.next_PC, alu_exe_if.op_type, alu_exe_if.op_mod, alu_exe_if.imm, alu_exe_if.use_PC, alu_exe_if.use_imm, alu_exe_if.rd, alu_exe_if.wb, alu_exe_if.tid, alu_exe_if.rs1_data,   alu_exe_if.rs2_data}),
         .valid_out (alu_exe_if.valid),
         .ready_out (alu_exe_if.ready)
     );
 
     // lsu unit
 
-    wire lsu_req_valid = dispatch_if.valid && (dispatch_if.ex_type == `EX_LSU);
-    wire [`INST_LSU_BITS-1:0] lsu_op_type = `INST_LSU_BITS'(dispatch_if.op_type);
+    wire lsu_req_valid = ibuffer_if.valid && (ibuffer_if.ex_type == `EX_LSU);
+    wire [`INST_LSU_BITS-1:0] lsu_op_type = `INST_LSU_BITS'(ibuffer_if.op_type);
 
     VX_skid_buffer #(
         .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `INST_LSU_BITS + `XLEN + `NR_BITS + 1 + `NUM_THREADS*`XLEN + `NUM_THREADS*`XLEN),
@@ -71,22 +72,22 @@ module VX_dispatch (
         .reset     (reset),
         .valid_in  (lsu_req_valid),
         .ready_in  (lsu_req_ready),
-        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, lsu_op_type,        dispatch_if.imm,    dispatch_if.rd, dispatch_if.wb, dispatch_if.rs1_data,  dispatch_if.rs2_data}),
-        .data_out  ({lsu_exe_if.uuid,  lsu_exe_if.wid,  lsu_exe_if.tmask,  lsu_exe_if.PC,  lsu_exe_if.op_type, lsu_exe_if.offset,  lsu_exe_if.rd,  lsu_exe_if.wb,  lsu_exe_if.base_addr, lsu_exe_if.store_data}),
+        .data_in   ({ibuffer_if.uuid, ibuffer_if.wid, ibuffer_if.tmask, ibuffer_if.PC, lsu_op_type,        ibuffer_if.imm,    ibuffer_if.rd, ibuffer_if.wb, gpr_stage_if.rs1_data, gpr_stage_if.rs2_data}),
+        .data_out  ({lsu_exe_if.uuid, lsu_exe_if.wid, lsu_exe_if.tmask, lsu_exe_if.PC, lsu_exe_if.op_type, lsu_exe_if.offset, lsu_exe_if.rd, lsu_exe_if.wb, lsu_exe_if.base_addr,  lsu_exe_if.store_data}),
         .valid_out (lsu_exe_if.valid),
         .ready_out (lsu_exe_if.ready)
     );
 
     // csr unit
 
-    wire csr_req_valid = dispatch_if.valid && (dispatch_if.ex_type == `EX_CSR);
-    wire [`INST_CSR_BITS-1:0] csr_op_type = `INST_CSR_BITS'(dispatch_if.op_type);
-    wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = dispatch_if.imm[`VX_CSR_ADDR_BITS-1:0];
-    wire [`NRI_BITS-1:0] csr_imm = dispatch_if.imm[`VX_CSR_ADDR_BITS +: `NRI_BITS];
+    wire csr_req_valid = ibuffer_if.valid && (ibuffer_if.ex_type == `EX_CSR);
+    wire [`INST_CSR_BITS-1:0] csr_op_type = `INST_CSR_BITS'(ibuffer_if.op_type);
+    wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = ibuffer_if.imm[`VX_CSR_ADDR_BITS-1:0];
+    wire [`NRI_BITS-1:0] csr_imm = ibuffer_if.imm[`VX_CSR_ADDR_BITS +: `NRI_BITS];
     wire [`NUM_THREADS-1:0][31:0] csr_data;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign csr_data[i] = dispatch_if.rs1_data[i][31:0];
+        assign csr_data[i] = gpr_stage_if.rs1_data[i][31:0];
     end
 
     VX_skid_buffer #(
@@ -97,8 +98,8 @@ module VX_dispatch (
         .reset     (reset),
         .valid_in  (csr_req_valid),
         .ready_in  (csr_req_ready),
-        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, csr_op_type,        csr_addr,        dispatch_if.rd, dispatch_if.wb, dispatch_if.use_imm, csr_imm,        tid,            csr_data}),
-        .data_out  ({csr_exe_if.uuid,  csr_exe_if.wid,  csr_exe_if.tmask,  csr_exe_if.PC,  csr_exe_if.op_type, csr_exe_if.addr, csr_exe_if.rd,  csr_exe_if.wb,  csr_exe_if.use_imm,  csr_exe_if.imm, csr_exe_if.tid, csr_exe_if.rs1_data}),
+        .data_in   ({ibuffer_if.uuid, ibuffer_if.wid, ibuffer_if.tmask, ibuffer_if.PC, csr_op_type,        csr_addr,        ibuffer_if.rd, ibuffer_if.wb, ibuffer_if.use_imm, csr_imm,        tid,            csr_data}),
+        .data_out  ({csr_exe_if.uuid, csr_exe_if.wid, csr_exe_if.tmask, csr_exe_if.PC, csr_exe_if.op_type, csr_exe_if.addr, csr_exe_if.rd, csr_exe_if.wb, csr_exe_if.use_imm, csr_exe_if.imm, csr_exe_if.tid, csr_exe_if.rs1_data}),
         .valid_out (csr_exe_if.valid),
         .ready_out (csr_exe_if.ready)
     );
@@ -106,10 +107,10 @@ module VX_dispatch (
     // fpu unit
 
 `ifdef EXT_F_ENABLE
-    wire fpu_req_valid = dispatch_if.valid && (dispatch_if.ex_type == `EX_FPU);
-    wire [`INST_FPU_BITS-1:0] fpu_op_type = `INST_FPU_BITS'(dispatch_if.op_type);
-    wire [`INST_FMT_BITS-1:0] fpu_fmt = dispatch_if.imm[`INST_FMT_BITS-1:0];
-    wire [`INST_FRM_BITS-1:0] fpu_frm = dispatch_if.op_mod[`INST_FRM_BITS-1:0];
+    wire fpu_req_valid = ibuffer_if.valid && (ibuffer_if.ex_type == `EX_FPU);
+    wire [`INST_FPU_BITS-1:0] fpu_op_type = `INST_FPU_BITS'(ibuffer_if.op_type);
+    wire [`INST_FMT_BITS-1:0] fpu_fmt = ibuffer_if.imm[`INST_FMT_BITS-1:0];
+    wire [`INST_FRM_BITS-1:0] fpu_frm = ibuffer_if.op_mod[`INST_FRM_BITS-1:0];
         
     VX_skid_buffer #(
         .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `INST_FPU_BITS + `INST_FMT_BITS + `INST_FRM_BITS + `NR_BITS + (3 * `NUM_THREADS * `XLEN)),
@@ -119,19 +120,19 @@ module VX_dispatch (
         .reset     (reset),
         .valid_in  (fpu_req_valid),
         .ready_in  (fpu_req_ready),
-        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, fpu_op_type,        fpu_fmt,        fpu_frm,        dispatch_if.rd, dispatch_if.rs1_data, dispatch_if.rs2_data, dispatch_if.rs3_data}),
-        .data_out  ({fpu_exe_if.uuid,  fpu_exe_if.wid,  fpu_exe_if.tmask,  fpu_exe_if.PC,  fpu_exe_if.op_type, fpu_exe_if.fmt, fpu_exe_if.frm, fpu_exe_if.rd,  fpu_exe_if.rs1_data,  fpu_exe_if.rs2_data,  fpu_exe_if.rs3_data}),
+        .data_in   ({ibuffer_if.uuid, ibuffer_if.wid, ibuffer_if.tmask, ibuffer_if.PC, fpu_op_type,        fpu_fmt,        fpu_frm,        ibuffer_if.rd, gpr_stage_if.rs1_data, gpr_stage_if.rs2_data, gpr_stage_if.rs3_data}),
+        .data_out  ({fpu_exe_if.uuid, fpu_exe_if.wid, fpu_exe_if.tmask, fpu_exe_if.PC, fpu_exe_if.op_type, fpu_exe_if.fmt, fpu_exe_if.frm, fpu_exe_if.rd,  fpu_exe_if.rs1_data,  fpu_exe_if.rs2_data,   fpu_exe_if.rs3_data}),
         .valid_out (fpu_exe_if.valid),
         .ready_out (fpu_exe_if.ready)
     );
 `else
-    `UNUSED_VAR (dispatch_if.rs3_data)
+    `UNUSED_VAR (gpr_stage_if.rs3_data)
 `endif
 
     // gpu unit
 
-    wire gpu_req_valid = dispatch_if.valid && (dispatch_if.ex_type == `EX_GPU);
-    wire [`INST_GPU_BITS-1:0] gpu_op_type = `INST_GPU_BITS'(dispatch_if.op_type);
+    wire gpu_req_valid = ibuffer_if.valid && (ibuffer_if.ex_type == `EX_GPU);
+    wire [`INST_GPU_BITS-1:0] gpu_op_type = `INST_GPU_BITS'(ibuffer_if.op_type);
 
     VX_skid_buffer #(
         .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `XLEN + `INST_GPU_BITS + `INST_MOD_BITS + `NR_BITS + 1 + `UP(`NT_BITS)  + (3 * `NUM_THREADS * `XLEN)),
@@ -141,8 +142,8 @@ module VX_dispatch (
         .reset     (reset),
         .valid_in  (gpu_req_valid),
         .ready_in  (gpu_req_ready),
-        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, next_PC,            gpu_op_type,        dispatch_if.op_mod, dispatch_if.rd, dispatch_if.wb, tid,            dispatch_if.rs1_data, dispatch_if.rs2_data, dispatch_if.rs3_data}),
-        .data_out  ({gpu_exe_if.uuid,  gpu_exe_if.wid,  gpu_exe_if.tmask,  gpu_exe_if.PC,  gpu_exe_if.next_PC, gpu_exe_if.op_type, gpu_exe_if.op_mod,  gpu_exe_if.rd,  gpu_exe_if.wb,  gpu_exe_if.tid, gpu_exe_if.rs1_data,  gpu_exe_if.rs2_data,  gpu_exe_if.rs3_data}),
+        .data_in   ({ibuffer_if.uuid, ibuffer_if.wid, ibuffer_if.tmask, ibuffer_if.PC, next_PC,            gpu_op_type,        ibuffer_if.op_mod, ibuffer_if.rd, ibuffer_if.wb, tid,            gpr_stage_if.rs1_data, gpr_stage_if.rs2_data, gpr_stage_if.rs3_data}),
+        .data_out  ({gpu_exe_if.uuid, gpu_exe_if.wid, gpu_exe_if.tmask, gpu_exe_if.PC, gpu_exe_if.next_PC, gpu_exe_if.op_type, gpu_exe_if.op_mod, gpu_exe_if.rd, gpu_exe_if.wb, gpu_exe_if.tid, gpu_exe_if.rs1_data,   gpu_exe_if.rs2_data,   gpu_exe_if.rs3_data}),
         .valid_out (gpu_exe_if.valid),
         .ready_out (gpu_exe_if.ready)
     ); 
@@ -150,7 +151,7 @@ module VX_dispatch (
     // can take next request?
     reg ready_r;
     always @(*) begin
-        case (dispatch_if.ex_type)
+        case (ibuffer_if.ex_type)
         `EX_LSU: ready_r = lsu_req_ready;
         `EX_CSR: ready_r = csr_req_ready;
     `ifdef EXT_F_ENABLE
@@ -161,6 +162,6 @@ module VX_dispatch (
         default: ready_r = alu_req_ready;
         endcase
     end
-    assign dispatch_if.ready = ready_r;
+    assign ibuffer_if.ready = ready_r;
     
 endmodule

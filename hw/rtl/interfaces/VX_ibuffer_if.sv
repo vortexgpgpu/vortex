@@ -18,12 +18,6 @@ interface VX_ibuffer_if ();
     wire [`NR_BITS-1:0]         rs1;
     wire [`NR_BITS-1:0]         rs2;
     wire [`NR_BITS-1:0]         rs3;
-    
-    wire [`NR_BITS-1:0]         rd_n;
-    wire [`NR_BITS-1:0]         rs1_n;
-    wire [`NR_BITS-1:0]         rs2_n;
-    wire [`NR_BITS-1:0]         rs3_n;
-    wire [`UP(`NW_BITS)-1:0]    wid_n;
 
     wire                        ready;
 
@@ -44,12 +38,7 @@ interface VX_ibuffer_if ();
         output rs1,
         output rs2,
         output rs3,
-        output rd_n,
-        output rs1_n,
-        output rs2_n,
-        output rs3_n,
-        output wid_n,        
-        input  ready
+        input  ready              
     );
 
     modport slave (
@@ -68,13 +57,23 @@ interface VX_ibuffer_if ();
         input  rd,
         input  rs1,
         input  rs2,
-        input  rs3,
-        input  rd_n,
-        input  rs1_n,
-        input  rs2_n,
-        input  rs3_n,
-        input  wid_n,        
+        input  rs3,   
         output ready
+    );    
+
+    modport scoreboard (
+        input  valid,
+        input  wid,
+        input  wb,
+        input  rd, 
+        output ready
+    );
+    
+    modport gpr (
+        input wid,    
+        input rs1,
+        input rs2,
+        input rs3
     );
     
 endinterface
