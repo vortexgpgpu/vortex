@@ -29,7 +29,6 @@ module VX_issue #(
     VX_ibuffer_if       ibuffer_if();
     VX_scoreboard_if    scoreboard_if();
     VX_gpr_stage_if     gpr_stage_if();
-    wire [3:0]          used_regs;
 
     `RESET_RELAY (ibuf_reset, reset);
     `RESET_RELAY (scoreboard_reset, reset);
@@ -53,8 +52,7 @@ module VX_issue #(
         .reset      (scoreboard_reset),         
         .writeback_if (writeback_if),
         .scoreboard_if (scoreboard_if),
-        .ibuffer_if (ibuffer_if),
-        .used_regs  (used_regs)
+        .ibuffer_if (ibuffer_if)
     );
 
     VX_gpr_stage #(
@@ -79,42 +77,18 @@ module VX_issue #(
         .fpu_exe_if (fpu_exe_if),
     `endif
         .gpu_exe_if (gpu_exe_if)
-    );
-
-    wire ibuffer_if_fire = ibuffer_if.valid && ibuffer_if.ready;
-    
-    reg [31:0] timeout_ctr;
-    always @(posedge clk) begin
-        if (reset) begin
-            timeout_ctr <= '0;
-        end else begin        
-            if (ibuffer_if.valid && ~ibuffer_if.ready) begin
-            `ifdef DBG_TRACE_CORE_PIPELINE
-                `TRACE(3, ("%d: *** core%0d-stall: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, cycles=%0d, inuse=%b%b%b%b, dispatch=%b (#%0d)\n",
-                    $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.rd, ibuffer_if.wb, timeout_ctr,
-                    used_regs[0], used_regs[1], used_regs[2], used_regs[3], ~ibuffer_if.ready, ibuffer_if.uuid));
-            `endif
-                timeout_ctr <= timeout_ctr + 1;
-            end else if (ibuffer_if_fire) begin
-                timeout_ctr <= '0;
-            end
-        end
-    end
-    `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT,
-                    ("%t: *** core%0d-issue-timeout: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, inuse=%b%b%b%b, dispatch=%b (#%0d)",
-                        $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.rd, ibuffer_if.wb, 
-                        used_regs[0], used_regs[1], used_regs[2], used_regs[3], ~ibuffer_if.ready, ibuffer_if.uuid));    
+    ); 
 
 `ifdef DBG_SCOPE_ISSUE
     if (CORE_ID == 0) begin
     `ifdef SCOPE
         localparam UUID_WIDTH = `UP(`UUID_BITS);
-        wire scoreboard_if_not_ready = ~scoreboard_if.ready; 
+        wire ibuffer_if_fire = ibuffer_if.valid && ibuffer_if.ready;
         wire ibuffer_if_not_ready = ~ibuffer_if.ready;
         wire writeback_if_valid = writeback_if.valid;
         VX_scope_tap #(
             .SCOPE_ID (2),
-            .TRIGGERW (5),
+            .TRIGGERW (4),
             .PROBEW   (UUID_WIDTH + `NUM_THREADS + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS +
                 1 + (`NR_BITS * 4) + `XLEN + 1 + 1 + (`NUM_THREADS * 3 * `XLEN) +
                 UUID_WIDTH + `NUM_THREADS + `NR_BITS + (`NUM_THREADS*`XLEN) + 1)
@@ -125,8 +99,7 @@ module VX_issue #(
             .stop(1'b0),
             .triggers({
                 reset, 
-                ibuffer_if_fire, 
-                scoreboard_if_not_ready, 
+                ibuffer_if_fire,
                 ibuffer_if_not_ready, 
                 writeback_if_valid
             }),
@@ -144,9 +117,9 @@ module VX_issue #(
                 ibuffer_if.imm,
                 ibuffer_if.use_PC,
                 ibuffer_if.use_imm,
-                ibuffer_if.rs1_data,
-                ibuffer_if.rs2_data,
-                ibuffer_if.rs3_data,
+                gpr_stage_if.rs1_data,
+                gpr_stage_if.rs2_data,
+                gpr_stage_if.rs3_data,
                 writeback_if.uuid,
                 writeback_if.tmask,
                 writeback_if.rd,
@@ -160,7 +133,7 @@ module VX_issue #(
     `ifdef CHIPSCOPE
         ila_issue ila_issue_inst (
             .clk    (clk),
-            .probe0 ({ibuffer_if.uuid, ibuffer.rs3, ibuffer.rs2, ibuffer.rs1, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.wid, ibuffer_if.ex_type, ibuffer_if.op_type, ibuffer_if.ready, ibuffer_if.valid, used_regs, scoreboard_if.ready, ibuffer_if.ready, ibuffer_if.ready, ibuffer_if.valid}),
+            .probe0 ({ibuffer_if.uuid, ibuffer.rs3, ibuffer.rs2, ibuffer.rs1, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.wid, ibuffer_if.ex_type, ibuffer_if.op_type, ibuffer_if.ready, ibuffer_if.valid}),
             .probe1 ({writeback_if.uuid, writeback_if.data[0], writeback_if.PC, writeback_if.tmask, writeback_if.wid, writeback_if.eop, writeback_if.valid})
         );
     `endif
