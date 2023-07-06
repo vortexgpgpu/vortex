@@ -8,7 +8,7 @@ module VX_gpr_stage #(
 
     VX_writeback_if.slave   writeback_if,  
     VX_ibuffer_if.gpr       ibuffer_if,
-    VX_gpr_stage_if.slave   gpr_stage_if
+    VX_gpr_stage_if.master  gpr_stage_if
 );
 
     `UNUSED_PARAM (CORE_ID)
@@ -98,7 +98,5 @@ module VX_gpr_stage #(
     `UNUSED_VAR (ibuffer_if.rs3)    
     assign gpr_stage_if.rs3_data = '0;
 `endif
-    
-    assign writeback_if.ready = 1'b1;
 
 endmodule

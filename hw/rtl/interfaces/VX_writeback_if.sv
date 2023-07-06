@@ -9,8 +9,7 @@ interface VX_writeback_if ();
     wire [`XLEN-1:0]                PC;
     wire [`NR_BITS-1:0]             rd;
     wire [`NUM_THREADS-1:0][`XLEN-1:0]   data;
-    wire                            eop;    
-    wire                            ready;
+    wire                            eop;
 
     modport master (
         output valid,
@@ -20,8 +19,7 @@ interface VX_writeback_if ();
         output PC,
         output rd,
         output data,
-        output eop,    
-        input  ready
+        output eop
     );
 
     modport slave (
@@ -32,8 +30,7 @@ interface VX_writeback_if ();
         input  PC,
         input  rd,
         input  data,
-        input  eop,
-        output ready
+        input  eop
     );
 
 endinterface

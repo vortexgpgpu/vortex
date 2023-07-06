@@ -73,7 +73,7 @@ module VX_writeback #(
         }),
         .data_out  ({writeback_if.uuid, writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.data, writeback_if.eop}),
         .valid_out (writeback_if.valid),        
-        .ready_out (writeback_if.ready)
+        .ready_out (1'b1)
     );
 
 `ifdef EXT_F_ENABLE
@@ -84,7 +84,7 @@ module VX_writeback #(
     assign alu_commit_if.ready = wb_alu_ready_in || ~alu_commit_if.wb;
     assign ld_commit_if.ready  = wb_ld_ready_in  || ~ld_commit_if.wb;
 
-    wire writeback_fire = writeback_if.valid && writeback_if.ready;
+    wire writeback_fire = writeback_if.valid;
     
     // simulation helper signal to get RISC-V tests Pass/Fail status
     reg [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value_r;

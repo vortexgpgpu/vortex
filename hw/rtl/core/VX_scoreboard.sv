@@ -16,7 +16,7 @@ module VX_scoreboard  #(
     reg [`NUM_WARPS-1:0][`NUM_REGS-1:0] inuse_regs, inuse_regs_n;
 
     wire reserve_reg = ibuffer_if.valid && ibuffer_if.ready && ibuffer_if.wb;
-    wire release_reg = writeback_if.valid && writeback_if.ready && writeback_if.eop;
+    wire release_reg = writeback_if.valid && writeback_if.eop;
     
     always @(*) begin
         inuse_regs_n = inuse_regs;
@@ -57,8 +57,6 @@ module VX_scoreboard  #(
     assign used_regs[1] = inuse_regs_n[wid_sel][scoreboard_if.rs1[wid_sel]];
     assign used_regs[2] = inuse_regs_n[wid_sel][scoreboard_if.rs2[wid_sel]];
     assign used_regs[3] = inuse_regs_n[wid_sel][scoreboard_if.rs3[wid_sel]];
-
-    `UNUSED_VAR (writeback_if.PC)
 
     always @(posedge clk) begin  
         if (release_reg) begin

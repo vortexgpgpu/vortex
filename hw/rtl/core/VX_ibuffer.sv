@@ -89,8 +89,8 @@ module VX_ibuffer #(
         .NUM_INPUTS  (`NUM_WARPS),
         .DATAW       (NW_WIDTH+DATAW),
         .ARBITER     ("R"),
-        .LOCK_ENABLE (1),
-        .BUFFERED    (3)        
+        .LOCK_ENABLE (0),
+        .BUFFERED    (2)        
     ) req_arb (
         .clk       (clk),
         .reset     (reset),

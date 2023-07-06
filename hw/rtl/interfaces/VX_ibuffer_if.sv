@@ -62,11 +62,11 @@ interface VX_ibuffer_if ();
     );    
 
     modport scoreboard (
-        input  valid,
-        input  wid,
-        input  wb,
-        input  rd, 
-        output ready
+        input valid,
+        input wid,
+        input wb,
+        input rd, 
+        input ready
     );
     
     modport gpr (
