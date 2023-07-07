@@ -394,7 +394,7 @@
 
 // Number of FPU units
 `ifndef NUM_FPU_UNITS
-`define NUM_FPU_UNITS `UP(`NUM_CORES / 8)
+`define NUM_FPU_UNITS `UP(`NUM_CORES / 4)
 `endif
 
 // Size of FPU Request Queue
@@ -460,7 +460,7 @@
 
 // Number of rop units
 `ifndef NUM_ROP_UNITS
-`define NUM_ROP_UNITS `UP(`NUM_CORES / 16)
+`define NUM_ROP_UNITS `UP(`NUM_CORES / 8)
 `endif
 
 // ROP memory pending size
