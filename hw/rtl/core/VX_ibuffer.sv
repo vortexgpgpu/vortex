@@ -15,7 +15,7 @@ module VX_ibuffer #(
 );
     `UNUSED_PARAM (CORE_ID)
 
-    localparam SIZE      = (`IBUF_SIZE + 1);
+    localparam SIZE      = `IBUF_SIZE + 1;
     localparam ALM_FULL  = SIZE - 1;
     localparam ALM_EMPTY = 1;
 
@@ -26,9 +26,9 @@ module VX_ibuffer #(
     localparam DATAW = UUID_WIDTH + `NUM_THREADS + `XLEN + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + (`NR_BITS * 4) + `XLEN + 1 + 1;
     
     wire [`NUM_WARPS-1:0] q_full, q_empty, q_alm_full, q_alm_empty;
-    wire [DATAW-1:0] q_data_in;
     wire [`NUM_WARPS-1:0][DATAW-1:0] q_data_prev;
     reg [`NUM_WARPS-1:0][DATAW-1:0] q_data_out;
+    wire [DATAW-1:0] q_data_in;
 
     wire enq_fire = decode_if.valid && decode_if.ready;
     wire deq_fire = ibuffer_if.valid && ibuffer_if.ready;
@@ -65,7 +65,7 @@ module VX_ibuffer #(
         ) queue (
             .clk      (clk),
             .reset    (reset),
-            .valid_in (push && !going_empty),
+            .valid_in (push && ~going_empty),
             .data_in  (q_data_in),
             .ready_out(pop),
             .data_out (q_data_prev[i]),           
@@ -138,7 +138,8 @@ module VX_ibuffer #(
 
     reg [`NUM_WARPS-1:0] valid_table, valid_table_n;
     reg [NW_WIDTH-1:0] deq_wid, deq_wid_n;
-    reg [NW_WIDTH-1:0] deq_wid_rr, deq_wid_rr_n;
+    reg [NW_WIDTH-1:0] deq_wid_rr;
+    wire [NW_WIDTH-1:0] deq_wid_rr_n;
     reg deq_valid, deq_valid_n;
     reg [DATAW-1:0] deq_instr, deq_instr_n;
     reg [NWARPSW-1:0] num_warps;
@@ -150,7 +151,7 @@ module VX_ibuffer #(
     always @(*) begin
         valid_table_n = valid_table;        
         if (deq_fire) begin
-            valid_table_n[deq_wid] = !q_alm_empty[deq_wid];
+            valid_table_n[deq_wid] = ~q_alm_empty[deq_wid];
         end
         if (enq_fire) begin
             valid_table_n[decode_if.wid] = 1;
@@ -171,24 +172,21 @@ module VX_ibuffer #(
     );
 
     // schedule the next instruction to issue
+    wire is_single_warp = (1 == num_warps) && !(deq_fire && q_alm_empty[deq_wid]);
     always @(*) begin
         if (num_warps > 1) begin
             deq_valid_n = 1;
             deq_wid_n   = deq_wid_rr;          
             deq_instr_n = q_data_out[deq_wid_rr];
-        end else if (1 == num_warps && !(deq_fire && q_alm_empty[deq_wid])) begin
-            deq_valid_n = 1;
-            deq_wid_n   = deq_wid;
-            deq_instr_n = deq_fire ? q_data_prev[deq_wid] : q_data_out[deq_wid];
         end else begin
-            deq_valid_n = enq_fire;
-            deq_wid_n   = decode_if.wid;
-            deq_instr_n = q_data_in;
+            deq_valid_n = is_single_warp;
+            deq_wid_n   = is_single_warp ? deq_wid : decode_if.wid;
+            deq_instr_n = deq_fire ? q_data_prev[deq_wid] : q_data_out[deq_wid];
         end
     end
 
-    wire warp_added   = enq_fire && q_empty[decode_if.wid];
-    wire warp_removed = deq_fire && ~(enq_fire && decode_if.wid == deq_wid) && q_alm_empty[deq_wid];
+    wire warp_inc = enq_fire && q_empty[decode_if.wid];
+    wire warp_dec = deq_fire && q_alm_empty[deq_wid] && ~(enq_fire && decode_if.wid == deq_wid);
     
     always @(posedge clk) begin
         if (reset)  begin
@@ -198,12 +196,8 @@ module VX_ibuffer #(
         end else begin
             valid_table <= valid_table_n;
             deq_valid   <= deq_valid_n;
-            if (warp_added && !warp_removed) begin
-                num_warps <= num_warps + NWARPSW'(1);
-            end else if (warp_removed && !warp_added) begin
-                num_warps <= num_warps - NWARPSW'(1);
-            end
-        end            
+            num_warps   <= num_warps + NWARPSW'($signed(2'(warp_inc) - 2'(warp_dec)));
+        end        
         deq_wid    <= deq_wid_n;
         deq_wid_rr <= deq_wid_rr_n;
         deq_instr  <= deq_instr_n;

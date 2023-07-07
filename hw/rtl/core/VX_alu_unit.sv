@@ -108,8 +108,8 @@ module VX_alu_unit #(
 
     // branch
 
-    wire [`XLEN-1:0] br_dest  = add_result[alu_exe_if.tid][`XLEN-1:0];
-    wire [`XLEN:0] cmp_result = sub_result[alu_exe_if.tid][`XLEN:0];
+    wire [`XLEN-1:0] br_dest  = add_result[alu_exe_if.tid];
+    wire [`XLEN:0] cmp_result = sub_result[alu_exe_if.tid];
     
     wire is_less  = cmp_result[`XLEN];
     wire is_equal = ~(| cmp_result[`XLEN-1:0]);

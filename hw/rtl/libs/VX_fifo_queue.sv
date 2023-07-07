@@ -202,6 +202,13 @@ module VX_fifo_queue #(
                     end
                 end
 
+                wire going_empty;
+                if (ALM_EMPTY == 1) begin
+                    assign going_empty = alm_empty_r;
+                end else begin
+                    assign going_empty = (used_r == ADDRW'(1));
+                end
+
                 VX_dp_ram #(
                     .DATAW   (DATAW),
                     .SIZE    (DEPTH),
@@ -218,7 +225,7 @@ module VX_fifo_queue #(
                 ); 
 
                 always @(posedge clk) begin
-                    if (push && (empty_r || ((used_r == ADDRW'(1)) && pop))) begin
+                    if (push && (empty_r || (going_empty && pop))) begin
                         dout_r <= data_in;
                     end else if (pop) begin
                         dout_r <= dout;
