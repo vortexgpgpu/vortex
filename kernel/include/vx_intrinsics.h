@@ -118,8 +118,8 @@ inline void vx_tmc(unsigned thread_mask) {
 }
 
 // Set thread predicate
-inline void vx_pred(unsigned condition) {
-    asm volatile (".insn r %0, 0, 0, x0, %1, x1" :: "i"(RISCV_CUSTOM0), "r"(condition));
+inline void vx_pred(unsigned condition, unsigned thread_mask) {
+    asm volatile (".insn r %0, 5, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(condition), "r"(thread_mask));
 }
 
 typedef void (*vx_wspawn_pfn)();

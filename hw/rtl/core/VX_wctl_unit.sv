@@ -53,10 +53,10 @@ module VX_wctl_unit #(
     assign warp_ctl_if.sjoin   = sjoin;
     assign warp_ctl_if.barrier = barrier;
 
-    // tmc
+    // tmc / pred
 
-    wire [`NUM_THREADS-1:0] then_tmask = gpu_exe_if.tmask & taken;
-    wire [`NUM_THREADS-1:0] pred_mask = (then_tmask != 0) ? then_tmask : gpu_exe_if.tmask;
+    wire [`NUM_THREADS-1:0] pred_taken = taken & gpu_exe_if.tmask;
+    wire [`NUM_THREADS-1:0] pred_mask = (pred_taken != 0) ? pred_taken : rs2_data[`NUM_THREADS-1:0];
 
     assign tmc.valid = gpu_exe_fire && (is_tmc || is_pred);
     assign tmc.tmask = is_pred ? pred_mask : rs1_data[`NUM_THREADS-1:0];

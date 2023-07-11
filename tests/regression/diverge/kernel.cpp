@@ -1,4 +1,6 @@
 #include <stdint.h>
+#include <assert.h>
+#include <algorithm>
 #include <vx_intrinsics.h>
 #include <vx_spawn.h>
 #include "common.h"
@@ -43,7 +45,33 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	// loop
 	for (int i = 0, n = task_id; i < n; ++i) {
 		value += src_ptr[i];
-	}	
+	}
+
+	// switch
+	switch (task_id) {
+	case 0:
+		value += 1;
+		break;
+	case 1:
+		value -= 1;
+		break;
+	case 2:
+		value *= 3;
+		break;
+	case 3:
+		value *= 5;
+		break;
+	default:
+		assert(task_id < arg->num_points);
+		break;
+	}
+
+	// select
+	value += (task_id >= 0) ? ((task_id > 5) ? src_ptr[0] : task_id) : ((task_id < 5) ? src_ptr[1] : -task_id);
+
+	// min/max
+	value += std::min(src_ptr[task_id], value);
+	value += std::max(src_ptr[task_id], value);
 
 	dst_ptr[task_id] = value;
 }

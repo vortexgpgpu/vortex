@@ -1299,25 +1299,14 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     case 0: {
       switch (func3) {
       case 0: {
-        // TMC   
+        // TMC  
         trace->exe_type = ExeType::GPU;     
         trace->gpu_type = GpuType::TMC;
         trace->used_iregs.set(rsrc0);
         trace->fetch_stall = true;
-        if (rsrc1) {
-          // predicate mode
-          ThreadMask pred;
-          for (uint32_t t = 0; t < num_threads; ++t) {
-            pred[t] = tmask_.test(t) ? (ireg_file_.at(t).at(rsrc0) != 0) : 0;
-          }
-          if (pred.any()) {
-            next_tmask &= pred;
-          }
-        } else {
-          next_tmask.reset();
-          for (uint32_t t = 0; t < num_threads; ++t) {
-            next_tmask.set(t, rsdata.at(thread_start)[0].i & (1 << t));
-          }
+        next_tmask.reset();
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          next_tmask.set(t, rsdata.at(thread_start)[0].i & (1 << t));
         }
       } break;
       case 1: {
@@ -1348,7 +1337,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         if (then_tmask.count() != tmask_.count() 
          && else_tmask.count() != tmask_.count()) {             
           if (ipdom_stack_.size() == arch_.ipdom_size()) {
-            std::cout << "IPDOM stack is full! (size=" << std::dec << ipdom_stack_.size() << ")\n" << std::flush;
+            std::cout << "IPDOM stack is full! size=" << std::dec << ipdom_stack_.size() << ", PC=" << std::hex << PC_ << " (#" << std::dec << trace->uuid << ")\n" << std::dec << std::flush;
             std::abort();
           }
           if (then_tmask.count() >= else_tmask.count()) {
@@ -1400,6 +1389,23 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_iregs.set(rsrc1);
         trace->fetch_stall = true;
         trace->data = std::make_shared<GPUTraceData>(rsdata[thread_start][0].i, rsdata[thread_start][1].i);
+      } break;
+      case 5: {
+        // PRED  
+        trace->exe_type = ExeType::GPU;     
+        trace->gpu_type = GpuType::TMC;
+        trace->used_iregs.set(rsrc0);
+        trace->used_iregs.set(rsrc1);
+        trace->fetch_stall = true;
+        ThreadMask pred;
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          pred[t] = tmask_.test(t) && (ireg_file_.at(t).at(rsrc0) & 0x1);
+        }
+        if (pred.any()) {
+          next_tmask &= pred;
+        } else {
+          next_tmask = ireg_file_.at(thread_start).at(rsrc1);
+        }      
       } break;
       default:
         std::abort();

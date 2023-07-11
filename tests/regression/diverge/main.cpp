@@ -3,6 +3,7 @@
 #include <string.h>
 #include <vortex.h>
 #include <vector>
+#include <assert.h>
 #include "common.h"
 
 #define RT_CHECK(_expr)                                         \
@@ -114,9 +115,34 @@ void gen_ref_data(uint32_t num_points) {
     for (int j = 0, n = i; j < n; ++j) {
       value += src_data.at(j);
     }	
+    
+    // switch
+    switch (i) {
+    case 0:
+      value += 1;
+      break;
+    case 1:
+      value -= 1;
+      break;
+    case 2:
+      value *= 3;
+      break;
+    case 3:
+      value *= 5;
+      break;
+    default:
+      assert(i < (int)num_points);
+      break;
+    }
+
+    // select
+    value += (i >= 0) ? ((i > 5) ? src_data.at(0) : i) : ((i < 5) ? src_data.at(1) : -i);
+
+    // min/max
+	  value += std::min(src_data.at(i), value);
+	  value += std::max(src_data.at(i), value);
 
     ref_data[i] = value;
-    //std::cout << std::dec << i << ": result=0x" << std::hex << value << std::endl;
   }
 }
 

@@ -27,7 +27,7 @@ LLVM_VORTEX ?= /opt/llvm-vortex
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex
-#LLVM_CFLAGS += -mllvm -vortex-branch-divergence=2 
+#LLVM_CFLAGS += -mllvm -vortex-branch-divergence=2
 #LLVM_CFLAGS += -mllvm -print-after-all 
 #LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0/$(RISCV_PREFIX) 
 #LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0
@@ -47,7 +47,7 @@ VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 VX_CFLAGS += -v -O3 -std=c++17
 VX_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw
-VX_CFLAGS += -DLLVM_VORTEX
+VX_CFLAGS += -DNDEBUG -DLLVM_VORTEX
 
 VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortexrt.a
 
@@ -76,7 +76,7 @@ endif
 endif
 
 all: $(PROJECT) kernel.bin kernel.dump
- 
+
 kernel.dump: kernel.elf
 	$(VX_DP) -D kernel.elf > kernel.dump
 

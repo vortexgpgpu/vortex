@@ -385,11 +385,12 @@ static const char* op_string(const Instr &instr) {
     switch (func7) {
     case 0:
       switch (func3) {            
-      case 0: return rs2 ? "PRED" : "TMC";
+      case 0: return "PRED";
       case 1: return "WSPAWN";
       case 2: return "SPLIT";
       case 3: return "JOIN";
       case 4: return "BAR";
+      case 5: return "PRED";
       default:
         std::abort();
       }

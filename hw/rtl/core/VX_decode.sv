@@ -423,8 +423,8 @@ module VX_decode  #(
                     7'h00: begin
                         ex_type = `EX_GPU;
                         case (func3)
-                            3'h0: begin // TMC, PRED
-                                op_type = rs2[0] ? `INST_OP_BITS'(`INST_GPU_PRED) : `INST_OP_BITS'(`INST_GPU_TMC);
+                            3'h0: begin // TMC
+                                op_type = `INST_OP_BITS'(`INST_GPU_TMC);
                                 is_wstall = 1;
                                 `USED_IREG (rs1);
                             end
@@ -451,6 +451,12 @@ module VX_decode  #(
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                             end
+                            3'h5: begin // PRED
+                                op_type = `INST_OP_BITS'(`INST_GPU_PRED);
+                                is_wstall = 1;
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
                             default:;
                         endcase
                     end
@@ -458,9 +464,9 @@ module VX_decode  #(
                         case (func3)
                         `ifdef EXT_RASTER_ENABLE
                             3'h0: begin // RASTER
-                                ex_type   = `EX_GPU;
-                                op_type   = `INST_OP_BITS'(`INST_GPU_RASTER);
-                                use_rd    = 1;
+                                ex_type = `EX_GPU;
+                                op_type = `INST_OP_BITS'(`INST_GPU_RASTER);
+                                use_rd  = 1;
                                 `USED_IREG (rd);
                             end
                         `endif

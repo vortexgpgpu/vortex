@@ -431,7 +431,7 @@ module VX_mem_unit # (
         .MEM_OUT_REG    (3),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L2_ENABLED)
-    ) l2cache_wrap (            
+    ) l2cache (            
         .clk            (clk),
         .reset          (l2_reset),
     `ifdef PERF_ENABLE

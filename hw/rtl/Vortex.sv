@@ -216,7 +216,7 @@ module Vortex (
         .MEM_OUT_REG    (3),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L3_ENABLED)
-    ) l3cache_wrap (
+    ) l3cache (
         .clk            (clk),
         .reset          (l3_reset),
 

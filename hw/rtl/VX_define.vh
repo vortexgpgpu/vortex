@@ -27,7 +27,7 @@
 
 `define NR_BITS         `CLOG2(`NUM_REGS)
 
-`define PD_STACK_SIZE   `UP(`NT_BITS)
+`define PD_STACK_SIZE   `UP(`NUM_THREADS-1)
 `define PD_STACK_SIZEW  `UP(`CLOG2(`PD_STACK_SIZE))
 
 `define PERF_CTR_BITS   44
