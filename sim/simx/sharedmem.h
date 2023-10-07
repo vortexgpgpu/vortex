@@ -62,10 +62,18 @@ public:
                 core_req.addr, bank_sel_addr_start_, bank_sel_addr_end_);
 
             // bank conflict check
-            if (in_used_banks.at(bank_id))
+	    // with 1 bank, set bank_id = 0 if used
+	    if ((config_.num_banks == 1) && (in_used_banks.at(bank_id-1)))
+			continue;
+
+	    if (config_.num_banks == 1)
+            	in_used_banks.at(bank_id-1) = true;
+
+            if ((config_.num_banks > 1) && (in_used_banks.at(bank_id)))
                 continue;
 
-            in_used_banks.at(bank_id) = true;
+	    if (config_.num_banks > 1)
+            	in_used_banks.at(bank_id) = true;
 
             if (!core_req.write || config_.write_reponse) {
                 // send response
