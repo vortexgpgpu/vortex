@@ -1,3 +1,16 @@
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "cachesim.h"
 #include <fstream>
 #include <iomanip>
@@ -235,7 +248,7 @@ void CacheSim::eval_mem_bus() {
     if (cache_->mem_req_valid) {
       if (cache_->mem_req_rw) { //write = 1
         uint64_t byteen = cache_->mem_req_byteen;
-        unsigned base_addr = (cache_->mem_req_addr * MEM_BLOCK_SIZE);
+        uint64_t base_addr = (cache_->mem_req_addr * MEM_BLOCK_SIZE);
         uint8_t* data = (uint8_t*)(cache_->mem_req_data);
         for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
           if ((byteen >> i) & 0x1) {            

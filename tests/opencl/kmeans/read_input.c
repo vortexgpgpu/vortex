@@ -331,7 +331,9 @@ int setup(int argc, char **argv) {
     }
   }
 
-  /* free up memory */
+  /* free up memory */  
+  free(cluster_centres[0]);
+  free(cluster_centres);
   free(features[0]);
   free(features);
   return (0);

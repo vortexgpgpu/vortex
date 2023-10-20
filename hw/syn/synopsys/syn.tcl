@@ -1,3 +1,16 @@
+# Copyright © 2019-2023
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 set search_path			[concat /nethome/dshim8/Desktop/GTCAD-3DPKG-v3/example/tech/cln28hpm/2d_db/ /nethome/dshim8/Desktop/GTCAD-3DPKG-v3/example/tech/cln28hpm/2d_hard_db/ ../../rtl/ ../../rtl/interfaces ../../rtl/pipe_regs ../../rtl/shared_memory ../../rtl/cache ../../models/memory/cln28hpm/2d_hardmacro_db]
 set link_library		[concat * sc12mc_cln28hpm_base_ulvt_c35_ssg_typical_max_0p81v_m40c.db rf2_32x128_wm1_ss_0p81v_0p81v_m40c.db rf2_256x128_wm1_ss_0p81v_0p81v_m40c.db rf2_256x19_wm0_ss_0p81v_0p81v_m40c.db rf2_128x128_wm1_ss_0p81v_0p81v_m40c.db dw_foundation.sldb]
 set symbol_library		{}

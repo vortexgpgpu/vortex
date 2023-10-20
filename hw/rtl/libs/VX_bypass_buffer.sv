@@ -1,5 +1,19 @@
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_bypass_buffer #(
     parameter DATAW    = 1,
     parameter PASSTHRU = 0
@@ -13,7 +27,7 @@ module VX_bypass_buffer #(
     input  wire             ready_out,
     output wire             valid_out
 ); 
-    if (PASSTHRU) begin
+    if (PASSTHRU != 0) begin
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
         assign ready_in  = ready_out;
@@ -47,3 +61,4 @@ module VX_bypass_buffer #(
     end
 
 endmodule
+`TRACING_ON

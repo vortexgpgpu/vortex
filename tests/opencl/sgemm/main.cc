@@ -6,6 +6,8 @@
 #include <time.h>
 #include <unistd.h> 
 #include <chrono>
+#include <vector>
+#include "common.h"
 
 #define KERNEL_NAME "sgemm"
 
@@ -52,25 +54,31 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   return 0;
 }
 
-static void matmul(float *C, const float* A, const float *B, int M, int N, int K) {
+/*static void matmul(TYPE *C, const TYPE* A, const TYPE *B, int M, int N, int K) {
   for (int m = 0; m < M; ++m) {
     for (int n = 0; n < N; ++n) {
-      float acc = 0.0f;
+      TYPE acc = 0;
       for (int k = 0; k < K; ++k) {
           acc += A[k * M + m] * B[n * K + k];
       }
       C[n * M + m] = acc;
     }
   }
-}
+}*/
 
-static bool almost_equal(float a, float b, int ulp = 21) {
+#ifdef USE_FLOAT
+static bool compare_equal(float a, float b, int ulp = 21) {
   union fi_t { int i; float f; };
   fi_t fa, fb;
   fa.f = a;
   fb.f = b;
   return std::abs(fa.i - fb.i) <= ulp;
 }
+#else
+static bool compare_equal(int a, int b, int ulp = 21) {
+  return (a == b);
+}
+#endif
 
 cl_device_id device_id = NULL;
 cl_context context = NULL;
@@ -80,9 +88,9 @@ cl_kernel kernel = NULL;
 cl_mem a_memobj = NULL;
 cl_mem b_memobj = NULL;
 cl_mem c_memobj = NULL;  
-float *h_a = NULL;
-float *h_b = NULL;
-float *h_c = NULL;
+TYPE *h_a = NULL;
+TYPE *h_b = NULL;
+TYPE *h_c = NULL;
 uint8_t *kernel_bin = NULL;
 
 static void cleanup() {
@@ -155,7 +163,7 @@ int main (int argc, char **argv) {
   context = CL_CHECK2(clCreateContext(NULL, 1, &device_id, NULL, NULL,  &_err));
 
   // Allocate device buffers
-  size_t nbytes = size * size * sizeof(float);
+  size_t nbytes = size * size * sizeof(TYPE);
   a_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
   b_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
   c_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, nbytes, NULL, &_err));
@@ -182,16 +190,54 @@ int main (int argc, char **argv) {
   CL_CHECK(clSetKernelArg(kernel, 3, sizeof(width), (void*)&width));
 
   // Allocate memories for input arrays and output arrays.    
-  h_a = (float*)malloc(nbytes);
-  h_b = (float*)malloc(nbytes);
-  h_c = (float*)malloc(nbytes);	
+  h_a = (TYPE*)malloc(nbytes);
+  h_b = (TYPE*)malloc(nbytes);
+  h_c = (TYPE*)malloc(nbytes);	
 	
   // Initialize values for array members.  
   for (int i = 0; i < (size * size); ++i) {
+  #ifdef USE_FLOAT
     h_a[i] = (float)rand() / (float)RAND_MAX;
     h_b[i] = (float)rand() / (float)RAND_MAX;
+  #else
+    h_a[i] = rand();
+    h_b[i] = rand();
+  #endif
     h_c[i] = 0xdeadbeef;
-    //printf("*** [%d]: h_a=%f, h_b=%f\n", i, h_a[i], h_b[i]);
+  }
+
+  size_t global_offset[2] = {0, 0};
+  size_t global_work_size[2] = {size, size};
+  size_t local_work_size[2] = {1, 1};
+
+  std::vector<float> ref_vec(size * size);
+
+  // reference generation
+  size_t num_groups_y = global_work_size[1] / local_work_size[1];
+  size_t num_groups_x = global_work_size[0] / local_work_size[0];    
+  for (size_t workgroup_id_y = 0; workgroup_id_y < num_groups_y; ++workgroup_id_y) {
+    for (size_t workgroup_id_x = 0; workgroup_id_x < num_groups_x; ++workgroup_id_x) {
+      for (size_t local_id_y = 0; local_id_y < local_work_size[1]; ++local_id_y) {
+        for (size_t local_id_x = 0; local_id_x < local_work_size[0]; ++local_id_x) {
+          // Calculate global ID for the work-item
+          int global_id_x = global_offset[0] + local_work_size[0] * workgroup_id_x + local_id_x;
+          int global_id_y = global_offset[1] + local_work_size[1] * workgroup_id_y + local_id_y;
+          // kernel operation
+          int r = global_id_x;
+          int c = global_id_y;
+          TYPE acc = 0;
+          for (int k = 0; k < width; k++) {
+            acc += h_a[k * width + r] * h_b[c * width + k];
+          }
+        /*#ifdef USE_FLOAT
+          printf("*** r=%d, c=%d, v=%f\n", r, c, acc);
+        #else
+          printf("*** r=%d, c=%d, v=%d\n", r, c, acc);
+        #endif*/                   
+          ref_vec[c * width + r] = acc;         
+        }
+      }
+    }
   }
 
   // Creating command queue
@@ -201,11 +247,9 @@ int main (int argc, char **argv) {
   CL_CHECK(clEnqueueWriteBuffer(commandQueue, a_memobj, CL_TRUE, 0, nbytes, h_a, 0, NULL, NULL));
   CL_CHECK(clEnqueueWriteBuffer(commandQueue, b_memobj, CL_TRUE, 0, nbytes, h_b, 0, NULL, NULL));
 
-  printf("Execute the kernel\n");
-  size_t global_work_size[2] = {size, size};
-  size_t local_work_size[2] = {1, 1};
+  printf("Execute the kernel\n");  
   auto time_start = std::chrono::high_resolution_clock::now();
-  CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, NULL));
+  CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 2, global_offset, global_work_size, local_work_size, 0, NULL, NULL));
   CL_CHECK(clFinish(commandQueue));
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
@@ -216,16 +260,17 @@ int main (int argc, char **argv) {
 
   printf("Verify result\n");
   int errors = 0;
-  float* h_ref = (float*)malloc(nbytes);
-  matmul(h_ref, h_a, h_b, size, size, size);
   for (int i = 0; i < (size * size); i++) {
-    if (!almost_equal(h_c[i], h_ref[i])) {
+    if (!compare_equal(h_c[i], ref_vec[i])) {
       if (errors < 100) 
-        printf("*** error: [%d] expected=%f, actual=%f\n", i, h_ref[i], h_c[i]);
+      #ifdef USE_FLOAT
+        printf("*** error: [%d] expected=%f, actual=%f\n", i, ref_vec[i], h_c[i]);
+      #else
+        printf("*** error: [%d] expected=%d, actual=%d\n", i, ref_vec[i], h_c[i]);
+      #endif
       ++errors;
     }
-  }  
-  free(h_ref);
+  }
   if (errors != 0) {
     printf("FAILED! - %d errors\n", errors);    
   } else {

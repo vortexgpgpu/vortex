@@ -44,6 +44,27 @@ static int read_data(float *A0, int nx,int ny,int nz,FILE *fp)
 	return 0;
 }
 
+static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return CL_INVALID_VALUE;
+
+  FILE* fp = fopen(filename, "r");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to load kernel.");
+    return CL_INVALID_VALUE;
+  }
+  fseek(fp , 0 , SEEK_END);
+  long fsize = ftell(fp);
+  rewind(fp);
+
+  *data = (uint8_t*)malloc(fsize);
+  *size = fread(*data, 1, fsize, fp);
+  
+  fclose(fp);
+  
+  return CL_SUCCESS;
+}
+
 int main(int argc, char** argv) {
 	struct pb_TimerSet timers;
 	struct pb_Parameters *parameters;
@@ -109,8 +130,6 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-	printf("OK\n");
-
   // okay, let's deliver actual variables
   clPlatform = (cl_platform_id) pb_context->clPlatformId;
   clContext = (cl_context) pb_context->clContext;
@@ -119,14 +138,17 @@ int main(int argc, char** argv) {
 	cl_command_queue clCommandQueue = clCreateCommandQueue(clContext,clDevice,CL_QUEUE_PROFILING_ENABLE,&clStatus);
 	CHECK_ERROR("clCreateCommandQueue")
 
-	printf("OK\n");
-
   	pb_SetOpenCL(&clContext, &clCommandQueue);
 
 	//const char* clSource[] = {readFile("src/opencl_base/kernel.cl")};
 	//cl_program clProgram = clCreateProgramWithSource(clContext,1,clSource,NULL,&clStatus);
-	cl_program clProgram = clCreateProgramWithBuiltInKernels(
-      clContext, 1, &clDevice, "naive_kernel", &clStatus);
+	uint8_t *kernel_bin = NULL;
+	size_t kernel_size;
+	cl_int binary_status = 0;  
+	clStatus = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
+	CHECK_ERROR("read_kernel_file")  
+	cl_program clProgram = clCreateProgramWithBinary(
+		clContext, 1, &clDevice, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &clStatus);
 	CHECK_ERROR("clCreateProgramWithSource")
 
 	char clOptions[50];
@@ -232,8 +254,7 @@ int main(int argc, char** argv) {
 	clStatus = clEnqueueReadBuffer(clCommandQueue,d_Anext,CL_TRUE,0,size*sizeof(float),h_Anext,0,NULL,NULL);
 	CHECK_ERROR("clEnqueueReadBuffer")
 
-    	clStatus = clReleaseMemObject(d_A0);
-	clStatus = clReleaseMemObject(d_Anext);
+    clStatus = clReleaseMemObject(d_A0);
 	clStatus = clReleaseKernel(clKernel);
 	clStatus = clReleaseProgram(clProgram);
 	clStatus = clReleaseCommandQueue(clCommandQueue);

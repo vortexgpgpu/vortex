@@ -1,9 +1,6 @@
-all: fpnew cocogfx softfloat ramulator
+all: fpnew softfloat ramulator
 
 fpnew:
-
-cocogfx:
-	$(MAKE) -C cocogfx
 
 softfloat:
 	SPECIALIZE_TYPE=RISCV SOFTFLOAT_OPTS="-fPIC -DSOFTFLOAT_ROUND_ODD -DINLINE_LEVEL=5 -DSOFTFLOAT_FAST_DIV32TO16 -DSOFTFLOAT_FAST_DIV64TO32" $(MAKE) -C softfloat/build/Linux-x86_64-GCC
@@ -13,8 +10,7 @@ ramulator:
 	$(MAKE) -C ramulator libramulator.a
 
 clean:
-	$(MAKE) -C cocogfx clean
 	$(MAKE) -C softfloat/build/Linux-x86_64-GCC clean
 	$(MAKE) -C ramulator clean
 
-.PHONY: all fpnew cocogfx softfloat ramulator
+.PHONY: all fpnew softfloat ramulator
