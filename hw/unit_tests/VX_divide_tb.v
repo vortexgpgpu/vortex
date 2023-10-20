@@ -1,3 +1,16 @@
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 `timescale 1ns/1ps
 
 module VX_tb_divide();
@@ -17,7 +30,7 @@ module VX_tb_divide();
 
     wire [31:0] o_div[0:7], o_rem[0:7];
 
-    for (genvar i = 0; i < 8; i++) begin
+    for (genvar i = 0; i < 8; ++i) begin
         VX_divide#(
             .WIDTHN(32),
             .WIDTHD(32),

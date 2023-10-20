@@ -285,7 +285,7 @@ int main(int argc, char *argv[]) {
     free(h_graph_visited);
 
   } catch (std::string msg) {
-    std::cout << "--cambine: exception in main ->" << msg << std::endl;
+    printf("--cambine: exception in main ->%s\n", msg);
     // release host memory
     free(h_graph_nodes);
     free(h_graph_mask);

@@ -3,6 +3,10 @@
 
 #include <stdlib.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void clMemSet(cl_command_queue, cl_mem, int, size_t);
 char* readFile(const char*);
 
@@ -13,5 +17,9 @@ char* readFile(const char*);
      printf("Line: %d\n",__LINE__);         \
      exit(1);                               \
   }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

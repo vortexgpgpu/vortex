@@ -1216,9 +1216,24 @@ pb_InitOpenCLContext(struct pb_Parameters* parameters) {
   cl_platform_id platform_id;
   cl_device_id device_id;
   cl_context context;
-  clGetPlatformIDs(1, &platform_id, NULL);
-  clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL);
-  context = clCreateContext(NULL, 1, &device_id, NULL, NULL,  &_err);
+
+  _err = clGetPlatformIDs(1, &platform_id, NULL);
+  if (_err != CL_SUCCESS) {
+    fprintf(stderr, "Error querying platform!\n");  
+    exit(-1);
+  }
+  
+  _err = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL);
+  if (_err != CL_SUCCESS) {
+    fprintf(stderr, "Error querying device IDs!\n");  
+    exit(-1);
+  }
+  
+  context = clCreateContext(NULL, 1, &device_id, NULL, NULL, &_err);
+  if (_err != CL_SUCCESS) {
+    fprintf(stderr, "Error Creating device context!\n");
+    exit(-1);
+  }
 
   pb_Context* c = (pb_Context*)malloc(sizeof(pb_Context));
   c->clContext = context;

@@ -170,6 +170,7 @@ float** kmeans_clustering(float **feature,    /* in: [npoints][nfeatures] */
     free(new_centers[0]);
     free(new_centers);
     free(new_centers_len);
+	free(initial);
 
     return clusters;
 }
