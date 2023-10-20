@@ -98,30 +98,10 @@ extern "C" {
         __asm__ __volatile__ ("csrc %0, %1"	:: "i" (csr), "r" (__v)); \
 })
 
-// Texture load
-inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
-    unsigned ret;
-    asm volatile (".insn r4 %1, 0, %2, %0, %3, %4, %5" : "=r"(ret) : "i"(RISCV_CUSTOM1), "i"(stage), "r"(u), "r"(v), "r"(lod));
-    return ret;
-}
-
 // Conditional move
 inline unsigned vx_cmov(unsigned c, unsigned t, unsigned f) {
     unsigned ret;
     asm volatile (".insn r4 %1, 1, 0, %0, %2, %3, %4" : "=r"(ret) : "i"(RISCV_CUSTOM1), "r"(c), "r"(t), "r"(f));
-    return ret;
-}
-
-// Rop write
-inline void vx_rop(unsigned x, unsigned y, unsigned face, unsigned color, unsigned depth) {
-    unsigned pos_face = (y << 16) | (x << 1) | face;
-    asm volatile (".insn r4 %0, 1, 1, x0, %1, %2, %3" :: "i"(RISCV_CUSTOM1), "r"(pos_face), "r"(color), "r"(depth));
-}
-
-// Raster load
-inline unsigned vx_rast() {
-    unsigned ret;
-    asm volatile (".insn r %1, 0, 1, %0, x0, x0" : "=r"(ret) : "i"(RISCV_CUSTOM0));
     return ret;
 }
 
