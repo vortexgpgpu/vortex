@@ -1,47 +1,50 @@
-`ifndef VX_COMMIT_IF
-`define VX_COMMIT_IF
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 `include "VX_define.vh"
 
-interface VX_commit_if ();
+interface VX_commit_if #(
+    parameter NUM_LANES = `NUM_THREADS,
+    parameter PID_WIDTH = `LOG2UP(`NUM_THREADS / NUM_LANES)
+) ();
+    
+    typedef struct packed {
+        logic [`UUID_WIDTH-1:0]     uuid;
+        logic [`NW_WIDTH-1:0]       wid;
+        logic [NUM_LANES-1:0]       tmask;
+        logic [`XLEN-1:0]           PC;
+        logic                       wb;
+        logic [`NR_BITS-1:0]        rd;
+        logic [NUM_LANES-1:0][`XLEN-1:0] data;
+        logic [PID_WIDTH-1:0]       pid;
+        logic                       sop;
+        logic                       eop;
+    } data_t;
 
-    wire                    valid;
-    wire [`UUID_BITS-1:0]   uuid;
-    wire [`NW_BITS-1:0]     wid;
-    wire [`NUM_THREADS-1:0] tmask;    
-    wire [31:0]             PC;
-    wire [`NUM_THREADS-1:0][31:0] data;
-    wire [`NR_BITS-1:0]     rd;
-    wire                    wb;
-    wire                    eop;
-    wire                    ready;
+    logic  valid;
+    data_t data;
+    logic  ready;    
 
     modport master (
         output valid,
-        output uuid,
-        output wid,
-        output tmask,
-        output PC,
         output data,
-        output rd,
-        output wb,
-        output eop,
         input  ready
     );
 
     modport slave (
         input  valid,
-        input  uuid,
-        input  wid,
-        input  tmask,
-        input  PC,
         input  data,
-        input  rd,
-        input  wb,
-        input  eop,
         output ready
     );
 
 endinterface
-
-`endif

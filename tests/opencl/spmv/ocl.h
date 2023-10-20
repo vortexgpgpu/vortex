@@ -1,6 +1,10 @@
 #ifndef __OCLH__
 #define __OCLH__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
 	cl_uint major;
 	cl_uint minor;
@@ -17,5 +21,9 @@ char* readFile(const char*);
      printf("Line: %d\n",__LINE__);         \
      exit(1);                               \
   }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

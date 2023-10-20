@@ -1,3 +1,4 @@
+XLEN ?= 32
 DESTDIR ?= .
 RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi
@@ -8,6 +9,7 @@ CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I../../../hw -I../../common
 CXXFLAGS += -I../$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I../$(THIRD_PARTY_DIR)
+CXXFLAGS += -DXLEN_$(XLEN)
 
 LDFLAGS += ../$(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 LDFLAGS += -L../$(THIRD_PARTY_DIR)/ramulator -lramulator
@@ -23,13 +25,18 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE_TAG
 DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE_DATA
 DBG_TRACE_FLAGS += -DDBG_TRACE_AFU
 DBG_TRACE_FLAGS += -DDBG_TRACE_SCOPE
-DBG_TRACE_FLAGS += -DDBG_TRACE_TEX
+DBG_TRACE_FLAGS += -DDBG_TRACE_GBAR
 
-DBG_FLAGS += $(DBG_TRACE_FLAGS)
+DBG_FLAGS += -DDEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 
-FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src
-TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
-RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(RTL_DIR)/simulate $(FPU_INCLUDE) $(TEX_INCLUDE)
+RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
+
+FPU_INCLUDE = -I$(RTL_DIR)/fpu
+ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
+	RTL_PKGS += $(THIRD_PARTY_DIR)/fpnew/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/fpnew/src/common_cells/src/cf_math_pkg $(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
+	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src
+endif
+RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 
 SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
@@ -42,14 +49,18 @@ else
 	TOP = Vortex
 endif
 
-VL_FLAGS = --exe --cc $(TOP) --top-module $(TOP)
-VL_FLAGS += -O2 --language 1800-2009 --assert -Wall -Wpedantic
-VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO -Wno-EOFNEWLINE
+VL_FLAGS = --exe
+VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic
+VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
-VL_FLAGS += $(RTL_INCLUDE)
-
+VL_FLAGS += -DSIMULATION
+VL_FLAGS += -DXLEN_$(XLEN)
 VL_FLAGS += $(CONFIGS)
+VL_FLAGS += $(RTL_INCLUDE)
+VL_FLAGS += $(RTL_PKGS)
+VL_FLAGS += --cc $(TOP) --top-module $(TOP)
+
 CXXFLAGS += $(CONFIGS)
 
 # Enable Verilator multithreaded simulation
@@ -59,8 +70,8 @@ VL_FLAGS += -j $(THREADS)
 
 # Debugigng
 ifdef DEBUG
-	VL_FLAGS += --trace --trace-structs -DVCD_OUTPUT $(DBG_FLAGS)
-	CXXFLAGS += -g -O0 -DVCD_OUTPUT $(DBG_FLAGS)
+	VL_FLAGS += --trace --trace-structs $(DBG_FLAGS)
+	CXXFLAGS += -g -O0 $(DBG_FLAGS)
 else    
 	VL_FLAGS += -DNDEBUG
 	CXXFLAGS += -O2 -DNDEBUG
@@ -72,20 +83,12 @@ ifdef PERF
 	CXXFLAGS += -DPERF_ENABLE
 endif
 
-# ALU backend
-VL_FLAGS += -DIMUL_DPI
-VL_FLAGS += -DIDIV_DPI
-
-# FPU backend
-FPU_CORE ?= FPU_DPI
-VL_FLAGS += -D$(FPU_CORE)
-
 PROJECT = rtlsim
 
-all: $(PROJECT)
+all: $(DESTDIR)/$(PROJECT)
 
 $(DESTDIR)/$(PROJECT): $(SRCS) main.cpp
-	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$@
+	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS) -DSTARTUP_ADDR=0x80000000' -LDFLAGS '$(LDFLAGS)' -o ../$@
 	
 $(DESTDIR)/lib$(PROJECT).so: $(SRCS)
 	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' -o ../$@

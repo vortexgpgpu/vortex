@@ -142,8 +142,9 @@ int main (int argc, char **argv) {
   c_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, nbytes, NULL, &_err));
 
   printf("Create program from kernel source\n");
-  program = CL_CHECK2(clCreateProgramWithBinary(
-    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &_err));
+  cl_int _err;
+  program = clCreateProgramWithBinary(
+    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &_err);
   if (program == NULL) {
     cleanup();
     return -1;
@@ -182,9 +183,8 @@ int main (int argc, char **argv) {
 
   printf("Execute the kernel\n");
   size_t global_work_size[1] = {size};
-  size_t local_work_size[1] = {1};
   auto time_start = std::chrono::high_resolution_clock::now();
-  CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, global_work_size, local_work_size, 0, NULL, NULL));
+  CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL));
   CL_CHECK(clFinish(commandQueue));
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();

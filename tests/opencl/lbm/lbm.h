@@ -6,15 +6,15 @@
  *cr
  ***************************************************************************/
 
-/*############################################################################*/
-
 #ifndef _LBM_H_
 #define _LBM_H_
 
-/*############################################################################*/
-
 #include "ocl.h"
 #include "lbm_macros.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void LBM_allocateGrid( float** ptr );
 void LBM_freeGrid( float** ptr );
@@ -34,6 +34,8 @@ void OpenCL_LBM_initializeGrid( const OpenCL_Param* prm, cl_mem d_grid, LBM_Grid
 void OpenCL_LBM_getDeviceGrid( const OpenCL_Param* prm, cl_mem d_grid, LBM_Grid h_grid );
 void OpenCL_LBM_performStreamCollide( const OpenCL_Param* prm, cl_mem srcGrid, cl_mem dstGrid );
 
-/*############################################################################*/
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _LBM_H_ */
