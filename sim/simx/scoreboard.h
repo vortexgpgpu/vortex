@@ -1,3 +1,16 @@
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
 
 #include "pipeline.h"
@@ -6,20 +19,15 @@
 namespace vortex {
 
 class Scoreboard {
-private:
+public:
+
     struct reg_use_t {
         RegType  type;
         uint32_t reg;        
         uint64_t owner;
     };
-
-    std::vector<RegMask> in_use_iregs_;
-    std::vector<RegMask> in_use_fregs_;
-    std::vector<RegMask> in_use_vregs_;
-    std::unordered_map<uint32_t, uint64_t> owners_; 
-
-public:    
-    Scoreboard(const ArchDef &arch) 
+        
+    Scoreboard(const Arch &arch) 
         : in_use_iregs_(arch.num_warps())
         , in_use_fregs_(arch.num_warps())
         , in_use_vregs_(arch.num_warps())
@@ -84,8 +92,7 @@ public:
     }
     
     void reserve(pipeline_trace_t* state) {
-        if (!state->wb)
-            return;  
+        assert(state->wb);  
         switch (state->rdest_type) {
         case RegType::Integer:            
             in_use_iregs_.at(state->wid).set(state->rdest);
@@ -105,8 +112,7 @@ public:
     }
 
     void release(pipeline_trace_t* state) {
-        if (!state->wb)
-            return;       
+        assert(state->wb);      
         switch (state->rdest_type) {
         case RegType::Integer:
             in_use_iregs_.at(state->wid).reset(state->rdest);
@@ -123,6 +129,13 @@ public:
         uint32_t tag = (state->rdest << 16) | (state->wid << 4) | (int)state->rdest_type;
         owners_.erase(tag);
     }
+
+private:
+
+    std::vector<RegMask> in_use_iregs_;
+    std::vector<RegMask> in_use_fregs_;
+    std::vector<RegMask> in_use_vregs_;
+    std::unordered_map<uint32_t, uint64_t> owners_;
 };
 
 }

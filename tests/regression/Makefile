@@ -10,7 +10,6 @@ all:
 	$(MAKE) -C fence
 	$(MAKE) -C no_mf_ext
 	$(MAKE) -C no_smem
-	$(MAKE) -C prefetch
 
 run-simx:
 	$(MAKE) -C basic run-simx
@@ -24,7 +23,6 @@ run-simx:
 	$(MAKE) -C fence run-simx
 	$(MAKE) -C no_mf_ext run-simx
 	$(MAKE) -C no_smem run-simx
-	$(MAKE) -C prefetch run-simx
 
 run-rtlsim:
 	$(MAKE) -C basic run-rtlsim
@@ -38,21 +36,19 @@ run-rtlsim:
 	$(MAKE) -C fence run-rtlsim
 	$(MAKE) -C no_mf_ext run-rtlsim
 	$(MAKE) -C no_smem run-rtlsim
-	$(MAKE) -C prefetch run-rtlsim
 
-run-vlsim:
-	$(MAKE) -C basic run-vlsim
-	$(MAKE) -C demo run-vlsim
-	$(MAKE) -C dogfood run-vlsim
-	$(MAKE) -C mstress run-vlsim
-	$(MAKE) -C io_addr run-vlsim
-	$(MAKE) -C printf run-vlsim
-	$(MAKE) -C diverge run-vlsim
-	$(MAKE) -C sort run-vlsim
-	$(MAKE) -C fence run-vlsim
-	$(MAKE) -C no_mf_ext run-vlsim
-	$(MAKE) -C no_smem run-vlsim
-	$(MAKE) -C prefetch run-vlsim
+run-opae:
+	$(MAKE) -C basic run-opae
+	$(MAKE) -C demo run-opae
+	$(MAKE) -C dogfood run-opae
+	$(MAKE) -C mstress run-opae
+	$(MAKE) -C io_addr run-opae
+	$(MAKE) -C printf run-opae
+	$(MAKE) -C diverge run-opae
+	$(MAKE) -C sort run-opae
+	$(MAKE) -C fence run-opae
+	$(MAKE) -C no_mf_ext run-opae
+	$(MAKE) -C no_smem run-opae
 
 clean:
 	$(MAKE) -C basic clean
@@ -66,7 +62,6 @@ clean:
 	$(MAKE) -C fence clean
 	$(MAKE) -C no_mf_ext clean
 	$(MAKE) -C no_smem clean
-	$(MAKE) -C prefetch clean
 
 clean-all:
 	$(MAKE) -C basic clean-all
@@ -80,4 +75,3 @@ clean-all:
 	$(MAKE) -C fence clean-all
 	$(MAKE) -C no_mf_ext clean-all
 	$(MAKE) -C no_smem clean-all
-	$(MAKE) -C prefetch clean-all

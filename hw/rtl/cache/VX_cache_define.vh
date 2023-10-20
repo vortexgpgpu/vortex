@@ -1,72 +1,65 @@
-`ifndef VX_CACHE_DEFINE
-`define VX_CACHE_DEFINE
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-`include "VX_platform.vh"
+`ifndef VX_CACHE_DEFINE_VH
+`define VX_CACHE_DEFINE_VH
 
-// cache request identifier
-`define DBG_CACHE_REQ_IDW       44
+`include "VX_define.vh"   
 
-`define REQS_BITS               `LOG2UP(NUM_REQS)
+`define CS_REQ_SEL_BITS         `CLOG2(NUM_REQS)
 
-`define PORTS_BITS              `LOG2UP(NUM_PORTS)
+`define CS_WORD_WIDTH           (8 * WORD_SIZE)
+`define CS_LINE_WIDTH           (8 * LINE_SIZE)
+`define CS_BANK_SIZE            (CACHE_SIZE / NUM_BANKS)
+`define CS_WAY_SEL_BITS         `CLOG2(NUM_WAYS)
 
-//                                tag              valid  tid          word_sel              
-`define MSHR_DATA_WIDTH         ((CORE_TAG_WIDTH + 1 +    `REQS_BITS + `UP(`WORD_SELECT_BITS)) * NUM_PORTS)
+`define CS_LINES_PER_BANK       (`CS_BANK_SIZE / (LINE_SIZE * NUM_WAYS))
+`define CS_WORDS_PER_LINE       (LINE_SIZE / WORD_SIZE)
 
-`define WORD_WIDTH              (8 * WORD_SIZE)
-
-`define CACHE_LINE_WIDTH        (8 * CACHE_LINE_SIZE)
-
-`define BANK_SIZE               (CACHE_SIZE / NUM_BANKS)
-`define LINES_PER_BANK          (`BANK_SIZE / CACHE_LINE_SIZE)
-`define WORDS_PER_LINE          (CACHE_LINE_SIZE / WORD_SIZE)
-
-`define WORD_ADDR_WIDTH         (32-`CLOG2(WORD_SIZE))
-`define MEM_ADDR_WIDTH          (32-`CLOG2(CACHE_LINE_SIZE))
-`define LINE_ADDR_WIDTH         (`MEM_ADDR_WIDTH-`CLOG2(NUM_BANKS))
+`define CS_WORD_ADDR_WIDTH      (`MEM_ADDR_WIDTH-`CLOG2(WORD_SIZE))
+`define CS_MEM_ADDR_WIDTH       (`MEM_ADDR_WIDTH-`CLOG2(LINE_SIZE))
+`define CS_LINE_ADDR_WIDTH      (`CS_MEM_ADDR_WIDTH-`CLOG2(NUM_BANKS))
 
 // Word select
-`define WORD_SELECT_BITS        `CLOG2(`WORDS_PER_LINE)
-`define WORD_SELECT_ADDR_START  0
-`define WORD_SELECT_ADDR_END    (`WORD_SELECT_ADDR_START+`WORD_SELECT_BITS-1)
+`define CS_WORD_SEL_BITS        `CLOG2(`CS_WORDS_PER_LINE)
+`define CS_WORD_SEL_ADDR_START  0
+`define CS_WORD_SEL_ADDR_END    (`CS_WORD_SEL_ADDR_START+`CS_WORD_SEL_BITS-1)
 
 // Bank select
-`define BANK_SELECT_BITS        `CLOG2(NUM_BANKS)
-`define BANK_SELECT_ADDR_START  (1+`WORD_SELECT_ADDR_END+BANK_ADDR_OFFSET)
-`define BANK_SELECT_ADDR_END    (`BANK_SELECT_ADDR_START+`BANK_SELECT_BITS-1)
+`define CS_BANK_SEL_BITS        `CLOG2(NUM_BANKS)
+`define CS_BANK_SEL_ADDR_START  (1+`CS_WORD_SEL_ADDR_END)
+`define CS_BANK_SEL_ADDR_END    (`CS_BANK_SEL_ADDR_START+`CS_BANK_SEL_BITS-1)
 
 // Line select
-`define LINE_SELECT_BITS        `CLOG2(`LINES_PER_BANK)
-`define LINE_SELECT_ADDR_START  (1+`BANK_SELECT_ADDR_END)
-`define LINE_SELECT_ADDR_END    (`LINE_SELECT_ADDR_START-BANK_ADDR_OFFSET+`LINE_SELECT_BITS-1)
+`define CS_LINE_SEL_BITS        `CLOG2(`CS_LINES_PER_BANK)
+`define CS_LINE_SEL_ADDR_START  (1+`CS_BANK_SEL_ADDR_END)
+`define CS_LINE_SEL_ADDR_END    (`CS_LINE_SEL_ADDR_START+`CS_LINE_SEL_BITS-1)
 
 // Tag select
-`define TAG_SELECT_BITS         (`WORD_ADDR_WIDTH-1-`LINE_SELECT_ADDR_END)
-`define TAG_SELECT_ADDR_START   (1+`LINE_SELECT_ADDR_END)
-`define TAG_SELECT_ADDR_END     (`WORD_ADDR_WIDTH-1)
+`define CS_TAG_SEL_BITS         (`CS_WORD_ADDR_WIDTH-1-`CS_LINE_SEL_ADDR_END)
+`define CS_TAG_SEL_ADDR_START   (1+`CS_LINE_SEL_ADDR_END)
+`define CS_TAG_SEL_ADDR_END     (`CS_WORD_ADDR_WIDTH-1)
 
-`define SELECT_BANK_ID(x)       x[`BANK_SELECT_ADDR_END : `BANK_SELECT_ADDR_START]
-`define SELECT_LINE_ADDR0(x)    x[`WORD_ADDR_WIDTH-1 : `LINE_SELECT_ADDR_START]
-`define SELECT_LINE_ADDRX(x)    {x[`WORD_ADDR_WIDTH-1 : `LINE_SELECT_ADDR_START], x[`BANK_SELECT_ADDR_START-1 : 1+`WORD_SELECT_ADDR_END]}
-
-`define LINE_TAG_ADDR(x)        x[`LINE_ADDR_WIDTH-1 : `LINE_SELECT_BITS]
-
-`define CACHE_REQ_ID_RNG        CORE_TAG_WIDTH-1 : (CORE_TAG_WIDTH-`DBG_CACHE_REQ_IDW)
+`define CS_LINE_TAG_ADDR(x)     x[`CS_LINE_ADDR_WIDTH-1 : `CS_LINE_SEL_BITS]
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define CORE_RSP_TAGS           ((CORE_TAG_ID_BITS != 0) ? 1 : NUM_REQS)
+`define CS_LINE_TO_MEM_ADDR(x, i)  {x, `CS_BANK_SEL_BITS'(i)}
+`define CS_MEM_ADDR_TO_BANK_ID(x)  x[0 +: `CS_BANK_SEL_BITS]
+`define CS_MEM_TAG_TO_REQ_ID(x)    x[MSHR_ADDR_WIDTH-1:0]
+`define CS_MEM_TAG_TO_BANK_ID(x)   x[MSHR_ADDR_WIDTH +: `CS_BANK_SEL_BITS]
 
-`define LINE_TO_MEM_ADDR(x, i)  {x, `BANK_SELECT_BITS'(i)}
+`define CS_LINE_TO_FULL_ADDR(x, i) {x, (`XLEN-$bits(x))'(i << (`XLEN-$bits(x)-`CS_BANK_SEL_BITS))}
+`define CS_MEM_TO_FULL_ADDR(x)     {x, (`XLEN-$bits(x))'(0)}
 
-`define MEM_ADDR_TO_BANK_ID(x)  x[0 +: `BANK_SELECT_BITS]
-
-`define MEM_TAG_TO_REQ_ID(x)    x[MSHR_ADDR_WIDTH-1:0]
-
-`define MEM_TAG_TO_BANK_ID(x)   x[MSHR_ADDR_WIDTH +: `BANK_SELECT_BITS]
-
-`define LINE_TO_BYTE_ADDR(x, i) {x, (32-$bits(x))'(i << (32-$bits(x)-`BANK_SELECT_BITS))}
-
-`define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
-
-`endif
+`endif // VX_CACHE_DEFINE_VH

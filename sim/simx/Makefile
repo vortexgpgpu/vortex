@@ -1,37 +1,28 @@
+XLEN ?= 32
 DESTDIR ?= .
 RTL_DIR = ../hw/rtl
 THIRD_PARTY_DIR = ../../third_party
 
-CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I. -I../common -I../../hw
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)
+CXXFLAGS += -DXLEN_$(XLEN)
 CXXFLAGS += $(CONFIGS)
 
-LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a 
-LDFLAGS += -L$(THIRD_PARTY_DIR)/cocogfx -lcocogfx 
+LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 LDFLAGS += -L$(THIRD_PARTY_DIR)/ramulator -lramulator
 
 SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
-SRCS += args.cpp cache.cpp memsim.cpp warp.cpp core.cpp decode.cpp execute.cpp exeunit.cpp tex_unit.cpp processor.cpp
-
-OBJS := $(patsubst %.cpp, obj_dir/%.o, $(notdir $(SRCS)))
-VPATH := $(sort $(dir $(SRCS)))
-
-#$(info OBJS is $(OBJS))
-#$(info VPATH is $(VPATH))
+SRCS += processor.cpp cluster.cpp core.cpp warp.cpp decode.cpp execute.cpp exe_unit.cpp cache_sim.cpp mem_sim.cpp shared_mem.cpp dcrs.cpp
 
 # Debugigng
 ifdef DEBUG
 	CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG)
+	#CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG) -fsanitize=address -fno-omit-frame-pointer
 else    
 	CXXFLAGS += -O2 -DNDEBUG
-endif
-
-# XLEN parameterization
-ifdef XLEN
-	CXXFLAGS += -DXLEN=$(XLEN)
 endif
 
 PROJECT = simx
@@ -39,7 +30,7 @@ PROJECT = simx
 all: $(DESTDIR)/$(PROJECT)
 	
 $(DESTDIR)/$(PROJECT): $(SRCS) main.cpp
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) -DSTARTUP_ADDR=0x80000000 $^ $(LDFLAGS) -o $@
 
 $(DESTDIR)/lib$(PROJECT).so: $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ -shared $(LDFLAGS) -o $@
@@ -48,4 +39,4 @@ $(DESTDIR)/lib$(PROJECT).so: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf obj_dir $(DESTDIR)/$(PROJECT) $(DESTDIR)/lib$(PROJECT).so
+	rm -rf $(DESTDIR)/$(PROJECT) $(DESTDIR)/lib$(PROJECT).so

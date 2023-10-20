@@ -1,4 +1,4 @@
-#include <vx_malloc.h>
+#include <malloc.h>
 #include <stdio.h>
 
 #define RT_CHECK(_expr)                                         \
