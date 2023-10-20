@@ -405,23 +405,14 @@ static const char* op_string(const Instr &instr) {
       default:
         std::abort();
       }
-    case 1:
-      switch (func3) {
-      case 0: return "RASTER";      
-      default:
-        std::abort();
-      }
     default:
       std::abort();
     }
   case Opcode::EXT2:
     switch (func3) {
-    case 0:
-      return "TEX";
     case 1: {
       switch (func2) {
-      case 0: return "CMOV";
-      case 1: return "ROP";      
+      case 0: return "CMOV"; 
       default:
         std::abort();
       }
