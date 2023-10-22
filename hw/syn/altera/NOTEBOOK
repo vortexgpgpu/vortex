@@ -54,7 +54,6 @@ TARGET=asesim make -C runtime/opae
 
 # build ASE hw image
 PREFIX=build_base CONFIGS="-DEXT_F_DISABLE -DL1_DISABLE -DSM_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" TARGET=asesim make
-PREFIX=build_gfx CONFIGS="-DEXT_GFX_ENABLE -DTCACHE_DISABLE -DRCACHE_DISABLE -DOCACHE_DISABLE -DEXT_F_DISABLE -DL1_DISABLE -DSM_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" TARGET=asesim make
 
 # ASE test runs
 ./run_ase.sh build_base_arria10_asesim_1c/synth ../../../../tests/regression/basic/basic -n1 -t0
@@ -64,10 +63,6 @@ PREFIX=build_gfx CONFIGS="-DEXT_GFX_ENABLE -DTCACHE_DISABLE -DRCACHE_DISABLE -DO
 ./run_ase.sh build_base_arria10_asesim_1c/synth ../../../../tests/regression/dogfood/dogfood -n16
 ./run_ase.sh build_base_arria10_asesim_1c/synth ../../../../tests/opencl/vecadd/vecadd
 ./run_ase.sh build_base_arria10_asesim_1c/synth ../../../../tests/opencl/sgemm/sgemm -n4
-./run_ase.sh build_gfx_arria10_asesim_1c/synth ../../../../tests/regression/tex/tex
-./run_ase.sh build_gfx_arria10_asesim_1c/synth ../../../../tests/regression/rop/rop -w8 -h8
-./run_ase.sh build_gfx_arria10_asesim_1c/synth ../../../../tests/regression/raster/raster -w8 -h8
-./run_ase.sh build_gfx_arria10_asesim_1c/synth ../../../../tests/regression/draw3d/draw3d -w8 -h8
 
 # modify "vsim_run.tcl" to dump VCD trace
 vcd file trace.vcd
@@ -88,15 +83,10 @@ tar -xvf vortex.vcd.tar.bz2
 
 # building FPGA images
 make all
-PREFIX=build_gfx NUM_CORES=2 CONFIGS="-DEXT_GFX_ENABLE" make
-
-# building gfx test on systems with custom boost directory
-LDFLAGS += -L/homes/tinebp/tools/boost/lib 
 
 # running benchmarks on FPGA
 fpgaconf --bus 0xaf <build>/synth/vortex_afu.gbs
 TARGET=fpga ./ci/blackbox.sh --driver=opae --app=sgemm
-TARGET=fpga ./ci/blackbox.sh --driver=opae --app=draw3d --args="-w512 -h512 -tvase.cgltrace"
 
 # quick off synthesis
 make core
