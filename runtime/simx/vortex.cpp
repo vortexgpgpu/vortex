@@ -347,7 +347,7 @@ extern int vx_copy_to_dev(vx_device_h hdevice, uint64_t dev_addr, const void* ho
 
     auto device = ((vx_device*)hdevice);
 
-    DBGPRINT("COPY_TO_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_addr, host_ptr, size);
+    DBGPRINT("COPY_TO_DEV: dev_addr=0x%lx, host_addr=0x%p, size=%ld\n", dev_addr, host_ptr, size);
 
     return device->upload(dev_addr, host_ptr, size);
 }
@@ -358,7 +358,7 @@ extern int vx_copy_from_dev(vx_device_h hdevice, void* host_ptr, uint64_t dev_ad
 
     auto device = ((vx_device*)hdevice);
 
-    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_addr, host_ptr, size); 
+    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%p, size=%ld\n", dev_addr, host_ptr, size); 
 
     return device->download(host_ptr, dev_addr, size);
 }
