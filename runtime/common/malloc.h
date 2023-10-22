@@ -448,7 +448,7 @@ private:
     uint32_t pageAlign_;    
     uint32_t blockAlign_;    
     page_t*  pages_;
-    uint16_t nextAddress_;
+    uint64_t nextAddress_;
     uint64_t allocated_;
 };
 
