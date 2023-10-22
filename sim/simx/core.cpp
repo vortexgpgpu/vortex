@@ -32,7 +32,10 @@ Core::Core(const SimContext& ctx,
            Cluster* cluster,
            const Arch &arch, 
            const DCRS &dcrs,
-           SharedMem::Ptr  sharedmem)
+           SharedMem::Ptr  sharedmem,
+           std::vector<RasterUnit::Ptr>& raster_units,
+           std::vector<RopUnit::Ptr>& rop_units,
+           std::vector<TexUnit::Ptr>& tex_units)
     : SimObject(ctx, "core")
     , icache_req_ports(1, this)
     , icache_rsp_ports(1, this)
@@ -49,7 +52,10 @@ Core::Core(const SimContext& ctx,
     , scoreboard_(arch_) 
     , operands_(ISSUE_WIDTH)
     , dispatchers_((uint32_t)ExeType::MAX)
-    , exe_units_((uint32_t)ExeType::MAX)
+    , exe_units_((uint32_t)ExeType::MAX)    
+    , raster_units_(raster_units)
+    , rop_units_(rop_units)
+    , tex_units_(tex_units)
     , sharedmem_(sharedmem)
     , fetch_latch_("fetch")
     , decode_latch_("decode")
@@ -57,6 +63,9 @@ Core::Core(const SimContext& ctx,
     , committed_traces_(ISSUE_WIDTH, nullptr)
     , csrs_(arch.num_warps())
     , cluster_(cluster)
+    , raster_idx_(0)
+    , rop_idx_(0)
+    , tex_idx_(0)
 {  
   for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
     csrs_.at(i).resize(arch.num_threads());
@@ -98,6 +107,18 @@ void Core::reset() {
 
   for (auto& exe_unit : exe_units_) {
     exe_unit->reset();
+  }
+
+  for (auto& raster_unit : raster_units_) {
+    raster_unit->reset();
+  }
+
+  for (auto& rop_unit : rop_units_) {
+    rop_unit->reset();
+  }
+
+  for (auto& tex_unit : tex_units_) {
+    tex_unit->reset();
   }
   
   for ( auto& barrier : barriers_) {
@@ -620,8 +641,98 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case VX_CSR_MPM_MEM_LAT_H:   return proc_perf.mem_latency >> 32;
         }
       } break;
+      case VX_DCR_MPM_CLASS_TEX: {
+        auto proc_perf = cluster_->processor()->perf_stats();
+        switch (addr) {
+        case VX_CSR_MPM_TEX_READS:   return proc_perf.clusters.tex_unit.reads & 0xffffffff;
+        case VX_CSR_MPM_TEX_READS_H: return proc_perf.clusters.tex_unit.reads >> 32;
+        case VX_CSR_MPM_TEX_LAT:     return proc_perf.clusters.tex_unit.latency & 0xffffffff;
+        case VX_CSR_MPM_TEX_LAT_H:   return proc_perf.clusters.tex_unit.latency >> 32;
+        case VX_CSR_MPM_TEX_STALL:   return proc_perf.clusters.tex_unit.stalls & 0xffffffff;
+        case VX_CSR_MPM_TEX_STALL_H: return proc_perf.clusters.tex_unit.stalls >> 32;
+
+        case VX_CSR_MPM_TCACHE_READS:    return proc_perf.clusters.tcache.reads & 0xffffffff; 
+        case VX_CSR_MPM_TCACHE_READS_H:  return proc_perf.clusters.tcache.reads >> 32;
+        case VX_CSR_MPM_TCACHE_MISS_R:   return proc_perf.clusters.tcache.read_misses & 0xffffffff; 
+        case VX_CSR_MPM_TCACHE_MISS_R_H: return proc_perf.clusters.tcache.read_misses >> 32;
+        case VX_CSR_MPM_TCACHE_BANK_ST:  return proc_perf.clusters.tcache.bank_stalls & 0xffffffff; 
+        case VX_CSR_MPM_TCACHE_BANK_ST_H:return proc_perf.clusters.tcache.bank_stalls >> 32;
+        case VX_CSR_MPM_TCACHE_MSHR_ST:  return proc_perf.clusters.tcache.mshr_stalls & 0xffffffff; 
+        case VX_CSR_MPM_TCACHE_MSHR_ST_H:return proc_perf.clusters.tcache.mshr_stalls >> 32;
+
+        case VX_CSR_MPM_TEX_ISSUE_ST:    return perf_stats_.tex_issue_stalls & 0xffffffff;
+        case VX_CSR_MPM_TEX_ISSUE_ST_H:  return perf_stats_.tex_issue_stalls >> 32;
+        }
+      } break;
+      case VX_DCR_MPM_CLASS_RASTER: {
+        auto proc_perf = cluster_->processor()->perf_stats();
+        switch (addr) {        
+        case VX_CSR_MPM_RASTER_READS:   return proc_perf.clusters.raster_unit.reads & 0xffffffff;
+        case VX_CSR_MPM_RASTER_READS_H: return proc_perf.clusters.raster_unit.reads >> 32;
+        case VX_CSR_MPM_RASTER_LAT:     return proc_perf.clusters.raster_unit.latency & 0xffffffff;
+        case VX_CSR_MPM_RASTER_LAT_H:   return proc_perf.clusters.raster_unit.latency >> 32;
+        case VX_CSR_MPM_RASTER_STALL:   return proc_perf.clusters.raster_unit.stalls & 0xffffffff;
+        case VX_CSR_MPM_RASTER_STALL_H: return proc_perf.clusters.raster_unit.stalls >> 32;
+
+        case VX_CSR_MPM_RCACHE_READS:    return proc_perf.clusters.rcache.reads & 0xffffffff; 
+        case VX_CSR_MPM_RCACHE_READS_H:  return proc_perf.clusters.rcache.reads >> 32; 
+        case VX_CSR_MPM_RCACHE_MISS_R:   return proc_perf.clusters.rcache.read_misses & 0xffffffff; 
+        case VX_CSR_MPM_RCACHE_MISS_R_H: return proc_perf.clusters.rcache.read_misses >> 32;  
+        case VX_CSR_MPM_RCACHE_BANK_ST:  return proc_perf.clusters.rcache.bank_stalls & 0xffffffff; 
+        case VX_CSR_MPM_RCACHE_BANK_ST_H:return proc_perf.clusters.rcache.bank_stalls >> 32;
+        case VX_CSR_MPM_RCACHE_MSHR_ST:  return proc_perf.clusters.rcache.mshr_stalls & 0xffffffff; 
+        case VX_CSR_MPM_RCACHE_MSHR_ST_H:return proc_perf.clusters.rcache.mshr_stalls >> 32;
+
+        case VX_CSR_MPM_RASTER_ISSUE_ST: return perf_stats_.raster_issue_stalls & 0xffffffff;
+        case VX_CSR_MPM_RASTER_ISSUE_ST_H: return perf_stats_.raster_issue_stalls >> 32;
+        default:
+          return 0;
+        }
+      } break;
+      case VX_DCR_MPM_CLASS_ROP: {
+        auto proc_perf = cluster_->processor()->perf_stats();
+        switch (addr) { 
+        case VX_CSR_MPM_ROP_READS:   return proc_perf.clusters.rop_unit.reads & 0xffffffff;
+        case VX_CSR_MPM_ROP_READS_H: return proc_perf.clusters.rop_unit.reads >> 32;
+        case VX_CSR_MPM_ROP_WRITES:  return proc_perf.clusters.rop_unit.writes & 0xffffffff;
+        case VX_CSR_MPM_ROP_WRITES_H:return proc_perf.clusters.rop_unit.writes >> 32;
+        case VX_CSR_MPM_ROP_LAT:     return proc_perf.clusters.rop_unit.latency & 0xffffffff;
+        case VX_CSR_MPM_ROP_LAT_H:   return proc_perf.clusters.rop_unit.latency >> 32;
+        case VX_CSR_MPM_ROP_STALL:   return proc_perf.clusters.rop_unit.stalls & 0xffffffff;
+        case VX_CSR_MPM_ROP_STALL_H: return proc_perf.clusters.rop_unit.stalls >> 32;
+
+        case VX_CSR_MPM_OCACHE_READS:    return proc_perf.clusters.ocache.reads & 0xffffffff; 
+        case VX_CSR_MPM_OCACHE_READS_H:  return proc_perf.clusters.ocache.reads >> 32; 
+        case VX_CSR_MPM_OCACHE_WRITES:   return proc_perf.clusters.ocache.writes & 0xffffffff; 
+        case VX_CSR_MPM_OCACHE_WRITES_H: return proc_perf.clusters.ocache.writes >> 32; 
+        case VX_CSR_MPM_OCACHE_MISS_R:   return proc_perf.clusters.ocache.read_misses & 0xffffffff; 
+        case VX_CSR_MPM_OCACHE_MISS_R_H: return proc_perf.clusters.ocache.read_misses >> 32; 
+        case VX_CSR_MPM_OCACHE_MISS_W:   return proc_perf.clusters.ocache.write_misses & 0xffffffff; 
+        case VX_CSR_MPM_OCACHE_MISS_W_H: return proc_perf.clusters.ocache.write_misses >> 32; 
+        case VX_CSR_MPM_OCACHE_BANK_ST:  return proc_perf.clusters.ocache.bank_stalls & 0xffffffff; 
+        case VX_CSR_MPM_OCACHE_BANK_ST_H:return proc_perf.clusters.ocache.bank_stalls >> 32;
+        case VX_CSR_MPM_OCACHE_MSHR_ST:  return proc_perf.clusters.ocache.mshr_stalls & 0xffffffff; 
+        case VX_CSR_MPM_OCACHE_MSHR_ST_H:return proc_perf.clusters.ocache.mshr_stalls >> 32;
+
+        case VX_CSR_MPM_ROP_ISSUE_ST:    return perf_stats_.rop_issue_stalls & 0xffffffff;
+        case VX_CSR_MPM_ROP_ISSUE_ST_H:  return perf_stats_.rop_issue_stalls >> 32;
+        default:
+          return 0;
+        }
+      } break;
+      default: {
+        std::cout << std::dec << "Error: invalid MPM CLASS: value=" << perf_class << std::endl;
+        std::abort();
+      } break;
       }
-    } else {
+    } else
+  #ifdef EXT_RASTER_ENABLE
+    if (addr >= VX_CSR_RASTER_BEGIN
+     && addr < VX_CSR_RASTER_END) {
+      return csrs_.at(wid).at(tid).at(addr);
+    } else
+  #endif
+    {
       std::cout << std::hex << "Error: invalid CSR read addr=0x" << addr << std::endl;
       std::abort();
     }
@@ -653,6 +764,18 @@ void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
   case VX_CSR_MNSTATUS:
     break;
   default:
+  #ifdef EXT_ROP_ENABLE
+    if (addr >= VX_CSR_ROP_BEGIN
+     && addr < VX_CSR_ROP_END) {
+      csrs_.at(wid).at(tid)[addr] = value;
+    } else
+  #endif
+  #ifdef EXT_TEX_ENABLE
+    if (addr >= VX_CSR_TEX_BEGIN
+     && addr < VX_CSR_TEX_END) {
+      csrs_.at(wid).at(tid)[addr] = value;
+    } else
+  #endif
     {
       std::cout << std::hex << "Error: invalid CSR write addr=0x" << addr << ", value=0x" << value << std::endl;
       std::abort();
@@ -698,4 +821,22 @@ void Core::attach_ram(RAM* ram) {
 #else
   mmu_.attach(*ram, 0, 0xFFFFFFFF);
 #endif
+}
+
+uint32_t Core::raster_idx() {
+  auto ret = raster_idx_++;
+  raster_idx_ %= raster_units_.size();
+  return ret;
+}
+
+uint32_t Core::rop_idx() {
+  auto ret = rop_idx_++;
+  rop_idx_ %= rop_units_.size();
+  return ret;
+}
+
+uint32_t Core::tex_idx() {
+  auto ret = tex_idx_++;
+  tex_idx_ %= tex_units_.size();
+  return ret;
 }

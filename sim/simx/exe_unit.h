@@ -16,6 +16,9 @@
 #include <simobject.h>
 #include "pipeline.h"
 #include "cache_sim.h"
+#include "tex_unit.h"
+#include "raster_unit.h"
+#include "rop_unit.h"
 
 namespace vortex {
 
@@ -92,7 +95,10 @@ public:
     
     void tick();
 
-private:
+private:    
+  std::vector<RasterUnit::Ptr> raster_units_;  
+  std::vector<RopUnit::Ptr>    rop_units_;
+  std::vector<TexUnit::Ptr>    tex_units_;
   std::vector<SimPort<pipeline_trace_t*>*> pending_rsps_;
   uint32_t input_idx_;
 };

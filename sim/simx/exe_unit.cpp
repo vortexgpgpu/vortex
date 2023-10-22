@@ -270,8 +270,22 @@ void LsuUnit::tick() {
 ///////////////////////////////////////////////////////////////////////////////
 
 SfuUnit::SfuUnit(const SimContext& ctx, Core* core) 
-    : ExeUnit(ctx, core, "SFU")
-{}
+    : ExeUnit(ctx, core, "SFU")   
+    , raster_units_(core->raster_units_)    
+    , rop_units_(core->rop_units_)
+    , tex_units_(core->tex_units_)
+    , input_idx_(0)
+{
+    for (auto& raster_unit : raster_units_) {
+        pending_rsps_.push_back(&raster_unit->Output);
+    }
+    for (auto& rop_unit : rop_units_) {
+        pending_rsps_.push_back(&rop_unit->Output);
+    }
+    for (auto& tex_unit : tex_units_) {
+        pending_rsps_.push_back(&tex_unit->Output);
+    }
+}
     
 void SfuUnit::tick() {
     // handle pending responses
@@ -289,7 +303,7 @@ void SfuUnit::tick() {
 
     // check input queue
     for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
-        int iw = (input_idx_ + i) % ISSUE_WIDTH;        
+        int iw = (input_idx_ + i) % ISSUE_WIDTH;
         auto& input = Inputs.at(iw);
         if (input.empty())
             continue;
@@ -317,6 +331,18 @@ void SfuUnit::tick() {
             }
             release_warp = false;
         }   break;
+        case SfuType::RASTER: {
+            auto trace_data = std::dynamic_pointer_cast<RasterUnit::TraceData>(trace->data);
+            raster_units_.at(trace_data->raster_idx)->Input.send(trace, 1);
+        }   break;
+        case SfuType::ROP: {
+            auto trace_data = std::dynamic_pointer_cast<RopUnit::TraceData>(trace->data);
+            rop_units_.at(trace_data->rop_idx)->Input.send(trace, 1);
+        }   break;    
+        case SfuType::TEX: {
+            auto trace_data = std::dynamic_pointer_cast<TexUnit::TraceData>(trace->data);
+            tex_units_.at(trace_data->tex_idx)->Input.send(trace, 1);
+        }   break;
         case SfuType::CMOV:
             output.send(trace, 3);
             break;
@@ -334,6 +360,20 @@ void SfuUnit::tick() {
         auto stalls = (SimPlatform::instance().cycles() - time);
 
         core_->perf_stats_.sfu_stalls += stalls;
+
+        switch (sfu_type) {
+        case SfuType::TEX:
+            core_->perf_stats_.tex_issue_stalls += stalls;
+            break;
+        case SfuType::ROP:
+            core_->perf_stats_.rop_issue_stalls += stalls;
+            break;
+        case SfuType::RASTER:
+            core_->perf_stats_.raster_issue_stalls += stalls;
+            break;
+        default:        
+            break;
+        }
 
         break; // single block
     }

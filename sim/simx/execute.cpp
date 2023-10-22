@@ -25,6 +25,7 @@
 #include "warp.h"
 #include "instr.h"
 #include "core.h"
+#include <cocogfx/include/fixed.hpp>
 
 using namespace vortex;
 
@@ -1418,12 +1419,61 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         std::abort();
       }
     } break;
+    case 1:
+      switch (func3) {
+      case 0: { // RASTER
+        trace->exe_type = ExeType::SFU; 
+        trace->sfu_type = SfuType::RASTER;
+        auto trace_data = std::make_shared<RasterUnit::TraceData>();
+        trace->data = trace_data;        
+        for (uint32_t ri = 0, rn = core_->raster_units_.size(); ri < rn; ++ri) {
+          trace_data->raster_idx = core_->raster_idx();
+          bool has_stamps = false;
+          for (uint32_t t = thread_start; t < num_threads; ++t) {
+            if (!tmask_.test(t))
+              continue;          
+            auto result = core_->raster_units_.at(trace_data->raster_idx)->fetch(
+              core_->id(), warp_id_, t, core_->csrs_[warp_id_][t]);          
+            rddata[t].i = result;
+            has_stamps |= (result != 0);
+          }
+          if (has_stamps)
+            break;
+        }
+        rd_write = true;
+      } break;
+      default:
+        std::abort();
+      }
+      break;
     default:
       std::abort();
     }
   } break;
   case EXT2: {    
-    switch (func3) {
+    switch (func3) {    
+    case 0: { // TEX
+      trace->exe_type = ExeType::SFU; 
+      trace->sfu_type = SfuType::TEX;
+      trace->used_iregs.set(rsrc0);
+      trace->used_iregs.set(rsrc1);
+      trace->used_iregs.set(rsrc2);
+      auto trace_data = std::make_shared<TexUnit::TraceData>(num_threads);
+      trace->data = trace_data;
+      trace_data->tex_idx = core_->tex_idx();
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!tmask_.test(t))
+          continue;        
+        auto u     = rsdata[t][0].i;
+        auto v     = rsdata[t][1].i;
+        auto lod   = rsdata[t][2].i;
+        auto stage = func2;
+        auto color = core_->tex_units_.at(trace_data->tex_idx)->read(
+          core_->id(), warp_id_, t, stage, u, v, lod, core_->csrs_[warp_id_][t], trace_data);
+        rddata[t].i = color;
+      }
+      rd_write = true;
+    } break;
     case 1:
       switch (func2) {
       case 0: { // CMOV
@@ -1438,6 +1488,28 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           rddata[t].i = rsdata[t][0].i ? rsdata[t][1].i : rsdata[t][2].i;
         }
         rd_write = true;
+      } break;
+      case 1: { // ROP
+        trace->exe_type = ExeType::SFU; 
+        trace->sfu_type = SfuType::ROP;
+        trace->used_iregs.set(rsrc0);
+        trace->used_iregs.set(rsrc1);
+        trace->used_iregs.set(rsrc2);
+        auto trace_data = std::make_shared<RopUnit::TraceData>();
+        trace->data = trace_data;
+        trace_data->rop_idx = core_->rop_idx();
+        for (uint32_t t = thread_start; t < num_threads; ++t) {
+          if (!tmask_.test(t))
+            continue;
+          auto pos_face = rsdata[t][0].i;
+          auto color    = rsdata[t][1].i;
+          auto depth    = rsdata[t][2].i;
+          auto f = (pos_face >> 0)  & 0x1;
+          auto x = (pos_face >> 1)  & 0x7fff;
+          auto y = (pos_face >> 16) & 0x7fff;
+          core_->rop_units_.at(trace_data->rop_idx)->write(
+            core_->id(), warp_id_, t, x, y, f, color, depth, core_->csrs_[warp_id_][t], trace_data);
+        }
       } break;
       default:
         std::abort();
@@ -2318,9 +2390,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         DPN(2, "}" << std::endl);
         trace->used_iregs[rdest] = 1;
         assert(rdest != 0);
-      } else {
-        // disable writes to x0
-        trace->wb = false;
       }
       break;
     case RegType::Float:

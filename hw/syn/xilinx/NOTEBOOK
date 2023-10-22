@@ -13,13 +13,26 @@ vivado -mode batch -source scripts/gen_ip.tcl -tclargs ip/xilinx_u50_gen3x16_xdm
 PREFIX=build_base_1c NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 make > build_u50_hw_emu_base_1c.log 2>&1 &
 PREFIX=build_base_1c NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 make > build_u50_hw_base_1c.log 2>&1 &
 
+PREFIX=build_gfx_1c NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 CONFIGS="-DEXT_GFX_ENABLE" make > build_u50_hw_emu_gfx_1c.log 2>&1 &
+PREFIX=build_gfx_1c NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 CONFIGS="-DEXT_GFX_ENABLE" make > build_u50_hw_gfx_1c.log 2>&1 &
+
+PREFIX=build_gfx_dbg_1c DEBUG=3 NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 CONFIGS="-DEXT_GFX_ENABLE" make > build_u50_hw_emu_gfx_dbg_1c.log 2>&1 &
+PREFIX=build_gfx_dbg_1c DEBUG=3 NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 CONFIGS="-DEXT_GFX_ENABLE" make > build_u50_hw_gfx_dbg_1c.log 2>&1 &
+
 PREFIX=build_base_2c NUM_CORES=2 TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 make > build_u50_hw_emu_base_2c.log 2>&1 &
 PREFIX=build_base_2c NUM_CORES=2 TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 make > build_u50_hw_base_2c.log 2>&1 &
 
+PREFIX=build_gfx_2c NUM_CORES=2 TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 CONFIGS="-DEXT_GFX_ENABLE" make > build_u50_hw_emu_gfx_2c.log 2>&1 &
+PREFIX=build_gfx_2c NUM_CORES=2 TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 CONFIGS="-DEXT_GFX_ENABLE" make > build_u50_hw_gfx_2c.log 2>&1 &
+
+PREFIX=build_gfx_dbg_1c DEBUG=3 NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 CONFIGS="-DEXT_GFX_ENABLE" make > build_u280_hw_emu_gfx_dbg_1c.log 2>&1 &
+PREFIX=build_gfx_dbg_1c DEBUG=3 NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 CONFIGS="-DEXT_GFX_ENABLE" make > build_u280_hw_gfx_dbg_1c.log 2>&1 &
 PREFIX=build_dbg_1c DEBUG=3 NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 make > build_u280_hw_emu_dbg_1c.log 2>&1 &
 PREFIX=build_dbg_1c DEBUG=3 NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 make > build_u280_hw_dbg_1c.log 2>&1 &
 PREFIX=build_base_1c NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 make > build_u280_hw_emu_base_1c.log 2>&1 &
 PREFIX=build_base_1c NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 make > build_u280_hw_base_1c.log 2>&1 &
+PREFIX=build_gfx_1c NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 CONFIGS="-DEXT_GFX_ENABLE" make > build_u280_hw_emu_gfx_1c.log 2>&1 &
+PREFIX=build_gfx_1c NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 CONFIGS="-DEXT_GFX_ENABLE" make > build_u280_hw_gfx_1c.log 2>&1 &
 
 PREFIX=build TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 make > build_vck5k_hw_emu.log 2>&1 &
 PREFIX=build TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 make > build_vck5k_hw.log 2>&1 &
@@ -46,8 +59,12 @@ TARGET=hw PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 ./ci/blackbox.sh --dri
 TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 ./ci/blackbox.sh --driver=xrt --app=demo
 FPGA_BIN_DIR=<bin_dir> TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
 FPGA_BIN_DIR=<bin_dir> TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
+FPGA_BIN_DIR=<bin_dir> TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
+FPGA_BIN_DIR=<bin_dir> TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
 FPGA_BIN_DIR=<bin_dir> TARGET=hw_emu PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 ./ci/blackbox.sh --driver=xrt --app=demo
 FPGA_BIN_DIR=<bin_dir> XRT_DEVICE_INDEX=1 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 ./ci/blackbox.sh --driver=xrt --app=demo
+FPGA_BIN_DIR=<bin_dir> TARGET=hw_emu PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 ./ci/blackbox.sh --driver=xrt --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
+FPGA_BIN_DIR=<bin_dir> XRT_DEVICE_INDEX=1 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 ./ci/blackbox.sh --driver=xrt --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
 
 # build report logs
 <build_dir>/bin/vortex_afu.xclbin.info

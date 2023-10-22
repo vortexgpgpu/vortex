@@ -4,7 +4,7 @@ BUILD_DIR=$(PREFIX)_$(DEVICE_FAMILY)
 
 IP_CACHE_DIR=../ip_cache/$(DEVICE_FAMILY)
 
-.PHONY: dogfood unittest pipeline smem cache fpu core vortex top test
+.PHONY: dogfood unittest pipeline smem cache fpu tex raster rop core vortex top test
 
 ip-gen: $(IP_CACHE_DIR)/ip_gen.log
 $(IP_CACHE_DIR)/ip_gen.log:
@@ -39,6 +39,21 @@ fpu: ip-gen
 	mkdir -p fpu/$(BUILD_DIR)
 	cp fpu/Makefile fpu/$(BUILD_DIR)
 	$(MAKE) -C fpu/$(BUILD_DIR) clean && $(MAKE) -C fpu/$(BUILD_DIR) > fpu/$(BUILD_DIR)/build.log 2>&1 &
+
+tex:
+	mkdir -p tex/$(BUILD_DIR)
+	cp tex/Makefile tex/$(BUILD_DIR)
+	$(MAKE) -C tex/$(BUILD_DIR) clean && $(MAKE) -C tex/$(BUILD_DIR) > tex/$(BUILD_DIR)/build.log 2>&1 &
+
+rop:
+	mkdir -p rop/$(BUILD_DIR)
+	cp rop/Makefile rop/$(BUILD_DIR)
+	$(MAKE) -C rop/$(BUILD_DIR) clean && $(MAKE) -C rop/$(BUILD_DIR) > rop/$(BUILD_DIR)/build.log 2>&1 &
+
+raster:
+	mkdir -p raster/$(BUILD_DIR)
+	cp raster/Makefile raster/$(BUILD_DIR)
+	$(MAKE) -C raster/$(BUILD_DIR) clean && $(MAKE) -C raster/$(BUILD_DIR) > raster/$(BUILD_DIR)/build.log 2>&1 &
 
 core:
 	mkdir -p core/$(BUILD_DIR)

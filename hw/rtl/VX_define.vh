@@ -240,6 +240,12 @@
 
 `define NUM_SOCKETS             `UP(`NUM_CORES / `SOCKET_SIZE)
 
+////////////////////////// Texture Unit Definitions ///////////////////////////
+
+`define TEX_REQ_TAG_WIDTH       (`UUID_WIDTH + `LOG2UP(`TEX_REQ_QUEUE_SIZE))
+`define TEX_REQ_ARB1_TAG_WIDTH  (`TEX_REQ_TAG_WIDTH + `CLOG2(`SOCKET_SIZE))
+`define TEX_REQ_ARB2_TAG_WIDTH  (`TEX_REQ_ARB1_TAG_WIDTH + `ARB_SEL_BITS(`NUM_SOCKETS, `NUM_TEX_UNITS))
+
 ///////////////////////////////////////////////////////////////////////////////
 
 // non-cacheable tag bits
@@ -362,6 +368,24 @@
     assign src.rsp_valid = dst.rsp_valid; \
     assign src.rsp_data.data = dst.rsp_data.data; \
     assign src.rsp_data.tag = dst.rsp_data.tag[TD-1 -: TS]; \
+    assign dst.rsp_ready = src.rsp_ready
+
+`define ASSIGN_VX_RASTER_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data  = src.req_data; \
+    assign src.req_ready = dst.req_ready
+
+`define ASSIGN_VX_ROP_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data  = src.req_data; \
+    assign src.req_ready = dst.req_ready
+
+`define ASSIGN_VX_TEX_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data  = src.req_data; \
+    assign src.req_ready = dst.req_ready; \
+    assign src.rsp_valid = dst.rsp_valid; \
+    assign src.rsp_data  = dst.rsp_data; \
     assign dst.rsp_ready = src.rsp_ready
 
 `define BUFFER_DCR_BUS_IF(dst, src, enable) \

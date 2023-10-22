@@ -17,6 +17,18 @@
 `include "VX_fpu_define.vh"
 `endif
 
+`ifdef EXT_TEX_ENABLE
+`include "VX_tex_define.vh"
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+`include "VX_raster_define.vh"
+`endif
+
+`ifdef EXT_ROP_ENABLE
+`include "VX_rop_define.vh"
+`endif
+
 module VX_core import VX_gpu_pkg::*; #( 
     parameter CORE_ID = 0
 ) (        
@@ -35,6 +47,30 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
 
     VX_mem_bus_if.master    icache_bus_if,
+
+`ifdef EXT_TEX_ENABLE
+`ifdef PERF_ENABLE
+    VX_tex_perf_if.slave    perf_tex_if,
+    VX_cache_perf_if.slave  perf_tcache_if,
+`endif
+    VX_tex_bus_if.master    tex_bus_if,
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+`ifdef PERF_ENABLE
+    VX_raster_perf_if.slave perf_raster_if,
+    VX_cache_perf_if.slave  perf_rcache_if,
+`endif
+    VX_raster_bus_if.slave  raster_bus_if,
+`endif
+
+`ifdef EXT_ROP_ENABLE
+`ifdef PERF_ENABLE
+    VX_rop_perf_if.slave    perf_rop_if,
+    VX_cache_perf_if.slave  perf_ocache_if,
+`endif
+    VX_rop_bus_if.master    rop_bus_if,
+`endif
 
 `ifdef GBAR_ENABLE
     VX_gbar_bus_if.master   gbar_bus_if,
@@ -186,6 +222,30 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef EXT_F_ENABLE
         .fpu_dispatch_if(fpu_dispatch_if),
         .fpu_commit_if  (fpu_commit_if),
+    `endif   
+
+    `ifdef EXT_TEX_ENABLE
+        .tex_bus_if     (tex_bus_if),
+    `ifdef PERF_ENABLE
+        .perf_tex_if    (perf_tex_if),
+        .perf_tcache_if (perf_tcache_if),
+    `endif
+    `endif
+    
+    `ifdef EXT_RASTER_ENABLE        
+        .raster_bus_if  (raster_bus_if),
+    `ifdef PERF_ENABLE
+        .perf_raster_if (perf_raster_if),
+        .perf_rcache_if (perf_rcache_if),
+    `endif
+    `endif
+
+    `ifdef EXT_ROP_ENABLE        
+        .rop_bus_if     (rop_bus_if),
+    `ifdef PERF_ENABLE
+        .perf_rop_if    (perf_rop_if),
+        .perf_ocache_if (perf_ocache_if),
+    `endif
     `endif
 
         .commit_csr_if  (commit_csr_if),
@@ -318,6 +378,15 @@ endmodule
 
 module VX_core_top
 import VX_gpu_pkg::*;
+`ifdef EXT_TEX_ENABLE
+import VX_tex_pkg::*;
+`endif
+`ifdef EXT_RASTER_ENABLE
+import VX_raster_pkg::*;
+`endif
+`ifdef EXT_ROP_ENABLE
+import VX_rop_pkg::*;
+`endif
 #( 
     parameter CORE_ID = 0
 ) (  
@@ -354,6 +423,40 @@ import VX_gpu_pkg::*;
     input wire  [ICACHE_WORD_SIZE*8-1:0]    icache_rsp_data,
     input wire  [ICACHE_TAG_WIDTH-1:0]      icache_rsp_tag,
     output wire                             icache_rsp_ready,
+
+`ifdef EXT_TEX_ENABLE
+    output wire                             tex_req_valid,
+    output wire [`NUM_SFU_LANES-1:0]        tex_req_mask,
+    output wire [1:0][`NUM_SFU_LANES-1:0][31:0] tex_req_coords,
+    output wire [`NUM_SFU_LANES-1:0][`VX_TEX_LOD_BITS-1:0] tex_req_lod,
+    output wire [`VX_TEX_STAGE_BITS-1:0]    tex_req_stage,
+    output wire [`TEX_REQ_TAG_WIDTH-1:0]    tex_req_tag,  
+    input  wire                             tex_req_ready,
+
+    input  wire                             tex_rsp_valid,
+    input  wire [`NUM_SFU_LANES-1:0][31:0]  tex_rsp_texels,
+    input  wire [`TEX_REQ_TAG_WIDTH-1:0]    tex_rsp_tag, 
+    output wire                             tex_rsp_ready,
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+    input wire                              raster_req_valid,  
+    input raster_stamp_t [`NUM_SFU_LANES-1:0] raster_req_stamps,
+    input wire                              raster_req_done,    
+    output wire                             raster_req_ready,
+`endif
+
+`ifdef EXT_ROP_ENABLE
+    output wire                             rop_req_valid,    
+    output wire [`UUID_WIDTH-1:0]           rop_req_uuid,
+    output wire [`NUM_SFU_LANES-1:0]        rop_req_mask, 
+    output wire [`NUM_SFU_LANES-1:0][`VX_ROP_DIM_BITS-1:0] rop_req_pos_x,
+    output wire [`NUM_SFU_LANES-1:0][`VX_ROP_DIM_BITS-1:0] rop_req_pos_y,
+    output rgba_t [`NUM_SFU_LANES-1:0]      rop_req_color,
+    output wire [`NUM_SFU_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] rop_req_depth,
+    output wire [`NUM_SFU_LANES-1:0]        rop_req_face,
+    input  wire                             rop_req_ready,
+`endif
 
 `ifdef GBAR_ENABLE
     output wire                             gbar_req_valid,
@@ -429,6 +532,68 @@ import VX_gpu_pkg::*;
     assign icache_bus_if.rsp_data.data = icache_rsp_data;
     assign icache_rsp_ready = icache_bus_if.rsp_ready;
 
+`ifdef EXT_TEX_ENABLE
+    VX_tex_bus_if #(
+        .NUM_LANES (`NUM_SFU_LANES),
+        .TAG_WIDTH (`TEX_REQ_TAG_WIDTH)
+    ) tex_bus_if();
+
+`ifdef PERF_ENABLE
+    VX_mem_perf_if perf_tex_if();
+    VX_cache_perf_if perf_tcache_if();   
+`endif
+
+    assign tex_req_valid = tex_bus_if.req_valid;
+    assign tex_req_mask = tex_bus_if.req_data.mask;
+    assign tex_req_coords = tex_bus_if.req_data.coords;
+    assign tex_req_lod = tex_bus_if.req_data.lod;
+    assign tex_req_stage = tex_bus_if.req_data.stage;
+    assign tex_req_tag = tex_bus_if.req_data.tag;  
+    assign tex_bus_if.req_ready = tex_req_ready;
+
+    assign tex_bus_if.rsp_valid = tex_rsp_valid;
+    assign tex_bus_if.rsp_data.texels = tex_rsp_texels;
+    assign tex_bus_if.rsp_data.tag = tex_rsp_tag; 
+    assign tex_rsp_ready = tex_bus_if.rsp_ready;
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+    VX_raster_bus_if #(
+        .NUM_LANES (`NUM_SFU_LANES)
+    ) raster_bus_if();
+    
+`ifdef PERF_ENABLE
+    VX_mem_perf_if perf_raster_if();
+    VX_cache_perf_if perf_rcache_if();   
+`endif
+
+    assign raster_bus_if.req_valid = raster_req_valid;  
+    assign raster_bus_if.req_data.stamps = raster_req_stamps;
+    assign raster_bus_if.req_data.done = raster_req_done;
+    assign raster_req_ready = raster_bus_if.req_ready;
+`endif
+
+`ifdef EXT_ROP_ENABLE
+    VX_rop_bus_if #(
+        .NUM_LANES (`NUM_SFU_LANES)
+    ) rop_bus_if();
+    
+`ifdef PERF_ENABLE
+    VX_mem_perf_if perf_rop_if();
+    VX_cache_perf_if perf_ocache_if();   
+`endif
+    
+    assign rop_req_valid = rop_bus_if.req_valid;    
+    assign rop_req_uuid = rop_bus_if.req_data.uuid;
+    assign rop_req_mask = rop_bus_if.req_data.mask; 
+    assign rop_req_pos_x = rop_bus_if.req_data.pos_x;
+    assign rop_req_pos_y = rop_bus_if.req_data.pos_y;
+    assign rop_req_color = rop_bus_if.req_data.color;
+    assign rop_req_depth = rop_bus_if.req_data.depth;
+    assign rop_req_face = rop_bus_if.req_data.face;
+    assign rop_bus_if.req_ready = rop_req_ready;
+`endif
+
 `ifdef PERF_ENABLE
     VX_mem_perf_if mem_perf_if();
 `endif
@@ -456,6 +621,30 @@ import VX_gpu_pkg::*;
         .dcache_bus_if  (dcache_bus_if),
 
         .icache_bus_if  (icache_bus_if),
+
+    `ifdef EXT_TEX_ENABLE
+        .tex_bus_if     (tex_bus_if),
+    `ifdef PERF_ENABLE
+        .perf_tex_if    (perf_tex_if),
+        .perf_tcache_if (perf_tcache_if),
+    `endif
+    `endif
+
+    `ifdef EXT_RASTER_ENABLE
+        .raster_bus_if  (raster_bus_if),
+    `ifdef PERF_ENABLE
+        .perf_raster_if (perf_raster_if),
+        .perf_rcache_if (perf_rcache_if),
+    `endif
+    `endif
+    
+    `ifdef EXT_ROP_ENABLE
+        .rop_bus_if     (rop_bus_if),
+    `ifdef PERF_ENABLE
+        .perf_rop_if    (perf_rop_if),
+        .perf_ocache_if (perf_ocache_if),
+    `endif
+    `endif
 
     `ifdef GBAR_ENABLE
         .gbar_bus_if    (gbar_bus_if),

@@ -405,14 +405,23 @@ static const char* op_string(const Instr &instr) {
       default:
         std::abort();
       }
+    case 1:
+      switch (func3) {
+      case 0: return "RASTER";      
+      default:
+        std::abort();
+      }
     default:
       std::abort();
     }
   case Opcode::EXT2:
     switch (func3) {
+    case 0:
+      return "TEX";
     case 1: {
       switch (func2) {
-      case 0: return "CMOV"; 
+      case 0: return "CMOV";
+      case 1: return "ROP";      
       default:
         std::abort();
       }
@@ -722,10 +731,21 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
   case R4_TYPE:
     if (op == Opcode::EXT2) {
       switch (func3) {
+      case 0: // TEX      
+        instr->setDestReg(rd, RegType::Integer);
+        instr->addSrcReg(rs1, RegType::Integer);
+        instr->addSrcReg(rs2, RegType::Integer);
+        instr->addSrcReg(rs3, RegType::Integer);
+        break;
       case 1:
         switch (func2) {
         case 0: // CMOV
           instr->setDestReg(rd, RegType::Integer);
+          instr->addSrcReg(rs1, RegType::Integer);
+          instr->addSrcReg(rs2, RegType::Integer);
+          instr->addSrcReg(rs3, RegType::Integer);
+          break;
+        case 1: // ROP
           instr->addSrcReg(rs1, RegType::Integer);
           instr->addSrcReg(rs2, RegType::Integer);
           instr->addSrcReg(rs3, RegType::Integer);
@@ -751,4 +771,5 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
   }
 
   return instr;
+  
 }

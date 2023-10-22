@@ -483,11 +483,36 @@ module VX_decode  #(
                             default:;
                         endcase
                     end
+                    7'h01: begin
+                        case (func3)
+                        `ifdef EXT_RASTER_ENABLE
+                            3'h0: begin // RASTER
+                                ex_type = `EX_SFU;
+                                op_type = `INST_OP_BITS'(`INST_SFU_RASTER);
+                                use_rd  = 1;
+                                `USED_IREG (rd);
+                            end
+                        `endif
+                            default:;
+                        endcase
+                    end
                     default:;
                 endcase
             end
             `INST_EXT2: begin                
                 case (func3)
+                `ifdef EXT_TEX_ENABLE
+                    3'h0: begin // TEX
+                        ex_type = `EX_SFU;
+                        op_type = `INST_OP_BITS'(`INST_SFU_TEX);
+                        op_mod  = `INST_MOD_BITS'(func2);
+                        use_rd  = 1;
+                        `USED_IREG (rd);       
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                        `USED_IREG (rs3);
+                    end
+                `endif
                     3'h1: begin
                         case (func2)                       
                             2'h0: begin // CMOV
@@ -499,6 +524,15 @@ module VX_decode  #(
                                 `USED_IREG (rs2);
                                 `USED_IREG (rs3);
                             end
+                        `ifdef EXT_ROP_ENABLE
+                            2'h1: begin // ROP
+                                ex_type = `EX_SFU;
+                                op_type = `INST_OP_BITS'(`INST_SFU_ROP);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                                `USED_IREG (rs3);
+                            end
+                        `endif
                             default:;
                         endcase
                     end

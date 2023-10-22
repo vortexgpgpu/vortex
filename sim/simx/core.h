@@ -36,6 +36,9 @@
 #include "operand.h"
 #include "dispatcher.h"
 #include "exe_unit.h"
+#include "tex_unit.h"
+#include "raster_unit.h"
+#include "rop_unit.h"
 #include "dcrs.h"
 
 namespace vortex {
@@ -53,6 +56,9 @@ public:
     uint64_t lsu_stalls;
     uint64_t fpu_stalls;
     uint64_t sfu_stalls;
+    uint64_t tex_issue_stalls;
+    uint64_t rop_issue_stalls;
+    uint64_t raster_issue_stalls;
     uint64_t ifetches;
     uint64_t loads;
     uint64_t stores;
@@ -68,6 +74,9 @@ public:
       , lsu_stalls(0)
       , fpu_stalls(0)
       , sfu_stalls(0)
+      , tex_issue_stalls(0)
+      , rop_issue_stalls(0)
+      , raster_issue_stalls(0)
       , ifetches(0)
       , loads(0)
       , stores(0)
@@ -87,7 +96,10 @@ public:
        Cluster* cluster,
        const Arch &arch, 
        const DCRS &dcrs,
-       SharedMem::Ptr  sharedmem);
+       SharedMem::Ptr  sharedmem,
+       std::vector<RasterUnit::Ptr>& raster_units,
+       std::vector<RopUnit::Ptr>& rop_units,
+       std::vector<TexUnit::Ptr>& tex_units);
 
   ~Core();
 
@@ -139,6 +151,12 @@ public:
 
   bool check_exit(Word* exitcode, bool riscv_test) const;
 
+  uint32_t raster_idx();
+
+  uint32_t rop_idx();
+
+  uint32_t tex_idx();
+
 private:
 
   void schedule();
@@ -167,6 +185,9 @@ private:
   std::vector<Operand::Ptr> operands_;
   std::vector<Dispatcher::Ptr> dispatchers_;
   std::vector<ExeUnit::Ptr> exe_units_;
+  std::vector<RasterUnit::Ptr> raster_units_;
+  std::vector<RopUnit::Ptr> rop_units_;
+  std::vector<TexUnit::Ptr> tex_units_;
   SharedMem::Ptr sharedmem_;
 
   PipelineLatch fetch_latch_;
@@ -189,6 +210,10 @@ private:
   PerfStats perf_stats_;
   
   Cluster* cluster_;
+
+  uint32_t raster_idx_;
+  uint32_t rop_idx_;
+  uint32_t tex_idx_;
 
   uint32_t commit_exe_;
 

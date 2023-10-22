@@ -10,6 +10,10 @@ all:
 	$(MAKE) -C fence
 	$(MAKE) -C no_mf_ext
 	$(MAKE) -C no_smem
+	$(MAKE) -C tex
+	$(MAKE) -C draw3d
+	$(MAKE) -C raster
+	$(MAKE) -C rop
 
 run-simx:
 	$(MAKE) -C basic run-simx
@@ -62,6 +66,10 @@ clean:
 	$(MAKE) -C fence clean
 	$(MAKE) -C no_mf_ext clean
 	$(MAKE) -C no_smem clean
+	$(MAKE) -C tex clean
+	$(MAKE) -C draw3d clean
+	$(MAKE) -C raster clean
+	$(MAKE) -C rop clean
 
 clean-all:
 	$(MAKE) -C basic clean-all
@@ -75,3 +83,7 @@ clean-all:
 	$(MAKE) -C fence clean-all
 	$(MAKE) -C no_mf_ext clean-all
 	$(MAKE) -C no_smem clean-all
+	$(MAKE) -C tex clean-all
+	$(MAKE) -C draw3d clean-all
+	$(MAKE) -C raster clean-all
+	$(MAKE) -C rop clean-all

@@ -12,9 +12,9 @@ Vortex is a full-stack open-source RISC-V GPGPU.
     - configurable number of cores, warps, and threads.
     - configurable number of ALU, FPU, LSU, and SFU units per core.
     - configurable pipeline issue width.
-    - optional shared memory, L1, L2, and L3 caches.
-- Software: 
-    - OpenCL 1.2 Support.
+    - optional graphics rasterizer, texture, ands ROP units.
+    - optional shared memory, L1, L2 and L3 caches.
+- Software: OpenCL 1.2 Support.
 - Supported FPGAs: 
     - Altera Arria 10
     - Altera Stratix 10
@@ -43,6 +43,7 @@ Vortex is a full-stack open-source RISC-V GPGPU.
 - [Verilator](https://www.veripool.org/verilator)
 - [FpNew](https://github.com/pulp-platform/fpnew.git)
 - [SoftFloat](https://github.com/ucb-bar/berkeley-softfloat-3.git)
+- [CocoGfx](https://github.com/gtcasl/cocogfx.git)
 - [Ramulator](https://github.com/CMU-SAFARI/ramulator.git)
 - [Yosys](https://github.com/YosysHQ/yosys)
 - [Sv2v](https://github.com/zachjs/sv2v)

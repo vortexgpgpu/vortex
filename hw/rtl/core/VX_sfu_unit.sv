@@ -33,6 +33,30 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     VX_fpu_to_csr_if.slave  fpu_to_csr_if [`NUM_FPU_BLOCKS],
 `endif
 
+`ifdef EXT_TEX_ENABLE
+    VX_tex_bus_if.master    tex_bus_if,
+`ifdef PERF_ENABLE
+    VX_tex_perf_if.slave    perf_tex_if,
+    VX_cache_perf_if.slave  perf_tcache_if,
+`endif
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+    VX_raster_bus_if.slave  raster_bus_if,
+`ifdef PERF_ENABLE
+    VX_raster_perf_if.slave perf_raster_if,
+    VX_cache_perf_if.slave  perf_rcache_if,
+`endif
+`endif
+
+`ifdef EXT_ROP_ENABLE
+    VX_rop_bus_if.master    rop_bus_if,
+`ifdef PERF_ENABLE
+    VX_rop_perf_if.slave    perf_rop_if,
+    VX_cache_perf_if.slave  perf_ocache_if,
+`endif
+`endif
+
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
     VX_commit_csr_if.slave  commit_csr_if,
@@ -46,9 +70,15 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     localparam PID_WIDTH    = `UP(PID_BITS);
 
     localparam RSP_ARB_DATAW = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + (NUM_LANES * `XLEN) + `NR_BITS + 1 + `XLEN + PID_WIDTH + 1 + 1;
-    localparam RSP_ARB_SIZE = 1 + 1;
+    localparam RSP_ARB_SIZE = 1 + 1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED;
     localparam RSP_ARB_IDX_WCTL = 0;
     localparam RSP_ARB_IDX_CSR = 1;
+    localparam RSP_ARB_IDX_RASTER = RSP_ARB_IDX_CSR + 1;
+    localparam RSP_ARB_IDX_ROP = RSP_ARB_IDX_RASTER + `EXT_RASTER_ENABLED;    
+    localparam RSP_ARB_IDX_TEX = RSP_ARB_IDX_ROP + `EXT_ROP_ENABLED;
+    `UNUSED_PARAM (RSP_ARB_IDX_RASTER)
+    `UNUSED_PARAM (RSP_ARB_IDX_ROP)
+    `UNUSED_PARAM (RSP_ARB_IDX_TEX)
 
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)
@@ -73,6 +103,18 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     
 `ifdef PERF_ENABLE
     VX_sfu_perf_if sfu_perf_if();
+`endif
+
+`ifdef EXT_TEX_ENABLE
+    VX_sfu_csr_if tex_csr_if();
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+    VX_sfu_csr_if raster_csr_if();
+`endif
+
+`ifdef EXT_ROP_ENABLE
+    VX_sfu_csr_if rop_csr_if();
 `endif
 
     // Warp control block    
@@ -134,6 +176,30 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
    
     `ifdef EXT_F_ENABLE  
         .fpu_to_csr_if  (fpu_to_csr_if),
+    `endif        
+    
+    `ifdef EXT_TEX_ENABLE        
+        .tex_csr_if     (tex_csr_if),
+    `ifdef PERF_ENABLE
+        .perf_tex_if    (perf_tex_if),
+        .perf_tcache_if (perf_tcache_if),
+    `endif
+    `endif
+    
+    `ifdef EXT_RASTER_ENABLE        
+        .raster_csr_if  (raster_csr_if),
+    `ifdef PERF_ENABLE
+        .perf_raster_if (perf_raster_if),
+        .perf_rcache_if (perf_rcache_if),
+    `endif
+    `endif
+
+    `ifdef EXT_ROP_ENABLE        
+        .rop_csr_if     (rop_csr_if),
+    `ifdef PERF_ENABLE
+        .perf_rop_if    (perf_rop_if),
+        .perf_ocache_if (perf_ocache_if),
+    `endif
     `endif
 
         .sched_csr_if   (sched_csr_if),
@@ -144,15 +210,120 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     assign rsp_arb_valid_in[RSP_ARB_IDX_CSR] = csr_commit_if.valid;
     assign rsp_arb_data_in[RSP_ARB_IDX_CSR] = csr_commit_if.data;
     assign csr_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_CSR];
+    
+`ifdef EXT_TEX_ENABLE
+
+    VX_execute_if #(
+        .NUM_LANES (NUM_LANES)
+    ) tex_execute_if();
+    VX_commit_if #(
+        .NUM_LANES (NUM_LANES)
+    ) tex_commit_if();
+
+    assign tex_execute_if.valid = execute_if[0].valid && (execute_if[0].data.op_type == `INST_SFU_TEX);
+    assign tex_execute_if.data = execute_if[0].data;
+
+    `RESET_RELAY (tex_reset, reset);
+
+    VX_tex_agent #(
+        .CORE_ID   (CORE_ID),
+        .NUM_LANES (NUM_LANES)
+    ) tex_agent (
+        .clk        (clk),
+        .reset      (tex_reset),
+        .execute_if (tex_execute_if),
+        .tex_csr_if (tex_csr_if),
+        .tex_bus_if (tex_bus_if),
+        .commit_if  (tex_commit_if)        
+    );     
+
+    assign rsp_arb_valid_in[RSP_ARB_IDX_TEX] = tex_commit_if.valid;
+    assign rsp_arb_data_in[RSP_ARB_IDX_TEX] = tex_commit_if.data;
+    assign tex_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_TEX];
+
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+    
+    VX_execute_if #(
+        .NUM_LANES (NUM_LANES)
+    ) raster_execute_if();
+    VX_commit_if #(
+        .NUM_LANES (NUM_LANES)
+    ) raster_commit_if();
+
+    assign raster_execute_if.valid = execute_if[0].valid && (execute_if[0].data.op_type == `INST_SFU_RASTER);
+    assign raster_execute_if.data = execute_if[0].data;
+
+    `RESET_RELAY (raster_reset, reset);
+
+    VX_raster_agent #(
+        .CORE_ID   (CORE_ID),
+        .NUM_LANES (NUM_LANES)
+    ) raster_agent (
+        .clk        (clk),
+        .reset      (raster_reset),
+        .execute_if (raster_execute_if),
+        .raster_csr_if(raster_csr_if),
+        .raster_bus_if(raster_bus_if), 
+        .commit_if  (raster_commit_if)       
+    );
+
+    assign rsp_arb_valid_in[RSP_ARB_IDX_RASTER] = raster_commit_if.valid;
+    assign rsp_arb_data_in[RSP_ARB_IDX_RASTER] = raster_commit_if.data;
+    assign raster_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_RASTER];
+
+`endif
+
+`ifdef EXT_ROP_ENABLE
+    
+    VX_execute_if #(
+        .NUM_LANES (NUM_LANES)
+    ) rop_execute_if();
+    VX_commit_if #(
+        .NUM_LANES (NUM_LANES)
+    ) rop_commit_if();
+
+    assign rop_execute_if.valid = execute_if[0].valid && (execute_if[0].data.op_type == `INST_SFU_ROP);
+    assign rop_execute_if.data = execute_if[0].data;
+
+    `RESET_RELAY (rop_reset, reset);
+            
+    VX_rop_agent #(
+        .CORE_ID   (CORE_ID),
+        .NUM_LANES (NUM_LANES)
+    ) rop_agent (
+        .clk        (clk),
+        .reset      (rop_reset),
+        .execute_if (rop_execute_if),
+        .rop_csr_if (rop_csr_if),
+        .rop_bus_if (rop_bus_if),
+        .commit_if  (rop_commit_if)
+    );
+
+    assign rsp_arb_valid_in[RSP_ARB_IDX_ROP] = rop_commit_if.valid;
+    assign rsp_arb_data_in[RSP_ARB_IDX_ROP] = rop_commit_if.data;
+    assign rop_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_ROP];
+
+`endif
 
     // can accept new request?
 
     reg sfu_req_ready;
     always @(*) begin
         case (execute_if[0].data.op_type)
-        `INST_SFU_CSRRW,
-        `INST_SFU_CSRRS,
-        `INST_SFU_CSRRC: sfu_req_ready = csr_execute_if.ready;
+         `INST_SFU_CSRRW,
+         `INST_SFU_CSRRS,
+         `INST_SFU_CSRRC: sfu_req_ready = csr_execute_if.ready;
+    `ifdef EXT_TEX_ENABLE
+        `INST_SFU_TEX: sfu_req_ready = tex_execute_if.ready;
+    `endif
+    `ifdef EXT_RASTER_ENABLE
+        `INST_SFU_RASTER: sfu_req_ready = raster_execute_if.ready;
+    `endif
+    `ifdef EXT_ROP_ENABLE
+        `INST_SFU_ROP: sfu_req_ready = rop_execute_if.ready;
+    `endif
         default: sfu_req_ready = wctl_execute_if.ready;
         endcase
     end   
@@ -195,6 +366,39 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     );
 
 `ifdef PERF_ENABLE
+`ifdef EXT_TEX_ENABLE
+    reg [`PERF_CTR_BITS-1:0] perf_tex_stalls;
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_tex_stalls <= '0;
+        end else begin
+            perf_tex_stalls <= perf_tex_stalls + `PERF_CTR_BITS'(tex_execute_if.valid && ~tex_execute_if.ready);
+        end
+    end
+    assign sfu_perf_if.tex_stalls = perf_tex_stalls;
+`endif
+`ifdef EXT_RASTER_ENABLE
+    reg [`PERF_CTR_BITS-1:0] perf_raster_stalls;
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_raster_stalls <= '0;
+        end else begin
+            perf_raster_stalls <= perf_raster_stalls + `PERF_CTR_BITS'(raster_execute_if.valid && ~raster_execute_if.ready);
+        end
+    end
+    assign sfu_perf_if.raster_stalls = perf_raster_stalls;
+`endif
+`ifdef EXT_ROP_ENABLE
+    reg [`PERF_CTR_BITS-1:0] perf_rop_stalls;
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_rop_stalls <= '0;
+        end else begin
+            perf_rop_stalls <= perf_rop_stalls + `PERF_CTR_BITS'(rop_execute_if.valid && ~rop_execute_if.ready);
+        end
+    end
+    assign sfu_perf_if.rop_stalls = perf_rop_stalls;
+`endif
     reg [`PERF_CTR_BITS-1:0] perf_wctl_stalls;
     always @(posedge clk) begin
         if (reset) begin

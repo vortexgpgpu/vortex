@@ -14,8 +14,9 @@
 #pragma once
 
 #include <util.h>
-#include <VX_types.h>
-#include <array>
+#include "tex_unit.h"
+#include "raster_unit.h"
+#include "rop_unit.h"
 
 namespace vortex {
 
@@ -39,7 +40,10 @@ class DCRS {
 public:
     void write(uint32_t addr, uint32_t value);
     
-    BaseDCRS base_dcrs;
+    BaseDCRS         base_dcrs;
+    TexUnit::DCRS    tex_dcrs;
+    RasterUnit::DCRS raster_dcrs;
+    RopUnit::DCRS    rop_dcrs;
 };
 
 }

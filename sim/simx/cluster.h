@@ -18,6 +18,9 @@
 #include "arch.h"
 #include "cache_cluster.h"
 #include "shared_mem.h"
+#include "raster_unit.h"
+#include "rop_unit.h"
+#include "tex_unit.h"
 #include "core.h"
 #include "constants.h"
 
@@ -28,6 +31,9 @@ class ProcessorImpl;
 class Cluster : public SimObject<Cluster> {
 public:
   struct PerfStats {
+    RasterUnit::PerfStats raster_unit;
+    RopUnit::PerfStats    rop_unit;
+    TexUnit::PerfStats    tex_unit;
     CacheSim::PerfStats   icache;
     CacheSim::PerfStats   dcache;
     SharedMem::PerfStats  sharedmem;
@@ -37,6 +43,9 @@ public:
     CacheSim::PerfStats   rcache;
 
     PerfStats& operator+=(const PerfStats& rhs) {
+      this->raster_unit += rhs.raster_unit;
+      this->rop_unit    += rhs.rop_unit;
+      this->tex_unit    += rhs.tex_unit;
       this->icache      += rhs.icache;
       this->dcache      += rhs.dcache;
       this->sharedmem   += rhs.sharedmem;
@@ -79,6 +88,9 @@ private:
   uint32_t                     cluster_id_;  
   std::vector<Core::Ptr>       cores_;  
   std::vector<CoreMask>        barriers_;
+  std::vector<RasterUnit::Ptr> raster_units_;
+  std::vector<RopUnit::Ptr>    rop_units_;
+  std::vector<TexUnit::Ptr>    tex_units_;
   CacheSim::Ptr                l2cache_;
   CacheCluster::Ptr            icaches_;
   CacheCluster::Ptr            dcaches_;

@@ -8,6 +8,9 @@ The directory/file layout of the Vortex codebase is as followed:
     - `cache`: cache subsystem
     - `mem`: memory subsystem
     - `fpu`: floating point unit
+    - `raster`: graphics rasterizer unit
+    - `rop`: graphics render output unit
+    - `tex`: graphics texture sampling unit
     - `interfaces`: interfaces for inter-module communication
     - `libs`: general-purpose RTL modules    
   - `syn`: synthesis directory

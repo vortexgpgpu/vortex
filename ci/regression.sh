@@ -99,6 +99,100 @@ make -C tests/opencl run-rtlsim
 echo "opencl tests done!"
 }
 
+tex() 
+{
+echo "begin texture tests..."
+
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-itoad.png -rtoad_ref_f0.png -f0 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-itoad.png -rtoad_ref_f1.png -f1 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-itoad.png -rtoad_ref_f2.png -f2 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-itoad.png -rtoad_ref_f3.png -f3 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-itoad.png -rtoad_ref_f4.png -f4 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-itoad.png -rtoad_ref_f5.png -f5 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-itoad.png -rtoad_ref_f6.png -f6 -g0"
+
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -rsoccer_ref_g0.png -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -rsoccer_ref_g0.png -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -rsoccer_ref_g0.png -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1" --perf=3
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1" --perf=3
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -rsoccer_ref_g2.png -g2"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -rsoccer_ref_g2.png -g2"
+
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1" --perf=3
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1" --perf=3
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1 -z"
+CONFIGS="-DEXT_TEX_ENABLE -DTCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim  --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1"
+CONFIGS="-DEXT_TEX_ENABLE -DNUM_TEX_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE" ./ci/blackbox.sh --driver=simx  --app=tex --args="-isoccer.png -rsoccer_ref_g1.png" --cores=4 --warps=1 --threads=2
+CONFIGS="-DEXT_TEX_ENABLE -DNUM_TEX_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim  --app=tex --args="-isoccer.png -rsoccer_ref_g1.png" --cores=1 --warps=1 --threads=2
+CONFIGS="-DEXT_TEX_ENABLE -DNUM_TEX_UNITS=1 -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim  --app=tex --args="-isoccer.png -rsoccer_ref_g1.png" --cores=2 --warps=1 --threads=2
+CONFIGS="-DEXT_TEX_ENABLE -DNUM_TEX_UNITS=4 -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim  --app=tex --args="-isoccer.png -rsoccer_ref_g1.png" --cores=2 --warps=1 --threads=2
+CONFIGS="-DEXT_TEX_ENABLE -DNUM_TEX_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim  --app=tex --args="-isoccer.png -rsoccer_ref_g1.png" --cores=4 --warps=1 --threads=2
+CONFIGS="-DEXT_TEX_ENABLE -DNUM_TEX_UNITS=4 -DL1_DISABLE -DSM_DISABLE -DNUM_TCACHES=2" ./ci/blackbox.sh --driver=rtlsim  --app=tex --args="-isoccer.png -rsoccer_ref_g1.png" --cores=4 --warps=1 --threads=2
+
+echo "texture tests done!"
+}
+
+rop()
+{
+echo "begin render output tests..."
+
+CONFIGS="-DEXT_ROP_ENABLE" ./ci/blackbox.sh --driver=simx --app=rop --args="-rwhitebox_128.png" --perf=5
+CONFIGS="-DEXT_ROP_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --perf=5
+CONFIGS="-DEXT_ROP_ENABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png"
+CONFIGS="-DEXT_ROP_ENABLE -DOCACHE_NUM_BANKS=8" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --perf=5
+CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=simx --app=rop --args="-rwhitebox_128.png" --cores=4 --warps=1 --threads=2
+CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --cores=1 --warps=1 --threads=2
+CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=1 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --cores=2 --warps=1 --threads=2
+CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --cores=4 --warps=1 --threads=2
+CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=4 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --cores=2 --warps=1 --threads=2
+CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=4 -DL1_DISABLE -DSM_DISABLE -DNUM_OCACHES=2" ./ci/blackbox.sh --driver=rtlsim  --app=rop --args="-rwhitebox_128.png" --cores=4 --warps=1 --threads=2
+
+echo "render output tests done!"
+}
+
+raster()
+{
+echo "begin rasterizer tests..."
+
+CONFIGS="-DEXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=simx --app=raster --args="-ttriangle.cgltrace -rtriangle_ref_128.png" --perf=4
+CONFIGS="-DEXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=raster --args="-ttriangle.cgltrace -rtriangle_ref_128.png" --perf=4
+CONFIGS="-DEXT_RASTER_ENABLE -DRCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=raster --args="-ttriangle.cgltrace -rtriangle_ref_128.png"
+CONFIGS="-DEXT_RASTER_ENABLE -DRCACHE_NUM_BANKS=4" ./ci/blackbox.sh --driver=rtlsim --app=raster --args="-ttriangle.cgltrace -rtriangle_ref_128.png" --perf=4
+CONFIGS="-DEXT_RASTER_ENABLE -DRASTER_TILE_LOGSIZE=4" ./ci/blackbox.sh --driver=simx --app=raster --args="-k4 -ttriangle.cgltrace -rtriangle_ref_128.png"
+CONFIGS="-DEXT_RASTER_ENABLE -DRASTER_TILE_LOGSIZE=6" ./ci/blackbox.sh --driver=simx --app=raster --args="-k6 -ttriangle.cgltrace -rtriangle_ref_128.png"
+CONFIGS="-DEXT_RASTER_ENABLE -DRASTER_TILE_LOGSIZE=4" ./ci/blackbox.sh --driver=rtlsim --app=raster --args="-k4 -ttriangle.cgltrace -rtriangle_ref_128.png"
+CONFIGS="-DEXT_RASTER_ENABLE -DRASTER_TILE_LOGSIZE=6" ./ci/blackbox.sh --driver=rtlsim --app=raster --args="-k6 -ttriangle.cgltrace -rtriangle_ref_128.png"
+CONFIGS="-DEXT_GFX_ENABLE -DNUM_RASTER_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DRCACHE_DISABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png" --cores=4 --warps=1 --threads=2
+CONFIGS="-DEXT_GFX_ENABLE -DNUM_RASTER_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DRCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png" --cores=1 --warps=1 --threads=2
+CONFIGS="-DEXT_GFX_ENABLE -DNUM_RASTER_UNITS=1 -DL1_DISABLE -DSM_DISABLE -DRCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png" --cores=2 --warps=1 --threads=2
+CONFIGS="-DEXT_GFX_ENABLE -DNUM_RASTER_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DRCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png" --cores=4 --warps=1 --threads=2
+CONFIGS="-DEXT_GFX_ENABLE -DNUM_RASTER_UNITS=2" ./ci/blackbox.sh --driver=rtlsim --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png" --warps=1 --threads=2
+CONFIGS="-DEXT_GFX_ENABLE -DNUM_RASTER_UNITS=4 -DL1_DISABLE -DSM_DISABLE -DRCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png" --cores=2 --warps=1 --threads=2 || true
+CONFIGS="-DEXT_GFX_ENABLE -DNUM_RASTER_UNITS=4 -DL1_DISABLE -DSM_DISABLE -DNUM_RCACHES=2" ./ci/blackbox.sh --driver=rtlsim  --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png" --cores=4 --warps=1 --threads=2 || true
+CONFIGS="-DEXT_GFX_ENABLE -DRASTER_NUM_SLICES=2 -DL1_DISABLE -DSM_DISABLE -DRCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=draw3d --args="-tvase.cgltrace -rvase_ref_128.png" --threads=2 || true
+
+echo "rasterizer output tests done!"
+}
+
+graphics()
+{
+echo "begin graphics tests..."
+
+CONFIGS="-DEXT_GFX_ENABLE -DNUM_RASTER_UNITS=2" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
+CONFIGS="-DEXT_GFX_ENABLE -DNUM_RASTER_UNITS=2" ./ci/blackbox.sh --driver=rtlsim --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
+CONFIGS="-DEXT_GFX_ENABLE -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE -DRCACHE_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png" --clusters=2 --cores=2 --warps=1 --threads=2
+CONFIGS="-DEXT_GFX_ENABLE -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE -DRCACHE_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png" --clusters=2 --cores=2 --warps=1 --threads=2
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-ttriangle.cgltrace -rtriangle_ref_8.png -w8 -h8" --warps=1 --threads=2 --debug=3
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=draw3d --args="-ttriangle.cgltrace -rtriangle_ref_8.png -w8 -h8" --warps=1 --threads=2 --debug=3
+CONFIGS="-DEXT_GFX_ENABLE -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE -DRCACHE_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tvase.cgltrace -rvase_ref_32.png -w32 -h32" --threads=2
+CONFIGS="-DEXT_GFX_ENABLE -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE -DRCACHE_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=draw3d --args="-tvase.cgltrace -rvase_ref_32.png -w32 -h32" --threads=2 || true
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-xy -w64 -h64 -ttriangle.cgltrace -rtriangle_ref_64.png"
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=draw3d --args="-xy -w64 -h64 -ttriangle.cgltrace -rtriangle_ref_64.png"
+
+echo "graphics tests done!"
+}
+
 cluster() 
 {
 echo "begin clustering tests..."
@@ -238,6 +332,7 @@ echo "begin stress0 tests..."
 # test verilator reset values
 CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
 CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
+CONFIGS="-DVERILATOR_RESET_VALUE=1 -DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
 CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --app=printf
 
 echo "stress0 tests done!"
@@ -259,13 +354,16 @@ echo "begin synthesis tests..."
 PREFIX=build_base make -C hw/syn/yosys clean
 PREFIX=build_base CONFIGS="-DDPI_DISABLE -DEXT_F_DISABLE" make -C hw/syn/yosys elaborate
 
+PREFIX=build_gfx make -C hw/syn/yosys clean
+PREFIX=build_gfx CONFIGS="-DDPI_DISABLE -DEXT_GFX_ENABLE -DEXT_F_DISABLE" make -C hw/syn/yosys elaborate
+
 echo "synthesis tests done!"
 }
 
 show_usage()
 {
     echo "Vortex Regression Test" 
-    echo "Usage: $0 [--unittest] [--isa] [--regression] [--opencl] [--cluster] [--debug] [--config] [--stress[#n]] [--synthesis] [--all] [--h|--help]"
+    echo "Usage: $0 [--unittest] [--isa] [--regression] [--opencl] [--tex] [--rop] [--raster] [--graphics] [--cluster] [--debug] [--config] [--stress[#n]] [--synthesis] [--all] [--h|--help]"
 }
 
 start=$SECONDS
@@ -279,6 +377,14 @@ while [ "$1" != "" ]; do
         --regression ) regression
                 ;;
         --opencl ) opencl
+                ;;
+        --tex ) tex
+                ;;
+        --rop ) rop
+                ;;
+        --raster ) raster
+                ;;
+        --graphics ) graphics
                 ;;
         --cluster ) cluster
                 ;;
@@ -299,6 +405,10 @@ while [ "$1" != "" ]; do
                isa
                regression
                opencl
+               graphics
+               tex
+               rop
+               raster               
                cluster
                debug
                config

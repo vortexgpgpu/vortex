@@ -9,10 +9,12 @@ CONFIGS += -DNOPAE
 #CONFIGS += -DNUM_CORES=2
 #CONFIGS += -DNUM_WARPS=32
 #CONFIGS += -DNUM_THREADS=32
+#CONFIGS += -DEXT_GFX_ENABLE
 #CONFIGS += -DL2_ENABLE
 
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
 	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -J$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -J$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/fpnew/src
 endif
-RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(AFU_DIR)/ccip -I$(IP_CACHE_DIR) $(FPU_INCLUDE)
+TEX_INCLUDE = -I$(RTL_DIR)/tex -I$(RTL_DIR)/raster -I$(RTL_DIR)/rop
+RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(AFU_DIR)/ccip -I$(IP_CACHE_DIR) $(FPU_INCLUDE) $(TEX_INCLUDE)
