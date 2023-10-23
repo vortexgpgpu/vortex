@@ -191,7 +191,7 @@ package VX_gpu_pkg;
             wid_to_isw = 0;
         end
     endfunction
-    `IGNORE_UNUSED_END
+`IGNORE_UNUSED_END
 
     function logic [`NW_WIDTH-1:0] wis_to_wid(
         input logic [ISSUE_WIS_W-1:0] wis, 
