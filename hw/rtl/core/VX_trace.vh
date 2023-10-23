@@ -14,6 +14,8 @@
 `ifndef VX_TRACE_VH
 `define VX_TRACE_VH
 
+`ifndef SYNTHESIS
+
 `include "VX_define.vh"
 
 task trace_ex_type(input int level, input [`EX_BITS-1:0] ex_type);
@@ -373,6 +375,8 @@ task trace_base_dcr(input int level, input [`VX_DCR_ADDR_WIDTH-1:0] addr);
         `VX_DCR_BASE_MPM_CLASS:     `TRACE(level, ("MPM_CLASS"));
         default:                    `TRACE(level, ("?"));
     endcase
-endtask 
+endtask
+
+`endif
 
 `endif // VX_TRACE_VH
