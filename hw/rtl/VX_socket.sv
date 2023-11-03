@@ -26,13 +26,14 @@ module VX_socket import VX_gpu_pkg::*; #(
     VX_mem_perf_if.slave    mem_perf_if,
 `endif
 
+    // DCRs
     VX_dcr_bus_if.slave     dcr_bus_if,
 
-    VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
-
-    VX_mem_bus_if.master    icache_bus_if,
+    // Memory
+    VX_mem_bus_if.master    mem_bus_if,
 
 `ifdef GBAR_ENABLE
+    // Barrier
     VX_gbar_bus_if.master   gbar_bus_if,
 `endif
 
@@ -62,77 +63,139 @@ module VX_socket import VX_gpu_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
+`ifdef PERF_ENABLE
+    VX_mem_perf_if mem_perf_tmp_if();
+    cache_perf_t perf_icache;
+    cache_perf_t perf_dcache;
+
+    assign mem_perf_tmp_if.icache = perf_icache;
+    assign mem_perf_tmp_if.dcache = perf_dcache;
+    assign mem_perf_tmp_if.l2cache = mem_perf_if.l2cache;
+    assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
+    assign mem_perf_tmp_if.smem = 'x;
+    assign mem_perf_tmp_if.mem = mem_perf_if.mem;
+`endif    
+
     VX_mem_bus_if #(
-        .DATA_SIZE (DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) per_core_dcache_bus_if[`SOCKET_SIZE * DCACHE_NUM_REQS]();
+        .DATA_SIZE (ICACHE_LINE_SIZE),
+        .TAG_WIDTH (ICACHE_MEM_TAG_WIDTH)
+    ) icache_mem_bus_if();
 
-    `RESET_RELAY (dcache_arb_reset, reset);
+    VX_mem_bus_if #(
+        .DATA_SIZE (DCACHE_LINE_SIZE),
+        .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
+    ) dcache_mem_bus_if();
 
-    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
-        VX_mem_bus_if #(
-            .DATA_SIZE (DCACHE_WORD_SIZE),
-            .TAG_WIDTH (DCACHE_ARB_TAG_WIDTH)
-        ) dcache_bus_tmp_if[1]();
+    VX_mem_bus_if #(
+        .DATA_SIZE (`L1_LINE_SIZE),
+        .TAG_WIDTH (L1_MEM_TAG_WIDTH)
+    ) cache_mem_bus_if[2]();
 
-        VX_mem_bus_if #(
-            .DATA_SIZE (DCACHE_WORD_SIZE),
-            .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-        ) per_core_dcache_bus_tmp_if[`SOCKET_SIZE]();
+    VX_mem_bus_if #(
+        .DATA_SIZE (`L1_LINE_SIZE),
+        .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
+    ) mem_bus_tmp_if[1]();
 
-        for (genvar j = 0; j < `SOCKET_SIZE; ++j) begin
-            `ASSIGN_VX_MEM_BUS_IF (per_core_dcache_bus_tmp_if[j], per_core_dcache_bus_if[j * DCACHE_NUM_REQS + i]);
-        end
+    `ASSIGN_VX_MEM_BUS_IF_X (cache_mem_bus_if[0], icache_mem_bus_if, L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_BUS_IF_X (cache_mem_bus_if[1], dcache_mem_bus_if, L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
 
-        VX_mem_arb #(
-            .NUM_INPUTS   (`SOCKET_SIZE),
-            .DATA_SIZE    (DCACHE_WORD_SIZE),
-            .TAG_WIDTH    (DCACHE_NOSM_TAG_WIDTH),
-            .TAG_SEL_IDX  (`CACHE_ADDR_TYPE_BITS),
-            .ARBITER      ("R"),
-            .OUT_REG_REQ  ((`SOCKET_SIZE > 1) ? 2 : 0),
-            .OUT_REG_RSP  ((`SOCKET_SIZE > 1) ? 2 : 0)
-        ) dcache_arb (
-            .clk        (clk),
-            .reset      (dcache_arb_reset),
-            .bus_in_if  (per_core_dcache_bus_tmp_if),
-            .bus_out_if (dcache_bus_tmp_if)
-        );
-    
-        `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[i], dcache_bus_tmp_if[0]);
-    end
+    `RESET_RELAY (mem_arb_reset, reset);
+
+    VX_mem_arb #(
+        .NUM_INPUTS   (2),
+        .DATA_SIZE    (`L1_LINE_SIZE),
+        .TAG_WIDTH    (L1_MEM_TAG_WIDTH),
+        .TAG_SEL_IDX  (1), // Skip 0 for NC flag
+        .ARBITER      ("R"),
+        .OUT_REG_REQ  (2),
+        .OUT_REG_RSP  (2)
+    ) mem_arb (
+        .clk        (clk),
+        .reset      (mem_arb_reset),
+        .bus_in_if  (cache_mem_bus_if),
+        .bus_out_if (mem_bus_tmp_if)
+    );
+
+    `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_tmp_if[0]);
 
     ///////////////////////////////////////////////////////////////////////////
-    
+
     VX_mem_bus_if #(
         .DATA_SIZE (ICACHE_WORD_SIZE), 
         .TAG_WIDTH (ICACHE_TAG_WIDTH)
     ) per_core_icache_bus_if[`SOCKET_SIZE]();
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (ICACHE_WORD_SIZE),
-        .TAG_WIDTH (ICACHE_ARB_TAG_WIDTH)
-    ) icache_bus_tmp_if[1]();
+    `RESET_RELAY (icache_reset, reset);
 
-    `RESET_RELAY (icache_arb_reset, reset);
-
-    VX_mem_arb #(
-        .NUM_INPUTS   (`SOCKET_SIZE),
-        .NUM_OUTPUTS  (1),
-        .DATA_SIZE    (ICACHE_WORD_SIZE),
-        .TAG_WIDTH    (ICACHE_TAG_WIDTH),
-        .TAG_SEL_IDX  (0),
-        .ARBITER      ("R"),
-        .OUT_REG_REQ  ((`SOCKET_SIZE > 1) ? 2 : 0),
-        .OUT_REG_RSP  ((`SOCKET_SIZE > 1) ? 2 : 0)
-    ) icache_arb (
-        .clk        (clk),
-        .reset      (icache_arb_reset),
-        .bus_in_if  (per_core_icache_bus_if),
-        .bus_out_if (icache_bus_tmp_if)
+    VX_cache_cluster #(
+        .INSTANCE_ID    ($sformatf("socket%0d-icache", SOCKET_ID)),    
+        .NUM_UNITS      (`NUM_ICACHES),
+        .NUM_INPUTS     (`SOCKET_SIZE),
+        .TAG_SEL_IDX    (0),
+        .CACHE_SIZE     (`ICACHE_SIZE),
+        .LINE_SIZE      (ICACHE_LINE_SIZE),
+        .NUM_BANKS      (1),
+        .NUM_WAYS       (`ICACHE_NUM_WAYS),
+        .WORD_SIZE      (ICACHE_WORD_SIZE),
+        .NUM_REQS       (1),
+        .CRSQ_SIZE      (`ICACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (`ICACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (`ICACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (`ICACHE_MREQ_SIZE),
+        .TAG_WIDTH      (ICACHE_TAG_WIDTH),
+        .UUID_WIDTH     (`UUID_WIDTH),
+        .WRITE_ENABLE   (0),
+        .CORE_OUT_REG   (2),
+        .MEM_OUT_REG    (2)
+    ) icache (
+    `ifdef PERF_ENABLE
+        .cache_perf     (perf_icache),
+    `endif
+        .clk            (clk),
+        .reset          (icache_reset),
+        .core_bus_if    (per_core_icache_bus_if),
+        .mem_bus_if     (icache_mem_bus_if)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, icache_bus_tmp_if[0]);
+    ///////////////////////////////////////////////////////////////////////////
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (DCACHE_WORD_SIZE), 
+        .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
+    ) per_core_dcache_bus_if[`SOCKET_SIZE * DCACHE_NUM_REQS]();
+
+    `RESET_RELAY (dcache_reset, reset);
+
+    VX_cache_cluster #(
+        .INSTANCE_ID    ($sformatf("socket%0d-dcache", SOCKET_ID)),    
+        .NUM_UNITS      (`NUM_DCACHES),
+        .NUM_INPUTS     (`SOCKET_SIZE),
+        .TAG_SEL_IDX    (1),
+        .CACHE_SIZE     (`DCACHE_SIZE),
+        .LINE_SIZE      (DCACHE_LINE_SIZE),
+        .NUM_BANKS      (`DCACHE_NUM_BANKS),
+        .NUM_WAYS       (`DCACHE_NUM_WAYS),
+        .WORD_SIZE      (DCACHE_WORD_SIZE),
+        .NUM_REQS       (DCACHE_NUM_REQS),
+        .CRSQ_SIZE      (`DCACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (`DCACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (`DCACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (`DCACHE_MREQ_SIZE),
+        .TAG_WIDTH      (DCACHE_NOSM_TAG_WIDTH),
+        .UUID_WIDTH     (`UUID_WIDTH),
+        .WRITE_ENABLE   (1),        
+        .NC_ENABLE      (1),
+        .CORE_OUT_REG   (`SM_ENABLED ? 2 : 1),
+        .MEM_OUT_REG    (2)
+    ) dcache (
+    `ifdef PERF_ENABLE
+        .cache_perf     (perf_dcache),
+    `endif        
+        .clk            (clk),
+        .reset          (dcache_reset),        
+        .core_bus_if    (per_core_dcache_bus_if),
+        .mem_bus_if     (dcache_mem_bus_if)
+    );
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -163,7 +226,7 @@ module VX_socket import VX_gpu_pkg::*; #(
             .reset          (core_reset),
 
         `ifdef PERF_ENABLE
-            .mem_perf_if    (mem_perf_if),
+            .mem_perf_if    (mem_perf_tmp_if),
         `endif
             
             .dcr_bus_if     (core_dcr_bus_if),

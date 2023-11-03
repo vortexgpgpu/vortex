@@ -228,17 +228,10 @@
 `define INST_SFU_CSRRS       4'h7
 `define INST_SFU_CSRRC       4'h8
 `define INST_SFU_TEX         4'h9
-`define INST_SFU_RASTER      4'hA
-`define INST_SFU_ROP         4'hB
-`define INST_SFU_CMOV        4'hC
 `define INST_SFU_BITS        4
 `define INST_SFU_CSR(f3)     (4'h6 + 4'(f3) - 4'h1)
 `define INST_SFU_IS_WCTL(op) (op <= 5)
 `define INST_SFU_IS_CSR(op)  (op >= 6 && op <= 8)
-
-///////////////////////////////////////////////////////////////////////////////
-
-`define NUM_SOCKETS             `UP(`NUM_CORES / `SOCKET_SIZE)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -396,7 +389,7 @@
     end \
     assign ``dst.``field = __reduce_add_r_``dst``field
 
-`define PERF_CACHE_ADD(dst, src, count) \
+`define PERF_CACHE_REDUCE(dst, src, count) \
     `PERF_REDUCE (dst, src, reads, `PERF_CTR_BITS, count); \
     `PERF_REDUCE (dst, src, writes, `PERF_CTR_BITS, count); \
     `PERF_REDUCE (dst, src, read_misses, `PERF_CTR_BITS, count); \

@@ -33,9 +33,6 @@
 `define VX_DCR_MPM_CLASS_NONE           0           
 `define VX_DCR_MPM_CLASS_CORE           1
 `define VX_DCR_MPM_CLASS_MEM            2
-`define VX_DCR_MPM_CLASS_TEX            3
-`define VX_DCR_MPM_CLASS_RASTER         4
-`define VX_DCR_MPM_CLASS_ROP            5
 
 // User Floating-Point CSRs
 

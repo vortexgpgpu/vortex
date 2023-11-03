@@ -77,8 +77,20 @@ module VX_core import VX_gpu_pkg::*; #(
     ) dcache_bus_tmp_if[DCACHE_NUM_REQS]();
 
 `ifdef PERF_ENABLE
-    VX_mem_perf_if mem_perf_tmp_if();
     VX_pipeline_perf_if pipeline_perf_if();
+    VX_mem_perf_if mem_perf_tmp_if();
+    cache_perf_t smem_perf;
+
+    assign mem_perf_tmp_if.icache = mem_perf_if.icache;
+    assign mem_perf_tmp_if.dcache = mem_perf_if.dcache;
+    assign mem_perf_tmp_if.l2cache = mem_perf_if.l2cache;
+    assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
+`ifdef SM_ENABLE    
+    assign mem_perf_tmp_if.smem = smem_perf;
+`else
+    assign mem_perf_tmp_if.smem = '0;
+`endif
+    assign mem_perf_tmp_if.mem = mem_perf_if.mem;
 `endif
 
     `RESET_RELAY (dcr_data_reset, reset);
@@ -226,18 +238,27 @@ module VX_core import VX_gpu_pkg::*; #(
         .sim_wb_value   (sim_wb_value)
     );
 
+`ifdef SM_ENABLE
+
     VX_smem_unit #(
         .CORE_ID (CORE_ID)
     ) smem_unit (
         .clk                (clk),
         .reset              (reset),
     `ifdef PERF_ENABLE
-        .mem_perf_in_if     (mem_perf_if),
-        .mem_perf_out_if    (mem_perf_tmp_if),
+        .cache_perf         (smem_perf),
     `endif
         .dcache_bus_in_if   (dcache_bus_tmp_if),
         .dcache_bus_out_if  (dcache_bus_if)
     );
+
+`else
+
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
+        `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[i], dcache_bus_tmp_if[i]);
+    end
+
+`endif
 
 `ifdef PERF_ENABLE
 
