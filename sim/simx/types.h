@@ -190,9 +190,6 @@ enum class SfuType {
   CSRRW,
   CSRRS,
   CSRRC,
-  TEX,
-  RASTER,
-  ROP,    
   CMOV  
 };
 
@@ -207,9 +204,6 @@ inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
   case SfuType::CSRRW:  os << "CSRRW"; break;
   case SfuType::CSRRS:  os << "CSRRS"; break;
   case SfuType::CSRRC:  os << "CSRRC"; break;
-  case SfuType::TEX:    os << "TEX"; break;
-  case SfuType::RASTER: os << "RASTER"; break;
-  case SfuType::ROP:    os << "ROP"; break;
   case SfuType::CMOV:   os << "CMOV"; break;
   }
   return os;

@@ -553,15 +553,6 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
           std::abort();
         }
         break;
-      case 1:
-        switch (func3) {
-        case 0: // RASTER
-          instr->setDestReg(rd, RegType::Integer);
-          break;
-        default:
-          std::abort();
-        }
-        break;
       default:
         std::abort();
       }

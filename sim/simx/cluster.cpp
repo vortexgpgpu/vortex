@@ -208,10 +208,7 @@ ProcessorImpl* Cluster::processor() const {
 Cluster::PerfStats Cluster::perf_stats() const {
   Cluster::PerfStats perf;
   perf.icache = icaches_->perf_stats();
-  perf.dcache = dcaches_->perf_stats();    
-  perf.tcache = tcaches_->perf_stats();
-  perf.ocache = ocaches_->perf_stats();
-  perf.rcache = rcaches_->perf_stats();
+  perf.dcache = dcaches_->perf_stats();
   perf.l2cache = l2cache_->perf_stats();
 
   for (auto sharedmem : sharedmems_) {

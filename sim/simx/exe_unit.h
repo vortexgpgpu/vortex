@@ -45,6 +45,24 @@ protected:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+class AluUnit : public ExeUnit {
+public:
+    AluUnit(const SimContext& ctx, Core*);
+    
+    void tick();
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+class FpuUnit : public ExeUnit {
+public:
+    FpuUnit(const SimContext& ctx, Core*);
+    
+    void tick();
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 class LsuUnit : public ExeUnit {
 public:
     LsuUnit(const SimContext& ctx, Core*);
@@ -68,24 +86,6 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class AluUnit : public ExeUnit {
-public:
-    AluUnit(const SimContext& ctx, Core*);
-    
-    void tick();
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-class FpuUnit : public ExeUnit {
-public:
-    FpuUnit(const SimContext& ctx, Core*);
-    
-    void tick();
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
 class SfuUnit : public ExeUnit {
 public:
     SfuUnit(const SimContext& ctx, Core*);
@@ -93,7 +93,6 @@ public:
     void tick();
 
 private:
-  std::vector<SimPort<pipeline_trace_t*>*> pending_rsps_;
   uint32_t input_idx_;
 };
 

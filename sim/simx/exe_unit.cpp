@@ -271,22 +271,10 @@ void LsuUnit::tick() {
 
 SfuUnit::SfuUnit(const SimContext& ctx, Core* core) 
     : ExeUnit(ctx, core, "SFU")
+    , input_idx_(0)
 {}
     
 void SfuUnit::tick() {
-    // handle pending responses
-    for (auto pending_rsp : pending_rsps_) {
-        if (pending_rsp->empty())
-            continue;
-        auto trace = pending_rsp->front();
-        if (trace->cid != core_->id())
-            continue;
-        int iw = trace->wid % ISSUE_WIDTH;
-        auto& output = Outputs.at(iw);
-        output.send(trace, 1);
-        pending_rsp->pop();
-    }
-
     // check input queue
     for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
         int iw = (input_idx_ + i) % ISSUE_WIDTH;        
