@@ -79,13 +79,13 @@ module VX_core import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE
     VX_pipeline_perf_if pipeline_perf_if();
     VX_mem_perf_if mem_perf_tmp_if();
-    cache_perf_t smem_perf;
 
     assign mem_perf_tmp_if.icache = mem_perf_if.icache;
     assign mem_perf_tmp_if.dcache = mem_perf_if.dcache;
     assign mem_perf_tmp_if.l2cache = mem_perf_if.l2cache;
     assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
-`ifdef SM_ENABLE    
+`ifdef SM_ENABLE
+    cache_perf_t smem_perf;
     assign mem_perf_tmp_if.smem = smem_perf;
 `else
     assign mem_perf_tmp_if.smem = '0;
