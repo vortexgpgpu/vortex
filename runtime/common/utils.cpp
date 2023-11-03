@@ -178,7 +178,26 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t instrs = 0;
   uint64_t cycles = 0;
 
-#ifdef PERF_ENABLE   
+#ifdef PERF_ENABLE
+
+  auto calcRatio = [&](uint64_t part, uint64_t total)->int {
+    if (total == 0)
+      return 0;
+    return int((1.0 - (double(part) / double(total))) * 100);
+  };
+
+  auto caclAvgLatency = [&](uint64_t sum, uint64_t requests)->int {
+    if (requests == 0)
+      return 0;
+    return int(double(sum) / double(requests));
+  };
+
+  auto calcUtilization = [&](uint64_t count, uint64_t stalls)->int {
+    if (count == 0)
+      return 0;
+    return int((double(count) / double(count + stalls)) * 100);
+  };
+
   auto perf_class = gAutoPerfDump.get_perf_class();
 
   // PERF: pipeline stalls
@@ -192,21 +211,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t loads = 0;
   uint64_t stores = 0;
   uint64_t ifetch_lat = 0;
-  uint64_t load_lat   = 0;
-  // PERF: Icache 
-  uint64_t icache_reads = 0;
-  uint64_t icache_read_misses = 0;
-  // PERF: Dcache 
-  uint64_t dcache_reads = 0;
-  uint64_t dcache_writes = 0;
-  uint64_t dcache_read_misses = 0;
-  uint64_t dcache_write_misses = 0;
-  uint64_t dcache_bank_stalls = 0; 
-  uint64_t dcache_mshr_stalls = 0;
-  // PERF: shared memory
-  uint64_t smem_reads = 0;
-  uint64_t smem_writes = 0;
-  uint64_t smem_bank_stalls = 0;
+  uint64_t load_lat   = 0;  
   // PERF: l2cache 
   uint64_t l2cache_reads = 0;
   uint64_t l2cache_writes = 0;
@@ -232,6 +237,19 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   if (ret != 0)
     return ret;
 
+#ifdef PERF_ENABLE
+  uint64_t isa_flags;
+  ret = vx_dev_caps(hdevice, VX_CAPS_ISA_FLAGS, &isa_flags);
+  if (ret != 0)
+    return ret;
+
+  bool icache_enable  = isa_flags & VX_ISA_EXT_ICACHE;
+  bool dcache_enable  = isa_flags & VX_ISA_EXT_DCACHE;
+  bool l2cache_enable = isa_flags & VX_ISA_EXT_L2CACHE;
+  bool l3cache_enable = isa_flags & VX_ISA_EXT_L3CACHE;
+  bool smem_enable    = isa_flags & VX_ISA_EXT_SMEM;
+#endif
+
   std::vector<uint8_t> staging_buf(64* sizeof(uint32_t));
       
   for (unsigned core_id = 0; core_id < num_cores; ++core_id) {    
@@ -239,13 +257,6 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     ret = vx_copy_from_dev(hdevice, staging_buf.data(), mpm_mem_addr, staging_buf.size());
     if (ret != 0)
       return ret;
-
-    uint64_t instrs_per_core = get_csr_64(staging_buf.data(), VX_CSR_MINSTRET);
-    uint64_t cycles_per_core = get_csr_64(staging_buf.data(), VX_CSR_MCYCLE);
-    float IPC = (float)(double(instrs_per_core) / double(cycles_per_core));
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs_per_core, cycles_per_core, IPC);            
-    instrs += instrs_per_core;
-    cycles = std::max<uint64_t>(cycles_per_core, cycles);
 
   #ifdef PERF_ENABLE
     switch (perf_class) {
@@ -291,52 +302,78 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       // ifetch latency
       uint64_t ifetch_lat_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_IFETCH_LAT);
       if (num_cores > 1) {
-        int mem_avg_lat = (int)(double(ifetch_lat_per_core) / double(ifetches_per_core));
+        int mem_avg_lat = caclAvgLatency(ifetch_lat_per_core, ifetches_per_core);
         fprintf(stream, "PERF: core%d: ifetch latency=%d cycles\n", core_id, mem_avg_lat);
       }
       ifetch_lat += ifetch_lat_per_core;
       // load latency
       uint64_t load_lat_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_LOAD_LAT);
       if (num_cores > 1) {
-        int mem_avg_lat = (int)(double(load_lat_per_core) / double(loads_per_core));
+        int mem_avg_lat = caclAvgLatency(load_lat_per_core, loads_per_core);
         fprintf(stream, "PERF: core%d: load latency=%d cycles\n", core_id, mem_avg_lat);
       }
       load_lat += load_lat_per_core;      
     } break;
     case VX_DCR_MPM_CLASS_MEM: {      
-      if (0 == core_id) {
-        // PERF: Icache
-        icache_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_ICACHE_READS);
-        icache_read_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_ICACHE_MISS_R);
-      
-        // PERF: Dcache
-        dcache_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_READS);
-        dcache_writes = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_WRITES);
-        dcache_read_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_MISS_R);
-        dcache_write_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_MISS_W);
-        dcache_bank_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_BANK_ST);
-        dcache_mshr_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_MSHR_ST);
-      
+      if (smem_enable) {
         // PERF: smem
-        smem_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_SMEM_READS);
-        smem_writes = get_csr_64(staging_buf.data(), VX_CSR_MPM_SMEM_WRITES);
-        smem_bank_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_SMEM_BANK_ST);
+        uint64_t smem_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_SMEM_READS);
+        uint64_t smem_writes = get_csr_64(staging_buf.data(), VX_CSR_MPM_SMEM_WRITES);
+        uint64_t smem_bank_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_SMEM_BANK_ST);
+        int smem_bank_utilization = calcUtilization(smem_reads + smem_writes, smem_bank_stalls);
+        fprintf(stream, "PERF: core%d: smem reads=%ld\n", core_id, smem_reads);
+        fprintf(stream, "PERF: core%d: smem writes=%ld\n", core_id, smem_writes); 
+        fprintf(stream, "PERF: core%d: smem bank stalls=%ld (utilization=%d%%)\n", core_id, smem_bank_stalls, smem_bank_utilization);
+      }
+
+      if (icache_enable) {
+        // PERF: Icache
+        uint64_t icache_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_ICACHE_READS);
+        uint64_t icache_read_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_ICACHE_MISS_R);
+        int icache_read_hit_ratio = calcRatio(icache_read_misses, icache_reads);    
+        fprintf(stream, "PERF: core%d: icache reads=%ld\n", core_id, icache_reads);
+        fprintf(stream, "PERF: core%d: icache read misses=%ld (hit ratio=%d%%)\n", core_id, icache_read_misses, icache_read_hit_ratio);
+      }
       
+      if (dcache_enable) {
+        // PERF: Dcache
+        uint64_t dcache_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_READS);
+        uint64_t dcache_writes = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_WRITES);
+        uint64_t dcache_read_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_MISS_R);
+        uint64_t dcache_write_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_MISS_W);
+        uint64_t dcache_bank_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_BANK_ST);
+        uint64_t dcache_mshr_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_MSHR_ST);
+        int dcache_read_hit_ratio = calcRatio(dcache_read_misses, dcache_reads);
+        int dcache_write_hit_ratio = calcRatio(dcache_write_misses, dcache_writes);
+        int dcache_bank_utilization = calcUtilization(dcache_reads + dcache_writes, dcache_bank_stalls);
+        fprintf(stream, "PERF: core%d: dcache reads=%ld\n", core_id, dcache_reads);
+        fprintf(stream, "PERF: core%d: dcache writes=%ld\n", core_id, dcache_writes);
+        fprintf(stream, "PERF: core%d: dcache read misses=%ld (hit ratio=%d%%)\n", core_id, dcache_read_misses, dcache_read_hit_ratio);
+        fprintf(stream, "PERF: core%d: dcache write misses=%ld (hit ratio=%d%%)\n", core_id, dcache_write_misses, dcache_write_hit_ratio);  
+        fprintf(stream, "PERF: core%d: dcache bank stalls=%ld (utilization=%d%%)\n", core_id, dcache_bank_stalls, dcache_bank_utilization);
+        fprintf(stream, "PERF: core%d: dcache mshr stalls=%ld\n", core_id, dcache_mshr_stalls);
+      }
+
+      if (l2cache_enable) {
         // PERF: L2cache
-        l2cache_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_READS);
-        l2cache_writes = get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_WRITES);
-        l2cache_read_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_MISS_R);
-        l2cache_write_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_MISS_W);
-        l2cache_bank_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_BANK_ST);
-        l2cache_mshr_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_MSHR_ST);
-      
-        // PERF: L3cache
-        l3cache_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_READS);
-        l3cache_writes = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_WRITES);
-        l3cache_read_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_MISS_R);
-        l3cache_write_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_MISS_W);
-        l3cache_bank_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_BANK_ST);
-        l3cache_mshr_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_MSHR_ST);
+        l2cache_reads += get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_READS);
+        l2cache_writes += get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_WRITES);
+        l2cache_read_misses += get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_MISS_R);
+        l2cache_write_misses += get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_MISS_W);
+        l2cache_bank_stalls += get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_BANK_ST);
+        l2cache_mshr_stalls += get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_MSHR_ST);
+      }
+
+      if (0 == core_id) {      
+        if (l3cache_enable) {
+          // PERF: L3cache
+          l3cache_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_READS);
+          l3cache_writes = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_WRITES);
+          l3cache_read_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_MISS_R);
+          l3cache_write_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_MISS_W);
+          l3cache_bank_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_BANK_ST);
+          l3cache_mshr_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_MSHR_ST);
+        }
       
         // PERF: memory
         mem_reads  = get_csr_64(staging_buf.data(), VX_CSR_MPM_MEM_READS);
@@ -347,11 +384,15 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     default:
       break;
     }
-  #endif
-  }  
-  
-  float IPC = (float)(double(instrs) / double(cycles));
-  fprintf(stream, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);    
+  #endif 
+
+    uint64_t instrs_per_core = get_csr_64(staging_buf.data(), VX_CSR_MINSTRET);
+    uint64_t cycles_per_core = get_csr_64(staging_buf.data(), VX_CSR_MCYCLE);
+    float IPC = (float)(double(instrs_per_core) / double(cycles_per_core));
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs_per_core, cycles_per_core, IPC);            
+    instrs += instrs_per_core;
+    cycles = std::max<uint64_t>(cycles_per_core, cycles);
+  }
       
 #ifdef PERF_ENABLE
   switch (perf_class) {
@@ -368,52 +409,51 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     fprintf(stream, "PERF: loads=%ld\n", loads);
     fprintf(stream, "PERF: stores=%ld\n", stores);    
     fprintf(stream, "PERF: ifetch latency=%d cycles\n", ifetch_avg_lat);
-    fprintf(stream, "PERF: load latency=%d cycles\n", load_avg_lat);
-    
+    fprintf(stream, "PERF: load latency=%d cycles\n", load_avg_lat);    
   } break;  
-  case VX_DCR_MPM_CLASS_MEM: {
-    int icache_read_hit_ratio = (int)((1.0 - (double(icache_read_misses) / double(icache_reads))) * 100);    
-    int dcache_read_hit_ratio = (int)((1.0 - (double(dcache_read_misses) / double(dcache_reads))) * 100);
-    int dcache_write_hit_ratio = (int)((1.0 - (double(dcache_write_misses) / double(dcache_writes))) * 100);
-    int dcache_bank_utilization = (int)((double(dcache_reads + dcache_writes) / double(dcache_reads + dcache_writes + dcache_bank_stalls)) * 100);    
-    int l2cache_read_hit_ratio = (int)((1.0 - (double(l2cache_read_misses) / double(l2cache_reads))) * 100);
-    int l2cache_write_hit_ratio = (int)((1.0 - (double(l2cache_write_misses) / double(l2cache_writes))) * 100);
-    int l2cache_bank_utilization = (int)((double(l2cache_reads + l2cache_writes) / double(l2cache_reads + l2cache_writes + l2cache_bank_stalls)) * 100);    
-    int l3cache_read_hit_ratio = (int)((1.0 - (double(l3cache_read_misses) / double(l3cache_reads))) * 100);
-    int l3cache_write_hit_ratio = (int)((1.0 - (double(l3cache_write_misses) / double(l3cache_writes))) * 100);
-    int l3cache_bank_utilization = (int)((double(l3cache_reads + l3cache_writes) / double(l3cache_reads + l3cache_writes + l3cache_bank_stalls)) * 100);    
-    int smem_bank_utilization = (int)((double(smem_reads + smem_writes) / double(smem_reads + smem_writes + smem_bank_stalls)) * 100);    
-    int mem_avg_lat = (int)(double(mem_lat) / double(mem_reads));    
-    fprintf(stream, "PERF: icache reads=%ld\n", icache_reads);
-    fprintf(stream, "PERF: icache read misses=%ld (hit ratio=%d%%)\n", icache_read_misses, icache_read_hit_ratio);
-    fprintf(stream, "PERF: dcache reads=%ld\n", dcache_reads);
-    fprintf(stream, "PERF: dcache writes=%ld\n", dcache_writes);
-    fprintf(stream, "PERF: dcache read misses=%ld (hit ratio=%d%%)\n", dcache_read_misses, dcache_read_hit_ratio);
-    fprintf(stream, "PERF: dcache write misses=%ld (hit ratio=%d%%)\n", dcache_write_misses, dcache_write_hit_ratio);  
-    fprintf(stream, "PERF: dcache bank stalls=%ld (utilization=%d%%)\n", dcache_bank_stalls, dcache_bank_utilization);
-    fprintf(stream, "PERF: dcache mshr stalls=%ld\n", dcache_mshr_stalls);
-    fprintf(stream, "PERF: smem reads=%ld\n", smem_reads);
-    fprintf(stream, "PERF: smem writes=%ld\n", smem_writes); 
-    fprintf(stream, "PERF: smem bank stalls=%ld (utilization=%d%%)\n", smem_bank_stalls, smem_bank_utilization);
-    fprintf(stream, "PERF: l2cache reads=%ld\n", l2cache_reads);
-    fprintf(stream, "PERF: l2cache writes=%ld\n", l2cache_writes);
-    fprintf(stream, "PERF: l2cache read misses=%ld (hit ratio=%d%%)\n", l2cache_read_misses, l2cache_read_hit_ratio);
-    fprintf(stream, "PERF: l2cache write misses=%ld (hit ratio=%d%%)\n", l2cache_write_misses, l2cache_write_hit_ratio);  
-    fprintf(stream, "PERF: l2cache bank stalls=%ld (utilization=%d%%)\n", l2cache_bank_stalls, l2cache_bank_utilization);
-    fprintf(stream, "PERF: l2cache mshr stalls=%ld\n", l2cache_mshr_stalls);
-    fprintf(stream, "PERF: l3cache reads=%ld\n", l3cache_reads);
-    fprintf(stream, "PERF: l3cache writes=%ld\n", l3cache_writes);
-    fprintf(stream, "PERF: l3cache read misses=%ld (hit ratio=%d%%)\n", l3cache_read_misses, l3cache_read_hit_ratio);
-    fprintf(stream, "PERF: l3cache write misses=%ld (hit ratio=%d%%)\n", l3cache_write_misses, l3cache_write_hit_ratio);  
-    fprintf(stream, "PERF: l3cache bank stalls=%ld (utilization=%d%%)\n", l3cache_bank_stalls, l3cache_bank_utilization);
-    fprintf(stream, "PERF: l3cache mshr stalls=%ld\n", l3cache_mshr_stalls);
+  case VX_DCR_MPM_CLASS_MEM: {    
+    if (l2cache_enable) {
+      l2cache_reads /= num_cores;
+      l2cache_writes /= num_cores;
+      l2cache_read_misses /= num_cores;
+      l2cache_write_misses /= num_cores;
+      l2cache_bank_stalls /= num_cores;
+      l2cache_mshr_stalls /= num_cores;
+      int l2cache_read_hit_ratio = calcRatio(l2cache_read_misses, l2cache_reads);
+      int l2cache_write_hit_ratio = calcRatio(l2cache_write_misses, l2cache_writes);
+      int l2cache_bank_utilization = calcUtilization(l2cache_reads + l2cache_writes, l2cache_bank_stalls);
+          
+      fprintf(stream, "PERF: l2cache reads=%ld\n", l2cache_reads);
+      fprintf(stream, "PERF: l2cache writes=%ld\n", l2cache_writes);
+      fprintf(stream, "PERF: l2cache read misses=%ld (hit ratio=%d%%)\n", l2cache_read_misses, l2cache_read_hit_ratio);
+      fprintf(stream, "PERF: l2cache write misses=%ld (hit ratio=%d%%)\n", l2cache_write_misses, l2cache_write_hit_ratio);  
+      fprintf(stream, "PERF: l2cache bank stalls=%ld (utilization=%d%%)\n", l2cache_bank_stalls, l2cache_bank_utilization);
+      fprintf(stream, "PERF: l2cache mshr stalls=%ld\n", l2cache_mshr_stalls);
+    }
+
+    if (l3cache_enable) {    
+      int l3cache_read_hit_ratio = calcRatio(l3cache_read_misses, l3cache_reads);
+      int l3cache_write_hit_ratio = calcRatio(l3cache_write_misses, l3cache_writes);
+      int l3cache_bank_utilization = calcUtilization(l3cache_reads + l3cache_writes, l3cache_bank_stalls);
+      fprintf(stream, "PERF: l3cache reads=%ld\n", l3cache_reads);
+      fprintf(stream, "PERF: l3cache writes=%ld\n", l3cache_writes);
+      fprintf(stream, "PERF: l3cache read misses=%ld (hit ratio=%d%%)\n", l3cache_read_misses, l3cache_read_hit_ratio);
+      fprintf(stream, "PERF: l3cache write misses=%ld (hit ratio=%d%%)\n", l3cache_write_misses, l3cache_write_hit_ratio);  
+      fprintf(stream, "PERF: l3cache bank stalls=%ld (utilization=%d%%)\n", l3cache_bank_stalls, l3cache_bank_utilization);
+      fprintf(stream, "PERF: l3cache mshr stalls=%ld\n", l3cache_mshr_stalls);
+    }
+
+    int mem_avg_lat = caclAvgLatency(mem_lat, mem_reads);   
     fprintf(stream, "PERF: memory requests=%ld (reads=%ld, writes=%ld)\n", (mem_reads + mem_writes), mem_reads, mem_writes);
     fprintf(stream, "PERF: memory latency=%d cycles\n", mem_avg_lat);
   } break;
   default:
     break;
   }
-#endif
+#endif 
+  
+  float IPC = (float)(double(instrs) / double(cycles));
+  fprintf(stream, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);  
 
   fflush(stream);
 

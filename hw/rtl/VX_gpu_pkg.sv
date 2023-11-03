@@ -58,6 +58,23 @@ package VX_gpu_pkg;
         logic [7:0]         mpm_class;
     } base_dcrs_t;
 
+    typedef struct packed {
+        logic [`PERF_CTR_BITS-1:0] reads;
+        logic [`PERF_CTR_BITS-1:0] writes;
+        logic [`PERF_CTR_BITS-1:0] read_misses;
+        logic [`PERF_CTR_BITS-1:0] write_misses;
+        logic [`PERF_CTR_BITS-1:0] bank_stalls;
+        logic [`PERF_CTR_BITS-1:0] mshr_stalls;
+        logic [`PERF_CTR_BITS-1:0] mem_stalls;
+        logic [`PERF_CTR_BITS-1:0] crsp_stalls;
+    } cache_perf_t;
+
+    typedef struct packed {
+        logic [`PERF_CTR_BITS-1:0] reads;
+        logic [`PERF_CTR_BITS-1:0] writes;
+        logic [`PERF_CTR_BITS-1:0] latency;
+    } mem_perf_t;
+
     /* verilator lint_off UNUSED */
 
     ////////////////////////// Icache Parameters //////////////////////////////
@@ -74,7 +91,6 @@ package VX_gpu_pkg;
 
     // Core request tag bits
     localparam ICACHE_TAG_WIDTH	    = (`UUID_WIDTH + ICACHE_TAG_ID_BITS);
-    localparam ICACHE_ARB_TAG_WIDTH	= (ICACHE_TAG_WIDTH + `CLOG2(`SOCKET_SIZE));
 
     // Memory request data bits
     localparam ICACHE_MEM_DATA_WIDTH = (ICACHE_LINE_SIZE * 8);
@@ -83,7 +99,7 @@ package VX_gpu_pkg;
     `ifdef ICACHE_ENABLE
     localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(`ICACHE_MSHR_SIZE, 1, `NUM_ICACHES);
     `else
-    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_TAG_WIDTH(1, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_ARB_TAG_WIDTH, `NUM_SOCKETS, `NUM_ICACHES);
+    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_TAG_WIDTH(1, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, `NUM_SOCKETS, `NUM_ICACHES);
     `endif
 
     ////////////////////////// Dcache Parameters //////////////////////////////
@@ -112,23 +128,21 @@ package VX_gpu_pkg;
     // Core request tag bits
     localparam DCACHE_TAG_WIDTH	    = (`UUID_WIDTH + DCACHE_TAG_ID_BITS);
     localparam DCACHE_NOSM_TAG_WIDTH = (DCACHE_TAG_WIDTH - `SM_ENABLED);
-    localparam DCACHE_ARB_TAG_WIDTH	= (DCACHE_NOSM_TAG_WIDTH + `CLOG2(`SOCKET_SIZE));
     
     // Memory request data bits
     localparam DCACHE_MEM_DATA_WIDTH = (DCACHE_LINE_SIZE * 8);
 
     // Memory request tag bits
     `ifdef DCACHE_ENABLE
-    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_MEM_TAG_WIDTH(`DCACHE_MSHR_SIZE, `DCACHE_NUM_BANKS, DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_ARB_TAG_WIDTH, `NUM_SOCKETS, `NUM_DCACHES);
+    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_MEM_TAG_WIDTH(`DCACHE_MSHR_SIZE, `DCACHE_NUM_BANKS, DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_NOSM_TAG_WIDTH, `SOCKET_SIZE, `NUM_DCACHES);
     `else
-    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_BYPASS_TAG_WIDTH(DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_ARB_TAG_WIDTH, `NUM_SOCKETS, `NUM_DCACHES);
+    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_BYPASS_TAG_WIDTH(DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_NOSM_TAG_WIDTH, `SOCKET_SIZE, `NUM_DCACHES);
     `endif
 
     /////////////////////////////// L1 Parameters /////////////////////////////
 
     localparam L1_MEM_TAG_WIDTH     = `MAX(ICACHE_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
-
-    localparam NUM_L1_OUTPUTS       = 2;
+    localparam L1_MEM_ARB_TAG_WIDTH	= (L1_MEM_TAG_WIDTH + `CLOG2(2));
 
     /////////////////////////////// L2 Parameters /////////////////////////////
 
@@ -136,10 +150,10 @@ package VX_gpu_pkg;
     localparam L2_WORD_SIZE	        = `L1_LINE_SIZE;
 
     // Input request size
-    localparam L2_NUM_REQS	        = NUM_L1_OUTPUTS;
+    localparam L2_NUM_REQS	        = `NUM_SOCKETS;
 
     // Core request tag bits
-    localparam L2_TAG_WIDTH	        = L1_MEM_TAG_WIDTH;
+    localparam L2_TAG_WIDTH	        = L1_MEM_ARB_TAG_WIDTH;
 
     // Memory request data bits
     localparam L2_MEM_DATA_WIDTH	= (`L2_LINE_SIZE * 8);

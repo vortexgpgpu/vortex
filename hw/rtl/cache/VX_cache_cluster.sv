@@ -13,7 +13,7 @@
 
 `include "VX_cache_define.vh"
 
-module VX_cache_cluster #(
+module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID    = "",
 
     parameter NUM_UNITS             = 1,
@@ -66,7 +66,7 @@ module VX_cache_cluster #(
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_cache_perf_if.master cache_perf_if,
+    output cache_perf_t     cache_perf,
 `endif
 
     VX_mem_bus_if.slave     core_bus_if [NUM_INPUTS * NUM_REQS],
@@ -83,8 +83,8 @@ module VX_cache_cluster #(
     `STATIC_ASSERT(NUM_INPUTS >= NUM_CACHES, ("invalid parameter"))
 
 `ifdef PERF_ENABLE
-    VX_cache_perf_if perf_cache_unit_if[NUM_CACHES]();
-    `PERF_CACHE_ADD (cache_perf_if, perf_cache_unit_if, NUM_CACHES);
+    cache_perf_t perf_cache_unit[NUM_CACHES];
+    `PERF_CACHE_REDUCE (cache_perf, perf_cache_unit, NUM_CACHES);
 `endif
 
     VX_mem_bus_if #(
@@ -97,7 +97,6 @@ module VX_cache_cluster #(
         .TAG_WIDTH (ARB_TAG_WIDTH)
     ) arb_core_bus_if[NUM_CACHES * NUM_REQS]();
 
-    
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_mem_bus_if #(
             .DATA_SIZE (WORD_SIZE),
@@ -161,7 +160,7 @@ module VX_cache_cluster #(
             .PASSTHRU     (PASSTHRU)
         ) cache_wrap (
         `ifdef PERF_ENABLE
-            .cache_perf_if (perf_cache_unit_if[i]),
+            .cache_perf  (perf_cache_unit[i]),
         `endif
             .clk         (clk),
             .reset       (cache_reset),
@@ -357,7 +356,7 @@ module VX_cache_cluster_top #(
         .MEM_OUT_REG    (MEM_OUT_REG)
     ) cache (
     `ifdef PERF_ENABLE
-        .cache_perf_if  (perf_icache_if),
+        .cache_perf     (perf_icache),
     `endif
         .clk            (clk),
         .reset          (reset),

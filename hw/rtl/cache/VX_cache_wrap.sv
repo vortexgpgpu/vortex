@@ -13,7 +13,7 @@
 
 `include "VX_cache_define.vh"
 
-module VX_cache_wrap #(
+module VX_cache_wrap import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID    = "",
 
     // Number of Word requests per cycle
@@ -67,14 +67,14 @@ module VX_cache_wrap #(
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_cache_perf_if.master cache_perf_if,
+    output cache_perf_t     cache_perf,
 `endif
 
     VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
     VX_mem_bus_if.master    mem_bus_if
 );
 
-    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))    
+    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter: NUM_BANKS=%d, NUM_REQS=%d", NUM_BANKS, NUM_REQS))    
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter"))
 
     localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE);    
@@ -353,14 +353,7 @@ module VX_cache_wrap #(
         assign mem_rsp_ready_b = 0;
 
     `ifdef PERF_ENABLE
-        assign cache_perf_if.reads        = '0;
-        assign cache_perf_if.writes       = '0;
-        assign cache_perf_if.read_misses  = '0;
-        assign cache_perf_if.write_misses = '0;
-        assign cache_perf_if.bank_stalls  = '0;
-        assign cache_perf_if.mshr_stalls  = '0;
-        assign cache_perf_if.mem_stalls   = '0;
-        assign cache_perf_if.crsp_stalls  = '0;
+        assign cache_perf = '0;
     `endif
 
     end else begin
@@ -429,7 +422,7 @@ module VX_cache_wrap #(
             .reset          (cache_reset),
 
         `ifdef PERF_ENABLE
-            .cache_perf_if  (cache_perf_if),
+            .cache_perf     (cache_perf),
         `endif
 
             .core_bus_if    (core_bus_wrap_if),
