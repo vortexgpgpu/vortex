@@ -197,10 +197,6 @@ private:
   friend class AluUnit;
   friend class FpuUnit;
   friend class SfuUnit;
-  friend class TexUnit;
-  friend class RasterAgent;
-  friend class RopAgent;
-  friend class TexAgent;
 };
 
 } // namespace vortex
