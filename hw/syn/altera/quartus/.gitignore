@@ -27,15 +27,3 @@
 
 /fpu/*
 !/fpu/Makefile
-
-/tex/*
-!/tex/Makefile
-
-/rop/*
-!/rop/Makefile
-
-/raster/*
-!/raster/Makefile
-
-/vortex-gfx/*
-!/vortex-gfx/Makefile
