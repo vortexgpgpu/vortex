@@ -329,6 +329,132 @@ void vx_spawn_kernel(context_t * ctx, vx_spawn_kernel_cb callback, void * arg) {
   }
 }
 
+///////////////////////////////////////////////////////////////////////////////
+//- SW warp scheduling, Mapping one SW warp to HW.
+//    - TM (0):   mapping one SW warp to one HW thread, vx_spawn_kernel
+//    - CM (1):   mapping one SW warp to one HW core, vx_spawn_kernel_cm
+//    - GM (2):   mapping one SW warp to N number of HW cores, vx_spawn_kernel_gm
+//    - GDM (3):  mapping one SW warp to N number of HW cores with M group size of SW thread for the distribution, vx_spwan_kernel_gdm
+//    - PM (4):   mapping one SW warp to N number of HW cores with N pipelining method, vx_spwan_kernel_pm
+///////////////////////////////////////////////////////////////////////////////
+
+static void __attribute__((noinline)) spawn_kernel_all_stub_cm()
+{
+  int cid = vx_core_id();
+
+  wspawn_kernel_args_t* p_wspawn_args = (wspawn_kernel_args_t*)g_wspawn_args[cid];
+
+  int num_groups_x = p_wspawn_args->ctx->num_groups[0];
+  int num_groups_y = p_wspawn_args->ctx->num_groups[1];
+  int num_groups_xy = num_groups_x * num_groups_y;
+
+  int isXYpow2 = p_wspawn_args->isXYpow2;
+  int log2XY = p_wspawn_args->log2XY;
+  int log2X = p_wspawn_args->log2X;
+
+  int workload = p_wspawn_args->NWs + p_wspawn_args->offset;
+
+  if(p_wspawn_args->isXYpow2){
+    for (int WGID = p_wspawn_args->offset; WGID < workload; ++WGID) {
+      int gid2 = WGID >> log2XY;
+      int WG_2d = WGID - gid2 * num_groups_xy;
+      int gid1 = WGID >> log2X;
+      int gid0 = WG_2d - gid1 * num_groups_x;
+      (p_wspawn_args->callback)(p_wspawn_args->arg, p_wspawn_args->ctx, gid0, gid1, gid2);
+    }
+  }else{
+    for (int WGID = p_wspawn_args->offset; WGID < workload; ++WGID) {
+      int gid2 = WGID / num_groups_xy;
+      int WG_2d = WGID - gid2 * num_groups_xy;
+      int gid1 = WGID / num_groups_x;
+      int gid0 = WG_2d - gid1 * num_groups_x;
+      (p_wspawn_args->callback)(p_wspawn_args->arg, p_wspawn_args->ctx, gid0, gid1, gid2);
+    }
+  }
+}
+
+static void spawn_kernel_all_cb_cm()
+{
+  // activate all threads
+  vx_tmc(-1);
+
+  // call stub routine
+  spawn_kernel_all_stub_cm();
+
+  // disable warp
+  vx_tmc_zero(0);
+}
+
+void vx_spawn_kernel_cm(context_t* ctx, vx_spawn_kernel_cb callback, void* arg)
+{
+  // total number of WGs
+  int X = ctx->num_groups[0];
+  int Y = ctx->num_groups[1];
+  int Z = ctx->num_groups[2];
+  int XY = X * Y;
+  int num_tasks = XY * Z;
+
+  // device specs
+  int NC = vx_num_cores();
+  int NW = vx_num_warps();
+  int NT = vx_num_threads();
+
+  // current core id
+  int core_id = vx_core_id();
+  if (core_id >= NUM_CORES_MAX)
+    return;
+
+  // calculate necessary active cores
+  int nc = MIN(num_tasks, NC);
+  if (core_id >= nc)
+    return; // terminate extra cores
+
+  // number of tasks per core
+  int tasks_per_core = num_tasks / nc;
+  int tasks_per_core_n1 = tasks_per_core;
+  if (core_id == (nc - 1)) {
+    int remains = num_tasks - (nc * tasks_per_core);
+    tasks_per_core_n1 += remains; // last core executes remaining WGs
+  }
+  /* TODO: check perf of different block schedule
+  if (core_id < num_tasks % nc) {
+    tasks_per_core_n1++;
+  }*/
+  if (tasks_per_core_n1 == 0)
+    return;
+
+  // number of workgroups per warp
+  int nAW = tasks_per_core_n1 * NW;  // total wraps per core
+  int fW = tasks_per_core_n1;        // full warp instruction
+  int rW = 0;                   // remaining full warp
+
+  // fast path handling
+  char isXYpow2 = is_log2(XY);
+  char log2XY = fast_log2(XY);
+  char log2X = fast_log2(X);
+
+  //--
+  wspawn_kernel_args_t wspawn_args = {
+    ctx, callback, arg, core_id * tasks_per_core, fW, rW, isXYpow2, log2XY, log2X
+  };
+  g_wspawn_args[core_id] = &wspawn_args;
+
+  vx_wspawn(NW, spawn_kernel_all_cb_cm);
+
+  //activate all threads
+  vx_tmc(-1);
+  
+  // call stub rutine
+  asm volatile("" ::: "memory");
+  spawn_kernel_all_stub_cm();
+
+  //back to single-treaded
+  vx_tmc_one();
+
+  // wait for spwan warps to terminate
+  vx_wspawn_wait();
+}
+
 #ifdef __cplusplus
 }
 #endif
