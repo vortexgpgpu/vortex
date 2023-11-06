@@ -16,12 +16,34 @@
 #include <iomanip>
 #include <iostream>
 #include <vector>
-#include <bitset> 
+#include <bitset>
 
-uint64_t timestamp = 0;
+#ifndef TRACE_START_TIME
+#define TRACE_START_TIME 0ull
+#endif
+
+#ifndef TRACE_STOP_TIME
+#define TRACE_STOP_TIME -1ull
+#endif
+
+static uint64_t timestamp = 0;
+static bool trace_enabled = false;
+static uint64_t trace_start_time = TRACE_START_TIME;
+static uint64_t trace_stop_time  = TRACE_STOP_TIME;
 
 double sc_time_stamp() { 
   return timestamp;
+}
+
+bool sim_trace_enabled() {
+  if (timestamp >= trace_start_time 
+   && timestamp < trace_stop_time)
+    return true;
+  return trace_enabled;
+}
+
+void sim_trace_enable(bool enable) {
+  trace_enabled = enable;
 }
 
 CacheSim::CacheSim() {
@@ -29,23 +51,23 @@ CacheSim::CacheSim() {
   Verilated::randReset(2);
 
   ram_ = nullptr;
-  cache_ = new VVX_cache();
+  cache_ = new VVX_cache_top();
 
   mem_rsp_active_ = false;
   snp_req_active_ = false;
 
-//#ifdef VCD_OUTPUT
+#ifdef VCD_OUTPUT
   Verilated::traceEverOn(true);
   trace_ = new VerilatedVcdC;
   cache_->trace(trace_, 99);
   trace_->open("trace.vcd");
-//#endif
+#endif
 }
 
 CacheSim::~CacheSim() {
-//#ifdef VCD_OUTPUT
+#ifdef VCD_OUTPUT
   trace_->close();
-//#endif
+#endif
   delete cache_;
   //need to delete the req and rsp vectors
 }
@@ -88,9 +110,9 @@ void CacheSim::step() {
 
 void CacheSim::eval() {
   cache_->eval();
-//#ifdef VCD_OUTPUT
+#ifdef VCD_OUTPUT
   trace_->dump(timestamp);
-//#endif
+#endif
   ++timestamp;
 }
 
@@ -127,7 +149,6 @@ void CacheSim::run(){
 void CacheSim::clear_req(){
   cache_->core_req_valid = 0; 
 }
-
 
 void CacheSim::send_req(core_req_t *req){
   core_req_vec_.push(req);
@@ -221,7 +242,7 @@ void CacheSim::eval_mem_bus() {
       cache_->mem_rsp_valid = 1;
 
       //copy data from the rsp queue to the cache module
-      memcpy((uint8_t*)cache_->mem_rsp_data, mem_rsp_vec_[dequeue_index].data, MEM_BLOCK_SIZE);
+      memcpy(cache_->mem_rsp_data.data(), mem_rsp_vec_[dequeue_index].data, MEM_BLOCK_SIZE);
 
       cache_->mem_rsp_tag = mem_rsp_vec_[dequeue_index].tag;    
       free(mem_rsp_vec_[dequeue_index].data); //take data out of the queue
@@ -249,7 +270,7 @@ void CacheSim::eval_mem_bus() {
       if (cache_->mem_req_rw) { //write = 1
         uint64_t byteen = cache_->mem_req_byteen;
         uint64_t base_addr = (cache_->mem_req_addr * MEM_BLOCK_SIZE);
-        uint8_t* data = (uint8_t*)(cache_->mem_req_data);
+        uint8_t* data = reinterpret_cast<uint8_t*>(cache_->mem_req_data.data());
         for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
           if ((byteen >> i) & 0x1) {            
             (*ram_)[base_addr + i] = data[i];
@@ -330,4 +351,3 @@ void CacheSim::get_mem_rsp(){
   std::cout << std::hex << "mem_rsp_tag: " << cache_->mem_rsp_tag << std::endl;
   std::cout << std::hex << "mem_rsp_ready: " << cache_->mem_rsp_ready << std::endl;
 }
-

@@ -15,6 +15,14 @@
 #include "memsim.h"
 #include "ram.h"
 
+#ifndef TRACE_START_TIME
+#define TRACE_START_TIME 0ull
+#endif
+
+#ifndef TRACE_STOP_TIME
+#define TRACE_STOP_TIME -1ull
+#endif
+
 static bool trace_enabled = false;
 static uint64_t trace_start_time = 0;
 static uint64_t trace_stop_time = -1ull;
@@ -35,14 +43,10 @@ void sim_trace_enable (bool enable) {
   	trace_enabled = enable;
 }
 
-//////////////////////////////////////////////////////
-
 int generate_rand (int min, int max) {
 	int range = max - min + 1;
 	return rand() % range + min;
 }
-
-//////////////////////////////////////////////////////
 
 int generate_rand_mask (int mask) {
 	int result = 0;
@@ -56,33 +60,33 @@ int generate_rand_mask (int mask) {
 	return result;
 }
 
-//////////////////////////////////////////////////////
-
 MemSim::MemSim() {
-	msu_ = new VVX_mem_streamer();
+	msu_ = new VVX_mem_scheduler();
 
 	// Enable tracing
 	Verilated::traceEverOn(true);
-    trace_ = new VerilatedVcdC;
-    msu_->trace(trace_, 99);
-    trace_->open("trace.vcd");
+
+#ifdef VCD_OUTPUT
+  	Verilated::traceEverOn(true);
+  	trace_ = new VerilatedVcdC;
+  	cache_->trace(trace_, 99);
+  	race_->open("trace.vcd");
+#endif
 }
 
-//////////////////////////////////////////////////////
-
 MemSim::~MemSim() {
+#ifdef VCD_OUTPUT
 	trace_->close();
+#endif
 	delete msu_;
 }
 
-//////////////////////////////////////////////////////
-
 void MemSim::eval() {
 	msu_->eval();
+#ifdef VCD_OUTPUT
 	trace_->dump(timestamp++);
+#endif
 }
-
-//////////////////////////////////////////////////////
 
 void MemSim::step() {
 	msu_->clk = 0;
@@ -92,18 +96,13 @@ void MemSim::step() {
 	this->eval();
 }
 
-//////////////////////////////////////////////////////
-
 void MemSim::reset() {
 	msu_->reset = 1;
 	this->step();
 
 	msu_->reset = 0;
 	this->step();
-
 }
-
-//////////////////////////////////////////////////////
 
 void MemSim::attach_core() {
 	if (msu_->req_ready) {
@@ -117,8 +116,6 @@ void MemSim::attach_core() {
 	}
 	msu_->rsp_ready = true;
 }
-
-//////////////////////////////////////////////////////
 
 void MemSim::attach_ram (RAM *ram) {
 
@@ -137,7 +134,6 @@ void MemSim::attach_ram (RAM *ram) {
 	rsp = ram->schedule_rsp();
 
 	msu_->mem_rsp_valid = rsp.valid;
-	msu_->mem_rsp_mask 	= rsp.mask;
 	msu_->mem_rsp_data 	= rsp.data;
 	msu_->mem_rsp_tag 	= rsp.tag;
 	rsp.ready 			= msu_->mem_rsp_ready;
@@ -145,8 +141,6 @@ void MemSim::attach_ram (RAM *ram) {
 
 	ram->halt_rsp(rsp);
 }
-
-//////////////////////////////////////////////////////
 
 void MemSim::run(RAM *ram) {
 	this->reset();
@@ -160,8 +154,6 @@ void MemSim::run(RAM *ram) {
 	}
 }
 
-//////////////////////////////////////////////////////
-
 int main (int argc, char** argv, char** env) {
     Verilated::commandArgs(argc, argv);
 
@@ -172,5 +164,3 @@ int main (int argc, char** argv, char** env) {
 
 	return 0;
 }
-
-//////////////////////////////////////////////////////

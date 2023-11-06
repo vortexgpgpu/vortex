@@ -20,7 +20,6 @@
 
 #include "svdpi.h"
 #include "verilated_vpi.h"
-#include "VX_config.h"
 
 #include "uuid_gen.h"
 
@@ -163,7 +162,7 @@ void dpi_idiv(bool enable, bool is_signed, iword_t a, iword_t b, iword_t* quotie
   uword_t dividen = a;
   uword_t divisor = b;
 
-  auto inf_neg = uword_t(1) << (XLEN-1); 
+  auto inf_neg = uword_t(1) << (8 * sizeof(iword_t) - 1);
 
   if (is_signed) {
     if (b == 0) {
