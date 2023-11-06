@@ -17,7 +17,7 @@
 #include <cstdint>
 #include "verilated.h"
 
-#ifdef VM_TRACE
+#ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>	// Trace file format header
 #endif
 
@@ -26,7 +26,7 @@ class vl_simulator {
 private:
 
   T top_;
-#ifdef VM_TRACE
+#ifdef VCD_OUTPUT
   VerilatedVcdC tfp_;
 #endif
 
@@ -35,7 +35,7 @@ public:
   vl_simulator() {
     top_.clk = 0;
     top_.reset = 0;
-  #ifdef VM_TRACE
+  #ifdef VCD_OUTPUT
     Verilated::traceEverOn(true);
     top_.trace(&tfp_, 99);
     tfp_.open("trace.vcd");
@@ -43,7 +43,7 @@ public:
   }
 
   ~vl_simulator() {
-  #ifdef VM_TRACE
+  #ifdef VCD_OUTPUT
     tfp_.close();
   #endif
     top_.final();
@@ -59,7 +59,7 @@ public:
   uint64_t step(uint64_t ticks, uint32_t count = 1) {
     while (count--) {
       top_.eval();
-    #ifdef VM_TRACE
+    #ifdef VCD_OUTPUT
       tfp_.dump(ticks);
     #endif
       top_.clk = !top_.clk;

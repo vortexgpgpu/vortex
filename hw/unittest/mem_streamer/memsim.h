@@ -18,8 +18,8 @@
 #include <vector>
 #include <verilated.h>
 #include <verilated_vcd_c.h>
-#include "VVX_mem_streamer.h"
-#include "VVX_mem_streamer__Syms.h"
+#include "VVX_mem_scheduler.h"
+#include "VVX_mem_scheduler__Syms.h"
 #include "ram.h"
 
 #define SIM_TIME 5000
@@ -28,20 +28,22 @@ int generate_rand (int min, int max);
 int generate_rand_mask (int mask);
 
 class MemSim {
-    private:
-        VVX_mem_streamer *msu_;
-        VerilatedVcdC *trace_;
+public:
+    MemSim();
+    virtual ~MemSim();
 
-        void eval();
-        void step();
-        void reset();
+    void run(RAM *ram);
 
-        void attach_core();
-        void attach_ram(RAM *ram);
+private:
+    VVX_mem_scheduler *msu_;
+#ifdef VCD_OUTPUT
+    VerilatedVcdC *trace_;
+#endif
 
-    public:
-        MemSim();
-        virtual ~MemSim();
+    void eval();
+    void step();
+    void reset();
 
-        void run(RAM *ram);  
+    void attach_core();
+    void attach_ram(RAM *ram);
 };

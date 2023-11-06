@@ -17,6 +17,14 @@
 
 #define MAX_TICKS 20
 
+#ifndef TRACE_START_TIME
+#define TRACE_START_TIME 0ull
+#endif
+
+#ifndef TRACE_STOP_TIME
+#define TRACE_STOP_TIME -1ull
+#endif
+
 #define CHECK(x)                                  \
    do {                                           \
      if (x)                                       \
@@ -25,10 +33,24 @@
 	   std::abort();			                          \
    } while (false)
 
-uint64_t ticks = 0;
+static uint64_t timestamp = 0;
+static bool trace_enabled = false;
+static uint64_t trace_start_time = TRACE_START_TIME;
+static uint64_t trace_stop_time  = TRACE_STOP_TIME;
 
 double sc_time_stamp() { 
-  return ticks;
+  return timestamp;
+}
+
+bool sim_trace_enabled() {
+  if (timestamp >= trace_start_time 
+   && timestamp < trace_stop_time)
+    return true;
+  return trace_enabled;
+}
+
+void sim_trace_enable(bool enable) {
+  trace_enabled = enable;
 }
 
 using Device = VVX_fifo_queue;
@@ -40,14 +62,14 @@ int main(int argc, char **argv) {
   vl_simulator<Device> sim;
 
   // run test
-  ticks = sim.reset(0);
-  while (ticks < MAX_TICKS) {
-    switch (ticks) {
+  timestamp = sim.reset(0);
+  while (timestamp < MAX_TICKS) {
+    switch (timestamp) {
     case 0:
       // initial values
       sim->pop  = 0;
       sim->push = 0;
-      ticks = sim.step(ticks, 2);
+      timestamp = sim.step(timestamp, 2);
       break;
     case 2:
       // Verify outputs    
@@ -96,11 +118,11 @@ int main(int argc, char **argv) {
     }
 
     // advance clock
-    ticks = sim.step(ticks, 2);
+    timestamp = sim.step(timestamp, 2);
   }
 
   std::cout << "PASSED!" << std::endl;
-  std::cout << "Simulation time: " << std::dec << ticks/2 << " cycles" << std::endl;
+  std::cout << "Simulation time: " << std::dec << timestamp/2 << " cycles" << std::endl;
 
   return 0;
 }

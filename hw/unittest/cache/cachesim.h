@@ -13,15 +13,15 @@
 
 #pragma once
 
-#include "VVX_cache.h"
-#include "VVX_cache__Syms.h"
+#include "VVX_cache_top.h"
+#include "VVX_cache_top__Syms.h"
 #include "verilated.h"
 
-//#ifdef VCD_OUTPUT
+#ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
-//#endif
+#endif
 
-//#include <VX_config.h>
+#include <VX_config.h>
 #include "ram.h"
 #include <ostream>
 #include <vector>
@@ -97,9 +97,9 @@ private:
   uint32_t snp_req_size_;
   uint32_t pending_snp_reqs_;
 
-  VVX_cache *cache_;
+  VVX_cache_top *cache_;
   RAM *ram_;
-//#ifdef VCD_OUTPUT
+#ifdef VCD_OUTPUT
   VerilatedVcdC *trace_;
-//#endif
+#endif
 };

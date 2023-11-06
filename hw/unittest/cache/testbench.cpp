@@ -54,6 +54,8 @@ int REQ_RSP(CacheSim *sim){ //verified
   int check = sim->assert_equal(data, write->tag);
   
   if (check == 4) return 1; 
+
+  return 0;
 }
 
 int HIT_1(CacheSim *sim){
@@ -242,7 +244,5 @@ int main(int argc, char **argv)
     std::cout << "FAILED" << std::endl;
   }
   
-
-
 	return 0;
 }

@@ -21,8 +21,6 @@ RAM::RAM() {
     is_rsp_stall_ = false;
 }
 
-//////////////////////////////////////////////////////
-
 bool RAM::check_duplicate_req(req_t req) {
     for(int i = 0; i < ram_.size(); i++) {
         if (ram_[i].addr == req.addr) {
@@ -32,8 +30,6 @@ bool RAM::check_duplicate_req(req_t req) {
     }
     return false;
 }
-
-//////////////////////////////////////////////////////
 
 int RAM::simulate_cycle_delay() {
 
@@ -57,8 +53,6 @@ int RAM::simulate_cycle_delay() {
     return dequeue_index;
 }
 
-//////////////////////////////////////////////////////
-
 void RAM::insert_req(req_t req) {
     if ( !(this->check_duplicate_req(req)) && req.valid && !req.rw) {
         req_t r;
@@ -78,14 +72,10 @@ void RAM::insert_req(req_t req) {
     }
 }
 
-//////////////////////////////////////////////////////
-
 uint8_t RAM::is_ready() {    
     // return generate_rand(0b1000, 0b1111);
     return 0b1111;
 }
-
-//////////////////////////////////////////////////////
 
 rsp_t RAM::schedule_rsp() {
     rsp_t rsp;
@@ -124,8 +114,6 @@ rsp_t RAM::schedule_rsp() {
     return rsp;
 }
 
-//////////////////////////////////////////////////////
-
 // Schedule response for only one cycle
 void RAM::halt_rsp(rsp_t rsp) {
     if (is_rsp_active_ && rsp.valid && rsp.ready) {
@@ -133,5 +121,3 @@ void RAM::halt_rsp(rsp_t rsp) {
         is_rsp_active_ = false;
     }
 }
-
-//////////////////////////////////////////////////////
