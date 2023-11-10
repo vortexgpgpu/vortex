@@ -38,6 +38,7 @@ K_LDFLAGS  += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_KN_PATH)/linker/vx_link$(XLE
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-narrowing
+CXXFLAGS += -pthread
 CXXFLAGS += -I$(POCL_RT_PATH)/include
 LDFLAGS  += -L$(POCL_RT_PATH)/lib -L$(VORTEX_RT_PATH)/stub -lvortex
 
