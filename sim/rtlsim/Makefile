@@ -85,7 +85,7 @@ endif
 
 PROJECT = rtlsim
 
-all: $(PROJECT)
+all: $(DESTDIR)/$(PROJECT)
 
 $(DESTDIR)/$(PROJECT): $(SRCS) main.cpp
 	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS) -DSTARTUP_ADDR=0x80000000' -LDFLAGS '$(LDFLAGS)' -o ../$@
