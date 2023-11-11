@@ -1,4 +1,5 @@
 XLEN ?= 32
+TOOLDIR ?= /opt
 
 TARGET ?= opaesim
 
@@ -6,12 +7,12 @@ XRT_SYN_DIR  ?= ../../../hw/syn/xilinx/xrt
 XRT_DEVICE_INDEX ?= 0
 
 ifeq ($(XLEN),64)
-RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
+RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv64-gnu-toolchain
 VX_CFLAGS += -march=rv64imafd -mabi=lp64d
 K_CFLAGS += -march=rv64imafd -mabi=ilp64d
 STARTUP_ADDR ?= 0x180000000
 else
-RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
+RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv-gnu-toolchain
 VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
 K_CFLAGS += -march=rv32imaf -mabi=ilp32f
 STARTUP_ADDR ?= 0x80000000
@@ -20,16 +21,16 @@ endif
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
 RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)
 
-POCL_CC_PATH ?= /opt/pocl/compiler
-POCL_RT_PATH ?= /opt/pocl/runtime
+POCL_CC_PATH ?= $(TOOLDIR)/pocl/compiler
+POCL_RT_PATH ?= $(TOOLDIR)/pocl/runtime
 
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 VORTEX_KN_PATH ?= $(realpath ../../../kernel)
 
 FPGA_BIN_DIR ?= $(VORTEX_RT_PATH)/opae
 
-LLVM_VORTEX ?= /opt/llvm-vortex
-LLVM_POCL ?= /opt/llvm-vortex
+LLVM_VORTEX ?= $(TOOLDIR)/llvm-vortex
+LLVM_POCL ?= $(TOOLDIR)/llvm-vortex
 
 K_CFLAGS   += -v -O3 --sysroot=$(RISCV_SYSROOT) --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH) -Xclang -target-feature -Xclang +vortex
 K_CFLAGS   += -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections

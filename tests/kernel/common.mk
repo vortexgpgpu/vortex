@@ -11,42 +11,39 @@ endif
 
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
 
-VORTEX_RT_PATH ?= $(realpath ../../../../../kernel)
-BIN2COE_PATH ?= ../../../../../../bin2coe
+VORTEX_KN_PATH ?= $(realpath ../../../kernel)
 
 CC = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
 AR = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar
 DP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
-CFLAGS += -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
-CFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
+SIM_DIR = ../../../sim
 
-LDFLAGS += -lm -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000
+CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
+CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw
 
-PROJECT = kernel
+LDFLAGS += -lm -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000 $(VORTEX_KN_PATH)/libvortexrt.a
 
-SRCS = main.c start.S
-
-all: $(PROJECT).elf $(PROJECT).hex $(PROJECT).bin $(PROJECT).dump $(PROJECT).bin.coe
+all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
 
 $(PROJECT).dump: $(PROJECT).elf
 	$(DP) -D $(PROJECT).elf > $(PROJECT).dump
 
-$(PROJECT).hex: $(PROJECT).elf
-	$(CP) -O ihex $(PROJECT).elf $(PROJECT).hex
-
 $(PROJECT).bin: $(PROJECT).elf
 	$(CP) -O binary $(PROJECT).elf $(PROJECT).bin
 
-$(PROJECT).bin.coe: $(PROJECT).bin
-	$(BIN2COE_PATH)/bin2coe $(PROJECT).bin --out=$(PROJECT).bin.coe --binary=$(PROJECT).bin --data=$(PROJECT).dat --binaddr=8192 --depth=16384 --wordsize=64
-
 $(PROJECT).elf: $(SRCS)
 	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT).elf
+
+run-rtlsim: $(PROJECT).bin
+	$(SIM_DIR)/rtlsim/rtlsim $(PROJECT).bin
+
+run-simx: $(PROJECT).bin
+	$(SIM_DIR)/simx/simx $(PROJECT).bin
 
 .depend: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf *.bin *.elf *.hex *.dump *.coe .depend 
+	rm -rf *.elf *.bin *.dump .depend 
