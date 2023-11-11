@@ -16,14 +16,11 @@
 
 TOOLDIR=${TOOLDIR:=/opt}
 
-export RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain
-export LLVM_POCL=$TOOLDIR/llvm-pocl
-export LLVM_VORTEX=$TOOLDIR/llvm-vortex
 export VERILATOR_ROOT=$TOOLDIR/verilator
 export PATH=$VERILATOR_ROOT/bin:$PATH
+
 export SV2V_PATH=$TOOLDIR/sv2v
 export PATH=$SV2V_PATH/bin:$PATH
+
 export YOSYS_PATH=$TOOLDIR/yosys
 export PATH=$YOSYS_PATH/bin:$PATH
-export POCL_CC_PATH=$TOOLDIR/pocl/compiler
-export POCL_RT_PATH=$TOOLDIR/pocl/runtime
