@@ -107,6 +107,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             .ready_out (scoreboard_if[i].ready)
         );
 
+    `ifdef SIMULATION
         reg [31:0] timeout_ctr;
     
         always @(posedge clk) begin
@@ -134,6 +135,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         `RUNTIME_ASSERT(~writeback_fire || inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] != 0,
             ("%t: *** core%0d: invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
                 $time, CORE_ID, wis_to_wid(writeback_if[i].data.wis, i), writeback_if[i].data.PC, writeback_if[i].data.tmask, writeback_if[i].data.rd, writeback_if[i].data.uuid));
+    `endif
+    
     end    
 
 endmodule
