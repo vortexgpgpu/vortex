@@ -220,8 +220,13 @@ module VX_muldiv_unit #(
     wire [NUM_LANES-1:0][`XLEN-1:0] div_in2;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
+    `ifdef XLEN_64
         assign div_in1[i] = is_alu_w ? {{(`XLEN-32){is_signed_op && execute_if.data.rs1_data[i][31]}}, execute_if.data.rs1_data[i][31:0]}: execute_if.data.rs1_data[i];
         assign div_in2[i] = is_alu_w ? {{(`XLEN-32){is_signed_op && execute_if.data.rs2_data[i][31]}}, execute_if.data.rs2_data[i][31:0]}: execute_if.data.rs2_data[i];
+    `else
+        assign div_in1[i] = execute_if.data.rs1_data[i];
+        assign div_in2[i] = execute_if.data.rs2_data[i];
+    `endif        
     end
 
 `ifdef IDIV_DPI    
