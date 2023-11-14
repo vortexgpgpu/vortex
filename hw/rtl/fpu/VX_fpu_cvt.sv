@@ -67,9 +67,6 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
     // or the number of bits in an integer
     localparam INT_EXP_WIDTH = `MAX(`CLOG2(INT_WIDTH), `MAX(EXP_BITS, `CLOG2(EXP_BIAS + MAN_BITS))) + 1;
 
-    // shift amount for denormalization
-    localparam SHAMT_BITS = `CLOG2(INT_MAN_WIDTH+1);
-
     localparam FMT_SHIFT_COMPENSATION = INT_MAN_WIDTH - 1 - MAN_BITS;
     localparam NUM_FP_STICKY  = 2 * INT_MAN_WIDTH - MAN_BITS - 1;   // removed mantissa, 1. and R
     localparam NUM_INT_STICKY = 2 * INT_MAN_WIDTH - INT_WIDTH;  // removed int and R
@@ -105,14 +102,14 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
 
     // Pipeline stage0
     
-    wire                    valid_in_s0;
-    wire [NUM_LANES-1:0]    lane_mask_s0;
-    wire [TAGW-1:0]         tag_in_s0;
-    wire                    is_itof_s0;
-    wire                    unsigned_s0;
-    wire [2:0]              rnd_mode_s0;
+    wire                 valid_in_s0;
+    wire [NUM_LANES-1:0] lane_mask_s0;
+    wire [TAGW-1:0]      tag_in_s0;
+    wire                 is_itof_s0;
+    wire                 is_signed_s0;
+    wire [2:0]           rnd_mode_s0;
     fclass_t [NUM_LANES-1:0] fclass_s0;
-    wire [NUM_LANES-1:0]    input_sign_s0;
+    wire [NUM_LANES-1:0] input_sign_s0;
     wire [NUM_LANES-1:0][INT_EXP_WIDTH-1:0] fmt_exponent_s0;
     wire [NUM_LANES-1:0][INT_MAN_WIDTH-1:0] encoded_mant_s0;
 
@@ -125,8 +122,8 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in, lane_mask, tag_in, is_itof, !is_signed, frm, fclass, input_sign, input_exp, input_mant}),
-        .data_out ({valid_in_s0, lane_mask_s0, tag_in_s0, is_itof_s0, unsigned_s0, rnd_mode_s0, fclass_s0, input_sign_s0, fmt_exponent_s0, encoded_mant_s0})
+        .data_in  ({valid_in, lane_mask, tag_in, is_itof, is_signed, frm, fclass, input_sign, input_exp, input_mant}),
+        .data_out ({valid_in_s0, lane_mask_s0, tag_in_s0, is_itof_s0, is_signed_s0, rnd_mode_s0, fclass_s0, input_sign_s0, fmt_exponent_s0, encoded_mant_s0})
     );
     
     // Normalization
@@ -161,15 +158,15 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
 
     // Pipeline stage1
 
-    wire                    valid_in_s1;
-    wire [NUM_LANES-1:0]    lane_mask_s1;
-    wire [TAGW-1:0]         tag_in_s1;
-    wire                    is_itof_s1;
-    wire                    unsigned_s1;
-    wire [2:0]              rnd_mode_s1;
+    wire                 valid_in_s1;
+    wire [NUM_LANES-1:0] lane_mask_s1;
+    wire [TAGW-1:0]      tag_in_s1;
+    wire                 is_itof_s1;
+    wire                 is_signed_s1;
+    wire [2:0]           rnd_mode_s1;
     fclass_t [NUM_LANES-1:0] fclass_s1;
-    wire [NUM_LANES-1:0]    input_sign_s1;
-    wire [NUM_LANES-1:0]    mant_is_zero_s1;
+    wire [NUM_LANES-1:0] input_sign_s1;
+    wire [NUM_LANES-1:0] mant_is_zero_s1;
     wire [NUM_LANES-1:0][INT_MAN_WIDTH-1:0] input_mant_s1;
     wire [NUM_LANES-1:0][INT_EXP_WIDTH-1:0] input_exp_s1;
 
@@ -180,8 +177,8 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in_s0, lane_mask_s0, tag_in_s0, is_itof_s0, unsigned_s0, rnd_mode_s0, fclass_s0, input_sign_s0, mant_is_zero_s0, input_mant_n_s0, input_exp_n_s0}),
-        .data_out ({valid_in_s1, lane_mask_s1, tag_in_s1, is_itof_s1, unsigned_s1, rnd_mode_s1, fclass_s1, input_sign_s1, mant_is_zero_s1, input_mant_s1, input_exp_s1})
+        .data_in  ({valid_in_s0, lane_mask_s0, tag_in_s0, is_itof_s0, is_signed_s0, rnd_mode_s0, fclass_s0, input_sign_s0, mant_is_zero_s0, input_mant_n_s0, input_exp_n_s0}),
+        .data_out ({valid_in_s1, lane_mask_s1, tag_in_s1, is_itof_s1, is_signed_s1, rnd_mode_s1, fclass_s1, input_sign_s1, mant_is_zero_s1, input_mant_s1, input_exp_s1})
     );
 
     // Perform adjustments to mantissa and exponent
@@ -190,47 +187,39 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
     wire [NUM_LANES-1:0][INT_EXP_WIDTH-1:0] final_exp_s1;
     wire [NUM_LANES-1:0] of_before_round_s1;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin           
-        reg [SHAMT_BITS-1:0] denorm_shamt_s1;    // shift amount for denormalization
-        reg of_before_round_tmp_s1;
-
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        wire [INT_EXP_WIDTH-1:0] denorm_shamt = INT_EXP_WIDTH'(INT_WIDTH-1) - input_exp_s1[i];
+        wire overflow = ($signed(denorm_shamt) <= -$signed(INT_EXP_WIDTH'(!is_signed_s1)));
+        wire underflow = ($signed(input_exp_s1[i]) < INT_EXP_WIDTH'($signed(-1)));
+        reg [INT_EXP_WIDTH-1:0] denorm_shamt_q;
         always @(*) begin
-            denorm_shamt_s1  = '0;
-            of_before_round_tmp_s1 = 1'b0;
-
-            if (!is_itof_s1) begin
-                if ($signed(input_exp_s1[i]) >= $signed(INT_EXP_WIDTH'(INT_WIDTH-1) + INT_EXP_WIDTH'(unsigned_s1))) begin
-                    // overflow
-                    of_before_round_tmp_s1 = 1'b1;                
-                end else if ($signed(input_exp_s1[i]) < INT_EXP_WIDTH'($signed(-1))) begin
-                    // underflow
-                    denorm_shamt_s1 = INT_WIDTH+1; // all bits go to the sticky
-                end else begin
-                    // By default right shift mantissa to be an integer
-                    denorm_shamt_s1 = SHAMT_BITS'(INT_WIDTH-1) - SHAMT_BITS'(input_exp_s1[i]);
-                end              
+            if (overflow) begin
+                denorm_shamt_q = '0;
+            end else if (underflow) begin
+                denorm_shamt_q = INT_WIDTH+1;
+            end else begin
+                denorm_shamt_q = denorm_shamt;
             end
         end
-
-        assign destination_mant_s1[i] = {input_mant_s1[i], 33'b0} >> denorm_shamt_s1;
+        assign destination_mant_s1[i] = is_itof_s1 ? {input_mant_s1[i], 33'b0} : ({input_mant_s1[i], 33'b0} >> denorm_shamt_q);
         assign final_exp_s1[i]        = input_exp_s1[i] + INT_EXP_WIDTH'(EXP_BIAS);
-        assign of_before_round_s1[i]  = of_before_round_tmp_s1;
+        assign of_before_round_s1[i]  = overflow;
     end
 
     // Pipeline stage2
     
-    wire                    valid_in_s2;
-    wire [NUM_LANES-1:0]    lane_mask_s2;
-    wire [TAGW-1:0]         tag_in_s2;
-    wire                    is_itof_s2;
-    wire                    unsigned_s2;
-    wire [2:0]              rnd_mode_s2;
+    wire                 valid_in_s2;
+    wire [NUM_LANES-1:0] lane_mask_s2;
+    wire [TAGW-1:0]      tag_in_s2;
+    wire                 is_itof_s2;
+    wire                 is_signed_s2;
+    wire [2:0]           rnd_mode_s2;
     fclass_t [NUM_LANES-1:0] fclass_s2;   
-    wire [NUM_LANES-1:0]    mant_is_zero_s2;
-    wire [NUM_LANES-1:0]    input_sign_s2;
+    wire [NUM_LANES-1:0] mant_is_zero_s2;
+    wire [NUM_LANES-1:0] input_sign_s2;
     wire [NUM_LANES-1:0][2*INT_MAN_WIDTH:0] destination_mant_s2;
     wire [NUM_LANES-1:0][INT_EXP_WIDTH-1:0] final_exp_s2;
-    wire [NUM_LANES-1:0]    of_before_round_s2;
+    wire [NUM_LANES-1:0] of_before_round_s2;
     
     VX_pipe_register #(
         .DATAW  (1 + NUM_LANES + TAGW + 1 + 1 + `INST_FRM_BITS + NUM_LANES * ($bits(fclass_t) + 1 + 1 + (2*INT_MAN_WIDTH+1) + INT_EXP_WIDTH + 1)),
@@ -239,24 +228,24 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in_s1, lane_mask_s1, tag_in_s1, is_itof_s1, unsigned_s1, rnd_mode_s1, fclass_s1, mant_is_zero_s1, input_sign_s1, destination_mant_s1, final_exp_s1, of_before_round_s1}),
-        .data_out ({valid_in_s2, lane_mask_s2, tag_in_s2, is_itof_s2, unsigned_s2, rnd_mode_s2, fclass_s2, mant_is_zero_s2, input_sign_s2, destination_mant_s2, final_exp_s2, of_before_round_s2})
+        .data_in  ({valid_in_s1, lane_mask_s1, tag_in_s1, is_itof_s1, is_signed_s1, rnd_mode_s1, fclass_s1, mant_is_zero_s1, input_sign_s1, destination_mant_s1, final_exp_s1, of_before_round_s1}),
+        .data_out ({valid_in_s2, lane_mask_s2, tag_in_s2, is_itof_s2, is_signed_s2, rnd_mode_s2, fclass_s2, mant_is_zero_s2, input_sign_s2, destination_mant_s2, final_exp_s2, of_before_round_s2})
     );
 
-    wire [NUM_LANES-1:0]    rounded_sign_s2;
+    wire [NUM_LANES-1:0] rounded_sign_s2;
     wire [NUM_LANES-1:0][INT_WIDTH-1:0] rounded_abs_s2; // absolute value of result after rounding
-    wire [NUM_LANES-1:0]    f2i_round_has_sticky_s2;
-    wire [NUM_LANES-1:0]    i2f_round_has_sticky_s2;
+    wire [NUM_LANES-1:0] f2i_round_has_sticky_s2;
+    wire [NUM_LANES-1:0] i2f_round_has_sticky_s2;
     
     // Rouding and classification
    
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        wire [MAN_BITS-1:0]     final_mant_s2;  // mantissa after adjustments
-        wire [INT_WIDTH-1:0]    final_int_s2;   // integer shifted in position
-        wire [1:0]              round_sticky_bits_s2;
-        wire [INT_WIDTH-1:0]    fmt_pre_round_abs_s2;
-        wire [INT_WIDTH-1:0]    pre_round_abs_s2;
-        wire [1:0]              f2i_round_sticky_bits_s2, i2f_round_sticky_bits_s2;
+        wire [MAN_BITS-1:0]  final_mant_s2;  // mantissa after adjustments
+        wire [INT_WIDTH-1:0] final_int_s2;   // integer shifted in position
+        wire [1:0]           round_sticky_bits_s2;
+        wire [INT_WIDTH-1:0] fmt_pre_round_abs_s2;
+        wire [INT_WIDTH-1:0] pre_round_abs_s2;
+        wire [1:0]           f2i_round_sticky_bits_s2, i2f_round_sticky_bits_s2;
 
         // Extract final mantissa and round bit, discard the normal bit (for FP)
         assign {final_mant_s2, i2f_round_sticky_bits_s2[1]} = destination_mant_s2[i][2*INT_MAN_WIDTH-1 : 2*INT_MAN_WIDTH-1 - (MAN_BITS+1) + 1];
@@ -298,7 +287,7 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
     wire [NUM_LANES-1:0] lane_mask_s3;
     wire [TAGW-1:0]      tag_in_s3;
     wire                 is_itof_s3;
-    wire                 unsigned_s3;
+    wire                 is_signed_s3;
     fclass_t [NUM_LANES-1:0] fclass_s3;   
     wire [NUM_LANES-1:0] mant_is_zero_s3;
     wire [NUM_LANES-1:0] input_sign_s3;
@@ -315,8 +304,8 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in_s2, lane_mask_s2, tag_in_s2, is_itof_s2, unsigned_s2, fclass_s2, mant_is_zero_s2, input_sign_s2, rounded_abs_s2, rounded_sign_s2, of_before_round_s2, f2i_round_has_sticky_s2, i2f_round_has_sticky_s2}),
-        .data_out ({valid_in_s3, lane_mask_s3, tag_in_s3, is_itof_s3, unsigned_s3, fclass_s3, mant_is_zero_s3, input_sign_s3, rounded_abs_s3, rounded_sign_s3, of_before_round_s3, f2i_round_has_sticky_s3, i2f_round_has_sticky_s3})
+        .data_in  ({valid_in_s2, lane_mask_s2, tag_in_s2, is_itof_s2, is_signed_s2, fclass_s2, mant_is_zero_s2, input_sign_s2, rounded_abs_s2, rounded_sign_s2, of_before_round_s2, f2i_round_has_sticky_s2, i2f_round_has_sticky_s2}),
+        .data_out ({valid_in_s3, lane_mask_s3, tag_in_s3, is_itof_s3, is_signed_s3, fclass_s3, mant_is_zero_s3, input_sign_s3, rounded_abs_s3, rounded_sign_s3, of_before_round_s3, f2i_round_has_sticky_s3, i2f_round_has_sticky_s3})
     );
      
     wire [NUM_LANES-1:0][INT_WIDTH-1:0] fmt_result_s3;
@@ -335,18 +324,18 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
     // F2I Special case handling
 
     reg [NUM_LANES-1:0][INT_WIDTH-1:0] f2i_special_result_s3;
-    fflags_t [NUM_LANES-1:0]  f2i_special_status_s3;
-    wire [NUM_LANES-1:0]      f2i_result_is_special_s3;
+    fflags_t [NUM_LANES-1:0] f2i_special_status_s3;
+    wire [NUM_LANES-1:0] f2i_result_is_special_s3;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
          // Assemble result according to destination format
         always @(*) begin
             if (input_sign_s3[i] && !fclass_s3[i].is_nan) begin
                 f2i_special_result_s3[i][INT_WIDTH-2:0] = '0;            // alone yields 2**(31)-1
-                f2i_special_result_s3[i][INT_WIDTH-1]   = ~unsigned_s3;  // for unsigned casts yields 2**31
+                f2i_special_result_s3[i][INT_WIDTH-1]   = is_signed_s3;  // for unsigned casts yields 2**31
             end else begin
                 f2i_special_result_s3[i][INT_WIDTH-2:0] = 2**(INT_WIDTH-1) - 1;   // alone yields 2**(31)-1
-                f2i_special_result_s3[i][INT_WIDTH-1]   = unsigned_s3;   // for unsigned casts yields 2**31
+                f2i_special_result_s3[i][INT_WIDTH-1]   = ~is_signed_s3;   // for unsigned casts yields 2**31
             end
         end            
 
@@ -354,7 +343,7 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
         assign f2i_result_is_special_s3[i] = fclass_s3[i].is_nan 
                                            | fclass_s3[i].is_inf
                                            | of_before_round_s3[i]
-                                           | (input_sign_s3[i] & unsigned_s3 & ~rounded_int_res_zero_s3[i]);
+                                           | (input_sign_s3[i] & ~is_signed_s3 & ~rounded_int_res_zero_s3[i]);
                                         
         // All integer special cases are invalid
         assign f2i_special_status_s3[i] = {1'b1, 4'h0};
