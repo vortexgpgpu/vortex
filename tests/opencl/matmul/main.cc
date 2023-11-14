@@ -184,8 +184,8 @@ int main (int argc, char **argv) {
   CL_CHECK(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&b_memobj));
   CL_CHECK(clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&c_memobj));
   CL_CHECK(clSetKernelArg(kernel, 3, sizeof(uint32_t), &size));
-  CL_CHECK(clSetKernelArg(kernel, 4, local_size[0]*local_size[1]*sizeof(float), NULL));
-  CL_CHECK(clSetKernelArg(kernel, 5, local_size[0]*local_size[1]*sizeof(float), NULL));
+  //CL_CHECK(clSetKernelArg(kernel, 4, local_size[0]*local_size[1]*sizeof(float), NULL));
+  //CL_CHECK(clSetKernelArg(kernel, 5, local_size[0]*local_size[1]*sizeof(float), NULL));
 
  // Allocate memories for input arrays and output arrays.
  std::vector<float> h_a(size * size);
