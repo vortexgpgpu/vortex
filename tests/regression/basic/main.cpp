@@ -262,11 +262,8 @@ int main(int argc, char *argv[]) {
 
     // upload kernel argument
     std::cout << "upload kernel argument" << std::endl;
-    {
-      auto buf_ptr = (void*)staging_buf.data();
-      memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
-      RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
-    }
+    memcpy(staging_buf.data(), &kernel_arg, sizeof(kernel_arg_t));
+    RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
 
     std::cout << "run kernel test" << std::endl;
     RT_CHECK(run_kernel_test(kernel_arg, buf_size, num_points));
