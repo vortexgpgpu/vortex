@@ -36,9 +36,9 @@ run-simx:
 	$(MAKE) -C lbm run-simx
 	$(MAKE) -C oclprintf run-simx
 	$(MAKE) -C blackscholes run-simx
-	$(MAKE) -C matmul run-simx
 	$(MAKE) -C transpose run-simx
 	$(MAKE) -C convolution run-simx
+#	$(MAKE) -C matmul run-simx
 #	$(MAKE) -C vectorhypot run-simx	
 #	$(MAKE) -C mri-q run-simx
 
@@ -59,8 +59,8 @@ run-rtlsim:
 	$(MAKE) -C lbm run-rtlsim
 	$(MAKE) -C oclprintf run-rtlsim
 	$(MAKE) -C blackscholes run-rtlsim
-	$(MAKE) -C matmul run-rtlsim
 	$(MAKE) -C convolution run-rtlsim
+#	$(MAKE) -C matmul run-rtlsim
 #	$(MAKE) -C vectorhypot run-rtlsim
 #	$(MAKE) -C mri-q run-rtlsim
 
@@ -81,8 +81,8 @@ run-opae:
 	$(MAKE) -C lbm run-opae
 	$(MAKE) -C oclprintf run-opae
 	$(MAKE) -C blackscholes run-opae
-	$(MAKE) -C matmul run-opae
 	$(MAKE) -C convolution run-opae
+#	$(MAKE) -C matmul run-opae
 #	$(MAKE) -C vectorhypot run-opae
 #	$(MAKE) -C mri-q run-opae
 

@@ -149,13 +149,9 @@ int main(int argc, char **argv) {
 
   cl_platform_id platform_id;
   cl_device_id device_id;
+  cl_program program;
   size_t kernel_size;
-  cl_int binary_status = 0;
   uint8_t *kernel_bin = NULL;
-
-  // read kernel binary from file  
-  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
-    return -1;
 
   // Getting platform and device information
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
@@ -170,19 +166,18 @@ int main(int argc, char **argv) {
   cl_kernel kernel = 0;
   cl_mem memObjects[2] = {0, 0};
 
-  // Create OpenCL program - first attempt to load cached binary.
-  // If that is not available, then create the program from source
-  // and store the binary for future use.
-  printf("create program from binary...\n");
-  cl_program program = CL_CHECK_ERR(clCreateProgramWithBinary(
-    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &_err));
-  if (program == NULL) {
-    std::cerr << "Failed to write program binary" << std::endl;
-    Cleanup(kernel_bin, device_id, context, queue, program, kernel, memObjects);
-    return 1;
-  } else {
-    printf("Read program from binary.");
-  }
+  printf("Create program from kernel source\n");
+#ifdef HOSTGPU
+  if (0 != read_kernel_file("kernel.cl", &kernel_bin, &kernel_size))
+    return -1;
+  program = CL_CHECK_ERR(clCreateProgramWithSource(
+    context, 1, (const char**)&kernel_bin, &kernel_size, &_err));  
+#else
+  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
+    return -1;
+  program = CL_CHECK_ERR(clCreateProgramWithBinary(
+    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, NULL, &_err));
+#endif
 
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
