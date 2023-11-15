@@ -223,18 +223,18 @@
 
 // Number of ALU units
 `ifndef NUM_ALU_LANES
-`define NUM_ALU_LANES   `UP(`NUM_THREADS / 2)
+`define NUM_ALU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_ALU_BLOCKS
-`define NUM_ALU_BLOCKS  `UP(`ISSUE_WIDTH / 1)
+`define NUM_ALU_BLOCKS  `ISSUE_WIDTH
 `endif
 
 // Number of FPU units
 `ifndef NUM_FPU_LANES
-`define NUM_FPU_LANES   `UP(`NUM_THREADS / 2)
+`define NUM_FPU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_FPU_BLOCKS
-`define NUM_FPU_BLOCKS  `UP(`ISSUE_WIDTH / 1)
+`define NUM_FPU_BLOCKS  `ISSUE_WIDTH
 `endif
 
 // Number of LSU units
