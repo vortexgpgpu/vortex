@@ -19,16 +19,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-union Float_t {    
-    float f;
-    int   i;
-    struct {
-        uint32_t man  : 23;
-        uint32_t exp  : 8;
-        uint32_t sign : 1;
-    } parts;
-};
-
 template <typename Type>
 class Comparator {};
 
@@ -38,22 +28,41 @@ public:
   static const char* type_str() {
     return "integer";
   }
-  static bool compare(int a, int b) { 
-    return a == b; 
+  static int generate() { 
+    return rand(); 
+  }
+  static bool compare(int a, int b, int index, int errors) { 
+    if (a != b) {
+      if (errors < 100) {
+        printf("*** error: [%d] expected=%d, actual=%d\n", index, a, b);
+      }
+      return false;
+    }
+    return true;
   }  
 };
 
 template <>
 class Comparator<float> {
+private:
+  union Float_t { float f; int i; };
 public:
   static const char* type_str() {
     return "float";
   }
-  static bool compare(float a, float b) { 
-    Float_t fa{a}, fb{b};
+  static int generate() { 
+    return static_cast<float>(rand()) / RAND_MAX;
+  }
+  static bool compare(float a, float b, int index, int errors) {     
+    union fi_t { float f; int32_t i; };
+    fi_t fa, fb;
+    fa.f = a;
+    fb.f = b;
     auto d = std::abs(fa.i - fb.i);
     if (d > FLOAT_ULP) {
-      std::cout << "*** almost_equal_ulp: a=" << a << ", b=" << b << ", ulp=" << d << ", ia=" << std::hex << fa.i << ", ib=" << fb.i << std::endl;
+      if (errors < 100) {
+        printf("*** error: [%d] expected=%f, actual=%f\n", index, a, b);
+      }
       return false;
     }
     return true;
@@ -127,9 +136,7 @@ int run_test(const kernel_arg_t& kernel_arg,
     for (uint32_t i = 0; i < num_points; ++i) {
       auto ref = source_data[2 * i + 0] + source_data[2 * i + 1];
       auto cur = buf_ptr[i];
-      if (!Comparator<TYPE>::compare(cur, ref)) {
-        std::cout << "error at result #" << std::dec << i
-                  << std::hex << ": actual 0x" << cur << ", expected 0x" << ref << std::endl;
+      if (!Comparator<TYPE>::compare(cur, ref, i, errors)) {
         ++errors;
       }
     }
@@ -196,8 +203,7 @@ int main(int argc, char *argv[]) {
   // generate source data
   source_data.resize(2 * num_points);
   for (uint32_t i = 0; i < source_data.size(); ++i) {
-    auto r = static_cast<float>(std::rand()) / RAND_MAX;
-    source_data[i] = static_cast<TYPE>(r * 2 * num_points);
+    source_data[i] = Comparator<TYPE>::generate();
   }
 
   // upload source buffer0

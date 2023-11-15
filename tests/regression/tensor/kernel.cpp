@@ -12,10 +12,10 @@ inline uint32_t log2_fast(uint32_t x) {
 }
 
 void kernel_body(uint32_t task_id, kernel_arg_t* __UNIFORM__ arg) {
-	auto size  = arg->size;
-    auto A = reinterpret_cast<TYPE*>(arg->A_addr);
+	auto A = reinterpret_cast<TYPE*>(arg->A_addr);
 	auto B = reinterpret_cast<TYPE*>(arg->B_addr);
 	auto C = reinterpret_cast<TYPE*>(arg->C_addr);
+    auto size  = arg->size;
 
     uint32_t row, col;
     if (is_log2(size)) {

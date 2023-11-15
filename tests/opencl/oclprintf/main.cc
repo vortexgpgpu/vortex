@@ -143,7 +143,7 @@ int main (int argc, char **argv) {
   // Allocate memories for input arrays and output arrays.    
   h_a = (int*)malloc(nbytes);
 	
-  // Initialize values for array members.  
+  // Generate input values
   for (int i = 0; i < size; ++i) {
     h_a[i] = -1 + i;
   }
