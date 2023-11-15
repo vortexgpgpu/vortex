@@ -8,11 +8,9 @@
 #include <chrono>
 #include <vector>
 
-#define LOCAL_SIZE 16
-
 #define FLOAT_ULP 6
 
-#define KERNEL_NAME "matmul"
+#define KERNEL_NAME "conv3x3"
 
 #define CL_CHECK(_expr)                                                \
    do {                                                                \
@@ -67,16 +65,25 @@ static bool compare_equal(float a, float b) {
   return d <= FLOAT_ULP;
 }
 
-static void matmul_cpu(float *C, float *A, float *B, int N) {
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < N; j++) {
-            float sum = 0.0f;
-            for (int k = 0; k < N; k++) {
-                sum += A[i * N + k] * B[k * N + j];
-            }
-            C[i * N + j] = sum;
+static void convolution_cpu(float *O, float *I, float *W, int32_t width, int32_t height) {
+  int paddedWidth = width + 2;
+  for (int32_t y = 0; y < height; ++y) {
+    for (int32_t x = 0; x < width; ++x) {
+      int paddedY = y + 1;
+      int paddedX = x + 1;
+      float sum = 0.0f;
+      for (int32_t ky = -1; ky <= 1; ++ky) {
+        for (int32_t kx = -1; kx <= 1; ++kx) {
+          int32_t iy = paddedY + ky;
+          int32_t ix = paddedX + kx;
+          float value = I[iy * paddedWidth + ix];
+          float weight = W[(ky + 1) * 3 + (kx + 1)];
+          sum += value * weight;
         }
+      }
+      O[y * width + x] = sum;
     }
+  }
 }
 
 cl_device_id device_id = NULL;
@@ -84,18 +91,18 @@ cl_context context = NULL;
 cl_command_queue commandQueue = NULL;
 cl_program program = NULL;
 cl_kernel kernel = NULL;
-cl_mem a_memobj = NULL;
-cl_mem b_memobj = NULL;
-cl_mem c_memobj = NULL;
-uint8_t *kernel_bin = NULL;
+cl_mem i_memobj = NULL;
+cl_mem w_memobj = NULL;
+cl_mem o_memobj = NULL;
+uint8_t* kernel_bin = NULL;
 
 static void cleanup() {
   if (commandQueue) clReleaseCommandQueue(commandQueue);
   if (kernel) clReleaseKernel(kernel);
   if (program) clReleaseProgram(program);
-  if (a_memobj) clReleaseMemObject(a_memobj);
-  if (b_memobj) clReleaseMemObject(b_memobj);
-  if (c_memobj) clReleaseMemObject(c_memobj);
+  if (i_memobj) clReleaseMemObject(i_memobj);
+  if (w_memobj) clReleaseMemObject(w_memobj);
+  if (o_memobj) clReleaseMemObject(o_memobj);
   if (context) clReleaseContext(context);
   if (device_id) clReleaseDevice(device_id);  
   if (kernel_bin) free(kernel_bin);
@@ -130,13 +137,11 @@ int main (int argc, char **argv) {
   // parse command arguments
   parse_args(argc, argv);
 
-  uint32_t num_points = size * size;
-
   printf("Matrix size=%d\n", size);
-  if ((size / LOCAL_SIZE) * LOCAL_SIZE != size) {
-    printf("Error: matrix size must be a multiple of %d\n", LOCAL_SIZE);
-    return -1;
-  }
+
+  uint32_t o_points = size * size;
+  uint32_t i_points = (size+2) * (size+2);
+  uint32_t w_points = 3 * 3;
   
   cl_platform_id platform_id;
   size_t kernel_size;
@@ -152,11 +157,13 @@ int main (int argc, char **argv) {
   clGetDeviceInfo(device_id, CL_DEVICE_NAME, sizeof(device_string), &device_string, NULL);
   printf("Using device: %s\n", device_string);
 
-  printf("Allocate device buffers\n");
-  size_t nbytes = num_points * sizeof(float);
-  a_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
-  b_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
-  c_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, nbytes, NULL, &_err));
+  printf("Allocate device buffers\n");  
+  size_t i_nbytes = i_points * sizeof(float);
+  size_t w_nbytes = w_points * sizeof(float);
+  size_t o_nbytes = o_points * sizeof(float);
+  i_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, i_nbytes, NULL, &_err));
+  w_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, w_nbytes, NULL, &_err));
+  o_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, o_nbytes, NULL, &_err));
 
   printf("Create program from kernel source\n");
 #ifdef HOSTGPU
@@ -182,53 +189,59 @@ int main (int argc, char **argv) {
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
   size_t global_size[2] = {size, size};
-  size_t local_size[2] = {LOCAL_SIZE, LOCAL_SIZE};  
 
   // Set kernel arguments
-  CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj));	
-  CL_CHECK(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&b_memobj));
-  CL_CHECK(clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&c_memobj));
+  CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&o_memobj));	
+  CL_CHECK(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&i_memobj));
+  CL_CHECK(clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&w_memobj));
   CL_CHECK(clSetKernelArg(kernel, 3, sizeof(uint32_t), &size));
-  CL_CHECK(clSetKernelArg(kernel, 4, local_size[0]*local_size[1]*sizeof(float), NULL));
-  CL_CHECK(clSetKernelArg(kernel, 5, local_size[0]*local_size[1]*sizeof(float), NULL));
+  CL_CHECK(clSetKernelArg(kernel, 4, sizeof(uint32_t), &size));
 
- // Allocate memories for input arrays and output arrays.
- std::vector<float> h_a(num_points);
- std::vector<float> h_b(num_points);
- std::vector<float> h_c(num_points);
+  // Allocate memories for input arrays and output arrays.
+  std::vector<float> h_i(i_points);
+  std::vector<float> h_w(w_points);
+  std::vector<float> h_o(o_points, 0.0f);
 	
   // Generate input values
-  for (uint32_t i = 0; i < num_points; ++i) {
-    h_a[i] = static_cast<float>(rand()) / RAND_MAX;
-    h_b[i] = static_cast<float>(rand()) / RAND_MAX;
+  for (int32_t y = -1; y < size+1; ++y) {
+    for (int32_t x = -1; x < size+1; ++x) {
+      if (x >= 0 && x < size && y >= 0 && y < size) {
+        h_i[(y+1) * (size+2) + (x+1)] = static_cast<float>(rand()) / RAND_MAX;
+      } else {
+        h_i[(y+1) * (size+2) + (x+1)] = 0;
+      }
+    }
+  }
+  for (uint32_t i = 0; i < w_points; ++i) {
+    h_w[i] = static_cast<float>(rand()) / RAND_MAX;
   }
 
   // Creating command queue
   commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));  
 
 	printf("Upload source buffers\n");
-  CL_CHECK(clEnqueueWriteBuffer(commandQueue, a_memobj, CL_TRUE, 0, nbytes, h_a.data(), 0, NULL, NULL));
-  CL_CHECK(clEnqueueWriteBuffer(commandQueue, b_memobj, CL_TRUE, 0, nbytes, h_b.data(), 0, NULL, NULL));
+  CL_CHECK(clEnqueueWriteBuffer(commandQueue, i_memobj, CL_TRUE, 0, i_nbytes, h_i.data(), 0, NULL, NULL));
+  CL_CHECK(clEnqueueWriteBuffer(commandQueue, w_memobj, CL_TRUE, 0, w_nbytes, h_w.data(), 0, NULL, NULL));
 
   printf("Execute the kernel\n");
   auto time_start = std::chrono::high_resolution_clock::now();
-  CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 2, NULL, global_size, local_size, 0, NULL, NULL));
+  CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 2, NULL, global_size, NULL, 0, NULL, NULL));
   CL_CHECK(clFinish(commandQueue));
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
 
   printf("Download destination buffer\n");
-  CL_CHECK(clEnqueueReadBuffer(commandQueue, c_memobj, CL_TRUE, 0, nbytes, h_c.data(), 0, NULL, NULL));
+  CL_CHECK(clEnqueueReadBuffer(commandQueue, o_memobj, CL_TRUE, 0, o_nbytes, h_o.data(), 0, NULL, NULL));
 
   printf("Verify result\n");
-  std::vector<float> ref_vec(num_points);
-  matmul_cpu(ref_vec.data(), h_a.data(), h_b.data(), size);
+  std::vector<float> ref_vec(o_points);
+  convolution_cpu(ref_vec.data(), h_i.data(), h_w.data(), size, size);
   int errors = 0;
-  for (uint32_t i = 0; i < num_points; ++i) {
-    if (!compare_equal(h_c[i], ref_vec[i])) {
+  for (uint32_t i = 0; i < o_points; ++i) {
+    if (!compare_equal(h_o[i], ref_vec[i])) {
       if (errors < 100) 
-        printf("*** error: [%d] expected=%f, actual=%f\n", i, ref_vec[i], h_c[i]);
+        printf("*** error: [%d] expected=%f, actual=%f\n", i, ref_vec[i], h_o[i]);
       ++errors;
     }
   }

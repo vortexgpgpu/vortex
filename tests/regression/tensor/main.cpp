@@ -19,16 +19,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-union Float_t {    
-    float f;
-    int   i;
-    struct {
-        uint32_t man  : 23;
-        uint32_t exp  : 8;
-        uint32_t sign : 1;
-    } parts;
-};
-
 template <typename Type>
 class Comparator {};
 
@@ -38,8 +28,17 @@ public:
   static const char* type_str() {
     return "integer";
   }
-  static bool compare(int a, int b) { 
-    return a == b; 
+  static int generate() { 
+    return rand(); 
+  }
+  static bool compare(int a, int b, int index, int errors) { 
+    if (a != b) {
+      if (errors < 100) {
+        printf("*** error: [%d] expected=%d, actual=%d\n", index, a, b);
+      }
+      return false;
+    }
+    return true;
   }  
 };
 
@@ -49,18 +48,26 @@ public:
   static const char* type_str() {
     return "float";
   }
-  static bool compare(float a, float b) { 
-    Float_t fa{a}, fb{b};
+  static int generate() { 
+    return static_cast<float>(rand()) / RAND_MAX;
+  }
+  static bool compare(float a, float b, int index, int errors) { 
+    union fi_t { float f; int32_t i; };
+    fi_t fa, fb;
+    fa.f = a;
+    fb.f = b;
     auto d = std::abs(fa.i - fb.i);
     if (d > FLOAT_ULP) {
-      std::cout << "*** almost_equal_ulp: a=" << a << ", b=" << b << ", ulp=" << d << ", ia=" << std::hex << fa.i << ", ib=" << fb.i << std::endl;
+      if (errors < 100) {
+        printf("*** error: [%d] expected=%f, actual=%f\n", index, a, b);
+      }
       return false;
     }
     return true;
   }  
 };
 
-static void cpuMatrixMultiply(TYPE* out, const TYPE* A, const TYPE* B, uint32_t width, uint32_t height) {
+static void matmul_cpu(TYPE* out, const TYPE* A, const TYPE* B, uint32_t width, uint32_t height) {
   for (uint32_t row = 0; row < height; ++row) {
     for (uint32_t col = 0; col < width; ++col) {
       TYPE sum(0);
@@ -73,7 +80,7 @@ static void cpuMatrixMultiply(TYPE* out, const TYPE* A, const TYPE* B, uint32_t 
 }
 
 const char* kernel_file = "kernel.bin";
-uint32_t size = 16;
+uint32_t size = 32;
 
 vx_device_h device = nullptr;
 std::vector<uint8_t> staging_buf;
@@ -81,14 +88,14 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-s size] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-n size] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "s:k:h?")) != -1) {
+  while ((c = getopt(argc, argv, "n:k:h?")) != -1) {
     switch (c) {
-    case 's':
+    case 'n':
       size = atoi(optarg);
       break;
     case 'k':
@@ -138,9 +145,7 @@ int run_test(const kernel_arg_t& kernel_arg,
     for (uint32_t i = 0; i < refs.size(); ++i) {
       auto ref = refs[i];
       auto cur = buf_ptr[i];
-      if (!Comparator<TYPE>::compare(cur, ref)) {
-        std::cout << "error at result #" << std::dec << i
-                  << std::hex << ": actual 0x" << cur << ", expected 0x" << ref << std::endl;
+      if (!Comparator<TYPE>::compare(cur, ref, i, errors)) {
         ++errors;
       }
     }
@@ -208,7 +213,7 @@ int main(int argc, char *argv[]) {
     src_A[i] = static_cast<TYPE>(a * size);
     src_B[i] = static_cast<TYPE>(b * size);
   }
-  cpuMatrixMultiply(refs.data(), src_A.data(), src_B.data(), size, size);
+  matmul_cpu(refs.data(), src_A.data(), src_B.data(), size, size);
 
   // upload source buffer0
   {

@@ -166,12 +166,10 @@ int main (int argc, char **argv) {
   h_b = (float*)malloc(nbytes);
   h_c = (float*)malloc(nbytes);	
 	
-  // Initialize values for array members.  
+  // Generate input values
   for (int i = 0; i < size; ++i) {
     h_a[i] = sinf(i)*sinf(i);
     h_b[i] = cosf(i)*cosf(i);
-    h_c[i] = 0xdeadbeef;
-    //printf("*** [%d]: h_a=%f, h_b=%f\n", i, h_a[i], h_b[i]);
   }
 
   // Creating command queue

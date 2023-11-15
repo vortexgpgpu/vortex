@@ -155,9 +155,8 @@ int main (int argc, char **argv) {
   h_a = (int*)malloc(nbytes);
   h_c = (int*)malloc(nbytes);	
 	
-  // Initialize values for array members.  
+  // Generate input values
   for (int i = 0; i < size; ++i) {
-    h_c[i] = 0xdeadbeef;
     if (float_enable) {
       float value = sinf(i)*sinf(i);
       h_a[i] = *(int*)&value;
