@@ -407,7 +407,7 @@
 
 // Number of Associative Ways
 `ifndef ICACHE_NUM_WAYS
-`define ICACHE_NUM_WAYS 2
+`define ICACHE_NUM_WAYS 1
 `endif
 
 // Dcache Configurable Knobs //////////////////////////////////////////////////
@@ -461,7 +461,7 @@
 
 // Number of Associative Ways
 `ifndef DCACHE_NUM_WAYS
-`define DCACHE_NUM_WAYS 2
+`define DCACHE_NUM_WAYS 1
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
@@ -520,7 +520,7 @@
 
 // Number of Associative Ways
 `ifndef L2_NUM_WAYS
-`define L2_NUM_WAYS 4
+`define L2_NUM_WAYS 2
 `endif
 
 // L3cache Configurable Knobs /////////////////////////////////////////////////
