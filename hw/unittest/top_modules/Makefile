@@ -56,7 +56,6 @@ PROJECT = top_modules
 all: build
 	
 build: $(SRCS)
-	verilator --build $(VL_FLAGS) --cc VX_cache_cluster_top --top-module VX_cache_cluster_top $^ -CFLAGS '$(CXXFLAGS)'
 	verilator --build $(VL_FLAGS) --cc VX_cache_top --top-module VX_cache_top $^ -CFLAGS '$(CXXFLAGS)'
 	verilator --build $(VL_FLAGS) --cc VX_core_top --top-module VX_core_top $^ -CFLAGS '$(CXXFLAGS)'
 
