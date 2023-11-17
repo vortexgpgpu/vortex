@@ -157,9 +157,7 @@ int main(int argc, char** argv) {
 	CHECK_ERROR("clBuildProgram")
 
 	cl_kernel clKernel = clCreateKernel(clProgram,"naive_kernel",&clStatus);
-	CHECK_ERROR("clCreateKernel") 
-
-  printf("OK+\n");
+	CHECK_ERROR("clCreateKernel")
 
 	//host data
 	float *h_A0;
@@ -177,15 +175,11 @@ int main(int argc, char** argv) {
 	h_Anext=(float*)malloc(sizeof(float)*size);
 	pb_SwitchToTimer(&timers, pb_TimerID_IO);
 	//FILE *fp = fopen(parameters->inpFiles[0], "rb");
-	printf("OK+\n");
 	read_data(h_A0, nx,ny,nz,NULL);
-	printf("OK+\n");
-  //fclose(fp);
-  memcpy (h_Anext,h_A0,sizeof(float)*size);
+  	//fclose(fp);
+ 	memcpy (h_Anext,h_A0,sizeof(float)*size);
 
 	pb_SwitchToTimer(&timers, pb_TimerID_COPY);
-
-	printf("OK+\n");
 	
 	//memory allocation
 	d_A0 = clCreateBuffer(clContext,CL_MEM_READ_WRITE,size*sizeof(float),NULL,&clStatus);
@@ -201,18 +195,16 @@ int main(int argc, char** argv) {
 
 	pb_SwitchToTimer(&timers, pb_TimerID_COMPUTE);
 
-	printf("OK+\n");
-
 	//only use 1D thread block
-  int tx = 128;
+  	int tx = 128;
 	size_t block[3] = {tx,1,1};
 	size_t grid[3] = {(nx-2+tx-1)/tx*tx,ny-2,nz-2};
-  //size_t grid[3] = {nx-2,ny-2,nz-2};
-  size_t offset[3] = {1,1,1};
-  printf("grid size in x/y/z = %d %d %d\n",grid[0],grid[1],grid[2]);
+  	//size_t grid[3] = {nx-2,ny-2,nz-2};
+  	size_t offset[3] = {1,1,1};
+  	printf("grid size in x/y/z = %d %d %d\n",grid[0],grid[1],grid[2]);
 	printf("block size in x/y/z = %d %d %d\n",block[0],block[1],block[2]);
   
-  printf ("blocks = %d\n", (grid[0]/block[0])*(grid[1]/block[1])*(grid[2]*block[2]));
+  	printf ("blocks = %d\n", (grid[0]/block[0])*(grid[1]/block[1])*(grid[2]*block[2]));
 
 	clStatus = clSetKernelArg(clKernel,0,sizeof(float),(void*)&c0);
 	clStatus = clSetKernelArg(clKernel,1,sizeof(float),(void*)&c1);
@@ -226,14 +218,10 @@ int main(int argc, char** argv) {
 	//main execution
 	pb_SwitchToTimer(&timers, pb_TimerID_KERNEL);
 
-	printf("OK+0\n");
-
 	int t;
 	for(t=0;t<iteration;t++)
 	{
 		clStatus = clEnqueueNDRangeKernel(clCommandQueue,clKernel,3,NULL,grid,block,0,NULL,NULL);
-		printf("OK+0\n");
-
     //printf("iteration %d\n",t)
 		CHECK_ERROR("clEnqueueNDRangeKernel")
     
@@ -244,11 +232,9 @@ int main(int argc, char** argv) {
     clStatus = clSetKernelArg(clKernel,3,sizeof(cl_mem),(void*)&d_Anext);
 	}
 
-  printf("OK+1\n");
-
-  cl_mem d_temp = d_A0;
-  d_A0 = d_Anext;
-  d_Anext = d_temp;
+	cl_mem d_temp = d_A0;
+	d_A0 = d_Anext;
+	d_Anext = d_temp;
 
 	pb_SwitchToTimer(&timers, pb_TimerID_COPY);
 	clStatus = clEnqueueReadBuffer(clCommandQueue,d_Anext,CL_TRUE,0,size*sizeof(float),h_Anext,0,NULL,NULL);
@@ -260,8 +246,6 @@ int main(int argc, char** argv) {
 	clStatus = clReleaseCommandQueue(clCommandQueue);
 	clStatus = clReleaseContext(clContext);
 	CHECK_ERROR("clReleaseContext")
-
-	printf("OK+2\n");
  
 	if (parameters->outFile) {
 		pb_SwitchToTimer(&timers, pb_TimerID_IO);
