@@ -66,8 +66,8 @@ void gen_input_data(uint32_t num_points) {
   src_data.resize(num_points);
 
   for (uint32_t i = 0; i < num_points; ++i) {
-    float r = static_cast<float>(std::rand()) / RAND_MAX;
-    TYPE value = r * num_points;
+    auto r = static_cast<float>(std::rand()) / RAND_MAX;
+    auto value = static_cast<TYPE>(r * num_points);
     src_data[i] = value;
     std::cout << std::dec << i << ": value=" << value << std::endl;
   }  
@@ -172,19 +172,16 @@ int main(int argc, char *argv[]) {
   {
     std::cout << "allocate staging buffer" << std::endl;    
     uint32_t staging_buf_size = std::max<uint32_t>(src_buf_size,
-                                    std::max<uint32_t>(dst_buf_size, 
-                                      sizeof(kernel_arg_t)));
+                                  std::max<uint32_t>(dst_buf_size, 
+                                    sizeof(kernel_arg_t)));
     staging_buf.resize(staging_buf_size);
   }
   
   // upload kernel argument  
-  {
-    std::cout << "upload kernel argument" << std::endl;
-    auto buf_ptr = staging_buf.data();
-    memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
-    RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
-  }
-
+  std::cout << "upload kernel argument" << std::endl;
+  memcpy(staging_buf.data(), &kernel_arg, sizeof(kernel_arg_t));
+  RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
+  
   // upload source buffer
   {
     std::cout << "upload source buffer" << std::endl;

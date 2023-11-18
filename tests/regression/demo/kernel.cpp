@@ -4,11 +4,11 @@
 #include "common.h"
 
 void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
-	uint32_t count    = arg->task_size;
-	int32_t* src0_ptr = (int32_t*)arg->src0_addr;
-	int32_t* src1_ptr = (int32_t*)arg->src1_addr;
-	int32_t* dst_ptr  = (int32_t*)arg->dst_addr;
+	auto src0_ptr = reinterpret_cast<TYPE*>(arg->src0_addr);
+	auto src1_ptr = reinterpret_cast<TYPE*>(arg->src1_addr);
+	auto dst_ptr = reinterpret_cast<TYPE*>(arg->dst_addr);
 	
+	uint32_t count = arg->task_size;
 	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {

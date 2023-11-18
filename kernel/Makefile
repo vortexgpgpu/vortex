@@ -1,17 +1,18 @@
 XLEN ?= 32
+TOOLDIR ?= /opt
 
 ifeq ($(XLEN),64)
-RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
+RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv64-gnu-toolchain
 CFLAGS += -march=rv64imafd -mabi=lp64d
 else
-RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
+RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv-gnu-toolchain
 CFLAGS += -march=rv32imaf -mabi=ilp32f
 endif
 
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
 RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)
 
-LLVM_VORTEX ?= /opt/llvm-vortex
+LLVM_VORTEX ?= $(TOOLDIR)/llvm-vortex
 
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)

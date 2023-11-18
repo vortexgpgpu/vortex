@@ -91,14 +91,10 @@ int coo_to_jds(char *mtx_filename, int pad_rows, int warp_size, int pack_size,
   if ((f = fopen(mtx_filename, "r")) == NULL)
     exit(1);
 
-  printf("OK**\n");
-
   if (mm_read_banner(f, &matcode) != 0) {
     printf("Could not process Matrix Market banner.\n");
     exit(1);
   }
-
-	printf("OK**\n");
 
   /*  This is how one can screen matrix types if their application */
   /*  only supports a subset of the Matrix Market data types.      */
