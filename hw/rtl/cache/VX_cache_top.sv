@@ -22,7 +22,7 @@ module VX_cache_top #(
     // Size of cache in bytes
     parameter CACHE_SIZE            = 16384, 
     // Size of line inside a bank in bytes
-    parameter LINE_SIZE             = 16, 
+    parameter LINE_SIZE             = 64, 
     // Number of banks
     parameter NUM_BANKS             = 4,
     // Number of associative ways

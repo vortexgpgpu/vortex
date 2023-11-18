@@ -1,4 +1,4 @@
-PROJECT = matmul
+PROJECT = convolution
 
 SRCS = main.cc
 

@@ -190,13 +190,10 @@ int main(int argc, char *argv[]) {
   staging_buf.resize(staging_buf_size);
   
   // upload kernel argument  
-  {
-    std::cout << "upload kernel argument" << std::endl;
-    auto buf_ptr = (int*)staging_buf.data();
-    memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
-    RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
-  }
-
+  std::cout << "upload kernel argument" << std::endl;
+  memcpy(staging_buf.data(), &kernel_arg, sizeof(kernel_arg_t));
+  RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
+  
   // upload test address data
   {
     std::cout << "upload test address data" << std::endl;

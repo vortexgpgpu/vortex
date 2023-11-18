@@ -38,7 +38,7 @@ jobs:
         - rm -rf $HOME/build32 && cp -r $PWD $HOME/build32
         - rm -rf $HOME/build64 && cp -r $PWD $HOME/build64
         - make -C $HOME/build32
-        - XLEN=64 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain make -C $HOME/build64
+        - XLEN=64 make -C $HOME/build64
     - stage: test 
       name: unittest
       script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --unittest
@@ -47,13 +47,13 @@ jobs:
       script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --isa
     - stage: test 
       name: isa64
-      script: cp -r $HOME/build64 build && cd build && XLEN=64 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh --isa
+      script: cp -r $HOME/build64 build && cd build && XLEN=64 ./ci/travis_run.py ./ci/regression.sh --isa
     - stage: test 
       name: regression
       script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --regression
     - stage: test 
       name: regression64
-      script: cp -r $HOME/build64 build && cd build && XLEN=64 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh --regression
+      script: cp -r $HOME/build64 build && cd build && XLEN=64 ./ci/travis_run.py ./ci/regression.sh --regression
     - stage: test 
       name: opencl
       script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --opencl    

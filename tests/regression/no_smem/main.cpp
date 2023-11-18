@@ -135,13 +135,10 @@ int main(int argc, char *argv[]) {
   uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
   staging_buf.resize(alloc_size);
   
-  // upload kernel argument
+  // upload kernel argument  
   std::cout << "upload kernel argument" << std::endl;
-  {
-    auto buf_ptr = (int*)staging_buf.data();
-    memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
-    RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
-  }
+  memcpy(staging_buf.data(), &kernel_arg, sizeof(kernel_arg_t));
+  RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
 
   // upload source buffer0
   {

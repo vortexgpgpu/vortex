@@ -267,7 +267,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
     wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_rsp_per_cycle;    
 
-    wire perf_icache_pending_read_cycle;
+    wire [1:0] perf_icache_pending_read_cycle;
     wire [`CLOG2(DCACHE_NUM_REQS+1)+1-1:0] perf_dcache_pending_read_cycle;
 
     reg  [`PERF_CTR_BITS-1:0] perf_icache_pending_reads;
