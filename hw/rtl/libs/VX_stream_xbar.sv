@@ -22,7 +22,7 @@ module VX_stream_xbar #(
     parameter OUT_WIDTH     = `LOG2UP(NUM_OUTPUTS),
     parameter ARBITER       = "P",
     parameter LOCK_ENABLE   = 0,
-    parameter OUT_REG       = 0,
+    parameter OUT_REG      = 0,
     parameter MAX_FANOUT    = `MAX_FANOUT,
     parameter PERF_CTR_BITS = `CLOG2(NUM_INPUTS+1)
 ) (
@@ -173,8 +173,8 @@ module VX_stream_xbar #(
     end
 
     // compute inputs collision
-    // we have a collision when there exists a valid transfer with mutiple input candicates
-    // we caount the unique duplicates each cycle.
+    // we have a collision when there exists a valid transfer with multiple input candicates
+    // we count the unique duplicates each cycle.
     
     reg [PERF_CTR_BITS-1:0] collisions_r;
     reg [NUM_INPUTS-1:0] per_cycle_collision;
