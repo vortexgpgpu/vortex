@@ -28,6 +28,9 @@ __kernel void matmul(__global float *A,
         for (int j = 0; j < localSize; j++) {
             sum += localA[localRow * localSize + j] * localB[j * localSize + localCol];
         }
+
+        // Ensure computation is done before loading next block
+        barrier(CLK_LOCAL_MEM_FENCE);
     }
 
     C[globalRow * N + globalCol] = sum;
