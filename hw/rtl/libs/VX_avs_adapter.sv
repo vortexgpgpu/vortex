@@ -21,8 +21,8 @@ module VX_avs_adapter #(
     parameter NUM_BANKS     = 1, 
     parameter TAG_WIDTH     = 1,
     parameter RD_QUEUE_SIZE = 1,
-    parameter OUT_REG_REQ  = 0,
-    parameter OUT_REG_RSP  = 0
+    parameter OUT_REG_REQ   = 0,
+    parameter OUT_REG_RSP   = 0
 ) (
     input  wire                     clk,
     input  wire                     reset,

@@ -21,8 +21,8 @@ module VX_mem_arb #(
     parameter ADDR_WIDTH     = (MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE)),
     parameter TAG_WIDTH      = 1,    
     parameter TAG_SEL_IDX    = 0,   
-    parameter OUT_REG_REQ   = 0,
-    parameter OUT_REG_RSP   = 0,
+    parameter OUT_REG_REQ    = 0,
+    parameter OUT_REG_RSP    = 0,
     parameter `STRING ARBITER = "R"
 ) (
     input wire              clk,

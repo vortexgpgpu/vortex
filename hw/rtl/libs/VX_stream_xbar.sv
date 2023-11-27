@@ -22,7 +22,7 @@ module VX_stream_xbar #(
     parameter OUT_WIDTH     = `LOG2UP(NUM_OUTPUTS),
     parameter ARBITER       = "P",
     parameter LOCK_ENABLE   = 0,
-    parameter OUT_REG      = 0,
+    parameter OUT_REG       = 0,
     parameter MAX_FANOUT    = `MAX_FANOUT,
     parameter PERF_CTR_BITS = `CLOG2(NUM_INPUTS+1)
 ) (
