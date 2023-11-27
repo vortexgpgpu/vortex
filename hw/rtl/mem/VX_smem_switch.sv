@@ -19,8 +19,8 @@ module VX_smem_switch #(
     parameter TAG_WIDTH      = 1,
     parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
     parameter TAG_SEL_IDX    = 0,   
-    parameter OUT_REG_REQ   = 0,
-    parameter OUT_REG_RSP   = 0,
+    parameter OUT_REG_REQ    = 0,
+    parameter OUT_REG_RSP    = 0,
     parameter `STRING ARBITER = "R"
 ) (
     input wire              clk,
