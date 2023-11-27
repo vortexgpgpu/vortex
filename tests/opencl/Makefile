@@ -17,7 +17,7 @@ all:
 	$(MAKE) -C lbm
 	$(MAKE) -C oclprintf
 	$(MAKE) -C blackscholes
-	$(MAKE) -C matmul
+	$(MAKE) -C sgemm2
 	$(MAKE) -C convolution
 
 run-simx:
@@ -38,7 +38,7 @@ run-simx:
 	$(MAKE) -C transpose run-simx
 	$(MAKE) -C convolution run-simx
 	$(MAKE) -C cutcp run-simx
-	$(MAKE) -C matmul run-simx
+	$(MAKE) -C sgemm2 run-simx
 	$(MAKE) -C vectorhypot run-simx	
 	$(MAKE) -C mri-q run-simx
 
@@ -60,7 +60,7 @@ run-rtlsim:
 	$(MAKE) -C blackscholes run-rtlsim
 	$(MAKE) -C convolution run-rtlsim
 #	$(MAKE) -C cutcp run-rtlsim
-#	$(MAKE) -C matmul run-rtlsim
+#	$(MAKE) -C sgemm2 run-rtlsim
 #	$(MAKE) -C vectorhypot run-rtlsim
 #	$(MAKE) -C mri-q run-rtlsim
 
@@ -82,7 +82,7 @@ run-opae:
 	$(MAKE) -C blackscholes run-opae
 	$(MAKE) -C convolution run-opae
 #	$(MAKE) -C cutcp run-opae
-#	$(MAKE) -C matmul run-opae
+#	$(MAKE) -C sgemm2 run-opae
 #	$(MAKE) -C vectorhypot run-opae
 #	$(MAKE) -C mri-q run-opae
 
@@ -105,7 +105,7 @@ clean:
 	$(MAKE) -C lbm clean
 	$(MAKE) -C oclprintf clean
 	$(MAKE) -C blackscholes clean
-	$(MAKE) -C matmul clean
+	$(MAKE) -C sgemm2 clean
 	$(MAKE) -C convolution clean
 
 clean-all:
@@ -128,5 +128,5 @@ clean-all:
 	$(MAKE) -C lbm clean-all
 	$(MAKE) -C oclprintf clean-all
 	$(MAKE) -C blackscholes clean-all
-	$(MAKE) -C matmul clean-all
+	$(MAKE) -C sgemm2 clean-all
 	$(MAKE) -C convolution clean-all

@@ -1,4 +1,4 @@
-__kernel void matmul(__global float *A, 
+__kernel void sgemm2(__global float *A, 
                      __global float *B, 
                      __global float *C, 
                      const unsigned int N, 
@@ -36,7 +36,7 @@ __kernel void matmul(__global float *A,
     C[globalRow * N + globalCol] = sum;
 }
 
-/*__kernel void matmul(__global float *A, 
+/*__kernel void sgemm2(__global float *A, 
                        __global float *B, 
                        __global float *C, 
                        const unsigned int N)
