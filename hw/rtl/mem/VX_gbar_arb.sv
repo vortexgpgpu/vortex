@@ -15,7 +15,7 @@
 
 module VX_gbar_arb #(
     parameter NUM_REQS = 1,
-    parameter OUT_REG = 0,
+    parameter OUT_REG  = 0,
     parameter `STRING ARBITER = "R"
 ) (
     input wire              clk,

@@ -73,7 +73,7 @@ OBJS := $(addsuffix .o, $(notdir $(SRCS)))
 all: $(PROJECT) kernel.pocl
  
 kernel.pocl: kernel.cl
-	LLVM_PREFIX=$(LLVM_VORTEX) POCL_DEBUG=all LD_LIBRARY_PATH=$(LLVM_POCL)/lib:$(POCL_CC_PATH)/lib:$(LLVM_VORTEX)/lib POCL_VORTEX_CFLAGS="$(K_CFLAGS)" POCL_VORTEX_LDFLAGS="$(K_LDFLAGS)" $(POCL_CC_PATH)/bin/poclcc -o kernel.pocl kernel.cl
+	LD_LIBRARY_PATH=$(LLVM_POCL)/lib:$(POCL_CC_PATH)/lib:$(LLVM_VORTEX)/lib:$(LD_LIBRARY_PATH) LLVM_PREFIX=$(LLVM_VORTEX) POCL_DEBUG=all POCL_VORTEX_CFLAGS="$(K_CFLAGS)" POCL_VORTEX_LDFLAGS="$(K_LDFLAGS)" $(POCL_CC_PATH)/bin/poclcc -o kernel.pocl kernel.cl
  
 %.cc.o: %.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@
@@ -86,6 +86,9 @@ kernel.pocl: kernel.cl
 
 $(PROJECT): $(OBJS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+run-hostgpu: $(PROJECT) kernel.pocl
+	./$(PROJECT) $(OPTS)
 
 run-simx: $(PROJECT) kernel.pocl   
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)

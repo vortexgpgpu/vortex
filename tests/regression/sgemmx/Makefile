@@ -1,4 +1,4 @@
-PROJECT = tensor
+PROJECT = sgemmx
 
 SRCS = main.cpp
 
