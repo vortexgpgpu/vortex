@@ -12,7 +12,7 @@
 
 #define FLOAT_ULP 6
 
-#define KERNEL_NAME "matmul"
+#define KERNEL_NAME "sgemm2"
 
 #define CL_CHECK(_expr)                                                \
    do {                                                                \
