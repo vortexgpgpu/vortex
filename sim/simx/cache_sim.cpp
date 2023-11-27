@@ -41,19 +41,16 @@ struct params_t {
     uint32_t tag_select_addr_end;
 
     params_t(const CacheSim::Config& config) {
-        int32_t bank_bits = log2ceil(config.num_banks);
-        int32_t offset_bits = config.B - config.W;
-        int32_t log2_bank_size = config.C - bank_bits;
-        int32_t index_bits = log2_bank_size - (config.B + config.A);        
-        assert(log2_bank_size > 0);
+        int32_t offset_bits = config.L - config.W;
+        int32_t index_bits = config.C - (config.L + config.A + config.B);
         assert(offset_bits >= 0);
         assert(index_bits >= 0);
 
         this->log2_num_inputs = log2ceil(config.num_inputs);
 
-        this->words_per_line = 1 << offset_bits;
+        this->sets_per_bank  = 1 << index_bits;        
         this->lines_per_set  = 1 << config.A;
-        this->sets_per_bank   = 1 << index_bits;
+        this->words_per_line = 1 << offset_bits;        
 
         assert(config.ports_per_bank <= this->words_per_line);
                 
@@ -63,7 +60,7 @@ struct params_t {
 
         // Bank select
         this->bank_select_addr_start = (1+this->word_select_addr_end);
-        this->bank_select_addr_end = (this->bank_select_addr_start+bank_bits-1);
+        this->bank_select_addr_end = (this->bank_select_addr_start+config.B-1);
 
         // Set select
         this->set_select_addr_start = (1+this->bank_select_addr_end);
@@ -74,23 +71,23 @@ struct params_t {
         this->tag_select_addr_end = (config.addr_width-1);
     }
 
-    uint32_t addr_bank_id(uint64_t word_addr) const {
+    uint32_t addr_bank_id(uint64_t addr) const {
         if (bank_select_addr_end >= bank_select_addr_start)
-            return (uint32_t)bit_getw(word_addr, bank_select_addr_start, bank_select_addr_end);
+            return (uint32_t)bit_getw(addr, bank_select_addr_start, bank_select_addr_end);
         else    
             return 0;
     }
 
-    uint32_t addr_set_id(uint64_t word_addr) const {
+    uint32_t addr_set_id(uint64_t addr) const {
         if (set_select_addr_end >= set_select_addr_start)
-            return (uint32_t)bit_getw(word_addr, set_select_addr_start, set_select_addr_end);
+            return (uint32_t)bit_getw(addr, set_select_addr_start, set_select_addr_end);
         else
             return 0;
     }
 
-    uint64_t addr_tag(uint64_t word_addr) const {
+    uint64_t addr_tag(uint64_t addr) const {
         if (tag_select_addr_end >= tag_select_addr_start)
-            return bit_getw(word_addr, tag_select_addr_start, tag_select_addr_end);
+            return bit_getw(addr, tag_select_addr_start, tag_select_addr_end);
         else    
             return 0;
     }
@@ -288,8 +285,8 @@ private:
     Config config_;
     params_t params_;
     std::vector<bank_t> banks_;
-    Switch<MemReq, MemRsp>::Ptr bank_switch_;    
-    Switch<MemReq, MemRsp>::Ptr bypass_switch_;
+    MemSwitch::Ptr bank_switch_;    
+    MemSwitch::Ptr bypass_switch_;
     std::vector<SimPort<MemReq>> mem_req_ports_;
     std::vector<SimPort<MemRsp>> mem_rsp_ports_;
     std::vector<bank_req_t> pipeline_reqs_;
@@ -304,16 +301,16 @@ public:
         : simobject_(simobject)
         , config_(config)
         , params_(config)
-        , banks_(config.num_banks, {config, params_})
-        , mem_req_ports_(config.num_banks, simobject)
-        , mem_rsp_ports_(config.num_banks, simobject)
-        , pipeline_reqs_(config.num_banks, config.ports_per_bank)
+        , banks_((1 << config.B), {config, params_})
+        , mem_req_ports_((1 << config.B), simobject)
+        , mem_rsp_ports_((1 << config.B), simobject)
+        , pipeline_reqs_((1 << config.B), config.ports_per_bank)
     {
         char sname[100];
         snprintf(sname, 100, "%s-bypass-arb", simobject->name().c_str());
 
         if (config_.bypass) {            
-            bypass_switch_ = Switch<MemReq, MemRsp>::Create(sname, ArbiterType::RoundRobin, config_.num_inputs);            
+            bypass_switch_ = MemSwitch::Create(sname, ArbiterType::RoundRobin, config_.num_inputs);            
             for (uint32_t i = 0; i < config_.num_inputs; ++i) {
                simobject->CoreReqPorts.at(i).bind(&bypass_switch_->ReqIn.at(i));
                bypass_switch_->RspIn.at(i).bind(&simobject->CoreRspPorts.at(i));
@@ -323,14 +320,14 @@ public:
             return;
         }
         
-        bypass_switch_ = Switch<MemReq, MemRsp>::Create(sname, ArbiterType::Priority, 2);
+        bypass_switch_ = MemSwitch::Create(sname, ArbiterType::Priority, 2);
         bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPort);
         simobject->MemRspPort.bind(&bypass_switch_->RspOut.at(0));
 
-        if (config.num_banks > 1) {
+        if (config.B != 0) {
             snprintf(sname, 100, "%s-bank-arb", simobject->name().c_str());
-            bank_switch_ = Switch<MemReq, MemRsp>::Create(sname, ArbiterType::RoundRobin, config.num_banks);
-            for (uint32_t i = 0, n = config.num_banks; i < n; ++i) {
+            bank_switch_ = MemSwitch::Create(sname, ArbiterType::RoundRobin, (1 << config.B));
+            for (uint32_t i = 0, n = (1 << config.B); i < n; ++i) {
                 mem_req_ports_.at(i).bind(&bank_switch_->ReqIn.at(i));
                 bank_switch_->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
             }    
@@ -383,20 +380,22 @@ public:
             pipeline_req.clear();
         }
 
-        // schedule MSHR replay
-        for (uint32_t bank_id = 0, n = config_.num_banks; bank_id < n; ++bank_id) {
+        // first: schedule MSHR replay (flush MSHR queue)
+        for (uint32_t bank_id = 0, n = (1 << config_.B); bank_id < n; ++bank_id) {
             auto& bank = banks_.at(bank_id);
             auto& pipeline_req = pipeline_reqs_.at(bank_id);
             bank.mshr.pop(&pipeline_req);
         }
 
-        // schedule memory fill
-        for (uint32_t bank_id = 0, n = config_.num_banks; bank_id < n; ++bank_id) {
+        // second: schedule memory fill (flush memory queue)
+        for (uint32_t bank_id = 0, n = (1 << config_.B); bank_id < n; ++bank_id) {
             auto& mem_rsp_port = mem_rsp_ports_.at(bank_id);
             if (mem_rsp_port.empty())
                 continue;
 
             auto& pipeline_req = pipeline_reqs_.at(bank_id);
+
+            // skip if bank already busy
             if (pipeline_req.type != bank_req_t::None)
                 continue;
 
@@ -407,7 +406,7 @@ public:
             mem_rsp_port.pop();
         }
 
-        // schedule core requests        
+        // last: schedule core requests (flush core queue)      
         for (uint32_t req_id = 0, n = config_.num_inputs; req_id < n; ++req_id) {
             auto& core_req_port = simobject_->CoreReqPorts.at(req_id);
             if (core_req_port.empty())
@@ -425,18 +424,21 @@ public:
             }
 
             auto bank_id = params_.addr_bank_id(core_req.addr);
-            auto set_id  = params_.addr_set_id(core_req.addr);
-            auto tag     = params_.addr_tag(core_req.addr);
-            auto port_id = req_id % config_.ports_per_bank;
-
             auto& bank = banks_.at(bank_id);
             auto& pipeline_req = pipeline_reqs_.at(bank_id);
+
+            // skip if bank already busy
+            if (pipeline_req.type != bank_req_t::None)
+                continue;
+
+            auto set_id  = params_.addr_set_id(core_req.addr);
+            auto tag     = params_.addr_tag(core_req.addr);
+            auto port_id = req_id % config_.ports_per_bank;           
 
             // check MSHR capacity
             if ((!core_req.write || !config_.write_through)
              && bank.mshr.full()) {
                 ++perf_stats_.mshr_stalls;
-                ++perf_stats_.bank_stalls;
                 continue;
             }            
 
@@ -452,7 +454,7 @@ public:
                 }
                 // extend request ports
                 pipeline_req.ports.at(port_id) = bank_req_port_t{req_id, core_req.tag, true};
-            } else if (pipeline_req.type == bank_req_t::None) {
+            } else {
                 // schedule new request
                 bank_req_t bank_req(config_.ports_per_bank);
                 bank_req.ports.at(port_id) = bank_req_port_t{req_id, core_req.tag, true};
@@ -463,10 +465,6 @@ public:
                 bank_req.type  = bank_req_t::Core;
                 bank_req.write = core_req.write;
                 pipeline_req   = bank_req;
-            } else {
-                // bank in use
-                ++perf_stats_.bank_stalls;
-                continue;
             }
 
             if (core_req.write)
@@ -516,7 +514,7 @@ private:
     }
 
     void processBankRequests() {
-        for (uint32_t bank_id = 0, n = config_.num_banks; bank_id < n; ++bank_id) {
+        for (uint32_t bank_id = 0, n = (1 << config_.B); bank_id < n; ++bank_id) {
             auto& bank = banks_.at(bank_id);
             auto pipeline_req = pipeline_reqs_.at(bank_id);
             
@@ -545,11 +543,10 @@ private:
                     }
                 }
             } break;
-            case bank_req_t::Core: {        
-                bool hit = false;
-                bool found_free_line = false;            
-                uint32_t hit_line_id = 0;
-                uint32_t repl_line_id = 0;            
+            case bank_req_t::Core: {
+                int32_t hit_line_id  = -1;                
+                int32_t free_line_id = -1;
+                int32_t repl_line_id = 0;
                 uint32_t max_cnt = 0;
 
                 auto& set = bank.sets.at(pipeline_req.set_id);
@@ -557,38 +554,34 @@ private:
                 // tag lookup                
                 for (uint32_t i = 0, n = set.lines.size(); i < n; ++i) {
                     auto& line = set.lines.at(i);
+                    if (max_cnt < line.lru_ctr) {
+                        max_cnt = line.lru_ctr;
+                        repl_line_id = i;
+                    }
                     if (line.valid) {
-                        if (line.tag == pipeline_req.tag) {
-                            line.lru_ctr = 0;                        
+                        if (line.tag == pipeline_req.tag) {   
                             hit_line_id = i;
-                            hit = true;
+                            line.lru_ctr = 0;
                         } else {
                             ++line.lru_ctr;
                         }
-                        if (max_cnt < line.lru_ctr) {
-                            max_cnt = line.lru_ctr;
-                            repl_line_id = i;
-                        }
                     } else {                    
-                        found_free_line = true;
-                        repl_line_id = i;
+                        free_line_id = i;
                     }
                 }
 
-                if (hit) {     
-                    //
-                    // Hit handling   
-                    //                
+                if (hit_line_id != -1) {
+                    // Hit handling
                     if (pipeline_req.write) {
-                        // handle write hit
+                        // handle write has_hit
                         auto& hit_line = set.lines.at(hit_line_id);
                         if (config_.write_through) {
                             // forward write request to memory
                             MemReq mem_req;
-                            mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, hit_line.tag);
+                            mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, pipeline_req.tag);
                             mem_req.write = true;
-                            mem_req.cid = pipeline_req.cid;
-                            mem_req.uuid = pipeline_req.uuid;
+                            mem_req.cid   = pipeline_req.cid;
+                            mem_req.uuid  = pipeline_req.uuid;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
                             DT(3, simobject_->name() << "-dram-" << mem_req);
                         } else {
@@ -606,23 +599,21 @@ private:
                             DT(3, simobject_->name() << "-core-" << core_rsp);
                         }
                     }
-                } else {     
-                    //
-                    // Miss handling   
-                    //
+                } else {
+                    // Miss handling
                     if (pipeline_req.write)
                         ++perf_stats_.write_misses;
                     else
                         ++perf_stats_.read_misses;
 
-                    if (!found_free_line && !config_.write_through) {
+                    if (free_line_id == -1 && !config_.write_through) {
                         // write back dirty line
                         auto& repl_line = set.lines.at(repl_line_id);
                         if (repl_line.dirty) {                       
                             MemReq mem_req;
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, repl_line.tag);
                             mem_req.write = true;
-                            mem_req.cid = pipeline_req.cid;
+                            mem_req.cid   = pipeline_req.cid;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
                             DT(3, simobject_->name() << "-dram-" << mem_req);
                             ++perf_stats_.evictions;
@@ -635,8 +626,8 @@ private:
                             MemReq mem_req;
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, pipeline_req.tag);
                             mem_req.write = true;
-                            mem_req.cid = pipeline_req.cid;
-                            mem_req.uuid = pipeline_req.uuid;
+                            mem_req.cid   = pipeline_req.cid;
+                            mem_req.uuid  = pipeline_req.uuid;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
                             DT(3, simobject_->name() << "-dram-" << mem_req);
                         }
@@ -655,7 +646,7 @@ private:
                         auto mshr_pending = bank.mshr.lookup(pipeline_req);
 
                         // allocate MSHR
-                        auto mshr_id = bank.mshr.allocate(pipeline_req, repl_line_id);
+                        auto mshr_id = bank.mshr.allocate(pipeline_req, (free_line_id != -1) ? free_line_id : repl_line_id);
                         
                         // send fill request
                         if (!mshr_pending) {
@@ -663,8 +654,8 @@ private:
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, pipeline_req.tag);
                             mem_req.write = false;
                             mem_req.tag   = mshr_id;
-                            mem_req.cid = pipeline_req.cid;
-                            mem_req.uuid = pipeline_req.uuid;
+                            mem_req.cid   = pipeline_req.cid;
+                            mem_req.uuid  = pipeline_req.uuid;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
                             DT(3, simobject_->name() << "-dram-" << mem_req);
                             ++pending_fill_reqs_;

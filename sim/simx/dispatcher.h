@@ -66,6 +66,7 @@ public:
             }
             auto& output = Outputs.at(i);
             auto trace = input.front();
+            auto new_trace = trace;
             if (pid_count_ != 1) {
                 auto start_p = start_p_.at(b);
                 if (start_p == -1) {
@@ -81,33 +82,30 @@ public:
                     end = j;
                 }                
                 start /= num_lanes_;
-                end /= num_lanes_;
-                auto new_trace = new pipeline_trace_t(*trace);
-                new_trace->tmask.reset();
-                for (int j = start * num_lanes_, n = j + num_lanes_; j < n; ++j) {
-                    new_trace->tmask[j] = trace->tmask[j];
-                }                
-                new_trace->pid = start;
-                new_trace->sop = (start_p == 0);
-                if (start == end) {
-                    new_trace->eop = 1;
+                end /= num_lanes_;                
+                if (start != end) {
+                    new_trace = new pipeline_trace_t(*trace);
+                    new_trace->eop = false;
+                    start_p_.at(b) = start + 1;
+                } else {
                     start_p_.at(b) = -1;
                     input.pop();
                     ++block_sent;
-                    delete trace;
-                } else {
-                    new_trace->eop = 0;
-                    start_p_.at(b) = start + 1;
-                }                
-                output.send(new_trace, 1);
-                DT(3, "pipeline-dispatch: " << *new_trace);
+                }
+                new_trace->pid = start;
+                new_trace->sop = (0 == start_p);
+                ThreadMask tmask;
+                for (int j = start * num_lanes_, n = j + num_lanes_; j < n; ++j) {
+                    tmask[j] = trace->tmask[j];
+                }
+                new_trace->tmask = tmask;                
             } else {
-                trace->pid = 0;
+                new_trace->pid = 0;
                 input.pop();
-                output.send(trace, 1);
-                DT(3, "pipeline-dispatch: " << *trace);
                 ++block_sent;
-            }            
+            }
+            DT(3, "pipeline-dispatch: " << *new_trace);
+            output.send(new_trace, 1);
         }
         if (block_sent == block_size_) {
             batch_idx_ = (batch_idx_ + 1) % batch_count_;
