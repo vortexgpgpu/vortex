@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <vector>
+#include <chrono>
 #include <vortex.h>
 #include "common.h"
 
@@ -122,43 +123,6 @@ void cleanup() {
   }
 }
 
-int run_test(const kernel_arg_t& kernel_arg,
-             uint32_t buf_size, 
-             const std::vector<TYPE>& refs) {              
-  // start device
-  std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start(device));
-
-  // wait for completion
-  std::cout << "wait for completion" << std::endl;
-  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
-
-  // download destination buffer
-  std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(device, staging_buf.data(), kernel_arg.C_addr, buf_size));
-
-  // verify result
-  std::cout << "verify result" << std::endl;  
-  {
-    int errors = 0;
-    auto buf_ptr = (TYPE*)staging_buf.data();
-    for (uint32_t i = 0; i < refs.size(); ++i) {
-      auto ref = refs[i];
-      auto cur = buf_ptr[i];
-      if (!Comparator<TYPE>::compare(cur, ref, i, errors)) {
-        ++errors;
-      }
-    }
-    if (errors != 0) {
-      std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
-      std::cout << "FAILED!" << std::endl;
-      return 1;  
-    }
-  }
-
-  return 0;
-}
-
 int main(int argc, char *argv[]) {  
   // parse command arguments
   parse_args(argc, argv);
@@ -239,10 +203,43 @@ int main(int argc, char *argv[]) {
   std::cout << "clear destination buffer" << std::endl;
   memset(staging_buf.data(), 0, num_points * sizeof(TYPE));
   RT_CHECK(vx_copy_to_dev(device, kernel_arg.C_addr, staging_buf.data(), buf_size));  
+
+  auto time_start = std::chrono::high_resolution_clock::now();
   
-  // run tests
-  std::cout << "run tests" << std::endl;
-  RT_CHECK(run_test(kernel_arg, buf_size, refs));
+  // start device
+  std::cout << "start device" << std::endl;
+  RT_CHECK(vx_start(device));
+
+  // wait for completion
+  std::cout << "wait for completion" << std::endl;
+  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));  
+
+  auto time_end = std::chrono::high_resolution_clock::now();
+  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
+  printf("Elapsed time: %lg ms\n", elapsed);
+
+  // download destination buffer
+  std::cout << "download destination buffer" << std::endl;
+  RT_CHECK(vx_copy_from_dev(device, staging_buf.data(), kernel_arg.C_addr, buf_size));
+
+  // verify result
+  std::cout << "verify result" << std::endl;  
+  {
+    int errors = 0;
+    auto buf_ptr = (TYPE*)staging_buf.data();
+    for (uint32_t i = 0; i < refs.size(); ++i) {
+      auto ref = refs[i];
+      auto cur = buf_ptr[i];
+      if (!Comparator<TYPE>::compare(cur, ref, i, errors)) {
+        ++errors;
+      }
+    }
+    if (errors != 0) {
+      std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
+      std::cout << "FAILED!" << std::endl;
+      return 1;  
+    }
+  }
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
