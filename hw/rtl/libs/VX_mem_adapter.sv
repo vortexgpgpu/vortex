@@ -21,8 +21,8 @@ module VX_mem_adapter #(
     parameter DST_ADDR_WIDTH = 1,                
     parameter SRC_TAG_WIDTH  = 1,
     parameter DST_TAG_WIDTH  = 1,
-    parameter OUT_REG_REQ   = 0,
-    parameter OUT_REG_RSP   = 0
+    parameter OUT_REG_REQ    = 0,
+    parameter OUT_REG_RSP    = 0
 ) (
     input wire                          clk,
     input wire                          reset,
