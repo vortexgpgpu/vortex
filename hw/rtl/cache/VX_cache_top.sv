@@ -13,7 +13,7 @@
 
 `include "VX_cache_define.vh"
 
-module VX_cache_top #(
+module VX_cache_top import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID    = "",
 
     // Number of Word requests per cycle
