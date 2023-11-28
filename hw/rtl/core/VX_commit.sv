@@ -106,7 +106,9 @@ module VX_commit import VX_gpu_pkg::*; #(
     assign commit_fire_any = (| commit_fire);
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        `POP_COUNT(commit_size[i], commit_tmask[i]);
+        wire [COMMIT_SIZEW-1:0] count;
+        `POP_COUNT(count, commit_tmask[i]);
+        assign commit_size[i] = count;
     end
 
     VX_pipe_register #(
