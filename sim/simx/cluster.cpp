@@ -36,16 +36,15 @@ Cluster::Cluster(const SimContext& ctx,
   l2cache_ = CacheSim::Create(sname, CacheSim::Config{
     !L2_ENABLED,
     log2ceil(L2_CACHE_SIZE), // C
-    log2ceil(MEM_BLOCK_SIZE), // B
+    log2ceil(MEM_BLOCK_SIZE), // L
     log2ceil(L2_NUM_WAYS),  // W
     0,                      // A
+    log2ceil(L2_NUM_BANKS), // B
     XLEN,                   // address bits  
-    L2_NUM_BANKS,           // number of banks
     1,                      // number of ports
     5,                      // request size 
     true,                   // write-through
     false,                  // write response
-    0,                      // victim size
     L2_MSHR_SIZE,           // mshr
     2,                      // pipeline latency
   });
@@ -57,16 +56,15 @@ Cluster::Cluster(const SimContext& ctx,
   icaches_ = CacheCluster::Create(sname, num_cores, NUM_ICACHES, 1, CacheSim::Config{
     !ICACHE_ENABLED,
     log2ceil(ICACHE_SIZE),  // C
-    log2ceil(L1_LINE_SIZE), // B
+    log2ceil(L1_LINE_SIZE), // L
     log2ceil(sizeof(uint32_t)), // W
     log2ceil(ICACHE_NUM_WAYS),// A
-    XLEN,                   // address bits    
-    1,                      // number of banks
+    1,                      // B
+    XLEN,                   // address bits
     1,                      // number of ports
     1,                      // number of inputs
     true,                   // write-through
     false,                  // write response
-    0,                      // victim size
     (uint8_t)arch.num_warps(), // mshr
     2,                      // pipeline latency
   });
@@ -78,16 +76,15 @@ Cluster::Cluster(const SimContext& ctx,
   dcaches_ = CacheCluster::Create(sname, num_cores, NUM_DCACHES, NUM_LSU_LANES, CacheSim::Config{
     !DCACHE_ENABLED,
     log2ceil(DCACHE_SIZE),  // C
-    log2ceil(L1_LINE_SIZE), // B
+    log2ceil(L1_LINE_SIZE), // L
     log2ceil(sizeof(Word)), // W
     log2ceil(DCACHE_NUM_WAYS),// A
-    XLEN,                   // address bits    
-    DCACHE_NUM_BANKS,       // number of banks
+    log2ceil(DCACHE_NUM_BANKS), // B
+    XLEN,                   // address bits
     1,                      // number of ports
     DCACHE_NUM_BANKS,       // number of inputs
     true,                   // write-through
     false,                  // write response
-    0,                      // victim size
     DCACHE_MSHR_SIZE,       // mshr
     4,                      // pipeline latency
   });
@@ -129,11 +126,11 @@ Cluster::Cluster(const SimContext& ctx,
       cores_.at(i)->dcache_req_ports.at(j).bind(&smem_demux->ReqIn);
       smem_demux->RspIn.bind(&cores_.at(i)->dcache_rsp_ports.at(j));        
       
-      smem_demux->ReqDc.bind(&dcaches_->CoreReqPorts.at(i).at(j));
-      dcaches_->CoreRspPorts.at(i).at(j).bind(&smem_demux->RspDc);
+      smem_demux->ReqDC.bind(&dcaches_->CoreReqPorts.at(i).at(j));
+      dcaches_->CoreRspPorts.at(i).at(j).bind(&smem_demux->RspDC);
 
-      smem_demux->ReqSm.bind(&sharedmems_.at(i)->Inputs.at(j));
-      sharedmems_.at(i)->Outputs.at(j).bind(&smem_demux->RspSm);
+      smem_demux->ReqSM.bind(&sharedmems_.at(i)->Inputs.at(j));
+      sharedmems_.at(i)->Outputs.at(j).bind(&smem_demux->RspSM);
     }
   }
 }
@@ -208,10 +205,7 @@ ProcessorImpl* Cluster::processor() const {
 Cluster::PerfStats Cluster::perf_stats() const {
   Cluster::PerfStats perf;
   perf.icache = icaches_->perf_stats();
-  perf.dcache = dcaches_->perf_stats();    
-  perf.tcache = tcaches_->perf_stats();
-  perf.ocache = ocaches_->perf_stats();
-  perf.rcache = rcaches_->perf_stats();
+  perf.dcache = dcaches_->perf_stats();
   perf.l2cache = l2cache_->perf_stats();
 
   for (auto sharedmem : sharedmems_) {

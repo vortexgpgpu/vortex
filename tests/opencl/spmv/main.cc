@@ -148,7 +148,6 @@ int main(int argc, char **argv) {
   //    &h_data, &h_indices, &h_ptr,
   //    &h_perm, &h_nzcnt);
   int col_count;
-	printf("OK--\n");
   coo_to_jds(parameters->inpFiles[0], // bcsstk32.mtx, fidapm05.mtx, jgl009.mtx
              1,                       // row padding
              pad,                     // warp size
@@ -158,8 +157,6 @@ int main(int argc, char **argv) {
              1,                       // debug level [0:2]
              &h_data, &h_ptr, &h_nzcnt, &h_indices, &h_perm, &col_count, &dim,
              &len, &nzcnt_len, &depth);
-
-	printf("OK++\n");
 
   //	pb_SwitchToTimer(&timers, pb_TimerID_COMPUTE);
   h_Ax_vector = (float *)malloc(sizeof(float) * dim);

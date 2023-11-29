@@ -262,7 +262,7 @@ module VX_afu_wrap #(
 		.m_axi_awready	(m_axi_mem_awready_a),
 		.m_axi_awaddr	(m_axi_mem_awaddr_w),
 		.m_axi_awid		(m_axi_mem_awid_a),
-		`UNUSED_PIN (m_axi_awlen),
+		.m_axi_awlen    (m_axi_mem_awlen_a),
 		`UNUSED_PIN (m_axi_awsize),
 		`UNUSED_PIN (m_axi_awburst),
 		`UNUSED_PIN (m_axi_awlock),

@@ -173,13 +173,9 @@ void MAIN_initialize(const MAIN_Param *param, const OpenCL_Param *prm) {
 
 	pb_SwitchToTimer(&timers, pb_TimerID_COPY);
 
-	printf("OK+\n");
-
   // Setup DEVICE datastructures
   OpenCL_LBM_allocateGrid(prm, &OpenCL_srcGrid);
   OpenCL_LBM_allocateGrid(prm, &OpenCL_dstGrid);
-
-	printf("OK-\n");
 
   // Initialize DEVICE datastructures
   OpenCL_LBM_initializeGrid(prm, OpenCL_srcGrid, TEMP_srcGrid);

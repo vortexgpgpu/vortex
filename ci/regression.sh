@@ -22,6 +22,7 @@ rm -f blackbox.*.cache
 unittest() 
 {
 make -C tests/unittest run
+make -C hw/unittest
 }
 
 isa() 

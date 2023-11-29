@@ -77,8 +77,20 @@ module VX_core import VX_gpu_pkg::*; #(
     ) dcache_bus_tmp_if[DCACHE_NUM_REQS]();
 
 `ifdef PERF_ENABLE
-    VX_mem_perf_if mem_perf_tmp_if();
     VX_pipeline_perf_if pipeline_perf_if();
+    VX_mem_perf_if mem_perf_tmp_if();
+
+    assign mem_perf_tmp_if.icache = mem_perf_if.icache;
+    assign mem_perf_tmp_if.dcache = mem_perf_if.dcache;
+    assign mem_perf_tmp_if.l2cache = mem_perf_if.l2cache;
+    assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
+`ifdef SM_ENABLE
+    cache_perf_t smem_perf;
+    assign mem_perf_tmp_if.smem = smem_perf;
+`else
+    assign mem_perf_tmp_if.smem = '0;
+`endif
+    assign mem_perf_tmp_if.mem = mem_perf_if.mem;
 `endif
 
     `RESET_RELAY (dcr_data_reset, reset);
@@ -104,7 +116,11 @@ module VX_core import VX_gpu_pkg::*; #(
         .CORE_ID (CORE_ID)
     ) schedule (
         .clk            (clk),
-        .reset          (schedule_reset),   
+        .reset          (schedule_reset),
+
+    `ifdef PERF_ENABLE
+        .perf_schedule_if (pipeline_perf_if.schedule),
+    `endif 
 
         .base_dcrs      (base_dcrs),  
 
@@ -226,18 +242,27 @@ module VX_core import VX_gpu_pkg::*; #(
         .sim_wb_value   (sim_wb_value)
     );
 
+`ifdef SM_ENABLE
+
     VX_smem_unit #(
         .CORE_ID (CORE_ID)
     ) smem_unit (
         .clk                (clk),
         .reset              (reset),
     `ifdef PERF_ENABLE
-        .mem_perf_in_if     (mem_perf_if),
-        .mem_perf_out_if    (mem_perf_tmp_if),
+        .cache_perf         (smem_perf),
     `endif
         .dcache_bus_in_if   (dcache_bus_tmp_if),
         .dcache_bus_out_if  (dcache_bus_if)
     );
+
+`else
+
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
+        `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[i], dcache_bus_tmp_if[i]);
+    end
+
+`endif
 
 `ifdef PERF_ENABLE
 
@@ -246,7 +271,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
     wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_rsp_per_cycle;    
 
-    wire perf_icache_pending_read_cycle;
+    wire [1:0] perf_icache_pending_read_cycle;
     wire [`CLOG2(DCACHE_NUM_REQS+1)+1-1:0] perf_dcache_pending_read_cycle;
 
     reg  [`PERF_CTR_BITS-1:0] perf_icache_pending_reads;
@@ -312,158 +337,4 @@ module VX_core import VX_gpu_pkg::*; #(
 
 `endif
     
-endmodule
-
-///////////////////////////////////////////////////////////////////////////////
-
-module VX_core_top
-import VX_gpu_pkg::*;
-#( 
-    parameter CORE_ID = 0
-) (  
-    // Clock
-    input wire                              clk,
-    input wire                              reset,
-
-    input wire                              dcr_write_valid,
-    input wire [`VX_DCR_ADDR_WIDTH-1:0]     dcr_write_addr,
-    input wire [`VX_DCR_DATA_WIDTH-1:0]     dcr_write_data,
-
-    output wire [DCACHE_NUM_REQS-1:0]       dcache_req_valid,
-    output wire [DCACHE_NUM_REQS-1:0]       dcache_req_rw,
-    output wire [DCACHE_NUM_REQS-1:0][DCACHE_WORD_SIZE-1:0] dcache_req_byteen,
-    output wire [DCACHE_NUM_REQS-1:0][DCACHE_ADDR_WIDTH-1:0] dcache_req_addr,
-    output wire [DCACHE_NUM_REQS-1:0][DCACHE_WORD_SIZE*8-1:0] dcache_req_data,
-    output wire [DCACHE_NUM_REQS-1:0][DCACHE_NOSM_TAG_WIDTH-1:0] dcache_req_tag,
-    input  wire [DCACHE_NUM_REQS-1:0]       dcache_req_ready,
-
-    input wire  [DCACHE_NUM_REQS-1:0]       dcache_rsp_valid,
-    input wire  [DCACHE_NUM_REQS-1:0][DCACHE_WORD_SIZE*8-1:0] dcache_rsp_data,
-    input wire  [DCACHE_NUM_REQS-1:0][DCACHE_NOSM_TAG_WIDTH-1:0] dcache_rsp_tag,
-    output wire [DCACHE_NUM_REQS-1:0]       dcache_rsp_ready,
-
-    output wire                             icache_req_valid,
-    output wire                             icache_req_rw,
-    output wire [ICACHE_WORD_SIZE-1:0]      icache_req_byteen,
-    output wire [ICACHE_ADDR_WIDTH-1:0]     icache_req_addr,
-    output wire [ICACHE_WORD_SIZE*8-1:0]    icache_req_data,
-    output wire [ICACHE_TAG_WIDTH-1:0]      icache_req_tag,
-    input  wire                             icache_req_ready,
-
-    input wire                              icache_rsp_valid,
-    input wire  [ICACHE_WORD_SIZE*8-1:0]    icache_rsp_data,
-    input wire  [ICACHE_TAG_WIDTH-1:0]      icache_rsp_tag,
-    output wire                             icache_rsp_ready,
-
-`ifdef GBAR_ENABLE
-    output wire                             gbar_req_valid,
-    output wire [`NB_WIDTH-1:0]             gbar_req_id,
-    output wire [`NC_WIDTH-1:0]             gbar_req_size_m1,    
-    output wire [`NC_WIDTH-1:0]             gbar_req_core_id,
-    input wire                              gbar_req_ready,
-    input wire                              gbar_rsp_valid,
-    input wire [`NB_WIDTH-1:0]              gbar_rsp_id,
-`endif
-
-    // simulation helper signals
-    output wire                             sim_ebreak,
-    output wire [`NUM_REGS-1:0][`XLEN-1:0]  sim_wb_value,
-
-    // Status
-    output wire                             busy
-);
-    
-`ifdef GBAR_ENABLE
-    VX_gbar_bus_if gbar_bus_if();
-
-    assign gbar_req_valid = gbar_bus_if.req_valid;
-    assign gbar_req_id = gbar_bus_if.req_id;
-    assign gbar_req_size_m1 = gbar_bus_if.req_size_m1;   
-    assign gbar_req_core_id =  gbar_bus_if.req_core_id;
-    assign gbar_bus_if.req_ready = gbar_req_ready;
-    assign gbar_bus_if.rsp_valid = gbar_rsp_valid;
-    assign gbar_bus_if.rsp_id = gbar_rsp_id;
-`endif
-
-    VX_dcr_bus_if dcr_bus_if(); 
-
-    assign dcr_bus_if.write_valid = dcr_write_valid;
-    assign dcr_bus_if.write_addr = dcr_write_addr;
-    assign dcr_bus_if.write_data = dcr_write_data;
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (DCACHE_WORD_SIZE),
-        .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) dcache_bus_if[DCACHE_NUM_REQS]();
-
-    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
-        assign dcache_req_valid[i] = dcache_bus_if[i].req_valid;
-        assign dcache_req_rw[i] = dcache_bus_if[i].req_data.rw;
-        assign dcache_req_byteen[i] = dcache_bus_if[i].req_data.byteen;
-        assign dcache_req_addr[i] = dcache_bus_if[i].req_data.addr;
-        assign dcache_req_data[i] = dcache_bus_if[i].req_data.data;
-        assign dcache_req_tag[i] = dcache_bus_if[i].req_data.tag;
-        assign dcache_bus_if[i].req_ready = dcache_req_ready[i];
-
-        assign dcache_bus_if[i].rsp_valid = dcache_rsp_valid[i];
-        assign dcache_bus_if[i].rsp_data.tag = dcache_rsp_tag[i];
-        assign dcache_bus_if[i].rsp_data.data = dcache_rsp_data[i];
-        assign dcache_rsp_ready[i] = dcache_bus_if[i].rsp_ready;
-    end
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (ICACHE_WORD_SIZE),
-        .TAG_WIDTH (ICACHE_TAG_WIDTH)
-    ) icache_bus_if();
-
-    assign icache_req_valid = icache_bus_if.req_valid;
-    assign icache_req_rw = icache_bus_if.req_data.rw;
-    assign icache_req_byteen = icache_bus_if.req_data.byteen;
-    assign icache_req_addr = icache_bus_if.req_data.addr;
-    assign icache_req_data = icache_bus_if.req_data.data;
-    assign icache_req_tag = icache_bus_if.req_data.tag;
-    assign icache_bus_if.req_ready = icache_req_ready;
-
-    assign icache_bus_if.rsp_valid = icache_rsp_valid;
-    assign icache_bus_if.rsp_data.tag = icache_rsp_tag;
-    assign icache_bus_if.rsp_data.data = icache_rsp_data;
-    assign icache_rsp_ready = icache_bus_if.rsp_ready;
-
-`ifdef PERF_ENABLE
-    VX_mem_perf_if mem_perf_if();
-`endif
-
-`ifdef SCOPE
-    wire [0:0] scope_reset_w = 1'b0; 
-    wire [0:0] scope_bus_in_w = 1'b0; 
-    wire [0:0] scope_bus_out_w;
-    `UNUSED_VAR (scope_bus_out_w)
-`endif
-
-    VX_core #(
-        .CORE_ID (0)
-    ) core (
-        `SCOPE_IO_BIND (0)
-        .clk            (clk),
-        .reset          (reset),
-        
-    `ifdef PERF_ENABLE
-        .mem_perf_if    (mem_perf_if),
-    `endif
-        
-        .dcr_bus_if     (dcr_bus_if),
-
-        .dcache_bus_if  (dcache_bus_if),
-
-        .icache_bus_if  (icache_bus_if),
-
-    `ifdef GBAR_ENABLE
-        .gbar_bus_if    (gbar_bus_if),
-    `endif
-
-        .sim_ebreak     (sim_ebreak),
-        .sim_wb_value   (sim_wb_value),
-        .busy           (busy)
-    );
-
 endmodule

@@ -51,9 +51,8 @@ inline char is_log2(int x) {
   return ((x & (x-1)) == 0);
 }
 
-inline int fast_log2(int x) {
-  float f = x;
-  return (*(int*)(&f)>>23) - 127;
+inline int log2_fast(int x) {
+  return 31 - __builtin_clz (x);
 }
 
 static void __attribute__ ((noinline)) spawn_tasks_all_stub() {
@@ -286,8 +285,8 @@ void vx_spawn_kernel(context_t * ctx, vx_spawn_kernel_cb callback, void * arg) {
 
   // fast path handling
   char isXYpow2 = is_log2(XY);
-  char log2XY   = fast_log2(XY);
-  char log2X    = fast_log2(X);
+  char log2XY   = log2_fast(XY);
+  char log2X    = log2_fast(X);
 
   wspawn_kernel_args_t wspawn_args = { 
     ctx, callback, arg, core_id * tasks_per_core, fW, rW, isXYpow2, log2XY, log2X

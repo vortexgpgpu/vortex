@@ -38,9 +38,12 @@ module VX_operands import VX_gpu_pkg::*; #(
         reg [`NR_BITS-1:0] gpr_rd_rid, gpr_rd_rid_n;
         reg [ISSUE_WIS_W-1:0] gpr_rd_wis, gpr_rd_wis_n;
 
-        reg [ISSUE_RATIO-1:0][`NUM_THREADS-1:0][`XLEN-1:0] cache_data, cache_data_n;
-        reg [ISSUE_RATIO-1:0][`NR_BITS-1:0] cache_reg, cache_reg_n;
-        reg [ISSUE_RATIO-1:0][`NUM_THREADS-1:0] cache_tmask, cache_tmask_n;
+        reg [`NUM_THREADS-1:0][`XLEN-1:0] cache_data [ISSUE_RATIO-1:0];
+        reg [`NUM_THREADS-1:0][`XLEN-1:0] cache_data_n [ISSUE_RATIO-1:0];
+        reg [`NR_BITS-1:0] cache_reg [ISSUE_RATIO-1:0];
+        reg [`NR_BITS-1:0] cache_reg_n [ISSUE_RATIO-1:0];
+        reg [`NUM_THREADS-1:0] cache_tmask [ISSUE_RATIO-1:0];
+        reg [`NUM_THREADS-1:0] cache_tmask_n [ISSUE_RATIO-1:0];
         reg [ISSUE_RATIO-1:0] cache_eop, cache_eop_n;
 
         reg [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data, rs1_data_n;
@@ -160,11 +163,8 @@ module VX_operands import VX_gpu_pkg::*; #(
                     end
                     cache_reg_n[writeback_if[i].data.wis] = writeback_if[i].data.rd;
                     cache_eop_n[writeback_if[i].data.wis] = writeback_if[i].data.eop;
-                    if (writeback_if[i].data.sop) begin
-                        cache_tmask_n[writeback_if[i].data.wis] = writeback_if[i].data.tmask;
-                    end else begin
-                        cache_tmask_n[writeback_if[i].data.wis] |= writeback_if[i].data.tmask;
-                    end                
+                    cache_tmask_n[writeback_if[i].data.wis] = writeback_if[i].data.sop ? writeback_if[i].data.tmask : 
+                                                                    (cache_tmask_n[writeback_if[i].data.wis] | writeback_if[i].data.tmask);
                 end
             end
         end
@@ -175,7 +175,6 @@ module VX_operands import VX_gpu_pkg::*; #(
                 gpr_rd_rid  <= '0;
                 gpr_rd_wis  <= '0;
                 cache_eop   <= {ISSUE_RATIO{1'b1}};
-                cache_reg   <= '0;
                 data_ready  <= 0;
             end else begin
                 state       <= state_n;

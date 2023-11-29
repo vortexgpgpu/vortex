@@ -22,11 +22,11 @@
 #include <memory>
 #include <set>
 #include <simobject.h>
+#include <mem.h>
 #include "debug.h"
 #include "types.h"
 #include "arch.h"
 #include "decode.h"
-#include "mem.h"
 #include "warp.h"
 #include "pipeline.h"
 #include "cache_sim.h"
@@ -42,17 +42,25 @@ namespace vortex {
 
 class Cluster;
 
+using TraceSwitch = Mux<pipeline_trace_t*>;
+
 class Core : public SimObject<Core> {
 public:
   struct PerfStats {
     uint64_t cycles;
     uint64_t instrs;
+    uint64_t sched_stalls;
+    uint64_t fetch_stalls;
     uint64_t ibuf_stalls;
     uint64_t scrb_stalls;
     uint64_t alu_stalls;
     uint64_t lsu_stalls;
     uint64_t fpu_stalls;
     uint64_t sfu_stalls;
+    uint64_t scrb_alu;
+    uint64_t scrb_fpu;
+    uint64_t scrb_lsu;
+    uint64_t scrb_sfu;
     uint64_t ifetches;
     uint64_t loads;
     uint64_t stores;
@@ -62,12 +70,18 @@ public:
     PerfStats() 
       : cycles(0)
       , instrs(0)
+      , sched_stalls(0)
+      , fetch_stalls(0)
       , ibuf_stalls(0)
       , scrb_stalls(0)
       , alu_stalls(0)
       , lsu_stalls(0)
       , fpu_stalls(0)
       , sfu_stalls(0)
+      , scrb_alu(0)
+      , scrb_fpu(0)
+      , scrb_lsu(0)
+      , scrb_sfu(0)
       , ifetches(0)
       , loads(0)
       , stores(0)
@@ -173,7 +187,6 @@ private:
   PipelineLatch decode_latch_;
   
   HashTable<pipeline_trace_t*> pending_icache_;
-  std::vector<pipeline_trace_t*> committed_traces_;
   WarpMask active_warps_;
   WarpMask stalled_warps_;
   uint64_t issued_instrs_;
@@ -190,17 +203,15 @@ private:
   
   Cluster* cluster_;
 
-  uint32_t commit_exe_;
+  std::vector<TraceSwitch::Ptr> commit_arbs_;
+
+  uint32_t ibuffer_idx_;
 
   friend class Warp;
   friend class LsuUnit;
   friend class AluUnit;
   friend class FpuUnit;
   friend class SfuUnit;
-  friend class TexUnit;
-  friend class RasterAgent;
-  friend class RopAgent;
-  friend class TexAgent;
 };
 
 } // namespace vortex

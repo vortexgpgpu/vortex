@@ -33,9 +33,6 @@
 `define VX_DCR_MPM_CLASS_NONE           0           
 `define VX_DCR_MPM_CLASS_CORE           1
 `define VX_DCR_MPM_CLASS_MEM            2
-`define VX_DCR_MPM_CLASS_TEX            3
-`define VX_DCR_MPM_CLASS_RASTER         4
-`define VX_DCR_MPM_CLASS_ROP            5
 
 // User Floating-Point CSRs
 
@@ -61,6 +58,8 @@
 
 `define VX_CSR_MPM_BASE                 12'hB00
 `define VX_CSR_MPM_BASE_H               12'hB80
+`define VX_CSR_MPM_USER                 12'hB03
+`define VX_CSR_MPM_USER_H               12'hB83
 
 // Machine Performance-monitoring core counters
 // PERF: Standard
@@ -71,29 +70,41 @@
 `define VX_CSR_MINSTRET                 12'hB02
 `define VX_CSR_MINSTRET_H               12'hB82
 // PERF: pipeline
-`define VX_CSR_MPM_IBUF_ST              12'hB03
-`define VX_CSR_MPM_IBUF_ST_H            12'hB83
-`define VX_CSR_MPM_SCRB_ST              12'hB04
-`define VX_CSR_MPM_SCRB_ST_H            12'hB84
-`define VX_CSR_MPM_ALU_ST               12'hB05
-`define VX_CSR_MPM_ALU_ST_H             12'hB85
-`define VX_CSR_MPM_LSU_ST               12'hB06
-`define VX_CSR_MPM_LSU_ST_H             12'hB86
-`define VX_CSR_MPM_FPU_ST               12'hB07
-`define VX_CSR_MPM_FPU_ST_H             12'hB87
-`define VX_CSR_MPM_SFU_ST               12'hB08
-`define VX_CSR_MPM_SFU_ST_H             12'hB88
+`define VX_CSR_MPM_SCHED_ST             12'hB03
+`define VX_CSR_MPM_SCHED_ST_H           12'hB83
+`define VX_CSR_MPM_FETCH_ST             12'hB04
+`define VX_CSR_MPM_FETCH_ST_H           12'hB84
+`define VX_CSR_MPM_IBUF_ST              12'hB05
+`define VX_CSR_MPM_IBUF_ST_H            12'hB85
+`define VX_CSR_MPM_SCRB_ST              12'hB06
+`define VX_CSR_MPM_SCRB_ST_H            12'hB86
+`define VX_CSR_MPM_ALU_ST               12'hB07
+`define VX_CSR_MPM_ALU_ST_H             12'hB87
+`define VX_CSR_MPM_LSU_ST               12'hB08
+`define VX_CSR_MPM_LSU_ST_H             12'hB88
+`define VX_CSR_MPM_FPU_ST               12'hB09
+`define VX_CSR_MPM_FPU_ST_H             12'hB89
+`define VX_CSR_MPM_SFU_ST               12'hB0A
+`define VX_CSR_MPM_SFU_ST_H             12'hB8A
+`define VX_CSR_MPM_SCRB_ALU             12'hB0B
+`define VX_CSR_MPM_SCRB_ALU_H           12'hB8B
+`define VX_CSR_MPM_SCRB_FPU             12'hB0C
+`define VX_CSR_MPM_SCRB_FPU_H           12'hB8C
+`define VX_CSR_MPM_SCRB_LSU             12'hB0D
+`define VX_CSR_MPM_SCRB_LSU_H           12'hB8D
+`define VX_CSR_MPM_SCRB_SFU             12'hB0E
+`define VX_CSR_MPM_SCRB_SFU_H           12'hB8E
 // PERF: memory
-`define VX_CSR_MPM_IFETCHES             12'hB0A
-`define VX_CSR_MPM_IFETCHES_H           12'hB8A
-`define VX_CSR_MPM_LOADS                12'hB0B
-`define VX_CSR_MPM_LOADS_H              12'hB8B
-`define VX_CSR_MPM_STORES               12'hB0C
-`define VX_CSR_MPM_STORES_H             12'hB8C
-`define VX_CSR_MPM_IFETCH_LAT           12'hB0D
-`define VX_CSR_MPM_IFETCH_LAT_H         12'hB8D
-`define VX_CSR_MPM_LOAD_LAT             12'hB0E 
-`define VX_CSR_MPM_LOAD_LAT_H           12'hB8E
+`define VX_CSR_MPM_IFETCHES             12'hB0F
+`define VX_CSR_MPM_IFETCHES_H           12'hB8F
+`define VX_CSR_MPM_LOADS                12'hB10
+`define VX_CSR_MPM_LOADS_H              12'hB90
+`define VX_CSR_MPM_STORES               12'hB11
+`define VX_CSR_MPM_STORES_H             12'hB91
+`define VX_CSR_MPM_IFETCH_LAT           12'hB12
+`define VX_CSR_MPM_IFETCH_LAT_H         12'hB92
+`define VX_CSR_MPM_LOAD_LAT             12'hB13 
+`define VX_CSR_MPM_LOAD_LAT_H           12'hB93
 
 // Machine Performance-monitoring memory counters
 // PERF: icache
@@ -101,59 +112,61 @@
 `define VX_CSR_MPM_ICACHE_READS_H       12'hB83
 `define VX_CSR_MPM_ICACHE_MISS_R        12'hB04     // read misses
 `define VX_CSR_MPM_ICACHE_MISS_R_H      12'hB84
+`define VX_CSR_MPM_ICACHE_MSHR_ST       12'hB05     // MSHR stalls
+`define VX_CSR_MPM_ICACHE_MSHR_ST_H     12'hB85
 // PERF: dcache
-`define VX_CSR_MPM_DCACHE_READS         12'hB05     // total reads
-`define VX_CSR_MPM_DCACHE_READS_H       12'hB85
-`define VX_CSR_MPM_DCACHE_WRITES        12'hB06     // total writes
-`define VX_CSR_MPM_DCACHE_WRITES_H      12'hB86
-`define VX_CSR_MPM_DCACHE_MISS_R        12'hB07     // read misses
-`define VX_CSR_MPM_DCACHE_MISS_R_H      12'hB87
-`define VX_CSR_MPM_DCACHE_MISS_W        12'hB08     // write misses
-`define VX_CSR_MPM_DCACHE_MISS_W_H      12'hB88
-`define VX_CSR_MPM_DCACHE_BANK_ST       12'hB09     // bank conflicts
-`define VX_CSR_MPM_DCACHE_BANK_ST_H     12'hB89
-`define VX_CSR_MPM_DCACHE_MSHR_ST       12'hB0A     // MSHR stalls
-`define VX_CSR_MPM_DCACHE_MSHR_ST_H     12'hB8A
-// PERF: smem
-`define VX_CSR_MPM_SMEM_READS           12'hB0B     // memory reads
-`define VX_CSR_MPM_SMEM_READS_H         12'hB8B
-`define VX_CSR_MPM_SMEM_WRITES          12'hB0C     // memory writes
-`define VX_CSR_MPM_SMEM_WRITES_H        12'hB8C
-`define VX_CSR_MPM_SMEM_BANK_ST         12'hB0D     // bank conflicts
-`define VX_CSR_MPM_SMEM_BANK_ST_H       12'hB8D
+`define VX_CSR_MPM_DCACHE_READS         12'hB06     // total reads
+`define VX_CSR_MPM_DCACHE_READS_H       12'hB86
+`define VX_CSR_MPM_DCACHE_WRITES        12'hB07     // total writes
+`define VX_CSR_MPM_DCACHE_WRITES_H      12'hB87
+`define VX_CSR_MPM_DCACHE_MISS_R        12'hB08     // read misses
+`define VX_CSR_MPM_DCACHE_MISS_R_H      12'hB88
+`define VX_CSR_MPM_DCACHE_MISS_W        12'hB09     // write misses
+`define VX_CSR_MPM_DCACHE_MISS_W_H      12'hB89
+`define VX_CSR_MPM_DCACHE_BANK_ST       12'hB0A     // bank conflicts
+`define VX_CSR_MPM_DCACHE_BANK_ST_H     12'hB8A
+`define VX_CSR_MPM_DCACHE_MSHR_ST       12'hB0B     // MSHR stalls
+`define VX_CSR_MPM_DCACHE_MSHR_ST_H     12'hB8B
 // PERF: l2cache
-`define VX_CSR_MPM_L2CACHE_READS        12'hB0E     // total reads
-`define VX_CSR_MPM_L2CACHE_READS_H      12'hB8E
-`define VX_CSR_MPM_L2CACHE_WRITES       12'hB0F     // total writes
-`define VX_CSR_MPM_L2CACHE_WRITES_H     12'hB8F
-`define VX_CSR_MPM_L2CACHE_MISS_R       12'hB10     // read misses
-`define VX_CSR_MPM_L2CACHE_MISS_R_H     12'hB90
-`define VX_CSR_MPM_L2CACHE_MISS_W       12'hB11     // write misses
-`define VX_CSR_MPM_L2CACHE_MISS_W_H     12'hB91
-`define VX_CSR_MPM_L2CACHE_BANK_ST      12'hB12     // bank conflicts
-`define VX_CSR_MPM_L2CACHE_BANK_ST_H    12'hB92
-`define VX_CSR_MPM_L2CACHE_MSHR_ST      12'hB13     // MSHR stalls
-`define VX_CSR_MPM_L2CACHE_MSHR_ST_H    12'hB93
+`define VX_CSR_MPM_L2CACHE_READS        12'hB0C     // total reads
+`define VX_CSR_MPM_L2CACHE_READS_H      12'hB8C
+`define VX_CSR_MPM_L2CACHE_WRITES       12'hB0D     // total writes
+`define VX_CSR_MPM_L2CACHE_WRITES_H     12'hB8D
+`define VX_CSR_MPM_L2CACHE_MISS_R       12'hB0E     // read misses
+`define VX_CSR_MPM_L2CACHE_MISS_R_H     12'hB8E
+`define VX_CSR_MPM_L2CACHE_MISS_W       12'hB0F     // write misses
+`define VX_CSR_MPM_L2CACHE_MISS_W_H     12'hB8F
+`define VX_CSR_MPM_L2CACHE_BANK_ST      12'hB10     // bank conflicts
+`define VX_CSR_MPM_L2CACHE_BANK_ST_H    12'hB90
+`define VX_CSR_MPM_L2CACHE_MSHR_ST      12'hB11     // MSHR stalls
+`define VX_CSR_MPM_L2CACHE_MSHR_ST_H    12'hB91
 // PERF: l3cache
-`define VX_CSR_MPM_L3CACHE_READS        12'hB14     // total reads
-`define VX_CSR_MPM_L3CACHE_READS_H      12'hB94
-`define VX_CSR_MPM_L3CACHE_WRITES       12'hB15     // total writes
-`define VX_CSR_MPM_L3CACHE_WRITES_H     12'hB95
-`define VX_CSR_MPM_L3CACHE_MISS_R       12'hB16     // read misses
-`define VX_CSR_MPM_L3CACHE_MISS_R_H     12'hB96
-`define VX_CSR_MPM_L3CACHE_MISS_W       12'hB17     // write misses
-`define VX_CSR_MPM_L3CACHE_MISS_W_H     12'hB97
-`define VX_CSR_MPM_L3CACHE_BANK_ST      12'hB18     // bank conflicts
-`define VX_CSR_MPM_L3CACHE_BANK_ST_H    12'hB98
-`define VX_CSR_MPM_L3CACHE_MSHR_ST      12'hB19     // MSHR stalls
-`define VX_CSR_MPM_L3CACHE_MSHR_ST_H    12'hB99
+`define VX_CSR_MPM_L3CACHE_READS        12'hB12     // total reads
+`define VX_CSR_MPM_L3CACHE_READS_H      12'hB92
+`define VX_CSR_MPM_L3CACHE_WRITES       12'hB13     // total writes
+`define VX_CSR_MPM_L3CACHE_WRITES_H     12'hB93
+`define VX_CSR_MPM_L3CACHE_MISS_R       12'hB14     // read misses
+`define VX_CSR_MPM_L3CACHE_MISS_R_H     12'hB94
+`define VX_CSR_MPM_L3CACHE_MISS_W       12'hB15     // write misses
+`define VX_CSR_MPM_L3CACHE_MISS_W_H     12'hB95
+`define VX_CSR_MPM_L3CACHE_BANK_ST      12'hB16     // bank conflicts
+`define VX_CSR_MPM_L3CACHE_BANK_ST_H    12'hB96
+`define VX_CSR_MPM_L3CACHE_MSHR_ST      12'hB17     // MSHR stalls
+`define VX_CSR_MPM_L3CACHE_MSHR_ST_H    12'hB97
 // PERF: memory
-`define VX_CSR_MPM_MEM_READS            12'hB1A     // total reads
-`define VX_CSR_MPM_MEM_READS_H          12'hB9A
-`define VX_CSR_MPM_MEM_WRITES           12'hB1B     // total writes
-`define VX_CSR_MPM_MEM_WRITES_H         12'hB9B
-`define VX_CSR_MPM_MEM_LAT              12'hB1C     // memory latency
-`define VX_CSR_MPM_MEM_LAT_H            12'hB9C
+`define VX_CSR_MPM_MEM_READS            12'hB18     // total reads
+`define VX_CSR_MPM_MEM_READS_H          12'hB98
+`define VX_CSR_MPM_MEM_WRITES           12'hB19     // total writes
+`define VX_CSR_MPM_MEM_WRITES_H         12'hB99
+`define VX_CSR_MPM_MEM_LAT              12'hB1A     // memory latency
+`define VX_CSR_MPM_MEM_LAT_H            12'hB9A
+// PERF: smem
+`define VX_CSR_MPM_SMEM_READS           12'hB1B     // memory reads
+`define VX_CSR_MPM_SMEM_READS_H         12'hB9B
+`define VX_CSR_MPM_SMEM_WRITES          12'hB1C     // memory writes
+`define VX_CSR_MPM_SMEM_WRITES_H        12'hB9C
+`define VX_CSR_MPM_SMEM_BANK_ST         12'hB1D     // bank conflicts
+`define VX_CSR_MPM_SMEM_BANK_ST_H       12'hB9D
 
 // Machine Information Registers
 

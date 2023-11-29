@@ -10,6 +10,8 @@ all:
 	$(MAKE) -C fence
 	$(MAKE) -C no_mf_ext
 	$(MAKE) -C no_smem
+	$(MAKE) -C vecaddx
+	$(MAKE) -C sgemmx
 
 run-simx:
 	$(MAKE) -C basic run-simx
@@ -23,6 +25,8 @@ run-simx:
 	$(MAKE) -C fence run-simx
 	$(MAKE) -C no_mf_ext run-simx
 	$(MAKE) -C no_smem run-simx
+	$(MAKE) -C vecaddx run-simx
+	$(MAKE) -C sgemmx run-simx
 
 run-rtlsim:
 	$(MAKE) -C basic run-rtlsim
@@ -36,6 +40,8 @@ run-rtlsim:
 	$(MAKE) -C fence run-rtlsim
 	$(MAKE) -C no_mf_ext run-rtlsim
 	$(MAKE) -C no_smem run-rtlsim
+	$(MAKE) -C vecaddx run-rtlsim
+	$(MAKE) -C sgemmx run-rtlsim
 
 run-opae:
 	$(MAKE) -C basic run-opae
@@ -49,6 +55,8 @@ run-opae:
 	$(MAKE) -C fence run-opae
 	$(MAKE) -C no_mf_ext run-opae
 	$(MAKE) -C no_smem run-opae
+	$(MAKE) -C vecaddx run-opae
+	$(MAKE) -C sgemmx run-opae
 
 clean:
 	$(MAKE) -C basic clean
@@ -62,6 +70,8 @@ clean:
 	$(MAKE) -C fence clean
 	$(MAKE) -C no_mf_ext clean
 	$(MAKE) -C no_smem clean
+	$(MAKE) -C vecaddx clean
+	$(MAKE) -C sgemmx clean
 
 clean-all:
 	$(MAKE) -C basic clean-all
@@ -75,3 +85,5 @@ clean-all:
 	$(MAKE) -C fence clean-all
 	$(MAKE) -C no_mf_ext clean-all
 	$(MAKE) -C no_smem clean-all
+	$(MAKE) -C vecaddx clean-all
+	$(MAKE) -C sgemmx clean-all

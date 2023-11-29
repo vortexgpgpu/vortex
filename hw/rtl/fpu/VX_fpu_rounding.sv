@@ -54,7 +54,6 @@ module VX_fpu_rounding #(
                       2'b01: round_up = 1'b0;            // < ulp/2 away, round down
                       2'b10: round_up = abs_value_i[0];  // = ulp/2 away, round towards even result
                       2'b11: round_up = 1'b1;            // > ulp/2 away, round up
-                    default: round_up = 1'bx;
                 endcase
             `INST_FRM_RTZ: round_up = 1'b0; // always round down
             `INST_FRM_RDN: round_up = (| round_sticky_bits_i) & sign_i;  // to 0 if +, away if -

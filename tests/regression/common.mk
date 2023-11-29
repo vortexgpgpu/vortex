@@ -1,16 +1,18 @@
 XLEN ?= 32
 
+TOOLDIR ?= /opt
+
 TARGET ?= opaesim
 
 XRT_SYN_DIR ?= ../../../hw/syn/xilinx/xrt
 XRT_DEVICE_INDEX ?= 0
 
 ifeq ($(XLEN),64)
-RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
+RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv64-gnu-toolchain
 VX_CFLAGS += -march=rv64imafd -mabi=lp64d
 STARTUP_ADDR ?= 0x180000000
 else
-RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
+RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv-gnu-toolchain
 VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
 STARTUP_ADDR ?= 0x80000000
 endif
@@ -23,7 +25,7 @@ VORTEX_KN_PATH ?= $(realpath ../../../kernel)
 
 FPGA_BIN_DIR ?= $(VORTEX_RT_PATH)/opae
 
-LLVM_VORTEX ?= /opt/llvm-vortex
+LLVM_VORTEX ?= $(TOOLDIR)/llvm-vortex
 
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
