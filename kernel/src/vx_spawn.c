@@ -429,8 +429,8 @@ void vx_spawn_kernel_cm(context_t* ctx, vx_spawn_kernel_cb callback, void* arg)
 
   // fast path handling
   char isXYpow2 = is_log2(XY);
-  char log2XY = fast_log2(XY);
-  char log2X = fast_log2(X);
+  char log2XY = log2_fast(XY);
+  char log2X = log2_fast(X);
 
   //--
   wspawn_kernel_args_t wspawn_args = {
