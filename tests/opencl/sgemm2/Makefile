@@ -1,4 +1,4 @@
-PROJECT = matmul
+PROJECT = sgemm2
 
 SRCS = main.cc
 

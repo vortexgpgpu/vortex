@@ -19,6 +19,11 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     input wire              clk,
     input wire              reset,
 
+`ifdef PERF_ENABLE
+    output reg [`PERF_CTR_BITS-1:0] perf_scb_stalls,
+    output reg [`PERF_CTR_BITS-1:0] perf_scb_uses [`NUM_EX_UNITS],
+`endif
+
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
     VX_ibuffer_if.slave     ibuffer_if [`ISSUE_WIDTH],
     VX_ibuffer_if.master    scoreboard_if [`ISSUE_WIDTH]
@@ -26,81 +31,100 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (CORE_ID)
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + (`NR_BITS * 4) + 1;
 
+`ifdef PERF_ENABLE
+    wire [`NUM_EX_UNITS-1:0] scoreboard_uses_per_cycle;
+    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] scoreboard_stalls_per_cycle;
+    reg [`ISSUE_WIDTH-1:0][`NUM_EX_UNITS-1:0] scoreboard_uses;
+    wire [`ISSUE_WIDTH-1:0] scoreboard_stalls;
+
+    `POP_COUNT(scoreboard_stalls_per_cycle, scoreboard_stalls);
+    VX_reduce #(
+        .DATAW_IN (`NUM_EX_UNITS),
+        .N  (`ISSUE_WIDTH),
+        .OP ("|")
+    ) reduce (
+        .data_in  (scoreboard_uses),
+        .data_out (scoreboard_uses_per_cycle)
+    );
+`endif
+
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        reg [`UP(ISSUE_RATIO)-1:0][`NUM_REGS-1:0] inuse_regs, inuse_regs_n;
-        reg [3:0] ready_masks, ready_masks_n;        
+        reg [`UP(ISSUE_RATIO)-1:0][`NUM_REGS-1:0] inuse_regs;
         VX_ibuffer_if staging_if();
-        
+
         wire writeback_fire = writeback_if[i].valid && writeback_if[i].data.eop;
 
+        wire inuse_rd  = inuse_regs[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd];
+        wire inuse_rs1 = inuse_regs[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs1];
+        wire inuse_rs2 = inuse_regs[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs2];
+        wire inuse_rs3 = inuse_regs[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3];
+
+    `ifdef PERF_ENABLE
+        reg [`UP(ISSUE_RATIO)-1:0][`NUM_REGS-1:0][`EX_BITS-1:0] inuse_units;        
         always @(*) begin
-            inuse_regs_n = inuse_regs;
-            ready_masks_n = ready_masks;
-            if (writeback_fire) begin
-                inuse_regs_n[writeback_if[i].data.wis][writeback_if[i].data.rd] = 0;
-                ready_masks_n |= {4{(ISSUE_RATIO == 0) || writeback_if[i].data.wis == staging_if.data.wis}} 
-                               & {(writeback_if[i].data.rd == staging_if.data.rd),
-                                  (writeback_if[i].data.rd == staging_if.data.rs1),
-                                  (writeback_if[i].data.rd == staging_if.data.rs2),
-                                  (writeback_if[i].data.rd == staging_if.data.rs3)};
-            end   
-            if (staging_if.valid && staging_if.ready && staging_if.data.wb) begin
-                inuse_regs_n[staging_if.data.wis][staging_if.data.rd] = 1;
-                ready_masks_n = '0;
+            scoreboard_uses[i] = '0;
+            if (ibuffer_if[i].valid) begin
+                if (inuse_rd) begin
+                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd]] = 1;
+                end
+                if (inuse_rs1) begin
+                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs1]] = 1;
+                end
+                if (inuse_rs2) begin
+                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs2]] = 1;
+                end
+                if (inuse_rs3) begin
+                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3]] = 1;
+                end
             end
-            if (ibuffer_if[i].valid && ibuffer_if[i].ready) begin
-                ready_masks_n = ~{inuse_regs_n[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd],
-                                  inuse_regs_n[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs1],
-                                  inuse_regs_n[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs2],
-                                  inuse_regs_n[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3]};
-            end
-        end   
+        end
+        assign scoreboard_stalls[i] = ibuffer_if[i].valid && ~ibuffer_if[i].ready;
+    `endif
+
+        reg [DATAW-1:0] data_out_r;
+        reg valid_out_r;
+
+        wire [3:0] ready_masks = ~{inuse_rd, inuse_rs1, inuse_rs2, inuse_rs3};
+        wire deps_ready = (& ready_masks);
 
         always @(posedge clk) begin
             if (reset) begin
-                inuse_regs  <= '0;
-                ready_masks <= '0;
-            end else begin            
-                inuse_regs  <= inuse_regs_n;
-                ready_masks <= ready_masks_n;
+                valid_out_r <= 0;
+                inuse_regs <= '0;                
+            end else begin                
+                if (writeback_fire) begin
+                    inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] <= 0;            
+                end
+                if (~valid_out_r) begin
+                    valid_out_r <= ibuffer_if[i].valid && deps_ready;
+                end else if (staging_if.ready) begin
+                    if (staging_if.data.wb) begin
+                        inuse_regs[staging_if.data.wis][staging_if.data.rd] <= 1;
+                    `ifdef PERF_ENABLE
+                        inuse_units[staging_if.data.wis][staging_if.data.rd] <= staging_if.data.ex_type;
+                    `endif
+                    end
+                    valid_out_r <= 0;
+                end
+            end
+            if (~valid_out_r) begin
+                data_out_r <= ibuffer_if[i].data;
             end
         end
 
-        // staging buffer
-
-        `RESET_RELAY (stg_buf_reset, reset);
-        
-        VX_elastic_buffer #(
-            .DATAW (DATAW)
-        ) stg_buf (
-            .clk       (clk),
-            .reset     (stg_buf_reset),
-            .valid_in  (ibuffer_if[i].valid),
-            .ready_in  (ibuffer_if[i].ready),
-            .data_in   (ibuffer_if[i].data),
-            .data_out  (staging_if.data),
-            .valid_out (staging_if.valid),
-            .ready_out (staging_if.ready)
-        );
-
-        // output buffer
-
-        wire valid_stg, ready_stg;
-        wire regs_ready = (& ready_masks);
-        assign valid_stg = staging_if.valid && regs_ready;
-        assign staging_if.ready = ready_stg && regs_ready;
-
-        `RESET_RELAY (out_buf_reset, reset);
+        assign ibuffer_if[i].ready = ~valid_out_r && deps_ready;
+        assign staging_if.valid = valid_out_r;
+        assign staging_if.data  = data_out_r;
 
         VX_elastic_buffer #(
             .DATAW   (DATAW),
-            .SIZE    (2),
+            .SIZE    (0),
             .OUT_REG (2)
         ) out_buf (
             .clk       (clk),
-            .reset     (out_buf_reset),
-            .valid_in  (valid_stg),
-            .ready_in  (ready_stg),
+            .reset     (reset),
+            .valid_in  (staging_if.valid),
+            .ready_in  (staging_if.ready),
             .data_in   (staging_if.data),
             .data_out  (scoreboard_if[i].data),
             .valid_out (scoreboard_if[i].valid),
@@ -108,29 +132,29 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         );
 
     `ifdef SIMULATION
-        reg [31:0] timeout_ctr;
-    
+        reg [31:0] timeout_ctr;       
+
         always @(posedge clk) begin
             if (reset) begin
                 timeout_ctr <= '0;
             end else begin        
-                if (staging_if.valid && ~regs_ready) begin
+                if (ibuffer_if[i].valid && ~ibuffer_if[i].ready) begin
                 `ifdef DBG_TRACE_CORE_PIPELINE
                     `TRACE(3, ("%d: *** core%0d-scoreboard-stall: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)\n",
-                        $time, CORE_ID, wis_to_wid(staging_if.data.wis, i), staging_if.data.PC, staging_if.data.tmask, timeout_ctr,
-                        ~ready_masks, staging_if.data.uuid));
+                        $time, CORE_ID, wis_to_wid(ibuffer_if[i].data.wis, i), ibuffer_if[i].data.PC, ibuffer_if[i].data.tmask, timeout_ctr,
+                        ~ready_masks, ibuffer_if[i].data.uuid));
                 `endif
                     timeout_ctr <= timeout_ctr + 1;
-                end else if (staging_if.valid && staging_if.ready) begin
+                end else if (ibuffer_if[i].valid && ibuffer_if[i].ready) begin
                     timeout_ctr <= '0;
                 end
             end
-        end
-
+        end        
+        
         `RUNTIME_ASSERT((timeout_ctr < `STALL_TIMEOUT),
                         ("%t: *** core%0d-scoreboard-timeout: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)",
-                            $time, CORE_ID, wis_to_wid(staging_if.data.wis, i), staging_if.data.PC, staging_if.data.tmask, timeout_ctr,
-                            ~ready_masks, staging_if.data.uuid));
+                            $time, CORE_ID, wis_to_wid(ibuffer_if[i].data.wis, i), ibuffer_if[i].data.PC, ibuffer_if[i].data.tmask, timeout_ctr,
+                            ~ready_masks, ibuffer_if[i].data.uuid));
 
         `RUNTIME_ASSERT(~writeback_fire || inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] != 0,
             ("%t: *** core%0d: invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
@@ -138,5 +162,24 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     `endif
     
     end    
+
+`ifdef PERF_ENABLE
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_scb_stalls <= '0;
+        end else begin
+            perf_scb_stalls <= perf_scb_stalls + `PERF_CTR_BITS'(scoreboard_stalls_per_cycle);
+        end
+    end
+    for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin
+        always @(posedge clk) begin
+            if (reset) begin
+                perf_scb_uses[i] <= '0;
+            end else begin
+                perf_scb_uses[i] <= perf_scb_uses[i] + `PERF_CTR_BITS'(scoreboard_uses_per_cycle[i]);
+            end
+        end
+    end
+`endif
 
 endmodule

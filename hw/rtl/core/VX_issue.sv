@@ -59,6 +59,10 @@ module VX_issue #(
     ) scoreboard (
         .clk            (clk),
         .reset          (scoreboard_reset),
+    `ifdef PERF_ENABLE
+        .perf_scb_stalls(perf_issue_if.scb_stalls),
+        .perf_scb_uses  (perf_issue_if.scb_uses),
+    `endif
         .writeback_if   (writeback_if),
         .ibuffer_if     (ibuffer_if),
         .scoreboard_if  (scoreboard_if)
@@ -152,29 +156,17 @@ module VX_issue #(
 
 `ifdef PERF_ENABLE
     reg [`PERF_CTR_BITS-1:0] perf_ibf_stalls;
-    reg [`PERF_CTR_BITS-1:0] perf_scb_stalls;
-
-    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] scoreboard_stalls_per_cycle;
-    reg [`ISSUE_WIDTH-1:0] scoreboard_stalls;
-    for (genvar i=0; i < `ISSUE_WIDTH; ++i) begin
-        assign scoreboard_stalls[i] = ibuffer_if[i].valid && ~ibuffer_if[i].ready;
-    end
-    `POP_COUNT(scoreboard_stalls_per_cycle, scoreboard_stalls);
-
     always @(posedge clk) begin
         if (reset) begin
             perf_ibf_stalls <= '0;
-            perf_scb_stalls <= '0;
         end else begin
             if (decode_if.valid && ~decode_if.ready) begin
                 perf_ibf_stalls <= perf_ibf_stalls + `PERF_CTR_BITS'(1);
             end
-            perf_scb_stalls <= perf_scb_stalls + `PERF_CTR_BITS'(scoreboard_stalls_per_cycle);
         end
     end
 
     assign perf_issue_if.ibf_stalls = perf_ibf_stalls;
-    assign perf_issue_if.scb_stalls = perf_scb_stalls;
 `endif
 
 endmodule
