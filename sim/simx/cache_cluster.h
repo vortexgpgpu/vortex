@@ -45,20 +45,20 @@ public:
 
         char sname[100];
         
-        std::vector<Switch<MemReq, MemRsp>::Ptr> unit_arbs(num_units);
+        std::vector<MemSwitch::Ptr> unit_arbs(num_units);
         for (uint32_t u = 0; u < num_units; ++u) {
             snprintf(sname, 100, "%s-unit-arb-%d", name, u);
-            unit_arbs.at(u) = Switch<MemReq, MemRsp>::Create(sname, ArbiterType::RoundRobin, num_requests, config.num_inputs);
+            unit_arbs.at(u) = MemSwitch::Create(sname, ArbiterType::RoundRobin, num_requests, config.num_inputs);
             for (uint32_t i = 0; i < num_requests; ++i) {
                 this->CoreReqPorts.at(u).at(i).bind(&unit_arbs.at(u)->ReqIn.at(i));
                 unit_arbs.at(u)->RspIn.at(i).bind(&this->CoreRspPorts.at(u).at(i));
             }
         }
 
-        std::vector<Switch<MemReq, MemRsp>::Ptr> mem_arbs(config.num_inputs);
+        std::vector<MemSwitch::Ptr> mem_arbs(config.num_inputs);
         for (uint32_t i = 0; i < config.num_inputs; ++i) {
             snprintf(sname, 100, "%s-mem-arb-%d", name, i);
-            mem_arbs.at(i) = Switch<MemReq, MemRsp>::Create(sname, ArbiterType::RoundRobin, num_units, num_caches);
+            mem_arbs.at(i) = MemSwitch::Create(sname, ArbiterType::RoundRobin, num_units, num_caches);
             for (uint32_t u = 0; u < num_units; ++u) {              
                 unit_arbs.at(u)->ReqOut.at(i).bind(&mem_arbs.at(i)->ReqIn.at(u));
                 mem_arbs.at(i)->RspIn.at(u).bind(&unit_arbs.at(u)->RspOut.at(i));
@@ -66,7 +66,7 @@ public:
         }
 
         snprintf(sname, 100, "%s-cache-arb", name);
-        auto cache_arb = Switch<MemReq, MemRsp>::Create(sname, ArbiterType::RoundRobin, num_caches, 1);
+        auto cache_arb = MemSwitch::Create(sname, ArbiterType::RoundRobin, num_caches, 1);
 
         for (uint32_t i = 0; i < num_caches; ++i) {
             snprintf(sname, 100, "%s-cache%d", name, i);

@@ -116,7 +116,11 @@ module VX_core import VX_gpu_pkg::*; #(
         .CORE_ID (CORE_ID)
     ) schedule (
         .clk            (clk),
-        .reset          (schedule_reset),   
+        .reset          (schedule_reset),
+
+    `ifdef PERF_ENABLE
+        .perf_schedule_if (pipeline_perf_if.schedule),
+    `endif 
 
         .base_dcrs      (base_dcrs),  
 

@@ -14,10 +14,10 @@
 `include "VX_platform.vh"
 
 module VX_ipdom_stack #(
-    parameter WIDTH = 1,
-    parameter DEPTH = 1,
+    parameter WIDTH   = 1,
+    parameter DEPTH   = 1,
     parameter OUT_REG = 0,
-    parameter ADDRW = `LOG2UP(DEPTH)
+    parameter ADDRW   = `LOG2UP(DEPTH)
 ) (
     input  wire             clk,
     input  wire             reset,
