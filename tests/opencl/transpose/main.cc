@@ -55,10 +55,10 @@ int main( int argc, const char** argv)
 
     // run the main test
     int result = runTest(argc, argv);
-    //oclCheckError(result, 0);
+    oclCheckError(result, 0);
 }
 
-double transposeGPU(const char* kernelName, bool useLocalMem,  cl_uint ciDeviceCount, float* h_idata, float* h_odata, unsigned int size_x, unsigned int size_y)
+static double transposeGPU(const char* kernelName, bool useLocalMem,  cl_uint ciDeviceCount, float* h_idata, float* h_odata, unsigned int size_x, unsigned int size_y)
 {
     cl_mem d_odata[MAX_GPU_COUNT];
     cl_mem d_idata[MAX_GPU_COUNT];
@@ -79,16 +79,16 @@ double transposeGPU(const char* kernelName, bool useLocalMem,  cl_uint ciDeviceC
         // allocate device memory and copy host to device memory
         d_idata[i] = clCreateBuffer(cxGPUContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                     mem_size, h_idata, &ciErrNum);
-        //oclCheckError(ciErrNum, CL_SUCCESS);
+        oclCheckError(ciErrNum, CL_SUCCESS);
 
         // create buffer to store output
         d_odata[i] = clCreateBuffer(cxGPUContext, CL_MEM_WRITE_ONLY ,
                                     sizePerGPU*size_y*sizeof(float), NULL, &ciErrNum);
-        //oclCheckError(ciErrNum, CL_SUCCESS);
+        oclCheckError(ciErrNum, CL_SUCCESS);
 
         // create the naive transpose kernel
         ckKernel[i] = clCreateKernel(rv_program, kernelName, &ciErrNum);
-        //oclCheckError(ciErrNum, CL_SUCCESS);
+        oclCheckError(ciErrNum, CL_SUCCESS);
         
         // set the args values for the naive kernel
         size_t offset = i * sizePerGPU;
@@ -97,12 +97,11 @@ double transposeGPU(const char* kernelName, bool useLocalMem,  cl_uint ciDeviceC
         ciErrNum |= clSetKernelArg(ckKernel[i], 2, sizeof(int), &offset);
         ciErrNum |= clSetKernelArg(ckKernel[i], 3, sizeof(int), &size_x);
         ciErrNum |= clSetKernelArg(ckKernel[i], 4, sizeof(int), &size_y);
-        if(useLocalMem)
-        {
+        if (useLocalMem) {
             ciErrNum |= clSetKernelArg(ckKernel[i], 5, (BLOCK_DIM + 1) * BLOCK_DIM * sizeof(float), 0 );
         }
     }
-    //oclCheckError(ciErrNum, CL_SUCCESS);
+    oclCheckError(ciErrNum, CL_SUCCESS);
 
     // set up execution configuration
     szLocalWorkSize[0] = BLOCK_DIM;
@@ -111,18 +110,16 @@ double transposeGPU(const char* kernelName, bool useLocalMem,  cl_uint ciDeviceC
     szGlobalWorkSize[1] = shrRoundUp(BLOCK_DIM, size_y);
     
     // execute the kernel numIterations times
-    int numIterations = 100;
+    //int numIterations = 100;
+    int numIterations = 1;
     shrLog("\nProcessing a %d by %d matrix of floats...\n\n", size_x, size_y);
-    for (int i = -1; i < numIterations; ++i)
-    {
-        // Start time measurement after warmup
-        if( i == 0 ) shrDeltaT(0);
-
-        for(unsigned int k=0; k < ciDeviceCount; ++k){
-            ciErrNum |= clEnqueueNDRangeKernel(commandQueue[k], ckKernel[k], 2, NULL,                                           
-                                szGlobalWorkSize, szLocalWorkSize, 0, NULL, NULL);
+    for (int i = -1; i < numIterations; ++i) {
+        if (i == 0) 
+            shrDeltaT(0);
+        for (unsigned int k=0; k < ciDeviceCount; ++k) {
+            ciErrNum |= clEnqueueNDRangeKernel(commandQueue[k], ckKernel[k], 2, NULL, szGlobalWorkSize, szLocalWorkSize, 0, NULL, NULL);
         }
-        //oclCheckError(ciErrNum, CL_SUCCESS);
+        oclCheckError(ciErrNum, CL_SUCCESS);
     }    
 
     // Block CPU till GPU is done
@@ -130,7 +127,7 @@ double transposeGPU(const char* kernelName, bool useLocalMem,  cl_uint ciDeviceC
         ciErrNum |= clFinish(commandQueue[k]);
     }
     double time = shrDeltaT(0)/(double)numIterations;
-    //oclCheckError(ciErrNum, CL_SUCCESS);
+    oclCheckError(ciErrNum, CL_SUCCESS);
 
     // Copy back to host
     for(unsigned int i = 0; i < ciDeviceCount; ++i){
@@ -141,17 +138,18 @@ double transposeGPU(const char* kernelName, bool useLocalMem,  cl_uint ciDeviceC
                                 size * size_y * sizeof(float), &h_odata[offset * size_y], 
                                 0, NULL, NULL);
     }
-    //oclCheckError(ciErrNum, CL_SUCCESS);
+    oclCheckError(ciErrNum, CL_SUCCESS);
 
     for(unsigned int i = 0; i < ciDeviceCount; ++i){
         ciErrNum |= clReleaseMemObject(d_idata[i]);
         ciErrNum |= clReleaseMemObject(d_odata[i]);
         ciErrNum |= clReleaseKernel(ckKernel[i]);
     }
-    //oclCheckError(ciErrNum, CL_SUCCESS);
+    oclCheckError(ciErrNum, CL_SUCCESS);
 
     return time;
 }
+
 uint8_t *kernel_bin = NULL;
 
 static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
@@ -174,14 +172,17 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   
   return 0;
 }
+
 //! Run a simple test for CUDA
 // *********************************************************************
 int runTest( const int argc, const char** argv) 
 {
     cl_int ciErrNum;
     cl_uint ciDeviceCount;
-    unsigned int size_x = 2048;
-    unsigned int size_y = 2048;
+    //unsigned int size_x = 2048;
+    //unsigned int size_y = 2048;
+    unsigned int size_x = 64;
+    unsigned int size_y = 64;
 
     int temp;
     if( shrGetCmdLineArgumenti( argc, argv,"width", &temp) ){
@@ -197,18 +198,18 @@ int runTest( const int argc, const char** argv)
 
     //Get the NVIDIA platform
     ciErrNum = oclGetPlatformID(&cpPlatform);
-    //oclCheckError(ciErrNum, CL_SUCCESS);
+    oclCheckError(ciErrNum, CL_SUCCESS);
 
     //Get the devices
     ciErrNum = clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_DEFAULT, 0, NULL, &uiNumDevices);
-    //oclCheckError(ciErrNum, CL_SUCCESS);
+    oclCheckError(ciErrNum, CL_SUCCESS);
     cdDevices = (cl_device_id *)malloc(uiNumDevices * sizeof(cl_device_id) );
     ciErrNum = clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_DEFAULT, uiNumDevices, cdDevices, NULL);
-    //oclCheckError(ciErrNum, CL_SUCCESS);
+    oclCheckError(ciErrNum, CL_SUCCESS);
 
     //Create the context
     cxGPUContext = clCreateContext(0, uiNumDevices, cdDevices, NULL, NULL, &ciErrNum);
-    //oclCheckError(ciErrNum, CL_SUCCESS);
+    oclCheckError(ciErrNum, CL_SUCCESS);
   
     if(shrCheckCmdLineFlag(argc, (const char**)argv, "device"))
     {
@@ -301,26 +302,27 @@ int runTest( const int argc, const char** argv)
     srand(15235911);
     shrFillArray(h_idata, (size_x * size_y));
 
-    // Program Setup
-    size_t program_length;
-    char* source_path = shrFindFilePath("transpose.cl", argv[0]);
-    //oclCheckError(source_path != NULL, shrTRUE);
-    char *source = oclLoadProgSource(source_path, "", &program_length);
-    //oclCheckError(source != NULL, shrTRUE);
-    size_t kernel_size;
-    cl_int binary_status = 0;
-    cl_device_id device_id;
     // create the program
-    rv_program = clCreateProgramWithBinary(
-        cxGPUContext, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, NULL);
     //rv_program = clCreateProgramWithSource(cxGPUContext, 1,
                      // (const char **)&source, &program_length, &ciErrNum);
-    //oclCheckError(ciErrNum, CL_SUCCESS);
+    uint8_t *kernel_bin = NULL;
+    size_t kernel_size;
+    cl_int binary_status = 0;  
+    ciErrNum = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
+    if (ciErrNum != CL_SUCCESS) {
+        shrLog(" Error %i in read_kernel_file call !!!\n\n", ciErrNum);
+        return ciErrNum;
+    }
+    rv_program = clCreateProgramWithBinary(
+        cxGPUContext, 1, cdDevices, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &ciErrNum);
+    if (ciErrNum != CL_SUCCESS) {
+        shrLog(" Error %i in clCreateProgramWithBinary call !!!\n\n", ciErrNum);
+        return ciErrNum;
+    }
     
     // build the program
     ciErrNum = clBuildProgram(rv_program, 0, NULL, "-cl-fast-relaxed-math", NULL, NULL);
-    if (ciErrNum != CL_SUCCESS)
-    {
+    if (ciErrNum != CL_SUCCESS) {
         // write out standard error, Build Log and PTX, then return error
         shrLogEx(LOGBOTH | ERRORMSG, ciErrNum, STDERROR);
         oclLogBuildInfo(rv_program, oclGetFirstDev(cxGPUContext));
@@ -331,13 +333,13 @@ int runTest( const int argc, const char** argv)
     // Run Naive Kernel
 #ifdef GPU_PROFILING
     // Matrix Copy kernel runs to measure reference performance.
-    double uncoalescedCopyTime = transposeGPU("uncoalesced_copy", false, ciDeviceCount, h_idata, h_odata, size_x, size_y);
-    double simpleCopyTime = transposeGPU("simple_copy", false, ciDeviceCount, h_idata, h_odata, size_x, size_y);
-    double sharedCopyTime = transposeGPU("shared_copy", true, ciDeviceCount, h_idata, h_odata, size_x, size_y);
+    //double uncoalescedCopyTime = transposeGPU("uncoalesced_copy", false, ciDeviceCount, h_idata, h_odata, size_x, size_y);
+    //double simpleCopyTime = transposeGPU("simple_copy", false, ciDeviceCount, h_idata, h_odata, size_x, size_y);
+    //double sharedCopyTime = transposeGPU("shared_copy", true, ciDeviceCount, h_idata, h_odata, size_x, size_y);
 #endif
 
     double naiveTime = transposeGPU("transpose_naive", false, ciDeviceCount, h_idata, h_odata, size_x, size_y);
-    double optimizedTime = transposeGPU("transpose", true, ciDeviceCount, h_idata, h_odata, size_x, size_y);
+    //double optimizedTime = transposeGPU("transpose", true, ciDeviceCount, h_idata, h_odata, size_x, size_y);
 
 #ifdef GPU_PROFILING
     // log times
@@ -369,8 +371,8 @@ int runTest( const int argc, const char** argv)
     free(h_idata);
     free(h_odata);
     free(reference);
-    free(source);
-    free(source_path);
+    //free(source);
+    //free(source_path);
 
     // cleanup OpenCL
     ciErrNum = clReleaseProgram(rv_program);    
@@ -379,7 +381,7 @@ int runTest( const int argc, const char** argv)
         ciErrNum |= clReleaseCommandQueue(commandQueue[i]);
     }    
     ciErrNum |= clReleaseContext(cxGPUContext);
-    //oclCheckError(ciErrNum, CL_SUCCESS);
+    oclCheckError(ciErrNum, CL_SUCCESS);
 
     // pass or fail (cumulative... all tests in the loop)
     shrQAFinishExit(argc, (const char **)argv, (1 == res) ? QA_PASSED : QA_FAILED);

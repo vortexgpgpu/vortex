@@ -1,6 +1,10 @@
 #ifndef __COMPUTEQ__
 #define __COMPUTEQ__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void computePhiMag_GPU(int numK,cl_mem phiR_d,cl_mem phiI_d,cl_mem phiMag_d,clPrmtr* clPrm);
 void computeQ_GPU (int numK,int numX,
 		   cl_mem x_d, cl_mem y_d, cl_mem z_d,
@@ -10,5 +14,9 @@ void computeQ_GPU (int numK,int numX,
 
 void createDataStructsCPU(int numK, int numX, float** phiMag,
 	 		  float** Qr, float** Qi);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

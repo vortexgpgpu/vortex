@@ -1,80 +1,17 @@
-XLEN ?= 32
-
-RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
-VORTEX_DRV_PATH ?= $(realpath ../../../driver)
-VORTEX_RT_PATH ?= $(realpath ../../../runtime)
+PROJECT = no_smem
 
 OPTS ?= -n8
 
-VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
-VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
-VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
-VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
-
-VX_CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
-VX_CFLAGS += -DSM_ENABLE=0 -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
-
-VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections,--defsym=__stack_top=0xfefff000
-
-VX_RUNTIME = $(VORTEX_RT_PATH)/src/vx_start.S $(VORTEX_RT_PATH)/src/vx_perf.c $(VORTEX_RT_PATH)/src/vx_syscalls.c
-
-VX_SRCS = kernel.c $(VX_RUNTIME)
-
-CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
-
-CXXFLAGS += -I$(VORTEX_DRV_PATH)/include
-
-LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex
-
-# Debugigng
-ifdef DEBUG
-	CXXFLAGS += -g -O0
-else    
-	CXXFLAGS += -O2 -DNDEBUG
-endif
-
-PROJECT = no_smem
+VX_SRCS = kernel.cpp $(VORTEX_KN_PATH)/src/vx_perf.c $(VORTEX_KN_PATH)/src/vx_syscalls.c $(VORTEX_KN_PATH)/src/vx_print.S $(VORTEX_KN_PATH)/src/vx_start.S
 
 SRCS = main.cpp
 
-all: $(PROJECT) kernel.bin kernel.dump
- 
-kernel.dump: kernel.elf
-	$(VX_DP) -D kernel.elf > kernel.dump
+include ../common.mk
 
-kernel.bin: kernel.elf
-	$(VX_CP) -O binary kernel.elf kernel.bin
+VX_CFLAGS += -DSM_DISABLE
+VX_LDFLAGS = -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR)
 
-kernel.elf: $(VX_SRCS)
-	$(VX_CC) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o kernel.elf
-
-$(PROJECT): $(SRCS)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
-
-run-simx: $(PROJECT) kernel.bin   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
-	
-run-fpga: $(PROJECT) kernel.bin   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/fpga:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
-
-run-asesim: $(PROJECT) kernel.bin   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/asesim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
-	
-run-vlsim: $(PROJECT) kernel.bin   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/vlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
-
-run-rtlsim: $(PROJECT) kernel.bin   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
-
-.depend: $(SRCS)
-	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
-
-clean:
-	rm -rf $(PROJECT) *.o .depend
-
-clean-all: clean
-	rm -rf *.elf *.bin *.dump
-
-ifneq ($(MAKECMDGOALS),clean)
-    -include .depend
-endif
+VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
+VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-g++
+VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
+VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy

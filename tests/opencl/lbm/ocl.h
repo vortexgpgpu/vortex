@@ -1,6 +1,10 @@
 #ifndef __OCLH__
 #define __OCLH__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
 	cl_platform_id clPlatform;
 	cl_context_properties clCps[3];
@@ -21,5 +25,9 @@ typedef struct {
   }
 
 char* readFile(char*);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

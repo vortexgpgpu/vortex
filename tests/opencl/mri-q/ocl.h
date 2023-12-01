@@ -3,6 +3,10 @@
 
 #include <stdlib.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
 	cl_context clContext;
 	cl_command_queue clCommandQueue;
@@ -19,5 +23,9 @@ char* readFile(const char*);
      printf("Line: %d\n",__LINE__);         \
      exit(1);                               \
   }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -1,9 +1,22 @@
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 `include "VX_platform.vh"
 
 `TRACING_OFF
 module VX_elastic_buffer #(
     parameter DATAW   = 1,
-    parameter SIZE    = 2,
+    parameter SIZE    = 1,
     parameter OUT_REG = 0,
     parameter LUTRAM  = 0
 ) ( 
@@ -18,8 +31,6 @@ module VX_elastic_buffer #(
     input  wire             ready_out,
     output wire             valid_out
 );
-    `STATIC_ASSERT (SIZE != 1, ("invalid value"))
-
     if (SIZE == 0) begin
 
         `UNUSED_VAR (clk)
@@ -29,19 +40,36 @@ module VX_elastic_buffer #(
         assign data_out  = data_in;
         assign ready_in  = ready_out;
 
+    end else if (SIZE == 1) begin
+
+        wire stall = valid_out && ~ready_out;
+
+        VX_pipe_register #(
+            .DATAW	(1 + DATAW),
+            .RESETW (1)
+        ) pipe_register (
+            .clk      (clk),
+            .reset    (reset),
+            .enable	  (~stall),
+            .data_in  ({valid_in,  data_in}),
+            .data_out ({valid_out, data_out})
+        );
+
+        assign ready_in = ~stall;
+
     end else if (SIZE == 2) begin
 
         VX_skid_buffer #(
             .DATAW   (DATAW),
             .OUT_REG (OUT_REG)
-        ) queue (
+        ) skid_buffer (
             .clk       (clk),
             .reset     (reset),
-            .valid_in  (valid_in),        
-            .data_in   (data_in),
-            .ready_in  (ready_in),      
-            .valid_out (valid_out),
+            .valid_in  (valid_in),                    
+            .ready_in  (ready_in),
+            .data_in   (data_in),          
             .data_out  (data_out),
+            .valid_out (valid_out),
             .ready_out (ready_out)
         );
     
@@ -49,21 +77,24 @@ module VX_elastic_buffer #(
         
         wire empty, full;
 
+        wire [DATAW-1:0] data_out_t;
+        wire ready_out_t;
+
         wire push = valid_in && ready_in;
-        wire pop  = valid_out && ready_out;
+        wire pop = ~empty && ready_out_t;
 
         VX_fifo_queue #(
             .DATAW   (DATAW),
-            .SIZE    (SIZE),
-            .OUT_REG (OUT_REG),
+            .DEPTH   (SIZE),
+            .OUT_REG (OUT_REG == 1),
             .LUTRAM  (LUTRAM)
-        ) queue (
+        ) fifo_queue (
             .clk    (clk),
             .reset  (reset),
             .push   (push),
             .pop    (pop),
             .data_in(data_in),
-            .data_out(data_out),    
+            .data_out(data_out_t),    
             .empty  (empty),
             .full   (full),
             `UNUSED_PIN (alm_empty),
@@ -71,8 +102,21 @@ module VX_elastic_buffer #(
             `UNUSED_PIN (size)
         );
 
-        assign ready_in  = ~full;
-        assign valid_out = ~empty;
+        assign ready_in = ~full;
+
+        VX_elastic_buffer #(
+            .DATAW (DATAW),
+            .SIZE  (OUT_REG == 2)
+        ) out_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (~empty),
+            .ready_in  (ready_out_t),
+            .data_in   (data_out_t),
+            .data_out  (data_out),
+            .valid_out (valid_out),
+            .ready_out (ready_out)
+        );
 
     end
 

@@ -1,3 +1,16 @@
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 `include "VX_platform.vh"
 
 // Fast encoder using parallel prefix computation
@@ -5,7 +18,7 @@
 
 `TRACING_OFF
 module VX_onehot_encoder #(
-    parameter N       = 1,    
+    parameter N       = 1,
     parameter REVERSE = 0,
     parameter MODEL   = 1,
     parameter LN      = `LOG2UP(N)
@@ -24,53 +37,50 @@ module VX_onehot_encoder #(
         assign data_out  = data_in[!REVERSE];
         assign valid_out = (| data_in);
 
-    end else if (MODEL == 1) begin
-    `IGNORE_WARNINGS_BEGIN
-        localparam levels_lp = $clog2(N);
-        localparam aligned_width_lp = 1 << $clog2(N);
-    
-        wire [levels_lp:0][aligned_width_lp-1:0] addr;
-        wire [levels_lp:0][aligned_width_lp-1:0] v; 
+    end else if (MODEL == 1) begin    
+        localparam M = 1 << LN;   
+    `IGNORE_UNOPTFLAT_BEGIN 
+        wire [LN-1:0][M-1:0] addr;
+        wire [LN:0][M-1:0] v;
+    `IGNORE_UNOPTFLAT_END
     
         // base case, also handle padding for non-power of two inputs
-        assign v[0] = REVERSE ? (data_in << (aligned_width_lp - N)) : ((aligned_width_lp)'(data_in));
-        assign addr[0] = 'x;
+        assign v[0] = REVERSE ? (M'(data_in) << (M - N)) : M'(data_in);
     
-        for (genvar level = 1; level < levels_lp+1; level=level+1) begin
-            localparam segments_lp      = 2**(levels_lp-level);
-            localparam segment_slot_lp  = aligned_width_lp/segments_lp;
-            localparam segment_width_lp = level; // how many bits are needed at each level
+        for (genvar lvl = 1; lvl < (LN+1); ++lvl) begin
+            localparam SN = 1 << (LN - lvl);
+            localparam SI = M / SN;
+            localparam SW = lvl;
         
-            for (genvar segment = 0; segment < segments_lp; segment=segment+1) begin
-                wire [1:0] vs = {
-                    v[level-1][segment*segment_slot_lp+(segment_slot_lp >> 1)],
-                    v[level-1][segment*segment_slot_lp]
-                };
-            
-                assign v[level][segment*segment_slot_lp] = (| vs);
+            for (genvar s = 0; s < SN; ++s) begin
+            `IGNORE_UNOPTFLAT_BEGIN
+                wire [1:0] vs = {v[lvl-1][s*SI+(SI>>1)], v[lvl-1][s*SI]};
+            `IGNORE_UNOPTFLAT_END
+                        
+                assign v[lvl][s*SI] = (| vs);
 
-                if (level == 1) begin
-                    assign addr[level][(segment*segment_slot_lp)+:segment_width_lp] = vs[!REVERSE]; 
+                if (lvl == 1) begin
+                    assign addr[lvl-1][s*SI +: SW] = vs[!REVERSE]; 
                 end else begin
-                    assign addr[level][(segment*segment_slot_lp)+:segment_width_lp] = { 
+                    assign addr[lvl-1][s*SI +: SW] = { 
                         vs[!REVERSE],
-                        addr[level-1][segment*segment_slot_lp+:segment_width_lp-1] | addr[level-1][segment*segment_slot_lp+(segment_slot_lp >> 1)+:segment_width_lp-1]
+                        addr[lvl-2][s*SI +: SW-1] | addr[lvl-2][s*SI+(SI>>1) +: SW-1]
                     };
                 end        
             end  
         end	
     
-        assign data_out = addr[levels_lp][`LOG2UP(N)-1:0];
-        assign valid_out = v[levels_lp][0];
-    `IGNORE_WARNINGS_END
-    end else if (MODEL == 2) begin 
+        assign data_out = addr[LN-1][LN-1:0];
+        assign valid_out = v[LN][0];
+
+    end else if (MODEL == 2 && REVERSE == 0) begin 
 
         for (genvar j = 0; j < LN; ++j) begin
             wire [N-1:0] mask;
             for (genvar i = 0; i < N; ++i) begin
                 assign mask[i] = i[j];
             end
-            assign data_out[j] = |(mask & data_in);
+            assign data_out[j] = | (mask & data_in);
         end
 
         assign valid_out = (| data_in);
@@ -79,21 +89,21 @@ module VX_onehot_encoder #(
 
         reg [LN-1:0] index_r;
 
-        if (REVERSE) begin
+        if (REVERSE != 0) begin
             always @(*) begin        
                 index_r = 'x; 
                 for (integer i = N-1; i >= 0; --i) begin
                     if (data_in[i]) begin                
-                        index_r = `LOG2UP(N)'(i);
+                        index_r = LN'(N-1-i);
                     end
                 end
             end
         end else begin
             always @(*) begin        
                 index_r = 'x; 
-                for (integer i = 0; i < N; i++) begin
+                for (integer i = 0; i < N; ++i) begin
                     if (data_in[i]) begin                
-                        index_r = `LOG2UP(N)'(i);
+                        index_r = LN'(i);
                     end
                 end
             end

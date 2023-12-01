@@ -19,6 +19,27 @@
 #include "macros.h"
 #include "ocl.h"
 
+static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
+  if (NULL == filename || NULL == data || 0 == size)
+    return CL_INVALID_VALUE;
+
+  FILE* fp = fopen(filename, "r");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to load kernel.");
+    return CL_INVALID_VALUE;
+  }
+  fseek(fp , 0 , SEEK_END);
+  long fsize = ftell(fp);
+  rewind(fp);
+
+  *data = (uint8_t*)malloc(fsize);
+  *size = fread(*data, 1, fsize, fp);
+  
+  fclose(fp);
+  
+  return CL_SUCCESS;
+}
+
 // OpenCL 1.1 support for int3 is not uniform on all implementations, so
 // we use int4 instead.  Only the 'x', 'y', and 'z' fields of xyz are used.
 typedef cl_int4 xyz;
@@ -294,16 +315,12 @@ int gpu_compute_cutoff_potential_lattice(
     printf("\n");
   }
 
-  printf("Ok!\n");
-
   pb_Context* pb_context;
   pb_context = pb_InitOpenCLContext(parameters);
   if (pb_context == NULL) {
     fprintf (stderr, "Error: No OpenCL platform/device can be found."); 
     return -1;
   }
-
-  printf("Ok!\n");
 
   cl_int clStatus;
   cl_device_id clDevice = (cl_device_id) pb_context->clDeviceId;
@@ -317,8 +334,13 @@ int gpu_compute_cutoff_potential_lattice(
   
   //const char* clSource[] = {readFile("src/opencl_base/kernel.cl")};
   //cl_program clProgram = clCreateProgramWithSource(clContext,1,clSource,NULL,&clStatus);
-  cl_program clProgram = clCreateProgramWithBuiltInKernels(
-      clContext, 1, &clDevice, "opencl_cutoff_potential_lattice", &clStatus);
+  uint8_t *kernel_bin = NULL;
+  size_t kernel_size;
+  cl_int binary_status = 0;  
+  clStatus = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
+  CHECK_ERROR("read_kernel_file")  
+	cl_program clProgram = clCreateProgramWithBinary(
+      clContext, 1, &clDevice, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &clStatus);
   CHECK_ERROR("clCreateProgramWithSource")
 
   char clOptions[50];
@@ -399,9 +421,6 @@ int gpu_compute_cutoff_potential_lattice(
   clStatus = clSetKernelArg(clKernel,10,sizeof(cl_mem),&NbrList);
   CHECK_ERROR("clSetKernelArg")
 
-  printf("Ok!!\n");
-
-
   /* loop over z-dimension, invoke OpenCL kernel for each x-y plane */
   pb_SwitchToTimer(timers, pb_TimerID_KERNEL);
   printf("Invoking OpenCL kernel on %d region planes...\n", zRegionDim);
@@ -412,26 +431,16 @@ int gpu_compute_cutoff_potential_lattice(
     clStatus = clSetKernelArg(clKernel,8,sizeof(int),&zRegionIndex);
     CHECK_ERROR("clSetKernelArg")
 
-    printf("Ok**!2\n");
-
     clStatus = clEnqueueNDRangeKernel(clCommandQueue,clKernel,3,NULL,gridDim,blockDim,0,NULL,NULL);
-
-    printf("Ok**!2\n");
 
     CHECK_ERROR("clEnqueueNDRangeKernel")
 
-    printf("Ok**!2\n");
-
     clStatus = clFinish(clCommandQueue);
-
-    printf("Ok**!2\n");
 
     CHECK_ERROR("clFinish")
   }
 
-  printf("Ok++!\n");
-
-  printf("Finished OpenCL kernel calls                        \n");
+  printf("Finished OpenCL kernel calls\n");
 
   /* copy result regions from OpenCL device */
   pb_SwitchToTimer(timers, pb_TimerID_COPY);

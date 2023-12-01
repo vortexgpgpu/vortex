@@ -124,8 +124,6 @@ int main(int argc, char *argv[]) {
   pb_InitializeTimerSet(&timers);
   pb_SwitchToTimer(&timers, pb_TimerID_IO);
 
-  printf("OK\n");
-
   {
     const char *pqrfilename = parameters->inpFiles[0];
 
@@ -135,8 +133,6 @@ int main(int argc, char *argv[]) {
     }
     printf("read %d atoms from file '%s'\n", atom->size, pqrfilename);
   }
-
-  printf("OK\n");
 
   /* find extent of domain */
   pb_SwitchToTimer(&timers, pb_TimerID_COMPUTE);

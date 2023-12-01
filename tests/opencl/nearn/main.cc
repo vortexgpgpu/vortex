@@ -172,6 +172,7 @@ float *OpenClFindNearestNeighbors(cl_context context, int numRecords,
 
     printf("%f\n\n", (float)(totalTime / 1e9));
   }
+
   // 6. return finalized data and release buffers
   clReleaseEvent(writeEvent);  
   clReleaseEvent(kernelEvent);

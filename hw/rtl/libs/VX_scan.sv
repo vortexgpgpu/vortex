@@ -1,3 +1,16 @@
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 `include "VX_platform.vh"
 
 // Fast Paralllel scan using Kogge-Stone style prefix tree with configurable operator
@@ -12,14 +25,14 @@ module VX_scan #(
     input  wire [N-1:0] data_in,
     output wire [N-1:0] data_out
 );
-`IGNORE_WARNINGS_BEGIN
+    localparam LOGN = `CLOG2(N);
 
-    localparam LOGN = $clog2(N);
-
+`IGNORE_UNOPTFLAT_BEGIN
     wire [LOGN:0][N-1:0] t;   
+`IGNORE_UNOPTFLAT_END
 
     // reverses bits
-    if (REVERSE) begin
+    if (REVERSE != 0) begin
         assign t[0] = data_in;
     end else begin
         assign t[0] = {<<{data_in}};
@@ -35,7 +48,7 @@ module VX_scan #(
     end else begin
         // general case
         wire [N-1:0] fill;
-	    for (genvar i = 0; i < LOGN; i++) begin
+	    for (genvar i = 0; i < LOGN; ++i) begin
             wire [N-1:0] shifted = N'({fill, t[i]} >> (1<<i));
             if (OP == 0) begin
 		        assign fill = {N{1'b0}};
@@ -51,14 +64,13 @@ module VX_scan #(
     end   
 
     // reverse bits
-    if (REVERSE) begin
+    if (REVERSE != 0) begin
         assign data_out = t[LOGN];
     end else begin
-        for (genvar i = 0; i < N; i++) begin
+        for (genvar i = 0; i < N; ++i) begin
             assign data_out[i] = t[LOGN][N-1-i];
         end        
     end
 
-`IGNORE_WARNINGS_END
 endmodule
 `TRACING_ON
