@@ -191,14 +191,15 @@ module VX_stream_xbar #(
         end
     end
 
-    wire [`CLOG2(NUM_INPUTS+1)-1:0] collision_count;
+    wire [`CLOG2(NUM_INPUTS+1)-1:0] collision_count, collision_count_r;
     `POP_COUNT(collision_count, per_cycle_collision);
+    `BUFFER(collision_count_r, collision_count);
 
     always @(posedge clk) begin
         if (reset) begin
             collisions_r <= '0;
         end else begin
-            collisions_r <= collisions_r + PERF_CTR_BITS'(collision_count);
+            collisions_r <= collisions_r + PERF_CTR_BITS'(collision_count_r);
         end
     end
 
