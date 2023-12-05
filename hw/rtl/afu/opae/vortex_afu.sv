@@ -692,9 +692,11 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .reset (reset),
         .incr  (cci_rd_req_fire),
         .decr  (cci_rdq_pop),
+        `UNUSED_PIN (empty),
+        `UNUSED_PIN (alm_empty),
         .full  (cci_pending_reads_full),
-        .size  (cci_pending_reads),
-        `UNUSED_PIN (empty)
+        `UNUSED_PIN (alm_full),
+        .size  (cci_pending_reads)
     );
 
     `UNUSED_VAR (cci_pending_reads)
@@ -852,7 +854,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .incr  (cci_mem_rd_rsp_fire),
         .decr  (cci_wr_rsp_fire),
         .empty (cci_pending_writes_empty),
+        `UNUSED_PIN (alm_empty),
         .full  (cci_pending_writes_full),
+        `UNUSED_PIN (alm_full),
         .size  (cci_pending_writes)
     );
 

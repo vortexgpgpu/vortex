@@ -36,10 +36,10 @@ module VX_commit import VX_gpu_pkg::*, VX_trace_pkg::*; #(
 
     VX_commit_if commit_arb_if[`ISSUE_WIDTH]();
 
-    wire [`ISSUE_WIDTH-1:0] commit_fire;
-    wire [`ISSUE_WIDTH-1:0][`NW_WIDTH-1:0] commit_wid;
-    wire [`ISSUE_WIDTH-1:0][`NUM_THREADS-1:0] commit_tmask;
-    wire [`ISSUE_WIDTH-1:0] commit_eop;
+    wire [`ISSUE_WIDTH-1:0] per_issue_commit_fire;
+    wire [`ISSUE_WIDTH-1:0][`NW_WIDTH-1:0] per_issue_commit_wid;
+    wire [`ISSUE_WIDTH-1:0][`NUM_THREADS-1:0] per_issue_commit_tmask;
+    wire [`ISSUE_WIDTH-1:0] per_issue_commit_eop;
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
 
@@ -72,10 +72,10 @@ module VX_commit import VX_gpu_pkg::*, VX_trace_pkg::*; #(
             `UNUSED_PIN (sel_out)
         );
 
-        assign commit_fire[i] = commit_arb_if[i].valid && commit_arb_if[i].ready;
-        assign commit_tmask[i]= {`NUM_THREADS{commit_fire[i]}} & commit_arb_if[i].data.tmask;
-        assign commit_wid[i]  = commit_arb_if[i].data.wid;
-        assign commit_eop[i]  = commit_arb_if[i].data.eop;
+        assign per_issue_commit_fire[i] = commit_arb_if[i].valid && commit_arb_if[i].ready;
+        assign per_issue_commit_tmask[i]= {`NUM_THREADS{per_issue_commit_fire[i]}} & commit_arb_if[i].data.tmask;
+        assign per_issue_commit_wid[i]  = commit_arb_if[i].data.wid;
+        assign per_issue_commit_eop[i]  = commit_arb_if[i].data.eop;
     end
 
     // CSRs update
@@ -84,11 +84,11 @@ module VX_commit import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     wire [COMMIT_ALL_SIZEW-1:0] commit_size_all_r, commit_size_all_rr;
     wire commit_fire_any, commit_fire_any_r, commit_fire_any_rr;
 
-    assign commit_fire_any = (| commit_fire);
+    assign commit_fire_any = (| per_issue_commit_fire);
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         wire [COMMIT_SIZEW-1:0] count;
-        `POP_COUNT(count, commit_tmask[i]);
+        `POP_COUNT(count, per_issue_commit_tmask[i]);
         assign commit_size[i] = count;
     end
 
@@ -136,19 +136,28 @@ module VX_commit import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     end
     assign commit_csr_if.instret = instret;
 
-    // Committed instructions
+    // Track committed instructions
 
-    wire [`ISSUE_WIDTH-1:0] committed = commit_fire & commit_eop;
+    reg [`NUM_WARPS-1:0] committed_warps;
+
+    always @(*) begin
+        committed_warps = 0;
+        for (integer i = 0; i < `ISSUE_WIDTH; ++i) begin
+            if (per_issue_commit_fire[i] && per_issue_commit_eop[i]) begin
+                committed_warps[per_issue_commit_wid[i]] = 1;
+            end
+        end
+    end
 
     VX_pipe_register #(
-        .DATAW  (`ISSUE_WIDTH * (1 + `NW_WIDTH)),
-        .RESETW (`ISSUE_WIDTH)
+        .DATAW  (`NUM_WARPS),
+        .RESETW (`NUM_WARPS)
     ) committed_pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({committed, commit_wid}),
-        .data_out ({commit_sched_if.committed, commit_sched_if.committed_wid})
+        .data_in  (committed_warps),
+        .data_out ({commit_sched_if.committed_warps})
     );
 
     // Writeback
