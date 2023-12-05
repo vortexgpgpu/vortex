@@ -364,9 +364,11 @@ module VX_cache_bank #(
         .reset (reset),
         .incr  (core_req_fire),
         .decr  (replay_fire || (mshr_finalize_st1 && mshr_release_st1)),
+        `UNUSED_PIN (empty),
+        `UNUSED_PIN (alm_empty),
         .full  (mshr_alm_full),
-        `UNUSED_PIN (size),
-        `UNUSED_PIN (empty)
+        `UNUSED_PIN (alm_full),
+        `UNUSED_PIN (size)
     );
 
     `RESET_RELAY (mshr_reset, reset);
