@@ -307,20 +307,20 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define BUFFER_BUSY(dst, src, enable) \
-    logic __busy; \
-    if (enable) begin \
-        always @(posedge clk) begin \
-            if (reset) begin \
-                __busy <= 1'b0; \
-            end else begin \
-                __busy <= src; \
-            end \
-        end \
-    end else begin \
-        assign __busy = src; \
-    end \
-    assign dst = __busy
+`define BUFFER_EX(dst, src, ena, latency) \
+    VX_pipe_register #( \
+        .DATAW  ($bits(dst)), \
+        .RESETW ($bits(dst)), \
+        .DEPTH  (latency) \
+    ) __``dst ( \
+        .clk      (clk), \
+        .reset    (reset), \
+        .enable   (ena), \
+        .data_in  (src), \
+        .data_out (dst) \
+    )
+
+`define BUFFER(dst, src) `BUFFER_EX(dst, src, 1'b1, 1)
 
 `define POP_COUNT_EX(out, in, model) \
     VX_popcount #( \

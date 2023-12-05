@@ -353,7 +353,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
         .empty     (no_pending_instr)
     );
 
-    `BUFFER_BUSY (busy, (active_warps != 0 || ~no_pending_instr), 1);
+    `BUFFER_EX(busy, (active_warps != 0 || ~no_pending_instr), 1'b1, 1);
 
     // export CSRs
     assign sched_csr_if.cycles = cycles;
