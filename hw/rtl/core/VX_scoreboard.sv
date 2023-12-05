@@ -32,19 +32,20 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + (`NR_BITS * 4) + 1;
 
 `ifdef PERF_ENABLE
-    wire [`NUM_EX_UNITS-1:0] scoreboard_uses_per_cycle;
-    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] scoreboard_stalls_per_cycle;
-    reg [`ISSUE_WIDTH-1:0][`NUM_EX_UNITS-1:0] scoreboard_uses;
-    wire [`ISSUE_WIDTH-1:0] scoreboard_stalls;
+    wire [`NUM_EX_UNITS-1:0] perf_uses_per_cycle;
+    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] perf_stalls_per_cycle;
+    reg [`ISSUE_WIDTH-1:0][`NUM_EX_UNITS-1:0] perf_issue_uses_per_cycle;
+    wire [`ISSUE_WIDTH-1:0] perf_issue_stalls_per_cycle;
 
-    `POP_COUNT(scoreboard_stalls_per_cycle, scoreboard_stalls);
+    `POP_COUNT(perf_stalls_per_cycle, perf_issue_stalls_per_cycle);
+
     VX_reduce #(
         .DATAW_IN (`NUM_EX_UNITS),
         .N  (`ISSUE_WIDTH),
         .OP ("|")
     ) reduce (
-        .data_in  (scoreboard_uses),
-        .data_out (scoreboard_uses_per_cycle)
+        .data_in  (perf_issue_uses_per_cycle),
+        .data_out (perf_uses_per_cycle)
     );
 `endif
 
@@ -62,23 +63,23 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         reg [`UP(ISSUE_RATIO)-1:0][`NUM_REGS-1:0][`EX_BITS-1:0] inuse_units;        
         always @(*) begin
-            scoreboard_uses[i] = '0;
+            perf_issue_uses_per_cycle[i] = '0;
             if (ibuffer_if[i].valid) begin
                 if (inuse_rd) begin
-                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd]] = 1;
+                    perf_issue_uses_per_cycle[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd]] = 1;
                 end
                 if (inuse_rs1) begin
-                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs1]] = 1;
+                    perf_issue_uses_per_cycle[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs1]] = 1;
                 end
                 if (inuse_rs2) begin
-                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs2]] = 1;
+                    perf_issue_uses_per_cycle[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs2]] = 1;
                 end
                 if (inuse_rs3) begin
-                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3]] = 1;
+                    perf_issue_uses_per_cycle[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3]] = 1;
                 end
             end
         end
-        assign scoreboard_stalls[i] = ibuffer_if[i].valid && ~ibuffer_if[i].ready;
+        assign perf_issue_stalls_per_cycle[i] = ibuffer_if[i].valid && ~ibuffer_if[i].ready;
     `endif
 
         reg [DATAW-1:0] data_out_r;
@@ -164,19 +165,26 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     end    
 
 `ifdef PERF_ENABLE
+    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] perf_stalls_per_cycle_r;
+    wire [`NUM_EX_UNITS-1:0] perf_uses_per_cycle_r;
+    
+    `BUFFER(perf_stalls_per_cycle_r, perf_stalls_per_cycle);
+    `BUFFER(perf_uses_per_cycle_r, perf_uses_per_cycle);
+
     always @(posedge clk) begin
         if (reset) begin
-            perf_scb_stalls <= '0;
+            perf_scb_stalls <= '0;            
         end else begin
-            perf_scb_stalls <= perf_scb_stalls + `PERF_CTR_BITS'(scoreboard_stalls_per_cycle);
+            perf_scb_stalls <= perf_scb_stalls + `PERF_CTR_BITS'(perf_stalls_per_cycle_r);
         end
     end
+
     for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin
         always @(posedge clk) begin
             if (reset) begin
                 perf_scb_uses[i] <= '0;
             end else begin
-                perf_scb_uses[i] <= perf_scb_uses[i] + `PERF_CTR_BITS'(scoreboard_uses_per_cycle[i]);
+                perf_scb_uses[i] <= perf_scb_uses[i] + `PERF_CTR_BITS'(perf_uses_per_cycle_r[i]);
             end
         end
     end
