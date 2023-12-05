@@ -370,24 +370,42 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     assign schedule_if.data.uuid = instr_uuid;
 
-    `RESET_RELAY (pending_instr_reset, reset);
+    // Track pending instructions per warp
 
-    wire no_pending_instr;
-    VX_pending_instr #(
-        .CTR_WIDTH  (12),
-        .DECR_COUNT (`ISSUE_WIDTH),
-        .ALM_EMPTY  (1)
-    ) pending_instr(
-        .clk       (clk),
-        .reset     (pending_instr_reset),
-        .incr      (schedule_if_fire),
-        .incr_wid  (schedule_if.data.wid),
-        .decr      (commit_sched_if.committed),
-        .decr_wid  (commit_sched_if.committed_wid),
-        .alm_empty_wid (sched_csr_if.alm_empty_wid),
-        .alm_empty (sched_csr_if.alm_empty),
-        .empty     (no_pending_instr)
-    );
+    reg [`NUM_WARPS-1:0] per_warp_incr;
+    always @(*) begin
+        per_warp_incr = 0;
+        if (schedule_if_fire) begin
+            per_warp_incr[schedule_if.data.wid] = 1;
+        end
+    end
+
+    wire [`NUM_WARPS-1:0] pending_warp_empty;
+    wire [`NUM_WARPS-1:0] pending_warp_alm_empty;
+
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
+
+        `RESET_RELAY (pending_instr_reset, reset);
+
+        VX_pending_size #(
+            .SIZE      (4096),
+            .ALM_EMPTY (1)
+        ) counter (
+            .clk       (clk),
+            .reset     (pending_instr_reset),
+            .incr      (per_warp_incr[i]),
+            .decr      (commit_sched_if.committed_warps[i]),
+            .empty     (pending_warp_empty[i]),
+            .alm_empty (pending_warp_alm_empty[i]),
+            `UNUSED_PIN (full),
+            `UNUSED_PIN (alm_full),
+            `UNUSED_PIN (size)
+        );
+	end
+
+    assign sched_csr_if.alm_empty = pending_warp_alm_empty[sched_csr_if.alm_empty_wid];
+
+    wire no_pending_instr = (& pending_warp_empty);
 
     `BUFFER_EX(busy, (active_warps != 0 || ~no_pending_instr), 1'b1, 1);
 

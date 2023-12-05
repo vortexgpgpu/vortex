@@ -186,7 +186,7 @@ module VX_stream_arb #(
             );
 
             for (genvar i = 0; i < NUM_REQS; ++i) begin
-                assign ready_in[i] = ready_in_r & arb_onehot[i];
+                assign ready_in[i] = ready_in_r && arb_onehot[i];
             end
 
             VX_elastic_buffer #(

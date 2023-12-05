@@ -78,9 +78,11 @@ module VX_fetch import VX_gpu_pkg::*; #(
             .reset (reset),
             .incr  (icache_req_fire && schedule_if.data.wid == i),
             .decr  (fetch_if.ibuf_pop[i]),
+            `UNUSED_PIN (empty),
+            `UNUSED_PIN (alm_empty),
             .full  (pending_ibuf_full[i]),
-            `UNUSED_PIN (size),
-            `UNUSED_PIN (empty)
+            `UNUSED_PIN (alm_full),
+            `UNUSED_PIN (size)
         );
     end
     wire ibuf_ready = ~pending_ibuf_full[schedule_if.data.wid];
