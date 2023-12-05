@@ -32,22 +32,20 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + (`NR_BITS * 4) + 1;
 
 `ifdef PERF_ENABLE
-    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] scoreboard_alu_per_cycle;
-`ifdef EXT_F_ENABLE
-    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] scoreboard_fpu_per_cycle;
-`endif
-    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] scoreboard_lsu_per_cycle;
-    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] scoreboard_sfu_per_cycle;
-    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] scoreboard_stalls_per_cycle;        
-    reg [`EX_BITS-1:0][`ISSUE_WIDTH-1:0] scoreboard_uses;
+    wire [`NUM_EX_UNITS-1:0] scoreboard_uses_per_cycle;
+    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] scoreboard_stalls_per_cycle;
+    reg [`ISSUE_WIDTH-1:0][`NUM_EX_UNITS-1:0] scoreboard_uses;
     wire [`ISSUE_WIDTH-1:0] scoreboard_stalls;
+
     `POP_COUNT(scoreboard_stalls_per_cycle, scoreboard_stalls);
-    `POP_COUNT(scoreboard_alu_per_cycle, scoreboard_uses[`EX_ALU]);
-`ifdef EXT_F_ENABLE
-    `POP_COUNT(scoreboard_fpu_per_cycle, scoreboard_uses[`EX_FPU]);
-`endif
-    `POP_COUNT(scoreboard_lsu_per_cycle, scoreboard_uses[`EX_LSU]);
-    `POP_COUNT(scoreboard_sfu_per_cycle, scoreboard_uses[`EX_SFU]);
+    VX_reduce #(
+        .DATAW_IN (`NUM_EX_UNITS),
+        .N  (`ISSUE_WIDTH),
+        .OP ("|")
+    ) reduce (
+        .data_in  (scoreboard_uses),
+        .data_out (scoreboard_uses_per_cycle)
+    );
 `endif
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
@@ -64,19 +62,19 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         reg [`UP(ISSUE_RATIO)-1:0][`NUM_REGS-1:0][`EX_BITS-1:0] inuse_units;        
         always @(*) begin
-            scoreboard_uses = '0;
+            scoreboard_uses[i] = '0;
             if (ibuffer_if[i].valid) begin
                 if (inuse_rd) begin
-                    scoreboard_uses[inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd]][i] = 1;
+                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd]] = 1;
                 end
                 if (inuse_rs1) begin
-                    scoreboard_uses[inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs1]][i] = 1;
+                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs1]] = 1;
                 end
                 if (inuse_rs2) begin
-                    scoreboard_uses[inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs2]][i] = 1;
+                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs2]] = 1;
                 end
                 if (inuse_rs3) begin
-                    scoreboard_uses[inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3]][i] = 1;
+                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3]] = 1;
                 end
             end
         end
@@ -169,20 +167,17 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     always @(posedge clk) begin
         if (reset) begin
             perf_scb_stalls <= '0;
-            perf_scb_uses[`EX_ALU] <= '0;
-        `ifdef EXT_F_ENABLE
-            perf_scb_uses[`EX_FPU] <= '0;
-        `endif
-            perf_scb_uses[`EX_LSU] <= '0;
-            perf_scb_uses[`EX_SFU] <= '0;
         end else begin
             perf_scb_stalls <= perf_scb_stalls + `PERF_CTR_BITS'(scoreboard_stalls_per_cycle);
-            perf_scb_uses[`EX_ALU] <= perf_scb_uses[`EX_ALU] + `PERF_CTR_BITS'(scoreboard_alu_per_cycle);
-        `ifdef EXT_F_ENABLE
-            perf_scb_uses[`EX_FPU] <= perf_scb_uses[`EX_FPU] + `PERF_CTR_BITS'(scoreboard_fpu_per_cycle);
-        `endif
-            perf_scb_uses[`EX_LSU] <= perf_scb_uses[`EX_LSU] + `PERF_CTR_BITS'(scoreboard_lsu_per_cycle);
-            perf_scb_uses[`EX_SFU] <= perf_scb_uses[`EX_SFU] + `PERF_CTR_BITS'(scoreboard_sfu_per_cycle);
+        end
+    end
+    for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin
+        always @(posedge clk) begin
+            if (reset) begin
+                perf_scb_uses[i] <= '0;
+            end else begin
+                perf_scb_uses[i] <= perf_scb_uses[i] + `PERF_CTR_BITS'(scoreboard_uses_per_cycle[i]);
+            end
         end
     end
 `endif
