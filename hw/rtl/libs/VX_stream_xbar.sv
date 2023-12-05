@@ -183,9 +183,10 @@ module VX_stream_xbar #(
         per_cycle_collision = 0;
         for (integer i = 0; i < NUM_INPUTS; ++i) begin
             for (integer j = 1; j < (NUM_INPUTS-i); ++j) begin
-                if (valid_in[i] && valid_in[j+i] && sel_in[i] == sel_in[j+i]) begin
-                    per_cycle_collision[i] |= ready_in[i] | ready_in[j+i];
-                end
+                per_cycle_collision[i] |= valid_in[i]
+                                       && valid_in[j+i] 
+                                       && (sel_in[i] == sel_in[j+i])
+                                       && (ready_in[i] | ready_in[j+i]);
             end
         end
     end
