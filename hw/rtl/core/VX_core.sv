@@ -266,9 +266,8 @@ module VX_core import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
 
-    wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_rd_req_per_cycle;
-    wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_wr_req_per_cycle;
-
+    wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_rd_req_per_cycle, perf_dcache_rd_req_per_cycle_r;
+    wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_wr_req_per_cycle, perf_dcache_wr_req_per_cycle_r;
     wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_rsp_per_cycle;    
 
     wire [1:0] perf_icache_pending_read_cycle;
@@ -295,9 +294,12 @@ module VX_core import VX_gpu_pkg::*; #(
     `POP_COUNT(perf_dcache_rd_req_per_cycle, perf_dcache_rd_req_fire);
     `POP_COUNT(perf_dcache_wr_req_per_cycle, perf_dcache_wr_req_fire);
     `POP_COUNT(perf_dcache_rsp_per_cycle, perf_dcache_rsp_fire);
+
+    `BUFFER(perf_dcache_rd_req_per_cycle_r, perf_dcache_rd_req_per_cycle);
+    `BUFFER(perf_dcache_wr_req_per_cycle_r, perf_dcache_wr_req_per_cycle);
       
     assign perf_icache_pending_read_cycle = perf_icache_req_fire - perf_icache_rsp_fire;
-    assign perf_dcache_pending_read_cycle = perf_dcache_rd_req_per_cycle - perf_dcache_rsp_per_cycle;
+    assign perf_dcache_pending_read_cycle = perf_dcache_rd_req_per_cycle_r - perf_dcache_rsp_per_cycle;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -321,8 +323,8 @@ module VX_core import VX_gpu_pkg::*; #(
             perf_dcache_lat <= '0;
         end else begin
             perf_ifetches   <= perf_ifetches   + `PERF_CTR_BITS'(perf_icache_req_fire);
-            perf_loads      <= perf_loads      + `PERF_CTR_BITS'(perf_dcache_rd_req_per_cycle);
-            perf_stores     <= perf_stores     + `PERF_CTR_BITS'(perf_dcache_wr_req_per_cycle);
+            perf_loads      <= perf_loads      + `PERF_CTR_BITS'(perf_dcache_rd_req_per_cycle_r);
+            perf_stores     <= perf_stores     + `PERF_CTR_BITS'(perf_dcache_wr_req_per_cycle_r);
             perf_icache_lat <= perf_icache_lat + perf_icache_pending_reads;
             perf_dcache_lat <= perf_dcache_lat + perf_dcache_pending_reads;
         end
