@@ -229,8 +229,8 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     // per cycle: reads, writes
-    wire [`CLOG2(NUM_REQS+1)-1:0] perf_reads_per_cycle;
-    wire [`CLOG2(NUM_REQS+1)-1:0] perf_writes_per_cycle;
+    wire [`CLOG2(NUM_REQS+1)-1:0] perf_reads_per_cycle, perf_reads_per_cycle_r;
+    wire [`CLOG2(NUM_REQS+1)-1:0] perf_writes_per_cycle, perf_writes_per_cycle_r;
     wire [`CLOG2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
 
     wire [NUM_REQS-1:0] perf_reads_per_req = req_valid & req_ready & ~req_rw;
@@ -245,8 +245,6 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
     reg [`PERF_CTR_BITS-1:0] perf_writes;
     reg [`PERF_CTR_BITS-1:0] perf_crsp_stalls;
 
-    wire [`CLOG2(NUM_REQS+1)-1:0] perf_reads_per_cycle_r;
-    wire [`CLOG2(NUM_REQS+1)-1:0] perf_writes_per_cycle_r;
     `BUFFER(perf_reads_per_cycle_r, perf_reads_per_cycle);
     `BUFFER(perf_writes_per_cycle_r, perf_writes_per_cycle);
 
