@@ -156,13 +156,14 @@ module VX_issue #(
 
 `ifdef PERF_ENABLE
     reg [`PERF_CTR_BITS-1:0] perf_ibf_stalls;
+    
+    wire decode_stall = decode_if.valid && ~decode_if.ready;
+
     always @(posedge clk) begin
         if (reset) begin
             perf_ibf_stalls <= '0;
         end else begin
-            if (decode_if.valid && ~decode_if.ready) begin
-                perf_ibf_stalls <= perf_ibf_stalls + `PERF_CTR_BITS'(1);
-            end
+            perf_ibf_stalls <= perf_ibf_stalls + `PERF_CTR_BITS'(decode_stall);
         end
     end
 
