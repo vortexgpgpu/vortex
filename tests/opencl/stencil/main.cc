@@ -197,10 +197,10 @@ int main(int argc, char** argv) {
 
 	//only use 1D thread block
   	int tx = 128;
-	int block[3] = {tx,1,1};
-	int grid[3] = {(nx-2+tx-1)/tx*tx,ny-2,nz-2};
+	size_t block[3] = {tx,1,1};
+	size_t grid[3] = {(nx-2+tx-1)/tx*tx,ny-2,nz-2};
   	//size_t grid[3] = {nx-2,ny-2,nz-2};
-  	int offset[3] = {1,1,1};
+  	size_t offset[3] = {1,1,1};
   	printf("grid size in x/y/z = %d %d %d\n",grid[0],grid[1],grid[2]);
 	printf("block size in x/y/z = %d %d %d\n",block[0],block[1],block[2]);
   
