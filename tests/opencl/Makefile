@@ -37,10 +37,10 @@ run-simx:
 	$(MAKE) -C blackscholes run-simx
 	$(MAKE) -C transpose run-simx
 	$(MAKE) -C convolution run-simx
-	$(MAKE) -C cutcp run-simx
-	$(MAKE) -C sgemm2 run-simx
+	$(MAKE) -C cutcp run-simx	
 	$(MAKE) -C vectorhypot run-simx	
 	$(MAKE) -C mri-q run-simx
+#	$(MAKE) -C sgemm2 run-simx
 
 run-rtlsim:
 	$(MAKE) -C vecadd run-rtlsim
