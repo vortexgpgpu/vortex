@@ -176,8 +176,9 @@ module VX_stream_xbar #(
     // we have a collision when there exists a valid transfer with multiple input candicates
     // we count the unique duplicates each cycle.
     
+    reg [NUM_INPUTS-1:0] per_cycle_collision, per_cycle_collision_r;
+    wire [`CLOG2(NUM_INPUTS+1)-1:0] collision_count;
     reg [PERF_CTR_BITS-1:0] collisions_r;
-    reg [NUM_INPUTS-1:0] per_cycle_collision;
 
     always @(*) begin
         per_cycle_collision = 0;
@@ -190,16 +191,15 @@ module VX_stream_xbar #(
             end
         end
     end
-
-    wire [`CLOG2(NUM_INPUTS+1)-1:0] collision_count, collision_count_r;
-    `POP_COUNT(collision_count, per_cycle_collision);
-    `BUFFER(collision_count_r, collision_count);
+    
+    `BUFFER(per_cycle_collision_r, per_cycle_collision);    
+    `POP_COUNT(collision_count, per_cycle_collision_r);
 
     always @(posedge clk) begin
         if (reset) begin
             collisions_r <= '0;
         end else begin
-            collisions_r <= collisions_r + PERF_CTR_BITS'(collision_count_r);
+            collisions_r <= collisions_r + PERF_CTR_BITS'(collision_count);
         end
     end
 

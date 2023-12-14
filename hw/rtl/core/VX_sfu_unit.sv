@@ -196,11 +196,14 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     reg [`PERF_CTR_BITS-1:0] perf_wctl_stalls;
+
+    wire wctl_execute_stall = wctl_execute_if.valid && ~wctl_execute_if.ready;
+
     always @(posedge clk) begin
         if (reset) begin
             perf_wctl_stalls <= '0;
         end else begin
-            perf_wctl_stalls <= perf_wctl_stalls + `PERF_CTR_BITS'(wctl_execute_if.valid && ~wctl_execute_if.ready);
+            perf_wctl_stalls <= perf_wctl_stalls + `PERF_CTR_BITS'(wctl_execute_stall);
         end
     end
     assign sfu_perf_if.wctl_stalls = perf_wctl_stalls;

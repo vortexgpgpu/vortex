@@ -49,7 +49,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_join   = (execute_if.data.op_type == `INST_SFU_JOIN);
     wire is_bar    = (execute_if.data.op_type == `INST_SFU_BAR);
 
-    wire [LANE_BITS-1:0] tid;
+    wire [`UP(LANE_BITS)-1:0] tid;
     if (LANE_BITS != 0) begin
         assign tid = execute_if.data.tid[0 +: LANE_BITS];
     end else begin
