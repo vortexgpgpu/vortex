@@ -383,13 +383,16 @@ module VX_schedule import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE    
     reg [`PERF_CTR_BITS-1:0] perf_sched_stalls;
     reg [`PERF_CTR_BITS-1:0] perf_fetch_stalls;
+
+    wire schedule_stall = schedule_if.valid && ~schedule_if.ready;
+
     always @(posedge clk) begin
         if (reset) begin
             perf_sched_stalls <= '0;
             perf_fetch_stalls <= '0;            
         end else begin
-            perf_sched_stalls <= perf_sched_stalls + `PERF_CTR_BITS'(!schedule_valid);
-            perf_fetch_stalls <= perf_fetch_stalls + `PERF_CTR_BITS'(schedule_if.valid && !schedule_if.ready);            
+            perf_sched_stalls <= perf_sched_stalls + `PERF_CTR_BITS'(~schedule_valid);
+            perf_fetch_stalls <= perf_fetch_stalls + `PERF_CTR_BITS'(schedule_stall);
         end
     end
 

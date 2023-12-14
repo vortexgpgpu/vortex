@@ -181,16 +181,15 @@ module Vortex import VX_gpu_pkg::*; (
         end
     end
 
+    wire mem_rd_req_fire = mem_req_fire && ~mem_bus_if.req_data.rw;
+    wire mem_wr_req_fire = mem_req_fire && mem_bus_if.req_data.rw;
+
     always @(posedge clk) begin
         if (reset) begin       
             mem_perf <= '0;
-        end else begin  
-            if (mem_req_fire && ~mem_bus_if.req_data.rw) begin
-                mem_perf.reads <= mem_perf.reads + `PERF_CTR_BITS'(1);
-            end
-            if (mem_req_fire && mem_bus_if.req_data.rw) begin
-                mem_perf.writes <= mem_perf.writes + `PERF_CTR_BITS'(1);
-            end      
+        end else begin
+            mem_perf.reads <= mem_perf.reads + `PERF_CTR_BITS'(mem_rd_req_fire);
+            mem_perf.writes <= mem_perf.writes + `PERF_CTR_BITS'(mem_wr_req_fire);
             mem_perf.latency <= mem_perf.latency + perf_mem_pending_reads;
         end
     end

@@ -194,10 +194,14 @@
 `ifndef FPU_FPNEW
 `ifndef FPU_DSP
 `ifndef FPU_DPI
-`ifdef SYNTHESIS
-`define FPU_DSP
-`else
+`ifndef SYNTHESIS
+`ifndef DPI_DISABLE
 `define FPU_DPI
+`else
+`define FPU_DSP
+`endif
+`else
+`define FPU_DSP
 `endif
 `endif
 `endif
