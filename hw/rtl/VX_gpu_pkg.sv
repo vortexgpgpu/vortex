@@ -190,42 +190,46 @@ package VX_gpu_pkg;
 
     /////////////////////////////// Issue parameters //////////////////////////
 
-    localparam ISSUE_IDX_W = `LOG2UP(`ISSUE_WIDTH);    
+    localparam ISSUE_ISW   = `CLOG2(`ISSUE_WIDTH);
+    localparam ISSUE_ISW_W = `UP(ISSUE_ISW);   
     localparam ISSUE_RATIO = `NUM_WARPS / `ISSUE_WIDTH;
-    localparam ISSUE_WIS_W = `LOG2UP(ISSUE_RATIO);
-    localparam ISSUE_ADDRW = `LOG2UP(`NUM_REGS * (ISSUE_RATIO));
-
+    localparam ISSUE_WIS   = `CLOG2(ISSUE_RATIO);
+    localparam ISSUE_WIS_W = `UP(ISSUE_WIS);
+    
 `IGNORE_UNUSED_BEGIN
-    function logic [ISSUE_IDX_W-1:0] wid_to_isw(
+    function logic [`NW_WIDTH-1:0] wis_to_wid(
+        input logic [ISSUE_WIS_W-1:0] wis, 
+        input logic [ISSUE_ISW_W-1:0] isw
+    );
+        if (ISSUE_WIS == 0) begin
+            wis_to_wid = `NW_WIDTH'(isw);
+        end else if (ISSUE_ISW == 0) begin
+            wis_to_wid = `NW_WIDTH'(wis);
+        end else begin 
+            wis_to_wid = `NW_WIDTH'({wis, isw});
+        end
+    endfunction
+
+    function logic [ISSUE_ISW_W-1:0] wid_to_isw(
         input logic [`NW_WIDTH-1:0] wid
     );
-        if (`ISSUE_WIDTH > 1) begin    
-            wid_to_isw = ISSUE_IDX_W'(wid);
+        if (ISSUE_ISW != 0) begin    
+            wid_to_isw = wid[ISSUE_ISW_W-1:0];
         end else begin
             wid_to_isw = 0;
         end
-    endfunction
-`IGNORE_UNUSED_END
-
-    function logic [`NW_WIDTH-1:0] wis_to_wid(
-        input logic [ISSUE_WIS_W-1:0] wis, 
-        input logic [ISSUE_IDX_W-1:0] isw
-    );
-        wis_to_wid = `NW_WIDTH'({wis, isw} >> (ISSUE_IDX_W-`CLOG2(`ISSUE_WIDTH)));
     endfunction
 
     function logic [ISSUE_WIS_W-1:0] wid_to_wis(
         input logic [`NW_WIDTH-1:0] wid
     );
-        wid_to_wis = ISSUE_WIS_W'({1'b0, wid} >> `CLOG2(`ISSUE_WIDTH));
+        if (ISSUE_WIS != 0) begin
+            wid_to_wis = ISSUE_WIS_W'(wid >> ISSUE_ISW);
+        end else begin
+            wid_to_wis = 0;
+        end
     endfunction
-
-    function logic [ISSUE_ADDRW-1:0] wis_to_addr(
-        input logic [`NR_BITS-1:0] rid,
-        input logic [ISSUE_WIS_W-1:0] wis        
-    );
-        wis_to_addr = ISSUE_ADDRW'({rid, wis} >> (ISSUE_WIS_W-`CLOG2(ISSUE_RATIO)));
-    endfunction
+`IGNORE_UNUSED_END
 
 endpackage
 
