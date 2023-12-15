@@ -355,11 +355,14 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
     wire [NUM_LANES-1:0][INT_WIDTH-1:0] tmp_result_s3;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin                                  
-        fflags_t i2f_regular_status_s3 = i2f_round_has_sticky_s3[i] ? 5'h1 : 5'h0;
-        fflags_t f2i_regular_status_s3 = f2i_round_has_sticky_s3[i] ? 5'h1 : 5'h0;
+        fflags_t i2f_regular_status_s3, f2i_regular_status_s3;
+        fflags_t i2f_status_s3, f2i_status_s3;
 
-        fflags_t i2f_status_s3 = i2f_regular_status_s3;
-        fflags_t f2i_status_s3 = f2i_result_is_special_s3[i] ? f2i_special_status_s3[i] : f2i_regular_status_s3;
+        assign i2f_regular_status_s3 = {4'h0, i2f_round_has_sticky_s3[i]};
+        assign f2i_regular_status_s3 = {4'h0, f2i_round_has_sticky_s3[i]};
+
+        assign i2f_status_s3 = i2f_regular_status_s3;
+        assign f2i_status_s3 = f2i_result_is_special_s3[i] ? f2i_special_status_s3[i] : f2i_regular_status_s3;
 
         wire [INT_WIDTH-1:0] i2f_result_s3 = fmt_result_s3[i];
         wire [INT_WIDTH-1:0] f2i_result_s3 = f2i_result_is_special_s3[i] ? f2i_special_result_s3[i] : rounded_int_res_s3[i];
