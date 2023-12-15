@@ -70,8 +70,8 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
         always @(posedge clk) begin
             if (reset) begin
                 batch_idx <= '0;
-            end else if (batch_done) begin
-                batch_idx <= batch_idx + BATCH_COUNT_W'(1);
+            end else begin
+                batch_idx <= batch_idx + BATCH_COUNT_W'(batch_done);
             end
         end
     end else begin
