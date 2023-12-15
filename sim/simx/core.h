@@ -49,8 +49,8 @@ public:
   struct PerfStats {
     uint64_t cycles;
     uint64_t instrs;
+    uint64_t sched_idles;
     uint64_t sched_stalls;
-    uint64_t fetch_stalls;
     uint64_t ibuf_stalls;
     uint64_t scrb_stalls;
     uint64_t alu_stalls;
@@ -70,8 +70,8 @@ public:
     PerfStats() 
       : cycles(0)
       , instrs(0)
+      , sched_idles(0)
       , sched_stalls(0)
-      , fetch_stalls(0)
       , ibuf_stalls(0)
       , scrb_stalls(0)
       , alu_stalls(0)
