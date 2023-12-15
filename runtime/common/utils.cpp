@@ -175,8 +175,9 @@ static uint64_t get_csr_64(const void* ptr, int addr) {
 extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   int ret = 0;
 
-  uint64_t instrs = 0;
-  uint64_t cycles = 0;
+  uint64_t total_instrs = 0;
+  uint64_t total_cycles = 0;
+  uint64_t max_cycles = 0;
 
 #ifdef PERF_ENABLE
 
@@ -199,8 +200,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   auto perf_class = gAutoPerfDump.get_perf_class();
 
   // PERF: pipeline stalls
-  uint64_t scheduler_stalls = 0;
-  uint64_t fetch_stalls = 0;
+  uint64_t sched_idles = 0;
+  uint64_t sched_stalls = 0;
   uint64_t ibuffer_stalls = 0;
   uint64_t scrb_stalls = 0;
   uint64_t lsu_stalls = 0;
@@ -269,19 +270,19 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     switch (perf_class) {
     case VX_DCR_MPM_CLASS_CORE: {
       // PERF: pipeline    
-      // schedule stalls
+      // scheduler idles
       {
-        uint64_t scheduler_stalls_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCHED_ST);
-        int scheduler_percent_per_core = calcAvgPercent(scheduler_stalls_per_core, cycles_per_core);
-        if (num_cores > 1) fprintf(stream, "PERF: core%d: schedule stalls=%ld (%d%%)\n", core_id, scheduler_stalls_per_core, scheduler_percent_per_core);
-        scheduler_stalls += scheduler_stalls_per_core;
+        uint64_t sched_idles_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCHED_ID);
+        int idles_percent_per_core = calcAvgPercent(sched_idles_per_core, cycles_per_core);
+        if (num_cores > 1) fprintf(stream, "PERF: core%d: scheduler idles=%ld (%d%%)\n", core_id, sched_idles_per_core, idles_percent_per_core);
+        sched_idles += sched_idles_per_core;
       }
-      // fetch stalls
+      // scheduler stalls
       {
-        uint64_t fetch_stalls_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_FETCH_ST);
-        int fetch_percent_per_core = calcAvgPercent(fetch_stalls_per_core, cycles_per_core);
-        if (num_cores > 1) fprintf(stream, "PERF: core%d: ifetch stalls=%ld (%d%%)\n", core_id, fetch_stalls_per_core, fetch_percent_per_core);
-        fetch_stalls += fetch_stalls_per_core;
+        uint64_t sched_stalls_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCHED_ST);
+        int stalls_percent_per_core = calcAvgPercent(sched_stalls_per_core, cycles_per_core);
+        if (num_cores > 1) fprintf(stream, "PERF: core%d: scheduler stalls=%ld (%d%%)\n", core_id, sched_stalls_per_core, stalls_percent_per_core);
+        sched_stalls += sched_stalls_per_core;
       }
       // ibuffer_stalls
       {
@@ -340,7 +341,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         if (num_cores > 1) fprintf(stream, "PERF: core%d: ifetches=%ld\n", core_id, ifetches_per_core);
         ifetches += ifetches_per_core;
 
-        uint64_t ifetch_lat_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_IFETCH_LAT);
+        uint64_t ifetch_lat_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_IFETCH_LT);
         int mem_avg_lat = caclAverage(ifetch_lat_per_core, ifetches_per_core);
         if (num_cores > 1) fprintf(stream, "PERF: core%d: ifetch latency=%d cycles\n", core_id, mem_avg_lat);      
         ifetch_lat += ifetch_lat_per_core;
@@ -351,7 +352,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         if (num_cores > 1) fprintf(stream, "PERF: core%d: loads=%ld\n", core_id, loads_per_core);
         loads += loads_per_core;
 
-        uint64_t load_lat_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_LOAD_LAT);
+        uint64_t load_lat_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_LOAD_LT);
         int mem_avg_lat = caclAverage(load_lat_per_core, loads_per_core);
         if (num_cores > 1) fprintf(stream, "PERF: core%d: load latency=%d cycles\n", core_id, mem_avg_lat);
         load_lat += load_lat_per_core;
@@ -431,7 +432,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         // PERF: memory
         mem_reads  = get_csr_64(staging_buf.data(), VX_CSR_MPM_MEM_READS);
         mem_writes = get_csr_64(staging_buf.data(), VX_CSR_MPM_MEM_WRITES);
-        mem_lat    = get_csr_64(staging_buf.data(), VX_CSR_MPM_MEM_LAT);
+        mem_lat    = get_csr_64(staging_buf.data(), VX_CSR_MPM_MEM_LT);
       }
     } break;
     default:
@@ -441,21 +442,22 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
 
     float IPC = (float)(double(instrs_per_core) / double(cycles_per_core));
     if (num_cores > 1) fprintf(stream, "PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs_per_core, cycles_per_core, IPC);            
-    instrs += instrs_per_core;
-    cycles = std::max<uint64_t>(cycles_per_core, cycles);
+    total_instrs += instrs_per_core;
+    total_cycles += cycles_per_core;
+    max_cycles = std::max<uint64_t>(cycles_per_core, max_cycles);
   }
       
 #ifdef PERF_ENABLE
   switch (perf_class) {
   case VX_DCR_MPM_CLASS_CORE: {    
-    int scheduler_percent = calcAvgPercent(scheduler_stalls, cycles);
-    int fetch_percent = calcAvgPercent(fetch_stalls, cycles);
-    int ibuffer_percent = calcAvgPercent(ibuffer_stalls, cycles);
+    int sched_idles_percent = calcAvgPercent(sched_idles, total_cycles);
+    int sched_stalls_percent = calcAvgPercent(sched_stalls, total_cycles);
+    int ibuffer_percent = calcAvgPercent(ibuffer_stalls, total_cycles);
     int ifetch_avg_lat = (int)(double(ifetch_lat) / double(ifetches));
     int load_avg_lat = (int)(double(load_lat) / double(loads));
     uint64_t scrb_total = scrb_alu + scrb_fpu + scrb_lsu + scrb_sfu;
-    fprintf(stream, "PERF: scheduler stalls=%ld (%d%%)\n", scheduler_stalls, scheduler_percent);
-    fprintf(stream, "PERF: fetch stalls=%ld (%d%%)\n", fetch_stalls, fetch_percent);
+    fprintf(stream, "PERF: scheduler idles=%ld (%d%%)\n", sched_idles, sched_idles_percent);
+    fprintf(stream, "PERF: scheduler stalls=%ld (%d%%)\n", sched_stalls, sched_stalls_percent);
     fprintf(stream, "PERF: ibuffer stalls=%ld (%d%%)\n", ibuffer_stalls, ibuffer_percent);
     fprintf(stream, "PERF: scoreboard stalls=%ld (alu=%d%%, fpu=%d%%, lsu=%d%%, sfu=%d%%)\n", scrb_stalls,
       calcAvgPercent(scrb_alu, scrb_total), 
@@ -514,8 +516,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   }
 #endif 
   
-  float IPC = (float)(double(instrs) / double(cycles));
-  fprintf(stream, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);  
+  float IPC = (float)(double(total_instrs) / double(max_cycles));
+  fprintf(stream, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", total_instrs, max_cycles, IPC);  
 
   fflush(stream);
 
