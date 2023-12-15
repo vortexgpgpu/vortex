@@ -554,7 +554,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     VX_stream_arb #(
         .NUM_INPUTS (2),
         .DATAW      (RSP_ARB_DATAW),
-        .OUT_REG    (1)
+        .OUT_REG    (2)
     ) rsp_arb (
         .clk       (clk),
         .reset     (commit_reset),

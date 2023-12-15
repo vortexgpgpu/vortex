@@ -167,7 +167,7 @@ void Core::schedule() {
     }
   }
   if (scheduled_warp == -1) {
-    ++perf_stats_.sched_stalls;
+    ++perf_stats_.sched_idles;
     return;
   }
 
@@ -548,10 +548,10 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         break;    
       case VX_DCR_MPM_CLASS_CORE: {
         switch (addr) {
+        case VX_CSR_MPM_SCHED_ID:  return perf_stats_.sched_idles & 0xffffffff; 
+        case VX_CSR_MPM_SCHED_ID_H:return perf_stats_.sched_idles >> 32;
         case VX_CSR_MPM_SCHED_ST:  return perf_stats_.sched_stalls & 0xffffffff; 
         case VX_CSR_MPM_SCHED_ST_H:return perf_stats_.sched_stalls >> 32;
-        case VX_CSR_MPM_FETCH_ST:  return perf_stats_.fetch_stalls & 0xffffffff; 
-        case VX_CSR_MPM_FETCH_ST_H:return perf_stats_.fetch_stalls >> 32;
         case VX_CSR_MPM_IBUF_ST:   return perf_stats_.ibuf_stalls & 0xffffffff; 
         case VX_CSR_MPM_IBUF_ST_H: return perf_stats_.ibuf_stalls >> 32; 
         case VX_CSR_MPM_SCRB_ST:   return perf_stats_.scrb_stalls & 0xffffffff; 
@@ -579,10 +579,10 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case VX_CSR_MPM_LOADS_H:   return perf_stats_.loads >> 32; 
         case VX_CSR_MPM_STORES:    return perf_stats_.stores & 0xffffffff; 
         case VX_CSR_MPM_STORES_H:  return perf_stats_.stores >> 32;
-        case VX_CSR_MPM_IFETCH_LAT: return perf_stats_.ifetch_latency & 0xffffffff; 
-        case VX_CSR_MPM_IFETCH_LAT_H: return perf_stats_.ifetch_latency >> 32; 
-        case VX_CSR_MPM_LOAD_LAT:  return perf_stats_.load_latency & 0xffffffff; 
-        case VX_CSR_MPM_LOAD_LAT_H: return perf_stats_.load_latency >> 32;
+        case VX_CSR_MPM_IFETCH_LT: return perf_stats_.ifetch_latency & 0xffffffff; 
+        case VX_CSR_MPM_IFETCH_LT_H: return perf_stats_.ifetch_latency >> 32; 
+        case VX_CSR_MPM_LOAD_LT:   return perf_stats_.load_latency & 0xffffffff; 
+        case VX_CSR_MPM_LOAD_LT_H: return perf_stats_.load_latency >> 32;
        }
       } break; 
       case VX_DCR_MPM_CLASS_MEM: {
@@ -638,8 +638,8 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case VX_CSR_MPM_MEM_READS_H:      return proc_perf.mem_reads >> 32; 
         case VX_CSR_MPM_MEM_WRITES:       return proc_perf.mem_writes & 0xffffffff; 
         case VX_CSR_MPM_MEM_WRITES_H:     return proc_perf.mem_writes >> 32; 
-        case VX_CSR_MPM_MEM_LAT:          return proc_perf.mem_latency & 0xffffffff; 
-        case VX_CSR_MPM_MEM_LAT_H:        return proc_perf.mem_latency >> 32;
+        case VX_CSR_MPM_MEM_LT:           return proc_perf.mem_latency & 0xffffffff; 
+        case VX_CSR_MPM_MEM_LT_H :        return proc_perf.mem_latency >> 32;
          
         case VX_CSR_MPM_SMEM_READS:       return proc_perf.clusters.sharedmem.reads & 0xffffffff;
         case VX_CSR_MPM_SMEM_READS_H:     return proc_perf.clusters.sharedmem.reads >> 32;
