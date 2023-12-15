@@ -49,12 +49,12 @@ module Vortex import VX_gpu_pkg::*; (
     cache_perf_t perf_l3cache;
     mem_perf_t mem_perf;   
 
-    assign mem_perf_if.icache = 'x;
-    assign mem_perf_if.dcache = 'x;
+    assign mem_perf_if.smem    = 'x;    
+    assign mem_perf_if.icache  = 'x;
+    assign mem_perf_if.dcache  = 'x;
     assign mem_perf_if.l2cache = 'x;
     assign mem_perf_if.l3cache = perf_l3cache;
-    assign mem_perf_if.smem = 'x;
-    assign mem_perf_if.mem = mem_perf;
+    assign mem_perf_if.mem     = mem_perf;
 `endif    
 
     VX_mem_bus_if #(
