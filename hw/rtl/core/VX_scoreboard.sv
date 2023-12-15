@@ -51,7 +51,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         reg [`UP(ISSUE_RATIO)-1:0][`NUM_REGS-1:0] inuse_regs;
-        VX_ibuffer_if staging_if();
 
         wire writeback_fire = writeback_if[i].valid && writeback_if[i].data.eop;
 
@@ -84,9 +83,16 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
         reg [DATAW-1:0] data_out_r;
         reg valid_out_r;
+        wire ready_out;
 
         wire [3:0] ready_masks = ~{inuse_rd, inuse_rs1, inuse_rs2, inuse_rs3};
         wire deps_ready = (& ready_masks);
+
+        wire valid_in  = ibuffer_if[i].valid && deps_ready;
+        wire ready_in  = ~valid_out_r && deps_ready;
+        wire [DATAW-1:0] data_in = ibuffer_if[i].data;
+
+        assign ready_out = scoreboard_if[i].ready;
 
         always @(posedge clk) begin
             if (reset) begin
@@ -97,40 +103,25 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                     inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] <= 0;            
                 end
                 if (~valid_out_r) begin
-                    valid_out_r <= ibuffer_if[i].valid && deps_ready;
-                end else if (staging_if.ready) begin
-                    if (staging_if.data.wb) begin
-                        inuse_regs[staging_if.data.wis][staging_if.data.rd] <= 1;
+                    valid_out_r <= valid_in;
+                end else if (ready_out) begin
+                    if (scoreboard_if[i].data.wb) begin
+                        inuse_regs[scoreboard_if[i].data.wis][scoreboard_if[i].data.rd] <= 1;
                     `ifdef PERF_ENABLE
-                        inuse_units[staging_if.data.wis][staging_if.data.rd] <= staging_if.data.ex_type;
+                        inuse_units[scoreboard_if[i].data.wis][scoreboard_if[i].data.rd] <= scoreboard_if[i].data.ex_type;
                     `endif
                     end
                     valid_out_r <= 0;
                 end
             end
             if (~valid_out_r) begin
-                data_out_r <= ibuffer_if[i].data;
+                data_out_r <= data_in;
             end
         end
 
-        assign ibuffer_if[i].ready = ~valid_out_r && deps_ready;
-        assign staging_if.valid = valid_out_r;
-        assign staging_if.data  = data_out_r;
-
-        VX_elastic_buffer #(
-            .DATAW   (DATAW),
-            .SIZE    (0),
-            .OUT_REG (2)
-        ) out_buf (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (staging_if.valid),
-            .ready_in  (staging_if.ready),
-            .data_in   (staging_if.data),
-            .data_out  (scoreboard_if[i].data),
-            .valid_out (scoreboard_if[i].valid),
-            .ready_out (scoreboard_if[i].ready)
-        );
+        assign ibuffer_if[i].ready    = ready_in;
+        assign scoreboard_if[i].valid = valid_out_r;
+        assign scoreboard_if[i].data  = data_out_r;
 
     `ifdef SIMULATION
         reg [31:0] timeout_ctr;       
