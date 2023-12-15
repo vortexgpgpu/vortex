@@ -217,7 +217,7 @@ package VX_gpu_pkg;
     function logic [ISSUE_WIS_W-1:0] wid_to_wis(
         input logic [`NW_WIDTH-1:0] wid
     );
-        wid_to_wis = ISSUE_WIS_W'(wid >> `CLOG2(`ISSUE_WIDTH));
+        wid_to_wis = ISSUE_WIS_W'({1'b0, wid} >> `CLOG2(`ISSUE_WIDTH));
     endfunction
 
     function logic [ISSUE_ADDRW-1:0] wis_to_addr(

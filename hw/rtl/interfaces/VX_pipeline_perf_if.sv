@@ -14,8 +14,8 @@
 `include "VX_define.vh"
 
 interface VX_pipeline_perf_if ();
+    wire [`PERF_CTR_BITS-1:0]   sched_idles;
     wire [`PERF_CTR_BITS-1:0]   sched_stalls;
-    wire [`PERF_CTR_BITS-1:0]   fetch_stalls;
     wire [`PERF_CTR_BITS-1:0]   ibf_stalls;
     wire [`PERF_CTR_BITS-1:0]   scb_stalls;
     wire [`PERF_CTR_BITS-1:0]   scb_uses [`NUM_EX_UNITS];
@@ -28,8 +28,8 @@ interface VX_pipeline_perf_if ();
     wire [`PERF_CTR_BITS-1:0]   load_latency;
 
     modport schedule (
-        output sched_stalls,
-        output fetch_stalls
+        output sched_idles,
+        output sched_stalls        
     );
 
     modport issue (
@@ -40,8 +40,8 @@ interface VX_pipeline_perf_if ();
     );
 
     modport slave (
+        input sched_idles,
         input sched_stalls,
-        input fetch_stalls,
         input ibf_stalls,
         input scb_stalls,
         input scb_uses,
