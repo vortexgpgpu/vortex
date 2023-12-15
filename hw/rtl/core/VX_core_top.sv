@@ -130,6 +130,12 @@ module VX_core_top import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     VX_mem_perf_if mem_perf_if();
+    assign mem_perf_if.smem    = '0;
+    assign mem_perf_if.icache  = '0;
+    assign mem_perf_if.dcache  = '0;
+    assign mem_perf_if.l2cache = '0;
+    assign mem_perf_if.l3cache = '0;    
+    assign mem_perf_if.mem     = '0;
 `endif
 
 `ifdef SCOPE

@@ -201,9 +201,7 @@ module VX_fifo_queue #(
                         rd_ptr_r   <= '0;
                         rd_ptr_n_r <= 1;
                     end else begin
-                        if (push) begin             
-                            wr_ptr_r <= wr_ptr_r + ADDRW'(1);
-                        end
+                        wr_ptr_r <= wr_ptr_r + ADDRW'(push);
                         if (pop) begin
                             rd_ptr_r <= rd_ptr_n_r;                       
                             if (DEPTH > 2) begin    
