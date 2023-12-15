@@ -70,10 +70,10 @@
 `define VX_CSR_MINSTRET                 12'hB02
 `define VX_CSR_MINSTRET_H               12'hB82
 // PERF: pipeline
-`define VX_CSR_MPM_SCHED_ST             12'hB03
-`define VX_CSR_MPM_SCHED_ST_H           12'hB83
-`define VX_CSR_MPM_FETCH_ST             12'hB04
-`define VX_CSR_MPM_FETCH_ST_H           12'hB84
+`define VX_CSR_MPM_SCHED_ID             12'hB03
+`define VX_CSR_MPM_SCHED_ID_H           12'hB83
+`define VX_CSR_MPM_SCHED_ST             12'hB04
+`define VX_CSR_MPM_SCHED_ST_H           12'hB84
 `define VX_CSR_MPM_IBUF_ST              12'hB05
 `define VX_CSR_MPM_IBUF_ST_H            12'hB85
 `define VX_CSR_MPM_SCRB_ST              12'hB06
@@ -101,10 +101,10 @@
 `define VX_CSR_MPM_LOADS_H              12'hB90
 `define VX_CSR_MPM_STORES               12'hB11
 `define VX_CSR_MPM_STORES_H             12'hB91
-`define VX_CSR_MPM_IFETCH_LAT           12'hB12
-`define VX_CSR_MPM_IFETCH_LAT_H         12'hB92
-`define VX_CSR_MPM_LOAD_LAT             12'hB13 
-`define VX_CSR_MPM_LOAD_LAT_H           12'hB93
+`define VX_CSR_MPM_IFETCH_LT            12'hB12
+`define VX_CSR_MPM_IFETCH_LT_H          12'hB92
+`define VX_CSR_MPM_LOAD_LT              12'hB13 
+`define VX_CSR_MPM_LOAD_LT_H            12'hB93
 
 // Machine Performance-monitoring memory counters
 // PERF: icache
@@ -158,8 +158,8 @@
 `define VX_CSR_MPM_MEM_READS_H          12'hB98
 `define VX_CSR_MPM_MEM_WRITES           12'hB19     // total writes
 `define VX_CSR_MPM_MEM_WRITES_H         12'hB99
-`define VX_CSR_MPM_MEM_LAT              12'hB1A     // memory latency
-`define VX_CSR_MPM_MEM_LAT_H            12'hB9A
+`define VX_CSR_MPM_MEM_LT               12'hB1A     // memory latency
+`define VX_CSR_MPM_MEM_LT_H             12'hB9A
 // PERF: smem
 `define VX_CSR_MPM_SMEM_READS           12'hB1B     // memory reads
 `define VX_CSR_MPM_SMEM_READS_H         12'hB9B

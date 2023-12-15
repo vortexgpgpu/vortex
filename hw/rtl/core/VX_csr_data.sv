@@ -186,11 +186,11 @@ import VX_fpu_pkg::*;
                     case (base_dcrs.mpm_class)
                     `VX_DCR_MPM_CLASS_CORE: begin
                         case (read_addr)
-                        // PERF: pipeline            
+                        // PERF: pipeline
+                        `VX_CSR_MPM_SCHED_ID       : read_data_ro_r = pipeline_perf_if.sched_idles[31:0];
+                        `VX_CSR_MPM_SCHED_ID_H     : read_data_ro_r = 32'(pipeline_perf_if.sched_idles[`PERF_CTR_BITS-1:32]);
                         `VX_CSR_MPM_SCHED_ST       : read_data_ro_r = pipeline_perf_if.sched_stalls[31:0];
-                        `VX_CSR_MPM_SCHED_ST_H     : read_data_ro_r = 32'(pipeline_perf_if.sched_stalls[`PERF_CTR_BITS-1:32]);            
-                        `VX_CSR_MPM_FETCH_ST       : read_data_ro_r = pipeline_perf_if.fetch_stalls[31:0];
-                        `VX_CSR_MPM_FETCH_ST_H     : read_data_ro_r = 32'(pipeline_perf_if.fetch_stalls[`PERF_CTR_BITS-1:32]);
+                        `VX_CSR_MPM_SCHED_ST_H     : read_data_ro_r = 32'(pipeline_perf_if.sched_stalls[`PERF_CTR_BITS-1:32]);
                         `VX_CSR_MPM_IBUF_ST        : read_data_ro_r = pipeline_perf_if.ibf_stalls[31:0];
                         `VX_CSR_MPM_IBUF_ST_H      : read_data_ro_r = 32'(pipeline_perf_if.ibf_stalls[`PERF_CTR_BITS-1:32]);
                         `VX_CSR_MPM_SCRB_ST        : read_data_ro_r = pipeline_perf_if.scb_stalls[31:0];
@@ -228,10 +228,10 @@ import VX_fpu_pkg::*;
                         `VX_CSR_MPM_LOADS_H        : read_data_ro_r = 32'(pipeline_perf_if.loads[`PERF_CTR_BITS-1:32]);
                         `VX_CSR_MPM_STORES         : read_data_ro_r = pipeline_perf_if.stores[31:0];
                         `VX_CSR_MPM_STORES_H       : read_data_ro_r = 32'(pipeline_perf_if.stores[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_IFETCH_LAT     : read_data_ro_r = pipeline_perf_if.ifetch_latency[31:0];
-                        `VX_CSR_MPM_IFETCH_LAT_H   : read_data_ro_r = 32'(pipeline_perf_if.ifetch_latency[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_LOAD_LAT       : read_data_ro_r = pipeline_perf_if.load_latency[31:0];
-                        `VX_CSR_MPM_LOAD_LAT_H     : read_data_ro_r = 32'(pipeline_perf_if.load_latency[`PERF_CTR_BITS-1:32]);            
+                        `VX_CSR_MPM_IFETCH_LT      : read_data_ro_r = pipeline_perf_if.ifetch_latency[31:0];
+                        `VX_CSR_MPM_IFETCH_LT_H    : read_data_ro_r = 32'(pipeline_perf_if.ifetch_latency[`PERF_CTR_BITS-1:32]);
+                        `VX_CSR_MPM_LOAD_LT        : read_data_ro_r = pipeline_perf_if.load_latency[31:0];
+                        `VX_CSR_MPM_LOAD_LT_H      : read_data_ro_r = 32'(pipeline_perf_if.load_latency[`PERF_CTR_BITS-1:32]);            
                         default:;
                         endcase
                     end
@@ -295,8 +295,8 @@ import VX_fpu_pkg::*;
                         `VX_CSR_MPM_MEM_READS_H        : read_data_ro_r = 32'(mem_perf_if.mem.reads[`PERF_CTR_BITS-1:32]);
                         `VX_CSR_MPM_MEM_WRITES         : read_data_ro_r = mem_perf_if.mem.writes[31:0];
                         `VX_CSR_MPM_MEM_WRITES_H       : read_data_ro_r = 32'(mem_perf_if.mem.writes[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_MEM_LAT            : read_data_ro_r = mem_perf_if.mem.latency[31:0];
-                        `VX_CSR_MPM_MEM_LAT_H          : read_data_ro_r = 32'(mem_perf_if.mem.latency[`PERF_CTR_BITS-1:32]);     
+                        `VX_CSR_MPM_MEM_LT             : read_data_ro_r = mem_perf_if.mem.latency[31:0];
+                        `VX_CSR_MPM_MEM_LT_H           : read_data_ro_r = 32'(mem_perf_if.mem.latency[`PERF_CTR_BITS-1:32]);     
                         default:;
                         endcase
                     end
