@@ -37,7 +37,7 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
     wire [BLOCK_SIZE-1:0] commit_in_valid;
     wire [BLOCK_SIZE-1:0][DATAW-1:0] commit_in_data;
     wire [BLOCK_SIZE-1:0] commit_in_ready;
-    wire [BLOCK_SIZE-1:0][ISSUE_IDX_W-1:0] commit_in_wsi;
+    wire [BLOCK_SIZE-1:0][ISSUE_ISW_W-1:0] commit_in_isw;
 
     for (genvar i = 0; i < BLOCK_SIZE; ++i) begin
         assign commit_in_valid[i] = commit_in_if[i].valid;
@@ -45,12 +45,12 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
         assign commit_in_if[i].ready = commit_in_ready[i];
         if (BLOCK_SIZE != `ISSUE_WIDTH) begin
             if (BLOCK_SIZE != 1) begin
-                assign commit_in_wsi[i] = {commit_in_data[i][DATA_WIS_OFF+BLOCK_SIZE_W +: (ISSUE_IDX_W-BLOCK_SIZE_W)], BLOCK_SIZE_W'(i)};
+                assign commit_in_isw[i] = {commit_in_data[i][DATA_WIS_OFF+BLOCK_SIZE_W +: (ISSUE_ISW_W-BLOCK_SIZE_W)], BLOCK_SIZE_W'(i)};
             end else begin
-                assign commit_in_wsi[i] = commit_in_data[i][DATA_WIS_OFF +: ISSUE_IDX_W];
+                assign commit_in_isw[i] = commit_in_data[i][DATA_WIS_OFF +: ISSUE_ISW_W];
             end
         end else begin
-            assign commit_in_wsi[i] = BLOCK_SIZE_W'(i);
+            assign commit_in_isw[i] = BLOCK_SIZE_W'(i);
         end
     end
 
@@ -64,12 +64,12 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
             commit_out_data[i] = 'x;
         end
         for (integer i = 0; i < BLOCK_SIZE; ++i) begin
-            commit_out_valid[commit_in_wsi[i]] = commit_in_valid[i];
-            commit_out_data[commit_in_wsi[i]] = commit_in_data[i];
+            commit_out_valid[commit_in_isw[i]] = commit_in_valid[i];
+            commit_out_data[commit_in_isw[i]] = commit_in_data[i];
         end
     end
     for (genvar i = 0; i < BLOCK_SIZE; ++i) begin
-        assign commit_in_ready[i] = commit_out_ready[commit_in_wsi[i]];
+        assign commit_in_ready[i] = commit_out_ready[commit_in_isw[i]];
     end
     
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
