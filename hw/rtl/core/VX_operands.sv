@@ -239,15 +239,18 @@ module VX_operands import VX_gpu_pkg::*; #(
 
         // GPR banks
 
-        wire [RAM_ADDRW-1:0] gpr_rd_addr;
+        reg [RAM_ADDRW-1:0] gpr_rd_addr;       
         wire [RAM_ADDRW-1:0] gpr_wr_addr;
-
         if (ISSUE_WIS != 0) begin
-            assign gpr_rd_addr = {gpr_rd_wis, gpr_rd_rid};
             assign gpr_wr_addr = {writeback_if[i].data.wis, writeback_if[i].data.rd};
+            always @(posedge clk) begin
+                gpr_rd_addr <= {gpr_rd_wis_n, gpr_rd_rid_n};
+            end
         end else begin
-            assign gpr_rd_addr = gpr_rd_rid;
             assign gpr_wr_addr = writeback_if[i].data.rd;
+            always @(posedge clk) begin
+                gpr_rd_addr <= gpr_rd_rid_n;
+            end
         end
         
     `ifdef GPR_RESET
@@ -258,30 +261,31 @@ module VX_operands import VX_gpu_pkg::*; #(
             end
         end
     `endif
-        
-        VX_dp_ram #(
-            .DATAW (`XLEN * `NUM_THREADS),
-            .SIZE (`NUM_REGS * ISSUE_RATIO),
-            .WRENW (`NUM_THREADS),
-        `ifdef GPR_RESET
-            .INIT_ENABLE (1),
-            .INIT_VALUE (0),
-        `endif
-            .NO_RWCHECK (1)
-        ) gpr_ram (
-            .clk   (clk),
-            .read  (1'b1),
-            .wren  (writeback_if[i].data.tmask),
-        `ifdef GPR_RESET
-            .write (wr_enabled && writeback_if[i].valid),
-        `else
-            .write (writeback_if[i].valid),
-        `endif
-            .waddr (gpr_wr_addr),
-            .wdata (writeback_if[i].data.data),
-            .raddr (gpr_rd_addr),
-            .rdata (gpr_rd_data)
-        );
+
+        for (genvar j = 0; j < `NUM_THREADS; ++j) begin
+            VX_dp_ram #(
+                .DATAW (`XLEN),
+                .SIZE (`NUM_REGS * ISSUE_RATIO),
+            `ifdef GPR_RESET
+                .INIT_ENABLE (1),
+                .INIT_VALUE (0),
+            `endif
+                .NO_RWCHECK (1)
+            ) gpr_ram (
+                .clk   (clk),
+                .read  (1'b1),
+                `UNUSED_PIN (wren),
+            `ifdef GPR_RESET
+                .write (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]),
+            `else
+                .write (writeback_if[i].valid && writeback_if[i].data.tmask[j]),
+            `endif              
+                .waddr (gpr_wr_addr),
+                .wdata (writeback_if[i].data.data[j]),
+                .raddr (gpr_rd_addr),
+                .rdata (gpr_rd_data[j])
+            );
+        end
     end
 
 endmodule
