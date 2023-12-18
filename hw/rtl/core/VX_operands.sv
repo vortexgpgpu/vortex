@@ -26,6 +26,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 );
     `UNUSED_PARAM (CORE_ID)
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + `NR_BITS;
+    localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * ISSUE_RATIO);
 
     localparam STATE_IDLE   = 2'd0;
     localparam STATE_FETCH1 = 2'd1;
@@ -50,7 +51,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         reg [DATAW-1:0] data_out_r;
         reg [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data, rs1_data_n;
         reg [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data, rs2_data_n;
-        reg [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data, rs3_data_n;   
+        reg [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data, rs3_data_n;
 
         reg [STATE_BITS-1:0] state, state_n;
         reg [`NR_BITS-1:0] rs2, rs2_n;
@@ -174,7 +175,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         always @(posedge clk)  begin
             if (reset) begin                
                 state       <= STATE_IDLE;
-                cache_eop   <= {ISSUE_RATIO{1'b1}};                
+                cache_eop   <= {ISSUE_RATIO{1'b1}};
                 data_ready  <= 0;
                 valid_out_r <= 0;
             end else begin
@@ -235,9 +236,20 @@ module VX_operands import VX_gpu_pkg::*; #(
         assign operands_if[i].data.rs3_data = rs3_data;
 
         assign scoreboard_if[i].ready = ~valid_out_r && data_ready;
-        
+
         // GPR banks
 
+        wire [RAM_ADDRW-1:0] gpr_rd_addr;
+        wire [RAM_ADDRW-1:0] gpr_wr_addr;
+
+        if (ISSUE_WIS != 0) begin
+            assign gpr_rd_addr = {gpr_rd_wis, gpr_rd_rid};
+            assign gpr_wr_addr = {writeback_if[i].data.wis, writeback_if[i].data.rd};
+        end else begin
+            assign gpr_rd_addr = gpr_rd_rid;
+            assign gpr_wr_addr = writeback_if[i].data.rd;
+        end
+        
     `ifdef GPR_RESET
         reg wr_enabled = 0;
         always @(posedge clk) begin
@@ -245,30 +257,31 @@ module VX_operands import VX_gpu_pkg::*; #(
                 wr_enabled <= 1;
             end
         end
-    `else
-        wire wr_enabled = 1;
     `endif
         
-        for (genvar j = 0; j < `NUM_THREADS; ++j) begin
-            VX_dp_ram #(
-                .DATAW (`XLEN),
-                .SIZE (`NUM_REGS * ISSUE_RATIO),
-            `ifdef GPR_RESET
-                .INIT_ENABLE (1),
-                .INIT_VALUE (0),
-            `endif
-                .NO_RWCHECK (1)
-            ) gpr_ram (
-                .clk   (clk),
-                .read  (1'b1),
-                `UNUSED_PIN (wren),
-                .write (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]),                
-                .waddr (wis_to_addr(writeback_if[i].data.rd, writeback_if[i].data.wis)),
-                .wdata (writeback_if[i].data.data[j]),
-                .raddr (wis_to_addr(gpr_rd_rid, gpr_rd_wis)),
-                .rdata (gpr_rd_data[j])
-            );
-        end
-    end    
+        VX_dp_ram #(
+            .DATAW (`XLEN * `NUM_THREADS),
+            .SIZE (`NUM_REGS * ISSUE_RATIO),
+            .WRENW (`NUM_THREADS),
+        `ifdef GPR_RESET
+            .INIT_ENABLE (1),
+            .INIT_VALUE (0),
+        `endif
+            .NO_RWCHECK (1)
+        ) gpr_ram (
+            .clk   (clk),
+            .read  (1'b1),
+            .wren  (writeback_if[i].data.tmask),
+        `ifdef GPR_RESET
+            .write (wr_enabled && writeback_if[i].valid),
+        `else
+            .write (writeback_if[i].valid),
+        `endif
+            .waddr (gpr_wr_addr),
+            .wdata (writeback_if[i].data.data),
+            .raddr (gpr_rd_addr),
+            .rdata (gpr_rd_data)
+        );
+    end
 
 endmodule

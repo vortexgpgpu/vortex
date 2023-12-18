@@ -203,20 +203,20 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
             assign block_done[block_idx]  = ~valid_p || ready_p;
         end
 
-        wire [ISSUE_IDX_W-1:0] wsi;
+        wire [ISSUE_ISW_W-1:0] isw;
         if (BATCH_COUNT != 1) begin
             if (BLOCK_SIZE != 1) begin
-                assign wsi = {batch_idx, BLOCK_SIZE_W'(block_idx)};
+                assign isw = {batch_idx, BLOCK_SIZE_W'(block_idx)};
             end else begin
-                assign wsi = batch_idx;
+                assign isw = batch_idx;
             end
         end else begin
-            assign wsi = block_idx;
+            assign isw = block_idx;
         end
 
         `RESET_RELAY(buf_out_reset, reset);
 
-        wire [`NW_WIDTH-1:0] block_wid = wis_to_wid(dispatch_data[issue_idx][DATA_TMASK_OFF+`NUM_THREADS +: ISSUE_WIS_W], wsi);
+        wire [`NW_WIDTH-1:0] block_wid = wis_to_wid(dispatch_data[issue_idx][DATA_TMASK_OFF+`NUM_THREADS +: ISSUE_WIS_W], isw);
 
         VX_elastic_buffer #(
             .DATAW   (OUT_DATAW),
