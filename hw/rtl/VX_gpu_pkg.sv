@@ -224,7 +224,7 @@ package VX_gpu_pkg;
         input logic [`NW_WIDTH-1:0] wid
     );
         if (ISSUE_WIS != 0) begin
-            wid_to_wis = wid[`NW_WIDTH-1:ISSUE_ISW];
+            wid_to_wis = ISSUE_WIS_W'(wid >> ISSUE_ISW);
         end else begin
             wid_to_wis = 0;
         end
