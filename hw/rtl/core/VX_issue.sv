@@ -84,7 +84,7 @@ module VX_issue #(
         .clk            (clk), 
         .reset          (dispatch_reset),
     `ifdef PERF_ENABLE
-        .perf_stalls    (perf_issue_if.dsp_stalls),
+        `UNUSED_PIN     (perf_stalls),
     `endif
         .operands_if    (operands_if),
         .alu_dispatch_if(alu_dispatch_if),

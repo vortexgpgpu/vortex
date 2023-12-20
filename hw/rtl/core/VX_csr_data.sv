@@ -195,19 +195,6 @@ import VX_fpu_pkg::*;
                         `VX_CSR_MPM_IBUF_ST_H      : read_data_ro_r = 32'(pipeline_perf_if.ibf_stalls[`PERF_CTR_BITS-1:32]);
                         `VX_CSR_MPM_SCRB_ST        : read_data_ro_r = pipeline_perf_if.scb_stalls[31:0];
                         `VX_CSR_MPM_SCRB_ST_H      : read_data_ro_r = 32'(pipeline_perf_if.scb_stalls[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_ALU_ST         : read_data_ro_r = pipeline_perf_if.dsp_stalls[`EX_ALU][31:0];
-                        `VX_CSR_MPM_ALU_ST_H       : read_data_ro_r = 32'(pipeline_perf_if.dsp_stalls[`EX_ALU][`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_LSU_ST         : read_data_ro_r = pipeline_perf_if.dsp_stalls[`EX_LSU][31:0];
-                        `VX_CSR_MPM_LSU_ST_H       : read_data_ro_r = 32'(pipeline_perf_if.dsp_stalls[`EX_LSU][`PERF_CTR_BITS-1:32]);
-                    `ifdef EXT_F_ENABLE
-                        `VX_CSR_MPM_FPU_ST         : read_data_ro_r = pipeline_perf_if.dsp_stalls[`EX_FPU][31:0];
-                        `VX_CSR_MPM_FPU_ST_H       : read_data_ro_r = 32'(pipeline_perf_if.dsp_stalls[`EX_FPU][`PERF_CTR_BITS-1:32]);
-                    `else
-                        `VX_CSR_MPM_FPU_ST         : read_data_ro_r = '0;
-                        `VX_CSR_MPM_FPU_ST_H       : read_data_ro_r = '0;
-                    `endif
-                        `VX_CSR_MPM_SFU_ST         : read_data_ro_r = pipeline_perf_if.dsp_stalls[`EX_SFU][31:0];
-                        `VX_CSR_MPM_SFU_ST_H       : read_data_ro_r = 32'(pipeline_perf_if.dsp_stalls[`EX_SFU][`PERF_CTR_BITS-1:32]);
                         `VX_CSR_MPM_SCRB_ALU       : read_data_ro_r = 32'(pipeline_perf_if.scb_uses[`EX_ALU][`PERF_CTR_BITS-1:32]);
                         `VX_CSR_MPM_SCRB_ALU_H     : read_data_ro_r = pipeline_perf_if.scb_uses[`EX_ALU][31:0];
                     `ifdef EXT_F_ENABLE
@@ -220,7 +207,7 @@ import VX_fpu_pkg::*;
                         `VX_CSR_MPM_SCRB_LSU       : read_data_ro_r = 32'(pipeline_perf_if.scb_uses[`EX_LSU][`PERF_CTR_BITS-1:32]);
                         `VX_CSR_MPM_SCRB_LSU_H     : read_data_ro_r = pipeline_perf_if.scb_uses[`EX_LSU][31:0];
                         `VX_CSR_MPM_SCRB_SFU       : read_data_ro_r = 32'(pipeline_perf_if.scb_uses[`EX_SFU][`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_SCRB_SFU_H     : read_data_ro_r = pipeline_perf_if.scb_uses[`EX_SFU][31:0];
+                        `VX_CSR_MPM_SCRB_SFU_H     : read_data_ro_r = pipeline_perf_if.scb_uses[`EX_SFU][31:0];                        
                         // PERF: memory
                         `VX_CSR_MPM_IFETCHES       : read_data_ro_r = pipeline_perf_if.ifetches[31:0];
                         `VX_CSR_MPM_IFETCHES_H     : read_data_ro_r = 32'(pipeline_perf_if.ifetches[`PERF_CTR_BITS-1:32]); 

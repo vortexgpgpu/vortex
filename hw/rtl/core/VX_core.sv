@@ -273,23 +273,23 @@ module VX_core import VX_gpu_pkg::*; #(
     wire [1:0] perf_icache_pending_read_cycle;
     wire [`CLOG2(DCACHE_NUM_REQS+1)+1-1:0] perf_dcache_pending_read_cycle;
 
-    reg  [`PERF_CTR_BITS-1:0] perf_icache_pending_reads;
-    reg  [`PERF_CTR_BITS-1:0] perf_dcache_pending_reads;
+    reg [`PERF_CTR_BITS-1:0] perf_icache_pending_reads;
+    reg [`PERF_CTR_BITS-1:0] perf_dcache_pending_reads;
 
-    reg  [`PERF_CTR_BITS-1:0] perf_ifetches;
-    reg  [`PERF_CTR_BITS-1:0] perf_loads;
-    reg  [`PERF_CTR_BITS-1:0] perf_stores;
+    reg [`PERF_CTR_BITS-1:0] perf_ifetches;
+    reg [`PERF_CTR_BITS-1:0] perf_loads;
+    reg [`PERF_CTR_BITS-1:0] perf_stores;
 
-    wire  perf_icache_req_fire = icache_bus_if.req_valid & icache_bus_if.req_ready;
-    wire  perf_icache_rsp_fire = icache_bus_if.rsp_valid & icache_bus_if.rsp_ready;
+    wire perf_icache_req_fire = icache_bus_if.req_valid && icache_bus_if.req_ready;
+    wire perf_icache_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
 
     wire [DCACHE_NUM_REQS-1:0] perf_dcache_rd_req_fire, perf_dcache_rd_req_fire_r;
     wire [DCACHE_NUM_REQS-1:0] perf_dcache_wr_req_fire, perf_dcache_wr_req_fire_r;
     wire [DCACHE_NUM_REQS-1:0] perf_dcache_rsp_fire;
 
     for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
-        assign perf_dcache_rd_req_fire[i] = dcache_bus_if[i].req_valid && ~dcache_bus_if[i].req_data.rw && dcache_bus_if[i].req_ready;
-        assign perf_dcache_wr_req_fire[i] = dcache_bus_if[i].req_valid && dcache_bus_if[i].req_data.rw && dcache_bus_if[i].req_ready;
+        assign perf_dcache_rd_req_fire[i] = dcache_bus_if[i].req_valid && dcache_bus_if[i].req_ready && ~dcache_bus_if[i].req_data.rw;
+        assign perf_dcache_wr_req_fire[i] = dcache_bus_if[i].req_valid && dcache_bus_if[i].req_ready && dcache_bus_if[i].req_data.rw;
         assign perf_dcache_rsp_fire[i] = dcache_bus_if[i].rsp_valid && dcache_bus_if[i].rsp_ready;
     end
 
