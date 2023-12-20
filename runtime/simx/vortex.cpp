@@ -87,7 +87,7 @@ private:
 class vx_device {    
 public:
     vx_device() 
-        : arch_(NUM_THREADS, NUM_WARPS, NUM_CORES, NUM_CLUSTERS)
+        : arch_(NUM_THREADS, NUM_WARPS, NUM_CORES)
         , ram_(RAM_PAGE_SIZE)
         , processor_(arch_)
         , global_mem_(

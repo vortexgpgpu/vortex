@@ -40,7 +40,7 @@
 
 namespace vortex {
 
-class Cluster;
+class Socket;
 
 using TraceSwitch = Mux<pipeline_trace_t*>;
 
@@ -53,10 +53,6 @@ public:
     uint64_t sched_stalls;
     uint64_t ibuf_stalls;
     uint64_t scrb_stalls;
-    uint64_t alu_stalls;
-    uint64_t lsu_stalls;
-    uint64_t fpu_stalls;
-    uint64_t sfu_stalls;
     uint64_t scrb_alu;
     uint64_t scrb_fpu;
     uint64_t scrb_lsu;
@@ -74,10 +70,6 @@ public:
       , sched_stalls(0)
       , ibuf_stalls(0)
       , scrb_stalls(0)
-      , alu_stalls(0)
-      , lsu_stalls(0)
-      , fpu_stalls(0)
-      , sfu_stalls(0)
       , scrb_alu(0)
       , scrb_fpu(0)
       , scrb_lsu(0)
@@ -96,12 +88,7 @@ public:
   std::vector<SimPort<MemReq>> dcache_req_ports;
   std::vector<SimPort<MemRsp>> dcache_rsp_ports;
 
-  Core(const SimContext& ctx, 
-       uint32_t core_id, 
-       Cluster* cluster,
-       const Arch &arch, 
-       const DCRS &dcrs,
-       SharedMem::Ptr  sharedmem);
+  Core(const SimContext& ctx, uint32_t core_id, Socket* socket, const Arch &arch, const DCRS &dcrs);
 
   ~Core();
 
@@ -117,6 +104,10 @@ public:
 
   uint32_t id() const {
     return core_id_;
+  }
+
+  Socket* socket() const {
+    return socket_;
   }
 
   const Arch& arch() const {
@@ -181,7 +172,8 @@ private:
   std::vector<Operand::Ptr> operands_;
   std::vector<Dispatcher::Ptr> dispatchers_;
   std::vector<ExeUnit::Ptr> exe_units_;
-  SharedMem::Ptr sharedmem_;
+  SharedMem::Ptr shared_mem_;
+  std::vector<SMemDemux::Ptr> smem_demuxs_;
 
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;
@@ -201,7 +193,7 @@ private:
   
   PerfStats perf_stats_;
   
-  Cluster* cluster_;
+  Socket* socket_;
 
   std::vector<TraceSwitch::Ptr> commit_arbs_;
 
