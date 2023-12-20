@@ -204,10 +204,6 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t sched_stalls = 0;
   uint64_t ibuffer_stalls = 0;
   uint64_t scrb_stalls = 0;
-  uint64_t lsu_stalls = 0;
-  uint64_t fpu_stalls = 0;
-  uint64_t alu_stalls = 0;
-  uint64_t sfu_stalls = 0;
   uint64_t scrb_alu = 0;
   uint64_t scrb_fpu = 0;
   uint64_t scrb_lsu = 0;
@@ -310,34 +306,10 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
           calcAvgPercent(scrb_sfu_per_core, scrb_total));
         scrb_stalls += scrb_stalls_per_core;
       }
-      // alu_stalls
-      {
-        uint64_t alu_stalls_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_ALU_ST);
-        if (num_cores > 1) fprintf(stream, "PERF: core%d: alu unit stalls=%ld\n", core_id, alu_stalls_per_core);
-        alu_stalls += alu_stalls_per_core;      
-      }
-      // lsu_stalls
-      {
-        uint64_t lsu_stalls_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_LSU_ST);
-        if (num_cores > 1) fprintf(stream, "PERF: core%d: lsu unit stalls=%ld\n", core_id, lsu_stalls_per_core);
-        lsu_stalls += lsu_stalls_per_core;
-      }
-      // fpu_stalls
-      {
-        uint64_t fpu_stalls_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_FPU_ST);
-        if (num_cores > 1) fprintf(stream, "PERF: core%d: fpu unit stalls=%ld\n", core_id, fpu_stalls_per_core);
-        fpu_stalls += fpu_stalls_per_core;      
-      }
-      // sfu_stalls
-      {
-        uint64_t sfu_stalls_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SFU_ST);
-        if (num_cores > 1) fprintf(stream, "PERF: core%d: sfu unit stalls=%ld\n", core_id, sfu_stalls_per_core);
-        sfu_stalls += sfu_stalls_per_core;
-      }
       // PERF: memory
       // ifetches
       {
-        uint64_t ifetches_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_LOADS);
+        uint64_t ifetches_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_IFETCHES);
         if (num_cores > 1) fprintf(stream, "PERF: core%d: ifetches=%ld\n", core_id, ifetches_per_core);
         ifetches += ifetches_per_core;
 
@@ -464,10 +436,6 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       calcAvgPercent(scrb_fpu, scrb_total),
       calcAvgPercent(scrb_lsu, scrb_total),
       calcAvgPercent(scrb_sfu, scrb_total));
-    fprintf(stream, "PERF: alu unit stalls=%ld\n", alu_stalls);
-    fprintf(stream, "PERF: lsu unit stalls=%ld\n", lsu_stalls);
-    fprintf(stream, "PERF: fpu unit stalls=%ld\n", fpu_stalls);
-    fprintf(stream, "PERF: sfu unit stalls=%ld\n", sfu_stalls);
     fprintf(stream, "PERF: ifetches=%ld\n", ifetches);
     fprintf(stream, "PERF: loads=%ld\n", loads);
     fprintf(stream, "PERF: stores=%ld\n", stores);    
