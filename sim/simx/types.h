@@ -70,6 +70,7 @@ inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
   case RegType::Integer: os << "x"; break;  
   case RegType::Float:   os << "f"; break;
   case RegType::Vector:  os << "v"; break;
+  default: assert(false);
   }
   return os;
 }
@@ -112,6 +113,7 @@ inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
   case AluType::SYSCALL: os << "SYSCALL"; break;
   case AluType::IMUL:    os << "IMUL"; break;
   case AluType::IDIV:    os << "IDIV"; break;
+  default: assert(false);
   }
   return os;
 }
@@ -129,6 +131,7 @@ inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
   case LsuType::LOAD:  os << "LOAD"; break;
   case LsuType::STORE: os << "STORE"; break;
   case LsuType::FENCE: os << "FENCE"; break;
+  default: assert(false);
   }
   return os;
 }
@@ -146,6 +149,7 @@ inline std::ostream &operator<<(std::ostream &os, const AddrType& type) {
   case AddrType::Global: os << "Global"; break;
   case AddrType::Shared: os << "Shared"; break;
   case AddrType::IO:     os << "IO"; break;
+  default: assert(false);
   }
   return os;
 }
@@ -174,6 +178,7 @@ inline std::ostream &operator<<(std::ostream &os, const FpuType& type) {
   case FpuType::FDIV:  os << "FDIV"; break;
   case FpuType::FSQRT: os << "FSQRT"; break;
   case FpuType::FCVT:  os << "FCVT"; break;
+  default: assert(false);
   }
   return os;
 }
@@ -205,6 +210,7 @@ inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
   case SfuType::CSRRS:  os << "CSRRS"; break;
   case SfuType::CSRRC:  os << "CSRRC"; break;
   case SfuType::CMOV:   os << "CMOV"; break;
+  default: assert(false);
   }
   return os;
 }
@@ -220,6 +226,7 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
   switch (type) {
   case ArbiterType::Priority:   os << "Priority"; break;
   case ArbiterType::RoundRobin: os << "RoundRobin"; break;
+  default: assert(false);
   }
   return os;
 }
