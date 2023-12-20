@@ -262,7 +262,10 @@
 `endif
 
 // LSU Duplicate Address Check
-`ifdef LSU_DUP
+`ifndef LSU_DUP_DISABLE
+`define LSU_DUP_ENABLE
+`endif
+`ifdef LSU_DUP_ENABLE
 `define LSU_DUP_ENABLED 1
 `else
 `define LSU_DUP_ENABLED 0
@@ -381,7 +384,7 @@
 
 // Number of Cache Units
 `ifndef NUM_ICACHES
-`define NUM_ICACHES `UP(`NUM_CORES / 4)
+`define NUM_ICACHES `UP(`SOCKET_SIZE / 4)
 `endif
 
 // Cache Size
@@ -430,7 +433,7 @@
 
 // Number of Cache Units
 `ifndef NUM_DCACHES
-`define NUM_DCACHES `UP(`NUM_CORES / 4)
+`define NUM_DCACHES `UP(`SOCKET_SIZE / 4)
 `endif
 
 // Cache Size
