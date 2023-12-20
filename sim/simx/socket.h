@@ -17,42 +17,47 @@
 #include "dcrs.h"
 #include "arch.h"
 #include "cache_cluster.h"
+#include "shared_mem.h"
 #include "core.h"
-#include "socket.h"
 #include "constants.h"
 
 namespace vortex {
 
-class ProcessorImpl;
+class Cluster;
 
-class Cluster : public SimObject<Cluster> {
+class Socket : public SimObject<Socket> {
 public:
-  struct PerfStats {    
-    CacheSim::PerfStats l2cache;
+  struct PerfStats {
+    CacheSim::PerfStats icache;
+    CacheSim::PerfStats dcache;
 
     PerfStats& operator+=(const PerfStats& rhs) {
-      this->l2cache += rhs.l2cache;
+      this->icache += rhs.icache;
+      this->dcache += rhs.dcache;
       return *this;
     }
   };
 
-  SimPort<MemReq> mem_req_port;
-  SimPort<MemRsp> mem_rsp_port;
+  SimPort<MemReq> icache_mem_req_port;
+  SimPort<MemRsp> icache_mem_rsp_port;
 
-  Cluster(const SimContext& ctx, 
-          uint32_t cluster_id,
-          ProcessorImpl* processor, 
-          const Arch &arch, 
-          const DCRS &dcrs);
+  SimPort<MemReq> dcache_mem_req_port;
+  SimPort<MemRsp> dcache_mem_rsp_port;
 
-  ~Cluster();
+  Socket(const SimContext& ctx, 
+         uint32_t socket_id,
+         Cluster* cluster, 
+         const Arch &arch, 
+         const DCRS &dcrs);
+
+  ~Socket();
 
   uint32_t id() const {
-    return cluster_id_;
+    return socket_id_;
   }
 
-  ProcessorImpl* processor() const {
-    return processor_;
+  Cluster* cluster() const {
+    return cluster_;
   }
 
   void reset();
@@ -67,15 +72,16 @@ public:
 
   void barrier(uint32_t bar_id, uint32_t count, uint32_t core_id);
 
-  Cluster::PerfStats perf_stats() const;
+  void resume(uint32_t core_id);
+
+  Socket::PerfStats perf_stats() const;
   
 private:
-  uint32_t                  cluster_id_;  
-  std::vector<Socket::Ptr>  sockets_;  
-  std::vector<CoreMask>     barriers_;
-  CacheSim::Ptr             l2cache_;
-  ProcessorImpl*            processor_;
-  uint32_t                  cores_per_socket_;
+  uint32_t                socket_id_;  
+  std::vector<Core::Ptr>  cores_;
+  CacheCluster::Ptr       icaches_;
+  CacheCluster::Ptr       dcaches_;
+  Cluster*                cluster_;
 };
 
 } // namespace vortex
