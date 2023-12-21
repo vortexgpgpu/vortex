@@ -23,7 +23,7 @@ interface VX_pipeline_perf_if ();
     wire [`PERF_CTR_BITS-1:0] ifetches;
     wire [`PERF_CTR_BITS-1:0] loads;
     wire [`PERF_CTR_BITS-1:0] stores;    
-    wire [`PERF_CTR_BITS-1:0] fetch_latency;
+    wire [`PERF_CTR_BITS-1:0] ifetch_latency;
     wire [`PERF_CTR_BITS-1:0] load_latency;
 
     modport schedule (
