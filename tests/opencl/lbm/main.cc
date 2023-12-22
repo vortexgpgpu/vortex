@@ -21,6 +21,26 @@
 #include "main.h"
 #include "ocl.h"
 
+static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return CL_INVALID_VALUE;
+
+  FILE* fp = fopen(filename, "r");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to load kernel.");
+    return CL_INVALID_VALUE;
+  }
+  fseek(fp , 0 , SEEK_END);
+  long fsize = ftell(fp);
+  rewind(fp);
+
+  *data = (uint8_t*)malloc(fsize);
+  *size = fread(*data, 1, fsize, fp);
+  
+  fclose(fp);
+  
+  return CL_SUCCESS;
+}
 
 /*############################################################################*/
 
@@ -153,13 +173,9 @@ void MAIN_initialize(const MAIN_Param *param, const OpenCL_Param *prm) {
 
 	pb_SwitchToTimer(&timers, pb_TimerID_COPY);
 
-	printf("OK+\n");
-
   // Setup DEVICE datastructures
   OpenCL_LBM_allocateGrid(prm, &OpenCL_srcGrid);
   OpenCL_LBM_allocateGrid(prm, &OpenCL_dstGrid);
-
-	printf("OK-\n");
 
   // Initialize DEVICE datastructures
   OpenCL_LBM_initializeGrid(prm, OpenCL_srcGrid, TEMP_srcGrid);
@@ -170,8 +186,6 @@ void MAIN_initialize(const MAIN_Param *param, const OpenCL_Param *prm) {
 
   LBM_freeGrid((float **)&TEMP_srcGrid);
   LBM_freeGrid((float **)&TEMP_dstGrid);
-
-	printf("OK\n");
 }
 
 /*############################################################################*/
@@ -188,7 +202,9 @@ void MAIN_finalize(const MAIN_Param *param, const OpenCL_Param *prm) {
   pb_SwitchToTimer(&timers, pb_TimerID_COMPUTE);
   LBM_showGridStatistics(TEMP_srcGrid);
 
-  LBM_storeVelocityField(TEMP_srcGrid, param->resultFilename, TRUE);
+  if (param->resultFilename) {
+    LBM_storeVelocityField(TEMP_srcGrid, param->resultFilename, TRUE);
+  }
 
   LBM_freeGrid((float **)&TEMP_srcGrid);
   OpenCL_LBM_freeGrid(OpenCL_srcGrid);
@@ -220,8 +236,14 @@ void OpenCL_initialize(struct pb_Parameters *p, OpenCL_Param *prm) {
 
   //const char *clSource[] = {readFile("src/opencl_base/kernel.cl")};
   //prm->clProgram = clCreateProgramWithSource(prm->clContext, 1, clSource, NULL, &clStatus);
-	prm->clProgram = clCreateProgramWithBuiltInKernels(
-      prm->clContext, 1, &prm->clDevice, "performStreamCollide_kernel", &clStatus);
+  // read kernel binary from file
+  uint8_t *kernel_bin = NULL;
+  size_t kernel_size;
+  cl_int binary_status = 0;  
+  clStatus = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
+  CHECK_ERROR("read_kernel_file")  
+	prm->clProgram = clCreateProgramWithBinary(
+      prm->clContext, 1, &prm->clDevice, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &clStatus);
   CHECK_ERROR("clCreateProgramWithSource")
 
   //char clOptions[100];

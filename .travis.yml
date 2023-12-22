@@ -1,76 +1,90 @@
 language: cpp
-dist: bionic
+dist: focal
 os: linux
 compiler: gcc
-addons:
-    apt:
-        sources:
-        - ubuntu-toolchain-r-test
-        packages:
-        - build-essential
-        - valgrind
-        - verilator
-        - yosys        
-        - libpng-dev
-        - libboost-serialization-dev
-        - libstdc++6
 
-install:
-  # Set environments  
-  - export RISCV_TOOLCHAIN_PATH=/opt/riscv-gnu-toolchain
-  - export VERILATOR_ROOT=/opt/verilator
-  - export PATH=$VERILATOR_ROOT/bin:$PATH
-  # Install toolchain
-  - ci/toolchain_install.sh -all
-  # build project
-  - make -s
+addons:  
+  apt:
+    packages:
+      - build-essential
+      - valgrind
+      - libstdc++6
 
-# stages ordering
+env:
+  global:
+    - TOOLDIR=$HOME/tools
+
+cache:
+  directories:
+    - $TOOLDIR
+    - $HOME/build32
+    - $HOME/build64
+
+before_install:
+  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ]; then  
+      mkdir -p $TOOLDIR;
+      OSDIR=ubuntu/focal ./ci/toolchain_install.sh --all;
+    fi
+  - source ./ci/toolchain_env.sh
+
 stages:
+  - setup
   - test
 
 jobs:     
   include:
-    - stage: test
-      name: coverage
-      script: cp -r $PWD ../build_coverage && cd ../build_coverage && ./ci/travis_run.py ./ci/regression.sh -coverage
-    - stage: test
-      name: coverage64
-      script: cp -r $PWD ../build_coverage64 && cd ../build_coverage64 && ./ci/travis_run.py ./ci/regression64.sh -coverage
-    - stage: test
-      name: tex
-      script: cp -r $PWD ../build_tex && cd ../build_tex && ./ci/travis_run.py ./ci/regression.sh -tex
-    - stage: test
+    - stage: setup
+      script:
+        - rm -rf $HOME/build32 && cp -r $PWD $HOME/build32
+        - rm -rf $HOME/build64 && cp -r $PWD $HOME/build64
+        - make -C $HOME/build32
+        - XLEN=64 make -C $HOME/build64
+    - stage: test 
+      name: unittest
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --unittest
+    - stage: test 
+      name: isa
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --isa
+    - stage: test 
+      name: isa64
+      script: cp -r $HOME/build64 build && cd build && XLEN=64 ./ci/travis_run.py ./ci/regression.sh --isa
+    - stage: test 
+      name: regression
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --regression
+    - stage: test 
+      name: regression64
+      script: cp -r $HOME/build64 build && cd build && XLEN=64 ./ci/travis_run.py ./ci/regression.sh --regression
+    - stage: test 
+      name: opencl
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --opencl    
+    - stage: test 
       name: cluster
-      script: cp -r $PWD ../build_cluster && cd ../build_cluster && ./ci/travis_run.py ./ci/regression.sh -cluster    
-    - stage: test
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --cluster    
+    - stage: test 
       name: config
-      script: cp -r $PWD ../build_config && cd ../build_config && ./ci/travis_run.py ./ci/regression.sh -config
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --config
     - stage: test
       name: debug
-      script: cp -r $PWD ../build_debug && cd ../build_debug && ./ci/travis_run.py ./ci/regression.sh -debug
-    - stage: test
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --debug
+    - stage: test 
       name: stress0
-      script: cp -r $PWD ../build_stress0 && cd ../build_stress0 && ./ci/travis_run.py ./ci/regression.sh -stress0
-    - stage: test
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --stress0
+    - stage: test 
       name: stress1
-      script: cp -r $PWD ../build_stress1 && cd ../build_stress1 && ./ci/travis_run.py ./ci/regression.sh -stress1
-    - stage: test
-      name: compiler
-      script: cp -r $PWD ../build_compiler && cd ../build_compiler && ./ci/travis_run.py ./ci/test_compiler.sh
-    - stage: test
-      name: tex
-      script: cp -r $PWD ../build_tex && cd ../build_tex && ./ci/travis_run.py ./ci/regression.sh -tex
-    - stage: test
-      name: unittest
-      script: cp -r $PWD ../build_unittest && cd ../build_unittest && ./ci/travis_run.py ./ci/regression.sh -unittest
-  
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --stress1
+    - stage: test 
+      name: synthesis
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --synthesis
+    - stage: test 
+      name: synthesis64
+      script: cp -r $HOME/build64 build && cd build && XLEN=64 ./ci/travis_run.py ./ci/regression.sh --synthesis
+            
 after_success:
   # Gather code coverage
-  - lcov --directory driver --capture --output-file driver.cov # capture trace  
-  - lcov --directory simx --capture --output-file simx.cov # capture trace    
-  - lcov --list driver.cov # output coverage data for debugging
-  - lcov --list simx.cov # output coverage data for debugging
+  - lcov --directory runtime --capture --output-file runtime.cov # capture trace  
+  - lcov --directory sim --capture --output-file sim.cov # capture trace    
+  - lcov --list runtime.cov # output coverage data for debugging
+  - lcov --list sim.cov # output coverage data for debugging
   # Upload coverage report
-  - bash <(curl -s https://codecov.io/bash) -f driver.cov
-  - bash <(curl -s https://codecov.io/bash) -f simx.cov
+  - bash <(curl -s https://codecov.io/bash) -f runtime.cov
+  - bash <(curl -s https://codecov.io/bash) -f sim.cov

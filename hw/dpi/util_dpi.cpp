@@ -1,23 +1,56 @@
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <stdio.h>
 #include <math.h>
 #include <unordered_map>
 #include <vector>
 #include <mutex>
 #include <iostream>
+
 #include "svdpi.h"
 #include "verilated_vpi.h"
-#include "VX_config.h"
+
+#include "uuid_gen.h"
+
+#ifdef XLEN_64
+#define iword_t   int64_t
+#define uword_t   uint64_t
+#define idword_t  __int128_t
+#define udword_t  __uint128_t
+#else
+#define iword_t   int32_t
+#define uword_t   uint32_t
+#define idword_t  int64_t
+#define udword_t  uint64_t
+#endif
+
+#ifndef DEBUG_LEVEL
+#define DEBUG_LEVEL 3
+#endif
 
 extern "C" {
-  void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth);
-  void dpi_idiv(bool enable, int a, int b, bool is_signed, int* quotient, int* remainder);
+  void dpi_imul(bool enable, bool is_signed_a, bool is_signed_b, iword_t a, iword_t b, iword_t* resultl, iword_t* resulth);
+  void dpi_idiv(bool enable, bool is_signed, iword_t a, iword_t b, iword_t* quotient, iword_t* remainder);
 
   int dpi_register();
   void dpi_assert(int inst, bool cond, int delay);
 
-  void dpi_trace(const char* format, ...);
+  void dpi_trace(int level, const char* format, ...);
   void dpi_trace_start();
   void dpi_trace_stop();
+
+  uint64_t dpi_uuid_gen(bool reset, int wid, uint64_t PC);
 }
 
 bool sim_trace_enabled();
@@ -93,49 +126,54 @@ void dpi_assert(int inst, bool cond, int delay) {
   }
 }
 
-void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth) {
+///////////////////////////////////////////////////////////////////////////////
+
+void dpi_imul(bool enable, bool is_signed_a, bool is_signed_b, iword_t a, iword_t b, iword_t* resultl, iword_t* resulth) {
   if (!enable)
     return;
+  udword_t first  = *(uword_t*)&a;
+  udword_t second = *(uword_t*)&b;
+
+  udword_t mask = udword_t(-1) << (8 * sizeof(iword_t));
     
-  uint64_t first  = *(uint32_t*)&a;
-  uint64_t second = *(uint32_t*)&b;
-    
-  if (is_signed_a && (first & 0x80000000)) {
-    first |= 0xFFFFFFFF00000000;
+  if (is_signed_a && a < 0) {
+    first |= mask;
   }
 
-  if (is_signed_b && (second & 0x80000000)) {
-    second |= 0xFFFFFFFF00000000;
+  if (is_signed_b && b < 0) {
+    second |= mask;
   }
 
-  uint64_t result;
+  udword_t result;
   if (is_signed_a || is_signed_b) {
-    result = (int64_t)first * (int64_t)second;
+    result = idword_t(first) * idword_t(second);
   } else {
     result = first * second;
-  }    
-    
-  *resultl = result & 0xFFFFFFFF;
-  *resulth = (result >> 32) & 0xFFFFFFFF;
+  }
+
+  *resultl = iword_t(result);
+  *resulth = iword_t(result >> (8 * sizeof(iword_t)));
 }
 
-void dpi_idiv(bool enable, int a, int b, bool is_signed, int* quotient, int* remainder) {
+void dpi_idiv(bool enable, bool is_signed, iword_t a, iword_t b, iword_t* quotient, iword_t* remainder) {
   if (!enable)
     return;
 
-  uint32_t dividen = *(uint32_t*)&a;
-  uint32_t divisor = *(uint32_t*)&b;
+  uword_t dividen = a;
+  uword_t divisor = b;
+
+  auto inf_neg = uword_t(1) << (8 * sizeof(iword_t) - 1);
 
   if (is_signed) {
     if (b == 0) {
       *quotient  = -1;
       *remainder = dividen;
-    } else if (dividen == 0x80000000 && divisor == 0xffffffff) {
+    } else if (dividen == inf_neg && divisor == -1) {
       *remainder = 0;
       *quotient  = dividen;
     } else { 
-      *quotient  = (int32_t)dividen / (int32_t)divisor;
-      *remainder = (int32_t)dividen % (int32_t)divisor;      
+      *quotient  = (iword_t)dividen / (iword_t)divisor;
+      *remainder = (iword_t)dividen % (iword_t)divisor;      
     }
   } else {    
     if (b == 0) {
@@ -148,7 +186,11 @@ void dpi_idiv(bool enable, int a, int b, bool is_signed, int* quotient, int* rem
   }
 }
 
-void dpi_trace(const char* format, ...) { 
+///////////////////////////////////////////////////////////////////////////////
+
+void dpi_trace(int level, const char* format, ...) { 
+  if (level > DEBUG_LEVEL)
+    return;
   if (!sim_trace_enabled())
     return;
   va_list va;
@@ -163,4 +205,28 @@ void dpi_trace_start() {
 
 void dpi_trace_stop() { 
   sim_trace_enable(false);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+std::unordered_map<uint32_t, std::shared_ptr<vortex::UUIDGenerator>> g_uuid_gens;
+
+uint64_t dpi_uuid_gen(bool reset, int wid, uint64_t PC) {
+  if (reset) {
+    g_uuid_gens.clear();
+    return 0;
+  }
+  std::shared_ptr<vortex::UUIDGenerator> uuid_gen;
+  auto it = g_uuid_gens.find(wid);
+  if (it == g_uuid_gens.end()) {
+    uuid_gen = std::make_shared<vortex::UUIDGenerator>();
+    g_uuid_gens.emplace(wid, uuid_gen);
+  } else {
+    uuid_gen = it->second;
+  }
+  uint32_t instr_uuid = uuid_gen->get_uuid(PC);
+  uint32_t instr_id  = instr_uuid & 0xffff;
+  uint32_t instr_ref = instr_uuid >> 16;
+  uint64_t uuid = (uint64_t(instr_ref) << 32) | (wid << 16) | instr_id;
+  return uuid;
 }

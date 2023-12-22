@@ -1,0 +1,54 @@
+{
+   "version": 1,
+   "afu-image": {
+      "power": 0,
+      "clock-frequency-high": "auto-200",
+      "clock-frequency-low":  "auto-100",
+      
+      "cmd-mem-read":     1,
+      "cmd-mem-write":    2,
+      "cmd-run":          3,
+      "cmd-dcr-write":    4,
+      "cmd-max-value":    4,
+      
+      "mmio-cmd-type":    10,     
+      "mmio-cmd-arg0":    12,
+      "mmio-cmd-arg1":    14,
+      "mmio-cmd-arg2":    16,          
+      "mmio-status":      18,   
+      "mmio-scope-read":  20,
+      "mmio-scope-write": 22,
+      "mmio-dev-caps":    24,
+      "mmio-isa-caps":    26,
+
+      "afu-top-interface":
+         {
+            "class": "ccip_std_afu_avalon_mm",
+            "module-ports" :
+               [
+                  {
+                     "class": "cci-p",
+                     "params":
+                        {
+                           "clock": "uClk_usr"
+                        }
+                  },
+                  {
+                     "class": "local-memory",
+                     "params":
+                        {
+                           "clock": "uClk_usr"
+                        }
+                  }
+               ]
+         },
+      "accelerator-clusters":
+         [
+            {
+               "name": "vortex_afu",
+               "total-contexts": 1,
+               "accelerator-type-uuid": "35f9452b-25c2-434c-93d5-6f8c60db361c"
+            }
+         ]
+   }
+}

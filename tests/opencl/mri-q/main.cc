@@ -34,6 +34,27 @@
 #include "macros.h"
 #include "computeQ.h"
 
+static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return CL_INVALID_VALUE;
+
+  FILE* fp = fopen(filename, "r");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to load kernel.");
+    return CL_INVALID_VALUE;
+  }
+  fseek(fp , 0 , SEEK_END);
+  long fsize = ftell(fp);
+  rewind(fp);
+
+  *data = (uint8_t*)malloc(fsize);
+  *size = fread(*data, 1, fsize, fp);
+  
+  fclose(fp);
+  
+  return CL_SUCCESS;
+}
+
 static void
 setupMemoryGPU(int num, int size, cl_mem* dev_ptr, float* host_ptr,clPrmtr* clPrm)
 {
@@ -93,8 +114,6 @@ main (int argc, char *argv[]) {
 	    &x, &y, &z,
 	    &phiR, &phiI);
 
-  printf("OK\n");
-
   /* Reduce the number of k-space samples if a number is given
    * on the command line */
   if (argc < 2)
@@ -137,13 +156,20 @@ main (int argc, char *argv[]) {
 
   pb_SetOpenCL(&(clPrm.clContext), &(clPrm.clCommandQueue));
 
-  printf("OK\n");
-
-  //const char* clSource[] = {readFile("src/opencl_base/kernels.cl")};
-  //cl_program clProgram = clCreateProgramWithSource(clPrm.clContext,1,clSource,NULL,&clStatus);
-  cl_program clProgram = clCreateProgramWithBuiltInKernels(
-      clPrm.clContext, 1, &clDevice, "ComputePhiMag_GPU;ComputeQ_GPU", &clStatus);
+#ifdef HOSTGPU
+  const char* clSource[] = {readFile("kernel.cl")};
   CHECK_ERROR("clCreateProgramWithSource")
+  cl_program clProgram = clCreateProgramWithSource(clPrm.clContext,1,clSource,NULL,&clStatus);
+#else
+  uint8_t *kernel_bin = NULL;
+  size_t kernel_size;
+  cl_int binary_status = 0;  
+  CHECK_ERROR("read_kernel_file")
+  clStatus = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);  
+  CHECK_ERROR("clCreateProgramWithSource")
+	cl_program clProgram = clCreateProgramWithBinary(
+      clPrm.clContext, 1, &clDevice, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &clStatus);  
+#endif
 
   char options[50];
   sprintf(options,"-I src/opencl_nvidia");

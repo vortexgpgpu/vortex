@@ -122,11 +122,6 @@ int main (int argc, char **argv) {
   
   cl_platform_id platform_id;
   size_t kernel_size;
-  cl_int binary_status;
-
-  // read kernel binary from file  
-  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
-    return -1;
   
   // Getting platform and device information
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
@@ -142,12 +137,17 @@ int main (int argc, char **argv) {
   c_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, nbytes, NULL, &_err));
 
   printf("Create program from kernel source\n");
-  program = CL_CHECK2(clCreateProgramWithBinary(
-    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &_err));
-  if (program == NULL) {
-    cleanup();
+#ifdef HOSTGPU
+  if (0 != read_kernel_file("kernel.cl", &kernel_bin, &kernel_size))
     return -1;
-  }
+  program = CL_CHECK2(clCreateProgramWithSource(
+    context, 1, (const char**)&kernel_bin, &kernel_size, &_err));  
+#else
+  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
+    return -1;
+  program = CL_CHECK2(clCreateProgramWithBinary(
+    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, NULL, &_err));
+#endif
 
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
@@ -165,12 +165,10 @@ int main (int argc, char **argv) {
   h_b = (float*)malloc(nbytes);
   h_c = (float*)malloc(nbytes);	
 	
-  // Initialize values for array members.  
+  // Generate input values
   for (int i = 0; i < size; ++i) {
     h_a[i] = sinf(i)*sinf(i);
     h_b[i] = cosf(i)*cosf(i);
-    h_c[i] = 0xdeadbeef;
-    //printf("*** [%d]: h_a=%f, h_b=%f\n", i, h_a[i], h_b[i]);
   }
 
   // Creating command queue
@@ -182,9 +180,8 @@ int main (int argc, char **argv) {
 
   printf("Execute the kernel\n");
   size_t global_work_size[1] = {size};
-  size_t local_work_size[1] = {1};
   auto time_start = std::chrono::high_resolution_clock::now();
-  CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, global_work_size, local_work_size, 0, NULL, NULL));
+  CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL));
   CL_CHECK(clFinish(commandQueue));
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();

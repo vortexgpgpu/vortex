@@ -1,3 +1,16 @@
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "mem.h"
 #include <vector>
 #include <iostream>
@@ -20,8 +33,9 @@ RamMemDevice::RamMemDevice(const char *filename, uint32_t wordSize)
     contents_.push_back(input.get());
   } while (input);
 
-  while (contents_.size() & (wordSize-1))
+  while (contents_.size() & (wordSize-1)) {
     contents_.push_back(0x00);
+  }
 }
 
 RamMemDevice::RamMemDevice(uint64_t size, uint32_t wordSize)
@@ -29,7 +43,7 @@ RamMemDevice::RamMemDevice(uint64_t size, uint32_t wordSize)
   , wordSize_(wordSize)
 {}
 
-void RamMemDevice::read(void *data, uint64_t addr, uint64_t size) {
+void RamMemDevice::read(void* data, uint64_t addr, uint64_t size) {
   auto addr_end = addr + size;
   if ((addr & (wordSize_-1))
    || (addr_end & (wordSize_-1)) 
@@ -44,7 +58,7 @@ void RamMemDevice::read(void *data, uint64_t addr, uint64_t size) {
   }
 }
 
-void RamMemDevice::write(const void *data, uint64_t addr, uint64_t size) {
+void RamMemDevice::write(const void* data, uint64_t addr, uint64_t size) {
   auto addr_end = addr + size;
   if ((addr & (wordSize_-1))
    || (addr_end & (wordSize_-1)) 
@@ -68,26 +82,26 @@ void RomMemDevice::write(const void* /*data*/, uint64_t /*addr*/, uint64_t /*siz
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool MemoryUnit::ADecoder::lookup(uint64_t a, uint32_t wordSize, mem_accessor_t* ma) {
-  uint64_t e = a + (wordSize - 1);
-  assert(e >= a);
+bool MemoryUnit::ADecoder::lookup(uint64_t addr, uint32_t wordSize, mem_accessor_t* ma) {
+  uint64_t end = addr + (wordSize - 1);
+  assert(end >= addr);
   for (auto iter = entries_.rbegin(), iterE = entries_.rend(); iter != iterE; ++iter) {
-    if (a >= iter->start && e <= iter->end) {
+    if (addr >= iter->start && end <= iter->end) {
       ma->md   = iter->md;
-      ma->addr = a - iter->start;
+      ma->addr = addr - iter->start;
       return true;
     }
   }
   return false;
 }
 
-void MemoryUnit::ADecoder::map(uint64_t a, uint64_t e, MemDevice &m) {
-  assert(e >= a);
-  entry_t entry{&m, a, e};
+void MemoryUnit::ADecoder::map(uint64_t start, uint64_t end, MemDevice &md) {
+  assert(end >= start);
+  entry_t entry{&md, start, end};
   entries_.emplace_back(entry);
 }
 
-void MemoryUnit::ADecoder::read(void *data, uint64_t addr, uint64_t size) {
+void MemoryUnit::ADecoder::read(void* data, uint64_t addr, uint64_t size) {
   mem_accessor_t ma;
   if (!this->lookup(addr, size, &ma)) {
     std::cout << "lookup of 0x" << std::hex << addr << " failed.\n";
@@ -96,7 +110,7 @@ void MemoryUnit::ADecoder::read(void *data, uint64_t addr, uint64_t size) {
   ma.md->read(data, ma.addr, size);
 }
 
-void MemoryUnit::ADecoder::write(const void *data, uint64_t addr, uint64_t size) {
+void MemoryUnit::ADecoder::write(const void* data, uint64_t addr, uint64_t size) {
   mem_accessor_t ma;
   if (!this->lookup(addr, size, &ma)) {
     std::cout << "lookup of 0x" << std::hex << addr << " failed.\n";
@@ -107,11 +121,11 @@ void MemoryUnit::ADecoder::write(const void *data, uint64_t addr, uint64_t size)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-MemoryUnit::MemoryUnit(uint64_t pageSize, uint64_t addrBytes, bool disableVm)
+MemoryUnit::MemoryUnit(uint64_t pageSize)
   : pageSize_(pageSize)
-  , addrBytes_(addrBytes)
-  , disableVM_(disableVm) {
-  if (!disableVm) {
+  , enableVM_(pageSize != 0)
+  , amo_reservation_({0x0, false}) {
+  if (pageSize != 0) {
     tlb_[0] = TLBEntry(0, 077);
   }
 }
@@ -133,30 +147,38 @@ MemoryUnit::TLBEntry MemoryUnit::tlbLookup(uint64_t vAddr, uint32_t flagMask) {
   }
 }
 
-void MemoryUnit::read(void *data, uint64_t addr, uint64_t size, bool sup) {
+uint64_t MemoryUnit::toPhyAddr(uint64_t addr, uint32_t flagMask) {
   uint64_t pAddr;
-  if (disableVM_) {
-    pAddr = addr;
-  } else {
-    uint32_t flagMask = sup ? 8 : 1;
+  if (enableVM_) {
     TLBEntry t = this->tlbLookup(addr, flagMask);
     pAddr = t.pfn * pageSize_ + addr % pageSize_;
+  } else {
+    pAddr = addr;    
   }
+  return pAddr;
+}
+
+void MemoryUnit::read(void* data, uint64_t addr, uint64_t size, bool sup) {
+  uint64_t pAddr = this->toPhyAddr(addr, sup ? 8 : 1);
   return decoder_.read(data, pAddr, size);
 }
 
-void MemoryUnit::write(const void *data, uint64_t addr, uint64_t size, bool sup) {
-  uint64_t pAddr;
-  if (disableVM_) {
-    pAddr = addr;
-  } else {
-    uint32_t flagMask = sup ? 16 : 2;
-    TLBEntry t = tlbLookup(addr, flagMask);
-    pAddr = t.pfn * pageSize_ + addr % pageSize_;
-  }
+void MemoryUnit::write(const void* data, uint64_t addr, uint64_t size, bool sup) {
+  uint64_t pAddr = this->toPhyAddr(addr, sup ? 16 : 1);
   decoder_.write(data, pAddr, size);
+  amo_reservation_.valid = false;
 }
 
+void MemoryUnit::amo_reserve(uint64_t addr) {
+  uint64_t pAddr = this->toPhyAddr(addr, 1);
+  amo_reservation_.addr = pAddr;
+  amo_reservation_.valid = true;
+}
+
+bool MemoryUnit::amo_check(uint64_t addr) {
+  uint64_t pAddr = this->toPhyAddr(addr, 1);
+  return amo_reservation_.valid && (amo_reservation_.addr == pAddr);
+}
 void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags) {
   tlb_[virt / pageSize_] = TLBEntry(phys / pageSize_, flags);
 }
@@ -168,12 +190,14 @@ void MemoryUnit::tlbRm(uint64_t va) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-RAM::RAM(uint32_t page_size) 
-  : size_(0)
+RAM::RAM(uint32_t page_size, uint64_t capacity) 
+  : capacity_(capacity)
   , page_bits_(log2ceil(page_size))
   , last_page_(nullptr)
   , last_page_index_(0) {    
    assert(ispow2(page_size));
+   assert(0 == capacity || ispow2(capacity));
+   assert(0 == (capacity % page_size));
 }
 
 RAM::~RAM() {
@@ -191,6 +215,9 @@ uint64_t RAM::size() const {
 }
 
 uint8_t *RAM::get(uint64_t address) const {
+  if (capacity_ != 0 && address >= capacity_) {
+    throw OutOfRange();
+  }
   uint32_t page_size   = 1 << page_bits_;  
   uint32_t page_offset = address & (page_size - 1);
   uint64_t page_index  = address >> page_bits_;
@@ -218,14 +245,14 @@ uint8_t *RAM::get(uint64_t address) const {
   return page + page_offset;
 }
 
-void RAM::read(void *data, uint64_t addr, uint64_t size) {
+void RAM::read(void* data, uint64_t addr, uint64_t size) {
   uint8_t* d = (uint8_t*)data;
   for (uint64_t i = 0; i < size; i++) {
     d[i] = *this->get(addr + i);
   }
 }
 
-void RAM::write(const void *data, uint64_t addr, uint64_t size) {
+void RAM::write(const void* data, uint64_t addr, uint64_t size) {
   const uint8_t* d = (const uint8_t*)data;
   for (uint64_t i = 0; i < size; i++) {
     *this->get(addr + i) = d[i];
@@ -236,6 +263,7 @@ void RAM::loadBinImage(const char* filename, uint64_t destination) {
   std::ifstream ifs(filename);
   if (!ifs) {
     std::cout << "error: " << filename << " not found" << std::endl;
+    std::abort();
   }
 
   ifs.seekg(0, ifs.end);
@@ -268,6 +296,7 @@ void RAM::loadHexImage(const char* filename) {
   std::ifstream ifs(filename);
   if (!ifs) {
     std::cout << "error: " << filename << " not found" << std::endl;
+    std::abort();
   }
 
   ifs.seekg(0, ifs.end);

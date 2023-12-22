@@ -31,8 +31,6 @@ int main(int argc, char *argv[]) {
 
   a = (float *)malloc(size * size * sizeof(float));
 
-  printf("OK\n");
-
   InitMat(fp, size, a, size, size);
   // printf("The input matrix a is:\n");
   // PrintMat(a, size, size, size);

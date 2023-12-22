@@ -1,3 +1,16 @@
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
 
 #include <functional>
@@ -84,33 +97,39 @@ public:
   }
 
   uint64_t pop() {
-    auto cycle = queue_.front().cycle;
+    auto cycles = queue_.front().cycles;
     queue_.pop();
-    return cycle;
+    return cycles;
   }  
 
   void tx_callback(const TxCallback& callback) {
     tx_cb_ = callback;
   }
 
+  uint64_t arrival_time() const {
+    if (queue_.empty())
+      return 0;
+    return queue_.front().cycles;
+  }
+
 protected:
   struct timed_pkt_t {
     Pkt      pkt;
-    uint64_t cycle;
+    uint64_t cycles;
   };
 
   std::queue<timed_pkt_t> queue_;
   SimPort*   peer_;
   TxCallback tx_cb_;
 
-  void push(const Pkt& data, uint64_t cycle) {
+  void push(const Pkt& data, uint64_t cycles) {
     if (tx_cb_) {
-      tx_cb_(data, cycle);
+      tx_cb_(data, cycles);
     }
     if (peer_) {
-      peer_->push(data, cycle);
+      peer_->push(data, cycles);
     } else {
-      queue_.push({data, cycle});
+      queue_.push({data, cycles});
     }
   }
 
@@ -129,14 +148,14 @@ public:
   
   virtual void fire() const = 0;
 
-  uint64_t time() const {
-    return time_;
+  uint64_t cycles() const {
+    return cycles_;
   }
 
 protected:
-  SimEventBase(uint64_t time) : time_(time) {}
+  SimEventBase(uint64_t cycles) : cycles_(cycles) {}
 
-  uint64_t time_;
+  uint64_t cycles_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -150,8 +169,8 @@ public:
 
   typedef std::function<void (const Pkt&)> Func;
 
-  SimCallEvent(const Func& func, const Pkt& pkt, uint64_t time) 
-    : SimEventBase(time)
+  SimCallEvent(const Func& func, const Pkt& pkt, uint64_t cycles) 
+    : SimEventBase(cycles)
     , func_(func)
     , pkt_(pkt)
   {}
@@ -180,11 +199,11 @@ template <typename Pkt>
 class SimPortEvent : public SimEventBase {
 public:
   void fire() const override {
-    const_cast<SimPort<Pkt>*>(port_)->push(pkt_, time_);
+    const_cast<SimPort<Pkt>*>(port_)->push(pkt_, cycles_);
   }
 
-  SimPortEvent(const SimPort<Pkt>* port, const Pkt& pkt, uint64_t time) 
-    : SimEventBase(time) 
+  SimPortEvent(const SimPort<Pkt>* port, const Pkt& pkt, uint64_t cycles) 
+    : SimEventBase(cycles) 
     , port_(port)
     , pkt_(pkt)
   {}
@@ -330,7 +349,7 @@ public:
     auto evt_it_end = events_.end();
     while (evt_it != evt_it_end) {
       auto& event = *evt_it;
-      if (cycles_ >= event->time()) {        
+      if (cycles_ >= event->cycles()) {        
         event->fire();
         evt_it = events_.erase(evt_it);
       } else {        
@@ -395,5 +414,5 @@ void SimPort<Pkt>::send(const Pkt& pkt, uint64_t delay) const {
     reinterpret_cast<const SimPort<Pkt>*>(peer_)->send(pkt, delay);    
   } else {
     SimPlatform::instance().schedule(this, pkt, delay);
-  }  
+  } 
 }

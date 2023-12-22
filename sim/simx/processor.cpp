@@ -1,168 +1,140 @@
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "processor.h"
-#include "core.h"
-#include "constants.h"
+#include "processor_impl.h"
 
 using namespace vortex;
 
-class Processor::Impl {
-private:
-  std::vector<Core::Ptr> cores_;
-  std::vector<Cache::Ptr> l2caches_;
-  std::vector<Switch<MemReq, MemRsp>::Ptr> l2_mem_switches_;
-  Cache::Ptr l3cache_;
-  Switch<MemReq, MemRsp>::Ptr l3_mem_switch_;
+ProcessorImpl::ProcessorImpl(const Arch& arch) 
+  : arch_(arch)
+  , clusters_(arch.num_clusters())
+{
+  SimPlatform::instance().initialize();
 
-public:
-  Impl(const ArchDef& arch) 
-    : cores_(arch.num_cores())
-    , l2caches_(NUM_CLUSTERS)
-    , l2_mem_switches_(NUM_CLUSTERS)
-  {
-    SimPlatform::instance().initialize();
+  // create memory simulator
+  memsim_ = MemSim::Create("dram", MemSim::Config{
+    MEMORY_BANKS,
+    uint32_t(arch.num_cores()) * arch.num_clusters()
+  });
 
-    uint32_t num_cores = arch.num_cores();
-    uint32_t cores_per_cluster = num_cores / NUM_CLUSTERS;
-
-    // create cores
-    for (uint32_t i = 0; i < num_cores; ++i) {
-        cores_.at(i) = Core::Create(arch, i);
+  // create L3 cache
+  l3cache_ = CacheSim::Create("l3cache", CacheSim::Config{
+    !L3_ENABLED,
+    log2ceil(L3_CACHE_SIZE),  // C
+    log2ceil(MEM_BLOCK_SIZE), // L
+    log2ceil(L3_NUM_WAYS),    // W
+    0,                        // A
+    log2ceil(L3_NUM_BANKS),   // B
+    XLEN,                     // address bits      
+    1,                        // number of ports
+    uint8_t(arch.num_clusters()), // request size 
+    true,                     // write-through
+    false,                    // write response
+    L3_MSHR_SIZE,             // mshr
+    2,                        // pipeline latency
     }
+  );        
+  
+  // connect L3 memory ports
+  l3cache_->MemReqPort.bind(&memsim_->MemReqPort);
+  memsim_->MemRspPort.bind(&l3cache_->MemRspPort);
 
-     // setup memory simulator
-    auto memsim = MemSim::Create("dram", MemSim::Config{
-      MEMORY_BANKS,
-      arch.num_cores()
-    });
-    
-    std::vector<SimPort<MemReq>*> mem_req_ports(1, &memsim->MemReqPort);
-    std::vector<SimPort<MemRsp>*> mem_rsp_ports(1, &memsim->MemRspPort);
-
-    if (L3_ENABLE) {
-      l3cache_ = Cache::Create("l3cache", Cache::Config{
-        log2ceil(L3_CACHE_SIZE),  // C
-        log2ceil(MEM_BLOCK_SIZE), // B
-        2,                      // W
-        0,                      // A
-        32,                     // address bits  
-        L3_NUM_BANKS,           // number of banks
-        L3_NUM_PORTS,           // number of ports
-        NUM_CLUSTERS,           // request size 
-        true,                   // write-through
-        false,                  // write response
-        0,                      // victim size
-        L3_MSHR_SIZE,           // mshr
-        2,                      // pipeline latency
-        }
-      );        
-      l3cache_->MemReqPort.bind(mem_req_ports.at(0));
-      mem_rsp_ports.at(0)->bind(&l3cache_->MemRspPort);
-
-      mem_req_ports.resize(NUM_CLUSTERS);
-      mem_rsp_ports.resize(NUM_CLUSTERS);
-
-      for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {
-        mem_req_ports.at(i) = &l3cache_->CoreReqPorts.at(i);
-        mem_rsp_ports.at(i) = &l3cache_->CoreRspPorts.at(i);
-      }
-    } else if (NUM_CLUSTERS > 1) {
-      l3_mem_switch_ = Switch<MemReq, MemRsp>::Create("l3_arb", ArbiterType::RoundRobin, NUM_CLUSTERS);
-      l3_mem_switch_->ReqOut.bind(mem_req_ports.at(0));      
-      mem_rsp_ports.at(0)->bind(&l3_mem_switch_->RspIn);
-
-      mem_req_ports.resize(NUM_CLUSTERS);
-      mem_rsp_ports.resize(NUM_CLUSTERS);
-
-      for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {
-        mem_req_ports.at(i) = &l3_mem_switch_->ReqIn.at(i);
-        mem_rsp_ports.at(i) = &l3_mem_switch_->RspOut.at(i);
-      }
-    }
-
-    for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {
-      std::vector<SimPort<MemReq>*> cluster_mem_req_ports(cores_per_cluster); 
-      std::vector<SimPort<MemRsp>*> cluster_mem_rsp_ports(cores_per_cluster);
-
-      if (L2_ENABLE) {
-        auto& l2cache = l2caches_.at(i);
-        l2cache = Cache::Create("l2cache", Cache::Config{
-          log2ceil(L2_CACHE_SIZE),  // C
-          log2ceil(MEM_BLOCK_SIZE), // B
-          2,                      // W
-          0,                      // A
-          32,                     // address bits  
-          L2_NUM_BANKS,           // number of banks
-          L2_NUM_PORTS,           // number of ports
-          (uint8_t)cores_per_cluster, // request size 
-          true,                   // write-through
-          false,                  // write response
-          0,                      // victim size
-          L2_MSHR_SIZE,           // mshr
-          2,                      // pipeline latency
-        });
-        l2cache->MemReqPort.bind(mem_req_ports.at(i));
-        mem_rsp_ports.at(i)->bind(&l2cache->MemRspPort);
-
-        for (uint32_t j = 0; j < cores_per_cluster; ++j) {
-          cluster_mem_req_ports.at(j) = &l2cache->CoreReqPorts.at(j);
-          cluster_mem_rsp_ports.at(j) = &l2cache->CoreRspPorts.at(j);
-        }
-      } else {
-        auto& l2_mem_switch = l2_mem_switches_.at(i);
-        l2_mem_switch = Switch<MemReq, MemRsp>::Create("l2_arb", ArbiterType::RoundRobin, cores_per_cluster);
-        l2_mem_switch->ReqOut.bind(mem_req_ports.at(i));
-        mem_rsp_ports.at(i)->bind(&l2_mem_switch->RspIn);
-
-        for (uint32_t j = 0; j < cores_per_cluster; ++j) {
-          cluster_mem_req_ports.at(j) = &l2_mem_switch->ReqIn.at(j);
-          cluster_mem_rsp_ports.at(j) = &l2_mem_switch->RspOut.at(j);
-        }
-      }
-
-      for (uint32_t j = 0; j < cores_per_cluster; ++j) {
-        auto& core = cores_.at((i * cores_per_cluster) + j);
-        core->MemReqPort.bind(cluster_mem_req_ports.at(j));
-        cluster_mem_rsp_ports.at(j)->bind(&core->MemRspPort);
-      }
-    }
+  // create clusters
+  for (uint32_t i = 0; i < arch.num_clusters(); ++i) {
+    clusters_.at(i) = Cluster::Create(i, this, arch, dcrs_);
+    // connect L3 core ports
+    clusters_.at(i)->mem_req_port.bind(&l3cache_->CoreReqPorts.at(i));
+    l3cache_->CoreRspPorts.at(i).bind(&clusters_.at(i)->mem_rsp_port);
   }
 
-  ~Impl() {
-    SimPlatform::instance().finalize();
-  }
+  // set up memory perf recording
+  memsim_->MemReqPort.tx_callback([&](const MemReq& req, uint64_t cycle){
+    __unused (cycle);
+    perf_mem_reads_   += !req.write;
+    perf_mem_writes_  += req.write;
+    perf_mem_pending_reads_ += !req.write;
+  });
+  memsim_->MemRspPort.tx_callback([&](const MemRsp&, uint64_t cycle){
+    __unused (cycle);
+    --perf_mem_pending_reads_;
+  });
 
-  void attach_ram(RAM* ram) {
-    for (auto core : cores_) {
-      core->attach_ram(ram);
-    }
-  }
+  this->reset();
+}
 
-  int run() {
-    SimPlatform::instance().reset();
-    bool running;
-    int exitcode = 0;
-    do {
-      SimPlatform::instance().tick();
-      running = false;
-      for (auto& core : cores_) {
-        if (core->running()) {
-          running = true;
-        }
-        if (core->check_exit()) {
-          exitcode = core->getIRegValue(3);
-          running = false;
-          break;
+ProcessorImpl::~ProcessorImpl() {
+  SimPlatform::instance().finalize();
+}
+
+void ProcessorImpl::attach_ram(RAM* ram) {
+  for (auto cluster : clusters_) {
+    cluster->attach_ram(ram);
+  }
+}
+
+int ProcessorImpl::run(bool riscv_test) {
+  SimPlatform::instance().reset();
+  this->reset();
+  
+  bool done;
+  Word exitcode = 0;
+  do {
+    SimPlatform::instance().tick();
+    done = true;
+    for (auto cluster : clusters_) {
+      if (cluster->running()) {
+        Word ec;   
+        if (cluster->check_exit(&ec, riscv_test)) {
+          exitcode |= ec;
+        } else {
+          done = false;
         }
       }
-    } while (running);
+    }
+    perf_mem_latency_ += perf_mem_pending_reads_;
+  } while (!done);
 
-    return exitcode;
-  }
-};
+  return exitcode;
+}
+ 
+void ProcessorImpl::reset() {
+  perf_mem_reads_ = 0;
+  perf_mem_writes_ = 0;
+  perf_mem_latency_ = 0;
+  perf_mem_pending_reads_ = 0;
+}
+
+void ProcessorImpl::write_dcr(uint32_t addr, uint32_t value) {
+  dcrs_.write(addr, value);
+}
+
+ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
+  ProcessorImpl::PerfStats perf;
+  perf.mem_reads   = perf_mem_reads_;
+  perf.mem_writes  = perf_mem_writes_;
+  perf.mem_latency = perf_mem_latency_;
+  perf.l3cache     = l3cache_->perf_stats();
+  for (auto cluster : clusters_) {
+    perf.clusters += cluster->perf_stats();
+  }   
+  return perf;
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
-Processor::Processor(const ArchDef& arch) 
-  : impl_(new Impl(arch))
+Processor::Processor(const Arch& arch) 
+  : impl_(new ProcessorImpl(arch))
 {}
 
 Processor::~Processor() {
@@ -173,6 +145,10 @@ void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-int Processor::run() {
-  return impl_->run();
+int Processor::run(bool riscv_test) {
+  return impl_->run(riscv_test);
+}
+
+void Processor::write_dcr(uint32_t addr, uint32_t value) {
+  return impl_->write_dcr(addr, value);
 }

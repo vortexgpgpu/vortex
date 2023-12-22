@@ -1,3 +1,16 @@
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
 
 #include <stack>
@@ -18,8 +31,9 @@ public:
   void* allocate() {
     void* mem;
     if (!free_list_.empty()) {
-      mem = static_cast<void*>(free_list_.top());
+      auto entry = free_list_.top();
       free_list_.pop();
+      mem = static_cast<void*>(entry);      
     } else {
       mem = ::operator new(sizeof(T));
     }
@@ -36,12 +50,13 @@ public:
 
   void flush() {
     while (!free_list_.empty()) {
-      ::operator delete(free_list_.top());
+      auto entry = free_list_.top();
       free_list_.pop();
+      ::operator delete(entry);      
     }
   }
 
 private:
-  std::stack<void*> free_list_;
+  std::stack<T*> free_list_;
   uint32_t max_size_;
 };

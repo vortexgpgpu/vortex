@@ -1,85 +1,52 @@
-`ifndef VX_IBUFFER_IF
-`define VX_IBUFFER_IF
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 `include "VX_define.vh"
 
-interface VX_ibuffer_if ();
+interface VX_ibuffer_if import VX_gpu_pkg::*; ();
 
-    wire                    valid;    
-    wire [`UUID_BITS-1:0]   uuid;
-    wire [`NW_BITS-1:0]     wid;
-    wire [`NUM_THREADS-1:0] tmask;
-    wire [31:0]             PC;
-    wire [`EX_BITS-1:0]     ex_type;    
-    wire [`INST_OP_BITS-1:0] op_type; 
-    wire [`INST_MOD_BITS-1:0] op_mod;    
-    wire                    wb;
-    wire                    use_PC;
-    wire                    use_imm;
-    wire [31:0]             imm;
-    wire [`NR_BITS-1:0]     rd;
-    wire [`NR_BITS-1:0]     rs1;
-    wire [`NR_BITS-1:0]     rs2;
-    wire [`NR_BITS-1:0]     rs3;
-    
-    wire [`NR_BITS-1:0]     rd_n;
-    wire [`NR_BITS-1:0]     rs1_n;
-    wire [`NR_BITS-1:0]     rs2_n;
-    wire [`NR_BITS-1:0]     rs3_n;
-    wire [`NW_BITS-1:0]     wid_n;
+    typedef struct packed {
+        logic [`UUID_WIDTH-1:0]     uuid;
+        logic [ISSUE_WIS_W-1:0]     wis;
+        logic [`NUM_THREADS-1:0]    tmask;
+        logic [`EX_BITS-1:0]        ex_type;    
+        logic [`INST_OP_BITS-1:0]   op_type;
+        logic [`INST_MOD_BITS-1:0]  op_mod;    
+        logic                       wb;
+        logic                       use_PC;
+        logic                       use_imm;
+        logic [`XLEN-1:0]           PC;
+        logic [`XLEN-1:0]           imm;
+        logic [`NR_BITS-1:0]        rd;
+        logic [`NR_BITS-1:0]        rs1;
+        logic [`NR_BITS-1:0]        rs2;
+        logic [`NR_BITS-1:0]        rs3;
+    } data_t;
 
-    wire                    ready;
+    logic  valid;
+    data_t data;
+    logic  ready;
 
     modport master (
         output valid,
-        output uuid,
-        output wid,
-        output tmask,
-        output PC,
-        output ex_type,
-        output op_type, 
-        output op_mod,    
-        output wb,
-        output use_PC,
-        output use_imm,
-        output imm,
-        output rd,
-        output rs1,
-        output rs2,
-        output rs3,
-        output rd_n,
-        output rs1_n,
-        output rs2_n,
-        output rs3_n,
-        output wid_n,        
+        output data,
         input  ready
     );
 
     modport slave (
         input  valid,
-        input  uuid,
-        input  wid,
-        input  tmask,
-        input  PC,
-        input  ex_type,
-        input  op_type, 
-        input  op_mod,    
-        input  wb,
-        input  use_PC,
-        input  use_imm,
-        input  imm,
-        input  rd,
-        input  rs1,
-        input  rs2,
-        input  rs3,
-        input  rd_n,
-        input  rs1_n,
-        input  rs2_n,
-        input  rs3_n,
-        input  wid_n,        
+        input  data,
         output ready
     );
-    
-endinterface
 
-`endif
+endinterface

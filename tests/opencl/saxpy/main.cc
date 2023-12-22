@@ -31,6 +31,7 @@
 #include <string.h>
 #include <unistd.h> 
 #include <chrono>
+#include <vector>
 
 #define CL_CHECK(_expr)                                                        \
   do {                                                                         \
@@ -76,6 +77,14 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   fclose(fp);
   
   return 0;
+}
+
+static bool almost_equal(float a, float b, int ulp = 4) {
+  union fi_t { int i; float f; };
+  fi_t fa, fb;
+  fa.f = a;
+  fb.f = b;
+  return std::abs(fa.i - fb.i) <= ulp;
 }
 
 uint8_t *kernel_bin = NULL;
@@ -142,61 +151,53 @@ int main(int argc, char **argv) {
   
   cl_platform_id platform_id;
   cl_device_id device_id;
+  cl_program program;
+  cl_mem input_buffer;
+  cl_mem output_buffer;
   size_t kernel_size;
-  cl_int binary_status = 0;
-
-  // read kernel binary from file  
-  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
-    return -1;
+  cl_context context;
+  cl_command_queue queue;
 
   // Getting platform and device information
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
   CL_CHECK(clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL));
 
-  cl_context context;
-  context = CL_CHECK_ERR(clCreateContext(NULL, 1, &device_id, &pfn_notify, NULL, &_err));
-
-  cl_command_queue queue;
+  context = CL_CHECK_ERR(clCreateContext(NULL, 1, &device_id, &pfn_notify, NULL, &_err));  
   queue = CL_CHECK_ERR(clCreateCommandQueue(context, device_id, 0, &_err));
 
   cl_kernel kernel = 0;
   cl_mem memObjects[2] = {0, 0};
 
-  // Create OpenCL program - first attempt to load cached binary.
-  //  If that is not available, then create the program from source
-  //  and store the binary for future use.
-  std::cout << "Attempting to create program from binary..." << std::endl;
-  cl_program program = CL_CHECK_ERR(clCreateProgramWithBinary(
-    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &_err));
-  if (program == NULL) {
-    std::cerr << "Failed to write program binary" << std::endl;
-    Cleanup(device_id, context, queue, program, kernel, memObjects);
-    return 1;
-  } else {
-    std::cout << "Read program from binary." << std::endl;
-  }
+  printf("Create program from kernel source\n");
+#ifdef HOSTGPU
+  if (0 != read_kernel_file("kernel.cl", &kernel_bin, &kernel_size))
+    return -1;
+  program = CL_CHECK_ERR(clCreateProgramWithSource(
+    context, 1, (const char**)&kernel_bin, &kernel_size, &_err));  
+#else
+  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
+    return -1;
+  program = CL_CHECK_ERR(clCreateProgramWithBinary(
+    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, NULL, &_err));
+#endif
 
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
 
   size_t nbytes = sizeof(float) * size;
 
-  printf("attempting to create input buffer\n");
-  cl_mem input_buffer;
-  input_buffer = CL_CHECK_ERR(clCreateBuffer(
-      context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
+  printf("create input buffer\n");  
+  input_buffer = CL_CHECK_ERR(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
 
-  printf("attempting to create output buffer\n");
-  cl_mem output_buffer;
-  output_buffer = CL_CHECK_ERR(clCreateBuffer(
-      context, CL_MEM_WRITE_ONLY, nbytes, NULL, &_err));
+  printf("create output buffer\n");  
+  output_buffer = CL_CHECK_ERR(clCreateBuffer(context, CL_MEM_READ_WRITE, nbytes, NULL, &_err));
 
   memObjects[0] = input_buffer;
   memObjects[1] = output_buffer;
 
   float factor = ((float)rand() / (float)(RAND_MAX)) * 100.0;
 
-  printf("attempting to create kernel\n");
+  printf("create kernel\n");
   kernel = CL_CHECK_ERR(clCreateKernel(program, "saxpy", &_err));
 
   printf("setting up kernel args\n");
@@ -204,36 +205,65 @@ int main(int argc, char **argv) {
   CL_CHECK(clSetKernelArg(kernel, 1, sizeof(output_buffer), &output_buffer));
   CL_CHECK(clSetKernelArg(kernel, 2, sizeof(factor), &factor));
 
-  printf("attempting to enqueue write buffer\n");
-  float* h_src = (float*)malloc(nbytes);
-  for (int i = 0; i < size; i++) {
-    h_src[i] = ((float)rand() / (float)(RAND_MAX)) * 100.0;
-  }
-  CL_CHECK(clEnqueueWriteBuffer(queue, input_buffer, CL_TRUE, 0, nbytes, h_src, 0, NULL, NULL));
-  free(h_src);
+  size_t global_offset[1] = {0};
+  size_t global_work_size[1] = {size};
+  size_t local_work_size[1] = {1};
 
-  size_t global_work_size[] = {size/2, size/2};
-  printf("attempting to enqueue kernel\n");
+  printf("initialize buffers\n");
+  std::vector<float> ref_vec(size, 0.0f);
+  {
+    std::vector<float> dst_vec(size, 0.0f);
+    std::vector<float> src_vec(size);
+    
+    for (int i = 0; i < size; i++) {
+      src_vec[i] = ((float)rand() / (float)(RAND_MAX)) * 100.0;
+    }
+
+    CL_CHECK(clEnqueueWriteBuffer(queue, input_buffer, CL_TRUE, 0, nbytes, src_vec.data(), 0, NULL, NULL));
+    CL_CHECK(clEnqueueWriteBuffer(queue, output_buffer, CL_TRUE, 0, nbytes, dst_vec.data(), 0, NULL, NULL));
+
+    size_t num_groups_x = global_work_size[0] / local_work_size[0];    
+    for (size_t workgroup_id_x = 0; workgroup_id_x < num_groups_x; ++workgroup_id_x) {
+      for (size_t local_id_x = 0; local_id_x < local_work_size[0]; ++local_id_x) {
+        // Calculate global ID for the work-item
+        int global_id_x = global_offset[0] + local_work_size[0] * workgroup_id_x + local_id_x;
+        // kernel operation
+        int i = global_id_x;
+        ref_vec[i] += src_vec[i] * factor;
+      }
+    }
+  }
+
+  printf("enqueue kernel\n");
   auto time_start = std::chrono::high_resolution_clock::now();
-  CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 1, NULL, global_work_size,
-                                  NULL, 0, NULL, NULL));
+  CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 1, global_offset, global_work_size, local_work_size, 0, NULL, NULL));
   CL_CHECK(clFinish(queue));
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
 
-  printf("Download destination buffer\n");
-  float* h_dst = (float*)malloc(nbytes);
-  CL_CHECK(clEnqueueReadBuffer(queue, output_buffer, CL_TRUE, 0, nbytes, h_dst, 0, NULL, NULL));
+  printf("Verify result\n");
+  int errors = 0;
+  {
+    std::vector<float> dst_vec(size);    
+    CL_CHECK(clEnqueueReadBuffer(queue, output_buffer, CL_TRUE, 0, nbytes, dst_vec.data(), 0, NULL, NULL));
 
-  /*printf("Result:");
-  for (int i = 0; i < size; i++) {
-    float data = h_dst[i];
-    printf(" %f", data);
-  }*/
-  free(h_dst);
+    for (int i = 0; i < size; ++i) {
+      if (!almost_equal(dst_vec[i], ref_vec[i])) {
+        if (errors < 100) 
+          printf("*** error: [%d] expected=%f, actual=%f\n", i, ref_vec[i], dst_vec[i]);
+        ++errors;
+      }
+    }
+  
+    if (0 == errors) {
+      printf("PASSED!\n");
+    } else {
+      printf("FAILED! - %d errors\n", errors);    
+    }
+  }
 
   Cleanup(device_id, context, queue, program, kernel, memObjects);
 
-  return 0;
+  return errors;
 }

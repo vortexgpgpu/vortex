@@ -34,6 +34,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <chrono>
+#include <vector>
 
 #define CL_CHECK(_expr)                                                        \
   do {                                                                         \
@@ -47,7 +48,7 @@
 #define CL_CHECK_ERR(_expr)                                                    \
   ({                                                                           \
     cl_int _err = CL_INVALID_VALUE;                                            \
-    decltype(_expr) _ret = _expr;                                                \
+    decltype(_expr) _ret = _expr;                                              \
     if (_err != CL_SUCCESS) {                                                  \
       fprintf(stderr, "OpenCL Error: '%s' returned %d!\n", #_expr, (int)_err); \
       abort();                                                                 \
@@ -81,85 +82,17 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   return 0;
 }
 
-uint8_t *kernel_bin = NULL;
-
-// inlcude pocl float to half conversions
-typedef union {
-  int32_t i;
-  float f;
-} FloatConvUnion;
-cl_half poclu_float_to_cl_half(float value) {
-  FloatConvUnion u;
-  u.f = value;
-  cl_half half = (u.i >> 16) & 0x8000; // sign
-  cl_half fraction =
-      (u.i >> 12) & 0x007ff;             // fraction with extra bit for rounding
-  cl_half exponent = (u.i >> 23) & 0xff; // exponent
-
-  if (exponent < 0x0067) // Return signed zero if zero or value is too small for
-                         // denormal half
-    return half;
-
-  if (exponent > 0x008e) { // value was NaN or Inf
-    half |= 0x7c00u;       // Make into inf
-    half |= exponent == 255 &&
-            (u.i & 0x007fffffu); // If value was NaN make this into NaN
-    return half;
-  }
-
-  if (exponent < 0x0071) { // Denormal
-    fraction |= 0x0800u;
-
-    // rounding
-    half |= (fraction >> (0x0072 - exponent)) +
-            ((fraction >> (0x0071 - exponent)) & 1);
-    return half;
-  }
-
-  half |= ((exponent - 0x0070) << 10) | (fraction >> 1);
-  half += fraction & 1; // rounding
-  return half;
-}
-#ifndef INFINITY
-#define INFINITY 1.0 / 0.0
-#endif
-
-#ifndef NAN
-#define NAN 0.0 / 0.0
-#endif
-
-float poclu_cl_half_to_float(cl_half value) {
-  if (value == 0xFC00) {
-    return -INFINITY;
-  }
-  if (value == 0x7C00) {
-    return INFINITY;
-  }
-
-  int sgn = ((value & 0x8000) >> 15);
-  int exp = (value & 0x7C00) >> 10;
-  int mant = value & 0x03FF;
-
-  if (exp == 0x1F && mant != 0) {
-    return NAN;
-  }
-
-  float v = (exp == 0) ? mant : mant | 0x0400; // 1.x if not denormal
-  v /= 0x400;
-  float mul = exp2((float)exp - 15);
-  v *= mul;
-  if (sgn) {
-    v *= -1;
-  }
-  return v;
+static bool almost_equal(float a, float b, int ulp = 4) {
+  union fi_t { int i; float f; };
+  fi_t fa, fb;
+  fa.f = a;
+  fb.f = b;
+  return std::abs(fa.i - fb.i) <= ulp;
 }
 
-///
-//  Cleanup any created OpenCL resources
-//
-void Cleanup(cl_device_id device_id, cl_context context, cl_command_queue commandQueue,
-             cl_program program, cl_kernel kernel, cl_mem memObjects[2]) {
-  if (kernel_bin) 
+void Cleanup(uint8_t *kernel_bin, cl_device_id device_id, cl_context context, 
+             cl_command_queue commandQueue, cl_program program, cl_kernel kernel, cl_mem memObjects[2]) {
+  if (kernel_bin != NULL) 
     free(kernel_bin);
   
   if (commandQueue != 0)
@@ -183,18 +116,18 @@ void Cleanup(cl_device_id device_id, cl_context context, cl_command_queue comman
     clReleaseDevice(device_id);
 }
 
-int size = 16+2;
-
 static void show_usage() {
   printf("Usage: [-n size] [-h: help]\n");
 }
+
+int size = 16;
 
 static void parse_args(int argc, char **argv) {
   int c;
   while ((c = getopt(argc, argv, "n:h?")) != -1) {
     switch (c) {
     case 'n':
-      size = atoi(optarg)+2;
+      size = atoi(optarg);
       break;
     case 'h':
     case '?': {
@@ -216,12 +149,9 @@ int main(int argc, char **argv) {
 
   cl_platform_id platform_id;
   cl_device_id device_id;
+  cl_program program;
   size_t kernel_size;
-  cl_int binary_status = 0;
-
-  // read kernel binary from file  
-  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
-    return -1;
+  uint8_t *kernel_bin = NULL;
 
   // Getting platform and device information
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
@@ -236,30 +166,29 @@ int main(int argc, char **argv) {
   cl_kernel kernel = 0;
   cl_mem memObjects[2] = {0, 0};
 
-  // Create OpenCL program - first attempt to load cached binary.
-  //  If that is not available, then create the program from source
-  //  and store the binary for future use.
-  std::cout << "Attempting to create program from binary..." << std::endl;
-  cl_program program = CL_CHECK_ERR(clCreateProgramWithBinary(
-    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &_err));
-  if (program == NULL) {
-    std::cerr << "Failed to write program binary" << std::endl;
-    Cleanup(device_id, context, queue, program, kernel, memObjects);
-    return 1;
-  } else {
-    std::cout << "Read program from binary." << std::endl;
-  }
+  printf("Create program from kernel source\n");
+#ifdef HOSTGPU
+  if (0 != read_kernel_file("kernel.cl", &kernel_bin, &kernel_size))
+    return -1;
+  program = CL_CHECK_ERR(clCreateProgramWithSource(
+    context, 1, (const char**)&kernel_bin, &kernel_size, &_err));  
+#else
+  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
+    return -1;
+  program = CL_CHECK_ERR(clCreateProgramWithBinary(
+    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, NULL, &_err));
+#endif
 
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
 
   size_t nbytes = sizeof(float) * size * size;
 
-  printf("attempting to create input buffer\n");
+  printf("create input buffer\n");
   cl_mem input_buffer;
   input_buffer = CL_CHECK_ERR(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
 
-  printf("attempting to create output buffer\n");
+  printf("create output buffer\n");
   cl_mem output_buffer;
   output_buffer = CL_CHECK_ERR(clCreateBuffer(context, CL_MEM_WRITE_ONLY, nbytes, NULL, &_err));
 
@@ -267,7 +196,6 @@ int main(int argc, char **argv) {
   memObjects[1] = output_buffer;
 
   long long ldc = size;
-
   float m0 = 1.0;
   float m1 = 1.0;
   float m2 = 1.0;
@@ -278,8 +206,9 @@ int main(int argc, char **argv) {
   float m7 = 1.0;
   float m8 = 1.0;
 
-  printf("attempting to create kernel\n");
+  printf("create kernel\n");
   kernel = CL_CHECK_ERR(clCreateKernel(program, "sfilter", &_err));
+
   printf("setting up kernel args\n");
   CL_CHECK(clSetKernelArg(kernel, 0, sizeof(input_buffer), &input_buffer));
   CL_CHECK(clSetKernelArg(kernel, 1, sizeof(output_buffer), &output_buffer));
@@ -294,38 +223,84 @@ int main(int argc, char **argv) {
   CL_CHECK(clSetKernelArg(kernel, 10, sizeof(m7), (&m7)));
   CL_CHECK(clSetKernelArg(kernel, 11, sizeof(m8), (&m8)));
 
-  printf("attempting to enqueue write buffer\n");  
-  float* h_src = (float*)malloc(nbytes);
-  for (int i = 0; i < size * size; i++) {
-    h_src[i] = ((float)rand() / (float)(RAND_MAX)) * 100.0;
-  }
-  CL_CHECK(clEnqueueWriteBuffer(queue, input_buffer, CL_TRUE, 0, nbytes, h_src, 0, NULL, NULL));
-  free(h_src);
-
   size_t global_offset[2] = {1, 1};
-  size_t global_work_size[2] = {size - 2, size - 2}; // avoid the edges
-  const size_t local_work_size[2] = {size - 2, 1};
-  printf("attempting to enqueue kernel\n");
+  size_t global_work_size[2] = {size - 2, size - 2};
+  size_t local_work_size[2] = {size - 2, 1};
+
+  printf("enqueue write buffer\n"); 
+  std::vector<float> ref_vec(size * size);
+  {
+    std::vector<float> src_vec(size * size);
+    std::vector<float> dst_vec(size * size, 0.0f);
+
+    for (int i = 0; i < size * size; ++i) {
+      src_vec[i] = ((float)rand() / (float)(RAND_MAX)) * 100.0;
+    }
+    
+    CL_CHECK(clEnqueueWriteBuffer(queue, input_buffer, CL_TRUE, 0, nbytes, src_vec.data(), 0, NULL, NULL));
+    CL_CHECK(clEnqueueWriteBuffer(queue, output_buffer, CL_TRUE, 0, nbytes, dst_vec.data(), 0, NULL, NULL));
+    
+    // reference generation
+    size_t num_groups_y = global_work_size[1] / local_work_size[1];
+    size_t num_groups_x = global_work_size[0] / local_work_size[0];    
+    for (size_t workgroup_id_y = 0; workgroup_id_y < num_groups_y; ++workgroup_id_y) {
+      for (size_t workgroup_id_x = 0; workgroup_id_x < num_groups_x; ++workgroup_id_x) {
+        for (size_t local_id_y = 0; local_id_y < local_work_size[1]; ++local_id_y) {
+          for (size_t local_id_x = 0; local_id_x < local_work_size[0]; ++local_id_x) {
+            // calculate global ID for the work-item
+            int global_id_x = global_offset[0] + local_work_size[0] * workgroup_id_x + local_id_x;
+            int global_id_y = global_offset[1] + local_work_size[1] * workgroup_id_y + local_id_y;
+            // kernel operation
+            int x = global_id_x;
+            int y = global_id_y;            
+            float i0 = src_vec.at((x-1) + (y-1) * ldc) * m0;
+            float i1 = src_vec.at((x+0) + (y-1) * ldc) * m1;
+            float i2 = src_vec.at((x+1) + (y-1) * ldc) * m2;
+            float i3 = src_vec.at((x-1) + (y+0) * ldc) * m3;
+            float i4 = src_vec.at((x+0) + (y+0) * ldc) * m4;
+            float i5 = src_vec.at((x+1) + (y+0) * ldc) * m5;
+            float i6 = src_vec.at((x-1) + (y+1) * ldc) * m6;
+            float i7 = src_vec.at((x+0) + (y+1) * ldc) * m7;
+            float i8 = src_vec.at((x+1) + (y+1) * ldc) * m8;
+            float v = i0 + i1 + i2 + i3 + i4 + i5 + i6 + i7 + i8;
+            //printf("*** x=%d, y=%d, v=%f\n", x, y, v);
+            ref_vec.at(x + y * ldc) = v;
+          }
+        }
+      }
+    }
+  }
+
+  printf("enqueue kernel\n");
   auto time_start = std::chrono::high_resolution_clock::now();
-  CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 2, global_offset,
-                                  global_work_size, local_work_size, 0, NULL, NULL));
+  CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 2, global_offset, global_work_size, local_work_size, 0, NULL, NULL));
   CL_CHECK(clFinish(queue));
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
 
-  printf("Download destination buffer\n");
-  float* h_dst = (float*)malloc(nbytes);
-  CL_CHECK(clEnqueueReadBuffer(queue, output_buffer, CL_TRUE, 0, nbytes, h_dst, 0, NULL, NULL));
+  printf("Verify result\n");
+  int errors = 0;
+  {
+    std::vector<float> dst_vec(size * size);
+    CL_CHECK(clEnqueueReadBuffer(queue, output_buffer, CL_TRUE, 0, nbytes, dst_vec.data(), 0, NULL, NULL));
+
+    for (int i = 0; i < size * size; ++i) {
+      if (!almost_equal(dst_vec[i], ref_vec[i])) {
+        if (errors < 100) 
+          printf("*** error: [%d] expected=%f, actual=%f\n", i, ref_vec[i], dst_vec[i]);
+        ++errors;
+      }
+    }
   
-  /*printf("Result:");
-  for (int i = 0; i < size; i++) {
-    float data = h_dst[i];
-    printf(" %f", data);
-  }*/
-  free(h_dst);
+    if (0 == errors) {
+      printf("PASSED!\n");
+    } else {
+      printf("FAILED! - %d errors\n", errors);    
+    }
+  }
 
-  Cleanup(device_id, context, queue, program, kernel, memObjects);
+  Cleanup(kernel_bin, device_id, context, queue, program, kernel, memObjects);
 
-  return 0;
+  return errors;
 }

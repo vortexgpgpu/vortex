@@ -1,141 +1,58 @@
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 `include "VX_platform.vh"
 
 `TRACING_OFF
-module VX_shift_register_nr #( 
-    parameter DATAW  = 1,
-    parameter DEPTH  = 1,
-    parameter NTAPS  = 1,
-    parameter DEPTHW = $clog2(DEPTH),
-    parameter [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}}
-) (
-    input wire clk,
-    input wire enable,
-    input wire [DATAW-1:0]          data_in,
-    output wire [(NTAPS*DATAW)-1:0] data_out
-);
-    reg [DEPTH-1:0][DATAW-1:0] entries;
-
-    always @(posedge clk) begin
-        if (enable) begin                    
-            for (integer i = DEPTH-1; i > 0; --i)
-                entries[i] <= entries[i-1];
-            entries[0] <= data_in;
-        end
-    end
-
-    for (genvar i = 0; i < NTAPS; ++i) begin
-        assign data_out [i*DATAW+:DATAW] = entries [TAPS[i*DEPTHW+:DEPTHW]];
-    end
-
-endmodule
-
-module VX_shift_register_wr #( 
-    parameter DATAW  = 1, 
-    parameter DEPTH  = 1,
-    parameter NTAPS  = 1,
-    parameter DEPTHW = $clog2(DEPTH),
-    parameter [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}}
-) (
-    input wire clk,
-    input wire reset,
-    input wire enable,
-    input wire [DATAW-1:0]          data_in,
-    output wire [(NTAPS*DATAW)-1:0] data_out
-);
-    reg [DEPTH-1:0][DATAW-1:0] entries;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            entries <= '0;
-        end else if (enable) begin                    
-            for (integer i = DEPTH-1; i > 0; --i)
-                entries[i] <= entries[i-1];
-            entries[0] <= data_in;
-        end
-    end
-
-    for (genvar i = 0; i < NTAPS; ++i) begin
-        assign data_out [i*DATAW+:DATAW] = entries [TAPS[i*DEPTHW+:DEPTHW]];
-    end
-
-endmodule
-
 module VX_shift_register #( 
-    parameter DATAW  = 1, 
-    parameter RESETW = 0,
-    parameter DEPTH  = 1,
-    parameter NTAPS  = 1,
-    parameter DEPTHW = $clog2(DEPTH),
-    parameter [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}}
+    parameter DATAW      = 1,
+    parameter RESETW     = 0,
+    parameter DEPTH      = 1,
+    parameter NUM_TAPS   = 1,    
+    parameter TAP_START  = 0,
+    parameter TAP_STRIDE = 1    
 ) (
-    input wire clk,
-    input wire reset,
-    input wire enable,
-    input wire [DATAW-1:0]          data_in,
-    output wire [(NTAPS*DATAW)-1:0] data_out
+    input wire                         clk,
+    input wire                         reset,
+    input wire                         enable,
+    input wire [DATAW-1:0]             data_in,
+    output wire [NUM_TAPS-1:0][DATAW-1:0] data_out
 );
-    if (RESETW != 0) begin
-        if (RESETW == DATAW) begin
-    
-            VX_shift_register_wr #(
-                .DATAW (DATAW),
-                .DEPTH (DEPTH),
-                .NTAPS (NTAPS),
-                .TAPS  (TAPS)
-            ) sr (
-                .clk      (clk),
-                .reset    (reset),
-                .enable   (enable),
-                .data_in  (data_in),
-                .data_out (data_out)
-            );
-    
-        end else begin
-    
-            VX_shift_register_wr #(
-                .DATAW (RESETW),
-                .DEPTH (DEPTH),
-                .NTAPS (NTAPS),
-                .TAPS  (TAPS)
-            ) sr_wr (
-                .clk      (clk),
-                .reset    (reset),
-                .enable   (enable),
-                .data_in  (data_in[DATAW-1:DATAW-RESETW]),
-                .data_out (data_out[DATAW-1:DATAW-RESETW])
-            );
+    if (DEPTH != 0) begin
+        reg [DEPTH-1:0][DATAW-1:0] entries;
 
-            VX_shift_register_nr #(
-                .DATAW (DATAW-RESETW),
-                .DEPTH (DEPTH),
-                .NTAPS (NTAPS),
-                .TAPS  (TAPS)
-            ) sr_nr (
-                .clk      (clk),
-                .enable   (enable),
-                .data_in  (data_in[DATAW-RESETW-1:0]),
-                .data_out (data_out[DATAW-RESETW-1:0])
-            );
-
+        always @(posedge clk) begin
+            for (integer i = 0; i < DATAW; ++i) begin
+                if ((i >= (DATAW-RESETW)) && reset) begin
+                    for (integer j = 0; j < DEPTH; ++j)
+                        entries[j][i] <= 0;
+                end else if (enable) begin          
+                    for (integer j = 1; j < DEPTH; ++j)
+                        entries[j-1][i] <= entries[j][i];
+                    entries[DEPTH-1][i] <= data_in[i];
+                end
+            end
         end
 
-    end else begin        
-
+        for (genvar i = 0; i < NUM_TAPS; ++i) begin
+            assign data_out[i] = entries[i * TAP_STRIDE + TAP_START];
+        end
+    end else begin
+        `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
-    
-        VX_shift_register_nr #(
-            .DATAW (DATAW),
-            .DEPTH (DEPTH),
-            .NTAPS (NTAPS),
-            .TAPS  (TAPS)
-        ) sr (
-            .clk      (clk),
-            .enable   (enable),
-            .data_in  (data_in),
-            .data_out (data_out)
-        );
-
-    end    
+        `UNUSED_VAR (enable)
+        assign data_out = data_in;
+    end
 
 endmodule
 `TRACING_ON

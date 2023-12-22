@@ -17,6 +17,26 @@
 #include "gpu_info.h"
 #include "ocl.h"
 
+static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return CL_INVALID_VALUE;
+
+  FILE* fp = fopen(filename, "r");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to load kernel.");
+    return CL_INVALID_VALUE;
+  }
+  fseek(fp , 0 , SEEK_END);
+  long fsize = ftell(fp);
+  rewind(fp);
+
+  *data = (uint8_t*)malloc(fsize);
+  *size = fread(*data, 1, fsize, fp);
+  
+  fclose(fp);
+  
+  return CL_SUCCESS;
+}
 
 static int generate_vector(float *x_vector, int dim) {
   srand(54321);
@@ -43,8 +63,6 @@ int main(int argc, char **argv) {
   strncpy(parameters->inpFiles[0], "1138_bus.mtx", 100);
   strncpy(parameters->inpFiles[1], "vector.bin", 100);
 
-  printf("OK\n");
-
   if ((parameters->inpFiles[0] == NULL) || (parameters->inpFiles[1] == NULL)) {
     fprintf(stderr, "Expecting one input filename\n");
     exit(-1);
@@ -63,8 +81,6 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  printf("OK\n");
-
   cl_device_id clDevice = (cl_device_id)pb_context->clDeviceId;
   cl_platform_id clPlatform = (cl_platform_id)pb_context->clPlatformId;
   cl_context clContext = (cl_context)pb_context->clContext;
@@ -72,18 +88,19 @@ int main(int argc, char **argv) {
       clContext, clDevice, CL_QUEUE_PROFILING_ENABLE, &clStatus);
   CHECK_ERROR("clCreateCommandQueue")
 
-  printf("OK\n");
-
   pb_SetOpenCL(&clContext, &clCommandQueue);
 
   //const char *clSource[] = {readFile("src/opencl_base/kernel.cl")};
   // cl_program clProgram =
   // clCreateProgramWithSource(clContext,1,clSource,NULL,&clStatus);
-  cl_program clProgram = clCreateProgramWithBuiltInKernels(
-      clContext, 1, &clDevice, "spmv_jds_naive", &clStatus);
+   uint8_t *kernel_bin = NULL;
+  size_t kernel_size;
+  cl_int binary_status = 0;  
+  clStatus = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
+  CHECK_ERROR("read_kernel_file")  
+	cl_program clProgram = clCreateProgramWithBinary(
+      clContext, 1, &clDevice, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &clStatus);
   CHECK_ERROR("clCreateProgramWithSource")
-
-  printf("OK\n");
 
   char clOptions[50];
   sprintf(clOptions, "");
@@ -92,8 +109,6 @@ int main(int argc, char **argv) {
 
   cl_kernel clKernel = clCreateKernel(clProgram, "spmv_jds_naive", &clStatus);
   CHECK_ERROR("clCreateKernel")
-
-	printf("OK\n");
 
   int len;
   int depth;
@@ -133,7 +148,6 @@ int main(int argc, char **argv) {
   //    &h_data, &h_indices, &h_ptr,
   //    &h_perm, &h_nzcnt);
   int col_count;
-	printf("OK--\n");
   coo_to_jds(parameters->inpFiles[0], // bcsstk32.mtx, fidapm05.mtx, jgl009.mtx
              1,                       // row padding
              pad,                     // warp size
@@ -143,8 +157,6 @@ int main(int argc, char **argv) {
              1,                       // debug level [0:2]
              &h_data, &h_ptr, &h_nzcnt, &h_indices, &h_perm, &col_count, &dim,
              &len, &nzcnt_len, &depth);
-
-	printf("OK++\n");
 
   //	pb_SwitchToTimer(&timers, pb_TimerID_COMPUTE);
   h_Ax_vector = (float *)malloc(sizeof(float) * dim);

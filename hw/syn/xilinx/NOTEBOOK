@@ -1,0 +1,56 @@
+## Xilinx synthesis Notebook
+
+# check installed FPGAs
+platforminfo -l
+
+# check FPGA status
+xbutil validate --device 0000:09:00.1 --verbose
+
+# generate FPU IPs
+vivado -mode batch -source scripts/gen_ip.tcl -tclargs ip/xilinx_u50_gen3x16_xdma_5_202210_1
+
+# build FPGA
+PREFIX=build_base_1c NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 make > build_u50_hw_emu_base_1c.log 2>&1 &
+PREFIX=build_base_1c NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 make > build_u50_hw_base_1c.log 2>&1 &
+
+PREFIX=build_base_2c NUM_CORES=2 TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 make > build_u50_hw_emu_base_2c.log 2>&1 &
+PREFIX=build_base_2c NUM_CORES=2 TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 make > build_u50_hw_base_2c.log 2>&1 &
+
+PREFIX=build_dbg_1c DEBUG=3 NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 make > build_u280_hw_emu_dbg_1c.log 2>&1 &
+PREFIX=build_dbg_1c DEBUG=3 NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 make > build_u280_hw_dbg_1c.log 2>&1 &
+PREFIX=build_base_1c NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 make > build_u280_hw_emu_base_1c.log 2>&1 &
+PREFIX=build_base_1c NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 make > build_u280_hw_base_1c.log 2>&1 &
+
+PREFIX=build TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 make > build_vck5k_hw_emu.log 2>&1 &
+PREFIX=build TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 make > build_vck5k_hw.log 2>&1 &
+
+# debug hw_emu using xsim
+xsim --gui xilinx_u50_gen3x16_xdma_5_202210_1-0-vortex_afu.wdb &
+
+# debug hw using ILA
+platforminfo --json="hardwarePlatform.extensions.chipscope_debug" xilinx_u50_gen3x16_xdma_5_202210_1
+ls /dev/xfpga/xvc_pub*
+ls /dev/xvc_pub*
+debug_hw --xvc_pcie /dev/xfpga/xvc_pub.u2305.0 --hw_server
+debug_hw --xvc_pcie /dev/xvc_pub.u0 --hw_server
+debug_hw --vivado --host localhost --ltx_file ./build_xilinx_u50_gen3x16_xdma_5_202210_1_hw/_x/link/vivado/vpl/prj/prj.runs/impl_1/debug_nets.ltx &
+make chipscope TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1
+
+# analyze build report
+vitis_analyzer build_xilinx_u50_gen3x16_xdma_5_202210_1_hw_4c/bin/vortex_afu.xclbin.link_summary
+
+# running test
+TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
+TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
+TARGET=hw PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 ./ci/blackbox.sh --driver=xrt --app=demo
+TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 ./ci/blackbox.sh --driver=xrt --app=demo
+FPGA_BIN_DIR=<bin_dir> TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
+FPGA_BIN_DIR=<bin_dir> TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
+FPGA_BIN_DIR=<bin_dir> TARGET=hw_emu PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 ./ci/blackbox.sh --driver=xrt --app=demo
+FPGA_BIN_DIR=<bin_dir> XRT_DEVICE_INDEX=1 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 ./ci/blackbox.sh --driver=xrt --app=demo
+
+# build report logs
+<build_dir>/bin/vortex_afu.xclbin.info
+<build_dir>/_x/reports/link/link/imp/impl_1_full_util_routed.rpt
+<build_dir>/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt # search for keyword "VIOLATED"
+<build_dir>/_x/logs/link/syn/ulp_vortex_afu_1_0_synth_1_runme.log
