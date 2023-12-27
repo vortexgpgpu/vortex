@@ -253,6 +253,12 @@ package VX_gpu_pkg;
 
     /////////////////////////////// L2 Parameters /////////////////////////////
 
+    localparam ICACHE_MEM_ARB_IDX = 0;
+    localparam DCACHE_MEM_ARB_IDX = ICACHE_MEM_ARB_IDX + 1;
+    localparam TCACHE_MEM_ARB_IDX = DCACHE_MEM_ARB_IDX + 1;
+    localparam RCACHE_MEM_ARB_IDX = TCACHE_MEM_ARB_IDX + `EXT_TEX_ENABLED;
+    localparam OCACHE_MEM_ARB_IDX = RCACHE_MEM_ARB_IDX + `EXT_RASTER_ENABLED;
+
     // Word size in bytes
     localparam L2_WORD_SIZE	        = `L1_LINE_SIZE;
 

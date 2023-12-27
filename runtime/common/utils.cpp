@@ -385,12 +385,12 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         uint64_t scrb_rop_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_ROP);
         if (num_cores > 1) {
           uint64_t sfu_total = scrb_wctl_per_core + scrb_csrs_per_core + scrb_tex_per_core + scrb_raster_per_core + scrb_rop_per_core;
-          fprintf(stream, "PERF: core%d: sfu stalls=%ld (wctl=%d%%, scrs=%d%%"
-          #ifdef EXT_TEX_ENABLE
-            ", tex=%d%%"
-          #endif
+          fprintf(stream, "PERF: core%d: sfu stalls=%ld (wctl=%d%%, scrs=%d%%"          
           #ifdef EXT_RASTER_ENABLE
             ", raster=%d%%"
+          #endif
+          #ifdef EXT_TEX_ENABLE
+            ", tex=%d%%"
           #endif
           #ifdef EXT_ROP_ENABLE
             ", rop=%d%%"
@@ -400,9 +400,15 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
             , scrb_sfu_per_core
             , calcAvgPercent(scrb_wctl_per_core, sfu_total)
             , calcAvgPercent(scrb_csrs_per_core, sfu_total)
-            , calcAvgPercent(scrb_tex_per_core, sfu_total)
+          #ifdef EXT_RASTER_ENABLE
             , calcAvgPercent(scrb_raster_per_core, sfu_total)
+          #endif
+          #ifdef EXT_TEX_ENABLE
+            , calcAvgPercent(scrb_tex_per_core, sfu_total)
+          #endif
+          #ifdef EXT_ROP_ENABLE
             , calcAvgPercent(scrb_rop_per_core, sfu_total)
+          #endif
           );
         }
         scrb_wctl += scrb_wctl_per_core;
@@ -592,11 +598,11 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       calcAvgPercent(scrb_lsu, scrb_total),
       calcAvgPercent(scrb_sfu, scrb_total));    
     fprintf(stream, "PERF: sfu stalls=%ld (wctl=%d%%, scrs=%d%%"
-    #ifdef EXT_TEX_ENABLE
-      ", tex=%d%%"
-    #endif
     #ifdef EXT_RASTER_ENABLE
       ", raster=%d%%"
+    #endif
+    #ifdef EXT_TEX_ENABLE
+      ", tex=%d%%"
     #endif
     #ifdef EXT_ROP_ENABLE
       ", rop=%d%%"
@@ -605,9 +611,15 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       , scrb_sfu
       , calcAvgPercent(scrb_wctl, sfu_total)
       , calcAvgPercent(scrb_csrs, sfu_total)
-      , calcAvgPercent(scrb_tex, sfu_total)
+    #ifdef EXT_RASTER_ENABLE
       , calcAvgPercent(scrb_raster, sfu_total)
+    #endif
+    #ifdef EXT_TEX_ENABLE
+      , calcAvgPercent(scrb_tex, sfu_total)     
+    #endif
+    #ifdef EXT_ROP_ENABLE
       , calcAvgPercent(scrb_rop, sfu_total)
+    #endif
     );
     fprintf(stream, "PERF: ifetches=%ld\n", ifetches);
     fprintf(stream, "PERF: loads=%ld\n", loads);
