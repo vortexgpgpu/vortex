@@ -9,9 +9,6 @@ OPAE Environment Setup
     $ export C_INCLUDE_PATH=$OPAE_HOME/include:$C_INCLUDE_PATH
     $ export LIBRARY_PATH=$OPAE_HOME/lib:$LIBRARY_PATH
     $ export LD_LIBRARY_PATH=$OPAE_HOME/lib:$LD_LIBRARY_PATH
-    $ export RISCV_TOOLCHAIN_PATH=/opt/riscv-gnu-toolchain
-    $ export PATH=:/opt/verilator/bin:$PATH
-    $ export VERILATOR_ROOT=/opt/verilator
 
 OPAE Build
 ------------------

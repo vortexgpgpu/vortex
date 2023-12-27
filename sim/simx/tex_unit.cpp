@@ -38,6 +38,7 @@ public:
   void clear() {
     sampler_.configure(dcrs_);
     pending_reqs_.clear();
+    perf_stats_ = PerfStats();
   }
 
   void tick() {

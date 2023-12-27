@@ -32,18 +32,17 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
   l3cache_ = CacheSim::Create("l3cache", CacheSim::Config{
     !L3_ENABLED,
     log2ceil(L3_CACHE_SIZE),  // C
-    log2ceil(MEM_BLOCK_SIZE), // B
-    log2ceil(L3_NUM_WAYS),  // W
-    0,                      // A
-    XLEN,                   // address bits  
-    L3_NUM_BANKS,           // number of banks
-    1,                      // number of ports
+    log2ceil(MEM_BLOCK_SIZE), // L
+    log2ceil(L3_NUM_WAYS),    // W
+    0,                        // A
+    log2ceil(L3_NUM_BANKS),   // B
+    XLEN,                     // address bits      
+    1,                        // number of ports
     uint8_t(arch.num_clusters()), // request size 
-    true,                   // write-through
-    false,                  // write response
-    0,                      // victim size
-    L3_MSHR_SIZE,           // mshr
-    2,                      // pipeline latency
+    true,                     // write-through
+    false,                    // write response
+    L3_MSHR_SIZE,             // mshr
+    2,                        // pipeline latency
     }
   );        
   
@@ -114,6 +113,7 @@ void ProcessorImpl::reset() {
   perf_mem_writes_ = 0;
   perf_mem_latency_ = 0;
   perf_mem_pending_reads_ = 0;
+  
 }
 
 void ProcessorImpl::write_dcr(uint32_t addr, uint32_t value) {
@@ -126,9 +126,6 @@ ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
   perf.mem_writes  = perf_mem_writes_;
   perf.mem_latency = perf_mem_latency_;
   perf.l3cache     = l3cache_->perf_stats();
-  for (auto cluster : clusters_) {
-    perf.clusters += cluster->perf_stats();
-  }   
   return perf;
 }
 

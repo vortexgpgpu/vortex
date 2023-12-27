@@ -67,9 +67,9 @@
         default:                    `TRACE(level, ("?")); \
     endcase
 
-`define PERF_RASTER_ADD(dst, src, count) \
-    `PERF_REDUCE (dst, src, mem_reads, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, mem_latency, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, stall_cycles, `PERF_CTR_BITS, count)
+`define PERF_RASTER_ADD(dst, src, dcount, scount) \
+    `PERF_COUNTER_ADD (dst, src, mem_reads, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
+    `PERF_COUNTER_ADD (dst, src, mem_latency, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
+    `PERF_COUNTER_ADD (dst, src, stall_cycles, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1))
 
 `endif // VX_RASTER_DEFINE_VH

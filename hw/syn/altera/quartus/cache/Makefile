@@ -1,6 +1,6 @@
-PROJECT = VX_cache_cluster_top
+PROJECT = VX_cache_top
 TOP_LEVEL_ENTITY = $(PROJECT)
-SRC_FILE = VX_cache_cluster.sv
+SRC_FILE = $(PROJECT).sv
 
 include ../../common.mk
 

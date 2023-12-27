@@ -172,8 +172,10 @@ public:
   ~Impl() {}
 
   void reset() {
-    render_output_.configure(dcrs_);
+    render_output_.configure(dcrs_);    
     last_pop_time_= 0;
+    pending_reqs_.clear();
+    perf_stats_ = PerfStats();
   }
 
   void tick() {
@@ -222,7 +224,7 @@ public:
         return;
     } else {
         trace->log_once(false);
-    }      
+    }
  
     auto data = std::dynamic_pointer_cast<RopUnit::TraceData>(trace->data);
     auto tag = pending_reqs_.allocate({data, (uint32_t)data->mem_rd_addrs.size()});
@@ -288,8 +290,8 @@ private:
   const DCRS&   dcrs_;
   PerfStats     perf_stats_;
   RenderOutput  render_output_;
-  HashTable<pending_req_t> pending_reqs_;
   uint64_t      last_pop_time_;
+  HashTable<pending_req_t> pending_reqs_;  
 };
 
 ///////////////////////////////////////////////////////////////////////////////

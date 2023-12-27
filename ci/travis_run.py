@@ -21,7 +21,7 @@ import subprocess
 # This script executes a long-running command while outputing "still running ..." periodically
 # to notify Travis build system that the program has not hanged
 
-PING_INTERVAL=15
+PING_INTERVAL=300 # 5 minutes
 
 def monitor(stop):
     wait_time = 0    

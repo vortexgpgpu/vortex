@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_shared_mem #(
+module VX_shared_mem import VX_gpu_pkg::*; #(
     parameter `STRING  INSTANCE_ID = "",
 
     // Size of cache in bytes
@@ -40,7 +40,7 @@ module VX_shared_mem #(
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_cache_perf_if.master cache_perf_if,
+    output cache_perf_t cache_perf,
 `endif
 
     // Core request    
@@ -106,6 +106,10 @@ module VX_shared_mem #(
     wire [NUM_REQS-1:0][REQ_DATAW-1:0] req_data_in;    
     wire [NUM_BANKS-1:0][REQ_DATAW-1:0] req_data_out;
 
+`ifdef PERF_ENABLE
+    wire [`PERF_CTR_BITS-1:0] perf_collisions;
+`endif
+
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         assign req_data_in[i] = {
             req_rw[i],        
@@ -125,7 +129,7 @@ module VX_shared_mem #(
         .clk       (clk),
         .reset     (reset),
     `ifdef PERF_ENABLE
-        .collisions (cache_perf_if.bank_stalls),
+        .collisions (perf_collisions),
     `else
         `UNUSED_PIN (collisions),
     `endif
@@ -229,9 +233,11 @@ module VX_shared_mem #(
     wire [`CLOG2(NUM_REQS+1)-1:0] perf_writes_per_cycle;
     wire [`CLOG2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
 
-    wire [NUM_REQS-1:0] perf_reads_per_req = req_valid & req_ready & ~req_rw;
-    wire [NUM_REQS-1:0] perf_writes_per_req = req_valid & req_ready & req_rw;
+    wire [NUM_REQS-1:0] perf_reads_per_req, perf_writes_per_req;
     wire [NUM_REQS-1:0] perf_crsp_stall_per_req = rsp_valid & ~rsp_ready;
+
+    `BUFFER(perf_reads_per_req, req_valid & req_ready & ~req_rw);
+    `BUFFER(perf_writes_per_req, req_valid & req_ready & req_rw);
 
     `POP_COUNT(perf_reads_per_cycle, perf_reads_per_req);
     `POP_COUNT(perf_writes_per_cycle, perf_writes_per_req);
@@ -253,13 +259,14 @@ module VX_shared_mem #(
         end
     end
 
-    assign cache_perf_if.reads        = perf_reads;
-    assign cache_perf_if.writes       = perf_writes;
-    assign cache_perf_if.read_misses  = '0;
-    assign cache_perf_if.write_misses = '0;
-    assign cache_perf_if.mshr_stalls  = '0;
-    assign cache_perf_if.mem_stalls   = '0;
-    assign cache_perf_if.crsp_stalls  = perf_crsp_stalls;
+    assign cache_perf.reads        = perf_reads;
+    assign cache_perf.writes       = perf_writes;
+    assign cache_perf.read_misses  = '0;
+    assign cache_perf.write_misses = '0;
+    assign cache_perf.bank_stalls  = perf_collisions;
+    assign cache_perf.mshr_stalls  = '0;
+    assign cache_perf.mem_stalls   = '0;
+    assign cache_perf.crsp_stalls  = perf_crsp_stalls;
 
 `endif
 

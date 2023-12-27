@@ -37,7 +37,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     VX_tex_bus_if.master    tex_bus_if,
 `ifdef PERF_ENABLE
     VX_tex_perf_if.slave    perf_tex_if,
-    VX_cache_perf_if.slave  perf_tcache_if,
 `endif
 `endif
 
@@ -45,7 +44,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     VX_raster_bus_if.slave  raster_bus_if,
 `ifdef PERF_ENABLE
     VX_raster_perf_if.slave perf_raster_if,
-    VX_cache_perf_if.slave  perf_rcache_if,
 `endif
 `endif
 
@@ -53,7 +51,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     VX_rop_bus_if.master    rop_bus_if,
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave    perf_rop_if,
-    VX_cache_perf_if.slave  perf_ocache_if,
 `endif
 `endif
 
@@ -182,7 +179,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .tex_csr_if     (tex_csr_if),
     `ifdef PERF_ENABLE
         .perf_tex_if    (perf_tex_if),
-        .perf_tcache_if (perf_tcache_if),
     `endif
     `endif
     
@@ -190,7 +186,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .raster_csr_if  (raster_csr_if),
     `ifdef PERF_ENABLE
         .perf_raster_if (perf_raster_if),
-        .perf_rcache_if (perf_rcache_if),
     `endif
     `endif
 
@@ -198,7 +193,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .rop_csr_if     (rop_csr_if),
     `ifdef PERF_ENABLE
         .perf_rop_if    (perf_rop_if),
-        .perf_ocache_if (perf_ocache_if),
     `endif
     `endif
 
@@ -341,7 +335,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .NUM_INPUTS (RSP_ARB_SIZE),
         .DATAW      (RSP_ARB_DATAW),
         .ARBITER    ("R"),
-        .OUT_REG    (1)
+        .OUT_REG    (3)
     ) rsp_arb (
         .clk       (clk),
         .reset     (commit_reset), 
@@ -357,7 +351,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     VX_gather_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_REG    (3)
+        .OUT_REG    (1)
     ) gather_unit (
         .clk           (clk),
         .reset         (commit_reset),
@@ -400,11 +394,14 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     assign sfu_perf_if.rop_stalls = perf_rop_stalls;
 `endif
     reg [`PERF_CTR_BITS-1:0] perf_wctl_stalls;
+
+    wire wctl_execute_stall = wctl_execute_if.valid && ~wctl_execute_if.ready;
+
     always @(posedge clk) begin
         if (reset) begin
             perf_wctl_stalls <= '0;
         end else begin
-            perf_wctl_stalls <= perf_wctl_stalls + `PERF_CTR_BITS'(wctl_execute_if.valid && ~wctl_execute_if.ready);
+            perf_wctl_stalls <= perf_wctl_stalls + `PERF_CTR_BITS'(wctl_execute_stall);
         end
     end
     assign sfu_perf_if.wctl_stalls = perf_wctl_stalls;

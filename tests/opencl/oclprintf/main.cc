@@ -106,11 +106,6 @@ int main (int argc, char **argv) {
   
   cl_platform_id platform_id;
   size_t kernel_size;
-  cl_int binary_status;
-
-  // read kernel binary from file  
-  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
-    return -1;
   
   // Getting platform and device information
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
@@ -124,12 +119,17 @@ int main (int argc, char **argv) {
   a_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
 
   printf("Create program from kernel source\n");
-  program = CL_CHECK2(clCreateProgramWithBinary(
-    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &_err));
-  if (program == NULL) {
-    cleanup();
+#ifdef HOSTGPU
+  if (0 != read_kernel_file("kernel.cl", &kernel_bin, &kernel_size))
     return -1;
-  }
+  program = CL_CHECK2(clCreateProgramWithSource(
+    context, 1, (const char**)&kernel_bin, &kernel_size, &_err));  
+#else
+  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
+    return -1;
+  program = CL_CHECK2(clCreateProgramWithBinary(
+    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, NULL, &_err));
+#endif
 
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
@@ -143,7 +143,7 @@ int main (int argc, char **argv) {
   // Allocate memories for input arrays and output arrays.    
   h_a = (int*)malloc(nbytes);
 	
-  // Initialize values for array members.  
+  // Generate input values
   for (int i = 0; i < size; ++i) {
     h_a[i] = -1 + i;
   }

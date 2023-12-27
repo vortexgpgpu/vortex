@@ -22,126 +22,81 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     input wire              reset,
     
 `ifdef PERF_ENABLE
-    VX_mem_perf_if.master   mem_perf_if,
+    output cache_perf_t     perf_l2cache,
+`ifdef EXT_RASTER_ENABLE
+    output cache_perf_t     perf_rcache,
+`endif
+`ifdef EXT_TEX_ENABLE
+    output cache_perf_t     perf_tcache,
+`endif
+`ifdef EXT_ROP_ENABLE
+    output cache_perf_t     perf_ocache,
+`endif
 `endif    
 
-    VX_mem_bus_if.slave     icache_bus_if [`NUM_SOCKETS],
+    VX_mem_bus_if.slave     per_socket_icache_mem_bus_if [`NUM_SOCKETS],
 
-    VX_mem_bus_if.slave     dcache_bus_if [`NUM_SOCKETS * DCACHE_NUM_REQS],
+    VX_mem_bus_if.slave     per_socket_dcache_mem_bus_if [`NUM_SOCKETS],
 
 `ifdef EXT_TEX_ENABLE
-`ifdef PERF_ENABLE
-    VX_cache_perf_if.master perf_tcache_if,
-`endif
     VX_mem_bus_if.slave     tcache_bus_if [`NUM_TEX_UNITS * TCACHE_NUM_REQS],
 `endif
 
 `ifdef EXT_RASTER_ENABLE
-`ifdef PERF_ENABLE
-    VX_cache_perf_if.master perf_rcache_if,
-`endif
     VX_mem_bus_if.slave     rcache_bus_if [`NUM_RASTER_UNITS * RCACHE_NUM_REQS],
 `endif 
 
 `ifdef EXT_ROP_ENABLE
-`ifdef PERF_ENABLE
-    VX_cache_perf_if.master perf_ocache_if,
-`endif
     VX_mem_bus_if.slave     ocache_bus_if [`NUM_ROP_UNITS * OCACHE_NUM_REQS],
 `endif
 
     VX_mem_bus_if.master    mem_bus_if
 );
-
-`ifdef PERF_ENABLE
-    VX_cache_perf_if perf_icache_if();
-    VX_cache_perf_if perf_dcache_if();
-    VX_cache_perf_if perf_l2cache_if();
-`endif   
-
-/////////////////////////////// I-Cache ///////////////////////////////////
-
     VX_mem_bus_if #(
         .DATA_SIZE (ICACHE_LINE_SIZE),
-        .TAG_WIDTH (ICACHE_MEM_TAG_WIDTH)
-    ) icache_mem_bus_if();
-    
-    `RESET_RELAY (icache_reset, reset);
-
-    VX_cache_cluster #(
-        .INSTANCE_ID    ($sformatf("cluster%0d-icache", CLUSTER_ID)),    
-        .NUM_UNITS      (`NUM_ICACHES),
-        .NUM_INPUTS     (`NUM_SOCKETS),
-        .TAG_SEL_IDX    (0),
-        .CACHE_SIZE     (`ICACHE_SIZE),
-        .LINE_SIZE      (ICACHE_LINE_SIZE),
-        .NUM_BANKS      (1),
-        .NUM_WAYS       (`ICACHE_NUM_WAYS),
-        .WORD_SIZE      (ICACHE_WORD_SIZE),
-        .NUM_REQS       (1),
-        .CRSQ_SIZE      (`ICACHE_CRSQ_SIZE),
-        .MSHR_SIZE      (`ICACHE_MSHR_SIZE),
-        .MRSQ_SIZE      (`ICACHE_MRSQ_SIZE),
-        .MREQ_SIZE      (`ICACHE_MREQ_SIZE),
-        .TAG_WIDTH      (ICACHE_ARB_TAG_WIDTH),
-        .UUID_WIDTH     (`UUID_WIDTH),
-        .WRITE_ENABLE   (0),
-        .CORE_OUT_REG   (2),
-        .MEM_OUT_REG    (2)
-    ) icache (
-    `ifdef PERF_ENABLE
-        .cache_perf_if  (perf_icache_if),
-    `endif
-        .clk            (clk),
-        .reset          (icache_reset),
-        .core_bus_if    (icache_bus_if),
-        .mem_bus_if     (icache_mem_bus_if)
-    );
-
-/////////////////////////////// D-Cache ///////////////////////////////////
+        .TAG_WIDTH (ICACHE_MEM_ARB_TAG_WIDTH)
+    ) icache_mem_bus_if[1]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_LINE_SIZE),
-        .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
-    ) dcache_mem_bus_if();
+        .TAG_WIDTH (DCACHE_MEM_ARB_TAG_WIDTH)
+    ) dcache_mem_bus_if[1]();
 
-    `RESET_RELAY (dcache_reset, reset);
+    `RESET_RELAY (l1_mem_arb_reset, reset);
 
-    VX_cache_cluster #(
-        .INSTANCE_ID    ($sformatf("cluster%0d-dcache", CLUSTER_ID)),    
-        .NUM_UNITS      (`NUM_DCACHES),
-        .NUM_INPUTS     (`NUM_SOCKETS),
-        .TAG_SEL_IDX    (1),
-        .CACHE_SIZE     (`DCACHE_SIZE),
-        .LINE_SIZE      (DCACHE_LINE_SIZE),
-        .NUM_BANKS      (`DCACHE_NUM_BANKS),
-        .NUM_WAYS       (`DCACHE_NUM_WAYS),
-        .WORD_SIZE      (DCACHE_WORD_SIZE),
-        .NUM_REQS       (DCACHE_NUM_REQS),
-        .CRSQ_SIZE      (`DCACHE_CRSQ_SIZE),
-        .MSHR_SIZE      (`DCACHE_MSHR_SIZE),
-        .MRSQ_SIZE      (`DCACHE_MRSQ_SIZE),
-        .MREQ_SIZE      (`DCACHE_MREQ_SIZE),
-        .TAG_WIDTH      (DCACHE_ARB_TAG_WIDTH),
-        .UUID_WIDTH     (`UUID_WIDTH),
-        .WRITE_ENABLE   (1),        
-        .NC_ENABLE      (1),
-        .CORE_OUT_REG   (`SM_ENABLED ? 2 : 1),
-        .MEM_OUT_REG    (2)
-    ) dcache (
-    `ifdef PERF_ENABLE
-        .cache_perf_if  (perf_dcache_if),
-    `endif
-        
-        .clk            (clk),
-        .reset          (dcache_reset),        
-        .core_bus_if    (dcache_bus_if),
-        .mem_bus_if     (dcache_mem_bus_if)
+    VX_mem_arb #(
+        .NUM_INPUTS  (`NUM_SOCKETS),
+        .DATA_SIZE   (ICACHE_LINE_SIZE),
+        .TAG_WIDTH   (ICACHE_MEM_TAG_WIDTH),
+        .TAG_SEL_IDX (1), // Skip 0 for NC flag
+        .ARBITER     ("R"),
+        .OUT_REG_REQ (2),
+        .OUT_REG_RSP (2)
+    ) icache_mem_arb (
+        .clk        (clk),
+        .reset      (l1_mem_arb_reset),
+        .bus_in_if  (per_socket_icache_mem_bus_if),
+        .bus_out_if (icache_mem_bus_if)
+    );
+
+    VX_mem_arb #(
+        .NUM_INPUTS  (`NUM_SOCKETS),
+        .DATA_SIZE   (DCACHE_LINE_SIZE),
+        .TAG_WIDTH   (DCACHE_MEM_TAG_WIDTH),
+        .TAG_SEL_IDX (1), // Skip 0 for NC flag
+        .ARBITER     ("R"),
+        .OUT_REG_REQ (2),
+        .OUT_REG_RSP (2)
+    ) dcache_mem_arb (
+        .clk        (clk),
+        .reset      (l1_mem_arb_reset),
+        .bus_in_if  (per_socket_dcache_mem_bus_if),
+        .bus_out_if (dcache_mem_bus_if)
     );
 
 /////////////////////////////// T-Cache ///////////////////////////////////
 
-`ifdef EXT_TEX_ENABLE    
+`ifdef EXT_TEX_ENABLE
 
     VX_mem_bus_if #(
         .DATA_SIZE (TCACHE_LINE_SIZE),
@@ -173,57 +128,12 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .MEM_OUT_REG    (2)
     ) tcache (
     `ifdef PERF_ENABLE
-        .cache_perf_if  (perf_tcache_if),
+        .cache_perf     (perf_tcache),
     `endif        
         .clk            (clk),
         .reset          (tcache_reset),
         .core_bus_if    (tcache_bus_if),
         .mem_bus_if     (tcache_mem_bus_if)
-    );
-
-`endif
-
-/////////////////////////////// O-Cache ///////////////////////////////////
-
-`ifdef EXT_ROP_ENABLE    
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (OCACHE_LINE_SIZE),
-        .TAG_WIDTH (OCACHE_MEM_TAG_WIDTH)
-    ) ocache_mem_bus_if();
-
-    `RESET_RELAY (ocache_reset, reset);
-
-    VX_cache_cluster #(
-        .INSTANCE_ID    ($sformatf("cluster%0d-ocache", CLUSTER_ID)),
-        .NUM_UNITS      (`NUM_OCACHES),
-        .NUM_INPUTS     (`NUM_ROP_UNITS),
-        .TAG_SEL_IDX    (0),
-        .CACHE_SIZE     (`OCACHE_SIZE),
-        .LINE_SIZE      (OCACHE_LINE_SIZE),
-        .NUM_BANKS      (`OCACHE_NUM_BANKS),
-        .NUM_WAYS       (`OCACHE_NUM_WAYS),
-        .WORD_SIZE      (OCACHE_WORD_SIZE),
-        .NUM_REQS       (OCACHE_NUM_REQS),
-        .CRSQ_SIZE      (`OCACHE_CRSQ_SIZE),
-        .MSHR_SIZE      (`OCACHE_MSHR_SIZE),
-        .MRSQ_SIZE      (`OCACHE_MRSQ_SIZE),
-        .MREQ_SIZE      (`OCACHE_MREQ_SIZE),
-        .TAG_WIDTH      (OCACHE_TAG_WIDTH),
-        .WRITE_ENABLE   (1),
-        .UUID_WIDTH     (`UUID_WIDTH),
-        .NC_ENABLE      (0),
-        .CORE_OUT_REG   (2),
-        .MEM_OUT_REG    (2)
-    ) ocache (
-    `ifdef PERF_ENABLE
-        .cache_perf_if  (perf_ocache_if),
-    `endif        
-        .clk            (clk),
-        .reset          (ocache_reset),
-
-        .core_bus_if    (ocache_bus_if),
-        .mem_bus_if     (ocache_mem_bus_if)
     );
 
 `endif
@@ -262,12 +172,57 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .MEM_OUT_REG    (2)
     ) rcache (
     `ifdef PERF_ENABLE
-        .cache_perf_if  (perf_rcache_if),
+        .cache_perf     (perf_rcache),
     `endif        
         .clk            (clk),
         .reset          (rcache_reset),
         .core_bus_if    (rcache_bus_if),
         .mem_bus_if     (rcache_mem_bus_if)
+    );
+
+`endif
+
+/////////////////////////////// O-Cache ///////////////////////////////////
+
+`ifdef EXT_ROP_ENABLE
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (OCACHE_LINE_SIZE),
+        .TAG_WIDTH (OCACHE_MEM_TAG_WIDTH)
+    ) ocache_mem_bus_if();
+
+    `RESET_RELAY (ocache_reset, reset);
+
+    VX_cache_cluster #(
+        .INSTANCE_ID    ($sformatf("cluster%0d-ocache", CLUSTER_ID)),
+        .NUM_UNITS      (`NUM_OCACHES),
+        .NUM_INPUTS     (`NUM_ROP_UNITS),
+        .TAG_SEL_IDX    (0),
+        .CACHE_SIZE     (`OCACHE_SIZE),
+        .LINE_SIZE      (OCACHE_LINE_SIZE),
+        .NUM_BANKS      (`OCACHE_NUM_BANKS),
+        .NUM_WAYS       (`OCACHE_NUM_WAYS),
+        .WORD_SIZE      (OCACHE_WORD_SIZE),
+        .NUM_REQS       (OCACHE_NUM_REQS),
+        .CRSQ_SIZE      (`OCACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (`OCACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (`OCACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (`OCACHE_MREQ_SIZE),
+        .TAG_WIDTH      (OCACHE_TAG_WIDTH),
+        .WRITE_ENABLE   (1),
+        .UUID_WIDTH     (`UUID_WIDTH),
+        .NC_ENABLE      (0),
+        .CORE_OUT_REG   (2),
+        .MEM_OUT_REG    (2)
+    ) ocache (
+    `ifdef PERF_ENABLE
+        .cache_perf     (perf_ocache),
+    `endif        
+        .clk            (clk),
+        .reset          (ocache_reset),
+
+        .core_bus_if    (ocache_bus_if),
+        .mem_bus_if     (ocache_mem_bus_if)
     );
 
 `endif
@@ -288,8 +243,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (R_MEM_ARB_IDX)
     `UNUSED_PARAM (O_MEM_ARB_IDX)
 
-    `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[I_MEM_ARB_IDX], icache_mem_bus_if, L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH);
-    `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[D_MEM_ARB_IDX], dcache_mem_bus_if, L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[I_MEM_ARB_IDX], icache_mem_bus_if[0], L1_MEM_TAG_WIDTH, ICACHE_MEM_ARB_TAG_WIDTH);
+    `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[D_MEM_ARB_IDX], dcache_mem_bus_if[0], L1_MEM_TAG_WIDTH, DCACHE_MEM_ARB_TAG_WIDTH);
 
 `ifdef EXT_TEX_ENABLE
     `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[T_MEM_ARB_IDX], tcache_mem_bus_if, L1_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH);
@@ -328,54 +283,10 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .clk            (clk),
         .reset          (l2_reset),
     `ifdef PERF_ENABLE
-        .cache_perf_if  (perf_l2cache_if),
+        .cache_perf     (perf_l2cache),
     `endif
         .core_bus_if    (l2_mem_bus_if),
         .mem_bus_if     (mem_bus_if)
     );
-
-`ifdef PERF_ENABLE
-    
-    `UNUSED_VAR (perf_dcache_if.mem_stalls)
-    `UNUSED_VAR (perf_dcache_if.crsp_stalls)
-
-    assign mem_perf_if.icache_reads       = perf_icache_if.reads;
-    assign mem_perf_if.icache_read_misses = perf_icache_if.read_misses;
-    
-    assign mem_perf_if.dcache_reads       = perf_dcache_if.reads;
-    assign mem_perf_if.dcache_writes      = perf_dcache_if.writes;
-    assign mem_perf_if.dcache_read_misses = perf_dcache_if.read_misses;
-    assign mem_perf_if.dcache_write_misses= perf_dcache_if.write_misses;
-    assign mem_perf_if.dcache_bank_stalls = perf_dcache_if.bank_stalls;
-    assign mem_perf_if.dcache_mshr_stalls = perf_dcache_if.mshr_stalls;
-
-`ifdef L2_ENABLE
-    assign mem_perf_if.l2cache_reads       = perf_l2cache_if.reads;
-    assign mem_perf_if.l2cache_writes      = perf_l2cache_if.writes;
-    assign mem_perf_if.l2cache_read_misses = perf_l2cache_if.read_misses;
-    assign mem_perf_if.l2cache_write_misses= perf_l2cache_if.write_misses;
-    assign mem_perf_if.l2cache_bank_stalls = perf_l2cache_if.bank_stalls;
-    assign mem_perf_if.l2cache_mshr_stalls = perf_l2cache_if.mshr_stalls;
-`else
-    assign mem_perf_if.l2cache_reads       = '0;
-    assign mem_perf_if.l2cache_writes      = '0;
-    assign mem_perf_if.l2cache_read_misses = '0;
-    assign mem_perf_if.l2cache_write_misses= '0;
-    assign mem_perf_if.l2cache_bank_stalls = '0;
-    assign mem_perf_if.l2cache_mshr_stalls = '0;
-`endif
-    
-    assign mem_perf_if.l3cache_reads       = '0;
-    assign mem_perf_if.l3cache_writes      = '0;
-    assign mem_perf_if.l3cache_read_misses = '0;
-    assign mem_perf_if.l3cache_write_misses= '0;
-    assign mem_perf_if.l3cache_bank_stalls = '0;
-    assign mem_perf_if.l3cache_mshr_stalls = '0;
-
-    assign mem_perf_if.mem_reads   = '0;       
-    assign mem_perf_if.mem_writes  = '0;
-    assign mem_perf_if.mem_latency = '0;
-    
-`endif
     
 endmodule

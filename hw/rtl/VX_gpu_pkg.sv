@@ -58,6 +58,23 @@ package VX_gpu_pkg;
         logic [7:0]         mpm_class;
     } base_dcrs_t;
 
+    typedef struct packed {
+        logic [`PERF_CTR_BITS-1:0] reads;
+        logic [`PERF_CTR_BITS-1:0] writes;
+        logic [`PERF_CTR_BITS-1:0] read_misses;
+        logic [`PERF_CTR_BITS-1:0] write_misses;
+        logic [`PERF_CTR_BITS-1:0] bank_stalls;
+        logic [`PERF_CTR_BITS-1:0] mshr_stalls;
+        logic [`PERF_CTR_BITS-1:0] mem_stalls;
+        logic [`PERF_CTR_BITS-1:0] crsp_stalls;
+    } cache_perf_t;
+
+    typedef struct packed {
+        logic [`PERF_CTR_BITS-1:0] reads;
+        logic [`PERF_CTR_BITS-1:0] writes;
+        logic [`PERF_CTR_BITS-1:0] latency;
+    } mem_perf_t;
+
     /* verilator lint_off UNUSED */
 
     ////////////////////////// Icache Parameters //////////////////////////////
@@ -74,7 +91,6 @@ package VX_gpu_pkg;
 
     // Core request tag bits
     localparam ICACHE_TAG_WIDTH	    = (`UUID_WIDTH + ICACHE_TAG_ID_BITS);
-    localparam ICACHE_ARB_TAG_WIDTH	= (ICACHE_TAG_WIDTH + `CLOG2(`SOCKET_SIZE));
 
     // Memory request data bits
     localparam ICACHE_MEM_DATA_WIDTH = (ICACHE_LINE_SIZE * 8);
@@ -83,7 +99,7 @@ package VX_gpu_pkg;
     `ifdef ICACHE_ENABLE
     localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(`ICACHE_MSHR_SIZE, 1, `NUM_ICACHES);
     `else
-    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_TAG_WIDTH(1, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_ARB_TAG_WIDTH, `NUM_SOCKETS, `NUM_ICACHES);
+    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_TAG_WIDTH(1, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, `NUM_SOCKETS, `NUM_ICACHES);
     `endif
 
     ////////////////////////// Dcache Parameters //////////////////////////////
@@ -112,16 +128,15 @@ package VX_gpu_pkg;
     // Core request tag bits
     localparam DCACHE_TAG_WIDTH	    = (`UUID_WIDTH + DCACHE_TAG_ID_BITS);
     localparam DCACHE_NOSM_TAG_WIDTH = (DCACHE_TAG_WIDTH - `SM_ENABLED);
-    localparam DCACHE_ARB_TAG_WIDTH	= (DCACHE_NOSM_TAG_WIDTH + `CLOG2(`SOCKET_SIZE));
     
     // Memory request data bits
     localparam DCACHE_MEM_DATA_WIDTH = (DCACHE_LINE_SIZE * 8);
 
     // Memory request tag bits
     `ifdef DCACHE_ENABLE
-    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_MEM_TAG_WIDTH(`DCACHE_MSHR_SIZE, `DCACHE_NUM_BANKS, DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_ARB_TAG_WIDTH, `NUM_SOCKETS, `NUM_DCACHES);
+    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_MEM_TAG_WIDTH(`DCACHE_MSHR_SIZE, `DCACHE_NUM_BANKS, DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_NOSM_TAG_WIDTH, `SOCKET_SIZE, `NUM_DCACHES);
     `else
-    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_BYPASS_TAG_WIDTH(DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_ARB_TAG_WIDTH, `NUM_SOCKETS, `NUM_DCACHES);
+    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_BYPASS_TAG_WIDTH(DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_NOSM_TAG_WIDTH, `SOCKET_SIZE, `NUM_DCACHES);
     `endif
 
     ////////////////////////// Tcache Parameters //////////////////////////////
@@ -228,12 +243,13 @@ package VX_gpu_pkg;
 
     /////////////////////////////// L1 Parameters /////////////////////////////
 
-    localparam L1_MEM_TAG_WIDTH     =  `MAX(`MAX(`MAX(`MAX(ICACHE_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH),
-                                        (`EXT_TEX_ENABLED ? TCACHE_MEM_TAG_WIDTH : 0)),
-                                        (`EXT_RASTER_ENABLED ? RCACHE_MEM_TAG_WIDTH : 0)),
-                                        (`EXT_ROP_ENABLED ? OCACHE_MEM_TAG_WIDTH : 0));
-
-    localparam NUM_L1_OUTPUTS       = (2 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED);
+    localparam NUM_L1_OUTPUTS           = (2 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED);
+    localparam ICACHE_MEM_ARB_TAG_WIDTH = (ICACHE_MEM_TAG_WIDTH + `CLOG2(`NUM_SOCKETS));
+    localparam DCACHE_MEM_ARB_TAG_WIDTH = (DCACHE_MEM_TAG_WIDTH + `CLOG2(`NUM_SOCKETS));
+    localparam L1_MEM_TAG_WIDTH         = `MAX(`MAX(`MAX(`MAX(ICACHE_MEM_ARB_TAG_WIDTH, DCACHE_MEM_ARB_TAG_WIDTH),
+                                          (`EXT_TEX_ENABLED ? TCACHE_MEM_TAG_WIDTH : 0)),
+                                          (`EXT_RASTER_ENABLED ? RCACHE_MEM_TAG_WIDTH : 0)),
+                                          (`EXT_ROP_ENABLED ? OCACHE_MEM_TAG_WIDTH : 0));
 
     /////////////////////////////// L2 Parameters /////////////////////////////
 
@@ -241,7 +257,7 @@ package VX_gpu_pkg;
     localparam L2_WORD_SIZE	        = `L1_LINE_SIZE;
 
     // Input request size
-    localparam L2_NUM_REQS	        = NUM_L1_OUTPUTS;
+    localparam L2_NUM_REQS	        = (2 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED);
 
     // Core request tag bits
     localparam L2_TAG_WIDTH	        = L1_MEM_TAG_WIDTH;
@@ -281,42 +297,46 @@ package VX_gpu_pkg;
 
     /////////////////////////////// Issue parameters //////////////////////////
 
-    localparam ISSUE_IDX_W = `LOG2UP(`ISSUE_WIDTH);    
+    localparam ISSUE_ISW   = `CLOG2(`ISSUE_WIDTH);
+    localparam ISSUE_ISW_W = `UP(ISSUE_ISW);   
     localparam ISSUE_RATIO = `NUM_WARPS / `ISSUE_WIDTH;
-    localparam ISSUE_WIS_W = `LOG2UP(ISSUE_RATIO);
-    localparam ISSUE_ADDRW = `LOG2UP(`NUM_REGS * (ISSUE_RATIO));
-
+    localparam ISSUE_WIS   = `CLOG2(ISSUE_RATIO);
+    localparam ISSUE_WIS_W = `UP(ISSUE_WIS);
+    
 `IGNORE_UNUSED_BEGIN
-    function logic [ISSUE_IDX_W-1:0] wid_to_isw(
+    function logic [`NW_WIDTH-1:0] wis_to_wid(
+        input logic [ISSUE_WIS_W-1:0] wis, 
+        input logic [ISSUE_ISW_W-1:0] isw
+    );
+        if (ISSUE_WIS == 0) begin
+            wis_to_wid = `NW_WIDTH'(isw);
+        end else if (ISSUE_ISW == 0) begin
+            wis_to_wid = `NW_WIDTH'(wis);
+        end else begin 
+            wis_to_wid = `NW_WIDTH'({wis, isw});
+        end
+    endfunction
+
+    function logic [ISSUE_ISW_W-1:0] wid_to_isw(
         input logic [`NW_WIDTH-1:0] wid
     );
-        if (`ISSUE_WIDTH > 1) begin    
-            wid_to_isw = ISSUE_IDX_W'(wid);
+        if (ISSUE_ISW != 0) begin    
+            wid_to_isw = wid[ISSUE_ISW_W-1:0];
         end else begin
             wid_to_isw = 0;
         end
-    endfunction
-`IGNORE_UNUSED_END
-
-    function logic [`NW_WIDTH-1:0] wis_to_wid(
-        input logic [ISSUE_WIS_W-1:0] wis, 
-        input logic [ISSUE_IDX_W-1:0] isw
-    );
-        wis_to_wid = `NW_WIDTH'({wis, isw} >> (ISSUE_IDX_W-`CLOG2(`ISSUE_WIDTH)));
     endfunction
 
     function logic [ISSUE_WIS_W-1:0] wid_to_wis(
         input logic [`NW_WIDTH-1:0] wid
     );
-        wid_to_wis = ISSUE_WIS_W'(wid >> `CLOG2(`ISSUE_WIDTH));
+        if (ISSUE_WIS != 0) begin
+            wid_to_wis = ISSUE_WIS_W'(wid >> ISSUE_ISW);
+        end else begin
+            wid_to_wis = 0;
+        end
     endfunction
-
-    function logic [ISSUE_ADDRW-1:0] wis_to_addr(
-        input logic [`NR_BITS-1:0] rid,
-        input logic [ISSUE_WIS_W-1:0] wis        
-    );
-        wis_to_addr = ISSUE_ADDRW'({rid, wis} >> (ISSUE_WIS_W-`CLOG2(ISSUE_RATIO)));
-    endfunction
+`IGNORE_UNUSED_END
 
 endpackage
 

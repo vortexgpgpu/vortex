@@ -1,10 +1,11 @@
 XLEN ?= 32
+TOOLDIR ?= /opt
 
 ifeq ($(XLEN),64)
-RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
+RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv64-gnu-toolchain
 CFLAGS += -march=rv64imafd -mabi=lp64d
 else
-RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
+RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv-gnu-toolchain
 CFLAGS += -march=rv32imaf -mabi=ilp32f
 endif
 

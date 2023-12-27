@@ -51,8 +51,7 @@ void AluUnit::tick() {
             assert(core_->stalled_warps_.test(trace->wid));
             core_->stalled_warps_.reset(trace->wid);
         }
-        auto time = input.pop();
-        core_->perf_stats_.alu_stalls += (SimPlatform::instance().cycles() - time);
+        input.pop();
     }
 }
 
@@ -87,8 +86,7 @@ void FpuUnit::tick() {
             std::abort();
         }    
         DT(3, "pipeline-execute: op=" << trace->fpu_type << ", " << *trace);
-        auto time = input.pop();
-        core_->perf_stats_.fpu_stalls += (SimPlatform::instance().cycles() - time);
+        input.pop();
     }
 }
 
@@ -114,7 +112,7 @@ void LsuUnit::tick() {
 
     // handle dcache response    
     for (uint32_t t = 0; t < num_lanes_; ++t) {
-        auto& dcache_rsp_port = core_->dcache_rsp_ports.at(t);
+        auto& dcache_rsp_port = core_->smem_demuxs_.at(t)->RspIn;
         if (dcache_rsp_port.empty())
             continue;
         auto& mem_rsp = dcache_rsp_port.front();
@@ -136,7 +134,7 @@ void LsuUnit::tick() {
 
     // handle shared memory response
     for (uint32_t t = 0; t < num_lanes_; ++t) {
-        auto& smem_rsp_port = core_->sharedmem_->Outputs.at(t);
+        auto& smem_rsp_port = core_->shared_mem_->Outputs.at(t);
         if (smem_rsp_port.empty())
             continue;
         auto& mem_rsp = smem_rsp_port.front();
@@ -184,8 +182,7 @@ void LsuUnit::tick() {
             fence_lock_ = true;        
             DT(3, "fence-lock: " << *trace);
             // remove input
-            auto time = input.pop(); 
-            core_->perf_stats_.lsu_stalls += (SimPlatform::instance().cycles() - time);
+            input.pop(); 
             break;
         }
 
@@ -213,7 +210,9 @@ void LsuUnit::tick() {
                 auto mem_addr = trace_data->mem_addrs.at(t).addr & ~addr_mask;
                 matches += (addr0 == mem_addr);
             }
+        #ifdef LSU_DUP_ENABLE
             is_dup = (matches == trace->tmask.count());
+        #endif
         }
 
         uint32_t addr_count;
@@ -229,7 +228,7 @@ void LsuUnit::tick() {
             if (!trace->tmask.test(t0 + t))
                 continue;
             
-            auto& dcache_req_port = core_->dcache_req_ports.at(t);
+            auto& dcache_req_port = core_->smem_demuxs_.at(t)->ReqIn;
             auto mem_addr = trace_data->mem_addrs.at(t);
             auto type = core_->get_addr_type(mem_addr.addr);
 
@@ -241,12 +240,16 @@ void LsuUnit::tick() {
             mem_req.cid   = trace->cid;
             mem_req.uuid  = trace->uuid;        
                 
-            dcache_req_port.send(mem_req, 2);
+            dcache_req_port.send(mem_req, 1);
             DT(3, "dcache-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << tag 
                 << ", lsu_type=" << trace->lsu_type << ", tid=" << t << ", addr_type=" << mem_req.type << ", " << *trace);
 
-            ++pending_loads_;
-            ++core_->perf_stats_.loads;        
+            if (is_write) {
+                ++core_->perf_stats_.stores;
+            } else {                
+                ++core_->perf_stats_.loads;
+                ++pending_loads_;
+            }
             if (is_dup)
                 break;
         }
@@ -254,13 +257,11 @@ void LsuUnit::tick() {
         // do not wait on writes
         if (is_write) {
             pending_rd_reqs_.release(tag);
-            output.send(trace, 1);
-            ++core_->perf_stats_.stores;
+            output.send(trace, 1);            
         }
 
         // remove input
-        auto time = input.pop();
-        core_->perf_stats_.lsu_stalls += (SimPlatform::instance().cycles() - time);
+        input.pop();
 
         break; // single block
     }
@@ -270,7 +271,7 @@ void LsuUnit::tick() {
 ///////////////////////////////////////////////////////////////////////////////
 
 SfuUnit::SfuUnit(const SimContext& ctx, Core* core) 
-    : ExeUnit(ctx, core, "SFU")   
+    : ExeUnit(ctx, core, "SFU")
     , raster_units_(core->raster_units_)    
     , rop_units_(core->rop_units_)
     , tex_units_(core->tex_units_)
@@ -356,24 +357,7 @@ void SfuUnit::tick() {
             core_->stalled_warps_.reset(trace->wid);
         }
 
-        auto time = input.pop();
-        auto stalls = (SimPlatform::instance().cycles() - time);
-
-        core_->perf_stats_.sfu_stalls += stalls;
-
-        switch (sfu_type) {
-        case SfuType::TEX:
-            core_->perf_stats_.tex_issue_stalls += stalls;
-            break;
-        case SfuType::ROP:
-            core_->perf_stats_.rop_issue_stalls += stalls;
-            break;
-        case SfuType::RASTER:
-            core_->perf_stats_.raster_issue_stalls += stalls;
-            break;
-        default:        
-            break;
-        }
+        input.pop();
 
         break; // single block
     }

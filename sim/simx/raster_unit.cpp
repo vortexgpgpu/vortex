@@ -312,6 +312,8 @@ public:
     rasterizer_.configure(dcrs_);
     mem_trace_state_ = e_mem_trace_state::header;
     fetched_stamps_ = 0;
+    pending_reqs_.clear();
+    perf_stats_ = PerfStats();
   }
 
   void tick() {
@@ -390,8 +392,6 @@ public:
         perf_stats_.latency += pending_reqs_.at(i).count;
     }
 
-    perf_stats_.stalls += (SimPlatform::instance().cycles() > simobject_->Output.arrival_time());
-
     if (mem_traces.empty())
       return;
 
@@ -425,6 +425,12 @@ public:
 
     if (addresses.empty())
       return;
+
+    // check pending queue capacity    
+    if (pending_reqs_.full()) {
+        ++perf_stats_.stalls;
+        return;
+    }
 
     auto tag = pending_reqs_.allocate({(uint32_t)addresses.size()});
     for (auto addr : addresses) {

@@ -13,7 +13,7 @@
 
 `include "VX_cache_define.vh"
 
-module VX_cache #(
+module VX_cache import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID    = "",
 
     // Number of Word requests per cycle
@@ -56,7 +56,7 @@ module VX_cache #(
  ) (    
     // PERF
 `ifdef PERF_ENABLE
-    VX_cache_perf_if.master cache_perf_if,
+    output cache_perf_t     cache_perf,
 `endif
     
     input wire clk,
@@ -279,6 +279,10 @@ module VX_cache #(
             core_req_tag[i]};
     end
 
+`ifdef PERF_ENABLE
+    wire [`PERF_CTR_BITS-1:0] perf_collisions;
+`endif
+
     `RESET_RELAY (req_xbar_reset, reset);
 
      VX_stream_xbar #(
@@ -290,9 +294,9 @@ module VX_cache #(
         .clk       (clk),
         .reset     (req_xbar_reset),
     `ifdef PERF_ENABLE
-        .collisions (cache_perf_if.bank_stalls),
+        .collisions(perf_collisions),
     `else
-        `UNUSED_PIN (collisions),
+        `UNUSED_PIN(collisions),
     `endif
         .valid_in  (core_req_valid),
         .data_in   (core_req_data_in),
@@ -526,14 +530,17 @@ module VX_cache #(
     wire [`CLOG2(NUM_REQS+1)-1:0] perf_core_reads_per_cycle;
     wire [`CLOG2(NUM_REQS+1)-1:0] perf_core_writes_per_cycle;
     
-    wire [NUM_REQS-1:0] perf_core_reads_per_req  = core_req_valid & core_req_ready & ~core_req_rw;
-    wire [NUM_REQS-1:0] perf_core_writes_per_req = core_req_valid & core_req_ready & core_req_rw;
+    wire [NUM_REQS-1:0] perf_core_reads_per_req;
+    wire [NUM_REQS-1:0] perf_core_writes_per_req;
         
     // per cycle: read misses, write misses, msrq stalls, pipeline stalls
     wire [`CLOG2(NUM_BANKS+1)-1:0] perf_read_miss_per_cycle;
     wire [`CLOG2(NUM_BANKS+1)-1:0] perf_write_miss_per_cycle;
     wire [`CLOG2(NUM_BANKS+1)-1:0] perf_mshr_stall_per_cycle;
-    wire [`CLOG2(NUM_BANKS+1)-1:0] perf_crsp_stall_per_cycle;
+    wire [`CLOG2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
+
+    `BUFFER(perf_core_reads_per_req, core_req_valid & core_req_ready & ~core_req_rw);
+    `BUFFER(perf_core_writes_per_req, core_req_valid & core_req_ready & core_req_rw);
     
     `POP_COUNT(perf_core_reads_per_cycle, perf_core_reads_per_req);
     `POP_COUNT(perf_core_writes_per_cycle, perf_core_writes_per_req);
@@ -556,7 +563,7 @@ module VX_cache #(
     reg [`PERF_CTR_BITS-1:0] perf_write_misses;
     reg [`PERF_CTR_BITS-1:0] perf_mshr_stalls;
     reg [`PERF_CTR_BITS-1:0] perf_mem_stalls;
-    reg [`PERF_CTR_BITS-1:0] perf_crsp_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_crsp_stalls;    
 
     always @(posedge clk) begin
         if (reset) begin
@@ -578,13 +585,14 @@ module VX_cache #(
         end
     end
 
-    assign cache_perf_if.reads        = perf_core_reads;
-    assign cache_perf_if.writes       = perf_core_writes;
-    assign cache_perf_if.read_misses  = perf_read_misses;
-    assign cache_perf_if.write_misses = perf_write_misses;
-    assign cache_perf_if.mshr_stalls  = perf_mshr_stalls;
-    assign cache_perf_if.mem_stalls   = perf_mem_stalls;
-    assign cache_perf_if.crsp_stalls  = perf_crsp_stalls;
+    assign cache_perf.reads        = perf_core_reads;
+    assign cache_perf.writes       = perf_core_writes;
+    assign cache_perf.read_misses  = perf_read_misses;
+    assign cache_perf.write_misses = perf_write_misses;
+    assign cache_perf.bank_stalls  = perf_collisions;
+    assign cache_perf.mshr_stalls  = perf_mshr_stalls;
+    assign cache_perf.mem_stalls   = perf_mem_stalls;
+    assign cache_perf.crsp_stalls  = perf_crsp_stalls;
 `endif
 
 endmodule

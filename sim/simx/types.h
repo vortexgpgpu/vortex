@@ -70,6 +70,7 @@ inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
   case RegType::Integer: os << "x"; break;  
   case RegType::Float:   os << "f"; break;
   case RegType::Vector:  os << "v"; break;
+  default: assert(false);
   }
   return os;
 }
@@ -81,7 +82,7 @@ enum class ExeType {
   LSU,
   FPU,
   SFU,
-  MAX,
+  ExeTypeCount
 };
 
 inline std::ostream &operator<<(std::ostream &os, const ExeType& type) {
@@ -90,7 +91,7 @@ inline std::ostream &operator<<(std::ostream &os, const ExeType& type) {
   case ExeType::LSU: os << "LSU"; break;
   case ExeType::FPU: os << "FPU"; break;
   case ExeType::SFU: os << "SFU"; break;
-  case ExeType::MAX: break;
+  default: assert(false);
   }
   return os;
 }
@@ -112,6 +113,7 @@ inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
   case AluType::SYSCALL: os << "SYSCALL"; break;
   case AluType::IMUL:    os << "IMUL"; break;
   case AluType::IDIV:    os << "IDIV"; break;
+  default: assert(false);
   }
   return os;
 }
@@ -129,6 +131,7 @@ inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
   case LsuType::LOAD:  os << "LOAD"; break;
   case LsuType::STORE: os << "STORE"; break;
   case LsuType::FENCE: os << "FENCE"; break;
+  default: assert(false);
   }
   return os;
 }
@@ -138,7 +141,7 @@ inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
 enum class AddrType {
   Global,
   Shared,
-  IO,
+  IO
 };
 
 inline std::ostream &operator<<(std::ostream &os, const AddrType& type) {
@@ -146,6 +149,7 @@ inline std::ostream &operator<<(std::ostream &os, const AddrType& type) {
   case AddrType::Global: os << "Global"; break;
   case AddrType::Shared: os << "Shared"; break;
   case AddrType::IO:     os << "IO"; break;
+  default: assert(false);
   }
   return os;
 }
@@ -164,7 +168,7 @@ enum class FpuType {
   FMA,
   FDIV,
   FSQRT,
-  FCVT,
+  FCVT
 };
 
 inline std::ostream &operator<<(std::ostream &os, const FpuType& type) {
@@ -174,6 +178,7 @@ inline std::ostream &operator<<(std::ostream &os, const FpuType& type) {
   case FpuType::FDIV:  os << "FDIV"; break;
   case FpuType::FSQRT: os << "FSQRT"; break;
   case FpuType::FCVT:  os << "FCVT"; break;
+  default: assert(false);
   }
   return os;
 }
@@ -192,8 +197,8 @@ enum class SfuType {
   CSRRC,
   TEX,
   RASTER,
-  ROP,    
-  CMOV  
+  ROP,
+  CMOV
 };
 
 inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
@@ -211,6 +216,7 @@ inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
   case SfuType::RASTER: os << "RASTER"; break;
   case SfuType::ROP:    os << "ROP"; break;
   case SfuType::CMOV:   os << "CMOV"; break;
+  default: assert(false);
   }
   return os;
 }
@@ -226,6 +232,7 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
   switch (type) {
   case ArbiterType::Priority:   os << "Priority"; break;
   case ArbiterType::RoundRobin: os << "RoundRobin"; break;
+  default: assert(false);
   }
   return os;
 }
@@ -357,6 +364,92 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+template <typename Type>
+class Mux : public SimObject<Mux<Type>> {
+public:
+  std::vector<SimPort<Type>> Inputs;
+  std::vector<SimPort<Type>> Outputs;
+
+  Mux(
+    const SimContext& ctx, 
+    const char* name, 
+    ArbiterType type, 
+    uint32_t num_inputs, 
+    uint32_t num_outputs = 1,
+    uint32_t delay = 1
+  ) : SimObject<Mux<Type>>(ctx, name)    
+    , Inputs(num_inputs, this)
+    , Outputs(num_outputs, this)
+    , type_(type)
+    , delay_(delay)
+    , cursors_(num_outputs, 0)
+    , num_reqs_(num_inputs / num_outputs)
+  {
+    assert(delay != 0);    
+    assert(num_inputs <= 32);
+    assert(num_outputs <= 32);
+    assert(num_inputs >= num_outputs);
+
+    // bypass mode
+    if (num_inputs == num_outputs) {      
+      for (uint32_t i = 0; i < num_inputs; ++i) {
+        Inputs.at(i).bind(&Outputs.at(i));
+      }
+    }
+  }
+
+  void reset() {
+    for (auto& cursor : cursors_) {
+      cursor = 0;
+    }
+  }
+
+  void tick() {
+    uint32_t I = Inputs.size();
+    uint32_t O = Outputs.size();
+    uint32_t R = num_reqs_;
+
+    // skip bypass mode
+    if (I == O)
+      return;
+        
+    // process inputs       
+    for (uint32_t o = 0; o < O; ++o) {
+      for (uint32_t r = 0; r < R; ++r) {
+        uint32_t i = (cursors_.at(o) + r) & (R-1);
+        uint32_t j = o * R + i;
+        if (j >= I)
+          continue;
+        
+        auto& req_in = Inputs.at(j);
+        if (!req_in.empty()) {
+          auto& req = req_in.front();
+          DT(4, this->name() << "-" << req);
+          Outputs.at(o).send(req, delay_);                
+          req_in.pop();
+          this->update_cursor(o, i);
+          break;
+        }
+      }
+    }
+  }
+
+private:
+
+  void update_cursor(uint32_t index, uint32_t grant) {
+    if (type_ == ArbiterType::RoundRobin) {
+      cursors_.at(index) = grant + 1;
+    }
+  }
+
+  ArbiterType type_;
+  uint32_t delay_;  
+  std::vector<uint32_t> cursors_;
+  uint32_t num_reqs_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 template <typename Req, typename Rsp>
 class Switch : public SimObject<Switch<Req, Rsp>> {
 public:
@@ -370,13 +463,13 @@ public:
     const SimContext& ctx, 
     const char* name, 
     ArbiterType type, 
-    uint32_t num_inputs = 1, 
+    uint32_t num_inputs, 
     uint32_t num_outputs = 1,
     uint32_t delay = 1
   ) 
     : SimObject<Switch<Req, Rsp>>(ctx, name)    
-    , ReqIn(num_inputs,   this)
-    , RspIn(num_inputs,   this)
+    , ReqIn(num_inputs, this)
+    , RspIn(num_inputs, this)
     , ReqOut(num_outputs, this)    
     , RspOut(num_outputs, this)
     , type_(type)
@@ -389,8 +482,8 @@ public:
     assert(num_outputs <= 32);
     assert(num_inputs >= num_outputs);
 
+    // bypass mode    
     if (num_inputs == num_outputs) {
-      // bypass mode
       for (uint32_t i = 0; i < num_inputs; ++i) {
         ReqIn.at(i).bind(&ReqOut.at(i));
         RspOut.at(i).bind(&RspIn.at(i));
@@ -468,14 +561,14 @@ private:
 
 class SMemDemux : public SimObject<SMemDemux> {
 public:
-  SimPort<MemReq>  ReqIn;
-  SimPort<MemRsp>  RspIn;
+  SimPort<MemReq> ReqIn;
+  SimPort<MemRsp> RspIn;
 
-  SimPort<MemReq>  ReqSm;
-  SimPort<MemRsp>  RspSm;
+  SimPort<MemReq> ReqSM;
+  SimPort<MemRsp> RspSM;
 
-  SimPort<MemReq>  ReqDc;
-  SimPort<MemRsp>  RspDc;
+  SimPort<MemReq> ReqDC;
+  SimPort<MemRsp> RspDC;
 
   SMemDemux(
     const SimContext& ctx, 
@@ -484,45 +577,49 @@ public:
   ) : SimObject<SMemDemux>(ctx, name)    
     , ReqIn(this)
     , RspIn(this)
-    , ReqSm(this)
-    , RspSm(this)
-    , ReqDc(this)
-    , RspDc(this)
+    , ReqSM(this)
+    , RspSM(this)
+    , ReqDC(this)
+    , RspDC(this)
     , delay_(delay)
   {}
 
   void reset() {}
 
-  void tick() {
+  void tick() {      
+    // process incoming reponses
+    if (!RspSM.empty()) {
+      auto& rsp = RspSM.front();
+      DT(4, this->name() << "-" << rsp);
+      RspIn.send(rsp, 1);
+      RspSM.pop();
+    }
+    if (!RspDC.empty()) {
+      auto& rsp = RspDC.front();
+      DT(4, this->name() << "-" << rsp);
+      RspIn.send(rsp, 1);
+      RspDC
+      .pop();
+    }
     // process incomming requests  
     if (!ReqIn.empty()) {
       auto& req = ReqIn.front();
       DT(4, this->name() << "-" << req);
       if (req.type == AddrType::Shared) {
-        ReqSm.send(req, delay_);
+        ReqSM.send(req, delay_);
       } else {
-        ReqDc.send(req, delay_);
+        ReqDC.send(req, delay_);
       }
       ReqIn.pop();
     }   
-      
-    // process incoming reponses
-    if (!RspSm.empty()) {
-      auto& rsp = RspSm.front();
-      DT(4, this->name() << "-" << rsp);
-      RspIn.send(rsp, 1);
-      RspSm.pop();
-    }
-    if (!RspDc.empty()) {
-      auto& rsp = RspDc.front();
-      DT(4, this->name() << "-" << rsp);
-      RspIn.send(rsp, 1);
-      RspDc.pop();
-    }
   }
 
 private:
   uint32_t delay_;
 };
+
+///////////////////////////////////////////////////////////////////////////////
+
+using MemSwitch = Switch<MemReq, MemRsp>;
 
 }

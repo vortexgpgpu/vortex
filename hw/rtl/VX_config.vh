@@ -32,7 +32,20 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// 32 bit XLEN as default.
+`ifdef EXT_GFX_ENABLE
+`define EXT_TEX_ENABLE
+`define EXT_RASTER_ENABLE
+`define EXT_ROP_ENABLE
+`endif
+
+`ifndef EXT_M_DISABLE
+`define EXT_M_ENABLE
+`endif
+
+`ifndef EXT_F_DISABLE
+`define EXT_F_ENABLE
+`endif
+
 `ifndef XLEN_32
 `ifndef XLEN_64
 `define XLEN_32
@@ -45,6 +58,26 @@
 
 `ifdef XLEN_32
 `define XLEN 32
+`endif
+
+`ifdef EXT_D_ENABLE
+`define FLEN_64
+`else
+`define FLEN_32
+`endif
+
+`ifdef FLEN_64
+`define FLEN 64
+`endif
+
+`ifdef FLEN_32
+`define FLEN 32
+`endif
+
+`ifdef XLEN_64
+`ifdef FLEN_32
+    `define FPU_RV64F
+`endif
 `endif
 
 `ifndef NUM_CLUSTERS
@@ -70,6 +103,7 @@
 `ifndef SOCKET_SIZE
 `define SOCKET_SIZE `MIN(4, `NUM_CORES)
 `endif
+`define NUM_SOCKETS `UP(`NUM_CORES / `SOCKET_SIZE)
 
 `ifdef L2_ENABLE
     `define L2_ENABLED   1
@@ -166,10 +200,14 @@
 `ifndef FPU_FPNEW
 `ifndef FPU_DSP
 `ifndef FPU_DPI
-`ifdef SYNTHESIS
-`define FPU_DSP
-`else
+`ifndef SYNTHESIS
+`ifndef DPI_DISABLE
 `define FPU_DPI
+`else
+`define FPU_DSP
+`endif
+`else
+`define FPU_DSP
 `endif
 `endif
 `endif
@@ -186,148 +224,6 @@
 `define DEBUG_LEVEL 3
 `endif
 
-// ISA Extensions /////////////////////////////////////////////////////////////
-
-`ifndef EXT_M_DISABLE
-`define EXT_M_ENABLE
-`endif
-
-`ifndef EXT_F_DISABLE
-`define EXT_F_ENABLE
-`endif
-
-`ifdef EXT_D_ENABLE
-`define FLEN_64
-`else
-`define FLEN_32
-`endif
-
-`ifdef FLEN_64
-`define FLEN 64
-`endif
-
-`ifdef FLEN_32
-`define FLEN 32
-`endif
-
-`ifdef XLEN_64
-`ifdef FLEN_32
-    `define FPU_RV64F
-`endif
-`endif
-
-`ifdef EXT_GFX_ENABLE
-`define EXT_TEX_ENABLE
-`define EXT_RASTER_ENABLE
-`define EXT_ROP_ENABLE
-`endif
-
-`define ISA_STD_A           0
-`define ISA_STD_C           2
-`define ISA_STD_D           3
-`define ISA_STD_E           4
-`define ISA_STD_F           5
-`define ISA_STD_H           7
-`define ISA_STD_I           8
-`define ISA_STD_N           13
-`define ISA_STD_Q           16
-`define ISA_STD_S           18
-`define ISA_STD_U           20
-
-`define ISA_EXT_TEX         0
-`define ISA_EXT_RASTER      1
-`define ISA_EXT_ROP         2
-
-`ifdef EXT_A_ENABLE
-    `define EXT_A_ENABLED   1
-`else
-    `define EXT_A_ENABLED   0
-`endif
-
-`ifdef EXT_C_ENABLE
-    `define EXT_C_ENABLED   1
-`else
-    `define EXT_C_ENABLED   0
-`endif
-
-`ifdef EXT_D_ENABLE
-    `define EXT_D_ENABLED   1
-`else
-    `define EXT_D_ENABLED   0
-`endif
-
-`ifdef EXT_F_ENABLE
-    `define EXT_F_ENABLED   1
-`else
-    `define EXT_F_ENABLED   0
-`endif
-
-`ifdef EXT_M_ENABLE
-    `define EXT_M_ENABLED   1
-`else
-    `define EXT_M_ENABLED   0
-`endif
-
-`ifdef EXT_TEX_ENABLE
-    `define EXT_TEX_ENABLED 1
-`else
-    `define EXT_TEX_ENABLED 0
-`endif
-
-`ifdef EXT_RASTER_ENABLE
-    `define EXT_RASTER_ENABLED 1
-`else
-    `define EXT_RASTER_ENABLED 0
-`endif
-
-`ifdef EXT_ROP_ENABLE
-    `define EXT_ROP_ENABLED 1
-`else
-    `define EXT_ROP_ENABLED 0
-`endif
-
-`define ISA_X_ENABLED  ( `EXT_TEX_ENABLED       \
-                       | `EXT_RASTER_ENABLED    \
-                       | `EXT_ROP_ENABLED       \
-                       )
-
-`define MISA_EXT  (`EXT_TEX_ENABLED << `ISA_EXT_TEX)        \
-                | (`EXT_RASTER_ENABLED << `ISA_EXT_RASTER)  \
-                | (`EXT_ROP_ENABLED << `ISA_EXT_ROP)
-
-`define MISA_STD  (`EXT_A_ENABLED <<  0) /* A - Atomic Instructions extension */ \
-                | (0 <<  1) /* B - Tentatively reserved for Bit operations extension */ \
-                | (`EXT_C_ENABLED <<  2) /* C - Compressed extension */ \
-                | (`EXT_D_ENABLED <<  3) /* D - Double precsision floating-point extension */ \
-                | (0 <<  4) /* E - RV32E base ISA */ \
-                | (`EXT_F_ENABLED << 5) /* F - Single precsision floating-point extension */ \
-                | (0 <<  6) /* G - Additional standard extensions present */ \
-                | (0 <<  7) /* H - Hypervisor mode implemented */ \
-                | (1 <<  8) /* I - RV32I/64I/128I base ISA */ \
-                | (0 <<  9) /* J - Reserved */ \
-                | (0 << 10) /* K - Reserved */ \
-                | (0 << 11) /* L - Tentatively reserved for Bit operations extension */ \
-                | (`EXT_M_ENABLED << 12) /* M - Integer Multiply/Divide extension */ \
-                | (0 << 13) /* N - User level interrupts supported */ \
-                | (0 << 14) /* O - Reserved */ \
-                | (0 << 15) /* P - Tentatively reserved for Packed-SIMD extension */ \
-                | (0 << 16) /* Q - Quad-precision floating-point extension */ \
-                | (0 << 17) /* R - Reserved */ \
-                | (0 << 18) /* S - Supervisor mode implemented */ \
-                | (0 << 19) /* T - Tentatively reserved for Transactional Memory extension */ \
-                | (1 << 20) /* U - User mode implemented */ \
-                | (0 << 21) /* V - Tentatively reserved for Vector extension */ \
-                | (0 << 22) /* W - Reserved */ \
-                | (`ISA_X_ENABLED << 23) /* X - Non-standard extensions present */ \
-                | (0 << 24) /* Y - Reserved */ \
-                | (0 << 25) /* Z - Reserved */
-
-// Device identification //////////////////////////////////////////////////////
-
-`define VENDOR_ID           0
-`define ARCHITECTURE_ID     0
-`define IMPLEMENTATION_ID   0
-
 // Pipeline Configuration /////////////////////////////////////////////////////
 
 // Issue width
@@ -337,18 +233,18 @@
 
 // Number of ALU units
 `ifndef NUM_ALU_LANES
-`define NUM_ALU_LANES   `UP(`NUM_THREADS / 2)
+`define NUM_ALU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_ALU_BLOCKS
-`define NUM_ALU_BLOCKS  `UP(`ISSUE_WIDTH / 1)
+`define NUM_ALU_BLOCKS  `ISSUE_WIDTH
 `endif
 
 // Number of FPU units
 `ifndef NUM_FPU_LANES
-`define NUM_FPU_LANES   `UP(`NUM_THREADS / 2)
+`define NUM_FPU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_FPU_BLOCKS
-`define NUM_FPU_BLOCKS  `UP(`ISSUE_WIDTH / 1)
+`define NUM_FPU_BLOCKS  `ISSUE_WIDTH
 `endif
 
 // Number of LSU units
@@ -372,7 +268,10 @@
 `endif
 
 // LSU Duplicate Address Check
-`ifdef LSU_DUP
+`ifndef LSU_DUP_DISABLE
+`define LSU_DUP_ENABLE
+`endif
+`ifdef LSU_DUP_ENABLE
 `define LSU_DUP_ENABLED 1
 `else
 `define LSU_DUP_ENABLED 0
@@ -557,7 +456,7 @@
 
 // Number of Cache Units
 `ifndef NUM_ICACHES
-`define NUM_ICACHES `UP(`NUM_CORES / 4)
+`define NUM_ICACHES `UP(`SOCKET_SIZE / 4)
 `endif
 
 // Cache Size
@@ -587,7 +486,7 @@
 
 // Number of Associative Ways
 `ifndef ICACHE_NUM_WAYS
-`define ICACHE_NUM_WAYS 2
+`define ICACHE_NUM_WAYS 1
 `endif
 
 // Dcache Configurable Knobs //////////////////////////////////////////////////
@@ -606,7 +505,7 @@
 
 // Number of Cache Units
 `ifndef NUM_DCACHES
-`define NUM_DCACHES `UP(`NUM_CORES / 4)
+`define NUM_DCACHES `UP(`SOCKET_SIZE / 4)
 `endif
 
 // Cache Size
@@ -616,7 +515,7 @@
 
 // Number of Banks
 `ifndef DCACHE_NUM_BANKS
-`define DCACHE_NUM_BANKS (`NUM_LSU_LANES)
+`define DCACHE_NUM_BANKS `MIN(`NUM_LSU_LANES, 4)
 `endif
 
 // Core Response Queue Size
@@ -641,7 +540,7 @@
 
 // Number of Associative Ways
 `ifndef DCACHE_NUM_WAYS
-`define DCACHE_NUM_WAYS 2
+`define DCACHE_NUM_WAYS 1
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
@@ -649,6 +548,7 @@
 `ifndef SM_DISABLE
 `define SM_ENABLE
 `endif
+
 `ifdef SM_ENABLE
     `define SM_ENABLED   1
 `else
@@ -836,7 +736,7 @@
 
 // Number of Banks
 `ifndef L2_NUM_BANKS
-`define L2_NUM_BANKS 2
+`define L2_NUM_BANKS `MIN(4, `NUM_SOCKETS)
 `endif
 
 // Core Response Queue Size
@@ -861,7 +761,7 @@
 
 // Number of Associative Ways
 `ifndef L2_NUM_WAYS
-`define L2_NUM_WAYS 4
+`define L2_NUM_WAYS 2
 `endif
 
 // L3cache Configurable Knobs /////////////////////////////////////////////////
@@ -904,5 +804,118 @@
 `ifndef L3_NUM_WAYS
 `define L3_NUM_WAYS 4
 `endif
+
+// ISA Extensions /////////////////////////////////////////////////////////////
+
+`ifdef EXT_A_ENABLE
+    `define EXT_A_ENABLED   1
+`else
+    `define EXT_A_ENABLED   0
+`endif
+
+`ifdef EXT_C_ENABLE
+    `define EXT_C_ENABLED   1
+`else
+    `define EXT_C_ENABLED   0
+`endif
+
+`ifdef EXT_D_ENABLE
+    `define EXT_D_ENABLED   1
+`else
+    `define EXT_D_ENABLED   0
+`endif
+
+`ifdef EXT_F_ENABLE
+    `define EXT_F_ENABLED   1
+`else
+    `define EXT_F_ENABLED   0
+`endif
+
+`ifdef EXT_M_ENABLE
+    `define EXT_M_ENABLED   1
+`else
+    `define EXT_M_ENABLED   0
+`endif
+
+`ifdef EXT_TEX_ENABLE
+    `define EXT_TEX_ENABLED 1
+`else
+    `define EXT_TEX_ENABLED 0
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+    `define EXT_RASTER_ENABLED 1
+`else
+    `define EXT_RASTER_ENABLED 0
+`endif
+
+`ifdef EXT_ROP_ENABLE
+    `define EXT_ROP_ENABLED 1
+`else
+    `define EXT_ROP_ENABLED 0
+`endif
+
+`define ISA_STD_A           0
+`define ISA_STD_C           2
+`define ISA_STD_D           3
+`define ISA_STD_E           4
+`define ISA_STD_F           5
+`define ISA_STD_H           7
+`define ISA_STD_I           8
+`define ISA_STD_N           13
+`define ISA_STD_Q           16
+`define ISA_STD_S           18
+`define ISA_STD_U           20
+
+`define ISA_EXT_ICACHE      0
+`define ISA_EXT_DCACHE      1
+`define ISA_EXT_L2CACHE     2
+`define ISA_EXT_L3CACHE     3
+`define ISA_EXT_SMEM        4
+`define ISA_EXT_TEX         5
+`define ISA_EXT_RASTER      6
+`define ISA_EXT_ROP         7
+
+`define MISA_EXT  (`ICACHE_ENABLED  << `ISA_EXT_ICACHE) \
+                | (`DCACHE_ENABLED  << `ISA_EXT_DCACHE) \
+                | (`L2_ENABLED      << `ISA_EXT_L2CACHE) \
+                | (`L3_ENABLED      << `ISA_EXT_L3CACHE) \
+                | (`SM_ENABLED      << `ISA_EXT_SMEM) \
+                | (`EXT_TEX_ENABLED << `ISA_EXT_TEX) \
+                | (`EXT_RASTER_ENABLED << `ISA_EXT_RASTER) \
+                | (`EXT_ROP_ENABLED << `ISA_EXT_ROP)
+
+`define MISA_STD  (`EXT_A_ENABLED <<  0) /* A - Atomic Instructions extension */ \
+                | (0 <<  1) /* B - Tentatively reserved for Bit operations extension */ \
+                | (`EXT_C_ENABLED <<  2) /* C - Compressed extension */ \
+                | (`EXT_D_ENABLED <<  3) /* D - Double precsision floating-point extension */ \
+                | (0 <<  4) /* E - RV32E base ISA */ \
+                | (`EXT_F_ENABLED << 5) /* F - Single precsision floating-point extension */ \
+                | (0 <<  6) /* G - Additional standard extensions present */ \
+                | (0 <<  7) /* H - Hypervisor mode implemented */ \
+                | (1 <<  8) /* I - RV32I/64I/128I base ISA */ \
+                | (0 <<  9) /* J - Reserved */ \
+                | (0 << 10) /* K - Reserved */ \
+                | (0 << 11) /* L - Tentatively reserved for Bit operations extension */ \
+                | (`EXT_M_ENABLED << 12) /* M - Integer Multiply/Divide extension */ \
+                | (0 << 13) /* N - User level interrupts supported */ \
+                | (0 << 14) /* O - Reserved */ \
+                | (0 << 15) /* P - Tentatively reserved for Packed-SIMD extension */ \
+                | (0 << 16) /* Q - Quad-precision floating-point extension */ \
+                | (0 << 17) /* R - Reserved */ \
+                | (0 << 18) /* S - Supervisor mode implemented */ \
+                | (0 << 19) /* T - Tentatively reserved for Transactional Memory extension */ \
+                | (1 << 20) /* U - User mode implemented */ \
+                | (0 << 21) /* V - Tentatively reserved for Vector extension */ \
+                | (0 << 22) /* W - Reserved */ \
+                | (1 << 23) /* X - Non-standard extensions present */ \
+                | (0 << 24) /* Y - Reserved */ \
+                | (0 << 25) /* Z - Reserved */
+
+// Device identification //////////////////////////////////////////////////////
+
+`define VENDOR_ID           0
+`define ARCHITECTURE_ID     0
+`define IMPLEMENTATION_ID   0
 
 `endif // VX_CONFIG_VH

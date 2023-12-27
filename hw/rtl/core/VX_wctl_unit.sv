@@ -29,7 +29,6 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 );
     `UNUSED_PARAM (CORE_ID)
     localparam LANE_BITS  = `CLOG2(NUM_LANES);
-    localparam LANE_WIDTH = `UP(LANE_BITS);
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
     localparam WCTL_WIDTH = $bits(tmc_t) + $bits(wspawn_t) + $bits(split_t) + $bits(join_t) + $bits(barrier_t);
@@ -50,7 +49,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_join   = (execute_if.data.op_type == `INST_SFU_JOIN);
     wire is_bar    = (execute_if.data.op_type == `INST_SFU_BAR);
 
-    wire [LANE_WIDTH-1:0] tid;
+    wire [`UP(LANE_BITS)-1:0] tid;
     if (LANE_BITS != 0) begin
         assign tid = execute_if.data.tid[0 +: LANE_BITS];
     end else begin

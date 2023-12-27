@@ -46,7 +46,6 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_tex_bus_if.master    tex_bus_if,
 `ifdef PERF_ENABLE
     VX_tex_perf_if.slave    perf_tex_if,
-    VX_cache_perf_if.slave  perf_tcache_if,
 `endif
 `endif
 
@@ -54,7 +53,6 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_raster_bus_if.slave  raster_bus_if,
 `ifdef PERF_ENABLE
     VX_raster_perf_if.slave perf_raster_if,
-    VX_cache_perf_if.slave  perf_rcache_if,
 `endif
 `endif
 
@@ -62,7 +60,6 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_rop_bus_if.master    rop_bus_if,
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave    perf_rop_if,
-    VX_cache_perf_if.slave  perf_ocache_if,
 `endif
 `endif    
   
@@ -149,7 +146,6 @@ module VX_execute import VX_gpu_pkg::*; #(
         .tex_bus_if     (tex_bus_if),
     `ifdef PERF_ENABLE
         .perf_tex_if    (perf_tex_if),
-        .perf_tcache_if (perf_tcache_if),
     `endif
     `endif
     
@@ -157,7 +153,6 @@ module VX_execute import VX_gpu_pkg::*; #(
         .raster_bus_if  (raster_bus_if),
     `ifdef PERF_ENABLE
         .perf_raster_if (perf_raster_if),
-        .perf_rcache_if (perf_rcache_if),
     `endif
     `endif
 
@@ -165,7 +160,6 @@ module VX_execute import VX_gpu_pkg::*; #(
         .rop_bus_if     (rop_bus_if),
     `ifdef PERF_ENABLE
         .perf_rop_if    (perf_rop_if),
-        .perf_ocache_if (perf_ocache_if),
     `endif
     `endif
     

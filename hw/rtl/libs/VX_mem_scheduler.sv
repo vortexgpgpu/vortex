@@ -16,14 +16,14 @@
 `TRACING_OFF
 module VX_mem_scheduler #(
     parameter `STRING INSTANCE_ID = "",
-    parameter NUM_REQS     = 4,
-    parameter NUM_BANKS    = 4,
+    parameter NUM_REQS     = 1,
+    parameter NUM_BANKS    = 1,
     parameter ADDR_WIDTH   = 32,
     parameter DATA_WIDTH   = 32,
-    parameter TAG_WIDTH    = 32,
+    parameter TAG_WIDTH    = 8,
     parameter MEM_TAG_ID   = 0, // upper section of the tag sent to the memory interface
     parameter UUID_WIDTH   = 0, // upper section of the mem_tag_id containing the UUID
-    parameter QUEUE_SIZE   = 16,
+    parameter QUEUE_SIZE   = 8,
     parameter RSP_PARTIAL  = 0,
     parameter CORE_OUT_REG = 0,
     parameter MEM_OUT_REG  = 0,

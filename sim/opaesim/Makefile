@@ -124,7 +124,7 @@ CXXFLAGS += -DNOPAE
 
 PROJECT = libopae-c-sim.so
 
-all: $(PROJECT)
+all: $(DESTDIR)/$(PROJECT)
 
 $(DESTDIR)/vortex.xml:
 	verilator --xml-only -O0 $(VL_FLAGS) $(TOP) --xml-output $(DESTDIR)/vortex.xml

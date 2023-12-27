@@ -32,21 +32,18 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     VX_sfu_csr_if.master        tex_csr_if,
 `ifdef PERF_ENABLE
     VX_tex_perf_if.slave        perf_tex_if,
-    VX_cache_perf_if.slave      perf_tcache_if,
 `endif
 `endif
 `ifdef EXT_RASTER_ENABLE
     VX_sfu_csr_if.master        raster_csr_if,
 `ifdef PERF_ENABLE
     VX_raster_perf_if.slave     perf_raster_if,
-    VX_cache_perf_if.slave      perf_rcache_if,
 `endif
 `endif
 `ifdef EXT_ROP_ENABLE
     VX_sfu_csr_if.master        rop_csr_if,
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave        perf_rop_if,
-    VX_cache_perf_if.slave      perf_ocache_if,
 `endif
 `endif
     
@@ -168,15 +165,12 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .sfu_perf_if    (sfu_perf_if),
     `ifdef EXT_TEX_ENABLE        
         .perf_tex_if    (perf_tex_if),
-        .perf_tcache_if (perf_tcache_if),
     `endif    
     `ifdef EXT_RASTER_ENABLE        
         .perf_raster_if (perf_raster_if),
-        .perf_rcache_if (perf_rcache_if),
     `endif
     `ifdef EXT_ROP_ENABLE
         .perf_rop_if    (perf_rop_if),
-        .perf_ocache_if (perf_ocache_if),
     `endif
     `endif
 

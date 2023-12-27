@@ -54,18 +54,11 @@ Vortex is a full-stack open-source RISC-V GPGPU.
     $ git clone --recursive https://github.com/vortexgpgpu/vortex.git
     $ cd Vortex
 ### Install prebuilt toolchain
-    $ ./ci/toolchain_install.sh --all
-
     By default, the toolchain will install to /opt folder. 
-    You can install the toolchain to a different directory by overiding DESTDIR.
-
-    $ DESTDIR=$TOOLDIR ./ci/toolchain_install.sh --all
-    $ export VORTEX_HOME=$TOOLDIR/vortex
-    $ export LLVM_VORTEX=$TOOLDIR/llvm-vortex
-    $ export LLVM_POCL=$TOOLDIR/llvm-pocl
-    $ export RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain
-    $ export VERILATOR_ROOT=$TOOLDIR/verilator
-    $ export PATH=$VERILATOR_ROOT/bin:$PATH 
+    You can install the toolchain to a different directory by overriding TOOLDIR (e.g. export TOOLDIR=$HOME/tools).
+    
+    $ ./ci/toolchain_install.sh --all
+    $ source ./ci/toolchain_env.sh
 ### Build Vortex sources
     $ make -s
 ### Quick demo running vecadd OpenCL kernel on 2 cores

@@ -236,10 +236,6 @@
 `define INST_SFU_IS_WCTL(op) (op <= 5)
 `define INST_SFU_IS_CSR(op)  (op >= 6 && op <= 8)
 
-///////////////////////////////////////////////////////////////////////////////
-
-`define NUM_SOCKETS             `UP(`NUM_CORES / `SOCKET_SIZE)
-
 ////////////////////////// Texture Unit Definitions ///////////////////////////
 
 `define TEX_REQ_TAG_WIDTH       (`UUID_WIDTH + `LOG2UP(`TEX_REQ_QUEUE_SIZE))
@@ -320,20 +316,20 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define BUFFER_BUSY(dst, src, enable) \
-    logic __busy; \
-    if (enable) begin \
-        always @(posedge clk) begin \
-            if (reset) begin \
-                __busy <= 1'b0; \
-            end else begin \
-                __busy <= src; \
-            end \
-        end \
-    end else begin \
-        assign __busy = src; \
-    end \
-    assign dst = __busy
+`define BUFFER_EX(dst, src, ena, latency) \
+    VX_pipe_register #( \
+        .DATAW  ($bits(dst)), \
+        .RESETW ($bits(dst)), \
+        .DEPTH  (latency) \
+    ) __``dst ( \
+        .clk      (clk), \
+        .reset    (reset), \
+        .enable   (ena), \
+        .data_in  (src), \
+        .data_out (dst) \
+    )
+
+`define BUFFER(dst, src) `BUFFER_EX(dst, src, 1'b1, 1)
 
 `define POP_COUNT_EX(out, in, model) \
     VX_popcount #( \
@@ -400,35 +396,32 @@
     VX_dcr_bus_if dst(); \
     assign {dst.write_valid, dst.write_addr, dst.write_data} = __``dst
 
-`define PERF_REDUCE(dst, src, field, width, count) \
-    wire [count-1:0][width-1:0] __reduce_add_i_``src``field; \
-    wire [width-1:0] __reduce_add_o_``dst``field; \
-    reg [width-1:0] __reduce_add_r_``dst``field; \
-    for (genvar __i = 0; __i < count; ++__i) begin \
-        assign __reduce_add_i_``src``field[__i] = ``src[__i].``field; \
-    end \
-    VX_reduce #(.DATAW_IN(width), .N(count), .OP("+")) __reduce_add_``dst``field ( \
-        __reduce_add_i_``src``field, \
-        __reduce_add_o_``dst``field \
-    ); \
-    always @(posedge clk) begin \
-       if (reset) begin \
-           __reduce_add_r_``dst``field <= '0; \
-       end else begin \
-           __reduce_add_r_``dst``field <= __reduce_add_o_``dst``field; \
-       end \
-    end \
-    assign ``dst.``field = __reduce_add_r_``dst``field
-
-`define PERF_CACHE_ADD(dst, src, count) \
-    `PERF_REDUCE (dst, src, reads, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, writes, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, read_misses, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, write_misses, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, bank_stalls, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, mshr_stalls, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, mem_stalls, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, crsp_stalls, `PERF_CTR_BITS, count)
+`define PERF_COUNTER_ADD(dst, src, field, width, dst_count, src_count, reg_enable) \
+    for (genvar __d = 0; __d < dst_count; ++__d) begin \
+        localparam __count = ((src_count > dst_count) ? ((src_count + dst_count - 1) / dst_count) : 1); \
+        wire [__count-1:0][width-1:0] __reduce_add_i_``src``field; \
+        wire [width-1:0] __reduce_add_o_``dst``field; \
+        for (genvar __i = 0; __i < __count; ++__i) begin \
+            assign __reduce_add_i_``src``field[__i] = ``src[__d * __count + __i].``field; \
+        end \
+        VX_reduce #(.DATAW_IN(width), .N(__count), .OP("+")) __reduce_add_``dst``field ( \
+            __reduce_add_i_``src``field, \
+            __reduce_add_o_``dst``field \
+        ); \
+        if (reg_enable) begin \
+            reg [width-1:0] __reduce_add_r_``dst``field; \
+            always @(posedge clk) begin \
+                if (reset) begin \
+                    __reduce_add_r_``dst``field <= '0; \
+                end else begin \
+                    __reduce_add_r_``dst``field <= __reduce_add_o_``dst``field; \
+                end \
+            end \
+            assign ``dst[__d].``field = __reduce_add_r_``dst``field; \
+        end else begin \
+            assign ``dst[__d].``field = __reduce_add_o_``dst``field; \
+        end \
+    end
 
 `define ASSIGN_BLOCKED_WID(dst, src, block_idx, block_size) \
     if (block_size != 1) begin \
@@ -441,8 +434,22 @@
         assign dst = src; \
     end
 
-`define TO_DISPATCH_DATA(data, tid) \
-    {data.uuid, data.wis, data.tmask, data.op_type, data.op_mod, data.wb, data.use_PC, data.use_imm, data.PC, data.imm, data.rd, tid, data.rs1_data, data.rs2_data, data.rs3_data}
+`define TO_DISPATCH_DATA(data, tid) { \
+    data.uuid, \
+    data.wis, \
+    data.tmask, \
+    data.op_type, \
+    data.op_mod, \
+    data.wb, \
+    data.use_PC, \
+    data.use_imm, \
+    data.PC, \
+    data.imm, \
+    data.rd, \
+    tid, \
+    data.rs1_data, \
+    data.rs2_data, \
+    data.rs3_data}
 
 ///////////////////////////////////////////////////////////////////////////////
 

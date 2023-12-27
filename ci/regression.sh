@@ -22,6 +22,7 @@ rm -f blackbox.*.cache
 unittest() 
 {
 make -C tests/unittest run
+make -C hw/unittest
 }
 
 isa() 
@@ -64,6 +65,9 @@ echo "isa tests done!"
 regression() 
 {
 echo "begin regression tests..."
+
+make -C sim clean && CONFIGS="-DEXT_GFX_ENABLE" make -C sim
+make -C runtime clean && CONFIGS="-DEXT_GFX_ENABLE" make -C runtime
 
 make -C tests/kernel run-simx
 make -C tests/kernel run-rtlsim
