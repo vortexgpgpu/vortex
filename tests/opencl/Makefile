@@ -15,10 +15,10 @@ all:
 	$(MAKE) -C blackscholes
 	$(MAKE) -C transpose
 	$(MAKE) -C convolution
-	$(MAKE) -C cutcp
-	$(MAKE) -C sgemm2
-	$(MAKE) -C vectorhypot
-	$(MAKE) -C mri-q run-simx
+#	$(MAKE) -C cutcp
+#	$(MAKE) -C sgemm2
+#	$(MAKE) -C vectorhypot
+#	$(MAKE) -C mri-q run-simx
 
 run-simx:
 	$(MAKE) -C vecadd run-simx
@@ -125,7 +125,7 @@ clean-all:
 	$(MAKE) -C oclprintf clean-all
 	$(MAKE) -C blackscholes clean-all
 	$(MAKE) -C convolution clean-all
-	$(MAKE) -C cutcp clean-all
-	$(MAKE) -C sgemm2 clean-all
-	$(MAKE) -C vectorhypot clean-all
-	$(MAKE) -C mri-q clean-all
+#	$(MAKE) -C cutcp clean-all
+#	$(MAKE) -C sgemm2 clean-all
+#	$(MAKE) -C vectorhypot clean-all
+#	$(MAKE) -C mri-q clean-all
