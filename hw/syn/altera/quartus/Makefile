@@ -45,10 +45,10 @@ tex:
 	cp tex/Makefile tex/$(BUILD_DIR)
 	$(MAKE) -C tex/$(BUILD_DIR) clean && $(MAKE) -C tex/$(BUILD_DIR) > tex/$(BUILD_DIR)/build.log 2>&1 &
 
-rop:
-	mkdir -p rop/$(BUILD_DIR)
-	cp rop/Makefile rop/$(BUILD_DIR)
-	$(MAKE) -C rop/$(BUILD_DIR) clean && $(MAKE) -C rop/$(BUILD_DIR) > rop/$(BUILD_DIR)/build.log 2>&1 &
+om:
+	mkdir -p om/$(BUILD_DIR)
+	cp om/Makefile om/$(BUILD_DIR)
+	$(MAKE) -C om/$(BUILD_DIR) clean && $(MAKE) -C om/$(BUILD_DIR) > om/$(BUILD_DIR)/build.log 2>&1 &
 
 raster:
 	mkdir -p raster/$(BUILD_DIR)
