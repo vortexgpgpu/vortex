@@ -15,7 +15,7 @@ all:
 	$(MAKE) -C tex
 	$(MAKE) -C draw3d
 	$(MAKE) -C raster
-	$(MAKE) -C rop
+	$(MAKE) -C om
 
 run-simx:
 	$(MAKE) -C basic run-simx
@@ -34,7 +34,7 @@ run-simx:
 	$(MAKE) -C tex run-simx
 	$(MAKE) -C draw3d run-simx
 	$(MAKE) -C raster run-simx
-	$(MAKE) -C rop run-simx
+	$(MAKE) -C om run-simx
 
 run-rtlsim:
 	$(MAKE) -C basic run-rtlsim
@@ -53,7 +53,7 @@ run-rtlsim:
 	$(MAKE) -C tex run-rtlsim
 	$(MAKE) -C draw3d run-rtlsim
 	$(MAKE) -C raster run-rtlsim
-	$(MAKE) -C rop run-rtlsim
+	$(MAKE) -C om run-rtlsim
 
 run-opae:
 	$(MAKE) -C basic run-opae
@@ -72,7 +72,7 @@ run-opae:
 	$(MAKE) -C tex run-opae
 	$(MAKE) -C draw3d run-opae
 	$(MAKE) -C raster run-opae
-	$(MAKE) -C rop run-opae
+	$(MAKE) -C om run-opae
 
 clean:
 	$(MAKE) -C basic clean
@@ -91,7 +91,7 @@ clean:
 	$(MAKE) -C tex clean
 	$(MAKE) -C draw3d clean
 	$(MAKE) -C raster clean
-	$(MAKE) -C rop clean
+	$(MAKE) -C om clean
 
 clean-all:
 	$(MAKE) -C basic clean-all
@@ -110,4 +110,4 @@ clean-all:
 	$(MAKE) -C tex clean-all
 	$(MAKE) -C draw3d clean-all
 	$(MAKE) -C raster clean-all
-	$(MAKE) -C rop clean-all
+	$(MAKE) -C om clean-all

@@ -139,12 +139,12 @@ int render(uint32_t num_tasks) {
     RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
   }
 
-  // configure rop color buffer
+  // configure om color buffer
   vx_dcr_write(device, VX_DCR_OM_CBUF_ADDR,  cbuf_addr / 64); // block address
   vx_dcr_write(device, VX_DCR_OM_CBUF_PITCH, cbuf_pitch);
   vx_dcr_write(device, VX_DCR_OM_CBUF_WRITEMASK, 0xf);
 
-  // configure rop depth buffer to default
+  // configure om depth buffer to default
   vx_dcr_write(device, VX_DCR_OM_ZBUF_ADDR,  zbuf_addr / 64); // block address
   vx_dcr_write(device, VX_DCR_OM_ZBUF_PITCH, zbuf_pitch);   
   if (depth_enable) {
@@ -155,7 +155,7 @@ int render(uint32_t num_tasks) {
     vx_dcr_write(device, VX_DCR_OM_DEPTH_WRITEMASK, 0);
   }
   
-  // configure rop stencil states to default
+  // configure om stencil states to default
   vx_dcr_write(device, VX_DCR_OM_STENCIL_FUNC,  VX_OM_DEPTH_FUNC_ALWAYS);
   vx_dcr_write(device, VX_DCR_OM_STENCIL_ZPASS, VX_OM_STENCIL_OP_KEEP);
   vx_dcr_write(device, VX_DCR_OM_STENCIL_ZPASS, VX_OM_STENCIL_OP_KEEP);
@@ -164,7 +164,7 @@ int render(uint32_t num_tasks) {
   vx_dcr_write(device, VX_DCR_OM_STENCIL_MASK,  VX_OM_STENCIL_MASK);
   vx_dcr_write(device, VX_DCR_OM_STENCIL_WRITEMASK, 0);
 
-  // configure rop blend states to default
+  // configure om blend states to default
   if (blend_enable) {
     vx_dcr_write(device, VX_DCR_OM_BLEND_MODE, (VX_OM_BLEND_MODE_ADD << 16)   // DST
                                               | (VX_OM_BLEND_MODE_ADD << 0));  // SRC
@@ -219,7 +219,7 @@ int main(int argc, char *argv[]) {
   uint64_t isa_flags;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
   if (0 == (isa_flags & VX_ISA_EXT_OM)) {
-    std::cout << "ROP extension not supported!" << std::endl;
+    std::cout << "OM extension not supported!" << std::endl;
     cleanup();
     return -1;
   }
