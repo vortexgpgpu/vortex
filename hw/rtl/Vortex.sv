@@ -34,15 +34,15 @@ module Vortex import VX_gpu_pkg::*; (
 
     // Memory request
     output wire                             mem_req_valid,
-    output wire                             mem_req_rw,    
-    output wire [`VX_MEM_BYTEEN_WIDTH-1:0]  mem_req_byteen,    
+    output wire                             mem_req_rw,
+    output wire [`VX_MEM_BYTEEN_WIDTH-1:0]  mem_req_byteen,
     output wire [`VX_MEM_ADDR_WIDTH-1:0]    mem_req_addr,
     output wire [`VX_MEM_DATA_WIDTH-1:0]    mem_req_data,
     output wire [`VX_MEM_TAG_WIDTH-1:0]     mem_req_tag,
     input  wire                             mem_req_ready,
 
     // Memory response    
-    input wire                              mem_rsp_valid,        
+    input wire                              mem_rsp_valid,    
     input wire [`VX_MEM_DATA_WIDTH-1:0]     mem_rsp_data,
     input wire [`VX_MEM_TAG_WIDTH-1:0]      mem_rsp_tag,
     output wire                             mem_rsp_ready,

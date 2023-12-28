@@ -90,6 +90,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .reset       (gbar_reset),
         .gbar_bus_if (gbar_bus_if)
     );
+
 `endif
 
 `ifdef EXT_RASTER_ENABLE
