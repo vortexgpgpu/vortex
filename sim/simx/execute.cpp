@@ -2390,6 +2390,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         DPN(2, "}" << std::endl);
         trace->used_iregs[rdest] = 1;
         assert(rdest != 0);
+      } else {
+        // disable writes to x0
+        trace->wb = false;
       }
       break;
     case RegType::Float:

@@ -53,8 +53,8 @@ module VX_cluster import VX_gpu_pkg::*; #(
 );
 
 `ifdef SCOPE
-    localparam scope_raster_units = `EXT_RASTER_ENABLED ? `NUM_RASTER_UNITS : 0;
-    `SCOPE_IO_SWITCH (scope_raster_units + `NUM_SOCKETS);
+    localparam scope_socket = `EXT_RASTER_ENABLED ? `NUM_RASTER_UNITS : 0;
+    `SCOPE_IO_SWITCH (scope_socket + `NUM_SOCKETS);
 `endif    
 
 `ifdef PERF_ENABLE
@@ -284,7 +284,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         VX_socket #(
             .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + i)
         ) socket (
-            `SCOPE_IO_BIND  (scope_raster_units+i)
+            `SCOPE_IO_BIND  (scope_socket+i)
 
             .clk            (clk),
             .reset          (socket_reset),

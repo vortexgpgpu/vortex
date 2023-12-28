@@ -69,8 +69,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     localparam RSP_ARB_DATAW = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + (NUM_LANES * `XLEN) + `NR_BITS + 1 + `XLEN + PID_WIDTH + 1 + 1;
     localparam RSP_ARB_SIZE = 1 + 1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_OM_ENABLED;
     localparam RSP_ARB_IDX_WCTL = 0;
-    localparam RSP_ARB_IDX_CSR = 1;
-    localparam RSP_ARB_IDX_RASTER = RSP_ARB_IDX_CSR + 1;
+    localparam RSP_ARB_IDX_CSRS = 1;
+    localparam RSP_ARB_IDX_RASTER = RSP_ARB_IDX_CSRS + 1;
     localparam RSP_ARB_IDX_OM = RSP_ARB_IDX_RASTER + `EXT_RASTER_ENABLED;    
     localparam RSP_ARB_IDX_TEX = RSP_ARB_IDX_OM + `EXT_OM_ENABLED;
     `UNUSED_PARAM (RSP_ARB_IDX_RASTER)
@@ -196,9 +196,9 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .commit_if      (csr_commit_if)
     );    
 
-    assign rsp_arb_valid_in[RSP_ARB_IDX_CSR] = csr_commit_if.valid;
-    assign rsp_arb_data_in[RSP_ARB_IDX_CSR] = csr_commit_if.data;
-    assign csr_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_CSR];
+    assign rsp_arb_valid_in[RSP_ARB_IDX_CSRS] = csr_commit_if.valid;
+    assign rsp_arb_data_in[RSP_ARB_IDX_CSRS] = csr_commit_if.data;
+    assign csr_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_CSRS];
     
 `ifdef EXT_TEX_ENABLE
 
