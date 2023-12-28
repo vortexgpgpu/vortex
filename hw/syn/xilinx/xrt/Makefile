@@ -55,7 +55,7 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE_DATA
 DBG_TRACE_FLAGS += -DDBG_TRACE_AFU
 DBG_TRACE_FLAGS += -DDBG_TRACE_TEX
 DBG_TRACE_FLAGS += -DDBG_TRACE_RASTER
-DBG_TRACE_FLAGS += -DDBG_TRACE_ROP
+DBG_TRACE_FLAGS += -DDBG_TRACE_OM
 DBG_TRACE_FLAGS += -DDBG_TRACE_GBAR
 
 # Control logic analyzer monitors
@@ -83,9 +83,9 @@ ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
 endif
 TEX_INCLUDE = -I$(RTL_DIR)/tex
 RASTER_INCLUDE = -I$(RTL_DIR)/raster
-ROP_INCLUDE = -I$(RTL_DIR)/rop
+OM_INCLUDE = -I$(RTL_DIR)/om
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR)
-RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
+RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(OM_INCLUDE)
 
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache

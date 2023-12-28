@@ -31,8 +31,8 @@
 /tex/*
 !/tex/Makefile
 
-/rop/*
-!/rop/Makefile
+/om/*
+!/om/Makefile
 
 /raster/*
 !/raster/Makefile

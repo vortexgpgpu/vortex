@@ -219,14 +219,14 @@ package VX_gpu_pkg;
     // Input request size
     localparam OCACHE_NUM_REQS	    = `OCACHE_NUM_BANKS;
 
-    // ROP memory request size
-    localparam ROP_MEM_REQS	        = (2 * `NUM_SFU_LANES);
+    // OM memory request size
+    localparam OM_MEM_REQS	        = (2 * `NUM_SFU_LANES);
 
     // Batch select bits
-    localparam OCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(ROP_MEM_REQS, OCACHE_NUM_REQS);
+    localparam OCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(OM_MEM_REQS, OCACHE_NUM_REQS);
 
     // Core request tag Id bits       
-    localparam OCACHE_TAG_ID_BITS	= (`CLOG2(`ROP_MEM_QUEUE_SIZE) + OCACHE_BATCH_SEL_BITS);
+    localparam OCACHE_TAG_ID_BITS	= (`CLOG2(`OM_MEM_QUEUE_SIZE) + OCACHE_BATCH_SEL_BITS);
 
     // Core request tag bits
     localparam OCACHE_TAG_WIDTH	    = (`UUID_WIDTH + OCACHE_TAG_ID_BITS);
@@ -238,18 +238,18 @@ package VX_gpu_pkg;
     `ifdef OCACHE_ENABLE
     localparam OCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(`OCACHE_MSHR_SIZE, `OCACHE_NUM_BANKS, `NUM_OCACHES);
     `else
-    localparam OCACHE_MEM_TAG_WIDTH	= `CACHE_CLUSTER_BYPASS_TAG_WIDTH(OCACHE_NUM_REQS, OCACHE_LINE_SIZE, OCACHE_WORD_SIZE, OCACHE_TAG_WIDTH, `NUM_ROP_UNITS, `NUM_OCACHES);
+    localparam OCACHE_MEM_TAG_WIDTH	= `CACHE_CLUSTER_BYPASS_TAG_WIDTH(OCACHE_NUM_REQS, OCACHE_LINE_SIZE, OCACHE_WORD_SIZE, OCACHE_TAG_WIDTH, `NUM_OM_UNITS, `NUM_OCACHES);
     `endif
 
     /////////////////////////////// L1 Parameters /////////////////////////////
 
-    localparam NUM_L1_OUTPUTS           = (2 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED);
+    localparam NUM_L1_OUTPUTS           = (2 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_OM_ENABLED);
     localparam ICACHE_MEM_ARB_TAG_WIDTH = (ICACHE_MEM_TAG_WIDTH + `CLOG2(`NUM_SOCKETS));
     localparam DCACHE_MEM_ARB_TAG_WIDTH = (DCACHE_MEM_TAG_WIDTH + `CLOG2(`NUM_SOCKETS));
     localparam L1_MEM_TAG_WIDTH         = `MAX(`MAX(`MAX(`MAX(ICACHE_MEM_ARB_TAG_WIDTH, DCACHE_MEM_ARB_TAG_WIDTH),
                                           (`EXT_TEX_ENABLED ? TCACHE_MEM_TAG_WIDTH : 0)),
                                           (`EXT_RASTER_ENABLED ? RCACHE_MEM_TAG_WIDTH : 0)),
-                                          (`EXT_ROP_ENABLED ? OCACHE_MEM_TAG_WIDTH : 0));
+                                          (`EXT_OM_ENABLED ? OCACHE_MEM_TAG_WIDTH : 0));
 
     /////////////////////////////// L2 Parameters /////////////////////////////
 
@@ -263,7 +263,7 @@ package VX_gpu_pkg;
     localparam L2_WORD_SIZE	        = `L1_LINE_SIZE;
 
     // Input request size
-    localparam L2_NUM_REQS	        = (2 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED);
+    localparam L2_NUM_REQS	        = (2 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_OM_ENABLED);
 
     // Core request tag bits
     localparam L2_TAG_WIDTH	        = L1_MEM_TAG_WIDTH;

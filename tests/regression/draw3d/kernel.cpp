@@ -218,12 +218,12 @@ void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
 
 		auto pos_mask = csr_read(VX_CSR_RASTER_POS_MASK);
 	#ifdef SW_ENABLE
-		if (arg->sw_rop) {
-			OUTPUT(pos_mask, 0, out_color, z, g_gpu_sw.rop);
+		if (arg->sw_om) {
+			OUTPUT(pos_mask, 0, out_color, z, g_gpu_sw.om);
 		} else 
 	#endif	
 		{
-			OUTPUT(pos_mask, 0, out_color, z, vx_rop);
+			OUTPUT(pos_mask, 0, out_color, z, vx_om);
 		}
 	}
 }
@@ -274,10 +274,10 @@ void shader_function_sw_rast_cb(uint32_t pos_mask,
 		TO_RGBA(out_color, r, g, b, a);
 	}
 
-	if (arg->sw_rop) {
-		OUTPUT(pos_mask, 0, out_color, z, g_gpu_sw.rop);
+	if (arg->sw_om) {
+		OUTPUT(pos_mask, 0, out_color, z, g_gpu_sw.om);
 	} else {
-		OUTPUT(pos_mask, 0, out_color, z, vx_rop);
+		OUTPUT(pos_mask, 0, out_color, z, vx_om);
 	}
 }
 

@@ -1489,15 +1489,15 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
         rd_write = true;
       } break;
-      case 1: { // ROP
+      case 1: { // OM
         trace->exe_type = ExeType::SFU; 
-        trace->sfu_type = SfuType::ROP;
+        trace->sfu_type = SfuType::OM;
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->used_iregs.set(rsrc2);
-        auto trace_data = std::make_shared<RopUnit::TraceData>();
+        auto trace_data = std::make_shared<OMUnit::TraceData>();
         trace->data = trace_data;
-        trace_data->rop_idx = core_->rop_idx();
+        trace_data->om_idx = core_->om_idx();
         for (uint32_t t = thread_start; t < num_threads; ++t) {
           if (!tmask_.test(t))
             continue;
@@ -1507,7 +1507,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           auto f = (pos_face >> 0)  & 0x1;
           auto x = (pos_face >> 1)  & 0x7fff;
           auto y = (pos_face >> 16) & 0x7fff;
-          core_->rop_units_.at(trace_data->rop_idx)->write(
+          core_->om_units_.at(trace_data->om_idx)->write(
             core_->id(), warp_id_, t, x, y, f, color, depth, core_->csrs_[warp_id_][t], trace_data);
         }
       } break;

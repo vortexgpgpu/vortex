@@ -16,7 +16,7 @@
 #include <util.h>
 #include "tex_unit.h"
 #include "raster_unit.h"
-#include "rop_unit.h"
+#include "om_unit.h"
 
 namespace vortex {
 
@@ -40,10 +40,10 @@ class DCRS {
 public:
     void write(uint32_t addr, uint32_t value);
     
-    BaseDCRS         base_dcrs;
-    TexUnit::DCRS    tex_dcrs;
+    BaseDCRS         base_dcrs;    
     RasterUnit::DCRS raster_dcrs;
-    RopUnit::DCRS    rop_dcrs;
+    TexUnit::DCRS    tex_dcrs;
+    OMUnit::DCRS     om_dcrs;
 };
 
 }

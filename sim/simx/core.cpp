@@ -34,8 +34,8 @@ Core::Core(const SimContext& ctx,
            const Arch &arch, 
            const DCRS &dcrs,
            const std::vector<RasterUnit::Ptr>& raster_units,
-           const std::vector<RopUnit::Ptr>& rop_units,
-           const std::vector<TexUnit::Ptr>& tex_units)
+           const std::vector<TexUnit::Ptr>& tex_units,
+           const std::vector<OMUnit::Ptr>& om_units)
     : SimObject(ctx, "core")
     , icache_req_ports(1, this)
     , icache_rsp_ports(1, this)
@@ -50,22 +50,22 @@ Core::Core(const SimContext& ctx,
     , barriers_(arch.num_barriers(), 0)
     , fcsrs_(arch.num_warps(), 0)
     , ibuffers_(arch.num_warps(), IBUF_SIZE)
-    , scoreboard_(arch_) 
+    , scoreboard_(arch_)
     , operands_(ISSUE_WIDTH)
     , dispatchers_((uint32_t)ExeType::ExeTypeCount)
     , exe_units_((uint32_t)ExeType::ExeTypeCount)
     , smem_demuxs_(NUM_LSU_LANES)
     , raster_units_(raster_units)
-    , rop_units_(rop_units)
     , tex_units_(tex_units)
+    , om_units_(om_units)
     , fetch_latch_("fetch")
     , decode_latch_("decode")
     , pending_icache_(arch_.num_warps())
-    , csrs_(arch.num_warps())    
+    , csrs_(arch.num_warps())  
     , commit_arbs_(ISSUE_WIDTH)
     , raster_idx_(0)
-    , rop_idx_(0)
-    , tex_idx_(0)    
+    , tex_idx_(0)
+    , om_idx_(0)
 {
   char sname[100];
 
@@ -147,12 +147,12 @@ void Core::reset() {
     raster_unit->reset();
   }
 
-  for (auto& rop_unit : rop_units_) {
-    rop_unit->reset();
-  }
-
   for (auto& tex_unit : tex_units_) {
     tex_unit->reset();
+  }
+
+  for (auto& om_unit : om_units_) {
+    om_unit->reset();
   }
  
   for (auto& commit_arb : commit_arbs_) {
@@ -351,7 +351,7 @@ void Core::issue() {
           case SfuType::CSRRC: ++perf_stats_.scrb_csrs; break;
           case SfuType::TEX: ++perf_stats_.scrb_tex; break;
           case SfuType::RASTER: ++perf_stats_.scrb_raster; break;
-          case SfuType::ROP: ++perf_stats_.scrb_rop; break;
+          case SfuType::OM: ++perf_stats_.scrb_om; break;
           default: assert(false);
           }
         } break;
@@ -624,8 +624,8 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case VX_CSR_MPM_SCRB_TEX_H: return perf_stats_.scrb_tex >> 32;
         case VX_CSR_MPM_SCRB_RASTER: return perf_stats_.scrb_raster & 0xffffffff;
         case VX_CSR_MPM_SCRB_RASTER_H: return perf_stats_.scrb_raster >> 32;
-        case VX_CSR_MPM_SCRB_ROP:  return perf_stats_.scrb_rop & 0xffffffff;
-        case VX_CSR_MPM_SCRB_ROP_H: return perf_stats_.scrb_rop >> 32;
+        case VX_CSR_MPM_SCRB_OM:   return perf_stats_.scrb_om & 0xffffffff;
+        case VX_CSR_MPM_SCRB_OM_H: return perf_stats_.scrb_om >> 32;
         case VX_CSR_MPM_IFETCHES:  return perf_stats_.ifetches & 0xffffffff; 
         case VX_CSR_MPM_IFETCHES_H: return perf_stats_.ifetches >> 32; 
         case VX_CSR_MPM_LOADS:     return perf_stats_.loads & 0xffffffff; 
@@ -755,21 +755,21 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
           return 0;
         }
       } break;
-      case VX_DCR_MPM_CLASS_ROP: {
-        RopUnit::PerfStats rop_perf_stats;
-        for (auto rop_unit : rop_units_) {
-          rop_perf_stats += rop_unit->perf_stats();
+      case VX_DCR_MPM_CLASS_OM: {
+        OMUnit::PerfStats om_perf_stats;
+        for (auto om_unit : om_units_) {
+          om_perf_stats += om_unit->perf_stats();
         }
         auto cluster_perf = socket_->cluster()->perf_stats();
         switch (addr) { 
-        case VX_CSR_MPM_ROP_READS:    return rop_perf_stats.reads & 0xffffffff;
-        case VX_CSR_MPM_ROP_READS_H:  return rop_perf_stats.reads >> 32;
-        case VX_CSR_MPM_ROP_WRITES:   return rop_perf_stats.writes & 0xffffffff;
-        case VX_CSR_MPM_ROP_WRITES_H: return rop_perf_stats.writes >> 32;
-        case VX_CSR_MPM_ROP_LAT:      return rop_perf_stats.latency & 0xffffffff;
-        case VX_CSR_MPM_ROP_LAT_H:    return rop_perf_stats.latency >> 32;
-        case VX_CSR_MPM_ROP_STALL:    return rop_perf_stats.stalls & 0xffffffff;
-        case VX_CSR_MPM_ROP_STALL_H:  return rop_perf_stats.stalls >> 32;
+        case VX_CSR_MPM_OM_READS:     return om_perf_stats.reads & 0xffffffff;
+        case VX_CSR_MPM_OM_READS_H:   return om_perf_stats.reads >> 32;
+        case VX_CSR_MPM_OM_WRITES:    return om_perf_stats.writes & 0xffffffff;
+        case VX_CSR_MPM_OM_WRITES_H:  return om_perf_stats.writes >> 32;
+        case VX_CSR_MPM_OM_LAT:       return om_perf_stats.latency & 0xffffffff;
+        case VX_CSR_MPM_OM_LAT_H:     return om_perf_stats.latency >> 32;
+        case VX_CSR_MPM_OM_STALL:     return om_perf_stats.stalls & 0xffffffff;
+        case VX_CSR_MPM_OM_STALL_H:   return om_perf_stats.stalls >> 32;
 
         case VX_CSR_MPM_OCACHE_READS:   return cluster_perf.ocache.reads & 0xffffffff; 
         case VX_CSR_MPM_OCACHE_READS_H: return cluster_perf.ocache.reads >> 32; 
@@ -831,9 +831,9 @@ void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
   case VX_CSR_MNSTATUS:
     break;
   default:
-  #ifdef EXT_ROP_ENABLE
-    if (addr >= VX_CSR_ROP_BEGIN
-     && addr < VX_CSR_ROP_END) {
+  #ifdef EXT_OM_ENABLE
+    if (addr >= VX_CSR_OM_BEGIN
+     && addr < VX_CSR_OM_END) {
       csrs_.at(wid).at(tid)[addr] = value;
     } else
   #endif
@@ -896,9 +896,9 @@ uint32_t Core::raster_idx() {
   return ret;
 }
 
-uint32_t Core::rop_idx() {
-  auto ret = rop_idx_++;
-  rop_idx_ %= rop_units_.size();
+uint32_t Core::om_idx() {
+  auto ret = om_idx_++;
+  om_idx_ %= om_units_.size();
   return ret;
 }
 

@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_rop_define.vh"
+`include "VX_om_define.vh"
 
-module VX_rop_blend import VX_rop_pkg::*; #(
+module VX_om_blend import VX_om_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = 4,
     parameter TAG_WIDTH = 1
@@ -24,7 +24,7 @@ module VX_rop_blend import VX_rop_pkg::*; #(
     input wire  reset,
 
     // DCRs
-    input rop_dcrs_t dcrs,
+    input om_dcrs_t dcrs,
 
     // Handshake
     input wire                  valid_in,
@@ -56,8 +56,8 @@ module VX_rop_blend import VX_rop_pkg::*; #(
     rgba_t [NUM_LANES-1:0]  dst_factor;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : blend_func_inst
-        VX_rop_blend_func #(
-        ) rop_blend_func_src (
+        VX_om_blend_func #(
+        ) om_blend_func_src (
             .func_rgb   (dcrs.blend_src_rgb),
             .func_a     (dcrs.blend_src_a),
             .src_color  (src_color[i]),
@@ -66,8 +66,8 @@ module VX_rop_blend import VX_rop_pkg::*; #(
             .factor_out (src_factor[i])
         );
 
-        VX_rop_blend_func #(
-        ) rop_blend_func_dst (
+        VX_om_blend_func #(
+        ) om_blend_func_dst (
             .func_rgb   (dcrs.blend_dst_rgb),
             .func_a     (dcrs.blend_dst_a),
             .src_color  (src_color[i]),
@@ -103,9 +103,9 @@ module VX_rop_blend import VX_rop_pkg::*; #(
     rgba_t [NUM_LANES-1:0] logic_op_color_s2;
     
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        VX_rop_blend_multadd #(
+        VX_om_blend_multadd #(
             .LATENCY (LATENCY)
-        ) rop_blend_multadd (
+        ) om_blend_multadd (
             .clk        (clk),
             .reset      (reset),
             .enable     (~stall),            
@@ -118,9 +118,9 @@ module VX_rop_blend import VX_rop_pkg::*; #(
             .color_out  (mult_add_color_s2[i])
         );
 
-        VX_rop_blend_minmax #(
+        VX_om_blend_minmax #(
             .LATENCY (LATENCY)
-        ) rop_blend_minmax (
+        ) om_blend_minmax (
             .clk        (clk),
             .reset      (reset),
             .enable     (~stall),
@@ -130,9 +130,9 @@ module VX_rop_blend import VX_rop_pkg::*; #(
             .max_out    (max_color_s2[i])
         );
 
-        VX_rop_logic_op #(
+        VX_om_logic_op #(
             .LATENCY (LATENCY)
-        ) rop_logic_op (
+        ) om_logic_op (
             .clk        (clk),
             .reset      (reset),
             .enable     (~stall),
@@ -160,24 +160,24 @@ module VX_rop_blend import VX_rop_pkg::*; #(
         always @(*) begin
             // RGB Component
             case (dcrs.blend_mode_rgb)
-                `VX_ROP_BLEND_MODE_ADD, 
-                `VX_ROP_BLEND_MODE_SUB, 
-                `VX_ROP_BLEND_MODE_REV_SUB: begin
+                `VX_OM_BLEND_MODE_ADD, 
+                `VX_OM_BLEND_MODE_SUB, 
+                `VX_OM_BLEND_MODE_REV_SUB: begin
                     color_out_s2[i].r = mult_add_color_s2[i].r;
                     color_out_s2[i].g = mult_add_color_s2[i].g;
                     color_out_s2[i].b = mult_add_color_s2[i].b;
                     end
-                `VX_ROP_BLEND_MODE_MIN: begin
+                `VX_OM_BLEND_MODE_MIN: begin
                     color_out_s2[i].r = min_color_s2[i].r;
                     color_out_s2[i].g = min_color_s2[i].g;
                     color_out_s2[i].b = min_color_s2[i].b;
                     end
-                `VX_ROP_BLEND_MODE_MAX: begin
+                `VX_OM_BLEND_MODE_MAX: begin
                     color_out_s2[i].r = max_color_s2[i].r;
                     color_out_s2[i].g = max_color_s2[i].g;
                     color_out_s2[i].b = max_color_s2[i].b;
                     end
-                `VX_ROP_BLEND_MODE_LOGICOP: begin
+                `VX_OM_BLEND_MODE_LOGICOP: begin
                     color_out_s2[i].r = logic_op_color_s2[i].r;
                     color_out_s2[i].g = logic_op_color_s2[i].g;
                     color_out_s2[i].b = logic_op_color_s2[i].b;
@@ -190,18 +190,18 @@ module VX_rop_blend import VX_rop_pkg::*; #(
             endcase
             // Alpha Component
             case (dcrs.blend_mode_a)
-                `VX_ROP_BLEND_MODE_ADD, 
-                `VX_ROP_BLEND_MODE_SUB, 
-                `VX_ROP_BLEND_MODE_REV_SUB: begin
+                `VX_OM_BLEND_MODE_ADD, 
+                `VX_OM_BLEND_MODE_SUB, 
+                `VX_OM_BLEND_MODE_REV_SUB: begin
                     color_out_s2[i].a = mult_add_color_s2[i].a;
                     end
-                `VX_ROP_BLEND_MODE_MIN: begin
+                `VX_OM_BLEND_MODE_MIN: begin
                     color_out_s2[i].a = min_color_s2[i].a;
                     end
-                `VX_ROP_BLEND_MODE_MAX: begin
+                `VX_OM_BLEND_MODE_MAX: begin
                     color_out_s2[i].a = max_color_s2[i].a;
                     end
-                `VX_ROP_BLEND_MODE_LOGICOP: begin
+                `VX_OM_BLEND_MODE_LOGICOP: begin
                     color_out_s2[i].a = logic_op_color_s2[i].a;
                     end
                 default: begin

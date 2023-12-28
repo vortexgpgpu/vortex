@@ -38,7 +38,7 @@
 #include "exe_unit.h"
 #include "tex_unit.h"
 #include "raster_unit.h"
-#include "rop_unit.h"
+#include "om_unit.h"
 #include "dcrs.h"
 
 namespace vortex {
@@ -63,7 +63,7 @@ public:
     uint64_t scrb_wctl;
     uint64_t scrb_csrs;
     uint64_t scrb_tex;
-    uint64_t scrb_rop;
+    uint64_t scrb_om;
     uint64_t scrb_raster;
     uint64_t ifetches;
     uint64_t loads;
@@ -85,7 +85,7 @@ public:
       , scrb_wctl(0)
       , scrb_csrs(0)
       , scrb_tex(0)
-      , scrb_rop(0)
+      , scrb_om(0)
       , scrb_raster(0)
       , ifetches(0)
       , loads(0)
@@ -107,8 +107,8 @@ public:
        const Arch &arch, 
        const DCRS &dcrs,
        const std::vector<RasterUnit::Ptr>& raster_units,
-       const std::vector<RopUnit::Ptr>& rop_units,
-       const std::vector<TexUnit::Ptr>& tex_units);
+       const std::vector<TexUnit::Ptr>& tex_units,
+       const std::vector<OMUnit::Ptr>& om_units);
 
   ~Core();
 
@@ -166,7 +166,7 @@ public:
 
   uint32_t raster_idx();
 
-  uint32_t rop_idx();
+  uint32_t om_idx();
 
   uint32_t tex_idx();
 
@@ -201,9 +201,9 @@ private:
   std::vector<ExeUnit::Ptr> exe_units_;
   SharedMem::Ptr shared_mem_;
   std::vector<SMemDemux::Ptr> smem_demuxs_;
-  std::vector<RasterUnit::Ptr> raster_units_;
-  std::vector<RopUnit::Ptr> rop_units_;
+  std::vector<RasterUnit::Ptr> raster_units_;  
   std::vector<TexUnit::Ptr> tex_units_;
+  std::vector<OMUnit::Ptr> om_units_;
 
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;
@@ -228,9 +228,9 @@ private:
   uint32_t commit_exe_;
   uint32_t ibuffer_idx_;
 
-  uint32_t raster_idx_;
-  uint32_t rop_idx_;
+  uint32_t raster_idx_;  
   uint32_t tex_idx_;
+  uint32_t om_idx_;
 
   friend class Warp;
   friend class LsuUnit;

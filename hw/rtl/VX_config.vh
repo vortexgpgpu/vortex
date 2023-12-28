@@ -35,7 +35,7 @@
 `ifdef EXT_GFX_ENABLE
 `define EXT_TEX_ENABLE
 `define EXT_RASTER_ENABLE
-`define EXT_ROP_ENABLE
+`define EXT_OM_ENABLE
 `endif
 
 `ifndef EXT_M_DISABLE
@@ -429,16 +429,16 @@
 `define RASTER_MEM_FIFO_DEPTH 8
 `endif
 
-// Rop Units ///////////////////////////////////////////////////////////////////
+// OM Units ///////////////////////////////////////////////////////////////////
 
-// Number of ROP Units
-`ifndef NUM_ROP_UNITS
-`define NUM_ROP_UNITS `UP(`NUM_CORES / 8)
+// Number of OM Units
+`ifndef NUM_OM_UNITS
+`define NUM_OM_UNITS `UP(`NUM_CORES / 8)
 `endif
 
-// ROP Memory Queue Size
-`ifndef ROP_MEM_QUEUE_SIZE    
-`define ROP_MEM_QUEUE_SIZE (2 * (`NUM_THREADS / `NUM_SFU_LANES))
+// OM Memory Queue Size
+`ifndef OM_MEM_QUEUE_SIZE    
+`define OM_MEM_QUEUE_SIZE (2 * (`NUM_THREADS / `NUM_SFU_LANES))
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
@@ -685,7 +685,7 @@
 
 // Number of Cache Units
 `ifndef NUM_OCACHES
-`define NUM_OCACHES `UP(`NUM_ROP_UNITS / 4)
+`define NUM_OCACHES `UP(`NUM_OM_UNITS / 4)
 `endif
 
 // Cache Size
@@ -849,10 +849,10 @@
     `define EXT_RASTER_ENABLED 0
 `endif
 
-`ifdef EXT_ROP_ENABLE
-    `define EXT_ROP_ENABLED 1
+`ifdef EXT_OM_ENABLE
+    `define EXT_OM_ENABLED 1
 `else
-    `define EXT_ROP_ENABLED 0
+    `define EXT_OM_ENABLED 0
 `endif
 
 `define ISA_STD_A           0
@@ -874,7 +874,7 @@
 `define ISA_EXT_SMEM        4
 `define ISA_EXT_TEX         5
 `define ISA_EXT_RASTER      6
-`define ISA_EXT_ROP         7
+`define ISA_EXT_OM          7
 
 `define MISA_EXT  (`ICACHE_ENABLED  << `ISA_EXT_ICACHE) \
                 | (`DCACHE_ENABLED  << `ISA_EXT_DCACHE) \
@@ -883,7 +883,7 @@
                 | (`SM_ENABLED      << `ISA_EXT_SMEM) \
                 | (`EXT_TEX_ENABLED << `ISA_EXT_TEX) \
                 | (`EXT_RASTER_ENABLED << `ISA_EXT_RASTER) \
-                | (`EXT_ROP_ENABLED << `ISA_EXT_ROP)
+                | (`EXT_OM_ENABLED  << `ISA_EXT_OM)
 
 `define MISA_STD  (`EXT_A_ENABLED <<  0) /* A - Atomic Instructions extension */ \
                 | (0 <<  1) /* B - Tentatively reserved for Bit operations extension */ \

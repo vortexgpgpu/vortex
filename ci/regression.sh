@@ -137,20 +137,20 @@ CONFIGS="-DEXT_TEX_ENABLE -DNUM_TEX_UNITS=4 -DL1_DISABLE -DSM_DISABLE -DNUM_TCAC
 echo "texture tests done!"
 }
 
-rop()
+om()
 {
 echo "begin render output tests..."
 
-CONFIGS="-DEXT_ROP_ENABLE" ./ci/blackbox.sh --driver=simx --app=rop --args="-rwhitebox_128.png" --perf=5
-CONFIGS="-DEXT_ROP_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --perf=5
-CONFIGS="-DEXT_ROP_ENABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png"
-CONFIGS="-DEXT_ROP_ENABLE -DOCACHE_NUM_BANKS=8" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --perf=5
-CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=simx --app=rop --args="-rwhitebox_128.png" --cores=4 --warps=1 --threads=2
-CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --cores=1 --warps=1 --threads=2
-CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=1 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --cores=2 --warps=1 --threads=2
-CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --cores=4 --warps=1 --threads=2
-CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=4 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --cores=2 --warps=1 --threads=2
-CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=4 -DL1_DISABLE -DSM_DISABLE -DNUM_OCACHES=2" ./ci/blackbox.sh --driver=rtlsim  --app=rop --args="-rwhitebox_128.png" --cores=4 --warps=1 --threads=2
+CONFIGS="-DEXT_OM_ENABLE" ./ci/blackbox.sh --driver=simx --app=om --args="-rwhitebox_128.png" --perf=5
+CONFIGS="-DEXT_OM_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=om --args="-rwhitebox_128.png" --perf=5
+CONFIGS="-DEXT_OM_ENABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=om --args="-rwhitebox_128.png"
+CONFIGS="-DEXT_OM_ENABLE -DOCACHE_NUM_BANKS=8" ./ci/blackbox.sh --driver=rtlsim --app=om --args="-rwhitebox_128.png" --perf=5
+CONFIGS="-DEXT_OM_ENABLE -DNUM_OM_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=simx --app=om --args="-rwhitebox_128.png" --cores=4 --warps=1 --threads=2
+CONFIGS="-DEXT_OM_ENABLE -DNUM_OM_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=om --args="-rwhitebox_128.png" --cores=1 --warps=1 --threads=2
+CONFIGS="-DEXT_OM_ENABLE -DNUM_OM_UNITS=1 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=om --args="-rwhitebox_128.png" --cores=2 --warps=1 --threads=2
+CONFIGS="-DEXT_OM_ENABLE -DNUM_OM_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=om --args="-rwhitebox_128.png" --cores=4 --warps=1 --threads=2
+CONFIGS="-DEXT_OM_ENABLE -DNUM_OM_UNITS=4 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=om --args="-rwhitebox_128.png" --cores=2 --warps=1 --threads=2
+CONFIGS="-DEXT_OM_ENABLE -DNUM_OM_UNITS=4 -DL1_DISABLE -DSM_DISABLE -DNUM_OCACHES=2" ./ci/blackbox.sh --driver=rtlsim  --app=om --args="-rwhitebox_128.png" --cores=4 --warps=1 --threads=2
 
 echo "render output tests done!"
 }
@@ -367,7 +367,7 @@ echo "synthesis tests done!"
 show_usage()
 {
     echo "Vortex Regression Test" 
-    echo "Usage: $0 [--unittest] [--isa] [--regression] [--opencl] [--tex] [--rop] [--raster] [--graphics] [--cluster] [--debug] [--config] [--stress[#n]] [--synthesis] [--all] [--h|--help]"
+    echo "Usage: $0 [--unittest] [--isa] [--regression] [--opencl] [--tex] [--om] [--raster] [--graphics] [--cluster] [--debug] [--config] [--stress[#n]] [--synthesis] [--all] [--h|--help]"
 }
 
 start=$SECONDS
@@ -384,7 +384,7 @@ while [ "$1" != "" ]; do
                 ;;
         --tex ) tex
                 ;;
-        --rop ) rop
+        --om )  om
                 ;;
         --raster ) raster
                 ;;
@@ -411,7 +411,7 @@ while [ "$1" != "" ]; do
                opencl
                graphics
                tex
-               rop
+               om
                raster               
                cluster
                debug

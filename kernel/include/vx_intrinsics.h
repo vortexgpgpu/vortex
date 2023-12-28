@@ -112,8 +112,8 @@ inline unsigned vx_cmov(unsigned c, unsigned t, unsigned f) {
     return ret;
 }
 
-// Rop write
-inline void vx_rop(unsigned x, unsigned y, unsigned face, unsigned color, unsigned depth) {
+// OM write
+inline void vx_om(unsigned x, unsigned y, unsigned face, unsigned color, unsigned depth) {
     unsigned pos_face = (y << 16) | (x << 1) | face;
     asm volatile (".insn r4 %0, 1, 1, x0, %1, %2, %3" :: "i"(RISCV_CUSTOM1), "r"(pos_face), "r"(color), "r"(depth));
 }

@@ -117,9 +117,9 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class RopDCRS {
+class OMDCRS {
 public:
-  RopDCRS() {
+  OMDCRS() {
     this->clear();
   }
 
@@ -130,19 +130,19 @@ public:
   }
 
   uint32_t read(uint32_t addr) const {    
-    uint32_t state = VX_DCR_ROP_STATE(addr);
-    assert(state < VX_DCR_ROP_STATE_COUNT);
+    uint32_t state = VX_DCR_OM_STATE(addr);
+    assert(state < VX_DCR_OM_STATE_COUNT);
     return states_[state];
   }
 
   void write(uint32_t addr, uint32_t value) {    
-    uint32_t state = VX_DCR_ROP_STATE(addr);
-    assert(state < VX_DCR_ROP_STATE_COUNT);
+    uint32_t state = VX_DCR_OM_STATE(addr);
+    assert(state < VX_DCR_OM_STATE_COUNT);
     states_[state] = value;
   }
 
 private:
-  uint32_t states_[VX_DCR_ROP_STATE_COUNT];
+  uint32_t states_[VX_DCR_OM_STATE_COUNT];
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -212,7 +212,7 @@ public:
   DepthTencil();
   ~DepthTencil();
 
-  void configure(const RopDCRS& dcrs);
+  void configure(const OMDCRS& dcrs);
 
   bool test(uint32_t is_backface, 
             uint32_t depth, 
@@ -255,7 +255,7 @@ public:
   Blender();
   ~Blender();
 
-  void configure(const RopDCRS& dcrs);
+  void configure(const OMDCRS& dcrs);
 
   uint32_t blend(uint32_t srcColor, uint32_t dstColor) const;
 

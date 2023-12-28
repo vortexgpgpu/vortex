@@ -421,7 +421,7 @@ static const char* op_string(const Instr &instr) {
     case 1: {
       switch (func2) {
       case 0: return "CMOV";
-      case 1: return "ROP";      
+      case 1: return "OM";      
       default:
         std::abort();
       }
@@ -745,7 +745,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
           instr->addSrcReg(rs2, RegType::Integer);
           instr->addSrcReg(rs3, RegType::Integer);
           break;
-        case 1: // ROP
+        case 1: // OM
           instr->addSrcReg(rs1, RegType::Integer);
           instr->addSrcReg(rs2, RegType::Integer);
           instr->addSrcReg(rs3, RegType::Integer);

@@ -17,9 +17,9 @@ class GpuSW;
 
 typedef struct {
 #ifdef SW_ENABLE
-  graphics::RasterDCRS raster_dcrs;
-  graphics::RopDCRS    rop_dcrs;
+  graphics::RasterDCRS raster_dcrs;  
   graphics::TexDCRS    tex_dcrs;
+  graphics::OMDCRS     om_dcrs;
 #endif
   uint32_t log_num_tasks;
   uint64_t prim_addr;
@@ -28,9 +28,9 @@ typedef struct {
   bool color_enabled;
   bool tex_enabled; 
   bool tex_modulate;
-  bool sw_tex;
   bool sw_rast;
-  bool sw_rop;
+  bool sw_tex;
+  bool sw_om;
 } kernel_arg_t;
 
 #endif

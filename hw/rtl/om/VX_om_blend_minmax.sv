@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_rop_define.vh"
+`include "VX_om_define.vh"
 
-module VX_rop_blend_minmax import VX_rop_pkg::*; #(
+module VX_om_blend_minmax import VX_om_pkg::*; #(
     parameter LATENCY = 1
 ) (
     input wire clk,

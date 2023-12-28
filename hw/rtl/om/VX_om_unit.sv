@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_rop_define.vh"
+`include "VX_om_define.vh"
 
-module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
+module VX_om_unit import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = 4
 ) (
@@ -24,7 +24,7 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_rop_perf_if.master   perf_rop_if,
+    VX_om_perf_if.master   perf_om_if,
 `endif
 
     // Memory interface
@@ -32,23 +32,23 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
 
     // Inputs
     VX_dcr_bus_if.slave     dcr_bus_if,
-    VX_rop_bus_if.slave     rop_bus_if
+    VX_om_bus_if.slave     om_bus_if
 );
-    localparam MEM_TAG_WIDTH    = `UUID_WIDTH + NUM_LANES * (`VX_ROP_DIM_BITS + `VX_ROP_DIM_BITS + 32 + `VX_ROP_DEPTH_BITS + 1);
-    localparam DS_TAG_WIDTH     = NUM_LANES * (`VX_ROP_DIM_BITS + `VX_ROP_DIM_BITS + 1 + 1 + 32);
-    localparam BLEND_TAG_WIDTH  = NUM_LANES * (`VX_ROP_DIM_BITS + `VX_ROP_DIM_BITS + 1);
+    localparam MEM_TAG_WIDTH    = `UUID_WIDTH + NUM_LANES * (`VX_OM_DIM_BITS + `VX_OM_DIM_BITS + 32 + `VX_OM_DEPTH_BITS + 1);
+    localparam DS_TAG_WIDTH     = NUM_LANES * (`VX_OM_DIM_BITS + `VX_OM_DIM_BITS + 1 + 1 + 32);
+    localparam BLEND_TAG_WIDTH  = NUM_LANES * (`VX_OM_DIM_BITS + `VX_OM_DIM_BITS + 1);
 
     // DCRs
 
-    rop_dcrs_t rop_dcrs;
+    om_dcrs_t om_dcrs;
 
-    VX_rop_dcr #( 
+    VX_om_dcr #( 
         .INSTANCE_ID (INSTANCE_ID)
-    ) rop_dcr (
+    ) om_dcr (
         .clk        (clk),
         .reset      (reset),
         .dcr_bus_if (dcr_bus_if),
-        .rop_dcrs   (rop_dcrs)
+        .om_dcrs   (om_dcrs)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -57,11 +57,11 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     wire [NUM_LANES-1:0]                    mem_req_ds_mask, mem_req_ds_mask_r;
     wire [NUM_LANES-1:0]                    mem_req_c_mask, mem_req_c_mask_r;
     wire                                    mem_req_rw, mem_req_rw_r;
-    wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] mem_req_pos_x, mem_req_pos_x_r;
-    wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] mem_req_pos_y, mem_req_pos_y_r;
+    wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] mem_req_pos_x, mem_req_pos_x_r;
+    wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] mem_req_pos_y, mem_req_pos_y_r;
     rgba_t [NUM_LANES-1:0]                  mem_req_color, mem_req_color_r;
-    wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] mem_req_depth, mem_req_depth_r;
-    wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0] mem_req_stencil, mem_req_stencil_r;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] mem_req_depth, mem_req_depth_r;
+    wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] mem_req_stencil, mem_req_stencil_r;
     wire [NUM_LANES-1:0]                    mem_req_face, mem_req_face_r;
     wire [MEM_TAG_WIDTH-1:0]                mem_req_tag, mem_req_tag_r;
     wire                                    mem_req_ready, mem_req_ready_r;
@@ -69,23 +69,23 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     wire                                    mem_rsp_valid;
     wire [NUM_LANES-1:0]                    mem_rsp_mask;
     rgba_t [NUM_LANES-1:0]                  mem_rsp_color;
-    wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] mem_rsp_depth;
-    wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0] mem_rsp_stencil;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] mem_rsp_depth;
+    wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] mem_rsp_stencil;
     wire [MEM_TAG_WIDTH-1:0]                mem_rsp_tag;
     wire                                    mem_rsp_ready;
     wire                                    mem_write_notify;
 
     `RESET_RELAY (mem_reset, reset);
 
-    VX_rop_mem #(
+    VX_om_mem #(
         .INSTANCE_ID (INSTANCE_ID),
         .NUM_LANES   (NUM_LANES),
         .TAG_WIDTH   (MEM_TAG_WIDTH)
-    ) rop_mem (
+    ) om_mem (
         .clk            (clk),
         .reset          (mem_reset),
 
-        .dcrs           (rop_dcrs),
+        .dcrs           (om_dcrs),
 
         .cache_bus_if   (cache_bus_if),
 
@@ -123,25 +123,25 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
 
     wire [NUM_LANES-1:0]    ds_face;
 
-    wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0]    ds_depth_ref;
-    wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0]    ds_depth_val;
-    wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0]  ds_stencil_val;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0]    ds_depth_ref;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0]    ds_depth_val;
+    wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0]  ds_stencil_val;
 
-    wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0]    ds_depth_out;      
-    wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0]  ds_stencil_out;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0]    ds_depth_out;      
+    wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0]  ds_stencil_out;
     wire [NUM_LANES-1:0]                            ds_pass_out;
 
     `RESET_RELAY (ds_reset, reset);
 
-    VX_rop_ds #(
+    VX_om_ds #(
         .INSTANCE_ID (INSTANCE_ID),
         .NUM_LANES   (NUM_LANES),
         .TAG_WIDTH   (DS_TAG_WIDTH)
-    ) rop_ds (
+    ) om_ds (
         .clk            (clk),
         .reset          (ds_reset),
 
-        .dcrs           (rop_dcrs),
+        .dcrs           (om_dcrs),
 
         .valid_in       (ds_valid_in), 
         .tag_in         (ds_tag_in), 
@@ -176,15 +176,15 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
 
     `RESET_RELAY (blend_reset, reset);
 
-    VX_rop_blend #(
+    VX_om_blend #(
         .INSTANCE_ID (INSTANCE_ID),
         .NUM_LANES   (NUM_LANES),
         .TAG_WIDTH   (BLEND_TAG_WIDTH)
-    ) rop_blend (
+    ) om_blend (
         .clk            (clk),
         .reset          (blend_reset),
 
-        .dcrs           (rop_dcrs),
+        .dcrs           (om_dcrs),
 
         .valid_in       (blend_valid_in), 
         .tag_in         (blend_tag_in),
@@ -201,20 +201,20 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire color_writeen = (rop_dcrs.cbuf_writemask != 0);
+    wire color_writeen = (om_dcrs.cbuf_writemask != 0);
 
-    wire depth_enable  = rop_dcrs.depth_enable;
-    wire depth_writeen = rop_dcrs.depth_enable && (rop_dcrs.depth_writemask != 0);
+    wire depth_enable  = om_dcrs.depth_enable;
+    wire depth_writeen = om_dcrs.depth_enable && (om_dcrs.depth_writemask != 0);
 
-    wire stencil_enable  = (| rop_dcrs.stencil_enable);
-    wire stencil_writeen = (rop_dcrs.stencil_enable[0] && (rop_dcrs.stencil_writemask[0] != 0))
-                        || (rop_dcrs.stencil_enable[1] && (rop_dcrs.stencil_writemask[1] != 0));
+    wire stencil_enable  = (| om_dcrs.stencil_enable);
+    wire stencil_writeen = (om_dcrs.stencil_enable[0] && (om_dcrs.stencil_writemask[0] != 0))
+                        || (om_dcrs.stencil_enable[1] && (om_dcrs.stencil_writemask[1] != 0));
 
     wire ds_enable  = depth_enable || stencil_enable;
     wire ds_writeen = depth_writeen || stencil_writeen;
 
-    wire blend_enable  = rop_dcrs.blend_enable;
-    wire blend_writeen = rop_dcrs.blend_enable && color_writeen;
+    wire blend_enable  = om_dcrs.blend_enable;
+    wire blend_writeen = om_dcrs.blend_enable && color_writeen;
 
     wire ds_color_writeen = ds_writeen || (ds_enable && color_writeen);
 
@@ -224,20 +224,20 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] mem_rsp_pos_x, mem_rsp_pos_y;
+    wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] mem_rsp_pos_x, mem_rsp_pos_y;
     wire [`UUID_WIDTH-1:0] mem_rsp_uuid;
     `UNUSED_VAR (mem_rsp_uuid)
 
-    wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] ds_write_pos_x, ds_write_pos_y;
+    wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] ds_write_pos_x, ds_write_pos_y;
     wire [NUM_LANES-1:0] ds_write_face, ds_rsp_mask;
     rgba_t [NUM_LANES-1:0] ds_write_color;
 
-    wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] blend_write_pos_x, blend_write_pos_y;
+    wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] blend_write_pos_x, blend_write_pos_y;
     wire [NUM_LANES-1:0] blend_rsp_mask;
 
     wire pending_reads_full;
     
-    assign mem_req_tag = {rop_bus_if.req_data.uuid, rop_bus_if.req_data.pos_x, rop_bus_if.req_data.pos_y, rop_bus_if.req_data.color, rop_bus_if.req_data.depth, rop_bus_if.req_data.face};
+    assign mem_req_tag = {om_bus_if.req_data.uuid, om_bus_if.req_data.pos_x, om_bus_if.req_data.pos_y, om_bus_if.req_data.color, om_bus_if.req_data.depth, om_bus_if.req_data.face};
     assign {mem_rsp_uuid, mem_rsp_pos_x, mem_rsp_pos_y, blend_src_color, ds_depth_ref, ds_face} = mem_rsp_tag;
 
     assign ds_tag_in = {mem_rsp_pos_x, mem_rsp_pos_y, mem_rsp_mask, ds_face, blend_src_color};
@@ -246,9 +246,9 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     assign blend_tag_in = {mem_rsp_pos_x, mem_rsp_pos_y, mem_rsp_mask};
     assign {blend_write_pos_x, blend_write_pos_y, blend_rsp_mask} = blend_tag_out;
 
-    wire color_write = write_bypass && rop_bus_if.req_valid;
+    wire color_write = write_bypass && om_bus_if.req_valid;
 
-    wire ds_blend_read = mem_readen && rop_bus_if.req_valid && ~pending_reads_full;
+    wire ds_blend_read = mem_readen && om_bus_if.req_valid && ~pending_reads_full;
 
     wire ds_blend_write = (ds_color_writeen && blend_writeen) ? (ds_valid_out && blend_valid_out) :
                             (ds_color_writeen ? ds_valid_out :
@@ -260,11 +260,11 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     wire [NUM_LANES-1:0] color_bypass_mask, ds_color_write_mask;
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin      
-        assign ds_read_mask[i]        = rop_bus_if.req_data.mask[i] && ds_enable;
-        assign blend_read_mask[i]     = rop_bus_if.req_data.mask[i] && blend_writeen;
+        assign ds_read_mask[i]        = om_bus_if.req_data.mask[i] && ds_enable;
+        assign blend_read_mask[i]     = om_bus_if.req_data.mask[i] && blend_writeen;
         assign ds_write_mask[i]       = ds_rsp_mask[i] && (stencil_writeen || (depth_writeen && ds_pass_out[i]));
         assign blend_write_mask[i]    = blend_rsp_mask[i] && blend_writeen && (~ds_enable || ds_pass_out[i]);  
-        assign color_bypass_mask[i]   = rop_bus_if.req_data.mask[i] && color_writeen;
+        assign color_bypass_mask[i]   = om_bus_if.req_data.mask[i] && color_writeen;
         assign ds_color_write_mask[i] = ds_rsp_mask[i] && ds_pass_out[i];
     end
 
@@ -273,15 +273,15 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     assign mem_req_c_mask   = write_bypass ? color_bypass_mask : (blend_valid_out ? blend_write_mask : (ds_valid_out ? ds_color_write_mask : blend_read_mask));
     assign mem_req_rw       = ds_blend_write || write_bypass;
     assign mem_req_face     = ds_write_face;
-    assign mem_req_pos_x    = ds_valid_out ? ds_write_pos_x : (blend_valid_out ? blend_write_pos_x : rop_bus_if.req_data.pos_x);
-    assign mem_req_pos_y    = ds_valid_out ? ds_write_pos_y : (blend_valid_out ? blend_write_pos_y : rop_bus_if.req_data.pos_y);
-    assign mem_req_color    = blend_enable ? blend_color_out : (ds_enable ? ds_write_color : rop_bus_if.req_data.color);
+    assign mem_req_pos_x    = ds_valid_out ? ds_write_pos_x : (blend_valid_out ? blend_write_pos_x : om_bus_if.req_data.pos_x);
+    assign mem_req_pos_y    = ds_valid_out ? ds_write_pos_y : (blend_valid_out ? blend_write_pos_y : om_bus_if.req_data.pos_y);
+    assign mem_req_color    = blend_enable ? blend_color_out : (ds_enable ? ds_write_color : om_bus_if.req_data.color);
     assign mem_req_depth    = ds_depth_out;
     assign mem_req_stencil  = ds_stencil_out;
     
     assign ds_ready_out     = mem_req_ready && (~blend_writeen || blend_valid_out);
     assign blend_ready_out  = mem_req_ready && (~ds_color_writeen || ds_valid_out);
-    assign rop_bus_if.req_ready = mem_req_ready && ~ds_blend_write && ~pending_reads_full;
+    assign om_bus_if.req_ready = mem_req_ready && ~ds_blend_write && ~pending_reads_full;
 
     assign ds_valid_in      = ds_enable && mem_rsp_valid && (~blend_enable || blend_ready_in);
     assign blend_valid_in   = blend_enable && mem_rsp_valid && (~ds_enable || ds_ready_in);
@@ -301,7 +301,7 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     // to prevent potential deadlocks, 
     // ensure the memory scheduler's queue doesn't fill up
     VX_pending_size #( 
-        .SIZE (`ROP_MEM_QUEUE_SIZE)
+        .SIZE (`OM_MEM_QUEUE_SIZE)
     ) pending_reads (
         .clk   (clk),
         .reset (reset),
@@ -315,7 +315,7 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     wire mem_req_valid_unqual_r;
 
     VX_elastic_buffer #(
-        .DATAW   (1 + NUM_LANES * (1 + 1 + 2 * `VX_ROP_DIM_BITS + $bits(rgba_t) + `VX_ROP_DEPTH_BITS + `VX_ROP_STENCIL_BITS + 1) + MEM_TAG_WIDTH),
+        .DATAW   (1 + NUM_LANES * (1 + 1 + 2 * `VX_OM_DIM_BITS + $bits(rgba_t) + `VX_OM_DEPTH_BITS + `VX_OM_STENCIL_BITS + 1) + MEM_TAG_WIDTH),
         .OUT_REG (1)
     ) mem_req_buf (
         .clk       (clk),
@@ -366,7 +366,7 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
         end
     end
 
-    wire perf_stall_cycle = rop_bus_if.req_valid & ~rop_bus_if.req_ready;
+    wire perf_stall_cycle = om_bus_if.req_valid & ~om_bus_if.req_ready;
 
     reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
     reg [`PERF_CTR_BITS-1:0] perf_mem_writes;
@@ -387,10 +387,10 @@ module VX_rop_unit import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
         end
     end
 
-    assign perf_rop_if.mem_reads    = perf_mem_reads;
-    assign perf_rop_if.mem_writes   = perf_mem_writes;
-    assign perf_rop_if.mem_latency  = perf_mem_latency;
-    assign perf_rop_if.stall_cycles = perf_stall_cycles;
+    assign perf_om_if.mem_reads    = perf_mem_reads;
+    assign perf_om_if.mem_writes   = perf_mem_writes;
+    assign perf_om_if.mem_latency  = perf_mem_latency;
+    assign perf_om_if.stall_cycles = perf_stall_cycles;
 
 `endif
 
@@ -398,7 +398,7 @@ endmodule
 
 ///////////////////////////////////////////////////////////////////////////////
 
-module VX_rop_unit_top import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
+module VX_om_unit_top import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = `NUM_THREADS
 ) (
@@ -409,15 +409,15 @@ module VX_rop_unit_top import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     input wire [`VX_DCR_ADDR_WIDTH-1:0]     dcr_write_addr,
     input wire [`VX_DCR_DATA_WIDTH-1:0]     dcr_write_data,
 
-    input  wire                             rop_req_valid, 
-    input  wire [`UUID_WIDTH-1:0]           rop_req_uuid,
-    input  wire [NUM_LANES-1:0]             rop_req_mask, 
-    input  wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] rop_req_pos_x,
-    input  wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] rop_req_pos_y,
-    input  rgba_t [NUM_LANES-1:0]           rop_req_color,
-    input  wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] rop_req_depth,
-    input  wire [NUM_LANES-1:0]             rop_req_face,
-    output wire                             rop_req_ready,
+    input  wire                             om_req_valid, 
+    input  wire [`UUID_WIDTH-1:0]           om_req_uuid,
+    input  wire [NUM_LANES-1:0]             om_req_mask, 
+    input  wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] om_req_pos_x,
+    input  wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] om_req_pos_y,
+    input  rgba_t [NUM_LANES-1:0]           om_req_color,
+    input  wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] om_req_depth,
+    input  wire [NUM_LANES-1:0]             om_req_face,
+    output wire                             om_req_ready,
 
     output wire [OCACHE_NUM_REQS-1:0]       cache_req_valid,
     output wire [OCACHE_NUM_REQS-1:0]       cache_req_rw,
@@ -433,7 +433,7 @@ module VX_rop_unit_top import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     output wire [OCACHE_NUM_REQS-1:0]       cache_rsp_ready
 );
 
-    VX_rop_perf_if perf_rop_if();
+    VX_om_perf_if perf_om_if();
     
     VX_dcr_bus_if dcr_bus_if();
 
@@ -441,19 +441,19 @@ module VX_rop_unit_top import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     assign dcr_bus_if.write_addr = dcr_write_addr;
     assign dcr_bus_if.write_data = dcr_write_data;
 
-    VX_rop_bus_if #(
+    VX_om_bus_if #(
         .NUM_LANES (NUM_LANES)
-    ) rop_bus_if();
+    ) om_bus_if();
     
-    assign rop_bus_if.req_valid = rop_req_valid;    
-    assign rop_bus_if.req_data.uuid = rop_req_uuid;
-    assign rop_bus_if.req_data.mask = rop_req_mask; 
-    assign rop_bus_if.req_data.pos_x = rop_req_pos_x;
-    assign rop_bus_if.req_data.pos_y = rop_req_pos_y;
-    assign rop_bus_if.req_data.color = rop_req_color;
-    assign rop_bus_if.req_data.depth = rop_req_depth;
-    assign rop_bus_if.req_data.face = rop_req_face;
-    assign rop_req_ready = rop_bus_if.req_ready;
+    assign om_bus_if.req_valid = om_req_valid;    
+    assign om_bus_if.req_data.uuid = om_req_uuid;
+    assign om_bus_if.req_data.mask = om_req_mask; 
+    assign om_bus_if.req_data.pos_x = om_req_pos_x;
+    assign om_bus_if.req_data.pos_y = om_req_pos_y;
+    assign om_bus_if.req_data.color = om_req_color;
+    assign om_bus_if.req_data.depth = om_req_depth;
+    assign om_bus_if.req_data.face = om_req_face;
+    assign om_req_ready = om_bus_if.req_ready;
 
     VX_mem_bus_if #(
         .DATA_SIZE (OCACHE_WORD_SIZE), 
@@ -473,17 +473,17 @@ module VX_rop_unit_top import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     assign cache_bus_if.rsp_data.data = cache_rsp_data;
     assign cache_rsp_ready = cache_bus_if.rsp_ready;
 
-    VX_rop_unit #(
+    VX_om_unit #(
         .INSTANCE_ID (INSTANCE_ID),
         .NUM_LANES   (NUM_LANES)
-    ) rop_unit (
+    ) om_unit (
         .clk           (clk),
         .reset         (reset),
     `ifdef PERF_ENABLE
-        .perf_rop_if   (perf_rop_if),
+        .perf_om_if   (perf_om_if),
     `endif 
         .dcr_bus_if    (dcr_bus_if),
-        .rop_bus_if    (rop_bus_if),
+        .om_bus_if    (om_bus_if),
         .cache_bus_if  (cache_bus_if)
     );
 

@@ -40,10 +40,10 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     VX_raster_perf_if.slave     perf_raster_if,
 `endif
 `endif
-`ifdef EXT_ROP_ENABLE
-    VX_sfu_csr_if.master        rop_csr_if,
+`ifdef EXT_OM_ENABLE
+    VX_sfu_csr_if.master        om_csr_if,
 `ifdef PERF_ENABLE
-    VX_rop_perf_if.slave        perf_rop_if,
+    VX_om_perf_if.slave         perf_om_if,
 `endif
 `endif
     
@@ -121,34 +121,34 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     assign raster_csr_if.read_tmask  = execute_if.data.tmask;
     assign raster_csr_if.read_addr   = csr_addr;
     
-    assign raster_csr_if.write_enable = csr_req_valid && csr_write_enable && raster_addr_enable;
-    assign raster_csr_if.write_uuid   = execute_if.data.uuid;
-    assign raster_csr_if.write_pid    = execute_if.data.pid;
-    assign raster_csr_if.write_wid    = execute_if.data.wid;
-    assign raster_csr_if.write_tmask  = execute_if.data.tmask;
-    assign raster_csr_if.write_addr   = csr_addr;
-    assign raster_csr_if.write_data   = rs1_data;
+    assign raster_csr_if.write_enable= csr_req_valid && csr_write_enable && raster_addr_enable;
+    assign raster_csr_if.write_uuid  = execute_if.data.uuid;
+    assign raster_csr_if.write_pid   = execute_if.data.pid;
+    assign raster_csr_if.write_wid   = execute_if.data.wid;
+    assign raster_csr_if.write_tmask = execute_if.data.tmask;
+    assign raster_csr_if.write_addr  = csr_addr;
+    assign raster_csr_if.write_data  = rs1_data;
 `endif
 
-`ifdef EXT_ROP_ENABLE
+`ifdef EXT_OM_ENABLE
 
-    wire rop_addr_enable = (csr_addr >= `VX_CSR_ROP_BEGIN && csr_addr < `VX_CSR_ROP_END);
+    wire om_addr_enable = (csr_addr >= `VX_CSR_OM_BEGIN && csr_addr < `VX_CSR_OM_END);
 
-    assign rop_csr_if.read_enable = csr_req_valid && ~csr_write_enable && rop_addr_enable;
-    assign rop_csr_if.read_uuid   = execute_if.data.uuid;
-    assign rop_csr_if.read_pid    = execute_if.data.pid;
-    assign rop_csr_if.read_wid    = execute_if.data.wid;
-    assign rop_csr_if.read_tmask  = execute_if.data.tmask;
-    assign rop_csr_if.read_addr   = csr_addr;
-    `UNUSED_VAR (rop_csr_if.read_data)
+    assign om_csr_if.read_enable  = csr_req_valid && ~csr_write_enable && om_addr_enable;
+    assign om_csr_if.read_uuid    = execute_if.data.uuid;
+    assign om_csr_if.read_pid     = execute_if.data.pid;
+    assign om_csr_if.read_wid     = execute_if.data.wid;
+    assign om_csr_if.read_tmask   = execute_if.data.tmask;
+    assign om_csr_if.read_addr    = csr_addr;
+    `UNUSED_VAR (om_csr_if.read_data)
     
-    assign rop_csr_if.write_enable = csr_req_valid && csr_write_enable && rop_addr_enable; 
-    assign rop_csr_if.write_uuid   = execute_if.data.uuid;
-    assign rop_csr_if.write_pid    = execute_if.data.pid;
-    assign rop_csr_if.write_wid    = execute_if.data.wid;
-    assign rop_csr_if.write_tmask  = execute_if.data.tmask;
-    assign rop_csr_if.write_addr   = csr_addr;
-    assign rop_csr_if.write_data   = rs1_data;
+    assign om_csr_if.write_enable = csr_req_valid && csr_write_enable && om_addr_enable; 
+    assign om_csr_if.write_uuid   = execute_if.data.uuid;
+    assign om_csr_if.write_pid    = execute_if.data.pid;
+    assign om_csr_if.write_wid    = execute_if.data.wid;
+    assign om_csr_if.write_tmask  = execute_if.data.tmask;
+    assign om_csr_if.write_addr   = csr_addr;
+    assign om_csr_if.write_data   = rs1_data;
 `endif
 
     VX_csr_data #(
@@ -169,8 +169,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     `ifdef EXT_RASTER_ENABLE        
         .perf_raster_if (perf_raster_if),
     `endif
-    `ifdef EXT_ROP_ENABLE
-        .perf_rop_if    (perf_rop_if),
+    `ifdef EXT_OM_ENABLE
+        .perf_om_if     (perf_om_if),
     `endif
     `endif
 
@@ -232,8 +232,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     assign csr_req_data = execute_if.data.use_imm ? 32'(csr_imm) : rs1_data[0];
 
     assign csr_wr_enable = (csr_write_enable || (| csr_req_data))
-                `ifdef EXT_ROP_ENABLE
-                    && !rop_addr_enable
+                `ifdef EXT_OM_ENABLE
+                    && !om_addr_enable
                 `endif    
                     ;
 

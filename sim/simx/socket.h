@@ -44,8 +44,8 @@ public:
          const Arch &arch, 
          const DCRS &dcrs,
          const std::vector<RasterUnit::Ptr>& raster_units,
-         const std::vector<RopUnit::Ptr>& rop_units,
-         const std::vector<TexUnit::Ptr>& tex_units);
+         const std::vector<TexUnit::Ptr>& tex_units,
+         const std::vector<OMUnit::Ptr>& om_units);
 
   ~Socket();
 

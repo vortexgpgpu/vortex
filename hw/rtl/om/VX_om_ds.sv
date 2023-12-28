@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_rop_define.vh"
+`include "VX_om_define.vh"
 
-module VX_rop_ds import VX_rop_pkg::*; #(
+module VX_om_ds import VX_om_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = 4,
     parameter TAG_WIDTH = 1
@@ -24,7 +24,7 @@ module VX_rop_ds import VX_rop_pkg::*; #(
     input wire reset,
     
     // DCRs
-    input rop_dcrs_t dcrs,
+    input om_dcrs_t dcrs,
 
     // Handshake
     input wire                  valid_in,
@@ -37,13 +37,13 @@ module VX_rop_ds import VX_rop_pkg::*; #(
 
     // Input values
     input wire [NUM_LANES-1:0]                          face,
-    input wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0]  depth_ref,
-    input wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0]  depth_val,
-    input wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0] stencil_val,    
+    input wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0]   depth_ref,
+    input wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0]   depth_val,
+    input wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] stencil_val,    
 
     // Output values
-    output wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] depth_out,        
-    output wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0] stencil_out,
+    output wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0]  depth_out,        
+    output wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] stencil_out,
     output wire [NUM_LANES-1:0]                         pass_out
 ); 
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -59,9 +59,9 @@ module VX_rop_ds import VX_rop_pkg::*; #(
     wire [NUM_LANES-1:0] dpass;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        VX_rop_compare #(
-            .DATAW (`VX_ROP_DEPTH_BITS)
-        ) rop_compare_depth (
+        VX_om_compare #(
+            .DATAW (`VX_OM_DEPTH_BITS)
+        ) om_compare_depth (
             .func   (dcrs.depth_func),
             .a      (depth_ref[i]),
             .b      (depth_val[i]),
@@ -74,9 +74,9 @@ module VX_rop_ds import VX_rop_pkg::*; #(
     wire [NUM_LANES-1:0] spass;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        VX_rop_compare #(
-            .DATAW (`VX_ROP_STENCIL_BITS)
-        ) rop_compare_stencil (
+        VX_om_compare #(
+            .DATAW (`VX_OM_STENCIL_BITS)
+        ) om_compare_stencil (
             .func   (dcrs.stencil_func[face[i]]),
             .a      (dcrs.stencil_ref[face[i]] & dcrs.stencil_mask[face[i]]),
             .b      (stencil_val[i] & dcrs.stencil_mask[face[i]]),
@@ -89,12 +89,12 @@ module VX_rop_ds import VX_rop_pkg::*; #(
     wire valid_in_s;
     wire [NUM_LANES-1:0] face_s;
     wire [NUM_LANES-1:0] dpass_s, spass_s;
-    wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] depth_ref_s, depth_val_s;
-    wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0] stencil_val_s;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] depth_ref_s, depth_val_s;
+    wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] stencil_val_s;
     wire [TAG_WIDTH-1:0] tag_in_s;
     
     VX_pipe_register #(
-        .DATAW	(1 + NUM_LANES * (1 + 1 + 1 + 2 * `VX_ROP_DEPTH_BITS + `VX_ROP_STENCIL_BITS) + TAG_WIDTH),
+        .DATAW	(1 + NUM_LANES * (1 + 1 + 1 + 2 * `VX_OM_DEPTH_BITS + `VX_OM_STENCIL_BITS) + TAG_WIDTH),
         .RESETW (1),
         .DEPTH  (2)
     ) pipe_reg1 (
@@ -107,16 +107,16 @@ module VX_rop_ds import VX_rop_pkg::*; #(
 
     // Stencil Operation //////////////////////////////////////////////////////
 
-    wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0] stencil_result;
+    wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] stencil_result;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        wire [`VX_ROP_STENCIL_OP_BITS-1:0] stencil_op;
+        wire [`VX_OM_STENCIL_OP_BITS-1:0] stencil_op;
         assign stencil_op = spass_s[i] ? (dpass_s[i] ? dcrs.stencil_zpass[face_s[i]]
                                                      : dcrs.stencil_zfail[face_s[i]])
                                        : dcrs.stencil_fail[face_s[i]];
-        VX_rop_stencil_op #(
-            .DATAW (`VX_ROP_STENCIL_BITS)
-        ) rop_stencil_op (
+        VX_om_stencil_op #(
+            .DATAW (`VX_OM_STENCIL_BITS)
+        ) om_stencil_op (
             .op     (stencil_op),
             .sref   (dcrs.stencil_ref[face_s[i]]),
             .val    (stencil_val_s[i]),
@@ -126,13 +126,13 @@ module VX_rop_ds import VX_rop_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0]   depth_write;
-    wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0] stencil_write;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0]   depth_write;
+    wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] stencil_write;
     wire [NUM_LANES-1:0] pass;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign depth_write[i] = (dpass_s[i] && dcrs.depth_writemask) ? depth_ref_s[i] : depth_val_s[i];
-        for (genvar j = 0; j < `VX_ROP_STENCIL_BITS; ++j) begin
+        for (genvar j = 0; j < `VX_OM_STENCIL_BITS; ++j) begin
             assign stencil_write[i][j] = dcrs.stencil_writemask[face_s[i]][j] ? stencil_result[i][j] : stencil_val_s[i][j];
         end
     end
@@ -142,7 +142,7 @@ module VX_rop_ds import VX_rop_pkg::*; #(
     // Output /////////////////////////////////////////////////////////////////
 
     VX_pipe_register #(
-        .DATAW	(1 + TAG_WIDTH + NUM_LANES * (`VX_ROP_DEPTH_BITS + `VX_ROP_STENCIL_BITS + 1)),
+        .DATAW	(1 + TAG_WIDTH + NUM_LANES * (`VX_OM_DEPTH_BITS + `VX_OM_STENCIL_BITS + 1)),
         .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),

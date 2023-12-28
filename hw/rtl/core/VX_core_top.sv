@@ -139,7 +139,7 @@ module VX_core_top import VX_gpu_pkg::*; #(
 `ifdef EXT_RASTER_ENABLE
     assign mem_perf_if.rcache  = '0;
 `endif
-`ifdef EXT_ROP_ENABLE
+`ifdef EXT_OM_ENABLE
     assign mem_perf_if.ocache  = '0;
 `endif
     assign mem_perf_if.l3cache = '0;

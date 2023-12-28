@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_rop_define.vh"
+`include "VX_om_define.vh"
 
 // Module for handling memory requests
-module VX_rop_mem import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
+module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = 4,
     parameter TAG_WIDTH = 1
@@ -25,7 +25,7 @@ module VX_rop_mem import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     input wire reset,
 
     // Device configuration
-    input rop_dcrs_t dcrs,
+    input om_dcrs_t dcrs,
 
     // Memory interface
     VX_mem_bus_if.master cache_bus_if [OCACHE_NUM_REQS],
@@ -35,11 +35,11 @@ module VX_rop_mem import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     input wire [NUM_LANES-1:0]                      req_ds_mask,
     input wire [NUM_LANES-1:0]                      req_c_mask,
     input wire                                      req_rw,
-    input wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] req_pos_x,
-    input wire [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] req_pos_y,
+    input wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] req_pos_x,
+    input wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] req_pos_y,
     input rgba_t [NUM_LANES-1:0]                    req_color, 
-    input wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] req_depth,
-    input wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0] req_stencil,
+    input wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] req_depth,
+    input wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] req_stencil,
     input wire [NUM_LANES-1:0]                      req_face,
     input wire [TAG_WIDTH-1:0]                      req_tag,
     output wire                                     req_ready,
@@ -49,14 +49,14 @@ module VX_rop_mem import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     output wire                                     rsp_valid,
     output wire [NUM_LANES-1:0]                     rsp_mask,
     output rgba_t [NUM_LANES-1:0]                   rsp_color, 
-    output wire [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] rsp_depth,
-    output wire [NUM_LANES-1:0][`VX_ROP_STENCIL_BITS-1:0] rsp_stencil,
+    output wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] rsp_depth,
+    output wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] rsp_stencil,
     output wire [TAG_WIDTH-1:0]                     rsp_tag,
     input wire                                      rsp_ready    
 );
 
-    localparam NUM_REQS   = ROP_MEM_REQS;
-    localparam W_ADDR_BITS = (`ROP_ADDR_BITS + 6) - 2;
+    localparam NUM_REQS    = OM_MEM_REQS;
+    localparam W_ADDR_BITS = (`OM_ADDR_BITS + 6) - 2;
 
     wire                        mreq_valid, mreq_valid_r;
     wire                        mreq_rw, mreq_rw_r;
@@ -91,8 +91,8 @@ module VX_rop_mem import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
         `UNUSED_VAR (m_y_pitch)
 
         VX_multiplier #(
-            .A_WIDTH (`VX_ROP_DIM_BITS),
-            .B_WIDTH (`VX_ROP_PITCH_BITS),
+            .A_WIDTH (`VX_OM_DIM_BITS),
+            .B_WIDTH (`VX_OM_PITCH_BITS),
             .R_WIDTH (32),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
@@ -131,8 +131,8 @@ module VX_rop_mem import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
         `UNUSED_VAR (m_y_pitch)
 
         VX_multiplier #(
-            .A_WIDTH (`VX_ROP_DIM_BITS),
-            .B_WIDTH (`VX_ROP_PITCH_BITS),
+            .A_WIDTH (`VX_OM_DIM_BITS),
+            .B_WIDTH (`VX_OM_PITCH_BITS),
             .R_WIDTH (32),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
@@ -217,7 +217,7 @@ module VX_rop_mem import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
         .TAG_WIDTH    (TAG_WIDTH),
         .MEM_TAG_ID   (`UUID_WIDTH),
         .UUID_WIDTH   (`UUID_WIDTH),
-        .QUEUE_SIZE   (`ROP_MEM_QUEUE_SIZE),
+        .QUEUE_SIZE   (`OM_MEM_QUEUE_SIZE),
         .CORE_OUT_REG (2)
     ) mem_scheduler (
         .clk            (clk),
@@ -276,8 +276,8 @@ module VX_rop_mem import VX_gpu_pkg::*; import VX_rop_pkg::*; #(
     assign rsp_mask = (mrsp_mask[0 +: NUM_LANES] | mrsp_mask[NUM_LANES +: NUM_LANES]);
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin        
-        assign rsp_depth[i]   = `VX_ROP_DEPTH_BITS'(mrsp_data[i] >> 0) & `VX_ROP_DEPTH_BITS'(`VX_ROP_DEPTH_MASK);
-        assign rsp_stencil[i] = `VX_ROP_STENCIL_BITS'(mrsp_data[i] >> `VX_ROP_DEPTH_BITS) & `VX_ROP_STENCIL_BITS'(`VX_ROP_STENCIL_MASK);        
+        assign rsp_depth[i]   = `VX_OM_DEPTH_BITS'(mrsp_data[i] >> 0) & `VX_OM_DEPTH_BITS'(`VX_OM_DEPTH_MASK);
+        assign rsp_stencil[i] = `VX_OM_STENCIL_BITS'(mrsp_data[i] >> `VX_OM_DEPTH_BITS) & `VX_OM_STENCIL_BITS'(`VX_OM_STENCIL_MASK);        
     end
 
     for (genvar i = NUM_LANES; i < NUM_REQS; ++i) begin

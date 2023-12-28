@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_rop_define.vh"
+`include "VX_om_define.vh"
 
-module VX_rop_arb import VX_rop_pkg::*; #(
+module VX_om_arb import VX_om_pkg::*; #(
     parameter NUM_INPUTS     = 1,
     parameter NUM_OUTPUTS    = 1,
     parameter NUM_LANES      = 1,
@@ -26,13 +26,13 @@ module VX_rop_arb import VX_rop_pkg::*; #(
     input wire              reset,
 
     // input requests    
-    VX_rop_bus_if.slave     bus_in_if [NUM_INPUTS],
+    VX_om_bus_if.slave     bus_in_if [NUM_INPUTS],
 
     // output request
-    VX_rop_bus_if.master    bus_out_if [NUM_OUTPUTS]
+    VX_om_bus_if.master    bus_out_if [NUM_OUTPUTS]
 );
 
-    localparam REQ_DATAW  = `UUID_WIDTH + NUM_LANES * (1 + 2 * `VX_ROP_DIM_BITS + $bits(rgba_t) + `VX_ROP_DEPTH_BITS + 1);
+    localparam REQ_DATAW  = `UUID_WIDTH + NUM_LANES * (1 + 2 * `VX_OM_DIM_BITS + $bits(rgba_t) + `VX_OM_DEPTH_BITS + 1);
 
     wire [NUM_INPUTS-1:0]                 req_valid_in;
     wire [NUM_INPUTS-1:0][REQ_DATAW-1:0]  req_data_in;

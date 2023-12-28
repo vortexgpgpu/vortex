@@ -321,21 +321,21 @@ bool DoCompare(uint32_t func, uint32_t a, uint32_t b) {
   switch (func) {
   default:
     assert(false);
-  case VX_ROP_DEPTH_FUNC_NEVER:
+  case VX_OM_DEPTH_FUNC_NEVER:
     return false;
-  case VX_ROP_DEPTH_FUNC_LESS:
+  case VX_OM_DEPTH_FUNC_LESS:
     return (a < b);
-  case VX_ROP_DEPTH_FUNC_EQUAL:
+  case VX_OM_DEPTH_FUNC_EQUAL:
     return (a == b);
-  case VX_ROP_DEPTH_FUNC_LEQUAL:
+  case VX_OM_DEPTH_FUNC_LEQUAL:
     return (a <= b);
-  case VX_ROP_DEPTH_FUNC_GREATER:
+  case VX_OM_DEPTH_FUNC_GREATER:
     return (a > b);
-  case VX_ROP_DEPTH_FUNC_NOTEQUAL:
+  case VX_OM_DEPTH_FUNC_NOTEQUAL:
     return (a != b);
-  case VX_ROP_DEPTH_FUNC_GEQUAL:
+  case VX_OM_DEPTH_FUNC_GEQUAL:
     return (a >= b);
-  case VX_ROP_DEPTH_FUNC_ALWAYS:
+  case VX_OM_DEPTH_FUNC_ALWAYS:
     return true;
   }
 }
@@ -344,21 +344,21 @@ uint32_t DoStencilOp(uint32_t op, uint32_t ref, uint32_t val) {
   switch (op) {
   default:
     assert(false);
-  case VX_ROP_STENCIL_OP_KEEP:
+  case VX_OM_STENCIL_OP_KEEP:
     return val;
-  case VX_ROP_STENCIL_OP_ZERO:
+  case VX_OM_STENCIL_OP_ZERO:
     return 0;
-  case VX_ROP_STENCIL_OP_REPLACE:
+  case VX_OM_STENCIL_OP_REPLACE:
     return ref;
-  case VX_ROP_STENCIL_OP_INCR:
+  case VX_OM_STENCIL_OP_INCR:
     return (val < 0xff) ? (val + 1) : val;
-  case VX_ROP_STENCIL_OP_DECR:
+  case VX_OM_STENCIL_OP_DECR:
     return (val > 0) ? (val - 1) : val;
-  case VX_ROP_STENCIL_OP_INVERT:
+  case VX_OM_STENCIL_OP_INVERT:
     return ~val;
-  case VX_ROP_STENCIL_OP_INCR_WRAP:
+  case VX_OM_STENCIL_OP_INCR_WRAP:
     return (val + 1) & 0xff;
-  case VX_ROP_STENCIL_OP_DECR_WRAP:
+  case VX_OM_STENCIL_OP_DECR_WRAP:
     return (val - 1) & 0xff;
   }
 }
@@ -367,37 +367,37 @@ uint32_t DoLogicOp(uint32_t op, uint32_t src, uint32_t dst) {
   switch (op) {
   default:
     assert(false);
-  case VX_ROP_LOGIC_OP_CLEAR:
+  case VX_OM_LOGIC_OP_CLEAR:
     return 0;
-  case VX_ROP_LOGIC_OP_AND:
+  case VX_OM_LOGIC_OP_AND:
     return src & dst;
-  case VX_ROP_LOGIC_OP_AND_REVERSE:
+  case VX_OM_LOGIC_OP_AND_REVERSE:
     return src & ~dst;
-  case VX_ROP_LOGIC_OP_COPY:
+  case VX_OM_LOGIC_OP_COPY:
     return src;
-  case VX_ROP_LOGIC_OP_AND_INVERTED:
+  case VX_OM_LOGIC_OP_AND_INVERTED:
     return ~src & dst;
-  case VX_ROP_LOGIC_OP_NOOP:
+  case VX_OM_LOGIC_OP_NOOP:
     return dst;
-  case VX_ROP_LOGIC_OP_XOR:
+  case VX_OM_LOGIC_OP_XOR:
     return src ^ dst;
-  case VX_ROP_LOGIC_OP_OR:
+  case VX_OM_LOGIC_OP_OR:
     return src | dst;
-  case VX_ROP_LOGIC_OP_NOR:
+  case VX_OM_LOGIC_OP_NOR:
     return ~(src | dst);
-  case VX_ROP_LOGIC_OP_EQUIV:
+  case VX_OM_LOGIC_OP_EQUIV:
     return ~(src ^ dst);
-  case VX_ROP_LOGIC_OP_INVERT:
+  case VX_OM_LOGIC_OP_INVERT:
     return ~dst;
-  case VX_ROP_LOGIC_OP_OR_REVERSE:
+  case VX_OM_LOGIC_OP_OR_REVERSE:
     return src | ~dst;
-  case VX_ROP_LOGIC_OP_COPY_INVERTED:
+  case VX_OM_LOGIC_OP_COPY_INVERTED:
     return ~src;
-  case VX_ROP_LOGIC_OP_OR_INVERTED:
+  case VX_OM_LOGIC_OP_OR_INVERTED:
     return ~src | dst;
-  case VX_ROP_LOGIC_OP_NAND:
+  case VX_OM_LOGIC_OP_NAND:
     return ~(src & dst);
-  case VX_ROP_LOGIC_OP_SET:
+  case VX_OM_LOGIC_OP_SET:
     return 0xffffffff;
   }
 }
@@ -409,65 +409,65 @@ ColorARGB DoBlendFunc(uint32_t func,
   switch (func) {
   default:
     assert(false);
-  case VX_ROP_BLEND_FUNC_ZERO:
+  case VX_OM_BLEND_FUNC_ZERO:
     return ColorARGB(0, 0, 0, 0);
-  case VX_ROP_BLEND_FUNC_ONE:
+  case VX_OM_BLEND_FUNC_ONE:
     return ColorARGB(0xff, 0xff, 0xff, 0xff);
-  case VX_ROP_BLEND_FUNC_SRC_RGB:
+  case VX_OM_BLEND_FUNC_SRC_RGB:
     return src;
-  case VX_ROP_BLEND_FUNC_ONE_MINUS_SRC_RGB:
+  case VX_OM_BLEND_FUNC_ONE_MINUS_SRC_RGB:
     return ColorARGB(
       0xff - src.a,
       0xff - src.r,
       0xff - src.g,
       0xff - src.b
     );
-  case VX_ROP_BLEND_FUNC_DST_RGB:
+  case VX_OM_BLEND_FUNC_DST_RGB:
     return dst;
-  case VX_ROP_BLEND_FUNC_ONE_MINUS_DST_RGB:
+  case VX_OM_BLEND_FUNC_ONE_MINUS_DST_RGB:
     return ColorARGB(
       0xff - dst.a,
       0xff - dst.r,
       0xff - dst.g,
       0xff - dst.b
     );
-  case VX_ROP_BLEND_FUNC_SRC_A:
+  case VX_OM_BLEND_FUNC_SRC_A:
     return ColorARGB(src.a, src.a, src.a, src.a);
-  case VX_ROP_BLEND_FUNC_ONE_MINUS_SRC_A:
+  case VX_OM_BLEND_FUNC_ONE_MINUS_SRC_A:
     return ColorARGB(
       0xff - src.a,
       0xff - src.a,
       0xff - src.a,
       0xff - src.a
     );
-  case VX_ROP_BLEND_FUNC_DST_A:
+  case VX_OM_BLEND_FUNC_DST_A:
     return ColorARGB(dst.a, dst.a, dst.a, dst.a);
-  case VX_ROP_BLEND_FUNC_ONE_MINUS_DST_A:
+  case VX_OM_BLEND_FUNC_ONE_MINUS_DST_A:
     return ColorARGB(
       0xff - dst.a,
       0xff - dst.a,
       0xff - dst.a,
       0xff - dst.a
     );
-  case VX_ROP_BLEND_FUNC_CONST_RGB:
+  case VX_OM_BLEND_FUNC_CONST_RGB:
     return cst;
-  case VX_ROP_BLEND_FUNC_ONE_MINUS_CONST_RGB:
+  case VX_OM_BLEND_FUNC_ONE_MINUS_CONST_RGB:
     return ColorARGB(
       0xff - cst.a,
       0xff - cst.r,
       0xff - cst.g,
       0xff - cst.b
     );
-  case VX_ROP_BLEND_FUNC_CONST_A:
+  case VX_OM_BLEND_FUNC_CONST_A:
     return ColorARGB(cst.a, cst.a, cst.a, cst.a);
-  case VX_ROP_BLEND_FUNC_ONE_MINUS_CONST_A:
+  case VX_OM_BLEND_FUNC_ONE_MINUS_CONST_A:
     return ColorARGB(
       0xff - cst.a,
       0xff - cst.r,
       0xff - cst.g,
       0xff - cst.b
     );
-  case VX_ROP_BLEND_FUNC_ALPHA_SAT: {
+  case VX_OM_BLEND_FUNC_ALPHA_SAT: {
     auto factor = std::min<int>(src.a, 0xff - dst.a);
     return ColorARGB(0xff, factor, factor, factor);
   }
@@ -483,42 +483,42 @@ ColorARGB DoBlendMode(uint32_t mode,
   switch (mode) {
   default:
     assert(false);
-  case VX_ROP_BLEND_MODE_ADD:
+  case VX_OM_BLEND_MODE_ADD:
     return ColorARGB(
       Div255(std::min<int>(src.a * s.a + dst.a * d.a + 0x80, 0xFF00)),
       Div255(std::min<int>(src.r * s.r + dst.r * d.r + 0x80, 0xFF00)),
       Div255(std::min<int>(src.g * s.g + dst.g * d.g + 0x80, 0xFF00)),
       Div255(std::min<int>(src.b * s.b + dst.b * d.b + 0x80, 0xFF00))
     );
-  case VX_ROP_BLEND_MODE_SUB:
+  case VX_OM_BLEND_MODE_SUB:
     return ColorARGB(
       Div255(std::max<int>(src.a * s.a - dst.a * d.a + 0x80, 0x0)),
       Div255(std::max<int>(src.r * s.r - dst.r * d.r + 0x80, 0x0)),
       Div255(std::max<int>(src.g * s.g - dst.g * d.g + 0x80, 0x0)),
       Div255(std::max<int>(src.b * s.b - dst.b * d.b + 0x80, 0x0))
     );
-  case VX_ROP_BLEND_MODE_REV_SUB:
+  case VX_OM_BLEND_MODE_REV_SUB:
     return ColorARGB(
       Div255(std::max<int>(dst.a * d.a - src.a * s.a + 0x80, 0x0)),
       Div255(std::max<int>(dst.r * d.r - src.r * s.r + 0x80, 0x0)),
       Div255(std::max<int>(dst.g * d.g - src.g * s.g + 0x80, 0x0)),
       Div255(std::max<int>(dst.b * d.b - src.b * s.b + 0x80, 0x0))
     );
-  case VX_ROP_BLEND_MODE_MIN:
+  case VX_OM_BLEND_MODE_MIN:
     return ColorARGB(
       std::min(src.a, dst.a),
       std::min(src.r, dst.r),
       std::min(src.g, dst.g),
       std::min(src.b, dst.b)
     );
-  case VX_ROP_BLEND_MODE_MAX:
+  case VX_OM_BLEND_MODE_MAX:
     return ColorARGB(
       std::max(src.a, dst.a),
       std::max(src.r, dst.r),
       std::max(src.g, dst.g),
       std::max(src.b, dst.b)
     );
-  case VX_ROP_BLEND_MODE_LOGICOP:
+  case VX_OM_BLEND_MODE_LOGICOP:
     return ColorARGB(DoLogicOp(logic_op, src.value, dst.value));
   }
 }
@@ -531,43 +531,43 @@ DepthTencil::DepthTencil() {}
 
 DepthTencil::~DepthTencil() {}
 
-void DepthTencil::configure(const RopDCRS& dcrs) {
+void DepthTencil::configure(const OMDCRS& dcrs) {
   // get device configuration
-  depth_func_          = dcrs.read(VX_DCR_ROP_DEPTH_FUNC);
-  bool depth_writemask = dcrs.read(VX_DCR_ROP_DEPTH_WRITEMASK) & 0x1;
+  depth_func_          = dcrs.read(VX_DCR_OM_DEPTH_FUNC);
+  bool depth_writemask = dcrs.read(VX_DCR_OM_DEPTH_WRITEMASK) & 0x1;
 
-  stencil_front_func_ = dcrs.read(VX_DCR_ROP_STENCIL_FUNC) & 0xffff;
-  stencil_front_zpass_= dcrs.read(VX_DCR_ROP_STENCIL_ZPASS) & 0xffff;
-  stencil_front_zfail_= dcrs.read(VX_DCR_ROP_STENCIL_ZFAIL) & 0xffff;
-  stencil_front_fail_ = dcrs.read(VX_DCR_ROP_STENCIL_FAIL) & 0xffff;
-  stencil_front_ref_  = dcrs.read(VX_DCR_ROP_STENCIL_REF) & 0xffff;
-  stencil_front_mask_ = dcrs.read(VX_DCR_ROP_STENCIL_MASK) & 0xffff;
+  stencil_front_func_ = dcrs.read(VX_DCR_OM_STENCIL_FUNC) & 0xffff;
+  stencil_front_zpass_= dcrs.read(VX_DCR_OM_STENCIL_ZPASS) & 0xffff;
+  stencil_front_zfail_= dcrs.read(VX_DCR_OM_STENCIL_ZFAIL) & 0xffff;
+  stencil_front_fail_ = dcrs.read(VX_DCR_OM_STENCIL_FAIL) & 0xffff;
+  stencil_front_ref_  = dcrs.read(VX_DCR_OM_STENCIL_REF) & 0xffff;
+  stencil_front_mask_ = dcrs.read(VX_DCR_OM_STENCIL_MASK) & 0xffff;
 
-  stencil_back_func_  = dcrs.read(VX_DCR_ROP_STENCIL_FUNC) >> 16;
-  stencil_back_zpass_ = dcrs.read(VX_DCR_ROP_STENCIL_ZPASS) >> 16;
-  stencil_back_zfail_ = dcrs.read(VX_DCR_ROP_STENCIL_ZFAIL) >> 16;
-  stencil_back_fail_  = dcrs.read(VX_DCR_ROP_STENCIL_FAIL) >> 16;    
-  stencil_back_ref_   = dcrs.read(VX_DCR_ROP_STENCIL_REF) >> 16;
-  stencil_back_mask_  = dcrs.read(VX_DCR_ROP_STENCIL_MASK) >> 16;
+  stencil_back_func_  = dcrs.read(VX_DCR_OM_STENCIL_FUNC) >> 16;
+  stencil_back_zpass_ = dcrs.read(VX_DCR_OM_STENCIL_ZPASS) >> 16;
+  stencil_back_zfail_ = dcrs.read(VX_DCR_OM_STENCIL_ZFAIL) >> 16;
+  stencil_back_fail_  = dcrs.read(VX_DCR_OM_STENCIL_FAIL) >> 16;    
+  stencil_back_ref_   = dcrs.read(VX_DCR_OM_STENCIL_REF) >> 16;
+  stencil_back_mask_  = dcrs.read(VX_DCR_OM_STENCIL_MASK) >> 16;
 
-  depth_enabled_ = !((depth_func_ == VX_ROP_DEPTH_FUNC_ALWAYS) && !depth_writemask);
+  depth_enabled_ = !((depth_func_ == VX_OM_DEPTH_FUNC_ALWAYS) && !depth_writemask);
   
-  stencil_front_enabled_ = !((stencil_front_func_  == VX_ROP_DEPTH_FUNC_ALWAYS) 
-                          && (stencil_front_zpass_ == VX_ROP_STENCIL_OP_KEEP)
-                          && (stencil_front_zfail_ == VX_ROP_STENCIL_OP_KEEP));
+  stencil_front_enabled_ = !((stencil_front_func_  == VX_OM_DEPTH_FUNC_ALWAYS) 
+                          && (stencil_front_zpass_ == VX_OM_STENCIL_OP_KEEP)
+                          && (stencil_front_zfail_ == VX_OM_STENCIL_OP_KEEP));
   
-  stencil_back_enabled_ = !((stencil_back_func_  == VX_ROP_DEPTH_FUNC_ALWAYS) 
-                          && (stencil_back_zpass_ == VX_ROP_STENCIL_OP_KEEP)
-                          && (stencil_back_zfail_ == VX_ROP_STENCIL_OP_KEEP));
+  stencil_back_enabled_ = !((stencil_back_func_  == VX_OM_DEPTH_FUNC_ALWAYS) 
+                          && (stencil_back_zpass_ == VX_OM_STENCIL_OP_KEEP)
+                          && (stencil_back_zfail_ == VX_OM_STENCIL_OP_KEEP));
 }
 
 bool DepthTencil::test(uint32_t is_backface, 
                        uint32_t depth, 
                        uint32_t depthstencil_val, 
                        uint32_t* depthstencil_result) const {
-  auto depth_val   = depthstencil_val & VX_ROP_DEPTH_MASK;
-  auto stencil_val = depthstencil_val >> VX_ROP_DEPTH_BITS;
-  auto depth_ref   = depth & VX_ROP_DEPTH_MASK;
+  auto depth_val   = depthstencil_val & VX_OM_DEPTH_MASK;
+  auto stencil_val = depthstencil_val >> VX_OM_DEPTH_BITS;
+  auto depth_ref   = depth & VX_OM_DEPTH_MASK;
     
   auto stencil_func = is_backface ? stencil_back_func_ : stencil_front_func_;    
   auto stencil_ref  = is_backface ? stencil_back_ref_  : stencil_front_ref_;    
@@ -591,7 +591,7 @@ bool DepthTencil::test(uint32_t is_backface,
   }
   
   auto stencil_result = DoStencilOp(stencil_op, stencil_ref, stencil_val);
-  *depthstencil_result = (stencil_result << VX_ROP_DEPTH_BITS) | depth_ref;
+  *depthstencil_result = (stencil_result << VX_OM_DEPTH_BITS) | depth_ref;
   return passed;
 }
 
@@ -600,23 +600,23 @@ bool DepthTencil::test(uint32_t is_backface,
 Blender::Blender() {}
 Blender::~Blender() {}
 
-void Blender::configure(const RopDCRS& dcrs) {
+void Blender::configure(const OMDCRS& dcrs) {
   // get device configuration
-  blend_mode_rgb_ = dcrs.read(VX_DCR_ROP_BLEND_MODE) & 0xffff;
-  blend_mode_a_   = dcrs.read(VX_DCR_ROP_BLEND_MODE) >> 16;
-  blend_src_rgb_  = (dcrs.read(VX_DCR_ROP_BLEND_FUNC) >>  0) & 0xff;
-  blend_src_a_    = (dcrs.read(VX_DCR_ROP_BLEND_FUNC) >>  8) & 0xff;
-  blend_dst_rgb_  = (dcrs.read(VX_DCR_ROP_BLEND_FUNC) >> 16) & 0xff;
-  blend_dst_a_    = (dcrs.read(VX_DCR_ROP_BLEND_FUNC) >> 24) & 0xff;
-  blend_const_    = dcrs.read(VX_DCR_ROP_BLEND_CONST);
-  logic_op_       = dcrs.read(VX_DCR_ROP_LOGIC_OP);  
+  blend_mode_rgb_ = dcrs.read(VX_DCR_OM_BLEND_MODE) & 0xffff;
+  blend_mode_a_   = dcrs.read(VX_DCR_OM_BLEND_MODE) >> 16;
+  blend_src_rgb_  = (dcrs.read(VX_DCR_OM_BLEND_FUNC) >>  0) & 0xff;
+  blend_src_a_    = (dcrs.read(VX_DCR_OM_BLEND_FUNC) >>  8) & 0xff;
+  blend_dst_rgb_  = (dcrs.read(VX_DCR_OM_BLEND_FUNC) >> 16) & 0xff;
+  blend_dst_a_    = (dcrs.read(VX_DCR_OM_BLEND_FUNC) >> 24) & 0xff;
+  blend_const_    = dcrs.read(VX_DCR_OM_BLEND_CONST);
+  logic_op_       = dcrs.read(VX_DCR_OM_LOGIC_OP);  
 
-  enabled_        = !((blend_mode_rgb_ == VX_ROP_BLEND_MODE_ADD)
-                   && (blend_mode_a_   == VX_ROP_BLEND_MODE_ADD) 
-                   && (blend_src_rgb_  == VX_ROP_BLEND_FUNC_ONE) 
-                   && (blend_src_a_    == VX_ROP_BLEND_FUNC_ONE) 
-                   && (blend_dst_rgb_  == VX_ROP_BLEND_FUNC_ZERO) 
-                   && (blend_dst_a_    == VX_ROP_BLEND_FUNC_ZERO));
+  enabled_        = !((blend_mode_rgb_ == VX_OM_BLEND_MODE_ADD)
+                   && (blend_mode_a_   == VX_OM_BLEND_MODE_ADD) 
+                   && (blend_src_rgb_  == VX_OM_BLEND_FUNC_ONE) 
+                   && (blend_src_a_    == VX_OM_BLEND_FUNC_ONE) 
+                   && (blend_dst_rgb_  == VX_OM_BLEND_FUNC_ZERO) 
+                   && (blend_dst_a_    == VX_OM_BLEND_FUNC_ZERO));
 }
 
 uint32_t Blender::blend(uint32_t srcColor, uint32_t dstColor) const {

@@ -25,8 +25,8 @@
 `include "VX_raster_define.vh"
 `endif
 
-`ifdef EXT_ROP_ENABLE
-`include "VX_rop_define.vh"
+`ifdef EXT_OM_ENABLE
+`include "VX_om_define.vh"
 `endif
 
 module VX_core import VX_gpu_pkg::*; #( 
@@ -62,11 +62,11 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_raster_bus_if.slave  raster_bus_if,
 `endif
 
-`ifdef EXT_ROP_ENABLE
+`ifdef EXT_OM_ENABLE
 `ifdef PERF_ENABLE
-    VX_rop_perf_if.slave    perf_rop_if,
+    VX_om_perf_if.slave     perf_om_if,
 `endif
-    VX_rop_bus_if.master    rop_bus_if,
+    VX_om_bus_if.master     om_bus_if,
 `endif
 
 `ifdef GBAR_ENABLE
@@ -123,7 +123,7 @@ module VX_core import VX_gpu_pkg::*; #(
 `ifdef EXT_RASTER_ENABLE
     assign mem_perf_tmp_if.rcache  = mem_perf_if.rcache;
 `endif
-`ifdef EXT_ROP_ENABLE
+`ifdef EXT_OM_ENABLE
     assign mem_perf_tmp_if.ocache  = mem_perf_if.ocache;
 `endif    
     assign mem_perf_tmp_if.mem = mem_perf_if.mem;
@@ -254,10 +254,10 @@ module VX_core import VX_gpu_pkg::*; #(
     `endif
     `endif
 
-    `ifdef EXT_ROP_ENABLE        
-        .rop_bus_if     (rop_bus_if),
+    `ifdef EXT_OM_ENABLE        
+        .om_bus_if      (om_bus_if),
     `ifdef PERF_ENABLE
-        .perf_rop_if    (perf_rop_if),
+        .perf_om_if     (perf_om_if),
     `endif
     `endif
 

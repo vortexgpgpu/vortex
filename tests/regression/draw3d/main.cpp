@@ -33,9 +33,9 @@ const char* trace_file  = "triangle.cgltrace";
 const char* output_file = "output.png";
 const char* reference_file = nullptr;
 
-bool sw_tex = false;
 bool sw_rast = false;
-bool sw_rop = false;
+bool sw_tex = false;
+bool sw_om = false;
 
 uint32_t start_draw = 0;
 uint32_t end_draw = -1;
@@ -69,7 +69,7 @@ uint32_t tileLogSize = RASTER_TILE_LOGSIZE;
 
 static void show_usage() {
    std::cout << "Vortex 3D Rendering Test." << std::endl;
-   std::cout << "Usage: [-t trace] [-s startdraw] [-e enddraw] [-o output] [-r reference] [-w width] [-h height] [-e empty] [-x s/w rast] [-y s/w rop] [-k tilelogsize]" << std::endl;
+   std::cout << "Usage: [-t trace] [-s startdraw] [-e enddraw] [-o output] [-r reference] [-w width] [-h height] [-e empty] [-x s/w rast] [-y s/w om] [-k tilelogsize]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
@@ -104,7 +104,7 @@ static void parse_args(int argc, char **argv) {
       sw_rast = true;
       break;
     case 'y':
-      sw_rop = true;
+      sw_om = true;
       break;
     case 'k':
       tileLogSize = std::atoi(optarg);
@@ -140,9 +140,9 @@ void cleanup() {
     vx_dcr_write(device, addr, value); \
     kernel_arg.raster_dcrs.write(addr, value)
 
-  #define ROP_DCR_WRITE(addr, value)  \
+  #define OM_DCR_WRITE(addr, value)  \
     vx_dcr_write(device, addr, value); \
-    kernel_arg.rop_dcrs.write(addr, value)
+    kernel_arg.om_dcrs.write(addr, value)
 
   #define TEX_DCR_WRITE(addr, value)  \
     vx_dcr_write(device, addr, value); \
@@ -151,7 +151,7 @@ void cleanup() {
   #define RASTER_DCR_WRITE(addr, value)  \
     vx_dcr_write(device, addr, value)
 
-  #define ROP_DCR_WRITE(addr, value)  \
+  #define OM_DCR_WRITE(addr, value)  \
     vx_dcr_write(device, addr, value)
 
   #define TEX_DCR_WRITE(addr, value)  \
@@ -213,67 +213,67 @@ int render(const CGLTrace& trace) {
     RASTER_DCR_WRITE(VX_DCR_RASTER_SCISSOR_X, (dst_width << 16) | 0);
     RASTER_DCR_WRITE(VX_DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0);
 
-    // configure rop color buffer
-    ROP_DCR_WRITE(VX_DCR_ROP_CBUF_ADDR,  cbuf_addr / 64); // block address
-    ROP_DCR_WRITE(VX_DCR_ROP_CBUF_PITCH, cbuf_pitch);
-    ROP_DCR_WRITE(VX_DCR_ROP_CBUF_WRITEMASK, states.color_writemask);
+    // configure om color buffer
+    OM_DCR_WRITE(VX_DCR_OM_CBUF_ADDR,  cbuf_addr / 64); // block address
+    OM_DCR_WRITE(VX_DCR_OM_CBUF_PITCH, cbuf_pitch);
+    OM_DCR_WRITE(VX_DCR_OM_CBUF_WRITEMASK, states.color_writemask);
 
     if (states.depth_test || states.stencil_test) {
-      // configure rop depth buffer
-      ROP_DCR_WRITE(VX_DCR_ROP_ZBUF_ADDR,  zbuf_addr / 64); // block address
-      ROP_DCR_WRITE(VX_DCR_ROP_ZBUF_PITCH, zbuf_pitch);    
+      // configure om depth buffer
+      OM_DCR_WRITE(VX_DCR_OM_ZBUF_ADDR,  zbuf_addr / 64); // block address
+      OM_DCR_WRITE(VX_DCR_OM_ZBUF_PITCH, zbuf_pitch);    
     }
 
     if (states.depth_test) {    
-      // configure rop depth states
+      // configure om depth states
       auto depth_func = graphics::toVXCompare(states.depth_func);
-      ROP_DCR_WRITE(VX_DCR_ROP_DEPTH_FUNC, depth_func);
-      ROP_DCR_WRITE(VX_DCR_ROP_DEPTH_WRITEMASK, states.depth_writemask);
+      OM_DCR_WRITE(VX_DCR_OM_DEPTH_FUNC, depth_func);
+      OM_DCR_WRITE(VX_DCR_OM_DEPTH_WRITEMASK, states.depth_writemask);
     } else {
-      ROP_DCR_WRITE(VX_DCR_ROP_DEPTH_FUNC, VX_ROP_DEPTH_FUNC_ALWAYS);
-      ROP_DCR_WRITE(VX_DCR_ROP_DEPTH_WRITEMASK, 0);
+      OM_DCR_WRITE(VX_DCR_OM_DEPTH_FUNC, VX_OM_DEPTH_FUNC_ALWAYS);
+      OM_DCR_WRITE(VX_DCR_OM_DEPTH_WRITEMASK, 0);
     }
 
     if (states.stencil_test) {
-      // configure rop stencil states
+      // configure om stencil states
       auto stencil_func  = graphics::toVXCompare(states.stencil_func);
       auto stencil_zpass = graphics::toVXStencilOp(states.stencil_zpass);
       auto stencil_zfail = graphics::toVXStencilOp(states.stencil_zfail);
       auto stencil_fail  = graphics::toVXStencilOp(states.stencil_fail);
-      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_FUNC, stencil_func);
-      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_ZPASS, stencil_zpass);
-      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_ZPASS, stencil_zfail);
-      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_FAIL, stencil_fail);
-      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_REF, states.stencil_ref);
-      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_MASK, states.stencil_mask);
-      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_WRITEMASK, states.stencil_writemask);      
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_FUNC, stencil_func);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, stencil_zpass);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, stencil_zfail);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_FAIL, stencil_fail);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_REF, states.stencil_ref);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_MASK, states.stencil_mask);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_WRITEMASK, states.stencil_writemask);      
     } else {
-      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_FUNC, VX_ROP_DEPTH_FUNC_ALWAYS);
-      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_ZPASS, VX_ROP_STENCIL_OP_KEEP);
-      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_ZPASS, VX_ROP_STENCIL_OP_KEEP);
-      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_FAIL, VX_ROP_STENCIL_OP_KEEP);
-      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_REF, 0);
-      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_MASK, VX_ROP_STENCIL_MASK);
-      ROP_DCR_WRITE(VX_DCR_ROP_STENCIL_WRITEMASK, 0);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_FUNC, VX_OM_DEPTH_FUNC_ALWAYS);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, VX_OM_STENCIL_OP_KEEP);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_ZPASS, VX_OM_STENCIL_OP_KEEP);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_FAIL, VX_OM_STENCIL_OP_KEEP);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_REF, 0);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_MASK, VX_OM_STENCIL_MASK);
+      OM_DCR_WRITE(VX_DCR_OM_STENCIL_WRITEMASK, 0);
     }
 
     if (states.blend_enabled) {
-      // configure rop blend states
+      // configure om blend states
       auto blend_src = graphics::toVXBlendFunc(states.blend_src);
       auto blend_dst = graphics::toVXBlendFunc(states.blend_dst);
-      ROP_DCR_WRITE(VX_DCR_ROP_BLEND_MODE, (VX_ROP_BLEND_MODE_ADD << 16)   // DST
-                                         | (VX_ROP_BLEND_MODE_ADD << 0));  // SRC
-      ROP_DCR_WRITE(VX_DCR_ROP_BLEND_FUNC, (blend_dst << 24)            // DST_A
+      OM_DCR_WRITE(VX_DCR_OM_BLEND_MODE, (VX_OM_BLEND_MODE_ADD << 16)   // DST
+                                         | (VX_OM_BLEND_MODE_ADD << 0));  // SRC
+      OM_DCR_WRITE(VX_DCR_OM_BLEND_FUNC, (blend_dst << 24)            // DST_A
                                          | (blend_dst << 16)            // DST_RGB 
                                          | (blend_src << 8)             // SRC_A
                                          | (blend_src << 0));           // SRC_RGB
     } else {
-      ROP_DCR_WRITE(VX_DCR_ROP_BLEND_MODE, (VX_ROP_BLEND_MODE_ADD << 16)   // DST
-                                         | (VX_ROP_BLEND_MODE_ADD << 0));  // SRC
-      ROP_DCR_WRITE(VX_DCR_ROP_BLEND_FUNC, (VX_ROP_BLEND_FUNC_ZERO << 24)  // DST_A
-                                         | (VX_ROP_BLEND_FUNC_ZERO << 16)  // DST_RGB 
-                                         | (VX_ROP_BLEND_FUNC_ONE << 8)    // SRC_A
-                                         | (VX_ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
+      OM_DCR_WRITE(VX_DCR_OM_BLEND_MODE, (VX_OM_BLEND_MODE_ADD << 16)   // DST
+                                         | (VX_OM_BLEND_MODE_ADD << 0));  // SRC
+      OM_DCR_WRITE(VX_DCR_OM_BLEND_FUNC, (VX_OM_BLEND_FUNC_ZERO << 24)  // DST_A
+                                         | (VX_OM_BLEND_FUNC_ZERO << 16)  // DST_RGB 
+                                         | (VX_OM_BLEND_FUNC_ONE << 8)    // SRC_A
+                                         | (VX_OM_BLEND_FUNC_ONE << 0));  // SRC_RGB
     }
     
     if (states.texture_enabled) {
@@ -397,8 +397,8 @@ int main(int argc, char *argv[]) {
 
   uint64_t isa_flags;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-  if (0 == (isa_flags & (VX_ISA_EXT_TEX | VX_ISA_EXT_RASTER | VX_ISA_EXT_ROP))) {
-    std::cout << "TEX, RASTER, and ROP ISA extensions are needed!" << std::endl;
+  if (0 == (isa_flags & (VX_ISA_EXT_RASTER | VX_ISA_EXT_TEX | VX_ISA_EXT_OM))) {
+    std::cout << "RASTER, TEX, and OM ISA extensions are needed!" << std::endl;
     cleanup();
     return -1;
   }
@@ -488,7 +488,7 @@ int main(int argc, char *argv[]) {
   kernel_arg.log_num_tasks = log2ceil(num_tasks);
   kernel_arg.sw_tex        = sw_tex;
   kernel_arg.sw_rast       = sw_rast;
-  kernel_arg.sw_rop        = sw_rop;
+  kernel_arg.sw_om         = sw_om;
 
   // run tests
   RT_CHECK(render(trace));

@@ -25,11 +25,11 @@ Cluster::Cluster(const SimContext& ctx,
   , mem_rsp_port(this)
   , cluster_id_(cluster_id)
   , processor_(processor)
-  , sockets_(NUM_SOCKETS)  
+  , sockets_(NUM_SOCKETS)
   , barriers_(arch.num_barriers(), 0)
   , raster_units_(NUM_RASTER_UNITS)
-  , rop_units_(NUM_ROP_UNITS)
-  , tex_units_(NUM_TEX_UNITS)  
+  , tex_units_(NUM_TEX_UNITS)
+  , om_units_(NUM_OM_UNITS)
   , cores_per_socket_(arch.socket_size())
 {
   char sname[100];
@@ -48,9 +48,9 @@ Cluster::Cluster(const SimContext& ctx,
   }
 
   // create rop units
-  for (uint32_t i = 0; i < NUM_ROP_UNITS; ++i) {
-    snprintf(sname, 100, "cluster%d-rop_unit%d", cluster_id, i);      
-    rop_units_.at(i) = RopUnit::Create(sname, arch, dcrs.rop_dcrs);
+  for (uint32_t i = 0; i < NUM_OM_UNITS; ++i) {
+    snprintf(sname, 100, "cluster%d-om_unit%d", cluster_id, i);      
+    om_units_.at(i) = OMUnit::Create(sname, arch, dcrs.om_dcrs);
   }
 
   // create tex units
@@ -70,25 +70,25 @@ Cluster::Cluster(const SimContext& ctx,
   snprintf(sname, 100, "cluster%d-dcache-arb", cluster_id);
   auto dcache_switch = MemSwitch::Create(sname, ArbiterType::RoundRobin, sockets_per_cluster);
 
-  for (uint32_t i = 0, raster_idx = 0, rop_idx = 0, tex_idx = 0; i < sockets_per_cluster; ++i) {
+  for (uint32_t i = 0, raster_idx = 0, om_idx = 0, tex_idx = 0; i < sockets_per_cluster; ++i) {
     auto per_socket_raster_units = std::max<uint32_t>((NUM_RASTER_UNITS + sockets_per_cluster - 1 - i) / sockets_per_cluster, 1);
-    auto per_socket_rop_units = std::max<uint32_t>((NUM_ROP_UNITS + sockets_per_cluster - 1 - i) / sockets_per_cluster, 1);
+    auto per_socket_om_units = std::max<uint32_t>((NUM_OM_UNITS + sockets_per_cluster - 1 - i) / sockets_per_cluster, 1);
     auto per_socket_tex_units = std::max<uint32_t>((NUM_TEX_UNITS + sockets_per_cluster - 1 - i) / sockets_per_cluster, 1);
 
     std::vector<RasterUnit::Ptr> raster_units(per_socket_raster_units);
-    std::vector<RopUnit::Ptr> rop_units(per_socket_rop_units);
     std::vector<TexUnit::Ptr> tex_units(per_socket_tex_units);
+    std::vector<OMUnit::Ptr> om_units(per_socket_om_units);
 
     for (uint32_t j = 0; j < per_socket_raster_units; ++j) {
       raster_units.at(j) = raster_units_.at(raster_idx++ % NUM_RASTER_UNITS);
     }
 
-    for (uint32_t j = 0; j < per_socket_rop_units; ++j) {
-      rop_units.at(j) = rop_units_.at(rop_idx++ % NUM_ROP_UNITS);
-    }
-
     for (uint32_t j = 0; j < per_socket_tex_units; ++j) {
       tex_units.at(j) = tex_units_.at(tex_idx++ % NUM_TEX_UNITS);
+    }
+
+    for (uint32_t j = 0; j < per_socket_om_units; ++j) {
+      om_units.at(j) = om_units_.at(om_idx++ % NUM_OM_UNITS);
     }
 
     uint32_t socket_id = cluster_id * sockets_per_cluster + i;
@@ -98,8 +98,8 @@ Cluster::Cluster(const SimContext& ctx,
                                  arch, 
                                  dcrs, 
                                  raster_units, 
-                                 rop_units, 
-                                 tex_units);
+                                 tex_units, 
+                                 om_units);
 
     socket->icache_mem_req_port.bind(&icache_switch->ReqIn.at(i));
     icache_switch->RspIn.at(i).bind(&socket->icache_mem_rsp_port);
@@ -197,7 +197,7 @@ Cluster::Cluster(const SimContext& ctx,
   // Create ocache
 
   snprintf(sname, 100, "cluster%d-ocaches", cluster_id);
-  ocaches_ = CacheCluster::Create(sname, NUM_ROP_UNITS, NUM_OCACHES, NUM_SFU_LANES, CacheSim::Config{
+  ocaches_ = CacheCluster::Create(sname, NUM_OM_UNITS, NUM_OCACHES, NUM_SFU_LANES, CacheSim::Config{
     !OCACHE_ENABLED,
     log2ceil(OCACHE_SIZE),  // C
     log2ceil(MEM_BLOCK_SIZE), // L
@@ -216,10 +216,10 @@ Cluster::Cluster(const SimContext& ctx,
   ocaches_->MemReqPort.bind(&l2cache_->CoreReqPorts.at(3));
   l2cache_->CoreRspPorts.at(3).bind(&ocaches_->MemRspPort);
 
-  for (uint32_t i = 0; i < NUM_ROP_UNITS; ++i) {
+  for (uint32_t i = 0; i < NUM_OM_UNITS; ++i) {
     for (uint32_t j = 0; j < NUM_SFU_LANES; ++j) {
-      rop_units_.at(i)->MemReqs.at(j).bind(&ocaches_->CoreReqPorts.at(i).at(j));
-      ocaches_->CoreRspPorts.at(i).at(j).bind(&rop_units_.at(i)->MemRsps.at(j));
+      om_units_.at(i)->MemReqs.at(j).bind(&ocaches_->CoreReqPorts.at(i).at(j));
+      ocaches_->CoreRspPorts.at(i).at(j).bind(&om_units_.at(i)->MemRsps.at(j));
     }
   }
 }
@@ -245,11 +245,11 @@ void Cluster::attach_ram(RAM* ram) {
   for (auto raster_unit : raster_units_) {
     raster_unit->attach_ram(ram);
   }
-  for (auto rop_unit : rop_units_) {
-    rop_unit->attach_ram(ram);
-  }
   for (auto tex_unit : tex_units_) {
     tex_unit->attach_ram(ram);
+  }
+  for (auto om_unit : om_units_) {
+    om_unit->attach_ram(ram);
   }
 }
 

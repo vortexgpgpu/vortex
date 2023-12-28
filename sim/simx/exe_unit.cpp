@@ -272,19 +272,19 @@ void LsuUnit::tick() {
 
 SfuUnit::SfuUnit(const SimContext& ctx, Core* core) 
     : ExeUnit(ctx, core, "SFU")
-    , raster_units_(core->raster_units_)    
-    , rop_units_(core->rop_units_)
+    , raster_units_(core->raster_units_)
     , tex_units_(core->tex_units_)
+    , om_units_(core->om_units_)
     , input_idx_(0)
 {
     for (auto& raster_unit : raster_units_) {
         pending_rsps_.push_back(&raster_unit->Output);
     }
-    for (auto& rop_unit : rop_units_) {
-        pending_rsps_.push_back(&rop_unit->Output);
-    }
     for (auto& tex_unit : tex_units_) {
         pending_rsps_.push_back(&tex_unit->Output);
+    }
+    for (auto& om_unit : om_units_) {
+        pending_rsps_.push_back(&om_unit->Output);
     }
 }
     
@@ -336,9 +336,9 @@ void SfuUnit::tick() {
             auto trace_data = std::dynamic_pointer_cast<RasterUnit::TraceData>(trace->data);
             raster_units_.at(trace_data->raster_idx)->Input.send(trace, 1);
         }   break;
-        case SfuType::ROP: {
-            auto trace_data = std::dynamic_pointer_cast<RopUnit::TraceData>(trace->data);
-            rop_units_.at(trace_data->rop_idx)->Input.send(trace, 1);
+        case SfuType::OM: {
+            auto trace_data = std::dynamic_pointer_cast<OMUnit::TraceData>(trace->data);
+            om_units_.at(trace_data->om_idx)->Input.send(trace, 1);
         }   break;    
         case SfuType::TEX: {
             auto trace_data = std::dynamic_pointer_cast<TexUnit::TraceData>(trace->data);

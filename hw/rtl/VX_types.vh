@@ -35,7 +35,7 @@
 `define VX_DCR_MPM_CLASS_MEM            2
 `define VX_DCR_MPM_CLASS_TEX            3
 `define VX_DCR_MPM_CLASS_RASTER         4
-`define VX_DCR_MPM_CLASS_ROP            5
+`define VX_DCR_MPM_CLASS_OM             5
 
 // User Floating-Point CSRs
 
@@ -107,8 +107,8 @@
 `define VX_CSR_MPM_SCRB_CSRS_H          12'hB91
 `define VX_CSR_MPM_SCRB_TEX             12'hB12
 `define VX_CSR_MPM_SCRB_TEX_H           12'hB92
-`define VX_CSR_MPM_SCRB_ROP             12'hB13
-`define VX_CSR_MPM_SCRB_ROP_H           12'hB93
+`define VX_CSR_MPM_SCRB_OM              12'hB13
+`define VX_CSR_MPM_SCRB_OM_H            12'hB93
 `define VX_CSR_MPM_SCRB_RASTER          12'hB14
 `define VX_CSR_MPM_SCRB_RASTER_H        12'hB94
 
@@ -210,17 +210,17 @@
 `define VX_CSR_MPM_RCACHE_MSHR_ST       12'hB09     // MSHR stalls
 `define VX_CSR_MPM_RCACHE_MSHR_ST_H     12'hB89
 
-// Machine Performance-monitoring rop counters
-// PERF: rop unit
-`define VX_CSR_MPM_ROP_READS            12'hB03     // rop memory reads
-`define VX_CSR_MPM_ROP_READS_H          12'hB83
-`define VX_CSR_MPM_ROP_WRITES           12'hB04     // rop memory writes
-`define VX_CSR_MPM_ROP_WRITES_H         12'hB84
-`define VX_CSR_MPM_ROP_LAT              12'hB05     // rop memory latency
-`define VX_CSR_MPM_ROP_LAT_H            12'hB85
-`define VX_CSR_MPM_ROP_STALL            12'hB06     // rop stall cycles
-`define VX_CSR_MPM_ROP_STALL_H          12'hB86
-// PERF: rop cache
+// Machine Performance-monitoring OM counters
+// PERF: om unit
+`define VX_CSR_MPM_OM_READS             12'hB03     // om memory reads
+`define VX_CSR_MPM_OM_READS_H           12'hB83
+`define VX_CSR_MPM_OM_WRITES            12'hB04     // om memory writes
+`define VX_CSR_MPM_OM_WRITES_H          12'hB84
+`define VX_CSR_MPM_OM_LAT               12'hB05     // om memory latency
+`define VX_CSR_MPM_OM_LAT_H             12'hB85
+`define VX_CSR_MPM_OM_STALL             12'hB06     // om stall cycles
+`define VX_CSR_MPM_OM_STALL_H           12'hB86
+// PERF: om cache
 `define VX_CSR_MPM_OCACHE_READS         12'hB07     // total reads
 `define VX_CSR_MPM_OCACHE_READS_H       12'hB87
 `define VX_CSR_MPM_OCACHE_WRITES        12'hB08     // total writes
@@ -272,17 +272,17 @@
 `define VX_CSR_RASTER_END               (`VX_CSR_RASTER_BEGIN+13)
 `define VX_CSR_RASTER_COUNT             (`VX_CSR_RASTER_END-`VX_CSR_RASTER_BEGIN)
 
-// ROP unit CSRs
+// OM unit CSRs
 
-`define VX_CSR_ROP_BEGIN                `VX_CSR_RASTER_END
-`define VX_CSR_ROP_RT_IDX               (`VX_CSR_ROP_BEGIN+0)
-`define VX_CSR_ROP_SAMPLE_IDX           (`VX_CSR_ROP_BEGIN+1)
-`define VX_CSR_ROP_END                  (`VX_CSR_ROP_BEGIN+2)
-`define VX_CSR_ROP_COUNT                (`VX_CSR_ROP_END-`VX_CSR_ROP_BEGIN)
+`define VX_CSR_OM_BEGIN                 `VX_CSR_RASTER_END
+`define VX_CSR_OM_RT_IDX                (`VX_CSR_OM_BEGIN+0)
+`define VX_CSR_OM_SAMPLE_IDX            (`VX_CSR_OM_BEGIN+1)
+`define VX_CSR_OM_END                   (`VX_CSR_OM_BEGIN+2)
+`define VX_CSR_OM_COUNT                 (`VX_CSR_OM_END-`VX_CSR_OM_BEGIN)
 
 // Texture unit CSRs
 
-`define VX_CSR_TEX_BEGIN                `VX_CSR_ROP_END
+`define VX_CSR_TEX_BEGIN                `VX_CSR_OM_END
 `define VX_CSR_TEX_END                  (`VX_CSR_TEX_BEGIN+0)
 `define VX_CSR_TEX_COUNT                (`VX_CSR_TEX_END-`VX_CSR_TEX_BEGIN)
 
@@ -350,101 +350,101 @@
 
 // Render Output Units ////////////////////////////////////////////////////////
 
-`define VX_ROP_DIM_BITS                 15
+`define VX_OM_DIM_BITS                 15
 
-`define VX_ROP_PITCH_BITS               (`VX_ROP_DIM_BITS + `CLOG2(4) + 1)
+`define VX_OM_PITCH_BITS               (`VX_OM_DIM_BITS + `CLOG2(4) + 1)
 
-`define VX_ROP_DEPTH_BITS               24 
-`define VX_ROP_DEPTH_MASK               ((1 << `VX_ROP_DEPTH_BITS) - 1)
+`define VX_OM_DEPTH_BITS               24 
+`define VX_OM_DEPTH_MASK               ((1 << `VX_OM_DEPTH_BITS) - 1)
 
-`define VX_ROP_STENCIL_BITS             8
-`define VX_ROP_STENCIL_MASK             ((1 << `VX_ROP_STENCIL_BITS) - 1)
+`define VX_OM_STENCIL_BITS             8
+`define VX_OM_STENCIL_MASK             ((1 << `VX_OM_STENCIL_BITS) - 1)
 
-`define VX_ROP_DEPTH_FUNC_ALWAYS        0
-`define VX_ROP_DEPTH_FUNC_NEVER         1
-`define VX_ROP_DEPTH_FUNC_LESS          2
-`define VX_ROP_DEPTH_FUNC_LEQUAL        3
-`define VX_ROP_DEPTH_FUNC_EQUAL         4
-`define VX_ROP_DEPTH_FUNC_GEQUAL        5
-`define VX_ROP_DEPTH_FUNC_GREATER       6
-`define VX_ROP_DEPTH_FUNC_NOTEQUAL      7
-`define VX_ROP_DEPTH_FUNC_BITS          3
+`define VX_OM_DEPTH_FUNC_ALWAYS        0
+`define VX_OM_DEPTH_FUNC_NEVER         1
+`define VX_OM_DEPTH_FUNC_LESS          2
+`define VX_OM_DEPTH_FUNC_LEQUAL        3
+`define VX_OM_DEPTH_FUNC_EQUAL         4
+`define VX_OM_DEPTH_FUNC_GEQUAL        5
+`define VX_OM_DEPTH_FUNC_GREATER       6
+`define VX_OM_DEPTH_FUNC_NOTEQUAL      7
+`define VX_OM_DEPTH_FUNC_BITS          3
 
-`define VX_ROP_STENCIL_OP_KEEP          0 
-`define VX_ROP_STENCIL_OP_ZERO          1
-`define VX_ROP_STENCIL_OP_REPLACE       2
-`define VX_ROP_STENCIL_OP_INCR          3
-`define VX_ROP_STENCIL_OP_DECR          4
-`define VX_ROP_STENCIL_OP_INVERT        5
-`define VX_ROP_STENCIL_OP_INCR_WRAP     6
-`define VX_ROP_STENCIL_OP_DECR_WRAP     7
-`define VX_ROP_STENCIL_OP_BITS          3
+`define VX_OM_STENCIL_OP_KEEP          0 
+`define VX_OM_STENCIL_OP_ZERO          1
+`define VX_OM_STENCIL_OP_REPLACE       2
+`define VX_OM_STENCIL_OP_INCR          3
+`define VX_OM_STENCIL_OP_DECR          4
+`define VX_OM_STENCIL_OP_INVERT        5
+`define VX_OM_STENCIL_OP_INCR_WRAP     6
+`define VX_OM_STENCIL_OP_DECR_WRAP     7
+`define VX_OM_STENCIL_OP_BITS          3
 
-`define VX_ROP_BLEND_MODE_ADD           0
-`define VX_ROP_BLEND_MODE_SUB           1
-`define VX_ROP_BLEND_MODE_REV_SUB       2
-`define VX_ROP_BLEND_MODE_MIN           3
-`define VX_ROP_BLEND_MODE_MAX           4
-`define VX_ROP_BLEND_MODE_LOGICOP       5
-`define VX_ROP_BLEND_MODE_BITS          3
+`define VX_OM_BLEND_MODE_ADD           0
+`define VX_OM_BLEND_MODE_SUB           1
+`define VX_OM_BLEND_MODE_REV_SUB       2
+`define VX_OM_BLEND_MODE_MIN           3
+`define VX_OM_BLEND_MODE_MAX           4
+`define VX_OM_BLEND_MODE_LOGICOP       5
+`define VX_OM_BLEND_MODE_BITS          3
 
-`define VX_ROP_BLEND_FUNC_ZERO          0 
-`define VX_ROP_BLEND_FUNC_ONE           1
-`define VX_ROP_BLEND_FUNC_SRC_RGB       2
-`define VX_ROP_BLEND_FUNC_ONE_MINUS_SRC_RGB 3
-`define VX_ROP_BLEND_FUNC_DST_RGB       4
-`define VX_ROP_BLEND_FUNC_ONE_MINUS_DST_RGB 5
-`define VX_ROP_BLEND_FUNC_SRC_A         6
-`define VX_ROP_BLEND_FUNC_ONE_MINUS_SRC_A   7
-`define VX_ROP_BLEND_FUNC_DST_A         8
-`define VX_ROP_BLEND_FUNC_ONE_MINUS_DST_A   9
-`define VX_ROP_BLEND_FUNC_CONST_RGB     10
-`define VX_ROP_BLEND_FUNC_ONE_MINUS_CONST_RGB 11
-`define VX_ROP_BLEND_FUNC_CONST_A       12
-`define VX_ROP_BLEND_FUNC_ONE_MINUS_CONST_A 13
-`define VX_ROP_BLEND_FUNC_ALPHA_SAT     14
-`define VX_ROP_BLEND_FUNC_BITS          4
+`define VX_OM_BLEND_FUNC_ZERO          0 
+`define VX_OM_BLEND_FUNC_ONE           1
+`define VX_OM_BLEND_FUNC_SRC_RGB       2
+`define VX_OM_BLEND_FUNC_ONE_MINUS_SRC_RGB 3
+`define VX_OM_BLEND_FUNC_DST_RGB       4
+`define VX_OM_BLEND_FUNC_ONE_MINUS_DST_RGB 5
+`define VX_OM_BLEND_FUNC_SRC_A         6
+`define VX_OM_BLEND_FUNC_ONE_MINUS_SRC_A   7
+`define VX_OM_BLEND_FUNC_DST_A         8
+`define VX_OM_BLEND_FUNC_ONE_MINUS_DST_A   9
+`define VX_OM_BLEND_FUNC_CONST_RGB     10
+`define VX_OM_BLEND_FUNC_ONE_MINUS_CONST_RGB 11
+`define VX_OM_BLEND_FUNC_CONST_A       12
+`define VX_OM_BLEND_FUNC_ONE_MINUS_CONST_A 13
+`define VX_OM_BLEND_FUNC_ALPHA_SAT     14
+`define VX_OM_BLEND_FUNC_BITS          4
 
-`define VX_ROP_LOGIC_OP_CLEAR           0
-`define VX_ROP_LOGIC_OP_AND             1
-`define VX_ROP_LOGIC_OP_AND_REVERSE     2
-`define VX_ROP_LOGIC_OP_COPY            3
-`define VX_ROP_LOGIC_OP_AND_INVERTED    4
-`define VX_ROP_LOGIC_OP_NOOP            5
-`define VX_ROP_LOGIC_OP_XOR             6
-`define VX_ROP_LOGIC_OP_OR              7
-`define VX_ROP_LOGIC_OP_NOR             8
-`define VX_ROP_LOGIC_OP_EQUIV           9
-`define VX_ROP_LOGIC_OP_INVERT          10
-`define VX_ROP_LOGIC_OP_OR_REVERSE      11
-`define VX_ROP_LOGIC_OP_COPY_INVERTED   12
-`define VX_ROP_LOGIC_OP_OR_INVERTED     13
-`define VX_ROP_LOGIC_OP_NAND            14
-`define VX_ROP_LOGIC_OP_SET             15
-`define VX_ROP_LOGIC_OP_BITS            4
+`define VX_OM_LOGIC_OP_CLEAR           0
+`define VX_OM_LOGIC_OP_AND             1
+`define VX_OM_LOGIC_OP_AND_REVERSE     2
+`define VX_OM_LOGIC_OP_COPY            3
+`define VX_OM_LOGIC_OP_AND_INVERTED    4
+`define VX_OM_LOGIC_OP_NOOP            5
+`define VX_OM_LOGIC_OP_XOR             6
+`define VX_OM_LOGIC_OP_OR              7
+`define VX_OM_LOGIC_OP_NOR             8
+`define VX_OM_LOGIC_OP_EQUIV           9
+`define VX_OM_LOGIC_OP_INVERT          10
+`define VX_OM_LOGIC_OP_OR_REVERSE      11
+`define VX_OM_LOGIC_OP_COPY_INVERTED   12
+`define VX_OM_LOGIC_OP_OR_INVERTED     13
+`define VX_OM_LOGIC_OP_NAND            14
+`define VX_OM_LOGIC_OP_SET             15
+`define VX_OM_LOGIC_OP_BITS            4
 
-`define VX_DCR_ROP_STATE_BEGIN          `VX_DCR_RASTER_STATE_END
-`define VX_DCR_ROP_CBUF_ADDR            (`VX_DCR_ROP_STATE_BEGIN+0)
-`define VX_DCR_ROP_CBUF_PITCH           (`VX_DCR_ROP_STATE_BEGIN+1)
-`define VX_DCR_ROP_CBUF_WRITEMASK       (`VX_DCR_ROP_STATE_BEGIN+2)
-`define VX_DCR_ROP_ZBUF_ADDR            (`VX_DCR_ROP_STATE_BEGIN+3)
-`define VX_DCR_ROP_ZBUF_PITCH           (`VX_DCR_ROP_STATE_BEGIN+4)
-`define VX_DCR_ROP_DEPTH_FUNC           (`VX_DCR_ROP_STATE_BEGIN+5)
-`define VX_DCR_ROP_DEPTH_WRITEMASK      (`VX_DCR_ROP_STATE_BEGIN+6)
-`define VX_DCR_ROP_STENCIL_FUNC         (`VX_DCR_ROP_STATE_BEGIN+7)
-`define VX_DCR_ROP_STENCIL_ZPASS        (`VX_DCR_ROP_STATE_BEGIN+8)
-`define VX_DCR_ROP_STENCIL_ZFAIL        (`VX_DCR_ROP_STATE_BEGIN+9)
-`define VX_DCR_ROP_STENCIL_FAIL         (`VX_DCR_ROP_STATE_BEGIN+10)
-`define VX_DCR_ROP_STENCIL_REF          (`VX_DCR_ROP_STATE_BEGIN+11)
-`define VX_DCR_ROP_STENCIL_MASK         (`VX_DCR_ROP_STATE_BEGIN+12)
-`define VX_DCR_ROP_STENCIL_WRITEMASK    (`VX_DCR_ROP_STATE_BEGIN+13)
-`define VX_DCR_ROP_BLEND_MODE           (`VX_DCR_ROP_STATE_BEGIN+14)
-`define VX_DCR_ROP_BLEND_FUNC           (`VX_DCR_ROP_STATE_BEGIN+15)
-`define VX_DCR_ROP_BLEND_CONST          (`VX_DCR_ROP_STATE_BEGIN+16)
-`define VX_DCR_ROP_LOGIC_OP             (`VX_DCR_ROP_STATE_BEGIN+17)
-`define VX_DCR_ROP_STATE_END            (`VX_DCR_ROP_STATE_BEGIN+18)
+`define VX_DCR_OM_STATE_BEGIN          `VX_DCR_RASTER_STATE_END
+`define VX_DCR_OM_CBUF_ADDR            (`VX_DCR_OM_STATE_BEGIN+0)
+`define VX_DCR_OM_CBUF_PITCH           (`VX_DCR_OM_STATE_BEGIN+1)
+`define VX_DCR_OM_CBUF_WRITEMASK       (`VX_DCR_OM_STATE_BEGIN+2)
+`define VX_DCR_OM_ZBUF_ADDR            (`VX_DCR_OM_STATE_BEGIN+3)
+`define VX_DCR_OM_ZBUF_PITCH           (`VX_DCR_OM_STATE_BEGIN+4)
+`define VX_DCR_OM_DEPTH_FUNC           (`VX_DCR_OM_STATE_BEGIN+5)
+`define VX_DCR_OM_DEPTH_WRITEMASK      (`VX_DCR_OM_STATE_BEGIN+6)
+`define VX_DCR_OM_STENCIL_FUNC         (`VX_DCR_OM_STATE_BEGIN+7)
+`define VX_DCR_OM_STENCIL_ZPASS        (`VX_DCR_OM_STATE_BEGIN+8)
+`define VX_DCR_OM_STENCIL_ZFAIL        (`VX_DCR_OM_STATE_BEGIN+9)
+`define VX_DCR_OM_STENCIL_FAIL         (`VX_DCR_OM_STATE_BEGIN+10)
+`define VX_DCR_OM_STENCIL_REF          (`VX_DCR_OM_STATE_BEGIN+11)
+`define VX_DCR_OM_STENCIL_MASK         (`VX_DCR_OM_STATE_BEGIN+12)
+`define VX_DCR_OM_STENCIL_WRITEMASK    (`VX_DCR_OM_STATE_BEGIN+13)
+`define VX_DCR_OM_BLEND_MODE           (`VX_DCR_OM_STATE_BEGIN+14)
+`define VX_DCR_OM_BLEND_FUNC           (`VX_DCR_OM_STATE_BEGIN+15)
+`define VX_DCR_OM_BLEND_CONST          (`VX_DCR_OM_STATE_BEGIN+16)
+`define VX_DCR_OM_LOGIC_OP             (`VX_DCR_OM_STATE_BEGIN+17)
+`define VX_DCR_OM_STATE_END            (`VX_DCR_OM_STATE_BEGIN+18)
 
-`define VX_DCR_ROP_STATE(addr)          ((addr) - `VX_DCR_ROP_STATE_BEGIN)
-`define VX_DCR_ROP_STATE_COUNT          (`VX_DCR_ROP_STATE_END-`VX_DCR_ROP_STATE_BEGIN)
+`define VX_DCR_OM_STATE(addr)          ((addr) - `VX_DCR_OM_STATE_BEGIN)
+`define VX_DCR_OM_STATE_COUNT          (`VX_DCR_OM_STATE_END-`VX_DCR_OM_STATE_BEGIN)
 
 `endif // VX_TYPES_VH

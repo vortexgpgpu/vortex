@@ -29,7 +29,7 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_AFU
 DBG_TRACE_FLAGS += -DDBG_TRACE_SCOPE
 DBG_TRACE_FLAGS += -DDBG_TRACE_TEX
 DBG_TRACE_FLAGS += -DDBG_TRACE_RASTER
-DBG_TRACE_FLAGS += -DDBG_TRACE_ROP
+DBG_TRACE_FLAGS += -DDBG_TRACE_OM
 DBG_TRACE_FLAGS += -DDBG_TRACE_GBAR
 
 # Control logic analyzer monitors
@@ -62,7 +62,7 @@ SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
 SRCS += fpga.cpp opae_sim.cpp
 
 RTL_PKGS = $(AFU_DIR)/local_mem_cfg_pkg.sv $(AFU_DIR)/ccip/ccip_if_pkg.sv
-RTL_PKGS += $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv $(RTL_DIR)/tex/VX_tex_pkg.sv $(RTL_DIR)/raster/VX_raster_pkg.sv $(RTL_DIR)/rop/VX_rop_pkg.sv
+RTL_PKGS += $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv $(RTL_DIR)/tex/VX_tex_pkg.sv $(RTL_DIR)/raster/VX_raster_pkg.sv $(RTL_DIR)/om/VX_om_pkg.sv
 
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
@@ -71,9 +71,9 @@ ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
 endif
 TEX_INCLUDE = -I$(RTL_DIR)/tex
 RASTER_INCLUDE = -I$(RTL_DIR)/raster
-ROP_INCLUDE = -I$(RTL_DIR)/rop
+OM_INCLUDE = -I$(RTL_DIR)/om
 RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
-RTL_INCLUDE += $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
+RTL_INCLUDE += $(TEX_INCLUDE) $(RASTER_INCLUDE) $(OM_INCLUDE)
 RTL_INCLUDE += -I$(AFU_DIR) -I$(AFU_DIR)/ccip
 
 TOP = vortex_afu_shim

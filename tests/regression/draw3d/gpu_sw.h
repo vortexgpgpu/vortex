@@ -72,23 +72,23 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class RenderOutput {
+class OutputMerger {
 public:
 
-  void configure(const graphics::RopDCRS& dcrs) {
+  void configure(const graphics::OMDCRS& dcrs) {
     depthStencil_.configure(dcrs);
     blender_.configure(dcrs);
 
     // get device configuration
-    zbuf_baseaddr_ = uint64_t(dcrs.read(VX_DCR_ROP_ZBUF_ADDR)) << 6;
-    zbuf_pitch_    = dcrs.read(VX_DCR_ROP_ZBUF_PITCH);
-    depth_writemask_ = dcrs.read(VX_DCR_ROP_DEPTH_WRITEMASK) & 0x1;
-    stencil_front_writemask_ = dcrs.read(VX_DCR_ROP_STENCIL_WRITEMASK) & 0xffff;
-    stencil_back_writemask_ = dcrs.read(VX_DCR_ROP_STENCIL_WRITEMASK) >> 16;
+    zbuf_baseaddr_ = uint64_t(dcrs.read(VX_DCR_OM_ZBUF_ADDR)) << 6;
+    zbuf_pitch_    = dcrs.read(VX_DCR_OM_ZBUF_PITCH);
+    depth_writemask_ = dcrs.read(VX_DCR_OM_DEPTH_WRITEMASK) & 0x1;
+    stencil_front_writemask_ = dcrs.read(VX_DCR_OM_STENCIL_WRITEMASK) & 0xffff;
+    stencil_back_writemask_ = dcrs.read(VX_DCR_OM_STENCIL_WRITEMASK) >> 16;
 
-    cbuf_baseaddr_ = uint64_t(dcrs.read(VX_DCR_ROP_CBUF_ADDR)) << 6;
-    cbuf_pitch_    = dcrs.read(VX_DCR_ROP_CBUF_PITCH);
-    auto cbuf_writemask = dcrs.read(VX_DCR_ROP_CBUF_WRITEMASK) & 0xf;
+    cbuf_baseaddr_ = uint64_t(dcrs.read(VX_DCR_OM_CBUF_ADDR)) << 6;
+    cbuf_pitch_    = dcrs.read(VX_DCR_OM_CBUF_PITCH);
+    auto cbuf_writemask = dcrs.read(VX_DCR_OM_CBUF_WRITEMASK) & 0xf;
     cbuf_writemask_ = (((cbuf_writemask >> 0) & 0x1) * 0x000000ff) 
                     | (((cbuf_writemask >> 1) & 0x1) * 0x0000ff00) 
                     | (((cbuf_writemask >> 2) & 0x1) * 0x00ff0000) 
@@ -153,8 +153,8 @@ private:
              uint32_t depthstencil, 
              uint32_t color) const {
     auto stencil_writemask = is_backface ? stencil_back_writemask_ : stencil_front_writemask_;
-    auto ds_writeMask = ((depth_enable && ds_passed && depth_writemask_) ? VX_ROP_DEPTH_MASK : 0) 
-                      | (stencil_enable ? (stencil_writemask << VX_ROP_DEPTH_BITS) : 0);
+    auto ds_writeMask = ((depth_enable && ds_passed && depth_writemask_) ? VX_OM_DEPTH_MASK : 0) 
+                      | (stencil_enable ? (stencil_writemask << VX_OM_DEPTH_BITS) : 0);
     if (ds_writeMask != 0) {      
       uint32_t write_value = (dst_depthstencil & ~ds_writeMask) | (depthstencil & ds_writeMask);
       uint64_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;        
@@ -227,7 +227,7 @@ public:
 
   void configure(kernel_arg_t* __UNIFORM__ kernel_arg) {
     rasterizer_.configure(kernel_arg->raster_dcrs, kernel_arg->log_num_tasks);
-    renderOutput_.configure(kernel_arg->rop_dcrs);
+    output_merger_.configure(kernel_arg->om_dcrs);
     sampler_.configure(kernel_arg->tex_dcrs);
     kernel_arg_ = kernel_arg;
   }
@@ -240,8 +240,8 @@ public:
     rasterizer_.render(task_id);
   }
 
-  void rop(unsigned x, unsigned y, unsigned is_backface, unsigned color, unsigned depth) const {
-    renderOutput_.write(x, y, is_backface, color, depth);
+  void om(unsigned x, unsigned y, unsigned is_backface, unsigned color, unsigned depth) const {
+    output_merger_.write(x, y, is_backface, color, depth);
   }
 
   uint32_t tex(uint32_t stage, int32_t u, int32_t v, uint32_t lod) const {
@@ -250,7 +250,7 @@ public:
 
 private:  
   Rasterizer     rasterizer_;
-  RenderOutput   renderOutput_;
+  OutputMerger   output_merger_;
   TextureSampler sampler_;
   kernel_arg_t*  kernel_arg_;
 };

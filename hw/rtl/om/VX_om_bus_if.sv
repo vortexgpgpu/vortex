@@ -13,18 +13,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_rop_define.vh"
+`include "VX_om_define.vh"
 
-interface VX_rop_bus_if import VX_rop_pkg::*; #(
+interface VX_om_bus_if import VX_om_pkg::*; #(
     parameter NUM_LANES = 1
 ) ();
     typedef struct packed {
         logic [`UUID_WIDTH-1:0]                 uuid;
         logic [NUM_LANES-1:0]                   mask; 
-        logic [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] pos_x;
-        logic [NUM_LANES-1:0][`VX_ROP_DIM_BITS-1:0] pos_y;
+        logic [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] pos_x;
+        logic [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] pos_y;
         rgba_t [NUM_LANES-1:0]                  color;
-        logic [NUM_LANES-1:0][`VX_ROP_DEPTH_BITS-1:0] depth;
+        logic [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] depth;
         logic [NUM_LANES-1:0]                   face;
     } req_data_t;
 

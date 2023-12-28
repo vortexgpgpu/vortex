@@ -23,7 +23,7 @@ namespace vortex {
 
 class RAM;
 
-class RopUnit : public SimObject<RopUnit> {
+class OMUnit : public SimObject<OMUnit> {
 public:
   struct PerfStats {        
     uint64_t reads;
@@ -51,10 +51,10 @@ public:
     using Ptr = std::shared_ptr<TraceData>;
     std::vector<uint64_t> mem_rd_addrs;
     std::vector<uint64_t> mem_wr_addrs;
-    uint32_t rop_idx;
+    uint32_t om_idx;
   };
 
-  using DCRS = graphics::RopDCRS;
+  using DCRS = graphics::OMDCRS;
 
   std::vector<SimPort<MemReq>> MemReqs;
   std::vector<SimPort<MemRsp>> MemRsps;
@@ -62,12 +62,12 @@ public:
   SimPort<pipeline_trace_t*> Input;
   SimPort<pipeline_trace_t*> Output;
 
-  RopUnit(const SimContext& ctx, 
+  OMUnit(const SimContext& ctx, 
           const char* name,
           const Arch &arch, 
           const DCRS& dcrs);    
 
-  ~RopUnit();
+  ~OMUnit();
 
   void reset();
 
@@ -77,7 +77,7 @@ public:
 
   void write(uint32_t cid, uint32_t wid, uint32_t tid, 
              uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, 
-             const CSRs& csrs, RopUnit::TraceData::Ptr trace_data);
+             const CSRs& csrs, OMUnit::TraceData::Ptr trace_data);
 
   const PerfStats& perf_stats() const;
 

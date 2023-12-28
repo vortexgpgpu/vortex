@@ -13,13 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_rop_define.vh"
+`include "VX_om_define.vh"
 
-module VX_rop_compare #(
+module VX_om_compare #(
     parameter DATAW = 24
 ) (
     // Inputs
-    input wire [`VX_ROP_DEPTH_FUNC_BITS-1:0] func,
+    input wire [`VX_OM_DEPTH_FUNC_BITS-1:0] func,
     input wire [DATAW-1:0] a,
     input wire [DATAW-1:0] b,
 
@@ -34,15 +34,15 @@ module VX_rop_compare #(
 
     always @(*) begin
         case (func)
-            `VX_ROP_DEPTH_FUNC_NEVER    : result_r = 0;
-            `VX_ROP_DEPTH_FUNC_LESS     : result_r = less;
-            `VX_ROP_DEPTH_FUNC_EQUAL    : result_r = equal;
-            `VX_ROP_DEPTH_FUNC_LEQUAL   : result_r = less || equal;
-            `VX_ROP_DEPTH_FUNC_GREATER  : result_r = ~(less || equal);
-            `VX_ROP_DEPTH_FUNC_NOTEQUAL : result_r = ~equal;
-            `VX_ROP_DEPTH_FUNC_GEQUAL   : result_r = ~less;
-            `VX_ROP_DEPTH_FUNC_ALWAYS   : result_r = 1;
-            default                     : result_r = 'x;
+            `VX_OM_DEPTH_FUNC_NEVER    : result_r = 0;
+            `VX_OM_DEPTH_FUNC_LESS     : result_r = less;
+            `VX_OM_DEPTH_FUNC_EQUAL    : result_r = equal;
+            `VX_OM_DEPTH_FUNC_LEQUAL   : result_r = less || equal;
+            `VX_OM_DEPTH_FUNC_GREATER  : result_r = ~(less || equal);
+            `VX_OM_DEPTH_FUNC_NOTEQUAL : result_r = ~equal;
+            `VX_OM_DEPTH_FUNC_GEQUAL   : result_r = ~less;
+            `VX_OM_DEPTH_FUNC_ALWAYS   : result_r = 1;
+            default                    : result_r = 'x;
         endcase        
     end
 

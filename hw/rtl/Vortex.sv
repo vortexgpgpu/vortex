@@ -21,8 +21,8 @@
 `include "VX_raster_define.vh"
 `endif
 
-`ifdef EXT_ROP_ENABLE
-`include "VX_rop_define.vh"
+`ifdef EXT_OM_ENABLE
+`include "VX_om_define.vh"
 `endif
 
 module Vortex import VX_gpu_pkg::*; (
@@ -67,7 +67,7 @@ module Vortex import VX_gpu_pkg::*; (
 `ifdef EXT_RASTER_ENABLE
     assign mem_perf_if.rcache  = 'x;
 `endif
-`ifdef EXT_ROP_ENABLE
+`ifdef EXT_OM_ENABLE
     assign mem_perf_if.ocache  = 'x;
 `endif
     assign mem_perf_if.smem    = 'x;

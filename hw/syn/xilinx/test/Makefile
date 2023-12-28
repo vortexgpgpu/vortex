@@ -12,9 +12,9 @@ ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
 endif
 TEX_INCLUDE = -I$(RTL_DIR)/tex
 RASTER_INCLUDE = -I$(RTL_DIR)/raster
-ROP_INCLUDE = -I$(RTL_DIR)/rop
+OM_INCLUDE = -I$(RTL_DIR)/om
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
-RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
+RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(OM_INCLUDE)
 RTL_INCLUDE += -Iproject_1_files
 
 # compilation flags

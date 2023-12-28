@@ -13,8 +13,6 @@
 
 `include "VX_define.vh"
 
-`define SMEM_ADDR_STACK_OPT
-
 module VX_graphics import VX_gpu_pkg::*; #(
     parameter CLUSTER_ID = 0
 ) (
@@ -39,11 +37,11 @@ module VX_graphics import VX_gpu_pkg::*; #(
 `endif
 `endif 
 
-`ifdef EXT_ROP_ENABLE
-    VX_rop_bus_if.slave     per_socket_rop_bus_if [`NUM_SOCKETS],
+`ifdef EXT_OM_ENABLE
+    VX_om_bus_if.slave      per_socket_om_bus_if [`NUM_SOCKETS],
     VX_mem_bus_if.master    ocache_mem_bus_if,
 `ifdef PERF_ENABLE
-    VX_rop_perf_if.master   perf_rop_if [`NUM_SOCKETS],
+    VX_om_perf_if.master    perf_om_if [`NUM_SOCKETS],
     output cache_perf_t     perf_ocache,
 `endif
 `endif
@@ -267,60 +265,60 @@ module VX_graphics import VX_gpu_pkg::*; #(
             
 `endif
 
-`ifdef EXT_ROP_ENABLE
+`ifdef EXT_OM_ENABLE
 
 `ifdef PERF_ENABLE
-    VX_rop_perf_if perf_rop_unit_if[`NUM_ROP_UNITS]();
-    `PERF_ROP_ADD (perf_rop_if, perf_rop_unit_if, `NUM_SOCKETS, `NUM_ROP_UNITS)
+    VX_om_perf_if perf_om_unit_if[`NUM_OM_UNITS]();
+    `PERF_OM_ADD (perf_om_if, perf_om_unit_if, `NUM_SOCKETS, `NUM_OM_UNITS)
 `endif
 
     VX_mem_bus_if #(
         .DATA_SIZE (OCACHE_WORD_SIZE),
         .TAG_WIDTH (OCACHE_TAG_WIDTH)
-    ) ocache_bus_if[`NUM_ROP_UNITS * OCACHE_NUM_REQS]();
+    ) ocache_bus_if[`NUM_OM_UNITS * OCACHE_NUM_REQS]();
 
-    VX_rop_bus_if #(
+    VX_om_bus_if #(
         .NUM_LANES (`NUM_SFU_LANES)
-    ) rop_bus_if[`NUM_ROP_UNITS]();
+    ) om_bus_if[`NUM_OM_UNITS]();
 
-    `RESET_RELAY (rop_arb_reset, reset);
+    `RESET_RELAY (om_arb_reset, reset);
 
-    VX_rop_arb #(
+    VX_om_arb #(
         .NUM_INPUTS  (`NUM_SOCKETS),
         .NUM_LANES   (`NUM_SFU_LANES),
-        .NUM_OUTPUTS (`NUM_ROP_UNITS),
+        .NUM_OUTPUTS (`NUM_OM_UNITS),
         .ARBITER     ("R"),
-        .OUT_REG    ((`NUM_SOCKETS != `NUM_ROP_UNITS) ? 2 : 0)
-    ) rop_arb (
+        .OUT_REG    ((`NUM_SOCKETS != `NUM_OM_UNITS) ? 2 : 0)
+    ) om_arb (
         .clk        (clk),
-        .reset      (rop_arb_reset),
-        .bus_in_if  (per_socket_rop_bus_if),
-        .bus_out_if (rop_bus_if)
+        .reset      (om_arb_reset),
+        .bus_in_if  (per_socket_om_bus_if),
+        .bus_out_if (om_bus_if)
     );
 
-    VX_dcr_bus_if rop_dcr_bus_tmp_if();
-    assign rop_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `VX_DCR_ROP_STATE_BEGIN && dcr_bus_if.write_addr < `VX_DCR_ROP_STATE_END);
-    assign rop_dcr_bus_tmp_if.write_addr  = dcr_bus_if.write_addr;
-    assign rop_dcr_bus_tmp_if.write_data  = dcr_bus_if.write_data;
+    VX_dcr_bus_if om_dcr_bus_tmp_if();
+    assign om_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `VX_DCR_OM_STATE_BEGIN && dcr_bus_if.write_addr < `VX_DCR_OM_STATE_END);
+    assign om_dcr_bus_tmp_if.write_addr  = dcr_bus_if.write_addr;
+    assign om_dcr_bus_tmp_if.write_data  = dcr_bus_if.write_data;
 
-    `BUFFER_DCR_BUS_IF (rop_dcr_bus_if, rop_dcr_bus_tmp_if, 1);
+    `BUFFER_DCR_BUS_IF (om_dcr_bus_if, om_dcr_bus_tmp_if, 1);
 
-    // Generate all rop units
-    for (genvar i = 0; i < `NUM_ROP_UNITS; ++i) begin
+    // Generate all OM units
+    for (genvar i = 0; i < `NUM_OM_UNITS; ++i) begin
 
-        `RESET_RELAY (rop_reset, reset);
+        `RESET_RELAY (om_reset, reset);
 
-        VX_rop_unit #(
-            .INSTANCE_ID ($sformatf("cluster%0d-rop%0d", CLUSTER_ID, i)),
+        VX_om_unit #(
+            .INSTANCE_ID ($sformatf("cluster%0d-om%0d", CLUSTER_ID, i)),
             .NUM_LANES   (`NUM_SFU_LANES)
-        ) rop_unit (
+        ) om_unit (
             .clk           (clk),
-            .reset         (rop_reset),
+            .reset         (om_reset),
         `ifdef PERF_ENABLE
-            .perf_rop_if   (perf_rop_unit_if[i]),
+            .perf_om_if    (perf_om_unit_if[i]),
         `endif
-            .dcr_bus_if    (rop_dcr_bus_if),
-            .rop_bus_if    (rop_bus_if[i]),            
+            .dcr_bus_if    (om_dcr_bus_if),
+            .om_bus_if     (om_bus_if[i]),            
             .cache_bus_if  (ocache_bus_if[i * OCACHE_NUM_REQS +: OCACHE_NUM_REQS])
         );
     end
@@ -335,7 +333,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
     VX_cache_cluster #(
         .INSTANCE_ID    ($sformatf("cluster%0d-ocache", CLUSTER_ID)),
         .NUM_UNITS      (`NUM_OCACHES),
-        .NUM_INPUTS     (`NUM_ROP_UNITS),
+        .NUM_INPUTS     (`NUM_OM_UNITS),
         .TAG_SEL_IDX    (0),
         .CACHE_SIZE     (`OCACHE_SIZE),
         .LINE_SIZE      (OCACHE_LINE_SIZE),

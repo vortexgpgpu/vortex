@@ -360,7 +360,7 @@ task trace_ex_op(input int level,
             `INST_SFU_CSRRC: begin if (use_imm) `TRACE(level, ("CSRRCI")); else `TRACE(level, ("CSRRC")); end
             `INST_SFU_TEX:   `TRACE(level, ("TEX"));
             `INST_SFU_RASTER:`TRACE(level, ("RASTER"));
-            `INST_SFU_ROP:   `TRACE(level, ("ROP"));
+            `INST_SFU_OM:    `TRACE(level, ("OM"));
             default:         `TRACE(level, ("?"));
         endcase
     end

@@ -22,7 +22,7 @@
 #include "socket.h"
 #include "constants.h"
 #include "raster_unit.h"
-#include "rop_unit.h"
+#include "om_unit.h"
 #include "tex_unit.h"
 
 namespace vortex {
@@ -77,8 +77,8 @@ private:
   std::vector<Socket::Ptr>    sockets_;  
   std::vector<CoreMask>       barriers_;
   std::vector<RasterUnit::Ptr> raster_units_;
-  std::vector<RopUnit::Ptr>   rop_units_;
   std::vector<TexUnit::Ptr>   tex_units_;
+  std::vector<OMUnit::Ptr>    om_units_;
   CacheCluster::Ptr           tcaches_;
   CacheCluster::Ptr           ocaches_;
   CacheCluster::Ptr           rcaches_;

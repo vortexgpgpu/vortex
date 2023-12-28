@@ -89,7 +89,7 @@ oslice()
     do        
         echo -e "\n###############################################################################\n" >> $LOG_FILE
         echo -e "$TEST mode=$mode" >> $LOG_FILE
-        CONFIGS="-DEXT_GFX_ENABLE -DNUM_ROP_UNITS=$mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --app=draw3d --args="-onull -tvase.cgltrace -w${WIDTH} -h${HEIGHT}" --perf=5 >> $LOG_FILE
+        CONFIGS="-DEXT_GFX_ENABLE -DNUM_OM_UNITS=$mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --app=draw3d --args="-onull -tvase.cgltrace -w${WIDTH} -h${HEIGHT}" --perf=5 >> $LOG_FILE
     done
 }
 

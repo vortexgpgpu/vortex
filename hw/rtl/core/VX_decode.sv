@@ -524,10 +524,10 @@ module VX_decode  #(
                                 `USED_IREG (rs2);
                                 `USED_IREG (rs3);
                             end
-                        `ifdef EXT_ROP_ENABLE
-                            2'h1: begin // ROP
+                        `ifdef EXT_OM_ENABLE
+                            2'h1: begin // OM
                                 ex_type = `EX_SFU;
-                                op_type = `INST_OP_BITS'(`INST_SFU_ROP);
+                                op_type = `INST_OP_BITS'(`INST_SFU_OM);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                                 `USED_IREG (rs3);

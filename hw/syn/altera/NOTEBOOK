@@ -65,7 +65,7 @@ PREFIX=build_gfx CONFIGS="-DEXT_GFX_ENABLE -DTCACHE_DISABLE -DRCACHE_DISABLE -DO
 ./run_ase.sh build_base_arria10_asesim_1c/synth ../../../../tests/opencl/vecadd/vecadd
 ./run_ase.sh build_base_arria10_asesim_1c/synth ../../../../tests/opencl/sgemm/sgemm -n4
 ./run_ase.sh build_gfx_arria10_asesim_1c/synth ../../../../tests/regression/tex/tex
-./run_ase.sh build_gfx_arria10_asesim_1c/synth ../../../../tests/regression/rop/rop -w8 -h8
+./run_ase.sh build_gfx_arria10_asesim_1c/synth ../../../../tests/regression/om/om -w8 -h8
 ./run_ase.sh build_gfx_arria10_asesim_1c/synth ../../../../tests/regression/raster/raster -w8 -h8
 ./run_ase.sh build_gfx_arria10_asesim_1c/synth ../../../../tests/regression/draw3d/draw3d -w8 -h8
 

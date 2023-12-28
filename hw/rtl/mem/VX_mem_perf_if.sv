@@ -25,7 +25,7 @@ interface VX_mem_perf_if import VX_gpu_pkg::*; ();
 `ifdef EXT_RASTER_ENABLE
     cache_perf_t rcache;
 `endif
-`ifdef EXT_ROP_ENABLE
+`ifdef EXT_OM_ENABLE
     cache_perf_t ocache;
 `endif
     cache_perf_t smem;
@@ -42,7 +42,7 @@ interface VX_mem_perf_if import VX_gpu_pkg::*; ();
     `ifdef EXT_RASTER_ENABLE
         output rcache,
     `endif
-    `ifdef EXT_ROP_ENABLE
+    `ifdef EXT_OM_ENABLE
         output ocache,
     `endif
         output smem,
@@ -60,7 +60,7 @@ interface VX_mem_perf_if import VX_gpu_pkg::*; ();
     `ifdef EXT_RASTER_ENABLE
         input rcache,
     `endif
-    `ifdef EXT_ROP_ENABLE
+    `ifdef EXT_OM_ENABLE
         input ocache,
     `endif
         input smem,        

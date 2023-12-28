@@ -26,7 +26,7 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 
 	for (uint32_t y = y_start; y < y_end; ++y) {
 		for (uint32_t x = x_start; x < x_end; ++x) {
-			vx_rop(x, y, backface, color, depth);	
+			vx_om(x, y, backface, color, depth);	
 		}
 	}
 }

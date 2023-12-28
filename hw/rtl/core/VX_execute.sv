@@ -56,10 +56,10 @@ module VX_execute import VX_gpu_pkg::*; #(
 `endif
 `endif
 
-`ifdef EXT_ROP_ENABLE        
-    VX_rop_bus_if.master    rop_bus_if,
+`ifdef EXT_OM_ENABLE        
+    VX_om_bus_if.master     om_bus_if,
 `ifdef PERF_ENABLE
-    VX_rop_perf_if.slave    perf_rop_if,
+    VX_om_perf_if.slave     perf_om_if,
 `endif
 `endif    
   
@@ -156,10 +156,10 @@ module VX_execute import VX_gpu_pkg::*; #(
     `endif
     `endif
 
-    `ifdef EXT_ROP_ENABLE
-        .rop_bus_if     (rop_bus_if),
+    `ifdef EXT_OM_ENABLE
+        .om_bus_if      (om_bus_if),
     `ifdef PERF_ENABLE
-        .perf_rop_if    (perf_rop_if),
+        .perf_om_if     (perf_om_if),
     `endif
     `endif
     

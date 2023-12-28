@@ -47,11 +47,11 @@ module VX_socket import VX_gpu_pkg::*; #(
     VX_raster_bus_if.slave  raster_bus_if,
 `endif
 
-`ifdef EXT_ROP_ENABLE
+`ifdef EXT_OM_ENABLE
 `ifdef PERF_ENABLE
-    VX_rop_perf_if.slave    perf_rop_if,
+    VX_om_perf_if.slave     perf_om_if,
 `endif
-    VX_rop_bus_if.master    rop_bus_if,
+    VX_om_bus_if.master     om_bus_if,
 `endif
 
 `ifdef GBAR_ENABLE
@@ -108,28 +108,28 @@ module VX_socket import VX_gpu_pkg::*; #(
 
 `endif
 
-`ifdef EXT_ROP_ENABLE
+`ifdef EXT_OM_ENABLE
 
-    VX_rop_bus_if #(
+    VX_om_bus_if #(
         .NUM_LANES (`NUM_SFU_LANES)
-    ) per_core_rop_bus_if[`SOCKET_SIZE](), rop_bus_tmp_if[1]();
+    ) per_core_om_bus_if[`SOCKET_SIZE](), om_bus_tmp_if[1]();
 
-    `RESET_RELAY (rop_arb_reset, reset);
+    `RESET_RELAY (om_arb_reset, reset);
 
-    VX_rop_arb #(
+    VX_om_arb #(
         .NUM_INPUTS  (`SOCKET_SIZE),
         .NUM_OUTPUTS (1),
         .NUM_LANES   (`NUM_SFU_LANES),        
         .ARBITER     ("R"),
         .OUT_REG     ((`SOCKET_SIZE > 1) ? 2 : 0)
-    ) rop_arb (
+    ) om_arb (
         .clk        (clk),
-        .reset      (rop_arb_reset),
-        .bus_in_if  (per_core_rop_bus_if),
-        .bus_out_if (rop_bus_tmp_if)
+        .reset      (om_arb_reset),
+        .bus_in_if  (per_core_om_bus_if),
+        .bus_out_if (om_bus_tmp_if)
     );
 
-    `ASSIGN_VX_ROP_BUS_IF (rop_bus_if, rop_bus_tmp_if[0]);
+    `ASSIGN_VX_OM_BUS_IF (om_bus_if, om_bus_tmp_if[0]);
 
 `endif
 
@@ -177,7 +177,7 @@ module VX_socket import VX_gpu_pkg::*; #(
 `ifdef EXT_RASTER_ENABLE
     assign mem_perf_tmp_if.rcache  = mem_perf_if.rcache;
 `endif
-`ifdef EXT_ROP_ENABLE
+`ifdef EXT_OM_ENABLE
     assign mem_perf_tmp_if.ocache  = mem_perf_if.ocache;
 `endif
     assign mem_perf_tmp_if.smem = 'x;
@@ -317,11 +317,11 @@ module VX_socket import VX_gpu_pkg::*; #(
             .raster_bus_if  (per_core_raster_bus_if[i]),
         `endif
         
-        `ifdef EXT_ROP_ENABLE
+        `ifdef EXT_OM_ENABLE
         `ifdef PERF_ENABLE
-            .perf_rop_if    (perf_rop_if),
+            .perf_om_if     (perf_om_if),
         `endif
-            .rop_bus_if     (per_core_rop_bus_if[i]),
+            .om_bus_if      (per_core_om_bus_if[i]),
         `endif
 
         `ifdef GBAR_ENABLE

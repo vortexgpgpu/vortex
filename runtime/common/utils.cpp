@@ -166,8 +166,8 @@ int dcr_initialize(vx_device_h hdevice) {
     });
   }
 
-  for (int i = 0; i < VX_DCR_ROP_STATE_COUNT; ++i) {
-    RT_CHECK(vx_dcr_write(hdevice, VX_DCR_ROP_STATE_BEGIN + i, 0), {
+  for (int i = 0; i < VX_DCR_OM_STATE_COUNT; ++i) {
+    RT_CHECK(vx_dcr_write(hdevice, VX_DCR_OM_STATE_BEGIN + i, 0), {
       return -1;
     });
   }
@@ -234,7 +234,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t scrb_csrs = 0;
   uint64_t scrb_tex = 0;
   uint64_t scrb_raster = 0;
-  uint64_t scrb_rop = 0;
+  uint64_t scrb_om = 0;
   uint64_t ifetches = 0;
   uint64_t loads = 0;
   uint64_t stores = 0;
@@ -279,12 +279,12 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t rcache_bank_stalls = 0; 
   uint64_t rcache_mshr_stalls = 0;
 #endif
-#ifdef EXT_ROP_ENABLE
-  uint64_t rop_mem_reads = 0;
-  uint64_t rop_mem_writes = 0;
-  uint64_t rop_mem_lat = 0;
-  uint64_t rop_stall_cycles = 0;
-  // PERF: rop ocache
+#ifdef EXT_OM_ENABLE
+  uint64_t om_mem_reads = 0;
+  uint64_t om_mem_writes = 0;
+  uint64_t om_mem_lat = 0;
+  uint64_t om_stall_cycles = 0;
+  // PERF: om ocache
   uint64_t ocache_reads = 0;       
   uint64_t ocache_writes = 0;      
   uint64_t ocache_read_misses = 0; 
@@ -382,9 +382,9 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         uint64_t scrb_csrs_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_CSRS);
         uint64_t scrb_tex_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_TEX);
         uint64_t scrb_raster_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_RASTER);
-        uint64_t scrb_rop_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_ROP);
+        uint64_t scrb_om_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_OM);
         if (num_cores > 1) {
-          uint64_t sfu_total = scrb_wctl_per_core + scrb_csrs_per_core + scrb_tex_per_core + scrb_raster_per_core + scrb_rop_per_core;
+          uint64_t sfu_total = scrb_wctl_per_core + scrb_csrs_per_core + scrb_tex_per_core + scrb_raster_per_core + scrb_om_per_core;
           fprintf(stream, "PERF: core%d: sfu stalls=%ld (wctl=%d%%, scrs=%d%%"          
           #ifdef EXT_RASTER_ENABLE
             ", raster=%d%%"
@@ -392,8 +392,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
           #ifdef EXT_TEX_ENABLE
             ", tex=%d%%"
           #endif
-          #ifdef EXT_ROP_ENABLE
-            ", rop=%d%%"
+          #ifdef EXT_OM_ENABLE
+            ", om=%d%%"
           #endif
             ")\n"
             , core_id
@@ -406,8 +406,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
           #ifdef EXT_TEX_ENABLE
             , calcAvgPercent(scrb_tex_per_core, sfu_total)
           #endif
-          #ifdef EXT_ROP_ENABLE
-            , calcAvgPercent(scrb_rop_per_core, sfu_total)
+          #ifdef EXT_OM_ENABLE
+            , calcAvgPercent(scrb_om_per_core, sfu_total)
           #endif
           );
         }
@@ -415,7 +415,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         scrb_csrs += scrb_csrs_per_core;
         scrb_tex += scrb_tex_per_core;
         scrb_raster += scrb_raster_per_core;
-        scrb_rop += scrb_rop_per_core;
+        scrb_om += scrb_om_per_core;
       }
       // PERF: memory
       // ifetches
@@ -550,12 +550,12 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       }
     #endif
     } break;
-    case VX_DCR_MPM_CLASS_ROP: {
-    #ifdef EXT_ROP_ENABLE
-      rop_mem_reads    += get_csr_64(staging_buf.data(), VX_CSR_MPM_ROP_READS);
-      rop_mem_writes   += get_csr_64(staging_buf.data(), VX_CSR_MPM_ROP_WRITES);
-      rop_mem_lat      += get_csr_64(staging_buf.data(), VX_CSR_MPM_ROP_LAT);
-      rop_stall_cycles += get_csr_64(staging_buf.data(), VX_CSR_MPM_ROP_STALL);
+    case VX_DCR_MPM_CLASS_OM: {
+    #ifdef EXT_OM_ENABLE
+      om_mem_reads    += get_csr_64(staging_buf.data(), VX_CSR_MPM_OM_READS);
+      om_mem_writes   += get_csr_64(staging_buf.data(), VX_CSR_MPM_OM_WRITES);
+      om_mem_lat      += get_csr_64(staging_buf.data(), VX_CSR_MPM_OM_LAT);
+      om_stall_cycles += get_csr_64(staging_buf.data(), VX_CSR_MPM_OM_STALL);
       if (0 == core_id) {        
         // cache perf counters
         ocache_reads        = get_csr_64(staging_buf.data(), VX_CSR_MPM_OCACHE_READS);
@@ -588,7 +588,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     int ifetch_avg_lat = (int)(double(ifetch_lat) / double(ifetches));
     int load_avg_lat = (int)(double(load_lat) / double(loads));
     uint64_t scrb_total = scrb_alu + scrb_fpu + scrb_lsu + scrb_sfu;
-    uint64_t sfu_total = scrb_wctl + scrb_csrs + scrb_tex + scrb_raster + scrb_rop;
+    uint64_t sfu_total = scrb_wctl + scrb_csrs + scrb_tex + scrb_raster + scrb_om;
     fprintf(stream, "PERF: scheduler idle=%ld (%d%%)\n", sched_idles, sched_idles_percent);
     fprintf(stream, "PERF: scheduler stalls=%ld (%d%%)\n", sched_stalls, sched_stalls_percent);
     fprintf(stream, "PERF: ibuffer stalls=%ld (%d%%)\n", ibuffer_stalls, ibuffer_percent);
@@ -604,8 +604,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     #ifdef EXT_TEX_ENABLE
       ", tex=%d%%"
     #endif
-    #ifdef EXT_ROP_ENABLE
-      ", rop=%d%%"
+    #ifdef EXT_OM_ENABLE
+      ", om=%d%%"
     #endif
       ")\n"
       , scrb_sfu
@@ -617,8 +617,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     #ifdef EXT_TEX_ENABLE
       , calcAvgPercent(scrb_tex, sfu_total)     
     #endif
-    #ifdef EXT_ROP_ENABLE
-      , calcAvgPercent(scrb_rop, sfu_total)
+    #ifdef EXT_OM_ENABLE
+      , calcAvgPercent(scrb_om, sfu_total)
     #endif
     );
     fprintf(stream, "PERF: ifetches=%ld\n", ifetches);
@@ -701,18 +701,18 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     fprintf(stream, "PERF: rcache mshr stalls=%ld\n", rcache_mshr_stalls);
   #endif
   } break;
-  case VX_DCR_MPM_CLASS_ROP: {
-  #ifdef EXT_ROP_ENABLE
-    rop_mem_reads /= num_cores;
-    rop_mem_writes /= num_cores;
-    rop_mem_lat /= num_cores;
-    rop_stall_cycles /= num_cores;
-    int rop_mem_avg_lat = (int)(double(rop_mem_lat) / double(rop_mem_reads + rop_mem_writes));
-    int rop_stall_cycles_ratio = (int)(100 * double(rop_stall_cycles) / total_cycles);
-    fprintf(stream, "PERF: rop memory reads=%ld\n", rop_mem_reads);
-    fprintf(stream, "PERF: rop memory writes=%ld\n", rop_mem_writes);
-    fprintf(stream, "PERF: rop memory latency=%d cycles\n", rop_mem_avg_lat);
-    fprintf(stream, "PERF: rop stall cycles=%ld cycles (%d%%)\n", rop_stall_cycles, rop_stall_cycles_ratio);
+  case VX_DCR_MPM_CLASS_OM: {
+  #ifdef EXT_OM_ENABLE
+    om_mem_reads /= num_cores;
+    om_mem_writes /= num_cores;
+    om_mem_lat /= num_cores;
+    om_stall_cycles /= num_cores;
+    int om_mem_avg_lat = (int)(double(om_mem_lat) / double(om_mem_reads + om_mem_writes));
+    int om_stall_cycles_ratio = (int)(100 * double(om_stall_cycles) / total_cycles);
+    fprintf(stream, "PERF: om memory reads=%ld\n", om_mem_reads);
+    fprintf(stream, "PERF: om memory writes=%ld\n", om_mem_writes);
+    fprintf(stream, "PERF: om memory latency=%d cycles\n", om_mem_avg_lat);
+    fprintf(stream, "PERF: om stall cycles=%ld cycles (%d%%)\n", om_stall_cycles, om_stall_cycles_ratio);
     // cache perf counters
     int ocache_read_hit_ratio = (int)((1.0 - (double(ocache_read_misses) / double(ocache_reads))) * 100);
     int ocache_write_hit_ratio = (int)((1.0 - (double(ocache_write_misses) / double(ocache_writes))) * 100);

@@ -21,8 +21,8 @@ interface VX_sfu_perf_if ();
 `ifdef EXT_RASTER_ENABLE
     wire [`PERF_CTR_BITS-1:0] raster_stalls;
 `endif
-`ifdef EXT_ROP_ENABLE
-    wire [`PERF_CTR_BITS-1:0] rop_stalls;
+`ifdef EXT_OM_ENABLE
+    wire [`PERF_CTR_BITS-1:0] om_stalls;
 `endif
     wire [`PERF_CTR_BITS-1:0] wctl_stalls;
 
@@ -33,8 +33,8 @@ interface VX_sfu_perf_if ();
     `ifdef EXT_RASTER_ENABLE
         output raster_stalls,
     `endif
-    `ifdef EXT_ROP_ENABLE
-        output rop_stalls,
+    `ifdef EXT_OM_ENABLE
+        output om_stalls,
     `endif
         output wctl_stalls
     );
@@ -46,8 +46,8 @@ interface VX_sfu_perf_if ();
     `ifdef EXT_RASTER_ENABLE
         input raster_stalls,
     `endif
-    `ifdef EXT_ROP_ENABLE
-        input rop_stalls,
+    `ifdef EXT_OM_ENABLE
+        input om_stalls,
     `endif
         input wctl_stalls
     );

@@ -12,7 +12,7 @@ Vortex is a full-stack open-source RISC-V GPGPU.
     - configurable number of cores, warps, and threads.
     - configurable number of ALU, FPU, LSU, and SFU units per core.
     - configurable pipeline issue width.
-    - optional graphics rasterizer, texture, ands ROP units.
+    - optional graphics rasterizer, texture, and OM units.
     - optional shared memory, L1, L2 and L3 caches.
 - Software: OpenCL 1.2 Support.
 - Supported FPGAs: 

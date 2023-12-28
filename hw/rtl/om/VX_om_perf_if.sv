@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_rop_define.vh"
+`include "VX_om_define.vh"
 
-interface VX_rop_perf_if ();
+interface VX_om_perf_if ();
 
     wire [`PERF_CTR_BITS-1:0] mem_reads;
     wire [`PERF_CTR_BITS-1:0] mem_writes;

@@ -70,7 +70,7 @@ jobs:
       script: cp -r ../build32 ../build32_tex && cd ../build32_tex && ./ci/travis_run.py ./ci/regression.sh --tex
     - stage: test
       name: rop
-      script: cp -r ../build32 ../build32_rop && cd ../build32_rop && ./ci/travis_run.py ./ci/regression.sh --rop
+      script: cp -r ../build32 ../build32_om && cd ../build32_om && ./ci/travis_run.py ./ci/regression.sh --rop
     - stage: test
       name: raster
       script: cp -r ../build32 ../build32_raster && cd ../build32_raster && ./ci/travis_run.py ./ci/regression.sh --raster
