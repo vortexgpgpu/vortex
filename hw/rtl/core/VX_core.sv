@@ -77,20 +77,14 @@ module VX_core import VX_gpu_pkg::*; #(
     ) dcache_bus_tmp_if[DCACHE_NUM_REQS]();
 
 `ifdef PERF_ENABLE
-    VX_pipeline_perf_if pipeline_perf_if();
     VX_mem_perf_if mem_perf_tmp_if();
+    VX_pipeline_perf_if pipeline_perf_if();    
 
-    assign mem_perf_tmp_if.icache = mem_perf_if.icache;
-    assign mem_perf_tmp_if.dcache = mem_perf_if.dcache;
+    assign mem_perf_tmp_if.icache  = mem_perf_if.icache;
+    assign mem_perf_tmp_if.dcache  = mem_perf_if.dcache;
     assign mem_perf_tmp_if.l2cache = mem_perf_if.l2cache;
     assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
-`ifdef SM_ENABLE
-    cache_perf_t smem_perf;
-    assign mem_perf_tmp_if.smem = smem_perf;
-`else
-    assign mem_perf_tmp_if.smem = '0;
-`endif
-    assign mem_perf_tmp_if.mem = mem_perf_if.mem;
+    assign mem_perf_tmp_if.mem     = mem_perf_if.mem;
 `endif
 
     `RESET_RELAY (dcr_data_reset, reset);
@@ -250,7 +244,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .clk                (clk),
         .reset              (reset),
     `ifdef PERF_ENABLE
-        .cache_perf         (smem_perf),
+        .cache_perf         (mem_perf_tmp_if.smem),
     `endif
         .dcache_bus_in_if   (dcache_bus_tmp_if),
         .dcache_bus_out_if  (dcache_bus_if)
@@ -340,5 +334,5 @@ module VX_core import VX_gpu_pkg::*; #(
     assign pipeline_perf_if.load_latency = perf_dcache_lat;
 
 `endif
-    
+
 endmodule
