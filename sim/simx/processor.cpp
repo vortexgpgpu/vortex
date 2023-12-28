@@ -113,6 +113,7 @@ void ProcessorImpl::reset() {
   perf_mem_writes_ = 0;
   perf_mem_latency_ = 0;
   perf_mem_pending_reads_ = 0;
+  
 }
 
 void ProcessorImpl::write_dcr(uint32_t addr, uint32_t value) {
@@ -125,9 +126,6 @@ ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
   perf.mem_writes  = perf_mem_writes_;
   perf.mem_latency = perf_mem_latency_;
   perf.l3cache     = l3cache_->perf_stats();
-  for (auto cluster : clusters_) {
-    perf.clusters += cluster->perf_stats();
-  }   
   return perf;
 }
 
