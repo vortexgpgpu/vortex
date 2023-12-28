@@ -97,6 +97,11 @@
 `define VX_CSR_MPM_IFETCH_LT_H          12'hB8E
 `define VX_CSR_MPM_LOAD_LT              12'hB0F 
 `define VX_CSR_MPM_LOAD_LT_H            12'hB8F
+// SFU: scoreboard
+`define VX_CSR_MPM_SCRB_WCTL            12'hB10
+`define VX_CSR_MPM_SCRB_WCTL_H          12'hB90
+`define VX_CSR_MPM_SCRB_CSRS            12'hB11
+`define VX_CSR_MPM_SCRB_CSRS_H          12'hB91
 
 // Machine Performance-monitoring memory counters
 // PERF: icache

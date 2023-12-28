@@ -28,13 +28,18 @@
 
 using namespace vortex;
 
-Core::Core(const SimContext& ctx, uint32_t core_id, Socket* socket, const Arch &arch, const DCRS &dcrs)
+Core::Core(const SimContext& ctx, 
+           uint32_t core_id, 
+           Socket* socket,
+           const Arch &arch, 
+           const DCRS &dcrs)
     : SimObject(ctx, "core")
     , icache_req_ports(1, this)
     , icache_rsp_ports(1, this)
     , dcache_req_ports(NUM_LSU_LANES, this)
     , dcache_rsp_ports(NUM_LSU_LANES, this)
     , core_id_(core_id)
+    , socket_(socket)
     , arch_(arch)
     , dcrs_(dcrs)
     , decoder_(arch)
@@ -42,7 +47,7 @@ Core::Core(const SimContext& ctx, uint32_t core_id, Socket* socket, const Arch &
     , barriers_(arch.num_barriers(), 0)
     , fcsrs_(arch.num_warps(), 0)
     , ibuffers_(arch.num_warps(), IBUF_SIZE)
-    , scoreboard_(arch_) 
+    , scoreboard_(arch_)
     , operands_(ISSUE_WIDTH)
     , dispatchers_((uint32_t)ExeType::ExeTypeCount)
     , exe_units_((uint32_t)ExeType::ExeTypeCount)
@@ -50,8 +55,7 @@ Core::Core(const SimContext& ctx, uint32_t core_id, Socket* socket, const Arch &
     , fetch_latch_("fetch")
     , decode_latch_("decode")
     , pending_icache_(arch_.num_warps())
-    , csrs_(arch.num_warps())
-    , socket_(socket)
+    , csrs_(arch.num_warps())  
     , commit_arbs_(ISSUE_WIDTH)
 {
   char sname[100];
@@ -69,6 +73,7 @@ Core::Core(const SimContext& ctx, uint32_t core_id, Socket* socket, const Arch &
   }
 
   // initialize shared memory
+  snprintf(sname, 100, "core%d-shared_mem", core_id);
   shared_mem_ = SharedMem::Create(sname, SharedMem::Config{
     (1 << SMEM_LOG_SIZE),
     sizeof(Word),
@@ -77,17 +82,17 @@ Core::Core(const SimContext& ctx, uint32_t core_id, Socket* socket, const Arch &
     false
   });
   for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
-      snprintf(sname, 100, "smem_demux%d_%d", core_id, i);
-      auto smem_demux = SMemDemux::Create(sname);
-      
-      smem_demux->ReqDC.bind(&dcache_req_ports.at(i));
-      dcache_rsp_ports.at(i).bind(&smem_demux->RspDC);
+    snprintf(sname, 100, "core%d-smem_demux%d", core_id, i);
+    auto smem_demux = SMemDemux::Create(sname);
+    
+    smem_demux->ReqDC.bind(&dcache_req_ports.at(i));
+    dcache_rsp_ports.at(i).bind(&smem_demux->RspDC);
 
-      smem_demux->ReqSM.bind(&shared_mem_->Inputs.at(i));
-      shared_mem_->Outputs.at(i).bind(&smem_demux->RspSM);
+    smem_demux->ReqSM.bind(&shared_mem_->Inputs.at(i));
+    shared_mem_->Outputs.at(i).bind(&smem_demux->RspSM);
 
-      smem_demuxs_.at(i) = smem_demux;
-    }
+    smem_demuxs_.at(i) = smem_demux;
+  }
 
   // initialize dispatchers
   dispatchers_.at((int)ExeType::ALU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_ALU_BLOCKS, NUM_ALU_LANES);
@@ -103,7 +108,7 @@ Core::Core(const SimContext& ctx, uint32_t core_id, Socket* socket, const Arch &
 
   // bind commit arbiters
   for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {    
-    snprintf(sname, 100, "commit-arb%d", i);
+    snprintf(sname, 100, "core%d-commit-arb%d", core_id, i);
     auto arbiter = TraceSwitch::Create(sname, ArbiterType::RoundRobin, (uint32_t)ExeType::ExeTypeCount, 1);
     for (uint32_t j = 0; j < (uint32_t)ExeType::ExeTypeCount; ++j) {
       exe_units_.at(j)->Outputs.at(i).bind(&arbiter->Inputs.at(j));
@@ -128,7 +133,7 @@ void Core::reset() {
   for (auto& exe_unit : exe_units_) {
     exe_unit->reset();
   }
-
+ 
   for (auto& commit_arb : commit_arbs_) {
     commit_arb->reset();
   }
@@ -184,7 +189,7 @@ void Core::schedule() {
     }
   }
   if (scheduled_warp == -1) {
-    ++perf_stats_.sched_idles;
+    ++perf_stats_.sched_idle;
     return;
   }
 
@@ -229,7 +234,7 @@ void Core::fetch() {
   mem_req.uuid  = trace->uuid;
   icache_req_ports.at(0).send(mem_req, 2);    
   DT(3, "icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << *trace);    
-  fetch_latch_.pop();      
+  fetch_latch_.pop();
   ++perf_stats_.ifetches;
   ++pending_ifetches_;
 }
@@ -311,7 +316,21 @@ void Core::issue() {
         case ExeType::ALU: ++perf_stats_.scrb_alu; break;
         case ExeType::FPU: ++perf_stats_.scrb_fpu; break;
         case ExeType::LSU: ++perf_stats_.scrb_lsu; break;        
-        case ExeType::SFU: ++perf_stats_.scrb_sfu; break;
+        case ExeType::SFU: {
+          ++perf_stats_.scrb_sfu;
+          switch (use.sfu_type) {
+          case SfuType::TMC:
+          case SfuType::WSPAWN:
+          case SfuType::SPLIT:
+          case SfuType::JOIN:
+          case SfuType::BAR:
+          case SfuType::PRED: ++perf_stats_.scrb_wctl; break;
+          case SfuType::CSRRW:
+          case SfuType::CSRRS:
+          case SfuType::CSRRC: ++perf_stats_.scrb_csrs; break;
+          default: assert(false);
+          }
+        } break;
         default: assert(false);
         }        
       }
@@ -356,7 +375,6 @@ void Core::commit() {
     auto& commit_arb = commit_arbs_.at(i);
     if (commit_arb->Outputs.at(0).empty())
       continue;
-
     auto trace = commit_arb->Outputs.at(0).front();
 
     // advance to commit stage
@@ -558,8 +576,8 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         break;    
       case VX_DCR_MPM_CLASS_CORE: {
         switch (addr) {
-        case VX_CSR_MPM_SCHED_ID:  return perf_stats_.sched_idles & 0xffffffff; 
-        case VX_CSR_MPM_SCHED_ID_H:return perf_stats_.sched_idles >> 32;
+        case VX_CSR_MPM_SCHED_ID:  return perf_stats_.sched_idle & 0xffffffff; 
+        case VX_CSR_MPM_SCHED_ID_H:return perf_stats_.sched_idle >> 32;
         case VX_CSR_MPM_SCHED_ST:  return perf_stats_.sched_stalls & 0xffffffff; 
         case VX_CSR_MPM_SCHED_ST_H:return perf_stats_.sched_stalls >> 32;
         case VX_CSR_MPM_IBUF_ST:   return perf_stats_.ibuf_stalls & 0xffffffff; 
@@ -574,6 +592,10 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case VX_CSR_MPM_SCRB_LSU_H:return perf_stats_.scrb_lsu >> 32;
         case VX_CSR_MPM_SCRB_SFU:  return perf_stats_.scrb_sfu & 0xffffffff;
         case VX_CSR_MPM_SCRB_SFU_H:return perf_stats_.scrb_sfu >> 32;
+        case VX_CSR_MPM_SCRB_WCTL: return perf_stats_.scrb_wctl & 0xffffffff;
+        case VX_CSR_MPM_SCRB_WCTL_H: return perf_stats_.scrb_wctl >> 32;
+        case VX_CSR_MPM_SCRB_CSRS: return perf_stats_.scrb_csrs & 0xffffffff;
+        case VX_CSR_MPM_SCRB_CSRS_H: return perf_stats_.scrb_csrs >> 32;
         case VX_CSR_MPM_IFETCHES:  return perf_stats_.ifetches & 0xffffffff; 
         case VX_CSR_MPM_IFETCHES_H: return perf_stats_.ifetches >> 32; 
         case VX_CSR_MPM_LOADS:     return perf_stats_.loads & 0xffffffff; 
@@ -588,6 +610,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
       } break; 
       case VX_DCR_MPM_CLASS_MEM: {
         auto proc_perf = socket_->cluster()->processor()->perf_stats();
+        auto cluster_perf = socket_->cluster()->perf_stats();
         auto socket_perf = socket_->perf_stats();
         auto smem_perf = shared_mem_->perf_stats();
         switch (addr) {
@@ -611,18 +634,18 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case VX_CSR_MPM_DCACHE_MSHR_ST:   return socket_perf.dcache.mshr_stalls & 0xffffffff; 
         case VX_CSR_MPM_DCACHE_MSHR_ST_H: return socket_perf.dcache.mshr_stalls >> 32;
 
-        case VX_CSR_MPM_L2CACHE_READS:    return proc_perf.clusters.l2cache.reads & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_READS_H:  return proc_perf.clusters.l2cache.reads >> 32; 
-        case VX_CSR_MPM_L2CACHE_WRITES:   return proc_perf.clusters.l2cache.writes & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_WRITES_H: return proc_perf.clusters.l2cache.writes >> 32; 
-        case VX_CSR_MPM_L2CACHE_MISS_R:   return proc_perf.clusters.l2cache.read_misses & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_MISS_R_H: return proc_perf.clusters.l2cache.read_misses >> 32; 
-        case VX_CSR_MPM_L2CACHE_MISS_W:   return proc_perf.clusters.l2cache.write_misses & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_MISS_W_H: return proc_perf.clusters.l2cache.write_misses >> 32; 
-        case VX_CSR_MPM_L2CACHE_BANK_ST:  return proc_perf.clusters.l2cache.bank_stalls & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_BANK_ST_H:return proc_perf.clusters.l2cache.bank_stalls >> 32;
-        case VX_CSR_MPM_L2CACHE_MSHR_ST:  return proc_perf.clusters.l2cache.mshr_stalls & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_MSHR_ST_H:return proc_perf.clusters.l2cache.mshr_stalls >> 32;
+        case VX_CSR_MPM_L2CACHE_READS:    return cluster_perf.l2cache.reads & 0xffffffff; 
+        case VX_CSR_MPM_L2CACHE_READS_H:  return cluster_perf.l2cache.reads >> 32; 
+        case VX_CSR_MPM_L2CACHE_WRITES:   return cluster_perf.l2cache.writes & 0xffffffff; 
+        case VX_CSR_MPM_L2CACHE_WRITES_H: return cluster_perf.l2cache.writes >> 32; 
+        case VX_CSR_MPM_L2CACHE_MISS_R:   return cluster_perf.l2cache.read_misses & 0xffffffff; 
+        case VX_CSR_MPM_L2CACHE_MISS_R_H: return cluster_perf.l2cache.read_misses >> 32; 
+        case VX_CSR_MPM_L2CACHE_MISS_W:   return cluster_perf.l2cache.write_misses & 0xffffffff; 
+        case VX_CSR_MPM_L2CACHE_MISS_W_H: return cluster_perf.l2cache.write_misses >> 32; 
+        case VX_CSR_MPM_L2CACHE_BANK_ST:  return cluster_perf.l2cache.bank_stalls & 0xffffffff; 
+        case VX_CSR_MPM_L2CACHE_BANK_ST_H:return cluster_perf.l2cache.bank_stalls >> 32;
+        case VX_CSR_MPM_L2CACHE_MSHR_ST:  return cluster_perf.l2cache.mshr_stalls & 0xffffffff; 
+        case VX_CSR_MPM_L2CACHE_MSHR_ST_H:return cluster_perf.l2cache.mshr_stalls >> 32;
 
         case VX_CSR_MPM_L3CACHE_READS:    return proc_perf.l3cache.reads & 0xffffffff; 
         case VX_CSR_MPM_L3CACHE_READS_H:  return proc_perf.l3cache.reads >> 32; 
@@ -638,7 +661,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case VX_CSR_MPM_L3CACHE_MSHR_ST_H:return proc_perf.l3cache.mshr_stalls >> 32;
 
         case VX_CSR_MPM_MEM_READS:        return proc_perf.mem_reads & 0xffffffff; 
-        case VX_CSR_MPM_MEM_READS_H:      return proc_perf.mem_reads >> 32; 
+        case VX_CSR_MPM_MEM_READS_H:      return proc_perf.mem_reads >> 32;
         case VX_CSR_MPM_MEM_WRITES:       return proc_perf.mem_writes & 0xffffffff; 
         case VX_CSR_MPM_MEM_WRITES_H:     return proc_perf.mem_writes >> 32; 
         case VX_CSR_MPM_MEM_LT:           return proc_perf.mem_latency & 0xffffffff; 
@@ -651,6 +674,10 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case VX_CSR_MPM_SMEM_BANK_ST:     return smem_perf.bank_stalls & 0xffffffff; 
         case VX_CSR_MPM_SMEM_BANK_ST_H:   return smem_perf.bank_stalls >> 32; 
         }
+      } break;
+      default: {
+        std::cout << std::dec << "Error: invalid MPM CLASS: value=" << perf_class << std::endl;
+        std::abort();
       } break;
       }
     } else {

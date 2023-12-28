@@ -18,20 +18,20 @@ using namespace vortex;
 Cluster::Cluster(const SimContext& ctx, 
                  uint32_t cluster_id,
                  ProcessorImpl* processor, 
-                 const Arch &arch, const 
-                 DCRS &dcrs) 
+                 const Arch &arch, 
+                 const DCRS &dcrs) 
   : SimObject(ctx, "cluster")
   , mem_req_port(this)
   , mem_rsp_port(this)
   , cluster_id_(cluster_id)
-  , sockets_(NUM_SOCKETS)  
-  , barriers_(arch.num_barriers(), 0)
   , processor_(processor)
+  , sockets_(NUM_SOCKETS)
+  , barriers_(arch.num_barriers(), 0)
   , cores_per_socket_(arch.socket_size())
 {
   char sname[100];
 
-  auto sockets_per_cluster = sockets_.size();
+  uint32_t sockets_per_cluster = sockets_.size();
 
   // create sockets
 
@@ -43,7 +43,10 @@ Cluster::Cluster(const SimContext& ctx,
 
   for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
     uint32_t socket_id = cluster_id * sockets_per_cluster + i;
-    auto socket = Socket::Create(socket_id, this, arch, dcrs);
+    auto socket = Socket::Create(socket_id, 
+                                 this, 
+                                 arch, 
+                                 dcrs);
 
     socket->icache_mem_req_port.bind(&icache_switch->ReqIn.at(i));
     icache_switch->RspIn.at(i).bind(&socket->icache_mem_rsp_port);
@@ -154,7 +157,7 @@ void Cluster::barrier(uint32_t bar_id, uint32_t count, uint32_t core_id) {
 }
 
 Cluster::PerfStats Cluster::perf_stats() const {
-  Cluster::PerfStats perf;
-  perf.l2cache = l2cache_->perf_stats();
-  return perf;
+  PerfStats perf_stats;
+  perf_stats.l2cache = l2cache_->perf_stats();
+  return perf_stats;
 }

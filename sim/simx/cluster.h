@@ -17,6 +17,7 @@
 #include "dcrs.h"
 #include "arch.h"
 #include "cache_cluster.h"
+#include "shared_mem.h"
 #include "core.h"
 #include "socket.h"
 #include "constants.h"
@@ -27,13 +28,8 @@ class ProcessorImpl;
 
 class Cluster : public SimObject<Cluster> {
 public:
-  struct PerfStats {    
+  struct PerfStats {
     CacheSim::PerfStats l2cache;
-
-    PerfStats& operator+=(const PerfStats& rhs) {
-      this->l2cache += rhs.l2cache;
-      return *this;
-    }
   };
 
   SimPort<MemReq> mem_req_port;
@@ -67,15 +63,15 @@ public:
 
   void barrier(uint32_t bar_id, uint32_t count, uint32_t core_id);
 
-  Cluster::PerfStats perf_stats() const;
+  PerfStats perf_stats() const;
   
 private:
-  uint32_t                  cluster_id_;  
-  std::vector<Socket::Ptr>  sockets_;  
-  std::vector<CoreMask>     barriers_;
-  CacheSim::Ptr             l2cache_;
-  ProcessorImpl*            processor_;
-  uint32_t                  cores_per_socket_;
+  uint32_t                    cluster_id_;
+  ProcessorImpl*              processor_;
+  std::vector<Socket::Ptr>    sockets_;  
+  std::vector<CoreMask>       barriers_;
+  CacheSim::Ptr               l2cache_;
+  uint32_t                    cores_per_socket_;
 };
 
 } // namespace vortex

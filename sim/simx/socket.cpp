@@ -19,16 +19,16 @@ using namespace vortex;
 Socket::Socket(const SimContext& ctx, 
                 uint32_t socket_id,
                 Cluster* cluster, 
-                const Arch &arch, const 
-                DCRS &dcrs) 
+                const Arch &arch, 
+                const DCRS &dcrs) 
   : SimObject(ctx, "socket")
   , icache_mem_req_port(this)
   , icache_mem_rsp_port(this)
   , dcache_mem_req_port(this)
   , dcache_mem_rsp_port(this)
   , socket_id_(socket_id)
-  , cores_(arch.socket_size())
   , cluster_(cluster)
+  , cores_(arch.socket_size())  
 {
   auto cores_per_socket = cores_.size();
   
@@ -77,7 +77,10 @@ Socket::Socket(const SimContext& ctx,
 
   for (uint32_t i = 0; i < cores_per_socket; ++i) {  
     uint32_t core_id = socket_id * cores_per_socket + i;
-    cores_.at(i) = Core::Create(core_id, this, arch, dcrs);
+    cores_.at(i) = Core::Create(core_id, 
+                                this, 
+                                arch, 
+                                dcrs);
 
     cores_.at(i)->icache_req_ports.at(0).bind(&icaches_->CoreReqPorts.at(i).at(0));
     icaches_->CoreRspPorts.at(i).at(0).bind(&cores_.at(i)->icache_rsp_ports.at(0));      
@@ -139,8 +142,8 @@ void Socket::resume(uint32_t core_index) {
 }
 
 Socket::PerfStats Socket::perf_stats() const {
-  Socket::PerfStats perf;
-  perf.icache = icaches_->perf_stats();
-  perf.dcache = dcaches_->perf_stats();  
-  return perf;
+  PerfStats perf_stats;
+  perf_stats.icache = icaches_->perf_stats();
+  perf_stats.dcache = dcaches_->perf_stats();  
+  return perf_stats;
 }

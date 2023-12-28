@@ -62,4 +62,16 @@
 `define CS_LINE_TO_FULL_ADDR(x, i) {x, (`XLEN-$bits(x))'(i << (`XLEN-$bits(x)-`CS_BANK_SEL_BITS))}
 `define CS_MEM_TO_FULL_ADDR(x)     {x, (`XLEN-$bits(x))'(0)}
 
+///////////////////////////////////////////////////////////////////////////////
+
+`define PERF_CACHE_ADD(dst, src, dcount, scount) \
+    `PERF_COUNTER_ADD (dst, src, reads, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
+    `PERF_COUNTER_ADD (dst, src, writes, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
+    `PERF_COUNTER_ADD (dst, src, read_misses, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
+    `PERF_COUNTER_ADD (dst, src, write_misses, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
+    `PERF_COUNTER_ADD (dst, src, bank_stalls, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
+    `PERF_COUNTER_ADD (dst, src, mshr_stalls, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
+    `PERF_COUNTER_ADD (dst, src, mem_stalls, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
+    `PERF_COUNTER_ADD (dst, src, crsp_stalls, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1))
+
 `endif // VX_CACHE_DEFINE_VH

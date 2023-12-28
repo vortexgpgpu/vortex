@@ -49,7 +49,7 @@ public:
   struct PerfStats {
     uint64_t cycles;
     uint64_t instrs;
-    uint64_t sched_idles;
+    uint64_t sched_idle;
     uint64_t sched_stalls;
     uint64_t ibuf_stalls;
     uint64_t scrb_stalls;
@@ -57,6 +57,8 @@ public:
     uint64_t scrb_fpu;
     uint64_t scrb_lsu;
     uint64_t scrb_sfu;
+    uint64_t scrb_wctl;
+    uint64_t scrb_csrs;
     uint64_t ifetches;
     uint64_t loads;
     uint64_t stores;
@@ -66,7 +68,7 @@ public:
     PerfStats() 
       : cycles(0)
       , instrs(0)
-      , sched_idles(0)
+      , sched_idle(0)
       , sched_stalls(0)
       , ibuf_stalls(0)
       , scrb_stalls(0)
@@ -74,6 +76,8 @@ public:
       , scrb_fpu(0)
       , scrb_lsu(0)
       , scrb_sfu(0)
+      , scrb_wctl(0)
+      , scrb_csrs(0)
       , ifetches(0)
       , loads(0)
       , stores(0)
@@ -88,7 +92,11 @@ public:
   std::vector<SimPort<MemReq>> dcache_req_ports;
   std::vector<SimPort<MemRsp>> dcache_rsp_ports;
 
-  Core(const SimContext& ctx, uint32_t core_id, Socket* socket, const Arch &arch, const DCRS &dcrs);
+  Core(const SimContext& ctx, 
+       uint32_t core_id, 
+       Socket* socket,
+       const Arch &arch, 
+       const DCRS &dcrs);
 
   ~Core();
 
@@ -158,6 +166,7 @@ private:
   void cout_flush();
 
   uint32_t core_id_;
+  Socket* socket_;
   const Arch& arch_;
   const DCRS &dcrs_;
   
@@ -193,10 +202,9 @@ private:
   
   PerfStats perf_stats_;
   
-  Socket* socket_;
-
   std::vector<TraceSwitch::Ptr> commit_arbs_;
 
+  uint32_t commit_exe_;
   uint32_t ibuffer_idx_;
 
   friend class Warp;

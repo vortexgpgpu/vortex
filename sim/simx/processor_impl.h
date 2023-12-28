@@ -24,17 +24,10 @@ namespace vortex {
 class ProcessorImpl {
 public:
   struct PerfStats {
+    CacheSim::PerfStats l3cache;
     uint64_t mem_reads;
     uint64_t mem_writes;
     uint64_t mem_latency;
-    CacheSim::PerfStats l3cache;
-    Cluster::PerfStats clusters;
-
-    PerfStats()
-      : mem_reads(0)
-      , mem_writes(0)
-      , mem_latency(0)
-    {}
   };
 
   ProcessorImpl(const Arch& arch);
@@ -46,7 +39,7 @@ public:
 
   void write_dcr(uint32_t addr, uint32_t value);
 
-  ProcessorImpl::PerfStats perf_stats() const;
+  PerfStats perf_stats() const;
 
 private:
  
@@ -55,7 +48,7 @@ private:
   const Arch& arch_;
   std::vector<std::shared_ptr<Cluster>> clusters_;
   DCRS dcrs_;
-  MemSim::Ptr   memsim_;
+  MemSim::Ptr memsim_;
   CacheSim::Ptr l3cache_;
   uint64_t perf_mem_reads_;
   uint64_t perf_mem_writes_;
