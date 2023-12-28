@@ -25,6 +25,7 @@ public:
         RegType  reg_type;
         uint32_t reg_id; 
         ExeType  exe_type;
+        SfuType  sfu_type;        
         uint64_t uuid;
     };
         
@@ -62,7 +63,7 @@ public:
             if (used_iregs.test(r)) {
                 uint32_t tag = (r << 16) | (trace->wid << 4) | (int)RegType::Integer;
                 auto owner = owners_.at(tag);
-                out.push_back({RegType::Integer, r, owner->exe_type, owner->uuid});
+                out.push_back({RegType::Integer, r, owner->exe_type, owner->sfu_type, owner->uuid});
             }
         }
 
@@ -70,7 +71,7 @@ public:
             if (used_fregs.test(r)) {
                 uint32_t tag = (r << 16) | (trace->wid << 4) | (int)RegType::Float;
                 auto owner = owners_.at(tag);
-                out.push_back({RegType::Float, r, owner->exe_type, owner->uuid});
+                out.push_back({RegType::Float, r, owner->exe_type, owner->sfu_type, owner->uuid});
             }
         }
 
@@ -78,7 +79,7 @@ public:
             if (used_vregs.test(r)) {
                 uint32_t tag = (r << 16) | (trace->wid << 4) | (int)RegType::Vector;
                 auto owner = owners_.at(tag);
-                out.push_back({RegType::Vector, r, owner->exe_type, owner->uuid});
+                out.push_back({RegType::Vector, r, owner->exe_type, owner->sfu_type, owner->uuid});
             }
         }
 

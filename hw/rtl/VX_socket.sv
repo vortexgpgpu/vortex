@@ -30,7 +30,8 @@ module VX_socket import VX_gpu_pkg::*; #(
     VX_dcr_bus_if.slave     dcr_bus_if,
 
     // Memory
-    VX_mem_bus_if.master    mem_bus_if,
+    VX_mem_bus_if.master    icache_mem_bus_if,
+    VX_mem_bus_if.master    dcache_mem_bus_if,
 
 `ifdef GBAR_ENABLE
     // Barrier
@@ -65,58 +66,11 @@ module VX_socket import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     VX_mem_perf_if mem_perf_tmp_if();
-    cache_perf_t perf_icache;
-    cache_perf_t perf_dcache;
-
-    assign mem_perf_tmp_if.icache = perf_icache;
-    assign mem_perf_tmp_if.dcache = perf_dcache;
     assign mem_perf_tmp_if.l2cache = mem_perf_if.l2cache;
     assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
     assign mem_perf_tmp_if.smem = 'x;
     assign mem_perf_tmp_if.mem = mem_perf_if.mem;
-`endif    
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (ICACHE_LINE_SIZE),
-        .TAG_WIDTH (ICACHE_MEM_TAG_WIDTH)
-    ) icache_mem_bus_if();
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (DCACHE_LINE_SIZE),
-        .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
-    ) dcache_mem_bus_if();
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (`L1_LINE_SIZE),
-        .TAG_WIDTH (L1_MEM_TAG_WIDTH)
-    ) cache_mem_bus_if[2]();
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (`L1_LINE_SIZE),
-        .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
-    ) mem_bus_tmp_if[1]();
-
-    `ASSIGN_VX_MEM_BUS_IF_X (cache_mem_bus_if[0], icache_mem_bus_if, L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH);
-    `ASSIGN_VX_MEM_BUS_IF_X (cache_mem_bus_if[1], dcache_mem_bus_if, L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
-
-    `RESET_RELAY (mem_arb_reset, reset);
-
-    VX_mem_arb #(
-        .NUM_INPUTS   (2),
-        .DATA_SIZE    (`L1_LINE_SIZE),
-        .TAG_WIDTH    (L1_MEM_TAG_WIDTH),
-        .TAG_SEL_IDX  (1), // Skip 0 for NC flag
-        .ARBITER      ("R"),
-        .OUT_REG_REQ  (2),
-        .OUT_REG_RSP  (2)
-    ) mem_arb (
-        .clk        (clk),
-        .reset      (mem_arb_reset),
-        .bus_in_if  (cache_mem_bus_if),
-        .bus_out_if (mem_bus_tmp_if)
-    );
-
-    `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_tmp_if[0]);
+`endif
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -149,7 +103,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .MEM_OUT_REG    (2)
     ) icache (
     `ifdef PERF_ENABLE
-        .cache_perf     (perf_icache),
+        .cache_perf     (mem_perf_tmp_if.icache),
     `endif
         .clk            (clk),
         .reset          (icache_reset),
@@ -160,7 +114,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     ///////////////////////////////////////////////////////////////////////////
 
     VX_mem_bus_if #(
-        .DATA_SIZE (DCACHE_WORD_SIZE), 
+        .DATA_SIZE (DCACHE_WORD_SIZE),
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
     ) per_core_dcache_bus_if[`SOCKET_SIZE * DCACHE_NUM_REQS]();
 
@@ -189,7 +143,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .MEM_OUT_REG    (2)
     ) dcache (
     `ifdef PERF_ENABLE
-        .cache_perf     (perf_dcache),
+        .cache_perf     (mem_perf_tmp_if.dcache),
     `endif        
         .clk            (clk),
         .reset          (dcache_reset),        
