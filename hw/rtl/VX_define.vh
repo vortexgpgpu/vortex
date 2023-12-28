@@ -57,10 +57,21 @@
 `define EX_ALU          0
 `define EX_LSU          1
 `define EX_SFU          2
-`define EX_FPU          3
+`define EX_FPU          (`EX_SFU + `EXT_F_ENABLED)
 
 `define NUM_EX_UNITS    (3 + `EXT_F_ENABLED)
 `define EX_BITS         `CLOG2(`NUM_EX_UNITS)
+`define EX_WIDTH        `UP(`EX_BITS)
+
+`define SFU_CSRS        0
+`define SFU_WCTL        1
+`define SFU_TEX         (`SFU_WCTL + `EXT_TEX_ENABLED)
+`define SFU_OM          (`SFU_TEX + `EXT_OM_ENABLED)
+`define SFU_RASTER      (`SFU_OM + `EXT_RASTER_ENABLED)
+
+`define NUM_SFU_UNITS   (2 + `EXT_TEX_ENABLED + `EXT_OM_ENABLED + `EXT_RASTER_ENABLED)
+`define SFU_BITS        `CLOG2(`NUM_SFU_UNITS)
+`define SFU_WIDTH       `UP(`SFU_BITS)
 
 ///////////////////////////////////////////////////////////////////////////////
 

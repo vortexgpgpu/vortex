@@ -33,7 +33,6 @@ import VX_fpu_pkg::*;
 `ifdef PERF_ENABLE
     VX_mem_perf_if.slave                mem_perf_if,
     VX_pipeline_perf_if.slave           pipeline_perf_if,
-    VX_sfu_perf_if.slave                sfu_perf_if,
 `ifdef EXT_TEX_ENABLE
     VX_tex_perf_if.slave                perf_tex_if,
 `endif
@@ -204,39 +203,43 @@ import VX_fpu_pkg::*;
                         `VX_CSR_MPM_IBUF_ST_H       : read_data_ro_r = 32'(pipeline_perf_if.ibf_stalls[`PERF_CTR_BITS-1:32]);
                         `VX_CSR_MPM_SCRB_ST         : read_data_ro_r = pipeline_perf_if.scb_stalls[31:0];
                         `VX_CSR_MPM_SCRB_ST_H       : read_data_ro_r = 32'(pipeline_perf_if.scb_stalls[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_SCRB_ALU        : read_data_ro_r = 32'(pipeline_perf_if.scb_uses[`EX_ALU][`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_SCRB_ALU_H      : read_data_ro_r = pipeline_perf_if.scb_uses[`EX_ALU][31:0];
+                        `VX_CSR_MPM_SCRB_ALU        : read_data_ro_r = pipeline_perf_if.units_uses[`EX_ALU][31:0];
+                        `VX_CSR_MPM_SCRB_ALU_H      : read_data_ro_r = 32'(pipeline_perf_if.units_uses[`EX_ALU][`PERF_CTR_BITS-1:32]);
                     `ifdef EXT_F_ENABLE
-                        `VX_CSR_MPM_SCRB_FPU        : read_data_ro_r = 32'(pipeline_perf_if.scb_uses[`EX_FPU][`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_SCRB_FPU_H      : read_data_ro_r = pipeline_perf_if.scb_uses[`EX_FPU][31:0];
+                        `VX_CSR_MPM_SCRB_FPU        : read_data_ro_r = pipeline_perf_if.units_uses[`EX_FPU][31:0];
+                        `VX_CSR_MPM_SCRB_FPU_H      : read_data_ro_r = 32'(pipeline_perf_if.units_uses[`EX_FPU][`PERF_CTR_BITS-1:32]);
                     `else
                         `VX_CSR_MPM_SCRB_FPU        : read_data_ro_r = '0;
                         `VX_CSR_MPM_SCRB_FPU_H      : read_data_ro_r = '0;
                     `endif
-                        `VX_CSR_MPM_SCRB_LSU        : read_data_ro_r = 32'(pipeline_perf_if.scb_uses[`EX_LSU][`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_SCRB_LSU_H      : read_data_ro_r = pipeline_perf_if.scb_uses[`EX_LSU][31:0];
-                        `VX_CSR_MPM_SCRB_SFU        : read_data_ro_r = 32'(pipeline_perf_if.scb_uses[`EX_SFU][`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_SCRB_SFU_H      : read_data_ro_r = pipeline_perf_if.scb_uses[`EX_SFU][31:0];                      
+                        `VX_CSR_MPM_SCRB_LSU        : read_data_ro_r = pipeline_perf_if.units_uses[`EX_LSU][31:0];
+                        `VX_CSR_MPM_SCRB_LSU_H      : read_data_ro_r = 32'(pipeline_perf_if.units_uses[`EX_LSU][`PERF_CTR_BITS-1:32]);
+                        `VX_CSR_MPM_SCRB_SFU        : read_data_ro_r = pipeline_perf_if.units_uses[`EX_SFU][31:0];
+                        `VX_CSR_MPM_SCRB_SFU_H      : read_data_ro_r = 32'(pipeline_perf_if.units_uses[`EX_SFU][`PERF_CTR_BITS-1:32]);
+                        `VX_CSR_MPM_SCRB_CSRS       : read_data_ro_r = pipeline_perf_if.sfu_uses[`SFU_CSRS][31:0];
+                        `VX_CSR_MPM_SCRB_CSRS_H     : read_data_ro_r = 32'(pipeline_perf_if.sfu_uses[`SFU_CSRS][`PERF_CTR_BITS-1:32]);
+                        `VX_CSR_MPM_SCRB_WCTL       : read_data_ro_r = pipeline_perf_if.sfu_uses[`SFU_WCTL][31:0];
+                        `VX_CSR_MPM_SCRB_WCTL_H     : read_data_ro_r = 32'(pipeline_perf_if.sfu_uses[`SFU_WCTL][`PERF_CTR_BITS-1:32]);
                     `ifdef EXT_TEX_ENABLE
-                        `VX_CSR_MPM_SCRB_TEX        : read_data_ro_r = sfu_perf_if.tex_stalls[31:0];
-                        `VX_CSR_MPM_SCRB_TEX_H      : read_data_ro_r = 32'(sfu_perf_if.tex_stalls[`PERF_CTR_BITS-1:32]);
+                        `VX_CSR_MPM_SCRB_TEX        : read_data_ro_r = pipeline_perf_if.sfu_uses[`SFU_TEX][31:0];
+                        `VX_CSR_MPM_SCRB_TEX_H      : read_data_ro_r = 32'(pipeline_perf_if.sfu_uses[`SFU_TEX][`PERF_CTR_BITS-1:32]);
                     `else                   
                         `VX_CSR_MPM_SCRB_TEX        : read_data_ro_r = '0;
                         `VX_CSR_MPM_SCRB_TEX_H      : read_data_ro_r = '0;
                     `endif
-                    `ifdef EXT_RASTER_ENABLE
-                        `VX_CSR_MPM_SCRB_RASTER     : read_data_ro_r = sfu_perf_if.raster_stalls[31:0];
-                        `VX_CSR_MPM_SCRB_RASTER_H   : read_data_ro_r = 32'(sfu_perf_if.raster_stalls[`PERF_CTR_BITS-1:32]);
-                    `else                   
-                        `VX_CSR_MPM_SCRB_RASTER     : read_data_ro_r = '0;
-                        `VX_CSR_MPM_SCRB_RASTER_H   : read_data_ro_r = '0;
-                    `endif
                     `ifdef EXT_OM_ENABLE
-                        `VX_CSR_MPM_SCRB_OM         : read_data_ro_r = sfu_perf_if.om_stalls[31:0];
-                        `VX_CSR_MPM_SCRB_OM_H       : read_data_ro_r = 32'(sfu_perf_if.om_stalls[`PERF_CTR_BITS-1:32]);
+                        `VX_CSR_MPM_SCRB_OM         : read_data_ro_r = pipeline_perf_if.sfu_uses[`SFU_OM][31:0];
+                        `VX_CSR_MPM_SCRB_OM_H       : read_data_ro_r = 32'(pipeline_perf_if.sfu_uses[`SFU_OM][`PERF_CTR_BITS-1:32]);
                     `else                   
                         `VX_CSR_MPM_SCRB_OM         : read_data_ro_r = '0;
                         `VX_CSR_MPM_SCRB_OM_H       : read_data_ro_r = '0;
+                    `endif
+                    `ifdef EXT_RASTER_ENABLE
+                        `VX_CSR_MPM_SCRB_RASTER     : read_data_ro_r = pipeline_perf_if.sfu_uses[`SFU_RASTER][31:0];
+                        `VX_CSR_MPM_SCRB_RASTER_H   : read_data_ro_r = 32'(pipeline_perf_if.sfu_uses[`SFU_RASTER][`PERF_CTR_BITS-1:32]);
+                    `else                   
+                        `VX_CSR_MPM_SCRB_RASTER     : read_data_ro_r = '0;
+                        `VX_CSR_MPM_SCRB_RASTER_H   : read_data_ro_r = '0;
                     `endif
                         // PERF: memory
                         `VX_CSR_MPM_IFETCHES        : read_data_ro_r = pipeline_perf_if.ifetches[31:0];
@@ -411,8 +414,6 @@ import VX_fpu_pkg::*;
     `RUNTIME_ASSERT(~read_enable || read_addr_valid_r, ("%t: *** invalid CSR read address: 0x%0h (#%0d)", $time, read_addr, read_uuid))
 
 `ifdef PERF_ENABLE
-    wire [`PERF_CTR_BITS-1:0] perf_wctl_stalls = sfu_perf_if.wctl_stalls;
-    `UNUSED_VAR (perf_wctl_stalls);
     `UNUSED_VAR (mem_perf_if.icache);
     `UNUSED_VAR (mem_perf_if.smem);
 `endif

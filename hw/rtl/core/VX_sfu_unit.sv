@@ -98,10 +98,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     wire [RSP_ARB_SIZE-1:0] rsp_arb_ready_in;
     wire [RSP_ARB_SIZE-1:0][RSP_ARB_DATAW-1:0] rsp_arb_data_in;
     
-`ifdef PERF_ENABLE
-    VX_sfu_perf_if sfu_perf_if();
-`endif
-
 `ifdef EXT_TEX_ENABLE
     VX_sfu_csr_if tex_csr_if();
 `endif
@@ -168,7 +164,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .mem_perf_if    (mem_perf_if),
         .pipeline_perf_if(pipeline_perf_if),
-        .sfu_perf_if    (sfu_perf_if),
     `endif
    
     `ifdef EXT_F_ENABLE  
@@ -320,7 +315,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     `endif
         default: sfu_req_ready = wctl_execute_if.ready;
         endcase
-    end   
+    end
     assign execute_if[0].ready = sfu_req_ready;
 
     // response arbitration
@@ -358,53 +353,5 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .commit_in_if  (arb_commit_if),
         .commit_out_if (commit_if)
     );
-
-`ifdef PERF_ENABLE
-`ifdef EXT_TEX_ENABLE
-    reg [`PERF_CTR_BITS-1:0] perf_tex_stalls;
-    always @(posedge clk) begin
-        if (reset) begin
-            perf_tex_stalls <= '0;
-        end else begin
-            perf_tex_stalls <= perf_tex_stalls + `PERF_CTR_BITS'(tex_execute_if.valid && ~tex_execute_if.ready);
-        end
-    end
-    assign sfu_perf_if.tex_stalls = perf_tex_stalls;
-`endif
-`ifdef EXT_RASTER_ENABLE
-    reg [`PERF_CTR_BITS-1:0] perf_raster_stalls;
-    always @(posedge clk) begin
-        if (reset) begin
-            perf_raster_stalls <= '0;
-        end else begin
-            perf_raster_stalls <= perf_raster_stalls + `PERF_CTR_BITS'(raster_execute_if.valid && ~raster_execute_if.ready);
-        end
-    end
-    assign sfu_perf_if.raster_stalls = perf_raster_stalls;
-`endif
-`ifdef EXT_OM_ENABLE
-    reg [`PERF_CTR_BITS-1:0] perf_om_stalls;
-    always @(posedge clk) begin
-        if (reset) begin
-            perf_om_stalls <= '0;
-        end else begin
-            perf_om_stalls <= perf_om_stalls + `PERF_CTR_BITS'(om_execute_if.valid && ~om_execute_if.ready);
-        end
-    end
-    assign sfu_perf_if.om_stalls = perf_om_stalls;
-`endif
-    reg [`PERF_CTR_BITS-1:0] perf_wctl_stalls;
-
-    wire wctl_execute_stall = wctl_execute_if.valid && ~wctl_execute_if.ready;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            perf_wctl_stalls <= '0;
-        end else begin
-            perf_wctl_stalls <= perf_wctl_stalls + `PERF_CTR_BITS'(wctl_execute_stall);
-        end
-    end
-    assign sfu_perf_if.wctl_stalls = perf_wctl_stalls;
-`endif
 
 endmodule
