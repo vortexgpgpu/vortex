@@ -151,9 +151,9 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             STATE_IDLE: begin
                 // fetch the next tile header
                 if (start && (start_tile_count != 0)) begin
+                    mem_req_valid <= 1;
                     state <= STATE_TILE;
-                end
-                mem_req_valid   <= 1;
+                end                
                 mem_req_addr[0] <= start_tbuf_addr;
                 mem_req_addr[1] <= start_tbuf_addr + W_ADDR_BITS'(1);
                 mem_req_mask    <= 9'b11;
