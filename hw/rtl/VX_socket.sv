@@ -182,9 +182,7 @@ module VX_socket import VX_gpu_pkg::*; #(
 `endif
     assign mem_perf_tmp_if.smem = 'x;
     assign mem_perf_tmp_if.mem = mem_perf_if.mem;
-`endif    
-
-
+`endif
 
     ///////////////////////////////////////////////////////////////////////////
 
