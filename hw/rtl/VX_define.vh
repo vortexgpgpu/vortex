@@ -57,10 +57,18 @@
 `define EX_ALU          0
 `define EX_LSU          1
 `define EX_SFU          2
-`define EX_FPU          3
+`define EX_FPU          (`EX_SFU + `EXT_F_ENABLED)
 
 `define NUM_EX_UNITS    (3 + `EXT_F_ENABLED)
 `define EX_BITS         `CLOG2(`NUM_EX_UNITS)
+`define EX_WIDTH        `UP(`EX_BITS)
+
+`define SFU_CSRS        0
+`define SFU_WCTL        1
+
+`define NUM_SFU_UNITS   (2)
+`define SFU_BITS        `CLOG2(`NUM_SFU_UNITS)
+`define SFU_WIDTH       `UP(`SFU_BITS)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -369,35 +377,32 @@
     VX_dcr_bus_if dst(); \
     assign {dst.write_valid, dst.write_addr, dst.write_data} = __``dst
 
-`define PERF_REDUCE(dst, src, field, width, count) \
-    wire [count-1:0][width-1:0] __reduce_add_i_``src``field; \
-    wire [width-1:0] __reduce_add_o_``dst``field; \
-    reg [width-1:0] __reduce_add_r_``dst``field; \
-    for (genvar __i = 0; __i < count; ++__i) begin \
-        assign __reduce_add_i_``src``field[__i] = ``src[__i].``field; \
-    end \
-    VX_reduce #(.DATAW_IN(width), .N(count), .OP("+")) __reduce_add_``dst``field ( \
-        __reduce_add_i_``src``field, \
-        __reduce_add_o_``dst``field \
-    ); \
-    always @(posedge clk) begin \
-       if (reset) begin \
-           __reduce_add_r_``dst``field <= '0; \
-       end else begin \
-           __reduce_add_r_``dst``field <= __reduce_add_o_``dst``field; \
-       end \
-    end \
-    assign ``dst.``field = __reduce_add_r_``dst``field
-
-`define PERF_CACHE_REDUCE(dst, src, count) \
-    `PERF_REDUCE (dst, src, reads, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, writes, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, read_misses, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, write_misses, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, bank_stalls, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, mshr_stalls, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, mem_stalls, `PERF_CTR_BITS, count); \
-    `PERF_REDUCE (dst, src, crsp_stalls, `PERF_CTR_BITS, count)
+`define PERF_COUNTER_ADD(dst, src, field, width, dst_count, src_count, reg_enable) \
+    for (genvar __d = 0; __d < dst_count; ++__d) begin \
+        localparam __count = ((src_count > dst_count) ? ((src_count + dst_count - 1) / dst_count) : 1); \
+        wire [__count-1:0][width-1:0] __reduce_add_i_``src``field; \
+        wire [width-1:0] __reduce_add_o_``dst``field; \
+        for (genvar __i = 0; __i < __count; ++__i) begin \
+            assign __reduce_add_i_``src``field[__i] = ``src[__d * __count + __i].``field; \
+        end \
+        VX_reduce #(.DATAW_IN(width), .N(__count), .OP("+")) __reduce_add_``dst``field ( \
+            __reduce_add_i_``src``field, \
+            __reduce_add_o_``dst``field \
+        ); \
+        if (reg_enable) begin \
+            reg [width-1:0] __reduce_add_r_``dst``field; \
+            always @(posedge clk) begin \
+                if (reset) begin \
+                    __reduce_add_r_``dst``field <= '0; \
+                end else begin \
+                    __reduce_add_r_``dst``field <= __reduce_add_o_``dst``field; \
+                end \
+            end \
+            assign ``dst[__d].``field = __reduce_add_r_``dst``field; \
+        end else begin \
+            assign ``dst[__d].``field = __reduce_add_o_``dst``field; \
+        end \
+    end
 
 `define ASSIGN_BLOCKED_WID(dst, src, block_idx, block_size) \
     if (block_size != 1) begin \

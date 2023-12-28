@@ -30,12 +30,6 @@ public:
   struct PerfStats {
     CacheSim::PerfStats icache;
     CacheSim::PerfStats dcache;
-
-    PerfStats& operator+=(const PerfStats& rhs) {
-      this->icache += rhs.icache;
-      this->dcache += rhs.dcache;
-      return *this;
-    }
   };
 
   SimPort<MemReq> icache_mem_req_port;
@@ -74,14 +68,14 @@ public:
 
   void resume(uint32_t core_id);
 
-  Socket::PerfStats perf_stats() const;
+  PerfStats perf_stats() const;
   
 private:
-  uint32_t                socket_id_;  
+  uint32_t                socket_id_;
+  Cluster*                cluster_;
   std::vector<Core::Ptr>  cores_;
   CacheCluster::Ptr       icaches_;
   CacheCluster::Ptr       dcaches_;
-  Cluster*                cluster_;
 };
 
 } // namespace vortex
