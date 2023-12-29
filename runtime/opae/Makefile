@@ -1,24 +1,14 @@
 XLEN ?= 32
-
 TARGET ?= opaesim
-
+DESTDIR ?= $(CURDIR)
 OPAESIM_DIR = ../../sim/opaesim
-
 RTL_DIR=../../hw/rtl
-
 SYN_DIR=../../hw/syn/altera/opae
-
 SCRIPT_DIR=../../hw/scripts
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -I. -I../include -I../common/ -I../../hw
+CXXFLAGS += -I$(DESTDIR) -I../include -I../common/ -I../../hw
 CXXFLAGS += -DXLEN_$(XLEN)
-
-ifeq ($(TARGET), opaesim)
-	CXXFLAGS += -I$(OPAESIM_DIR)
-else
-	CXXFLAGS += -I$(SYN_DIR)
-endif
 
 # Position independent code
 CXXFLAGS += -fPIC
@@ -35,9 +25,11 @@ SRCS = vortex.cpp driver.cpp ../common/utils.cpp
 
 # set up target types
 ifeq ($(TARGET), opaesim)
-	CXXFLAGS += -DOPAESIM
-	OPAESIM = libopae-c-sim.so
+	OPAESIM = $(DESTDIR)/libopae-c-sim.so
+	CXXFLAGS += -DOPAESIM -I$(OPAESIM_DIR)	
+	LDFLAGS += -L$(DESTDIR) -lopae-c-sim
 else
+	CXXFLAGS += -I$(SYN_DIR)
 	ifeq ($(TARGET), asesim)
 		CXXFLAGS += -DASESIM
 	else
@@ -65,14 +57,14 @@ endif
 
 PROJECT = libvortex.so
 
-all: $(PROJECT)
+all: $(DESTDIR)/$(PROJECT)
 
-libopae-c-sim.so:
-	DESTDIR=../../runtime/opae $(MAKE) -C $(OPAESIM_DIR) ../../runtime/opae/libopae-c-sim.so
+$(DESTDIR)/libopae-c-sim.so:
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(OPAESIM_DIR) $(DESTDIR)/libopae-c-sim.so
 
-$(PROJECT): $(SRCS) $(OPAESIM)
-	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT)
+$(DESTDIR)/$(PROJECT): $(SRCS) $(OPAESIM)
+	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
 clean:
-	DESTDIR=../../runtime/opae $(MAKE) -C $(OPAESIM_DIR) clean
-	rm -rf $(PROJECT)
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(OPAESIM_DIR) clean
+	rm -rf $(DESTDIR)/$(PROJECT)

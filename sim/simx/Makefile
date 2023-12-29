@@ -1,5 +1,5 @@
 XLEN ?= 32
-DESTDIR ?= .
+DESTDIR ?= $(CURDIR)
 RTL_DIR = ../hw/rtl
 THIRD_PARTY_DIR = ../../third_party
 
