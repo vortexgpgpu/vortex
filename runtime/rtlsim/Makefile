@@ -1,9 +1,10 @@
 XLEN ?= 32
 DESTDIR ?= $(CURDIR)
-RTLSIM_DIR = ../../sim/rtlsim
+SIM_DIR = $(abspath ../../sim)
+HW_DIR = $(abspath ../../hw)
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -I../include -I../common -I../../hw -I$(RTLSIM_DIR) -I$(RTLSIM_DIR)/../common
+CXXFLAGS += -I../include -I../common -I$(HW_DIR) -I$(SIM_DIR)/rtlsim -I$(SIM_DIR)/common
 CXXFLAGS += -DXLEN_$(XLEN)
 
 # Position independent code
@@ -37,9 +38,9 @@ PROJECT = libvortex.so
 all: $(DESTDIR)/$(PROJECT)
 	
 $(DESTDIR)/$(PROJECT): $(SRCS)
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(RTLSIM_DIR) $(DESTDIR)/librtlsim.so
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(SIM_DIR)/rtlsim $(DESTDIR)/librtlsim.so
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
 clean:
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(RTLSIM_DIR) clean
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(SIM_DIR)/rtlsim clean
 	rm -rf $(DESTDIR)/$(PROJECT) *.o

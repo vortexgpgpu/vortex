@@ -1,20 +1,22 @@
 XLEN ?= 32
 DESTDIR ?= $(CURDIR)
-RTL_DIR = ../../hw/rtl
-DPI_DIR = ../../hw/dpi
+HW_DIR = $(abspath ../../hw)
+COMMON_DIR = $(abspath ../common)
+THIRD_PARTY_DIR = $(abspath ../../third_party)
+RTL_DIR = $(HW_DIR)/rtl
+DPI_DIR = $(HW_DIR)/dpi
 AFU_DIR = $(RTL_DIR)/afu/opae
-SCRIPT_DIR = ../../hw/scripts
-THIRD_PARTY_DIR = ../../third_party
+SCRIPT_DIR = $(HW_DIR)/scripts
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I.. -I../../../hw -I../../common -I$(abspath $(DESTDIR))
-CXXFLAGS += -I../$(THIRD_PARTY_DIR)/softfloat/source/include
-CXXFLAGS += -I../$(THIRD_PARTY_DIR)
+CXXFLAGS += -I$(CURDIR) -I$(HW_DIR) -I$(COMMON_DIR) -I$(DESTDIR)
+CXXFLAGS += -I/$(THIRD_PARTY_DIR)/softfloat/source/include
+CXXFLAGS += -I/$(THIRD_PARTY_DIR)
 CXXFLAGS += -DXLEN_$(XLEN)
 
-LDFLAGS += -shared ../$(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
-LDFLAGS += -L../$(THIRD_PARTY_DIR)/ramulator -lramulator -pthread
+LDFLAGS += -shared $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
+LDFLAGS += -L$(THIRD_PARTY_DIR)/ramulator -lramulator -pthread
 
 # control RTL debug tracing states
 DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_PIPELINE  
@@ -53,9 +55,9 @@ endif
 
 DBG_FLAGS += -DDEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 
-SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
+SRCS = $(COMMON_DIR)/util.cpp $(COMMON_DIR)/mem.cpp $(COMMON_DIR)/rvfloats.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
-SRCS += fpga.cpp opae_sim.cpp
+SRCS += $(CURDIR)/fpga.cpp $(CURDIR)/opae_sim.cpp
 
 RTL_PKGS = $(AFU_DIR)/local_mem_cfg_pkg.sv $(AFU_DIR)/ccip/ccip_if_pkg.sv
 RTL_PKGS += $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
@@ -128,7 +130,7 @@ $(DESTDIR)/vortex_afu.h : $(AFU_DIR)/vortex_afu.vh
 	$(SCRIPT_DIR)/gen_config.py -i $^ -o $@
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/vortex_afu.h $(SCOPE_JSON)
-	verilator --build --exe -O3 $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o $@
+	verilator --build --exe -O3 $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $(DESTDIR)/obj_dir -o $@
 
 clean:
-	rm -rf obj_dir $(DESTDIR)/vortex.xml $(DESTDIR)/scope.json $(DESTDIR)/vortex_afu.h $(DESTDIR)/$(PROJECT)
+	rm -rf $(DESTDIR)/obj_dir $(DESTDIR)/vortex.xml $(DESTDIR)/scope.json $(DESTDIR)/vortex_afu.h $(DESTDIR)/$(PROJECT)
