@@ -1,18 +1,20 @@
 XLEN ?= 32
 DESTDIR ?= $(CURDIR)
-RTL_DIR = ../../hw/rtl
-DPI_DIR = ../../hw/dpi
-THIRD_PARTY_DIR = ../../third_party
+HW_DIR = $(abspath ../../hw)
+COMMON_DIR = $(abspath ../common)
+THIRD_PARTY_DIR = $(abspath ../../third_party)
+RTL_DIR = $(HW_DIR)/rtl
+DPI_DIR = $(HW_DIR)/dpi
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I../../../hw -I../../common
-CXXFLAGS += -I../$(THIRD_PARTY_DIR)/softfloat/source/include
-CXXFLAGS += -I../$(THIRD_PARTY_DIR)
+CXXFLAGS += -I$(HW_DIR) -I$(COMMON_DIR)
+CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
+CXXFLAGS += -I$(THIRD_PARTY_DIR)
 CXXFLAGS += -DXLEN_$(XLEN)
 
-LDFLAGS += ../$(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
-LDFLAGS += -L../$(THIRD_PARTY_DIR)/ramulator -lramulator
+LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
+LDFLAGS += -L$(THIRD_PARTY_DIR)/ramulator -lramulator
 
 # control RTL debug tracing states
 DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_PIPELINE  
@@ -45,9 +47,9 @@ OM_INCLUDE = -I$(RTL_DIR)/om
 RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 RTL_INCLUDE += $(TEX_INCLUDE) $(RASTER_INCLUDE) $(OM_INCLUDE)
 
-SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
+SRCS = $(COMMON_DIR)/util.cpp $(COMMON_DIR)/mem.cpp $(COMMON_DIR)/rvfloats.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
-SRCS += processor.cpp
+SRCS += $(CURDIR)/processor.cpp
 
 ifdef AXI_BUS
 	TOP = Vortex_axi
@@ -94,11 +96,11 @@ PROJECT = rtlsim
 
 all: $(DESTDIR)/$(PROJECT)
 
-$(DESTDIR)/$(PROJECT): $(SRCS) main.cpp
-	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS) -DSTARTUP_ADDR=0x80000000' -LDFLAGS '$(LDFLAGS)' -o $@
+$(DESTDIR)/$(PROJECT): $(SRCS) $(CURDIR)/main.cpp
+	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS) -DSTARTUP_ADDR=0x80000000' -LDFLAGS '$(LDFLAGS)' --Mdir $(DESTDIR)/obj_dir -o $@
 	
 $(DESTDIR)/lib$(PROJECT).so: $(SRCS)
-	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' -o $@
+	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' --Mdir $(DESTDIR)/obj_dir -o $@
 
 clean:
-	rm -rf obj_dir $(DESTDIR)/$(PROJECT) $(DESTDIR)/lib$(PROJECT).so
+	rm -rf $(DESTDIR)/obj_dir $(DESTDIR)/$(PROJECT) $(DESTDIR)/lib$(PROJECT).so
