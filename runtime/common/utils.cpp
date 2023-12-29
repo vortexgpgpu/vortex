@@ -322,7 +322,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         uint64_t scrb_wctl_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_WCTL);
         uint64_t scrb_csrs_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_CSRS);
         if (num_cores > 1) {
-          uint64_t sfu_total = scrb_wctl_per_core + scrb_csrs_per_core + scrb_tex_per_core + scrb_raster_per_core + scrb_om_per_core;
+          uint64_t sfu_total = scrb_wctl_per_core + scrb_csrs_per_core;
           fprintf(stream, "PERF: core%d: sfu stalls=%ld (scrs=%d%%, wctl=%d%%)\n"
             , core_id
             , scrb_sfu_per_core            
