@@ -1,5 +1,5 @@
 XLEN ?= 32
-DESTDIR ?= .
+DESTDIR ?= $(CURDIR)
 RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi
 AFU_DIR = $(RTL_DIR)/afu/opae
@@ -119,16 +119,16 @@ PROJECT = libopae-c-sim.so
 all: $(DESTDIR)/$(PROJECT)
 
 $(DESTDIR)/vortex.xml:
-	verilator --xml-only -O0 $(VL_FLAGS) $(TOP) --xml-output $(DESTDIR)/vortex.xml
+	verilator --xml-only -O0 $(VL_FLAGS) $(TOP) --xml-output $@
 
 $(DESTDIR)/scope.json: $(DESTDIR)/vortex.xml
-	$(SCRIPT_DIR)/scope.py $(DESTDIR)/vortex.xml -o $(DESTDIR)/scope.json
+	$(SCRIPT_DIR)/scope.py $^ -o $@
 
 $(DESTDIR)/vortex_afu.h : $(AFU_DIR)/vortex_afu.vh
-	$(SCRIPT_DIR)/gen_config.py -i $(AFU_DIR)/vortex_afu.vh -o $(DESTDIR)/vortex_afu.h
+	$(SCRIPT_DIR)/gen_config.py -i $^ -o $@
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/vortex_afu.h $(SCOPE_JSON)
-	verilator --build --exe -O3 $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(DESTDIR)/$(PROJECT)
+	verilator --build --exe -O3 $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o $@
 
 clean:
 	rm -rf obj_dir $(DESTDIR)/vortex.xml $(DESTDIR)/scope.json $(DESTDIR)/vortex_afu.h $(DESTDIR)/$(PROJECT)
