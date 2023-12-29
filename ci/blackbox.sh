@@ -16,7 +16,17 @@
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: $0 [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--perf=#class] [--rebuild=0|1] [--log=logfile] [--help]]"
+    echo "Usage: $0 [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--perf=#class] [--rebuild=#n] [--log=logfile] [--help]]"
+}
+
+show_help()
+{
+    show_usage
+    echo "  where"
+    echo "--driver: simx, rtlsim, oape, xrt"
+    echo "--app: any subfolder test under regression or opencl"
+    echo "--class: 0=disable, 1=pipeline, 2=memsys"
+    echo "--rebuild: 0=disable, 1=force, 2=auto, 3=temp"
 }
 
 SCRIPT_DIR=$(dirname "$0")
@@ -36,6 +46,7 @@ SCOPE=0
 HAS_ARGS=0
 PERF_CLASS=0
 REBUILD=2
+TEMPBUILD=0
 LOGFILE=run.log
 
 for i in "$@"
@@ -102,7 +113,7 @@ case $i in
         shift
         ;;
     --help)
-        show_usage
+        show_help
         exit 0
         ;;
     *)
@@ -111,6 +122,12 @@ case $i in
         ;;
 esac
 done
+
+if [ $REBUILD -eq 3 ];
+then
+    REBUILD=1
+    TEMPBUILD=1
+fi
 
 case $DRIVER in
     simx)
@@ -174,53 +191,119 @@ make -C $VORTEX_HOME/runtime/stub > /dev/null
 
 if [ $DEBUG -ne 0 ]
 then    
-    # driver initialization
-    if [ $SCOPE -eq 1 ]
-    then
-        echo "running: DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
-        DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH > /dev/null
-    else
-        echo "running: DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
-        DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -C $DRIVER_PATH > /dev/null
-    fi
-    
     # running application
-    if [ $HAS_ARGS -eq 1 ]
+    if [ $TEMPBUILD -eq 1 ]
     then
-        echo "running: OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1"
-        OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
-        status=$?
+        # setup temp directory
+        TEMPDIR=$(mktemp -d)
+        mkdir -p "$TEMPDIR/$DRIVER"
+
+        # driver initialization
+        if [ $SCOPE -eq 1 ]
+        then
+            echo "running: DESTDIR=$TEMPDIR/$DRIVER DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS=$CONFIGS make -C $DRIVER_PATH"
+            DESTDIR="$TEMPDIR/$DRIVER" DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH > /dev/null
+        else
+            echo "running: DESTDIR=$TEMPDIR/$DRIVER DEBUG=$DEBUG_LEVEL CONFIGS=$CONFIGS make -C $DRIVER_PATH"
+            DESTDIR="$TEMPDIR/$DRIVER" DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -C $DRIVER_PATH > /dev/null
+        fi
+
+        # running application
+        if [ $HAS_ARGS -eq 1 ]
+        then
+            echo "running: VORTEX_RT_PATH=$TEMPDIR OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1"
+            VORTEX_RT_PATH=$TEMPDIR OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
+            status=$?
+        else
+            echo "running: VORTEX_RT_PATH=$TEMPDIR make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1"
+            VORTEX_RT_PATH=$TEMPDIR make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
+            status=$?
+        fi
+
+        # cleanup temp directory
+        trap "rm -rf $TEMPDIR" EXIT
     else
-        echo "running: make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1"
-        make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
-        status=$?
+        # driver initialization
+        if [ $SCOPE -eq 1 ]
+        then
+            echo "running: DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS=$CONFIGS make -C $DRIVER_PATH"
+            DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH > /dev/null
+        else
+            echo "running: DEBUG=$DEBUG_LEVEL CONFIGS=$CONFIGS make -C $DRIVER_PATH"
+            DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -C $DRIVER_PATH > /dev/null
+        fi
+
+        # running application
+        if [ $HAS_ARGS -eq 1 ]
+        then
+            echo "running: OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1"
+            OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
+            status=$?
+        else
+            echo "running: make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1"
+            make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
+            status=$?
+        fi
     fi
     
     if [ -f "$APP_PATH/trace.vcd" ]
     then 
         mv -f $APP_PATH/trace.vcd .
     fi
-else
-    # driver initialization
-    if [ $SCOPE -eq 1 ]
+else    
+    if [ $TEMPBUILD -eq 1 ]
     then
-        echo "running: SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
-        SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH > /dev/null
+        # setup temp directory
+        TEMPDIR=$(mktemp -d)
+        mkdir -p "$TEMPDIR/$DRIVER"
+        
+        # driver initialization
+        if [ $SCOPE -eq 1 ]
+        then
+            echo "running: DESTDIR=$TEMPDIR/$DRIVER SCOPE=1 CONFIGS=$CONFIGS make -C $DRIVER_PATH"
+            DESTDIR="$TEMPDIR/$DRIVER" SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH > /dev/null
+        else
+            echo "running: DESTDIR=$TEMPDIR/$DRIVER CONFIGS=$CONFIGS make -C $DRIVER_PATH"
+            DESTDIR="$TEMPDIR/$DRIVER" CONFIGS="$CONFIGS" make -C $DRIVER_PATH > /dev/null
+        fi
+        
+        # running application
+        if [ $HAS_ARGS -eq 1 ]
+        then
+            echo "running: VORTEX_RT_PATH=$TEMPDIR OPTS=$ARGS make -C $APP_PATH run-$DRIVER"
+            VORTEX_RT_PATH=$TEMPDIR OPTS=$ARGS make -C $APP_PATH run-$DRIVER
+            status=$?
+        else
+            echo "running: VORTEX_RT_PATH=$TEMPDIR make -C $APP_PATH run-$DRIVER"
+            VORTEX_RT_PATH=$TEMPDIR make -C $APP_PATH run-$DRIVER
+            status=$?
+        fi
+
+        # cleanup temp directory
+        trap "rm -rf $TEMPDIR" EXIT
     else
-        echo "running: CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
-        CONFIGS="$CONFIGS" make -C $DRIVER_PATH > /dev/null
-    fi
-    
-    # running application
-    if [ $HAS_ARGS -eq 1 ]
-    then
-        echo "running: OPTS=$ARGS make -C $APP_PATH run-$DRIVER"
-        OPTS=$ARGS make -C $APP_PATH run-$DRIVER
-        status=$?
-    else
-        echo "running: make -C $APP_PATH run-$DRIVER"
-        make -C $APP_PATH run-$DRIVER
-        status=$?
+        
+        # driver initialization
+        if [ $SCOPE -eq 1 ]
+        then
+            echo "running: SCOPE=1 CONFIGS=$CONFIGS make -C $DRIVER_PATH"
+            SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH > /dev/null
+        else
+            echo "running: CONFIGS=$CONFIGS make -C $DRIVER_PATH"
+            CONFIGS="$CONFIGS" make -C $DRIVER_PATH > /dev/null
+        fi
+
+        # running application
+        if [ $HAS_ARGS -eq 1 ]
+        then
+            echo "running: OPTS=$ARGS make -C $APP_PATH run-$DRIVER"
+            OPTS=$ARGS make -C $APP_PATH run-$DRIVER
+            status=$?
+        else
+            echo "running: make -C $APP_PATH run-$DRIVER"
+            make -C $APP_PATH run-$DRIVER
+            status=$?
+        fi
     fi
 fi
 
