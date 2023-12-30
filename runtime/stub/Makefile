@@ -1,6 +1,11 @@
+XLEN ?= 32
+DESTDIR ?= $(CURDIR)
+SIM_DIR = $(abspath ../../sim)
+HW_DIR = $(abspath ../../hw)
+
 CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I../include -I../../runtime -I../../hw -I../../sim/common
+CXXFLAGS += -I../include -I../common -I$(HW_DIR) -I$(SIM_DIR)/common
 
 CXXFLAGS += -fPIC
 
