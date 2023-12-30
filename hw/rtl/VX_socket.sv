@@ -30,8 +30,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     VX_dcr_bus_if.slave     dcr_bus_if,
 
     // Memory
-    VX_mem_bus_if.master    icache_mem_bus_if,
-    VX_mem_bus_if.master    dcache_mem_bus_if,
+    VX_mem_bus_if.master    mem_bus_if,
 
 `ifdef GBAR_ENABLE
     // Barrier
@@ -79,6 +78,11 @@ module VX_socket import VX_gpu_pkg::*; #(
         .TAG_WIDTH (ICACHE_TAG_WIDTH)
     ) per_core_icache_bus_if[`SOCKET_SIZE]();
 
+    VX_mem_bus_if #(
+        .DATA_SIZE (ICACHE_LINE_SIZE),
+        .TAG_WIDTH (ICACHE_MEM_TAG_WIDTH)
+    ) icache_mem_bus_if();
+
     `RESET_RELAY (icache_reset, reset);
 
     VX_cache_cluster #(
@@ -117,6 +121,11 @@ module VX_socket import VX_gpu_pkg::*; #(
         .DATA_SIZE (DCACHE_WORD_SIZE),
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
     ) per_core_dcache_bus_if[`SOCKET_SIZE * DCACHE_NUM_REQS]();
+    
+    VX_mem_bus_if #(
+        .DATA_SIZE (DCACHE_LINE_SIZE),
+        .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
+    ) dcache_mem_bus_if();
 
     `RESET_RELAY (dcache_reset, reset);
 
@@ -150,6 +159,40 @@ module VX_socket import VX_gpu_pkg::*; #(
         .core_bus_if    (per_core_dcache_bus_if),
         .mem_bus_if     (dcache_mem_bus_if)
     );
+
+    ///////////////////////////////////////////////////////////////////////////  
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (`L1_LINE_SIZE),
+        .TAG_WIDTH (L1_MEM_TAG_WIDTH)
+    ) l1_mem_bus_if[2]();
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (`L1_LINE_SIZE),
+        .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
+    ) l1_mem_arb_bus_if[1]();
+
+    `ASSIGN_VX_MEM_BUS_IF_X (l1_mem_bus_if[0], icache_mem_bus_if, L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_BUS_IF_X (l1_mem_bus_if[1], dcache_mem_bus_if, L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
+
+    `RESET_RELAY (mem_arb_reset, reset);
+
+    VX_mem_arb #(
+        .NUM_INPUTS   (2),
+        .DATA_SIZE    (`L1_LINE_SIZE),
+        .TAG_WIDTH    (L1_MEM_TAG_WIDTH),
+        .TAG_SEL_IDX  (1), // Skip 0 for NC flag
+        .ARBITER      ("R"),
+        .OUT_REG_REQ  (2),
+        .OUT_REG_RSP  (2)
+    ) mem_arb (
+        .clk        (clk),
+        .reset      (mem_arb_reset),
+        .bus_in_if  (l1_mem_bus_if),
+        .bus_out_if (l1_mem_arb_bus_if)
+    );
+
+    `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, l1_mem_arb_bus_if[0]);
 
     ///////////////////////////////////////////////////////////////////////////
 

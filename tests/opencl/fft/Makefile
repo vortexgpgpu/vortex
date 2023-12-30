@@ -1,4 +1,4 @@
-PROJECT = sgemm2
+PROJECT = fft4
 
 SRCS = main.cc
 
