@@ -141,10 +141,9 @@ package VX_gpu_pkg;
 
     /////////////////////////////// L1 Parameters /////////////////////////////
 
-    localparam ICACHE_MEM_ARB_TAG_WIDTH = (ICACHE_MEM_TAG_WIDTH + `CLOG2(`NUM_SOCKETS));
-    localparam DCACHE_MEM_ARB_TAG_WIDTH = (DCACHE_MEM_TAG_WIDTH + `CLOG2(`NUM_SOCKETS));
-    localparam L1_MEM_TAG_WIDTH         = `MAX(ICACHE_MEM_ARB_TAG_WIDTH, DCACHE_MEM_ARB_TAG_WIDTH);
-
+    localparam L1_MEM_TAG_WIDTH     = `MAX(ICACHE_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
+    localparam L1_MEM_ARB_TAG_WIDTH = (L1_MEM_TAG_WIDTH + `CLOG2(2));
+    
     /////////////////////////////// L2 Parameters /////////////////////////////
 
     localparam ICACHE_MEM_ARB_IDX = 0;
@@ -154,10 +153,10 @@ package VX_gpu_pkg;
     localparam L2_WORD_SIZE	        = `L1_LINE_SIZE;
 
     // Input request size
-    localparam L2_NUM_REQS	        = 2;
+    localparam L2_NUM_REQS	        = `NUM_SOCKETS;
 
     // Core request tag bits
-    localparam L2_TAG_WIDTH	        = L1_MEM_TAG_WIDTH;
+    localparam L2_TAG_WIDTH	        = L1_MEM_ARB_TAG_WIDTH;
 
     // Memory request data bits
     localparam L2_MEM_DATA_WIDTH	= (`L2_LINE_SIZE * 8);
