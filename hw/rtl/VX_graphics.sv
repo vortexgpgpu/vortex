@@ -158,7 +158,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .mem_bus_if     (rcache_mem_bus_tmp_if)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF_X (rcache_mem_bus_if, rcache_mem_bus_tmp_if, L1_MEM_TAG_WIDTH, RCACHE_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_BUS_IF_X (rcache_mem_bus_if, rcache_mem_bus_tmp_if, L1X_MEM_TAG_WIDTH, RCACHE_MEM_TAG_WIDTH);
 
 `endif
 
@@ -261,7 +261,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .mem_bus_if     (tcache_mem_bus_tmp_if)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF_X (tcache_mem_bus_if, tcache_mem_bus_tmp_if, L1_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_BUS_IF_X (tcache_mem_bus_if, tcache_mem_bus_tmp_if, L1X_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH);
             
 `endif
 
@@ -362,7 +362,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .mem_bus_if     (ocache_mem_bus_tmp_if)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF_X (ocache_mem_bus_if, ocache_mem_bus_tmp_if, L1_MEM_TAG_WIDTH, OCACHE_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_BUS_IF_X (ocache_mem_bus_if, ocache_mem_bus_tmp_if, L1X_MEM_TAG_WIDTH, OCACHE_MEM_TAG_WIDTH);
 
 `endif
     

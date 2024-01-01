@@ -149,7 +149,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .perf_raster_if (perf_raster_if),
         .perf_rcache (mem_perf_tmp_if.rcache),
     `endif
-        .rcache_mem_bus_if (l2_mem_bus_if[RCACHE_MEM_ARB_IDX]),
+        .rcache_mem_bus_if (l2_mem_bus_if[RCACHE_MEM_L2_IDX]),
     `endif
 
     `ifdef EXT_TEX_ENABLE
@@ -158,7 +158,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .perf_tex_if (perf_tex_if),
         .perf_tcache (mem_perf_tmp_if.tcache),
     `endif
-        .tcache_mem_bus_if (l2_mem_bus_if[TCACHE_MEM_ARB_IDX]),
+        .tcache_mem_bus_if (l2_mem_bus_if[TCACHE_MEM_L2_IDX]),
     `endif
 
     `ifdef EXT_OM_ENABLE
@@ -167,66 +167,20 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .perf_om_if (perf_om_if),
         .perf_ocache (mem_perf_tmp_if.ocache),
     `endif
-        .ocache_mem_bus_if (l2_mem_bus_if[OCACHE_MEM_ARB_IDX]),
+        .ocache_mem_bus_if (l2_mem_bus_if[OCACHE_MEM_L2_IDX]),
     `endif
 
         .dcr_bus_if (dcr_bus_if)        
     );
-
+    
     VX_mem_bus_if #(
-        .DATA_SIZE (ICACHE_LINE_SIZE),
-        .TAG_WIDTH (ICACHE_MEM_TAG_WIDTH)
-    ) per_socket_icache_mem_bus_if[`NUM_SOCKETS]();
+        .DATA_SIZE (`L1_LINE_SIZE),
+        .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
+    ) per_socket_mem_bus_if[`NUM_SOCKETS]();
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (DCACHE_LINE_SIZE),
-        .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
-    ) per_socket_dcache_mem_bus_if[`NUM_SOCKETS]();
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (ICACHE_LINE_SIZE),
-        .TAG_WIDTH (ICACHE_MEM_ARB_TAG_WIDTH)
-    ) icache_mem_bus_if[1]();
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (DCACHE_LINE_SIZE),
-        .TAG_WIDTH (DCACHE_MEM_ARB_TAG_WIDTH)
-    ) dcache_mem_bus_if[1]();
-
-    `RESET_RELAY (l1_mem_arb_reset, reset);
-
-    VX_mem_arb #(
-        .NUM_INPUTS  (`NUM_SOCKETS),
-        .DATA_SIZE   (ICACHE_LINE_SIZE),
-        .TAG_WIDTH   (ICACHE_MEM_TAG_WIDTH),
-        .TAG_SEL_IDX (1), // Skip 0 for NC flag
-        .ARBITER     ("R"),
-        .OUT_REG_REQ (2),
-        .OUT_REG_RSP (2)
-    ) icache_mem_arb (
-        .clk        (clk),
-        .reset      (l1_mem_arb_reset),
-        .bus_in_if  (per_socket_icache_mem_bus_if),
-        .bus_out_if (icache_mem_bus_if)
-    );
-
-    VX_mem_arb #(
-        .NUM_INPUTS  (`NUM_SOCKETS),
-        .DATA_SIZE   (DCACHE_LINE_SIZE),
-        .TAG_WIDTH   (DCACHE_MEM_TAG_WIDTH),
-        .TAG_SEL_IDX (1), // Skip 0 for NC flag
-        .ARBITER     ("R"),
-        .OUT_REG_REQ (2),
-        .OUT_REG_RSP (2)
-    ) dcache_mem_arb (
-        .clk        (clk),
-        .reset      (l1_mem_arb_reset),
-        .bus_in_if  (per_socket_dcache_mem_bus_if),
-        .bus_out_if (dcache_mem_bus_if)
-    );
-
-    `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[ICACHE_MEM_ARB_IDX], icache_mem_bus_if[0], L1_MEM_TAG_WIDTH, ICACHE_MEM_ARB_TAG_WIDTH);
-    `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[DCACHE_MEM_ARB_IDX], dcache_mem_bus_if[0], L1_MEM_TAG_WIDTH, DCACHE_MEM_ARB_TAG_WIDTH);    
+    for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
+        `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[L1_MEM_L2_IDX + i], per_socket_mem_bus_if[i], L1X_MEM_TAG_WIDTH, L1_MEM_ARB_TAG_WIDTH);
+    end
 
     `RESET_RELAY (l2_reset, reset);
 
@@ -242,7 +196,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .MSHR_SIZE      (`L2_MSHR_SIZE),
         .MRSQ_SIZE      (`L2_MRSQ_SIZE),
         .MREQ_SIZE      (`L2_MREQ_SIZE),
-        .TAG_WIDTH      (L1_MEM_TAG_WIDTH),
+        .TAG_WIDTH      (L2_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .UUID_WIDTH     (`UUID_WIDTH),  
         .CORE_OUT_REG   (2),
@@ -296,8 +250,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
             
             .dcr_bus_if     (socket_dcr_bus_if),
 
-            .icache_mem_bus_if (per_socket_icache_mem_bus_if[i]),
-            .dcache_mem_bus_if (per_socket_dcache_mem_bus_if[i]),
+            .mem_bus_if     (per_socket_mem_bus_if[i]),
 
         `ifdef EXT_RASTER_ENABLE
         `ifdef PERF_ENABLE
@@ -327,7 +280,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
             .sim_ebreak     (per_socket_sim_ebreak[i]),
             .sim_wb_value   (per_socket_sim_wb_value[i]),
             .busy           (per_socket_busy[i])
-        );
+        );        
     end
 
     `BUFFER_EX(busy, (| per_socket_busy), 1'b1, (`NUM_SOCKETS > 1));

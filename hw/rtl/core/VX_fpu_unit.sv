@@ -30,7 +30,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
     localparam NUM_LANES  = `NUM_FPU_LANES;
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
-    localparam TAG_WIDTH  = `LOG2UP(`FPU_REQ_QUEUE_SIZE);
+    localparam TAG_WIDTH  = `LOG2UP(`FPUQ_SIZE);
     localparam PARTIAL_BW = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `NUM_THREADS);
 
     VX_execute_if #(
@@ -87,7 +87,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
 
         VX_index_buffer #(
             .DATAW  (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + PID_WIDTH + 1 + 1),
-            .SIZE   (`FPU_REQ_QUEUE_SIZE)
+            .SIZE   (`FPUQ_SIZE)
         ) tag_store (
             .clk          (clk),
             .reset        (reset),

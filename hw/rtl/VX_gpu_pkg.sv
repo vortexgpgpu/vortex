@@ -243,29 +243,30 @@ package VX_gpu_pkg;
 
     /////////////////////////////// L1 Parameters /////////////////////////////
 
-    localparam ICACHE_MEM_ARB_TAG_WIDTH = (ICACHE_MEM_TAG_WIDTH + `CLOG2(`NUM_SOCKETS));
-    localparam DCACHE_MEM_ARB_TAG_WIDTH = (DCACHE_MEM_TAG_WIDTH + `CLOG2(`NUM_SOCKETS));
-    localparam L1_MEM_TAG_WIDTH         = `MAX(`MAX(`MAX(`MAX(ICACHE_MEM_ARB_TAG_WIDTH, DCACHE_MEM_ARB_TAG_WIDTH),
-                                          (`EXT_TEX_ENABLED ? TCACHE_MEM_TAG_WIDTH : 0)),
-                                          (`EXT_RASTER_ENABLED ? RCACHE_MEM_TAG_WIDTH : 0)),
-                                          (`EXT_OM_ENABLED ? OCACHE_MEM_TAG_WIDTH : 0));
+    localparam L1_MEM_TAG_WIDTH     = `MAX(ICACHE_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
+    localparam L1_MEM_ARB_TAG_WIDTH = (L1_MEM_TAG_WIDTH + `CLOG2(2));
+    localparam L1X_MEM_TAG_WIDTH    = `MAX(`MAX(`MAX(L1_MEM_ARB_TAG_WIDTH,
+                                      (`EXT_TEX_ENABLED ? TCACHE_MEM_TAG_WIDTH : 0)),
+                                      (`EXT_RASTER_ENABLED ? RCACHE_MEM_TAG_WIDTH : 0)),
+                                      (`EXT_OM_ENABLED ? OCACHE_MEM_TAG_WIDTH : 0));
 
+    
+    
     /////////////////////////////// L2 Parameters /////////////////////////////
 
-    localparam ICACHE_MEM_ARB_IDX = 0;
-    localparam DCACHE_MEM_ARB_IDX = ICACHE_MEM_ARB_IDX + 1;
-    localparam TCACHE_MEM_ARB_IDX = DCACHE_MEM_ARB_IDX + 1;
-    localparam RCACHE_MEM_ARB_IDX = TCACHE_MEM_ARB_IDX + `EXT_TEX_ENABLED;
-    localparam OCACHE_MEM_ARB_IDX = RCACHE_MEM_ARB_IDX + `EXT_RASTER_ENABLED;
+    localparam L1_MEM_L2_IDX     = 0;
+    localparam TCACHE_MEM_L2_IDX = L1_MEM_L2_IDX + `NUM_SOCKETS;
+    localparam RCACHE_MEM_L2_IDX = TCACHE_MEM_L2_IDX + `EXT_TEX_ENABLED;
+    localparam OCACHE_MEM_L2_IDX = RCACHE_MEM_L2_IDX + `EXT_RASTER_ENABLED;
 
     // Word size in bytes
     localparam L2_WORD_SIZE	        = `L1_LINE_SIZE;
 
     // Input request size
-    localparam L2_NUM_REQS	        = (2 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_OM_ENABLED);
+    localparam L2_NUM_REQS	        = (`NUM_SOCKETS + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_OM_ENABLED);
 
     // Core request tag bits
-    localparam L2_TAG_WIDTH	        = L1_MEM_TAG_WIDTH;
+    localparam L2_TAG_WIDTH	        = L1X_MEM_TAG_WIDTH;
 
     // Memory request data bits
     localparam L2_MEM_DATA_WIDTH	= (`L2_LINE_SIZE * 8);

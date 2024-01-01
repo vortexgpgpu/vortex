@@ -298,8 +298,8 @@
 // Floating-Point Units ///////////////////////////////////////////////////////
 
 // Size of FPU Request Queue
-`ifndef FPU_REQ_QUEUE_SIZE
-`define FPU_REQ_QUEUE_SIZE (2 * (`NUM_THREADS / `NUM_FPU_LANES))
+`ifndef FPUQ_SIZE
+`define FPUQ_SIZE (2 * (`NUM_THREADS / `NUM_FPU_LANES))
 `endif
 
 // FNCP Latency
