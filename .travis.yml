@@ -58,22 +58,22 @@ jobs:
       script: cp -r $HOME/build64 build && cd build && XLEN=64 ./ci/travis_run.py ./ci/regression.sh --regression
     - stage: test 
       name: opencl
-      script: cp -r ../build32 ../build32_opencl && cd ../build32_opencl && ./ci/travis_run.py ./ci/regression.sh --opencl    
+      script: cp -r $HOME/build32 $HOME/build32_opencl && cd $HOME/build32_opencl && ./ci/travis_run.py ./ci/regression.sh --opencl    
     - stage: test
       name: graphics
-      script: cp -r ../build32 ../build32_graphics && cd ../build32_graphics && ./ci/travis_run.py ./ci/regression.sh --graphics
+      script: cp -r $HOME/build32 $HOME/build32_graphics && cd $HOME/build32_graphics && ./ci/travis_run.py ./ci/regression.sh --graphics
     - stage: test
       name: graphics64
-      script: cp -r ../build64 ../build64_graphics && cd ../build64_graphics && XLEN=64 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh --graphics
+      script: cp -r $HOME/build64 $HOME/build64_graphics && cd $HOME/build64_graphics && XLEN=64 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh --graphics
     - stage: test
       name: tex
-      script: cp -r ../build32 ../build32_tex && cd ../build32_tex && ./ci/travis_run.py ./ci/regression.sh --tex
+      script: cp -r $HOME/build32 $HOME/build32_tex && cd $HOME/build32_tex && ./ci/travis_run.py ./ci/regression.sh --tex
     - stage: test
       name: rop
-      script: cp -r ../build32 ../build32_om && cd ../build32_om && ./ci/travis_run.py ./ci/regression.sh --rop
+      script: cp -r $HOME/build32 $HOME/build32_om && cd $HOME/build32_om && ./ci/travis_run.py ./ci/regression.sh --rop
     - stage: test
       name: raster
-      script: cp -r ../build32 ../build32_raster && cd ../build32_raster && ./ci/travis_run.py ./ci/regression.sh --raster
+      script: cp -r $HOME/build32 $HOME/build32_raster && cd $HOME/build32_raster && ./ci/travis_run.py ./ci/regression.sh --raster
     - stage: test
       script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --opencl    
     - stage: test 
