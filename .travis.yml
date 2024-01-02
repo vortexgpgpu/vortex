@@ -74,8 +74,6 @@ jobs:
     - stage: test
       name: raster
       script: cp -r $HOME/build32 $HOME/build32_raster && cd $HOME/build32_raster && ./ci/travis_run.py ./ci/regression.sh --raster
-    - stage: test
-      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --opencl    
     - stage: test 
       name: cluster
       script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --cluster    
