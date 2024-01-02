@@ -1,4 +1,4 @@
-PROJECT = rop
+PROJECT = om
 
 OPTS ?=
 

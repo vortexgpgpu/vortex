@@ -69,8 +69,8 @@ jobs:
       name: tex
       script: cp -r $HOME/build32 $HOME/build32_tex && cd $HOME/build32_tex && ./ci/travis_run.py ./ci/regression.sh --tex
     - stage: test
-      name: rop
-      script: cp -r $HOME/build32 $HOME/build32_om && cd $HOME/build32_om && ./ci/travis_run.py ./ci/regression.sh --rop
+      name: om
+      script: cp -r $HOME/build32 $HOME/build32_om && cd $HOME/build32_om && ./ci/travis_run.py ./ci/regression.sh --om
     - stage: test
       name: raster
       script: cp -r $HOME/build32 $HOME/build32_raster && cd $HOME/build32_raster && ./ci/travis_run.py ./ci/regression.sh --raster

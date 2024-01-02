@@ -4,7 +4,7 @@ BUILD_DIR=$(PREFIX)_$(DEVICE_FAMILY)
 
 IP_CACHE_DIR=../ip_cache/$(DEVICE_FAMILY)
 
-.PHONY: dogfood unittest pipeline smem cache fpu tex raster rop core vortex top test
+.PHONY: dogfood unittest pipeline smem cache fpu tex raster om core vortex top test
 
 ip-gen: $(IP_CACHE_DIR)/ip_gen.log
 $(IP_CACHE_DIR)/ip_gen.log:

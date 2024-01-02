@@ -47,7 +47,7 @@ Cluster::Cluster(const SimContext& ctx,
     });
   }
 
-  // create rop units
+  // create om units
   for (uint32_t i = 0; i < NUM_OM_UNITS; ++i) {
     snprintf(sname, 100, "cluster%d-om_unit%d", cluster_id, i);      
     om_units_.at(i) = OMUnit::Create(sname, arch, dcrs.om_dcrs);
