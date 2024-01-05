@@ -21,7 +21,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     output reg [`PERF_CTR_BITS-1:0] perf_scb_stalls,
-    output reg [`PERF_CTR_BITS-1:0] perf_scb_uses [`NUM_EX_UNITS],
+    output reg [`PERF_CTR_BITS-1:0] perf_units_uses [`NUM_EX_UNITS],
+    output reg [`PERF_CTR_BITS-1:0] perf_sfu_uses [`NUM_SFU_UNITS],
 `endif
 
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
@@ -32,25 +33,70 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + (`NR_BITS * 4) + 1;
 
 `ifdef PERF_ENABLE
-    wire [`NUM_EX_UNITS-1:0] scoreboard_uses_per_cycle;
-    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] scoreboard_stalls_per_cycle;
-    reg [`ISSUE_WIDTH-1:0][`NUM_EX_UNITS-1:0] scoreboard_uses;
-    wire [`ISSUE_WIDTH-1:0] scoreboard_stalls;
+    reg [`ISSUE_WIDTH-1:0][`NUM_EX_UNITS-1:0] perf_issue_units_per_cycle;
+    wire [`NUM_EX_UNITS-1:0] perf_units_per_cycle, perf_units_per_cycle_r;
 
-    `POP_COUNT(scoreboard_stalls_per_cycle, scoreboard_stalls);
+    reg [`ISSUE_WIDTH-1:0][`NUM_SFU_UNITS-1:0] perf_issue_sfu_per_cycle;    
+    wire [`NUM_SFU_UNITS-1:0] perf_sfu_per_cycle, perf_sfu_per_cycle_r;
+
+    wire [`ISSUE_WIDTH-1:0] perf_issue_stalls_per_cycle;
+    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] perf_stalls_per_cycle, perf_stalls_per_cycle_r;    
+
+    `POP_COUNT(perf_stalls_per_cycle, perf_issue_stalls_per_cycle);    
+
     VX_reduce #(
         .DATAW_IN (`NUM_EX_UNITS),
         .N  (`ISSUE_WIDTH),
         .OP ("|")
-    ) reduce (
-        .data_in  (scoreboard_uses),
-        .data_out (scoreboard_uses_per_cycle)
+    ) perf_units_reduce (
+        .data_in  (perf_issue_units_per_cycle),
+        .data_out (perf_units_per_cycle)
+    );    
+
+    VX_reduce #(
+        .DATAW_IN (`NUM_SFU_UNITS),
+        .N  (`ISSUE_WIDTH),
+        .OP ("|")
+    ) perf_sfu_reduce (
+        .data_in  (perf_issue_sfu_per_cycle),
+        .data_out (perf_sfu_per_cycle)
     );
+
+    `BUFFER(perf_stalls_per_cycle_r, perf_stalls_per_cycle);
+    `BUFFER(perf_units_per_cycle_r, perf_units_per_cycle);
+    `BUFFER(perf_sfu_per_cycle_r, perf_sfu_per_cycle);
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_scb_stalls <= '0;            
+        end else begin
+            perf_scb_stalls <= perf_scb_stalls + `PERF_CTR_BITS'(perf_stalls_per_cycle_r);
+        end
+    end
+
+    for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin
+        always @(posedge clk) begin
+            if (reset) begin
+                perf_units_uses[i] <= '0;
+            end else begin
+                perf_units_uses[i] <= perf_units_uses[i] + `PERF_CTR_BITS'(perf_units_per_cycle_r[i]);
+            end
+        end
+    end
+    
+    for (genvar i = 0; i < `NUM_SFU_UNITS; ++i) begin
+        always @(posedge clk) begin
+            if (reset) begin
+                perf_sfu_uses[i] <= '0;
+            end else begin
+                perf_sfu_uses[i] <= perf_sfu_uses[i] + `PERF_CTR_BITS'(perf_sfu_per_cycle_r[i]);
+            end
+        end
+    end
 `endif
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         reg [`UP(ISSUE_RATIO)-1:0][`NUM_REGS-1:0] inuse_regs;
-        VX_ibuffer_if staging_if();
 
         wire writeback_fire = writeback_if[i].valid && writeback_if[i].data.eop;
 
@@ -60,76 +106,96 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         wire inuse_rs3 = inuse_regs[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3];
 
     `ifdef PERF_ENABLE
-        reg [`UP(ISSUE_RATIO)-1:0][`NUM_REGS-1:0][`EX_BITS-1:0] inuse_units;        
+        reg [`UP(ISSUE_RATIO)-1:0][`NUM_REGS-1:0][`EX_WIDTH-1:0] inuse_units;   
+        reg [`UP(ISSUE_RATIO)-1:0][`NUM_REGS-1:0][`SFU_WIDTH-1:0] inuse_sfu;        
+
+        reg [`SFU_WIDTH-1:0] sfu_type;
         always @(*) begin
-            scoreboard_uses[i] = '0;
+            case (scoreboard_if[i].data.op_type)
+            `INST_SFU_CSRRW,
+            `INST_SFU_CSRRS,
+            `INST_SFU_CSRRC: sfu_type = `SFU_CSRS;
+            default: sfu_type = `SFU_WCTL;
+            endcase
+        end
+
+        always @(*) begin
+            perf_issue_units_per_cycle[i] = '0;
+            perf_issue_sfu_per_cycle[i] = '0;
             if (ibuffer_if[i].valid) begin
                 if (inuse_rd) begin
-                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd]] = 1;
+                    perf_issue_units_per_cycle[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd]] = 1;
+                    if (inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd] == `EX_SFU) begin
+                        perf_issue_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd]] = 1;
+                    end
                 end
                 if (inuse_rs1) begin
-                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs1]] = 1;
+                    perf_issue_units_per_cycle[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs1]] = 1;
+                    if (inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs1] == `EX_SFU) begin
+                        perf_issue_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs1]] = 1;
+                    end
                 end
                 if (inuse_rs2) begin
-                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs2]] = 1;
+                    perf_issue_units_per_cycle[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs2]] = 1;
+                    if (inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs2] == `EX_SFU) begin
+                        perf_issue_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs2]] = 1;
+                    end
                 end
                 if (inuse_rs3) begin
-                    scoreboard_uses[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3]] = 1;
+                    perf_issue_units_per_cycle[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3]] = 1;
+                    if (inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3] == `EX_SFU) begin
+                        perf_issue_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3]] = 1;
+                    end
                 end
             end
         end
-        assign scoreboard_stalls[i] = ibuffer_if[i].valid && ~ibuffer_if[i].ready;
+        assign perf_issue_stalls_per_cycle[i] = ibuffer_if[i].valid && ~ibuffer_if[i].ready;
     `endif
 
         reg [DATAW-1:0] data_out_r;
         reg valid_out_r;
+        wire ready_out;
 
         wire [3:0] ready_masks = ~{inuse_rd, inuse_rs1, inuse_rs2, inuse_rs3};
         wire deps_ready = (& ready_masks);
 
+        wire valid_in  = ibuffer_if[i].valid && deps_ready;
+        wire ready_in  = ~valid_out_r && deps_ready;
+        wire [DATAW-1:0] data_in = ibuffer_if[i].data;
+
+        assign ready_out = scoreboard_if[i].ready;
+
         always @(posedge clk) begin
             if (reset) begin
                 valid_out_r <= 0;
-                inuse_regs <= '0;                
-            end else begin                
+                inuse_regs <= '0;
+            end else begin
                 if (writeback_fire) begin
                     inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] <= 0;            
                 end
                 if (~valid_out_r) begin
-                    valid_out_r <= ibuffer_if[i].valid && deps_ready;
-                end else if (staging_if.ready) begin
-                    if (staging_if.data.wb) begin
-                        inuse_regs[staging_if.data.wis][staging_if.data.rd] <= 1;
+                    valid_out_r <= valid_in;
+                end else if (ready_out) begin
+                    if (scoreboard_if[i].data.wb) begin
+                        inuse_regs[scoreboard_if[i].data.wis][scoreboard_if[i].data.rd] <= 1;
                     `ifdef PERF_ENABLE
-                        inuse_units[staging_if.data.wis][staging_if.data.rd] <= staging_if.data.ex_type;
+                        inuse_units[scoreboard_if[i].data.wis][scoreboard_if[i].data.rd] <= scoreboard_if[i].data.ex_type;
+                        if (scoreboard_if[i].data.ex_type == `EX_SFU) begin
+                            inuse_sfu[scoreboard_if[i].data.wis][scoreboard_if[i].data.rd] <= sfu_type;
+                        end
                     `endif
                     end
                     valid_out_r <= 0;
                 end
             end
             if (~valid_out_r) begin
-                data_out_r <= ibuffer_if[i].data;
+                data_out_r <= data_in;
             end
         end
 
-        assign ibuffer_if[i].ready = ~valid_out_r && deps_ready;
-        assign staging_if.valid = valid_out_r;
-        assign staging_if.data  = data_out_r;
-
-        VX_elastic_buffer #(
-            .DATAW   (DATAW),
-            .SIZE    (0),
-            .OUT_REG (2)
-        ) out_buf (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (staging_if.valid),
-            .ready_in  (staging_if.ready),
-            .data_in   (staging_if.data),
-            .data_out  (scoreboard_if[i].data),
-            .valid_out (scoreboard_if[i].valid),
-            .ready_out (scoreboard_if[i].ready)
-        );
+        assign ibuffer_if[i].ready    = ready_in;
+        assign scoreboard_if[i].valid = valid_out_r;
+        assign scoreboard_if[i].data  = data_out_r;
 
     `ifdef SIMULATION
         reg [31:0] timeout_ctr;       
@@ -149,7 +215,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                     timeout_ctr <= '0;
                 end
             end
-        end        
+        end
         
         `RUNTIME_ASSERT((timeout_ctr < `STALL_TIMEOUT),
                         ("%t: *** core%0d-scoreboard-timeout: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)",
@@ -161,25 +227,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 $time, CORE_ID, wis_to_wid(writeback_if[i].data.wis, i), writeback_if[i].data.PC, writeback_if[i].data.tmask, writeback_if[i].data.rd, writeback_if[i].data.uuid));
     `endif
     
-    end    
-
-`ifdef PERF_ENABLE
-    always @(posedge clk) begin
-        if (reset) begin
-            perf_scb_stalls <= '0;
-        end else begin
-            perf_scb_stalls <= perf_scb_stalls + `PERF_CTR_BITS'(scoreboard_stalls_per_cycle);
-        end
     end
-    for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin
-        always @(posedge clk) begin
-            if (reset) begin
-                perf_scb_uses[i] <= '0;
-            end else begin
-                perf_scb_uses[i] <= perf_scb_uses[i] + `PERF_CTR_BITS'(scoreboard_uses_per_cycle[i]);
-            end
-        end
-    end
-`endif
 
 endmodule

@@ -26,6 +26,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 );
     `UNUSED_PARAM (CORE_ID)
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + `NR_BITS;
+    localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * ISSUE_RATIO);
 
     localparam STATE_IDLE   = 2'd0;
     localparam STATE_FETCH1 = 2'd1;
@@ -46,9 +47,11 @@ module VX_operands import VX_gpu_pkg::*; #(
         reg [`NUM_THREADS-1:0] cache_tmask_n [ISSUE_RATIO-1:0];
         reg [ISSUE_RATIO-1:0] cache_eop, cache_eop_n;
 
+        reg valid_out_r;
+        reg [DATAW-1:0] data_out_r;
         reg [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data, rs1_data_n;
         reg [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data, rs2_data_n;
-        reg [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data, rs3_data_n;   
+        reg [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data, rs3_data_n;
 
         reg [STATE_BITS-1:0] state, state_n;
         reg [`NR_BITS-1:0] rs2, rs2_n;
@@ -57,11 +60,11 @@ module VX_operands import VX_gpu_pkg::*; #(
         reg rs3_ready, rs3_ready_n;
         reg data_ready, data_ready_n;
 
+        wire ready_out = operands_if[i].ready;
+        
         wire is_rs1_zero = (scoreboard_if[i].data.rs1 == 0);
         wire is_rs2_zero = (scoreboard_if[i].data.rs2 == 0);
-        wire is_rs3_zero = (scoreboard_if[i].data.rs3 == 0);        
-
-        VX_operands_if staging_if();
+        wire is_rs3_zero = (scoreboard_if[i].data.rs3 == 0);
 
         always @(*) begin
             state_n      = state;
@@ -82,7 +85,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 
             case (state)
             STATE_IDLE: begin
-                if (staging_if.valid && staging_if.ready) begin
+                if (valid_out_r && ready_out) begin
                     data_ready_n = 0;
                 end
                 if (scoreboard_if[i].valid && data_ready_n == 0) begin
@@ -170,33 +173,86 @@ module VX_operands import VX_gpu_pkg::*; #(
         end
 
         always @(posedge clk)  begin
-            if (reset) begin
+            if (reset) begin                
                 state       <= STATE_IDLE;
-                gpr_rd_rid  <= '0;
-                gpr_rd_wis  <= '0;
                 cache_eop   <= {ISSUE_RATIO{1'b1}};
                 data_ready  <= 0;
+                valid_out_r <= 0;
             end else begin
                 state       <= state_n;
-                rs2         <= rs2_n;
-                rs3         <= rs3_n;
-                rs2_ready   <= rs2_ready_n;
-                rs3_ready   <= rs3_ready_n;
-                rs1_data    <= rs1_data_n;
-                rs2_data    <= rs2_data_n;
-                rs3_data    <= rs3_data_n;
-                gpr_rd_rid  <= gpr_rd_rid_n;
-                gpr_rd_wis  <= gpr_rd_wis_n;
-                cache_data  <= cache_data_n;
-                cache_reg   <= cache_reg_n;
-                cache_tmask <= cache_tmask_n;
                 cache_eop   <= cache_eop_n;
-                data_ready  <= data_ready_n;
+                data_ready  <= data_ready_n;                
+                if (~valid_out_r) begin
+                    valid_out_r <= scoreboard_if[i].valid && data_ready;
+                end else if (ready_out) begin
+                    valid_out_r <= 0;
+                end
             end
-        end
+
+            if (~valid_out_r) begin
+                data_out_r  <= {scoreboard_if[i].data.uuid,
+                                scoreboard_if[i].data.wis,
+                                scoreboard_if[i].data.tmask,
+                                scoreboard_if[i].data.PC, 
+                                scoreboard_if[i].data.wb,
+                                scoreboard_if[i].data.ex_type,
+                                scoreboard_if[i].data.op_type,
+                                scoreboard_if[i].data.op_mod,
+                                scoreboard_if[i].data.use_PC,
+                                scoreboard_if[i].data.use_imm,
+                                scoreboard_if[i].data.imm,
+                                scoreboard_if[i].data.rd};
+            end        
+            
+            gpr_rd_rid  <= gpr_rd_rid_n;
+            gpr_rd_wis  <= gpr_rd_wis_n;
+            rs2_ready   <= rs2_ready_n;
+            rs3_ready   <= rs3_ready_n;
+            rs2         <= rs2_n;
+            rs3         <= rs3_n;
+            rs1_data    <= rs1_data_n;
+            rs2_data    <= rs2_data_n;
+            rs3_data    <= rs3_data_n;          
+            cache_data  <= cache_data_n;
+            cache_reg   <= cache_reg_n;
+            cache_tmask <= cache_tmask_n;
+        end        
+
+        assign operands_if[i].valid = valid_out_r;
+        assign {operands_if[i].data.uuid,
+                operands_if[i].data.wis,
+                operands_if[i].data.tmask,
+                operands_if[i].data.PC, 
+                operands_if[i].data.wb,
+                operands_if[i].data.ex_type,
+                operands_if[i].data.op_type,
+                operands_if[i].data.op_mod,
+                operands_if[i].data.use_PC,
+                operands_if[i].data.use_imm,
+                operands_if[i].data.imm,
+                operands_if[i].data.rd} = data_out_r;
+        assign operands_if[i].data.rs1_data = rs1_data;
+        assign operands_if[i].data.rs2_data = rs2_data;
+        assign operands_if[i].data.rs3_data = rs3_data;
+
+        assign scoreboard_if[i].ready = ~valid_out_r && data_ready;
 
         // GPR banks
 
+        reg [RAM_ADDRW-1:0] gpr_rd_addr;       
+        wire [RAM_ADDRW-1:0] gpr_wr_addr;
+        if (ISSUE_WIS != 0) begin
+            assign gpr_wr_addr = {writeback_if[i].data.wis, writeback_if[i].data.rd};
+            always @(posedge clk) begin
+                gpr_rd_addr <= {gpr_rd_wis_n, gpr_rd_rid_n};
+            end
+        end else begin
+            assign gpr_wr_addr = writeback_if[i].data.rd;
+            always @(posedge clk) begin
+                gpr_rd_addr <= gpr_rd_rid_n;
+            end
+        end
+        
     `ifdef GPR_RESET
         reg wr_enabled = 0;
         always @(posedge clk) begin
@@ -204,10 +260,8 @@ module VX_operands import VX_gpu_pkg::*; #(
                 wr_enabled <= 1;
             end
         end
-    `else
-        wire wr_enabled = 1;
     `endif
-        
+
         for (genvar j = 0; j < `NUM_THREADS; ++j) begin
             VX_dp_ram #(
                 .DATAW (`XLEN),
@@ -221,81 +275,17 @@ module VX_operands import VX_gpu_pkg::*; #(
                 .clk   (clk),
                 .read  (1'b1),
                 `UNUSED_PIN (wren),
-                .write (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]),                
-                .waddr (wis_to_addr(writeback_if[i].data.rd, writeback_if[i].data.wis)),
+            `ifdef GPR_RESET
+                .write (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]),
+            `else
+                .write (writeback_if[i].valid && writeback_if[i].data.tmask[j]),
+            `endif              
+                .waddr (gpr_wr_addr),
                 .wdata (writeback_if[i].data.data[j]),
-                .raddr (wis_to_addr(gpr_rd_rid, gpr_rd_wis)),
+                .raddr (gpr_rd_addr),
                 .rdata (gpr_rd_data[j])
             );
         end
-
-        // staging buffer
-
-        `RESET_RELAY (stg_buf_reset, reset);
-        
-        VX_elastic_buffer #(
-            .DATAW (DATAW)
-        ) stg_buf (
-            .clk      (clk),
-            .reset    (stg_buf_reset),
-            .valid_in (scoreboard_if[i].valid),
-            .ready_in (scoreboard_if[i].ready),
-            .data_in  ({
-                scoreboard_if[i].data.uuid,
-                scoreboard_if[i].data.wis,
-                scoreboard_if[i].data.tmask,
-                scoreboard_if[i].data.PC, 
-                scoreboard_if[i].data.wb,
-                scoreboard_if[i].data.ex_type,
-                scoreboard_if[i].data.op_type,
-                scoreboard_if[i].data.op_mod,
-                scoreboard_if[i].data.use_PC,
-                scoreboard_if[i].data.use_imm,
-                scoreboard_if[i].data.imm,
-                scoreboard_if[i].data.rd}),
-            .data_out ({
-                staging_if.data.uuid,
-                staging_if.data.wis,
-                staging_if.data.tmask,
-                staging_if.data.PC, 
-                staging_if.data.wb,
-                staging_if.data.ex_type,
-                staging_if.data.op_type,
-                staging_if.data.op_mod,
-                staging_if.data.use_PC,
-                staging_if.data.use_imm,
-                staging_if.data.imm,
-                staging_if.data.rd}),                                               
-            .valid_out (staging_if.valid),
-            .ready_out (staging_if.ready)
-        );
-
-        assign staging_if.data.rs1_data = rs1_data;
-        assign staging_if.data.rs2_data = rs2_data;
-        assign staging_if.data.rs3_data = rs3_data;
-
-        // output buffer
-
-        wire valid_stg, ready_stg;
-        assign valid_stg = staging_if.valid && data_ready;
-        assign staging_if.ready = ready_stg && data_ready;
-
-        `RESET_RELAY (out_buf_reset, reset);
-
-        VX_elastic_buffer #(
-            .DATAW   (DATAW + (3 * `NUM_THREADS * `XLEN)),
-            .SIZE    (2),
-            .OUT_REG (2)
-        ) out_buf (
-            .clk       (clk),
-            .reset     (out_buf_reset),
-            .valid_in  (valid_stg),
-            .ready_in  (ready_stg),
-            .data_in   (staging_if.data),
-            .data_out  (operands_if[i].data),
-            .valid_out (operands_if[i].valid),
-            .ready_out (operands_if[i].ready)
-        );
-    end    
+    end
 
 endmodule

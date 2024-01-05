@@ -83,8 +83,9 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     `STATIC_ASSERT(NUM_INPUTS >= NUM_CACHES, ("invalid parameter"))
 
 `ifdef PERF_ENABLE
-    cache_perf_t perf_cache_unit[NUM_CACHES];
-    `PERF_CACHE_REDUCE (cache_perf, perf_cache_unit, NUM_CACHES);
+    cache_perf_t perf_cache_tmp[1], perf_cache_unit[NUM_CACHES];
+    `PERF_CACHE_ADD (perf_cache_tmp, perf_cache_unit, 1, NUM_CACHES)
+    assign cache_perf = perf_cache_tmp[0];
 `endif
 
     VX_mem_bus_if #(

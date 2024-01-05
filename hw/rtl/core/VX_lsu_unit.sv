@@ -96,7 +96,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     // detect duplicate addresses
 
     wire lsu_is_dup;
-`ifdef LSU_DUP
+`ifdef LSU_DUP_ENABLE
     if (NUM_LANES > 1) begin    
         wire [NUM_LANES-2:0] addr_matches;
         for (genvar i = 0; i < (NUM_LANES-1); ++i) begin
@@ -304,7 +304,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     assign mem_req_tag = {
         execute_if[0].data.uuid, lsu_addr_type, execute_if[0].data.wid, execute_if[0].data.tmask, execute_if[0].data.PC, execute_if[0].data.rd, execute_if[0].data.op_type, req_align, execute_if[0].data.pid, pkt_waddr
-    `ifdef LSU_DUP
+    `ifdef LSU_DUP_ENABLE
         , lsu_is_dup
     `endif
     };
@@ -448,13 +448,13 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     wire [PID_WIDTH-1:0] rsp_pid;
     wire rsp_is_dup;
     
-`ifndef LSU_DUP
+`ifndef LSU_DUP_ENABLE
     assign rsp_is_dup = 0;
 `endif
 
     assign {
         rsp_uuid, rsp_addr_type, rsp_wid, rsp_tmask_uq, rsp_pc, rsp_rd, rsp_op_type, rsp_align, rsp_pid, pkt_raddr
-    `ifdef LSU_DUP
+    `ifdef LSU_DUP_ENABLE
         , rsp_is_dup
     `endif
     } = mem_rsp_tag;
@@ -554,7 +554,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     VX_stream_arb #(
         .NUM_INPUTS (2),
         .DATAW      (RSP_ARB_DATAW),
-        .OUT_REG    (1)
+        .OUT_REG    (3)
     ) rsp_arb (
         .clk       (clk),
         .reset     (commit_reset),

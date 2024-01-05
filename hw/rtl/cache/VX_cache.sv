@@ -530,14 +530,17 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [`CLOG2(NUM_REQS+1)-1:0] perf_core_reads_per_cycle;
     wire [`CLOG2(NUM_REQS+1)-1:0] perf_core_writes_per_cycle;
     
-    wire [NUM_REQS-1:0] perf_core_reads_per_req  = core_req_valid & core_req_ready & ~core_req_rw;
-    wire [NUM_REQS-1:0] perf_core_writes_per_req = core_req_valid & core_req_ready & core_req_rw;
+    wire [NUM_REQS-1:0] perf_core_reads_per_req;
+    wire [NUM_REQS-1:0] perf_core_writes_per_req;
         
     // per cycle: read misses, write misses, msrq stalls, pipeline stalls
     wire [`CLOG2(NUM_BANKS+1)-1:0] perf_read_miss_per_cycle;
     wire [`CLOG2(NUM_BANKS+1)-1:0] perf_write_miss_per_cycle;
     wire [`CLOG2(NUM_BANKS+1)-1:0] perf_mshr_stall_per_cycle;
-    wire [`CLOG2(NUM_BANKS+1)-1:0] perf_crsp_stall_per_cycle;
+    wire [`CLOG2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
+
+    `BUFFER(perf_core_reads_per_req, core_req_valid & core_req_ready & ~core_req_rw);
+    `BUFFER(perf_core_writes_per_req, core_req_valid & core_req_ready & core_req_rw);
     
     `POP_COUNT(perf_core_reads_per_cycle, perf_core_reads_per_req);
     `POP_COUNT(perf_core_writes_per_cycle, perf_core_writes_per_req);
@@ -560,7 +563,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     reg [`PERF_CTR_BITS-1:0] perf_write_misses;
     reg [`PERF_CTR_BITS-1:0] perf_mshr_stalls;
     reg [`PERF_CTR_BITS-1:0] perf_mem_stalls;
-    reg [`PERF_CTR_BITS-1:0] perf_crsp_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_crsp_stalls;    
 
     always @(posedge clk) begin
         if (reset) begin

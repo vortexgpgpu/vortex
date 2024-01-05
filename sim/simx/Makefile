@@ -1,11 +1,12 @@
 XLEN ?= 32
-DESTDIR ?= .
-RTL_DIR = ../hw/rtl
-THIRD_PARTY_DIR = ../../third_party
+DESTDIR ?= $(CURDIR)
+HW_DIR = $(abspath ../../hw)
+COMMON_DIR = $(abspath ../common)
+THIRD_PARTY_DIR = $(abspath ../../third_party)
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I. -I../common -I../../hw
+CXXFLAGS += -I$(CURDIR) -I$(COMMON_DIR) -I$(HW_DIR)
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)
 CXXFLAGS += -DXLEN_$(XLEN)
@@ -14,8 +15,8 @@ CXXFLAGS += $(CONFIGS)
 LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 LDFLAGS += -L$(THIRD_PARTY_DIR)/ramulator -lramulator
 
-SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
-SRCS += processor.cpp cluster.cpp core.cpp warp.cpp decode.cpp execute.cpp exe_unit.cpp cache_sim.cpp mem_sim.cpp shared_mem.cpp dcrs.cpp
+SRCS = $(COMMON_DIR)/util.cpp $(COMMON_DIR)/mem.cpp $(COMMON_DIR)/rvfloats.cpp
+SRCS += processor.cpp cluster.cpp socket.cpp core.cpp warp.cpp decode.cpp execute.cpp exe_unit.cpp cache_sim.cpp mem_sim.cpp shared_mem.cpp dcrs.cpp
 
 # Debugigng
 ifdef DEBUG

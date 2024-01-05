@@ -194,10 +194,14 @@
 `ifndef FPU_FPNEW
 `ifndef FPU_DSP
 `ifndef FPU_DPI
-`ifdef SYNTHESIS
-`define FPU_DSP
-`else
+`ifndef SYNTHESIS
+`ifndef DPI_DISABLE
 `define FPU_DPI
+`else
+`define FPU_DSP
+`endif
+`else
+`define FPU_DSP
 `endif
 `endif
 `endif
@@ -258,7 +262,10 @@
 `endif
 
 // LSU Duplicate Address Check
-`ifdef LSU_DUP
+`ifndef LSU_DUP_DISABLE
+`define LSU_DUP_ENABLE
+`endif
+`ifdef LSU_DUP_ENABLE
 `define LSU_DUP_ENABLED 1
 `else
 `define LSU_DUP_ENABLED 0
@@ -285,8 +292,8 @@
 // Floating-Point Units ///////////////////////////////////////////////////////
 
 // Size of FPU Request Queue
-`ifndef FPU_REQ_QUEUE_SIZE
-`define FPU_REQ_QUEUE_SIZE (2 * (`NUM_THREADS / `NUM_FPU_LANES))
+`ifndef FPUQ_SIZE
+`define FPUQ_SIZE (2 * (`NUM_THREADS / `NUM_FPU_LANES))
 `endif
 
 // FNCP Latency
@@ -377,7 +384,7 @@
 
 // Number of Cache Units
 `ifndef NUM_ICACHES
-`define NUM_ICACHES `UP(`NUM_CORES / 4)
+`define NUM_ICACHES `UP(`SOCKET_SIZE / 4)
 `endif
 
 // Cache Size
@@ -426,7 +433,7 @@
 
 // Number of Cache Units
 `ifndef NUM_DCACHES
-`define NUM_DCACHES `UP(`NUM_CORES / 4)
+`define NUM_DCACHES `UP(`SOCKET_SIZE / 4)
 `endif
 
 // Cache Size
@@ -436,7 +443,7 @@
 
 // Number of Banks
 `ifndef DCACHE_NUM_BANKS
-`define DCACHE_NUM_BANKS (`NUM_LSU_LANES)
+`define DCACHE_NUM_BANKS `MIN(`NUM_LSU_LANES, 4)
 `endif
 
 // Core Response Queue Size

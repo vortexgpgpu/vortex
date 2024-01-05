@@ -48,7 +48,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     localparam RSP_ARB_DATAW = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + (NUM_LANES * `XLEN) + `NR_BITS + 1 + `XLEN + PID_WIDTH + 1 + 1;
     localparam RSP_ARB_SIZE = 1 + 1;
     localparam RSP_ARB_IDX_WCTL = 0;
-    localparam RSP_ARB_IDX_CSR = 1;
+    localparam RSP_ARB_IDX_CSRS = 1;
 
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)
@@ -71,9 +71,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     wire [RSP_ARB_SIZE-1:0] rsp_arb_ready_in;
     wire [RSP_ARB_SIZE-1:0][RSP_ARB_DATAW-1:0] rsp_arb_data_in;
     
-`ifdef PERF_ENABLE
-    VX_sfu_perf_if sfu_perf_if();
-`endif
 
     // Warp control block    
     VX_execute_if #(
@@ -129,7 +126,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .mem_perf_if    (mem_perf_if),
         .pipeline_perf_if(pipeline_perf_if),
-        .sfu_perf_if    (sfu_perf_if),
     `endif
    
     `ifdef EXT_F_ENABLE  
@@ -141,21 +137,21 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .commit_if      (csr_commit_if)
     );    
 
-    assign rsp_arb_valid_in[RSP_ARB_IDX_CSR] = csr_commit_if.valid;
-    assign rsp_arb_data_in[RSP_ARB_IDX_CSR] = csr_commit_if.data;
-    assign csr_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_CSR];
+    assign rsp_arb_valid_in[RSP_ARB_IDX_CSRS] = csr_commit_if.valid;
+    assign rsp_arb_data_in[RSP_ARB_IDX_CSRS] = csr_commit_if.data;
+    assign csr_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_CSRS];
 
     // can accept new request?
 
     reg sfu_req_ready;
     always @(*) begin
         case (execute_if[0].data.op_type)
-        `INST_SFU_CSRRW,
-        `INST_SFU_CSRRS,
-        `INST_SFU_CSRRC: sfu_req_ready = csr_execute_if.ready;
+         `INST_SFU_CSRRW,
+         `INST_SFU_CSRRS,
+         `INST_SFU_CSRRC: sfu_req_ready = csr_execute_if.ready;
         default: sfu_req_ready = wctl_execute_if.ready;
         endcase
-    end   
+    end
     assign execute_if[0].ready = sfu_req_ready;
 
     // response arbitration
@@ -193,17 +189,5 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .commit_in_if  (arb_commit_if),
         .commit_out_if (commit_if)
     );
-
-`ifdef PERF_ENABLE
-    reg [`PERF_CTR_BITS-1:0] perf_wctl_stalls;
-    always @(posedge clk) begin
-        if (reset) begin
-            perf_wctl_stalls <= '0;
-        end else begin
-            perf_wctl_stalls <= perf_wctl_stalls + `PERF_CTR_BITS'(wctl_execute_if.valid && ~wctl_execute_if.ready);
-        end
-    end
-    assign sfu_perf_if.wctl_stalls = perf_wctl_stalls;
-`endif
 
 endmodule

@@ -34,14 +34,13 @@ static void show_usage() {
 uint32_t num_threads = NUM_THREADS;
 uint32_t num_warps = NUM_WARPS;
 uint32_t num_cores = NUM_CORES;
-uint32_t num_clusters = NUM_CLUSTERS;
 bool showStats = false;;
 bool riscv_test = false;
 const char* program = nullptr;
 
 static void parse_args(int argc, char **argv) {
   	int c;
-  	while ((c = getopt(argc, argv, "t:w:c:g:rsh?")) != -1) {
+  	while ((c = getopt(argc, argv, "t:w:c:rsh?")) != -1) {
     	switch (c) {
       case 't':
         num_threads = atoi(optarg);
@@ -51,9 +50,6 @@ static void parse_args(int argc, char **argv) {
         break;
 		  case 'c':
         num_cores = atoi(optarg);
-        break;
-		  case 'g':
-        num_clusters = atoi(optarg);
         break;
       case 'r':
         riscv_test = true;
@@ -88,7 +84,7 @@ int main(int argc, char **argv) {
 
   {
     // create processor configuation
-    Arch arch(num_threads, num_warps, num_cores, num_clusters);
+    Arch arch(num_threads, num_warps, num_cores);
 
     // create memory module
     RAM ram(RAM_PAGE_SIZE);

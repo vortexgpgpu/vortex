@@ -22,15 +22,15 @@ module Vortex import VX_gpu_pkg::*; (
 
     // Memory request
     output wire                             mem_req_valid,
-    output wire                             mem_req_rw,    
-    output wire [`VX_MEM_BYTEEN_WIDTH-1:0]  mem_req_byteen,    
+    output wire                             mem_req_rw,
+    output wire [`VX_MEM_BYTEEN_WIDTH-1:0]  mem_req_byteen,
     output wire [`VX_MEM_ADDR_WIDTH-1:0]    mem_req_addr,
     output wire [`VX_MEM_DATA_WIDTH-1:0]    mem_req_data,
     output wire [`VX_MEM_TAG_WIDTH-1:0]     mem_req_tag,
     input  wire                             mem_req_ready,
 
     // Memory response    
-    input wire                              mem_rsp_valid,        
+    input wire                              mem_rsp_valid,    
     input wire [`VX_MEM_DATA_WIDTH-1:0]     mem_rsp_data,
     input wire [`VX_MEM_TAG_WIDTH-1:0]      mem_rsp_tag,
     output wire                             mem_rsp_ready,
@@ -45,17 +45,11 @@ module Vortex import VX_gpu_pkg::*; (
 );
 
 `ifdef PERF_ENABLE
-    VX_mem_perf_if mem_perf_if();  
-    cache_perf_t perf_l3cache;
-    mem_perf_t mem_perf;   
-
-    assign mem_perf_if.icache = 'x;
-    assign mem_perf_if.dcache = 'x;
+    VX_mem_perf_if mem_perf_if();
+    assign mem_perf_if.icache  = 'x;
+    assign mem_perf_if.dcache  = 'x;
     assign mem_perf_if.l2cache = 'x;
-    assign mem_perf_if.l3cache = perf_l3cache;
-    assign mem_perf_if.smem = 'x;
-    assign mem_perf_if.mem = mem_perf;
-`endif    
+`endif
 
     VX_mem_bus_if #(
         .DATA_SIZE (`L2_LINE_SIZE),
@@ -93,7 +87,7 @@ module Vortex import VX_gpu_pkg::*; (
         .reset          (l3_reset),
 
     `ifdef PERF_ENABLE
-        .cache_perf     (perf_l3cache),
+        .cache_perf     (mem_perf_if.l3cache),
     `endif
 
         .core_bus_if    (per_cluster_mem_bus_if),
@@ -166,11 +160,12 @@ module Vortex import VX_gpu_pkg::*; (
         );
     end
 
-    `BUFFER_BUSY (busy, (| per_cluster_busy), (`NUM_CLUSTERS > 1));    
+    `BUFFER_EX(busy, (| per_cluster_busy), 1'b1, (`NUM_CLUSTERS > 1));
 
 `ifdef PERF_ENABLE
 
-    reg [`PERF_CTR_BITS-1:0] perf_mem_pending_reads;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_pending_reads;    
+    mem_perf_t mem_perf;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -181,19 +176,19 @@ module Vortex import VX_gpu_pkg::*; (
         end
     end
 
+    wire mem_rd_req_fire = mem_req_fire && ~mem_bus_if.req_data.rw;
+    wire mem_wr_req_fire = mem_req_fire && mem_bus_if.req_data.rw;
+
     always @(posedge clk) begin
         if (reset) begin       
             mem_perf <= '0;
-        end else begin  
-            if (mem_req_fire && ~mem_bus_if.req_data.rw) begin
-                mem_perf.reads <= mem_perf.reads + `PERF_CTR_BITS'(1);
-            end
-            if (mem_req_fire && mem_bus_if.req_data.rw) begin
-                mem_perf.writes <= mem_perf.writes + `PERF_CTR_BITS'(1);
-            end      
+        end else begin
+            mem_perf.reads <= mem_perf.reads + `PERF_CTR_BITS'(mem_rd_req_fire);
+            mem_perf.writes <= mem_perf.writes + `PERF_CTR_BITS'(mem_wr_req_fire);
             mem_perf.latency <= mem_perf.latency + perf_mem_pending_reads;
         end
     end
+    assign mem_perf_if.mem = mem_perf;
     
 `endif
 

@@ -43,7 +43,16 @@ module VX_cluster import VX_gpu_pkg::*; #(
 `ifdef SCOPE
     localparam scope_socket = 0;
     `SCOPE_IO_SWITCH (scope_socket + `NUM_SOCKETS);
-`endif
+`endif    
+
+`ifdef PERF_ENABLE
+    VX_mem_perf_if mem_perf_tmp_if();    
+    assign mem_perf_tmp_if.icache  = 'x;
+    assign mem_perf_tmp_if.dcache  = 'x;
+    assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
+    assign mem_perf_tmp_if.smem    = 'x;
+    assign mem_perf_tmp_if.mem     = mem_perf_if.mem;
+`endif    
 
 `ifdef GBAR_ENABLE
 
@@ -69,18 +78,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .reset       (gbar_reset),
         .gbar_bus_if (gbar_bus_if)
     );
-`endif
 
-`ifdef PERF_ENABLE
-    VX_mem_perf_if mem_perf_tmp_if();
-    cache_perf_t perf_l2cache;
-    
-    assign mem_perf_tmp_if.icache = 'x;
-    assign mem_perf_tmp_if.dcache = 'x;
-    assign mem_perf_tmp_if.l2cache = perf_l2cache;
-    assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
-    assign mem_perf_tmp_if.smem = 'x;
-    assign mem_perf_tmp_if.mem = mem_perf_if.mem;
 `endif
 
     VX_mem_bus_if #(
@@ -102,7 +100,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .MSHR_SIZE      (`L2_MSHR_SIZE),
         .MRSQ_SIZE      (`L2_MRSQ_SIZE),
         .MREQ_SIZE      (`L2_MREQ_SIZE),
-        .TAG_WIDTH      (L1_MEM_ARB_TAG_WIDTH),
+        .TAG_WIDTH      (L2_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .UUID_WIDTH     (`UUID_WIDTH),  
         .CORE_OUT_REG   (2),
@@ -113,7 +111,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .clk            (clk),
         .reset          (l2_reset),
     `ifdef PERF_ENABLE
-        .cache_perf     (perf_l2cache),
+        .cache_perf     (mem_perf_tmp_if.l2cache),
     `endif
         .core_bus_if    (per_socket_mem_bus_if),
         .mem_bus_if     (mem_bus_if)
@@ -146,6 +144,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
             .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + i)
         ) socket (
             `SCOPE_IO_BIND  (scope_socket+i)
+
             .clk            (clk),
             .reset          (socket_reset),
 
@@ -156,7 +155,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
             .dcr_bus_if     (socket_dcr_bus_if),
 
             .mem_bus_if     (per_socket_mem_bus_if[i]),
-        
+
         `ifdef GBAR_ENABLE
             .gbar_bus_if    (per_socket_gbar_bus_if[i]),
         `endif
@@ -167,6 +166,6 @@ module VX_cluster import VX_gpu_pkg::*; #(
         );
     end
 
-    `BUFFER_BUSY (busy, (| per_socket_busy), (`NUM_SOCKETS > 1));
+    `BUFFER_EX(busy, (| per_socket_busy), 1'b1, (`NUM_SOCKETS > 1));
 
 endmodule

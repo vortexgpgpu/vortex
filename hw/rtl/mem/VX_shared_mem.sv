@@ -233,9 +233,11 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
     wire [`CLOG2(NUM_REQS+1)-1:0] perf_writes_per_cycle;
     wire [`CLOG2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
 
-    wire [NUM_REQS-1:0] perf_reads_per_req = req_valid & req_ready & ~req_rw;
-    wire [NUM_REQS-1:0] perf_writes_per_req = req_valid & req_ready & req_rw;
+    wire [NUM_REQS-1:0] perf_reads_per_req, perf_writes_per_req;
     wire [NUM_REQS-1:0] perf_crsp_stall_per_req = rsp_valid & ~rsp_ready;
+
+    `BUFFER(perf_reads_per_req, req_valid & req_ready & ~req_rw);
+    `BUFFER(perf_writes_per_req, req_valid & req_ready & req_rw);
 
     `POP_COUNT(perf_reads_per_cycle, perf_reads_per_req);
     `POP_COUNT(perf_writes_per_cycle, perf_writes_per_req);

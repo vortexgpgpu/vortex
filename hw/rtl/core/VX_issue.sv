@@ -61,7 +61,8 @@ module VX_issue #(
         .reset          (scoreboard_reset),
     `ifdef PERF_ENABLE
         .perf_scb_stalls(perf_issue_if.scb_stalls),
-        .perf_scb_uses  (perf_issue_if.scb_uses),
+        .perf_units_uses(perf_issue_if.units_uses),
+        .perf_sfu_uses  (perf_issue_if.sfu_uses),
     `endif
         .writeback_if   (writeback_if),
         .ibuffer_if     (ibuffer_if),
@@ -84,7 +85,7 @@ module VX_issue #(
         .clk            (clk), 
         .reset          (dispatch_reset),
     `ifdef PERF_ENABLE
-        .perf_stalls    (perf_issue_if.dsp_stalls),
+        `UNUSED_PIN     (perf_stalls),
     `endif
         .operands_if    (operands_if),
         .alu_dispatch_if(alu_dispatch_if),
@@ -156,13 +157,14 @@ module VX_issue #(
 
 `ifdef PERF_ENABLE
     reg [`PERF_CTR_BITS-1:0] perf_ibf_stalls;
+    
+    wire decode_stall = decode_if.valid && ~decode_if.ready;
+
     always @(posedge clk) begin
         if (reset) begin
             perf_ibf_stalls <= '0;
         end else begin
-            if (decode_if.valid && ~decode_if.ready) begin
-                perf_ibf_stalls <= perf_ibf_stalls + `PERF_CTR_BITS'(1);
-            end
+            perf_ibf_stalls <= perf_ibf_stalls + `PERF_CTR_BITS'(decode_stall);
         end
     end
 
