@@ -7,3 +7,6 @@
 [submodule "third_party/ramulator"]
 	path = third_party/ramulator
 	url = https://github.com/CMU-SAFARI/ramulator.git
+[submodule "third_party/riscv-vector-tests"]
+	path = third_party/riscv-vector-tests
+	url = https://github.com/ksco/riscv-vector-tests.git
