@@ -1,0 +1,4 @@
+*.so
+vortex_afu.h
+rtlsim
+simx
