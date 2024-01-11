@@ -29,7 +29,7 @@ isa()
 {
 echo "begin isa tests..."
 
-make -C tests/riscv/isa run-simx
+make -C tests/riscv run-simx
 make -C tests/riscv/isa run-rtlsim
 CONFIGS="-DDPI_DISABLE" make -C tests/riscv/isa run-rtlsim
 
