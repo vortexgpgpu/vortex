@@ -732,8 +732,12 @@ void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
     csrs_.at(wid).at(tid)[VX_CSR_VXSAT] = value & 0b1;
     csrs_.at(wid).at(tid)[VX_CSR_VXRM] = (value >> 1) & 0b11;
     break;
-  case VX_CSR_VL: // read only, set by vset(i)vl(i)
-  case VX_CSR_VTYPE: // read only, set by vset(i)vl(i)
+  case VX_CSR_VL: // read only, written by vset(i)vl(i)
+    csrs_.at(wid).at(tid)[VX_CSR_VL] = value;
+    break;
+  case VX_CSR_VTYPE: // read only, written by vset(i)vl(i)
+    csrs_.at(wid).at(tid)[VX_CSR_VTYPE] = value;
+    break;
   case VX_CSR_VLENB: // read only, set to VLEN / 8
   case VX_CSR_SATP:
   case VX_CSR_MSTATUS:
@@ -766,7 +770,9 @@ void Core::trigger_ebreak() {
 
 bool Core::check_exit(Word* exitcode, bool riscv_test) const {
   if (exited_) {
-    Word ec = warps_.at(0)->getIRegValue(3);
+    // the gp is moved to a0 before exiting
+    uint32_t a0 = 10;
+    Word ec = warps_.at(0)->getIRegValue(a0);
     if (riscv_test) {
       *exitcode = (1 - ec);
     } else {
