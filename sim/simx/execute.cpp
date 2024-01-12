@@ -680,21 +680,10 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
       }
     } else {
-      auto &vd = vreg_file_.at(rdest);
-      switch (instr.getVlsWidth()) {
-      case 6: {
-        for (uint32_t i = 0; i < vl_; i++) {
-          Word mem_addr = ((rsdata[i][0].i) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
-          Word mem_data = 0;
-          core_->dcache_read(&mem_data, mem_addr, 4);
-          Word *result_ptr = (Word *)(vd.data() + i);
-          *result_ptr = mem_data;
-        }
-        break;
-      } 
-      default:
-        std::abort();
-      }
+      auto& mask = vreg_file_.at(0);
+      auto& vreg_file = vreg_file_;
+      auto vmask  = instr.getVmask();
+      loadVector(vreg_file, core_, rsdata, rdest, mask, vtype_.vsew, vl_, vmask);
     }
     rd_write = true;
     break;
@@ -729,19 +718,10 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
       }
     } else {
-      for (uint32_t i = 0; i < vl_; i++) {
-        uint64_t mem_addr = rsdata[i][0].i + (i * vtype_.vsew / 8);        
-        switch (instr.getVlsWidth()) {
-        case 6: {
-          // store word and unit strided (not checking for unit stride)          
-          uint32_t mem_data = *(uint32_t *)(vreg_file_.at(instr.getVs3()).data() + i);
-          core_->dcache_write(&mem_data, mem_addr, 4);
-          break;
-        } 
-        default:
-          std::abort();
-        }          
-      }
+      auto vmask  = instr.getVmask();
+      auto& mask = vreg_file_.at(0);
+      auto& vreg_file = vreg_file_;
+      storeVector(vreg_file, core_, rsdata, instr.getVs3(), mask, vtype_.vsew, vl_, vmask);
     }
     break;
   }
