@@ -5,10 +5,11 @@
 #include "instr.h"
 #include "core.h"
 #include "execute.h"
+#include "decode.h"
 
 using namespace vortex;
 
-void executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata, std::vector<std::vector<Byte>> &vreg_file_, vtype vtype_, uint32_t vl_) {
+void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata, std::vector<std::vector<Byte>> &vreg_file_, vtype vtype_, uint32_t vl_, uint32_t warp_id_) {
   auto func3  = instr.getFunc3();
   auto func6  = instr.getFunc6();
 
@@ -842,24 +843,67 @@ void executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata, std::
       }
     } break;
     case 7: {
-      vtype_.vill  = 0;
-      vtype_.vediv = instr.getVediv();
-      vtype_.vsew  = instr.getVsew();
-      vtype_.vlmul = instr.getVlmul();
+      uint32_t vma = instr.getVma();
+      uint32_t vta = instr.getVta();
+      uint32_t vsewO = instr.getVsewO();
+      uint32_t vsew = instr.getVsew();
+      uint32_t vlmul = instr.getVlmul();
 
-      DP(3, "lmul:" << vtype_.vlmul << " sew:" << vtype_.vsew  << " ediv: " << vtype_.vediv << "rsrc_" << rsdata[0][0].i << "VLMAX" << VLMAX);
+      if(!instr.hasZimm()){ // vsetvl
+        uint32_t zimm = rsdata[0][1].u;
+        vlmul = zimm & mask_v_lmul;
+        vsewO = (zimm >> shift_v_sew) & mask_v_sew;
+        vsew = 1 << (3 + vsewO);
+        vta = (zimm >> shift_v_ta) & mask_v_ta;
+        vma = (zimm >> shift_v_ma) & mask_v_ma;
+      }
 
-      auto s0 = rsdata[0][0].u;
+      bool negativeLmul = vlmul >> 2;
+      uint32_t vlenDividedByLmul = VLEN >> (0x8 - vlmul);
+      uint32_t vlenMultipliedByLmul = VLEN << vlmul;
+      uint32_t vlenTimesLmul = negativeLmul ? vlenDividedByLmul : vlenMultipliedByLmul;
+      VLMAX = vlenTimesLmul / vsew;
+      vtype_.vill  = vsew > XLEN || VLMAX < 8;
+
+      uint32_t s0 = instr.getImm(); // vsetivli
+      if (!instr.hasImm()) { // vsetvli/vsetvl
+        s0 = rsdata[0][0].u;
+      }
+
+      DP(1, "vill: " << +vtype_.vill << " vma: " << vma << " vta: " << vta << " lmul: " << vlmul << " sew: " << vsew << " s0: " << s0 << " VLMAX: " << VLMAX);
+
       if (s0 <= VLMAX) {
         vl_ = s0;
-      } else if (s0 < (2 * VLMAX)) {
-        vl_ = (uint32_t)ceil((s0 * 1.0) / 2.0);
       } else if (s0 >= (2 * VLMAX)) {
         vl_ = VLMAX;
-      }        
-      rddata[0].i = vl_;
-    } break;
+      }
+
+      if (vtype_.vill) {
+        core_->set_csr(VX_CSR_VTYPE, 1 << 31, 0, warp_id_);
+        vtype_.vma = 0;
+        vtype_.vta = 0;
+        vtype_.vsew  = 0;
+        vtype_.vlmul = 0;
+        core_->set_csr(VX_CSR_VL, 0, 0, warp_id_);
+        rddata[0].i = vl_;
+      } else {
+        vtype_.vma = vma;
+        vtype_.vta = vta;
+        vtype_.vsew  = vsew;
+        vtype_.vlmul = vlmul;
+        uint32_t vtype = vlmul;
+        vtype |= vsewO << shift_v_sew;
+        vtype |= vta << shift_v_ta;
+        vtype |= vma << shift_v_ma;
+        core_->set_csr(VX_CSR_VTYPE, vtype, 0, warp_id_);
+        core_->set_csr(VX_CSR_VL, vl_, 0, warp_id_);
+        rddata[0].i = vl_;
+      }
+    }
+    core_->set_csr(VX_CSR_VSTART, 0, 0, warp_id_);
+    break;
     default:
+      std::cout << "Unrecognised vector instruction func3: " << func3 << " func6: " << func6 << std::endl;
       std::abort();
     }
 }

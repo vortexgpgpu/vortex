@@ -63,6 +63,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
 
   auto func2  = instr.getFunc2();
   auto func3  = instr.getFunc3();
+  auto func6  = instr.getFunc6();
   auto func7  = instr.getFunc7();
 
   auto opcode = instr.getOpcode();
@@ -116,7 +117,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         DPN(2, "}" << std::endl);
         break;
       case RegType::Vector:
-        // TODO:
+        if (opcode == VSET && func3 == 5 && func6 == 0x17 && i == 0){
+          rsdata[0][i].u64 = freg_file_.at(0)[reg];
+        } else {
+          rsdata[0][i].u = ireg_file_.at(0)[reg];
+        }
         break;
       case RegType::None:
         break;
@@ -1435,7 +1440,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     }
   } break;
   case VSET: {
-    executeVector(instr, rsdata, rddata, vreg_file_, vtype_, vl_);
+    executeVector(instr, core_, rsdata, rddata, vreg_file_, vtype_, vl_, warp_id_);
   } break;    
   default:
     std::abort();
@@ -1478,6 +1483,13 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       }
       DPN(2, "}" << std::endl);
       trace->used_fregs[rdest] = 1;
+      break;
+    case RegType::Vector:
+        if ((opcode == VSET) && ((func3 == 0x7) | (func3 == 0x2)))
+        {
+          ireg_file_.at(0)[rdest] = rddata[0].u;
+          trace->used_iregs[rdest] = 1;
+        }
       break;
     default:
       std::abort();

@@ -82,8 +82,11 @@ public:
     , vMop_(0)
     , vNf_(0)
     , vs3_(0)
+    , has_zimm_(false)
     , vlmul_(0)
     , vsew_(0)
+    , vta_(0)
+    , vma_(0)
     , vediv_(0)   {
     for (uint32_t i = 0; i < MAX_REG_SOURCES; ++i) {
        rsrc_type_[i] = RegType::None;
@@ -115,8 +118,11 @@ public:
   void setVnf(uint32_t nf) { vNf_ = nf; }
   void setVmask(uint32_t mask) { vmask_ = mask; }
   void setVs3(uint32_t vs) { vs3_ = vs; }
-  void setVlmul(uint32_t lmul) { vlmul_ = 1 << lmul; }
-  void setVsew(uint32_t sew) { vsew_ = 1 << (3+sew); }
+  void setZimm(bool has_zimm) { has_zimm_ = has_zimm; }
+  void setVlmul(uint32_t lmul) { vlmul_ = lmul; }
+  void setVsew(uint32_t sew) { vsew_ = sew; }
+  void setVta(uint32_t vta) { vta_ = vta; }
+  void setVma(uint32_t vma) { vma_ = vma; }
   void setVediv(uint32_t ediv) { vediv_ = 1 << ediv; }
   void setFunc6(uint32_t func6) { func6_ = func6; }
 
@@ -137,8 +143,12 @@ public:
   uint32_t getvNf() const { return vNf_; }
   uint32_t getVmask() const { return vmask_; }
   uint32_t getVs3() const { return vs3_; }
+  bool     hasZimm() const { return has_zimm_; }
   uint32_t getVlmul() const { return vlmul_; }
-  uint32_t getVsew() const { return vsew_; }
+  uint32_t getVsew() const { return 1 << (3 + vsew_); }
+  uint32_t getVsewO() const { return vsew_; }
+  uint32_t getVta() const { return vta_; }
+  uint32_t getVma() const { return vma_; }
   uint32_t getVediv() const { return vediv_; }
 
 private:
@@ -166,8 +176,11 @@ private:
   uint32_t vMop_;
   uint32_t vNf_;
   uint32_t vs3_;
+  bool has_zimm_;
   uint32_t vlmul_;
   uint32_t vsew_;
+  uint32_t vta_;
+  uint32_t vma_;
   uint32_t vediv_;   
 
   friend std::ostream &operator<<(std::ostream &, const Instr&);

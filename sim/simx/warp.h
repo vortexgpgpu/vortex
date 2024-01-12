@@ -44,7 +44,8 @@ struct DomStackEntry {
 
 struct vtype {
   uint32_t vill;
-  uint32_t vediv;
+  uint32_t vma;
+  uint32_t vta;
   uint32_t vsew;
   uint32_t vlmul;
 };
