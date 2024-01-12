@@ -1,4 +1,14 @@
 #!/bin/bash
+VLEN=${VLEN:-256}
+XLEN=${XLEN:-32}
+TOOLDIR=${TOOLDIR:-"/opt"}
+
+if [ $XLEN -eq 64 ]; then
+  RISCV_TOOLCHAIN_PATH=${RISCV_TOOLCHAIN_PATH:-$TOOLDIR/riscv64-gnu-toolchain}
+else
+  RISCV_TOOLCHAIN_PATH=${RISCV_TOOLCHAIN_PATH:-$TOOLDIR/riscv-gnu-toolchain}
+fi
+
 cd testcases
 rm "$1"*
 cp ../../../../third_party/riscv-vector-tests/out/v"$VLEN"x"$XLEN"machine/bin/stage2/"$1"* .
