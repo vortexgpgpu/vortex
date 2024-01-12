@@ -9,7 +9,89 @@
 
 using namespace vortex;
 
-void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata, std::vector<std::vector<Byte>> &vreg_file_, vtype vtype_, uint32_t vl_, uint32_t warp_id_) {
+template <typename DT>
+void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, std::vector<Byte> mask, uint32_t vl, uint32_t vmask) {
+  uint32_t vsew = sizeof(DT) * 8;
+  for (uint32_t i = 0; i < vl; i++) {
+    uint8_t emask = *(uint8_t *)(mask.data() + i / 8);
+    uint8_t value = (emask >> (i % 8)) & 0x1;
+    DP(1, "VLE masking enabled: " << vmask << " mask element: " << +value);
+    if (!vmask && value == 0) continue;
+    
+    auto &vd = vreg_file.at((rdest + (i / (VLEN / vsew))) % 32);
+    Word mem_addr = ((rsdata[0][0].i) & 0xFFFFFFFC) + (i * vsew / 8);
+    Word mem_data = 0;
+    core_->dcache_read(&mem_data, mem_addr, vsew / 8);
+    DP(1, "Loading data " << mem_data << " from: " << mem_addr << " to vec reg: " << (rdest + (i / (VLEN / 8))) % 32);
+    DT *result_ptr = (DT *)(vd.data() + ((i % (VLEN / vsew)) * vsew / 8));
+    DP(1, "Previous data: " << +(*result_ptr));
+    *result_ptr = (DT) mem_data;
+  }
+}
+
+void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, std::vector<Byte> mask, uint32_t vsew, uint32_t vl, uint32_t vmask) {
+  switch (vsew) {
+    case 8:
+      loadVector<uint8_t>(vreg_file, core_, rsdata, rdest, mask, vl, vmask);
+      break;
+    case 16:
+      loadVector<uint16_t>(vreg_file, core_, rsdata, rdest, mask, vl, vmask);
+      break;
+    case 32:
+      loadVector<uint32_t>(vreg_file, core_, rsdata, rdest, mask, vl, vmask);
+      break;
+    case 64:
+      loadVector<uint64_t>(vreg_file, core_, rsdata, rdest, mask, vl, vmask);
+      break;
+    default:
+      std::cout << "Failed to execute VLE for vsew: " << vsew << std::endl;
+      std::abort();
+  }
+}
+
+template <typename DT>
+void storeVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, std::vector<Byte> mask, uint32_t vl, uint32_t vmask) {
+  uint32_t vsew = sizeof(DT) * 8;
+  for (uint32_t i = 0; i < vl; i++) {
+    uint8_t emask = *(uint8_t *)(mask.data() + i / 8);
+    uint8_t value = (emask >> (i % 8)) & 0x1;
+    DP(1, "VSE masking enabled: " << vmask << " mask element: " << +value);
+    if (!vmask && value == 0) continue;
+
+    uint64_t mem_addr = rsdata[0][0].i + (i * vsew / 8);
+    auto &vr = vreg_file.at((rsrc3 + (i / (VLEN / vsew))) % 32);      
+    uint32_t mem_data = 0;
+    int n = (vsew / 8);
+
+    for (int j = 0; j < n; j++){
+        mem_data += (*(Byte *)(vr.data() + j + ((i % (VLEN / vsew)) * vsew / 8))) * ((uint32_t)1 << (j * 8));
+    }
+    DP(1, "Storing: " << std::hex << mem_data << " at: " << mem_addr << " from vec reg: " << (rsrc3 + (i / (VLEN / vsew))) % 32);
+    core_->dcache_write(&mem_data, mem_addr, vsew / 8);
+  }
+}
+
+void storeVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, std::vector<Byte> mask, uint32_t vsew, uint32_t vl, uint32_t vmask) {
+  switch (vsew) {
+    case 8:
+      storeVector<uint8_t>(vreg_file, core_, rsdata, rsrc3, mask, vl, vmask);
+      break;
+    case 16:
+      storeVector<uint16_t>(vreg_file, core_, rsdata, rsrc3, mask, vl, vmask);
+      break;
+    case 32:
+      storeVector<uint32_t>(vreg_file, core_, rsdata, rsrc3, mask, vl, vmask);
+      break;
+    case 64:
+      storeVector<uint64_t>(vreg_file, core_, rsdata, rsrc3, mask, vl, vmask);
+      break;
+    default:
+      std::cout << "Failed to execute VSE for vsew: " << vsew << std::endl;
+      std::abort();
+  }
+}
+
+void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata, std::vector<std::vector<Byte>> &vreg_file_, vtype &vtype_, uint32_t &vl_, uint32_t warp_id_) {
   auto func3  = instr.getFunc3();
   auto func6  = instr.getFunc6();
 

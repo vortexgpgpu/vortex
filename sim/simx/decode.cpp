@@ -193,10 +193,14 @@ static const char* op_string(const Instr &instr) {
   case Opcode::FENCE: return "FENCE";
   case Opcode::FL: 
     switch (func3) {
-    case 0x1: return "VL";
     case 0x2: return "FLW";
     case 0x3: return "FLD";
-    default: 
+    case 0x0: return "VL8";
+    case 0x5: return "VL16";
+    case 0x6: return "VL32";
+    case 0x7: return "VL64";
+    default:
+      std::cout << "Could not decode float/vector load with func3: " << func3 << std::endl;
       std::abort();
     }
   case Opcode::FS: 
@@ -204,7 +208,12 @@ static const char* op_string(const Instr &instr) {
     case 0x1: return "VS";
     case 0x2: return "FSW";
     case 0x3: return "FSD";
-    default: 
+    case 0x0: return "VS8";
+    case 0x5: return "VS16";
+    case 0x6: return "VS32";
+    case 0x7: return "VS64";
+    default:
+      std::cout << "Could not decode float/vector store with func3: " << func3 << std::endl;
       std::abort();
     }
   case Opcode::AMO: {
