@@ -18,6 +18,62 @@ class Add {
     static std::string name() {return "Add";}
 };
 
+template <typename T, typename R>
+class Rsub {
+  public:
+    static R apply(T first, T second) {
+      return first - second;
+    }
+    static std::string name() {return "Rsub";}
+};
+
+template <typename T, typename R>
+class And {
+  public:
+    static R apply(T first, T second) {
+      return first & second;
+    }
+    static std::string name() {return "And";}
+};
+
+template <typename T, typename R>
+class Or {
+  public:
+    static R apply(T first, T second) {
+      return first | second;
+    }
+    static std::string name() {return "Or";}
+};
+
+template <typename T, typename R>
+class Xor {
+  public:
+    static R apply(T first, T second) {
+      return first ^ second;
+    }
+    static std::string name() {return "Xor";}
+};
+
+template <typename T, typename R>
+class Sll {
+  public:
+    static R apply(T first, T second) {
+      // Only the low lg2(SEW) bits of the shift-amount value are used to control the shift amount.
+      return second << (first & (sizeof(T) * 8 - 1));
+    }
+    static std::string name() {return "Sll";}
+};
+
+template <typename T, typename R>
+class SrlSra {
+  public:
+    static R apply(T first, T second) {
+      // Only the low lg2(SEW) bits of the shift-amount value are used to control the shift amount.
+      return second >> (first & (sizeof(T) * 8 - 1));
+    }
+    static std::string name() {return "SrlSra";}
+};
+
 template <typename DT>
 void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, std::vector<Byte> mask, uint32_t vl, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
@@ -148,7 +204,7 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
     switch (func3) {
     case 0: // vector-vector
       switch (func6) {
-      case 0: { // vadd.vi
+      case 0: { // vadd.vv
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
           auto &mask = vreg_file_.at(0);
@@ -412,6 +468,55 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
           if (!tmask_.test(t)) continue;
           auto &mask = vreg_file_.at(0);
           vector_op_vix<Add, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 3: { // vrsub.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          auto &mask = vreg_file_.at(0);
+          vector_op_vix<Rsub, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 9: { // vand.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          auto &mask = vreg_file_.at(0);
+          vector_op_vix<And, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 10: { // vor.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          auto &mask = vreg_file_.at(0);
+          vector_op_vix<Or, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 11: { // vxor.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          auto &mask = vreg_file_.at(0);
+          vector_op_vix<Xor, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 37: { // vsll.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          auto &mask = vreg_file_.at(0);
+          vector_op_vix<Sll, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 40: { // vsrl.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          auto &mask = vreg_file_.at(0);
+          vector_op_vix<SrlSra, uint8_t, uint16_t, uint32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 41: { // vsra.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          auto &mask = vreg_file_.at(0);
+          vector_op_vix<SrlSra, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
         }
       } break;
       }
