@@ -190,7 +190,7 @@ void vector_op_vix(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_
   }
 }
 
-void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata, std::vector<std::vector<Byte>> &vreg_file_, vtype &vtype_, uint32_t &vl_, uint32_t warp_id_, ThreadMask &tmask_, uint32_t num_threads) {
+void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata, std::vector<std::vector<Word>> &ireg_file_, std::vector<std::vector<Byte>> &vreg_file_, vtype &vtype_, uint32_t &vl_, uint32_t warp_id_, ThreadMask &tmask_, uint32_t num_threads) {
   auto func3  = instr.getFunc3();
   auto func6  = instr.getFunc6();
 
@@ -971,6 +971,18 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
           }
         }
       } break;
+      }
+    } break;
+    case 4:{
+      switch (func6){
+        case 0: { // vadd.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            auto& mask = vreg_file_.at(0);
+            vector_op_vix<Add, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+          }
+        } break;
       }
     } break;
     case 6: {
