@@ -9,6 +9,15 @@
 
 using namespace vortex;
 
+template <typename T, typename R>
+class Add {
+  public:
+    static R apply(T first, T second) {
+      return (R)first + (R)second;
+    }
+    static std::string name() {return "Add";}
+};
+
 template <typename DT>
 void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, std::vector<Byte> mask, uint32_t vl, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
@@ -91,61 +100,60 @@ void storeVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_,
   }
 }
 
-void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata, std::vector<std::vector<Byte>> &vreg_file_, vtype &vtype_, uint32_t &vl_, uint32_t warp_id_) {
+template <template <typename DT1, typename DT2> class OP, typename DT>
+void vector_op_vix(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, std::vector<Byte> mask, uint32_t vl, uint32_t vmask)
+{
+  uint32_t vsew = sizeof(DT) * 8;
+  for (uint32_t i = 0; i < vl; i++) {
+    auto& vr2 = vreg_file.at((rsrc0 + (i / (VLEN / vsew))) % 32);
+    auto& vd = vreg_file.at((rdest + (i / (VLEN / vsew))) % 32);
+    uint8_t emask = *(uint8_t *)(mask.data() + i / 8);
+    uint8_t value = (emask >> (i % 8)) & 0x1;
+    DP(1, "VI/VX masking enabled: " << vmask << " mask element: " << +value);
+    if (!vmask && value == 0) continue;
+    
+    DT second = *(DT *)(vr2.data() + (i % (VLEN / vsew)) * vsew / 8);
+    DT result = OP<DT, DT>::apply(first, second);
+    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    *(DT *)(vd.data() + (i % (VLEN / vsew)) * vsew / 8) = result;
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8=uint8_t, typename DT16=uint16_t, typename DT32=uint32_t>
+void vector_op_vix(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, std::vector<Byte> mask, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vix<OP, DT8>(src1, vreg_file, rsrc0, rdest, mask, vl, vmask);
+  } else if (vsew == 16) {
+    vector_op_vix<OP, DT16>(src1, vreg_file, rsrc0, rdest, mask, vl, vmask);
+  } else if (vsew == 32) {
+    vector_op_vix<OP, DT32>(src1, vreg_file, rsrc0, rdest, mask, vl, vmask);
+  } else {
+    std::cout << "Failed to execute VI/VX for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata, std::vector<std::vector<Byte>> &vreg_file_, vtype &vtype_, uint32_t &vl_, uint32_t warp_id_, ThreadMask &tmask_, uint32_t num_threads) {
   auto func3  = instr.getFunc3();
   auto func6  = instr.getFunc6();
 
   auto rdest  = instr.getRDest();
   auto rsrc0  = instr.getRSrc(0);
   auto rsrc1  = instr.getRSrc(1);
+  auto immsrc = sext((Word)instr.getImm(), 32);
   auto vmask  = instr.getVmask();
   
     uint32_t VLMAX = (instr.getVlmul() * VLEN) / instr.getVsew();
     switch (func3) {
     case 0: // vector-vector
       switch (func6) {
-      case 0: {
-        auto& vr1 = vreg_file_.at(rsrc0);
-        auto& vr2 = vreg_file_.at(rsrc1);
-        auto& vd = vreg_file_.at(rdest);
-        auto& mask = vreg_file_.at(0);
-        if (vtype_.vsew == 8) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint8_t emask = *(uint8_t *)(mask.data() + i);
-            uint8_t value = emask & 0x1;
-            if (vmask || (!vmask && value)) {
-              uint8_t first  = *(uint8_t *)(vr1.data() + i);
-              uint8_t second = *(uint8_t *)(vr2.data() + i);
-              uint8_t result = first + second;
-              DP(3, "Adding " << first << " + " << second << " = " << result);
-              *(uint8_t *)(vd.data() + i) = result;
-            }
-          }
-        } else if (vtype_.vsew == 16) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint16_t emask = *(uint16_t *)(mask.data() + i);
-            uint16_t value = emask & 0x1;
-            if (vmask || (!vmask && value)) {
-              uint16_t first  = *(uint16_t *)(vr1.data() + i);
-              uint16_t second = *(uint16_t *)(vr2.data() + i);
-              uint16_t result = first + second;
-              DP(3, "Adding " << first << " + " << second << " = " << result);
-              *(uint16_t *)(vd.data() + i) = result;
-            }
-          }
-        } else if (vtype_.vsew == 32) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint32_t emask = *(uint32_t *)(mask.data() + i);
-            uint32_t value = emask & 0x1;
-            if (vmask || (!vmask && value)) {
-              uint32_t first  = *(uint32_t *)(vr1.data() + i);
-              uint32_t second = *(uint32_t *)(vr2.data() + i);
-              uint32_t result = first + second;
-              DP(3, "Adding " << first << " + " << second << " = " << result);
-              *(uint32_t *)(vd.data() + i) = result;
-            }
-          }
-        }                
+      case 0: { // vadd.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          auto &mask = vreg_file_.at(0);
+          vector_op_vix<Add, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+        }
       } break;
       case 24: {
         // vmseq
@@ -397,6 +405,17 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
       } break;
       }
       break;
+    case 3: { // vector - immidiate
+      switch (func6) {
+      case 0: { // vadd.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          auto &mask = vreg_file_.at(0);
+          vector_op_vix<Add, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      }
+    } break;
     case 2: {
       switch (func6) {
       case 24: { 
@@ -952,7 +971,7 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
         s0 = rsdata[0][0].u;
       }
 
-      DP(1, "vill: " << +vtype_.vill << " vma: " << vma << " vta: " << vta << " lmul: " << vlmul << " sew: " << vsew << " s0: " << s0 << " VLMAX: " << VLMAX);
+      DP(1, "Vset(i)vl(i) - vill: " << +vtype_.vill << " vma: " << vma << " vta: " << vta << " lmul: " << vlmul << " sew: " << vsew << " s0: " << s0 << " VLMAX: " << VLMAX);
 
       if (s0 <= VLMAX) {
         vl_ = s0;
