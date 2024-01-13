@@ -519,6 +519,9 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
           vector_op_vix<SrlSra, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
         }
       } break;
+      default:
+        std::cout << "Unrecognised vector - immidiate instruction func3: " << func3 << " func6: " << func6 << std::endl;
+        std::abort();
       }
     } break;
     case 2: {
@@ -983,6 +986,9 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
             vector_op_vix<Add, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
           }
         } break;
+        default:
+          std::cout << "Unrecognised vector - scalar instruction func3: " << func3 << " func6: " << func6 << std::endl;
+          std::abort();
       }
     } break;
     case 6: {
