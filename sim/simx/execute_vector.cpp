@@ -19,12 +19,68 @@ class Add {
 };
 
 template <typename T, typename R>
+class Sub {
+  public:
+    static R apply(T first, T second) {
+      return (R)second - (R)first;
+    }
+    static std::string name() {return "Sub";}
+};
+
+template <typename T, typename R>
 class Rsub {
   public:
     static R apply(T first, T second) {
       return first - second;
     }
     static std::string name() {return "Rsub";}
+};
+
+template <typename T, typename R>
+class Mul {
+  public:
+    static R apply(T first, T second) {
+      return (R)first * (R)second;
+    }
+    static std::string name() {return "Mul";}
+};
+
+template <typename T, typename R>
+class Mulh {
+  public:
+    static R apply(T first, T second) {
+      __int128_t first_ext = sext((__int128_t)second, (sizeof(T) * 8));
+      __int128_t second_ext = sext((__int128_t)first, (sizeof(T) * 8));
+      return (first_ext * second_ext) >> (sizeof(T) * 8);
+    }
+    static std::string name() {return "Mulh";}
+};
+
+template <typename T, typename R>
+class Mulhu {
+  public:
+    static R apply(T first, T second) {
+      return ((__uint128_t)first * (__uint128_t)second) >> (sizeof(T) * 8);
+    }
+    static std::string name() {return "Mulhu";}
+};
+
+template <typename T, typename R>
+class Min {
+  public:
+    static R apply(T first, T second) {
+      return std::min(first, second);
+    }
+    static std::string name() {return "Min";}
+};
+
+template <typename T, typename R>
+class Max {
+  public:
+    static R apply(T first, T second) {
+      return std::max(first, second);
+    }
+    static std::string name() {return "Max";}
 };
 
 template <typename T, typename R>
@@ -986,6 +1042,102 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
             vector_op_vix<Add, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
           }
         } break;
+        case 2: { // vsub.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            auto& mask = vreg_file_.at(0);
+            vector_op_vix<Sub, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 3: { // vrsub.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            auto& mask = vreg_file_.at(0);
+            vector_op_vix<Rsub, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 4: { // vminu.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            auto& mask = vreg_file_.at(0);
+            vector_op_vix<Min, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 5: { // vmin.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            auto& mask = vreg_file_.at(0);
+            vector_op_vix<Min, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 6: { // vmaxu.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            auto& mask = vreg_file_.at(0);
+            vector_op_vix<Max, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 7: { // vmax.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            auto& mask = vreg_file_.at(0);
+            vector_op_vix<Max, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 9: { // vand.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            auto& mask = vreg_file_.at(0);
+            vector_op_vix<And, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 10: { // vor.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            auto& mask = vreg_file_.at(0);
+            vector_op_vix<Or, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 11: { // vxor.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            auto& mask = vreg_file_.at(0);
+            vector_op_vix<Xor, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 37: { // vsll.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            auto& mask = vreg_file_.at(0);
+            vector_op_vix<Sll, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 40: { // vsrl.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            auto& mask = vreg_file_.at(0);
+            vector_op_vix<SrlSra, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 41: { // vsra.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            auto& mask = vreg_file_.at(0);
+            vector_op_vix<SrlSra, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+          }
+        } break;
         default:
           std::cout << "Unrecognised vector - scalar instruction func3: " << func3 << " func6: " << func6 << std::endl;
           std::abort();
@@ -993,77 +1145,33 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
     } break;
     case 6: {
       switch (func6) {
-      case 0: {
-        auto &vr2 = vreg_file_.at(rsrc1);
-        auto &vd = vreg_file_.at(rdest);
-        if (vtype_.vsew == 8) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint8_t second = *(uint8_t *)(vr2.data() + i);
-            uint8_t result = (rsdata[i][0].i + second);
-            DP(3, "Comparing " << rsdata[i][0].i << " + " << second << " = " << result);
-            *(uint8_t *)(vd.data() + i) = result;
+        case 36: { // vmulhu.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            auto &mask = vreg_file_.at(0);
+            vector_op_vix<Mulhu, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
           }
-          for (uint32_t i = vl_; i < VLMAX; i++) {
-            *(uint8_t *)(vd.data() + i) = 0;
+        } break;
+        case 37: { // vmul.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            auto &mask = vreg_file_.at(0); 
+            vector_op_vix<Mul, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
           }
-        } else if (vtype_.vsew == 16) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint16_t second = *(uint16_t *)(vr2.data() + i);
-            uint16_t result = (rsdata[i][0].i + second);
-            DP(3, "Comparing " << rsdata[i][0].i << " + " << second << " = " << result);
-            *(uint16_t *)(vd.data() + i) = result;
+        } break;
+        case 39: { // vmulh.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            auto &mask = vreg_file_.at(0);
+            vector_op_vix<Mulh, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
           }
-          for (uint32_t i = vl_; i < VLMAX; i++) {
-            *(uint16_t *)(vd.data() + i) = 0;
-          }
-        } else if (vtype_.vsew == 32) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint32_t second = *(uint32_t *)(vr2.data() + i);
-            uint32_t result = (rsdata[i][0].i + second);
-            DP(3, "Comparing " << rsdata[i][0].i << " + " << second << " = " << result);
-            *(uint32_t *)(vd.data() + i) = result;
-          }
-          for (uint32_t i = vl_; i < VLMAX; i++) {
-            *(uint32_t *)(vd.data() + i) = 0;
-          }
-        }
-      } break;
-      case 37: {
-        // vmul.vx
-        auto &vr2 = vreg_file_.at(rsrc1);
-        auto &vd = vreg_file_.at(rdest);
-        if (vtype_.vsew == 8) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint8_t second = *(uint8_t *)(vr2.data() + i);
-            uint8_t result = (rsdata[i][0].i * second);
-            DP(3, "Comparing " << rsdata[i][0].i << " + " << second << " = " << result);
-            *(uint8_t *)(vd.data() + i) = result;
-          }
-          for (uint32_t i = vl_; i < VLMAX; i++) {
-            *(uint8_t *)(vd.data() + i) = 0;
-          }
-        } else if (vtype_.vsew == 16) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint16_t second = *(uint16_t *)(vr2.data() + i);
-            uint16_t result = (rsdata[i][0].i * second);
-            DP(3, "Comparing " << rsdata[i][0].i << " + " << second << " = " << result);
-            *(uint16_t *)(vd.data() + i) = result;
-          }
-          for (uint32_t i = vl_; i < VLMAX; i++) {
-            *(uint16_t *)(vd.data() + i) = 0;
-          }
-        } else if (vtype_.vsew == 32) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint32_t second = *(uint32_t *)(vr2.data() + i);
-            uint32_t result = (rsdata[i][0].i * second);
-            DP(3, "Comparing " << rsdata[i][0].i << " + " << second << " = " << result);
-            *(uint32_t *)(vd.data() + i) = result;
-          }
-          for (uint32_t i = vl_; i < VLMAX; i++) {
-            *(uint32_t *)(vd.data() + i) = 0;
-          }
-        }
-      } break;
+        } break;
+        default:
+          std::cout << "Unrecognised vector - scalar instruction func3: " << func3 << " func6: " << func6 << std::endl;
+          std::abort();
       }
     } break;
     case 7: {
