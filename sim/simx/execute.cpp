@@ -680,10 +680,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
       }
     } else {
-      auto& mask = vreg_file_.at(0);
       auto& vreg_file = vreg_file_;
       auto vmask  = instr.getVmask();
-      loadVector(vreg_file, core_, rsdata, rdest, mask, vtype_.vsew, vl_, vmask);
+      loadVector(vreg_file, core_, rsdata, rdest, vtype_.vsew, vl_, vmask);
     }
     rd_write = true;
     break;
@@ -719,9 +718,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       }
     } else {
       auto vmask  = instr.getVmask();
-      auto& mask = vreg_file_.at(0);
       auto& vreg_file = vreg_file_;
-      storeVector(vreg_file, core_, rsdata, instr.getVs3(), mask, vtype_.vsew, vl_, vmask);
+      storeVector(vreg_file, core_, rsdata, instr.getVs3(), vtype_.vsew, vl_, vmask);
     }
     break;
   }
