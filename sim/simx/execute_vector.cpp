@@ -132,6 +132,51 @@ class SrlSra {
 };
 
 template <typename T, typename R>
+class Eq {
+  public:
+    static R apply(T first, T second) {
+      return first == second;
+    }
+    static std::string name() {return "Eq";}
+};
+
+template <typename T, typename R>
+class Ne {
+  public:
+    static R apply(T first, T second) {
+      return first != second;
+    }
+    static std::string name() {return "Ne";}
+};
+
+template <typename T, typename R>
+class Lt {
+  public:
+    static R apply(T first, T second) {
+      return first > second;
+    }
+    static std::string name() {return "Lt";}
+};
+
+template <typename T, typename R>
+class Le {
+  public:
+    static R apply(T first, T second) {
+      return first >= second;
+    }
+    static std::string name() {return "Le";}
+};
+
+template <typename T, typename R>
+class Gt {
+  public:
+    static R apply(T first, T second) {
+      return first < second;
+    }
+    static std::string name() {return "Gt";}
+};
+
+template <typename T, typename R>
 class Fmin {
   public:
     static R apply(T first, T second) {
@@ -451,6 +496,39 @@ void vector_op_vv_red(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0,
   }
 }
 
+template <template <typename DT1, typename DT2> class OP, typename DT>
+void vector_op_vv_mask(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    if (isMasked(vreg_file, i, vmask)) continue;
+
+    DT first = getVregData<DT>(vreg_file, rsrc0, i);
+    DT second = getVregData<DT>(vreg_file, rsrc1, i);
+    bool result = OP<DT, bool>::apply(first, second);
+    DP(1, "Integer compare mask " << (OP<DT, bool>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    if (result) {
+      getVregData<uint8_t>(vreg_file, rdest, i / 8) |= 1 << (i % 8);
+    } else {
+      getVregData<uint8_t>(vreg_file, rdest, i / 8) &= ~(1 << (i % 8));
+    }
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32>
+void vector_op_vv_mask(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 8) {
+      vector_op_vv_mask<OP, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+    } else if (vsew == 16) {
+      vector_op_vv_mask<OP, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+    } else if (vsew == 32) {
+      vector_op_vv_mask<OP, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+    } else {
+      std::cout << "Unhandled sew of: " << vsew << std::endl;
+      std::abort();
+    }
+}
+
 void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata, std::vector<std::vector<Word>> &ireg_file_, std::vector<std::vector<Byte>> &vreg_file_, vtype &vtype_, uint32_t &vl_, uint32_t warp_id_, ThreadMask &tmask_, uint32_t num_threads) {
   auto func3  = instr.getFunc3();
   auto func6  = instr.getFunc6();
@@ -517,6 +595,54 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
               vector_op_vv<Xor, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 24: { // vmseq.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_mask<Eq, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 25: {  // vmsne.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_mask<Ne, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 26: { // vmsltu.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_mask<Lt, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 27: { // vmslt.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_mask<Lt, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 28: { // vmsleu.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_mask<Le, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 29: { // vmsle.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_mask<Le, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 30: { // vmsgtu.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_mask<Gt, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 31: { // vmsgt.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_mask<Gt, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 37: { // vsll.vv
