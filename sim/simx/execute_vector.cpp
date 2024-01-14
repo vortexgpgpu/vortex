@@ -177,6 +177,51 @@ class Gt {
 };
 
 template <typename T, typename R>
+class AndNot {
+  public:
+    static R apply(T first, T second) {
+      return second & ~first;
+    }
+    static std::string name() {return "AndNot";}
+};
+
+template <typename T, typename R>
+class OrNot {
+  public:
+    static R apply(T first, T second) {
+      return second | ~first;
+    }
+    static std::string name() {return "OrNot";}
+};
+
+template <typename T, typename R>
+class Nand {
+  public:
+    static R apply(T first, T second) {
+      return ~(second & first);
+    }
+    static std::string name() {return "Nand";}
+};
+
+template <typename T, typename R>
+class Nor {
+  public:
+    static R apply(T first, T second) {
+      return ~(second | first);
+    }
+    static std::string name() {return "Nor";}
+};
+
+template <typename T, typename R>
+class Xnor {
+  public:
+    static R apply(T first, T second) {
+      return ~(second ^ first);
+    }
+    static std::string name() {return "Xnor";}
+};
+
+template <typename T, typename R>
 class Fmin {
   public:
     static R apply(T first, T second) {
@@ -529,6 +574,24 @@ void vector_op_vv_mask(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0
     }
 }
 
+template <template <typename DT1, typename DT2> class OP>
+void vector_op_vv_mask(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    uint8_t firstMask = getVregData<uint8_t>(vreg_file, rsrc0, i / 8);
+    bool first = (firstMask >> (i % 8)) & 0x1;
+    uint8_t secondMask = getVregData<uint8_t>(vreg_file, rsrc1, i / 8);
+    bool second = (secondMask >> (i % 8)) & 0x1;
+    bool result = OP<uint8_t, uint8_t>::apply(first, second) & 0x1;
+    DP(1, "Compare mask bits " << (OP<uint8_t, uint8_t>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    if (result) {
+      getVregData<uint8_t>(vreg_file, rdest, i / 8) |= 1 << (i % 8);
+    } else {
+      getVregData<uint8_t>(vreg_file, rdest, i / 8) &= ~(1 << (i % 8));
+    }
+  }
+}
+
 void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata, std::vector<std::vector<Word>> &ireg_file_, std::vector<std::vector<Byte>> &vreg_file_, vtype &vtype_, uint32_t &vl_, uint32_t warp_id_, ThreadMask &tmask_, uint32_t num_threads) {
   auto func3  = instr.getFunc3();
   auto func6  = instr.getFunc6();
@@ -711,6 +774,54 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             vector_op_vv_red<Or, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 24: { // vmandn.mm
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_mask<AndNot>(vreg_file_, rsrc0, rsrc1, rdest, vl_);
+          }
+        } break;
+        case 25: { // vmand.mm
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_mask<And>(vreg_file_, rsrc0, rsrc1, rdest, vl_);
+          }
+        } break;
+        case 26: { // vmor.mm
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_mask<Or>(vreg_file_, rsrc0, rsrc1, rdest, vl_);
+          }
+        } break;
+        case 27: { // vmxor.mm
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_mask<Xor>(vreg_file_, rsrc0, rsrc1, rdest, vl_);
+          }
+        } break;
+        case 28: { // vmorn.mm
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_mask<OrNot>(vreg_file_, rsrc0, rsrc1, rdest, vl_);
+          }
+        } break;
+        case 29: { // vmnand.mm
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_mask<Nand>(vreg_file_, rsrc0, rsrc1, rdest, vl_);
+          }
+        } break;
+        case 30: { // vmnor.mm
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_mask<Nor>(vreg_file_, rsrc0, rsrc1, rdest, vl_);
+          }
+        } break;
+        case 31: { // vmxnor.mm
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_mask<Xnor>(vreg_file_, rsrc0, rsrc1, rdest, vl_);
           }
         } break;
         case 36: { // vmulhu.vv
