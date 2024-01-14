@@ -245,7 +245,7 @@ void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, 
   for (uint32_t i = 0; i < vl; i++) {
     uint8_t emask = *(uint8_t *)(mask.data() + i / 8);
     uint8_t value = (emask >> (i % 8)) & 0x1;
-    DP(1, "VLE masking enabled: " << vmask << " mask element: " << +value);
+    DP(1, "VLE masking enabled: " << +!vmask << " mask element: " << +value);
     if (!vmask && value == 0) continue;
     
     auto &vd = vreg_file.at((rdest + (i / (VLEN / vsew))) % 32);
@@ -285,7 +285,7 @@ void storeVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_,
   for (uint32_t i = 0; i < vl; i++) {
     uint8_t emask = *(uint8_t *)(mask.data() + i / 8);
     uint8_t value = (emask >> (i % 8)) & 0x1;
-    DP(1, "VSE masking enabled: " << vmask << " mask element: " << +value);
+    DP(1, "VSE masking enabled: " << +!vmask << " mask element: " << +value);
     if (!vmask && value == 0) continue;
 
     uint64_t mem_addr = rsdata[0][0].i + (i * vsew / 8);
@@ -330,7 +330,7 @@ void vector_op_vix(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t
     auto& vd = vreg_file.at((rdest + (i / (VLEN / vsew))) % 32);
     uint8_t emask = *(uint8_t *)(mask.data() + i / 8);
     uint8_t value = (emask >> (i % 8)) & 0x1;
-    DP(1, "VI/VX masking enabled: " << vmask << " mask element: " << +value);
+    DP(1, "VI/VX masking enabled: " << +!vmask << " mask element: " << +value);
     if (!vmask && value == 0) continue;
     
     DT second = *(DT *)(vr2.data() + (i % (VLEN / vsew)) * vsew / 8);
@@ -365,7 +365,7 @@ void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uin
     auto& vd = vreg_file.at((rdest + (i / (VLEN / vsew))) % 32);
     uint8_t emask = *(uint8_t *)(mask.data() + i / 8);
     uint8_t value = (emask >> (i % 8)) & 0x1;
-    DP(1, "VI/VX masking enabled: " << vmask << " mask element: " << +value);
+    DP(1, "VI/VX masking enabled: " << +!vmask << " mask element: " << +value);
     if (!vmask && value == 0) continue;
 
     DT first  = *(DT *)(vr1.data() + (i % (VLEN / vsew)) * vsew / 8);
@@ -386,7 +386,42 @@ void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uin
   } else if (vsew == 32) {
     vector_op_vv<OP, DT32>(vreg_file, rsrc0, rsrc1, rdest, mask, vl, vmask);
   } else {
-    std::cout << "Unhandled sew of: " << vsew << std::endl;
+    std::cout << "Failed to execute VV for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT, typename DTW>
+void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, std::vector<Byte> mask, uint32_t vl, uint32_t vmask)
+{
+  uint32_t vsew = sizeof(DT) * 8;
+  uint32_t vsew_w = sizeof(DTW) * 8;
+  for (uint32_t i = 0; i < vl; i++) {
+    auto& vr1 = vreg_file.at((rsrc0 + (i / (VLEN / vsew))) % 32);
+    auto& vr2 = vreg_file.at((rsrc1 + (i / (VLEN / vsew))) % 32);
+    auto& vd = vreg_file.at((rdest + (i / (VLEN / vsew_w))) % 32);
+    uint8_t emask = *(uint8_t *)(mask.data() + i / 8);
+    uint8_t value = (emask >> (i % 8)) & 0x1;
+    DP(1, "VI/VX masking enabled: " << +!vmask << " mask element: " << +value);
+    if (!vmask && value == 0) continue;
+
+    DT first  = *(DT *)(vr1.data() + (i % (VLEN / vsew)) * vsew / 8);
+    DT second = *(DT *)(vr2.data() + (i % (VLEN / vsew)) * vsew / 8);
+    DTW result = OP<DT, DTW>::apply(first, second);
+    DP(1, "Widening " << (OP<DT, DTW>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    *(DTW *)(vd.data() + (i % (VLEN / vsew_w)) * vsew_w / 8) = result;
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8=uint8_t, typename DT16=uint16_t, typename DT32=uint32_t>
+void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, std::vector<Byte> mask, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vv_w<OP, DT8, DT16>(vreg_file, rsrc0, rsrc1, rdest, mask, vl, vmask);
+  } else if (vsew == 16) {
+    vector_op_vv_w<OP, DT16, DT32>(vreg_file, rsrc0, rsrc1, rdest, mask, vl, vmask);
+  } else {
+    std::cout << "Failed to execute VV for vsew: " << vsew << std::endl;
     std::abort();
   }
 }
@@ -550,6 +585,13 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
             if (!tmask_.test(t)) continue;
             auto &mask = vreg_file_.at(0);
             vector_op_vv<Mulh, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 59: { // vwmul.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &mask = vreg_file_.at(0);
+            vector_op_vv_w<Mul, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
           }
         } break;
         default:
