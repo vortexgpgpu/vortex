@@ -231,7 +231,7 @@ void vector_op_vix(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t
   }
 }
 
-template <template <typename DT1, typename DT2> class OP, typename DT8=uint8_t, typename DT16=uint16_t, typename DT32=uint32_t>
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32>
 void vector_op_vix(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, std::vector<Byte> mask, uint32_t vsew, uint32_t vl, uint32_t vmask)
 {
   if (vsew == 8) {
@@ -242,6 +242,42 @@ void vector_op_vix(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_
     vector_op_vix<OP, DT32>(src1, vreg_file, rsrc0, rdest, mask, vl, vmask);
   } else {
     std::cout << "Failed to execute VI/VX for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT>
+void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, std::vector<Byte> mask, uint32_t vl, uint32_t vmask)
+{
+  uint32_t vsew = sizeof(DT) * 8;
+  for (uint32_t i = 0; i < vl; i++) {
+    auto& vr1 = vreg_file.at((rsrc0 + (i / (VLEN / vsew))) % 32);
+    auto& vr2 = vreg_file.at((rsrc1 + (i / (VLEN / vsew))) % 32);
+    auto& vd = vreg_file.at((rdest + (i / (VLEN / vsew))) % 32);
+    uint8_t emask = *(uint8_t *)(mask.data() + i / 8);
+    uint8_t value = (emask >> (i % 8)) & 0x1;
+    DP(1, "VI/VX masking enabled: " << vmask << " mask element: " << +value);
+    if (!vmask && value == 0) continue;
+
+    DT first  = *(DT *)(vr1.data() + (i % (VLEN / vsew)) * vsew / 8);
+    DT second = *(DT *)(vr2.data() + (i % (VLEN / vsew)) * vsew / 8);
+    DT result = OP<DT, DT>::apply(first, second);
+    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    *(DT *)(vd.data() + (i % (VLEN / vsew)) * vsew / 8) = result;
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32>
+void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, std::vector<Byte> mask, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vv<OP, DT8>(vreg_file, rsrc0, rsrc1, rdest, mask, vl, vmask);
+  } else if (vsew == 16) {
+    vector_op_vv<OP, DT16>(vreg_file, rsrc0, rsrc1, rdest, mask, vl, vmask);
+  } else if (vsew == 32) {
+    vector_op_vv<OP, DT32>(vreg_file, rsrc0, rsrc1, rdest, mask, vl, vmask);
+  } else {
+    std::cout << "Unhandled sew of: " << vsew << std::endl;
     std::abort();
   }
 }
@@ -258,265 +294,97 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
   
     uint32_t VLMAX = (instr.getVlmul() * VLEN) / instr.getVsew();
     switch (func3) {
-    case 0: // vector-vector
-      switch (func6) {
-      case 0: { // vadd.vv
-        for (uint32_t t = 0; t < num_threads; ++t) {
-          if (!tmask_.test(t)) continue;
-          auto &mask = vreg_file_.at(0);
-          vector_op_vix<Add, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
-        }
+    case 0: { // vector - vector
+        switch (func6) { 
+          case 0: { // vadd.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vv<Add, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 2: { // vsub.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vv<Sub, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 4: { // vminu.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vv<Min, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 5: { // vmin.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vv<Min, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 6: { // vmaxu.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vv<Max, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 7: { // vmax.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vv<Max, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 9: { // vand.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vv<And, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 10: { // vor.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vv<Or, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 11: { // vxor.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vv<Xor, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 37: { // vsll.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vv<Sll, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 40: { // vsrl.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vv<SrlSra, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 41: { // vsra.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vv<SrlSra, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          default:
+            std::cout << "Unrecognised vector - vector instruction func3: " << func3 << " func6: " << func6 << std::endl;
+            std::abort();
+        } 
       } break;
-      case 24: {
-        // vmseq
-        auto &vr1 = vreg_file_.at(rsrc0);
-        auto &vr2 = vreg_file_.at(rsrc1);
-        auto &vd = vreg_file_.at(rdest);
-        if (vtype_.vsew == 8) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint8_t first  = *(uint8_t *)(vr1.data() + i);
-            uint8_t second = *(uint8_t *)(vr2.data() + i);
-            uint8_t result = (first == second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint8_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 16) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint16_t first  = *(uint16_t *)(vr1.data() + i);
-            uint16_t second = *(uint16_t *)(vr2.data() + i);
-            uint16_t result = (first == second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint16_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 32) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint32_t first  = *(uint32_t *)(vr1.data() + i);
-            uint32_t second = *(uint32_t *)(vr2.data() + i);
-            uint32_t result = (first == second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint32_t *)(vd.data() + i) = result;
-          }
-        }
-      } break;
-      case 25: { 
-        // vmsne
-        auto &vr1 = vreg_file_.at(rsrc0);
-        auto &vr2 = vreg_file_.at(rsrc1);
-        auto &vd = vreg_file_.at(rdest);
-        if (vtype_.vsew == 8) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint8_t first  = *(uint8_t *)(vr1.data() + i);
-            uint8_t second = *(uint8_t *)(vr2.data() + i);
-            uint8_t result = (first != second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint8_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 16) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint16_t first  = *(uint16_t *)(vr1.data() + i);
-            uint16_t second = *(uint16_t *)(vr2.data() + i);
-            uint16_t result = (first != second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint16_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 32) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint32_t first  = *(uint32_t *)(vr1.data() + i);
-            uint32_t second = *(uint32_t *)(vr2.data() + i);
-            uint32_t result = (first != second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint32_t *)(vd.data() + i) = result;
-          }
-        }
-      } break;
-      case 26: {
-        // vmsltu
-        auto &vr1 = vreg_file_.at(rsrc0);
-        auto &vr2 = vreg_file_.at(rsrc1);
-        auto &vd = vreg_file_.at(rdest);
-        if (vtype_.vsew == 8) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint8_t first  = *(uint8_t *)(vr1.data() + i);
-            uint8_t second = *(uint8_t *)(vr2.data() + i);
-            uint8_t result = (first < second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint8_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 16) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint16_t first  = *(uint16_t *)(vr1.data() + i);
-            uint16_t second = *(uint16_t *)(vr2.data() + i);
-            uint16_t result = (first < second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint16_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 32) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint32_t first  = *(uint32_t *)(vr1.data() + i);
-            uint32_t second = *(uint32_t *)(vr2.data() + i);
-            uint32_t result = (first < second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint32_t *)(vd.data() + i) = result;
-          }
-        }
-      } break;
-      case 27: {
-        // vmslt
-        auto &vr1 = vreg_file_.at(rsrc0);
-        auto &vr2 = vreg_file_.at(rsrc1);
-        auto &vd = vreg_file_.at(rdest);
-        if (vtype_.vsew == 8) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            int8_t first  = *(int8_t *)(vr1.data() + i);
-            int8_t second = *(int8_t *)(vr2.data() + i);
-            int8_t result = (first < second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint8_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 16) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            int16_t first  = *(int16_t *)(vr1.data() + i);
-            int16_t second = *(int16_t *)(vr2.data() + i);
-            int16_t result = (first < second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(int16_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 32) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            int32_t first  = *(int32_t *)(vr1.data() + i);
-            int32_t second = *(int32_t *)(vr2.data() + i);
-            int32_t result = (first < second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(int32_t *)(vd.data() + i) = result;
-          }
-        }
-      } break;
-      case 28: {
-        // vmsleu
-        auto &vr1 = vreg_file_.at(rsrc0);
-        auto &vr2 = vreg_file_.at(rsrc1);
-        auto &vd = vreg_file_.at(rdest);
-        if (vtype_.vsew == 8) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint8_t first  = *(uint8_t *)(vr1.data() + i);
-            uint8_t second = *(uint8_t *)(vr2.data() + i);
-            uint8_t result = (first <= second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint8_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 16) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint16_t first  = *(uint16_t *)(vr1.data() + i);
-            uint16_t second = *(uint16_t *)(vr2.data() + i);
-            uint16_t result = (first <= second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint16_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 32) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint32_t first  = *(uint32_t *)(vr1.data() + i);
-            uint32_t second = *(uint32_t *)(vr2.data() + i);
-            uint32_t result = (first <= second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint32_t *)(vd.data() + i) = result;
-          }
-        }
-      } break;
-      case 29: {
-        // vmsle
-        auto &vr1 = vreg_file_.at(rsrc0);
-        auto &vr2 = vreg_file_.at(rsrc1);
-        auto &vd = vreg_file_.at(rdest);
-        if (vtype_.vsew == 8) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            int8_t first  = *(int8_t *)(vr1.data() + i);
-            int8_t second = *(int8_t *)(vr2.data() + i);
-            int8_t result = (first <= second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint8_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 16) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            int16_t first  = *(int16_t *)(vr1.data() + i);
-            int16_t second = *(int16_t *)(vr2.data() + i);
-            int16_t result = (first <= second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(int16_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 32) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            int32_t first  = *(int32_t *)(vr1.data() + i);
-            int32_t second = *(int32_t *)(vr2.data() + i);
-            int32_t result = (first <= second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(int32_t *)(vd.data() + i) = result;
-          }
-        }
-      } break;
-      case 30: {
-        // vmsgtu
-        auto &vr1 = vreg_file_.at(rsrc0);
-        auto &vr2 = vreg_file_.at(rsrc1);
-        auto &vd = vreg_file_.at(rdest);
-        if (vtype_.vsew == 8) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint8_t first  = *(uint8_t *)(vr1.data() + i);
-            uint8_t second = *(uint8_t *)(vr2.data() + i);
-            uint8_t result = (first > second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint8_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 16) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint16_t first  = *(uint16_t *)(vr1.data() + i);
-            uint16_t second = *(uint16_t *)(vr2.data() + i);
-            uint16_t result = (first > second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint16_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 32) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            uint32_t first  = *(uint32_t *)(vr1.data() + i);
-            uint32_t second = *(uint32_t *)(vr2.data() + i);
-            uint32_t result = (first > second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint32_t *)(vd.data() + i) = result;
-          }
-        }
-      } break;
-      case 31: {
-        // vmsgt
-        auto &vr1 = vreg_file_.at(rsrc0);
-        auto &vr2 = vreg_file_.at(rsrc1);
-        auto &vd = vreg_file_.at(rdest);
-        if (vtype_.vsew == 8) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            int8_t first  = *(int8_t *)(vr1.data() + i);
-            int8_t second = *(int8_t *)(vr2.data() + i);
-            int8_t result = (first > second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint8_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 16) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            int16_t first  = *(int16_t *)(vr1.data() + i);
-            int16_t second = *(int16_t *)(vr2.data() + i);
-            int16_t result = (first > second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(int16_t *)(vd.data() + i) = result;
-          }
-        } else if (vtype_.vsew == 32) {
-          for (uint32_t i = 0; i < vl_; i++) {
-            int32_t first  = *(int32_t *)(vr1.data() + i);
-            int32_t second = *(int32_t *)(vr2.data() + i);
-            int32_t result = (first > second) ? 1 : 0;
-            DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(int32_t *)(vd.data() + i) = result;
-          }
-        }
-      } break;
-      }
-      break;
     case 3: { // vector - immidiate
       switch (func6) {
       case 0: { // vadd.vi
