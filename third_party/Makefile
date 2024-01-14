@@ -7,7 +7,7 @@ else
 RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv-gnu-toolchain
 endif
 
-all: fpnew softfloat ramulator riscv-vector-tests
+all: fpnew softfloat ramulator
 
 fpnew:
 
