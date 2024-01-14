@@ -1,6 +1,7 @@
 #include <iostream>
 #include <stdlib.h>
 #include <math.h>
+#include <rvfloats.h>
 #include "warp.h"
 #include "instr.h"
 #include "core.h"
@@ -128,6 +129,114 @@ class SrlSra {
       return second >> (first & (sizeof(T) * 8 - 1));
     }
     static std::string name() {return "SrlSra";}
+};
+
+template <typename T, typename R>
+class Fmin {
+  public:
+    static R apply(T first, T second) {
+      // ignoring rounding modes for now
+      uint32_t fflags = 0;
+      if (sizeof(T) == 4) {
+        return rv_fmin_s(first, second, &fflags);
+      } else if (sizeof(T) == 8) {
+        return rv_fmin_d(first, second, &fflags);
+      } else {
+        std::cout << "Fmin only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Fmin";}
+};
+
+template <typename T, typename R>
+class Fmax {
+  public:
+    static R apply(T first, T second) {
+      // ignoring rounding modes for now
+      uint32_t fflags = 0;
+      if (sizeof(T) == 4) {
+        return rv_fmax_s(first, second, &fflags);
+      } else if (sizeof(T) == 8) {
+        return rv_fmax_d(first, second, &fflags);
+      } else {
+        std::cout << "Fmax only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Fmax";}
+};
+
+template <typename T, typename R>
+class Fcvt {
+  public:
+    static R apply(T first, T second) {
+      // ignoring flags for now
+      uint32_t fflags = 0;
+      // ignoring rounding mode for now
+      uint32_t frm = 0;
+      if (sizeof(T) == 4) {
+        switch (first) {
+          case 0b001: // vfcvt.x.f.v
+            return rv_ftoi_s(second, frm, &fflags);
+          case 0b011: // vfcvt.f.x.v
+            return rv_itof_s(second, frm, &fflags);
+          default:
+            std::cout << "Fcvt has unsupported value for first: " << first << std::endl;
+            std::abort();
+        }
+      } else if (sizeof(T) == 8) {
+        switch (first) {
+          case 0b001: // vfcvt.x.f.v
+            return rv_ftoi_d(second, frm, &fflags);
+          case 0b011: // vfcvt.f.x.v
+            return rv_itof_d(second, frm, &fflags);
+          default:
+            std::cout << "Fcvt has unsupported value for first: " << first << std::endl;
+            std::abort();
+        }
+      } else {
+        std::cout << "Fcvt only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Fcvt";}
+};
+
+template <typename T, typename R>
+class Funary1 {
+  public:
+    static R apply(T first, T second) {
+      // ignoring flags for now
+      uint32_t fflags = 0;
+      // ignoring rounding mode for now
+      uint32_t frm = 0;
+      if (sizeof(T) == 4) {
+        switch (first) {
+          case 0b100: // vfrsqrt7.v
+            return rv_frsqrt7_s(second, frm, &fflags);
+          case 0b101: // vfrec7.v
+            return rv_frecip7_s(second, frm, &fflags);
+          default:
+            std::cout << "Funary1 has unsupported value for first: " << first << std::endl;
+            std::abort();
+        }
+      } else if (sizeof(T) == 8) {
+        switch (first) {
+          case 0b100: // vfrsqrt7.v
+            return rv_frsqrt7_d(second, frm, &fflags);
+          case 0b101: // vfrec7.v
+            return rv_frecip7_d(second, frm, &fflags);
+          default:
+            std::cout << "Funary1 has unsupported value for first: " << first << std::endl;
+            std::abort();
+        }
+      } else {
+        std::cout << "Funary1 only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Funary1";}
 };
 
 template <typename DT>
@@ -384,6 +493,41 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
             std::cout << "Unrecognised vector - vector instruction func3: " << func3 << " func6: " << func6 << std::endl;
             std::abort();
         } 
+      } break;
+    case 1: { // float vector - vector
+        switch (func6) {
+          case 4: { // vfmin.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vv<Fmin, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 6: { // vfmax.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vv<Fmax, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 18: { // vfcvt.f.x.v, vfcvt.x.f.v
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vix<Fcvt, uint8_t, uint16_t, uint32_t>(rsrc0, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 19: { // vfrec7.v, vfrsqrt7.v
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& mask = vreg_file_.at(0);
+              vector_op_vix<Funary1, uint8_t, uint16_t, uint32_t>(rsrc0, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          default:
+            std::cout << "Unrecognised float vector - vector instruction func3: " << func3 << " func6: " << func6 << std::endl;
+            std::abort();
+        }
       } break;
     case 3: { // vector - immidiate
       switch (func6) {
