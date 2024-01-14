@@ -243,7 +243,7 @@ bool isMasked(std::vector<std::vector<Byte>> &vreg_file, uint32_t byteI, bool vm
   auto& mask = vreg_file.at(0);
   uint8_t emask = *(uint8_t *)(mask.data() + byteI / 8);
   uint8_t value = (emask >> (byteI % 8)) & 0x1;
-  DP(1, "VSE masking enabled: " << +!vmask << " mask element: " << +value);
+  DP(1, "Masking enabled: " << +!vmask << " mask element: " << +value);
   return !vmask && value == 0;
 }
 
@@ -418,6 +418,39 @@ void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, u
   }
 }
 
+template <template <typename DT1, typename DT2> class OP, typename DT>
+void vector_op_vv_red(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    // use rdest as accumulator
+    if (i == 0) {
+      getVregData<DT>(vreg_file, rdest, 0) = getVregData<DT>(vreg_file, rsrc0, 0);
+    }
+    if (isMasked(vreg_file, i, vmask)) continue;
+
+    DT first = getVregData<DT>(vreg_file, rdest, 0);
+    DT second = getVregData<DT>(vreg_file, rsrc1, i);
+    DT result = OP<DT, DT>::apply(first, second);
+    DP(1, "Reduction " << (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    getVregData<DT>(vreg_file, rdest, 0) = result;
+  } 
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32>
+void vector_op_vv_red(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vv_red<OP, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 16) {
+    vector_op_vv_red<OP, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 32) {
+    vector_op_vv_red<OP, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else {
+    std::cout << "Unhandled vsew of: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
 void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata, std::vector<std::vector<Word>> &ireg_file_, std::vector<std::vector<Byte>> &vreg_file_, vtype &vtype_, uint32_t &vl_, uint32_t warp_id_, ThreadMask &tmask_, uint32_t num_threads) {
   auto func3  = instr.getFunc3();
   auto func6  = instr.getFunc6();
@@ -542,6 +575,18 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
       } break;
     case 2: { // mask vector - vector
       switch (func6) {
+        case 0 : { // vredsum.vs
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_red<Add, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 2 : { // vredor.vs
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_red<Or, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
         case 36: { // vmulhu.vv
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
