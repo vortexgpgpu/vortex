@@ -239,39 +239,61 @@ class Funary1 {
     static std::string name() {return "Funary1";}
 };
 
+bool isMasked(std::vector<std::vector<Byte>> &vreg_file, uint32_t byteI, bool vmask) {
+  auto& mask = vreg_file.at(0);
+  uint8_t emask = *(uint8_t *)(mask.data() + byteI / 8);
+  uint8_t value = (emask >> (byteI % 8)) & 0x1;
+  DP(1, "VSE masking enabled: " << +!vmask << " mask element: " << +value);
+  return !vmask && value == 0;
+}
+
 template <typename DT>
-void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, std::vector<Byte> mask, uint32_t vl, uint32_t vmask) {
+uint32_t getVreg(uint32_t baseVreg, uint32_t byteI) {
+  uint32_t vsew = sizeof(DT) * 8;
+  return (baseVreg + (byteI / (VLEN / vsew))) % 32;
+}
+
+template <typename DT>
+DT &getVregData(std::vector<vortex::Byte> &baseVregVec, uint32_t byteI) {
+  uint32_t vsew = sizeof(DT) * 8;
+  return *(DT *)(baseVregVec.data() + (byteI % (VLEN / vsew)) * vsew / 8);
+}
+
+template <typename DT>
+DT &getVregData(std::vector<std::vector<vortex::Byte>> &vreg_file, uint32_t baseVreg, uint32_t byteI) {
+  auto& vr1 = vreg_file.at(getVreg<DT>(baseVreg, byteI));
+  return getVregData<DT>(vr1, byteI);
+}
+
+template <typename DT>
+void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, uint32_t vl, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
   for (uint32_t i = 0; i < vl; i++) {
-    uint8_t emask = *(uint8_t *)(mask.data() + i / 8);
-    uint8_t value = (emask >> (i % 8)) & 0x1;
-    DP(1, "VLE masking enabled: " << +!vmask << " mask element: " << +value);
-    if (!vmask && value == 0) continue;
+    if (isMasked(vreg_file, i, vmask)) continue;
     
-    auto &vd = vreg_file.at((rdest + (i / (VLEN / vsew))) % 32);
     Word mem_addr = ((rsdata[0][0].i) & 0xFFFFFFFC) + (i * vsew / 8);
     Word mem_data = 0;
     core_->dcache_read(&mem_data, mem_addr, vsew / 8);
-    DP(1, "Loading data " << mem_data << " from: " << mem_addr << " to vec reg: " << (rdest + (i / (VLEN / 8))) % 32);
-    DT *result_ptr = (DT *)(vd.data() + ((i % (VLEN / vsew)) * vsew / 8));
-    DP(1, "Previous data: " << +(*result_ptr));
-    *result_ptr = (DT) mem_data;
+    DP(1, "Loading data " << mem_data << " from: " << mem_addr << " to vec reg: " << getVreg<DT>(rdest, i));
+    DT &result = getVregData<DT>(vreg_file, rdest, i);
+    DP(1, "Previous data: " << +result);
+    result = (DT) mem_data;
   }
 }
 
-void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, std::vector<Byte> mask, uint32_t vsew, uint32_t vl, uint32_t vmask) {
+void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
   switch (vsew) {
     case 8:
-      loadVector<uint8_t>(vreg_file, core_, rsdata, rdest, mask, vl, vmask);
+      loadVector<uint8_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
       break;
     case 16:
-      loadVector<uint16_t>(vreg_file, core_, rsdata, rdest, mask, vl, vmask);
+      loadVector<uint16_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
       break;
     case 32:
-      loadVector<uint32_t>(vreg_file, core_, rsdata, rdest, mask, vl, vmask);
+      loadVector<uint32_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
       break;
     case 64:
-      loadVector<uint64_t>(vreg_file, core_, rsdata, rdest, mask, vl, vmask);
+      loadVector<uint64_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
       break;
     default:
       std::cout << "Failed to execute VLE for vsew: " << vsew << std::endl;
@@ -280,40 +302,31 @@ void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, 
 }
 
 template <typename DT>
-void storeVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, std::vector<Byte> mask, uint32_t vl, uint32_t vmask) {
+void storeVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, uint32_t vl, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
   for (uint32_t i = 0; i < vl; i++) {
-    uint8_t emask = *(uint8_t *)(mask.data() + i / 8);
-    uint8_t value = (emask >> (i % 8)) & 0x1;
-    DP(1, "VSE masking enabled: " << +!vmask << " mask element: " << +value);
-    if (!vmask && value == 0) continue;
+    if (isMasked(vreg_file, i, vmask)) continue;
 
-    uint64_t mem_addr = rsdata[0][0].i + (i * vsew / 8);
-    auto &vr = vreg_file.at((rsrc3 + (i / (VLEN / vsew))) % 32);      
-    uint32_t mem_data = 0;
-    int n = (vsew / 8);
-
-    for (int j = 0; j < n; j++){
-        mem_data += (*(Byte *)(vr.data() + j + ((i % (VLEN / vsew)) * vsew / 8))) * ((uint32_t)1 << (j * 8));
-    }
-    DP(1, "Storing: " << std::hex << mem_data << " at: " << mem_addr << " from vec reg: " << (rsrc3 + (i / (VLEN / vsew))) % 32);
+    uint64_t mem_addr = rsdata[0][0].i + (i * vsew / 8); 
+    uint32_t mem_data = getVregData<DT>(vreg_file, rsrc3, i);
+    DP(1, "Storing: " << std::hex << mem_data << " at: " << mem_addr << " from vec reg: " << getVreg<DT>(rsrc3, i));
     core_->dcache_write(&mem_data, mem_addr, vsew / 8);
   }
 }
 
-void storeVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, std::vector<Byte> mask, uint32_t vsew, uint32_t vl, uint32_t vmask) {
+void storeVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, uint32_t vsew, uint32_t vl, uint32_t vmask) {
   switch (vsew) {
     case 8:
-      storeVector<uint8_t>(vreg_file, core_, rsdata, rsrc3, mask, vl, vmask);
+      storeVector<uint8_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
       break;
     case 16:
-      storeVector<uint16_t>(vreg_file, core_, rsdata, rsrc3, mask, vl, vmask);
+      storeVector<uint16_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
       break;
     case 32:
-      storeVector<uint32_t>(vreg_file, core_, rsdata, rsrc3, mask, vl, vmask);
+      storeVector<uint32_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
       break;
     case 64:
-      storeVector<uint64_t>(vreg_file, core_, rsdata, rsrc3, mask, vl, vmask);
+      storeVector<uint64_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
       break;
     default:
       std::cout << "Failed to execute VSE for vsew: " << vsew << std::endl;
@@ -322,33 +335,27 @@ void storeVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_,
 }
 
 template <template <typename DT1, typename DT2> class OP, typename DT>
-void vector_op_vix(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, std::vector<Byte> mask, uint32_t vl, uint32_t vmask)
+void vector_op_vix(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
-  uint32_t vsew = sizeof(DT) * 8;
   for (uint32_t i = 0; i < vl; i++) {
-    auto& vr2 = vreg_file.at((rsrc0 + (i / (VLEN / vsew))) % 32);
-    auto& vd = vreg_file.at((rdest + (i / (VLEN / vsew))) % 32);
-    uint8_t emask = *(uint8_t *)(mask.data() + i / 8);
-    uint8_t value = (emask >> (i % 8)) & 0x1;
-    DP(1, "VI/VX masking enabled: " << +!vmask << " mask element: " << +value);
-    if (!vmask && value == 0) continue;
+    if (isMasked(vreg_file, i, vmask)) continue;
     
-    DT second = *(DT *)(vr2.data() + (i % (VLEN / vsew)) * vsew / 8);
+    DT second = getVregData<DT>(vreg_file, rsrc0, i);
     DT result = OP<DT, DT>::apply(first, second);
     DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
-    *(DT *)(vd.data() + (i % (VLEN / vsew)) * vsew / 8) = result;
+    getVregData<DT>(vreg_file, rdest, i) = result;
   }
 }
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32>
-void vector_op_vix(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, std::vector<Byte> mask, uint32_t vsew, uint32_t vl, uint32_t vmask)
+void vector_op_vix(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
 {
   if (vsew == 8) {
-    vector_op_vix<OP, DT8>(src1, vreg_file, rsrc0, rdest, mask, vl, vmask);
+    vector_op_vix<OP, DT8>(src1, vreg_file, rsrc0, rdest, vl, vmask);
   } else if (vsew == 16) {
-    vector_op_vix<OP, DT16>(src1, vreg_file, rsrc0, rdest, mask, vl, vmask);
+    vector_op_vix<OP, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask);
   } else if (vsew == 32) {
-    vector_op_vix<OP, DT32>(src1, vreg_file, rsrc0, rdest, mask, vl, vmask);
+    vector_op_vix<OP, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask);
   } else {
     std::cout << "Failed to execute VI/VX for vsew: " << vsew << std::endl;
     std::abort();
@@ -356,35 +363,28 @@ void vector_op_vix(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_
 }
 
 template <template <typename DT1, typename DT2> class OP, typename DT>
-void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, std::vector<Byte> mask, uint32_t vl, uint32_t vmask)
+void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
-  uint32_t vsew = sizeof(DT) * 8;
   for (uint32_t i = 0; i < vl; i++) {
-    auto& vr1 = vreg_file.at((rsrc0 + (i / (VLEN / vsew))) % 32);
-    auto& vr2 = vreg_file.at((rsrc1 + (i / (VLEN / vsew))) % 32);
-    auto& vd = vreg_file.at((rdest + (i / (VLEN / vsew))) % 32);
-    uint8_t emask = *(uint8_t *)(mask.data() + i / 8);
-    uint8_t value = (emask >> (i % 8)) & 0x1;
-    DP(1, "VI/VX masking enabled: " << +!vmask << " mask element: " << +value);
-    if (!vmask && value == 0) continue;
+    if (isMasked(vreg_file, i, vmask)) continue;
 
-    DT first  = *(DT *)(vr1.data() + (i % (VLEN / vsew)) * vsew / 8);
-    DT second = *(DT *)(vr2.data() + (i % (VLEN / vsew)) * vsew / 8);
+    DT first  = getVregData<DT>(vreg_file, rsrc0, i);
+    DT second = getVregData<DT>(vreg_file, rsrc1, i);
     DT result = OP<DT, DT>::apply(first, second);
     DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
-    *(DT *)(vd.data() + (i % (VLEN / vsew)) * vsew / 8) = result;
+    getVregData<DT>(vreg_file, rdest, i) = result;
   }
 }
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32>
-void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, std::vector<Byte> mask, uint32_t vsew, uint32_t vl, uint32_t vmask)
+void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
 {
   if (vsew == 8) {
-    vector_op_vv<OP, DT8>(vreg_file, rsrc0, rsrc1, rdest, mask, vl, vmask);
+    vector_op_vv<OP, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
   } else if (vsew == 16) {
-    vector_op_vv<OP, DT16>(vreg_file, rsrc0, rsrc1, rdest, mask, vl, vmask);
+    vector_op_vv<OP, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
   } else if (vsew == 32) {
-    vector_op_vv<OP, DT32>(vreg_file, rsrc0, rsrc1, rdest, mask, vl, vmask);
+    vector_op_vv<OP, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
   } else {
     std::cout << "Failed to execute VV for vsew: " << vsew << std::endl;
     std::abort();
@@ -392,34 +392,26 @@ void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uin
 }
 
 template <template <typename DT1, typename DT2> class OP, typename DT, typename DTW>
-void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, std::vector<Byte> mask, uint32_t vl, uint32_t vmask)
+void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
-  uint32_t vsew = sizeof(DT) * 8;
-  uint32_t vsew_w = sizeof(DTW) * 8;
   for (uint32_t i = 0; i < vl; i++) {
-    auto& vr1 = vreg_file.at((rsrc0 + (i / (VLEN / vsew))) % 32);
-    auto& vr2 = vreg_file.at((rsrc1 + (i / (VLEN / vsew))) % 32);
-    auto& vd = vreg_file.at((rdest + (i / (VLEN / vsew_w))) % 32);
-    uint8_t emask = *(uint8_t *)(mask.data() + i / 8);
-    uint8_t value = (emask >> (i % 8)) & 0x1;
-    DP(1, "VI/VX masking enabled: " << +!vmask << " mask element: " << +value);
-    if (!vmask && value == 0) continue;
+    if (isMasked(vreg_file, i, vmask)) continue;
 
-    DT first  = *(DT *)(vr1.data() + (i % (VLEN / vsew)) * vsew / 8);
-    DT second = *(DT *)(vr2.data() + (i % (VLEN / vsew)) * vsew / 8);
+    DT first  = getVregData<DT>(vreg_file, rsrc0, i);
+    DT second = getVregData<DT>(vreg_file, rsrc1, i);
     DTW result = OP<DT, DTW>::apply(first, second);
     DP(1, "Widening " << (OP<DT, DTW>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
-    *(DTW *)(vd.data() + (i % (VLEN / vsew_w)) * vsew_w / 8) = result;
+    getVregData<DTW>(vreg_file, rdest, i) = result;
   }
 }
 
 template <template <typename DT1, typename DT2> class OP, typename DT8=uint8_t, typename DT16=uint16_t, typename DT32=uint32_t>
-void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, std::vector<Byte> mask, uint32_t vsew, uint32_t vl, uint32_t vmask)
+void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
 {
   if (vsew == 8) {
-    vector_op_vv_w<OP, DT8, DT16>(vreg_file, rsrc0, rsrc1, rdest, mask, vl, vmask);
+    vector_op_vv_w<OP, DT8, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
   } else if (vsew == 16) {
-    vector_op_vv_w<OP, DT16, DT32>(vreg_file, rsrc0, rsrc1, rdest, mask, vl, vmask);
+    vector_op_vv_w<OP, DT16, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
   } else {
     std::cout << "Failed to execute VV for vsew: " << vsew << std::endl;
     std::abort();
@@ -443,85 +435,73 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
           case 0: { // vadd.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vv<Add, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vv<Add, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 2: { // vsub.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vv<Sub, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vv<Sub, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 4: { // vminu.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vv<Min, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vv<Min, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 5: { // vmin.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vv<Min, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vv<Min, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 6: { // vmaxu.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vv<Max, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vv<Max, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 7: { // vmax.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vv<Max, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vv<Max, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 9: { // vand.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vv<And, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vv<And, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 10: { // vor.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vv<Or, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vv<Or, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 11: { // vxor.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vv<Xor, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vv<Xor, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 37: { // vsll.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vv<Sll, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vv<Sll, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 40: { // vsrl.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vv<SrlSra, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vv<SrlSra, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 41: { // vsra.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vv<SrlSra, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vv<SrlSra, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           default:
@@ -534,29 +514,25 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
           case 4: { // vfmin.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vv<Fmin, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vv<Fmin, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 6: { // vfmax.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vv<Fmax, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vv<Fmax, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 18: { // vfcvt.f.x.v, vfcvt.x.f.v
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vix<Fcvt, uint8_t, uint16_t, uint32_t>(rsrc0, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vix<Fcvt, uint8_t, uint16_t, uint32_t>(rsrc0, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 19: { // vfrec7.v, vfrsqrt7.v
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto& mask = vreg_file_.at(0);
-              vector_op_vix<Funary1, uint8_t, uint16_t, uint32_t>(rsrc0, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+              vector_op_vix<Funary1, uint8_t, uint16_t, uint32_t>(rsrc0, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           default:
@@ -569,29 +545,25 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
         case 36: { // vmulhu.vv
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
-            auto &mask = vreg_file_.at(0);
-            vector_op_vv<Mulhu, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vv<Mulhu, uint8_t, uint16_t, uint32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 37: { // vmul.vv
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
-            auto &mask = vreg_file_.at(0);
-            vector_op_vv<Mul, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vv<Mul, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 39: { // vmulh.vv
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
-            auto &mask = vreg_file_.at(0);
-            vector_op_vv<Mulh, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vv<Mulh, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 59: { // vwmul.vv
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
-            auto &mask = vreg_file_.at(0);
-            vector_op_vv_w<Mul, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vv_w<Mul, int8_t, int16_t, int32_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         default:
@@ -604,57 +576,49 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
       case 0: { // vadd.vi
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
-          auto &mask = vreg_file_.at(0);
-          vector_op_vix<Add, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+          vector_op_vix<Add, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
       case 3: { // vrsub.vi
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
-          auto &mask = vreg_file_.at(0);
-          vector_op_vix<Rsub, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+          vector_op_vix<Rsub, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
       case 9: { // vand.vi
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
-          auto &mask = vreg_file_.at(0);
-          vector_op_vix<And, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+          vector_op_vix<And, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
       case 10: { // vor.vi
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
-          auto &mask = vreg_file_.at(0);
-          vector_op_vix<Or, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+          vector_op_vix<Or, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
       case 11: { // vxor.vi
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
-          auto &mask = vreg_file_.at(0);
-          vector_op_vix<Xor, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+          vector_op_vix<Xor, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
       case 37: { // vsll.vi
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
-          auto &mask = vreg_file_.at(0);
-          vector_op_vix<Sll, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+          vector_op_vix<Sll, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
       case 40: { // vsrl.vi
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
-          auto &mask = vreg_file_.at(0);
-          vector_op_vix<SrlSra, uint8_t, uint16_t, uint32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+          vector_op_vix<SrlSra, uint8_t, uint16_t, uint32_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
       case 41: { // vsra.vi
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
-          auto &mask = vreg_file_.at(0);
-          vector_op_vix<SrlSra, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, mask, vtype_.vsew, vl_, vmask);
+          vector_op_vix<SrlSra, int8_t, int16_t, int32_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
       default:
@@ -668,104 +632,91 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
-            auto& mask = vreg_file_.at(0);
-            vector_op_vix<Add, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<Add, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 2: { // vsub.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
-            auto& mask = vreg_file_.at(0);
-            vector_op_vix<Sub, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<Sub, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 3: { // vrsub.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
-            auto& mask = vreg_file_.at(0);
-            vector_op_vix<Rsub, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<Rsub, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 4: { // vminu.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
-            auto& mask = vreg_file_.at(0);
-            vector_op_vix<Min, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<Min, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 5: { // vmin.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
-            auto& mask = vreg_file_.at(0);
-            vector_op_vix<Min, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<Min, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 6: { // vmaxu.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
-            auto& mask = vreg_file_.at(0);
-            vector_op_vix<Max, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<Max, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 7: { // vmax.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
-            auto& mask = vreg_file_.at(0);
-            vector_op_vix<Max, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<Max, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 9: { // vand.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
-            auto& mask = vreg_file_.at(0);
-            vector_op_vix<And, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<And, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 10: { // vor.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
-            auto& mask = vreg_file_.at(0);
-            vector_op_vix<Or, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<Or, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 11: { // vxor.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
-            auto& mask = vreg_file_.at(0);
-            vector_op_vix<Xor, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<Xor, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 37: { // vsll.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
-            auto& mask = vreg_file_.at(0);
-            vector_op_vix<Sll, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<Sll, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 40: { // vsrl.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
-            auto& mask = vreg_file_.at(0);
-            vector_op_vix<SrlSra, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<SrlSra, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 41: { // vsra.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
-            auto& mask = vreg_file_.at(0);
-            vector_op_vix<SrlSra, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<SrlSra, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         default:
@@ -779,24 +730,21 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto &src1 = ireg_file_.at(t).at(rsrc0);
-            auto &mask = vreg_file_.at(0);
-            vector_op_vix<Mulhu, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<Mulhu, uint8_t, uint16_t, uint32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 37: { // vmul.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto &src1 = ireg_file_.at(t).at(rsrc0);
-            auto &mask = vreg_file_.at(0); 
-            vector_op_vix<Mul, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<Mul, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 39: { // vmulh.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             auto &src1 = ireg_file_.at(t).at(rsrc0);
-            auto &mask = vreg_file_.at(0);
-            vector_op_vix<Mulh, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, mask, vtype_.vsew, vl_, vmask);
+            vector_op_vix<Mulh, int8_t, int16_t, int32_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         default:
