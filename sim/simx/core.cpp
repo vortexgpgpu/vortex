@@ -769,10 +769,8 @@ void Core::trigger_ebreak() {
 }
 
 bool Core::check_exit(Word* exitcode, bool riscv_test) const {
-  if (exited_) {
-    // the gp is moved to a0 before exiting
-    uint32_t a0 = 10;
-    Word ec = warps_.at(0)->getIRegValue(a0);
+  if (exited_) {    
+    Word ec = warps_.at(0)->getIRegValue(3);
     if (riscv_test) {
       *exitcode = (1 - ec);
     } else {
