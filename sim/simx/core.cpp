@@ -519,7 +519,7 @@ void Core::cout_flush() {
   }
 }
 
-uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
+Word Core::get_csr(Word addr, uint32_t tid, uint32_t wid) {
   switch (addr) {
   case VX_CSR_SATP:
   case VX_CSR_PMPCFG0:
@@ -706,7 +706,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   return 0;
 }
 
-void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
+void Core::set_csr(Word addr, Word value, uint32_t tid, uint32_t wid) {
   __unused (tid);
   switch (addr) {
   case VX_CSR_FFLAGS:
