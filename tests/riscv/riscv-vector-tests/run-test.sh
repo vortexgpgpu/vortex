@@ -9,26 +9,58 @@ else
   RISCV_TOOLCHAIN_PATH=${RISCV_TOOLCHAIN_PATH:-$TOOLDIR/riscv-gnu-toolchain}
 fi
 
+# get selected testcases from command line or run default testcases
+if [ "$#" == "0" ];
+then
+  # write out test case name explicitely if there are collisions with other test names
+  testcases=(vset vle \
+             vse8 vse16 vse32 \
+             vadd vsub vmin vmax vand vor vxor \
+             vmseq.vv vmsne.vv vmsltu.vv vmslt.vv vmsleu.vv vmsle.vv vmsgtu.vv vmsgt.vv \
+             vsll vsrl vsra \
+             vfmin.vv vfmax.vv vfcvt.f.x.v vfcvt.x.f.v vfrec7 vfrsqrt7 \
+             vredsum vredor \
+             vmand vmor vmxor vmnand vmnor vmxnor \
+             vmul.v vmulh.v vmulhu.v vwmul.vv \
+             vrsub)
+  if [ $XLEN -eq 64 ]; then
+    testcases+=(vse64)
+  fi
+else
+  testcases="${@}"
+fi
+
 cd "testcases/v"$VLEN"x"$XLEN
-rm "$1"*.elf "$1"*.bin "$1"*.dump "$1"*.log
-cp -f ../../../../../third_party/riscv-vector-tests/out/v"$VLEN"x"$XLEN"machine/bin/stage2/"$1"* .
 passed=0
 failed=0
-all=0
-for f in "$1"* ; do 
-  ln -s "$f" "$f.elf";
-  "$RISCV_TOOLCHAIN_PATH"/bin/riscv"$XLEN"-unknown-elf-objdump -D "$f.elf" > "$f.dump";
-  "$RISCV_TOOLCHAIN_PATH"/bin/riscv"$XLEN"-unknown-elf-objcopy -O binary "$f.elf" "$f.bin";
-  ../../../../../sim/simx/simx -r -c 1 "$f.bin" &> "$f.log";
-  if [ $? -eq 0 ]; then
-    echo "$f PASSED"
-    let "passed++"
-  else
-    echo "$f FAILED"
-    let "failed++"
-  fi
-  let "all++"
+selected=0
+
+rm *".ddr4.log"
+for testcase in ${testcases[@]}; do
+  rm "$testcase"*.elf "$testcase"*.bin "$testcase"*.dump "$testcase"*.log
+  cp -f ../../../../../third_party/riscv-vector-tests/out/v"$VLEN"x"$XLEN"machine/bin/stage2/"$testcase"* .
+done
+
+# count all available testcases, exclude *.elf, *.bin, *.dump, *.log to prevent double counting
+all=$(($(ls | wc -l) - $(ls -d *.elf | wc -l) - $(ls -d *.bin | wc -l) - $(ls -d *.dump | wc -l) - $(ls -d *.log | wc -l)))
+
+for testcase in ${testcases[@]}; do
+  for f in "$testcase"* ; do 
+    ln -s "$f" "$f.elf";
+    "$RISCV_TOOLCHAIN_PATH"/bin/riscv"$XLEN"-unknown-elf-objdump -D "$f.elf" > "$f.dump";
+    "$RISCV_TOOLCHAIN_PATH"/bin/riscv"$XLEN"-unknown-elf-objcopy -O binary "$f.elf" "$f.bin";
+    ../../../../../sim/simx/simx -r -c 1 "$f.bin" &> "$f.log";
+    if [ $? -eq 0 ]; then
+      echo "$f PASSED"
+      let "passed++"
+    else
+      echo "$f FAILED"
+      let "failed++"
+    fi
+    let "selected++"
+  done
 done
 cd ../..
-echo "Passed $passed out of $all vector tests."
+echo "Passed $passed out of $selected selected vector tests."
+echo "Total available vector tests: $all"
 exit $failed
