@@ -278,9 +278,9 @@ class Fcvt {
       } else if (sizeof(T) == 8) {
         switch (first) {
           case 0b001: // vfcvt.x.f.v
-            return rv_ftoi_d(second, frm, &fflags);
+            return rv_ftol_d(second, frm, &fflags);
           case 0b011: // vfcvt.f.x.v
-            return rv_itof_d(second, frm, &fflags);
+            return rv_ltof_d(second, frm, &fflags);
           default:
             std::cout << "Fcvt has unsupported value for first: " << first << std::endl;
             std::abort();
