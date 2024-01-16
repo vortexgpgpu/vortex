@@ -329,8 +329,8 @@ class Funary1 {
     static std::string name() {return "Funary1";}
 };
 
-bool isMasked(std::vector<std::vector<Byte>> &vreg_file, uint32_t byteI, bool vmask) {
-  auto& mask = vreg_file.at(0);
+bool isMasked(std::vector<std::vector<Byte>> &vreg_file, uint32_t maskVreg, uint32_t byteI, bool vmask) {
+  auto& mask = vreg_file.at(maskVreg);
   uint8_t emask = *(uint8_t *)(mask.data() + byteI / 8);
   uint8_t value = (emask >> (byteI % 8)) & 0x1;
   DP(1, "Masking enabled: " << +!vmask << " mask element: " << +value);
@@ -359,7 +359,7 @@ template <typename DT>
 void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, uint32_t vl, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
   for (uint32_t i = 0; i < vl; i++) {
-    if (isMasked(vreg_file, i, vmask)) continue;
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
     
     Word mem_addr = ((rsdata[0][0].i) & 0xFFFFFFFC) + (i * vsew / 8);
     Word mem_data = 0;
@@ -395,7 +395,7 @@ template <typename DT>
 void storeVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, uint32_t vl, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
   for (uint32_t i = 0; i < vl; i++) {
-    if (isMasked(vreg_file, i, vmask)) continue;
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
 
     Word mem_addr = rsdata[0][0].i + (i * vsew / 8); 
     Word mem_data = getVregData<DT>(vreg_file, rsrc3, i);
@@ -428,7 +428,7 @@ template <template <typename DT1, typename DT2> class OP, typename DT>
 void vector_op_vix(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
   for (uint32_t i = 0; i < vl; i++) {
-    if (isMasked(vreg_file, i, vmask)) continue;
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
     
     DT second = getVregData<DT>(vreg_file, rsrc0, i);
     DT result = OP<DT, DT>::apply(first, second);
@@ -458,7 +458,7 @@ template <template <typename DT1, typename DT2> class OP, typename DT>
 void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
   for (uint32_t i = 0; i < vl; i++) {
-    if (isMasked(vreg_file, i, vmask)) continue;
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
 
     DT first  = getVregData<DT>(vreg_file, rsrc0, i);
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
@@ -489,7 +489,7 @@ template <template <typename DT1, typename DT2> class OP, typename DT, typename 
 void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
   for (uint32_t i = 0; i < vl; i++) {
-    if (isMasked(vreg_file, i, vmask)) continue;
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
 
     DT first  = getVregData<DT>(vreg_file, rsrc0, i);
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
@@ -522,7 +522,7 @@ void vector_op_vv_red(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0,
     if (i == 0) {
       getVregData<DT>(vreg_file, rdest, 0) = getVregData<DT>(vreg_file, rsrc0, 0);
     }
-    if (isMasked(vreg_file, i, vmask)) continue;
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
 
     DT first = getVregData<DT>(vreg_file, rdest, 0);
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
@@ -544,7 +544,7 @@ void vector_op_vv_red(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0,
   } else if (vsew == 64) {
     vector_op_vv_red<OP, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
   } else {
-    std::cout << "Unhandled vsew of: " << vsew << std::endl;
+    std::cout << "Failed to execute VV reduction for vsew: " << vsew << std::endl;
     std::abort();
   }
 }
@@ -553,7 +553,7 @@ template <template <typename DT1, typename DT2> class OP, typename DT>
 void vector_op_vv_mask(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
   for (uint32_t i = 0; i < vl; i++) {
-    if (isMasked(vreg_file, i, vmask)) continue;
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
 
     DT first = getVregData<DT>(vreg_file, rsrc0, i);
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
@@ -571,17 +571,17 @@ template <template <typename DT1, typename DT2> class OP, typename DT8, typename
 void vector_op_vv_mask(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
 {
   if (vsew == 8) {
-      vector_op_vv_mask<OP, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-    } else if (vsew == 16) {
-      vector_op_vv_mask<OP, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-    } else if (vsew == 32) {
-      vector_op_vv_mask<OP, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-    } else if (vsew == 64) {
-      vector_op_vv_mask<OP, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-    } else {
-      std::cout << "Unhandled sew of: " << vsew << std::endl;
-      std::abort();
-    }
+    vector_op_vv_mask<OP, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 16) {
+    vector_op_vv_mask<OP, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 32) {
+    vector_op_vv_mask<OP, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 64) {
+    vector_op_vv_mask<OP, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else {
+    std::cout << "Failed to execute VV integer compare mask for vsew: " << vsew << std::endl;
+    std::abort();
+  }
 }
 
 template <template <typename DT1, typename DT2> class OP>
@@ -599,6 +599,39 @@ void vector_op_vv_mask(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0
     } else {
       getVregData<uint8_t>(vreg_file, rdest, i / 8) &= ~(1 << (i % 8));
     }
+  }
+}
+
+template <typename DT>
+void vector_op_vv_compress(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl)
+{
+  int currPos = 0;
+  for (uint32_t i = 0; i < vl; i++) {
+    // Special case: use rsrc0 as mask vector register instead of default v0
+    // This instruction is always masked (vmask == 0), but encoded as unmasked (vmask == 1)
+    if (isMasked(vreg_file, rsrc0, i, 0)) continue;
+
+    DT value = getVregData<DT>(vreg_file, rsrc1, i);
+    DP(1, "Compression - Moving value " << value << " from position " << i << " to position " << currPos);
+    getVregData<DT>(vreg_file, rdest, currPos) = value;
+    currPos++;
+  }
+}
+
+template <typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vv_compress(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl_)
+{
+  if (vsew == 8) {
+    vector_op_vv_compress<DT8>(vreg_file, rsrc0, rsrc1, rdest, vl_);
+  } else if (vsew == 16) {
+    vector_op_vv_compress<DT16>(vreg_file, rsrc0, rsrc1, rdest, vl_);
+  } else if (vsew == 32) {
+    vector_op_vv_compress<DT32>(vreg_file, rsrc0, rsrc1, rdest, vl_);
+  } else if (vsew == 64) {
+    vector_op_vv_compress<DT64>(vreg_file, rsrc0, rsrc1, rdest, vl_);
+  } else {
+    std::cout << "Failed to execute VV compression for vsew: " << vsew << std::endl;
+    std::abort();
   }
 }
 
@@ -784,6 +817,12 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             vector_op_vv_red<Or, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 23: { // vcompress.vm
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_compress<uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_);
           }
         } break;
         case 24: { // vmandn.mm
