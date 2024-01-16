@@ -802,7 +802,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       if (!tmask_.test(t))
         continue;
       uint32_t csr_addr = immsrc;
-      uint32_t csr_value;
+      Word csr_value;
       if (func3 == 0) {
         trace->exe_type = ExeType::ALU;
         trace->alu_type = AluType::SYSCALL;

@@ -1065,7 +1065,7 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
       uint32_t vlenMultipliedByLmul = VLEN << vlmul;
       uint32_t vlenTimesLmul = negativeLmul ? vlenDividedByLmul : vlenMultipliedByLmul;
       VLMAX = vlenTimesLmul / vsew;
-      vtype_.vill  = vsew > XLEN || VLMAX < XLEN / VLEN;
+      vtype_.vill  = vsew > XLEN || VLMAX < VLEN / XLEN;
 
       uint32_t s0 = instr.getImm(); // vsetivli
       if (!instr.hasImm()) { // vsetvli/vsetvl
@@ -1081,7 +1081,7 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
       }
 
       if (vtype_.vill) {
-        core_->set_csr(VX_CSR_VTYPE, 1 << 31, 0, warp_id_);
+        core_->set_csr(VX_CSR_VTYPE, (Word)1 << (XLEN - 1), 0, warp_id_);
         vtype_.vma = 0;
         vtype_.vta = 0;
         vtype_.vsew  = 0;
@@ -1093,7 +1093,7 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
         vtype_.vta = vta;
         vtype_.vsew  = vsew;
         vtype_.vlmul = vlmul;
-        uint32_t vtype = vlmul;
+        Word vtype = vlmul;
         vtype |= vsewO << shift_v_sew;
         vtype |= vta << shift_v_ta;
         vtype |= vma << shift_v_ma;

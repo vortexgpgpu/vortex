@@ -126,9 +126,9 @@ public:
     return dcrs_;
   }
 
-  uint32_t get_csr(uint32_t addr, uint32_t tid, uint32_t wid);
+  Word get_csr(Word addr, uint32_t tid, uint32_t wid);
   
-  void set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid);
+  void set_csr(Word addr, Word value, uint32_t tid, uint32_t wid);
 
   void wspawn(uint32_t num_warps, Word nextPC);
   
