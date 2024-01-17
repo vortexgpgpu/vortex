@@ -20,6 +20,18 @@
 
 namespace vortex {
 
+union reg_data_t {
+  Word     u;
+  WordI    i;
+  WordF    f;
+  float    f32;
+  double   f64;
+  uint32_t u32;
+  uint64_t u64; 
+  int32_t  i32;
+  int64_t  i64;
+};
+
 class Arch;
 class Core;
 class Instr;
@@ -89,6 +101,7 @@ public:
 private:
 
   void execute(const Instr &instr, pipeline_trace_t *trace);
+  void executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata);
 
   UUIDGenerator uui_gen_;
   

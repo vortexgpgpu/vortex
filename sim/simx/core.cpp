@@ -548,8 +548,8 @@ Word Core::get_csr(Word addr, uint32_t tid, uint32_t wid) {
   case VX_CSR_VXRM:
     return csrs_.at(wid).at(tid)[VX_CSR_VXRM];
   case VX_CSR_VCSR: {
-    uint32_t vxsat = csrs_.at(wid).at(tid)[VX_CSR_VXSAT];
-    uint32_t vxrm = csrs_.at(wid).at(tid)[VX_CSR_VXRM];
+    Word vxsat = csrs_.at(wid).at(tid)[VX_CSR_VXSAT];
+    Word vxrm = csrs_.at(wid).at(tid)[VX_CSR_VXRM];
     return (vxrm << 1) | vxsat;
   }
   case VX_CSR_VL:

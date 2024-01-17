@@ -1418,7 +1418,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     }
   } break;
   case VSET: {
-    executeVector(instr, core_, rsdata, rddata, ireg_file_, vreg_file_, vtype_, vl_, warp_id_, tmask_, num_threads);
+    executeVector(instr, rsdata, rddata);
   } break;    
   default:
     std::abort();
