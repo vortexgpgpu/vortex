@@ -22,7 +22,7 @@ then
              vredsum vredor \
              vmand vmor vmxor vmnand vmnor vmxnor \
              vmul.v vmulh.v vmulhu.v vwmul.vv \
-             vrsub vcompress)
+             vrsub vcompress vnclip)
   if [ $XLEN -eq 64 ]; then
     testcases+=(vse64)
   fi

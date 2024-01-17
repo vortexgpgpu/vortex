@@ -5,7 +5,6 @@
 #include "warp.h"
 #include "instr.h"
 #include "core.h"
-#include "execute.h"
 #include "decode.h"
 
 using namespace vortex;
@@ -329,6 +328,46 @@ class Funary1 {
     static std::string name() {return "Funary1";}
 };
 
+template <typename T, typename R>
+class Clip {
+  private:
+    static bool bitAt(T value, R pos, R negOffset) {
+      R offsetPos = pos - negOffset;
+      return pos >= negOffset && ((value >> offsetPos) & 0x1);
+    }
+    static bool anyBitUpTo(T value, R to, R negOffset) {
+      R offsetTo = to - negOffset;
+      return to >= negOffset && (value & ((1 << (offsetTo + 1)) - 1));
+    }
+    static bool roundBit(T value, R shiftDown, uint32_t vxrm) {
+      switch (vxrm){
+        case 0: // round-to-nearest-up
+          return bitAt(value, shiftDown, 1);
+        case 1: // round-to-nearest-even
+          return bitAt(value, shiftDown, 1) && (anyBitUpTo(value, shiftDown, 2) || bitAt(value, shiftDown, 0));
+        case 2: // round-down (truncate)
+          return 0;
+        case 3: // round-to-odd
+          return !bitAt(value, shiftDown, 0) && anyBitUpTo(value, shiftDown, 1);
+        default:
+          std::cout << "Clip - invalid value for vxrm: " << vxrm << std::endl;
+          std::abort();
+      }
+    }
+  public:
+    static R apply(T first, T second, uint32_t vxrm, uint32_t &vxsat_) {
+      // ignoring rounding mode for now, simply rounding up to pass the tests
+      // The low lg2(2*SEW) bits of the vector or scalar shift-amount value (e.g., the low 6 bits for a SEW=64-bit to
+      // SEW=32-bit narrowing operation) are used to control the right shift amount, which provides the scaling.
+      R firstValid = first & (sizeof(T) * 8 - 1);
+      T unclippedResult = (second >> firstValid) + roundBit(second, firstValid, vxrm);
+      R clippedResult = std::clamp(unclippedResult, (T)std::numeric_limits<R>::min(), (T)std::numeric_limits<R>::max());
+      vxsat_ |= clippedResult != unclippedResult;
+      return clippedResult;
+    }
+    static std::string name() {return "Clip";}
+};
+
 bool isMasked(std::vector<std::vector<Byte>> &vreg_file, uint32_t maskVreg, uint32_t byteI, bool vmask) {
   auto& mask = vreg_file.at(maskVreg);
   uint8_t emask = *(uint8_t *)(mask.data() + byteI / 8);
@@ -454,6 +493,62 @@ void vector_op_vix(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_
   }
 }
 
+template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
+void vector_op_vix_w(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl, uint32_t vmask, uint32_t vxrm)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    DT second = getVregData<DT>(vreg_file, rsrc0, i);
+    DTR result = OP<DT, DTR>::apply(first, second);
+    DP(1, "Widening " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    getVregData<DTR>(vreg_file, rdest, i) = result;
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vix_w(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask, uint32_t vxrm)
+{
+  if (vsew == 8) {
+    vector_op_vix_w<OP, DT8, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm);
+  } else if (vsew == 16) {
+    vector_op_vix_w<OP, DT16, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm);
+  } else if (vsew == 32) {
+    vector_op_vix_w<OP, DT32, DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm);
+  } else {
+    std::cout << "Failed to execute VV widening for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
+void vector_op_vix_n(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    DT second = getVregData<DT>(vreg_file, rsrc0, i);
+    DTR result = OP<DT, DTR>::apply(first, second, vxrm, vxsat);
+    DP(1, "Narrowing " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    getVregData<DTR>(vreg_file, rdest, i) = result;
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vix_n(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat)
+{
+  if (vsew == 8) {
+    vector_op_vix_n<OP, DT16, DT8>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
+  } else if (vsew == 16) {
+    vector_op_vix_n<OP, DT32, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
+  } else if (vsew == 32) {
+    vector_op_vix_n<OP, DT64, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
+  } else {
+    std::cout << "Failed to execute VV narrowing for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
 template <template <typename DT1, typename DT2> class OP, typename DT>
 void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
@@ -485,17 +580,17 @@ void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uin
   }
 }
 
-template <template <typename DT1, typename DT2> class OP, typename DT, typename DTW>
+template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
 void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
   for (uint32_t i = 0; i < vl; i++) {
     if (isMasked(vreg_file, 0, i, vmask)) continue;
 
-    DT first  = getVregData<DT>(vreg_file, rsrc0, i);
+    DT first = getVregData<DT>(vreg_file, rsrc0, i);
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
-    DTW result = OP<DT, DTW>::apply(first, second);
-    DP(1, "Widening " << (OP<DT, DTW>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
-    getVregData<DTW>(vreg_file, rdest, i) = result;
+    DTR result = OP<DT, DTR>::apply(first, second);
+    DP(1, "Widening " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    getVregData<DTR>(vreg_file, rdest, i) = result;
   }
 }
 
@@ -509,7 +604,36 @@ void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, u
   } else if (vsew == 32) {
     vector_op_vv_w<OP, DT32, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
   } else {
-    std::cout << "Failed to execute VV for vsew: " << vsew << std::endl;
+    std::cout << "Failed to execute VV widening for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
+void vector_op_vv_n(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    DTR first = getVregData<DTR>(vreg_file, rsrc0, i);
+    DT second = getVregData<DT>(vreg_file, rsrc1, i);
+    DTR result = OP<DT, DTR>::apply(first, second, vxrm, vxsat);
+    DP(1, "Narrowing " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    getVregData<DTR>(vreg_file, rdest, i) = result;
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vv_n(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat)
+{
+  if (vsew == 8) {
+    vector_op_vv_n<OP, DT16, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
+  } else if (vsew == 16) {
+    vector_op_vv_n<OP, DT32, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
+  } else if (vsew == 32) {
+    vector_op_vv_n<OP, DT64, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
+  } else {
+    std::cout << "Failed to execute VV narrowing for vsew: " << vsew << std::endl;
     std::abort();
   }
 }
@@ -635,7 +759,7 @@ void vector_op_vv_compress(std::vector<std::vector<Byte>> &vreg_file, uint32_t r
   }
 }
 
-void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata, std::vector<std::vector<Word>> &ireg_file_, std::vector<std::vector<Byte>> &vreg_file_, vtype &vtype_, uint32_t &vl_, uint32_t warp_id_, ThreadMask &tmask_, uint32_t num_threads) {
+void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata) {
   auto func3  = instr.getFunc3();
   auto func6  = instr.getFunc6();
 
@@ -644,6 +768,7 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
   auto rsrc1  = instr.getRSrc(1);
   auto immsrc = sext((Word)instr.getImm(), 32);
   auto vmask  = instr.getVmask();
+  auto num_threads = arch_.num_threads();
   
     uint32_t VLMAX = (instr.getVlmul() * VLEN) / instr.getVsew();
     switch (func3) {
@@ -767,6 +892,24 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
               vector_op_vv<SrlSra, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 46: { // vnclipu.wv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+              uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+              vector_op_vv_n<Clip, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+              core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
+            }
+          } break;
+          case 47: { // vnclip.wv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+              uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+              vector_op_vv_n<Clip, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+              core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
             }
           } break;
           default:
@@ -952,6 +1095,24 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
           vector_op_vix<SrlSra, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
+      case 46: { // vnclipu.wi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+          uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+          vector_op_vix_n<Clip, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+          core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
+        }
+      } break;
+      case 47: { // vnclip.wi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+          uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+          vector_op_vix_n<Clip, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+          core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
+        }
+      } break;
       default:
         std::cout << "Unrecognised vector - immidiate instruction func3: " << func3 << " func6: " << func6 << std::endl;
         std::abort();
@@ -1048,6 +1209,26 @@ void executeVector(const Instr &instr, vortex::Core *core_, std::vector<reg_data
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
             vector_op_vix<SrlSra, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 46: { // vnclipu.wx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+            uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+            vector_op_vix_n<Clip, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+            core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
+          }
+        } break;
+        case 47: { // vnclip.wx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+            uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+            vector_op_vix_n<Clip, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+            core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
           }
         } break;
         default:
