@@ -18,7 +18,7 @@ then
              vadd vsub vmin vmax vand vor vxor \
              vmseq.vv vmsne.vv vmsltu.vv vmslt.vv vmsleu.vv vmsle.vv vmsgtu.vv vmsgt.vv \
              vsll vsrl vsra \
-             vfmin.vv vfmax.vv vfcvt.f.x.v vfcvt.x.f.v vfrec7 vfrsqrt7 \
+             vfmin vfmax vfcvt.f.x.v vfcvt.x.f.v vfrec7 vfrsqrt7 \
              vredsum vredor \
              vmand vmor vmxor vmnand vmnor vmxnor \
              vmul.v vmulh.v vmulhu.v vwmul.vv \

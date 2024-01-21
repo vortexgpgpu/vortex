@@ -1236,6 +1236,27 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
           std::abort();
       }
     } break;
+    case 5: { // float vector - scalar
+        switch (func6) {
+          case 4: { // vfmin.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<Fmin, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 6: { // vfmax.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<Fmax, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          default:
+            std::cout << "Unrecognised float vector - scalar instruction func3: " << func3 << " func6: " << func6 << std::endl;
+            std::abort();
+        }
+      } break;
     case 6: {
       switch (func6) {
         case 36: { // vmulhu.vx
