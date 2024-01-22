@@ -16,7 +16,7 @@ then
   testcases=(vset vle \
              vse8 vse16 vse32 \
              vadd vsub vmin vmax vand vor vxor \
-             vmseq.vv vmsne.vv vmsltu.vv vmslt.vv vmsleu.vv vmsle.vv vmsgtu.vv vmsgt.vv \
+             vmseq vmsne vmslt vmsle vmsgt \
              vsll vsrl vsra \
              vfmin vfmax vfcvt.f.x.v vfcvt.x.f.v vfrec7 vfrsqrt7 \
              vredsum vredor \

@@ -516,7 +516,7 @@ void vector_op_vix_w(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint3
   } else if (vsew == 32) {
     vector_op_vix_w<OP, DT32, DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm);
   } else {
-    std::cout << "Failed to execute VV widening for vsew: " << vsew << std::endl;
+    std::cout << "Failed to execute VI/VX widening for vsew: " << vsew << std::endl;
     std::abort();
   }
 }
@@ -544,7 +544,41 @@ void vector_op_vix_n(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint3
   } else if (vsew == 32) {
     vector_op_vix_n<OP, DT64, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
   } else {
-    std::cout << "Failed to execute VV narrowing for vsew: " << vsew << std::endl;
+    std::cout << "Failed to execute VI/VX narrowing for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT>
+void vector_op_vix_mask(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl, uint32_t vmask)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    DT second = getVregData<DT>(vreg_file, rsrc0, i);
+    bool result = OP<DT, bool>::apply(first, second);
+    DP(1, "Integer compare mask " << (OP<DT, bool>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    if (result) {
+      getVregData<uint8_t>(vreg_file, rdest, i / 8) |= 1 << (i % 8);
+    } else {
+      getVregData<uint8_t>(vreg_file, rdest, i / 8) &= ~(1 << (i % 8));
+    }
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vix_mask(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vix_mask<OP, DT8>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else if (vsew == 16) {
+    vector_op_vix_mask<OP, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else if (vsew == 32) {
+    vector_op_vix_mask<OP, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else if (vsew == 64) {
+    vector_op_vix_mask<OP, DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else {
+    std::cout << "Failed to execute VI/VX integer compare mask for vsew: " << vsew << std::endl;
     std::abort();
   }
 }
@@ -1077,6 +1111,54 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
           vector_op_vix<Xor, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
+      case 24: { // vmseq.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          vector_op_vix_mask<Eq, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 25: {  // vmsne.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          vector_op_vix_mask<Ne, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 26: { // vmsltu.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          vector_op_vix_mask<Lt, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 27: { // vmslt.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          vector_op_vix_mask<Lt, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 28: { // vmsleu.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          vector_op_vix_mask<Le, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 29: { // vmsle.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          vector_op_vix_mask<Le, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 30: { // vmsgtu.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          vector_op_vix_mask<Gt, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 31: { // vmsgt.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          vector_op_vix_mask<Gt, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
+        }
+      } break;
       case 37: { // vsll.vi
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
@@ -1188,6 +1270,62 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
             vector_op_vix<Xor, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 24: { // vmseq.vix
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_mask<Eq, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 25: {  // vmsne.vix
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_mask<Ne, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 26: { // vmsltu.vix
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_mask<Lt, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 27: { // vmslt.vix
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_mask<Lt, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 28: { // vmsleu.vix
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_mask<Le, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 29: { // vmsle.vix
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_mask<Le, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 30: { // vmsgtu.vix
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_mask<Gt, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 31: { // vmsgt.vix
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_mask<Gt, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 37: { // vsll.vx
