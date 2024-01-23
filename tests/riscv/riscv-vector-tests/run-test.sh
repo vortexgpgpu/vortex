@@ -19,7 +19,7 @@ then
              vmseq vmsne vmslt vmsle vmsgt \
              vsll vsrl vsra \
              vfmin vfmax vfcvt.f.x.v vfcvt.x.f.v vfrec7 vfrsqrt7 \
-             vredsum vredor \
+             vredsum vredand vredor vredxor vredmin vredmax \
              vmand vmor vmxor vmnand vmnor vmxnor \
              vmul.v vmulh.v vmulhu.v vwmul.vv \
              vrsub vcompress vnclip)
