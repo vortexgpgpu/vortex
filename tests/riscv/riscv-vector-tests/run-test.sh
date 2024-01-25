@@ -18,7 +18,7 @@ then
              vadd vsub vmin vmax vand vor vxor \
              vmseq vmsne vmslt vmsle vmsgt \
              vsll vsrl vsra \
-             vfmin vfmax vfcvt.f.x.v vfcvt.x.f.v vfrec7 vfrsqrt7 \
+             vfmin vfmax vfcvt.f.x.v vfcvt.x.f.v vfsqrt vfrsqrt7 vfrec7 vfclass \
              vfadd vfredusum vfsub vfredosum vfredmin vfredmax vfsgnj vmf \
              vredsum vredand vredor vredxor vredmin vredmax \
              vmand vmor vmxor vmnand vmnor vmxnor \

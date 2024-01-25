@@ -390,20 +390,28 @@ class Funary1 {
       uint32_t frm = 0;
       if (sizeof(T) == 4) {
         switch (first) {
-          case 0b100: // vfrsqrt7.v
+          case 0b00000: // vfsqrt.v
+            return rv_fsqrt_s(second, frm, &fflags);
+          case 0b00100: // vfrsqrt7.v
             return rv_frsqrt7_s(second, frm, &fflags);
-          case 0b101: // vfrec7.v
+          case 0b00101: // vfrec7.v
             return rv_frecip7_s(second, frm, &fflags);
+          case 0b10000: // vfclass.v
+            return rv_fclss_s(second);
           default:
             std::cout << "Funary1 has unsupported value for first: " << first << std::endl;
             std::abort();
         }
       } else if (sizeof(T) == 8) {
         switch (first) {
-          case 0b100: // vfrsqrt7.v
+          case 0b00000: // vfsqrt.v
+            return rv_fsqrt_d(second, frm, &fflags);
+          case 0b00100: // vfrsqrt7.v
             return rv_frsqrt7_d(second, frm, &fflags);
-          case 0b101: // vfrec7.v
+          case 0b00101: // vfrec7.v
             return rv_frecip7_d(second, frm, &fflags);
+          case 0b10000: // vfclass.v
+            return rv_fclss_d(second);
           default:
             std::cout << "Funary1 has unsupported value for first: " << first << std::endl;
             std::abort();
@@ -1216,7 +1224,7 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               vector_op_vix<Fcvt, uint8_t, uint16_t, uint32_t, uint64_t>(rsrc0, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
-          case 19: { // vfrec7.v, vfrsqrt7.v
+          case 19: { // vfsqrt.v, vfrsqrt7.v, vfrec7.v, vfclass.v
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
               vector_op_vix<Funary1, uint8_t, uint16_t, uint32_t, uint64_t>(rsrc0, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
