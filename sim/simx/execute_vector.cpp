@@ -221,6 +221,46 @@ class Xnor {
 };
 
 template <typename T, typename R>
+class Fadd {
+  public:
+    static R apply(T first, T second) {
+      // ignoring flags for now
+      uint32_t fflags = 0;
+      // ignoring rounding mode for now
+      uint32_t frm = 0;
+      if (sizeof(T) == 4) {
+        return rv_fadd_s(first, second, frm, &fflags);
+      } else if (sizeof(T) == 8) {
+        return rv_fadd_d(first, second, frm, &fflags);
+      } else {
+        std::cout << "Fadd only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Fadd";}
+};
+
+template <typename T, typename R>
+class Fsub {
+  public:
+    static R apply(T first, T second) {
+      // ignoring flags for now
+      uint32_t fflags = 0;
+      // ignoring rounding mode for now
+      uint32_t frm = 0;
+      if (sizeof(T) == 4) {
+        return rv_fsub_s(second, first, frm, &fflags);
+      } else if (sizeof(T) == 8) {
+        return rv_fsub_d(second, first, frm, &fflags);
+      } else {
+        std::cout << "Fsub only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Fsub";}
+};
+
+template <typename T, typename R>
 class Fmin {
   public:
     static R apply(T first, T second) {
@@ -254,6 +294,54 @@ class Fmax {
       }
     }
     static std::string name() {return "Fmax";}
+};
+
+template <typename T, typename R>
+class Fsgnj {
+  public:
+    static R apply(T first, T second) {
+      if (sizeof(T) == 4) {
+        return rv_fsgnj_s(second, first);
+      } else if (sizeof(T) == 8) {
+        return rv_fsgnj_d(second, first);
+      } else {
+        std::cout << "Fsgnj only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Fsgnj";}
+};
+
+template <typename T, typename R>
+class Fsgnjn {
+  public:
+    static R apply(T first, T second) {
+      if (sizeof(T) == 4) {
+        return rv_fsgnjn_s(second, first);
+      } else if (sizeof(T) == 8) {
+        return rv_fsgnjn_d(second, first);
+      } else {
+        std::cout << "Fsgnjn only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Fsgnjn";}
+};
+
+template <typename T, typename R>
+class Fsgnjx {
+  public:
+    static R apply(T first, T second) {
+      if (sizeof(T) == 4) {
+        return rv_fsgnjx_s(second, first);
+      } else if (sizeof(T) == 8) {
+        return rv_fsgnjx_d(second, first);
+      } else {
+        std::cout << "Fsgnjx only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Fsgnjx";}
 };
 
 template <typename T, typename R>
@@ -953,16 +1041,65 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
       } break;
     case 1: { // float vector - vector
         switch (func6) {
+          case 0: { // vfadd.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 2: { // vfsub.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv<Fsub, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 1: // vfredusum.vs - treated the same as vfredosum.vs
+          case 3: { // vfredosum.vs
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_red<Fadd, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
           case 4: { // vfmin.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
               vector_op_vv<Fmin, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
+          case 5: { // vfredmin.vs
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_red<Fmin, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
           case 6: { // vfmax.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
               vector_op_vv<Fmax, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 7: { // vfredmax.vs
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_red<Fmax, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 8: { // vfsgnj.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv<Fsgnj, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 9: { // vfsgnjn.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv<Fsgnjn, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 10: { // vfsgnjx.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv<Fsgnjx, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 18: { // vfcvt.f.x.v, vfcvt.x.f.v
@@ -1412,6 +1549,20 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
     } break;
     case 5: { // float vector - scalar
         switch (func6) {
+          case 0: { // vfadd.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 2: { // vfsub.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<Fsub, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
           case 4: { // vfmin.vf
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
@@ -1424,6 +1575,27 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               if (!tmask_.test(t)) continue;
               auto &src1 = freg_file_.at(t).at(rsrc0);
               vector_op_vix<Fmax, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 8: { // vfsgnj.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<Fsgnj, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 9: { // vfsgnjn.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<Fsgnjn, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 10: { // vfsgnjx.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<Fsgnjx, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           default:
