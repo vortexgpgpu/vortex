@@ -22,7 +22,8 @@ then
              vfadd vfredusum vfsub vfredosum vfredmin vfredmax vfsgnj vmf \
              vredsum vredand vredor vredxor vredmin vredmax \
              vmand vmor vmxor vmnand vmnor vmxnor \
-             vmul.v vmulh.v vmulhu.v vwmul.vv \
+             vmul.v vmulh.v vmulhu.v \
+             vwaddu.v vwadd.v vwsubu.v vwsub.v vwmulu.v vwmul.v \
              vrsub vcompress vnclip)
   if [ $XLEN -eq 64 ]; then
     testcases+=(vse64)
