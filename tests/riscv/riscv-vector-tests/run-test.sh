@@ -19,10 +19,10 @@ then
              vmseq vmsne vmslt vmsle vmsgt \
              vsll vsrl vsra \
              vfmin vfmax vfcvt.f.x.v vfcvt.x.f.v vfsqrt vfrsqrt7 vfrec7 vfclass \
-             vfadd vfredusum vfsub vfredosum vfredmin vfredmax vfsgnj vmf \
+             vfadd vfredusum vfsub vfredosum vfredmin vfredmax vfsgnj vmf vfdiv vfrdiv vfmul vfrsub \
              vredsum vredand vredor vredxor vredmin vredmax \
              vmand vmor vmxor vmnand vmnor vmxnor \
-             vmul.v vmulh.v vmulhu.v \
+             vdiv vrem vmul.v vmulh.v vmulhu.v \
              vwaddu.v vwadd.v vwsubu.v vwsub.v vwmulu.v vwmul.v \
              vrsub vcompress vnclip)
   if [ $XLEN -eq 64 ]; then

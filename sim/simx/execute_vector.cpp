@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <rvfloats.h>
+#include <limits>
 #include "warp.h"
 #include "instr.h"
 #include "core.h"
@@ -34,6 +35,38 @@ class Rsub {
       return first - second;
     }
     static std::string name() {return "Rsub";}
+};
+
+template <typename T, typename R>
+class Div {
+  public:
+    static R apply(T first, T second) {
+      // logic taken from scalar div
+      if (first == 0) {
+        return -1;
+      } else if (second == std::numeric_limits<T>::min() && first == T(-1)) {
+        return second;
+      } else {
+        return (R)second / (R)first;
+      }
+    }
+    static std::string name() {return "Div";}
+};
+
+template <typename T, typename R>
+class Rem {
+  public:
+    static R apply(T first, T second) {
+      // logic taken from scalar rem
+      if (first == 0) {
+        return second;
+      } else if (second == std::numeric_limits<T>::min() && first == T(-1)) {
+        return 0;
+      } else {
+        return (R)second % (R)first;
+      }
+    }
+    static std::string name() {return "Rem";}
 };
 
 template <typename T, typename R>
@@ -530,6 +563,86 @@ class Fge {
       }
     }
     static std::string name() {return "Fge";}
+};
+
+template <typename T, typename R>
+class Fdiv {
+  public:
+    static R apply(T first, T second) {
+      // ignoring flags for now
+      uint32_t fflags = 0;
+      // ignoring rounding mode for now
+      uint32_t frm = 0;
+      if (sizeof(T) == 4) {
+        return rv_fdiv_s(second, first, frm, &fflags);
+      } else if (sizeof(T) == 8) {
+        return rv_fdiv_d(second, first, frm, &fflags);
+      } else {
+        std::cout << "Fdiv only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Fdiv";}
+};
+
+template <typename T, typename R>
+class Frdiv {
+  public:
+    static R apply(T first, T second) {
+      // ignoring flags for now
+      uint32_t fflags = 0;
+      // ignoring rounding mode for now
+      uint32_t frm = 0;
+      if (sizeof(T) == 4) {
+        return rv_fdiv_s(first, second, frm, &fflags);
+      } else if (sizeof(T) == 8) {
+        return rv_fdiv_d(first, second, frm, &fflags);
+      } else {
+        std::cout << "Frdiv only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Frdiv";}
+};
+
+template <typename T, typename R>
+class Fmul {
+  public:
+    static R apply(T first, T second) {
+      // ignoring flags for now
+      uint32_t fflags = 0;
+      // ignoring rounding mode for now
+      uint32_t frm = 0;
+      if (sizeof(T) == 4) {
+        return rv_fmul_s(first, second, frm, &fflags);
+      } else if (sizeof(T) == 8) {
+        return rv_fmul_d(first, second, frm, &fflags);
+      } else {
+        std::cout << "Fmul only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Fmul";}
+};
+
+template <typename T, typename R>
+class Frsub {
+  public:
+    static R apply(T first, T second) {
+      // ignoring flags for now
+      uint32_t fflags = 0;
+      // ignoring rounding mode for now
+      uint32_t frm = 0;
+      if (sizeof(T) == 4) {
+        return rv_fsub_s(first, second, frm, &fflags);
+      } else if (sizeof(T) == 8) {
+        return rv_fsub_d(first, second, frm, &fflags);
+      } else {
+        std::cout << "Frsub only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Frsub";}
 };
 
 template <typename T, typename R>
@@ -1254,6 +1367,18 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               vector_op_vv_mask<Fne, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
+          case 32: { // vfdiv.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv<Fdiv, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 36: { // vfmul.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv<Fmul, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
           default:
             std::cout << "Unrecognised float vector - vector instruction func3: " << func3 << " func6: " << func6 << std::endl;
             std::abort();
@@ -1361,6 +1486,30 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             vector_op_vv_mask<Xnor>(vreg_file_, rsrc0, rsrc1, rdest, vl_);
+          }
+        } break;
+        case 32: { // vdivu.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv<Div, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 33: { // vdiv.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv<Div, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 34: { // vremu.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv<Rem, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 35: { // vrem.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv<Rem, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 36: { // vmulhu.vv
@@ -1810,6 +1959,34 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               vector_op_vix_mask<Fge, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
+          case 32: { // vfdiv.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<Fdiv, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 33: { // vfrdiv.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<Frdiv, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 36: { // vfmul.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<Fmul, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 39: { // vfrsub.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<Frsub, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
           default:
             std::cout << "Unrecognised float vector - scalar instruction func3: " << func3 << " func6: " << func6 << std::endl;
             std::abort();
@@ -1817,6 +1994,34 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
       } break;
     case 6: {
       switch (func6) {
+        case 32: { // vdivu.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix<Div, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 33: { // vdiv.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix<Div, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 34: { // vremu.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix<Rem, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 35: { // vrem.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix<Rem, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
         case 36: { // vmulhu.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
