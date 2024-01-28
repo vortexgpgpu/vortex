@@ -56,17 +56,17 @@ TARGET=asesim make -C runtime/opae
 PREFIX=build_base CONFIGS="-DEXT_F_DISABLE -DL1_DISABLE -DSM_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" TARGET=asesim make
 
 # ASE test runs
-./run_ase.sh build_base_arria10_asesim_1c/synth ../../../../tests/regression/basic/basic -n1 -t0
-./run_ase.sh build_base_arria10_asesim_1c/synth ../../../../tests/regression/basic/basic -n1 -t1
-./run_ase.sh build_base_arria10_asesim_1c/synth ../../../../tests/regression/basic/basic -n16
-./run_ase.sh build_base_arria10_asesim_1c/synth ../../../../tests/regression/demo/demo -n16
-./run_ase.sh build_base_arria10_asesim_1c/synth ../../../../tests/regression/dogfood/dogfood -n16
-./run_ase.sh build_base_arria10_asesim_1c/synth ../../../../tests/opencl/vecadd/vecadd
-./run_ase.sh build_base_arria10_asesim_1c/synth ../../../../tests/opencl/sgemm/sgemm -n4
+./run_ase.sh build_base_arria10_asesim_1c ../../../../tests/regression/basic/basic -n1 -t0
+./run_ase.sh build_base_arria10_asesim_1c ../../../../tests/regression/basic/basic -n1 -t1
+./run_ase.sh build_base_arria10_asesim_1c ../../../../tests/regression/basic/basic -n16
+./run_ase.sh build_base_arria10_asesim_1c ../../../../tests/regression/demo/demo -n16
+./run_ase.sh build_base_arria10_asesim_1c ../../../../tests/regression/dogfood/dogfood -n16
+./run_ase.sh build_base_arria10_asesim_1c ../../../../tests/opencl/vecadd/vecadd
+./run_ase.sh build_base_arria10_asesim_1c ../../../../tests/opencl/sgemm/sgemm -n4
 
 # modify "vsim_run.tcl" to dump VCD trace
 vcd file trace.vcd
-vcd add -r /*/Vortex/hw/rtl/* 
+vcd add -r /*/afu/*
 run -all
 
 # compress FPGA output files
