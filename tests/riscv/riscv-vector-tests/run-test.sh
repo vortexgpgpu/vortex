@@ -24,7 +24,8 @@ then
              vmand vmor vmxor vmnand vmnor vmxnor \
              vdiv vrem vmul.v vmulh.v vmulhu.v \
              vwaddu.v vwadd.v vwsubu.v vwsub.v vwmulu.v vwmul.v \
-             vrsub vcompress vnclip)
+             vrsub vcompress vnclip \
+             vid)
   if [ $XLEN -eq 64 ]; then
     testcases+=(vse64)
   fi
