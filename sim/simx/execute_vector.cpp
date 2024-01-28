@@ -236,6 +236,15 @@ class Nand {
 };
 
 template <typename T, typename R>
+class Mv {
+  public:
+    static R apply(T first, T) {
+      return first;
+    }
+    static std::string name() {return "Mv";}
+};
+
+template <typename T, typename R>
 class Nor {
   public:
     static R apply(T first, T second) {
@@ -411,6 +420,20 @@ class Fcvt {
       }
     }
     static std::string name() {return "Fcvt";}
+};
+
+template <typename T, typename R>
+class RFxunary0 {
+  public:
+    static R apply(T first, T second) {
+      if (second == 0) { // vmv.s.x
+        return first;
+      } else {
+        std::cout << "RFxunary0 has unsupported value for second: " << second << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "RFxunary0";}
 };
 
 template <typename T, typename R>
@@ -806,6 +829,26 @@ void vector_op_vix(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_
     vector_op_vix<OP, DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask);
   } else {
     std::cout << "Failed to execute VI/VX for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+void vector_op_scalar(Word &dest, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t vsew)
+{
+  if (rsrc0 != 0) {
+    std::cout << "Vwxunary0/Vwfunary0 has unsupported value for vs2: " << rsrc0 << std::endl;
+    std::abort();
+  }
+  if (vsew == 8) {
+    dest = getVregData<uint8_t>(vreg_file, rsrc1, 0);
+  } else if (vsew == 16) {
+    dest = getVregData<uint16_t>(vreg_file, rsrc1, 0);
+  } else if (vsew == 32) {
+    dest = getVregData<uint32_t>(vreg_file, rsrc1, 0);
+  } else if (vsew == 64) {
+    dest = getVregData<uint64_t>(vreg_file, rsrc1, 0);
+  } else {
+    std::cout << "Failed to execute vmv.x.s/vfmv.f.s for vsew: " << vsew << std::endl;
     std::abort();
   }
 }
@@ -1206,6 +1249,16 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               vector_op_vv<Xor, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
+          case 23: { // vmv.v.v
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              if (rsrc1 != 0) {
+                std::cout << "For vmv.v.v vs2 must contain v0." << std::endl;
+                std::abort();
+              }
+              vector_op_vv<Mv, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
           case 24: { // vmseq.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
@@ -1358,6 +1411,14 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               vector_op_vv<Fsgnjx, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
+          case 16: { // vfmv.f.s
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &dest = freg_file_.at(t).at(rdest);
+              vector_op_scalar(dest, vreg_file_, rsrc0, rsrc1, vtype_.vsew);
+              DP(1, "Moved " << +dest << " from: " << +rsrc1 << " to: " << +rdest);
+            }
+          } break;
           case 18: { // vfcvt.f.x.v, vfcvt.x.f.v
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
@@ -1459,6 +1520,14 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             vector_op_vv_red<Max, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 16: { // vmv.x.s
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &dest = ireg_file_.at(t).at(rdest);
+            vector_op_scalar(dest, vreg_file_, rsrc0, rsrc1, vtype_.vsew);
+            DP(1, "Moved " << +dest << " from: " << +rsrc1 << " to: " << +rdest);
           }
         } break;
         case 20: { // vid.v
@@ -1636,6 +1705,16 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
           vector_op_vix<Xor, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
+      case 23: { // vmv.v.i
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          if (rsrc0 != 0) {
+            std::cout << "For vmv.v.i vs2 must contain v0." << std::endl;
+            std::abort();
+          }
+          vector_op_vix<Mv, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
+        }
+      } break;
       case 24: { // vmseq.vi
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
@@ -1688,6 +1767,17 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
           vector_op_vix<Sll, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
+        }
+      } break;
+      case 39: { // vmv1r.v, vmv2r.v, vmv4r.v, vmv8r.v
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          uint32_t nreg = (immsrc & 0b111) + 1;
+          if (nreg != 1 && nreg != 2 && nreg != 4 && nreg != 8) {
+            std::cout << "Reserved value for nreg: " << nreg << std::endl;
+            std::abort();
+          }
+          if (!tmask_.test(t)) continue;
+          vector_op_vv<Mv, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, nreg * VLEN / vtype_.vsew, vmask);
         }
       } break;
       case 40: { // vsrl.vi
@@ -1795,6 +1885,17 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
             vector_op_vix<Xor, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 23: { // vmv.v.x
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            if (rsrc1 != 0) {
+              std::cout << "For vmv.v.x vs2 must contain v0." << std::endl;
+              std::abort();
+            }
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix<Mv, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 24: { // vmseq.vx
@@ -1950,11 +2051,25 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               vector_op_vix<Fsgnjx, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
+          case 16: { // vfmv.s.f
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<RFxunary0, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, std::min(vl_, (uint32_t) 1), vmask);
+            }
+          } break;
           case 24: { // vmfeq.vf
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
               auto &src1 = freg_file_.at(t).at(rsrc0);
               vector_op_vix_mask<Feq, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 23: { // vfmv.v.f
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<Mv, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 25: { // vmfle.vf
@@ -2027,6 +2142,13 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
       } break;
     case 6: {
       switch (func6) {
+        case 16: { // vmv.s.x
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix<RFxunary0, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, std::min(vl_, (uint32_t) 1), vmask);
+          }
+        } break;
         case 32: { // vdivu.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
