@@ -14,9 +14,7 @@
 `ifndef VX_TRACE_VH
 `define VX_TRACE_VH
 
-`ifndef SYNTHESIS
-
-`include "VX_define.vh"
+`ifdef SIMULATION
 
 task trace_ex_type(input int level, input [`EX_BITS-1:0] ex_type);
     case (ex_type)
