@@ -308,13 +308,20 @@ module VX_schedule import VX_gpu_pkg::*; #(
     localparam GNW_WIDTH = `LOG2UP(`NUM_CLUSTERS * `NUM_CORES * `NUM_WARPS);
     reg [`UUID_WIDTH-1:0] instr_uuid;
     wire [GNW_WIDTH-1:0] g_wid = (GNW_WIDTH'(CORE_ID) << `NW_BITS) + GNW_WIDTH'(schedule_wid);
+`ifdef SV_DPI
     always @(posedge clk) begin
         if (reset) begin
             instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(1, 0, 0));
         end else if (schedule_fire) begin
             instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(0, 32'(g_wid), 64'(schedule_pc)));
-        end
+        end        
     end
+`else
+    wire [GNW_WIDTH+16-1:0] w_uuid = {g_wid, 16'(schedule_pc)};
+    always @(*) begin
+        instr_uuid = `UUID_WIDTH'(w_uuid);
+    end
+`endif
 `else
     wire [`UUID_WIDTH-1:0] instr_uuid = '0;
 `endif
