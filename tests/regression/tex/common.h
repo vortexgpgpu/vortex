@@ -8,6 +8,9 @@
 
 #define KERNEL_ARG_DEV_MEM_ADDR 0x7ffff000
 
+using FloatX = float;
+// using FloatX = cocogfx::TFixed<24, int64_t>;
+
 typedef struct {
   bool      use_sw;  
   uint32_t  num_tasks;  

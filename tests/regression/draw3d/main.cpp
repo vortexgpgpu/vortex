@@ -396,9 +396,19 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_open(&device));
 
   uint64_t isa_flags;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-  if (0 == (isa_flags & (VX_ISA_EXT_RASTER | VX_ISA_EXT_TEX | VX_ISA_EXT_OM))) {
-    std::cout << "RASTER, TEX, and OM ISA extensions are needed!" << std::endl;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));  
+  if (0 == (isa_flags & (VX_ISA_EXT_RASTER))) {
+    std::cout << "RASTER ISA extensions are needed!" << std::endl;
+    cleanup();
+    return -1;
+  }
+  if (0 == (isa_flags & (VX_ISA_EXT_TEX))) {
+    std::cout << "TEX ISA extensions are needed!" << std::endl;
+    cleanup();
+    return -1;
+  }
+  if (0 == (isa_flags & (VX_ISA_EXT_OM))) {
+    std::cout << "OM ISA extensions are needed!" << std::endl;
     cleanup();
     return -1;
   }

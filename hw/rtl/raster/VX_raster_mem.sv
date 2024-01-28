@@ -234,7 +234,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         end
     end
 
-    // Memory streamer
+    // Memory scheduler
 
     // ensure that we have space in the output buffer to prevent memory deadlock
     wire pending_output_full;

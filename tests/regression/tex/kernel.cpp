@@ -8,8 +8,8 @@ using namespace graphics;
 
 typedef struct {
  	uint32_t tile_height;
-  	float    deltaX;
-  	float    deltaY;
+  FloatX   deltaX;
+  FloatX   deltaY;
 	uint32_t lod;
 	uint32_t frac;
 } tile_info_t;
