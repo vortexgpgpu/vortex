@@ -191,6 +191,10 @@
 `define STALL_TIMEOUT (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
 `endif
 
+`ifndef SV_DPI
+`define DPI_DISABLE
+`endif
+
 `ifndef FPU_FPNEW
 `ifndef FPU_DSP
 `ifndef FPU_DPI
