@@ -1024,6 +1024,33 @@ void vector_op_vv_red(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0,
   }
 }
 
+template <typename DT>
+void vector_op_vid(std::vector<std::vector<Byte>> &vreg_file, uint32_t rdest, uint32_t vl, uint32_t vmask)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    DP(1, "Element Index = " << +i);
+    getVregData<DT>(vreg_file, rdest, i) = i;
+  } 
+}
+
+void vector_op_vid(std::vector<std::vector<Byte>> &vreg_file, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vid<uint8_t>(vreg_file, rdest, vl, vmask);
+  } else if (vsew == 16) {
+    vector_op_vid<uint16_t>(vreg_file, rdest, vl, vmask);
+  } else if (vsew == 32) {
+    vector_op_vid<uint32_t>(vreg_file, rdest, vl, vmask);
+  } else if (vsew == 64) {
+    vector_op_vid<uint64_t>(vreg_file, rdest, vl, vmask);
+  } else {
+    std::cout << "Failed to execute vector element index for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
 template <template <typename DT1, typename DT2> class OP, typename DT>
 void vector_op_vv_mask(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
@@ -1432,6 +1459,12 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             vector_op_vv_red<Max, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 20: { // vid.v
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vid(vreg_file_, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 23: { // vcompress.vm
@@ -2119,12 +2152,7 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
       }
 
       DP(1, "Vset(i)vl(i) - vill: " << +vtype_.vill << " vma: " << vma << " vta: " << vta << " lmul: " << vlmul << " sew: " << vsew << " s0: " << s0 << " VLMAX: " << VLMAX);
-
-      if (s0 <= VLMAX) {
-        vl_ = s0;
-      } else if (s0 >= (2 * VLMAX)) {
-        vl_ = VLMAX;
-      }
+      vl_ = std::min(s0, VLMAX);
 
       if (vtype_.vill) {
         core_->set_csr(VX_CSR_VTYPE, (Word)1 << (XLEN - 1), 0, warp_id_);
