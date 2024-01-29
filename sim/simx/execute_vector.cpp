@@ -396,26 +396,95 @@ class Fcvt {
       uint32_t frm = 0;
       if (sizeof(T) == 4) {
         switch (first) {
-          case 0b001: // vfcvt.x.f.v
+          case 0b00000: // vfcvt.xu.f.v
+            return rv_ftou_s(second, frm, &fflags);
+          case 0b00001: // vfcvt.x.f.v
             return rv_ftoi_s(second, frm, &fflags);
-          case 0b011: // vfcvt.f.x.v
+          case 0b00010: // vfcvt.f.xu.v
+            return rv_utof_s(second, frm, &fflags);
+          case 0b00011: // vfcvt.f.x.v
             return rv_itof_s(second, frm, &fflags);
+          case 0b00110: // vfcvt.rtz.xu.f.v
+            return rv_ftou_s(second, 1, &fflags);
+          case 0b00111: // vfcvt.rtz.x.f.v
+            return rv_ftoi_s(second, 1, &fflags);
+          case 0b01000: // vfwcvt.xu.f.v
+            return rv_ftolu_s(second, frm, &fflags);
+          case 0b01001: // vfwcvt.x.f.v
+            return rv_ftol_s(second, frm, &fflags);
+          case 0b01010: // vfwcvt.f.xu.v
+            return rv_utof_d(second, frm, &fflags);
+          case 0b01011: // vfwcvt.f.x.v
+            return rv_itof_d(second, frm, &fflags);
+          case 0b01100: // vfwcvt.f.f.v
+            return rv_ftod(second);
+          case 0b01110: // vfwcvt.rtz.xu.f.v
+            return rv_ftolu_s(second, 1, &fflags);
+          case 0b01111: // vfwcvt.rtz.x.f.v
+            return rv_ftol_s(second, 1, &fflags);
           default:
             std::cout << "Fcvt has unsupported value for first: " << first << std::endl;
             std::abort();
         }
       } else if (sizeof(T) == 8) {
         switch (first) {
-          case 0b001: // vfcvt.x.f.v
+          case 0b00000: // vfcvt.xu.f.v
+            return rv_ftolu_d(second, frm, &fflags);
+          case 0b00001: // vfcvt.x.f.v
             return rv_ftol_d(second, frm, &fflags);
-          case 0b011: // vfcvt.f.x.v
+          case 0b00010: // vfcvt.f.xu.v
+            return rv_lutof_d(second, frm, &fflags);
+          case 0b00011: // vfcvt.f.x.v
             return rv_ltof_d(second, frm, &fflags);
+          case 0b00110: // vfcvt.rtz.xu.f.v
+            return rv_ftolu_d(second, 1, &fflags);
+          case 0b00111: // vfcvt.rtz.x.f.v
+            return rv_ftol_d(second, 1, &fflags);
+          case 0b01000: // vfwcvt.xu.f.v
+          case 0b01001: // vfwcvt.x.f.v
+          case 0b01010: // vfwcvt.f.xu.v
+          case 0b01011: // vfwcvt.f.x.v
+          case 0b01100: // vfwcvt.f.f.v
+          case 0b01110: // vfwcvt.rtz.xu.f.v
+          case 0b01111: // vfwcvt.rtz.x.f.v
+            std::cout << "Fwcvt only supports f32" << std::endl;
+            std::abort();
           default:
             std::cout << "Fcvt has unsupported value for first: " << first << std::endl;
             std::abort();
         }
       } else {
         std::cout << "Fcvt only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static R apply(T first, T second, uint32_t vxrm, uint32_t &) { // saturation argument is unused
+      // ignoring flags for now
+      uint32_t fflags = 0;
+      if (sizeof(T) == 8) {
+        switch (first) {
+          case 0b10000: // vfncvt.xu.f.w
+            return rv_ftou_d(second, vxrm, &fflags);
+          case 0b10001: // vfncvt.x.f.w
+            return rv_ftoi_d(second, vxrm, &fflags);
+          case 0b10010: // vfncvt.f.xu.w
+            return rv_lutof_s(second, vxrm, &fflags);
+          case 0b10011: // vfncvt.f.x.w
+            return rv_ltof_s(second, vxrm, &fflags);
+          case 0b10100: // vfncvt.f.f.w
+            return rv_dtof_r(second, vxrm);
+          case 0b10101: // vfncvt.rod.f.f.w
+            return rv_dtof_r(second, 6);
+          case 0b10110: // vfncvt.rtz.xu.f.w
+            return rv_ftou_d(second, 1, &fflags);
+          case 0b10111: // vfncvt.rtz.x.f.w
+            return rv_ftoi_d(second, 1, &fflags);
+          default:
+            std::cout << "Fncvt has unsupported value for first: " << first << std::endl;
+            std::abort();
+        }
+      } else {
+        std::cout << "Fncvt only supports f64" << std::endl;
         std::abort();
       }
     }
@@ -1419,10 +1488,26 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               DP(1, "Moved " << +dest << " from: " << +rsrc1 << " to: " << +rdest);
             }
           } break;
-          case 18: { // vfcvt.f.x.v, vfcvt.x.f.v
+          case 18: {
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              vector_op_vix<Fcvt, uint8_t, uint16_t, uint32_t, uint64_t>(rsrc0, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+              switch (rsrc0 >> 3) {
+                case 0b00: // vfcvt.xu.f.v, vfcvt.x.f.v, vfcvt.f.xu.v, vfcvt.f.x.v, vfcvt.rtz.xu.f.v, vfcvt.rtz.x.f.v
+                  vector_op_vix<Fcvt, uint8_t, uint16_t, uint32_t, uint64_t>(rsrc0, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+                  break;
+                case 0b01: // vfwcvt.xu.f.v, vfwcvt.x.f.v, vfwcvt.f.xu.v, vfwcvt.f.x.v, vfwcvt.f.f.v, vfwcvt.rtz.xu.f.v, vfwcvt.rtz.x.f.v
+                  vector_op_vix_w<Fcvt, uint8_t, uint16_t, uint32_t, uint64_t>(rsrc0, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+                  break;
+                case 0b10: { // vfncvt.xu.f.w, vfncvt.x.f.w, vfncvt.f.xu.w, vfncvt.f.x.w, vfncvt.f.f.w, vfncvt.rod.f.f.w, vfncvt.rtz.xu.f.w, vfncvt.rtz.x.f.w
+                  uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+                  uint32_t vxsat = 0; // saturation argument is unused
+                  vector_op_vix_n<Fcvt, uint8_t, uint16_t, uint32_t, uint64_t>(rsrc0, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+                  break;
+                }
+                default:
+                  std::cout << "Fcvt unsupported value for rsrc0: " << rsrc0 << std::endl;
+                  std::abort();
+              }
             }
           } break;
           case 19: { // vfsqrt.v, vfrsqrt7.v, vfrec7.v, vfclass.v
