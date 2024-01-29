@@ -514,6 +514,11 @@ uint64_t rv_fsgnjx_d(uint64_t a, uint64_t b) {
   return r;
 }
 
+uint32_t rv_dtof_r(uint64_t a, uint32_t frm) {
+  rv_init(frm);
+  return rv_dtof(a);
+}
+
 uint32_t rv_dtof(uint64_t a) {
   auto r = f64_to_f32(to_float64_t(a));
   return from_float32_t(r);
