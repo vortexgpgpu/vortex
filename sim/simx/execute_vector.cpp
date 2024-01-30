@@ -2299,11 +2299,20 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               vector_op_vix_mask<Feq, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
-          case 23: { // vfmv.v.f
+          case 23: {
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto &src1 = freg_file_.at(t).at(rsrc0);
-              vector_op_vix<Mv, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+              if (vmask) { // vfmv.v.f
+                if (rsrc1 != 0) {
+                  std::cout << "For vfmv.v.f vs2 must contain v0." << std::endl;
+                  std::abort();
+                }
+                auto &src1 = freg_file_.at(t).at(rsrc0);
+                vector_op_vix<Mv, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+              } else { // vfmerge.vfm
+                auto& src1 = freg_file_.at(t).at(rsrc0);
+                vector_op_vix_merge<int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+              }
             }
           } break;
           case 25: { // vmfle.vf
