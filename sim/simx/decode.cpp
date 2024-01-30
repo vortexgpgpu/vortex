@@ -660,7 +660,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
         case 3: { // Vector - immediate arithmetic instructions
           instr->setDestReg(rd, RegType::Vector);
           instr->addSrcReg(rs2, RegType::Vector);
-          instr->setImm(sext(rs1, width_reg));
+          instr->setImm(rs1);
           instr->setVmask((code >> shift_func7) & 0x1);
           instr->setFunc6(func6);
         } break;

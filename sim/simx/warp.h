@@ -120,6 +120,7 @@ private:
 
   struct vtype vtype_;
   uint32_t vl_;
+  Word VLMAX;
 };
 
 }
