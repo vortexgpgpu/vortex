@@ -1012,6 +1012,47 @@ void vector_op_vix_mask(Word src1, std::vector<std::vector<Byte>> &vreg_file, ui
   }
 }
 
+template <typename DT>
+void vector_op_vix_slide(Word first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl, Word VLMAX, uint32_t vmask, bool scalar)
+{
+  // If VLMAX > 0 this means we have a vslidedown instruction, vslideup does not require VLMAX
+  bool slideDown = VLMAX;
+  uint32_t scalarPos = slideDown ? vl - 1 : 0;
+  // If scalar set is set this means we have a v(f)slide1up or v(f)slide1down instruction,
+  // so first is our scalar value and we need to overwrite it with 1 for later computations
+  if (scalar && vl && !isMasked(vreg_file, 0, scalarPos, vmask)) {
+    DP(1, "Slide - Moving scalar value " << +first << " to position " << +scalarPos);
+    getVregData<DT>(vreg_file, rdest, scalarPos) = first;
+  }
+  first = scalar ? 1 : first;
+
+  for (Word i = slideDown ? 0 : first; i < vl - (scalar && vl && slideDown); i++) {
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    __uint128_t iSrc = slideDown ? (__uint128_t)i + (__uint128_t)first : (__uint128_t)i - (__uint128_t)first; // prevent overflows/underflows
+    DT value = (!slideDown || iSrc < VLMAX) ? getVregData<DT>(vreg_file, rsrc0, iSrc) : 0;
+    DP(1, "Slide - Moving value " << +value << " from position " << (uint64_t)iSrc << " to position " << +i);
+    getVregData<DT>(vreg_file, rdest, i) = value;
+  }
+}
+
+template <typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vix_slide(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, Word VLMAX, uint32_t vmask, bool scalar)
+{
+  if (vsew == 8) {
+    vector_op_vix_slide<DT8>(src1, vreg_file, rsrc0, rdest, vl, VLMAX, vmask, scalar);
+  } else if (vsew == 16) {
+    vector_op_vix_slide<DT16>(src1, vreg_file, rsrc0, rdest, vl, VLMAX, vmask, scalar);
+  } else if (vsew == 32) {
+    vector_op_vix_slide<DT32>(src1, vreg_file, rsrc0, rdest, vl, VLMAX, vmask, scalar);
+  } else if (vsew == 64) {
+    vector_op_vix_slide<DT64>(src1, vreg_file, rsrc0, rdest, vl, VLMAX, vmask, scalar);
+  } else {
+    std::cout << "Failed to execute VI/VX slide for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
 template <template <typename DT1, typename DT2> class OP, typename DT>
 void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
@@ -1226,7 +1267,7 @@ void vector_op_vv_compress(std::vector<std::vector<Byte>> &vreg_file, uint32_t r
     if (isMasked(vreg_file, rsrc0, i, 0)) continue;
 
     DT value = getVregData<DT>(vreg_file, rsrc1, i);
-    DP(1, "Compression - Moving value " << value << " from position " << i << " to position " << currPos);
+    DP(1, "Compression - Moving value " << +value << " from position " << i << " to position " << currPos);
     getVregData<DT>(vreg_file, rdest, currPos) = value;
     currPos++;
   }
@@ -1256,11 +1297,11 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
   auto rdest  = instr.getRDest();
   auto rsrc0  = instr.getRSrc(0);
   auto rsrc1  = instr.getRSrc(1);
-  auto immsrc = sext((Word)instr.getImm(), 32);
+  auto immsrc = sext((Word)instr.getImm(), width_reg);
+  auto uimmsrc = (Word)instr.getImm();
   auto vmask  = instr.getVmask();
   auto num_threads = arch_.num_threads();
   
-    uint32_t VLMAX = (instr.getVlmul() * VLEN) / instr.getVsew();
     switch (func3) {
     case 0: { // vector - vector
         switch (func6) { 
@@ -1790,6 +1831,18 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
           vector_op_vix<Xor, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
+      case 14: { // vslideup.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(uimmsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, 0, vmask, false);
+        }
+      } break;
+      case 15: { // vslidedown.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(uimmsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, VLMAX, vmask, false);
+        }
+      } break;
       case 23: { // vmv.v.i
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
@@ -1972,6 +2025,20 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             vector_op_vix<Xor, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
+        case 14: { // vslideup.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, 0, vmask, false);
+          }
+        } break;
+        case 15: { // vslidedown.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, VLMAX, vmask, false);
+          }
+        } break;
         case 23: { // vmv.v.x
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
@@ -2136,6 +2203,20 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               vector_op_vix<Fsgnjx, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
+          case 14: { // vfslide1up.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, 0, vmask, true);
+            }
+          } break;
+          case 15: { // vfslide1down.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto& src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, VLMAX, vmask, true);
+            }
+          } break;
           case 16: { // vfmv.s.f
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
@@ -2227,6 +2308,20 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
       } break;
     case 6: {
       switch (func6) {
+        case 14: { // vslide1up.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, 0, vmask, true);
+          }
+        } break;
+        case 15: { // vslide1down.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, VLMAX, vmask, true);
+          }
+        } break;
         case 16: { // vmv.s.x
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
@@ -2353,7 +2448,7 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
       VLMAX = vlenTimesLmul / vsew;
       vtype_.vill  = vsew > XLEN || VLMAX < VLEN / XLEN;
 
-      uint32_t s0 = instr.getImm(); // vsetivli
+      Word s0 = instr.getImm(); // vsetivli
       if (!instr.hasImm()) { // vsetvli/vsetvl
         s0 = rsdata[0][0].u;
       }
