@@ -902,6 +902,33 @@ void vector_op_vix(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_
   }
 }
 
+template <typename DT>
+void vector_op_vix_merge(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl, uint32_t vmask)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    DT result = isMasked(vreg_file, 0, i, vmask) ? getVregData<DT>(vreg_file, rsrc0, i) : first;
+    DP(1, "Merge - Choosing result: " << +result);
+    getVregData<DT>(vreg_file, rdest, i) = result;
+  }
+}
+
+template <typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vix_merge(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vix_merge<DT8>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else if (vsew == 16) {
+    vector_op_vix_merge<DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else if (vsew == 32) {
+    vector_op_vix_merge<DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else if (vsew == 64) {
+    vector_op_vix_merge<DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else {
+    std::cout << "Failed to execute VI/VX for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
 void vector_op_scalar(Word &dest, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t vsew)
 {
   if (rsrc0 != 0) {
@@ -1078,6 +1105,34 @@ void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uin
     vector_op_vv<OP, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
   } else if (vsew == 64) {
     vector_op_vv<OP, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else {
+    std::cout << "Failed to execute VV for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+template <typename DT>
+void vector_op_vv_merge(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    uint32_t rsrc = isMasked(vreg_file, 0, i, vmask) ? rsrc1 : rsrc0;
+    DT result = getVregData<DT>(vreg_file, rsrc, i);
+    DP(1, "Merge - Choosing result: " << +result);
+    getVregData<DT>(vreg_file, rdest, i) = result;
+  }
+}
+
+template <typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vv_merge(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vv_merge<DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 16) {
+    vector_op_vv_merge<DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 32) {
+    vector_op_vv_merge<DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 64) {
+    vector_op_vv_merge<DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
   } else {
     std::cout << "Failed to execute VV for vsew: " << vsew << std::endl;
     std::abort();
@@ -1359,14 +1414,18 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               vector_op_vv<Xor, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
-          case 23: { // vmv.v.v
+          case 23: {
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              if (rsrc1 != 0) {
-                std::cout << "For vmv.v.v vs2 must contain v0." << std::endl;
-                std::abort();
+              if (vmask) { // vmv.v.v
+                if (rsrc1 != 0) {
+                  std::cout << "For vmv.v.v vs2 must contain v0." << std::endl;
+                  std::abort();
+                }
+                vector_op_vv<Mv, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+              } else { // vmerge.vvm
+                vector_op_vv_merge<int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
               }
-              vector_op_vv<Mv, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 24: { // vmseq.vv
@@ -1846,11 +1905,15 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
       case 23: { // vmv.v.i
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
-          if (rsrc0 != 0) {
-            std::cout << "For vmv.v.i vs2 must contain v0." << std::endl;
-            std::abort();
+          if (vmask) { // vmv.v.i
+            if (rsrc0 != 0) {
+              std::cout << "For vmv.v.i vs2 must contain v0." << std::endl;
+              std::abort();
+            }
+            vector_op_vix<Mv, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
+          } else { // vmerge.vim
+            vector_op_vix_merge<int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
           }
-          vector_op_vix<Mv, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
       case 24: { // vmseq.vi
@@ -2039,15 +2102,20 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, VLMAX, vmask, false);
           }
         } break;
-        case 23: { // vmv.v.x
+        case 23: {
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
-            if (rsrc1 != 0) {
-              std::cout << "For vmv.v.x vs2 must contain v0." << std::endl;
-              std::abort();
+            if (vmask) { // vmv.v.x
+              if (rsrc1 != 0) {
+                std::cout << "For vmv.v.x vs2 must contain v0." << std::endl;
+                std::abort();
+              }
+              auto& src1 = ireg_file_.at(t).at(rsrc0);
+              vector_op_vix<Mv, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            } else { // vmerge.vxm
+              auto& src1 = ireg_file_.at(t).at(rsrc0);
+              vector_op_vix_merge<int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
-            auto& src1 = ireg_file_.at(t).at(rsrc0);
-            vector_op_vix<Mv, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 24: { // vmseq.vx
