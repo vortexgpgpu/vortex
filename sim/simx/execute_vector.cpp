@@ -804,7 +804,7 @@ DT &getVregData(std::vector<std::vector<vortex::Byte>> &vreg_file, uint32_t base
 }
 
 template <typename DT>
-void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, uint32_t vl, uint32_t vmask) {
+void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, uint32_t vl, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
   for (uint32_t i = 0; i < vl; i++) {
     if (isMasked(vreg_file, 0, i, vmask)) continue;
@@ -819,19 +819,19 @@ void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, 
   }
 }
 
-void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
+void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
   switch (vsew) {
     case 8:
-      loadVector<uint8_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
+      vector_op_vix_load<uint8_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
       break;
     case 16:
-      loadVector<uint16_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
+      vector_op_vix_load<uint16_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
       break;
     case 32:
-      loadVector<uint32_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
+      vector_op_vix_load<uint32_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
       break;
     case 64:
-      loadVector<uint64_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
+      vector_op_vix_load<uint64_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
       break;
     default:
       std::cout << "Failed to execute VLE for vsew: " << vsew << std::endl;
@@ -839,8 +839,14 @@ void loadVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, 
   }
 }
 
+void Warp::loadVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
+  auto vmask  = instr.getVmask();
+  auto rdest  = instr.getRDest();
+  vector_op_vix_load(vreg_file_, core_, rsdata, rdest, vtype_.vsew, vl_, vmask);
+}
+
 template <typename DT>
-void storeVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, uint32_t vl, uint32_t vmask) {
+void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, uint32_t vl, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
   for (uint32_t i = 0; i < vl; i++) {
     if (isMasked(vreg_file, 0, i, vmask)) continue;
@@ -852,24 +858,30 @@ void storeVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_,
   }
 }
 
-void storeVector(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, uint32_t vsew, uint32_t vl, uint32_t vmask) {
+void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, uint32_t vsew, uint32_t vl, uint32_t vmask) {
   switch (vsew) {
     case 8:
-      storeVector<uint8_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
+      vector_op_vix_store<uint8_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
       break;
     case 16:
-      storeVector<uint16_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
+      vector_op_vix_store<uint16_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
       break;
     case 32:
-      storeVector<uint32_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
+      vector_op_vix_store<uint32_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
       break;
     case 64:
-      storeVector<uint64_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
+      vector_op_vix_store<uint64_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
       break;
     default:
       std::cout << "Failed to execute VSE for vsew: " << vsew << std::endl;
       std::abort();
   }
+}
+
+void Warp::storeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
+  auto vmask  = instr.getVmask();
+  auto vs3  = instr.getVs3();
+  vector_op_vix_store(vreg_file_, core_, rsdata, vs3, vtype_.vsew, vl_, vmask);
 }
 
 template <template <typename DT1, typename DT2> class OP, typename DT>

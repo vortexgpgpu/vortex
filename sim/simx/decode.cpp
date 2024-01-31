@@ -680,7 +680,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
       instr->setVlsWidth(func3);
       instr->addSrcReg(rs2, RegType::Vector);
       instr->setVmask(code >> shift_func7);
-      instr->setVmop((code >> shift_vmop) & mask_func3);
+      instr->setVmop((code >> shift_vmop) & 0b11);
       instr->setVnf((code >> shift_vnf) & mask_func3);
       break;
 
@@ -690,7 +690,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
       instr->setVlsWidth(func3);
       instr->addSrcReg(rs2, RegType::Vector);
       instr->setVmask(code >> shift_func7);
-      instr->setVmop((code >> shift_vmop) & mask_func3);
+      instr->setVmop((code >> shift_vmop) & 0b11);
       instr->setVnf((code >> shift_vnf) & mask_func3);
       break;
 

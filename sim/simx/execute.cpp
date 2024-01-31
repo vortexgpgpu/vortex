@@ -25,7 +25,6 @@
 #include "warp.h"
 #include "instr.h"
 #include "core.h"
-#include "execute_vector.h"
 
 using namespace vortex;
 
@@ -680,9 +679,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
       }
     } else {
-      auto& vreg_file = vreg_file_;
-      auto vmask  = instr.getVmask();
-      loadVector(vreg_file, core_, rsdata, rdest, vtype_.vsew, vl_, vmask);
+      loadVector(instr, rsdata);
     }
     rd_write = true;
     break;
@@ -717,9 +714,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
       }
     } else {
-      auto vmask  = instr.getVmask();
-      auto& vreg_file = vreg_file_;
-      storeVector(vreg_file, core_, rsdata, instr.getVs3(), vtype_.vsew, vl_, vmask);
+      storeVector(instr, rsdata);
     }
     break;
   }
