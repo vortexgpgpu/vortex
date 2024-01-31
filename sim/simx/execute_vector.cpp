@@ -1080,6 +1080,35 @@ void vector_op_vix_slide(Word src1, std::vector<std::vector<Byte>> &vreg_file, u
   }
 }
 
+template <typename DT>
+void vector_op_vix_gather(Word first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl, Word VLMAX, uint32_t vmask)
+{
+  for (Word i = 0; i < vl; i++) {
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    DT value = first < VLMAX ? getVregData<DT>(vreg_file, rsrc0, first) : 0;
+    DP(1, "Register gather - Moving value " << +value << " from position " << +first << " to position " << +i);
+    getVregData<DT>(vreg_file, rdest, i) = value;
+  }
+}
+
+template <typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vix_gather(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, Word VLMAX, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vix_gather<DT8>(src1, vreg_file, rsrc0, rdest, vl, VLMAX, vmask);
+  } else if (vsew == 16) {
+    vector_op_vix_gather<DT16>(src1, vreg_file, rsrc0, rdest, vl, VLMAX, vmask);
+  } else if (vsew == 32) {
+    vector_op_vix_gather<DT32>(src1, vreg_file, rsrc0, rdest, vl, VLMAX, vmask);
+  } else if (vsew == 64) {
+    vector_op_vix_gather<DT64>(src1, vreg_file, rsrc0, rdest, vl, VLMAX, vmask);
+  } else {
+    std::cout << "Failed to execute VI/VX register gather for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
 template <template <typename DT1, typename DT2> class OP, typename DT>
 void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
@@ -1135,6 +1164,36 @@ void vector_op_vv_merge(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc
     vector_op_vv_merge<DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
   } else {
     std::cout << "Failed to execute VV for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+template <typename DT>
+void vector_op_vv_gather(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, bool ei16, uint32_t VLMAX, uint32_t vmask)
+{
+  for (Word i = 0; i < vl; i++) {
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    uint32_t first = ei16 ? getVregData<uint16_t>(vreg_file, rsrc0, i) : getVregData<DT>(vreg_file, rsrc0, i);
+    DT value = first < VLMAX ? getVregData<DT>(vreg_file, rsrc1, first) : 0;
+    DP(1, "Register gather - Moving value " << +value << " from position " << +first << " to position " << +i);
+    getVregData<DT>(vreg_file, rdest, i) = value;
+  }
+}
+
+template <typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vv_gather(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, bool ei16, uint32_t VLMAX, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vv_gather<DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, ei16, VLMAX, vmask);
+  } else if (vsew == 16) {
+    vector_op_vv_gather<DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, ei16, VLMAX, vmask);
+  } else if (vsew == 32) {
+    vector_op_vv_gather<DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, ei16, VLMAX, vmask);
+  } else if (vsew == 64) {
+    vector_op_vv_gather<DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, ei16, VLMAX, vmask);
+  } else {
+    std::cout << "Failed to execute VV register gather for vsew: " << vsew << std::endl;
     std::abort();
   }
 }
@@ -1412,6 +1471,18 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
               vector_op_vv<Xor, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 12: { // vrgather.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_gather<uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, false, VLMAX, vmask);
+            }
+          } break;
+          case 14: { // vrgatherei16.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_gather<uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, true, VLMAX, vmask);
             }
           } break;
           case 23: {
@@ -1890,6 +1961,12 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
           vector_op_vix<Xor, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
+      case 12: { // vrgather.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          vector_op_vix_gather<uint8_t, uint16_t, uint32_t, uint64_t>(uimmsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, VLMAX, vmask);
+        }
+      } break;
       case 14: { // vslideup.vi
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
@@ -2086,6 +2163,13 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
             vector_op_vix<Xor, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 12: { // vrgather.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_gather<uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, VLMAX, vmask);
           }
         } break;
         case 14: { // vslideup.vx
