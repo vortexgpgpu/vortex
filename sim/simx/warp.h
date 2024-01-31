@@ -102,6 +102,8 @@ private:
 
   void execute(const Instr &instr, pipeline_trace_t *trace);
   void executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata);
+  void loadVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata);
+  void storeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata);
 
   UUIDGenerator uui_gen_;
   
