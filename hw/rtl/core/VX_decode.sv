@@ -533,8 +533,9 @@ module VX_decode  #(
     assign decode_sched_if.valid    = fetch_fire;
     assign decode_sched_if.wid      = fetch_if.data.wid;
     assign decode_sched_if.is_wstall = is_wstall;
-    
+`ifndef L1_ENABLE    
     assign fetch_if.ibuf_pop = decode_if.ibuf_pop;
+`endif
 
 `ifdef DBG_TRACE_CORE_PIPELINE
     always @(posedge clk) begin
