@@ -291,6 +291,13 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+`ifdef ICACHE_ENABLE
+`define L1_ENABLE
+`endif
+`ifdef DCACHE_ENABLE
+`define L1_ENABLE
+`endif
+
 `ifdef L2_ENABLE
 `define L2_LINE_SIZE	        `MEM_BLOCK_SIZE
 `else

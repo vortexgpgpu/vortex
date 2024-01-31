@@ -26,21 +26,26 @@ interface VX_fetch_if ();
     logic  valid;
     data_t data;
     logic  ready;
-    
+`ifndef L1_ENABLE    
     logic [`ISSUE_WIDTH-1:0] ibuf_pop;
+`endif
 
     modport master (
         output valid,
         output data,
-        input  ibuf_pop,
         input  ready
+    `ifndef L1_ENABLE
+        , input ibuf_pop
+    `endif
     );
 
     modport slave (
         input  valid,
         input  data,
-        output ibuf_pop,
         output ready
+    `ifndef L1_ENABLE
+        , output ibuf_pop
+    `endif
     );
 
 endinterface

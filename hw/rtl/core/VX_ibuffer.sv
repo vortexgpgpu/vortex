@@ -66,8 +66,9 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
             .valid_out (ibuffer_if[i].valid),
             .ready_out(ibuffer_if[i].ready)
         );        
-
+    `ifndef L1_ENABLE
         assign decode_if.ibuf_pop[i] = ibuffer_if[i].valid && ibuffer_if[i].ready;
+    `endif
     end
 
 endmodule

@@ -1,9 +1,10 @@
-// Copyright © 2019-2023
+// Copyright 2024 blaise
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
+// 
+//     http://www.apache.org/licenses/LICENSE-2.0
 // 
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -11,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A bypass elastic buffer operates at full bandwidth where pop can happen if the buffer is empty but is going full
+// A pipelined elastic buffer operates at full bandwidth where push can happen if the buffer is not empty but is going empty
 // It has the following benefits:
 // + Full-bandwidth throughput
 // + use only one register for storage
+// + data_out is fully registered
 // It has the following limitations:
-// + data_out is not registered
 // + ready_in and ready_out are coupled
 
 `include "VX_platform.vh"
 
 `TRACING_OFF
-module VX_bypass_buffer #(
+module VX_pipe_buffer #(
     parameter DATAW    = 1,
     parameter PASSTHRU = 0
 ) ( 
@@ -42,27 +43,20 @@ module VX_bypass_buffer #(
         assign valid_out = valid_in;        
         assign data_out  = data_in;
     end else begin
-        reg [DATAW-1:0] buffer;
-        reg has_data;
+        wire stall = valid_out && ~ready_out;
 
-        always @(posedge clk) begin
-            if (reset) begin
-                has_data <= 0;
-            end else begin            
-                if (ready_out) begin
-                    has_data <= 0;
-                end else if (~has_data) begin
-                    has_data <= valid_in;
-                end
-            end
-            if (~has_data) begin
-                buffer <= data_in;
-            end
-        end
+        VX_pipe_register #(
+            .DATAW	(1 + DATAW),
+            .RESETW (1)
+        ) pipe_register (
+            .clk      (clk),
+            .reset    (reset),
+            .enable	  (~stall),
+            .data_in  ({valid_in,  data_in}),
+            .data_out ({valid_out, data_out})
+        );
 
-        assign ready_in  = ready_out || ~has_data;
-        assign data_out  = has_data ? buffer : data_in;
-        assign valid_out = valid_in || has_data;
+        assign ready_in = ~stall;
     end
 
 endmodule
