@@ -13,7 +13,7 @@ fi
 if [ "$#" == "0" ];
 then
   # write out test case name explicitely if there are collisions with other test names
-  testcases=(vset vle vmv vslide vmerge \
+  testcases=(vset vle vmv vslide vmerge vrgather \
              vse8 vse16 vse32 \
              vadd vsub vmin vmax vand vor vxor \
              vmseq vmsne vmslt vmsle vmsgt \
