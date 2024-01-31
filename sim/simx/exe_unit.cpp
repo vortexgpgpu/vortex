@@ -207,7 +207,7 @@ void LsuUnit::tick() {
             for (uint32_t t = 1; t < num_lanes_; ++t) {
                 if (!trace->tmask.test(t0 + t))
                     continue;
-                auto mem_addr = trace_data->mem_addrs.at(t).addr & ~addr_mask;
+                auto mem_addr = trace_data->mem_addrs.at(t + t0).addr & ~addr_mask;
                 matches += (addr0 == mem_addr);
             }
         #ifdef LSU_DUP_ENABLE
@@ -229,7 +229,7 @@ void LsuUnit::tick() {
                 continue;
             
             auto& dcache_req_port = core_->smem_demuxs_.at(t)->ReqIn;
-            auto mem_addr = trace_data->mem_addrs.at(t);
+            auto mem_addr = trace_data->mem_addrs.at(t + t0);
             auto type = core_->get_addr_type(mem_addr.addr);
 
             MemReq mem_req;
