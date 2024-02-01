@@ -842,7 +842,34 @@ void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Core 
 void Warp::loadVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
   auto vmask  = instr.getVmask();
   auto rdest  = instr.getRDest();
-  vector_op_vix_load(vreg_file_, core_, rsdata, rdest, vtype_.vsew, vl_, vmask);
+  auto mop = instr.getVmop();
+  switch (mop) {
+    case 0b00: { // unit-stride
+      auto lumop  = instr.getVumop();
+      switch (lumop) {
+        case 0b0000: // vle8.v, vle16.v, vle32.v, vle64.v
+          vector_op_vix_load(vreg_file_, core_, rsdata, rdest, vtype_.vsew, vl_, vmask);
+          break;
+        case 0b1000: { // vl1r.v, vl2r.v, vl4r.v, vl8r.v
+          uint32_t nreg = instr.getVnf() + 1;
+          if (nreg != 1 && nreg != 2 && nreg != 4 && nreg != 8) {
+            std::cout << "Whole vector register load - reserved value for nreg: " << nreg << std::endl;
+            std::abort();
+          }
+          DP(1, "Whole vector register load with nreg: " << nreg);
+          vector_op_vix_load<uint8_t>(vreg_file_, core_, rsdata, rdest, nreg * VLEN / 8, vmask);
+          break;
+        }
+        default:
+          std::cout << "Load vector - unsupported lumop: " << lumop << std::endl;
+          std::abort();
+      }
+      break;
+    }
+    default:
+      std::cout << "Load vector - unsupported mop: " << mop << std::endl;
+      std::abort();
+  }
 }
 
 template <typename DT>
@@ -880,8 +907,35 @@ void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Core
 
 void Warp::storeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
   auto vmask  = instr.getVmask();
-  auto vs3  = instr.getVs3();
-  vector_op_vix_store(vreg_file_, core_, rsdata, vs3, vtype_.vsew, vl_, vmask);
+  auto mop = instr.getVmop();
+  switch (mop) {
+    case 0b00: { // unit-stride
+      auto vs3  = instr.getRSrc(1);
+      auto sumop  = instr.getVumop();
+      switch (sumop) {
+        case 0b0000: // vse8.v, vse16.v, vse32.v, vse64.v
+          vector_op_vix_store(vreg_file_, core_, rsdata, vs3, vtype_.vsew, vl_, vmask);
+          break;
+        case 0b1000: { // vs1r.v, vs2r.v, vs4r.v, vs8r.v
+          uint32_t nreg = instr.getVnf() + 1;
+          if (nreg != 1 && nreg != 2 && nreg != 4 && nreg != 8) {
+            std::cout << "Whole vector register store - reserved value for nreg: " << nreg << std::endl;
+            std::abort();
+          }
+          DP(1, "Whole vector register store with nreg: " << nreg);
+          vector_op_vix_store<uint8_t>(vreg_file_, core_, rsdata, vs3, nreg * VLEN / 8, vmask);
+          break;
+        }
+        default:
+          std::cout << "Store vector - unsupported sumop: " << sumop << std::endl;
+          std::abort();
+      }
+      break;
+    }
+    default:
+      std::cout << "Store vector - unsupported mop: " << mop << std::endl;
+      std::abort();      
+  }
 }
 
 template <template <typename DT1, typename DT2> class OP, typename DT>

@@ -636,13 +636,13 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
   case InstType::V_TYPE:
     switch (op) {
     case Opcode::VSET: {
-      instr->setDestReg(rd, RegType::Vector);
+      instr->setDestReg(rd, RegType::Integer);
       instr->setFunc3(func3);
       switch (func3) {
         case 7: {
           if (code >> (shift_vset - 1) == 0b10) { // vsetvl
-            instr->addSrcReg(rs1, RegType::Vector);
-            instr->addSrcReg(rs2, RegType::Vector);
+            instr->addSrcReg(rs1, RegType::Integer);
+            instr->addSrcReg(rs2, RegType::Integer);
           } else {
             auto zimm = (code >> shift_rs2) & mask_v_zimm;
             instr->setZimm(true);
@@ -653,7 +653,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
             if ((code >> shift_vset)) { // vsetivli
               instr->setImm(rs1);
             } else { // vsetvli
-              instr->addSrcReg(rs1, RegType::Vector);
+              instr->addSrcReg(rs1, RegType::Integer);
             }
           }
         } break;
@@ -675,20 +675,43 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
     } break;
 
     case Opcode::FL:
-      instr->setDestReg(rd, RegType::Vector);
-      instr->addSrcReg(rs1, RegType::Vector);
-      instr->setVlsWidth(func3);
-      instr->addSrcReg(rs2, RegType::Vector);
-      instr->setVmask(code >> shift_func7);
       instr->setVmop((code >> shift_vmop) & 0b11);
+      switch (instr->getVmop()) {
+        case 0b00:
+          instr->setVumop(rs2);
+          break;
+        case 0b10:
+          instr->addSrcReg(rs2, RegType::Integer);
+          break;
+        case 0b01:
+        case 0b11:
+          instr->addSrcReg(rs2, RegType::Vector);
+          break;
+      }
+      instr->addSrcReg(rs1, RegType::Integer);
+      instr->setDestReg(rd, RegType::Vector);
+      instr->setVlsWidth(func3);
+      instr->setVmask(code >> shift_func7);
       instr->setVnf((code >> shift_vnf) & mask_func3);
       break;
 
     case Opcode::FS:
-      instr->setVs3(rd);
-      instr->addSrcReg(rs1, RegType::Vector);
+      instr->setVmop((code >> shift_vmop) & 0b11);
+      switch (instr->getVmop()) {
+        case 0b00:
+          instr->setVumop(rs2);
+          break;
+        case 0b10:
+          instr->addSrcReg(rs2, RegType::Integer);
+          break;
+        case 0b01:
+        case 0b11:
+          instr->addSrcReg(rs2, RegType::Vector);
+          break;
+      }
+      instr->addSrcReg(rs1, RegType::Integer);
+      instr->addSrcReg(rd, RegType::Vector);
       instr->setVlsWidth(func3);
-      instr->addSrcReg(rs2, RegType::Vector);
       instr->setVmask(code >> shift_func7);
       instr->setVmop((code >> shift_vmop) & 0b11);
       instr->setVnf((code >> shift_vnf) & mask_func3);

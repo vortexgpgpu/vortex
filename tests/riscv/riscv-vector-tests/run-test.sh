@@ -15,6 +15,8 @@ then
   # write out test case name explicitely if there are collisions with other test names
   testcases=(vset vle vmv vslide vmerge vrgather \
              vse8 vse16 vse32 \
+             vl1r vl2r vl4r vl8r \
+             vs1r vs2r vs4r vs8r \
              vadd vsub vmin vmax vand vor vxor \
              vmseq vmsne vmslt vmsle vmsgt \
              vsll vsrl vsra \
