@@ -80,6 +80,7 @@ public:
     , vmask_(0)
     , vlsWidth_(0)
     , vMop_(0)
+    , vUmop_(0)
     , vNf_(0)
     , vs3_(0)
     , has_zimm_(false)
@@ -115,6 +116,7 @@ public:
   void setImm(uint32_t imm) { has_imm_ = true; imm_ = imm; }
   void setVlsWidth(uint32_t width) { vlsWidth_ = width; }
   void setVmop(uint32_t mop) { vMop_ = mop; }
+  void setVumop(uint32_t umop) { vUmop_ = umop; }
   void setVnf(uint32_t nf) { vNf_ = nf; }
   void setVmask(uint32_t mask) { vmask_ = mask; }
   void setVs3(uint32_t vs) { vs3_ = vs; }
@@ -140,7 +142,8 @@ public:
   uint32_t getImm() const { return imm_; }
   uint32_t getVlsWidth() const { return vlsWidth_; }
   uint32_t getVmop() const { return vMop_; }
-  uint32_t getvNf() const { return vNf_; }
+  uint32_t getVumop() const { return vUmop_; }
+  uint32_t getVnf() const { return vNf_; }
   uint32_t getVmask() const { return vmask_; }
   uint32_t getVs3() const { return vs3_; }
   bool     hasZimm() const { return has_zimm_; }
@@ -174,6 +177,7 @@ private:
   uint32_t vmask_;
   uint32_t vlsWidth_;
   uint32_t vMop_;
+  uint32_t vUmop_;
   uint32_t vNf_;
   uint32_t vs3_;
   bool has_zimm_;
