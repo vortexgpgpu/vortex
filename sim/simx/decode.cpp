@@ -675,6 +675,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
     } break;
 
     case Opcode::FL:
+      instr->addSrcReg(rs1, RegType::Integer);
       instr->setVmop((code >> shift_vmop) & 0b11);
       switch (instr->getVmop()) {
         case 0b00:
@@ -688,14 +689,14 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
           instr->addSrcReg(rs2, RegType::Vector);
           break;
       }
-      instr->addSrcReg(rs1, RegType::Integer);
       instr->setDestReg(rd, RegType::Vector);
       instr->setVlsWidth(func3);
-      instr->setVmask(code >> shift_func7);
+      instr->setVmask((code >> shift_func7) & 0x1);
       instr->setVnf((code >> shift_vnf) & mask_func3);
       break;
 
     case Opcode::FS:
+      instr->addSrcReg(rs1, RegType::Integer);
       instr->setVmop((code >> shift_vmop) & 0b11);
       switch (instr->getVmop()) {
         case 0b00:
@@ -709,10 +710,9 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
           instr->addSrcReg(rs2, RegType::Vector);
           break;
       }
-      instr->addSrcReg(rs1, RegType::Integer);
       instr->addSrcReg(rd, RegType::Vector);
       instr->setVlsWidth(func3);
-      instr->setVmask(code >> shift_func7);
+      instr->setVmask((code >> shift_func7) & 0x1);
       instr->setVmop((code >> shift_vmop) & 0b11);
       instr->setVnf((code >> shift_vnf) & mask_func3);
       break;
