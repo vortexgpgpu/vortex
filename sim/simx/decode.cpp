@@ -665,7 +665,13 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
           instr->setFunc6(func6);
         } break;
         default: { // Vector - vector/scalar arithmetic instructions
-          instr->setDestReg(rd, RegType::Vector);
+          if (func3 == 1 && func6 == 16) {
+            instr->setDestReg(rd, RegType::Float);
+          } else if (func3 == 2 && func6 == 16) {
+            instr->setDestReg(rd, RegType::Integer);
+          } else {
+            instr->setDestReg(rd, RegType::Vector);
+          }
           instr->addSrcReg(rs1, RegType::Vector);
           instr->addSrcReg(rs2, RegType::Vector);
           instr->setVmask((code >> shift_func7) & 0x1);

@@ -1407,7 +1407,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     }
   } break;
   case VSET: {
-    if ((func3 == 0x7) | (func3 == 0x2)) {
+    auto func6 = instr.getFunc6();
+    if ((func3 == 0x7) || (func3 == 0x2 && func6 == 16) || (func3 == 0x1 && func6 == 16)) {
       rd_write = true;
     }
     executeVector(instr, rsdata, rddata);
