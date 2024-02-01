@@ -995,7 +995,8 @@ void vector_op_vix_merge(Word src1, std::vector<std::vector<Byte>> &vreg_file, u
   }
 }
 
-void vector_op_scalar(Word &dest, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t vsew)
+template <typename DT>
+void vector_op_scalar(DT &dest, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t vsew)
 {
   if (rsrc0 != 0) {
     std::cout << "Vwxunary0/Vwfunary0 has unsupported value for vs2: " << rsrc0 << std::endl;
