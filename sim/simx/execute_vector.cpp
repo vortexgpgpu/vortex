@@ -804,12 +804,12 @@ DT &getVregData(std::vector<std::vector<vortex::Byte>> &vreg_file, uint32_t base
 }
 
 template <typename DT>
-void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, uint32_t vl, uint32_t vmask) {
+void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, uint32_t vl, WordI stride, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
   for (uint32_t i = 0; i < vl; i++) {
     if (isMasked(vreg_file, 0, i, vmask)) continue;
     
-    Word mem_addr = ((rsdata[0][0].i) & 0xFFFFFFFC) + (i * vsew / 8);
+    Word mem_addr = ((rsdata[0][0].i) & 0xFFFFFFFC) + (i * stride);
     Word mem_data = 0;
     core_->dcache_read(&mem_data, mem_addr, vsew / 8);
     DP(1, "Loading data " << mem_data << " from: " << mem_addr << " to vec reg: " << getVreg<DT>(rdest, i));
@@ -819,19 +819,19 @@ void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Core 
   }
 }
 
-void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
+void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rdest, uint32_t vsew, uint32_t vl, WordI stride, uint32_t vmask) {
   switch (vsew) {
     case 8:
-      vector_op_vix_load<uint8_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
+      vector_op_vix_load<uint8_t>(vreg_file, core_, rsdata, rdest, vl, stride, vmask);
       break;
     case 16:
-      vector_op_vix_load<uint16_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
+      vector_op_vix_load<uint16_t>(vreg_file, core_, rsdata, rdest, vl, stride, vmask);
       break;
     case 32:
-      vector_op_vix_load<uint32_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
+      vector_op_vix_load<uint32_t>(vreg_file, core_, rsdata, rdest, vl, stride, vmask);
       break;
     case 64:
-      vector_op_vix_load<uint64_t>(vreg_file, core_, rsdata, rdest, vl, vmask);
+      vector_op_vix_load<uint64_t>(vreg_file, core_, rsdata, rdest, vl, stride, vmask);
       break;
     default:
       std::cout << "Failed to execute VLE for vsew: " << vsew << std::endl;
@@ -846,9 +846,10 @@ void Warp::loadVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
   switch (mop) {
     case 0b00: { // unit-stride
       auto lumop  = instr.getVumop();
+      WordI stride = vtype_.vsew / 8;
       switch (lumop) {
         case 0b0000: // vle8.v, vle16.v, vle32.v, vle64.v
-          vector_op_vix_load(vreg_file_, core_, rsdata, rdest, vtype_.vsew, vl_, vmask);
+          vector_op_vix_load(vreg_file_, core_, rsdata, rdest, vtype_.vsew, vl_, stride, vmask);
           break;
         case 0b1000: { // vl1r.v, vl2r.v, vl4r.v, vl8r.v
           uint32_t nreg = instr.getVnf() + 1;
@@ -857,13 +858,20 @@ void Warp::loadVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
             std::abort();
           }
           DP(1, "Whole vector register load with nreg: " << nreg);
-          vector_op_vix_load<uint8_t>(vreg_file_, core_, rsdata, rdest, nreg * VLEN / 8, vmask);
+          vector_op_vix_load<uint8_t>(vreg_file_, core_, rsdata, rdest, nreg * VLEN / 8, stride, vmask);
           break;
         }
         default:
           std::cout << "Load vector - unsupported lumop: " << lumop << std::endl;
           std::abort();
       }
+      break;
+    }
+    case 0b10: { // strided: vlse8.v, vlse16.v, vlse32.v, vlse64.v
+      auto rsrc1  = instr.getRSrc(1);
+      auto rdest  = instr.getRDest();
+      WordI stride = ireg_file_.at(0).at(rsrc1);
+      vector_op_vix_load(vreg_file_, core_, rsdata, rdest, vtype_.vsew, vl_, stride, vmask);
       break;
     }
     default:
@@ -873,31 +881,31 @@ void Warp::loadVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
 }
 
 template <typename DT>
-void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, uint32_t vl, uint32_t vmask) {
+void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, uint32_t vl, WordI stride, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
   for (uint32_t i = 0; i < vl; i++) {
     if (isMasked(vreg_file, 0, i, vmask)) continue;
 
-    Word mem_addr = rsdata[0][0].i + (i * vsew / 8); 
+    Word mem_addr = rsdata[0][0].i + (i * stride);
     Word mem_data = getVregData<DT>(vreg_file, rsrc3, i);
     DP(1, "Storing: " << std::hex << mem_data << " at: " << mem_addr << " from vec reg: " << getVreg<DT>(rsrc3, i));
     core_->dcache_write(&mem_data, mem_addr, vsew / 8);
   }
 }
 
-void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, uint32_t vsew, uint32_t vl, uint32_t vmask) {
+void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, uint32_t vsew, uint32_t vl, WordI stride, uint32_t vmask) {
   switch (vsew) {
     case 8:
-      vector_op_vix_store<uint8_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
+      vector_op_vix_store<uint8_t>(vreg_file, core_, rsdata, rsrc3, vl, stride, vmask);
       break;
     case 16:
-      vector_op_vix_store<uint16_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
+      vector_op_vix_store<uint16_t>(vreg_file, core_, rsdata, rsrc3, vl, stride, vmask);
       break;
     case 32:
-      vector_op_vix_store<uint32_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
+      vector_op_vix_store<uint32_t>(vreg_file, core_, rsdata, rsrc3, vl, stride, vmask);
       break;
     case 64:
-      vector_op_vix_store<uint64_t>(vreg_file, core_, rsdata, rsrc3, vl, vmask);
+      vector_op_vix_store<uint64_t>(vreg_file, core_, rsdata, rsrc3, vl, stride, vmask);
       break;
     default:
       std::cout << "Failed to execute VSE for vsew: " << vsew << std::endl;
@@ -912,9 +920,10 @@ void Warp::storeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
     case 0b00: { // unit-stride
       auto vs3  = instr.getRSrc(1);
       auto sumop  = instr.getVumop();
+      WordI stride = vtype_.vsew / 8;
       switch (sumop) {
         case 0b0000: // vse8.v, vse16.v, vse32.v, vse64.v
-          vector_op_vix_store(vreg_file_, core_, rsdata, vs3, vtype_.vsew, vl_, vmask);
+          vector_op_vix_store(vreg_file_, core_, rsdata, vs3, vtype_.vsew, vl_, stride, vmask);
           break;
         case 0b1000: { // vs1r.v, vs2r.v, vs4r.v, vs8r.v
           uint32_t nreg = instr.getVnf() + 1;
@@ -923,13 +932,21 @@ void Warp::storeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
             std::abort();
           }
           DP(1, "Whole vector register store with nreg: " << nreg);
-          vector_op_vix_store<uint8_t>(vreg_file_, core_, rsdata, vs3, nreg * VLEN / 8, vmask);
+          uint32_t vl = nreg * VLEN / 8;
+          vector_op_vix_store<uint8_t>(vreg_file_, core_, rsdata, vs3, vl, stride, vmask);
           break;
         }
         default:
           std::cout << "Store vector - unsupported sumop: " << sumop << std::endl;
           std::abort();
       }
+      break;
+    }
+    case 0b10: { // strided: vsse8.v, vsse16.v, vsse32.v, vsse64.v
+      auto rsrc1  = instr.getRSrc(1);
+      auto vs3  = instr.getRSrc(2);
+      WordI stride = ireg_file_.at(0).at(rsrc1);
+      vector_op_vix_store(vreg_file_, core_, rsdata, vs3, vtype_.vsew, vl_, stride, vmask);
       break;
     }
     default:
