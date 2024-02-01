@@ -1738,7 +1738,7 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
           case 16: { // vfmv.f.s
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
-              auto &dest = freg_file_.at(t).at(rdest);
+              auto &dest = rddata[t].u64;
               vector_op_scalar(dest, vreg_file_, rsrc0, rsrc1, vtype_.vsew);
               DP(1, "Moved " << +dest << " from: " << +rsrc1 << " to: " << +rdest);
             }
@@ -1865,7 +1865,7 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
         case 16: { // vmv.x.s
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
-            auto &dest = ireg_file_.at(t).at(rdest);
+            auto &dest = rddata[t].i;
             vector_op_scalar(dest, vreg_file_, rsrc0, rsrc1, vtype_.vsew);
             DP(1, "Moved " << +dest << " from: " << +rsrc1 << " to: " << +rdest);
           }
