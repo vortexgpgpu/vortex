@@ -14,7 +14,7 @@ if [ "$#" == "0" ];
 then
   # write out test case name explicitely if there are collisions with other test names
   testcases=(vset vmv vslide vmerge vrgather \
-             vle8 vle16 vle32 \
+             vle8.v vle16.v vle32.v \
              vse8 vse16 vse32 \
              vlse8 vlse16 vlse32 \
              vsse8 vsse16 vsse32 \
@@ -24,7 +24,7 @@ then
              vadd vsub vmin vmax vand vor vxor \
              vmseq vmsne vmslt vmsle vmsgt \
              vsll vsrl vsra \
-             vfmin vfmax vfcvt vfwcvt vfncvt vfsqrt vfrsqrt7 vfrec7 vfclass vfmv vfslide vfmerge \
+             vfmin vfmax vfcvt vfsqrt vfrsqrt7 vfrec7 vfclass vfmv vfslide vfmerge \
              vfadd vfredusum vfsub vfredosum vfredmin vfredmax vfsgnj vmf vfdiv vfrdiv vfmul vfrsub \
              vredsum vredand vredor vredxor vredmin vredmax \
              vmand vmor vmxor vmnand vmnor vmxnor \
@@ -33,7 +33,7 @@ then
              vrsub vcompress vnclip \
              vid)
   if [ $XLEN -eq 64 ]; then
-    testcases+=(vle64 vse64 vlse64 vsse64)
+    testcases+=(vle64.v vse64 vlse64 vsse64 vfwcvt vfncvt)
   fi
 else
   testcases="${@}"
