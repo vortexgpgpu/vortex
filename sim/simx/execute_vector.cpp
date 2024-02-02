@@ -901,11 +901,12 @@ void Warp::loadVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
   switch (mop) {
     case 0b00: { // unit-stride
       auto lumop  = instr.getVumop();
-      WordI stride = vtype_.vsew / 8;
       switch (lumop) {
-        case 0b0000: // vle8.v, vle16.v, vle32.v, vle64.v
+        case 0b0000: { // vle8.v, vle16.v, vle32.v, vle64.v
+          WordI stride = vtype_.vsew / 8;
           vector_op_vix_load(vreg_file_, core_, rsdata, rdest, vtype_.vsew, vl_, stride, vmask);
           break;
+        }
         case 0b1000: { // vl1r.v, vl2r.v, vl4r.v, vl8r.v
           uint32_t nreg = instr.getVnf() + 1;
           if (nreg != 1 && nreg != 2 && nreg != 4 && nreg != 8) {
@@ -913,7 +914,9 @@ void Warp::loadVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
             std::abort();
           }
           DP(1, "Whole vector register load with nreg: " << nreg);
-          vector_op_vix_load<uint8_t>(vreg_file_, core_, rsdata, rdest, nreg * VLEN / 8, stride, vmask);
+          uint32_t vl = nreg * VLEN / instr.getVsew();
+          WordI stride = instr.getVsew() / 8;
+          vector_op_vix_load(vreg_file_, core_, rsdata, rdest, instr.getVsew(), vl, stride, vmask);
           break;
         }
         default:
