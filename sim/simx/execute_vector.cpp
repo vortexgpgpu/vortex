@@ -839,6 +839,61 @@ void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Core 
   }
 }
 
+template <typename DT>
+void vector_op_vv_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc1, uint32_t rdest, uint32_t iSew, uint32_t vl, uint32_t vmask) {
+  uint32_t vsew = sizeof(DT) * 8;
+  for (uint32_t i = 0; i < vl; i++) {
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    Word offset = 0;
+    switch (iSew) {
+      case 8:
+        offset = getVregData<uint8_t>(vreg_file, rsrc1, i);
+        break;
+      case 16:
+        offset = getVregData<uint16_t>(vreg_file, rsrc1, i);
+        break;
+      case 32:
+        offset = getVregData<uint32_t>(vreg_file, rsrc1, i);
+        break;
+      case 64:
+        offset = getVregData<uint64_t>(vreg_file, rsrc1, i);
+        break;
+      default:
+        std::cout << "Unsupported iSew: " << iSew << std::endl;
+        std::abort();
+    }
+    
+    Word mem_addr = ((rsdata[0][0].i) & 0xFFFFFFFC) + offset;
+    Word mem_data = 0;
+    core_->dcache_read(&mem_data, mem_addr, vsew / 8);
+    DP(1, "VLUX/VLOX - Loading data " << mem_data << " from: " << mem_addr << " with offset: " << std::dec << offset << " to vec reg: " << getVreg<DT>(rdest, i));
+    DT &result = getVregData<DT>(vreg_file, rdest, i);
+    DP(1, "Previous data: " << +result);
+    result = (DT) mem_data;
+  }
+}
+
+void vector_op_vv_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t iSew, uint32_t vl, uint32_t vmask) {
+  switch (vsew) {
+    case 8:
+      vector_op_vv_load<uint8_t>(vreg_file, core_, rsdata, rsrc1, rdest, iSew, vl, vmask);
+      break;
+    case 16:
+      vector_op_vv_load<uint16_t>(vreg_file, core_, rsdata, rsrc1, rdest, iSew, vl, vmask);
+      break;
+    case 32:
+      vector_op_vv_load<uint32_t>(vreg_file, core_, rsdata, rsrc1, rdest, iSew, vl, vmask);
+      break;
+    case 64:
+      vector_op_vv_load<uint64_t>(vreg_file, core_, rsdata, rsrc1, rdest, iSew, vl, vmask);
+      break;
+    default:
+      std::cout << "Failed to execute VLUX/VLOX for vsew: " << vsew << std::endl;
+      std::abort();
+  }
+}
+
 void Warp::loadVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
   auto vmask  = instr.getVmask();
   auto rdest  = instr.getRDest();
@@ -874,6 +929,10 @@ void Warp::loadVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
       vector_op_vix_load(vreg_file_, core_, rsdata, rdest, vtype_.vsew, vl_, stride, vmask);
       break;
     }
+    case 0b01: // indexed - unordered, vluxei8.v, vluxei16.v, vluxei32.v, vluxei64.v
+    case 0b11: // indexed - ordered, vloxei8.v, vloxei16.v, vloxei32.v, vloxei64.v
+      vector_op_vv_load(vreg_file_, core_, rsdata, instr.getRSrc(1), rdest, vtype_.vsew, instr.getVsew(), vl_, vmask);
+      break;
     default:
       std::cout << "Load vector - unsupported mop: " << mop << std::endl;
       std::abort();
@@ -909,6 +968,58 @@ void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Core
       break;
     default:
       std::cout << "Failed to execute VSE for vsew: " << vsew << std::endl;
+      std::abort();
+  }
+}
+
+template <typename DT>
+void vector_op_vv_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc1, uint32_t rsrc3, uint32_t iSew, uint32_t vl, uint32_t vmask) {
+  uint32_t vsew = sizeof(DT) * 8;
+  for (uint32_t i = 0; i < vl; i++) {
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    Word offset = 0;
+    switch (iSew) {
+      case 8:
+        offset = getVregData<uint8_t>(vreg_file, rsrc1, i);
+        break;
+      case 16:
+        offset = getVregData<uint16_t>(vreg_file, rsrc1, i);
+        break;
+      case 32:
+        offset = getVregData<uint32_t>(vreg_file, rsrc1, i);
+        break;
+      case 64:
+        offset = getVregData<uint64_t>(vreg_file, rsrc1, i);
+        break;
+      default:
+        std::cout << "Unsupported iSew: " << iSew << std::endl;
+        std::abort();
+    }
+    
+    Word mem_addr = rsdata[0][0].i + offset;
+    Word mem_data = getVregData<DT>(vreg_file, rsrc3, i);
+    DP(1, "VSUX/VSOX - Storing: " << std::hex << mem_data << " at: " << mem_addr << " with offset: " << std::dec << offset << " from vec reg: " << getVreg<DT>(rsrc3, i));
+    core_->dcache_write(&mem_data, mem_addr, vsew / 8);
+  }
+}
+
+void vector_op_vv_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Core *core_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc1, uint32_t rsrc3, uint32_t vsew, uint32_t iSew, uint32_t vl, uint32_t vmask) {
+  switch (vsew) {
+    case 8:
+      vector_op_vv_store<uint8_t>(vreg_file, core_, rsdata, rsrc1, rsrc3, iSew, vl, vmask);
+      break;
+    case 16:
+      vector_op_vv_store<uint16_t>(vreg_file, core_, rsdata, rsrc1, rsrc3, iSew, vl, vmask);
+      break;
+    case 32:
+      vector_op_vv_store<uint32_t>(vreg_file, core_, rsdata, rsrc1, rsrc3, iSew, vl, vmask);
+      break;
+    case 64:
+      vector_op_vv_store<uint64_t>(vreg_file, core_, rsdata, rsrc1, rsrc3, iSew, vl, vmask);
+      break;
+    default:
+      std::cout << "Failed to execute VSUX/VSOX for vsew: " << vsew << std::endl;
       std::abort();
   }
 }
@@ -949,6 +1060,10 @@ void Warp::storeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
       vector_op_vix_store(vreg_file_, core_, rsdata, vs3, vtype_.vsew, vl_, stride, vmask);
       break;
     }
+    case 0b01: // indexed - unordered, vsuxei8.v, vsuxei16.v, vsuxei32.v, vsuxei64.v
+    case 0b11: // indexed - ordered, vsoxei8.v, vsoxei16.v, vsoxei32.v, vsoxei64.v
+      vector_op_vv_store(vreg_file_, core_, rsdata, instr.getRSrc(1), instr.getRSrc(2), vtype_.vsew, instr.getVsew(), vl_, vmask);
+      break;
     default:
       std::cout << "Store vector - unsupported mop: " << mop << std::endl;
       std::abort();      

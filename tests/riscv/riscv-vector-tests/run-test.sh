@@ -18,6 +18,7 @@ then
              vse8 vse16 vse32 \
              vlse8 vlse16 vlse32 \
              vsse8 vsse16 vsse32 \
+             vloxei vluxei vsoxei vsuxei \
              vl1r vl2r vl4r vl8r \
              vs1r vs2r vs4r vs8r \
              vadd vsub vmin vmax vand vor vxor \
