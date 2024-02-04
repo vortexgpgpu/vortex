@@ -31,6 +31,7 @@ then
              vdiv vrem vmul.v vmulh.v vmulhu.v \
              vwaddu.v vwadd.v vwsubu.v vwsub.v vwmulu.v vwmul.v \
              vrsub vcompress vnclip \
+             vsext vzext \
              vid)
   if [ $XLEN -eq 64 ]; then
     testcases+=(vle64.v vse64 vlse64 vsse64 vfwcvt vfncvt)

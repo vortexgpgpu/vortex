@@ -550,6 +550,15 @@ class Funary1 {
 };
 
 template <typename T, typename R>
+class Xunary0 {
+  public:
+    static R apply(T, T second) {
+      return second;
+    }
+    static std::string name() {return "Xunary0";}
+};
+
+template <typename T, typename R>
 class Feq {
   public:
     static R apply(T first, T second) {
@@ -1203,6 +1212,69 @@ void vector_op_vix_n(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint3
     vector_op_vix_n<OP, DT64, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
   } else {
     std::cout << "Failed to execute VI/VX narrowing for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP>
+void vector_op_vix_ext(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 16) {
+    switch (src1) {
+      case 0b00110: // vzext.vf2
+        vector_op_vix_w<OP, uint8_t, uint16_t>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+        break;
+      case 0b00111: // vsext.vf2
+        vector_op_vix_w<OP, int8_t, int16_t>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+        break;
+      default:
+        std::cout << "Xunary0 has unsupported value for vf: " << src1 << std::endl;
+        std::abort();
+    }
+  } else if (vsew == 32) {
+    switch (src1) {
+      case 0b00100: // vzext.vf4
+        vector_op_vix_w<OP, uint8_t, uint32_t>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+        break;
+      case 0b00101: // vsext.vf4
+        vector_op_vix_w<OP, int8_t, int32_t>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+        break;
+      case 0b00110: // vzext.vf2
+        vector_op_vix_w<OP, uint16_t, uint32_t>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+        break;
+      case 0b00111: // vsext.vf2
+        vector_op_vix_w<OP, int16_t, int32_t>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+        break;
+      default:
+        std::cout << "Xunary0 has unsupported value for vf: " << src1 << std::endl;
+        std::abort();
+    }
+  } else if (vsew == 64) {
+    switch (src1) {
+      case 0b00010: // vzext.vf8
+        vector_op_vix_w<OP, uint8_t, uint64_t>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+        break;
+      case 0b00011: // vsext.vf8
+        vector_op_vix_w<OP, int8_t, int64_t>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+        break;
+      case 0b00100: // vzext.vf4
+        vector_op_vix_w<OP, uint16_t, uint64_t>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+        break;
+      case 0b00101: // vsext.vf4
+        vector_op_vix_w<OP, int16_t, int64_t>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+        break;
+      case 0b00110: // vzext.vf2
+        vector_op_vix_w<OP, uint32_t, uint64_t>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+        break;
+      case 0b00111: // vsext.vf2
+        vector_op_vix_w<OP, int32_t, int64_t>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+        break;
+      default:
+        std::cout << "Xunary0 has unsupported value for vf: " << src1 << std::endl;
+        std::abort();
+    }
+  } else {
+    std::cout << "Failed to execute Xunary0 for vsew: " << vsew << std::endl;
     std::abort();
   }
 }
@@ -1986,6 +2058,16 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             auto &dest = rddata[t].i;
             vector_op_scalar(dest, vreg_file_, rsrc0, rsrc1, vtype_.vsew);
             DP(1, "Moved " << +dest << " from: " << +rsrc1 << " to: " << +rdest);
+          }
+        } break;
+        case 18: { // vzext.vf8, vsext.vf8, vzext.vf4, vsext.vf4, vzext.vf2, vsext.vf2
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+              if ((vtype_.vlmul >> 2) == 1) {
+                std::cout << "Lmul values below 1 are not supported by vzext and vsext." << std::endl;
+                std::abort();
+              }
+              vector_op_vix_ext<Xunary0>(rsrc0, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 20: { // vid.v
