@@ -14,6 +14,9 @@ template <typename T, typename R>
 class Add {
   public:
     static R apply(T first, T second) {
+      return apply(first, second, 0);
+    }
+    static R apply(T first, T second, R) {
       return (R)first + (R)second;
     }
     static std::string name() {return "Add";}
@@ -23,6 +26,9 @@ template <typename T, typename R>
 class Sub {
   public:
     static R apply(T first, T second) {
+      return apply(first, second, 0);
+    }
+    static R apply(T first, T second, R) {
       return (R)second - (R)first;
     }
     static std::string name() {return "Sub";}
@@ -73,6 +79,9 @@ template <typename T, typename R>
 class Mul {
   public:
     static R apply(T first, T second) {
+      return apply(first, second, 0);
+    }
+    static R apply(T first, T second, R) {
       return (R)first * (R)second;
     }
     static std::string name() {return "Mul";}
@@ -96,6 +105,15 @@ class Mulhu {
       return ((__uint128_t)first * (__uint128_t)second) >> (sizeof(T) * 8);
     }
     static std::string name() {return "Mulhu";}
+};
+
+template <typename T, typename R>
+class Macc {
+  public:
+    static R apply(T first, T second, R third) {
+      return ((R)first * (R)second) + third;
+    }
+    static std::string name() {return "Macc";}
 };
 
 template <typename T, typename R>
@@ -390,6 +408,9 @@ template <typename T, typename R>
 class Fcvt {
   public:
     static R apply(T first, T second) {
+      return apply(first, second, 0);
+    }
+    static R apply(T first, T second, T) {
       // ignoring flags for now
       uint32_t fflags = 0;
       // ignoring rounding mode for now
@@ -552,7 +573,7 @@ class Funary1 {
 template <typename T, typename R>
 class Xunary0 {
   public:
-    static R apply(T, T second) {
+    static R apply(T, T second, T) {
       return second;
     }
     static std::string name() {return "Xunary0";}
@@ -1167,8 +1188,9 @@ void vector_op_vix_w(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32
     if (isMasked(vreg_file, 0, i, vmask)) continue;
 
     DT second = getVregData<DT>(vreg_file, rsrc0, i);
-    DTR result = OP<DT, DTR>::apply(first, second);
-    DP(1, "Widening " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    DTR third = getVregData<DTR>(vreg_file, rdest, i);
+    DTR result = OP<DT, DTR>::apply(first, second, third);
+    DP(1, "Widening " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     getVregData<DTR>(vreg_file, rdest, i) = result;
   }
 }
@@ -1480,8 +1502,9 @@ void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, u
 
     DT first = getVregData<DT>(vreg_file, rsrc0, i);
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
-    DTR result = OP<DT, DTR>::apply(first, second);
-    DP(1, "Widening " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    DTR third = getVregData<DTR>(vreg_file, rdest, i);
+    DTR result = OP<DT, DTR>::apply(first, second, third);
+    DP(1, "Widening " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     getVregData<DTR>(vreg_file, rdest, i) = result;
   }
 }
@@ -2210,6 +2233,18 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             vector_op_vv_w<Mul, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
+        case 60: { // vwmaccu.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_w<Macc, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 61: { // vwmacc.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_w<Macc, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
         default:
           std::cout << "Unrecognised mask vector - vector instruction func3: " << func3 << " func6: " << func6 << std::endl;
           std::abort();
@@ -2865,6 +2900,20 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             if (!tmask_.test(t)) continue;
             auto &src1 = ireg_file_.at(t).at(rsrc0);
             vector_op_vix_w<Mul, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 60: { // vwmaccu.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_w<Macc, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 61: { // vwmacc.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_w<Macc, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         default:
