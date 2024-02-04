@@ -298,18 +298,6 @@
 `define L1_ENABLE
 `endif
 
-`ifdef L2_ENABLE
-`define L2_LINE_SIZE	        `MEM_BLOCK_SIZE
-`else
-`define L2_LINE_SIZE	        `L1_LINE_SIZE
-`endif
-
-`ifdef L3_ENABLE
-`define L3_LINE_SIZE	        `MEM_BLOCK_SIZE
-`else
-`define L3_LINE_SIZE	        `L2_LINE_SIZE
-`endif
-
 `define VX_MEM_BYTEEN_WIDTH     `L3_LINE_SIZE   
 `define VX_MEM_ADDR_WIDTH       (`MEM_ADDR_WIDTH - `CLOG2(`L3_LINE_SIZE))
 `define VX_MEM_DATA_WIDTH       (`L3_LINE_SIZE * 8)

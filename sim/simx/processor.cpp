@@ -33,8 +33,8 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     !L3_ENABLED,
     log2ceil(L3_CACHE_SIZE),  // C
     log2ceil(MEM_BLOCK_SIZE), // L
-    log2ceil(L3_NUM_WAYS),    // W
-    0,                        // A
+    log2ceil(L2_LINE_SIZE),   // W
+    log2ceil(L3_NUM_WAYS),    // A
     log2ceil(L3_NUM_BANKS),   // B
     XLEN,                     // address bits      
     1,                        // number of ports
@@ -58,7 +58,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     l3cache_->CoreRspPorts.at(i).bind(&clusters_.at(i)->mem_rsp_port);
   }
 
-  // set up memory perf recording
+  // set up memory profiling
   memsim_->MemReqPort.tx_callback([&](const MemReq& req, uint64_t cycle){
     __unused (cycle);
     perf_mem_reads_   += !req.write;
