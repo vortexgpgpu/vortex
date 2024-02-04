@@ -2063,8 +2063,10 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
         case 18: { // vzext.vf8, vsext.vf8, vzext.vf4, vsext.vf4, vzext.vf2, vsext.vf2
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
-              if ((vtype_.vlmul >> 2) == 1) {
-                std::cout << "Lmul values below 1 are not supported by vzext and vsext." << std::endl;
+              bool negativeLmul = vtype_.vlmul >> 2;
+              uint32_t illegalLmul = negativeLmul && !((8 >> (0x8 - vtype_.vlmul)) >> (0x4 - (rsrc0 >> 1)));
+              if (illegalLmul) {
+                std::cout << "Lmul*vf<1/8 is not supported by vzext and vsext." << std::endl;
                 std::abort();
               }
               vector_op_vix_ext<Xunary0>(rsrc0, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
