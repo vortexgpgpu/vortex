@@ -47,8 +47,6 @@ module VX_operands import VX_gpu_pkg::*; #(
         reg [`NUM_THREADS-1:0] cache_tmask_n [ISSUE_RATIO-1:0];
         reg [ISSUE_RATIO-1:0] cache_eop, cache_eop_n;
 
-        reg valid_out_r;
-        reg [DATAW-1:0] data_out_r;
         reg [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data, rs1_data_n;
         reg [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data, rs2_data_n;
         reg [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data, rs3_data_n;
@@ -60,7 +58,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         reg rs3_ready, rs3_ready_n;
         reg data_ready, data_ready_n;
 
-        wire ready_out = operands_if[i].ready;
+        wire stg_valid_in, stg_ready_in;
         
         wire is_rs1_zero = (scoreboard_if[i].data.rs1 == 0);
         wire is_rs2_zero = (scoreboard_if[i].data.rs2 == 0);
@@ -85,7 +83,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 
             case (state)
             STATE_IDLE: begin
-                if (valid_out_r && ready_out) begin
+                if (operands_if[i].valid && operands_if[i].ready) begin
                     data_ready_n = 0;
                 end
                 if (scoreboard_if[i].valid && data_ready_n == 0) begin
@@ -173,37 +171,15 @@ module VX_operands import VX_gpu_pkg::*; #(
         end
 
         always @(posedge clk)  begin
-            if (reset) begin                
+            if (reset) begin 
                 state       <= STATE_IDLE;
                 cache_eop   <= {ISSUE_RATIO{1'b1}};
                 data_ready  <= 0;
-                valid_out_r <= 0;
             end else begin
                 state       <= state_n;
                 cache_eop   <= cache_eop_n;
-                data_ready  <= data_ready_n;                
-                if (~valid_out_r) begin
-                    valid_out_r <= scoreboard_if[i].valid && data_ready;
-                end else if (ready_out) begin
-                    valid_out_r <= 0;
-                end
+                data_ready  <= data_ready_n;
             end
-
-            if (~valid_out_r) begin
-                data_out_r  <= {scoreboard_if[i].data.uuid,
-                                scoreboard_if[i].data.wis,
-                                scoreboard_if[i].data.tmask,
-                                scoreboard_if[i].data.PC, 
-                                scoreboard_if[i].data.wb,
-                                scoreboard_if[i].data.ex_type,
-                                scoreboard_if[i].data.op_type,
-                                scoreboard_if[i].data.op_mod,
-                                scoreboard_if[i].data.use_PC,
-                                scoreboard_if[i].data.use_imm,
-                                scoreboard_if[i].data.imm,
-                                scoreboard_if[i].data.rd};
-            end        
-            
             gpr_rd_rid  <= gpr_rd_rid_n;
             gpr_rd_wis  <= gpr_rd_wis_n;
             rs2_ready   <= rs2_ready_n;
@@ -216,10 +192,35 @@ module VX_operands import VX_gpu_pkg::*; #(
             cache_data  <= cache_data_n;
             cache_reg   <= cache_reg_n;
             cache_tmask <= cache_tmask_n;
-        end        
+        end
 
-        assign operands_if[i].valid = valid_out_r;
-        assign {operands_if[i].data.uuid,
+        assign stg_valid_in = scoreboard_if[i].valid && data_ready;
+        assign scoreboard_if[i].ready = stg_ready_in && data_ready;        
+
+        VX_toggle_buffer #(
+            .DATAW (DATAW)
+        ) staging_buffer (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (stg_valid_in),
+            .data_in   ({
+                scoreboard_if[i].data.uuid,
+                scoreboard_if[i].data.wis,
+                scoreboard_if[i].data.tmask,
+                scoreboard_if[i].data.PC, 
+                scoreboard_if[i].data.wb,
+                scoreboard_if[i].data.ex_type,
+                scoreboard_if[i].data.op_type,
+                scoreboard_if[i].data.op_mod,
+                scoreboard_if[i].data.use_PC,
+                scoreboard_if[i].data.use_imm,
+                scoreboard_if[i].data.imm,
+                scoreboard_if[i].data.rd
+            }),
+            .ready_in  (stg_ready_in),
+            .valid_out (operands_if[i].valid),
+            .data_out  ({
+                operands_if[i].data.uuid,
                 operands_if[i].data.wis,
                 operands_if[i].data.tmask,
                 operands_if[i].data.PC, 
@@ -230,12 +231,14 @@ module VX_operands import VX_gpu_pkg::*; #(
                 operands_if[i].data.use_PC,
                 operands_if[i].data.use_imm,
                 operands_if[i].data.imm,
-                operands_if[i].data.rd} = data_out_r;
+                operands_if[i].data.rd
+            }),
+            .ready_out (operands_if[i].ready)
+        );
+
         assign operands_if[i].data.rs1_data = rs1_data;
         assign operands_if[i].data.rs2_data = rs2_data;
         assign operands_if[i].data.rs3_data = rs3_data;
-
-        assign scoreboard_if[i].ready = ~valid_out_r && data_ready;
 
         // GPR banks
 
