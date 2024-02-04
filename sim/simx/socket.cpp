@@ -44,7 +44,7 @@ Socket::Socket(const SimContext& ctx,
     XLEN,                   // address bits
     1,                      // number of ports
     1,                      // number of inputs
-    true,                   // write-through
+    false,                  // write-through
     false,                  // write response
     (uint8_t)arch.num_warps(), // mshr
     2,                      // pipeline latency
