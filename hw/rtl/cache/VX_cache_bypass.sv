@@ -130,20 +130,20 @@ module VX_cache_bypass #(
 
     assign core_req_valid_in_nc = core_req_valid_in & core_req_nc_idxs;
 
-    wire core_req_in_fire = | (core_req_valid_in & core_req_ready_in);
+    wire core_req_nc_ready = ~mem_req_valid_in && mem_req_ready_out;
 
     VX_generic_arbiter #(
         .NUM_REQS    (NUM_REQS),
         .TYPE        (PASSTHRU ? "R" : "P"),
         .LOCK_ENABLE (1)
-    ) req_arb (
+    ) core_req_nc_arb (
         .clk          (clk),
-        .reset        (reset),
-        .unlock       (core_req_in_fire),
+        .reset        (reset),        
         .requests     (core_req_valid_in_nc),        
         .grant_index  (core_req_nc_idx),
         .grant_onehot (core_req_nc_sel),
-        .grant_valid  (core_req_nc_valid)
+        .grant_valid  (core_req_nc_valid),
+        .grant_unlock (core_req_nc_ready)
     );
 
     assign core_req_valid_out  = core_req_valid_in & ~core_req_nc_idxs;
@@ -164,7 +164,7 @@ module VX_cache_bypass #(
     end
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign core_req_ready_in[i] = core_req_valid_in_nc[i] ? (~mem_req_valid_in && mem_req_ready_out && core_req_nc_sel[i]) 
+        assign core_req_ready_in[i] = core_req_valid_in_nc[i] ? (core_req_nc_ready && core_req_nc_sel[i]) 
                                                               : core_req_ready_out[i];
     end
 
