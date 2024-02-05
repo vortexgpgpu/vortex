@@ -25,11 +25,11 @@ then
              vmseq vmsne vmslt vmsle vmsgt \
              vsll vsrl vsra \
              vfmin vfmax vfcvt vfsqrt vfrsqrt7 vfrec7 vfclass vfmv vfslide vfmerge \
-             vfadd vfredusum vfsub vfredosum vfredmin vfredmax vfsgnj vmf vfdiv vfrdiv vfmul vfrsub \
+             vfadd vfredusum vfsub vfredosum vfredmin vfredmax vfsgnj vmf vfdiv vfrdiv vfmul vfrsub vfmacc vfnmsac \
              vredsum vredand vredor vredxor vredmin vredmax \
              vmand vmor vmxor vmnand vmnor vmxnor \
              vdiv vrem vmul.v vmulh.v vmulhu.v \
-             vwaddu.v vwadd.v vwsubu.v vwsub.v vwmulu.v vwmul.v \
+             vwaddu.v vwadd.v vwsubu.v vwsub.v vwmulu.v vwmul.v vwmacc.v vwmaccu.v \
              vrsub vcompress vnclip \
              vsext vzext \
              vid)

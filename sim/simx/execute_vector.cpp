@@ -13,9 +13,6 @@ using namespace vortex;
 template <typename T, typename R>
 class Add {
   public:
-    static R apply(T first, T second) {
-      return apply(first, second, 0);
-    }
     static R apply(T first, T second, R) {
       return (R)first + (R)second;
     }
@@ -25,9 +22,6 @@ class Add {
 template <typename T, typename R>
 class Sub {
   public:
-    static R apply(T first, T second) {
-      return apply(first, second, 0);
-    }
     static R apply(T first, T second, R) {
       return (R)second - (R)first;
     }
@@ -37,7 +31,7 @@ class Sub {
 template <typename T, typename R>
 class Rsub {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return first - second;
     }
     static std::string name() {return "Rsub";}
@@ -46,7 +40,7 @@ class Rsub {
 template <typename T, typename R>
 class Div {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // logic taken from scalar div
       if (first == 0) {
         return -1;
@@ -62,7 +56,7 @@ class Div {
 template <typename T, typename R>
 class Rem {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // logic taken from scalar rem
       if (first == 0) {
         return second;
@@ -78,9 +72,6 @@ class Rem {
 template <typename T, typename R>
 class Mul {
   public:
-    static R apply(T first, T second) {
-      return apply(first, second, 0);
-    }
     static R apply(T first, T second, R) {
       return (R)first * (R)second;
     }
@@ -90,7 +81,7 @@ class Mul {
 template <typename T, typename R>
 class Mulh {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       __int128_t first_ext = sext((__int128_t)second, (sizeof(T) * 8));
       __int128_t second_ext = sext((__int128_t)first, (sizeof(T) * 8));
       return (first_ext * second_ext) >> (sizeof(T) * 8);
@@ -101,7 +92,7 @@ class Mulh {
 template <typename T, typename R>
 class Mulhu {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return ((__uint128_t)first * (__uint128_t)second) >> (sizeof(T) * 8);
     }
     static std::string name() {return "Mulhu";}
@@ -119,7 +110,7 @@ class Macc {
 template <typename T, typename R>
 class Min {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return std::min(first, second);
     }
     static std::string name() {return "Min";}
@@ -128,7 +119,7 @@ class Min {
 template <typename T, typename R>
 class Max {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return std::max(first, second);
     }
     static std::string name() {return "Max";}
@@ -137,7 +128,7 @@ class Max {
 template <typename T, typename R>
 class And {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return first & second;
     }
     static std::string name() {return "And";}
@@ -146,7 +137,7 @@ class And {
 template <typename T, typename R>
 class Or {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return first | second;
     }
     static std::string name() {return "Or";}
@@ -155,7 +146,7 @@ class Or {
 template <typename T, typename R>
 class Xor {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return first ^ second;
     }
     static std::string name() {return "Xor";}
@@ -164,7 +155,7 @@ class Xor {
 template <typename T, typename R>
 class Sll {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // Only the low lg2(SEW) bits of the shift-amount value are used to control the shift amount.
       return second << (first & (sizeof(T) * 8 - 1));
     }
@@ -174,7 +165,7 @@ class Sll {
 template <typename T, typename R>
 class SrlSra {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // Only the low lg2(SEW) bits of the shift-amount value are used to control the shift amount.
       return second >> (first & (sizeof(T) * 8 - 1));
     }
@@ -184,7 +175,7 @@ class SrlSra {
 template <typename T, typename R>
 class Eq {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return first == second;
     }
     static std::string name() {return "Eq";}
@@ -193,7 +184,7 @@ class Eq {
 template <typename T, typename R>
 class Ne {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return first != second;
     }
     static std::string name() {return "Ne";}
@@ -202,7 +193,7 @@ class Ne {
 template <typename T, typename R>
 class Lt {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return first > second;
     }
     static std::string name() {return "Lt";}
@@ -211,7 +202,7 @@ class Lt {
 template <typename T, typename R>
 class Le {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return first >= second;
     }
     static std::string name() {return "Le";}
@@ -220,7 +211,7 @@ class Le {
 template <typename T, typename R>
 class Gt {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return first < second;
     }
     static std::string name() {return "Gt";}
@@ -229,7 +220,7 @@ class Gt {
 template <typename T, typename R>
 class AndNot {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return second & ~first;
     }
     static std::string name() {return "AndNot";}
@@ -238,7 +229,7 @@ class AndNot {
 template <typename T, typename R>
 class OrNot {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return second | ~first;
     }
     static std::string name() {return "OrNot";}
@@ -247,7 +238,7 @@ class OrNot {
 template <typename T, typename R>
 class Nand {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return ~(second & first);
     }
     static std::string name() {return "Nand";}
@@ -256,7 +247,7 @@ class Nand {
 template <typename T, typename R>
 class Mv {
   public:
-    static R apply(T first, T) {
+    static R apply(T first, T, R) {
       return first;
     }
     static std::string name() {return "Mv";}
@@ -265,7 +256,7 @@ class Mv {
 template <typename T, typename R>
 class Nor {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return ~(second | first);
     }
     static std::string name() {return "Nor";}
@@ -274,7 +265,7 @@ class Nor {
 template <typename T, typename R>
 class Xnor {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       return ~(second ^ first);
     }
     static std::string name() {return "Xnor";}
@@ -283,7 +274,7 @@ class Xnor {
 template <typename T, typename R>
 class Fadd {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring flags for now
       uint32_t fflags = 0;
       // ignoring rounding mode for now
@@ -303,7 +294,7 @@ class Fadd {
 template <typename T, typename R>
 class Fsub {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring flags for now
       uint32_t fflags = 0;
       // ignoring rounding mode for now
@@ -321,9 +312,49 @@ class Fsub {
 };
 
 template <typename T, typename R>
+class Fmacc {
+  public:
+    static R apply(T first, T second, R third) {
+      // ignoring flags for now
+      uint32_t fflags = 0;
+      // ignoring rounding mode for now
+      uint32_t frm = 0;
+      if (sizeof(T) == 4) {
+        return rv_fmadd_s(first, second, third, frm, &fflags);
+      } else if (sizeof(T) == 8) {
+        return rv_fmadd_d(first, second, third, frm, &fflags);
+      } else {
+        std::cout << "Fmacc only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Fmacc";}
+};
+
+template <typename T, typename R>
+class Fnmsac {
+  public:
+    static R apply(T first, T second, R third) {
+      // ignoring flags for now
+      uint32_t fflags = 0;
+      // ignoring rounding mode for now
+      uint32_t frm = 0;
+      if (sizeof(T) == 4) {
+        return rv_fnmadd_s(first, second, rv_fsgnjn_s(third, third), frm, &fflags);
+      } else if (sizeof(T) == 8) {
+        return rv_fnmadd_d(first, second, rv_fsgnjn_d(third, third), frm, &fflags);
+      } else {
+        std::cout << "Fnmsac only supports f32 and f64" << std::endl;
+        std::abort();
+      }
+    }
+    static std::string name() {return "Fnmsac";}
+};
+
+template <typename T, typename R>
 class Fmin {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring rounding modes for now
       uint32_t fflags = 0;
       if (sizeof(T) == 4) {
@@ -341,7 +372,7 @@ class Fmin {
 template <typename T, typename R>
 class Fmax {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring rounding modes for now
       uint32_t fflags = 0;
       if (sizeof(T) == 4) {
@@ -359,7 +390,7 @@ class Fmax {
 template <typename T, typename R>
 class Fsgnj {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       if (sizeof(T) == 4) {
         return rv_fsgnj_s(second, first);
       } else if (sizeof(T) == 8) {
@@ -375,7 +406,7 @@ class Fsgnj {
 template <typename T, typename R>
 class Fsgnjn {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       if (sizeof(T) == 4) {
         return rv_fsgnjn_s(second, first);
       } else if (sizeof(T) == 8) {
@@ -391,7 +422,7 @@ class Fsgnjn {
 template <typename T, typename R>
 class Fsgnjx {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       if (sizeof(T) == 4) {
         return rv_fsgnjx_s(second, first);
       } else if (sizeof(T) == 8) {
@@ -407,10 +438,7 @@ class Fsgnjx {
 template <typename T, typename R>
 class Fcvt {
   public:
-    static R apply(T first, T second) {
-      return apply(first, second, 0);
-    }
-    static R apply(T first, T second, T) {
+    static R apply(T first, T second, R) {
       // ignoring flags for now
       uint32_t fflags = 0;
       // ignoring rounding mode for now
@@ -515,7 +543,7 @@ class Fcvt {
 template <typename T, typename R>
 class RFxunary0 {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       if (second == 0) { // vmv.s.x
         return first;
       } else {
@@ -529,7 +557,7 @@ class RFxunary0 {
 template <typename T, typename R>
 class Funary1 {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring flags for now
       uint32_t fflags = 0;
       // ignoring rounding mode for now
@@ -582,7 +610,7 @@ class Xunary0 {
 template <typename T, typename R>
 class Feq {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring flags for now
       uint32_t fflags = 0;
       if (sizeof(T) == 4) {
@@ -600,7 +628,7 @@ class Feq {
 template <typename T, typename R>
 class Fle {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring flags for now
       uint32_t fflags = 0;
       if (sizeof(T) == 4) {
@@ -618,7 +646,7 @@ class Fle {
 template <typename T, typename R>
 class Flt {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring flags for now
       uint32_t fflags = 0;
       if (sizeof(T) == 4) {
@@ -636,7 +664,7 @@ class Flt {
 template <typename T, typename R>
 class Fne {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring flags for now
       uint32_t fflags = 0;
       if (sizeof(T) == 4) {
@@ -654,7 +682,7 @@ class Fne {
 template <typename T, typename R>
 class Fgt {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring flags for now
       uint32_t fflags = 0;
       if (sizeof(T) == 4) {
@@ -672,7 +700,7 @@ class Fgt {
 template <typename T, typename R>
 class Fge {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring flags for now
       uint32_t fflags = 0;
       if (sizeof(T) == 4) {
@@ -690,7 +718,7 @@ class Fge {
 template <typename T, typename R>
 class Fdiv {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring flags for now
       uint32_t fflags = 0;
       // ignoring rounding mode for now
@@ -710,7 +738,7 @@ class Fdiv {
 template <typename T, typename R>
 class Frdiv {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring flags for now
       uint32_t fflags = 0;
       // ignoring rounding mode for now
@@ -730,7 +758,7 @@ class Frdiv {
 template <typename T, typename R>
 class Fmul {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring flags for now
       uint32_t fflags = 0;
       // ignoring rounding mode for now
@@ -750,7 +778,7 @@ class Fmul {
 template <typename T, typename R>
 class Frsub {
   public:
-    static R apply(T first, T second) {
+    static R apply(T first, T second, R) {
       // ignoring flags for now
       uint32_t fflags = 0;
       // ignoring rounding mode for now
@@ -1110,8 +1138,9 @@ void vector_op_vix(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t
     if (isMasked(vreg_file, 0, i, vmask)) continue;
     
     DT second = getVregData<DT>(vreg_file, rsrc0, i);
-    DT result = OP<DT, DT>::apply(first, second);
-    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    DT third = getVregData<DT>(vreg_file, rdest, i);
+    DT result = OP<DT, DT>::apply(first, second, third);
+    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     getVregData<DT>(vreg_file, rdest, i) = result;
   }
 }
@@ -1308,7 +1337,7 @@ void vector_op_vix_mask(DT first, std::vector<std::vector<Byte>> &vreg_file, uin
     if (isMasked(vreg_file, 0, i, vmask)) continue;
 
     DT second = getVregData<DT>(vreg_file, rsrc0, i);
-    bool result = OP<DT, bool>::apply(first, second);
+    bool result = OP<DT, bool>::apply(first, second, 0);
     DP(1, "Integer/float compare mask " << (OP<DT, bool>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
     if (result) {
       getVregData<uint8_t>(vreg_file, rdest, i / 8) |= 1 << (i % 8);
@@ -1413,8 +1442,9 @@ void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uin
 
     DT first  = getVregData<DT>(vreg_file, rsrc0, i);
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
-    DT result = OP<DT, DT>::apply(first, second);
-    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    DT third = getVregData<DT>(vreg_file, rdest, i);
+    DT result = OP<DT, DT>::apply(first, second, third);
+    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     getVregData<DT>(vreg_file, rdest, i) = result;
   }
 }
@@ -1565,7 +1595,7 @@ void vector_op_vv_red(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0,
 
     DT first = getVregData<DT>(vreg_file, rdest, 0);
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
-    DT result = OP<DT, DT>::apply(first, second);
+    DT result = OP<DT, DT>::apply(first, second, 0);
     DP(1, "Reduction " << (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
     getVregData<DT>(vreg_file, rdest, 0) = result;
   } 
@@ -1623,7 +1653,7 @@ void vector_op_vv_mask(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0
 
     DT first = getVregData<DT>(vreg_file, rsrc0, i);
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
-    bool result = OP<DT, bool>::apply(first, second);
+    bool result = OP<DT, bool>::apply(first, second, 0);
     DP(1, "Integer/float compare mask " << (OP<DT, bool>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
     if (result) {
       getVregData<uint8_t>(vreg_file, rdest, i / 8) |= 1 << (i % 8);
@@ -1658,7 +1688,7 @@ void vector_op_vv_mask(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0
     bool first = (firstMask >> (i % 8)) & 0x1;
     uint8_t secondMask = getVregData<uint8_t>(vreg_file, rsrc1, i / 8);
     bool second = (secondMask >> (i % 8)) & 0x1;
-    bool result = OP<uint8_t, uint8_t>::apply(first, second) & 0x1;
+    bool result = OP<uint8_t, uint8_t>::apply(first, second, 0) & 0x1;
     DP(1, "Compare mask bits " << (OP<uint8_t, uint8_t>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
     if (result) {
       getVregData<uint8_t>(vreg_file, rdest, i / 8) |= 1 << (i % 8);
@@ -2018,6 +2048,18 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
               vector_op_vv<Fmul, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 44: { // vfmacc.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv<Fmacc, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 47: { // vfnmsac.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv<Fnmsac, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           default:
@@ -2781,6 +2823,20 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               if (!tmask_.test(t)) continue;
               auto &src1 = freg_file_.at(t).at(rsrc0);
               vector_op_vix<Frsub, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 44: { // vfmacc.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<Fmacc, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 47: { // vfnmsac.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix<Fnmsac, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           default:
