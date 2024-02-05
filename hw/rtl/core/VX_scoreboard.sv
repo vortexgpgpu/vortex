@@ -111,7 +111,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
         reg [`SFU_WIDTH-1:0] sfu_type;
         always @(*) begin
-            case (scoreboard_if[i].data.op_type)
+            case (ibuffer_if[i].data.op_type)
             `INST_SFU_CSRRW,
             `INST_SFU_CSRRS,
             `INST_SFU_CSRRC: sfu_type = `SFU_CSRS;
@@ -179,12 +179,12 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 if (writeback_fire) begin
                     inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] <= 0;            
                 end
-                if (stg_valid_in && stg_ready_in && ibuffer_if[i].data.wb) begin
+                if (ibuffer_if[i].valid && ibuffer_if[i].ready && ibuffer_if[i].data.wb) begin
                     inuse_regs[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd] <= 1;
                 end
             end
         `ifdef PERF_ENABLE
-            if (stg_valid_in && stg_ready_in && ibuffer_if[i].data.wb) begin
+            if (ibuffer_if[i].valid && ibuffer_if[i].ready && ibuffer_if[i].data.wb) begin
                 inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd] <= ibuffer_if[i].data.ex_type;
                 if (ibuffer_if[i].data.ex_type == `EX_SFU) begin
                     inuse_sfu[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd] <= sfu_type;
