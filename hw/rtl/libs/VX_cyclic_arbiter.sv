@@ -21,15 +21,12 @@ module VX_cyclic_arbiter #(
 ) (
     input  wire                     clk,
     input  wire                     reset,
-    input  wire [NUM_REQS-1:0]      requests,           
-    input  wire                     unlock,
+    input  wire [NUM_REQS-1:0]      requests,    
     output wire [LOG_NUM_REQS-1:0]  grant_index,
     output wire [NUM_REQS-1:0]      grant_onehot,   
-    output wire                     grant_valid
+    output wire                     grant_valid,
+    input  wire                     grant_unlock
 );
-    `UNUSED_PARAM (LOCK_ENABLE)
-    `UNUSED_VAR (unlock)
-    
     if (NUM_REQS == 1)  begin  
 
         `UNUSED_VAR (clk)
@@ -51,7 +48,7 @@ module VX_cyclic_arbiter #(
             end else begin                
                 if (!IS_POW2 && grant_index_r == LOG_NUM_REQS'(NUM_REQS-1)) begin
                     grant_index_r <= '0;
-                end else begin
+                end else if (!LOCK_ENABLE || ~grant_valid || grant_unlock) begin
                     grant_index_r <= grant_index_r + LOG_NUM_REQS'(1);
                 end
             end

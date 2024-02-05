@@ -210,7 +210,7 @@ void Core::schedule() {
 void Core::fetch() {
   perf_stats_.ifetch_latency += pending_ifetches_;
 
-  // handle icache reponse
+  // handle icache response
   auto& icache_rsp_port = icache_rsp_ports.at(0);
   if (!icache_rsp_port.empty()){
     auto& mem_rsp = icache_rsp_port.front();
