@@ -54,7 +54,7 @@ module VX_fair_arbiter #(
         end
                
         VX_priority_arbiter #(
-            .NUM_REQS    (NUM_REQS),
+            .NUM_REQS (NUM_REQS)
         ) priority_arbiter (
             .requests     (requests_qual), 
             .grant_index  (grant_index),
