@@ -62,10 +62,10 @@ Cluster::Cluster(const SimContext& ctx,
   snprintf(sname, 100, "cluster%d-l2cache", cluster_id);
   l2cache_ = CacheSim::Create(sname, CacheSim::Config{
     !L2_ENABLED,
-    log2ceil(L2_CACHE_SIZE), // C
-    log2ceil(MEM_BLOCK_SIZE), // L
-    log2ceil(L2_NUM_WAYS),  // W
-    0,                      // A
+    log2ceil(L2_CACHE_SIZE),// C
+    log2ceil(MEM_BLOCK_SIZE),// L
+    log2ceil(L1_LINE_SIZE), // W
+    log2ceil(L2_NUM_WAYS),  // A
     log2ceil(L2_NUM_BANKS), // B
     XLEN,                   // address bits  
     1,                      // number of ports

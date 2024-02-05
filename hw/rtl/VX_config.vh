@@ -136,6 +136,18 @@
 `endif
 `endif
 
+`ifdef L2_ENABLE
+`define L2_LINE_SIZE `MEM_BLOCK_SIZE
+`else
+`define L2_LINE_SIZE `L1_LINE_SIZE
+`endif
+
+`ifdef L3_ENABLE
+`define L3_LINE_SIZE `MEM_BLOCK_SIZE
+`else
+`define L3_LINE_SIZE `L2_LINE_SIZE
+`endif
+
 `ifdef XLEN_64
 
 `ifndef STARTUP_ADDR

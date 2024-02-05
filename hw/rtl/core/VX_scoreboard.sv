@@ -111,7 +111,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
         reg [`SFU_WIDTH-1:0] sfu_type;
         always @(*) begin
-            case (scoreboard_if[i].data.op_type)
+            case (ibuffer_if[i].data.op_type)
             `INST_SFU_CSRRW,
             `INST_SFU_CSRRS,
             `INST_SFU_CSRRC: sfu_type = `SFU_CSRS;
@@ -152,50 +152,46 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         assign perf_issue_stalls_per_cycle[i] = ibuffer_if[i].valid && ~ibuffer_if[i].ready;
     `endif
 
-        reg [DATAW-1:0] data_out_r;
-        reg valid_out_r;
-        wire ready_out;
+        wire [3:0] operands_busy = {inuse_rd, inuse_rs1, inuse_rs2, inuse_rs3};
+        wire operands_ready = ~(| operands_busy);
+        
+        wire stg_valid_in, stg_ready_in;
+        assign stg_valid_in = ibuffer_if[i].valid && operands_ready;
+        assign ibuffer_if[i].ready = stg_ready_in && operands_ready;        
 
-        wire [3:0] ready_masks = ~{inuse_rd, inuse_rs1, inuse_rs2, inuse_rs3};
-        wire deps_ready = (& ready_masks);
-
-        wire valid_in  = ibuffer_if[i].valid && deps_ready;
-        wire ready_in  = ~valid_out_r && deps_ready;
-        wire [DATAW-1:0] data_in = ibuffer_if[i].data;
-
-        assign ready_out = scoreboard_if[i].ready;
+        VX_stream_buffer #(
+            .DATAW (DATAW)
+        ) staging_buffer (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (stg_valid_in),
+            .data_in   (ibuffer_if[i].data),
+            .ready_in  (stg_ready_in),
+            .valid_out (scoreboard_if[i].valid),
+            .data_out  (scoreboard_if[i].data),
+            .ready_out (scoreboard_if[i].ready)
+        );
 
         always @(posedge clk) begin
             if (reset) begin
-                valid_out_r <= 0;
                 inuse_regs <= '0;
             end else begin
                 if (writeback_fire) begin
                     inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] <= 0;            
                 end
-                if (~valid_out_r) begin
-                    valid_out_r <= valid_in;
-                end else if (ready_out) begin
-                    if (scoreboard_if[i].data.wb) begin
-                        inuse_regs[scoreboard_if[i].data.wis][scoreboard_if[i].data.rd] <= 1;
-                    `ifdef PERF_ENABLE
-                        inuse_units[scoreboard_if[i].data.wis][scoreboard_if[i].data.rd] <= scoreboard_if[i].data.ex_type;
-                        if (scoreboard_if[i].data.ex_type == `EX_SFU) begin
-                            inuse_sfu[scoreboard_if[i].data.wis][scoreboard_if[i].data.rd] <= sfu_type;
-                        end
-                    `endif
-                    end
-                    valid_out_r <= 0;
+                if (ibuffer_if[i].valid && ibuffer_if[i].ready && ibuffer_if[i].data.wb) begin
+                    inuse_regs[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd] <= 1;
                 end
             end
-            if (~valid_out_r) begin
-                data_out_r <= data_in;
+        `ifdef PERF_ENABLE
+            if (ibuffer_if[i].valid && ibuffer_if[i].ready && ibuffer_if[i].data.wb) begin
+                inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd] <= ibuffer_if[i].data.ex_type;
+                if (ibuffer_if[i].data.ex_type == `EX_SFU) begin
+                    inuse_sfu[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd] <= sfu_type;
+                end
             end
+        `endif
         end
-
-        assign ibuffer_if[i].ready    = ready_in;
-        assign scoreboard_if[i].valid = valid_out_r;
-        assign scoreboard_if[i].data  = data_out_r;
 
     `ifdef SIMULATION
         reg [31:0] timeout_ctr;       
@@ -208,7 +204,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 `ifdef DBG_TRACE_CORE_PIPELINE
                     `TRACE(3, ("%d: *** core%0d-scoreboard-stall: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)\n",
                         $time, CORE_ID, wis_to_wid(ibuffer_if[i].data.wis, i), ibuffer_if[i].data.PC, ibuffer_if[i].data.tmask, timeout_ctr,
-                        ~ready_masks, ibuffer_if[i].data.uuid));
+                        operands_busy, ibuffer_if[i].data.uuid));
                 `endif
                     timeout_ctr <= timeout_ctr + 1;
                 end else if (ibuffer_if[i].valid && ibuffer_if[i].ready) begin
@@ -220,7 +216,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         `RUNTIME_ASSERT((timeout_ctr < `STALL_TIMEOUT),
                         ("%t: *** core%0d-scoreboard-timeout: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)",
                             $time, CORE_ID, wis_to_wid(ibuffer_if[i].data.wis, i), ibuffer_if[i].data.PC, ibuffer_if[i].data.tmask, timeout_ctr,
-                            ~ready_masks, ibuffer_if[i].data.uuid));
+                            operands_busy, ibuffer_if[i].data.uuid));
 
         `RUNTIME_ASSERT(~writeback_fire || inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] != 0,
             ("%t: *** core%0d: invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",

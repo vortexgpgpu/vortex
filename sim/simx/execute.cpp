@@ -339,7 +339,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         break;
       }
       case 1: {
-        // RV64I: SLLI
+        // RV32I: SLLI
         rddata[t].i = rsdata[t][0].i << immsrc;
         break;
       }
@@ -360,11 +360,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       }
       case 5: {
         if (func7) {
-          // RV64I: SRAI
+          // RV32I: SRAI
           Word result = rsdata[t][0].i >> immsrc;
           rddata[t].i = result;
         } else {
-          // RV64I: SRLI
+          // RV32I: SRLI
           Word result = rsdata[t][0].u >> immsrc;
           rddata[t].i = result;
         }
