@@ -36,7 +36,7 @@ module VX_generic_arbiter #(
         `UNUSED_VAR (grant_unlock)
 
         VX_priority_arbiter #(
-            .NUM_REQS (NUM_REQS),
+            .NUM_REQS (NUM_REQS)
         ) priority_arbiter (
             .requests     (requests),              
             .grant_valid  (grant_valid),
