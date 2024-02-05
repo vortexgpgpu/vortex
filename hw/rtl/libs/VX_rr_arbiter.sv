@@ -21,18 +21,18 @@ module VX_rr_arbiter #(
     parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS)
 ) (
     input  wire                     clk,
-    input  wire                     reset,          
-    input  wire                     unlock,
+    input  wire                     reset,    
     input  wire [NUM_REQS-1:0]      requests, 
     output wire [LOG_NUM_REQS-1:0]  grant_index,
     output wire [NUM_REQS-1:0]      grant_onehot,   
-    output wire                     grant_valid
+    output wire                     grant_valid,
+    input  wire                     grant_unlock
 );
     if (NUM_REQS == 1)  begin
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
-        `UNUSED_VAR (unlock)
+        `UNUSED_VAR (grant_unlock)
         
         assign grant_index  = '0;
         assign grant_onehot = requests;
@@ -55,7 +55,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= '0;
-            end else if (!LOCK_ENABLE || unlock) begin
+            end else if (!LOCK_ENABLE || grant_unlock) begin
                 state <= grant_index_r;
             end
         end
@@ -85,7 +85,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= '0;
-            end else if (!LOCK_ENABLE || unlock) begin
+            end else if (!LOCK_ENABLE || grant_unlock) begin
                 state <= grant_index_r;
             end
         end
@@ -121,7 +121,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= '0;
-            end else if (!LOCK_ENABLE || unlock) begin
+            end else if (!LOCK_ENABLE || grant_unlock) begin
                 state <= grant_index_r;
             end
         end
@@ -165,7 +165,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= '0;
-            end else if (!LOCK_ENABLE || unlock) begin
+            end else if (!LOCK_ENABLE || grant_unlock) begin
                 state <= grant_index_r;
             end
         end
@@ -219,7 +219,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= '0;
-            end else if (!LOCK_ENABLE || unlock) begin
+            end else if (!LOCK_ENABLE || grant_unlock) begin
                 state <= grant_index_r;
             end
         end
@@ -285,7 +285,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= '0;
-            end else if (!LOCK_ENABLE || unlock) begin
+            end else if (!LOCK_ENABLE || grant_unlock) begin
                 state <= grant_index_r;
             end
         end
@@ -365,7 +365,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= '0;
-            end else if (!LOCK_ENABLE || unlock) begin
+            end else if (!LOCK_ENABLE || grant_unlock) begin
                 state <= grant_index_r;
             end
         end
@@ -399,7 +399,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin
 		    if (reset) begin
 				pointer_reg <= {NUM_REQS{1'b1}};
-			end else if (!LOCK_ENABLE || unlock) begin
+			end else if (!LOCK_ENABLE || grant_unlock) begin
 				if (|req_masked) begin
                     pointer_reg <= mask_higher_pri_regs;
                 end else if (|requests) begin
@@ -443,7 +443,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= '0;
-            end else if (!LOCK_ENABLE || unlock) begin
+            end else if (!LOCK_ENABLE || grant_unlock) begin
                 state <= grant_index_r;
             end
         end

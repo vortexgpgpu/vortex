@@ -21,8 +21,7 @@ module VX_stream_xbar #(
     parameter IN_WIDTH      = `LOG2UP(NUM_INPUTS),
     parameter OUT_WIDTH     = `LOG2UP(NUM_OUTPUTS),
     parameter ARBITER       = "P",
-    parameter LOCK_ENABLE   = 0,
-    parameter OUT_REG      = 0,
+    parameter OUT_REG       = 0,
     parameter MAX_FANOUT    = `MAX_FANOUT,
     parameter PERF_CTR_BITS = `CLOG2(NUM_INPUTS+1)
 ) (
@@ -66,7 +65,6 @@ module VX_stream_xbar #(
                     .NUM_OUTPUTS (1),
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
-                    .LOCK_ENABLE (LOCK_ENABLE),
                     .MAX_FANOUT  (MAX_FANOUT),
                     .OUT_REG     (OUT_REG)
                 ) xbar_arb (
@@ -95,7 +93,6 @@ module VX_stream_xbar #(
                 .NUM_OUTPUTS (1),
                 .DATAW       (DATAW),
                 .ARBITER     (ARBITER),
-                .LOCK_ENABLE (LOCK_ENABLE),
                 .MAX_FANOUT  (MAX_FANOUT),
                 .OUT_REG     (OUT_REG)
             ) xbar_arb (

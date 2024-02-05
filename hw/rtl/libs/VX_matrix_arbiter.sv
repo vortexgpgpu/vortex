@@ -20,18 +20,18 @@ module VX_matrix_arbiter #(
     parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS)
 ) (
     input  wire                     clk,
-    input  wire                     reset,
-    input  wire                     unlock,
+    input  wire                     reset,    
     input  wire [NUM_REQS-1:0]      requests,
     output wire [LOG_NUM_REQS-1:0]  grant_index,
     output wire [NUM_REQS-1:0]      grant_onehot,   
-    output wire                     grant_valid
+    output wire                     grant_valid,
+    input  wire                     grant_unlock
 );
     if (NUM_REQS == 1)  begin
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
-        `UNUSED_VAR (unlock)
+        `UNUSED_VAR (grant_unlock)
         
         assign grant_index  = '0;
         assign grant_onehot = requests;
@@ -71,18 +71,18 @@ module VX_matrix_arbiter #(
         end
 
         if (LOCK_ENABLE == 0) begin
-            `UNUSED_VAR (unlock)
+            `UNUSED_VAR (grant_unlock)
             assign grant_onehot = grant_unqual;
         end else begin
             reg [NUM_REQS-1:0] grant_unqual_prev;
             always @(posedge clk) begin
                 if (reset) begin
                     grant_unqual_prev <= '0;
-                end else if (unlock) begin
+                end else if (grant_unlock) begin
                     grant_unqual_prev <= grant_unqual;
                 end
             end
-            assign grant_onehot = unlock ? grant_unqual : grant_unqual_prev;
+            assign grant_onehot = grant_unlock ? grant_unqual : grant_unqual_prev;
         end
 
         VX_onehot_encoder #(

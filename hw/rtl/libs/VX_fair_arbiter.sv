@@ -21,17 +21,17 @@ module VX_fair_arbiter #(
 ) (
     input  wire                     clk,
     input  wire                     reset,
-    input  wire                     unlock,
     input  wire [NUM_REQS-1:0]      requests, 
     output wire [LOG_NUM_REQS-1:0]  grant_index,
     output wire [NUM_REQS-1:0]      grant_onehot,   
-    output wire                     grant_valid
+    output wire                     grant_valid,
+    input  wire                     grant_unlock
 );
     if (NUM_REQS == 1)  begin                
         
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)        
-        `UNUSED_VAR (unlock)
+        `UNUSED_VAR (grant_unlock)
 
         assign grant_index  = '0;
         assign grant_onehot = requests;
@@ -48,18 +48,14 @@ module VX_fair_arbiter #(
         always @(posedge clk) begin
             if (reset) begin
                 buffer <= '0;
-            end else if (!LOCK_ENABLE || unlock) begin
+            end else if (!LOCK_ENABLE || grant_unlock) begin
                 buffer <= buffer_n;
             end
         end
                
         VX_priority_arbiter #(
             .NUM_REQS    (NUM_REQS),
-            .LOCK_ENABLE (LOCK_ENABLE)
         ) priority_arbiter (
-            .clk          (clk),
-            .reset        (reset),
-            .unlock       (unlock),
             .requests     (requests_qual), 
             .grant_index  (grant_index),
             .grant_onehot (grant_onehot),
