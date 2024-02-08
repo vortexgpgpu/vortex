@@ -22,7 +22,7 @@ rm -f blackbox.*.cache
 unittest() 
 {
 make -C tests/unittest run
-make -C hw/unittest
+make -C hw/unittest > /dev/null
 }
 
 isa() 
@@ -31,33 +31,36 @@ echo "begin isa tests..."
 
 make -C tests/riscv/isa run-simx
 make -C tests/riscv/isa run-rtlsim
-CONFIGS="-DDPI_DISABLE" make -C tests/riscv/isa run-rtlsim
 
-make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim
+make -C sim/rtlsim clean && CONFIGS="-DDPI_DISABLE" make -C sim/rtlsim > /dev/null
+make -C tests/riscv/isa run-rtlsim
+
+make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null
 make -C tests/riscv/isa run-rtlsim-32f
 
-make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI" make -C sim/rtlsim
+make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null
 make -C tests/riscv/isa run-rtlsim-32f
 
-make -C sim/rtlsim clean && CONFIGS="-DFPU_DSP" make -C sim/rtlsim
+make -C sim/rtlsim clean && CONFIGS="-DFPU_DSP" make -C sim/rtlsim > /dev/null
 make -C tests/riscv/isa run-rtlsim-32f
 
 if [ "$XLEN" == "64" ]
 then
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null
         make -C tests/riscv/isa run-rtlsim-64f
 
-        make -C sim/rtlsim clean && CONFIGS="-DEXT_D_ENABLE -DFPU_FPNEW" make -C sim/rtlsim
+        make -C sim/rtlsim clean && CONFIGS="-DEXT_D_ENABLE -DFPU_FPNEW" make -C sim/rtlsim > /dev/null
         make -C tests/riscv/isa run-rtlsim-64d || true
 
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI" make -C sim/rtlsim
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null
         make -C tests/riscv/isa run-rtlsim-64f
 
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_DSP" make -C sim/rtlsim
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_DSP" make -C sim/rtlsim > /dev/null
         make -C tests/riscv/isa run-rtlsim-64fx
 fi
 
-make -C sim/rtlsim clean && make -C sim/rtlsim
+# restore default prebuilt configuration
+make -C sim/rtlsim clean && make -C sim/rtlsim > /dev/null
 
 echo "isa tests done!"
 }
@@ -134,15 +137,16 @@ debug()
 echo "begin debugging tests..."
 
 # test CSV trace generation
-make -C sim/simx clean && DEBUG=3 make -C sim/simx
-make -C sim/rtlsim clean && DEBUG=3 CONFIGS="-DGPR_RESET" make -C sim/rtlsim
+make -C sim/simx clean && DEBUG=3 make -C sim/simx > /dev/null
+make -C sim/rtlsim clean && DEBUG=3 CONFIGS="-DGPR_RESET" make -C sim/rtlsim > /dev/null
 make -C tests/riscv/isa run-simx-32im > run_simx.log
 make -C tests/riscv/isa run-rtlsim-32im > run_rtlsim.log
 ./ci/trace_csv.py -trtlsim run_rtlsim.log -otrace_rtlsim.csv
 ./ci/trace_csv.py -tsimx run_simx.log -otrace_simx.csv
 diff trace_rtlsim.csv trace_simx.csv
-make -C sim/simx clean && make -C sim/simx
-make -C sim/rtlsim clean && make -C sim/rtlsim
+# restore default prebuilt configuration
+make -C sim/simx clean && make -C sim/simx > /dev/null
+make -C sim/rtlsim clean && make -C sim/rtlsim > /dev/null
 
 ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --perf=1 --app=demo --args="-n1"
 ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --perf=1 --app=demo --args="-n1"
