@@ -35,7 +35,7 @@ Vortex is a full-stack open-source RISC-V GPGPU.
 ## Build Instructions
 More detailed build instructions can be found [here](docs/install_vortex.md).
 ### Supported OS Platforms
-- Ubuntu 18.04
+- Ubuntu 18.04, 20.04
 - Centos 7
 ### Toolchain Dependencies
 - [POCL](http://portablecl.org/)
