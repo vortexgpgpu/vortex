@@ -38,7 +38,7 @@ def execute(command):
     while True:
         output = process.stdout.readline()
         if output:
-            line = output.decode('ascii').rstrip()
+            line = output.decode('utf-8').rstrip()
             print(">>> " + line)
             process.stdout.flush()
         ret = process.poll()
