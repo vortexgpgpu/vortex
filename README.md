@@ -54,10 +54,12 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
     $ git clone --recursive https://github.com/vortexgpgpu/vortex.git
     $ cd Vortex
 ### Install prebuilt toolchain
-    By default, the toolchain will install to /opt folder which requires sudo access. 
-    You can install the toolchain to a different location of your choice by setting TOOLDIR (e.g. export TOOLDIR=$HOME/tools).
-    $ export TOOLDIR=/opt
+    # By default, the toolchain will install to /opt folder which requires sudo access. Alternatively, you could also install the toolchain to a different location of your choice by setting the TOOLDIR environment variable
+
+    $ export TOOLDIR=$HOME/tools    
     $ ./ci/toolchain_install.sh --all
+
+### Set up environment variables
     $ source ./ci/toolchain_env.sh
 ### Build Vortex sources
     $ make -s
