@@ -29,6 +29,48 @@ class Sub {
 };
 
 template <typename T, typename R>
+class Ssub {
+  public:
+    static R apply(T first, T second, uint32_t, uint32_t &vxsat_) {
+      // rounding mode is not relevant for this operation
+      T unclippedResult = second - first;
+      R clippedResult = std::clamp(unclippedResult, (T)std::numeric_limits<R>::min(), (T)std::numeric_limits<R>::max());
+      vxsat_ |= clippedResult != unclippedResult;
+      return clippedResult;
+    }
+    static std::string name() {return "Ssub";}
+};
+
+template <typename T, typename R>
+class Ssubu {
+  public:
+    static R apply(T first, T second, uint32_t, uint32_t &vxsat_) {
+      // rounding mode is not relevant for this operation
+      if (first > second) {
+        vxsat_ = true;
+        return 0;
+      } else {
+        vxsat_ = false;
+        return second - first;
+      }
+    }
+    static std::string name() {return "Ssubu";}
+};
+
+template <typename T, typename R>
+class Sadd {
+  public:
+    static R apply(T first, T second, uint32_t, uint32_t &vxsat_) {
+      // rounding mode is not relevant for this operation
+      T unclippedResult = second + first;
+      R clippedResult = std::clamp(unclippedResult, (T)std::numeric_limits<R>::min(), (T)std::numeric_limits<R>::max());
+      vxsat_ |= clippedResult != unclippedResult;
+      return clippedResult;
+    }
+    static std::string name() {return "Sadd";}
+};
+
+template <typename T, typename R>
 class Rsub {
   public:
     static R apply(T first, T second, R) {
@@ -1363,6 +1405,36 @@ void vector_op_vix_n(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint3
   }
 }
 
+template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
+void vector_op_vix_sat(DTR first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    DT second = getVregData<DTR>(vreg_file, rsrc0, i);
+    DTR result = OP<DT, DTR>::apply(first, second, vxrm, vxsat);
+    DP(1, "Saturating " << (OP<DT, DTR>::name()) << "(" << +(DTR)first << ", " << +(DTR)second << ")" << " = " << +(DTR)result);
+    getVregData<DTR>(vreg_file, rdest, i) = result;
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64, typename DT128>
+void vector_op_vix_sat(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat)
+{
+  if (vsew == 8) {
+    vector_op_vix_sat<OP, DT16, DT8>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
+  } else if (vsew == 16) {
+    vector_op_vix_sat<OP, DT32, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
+  } else if (vsew == 32) {
+    vector_op_vix_sat<OP, DT64, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
+  } else if (vsew == 64) {
+    vector_op_vix_sat<OP, DT128, DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
+  } else {
+    std::cout << "Failed to execute VI/VX saturating for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
 template <template <typename DT1, typename DT2> class OP>
 void vector_op_vix_ext(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
 {
@@ -1679,6 +1751,37 @@ void vector_op_vv_n(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, u
   }
 }
 
+template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
+void vector_op_vv_sat(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    DT first = getVregData<DTR>(vreg_file, rsrc0, i);
+    DT second = getVregData<DTR>(vreg_file, rsrc1, i);
+    DTR result = OP<DT, DTR>::apply(first, second, vxrm, vxsat);
+    DP(1, "Saturating " << (OP<DT, DTR>::name()) << "(" << +(DTR)first << ", " << +(DTR)second << ")" << " = " << +(DTR)result);
+    getVregData<DTR>(vreg_file, rdest, i) = result;
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64, typename DT128>
+void vector_op_vv_sat(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat)
+{
+  if (vsew == 8) {
+    vector_op_vv_sat<OP, DT16, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
+  } else if (vsew == 16) {
+    vector_op_vv_sat<OP, DT32, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
+  } else if (vsew == 32) {
+    vector_op_vv_sat<OP, DT64, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
+  } else if (vsew == 64) {
+    vector_op_vv_sat<OP, DT128, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
+  } else {
+    std::cout << "Failed to execute VV saturating for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
 template <template <typename DT1, typename DT2> class OP, typename DT>
 void vector_op_vv_red(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
@@ -1968,6 +2071,38 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
               vector_op_vv_mask<Gt, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 32: { // vsaddu.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+              vector_op_vv_sat<Sadd, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+              core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
+            }
+          } break;
+          case 33: { // vsadd.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+              vector_op_vv_sat<Sadd, int8_t, int16_t, int32_t, int64_t, __int128_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+              core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
+            }
+          } break;
+          case 34: { // vssubu.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+              vector_op_vv_sat<Ssubu, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+              core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
+            }
+          } break;
+          case 35: { // vssub.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+              vector_op_vv_sat<Ssub, int8_t, int16_t, int32_t, int64_t, __int128_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+              core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
             }
           } break;
           case 37: { // vsll.vv
@@ -2536,6 +2671,22 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
           vector_op_vix_mask<Gt, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
+      case 32: { // vsaddu.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+          vector_op_vix_sat<Sadd, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+          core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
+        }
+      } break;
+      case 33: { // vsadd.vi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+          vector_op_vix_sat<Sadd, int8_t, int16_t, int32_t, int64_t, __int128_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+          core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
+        }
+      } break;
       case 37: { // vsll.vi
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
@@ -2751,6 +2902,42 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
             vector_op_vix_mask<Gt, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 32: { // vsaddu.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+            vector_op_vix_sat<Sadd, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+            core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
+          }
+        } break;
+        case 33: { // vsadd.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+            vector_op_vix_sat<Sadd, int8_t, int16_t, int32_t, int64_t, __int128_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+            core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
+          }
+        } break;
+        case 34: { // vssubu.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+            vector_op_vix_sat<Ssubu, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+            core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
+          }
+        } break;
+        case 35: { // vssub.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+            vector_op_vix_sat<Ssub, int8_t, int16_t, int32_t, int64_t, __int128_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+            core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
           }
         } break;
         case 37: { // vsll.vx
