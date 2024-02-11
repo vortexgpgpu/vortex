@@ -37,8 +37,8 @@ jobs:
       script:
         - rm -rf $HOME/build32 && cp -r $PWD $HOME/build32
         - rm -rf $HOME/build64 && cp -r $PWD $HOME/build64
-        - make -C $HOME/build32
-        - XLEN=64 make -C $HOME/build64
+        - make -C $HOME/build32 > /dev/null
+        - XLEN=64 make -C $HOME/build64 > /dev/null
     - stage: test 
       name: unittest
       script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --unittest
