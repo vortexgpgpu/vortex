@@ -1,5 +1,3 @@
-## Altera synthesis Notebook
-
 ## To configure quartus and opae. Run this after logging in.
 source /export/fpga/bin/setup-fpga-env fpga-pac-a10
 

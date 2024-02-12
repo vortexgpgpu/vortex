@@ -86,111 +86,16 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
                                                           `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS));
 
     localparam NC_BYPASS = (NC_ENABLE || PASSTHRU);
-    localparam DIRECT_PASSTHRU = PASSTHRU && (`CS_WORD_SEL_BITS == 0) && (NUM_REQS == 1);
 
-    wire [NUM_REQS-1:0]                     core_req_valid;
-    wire [NUM_REQS-1:0]                     core_req_rw;
-    wire [NUM_REQS-1:0][`CS_WORD_ADDR_WIDTH-1:0] core_req_addr;
-    wire [NUM_REQS-1:0][WORD_SIZE-1:0]      core_req_byteen;
-    wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_req_data;
-    wire [NUM_REQS-1:0][TAG_WIDTH-1:0]      core_req_tag;
-    wire [NUM_REQS-1:0]                     core_req_ready;
+    VX_mem_bus_if #(
+        .DATA_SIZE (WORD_SIZE),
+        .TAG_WIDTH (CORE_TAG_X_WIDTH)
+    ) core_bus_bypass_if[NUM_REQS]();
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign core_req_valid[i]  = core_bus_if[i].req_valid;
-        assign core_req_rw[i]     = core_bus_if[i].req_data.rw;
-        assign core_req_addr[i]   = core_bus_if[i].req_data.addr;
-        assign core_req_byteen[i] = core_bus_if[i].req_data.byteen;
-        assign core_req_data[i]   = core_bus_if[i].req_data.data;
-        assign core_req_tag[i]    = core_bus_if[i].req_data.tag;
-        assign core_bus_if[i].req_ready = core_req_ready[i];
-    end
-
-    ///////////////////////////////////////////////////////////////////////////
-
-    // Core response buffering
-    wire [NUM_REQS-1:0]                  core_rsp_valid_s;
-    wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_rsp_data_s;
-    wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   core_rsp_tag_s;
-    wire [NUM_REQS-1:0]                  core_rsp_ready_s;
-
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
-        
-        `RESET_RELAY (core_rsp_reset, reset);
-
-        VX_elastic_buffer #(
-            .DATAW   (`CS_WORD_WIDTH + TAG_WIDTH),
-            .SIZE    ((NC_BYPASS && !DIRECT_PASSTHRU) ? `OUT_REG_TO_EB_SIZE(CORE_OUT_REG) : 0),
-            .OUT_REG (`OUT_REG_TO_EB_REG(CORE_OUT_REG))
-        ) core_rsp_buf (
-            .clk       (clk),
-            .reset     (core_rsp_reset),
-            .valid_in  (core_rsp_valid_s[i]),
-            .ready_in  (core_rsp_ready_s[i]),
-            .data_in   ({core_rsp_data_s[i], core_rsp_tag_s[i]}),
-            .data_out  ({core_bus_if[i].rsp_data.data, core_bus_if[i].rsp_data.tag}), 
-            .valid_out (core_bus_if[i].rsp_valid),
-            .ready_out (core_bus_if[i].rsp_ready)
-        );
-    end
-
-    ///////////////////////////////////////////////////////////////////////////
-
-    // Memory request buffering
-    wire                             mem_req_valid_s;
-    wire                             mem_req_rw_s;
-    wire [LINE_SIZE-1:0]             mem_req_byteen_s;   
-    wire [`CS_MEM_ADDR_WIDTH-1:0]    mem_req_addr_s;
-    wire [`CS_LINE_WIDTH-1:0]        mem_req_data_s;
-    wire [MEM_TAG_WIDTH-1:0]         mem_req_tag_s;
-    wire                             mem_req_ready_s;
-
-    VX_elastic_buffer #(
-        .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_WIDTH),
-        .SIZE    ((NC_BYPASS && !DIRECT_PASSTHRU) ? `OUT_REG_TO_EB_SIZE(MEM_OUT_REG) : 0),
-        .OUT_REG (`OUT_REG_TO_EB_REG(MEM_OUT_REG))
-    ) mem_req_buf (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (mem_req_valid_s), 
-        .ready_in  (mem_req_ready_s), 
-        .data_in   ({mem_req_rw_s, mem_req_byteen_s, mem_req_addr_s, mem_req_data_s, mem_req_tag_s}),
-        .data_out  ({mem_bus_if.req_data.rw, mem_bus_if.req_data.byteen, mem_bus_if.req_data.addr, mem_bus_if.req_data.data, mem_bus_if.req_data.tag}), 
-        .valid_out (mem_bus_if.req_valid), 
-        .ready_out (mem_bus_if.req_ready)
-    );
-
-    ///////////////////////////////////////////////////////////////////////////
-
-    // Core request    
-    wire [NUM_REQS-1:0]                     core_req_valid_b;
-    wire [NUM_REQS-1:0]                     core_req_rw_b;
-    wire [NUM_REQS-1:0][`CS_WORD_ADDR_WIDTH-1:0] core_req_addr_b;
-    wire [NUM_REQS-1:0][WORD_SIZE-1:0]      core_req_byteen_b;
-    wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_req_data_b;
-    wire [NUM_REQS-1:0][CORE_TAG_X_WIDTH-1:0] core_req_tag_b;
-    wire [NUM_REQS-1:0]                     core_req_ready_b;
-
-    // Core response
-    wire [NUM_REQS-1:0]                     core_rsp_valid_b;
-    wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_rsp_data_b;
-    wire [NUM_REQS-1:0][CORE_TAG_X_WIDTH-1:0] core_rsp_tag_b;
-    wire [NUM_REQS-1:0]                     core_rsp_ready_b;
-
-    // Memory request
-    wire                            mem_req_valid_b;
-    wire                            mem_req_rw_b;
-    wire [`CS_MEM_ADDR_WIDTH-1:0]   mem_req_addr_b;
-    wire [LINE_SIZE-1:0]            mem_req_byteen_b;
-    wire [`CS_LINE_WIDTH-1:0]       mem_req_data_b;
-    wire [MEM_TAG_X_WIDTH-1:0]      mem_req_tag_b;
-    wire                            mem_req_ready_b;
-    
-    // Memory response
-    wire                            mem_rsp_valid_b;
-    wire [`CS_LINE_WIDTH-1:0]       mem_rsp_data_b;
-    wire [MEM_TAG_X_WIDTH-1:0]      mem_rsp_tag_b;
-    wire                            mem_rsp_ready_b;
+    VX_mem_bus_if #(
+        .DATA_SIZE (LINE_SIZE),
+        .TAG_WIDTH (MEM_TAG_X_WIDTH)
+    ) mem_bus_bypass_if();
 
     if (NC_BYPASS) begin
        
@@ -203,100 +108,41 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .NC_ENABLE         (NC_ENABLE),
             .PASSTHRU          (PASSTHRU),
 
-            .CORE_ADDR_WIDTH   (`CS_WORD_ADDR_WIDTH),
-            .CORE_DATA_SIZE    (WORD_SIZE), 
+            .WORD_SIZE         (WORD_SIZE), 
+            .LINE_SIZE         (LINE_SIZE),
+
+            .CORE_ADDR_WIDTH   (`CS_WORD_ADDR_WIDTH),            
             .CORE_TAG_IN_WIDTH (TAG_WIDTH),
                 
-            .MEM_ADDR_WIDTH    (`CS_MEM_ADDR_WIDTH),
-            .MEM_DATA_SIZE     (LINE_SIZE),
+            .MEM_ADDR_WIDTH    (`CS_MEM_ADDR_WIDTH),            
             .MEM_TAG_IN_WIDTH  (MEM_TAG_X_WIDTH),
             .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH),
 
-            .UUID_WIDTH        (UUID_WIDTH)
+            .UUID_WIDTH        (UUID_WIDTH),
+
+            .CORE_OUT_REG      (CORE_OUT_REG),
+            .MEM_OUT_REG       (MEM_OUT_REG)
         ) cache_bypass (
-            .clk                (clk),
-            .reset              (nc_bypass_reset),
+            .clk            (clk),
+            .reset          (nc_bypass_reset),
 
-            // Core request in
-            .core_req_valid_in  (core_req_valid),
-            .core_req_rw_in     (core_req_rw),
-            .core_req_byteen_in (core_req_byteen),
-            .core_req_addr_in   (core_req_addr),
-            .core_req_data_in   (core_req_data), 
-            .core_req_tag_in    (core_req_tag),
-            .core_req_ready_in  (core_req_ready),
+            .core_bus_in_if (core_bus_if),
+            .core_bus_out_if(core_bus_bypass_if),
 
-            // Core request out
-            .core_req_valid_out (core_req_valid_b),
-            .core_req_rw_out    (core_req_rw_b),
-            .core_req_byteen_out(core_req_byteen_b),
-            .core_req_addr_out  (core_req_addr_b),
-            .core_req_data_out  (core_req_data_b), 
-            .core_req_tag_out   (core_req_tag_b),
-            .core_req_ready_out (core_req_ready_b),
-
-            // Core response in
-            .core_rsp_valid_in  (core_rsp_valid_b),
-            .core_rsp_data_in   (core_rsp_data_b),
-            .core_rsp_tag_in    (core_rsp_tag_b),
-            .core_rsp_ready_in  (core_rsp_ready_b),
-
-            // Core response out
-            .core_rsp_valid_out (core_rsp_valid_s),
-            .core_rsp_data_out  (core_rsp_data_s),
-            .core_rsp_tag_out   (core_rsp_tag_s),
-            .core_rsp_ready_out (core_rsp_ready_s),
-
-            // Memory request in
-            .mem_req_valid_in   (mem_req_valid_b),
-            .mem_req_rw_in      (mem_req_rw_b), 
-            .mem_req_addr_in    (mem_req_addr_b),
-            .mem_req_byteen_in  (mem_req_byteen_b),
-            .mem_req_data_in    (mem_req_data_b),
-            .mem_req_tag_in     (mem_req_tag_b),
-            .mem_req_ready_in   (mem_req_ready_b),
-
-            // Memory request out
-            .mem_req_valid_out  (mem_req_valid_s),
-            .mem_req_addr_out   (mem_req_addr_s),
-            .mem_req_rw_out     (mem_req_rw_s),
-            .mem_req_byteen_out (mem_req_byteen_s),
-            .mem_req_data_out   (mem_req_data_s),
-            .mem_req_tag_out    (mem_req_tag_s),
-            .mem_req_ready_out  (mem_req_ready_s),
-
-            // Memory response in
-            .mem_rsp_valid_in   (mem_bus_if.rsp_valid), 
-            .mem_rsp_data_in    (mem_bus_if.rsp_data.data),
-            .mem_rsp_tag_in     (mem_bus_if.rsp_data.tag),
-            .mem_rsp_ready_in   (mem_bus_if.rsp_ready),
-
-            // Memory response out
-            .mem_rsp_valid_out  (mem_rsp_valid_b), 
-            .mem_rsp_data_out   (mem_rsp_data_b),
-            .mem_rsp_tag_out    (mem_rsp_tag_b),
-            .mem_rsp_ready_out  (mem_rsp_ready_b)
+            .mem_bus_in_if  (mem_bus_bypass_if),
+            .mem_bus_out_if (mem_bus_if)
         );
-    end else begin        
-        assign core_req_valid_b = core_req_valid;
-        assign core_req_rw_b    = core_req_rw;
-        assign core_req_addr_b  = core_req_addr;
-        assign core_req_byteen_b= core_req_byteen;
-        assign core_req_data_b  = core_req_data;
-        assign core_req_tag_b   = core_req_tag;
-        assign core_req_ready   = core_req_ready_b;
+    end else begin       
+        for (genvar i = 0; i < NUM_REQS; ++i) begin
+            `ASSIGN_VX_MEM_BUS_IF (core_bus_bypass_if[i], core_bus_if[i]); 
+        end
 
-        assign core_rsp_valid_s = core_rsp_valid_b;
-        assign core_rsp_data_s  = core_rsp_data_b;
-        assign core_rsp_tag_s   = core_rsp_tag_b;
-        assign core_rsp_ready_b = core_rsp_ready_s;
-
-        assign mem_req_valid_s  = mem_req_valid_b;
-        assign mem_req_addr_s   = mem_req_addr_b;
-        assign mem_req_rw_s     = mem_req_rw_b;
-        assign mem_req_byteen_s = mem_req_byteen_b;
-        assign mem_req_data_s   = mem_req_data_b;
-        assign mem_req_ready_b  = mem_req_ready_s;
+        assign mem_bus_if.req_valid        = mem_bus_bypass_if.req_valid;
+        assign mem_bus_if.req_data.addr    = mem_bus_bypass_if.req_data.addr;
+        assign mem_bus_if.req_data.rw      = mem_bus_bypass_if.req_data.rw;
+        assign mem_bus_if.req_data.byteen  = mem_bus_bypass_if.req_data.byteen;
+        assign mem_bus_if.req_data.data    = mem_bus_bypass_if.req_data.data;
+        assign mem_bus_bypass_if.req_ready = mem_bus_if.req_ready;
 
         // Add explicit NC=0 flag to the memory request tag
 
@@ -304,14 +150,14 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .N   (MEM_TAG_WIDTH-1),
             .POS (NC_TAG_BIT)
         ) mem_req_tag_insert (
-            .data_in  (mem_req_tag_b),
+            .data_in  (mem_bus_bypass_if.req_data.tag),
             .sel_in   (1'b0),
-            .data_out (mem_req_tag_s)
-        );
+            .data_out (mem_bus_if.req_data.tag)
+        );       
 
-        assign mem_rsp_valid_b = mem_bus_if.rsp_valid;
-        assign mem_rsp_data_b  = mem_bus_if.rsp_data.data;
-        assign mem_bus_if.rsp_ready = mem_rsp_ready_b;
+        assign mem_bus_bypass_if.rsp_valid = mem_bus_if.rsp_valid;
+        assign mem_bus_bypass_if.rsp_data.data = mem_bus_if.rsp_data.data;
+        assign mem_bus_if.rsp_ready = mem_bus_bypass_if.rsp_ready;
 
         // Remove NC flag from the memory response tag
 
@@ -320,83 +166,35 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .POS (NC_TAG_BIT)
         ) mem_rsp_tag_remove (
             .data_in  (mem_bus_if.rsp_data.tag),
-            .data_out (mem_rsp_tag_b)
+            .data_out (mem_bus_bypass_if.rsp_data.tag)
         );
     end 
 
     if (PASSTHRU != 0) begin
 
-        `UNUSED_VAR (core_req_valid_b)
-        `UNUSED_VAR (core_req_rw_b)
-        `UNUSED_VAR (core_req_addr_b)
-        `UNUSED_VAR (core_req_byteen_b)
-        `UNUSED_VAR (core_req_data_b)
-        `UNUSED_VAR (core_req_tag_b)
-        assign core_req_ready_b = '0;
+        for (genvar i = 0; i < NUM_REQS; ++i) begin
+            `UNUSED_VAR (core_bus_bypass_if[i].req_valid)
+            `UNUSED_VAR (core_bus_bypass_if[i].req_data)
+            assign core_bus_bypass_if[i].req_ready = 0;
 
-        assign core_rsp_valid_b = '0;
-        assign core_rsp_data_b  = '0;
-        assign core_rsp_tag_b   = '0;
-        `UNUSED_VAR (core_rsp_ready_b)
+            assign core_bus_bypass_if[i].rsp_valid = 0;
+            assign core_bus_bypass_if[i].rsp_data  = '0;
+            `UNUSED_VAR (core_bus_bypass_if[i].rsp_ready)
+        end        
 
-        assign mem_req_valid_b  = 0;
-        assign mem_req_addr_b   = '0;
-        assign mem_req_rw_b     = '0;
-        assign mem_req_byteen_b = '0;
-        assign mem_req_data_b   = '0;
-        assign mem_req_tag_b    = '0;
-        `UNUSED_VAR (mem_req_ready_b)
+        assign mem_bus_bypass_if.req_valid = 0;
+        assign mem_bus_bypass_if.req_data = '0;
+        `UNUSED_VAR (mem_bus_bypass_if.req_ready)
 
-        `UNUSED_VAR (mem_rsp_valid_b)
-        `UNUSED_VAR (mem_rsp_data_b)
-        `UNUSED_VAR (mem_rsp_tag_b)
-        assign mem_rsp_ready_b = 0;
+        `UNUSED_VAR (mem_bus_bypass_if.rsp_valid)
+        `UNUSED_VAR (mem_bus_bypass_if.rsp_data)
+        assign mem_bus_bypass_if.rsp_ready = 0;
 
     `ifdef PERF_ENABLE
         assign cache_perf = '0;
     `endif
 
     end else begin
-
-        VX_mem_bus_if #(
-            .DATA_SIZE (WORD_SIZE),
-            .TAG_WIDTH (CORE_TAG_X_WIDTH)
-        ) core_bus_wrap_if[NUM_REQS]();
-
-        VX_mem_bus_if #(
-            .DATA_SIZE (LINE_SIZE), 
-            .TAG_WIDTH (MEM_TAG_X_WIDTH)
-        ) mem_bus_wrap_if();
-
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
-            assign core_bus_wrap_if[i].req_valid  = core_req_valid_b[i];
-            assign core_bus_wrap_if[i].req_data.rw     = core_req_rw_b[i];
-            assign core_bus_wrap_if[i].req_data.addr   = core_req_addr_b[i];
-            assign core_bus_wrap_if[i].req_data.byteen = core_req_byteen_b[i];
-            assign core_bus_wrap_if[i].req_data.data   = core_req_data_b[i];
-            assign core_bus_wrap_if[i].req_data.tag    = core_req_tag_b[i];
-            assign core_req_ready_b[i] = core_bus_wrap_if[i].req_ready;
-        end
-
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
-            assign core_rsp_valid_b[i] = core_bus_wrap_if[i].rsp_valid;
-            assign core_rsp_data_b[i]  = core_bus_wrap_if[i].rsp_data.data;
-            assign core_rsp_tag_b[i]   = core_bus_wrap_if[i].rsp_data.tag;
-            assign core_bus_wrap_if[i].rsp_ready = core_rsp_ready_b[i];
-        end
-
-        assign mem_req_valid_b  = mem_bus_wrap_if.req_valid;
-        assign mem_req_addr_b   = mem_bus_wrap_if.req_data.addr;
-        assign mem_req_rw_b     = mem_bus_wrap_if.req_data.rw;
-        assign mem_req_byteen_b = mem_bus_wrap_if.req_data.byteen;
-        assign mem_req_data_b   = mem_bus_wrap_if.req_data.data;
-        assign mem_req_tag_b    = mem_bus_wrap_if.req_data.tag;
-        assign mem_bus_wrap_if.req_ready = mem_req_ready_b;
-
-        assign mem_bus_wrap_if.rsp_valid = mem_rsp_valid_b;
-        assign mem_bus_wrap_if.rsp_data.data  = mem_rsp_data_b;
-        assign mem_bus_wrap_if.rsp_data.tag   = mem_rsp_tag_b;
-        assign mem_rsp_ready_b = mem_bus_wrap_if.rsp_ready;
 
         `RESET_RELAY (cache_reset, reset);
 
@@ -420,14 +218,12 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         ) cache (
             .clk            (clk),
             .reset          (cache_reset),
-
         `ifdef PERF_ENABLE
             .cache_perf     (cache_perf),
         `endif
-
-            .core_bus_if    (core_bus_wrap_if),
-            .mem_bus_if     (mem_bus_wrap_if)
-        );
+            .core_bus_if    (core_bus_bypass_if),
+            .mem_bus_if     (mem_bus_bypass_if)
+        );       
         
     end
 

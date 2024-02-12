@@ -1,5 +1,3 @@
-## Xilinx synthesis Notebook
-
 # check installed FPGAs
 platforminfo -l
 
