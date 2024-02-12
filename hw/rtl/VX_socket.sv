@@ -102,7 +102,8 @@ module VX_socket import VX_gpu_pkg::*; #(
         .MREQ_SIZE      (`ICACHE_MREQ_SIZE),
         .TAG_WIDTH      (ICACHE_TAG_WIDTH),
         .UUID_WIDTH     (`UUID_WIDTH),
-        .WRITE_ENABLE   (0),
+        .WRITE_ENABLE   (0),      
+        .NC_ENABLE      (0),
         .CORE_OUT_REG   (2),
         .MEM_OUT_REG    (2)
     ) icache (
