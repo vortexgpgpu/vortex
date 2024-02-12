@@ -683,20 +683,6 @@ class Fcvt {
 };
 
 template <typename T, typename R>
-class RFxunary0 {
-  public:
-    static R apply(T first, T second, R) {
-      if (second == 0) { // vmv.s.x, vfmv.s.f
-        return first;
-      } else {
-        std::cout << "RFxunary0 has unsupported value for second: " << second << std::endl;
-        std::abort();
-      }
-    }
-    static std::string name() {return "RFxunary0";}
-};
-
-template <typename T, typename R>
 class Funary1 {
   public:
     static R apply(T first, T second, R) {
