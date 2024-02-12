@@ -686,7 +686,7 @@ template <typename T, typename R>
 class RFxunary0 {
   public:
     static R apply(T first, T second, R) {
-      if (second == 0) { // vmv.s.x
+      if (second == 0) { // vmv.s.x, vfmv.s.f
         return first;
       } else {
         std::cout << "RFxunary0 has unsupported value for second: " << second << std::endl;
@@ -3102,8 +3102,12 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
           case 16: { // vfmv.s.f
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
+              if (rsrc1 != 0) {
+                std::cout << "For vfmv.s.f vs2 must contain v0." << std::endl;
+                std::abort();
+              }
               auto &src1 = freg_file_.at(t).at(rsrc0);
-              vector_op_vix<RFxunary0, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, std::min(vl_, (uint32_t) 1), vmask);
+              vector_op_vix<Mv, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, std::min(vl_, (uint32_t) 1), vmask);
             }
           } break;
           case 24: { // vmfeq.vf
@@ -3272,8 +3276,12 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
         case 16: { // vmv.s.x
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
-            auto &src1 = ireg_file_.at(t).at(rsrc0);
-            vector_op_vix<RFxunary0, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, std::min(vl_, (uint32_t) 1), vmask);
+            if (rsrc1 != 0) {
+              std::cout << "For vmv.s.x vs2 must contain v0." << std::endl;
+              std::abort();
+            }
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix<Mv, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, std::min(vl_, (uint32_t) 1), vmask);
           }
         } break;
         case 32: { // vdivu.vx
