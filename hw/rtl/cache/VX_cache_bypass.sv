@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_platform.vh"
+`include "VX_cache_define.vh"
 
 module VX_cache_bypass #(
     parameter NUM_REQS          = 1,
