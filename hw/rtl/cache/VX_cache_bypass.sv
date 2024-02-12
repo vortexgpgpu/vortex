@@ -358,14 +358,12 @@ module VX_cache_bypass #(
         .data_out (mem_bus_in_if.rsp_data.tag)
     );
 
-    wire [NUM_REQS-1:0] core_rsp_valid_in;
-    wire [NUM_REQS-1:0] core_rsp_ready_out;
+    wire [NUM_REQS-1:0] core_rsp_out_valid;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign core_rsp_valid_in[i] = core_bus_out_if[i].rsp_valid;
-        assign core_rsp_ready_out[i] = core_bus_in_if[i].rsp_ready;
+        assign core_rsp_out_valid[i] = core_bus_out_if[i].rsp_valid;
     end
 
-    assign mem_bus_out_if.rsp_ready = is_mem_rsp_nc ? (~core_rsp_valid_in[rsp_idx] && core_rsp_ready_out[rsp_idx]) : mem_bus_in_if.rsp_ready;
+    assign mem_bus_out_if.rsp_ready = is_mem_rsp_nc ? (~core_rsp_out_valid[rsp_idx] && core_rsp_in_ready[rsp_idx]) : mem_bus_in_if.rsp_ready;
 
 endmodule
