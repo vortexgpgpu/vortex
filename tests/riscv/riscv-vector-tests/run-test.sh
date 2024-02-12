@@ -31,7 +31,7 @@ then
              vmand vmor vmxor vmnand vmnor vmxnor \
              vdiv vrem vmul.v vmulh.v vmulhu.v \
              vwaddu.v vwadd.v vwsubu.v vwsub.v vwmulu.v vwmul.v vwmacc.v vwmaccu.v \
-             vrsub vcompress vnclip vssub vsadd \
+             vrsub vcompress vnclip vssub vsadd vnsra vnsrl \
              vsext vzext \
              vid)
   if [ $XLEN -eq 64 ]; then

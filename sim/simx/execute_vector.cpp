@@ -211,6 +211,10 @@ class SrlSra {
       // Only the low lg2(SEW) bits of the shift-amount value are used to control the shift amount.
       return second >> (first & (sizeof(T) * 8 - 1));
     }
+    static R apply(T first, T second, uint32_t, uint32_t) {
+      // rounding mode and saturation are not relevant for this operation
+      return apply(first, second, 0);
+    }
     static std::string name() {return "SrlSra";}
 };
 
@@ -2123,6 +2127,20 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               vector_op_vv<SrlSra, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
+          case 44: { // vnsrl.wv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              uint32_t vxsat = 0; // saturation is not relevant for this operation
+              vector_op_vv_n<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+            }
+          } break;
+          case 45: { // vnsra.wv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              uint32_t vxsat = 0; // saturation is not relevant for this operation
+              vector_op_vv_n<SrlSra, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+            }
+          } break;
           case 46: { // vnclipu.wv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
@@ -2716,6 +2734,20 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
           vector_op_vix<SrlSra, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
         }
       } break;
+      case 44: { // vnsrl.wi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          uint32_t vxsat = 0; // saturation is not relevant for this operation
+          vector_op_vix_n<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+        }
+      } break;
+      case 45: { // vnsra.wi
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          uint32_t vxsat = 0; // saturation is not relevant for this operation
+          vector_op_vix_n<SrlSra, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+        }
+      } break;
       case 46: { // vnclipu.wi
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
@@ -2959,6 +2991,22 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
             vector_op_vix<SrlSra, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 44: { // vnsrl.wx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            uint32_t vxsat = 0; // saturation is not relevant for this operation
+            vector_op_vix_n<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
+          }
+        } break;
+        case 45: { // vnsra.wx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            uint32_t vxsat = 0; // saturation is not relevant for this operation
+            vector_op_vix_n<SrlSra, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask, 0, vxsat);
           }
         } break;
         case 46: { // vnclipu.wx
