@@ -73,7 +73,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     `UNUSED_VAR (execute_if[0].data.tid)
 
 `ifdef SM_ENABLE
-    `STATIC_ASSERT((1 << `SMEM_LOG_SIZE) == `MEM_BLOCK_SIZE * ((1 << `SMEM_LOG_SIZE) / `MEM_BLOCK_SIZE), ("invalid parameter"))
+    `STATIC_ASSERT(`IS_DIVISBLE((1 << `SMEM_LOG_SIZE), `MEM_BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT(0 == (`SMEM_BASE_ADDR % (1 << `SMEM_LOG_SIZE)), ("invalid parameter"))
     localparam SMEM_START_B = MEM_ADDRW'(`XLEN'(`SMEM_BASE_ADDR) >> MEM_ASHIFT);
     localparam SMEM_END_B = MEM_ADDRW'((`XLEN'(`SMEM_BASE_ADDR) + (1 << `SMEM_LOG_SIZE)) >> MEM_ASHIFT);
@@ -340,25 +340,25 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .reset          (mem_scheduler_reset),
 
         // Input request
-        .req_valid      (mem_req_valid),
-        .req_rw         (mem_req_rw),
-        .req_mask       (mem_req_mask),
-        .req_byteen     (mem_req_byteen),
-        .req_addr       (mem_req_addr),
-        .req_data       (mem_req_data),
-        .req_tag        (mem_req_tag),
-        .req_empty      (mem_req_empty),
-        .req_ready      (mem_req_ready),
-        `UNUSED_PIN     (write_notify),
+        .core_req_valid (mem_req_valid),
+        .core_req_rw    (mem_req_rw),
+        .core_req_mask  (mem_req_mask),
+        .core_req_byteen(mem_req_byteen),
+        .core_req_addr  (mem_req_addr),
+        .core_req_data  (mem_req_data),
+        .core_req_tag   (mem_req_tag),
+        .core_req_ready (mem_req_ready),        
+        .core_req_empty (mem_req_empty),
+        `UNUSED_PIN (core_req_sent),        
         
         // Output response
-        .rsp_valid      (mem_rsp_valid),
-        .rsp_mask       (mem_rsp_mask),
-        .rsp_data       (mem_rsp_data),
-        .rsp_tag        (mem_rsp_tag),
-        .rsp_sop        (mem_rsp_sop),
-        .rsp_eop        (mem_rsp_eop),
-        .rsp_ready      (mem_rsp_ready),
+        .core_rsp_valid (mem_rsp_valid),
+        .core_rsp_mask  (mem_rsp_mask),
+        .core_rsp_data  (mem_rsp_data),
+        .core_rsp_tag   (mem_rsp_tag),
+        .core_rsp_sop   (mem_rsp_sop),
+        .core_rsp_eop   (mem_rsp_eop),
+        .core_rsp_ready (mem_rsp_ready),
 
         // Memory request
         .mem_req_valid  (cache_req_valid),

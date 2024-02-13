@@ -29,7 +29,7 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
     VX_execute_if.master    execute_if [BLOCK_SIZE]
 
 );
-    `STATIC_ASSERT ((`NUM_THREADS == NUM_LANES  * (`NUM_THREADS / NUM_LANES)), ("invalid parameter"))
+    `STATIC_ASSERT (`IS_DIVISBLE(`NUM_THREADS, NUM_LANES), ("invalid parameter"))
     localparam BLOCK_SIZE_W = `LOG2UP(BLOCK_SIZE);
     localparam NUM_PACKETS  = `NUM_THREADS / NUM_LANES;
     localparam PID_BITS     = `CLOG2(NUM_PACKETS);
