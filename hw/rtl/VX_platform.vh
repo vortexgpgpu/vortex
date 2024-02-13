@@ -169,7 +169,8 @@
 `define CLOG2(x)    $clog2(x)
 `define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > (x)) ? 1 : 0))
 `define LOG2UP(x)   (((x) > 1) ? $clog2(x) : 1)
-`define ISPOW2(x)   (((x) != 0) && (0 == ((x) & ((x) - 1))))
+`define IS_POW2(x)   (((x) != 0) && (0 == ((x) & ((x) - 1))))
+`define IS_DIVISBLE(n, d) (((n) % (d)) == 0)
 
 `define ABS(x)      (((x) < 0) ? (-(x)) : (x));
 
@@ -181,13 +182,10 @@
 `define MAX(x, y)   (((x) > (y)) ? (x) : (y))
 `endif
 
-`ifndef CLAMP
 `define CLAMP(x, lo, hi)   (((x) > (hi)) ? (hi) : (((x) < (lo)) ? (lo) : (x)))
-`endif
 
-`ifndef UP
 `define UP(x)       (((x) != 0) ? (x) : 1)
-`endif
+
 
 `define RTRIM(x, s) x[$bits(x)-1:($bits(x)-s)]
 
