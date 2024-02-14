@@ -14,7 +14,7 @@ all:
 	$(MAKE) -C oclprintf
 	$(MAKE) -C blackscholes
 	$(MAKE) -C transpose
-	$(MAKE) -C convolution
+	$(MAKE) -C conv3
 
 run-simx:
 	$(MAKE) -C vecadd run-simx
@@ -32,7 +32,7 @@ run-simx:
 	$(MAKE) -C oclprintf run-simx
 	$(MAKE) -C blackscholes run-simx
 	$(MAKE) -C transpose run-simx
-	$(MAKE) -C convolution run-simx
+	$(MAKE) -C conv3 run-simx
 
 run-rtlsim:
 	$(MAKE) -C vecadd run-rtlsim
@@ -50,7 +50,7 @@ run-rtlsim:
 	$(MAKE) -C lbm run-rtlsim
 	$(MAKE) -C oclprintf run-rtlsim
 	$(MAKE) -C blackscholes run-rtlsim
-	$(MAKE) -C convolution run-rtlsim
+	$(MAKE) -C conv3 run-rtlsim
 
 run-opae:
 	$(MAKE) -C vecadd run-opae
@@ -68,7 +68,7 @@ run-opae:
 	$(MAKE) -C lbm run-opae
 	$(MAKE) -C oclprintf run-opae
 	$(MAKE) -C blackscholes run-opae
-	$(MAKE) -C convolution run-opae
+	$(MAKE) -C conv3 run-opae
 
 clean:
 	$(MAKE) -C vecadd clean
@@ -86,7 +86,7 @@ clean:
 	$(MAKE) -C lbm clean
 	$(MAKE) -C oclprintf clean
 	$(MAKE) -C blackscholes clean
-	$(MAKE) -C convolution clean
+	$(MAKE) -C conv3 clean
 
 clean-all:
 	$(MAKE) -C vecadd clean-all
@@ -104,4 +104,4 @@ clean-all:
 	$(MAKE) -C lbm clean-all
 	$(MAKE) -C oclprintf clean-all
 	$(MAKE) -C blackscholes clean-all
-	$(MAKE) -C convolution clean-all
+	$(MAKE) -C conv3 clean-all

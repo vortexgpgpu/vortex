@@ -1,8 +1,8 @@
-__kernel void conv3x3(__global float* output, 
-                      __global float* input,
-                      __global float* weights, 
-                      const int width, 
-                      const int height) 
+__kernel void conv3(__global float* output, 
+                    __global float* input,
+                    __global float* weights, 
+                    const int width, 
+                    const int height) 
 {
     int x = get_global_id(0);
     int y = get_global_id(1);
@@ -12,7 +12,7 @@ __kernel void conv3x3(__global float* output,
     int paddedX = x + 1;
     int paddedY = y + 1;
 
-    // Compute the convolution sum
+    // Compute 3x3 convolution sum
     float sum = 0.0f;
 
     sum += input[(paddedY - 1) * paddedWidth + (paddedX - 1)] * weights[0]; // Top-left
