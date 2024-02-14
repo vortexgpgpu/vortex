@@ -269,7 +269,7 @@
 
 // Size of Instruction Buffer
 `ifndef IBUF_SIZE
-`define IBUF_SIZE   (2 * (`NUM_WARPS / `ISSUE_WIDTH))
+`define IBUF_SIZE   4
 `endif
 
 // Size of LSU Request Queue
