@@ -16,86 +16,89 @@
 `TRACING_OFF
 module VX_mem_scheduler #(
     parameter `STRING INSTANCE_ID = "",
-    parameter NUM_REQS     = 1,
-    parameter NUM_BANKS    = 1,
+    parameter CORE_REQS    = 1,
+    parameter MEM_CHANNELS = 1,
     parameter ADDR_WIDTH   = 32,
-    parameter DATA_WIDTH   = 32,
+    parameter WORD_SIZE    = 4,
+    parameter LINE_SIZE    = 4,
     parameter TAG_WIDTH    = 8,
-    parameter MEM_TAG_ID   = 0, // upper section of the tag sent to the memory interface
-    parameter UUID_WIDTH   = 0, // upper section of the mem_tag_id containing the UUID
+    parameter TAG_ID_WIDTH = 0, // lower section of the request tag contains the tag identifier
+    parameter UUID_WIDTH   = 0, // upper section of the request tag contains the UUID
     parameter QUEUE_SIZE   = 8,
     parameter RSP_PARTIAL  = 0,
     parameter CORE_OUT_REG = 0,
     parameter MEM_OUT_REG  = 0,
 
-    parameter BYTEENW      = DATA_WIDTH / 8,
-    parameter NUM_BATCHES  = (NUM_REQS + NUM_BANKS - 1) / NUM_BANKS,
+    parameter WORD_WIDTH   = WORD_SIZE * 8,
+    parameter LINE_WIDTH   = LINE_SIZE * 8,
+    parameter MEM_REQS     = (CORE_REQS * WORD_SIZE) / LINE_SIZE,
+    parameter NUM_BATCHES  = (MEM_REQS + MEM_CHANNELS - 1) / MEM_CHANNELS,
     parameter QUEUE_ADDRW  = `CLOG2(QUEUE_SIZE),
     parameter BATCH_SEL_BITS = `CLOG2(NUM_BATCHES),
+    parameter MEM_TAG_ID   = TAG_WIDTH - TAG_ID_WIDTH,
     parameter MEM_TAGW     = MEM_TAG_ID + QUEUE_ADDRW + BATCH_SEL_BITS
 ) (
     input wire clk,
     input wire reset,
 
-    // Input request
+    // Core request
     input wire                              core_req_valid,
     input wire                              core_req_rw,
-    input wire [NUM_REQS-1:0]               core_req_mask,
-    input wire [NUM_REQS-1:0][BYTEENW-1:0]  core_req_byteen,
-    input wire [NUM_REQS-1:0][ADDR_WIDTH-1:0] core_req_addr,
-    input wire [NUM_REQS-1:0][DATA_WIDTH-1:0] core_req_data,
+    input wire [CORE_REQS-1:0]              core_req_mask,
+    input wire [CORE_REQS-1:0][WORD_SIZE-1:0] core_req_byteen,
+    input wire [CORE_REQS-1:0][ADDR_WIDTH-1:0] core_req_addr,
+    input wire [CORE_REQS-1:0][WORD_WIDTH-1:0] core_req_data,
     input wire [TAG_WIDTH-1:0]              core_req_tag,
     output wire                             core_req_ready,
     output wire                             core_req_empty,    
     output wire                             core_req_sent,
 
-    // Output response
+    // Core response
     output wire                             core_rsp_valid,
-    output wire [NUM_REQS-1:0]              core_rsp_mask,
-    output wire [NUM_REQS-1:0][DATA_WIDTH-1:0] core_rsp_data,
+    output wire [CORE_REQS-1:0]             core_rsp_mask,
+    output wire [CORE_REQS-1:0][WORD_WIDTH-1:0] core_rsp_data,
     output wire [TAG_WIDTH-1:0]             core_rsp_tag,
     output wire                             core_rsp_sop,
     output wire                             core_rsp_eop,
     input wire                              core_rsp_ready,
 
     // Memory request
-    output wire [NUM_BANKS-1:0]             mem_req_valid,
-    output wire [NUM_BANKS-1:0]             mem_req_rw,
-    output wire [NUM_BANKS-1:0][BYTEENW-1:0] mem_req_byteen,
-    output wire [NUM_BANKS-1:0][ADDR_WIDTH-1:0] mem_req_addr,
-    output wire [NUM_BANKS-1:0][DATA_WIDTH-1:0] mem_req_data,
-    output wire [NUM_BANKS-1:0][MEM_TAGW-1:0]mem_req_tag,
-    input wire 	[NUM_BANKS-1:0]             mem_req_ready,
+    output wire [MEM_CHANNELS-1:0]          mem_req_valid,
+    output wire [MEM_CHANNELS-1:0]          mem_req_rw,
+    output wire [MEM_CHANNELS-1:0][LINE_SIZE-1:0] mem_req_byteen,
+    output wire [MEM_CHANNELS-1:0][ADDR_WIDTH-1:0] mem_req_addr,
+    output wire [MEM_CHANNELS-1:0][LINE_WIDTH-1:0] mem_req_data,
+    output wire [MEM_CHANNELS-1:0][MEM_TAGW-1:0]mem_req_tag,
+    input wire 	[MEM_CHANNELS-1:0]          mem_req_ready,
 
     // Memory response
-    input wire [NUM_BANKS-1:0]              mem_rsp_valid,
-    input wire [NUM_BANKS-1:0][DATA_WIDTH-1:0] mem_rsp_data,
-    input wire [NUM_BANKS-1:0][MEM_TAGW-1:0] mem_rsp_tag,    
-    output wire [NUM_BANKS-1:0]             mem_rsp_ready
+    input wire [MEM_CHANNELS-1:0]           mem_rsp_valid,
+    input wire [MEM_CHANNELS-1:0][LINE_WIDTH-1:0] mem_rsp_data,
+    input wire [MEM_CHANNELS-1:0][MEM_TAGW-1:0] mem_rsp_tag,    
+    output wire [MEM_CHANNELS-1:0]          mem_rsp_ready
 );
 
-    localparam MEM_TAG_WIDTH   = `UP(MEM_TAG_ID);
+    localparam REQQ_TAG_WIDTH  = MEM_TAG_ID + QUEUE_ADDRW;
     localparam BATCH_SEL_WIDTH = `UP(BATCH_SEL_BITS);
-    localparam TAG_ONLY_WIDTH  = TAG_WIDTH - MEM_TAG_ID;
     localparam STALL_TIMEOUT   = 10000000;
 
+    `STATIC_ASSERT ((WORD_SIZE == LINE_SIZE), ("invalid parameter"))
     `STATIC_ASSERT ((MEM_TAG_ID >= UUID_WIDTH), ("invalid parameter"))
-    `STATIC_ASSERT (`IS_DIVISBLE(DATA_WIDTH, 8), ("invalid parameter"))
     `STATIC_ASSERT ((0 == RSP_PARTIAL) || (1 == RSP_PARTIAL), ("invalid parameter"))
     `RUNTIME_ASSERT ((~core_req_valid || core_req_mask != 0), ("invalid request mask"));
 
-    wire [NUM_BANKS-1:0]            mem_req_valid_s;
-    wire [NUM_BANKS-1:0]            mem_req_mask_s;
-    wire [NUM_BANKS-1:0]            mem_req_rw_s;
-    wire [NUM_BANKS-1:0][BYTEENW-1:0] mem_req_byteen_s;
-    wire [NUM_BANKS-1:0][ADDR_WIDTH-1:0] mem_req_addr_s;
-    wire [NUM_BANKS-1:0][DATA_WIDTH-1:0] mem_req_data_s;
+    wire [MEM_CHANNELS-1:0]         mem_req_valid_s;
+    wire [MEM_CHANNELS-1:0]         mem_req_mask_s;
+    wire [MEM_CHANNELS-1:0]         mem_req_rw_s;
+    wire [MEM_CHANNELS-1:0][LINE_SIZE-1:0] mem_req_byteen_s;
+    wire [MEM_CHANNELS-1:0][ADDR_WIDTH-1:0] mem_req_addr_s;
+    wire [MEM_CHANNELS-1:0][LINE_WIDTH-1:0] mem_req_data_s;
     wire [MEM_TAGW-1:0]             mem_req_tag_s;
-    wire [NUM_BANKS-1:0]            mem_req_ready_s;
+    wire [MEM_CHANNELS-1:0]         mem_req_ready_s;
 
     wire                            mem_rsp_valid_s;
-    wire [NUM_BANKS-1:0]            mem_rsp_mask_s;
-    wire [NUM_BANKS-1:0][DATA_WIDTH-1:0] mem_rsp_data_s;
+    wire [MEM_CHANNELS-1:0]         mem_rsp_mask_s;
+    wire [MEM_CHANNELS-1:0][LINE_WIDTH-1:0] mem_rsp_data_s;
     wire [MEM_TAGW-1:0]             mem_rsp_tag_s;
     wire                            mem_rsp_ready_s;
     wire                            mem_rsp_fire_s;
@@ -105,12 +108,11 @@ module VX_mem_scheduler #(
     wire                            reqq_full;
     wire                            reqq_empty;
     wire                            reqq_rw;
-    wire [NUM_REQS-1:0]             reqq_mask;
-    wire [NUM_REQS-1:0][BYTEENW-1:0] reqq_byteen;
-    wire [NUM_REQS-1:0][ADDR_WIDTH-1:0] reqq_addr;
-    wire [NUM_REQS-1:0][DATA_WIDTH-1:0] reqq_data;
-    wire [QUEUE_ADDRW-1:0]          reqq_tag;
-    wire [MEM_TAG_WIDTH-1:0]        reqq_mtid;
+    wire [CORE_REQS-1:0]            reqq_mask;
+    wire [CORE_REQS-1:0][WORD_SIZE-1:0] reqq_byteen;
+    wire [CORE_REQS-1:0][ADDR_WIDTH-1:0] reqq_addr;
+    wire [CORE_REQS-1:0][WORD_WIDTH-1:0] reqq_data;
+    wire [REQQ_TAG_WIDTH-1:0]       reqq_tag;
 
     wire                            ibuf_push;
     wire                            ibuf_pop;
@@ -118,12 +120,12 @@ module VX_mem_scheduler #(
     wire [QUEUE_ADDRW-1:0]          ibuf_raddr;
     wire                            ibuf_full;
     wire                            ibuf_empty;
-    wire [TAG_ONLY_WIDTH-1:0]       ibuf_din;
-    wire [TAG_ONLY_WIDTH-1:0]       ibuf_dout;
+    wire [TAG_ID_WIDTH-1:0]         ibuf_din;
+    wire [TAG_ID_WIDTH-1:0]         ibuf_dout;
 
     wire                            crsp_valid;
-    wire [NUM_REQS-1:0]             crsp_mask;
-    wire [NUM_REQS-1:0][DATA_WIDTH-1:0] crsp_data;
+    wire [CORE_REQS-1:0]            crsp_mask;
+    wire [CORE_REQS-1:0][WORD_WIDTH-1:0] crsp_data;
     wire [TAG_WIDTH-1:0]            crsp_tag;
     wire                            crsp_sop;
     wire                            crsp_eop;
@@ -136,18 +138,18 @@ module VX_mem_scheduler #(
     assign reqq_push = core_req_valid && core_req_ready;
     assign reqq_pop  = ~reqq_empty && req_sent_all;
     
-    wire [MEM_TAG_WIDTH-1:0] req_mtid;
+    wire [REQQ_TAG_WIDTH-1:0] reqq_tag_u;
     if (MEM_TAG_ID != 0) begin
-        assign req_mtid = core_req_tag[TAG_WIDTH-1 -: MEM_TAG_ID];
+        assign reqq_tag_u = {core_req_tag[TAG_WIDTH-1:TAG_ID_WIDTH], ibuf_waddr};
     end else begin
-        assign req_mtid = '0;
+        assign reqq_tag_u = ibuf_waddr;
     end
 
     wire [`CLOG2(QUEUE_SIZE+1)-1:0] reqq_size;
     `UNUSED_VAR (reqq_size)
 
     VX_fifo_queue #(
-        .DATAW   (1 + NUM_REQS * (1 + BYTEENW + ADDR_WIDTH + DATA_WIDTH) + MEM_TAG_WIDTH + QUEUE_ADDRW),
+        .DATAW   (1 + CORE_REQS * (1 + WORD_SIZE + ADDR_WIDTH + WORD_WIDTH) + REQQ_TAG_WIDTH),
         .DEPTH	 (QUEUE_SIZE),
         .OUT_REG (1)
     ) req_queue (
@@ -155,8 +157,8 @@ module VX_mem_scheduler #(
         .reset      (reset),
         .push       (reqq_push),
         .pop        (reqq_pop),
-        .data_in    ({core_req_rw, core_req_mask, core_req_byteen, core_req_addr, core_req_data, req_mtid, ibuf_waddr}),
-        .data_out   ({reqq_rw, reqq_mask, reqq_byteen, reqq_addr, reqq_data, reqq_mtid, reqq_tag}),
+        .data_in    ({core_req_rw, core_req_mask, core_req_byteen, core_req_addr, core_req_data, reqq_tag_u}),
+        .data_out   ({reqq_rw, reqq_mask, reqq_byteen, reqq_addr, reqq_data, reqq_tag}),
         .full       (reqq_full),
         .empty      (reqq_empty),
         `UNUSED_PIN (alm_full),
@@ -180,10 +182,10 @@ module VX_mem_scheduler #(
     assign ibuf_push  = reqq_push && ~core_req_rw;
     assign ibuf_pop   = crsp_valid && crsp_ready && rsp_complete;
     assign ibuf_raddr = mem_rsp_tag_s[0 +: QUEUE_ADDRW];
-    assign ibuf_din   = core_req_tag[TAG_ONLY_WIDTH-1:0];
+    assign ibuf_din   = core_req_tag[TAG_ID_WIDTH-1:0];
 
     VX_index_buffer #(
-        .DATAW (TAG_ONLY_WIDTH),
+        .DATAW (TAG_ID_WIDTH),
         .SIZE  (QUEUE_SIZE)
     ) req_ibuf (
         .clk          (clk),
@@ -202,18 +204,18 @@ module VX_mem_scheduler #(
 
     // Handle memory requests /////////////////////////////////////////////////
 
-    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0] mem_req_mask_b;
-    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0] mem_req_rw_b;
-    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0][BYTEENW-1:0] mem_req_byteen_b; 
-    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0][ADDR_WIDTH-1:0] mem_req_addr_b;
-    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] mem_req_data_b;
+    wire [NUM_BATCHES-1:0][MEM_CHANNELS-1:0] mem_req_mask_b;
+    wire [NUM_BATCHES-1:0][MEM_CHANNELS-1:0] mem_req_rw_b;
+    wire [NUM_BATCHES-1:0][MEM_CHANNELS-1:0][LINE_SIZE-1:0] mem_req_byteen_b; 
+    wire [NUM_BATCHES-1:0][MEM_CHANNELS-1:0][ADDR_WIDTH-1:0] mem_req_addr_b;
+    wire [NUM_BATCHES-1:0][MEM_CHANNELS-1:0][LINE_WIDTH-1:0] mem_req_data_b;
     
     wire [BATCH_SEL_WIDTH-1:0] req_batch_idx;
 
     for (genvar i = 0; i < NUM_BATCHES; ++i) begin
-        for (genvar j = 0; j < NUM_BANKS; ++j) begin
-            localparam r = i * NUM_BANKS + j;
-            if (r < NUM_REQS) begin
+        for (genvar j = 0; j < MEM_CHANNELS; ++j) begin
+            localparam r = i * MEM_CHANNELS + j;
+            if (r < CORE_REQS) begin
                 assign mem_req_mask_b[i][j]   = reqq_mask[r];
                 assign mem_req_rw_b[i][j]     = reqq_rw;
                 assign mem_req_byteen_b[i][j] = reqq_byteen[r];
@@ -235,9 +237,9 @@ module VX_mem_scheduler #(
     assign mem_req_addr_s   = mem_req_addr_b[req_batch_idx];
     assign mem_req_data_s   = mem_req_data_b[req_batch_idx];
 
-    reg [NUM_BANKS-1:0] batch_sent_mask;
+    reg [MEM_CHANNELS-1:0] batch_sent_mask;
     
-    wire [NUM_BANKS-1:0] batch_sent_mask_n = batch_sent_mask | mem_req_ready_s;
+    wire [MEM_CHANNELS-1:0] batch_sent_mask_n = batch_sent_mask | mem_req_ready_s;
     
     wire batch_sent_all = (mem_req_mask_s & ~batch_sent_mask_n) == 0;
 
@@ -255,7 +257,7 @@ module VX_mem_scheduler #(
         end
     end
     
-    if (NUM_BATCHES > 1) begin
+    if (NUM_BATCHES != 1) begin
         reg [BATCH_SEL_BITS-1:0] req_batch_idx_r;
         always @(posedge clk) begin
             if (reset) begin
@@ -291,35 +293,23 @@ module VX_mem_scheduler #(
             `UNUSED_PIN (valid_out)
         );
 
-        assign req_batch_idx = req_batch_idx_r;
-        
-        assign req_sent_all = batch_sent_all && (req_batch_idx_r == req_batch_idx_last);
-                
-        if (MEM_TAG_ID != 0) begin
-            assign mem_req_tag_s = {reqq_mtid, req_batch_idx, reqq_tag};
-        end else begin
-            `UNUSED_VAR (reqq_mtid)
-            assign mem_req_tag_s = {req_batch_idx, reqq_tag};
-        end
+        assign req_batch_idx = req_batch_idx_r;        
+        assign req_sent_all  = batch_sent_all && (req_batch_idx_r == req_batch_idx_last);
+        assign mem_req_tag_s = {reqq_tag, req_batch_idx};
 
     end else begin
 
         assign req_batch_idx = '0;
         assign req_sent_all  = batch_sent_all;
+        assign mem_req_tag_s = reqq_tag;
 
-        if (MEM_TAG_ID != 0) begin
-            assign mem_req_tag_s = {reqq_mtid, reqq_tag};
-        end else begin
-            `UNUSED_VAR (reqq_mtid)
-            assign mem_req_tag_s = reqq_tag;
-        end
     end
 
-    assign mem_req_valid_s = {NUM_BANKS{~reqq_empty}} & mem_req_mask_s & ~batch_sent_mask;  
+    assign mem_req_valid_s = {MEM_CHANNELS{~reqq_empty}} & mem_req_mask_s & ~batch_sent_mask;  
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < MEM_CHANNELS; ++i) begin
         VX_elastic_buffer #(
-            .DATAW   (1 + BYTEENW + ADDR_WIDTH + DATA_WIDTH + MEM_TAGW),
+            .DATAW   (1 + LINE_SIZE + ADDR_WIDTH + LINE_WIDTH + MEM_TAGW),
             .SIZE    (`OUT_REG_TO_EB_SIZE(MEM_OUT_REG)),
             .OUT_REG (`OUT_REG_TO_EB_REG(MEM_OUT_REG))
         ) mem_req_buf (
@@ -336,14 +326,14 @@ module VX_mem_scheduler #(
 
     // Handle memory responses ////////////////////////////////////////////////
 
-    reg [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_rem_mask;
-    wire [NUM_REQS-1:0] rsp_rem_mask_n, curr_mask;
+    reg [QUEUE_SIZE-1:0][CORE_REQS-1:0] rsp_rem_mask;
+    wire [CORE_REQS-1:0] rsp_rem_mask_n, curr_mask;
     wire [BATCH_SEL_WIDTH-1:0] rsp_batch_idx;
 
     // Select memory response
     VX_mem_rsp_sel #(
-        .NUM_REQS     (NUM_BANKS),
-        .DATA_WIDTH   (DATA_WIDTH),
+        .NUM_REQS     (MEM_CHANNELS),
+        .DATA_WIDTH   (LINE_WIDTH),
         .TAG_WIDTH    (MEM_TAGW),
         .TAG_SEL_BITS (MEM_TAGW - MEM_TAG_ID),
         .OUT_REG      (2)
@@ -361,16 +351,16 @@ module VX_mem_scheduler #(
         .rsp_ready_out (mem_rsp_ready_s)
     );
 
-    for (genvar r = 0; r < NUM_REQS; ++r) begin
-        localparam i = r / NUM_BANKS;
-        localparam j = r % NUM_BANKS;
+    for (genvar r = 0; r < CORE_REQS; ++r) begin
+        localparam i = r / MEM_CHANNELS;
+        localparam j = r % MEM_CHANNELS;
         assign curr_mask[r] = (BATCH_SEL_WIDTH'(i) == rsp_batch_idx) && mem_rsp_mask_s[j];
     end
     
     assign rsp_rem_mask_n = rsp_rem_mask[ibuf_raddr] & ~curr_mask;
 
     if (NUM_BATCHES > 1) begin
-        assign rsp_batch_idx = mem_rsp_tag_s[QUEUE_ADDRW +: BATCH_SEL_BITS];
+        assign rsp_batch_idx = mem_rsp_tag_s[BATCH_SEL_BITS-1:0];
     end else begin
         assign rsp_batch_idx = '0;
     end    
@@ -408,22 +398,22 @@ module VX_mem_scheduler #(
         assign crsp_mask = curr_mask;
         assign crsp_sop = rsp_sop_r[ibuf_raddr];
 
-        for (genvar r = 0; r < NUM_REQS; ++r) begin
-            localparam j = r % NUM_BANKS;
+        for (genvar r = 0; r < CORE_REQS; ++r) begin
+            localparam j = r % MEM_CHANNELS;
             assign crsp_data[r] = mem_rsp_data_s[j];
         end
 
     end else begin
 
-        reg [NUM_BATCHES*NUM_BANKS*DATA_WIDTH-1:0] rsp_store [QUEUE_SIZE-1:0];        
-        reg [NUM_BATCHES*NUM_BANKS*DATA_WIDTH-1:0] rsp_store_n;        
-        reg [NUM_REQS-1:0] rsp_orig_mask [QUEUE_SIZE-1:0];    
+        reg [NUM_BATCHES*MEM_CHANNELS*WORD_WIDTH-1:0] rsp_store [QUEUE_SIZE-1:0];        
+        reg [NUM_BATCHES*MEM_CHANNELS*WORD_WIDTH-1:0] rsp_store_n;        
+        reg [CORE_REQS-1:0] rsp_orig_mask [QUEUE_SIZE-1:0];    
 
         always @(*) begin
             rsp_store_n = rsp_store[ibuf_raddr];            
-            for (integer i = 0; i < NUM_BANKS; ++i) begin
-                if ((NUM_BANKS == 1) || mem_rsp_mask_s[i]) begin
-                    rsp_store_n[(rsp_batch_idx * NUM_BANKS + i) * DATA_WIDTH +: DATA_WIDTH] = mem_rsp_data_s[i];
+            for (integer i = 0; i < MEM_CHANNELS; ++i) begin
+                if ((MEM_CHANNELS == 1) || mem_rsp_mask_s[i]) begin
+                    rsp_store_n[(rsp_batch_idx * MEM_CHANNELS + i) * WORD_WIDTH +: WORD_WIDTH] = mem_rsp_data_s[i];
                 end
             end
         end        
@@ -444,10 +434,10 @@ module VX_mem_scheduler #(
         assign crsp_mask = rsp_orig_mask[ibuf_raddr];
         assign crsp_sop = 1'b1;
 
-        for (genvar r = 0; r < NUM_REQS; ++r) begin
-            localparam i = r / NUM_BANKS;
-            localparam j = r % NUM_BANKS;
-            assign crsp_data[r] = rsp_store_n[(i * NUM_BANKS + j) * DATA_WIDTH +: DATA_WIDTH];
+        for (genvar r = 0; r < CORE_REQS; ++r) begin
+            localparam i = r / MEM_CHANNELS;
+            localparam j = r % MEM_CHANNELS;
+            assign crsp_data[r] = rsp_store_n[(i * MEM_CHANNELS + j) * LINE_WIDTH +: WORD_WIDTH];
         end
     end
 
@@ -462,7 +452,7 @@ module VX_mem_scheduler #(
     // Send response to caller
 
     VX_elastic_buffer #(
-        .DATAW   (NUM_REQS + 1 + 1 + (NUM_REQS * DATA_WIDTH) + TAG_WIDTH),
+        .DATAW   (CORE_REQS + 1 + 1 + (CORE_REQS * WORD_WIDTH) + TAG_WIDTH),
         .SIZE    (`OUT_REG_TO_EB_SIZE(CORE_OUT_REG)),
         .OUT_REG (`OUT_REG_TO_EB_REG(CORE_OUT_REG))
     ) rsp_buf (
@@ -485,7 +475,7 @@ module VX_mem_scheduler #(
     if (UUID_WIDTH != 0) begin
         assign req_dbg_uuid = core_req_tag[TAG_WIDTH-1 -: UUID_WIDTH];
         assign rsp_dbg_uuid = core_rsp_tag[TAG_WIDTH-1 -: UUID_WIDTH];
-        assign mem_req_dbg_uuid = reqq_mtid[MEM_TAG_ID-1 -: UUID_WIDTH];
+        assign mem_req_dbg_uuid = reqq_tag[REQQ_TAG_WIDTH-1 -: UUID_WIDTH];
         assign mem_rsp_dbg_uuid = mem_rsp_tag_s[MEM_TAGW-1 -: UUID_WIDTH];
     end else begin
         assign req_dbg_uuid = '0;
@@ -499,7 +489,7 @@ module VX_mem_scheduler #(
     `UNUSED_VAR (mem_req_dbg_uuid)
     `UNUSED_VAR (mem_rsp_dbg_uuid)
 
-    reg [(`UP(UUID_WIDTH) + TAG_ONLY_WIDTH + 64)-1:0] pending_reqs [QUEUE_SIZE-1:0];
+    reg [(`UP(UUID_WIDTH) + TAG_ID_WIDTH + 64)-1:0] pending_reqs [QUEUE_SIZE-1:0];
     reg [QUEUE_SIZE-1:0] pending_req_valids;
 
     always @(posedge clk) begin
@@ -522,7 +512,7 @@ module VX_mem_scheduler #(
             if (pending_req_valids[i]) begin
                 `ASSERT(($time - pending_reqs[i][0 +: 64]) < STALL_TIMEOUT,
                     ("%t: *** %s response timeout: remaining=%b, tag=0x%0h (#%0d)", 
-                        $time, INSTANCE_ID, rsp_rem_mask[i], pending_reqs[i][64 +: TAG_ONLY_WIDTH], pending_reqs[i][64+TAG_ONLY_WIDTH +: `UP(UUID_WIDTH)]));
+                        $time, INSTANCE_ID, rsp_rem_mask[i], pending_reqs[i][64 +: TAG_ID_WIDTH], pending_reqs[i][64+TAG_ID_WIDTH +: `UP(UUID_WIDTH)]));
             end
         end
     end
@@ -531,44 +521,44 @@ module VX_mem_scheduler #(
     ///////////////////////////////////////////////////////////////////////////
 
 `ifndef NDEBUG
-    wire [NUM_BANKS-1:0] mem_req_fire_s = mem_req_valid_s & mem_req_ready_s;
+    wire [MEM_CHANNELS-1:0] mem_req_fire_s = mem_req_valid_s & mem_req_ready_s;
     always @(posedge clk) begin
         if (core_req_valid && core_req_ready) begin
             if (core_req_rw) begin
                 `TRACE(1, ("%d: %s-core-req-wr: valid=%b, addr=", $time, INSTANCE_ID, core_req_mask));
-                `TRACE_ARRAY1D(1, core_req_addr, NUM_REQS);                       
+                `TRACE_ARRAY1D(1, core_req_addr, CORE_REQS);                       
                 `TRACE(1, (", byteen="));
-                `TRACE_ARRAY1D(1, core_req_byteen, NUM_REQS);
+                `TRACE_ARRAY1D(1, core_req_byteen, CORE_REQS);
                 `TRACE(1, (", data="));
-                `TRACE_ARRAY1D(1, core_req_data, NUM_REQS);         
+                `TRACE_ARRAY1D(1, core_req_data, CORE_REQS);         
             end else begin
                 `TRACE(1, ("%d: %s-core-req-rd: valid=%b, addr=", $time, INSTANCE_ID, core_req_mask));
-                `TRACE_ARRAY1D(1, core_req_addr, NUM_REQS);                
+                `TRACE_ARRAY1D(1, core_req_addr, CORE_REQS);                
             end 
             `TRACE(1, (", tag=0x%0h (#%0d)\n", core_req_tag, req_dbg_uuid));           
         end
         if (core_rsp_valid && core_rsp_ready) begin
             `TRACE(1, ("%d: %s-rsp: valid=%b, sop=%b, eop=%b, data=", $time, INSTANCE_ID, core_rsp_mask, core_rsp_sop, core_rsp_eop));
-            `TRACE_ARRAY1D(1, core_rsp_data, NUM_REQS);
+            `TRACE_ARRAY1D(1, core_rsp_data, CORE_REQS);
             `TRACE(1, (", tag=0x%0h (#%0d)\n", core_rsp_tag, rsp_dbg_uuid));
         end
         if (| mem_req_fire_s) begin
             if (| mem_req_rw_s) begin
                 `TRACE(1, ("%d: %s-mem-req-wr: valid=%b, addr=", $time, INSTANCE_ID, mem_req_fire_s));
-                `TRACE_ARRAY1D(1, mem_req_addr_s, NUM_BANKS);
+                `TRACE_ARRAY1D(1, mem_req_addr_s, MEM_CHANNELS);
                 `TRACE(1, (", byteen="));
-                `TRACE_ARRAY1D(1, mem_req_byteen_s, NUM_BANKS);
+                `TRACE_ARRAY1D(1, mem_req_byteen_s, MEM_CHANNELS);
                 `TRACE(1, (", data="));
-                `TRACE_ARRAY1D(1, mem_req_data_s, NUM_BANKS);           
+                `TRACE_ARRAY1D(1, mem_req_data_s, MEM_CHANNELS);           
             end else begin
                 `TRACE(1, ("%d: %s-mem-req-rd: valid=%b, addr=", $time, INSTANCE_ID, mem_req_fire_s));
-                `TRACE_ARRAY1D(1, mem_req_addr_s, NUM_BANKS);                
+                `TRACE_ARRAY1D(1, mem_req_addr_s, MEM_CHANNELS);                
             end
             `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_waddr, req_batch_idx, mem_req_dbg_uuid));
         end 
         if (mem_rsp_fire_s) begin
             `TRACE(1, ("%d: %s-mem-rsp: valid=%b, data=", $time, INSTANCE_ID, mem_rsp_mask_s));                
-            `TRACE_ARRAY1D(1, mem_rsp_data_s, NUM_BANKS);
+            `TRACE_ARRAY1D(1, mem_rsp_data_s, MEM_CHANNELS);
             `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_raddr, rsp_batch_idx, mem_rsp_dbg_uuid));
         end
     end
