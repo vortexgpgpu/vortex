@@ -176,6 +176,7 @@ private:
   std::vector<std::shared_ptr<Warp>> warps_;  
   std::vector<WarpMask> barriers_;
   std::vector<Byte> fcsrs_;
+  std::vector<Word> tcore_csrs_;
   std::vector<IBuffer> ibuffers_;
   Scoreboard scoreboard_;
   std::vector<Operand::Ptr> operands_;

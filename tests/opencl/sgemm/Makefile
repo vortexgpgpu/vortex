@@ -2,6 +2,6 @@ PROJECT = sgemm
 
 SRCS = main.cc
 
-OPTS ?= -n32
+OPTS ?= -n2
 
 include ../common.mk

@@ -50,7 +50,7 @@ enum Opcode {
   EXT1      = 0x0b,
   EXT2      = 0x2b,
   EXT3      = 0x5b,
-  EXT4      = 0x7b
+  TCU       = 0x7b  //Tensor core
 };
 
 enum InstType {

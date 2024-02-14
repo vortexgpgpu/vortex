@@ -1,0 +1,14 @@
+main.o: main.cc gaussianElim.h clutils.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_version.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_platform.h \
+ /nethome/software/latest/pocl/runtime/include/CL/opencl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_gl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_gl_ext.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_ext.h
+clutils.o: clutils.cpp \
+ /nethome/software/latest/pocl/runtime/include/CL/cl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_version.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_platform.h clutils.h \
+ utils.h
+utils.o: utils.cpp utils.h

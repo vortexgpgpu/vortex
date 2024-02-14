@@ -1,3 +1,4 @@
+
 XLEN ?= 32
 DESTDIR ?= $(CURDIR)
 HW_DIR = $(abspath ../../hw)
@@ -33,11 +34,14 @@ all: $(DESTDIR)/$(PROJECT)
 $(DESTDIR)/$(PROJECT): $(SRCS) main.cpp
 	$(CXX) $(CXXFLAGS) -DSTARTUP_ADDR=0x80000000 $^ $(LDFLAGS) -o $@
 
+
 $(DESTDIR)/lib$(PROJECT).so: $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ -shared $(LDFLAGS) -o $@
 
+
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
+
 
 clean:
 	rm -rf $(DESTDIR)/$(PROJECT) $(DESTDIR)/lib$(PROJECT).so

@@ -1,0 +1,19 @@
+main.o: main.cc oclUtils.h shrUtils.h \
+ /nethome/software/latest/pocl/runtime/include/CL/opencl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_version.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_platform.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_gl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_gl_ext.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_ext.h shrQATest.h
+oclUtils.o: oclUtils.cpp oclUtils.h shrUtils.h \
+ /nethome/software/latest/pocl/runtime/include/CL/opencl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_version.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_platform.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_gl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_gl_ext.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_ext.h
+shrUtils.o: shrUtils.cpp shrUtils.h cmd_arg_reader.h exception.h
+cmd_arg_reader.o: cmd_arg_reader.cpp cmd_arg_reader.h exception.h
+transpose_gold.o: transpose_gold.cpp

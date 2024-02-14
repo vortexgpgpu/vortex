@@ -592,8 +592,7 @@ public:
       auto& rsp = RspDC.front();
       DT(4, this->name() << "-" << rsp);
       RspIn.send(rsp, 1);
-      RspDC
-      .pop();
+      RspDC.pop();
     }
     // process incomming requests  
     if (!ReqIn.empty()) {

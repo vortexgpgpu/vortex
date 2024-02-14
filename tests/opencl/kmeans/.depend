@@ -1,0 +1,9 @@
+main.o: main.cc kmeans.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_version.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_platform.h
+read_input.o: read_input.c kmeans.h
+rmse.o: rmse.c kmeans.h
+kmeans_clustering.o: kmeans_clustering.c kmeans.h
+cluster.o: cluster.c kmeans.h
+getopt.o: getopt.c

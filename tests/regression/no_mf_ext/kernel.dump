@@ -1,0 +1,1570 @@
+
+kernel.elf:	file format elf32-littleriscv
+
+Disassembly of section .init:
+
+80000000 <_start>:
+80000000: f3 22 10 fc  	csrr	t0, nw
+80000004: 17 03 00 00  	auipc	t1, 0
+80000008: 13 03 43 14  	addi	t1, t1, 324
+8000000c: 0b 90 62 00  	vx_wspawn	t0, t1
+80000010: 93 02 f0 ff  	li	t0, -1
+80000014: 0b 80 02 00  	vx_tmc	t0
+80000018: ef 00 c0 0f  	jal	0x80000114 <init_regs>
+8000001c: 93 02 10 00  	li	t0, 1
+80000020: 0b 80 02 00  	vx_tmc	t0
+80000024: ef 00 c0 14  	jal	0x80000170 <vx_wspawn_wait>
+80000028: f3 22 10 fc  	csrr	t0, nw
+8000002c: 17 03 00 00  	auipc	t1, 0
+80000030: 13 03 03 13  	addi	t1, t1, 304
+80000034: 0b 90 62 00  	vx_wspawn	t0, t1
+80000038: 93 02 f0 ff  	li	t0, -1
+8000003c: 0b 80 02 00  	vx_tmc	t0
+80000040: ef 00 00 14  	jal	0x80000180 <__init_tls>
+80000044: 93 02 10 00  	li	t0, 1
+80000048: 0b 80 02 00  	vx_tmc	t0
+8000004c: ef 00 40 12  	jal	0x80000170 <vx_wspawn_wait>
+80000050: 17 25 00 00  	auipc	a0, 2
+80000054: 13 05 45 d0  	addi	a0, a0, -764
+80000058: 17 26 00 00  	auipc	a2, 2
+8000005c: 13 06 c6 cf  	addi	a2, a2, -772
+80000060: 33 06 a6 40  	sub	a2, a2, a0
+80000064: 93 05 00 00  	li	a1, 0
+80000068: ef 00 c0 61  	jal	0x80000684 <memset>
+8000006c: 17 05 00 00  	auipc	a0, 0
+80000070: 13 05 c5 1e  	addi	a0, a0, 492
+80000074: ef 00 80 45  	jal	0x800004cc <atexit>
+80000078: ef 00 c0 14  	jal	0x800001c4 <__libc_init_array>
+8000007c: ef 00 40 05  	jal	0x800000d0 <main>
+80000080: 6f 00 40 00  	j	0x80000084 <exit>
+
+Disassembly of section .text:
+
+80000084 <exit>:
+80000084: 13 01 01 ff  	addi	sp, sp, -16
+80000088: 93 05 00 00  	li	a1, 0
+8000008c: 23 24 81 00  	sw	s0, 8(sp)
+80000090: 23 26 11 00  	sw	ra, 12(sp)
+80000094: 13 04 05 00  	mv	s0, a0
+80000098: ef 00 40 76  	jal	0x800007fc <__call_exitprocs>
+8000009c: 17 25 00 00  	auipc	a0, 2
+800000a0: 03 25 45 cb  	lw	a0, -844(a0)
+800000a4: 83 27 c5 03  	lw	a5, 60(a0)
+800000a8: 63 84 07 00  	beqz	a5, 0x800000b0 <exit+0x2c>
+800000ac: e7 80 07 00  	jalr	a5
+800000b0: 13 05 04 00  	mv	a0, s0
+800000b4: ef 00 00 05  	jal	0x80000104 <_exit>
+
+800000b8 <register_fini>:
+800000b8: 93 07 00 00  	li	a5, 0
+800000bc: 63 88 07 00  	beqz	a5, 0x800000cc <register_fini+0x14>
+800000c0: 17 05 00 00  	auipc	a0, 0
+800000c4: 13 05 85 19  	addi	a0, a0, 408
+800000c8: 6f 00 40 40  	j	0x800004cc <atexit>
+800000cc: 67 80 00 00  	ret
+
+800000d0 <main>:
+800000d0: 37 f6 ff 7f  	lui	a2, 524287
+800000d4: 03 25 06 00  	lw	a0, 0(a2)
+800000d8: 63 02 05 02  	beqz	a0, 0x800000fc <main+0x2c>
+800000dc: 83 25 86 00  	lw	a1, 8(a2)
+800000e0: 03 26 06 01  	lw	a2, 16(a2)
+800000e4: 83 a6 05 00  	lw	a3, 0(a1)
+800000e8: 23 20 d6 00  	sw	a3, 0(a2)
+800000ec: 13 05 f5 ff  	addi	a0, a0, -1
+800000f0: 13 06 46 00  	addi	a2, a2, 4
+800000f4: 93 85 45 00  	addi	a1, a1, 4
+800000f8: e3 16 05 fe  	bnez	a0, 0x800000e4 <main+0x14>
+800000fc: 13 05 00 00  	li	a0, 0
+80000100: 67 80 00 00  	ret
+
+80000104 <_exit>:
+80000104: 13 04 05 00  	mv	s0, a0
+80000108: ef 00 c0 1a  	jal	0x800002b4 <vx_perf_dump>
+8000010c: 93 01 04 00  	mv	gp, s0
+80000110: 0b 00 00 00  	vx_tmc	zero
+
+80000114 <init_regs>:
+80000114: 97 21 00 00  	auipc	gp, 2
+80000118: 93 81 41 01  	addi	gp, gp, 20
+8000011c: 37 01 00 ff  	lui	sp, 1044480
+80000120: f3 22 40 f1  	csrr	t0, mhartid
+80000124: 13 93 d2 00  	slli	t1, t0, 13
+80000128: 33 01 61 40  	sub	sp, sp, t1
+8000012c: 13 03 00 00  	li	t1, 0
+80000130: b3 82 62 02  	mul	t0, t0, t1
+80000134: 17 22 00 00  	auipc	tp, 2
+80000138: 13 02 f2 c5  	addi	tp, tp, -929
+8000013c: 33 02 52 00  	add	tp, tp, t0
+80000140: 13 72 02 fc  	andi	tp, tp, -64
+80000144: 67 80 00 00  	ret
+
+80000148 <init_regs_all>:
+80000148: 93 02 f0 ff  	li	t0, -1
+8000014c: 0b 80 02 00  	vx_tmc	t0
+80000150: ef f0 5f fc  	jal	0x80000114 <init_regs>
+80000154: 0b 00 00 00  	vx_tmc	zero
+80000158: 67 80 00 00  	ret
+
+8000015c <init_tls_all>:
+8000015c: 93 02 f0 ff  	li	t0, -1
+80000160: 0b 80 02 00  	vx_tmc	t0
+80000164: ef 00 c0 01  	jal	0x80000180 <__init_tls>
+80000168: 0b 00 00 00  	vx_tmc	zero
+8000016c: 67 80 00 00  	ret
+
+80000170 <vx_wspawn_wait>:
+80000170: f3 22 30 cc  	csrr	t0, gid
+80000174: 13 03 10 00  	li	t1, 1
+80000178: e3 9c 62 fe  	bne	t0, t1, 0x80000170 <vx_wspawn_wait>
+8000017c: 67 80 00 00  	ret
+
+80000180 <__init_tls>:
+80000180: 13 01 01 ff  	addi	sp, sp, -16
+80000184: 13 06 00 00  	li	a2, 0
+80000188: 97 15 00 00  	auipc	a1, 1
+8000018c: 93 85 85 79  	addi	a1, a1, 1944
+80000190: 13 05 02 00  	mv	a0, tp
+80000194: 23 24 81 00  	sw	s0, 8(sp)
+80000198: 23 26 11 00  	sw	ra, 12(sp)
+8000019c: 13 04 02 00  	mv	s0, tp
+800001a0: ef 00 00 34  	jal	0x800004e0 <memcpy>
+800001a4: 13 05 00 00  	li	a0, 0
+800001a8: 33 05 a4 00  	add	a0, s0, a0
+800001ac: 03 24 81 00  	lw	s0, 8(sp)
+800001b0: 83 20 c1 00  	lw	ra, 12(sp)
+800001b4: 13 06 00 00  	li	a2, 0
+800001b8: 93 05 00 00  	li	a1, 0
+800001bc: 13 01 01 01  	addi	sp, sp, 16
+800001c0: 6f 00 40 4c  	j	0x80000684 <memset>
+
+800001c4 <__libc_init_array>:
+800001c4: 13 01 01 ff  	addi	sp, sp, -16
+800001c8: 23 24 81 00  	sw	s0, 8(sp)
+800001cc: 23 20 21 01  	sw	s2, 0(sp)
+800001d0: 97 17 00 00  	auipc	a5, 1
+800001d4: 93 87 07 75  	addi	a5, a5, 1872
+800001d8: 17 14 00 00  	auipc	s0, 1
+800001dc: 13 04 84 74  	addi	s0, s0, 1864
+800001e0: 23 26 11 00  	sw	ra, 12(sp)
+800001e4: 23 22 91 00  	sw	s1, 4(sp)
+800001e8: 33 89 87 40  	sub	s2, a5, s0
+800001ec: 63 80 87 02  	beq	a5, s0, 0x8000020c <__libc_init_array+0x48>
+800001f0: 13 59 29 40  	srai	s2, s2, 2
+800001f4: 93 04 00 00  	li	s1, 0
+800001f8: 83 27 04 00  	lw	a5, 0(s0)
+800001fc: 93 84 14 00  	addi	s1, s1, 1
+80000200: 13 04 44 00  	addi	s0, s0, 4
+80000204: e7 80 07 00  	jalr	a5
+80000208: e3 e8 24 ff  	bltu	s1, s2, 0x800001f8 <__libc_init_array+0x34>
+8000020c: 97 17 00 00  	auipc	a5, 1
+80000210: 93 87 87 71  	addi	a5, a5, 1816
+80000214: 17 14 00 00  	auipc	s0, 1
+80000218: 13 04 c4 70  	addi	s0, s0, 1804
+8000021c: 33 89 87 40  	sub	s2, a5, s0
+80000220: 13 59 29 40  	srai	s2, s2, 2
+80000224: 63 8e 87 00  	beq	a5, s0, 0x80000240 <__libc_init_array+0x7c>
+80000228: 93 04 00 00  	li	s1, 0
+8000022c: 83 27 04 00  	lw	a5, 0(s0)
+80000230: 93 84 14 00  	addi	s1, s1, 1
+80000234: 13 04 44 00  	addi	s0, s0, 4
+80000238: e7 80 07 00  	jalr	a5
+8000023c: e3 e8 24 ff  	bltu	s1, s2, 0x8000022c <__libc_init_array+0x68>
+80000240: 83 20 c1 00  	lw	ra, 12(sp)
+80000244: 03 24 81 00  	lw	s0, 8(sp)
+80000248: 83 24 41 00  	lw	s1, 4(sp)
+8000024c: 03 29 01 00  	lw	s2, 0(sp)
+80000250: 13 01 01 01  	addi	sp, sp, 16
+80000254: 67 80 00 00  	ret
+
+80000258 <__libc_fini_array>:
+80000258: 13 01 01 ff  	addi	sp, sp, -16
+8000025c: 23 24 81 00  	sw	s0, 8(sp)
+80000260: 97 17 00 00  	auipc	a5, 1
+80000264: 93 87 47 6c  	addi	a5, a5, 1732
+80000268: 17 14 00 00  	auipc	s0, 1
+8000026c: 13 04 c4 6b  	addi	s0, s0, 1724
+80000270: 33 04 f4 40  	sub	s0, s0, a5
+80000274: 23 22 91 00  	sw	s1, 4(sp)
+80000278: 23 26 11 00  	sw	ra, 12(sp)
+8000027c: 93 54 24 40  	srai	s1, s0, 2
+80000280: 63 80 04 02  	beqz	s1, 0x800002a0 <__libc_fini_array+0x48>
+80000284: 13 04 c4 ff  	addi	s0, s0, -4
+80000288: 33 04 f4 00  	add	s0, s0, a5
+8000028c: 83 27 04 00  	lw	a5, 0(s0)
+80000290: 93 84 f4 ff  	addi	s1, s1, -1
+80000294: 13 04 c4 ff  	addi	s0, s0, -4
+80000298: e7 80 07 00  	jalr	a5
+8000029c: e3 98 04 fe  	bnez	s1, 0x8000028c <__libc_fini_array+0x34>
+800002a0: 83 20 c1 00  	lw	ra, 12(sp)
+800002a4: 03 24 81 00  	lw	s0, 8(sp)
+800002a8: 83 24 41 00  	lw	s1, 4(sp)
+800002ac: 13 01 01 01  	addi	sp, sp, 16
+800002b0: 67 80 00 00  	ret
+
+800002b4 <vx_perf_dump>:
+800002b4: f3 27 20 cc  	csrr	a5, cid
+800002b8: 37 47 00 ff  	lui	a4, 1044484
+800002bc: 13 07 07 04  	addi	a4, a4, 64
+800002c0: 93 97 87 00  	slli	a5, a5, 8
+800002c4: b3 87 e7 00  	add	a5, a5, a4
+800002c8: 73 27 00 b0  	csrr	a4, mcycle
+800002cc: 23 a0 e7 00  	sw	a4, 0(a5)
+800002d0: 73 27 10 b0  	csrr	a4, 2817
+800002d4: 23 a2 e7 00  	sw	a4, 4(a5)
+800002d8: 73 27 20 b0  	csrr	a4, minstret
+800002dc: 23 a4 e7 00  	sw	a4, 8(a5)
+800002e0: 73 27 30 b0  	csrr	a4, mhpmcounter3
+800002e4: 23 a6 e7 00  	sw	a4, 12(a5)
+800002e8: 73 27 40 b0  	csrr	a4, mhpmcounter4
+800002ec: 23 a8 e7 00  	sw	a4, 16(a5)
+800002f0: 73 27 50 b0  	csrr	a4, mhpmcounter5
+800002f4: 23 aa e7 00  	sw	a4, 20(a5)
+800002f8: 73 27 60 b0  	csrr	a4, mhpmcounter6
+800002fc: 23 ac e7 00  	sw	a4, 24(a5)
+80000300: 73 27 70 b0  	csrr	a4, mhpmcounter7
+80000304: 23 ae e7 00  	sw	a4, 28(a5)
+80000308: 73 27 80 b0  	csrr	a4, mhpmcounter8
+8000030c: 23 a0 e7 02  	sw	a4, 32(a5)
+80000310: 73 27 90 b0  	csrr	a4, mhpmcounter9
+80000314: 23 a2 e7 02  	sw	a4, 36(a5)
+80000318: 73 27 a0 b0  	csrr	a4, mhpmcounter10
+8000031c: 23 a4 e7 02  	sw	a4, 40(a5)
+80000320: 73 27 b0 b0  	csrr	a4, mhpmcounter11
+80000324: 23 a6 e7 02  	sw	a4, 44(a5)
+80000328: 73 27 c0 b0  	csrr	a4, mhpmcounter12
+8000032c: 23 a8 e7 02  	sw	a4, 48(a5)
+80000330: 73 27 d0 b0  	csrr	a4, mhpmcounter13
+80000334: 23 aa e7 02  	sw	a4, 52(a5)
+80000338: 73 27 e0 b0  	csrr	a4, mhpmcounter14
+8000033c: 23 ac e7 02  	sw	a4, 56(a5)
+80000340: 73 27 f0 b0  	csrr	a4, mhpmcounter15
+80000344: 23 ae e7 02  	sw	a4, 60(a5)
+80000348: 73 27 00 b1  	csrr	a4, mhpmcounter16
+8000034c: 23 a0 e7 04  	sw	a4, 64(a5)
+80000350: 73 27 10 b1  	csrr	a4, mhpmcounter17
+80000354: 23 a2 e7 04  	sw	a4, 68(a5)
+80000358: 73 27 20 b1  	csrr	a4, mhpmcounter18
+8000035c: 23 a4 e7 04  	sw	a4, 72(a5)
+80000360: 73 27 30 b1  	csrr	a4, mhpmcounter19
+80000364: 23 a6 e7 04  	sw	a4, 76(a5)
+80000368: 73 27 40 b1  	csrr	a4, mhpmcounter20
+8000036c: 23 a8 e7 04  	sw	a4, 80(a5)
+80000370: 73 27 50 b1  	csrr	a4, mhpmcounter21
+80000374: 23 aa e7 04  	sw	a4, 84(a5)
+80000378: 73 27 60 b1  	csrr	a4, mhpmcounter22
+8000037c: 23 ac e7 04  	sw	a4, 88(a5)
+80000380: 73 27 70 b1  	csrr	a4, mhpmcounter23
+80000384: 23 ae e7 04  	sw	a4, 92(a5)
+80000388: 73 27 80 b1  	csrr	a4, mhpmcounter24
+8000038c: 23 a0 e7 06  	sw	a4, 96(a5)
+80000390: 73 27 90 b1  	csrr	a4, mhpmcounter25
+80000394: 23 a2 e7 06  	sw	a4, 100(a5)
+80000398: 73 27 a0 b1  	csrr	a4, mhpmcounter26
+8000039c: 23 a4 e7 06  	sw	a4, 104(a5)
+800003a0: 73 27 b0 b1  	csrr	a4, mhpmcounter27
+800003a4: 23 a6 e7 06  	sw	a4, 108(a5)
+800003a8: 73 27 c0 b1  	csrr	a4, mhpmcounter28
+800003ac: 23 a8 e7 06  	sw	a4, 112(a5)
+800003b0: 73 27 d0 b1  	csrr	a4, mhpmcounter29
+800003b4: 23 aa e7 06  	sw	a4, 116(a5)
+800003b8: 73 27 e0 b1  	csrr	a4, mhpmcounter30
+800003bc: 23 ac e7 06  	sw	a4, 120(a5)
+800003c0: 73 27 f0 b1  	csrr	a4, mhpmcounter31
+800003c4: 23 ae e7 06  	sw	a4, 124(a5)
+800003c8: 73 27 00 b8  	csrr	a4, mcycleh
+800003cc: 23 a0 e7 08  	sw	a4, 128(a5)
+800003d0: 73 27 10 b8  	csrr	a4, 2945
+800003d4: 23 a2 e7 08  	sw	a4, 132(a5)
+800003d8: 73 27 20 b8  	csrr	a4, minstreth
+800003dc: 23 a4 e7 08  	sw	a4, 136(a5)
+800003e0: 73 27 30 b8  	csrr	a4, mhpmcounter3h
+800003e4: 23 a6 e7 08  	sw	a4, 140(a5)
+800003e8: 73 27 40 b8  	csrr	a4, mhpmcounter4h
+800003ec: 23 a8 e7 08  	sw	a4, 144(a5)
+800003f0: 73 27 50 b8  	csrr	a4, mhpmcounter5h
+800003f4: 23 aa e7 08  	sw	a4, 148(a5)
+800003f8: 73 27 60 b8  	csrr	a4, mhpmcounter6h
+800003fc: 23 ac e7 08  	sw	a4, 152(a5)
+80000400: 73 27 70 b8  	csrr	a4, mhpmcounter7h
+80000404: 23 ae e7 08  	sw	a4, 156(a5)
+80000408: 73 27 80 b8  	csrr	a4, mhpmcounter8h
+8000040c: 23 a0 e7 0a  	sw	a4, 160(a5)
+80000410: 73 27 90 b8  	csrr	a4, mhpmcounter9h
+80000414: 23 a2 e7 0a  	sw	a4, 164(a5)
+80000418: 73 27 a0 b8  	csrr	a4, mhpmcounter10h
+8000041c: 23 a4 e7 0a  	sw	a4, 168(a5)
+80000420: 73 27 b0 b8  	csrr	a4, mhpmcounter11h
+80000424: 23 a6 e7 0a  	sw	a4, 172(a5)
+80000428: 73 27 c0 b8  	csrr	a4, mhpmcounter12h
+8000042c: 23 a8 e7 0a  	sw	a4, 176(a5)
+80000430: 73 27 d0 b8  	csrr	a4, mhpmcounter13h
+80000434: 23 aa e7 0a  	sw	a4, 180(a5)
+80000438: 73 27 e0 b8  	csrr	a4, mhpmcounter14h
+8000043c: 23 ac e7 0a  	sw	a4, 184(a5)
+80000440: 73 27 f0 b8  	csrr	a4, mhpmcounter15h
+80000444: 23 ae e7 0a  	sw	a4, 188(a5)
+80000448: 73 27 00 b9  	csrr	a4, mhpmcounter16h
+8000044c: 23 a0 e7 0c  	sw	a4, 192(a5)
+80000450: 73 27 10 b9  	csrr	a4, mhpmcounter17h
+80000454: 23 a2 e7 0c  	sw	a4, 196(a5)
+80000458: 73 27 20 b9  	csrr	a4, mhpmcounter18h
+8000045c: 23 a4 e7 0c  	sw	a4, 200(a5)
+80000460: 73 27 30 b9  	csrr	a4, mhpmcounter19h
+80000464: 23 a6 e7 0c  	sw	a4, 204(a5)
+80000468: 73 27 40 b9  	csrr	a4, mhpmcounter20h
+8000046c: 23 a8 e7 0c  	sw	a4, 208(a5)
+80000470: 73 27 50 b9  	csrr	a4, mhpmcounter21h
+80000474: 23 aa e7 0c  	sw	a4, 212(a5)
+80000478: 73 27 60 b9  	csrr	a4, mhpmcounter22h
+8000047c: 23 ac e7 0c  	sw	a4, 216(a5)
+80000480: 73 27 70 b9  	csrr	a4, mhpmcounter23h
+80000484: 23 ae e7 0c  	sw	a4, 220(a5)
+80000488: 73 27 80 b9  	csrr	a4, mhpmcounter24h
+8000048c: 23 a0 e7 0e  	sw	a4, 224(a5)
+80000490: 73 27 90 b9  	csrr	a4, mhpmcounter25h
+80000494: 23 a2 e7 0e  	sw	a4, 228(a5)
+80000498: 73 27 a0 b9  	csrr	a4, mhpmcounter26h
+8000049c: 23 a4 e7 0e  	sw	a4, 232(a5)
+800004a0: 73 27 b0 b9  	csrr	a4, mhpmcounter27h
+800004a4: 23 a6 e7 0e  	sw	a4, 236(a5)
+800004a8: 73 27 c0 b9  	csrr	a4, mhpmcounter28h
+800004ac: 23 a8 e7 0e  	sw	a4, 240(a5)
+800004b0: 73 27 d0 b9  	csrr	a4, mhpmcounter29h
+800004b4: 23 aa e7 0e  	sw	a4, 244(a5)
+800004b8: 73 27 e0 b9  	csrr	a4, mhpmcounter30h
+800004bc: 23 ac e7 0e  	sw	a4, 248(a5)
+800004c0: 73 27 f0 b9  	csrr	a4, mhpmcounter31h
+800004c4: 23 ae e7 0e  	sw	a4, 252(a5)
+800004c8: 67 80 00 00  	ret
+
+800004cc <atexit>:
+800004cc: 93 05 05 00  	mv	a1, a0
+800004d0: 93 06 00 00  	li	a3, 0
+800004d4: 13 06 00 00  	li	a2, 0
+800004d8: 13 05 00 00  	li	a0, 0
+800004dc: 6f 00 40 28  	j	0x80000760 <__register_exitproc>
+
+800004e0 <memcpy>:
+800004e0: b3 47 b5 00  	xor	a5, a0, a1
+800004e4: 93 f7 37 00  	andi	a5, a5, 3
+800004e8: b3 08 c5 00  	add	a7, a0, a2
+800004ec: 63 94 07 06  	bnez	a5, 0x80000554 <memcpy+0x74>
+800004f0: 93 07 30 00  	li	a5, 3
+800004f4: 63 f0 c7 06  	bgeu	a5, a2, 0x80000554 <memcpy+0x74>
+800004f8: 93 77 35 00  	andi	a5, a0, 3
+800004fc: 13 07 05 00  	mv	a4, a0
+80000500: 63 9a 07 06  	bnez	a5, 0x80000574 <memcpy+0x94>
+80000504: 13 f6 c8 ff  	andi	a2, a7, -4
+80000508: b3 06 e6 40  	sub	a3, a2, a4
+8000050c: 93 07 00 02  	li	a5, 32
+80000510: 63 ce d7 08  	blt	a5, a3, 0x800005ac <memcpy+0xcc>
+80000514: 93 86 05 00  	mv	a3, a1
+80000518: 93 07 07 00  	mv	a5, a4
+8000051c: 63 78 c7 02  	bgeu	a4, a2, 0x8000054c <memcpy+0x6c>
+80000520: 03 a8 06 00  	lw	a6, 0(a3)
+80000524: 93 87 47 00  	addi	a5, a5, 4
+80000528: 93 86 46 00  	addi	a3, a3, 4
+8000052c: 23 ae 07 ff  	sw	a6, -4(a5)
+80000530: e3 e8 c7 fe  	bltu	a5, a2, 0x80000520 <memcpy+0x40>
+80000534: 93 07 f6 ff  	addi	a5, a2, -1
+80000538: b3 87 e7 40  	sub	a5, a5, a4
+8000053c: 93 f7 c7 ff  	andi	a5, a5, -4
+80000540: 93 87 47 00  	addi	a5, a5, 4
+80000544: 33 07 f7 00  	add	a4, a4, a5
+80000548: b3 85 f5 00  	add	a1, a1, a5
+8000054c: 63 68 17 01  	bltu	a4, a7, 0x8000055c <memcpy+0x7c>
+80000550: 67 80 00 00  	ret
+80000554: 13 07 05 00  	mv	a4, a0
+80000558: 63 78 15 05  	bgeu	a0, a7, 0x800005a8 <memcpy+0xc8>
+8000055c: 83 c7 05 00  	lbu	a5, 0(a1)
+80000560: 13 07 17 00  	addi	a4, a4, 1
+80000564: 93 85 15 00  	addi	a1, a1, 1
+80000568: a3 0f f7 fe  	sb	a5, -1(a4)
+8000056c: e3 98 e8 fe  	bne	a7, a4, 0x8000055c <memcpy+0x7c>
+80000570: 67 80 00 00  	ret
+80000574: 83 c6 05 00  	lbu	a3, 0(a1)
+80000578: 13 07 17 00  	addi	a4, a4, 1
+8000057c: 93 77 37 00  	andi	a5, a4, 3
+80000580: a3 0f d7 fe  	sb	a3, -1(a4)
+80000584: 93 85 15 00  	addi	a1, a1, 1
+80000588: e3 8e 07 f6  	beqz	a5, 0x80000504 <memcpy+0x24>
+8000058c: 83 c6 05 00  	lbu	a3, 0(a1)
+80000590: 13 07 17 00  	addi	a4, a4, 1
+80000594: 93 77 37 00  	andi	a5, a4, 3
+80000598: a3 0f d7 fe  	sb	a3, -1(a4)
+8000059c: 93 85 15 00  	addi	a1, a1, 1
+800005a0: e3 9a 07 fc  	bnez	a5, 0x80000574 <memcpy+0x94>
+800005a4: 6f f0 1f f6  	j	0x80000504 <memcpy+0x24>
+800005a8: 67 80 00 00  	ret
+800005ac: 13 01 01 ff  	addi	sp, sp, -16
+800005b0: 23 26 81 00  	sw	s0, 12(sp)
+800005b4: 13 04 00 02  	li	s0, 32
+800005b8: 83 a3 05 00  	lw	t2, 0(a1)
+800005bc: 83 a2 45 00  	lw	t0, 4(a1)
+800005c0: 83 af 85 00  	lw	t6, 8(a1)
+800005c4: 03 af c5 00  	lw	t5, 12(a1)
+800005c8: 83 ae 05 01  	lw	t4, 16(a1)
+800005cc: 03 ae 45 01  	lw	t3, 20(a1)
+800005d0: 03 a3 85 01  	lw	t1, 24(a1)
+800005d4: 03 a8 c5 01  	lw	a6, 28(a1)
+800005d8: 83 a6 05 02  	lw	a3, 32(a1)
+800005dc: 13 07 47 02  	addi	a4, a4, 36
+800005e0: b3 07 e6 40  	sub	a5, a2, a4
+800005e4: 23 2e 77 fc  	sw	t2, -36(a4)
+800005e8: 23 20 57 fe  	sw	t0, -32(a4)
+800005ec: 23 22 f7 ff  	sw	t6, -28(a4)
+800005f0: 23 24 e7 ff  	sw	t5, -24(a4)
+800005f4: 23 26 d7 ff  	sw	t4, -20(a4)
+800005f8: 23 28 c7 ff  	sw	t3, -16(a4)
+800005fc: 23 2a 67 fe  	sw	t1, -12(a4)
+80000600: 23 2c 07 ff  	sw	a6, -8(a4)
+80000604: 23 2e d7 fe  	sw	a3, -4(a4)
+80000608: 93 85 45 02  	addi	a1, a1, 36
+8000060c: e3 46 f4 fa  	blt	s0, a5, 0x800005b8 <memcpy+0xd8>
+80000610: 93 86 05 00  	mv	a3, a1
+80000614: 93 07 07 00  	mv	a5, a4
+80000618: 63 78 c7 02  	bgeu	a4, a2, 0x80000648 <memcpy+0x168>
+8000061c: 03 a8 06 00  	lw	a6, 0(a3)
+80000620: 93 87 47 00  	addi	a5, a5, 4
+80000624: 93 86 46 00  	addi	a3, a3, 4
+80000628: 23 ae 07 ff  	sw	a6, -4(a5)
+8000062c: e3 e8 c7 fe  	bltu	a5, a2, 0x8000061c <memcpy+0x13c>
+80000630: 93 07 f6 ff  	addi	a5, a2, -1
+80000634: b3 87 e7 40  	sub	a5, a5, a4
+80000638: 93 f7 c7 ff  	andi	a5, a5, -4
+8000063c: 93 87 47 00  	addi	a5, a5, 4
+80000640: 33 07 f7 00  	add	a4, a4, a5
+80000644: b3 85 f5 00  	add	a1, a1, a5
+80000648: 63 68 17 01  	bltu	a4, a7, 0x80000658 <memcpy+0x178>
+8000064c: 03 24 c1 00  	lw	s0, 12(sp)
+80000650: 13 01 01 01  	addi	sp, sp, 16
+80000654: 67 80 00 00  	ret
+80000658: 83 c7 05 00  	lbu	a5, 0(a1)
+8000065c: 13 07 17 00  	addi	a4, a4, 1
+80000660: 93 85 15 00  	addi	a1, a1, 1
+80000664: a3 0f f7 fe  	sb	a5, -1(a4)
+80000668: e3 82 e8 fe  	beq	a7, a4, 0x8000064c <memcpy+0x16c>
+8000066c: 83 c7 05 00  	lbu	a5, 0(a1)
+80000670: 13 07 17 00  	addi	a4, a4, 1
+80000674: 93 85 15 00  	addi	a1, a1, 1
+80000678: a3 0f f7 fe  	sb	a5, -1(a4)
+8000067c: e3 9e e8 fc  	bne	a7, a4, 0x80000658 <memcpy+0x178>
+80000680: 6f f0 df fc  	j	0x8000064c <memcpy+0x16c>
+
+80000684 <memset>:
+80000684: 13 03 f0 00  	li	t1, 15
+80000688: 13 07 05 00  	mv	a4, a0
+8000068c: 63 7e c3 02  	bgeu	t1, a2, 0x800006c8 <memset+0x44>
+80000690: 93 77 f7 00  	andi	a5, a4, 15
+80000694: 63 90 07 0a  	bnez	a5, 0x80000734 <memset+0xb0>
+80000698: 63 92 05 08  	bnez	a1, 0x8000071c <memset+0x98>
+8000069c: 93 76 06 ff  	andi	a3, a2, -16
+800006a0: 13 76 f6 00  	andi	a2, a2, 15
+800006a4: b3 86 e6 00  	add	a3, a3, a4
+800006a8: 23 20 b7 00  	sw	a1, 0(a4)
+800006ac: 23 22 b7 00  	sw	a1, 4(a4)
+800006b0: 23 24 b7 00  	sw	a1, 8(a4)
+800006b4: 23 26 b7 00  	sw	a1, 12(a4)
+800006b8: 13 07 07 01  	addi	a4, a4, 16
+800006bc: e3 66 d7 fe  	bltu	a4, a3, 0x800006a8 <memset+0x24>
+800006c0: 63 14 06 00  	bnez	a2, 0x800006c8 <memset+0x44>
+800006c4: 67 80 00 00  	ret
+800006c8: b3 06 c3 40  	sub	a3, t1, a2
+800006cc: 93 96 26 00  	slli	a3, a3, 2
+800006d0: 97 02 00 00  	auipc	t0, 0
+800006d4: b3 86 56 00  	add	a3, a3, t0
+800006d8: 67 80 c6 00  	jr	12(a3)
+800006dc: 23 07 b7 00  	sb	a1, 14(a4)
+800006e0: a3 06 b7 00  	sb	a1, 13(a4)
+800006e4: 23 06 b7 00  	sb	a1, 12(a4)
+800006e8: a3 05 b7 00  	sb	a1, 11(a4)
+800006ec: 23 05 b7 00  	sb	a1, 10(a4)
+800006f0: a3 04 b7 00  	sb	a1, 9(a4)
+800006f4: 23 04 b7 00  	sb	a1, 8(a4)
+800006f8: a3 03 b7 00  	sb	a1, 7(a4)
+800006fc: 23 03 b7 00  	sb	a1, 6(a4)
+80000700: a3 02 b7 00  	sb	a1, 5(a4)
+80000704: 23 02 b7 00  	sb	a1, 4(a4)
+80000708: a3 01 b7 00  	sb	a1, 3(a4)
+8000070c: 23 01 b7 00  	sb	a1, 2(a4)
+80000710: a3 00 b7 00  	sb	a1, 1(a4)
+80000714: 23 00 b7 00  	sb	a1, 0(a4)
+80000718: 67 80 00 00  	ret
+8000071c: 93 f5 f5 0f  	andi	a1, a1, 255
+80000720: 93 96 85 00  	slli	a3, a1, 8
+80000724: b3 e5 d5 00  	or	a1, a1, a3
+80000728: 93 96 05 01  	slli	a3, a1, 16
+8000072c: b3 e5 d5 00  	or	a1, a1, a3
+80000730: 6f f0 df f6  	j	0x8000069c <memset+0x18>
+80000734: 93 96 27 00  	slli	a3, a5, 2
+80000738: 97 02 00 00  	auipc	t0, 0
+8000073c: b3 86 56 00  	add	a3, a3, t0
+80000740: 93 82 00 00  	mv	t0, ra
+80000744: e7 80 06 fa  	jalr	-96(a3)
+80000748: 93 80 02 00  	mv	ra, t0
+8000074c: 93 87 07 ff  	addi	a5, a5, -16
+80000750: 33 07 f7 40  	sub	a4, a4, a5
+80000754: 33 06 f6 00  	add	a2, a2, a5
+80000758: e3 78 c3 f6  	bgeu	t1, a2, 0x800006c8 <memset+0x44>
+8000075c: 6f f0 df f3  	j	0x80000698 <memset+0x14>
+
+80000760 <__register_exitproc>:
+80000760: 17 17 00 00  	auipc	a4, 1
+80000764: 03 27 07 5f  	lw	a4, 1520(a4)
+80000768: 83 27 87 14  	lw	a5, 328(a4)
+8000076c: 63 8c 07 04  	beqz	a5, 0x800007c4 <__register_exitproc+0x64>
+80000770: 03 a7 47 00  	lw	a4, 4(a5)
+80000774: 13 08 f0 01  	li	a6, 31
+80000778: 63 4e e8 06  	blt	a6, a4, 0x800007f4 <__register_exitproc+0x94>
+8000077c: 13 18 27 00  	slli	a6, a4, 2
+80000780: 63 06 05 02  	beqz	a0, 0x800007ac <__register_exitproc+0x4c>
+80000784: 33 83 07 01  	add	t1, a5, a6
+80000788: 23 24 c3 08  	sw	a2, 136(t1)
+8000078c: 83 a8 87 18  	lw	a7, 392(a5)
+80000790: 13 06 10 00  	li	a2, 1
+80000794: 33 16 e6 00  	sll	a2, a2, a4
+80000798: b3 e8 c8 00  	or	a7, a7, a2
+8000079c: 23 a4 17 19  	sw	a7, 392(a5)
+800007a0: 23 24 d3 10  	sw	a3, 264(t1)
+800007a4: 93 06 20 00  	li	a3, 2
+800007a8: 63 04 d5 02  	beq	a0, a3, 0x800007d0 <__register_exitproc+0x70>
+800007ac: 13 07 17 00  	addi	a4, a4, 1
+800007b0: 23 a2 e7 00  	sw	a4, 4(a5)
+800007b4: b3 87 07 01  	add	a5, a5, a6
+800007b8: 23 a4 b7 00  	sw	a1, 8(a5)
+800007bc: 13 05 00 00  	li	a0, 0
+800007c0: 67 80 00 00  	ret
+800007c4: 93 07 c7 14  	addi	a5, a4, 332
+800007c8: 23 24 f7 14  	sw	a5, 328(a4)
+800007cc: 6f f0 5f fa  	j	0x80000770 <__register_exitproc+0x10>
+800007d0: 83 a6 c7 18  	lw	a3, 396(a5)
+800007d4: 13 07 17 00  	addi	a4, a4, 1
+800007d8: 23 a2 e7 00  	sw	a4, 4(a5)
+800007dc: b3 e6 c6 00  	or	a3, a3, a2
+800007e0: 23 a6 d7 18  	sw	a3, 396(a5)
+800007e4: b3 87 07 01  	add	a5, a5, a6
+800007e8: 23 a4 b7 00  	sw	a1, 8(a5)
+800007ec: 13 05 00 00  	li	a0, 0
+800007f0: 67 80 00 00  	ret
+800007f4: 13 05 f0 ff  	li	a0, -1
+800007f8: 67 80 00 00  	ret
+
+800007fc <__call_exitprocs>:
+800007fc: 13 01 01 fd  	addi	sp, sp, -48
+80000800: 23 2c 41 01  	sw	s4, 24(sp)
+80000804: 17 1a 00 00  	auipc	s4, 1
+80000808: 03 2a ca 54  	lw	s4, 1356(s4)
+8000080c: 23 20 21 03  	sw	s2, 32(sp)
+80000810: 03 29 8a 14  	lw	s2, 328(s4)
+80000814: 23 26 11 02  	sw	ra, 44(sp)
+80000818: 23 24 81 02  	sw	s0, 40(sp)
+8000081c: 23 22 91 02  	sw	s1, 36(sp)
+80000820: 23 2e 31 01  	sw	s3, 28(sp)
+80000824: 23 2a 51 01  	sw	s5, 20(sp)
+80000828: 23 28 61 01  	sw	s6, 16(sp)
+8000082c: 23 26 71 01  	sw	s7, 12(sp)
+80000830: 23 24 81 01  	sw	s8, 8(sp)
+80000834: 63 00 09 04  	beqz	s2, 0x80000874 <__call_exitprocs+0x78>
+80000838: 13 0b 05 00  	mv	s6, a0
+8000083c: 93 8b 05 00  	mv	s7, a1
+80000840: 93 0a 10 00  	li	s5, 1
+80000844: 93 09 f0 ff  	li	s3, -1
+80000848: 83 24 49 00  	lw	s1, 4(s2)
+8000084c: 13 84 f4 ff  	addi	s0, s1, -1
+80000850: 63 42 04 02  	bltz	s0, 0x80000874 <__call_exitprocs+0x78>
+80000854: 93 94 24 00  	slli	s1, s1, 2
+80000858: b3 04 99 00  	add	s1, s2, s1
+8000085c: 63 84 0b 04  	beqz	s7, 0x800008a4 <__call_exitprocs+0xa8>
+80000860: 83 a7 44 10  	lw	a5, 260(s1)
+80000864: 63 80 77 05  	beq	a5, s7, 0x800008a4 <__call_exitprocs+0xa8>
+80000868: 13 04 f4 ff  	addi	s0, s0, -1
+8000086c: 93 84 c4 ff  	addi	s1, s1, -4
+80000870: e3 16 34 ff  	bne	s0, s3, 0x8000085c <__call_exitprocs+0x60>
+80000874: 83 20 c1 02  	lw	ra, 44(sp)
+80000878: 03 24 81 02  	lw	s0, 40(sp)
+8000087c: 83 24 41 02  	lw	s1, 36(sp)
+80000880: 03 29 01 02  	lw	s2, 32(sp)
+80000884: 83 29 c1 01  	lw	s3, 28(sp)
+80000888: 03 2a 81 01  	lw	s4, 24(sp)
+8000088c: 83 2a 41 01  	lw	s5, 20(sp)
+80000890: 03 2b 01 01  	lw	s6, 16(sp)
+80000894: 83 2b c1 00  	lw	s7, 12(sp)
+80000898: 03 2c 81 00  	lw	s8, 8(sp)
+8000089c: 13 01 01 03  	addi	sp, sp, 48
+800008a0: 67 80 00 00  	ret
+800008a4: 83 27 49 00  	lw	a5, 4(s2)
+800008a8: 83 a6 44 00  	lw	a3, 4(s1)
+800008ac: 93 87 f7 ff  	addi	a5, a5, -1
+800008b0: 63 8e 87 04  	beq	a5, s0, 0x8000090c <__call_exitprocs+0x110>
+800008b4: 23 a2 04 00  	sw	zero, 4(s1)
+800008b8: e3 88 06 fa  	beqz	a3, 0x80000868 <__call_exitprocs+0x6c>
+800008bc: 83 27 89 18  	lw	a5, 392(s2)
+800008c0: 33 97 8a 00  	sll	a4, s5, s0
+800008c4: 03 2c 49 00  	lw	s8, 4(s2)
+800008c8: b3 77 f7 00  	and	a5, a4, a5
+800008cc: 63 92 07 02  	bnez	a5, 0x800008f0 <__call_exitprocs+0xf4>
+800008d0: e7 80 06 00  	jalr	a3
+800008d4: 03 27 49 00  	lw	a4, 4(s2)
+800008d8: 83 27 8a 14  	lw	a5, 328(s4)
+800008dc: 63 14 87 01  	bne	a4, s8, 0x800008e4 <__call_exitprocs+0xe8>
+800008e0: e3 84 27 f9  	beq	a5, s2, 0x80000868 <__call_exitprocs+0x6c>
+800008e4: e3 88 07 f8  	beqz	a5, 0x80000874 <__call_exitprocs+0x78>
+800008e8: 13 89 07 00  	mv	s2, a5
+800008ec: 6f f0 df f5  	j	0x80000848 <__call_exitprocs+0x4c>
+800008f0: 83 27 c9 18  	lw	a5, 396(s2)
+800008f4: 83 a5 44 08  	lw	a1, 132(s1)
+800008f8: 33 77 f7 00  	and	a4, a4, a5
+800008fc: 63 1c 07 00  	bnez	a4, 0x80000914 <__call_exitprocs+0x118>
+80000900: 13 05 0b 00  	mv	a0, s6
+80000904: e7 80 06 00  	jalr	a3
+80000908: 6f f0 df fc  	j	0x800008d4 <__call_exitprocs+0xd8>
+8000090c: 23 22 89 00  	sw	s0, 4(s2)
+80000910: 6f f0 9f fa  	j	0x800008b8 <__call_exitprocs+0xbc>
+80000914: 13 85 05 00  	mv	a0, a1
+80000918: e7 80 06 00  	jalr	a3
+8000091c: 6f f0 9f fb  	j	0x800008d4 <__call_exitprocs+0xd8>
+
+Disassembly of section .init_array:
+
+80001920 <__tdata_start>:
+80001920: b8 00        	<unknown>
+80001922: 00 80        	<unknown>
+
+Disassembly of section .data:
+
+80001928 <impure_data>:
+80001928: 00 00        	<unknown>
+8000192a: 00 00        	<unknown>
+8000192c: 14 1c        	<unknown>
+8000192e: 00 80        	<unknown>
+80001930: 7c 1c        	<unknown>
+80001932: 00 80        	<unknown>
+80001934: e4 1c        	<unknown>
+80001936: 00 80        	<unknown>
+		...
+800019d0: 01 00        	<unknown>
+800019d2: 00 00        	<unknown>
+800019d4: 00 00        	<unknown>
+800019d6: 00 00        	<unknown>
+800019d8: 0e 33        	<unknown>
+800019da: cd ab        	<unknown>
+800019dc: 34 12        	<unknown>
+800019de: 6d e6        	<unknown>
+800019e0: ec de        	<unknown>
+800019e2: 05 00        	<unknown>
+800019e4: 0b 00 00 00  	vx_tmc	zero
+		...
+
+Disassembly of section .sdata:
+
+80001d50 <_global_impure_ptr>:
+80001d50: 28 19        	<unknown>
+80001d52: 00 80        	<unknown>
+
+Disassembly of section .comment:
+
+00000000 <.comment>:
+       0: 63 6c 61 6e  	bltu	sp, t1, 0x6f8 <.comment+0x6f8>
+       4: 67 20 76 65  	<unknown>
+       8: 72 73        	<unknown>
+       a: 69 6f        	<unknown>
+       c: 6e 20        	<unknown>
+       e: 31 36        	<unknown>
+      10: 2e 30        	<unknown>
+      12: 2e 36        	<unknown>
+      14: 20 28        	<unknown>
+      16: 68 74        	<unknown>
+      18: 74 70        	<unknown>
+      1a: 73 3a 2f 2f  	csrrc	s4, 754, t5
+      1e: 67 69 74 68  	<unknown>
+      22: 75 62        	<unknown>
+      24: 2e 63        	<unknown>
+      26: 6f 6d 2f 76  	jal	s10, 0xf6788 <.comment+0xf6788>
+      2a: 6f 72 74 65  	jal	tp, 0x47e80 <.comment+0x47e80>
+      2e: 78 67        	<unknown>
+      30: 70 67        	<unknown>
+      32: 70 75        	<unknown>
+      34: 2f 6c 6c 76  	<unknown>
+      38: 6d 2e        	<unknown>
+      3a: 67 69 74 20  	<unknown>
+      3e: 35 38        	<unknown>
+      40: 38 31        	<unknown>
+      42: 31 62        	<unknown>
+      44: 66 61        	<unknown>
+      46: 36 31        	<unknown>
+      48: 61 35        	<unknown>
+      4a: 30 33        	<unknown>
+      4c: 66 64        	<unknown>
+      4e: 34 61        	<unknown>
+      50: 35 66        	<unknown>
+      52: 30 64        	<unknown>
+      54: 63 37 62 35  	<unknown>
+      58: 37 38 30 32  	lui	a6, 205571
+      5c: 66 61        	<unknown>
+      5e: 65 35        	<unknown>
+      60: 31 63        	<unknown>
+      62: 33 66 35 64  	<unknown>
+      66: 29 00        	<unknown>
+      68: 47 43 43 3a  	<unknown>
+      6c: 20 28        	<unknown>
+      6e: 67 32 65 65  	<unknown>
+      72: 35 65        	<unknown>
+      74: 34 33        	<unknown>
+      76: 30 30        	<unknown>
+      78: 31 38        	<unknown>
+      7a: 2d 64        	<unknown>
+      7c: 69 72        	<unknown>
+      7e: 74 79        	<unknown>
+      80: 29 20        	<unknown>
+      82: 31 32        	<unknown>
+      84: 2e 32        	<unknown>
+      86: 2e 30        	<unknown>
+      88: 00 47        	<unknown>
+      8a: 43 43 3a 20  	fmadd.s	ft6, fs4, ft3, ft4, rmm
+      8e: 28 47        	<unknown>
+      90: 4e 55        	<unknown>
+      92: 29 20        	<unknown>
+      94: 31 32        	<unknown>
+      96: 2e 32        	<unknown>
+      98: 2e 30        	<unknown>
+      9a: 00           	<unknown>
+
+Disassembly of section .riscv.attributes:
+
+00000000 <.riscv.attributes>:
+       0: 41 40        	<unknown>
+       2: 00 00        	<unknown>
+       4: 00 72        	<unknown>
+       6: 69 73        	<unknown>
+       8: 63 76 00 01  	bgeu	zero, a6, 0x14 <.comment+0x14>
+       c: 36 00        	<unknown>
+       e: 00 00        	<unknown>
+      10: 04 10        	<unknown>
+      12: 05 72        	<unknown>
+      14: 76 33        	<unknown>
+      16: 32 69        	<unknown>
+      18: 32 70        	<unknown>
+      1a: 31 5f        	<unknown>
+      1c: 6d 32        	<unknown>
+      1e: 70 30        	<unknown>
+      20: 5f 61 32 70  	<unknown>
+      24: 31 5f        	<unknown>
+      26: 66 32        	<unknown>
+      28: 70 32        	<unknown>
+      2a: 5f 7a 69 63  	<unknown>
+      2e: 73 72 32 70  	csrrci	tp, 1795, 4
+      32: 30 5f        	<unknown>
+      34: 7a 6d        	<unknown>
+      36: 6d 75        	<unknown>
+      38: 6c 31        	<unknown>
+      3a: 70 30        	<unknown>
+      3c: 00 08        	<unknown>
+      3e: 01 0a        	<unknown>
+      40: 0b           	<unknown>
+
+Disassembly of section .symtab:
+
+00000000 <.symtab>:
+		...
+      14: 00 00        	<unknown>
+      16: 00 80        	<unknown>
+      18: 00 00        	<unknown>
+      1a: 00 00        	<unknown>
+      1c: 03 00 01 00  	lb	zero, 0(sp)
+      20: 00 00        	<unknown>
+      22: 00 00        	<unknown>
+      24: 84 00        	<unknown>
+      26: 00 80        	<unknown>
+      28: 00 00        	<unknown>
+      2a: 00 00        	<unknown>
+      2c: 03 00 02 00  	lb	zero, 0(tp)
+      30: 00 00        	<unknown>
+      32: 00 00        	<unknown>
+      34: 20 19        	<unknown>
+      36: 00 80        	<unknown>
+      38: 00 00        	<unknown>
+      3a: 00 00        	<unknown>
+      3c: 03 00 03 00  	lb	zero, 0(t1)
+      40: 00 00        	<unknown>
+      42: 00 00        	<unknown>
+      44: 28 19        	<unknown>
+      46: 00 80        	<unknown>
+      48: 00 00        	<unknown>
+      4a: 00 00        	<unknown>
+      4c: 03 00 04 00  	lb	zero, 0(s0)
+      50: 00 00        	<unknown>
+      52: 00 00        	<unknown>
+      54: 50 1d        	<unknown>
+      56: 00 80        	<unknown>
+      58: 00 00        	<unknown>
+      5a: 00 00        	<unknown>
+      5c: 03 00 05 00  	lb	zero, 0(a0)
+		...
+      6c: 03 00 06 00  	lb	zero, 0(a2)
+		...
+      7c: 03 00 07 00  	lb	zero, 0(a4)
+      80: 01 00        	<unknown>
+		...
+      8a: 00 00        	<unknown>
+      8c: 04 00        	<unknown>
+      8e: f1 ff        	<unknown>
+      90: 0e 00        	<unknown>
+      92: 00 00        	<unknown>
+      94: 00 00        	<unknown>
+      96: 00 80        	<unknown>
+      98: 00 00        	<unknown>
+      9a: 00 00        	<unknown>
+      9c: 00 00        	<unknown>
+      9e: 01 00        	<unknown>
+      a0: 3a 00        	<unknown>
+      a2: 00 00        	<unknown>
+      a4: 48 01        	<unknown>
+      a6: 00 80        	<unknown>
+      a8: 00 00        	<unknown>
+      aa: 00 00        	<unknown>
+      ac: 02 00        	<unknown>
+      ae: 02 00        	<unknown>
+      b0: 48 00        	<unknown>
+      b2: 00 00        	<unknown>
+      b4: 14 01        	<unknown>
+      b6: 00 80        	<unknown>
+      b8: 00 00        	<unknown>
+      ba: 00 00        	<unknown>
+      bc: 02 00        	<unknown>
+      be: 02 00        	<unknown>
+      c0: 52 00        	<unknown>
+      c2: 00 00        	<unknown>
+      c4: 5c 01        	<unknown>
+      c6: 00 80        	<unknown>
+      c8: 00 00        	<unknown>
+      ca: 00 00        	<unknown>
+      cc: 02 00        	<unknown>
+      ce: 02 00        	<unknown>
+      d0: 0e 00        	<unknown>
+      d2: 00 00        	<unknown>
+      d4: 04 01        	<unknown>
+      d6: 00 80        	<unknown>
+      d8: 00 00        	<unknown>
+      da: 00 00        	<unknown>
+      dc: 00 00        	<unknown>
+      de: 02 00        	<unknown>
+      e0: e3 00 00 00  	beqz	zero, 0x8e0 <.symtab+0x8e0>
+		...
+      ec: 04 00        	<unknown>
+      ee: f1 ff        	<unknown>
+      f0: 5f 00 00 00  	<unknown>
+      f4: 84 00        	<unknown>
+      f6: 00 80        	<unknown>
+      f8: 00 00        	<unknown>
+      fa: 00 00        	<unknown>
+      fc: 00 00        	<unknown>
+      fe: 02 00        	<unknown>
+     100: 86 00        	<unknown>
+		...
+     10a: 00 00        	<unknown>
+     10c: 04 00        	<unknown>
+     10e: f1 ff        	<unknown>
+     110: 96 00        	<unknown>
+     112: 00 00        	<unknown>
+     114: b8 00        	<unknown>
+     116: 00 80        	<unknown>
+     118: 18 00        	<unknown>
+     11a: 00 00        	<unknown>
+     11c: 02 00        	<unknown>
+     11e: 02 00        	<unknown>
+     120: 5f 00 00 00  	<unknown>
+     124: b8 00        	<unknown>
+     126: 00 80        	<unknown>
+     128: 00 00        	<unknown>
+     12a: 00 00        	<unknown>
+     12c: 00 00        	<unknown>
+     12e: 02 00        	<unknown>
+     130: 5f 00 00 00  	<unknown>
+     134: fc 07        	<unknown>
+     136: 00 80        	<unknown>
+     138: 00 00        	<unknown>
+     13a: 00 00        	<unknown>
+     13c: 00 00        	<unknown>
+     13e: 02 00        	<unknown>
+     140: a4 00        	<unknown>
+		...
+     14a: 00 00        	<unknown>
+     14c: 04 00        	<unknown>
+     14e: f1 ff        	<unknown>
+     150: af 00 00 00  	<unknown>
+		...
+     15c: 04 00        	<unknown>
+     15e: f1 ff        	<unknown>
+     160: 0e 00        	<unknown>
+     162: 00 00        	<unknown>
+     164: 80 01        	<unknown>
+     166: 00 80        	<unknown>
+     168: 00 00        	<unknown>
+     16a: 00 00        	<unknown>
+     16c: 00 00        	<unknown>
+     16e: 02 00        	<unknown>
+     170: 0e 00        	<unknown>
+     172: 00 00        	<unknown>
+     174: c4 01        	<unknown>
+     176: 00 80        	<unknown>
+     178: 00 00        	<unknown>
+     17a: 00 00        	<unknown>
+     17c: 00 00        	<unknown>
+     17e: 02 00        	<unknown>
+     180: 0e 00        	<unknown>
+     182: 00 00        	<unknown>
+     184: 58 02        	<unknown>
+     186: 00 80        	<unknown>
+     188: 00 00        	<unknown>
+     18a: 00 00        	<unknown>
+     18c: 00 00        	<unknown>
+     18e: 02 00        	<unknown>
+     190: bd 00        	<unknown>
+		...
+     19a: 00 00        	<unknown>
+     19c: 04 00        	<unknown>
+     19e: f1 ff        	<unknown>
+     1a0: 0e 00        	<unknown>
+     1a2: 00 00        	<unknown>
+     1a4: b4 02        	<unknown>
+     1a6: 00 80        	<unknown>
+     1a8: 00 00        	<unknown>
+     1aa: 00 00        	<unknown>
+     1ac: 00 00        	<unknown>
+     1ae: 02 00        	<unknown>
+     1b0: e1 00        	<unknown>
+		...
+     1ba: 00 00        	<unknown>
+     1bc: 04 00        	<unknown>
+     1be: f1 ff        	<unknown>
+     1c0: 5f 00 00 00  	<unknown>
+     1c4: cc 04        	<unknown>
+     1c6: 00 80        	<unknown>
+     1c8: 00 00        	<unknown>
+     1ca: 00 00        	<unknown>
+     1cc: 00 00        	<unknown>
+     1ce: 02 00        	<unknown>
+     1d0: c7 00 00 00  	fmsub.s	ft1, ft0, ft0, ft0, rne
+		...
+     1dc: 04 00        	<unknown>
+     1de: f1 ff        	<unknown>
+     1e0: 5f 00 00 00  	<unknown>
+     1e4: e0 04        	<unknown>
+     1e6: 00 80        	<unknown>
+     1e8: 00 00        	<unknown>
+     1ea: 00 00        	<unknown>
+     1ec: 00 00        	<unknown>
+     1ee: 02 00        	<unknown>
+     1f0: d0 00        	<unknown>
+		...
+     1fa: 00 00        	<unknown>
+     1fc: 04 00        	<unknown>
+     1fe: f1 ff        	<unknown>
+     200: 5f 00 00 00  	<unknown>
+     204: 84 06        	<unknown>
+     206: 00 80        	<unknown>
+     208: 00 00        	<unknown>
+     20a: 00 00        	<unknown>
+     20c: 00 00        	<unknown>
+     20e: 02 00        	<unknown>
+     210: df 00 00 00  	<unknown>
+		...
+     21c: 04 00        	<unknown>
+     21e: f1 ff        	<unknown>
+     220: 5f 00 00 00  	<unknown>
+     224: 60 07        	<unknown>
+     226: 00 80        	<unknown>
+     228: 00 00        	<unknown>
+     22a: 00 00        	<unknown>
+     22c: 00 00        	<unknown>
+     22e: 02 00        	<unknown>
+     230: ea 00        	<unknown>
+		...
+     23a: 00 00        	<unknown>
+     23c: 04 00        	<unknown>
+     23e: f1 ff        	<unknown>
+     240: f3 00 00 00  	<unknown>
+     244: 28 19        	<unknown>
+     246: 00 80        	<unknown>
+     248: 28 04        	<unknown>
+     24a: 00 00        	<unknown>
+     24c: 01 00        	<unknown>
+     24e: 04 00        	<unknown>
+		...
+     25c: 04 00        	<unknown>
+     25e: f1 ff        	<unknown>
+     260: ff 00 00 00  	<unknown>
+     264: 24 19        	<unknown>
+     266: 00 80        	<unknown>
+     268: 00 00        	<unknown>
+     26a: 00 00        	<unknown>
+     26c: 00 00        	<unknown>
+     26e: 03 00 10 01  	lb	zero, 17(zero)
+     272: 00 00        	<unknown>
+     274: 20 19        	<unknown>
+     276: 00 80        	<unknown>
+     278: 00 00        	<unknown>
+     27a: 00 00        	<unknown>
+     27c: 00 00        	<unknown>
+     27e: 03 00 1d 01  	lb	zero, 17(s10)
+     282: 00 00        	<unknown>
+     284: 24 19        	<unknown>
+     286: 00 80        	<unknown>
+     288: 00 00        	<unknown>
+     28a: 00 00        	<unknown>
+     28c: 00 00        	<unknown>
+     28e: 03 00 30 01  	lb	zero, 19(zero)
+     292: 00 00        	<unknown>
+     294: 20 19        	<unknown>
+     296: 00 80        	<unknown>
+     298: 00 00        	<unknown>
+     29a: 00 00        	<unknown>
+     29c: 00 00        	<unknown>
+     29e: 03 00 3e 01  	lb	zero, 19(t3)
+     2a2: 00 00        	<unknown>
+     2a4: 24 19        	<unknown>
+     2a6: 00 80        	<unknown>
+     2a8: 00 00        	<unknown>
+     2aa: 00 00        	<unknown>
+     2ac: 00 00        	<unknown>
+     2ae: 03 00 4f 01  	lb	zero, 20(t5)
+		...
+     2be: f1 ff        	<unknown>
+     2c0: 5d 01        	<unknown>
+     2c2: 00 00        	<unknown>
+     2c4: 20 19        	<unknown>
+     2c6: 00 80        	<unknown>
+     2c8: 00 00        	<unknown>
+     2ca: 00 00        	<unknown>
+     2cc: 00 00        	<unknown>
+     2ce: 03 00 71 01  	lb	zero, 23(sp)
+     2d2: 00 00        	<unknown>
+     2d4: 20 19        	<unknown>
+     2d6: 00 80        	<unknown>
+     2d8: 00 00        	<unknown>
+     2da: 00 00        	<unknown>
+     2dc: 00 00        	<unknown>
+     2de: 03 00 7c 01  	lb	zero, 23(s8)
+     2e2: 00 00        	<unknown>
+     2e4: 20 19        	<unknown>
+     2e6: 00 80        	<unknown>
+     2e8: 00 00        	<unknown>
+     2ea: 00 00        	<unknown>
+     2ec: 00 00        	<unknown>
+     2ee: 03 00 8f 01  	lb	zero, 24(t5)
+     2f2: 00 00        	<unknown>
+     2f4: 20 19        	<unknown>
+     2f6: 00 80        	<unknown>
+     2f8: 00 00        	<unknown>
+     2fa: 00 00        	<unknown>
+     2fc: 00 00        	<unknown>
+     2fe: 03 00 a5 01  	lb	zero, 26(a0)
+     302: 00 00        	<unknown>
+     304: 50 1d        	<unknown>
+     306: 00 80        	<unknown>
+     308: 00 00        	<unknown>
+     30a: 00 00        	<unknown>
+     30c: 10 00        	<unknown>
+     30e: 05 00        	<unknown>
+     310: b5 01        	<unknown>
+     312: 00 00        	<unknown>
+     314: 70 01        	<unknown>
+     316: 00 80        	<unknown>
+     318: 00 00        	<unknown>
+     31a: 00 00        	<unknown>
+     31c: 12 00        	<unknown>
+     31e: 02 00        	<unknown>
+     320: c4 01        	<unknown>
+     322: 00 00        	<unknown>
+     324: e0 04        	<unknown>
+     326: 00 80        	<unknown>
+     328: a4 01        	<unknown>
+     32a: 00 00        	<unknown>
+     32c: 12 00        	<unknown>
+     32e: 02 00        	<unknown>
+     330: cb 01 00 00  	fnmsub.s	ft3, ft0, ft0, ft0, rne
+     334: 28 21        	<unknown>
+     336: 00 80        	<unknown>
+     338: 00 00        	<unknown>
+     33a: 00 00        	<unknown>
+     33c: 10 00        	<unknown>
+     33e: f1 ff        	<unknown>
+     340: dc 01        	<unknown>
+     342: 00 00        	<unknown>
+     344: 50 1d        	<unknown>
+     346: 00 80        	<unknown>
+     348: 04 00        	<unknown>
+     34a: 00 00        	<unknown>
+     34c: 11 00        	<unknown>
+     34e: 05 00        	<unknown>
+     350: ef 01 00 00  	jal	gp, 0x350 <.symtab+0x350>
+     354: c4 01        	<unknown>
+     356: 00 80        	<unknown>
+     358: 94 00        	<unknown>
+     35a: 00 00        	<unknown>
+     35c: 12 00        	<unknown>
+     35e: 02 00        	<unknown>
+     360: 01 02        	<unknown>
+     362: 00 00        	<unknown>
+     364: 80 01        	<unknown>
+     366: 00 80        	<unknown>
+     368: 44 00        	<unknown>
+     36a: 00 00        	<unknown>
+     36c: 12 00        	<unknown>
+     36e: 02 00        	<unknown>
+     370: 0c 02        	<unknown>
+     372: 00 00        	<unknown>
+     374: 58 02        	<unknown>
+     376: 00 80        	<unknown>
+     378: 5c 00        	<unknown>
+     37a: 00 00        	<unknown>
+     37c: 12 00        	<unknown>
+     37e: 02 00        	<unknown>
+     380: 1e 02        	<unknown>
+		...
+     38a: 00 00        	<unknown>
+     38c: 10 00        	<unknown>
+     38e: f1 ff        	<unknown>
+     390: 2b 02 00 00  	vx_tex	tp, 0, zero, zero, zero
+		...
+     39c: 10 00        	<unknown>
+     39e: f1 ff        	<unknown>
+     3a0: 37 02 00 00  	lui	tp, 0
+     3a4: fc 07        	<unknown>
+     3a6: 00 80        	<unknown>
+     3a8: 24 01        	<unknown>
+     3aa: 00 00        	<unknown>
+     3ac: 12 00        	<unknown>
+     3ae: 02 00        	<unknown>
+     3b0: 37 01 00 00  	lui	sp, 0
+     3b4: 00 00        	<unknown>
+     3b6: 00 80        	<unknown>
+     3b8: 84 00        	<unknown>
+     3ba: 00 00        	<unknown>
+     3bc: 12 00        	<unknown>
+     3be: 01 00        	<unknown>
+     3c0: 48 02        	<unknown>
+     3c2: 00 00        	<unknown>
+     3c4: 60 07        	<unknown>
+     3c6: 00 80        	<unknown>
+     3c8: 9c 00        	<unknown>
+     3ca: 00 00        	<unknown>
+     3cc: 12 00        	<unknown>
+     3ce: 02 00        	<unknown>
+     3d0: 5c 02        	<unknown>
+     3d2: 00 00        	<unknown>
+     3d4: 54 1d        	<unknown>
+     3d6: 00 80        	<unknown>
+     3d8: 00 00        	<unknown>
+     3da: 00 00        	<unknown>
+     3dc: 10 00        	<unknown>
+     3de: 05 00        	<unknown>
+     3e0: 68 02        	<unknown>
+     3e2: 00 00        	<unknown>
+     3e4: 54 1d        	<unknown>
+     3e6: 00 80        	<unknown>
+     3e8: 00 00        	<unknown>
+     3ea: 00 00        	<unknown>
+     3ec: 10 00        	<unknown>
+     3ee: 05 00        	<unknown>
+     3f0: 74 02        	<unknown>
+     3f2: 00 00        	<unknown>
+     3f4: 84 06        	<unknown>
+     3f6: 00 80        	<unknown>
+     3f8: dc 00        	<unknown>
+     3fa: 00 00        	<unknown>
+     3fc: 12 00        	<unknown>
+     3fe: 02 00        	<unknown>
+     400: 7b 02 00 00  	<unknown>
+     404: d0 00        	<unknown>
+     406: 00 80        	<unknown>
+     408: 34 00        	<unknown>
+     40a: 00 00        	<unknown>
+     40c: 12 00        	<unknown>
+     40e: 02 00        	<unknown>
+     410: 80 02        	<unknown>
+     412: 00 00        	<unknown>
+     414: cc 04        	<unknown>
+     416: 00 80        	<unknown>
+     418: 14 00        	<unknown>
+     41a: 00 00        	<unknown>
+     41c: 12 00        	<unknown>
+     41e: 02 00        	<unknown>
+     420: 87 02 00 00  	<unknown>
+		...
+     42c: 10 00        	<unknown>
+     42e: f1 ff        	<unknown>
+     430: 9a 02        	<unknown>
+     432: 00 00        	<unknown>
+     434: 00 00        	<unknown>
+     436: 00 80        	<unknown>
+     438: 00 00        	<unknown>
+     43a: 00 00        	<unknown>
+     43c: 10 00        	<unknown>
+     43e: f1 ff        	<unknown>
+     440: a7 02 00 00  	<unknown>
+     444: 28 19        	<unknown>
+     446: 00 80        	<unknown>
+     448: 00 00        	<unknown>
+     44a: 00 00        	<unknown>
+     44c: 10 00        	<unknown>
+     44e: 04 00        	<unknown>
+     450: b6 02        	<unknown>
+     452: 00 00        	<unknown>
+     454: 54 1d        	<unknown>
+     456: 00 80        	<unknown>
+     458: 00 00        	<unknown>
+     45a: 00 00        	<unknown>
+     45c: 10 00        	<unknown>
+     45e: 05 00        	<unknown>
+     460: 77 01 00 00  	<unknown>
+     464: 54 1d        	<unknown>
+     466: 00 80        	<unknown>
+     468: 00 00        	<unknown>
+     46a: 00 00        	<unknown>
+     46c: 10 00        	<unknown>
+     46e: 05 00        	<unknown>
+     470: cb 02 00 00  	fnmsub.s	ft5, ft0, ft0, ft0, rne
+     474: 84 00        	<unknown>
+     476: 00 80        	<unknown>
+     478: 34 00        	<unknown>
+     47a: 00 00        	<unknown>
+     47c: 12 00        	<unknown>
+     47e: 02 00        	<unknown>
+     480: bd 02        	<unknown>
+     482: 00 00        	<unknown>
+     484: b4 02        	<unknown>
+     486: 00 80        	<unknown>
+     488: 18 02        	<unknown>
+     48a: 00 00        	<unknown>
+     48c: 12 00        	<unknown>
+     48e: 02 00        	<unknown>
+     490: ca 02        	<unknown>
+     492: 00 00        	<unknown>
+     494: 04 01        	<unknown>
+     496: 00 80        	<unknown>
+     498: 00 00        	<unknown>
+     49a: 00 00        	<unknown>
+     49c: 12 00        	<unknown>
+     49e: 02 00        	<unknown>
+
+Disassembly of section .strtab:
+
+00000000 <.strtab>:
+       0: 00 76        	<unknown>
+       2: 78 5f        	<unknown>
+       4: 73 74 61 72  	csrrci	s0, mhpmevent6h, 2
+       8: 74 2e        	<unknown>
+       a: 53 2e 6f 00  	fadd.s	ft8, ft10, ft6, rdn
+       e: 24 78        	<unknown>
+      10: 72 76        	<unknown>
+      12: 33 32 69 32  	<unknown>
+      16: 70 31        	<unknown>
+      18: 5f 6d 32 70  	<unknown>
+      1c: 30 5f        	<unknown>
+      1e: 61 32        	<unknown>
+      20: 70 31        	<unknown>
+      22: 5f 66 32 70  	<unknown>
+      26: 32 5f        	<unknown>
+      28: 7a 69        	<unknown>
+      2a: 63 73 72 32  	bgeu	tp, t2, 0x350 <.symtab+0x350>
+      2e: 70 30        	<unknown>
+      30: 5f 7a 6d 6d  	<unknown>
+      34: 75 6c        	<unknown>
+      36: 31 70        	<unknown>
+      38: 30 00        	<unknown>
+      3a: 69 6e        	<unknown>
+      3c: 69 74        	<unknown>
+      3e: 5f 72 65 67  	<unknown>
+      42: 73 5f 61 6c  	csrrwi	t5, 1734, 2
+      46: 6c 00        	<unknown>
+      48: 69 6e        	<unknown>
+      4a: 69 74        	<unknown>
+      4c: 5f 72 65 67  	<unknown>
+      50: 73 00 69 6e  	<unknown>
+      54: 69 74        	<unknown>
+      56: 5f 74 6c 73  	<unknown>
+      5a: 5f 61 6c 6c  	<unknown>
+      5e: 00 24        	<unknown>
+      60: 78 72        	<unknown>
+      62: 76 33        	<unknown>
+      64: 32 69        	<unknown>
+      66: 32 70        	<unknown>
+      68: 31 5f        	<unknown>
+      6a: 6d 32        	<unknown>
+      6c: 70 30        	<unknown>
+      6e: 5f 66 32 70  	<unknown>
+      72: 32 5f        	<unknown>
+      74: 7a 69        	<unknown>
+      76: 63 73 72 32  	bgeu	tp, t2, 0x39c <.symtab+0x39c>
+      7a: 70 30        	<unknown>
+      7c: 5f 7a 6d 6d  	<unknown>
+      80: 75 6c        	<unknown>
+      82: 31 70        	<unknown>
+      84: 30 00        	<unknown>
+      86: 5f 5f 63 61  	<unknown>
+      8a: 6c 6c        	<unknown>
+      8c: 5f 61 74 65  	<unknown>
+      90: 78 69        	<unknown>
+      92: 74 2e        	<unknown>
+      94: 63 00 72 65  	beq	tp, s7, 0x6d4 <.symtab+0x6d4>
+      98: 67 69 73 74  	<unknown>
+      9c: 65 72        	<unknown>
+      9e: 5f 66 69 6e  	<unknown>
+      a2: 69 00        	<unknown>
+      a4: 6b 65 72 6e  	<unknown>
+      a8: 65 6c        	<unknown>
+      aa: 2e 63        	<unknown>
+      ac: 70 70        	<unknown>
+      ae: 00 76        	<unknown>
+      b0: 78 5f        	<unknown>
+      b2: 73 79 73 63  	csrrci	s2, 1591, 6
+      b6: 61 6c        	<unknown>
+      b8: 6c 73        	<unknown>
+      ba: 2e 63        	<unknown>
+      bc: 00 76        	<unknown>
+      be: 78 5f        	<unknown>
+      c0: 70 65        	<unknown>
+      c2: 72 66        	<unknown>
+      c4: 2e 63        	<unknown>
+      c6: 00 6d        	<unknown>
+      c8: 65 6d        	<unknown>
+      ca: 63 70 79 2e  	bgeu	s2, t2, 0x3aa <.symtab+0x3aa>
+      ce: 63 00 6c 69  	beq	s8, s6, 0x74e <.symtab+0x74e>
+      d2: 62 5f        	<unknown>
+      d4: 61 2d        	<unknown>
+      d6: 6d 65        	<unknown>
+      d8: 6d 73        	<unknown>
+      da: 65 74        	<unknown>
+      dc: 2e 6f        	<unknown>
+      de: 00 5f        	<unknown>
+      e0: 5f 61 74 65  	<unknown>
+      e4: 78 69        	<unknown>
+      e6: 74 2e        	<unknown>
+      e8: 63 00 69 6d  	beq	s2, s6, 0x7a8 <.symtab+0x7a8>
+      ec: 70 75        	<unknown>
+      ee: 72 65        	<unknown>
+      f0: 2e 63        	<unknown>
+      f2: 00 69        	<unknown>
+      f4: 6d 70        	<unknown>
+      f6: 75 72        	<unknown>
+      f8: 65 5f        	<unknown>
+      fa: 64 61        	<unknown>
+      fc: 74 61        	<unknown>
+      fe: 00 5f        	<unknown>
+     100: 5f 66 69 6e  	<unknown>
+     104: 69 5f        	<unknown>
+     106: 61 72        	<unknown>
+     108: 72 61        	<unknown>
+     10a: 79 5f        	<unknown>
+     10c: 65 6e        	<unknown>
+     10e: 64 00        	<unknown>
+     110: 5f 5f 74 62  	<unknown>
+     114: 73 73 5f 73  	csrrci	t1, mhpmevent21h, 30
+     118: 74 61        	<unknown>
+     11a: 72 74        	<unknown>
+     11c: 00 5f        	<unknown>
+     11e: 5f 66 69 6e  	<unknown>
+     122: 69 5f        	<unknown>
+     124: 61 72        	<unknown>
+     126: 72 61        	<unknown>
+     128: 79 5f        	<unknown>
+     12a: 73 74 61 72  	csrrci	s0, mhpmevent6h, 2
+     12e: 74 00        	<unknown>
+     130: 5f 5f 74 64  	<unknown>
+     134: 61 74        	<unknown>
+     136: 61 5f        	<unknown>
+     138: 73 74 61 72  	csrrci	s0, mhpmevent6h, 2
+     13c: 74 00        	<unknown>
+     13e: 5f 5f 69 6e  	<unknown>
+     142: 69 74        	<unknown>
+     144: 5f 61 72 72  	<unknown>
+     148: 61 79        	<unknown>
+     14a: 5f 65 6e 64  	<unknown>
+     14e: 00 5f        	<unknown>
+     150: 5f 74 62 73  	<unknown>
+     154: 73 5f 6f 66  	csrrwi	t5, 1638, 30
+     158: 66 73        	<unknown>
+     15a: 65 74        	<unknown>
+     15c: 00 5f        	<unknown>
+     15e: 5f 70 72 65  	<unknown>
+     162: 69 6e        	<unknown>
+     164: 69 74        	<unknown>
+     166: 5f 61 72 72  	<unknown>
+     16a: 61 79        	<unknown>
+     16c: 5f 65 6e 64  	<unknown>
+     170: 00 5f        	<unknown>
+     172: 5f 74 62 73  	<unknown>
+     176: 73 5f 65 6e  	csrrwi	t5, 1766, 10
+     17a: 64 00        	<unknown>
+     17c: 5f 5f 69 6e  	<unknown>
+     180: 69 74        	<unknown>
+     182: 5f 61 72 72  	<unknown>
+     186: 61 79        	<unknown>
+     188: 5f 73 74 61  	<unknown>
+     18c: 72 74        	<unknown>
+     18e: 00 5f        	<unknown>
+     190: 5f 70 72 65  	<unknown>
+     194: 69 6e        	<unknown>
+     196: 69 74        	<unknown>
+     198: 5f 61 72 72  	<unknown>
+     19c: 61 79        	<unknown>
+     19e: 5f 73 74 61  	<unknown>
+     1a2: 72 74        	<unknown>
+     1a4: 00 5f        	<unknown>
+     1a6: 5f 53 44 41  	<unknown>
+     1aa: 54 41        	<unknown>
+     1ac: 5f 42 45 47  	<unknown>
+     1b0: 49 4e        	<unknown>
+     1b2: 5f 5f 00 76  	<unknown>
+     1b6: 78 5f        	<unknown>
+     1b8: 77 73 70 61  	<unknown>
+     1bc: 77 6e 5f 77  	<unknown>
+     1c0: 61 69        	<unknown>
+     1c2: 74 00        	<unknown>
+     1c4: 6d 65        	<unknown>
+     1c6: 6d 63        	<unknown>
+     1c8: 70 79        	<unknown>
+     1ca: 00 5f        	<unknown>
+     1cc: 5f 67 6c 6f  	<unknown>
+     1d0: 62 61        	<unknown>
+     1d2: 6c 5f        	<unknown>
+     1d4: 70 6f        	<unknown>
+     1d6: 69 6e        	<unknown>
+     1d8: 74 65        	<unknown>
+     1da: 72 00        	<unknown>
+     1dc: 5f 67 6c 6f  	<unknown>
+     1e0: 62 61        	<unknown>
+     1e2: 6c 5f        	<unknown>
+     1e4: 69 6d        	<unknown>
+     1e6: 70 75        	<unknown>
+     1e8: 72 65        	<unknown>
+     1ea: 5f 70 74 72  	<unknown>
+     1ee: 00 5f        	<unknown>
+     1f0: 5f 6c 69 62  	<unknown>
+     1f4: 63 5f 69 6e  	bge	s2, t1, 0x8f2 <.symtab+0x8f2>
+     1f8: 69 74        	<unknown>
+     1fa: 5f 61 72 72  	<unknown>
+     1fe: 61 79        	<unknown>
+     200: 00 5f        	<unknown>
+     202: 5f 69 6e 69  	<unknown>
+     206: 74 5f        	<unknown>
+     208: 74 6c        	<unknown>
+     20a: 73 00 5f 5f  	<unknown>
+     20e: 6c 69        	<unknown>
+     210: 62 63        	<unknown>
+     212: 5f 66 69 6e  	<unknown>
+     216: 69 5f        	<unknown>
+     218: 61 72        	<unknown>
+     21a: 72 61        	<unknown>
+     21c: 79 00        	<unknown>
+     21e: 5f 5f 74 64  	<unknown>
+     222: 61 74        	<unknown>
+     224: 61 5f        	<unknown>
+     226: 73 69 7a 65  	csrrsi	s2, 1623, 20
+     22a: 00 5f        	<unknown>
+     22c: 5f 74 62 73  	<unknown>
+     230: 73 5f 73 69  	csrrwi	t5, 1687, 6
+     234: 7a 65        	<unknown>
+     236: 00 5f        	<unknown>
+     238: 5f 63 61 6c  	<unknown>
+     23c: 6c 5f        	<unknown>
+     23e: 65 78        	<unknown>
+     240: 69 74        	<unknown>
+     242: 70 72        	<unknown>
+     244: 6f 63 73 00  	jal	t1, 0x36a4a <.symtab+0x36a4a>
+     248: 5f 5f 72 65  	<unknown>
+     24c: 67 69 73 74  	<unknown>
+     250: 65 72        	<unknown>
+     252: 5f 65 78 69  	<unknown>
+     256: 74 70        	<unknown>
+     258: 72 6f        	<unknown>
+     25a: 63 00 5f 5f  	beq	t5, s5, 0x83a <.symtab+0x83a>
+     25e: 42 53        	<unknown>
+     260: 53 5f 45 4e  	<unknown>
+     264: 44 5f        	<unknown>
+     266: 5f 00 5f 5f  	<unknown>
+     26a: 62 73        	<unknown>
+     26c: 73 5f 73 74  	csrrwi	t5, mseccfg, 6
+     270: 61 72        	<unknown>
+     272: 74 00        	<unknown>
+     274: 6d 65        	<unknown>
+     276: 6d 73        	<unknown>
+     278: 65 74        	<unknown>
+     27a: 00 6d        	<unknown>
+     27c: 61 69        	<unknown>
+     27e: 6e 00        	<unknown>
+     280: 61 74        	<unknown>
+     282: 65 78        	<unknown>
+     284: 69 74        	<unknown>
+     286: 00 5f        	<unknown>
+     288: 5f 74 63 62  	<unknown>
+     28c: 5f 61 6c 69  	<unknown>
+     290: 67 6e 65 64  	<unknown>
+     294: 5f 73 69 7a  	<unknown>
+     298: 65 00        	<unknown>
+     29a: 53 54 41 52  	<unknown>
+     29e: 54 55        	<unknown>
+     2a0: 50 5f        	<unknown>
+     2a2: 41 44        	<unknown>
+     2a4: 44 52        	<unknown>
+     2a6: 00 5f        	<unknown>
+     2a8: 5f 44 41 54  	<unknown>
+     2ac: 41 5f        	<unknown>
+     2ae: 42 45        	<unknown>
+     2b0: 47 49 4e 5f  	<unknown>
+     2b4: 5f 00 5f 65  	<unknown>
+     2b8: 64 61        	<unknown>
+     2ba: 74 61        	<unknown>
+     2bc: 00 76        	<unknown>
+     2be: 78 5f        	<unknown>
+     2c0: 70 65        	<unknown>
+     2c2: 72 66        	<unknown>
+     2c4: 5f 64 75 6d  	<unknown>
+     2c8: 70 00        	<unknown>
+     2ca: 5f 65 78 69  	<unknown>
+     2ce: 74 00        	<unknown>
+
+Disassembly of section .shstrtab:
+
+00000000 <.shstrtab>:
+       0: 00 2e        	<unknown>
+       2: 73 79 6d 74  	csrrci	s2, 1862, 26
+       6: 61 62        	<unknown>
+       8: 00 2e        	<unknown>
+       a: 73 74 72 74  	csrrci	s0, mseccfg, 4
+       e: 61 62        	<unknown>
+      10: 00 2e        	<unknown>
+      12: 73 68 73 74  	csrrsi	a6, mseccfg, 6
+      16: 72 74        	<unknown>
+      18: 61 62        	<unknown>
+      1a: 00 2e        	<unknown>
+      1c: 69 6e        	<unknown>
+      1e: 69 74        	<unknown>
+      20: 00 2e        	<unknown>
+      22: 74 65        	<unknown>
+      24: 78 74        	<unknown>
+      26: 00 2e        	<unknown>
+      28: 69 6e        	<unknown>
+      2a: 69 74        	<unknown>
+      2c: 5f 61 72 72  	<unknown>
+      30: 61 79        	<unknown>
+      32: 00 2e        	<unknown>
+      34: 64 61        	<unknown>
+      36: 74 61        	<unknown>
+      38: 00 2e        	<unknown>
+      3a: 73 64 61 74  	csrrsi	s0, 1862, 2
+      3e: 61 00        	<unknown>
+      40: 2e 63        	<unknown>
+      42: 6f 6d 6d 65  	jal	s10, 0xd6698 <.symtab+0xd6698>
+      46: 6e 74        	<unknown>
+      48: 00 2e        	<unknown>
+      4a: 72 69        	<unknown>
+      4c: 73 63 76 2e  	csrrsi	t1, 743, 12
+      50: 61 74        	<unknown>
+      52: 74 72        	<unknown>
+      54: 69 62        	<unknown>
+      56: 75 74        	<unknown>
+      58: 65 73        	<unknown>
+      5a: 00           	<unknown>

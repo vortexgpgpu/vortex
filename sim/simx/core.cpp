@@ -27,7 +27,7 @@
 #include "processor_impl.h"
 
 using namespace vortex;
-
+//TODO - change number of tcore_csrs_ 
 Core::Core(const SimContext& ctx, 
            uint32_t core_id, 
            Socket* socket,
@@ -46,6 +46,7 @@ Core::Core(const SimContext& ctx,
     , warps_(arch.num_warps())
     , barriers_(arch.num_barriers(), 0)
     , fcsrs_(arch.num_warps(), 0)
+    , tcore_csrs_(12, 0)
     , ibuffers_(arch.num_warps(), IBUF_SIZE)
     , scoreboard_(arch_)
     , operands_(ISSUE_WIDTH)
@@ -146,6 +147,10 @@ void Core::reset() {
     fcsr = 0;
   }
   
+  for (auto& tcsr : tcore_csrs_) {
+    tcsr = 0;
+  }
+
   for (auto& ibuf : ibuffers_) {
     ibuf.clear();
   }
@@ -541,7 +546,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   case VX_CSR_FCSR:
     return fcsrs_.at(wid);
   case VX_CSR_MHARTID: // global thread ID
-    return (core_id_ * arch_.num_warps() + wid) * arch_.num_threads() + tid;
+    return (core_id_* arch_.num_warps() + wid) * arch_.num_threads() + tid;
   case VX_CSR_THREAD_ID: // thread ID
     return tid;
   case VX_CSR_WARP_ID: // warp ID
@@ -566,6 +571,30 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
     return perf_stats_.instrs & 0xffffffff;
   case VX_CSR_MINSTRET_H: // NumInsts
     return (uint32_t)(perf_stats_.instrs >> 32);
+  case VX_MAT_MUL_0:
+    return tcore_csrs_.at(0);
+  case VX_MAT_MUL_1:
+    return tcore_csrs_.at(1);
+  case VX_MAT_MUL_2:
+    return tcore_csrs_.at(2);
+  case VX_MAT_MUL_3:
+    return tcore_csrs_.at(3);
+  case VX_MAT_MUL_4:
+    return tcore_csrs_.at(4);
+  case VX_MAT_MUL_5:
+    return tcore_csrs_.at(5);
+  case VX_MAT_MUL_6:
+    return tcore_csrs_.at(6);
+  case VX_MAT_MUL_7:
+    return tcore_csrs_.at(7);
+  case VX_MAT_MUL_8:
+    return tcore_csrs_.at(8);
+  case VX_MAT_MUL_9:
+    return tcore_csrs_.at(9);
+  case VX_MAT_MUL_10:
+    return tcore_csrs_.at(10);
+  case VX_MAT_MUL_11:
+    return tcore_csrs_.at(11);
   default:
     if ((addr >= VX_CSR_MPM_BASE && addr < (VX_CSR_MPM_BASE + 32))
      || (addr >= VX_CSR_MPM_BASE_H && addr < (VX_CSR_MPM_BASE_H + 32))) {
@@ -710,6 +739,42 @@ void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
   case VX_CSR_PMPCFG0:
   case VX_CSR_PMPADDR0:
   case VX_CSR_MNSTATUS:
+  case VX_MAT_MUL_0:
+    tcore_csrs_.at(0) = (tcore_csrs_.at(0) & ~0xFFFF) | (value & 0xFFFF);
+    break;
+  case VX_MAT_MUL_1:
+    tcore_csrs_.at(1) = (tcore_csrs_.at(1) & ~0xFFFF) | (value & 0xFFFF);
+    break;
+  case VX_MAT_MUL_2:
+    tcore_csrs_.at(2) = (tcore_csrs_.at(2) & ~0xFFFF) | (value & 0xFFFF);
+    break;
+  case VX_MAT_MUL_3:
+    tcore_csrs_.at(3) = (tcore_csrs_.at(3) & ~0xFFFF) | (value & 0xFFFF);
+    break;
+  case VX_MAT_MUL_4:
+    tcore_csrs_.at(4) = (tcore_csrs_.at(4) & ~0xFFFF) | (value & 0xFFFF);
+    break;
+  case VX_MAT_MUL_5:
+    tcore_csrs_.at(5) = (tcore_csrs_.at(5) & ~0xFFFF) | (value & 0xFFFF);
+    break;
+  case VX_MAT_MUL_6:
+    tcore_csrs_.at(6) = (tcore_csrs_.at(6) & ~0xFFFF) | (value & 0xFFFF);
+    break;
+  case VX_MAT_MUL_7:
+    tcore_csrs_.at(7) = (tcore_csrs_.at(7) & ~0xFFFF) | (value & 0xFFFF);
+    break;
+  case VX_MAT_MUL_8:
+    tcore_csrs_.at(8) = (tcore_csrs_.at(8) & ~0xFFFF) | (value & 0xFFFF);
+    break;
+  case VX_MAT_MUL_9:
+    tcore_csrs_.at(9) = (tcore_csrs_.at(9) & ~0xFFFF) | (value & 0xFFFF);
+    break;
+  case VX_MAT_MUL_10:
+    tcore_csrs_.at(10) = (tcore_csrs_.at(10) & ~0xFFFF) | (value & 0xFFFF);
+    break;
+  case VX_MAT_MUL_11:
+    tcore_csrs_.at(11) = (tcore_csrs_.at(11) & ~0xFFFF) | (value & 0xFFFF);
+    break;
     break;
   default:
     {

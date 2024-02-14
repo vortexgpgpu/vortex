@@ -157,6 +157,9 @@ module VX_issue #(
 
 `ifdef PERF_ENABLE
     reg [`PERF_CTR_BITS-1:0] perf_ibf_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_active_threads;
+    assign perf_issue_if.active_threads = perf_active_threads;
+
     
     wire decode_stall = decode_if.valid && ~decode_if.ready;
 
@@ -164,11 +167,29 @@ module VX_issue #(
         if (reset) begin
             perf_ibf_stalls <= '0;
         end else begin
-            perf_ibf_stalls <= perf_ibf_stalls + `PERF_CTR_BITS'(decode_stall);
+            //perf_ibf_stalls <= perf_ibf_stalls + `PERF_CTR_BITS'(decode_stall);
         end
     end
 
-    assign perf_issue_if.ibf_stalls = perf_ibf_stalls;
+    always @(posedge clk) begin
+    `ifdef PERF_ENABLE
+        if (reset) begin
+            perf_active_threads <= 0;
+        end else begin
+            if (ibuffer_if.valid & ibuffer_if.ready) begin
+                for (integer i=0 ; i <`NUM_THREADS ; i = i+1 ) begin
+                    if (ibuffer_if.tmask[i])
+                        perf_active_threads <= perf_active_threads + 1;
+                end
+                //perf_active_threads <= perf_active_threads + {(`NUM_THREADS-1) {1'b0},ibuffer_if.tmask[i]};
+                //perf_active_threads <= perf_active_threads + ibuffer_if.tmask[i];
+            end
+        end
+    `endif
+    end
+
+
+    //assign perf_issue_if.ibf_stalls = perf_ibf_stalls;
 `endif
 
 endmodule

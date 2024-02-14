@@ -148,6 +148,7 @@ case $DRIVER in
         ;;
 esac
 
+
 if [ -d "$VORTEX_HOME/tests/opencl/$APP" ];
 then
     APP_PATH=$VORTEX_HOME/tests/opencl/$APP

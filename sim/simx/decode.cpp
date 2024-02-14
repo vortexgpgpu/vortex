@@ -38,6 +38,7 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   {Opcode::JAL_INST,   InstType::J_TYPE},
   {Opcode::JALR_INST,  InstType::I_TYPE},
   {Opcode::SYS_INST,   InstType::I_TYPE},
+  {Opcode::TCU,        InstType::S_TYPE},
   {Opcode::FENCE,      InstType::I_TYPE},
   {Opcode::AMO,        InstType::R_TYPE},
   {Opcode::FL,         InstType::I_TYPE},
@@ -222,6 +223,7 @@ static const char* op_string(const Instr &instr) {
     case 1: return "CSRRW";
     case 2: return "CSRRS";
     case 3: return "CSRRC";
+    case 4: return "MATMUL"; //Tensor core MATMUL 
     case 5: return "CSRRWI";
     case 6: return "CSRRSI";
     case 7: return "CSRRCI";
@@ -420,6 +422,15 @@ static const char* op_string(const Instr &instr) {
     default:
       std::abort();
     }
+
+  case Opcode::TCU:
+  switch(func3){
+    case 0: return "ML"; //
+    case 1: return "MS"; //
+    case 2: return "MATMUL";
+    default:
+      std::abort();
+  }
   default:
     std::abort();
   }

@@ -1,0 +1,2 @@
+main.o: main.cpp /export/nethome/nnair70/vortex/runtime/include/vortex.h \
+ testcases.h common.h

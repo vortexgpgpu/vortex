@@ -1,0 +1,17 @@
+main.o: main.cc /nethome/software/latest/pocl/runtime/include/CL/cl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_version.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_platform.h parboil.h \
+ ocl.h
+args.o: args.c parboil.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_version.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_platform.h
+parboil_opencl.o: parboil_opencl.c parboil.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_version.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_platform.h
+ocl.o: ocl.c /nethome/software/latest/pocl/runtime/include/CL/cl.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_version.h \
+ /nethome/software/latest/pocl/runtime/include/CL/cl_platform.h ocl.h
+gpu_info.o: gpu_info.c gpu_info.h
+file.o: file.c

@@ -8,6 +8,7 @@
 #include <chrono>
 #include <vector>
 #include "common.h"
+#include <iostream>
 
 #define KERNEL_NAME "sgemm"
 
@@ -64,7 +65,7 @@ public:
   static const char* type_str() {
     return "float";
   }
-  static int generate() { 
+  static float generate() { 
     return static_cast<float>(rand()) / RAND_MAX;
   }
   static bool compare(float a, float b, int index, int errors) { 
@@ -73,6 +74,7 @@ public:
     fa.f = a;
     fb.f = b;
     auto d = std::abs(fa.i - fb.i);
+
     if (d > FLOAT_ULP) {
       if (errors < 100) {
         printf("*** error: [%d] expected=%f, actual=%f\n", index, a, b);
@@ -94,6 +96,20 @@ public:
     }
   }
 }*/
+
+void printMemObjectInfo(cl_mem memObject) {
+    cl_mem_object_type memObjectType;
+    clGetMemObjectInfo(memObject, CL_MEM_TYPE, sizeof(cl_mem_object_type), &memObjectType, NULL);
+
+    size_t memObjectSize;
+    clGetMemObjectInfo(memObject, CL_MEM_SIZE, sizeof(size_t), &memObjectSize, NULL);
+
+    printf("Memory Object Information:\n");
+    printf("Type: %s\n", (memObjectType == CL_MEM_OBJECT_BUFFER) ? "Buffer" : "Image");
+    printf("Size: %zu bytes\n", memObjectSize);
+}
+
+
 
 static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
   if (nullptr == filename || nullptr == data || 0 == size)
@@ -178,6 +194,10 @@ static void parse_args(int argc, char **argv) {
 }
 
 int main (int argc, char **argv) {
+
+
+  //printf("Entered main\n");
+
   // parse command arguments
   parse_args(argc, argv);
 
@@ -197,9 +217,20 @@ int main (int argc, char **argv) {
 
   // Allocate device buffers
   size_t nbytes = num_points * sizeof(TYPE);
+  printf("nbytes=%zu\n",nbytes);
+
   a_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
   b_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
   c_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, nbytes, NULL, &_err));
+
+ // uintptr_t bufferAddressA = (uintptr_t)a_memobj;
+//printf("Address of myBuffer in kernel: %p\n", (void*)bufferAddressA);
+
+  //uintptr_t bufferAddressB = (uintptr_t)b_memobj;
+//printf("Address of myBuffer in kernel: %p\n", (void*)bufferAddressB);
+
+ //uintptr_t bufferAddressC = (uintptr_t)c_memobj;
+//printf("Address of myBuffer in kernel: %p\n", (void*)bufferAddressC);
 
   printf("Create program from kernel source\n");
 #ifdef HOSTGPU
@@ -220,6 +251,7 @@ int main (int argc, char **argv) {
   // Create kernel
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
+  
   // Set kernel arguments
   int width = size;
   CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj));	
@@ -234,9 +266,17 @@ int main (int argc, char **argv) {
 	
   // Generate input values 
   for (uint32_t i = 0; i < num_points; ++i) {
-    h_a[i] = Comparator<TYPE>::generate();
-    h_b[i] = Comparator<TYPE>::generate();
+    //h_a[i] = Comparator<TYPE>::generate();
+    //h_b[i] = Comparator<TYPE>::generate();
+    h_a[i] = i;
+    h_b[i] = i;
   }
+
+   for (uint32_t i = 0; i < num_points; ++i) {
+    printf("h_a[%d] = %f ",i,h_a[i]);
+    printf("h_b[%d] = %f \n",i,h_b[i]);
+    }
+
 
   size_t global_offset[2] = {0, 0};
   size_t global_work_size[2] = {size, size};
@@ -259,12 +299,18 @@ int main (int argc, char **argv) {
           int c = global_id_y;
           TYPE acc = 0;
           for (int k = 0; k < width; k++) {
-            acc += h_a[k * width + r] * h_b[c * width + k];
+            acc += h_a[r * width + k] * h_b[k * width + c];
+            printf("Muliplying %f by %f\n",h_a[r * width + k],h_b[k * width + c]);
           }                  
           ref_vec[c * width + r] = acc;         
         }
       }
     }
+  }
+
+  for (uint32_t i = 0; i < num_points; ++i) {
+    printf("h_c[%d] = %f, ref_vec[%d] = %f\n",i,h_c[i],i,ref_vec[i]);
+    
   }
 
   // Creating command queue
@@ -288,6 +334,7 @@ int main (int argc, char **argv) {
   printf("Verify result\n");
   int errors = 0;
   for (uint32_t i = 0; i < num_points; ++i) {
+    printf("h_c[%d] = %f, ref_vec[%d] = %f\n",i,h_c[i],i,ref_vec[i]);
     if (!Comparator<TYPE>::compare(h_c[i], ref_vec[i], i, errors)) {
       ++errors;
     }

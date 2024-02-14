@@ -13,7 +13,7 @@
 
 #ifndef __VX_INTRINSICS_H__
 #define __VX_INTRINSICS_H__
-
+#include <vx_print.h>
 #include <VX_config.h>
 #include <VX_types.h>
 
@@ -218,6 +218,81 @@ inline int vx_hart_id() {
 
 inline void vx_fence() {
     asm volatile ("fence iorw, iorw");
+}
+
+
+
+//1. Fix address to load and store
+//2. csrw/csrr pseudo-instructions
+//3. Define new CSR addresses
+
+//mat load
+inline void ml(unsigned dest, unsigned  addr) {
+    
+    asm volatile (".insn s 0x7b, 0, x0, %0(%1)" :: "i"(dest), "r"(addr));
+}
+
+/*
+inline void ml(unsigned dest, unsigned addr) {
+    
+
+    asm volatile (".insn s 0x7b, 0, x0, %0(%1)" :: "i"(dest), "r"(addr));
+    /*
+    if(matrix == 0) //Matrix A 
+    {
+        asm volatile (".insn s 0x7b, 0, x0, %0(%1)" :: "i"(dest), "r"(addr));
+
+        /*asm volatile ("lw %%x10, %1, 0x0\n"   // ld rdest, rsrc, offset
+                      "lw %%x11, %1, 0x4\n"
+                      "lw %%x12, %1, 0x8\n"
+                      "lw %%x13, %1, 0xc\n"
+                      "csrw %0, %%x10\n"        //reg to csr 
+                      "csrw %1, %%x11\n" 
+                      "csrw %2, %%x12\n"
+                      "csrw %3, %%x13\n"
+        : "=r"(VX_MAT_MUL_0), "=r"(VX_MAT_MUL_1), "=r"(VX_MAT_MUL_2), "=r"(VX_MAT_MUL_3)
+        : "r"(addr));
+        
+    }
+    else if(matrix == 1) //Matrix B
+    {
+        asm volatile (".insn s 0x7b, 0, x0, %0(%1)" :: "i"(dest), "r"(addr));
+        /*
+        asm volatile ("lw %%x10, %1, 0x0\n"   // ld rdest, rsrc, offset
+                      "lw %%x11, %1, 0x4\n"
+                      "lw %%x12, %1, 0x8\n"
+                      "lw %%x13, %1, 0xc\n"
+                      "csrw %0, %%x10\n"        //reg to csr 
+                      "csrw %1, %%x11\n" 
+                      "csrw %2, %%x12\n"
+                      "csrw %3, %%x13\n"
+        : "=r"(VX_MAT_MUL_4), "=r"(VX_MAT_MUL_5), "=r"(VX_MAT_MUL_6), "=r"(VX_MAT_MUL_7)
+        : "r"(addr));
+        /
+    }
+}*/
+
+//mat store
+inline void ms(unsigned  addr) {
+    
+    asm volatile (".insn s 0x7b, 1, x0, 0(%0)" :: "r"(addr));
+    /*asm volatile ("csrr %%x10, %1\n"      //csr to reg 
+                  "csrr %%x11, %1\n"
+                  "csrr %%x12, %1\n"
+                  "csrr %%x13, %1\n"
+                  "sw %0, %%x10, 0x0\n"   // ld rdest, rsrc, offset
+                  "sw %0, %%x11, 0x4\n"
+                  "sw %0, %%x12, 0x8\n"
+                  "sw %0, %%x13, 0xc\n"
+    : "=r"(addr)
+    : "r"(VX_MAT_MUL_8), "r"(VX_MAT_MUL_9), "r"(VX_MAT_MUL_10), "r"(VX_MAT_MUL_11));
+    */
+
+}
+
+//mat mul
+inline void mm() {
+    asm volatile (".insn s 0x7b, 2, x0, 0(x0)");
 }
 
 #ifdef __cplusplus

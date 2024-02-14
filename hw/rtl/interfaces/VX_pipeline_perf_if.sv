@@ -26,6 +26,7 @@ interface VX_pipeline_perf_if ();
     wire [`PERF_CTR_BITS-1:0] stores;    
     wire [`PERF_CTR_BITS-1:0] ifetch_latency;
     wire [`PERF_CTR_BITS-1:0] load_latency;
+    wire [`PERF_CTR_BITS-1:0] active_threads;
 
     modport schedule (
         output sched_idles,
@@ -36,7 +37,8 @@ interface VX_pipeline_perf_if ();
         output ibf_stalls,
         output scb_stalls,
         output units_uses,
-        output sfu_uses
+        output sfu_uses,
+        output active_threads
     );
 
     modport slave (
@@ -50,7 +52,8 @@ interface VX_pipeline_perf_if ();
         input loads,
         input stores,
         input ifetch_latency,
-        input load_latency
+        input load_latency,
+        input active_threads
     );
 
 endinterface

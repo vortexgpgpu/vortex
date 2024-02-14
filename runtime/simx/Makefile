@@ -24,6 +24,7 @@ endif
 
 PROJECT = libvortex.so
 
+
 all: $(DESTDIR)/$(PROJECT)
 
 $(DESTDIR)/$(PROJECT): $(SRCS)

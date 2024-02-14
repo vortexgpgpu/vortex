@@ -80,6 +80,8 @@ static void parse_args(int argc, char **argv) {
 int main(int argc, char **argv) {
   int exitcode = 0;
 
+  std::cout << "Entered this main\n";
+
   parse_args(argc, argv);
 
   {

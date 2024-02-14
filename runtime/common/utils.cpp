@@ -181,6 +181,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
 
 #ifdef PERF_ENABLE
 
+  uint64_t active_threads = 0;
+
   auto calcRatio = [&](uint64_t part, uint64_t total)->int {
     if (total == 0)
       return 0;
@@ -265,6 +267,12 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     uint64_t instrs_per_core = get_csr_64(staging_buf.data(), VX_CSR_MINSTRET);    
 
   #ifdef PERF_ENABLE
+
+     // active threads
+      uint64_t active_threads_per_core = get_csr_64(staging_buf.data(), CSR_MPM_ACTIVE_THREADS);
+      if (num_cores > 1) fprintf(stream, "PERF: core%d: active threads=%ld\n", core_id, active_threads_per_core);
+      active_threads += active_threads_per_core;
+
     switch (perf_class) {
     case VX_DCR_MPM_CLASS_CORE: {
       // PERF: pipeline    
@@ -460,6 +468,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     int load_avg_lat = (int)(double(load_lat) / double(loads));
     uint64_t scrb_total = scrb_alu + scrb_fpu + scrb_lsu + scrb_sfu;
     uint64_t sfu_total = scrb_wctl + scrb_csrs;
+    float active_threads_avg = (float)(double(active_threads) / double(total_cycles));
+    
     fprintf(stream, "PERF: scheduler idle=%ld (%d%%)\n", sched_idles, sched_idles_percent);
     fprintf(stream, "PERF: scheduler stalls=%ld (%d%%)\n", sched_stalls, sched_stalls_percent);
     fprintf(stream, "PERF: ibuffer stalls=%ld (%d%%)\n", ibuffer_stalls, ibuffer_percent);
@@ -477,7 +487,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     fprintf(stream, "PERF: loads=%ld\n", loads);
     fprintf(stream, "PERF: stores=%ld\n", stores);    
     fprintf(stream, "PERF: ifetch latency=%d cycles\n", ifetch_avg_lat);
-    fprintf(stream, "PERF: load latency=%d cycles\n", load_avg_lat);    
+    fprintf(stream, "PERF: load latency=%d cycles\n", load_avg_lat);  
+    fprintf(stream, "PERF: avg active threads=%f cycles\n", active_threads_avg);   
   } break;  
   case VX_DCR_MPM_CLASS_MEM: {    
     if (l2cache_enable) {
