@@ -79,8 +79,11 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     localparam SMEM_END_B = MEM_ADDRW'((`XLEN'(`SMEM_BASE_ADDR) + (1 << `SMEM_LOG_SIZE)) >> MEM_ASHIFT);
 `endif
 
-    // tag = uuid + addr_type + wid + PC + tmask + rd + op_type + align + is_dup + pid + pkt_addr 
-    localparam TAG_WIDTH = `UUID_WIDTH + (NUM_LANES * `CACHE_ADDR_TYPE_BITS) + `NW_WIDTH + `XLEN + NUM_LANES + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * (REQ_ASHIFT)) + `LSU_DUP_ENABLED + PID_WIDTH + LSUQ_SIZEW;
+    // tag_id = wid + PC + tmask + rd + op_type + align + is_dup + pid + pkt_addr 
+    localparam TAG_ID_WIDTH = `NW_WIDTH + `XLEN + NUM_LANES + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * (REQ_ASHIFT)) + `LSU_DUP_ENABLED + PID_WIDTH + LSUQ_SIZEW;
+
+    // tag = uuid + addr_type + tag_id 
+    localparam TAG_WIDTH = `UUID_WIDTH + (NUM_LANES * `CACHE_ADDR_TYPE_BITS) + TAG_ID_WIDTH;
 
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % `MEM_BLOCK_SIZE), ("invalid parameter"))
 
@@ -325,13 +328,14 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     VX_mem_scheduler #(
         .INSTANCE_ID ($sformatf("core%0d-lsu-memsched", CORE_ID)),
-        .NUM_REQS    (LSU_MEM_REQS), 
-        .NUM_BANKS   (DCACHE_NUM_REQS),
+        .CORE_REQS   (LSU_MEM_REQS),
+        .MEM_CHANNELS(DCACHE_NUM_REQS),
         .ADDR_WIDTH  (DCACHE_ADDR_WIDTH),
-        .DATA_WIDTH  (`XLEN),
+        .WORD_SIZE   (DCACHE_WORD_SIZE),
+        .LINE_SIZE   (DCACHE_WORD_SIZE),
         .QUEUE_SIZE  (`LSUQ_SIZE),
         .TAG_WIDTH   (TAG_WIDTH),
-        .MEM_TAG_ID  (`UUID_WIDTH + (NUM_LANES * `CACHE_ADDR_TYPE_BITS)),
+        .TAG_ID_WIDTH(TAG_ID_WIDTH),
         .UUID_WIDTH  (`UUID_WIDTH),
         .RSP_PARTIAL (1),
         .MEM_OUT_REG (2)
