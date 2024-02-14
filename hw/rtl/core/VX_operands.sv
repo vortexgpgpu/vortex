@@ -21,7 +21,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     input wire              reset,
 
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
-    VX_ibuffer_if.slave     scoreboard_if [`ISSUE_WIDTH],
+    VX_scoreboard_if.slave  scoreboard_if [`ISSUE_WIDTH],
     VX_operands_if.master   operands_if [`ISSUE_WIDTH]
 );
     `UNUSED_PARAM (CORE_ID)

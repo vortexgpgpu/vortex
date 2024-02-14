@@ -13,39 +13,40 @@
 
 `include "VX_define.vh"
 
-interface VX_fetch_if ();
+interface VX_scoreboard_if import VX_gpu_pkg::*; ();
 
     typedef struct packed {
         logic [`UUID_WIDTH-1:0]     uuid;
-        logic [`NW_WIDTH-1:0]       wid;
+        logic [ISSUE_WIS_W-1:0]     wis;
         logic [`NUM_THREADS-1:0]    tmask;
+        logic [`EX_BITS-1:0]        ex_type;    
+        logic [`INST_OP_BITS-1:0]   op_type;
+        logic [`INST_MOD_BITS-1:0]  op_mod;    
+        logic                       wb;
+        logic                       use_PC;
+        logic                       use_imm;
         logic [`XLEN-1:0]           PC;
-        logic [31:0]                instr;
+        logic [`XLEN-1:0]           imm;
+        logic [`NR_BITS-1:0]        rd;
+        logic [`NR_BITS-1:0]        rs1;
+        logic [`NR_BITS-1:0]        rs2;
+        logic [`NR_BITS-1:0]        rs3;
     } data_t;
 
     logic  valid;
     data_t data;
     logic  ready;
-`ifndef L1_ENABLE
-    logic [`NUM_WARPS-1:0] ibuf_pop;
-`endif
 
     modport master (
         output valid,
         output data,
         input  ready
-    `ifndef L1_ENABLE
-        , input ibuf_pop
-    `endif
     );
 
     modport slave (
         input  valid,
         input  data,
         output ready
-    `ifndef L1_ENABLE
-        , output ibuf_pop
-    `endif
     );
 
 endinterface

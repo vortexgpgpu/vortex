@@ -67,25 +67,23 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
 `ifndef L1_ENABLE
     // Ensure that the ibuffer doesn't fill up.
-    // This resolves potential deadlock if ibuffer fills and the LSU stalls the execute stage due to pending dcache request.
-    // This issue is particularly prevalent when the icache and dcache is disabled and both requests share the same bus.
-    wire [ISSUE_ISW-1:0] schedule_isw = wid_to_isw(schedule_if.data.wid);
-
-    wire [`ISSUE_WIDTH-1:0] pending_ibuf_full;
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
+    // This resolves potential deadlock if ibuffer fills and the LSU stalls the execute stage due to pending dcache requests.
+    // This issue is particularly prevalent when the icache and dcache are disabled and both requests share the same bus.
+    wire [`NUM_WARPS-1:0] pending_ibuf_full;
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
         VX_pending_size #( 
             .SIZE (`IBUF_SIZE)
         ) pending_reads (
             .clk   (clk),
             .reset (reset),
-            .incr  (icache_req_fire && schedule_isw == i),
+            .incr  (icache_req_fire && schedule_if.data.wid == i),
             .decr  (fetch_if.ibuf_pop[i]),
             .full  (pending_ibuf_full[i]),
             `UNUSED_PIN (size),
             `UNUSED_PIN (empty)
         );
     end
-    wire ibuf_ready = ~pending_ibuf_full[schedule_isw];
+    wire ibuf_ready = ~pending_ibuf_full[schedule_if.data.wid];
 `else
     wire ibuf_ready = 1'b1;
 `endif

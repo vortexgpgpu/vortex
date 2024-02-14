@@ -36,8 +36,8 @@ module VX_issue #(
 `endif
     VX_dispatch_if.master   sfu_dispatch_if [`ISSUE_WIDTH]
 );
-    VX_ibuffer_if  ibuffer_if [`ISSUE_WIDTH]();
-    VX_ibuffer_if  scoreboard_if [`ISSUE_WIDTH]();
+    VX_ibuffer_if ibuffer_if [`NUM_WARPS]();
+    VX_scoreboard_if scoreboard_if [`ISSUE_WIDTH]();
     VX_operands_if operands_if [`ISSUE_WIDTH]();
 
     `RESET_RELAY (ibuf_reset, reset);
