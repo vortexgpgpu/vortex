@@ -10,7 +10,7 @@
 
 #define FLOAT_ULP 6
 
-#define KERNEL_NAME "conv3x3"
+#define KERNEL_NAME "conv3"
 
 #define CL_CHECK(_expr)                                                \
    do {                                                                \

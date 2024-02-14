@@ -1,4 +1,4 @@
-PROJECT = convolution
+PROJECT = conv3
 
 SRCS = main.cc
 
