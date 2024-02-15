@@ -269,8 +269,8 @@ module VX_fpu_fpnew
 
     VX_elastic_buffer #(
         .DATAW   (RSP_DATAW),
-        .SIZE    (`OUT_REG_TO_EB_SIZE(OUT_REG)),
-        .OUT_REG (`OUT_REG_TO_EB_REG(OUT_REG))
+        .SIZE    (`TO_OUT_BUF_SIZE(OUT_REG)),
+        .OUT_REG (`TO_OUT_BUF_REG(OUT_REG))
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),

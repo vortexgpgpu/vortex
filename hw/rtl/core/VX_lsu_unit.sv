@@ -50,7 +50,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_REG    (1)
+        .OUT_BUF    (1)
     ) dispatch_unit (
         .clk        (clk),
         .reset      (dispatch_reset),
@@ -338,7 +338,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .TAG_ID_WIDTH(TAG_ID_WIDTH),
         .UUID_WIDTH  (`UUID_WIDTH),
         .RSP_PARTIAL (1),
-        .MEM_OUT_REG (2)
+        .MEM_OUT_BUF (2)
     ) mem_scheduler (
         .clk            (clk),
         .reset          (mem_scheduler_reset),
@@ -558,7 +558,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     VX_stream_arb #(
         .NUM_INPUTS (2),
         .DATAW      (RSP_ARB_DATAW),
-        .OUT_REG    (3)
+        .OUT_BUF    (3)
     ) rsp_arb (
         .clk       (clk),
         .reset     (commit_reset),
@@ -574,7 +574,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     VX_gather_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_REG    (3)
+        .OUT_BUF    (3)
     ) gather_unit (
         .clk           (clk),
         .reset         (commit_reset),

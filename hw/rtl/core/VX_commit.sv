@@ -56,7 +56,7 @@ module VX_commit import VX_gpu_pkg::*; #(
             .NUM_INPUTS (`NUM_EX_UNITS),
             .DATAW      (DATAW),
             .ARBITER    ("R"),
-            .OUT_REG    (1)
+            .OUT_BUF    (1)
         ) commit_arb (
             .clk       (clk),
             .reset     (arb_reset),

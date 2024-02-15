@@ -78,8 +78,8 @@ module Vortex import VX_gpu_pkg::*; (
         .TAG_WIDTH      (L2_MEM_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .UUID_WIDTH     (`UUID_WIDTH),  
-        .CORE_OUT_REG   (2),
-        .MEM_OUT_REG    (2),
+        .CORE_OUT_BUF   (2),
+        .MEM_OUT_BUF    (2),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L3_ENABLED)
     ) l3cache (

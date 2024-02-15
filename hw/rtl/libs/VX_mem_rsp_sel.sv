@@ -19,7 +19,7 @@ module VX_mem_rsp_sel #(
     parameter DATA_WIDTH    = 1, 
     parameter TAG_WIDTH     = 1,    
     parameter TAG_SEL_BITS  = 0,
-    parameter OUT_REG       = 0
+    parameter OUT_BUF       = 0
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -84,8 +84,8 @@ module VX_mem_rsp_sel #(
         
         VX_elastic_buffer #(
             .DATAW   (NUM_REQS + TAG_WIDTH + (NUM_REQS * DATA_WIDTH)),
-            .SIZE    (`OUT_REG_TO_EB_SIZE(OUT_REG)),
-            .OUT_REG (`OUT_REG_TO_EB_REG(OUT_REG))
+            .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+            .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
         ) out_buf (
             .clk       (clk),
             .reset     (reset),

@@ -26,8 +26,8 @@ module VX_mem_scheduler #(
     parameter UUID_WIDTH   = 0, // upper section of the request tag contains the UUID
     parameter QUEUE_SIZE   = 8,
     parameter RSP_PARTIAL  = 0,
-    parameter CORE_OUT_REG = 0,
-    parameter MEM_OUT_REG  = 0,
+    parameter CORE_OUT_BUF = 0,
+    parameter MEM_OUT_BUF  = 0,
 
     parameter WORD_WIDTH   = WORD_SIZE * 8,
     parameter LINE_WIDTH   = LINE_SIZE * 8,
@@ -310,8 +310,8 @@ module VX_mem_scheduler #(
     for (genvar i = 0; i < MEM_CHANNELS; ++i) begin
         VX_elastic_buffer #(
             .DATAW   (1 + LINE_SIZE + ADDR_WIDTH + LINE_WIDTH + MEM_TAGW),
-            .SIZE    (`OUT_REG_TO_EB_SIZE(MEM_OUT_REG)),
-            .OUT_REG (`OUT_REG_TO_EB_REG(MEM_OUT_REG))
+            .SIZE    (`TO_OUT_BUF_SIZE(MEM_OUT_BUF)),
+            .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
         ) mem_req_buf (
             .clk       (clk),
             .reset     (reset),
@@ -336,7 +336,7 @@ module VX_mem_scheduler #(
         .DATA_WIDTH   (LINE_WIDTH),
         .TAG_WIDTH    (MEM_TAGW),
         .TAG_SEL_BITS (MEM_TAGW - MEM_TAG_ID),
-        .OUT_REG      (2)
+        .OUT_BUF      (2)
     ) mem_rsp_sel (
         .clk           (clk),
         .reset         (reset),
@@ -453,8 +453,8 @@ module VX_mem_scheduler #(
 
     VX_elastic_buffer #(
         .DATAW   (CORE_REQS + 1 + 1 + (CORE_REQS * WORD_WIDTH) + TAG_WIDTH),
-        .SIZE    (`OUT_REG_TO_EB_SIZE(CORE_OUT_REG)),
-        .OUT_REG (`OUT_REG_TO_EB_REG(CORE_OUT_REG))
+        .SIZE    (`TO_OUT_BUF_SIZE(CORE_OUT_BUF)),
+        .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),

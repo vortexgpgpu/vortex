@@ -21,8 +21,8 @@ module VX_mem_adapter #(
     parameter DST_ADDR_WIDTH = 1,                
     parameter SRC_TAG_WIDTH  = 1,
     parameter DST_TAG_WIDTH  = 1,
-    parameter OUT_REG_REQ    = 0,
-    parameter OUT_REG_RSP    = 0
+    parameter REQ_OUT_BUF    = 0,
+    parameter RSP_OUT_BUF    = 0
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -208,8 +208,8 @@ module VX_mem_adapter #(
 
     VX_elastic_buffer #(
         .DATAW    (1 + DST_DATA_SIZE + DST_ADDR_WIDTH + DST_DATA_WIDTH + DST_TAG_WIDTH),
-        .SIZE     (`OUT_REG_TO_EB_SIZE(OUT_REG_REQ)),
-        .OUT_REG  (`OUT_REG_TO_EB_REG(OUT_REG_REQ))
+        .SIZE     (`TO_OUT_BUF_SIZE(REQ_OUT_BUF)),
+        .OUT_REG  (`TO_OUT_BUF_REG(REQ_OUT_BUF))
     ) req_out_buf (
         .clk       (clk),
         .reset     (reset),
@@ -223,8 +223,8 @@ module VX_mem_adapter #(
 
     VX_elastic_buffer #(
         .DATAW    (SRC_DATA_WIDTH + SRC_TAG_WIDTH),
-        .SIZE     (`OUT_REG_TO_EB_SIZE(OUT_REG_RSP)),
-        .OUT_REG  (`OUT_REG_TO_EB_REG(OUT_REG_RSP))
+        .SIZE     (`TO_OUT_BUF_SIZE(RSP_OUT_BUF)),
+        .OUT_REG  (`TO_OUT_BUF_REG(RSP_OUT_BUF))
     ) rsp_in_buf (
         .clk       (clk),
         .reset     (reset),

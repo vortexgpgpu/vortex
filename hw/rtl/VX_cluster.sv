@@ -63,7 +63,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
     VX_gbar_arb #(
         .NUM_REQS (`NUM_SOCKETS),
-        .OUT_REG  ((`NUM_SOCKETS > 2) ? 1 : 0) // bgar_unit has no backpressure
+        .OUT_BUF  ((`NUM_SOCKETS > 2) ? 1 : 0) // bgar_unit has no backpressure
     ) gbar_arb (
         .clk        (clk),
         .reset      (gbar_reset),
@@ -103,8 +103,8 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .TAG_WIDTH      (L2_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .UUID_WIDTH     (`UUID_WIDTH),  
-        .CORE_OUT_REG   (2),
-        .MEM_OUT_REG    (2),
+        .CORE_OUT_BUF   (2),
+        .MEM_OUT_BUF    (2),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L2_ENABLED)
     ) l2cache (

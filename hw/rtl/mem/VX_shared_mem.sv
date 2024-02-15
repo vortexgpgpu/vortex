@@ -124,7 +124,7 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (REQ_DATAW),
         .PERF_CTR_BITS (`PERF_CTR_BITS),
-        .OUT_REG     (3) // output should be registered for the data_store addressing
+        .OUT_BUF     (3) // output should be registered for the data_store addressing
     ) req_xbar (
         .clk       (clk),
         .reset     (reset),
@@ -208,7 +208,7 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
         .NUM_INPUTS  (NUM_BANKS),
         .NUM_OUTPUTS (NUM_REQS),
         .DATAW       (RSP_DATAW),
-        .OUT_REG     (2)
+        .OUT_BUF     (2)
     ) rsp_xbar (
         .clk       (clk),
         .reset     (reset),

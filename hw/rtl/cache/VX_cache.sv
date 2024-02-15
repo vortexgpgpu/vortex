@@ -49,10 +49,10 @@ module VX_cache import VX_gpu_pkg::*; #(
     parameter TAG_WIDTH             = UUID_WIDTH + 1,
 
     // Core response output register
-    parameter CORE_OUT_REG          = 0,
+    parameter CORE_OUT_BUF          = 0,
 
     // Memory request output register
-    parameter MEM_OUT_REG           = 0
+    parameter MEM_OUT_BUF           = 0
  ) (    
     // PERF
 `ifdef PERF_ENABLE
@@ -123,8 +123,8 @@ module VX_cache import VX_gpu_pkg::*; #(
 
         VX_elastic_buffer #(
             .DATAW   (`CS_WORD_WIDTH + TAG_WIDTH),
-            .SIZE    (CORE_REQ_BUF_ENABLE ? `OUT_REG_TO_EB_SIZE(CORE_OUT_REG) : 0),
-            .OUT_REG (`OUT_REG_TO_EB_REG(CORE_OUT_REG))
+            .SIZE    (CORE_REQ_BUF_ENABLE ? `TO_OUT_BUF_SIZE(CORE_OUT_BUF) : 0),
+            .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
         ) core_rsp_buf (
             .clk       (clk),
             .reset     (core_rsp_reset),
@@ -152,8 +152,8 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     VX_elastic_buffer #(
         .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_WIDTH),
-        .SIZE    (MEM_REQ_BUF_ENABLE ? `OUT_REG_TO_EB_SIZE(MEM_OUT_REG) : 0),
-        .OUT_REG (`OUT_REG_TO_EB_REG(MEM_OUT_REG))
+        .SIZE    (MEM_REQ_BUF_ENABLE ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
+        .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
     ) mem_req_buf (
         .clk       (clk),
         .reset     (mem_req_buf_reset),
@@ -346,8 +346,8 @@ module VX_cache import VX_gpu_pkg::*; #(
             .WRITE_ENABLE (WRITE_ENABLE),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (TAG_WIDTH),
-            .CORE_OUT_REG (CORE_REQ_BUF_ENABLE ? 0 : CORE_OUT_REG),
-            .MEM_OUT_REG  (MEM_REQ_BUF_ENABLE ? 0 : MEM_OUT_REG)
+            .CORE_OUT_BUF (CORE_REQ_BUF_ENABLE ? 0 : CORE_OUT_BUF),
+            .MEM_OUT_BUF  (MEM_REQ_BUF_ENABLE ? 0 : MEM_OUT_BUF)
         ) bank (          
             .clk                (clk),
             .reset              (bank_reset),

@@ -52,7 +52,7 @@ module VX_socket import VX_gpu_pkg::*; #(
 
     VX_gbar_arb #(
         .NUM_REQS (`SOCKET_SIZE),
-        .OUT_REG  ((`SOCKET_SIZE > 1) ? 2 : 0)
+        .OUT_BUF  ((`SOCKET_SIZE > 1) ? 2 : 0)
     ) gbar_arb (
         .clk        (clk),
         .reset      (gbar_arb_reset),
@@ -104,8 +104,8 @@ module VX_socket import VX_gpu_pkg::*; #(
         .UUID_WIDTH     (`UUID_WIDTH),
         .WRITE_ENABLE   (0),      
         .NC_ENABLE      (0),
-        .CORE_OUT_REG   (2),
-        .MEM_OUT_REG    (2)
+        .CORE_OUT_BUF   (2),
+        .MEM_OUT_BUF    (2)
     ) icache (
     `ifdef PERF_ENABLE
         .cache_perf     (mem_perf_tmp_if.icache),
@@ -149,8 +149,8 @@ module VX_socket import VX_gpu_pkg::*; #(
         .UUID_WIDTH     (`UUID_WIDTH),
         .WRITE_ENABLE   (1),        
         .NC_ENABLE      (1),
-        .CORE_OUT_REG   (`SM_ENABLED ? 2 : 1),
-        .MEM_OUT_REG    (2)
+        .CORE_OUT_BUF   (`SM_ENABLED ? 2 : 1),
+        .MEM_OUT_BUF    (2)
     ) dcache (
     `ifdef PERF_ENABLE
         .cache_perf     (mem_perf_tmp_if.dcache),
@@ -184,8 +184,8 @@ module VX_socket import VX_gpu_pkg::*; #(
         .TAG_WIDTH    (L1_MEM_TAG_WIDTH),
         .TAG_SEL_IDX  (1), // Skip 0 for NC flag
         .ARBITER      ("R"),
-        .OUT_REG_REQ  (2),
-        .OUT_REG_RSP  (2)
+        .REQ_OUT_BUF  (2),
+        .RSP_OUT_BUF  (2)
     ) mem_arb (
         .clk        (clk),
         .reset      (mem_arb_reset),

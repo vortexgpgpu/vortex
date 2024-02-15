@@ -55,11 +55,11 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     // Force bypass for all requests
     parameter PASSTHRU              = 0,
 
-    // Core response output register
-    parameter CORE_OUT_REG          = 0,
+    // Core response output buffer
+    parameter CORE_OUT_BUF          = 0,
 
-    // Memory request output register
-    parameter MEM_OUT_REG           = 0
+    // Memory request output buffer
+    parameter MEM_OUT_BUF           = 0
  ) (
     
     input wire clk,
@@ -120,8 +120,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
             .UUID_WIDTH        (UUID_WIDTH),
 
-            .CORE_OUT_REG      (CORE_OUT_REG),
-            .MEM_OUT_REG       (MEM_OUT_REG)
+            .CORE_OUT_BUF      (CORE_OUT_BUF),
+            .MEM_OUT_BUF       (MEM_OUT_BUF)
         ) cache_bypass (
             .clk            (clk),
             .reset          (nc_bypass_reset),
@@ -213,8 +213,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .WRITE_ENABLE (WRITE_ENABLE),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (CORE_TAG_X_WIDTH),
-            .CORE_OUT_REG (NC_BYPASS ? 1 : CORE_OUT_REG),
-            .MEM_OUT_REG  (NC_BYPASS ? 1 : MEM_OUT_REG)
+            .CORE_OUT_BUF (NC_BYPASS ? 1 : CORE_OUT_BUF),
+            .MEM_OUT_BUF  (NC_BYPASS ? 1 : MEM_OUT_BUF)
         ) cache (
             .clk            (clk),
             .reset          (cache_reset),

@@ -45,7 +45,7 @@ module VX_alu_unit #(
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_REG    (PARTIAL_BW ? 1 : 0)
+        .OUT_BUF    (PARTIAL_BW ? 1 : 0)
     ) dispatch_unit (
         .clk        (clk),
         .reset      (dispatch_reset),
@@ -127,7 +127,7 @@ module VX_alu_unit #(
         VX_stream_arb #(
             .NUM_INPUTS (RSP_ARB_SIZE),
             .DATAW      (RSP_ARB_DATAW),
-            .OUT_REG    (PARTIAL_BW ? 1 : 3)
+            .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) rsp_arb (
             .clk       (clk),
             .reset     (reset),
@@ -161,7 +161,7 @@ module VX_alu_unit #(
     VX_gather_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_REG    (PARTIAL_BW ? 3 : 0)
+        .OUT_BUF    (PARTIAL_BW ? 3 : 0)
     ) gather_unit (
         .clk           (clk),
         .reset         (commit_reset),
