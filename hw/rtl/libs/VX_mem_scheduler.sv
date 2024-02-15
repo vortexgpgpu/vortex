@@ -22,7 +22,7 @@ module VX_mem_scheduler #(
     parameter WORD_SIZE    = 4,
     parameter LINE_SIZE    = 4,
     parameter TAG_WIDTH    = 8,
-    parameter TAG_ID_WIDTH = 0, // lower section of the request tag contains the tag identifier
+    parameter TAG_ID_WIDTH = 8, // lower section of the request tag contains the tag identifier
     parameter UUID_WIDTH   = 0, // upper section of the request tag contains the UUID
     parameter QUEUE_SIZE   = 8,
     parameter RSP_PARTIAL  = 0,
@@ -181,7 +181,7 @@ module VX_mem_scheduler #(
 
     assign ibuf_push  = reqq_push && ~core_req_rw;
     assign ibuf_pop   = crsp_valid && crsp_ready && rsp_complete;
-    assign ibuf_raddr = mem_rsp_tag_s[0 +: QUEUE_ADDRW];
+    assign ibuf_raddr = mem_rsp_tag_s[BATCH_SEL_BITS +: QUEUE_ADDRW];
     assign ibuf_din   = core_req_tag[TAG_ID_WIDTH-1:0];
 
     VX_index_buffer #(
@@ -363,7 +363,7 @@ module VX_mem_scheduler #(
         assign rsp_batch_idx = mem_rsp_tag_s[BATCH_SEL_BITS-1:0];
     end else begin
         assign rsp_batch_idx = '0;
-    end    
+    end
 
     assign rsp_complete = ~(| rsp_rem_mask_n);
 
