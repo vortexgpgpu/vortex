@@ -33,8 +33,8 @@ module VX_cache_bypass #(
 
     parameter UUID_WIDTH        = 0,
 
-    parameter CORE_OUT_REG      = 0,
-    parameter MEM_OUT_REG       = 0,
+    parameter CORE_OUT_BUF      = 0,
+    parameter MEM_OUT_BUF       = 0,
  
     parameter CORE_DATA_WIDTH   = WORD_SIZE * 8,
     parameter CORE_TAG_OUT_WIDTH = CORE_TAG_IN_WIDTH - NC_ENABLE
@@ -233,8 +233,8 @@ module VX_cache_bypass #(
 
     VX_elastic_buffer #(
         .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_OUT_WIDTH),
-        .SIZE    ((!DIRECT_PASSTHRU) ? `OUT_REG_TO_EB_SIZE(MEM_OUT_REG) : 0),
-        .OUT_REG (`OUT_REG_TO_EB_REG(MEM_OUT_REG))
+        .SIZE    ((!DIRECT_PASSTHRU) ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
+        .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
     ) mem_req_buf (
         .clk       (clk),
         .reset     (reset),
@@ -326,8 +326,8 @@ module VX_cache_bypass #(
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_elastic_buffer #(
             .DATAW   (`CS_WORD_WIDTH + CORE_TAG_IN_WIDTH),
-            .SIZE    ((!DIRECT_PASSTHRU) ? `OUT_REG_TO_EB_SIZE(CORE_OUT_REG) : 0),
-            .OUT_REG (`OUT_REG_TO_EB_REG(CORE_OUT_REG))
+            .SIZE    ((!DIRECT_PASSTHRU) ? `TO_OUT_BUF_SIZE(CORE_OUT_BUF) : 0),
+            .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
         ) core_rsp_buf (
             .clk       (clk),
             .reset     (reset),

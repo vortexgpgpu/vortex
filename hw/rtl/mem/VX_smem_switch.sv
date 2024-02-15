@@ -19,8 +19,8 @@ module VX_smem_switch #(
     parameter TAG_WIDTH      = 1,
     parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
     parameter TAG_SEL_IDX    = 0,   
-    parameter OUT_REG_REQ    = 0,
-    parameter OUT_REG_RSP    = 0,
+    parameter REQ_OUT_BUF    = 0,
+    parameter RSP_OUT_BUF    = 0,
     parameter `STRING ARBITER = "R"
 ) (
     input wire              clk,
@@ -64,7 +64,7 @@ module VX_smem_switch #(
     VX_stream_switch #(
         .NUM_OUTPUTS (NUM_REQS),
         .DATAW       (REQ_DATAW),
-        .OUT_REG     (OUT_REG_REQ)
+        .OUT_BUF     (REQ_OUT_BUF)
     ) req_switch (
         .clk       (clk),
         .reset     (reset),
@@ -102,7 +102,7 @@ module VX_smem_switch #(
         .NUM_INPUTS (NUM_REQS),
         .DATAW      (RSP_DATAW),        
         .ARBITER    (ARBITER),
-        .OUT_REG    (OUT_REG_RSP)
+        .OUT_BUF    (RSP_OUT_BUF)
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),

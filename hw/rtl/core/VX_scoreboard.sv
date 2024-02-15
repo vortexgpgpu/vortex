@@ -233,7 +233,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             .NUM_INPUTS (ISSUE_RATIO),
             .DATAW      (DATAW),
             .ARBITER    ("F"),
-            .OUT_REG    (2)
+            .OUT_BUF    (2)
         ) out_arb (
             .clk      (clk),
             .reset    (arb_reset),

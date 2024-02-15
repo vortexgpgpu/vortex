@@ -106,8 +106,8 @@ module VX_smem_unit import VX_gpu_pkg::*; #(
             .TAG_WIDTH    (DCACHE_TAG_WIDTH),
             .TAG_SEL_IDX  (0),
             .ARBITER      ("P"),
-            .OUT_REG_REQ  (2),
-            .OUT_REG_RSP  (2)
+            .REQ_OUT_BUF  (2),
+            .RSP_OUT_BUF  (2)
         ) smem_switch (
             .clk        (clk),
             .reset      (switch_reset),

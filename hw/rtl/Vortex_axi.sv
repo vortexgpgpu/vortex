@@ -124,7 +124,7 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         .ADDR_WIDTH (`XLEN),
         .TAG_WIDTH  (`VX_MEM_TAG_WIDTH),
         .NUM_BANKS  (AXI_NUM_BANKS),
-        .OUT_REG_RSP((AXI_NUM_BANKS > 1) ? 2 : 0)
+        .RSP_OUT_BUF((AXI_NUM_BANKS > 1) ? 2 : 0)
     ) axi_adapter (
         .clk            (clk),
         .reset          (reset),

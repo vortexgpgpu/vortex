@@ -324,7 +324,7 @@ module VX_muldiv_unit #(
     VX_stream_arb #(
         .NUM_INPUTS (2),
         .DATAW (TAGW + (NUM_LANES * `XLEN)),
-        .OUT_REG (1)
+        .OUT_BUF (1)
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),

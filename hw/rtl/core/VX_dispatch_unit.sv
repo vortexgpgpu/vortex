@@ -16,7 +16,7 @@
 module VX_dispatch_unit import VX_gpu_pkg::*; #(    
     parameter BLOCK_SIZE = 1,
     parameter NUM_LANES  = 1,
-    parameter OUT_REG    = 0,
+    parameter OUT_BUF    = 0,
     parameter MAX_FANOUT = `MAX_FANOUT
 ) ( 
     input  wire             clk,
@@ -220,8 +220,8 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
 
         VX_elastic_buffer #(
             .DATAW   (OUT_DATAW),
-            .SIZE    (`OUT_REG_TO_EB_SIZE(OUT_REG)),
-            .OUT_REG (`OUT_REG_TO_EB_REG(OUT_REG))
+            .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+            .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
         ) buf_out (
             .clk       (clk),
             .reset     (buf_out_reset),
