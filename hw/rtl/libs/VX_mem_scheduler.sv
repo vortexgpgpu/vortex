@@ -103,16 +103,14 @@ module VX_mem_scheduler #(
     wire                            mem_rsp_ready_s;
     wire                            mem_rsp_fire_s;
 
-    wire                            reqq_push;
-    wire                            reqq_pop;
-    wire                            reqq_full;
-    wire                            reqq_empty;
-    wire                            reqq_rw;
+    wire                            reqq_valid;
     wire [CORE_REQS-1:0]            reqq_mask;
+    wire                            reqq_rw;    
     wire [CORE_REQS-1:0][WORD_SIZE-1:0] reqq_byteen;
     wire [CORE_REQS-1:0][ADDR_WIDTH-1:0] reqq_addr;
     wire [CORE_REQS-1:0][WORD_WIDTH-1:0] reqq_data;
     wire [REQQ_TAG_WIDTH-1:0]       reqq_tag;
+    wire                            reqq_ready;
 
     wire                            ibuf_push;
     wire                            ibuf_pop;
@@ -135,8 +133,9 @@ module VX_mem_scheduler #(
 
     wire req_sent_all;
 
-    assign reqq_push = core_req_valid && core_req_ready;
-    assign reqq_pop  = ~reqq_empty && req_sent_all;
+    wire ibuf_ready = (core_req_rw || ~ibuf_full);
+    wire reqq_valid_in = core_req_valid && ibuf_ready;
+    wire reqq_ready_in;
     
     wire [REQQ_TAG_WIDTH-1:0] reqq_tag_u;
     if (MEM_TAG_ID != 0) begin
@@ -145,41 +144,35 @@ module VX_mem_scheduler #(
         assign reqq_tag_u = ibuf_waddr;
     end
 
-    wire [`CLOG2(QUEUE_SIZE+1)-1:0] reqq_size;
-    `UNUSED_VAR (reqq_size)
-
-    VX_fifo_queue #(
+    VX_elastic_buffer #(
         .DATAW   (1 + CORE_REQS * (1 + WORD_SIZE + ADDR_WIDTH + WORD_WIDTH) + REQQ_TAG_WIDTH),
-        .DEPTH	 (QUEUE_SIZE),
+        .SIZE	 (QUEUE_SIZE),
         .OUT_REG (1)
     ) req_queue (
-        .clk        (clk),
-        .reset      (reset),
-        .push       (reqq_push),
-        .pop        (reqq_pop),
-        .data_in    ({core_req_rw, core_req_mask, core_req_byteen, core_req_addr, core_req_data, reqq_tag_u}),
-        .data_out   ({reqq_rw, reqq_mask, reqq_byteen, reqq_addr, reqq_data, reqq_tag}),
-        .full       (reqq_full),
-        .empty      (reqq_empty),
-        `UNUSED_PIN (alm_full),
-        `UNUSED_PIN (alm_empty),
-        .size       (reqq_size)
+        .clk      (clk),
+        .reset    (reset),
+        .valid_in (reqq_valid_in),
+        .ready_in (reqq_ready_in),
+        .data_in  ({core_req_rw, core_req_mask, core_req_byteen, core_req_addr, core_req_data, reqq_tag_u}),
+        .data_out ({reqq_rw, reqq_mask, reqq_byteen, reqq_addr, reqq_data, reqq_tag}),
+        .valid_out(reqq_valid),
+        .ready_out(reqq_ready)
     );
 
     // can accept another request?
-    assign core_req_ready = ~reqq_full && (core_req_rw || ~ibuf_full);
+    assign core_req_ready = reqq_ready_in && ibuf_ready;
 
     // no pending requests
-    assign core_req_empty = reqq_empty && ibuf_empty;
+    assign core_req_empty = !reqq_valid && ibuf_empty;
 
     // notify request submisison 
-    assign core_req_sent = reqq_pop;
+    assign core_req_sent = reqq_valid && reqq_ready;
 
     // Index buffer ///////////////////////////////////////////////////////////
 
     wire rsp_complete;
 
-    assign ibuf_push  = reqq_push && ~core_req_rw;
+    assign ibuf_push  = core_req_valid && core_req_ready && ~core_req_rw;
     assign ibuf_pop   = crsp_valid && crsp_ready && rsp_complete;
     assign ibuf_raddr = mem_rsp_tag_s[BATCH_SEL_BITS +: QUEUE_ADDRW];
     assign ibuf_din   = core_req_tag[TAG_ID_WIDTH-1:0];
@@ -247,7 +240,7 @@ module VX_mem_scheduler #(
         if (reset) begin
             batch_sent_mask <= '0;
         end else begin
-            if (~reqq_empty) begin
+            if (reqq_valid) begin
                 if (batch_sent_all) begin
                     batch_sent_mask <= '0;
                 end else begin
@@ -263,7 +256,7 @@ module VX_mem_scheduler #(
             if (reset) begin
                 req_batch_idx_r <= '0;
             end else begin
-                if (~reqq_empty && batch_sent_all) begin
+                if (reqq_valid && batch_sent_all) begin
                     if (req_sent_all) begin
                         req_batch_idx_r <= '0;
                     end else begin
@@ -305,7 +298,8 @@ module VX_mem_scheduler #(
 
     end
 
-    assign mem_req_valid_s = {MEM_CHANNELS{~reqq_empty}} & mem_req_mask_s & ~batch_sent_mask;  
+    assign mem_req_valid_s = {MEM_CHANNELS{reqq_valid}} & mem_req_mask_s & ~batch_sent_mask; 
+    assign reqq_ready = req_sent_all;
 
     for (genvar i = 0; i < MEM_CHANNELS; ++i) begin
         VX_elastic_buffer #(
