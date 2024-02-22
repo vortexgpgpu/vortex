@@ -29,7 +29,6 @@ Warp::Warp(Core *core, uint32_t warp_id)
     , core_(core)
     , ireg_file_(core->arch().num_threads(), std::vector<Word>(core->arch().num_regs()))
     , freg_file_(core->arch().num_threads(), std::vector<uint64_t>(core->arch().num_regs()))
-    , vreg_file_(core->arch().num_threads(), std::vector<Byte>(core->arch().vsize()))
 {
   this->reset();
 }
@@ -46,9 +45,6 @@ void Warp::reset() {
       reg = 0;
     }
     for (auto& reg : freg_file_.at(i)) {
-      reg = 0;
-    }
-    for (auto& reg : vreg_file_.at(i)) {
       reg = 0;
     }
   }

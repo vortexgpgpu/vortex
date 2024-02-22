@@ -60,8 +60,7 @@ typedef std::unordered_map<uint32_t, uint32_t> CSRs;
 enum class RegType {
   None,
   Integer,
-  Float,
-  Vector
+  Float
 };
 
 inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
@@ -69,7 +68,6 @@ inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
   case RegType::None: break;
   case RegType::Integer: os << "x"; break;  
   case RegType::Float:   os << "f"; break;
-  case RegType::Vector:  os << "v"; break;
   default: assert(false);
   }
   return os;
