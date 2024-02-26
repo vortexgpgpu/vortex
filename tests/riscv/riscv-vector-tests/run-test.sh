@@ -23,7 +23,7 @@ then
              vs1r vs2r vs4r vs8r \
              vadd vsub vmin vmax vand vor vxor \
              vmseq vmsne vmslt vmsle vmsgt \
-             vsll vsrl vsra \
+             vsll vsrl vsra vssr \
              vfmin vfmax vfcvt vfsqrt vfrsqrt7 vfrec7 vfclass vfmv vfslide vfmerge \
              vfadd vfredusum vfsub vfredosum vfredmin vfredmax vfsgnj vmf vfdiv vfrdiv vfmul vfrsub \
              vfmacc vfnmacc vfmsac vfnmsac vfmadd vfnmadd vfmsub vfnmsub \
