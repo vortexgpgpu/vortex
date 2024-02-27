@@ -250,6 +250,28 @@ class SrlSra {
 };
 
 template <typename T, typename R>
+class Aadd {
+  public:
+    static R apply(T first, T second, uint32_t vxrm, uint32_t) {
+      // Saturation is not relevant for this operation
+      T sum = second + first;
+      return (sum >> 1) + roundBit(sum, 1, vxrm);
+    }
+    static std::string name() {return "Aadd";}
+};
+
+template <typename T, typename R>
+class Asub {
+  public:
+    static R apply(T first, T second, uint32_t vxrm, uint32_t) {
+      // Saturation is not relevant for this operation
+      T difference = second - first;
+      return (difference >> 1) + roundBit(difference, 1, vxrm);
+    }
+    static std::string name() {return "Asub";}
+};
+
+template <typename T, typename R>
 class Eq {
   public:
     static R apply(T first, T second, R) {
@@ -2445,6 +2467,38 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             vector_op_vv_red<Max, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
+        case 8: { // vaaddu.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+            uint32_t vxsat = 0; // saturation is not relevant for this operation
+            vector_op_vv_sat<Aadd, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+          }
+        } break;
+        case 9: { // vaadd.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+            uint32_t vxsat = 0; // saturation is not relevant for this operation
+            vector_op_vv_sat<Aadd, int8_t, int16_t, int32_t, int64_t, __int128_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+          }
+        } break;
+        case 10: { // vasubu.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+            uint32_t vxsat = 0; // saturation is not relevant for this operation
+            vector_op_vv_sat<Asub, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+          }
+        } break;
+        case 11: { // vasub.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+            uint32_t vxsat = 0; // saturation is not relevant for this operation
+            vector_op_vv_sat<Asub, int8_t, int16_t, int32_t, int64_t, __int128_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+          }
+        } break;
         case 16: { // vmv.x.s
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
@@ -3336,6 +3390,42 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
       } break;
     case 6: {
       switch (func6) {
+        case 8: { // vaaddu.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+            uint32_t vxsat = 0; // saturation is not relevant for this operation
+            vector_op_vix_sat<Aadd, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+          }
+        } break;
+        case 9: { // vaadd.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+            uint32_t vxsat = 0; // saturation is not relevant for this operation
+            vector_op_vix_sat<Aadd, int8_t, int16_t, int32_t, int64_t, __int128_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+          }
+        } break;
+        case 10: { // vasubu.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+            uint32_t vxsat = 0; // saturation is not relevant for this operation
+            vector_op_vix_sat<Asub, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+          }
+        } break;
+        case 11: { // vasub.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+            uint32_t vxsat = 0; // saturation is not relevant for this operation
+            vector_op_vix_sat<Asub, int8_t, int16_t, int32_t, int64_t, __int128_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+          }
+        } break;
         case 14: { // vslide1up.vx
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
