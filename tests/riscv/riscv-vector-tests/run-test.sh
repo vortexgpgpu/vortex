@@ -24,6 +24,7 @@ then
              vadd vsub vmin vmax vand vor vxor \
              vmseq vmsne vmslt vmsle vmsgt \
              vsll vsrl vsra vssr \
+             vaadd vasub \
              vfmin vfmax vfcvt vfsqrt vfrsqrt7 vfrec7 vfclass vfmv vfslide vfmerge \
              vfadd vfredusum vfsub vfredosum vfredmin vfredmax vfsgnj vmf vfdiv vfrdiv vfmul vfrsub \
              vfmacc vfnmacc vfmsac vfnmsac vfmadd vfnmadd vfmsub vfnmsub \
