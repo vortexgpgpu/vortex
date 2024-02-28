@@ -13,7 +13,8 @@
 
 ## Installation
 
-- Refer to the build instructions in [README](../README.md). 
+- For the different environments Vortex supports, [read this document](environment_setup.md).
+- To install on your own system, [follow this document](install_vortex.md).
 
 ## Quick Start Scenarios
 

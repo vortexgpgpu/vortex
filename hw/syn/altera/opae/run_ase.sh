@@ -15,27 +15,27 @@
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-BUILD_DIR=$1
+BUILD_DIR=$(realpath $1)
 
 PROGRAM=$(basename "$2")
 PROGRAM_DIR=`dirname $2`
 
+POCL_RT_PATH=$TOOLDIR/pocl/runtime
 VORTEX_RT_PATH=$SCRIPT_DIR/../../../../runtime
 
 # Export ASE_WORKDIR variable
-export ASE_WORKDIR=$SCRIPT_DIR/$BUILD_DIR/work
-
-shift 2
+export ASE_WORKDIR=$BUILD_DIR/synth/work
 
 # cleanup incomplete runs
 rm -f $ASE_WORKDIR/.app_lock.pid 
 rm -f $ASE_WORKDIR/.ase_ready.pid
-rm -f $SCRIPT_DIR/$BUILD_DIR/nohup.out
+rm -f $BUILD_DIR/synth/nohup.out
 
-# Start Simulator in background
-pushd $SCRIPT_DIR/$BUILD_DIR 
-echo "  [DBG]  starting ASE simnulator (stdout saved to '$SCRIPT_DIR/$BUILD_DIR/nohup.out')"
-nohup make sim & 
+# Start Simulator in background (capture processs group pid)
+pushd $BUILD_DIR/synth 
+echo "  [DBG]  starting ASE simnulator (stdout saved to '$BUILD_DIR/synth/nohup.out')"
+setsid make sim &> /dev/null &
+SIM_PID=$!
 popd
 
 # Wait for simulator readiness
@@ -47,6 +47,11 @@ done
 
 # run application
 pushd $PROGRAM_DIR
+shift 2
 echo "  [DBG]  running ./$PROGRAM $*"
 ASE_LOG=0 LD_LIBRARY_PATH=$POCL_RT_PATH/lib:$VORTEX_RT_PATH/opae:$LD_LIBRARY_PATH ./$PROGRAM $*
 popd
+
+# stop the simulator (kill process group)
+kill -- -$(ps -o pgid= $SIM_PID | grep -o '[0-9]*')
+wait $SIM_PID 2> /dev/null
