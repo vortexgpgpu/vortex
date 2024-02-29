@@ -101,7 +101,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin
         reg [`NUM_REGS-1:0] inuse_regs;
-        reg [3:0] operands_busy;
 
         localparam iw = i % `ISSUE_WIDTH;
         localparam wis = i / `ISSUE_WIDTH;
