@@ -75,8 +75,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     localparam NUM_CACHES = `UP(NUM_UNITS);
     localparam PASSTHRU   = (NUM_UNITS == 0);
     localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_CACHES);    
-    localparam MEM_TAG_WIDTH = PASSTHRU ? (NC_ENABLE ? `CACHE_NC_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) : 
-                                                       `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH)) : 
+    localparam MEM_TAG_WIDTH = PASSTHRU ? `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) : 
                                           (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) :
                                                        `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS));
 
@@ -155,6 +154,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .WRITE_ENABLE (WRITE_ENABLE),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (ARB_TAG_WIDTH),
+            .TAG_SEL_IDX  (TAG_SEL_IDX),
             .CORE_OUT_BUF ((NUM_INPUTS != NUM_CACHES) ? 2 : CORE_OUT_BUF),
             .MEM_OUT_BUF  ((NUM_CACHES > 1) ? 2 : MEM_OUT_BUF),
             .NC_ENABLE    (NC_ENABLE),
@@ -181,7 +181,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         .NUM_INPUTS   (NUM_CACHES),
         .DATA_SIZE    (LINE_SIZE),
         .TAG_WIDTH    (MEM_TAG_WIDTH),
-        .TAG_SEL_IDX  (1), // Skip 0 for NC flag
+        .TAG_SEL_IDX  (TAG_SEL_IDX),
         .ARBITER      ("R"),
         .REQ_OUT_BUF ((NUM_CACHES > 1) ? 2 : 0),
         .RSP_OUT_BUF ((NUM_CACHES > 1) ? 2 : 0)

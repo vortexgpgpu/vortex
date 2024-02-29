@@ -74,7 +74,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     ///////////////////////////////////////////////////////////////////////////
 
     VX_mem_bus_if #(
-        .DATA_SIZE (ICACHE_WORD_SIZE), 
+        .DATA_SIZE (ICACHE_WORD_SIZE),
         .TAG_WIDTH (ICACHE_TAG_WIDTH)
     ) per_core_icache_bus_if[`SOCKET_SIZE]();
 
@@ -120,7 +120,7 @@ module VX_socket import VX_gpu_pkg::*; #(
 
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_WORD_SIZE),
-        .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
+        .TAG_WIDTH (DCACHE_TAG_WIDTH)
     ) per_core_dcache_bus_if[`SOCKET_SIZE * DCACHE_NUM_REQS]();
     
     VX_mem_bus_if #(
@@ -134,7 +134,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .INSTANCE_ID    ($sformatf("socket%0d-dcache", SOCKET_ID)),    
         .NUM_UNITS      (`NUM_DCACHES),
         .NUM_INPUTS     (`SOCKET_SIZE),
-        .TAG_SEL_IDX    (1),
+        .TAG_SEL_IDX    (0),
         .CACHE_SIZE     (`DCACHE_SIZE),
         .LINE_SIZE      (DCACHE_LINE_SIZE),
         .NUM_BANKS      (`DCACHE_NUM_BANKS),
@@ -145,7 +145,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .MSHR_SIZE      (`DCACHE_MSHR_SIZE),
         .MRSQ_SIZE      (`DCACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`DCACHE_MREQ_SIZE),
-        .TAG_WIDTH      (DCACHE_NOSM_TAG_WIDTH),
+        .TAG_WIDTH      (DCACHE_TAG_WIDTH),
         .UUID_WIDTH     (`UUID_WIDTH),
         .WRITE_ENABLE   (1),        
         .NC_ENABLE      (1),
@@ -182,7 +182,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .NUM_INPUTS   (2),
         .DATA_SIZE    (`L1_LINE_SIZE),
         .TAG_WIDTH    (L1_MEM_TAG_WIDTH),
-        .TAG_SEL_IDX  (1), // Skip 0 for NC flag
+        .TAG_SEL_IDX  (0),
         .ARBITER      ("R"),
         .REQ_OUT_BUF  (2),
         .RSP_OUT_BUF  (2)

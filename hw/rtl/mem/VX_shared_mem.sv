@@ -43,20 +43,7 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
     output cache_perf_t cache_perf,
 `endif
 
-    // Core request    
-    input wire [NUM_REQS-1:0]                   req_valid,
-    input wire [NUM_REQS-1:0]                   req_rw,
-    input wire [NUM_REQS-1:0][ADDR_WIDTH-1:0]   req_addr,
-    input wire [NUM_REQS-1:0][WORD_SIZE-1:0]    req_byteen,
-    input wire [NUM_REQS-1:0][WORD_SIZE*8-1:0]  req_data,
-    input wire [NUM_REQS-1:0][TAG_WIDTH-1:0]    req_tag,
-    output wire [NUM_REQS-1:0]                  req_ready,
-
-    // Core response
-    output wire [NUM_REQS-1:0]                  rsp_valid,
-    output wire [NUM_REQS-1:0][WORD_SIZE*8-1:0] rsp_data,
-    output wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   rsp_tag,
-    input  wire [NUM_REQS-1:0]                  rsp_ready
+    VX_mem_bus_if.slave mem_bus_if [NUM_REQS]
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (UUID_WIDTH)
@@ -79,7 +66,7 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][BANK_SEL_WIDTH-1:0] req_bank_idx;
     if (NUM_BANKS > 1) begin
         for (genvar i = 0; i < NUM_REQS; ++i) begin
-            assign req_bank_idx[i] = req_addr[i][0 +: BANK_SEL_BITS];
+            assign req_bank_idx[i] = mem_bus_if[i].req_data.addr[0 +: BANK_SEL_BITS];
         end
     end else begin
         assign req_bank_idx = 0;
@@ -89,7 +76,7 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
 
     wire [NUM_REQS-1:0][BANK_ADDR_WIDTH-1:0] req_bank_addr;
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign req_bank_addr[i] = req_addr[i][BANK_SEL_BITS +: BANK_ADDR_WIDTH];
+        assign req_bank_addr[i] = mem_bus_if[i].req_data.addr[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
     end
 
     // bank requests dispatch
@@ -102,22 +89,27 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]     per_bank_req_tag;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] per_bank_req_idx;
     wire [NUM_BANKS-1:0]                    per_bank_req_ready;
+    
+    wire [NUM_BANKS-1:0][REQ_DATAW-1:0]     per_bank_req_data_all;
 
-    wire [NUM_REQS-1:0][REQ_DATAW-1:0] req_data_in;    
-    wire [NUM_BANKS-1:0][REQ_DATAW-1:0] req_data_out;
+    wire [NUM_REQS-1:0]                 req_valid_in;
+    wire [NUM_REQS-1:0][REQ_DATAW-1:0]  req_data_in; 
+    wire [NUM_REQS-1:0]                 req_ready_in;
 
 `ifdef PERF_ENABLE
     wire [`PERF_CTR_BITS-1:0] perf_collisions;
 `endif
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
+        assign req_valid_in[i] = mem_bus_if[i].req_valid;
         assign req_data_in[i] = {
-            req_rw[i],        
+            mem_bus_if[i].req_data.rw,        
             req_bank_addr[i],
-            req_byteen[i],
-            req_data[i],
-            req_tag[i]};
-    end
+            mem_bus_if[i].req_data.byteen,
+            mem_bus_if[i].req_data.data,
+            mem_bus_if[i].req_data.tag};
+        assign mem_bus_if[i].req_ready = req_ready_in[i];
+    end    
 
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_REQS),
@@ -133,12 +125,12 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
     `else
         `UNUSED_PIN (collisions),
     `endif
-        .valid_in  (req_valid),
+        .valid_in  (req_valid_in),
         .data_in   (req_data_in),
         .sel_in    (req_bank_idx),
-        .ready_in  (req_ready),
+        .ready_in  (req_ready_in),
         .valid_out (per_bank_req_valid),
-        .data_out  (req_data_out),
+        .data_out  (per_bank_req_data_all),
         .sel_out   (per_bank_req_idx),
         .ready_out (per_bank_req_ready)
     );
@@ -149,7 +141,7 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
             per_bank_req_addr[i],
             per_bank_req_byteen[i],        
             per_bank_req_data[i],        
-            per_bank_req_tag[i]} = req_data_out[i];
+            per_bank_req_tag[i]} = per_bank_req_data_all[i];
     end
 
     // banks access
@@ -197,12 +189,15 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
 
     // bank responses gather
 
-    wire [NUM_BANKS-1:0][RSP_DATAW-1:0] rsp_data_in;
-    wire [NUM_REQS-1:0][RSP_DATAW-1:0] rsp_data_out;
-
+    wire [NUM_BANKS-1:0][RSP_DATAW-1:0] per_bank_rsp_data_all;
+    
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
-        assign rsp_data_in[i] = {per_bank_rsp_data[i], per_bank_rsp_tag[i]};
+        assign per_bank_rsp_data_all[i] = {per_bank_rsp_data[i], per_bank_rsp_tag[i]};
     end
+
+    wire [NUM_REQS-1:0]                 rsp_valid_out;
+    wire [NUM_REQS-1:0][RSP_DATAW-1:0]  rsp_data_out;
+    wire [NUM_REQS-1:0]                 rsp_ready_out;
 
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_BANKS),
@@ -215,16 +210,18 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
         `UNUSED_PIN (collisions),
         .sel_in    (per_bank_rsp_idx),
         .valid_in  (per_bank_rsp_valid),
+        .data_in   (per_bank_rsp_data_all),
         .ready_in  (per_bank_rsp_ready),
-        .data_in   (rsp_data_in),
+        .valid_out (rsp_valid_out),
         .data_out  (rsp_data_out),
-        .valid_out (rsp_valid),
-        .ready_out (rsp_ready),
+        .ready_out (rsp_ready_out),
         `UNUSED_PIN (sel_out)
     );
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign {rsp_data[i], rsp_tag[i]} = rsp_data_out[i];
+        assign mem_bus_if[i].rsp_valid = rsp_valid_out[i];
+        assign mem_bus_if[i].rsp_data = rsp_data_out[i];
+        assign rsp_ready_out[i] = mem_bus_if[i].rsp_ready;
     end
 
 `ifdef PERF_ENABLE
@@ -277,8 +274,8 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         if (UUID_WIDTH != 0) begin
-            assign req_uuid[i] = req_tag[i][TAG_WIDTH-1 -: UUID_WIDTH];
-            assign rsp_uuid[i] = rsp_tag[i][TAG_WIDTH-1 -: UUID_WIDTH];
+            assign req_uuid[i] = mem_bus_if[i].req_data.tag[TAG_WIDTH-1 -: UUID_WIDTH];
+            assign rsp_uuid[i] = mem_bus_if[i].rsp_data.tag[TAG_WIDTH-1 -: UUID_WIDTH];
         end else begin
             assign req_uuid[i] = 0;
             assign rsp_uuid[i] = 0;
@@ -297,25 +294,27 @@ module VX_shared_mem import VX_gpu_pkg::*; #(
             assign per_bank_rsp_uuid[i] = 0;
         end
     end
-
-    always @(posedge clk) begin        
-        for (integer i = 0; i < NUM_REQS; ++i) begin
-            if (req_valid[i] && req_ready[i]) begin
-                if (req_rw[i]) begin
+    
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
+        always @(posedge clk) begin
+            if (mem_bus_if[i].req_valid && mem_bus_if[i].req_ready) begin
+                if (mem_bus_if[i].req_data.rw) begin
                     `TRACE(1, ("%d: %s wr-req: req_idx=%0d, addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", 
-                        $time, INSTANCE_ID, i, req_addr[i], req_tag[i], req_byteen[i], req_data[i], req_uuid[i]));
+                        $time, INSTANCE_ID, i, mem_bus_if[i].req_data.addr, mem_bus_if[i].req_data.tag, mem_bus_if[i].req_data.byteen, mem_bus_if[i].req_data.data, req_uuid[i]));
                 end else begin
                     `TRACE(1, ("%d: %s rd-req: req_idx=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n", 
-                        $time, INSTANCE_ID, i, req_addr[i], req_tag[i], req_uuid[i]));
+                        $time, INSTANCE_ID, i, mem_bus_if[i].req_data.addr, mem_bus_if[i].req_data.tag, req_uuid[i]));
                 end
             end
-            if (rsp_valid[i] && rsp_ready[i]) begin
+            if (mem_bus_if[i].rsp_valid && mem_bus_if[i].rsp_ready) begin
                 `TRACE(1, ("%d: %s rd-rsp: req_idx=%0d, tag=0x%0h, data=0x%0h (#%0d)\n", 
-                    $time, INSTANCE_ID, i, rsp_tag[i], rsp_data[i], rsp_uuid[i]));
+                    $time, INSTANCE_ID, i, mem_bus_if[i].rsp_data.tag, mem_bus_if[i].rsp_data.data[i], rsp_uuid[i]));
             end
         end
-
-        for (integer i = 0; i < NUM_BANKS; ++i) begin
+    end
+    
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+        always @(posedge clk) begin
             if (per_bank_req_valid[i] && per_bank_req_ready[i]) begin
                 if (per_bank_req_rw[i]) begin
                     `TRACE(2, ("%d: %s-bank%0d wr-req: addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", 

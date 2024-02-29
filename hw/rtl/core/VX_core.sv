@@ -72,9 +72,9 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_writeback_if     writeback_if[`ISSUE_WIDTH]();
 
     VX_mem_bus_if #(
-        .DATA_SIZE (DCACHE_WORD_SIZE), 
+        .DATA_SIZE (DCACHE_WORD_SIZE),
         .TAG_WIDTH (DCACHE_TAG_WIDTH)
-    ) dcache_bus_tmp_if[DCACHE_NUM_REQS]();
+    ) dcache_sm_bus_if[DCACHE_NUM_REQS]();
 
 `ifdef PERF_ENABLE
     VX_mem_perf_if mem_perf_tmp_if();
@@ -191,7 +191,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .pipeline_perf_if(pipeline_perf_if),
     `endif 
 
-        .dcache_bus_if  (dcache_bus_tmp_if),
+        .dcache_bus_if  (dcache_sm_bus_if),
     
     `ifdef EXT_F_ENABLE
         .fpu_dispatch_if(fpu_dispatch_if),
@@ -246,14 +246,14 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .cache_perf         (mem_perf_tmp_if.smem),
     `endif
-        .dcache_bus_in_if   (dcache_bus_tmp_if),
+        .dcache_bus_in_if   (dcache_sm_bus_if),
         .dcache_bus_out_if  (dcache_bus_if)
     );
 
 `else
 
     for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
-        `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[i], dcache_bus_tmp_if[i]);
+        `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[i], dcache_sm_bus_if[i]);
     end
 
 `endif
