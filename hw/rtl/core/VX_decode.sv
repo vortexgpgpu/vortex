@@ -538,12 +538,27 @@ module VX_decode  #(
 `endif
 
 `ifdef DBG_TRACE_CORE_PIPELINE
+`ifdef FLEN_64
+    wire fdst_d = decode_if.data.imm[0];
+`else
+    wire fdst_d = 0;
+`endif
+`ifdef XLEN_64
+    wire fcvt_l = decode_if.data.imm[1];
+`else
+    wire fcvt_l = 0;
+`endif
+`ifdef EXT_F_ENABLE
+    wire rd_float = 1'(decode_if.data.rd >> 5) || 1'(decode_if.data.rs2 >> 5);
+`else
+    wire rd_float = 0;
+`endif
     always @(posedge clk) begin
         if (decode_if.valid && decode_if.ready) begin
             `TRACE(1, ("%d: core%0d-decode: wid=%0d, PC=0x%0h, instr=0x%0h, ex=", $time, CORE_ID, decode_if.data.wid, decode_if.data.PC, instr));
             trace_ex_type(1, decode_if.data.ex_type);
             `TRACE(1, (", op="));
-            trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_mod, decode_if.data.rd, decode_if.data.rs2, decode_if.data.use_imm, decode_if.data.imm);
+            trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_mod, decode_if.data.use_imm, fdst_d, fcvt_l, rd_float);
             `TRACE(1, (", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=0x%0h, opds=%b%b%b%b, use_pc=%b, use_imm=%b (#%0d)\n",
                 decode_if.data.op_mod, decode_if.data.tmask, decode_if.data.wb, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3, decode_if.data.imm, use_rd, use_rs1, use_rs2, use_rs3, decode_if.data.use_PC, decode_if.data.use_imm, decode_if.data.uuid));
         end

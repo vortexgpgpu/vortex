@@ -29,31 +29,12 @@ endtask
 task trace_ex_op(input int level, 
                  input [`EX_BITS-1:0] ex_type, 
                  input [`INST_OP_BITS-1:0] op_type, 
-                 input [`INST_MOD_BITS-1:0] op_mod,                 
-                 `UNUSED_ARG(input [`NR_BITS-1:0] rd),
-                 `UNUSED_ARG(input [`NR_BITS-1:0] rs2),
+                 input [`INST_MOD_BITS-1:0] op_mod,  
                  input use_imm,
-                 `UNUSED_ARG(input [`XLEN-1:0] imm)
+                 input fdst_d,
+                 input fcvt_l,
+                 input rd_float
 );
-
-`ifdef FLEN_64
-    logic fdst_d = imm[0];
-`else
-    logic fdst_d = 0;
-`endif
-
-`ifdef XLEN_64
-    logic fcvt_l = imm[1];
-`else
-    logic fcvt_l = 0;
-`endif
-
-`ifdef EXT_F_ENABLE
-    logic rd_float = 1'(rd >> 5) || 1'(rs2 >> 5);
-`else
-    logic rd_float = 0;
-`endif
-
     case (ex_type)
     `EX_ALU: begin 
         if (`INST_ALU_IS_BR(op_mod)) begin
