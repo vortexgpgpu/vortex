@@ -280,7 +280,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     vx_dev_caps(device, VX_CAPS_LOCAL_MEM_SIZE, &local_mem_size);
     if (local_mem_size <= 1) {        
         device->local_mem = std::make_shared<vortex::MemoryAllocator>(
-            SMEM_BASE_ADDR, local_mem_size, RAM_PAGE_SIZE, 1);
+            LMEM_BASE_ADDR, local_mem_size, RAM_PAGE_SIZE, 1);
     }
     
 #ifdef SCOPE
@@ -371,7 +371,7 @@ extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_addr) {
         return 0;
 
     auto device = ((vx_device*)hdevice);
-    if (dev_addr >= SMEM_BASE_ADDR) {
+    if (dev_addr >= LMEM_BASE_ADDR) {
         return device->local_mem->release(dev_addr);
     } else {    
         return device->global_mem->release(dev_addr);

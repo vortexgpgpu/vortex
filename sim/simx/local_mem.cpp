@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "shared_mem.h"
+#include "local_mem.h"
 #include "core.h"
 #include <bitmanip.h>
 #include <vector>
@@ -19,9 +19,9 @@
 
 using namespace vortex;
 
-class SharedMem::Impl {
+class LocalMem::Impl {
 protected:
-    SharedMem* simobject_;
+    LocalMem* simobject_;
     Config    config_;
     RAM       ram_;
     uint32_t  bank_sel_addr_start_;
@@ -36,7 +36,7 @@ protected:
     }
 
 public:
-    Impl(SharedMem* simobject, const Config& config) 
+    Impl(LocalMem* simobject, const Config& config) 
         : simobject_(simobject)
         , config_(config)
         , ram_(config.capacity, config.capacity)
@@ -52,13 +52,13 @@ public:
 
     void read(void* data, uint64_t addr, uint32_t size) {
         auto s_addr = to_local_addr(addr);        
-        DPH(3, "Shared Mem addr=0x" << std::hex << s_addr << std::endl);
+        DPH(3, "Local Mem addr=0x" << std::hex << s_addr << std::endl);
         ram_.read(data, s_addr, size);
     }
 
     void write(const void* data, uint64_t addr, uint32_t size) {
         auto s_addr = to_local_addr(addr);        
-        DPH(3, "Shared Mem addr=0x" << std::hex << s_addr << std::endl);
+        DPH(3, "Local Mem addr=0x" << std::hex << s_addr << std::endl);
         ram_.write(data, s_addr, size);
     }
 
@@ -106,33 +106,33 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SharedMem::SharedMem(const SimContext& ctx, const char* name, const Config& config) 
-    : SimObject<SharedMem>(ctx, name)   
+LocalMem::LocalMem(const SimContext& ctx, const char* name, const Config& config) 
+    : SimObject<LocalMem>(ctx, name)   
     , Inputs(config.num_reqs, this)
     , Outputs(config.num_reqs, this)
     , impl_(new Impl(this, config))
 {}
 
-SharedMem::~SharedMem() {
+LocalMem::~LocalMem() {
     delete impl_;
 }
 
-void SharedMem::reset() {
+void LocalMem::reset() {
     impl_->reset();
 }
 
-void SharedMem::read(void* data, uint64_t addr, uint32_t size) {
+void LocalMem::read(void* data, uint64_t addr, uint32_t size) {
     impl_->read(data, addr, size);
 }
 
-void SharedMem::write(const void* data, uint64_t addr, uint32_t size) {
+void LocalMem::write(const void* data, uint64_t addr, uint32_t size) {
     impl_->write(data, addr, size);
 }
 
-void SharedMem::tick() {
+void LocalMem::tick() {
     impl_->tick();
 }
 
-const SharedMem::PerfStats& SharedMem::perf_stats() const {
+const LocalMem::PerfStats& LocalMem::perf_stats() const {
     return impl_->perf_stats();
 }

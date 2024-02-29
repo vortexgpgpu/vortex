@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_shared_mem import VX_gpu_pkg::*; #(
+module VX_local_mem import VX_gpu_pkg::*; #(
     parameter `STRING  INSTANCE_ID = "",
 
     // Size of cache in bytes

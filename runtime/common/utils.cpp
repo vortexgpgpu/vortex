@@ -250,7 +250,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   bool dcache_enable  = isa_flags & VX_ISA_EXT_DCACHE;
   bool l2cache_enable = isa_flags & VX_ISA_EXT_L2CACHE;
   bool l3cache_enable = isa_flags & VX_ISA_EXT_L3CACHE;
-  bool smem_enable    = isa_flags & VX_ISA_EXT_SMEM;
+  bool lmem_enable    = isa_flags & VX_ISA_EXT_LMEM;
 #endif
 
   std::vector<uint8_t> staging_buf(64* sizeof(uint32_t));
@@ -368,15 +368,15 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       }
     } break;
     case VX_DCR_MPM_CLASS_MEM: { 
-      if (smem_enable) {
-        // PERF: smem
-        uint64_t smem_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_SMEM_READS);
-        uint64_t smem_writes = get_csr_64(staging_buf.data(), VX_CSR_MPM_SMEM_WRITES);
-        uint64_t smem_bank_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_SMEM_BANK_ST);
-        int smem_bank_utilization = calcAvgPercent(smem_reads + smem_writes, smem_reads + smem_writes + smem_bank_stalls);
-        fprintf(stream, "PERF: core%d: smem reads=%ld\n", core_id, smem_reads);
-        fprintf(stream, "PERF: core%d: smem writes=%ld\n", core_id, smem_writes); 
-        fprintf(stream, "PERF: core%d: smem bank stalls=%ld (utilization=%d%%)\n", core_id, smem_bank_stalls, smem_bank_utilization);
+      if (lmem_enable) {
+        // PERF: lmem
+        uint64_t lmem_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_LMEM_READS);
+        uint64_t lmem_writes = get_csr_64(staging_buf.data(), VX_CSR_MPM_LMEM_WRITES);
+        uint64_t lmem_bank_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_LMEM_BANK_ST);
+        int lmem_bank_utilization = calcAvgPercent(lmem_reads + lmem_writes, lmem_reads + lmem_writes + lmem_bank_stalls);
+        fprintf(stream, "PERF: core%d: lmem reads=%ld\n", core_id, lmem_reads);
+        fprintf(stream, "PERF: core%d: lmem writes=%ld\n", core_id, lmem_writes); 
+        fprintf(stream, "PERF: core%d: lmem bank stalls=%ld (utilization=%d%%)\n", core_id, lmem_bank_stalls, lmem_bank_utilization);
       }
 
       if (icache_enable) {

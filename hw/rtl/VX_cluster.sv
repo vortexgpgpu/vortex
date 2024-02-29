@@ -50,7 +50,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
     assign mem_perf_tmp_if.icache  = 'x;
     assign mem_perf_tmp_if.dcache  = 'x;
     assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
-    assign mem_perf_tmp_if.smem    = 'x;
+    assign mem_perf_tmp_if.lmem    = 'x;
     assign mem_perf_tmp_if.mem     = mem_perf_if.mem;
 `endif    
 

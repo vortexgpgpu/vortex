@@ -157,13 +157,13 @@
 `define VX_CSR_MPM_MEM_WRITES_H         12'hB99
 `define VX_CSR_MPM_MEM_LT               12'hB1A     // memory latency
 `define VX_CSR_MPM_MEM_LT_H             12'hB9A
-// PERF: smem
-`define VX_CSR_MPM_SMEM_READS           12'hB1B     // memory reads
-`define VX_CSR_MPM_SMEM_READS_H         12'hB9B
-`define VX_CSR_MPM_SMEM_WRITES          12'hB1C     // memory writes
-`define VX_CSR_MPM_SMEM_WRITES_H        12'hB9C
-`define VX_CSR_MPM_SMEM_BANK_ST         12'hB1D     // bank conflicts
-`define VX_CSR_MPM_SMEM_BANK_ST_H       12'hB9D
+// PERF: lmem
+`define VX_CSR_MPM_LMEM_READS           12'hB1B     // memory reads
+`define VX_CSR_MPM_LMEM_READS_H         12'hB9B
+`define VX_CSR_MPM_LMEM_WRITES          12'hB1C     // memory writes
+`define VX_CSR_MPM_LMEM_WRITES_H        12'hB9C
+`define VX_CSR_MPM_LMEM_BANK_ST         12'hB1D     // bank conflicts
+`define VX_CSR_MPM_LMEM_BANK_ST_H       12'hB9D
 
 // Machine Information Registers
 

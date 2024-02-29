@@ -198,12 +198,12 @@ config()
     CONFIGS="-DEXT_F_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_mf_ext --perf=1
     CONFIGS="-DEXT_F_DISABLE" ./ci/blackbox.sh --driver=simx --cores=1 --app=no_mf_ext --perf=1
 
-    # disable shared memory
-    CONFIGS="-DSM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo --perf=1
-    CONFIGS="-DSM_DISABLE" ./ci/blackbox.sh --driver=simx --cores=1 --app=demo --perf=1
+    # disable local memory
+    CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo --perf=1
+    CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --cores=1 --app=demo --perf=1
 
     # disable L1 cache
-    CONFIGS="-DL1_DISABLE -DSM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm
+    CONFIGS="-DL1_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm
     CONFIGS="-DL1_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm
     CONFIGS="-DDCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm
     CONFIGS="-DICACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm
@@ -216,12 +216,12 @@ config()
 
     # reduce l1 line size
     CONFIGS="-DL1_LINE_SIZE=16" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr --args="-n1"
-    CONFIGS="-DL1_LINE_SIZE=4 -DL1_DISABLE -DSM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr --args="-n1"
+    CONFIGS="-DL1_LINE_SIZE=4 -DL1_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr --args="-n1"
 
     # test cache banking
-    CONFIGS="-DSMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DSMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DSMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=sgemm
+    CONFIGS="-DLMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
+    CONFIGS="-DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
+    CONFIGS="-DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=sgemm
     CONFIGS="-DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm
     CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm
     CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --cores=1 --app=sgemm
