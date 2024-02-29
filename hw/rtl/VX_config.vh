@@ -162,16 +162,16 @@
 
 `endif
 
-`ifndef SMEM_BASE_ADDR
-`define SMEM_BASE_ADDR `STACK_BASE_ADDR
+`ifndef LMEM_BASE_ADDR
+`define LMEM_BASE_ADDR `STACK_BASE_ADDR
 `endif
 
-`ifndef SMEM_LOG_SIZE
-`define SMEM_LOG_SIZE   14
+`ifndef LMEM_LOG_SIZE
+`define LMEM_LOG_SIZE   14
 `endif
 
 `ifndef IO_BASE_ADDR
-`define IO_BASE_ADDR (`SMEM_BASE_ADDR + (1 << `SMEM_LOG_SIZE))
+`define IO_BASE_ADDR (`LMEM_BASE_ADDR + (1 << `LMEM_LOG_SIZE))
 `endif
 
 `ifndef IO_COUT_ADDR
@@ -481,20 +481,20 @@
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
 
-`ifndef SM_DISABLE
-`define SM_ENABLE
+`ifndef LMEM_DISABLE
+`define LMEM_ENABLE
 `endif
 
-`ifdef SM_ENABLE
-    `define SM_ENABLED   1
+`ifdef LMEM_ENABLE
+    `define LMEM_ENABLED   1
 `else
-    `define SM_ENABLED   0
-    `define SMEM_NUM_BANKS 1
+    `define LMEM_ENABLED   0
+    `define LMEM_NUM_BANKS 1
 `endif
 
 // Number of Banks
-`ifndef SMEM_NUM_BANKS
-`define SMEM_NUM_BANKS (`NUM_LSU_LANES)
+`ifndef LMEM_NUM_BANKS
+`define LMEM_NUM_BANKS (`NUM_LSU_LANES)
 `endif
 
 // L2cache Configurable Knobs /////////////////////////////////////////////////
@@ -627,13 +627,13 @@
 `define ISA_EXT_DCACHE      1
 `define ISA_EXT_L2CACHE     2
 `define ISA_EXT_L3CACHE     3
-`define ISA_EXT_SMEM        4
+`define ISA_EXT_LMEM        4
 
 `define MISA_EXT  (`ICACHE_ENABLED  << `ISA_EXT_ICACHE) \
                 | (`DCACHE_ENABLED  << `ISA_EXT_DCACHE) \
                 | (`L2_ENABLED      << `ISA_EXT_L2CACHE) \
                 | (`L3_ENABLED      << `ISA_EXT_L3CACHE) \
-                | (`SM_ENABLED      << `ISA_EXT_SMEM)
+                | (`LMEM_ENABLED    << `ISA_EXT_LMEM)
 
 `define MISA_STD  (`EXT_A_ENABLED <<  0) /* A - Atomic Instructions extension */ \
                 | (0 <<  1) /* B - Tentatively reserved for Bit operations extension */ \

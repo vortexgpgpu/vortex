@@ -18,7 +18,7 @@
 
 namespace vortex {
 
-class SharedMem : public SimObject<SharedMem> {
+class LocalMem : public SimObject<LocalMem> {
 public:
   struct Config {
     uint32_t capacity;
@@ -50,8 +50,8 @@ public:
   std::vector<SimPort<MemReq>> Inputs;
   std::vector<SimPort<MemRsp>> Outputs;
 
-  SharedMem(const SimContext& ctx, const char* name, const Config& config);    
-  virtual ~SharedMem();
+  LocalMem(const SimContext& ctx, const char* name, const Config& config);    
+  virtual ~LocalMem();
 
   void reset();
 

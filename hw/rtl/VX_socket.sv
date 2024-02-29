@@ -67,7 +67,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     VX_mem_perf_if mem_perf_tmp_if();
     assign mem_perf_tmp_if.l2cache = mem_perf_if.l2cache;
     assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
-    assign mem_perf_tmp_if.smem = 'x;
+    assign mem_perf_tmp_if.lmem = 'x;
     assign mem_perf_tmp_if.mem = mem_perf_if.mem;
 `endif
 
@@ -149,7 +149,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .UUID_WIDTH     (`UUID_WIDTH),
         .WRITE_ENABLE   (1),        
         .NC_ENABLE      (1),
-        .CORE_OUT_BUF   (`SM_ENABLED ? 2 : 1),
+        .CORE_OUT_BUF   (`LMEM_ENABLED ? 2 : 1),
         .MEM_OUT_BUF    (2)
     ) dcache (
     `ifdef PERF_ENABLE

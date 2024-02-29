@@ -134,7 +134,7 @@ module VX_core_top import VX_gpu_pkg::*; #(
     assign mem_perf_if.dcache  = '0;
     assign mem_perf_if.l2cache = '0;
     assign mem_perf_if.l3cache = '0;
-    assign mem_perf_if.smem    = '0;
+    assign mem_perf_if.lmem    = '0;
     assign mem_perf_if.mem     = '0;
 `endif
 

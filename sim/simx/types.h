@@ -551,7 +551,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class SMemDemux : public SimObject<SMemDemux> {
+class LocalMemDemux : public SimObject<LocalMemDemux> {
 public:
   SimPort<MemReq> ReqIn;
   SimPort<MemRsp> RspIn;
@@ -562,11 +562,11 @@ public:
   SimPort<MemReq> ReqDC;
   SimPort<MemRsp> RspDC;
 
-  SMemDemux(
+  LocalMemDemux(
     const SimContext& ctx, 
     const char* name, 
     uint32_t delay = 1
-  ) : SimObject<SMemDemux>(ctx, name)    
+  ) : SimObject<LocalMemDemux>(ctx, name)    
     , ReqIn(this)
     , RspIn(this)
     , ReqSM(this)

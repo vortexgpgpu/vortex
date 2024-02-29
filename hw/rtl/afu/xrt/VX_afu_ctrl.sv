@@ -141,7 +141,7 @@ module VX_afu_ctrl #(
 
     // device caps
     wire [63:0] dev_caps = {16'b0,
-                            8'(`SM_ENABLED ? `SMEM_LOG_SIZE : 0),
+                            8'(`LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
                             16'(`NUM_CORES * `NUM_CLUSTERS), 
                             8'(`NUM_WARPS), 
                             8'(`NUM_THREADS), 

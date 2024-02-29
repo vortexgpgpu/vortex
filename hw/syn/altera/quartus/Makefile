@@ -4,7 +4,7 @@ BUILD_DIR=$(PREFIX)_$(DEVICE_FAMILY)
 
 IP_CACHE_DIR=../ip_cache/$(DEVICE_FAMILY)
 
-.PHONY: dogfood unittest pipeline smem cache fpu core vortex top test
+.PHONY: dogfood unittest pipeline lmem cache fpu core vortex top test
 
 ip-gen: $(IP_CACHE_DIR)/ip_gen.log
 $(IP_CACHE_DIR)/ip_gen.log:
@@ -25,10 +25,10 @@ pipeline:
 	cp pipeline/Makefile pipeline/$(BUILD_DIR)
 	$(MAKE) -C pipeline/$(BUILD_DIR) clean && $(MAKE) -C pipeline/$(BUILD_DIR) > pipeline/$(BUILD_DIR)/build.log 2>&1 &
 
-smem:
-	mkdir -p smem/$(BUILD_DIR)
-	cp smem/Makefile smem/$(BUILD_DIR)
-	$(MAKE) -C smem/$(BUILD_DIR) clean && $(MAKE) -C smem/$(BUILD_DIR) > smem/$(BUILD_DIR)/build.log 2>&1 &
+lmem:
+	mkdir -p lmem/$(BUILD_DIR)
+	cp lmem/Makefile lmem/$(BUILD_DIR)
+	$(MAKE) -C lmem/$(BUILD_DIR) clean && $(MAKE) -C lmem/$(BUILD_DIR) > lmem/$(BUILD_DIR)/build.log 2>&1 &
 
 cache:
 	mkdir -p cache/$(BUILD_DIR)

@@ -17,7 +17,7 @@
 #include "dcrs.h"
 #include "arch.h"
 #include "cache_cluster.h"
-#include "shared_mem.h"
+#include "local_mem.h"
 #include "core.h"
 #include "socket.h"
 #include "constants.h"

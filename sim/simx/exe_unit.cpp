@@ -112,7 +112,7 @@ void LsuUnit::tick() {
 
     // handle dcache response    
     for (uint32_t t = 0; t < num_lanes_; ++t) {
-        auto& dcache_rsp_port = core_->smem_demuxs_.at(t)->RspIn;
+        auto& dcache_rsp_port = core_->lmem_demuxs_.at(t)->RspIn;
         if (dcache_rsp_port.empty())
             continue;
         auto& mem_rsp = dcache_rsp_port.front();
@@ -132,15 +132,15 @@ void LsuUnit::tick() {
         --pending_loads_;
     }
 
-    // handle shared memory response
+    // handle local memory response
     for (uint32_t t = 0; t < num_lanes_; ++t) {
-        auto& smem_rsp_port = core_->shared_mem_->Outputs.at(t);
-        if (smem_rsp_port.empty())
+        auto& lmem_rsp_port = core_->local_mem_->Outputs.at(t);
+        if (lmem_rsp_port.empty())
             continue;
-        auto& mem_rsp = smem_rsp_port.front();
+        auto& mem_rsp = lmem_rsp_port.front();
         auto& entry = pending_rd_reqs_.at(mem_rsp.tag);          
         auto trace = entry.trace;
-        DT(3, "smem-rsp: tag=" << mem_rsp.tag << ", type=" << trace->lsu_type << ", tid=" << t << ", " << *trace);
+        DT(3, "lmem-rsp: tag=" << mem_rsp.tag << ", type=" << trace->lsu_type << ", tid=" << t << ", " << *trace);
         assert(entry.count);
         --entry.count; // track remaining addresses 
         if (0 == entry.count) {
@@ -149,7 +149,7 @@ void LsuUnit::tick() {
             output.send(trace, 1);
             pending_rd_reqs_.release(mem_rsp.tag);
         } 
-        smem_rsp_port.pop();  
+        lmem_rsp_port.pop();  
         --pending_loads_;
     }
 
@@ -228,7 +228,7 @@ void LsuUnit::tick() {
             if (!trace->tmask.test(t0 + t))
                 continue;
             
-            auto& dcache_req_port = core_->smem_demuxs_.at(t)->ReqIn;
+            auto& dcache_req_port = core_->lmem_demuxs_.at(t)->ReqIn;
             auto mem_addr = trace_data->mem_addrs.at(t + t0);
             auto type = core_->get_addr_type(mem_addr.addr);
 
