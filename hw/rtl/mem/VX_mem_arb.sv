@@ -79,7 +79,7 @@ module VX_mem_arb #(
             .POS (TAG_SEL_IDX)
         ) bits_insert (
             .data_in  (req_tag_out),
-            .sel_in   (req_sel_out[i]),
+            .ins_in   (req_sel_out[i]),
             .data_out (bus_out_if[i].req_data.tag)
         );
         assign bus_out_if[i].req_valid = req_valid_out[i];

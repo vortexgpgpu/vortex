@@ -205,7 +205,7 @@ module VX_cache_bypass #(
                 .POS (TAG_SEL_IDX)
             ) mem_req_tag_in_nc_insert (
                 .data_in  (mem_bus_in_if.req_valid ? (MEM_TAG_OUT_WIDTH-1)'(mem_bus_in_if.req_data.tag) : (MEM_TAG_OUT_WIDTH-1)'(mem_req_tag_bypass)),
-                .sel_in   (~mem_bus_in_if.req_valid),
+                .ins_in   (~mem_bus_in_if.req_valid),
                 .data_out (mem_req_out_tag)
             );
         end else begin
