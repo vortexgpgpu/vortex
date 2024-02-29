@@ -16,8 +16,11 @@
 module VX_cache_wrap import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID    = "",
 
+    parameter TAG_SEL_IDX           = 0,
+
     // Number of Word requests per cycle
     parameter NUM_REQS              = 4,
+
 
     // Size of cache in bytes
     parameter CACHE_SIZE            = 4096, 
@@ -49,7 +52,6 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     parameter TAG_WIDTH             = UUID_WIDTH + 1,
 
     // enable bypass for non-cacheable addresses
-    parameter NC_TAG_BIT            = 0,
     parameter NC_ENABLE             = 0,
 
     // Force bypass for all requests
@@ -74,48 +76,46 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     VX_mem_bus_if.master    mem_bus_if
 );
 
-    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter: NUM_BANKS=%d, NUM_REQS=%d", NUM_BANKS, NUM_REQS))    
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter"))
 
-    localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE);    
-    localparam CORE_TAG_X_WIDTH = TAG_WIDTH - NC_ENABLE;
-    localparam MEM_TAG_X_WIDTH  = MSHR_ADDR_WIDTH + `CS_BANK_SEL_BITS;
-    localparam MEM_TAG_WIDTH    = PASSTHRU ? (NC_ENABLE ? `CACHE_NC_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH) : 
-                                                          `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH)) : 
-                                             (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH) :
-                                                          `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS));
+    localparam MSHR_ADDR_WIDTH = `LOG2UP(MSHR_SIZE);
+    localparam CACHE_MEM_TAG_WIDTH = MSHR_ADDR_WIDTH + `CS_BANK_SEL_BITS;
+    
+    localparam MEM_TAG_WIDTH   = PASSTHRU ? `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH) :
+                                            (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH) :
+                                                         `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS));
 
-    localparam NC_BYPASS = (NC_ENABLE || PASSTHRU);
+    localparam NC_OR_BYPASS = (NC_ENABLE || PASSTHRU);
 
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
-        .TAG_WIDTH (CORE_TAG_X_WIDTH)
-    ) core_bus_bypass_if[NUM_REQS]();
+        .TAG_WIDTH (TAG_WIDTH)
+    ) core_bus_cache_if[NUM_REQS]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (LINE_SIZE),
-        .TAG_WIDTH (MEM_TAG_X_WIDTH)
-    ) mem_bus_bypass_if();
+        .TAG_WIDTH (CACHE_MEM_TAG_WIDTH)
+    ) mem_bus_cache_if();
 
-    if (NC_BYPASS) begin
+    if (NC_OR_BYPASS) begin
        
         `RESET_RELAY (nc_bypass_reset, reset);
 
         VX_cache_bypass #(
             .NUM_REQS          (NUM_REQS),
-            .NC_TAG_BIT        (NC_TAG_BIT),
+            .TAG_SEL_IDX       (TAG_SEL_IDX),
 
-            .NC_ENABLE         (NC_ENABLE),
             .PASSTHRU          (PASSTHRU),
+            .NC_ENABLE         (PASSTHRU ? 0 : NC_ENABLE),
 
             .WORD_SIZE         (WORD_SIZE), 
             .LINE_SIZE         (LINE_SIZE),
 
             .CORE_ADDR_WIDTH   (`CS_WORD_ADDR_WIDTH),            
-            .CORE_TAG_IN_WIDTH (TAG_WIDTH),
+            .CORE_TAG_WIDTH    (TAG_WIDTH),
                 
             .MEM_ADDR_WIDTH    (`CS_MEM_ADDR_WIDTH),            
-            .MEM_TAG_IN_WIDTH  (MEM_TAG_X_WIDTH),
+            .MEM_TAG_IN_WIDTH  (CACHE_MEM_TAG_WIDTH),
             .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH),
 
             .UUID_WIDTH        (UUID_WIDTH),
@@ -127,68 +127,40 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .reset          (nc_bypass_reset),
 
             .core_bus_in_if (core_bus_if),
-            .core_bus_out_if(core_bus_bypass_if),
+            .core_bus_out_if(core_bus_cache_if),
 
-            .mem_bus_in_if  (mem_bus_bypass_if),
+            .mem_bus_in_if  (mem_bus_cache_if),
             .mem_bus_out_if (mem_bus_if)
         );
-    end else begin       
+        
+    end else begin
+
         for (genvar i = 0; i < NUM_REQS; ++i) begin
-            `ASSIGN_VX_MEM_BUS_IF (core_bus_bypass_if[i], core_bus_if[i]); 
+            `ASSIGN_VX_MEM_BUS_IF (core_bus_cache_if[i], core_bus_if[i]); 
         end
 
-        assign mem_bus_if.req_valid        = mem_bus_bypass_if.req_valid;
-        assign mem_bus_if.req_data.addr    = mem_bus_bypass_if.req_data.addr;
-        assign mem_bus_if.req_data.rw      = mem_bus_bypass_if.req_data.rw;
-        assign mem_bus_if.req_data.byteen  = mem_bus_bypass_if.req_data.byteen;
-        assign mem_bus_if.req_data.data    = mem_bus_bypass_if.req_data.data;
-        assign mem_bus_bypass_if.req_ready = mem_bus_if.req_ready;
-
-        // Add explicit NC=0 flag to the memory request tag
-
-        VX_bits_insert #( 
-            .N   (MEM_TAG_WIDTH-1),
-            .POS (NC_TAG_BIT)
-        ) mem_req_tag_insert (
-            .data_in  (mem_bus_bypass_if.req_data.tag),
-            .sel_in   (1'b0),
-            .data_out (mem_bus_if.req_data.tag)
-        );       
-
-        assign mem_bus_bypass_if.rsp_valid = mem_bus_if.rsp_valid;
-        assign mem_bus_bypass_if.rsp_data.data = mem_bus_if.rsp_data.data;
-        assign mem_bus_if.rsp_ready = mem_bus_bypass_if.rsp_ready;
-
-        // Remove NC flag from the memory response tag
-
-        VX_bits_remove #( 
-            .N   (MEM_TAG_WIDTH),
-            .POS (NC_TAG_BIT)
-        ) mem_rsp_tag_remove (
-            .data_in  (mem_bus_if.rsp_data.tag),
-            .data_out (mem_bus_bypass_if.rsp_data.tag)
-        );
+        `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_cache_if);
     end 
 
     if (PASSTHRU != 0) begin
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin
-            `UNUSED_VAR (core_bus_bypass_if[i].req_valid)
-            `UNUSED_VAR (core_bus_bypass_if[i].req_data)
-            assign core_bus_bypass_if[i].req_ready = 0;
+            `UNUSED_VAR (core_bus_cache_if[i].req_valid)
+            `UNUSED_VAR (core_bus_cache_if[i].req_data)
+            assign core_bus_cache_if[i].req_ready = 0;
 
-            assign core_bus_bypass_if[i].rsp_valid = 0;
-            assign core_bus_bypass_if[i].rsp_data  = '0;
-            `UNUSED_VAR (core_bus_bypass_if[i].rsp_ready)
+            assign core_bus_cache_if[i].rsp_valid = 0;
+            assign core_bus_cache_if[i].rsp_data  = '0;
+            `UNUSED_VAR (core_bus_cache_if[i].rsp_ready)
         end        
 
-        assign mem_bus_bypass_if.req_valid = 0;
-        assign mem_bus_bypass_if.req_data = '0;
-        `UNUSED_VAR (mem_bus_bypass_if.req_ready)
+        assign mem_bus_cache_if.req_valid = 0;
+        assign mem_bus_cache_if.req_data = '0;
+        `UNUSED_VAR (mem_bus_cache_if.req_ready)
 
-        `UNUSED_VAR (mem_bus_bypass_if.rsp_valid)
-        `UNUSED_VAR (mem_bus_bypass_if.rsp_data)
-        assign mem_bus_bypass_if.rsp_ready = 0;
+        `UNUSED_VAR (mem_bus_cache_if.rsp_valid)
+        `UNUSED_VAR (mem_bus_cache_if.rsp_data)
+        assign mem_bus_cache_if.rsp_ready = 0;
 
     `ifdef PERF_ENABLE
         assign cache_perf = '0;
@@ -212,17 +184,17 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .MREQ_SIZE    (MREQ_SIZE),
             .WRITE_ENABLE (WRITE_ENABLE),
             .UUID_WIDTH   (UUID_WIDTH),
-            .TAG_WIDTH    (CORE_TAG_X_WIDTH),
-            .CORE_OUT_BUF (NC_BYPASS ? 1 : CORE_OUT_BUF),
-            .MEM_OUT_BUF  (NC_BYPASS ? 1 : MEM_OUT_BUF)
+            .TAG_WIDTH    (TAG_WIDTH),
+            .CORE_OUT_BUF (NC_OR_BYPASS ? 1 : CORE_OUT_BUF),
+            .MEM_OUT_BUF  (NC_OR_BYPASS ? 1 : MEM_OUT_BUF)
         ) cache (
             .clk            (clk),
             .reset          (cache_reset),
         `ifdef PERF_ENABLE
             .cache_perf     (cache_perf),
         `endif
-            .core_bus_if    (core_bus_bypass_if),
-            .mem_bus_if     (mem_bus_bypass_if)
+            .core_bus_if    (core_bus_cache_if),
+            .mem_bus_if     (mem_bus_cache_if)
         );       
         
     end
@@ -260,7 +232,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     wire [`UP(UUID_WIDTH)-1:0] mem_req_uuid;
     wire [`UP(UUID_WIDTH)-1:0] mem_rsp_uuid;
 
-    if ((UUID_WIDTH != 0) && (NC_BYPASS != 0)) begin
+    if ((UUID_WIDTH != 0) && (NC_OR_BYPASS != 0)) begin
         assign mem_req_uuid = mem_bus_if.req_data.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
         assign mem_rsp_uuid = mem_bus_if.rsp_data.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
     end else begin

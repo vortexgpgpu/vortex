@@ -30,16 +30,15 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     // outputs    
     VX_commit_if.master     commit_if [`ISSUE_WIDTH]
 );
+    localparam WORD_SIZE    = `XLEN / 8;
+    localparam ADDR_WIDTH   = `MEM_ADDR_WIDTH - `CLOG2(WORD_SIZE);
     localparam BLOCK_SIZE   = 1;
     localparam NUM_LANES    = `NUM_LSU_LANES;
     localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
     localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
     localparam LSUQ_SIZEW   = `LOG2UP(`LSUQ_SIZE);
-    localparam MEM_ASHIFT   = `CLOG2(`MEM_BLOCK_SIZE);    
-    localparam MEM_ADDRW    = `XLEN - MEM_ASHIFT;
-    localparam REQ_ASHIFT   = `CLOG2(DCACHE_WORD_SIZE);
-    localparam CACHE_TAG_WIDTH = `UUID_WIDTH + (NUM_LANES * `CACHE_ADDR_TYPE_BITS) + LSUQ_TAG_BITS;
+    localparam REQ_ASHIFT   = `CLOG2(WORD_SIZE);
 
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)
@@ -72,22 +71,13 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     `UNUSED_VAR (execute_if[0].data.rs3_data)
     `UNUSED_VAR (execute_if[0].data.tid)
 
-`ifdef SM_ENABLE
-    `STATIC_ASSERT(`IS_DIVISBLE((1 << `SMEM_LOG_SIZE), `MEM_BLOCK_SIZE), ("invalid parameter"))
-    `STATIC_ASSERT(0 == (`SMEM_BASE_ADDR % (1 << `SMEM_LOG_SIZE)), ("invalid parameter"))
-    localparam SMEM_START_B = MEM_ADDRW'(`XLEN'(`SMEM_BASE_ADDR) >> MEM_ASHIFT);
-    localparam SMEM_END_B = MEM_ADDRW'((`XLEN'(`SMEM_BASE_ADDR) + (1 << `SMEM_LOG_SIZE)) >> MEM_ASHIFT);
-`endif
-
     // tag_id = wid + PC + tmask + rd + op_type + align + is_dup + pid + pkt_addr 
     localparam TAG_ID_WIDTH = `NW_WIDTH + `XLEN + NUM_LANES + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * (REQ_ASHIFT)) + `LSU_DUP_ENABLED + PID_WIDTH + LSUQ_SIZEW;
 
-    // tag = uuid + addr_type + tag_id 
-    localparam TAG_WIDTH = `UUID_WIDTH + (NUM_LANES * `CACHE_ADDR_TYPE_BITS) + TAG_ID_WIDTH;
+    // tag = uuid + tag_id 
+    localparam TAG_WIDTH = `UUID_WIDTH + TAG_ID_WIDTH;
 
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % `MEM_BLOCK_SIZE), ("invalid parameter"))
-
-    wire [NUM_LANES-1:0][`CACHE_ADDR_TYPE_BITS-1:0] lsu_addr_type;
 
     // full address calculation
 
@@ -113,21 +103,6 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     assign lsu_is_dup = 0;
 `endif
 
-    // detect address type
-
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
-        wire [MEM_ADDRW-1:0] full_addr_b = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
-        // is non-cacheable I/O address
-        wire is_addr_io = (full_addr_b >= MEM_ADDRW'(`XLEN'(`IO_BASE_ADDR) >> MEM_ASHIFT));
-    `ifdef SM_ENABLE
-        // is shared memory address
-        wire is_addr_sm = (full_addr_b >= SMEM_START_B) && (full_addr_b < SMEM_END_B);
-        assign lsu_addr_type[i] = {is_addr_io, is_addr_sm};
-    `else
-        assign lsu_addr_type[i] = is_addr_io;
-    `endif
-    end
-
     wire mem_req_empty;
     wire st_rsp_ready;
     wire lsu_valid, lsu_ready;
@@ -145,8 +120,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0]            mem_req_mask;
     wire                            mem_req_rw;  
     wire [NUM_LANES-1:0][`MEM_ADDR_WIDTH-REQ_ASHIFT-1:0] mem_req_addr;
-    reg  [NUM_LANES-1:0][DCACHE_WORD_SIZE-1:0] mem_req_byteen;
-    reg  [NUM_LANES-1:0][`XLEN-1:0] mem_req_data;
+    reg  [NUM_LANES-1:0][WORD_SIZE-1:0] mem_req_byteen;
+    reg  [NUM_LANES-1:0][`XLEN-1:0] mem_req_data;    
     wire [TAG_WIDTH-1:0]            mem_req_tag;
     wire                            mem_req_ready;
 
@@ -202,7 +177,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
                     mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:2], 2'b11}] = 1'b1;
                 end
             `endif
-                default : mem_req_byteen[i] = {DCACHE_WORD_SIZE{1'b1}};
+                default : mem_req_byteen[i] = {WORD_SIZE{1'b1}};
             endcase
         end
     end
@@ -306,7 +281,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     end
 
     assign mem_req_tag = {
-        execute_if[0].data.uuid, lsu_addr_type, execute_if[0].data.wid, execute_if[0].data.tmask, execute_if[0].data.PC, execute_if[0].data.rd, execute_if[0].data.op_type, req_align, execute_if[0].data.pid, pkt_waddr
+        execute_if[0].data.uuid, execute_if[0].data.wid, execute_if[0].data.tmask, execute_if[0].data.PC, execute_if[0].data.rd, execute_if[0].data.op_type, req_align, execute_if[0].data.pid, pkt_waddr
     `ifdef LSU_DUP_ENABLE
         , lsu_is_dup
     `endif
@@ -314,28 +289,27 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     wire [DCACHE_NUM_REQS-1:0]              cache_req_valid;
     wire [DCACHE_NUM_REQS-1:0]              cache_req_rw;
-    wire [DCACHE_NUM_REQS-1:0][(`XLEN/8)-1:0] cache_req_byteen;
+    wire [DCACHE_NUM_REQS-1:0][DCACHE_WORD_SIZE-1:0] cache_req_byteen;
     wire [DCACHE_NUM_REQS-1:0][DCACHE_ADDR_WIDTH-1:0] cache_req_addr;
-    wire [DCACHE_NUM_REQS-1:0][`XLEN-1:0] cache_req_data;
-    wire [DCACHE_NUM_REQS-1:0][CACHE_TAG_WIDTH-1:0] cache_req_tag;
+    wire [DCACHE_NUM_REQS-1:0][(DCACHE_WORD_SIZE*8)-1:0] cache_req_data;
+    wire [DCACHE_NUM_REQS-1:0][DCACHE_TAG_WIDTH-1:0] cache_req_tag;
     wire [DCACHE_NUM_REQS-1:0]              cache_req_ready;
     wire [DCACHE_NUM_REQS-1:0]              cache_rsp_valid;
-    wire [DCACHE_NUM_REQS-1:0][`XLEN-1:0] cache_rsp_data;
-    wire [DCACHE_NUM_REQS-1:0][CACHE_TAG_WIDTH-1:0] cache_rsp_tag;
+    wire [DCACHE_NUM_REQS-1:0][(DCACHE_WORD_SIZE*8)-1:0] cache_rsp_data;
+    wire [DCACHE_NUM_REQS-1:0][DCACHE_TAG_WIDTH-1:0] cache_rsp_tag;
     wire [DCACHE_NUM_REQS-1:0]              cache_rsp_ready;
 
     `RESET_RELAY (mem_scheduler_reset, reset);
 
     VX_mem_scheduler #(
         .INSTANCE_ID ($sformatf("core%0d-lsu-memsched", CORE_ID)),
-        .CORE_REQS   (LSU_MEM_REQS),
-        .MEM_CHANNELS(DCACHE_NUM_REQS),
-        .ADDR_WIDTH  (DCACHE_ADDR_WIDTH),
-        .WORD_SIZE   (DCACHE_WORD_SIZE),
+        .CORE_REQS   (`NUM_LSU_LANES),
+        .MEM_CHANNELS(DCACHE_NUM_REQS),        
+        .WORD_SIZE   (WORD_SIZE),
         .LINE_SIZE   (DCACHE_WORD_SIZE),
+        .ADDR_WIDTH  (ADDR_WIDTH),
+        .TAG_WIDTH   (TAG_WIDTH),        
         .QUEUE_SIZE  (`LSUQ_SIZE),
-        .TAG_WIDTH   (TAG_WIDTH),
-        .TAG_ID_WIDTH(TAG_ID_WIDTH),
         .UUID_WIDTH  (`UUID_WIDTH),
         .RSP_PARTIAL (1),
         .MEM_OUT_BUF (2)
@@ -349,7 +323,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .core_req_mask  (mem_req_mask),
         .core_req_byteen(mem_req_byteen),
         .core_req_addr  (mem_req_addr),
-        .core_req_data  (mem_req_data),
+        .core_req_data  (mem_req_data),        
         .core_req_tag   (mem_req_tag),
         .core_req_ready (mem_req_ready),        
         .core_req_empty (mem_req_empty),
@@ -386,63 +360,16 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         assign cache_bus_if[i].req_data.byteen = cache_req_byteen[i];
         assign cache_bus_if[i].req_data.addr = cache_req_addr[i];
         assign cache_bus_if[i].req_data.data = cache_req_data[i];
+        assign cache_bus_if[i].req_data.tag = cache_req_tag[i];
         assign cache_req_ready[i] = cache_bus_if[i].req_ready;
 
         assign cache_rsp_valid[i] = cache_bus_if[i].rsp_valid;
         assign cache_rsp_data[i] = cache_bus_if[i].rsp_data.data;
+        assign cache_rsp_tag[i] = cache_bus_if[i].rsp_data.tag;
         assign cache_bus_if[i].rsp_ready = cache_rsp_ready[i];
-    end
-
-    // cache tag formatting: <uuid, tag, type>
-    
-    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
-        wire [`UUID_WIDTH-1:0]                          cache_req_uuid, cache_rsp_uuid;
-        wire [NUM_LANES-1:0][`CACHE_ADDR_TYPE_BITS-1:0] cache_req_type, cache_rsp_type;        
-        wire [`CLOG2(`LSUQ_SIZE)-1:0]                   cache_req_tag_x, cache_rsp_tag_x;
-        if (DCACHE_NUM_BATCHES > 1) begin
-
-            wire [DCACHE_NUM_BATCHES-1:0][`CACHE_ADDR_TYPE_BITS-1:0] cache_req_type_b, cache_rsp_type_b;            
-            wire [`CACHE_ADDR_TYPE_BITS-1:0] cache_req_type_bi, cache_rsp_type_bi;
-            wire [DCACHE_BATCH_SEL_BITS-1:0] cache_req_bid, cache_rsp_bid;
-
-            assign {cache_req_uuid, cache_req_type, cache_req_bid, cache_req_tag_x} = cache_req_tag[i];
-            assign cache_req_type_bi = cache_req_type_b[cache_req_bid];
-            assign cache_bus_if[i].req_data.tag = {cache_req_uuid, cache_req_bid, cache_req_tag_x, cache_req_type_bi};
-
-            assign {cache_rsp_uuid, cache_rsp_bid, cache_rsp_tag_x, cache_rsp_type_bi} = cache_bus_if[i].rsp_data.tag;
-            assign cache_rsp_type_b = {DCACHE_NUM_BATCHES{cache_rsp_type_bi}};
-            assign cache_rsp_tag[i] = {cache_rsp_uuid, cache_rsp_type, cache_rsp_bid, cache_rsp_tag_x};
-
-            for (genvar j = 0; j < DCACHE_NUM_BATCHES; ++j) begin
-                localparam k = j * DCACHE_NUM_REQS + i;                
-                if (k < NUM_LANES) begin
-                    assign cache_req_type_b[j] = cache_req_type[k];
-                    assign cache_rsp_type[k] = cache_rsp_type_b[j];
-                end else begin
-                    assign cache_req_type_b[j] = '0;
-                    `UNUSED_VAR (cache_rsp_type_b[j])
-                end
-            end
-
-        end else begin
-            
-            assign {cache_req_uuid, cache_req_type, cache_req_tag_x} = cache_req_tag[i];
-            assign cache_bus_if[i].req_data.tag = {cache_req_uuid, cache_req_tag_x, cache_req_type[i]};
-
-            assign {cache_rsp_uuid, cache_rsp_tag_x, cache_rsp_type[i]} = cache_bus_if[i].rsp_data.tag;
-            assign cache_rsp_tag[i] = {cache_rsp_uuid, cache_rsp_type, cache_rsp_tag_x};        
-
-            for (genvar j = 0; j < DCACHE_NUM_REQS; ++j) begin
-                if (i != j) begin
-                    `UNUSED_VAR (cache_req_type[j])
-                    assign cache_rsp_type[j] = '0;
-                end
-            end
-        end
     end
     
     wire [`UUID_WIDTH-1:0] rsp_uuid;
-    wire [NUM_LANES-1:0][`CACHE_ADDR_TYPE_BITS-1:0] rsp_addr_type;
     wire [`NW_WIDTH-1:0] rsp_wid;
     wire [NUM_LANES-1:0] rsp_tmask_uq;
     wire [`XLEN-1:0] rsp_pc;
@@ -457,12 +384,11 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 `endif
 
     assign {
-        rsp_uuid, rsp_addr_type, rsp_wid, rsp_tmask_uq, rsp_pc, rsp_rd, rsp_op_type, rsp_align, rsp_pid, pkt_raddr
+        rsp_uuid, rsp_wid, rsp_tmask_uq, rsp_pc, rsp_rd, rsp_op_type, rsp_align, rsp_pid, pkt_raddr
     `ifdef LSU_DUP_ENABLE
         , rsp_is_dup
     `endif
     } = mem_rsp_tag;
-    `UNUSED_VAR (rsp_addr_type)
     `UNUSED_VAR (rsp_op_type)
 
     // load response formatting
@@ -626,17 +552,13 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             if (mem_req_rw) begin
                 `TRACE(1, ("%d: D$%0d Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, execute_if[0].data.wid, execute_if[0].data.PC, mem_req_mask));
                 `TRACE_ARRAY1D(1, full_addr, NUM_LANES);
-                `TRACE(1, (", tag=0x%0h, byteen=0x%0h, type=", mem_req_tag, mem_req_byteen));
-                `TRACE_ARRAY1D(1, lsu_addr_type, NUM_LANES);
-                `TRACE(1, (", data="));
+                `TRACE(1, (", tag=0x%0h, byteen=0x%0h, data=", mem_req_tag, mem_req_byteen));
                 `TRACE_ARRAY1D(1, mem_req_data, NUM_LANES);
                 `TRACE(1, (", is_dup=%b (#%0d)\n", lsu_is_dup, execute_if[0].data.uuid));
             end else begin
                 `TRACE(1, ("%d: D$%0d Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, execute_if[0].data.wid, execute_if[0].data.PC, mem_req_mask));
                 `TRACE_ARRAY1D(1, full_addr, NUM_LANES);
-                `TRACE(1, (", tag=0x%0h, byteen=0x%0h, type=", mem_req_tag, mem_req_byteen));
-                `TRACE_ARRAY1D(1, lsu_addr_type, NUM_LANES);
-                `TRACE(1, (", rd=%0d, is_dup=%b (#%0d)\n", execute_if[0].data.rd, lsu_is_dup, execute_if[0].data.uuid));
+                `TRACE(1, (", tag=0x%0h, byteen=0x%0h, rd=%0d, is_dup=%b (#%0d)\n", mem_req_tag, mem_req_byteen, execute_if[0].data.rd, lsu_is_dup, execute_if[0].data.uuid));
             end
         end
         if (mem_rsp_fire) begin

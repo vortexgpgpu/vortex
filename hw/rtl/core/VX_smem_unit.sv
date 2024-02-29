@@ -26,21 +26,53 @@ module VX_smem_unit import VX_gpu_pkg::*; #(
     VX_mem_bus_if.slave     dcache_bus_in_if [DCACHE_NUM_REQS],
     VX_mem_bus_if.master    dcache_bus_out_if [DCACHE_NUM_REQS]
 );
-    `UNUSED_PARAM (CORE_ID)
+    `STATIC_ASSERT(`IS_DIVISBLE((1 << `SMEM_LOG_SIZE), `MEM_BLOCK_SIZE), ("invalid parameter"))
+    `STATIC_ASSERT(0 == (`SMEM_BASE_ADDR % (1 << `SMEM_LOG_SIZE)), ("invalid parameter"))
 
     localparam SMEM_ADDR_WIDTH = `SMEM_LOG_SIZE - `CLOG2(DCACHE_WORD_SIZE);
+    localparam MEM_ASHIFT      = `CLOG2(`MEM_BLOCK_SIZE);
+    localparam MEM_ADDRW       = `XLEN - MEM_ASHIFT;
+    localparam SMEM_START_B    = MEM_ADDRW'(`XLEN'(`SMEM_BASE_ADDR) >> MEM_ASHIFT);
+    localparam SMEM_END_B      = MEM_ADDRW'((`XLEN'(`SMEM_BASE_ADDR) + (1 << `SMEM_LOG_SIZE)) >> MEM_ASHIFT);
 
-    wire [DCACHE_NUM_REQS-1:0]                  smem_req_valid;
-    wire [DCACHE_NUM_REQS-1:0]                  smem_req_rw;
-    wire [DCACHE_NUM_REQS-1:0][SMEM_ADDR_WIDTH-1:0] smem_req_addr;
-    wire [DCACHE_NUM_REQS-1:0][DCACHE_WORD_SIZE-1:0] smem_req_byteen;
-    wire [DCACHE_NUM_REQS-1:0][DCACHE_WORD_SIZE*8-1:0] smem_req_data;
-    wire [DCACHE_NUM_REQS-1:0][DCACHE_NOSM_TAG_WIDTH-1:0] smem_req_tag;
-    wire [DCACHE_NUM_REQS-1:0]                  smem_req_ready;
-    wire [DCACHE_NUM_REQS-1:0]                  smem_rsp_valid;
-    wire [DCACHE_NUM_REQS-1:0][DCACHE_WORD_SIZE*8-1:0] smem_rsp_data;
-    wire [DCACHE_NUM_REQS-1:0][DCACHE_NOSM_TAG_WIDTH-1:0] smem_rsp_tag;
-    wire [DCACHE_NUM_REQS-1:0]                  smem_rsp_ready;
+    VX_mem_bus_if #(
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (DCACHE_TAG_WIDTH)
+    ) smem_bus_if[DCACHE_NUM_REQS]();
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (DCACHE_TAG_WIDTH)
+    ) switch_out_bus_if[2 * DCACHE_NUM_REQS]();
+
+    `RESET_RELAY (switch_reset, reset);
+
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin    
+        
+        wire [MEM_ADDRW-1:0] block_addr = dcache_bus_in_if[i].req_data.addr[DCACHE_ADDR_WIDTH-1 -: MEM_ADDRW];
+        wire bus_sel = (block_addr >= SMEM_START_B) && (block_addr < SMEM_END_B);
+
+        VX_smem_switch #(
+            .NUM_REQS     (2),
+            .DATA_SIZE    (DCACHE_WORD_SIZE),
+            .TAG_WIDTH    (DCACHE_TAG_WIDTH),
+            .ARBITER      ("P"),
+            .REQ_OUT_BUF  (2),
+            .RSP_OUT_BUF  (2)
+        ) smem_switch (
+            .clk        (clk),
+            .reset      (switch_reset),
+            .bus_sel    (bus_sel),
+            .bus_in_if  (dcache_bus_in_if[i]),
+            .bus_out_if (switch_out_bus_if[i * 2 +: 2])
+        );
+
+        // output bus[0] goes to the dcache
+        `ASSIGN_VX_MEM_BUS_IF (dcache_bus_out_if[i], switch_out_bus_if[i * 2 + 0]);
+
+        // output bus[1] goes to the local memory
+        `ASSIGN_VX_MEM_BUS_IF (smem_bus_if[i], switch_out_bus_if[i * 2 + 1]);
+    end
 
     `RESET_RELAY (smem_reset, reset);
     
@@ -52,7 +84,7 @@ module VX_smem_unit import VX_gpu_pkg::*; #(
         .WORD_SIZE  (DCACHE_WORD_SIZE),
         .ADDR_WIDTH (SMEM_ADDR_WIDTH),
         .UUID_WIDTH (`UUID_WIDTH), 
-        .TAG_WIDTH  (DCACHE_NOSM_TAG_WIDTH)
+        .TAG_WIDTH  (DCACHE_TAG_WIDTH)
     ) shared_mem (        
         .clk        (clk),
         .reset      (smem_reset),
@@ -60,65 +92,7 @@ module VX_smem_unit import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .cache_perf (cache_perf),
     `endif
-
-        // Core request
-        .req_valid  (smem_req_valid),
-        .req_rw     (smem_req_rw),
-        .req_byteen (smem_req_byteen),
-        .req_addr   (smem_req_addr),
-        .req_data   (smem_req_data),        
-        .req_tag    (smem_req_tag),
-        .req_ready  (smem_req_ready),
-
-        // Core response
-        .rsp_valid  (smem_rsp_valid),
-        .rsp_data   (smem_rsp_data),
-        .rsp_tag    (smem_rsp_tag),
-        .rsp_ready  (smem_rsp_ready)
+        .mem_bus_if (smem_bus_if)
     );
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (DCACHE_WORD_SIZE),
-        .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) switch_out_bus_if[2 * DCACHE_NUM_REQS]();
-
-    `RESET_RELAY (switch_reset, reset);
-
-    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
-
-        assign smem_req_valid[i] = switch_out_bus_if[i * 2 + 1].req_valid;
-        assign smem_req_rw[i] = switch_out_bus_if[i * 2 + 1].req_data.rw;
-        assign smem_req_byteen[i] = switch_out_bus_if[i * 2 + 1].req_data.byteen;
-        assign smem_req_data[i] = switch_out_bus_if[i * 2 + 1].req_data.data;
-        assign smem_req_tag[i] = switch_out_bus_if[i * 2 + 1].req_data.tag;
-        assign switch_out_bus_if[i * 2 + 1].req_ready = smem_req_ready[i];
-
-        assign switch_out_bus_if[i * 2 + 1].rsp_valid = smem_rsp_valid[i];
-        assign switch_out_bus_if[i * 2 + 1].rsp_data.data = smem_rsp_data[i];
-        assign switch_out_bus_if[i * 2 + 1].rsp_data.tag = smem_rsp_tag[i];
-        assign smem_rsp_ready[i] = switch_out_bus_if[i * 2 + 1].rsp_ready;
-
-        assign smem_req_addr[i] = switch_out_bus_if[i * 2 + 1].req_data.addr[SMEM_ADDR_WIDTH-1:0];
-
-        VX_smem_switch #(
-            .NUM_REQS     (2),
-            .DATA_SIZE    (DCACHE_WORD_SIZE),
-            .TAG_WIDTH    (DCACHE_TAG_WIDTH),
-            .TAG_SEL_IDX  (0),
-            .ARBITER      ("P"),
-            .REQ_OUT_BUF  (2),
-            .RSP_OUT_BUF  (2)
-        ) smem_switch (
-            .clk        (clk),
-            .reset      (switch_reset),
-            .bus_in_if  (dcache_bus_in_if[i]),
-            .bus_out_if (switch_out_bus_if[i * 2 +: 2])
-        );
-    end
-
-    // this bus goes to the dcache
-    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
-        `ASSIGN_VX_MEM_BUS_IF (dcache_bus_out_if[i], switch_out_bus_if[i * 2]);
-    end
 
 endmodule

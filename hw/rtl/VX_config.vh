@@ -129,23 +129,15 @@
 `endif
 
 `ifndef L1_LINE_SIZE
-`ifdef L1_DISABLE
-`define L1_LINE_SIZE ((`L2_ENABLED || `L3_ENABLED) ? 4 : `MEM_BLOCK_SIZE)
-`else
-`define L1_LINE_SIZE ((`L2_ENABLED || `L3_ENABLED) ? 16 : `MEM_BLOCK_SIZE)
-`endif
+`define L1_LINE_SIZE `MEM_BLOCK_SIZE
 `endif
 
-`ifdef L2_ENABLE
+`ifndef L2_LINE_SIZE
 `define L2_LINE_SIZE `MEM_BLOCK_SIZE
-`else
-`define L2_LINE_SIZE `L1_LINE_SIZE
 `endif
 
-`ifdef L3_ENABLE
+`ifndef L3_LINE_SIZE
 `define L3_LINE_SIZE `MEM_BLOCK_SIZE
-`else
-`define L3_LINE_SIZE `L2_LINE_SIZE
 `endif
 
 `ifdef XLEN_64
