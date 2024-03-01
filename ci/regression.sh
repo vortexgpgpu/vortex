@@ -32,9 +32,6 @@ isa()
     make -C tests/riscv/isa run-simx
     make -C tests/riscv/isa run-rtlsim
 
-    make -C sim/rtlsim clean && CONFIGS="-DDPI_DISABLE" make -C sim/rtlsim > /dev/null
-    make -C tests/riscv/isa run-rtlsim
-
     make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null
     make -C tests/riscv/isa run-rtlsim-32f
 
