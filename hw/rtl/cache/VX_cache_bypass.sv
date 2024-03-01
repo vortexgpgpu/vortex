@@ -66,7 +66,7 @@ module VX_cache_bypass #(
     localparam MEM_TAG_BYPASS_BITS = UUID_WIDTH + MEM_TAG_ID_BITS;
 
     localparam MEM_ASHIFT       = `CLOG2(`MEM_BLOCK_SIZE);    
-    localparam MEM_ADDRW        = `XLEN - MEM_ASHIFT;
+    localparam MEM_ADDRW        = `MEM_ADDR_WIDTH - MEM_ASHIFT;
 
     // handle core requests ///////////////////////////////////////////////////
 
