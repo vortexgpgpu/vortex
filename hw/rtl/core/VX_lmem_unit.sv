@@ -31,7 +31,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
 
     localparam LMEM_ADDR_WIDTH = `LMEM_LOG_SIZE - `CLOG2(DCACHE_WORD_SIZE);
     localparam MEM_ASHIFT      = `CLOG2(`MEM_BLOCK_SIZE);
-    localparam MEM_ADDRW       = `XLEN - MEM_ASHIFT;
+    localparam MEM_ADDRW       = `MEM_ADDR_WIDTH - MEM_ASHIFT;
     localparam LMEM_START_B    = MEM_ADDRW'(`XLEN'(`LMEM_BASE_ADDR) >> MEM_ASHIFT);
     localparam LMEM_END_B      = MEM_ADDRW'((`XLEN'(`LMEM_BASE_ADDR) + (1 << `LMEM_LOG_SIZE)) >> MEM_ASHIFT);
 
