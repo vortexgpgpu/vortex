@@ -212,9 +212,11 @@ module VX_mem_scheduler #(
 
     `UNUSED_VAR (ibuf_empty)
 
-    wire [QUEUE_ADDRW-1:0] ibuf_waddr_s = reqq_tag_s[QUEUE_ADDRW-1:0];
-    wire [QUEUE_ADDRW-1:0] ibuf_raddr_s = crsp_tag_s[QUEUE_ADDRW-1:0];
-    
+    wire reqq_rd_start_s = ibuf_push;
+    wire [MERGED_REQS-1:0] reqq_start_mask_s = core_req_mask;
+    wire [QUEUE_ADDRW-1:0] ibuf_waddr_s = ibuf_waddr;
+    wire [QUEUE_ADDRW-1:0] ibuf_raddr_s = ibuf_raddr;
+
     assign reqq_valid_s = reqq_valid;
     assign reqq_mask_s  = reqq_mask;
     assign reqq_rw_s    = reqq_rw;        
@@ -352,13 +354,9 @@ module VX_mem_scheduler #(
 
     // Handle memory responses ////////////////////////////////////////////////
 
-    reg [QUEUE_SIZE-1:0] pending_req_valids;
     reg [QUEUE_SIZE-1:0][MERGED_REQS-1:0] rsp_rem_mask;
     wire [MERGED_REQS-1:0] rsp_rem_mask_n, curr_mask;
     wire [BATCH_SEL_WIDTH-1:0] rsp_batch_idx;
-
-    wire reqq_fire_s = reqq_valid_s && reqq_ready_s;
-    wire reqq_rd_start_s = reqq_fire_s && ~reqq_rw_s && ~pending_req_valids[ibuf_waddr_s];
 
     // Select memory response
     VX_mem_rsp_sel #(
@@ -398,18 +396,8 @@ module VX_mem_scheduler #(
     end
 
     always @(posedge clk) begin
-        if (reset) begin
-            pending_req_valids <= '0;
-        end else begin
-            if (reqq_rd_start_s) begin
-                pending_req_valids[ibuf_waddr_s] <= 1;
-            end
-            if (mem_rsp_fire_s && rsp_complete) begin
-                pending_req_valids[ibuf_raddr_s] <= 0;
-            end
-        end
         if (reqq_rd_start_s) begin
-            rsp_rem_mask[ibuf_waddr_s] <= reqq_mask_s;
+            rsp_rem_mask[ibuf_waddr_s] <= reqq_start_mask_s;
         end
         if (mem_rsp_fire_s) begin
             rsp_rem_mask[ibuf_raddr_s] <= rsp_rem_mask_n;
@@ -430,18 +418,17 @@ module VX_mem_scheduler #(
                 rsp_sop_r[ibuf_raddr_s] <= 0;
             end
         end
-
-        assign mem_rsp_ready_s = crsp_ready_s;
         
         assign crsp_valid_s = mem_rsp_valid_s;
-
-        assign crsp_mask_s = curr_mask;
-        assign crsp_sop_s = rsp_sop_r[ibuf_raddr_s];
+        assign crsp_mask_s  = curr_mask;
+        assign crsp_sop_s   = rsp_sop_r[ibuf_raddr_s];
 
         for (genvar r = 0; r < MERGED_REQS; ++r) begin
             localparam j = r % MEM_CHANNELS;
             assign crsp_data_s[r] = mem_rsp_data_s[j];
         end
+
+        assign mem_rsp_ready_s = crsp_ready_s;
 
     end else begin
 
@@ -460,25 +447,24 @@ module VX_mem_scheduler #(
         
         always @(posedge clk) begin
             if (reqq_rd_start_s) begin
-                rsp_orig_mask[ibuf_waddr_s] <= core_req_mask;
+                rsp_orig_mask[ibuf_waddr_s] <= reqq_start_mask_s;
             end
             if (mem_rsp_valid_s) begin
                 rsp_store[ibuf_raddr_s] <= rsp_store_n;
             end
         end
 
-        assign mem_rsp_ready_s = crsp_ready_s || ~rsp_complete;      
-
         assign crsp_valid_s = mem_rsp_valid_s && rsp_complete;
-
-        assign crsp_mask_s = rsp_orig_mask[ibuf_raddr_s];
-        assign crsp_sop_s = 1'b1;
+        assign crsp_mask_s  = rsp_orig_mask[ibuf_raddr_s];
+        assign crsp_sop_s   = 1'b1;
 
         for (genvar r = 0; r < MERGED_REQS; ++r) begin
             localparam i = r / MEM_CHANNELS;
             localparam j = r % MEM_CHANNELS;
             assign crsp_data_s[r] = rsp_store_n[(i * MEM_CHANNELS + j) * LINE_WIDTH +: LINE_WIDTH];
         end
+
+        assign mem_rsp_ready_s = crsp_ready_s || ~rsp_complete;
     end
 
     assign crsp_tag_s = mem_rsp_tag_s[MEM_TAG_WIDTH-1 -: REQQ_TAG_WIDTH];
@@ -519,7 +505,7 @@ module VX_mem_scheduler #(
     if (UUID_WIDTH != 0) begin
         assign req_dbg_uuid = core_req_tag[TAG_WIDTH-1 -: UUID_WIDTH];
         assign rsp_dbg_uuid = core_rsp_tag[TAG_WIDTH-1 -: UUID_WIDTH];
-        assign mem_req_dbg_uuid = reqq_tag_s[REQQ_TAG_WIDTH-1 -: UUID_WIDTH];
+        assign mem_req_dbg_uuid = mem_req_tag_s[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
         assign mem_rsp_dbg_uuid = mem_rsp_tag_s[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
     end else begin
         assign req_dbg_uuid = '0;
@@ -534,17 +520,29 @@ module VX_mem_scheduler #(
     `UNUSED_VAR (mem_rsp_dbg_uuid)
 
     reg [(`UP(UUID_WIDTH) + TAG_ID_WIDTH + 64)-1:0] pending_reqs_time [QUEUE_SIZE-1:0];
+    reg [QUEUE_SIZE-1:0] pending_reqs_valid;
 
     always @(posedge clk) begin
-        if (reqq_rd_start_s) begin            
-            pending_reqs_time[ibuf_waddr_s] <= {req_dbg_uuid, ibuf_din, $time};
+        if (reset) begin
+            pending_reqs_valid <= '0;
+        end else begin
+            if (ibuf_push) begin
+                pending_reqs_valid[ibuf_waddr] <= 1'b1;
+            end
+            if (ibuf_pop) begin
+                pending_reqs_valid[ibuf_raddr] <= 1'b0;
+            end
+        end
+
+        if (ibuf_push) begin            
+            pending_reqs_time[ibuf_waddr] <= {req_dbg_uuid, ibuf_din, $time};
         end
 
         for (integer i = 0; i < QUEUE_SIZE; ++i) begin
-            if (pending_req_valids[i]) begin
+            if (pending_reqs_valid[i]) begin
                 `ASSERT(($time - pending_reqs_time[i][63:0]) < STALL_TIMEOUT,
-                    ("%t: *** %s response timeout: remaining=%b, tag=0x%0h (#%0d)", 
-                        $time, INSTANCE_ID, rsp_rem_mask[i], pending_reqs_time[i][64 +: TAG_ID_WIDTH], pending_reqs_time[i][64+TAG_ID_WIDTH +: `UP(UUID_WIDTH)]));
+                    ("%t: *** %s response timeout: tag=0x%0h (#%0d)", 
+                        $time, INSTANCE_ID, pending_reqs_time[i][64 +: TAG_ID_WIDTH], pending_reqs_time[i][64+TAG_ID_WIDTH +: `UP(UUID_WIDTH)]));
             end
         end
     end
