@@ -222,11 +222,11 @@ module VX_dispatch import VX_gpu_pkg::*; #(
                 `TRACE(1, ("%d: core%0d-issue: wid=%0d, PC=0x%0h, ex=", $time, CORE_ID, wis_to_wid(operands_if[i].data.wis, i), operands_if[i].data.PC));
                 trace_ex_type(1, operands_if[i].data.ex_type);
                 `TRACE(1, (", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1_data=", operands_if[i].data.op_mod, operands_if[i].data.tmask, operands_if[i].data.wb, operands_if[i].data.rd));
-                `TRACE_ARRAY1D(1, operands_if[i].data.rs1_data, `NUM_THREADS);
+                `TRACE_ARRAY1D(1, "0x%0h", operands_if[i].data.rs1_data, `NUM_THREADS);
                 `TRACE(1, (", rs2_data="));
-                `TRACE_ARRAY1D(1, operands_if[i].data.rs2_data, `NUM_THREADS);
+                `TRACE_ARRAY1D(1, "0x%0h", operands_if[i].data.rs2_data, `NUM_THREADS);
                 `TRACE(1, (", rs3_data="));
-                `TRACE_ARRAY1D(1, operands_if[i].data.rs3_data, `NUM_THREADS);
+                `TRACE_ARRAY1D(1, "0x%0h", operands_if[i].data.rs3_data, `NUM_THREADS);
                 `TRACE(1, (" (#%0d)\n", operands_if[i].data.uuid));
             end
         end

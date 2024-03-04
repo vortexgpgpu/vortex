@@ -105,7 +105,7 @@ package VX_gpu_pkg;
     ////////////////////////// Dcache Parameters //////////////////////////////
 
     // Word size in bytes
-    localparam DCACHE_WORD_SIZE	    = (`XLEN / 8);
+    localparam DCACHE_WORD_SIZE	    = `LSU_LINE_SIZE;
     localparam DCACHE_ADDR_WIDTH	= (`MEM_ADDR_WIDTH - `CLOG2(DCACHE_WORD_SIZE));
 
     // Block size in bytes
@@ -115,11 +115,11 @@ package VX_gpu_pkg;
     localparam DCACHE_NUM_REQS	    = `UP((`NUM_LSU_LANES * (`XLEN / 8)) / DCACHE_WORD_SIZE);
 
     // Batch select bits
-    localparam DCACHE_NUM_BATCHES	= ((DCACHE_NUM_REQS + DCACHE_NUM_REQS - 1) / DCACHE_NUM_REQS);
+    localparam DCACHE_NUM_BATCHES	= ((`NUM_LSU_LANES + DCACHE_NUM_REQS - 1) / DCACHE_NUM_REQS);
     localparam DCACHE_BATCH_SEL_BITS = `CLOG2(DCACHE_NUM_BATCHES);
 
     // Core request tag Id bits
-    localparam DCACHE_TAG_ID_BITS   = (`CLOG2(`LSUQ_SIZE) + DCACHE_BATCH_SEL_BITS);
+    localparam DCACHE_TAG_ID_BITS   = (`CLOG2(`LSUQ_OUT_SIZE) + DCACHE_BATCH_SEL_BITS);
 
     // Core request tag bits
     localparam DCACHE_TAG_WIDTH	    = (`UUID_WIDTH + DCACHE_TAG_ID_BITS);

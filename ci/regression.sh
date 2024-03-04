@@ -140,7 +140,7 @@ debug()
     make -C tests/riscv/isa run-rtlsim-32im > run_rtlsim.log
     ./ci/trace_csv.py -trtlsim run_rtlsim.log -otrace_rtlsim.csv
     ./ci/trace_csv.py -tsimx run_simx.log -otrace_simx.csv
-    git diff --no-index trace_rtlsim.csv trace_simx.csv
+    diff trace_rtlsim.csv trace_simx.csv
     # restore default prebuilt configuration
     make -C sim/simx clean && make -C sim/simx > /dev/null
     make -C sim/rtlsim clean && make -C sim/rtlsim > /dev/null
