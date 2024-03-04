@@ -191,22 +191,22 @@
 
 `define LTRIM(x, s) x[s-1:0]
 
-`define TRACE_ARRAY1D(lvl, arr, m)              \
+`define TRACE_ARRAY1D(lvl, fmt, arr, n)              \
     `TRACE(lvl, ("{"));                         \
-    for (integer __i = (m-1); __i >= 0; --__i) begin  \
-        if (__i != (m-1)) `TRACE(lvl, (", "));    \
-        `TRACE(lvl, ("0x%0h", arr[__i]));         \
+    for (integer __i = (n-1); __i >= 0; --__i) begin  \
+        if (__i != (n-1)) `TRACE(lvl, (", "));    \
+        `TRACE(lvl, (fmt, arr[__i]));         \
     end                                         \
     `TRACE(lvl, ("}"));
 
-`define TRACE_ARRAY2D(lvl, arr, m, n)           \
+`define TRACE_ARRAY2D(lvl, fmt, arr, m, n)           \
     `TRACE(lvl, ("{"));                         \
     for (integer __i = n-1; __i >= 0; --__i) begin    \
         if (__i != (n-1)) `TRACE(lvl, (", "));    \
         `TRACE(lvl, ("{"));                     \
         for (integer __j = (m-1); __j >= 0; --__j) begin \
             if (__j != (m-1)) `TRACE(lvl, (", "));\
-            `TRACE(lvl, ("0x%0h", arr[__i][__j]));  \
+            `TRACE(lvl, (fmt, arr[__i][__j]));  \
         end                                     \
         `TRACE(lvl, ("}"));                     \
     end                                         \

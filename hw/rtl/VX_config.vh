@@ -264,9 +264,9 @@
 `define IBUF_SIZE   4
 `endif
 
-// Size of LSU Request Queue
-`ifndef LSUQ_SIZE
-`define LSUQ_SIZE   (2 * (`NUM_THREADS / `NUM_LSU_LANES))
+// LSU line size
+`ifndef LSU_LINE_SIZE
+`define LSU_LINE_SIZE   (`XLEN / 8)
 `endif
 
 // LSU Duplicate Address Check
@@ -277,6 +277,16 @@
 `define LSU_DUP_ENABLED 1
 `else
 `define LSU_DUP_ENABLED 0
+`endif
+
+// Size of LSU Core Request Queue
+`ifndef LSUQ_IN_SIZE
+`define LSUQ_IN_SIZE    (2 * (`NUM_THREADS / `NUM_LSU_LANES))
+`endif
+
+// Size of LSU Memory Request Queue
+`ifndef LSUQ_OUT_SIZE
+`define LSUQ_OUT_SIZE   `MAX(`LSUQ_IN_SIZE, `LSU_LINE_SIZE / (`XLEN / 8))
 `endif
 
 `ifdef GBAR_ENABLE

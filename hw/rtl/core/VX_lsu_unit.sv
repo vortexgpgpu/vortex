@@ -37,7 +37,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
     localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
-    localparam LSUQ_SIZEW   = `LOG2UP(`LSUQ_SIZE);
+    localparam LSUQ_SIZEW   = `LOG2UP(`LSUQ_IN_SIZE);
     localparam REQ_ASHIFT   = `CLOG2(WORD_SIZE);
 
     VX_execute_if #(
@@ -215,8 +215,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     wire mem_rsp_sop_pkt, mem_rsp_eop_pkt;
 
     if (PID_BITS != 0) begin
-        reg [`LSUQ_SIZE-1:0][PID_BITS:0] pkt_ctr;
-        reg [`LSUQ_SIZE-1:0] pkt_sop, pkt_eop;
+        reg [`LSUQ_IN_SIZE-1:0][PID_BITS:0] pkt_ctr;
+        reg [`LSUQ_IN_SIZE-1:0] pkt_sop, pkt_eop;
 
         wire mem_req_rd_fire     = mem_req_fire && execute_if[0].data.wb;
         wire mem_req_rd_sop_fire = mem_req_rd_fire && execute_if[0].data.sop;
@@ -225,7 +225,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         wire full;
         
         VX_allocator #(
-            .SIZE (`LSUQ_SIZE)
+            .SIZE (`LSUQ_IN_SIZE)
         ) pkt_allocator (
             .clk        (clk),
             .reset      (reset),
@@ -309,7 +309,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .LINE_SIZE   (DCACHE_WORD_SIZE),
         .ADDR_WIDTH  (ADDR_WIDTH),
         .TAG_WIDTH   (TAG_WIDTH),        
-        .QUEUE_SIZE  (`LSUQ_SIZE),
+        .CORE_QUEUE_SIZE (`LSUQ_IN_SIZE),
+        .MEM_QUEUE_SIZE (`LSUQ_OUT_SIZE),
         .UUID_WIDTH  (`UUID_WIDTH),
         .RSP_PARTIAL (1),
         .MEM_OUT_BUF (2)
@@ -551,20 +552,20 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         if (mem_req_fire) begin
             if (mem_req_rw) begin
                 `TRACE(1, ("%d: D$%0d Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, execute_if[0].data.wid, execute_if[0].data.PC, mem_req_mask));
-                `TRACE_ARRAY1D(1, full_addr, NUM_LANES);
+                `TRACE_ARRAY1D(1, "0x%h", full_addr, NUM_LANES);
                 `TRACE(1, (", tag=0x%0h, byteen=0x%0h, data=", mem_req_tag, mem_req_byteen));
-                `TRACE_ARRAY1D(1, mem_req_data, NUM_LANES);
+                `TRACE_ARRAY1D(1, "0x%0h", mem_req_data, NUM_LANES);
                 `TRACE(1, (", is_dup=%b (#%0d)\n", lsu_is_dup, execute_if[0].data.uuid));
             end else begin
                 `TRACE(1, ("%d: D$%0d Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, execute_if[0].data.wid, execute_if[0].data.PC, mem_req_mask));
-                `TRACE_ARRAY1D(1, full_addr, NUM_LANES);
+                `TRACE_ARRAY1D(1, "0x%h", full_addr, NUM_LANES);
                 `TRACE(1, (", tag=0x%0h, byteen=0x%0h, rd=%0d, is_dup=%b (#%0d)\n", mem_req_tag, mem_req_byteen, execute_if[0].data.rd, lsu_is_dup, execute_if[0].data.uuid));
             end
         end
         if (mem_rsp_fire) begin
             `TRACE(1, ("%d: D$%0d Rsp: wid=%0d, PC=0x%0h, tmask=%b, tag=0x%0h, rd=%0d, sop=%b, eop=%b, data=",
                 $time, CORE_ID, rsp_wid, rsp_pc, mem_rsp_mask, mem_rsp_tag, rsp_rd, mem_rsp_sop, mem_rsp_eop));
-            `TRACE_ARRAY1D(1, mem_rsp_data, NUM_LANES);
+            `TRACE_ARRAY1D(1, "0x%0h", mem_rsp_data, NUM_LANES);
             `TRACE(1, (", is_dup=%b (#%0d)\n", rsp_is_dup, rsp_uuid));
         end
     end
