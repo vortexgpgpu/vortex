@@ -116,7 +116,7 @@ package VX_gpu_pkg;
 
     // Core request tag Id bits
         
-    localparam DCACHE_MERGED_REQS   = (`NUM_LSU_LANES * DCACHE_WORD_SIZE) / DCACHE_LINE_SIZE;
+    localparam DCACHE_MERGED_REQS   = (`NUM_LSU_LANES * (`XLEN / 8)) / DCACHE_WORD_SIZE;
     localparam DCACHE_MEM_BATCHES   = (DCACHE_MERGED_REQS + DCACHE_NUM_REQS - 1) / DCACHE_NUM_REQS;
     localparam DCACHE_TAG_ID_BITS   = (`CLOG2(`LSUQ_OUT_SIZE) + `CLOG2(DCACHE_MEM_BATCHES));
 
