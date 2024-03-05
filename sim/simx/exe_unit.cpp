@@ -94,7 +94,7 @@ void FpuUnit::tick() {
 
 LsuUnit::LsuUnit(const SimContext& ctx, Core* core) 
     : ExeUnit(ctx, core, "LSU")
-    , pending_rd_reqs_(LSUQ_SIZE)
+    , pending_rd_reqs_(LSUQ_IN_SIZE)
     , num_lanes_(NUM_LSU_LANES)     
     , pending_loads_(0)
     , fence_lock_(false)
