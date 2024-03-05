@@ -77,8 +77,6 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     // tag = uuid + tag_id 
     localparam TAG_WIDTH = `UUID_WIDTH + TAG_ID_WIDTH;
 
-    `STATIC_ASSERT(0 == (`IO_BASE_ADDR % `MEM_BLOCK_SIZE), ("invalid parameter"))
-
     // full address calculation
 
     wire [NUM_LANES-1:0][`XLEN-1:0] full_addr;    

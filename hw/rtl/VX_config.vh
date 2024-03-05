@@ -266,7 +266,7 @@
 
 // LSU line size
 `ifndef LSU_LINE_SIZE
-`define LSU_LINE_SIZE   (`XLEN / 8)
+`define LSU_LINE_SIZE   `MIN(`NUM_LSU_LANES * (`XLEN / 8), `L1_LINE_SIZE)
 `endif
 
 // LSU Duplicate Address Check

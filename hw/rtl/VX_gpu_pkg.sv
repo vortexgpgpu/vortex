@@ -114,12 +114,11 @@ package VX_gpu_pkg;
     // Input request size
     localparam DCACHE_NUM_REQS	    = `UP((`NUM_LSU_LANES * (`XLEN / 8)) / DCACHE_WORD_SIZE);
 
-    // Batch select bits
-    localparam DCACHE_NUM_BATCHES	= ((`NUM_LSU_LANES + DCACHE_NUM_REQS - 1) / DCACHE_NUM_REQS);
-    localparam DCACHE_BATCH_SEL_BITS = `CLOG2(DCACHE_NUM_BATCHES);
-
     // Core request tag Id bits
-    localparam DCACHE_TAG_ID_BITS   = (`CLOG2(`LSUQ_OUT_SIZE) + DCACHE_BATCH_SEL_BITS);
+        
+    localparam DCACHE_MERGED_REQS   = (`NUM_LSU_LANES * DCACHE_WORD_SIZE) / DCACHE_LINE_SIZE;
+    localparam DCACHE_MEM_BATCHES   = (DCACHE_MERGED_REQS + DCACHE_NUM_REQS - 1) / DCACHE_NUM_REQS;
+    localparam DCACHE_TAG_ID_BITS   = (`CLOG2(`LSUQ_OUT_SIZE) + `CLOG2(DCACHE_MEM_BATCHES));
 
     // Core request tag bits
     localparam DCACHE_TAG_WIDTH	    = (`UUID_WIDTH + DCACHE_TAG_ID_BITS);
