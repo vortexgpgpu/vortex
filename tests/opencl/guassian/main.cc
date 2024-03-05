@@ -155,12 +155,10 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,
   writeMB = (float)(sizeof(float) * size * (size + size + 1) / 1e6);
 
   // 3. Determine block sizes
-  size_t globalWorksizeFan1[1];
-  size_t globalWorksizeFan2[2];
-
-  globalWorksizeFan1[0] = size;
-  globalWorksizeFan2[0] = size;
-  globalWorksizeFan2[1] = size;
+  size_t globalWorksizeFan1[1] = {size};
+  size_t globalWorksizeFan2[2] = {size, size};
+  size_t localWorksizeFan1[1] = {1};
+  size_t localWorksizeFan2[2] = {1, 1};
 
   int t;
   // 4. Setup and Run kernels
@@ -178,7 +176,7 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,
     // launch kernel
     error =
         clEnqueueNDRangeKernel(command_queue, fan1_kernel, 1, 0,
-                               globalWorksizeFan1, NULL, 0, NULL, &kernelEvent);
+                               globalWorksizeFan1, localWorksizeFan1, 0, NULL, &kernelEvent);
 
     cl_errChk(error, "ERROR in Executing Fan1 Kernel", true);
     if (timing) {
@@ -202,7 +200,7 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,
     // launch kernel
     error =
         clEnqueueNDRangeKernel(command_queue, fan2_kernel, 2, 0,
-                               globalWorksizeFan2, NULL, 0, NULL, &kernelEvent);
+                               globalWorksizeFan2, localWorksizeFan2, 0, NULL, &kernelEvent);
 
     cl_errChk(error, "ERROR in Executing Fan1 Kernel", true);
     if (timing) {
