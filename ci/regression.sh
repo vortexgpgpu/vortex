@@ -163,21 +163,28 @@ config()
     CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood
 
     # issue width
-    CONFIGS="-DISSUE_WIDTH=1" ./ci/blackbox.sh --driver=rtlsim --app=diverge
     CONFIGS="-DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=rtlsim --app=diverge
-    CONFIGS="-DISSUE_WIDTH=1" ./ci/blackbox.sh --driver=simx --app=diverge
+    CONFIGS="-DISSUE_WIDTH=4" ./ci/blackbox.sh --driver=rtlsim --app=diverge
     CONFIGS="-DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=simx --app=diverge
+    CONFIGS="-DISSUE_WIDTH=4" ./ci/blackbox.sh --driver=simx --app=diverge
 
-    # dispatch size
-    CONFIGS="-DNUM_ALU_BLOCK=1 -DNUM_ALU_LANES=1" ./ci/blackbox.sh --driver=rtlsim --app=diverge
-    CONFIGS="-DNUM_ALU_BLOCK=2 -DNUM_ALU_LANES=2" ./ci/blackbox.sh --driver=rtlsim --app=diverge
-    CONFIGS="-DNUM_ALU_BLOCK=1 -DNUM_ALU_LANES=1" ./ci/blackbox.sh --driver=simx --app=diverge
-    CONFIGS="-DNUM_ALU_BLOCK=2 -DNUM_ALU_LANES=2" ./ci/blackbox.sh --driver=simx --app=diverge
+    # ALU scaling
+    CONFIGS="-DISSUE_WIDTH=2 -DNUM_ALU_BLOCK=1 -DNUM_ALU_LANES=2" ./ci/blackbox.sh --driver=rtlsim --app=diverge
+    CONFIGS="-DISSUE_WIDTH=4 -DNUM_ALU_BLOCK=4 -DNUM_ALU_LANES=4" ./ci/blackbox.sh --driver=rtlsim --app=diverge
+    CONFIGS="-DISSUE_WIDTH=2 -DNUM_ALU_BLOCK=1 -DNUM_ALU_LANES=2" ./ci/blackbox.sh --driver=simx --app=diverge
+    CONFIGS="-DISSUE_WIDTH=4 -DNUM_ALU_BLOCK=4 -DNUM_ALU_LANES=4" ./ci/blackbox.sh --driver=simx --app=diverge
 
     # FPU scaling
-    CONFIGS="-DNUM_ALU_BLOCK=4 -DNUM_FPU_LANES=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DNUM_ALU_BLOCK=2 -DNUM_FPU_LANES=4" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DNUM_ALU_BLOCK=4 -DNUM_FPU_LANES=4" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
+    CONFIGS="-DISSUE_WIDTH=2 -DNUM_FPU_BLOCK=1 -DNUM_FPU_LANES=2" ./ci/blackbox.sh --driver=rtlsim --app=vecaddx
+    CONFIGS="-DISSUE_WIDTH=4 -DNUM_FPU_BLOCK=4 -DNUM_FPU_LANES=4" ./ci/blackbox.sh --driver=rtlsim --app=vecaddx
+    CONFIGS="-DISSUE_WIDTH=2 -DNUM_FPU_BLOCK=1 -DNUM_FPU_LANES=2" ./ci/blackbox.sh --driver=simx --app=vecaddx
+    CONFIGS="-DISSUE_WIDTH=4 -DNUM_FPU_BLOCK=4 -DNUM_FPU_LANES=4" ./ci/blackbox.sh --driver=simx --app=vecaddx
+
+    # LSU scaling
+    CONFIGS="-DISSUE_WIDTH=2 -DNUM_LSU_BLOCK=1 -DNUM_LSU_LANES=2" ./ci/blackbox.sh --driver=rtlsim --app=vecaddx
+    CONFIGS="-DISSUE_WIDTH=4 -DNUM_LSU_BLOCK=4 -DNUM_LSU_LANES=4" ./ci/blackbox.sh --driver=rtlsim --app=vecaddx
+    CONFIGS="-DISSUE_WIDTH=2 -DNUM_LSU_BLOCK=1 -DNUM_LSU_LANES=2" ./ci/blackbox.sh --driver=simx --app=vecaddx
+    CONFIGS="-DISSUE_WIDTH=4 -DNUM_LSU_BLOCK=4 -DNUM_LSU_LANES=4" ./ci/blackbox.sh --driver=simx --app=vecaddx
 
     # custom program startup address
     make -C tests/regression/dogfood clean-all
@@ -200,13 +207,13 @@ config()
     CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --cores=1 --app=demo --perf=1
 
     # disable L1 cache
-    CONFIGS="-DL1_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm
-    CONFIGS="-DL1_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm
-    CONFIGS="-DDCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm
-    CONFIGS="-DICACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm
+    CONFIGS="-DL1_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemmx
+    CONFIGS="-DL1_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemmx
+    CONFIGS="-DDCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemmx
+    CONFIGS="-DICACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemmx
 
     # multiple L1 caches per cluster
-    CONFIGS="-DNUM_DCACHES=2 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm --cores=8 --warps=1 --threads=2
+    CONFIGS="-DNUM_DCACHES=2 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --cores=8 --warps=1 --threads=2
 
     # test AXI bus
     AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
@@ -216,12 +223,12 @@ config()
     CONFIGS="-DL1_LINE_SIZE=4 -DL1_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr --args="-n1"
 
     # test cache banking
-    CONFIGS="-DLMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=sgemm
-    CONFIGS="-DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm
-    CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm
-    CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --cores=1 --app=sgemm
+    CONFIGS="-DLMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=sgemmx
+    CONFIGS="-DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemmx
+    CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemmx
+    CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --cores=1 --app=sgemmx
 
     # test 128-bit MEM block
     CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=opae --cores=1 --app=demo

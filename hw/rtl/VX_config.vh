@@ -230,7 +230,7 @@
 
 // Issue width
 `ifndef ISSUE_WIDTH
-`define ISSUE_WIDTH     `MIN(`NUM_WARPS, 2)
+`define ISSUE_WIDTH     1
 `endif
 
 // Number of ALU units
