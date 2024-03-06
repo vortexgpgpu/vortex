@@ -40,6 +40,12 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     localparam LSUQ_SIZEW   = `LOG2UP(`LSUQ_IN_SIZE);
     localparam REQ_ASHIFT   = `CLOG2(WORD_SIZE);
 
+    // tag_id = wid + PC + tmask + rd + op_type + align + is_dup + pid + pkt_addr 
+    localparam TAG_ID_WIDTH = `NW_WIDTH + `XLEN + NUM_LANES + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * (REQ_ASHIFT)) + `LSU_DUP_ENABLED + PID_WIDTH + LSUQ_SIZEW;
+
+    // tag = uuid + tag_id 
+    localparam TAG_WIDTH = `UUID_WIDTH + TAG_ID_WIDTH;
+
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)
     ) execute_if[BLOCK_SIZE]();
@@ -70,12 +76,6 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     `UNUSED_VAR (execute_if[0].data.use_imm)
     `UNUSED_VAR (execute_if[0].data.rs3_data)
     `UNUSED_VAR (execute_if[0].data.tid)
-
-    // tag_id = wid + PC + tmask + rd + op_type + align + is_dup + pid + pkt_addr 
-    localparam TAG_ID_WIDTH = `NW_WIDTH + `XLEN + NUM_LANES + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * (REQ_ASHIFT)) + `LSU_DUP_ENABLED + PID_WIDTH + LSUQ_SIZEW;
-
-    // tag = uuid + tag_id 
-    localparam TAG_WIDTH = `UUID_WIDTH + TAG_ID_WIDTH;
 
     // full address calculation
 
