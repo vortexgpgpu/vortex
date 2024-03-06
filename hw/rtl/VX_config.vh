@@ -251,10 +251,10 @@
 
 // Number of LSU units
 `ifndef NUM_LSU_LANES
-`define NUM_LSU_LANES   `MIN(`NUM_THREADS, 4)
+`define NUM_LSU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_LSU_BLOCKS
-`define NUM_LSU_BLOCKS  1
+`define NUM_LSU_BLOCKS  `ISSUE_WIDTH
 `endif
 
 // Number of SFU units
@@ -276,9 +276,6 @@
 `endif
 
 // LSU Duplicate Address Check
-`ifndef LSU_DUP_DISABLE
-`define LSU_DUP_ENABLE
-`endif
 `ifdef LSU_DUP_ENABLE
 `define LSU_DUP_ENABLED 1
 `else
