@@ -136,6 +136,7 @@ module VX_mem_coalescer #(
         if (reset) begin
             state_r          <= STATE_SETUP;
             processed_mask_r <= '0;
+            out_req_valid_r  <= 0;
         end else begin
             state_r          <= state_n;
             out_req_valid_r  <= out_req_valid_n;

@@ -225,7 +225,7 @@ def write_csv(log_filename, csv_filename, log_type):
         sys.exit()
         
     # sort entries by uuid
-    entries.sort(key=lambda x: (int(x['core_id']), int(x['warp_id']), int(x['lineno'])))
+    entries.sort(key=lambda x: (int(x['uuid'])))
     for entry in entries:
         del entry['lineno']
     
