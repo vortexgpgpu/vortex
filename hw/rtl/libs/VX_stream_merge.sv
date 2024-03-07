@@ -14,7 +14,7 @@
 `include "VX_platform.vh"
 
 `TRACING_OFF
-module VX_mem_rsp_sel #(
+module VX_stream_merge #(
     parameter NUM_REQS      = 1, 
     parameter DATA_WIDTH    = 1, 
     parameter TAG_WIDTH     = 1,    
@@ -70,8 +70,7 @@ module VX_mem_rsp_sel #(
         
         always @(*) begin                
             rsp_valid_sel = '0;              
-            rsp_ready_sel = '0;
-            
+            rsp_ready_sel = '0;            
             for (integer i = 0; i < NUM_REQS; ++i) begin
                 if (rsp_tag_in[i][TAG_SEL_BITS-1:0] == rsp_tag_sel[TAG_SEL_BITS-1:0]) begin
                     rsp_valid_sel[i] = rsp_valid_in[i];                    
