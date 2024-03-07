@@ -28,13 +28,7 @@ module VX_issue #(
 
     VX_decode_if.slave      decode_if,
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
-
-    VX_dispatch_if.master   alu_dispatch_if [`ISSUE_WIDTH],
-    VX_dispatch_if.master   lsu_dispatch_if [`ISSUE_WIDTH],
-`ifdef EXT_F_ENABLE
-    VX_dispatch_if.master   fpu_dispatch_if [`ISSUE_WIDTH],
-`endif
-    VX_dispatch_if.master   sfu_dispatch_if [`ISSUE_WIDTH]
+    VX_dispatch_if.master   dispatch_if [`NUM_EX_UNITS * `ISSUE_WIDTH]
 );
     VX_ibuffer_if ibuffer_if [`NUM_WARPS]();
     VX_scoreboard_if scoreboard_if [`ISSUE_WIDTH]();
@@ -88,12 +82,7 @@ module VX_issue #(
         `UNUSED_PIN     (perf_stalls),
     `endif
         .operands_if    (operands_if),
-        .alu_dispatch_if(alu_dispatch_if),
-        .lsu_dispatch_if(lsu_dispatch_if),
-    `ifdef EXT_F_ENABLE
-        .fpu_dispatch_if(fpu_dispatch_if),
-    `endif
-        .sfu_dispatch_if(sfu_dispatch_if)
+        .dispatch_if    (dispatch_if)
     ); 
 
 `ifdef DBG_SCOPE_ISSUE

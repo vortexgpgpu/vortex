@@ -19,39 +19,31 @@ module VX_execute import VX_gpu_pkg::*; #(
     `SCOPE_IO_DECL
 
     input wire              clk, 
-    input wire              reset,    
+    input wire              reset, 
+
+`ifdef PERF_ENABLE
+    VX_mem_perf_if.slave    mem_perf_if,
+    VX_pipeline_perf_if.slave pipeline_perf_if,
+`endif  
 
     input base_dcrs_t       base_dcrs,
 
     // Dcache interface
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
+  
+    // dispatch interface
+    VX_dispatch_if.slave    dispatch_if [`NUM_EX_UNITS * `ISSUE_WIDTH],
 
     // commit interface
-    VX_commit_csr_if.slave  commit_csr_if,
-
-    // fetch interface
+    VX_commit_if.master     commit_if [`NUM_EX_UNITS * `ISSUE_WIDTH],
+    
+    // scheduler interfaces
     VX_sched_csr_if.slave   sched_csr_if,
-
-`ifdef PERF_ENABLE
-    VX_mem_perf_if.slave    mem_perf_if,
-    VX_pipeline_perf_if.slave pipeline_perf_if,
-`endif
-
-`ifdef EXT_F_ENABLE
-    VX_dispatch_if.slave    fpu_dispatch_if [`ISSUE_WIDTH],
-    VX_commit_if.master     fpu_commit_if [`ISSUE_WIDTH],
-`endif
-  
-    VX_dispatch_if.slave    alu_dispatch_if [`ISSUE_WIDTH],
-    VX_commit_if.master     alu_commit_if [`ISSUE_WIDTH],
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
-    
-    VX_dispatch_if.slave    lsu_dispatch_if [`ISSUE_WIDTH],  
-    VX_commit_if.master     lsu_commit_if [`ISSUE_WIDTH],
-    
-    VX_dispatch_if.slave    sfu_dispatch_if [`ISSUE_WIDTH], 
-    VX_commit_if.master     sfu_commit_if [`ISSUE_WIDTH],
     VX_warp_ctl_if.master   warp_ctl_if,
+
+    // commit interface
+    VX_commit_csr_if.slave  commit_csr_if,    
 
     // simulation helper signals
     output wire             sim_ebreak
@@ -70,9 +62,9 @@ module VX_execute import VX_gpu_pkg::*; #(
     ) alu_unit (
         .clk            (clk),
         .reset          (alu_reset),
-        .dispatch_if    (alu_dispatch_if),
-        .branch_ctl_if  (branch_ctl_if),
-        .commit_if      (alu_commit_if)
+        .dispatch_if    (dispatch_if[`EX_ALU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),        
+        .commit_if      (commit_if[`EX_ALU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
+        .branch_ctl_if  (branch_ctl_if)
     );
 
     `SCOPE_IO_SWITCH (1)
@@ -83,9 +75,9 @@ module VX_execute import VX_gpu_pkg::*; #(
         `SCOPE_IO_BIND  (0)
         .clk            (clk),
         .reset          (lsu_reset),
-        .cache_bus_if   (dcache_bus_if),
-        .dispatch_if    (lsu_dispatch_if),
-        .commit_if      (lsu_commit_if)
+        .dispatch_if    (dispatch_if[`EX_LSU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
+        .commit_if      (commit_if[`EX_LSU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),        
+        .cache_bus_if   (dcache_bus_if)
     );
 
 `ifdef EXT_F_ENABLE
@@ -96,9 +88,9 @@ module VX_execute import VX_gpu_pkg::*; #(
     ) fpu_unit (
         .clk            (clk),
         .reset          (fpu_reset),    
-        .dispatch_if    (fpu_dispatch_if), 
-        .fpu_to_csr_if  (fpu_to_csr_if),
-        .commit_if      (fpu_commit_if)
+        .dispatch_if    (dispatch_if[`EX_FPU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),         
+        .commit_if      (commit_if[`EX_FPU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
+        .fpu_to_csr_if  (fpu_to_csr_if)
     );
 `endif
 
@@ -107,31 +99,26 @@ module VX_execute import VX_gpu_pkg::*; #(
     ) sfu_unit (
         .clk            (clk),
         .reset          (sfu_reset),
-
     `ifdef PERF_ENABLE
         .mem_perf_if    (mem_perf_if),
         .pipeline_perf_if (pipeline_perf_if),
     `endif
-
-        .base_dcrs      (base_dcrs),            
-
-        .dispatch_if    (sfu_dispatch_if),
-    
+        .base_dcrs      (base_dcrs),
+        .dispatch_if    (dispatch_if[`EX_SFU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),            
     `ifdef EXT_F_ENABLE
         .fpu_to_csr_if  (fpu_to_csr_if),
-    `endif
-    
+    `endif    
         .commit_csr_if  (commit_csr_if),
         .sched_csr_if   (sched_csr_if),
-        .warp_ctl_if    (warp_ctl_if),
-        .commit_if      (sfu_commit_if)
+        .commit_if      (commit_if[`EX_SFU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
+        .warp_ctl_if    (warp_ctl_if)
     );
 
     // simulation helper signal to get RISC-V tests Pass/Fail status
-    assign sim_ebreak = alu_dispatch_if[0].valid && alu_dispatch_if[0].ready 
-                     && alu_dispatch_if[0].data.wis == 0
-                     && `INST_ALU_IS_BR(alu_dispatch_if[0].data.op_mod)
-                     && (`INST_BR_BITS'(alu_dispatch_if[0].data.op_type) == `INST_BR_EBREAK
-                      || `INST_BR_BITS'(alu_dispatch_if[0].data.op_type) == `INST_BR_ECALL);
+    assign sim_ebreak = dispatch_if[0].valid && dispatch_if[0].ready 
+                     && dispatch_if[0].data.wis == 0
+                     && `INST_ALU_IS_BR(dispatch_if[0].data.op_mod)
+                     && (`INST_BR_BITS'(dispatch_if[0].data.op_type) == `INST_BR_EBREAK
+                      || `INST_BR_BITS'(dispatch_if[0].data.op_type) == `INST_BR_ECALL);
 
 endmodule

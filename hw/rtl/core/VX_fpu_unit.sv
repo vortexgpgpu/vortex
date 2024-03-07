@@ -20,10 +20,12 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
     input wire clk,
     input wire reset,
 
+    // Inputs
     VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
-    VX_fpu_to_csr_if.master fpu_to_csr_if[`NUM_FPU_BLOCKS],
 
-    VX_commit_if.master     commit_if [`ISSUE_WIDTH]
+    // Outputs
+    VX_commit_if.master     commit_if [`ISSUE_WIDTH],    
+    VX_fpu_to_csr_if.master fpu_to_csr_if[`NUM_FPU_BLOCKS]
 );
     `UNUSED_PARAM (CORE_ID)
     localparam BLOCK_SIZE = `NUM_FPU_BLOCKS;
