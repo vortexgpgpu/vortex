@@ -57,18 +57,8 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_branch_ctl_if    branch_ctl_if[`NUM_ALU_BLOCKS]();
     VX_warp_ctl_if      warp_ctl_if();    
     
-    VX_dispatch_if      alu_dispatch_if[`ISSUE_WIDTH]();
-    VX_commit_if        alu_commit_if[`ISSUE_WIDTH]();
-
-    VX_dispatch_if      lsu_dispatch_if[`ISSUE_WIDTH]();
-    VX_commit_if        lsu_commit_if[`ISSUE_WIDTH]();
-`ifdef EXT_F_ENABLE 
-    VX_dispatch_if      fpu_dispatch_if[`ISSUE_WIDTH]();
-    VX_commit_if        fpu_commit_if[`ISSUE_WIDTH]();
-`endif
-    VX_dispatch_if      sfu_dispatch_if[`ISSUE_WIDTH]();
-    VX_commit_if        sfu_commit_if[`ISSUE_WIDTH]();    
-    
+    VX_dispatch_if      dispatch_if[`NUM_EX_UNITS * `ISSUE_WIDTH]();
+    VX_commit_if        commit_if[`NUM_EX_UNITS * `ISSUE_WIDTH]();    
     VX_writeback_if     writeback_if[`ISSUE_WIDTH]();
 
     VX_mem_bus_if #(
@@ -120,6 +110,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .warp_ctl_if    (warp_ctl_if),        
         .branch_ctl_if  (branch_ctl_if),
+        
         .decode_sched_if(decode_sched_if),
         .commit_sched_if(commit_sched_if),
 
@@ -167,13 +158,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .decode_if      (decode_if),
         .writeback_if   (writeback_if),
-
-        .alu_dispatch_if(alu_dispatch_if),
-        .lsu_dispatch_if(lsu_dispatch_if),
-    `ifdef EXT_F_ENABLE
-        .fpu_dispatch_if(fpu_dispatch_if),
-    `endif
-        .sfu_dispatch_if(sfu_dispatch_if)
+        .dispatch_if    (dispatch_if)
     );
 
     VX_execute #(
@@ -183,34 +168,24 @@ module VX_core import VX_gpu_pkg::*; #(
         
         .clk            (clk),
         .reset          (execute_reset),
-
-        .base_dcrs      (base_dcrs),
-
+        
     `ifdef PERF_ENABLE
         .mem_perf_if    (mem_perf_tmp_if),        
         .pipeline_perf_if(pipeline_perf_if),
-    `endif 
+    `endif
+        
+        .base_dcrs      (base_dcrs),
 
         .dcache_bus_if  (dcache_lmem_bus_if),
     
-    `ifdef EXT_F_ENABLE
-        .fpu_dispatch_if(fpu_dispatch_if),
-        .fpu_commit_if  (fpu_commit_if),
-    `endif
+        .dispatch_if    (dispatch_if),
+        .commit_if      (commit_if),
 
         .commit_csr_if  (commit_csr_if),
         .sched_csr_if   (sched_csr_if),
-        
-        .alu_dispatch_if(alu_dispatch_if),
-        .lsu_dispatch_if(lsu_dispatch_if),
-        .sfu_dispatch_if(sfu_dispatch_if),
 
         .warp_ctl_if    (warp_ctl_if),
         .branch_ctl_if  (branch_ctl_if),
-
-        .alu_commit_if  (alu_commit_if),
-        .lsu_commit_if  (lsu_commit_if),
-        .sfu_commit_if  (sfu_commit_if),
 
         .sim_ebreak     (sim_ebreak)
     );    
@@ -221,12 +196,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .clk            (clk),
         .reset          (commit_reset),
 
-        .alu_commit_if  (alu_commit_if),
-        .lsu_commit_if  (lsu_commit_if),
-    `ifdef EXT_F_ENABLE
-        .fpu_commit_if  (fpu_commit_if),
-    `endif
-        .sfu_commit_if  (sfu_commit_if),
+        .commit_if      (commit_if),
         
         .writeback_if   (writeback_if),
         

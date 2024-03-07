@@ -18,17 +18,15 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 ) (    
     `SCOPE_IO_DECL
 
-   input wire               clk,
+    input wire              clk,
     input wire              reset,
 
-   // Dcache interface
-    VX_mem_bus_if.master    cache_bus_if [DCACHE_NUM_REQS],
-
-    // inputs
+    // Inputs
     VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
 
-    // outputs    
-    VX_commit_if.master     commit_if [`ISSUE_WIDTH]
+    // Outputs    
+    VX_commit_if.master     commit_if [`ISSUE_WIDTH],
+    VX_mem_bus_if.master    cache_bus_if [DCACHE_NUM_REQS]
 );
     localparam WORD_SIZE    = `XLEN / 8;
     localparam ADDR_WIDTH   = `MEM_ADDR_WIDTH - `CLOG2(WORD_SIZE);

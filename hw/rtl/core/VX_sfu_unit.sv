@@ -32,12 +32,12 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 `ifdef EXT_F_ENABLE
     VX_fpu_to_csr_if.slave  fpu_to_csr_if [`NUM_FPU_BLOCKS],
 `endif
+    VX_commit_csr_if.slave  commit_csr_if,
+    VX_sched_csr_if.slave   sched_csr_if,
 
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
-    VX_commit_csr_if.slave  commit_csr_if,
-    VX_sched_csr_if.slave   sched_csr_if,
-    VX_warp_ctl_if.master   warp_ctl_if    
+    VX_warp_ctl_if.master   warp_ctl_if  
 );
     `UNUSED_PARAM (CORE_ID)
     localparam BLOCK_SIZE   = 1;
