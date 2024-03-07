@@ -410,14 +410,14 @@ module VX_mem_scheduler #(
 
     // Handle memory responses ////////////////////////////////////////////////
 
-    // Select memory response
-    VX_mem_rsp_sel #(
+    // Merge memory responses
+    VX_stream_merge #(
         .NUM_REQS     (MEM_CHANNELS),
         .DATA_WIDTH   (LINE_WIDTH),
         .TAG_WIDTH    (MEM_TAG_WIDTH),
         .TAG_SEL_BITS (MEM_TAG_WIDTH - UUID_WIDTH),
         .OUT_BUF      (2)
-    ) mem_rsp_sel (
+    ) rsp_merge (
         .clk           (clk),
         .reset         (reset),
         .rsp_valid_in  (mem_rsp_valid),
