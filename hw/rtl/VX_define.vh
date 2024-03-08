@@ -106,7 +106,7 @@
 // Custom extension opcodes
 `define INST_EXT1       7'b0001011 // 0x0B
 `define INST_EXT2       7'b0101011 // 0x2B
-`define INST_EXT3       7'b1011011 // 0x5B
+`define INST_EXT3       7'b1010111 // 0x57(according to valu format in RISC-V Vector Extension)
 `define INST_EXT4       7'b1111011 // 0x7B
 
 ///////////////////////////////////////////////////////////////////////////////
