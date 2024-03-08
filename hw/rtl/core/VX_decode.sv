@@ -505,6 +505,17 @@ module VX_decode  #(
                     default:;
                 endcase
             end
+            `ifdef EXT_V_ENABLE
+                        `INST_EXT3: begin
+                        ex_type = `EX_VALU;
+                        op_type = `INST_OP_BITS'(`INST_VALU_VADD);
+                        // op_mod, use_PC, imm, use_imm, wb, rd_r, rs1_r, rs2_r, rs3_r
+                        `USED_IREG (rd);
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                        imm = 0;
+            end
+            `endif
             default:;
         endcase
     end

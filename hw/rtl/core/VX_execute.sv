@@ -41,6 +41,12 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_dispatch_if.slave    fpu_dispatch_if [`ISSUE_WIDTH],
     VX_commit_if.master     fpu_commit_if [`ISSUE_WIDTH],
 `endif
+
+`ifdef EXT_V_ENABLE
+    VX_dispatch_if.slave    valu_dispatch_if [`ISSUE_WIDTH],
+    VX_commit_if.master     valu_commit_if [`ISSUE_WIDTH],
+`endif
+
   
     VX_dispatch_if.slave    alu_dispatch_if [`ISSUE_WIDTH],
     VX_commit_if.master     alu_commit_if [`ISSUE_WIDTH],
@@ -74,6 +80,18 @@ module VX_execute import VX_gpu_pkg::*; #(
         .branch_ctl_if  (branch_ctl_if),
         .commit_if      (alu_commit_if)
     );
+
+//vector alu unit
+`ifdef EXT_V_ENABLE
+    VX_valu_unit #(
+        .CORE_ID (CORE_ID)
+    ) valu_unit (
+        .clk            (clk),
+        .reset          (alu_reset),
+        .dispatch_if    (valu_dispatch_if),
+        .commit_if      (valu_commit_if)
+    );
+`endif
 
     `SCOPE_IO_SWITCH (1)
 

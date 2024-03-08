@@ -40,6 +40,10 @@
 `define EXT_F_ENABLE
 `endif
 
+`ifndef EXT_V_DISABLE
+`define EXT_V_ENABLE
+`endif
+
 `ifndef XLEN_32
 `ifndef XLEN_64
 `define XLEN_32
@@ -82,12 +86,12 @@
 `define NUM_CORES 1
 `endif
 
-`ifndef NUM_WARPS
-`define NUM_WARPS 4
+`ifndef NUM_UTHREADS
+`define NUM_UTHREADS 1
 `endif
 
 `ifndef NUM_THREADS
-`define NUM_THREADS 4
+`define NUM_THREADS 1
 `endif
 
 `ifndef NUM_BARRIERS
@@ -238,13 +242,23 @@
 
 // Issue width
 `ifndef ISSUE_WIDTH
-`define ISSUE_WIDTH     `MIN(`NUM_WARPS, 4)
+`define ISSUE_WIDTH     `MIN(`NUM_UTHREADS, 4)
 `endif
 
 // Number of ALU units
 `ifndef NUM_ALU_LANES
 `define NUM_ALU_LANES   `NUM_THREADS
 `endif
+
+//valu
+`ifndef NUM_VALU_LANES
+`define NUM_VALU_LANES  `VECTOR_LENGTH
+`endif
+
+`ifndef VECTOR_LENGTH
+`define VECTOR_LENGTH 8
+`endif
+
 `ifndef NUM_ALU_BLOCKS
 `define NUM_ALU_BLOCKS  `ISSUE_WIDTH
 `endif
@@ -269,7 +283,7 @@
 
 // Size of Instruction Buffer
 `ifndef IBUF_SIZE
-`define IBUF_SIZE   (2 * (`NUM_WARPS / `ISSUE_WIDTH))
+`define IBUF_SIZE   (2 * (`NUM_UTHREADS / `ISSUE_WIDTH))
 `endif
 
 // Size of LSU Request Queue
@@ -612,6 +626,13 @@
 `else
     `define EXT_F_ENABLED   0
 `endif
+
+`ifdef EXT_V_ENABLE
+    `define EXT_V_ENABLED   1
+`else
+    `define EXT_V_ENABLED   0
+`endif
+
 
 `ifdef EXT_M_ENABLE
     `define EXT_M_ENABLED   1

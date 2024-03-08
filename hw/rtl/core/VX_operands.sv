@@ -36,6 +36,9 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         wire [`NUM_THREADS-1:0][`XLEN-1:0] gpr_rd_data;
+`ifdef EXT_V_ENABLE
+        wire [`NUM_THREADS-1:0][`XLEN-1:0] vector_gpr_rd_data;
+`endif
         reg [`NR_BITS-1:0] gpr_rd_rid, gpr_rd_rid_n;
         reg [ISSUE_WIS_W-1:0] gpr_rd_wis, gpr_rd_wis_n;
 
@@ -50,6 +53,12 @@ module VX_operands import VX_gpu_pkg::*; #(
         reg [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data, rs1_data_n;
         reg [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data, rs2_data_n;
         reg [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data, rs3_data_n;
+
+        //vector
+        reg [`VECTOR_LENGTH-1:0][`XLEN-1:0] v_rs1_data, v_rs1_data_n;
+        reg [`VECTOR_LENGTH-1:0][`XLEN-1:0] v_rs2_data, v_rs2_data_n;
+        reg [`VECTOR_LENGTH-1:0][`XLEN-1:0] v_rs3_data, v_rs3_data_n;
+
 
         reg [STATE_BITS-1:0] state, state_n;
         reg [`NR_BITS-1:0] rs2, rs2_n;
@@ -73,6 +82,12 @@ module VX_operands import VX_gpu_pkg::*; #(
             rs1_data_n   = rs1_data;
             rs2_data_n   = rs2_data;
             rs3_data_n   = rs3_data;
+
+            //vector
+            v_rs1_data_n = v_rs1_data;
+            v_rs2_data_n = v_rs2_data;
+            v_rs3_data_n = v_rs3_data;
+
             cache_data_n = cache_data;
             cache_reg_n  = cache_reg;
             cache_tmask_n= cache_tmask;
@@ -188,7 +203,13 @@ module VX_operands import VX_gpu_pkg::*; #(
             rs3         <= rs3_n;
             rs1_data    <= rs1_data_n;
             rs2_data    <= rs2_data_n;
-            rs3_data    <= rs3_data_n;          
+            rs3_data    <= rs3_data_n;
+`ifdef EXT_V_ENABLE
+            //vector
+            v_rs1_data  <= v_rs1_data_n;
+            v_rs2_data  <= v_rs2_data_n;
+            v_rs3_data  <= v_rs3_data_n;
+`endif
             cache_data  <= cache_data_n;
             cache_reg   <= cache_reg_n;
             cache_tmask <= cache_tmask_n;
@@ -244,6 +265,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 
         reg [RAM_ADDRW-1:0] gpr_rd_addr;       
         wire [RAM_ADDRW-1:0] gpr_wr_addr;
+
         if (ISSUE_WIS != 0) begin
             assign gpr_wr_addr = {writeback_if[i].data.wis, writeback_if[i].data.rd};
             always @(posedge clk) begin
@@ -289,6 +311,7 @@ module VX_operands import VX_gpu_pkg::*; #(
                 .rdata (gpr_rd_data[j])
             );
         end
+
     end
 
 endmodule

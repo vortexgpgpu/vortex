@@ -20,7 +20,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define NW_BITS         `CLOG2(`NUM_WARPS)
+`define NW_BITS         `CLOG2(`NUM_UTHREADS)
 `define NC_WIDTH        `UP(`NC_BITS)
 
 `define NT_BITS         `CLOG2(`NUM_THREADS)
@@ -42,6 +42,12 @@
 `define NUM_REGS        `NUM_IREGS
 `endif
 
+`ifdef EXT_V_ENABLE
+`define NUM_VREGS        (2 * `NUM_IREGS)
+`else
+`define NUM_VREGS        `NUM_IREGS
+`endif
+
 `define NR_BITS         `CLOG2(`NUM_REGS)
 
 `define PERF_CTR_BITS   44
@@ -58,8 +64,9 @@
 `define EX_LSU          1
 `define EX_SFU          2
 `define EX_FPU          (`EX_SFU + `EXT_F_ENABLED)
+`define EX_VALU         (`EX_SFU + `EXT_F_ENABLED + `EXT_V_ENABLED)
 
-`define NUM_EX_UNITS    (3 + `EXT_F_ENABLED)
+`define NUM_EX_UNITS    (3 + `EXT_F_ENABLED + `EXT_V_ENABLED)
 `define EX_BITS         `CLOG2(`NUM_EX_UNITS)
 `define EX_WIDTH        `UP(`EX_BITS)
 
@@ -242,6 +249,8 @@
 `define INST_SFU_IS_CSR(op)  (op >= 6 && op <= 8)
 
 ///////////////////////////////////////////////////////////////////////////////
+`define INST_VALU_BITS       4
+`define INST_VALU_VADD        4'b0000
 
 // non-cacheable tag bits
 `define NC_TAG_BITS             1

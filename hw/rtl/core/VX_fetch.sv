@@ -52,7 +52,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     VX_dp_ram #(
         .DATAW  (`XLEN + `NUM_THREADS),
-        .SIZE   (`NUM_WARPS),
+        .SIZE   (`NUM_UTHREADS),
         .LUTRAM (1)
     ) tag_store (
         .clk   (clk),  

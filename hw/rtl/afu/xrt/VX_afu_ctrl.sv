@@ -143,7 +143,7 @@ module VX_afu_ctrl #(
     wire [63:0] dev_caps = {16'b0,
                             8'(`SM_ENABLED ? `SMEM_LOG_SIZE : 0),
                             16'(`NUM_CORES * `NUM_CLUSTERS), 
-                            8'(`NUM_WARPS), 
+                            8'(`NUM_UTHREADS), 
                             8'(`NUM_THREADS), 
                             8'(`IMPLEMENTATION_ID)};
 

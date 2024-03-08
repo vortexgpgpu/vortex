@@ -34,6 +34,11 @@ module VX_issue #(
 `ifdef EXT_F_ENABLE
     VX_dispatch_if.master   fpu_dispatch_if [`ISSUE_WIDTH],
 `endif
+`ifdef EXT_V_ENABLE
+    VX_dispatch_if.master   valu_dispatch_if [`ISSUE_WIDTH],
+`endif
+
+
     VX_dispatch_if.master   sfu_dispatch_if [`ISSUE_WIDTH]
 );
     VX_ibuffer_if  ibuffer_if [`ISSUE_WIDTH]();
@@ -92,6 +97,10 @@ module VX_issue #(
         .lsu_dispatch_if(lsu_dispatch_if),
     `ifdef EXT_F_ENABLE
         .fpu_dispatch_if(fpu_dispatch_if),
+    `endif
+
+    `ifdef EXT_V_ENABLE
+        .valu_dispatch_if(valu_dispatch_if),
     `endif
         .sfu_dispatch_if(sfu_dispatch_if)
     ); 

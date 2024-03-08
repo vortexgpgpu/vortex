@@ -22,6 +22,7 @@ task trace_ex_type(input int level, input [`EX_BITS-1:0] ex_type);
         `EX_LSU: `TRACE(level, ("LSU"));
         `EX_FPU: `TRACE(level, ("FPU"));
         `EX_SFU: `TRACE(level, ("SFU"));
+        `EX_VALU: `TRACE(level, ("VALU"));
         default: `TRACE(level, ("?"));
     endcase
 endtask
@@ -353,10 +354,17 @@ task trace_ex_op(input int level,
             `INST_SFU_JOIN:  `TRACE(level, ("JOIN"));
             `INST_SFU_BAR:   `TRACE(level, ("BAR"));
             `INST_SFU_PRED:  `TRACE(level, ("PRED"));
+            `INST_SFU_VADD:  `TRACE(level, ("VADD"));
             `INST_SFU_CSRRW: begin if (use_imm) `TRACE(level, ("CSRRWI")); else `TRACE(level, ("CSRRW")); end
             `INST_SFU_CSRRS: begin if (use_imm) `TRACE(level, ("CSRRSI")); else `TRACE(level, ("CSRRS")); end
             `INST_SFU_CSRRC: begin if (use_imm) `TRACE(level, ("CSRRCI")); else `TRACE(level, ("CSRRC")); end
             default:         `TRACE(level, ("?"));
+        endcase
+    end
+    `EX_VALU: begin
+        case(`INST_VALU_BITS'(op_type)) // VALU 4bit
+            `INST_VALU_VADD: `TRACE(level, ("VADD"));
+            default:          `TRACE(level, ("?"));
         endcase
     end
     default: `TRACE(level, ("?"));

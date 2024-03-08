@@ -25,7 +25,7 @@ package VX_gpu_pkg;
 
     typedef struct packed {
         logic                   valid;
-        logic [`NUM_WARPS-1:0]  wmask;
+        logic [`NUM_UTHREADS-1:0]  wmask;
         logic [`XLEN-1:0]       pc;
     } wspawn_t;
 
@@ -195,7 +195,7 @@ package VX_gpu_pkg;
 
     localparam ISSUE_ISW   = `CLOG2(`ISSUE_WIDTH);
     localparam ISSUE_ISW_W = `UP(ISSUE_ISW);   
-    localparam ISSUE_RATIO = `NUM_WARPS / `ISSUE_WIDTH;
+    localparam ISSUE_RATIO = `NUM_UTHREADS / `ISSUE_WIDTH;
     localparam ISSUE_WIS   = `CLOG2(ISSUE_RATIO);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS);
     

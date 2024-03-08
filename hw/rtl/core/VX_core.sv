@@ -66,6 +66,12 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_dispatch_if      fpu_dispatch_if[`ISSUE_WIDTH]();
     VX_commit_if        fpu_commit_if[`ISSUE_WIDTH]();
 `endif
+
+`ifdef EXT_V_ENABLE 
+    VX_dispatch_if      valu_dispatch_if[`ISSUE_WIDTH]();
+    VX_commit_if        valu_commit_if[`ISSUE_WIDTH]();
+`endif
+
     VX_dispatch_if      sfu_dispatch_if[`ISSUE_WIDTH]();
     VX_commit_if        sfu_commit_if[`ISSUE_WIDTH]();    
     
@@ -173,6 +179,11 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef EXT_F_ENABLE
         .fpu_dispatch_if(fpu_dispatch_if),
     `endif
+
+    `ifdef EXT_V_ENABLE
+        .valu_dispatch_if(valu_dispatch_if),
+    `endif
+
         .sfu_dispatch_if(sfu_dispatch_if)
     );
 
@@ -196,6 +207,11 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef EXT_F_ENABLE
         .fpu_dispatch_if(fpu_dispatch_if),
         .fpu_commit_if  (fpu_commit_if),
+    `endif
+
+    `ifdef EXT_V_ENABLE
+        .valu_dispatch_if(valu_dispatch_if),
+        .valu_commit_if  (valu_commit_if),
     `endif
 
         .commit_csr_if  (commit_csr_if),

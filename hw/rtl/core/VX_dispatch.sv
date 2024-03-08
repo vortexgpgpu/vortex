@@ -32,7 +32,11 @@ module VX_dispatch import VX_gpu_pkg::*; #(
 `ifdef EXT_F_ENABLE
     VX_dispatch_if.master   fpu_dispatch_if [`ISSUE_WIDTH],
 `endif
-    VX_dispatch_if.master   sfu_dispatch_if [`ISSUE_WIDTH] 
+`ifdef EXT_V_ENABLE    
+    VX_dispatch_if.master   valu_dispatch_if [`ISSUE_WIDTH],
+`endif
+
+    VX_dispatch_if.master   sfu_dispatch_if [`ISSUE_WIDTH]
 );
     `UNUSED_PARAM (CORE_ID)
 
@@ -83,6 +87,32 @@ module VX_dispatch import VX_gpu_pkg::*; #(
             .ready_out  (alu_dispatch_if[i].ready)
         );
     end
+`ifdef EXT_V_ENABLE
+    // VALU dispatch
+    VX_operands_if valu_operands_if[`ISSUE_WIDTH]();
+
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
+        assign valu_operands_if[i].valid = operands_if[i].valid && (operands_if[i].data.ex_type == `EX_VALU);
+        assign valu_operands_if[i].data = operands_if[i].data;
+
+        `RESET_RELAY (alu_reset, reset);
+
+        VX_elastic_buffer #(
+            .DATAW   (DATAW),
+            .SIZE    (2),
+            .OUT_REG (2)
+        ) valu_buffer (
+            .clk        (clk),
+            .reset      (alu_reset),
+            .valid_in   (valu_operands_if[i].valid),
+            .ready_in   (valu_operands_if[i].ready),
+            .data_in    (`TO_DISPATCH_DATA(valu_operands_if[i].data, last_active_tid[i])),
+            .data_out   (valu_dispatch_if[i].data),
+            .valid_out  (valu_dispatch_if[i].valid),
+            .ready_out  (valu_dispatch_if[i].ready)
+        );
+    end
+`endif
 
     // LSU dispatch
 

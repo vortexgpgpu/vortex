@@ -42,8 +42,8 @@ import VX_fpu_pkg::*;
 `endif
 
     input wire [`PERF_CTR_BITS-1:0]     cycles,
-    input wire [`NUM_WARPS-1:0]         active_warps,
-    input wire [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks,
+    input wire [`NUM_UTHREADS-1:0]         active_warps,
+    input wire [`NUM_UTHREADS-1:0][`NUM_THREADS-1:0] thread_masks,
 
     input wire                          read_enable,
     input wire [`UUID_WIDTH-1:0]        read_uuid,
@@ -66,7 +66,7 @@ import VX_fpu_pkg::*;
     // CSRs Write /////////////////////////////////////////////////////////////
 
 `ifdef EXT_F_ENABLE    
-    reg [`NUM_WARPS-1:0][`INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr, fcsr_n;
+    reg [`NUM_UTHREADS-1:0][`INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr, fcsr_n;
     wire [`NUM_FPU_BLOCKS-1:0]              fpu_write_enable;
     wire [`NUM_FPU_BLOCKS-1:0][`NW_WIDTH-1:0] fpu_write_wid;
     fflags_t [`NUM_FPU_BLOCKS-1:0]          fpu_write_fflags;
@@ -156,7 +156,7 @@ import VX_fpu_pkg::*;
             `VX_CSR_THREAD_MASK: read_data_ro_r = 32'(thread_masks[read_wid]);
             `VX_CSR_WARP_MASK  : read_data_ro_r = 32'(active_warps);
             `VX_CSR_NUM_THREADS: read_data_ro_r = 32'(`NUM_THREADS);
-            `VX_CSR_NUM_WARPS  : read_data_ro_r = 32'(`NUM_WARPS);
+            `VX_CSR_NUM_UTHREADS  : read_data_ro_r = 32'(`NUM_UTHREADS);
             `VX_CSR_NUM_CORES  : read_data_ro_r = 32'(`NUM_CORES * `NUM_CLUSTERS);           
             `VX_CSR_MCYCLE     : read_data_ro_r = 32'(cycles[31:0]);
             `VX_CSR_MCYCLE_H   : read_data_ro_r = 32'(cycles[`PERF_CTR_BITS-1:32]);

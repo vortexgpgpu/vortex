@@ -30,11 +30,11 @@ module VX_pending_instr #(
 );
     localparam COUNTW = `CLOG2(DECR_COUNT+1);
 
-    reg [`NUM_WARPS-1:0][CTR_WIDTH-1:0] pending_instrs;
-    reg [`NUM_WARPS-1:0][COUNTW-1:0] decr_cnt;
-    reg [`NUM_WARPS-1:0][DECR_COUNT-1:0] decr_mask;
-    reg [`NUM_WARPS-1:0] incr_cnt, incr_cnt_n;
-    reg [`NUM_WARPS-1:0] alm_empty_r, empty_r;
+    reg [`NUM_UTHREADS-1:0][CTR_WIDTH-1:0] pending_instrs;
+    reg [`NUM_UTHREADS-1:0][COUNTW-1:0] decr_cnt;
+    reg [`NUM_UTHREADS-1:0][DECR_COUNT-1:0] decr_mask;
+    reg [`NUM_UTHREADS-1:0] incr_cnt, incr_cnt_n;
+    reg [`NUM_UTHREADS-1:0] alm_empty_r, empty_r;
 
     always @(*) begin
         incr_cnt_n = 0;
@@ -49,7 +49,7 @@ module VX_pending_instr #(
         end
     end
 
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
+    for (genvar i = 0; i < `NUM_UTHREADS; ++i) begin
         
         wire [COUNTW-1:0] decr_cnt_n;
         `POP_COUNT(decr_cnt_n, decr_mask[i]);
