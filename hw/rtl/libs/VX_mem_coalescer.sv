@@ -200,12 +200,17 @@ module VX_mem_coalescer #(
             out_req_tag_n = {in_req_tag[TAG_WIDTH-1 -: UUID_WIDTH], ibuf_waddr};
             in_req_ready_n = 1;
             out_req_byteen_n = '0;
+            out_req_data_n = 'x;
             for (integer i = 0; i < OUT_REQS; ++i) begin
                 for (integer j = 0; j < BATCH_SIZE; j++) begin
                     if (in_req_mask[BATCH_SIZE * i + j]) begin
                         if (addr_matches[BATCH_SIZE * i + j]) begin
-                            out_req_byteen_n[i][in_addr_offset[BATCH_SIZE * i + j] * DATA_IN_SIZE +: DATA_IN_SIZE] = in_req_byteen[BATCH_SIZE * i + j];
-                            out_req_data_n[i][in_addr_offset[BATCH_SIZE * i + j] * DATA_IN_WIDTH +: DATA_IN_WIDTH] = in_req_data[BATCH_SIZE * i + j];
+                            for (integer k = 0; k < DATA_IN_SIZE; ++k) begin
+                                if (in_req_byteen[BATCH_SIZE * i + j][k]) begin
+                                    out_req_byteen_n[i][in_addr_offset[BATCH_SIZE * i + j] * DATA_IN_SIZE +: DATA_IN_SIZE][k] = 1'b1;
+                                    out_req_data_n[i][in_addr_offset[BATCH_SIZE * i + j] * DATA_IN_WIDTH +: DATA_IN_WIDTH][k * 8 +: 8] = in_req_data[BATCH_SIZE * i + j][k * 8 +: 8];
+                                end
+                            end
                         end else begin
                             if (!processed_mask_r[BATCH_SIZE * i + j]) begin
                                 in_req_ready_n = 0;    
