@@ -254,7 +254,7 @@
 `define NUM_LSU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_LSU_BLOCKS
-`define NUM_LSU_BLOCKS  `ISSUE_WIDTH
+`define NUM_LSU_BLOCKS  1
 `endif
 
 // Number of SFU units
