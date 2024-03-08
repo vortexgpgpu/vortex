@@ -21,8 +21,10 @@ module VX_operands import VX_gpu_pkg::*; #(
     input wire              reset,
 
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
+    VX_vwriteback_if.slave  vwriteback_if [`ISSUE_WIDTH],
     VX_ibuffer_if.slave     scoreboard_if [`ISSUE_WIDTH],
-    VX_operands_if.master   operands_if [`ISSUE_WIDTH]
+    VX_operands_if.master   operands_if [`ISSUE_WIDTH],
+    VX_voperands_if.master  voperands_if [`ISSUE_WIDTH]
 );
     `UNUSED_PARAM (CORE_ID)
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + `NR_BITS;
@@ -37,7 +39,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         wire [`NUM_THREADS-1:0][`XLEN-1:0] gpr_rd_data;
 `ifdef EXT_V_ENABLE
-        wire [`NUM_THREADS-1:0][`XLEN-1:0] vector_gpr_rd_data;
+        wire [`NUM_THREADS-1:0][`VECTOR_WIDTH-1:0] vgpr_rd_data;
 `endif
         reg [`NR_BITS-1:0] gpr_rd_rid, gpr_rd_rid_n;
         reg [ISSUE_WIS_W-1:0] gpr_rd_wis, gpr_rd_wis_n;
@@ -55,9 +57,8 @@ module VX_operands import VX_gpu_pkg::*; #(
         reg [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data, rs3_data_n;
 
         //vector
-        reg [`VECTOR_LENGTH-1:0][`XLEN-1:0] v_rs1_data, v_rs1_data_n;
-        reg [`VECTOR_LENGTH-1:0][`XLEN-1:0] v_rs2_data, v_rs2_data_n;
-        reg [`VECTOR_LENGTH-1:0][`XLEN-1:0] v_rs3_data, v_rs3_data_n;
+        reg [`NUM_THREADS-1:0][`VECTOR_WIDTH-1:0] vs1_data, vs1_data_n;
+        reg [`NUM_THREADS-1:0][`VECTOR_WIDTH-1:0] vs2_data, vs2_data_n;
 
 
         reg [STATE_BITS-1:0] state, state_n;
@@ -206,9 +207,8 @@ module VX_operands import VX_gpu_pkg::*; #(
             rs3_data    <= rs3_data_n;
 `ifdef EXT_V_ENABLE
             //vector
-            v_rs1_data  <= v_rs1_data_n;
-            v_rs2_data  <= v_rs2_data_n;
-            v_rs3_data  <= v_rs3_data_n;
+            vs1_data  <= vs1_data_n;
+            vs2_data  <= vs2_data_n;
 `endif
             cache_data  <= cache_data_n;
             cache_reg   <= cache_reg_n;
@@ -260,6 +260,8 @@ module VX_operands import VX_gpu_pkg::*; #(
         assign operands_if[i].data.rs1_data = rs1_data;
         assign operands_if[i].data.rs2_data = rs2_data;
         assign operands_if[i].data.rs3_data = rs3_data;
+        assign operands_if[i].data.vs1_data = vs1_data;
+        assign operands_if[i].data.vs2_data = vs2_data;
 
         // GPR banks
 
@@ -312,6 +314,32 @@ module VX_operands import VX_gpu_pkg::*; #(
             );
         end
 
+`define EXT_V_ENABLE
+        for (genvar j = 0; j < `NUM_THREADS; ++j) begin
+            VX_dp_ram #(
+                .DATAW (`VECTOR_WIDTH),
+                .SIZE (`NUM_VREGS * ISSUE_RATIO),
+            `ifdef GPR_RESET
+                .INIT_ENABLE (1),
+                .INIT_VALUE (0),
+            `endif
+                .NO_RWCHECK (1)
+            ) gpr_ram (
+                .clk   (clk),
+                .read  (1'b1),
+                `UNUSED_PIN (wren),
+            `ifdef GPR_RESET
+                .write (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]),
+            `else
+                .write (writeback_if[i].valid && writeback_if[i].data.tmask[j]),
+            `endif              
+                .waddr (gpr_wr_addr),
+                .wdata (writeback_if[i].data.vdata[j]),
+                .raddr (gpr_rd_addr),
+                .rdata (vgpr_rd_data[j])
+            );
+        end
+`endif
     end
 
 endmodule

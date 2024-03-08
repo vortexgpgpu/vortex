@@ -259,6 +259,10 @@
 `define VECTOR_LENGTH 8
 `endif
 
+`ifndef VECTOR_WIDTH
+`define VECTOR_WIDTH XLEN * VECTOR_LENGTH
+`endif
+
 `ifndef NUM_ALU_BLOCKS
 `define NUM_ALU_BLOCKS  `ISSUE_WIDTH
 `endif

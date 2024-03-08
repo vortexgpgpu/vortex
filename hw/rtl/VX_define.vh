@@ -43,7 +43,7 @@
 `endif
 
 `ifdef EXT_V_ENABLE
-`define NUM_VREGS        (2 * `NUM_IREGS)
+`define NUM_VREGS        (`NUM_IREGS)
 `else
 `define NUM_VREGS        `NUM_IREGS
 `endif
