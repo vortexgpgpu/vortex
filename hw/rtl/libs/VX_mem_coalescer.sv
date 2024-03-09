@@ -207,8 +207,8 @@ module VX_mem_coalescer #(
                         if (addr_matches[BATCH_SIZE * i + j]) begin
                             for (integer k = 0; k < DATA_IN_SIZE; ++k) begin
                                 if (in_req_byteen[BATCH_SIZE * i + j][k]) begin
-                                    out_req_byteen_n[i][in_addr_offset[BATCH_SIZE * i + j] * DATA_IN_SIZE +: DATA_IN_SIZE][k] = 1'b1;
-                                    out_req_data_n[i][in_addr_offset[BATCH_SIZE * i + j] * DATA_IN_WIDTH +: DATA_IN_WIDTH][k * 8 +: 8] = in_req_data[BATCH_SIZE * i + j][k * 8 +: 8];
+                                    out_req_byteen_n[i][in_addr_offset[BATCH_SIZE * i + j] * DATA_IN_SIZE + k +: 1] = 1'b1;
+                                    out_req_data_n[i][in_addr_offset[BATCH_SIZE * i + j] * DATA_IN_WIDTH + k * 8 +: 8] = in_req_data[BATCH_SIZE * i + j][k * 8 +: 8];
                                 end
                             end
                         end else begin
