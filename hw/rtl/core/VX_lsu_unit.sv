@@ -522,6 +522,41 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             end
         end
     `endif
+    
+    `ifdef DBG_SCOPE_LSU
+        if (CORE_ID == 0) begin
+        `ifdef SCOPE
+            VX_scope_tap #(
+                .SCOPE_ID (3),
+                .TRIGGERW (3),
+                .PROBEW   (`UUID_WIDTH+NUM_LANES*(`XLEN+4+`XLEN)+1+`UUID_WIDTH+NUM_LANES*`XLEN)
+            ) scope_tap (
+                .clk(clk),
+                .reset(scope_reset),
+                .start(1'b0),
+                .stop(1'b0),
+                .triggers({reset, mem_req_fire, mem_rsp_fire}),
+                .probes({execute_if[0].data.uuid, full_addr, mem_req_rw, mem_req_byteen, mem_req_data, rsp_uuid, rsp_data}),
+                .bus_in(scope_bus_in),
+                .bus_out(scope_bus_out)
+            );
+        `endif
+        `ifdef CHIPSCOPE    
+            wire [31:0] full_addr_0 = full_addr[0];
+            wire [31:0] mem_req_data_0 = mem_req_data[0];
+            wire [31:0] rsp_data_0 = rsp_data[0];
+            ila_lsu ila_lsu_inst (
+                .clk    (clk),
+                .probe0 ({mem_req_data_0, execute_if[0].data.uuid, execute_if[0].data.wid, execute_if[0].data.PC, mem_req_mask, full_addr_0, mem_req_byteen, mem_req_rw, mem_req_ready, mem_req_valid}),
+                .probe1 ({rsp_data_0, rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, rsp_tmask, rsp_wid, mem_rsp_ready, mem_rsp_valid}),
+                .probe2 ({cache_bus_if.req_data.data, cache_bus_if.req_data.tag, cache_bus_if.req_data.byteen, cache_bus_if.req_data.addr, cache_bus_if.req_data.rw, cache_bus_if.req_ready, cache_bus_if.req_valid}),
+                .probe3 ({cache_bus_if.rsp_data.data, cache_bus_if.rsp_data.tag, cache_bus_if.rsp_ready, cache_bus_if.rsp_valid})
+            );
+        `endif
+        end
+    `else
+        `SCOPE_IO_UNUSED()
+    `endif
     end
 
     `RESET_RELAY (commit_reset, reset);
@@ -536,40 +571,5 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .commit_in_if  (commit_block_if),
         .commit_out_if (commit_if)
     );
-
-`ifdef DBG_SCOPE_LSU
-    if (CORE_ID == 0) begin
-    `ifdef SCOPE
-        VX_scope_tap #(
-            .SCOPE_ID (3),
-            .TRIGGERW (3),
-            .PROBEW   (`UUID_WIDTH+NUM_LANES*(`XLEN+4+`XLEN)+1+`UUID_WIDTH+NUM_LANES*`XLEN)
-        ) scope_tap (
-            .clk(clk),
-            .reset(scope_reset),
-            .start(1'b0),
-            .stop(1'b0),
-            .triggers({reset, mem_req_fire, mem_rsp_fire}),
-            .probes({execute_if[0].data.uuid, full_addr, mem_req_rw, mem_req_byteen, mem_req_data, rsp_uuid, rsp_data}),
-            .bus_in(scope_bus_in),
-            .bus_out(scope_bus_out)
-        );
-    `endif
-    `ifdef CHIPSCOPE    
-        wire [31:0] full_addr_0 = full_addr[0];
-        wire [31:0] mem_req_data_0 = mem_req_data[0];
-        wire [31:0] rsp_data_0 = rsp_data[0];
-        ila_lsu ila_lsu_inst (
-            .clk    (clk),
-            .probe0 ({mem_req_data_0, execute_if[0].data.uuid, execute_if[0].data.wid, execute_if[0].data.PC, mem_req_mask, full_addr_0, mem_req_byteen, mem_req_rw, mem_req_ready, mem_req_valid}),
-            .probe1 ({rsp_data_0, rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, rsp_tmask, rsp_wid, mem_rsp_ready, mem_rsp_valid}),
-            .probe2 ({cache_bus_if.req_data.data, cache_bus_if.req_data.tag, cache_bus_if.req_data.byteen, cache_bus_if.req_data.addr, cache_bus_if.req_data.rw, cache_bus_if.req_ready, cache_bus_if.req_valid}),
-            .probe3 ({cache_bus_if.rsp_data.data, cache_bus_if.rsp_data.tag, cache_bus_if.rsp_ready, cache_bus_if.rsp_valid})
-        );
-    `endif
-    end
-`else
-    `SCOPE_IO_UNUSED()
-`endif
     
 endmodule
