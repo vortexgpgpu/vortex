@@ -130,19 +130,18 @@ module VX_valu_unit #(
             `UNUSED_PIN (sel_out)
         );
     end
+    `RESET_RELAY (commit_reset, reset);
 
-    // `RESET_RELAY (commit_reset, reset);
-
-    // VX_vgather_unit #(
-    //     .BLOCK_SIZE (BLOCK_SIZE),
-    //     .NUM_LANES  (NUM_LANES),
-    //     .NUM_VECTOR_LANES (NUM_VECTOR_LANES),
-    //     .OUT_REG    (PARTIAL_BW ? 3 : 0)
-    // ) gather_unit (
-    //     .clk           (clk),
-    //     .reset         (commit_reset),
-    //     .commit_in_if  (commit_block_if),
-    //     .commit_out_if (commit_if)
-    // );
+    VX_vgather_unit #(
+        .BLOCK_SIZE (BLOCK_SIZE),
+        .NUM_LANES  (NUM_LANES),
+        .NUM_VECTOR_LANES (NUM_VECTOR_LANES),
+        .OUT_REG    (PARTIAL_BW ? 3 : 0)
+    ) gather_unit (
+        .clk           (clk),
+        .reset         (commit_reset),
+        .commit_in_if  (commit_block_if),
+        .commit_out_if (commit_if)
+    );
 
 endmodule

@@ -41,7 +41,7 @@ module VX_commit import VX_gpu_pkg::*; #(
     localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + `NUM_THREADS * `XLEN + 1 + 1 + 1;
     localparam COMMIT_SIZEW = `CLOG2(`NUM_THREADS + 1);
     localparam COMMIT_ALL_SIZEW = COMMIT_SIZEW + `ISSUE_WIDTH - 1;
-
+    localparam NUM_LANES = `NUM_THREADS;
     // commit arbitration
 
     VX_commit_if commit_if[`ISSUE_WIDTH]();
@@ -51,6 +51,8 @@ module VX_commit import VX_gpu_pkg::*; #(
     wire [`ISSUE_WIDTH-1:0][`NUM_THREADS-1:0] commit_tmask;
     wire [`ISSUE_WIDTH-1:0] commit_eop;
     wire [`ISSUE_WIDTH-1:0][`VECTOR_WIDTH-1:0] vdata;
+    wire [`ISSUE_WIDTH-1:0][DATAW-1:0] valu_data;
+    wire [`ISSUE_WIDTH-1:0][NUM_LANES-1:0][`XLEN-1:0] valu_data_lane;
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
 
         `RESET_RELAY (arb_reset, reset);
@@ -91,7 +93,7 @@ module VX_commit import VX_gpu_pkg::*; #(
                 fpu_commit_if[i].data,
             `endif
             `ifdef EXT_V_ENABLE
-                valu_commit_if[i].data[DATAW-1:0],
+                valu_data[i],
             `endif
                 alu_commit_if[i].data,
                 lsu_commit_if[i].data       
@@ -101,7 +103,21 @@ module VX_commit import VX_gpu_pkg::*; #(
             .ready_out (commit_if[i].ready),
             `UNUSED_PIN (sel_out)
         );
-
+        assign valu_data[i] = {
+            valu_commit_if[i].data.uuid,
+            valu_commit_if[i].data.wid,
+            valu_commit_if[i].data.tmask,
+            valu_commit_if[i].data.PC,
+            valu_commit_if[i].data.wb,
+            valu_commit_if[i].data.rd,
+            valu_data_lane[i],
+            valu_commit_if[i].data.pid,
+            valu_commit_if[i].data.sop,
+            valu_commit_if[i].data.eop
+        };
+        for (genvar j = 0; j < NUM_LANES; ++j) begin
+            assign valu_data_lane[i] = valu_commit_if[i].data.data[0];
+        end
         assign commit_fire[i] = commit_if[i].valid && commit_if[i].ready;        
         assign commit_tmask[i]= {`NUM_THREADS{commit_fire[i]}} & commit_if[i].data.tmask;
         assign commit_wid[i]  = commit_if[i].data.wid;
@@ -233,7 +249,10 @@ module VX_commit import VX_gpu_pkg::*; #(
                 `TRACE(1, (" (#%0d)\n", sfu_commit_if[i].data.uuid));
             end
         end
+        `ifdef EXT_V_ENABLE
+            `RUNTIME_ASSERT(valu_commit_if[i].valid == 0, ("VX_commit: valu_commit_if is not supported"));
+        `endif
     end
 `endif
-
+   
 endmodule

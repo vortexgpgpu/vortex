@@ -64,6 +64,7 @@ VL_FLAGS += $(RTL_PKGS)
 VL_FLAGS += --cc $(TOP) --top-module $(TOP)
 
 CXXFLAGS += $(CONFIGS)
+CXXFLAGS += -DDUMP_PERF_STATS
 
 # Enable Verilator multithreaded simulation
 THREADS ?= $(shell python -c 'import multiprocessing as mp; print(mp.cpu_count())')
