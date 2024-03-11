@@ -181,7 +181,7 @@
 `define VX_CSR_THREAD_MASK              12'hCC4     // warning! this value is also used in LLVM
 
 `define VX_CSR_NUM_THREADS              12'hFC0
-`define VX_CSR_NUM_UTHREADS                12'hFC1
+`define VX_CSR_NUM_WARPS                12'hFC1
 `define VX_CSR_NUM_CORES                12'hFC2
 
 `endif // VX_TYPES_VH

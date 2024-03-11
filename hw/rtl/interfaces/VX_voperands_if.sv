@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-interface VX_operands_if import VX_gpu_pkg::*; ();
+interface VX_voperands_if import VX_gpu_pkg::*; ();
 
     typedef struct packed {
         logic [`UUID_WIDTH-1:0]         uuid;
@@ -31,6 +31,8 @@ interface VX_operands_if import VX_gpu_pkg::*; ();
         logic [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data;
         logic [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data;
         logic [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data;
+        logic [`NUM_THREADS-1:0][`VECTOR_WIDTH-1:0] vs1_data;
+        logic [`NUM_THREADS-1:0][`VECTOR_WIDTH-1:0] vs2_data;
     } data_t;
 
     logic  valid;

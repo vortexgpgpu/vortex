@@ -22,7 +22,6 @@ interface VX_writeback_if import VX_gpu_pkg::*; ();
         logic [`XLEN-1:0]               PC;
         logic [`NR_BITS-1:0]            rd;
         logic [`NUM_THREADS-1:0][`XLEN-1:0] data;
-        logic [`NUM_THREADS-1:0][`VECTOR_WIDTH-1:0] vdata;
         logic                           sop;
         logic                           eop;
     } data_t;

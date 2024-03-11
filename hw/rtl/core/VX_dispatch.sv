@@ -25,6 +25,9 @@ module VX_dispatch import VX_gpu_pkg::*; #(
 `endif
     // inputs
     VX_operands_if.slave    operands_if [`ISSUE_WIDTH],
+`ifdef EXT_V_ENABLE
+    VX_voperands_if.slave   voperands_if [`ISSUE_WIDTH],
+`endif
 
     // outputs
     VX_dispatch_if.master   alu_dispatch_if [`ISSUE_WIDTH],
@@ -33,7 +36,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     VX_dispatch_if.master   fpu_dispatch_if [`ISSUE_WIDTH],
 `endif
 `ifdef EXT_V_ENABLE    
-    VX_dispatch_if.master   valu_dispatch_if [`ISSUE_WIDTH],
+    VX_vdispatch_if.master   valu_dispatch_if [`ISSUE_WIDTH],
 `endif
 
     VX_dispatch_if.master   sfu_dispatch_if [`ISSUE_WIDTH]
@@ -41,6 +44,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (CORE_ID)
 
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + 1 + `XLEN + `XLEN + `NR_BITS + (3 * `NUM_THREADS * `XLEN) + `NT_WIDTH;
+    localparam VDATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + 1 + `XLEN + `XLEN + `NR_BITS + (3 * `NUM_THREADS * `XLEN) + (2 * `VECTOR_LENGTH * `XLEN) + `NT_WIDTH;
 
     wire [`ISSUE_WIDTH-1:0][`NT_WIDTH-1:0] last_active_tid;
 
@@ -89,16 +93,16 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     end
 `ifdef EXT_V_ENABLE
     // VALU dispatch
-    VX_operands_if valu_operands_if[`ISSUE_WIDTH]();
+    VX_voperands_if valu_operands_if[`ISSUE_WIDTH]();
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        assign valu_operands_if[i].valid = operands_if[i].valid && (operands_if[i].data.ex_type == `EX_VALU);
-        assign valu_operands_if[i].data = operands_if[i].data;
+        assign valu_operands_if[i].valid = voperands_if[i].valid && (voperands_if[i].data.ex_type == `EX_VALU);
+        assign valu_operands_if[i].data = voperands_if[i].data;
 
         `RESET_RELAY (alu_reset, reset);
 
         VX_elastic_buffer #(
-            .DATAW   (DATAW),
+            .DATAW   (VDATAW),
             .SIZE    (2),
             .OUT_REG (2)
         ) valu_buffer (

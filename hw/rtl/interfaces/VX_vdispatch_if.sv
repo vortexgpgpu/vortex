@@ -13,30 +13,32 @@
 
 `include "VX_define.vh"
 
-interface VX_operands_if import VX_gpu_pkg::*; ();
-
+interface VX_vdispatch_if import VX_gpu_pkg::*; ();
+    // warning: this layout should not be modified without updating VX_dispatch_unit!!!
     typedef struct packed {
-        logic [`UUID_WIDTH-1:0]         uuid;
-        logic [ISSUE_WIS_W-1:0]         wis;
-        logic [`NUM_THREADS-1:0]        tmask;
-        logic [`XLEN-1:0]               PC;
-        logic [`EX_BITS-1:0]            ex_type;
-        logic [`INST_OP_BITS-1:0]       op_type;
-        logic [`INST_MOD_BITS-1:0]      op_mod;
-        logic                           wb;
-        logic                           use_PC;
-        logic                           use_imm;
-        logic [`XLEN-1:0]               imm;
-        logic [`NR_BITS-1:0]            rd;
+        logic [`UUID_WIDTH-1:0]             uuid;
+        logic [ISSUE_WIS_W-1:0]             wis;
+        logic [`NUM_THREADS-1:0]            tmask;
+        logic [`INST_ALU_BITS-1:0]          op_type;
+        logic [`INST_MOD_BITS-1:0]          op_mod;
+        logic                               wb;
+        logic                               use_PC;
+        logic                               use_imm;
+        logic [`XLEN-1:0]                   PC;
+        logic [`XLEN-1:0]                   imm;
+        logic [`NR_BITS-1:0]                rd;
+        logic [`NT_WIDTH-1:0]               tid;
         logic [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data;
         logic [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data;
         logic [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data;
+        logic [`VECTOR_LENGTH-1:0][`XLEN-1:0] vs1_data;
+        logic [`VECTOR_LENGTH-1:0][`XLEN-1:0] vs2_data;
     } data_t;
 
     logic  valid;
     data_t data;
     logic  ready;
-    
+
     modport master (
         output valid,
         output data,

@@ -21,10 +21,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     input wire              reset,
 
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
-    VX_vwriteback_if.slave  vwriteback_if [`ISSUE_WIDTH],
     VX_ibuffer_if.slave     scoreboard_if [`ISSUE_WIDTH],
-    VX_operands_if.master   operands_if [`ISSUE_WIDTH],
-    VX_voperands_if.master  voperands_if [`ISSUE_WIDTH]
+    VX_operands_if.master   operands_if [`ISSUE_WIDTH]
 );
     `UNUSED_PARAM (CORE_ID)
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + `NR_BITS;
@@ -85,10 +83,10 @@ module VX_operands import VX_gpu_pkg::*; #(
             rs3_data_n   = rs3_data;
 
             //vector
-            v_rs1_data_n = v_rs1_data;
-            v_rs2_data_n = v_rs2_data;
-            v_rs3_data_n = v_rs3_data;
-
+`ifdef EXT_V_ENABLE
+            vs1_data_n = vs1_data;
+            vs2_data_n = vs2_data;
+`endif
             cache_data_n = cache_data;
             cache_reg_n  = cache_reg;
             cache_tmask_n= cache_tmask;
@@ -314,7 +312,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             );
         end
 
-`define EXT_V_ENABLE
+`ifdef EXT_V_ENABLE
         for (genvar j = 0; j < `NUM_THREADS; ++j) begin
             VX_dp_ram #(
                 .DATAW (`VECTOR_WIDTH),

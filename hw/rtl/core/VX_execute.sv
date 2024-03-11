@@ -43,8 +43,8 @@ module VX_execute import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef EXT_V_ENABLE
-    VX_dispatch_if.slave    valu_dispatch_if [`ISSUE_WIDTH],
-    VX_commit_if.master     valu_commit_if [`ISSUE_WIDTH],
+    VX_vdispatch_if.slave    valu_dispatch_if [`ISSUE_WIDTH],
+    VX_vcommit_if.master     valu_commit_if [`ISSUE_WIDTH],
 `endif
 
   

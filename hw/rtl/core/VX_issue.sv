@@ -35,7 +35,7 @@ module VX_issue #(
     VX_dispatch_if.master   fpu_dispatch_if [`ISSUE_WIDTH],
 `endif
 `ifdef EXT_V_ENABLE
-    VX_dispatch_if.master   valu_dispatch_if [`ISSUE_WIDTH],
+    VX_vdispatch_if.master   valu_dispatch_if [`ISSUE_WIDTH],
 `endif
 
 

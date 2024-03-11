@@ -20,7 +20,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define NW_BITS         `CLOG2(`NUM_UTHREADS)
+`define NW_BITS         `CLOG2(`NUM_WARPS)
 `define NC_WIDTH        `UP(`NC_BITS)
 
 `define NT_BITS         `CLOG2(`NUM_THREADS)

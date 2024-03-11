@@ -31,8 +31,8 @@ module VX_split_join import VX_gpu_pkg::*; #(
 );
     `UNUSED_PARAM (CORE_ID)
     
-    wire [(`XLEN+`NUM_THREADS)-1:0] ipdom_data [`NUM_UTHREADS-1:0];
-    wire ipdom_set [`NUM_UTHREADS-1:0];
+    wire [(`XLEN+`NUM_THREADS)-1:0] ipdom_data [`NUM_WARPS-1:0];
+    wire ipdom_set [`NUM_WARPS-1:0];
 
     wire [(`XLEN+`NUM_THREADS)-1:0] ipdom_q0 = {split.then_tmask | split.else_tmask, `XLEN'(0)};
     wire [(`XLEN+`NUM_THREADS)-1:0] ipdom_q1 = {split.else_tmask, split.next_pc};
@@ -40,7 +40,7 @@ module VX_split_join import VX_gpu_pkg::*; #(
     wire ipdom_push = valid && split.valid && split.is_dvg;
     wire ipdom_pop = valid && sjoin.valid && sjoin.is_dvg;
 
-    for (genvar i = 0; i < `NUM_UTHREADS; ++i) begin
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
 
         `RESET_RELAY (ipdom_reset, reset);
 

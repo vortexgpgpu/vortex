@@ -86,8 +86,8 @@
 `define NUM_CORES 1
 `endif
 
-`ifndef NUM_UTHREADS
-`define NUM_UTHREADS 1
+`ifndef NUM_WARPS
+`define NUM_WARPS 1
 `endif
 
 `ifndef NUM_THREADS
@@ -242,7 +242,7 @@
 
 // Issue width
 `ifndef ISSUE_WIDTH
-`define ISSUE_WIDTH     `MIN(`NUM_UTHREADS, 4)
+`define ISSUE_WIDTH     `MIN(`NUM_WARPS, 4)
 `endif
 
 // Number of ALU units
@@ -260,7 +260,7 @@
 `endif
 
 `ifndef VECTOR_WIDTH
-`define VECTOR_WIDTH XLEN * VECTOR_LENGTH
+`define VECTOR_WIDTH `XLEN * `VECTOR_LENGTH
 `endif
 
 `ifndef NUM_ALU_BLOCKS
@@ -287,7 +287,7 @@
 
 // Size of Instruction Buffer
 `ifndef IBUF_SIZE
-`define IBUF_SIZE   (2 * (`NUM_UTHREADS / `ISSUE_WIDTH))
+`define IBUF_SIZE   (2 * (`NUM_WARPS / `ISSUE_WIDTH))
 `endif
 
 // Size of LSU Request Queue

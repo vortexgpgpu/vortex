@@ -13,40 +13,30 @@
 
 `include "VX_define.vh"
 
-interface VX_operands_if import VX_gpu_pkg::*; ();
+interface VX_vwriteback_if import VX_gpu_pkg::*; ();
 
     typedef struct packed {
         logic [`UUID_WIDTH-1:0]         uuid;
         logic [ISSUE_WIS_W-1:0]         wis;
         logic [`NUM_THREADS-1:0]        tmask;
         logic [`XLEN-1:0]               PC;
-        logic [`EX_BITS-1:0]            ex_type;
-        logic [`INST_OP_BITS-1:0]       op_type;
-        logic [`INST_MOD_BITS-1:0]      op_mod;
-        logic                           wb;
-        logic                           use_PC;
-        logic                           use_imm;
-        logic [`XLEN-1:0]               imm;
         logic [`NR_BITS-1:0]            rd;
-        logic [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data;
-        logic [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data;
-        logic [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data;
+        logic [`NUM_THREADS-1:0][`VECTOR_WIDTH-1:0] data;
+        logic                           sop;
+        logic                           eop;
     } data_t;
 
     logic  valid;
     data_t data;
-    logic  ready;
-    
+
     modport master (
         output valid,
-        output data,
-        input  ready
+        output data
     );
 
     modport slave (
-        input  valid,
-        input  data,
-        output ready
+        input valid,
+        input data
     );
 
 endinterface

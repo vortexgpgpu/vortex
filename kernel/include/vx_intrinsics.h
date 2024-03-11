@@ -132,8 +132,8 @@ inline void vx_pred(unsigned condition, unsigned thread_mask) {
 typedef void (*vx_wspawn_pfn)();
 
 // Spawn warps
-inline void vx_wspawn(unsigned num_warps, vx_wspawn_pfn func_ptr) {
-    asm volatile (".insn r %0, 1, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(num_warps), "r"(func_ptr));
+inline void vx_wspawn(unsigned num_uthreads, vx_wspawn_pfn func_ptr) {
+    asm volatile (".insn r %0, 1, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(num_uthreads), "r"(func_ptr));
 }
 
 // Split on a predicate
@@ -149,8 +149,8 @@ inline void vx_join(unsigned stack_ptr) {
 }
 
 // Warp Barrier
-inline void vx_barrier(unsigned barried_id, unsigned num_warps) {
-    asm volatile (".insn r %0, 4, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barried_id), "r"(num_warps));
+inline void vx_barrier(unsigned barried_id, unsigned num_uthreads) {
+    asm volatile (".insn r %0, 4, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barried_id), "r"(num_uthreads));
 }
 
 // Return current thread identifier
@@ -196,7 +196,7 @@ inline int vx_num_threads() {
 }
 
 // Return the number of warps per core
-inline int vx_num_warps() {
+inline int vx_num_uthreads() {
     int ret;
     asm volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_WARPS));
     return ret;   

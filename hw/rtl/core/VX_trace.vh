@@ -354,7 +354,6 @@ task trace_ex_op(input int level,
             `INST_SFU_JOIN:  `TRACE(level, ("JOIN"));
             `INST_SFU_BAR:   `TRACE(level, ("BAR"));
             `INST_SFU_PRED:  `TRACE(level, ("PRED"));
-            `INST_SFU_VADD:  `TRACE(level, ("VADD"));
             `INST_SFU_CSRRW: begin if (use_imm) `TRACE(level, ("CSRRWI")); else `TRACE(level, ("CSRRW")); end
             `INST_SFU_CSRRS: begin if (use_imm) `TRACE(level, ("CSRRSI")); else `TRACE(level, ("CSRRS")); end
             `INST_SFU_CSRRC: begin if (use_imm) `TRACE(level, ("CSRRCI")); else `TRACE(level, ("CSRRC")); end

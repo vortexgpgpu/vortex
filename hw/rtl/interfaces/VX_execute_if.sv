@@ -15,6 +15,7 @@
 
 interface VX_execute_if #(
     parameter NUM_LANES = 1,
+    parameter NUM_VECTOR_LANES = 1,
     parameter PID_WIDTH = `LOG2UP(`NUM_THREADS / NUM_LANES)
 ) ();
     typedef struct packed {
