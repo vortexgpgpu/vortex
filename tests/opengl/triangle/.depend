@@ -1,0 +1,8 @@
+main.o: main.cc \
+ /home/vagrant/vortex-toolchain/pocl/runtime/include/CL/opencl.h \
+ /home/vagrant/vortex-toolchain/pocl/runtime/include/CL/cl.h \
+ /home/vagrant/vortex-toolchain/pocl/runtime/include/CL/cl_version.h \
+ /home/vagrant/vortex-toolchain/pocl/runtime/include/CL/cl_platform.h \
+ /home/vagrant/vortex-toolchain/pocl/runtime/include/CL/cl_gl.h \
+ /home/vagrant/vortex-toolchain/pocl/runtime/include/CL/cl_ext.h \
+ /home/vagrant/vortex-toolchain/pocl/runtime/include/CL/cl_ext_pocl.h
