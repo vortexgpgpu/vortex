@@ -64,8 +64,8 @@ Cluster::Cluster(const SimContext& ctx,
     !L2_ENABLED,
     log2ceil(L2_CACHE_SIZE), // C
     log2ceil(MEM_BLOCK_SIZE), // L
-    log2ceil(L2_NUM_WAYS),  // W
-    0,                      // A
+    log2ceil(sizeof(Word)),  // W
+    log2ceil(L2_NUM_WAYS),  // A
     log2ceil(L2_NUM_BANKS), // B
     XLEN,                   // address bits  
     1,                      // number of ports
