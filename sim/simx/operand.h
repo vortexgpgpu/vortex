@@ -13,15 +13,15 @@
 
 #pragma once
 
-#include "pipeline.h"
+#include "instr_trace.h"
 #include <queue>
 
 namespace vortex {
 
 class Operand : public SimObject<Operand> {
 public:
-    SimPort<pipeline_trace_t*> Input;
-    SimPort<pipeline_trace_t*> Output;
+    SimPort<instr_trace_t*> Input;
+    SimPort<instr_trace_t*> Output;
 
     Operand(const SimContext& ctx) 
         : SimObject<Operand>(ctx, "Operand") 
@@ -50,7 +50,7 @@ public:
             }
         }
 
-        Output.send(trace, delay);
+        Output.push(trace, delay);
         
         DT(3, "pipeline-operands: " << *trace);
 

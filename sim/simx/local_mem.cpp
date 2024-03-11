@@ -87,7 +87,7 @@ public:
             if (!core_req.write || config_.write_reponse) {
                 // send response
                 MemRsp core_rsp{core_req.tag, core_req.cid};
-                simobject_->Outputs.at(req_id).send(core_rsp, 1);
+                simobject_->Outputs.at(req_id).push(core_rsp, 1);
             }
 
             // update perf counters

@@ -492,7 +492,7 @@ private:
         uint32_t req_id = mem_rsp.tag & ((1 << params_.log2_num_inputs)-1);                
         uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
         MemRsp core_rsp{tag, mem_rsp.cid, mem_rsp.uuid};
-        simobject_->CoreRspPorts.at(req_id).send(core_rsp, config_.latency);
+        simobject_->CoreRspPorts.at(req_id).push(core_rsp, config_.latency);
         DT(3, simobject_->name() << "-core-" << core_rsp);
     }
 
@@ -502,13 +502,13 @@ private:
         {
             MemReq mem_req(core_req);
             mem_req.tag = (core_req.tag << params_.log2_num_inputs) + req_id;
-            bypass_switch_->ReqIn.at(1).send(mem_req, 1);
+            bypass_switch_->ReqIn.at(1).push(mem_req, 1);
             DT(3, simobject_->name() << "-dram-" << mem_req);
         }
 
         if (core_req.write && config_.write_reponse) {
             MemRsp core_rsp{core_req.tag, core_req.cid, core_req.uuid};
-            simobject_->CoreRspPorts.at(req_id).send(core_rsp, 1);            
+            simobject_->CoreRspPorts.at(req_id).push(core_rsp, 1);            
             DT(3, simobject_->name() << "-core-" << core_rsp);
         }
     }
@@ -538,7 +538,7 @@ private:
                         if (!info.valid)
                             continue;
                         MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
-                        simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);  
+                        simobject_->CoreRspPorts.at(info.req_id).push(core_rsp, config_.latency);  
                         DT(3, simobject_->name() << "-core-" << core_rsp);         
                     }
                 }
@@ -582,7 +582,7 @@ private:
                             mem_req.write = true;
                             mem_req.cid   = pipeline_req.cid;
                             mem_req.uuid  = pipeline_req.uuid;
-                            mem_req_ports_.at(bank_id).send(mem_req, 1);
+                            mem_req_ports_.at(bank_id).push(mem_req, 1);
                             DT(3, simobject_->name() << "-dram-" << mem_req);
                         } else {
                             // mark line as dirty
@@ -595,7 +595,7 @@ private:
                             if (!info.valid)
                                 continue;
                             MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
-                            simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);
+                            simobject_->CoreRspPorts.at(info.req_id).push(core_rsp, config_.latency);
                             DT(3, simobject_->name() << "-core-" << core_rsp);
                         }
                     }
@@ -614,7 +614,7 @@ private:
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, repl_line.tag);
                             mem_req.write = true;
                             mem_req.cid   = pipeline_req.cid;
-                            mem_req_ports_.at(bank_id).send(mem_req, 1);
+                            mem_req_ports_.at(bank_id).push(mem_req, 1);
                             DT(3, simobject_->name() << "-dram-" << mem_req);
                             ++perf_stats_.evictions;
                         }
@@ -628,7 +628,7 @@ private:
                             mem_req.write = true;
                             mem_req.cid   = pipeline_req.cid;
                             mem_req.uuid  = pipeline_req.uuid;
-                            mem_req_ports_.at(bank_id).send(mem_req, 1);
+                            mem_req_ports_.at(bank_id).push(mem_req, 1);
                             DT(3, simobject_->name() << "-dram-" << mem_req);
                         }
                         // send core response
@@ -637,7 +637,7 @@ private:
                                 if (!info.valid)
                                     continue;       
                                 MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
-                                simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);
+                                simobject_->CoreRspPorts.at(info.req_id).push(core_rsp, config_.latency);
                                 DT(3, simobject_->name() << "-core-" << core_rsp);
                             }
                         }
@@ -656,7 +656,7 @@ private:
                             mem_req.tag   = mshr_id;
                             mem_req.cid   = pipeline_req.cid;
                             mem_req.uuid  = pipeline_req.uuid;
-                            mem_req_ports_.at(bank_id).send(mem_req, 1);
+                            mem_req_ports_.at(bank_id).push(mem_req, 1);
                             DT(3, simobject_->name() << "-dram-" << mem_req);
                             ++pending_fill_reqs_;
                         }

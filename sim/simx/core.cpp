@@ -49,11 +49,9 @@ Core::Core(const SimContext& ctx,
     , ibuffers_(arch.num_warps(), IBUF_SIZE)
     , scoreboard_(arch_)
     , operands_(ISSUE_WIDTH)
-    , dispatchers_((uint32_t)ExeType::ExeTypeCount)
-    , exe_units_((uint32_t)ExeType::ExeTypeCount)
+    , dispatchers_((uint32_t)FUType::Count)
+    , exe_units_((uint32_t)FUType::Count)
     , lmem_demuxs_(NUM_LSU_LANES)
-    , fetch_latch_("fetch")
-    , decode_latch_("decode")
     , pending_icache_(arch_.num_warps())
     , csrs_(arch.num_warps())  
     , commit_arbs_(ISSUE_WIDTH)
@@ -95,22 +93,22 @@ Core::Core(const SimContext& ctx,
   }
 
   // initialize dispatchers
-  dispatchers_.at((int)ExeType::ALU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_ALU_BLOCKS, NUM_ALU_LANES);
-  dispatchers_.at((int)ExeType::FPU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_FPU_BLOCKS, NUM_FPU_LANES);
-  dispatchers_.at((int)ExeType::LSU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, 1, NUM_LSU_LANES);
-  dispatchers_.at((int)ExeType::SFU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, 1, NUM_SFU_LANES);
+  dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_ALU_BLOCKS, NUM_ALU_LANES);
+  dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_FPU_BLOCKS, NUM_FPU_LANES);
+  dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, 1, NUM_LSU_LANES);
+  dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, 1, NUM_SFU_LANES);
   
   // initialize execute units
-  exe_units_.at((int)ExeType::ALU) = SimPlatform::instance().create_object<AluUnit>(this);
-  exe_units_.at((int)ExeType::FPU) = SimPlatform::instance().create_object<FpuUnit>(this);
-  exe_units_.at((int)ExeType::LSU) = SimPlatform::instance().create_object<LsuUnit>(this);
-  exe_units_.at((int)ExeType::SFU) = SimPlatform::instance().create_object<SfuUnit>(this);
+  exe_units_.at((int)FUType::ALU) = SimPlatform::instance().create_object<AluUnit>(this);
+  exe_units_.at((int)FUType::FPU) = SimPlatform::instance().create_object<FpuUnit>(this);
+  exe_units_.at((int)FUType::LSU) = SimPlatform::instance().create_object<LsuUnit>(this);
+  exe_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(this);
 
   // bind commit arbiters
   for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {    
     snprintf(sname, 100, "core%d-commit-arb%d", core_id, i);
-    auto arbiter = TraceSwitch::Create(sname, ArbiterType::RoundRobin, (uint32_t)ExeType::ExeTypeCount, 1);
-    for (uint32_t j = 0; j < (uint32_t)ExeType::ExeTypeCount; ++j) {
+    auto arbiter = TraceSwitch::Create(sname, ArbiterType::RoundRobin, (uint32_t)FUType::Count, 1);
+    for (uint32_t j = 0; j < (uint32_t)FUType::Count; ++j) {
       exe_units_.at(j)->Outputs.at(i).bind(&arbiter->Inputs.at(j));
     }
     commit_arbs_.at(i) = arbiter;
@@ -157,8 +155,7 @@ void Core::reset() {
   decode_latch_.clear();
   pending_icache_.clear();
   stalled_warps_.reset();
-  issued_instrs_ = 0;
-  committed_instrs_ = 0;
+  pending_instrs_ = 0;
   exited_ = false;
   perf_stats_ = PerfStats();
   pending_ifetches_ = 0;
@@ -204,7 +201,7 @@ void Core::schedule() {
 
   // advance to fetch stage
   fetch_latch_.push(trace);
-  ++issued_instrs_;
+  ++pending_instrs_;
 }
 
 void Core::fetch() {
@@ -232,7 +229,7 @@ void Core::fetch() {
   mem_req.tag   = pending_icache_.allocate(trace);    
   mem_req.cid   = trace->cid;
   mem_req.uuid  = trace->uuid;
-  icache_req_ports.at(0).send(mem_req, 2);    
+  icache_req_ports.at(0).push(mem_req, 2);    
   DT(3, "icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << *trace);    
   fetch_latch_.pop();
   ++perf_stats_.ifetches;
@@ -278,7 +275,7 @@ void Core::issue() {
     if (operand->Output.empty())
       continue;
     auto trace = operand->Output.front();
-    if (dispatchers_.at((int)trace->exe_type)->push(i, trace)) {
+    if (dispatchers_.at((int)trace->fu_type)->push(i, trace)) {
       operand->Output.pop();
       trace->log_once(false);
     } else {
@@ -312,11 +309,11 @@ void Core::issue() {
       }
       for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
         auto& use = uses.at(j);
-        switch (use.exe_type) {        
-        case ExeType::ALU: ++perf_stats_.scrb_alu; break;
-        case ExeType::FPU: ++perf_stats_.scrb_fpu; break;
-        case ExeType::LSU: ++perf_stats_.scrb_lsu; break;        
-        case ExeType::SFU: {
+        switch (use.fu_type) {        
+        case FUType::ALU: ++perf_stats_.scrb_alu; break;
+        case FUType::FPU: ++perf_stats_.scrb_fpu; break;
+        case FUType::LSU: ++perf_stats_.scrb_lsu; break;        
+        case FUType::SFU: {
           ++perf_stats_.scrb_sfu;
           switch (use.sfu_type) {
           case SfuType::TMC:
@@ -348,7 +345,7 @@ void Core::issue() {
     DT(3, "pipeline-scoreboard: " << *trace);
 
     // to operand stage
-    operands_.at(i)->Input.send(trace, 1);
+    operands_.at(i)->Input.push(trace, 1);
 
     ibuffer.pop();
   }
@@ -356,14 +353,14 @@ void Core::issue() {
 }
 
 void Core::execute() {
-  for (uint32_t i = 0; i < (uint32_t)ExeType::ExeTypeCount; ++i) {
+  for (uint32_t i = 0; i < (uint32_t)FUType::Count; ++i) {
     auto& dispatch = dispatchers_.at(i);
     auto& exe_unit = exe_units_.at(i);
     for (uint32_t j = 0; j < ISSUE_WIDTH; ++j) {
       if (dispatch->Outputs.at(j).empty())
         continue;
       auto trace = dispatch->Outputs.at(j).front();
-      exe_unit->Inputs.at(j).send(trace, 1);
+      exe_unit->Inputs.at(j).push(trace, 1);
       dispatch->Outputs.at(j).pop();
     }
   }
@@ -387,8 +384,7 @@ void Core::commit() {
         scoreboard_.release(trace);
       }
 
-      assert(committed_instrs_ <= issued_instrs_);
-      ++committed_instrs_;
+      --pending_instrs_;
 
       perf_stats_.instrs += trace->tmask.count();
     }
@@ -743,7 +739,7 @@ bool Core::check_exit(Word* exitcode, bool riscv_test) const {
 }
 
 bool Core::running() const {
-  return (committed_instrs_ != issued_instrs_);
+  return (pending_instrs_ != 0);
 }
 
 void Core::resume() {

@@ -38,8 +38,7 @@ void Warp::reset() {
 #if (XLEN == 64)
   PC_ = (uint64_t(core_->dcrs().base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR1)) << 32) | PC_;
 #endif
-  tmask_.reset();  
-  issued_instrs_ = 0;
+  tmask_.reset();
   for (uint32_t i = 0, n = arch_.num_threads(); i < n; ++i) {
     for (auto& reg : ireg_file_.at(i)) {
       reg = 0;
@@ -51,7 +50,7 @@ void Warp::reset() {
   uui_gen_.reset();
 }
 
-pipeline_trace_t* Warp::eval() {
+instr_trace_t* Warp::eval() {
   assert(tmask_.any());
 
 #ifndef NDEBUG
@@ -83,7 +82,7 @@ pipeline_trace_t* Warp::eval() {
   DP(1, "Instr 0x" << std::hex << instr_code << ": " << *instr);
 
   // Create trace
-  auto trace = new pipeline_trace_t(uuid, arch_);
+  auto trace = new instr_trace_t(uuid, arch_);
   trace->cid   = core_->id();
   trace->wid   = warp_id_;
   trace->PC    = PC_;

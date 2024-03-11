@@ -66,7 +66,7 @@ inline int64_t check_boxing(int64_t a) {
   return nan_box(0x7fc00000); // NaN
 }
 
-void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
+void Warp::execute(const Instr &instr, instr_trace_t *trace) {
   assert(tmask_.any());
 
   auto next_pc = PC_ + 4;
@@ -136,7 +136,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   switch (opcode) {  
   case Opcode::LUI: {
     // RV32I: LUI
-    trace->exe_type = ExeType::ALU;
+    trace->fu_type = FUType::ALU;
     trace->alu_type = AluType::ARITH;
     for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
@@ -148,7 +148,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   }  
   case Opcode::AUIPC: {
     // RV32I: AUIPC
-    trace->exe_type = ExeType::ALU;
+    trace->fu_type = FUType::ALU;
     trace->alu_type = AluType::ARITH;
     for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
@@ -159,7 +159,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     break;
   }
   case Opcode::R: {
-    trace->exe_type = ExeType::ALU;    
+    trace->fu_type = FUType::ALU;    
     trace->alu_type = AluType::ARITH;
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
@@ -320,7 +320,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     break;
   }
   case Opcode::I: {
-    trace->exe_type = ExeType::ALU;    
+    trace->fu_type = FUType::ALU;    
     trace->alu_type = AluType::ARITH;    
     trace->used_iregs.set(rsrc0);
     for (uint32_t t = thread_start; t < num_threads; ++t) {
@@ -380,7 +380,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     break;
   }
   case Opcode::R_W: {
-    trace->exe_type = ExeType::ALU;    
+    trace->fu_type = FUType::ALU;    
     trace->alu_type = AluType::ARITH;
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
@@ -507,7 +507,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     break; 
   }
   case Opcode::I_W: {
-    trace->exe_type = ExeType::ALU;    
+    trace->fu_type = FUType::ALU;    
     trace->alu_type = AluType::ARITH;    
     trace->used_iregs.set(rsrc0);
     for (uint32_t t = thread_start; t < num_threads; ++t) {
@@ -550,7 +550,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     break;
   }
   case Opcode::B: {   
-    trace->exe_type = ExeType::ALU;    
+    trace->fu_type = FUType::ALU;    
     trace->alu_type = AluType::BRANCH;    
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
@@ -610,7 +610,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   }  
   case Opcode::JAL: {
     // RV32I: JAL
-    trace->exe_type = ExeType::ALU;    
+    trace->fu_type = FUType::ALU;    
     trace->alu_type = AluType::BRANCH;
     for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
@@ -624,7 +624,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   }  
   case Opcode::JALR: {
     // RV32I: JALR
-    trace->exe_type = ExeType::ALU;    
+    trace->fu_type = FUType::ALU;    
     trace->alu_type = AluType::BRANCH;
     trace->used_iregs.set(rsrc0);
     for (uint32_t t = thread_start; t < num_threads; ++t) {
@@ -639,7 +639,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   }
   case Opcode::L:
   case Opcode::FL: {
-    trace->exe_type = ExeType::LSU;    
+    trace->fu_type = FUType::LSU;    
     trace->lsu_type = LsuType::LOAD;
     trace->used_iregs.set(rsrc0);
     auto trace_data = std::make_shared<LsuTraceData>(num_threads);
@@ -683,7 +683,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   }
   case Opcode::S:   
   case Opcode::FS: {
-    trace->exe_type = ExeType::LSU;    
+    trace->fu_type = FUType::LSU;    
     trace->lsu_type = LsuType::STORE;
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);    
@@ -710,7 +710,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     break;
   }
   case Opcode::AMO: {
-    trace->exe_type = ExeType::LSU;    
+    trace->fu_type = FUType::LSU;    
     trace->lsu_type = LsuType::LOAD;
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
@@ -790,7 +790,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       uint32_t csr_addr = immsrc;
       uint32_t csr_value;
       if (func3 == 0) {
-        trace->exe_type = ExeType::ALU;
+        trace->fu_type = FUType::ALU;
         trace->alu_type = AluType::SYSCALL;
         trace->fetch_stall = true;
         switch (csr_addr) {
@@ -810,7 +810,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           std::abort();
         }                
       } else {
-        trace->exe_type = ExeType::SFU;        
+        trace->fu_type = FUType::SFU;        
         trace->fetch_stall = true;
         csr_value = core_->get_csr(csr_addr, t, warp_id_);
         switch (func3) {
@@ -882,12 +882,12 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   }  
   case Opcode::FENCE: {
     // RV32I: FENCE
-    trace->exe_type = ExeType::LSU;    
+    trace->fu_type = FUType::LSU;    
     trace->lsu_type = LsuType::FENCE;
     break;
   }
   case Opcode::FCI: {     
-    trace->exe_type = ExeType::FPU;     
+    trace->fu_type = FUType::FPU;     
     for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue; 
@@ -1271,7 +1271,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       switch (func3) {
       case 0: {
         // TMC  
-        trace->exe_type = ExeType::SFU;     
+        trace->fu_type = FUType::SFU;     
         trace->sfu_type = SfuType::TMC;
         trace->used_iregs.set(rsrc0);
         trace->fetch_stall = true;
@@ -1282,7 +1282,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 1: {
         // WSPAWN
-        trace->exe_type = ExeType::SFU;
+        trace->fu_type = FUType::SFU;
         trace->sfu_type = SfuType::WSPAWN;
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
@@ -1291,7 +1291,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 2: {
         // SPLIT
-        trace->exe_type = ExeType::SFU;
+        trace->fu_type = FUType::SFU;
         trace->sfu_type = SfuType::SPLIT;
         trace->used_iregs.set(rsrc0);
         trace->fetch_stall = true;
@@ -1324,7 +1324,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 3: {
         // JOIN
-        trace->exe_type = ExeType::SFU;
+        trace->fu_type = FUType::SFU;
         trace->sfu_type = SfuType::JOIN;
         trace->used_iregs.set(rsrc0);
         trace->fetch_stall = true;
@@ -1344,7 +1344,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 4: {
         // BAR
-        trace->exe_type = ExeType::SFU; 
+        trace->fu_type = FUType::SFU; 
         trace->sfu_type = SfuType::BAR;
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
@@ -1353,7 +1353,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 5: {
         // PRED  
-        trace->exe_type = ExeType::SFU;     
+        trace->fu_type = FUType::SFU;     
         trace->sfu_type = SfuType::PRED;
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
@@ -1381,7 +1381,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     case 1:
       switch (func2) {
       case 0: { // CMOV
-        trace->exe_type = ExeType::SFU;
+        trace->fu_type = FUType::SFU;
         trace->sfu_type = SfuType::CMOV;
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);

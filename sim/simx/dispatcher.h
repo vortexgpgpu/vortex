@@ -13,21 +13,21 @@
 
 #pragma once
 
-#include "pipeline.h"
+#include "instr_trace.h"
 #include <queue>
 
 namespace vortex {
 
 class Dispatcher : public SimObject<Dispatcher> {
 public:
-    std::vector<SimPort<pipeline_trace_t*>> Outputs;
+    std::vector<SimPort<instr_trace_t*>> Outputs;
 
     Dispatcher(const SimContext& ctx, const Arch& arch, uint32_t buf_size, uint32_t block_size, uint32_t num_lanes) 
         : SimObject<Dispatcher>(ctx, "Dispatcher") 
         , Outputs(ISSUE_WIDTH, this)
         , Inputs_(ISSUE_WIDTH, this)
         , arch_(arch)
-        , queues_(ISSUE_WIDTH, std::queue<pipeline_trace_t*>())
+        , queues_(ISSUE_WIDTH, std::queue<instr_trace_t*>())
         , buf_size_(buf_size)        
         , block_size_(block_size)        
         , num_lanes_(num_lanes)        
@@ -52,7 +52,7 @@ public:
             if (queue.empty())
                 continue;
             auto trace = queue.front();
-            Inputs_.at(i).send(trace, 1);
+            Inputs_.at(i).push(trace, 1);
             queue.pop();
         }
 
@@ -84,7 +84,7 @@ public:
                 start /= num_lanes_;
                 end /= num_lanes_;                
                 if (start != end) {
-                    new_trace = new pipeline_trace_t(*trace);
+                    new_trace = new instr_trace_t(*trace);
                     new_trace->eop = false;
                     start_p_.at(b) = start + 1;
                 } else {
@@ -105,7 +105,7 @@ public:
                 ++block_sent;
             }
             DT(3, "pipeline-dispatch: " << *new_trace);
-            output.send(new_trace, 1);
+            output.push(new_trace, 1);
         }
         if (block_sent == block_size_) {
             batch_idx_ = (batch_idx_ + 1) % batch_count_;
@@ -115,7 +115,7 @@ public:
         }
     };
 
-    bool push(uint32_t issue_index, pipeline_trace_t* trace) {
+    bool push(uint32_t issue_index, instr_trace_t* trace) {
         auto& queue = queues_.at(issue_index);
         if (queue.size() >= buf_size_)
             return false;
@@ -124,9 +124,9 @@ public:
     }
 
 private:
-    std::vector<SimPort<pipeline_trace_t*>> Inputs_;
+    std::vector<SimPort<instr_trace_t*>> Inputs_;
     const Arch& arch_;
-    std::vector<std::queue<pipeline_trace_t*>> queues_;
+    std::vector<std::queue<instr_trace_t*>> queues_;
     uint32_t buf_size_;
     uint32_t block_size_;
     uint32_t num_lanes_;
