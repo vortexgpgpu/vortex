@@ -69,7 +69,7 @@ public:
         if (req.type == ramulator::Request::Type::WRITE)
             return;
         MemRsp mem_rsp{tag, (uint32_t)req.coreid, uuid};
-        simobject_->MemRspPort.send(mem_rsp, 1);
+        simobject_->MemRspPort.push(mem_rsp, 1);
         DT(3, simobject_->name() << "-" << mem_rsp);
     }
 

@@ -42,7 +42,7 @@ namespace vortex {
 
 class Socket;
 
-using TraceSwitch = Mux<pipeline_trace_t*>;
+using TraceSwitch = Mux<instr_trace_t*>;
 
 class Core : public SimObject<Core> {
 public:
@@ -187,11 +187,10 @@ private:
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;
   
-  HashTable<pipeline_trace_t*> pending_icache_;
+  HashTable<instr_trace_t*> pending_icache_;
   WarpMask active_warps_;
   WarpMask stalled_warps_;
-  uint64_t issued_instrs_;
-  uint64_t committed_instrs_;
+  uint64_t pending_instrs_;
   bool exited_;
 
   uint64_t pending_ifetches_;

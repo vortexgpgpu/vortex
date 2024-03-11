@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include "pipeline.h"
+#include "instr_trace.h"
 #include <queue>
 
 namespace vortex {
@@ -24,7 +24,7 @@ public:
     struct reg_use_t {
         RegType  reg_type;
         uint32_t reg_id; 
-        ExeType  exe_type;
+        FUType  fu_type;
         SfuType  sfu_type;        
         uint64_t uuid;
     };
@@ -44,12 +44,12 @@ public:
         owners_.clear();
     }
 
-    bool in_use(pipeline_trace_t* trace) const {
+    bool in_use(instr_trace_t* trace) const {
         return (trace->used_iregs & in_use_iregs_.at(trace->wid)) != 0 
             || (trace->used_fregs & in_use_fregs_.at(trace->wid)) != 0;
     }
 
-    std::vector<reg_use_t> get_uses(pipeline_trace_t* trace) const {
+    std::vector<reg_use_t> get_uses(instr_trace_t* trace) const {
         std::vector<reg_use_t> out;  
         
         auto used_iregs = trace->used_iregs & in_use_iregs_.at(trace->wid);
@@ -59,7 +59,7 @@ public:
             if (used_iregs.test(r)) {
                 uint32_t tag = (r << 16) | (trace->wid << 4) | (int)RegType::Integer;
                 auto owner = owners_.at(tag);
-                out.push_back({RegType::Integer, r, owner->exe_type, owner->sfu_type, owner->uuid});
+                out.push_back({RegType::Integer, r, owner->fu_type, owner->sfu_type, owner->uuid});
             }
         }
 
@@ -67,14 +67,14 @@ public:
             if (used_fregs.test(r)) {
                 uint32_t tag = (r << 16) | (trace->wid << 4) | (int)RegType::Float;
                 auto owner = owners_.at(tag);
-                out.push_back({RegType::Float, r, owner->exe_type, owner->sfu_type, owner->uuid});
+                out.push_back({RegType::Float, r, owner->fu_type, owner->sfu_type, owner->uuid});
             }
         }
 
         return out;
     }
     
-    void reserve(pipeline_trace_t* trace) {
+    void reserve(instr_trace_t* trace) {
         assert(trace->wb);  
         switch (trace->rdest_type) {
         case RegType::Integer:            
@@ -89,10 +89,10 @@ public:
         uint32_t tag = (trace->rdest << 16) | (trace->wid << 4) | (int)trace->rdest_type;
         assert(owners_.count(tag) == 0);
         owners_[tag] = trace;
-        assert((int)trace->exe_type < 5);
+        assert((int)trace->fu_type < 5);
     }
 
-    void release(pipeline_trace_t* trace) {
+    void release(instr_trace_t* trace) {
         assert(trace->wb);      
         switch (trace->rdest_type) {
         case RegType::Integer:
@@ -112,7 +112,7 @@ private:
 
     std::vector<RegMask> in_use_iregs_;
     std::vector<RegMask> in_use_fregs_;
-    std::unordered_map<uint32_t, pipeline_trace_t*> owners_;
+    std::unordered_map<uint32_t, instr_trace_t*> owners_;
 };
 
 }

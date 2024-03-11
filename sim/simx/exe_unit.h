@@ -14,8 +14,7 @@
 #pragma once
 
 #include <simobject.h>
-#include "pipeline.h"
-#include "cache_sim.h"
+#include "instr_trace.h"
 
 namespace vortex {
 
@@ -23,8 +22,8 @@ class Core;
 
 class ExeUnit : public SimObject<ExeUnit> {
 public:
-    std::vector<SimPort<pipeline_trace_t*>> Inputs;
-    std::vector<SimPort<pipeline_trace_t*>> Outputs;
+    std::vector<SimPort<instr_trace_t*>> Inputs;
+    std::vector<SimPort<instr_trace_t*>> Outputs;
 
     ExeUnit(const SimContext& ctx, Core* core, const char* name) 
         : SimObject<ExeUnit>(ctx, name) 
@@ -73,12 +72,12 @@ public:
 
 private:    
     struct pending_req_t {
-      pipeline_trace_t* trace;
+      instr_trace_t* trace;
       uint32_t count;
     };
     HashTable<pending_req_t> pending_rd_reqs_;    
     uint32_t num_lanes_;
-    pipeline_trace_t* fence_state_;
+    instr_trace_t* fence_state_;
     uint64_t pending_loads_;
     bool fence_lock_;
     uint32_t input_idx_;

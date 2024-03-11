@@ -38,10 +38,10 @@ void AluUnit::tick() {
         case AluType::BRANCH:
         case AluType::SYSCALL:
         case AluType::IMUL:
-            output.send(trace, LATENCY_IMUL+1);
+            output.push(trace, LATENCY_IMUL+1);
             break;
         case AluType::IDIV:
-            output.send(trace, XLEN+1);
+            output.push(trace, XLEN+1);
             break;
         default:
             std::abort();
@@ -68,19 +68,19 @@ void FpuUnit::tick() {
         auto trace = input.front();
         switch (trace->fpu_type) {
         case FpuType::FNCP:
-            output.send(trace, 2);
+            output.push(trace, 2);
             break;
         case FpuType::FMA:
-            output.send(trace, LATENCY_FMA+1);
+            output.push(trace, LATENCY_FMA+1);
             break;
         case FpuType::FDIV:
-            output.send(trace, LATENCY_FDIV+1);
+            output.push(trace, LATENCY_FDIV+1);
             break;
         case FpuType::FSQRT:
-            output.send(trace, LATENCY_FSQRT+1);
+            output.push(trace, LATENCY_FSQRT+1);
             break;
         case FpuType::FCVT:
-            output.send(trace, LATENCY_FCVT+1);
+            output.push(trace, LATENCY_FCVT+1);
             break;
         default:
             std::abort();
@@ -125,7 +125,7 @@ void LsuUnit::tick() {
         if (0 == entry.count) {
             int iw = trace->wid % ISSUE_WIDTH;
             auto& output = Outputs.at(iw);
-            output.send(trace, 1);
+            output.push(trace, 1);
             pending_rd_reqs_.release(mem_rsp.tag);
         } 
         dcache_rsp_port.pop();
@@ -146,7 +146,7 @@ void LsuUnit::tick() {
         if (0 == entry.count) {
             int iw = trace->wid % ISSUE_WIDTH;
             auto& output = Outputs.at(iw);
-            output.send(trace, 1);
+            output.push(trace, 1);
             pending_rd_reqs_.release(mem_rsp.tag);
         } 
         lmem_rsp_port.pop();  
@@ -159,7 +159,7 @@ void LsuUnit::tick() {
             return;
         int iw = fence_state_->wid % ISSUE_WIDTH;
         auto& output = Outputs.at(iw);
-        output.send(fence_state_, 1);
+        output.push(fence_state_, 1);
         fence_lock_ = false;
         DT(3, "fence-unlock: " << fence_state_);
     }    
@@ -240,7 +240,7 @@ void LsuUnit::tick() {
             mem_req.cid   = trace->cid;
             mem_req.uuid  = trace->uuid;        
                 
-            dcache_req_port.send(mem_req, 1);
+            dcache_req_port.push(mem_req, 1);
             DT(3, "dcache-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << tag 
                 << ", lsu_type=" << trace->lsu_type << ", tid=" << t << ", addr_type=" << mem_req.type << ", " << *trace);
 
@@ -257,7 +257,7 @@ void LsuUnit::tick() {
         // do not wait on writes
         if (is_write) {
             pending_rd_reqs_.release(tag);
-            output.send(trace, 1);            
+            output.push(trace, 1);            
         }
 
         // remove input
@@ -296,10 +296,10 @@ void SfuUnit::tick() {
         case SfuType::CSRRW:
         case SfuType::CSRRS:
         case SfuType::CSRRC:
-            output.send(trace, 1);
+            output.push(trace, 1);
             break;
         case SfuType::BAR: {
-            output.send(trace, 1);
+            output.push(trace, 1);
             auto trace_data = std::dynamic_pointer_cast<SFUTraceData>(trace->data);
             if (trace->eop) {
                 core_->barrier(trace_data->bar.id, trace_data->bar.count, trace->wid);
@@ -307,7 +307,7 @@ void SfuUnit::tick() {
             release_warp = false;
         }   break;
         case SfuType::CMOV:
-            output.send(trace, 3);
+            output.push(trace, 3);
             break;
         default:
             std::abort();

@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include "pipeline.h"
+#include "instr_trace.h"
 #include <queue>
 
 namespace vortex {
@@ -32,11 +32,11 @@ public:
         return (entries_.size() == capacity_);
     }
 
-    pipeline_trace_t* top() const {
+    instr_trace_t* top() const {
         return entries_.front();
     }
 
-    void push(pipeline_trace_t* trace) {
+    void push(instr_trace_t* trace) {
         entries_.emplace(trace);
     }
 
@@ -45,12 +45,12 @@ public:
     }
 
     void clear() {
-        std::queue<pipeline_trace_t*> empty;
+        std::queue<instr_trace_t*> empty;
         std::swap(entries_, empty );
     }
 
 private:
-    std::queue<pipeline_trace_t*> entries_;
+    std::queue<instr_trace_t*> entries_;
     uint32_t capacity_;
 };
 

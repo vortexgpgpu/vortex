@@ -75,20 +75,20 @@ inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-enum class ExeType {
+enum class FUType {
   ALU,
   LSU,
   FPU,
   SFU,
-  ExeTypeCount
+  Count
 };
 
-inline std::ostream &operator<<(std::ostream &os, const ExeType& type) {
+inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
   switch (type) {
-  case ExeType::ALU: os << "ALU"; break;
-  case ExeType::LSU: os << "LSU"; break;
-  case ExeType::FPU: os << "FPU"; break;
-  case ExeType::SFU: os << "SFU"; break;
+  case FUType::ALU: os << "ALU"; break;
+  case FUType::LSU: os << "LSU"; break;
+  case FUType::FPU: os << "FPU"; break;
+  case FUType::SFU: os << "SFU"; break;
   default: assert(false);
   }
   return os;
@@ -417,7 +417,7 @@ public:
         if (!req_in.empty()) {
           auto& req = req_in.front();
           DT(4, this->name() << "-" << req);
-          Outputs.at(o).send(req, delay_);                
+          Outputs.at(o).push(req, delay_);                
           req_in.pop();
           this->update_cursor(o, i);
           break;
@@ -513,7 +513,7 @@ public:
             req.tag = (req.tag << lg_num_reqs_) | i;
           }
           DT(4, this->name() << "-" << req);
-          ReqOut.at(o).send(req, delay_);                
+          ReqOut.at(o).push(req, delay_);                
           req_in.pop();
           this->update_cursor(o, i);
           break;
@@ -530,7 +530,7 @@ public:
         }      
         DT(4, this->name() << "-" << rsp);
         uint32_t j = o * R + i;
-        RspIn.at(j).send(rsp, 1);      
+        RspIn.at(j).push(rsp, 1);      
         RspOut.at(o).pop();
       }
     }
@@ -583,13 +583,13 @@ public:
     if (!RspSM.empty()) {
       auto& rsp = RspSM.front();
       DT(4, this->name() << "-" << rsp);
-      RspIn.send(rsp, 1);
+      RspIn.push(rsp, 1);
       RspSM.pop();
     }
     if (!RspDC.empty()) {
       auto& rsp = RspDC.front();
       DT(4, this->name() << "-" << rsp);
-      RspIn.send(rsp, 1);
+      RspIn.push(rsp, 1);
       RspDC
       .pop();
     }
@@ -598,9 +598,9 @@ public:
       auto& req = ReqIn.front();
       DT(4, this->name() << "-" << req);
       if (req.type == AddrType::Shared) {
-        ReqSM.send(req, delay_);
+        ReqSM.push(req, delay_);
       } else {
-        ReqDC.send(req, delay_);
+        ReqDC.push(req, delay_);
       }
       ReqIn.pop();
     }   
