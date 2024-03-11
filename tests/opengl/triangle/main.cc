@@ -3,11 +3,12 @@
 #include <assert.h>
 #include <math.h>
 #include <CL/opencl.h>
+#include <GLSC2/glsc2.h>
 #include <unistd.h> 
 #include <string.h>
 #include <chrono>
 
-#define KERNEL_NAME "vecadd"
+#define KERNEL_NAME "triangle"
 
 #define CL_CHECK(_expr)                                                \
    do {                                                                \
@@ -212,4 +213,21 @@ int main (int argc, char **argv) {
   cleanup();  
 
   return errors;
+}
+
+
+int _main() {
+    // Set up vertex buffer object
+    unsigned int program, vbo;
+    
+    glViewport(0, 0, WIDTH, HEIGHT);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(program);
+
+    glGenBuffers(1, &vbo);
+    glBufferData(GL_ARRAY_BUFFER,sizeof(triangle),triangle,GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0); 
+    
+    glDrawArrays(GL_TRIANGLES, 0, 3);
 }
