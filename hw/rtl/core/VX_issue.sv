@@ -82,6 +82,7 @@ module VX_issue #(
         .writeback_if   (writeback_if),
         .scoreboard_if  (scoreboard_if),
         .operands_if    (operands_if)
+        // .voperands_if   (voperands_if)
     );
 
     VX_dispatch #(
@@ -93,6 +94,9 @@ module VX_issue #(
         `UNUSED_PIN     (perf_stalls),
     `endif
         .operands_if    (operands_if),
+    // `ifdef EXT_V_ENABLE
+        // .voperands_if   (voperands_if),
+    // `endif
         .alu_dispatch_if(alu_dispatch_if),
         .lsu_dispatch_if(lsu_dispatch_if),
     `ifdef EXT_F_ENABLE

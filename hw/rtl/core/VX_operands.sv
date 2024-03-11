@@ -37,7 +37,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         wire [`NUM_THREADS-1:0][`XLEN-1:0] gpr_rd_data;
 `ifdef EXT_V_ENABLE
-        wire [`NUM_THREADS-1:0][`VECTOR_WIDTH-1:0] vgpr_rd_data;
+        wire [`VECTOR_WIDTH-1:0] vgpr_rd_data;
 `endif
         reg [`NR_BITS-1:0] gpr_rd_rid, gpr_rd_rid_n;
         reg [ISSUE_WIS_W-1:0] gpr_rd_wis, gpr_rd_wis_n;
@@ -258,8 +258,8 @@ module VX_operands import VX_gpu_pkg::*; #(
         assign operands_if[i].data.rs1_data = rs1_data;
         assign operands_if[i].data.rs2_data = rs2_data;
         assign operands_if[i].data.rs3_data = rs3_data;
-        assign operands_if[i].data.vs1_data = vs1_data;
-        assign operands_if[i].data.vs2_data = vs2_data;
+        assign operands_if[i].vdata.vs1_data = vs1_data;
+        assign operands_if[i].vdata.vs2_data = vs2_data;
 
         // GPR banks
 
@@ -313,30 +313,29 @@ module VX_operands import VX_gpu_pkg::*; #(
         end
 
 `ifdef EXT_V_ENABLE
-        for (genvar j = 0; j < `NUM_THREADS; ++j) begin
-            VX_dp_ram #(
-                .DATAW (`VECTOR_WIDTH),
-                .SIZE (`NUM_VREGS * ISSUE_RATIO),
-            `ifdef GPR_RESET
-                .INIT_ENABLE (1),
-                .INIT_VALUE (0),
-            `endif
-                .NO_RWCHECK (1)
-            ) gpr_ram (
-                .clk   (clk),
-                .read  (1'b1),
-                `UNUSED_PIN (wren),
-            `ifdef GPR_RESET
-                .write (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]),
-            `else
-                .write (writeback_if[i].valid && writeback_if[i].data.tmask[j]),
-            `endif              
-                .waddr (gpr_wr_addr),
-                .wdata (writeback_if[i].data.vdata[j]),
-                .raddr (gpr_rd_addr),
-                .rdata (vgpr_rd_data[j])
-            );
-        end
+        VX_dp_ram #(
+            .DATAW (`VECTOR_WIDTH),
+            .SIZE (`NUM_VREGS * ISSUE_RATIO),
+        `ifdef GPR_RESET
+            .INIT_ENABLE (1),
+            .INIT_VALUE (0),
+        `endif
+            .NO_RWCHECK (1)
+        ) gpr_ram (
+            .clk   (clk),
+            .read  (1'b1),
+            `UNUSED_PIN (wren),
+        `ifdef GPR_RESET
+            .write (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[0]),
+        `else
+            .write (writeback_if[i].valid && writeback_if[i].data.tmask[0]),
+        `endif              
+            .waddr (gpr_wr_addr[`LOG2UP(`NUM_VREGS)-1:0]),
+            .wdata (writeback_if[i].data.vdata),
+            .raddr (gpr_rd_addr[`LOG2UP(`NUM_VREGS)-1:0]),
+            .rdata (vgpr_rd_data) // TODO: remove thread  index
+        );
+    `UNUSED_VAR (vgpr_rd_data) // TODO: use this data
 `endif
     end
 

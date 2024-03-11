@@ -131,7 +131,7 @@ module VX_valu_unit #(
         );
     end
 
-    `RESET_RELAY (commit_reset, reset);
+    // `RESET_RELAY (commit_reset, reset);
 
     // VX_vgather_unit #(
     //     .BLOCK_SIZE (BLOCK_SIZE),

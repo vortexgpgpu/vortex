@@ -436,6 +436,25 @@
     data.rs2_data, \
     data.rs3_data}
 
+`define TO_VDISPATCH_DATA(data, tid, vdata) { \
+data.uuid, \
+data.wis, \
+data.tmask, \
+data.op_type, \
+data.op_mod, \
+data.wb, \
+data.use_PC, \
+data.use_imm, \
+data.PC, \
+data.imm, \
+data.rd, \
+tid, \
+data.rs1_data, \
+data.rs2_data, \
+data.rs3_data, \
+vdata.vs1_data, \
+vdata.vs2_data}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 `endif // VX_DEFINE_VH

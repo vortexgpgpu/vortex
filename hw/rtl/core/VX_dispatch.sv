@@ -25,10 +25,6 @@ module VX_dispatch import VX_gpu_pkg::*; #(
 `endif
     // inputs
     VX_operands_if.slave    operands_if [`ISSUE_WIDTH],
-`ifdef EXT_V_ENABLE
-    VX_voperands_if.slave   voperands_if [`ISSUE_WIDTH],
-`endif
-
     // outputs
     VX_dispatch_if.master   alu_dispatch_if [`ISSUE_WIDTH],
     VX_dispatch_if.master   lsu_dispatch_if [`ISSUE_WIDTH],
@@ -44,7 +40,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (CORE_ID)
 
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + 1 + `XLEN + `XLEN + `NR_BITS + (3 * `NUM_THREADS * `XLEN) + `NT_WIDTH;
-    localparam VDATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + 1 + `XLEN + `XLEN + `NR_BITS + (3 * `NUM_THREADS * `XLEN) + (2 * `VECTOR_LENGTH * `XLEN) + `NT_WIDTH;
+    localparam VDATAW = (2 * `VECTOR_LENGTH * `XLEN);
 
     wire [`ISSUE_WIDTH-1:0][`NT_WIDTH-1:0] last_active_tid;
 
@@ -93,16 +89,17 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     end
 `ifdef EXT_V_ENABLE
     // VALU dispatch
-    VX_voperands_if valu_operands_if[`ISSUE_WIDTH]();
+    VX_operands_if valu_operands_if[`ISSUE_WIDTH]();
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        assign valu_operands_if[i].valid = voperands_if[i].valid && (voperands_if[i].data.ex_type == `EX_VALU);
-        assign valu_operands_if[i].data = voperands_if[i].data;
+        assign valu_operands_if[i].valid = operands_if[i].valid && (operands_if[i].data.ex_type == `EX_VALU);
+        assign valu_operands_if[i].data = operands_if[i].data;
+        assign valu_operands_if[i].vdata = operands_if[i].vdata;
 
         `RESET_RELAY (alu_reset, reset);
 
         VX_elastic_buffer #(
-            .DATAW   (VDATAW),
+            .DATAW   (DATAW + VDATAW),
             .SIZE    (2),
             .OUT_REG (2)
         ) valu_buffer (
@@ -110,7 +107,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
             .reset      (alu_reset),
             .valid_in   (valu_operands_if[i].valid),
             .ready_in   (valu_operands_if[i].ready),
-            .data_in    (`TO_DISPATCH_DATA(valu_operands_if[i].data, last_active_tid[i])),
+            .data_in    (`TO_VDISPATCH_DATA(valu_operands_if[i].data, last_active_tid[i], valu_operands_if[i].vdata)),
             .data_out   (valu_dispatch_if[i].data),
             .valid_out  (valu_dispatch_if[i].valid),
             .ready_out  (valu_dispatch_if[i].ready)

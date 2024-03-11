@@ -30,8 +30,6 @@ module VX_vint_unit #(
 );   
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_PARAM(BLOCK_IDX)
-    localparam LANE_BITS      = `CLOG2(NUM_VECTOR_LANES);
-    localparam LANE_WIDTH     = `UP(LANE_BITS);
     localparam PID_BITS       = `CLOG2(`NUM_THREADS / NUM_VECTOR_LANES);
     localparam PID_WIDTH      = `UP(PID_BITS);
     localparam SHIFT_IMM_BITS = `CLOG2(`XLEN);

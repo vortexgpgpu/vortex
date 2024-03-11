@@ -26,7 +26,9 @@ module VX_commit import VX_gpu_pkg::*; #(
     VX_commit_if.slave      fpu_commit_if [`ISSUE_WIDTH],
 `endif
     VX_commit_if.slave      sfu_commit_if [`ISSUE_WIDTH],
-
+`ifdef EXT_V_ENABLE
+    VX_vcommit_if.slave     valu_commit_if [`ISSUE_WIDTH],
+`endif
     // outputs
     VX_writeback_if.master  writeback_if  [`ISSUE_WIDTH],
     VX_commit_csr_if.master commit_csr_if,
@@ -48,7 +50,7 @@ module VX_commit import VX_gpu_pkg::*; #(
     wire [`ISSUE_WIDTH-1:0][`NW_WIDTH-1:0] commit_wid;
     wire [`ISSUE_WIDTH-1:0][`NUM_THREADS-1:0] commit_tmask;
     wire [`ISSUE_WIDTH-1:0] commit_eop;
-
+    wire [`ISSUE_WIDTH-1:0][`VECTOR_WIDTH-1:0] vdata;
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
 
         `RESET_RELAY (arb_reset, reset);
@@ -66,6 +68,9 @@ module VX_commit import VX_gpu_pkg::*; #(
             `ifdef EXT_F_ENABLE
                 fpu_commit_if[i].valid,
             `endif
+            `ifdef EXT_V_ENABLE
+                valu_commit_if[i].valid,
+            `endif
                 alu_commit_if[i].valid,
                 lsu_commit_if[i].valid
             }),
@@ -74,6 +79,9 @@ module VX_commit import VX_gpu_pkg::*; #(
             `ifdef EXT_F_ENABLE
                 fpu_commit_if[i].ready,
             `endif
+            `ifdef EXT_V_ENABLE
+                valu_commit_if[i].ready,
+            `endif
                 alu_commit_if[i].ready,
                 lsu_commit_if[i].ready                
             }),
@@ -81,6 +89,9 @@ module VX_commit import VX_gpu_pkg::*; #(
                 sfu_commit_if[i].data,
             `ifdef EXT_F_ENABLE
                 fpu_commit_if[i].data,
+            `endif
+            `ifdef EXT_V_ENABLE
+                valu_commit_if[i].data[DATAW-1:0],
             `endif
                 alu_commit_if[i].data,
                 lsu_commit_if[i].data       
@@ -95,6 +106,7 @@ module VX_commit import VX_gpu_pkg::*; #(
         assign commit_tmask[i]= {`NUM_THREADS{commit_fire[i]}} & commit_if[i].data.tmask;
         assign commit_wid[i]  = commit_if[i].data.wid;
         assign commit_eop[i]  = commit_if[i].data.eop;
+        assign vdata[i]       = valu_commit_if[i].data.data;
     end
 
     // CSRs update
@@ -182,6 +194,7 @@ module VX_commit import VX_gpu_pkg::*; #(
         assign writeback_if[i].data.data = commit_if[i].data.data; 
         assign writeback_if[i].data.sop  = commit_if[i].data.sop; 
         assign writeback_if[i].data.eop  = commit_if[i].data.eop;
+        assign writeback_if[i].data.vdata = vdata[i];
         assign commit_if[i].ready = 1'b1; // writeback has no backpressure
     end
     

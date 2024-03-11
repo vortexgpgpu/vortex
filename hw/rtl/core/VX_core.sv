@@ -243,7 +243,9 @@ module VX_core import VX_gpu_pkg::*; #(
         .fpu_commit_if  (fpu_commit_if),
     `endif
         .sfu_commit_if  (sfu_commit_if),
-        
+    `ifdef EXT_V_ENABLE
+        .valu_commit_if  (valu_commit_if),
+    `endif
         .writeback_if   (writeback_if),
         
         .commit_csr_if  (commit_csr_if),

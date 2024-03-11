@@ -33,19 +33,28 @@ interface VX_operands_if import VX_gpu_pkg::*; ();
         logic [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data;
     } data_t;
 
+    typedef struct packed {
+        logic [`VECTOR_LENGTH-1:0][`XLEN-1:0] vs1_data;
+        logic [`VECTOR_LENGTH-1:0][`XLEN-1:0] vs2_data;
+    } vdata_t;
+
+
     logic  valid;
     data_t data;
+    vdata_t vdata;
     logic  ready;
     
     modport master (
         output valid,
         output data,
+        output vdata,
         input  ready
     );
 
     modport slave (
         input  valid,
         input  data,
+        input  vdata,
         output ready
     );
 
