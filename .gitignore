@@ -1,0 +1,14 @@
+*
+!/**/
+!*.*
+runtime/opae/vortex_afu.h
+sim/opaesim/vortex_afu.h
+**/*.log
+*.a
+*.o
+*.bin
+*.dump
+*.elf
+*.pocl
+*.so
+.depend
