@@ -41,7 +41,10 @@ struct VertexAttrib{
     const void *pointer;
 };
 
-VertexAttrib vertex_attrib[255]; // TODO: this has to be the max size GL_MAX_VERTEX_ATTRIBS
+//change to GL_MAX_VERTEX
+#define VERTEX_ATTR_SIZE 255
+
+VertexAttrib vertex_attrib[VERTEX_ATTR_SIZE]; // TODO: this has to be the max size GL_MAX_VERTEX_ATTRIBS
 
 GL_APICALL void GL_APIENTRY glBindBuffer (GLenum target, GLuint buffer) {
     if (!_buffers[buffer].used) {
@@ -68,6 +71,10 @@ GL_APICALL void GL_APIENTRY glClear (GLbitfield mask);
 GL_APICALL GLuint GL_APIENTRY glCreateProgram (void);
 
 GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei count) {
+    if (first <0){
+        _err= GL_INVALID_VALUE;
+        return;
+    }
     if (index >= GL_MAX_VERTEX_ATTRIBS) {
         _err = GL_INVALID_VALUE;
         return;
@@ -76,11 +83,19 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     else if (mode==GL_LINES); // TODO
     else if (mode==GL_TRIANGLES) {
         while(first < count) {
-
-
+            for (int i =0; i<VERTEX_ATTR_SIZE; i++)
+            {
+                if (vertex_attrib[i].enable){
+                    //transfer elements
+                    
+                }
+            }
             ++first;
         }
     }
+}
+
+GL_APICALL void GL_APIENTRY glDrawRangeElements (GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const void *indices){
 }
 GL_APICALL void GL_APIENTRY glDisableVertexAttribArray (GLuint index) {
     if (index >= GL_MAX_VERTEX_ATTRIBS) {
@@ -133,6 +148,16 @@ GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLe
     if (stride < 0) {
         _err = GL_INVALID_VALUE;
         return;
+    }
+
+    //check type
+    if (type != GL_BYTE || type != GL_UNSIGNED_BYTE || type != GL_SHORT || type != GL_UNSIGNED_SHORT || type != GL_FLOAT){
+        _err=GL_INVALID_VALUE;
+        return;
+    }
+
+    if (normalized == GL_TRUE){
+        //normalizar integers
     }
 
     vertex_attrib[index].size = size;
