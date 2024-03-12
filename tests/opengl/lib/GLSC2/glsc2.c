@@ -3,6 +3,7 @@
 
 
 #define VERTEX_SHADER "kernel.vert.cl"
+#define PERS_DIV "kernel-persp-div.cl"
 // CL 
 cl_int _err;
 
@@ -47,32 +48,61 @@ cl_kernel init_vertex_shader_kernel(){
   //Hay que conservar cl_program al salir de la stack? (quien sabe...)
 }
 
-cl_kernel vertexShaderKernel = init_vertex_shader_kernel();
+cl_kernel init_perspective_division_kernel(){
+    uint8_t *kernel_bin = NULL;
+    size_t kernel_size;
 
-void vertex_shader_add_argument_buffer(cl_mem data, unsigned int arg, void* offset, unsigned int size){
+  //HOSTCPU
+    if (0 != read_kernel_file(PERS_DIV, &kernel_bin, &kernel_size))
+        return -1;
+    
+    cl_program vertex_shader = clCreateProgramWithSource(
+        _context, 1, (const char**)&kernel_bin, &kernel_size, &_err);  
+    // Build program
+  clBuildProgram(vertex_shader, 1, _getDeviceID(), NULL, NULL, NULL);
+  
+  // Create kernel
+  return clCreateKernel(vertex_shader, "perspective division", &_err);
+  //Hay que conservar cl_program al salir de la stack? (quien sabe...)
+}
+
+void vertex_shader_add_argument_buffer(cl_mem data, unsigned int arg, void* offset, unsigned int size, cl_kernel vertexShaderKernel){
   //position
   clSetKernelArg(vertexShaderKernel, arg, sizeof(cl_mem), (void *)&data);
   clSetKernelArg(vertexShaderKernel, arg+1, sizeof(void*), offset);
   clSetKernelArg(vertexShaderKernel, arg+2, sizeof(unsigned int), size);
 }
 
-void vertex_shader_add_argument_host(void* data, unsigned int arg, unsigned int size){
+void vertex_shader_add_argument_host(void* data, unsigned int arg, unsigned int size, cl_kernel vertexShaderKernel){
   //position
   clSetKernelArg(vertexShaderKernel, arg, sizeof(void*), (void *)&data);
   clSetKernelArg(vertexShaderKernel, arg+1, sizeof(void*), (void*)0);
   clSetKernelArg(vertexShaderKernel, arg+2, sizeof(unsigned int), size);
 }
 
-void execute_vertex_shader(unsigned int size, unsigned int arg){
-  cl_mem primitiveBuff = clCreateBuffer(context, CL_MEM_WRITE_ONLY, size*sizeof(float), NULL, &_err);
-  clSetKernelArg(vertexShaderKernel, arg, sizeof(cl_mem), size);
-  float primitiveHost[size];
+void execute_vertex_shader(unsigned int size, unsigned int arg, float* clip_coords, cl_kernel vertexShaderKernel){
+  cl_mem primitiveBuff = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 4*size*sizeof(float), NULL, &_err);
+  clSetKernelArg(vertexShaderKernel, arg, sizeof(cl_mem), clip_coords);
 
   cl_command_queue commandQueue = clCreateCommandQueue(context, _getDeviceID(), 0, &_err);
   size_t global_work_size[1] = {size};
   clEnqueueNDRangeKernel(commandQueue, vertexShaderKernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
   clFinish(commandQueue);  
-  clEnqueueReadBuffer(commandQueue, primitiveBuff, CL_TRUE, 0, size*sizeof(float), &primitiveHost, 0, NULL, NULL);
+  clEnqueueReadBuffer(commandQueue, primitiveBuff, CL_TRUE, 0, 4*size*sizeof(float), clip_coords, 0, NULL, NULL);
+}
+
+void execute_perspective_division(unsigned int numVerts, float* clip_coords, float* ndc_coords, cl_kernel perspective_kernel){
+    cl_mem clipCoordsBuff = clCreateBuffer(context, CL_MEM_READ_ONLY, numVerts*4*sizeof(float), NULL, &_err);
+    cl_mem ndcCoordsBuff = clCreateBuffer(context, CL_MEM_WRITE_ONLY, numVerts*3*sizeof(float), NULL, &_err);
+    
+    clSetKernelArg(perspective_kernel, 0, sizeof(cl_mem), clip_coords);
+    clSetKernelArg(perspective_kernel, 1, sizeof(cl_mem), ndc_coords);
+
+  cl_command_queue commandQueue = clCreateCommandQueue(context, _getDeviceID(), 0, &_err);
+  size_t global_work_size[1] = {numVerts};
+  clEnqueueNDRangeKernel(commandQueue, perspective_kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
+  clFinish(commandQueue);  
+  clEnqueueReadBuffer(commandQueue, ndcCoordsBuff, CL_TRUE, 0, 3*numVerts*sizeof(float), ndc_coords, 0, NULL, NULL);
 }
 
 // GL 
@@ -124,6 +154,54 @@ GL_APICALL void GL_APIENTRY glBufferData (GLenum target, GLsizeiptr size, const 
 GL_APICALL void GL_APIENTRY glClear (GLbitfield mask);
 GL_APICALL GLuint GL_APIENTRY glCreateProgram (void);
 
+inline void vertex_shader(GLint first, GLsizei count, float* clip_coords){
+    //VERTEX SHADER
+    cl_kernel vertexShaderKernel = init_vertex_shader_kernel();
+    //preparar input
+    VertexAttrib* pVertexAttr = &vertex_attrib;
+    clSetKernelArg(vertexShaderKernel, 0, sizeof(GLint), first);
+    unsigned int arg=1;
+
+    //cada uno es un kernel (la idea es hacer count-first kernels)
+    //while(first < count) {
+        //coger atributos del kernel
+    for (int i =0; i<VERTEX_ATTR_SIZE; i++)
+    {
+        if (pVertexAttr->enable){
+            if (_binded_buffer != 0){
+                //take from buffer, send to kernel as argument
+                vertex_shader_add_argument_buffer(buffers[_binded_buffer].mem, arg, pVertexAttr->pointer, pVertexAttr->size, vertexShaderKernel);
+            }else{
+                //take from host
+                vertex_shader_add_argument_host(pVertexAttr->pointer, arg, pVertexAttr->size, vertexShaderKernel);
+            }
+            arg+=3;
+        }
+    pVertexAttr++;
+    }
+    //}
+    execute_vertex_shader(count-first, arg++, clip_coords, vertexShaderKernel);
+}
+
+inline void perspective_division(unsigned int numVerts, float* clip_coords, float* ndc_coords){
+    cl_kernel perspective_kernel = init_perspective_division_kernel();
+    execute_perspective_division(numVerts, clip_coords, ndc_coords, perspective_kernel);
+}
+
+inline void gl_pipeline(GLint first, GLsizei count){
+    //pipeline
+    unsigned int numVerts = count-first;
+    //vertex shader
+    float clip_coords[4*numVerts];//es ejemplo, no se puede iniciar dinamicamente, pero tampoco se puede usar malloc :D
+    vertex_shader(first, count, clip_coords);
+    //clip coord
+    float ndc_coords[3*numVerts];
+    perspective_division(numVerts, clip_coords, ndc_coords);
+    //normalized-device-coords
+
+    //rasterization
+}
+
 GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei count) {
     if (first <0){
         _err= GL_INVALID_VALUE;
@@ -136,30 +214,7 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     if (mode==GL_POINTS); // TODO
     else if (mode==GL_LINES); // TODO
     else if (mode==GL_TRIANGLES) {
-        //preparar input
-        VertexAttrib* pVertexAttr = &vertex_attrib;
-        clSetKernelArg(vertexShaderKernel, 0, sizeof(unsigned int), first);
-        unsigned int arg=1;
-
-        //cada uno es un kernel (la idea es hacer count-first kernels)
-        //while(first < count) {
-            //coger atributos del kernel
-        for (int i =0; i<VERTEX_ATTR_SIZE; i++)
-        {
-            if (pVertexAttr->enable){
-                if (_binded_buffer != 0){
-                    //take from buffer, send to kernel as argument
-                    vertex_shader_add_argument_buffer(buffers[_binded_buffer].mem, arg, pVertexAttr->pointer, pVertexAttr->size);
-                }else{
-                    //take from host
-                    vertex_shader_add_argument_host(pVertexAttr->pointer, arg, pVertexAttr->size);
-                }
-                arg+=3;
-            }
-        pVertexAttr++;
-        }
-        //}
-        execute_vertex_shader(count-first, arg++);
+        gl_pipeline(first, count);
     }
 }
 

@@ -6,17 +6,19 @@ __kernel void vertex_shader (__global unsigned int first,
                       )
 {
   int gid = get_global_id(0);
-  float* read_pos = pos + first*size + gid*size + offset;
+
+  float* read_pos = &pos[first*size + gid*size + (unsigned int)(offset/sizeof(float))];
+  float* write_pos = &P[4*gid];
 
   for (int i=0; i<size; i++){
-    P[i]=*read_pos++;
+    write_pos[i]=*read_pos++;
   }
 
   //llenamos vector output
   while (size < 4){
-    P[size]=0;
+    write_pos[size]=0;
     if(size==3)
-      P[size] = 1;
+      write_pos[size] = 1;
     size++;
   }
 }
