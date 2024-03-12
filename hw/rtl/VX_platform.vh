@@ -140,21 +140,21 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `ifdef QUARTUS
-`define MAX_FANOUT      4
+`define MAX_FANOUT      8
 `define IF_DATA_SIZE(x) $bits(x.data)
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
 `define DISABLE_BRAM    (* ramstyle = "logic" *)
 `define PRESERVE_NET    (* preserve *)
 `elsif VIVADO
-`define MAX_FANOUT      4
+`define MAX_FANOUT      8
 `define IF_DATA_SIZE(x) $bits(x.data)
 `define USE_FAST_BRAM   (* ram_style = "distributed" *)
 `define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
 `define DISABLE_BRAM    (* ram_style = "registers" *)
 `define PRESERVE_NET    (* keep = "true" *)
 `else
-`define MAX_FANOUT      4
+`define MAX_FANOUT      8
 `define IF_DATA_SIZE(x) x.DATA_WIDTH
 `define USE_FAST_BRAM
 `define NO_RW_RAM_CHECK
@@ -185,6 +185,8 @@
 `define CLAMP(x, lo, hi)   (((x) > (hi)) ? (hi) : (((x) < (lo)) ? (lo) : (x)))
 
 `define UP(x)       (((x) != 0) ? (x) : 1)
+
+`define CDIV(n,d)   ((n + d - 1) / (d))
 
 
 `define RTRIM(x, s) x[$bits(x)-1:($bits(x)-s)]
