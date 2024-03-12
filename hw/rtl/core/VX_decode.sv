@@ -61,8 +61,11 @@ module VX_decode  #(
     wire [1:0] func2  = instr[26:25];
     wire [2:0] func3  = instr[14:12];
     wire [4:0] func5  = instr[31:27];
+    wire [5:0] func6  = instr[31:26];
     wire [6:0] func7  = instr[31:25];
     wire [11:0] u_12  = instr[31:20];
+
+    wire vm = instr[25];
 
     wire [4:0] rd  = instr[11:7];
     wire [4:0] rs1 = instr[19:15];
@@ -506,15 +509,30 @@ module VX_decode  #(
                 endcase
             end
             `ifdef EXT_V_ENABLE
-                        `INST_EXT3: begin
-                        ex_type = `EX_VALU;
-                        op_type = `INST_OP_BITS'(`INST_VALU_VADD);
-                        // op_mod, use_PC, imm, use_imm, wb, rd_r, rs1_r, rs2_r, rs3_r
-                        `USED_IREG (rd);
-                        `USED_IREG (rs1);
-                        `USED_IREG (rs2);
-                        imm = 0;
-            end
+                        `INST_VALU: begin
+                            case(func3)
+                                3'h00 : begin //OPIVV
+                                    case(func6)
+                                        6'h00 : begin //VADD
+                                            ex_type = `EX_VALU;
+                                            op_type = `INST_OP_BITS'(`INST_VALU_VADD);
+                                            `USED_IREG (rd);
+                                            `USED_IREG (rs1);
+                                            `USED_IREG (rs2);
+                                            imm = 0;
+                                        end
+                                        //additonal OPIVV Instructions
+
+                                        //
+                                        default :;
+                                    endcase 
+                                //additional major opcode(OPFVV, OPMVV, etc.)
+                                
+                                //
+                                end//of case(func6 = 6'h00)
+                                default:;
+                            endcase//of case(func6)
+            end//of 'INST_EXT3
             `endif
             default:;
         endcase
