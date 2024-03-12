@@ -509,7 +509,7 @@ module VX_decode  #(
                 endcase
             end
             `ifdef EXT_V_ENABLE
-                        `INST_EXT3: begin
+                        `INST_VALU: begin
                             case(func3)
                                 3'h00 : begin //OPIVV
                                     case(func6)
