@@ -158,7 +158,8 @@ private:
 class RAM : public MemDevice {
 public:
   
-   RAM(uint32_t page_size, uint64_t capacity = 0);
+  RAM(uint64_t capacity, uint32_t page_size);
+  RAM(uint64_t capacity) : RAM(capacity, capacity) {}
   ~RAM();
 
   void clear();

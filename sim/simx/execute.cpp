@@ -22,7 +22,7 @@
 #include <assert.h>
 #include <util.h>
 #include <rvfloats.h>
-#include "warp.h"
+#include "emulator.h"
 #include "instr.h"
 #include "core.h"
 
@@ -40,17 +40,6 @@ union reg_data_t {
   int64_t  i64;
 };
 
-inline uint32_t get_fpu_rm(uint32_t func3, Core* core, uint32_t tid, uint32_t wid) {
-  return (func3 == 0x7) ? core->get_csr(VX_CSR_FRM, tid, wid) : func3;
-}
-
-inline void update_fcrs(uint32_t fflags, Core* core, uint32_t tid, uint32_t wid) {
-  if (fflags) {
-    core->set_csr(VX_CSR_FCSR, core->get_csr(VX_CSR_FCSR, tid, wid) | fflags, tid, wid);
-    core->set_csr(VX_CSR_FFLAGS, core->get_csr(VX_CSR_FFLAGS, tid, wid) | fflags, tid, wid);
-  }
-}
-
 inline uint64_t nan_box(uint32_t value) {
   uint64_t mask = 0xffffffff00000000;
   return value | mask;
@@ -66,11 +55,20 @@ inline int64_t check_boxing(int64_t a) {
   return nan_box(0x7fc00000); // NaN
 }
 
-void Warp::execute(const Instr &instr, instr_trace_t *trace) {
-  assert(tmask_.any());
+void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
+  auto& warp = warps_.at(wid);
+  assert(warp.tmask.any());
 
-  auto next_pc = PC_ + 4;
-  auto next_tmask = tmask_; 
+  // initialize instruction trace
+  trace->cid   = core_->id();
+  trace->wid   = wid;
+  trace->PC    = warp.PC;
+  trace->tmask = warp.tmask;
+  trace->rdest = instr.getRDest();
+  trace->rdest_type = instr.getRDType();
+
+  auto next_pc = warp.PC + 4;
+  auto next_tmask = warp.tmask; 
 
   auto opcode = instr.getOpcode();
   auto func2  = instr.getFunc2();
@@ -86,7 +84,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
 
   uint32_t thread_start = 0;
   for (; thread_start < num_threads; ++thread_start) {
-      if (tmask_.test(thread_start))
+      if (warp.tmask.test(thread_start))
         break;
   }
 
@@ -103,11 +101,11 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
         DPH(2, "Src" << std::dec << i << " Reg: " << type << std::dec << reg << "={");
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
-          if (!tmask_.test(t)) {
+          if (!warp.tmask.test(t)) {
             DPN(2, "-");
             continue;            
           }
-          rsdata[t][i].u = ireg_file_.at(t)[reg];          
+          rsdata[t][i].u = warp.ireg_file.at(t)[reg];          
           DPN(2, "0x" << std::hex << rsdata[t][i].i);
         }
         DPN(2, "}" << std::endl);
@@ -116,11 +114,11 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
         DPH(2, "Src" << std::dec << i << " Reg: " << type << std::dec << reg << "={");
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
-          if (!tmask_.test(t)) {
+          if (!warp.tmask.test(t)) {
             DPN(2, "-");
             continue;            
           }
-          rsdata[t][i].u64 = freg_file_.at(t)[reg];
+          rsdata[t][i].u64 = warp.freg_file.at(t)[reg];
           DPN(2, "0x" << std::hex << rsdata[t][i].f);
         }
         DPN(2, "}" << std::endl);
@@ -139,7 +137,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
     trace->fu_type = FUType::ALU;
     trace->alu_type = AluType::ARITH;
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue;
       rddata[t].i = immsrc;
     }    
@@ -151,9 +149,9 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
     trace->fu_type = FUType::ALU;
     trace->alu_type = AluType::ARITH;
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue;
-      rddata[t].i = immsrc + PC_;
+      rddata[t].i = immsrc + warp.PC;
     }    
     rd_write = true;
     break;
@@ -164,7 +162,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue;
       if (func7 & 0x1) {
         switch (func3) {
@@ -324,7 +322,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
     trace->alu_type = AluType::ARITH;    
     trace->used_iregs.set(rsrc0);
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue;
       switch (func3) {
       case 0: {
@@ -385,7 +383,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue;
       if (func7 & 0x1) {
         switch (func3) {
@@ -511,7 +509,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
     trace->alu_type = AluType::ARITH;    
     trace->used_iregs.set(rsrc0);
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue;
       switch (func3) {
         case 0: {
@@ -555,48 +553,48 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue;
       switch (func3) {
       case 0: {
         // RV32I: BEQ
         if (rsdata[t][0].i == rsdata[t][1].i) {
-          next_pc = PC_ + immsrc;
+          next_pc = warp.PC + immsrc;
         }
         break;
       }
       case 1: {
         // RV32I: BNE
         if (rsdata[t][0].i != rsdata[t][1].i) {
-          next_pc = PC_ + immsrc;
+          next_pc = warp.PC + immsrc;
         }
         break;
       }
       case 4: {
         // RV32I: BLT
         if (rsdata[t][0].i < rsdata[t][1].i) {
-          next_pc = PC_ + immsrc;
+          next_pc = warp.PC + immsrc;
         }
         break;
       }
       case 5: {
         // RV32I: BGE
         if (rsdata[t][0].i >= rsdata[t][1].i) {
-          next_pc = PC_ + immsrc;
+          next_pc = warp.PC + immsrc;
         }
         break;
       }
       case 6: {
         // RV32I: BLTU
         if (rsdata[t][0].u < rsdata[t][1].u) {
-          next_pc = PC_ + immsrc;
+          next_pc = warp.PC + immsrc;
         }
         break;
       }
       case 7: {
         // RV32I: BGEU
         if (rsdata[t][0].u >= rsdata[t][1].u) {
-          next_pc = PC_ + immsrc;
+          next_pc = warp.PC + immsrc;
         }
         break;
       }
@@ -613,11 +611,11 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
     trace->fu_type = FUType::ALU;    
     trace->alu_type = AluType::BRANCH;
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue;
       rddata[t].i = next_pc;
     }
-    next_pc = PC_ + immsrc;
+    next_pc = warp.PC + immsrc;
     trace->fetch_stall = true;
     rd_write = true;
     break;
@@ -628,7 +626,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
     trace->alu_type = AluType::BRANCH;
     trace->used_iregs.set(rsrc0);
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue;
       rddata[t].i = next_pc;
     }
@@ -647,11 +645,11 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
     uint32_t data_bytes = 1 << (func3 & 0x3);
     uint32_t data_width = 8 * data_bytes;
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue;
       uint64_t mem_addr = rsdata[t][0].i + immsrc;         
       uint64_t read_data = 0;
-      core_->dcache_read(&read_data, mem_addr, data_bytes);
+      this->dcache_read(&read_data, mem_addr, data_bytes);
       trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
       switch (func3) {
       case 0: // RV32I: LB
@@ -691,7 +689,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
     trace->data = trace_data;
     uint32_t data_bytes = 1 << (func3 & 0x3);
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue;
       uint64_t mem_addr = rsdata[t][0].i + immsrc;
       uint64_t write_data = rsdata[t][1].u64;
@@ -701,7 +699,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
       case 1:
       case 2:
       case 3:
-        core_->dcache_write(&write_data, mem_addr, data_bytes);  
+        this->dcache_write(&write_data, mem_addr, data_bytes);  
         break;
       default:
         std::abort();
@@ -720,26 +718,26 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
     uint32_t data_bytes = 1 << (func3 & 0x3);
     uint32_t data_width = 8 * data_bytes;
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue;
       uint64_t mem_addr = rsdata[t][0].u;
       trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
       if (amo_type == 0x02) { // LR
         uint64_t read_data = 0;
-        core_->dcache_read(&read_data, mem_addr, data_bytes);        
-        core_->dcache_amo_reserve(mem_addr);
+        this->dcache_read(&read_data, mem_addr, data_bytes);        
+        this->dcache_amo_reserve(mem_addr);
         rddata[t].i = sext((Word)read_data, data_width);
       } else 
       if (amo_type == 0x03) { // SC
-        if (core_->dcache_amo_check(mem_addr)) {
-          core_->dcache_write(&rsdata[t][1].u64, mem_addr, data_bytes);
+        if (this->dcache_amo_check(mem_addr)) {
+          this->dcache_write(&rsdata[t][1].u64, mem_addr, data_bytes);
           rddata[t].i = 0;
         } else {
           rddata[t].i = 1;
         }
       } else {      
         uint64_t read_data = 0;
-        core_->dcache_read(&read_data, mem_addr, data_bytes);
+        this->dcache_read(&read_data, mem_addr, data_bytes);
         auto read_data_i = sext((WordI)read_data, data_width);        
         auto rs1_data_i  = sext((WordI)rsdata[t][1].u64, data_width);
         auto read_data_u = zext((Word)read_data, data_width);
@@ -776,7 +774,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
         default:
           std::abort();
         }
-        core_->dcache_write(&result, mem_addr, data_bytes);
+        this->dcache_write(&result, mem_addr, data_bytes);
         rddata[t].i = read_data_i;
       }
     }
@@ -785,7 +783,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
   }
   case Opcode::SYS: {
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue;
       uint32_t csr_addr = immsrc;
       uint32_t csr_value;
@@ -796,11 +794,11 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
         switch (csr_addr) {
         case 0: 
           // RV32I: ECALL
-          core_->trigger_ecall();
+          this->trigger_ecall();
           break;
         case 1: 
           // RV32I: EBREAK
-          core_->trigger_ebreak();
+          this->trigger_ebreak();
           break;
         case 0x002: // URET
         case 0x102: // SRET
@@ -812,12 +810,12 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
       } else {
         trace->fu_type = FUType::SFU;        
         trace->fetch_stall = true;
-        csr_value = core_->get_csr(csr_addr, t, warp_id_);
+        csr_value = this->get_csr(csr_addr, t, wid);
         switch (func3) {
         case 1: {
           // RV32I: CSRRW
           rddata[t].i = csr_value;
-          core_->set_csr(csr_addr, rsdata[t][0].i, t, warp_id_);      
+          this->set_csr(csr_addr, rsdata[t][0].i, t, wid);      
           trace->used_iregs.set(rsrc0);
           trace->sfu_type = SfuType::CSRRW;
           rd_write = true;
@@ -827,7 +825,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
           // RV32I: CSRRS
           rddata[t].i = csr_value;
           if (rsdata[t][0].i != 0) {
-            core_->set_csr(csr_addr, csr_value | rsdata[t][0].i, t, warp_id_);
+            this->set_csr(csr_addr, csr_value | rsdata[t][0].i, t, wid);
           }
           trace->used_iregs.set(rsrc0);
           trace->sfu_type = SfuType::CSRRS;
@@ -838,7 +836,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
           // RV32I: CSRRC
           rddata[t].i = csr_value;
           if (rsdata[t][0].i != 0) {
-            core_->set_csr(csr_addr, csr_value & ~rsdata[t][0].i, t, warp_id_);
+            this->set_csr(csr_addr, csr_value & ~rsdata[t][0].i, t, wid);
           }
           trace->used_iregs.set(rsrc0);
           trace->sfu_type = SfuType::CSRRC;
@@ -848,7 +846,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
         case 5: {
           // RV32I: CSRRWI
           rddata[t].i = csr_value;
-          core_->set_csr(csr_addr, rsrc0, t, warp_id_);
+          this->set_csr(csr_addr, rsrc0, t, wid);
           trace->sfu_type = SfuType::CSRRW;    
           rd_write = true;
           break;
@@ -857,7 +855,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
           // RV32I: CSRRSI;
           rddata[t].i = csr_value;
           if (rsrc0 != 0) {
-            core_->set_csr(csr_addr, csr_value | rsrc0, t, warp_id_);
+            this->set_csr(csr_addr, csr_value | rsrc0, t, wid);
           }
           trace->sfu_type = SfuType::CSRRS;
           rd_write = true;
@@ -867,7 +865,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
           // RV32I: CSRRCI
           rddata[t].i = csr_value;
           if (rsrc0 != 0) {
-            core_->set_csr(csr_addr, csr_value & ~rsrc0, t, warp_id_);
+            this->set_csr(csr_addr, csr_value & ~rsrc0, t, wid);
           }
           trace->sfu_type = SfuType::CSRRC;
           rd_write = true;
@@ -889,9 +887,9 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
   case Opcode::FCI: {     
     trace->fu_type = FUType::FPU;     
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue; 
-      uint32_t frm = get_fpu_rm(func3, core_, t, warp_id_);
+      uint32_t frm = this->get_fpu_rm(func3, t, wid);
       uint32_t fflags = 0;
       switch (func7) {
       case 0x00: { // RV32F: FADD.S
@@ -1206,7 +1204,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
         break;
       }
       }
-      update_fcrs(fflags, core_, t, warp_id_);
+      this->update_fcrs(fflags, t, wid);
     }
     rd_write = true;
     break;
@@ -1220,9 +1218,9 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
     trace->used_fregs.set(rsrc1);
     trace->used_fregs.set(rsrc2);
     for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask_.test(t))
+      if (!warp.tmask.test(t))
         continue;
-      uint32_t frm = get_fpu_rm(func3, core_, t, warp_id_);
+      uint32_t frm = this->get_fpu_rm(func3, t, wid);
       uint32_t fflags = 0;
       switch (opcode) {
       case Opcode::FMADD:
@@ -1260,7 +1258,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
       default:
         break;
       }              
-      update_fcrs(fflags, core_, t, warp_id_);
+      this->update_fcrs(fflags, t, wid);
     }
     rd_write = true;
     break;
@@ -1287,7 +1285,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->fetch_stall = true;
-        core_->wspawn(rsdata.at(thread_start)[0].i, rsdata.at(thread_start)[1].i);
+        this->wspawn(rsdata.at(thread_start)[0].i, rsdata.at(thread_start)[1].i);
       } break;
       case 2: {
         // SPLIT
@@ -1298,23 +1296,23 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
 
         ThreadMask then_tmask, else_tmask;
         for (uint32_t t = 0; t < num_threads; ++t) {
-          auto cond = ireg_file_.at(t).at(rsrc0);
-          then_tmask[t] = tmask_.test(t) && cond;
-          else_tmask[t] = tmask_.test(t) && !cond;
+          auto cond = warp.ireg_file.at(t).at(rsrc0);
+          then_tmask[t] = warp.tmask.test(t) && cond;
+          else_tmask[t] = warp.tmask.test(t) && !cond;
         }
 
         bool is_divergent = then_tmask.any() && else_tmask.any();
         if (is_divergent) {             
-          if (ipdom_stack_.size() == arch_.ipdom_size()) {
-            std::cout << "IPDOM stack is full! size=" << std::dec << ipdom_stack_.size() << ", PC=0x" << std::hex << PC_ << " (#" << std::dec << trace->uuid << ")\n" << std::dec << std::flush;
+          if (warp.ipdom_stack.size() == arch_.ipdom_size()) {
+            std::cout << "IPDOM stack is full! size=" << std::dec << warp.ipdom_stack.size() << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << trace->uuid << ")\n" << std::dec << std::flush;
             std::abort();
           }
           // set new thread mask
           next_tmask = then_tmask;
           // push reconvergence thread mask onto the stack
-          ipdom_stack_.emplace(tmask_);
+          warp.ipdom_stack.emplace(warp.tmask);
           // push else's thread mask onto the stack
-          ipdom_stack_.emplace(else_tmask, next_pc);
+          warp.ipdom_stack.emplace(else_tmask, next_pc);
         }
         // return divergent state
         for (uint32_t t = thread_start; t < num_threads; ++t) {
@@ -1329,17 +1327,17 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->fetch_stall = true;
 
-        int is_divergent = ireg_file_.at(thread_start).at(rsrc0);
+        int is_divergent = warp.ireg_file.at(thread_start).at(rsrc0);
         if (is_divergent != 0) {
-          if (ipdom_stack_.empty()) {
+          if (warp.ipdom_stack.empty()) {
             std::cout << "IPDOM stack is empty!\n" << std::flush;
             std::abort();
           }
-          next_tmask = ipdom_stack_.top().tmask;
-          if (!ipdom_stack_.top().fallthrough) {
-            next_pc = ipdom_stack_.top().PC;
+          next_tmask = warp.ipdom_stack.top().tmask;
+          if (!warp.ipdom_stack.top().fallthrough) {
+            next_pc = warp.ipdom_stack.top().PC;
           }          
-          ipdom_stack_.pop();
+          warp.ipdom_stack.pop();
         }    
       } break;
       case 4: {
@@ -1360,12 +1358,12 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
         trace->fetch_stall = true;
         ThreadMask pred;
         for (uint32_t t = 0; t < num_threads; ++t) {
-          pred[t] = tmask_.test(t) && (ireg_file_.at(t).at(rsrc0) & 0x1);
+          pred[t] = warp.tmask.test(t) && (warp.ireg_file.at(t).at(rsrc0) & 0x1);
         }
         if (pred.any()) {
           next_tmask &= pred;
         } else {
-          next_tmask = ireg_file_.at(thread_start).at(rsrc1);
+          next_tmask = warp.ireg_file.at(thread_start).at(rsrc1);
         }      
       } break;
       default:
@@ -1387,7 +1385,7 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
         trace->used_iregs.set(rsrc1);
         trace->used_iregs.set(rsrc2);
         for (uint32_t t = thread_start; t < num_threads; ++t) {
-          if (!tmask_.test(t))
+          if (!warp.tmask.test(t))
             continue;     
           rddata[t].i = rsdata[t][0].i ? rsdata[t][1].i : rsdata[t][2].i;
         }
@@ -1414,11 +1412,11 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
         DPH(2, "Dest Reg: " << type << std::dec << rdest << "={");    
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
-          if (!tmask_.test(t)) {
+          if (!warp.tmask.test(t)) {
             DPN(2, "-");
             continue;            
           }
-          ireg_file_.at(t)[rdest] = rddata[t].i;
+          warp.ireg_file.at(t)[rdest] = rddata[t].i;
           DPN(2, "0x" << std::hex << rddata[t].i);         
         }
         DPN(2, "}" << std::endl);
@@ -1433,11 +1431,11 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
       DPH(2, "Dest Reg: " << type << std::dec << rdest << "={");
       for (uint32_t t = 0; t < num_threads; ++t) {
         if (t) DPN(2, ", ");
-        if (!tmask_.test(t)) {
+        if (!warp.tmask.test(t)) {
           DPN(2, "-");
           continue;            
         }
-        freg_file_.at(t)[rdest] = rddata[t].u64;        
+        warp.freg_file.at(t)[rdest] = rddata[t].u64;        
         DPN(2, "0x" << std::hex << rddata[t].f);         
       }
       DPN(2, "}" << std::endl);
@@ -1449,19 +1447,21 @@ void Warp::execute(const Instr &instr, instr_trace_t *trace) {
     }
   }
 
-  PC_ += 4;
-  if (PC_ != next_pc) {
+  warp.PC += 4;
+  
+  if (warp.PC != next_pc) {
     DP(3, "*** Next PC=0x" << std::hex << next_pc << std::dec);
-    PC_ = next_pc;
+    warp.PC = next_pc;
   }
-  if (tmask_ != next_tmask) {    
+
+  if (warp.tmask != next_tmask) {    
     DPH(3, "*** New Tmask=");
     for (uint32_t i = 0; i < num_threads; ++i)
       DPN(3, next_tmask.test(i));
     DPN(3, std::endl);
-    tmask_ = next_tmask;
+    warp.tmask = next_tmask;
     if (!next_tmask.any()) {
-      core_->active_warps_.reset(warp_id_);
+      active_warps_.reset(wid);
     }
   }
 }

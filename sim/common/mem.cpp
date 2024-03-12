@@ -190,14 +190,17 @@ void MemoryUnit::tlbRm(uint64_t va) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-RAM::RAM(uint32_t page_size, uint64_t capacity) 
+RAM::RAM(uint64_t capacity, uint32_t page_size) 
   : capacity_(capacity)
   , page_bits_(log2ceil(page_size))
   , last_page_(nullptr)
   , last_page_index_(0) {    
-   assert(ispow2(page_size));
-   assert(0 == capacity || ispow2(capacity));
-   assert(0 == (capacity % page_size));
+  assert(ispow2(page_size));
+  if (capacity != 0) {
+    assert(ispow2(capacity));  
+    assert(page_size <= capacity);
+    assert(0 == (capacity % page_size));
+  }
 }
 
 RAM::~RAM() {

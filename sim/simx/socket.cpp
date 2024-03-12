@@ -118,19 +118,12 @@ bool Socket::running() const {
   return false;
 }
 
-bool Socket::check_exit(Word* exitcode, bool riscv_test) const {
-  bool done = true;
-  Word exitcode_ = 0;
+int Socket::get_exitcode() const {
+  int exitcode = 0;
   for (auto& core : cores_) {
-    Word ec;
-    if (core->check_exit(&ec, riscv_test)) {
-      exitcode_ |= ec;
-    } else {
-      done = false;
-    }
+    exitcode |= core->get_exitcode();
   }
-  *exitcode = exitcode_;
-  return done;
+  return exitcode;
 }
 
 void Socket::barrier(uint32_t bar_id, uint32_t count, uint32_t core_id) {
@@ -138,7 +131,7 @@ void Socket::barrier(uint32_t bar_id, uint32_t count, uint32_t core_id) {
 }
 
 void Socket::resume(uint32_t core_index) {
-  cores_.at(core_index)->resume();
+  cores_.at(core_index)->resume(-1);
 }
 
 Socket::PerfStats Socket::perf_stats() const {

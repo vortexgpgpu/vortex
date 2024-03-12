@@ -39,7 +39,7 @@ using namespace vortex;
 class vx_device {    
 public:
     vx_device() 
-        : ram_(RAM_PAGE_SIZE)
+        : ram_(0, RAM_PAGE_SIZE)
         , global_mem_(
             ALLOC_BASE_ADDR,
             ALLOC_MAX_ADDR - ALLOC_BASE_ADDR,

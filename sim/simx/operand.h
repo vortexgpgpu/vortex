@@ -14,7 +14,6 @@
 #pragma once
 
 #include "instr_trace.h"
-#include <queue>
 
 namespace vortex {
 

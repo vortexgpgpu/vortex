@@ -14,7 +14,8 @@
 #pragma once
 
 #include "instr_trace.h"
-#include <queue>
+#include <unordered_map>
+#include <vector>
 
 namespace vortex {
 

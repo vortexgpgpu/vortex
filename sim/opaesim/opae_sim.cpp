@@ -125,7 +125,7 @@ public:
     trace_->open("trace.vcd");
   #endif
 
-    ram_ = new RAM(RAM_PAGE_SIZE);
+    ram_ = new RAM(0, RAM_PAGE_SIZE);
 
     // initialize dram simulator
     ramulator::Config ram_config;

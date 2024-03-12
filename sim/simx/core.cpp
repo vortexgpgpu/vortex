@@ -19,12 +19,9 @@
 #include "types.h"
 #include "arch.h"
 #include "mem.h"
-#include "decode.h"
 #include "core.h"
-#include "socket.h"
 #include "debug.h"
 #include "constants.h"
-#include "processor_impl.h"
 
 using namespace vortex;
 
@@ -41,30 +38,17 @@ Core::Core(const SimContext& ctx,
     , core_id_(core_id)
     , socket_(socket)
     , arch_(arch)
-    , dcrs_(dcrs)
-    , decoder_(arch)
-    , warps_(arch.num_warps())
-    , barriers_(arch.num_barriers(), 0)
-    , fcsrs_(arch.num_warps(), 0)
+    , emulator_(arch, dcrs, this)
     , ibuffers_(arch.num_warps(), IBUF_SIZE)
     , scoreboard_(arch_)
     , operands_(ISSUE_WIDTH)
     , dispatchers_((uint32_t)FUType::Count)
-    , exe_units_((uint32_t)FUType::Count)
+    , func_units_((uint32_t)FUType::Count)
     , lmem_demuxs_(NUM_LSU_LANES)
     , pending_icache_(arch_.num_warps())
-    , csrs_(arch.num_warps())  
     , commit_arbs_(ISSUE_WIDTH)
 {
   char sname[100];
-
-  for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
-    csrs_.at(i).resize(arch.num_threads());
-  }
-
-  for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
-    warps_.at(i) = std::make_shared<Warp>(this, i);
-  }
 
   for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
     operands_.at(i) = SimPlatform::instance().create_object<Operand>();
@@ -99,17 +83,17 @@ Core::Core(const SimContext& ctx,
   dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, 1, NUM_SFU_LANES);
   
   // initialize execute units
-  exe_units_.at((int)FUType::ALU) = SimPlatform::instance().create_object<AluUnit>(this);
-  exe_units_.at((int)FUType::FPU) = SimPlatform::instance().create_object<FpuUnit>(this);
-  exe_units_.at((int)FUType::LSU) = SimPlatform::instance().create_object<LsuUnit>(this);
-  exe_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(this);
+  func_units_.at((int)FUType::ALU) = SimPlatform::instance().create_object<AluUnit>(this);
+  func_units_.at((int)FUType::FPU) = SimPlatform::instance().create_object<FpuUnit>(this);
+  func_units_.at((int)FUType::LSU) = SimPlatform::instance().create_object<LsuUnit>(this);
+  func_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(this);
 
   // bind commit arbiters
   for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {    
     snprintf(sname, 100, "core%d-commit-arb%d", core_id, i);
     auto arbiter = TraceSwitch::Create(sname, ArbiterType::RoundRobin, (uint32_t)FUType::Count, 1);
     for (uint32_t j = 0; j < (uint32_t)FUType::Count; ++j) {
-      exe_units_.at(j)->Outputs.at(i).bind(&arbiter->Inputs.at(j));
+      func_units_.at(j)->Outputs.at(i).bind(&arbiter->Inputs.at(j));
     }
     commit_arbs_.at(i) = arbiter;
   }
@@ -118,17 +102,14 @@ Core::Core(const SimContext& ctx,
 }
 
 Core::~Core() {
-  this->cout_flush();
+  //--
 }
 
 void Core::reset() {
-  for (auto& warp : warps_) {
-    warp->reset();
-  }
-  warps_.at(0)->setTmask(0, true);
-  active_warps_ = 1;
 
-  for (auto& exe_unit : exe_units_) {
+  emulator_.clear();
+
+  for (auto& exe_unit : func_units_) {
     exe_unit->reset();
   }
  
@@ -136,29 +117,20 @@ void Core::reset() {
     commit_arb->reset();
   }
   
-  for (auto& barrier : barriers_) {
-    barrier.reset();
-  }
-  
-  for (auto& fcsr : fcsrs_) {
-    fcsr = 0;
-  }
-  
   for (auto& ibuf : ibuffers_) {
     ibuf.clear();
   }
-
-  ibuffer_idx_ = 0;
 
   scoreboard_.clear();
   fetch_latch_.clear();
   decode_latch_.clear();
   pending_icache_.clear();
-  stalled_warps_.reset();
-  pending_instrs_ = 0;
-  exited_ = false;
-  perf_stats_ = PerfStats();
+  
+  ibuffer_idx_ = 0;
+  pending_instrs_ = 0;  
   pending_ifetches_ = 0;
+  
+  perf_stats_ = PerfStats();
 }
 
 void Core::tick() {
@@ -174,28 +146,14 @@ void Core::tick() {
 }
 
 void Core::schedule() {
-  int scheduled_warp = -1;
-
-  // find next ready warp
-  for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {  
-    bool warp_active = active_warps_.test(wid);
-    bool warp_stalled = stalled_warps_.test(wid); 
-    if (warp_active && !warp_stalled) {      
-      scheduled_warp = wid;
-      break;
-    }
-  }
-  if (scheduled_warp == -1) {
+  auto trace = emulator_.step();
+  if (trace == nullptr) {
     ++perf_stats_.sched_idle;
     return;
   }
 
   // suspend warp until decode
-  stalled_warps_.set(scheduled_warp);
-
-  // evaluate scheduled warp
-  auto& warp = warps_.at(scheduled_warp);
-  auto trace = warp->eval();
+  emulator_.suspend(trace->wid);
 
   DT(3, "pipeline-schedule: " << *trace);
 
@@ -255,9 +213,8 @@ void Core::decode() {
   }
   
   // release warp
-  if (!trace->fetch_stall) {
-    assert(stalled_warps_.test(trace->wid));
-    stalled_warps_.reset(trace->wid);
+  if (!trace->fetch_stall) {    
+    emulator_.resume(trace->wid);
   }
 
   DT(3, "pipeline-decode: " << *trace);
@@ -355,7 +312,7 @@ void Core::issue() {
 void Core::execute() {
   for (uint32_t i = 0; i < (uint32_t)FUType::Count; ++i) {
     auto& dispatch = dispatchers_.at(i);
-    auto& exe_unit = exe_units_.at(i);
+    auto& exe_unit = func_units_.at(i);
     for (uint32_t j = 0; j < ISSUE_WIDTH; ++j) {
       if (dispatch->Outputs.at(j).empty())
         continue;
@@ -396,361 +353,22 @@ void Core::commit() {
   }
 }
 
-void Core::wspawn(uint32_t num_warps, Word nextPC) {
-  uint32_t active_warps = std::min<uint32_t>(num_warps, arch_.num_warps());
-  DP(3, "*** Activate " << (active_warps-1) << " warps at PC: " << std::hex << nextPC);
-  for (uint32_t i = 1; i < active_warps; ++i) {
-    auto warp = warps_.at(i);
-    warp->setPC(nextPC);
-    warp->setTmask(0, true);
-    active_warps_.set(i);
-  }
-}
-
-void Core::barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id) {
-  uint32_t bar_idx = bar_id & 0x7fffffff;
-  bool is_global = (bar_id >> 31);
-
-  auto& barrier = barriers_.at(bar_idx);
-  barrier.set(warp_id);
-  DP(3, "*** Suspend core #" << core_id_ << ", warp #" << warp_id << " at barrier #" << bar_idx);
-
-  if (is_global) {
-    // global barrier handling
-    if (barrier.count() == active_warps_.count()) {
-      socket_->barrier(bar_idx, count, core_id_);
-      barrier.reset();
-    }    
-  } else {
-    // local barrier handling
-    if (barrier.count() == (size_t)count) {
-      // resume suspended warps
-      for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
-        if (barrier.test(i)) {
-          DP(3, "*** Resume core #" << core_id_ << ", warp #" << i << " at barrier #" << bar_idx);
-          stalled_warps_.reset(i);
-        }
-      }
-      barrier.reset();
-    }
-  }
-}
-
-void Core::icache_read(void *data, uint64_t addr, uint32_t size) {
-  mmu_.read(data, addr, size, 0);
-}
-
-AddrType Core::get_addr_type(uint64_t addr) {
-  if (LMEM_ENABLED) {
-    if (addr >= LMEM_BASE_ADDR && addr < (LMEM_BASE_ADDR + (1 << LMEM_LOG_SIZE))) {
-        return AddrType::Shared;
-    }
-  }
-  if (addr >= IO_BASE_ADDR) {
-     return AddrType::IO;
-  }
-  return AddrType::Global;
-}
-
-void Core::dcache_read(void *data, uint64_t addr, uint32_t size) {  
-  auto type = this->get_addr_type(addr);
-  if (type == AddrType::Shared) {
-    local_mem_->read(data, addr, size);
-  } else {  
-    mmu_.read(data, addr, size, 0);
-  }
-
-  DPH(2, "Mem Read: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (size=" << size << ", type=" << type << ")" << std::endl);
-}
-
-void Core::dcache_write(const void* data, uint64_t addr, uint32_t size) {  
-  auto type = this->get_addr_type(addr);
-  if (addr >= uint64_t(IO_COUT_ADDR)
-   && addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
-     this->writeToStdOut(data, addr, size);
-  } else {
-    if (type == AddrType::Shared) {
-      local_mem_->write(data, addr, size);
-    } else {
-      mmu_.write(data, addr, size, 0);
-    }
-  }
-  DPH(2, "Mem Write: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (size=" << size << ", type=" << type << ")" << std::endl);  
-}
-
-void Core::dcache_amo_reserve(uint64_t addr) {
-  auto type = this->get_addr_type(addr);
-  if (type == AddrType::Global) {
-    mmu_.amo_reserve(addr);
-  }
-}
-
-bool Core::dcache_amo_check(uint64_t addr) {
-  auto type = this->get_addr_type(addr);
-  if (type == AddrType::Global) {
-    return mmu_.amo_check(addr);
-  }
-  return false;
-}
-
-void Core::writeToStdOut(const void* data, uint64_t addr, uint32_t size) {
-  if (size != 1)
-    std::abort();
-  uint32_t tid = (addr - IO_COUT_ADDR) & (IO_COUT_SIZE-1);
-  auto& ss_buf = print_bufs_[tid];
-  char c = *(char*)data;
-  ss_buf << c;
-  if (c == '\n') {
-    std::cout << std::dec << "#" << tid << ": " << ss_buf.str() << std::flush;
-    ss_buf.str("");
-  }
-}
-
-void Core::cout_flush() {
-  for (auto& buf : print_bufs_) {
-    auto str = buf.second.str();
-    if (!str.empty()) {
-      std::cout << "#" << buf.first << ": " << str << std::endl;
-    }
-  }
-}
-
-uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
-  switch (addr) {
-  case VX_CSR_SATP:
-  case VX_CSR_PMPCFG0:
-  case VX_CSR_PMPADDR0:
-  case VX_CSR_MSTATUS:
-  case VX_CSR_MISA:
-  case VX_CSR_MEDELEG:
-  case VX_CSR_MIDELEG:
-  case VX_CSR_MIE:
-  case VX_CSR_MTVEC:
-  case VX_CSR_MEPC:
-  case VX_CSR_MNSTATUS:
-    return 0;
-
-  case VX_CSR_FFLAGS:
-    return fcsrs_.at(wid) & 0x1F;
-  case VX_CSR_FRM:
-    return (fcsrs_.at(wid) >> 5);
-  case VX_CSR_FCSR:
-    return fcsrs_.at(wid);
-  case VX_CSR_MHARTID: // global thread ID
-    return (core_id_ * arch_.num_warps() + wid) * arch_.num_threads() + tid;
-  case VX_CSR_THREAD_ID: // thread ID
-    return tid;
-  case VX_CSR_WARP_ID: // warp ID
-    return wid;
-  case VX_CSR_CORE_ID: // core ID
-    return core_id_;
-  case VX_CSR_THREAD_MASK: // thread mask
-    return warps_.at(wid)->getTmask();
-  case VX_CSR_WARP_MASK: // active warps
-    return active_warps_.to_ulong();
-  case VX_CSR_NUM_THREADS: // Number of threads per warp
-    return arch_.num_threads();
-  case VX_CSR_NUM_WARPS: // Number of warps per core
-    return arch_.num_warps();
-  case VX_CSR_NUM_CORES: // Number of cores per cluster
-    return uint32_t(arch_.num_cores()) * arch_.num_clusters();
-  case VX_CSR_MCYCLE: // NumCycles
-    return perf_stats_.cycles & 0xffffffff;
-  case VX_CSR_MCYCLE_H: // NumCycles
-    return (uint32_t)(perf_stats_.cycles >> 32);
-  case VX_CSR_MINSTRET: // NumInsts
-    return perf_stats_.instrs & 0xffffffff;
-  case VX_CSR_MINSTRET_H: // NumInsts
-    return (uint32_t)(perf_stats_.instrs >> 32);
-  default:
-    if ((addr >= VX_CSR_MPM_BASE && addr < (VX_CSR_MPM_BASE + 32))
-     || (addr >= VX_CSR_MPM_BASE_H && addr < (VX_CSR_MPM_BASE_H + 32))) {
-      // user-defined MPM CSRs
-      auto perf_class = dcrs_.base_dcrs.read(VX_DCR_BASE_MPM_CLASS);
-      switch (perf_class) {                
-      case VX_DCR_MPM_CLASS_NONE: 
-        break;    
-      case VX_DCR_MPM_CLASS_CORE: {
-        switch (addr) {
-        case VX_CSR_MPM_SCHED_ID:  return perf_stats_.sched_idle & 0xffffffff; 
-        case VX_CSR_MPM_SCHED_ID_H:return perf_stats_.sched_idle >> 32;
-        case VX_CSR_MPM_SCHED_ST:  return perf_stats_.sched_stalls & 0xffffffff; 
-        case VX_CSR_MPM_SCHED_ST_H:return perf_stats_.sched_stalls >> 32;
-        case VX_CSR_MPM_IBUF_ST:   return perf_stats_.ibuf_stalls & 0xffffffff; 
-        case VX_CSR_MPM_IBUF_ST_H: return perf_stats_.ibuf_stalls >> 32; 
-        case VX_CSR_MPM_SCRB_ST:   return perf_stats_.scrb_stalls & 0xffffffff;
-        case VX_CSR_MPM_SCRB_ST_H: return perf_stats_.scrb_stalls >> 32;
-        case VX_CSR_MPM_SCRB_ALU:  return perf_stats_.scrb_alu & 0xffffffff;
-        case VX_CSR_MPM_SCRB_ALU_H:return perf_stats_.scrb_alu >> 32;
-        case VX_CSR_MPM_SCRB_FPU:  return perf_stats_.scrb_fpu & 0xffffffff;
-        case VX_CSR_MPM_SCRB_FPU_H:return perf_stats_.scrb_fpu >> 32;
-        case VX_CSR_MPM_SCRB_LSU:  return perf_stats_.scrb_lsu & 0xffffffff;
-        case VX_CSR_MPM_SCRB_LSU_H:return perf_stats_.scrb_lsu >> 32;
-        case VX_CSR_MPM_SCRB_SFU:  return perf_stats_.scrb_sfu & 0xffffffff;
-        case VX_CSR_MPM_SCRB_SFU_H:return perf_stats_.scrb_sfu >> 32;
-        case VX_CSR_MPM_SCRB_WCTL: return perf_stats_.scrb_wctl & 0xffffffff;
-        case VX_CSR_MPM_SCRB_WCTL_H: return perf_stats_.scrb_wctl >> 32;
-        case VX_CSR_MPM_SCRB_CSRS: return perf_stats_.scrb_csrs & 0xffffffff;
-        case VX_CSR_MPM_SCRB_CSRS_H: return perf_stats_.scrb_csrs >> 32;
-        case VX_CSR_MPM_IFETCHES:  return perf_stats_.ifetches & 0xffffffff; 
-        case VX_CSR_MPM_IFETCHES_H: return perf_stats_.ifetches >> 32; 
-        case VX_CSR_MPM_LOADS:     return perf_stats_.loads & 0xffffffff; 
-        case VX_CSR_MPM_LOADS_H:   return perf_stats_.loads >> 32; 
-        case VX_CSR_MPM_STORES:    return perf_stats_.stores & 0xffffffff; 
-        case VX_CSR_MPM_STORES_H:  return perf_stats_.stores >> 32;
-        case VX_CSR_MPM_IFETCH_LT: return perf_stats_.ifetch_latency & 0xffffffff; 
-        case VX_CSR_MPM_IFETCH_LT_H: return perf_stats_.ifetch_latency >> 32; 
-        case VX_CSR_MPM_LOAD_LT:   return perf_stats_.load_latency & 0xffffffff; 
-        case VX_CSR_MPM_LOAD_LT_H: return perf_stats_.load_latency >> 32;
-       }
-      } break; 
-      case VX_DCR_MPM_CLASS_MEM: {
-        auto proc_perf = socket_->cluster()->processor()->perf_stats();
-        auto cluster_perf = socket_->cluster()->perf_stats();
-        auto socket_perf = socket_->perf_stats();
-        auto lmem_perf = local_mem_->perf_stats();
-        switch (addr) {
-        case VX_CSR_MPM_ICACHE_READS:     return socket_perf.icache.reads & 0xffffffff; 
-        case VX_CSR_MPM_ICACHE_READS_H:   return socket_perf.icache.reads >> 32; 
-        case VX_CSR_MPM_ICACHE_MISS_R:    return socket_perf.icache.read_misses & 0xffffffff;
-        case VX_CSR_MPM_ICACHE_MISS_R_H:  return socket_perf.icache.read_misses >> 32;
-        case VX_CSR_MPM_ICACHE_MSHR_ST:   return socket_perf.icache.mshr_stalls & 0xffffffff; 
-        case VX_CSR_MPM_ICACHE_MSHR_ST_H: return socket_perf.icache.mshr_stalls >> 32;
-        
-        case VX_CSR_MPM_DCACHE_READS:     return socket_perf.dcache.reads & 0xffffffff; 
-        case VX_CSR_MPM_DCACHE_READS_H:   return socket_perf.dcache.reads >> 32; 
-        case VX_CSR_MPM_DCACHE_WRITES:    return socket_perf.dcache.writes & 0xffffffff; 
-        case VX_CSR_MPM_DCACHE_WRITES_H:  return socket_perf.dcache.writes >> 32; 
-        case VX_CSR_MPM_DCACHE_MISS_R:    return socket_perf.dcache.read_misses & 0xffffffff; 
-        case VX_CSR_MPM_DCACHE_MISS_R_H:  return socket_perf.dcache.read_misses >> 32; 
-        case VX_CSR_MPM_DCACHE_MISS_W:    return socket_perf.dcache.write_misses & 0xffffffff; 
-        case VX_CSR_MPM_DCACHE_MISS_W_H:  return socket_perf.dcache.write_misses >> 32; 
-        case VX_CSR_MPM_DCACHE_BANK_ST:   return socket_perf.dcache.bank_stalls & 0xffffffff; 
-        case VX_CSR_MPM_DCACHE_BANK_ST_H: return socket_perf.dcache.bank_stalls >> 32;
-        case VX_CSR_MPM_DCACHE_MSHR_ST:   return socket_perf.dcache.mshr_stalls & 0xffffffff; 
-        case VX_CSR_MPM_DCACHE_MSHR_ST_H: return socket_perf.dcache.mshr_stalls >> 32;
-
-        case VX_CSR_MPM_L2CACHE_READS:    return cluster_perf.l2cache.reads & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_READS_H:  return cluster_perf.l2cache.reads >> 32; 
-        case VX_CSR_MPM_L2CACHE_WRITES:   return cluster_perf.l2cache.writes & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_WRITES_H: return cluster_perf.l2cache.writes >> 32; 
-        case VX_CSR_MPM_L2CACHE_MISS_R:   return cluster_perf.l2cache.read_misses & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_MISS_R_H: return cluster_perf.l2cache.read_misses >> 32; 
-        case VX_CSR_MPM_L2CACHE_MISS_W:   return cluster_perf.l2cache.write_misses & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_MISS_W_H: return cluster_perf.l2cache.write_misses >> 32; 
-        case VX_CSR_MPM_L2CACHE_BANK_ST:  return cluster_perf.l2cache.bank_stalls & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_BANK_ST_H:return cluster_perf.l2cache.bank_stalls >> 32;
-        case VX_CSR_MPM_L2CACHE_MSHR_ST:  return cluster_perf.l2cache.mshr_stalls & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_MSHR_ST_H:return cluster_perf.l2cache.mshr_stalls >> 32;
-
-        case VX_CSR_MPM_L3CACHE_READS:    return proc_perf.l3cache.reads & 0xffffffff; 
-        case VX_CSR_MPM_L3CACHE_READS_H:  return proc_perf.l3cache.reads >> 32; 
-        case VX_CSR_MPM_L3CACHE_WRITES:   return proc_perf.l3cache.writes & 0xffffffff; 
-        case VX_CSR_MPM_L3CACHE_WRITES_H: return proc_perf.l3cache.writes >> 32; 
-        case VX_CSR_MPM_L3CACHE_MISS_R:   return proc_perf.l3cache.read_misses & 0xffffffff; 
-        case VX_CSR_MPM_L3CACHE_MISS_R_H: return proc_perf.l3cache.read_misses >> 32; 
-        case VX_CSR_MPM_L3CACHE_MISS_W:   return proc_perf.l3cache.write_misses & 0xffffffff; 
-        case VX_CSR_MPM_L3CACHE_MISS_W_H: return proc_perf.l3cache.write_misses >> 32; 
-        case VX_CSR_MPM_L3CACHE_BANK_ST:  return proc_perf.l3cache.bank_stalls & 0xffffffff; 
-        case VX_CSR_MPM_L3CACHE_BANK_ST_H:return proc_perf.l3cache.bank_stalls >> 32;
-        case VX_CSR_MPM_L3CACHE_MSHR_ST:  return proc_perf.l3cache.mshr_stalls & 0xffffffff; 
-        case VX_CSR_MPM_L3CACHE_MSHR_ST_H:return proc_perf.l3cache.mshr_stalls >> 32;
-
-        case VX_CSR_MPM_MEM_READS:        return proc_perf.mem_reads & 0xffffffff; 
-        case VX_CSR_MPM_MEM_READS_H:      return proc_perf.mem_reads >> 32;
-        case VX_CSR_MPM_MEM_WRITES:       return proc_perf.mem_writes & 0xffffffff; 
-        case VX_CSR_MPM_MEM_WRITES_H:     return proc_perf.mem_writes >> 32; 
-        case VX_CSR_MPM_MEM_LT:           return proc_perf.mem_latency & 0xffffffff; 
-        case VX_CSR_MPM_MEM_LT_H :        return proc_perf.mem_latency >> 32;
-         
-        case VX_CSR_MPM_LMEM_READS:       return lmem_perf.reads & 0xffffffff;
-        case VX_CSR_MPM_LMEM_READS_H:     return lmem_perf.reads >> 32;
-        case VX_CSR_MPM_LMEM_WRITES:      return lmem_perf.writes & 0xffffffff;
-        case VX_CSR_MPM_LMEM_WRITES_H:    return lmem_perf.writes >> 32;
-        case VX_CSR_MPM_LMEM_BANK_ST:     return lmem_perf.bank_stalls & 0xffffffff; 
-        case VX_CSR_MPM_LMEM_BANK_ST_H:   return lmem_perf.bank_stalls >> 32; 
-        }
-      } break;
-      default: {
-        std::cout << std::dec << "Error: invalid MPM CLASS: value=" << perf_class << std::endl;
-        std::abort();
-      } break;
-      }
-    } else {
-      std::cout << std::hex << "Error: invalid CSR read addr=0x" << addr << std::endl;
-      std::abort();
-    }
-  }
-  return 0;
-}
-
-void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
-  __unused (tid);
-  switch (addr) {
-  case VX_CSR_FFLAGS:
-    fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0x1F) | (value & 0x1F);
-    break;
-  case VX_CSR_FRM:
-    fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0xE0) | (value << 5);
-    break;
-  case VX_CSR_FCSR:
-    fcsrs_.at(wid) = value & 0xff;
-    break;
-  case VX_CSR_SATP:
-  case VX_CSR_MSTATUS:
-  case VX_CSR_MEDELEG:
-  case VX_CSR_MIDELEG:
-  case VX_CSR_MIE:
-  case VX_CSR_MTVEC:
-  case VX_CSR_MEPC:
-  case VX_CSR_PMPCFG0:
-  case VX_CSR_PMPADDR0:
-  case VX_CSR_MNSTATUS:
-    break;
-  default:
-    {
-      std::cout << std::hex << "Error: invalid CSR write addr=0x" << addr << ", value=0x" << value << std::endl;
-      std::abort();
-    }
-  }
-}
-
-void Core::trigger_ecall() {
-  active_warps_.reset();
-  exited_ = true;
-}
-
-void Core::trigger_ebreak() {
-  active_warps_.reset();
-  exited_ = true;
-}
-
-bool Core::check_exit(Word* exitcode, bool riscv_test) const {
-  if (exited_) {
-    Word ec = warps_.at(0)->getIRegValue(3);
-    if (riscv_test) {
-      *exitcode = (1 - ec);
-    } else {
-      *exitcode = ec;
-    }
-    return true;
-  }
-  return false;
+int Core::get_exitcode() const {
+  return emulator_.get_exitcode();
 }
 
 bool Core::running() const {
-  return (pending_instrs_ != 0);
+  return emulator_.running() || (pending_instrs_ != 0);
 }
 
-void Core::resume() {
-  stalled_warps_.reset();
+void Core::resume(uint32_t wid) {
+  emulator_.resume(wid);
+}
+
+void Core::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
+  emulator_.barrier(bar_id, count, wid);
 }
 
 void Core::attach_ram(RAM* ram) {
-  // bind RAM to memory unit
-#if (XLEN == 64)
-  mmu_.attach(*ram, 0, 0xFFFFFFFFFFFFFFFF);
-#else
-  mmu_.attach(*ram, 0, 0xFFFFFFFF);
-#endif
+  emulator_.attach_ram(ram);
 }

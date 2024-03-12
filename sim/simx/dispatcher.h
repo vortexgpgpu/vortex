@@ -15,6 +15,7 @@
 
 #include "instr_trace.h"
 #include <queue>
+#include <vector>
 
 namespace vortex {
 

@@ -24,6 +24,7 @@
 #include "constants.h"
 #include <util.h>
 #include "core.h"
+#include "VX_types.h"
 
 using namespace vortex;
 
@@ -87,7 +88,7 @@ int main(int argc, char **argv) {
     Arch arch(num_threads, num_warps, num_cores);
 
     // create memory module
-    RAM ram(RAM_PAGE_SIZE);
+    RAM ram(0, RAM_PAGE_SIZE);
 
     // create processor
     Processor processor(arch);
@@ -117,7 +118,10 @@ int main(int argc, char **argv) {
     }
 
     // run simulation
-    exitcode = processor.run(riscv_test);
+    exitcode = processor.run();
+    if (riscv_test) {
+      exitcode = (1 - exitcode);
+    }
   }   
 
   if (exitcode != 0) {
