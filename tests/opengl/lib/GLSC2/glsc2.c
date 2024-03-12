@@ -1,8 +1,16 @@
 #include <GLSC2/glsc2.h>
 #include <CL/opencl.h>
 
+
+#define VERTEX_SHADER "kernel.vert.cl"
 // CL 
 cl_int _err;
+
+typedef struct vec2f
+{
+    float x;
+    float y;
+};
 
 cl_platform_id* _getPlatformID() {
     static cl_platform_id platform_id = NULL;
@@ -20,6 +28,52 @@ cl_device_id* _getDeviceID() {
 }
 
 cl_context _context = clCreateContext(NULL, 1, _getDeviceID(), NULL, NULL,  &_err);
+
+cl_kernel init_vertex_shader_kernel(){
+    uint8_t *kernel_bin = NULL;
+    size_t kernel_size;
+
+  //HOSTCPU
+    if (0 != read_kernel_file(VERTEX_SHADER, &kernel_bin, &kernel_size))
+        return -1;
+    
+    cl_program vertex_shader = clCreateProgramWithSource(
+        _context, 1, (const char**)&kernel_bin, &kernel_size, &_err);  
+    // Build program
+  clBuildProgram(vertex_shader, 1, _getDeviceID(), NULL, NULL, NULL);
+  
+  // Create kernel
+  return clCreateKernel(vertex_shader, "vertex_shader", &_err);
+  //Hay que conservar cl_program al salir de la stack? (quien sabe...)
+}
+
+cl_kernel vertexShaderKernel = init_vertex_shader_kernel();
+
+void vertex_shader_add_argument_buffer(cl_mem data, unsigned int arg, void* offset, unsigned int size){
+  //position
+  clSetKernelArg(vertexShaderKernel, arg, sizeof(cl_mem), (void *)&data);
+  clSetKernelArg(vertexShaderKernel, arg+1, sizeof(void*), offset);
+  clSetKernelArg(vertexShaderKernel, arg+2, sizeof(unsigned int), size);
+}
+
+void vertex_shader_add_argument_host(void* data, unsigned int arg, unsigned int size){
+  //position
+  clSetKernelArg(vertexShaderKernel, arg, sizeof(void*), (void *)&data);
+  clSetKernelArg(vertexShaderKernel, arg+1, sizeof(void*), (void*)0);
+  clSetKernelArg(vertexShaderKernel, arg+2, sizeof(unsigned int), size);
+}
+
+void execute_vertex_shader(unsigned int size, unsigned int arg){
+  cl_mem primitiveBuff = clCreateBuffer(context, CL_MEM_WRITE_ONLY, size*sizeof(float), NULL, &_err);
+  clSetKernelArg(vertexShaderKernel, arg, sizeof(cl_mem), size);
+  float primitiveHost[size];
+
+  cl_command_queue commandQueue = clCreateCommandQueue(context, _getDeviceID(), 0, &_err);
+  size_t global_work_size[1] = {size};
+  clEnqueueNDRangeKernel(commandQueue, vertexShaderKernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
+  clFinish(commandQueue);  
+  clEnqueueReadBuffer(commandQueue, primitiveBuff, CL_TRUE, 0, size*sizeof(float), &primitiveHost, 0, NULL, NULL);
+}
 
 // GL 
 
@@ -82,16 +136,30 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     if (mode==GL_POINTS); // TODO
     else if (mode==GL_LINES); // TODO
     else if (mode==GL_TRIANGLES) {
-        while(first < count) {
-            for (int i =0; i<VERTEX_ATTR_SIZE; i++)
-            {
-                if (vertex_attrib[i].enable){
-                    //transfer elements
-                    
+        //preparar input
+        VertexAttrib* pVertexAttr = &vertex_attrib;
+        clSetKernelArg(vertexShaderKernel, 0, sizeof(unsigned int), first);
+        unsigned int arg=1;
+
+        //cada uno es un kernel (la idea es hacer count-first kernels)
+        //while(first < count) {
+            //coger atributos del kernel
+        for (int i =0; i<VERTEX_ATTR_SIZE; i++)
+        {
+            if (pVertexAttr->enable){
+                if (_binded_buffer != 0){
+                    //take from buffer, send to kernel as argument
+                    vertex_shader_add_argument_buffer(buffers[_binded_buffer].mem, arg, pVertexAttr->pointer, pVertexAttr->size);
+                }else{
+                    //take from host
+                    vertex_shader_add_argument_host(pVertexAttr->pointer, arg, pVertexAttr->size);
                 }
+                arg+=3;
             }
-            ++first;
+        pVertexAttr++;
         }
+        //}
+        execute_vertex_shader(count-first, arg++);
     }
 }
 

@@ -1,5 +1,13 @@
 {
     "files.associations": {
-        "glsc2.h": "c"
+        "glsc2.h": "c",
+        "bitset": "c",
+        "chrono": "c",
+        "algorithm": "c",
+        "__bit_reference": "c",
+        "map": "c",
+        "set": "c",
+        "unordered_map": "c",
+        "unordered_set": "c"
     }
 }
