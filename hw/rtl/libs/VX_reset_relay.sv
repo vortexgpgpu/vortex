@@ -22,7 +22,7 @@ module VX_reset_relay #(
     input wire          reset,
     output wire [N-1:0] reset_o
 );    
-    if (MAX_FANOUT >= 0 && N > (MAX_FANOUT + MAX_FANOUT/2)) begin
+    if (MAX_FANOUT >= 0 && N > MAX_FANOUT) begin
         localparam F = `UP(MAX_FANOUT);
         localparam R = N / F;
         `PRESERVE_NET reg [R-1:0] reset_r;

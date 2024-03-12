@@ -33,10 +33,10 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     localparam DATAW = `UUID_WIDTH + `NUM_THREADS + `XLEN + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + (`NR_BITS * 4) + 1;
     
 `ifdef PERF_ENABLE
-    reg [`NUM_WARPS-1:0][`NUM_EX_UNITS-1:0] perf_issue_units_per_cycle;
+    reg [`NUM_WARPS-1:0][`NUM_EX_UNITS-1:0] perf_inuse_units_per_cycle;
     wire [`NUM_EX_UNITS-1:0] perf_units_per_cycle, perf_units_per_cycle_r;
 
-    reg [`NUM_WARPS-1:0][`NUM_SFU_UNITS-1:0] perf_issue_sfu_per_cycle;    
+    reg [`NUM_WARPS-1:0][`NUM_SFU_UNITS-1:0] perf_inuse_sfu_per_cycle;    
     wire [`NUM_SFU_UNITS-1:0] perf_sfu_per_cycle, perf_sfu_per_cycle_r;
 
     wire [`NUM_WARPS-1:0] perf_issue_stalls_per_cycle;
@@ -49,7 +49,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         .N  (`NUM_WARPS),
         .OP ("|")
     ) perf_units_reduce (
-        .data_in  (perf_issue_units_per_cycle),
+        .data_in  (perf_inuse_units_per_cycle),
         .data_out (perf_units_per_cycle)
     );    
 
@@ -58,13 +58,13 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         .N  (`NUM_WARPS),
         .OP ("|")
     ) perf_sfu_reduce (
-        .data_in  (perf_issue_sfu_per_cycle),
+        .data_in  (perf_inuse_sfu_per_cycle),
         .data_out (perf_sfu_per_cycle)
     );
 
     `BUFFER(perf_stalls_per_cycle_r, perf_stalls_per_cycle);
-    `BUFFER(perf_units_per_cycle_r, perf_units_per_cycle);
-    `BUFFER(perf_sfu_per_cycle_r, perf_sfu_per_cycle);
+    `BUFFER_EX(perf_units_per_cycle_r, perf_units_per_cycle, 1'b1, `CDIV(`NUM_WARPS, `MAX_FANOUT));
+    `BUFFER_EX(perf_sfu_per_cycle_r, perf_sfu_per_cycle, 1'b1, `CDIV(`NUM_WARPS, `MAX_FANOUT));
 
     always @(posedge clk) begin
         if (reset) begin
@@ -132,31 +132,31 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         end
 
         always @(*) begin            
-            perf_issue_units_per_cycle[i] = '0;
-            perf_issue_sfu_per_cycle[i] = '0;
+            perf_inuse_units_per_cycle[i] = '0;
+            perf_inuse_sfu_per_cycle[i] = '0;
             if (ibuffer_if[i].valid) begin
                 if (inuse_rd) begin
-                    perf_issue_units_per_cycle[i][inuse_units[ibuffer_if[i].data.rd]] = 1;
+                    perf_inuse_units_per_cycle[i][inuse_units[ibuffer_if[i].data.rd]] = 1;
                     if (inuse_units[ibuffer_if[i].data.rd] == `EX_SFU) begin
-                        perf_issue_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.rd]] = 1;
+                        perf_inuse_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.rd]] = 1;
                     end
                 end
                 if (inuse_rs1) begin
-                    perf_issue_units_per_cycle[i][inuse_units[ibuffer_if[i].data.rs1]] = 1;
+                    perf_inuse_units_per_cycle[i][inuse_units[ibuffer_if[i].data.rs1]] = 1;
                     if (inuse_units[ibuffer_if[i].data.rs1] == `EX_SFU) begin
-                        perf_issue_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.rs1]] = 1;
+                        perf_inuse_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.rs1]] = 1;
                     end
                 end
                 if (inuse_rs2) begin
-                    perf_issue_units_per_cycle[i][inuse_units[ibuffer_if[i].data.rs2]] = 1;
+                    perf_inuse_units_per_cycle[i][inuse_units[ibuffer_if[i].data.rs2]] = 1;
                     if (inuse_units[ibuffer_if[i].data.rs2] == `EX_SFU) begin
-                        perf_issue_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.rs2]] = 1;
+                        perf_inuse_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.rs2]] = 1;
                     end
                 end
                 if (inuse_rs3) begin
-                    perf_issue_units_per_cycle[i][inuse_units[ibuffer_if[i].data.rs3]] = 1;
+                    perf_inuse_units_per_cycle[i][inuse_units[ibuffer_if[i].data.rs3]] = 1;
                     if (inuse_units[ibuffer_if[i].data.rs3] == `EX_SFU) begin
-                        perf_issue_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.rs3]] = 1;
+                        perf_inuse_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.rs3]] = 1;
                     end
                 end
             end

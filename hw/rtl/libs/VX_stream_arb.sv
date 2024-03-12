@@ -71,11 +71,11 @@ module VX_stream_arb #(
                 );
             end
 
-        end else if (MAX_FANOUT != 0 && (NUM_INPUTS > (MAX_FANOUT + MAX_FANOUT/2))) begin
+        end else if (MAX_FANOUT != 0 && (NUM_INPUTS > MAX_FANOUT)) begin
 
             // (#inputs > max_fanout) and (#outputs == 1)
 
-            localparam NUM_BATCHES = (NUM_INPUTS + MAX_FANOUT - 1) / MAX_FANOUT;
+            localparam NUM_BATCHES = `CDIV(NUM_INPUTS, MAX_FANOUT);
             localparam LOG_NUM_REQS2 = `CLOG2(MAX_FANOUT);
             localparam LOG_NUM_REQS3 = `CLOG2(NUM_BATCHES);
 
@@ -232,11 +232,11 @@ module VX_stream_arb #(
                 end
             end
 
-        end else if (MAX_FANOUT != 0 && (NUM_OUTPUTS > (MAX_FANOUT + MAX_FANOUT/2))) begin
+        end else if (MAX_FANOUT != 0 && (NUM_OUTPUTS > MAX_FANOUT)) begin
 
             // (#inputs == 1) and (#outputs > max_fanout)
 
-            localparam NUM_BATCHES = (NUM_OUTPUTS + MAX_FANOUT - 1) / MAX_FANOUT;
+            localparam NUM_BATCHES = `CDIV(NUM_OUTPUTS, MAX_FANOUT);
 
             wire [NUM_BATCHES-1:0]            valid_tmp;
             wire [NUM_BATCHES-1:0][DATAW-1:0] data_tmp;
