@@ -114,19 +114,12 @@ bool Cluster::running() const {
   return false;
 }
 
-bool Cluster::check_exit(Word* exitcode, bool riscv_test) const {
-  bool done = true;
-  Word exitcode_ = 0;
+int Cluster::get_exitcode() const {
+  int exitcode = 0;
   for (auto& socket : sockets_) {
-    Word ec;
-    if (socket->check_exit(&ec, riscv_test)) {
-      exitcode_ |= ec;
-    } else {
-      done = false;
-    }
+    exitcode |= socket->get_exitcode();
   }
-  *exitcode = exitcode_;
-  return done;
+  return exitcode;
 }
 
 void Cluster::barrier(uint32_t bar_id, uint32_t count, uint32_t core_id) {

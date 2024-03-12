@@ -88,7 +88,7 @@ class vx_device {
 public:
     vx_device() 
         : arch_(NUM_THREADS, NUM_WARPS, NUM_CORES)
-        , ram_(RAM_PAGE_SIZE)
+        , ram_(0, RAM_PAGE_SIZE)
         , processor_(arch_)
         , global_mem_(
             ALLOC_BASE_ADDR,
@@ -183,7 +183,7 @@ public:
         
         // start new run
         future_ = std::async(std::launch::async, [&]{
-            processor_.run(false);
+            processor_.run();
         });
         
         return 0;

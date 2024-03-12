@@ -39,7 +39,7 @@ public:
     Impl(LocalMem* simobject, const Config& config) 
         : simobject_(simobject)
         , config_(config)
-        , ram_(config.capacity, config.capacity)
+        , ram_(config.capacity)
         , bank_sel_addr_start_(0)
         , bank_sel_addr_end_(0 + log2ceil(config.num_banks)-1)
     {}    

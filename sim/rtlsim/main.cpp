@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
 	parse_args(argc, argv);	
 
 	// create memory module
-	vortex::RAM ram(RAM_PAGE_SIZE);
+	vortex::RAM ram(0, RAM_PAGE_SIZE);
 
 	// create processor
 	vortex::Processor processor;

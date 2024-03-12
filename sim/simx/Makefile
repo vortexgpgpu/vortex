@@ -16,7 +16,7 @@ LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 LDFLAGS += -L$(THIRD_PARTY_DIR)/ramulator -lramulator
 
 SRCS = $(COMMON_DIR)/util.cpp $(COMMON_DIR)/mem.cpp $(COMMON_DIR)/rvfloats.cpp
-SRCS += processor.cpp cluster.cpp socket.cpp core.cpp warp.cpp decode.cpp execute.cpp exe_unit.cpp cache_sim.cpp mem_sim.cpp local_mem.cpp dcrs.cpp
+SRCS += processor.cpp cluster.cpp socket.cpp core.cpp emulator.cpp decode.cpp execute.cpp func_unit.cpp cache_sim.cpp mem_sim.cpp local_mem.cpp dcrs.cpp
 
 # Debugigng
 ifdef DEBUG

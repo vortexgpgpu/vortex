@@ -28,7 +28,7 @@ public:
 
   void attach_ram(RAM* mem);
 
-  int run(bool riscv_test);
+  int run();
 
   void write_dcr(uint32_t addr, uint32_t value);
 

@@ -13,21 +13,10 @@
 
 #pragma once
 
-#include <string>
 #include <vector>
-#include <list>
-#include <stack>
-#include <queue>
-#include <unordered_map>
-#include <memory>
-#include <set>
 #include <simobject.h>
-#include <mem.h>
-#include "debug.h"
 #include "types.h"
-#include "arch.h"
-#include "decode.h"
-#include "warp.h"
+#include "emulator.h"
 #include "pipeline.h"
 #include "cache_sim.h"
 #include "local_mem.h"
@@ -35,12 +24,13 @@
 #include "scoreboard.h"
 #include "operand.h"
 #include "dispatcher.h"
-#include "exe_unit.h"
-#include "dcrs.h"
+#include "func_unit.h"
 
 namespace vortex {
 
 class Socket;
+class Arch;
+class DCRS;
 
 using TraceSwitch = Mux<instr_trace_t*>;
 
@@ -108,49 +98,31 @@ public:
 
   bool running() const;
 
-  void resume();
+  void resume(uint32_t wid);
+
+  void barrier(uint32_t bar_id, uint32_t count, uint32_t wid);
 
   uint32_t id() const {
     return core_id_;
-  }
-
-  Socket* socket() const {
-    return socket_;
   }
 
   const Arch& arch() const {
     return arch_;
   }
 
-  const DCRS& dcrs() const {
-    return dcrs_;
+  Socket* socket() const {
+    return socket_;
   }
 
-  uint32_t get_csr(uint32_t addr, uint32_t tid, uint32_t wid);
-  
-  void set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid);
+  const LocalMem::Ptr& local_mem() const {
+    return local_mem_;
+  }
 
-  void wspawn(uint32_t num_warps, Word nextPC);
-  
-  void barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id);
+  const PerfStats& perf_stats() const {
+    return perf_stats_;
+  }
 
-  AddrType get_addr_type(uint64_t addr);
-
-  void icache_read(void* data, uint64_t addr, uint32_t size);
-
-  void dcache_read(void* data, uint64_t addr, uint32_t size);
-
-  void dcache_write(const void* data, uint64_t addr, uint32_t size);
-
-  void dcache_amo_reserve(uint64_t addr);
-
-  bool dcache_amo_check(uint64_t addr);
-
-  void trigger_ecall();
-
-  void trigger_ebreak();
-
-  bool check_exit(Word* exitcode, bool riscv_test) const;
+  int get_exitcode() const;
 
 private:
 
@@ -160,27 +132,18 @@ private:
   void issue();
   void execute();
   void commit();
-  
-  void writeToStdOut(const void* data, uint64_t addr, uint32_t size);
-
-  void cout_flush();
 
   uint32_t core_id_;
   Socket* socket_;
   const Arch& arch_;
-  const DCRS &dcrs_;
-  
-  const Decoder decoder_;
-  MemoryUnit mmu_;
 
-  std::vector<std::shared_ptr<Warp>> warps_;  
-  std::vector<WarpMask> barriers_;
-  std::vector<Byte> fcsrs_;
+  Emulator emulator_;
+  
   std::vector<IBuffer> ibuffers_;
   Scoreboard scoreboard_;
   std::vector<Operand::Ptr> operands_;
   std::vector<Dispatcher::Ptr> dispatchers_;
-  std::vector<ExeUnit::Ptr> exe_units_;
+  std::vector<FuncUnit::Ptr> func_units_;  
   LocalMem::Ptr local_mem_;
   std::vector<LocalMemDemux::Ptr> lmem_demuxs_;
 
@@ -188,16 +151,9 @@ private:
   PipelineLatch decode_latch_;
   
   HashTable<instr_trace_t*> pending_icache_;
-  WarpMask active_warps_;
-  WarpMask stalled_warps_;
   uint64_t pending_instrs_;
-  bool exited_;
 
   uint64_t pending_ifetches_;
-
-  std::unordered_map<int, std::stringstream> print_bufs_;
-
-  std::vector<std::vector<CSRs>> csrs_;
   
   PerfStats perf_stats_;
   
@@ -206,7 +162,6 @@ private:
   uint32_t commit_exe_;
   uint32_t ibuffer_idx_;
 
-  friend class Warp;
   friend class LsuUnit;
   friend class AluUnit;
   friend class FpuUnit;

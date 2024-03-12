@@ -83,24 +83,21 @@ void ProcessorImpl::attach_ram(RAM* ram) {
   }
 }
 
-int ProcessorImpl::run(bool riscv_test) {
+int ProcessorImpl::run() {
   SimPlatform::instance().reset();
   this->reset();
   
   bool done;
-  Word exitcode = 0;
+  int exitcode = 0;
   do {
     SimPlatform::instance().tick();
     done = true;
     for (auto cluster : clusters_) {
       if (cluster->running()) {
-        Word ec;   
-        if (cluster->check_exit(&ec, riscv_test)) {
-          exitcode |= ec;
-        } else {
-          done = false;
-        }
+        done = false;
+        continue;
       }
+      exitcode |= cluster->get_exitcode();
     }
     perf_mem_latency_ += perf_mem_pending_reads_;
   } while (!done);
@@ -143,8 +140,8 @@ void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-int Processor::run(bool riscv_test) {
-  return impl_->run(riscv_test);
+int Processor::run() {
+  return impl_->run();
 }
 
 void Processor::write_dcr(uint32_t addr, uint32_t value) {

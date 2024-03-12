@@ -16,6 +16,7 @@
 #include <stdint.h>
 #include <bitset>
 #include <queue>
+#include <vector>
 #include <unordered_map>
 #include <util.h>
 #include <stringutil.h>
@@ -52,8 +53,6 @@ typedef std::bitset<MAX_NUM_CORES>   CoreMask;
 typedef std::bitset<MAX_NUM_REGS>    RegMask;
 typedef std::bitset<MAX_NUM_THREADS> ThreadMask;
 typedef std::bitset<MAX_NUM_WARPS>   WarpMask;
-
-typedef std::unordered_map<uint32_t, uint32_t> CSRs;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -141,6 +140,18 @@ enum class AddrType {
   Shared,
   IO
 };
+
+inline AddrType get_addr_type(uint64_t addr) {
+  if (LMEM_ENABLED) {
+    if (addr >= LMEM_BASE_ADDR && addr < (LMEM_BASE_ADDR + (1 << LMEM_LOG_SIZE))) {
+        return AddrType::Shared;
+    }
+  }
+  if (addr >= IO_BASE_ADDR) {
+     return AddrType::IO;
+  }
+  return AddrType::Global;
+}
 
 inline std::ostream &operator<<(std::ostream &os, const AddrType& type) {
   switch (type) {

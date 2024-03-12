@@ -21,7 +21,7 @@
 #include <util.h>
 #include "debug.h"
 #include "types.h"
-#include "decode.h"
+#include "emulator.h"
 #include "arch.h"
 #include "instr.h"
 
@@ -435,9 +435,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 }
 }
 
-Decoder::Decoder(const Arch&) {}
-
-std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {  
+std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {  
   auto instr = std::make_shared<Instr>();
   auto op = Opcode((code >> shift_opcode) & mask_opcode);
   instr->setOpcode(op);
