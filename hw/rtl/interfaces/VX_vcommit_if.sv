@@ -26,7 +26,7 @@ interface VX_vcommit_if #(
         logic [`XLEN-1:0]           PC;
         logic                       wb;
         logic [`NR_BITS-1:0]        rd;
-        logic [NUM_VECTOR_LANES-1:0][`XLEN-1:0] data;
+        logic [NUM_VECTOR_LANES-1:0][`XLEN-1:0] data;//Vector data
         logic [PID_WIDTH-1:0]       pid;
         logic                       sop;
         logic                       eop;

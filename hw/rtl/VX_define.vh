@@ -249,9 +249,15 @@
 `define INST_SFU_IS_CSR(op)  (op >= 6 && op <= 8)
 
 ///////////////////////////////////////////////////////////////////////////////
-`define INST_VALU_BITS       4
+// VALU
+`define INST_VALU_BITS        4
 `define INST_VALU_VADD        4'b0000
+`define INST_VALU_VSUB        4'b0111
+`define INST_VALU_VAND        4'b1100
+`define INST_VALU_VOR         4'b1101
+`define INST_VALU_VXOR        4'b1110
 
+///////////////////////////////////////////////////////////////////////////////
 // non-cacheable tag bits
 `define NC_TAG_BITS             1
 

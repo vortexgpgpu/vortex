@@ -148,6 +148,25 @@ module VX_decode  #(
     end
 `endif
 
+`ifdef EXT_V_ENABLE
+    reg [`INST_OP_BITS-1:0] v_type;
+    always @(*) begin
+        case(func3)
+            3'h0: begin
+                case (func6) //
+                    6'h000000: v_type = `INST_VALU_VADD;
+                    6'h000010: v_type = `INST_VALU_VSUB;
+                    6'h001001: v_type = `INST_VALU_VAND;
+                    6'h001010: v_type = `INST_VALU_VOR;
+                    6'h001011: v_type = `INST_VALU_VXOR;
+                    default:;
+                endcase
+            end
+            default:;
+        endcase
+    end
+'endif
+
     always @(*) begin
 
         ex_type   = '0;
@@ -508,32 +527,16 @@ module VX_decode  #(
                     default:;
                 endcase
             end
-            `ifdef EXT_V_ENABLE
-                        `INST_VALU: begin
-                            case(func3)
-                                3'h00 : begin //OPIVV
-                                    case(func6)
-                                        6'h00 : begin //VADD
-                                            ex_type = `EX_VALU;
-                                            op_type = `INST_OP_BITS'(`INST_VALU_VADD);
-                                            `USED_IREG (rd);
-                                            `USED_IREG (rs1);
-                                            `USED_IREG (rs2);
-                                            imm = 0;
-                                        end
-                                        //additonal OPIVV Instructions
-
-                                        //
-                                        default :;
-                                    endcase 
-                                //additional major opcode(OPFVV, OPMVV, etc.)
-                                
-                                //
-                                end//of case(func6 = 6'h00)
-                                default:;
-                            endcase//of case(func6)
-            end//of 'INST_EXT3
-            `endif
+        `ifdef EXT_V_ENABLE
+            `INST_VALU: begin
+                    ex_type = `EX_VALU;
+                    op_type = `INST_OP_BITS'(v_type);
+                    `USED_IREG (rd);
+                    `USED_IREG (rs1);
+                    `USED_IREG (rs2);
+                    imm = 0;
+            end
+        `endif
             default:;
         endcase
     end
