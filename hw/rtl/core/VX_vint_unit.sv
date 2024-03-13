@@ -79,7 +79,7 @@ module VX_vint_unit #(
         assign sub_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] - alu_in2_imm[i][31:0]));
     end
     
-    /*
+    
     for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin // VSHR(shift right)
         wire [`XLEN:0] shr_in1 = {is_signed && alu_in1[i][`XLEN-1], alu_in1[i]};        
         assign shr_result[i] = `XLEN'($signed(shr_in1) >>> alu_in2_imm[i][SHIFT_IMM_BITS-1:0]);
@@ -87,7 +87,7 @@ module VX_vint_unit #(
         wire [31:0] shr_res_w = 32'($signed(shr_in1_w) >>> alu_in2_imm[i][4:0]);
         assign shr_result_w[i] = `XLEN'($signed(shr_res_w));
     end
-    */
+    
 
     for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin // VMSC(VAND, VOR, VXOR)
         always @(*) begin
@@ -95,7 +95,7 @@ module VX_vint_unit #(
                 2'b00: msc_result[i] = alu_in1[i] & alu_in2_imm[i]; // VAND
                 2'b01: msc_result[i] = alu_in1[i] | alu_in2_imm[i]; // VOR
                 2'b10: msc_result[i] = alu_in1[i] ^ alu_in2_imm[i]; // VXOR
-                2'b11: ;//msc_result[i] = alu_in1[i] << alu_in2_imm[i][SHIFT_IMM_BITS-1:0]; // VSLL
+                2'b11: msc_result[i] = alu_in1[i] << alu_in2_imm[i][SHIFT_IMM_BITS-1:0]; // VSLL
             endcase
         end
         assign msc_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] << alu_in2_imm[i][4:0]));
@@ -106,12 +106,12 @@ module VX_vint_unit #(
             case ({is_alu_w, op_class}) // 1bit (is_alu_w) + 2bits (op_class)          
                 3'b000: alu_result[i] = add_result[i];      // ADD
                 3'b001: alu_result[i] = sub_result[i][`XLEN-1:0];    // SUB
-                3'b010: ;//alu_result[i] = shr_result[i];      // SRL, SRA, SRLI, SRAI
+                3'b010: alu_result[i] = shr_result[i];      // SRL, SRA, SRLI, SRAI
                 3'b011: alu_result[i] = msc_result[i];      // AND, OR, XOR
-                3'b100: ;//alu_result[i] = add_result_w[i];    // ADDIW, ADDW
-                3'b101: ;//alu_result[i] = sub_result_w[i];    // SUBW
-                3'b110: ;//alu_result[i] = shr_result_w[i];    // SRLW, SRAW, SRLIW, SRAIW
-                3'b111: ;//alu_result[i] = msc_result_w[i];    // SLLW
+                3'b100: alu_result[i] = add_result_w[i];    // ADDIW, ADDW
+                3'b101: alu_result[i] = sub_result_w[i];    // SUBW
+                3'b110: alu_result[i] = shr_result_w[i];    // SRLW, SRAW, SRLIW, SRAIW
+                3'b111: alu_result[i] = msc_result_w[i];    // SLLW
             endcase
         end       
     end
