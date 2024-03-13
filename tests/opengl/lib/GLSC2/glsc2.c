@@ -4,6 +4,7 @@
 
 #define VERTEX_SHADER "kernel.vert.cl"
 #define PERS_DIV "kernel-persp-div.cl"
+#define VIEWPORT_TRANS "kernel-viewport-trans.cl"
 // CL 
 cl_int _err;
 
@@ -56,13 +57,31 @@ cl_kernel init_perspective_division_kernel(){
     if (0 != read_kernel_file(PERS_DIV, &kernel_bin, &kernel_size))
         return -1;
     
-    cl_program vertex_shader = clCreateProgramWithSource(
+    cl_program perspective_division = clCreateProgramWithSource(
         _context, 1, (const char**)&kernel_bin, &kernel_size, &_err);  
     // Build program
-  clBuildProgram(vertex_shader, 1, _getDeviceID(), NULL, NULL, NULL);
+  clBuildProgram(perspective_division, 1, _getDeviceID(), NULL, NULL, NULL);
   
   // Create kernel
-  return clCreateKernel(vertex_shader, "perspective division", &_err);
+  return clCreateKernel(perspective_division, "perspective division", &_err);
+  //Hay que conservar cl_program al salir de la stack? (quien sabe...)
+}
+
+cl_kernel init_viewport_transformation_kernel(){
+    uint8_t *kernel_bin = NULL;
+    size_t kernel_size;
+
+  //HOSTCPU
+    if (0 != read_kernel_file(VIEWPORT_TRANS, &kernel_bin, &kernel_size))
+        return -1;
+    
+    cl_program viewport_transformation = clCreateProgramWithSource(
+        _context, 1, (const char**)&kernel_bin, &kernel_size, &_err);  
+    // Build program
+  clBuildProgram(viewport_transformation, 1, _getDeviceID(), NULL, NULL, NULL);
+  
+  // Create kernel
+  return clCreateKernel(viewport_transformation, "viewport division", &_err);
   //Hay que conservar cl_program al salir de la stack? (quien sabe...)
 }
 
@@ -82,7 +101,7 @@ void vertex_shader_add_argument_host(void* data, unsigned int arg, unsigned int 
 
 void execute_vertex_shader(unsigned int size, unsigned int arg, float* clip_coords, cl_kernel vertexShaderKernel){
   cl_mem primitiveBuff = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 4*size*sizeof(float), NULL, &_err);
-  clSetKernelArg(vertexShaderKernel, arg, sizeof(cl_mem), clip_coords);
+  clSetKernelArg(vertexShaderKernel, arg, sizeof(cl_mem), primitiveBuff);
 
   cl_command_queue commandQueue = clCreateCommandQueue(context, _getDeviceID(), 0, &_err);
   size_t global_work_size[1] = {size};
@@ -95,8 +114,8 @@ void execute_perspective_division(unsigned int numVerts, float* clip_coords, flo
     cl_mem clipCoordsBuff = clCreateBuffer(context, CL_MEM_READ_ONLY, numVerts*4*sizeof(float), NULL, &_err);
     cl_mem ndcCoordsBuff = clCreateBuffer(context, CL_MEM_WRITE_ONLY, numVerts*3*sizeof(float), NULL, &_err);
     
-    clSetKernelArg(perspective_kernel, 0, sizeof(cl_mem), clip_coords);
-    clSetKernelArg(perspective_kernel, 1, sizeof(cl_mem), ndc_coords);
+    clSetKernelArg(perspective_kernel, 0, sizeof(cl_mem), clipCoordsBuff);
+    clSetKernelArg(perspective_kernel, 1, sizeof(cl_mem), ndcCoordsBuff);
 
   cl_command_queue commandQueue = clCreateCommandQueue(context, _getDeviceID(), 0, &_err);
   size_t global_work_size[1] = {numVerts};
@@ -105,7 +124,38 @@ void execute_perspective_division(unsigned int numVerts, float* clip_coords, flo
   clEnqueueReadBuffer(commandQueue, ndcCoordsBuff, CL_TRUE, 0, 3*numVerts*sizeof(float), ndc_coords, 0, NULL, NULL);
 }
 
+void execute_viewport_transformation(unsigned int numVerts, float* ndc_coords, float* window_coords, cl_kernel viewport_transformation_kernel){
+    cl_mem ndcCoordsBuff = clCreateBuffer(context, CL_MEM_READ_ONLY, numVerts*3*sizeof(float), NULL, &_err);
+    cl_mem windowCoordsBuff = clCreateBuffer(context, CL_MEM_WRITE_ONLY, numVerts*3*sizeof(float), NULL, &_err);
+    
+    clSetKernelArg(viewport_transformation_kernel, 0, sizeof(cl_mem), ndcCoordsBuff);
+    clSetKernelArg(viewport_transformation_kernel, 1, sizeof(GLint), viewportTransform.w);
+    clSetKernelArg(viewport_transformation_kernel, 2, sizeof(GLint), viewportTransform.h);
+    clSetKernelArg(viewport_transformation_kernel, 3, sizeof(GLint), (viewportTransform.x+viewportTransform.w/2));
+    clSetKernelArg(viewport_transformation_kernel, 4, sizeof(GLint), (viewportTransform.y+viewportTransform.h/2));
+    clSetKernelArg(viewport_transformation_kernel, 5, sizeof(GLfloat), viewportTransform.n);
+    clSetKernelArg(viewport_transformation_kernel, 6, sizeof(GLfloat), viewportTransform.f);
+    clSetKernelArg(viewport_transformation_kernel, 7, sizeof(cl_mem), windowCoordsBuff);
+
+  cl_command_queue commandQueue = clCreateCommandQueue(context, _getDeviceID(), 0, &_err);
+  size_t global_work_size[1] = {numVerts};
+  clEnqueueNDRangeKernel(commandQueue, viewport_transformation_kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
+  clFinish(commandQueue);  
+  clEnqueueReadBuffer(commandQueue, windowCoordsBuff, CL_TRUE, 0, 3*numVerts*sizeof(float), window_coords, 0, NULL, NULL);
+}
+
 // GL 
+
+struct VIEWPORT_TRANSFORM{
+    GLint x;
+    GLint y;
+    GLsizei w;
+    GLsizei h;
+    GLfloat n=0;
+    GLfloat f=0; 
+};
+
+VIEWPORT_TRANSFORM viewportTransform;
 
 struct BUFFER {
     GLboolean used;
@@ -188,6 +238,11 @@ inline void perspective_division(unsigned int numVerts, float* clip_coords, floa
     execute_perspective_division(numVerts, clip_coords, ndc_coords, perspective_kernel);
 }
 
+inline void viewport_transformation(unsigned int numVerts, float* ndc_coords, float* window_coords){
+    cl_kernel viewport_kernel = init_viewport_transformation_kernel();
+    execute_viewport_transformation(numVerts, ndc_coords, window_coords, viewport_kernel);
+}
+
 inline void gl_pipeline(GLint first, GLsizei count){
     //pipeline
     unsigned int numVerts = count-first;
@@ -198,7 +253,8 @@ inline void gl_pipeline(GLint first, GLsizei count){
     float ndc_coords[3*numVerts];
     perspective_division(numVerts, clip_coords, ndc_coords);
     //normalized-device-coords
-
+    float window_coords[3*numVerts];
+    viewport_transformation(numVerts, ndc_coords, window_coords);
     //rasterization
 }
 
@@ -289,4 +345,14 @@ GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLe
     vertex_attrib[index].stride = stride;
     vertex_attrib[index].pointer = pointer;
 }
-GL_APICALL void GL_APIENTRY glViewport (GLint x, GLint y, GLsizei width, GLsizei height);
+GL_APICALL void GL_APIENTRY glViewport (GLint x, GLint y, GLsizei width, GLsizei height){
+    viewportTransform.x=x;
+    viewportTransform.y=y;
+    viewportTransform.w=width;
+    viewportTransform.h=height;
+}
+
+GL_APICALL void GL_APIENTRY glDepthRangef (GLfloat n, GLfloat f){
+    viewportTransform.n=n;
+    viewportTransform.f=f;
+}
