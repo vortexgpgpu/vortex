@@ -275,13 +275,6 @@
 `define LSU_LINE_SIZE   `MIN(`NUM_LSU_LANES * (`XLEN / 8), `L1_LINE_SIZE)
 `endif
 
-// LSU Duplicate Address Check
-`ifdef LSU_DUP_ENABLE
-`define LSU_DUP_ENABLED 1
-`else
-`define LSU_DUP_ENABLED 0
-`endif
-
 // Size of LSU Core Request Queue
 `ifndef LSUQ_IN_SIZE
 `define LSUQ_IN_SIZE    (2 * (`NUM_THREADS / `NUM_LSU_LANES))

@@ -38,8 +38,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     localparam LSUQ_SIZEW   = `LOG2UP(`LSUQ_IN_SIZE);
     localparam REQ_ASHIFT   = `CLOG2(WORD_SIZE);
 
-    // tag_id = wid + PC + tmask + rd + op_type + align + is_dup + pid + pkt_addr 
-    localparam TAG_ID_WIDTH = `NW_WIDTH + `XLEN + NUM_LANES + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * (REQ_ASHIFT)) + `LSU_DUP_ENABLED + PID_WIDTH + LSUQ_SIZEW;
+    // tag_id = wid + PC + rd + op_type + align + pid + pkt_addr 
+    localparam TAG_ID_WIDTH = `NW_WIDTH + `XLEN + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * (REQ_ASHIFT)) + PID_WIDTH + LSUQ_SIZEW;
 
     // tag = uuid + tag_id 
     localparam TAG_WIDTH = `UUID_WIDTH + TAG_ID_WIDTH;
@@ -88,23 +88,6 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             assign full_addr[i] = execute_if[block_idx].data.rs1_data[i][`XLEN-1:0] + execute_if[block_idx].data.imm;
         end
 
-        // detect duplicate addresses
-
-        wire lsu_is_dup;
-    `ifdef LSU_DUP_ENABLE
-        if (NUM_LANES > 1) begin    
-            wire [NUM_LANES-2:0] addr_matches;
-            for (genvar i = 0; i < (NUM_LANES-1); ++i) begin
-                assign addr_matches[i] = (execute_if[block_idx].data.rs1_data[i+1] == execute_if[block_idx].data.rs1_data[0]) || ~execute_if[block_idx].data.tmask[i+1];
-            end
-            assign lsu_is_dup = execute_if[block_idx].data.tmask[0] && (& addr_matches);
-        end else begin
-            assign lsu_is_dup = 0;
-        end
-    `else
-        assign lsu_is_dup = 0;
-    `endif
-
         wire mem_req_empty;
         wire st_rsp_ready;
         wire lsu_valid, lsu_ready;
@@ -139,10 +122,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         assign lsu_ready = mem_req_ready 
                         && (~mem_req_rw || st_rsp_ready); // writes commit directly
 
-        for (genvar i = 0; i < NUM_LANES; ++i) begin
-            assign mem_req_mask[i] = execute_if[block_idx].data.tmask[i] && (~lsu_is_dup || (i == 0));
-        end
-
+        assign mem_req_mask = execute_if[block_idx].data.tmask;
         assign mem_req_rw = ~execute_if[block_idx].data.wb;    
 
         wire mem_req_fire = mem_req_valid && mem_req_ready;
@@ -282,11 +262,15 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             `UNUSED_VAR (pkt_raddr)
         end
 
+        // pack memory request tag
         assign mem_req_tag = {
-            execute_if[block_idx].data.uuid, execute_if[block_idx].data.wid, execute_if[block_idx].data.tmask, execute_if[block_idx].data.PC, execute_if[block_idx].data.rd, execute_if[block_idx].data.op_type, req_align, execute_if[block_idx].data.pid, pkt_waddr
-        `ifdef LSU_DUP_ENABLE
-            , lsu_is_dup
-        `endif
+            execute_if[block_idx].data.uuid, 
+            execute_if[block_idx].data.wid,
+            execute_if[block_idx].data.PC, 
+            execute_if[block_idx].data.rd, 
+            execute_if[block_idx].data.op_type, 
+            req_align, execute_if[block_idx].data.pid, 
+            pkt_waddr
         };
 
         wire [DCACHE_CHANNELS-1:0]              cache_req_valid;
@@ -304,7 +288,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         `RESET_RELAY (mem_scheduler_reset, reset);
 
         VX_mem_scheduler #(
-            .INSTANCE_ID ($sformatf("core%0d-lsu-memsched", CORE_ID)),
+            .INSTANCE_ID ($sformatf("core%0d-lsu-memsched%0d", CORE_ID, block_idx)),
             .CORE_REQS   (`NUM_LSU_LANES),
             .MEM_CHANNELS(DCACHE_CHANNELS),        
             .WORD_SIZE   (WORD_SIZE),
@@ -374,30 +358,27 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         
         wire [`UUID_WIDTH-1:0] rsp_uuid;
         wire [`NW_WIDTH-1:0] rsp_wid;
-        wire [NUM_LANES-1:0] rsp_tmask_uq;
         wire [`XLEN-1:0] rsp_pc;
         wire [`NR_BITS-1:0] rsp_rd;
         wire [`INST_LSU_BITS-1:0] rsp_op_type;
         wire [NUM_LANES-1:0][REQ_ASHIFT-1:0] rsp_align;
         wire [PID_WIDTH-1:0] rsp_pid;
-        wire rsp_is_dup;
-        
-    `ifndef LSU_DUP_ENABLE
-        assign rsp_is_dup = 0;
-    `endif
-
-        assign {
-            rsp_uuid, rsp_wid, rsp_tmask_uq, rsp_pc, rsp_rd, rsp_op_type, rsp_align, rsp_pid, pkt_raddr
-        `ifdef LSU_DUP_ENABLE
-            , rsp_is_dup
-        `endif
-        } = mem_rsp_tag;
         `UNUSED_VAR (rsp_op_type)
+
+        // unpack memory response tag
+        assign {
+            rsp_uuid, 
+            rsp_wid,
+            rsp_pc, rsp_rd, 
+            rsp_op_type, 
+            rsp_align, 
+            rsp_pid, 
+            pkt_raddr
+        } = mem_rsp_tag;
 
         // load response formatting
 
         reg [NUM_LANES-1:0][`XLEN-1:0] rsp_data;
-        wire [NUM_LANES-1:0] rsp_tmask;
 
     `ifdef XLEN_64
     `ifdef EXT_F_ENABLE
@@ -410,11 +391,10 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
         for (genvar i = 0; i < NUM_LANES; i++) begin
         `ifdef XLEN_64
-            wire [63:0] rsp_data64 = (i == 0 || rsp_is_dup) ? mem_rsp_data[0] : mem_rsp_data[i];
-            wire [31:0] rsp_data32 = (i == 0 || rsp_is_dup) ? (rsp_align[0][2] ? mem_rsp_data[0][63:32] : mem_rsp_data[0][31:0]) :
-                                                              (rsp_align[i][2] ? mem_rsp_data[i][63:32] : mem_rsp_data[i][31:0]);
+            wire [63:0] rsp_data64 = mem_rsp_data[i];
+            wire [31:0] rsp_data32 = (rsp_align[i][2] ? mem_rsp_data[i][63:32] : mem_rsp_data[i][31:0]);
         `else
-            wire [31:0] rsp_data32 = (i == 0 || rsp_is_dup) ? mem_rsp_data[0] : mem_rsp_data[i];
+            wire [31:0] rsp_data32 = mem_rsp_data[i];
         `endif        
             wire [15:0] rsp_data16 = rsp_align[i][1] ? rsp_data32[31:16] : rsp_data32[15:0];
             wire [7:0]  rsp_data8  = rsp_align[i][0] ? rsp_data16[15:8] : rsp_data16[7:0];
@@ -435,9 +415,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
                 default: rsp_data[i] = 'x;
                 endcase
             end        
-        end   
-
-        assign rsp_tmask = rsp_is_dup ? rsp_tmask_uq : mem_rsp_mask;
+        end
 
         // load commit
 
@@ -449,7 +427,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             .reset     (reset),
             .valid_in  (mem_rsp_valid),
             .ready_in  (mem_rsp_ready),
-            .data_in   ({rsp_uuid, rsp_wid, rsp_tmask, rsp_pc, rsp_rd, rsp_data, rsp_pid, mem_rsp_sop_pkt, mem_rsp_eop_pkt}),
+            .data_in   ({rsp_uuid, rsp_wid, mem_rsp_mask, rsp_pc, rsp_rd, rsp_data, rsp_pid, mem_rsp_sop_pkt, mem_rsp_eop_pkt}),
             .data_out  ({commit_ld_if.data.uuid, commit_ld_if.data.wid, commit_ld_if.data.tmask, commit_ld_if.data.PC, commit_ld_if.data.rd, commit_ld_if.data.data, commit_ld_if.data.pid, commit_ld_if.data.sop, commit_ld_if.data.eop}),
             .valid_out (commit_ld_if.valid),
             .ready_out (commit_ld_if.ready)
@@ -507,24 +485,24 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
                     `TRACE_ARRAY1D(1, "0x%h", full_addr, NUM_LANES);
                     `TRACE(1, (", tag=0x%0h, byteen=0x%0h, data=", mem_req_tag, mem_req_byteen));
                     `TRACE_ARRAY1D(1, "0x%0h", mem_req_data, NUM_LANES);
-                    `TRACE(1, (", is_dup=%b (#%0d)\n", lsu_is_dup, execute_if[block_idx].data.uuid));
+                    `TRACE(1, (" (#%0d)\n", execute_if[block_idx].data.uuid));
                 end else begin
                     `TRACE(1, ("%d: D$%0d Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, execute_if[block_idx].data.wid, execute_if[block_idx].data.PC, mem_req_mask));
                     `TRACE_ARRAY1D(1, "0x%h", full_addr, NUM_LANES);
-                    `TRACE(1, (", tag=0x%0h, byteen=0x%0h, rd=%0d, is_dup=%b (#%0d)\n", mem_req_tag, mem_req_byteen, execute_if[block_idx].data.rd, lsu_is_dup, execute_if[block_idx].data.uuid));
+                    `TRACE(1, (", tag=0x%0h, byteen=0x%0h, rd=%0d (#%0d)\n", mem_req_tag, mem_req_byteen, execute_if[block_idx].data.rd, execute_if[block_idx].data.uuid));
                 end
             end
             if (mem_rsp_fire) begin
                 `TRACE(1, ("%d: D$%0d Rsp: wid=%0d, PC=0x%0h, tmask=%b, tag=0x%0h, rd=%0d, sop=%b, eop=%b, data=",
                     $time, CORE_ID, rsp_wid, rsp_pc, mem_rsp_mask, mem_rsp_tag, rsp_rd, mem_rsp_sop, mem_rsp_eop));
                 `TRACE_ARRAY1D(1, "0x%0h", mem_rsp_data, NUM_LANES);
-                `TRACE(1, (", is_dup=%b (#%0d)\n", rsp_is_dup, rsp_uuid));
+                `TRACE(1, (" (#%0d)\n", rsp_uuid));
             end
         end
     `endif
     
     `ifdef DBG_SCOPE_LSU
-        if (CORE_ID == 0) begin
+        if (CORE_ID == 0 && block_idx == 0) begin
         `ifdef SCOPE
             VX_scope_tap #(
                 .SCOPE_ID (3),
@@ -548,7 +526,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             ila_lsu ila_lsu_inst (
                 .clk    (clk),
                 .probe0 ({mem_req_data_0, execute_if[0].data.uuid, execute_if[0].data.wid, execute_if[0].data.PC, mem_req_mask, full_addr_0, mem_req_byteen, mem_req_rw, mem_req_ready, mem_req_valid}),
-                .probe1 ({rsp_data_0, rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, rsp_tmask, rsp_wid, mem_rsp_ready, mem_rsp_valid}),
+                .probe1 ({rsp_data_0, rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, mem_rsp_mask, rsp_wid, mem_rsp_ready, mem_rsp_valid}),
                 .probe2 ({cache_bus_if.req_data.data, cache_bus_if.req_data.tag, cache_bus_if.req_data.byteen, cache_bus_if.req_data.addr, cache_bus_if.req_data.rw, cache_bus_if.req_ready, cache_bus_if.req_valid}),
                 .probe3 ({cache_bus_if.rsp_data.data, cache_bus_if.rsp_data.tag, cache_bus_if.rsp_ready, cache_bus_if.rsp_valid})
             );
