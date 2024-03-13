@@ -79,7 +79,7 @@ module VX_decode  #(
     `UNUSED_VAR (use_rs1)
     `UNUSED_VAR (use_rs2)
     `UNUSED_VAR (use_rs3)
-    `UNUSED_VAR (vm)
+    `UNUSED_VAR (vm) // Comment it if vm is needed in the following stages
 
     wire is_itype_sh = func3[0] && ~func3[1];
 

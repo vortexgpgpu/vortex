@@ -65,6 +65,7 @@ module VX_vint_unit #(
     wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] alu_in1 = execute_if.data.vs1_data;
     wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] alu_in2 = execute_if.data.vs2_data;
 
+    //immediate case
     wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if.data.use_imm ? {NUM_VECTOR_LANES{execute_if.data.imm}} : alu_in2;
 
     for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin // VADD
