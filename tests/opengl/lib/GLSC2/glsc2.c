@@ -1,8 +1,18 @@
 #include <GLSC2/glsc2.h>
 #include <CL/opencl.h>
 
+
+#define VERTEX_SHADER "kernel.vert.cl"
+#define PERS_DIV "kernel-persp-div.cl"
+#define VIEWPORT_TRANS "kernel-viewport-trans.cl"
 // CL 
 cl_int _err;
+
+typedef struct vec2f
+{
+    float x;
+    float y;
+};
 
 cl_platform_id* _getPlatformID() {
     static cl_platform_id platform_id = NULL;
@@ -21,7 +31,131 @@ cl_device_id* _getDeviceID() {
 
 cl_context _context = clCreateContext(NULL, 1, _getDeviceID(), NULL, NULL,  &_err);
 
+cl_kernel init_vertex_shader_kernel(){
+    uint8_t *kernel_bin = NULL;
+    size_t kernel_size;
+
+  //HOSTCPU
+    if (0 != read_kernel_file(VERTEX_SHADER, &kernel_bin, &kernel_size))
+        return -1;
+    
+    cl_program vertex_shader = clCreateProgramWithSource(
+        _context, 1, (const char**)&kernel_bin, &kernel_size, &_err);  
+    // Build program
+  clBuildProgram(vertex_shader, 1, _getDeviceID(), NULL, NULL, NULL);
+  
+  // Create kernel
+  return clCreateKernel(vertex_shader, "vertex_shader", &_err);
+  //Hay que conservar cl_program al salir de la stack? (quien sabe...)
+}
+
+cl_kernel init_perspective_division_kernel(){
+    uint8_t *kernel_bin = NULL;
+    size_t kernel_size;
+
+  //HOSTCPU
+    if (0 != read_kernel_file(PERS_DIV, &kernel_bin, &kernel_size))
+        return -1;
+    
+    cl_program perspective_division = clCreateProgramWithSource(
+        _context, 1, (const char**)&kernel_bin, &kernel_size, &_err);  
+    // Build program
+  clBuildProgram(perspective_division, 1, _getDeviceID(), NULL, NULL, NULL);
+  
+  // Create kernel
+  return clCreateKernel(perspective_division, "perspective division", &_err);
+  //Hay que conservar cl_program al salir de la stack? (quien sabe...)
+}
+
+cl_kernel init_viewport_transformation_kernel(){
+    uint8_t *kernel_bin = NULL;
+    size_t kernel_size;
+
+  //HOSTCPU
+    if (0 != read_kernel_file(VIEWPORT_TRANS, &kernel_bin, &kernel_size))
+        return -1;
+    
+    cl_program viewport_transformation = clCreateProgramWithSource(
+        _context, 1, (const char**)&kernel_bin, &kernel_size, &_err);  
+    // Build program
+  clBuildProgram(viewport_transformation, 1, _getDeviceID(), NULL, NULL, NULL);
+  
+  // Create kernel
+  return clCreateKernel(viewport_transformation, "viewport division", &_err);
+  //Hay que conservar cl_program al salir de la stack? (quien sabe...)
+}
+
+void vertex_shader_add_argument_buffer(cl_mem data, unsigned int arg, void* offset, unsigned int size, cl_kernel vertexShaderKernel){
+  //position
+  clSetKernelArg(vertexShaderKernel, arg, sizeof(cl_mem), (void *)&data);
+  clSetKernelArg(vertexShaderKernel, arg+1, sizeof(void*), offset);
+  clSetKernelArg(vertexShaderKernel, arg+2, sizeof(unsigned int), size);
+}
+
+void vertex_shader_add_argument_host(void* data, unsigned int arg, unsigned int size, cl_kernel vertexShaderKernel){
+  //position
+  clSetKernelArg(vertexShaderKernel, arg, sizeof(void*), (void *)&data);
+  clSetKernelArg(vertexShaderKernel, arg+1, sizeof(void*), (void*)0);
+  clSetKernelArg(vertexShaderKernel, arg+2, sizeof(unsigned int), size);
+}
+
+void execute_vertex_shader(unsigned int size, unsigned int arg, float* clip_coords, cl_kernel vertexShaderKernel){
+  cl_mem primitiveBuff = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 4*size*sizeof(float), NULL, &_err);
+  clSetKernelArg(vertexShaderKernel, arg, sizeof(cl_mem), primitiveBuff);
+
+  cl_command_queue commandQueue = clCreateCommandQueue(context, _getDeviceID(), 0, &_err);
+  size_t global_work_size[1] = {size};
+  clEnqueueNDRangeKernel(commandQueue, vertexShaderKernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
+  clFinish(commandQueue);  
+  clEnqueueReadBuffer(commandQueue, primitiveBuff, CL_TRUE, 0, 4*size*sizeof(float), clip_coords, 0, NULL, NULL);
+}
+
+void execute_perspective_division(unsigned int numVerts, float* clip_coords, float* ndc_coords, cl_kernel perspective_kernel){
+    cl_mem clipCoordsBuff = clCreateBuffer(context, CL_MEM_READ_ONLY, numVerts*4*sizeof(float), NULL, &_err);
+    cl_mem ndcCoordsBuff = clCreateBuffer(context, CL_MEM_WRITE_ONLY, numVerts*3*sizeof(float), NULL, &_err);
+    
+    clSetKernelArg(perspective_kernel, 0, sizeof(cl_mem), clipCoordsBuff);
+    clSetKernelArg(perspective_kernel, 1, sizeof(cl_mem), ndcCoordsBuff);
+
+  cl_command_queue commandQueue = clCreateCommandQueue(context, _getDeviceID(), 0, &_err);
+  size_t global_work_size[1] = {numVerts};
+  clEnqueueNDRangeKernel(commandQueue, perspective_kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
+  clFinish(commandQueue);  
+  clEnqueueReadBuffer(commandQueue, ndcCoordsBuff, CL_TRUE, 0, 3*numVerts*sizeof(float), ndc_coords, 0, NULL, NULL);
+}
+
+void execute_viewport_transformation(unsigned int numVerts, float* ndc_coords, float* window_coords, cl_kernel viewport_transformation_kernel){
+    cl_mem ndcCoordsBuff = clCreateBuffer(context, CL_MEM_READ_ONLY, numVerts*3*sizeof(float), NULL, &_err);
+    cl_mem windowCoordsBuff = clCreateBuffer(context, CL_MEM_WRITE_ONLY, numVerts*3*sizeof(float), NULL, &_err);
+    
+    clSetKernelArg(viewport_transformation_kernel, 0, sizeof(cl_mem), ndcCoordsBuff);
+    clSetKernelArg(viewport_transformation_kernel, 1, sizeof(GLint), viewportTransform.w);
+    clSetKernelArg(viewport_transformation_kernel, 2, sizeof(GLint), viewportTransform.h);
+    clSetKernelArg(viewport_transformation_kernel, 3, sizeof(GLint), (viewportTransform.x+viewportTransform.w/2));
+    clSetKernelArg(viewport_transformation_kernel, 4, sizeof(GLint), (viewportTransform.y+viewportTransform.h/2));
+    clSetKernelArg(viewport_transformation_kernel, 5, sizeof(GLfloat), viewportTransform.n);
+    clSetKernelArg(viewport_transformation_kernel, 6, sizeof(GLfloat), viewportTransform.f);
+    clSetKernelArg(viewport_transformation_kernel, 7, sizeof(cl_mem), windowCoordsBuff);
+
+  cl_command_queue commandQueue = clCreateCommandQueue(context, _getDeviceID(), 0, &_err);
+  size_t global_work_size[1] = {numVerts};
+  clEnqueueNDRangeKernel(commandQueue, viewport_transformation_kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
+  clFinish(commandQueue);  
+  clEnqueueReadBuffer(commandQueue, windowCoordsBuff, CL_TRUE, 0, 3*numVerts*sizeof(float), window_coords, 0, NULL, NULL);
+}
+
 // GL 
+
+struct VIEWPORT_TRANSFORM{
+    GLint x;
+    GLint y;
+    GLsizei w;
+    GLsizei h;
+    GLfloat n=0;
+    GLfloat f=0; 
+};
+
+VIEWPORT_TRANSFORM viewportTransform;
 
 struct BUFFER {
     GLboolean used;
@@ -41,7 +175,10 @@ struct VertexAttrib{
     const void *pointer;
 };
 
-VertexAttrib vertex_attrib[255]; // TODO: this has to be the max size GL_MAX_VERTEX_ATTRIBS
+//change to GL_MAX_VERTEX
+#define VERTEX_ATTR_SIZE 255
+
+VertexAttrib vertex_attrib[VERTEX_ATTR_SIZE]; // TODO: this has to be the max size GL_MAX_VERTEX_ATTRIBS
 
 GL_APICALL void GL_APIENTRY glBindBuffer (GLenum target, GLuint buffer) {
     if (!_buffers[buffer].used) {
@@ -67,7 +204,65 @@ GL_APICALL void GL_APIENTRY glBufferData (GLenum target, GLsizeiptr size, const 
 GL_APICALL void GL_APIENTRY glClear (GLbitfield mask);
 GL_APICALL GLuint GL_APIENTRY glCreateProgram (void);
 
+inline void vertex_shader(GLint first, GLsizei count, float* clip_coords){
+    //VERTEX SHADER
+    cl_kernel vertexShaderKernel = init_vertex_shader_kernel();
+    //preparar input
+    VertexAttrib* pVertexAttr = &vertex_attrib;
+    clSetKernelArg(vertexShaderKernel, 0, sizeof(GLint), first);
+    unsigned int arg=1;
+
+    //cada uno es un kernel (la idea es hacer count-first kernels)
+    //while(first < count) {
+        //coger atributos del kernel
+    for (int i =0; i<VERTEX_ATTR_SIZE; i++)
+    {
+        if (pVertexAttr->enable){
+            if (_binded_buffer != 0){
+                //take from buffer, send to kernel as argument
+                vertex_shader_add_argument_buffer(buffers[_binded_buffer].mem, arg, pVertexAttr->pointer, pVertexAttr->size, vertexShaderKernel);
+            }else{
+                //take from host
+                vertex_shader_add_argument_host(pVertexAttr->pointer, arg, pVertexAttr->size, vertexShaderKernel);
+            }
+            arg+=3;
+        }
+    pVertexAttr++;
+    }
+    //}
+    execute_vertex_shader(count-first, arg++, clip_coords, vertexShaderKernel);
+}
+
+inline void perspective_division(unsigned int numVerts, float* clip_coords, float* ndc_coords){
+    cl_kernel perspective_kernel = init_perspective_division_kernel();
+    execute_perspective_division(numVerts, clip_coords, ndc_coords, perspective_kernel);
+}
+
+inline void viewport_transformation(unsigned int numVerts, float* ndc_coords, float* window_coords){
+    cl_kernel viewport_kernel = init_viewport_transformation_kernel();
+    execute_viewport_transformation(numVerts, ndc_coords, window_coords, viewport_kernel);
+}
+
+inline void gl_pipeline(GLint first, GLsizei count){
+    //pipeline
+    unsigned int numVerts = count-first;
+    //vertex shader
+    float clip_coords[4*numVerts];//es ejemplo, no se puede iniciar dinamicamente, pero tampoco se puede usar malloc :D
+    vertex_shader(first, count, clip_coords);
+    //clip coord
+    float ndc_coords[3*numVerts];
+    perspective_division(numVerts, clip_coords, ndc_coords);
+    //normalized-device-coords
+    float window_coords[3*numVerts];
+    viewport_transformation(numVerts, ndc_coords, window_coords);
+    //rasterization
+}
+
 GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei count) {
+    if (first <0){
+        _err= GL_INVALID_VALUE;
+        return;
+    }
     if (index >= GL_MAX_VERTEX_ATTRIBS) {
         _err = GL_INVALID_VALUE;
         return;
@@ -75,12 +270,11 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     if (mode==GL_POINTS); // TODO
     else if (mode==GL_LINES); // TODO
     else if (mode==GL_TRIANGLES) {
-        while(first < count) {
-
-
-            ++first;
-        }
+        gl_pipeline(first, count);
     }
+}
+
+GL_APICALL void GL_APIENTRY glDrawRangeElements (GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const void *indices){
 }
 GL_APICALL void GL_APIENTRY glDisableVertexAttribArray (GLuint index) {
     if (index >= GL_MAX_VERTEX_ATTRIBS) {
@@ -135,10 +329,30 @@ GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLe
         return;
     }
 
+    //check type
+    if (type != GL_BYTE || type != GL_UNSIGNED_BYTE || type != GL_SHORT || type != GL_UNSIGNED_SHORT || type != GL_FLOAT){
+        _err=GL_INVALID_VALUE;
+        return;
+    }
+
+    if (normalized == GL_TRUE){
+        //normalizar integers
+    }
+
     vertex_attrib[index].size = size;
     vertex_attrib[index].type = type;
     vertex_attrib[index].normalized = normalized;
     vertex_attrib[index].stride = stride;
     vertex_attrib[index].pointer = pointer;
 }
-GL_APICALL void GL_APIENTRY glViewport (GLint x, GLint y, GLsizei width, GLsizei height);
+GL_APICALL void GL_APIENTRY glViewport (GLint x, GLint y, GLsizei width, GLsizei height){
+    viewportTransform.x=x;
+    viewportTransform.y=y;
+    viewportTransform.w=width;
+    viewportTransform.h=height;
+}
+
+GL_APICALL void GL_APIENTRY glDepthRangef (GLfloat n, GLfloat f){
+    viewportTransform.n=n;
+    viewportTransform.f=f;
+}

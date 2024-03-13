@@ -1,5 +1,30 @@
 {
     "files.associations": {
-        "glsc2.h": "c"
+        "glsc2.h": "c",
+        "bitset": "c",
+        "chrono": "c",
+        "algorithm": "c",
+        "__bit_reference": "c",
+        "map": "c",
+        "set": "c",
+        "unordered_map": "c",
+        "unordered_set": "c",
+        "array": "c",
+        "string_view": "c",
+        "initializer_list": "c",
+        "ranges": "c",
+        "utility": "c",
+        "valarray": "c",
+        "__hash_table": "c",
+        "__split_buffer": "c",
+        "__tree": "c",
+        "deque": "c",
+        "iterator": "c",
+        "list": "c",
+        "queue": "c",
+        "random": "c",
+        "stack": "c",
+        "string": "c",
+        "vector": "c"
     }
 }

@@ -166,7 +166,7 @@ int main (int argc, char **argv) {
   // Allocate memories for input arrays and output arrays.    
   h_a = (float*)malloc(nbytes);
   h_b = (float*)malloc(nbytes);
-  h_c = (float*)malloc(nbytes);	
+  h_c = (float*)malloc(nbytes);
 	
   // Generate input values
   for (int i = 0; i < size; ++i) {
@@ -218,16 +218,19 @@ int main (int argc, char **argv) {
 
 int _main() {
     // Set up vertex buffer object
-    unsigned int program, vbo;
+    GLuint program, vao, vbo;
     
     glViewport(0, 0, WIDTH, HEIGHT);
     glClear(GL_COLOR_BUFFER_BIT);
     glUseProgram(program);
 
+    //vbo
     glGenBuffers(1, &vbo);
     glBufferData(GL_ARRAY_BUFFER,sizeof(triangle),triangle,GL_STATIC_DRAW);
+
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0); 
     
+    //print
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
