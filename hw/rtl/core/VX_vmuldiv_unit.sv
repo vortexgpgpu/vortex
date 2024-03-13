@@ -15,16 +15,17 @@
 
 module VX_vmuldiv_unit #(
     parameter CORE_ID   = 0,
-    parameter NUM_LANES = 1
+    parameter NUM_LANES = 1,
+    parameter NUM_VECTOR_LANES = 1
 ) (
     input wire          clk,
     input wire          reset,
     
     // Inputs
-    VX_execute_if.slave execute_if,
+    VX_vexecute_if.slave execute_if,
 
     // Outputs
-    VX_commit_if.master commit_if
+    VX_vcommit_if.master commit_if
 );
     `UNUSED_PARAM (CORE_ID)
     localparam PID_BITS  = `CLOG2(`NUM_THREADS / NUM_LANES);
@@ -43,7 +44,7 @@ module VX_vmuldiv_unit #(
     wire is_alu_w = 0;
 `endif
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] mul_result_out;
+    wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] mul_result_out;
     wire [`UUID_WIDTH-1:0] mul_uuid_out;
     wire [`NW_WIDTH-1:0] mul_wid_out;
     wire [NUM_LANES-1:0] mul_tmask_out;
@@ -64,11 +65,11 @@ module VX_vmuldiv_unit #(
 
 `ifdef IMUL_DPI
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] mul_result_tmp;  
+    wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] mul_result_tmp;  
 
     wire mul_fire_in = mul_valid_in && mul_ready_in;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin
         wire [`XLEN-1:0] mul_resultl, mul_resulth;
         wire [`XLEN-1:0] mul_in1 = is_alu_w ? (execute_if.data.rs1_data[i] & `XLEN'hFFFFFFFF) : execute_if.data.rs1_data[i]; 
         wire [`XLEN-1:0] mul_in2 = is_alu_w ? (execute_if.data.rs2_data[i] & `XLEN'hFFFFFFFF) : execute_if.data.rs2_data[i]; 
@@ -79,7 +80,7 @@ module VX_vmuldiv_unit #(
     end
 
     VX_shift_register #(
-        .DATAW  (1 + TAGW + (NUM_LANES * `XLEN)),
+        .DATAW  (1 + TAGW + (NUM_VECTOR_LANES * `XLEN)),
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) mul_shift_reg (
@@ -94,16 +95,16 @@ module VX_vmuldiv_unit #(
 
 `else      
     
-    wire [NUM_LANES-1:0][2*(`XLEN+1)-1:0] mul_result_tmp;
+    wire [NUM_VECTOR_LANES-1:0][2*(`XLEN+1)-1:0] mul_result_tmp;
     wire is_mulh_out;
     wire is_mul_w_out;
 
 `ifdef XLEN_64
 
-    wire [NUM_LANES-1:0][`XLEN:0] mul_in1;
-    wire [NUM_LANES-1:0][`XLEN:0] mul_in2;
+    wire [NUM_VECTOR_LANES-1:0][`XLEN:0] mul_in1;
+    wire [NUM_VECTOR_LANES-1:0][`XLEN:0] mul_in2;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin
         assign mul_in1[i] = is_alu_w ? {{(`XLEN-31){execute_if.data.rs1_data[i][31]}}, execute_if.data.rs1_data[i][31:0]} : {is_signed_mul_a && execute_if.data.rs1_data[i][`XLEN-1], execute_if.data.rs1_data[i]};
         assign mul_in2[i] = is_alu_w ? {{(`XLEN-31){execute_if.data.rs2_data[i][31]}}, execute_if.data.rs2_data[i][31:0]} : {is_signed_mul_b && execute_if.data.rs2_data[i][`XLEN-1], execute_if.data.rs2_data[i]};
     end    
@@ -124,7 +125,7 @@ module VX_vmuldiv_unit #(
 
     VX_serial_mul #(
         .A_WIDTH (`XLEN+1),
-        .LANES   (NUM_LANES),
+        .LANES   (NUM_VECTOR_LANES),
         .SIGNED  (1)
     ) serial_mul (
         .clk       (clk),
@@ -149,9 +150,9 @@ module VX_vmuldiv_unit #(
 
 `else
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
-        wire [`XLEN:0] mul_in1 = {is_signed_mul_a && execute_if.data.rs1_data[i][`XLEN-1], execute_if.data.rs1_data[i]};
-        wire [`XLEN:0] mul_in2 = {is_signed_mul_b && execute_if.data.rs2_data[i][`XLEN-1], execute_if.data.rs2_data[i]};        
+    for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin
+        wire [`XLEN:0] mul_in1 = {is_signed_mul_a && execute_if.data.vs1_data[i][`XLEN-1], execute_if.data.vs1_data[i]};
+        wire [`XLEN:0] mul_in2 = {is_signed_mul_b && execute_if.data.vs2_data[i][`XLEN-1], execute_if.data.vs2_data[i]};        
     
         VX_multiplier #(
             .A_WIDTH (`XLEN+1),
@@ -167,6 +168,8 @@ module VX_vmuldiv_unit #(
             .result (mul_result_tmp[i])
         );        
     end
+
+ 
 
     VX_shift_register #(
         .DATAW  (1 + TAGW + 1 + 1),
@@ -199,7 +202,7 @@ module VX_vmuldiv_unit #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] div_result_out;
+    wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] div_result_out;
     wire [`UUID_WIDTH-1:0] div_uuid_out;
     wire [`NW_WIDTH-1:0] div_wid_out;
     wire [NUM_LANES-1:0] div_tmask_out;
@@ -216,50 +219,21 @@ module VX_vmuldiv_unit #(
     wire div_valid_out;
     wire div_ready_out;
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] div_in1;
-    wire [NUM_LANES-1:0][`XLEN-1:0] div_in2;
+    wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] div_in1;
+    wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] div_in2;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin
     `ifdef XLEN_64
-        assign div_in1[i] = is_alu_w ? {{(`XLEN-32){is_signed_op && execute_if.data.rs1_data[i][31]}}, execute_if.data.rs1_data[i][31:0]}: execute_if.data.rs1_data[i];
-        assign div_in2[i] = is_alu_w ? {{(`XLEN-32){is_signed_op && execute_if.data.rs2_data[i][31]}}, execute_if.data.rs2_data[i][31:0]}: execute_if.data.rs2_data[i];
+        assign div_in1[i] = is_alu_w ? {{(`XLEN-32){is_signed_op && execute_if.data.vs1_data[i][31]}}, execute_if.data.vs1_data[i][31:0]}: execute_if.data.vs1_data[i];
+        assign div_in2[i] = is_alu_w ? {{(`XLEN-32){is_signed_op && execute_if.data.vs2_data[i][31]}}, execute_if.data.vs2_data[i][31:0]}: execute_if.data.vs2_data[i];
     `else
-        assign div_in1[i] = execute_if.data.rs1_data[i];
-        assign div_in2[i] = execute_if.data.rs2_data[i];
+        assign div_in1[i] = execute_if.data.vs1_data[i];
+        assign div_in2[i] = execute_if.data.vs2_data[i];
     `endif        
     end
 
-`ifdef IDIV_DPI    
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] div_result_in;
-    wire div_fire_in = div_valid_in && div_ready_in;
-
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
-        wire [`XLEN-1:0] div_quotient, div_remainder;
-        always @(*) begin  
-            dpi_idiv (div_fire_in, is_signed_op, div_in1[i], div_in2[i], div_quotient, div_remainder);
-        end
-        assign div_result_in[i] = is_rem_op ? (is_alu_w ? `XLEN'($signed(div_remainder[31:0])) : div_remainder) : 
-                                              (is_alu_w ? `XLEN'($signed(div_quotient[31:0])) : div_quotient);
-    end
-
-    VX_shift_register #(
-        .DATAW  (1 + TAGW + (NUM_LANES * `XLEN)),
-        .DEPTH  (`LATENCY_IMUL),
-        .RESETW (1)
-    ) div_shift_reg (
-        .clk(clk),
-        .reset    (reset),
-        .enable   (div_ready_in),
-        .data_in  ({div_valid_in, execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, div_result_in}),
-        .data_out ({div_valid_out, div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, div_pid_out, div_sop_out, div_eop_out, div_result_out})
-    );
-
-    assign div_ready_in = div_ready_out || ~div_valid_out;
-
-`else
-
-    wire [NUM_LANES-1:0][`XLEN-1:0] div_quotient, div_remainder;
+    wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] div_quotient, div_remainder;
     wire is_rem_op_out;    
     wire is_div_w_out;
     wire div_strode;
@@ -281,7 +255,7 @@ module VX_vmuldiv_unit #(
         .WIDTHD (`XLEN),
         .WIDTHQ (`XLEN),
         .WIDTHR (`XLEN),
-        .LANES  (NUM_LANES)
+        .LANES  (NUM_VECTOR_LANES)
     ) serial_div (
         .clk       (clk),
         .reset     (reset),
@@ -306,7 +280,7 @@ module VX_vmuldiv_unit #(
     
     assign {div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out, is_div_w_out, div_pid_out, div_sop_out, div_eop_out} = div_tag_r;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin
     `ifdef XLEN_64
         assign div_result_out[i] = is_rem_op_out ? (is_div_w_out ? `XLEN'($signed(div_remainder[i][31:0])) : div_remainder[i]) : 
                                                    (is_div_w_out ? `XLEN'($signed(div_quotient[i][31:0])) : div_quotient[i]);     
@@ -316,14 +290,14 @@ module VX_vmuldiv_unit #(
     `endif
     end
 
-`endif
+// `endif
 
     // can accept new request?
     assign execute_if.ready = is_mulx_op ? mul_ready_in : div_ready_in;
 
     VX_stream_arb #(
         .NUM_INPUTS (2),
-        .DATAW (TAGW + (NUM_LANES * `XLEN)),
+        .DATAW (TAGW + (NUM_VECTOR_LANES * `XLEN)),
         .OUT_REG (1)
     ) rsp_buf (
         .clk       (clk),

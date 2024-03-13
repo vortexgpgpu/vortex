@@ -33,8 +33,7 @@ module VX_valu_unit #(
     localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
     localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + NUM_VECTOR_LANES * `XLEN + PID_WIDTH + 1 + 1;
-    // localparam RSP_ARB_SIZE = 1 + `EXT_M_ENABLED;
-    localparam RSP_ARB_SIZE = 1 ;
+    localparam RSP_ARB_SIZE = 1 + `EXT_M_ENABLED;
     localparam PARTIAL_BW   = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `NUM_THREADS);
 
     VX_vexecute_if #(
@@ -90,11 +89,45 @@ module VX_valu_unit #(
             .execute_if (int_execute_if),
             .commit_if  (int_commit_if)
         );
+        
+    `ifdef EXT_M_ENABLE
+
+        assign is_muldiv_op = `INST_ALU_IS_M(execute_if[block_idx].data.op_mod);
+
+        `RESET_RELAY (mdv_reset, reset);
+
+        VX_vexecute_if #(
+            .NUM_LANES (NUM_LANES),
+            .NUM_VECTOR_LANES (NUM_VECTOR_LANES)
+        ) mdv_execute_if();
+        
+        assign mdv_execute_if.valid = execute_if[block_idx].valid && is_muldiv_op;
+        assign mdv_execute_if.data = execute_if[block_idx].data;
+
+        VX_vcommit_if #(
+            .NUM_LANES (NUM_LANES),
+            .NUM_VECTOR_LANES (NUM_VECTOR_LANES)
+        ) mdv_commit_if();
+
+        VX_vmuldiv_unit #(
+            .CORE_ID   (CORE_ID),
+            .NUM_LANES (NUM_LANES),
+            .NUM_VECTOR_LANES (NUM_VECTOR_LANES)
+        ) vmdv_unit (
+            .clk        (clk),
+            .reset      (mdv_reset),
+            .execute_if (mdv_execute_if),
+            .commit_if  (mdv_commit_if)
+        );       
+       
+        assign execute_if[block_idx].ready = is_muldiv_op ? mdv_execute_if.ready : int_execute_if.ready;
+
+    `else
 
         assign is_muldiv_op = 0;
         assign execute_if[block_idx].ready = int_execute_if.ready;
 
-
+    `endif
 
         // send response
 
@@ -106,21 +139,21 @@ module VX_valu_unit #(
             .clk       (clk),
             .reset     (reset),
             .valid_in  ({                
-            // `ifdef EXT_M_ENABLE
-            //     mdv_commit_if.valid,
-            // `endif
+            `ifdef EXT_M_ENABLE
+                mdv_commit_if.valid,
+            `endif
                 int_commit_if.valid
             }),
             .ready_in  ({
-            // `ifdef EXT_M_ENABLE
-            //     mdv_commit_if.ready,
-            // `endif
+            `ifdef EXT_M_ENABLE
+                mdv_commit_if.ready,
+            `endif
                 int_commit_if.ready
             }),
             .data_in   ({
-            // `ifdef EXT_M_ENABLE
-                // mdv_commit_if.data,
-            // `endif
+            `ifdef EXT_M_ENABLE
+                mdv_commit_if.data,
+            `endif
                 int_commit_if.data
             }),
             .data_out  (commit_block_if[block_idx].data),

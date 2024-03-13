@@ -49,6 +49,5 @@ module VX_multiplier #(
         end        
         assign result = prod_r[LATENCY-1]; 
     end
-
 endmodule
 `TRACING_ON
