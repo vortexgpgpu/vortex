@@ -15,13 +15,28 @@
 `include "VX_trace.vh"
 
 `ifdef EXT_F_ENABLE
+    
+`ifdef EXT_V_ENABLE
     `define USED_IREG(x) \
-        x``_r = {1'b0, ``x}; \
+        x``_r = {2'b00, ``x}; \
         use_``x = 1
+
+    `define USED_FREG(x) \
+        x``_r = {2'b01, ``x}; \
+        use_``x = 1
+    
+    `define USED_VREG(x) \
+        x``_r = {2'b10, ``x}; \
+        use_``x = 1 
+`else
+    `define USED_IREG(x) \
+            x``_r = {1'b0, ``x}; \
+            use_``x = 1
 
     `define USED_FREG(x) \
         x``_r = {1'b1, ``x}; \
         use_``x = 1
+`endif
 `else
     `define USED_IREG(x) \
         x``_r = ``x; \
@@ -79,6 +94,7 @@ module VX_decode  #(
     `UNUSED_VAR (use_rs1)
     `UNUSED_VAR (use_rs2)
     `UNUSED_VAR (use_rs3)
+    `UNUSED_VAR (vm)
 
     wire is_itype_sh = func3[0] && ~func3[1];
 
@@ -516,9 +532,9 @@ module VX_decode  #(
                                         6'h00 : begin //VADD
                                             ex_type = `EX_VALU;
                                             op_type = `INST_OP_BITS'(`INST_VALU_VADD);
-                                            `USED_IREG (rd);
-                                            `USED_IREG (rs1);
-                                            `USED_IREG (rs2);
+                                            `USED_VREG (rd);
+                                            `USED_VREG (rs1);
+                                            `USED_VREG (rs2);
                                             imm = 0;
                                         end
                                         //additonal OPIVV Instructions

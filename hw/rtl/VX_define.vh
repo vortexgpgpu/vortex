@@ -37,16 +37,17 @@
 `define NRI_BITS        `CLOG2(`NUM_IREGS)
 
 `ifdef EXT_F_ENABLE
-`define NUM_REGS        (2 * `NUM_IREGS)
+`ifdef EXT_V_ENABLE
+    `define NUM_VREGS        (`NUM_IREGS)
+    `define NUM_REGS        (2 * `NUM_IREGS + `NUM_VREGS)
+`else
+    `define NUM_REGS        (2 * `NUM_IREGS)
+`endif
 `else
 `define NUM_REGS        `NUM_IREGS
 `endif
 
-`ifdef EXT_V_ENABLE
-`define NUM_VREGS        (`NUM_IREGS)
-`else
-`define NUM_VREGS        `NUM_IREGS
-`endif
+
 
 `define NR_BITS         `CLOG2(`NUM_REGS)
 
@@ -453,7 +454,8 @@ data.rs1_data, \
 data.rs2_data, \
 data.rs3_data, \
 vdata.vs1_data, \
-vdata.vs2_data}
+vdata.vs2_data, \
+vdata.vs3_data}
 
 ///////////////////////////////////////////////////////////////////////////////
 

@@ -36,6 +36,7 @@ interface VX_operands_if import VX_gpu_pkg::*; ();
     typedef struct packed {
         logic [`VECTOR_LENGTH-1:0][`XLEN-1:0] vs1_data;
         logic [`VECTOR_LENGTH-1:0][`XLEN-1:0] vs2_data;
+        logic [`VECTOR_LENGTH-1:0][`XLEN-1:0] vs3_data;
     } vdata_t;
 
 
