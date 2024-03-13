@@ -249,9 +249,9 @@ module VX_commit import VX_gpu_pkg::*; #(
                 `TRACE(1, (" (#%0d)\n", sfu_commit_if[i].data.uuid));
             end
         end
-        `ifdef EXT_V_ENABLE
-            `RUNTIME_ASSERT(valu_commit_if[i].valid == 0, ("VX_commit: valu_commit_if is not supported"));
-        `endif
+        // `ifdef EXT_V_ENABLE
+        //     `RUNTIME_ASSERT(valu_commit_if[i].valid == 0, ("VX_commit: valu_commit_if is not supported"));
+        // `endif
     end
 `endif
    

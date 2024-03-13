@@ -140,6 +140,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             end
             STATE_FETCH1: begin
                 rs1_data_n = gpr_rd_data;
+                vs1_data_n = vgpr_rd_data;
                 if (~rs2_ready) begin
                     gpr_rd_rid_n = rs2;
                     state_n = STATE_FETCH2;
@@ -153,6 +154,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             end
             STATE_FETCH2: begin
                 rs2_data_n = gpr_rd_data;
+                vs2_data_n = vgpr_rd_data;
                 if (~rs3_ready) begin
                     gpr_rd_rid_n = rs3;
                     state_n = STATE_FETCH3;
@@ -335,7 +337,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             .raddr (gpr_rd_addr[`LOG2UP(`NUM_VREGS)-1:0]),
             .rdata (vgpr_rd_data) // TODO: remove thread  index
         );
-    `UNUSED_VAR (vgpr_rd_data) // TODO: use this data
+    // `UNUSED_VAR (vgpr_rd_data) // TODO: use this data
 `endif
     end
 
