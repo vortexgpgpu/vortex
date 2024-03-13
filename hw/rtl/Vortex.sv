@@ -45,10 +45,11 @@ module Vortex import VX_gpu_pkg::*; (
 );
 
 `ifdef PERF_ENABLE
-    VX_mem_perf_if mem_perf_if();
+    VX_mem_perf_if mem_perf_if();    
     assign mem_perf_if.icache  = 'x;
     assign mem_perf_if.dcache  = 'x;
     assign mem_perf_if.l2cache = 'x;
+    assign mem_perf_if.lmem    = 'x;
 `endif
 
     VX_mem_bus_if #(

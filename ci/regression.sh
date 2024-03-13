@@ -212,8 +212,8 @@ config()
     CONFIGS="-DDCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemmx
     CONFIGS="-DICACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemmx
 
-    # multiple L1 caches per cluster
-    CONFIGS="-DNUM_DCACHES=2 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --cores=8 --warps=1 --threads=2
+    # multiple L1 caches per socket
+    CONFIGS="-DSOCKET_SIZE=4 -DNUM_DCACHES=2 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --cores=8 --warps=1 --threads=2
 
     # test AXI bus
     AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
