@@ -38,8 +38,8 @@ module VX_vint_unit #(
 
     wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] add_result;
     wire [NUM_VECTOR_LANES-1:0][`XLEN:0] sub_result; // +1 bit for branch compare
-    wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] shr_result;
-    reg  [NUM_VECTOR_LANES-1:0][`XLEN-1:0] msc_result;
+    wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] shr_result;//right shift
+    reg  [NUM_VECTOR_LANES-1:0][`XLEN-1:0] msc_result;//miscellaneous operations(AND, OR, etc.)
     
     wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] add_result_w;
     wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] sub_result_w;
@@ -57,43 +57,45 @@ module VX_vint_unit #(
 
     `UNUSED_VAR (execute_if.data.op_mod)
 
-    wire [`INST_ALU_BITS-1:0] alu_op = `INST_ALU_BITS'(execute_if.data.op_type);
+    wire [`INST_ALU_BITS-1:0] valu_op = `INST_ALU_BITS'(execute_if.data.op_type);
     // wire                   is_sub_op = `INST_ALU_IS_SUB(alu_op);
-    wire                   is_signed = `INST_ALU_SIGNED(alu_op);   
-    wire [1:0]              op_class = `INST_ALU_CLASS(alu_op);
+    wire                   is_signed = `INST_ALU_SIGNED(valu_op);//meaning valu_op[0]   
+    wire [1:0]              op_class = `INST_ALU_CLASS(valu_op);//meaning valu_op[3:2]
     
     wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] alu_in1 = execute_if.data.vs1_data;
     wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] alu_in2 = execute_if.data.vs2_data;
 
     wire [NUM_VECTOR_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if.data.use_imm ? {NUM_VECTOR_LANES{execute_if.data.imm}} : alu_in2;
 
-    for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin // VADD
         assign add_result[i] = alu_in1[i] + alu_in2_imm[i];
-        assign add_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] + alu_in2_imm[i][31:0]));
+        assign add_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] + alu_in2_imm[i][31:0]));//widened result
     end
 
-    for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin // VSUB
         wire [`XLEN:0] sub_in1 = {is_signed & alu_in1[i][`XLEN-1], alu_in1[i]};
         wire [`XLEN:0] sub_in2 = {is_signed & alu_in2_imm[i][`XLEN-1], alu_in2_imm[i]};
         assign sub_result[i] = sub_in1 - sub_in2;
         assign sub_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] - alu_in2_imm[i][31:0]));
     end
-
-    for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin    
+    
+    
+    for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin // VSHR(shift right)
         wire [`XLEN:0] shr_in1 = {is_signed && alu_in1[i][`XLEN-1], alu_in1[i]};        
         assign shr_result[i] = `XLEN'($signed(shr_in1) >>> alu_in2_imm[i][SHIFT_IMM_BITS-1:0]);
         wire [32:0] shr_in1_w = {is_signed && alu_in1[i][31], alu_in1[i][31:0]};
         wire [31:0] shr_res_w = 32'($signed(shr_in1_w) >>> alu_in2_imm[i][4:0]);
         assign shr_result_w[i] = `XLEN'($signed(shr_res_w));
     end
+    
 
-    for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin // VMSC(VAND, VOR, VXOR)
         always @(*) begin
-            case (alu_op[1:0])
-                2'b00: msc_result[i] = alu_in1[i] & alu_in2_imm[i]; // AND
-                2'b01: msc_result[i] = alu_in1[i] | alu_in2_imm[i]; // OR
-                2'b10: msc_result[i] = alu_in1[i] ^ alu_in2_imm[i]; // XOR
-                2'b11: msc_result[i] = alu_in1[i] << alu_in2_imm[i][SHIFT_IMM_BITS-1:0]; // SLL
+            case (valu_op[1:0])
+                2'b00: msc_result[i] = alu_in1[i] & alu_in2_imm[i]; // VAND
+                2'b01: msc_result[i] = alu_in1[i] | alu_in2_imm[i]; // VOR
+                2'b10: msc_result[i] = alu_in1[i] ^ alu_in2_imm[i]; // VXOR
+                2'b11: msc_result[i] = alu_in1[i] << alu_in2_imm[i][SHIFT_IMM_BITS-1:0]; // VSLL
             endcase
         end
         assign msc_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] << alu_in2_imm[i][4:0]));
@@ -101,11 +103,11 @@ module VX_vint_unit #(
 
     for (genvar i = 0; i < NUM_VECTOR_LANES; ++i) begin
         always @(*) begin
-            case ({is_alu_w, op_class})                        
-                3'b000: alu_result[i] = add_result[i];      // ADD, LUI, AUIPC
-                3'b001: alu_result[i] =  sub_result[i][`XLEN-1:0];    // SUB, SLTU, SLTI
+            case ({is_alu_w, op_class}) // 1bit (is_alu_w) + 2bits (op_class)          
+                3'b000: alu_result[i] = add_result[i];      // ADD
+                3'b001: alu_result[i] = sub_result[i][`XLEN-1:0];    // SUB
                 3'b010: alu_result[i] = shr_result[i];      // SRL, SRA, SRLI, SRAI
-                3'b011: alu_result[i] = msc_result[i];      // AND, OR, XOR, SLL, SLLI
+                3'b011: alu_result[i] = msc_result[i];      // AND, OR, XOR
                 3'b100: alu_result[i] = add_result_w[i];    // ADDIW, ADDW
                 3'b101: alu_result[i] = sub_result_w[i];    // SUBW
                 3'b110: alu_result[i] = shr_result_w[i];    // SRLW, SRAW, SRLIW, SRAIW
