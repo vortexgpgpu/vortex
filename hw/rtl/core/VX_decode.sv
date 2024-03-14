@@ -15,13 +15,28 @@
 `include "VX_trace.vh"
 
 `ifdef EXT_F_ENABLE
+    
+`ifdef EXT_V_ENABLE
     `define USED_IREG(x) \
-        x``_r = {1'b0, ``x}; \
+        x``_r = {2'b00, ``x}; \
         use_``x = 1
+
+    `define USED_FREG(x) \
+        x``_r = {2'b01, ``x}; \
+        use_``x = 1
+    
+    `define USED_VREG(x) \
+        x``_r = {2'b10, ``x}; \
+        use_``x = 1 
+`else
+    `define USED_IREG(x) \
+            x``_r = {1'b0, ``x}; \
+            use_``x = 1
 
     `define USED_FREG(x) \
         x``_r = {1'b1, ``x}; \
         use_``x = 1
+`endif
 `else
     `define USED_IREG(x) \
         x``_r = ``x; \
@@ -79,7 +94,11 @@ module VX_decode  #(
     `UNUSED_VAR (use_rs1)
     `UNUSED_VAR (use_rs2)
     `UNUSED_VAR (use_rs3)
+<<<<<<< HEAD
     `UNUSED_VAR (vm) // Comment it if vm is needed in the following stages
+=======
+    `UNUSED_VAR (vm)
+>>>>>>> 2dcc55444c72fb78f8610af1e162a49cdf4536b5
 
     wire is_itype_sh = func3[0] && ~func3[1];
 
@@ -535,6 +554,7 @@ module VX_decode  #(
                     default:;
                 endcase
             end
+<<<<<<< HEAD
         `ifdef EXT_V_ENABLE
             `INST_VALU: begin
                 ex_type = `EX_VALU;
@@ -554,6 +574,22 @@ module VX_decode  #(
                         imm = {{(`XLEN-12){i_imm[11]}}, i_imm};// Waveform 보면서 비트 수 수정
                         use_imm = 1;
                     end
+=======
+            `ifdef EXT_V_ENABLE
+                        `INST_VALU: begin
+                            case(func3)
+                                3'h00 : begin //OPIVV
+                                    case(func6)
+                                        6'h00 : begin //VADD
+                                            ex_type = `EX_VALU;
+                                            op_type = `INST_OP_BITS'(`INST_VALU_VADD);
+                                            `USED_VREG (rd);
+                                            `USED_VREG (rs1);
+                                            `USED_VREG (rs2);
+                                            imm = 0;
+                                        end
+                                        //additonal OPIVV Instructions
+>>>>>>> 2dcc55444c72fb78f8610af1e162a49cdf4536b5
 
                 endcase 
             end

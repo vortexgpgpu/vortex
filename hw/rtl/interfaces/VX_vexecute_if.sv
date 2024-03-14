@@ -36,6 +36,7 @@ interface VX_vexecute_if #(
         logic [NUM_LANES-1:0][`XLEN-1:0] rs3_data;
         logic [NUM_VECTOR_LANES-1:0][`XLEN-1:0] vs1_data;
         logic [NUM_VECTOR_LANES-1:0][`XLEN-1:0] vs2_data;
+        logic [NUM_VECTOR_LANES-1:0][`XLEN-1:0] vs3_data;
         logic [PID_WIDTH-1:0]           pid;
         logic                           sop;
         logic                           eop;

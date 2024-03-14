@@ -39,8 +39,8 @@ module VX_dispatch import VX_gpu_pkg::*; #(
 );
     `UNUSED_PARAM (CORE_ID)
 
-    localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + 1 + `XLEN + `XLEN + `NR_BITS + (3 * `NUM_THREADS * `XLEN) + `NT_WIDTH;
-    localparam VDATAW = (2 * `VECTOR_LENGTH * `XLEN);
+    localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + 1 + `XLEN + `XLEN + `NR_BITS + (3 * `XLEN) + `NT_WIDTH;
+    localparam VDATAW = (3 * `VECTOR_LENGTH * `XLEN);
 
     wire [`ISSUE_WIDTH-1:0][`NT_WIDTH-1:0] last_active_tid;
 

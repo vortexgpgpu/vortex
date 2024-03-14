@@ -46,8 +46,7 @@ module VX_valu_unit #(
 
     VX_vdispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
-        .NUM_LANES  (NUM_LANES),
-        .NUM_VECTOR_LANES (NUM_VECTOR_LANES),
+        .NUM_LANES  (NUM_VECTOR_LANES),
         .OUT_REG    (PARTIAL_BW ? 1 : 0)
     ) dispatch_unit (
         .clk        (clk),
