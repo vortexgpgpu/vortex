@@ -1,5 +1,5 @@
 #include <GLSC2/glsc2.h>
-#include <CL/opencl.h>
+#include "kernel.c"
 
 
 #define VERTEX_SHADER "kernel.vert.cl"
@@ -31,58 +31,57 @@ cl_device_id* _getDeviceID() {
 
 cl_context _context = clCreateContext(NULL, 1, _getDeviceID(), NULL, NULL,  &_err);
 
-cl_kernel init_vertex_shader_kernel(){
+void init_vertex_shader_kernel(cl_program *program, cl_kernel *kernel){
     uint8_t *kernel_bin = NULL;
     size_t kernel_size;
 
-  //HOSTCPU
+    //HOSTCPU
     if (0 != read_kernel_file(VERTEX_SHADER, &kernel_bin, &kernel_size))
         return -1;
     
-    cl_program vertex_shader = clCreateProgramWithSource(
+    *program = clCreateProgramWithSource(
         _context, 1, (const char**)&kernel_bin, &kernel_size, &_err);  
     // Build program
-  clBuildProgram(vertex_shader, 1, _getDeviceID(), NULL, NULL, NULL);
+    clBuildProgram(vertex_shader, 1, _getDeviceID(), NULL, NULL, NULL);
   
-  // Create kernel
-  return clCreateKernel(vertex_shader, "vertex_shader", &_err);
-  //Hay que conservar cl_program al salir de la stack? (quien sabe...)
+    // Create kernel
+    *kernel = clCreateKernel(vertex_shader, "vertex_shader", &_err);
 }
 
 cl_kernel init_perspective_division_kernel(){
     uint8_t *kernel_bin = NULL;
     size_t kernel_size;
 
-  //HOSTCPU
+    //HOSTCPU
     if (0 != read_kernel_file(PERS_DIV, &kernel_bin, &kernel_size))
         return -1;
     
     cl_program perspective_division = clCreateProgramWithSource(
         _context, 1, (const char**)&kernel_bin, &kernel_size, &_err);  
     // Build program
-  clBuildProgram(perspective_division, 1, _getDeviceID(), NULL, NULL, NULL);
+    clBuildProgram(perspective_division, 1, _getDeviceID(), NULL, NULL, NULL);
   
-  // Create kernel
-  return clCreateKernel(perspective_division, "perspective division", &_err);
-  //Hay que conservar cl_program al salir de la stack? (quien sabe...)
+    // Create kernel
+    return clCreateKernel(perspective_division, "perspective division", &_err);
+    //Hay que conservar cl_program al salir de la stack? (quien sabe...)
 }
 
 cl_kernel init_viewport_transformation_kernel(){
     uint8_t *kernel_bin = NULL;
     size_t kernel_size;
 
-  //HOSTCPU
+    //HOSTCPU
     if (0 != read_kernel_file(VIEWPORT_TRANS, &kernel_bin, &kernel_size))
         return -1;
     
     cl_program viewport_transformation = clCreateProgramWithSource(
         _context, 1, (const char**)&kernel_bin, &kernel_size, &_err);  
     // Build program
-  clBuildProgram(viewport_transformation, 1, _getDeviceID(), NULL, NULL, NULL);
+    clBuildProgram(viewport_transformation, 1, _getDeviceID(), NULL, NULL, NULL);
   
-  // Create kernel
-  return clCreateKernel(viewport_transformation, "viewport division", &_err);
-  //Hay que conservar cl_program al salir de la stack? (quien sabe...)
+    // Create kernel
+    return clCreateKernel(viewport_transformation, "viewport division", &_err);
+    //Hay que conservar cl_program al salir de la stack? (quien sabe...)
 }
 
 void vertex_shader_add_argument_buffer(cl_mem data, unsigned int arg, void* offset, unsigned int size, cl_kernel vertexShaderKernel){
@@ -144,41 +143,48 @@ void execute_viewport_transformation(unsigned int numVerts, float* ndc_coords, f
   clEnqueueReadBuffer(commandQueue, windowCoordsBuff, CL_TRUE, 0, 3*numVerts*sizeof(float), window_coords, 0, NULL, NULL);
 }
 
-// GL 
 
-struct VIEWPORT_TRANSFORM{
+#define _MAX_VERTEX_ATTRIBS 255 // TODO update GL_MAX_VERTEX_ATTRIBS
+
+typedef struct {
     GLint x;
     GLint y;
     GLsizei w;
     GLsizei h;
     GLfloat n=0;
     GLfloat f=0; 
-};
+} VIEWPORT_TRANSFORM;
 
-VIEWPORT_TRANSFORM viewportTransform;
-
-struct BUFFER {
+typedef struct {
     GLboolean used;
     GLenum target;
     cl_mem mem;
-};
+} BUFFER;
 
-BUFFER _buffers[255];
-GLuint _binded_buffer;
+typedef struct {
+    GLboolean used;
+    GLenum target;
+    cl_mem mem;
+} FRAMEBUFFER;
 
-struct VertexAttrib{
+typedef struct {
     bool enable, normalized;
     GLuint index;
     GLint size;
     GLenum type;
     GLsizei stride;
     const void *pointer;
-};
+} VERTEX_ATTRIB;
 
-//change to GL_MAX_VERTEX
-#define VERTEX_ATTR_SIZE 255
+VIEWPORT_TRANSFORM viewportTransform;
 
-VertexAttrib vertex_attrib[VERTEX_ATTR_SIZE]; // TODO: this has to be the max size GL_MAX_VERTEX_ATTRIBS
+BUFFER _buffers[255];
+GLuint _binded_buffer;
+
+FRAMEBUFFER _framebuffers[255];
+GLuint _binded_framebuffer;
+
+VERTEX_ATTRIB vertex_attrib[_MAX_VERTEX_ATTRIBS]; 
 
 GL_APICALL void GL_APIENTRY glBindBuffer (GLenum target, GLuint buffer) {
     if (!_buffers[buffer].used) {
@@ -188,6 +194,15 @@ GL_APICALL void GL_APIENTRY glBindBuffer (GLenum target, GLuint buffer) {
     
     _binded_buffer = buffer;
     _buffers[buffer].target = target;
+}
+GL_APICALL void GL_APIENTRY glBindFramebuffer (GLenum target, GLuint framebuffer) {
+    if (!_framebuffers[framebuffer].used) {
+        _err = GL_INVALID_OPERATION;
+        return;
+    }
+    
+    _binded_framebuffer = framebuffer;
+    _framebuffers[framebuffer].target = target;
 }
 
 GL_APICALL void GL_APIENTRY glBufferData (GLenum target, GLsizeiptr size, const void *data, GLenum usage) {
@@ -202,13 +217,16 @@ GL_APICALL void GL_APIENTRY glBufferData (GLenum target, GLsizeiptr size, const 
 }
 
 GL_APICALL void GL_APIENTRY glClear (GLbitfield mask);
+
 GL_APICALL GLuint GL_APIENTRY glCreateProgram (void);
 
 inline void vertex_shader(GLint first, GLsizei count, float* clip_coords){
     //VERTEX SHADER
-    cl_kernel vertexShaderKernel = init_vertex_shader_kernel();
+    cl_program vertexShaderProgram; 
+    cl_kernel vertexShaderKernel; 
+    init_vertex_shader_kernel(vertexShaderProgram, vertexShaderKernel);
     //preparar input
-    VertexAttrib* pVertexAttr = &vertex_attrib;
+    VERTEX_ATTRIB* pVertexAttr = &vertex_attrib;
     clSetKernelArg(vertexShaderKernel, 0, sizeof(GLint), first);
     unsigned int arg=1;
 
@@ -258,24 +276,23 @@ inline void gl_pipeline(GLint first, GLsizei count){
     //rasterization
 }
 
+void _glDrawArraysTriangles(GLint first, GLsizei count) {
+    gl_pipeline(first, count);
+}
+
 GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei count) {
     if (first <0){
         _err= GL_INVALID_VALUE;
         return;
     }
-    if (index >= GL_MAX_VERTEX_ATTRIBS) {
-        _err = GL_INVALID_VALUE;
-        return;
-    }
     if (mode==GL_POINTS); // TODO
     else if (mode==GL_LINES); // TODO
-    else if (mode==GL_TRIANGLES) {
-        gl_pipeline(first, count);
-    }
+    else if (mode==GL_TRIANGLES) 
+        _glDrawArraysTriangles(first, count);
 }
 
-GL_APICALL void GL_APIENTRY glDrawRangeElements (GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const void *indices){
-}
+GL_APICALL void GL_APIENTRY glDrawRangeElements (GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const void *indices);
+
 GL_APICALL void GL_APIENTRY glDisableVertexAttribArray (GLuint index) {
     if (index >= GL_MAX_VERTEX_ATTRIBS) {
         _err = GL_INVALID_VALUE;
@@ -294,6 +311,8 @@ GL_APICALL void GL_APIENTRY glEnableVertexAttribArray (GLuint index) {
     vertex_attrib[index].enable = true;
 }
 
+GL_APICALL void GL_APIENTRY glFinish (void);
+
 GL_APICALL void GL_APIENTRY glGenBuffers (GLsizei n, GLuint *buffers) {
     GLuint _id = 1; // _id = 0 is reserved for ARRAY_BUFFER
 
@@ -308,6 +327,22 @@ GL_APICALL void GL_APIENTRY glGenBuffers (GLsizei n, GLuint *buffers) {
         _id += 1;
     }
 }
+
+GL_APICALL void GL_APIENTRY glGenFramebuffers (GLsizei n, GLuint *framebuffers) {
+    GLuint _id = 1; // _id = 0 is reserved for ARRAY_BUFFER
+
+    while(n > 0 && _id < 256) {
+        if (!_framebuffers[_id].used) {
+            _framebuffers[_id].used = GL_TRUE;
+            *framebuffers = _id;
+
+            framebuffers += 1; 
+            n -= 1;
+        }
+        _id += 1;
+    }
+}
+
 
 GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat, const void *binary, GLsizei length);
 

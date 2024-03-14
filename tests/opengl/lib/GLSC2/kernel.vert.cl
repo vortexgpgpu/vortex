@@ -1,13 +1,30 @@
-__kernel void vertex_shader (__global unsigned int first,
-                      __global const float* pos,
-                      __global const void* pos_offset,
-                      __global const unsigned_int pos_size,
-                      __global float* P
+typedef struct __attribute__ ((packed)) vert_attrib
+{
+  bool enable, normalized;
+  GLuint index;
+  GLint size;
+  GLenum type;
+  GLsizei stride;
+  const void *pointer;
+};
+
+__kernel void vertex_shader (
+                      unsigned int _sz,
+                      vert_attrib *_VAO,
+                      __global const float* VBO,
+                      __global void* P
                       )
 {
   int gid = get_global_id(0);
 
-  float* read_pos = &pos[first*size + gid*size + (unsigned int)(offset/sizeof(float))];
+  vert_attrib *END = _VAO+_sz;
+  while (_VAO != END) {
+    if (_VAO)
+  }
+  for(unsigned int vao = 0; vao < _sz; ++vao) {
+
+  }
+  float* read_pos = &VBO[first*size + gid*size + (unsigned int)(offset/sizeof(float))];
   float* write_pos = &P[4*gid];
 
   for (int i=0; i<size; i++){
