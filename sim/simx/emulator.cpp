@@ -49,7 +49,7 @@ Emulator::warp_t::warp_t(const Arch& arch)
 void Emulator::warp_t::clear(const Arch& arch, const DCRS &dcrs) {
   this->PC = dcrs.base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR0);
 #if (XLEN == 64)
-  this->PC = (uint64_t(dcrs.base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR1)) << 32) | PC_;
+  this->PC = (uint64_t(dcrs.base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR1)) << 32) | this->PC;
 #endif
   this->tmask.reset();
   for (uint32_t i = 0, n = arch.num_threads(); i < n; ++i) {
