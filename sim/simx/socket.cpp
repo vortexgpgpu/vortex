@@ -28,10 +28,10 @@ Socket::Socket(const SimContext& ctx,
   , dcache_mem_rsp_port(this)
   , socket_id_(socket_id)
   , cluster_(cluster)
-  , cores_(arch.socket_size())  
+  , cores_(arch.socket_size())
 {
   auto cores_per_socket = cores_.size();
-  
+
   char sname[100];
   snprintf(sname, 100, "socket%d-icaches", socket_id);
   icaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_ICACHES, 1, CacheSim::Config{
@@ -46,7 +46,7 @@ Socket::Socket(const SimContext& ctx,
     1,                      // number of inputs
     false,                  // write-through
     false,                  // write response
-    (uint8_t)arch.num_warps(), // mshr
+    (uint8_t)arch.num_warps(), // mshr size
     2,                      // pipeline latency
   });
 
@@ -54,19 +54,19 @@ Socket::Socket(const SimContext& ctx,
   icache_mem_rsp_port.bind(&icaches_->MemRspPort);
 
   snprintf(sname, 100, "socket%d-dcaches", socket_id);
-  dcaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_DCACHES, NUM_LSU_LANES, CacheSim::Config{
+  dcaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_DCACHES, DCACHE_NUM_REQS, CacheSim::Config{
     !DCACHE_ENABLED,
     log2ceil(DCACHE_SIZE),  // C
     log2ceil(L1_LINE_SIZE), // L
-    log2ceil(sizeof(Word)), // W
+    log2ceil(DCACHE_WORD_SIZE), // W
     log2ceil(DCACHE_NUM_WAYS),// A
     log2ceil(DCACHE_NUM_BANKS), // B
     XLEN,                   // address bits
     1,                      // number of ports
-    DCACHE_NUM_BANKS,       // number of inputs
+    DCACHE_NUM_REQS,        // number of inputs
     true,                   // write-through
     false,                  // write response
-    DCACHE_MSHR_SIZE,       // mshr
+    DCACHE_MSHR_SIZE,       // mshr size
     2,                      // pipeline latency
   });
 
@@ -75,17 +75,14 @@ Socket::Socket(const SimContext& ctx,
 
   // create cores
 
-  for (uint32_t i = 0; i < cores_per_socket; ++i) {  
+  for (uint32_t i = 0; i < cores_per_socket; ++i) {
     uint32_t core_id = socket_id * cores_per_socket + i;
-    cores_.at(i) = Core::Create(core_id, 
-                                this, 
-                                arch, 
-                                dcrs);
+    cores_.at(i) = Core::Create(core_id, this, arch, dcrs);
 
     cores_.at(i)->icache_req_ports.at(0).bind(&icaches_->CoreReqPorts.at(i).at(0));
-    icaches_->CoreRspPorts.at(i).at(0).bind(&cores_.at(i)->icache_rsp_ports.at(0));      
+    icaches_->CoreRspPorts.at(i).at(0).bind(&cores_.at(i)->icache_rsp_ports.at(0));
 
-    for (uint32_t j = 0; j < NUM_LSU_LANES; ++j) {
+    for (uint32_t j = 0; j < DCACHE_NUM_REQS; ++j) {
       cores_.at(i)->dcache_req_ports.at(j).bind(&dcaches_->CoreReqPorts.at(i).at(j));
       dcaches_->CoreRspPorts.at(i).at(j).bind(&cores_.at(i)->dcache_rsp_ports.at(j));
     }
@@ -96,7 +93,7 @@ Socket::~Socket() {
   //--
 }
 
-void Socket::reset() {  
+void Socket::reset() {
   //--
 }
 
@@ -137,6 +134,6 @@ void Socket::resume(uint32_t core_index) {
 Socket::PerfStats Socket::perf_stats() const {
   PerfStats perf_stats;
   perf_stats.icache = icaches_->perf_stats();
-  perf_stats.dcache = dcaches_->perf_stats();  
+  perf_stats.dcache = dcaches_->perf_stats();
   return perf_stats;
 }

@@ -30,23 +30,23 @@ Core::Core(const SimContext& ctx,
            Socket* socket,
            const Arch &arch, 
            const DCRS &dcrs)
-    : SimObject(ctx, "core")
-    , icache_req_ports(1, this)
-    , icache_rsp_ports(1, this)
-    , dcache_req_ports(NUM_LSU_LANES, this)
-    , dcache_rsp_ports(NUM_LSU_LANES, this)
-    , core_id_(core_id)
-    , socket_(socket)
-    , arch_(arch)
-    , emulator_(arch, dcrs, this)
-    , ibuffers_(arch.num_warps(), IBUF_SIZE)
-    , scoreboard_(arch_)
-    , operands_(ISSUE_WIDTH)
-    , dispatchers_((uint32_t)FUType::Count)
-    , func_units_((uint32_t)FUType::Count)
-    , lmem_demuxs_(NUM_LSU_LANES)
-    , pending_icache_(arch_.num_warps())
-    , commit_arbs_(ISSUE_WIDTH)
+  : SimObject(ctx, "core")
+  , icache_req_ports(1, this)
+  , icache_rsp_ports(1, this)
+  , dcache_req_ports(DCACHE_NUM_REQS, this)
+  , dcache_rsp_ports(DCACHE_NUM_REQS, this)
+  , core_id_(core_id)
+  , socket_(socket)
+  , arch_(arch)
+  , emulator_(arch, dcrs, this)
+  , ibuffers_(arch.num_warps(), IBUF_SIZE)
+  , scoreboard_(arch_)
+  , operands_(ISSUE_WIDTH)
+  , dispatchers_((uint32_t)FUType::Count)
+  , func_units_((uint32_t)FUType::Count)
+  , lsu_demux_(DCACHE_NUM_REQS)
+  , pending_icache_(arch_.num_warps())
+  , commit_arbs_(ISSUE_WIDTH)
 {
   char sname[100];
 
@@ -58,30 +58,30 @@ Core::Core(const SimContext& ctx,
   snprintf(sname, 100, "core%d-local_mem", core_id);
   local_mem_ = LocalMem::Create(sname, LocalMem::Config{
     (1 << LMEM_LOG_SIZE),
-    sizeof(Word),
-    NUM_LSU_LANES, 
-    NUM_LSU_LANES,
+    DCACHE_WORD_SIZE,
+    DCACHE_NUM_REQS, 
+    LMEM_NUM_BANKS,
     false
   });
-  for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
-    snprintf(sname, 100, "core%d-lmem_demux%d", core_id, i);
+  for (uint32_t i = 0; i < DCACHE_NUM_REQS; ++i) {
+    snprintf(sname, 100, "core%d-lsu_demux%d", core_id, i);
     auto lmem_demux = LocalMemDemux::Create(sname);
-    
+
     lmem_demux->ReqDC.bind(&dcache_req_ports.at(i));
     dcache_rsp_ports.at(i).bind(&lmem_demux->RspDC);
 
     lmem_demux->ReqSM.bind(&local_mem_->Inputs.at(i));
     local_mem_->Outputs.at(i).bind(&lmem_demux->RspSM);
 
-    lmem_demuxs_.at(i) = lmem_demux;
+    lsu_demux_.at(i) = lmem_demux;
   }
 
   // initialize dispatchers
   dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_ALU_BLOCKS, NUM_ALU_LANES);
   dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_FPU_BLOCKS, NUM_FPU_LANES);
-  dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, 1, NUM_LSU_LANES);
-  dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, 1, NUM_SFU_LANES);
-  
+  dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_LSU_BLOCKS, NUM_LSU_LANES);
+  dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_SFU_BLOCKS, NUM_SFU_LANES);
+
   // initialize execute units
   func_units_.at((int)FUType::ALU) = SimPlatform::instance().create_object<AluUnit>(this);
   func_units_.at((int)FUType::FPU) = SimPlatform::instance().create_object<FpuUnit>(this);
@@ -89,7 +89,7 @@ Core::Core(const SimContext& ctx,
   func_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(this);
 
   // bind commit arbiters
-  for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {    
+  for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
     snprintf(sname, 100, "core%d-commit-arb%d", core_id, i);
     auto arbiter = TraceSwitch::Create(sname, ArbiterType::RoundRobin, (uint32_t)FUType::Count, 1);
     for (uint32_t j = 0; j < (uint32_t)FUType::Count; ++j) {
@@ -116,7 +116,7 @@ void Core::reset() {
   for (auto& commit_arb : commit_arbs_) {
     commit_arb->reset();
   }
-  
+
   for (auto& ibuf : ibuffers_) {
     ibuf.clear();
   }
@@ -125,11 +125,11 @@ void Core::reset() {
   fetch_latch_.clear();
   decode_latch_.clear();
   pending_icache_.clear();
-  
+
   ibuffer_idx_ = 0;
-  pending_instrs_ = 0;  
+  pending_instrs_ = 0;
   pending_ifetches_ = 0;
-  
+
   perf_stats_ = PerfStats();
 }
 
@@ -142,7 +142,7 @@ void Core::tick() {
   this->schedule();
 
   ++perf_stats_.cycles;
-  DPN(2, std::flush);  
+  DPN(2, std::flush);
 }
 
 void Core::schedule() {
@@ -184,11 +184,11 @@ void Core::fetch() {
   MemReq mem_req;
   mem_req.addr  = trace->PC;
   mem_req.write = false;
-  mem_req.tag   = pending_icache_.allocate(trace);    
+  mem_req.tag   = pending_icache_.allocate(trace);
   mem_req.cid   = trace->cid;
   mem_req.uuid  = trace->uuid;
-  icache_req_ports.at(0).push(mem_req, 2);    
-  DT(3, "icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << *trace);    
+  icache_req_ports.at(0).push(mem_req, 2);
+  DT(3, "icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << *trace);
   fetch_latch_.pop();
   ++perf_stats_.ifetches;
   ++pending_ifetches_;
@@ -211,9 +211,9 @@ void Core::decode() {
   } else {
     trace->log_once(false);
   }
-  
+
   // release warp
-  if (!trace->fetch_stall) {    
+  if (!trace->fetch_stall) {
     emulator_.resume(trace->wid);
   }
 
@@ -225,10 +225,10 @@ void Core::decode() {
   decode_latch_.pop();
 }
 
-void Core::issue() {   
+void Core::issue() { 
   // operands to dispatchers
   for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
-    auto& operand = operands_.at(i);    
+    auto& operand = operands_.at(i);
     if (operand->Output.empty())
       continue;
     auto trace = operand->Output.front();
@@ -255,7 +255,7 @@ void Core::issue() {
     if (scoreboard_.in_use(trace)) {
       auto uses = scoreboard_.get_uses(trace);
       if (!trace->log_once(true)) {
-        DTH(3, "*** scoreboard-stall: dependents={");        
+        DTH(3, "*** scoreboard-stall: dependents={");
         for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
           auto& use = uses.at(j);
           __unused (use);
@@ -266,10 +266,10 @@ void Core::issue() {
       }
       for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
         auto& use = uses.at(j);
-        switch (use.fu_type) {        
+        switch (use.fu_type) {
         case FUType::ALU: ++perf_stats_.scrb_alu; break;
         case FUType::FPU: ++perf_stats_.scrb_fpu; break;
-        case FUType::LSU: ++perf_stats_.scrb_lsu; break;        
+        case FUType::LSU: ++perf_stats_.scrb_lsu; break;
         case FUType::SFU: {
           ++perf_stats_.scrb_sfu;
           switch (use.sfu_type) {
@@ -286,7 +286,7 @@ void Core::issue() {
           }
         } break;
         default: assert(false);
-        }        
+        }
       }
       ++perf_stats_.scrb_stalls;
       continue;

@@ -145,7 +145,7 @@ private:
   std::vector<Dispatcher::Ptr> dispatchers_;
   std::vector<FuncUnit::Ptr> func_units_;  
   LocalMem::Ptr local_mem_;
-  std::vector<LocalMemDemux::Ptr> lmem_demuxs_;
+  std::vector<LocalMemDemux::Ptr> lsu_demux_;
 
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;

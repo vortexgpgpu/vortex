@@ -72,7 +72,7 @@ Cluster::Cluster(const SimContext& ctx,
     2,                      // request size 
     true,                   // write-through
     false,                  // write response
-    L2_MSHR_SIZE,           // mshr
+    L2_MSHR_SIZE,           // mshr size
     2,                      // pipeline latency
   });
 

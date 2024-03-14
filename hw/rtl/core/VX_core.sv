@@ -252,9 +252,9 @@ module VX_core import VX_gpu_pkg::*; #(
     wire [DCACHE_NUM_REQS-1:0] perf_dcache_rsp_fire;
 
     for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
-        assign perf_dcache_rd_req_fire[i] = dcache_bus_if[i].req_valid && dcache_bus_if[i].req_ready && ~dcache_bus_if[i].req_data.rw;
-        assign perf_dcache_wr_req_fire[i] = dcache_bus_if[i].req_valid && dcache_bus_if[i].req_ready && dcache_bus_if[i].req_data.rw;
-        assign perf_dcache_rsp_fire[i] = dcache_bus_if[i].rsp_valid && dcache_bus_if[i].rsp_ready;
+        assign perf_dcache_rd_req_fire[i] = dcache_lmem_bus_if[i].req_valid && dcache_lmem_bus_if[i].req_ready && ~dcache_lmem_bus_if[i].req_data.rw;
+        assign perf_dcache_wr_req_fire[i] = dcache_lmem_bus_if[i].req_valid && dcache_lmem_bus_if[i].req_ready && dcache_lmem_bus_if[i].req_data.rw;
+        assign perf_dcache_rsp_fire[i] = dcache_lmem_bus_if[i].rsp_valid && dcache_lmem_bus_if[i].rsp_ready;
     end
 
     `BUFFER(perf_dcache_rd_req_fire_r, perf_dcache_rd_req_fire);
