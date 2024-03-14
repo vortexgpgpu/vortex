@@ -94,11 +94,7 @@ module VX_decode  #(
     `UNUSED_VAR (use_rs1)
     `UNUSED_VAR (use_rs2)
     `UNUSED_VAR (use_rs3)
-<<<<<<< HEAD
-    `UNUSED_VAR (vm) // Comment it if vm is needed in the following stages
-=======
     `UNUSED_VAR (vm)
->>>>>>> 2dcc55444c72fb78f8610af1e162a49cdf4536b5
 
     wire is_itype_sh = func3[0] && ~func3[1];
 
@@ -192,7 +188,7 @@ module VX_decode  #(
             default:;
         endcase
     end
-'endif
+`endif
 
     always @(*) begin
 
@@ -554,12 +550,11 @@ module VX_decode  #(
                     default:;
                 endcase
             end
-<<<<<<< HEAD
         `ifdef EXT_V_ENABLE
             `INST_VALU: begin
                 ex_type = `EX_VALU;
                 use_rd = 1;
-                case(func3)
+                case (func3)
                     3'b000 : begin // OPIVV
                         op_type = `INST_OP_BITS'(v_type);
                         `USED_IREG (rd);
@@ -568,29 +563,13 @@ module VX_decode  #(
                         imm = 0;
                     end
                     3'b011 : begin // OPIVI (Immediate) 
-                        op_type = `INST_OP_BITS(v_type);
+                        op_type = `INST_OP_BITS'(v_type);
                         `USED_IREG (rd);
                         `USED_IREG (rs1);
                         imm = {{(`XLEN-12){i_imm[11]}}, i_imm};// Waveform 보면서 비트 수 수정
                         use_imm = 1;
                     end
-=======
-            `ifdef EXT_V_ENABLE
-                        `INST_VALU: begin
-                            case(func3)
-                                3'h00 : begin //OPIVV
-                                    case(func6)
-                                        6'h00 : begin //VADD
-                                            ex_type = `EX_VALU;
-                                            op_type = `INST_OP_BITS'(`INST_VALU_VADD);
-                                            `USED_VREG (rd);
-                                            `USED_VREG (rs1);
-                                            `USED_VREG (rs2);
-                                            imm = 0;
-                                        end
-                                        //additonal OPIVV Instructions
->>>>>>> 2dcc55444c72fb78f8610af1e162a49cdf4536b5
-
+                    default:;
                 endcase 
             end
         `endif
