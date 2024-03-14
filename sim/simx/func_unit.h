@@ -14,6 +14,7 @@
 #pragma once
 
 #include <simobject.h>
+#include <array>
 #include "instr_trace.h"
 
 namespace vortex {
@@ -22,77 +23,89 @@ class Core;
 
 class FuncUnit : public SimObject<FuncUnit> {
 public:
-    std::vector<SimPort<instr_trace_t*>> Inputs;
-    std::vector<SimPort<instr_trace_t*>> Outputs;
+	std::vector<SimPort<instr_trace_t*>> Inputs;
+	std::vector<SimPort<instr_trace_t*>> Outputs;
 
-    FuncUnit(const SimContext& ctx, Core* core, const char* name) 
-        : SimObject<FuncUnit>(ctx, name) 
-        , Inputs(ISSUE_WIDTH, this)
-        , Outputs(ISSUE_WIDTH, this)
-        , core_(core)
-    {}
-    
-    virtual ~FuncUnit() {}
+	FuncUnit(const SimContext& ctx, Core* core, const char* name) 
+		: SimObject<FuncUnit>(ctx, name) 
+		, Inputs(ISSUE_WIDTH, this)
+		, Outputs(ISSUE_WIDTH, this)
+		, core_(core)
+	{}
+	
+	virtual ~FuncUnit() {}
 
-    virtual void reset() {}
+	virtual void reset() {}
 
-    virtual void tick() = 0;
+	virtual void tick() = 0;
 
 protected:
-    Core* core_;
+	Core* core_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 class AluUnit : public FuncUnit {
 public:
-    AluUnit(const SimContext& ctx, Core*);
-    
-    void tick();
+  AluUnit(const SimContext& ctx, Core*);
+
+  void tick();
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 class FpuUnit : public FuncUnit {
 public:
-    FpuUnit(const SimContext& ctx, Core*);
-    
-    void tick();
+  FpuUnit(const SimContext& ctx, Core*);
+
+  void tick();
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 class LsuUnit : public FuncUnit {
 public:
-    LsuUnit(const SimContext& ctx, Core*);
+	LsuUnit(const SimContext& ctx, Core*);
+	~LsuUnit();
 
-    void reset();
+	void reset();
+	void tick();
 
-    void tick();
+private:
 
-private:    
-    struct pending_req_t {
-      instr_trace_t* trace;
-      uint32_t count;
-    };
-    HashTable<pending_req_t> pending_rd_reqs_;    
-    uint32_t num_lanes_;
-    instr_trace_t* fence_state_;
-    uint64_t pending_loads_;
-    bool fence_lock_;
-    uint32_t input_idx_;
+	int send_requests(instr_trace_t* trace, int block_idx, int tag);
+	int send_coalesced_requests(instr_trace_t* trace, int block_idx, int tag);
+
+	struct pending_req_t {
+		instr_trace_t* trace;
+		uint32_t count;
+	};
+
+	struct lsu_state_t {		
+		HashTable<pending_req_t> pending_rd_reqs;
+		instr_trace_t* fence_trace;	
+		bool fence_lock;
+
+		lsu_state_t() : pending_rd_reqs(LSUQ_IN_SIZE) {}
+		
+		void clear() {
+			this->pending_rd_reqs.clear();
+			this->fence_trace = nullptr;
+			this->fence_lock = false;
+		}
+	};
+	
+	std::array<lsu_state_t, NUM_LSU_BLOCKS> states_;	
+	uint64_t pending_loads_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 class SfuUnit : public FuncUnit {
 public:
-    SfuUnit(const SimContext& ctx, Core*);
-    
-    void tick();
-
-private:
-  uint32_t input_idx_;
+	SfuUnit(const SimContext& ctx, Core*);
+	
+	void tick();
 };
 
 }

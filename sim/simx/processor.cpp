@@ -41,7 +41,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     uint8_t(arch.num_clusters()), // request size 
     true,                     // write-through
     false,                    // write response
-    L3_MSHR_SIZE,             // mshr
+    L3_MSHR_SIZE,             // mshr size
     2,                        // pipeline latency
     }
   );        

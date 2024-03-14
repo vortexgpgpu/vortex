@@ -244,7 +244,7 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
 
 struct MemReq {
   uint64_t addr;
-  bool write;
+  bool     write;
   AddrType type;
   uint32_t tag;
   uint32_t cid;    

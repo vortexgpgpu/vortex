@@ -25,301 +25,337 @@
 using namespace vortex;
 
 AluUnit::AluUnit(const SimContext& ctx, Core* core) : FuncUnit(ctx, core, "ALU") {}
-    
-void AluUnit::tick() {    
-    for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
-        auto& input = Inputs.at(i);
-        if (input.empty()) 
-            continue;
-        auto& output = Outputs.at(i);
-        auto trace = input.front();
-        switch (trace->alu_type) {
-        case AluType::ARITH:        
-        case AluType::BRANCH:
-        case AluType::SYSCALL:
-        case AluType::IMUL:
-            output.push(trace, LATENCY_IMUL+1);
-            break;
-        case AluType::IDIV:
-            output.push(trace, XLEN+1);
-            break;
-        default:
-            std::abort();
-        }
-        DT(3, "pipeline-execute: op=" << trace->alu_type << ", " << *trace);
-        if (trace->eop && trace->fetch_stall) {
-            core_->resume(trace->wid);
-        }
-        input.pop();
-    }
+
+void AluUnit::tick() {
+  for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
+		auto& input = Inputs.at(iw);
+		if (input.empty()) 
+			continue;
+		auto& output = Outputs.at(iw);
+		auto trace = input.front();
+		switch (trace->alu_type) {
+		case AluType::ARITH:
+		case AluType::BRANCH:
+		case AluType::SYSCALL:
+		case AluType::IMUL:
+			output.push(trace, LATENCY_IMUL+1);
+			break;
+		case AluType::IDIV:
+			output.push(trace, XLEN+1);
+			break;
+		default:
+			std::abort();
+		}
+		DT(3, "pipeline-execute: op=" << trace->alu_type << ", " << *trace);
+		if (trace->eop && trace->fetch_stall) {
+			core_->resume(trace->wid);
+		}
+		input.pop();
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 FpuUnit::FpuUnit(const SimContext& ctx, Core* core) : FuncUnit(ctx, core, "FPU") {}
-    
+
 void FpuUnit::tick() {
-    for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
-        auto& input = Inputs.at(i);
-        if (input.empty()) 
-            continue;
-        auto& output = Outputs.at(i);
-        auto trace = input.front();
-        switch (trace->fpu_type) {
-        case FpuType::FNCP:
-            output.push(trace, 2);
-            break;
-        case FpuType::FMA:
-            output.push(trace, LATENCY_FMA+1);
-            break;
-        case FpuType::FDIV:
-            output.push(trace, LATENCY_FDIV+1);
-            break;
-        case FpuType::FSQRT:
-            output.push(trace, LATENCY_FSQRT+1);
-            break;
-        case FpuType::FCVT:
-            output.push(trace, LATENCY_FCVT+1);
-            break;
-        default:
-            std::abort();
-        }    
-        DT(3, "pipeline-execute: op=" << trace->fpu_type << ", " << *trace);
-        input.pop();
-    }
+	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
+		auto& input = Inputs.at(iw);
+		if (input.empty()) 
+			continue;
+		auto& output = Outputs.at(iw);
+		auto trace = input.front();
+		switch (trace->fpu_type) {
+		case FpuType::FNCP:
+			output.push(trace, 2);
+			break;
+		case FpuType::FMA:
+			output.push(trace, LATENCY_FMA+1);
+			break;
+		case FpuType::FDIV:
+			output.push(trace, LATENCY_FDIV+1);
+			break;
+		case FpuType::FSQRT:
+			output.push(trace, LATENCY_FSQRT+1);
+			break;
+		case FpuType::FCVT:
+			output.push(trace, LATENCY_FCVT+1);
+			break;
+		default:
+			std::abort();
+		}
+		DT(3, "pipeline-execute: op=" << trace->fpu_type << ", " << *trace);
+		input.pop();
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 LsuUnit::LsuUnit(const SimContext& ctx, Core* core) 
-    : FuncUnit(ctx, core, "LSU")
-    , pending_rd_reqs_(LSUQ_IN_SIZE)
-    , num_lanes_(NUM_LSU_LANES)     
-    , pending_loads_(0)
-    , fence_lock_(false)
-    , input_idx_(0)
+	: FuncUnit(ctx, core, "LSU")
+	, pending_loads_(0)
+{}
+
+LsuUnit::~LsuUnit()
 {}
 
 void LsuUnit::reset() {
-    pending_rd_reqs_.clear();
-    pending_loads_ = 0;
-    fence_lock_ = false;
+	for (auto& state : states_) {
+		state.clear();
+	}
+	pending_loads_ = 0;
 }
 
-void LsuUnit::tick() {    
-    core_->perf_stats_.load_latency += pending_loads_;
+void LsuUnit::tick() {
+	core_->perf_stats_.load_latency += pending_loads_;
 
-    // handle dcache response    
-    for (uint32_t t = 0; t < num_lanes_; ++t) {
-        auto& dcache_rsp_port = core_->lmem_demuxs_.at(t)->RspIn;
-        if (dcache_rsp_port.empty())
-            continue;
-        auto& mem_rsp = dcache_rsp_port.front();
-        auto& entry = pending_rd_reqs_.at(mem_rsp.tag);          
-        auto trace = entry.trace;
-        DT(3, "dcache-rsp: tag=" << mem_rsp.tag << ", type=" << trace->lsu_type 
-            << ", tid=" << t << ", " << *trace);  
-        assert(entry.count);
-        --entry.count; // track remaining addresses 
-        if (0 == entry.count) {
-            int iw = trace->wid % ISSUE_WIDTH;
-            auto& output = Outputs.at(iw);
-            output.push(trace, 1);
-            pending_rd_reqs_.release(mem_rsp.tag);
-        } 
-        dcache_rsp_port.pop();
-        --pending_loads_;
-    }
+	// handle dcache responses
+	for (uint32_t r = 0; r < DCACHE_NUM_REQS; ++r) {
+		auto& dcache_rsp_port = core_->lsu_demux_.at(r)->RspIn;
+		if (dcache_rsp_port.empty())
+			continue;
+		uint32_t block_idx = r / DCACHE_CHANNELS;
+		auto& state = states_.at(block_idx);
+		auto& mem_rsp = dcache_rsp_port.front();
+		auto& entry = state.pending_rd_reqs.at(mem_rsp.tag);
+		auto trace = entry.trace;
+		DT(3, "dcache-rsp: tag=" << mem_rsp.tag << ", type=" << trace->lsu_type << ", rid=" << r << ", " << *trace);
+		assert(entry.count);
+		--entry.count; // track remaining addresses 
+		if (0 == entry.count) {
+			int iw = trace->wid % ISSUE_WIDTH;
+			Outputs.at(iw).push(trace, 1);
+			state.pending_rd_reqs.release(mem_rsp.tag);
+		} 
+		dcache_rsp_port.pop();
+		--pending_loads_;
+	}
 
-    // handle local memory response
-    for (uint32_t t = 0; t < num_lanes_; ++t) {
-        auto& lmem_rsp_port = core_->local_mem_->Outputs.at(t);
-        if (lmem_rsp_port.empty())
-            continue;
-        auto& mem_rsp = lmem_rsp_port.front();
-        auto& entry = pending_rd_reqs_.at(mem_rsp.tag);          
-        auto trace = entry.trace;
-        DT(3, "lmem-rsp: tag=" << mem_rsp.tag << ", type=" << trace->lsu_type << ", tid=" << t << ", " << *trace);
-        assert(entry.count);
-        --entry.count; // track remaining addresses 
-        if (0 == entry.count) {
-            int iw = trace->wid % ISSUE_WIDTH;
-            auto& output = Outputs.at(iw);
-            output.push(trace, 1);
-            pending_rd_reqs_.release(mem_rsp.tag);
-        } 
-        lmem_rsp_port.pop();  
-        --pending_loads_;
-    }
+	// handle LSU requests 
+	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
+		uint32_t block_idx = iw % NUM_LSU_BLOCKS;
+		auto& state = states_.at(block_idx);
+		if (state.fence_lock) {
+			// wait for all pending memory operations to complete
+			if (!state.pending_rd_reqs.empty())
+				continue;
+			Outputs.at(iw).push(state.fence_trace, 1);
+			state.fence_lock = false;
+			DT(3, "fence-unlock: " << state.fence_trace);
+		}
 
-    if (fence_lock_) {
-        // wait for all pending memory operations to complete
-        if (!pending_rd_reqs_.empty())
-            return;
-        int iw = fence_state_->wid % ISSUE_WIDTH;
-        auto& output = Outputs.at(iw);
-        output.push(fence_state_, 1);
-        fence_lock_ = false;
-        DT(3, "fence-unlock: " << fence_state_);
-    }    
+		// check input queue
+		auto& input = Inputs.at(iw);
+		if (input.empty())
+			continue;
 
-    // check input queue
-    for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
-        int iw = (input_idx_ + i) % ISSUE_WIDTH;
-        auto& input = Inputs.at(iw);
-        if (input.empty())
-            continue;
-        auto& output = Outputs.at(iw);
-        auto trace = input.front();
-        auto trace_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
+		auto& output = Outputs.at(iw);
+		auto trace = input.front();
 
-        auto t0 = trace->pid * num_lanes_;
+		if (trace->lsu_type == LsuType::FENCE) {
+			// schedule fence lock
+			state.fence_trace = trace;
+			state.fence_lock = true;
+			DT(3, "fence-lock: " << *trace);
+			// remove input
+			input.pop(); 
+			continue;
+		}
 
-        if (trace->lsu_type == LsuType::FENCE) {
-            // schedule fence lock
-            fence_state_ = trace;
-            fence_lock_ = true;        
-            DT(3, "fence-lock: " << *trace);
-            // remove input
-            input.pop(); 
-            break;
-        }
+		// check pending queue capacity
+		if (state.pending_rd_reqs.full()) {
+			if (!trace->log_once(true)) {
+				DT(3, "*** " << this->name() << "-lsu-queue-stall: " << *trace);
+			}
+			continue;
+		} else {
+			trace->log_once(false);
+		}
 
-        // check pending queue capacity    
-        if (pending_rd_reqs_.full()) {
-            if (!trace->log_once(true)) {
-                DT(3, "*** " << this->name() << "-lsu-queue-stall: " << *trace);
-            }
-            break;
-        } else {
-            trace->log_once(false);
-        }
-        
-        bool is_write = (trace->lsu_type == LsuType::STORE);
+		uint32_t num_reqs;
+		auto tag = state.pending_rd_reqs.allocate({trace, 0});		
+		if (DCACHE_WORD_SIZE != (XLEN/8)) {
+			num_reqs = this->send_coalesced_requests(trace, block_idx, tag);
+		} else {
+			num_reqs = this->send_requests(trace, block_idx, tag);
+		}	
+		state.pending_rd_reqs.at(tag).count = num_reqs;
 
-        // duplicates detection
-        bool is_dup = false;
-        if (trace->tmask.test(t0)) {
-            uint64_t addr_mask = sizeof(uint32_t)-1;
-            uint32_t addr0 = trace_data->mem_addrs.at(0).addr & ~addr_mask;
-            uint32_t matches = 1;
-            for (uint32_t t = 1; t < num_lanes_; ++t) {
-                if (!trace->tmask.test(t0 + t))
-                    continue;
-                auto mem_addr = trace_data->mem_addrs.at(t + t0).addr & ~addr_mask;
-                matches += (addr0 == mem_addr);
-            }
-        #ifdef LSU_DUP_ENABLE
-            is_dup = (matches == trace->tmask.count());
-        #endif
-        }
+		// do not wait on writes
+		bool is_write = (trace->lsu_type == LsuType::STORE);
+		if (is_write) {
+			state.pending_rd_reqs.release(tag);
+			output.push(trace, 1);
+		}
 
-        uint32_t addr_count;
-        if (is_dup) {
-            addr_count = 1;
-        } else {
-            addr_count = trace->tmask.count();
-        }
+		// remove input
+		input.pop();
+	}
+}
 
-        auto tag = pending_rd_reqs_.allocate({trace, addr_count});
+int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
+	int count = 0;
+	
+	auto trace_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
+	bool is_write = (trace->lsu_type == LsuType::STORE);
+	auto t0 = trace->pid * NUM_LSU_LANES;
 
-        for (uint32_t t = 0; t < num_lanes_; ++t) {
-            if (!trace->tmask.test(t0 + t))
-                continue;
-            
-            auto& dcache_req_port = core_->lmem_demuxs_.at(t)->ReqIn;
-            auto mem_addr = trace_data->mem_addrs.at(t + t0);
-            auto type = get_addr_type(mem_addr.addr);
+	for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
+		uint32_t t = t0 + i;
+		if (!trace->tmask.test(t))
+			continue;
+		
+		int req_idx = block_idx * DCACHE_CHANNELS + (i % DCACHE_CHANNELS);		
+		auto& dcache_req_port = core_->lsu_demux_.at(req_idx)->ReqIn;		
+		
+		auto mem_addr = trace_data->mem_addrs.at(t);
+		auto type = get_addr_type(mem_addr.addr);
 
-            MemReq mem_req;
-            mem_req.addr  = mem_addr.addr;
-            mem_req.write = is_write;
-            mem_req.type  = type; 
-            mem_req.tag   = tag;
-            mem_req.cid   = trace->cid;
-            mem_req.uuid  = trace->uuid;        
-                
-            dcache_req_port.push(mem_req, 1);
-            DT(3, "dcache-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << tag 
-                << ", lsu_type=" << trace->lsu_type << ", tid=" << t << ", addr_type=" << mem_req.type << ", " << *trace);
+		MemReq mem_req;
+		mem_req.addr  = mem_addr.addr;
+		mem_req.write = is_write;
+		mem_req.type  = type; 
+		mem_req.tag   = tag;
+		mem_req.cid   = trace->cid;
+		mem_req.uuid  = trace->uuid;
+				
+		dcache_req_port.push(mem_req, 1);
+		DT(3, "dcache-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << tag 
+			<< ", lsu_type=" << trace->lsu_type << ", rid=" << req_idx << ", addr_type=" << mem_req.type << ", " << *trace);
 
-            if (is_write) {
-                ++core_->perf_stats_.stores;
-            } else {                
-                ++core_->perf_stats_.loads;
-                ++pending_loads_;
-            }
-            if (is_dup)
-                break;
-        }
+		if (is_write) {
+			++core_->perf_stats_.stores;
+		} else {
+			++core_->perf_stats_.loads;
+			++pending_loads_;
+		}
 
-        // do not wait on writes
-        if (is_write) {
-            pending_rd_reqs_.release(tag);
-            output.push(trace, 1);            
-        }
+		++count;
+	}
+	return count;
+}
 
-        // remove input
-        input.pop();
+int LsuUnit::send_coalesced_requests(instr_trace_t* trace, int block_idx, int tag) {
+	int count = 0;
+	
+	auto trace_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
+	bool is_write = (trace->lsu_type == LsuType::STORE);
+	auto t0 = trace->pid * NUM_LSU_LANES;
 
-        break; // single block
-    }
-    ++input_idx_;
+	auto addr_mask = ~uint64_t(LSU_LINE_SIZE-1);
+
+	for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
+
+		std::bitset<NUM_LSU_LANES / DCACHE_CHANNELS> mask(0);		
+		for (uint32_t i = 0; i < mask.size(); ++i) {
+			mask.set(i, trace->tmask.test(t0 + i));
+		}
+		
+		int req_idx = block_idx * DCACHE_CHANNELS + c;
+		auto& dcache_req_port = core_->lsu_demux_.at(req_idx)->ReqIn;
+
+		while (mask.any()) {
+			// calculate seed idex
+			int seed_idx = 0;
+			for (uint32_t i = 0; i < mask.size(); ++i) {
+				if (mask.test(i)) {
+					seed_idx = i;
+					break;
+				}
+			}
+
+			uint32_t seed_addr = trace_data->mem_addrs.at(t0 + seed_idx).addr & addr_mask;
+			auto type = get_addr_type(seed_addr);
+
+			// coalesce addresses matching the seed
+			uint32_t coelescing_size = 0;
+			for (uint32_t i = seed_idx; i < mask.size(); ++i) {
+				auto mem_addr = trace_data->mem_addrs.at(t0 + i).addr & addr_mask;
+				if (mem_addr == seed_addr) {
+					mask.set(i, 0);
+					++coelescing_size;		
+				}
+			}		
+
+			MemReq mem_req;
+			mem_req.addr  = seed_addr;
+			mem_req.write = is_write;
+			mem_req.type  = type; 
+			mem_req.tag   = tag;
+			mem_req.cid   = trace->cid;
+			mem_req.uuid  = trace->uuid;
+					
+			dcache_req_port.push(mem_req, 1);
+			DT(3, "dcache-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << tag 
+				<< ", lsu_type=" << trace->lsu_type << ", rid=" << req_idx << ", addr_type=" << mem_req.type << ", " << *trace);
+			if (coelescing_size > 1) {
+				DT(3, "*** coalescing: size=" << coelescing_size << ", " << *trace);
+			}
+
+			if (is_write) {
+				++core_->perf_stats_.stores;
+			} else {
+				++core_->perf_stats_.loads;
+				++pending_loads_;
+			}
+			
+			++count;
+		}
+
+		t0 += mask.size();
+	}
+	
+	return count;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 SfuUnit::SfuUnit(const SimContext& ctx, Core* core) 
-    : FuncUnit(ctx, core, "SFU")
-    , input_idx_(0)
+	: FuncUnit(ctx, core, "SFU")
 {}
-    
+
 void SfuUnit::tick() {
-    // check input queue
-    for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
-        int iw = (input_idx_ + i) % ISSUE_WIDTH;        
-        auto& input = Inputs.at(iw);
-        if (input.empty())
-            continue;
-        auto& output = Outputs.at(iw);
-        auto trace = input.front();
-        auto sfu_type = trace->sfu_type;
-        bool release_warp = trace->fetch_stall;
+	// check input queue
+	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
+		auto& input = Inputs.at(iw);
+		if (input.empty())
+			continue;
+		auto& output = Outputs.at(iw);
+		auto trace = input.front();
+		auto sfu_type = trace->sfu_type;
+		bool release_warp = trace->fetch_stall;
 
-        switch  (sfu_type) {
-        case SfuType::TMC: 
-        case SfuType::WSPAWN:
-        case SfuType::SPLIT:
-        case SfuType::JOIN:
-        case SfuType::PRED:
-        case SfuType::CSRRW:
-        case SfuType::CSRRS:
-        case SfuType::CSRRC:
-            output.push(trace, 1);
-            break;
-        case SfuType::BAR: {
-            output.push(trace, 1);
-            auto trace_data = std::dynamic_pointer_cast<SFUTraceData>(trace->data);
-            if (trace->eop) {
-                core_->barrier(trace_data->bar.id, trace_data->bar.count, trace->wid);
-            }
-            release_warp = false;
-        }   break;
-        case SfuType::CMOV:
-            output.push(trace, 3);
-            break;
-        default:
-            std::abort();
-        }
+		switch  (sfu_type) {
+		case SfuType::TMC: 
+		case SfuType::WSPAWN:
+		case SfuType::SPLIT:
+		case SfuType::JOIN:
+		case SfuType::PRED:
+		case SfuType::CSRRW:
+		case SfuType::CSRRS:
+		case SfuType::CSRRC:
+			output.push(trace, 1);
+			break;
+		case SfuType::BAR: {
+			output.push(trace, 1);
+			auto trace_data = std::dynamic_pointer_cast<SFUTraceData>(trace->data);
+			if (trace->eop) {
+				core_->barrier(trace_data->bar.id, trace_data->bar.count, trace->wid);
+			}
+			release_warp = false;
+		} break;
+		case SfuType::CMOV:
+			output.push(trace, 3);
+			break;
+		default:
+			std::abort();
+		}
 
-        DT(3, "pipeline-execute: op=" << trace->sfu_type << ", " << *trace);
-        if (trace->eop && release_warp)  {
-            core_->resume(trace->wid);
-        }
+		DT(3, "pipeline-execute: op=" << trace->sfu_type << ", " << *trace);
+		if (trace->eop && release_warp)  {
+			core_->resume(trace->wid);
+		}
 
-        input.pop();
-
-        break; // single block
-    }
-    ++input_idx_;
+		input.pop();
+	}
 }
