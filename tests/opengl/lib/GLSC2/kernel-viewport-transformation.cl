@@ -1,5 +1,5 @@
 
-__kernel void perspective_division(__global const float *ndc,
+__kernel void viewport_division(__global const float *ndc,
                                     __global const int px,
                                     __global const int py,
                                     __global const int cx,
