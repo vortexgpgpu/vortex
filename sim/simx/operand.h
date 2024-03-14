@@ -23,37 +23,37 @@ public:
     SimPort<instr_trace_t*> Output;
 
     Operand(const SimContext& ctx) 
-        : SimObject<Operand>(ctx, "Operand") 
-        , Input(this)
-        , Output(this)
+			: SimObject<Operand>(ctx, "Operand") 
+			, Input(this)
+			, Output(this)
     {}
-    
+
     virtual ~Operand() {}
 
     virtual void reset() {}
 
     virtual void tick() {
-        if (Input.empty())
-            return;
-        auto trace = Input.front();
+			if (Input.empty())
+				return;
+			auto trace = Input.front();
 
-        int delay = 1;
-        for (int i = 0; i < MAX_NUM_REGS; ++i) {
-            bool is_iregs = trace->used_iregs.test(i);
-            bool is_fregs = trace->used_fregs.test(i);
-            bool is_vregs = trace->used_vregs.test(i);
-            if (is_iregs || is_fregs || is_vregs) {
-                if (is_iregs && i == 0)
-                    continue;
-                ++delay;
-            }
-        }
+			int delay = 1;
+			for (int i = 0; i < MAX_NUM_REGS; ++i) {
+				bool is_iregs = trace->used_iregs.test(i);
+				bool is_fregs = trace->used_fregs.test(i);
+				bool is_vregs = trace->used_vregs.test(i);
+				if (is_iregs || is_fregs || is_vregs) {
+					if (is_iregs && i == 0)
+						continue;
+					++delay;
+				}
+			}
 
-        Output.push(trace, delay);
-        
-        DT(3, "pipeline-operands: " << *trace);
+			Output.push(trace, delay);
+			
+			DT(3, "pipeline-operands: " << *trace);
 
-        Input.pop();
+			Input.pop();
     };
 };
 
