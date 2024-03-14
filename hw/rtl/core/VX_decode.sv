@@ -530,12 +530,27 @@ module VX_decode  #(
             end
         `ifdef EXT_V_ENABLE
             `INST_VALU: begin
-                    ex_type = `EX_VALU;
-                    op_type = `INST_OP_BITS'(v_type);
-                    `USED_IREG (rd);
-                    `USED_IREG (rs1);
-                    `USED_IREG (rs2);
-                    imm = 0;
+                ex_type = `EX_VALU;
+                use_rd = 1;
+                case(func3)
+                    3'b000 : begin // OPIVV
+                        op_type = `INST_OP_BITS'(v_type);
+                        `USED_IREG (rd);
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                        imm = 0;
+                    end
+                    3'b011 : begin // OPIVI (Immediate) 
+                        op_type = `INST_OP_BITS(v_type);
+                        `USED_IREG (rd);
+                        `USED_IREG (rs2);
+                        use_imm = 1;
+                    end
+            `INST_
+
+
+
+                endcase 
             end
         `endif
             default:;
