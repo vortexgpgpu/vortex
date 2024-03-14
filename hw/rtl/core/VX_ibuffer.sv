@@ -36,7 +36,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
         VX_elastic_buffer #(
             .DATAW   (DATAW),
             .SIZE    (`IBUF_SIZE),
-            .OUT_REG (1)
+            .OUT_REG (2) // use a 2-cycle FIFO
         ) instr_buf (
             .clk      (clk),
             .reset    (reset),
