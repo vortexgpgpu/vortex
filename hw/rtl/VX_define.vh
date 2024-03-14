@@ -253,7 +253,10 @@
 // VALU
 `define INST_VALU_BITS        4
 `define INST_VALU_VADD        4'b0000
+`define INST_VALU_VADDI       4'b0000 // use_imm으로 Immediate 연산 유뮤가 판별 된다. op_type 자체는 동일
+`define INST_VALU_VSUBI       4'b0111
 `define INST_VALU_VSUB        4'b0111
+
 `define INST_VALU_VAND        4'b1100
 `define INST_VALU_VOR         4'b1101
 `define INST_VALU_VXOR        4'b1110

@@ -153,13 +153,20 @@ module VX_decode  #(
     reg [`INST_OP_BITS-1:0] v_type;
     always @(*) begin
         case(func3)
-            3'h0: begin
+            3'b000: begin
                 case (func6) //
-                    6'h000000: v_type = `INST_VALU_VADD;
-                    6'h000010: v_type = `INST_VALU_VSUB;
-                    6'h001001: v_type = `INST_VALU_VAND;
-                    6'h001010: v_type = `INST_VALU_VOR;
-                    6'h001011: v_type = `INST_VALU_VXOR;
+                    6'b000000: v_type = `INST_VALU_VADD;
+                    6'b000010: v_type = `INST_VALU_VSUB;
+                    6'b001001: v_type = `INST_VALU_VAND;
+                    6'b001010: v_type = `INST_VALU_VOR;
+                    6'b001011: v_type = `INST_VALU_VXOR;
+                    default:;
+                endcase
+            end
+            3'b011 : begin
+                case(func6)
+                    6'b000000 : v_type = `INST_VALU_VADDI;
+                    6'b000010 : v_type = `INST_VALU_VSUBI;
                     default:;
                 endcase
             end
@@ -543,12 +550,10 @@ module VX_decode  #(
                     3'b011 : begin // OPIVI (Immediate) 
                         op_type = `INST_OP_BITS(v_type);
                         `USED_IREG (rd);
-                        `USED_IREG (rs2);
+                        `USED_IREG (rs1);
+                        imm = {{(`XLEN-12){i_imm[11]}}, i_imm};// Waveform 보면서 비트 수 수정
                         use_imm = 1;
                     end
-            `INST_
-
-
 
                 endcase 
             end
