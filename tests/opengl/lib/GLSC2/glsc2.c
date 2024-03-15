@@ -97,16 +97,21 @@ inline void gl_pipeline(GLint first, GLsizei count){
     //pipeline
     unsigned int numVerts = count-first;
     //vertex shader
-    float clip_coords[4*numVerts];//es ejemplo, no se puede iniciar dinamicamente, pero tampoco se puede usar malloc :D
-    if(_no_program == GL_TRUE)
-        vertex_shader(first, count, clip_coords);
+    float primitives[4*GL_MAX_VERTEX_ATTRIBS];
+    if(!_no_program == GL_TRUE)
+        vertex_shader(first, count, primitives);
     //clip coord
-    float ndc_coords[3*numVerts];
-    perspective_division(numVerts, clip_coords, ndc_coords);
+    perspective_division(numVerts, primitives);
     //normalized-device-coords
-    float window_coords[3*numVerts];
-    viewport_transformation(numVerts, ndc_coords, window_coords);
+    viewport_transformation(numVerts, primitives);
     //rasterization
+    float fragments[4*viewportTransform.w*viewportTransform.h];//color
+    rasterization(numVerts, primitives, fragments, viewportTransform.w*viewportTransform.h);
+    //fragment-shader
+    fragment_shader();
+    //per-vertex-ops
+    per_vertex_operations();
+    //entiendo que aqui escribe en frame buff
 }
 
 void _glDrawArraysTriangles(GLint first, GLsizei count) {

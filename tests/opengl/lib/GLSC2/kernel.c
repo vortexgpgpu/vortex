@@ -21,6 +21,23 @@ cl_device_id* _getDeviceID() {
 
 cl_context _context = clCreateContext(NULL, 1, _getDeviceID(), NULL, NULL,  &_err);
 
+cl_program _createProgram(){
+    uint8_t *kernel_bin = NULL;
+    size_t kernel_size;
+
+    //HOSTCPU
+    if (0 != read_kernel_file("pipeline.cl", &kernel_bin, &kernel_size))
+        return -1;
+    
+    cl_program pipeline = clCreateProgramWithSource(
+        _context, 1, (const char**)&kernel_bin, &kernel_size, &_err);  
+    // Build program
+    clBuildProgram(pipeline, 1, _getDeviceID(), NULL, NULL, NULL);
+    return pipeline;
+}
+
+cl_program pipeline_program = _createProgram();
+
 
 void vertex_shader(GLint first, GLsizei count, float* clip_coords){
     //VERTEX SHADER
@@ -58,52 +75,29 @@ void vertex_shader(GLint first, GLsizei count, float* clip_coords){
   clEnqueueReadBuffer(commandQueue, cl_primitives, CL_TRUE, 0, 4*(count-first)*sizeof(float), clip_coords, 0, NULL, NULL);
 }
 
-void perspective_division(unsigned int numVerts, float* clip_coords, float* ndc_coords){
+void perspective_division(unsigned int numVerts, float* clip_coords){
     uint8_t *kernel_bin = NULL;
     size_t kernel_size;
 
-    //HOSTCPU
-    if (0 != read_kernel_file(PERS_DIV, &kernel_bin, &kernel_size))
-        return -1;
-    
-    cl_program perspective_division = clCreateProgramWithSource(
-        _context, 1, (const char**)&kernel_bin, &kernel_size, &_err);  
-    // Build program
-    clBuildProgram(perspective_division, 1, _getDeviceID(), NULL, NULL, NULL);
-  
     // Create kernel
-    cl_kernel perspective_kernel = clCreateKernel(perspective_division, "perspective division", &_err);
+    cl_kernel perspective_kernel = clCreateKernel(pipeline_program, "perspective_division", &_err);
 
-    cl_mem clipCoordsBuff = clCreateBuffer(context, CL_MEM_READ_ONLY, numVerts*4*sizeof(float), NULL, &_err);
-    cl_mem ndcCoordsBuff = clCreateBuffer(context, CL_MEM_WRITE_ONLY, numVerts*3*sizeof(float), NULL, &_err);
+    cl_mem clipCoordsBuff = clCreateBuffer(context, CL_MEM_READ_WRITE, numVerts*4*sizeof(float), NULL, &_err);
     
     clSetKernelArg(perspective_kernel, 0, sizeof(cl_mem), (void*)&clipCoordsBuff);
-    clSetKernelArg(perspective_kernel, 1, sizeof(cl_mem), (void*)&ndcCoordsBuff);
 
   cl_command_queue commandQueue = clCreateCommandQueue(context, _getDeviceID(), 0, &_err);
   size_t global_work_size[1] = {numVerts};
   clEnqueueNDRangeKernel(commandQueue, perspective_kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
   clFinish(commandQueue);  
-  clEnqueueReadBuffer(commandQueue, ndcCoordsBuff, CL_TRUE, 0, 3*numVerts*sizeof(float), ndc_coords, 0, NULL, NULL);
+  clEnqueueReadBuffer(commandQueue, clipCoordsBuff, CL_TRUE, 0, numVerts*4*sizeof(float), clip_coords, 0, NULL, NULL);
 }
 
-void viewport_transformation(unsigned int numVerts, float* ndc_coords, float* window_coords){
-    uint8_t *kernel_bin = NULL;
-    size_t kernel_size;
-
-    //HOSTCPU
-    if (0 != read_kernel_file(VIEWPORT_TRANS, &kernel_bin, &kernel_size))
-        return -1;
-
-    cl_program viewport_transformation = clCreateProgramWithSource(
-        _context, 1, (const char**)&kernel_bin, &kernel_size, &_err);  
-    // Build program
-    clBuildProgram(viewport_transformation, 1, _getDeviceID(), NULL, NULL, NULL);
+void viewport_transformation(unsigned int numVerts, float* ndc_coords){
 
     // Create kernel
-    cl_kernel viewport_kernel = clCreateKernel(viewport_transformation, "viewport division", &_err);
-    cl_mem ndcCoordsBuff = clCreateBuffer(context, CL_MEM_READ_ONLY, numVerts*3*sizeof(float), NULL, &_err);
-    cl_mem windowCoordsBuff = clCreateBuffer(context, CL_MEM_WRITE_ONLY, numVerts*3*sizeof(float), NULL, &_err);
+    cl_kernel viewport_kernel = clCreateKernel(pipeline_program, "viewport_division", &_err);
+    cl_mem ndcCoordsBuff = clCreateBuffer(context, CL_MEM_READ_WRITE, numVerts*4*sizeof(float), NULL, &_err);
 
     clSetKernelArg(viewport_transformation_kernel, 0, sizeof(cl_mem), ndcCoordsBuff);
     clSetKernelArg(viewport_transformation_kernel, 1, sizeof(GLint), viewportTransform.w);
@@ -112,13 +106,31 @@ void viewport_transformation(unsigned int numVerts, float* ndc_coords, float* wi
     clSetKernelArg(viewport_transformation_kernel, 4, sizeof(GLint), (viewportTransform.y+viewportTransform.h/2));
     clSetKernelArg(viewport_transformation_kernel, 5, sizeof(GLfloat), viewportTransform.n);
     clSetKernelArg(viewport_transformation_kernel, 6, sizeof(GLfloat), viewportTransform.f);
-    clSetKernelArg(viewport_transformation_kernel, 7, sizeof(cl_mem), windowCoordsBuff);
 
     cl_command_queue commandQueue = clCreateCommandQueue(context, _getDeviceID(), 0, &_err);
     size_t global_work_size[1] = {numVerts};
     clEnqueueNDRangeKernel(commandQueue, viewport_transformation_kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
     clFinish(commandQueue);  
-    clEnqueueReadBuffer(commandQueue, windowCoordsBuff, CL_TRUE, 0, 3*numVerts*sizeof(float), window_coords, 0, NULL, NULL);
+    clEnqueueReadBuffer(commandQueue, ndcCoordsBuff, CL_TRUE, 0, 4*numVerts*sizeof(float), ndcCoordsBuff, 0, NULL, NULL);
+}
+
+void rasterization(unsigned int numVerts, float* primitives, float* fragments, unsigned int grid_size){
+
+    // Create kernel
+    cl_kernel rasterization_kernel = clCreateKernel(pipeline_program, "rasterization", &_err);
+    cl_mem primitivesBuff = clCreateBuffer(_context, CL_MEM_READ_ONLY, numVerts*4*sizeof(float), NULL, &_err);
+    cl_mem fragmentsBuff = clCreateBuffer(_context, CL_MEM_WRITE_ONLY, grid_size*4*sizeof(float), NULL, &_err);
+
+    clSetKernelArg(rasterization_kernel, 0, sizeof(GLuint), grid_size);
+    clSetKernelArg(rasterization_kernel, 1, sizeof(cl_mem), primitivesBuff);
+    clSetKernelArg(rasterization_kernel, 2, sizeof(cl_mem), fragmentsBuff);
+    clSetKernelArg(rasterization_kernel, 3, sizeof(GLuint), grid_size);
+
+    cl_command_queue commandQueue = clCreateCommandQueue(_context, _getDeviceID(), 0, &_err);
+    size_t global_work_size[1] = {grid_size};
+    clEnqueueNDRangeKernel(commandQueue, rasterization_kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
+    clFinish(commandQueue);  
+    clEnqueueReadBuffer(commandQueue, fragmentsBuff, CL_TRUE, 0, 4*grid_size*sizeof(float), fragments, 0, NULL, NULL);
 }
 
 void fragment_shader(){
