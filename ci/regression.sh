@@ -219,8 +219,10 @@ config()
     AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
 
     # reduce l1 line size
-    CONFIGS="-DL1_LINE_SIZE=16" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr --args="-n1"
-    CONFIGS="-DL1_LINE_SIZE=4 -DL1_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr --args="-n1"
+    CONFIGS="-DL1_LINE_SIZE=4" ./ci/blackbox.sh --driver=rtlsim --app=io_addr
+    CONFIGS="-DL1_LINE_SIZE=4" ./ci/blackbox.sh --driver=simx --app=io_addr
+    CONFIGS="-DL1_LINE_SIZE=4 -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DL1_LINE_SIZE=4 -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=sgemmx
 
     # test cache banking
     CONFIGS="-DLMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx

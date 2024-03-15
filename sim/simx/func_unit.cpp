@@ -242,7 +242,7 @@ int LsuUnit::send_coalesced_requests(instr_trace_t* trace, int block_idx, int ta
 	bool is_write = (trace->lsu_type == LsuType::STORE);
 	auto t0 = trace->pid * NUM_LSU_LANES;
 
-	auto addr_mask = ~uint64_t(LSU_LINE_SIZE-1);
+	uint64_t addr_mask = ~uint64_t(LSU_LINE_SIZE-1);
 
 	for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
 
@@ -264,13 +264,13 @@ int LsuUnit::send_coalesced_requests(instr_trace_t* trace, int block_idx, int ta
 				}
 			}
 
-			uint32_t seed_addr = trace_data->mem_addrs.at(t0 + seed_idx).addr & addr_mask;
+			uint64_t seed_addr = trace_data->mem_addrs.at(t0 + seed_idx).addr & addr_mask;
 			auto type = get_addr_type(seed_addr);
 
 			// coalesce addresses matching the seed
 			uint32_t coelescing_size = 0;
 			for (uint32_t i = seed_idx; i < mask.size(); ++i) {
-				auto mem_addr = trace_data->mem_addrs.at(t0 + i).addr & addr_mask;
+				uint64_t mem_addr = trace_data->mem_addrs.at(t0 + i).addr & addr_mask;
 				if (mem_addr == seed_addr) {
 					mask.set(i, 0);
 					++coelescing_size;		
