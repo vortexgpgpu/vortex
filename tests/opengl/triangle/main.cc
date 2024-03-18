@@ -218,7 +218,28 @@ int main (int argc, char **argv) {
 
 int _main() {
     // Set up vertex buffer object
-    GLuint program, vao, vbo;
+    GLuint program = glCreateProgram();
+    GLuint vao, vbo;
+
+     // Getting platform and device information
+  cl_platform_id platform_id;
+  cl_device_id device_id = NULL;
+  uint8_t *kernel_bin = NULL;
+
+
+  clGetPlatformIDs(1, &platform_id, NULL);
+  clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL);
+
+  printf("Create context\n");
+  cl_context context = clCreateContext(NULL, 1, &device_id, NULL, NULL,  &_err);
+
+  read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
+
+
+  cl_program triangle_cl = clCreateProgramWithSource(
+      context, 1, (const char**)&kernel_bin, &kernel_size, &_err);
+
+  glProgramBinary (program, CL_PROGRAM, &cl_program, kernel_size);
     
     glViewport(0, 0, WIDTH, HEIGHT);
     glClear(GL_COLOR_BUFFER_BIT);

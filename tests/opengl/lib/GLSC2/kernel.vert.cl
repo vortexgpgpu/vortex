@@ -1,41 +1,47 @@
-typedef struct __attribute__ ((packed)) vert_attrib
-{
-  bool enable, normalized;
-  GLuint index;
-  GLint size;
-  GLenum type;
-  GLsizei stride;
-  const void *pointer;
+struct VAO{
+    bool enable, normalized;
+    GLuint index;
+    GLint size;
+    GLenum type;
+    GLsizei stride;
+    const void *pointer;
 };
 
-__kernel void vertex_shader (
-                      unsigned int _sz,
-                      vert_attrib *_VAO,
-                      __global const float* VBO,
-                      __global void* P
+struct vec3f{
+  float x;
+  float y;
+  float z;
+}
+
+struct vec4f{
+  float x;
+  float y;
+  float z;
+  float w;
+}
+
+void vertexatrib3f(int index, int gid, float* x, float* y, float* z, VAO* vao, float* vbo){
+  VAO i_vao=vao[index];
+  float* init = vbo[first*i_vao->size + gid*i_vao->size + (unsigned int) i_vao->pointer];
+  *x = *init++;
+  *y = *init++;
+  *z = *init;
+}
+
+__kernel void vertex_shader (__global unsigned int first,
+                      __global const void* vao,
+                      __global void* primitives,
+                      __global const void* vbo
                       )
 {
   int gid = get_global_id(0);
+  vec3f position;
+  vertexatrib3f(0, gid, &position.x, &position.y, &position.z, (VAO*) vao, (float*) vbo);
 
-  vert_attrib *END = _VAO+_sz;
-  while (_VAO != END) {
-    if (_VAO)
-  }
-  for(unsigned int vao = 0; vao < _sz; ++vao) {
+  vec4* gl_position = ((float*) primitives)[4*gid];
 
-  }
-  float* read_pos = &VBO[first*size + gid*size + (unsigned int)(offset/sizeof(float))];
-  float* write_pos = &P[4*gid];
-
-  for (int i=0; i<size; i++){
-    write_pos[i]=*read_pos++;
-  }
-
-  //llenamos vector output
-  while (size < 4){
-    write_pos[size]=0;
-    if(size==3)
-      write_pos[size] = 1;
-    size++;
-  }
+  gl_position.x = position.x;
+  gl_position.y = position.y;
+  gl_position.z = position.z;
+  gl_position.w = 1;
 }
