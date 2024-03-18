@@ -199,7 +199,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 
         VX_toggle_buffer #(
             .DATAW (DATAW)
-        ) staging_buffer (
+        ) toggle_buffer (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (stg_valid_in),

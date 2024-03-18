@@ -40,8 +40,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
         ) instr_buf (
             .clk      (clk),
             .reset    (reset),
-            .valid_in (decode_if.valid && decode_if.data.wid == i),
-            .ready_in (ibuf_ready_in[i]),
+            .valid_in (decode_if.valid && decode_if.data.wid == i),            
             .data_in  ({
                 decode_if.data.uuid,
                 decode_if.data.tmask,
@@ -57,10 +56,11 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 decode_if.data.rs1, 
                 decode_if.data.rs2, 
                 decode_if.data.rs3}),
-            .data_out(ibuffer_if[i].data),
+            .ready_in (ibuf_ready_in[i]),
             .valid_out(ibuffer_if[i].valid),
+            .data_out (ibuffer_if[i].data),
             .ready_out(ibuffer_if[i].ready)
-        );        
+        );
     `ifndef L1_ENABLE
         assign decode_if.ibuf_pop[i] = ibuffer_if[i].valid && ibuffer_if[i].ready;
     `endif
