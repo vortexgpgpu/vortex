@@ -80,7 +80,7 @@ llvm-vortex()
 llvm-pocl()
 {
     case $OSDIR in
-    "centos/7") parts=$(eval echo {a..g}) ;;
+    "centos/7") parts=$(eval echo {a..b}) ;;
     *)          parts=$(eval echo {a..b}) ;;
     esac
     echo $parts
