@@ -37,6 +37,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
     localparam LSUQ_SIZEW   = `LOG2UP(`LSUQ_IN_SIZE);
     localparam REQ_ASHIFT   = `CLOG2(WORD_SIZE);
+    localparam MEM_ASHIFT   = `CLOG2(`MEM_BLOCK_SIZE);
+    localparam MEM_ADDRW    = `MEM_ADDR_WIDTH - MEM_ASHIFT;
 
     // tag_id = wid + PC + rd + op_type + align + pid + pkt_addr 
     localparam TAG_ID_WIDTH = `NW_WIDTH + `XLEN + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * (REQ_ASHIFT)) + PID_WIDTH + LSUQ_SIZEW;
@@ -86,6 +88,22 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         wire [NUM_LANES-1:0][`XLEN-1:0] full_addr;    
         for (genvar i = 0; i < NUM_LANES; ++i) begin
             assign full_addr[i] = execute_if[block_idx].data.rs1_data[i][`XLEN-1:0] + execute_if[block_idx].data.imm;
+        end
+
+        // address type calculation
+
+        wire [NUM_LANES-1:0][`ADDR_TYPE_WIDTH-1:0] mem_req_atype;
+        for (genvar i = 0; i < NUM_LANES; ++i) begin
+            wire [MEM_ADDRW-1:0] block_addr = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];            
+            // is I/O address
+            wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`XLEN'(`IO_BASE_ADDR) >> MEM_ASHIFT);
+            assign mem_req_atype[i][`ADDR_TYPE_IO] = (block_addr >= io_addr_start);
+        `ifdef LMEM_ENABLE
+            // is local memory address            
+            wire [MEM_ADDRW-1:0] lmem_addr_start = MEM_ADDRW'(`XLEN'(`LMEM_BASE_ADDR) >> MEM_ASHIFT);
+            wire [MEM_ADDRW-1:0] lmem_addr_end = MEM_ADDRW'((`XLEN'(`LMEM_BASE_ADDR) + `XLEN'(1 << `LMEM_LOG_SIZE)) >> MEM_ASHIFT);
+            assign mem_req_atype[i][`ADDR_TYPE_LOCAL] = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);            
+        `endif
         end
 
         wire mem_req_empty;
@@ -277,6 +295,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         wire [DCACHE_CHANNELS-1:0]              cache_req_rw;
         wire [DCACHE_CHANNELS-1:0][DCACHE_WORD_SIZE-1:0] cache_req_byteen;
         wire [DCACHE_CHANNELS-1:0][DCACHE_ADDR_WIDTH-1:0] cache_req_addr;
+        wire [DCACHE_CHANNELS-1:0][`ADDR_TYPE_WIDTH-1:0] cache_req_atype;
         wire [DCACHE_CHANNELS-1:0][(DCACHE_WORD_SIZE*8)-1:0] cache_req_data;
         wire [DCACHE_CHANNELS-1:0][DCACHE_TAG_WIDTH-1:0] cache_req_tag;
         wire [DCACHE_CHANNELS-1:0]              cache_req_ready;
@@ -294,6 +313,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             .WORD_SIZE   (WORD_SIZE),
             .LINE_SIZE   (DCACHE_WORD_SIZE),
             .ADDR_WIDTH  (ADDR_WIDTH),
+            .ATYPE_WIDTH (`ADDR_TYPE_WIDTH),
             .TAG_WIDTH   (TAG_WIDTH),        
             .CORE_QUEUE_SIZE (`LSUQ_IN_SIZE),
             .MEM_QUEUE_SIZE (`LSUQ_OUT_SIZE),
@@ -310,6 +330,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             .core_req_mask  (mem_req_mask),
             .core_req_byteen(mem_req_byteen),
             .core_req_addr  (mem_req_addr),
+            .core_req_atype (mem_req_atype),
             .core_req_data  (mem_req_data),        
             .core_req_tag   (mem_req_tag),
             .core_req_ready (mem_req_ready),        
@@ -330,6 +351,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             .mem_req_rw     (cache_req_rw),
             .mem_req_byteen (cache_req_byteen),
             .mem_req_addr   (cache_req_addr),
+            .mem_req_atype  (cache_req_atype),
             .mem_req_data   (cache_req_data),
             .mem_req_tag    (cache_req_tag),
             .mem_req_ready  (cache_req_ready),
@@ -346,6 +368,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             assign cache_bus_if[block_idx * DCACHE_CHANNELS + i].req_data.rw = cache_req_rw[i];
             assign cache_bus_if[block_idx * DCACHE_CHANNELS + i].req_data.byteen = cache_req_byteen[i];
             assign cache_bus_if[block_idx * DCACHE_CHANNELS + i].req_data.addr = cache_req_addr[i];
+            assign cache_bus_if[block_idx * DCACHE_CHANNELS + i].req_data.atype = cache_req_atype[i];
             assign cache_bus_if[block_idx * DCACHE_CHANNELS + i].req_data.data = cache_req_data[i];
             assign cache_bus_if[block_idx * DCACHE_CHANNELS + i].req_data.tag = cache_req_tag[i];
             assign cache_req_ready[i] = cache_bus_if[block_idx * DCACHE_CHANNELS + i].req_ready;
@@ -483,20 +506,24 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
                 if (mem_req_rw) begin
                     `TRACE(1, ("%d: D$%0d Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, execute_if[block_idx].data.wid, execute_if[block_idx].data.PC, mem_req_mask));
                     `TRACE_ARRAY1D(1, "0x%h", full_addr, NUM_LANES);
-                    `TRACE(1, (", tag=0x%0h, byteen=0x%0h, data=", mem_req_tag, mem_req_byteen));
+                    `TRACE(1, (", atype="));
+                    `TRACE_ARRAY1D(1, "%b", mem_req_atype, NUM_LANES);
+                    `TRACE(1, (", byteen=0x%0h, data=", mem_req_byteen));
                     `TRACE_ARRAY1D(1, "0x%0h", mem_req_data, NUM_LANES);
-                    `TRACE(1, (" (#%0d)\n", execute_if[block_idx].data.uuid));
+                    `TRACE(1, (", tag=0x%0h (#%0d)\n", mem_req_tag, execute_if[block_idx].data.uuid));
                 end else begin
                     `TRACE(1, ("%d: D$%0d Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, execute_if[block_idx].data.wid, execute_if[block_idx].data.PC, mem_req_mask));
                     `TRACE_ARRAY1D(1, "0x%h", full_addr, NUM_LANES);
-                    `TRACE(1, (", tag=0x%0h, byteen=0x%0h, rd=%0d (#%0d)\n", mem_req_tag, mem_req_byteen, execute_if[block_idx].data.rd, execute_if[block_idx].data.uuid));
+                    `TRACE(1, (", atype="));
+                    `TRACE_ARRAY1D(1, "%b", mem_req_atype, NUM_LANES);
+                    `TRACE(1, (", byteen=0x%0h, rd=%0d, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if[block_idx].data.rd, mem_req_tag, execute_if[block_idx].data.uuid));
                 end
             end
             if (mem_rsp_fire) begin
-                `TRACE(1, ("%d: D$%0d Rsp: wid=%0d, PC=0x%0h, tmask=%b, tag=0x%0h, rd=%0d, sop=%b, eop=%b, data=",
-                    $time, CORE_ID, rsp_wid, rsp_pc, mem_rsp_mask, mem_rsp_tag, rsp_rd, mem_rsp_sop, mem_rsp_eop));
+                `TRACE(1, ("%d: D$%0d Rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, sop=%b, eop=%b, data=",
+                    $time, CORE_ID, rsp_wid, rsp_pc, mem_rsp_mask, rsp_rd, mem_rsp_sop, mem_rsp_eop));
                 `TRACE_ARRAY1D(1, "0x%0h", mem_rsp_data, NUM_LANES);
-                `TRACE(1, (" (#%0d)\n", rsp_uuid));
+                `TRACE(1, (", tag=0x%0h (#%0d)\n", mem_rsp_tag, rsp_uuid));
             end
         end
     `endif

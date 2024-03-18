@@ -15,15 +15,17 @@
 
 interface VX_mem_bus_if #(
     parameter DATA_SIZE  = 1,
+    parameter ATYPE_WIDTH= `ADDR_TYPE_WIDTH,
     parameter TAG_WIDTH  = 1,
     parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
     parameter ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE)
 ) ();
 
     typedef struct packed {
-        logic                   rw;    
+        logic                   rw;
         logic [DATA_SIZE-1:0]   byteen;
         logic [ADDR_WIDTH-1:0]  addr;
+        logic [ATYPE_WIDTH-1:0] atype;
         logic [DATA_SIZE*8-1:0] data;
         logic [TAG_WIDTH-1:0]   tag;
     } req_data_t;

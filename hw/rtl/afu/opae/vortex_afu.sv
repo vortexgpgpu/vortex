@@ -514,6 +514,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .mem_rsp_tag_out    (cci_vx_mem_bus_if[1].rsp_data.tag), 
         .mem_rsp_ready_out  (cci_vx_mem_bus_if[1].rsp_ready)
     );
+    
+    assign cci_vx_mem_bus_if[1].req_data.atype = '0;
+    `UNUSED_VAR (cci_vx_mem_bus_if[1].req_data.atype)
 
     //--
 
@@ -562,6 +565,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .mem_rsp_tag_out    (cci_vx_mem_bus_if[0].rsp_data.tag), 
         .mem_rsp_ready_out  (cci_vx_mem_bus_if[0].rsp_ready)
     );
+
+    assign cci_vx_mem_bus_if[0].req_data.atype = '0;
+    `UNUSED_VAR (cci_vx_mem_bus_if[0].req_data.atype)
 
     //--
     VX_mem_bus_if #(
@@ -630,6 +636,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .avs_burstcount   (avs_burstcount),
         .avs_readdatavalid(avs_readdatavalid)
     );
+
+    assign mem_bus_if[0].req_data.atype = '0;
+    `UNUSED_VAR (mem_bus_if[0].req_data.atype)
 
     // CCI-P Read Request ///////////////////////////////////////////////////////////
 

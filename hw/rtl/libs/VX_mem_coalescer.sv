@@ -18,6 +18,7 @@ module VX_mem_coalescer #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_REQS      = 1,
     parameter ADDR_WIDTH    = 32,
+    parameter ATYPE_WIDTH   = 1,
     parameter DATA_IN_SIZE  = 4,
     parameter DATA_OUT_SIZE = 64,
     parameter TAG_WIDTH     = 8,
@@ -42,6 +43,7 @@ module VX_mem_coalescer #(
     input wire [NUM_REQS-1:0]           in_req_mask,
     input wire [NUM_REQS-1:0][DATA_IN_SIZE-1:0] in_req_byteen,
     input wire [NUM_REQS-1:0][ADDR_WIDTH-1:0] in_req_addr,
+    input wire [NUM_REQS-1:0][ATYPE_WIDTH-1:0] in_req_atype,
     input wire [NUM_REQS-1:0][DATA_IN_WIDTH-1:0] in_req_data,
     input wire [TAG_WIDTH-1:0]          in_req_tag,    
     output wire                         in_req_ready,
@@ -59,6 +61,7 @@ module VX_mem_coalescer #(
     output wire [OUT_REQS-1:0]          out_req_mask,    
     output wire [OUT_REQS-1:0][DATA_OUT_SIZE-1:0] out_req_byteen,
     output wire [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] out_req_addr,
+    output wire [OUT_REQS-1:0][ATYPE_WIDTH-1:0] out_req_atype,
     output wire [OUT_REQS-1:0][DATA_OUT_WIDTH-1:0] out_req_data,
     output wire [OUT_TAG_WIDTH-1:0]     out_req_tag,
     input wire 	                        out_req_ready,
@@ -91,6 +94,7 @@ module VX_mem_coalescer #(
     logic [OUT_REQS-1:0] out_req_mask_r, out_req_mask_n;
     logic [OUT_REQS-1:0][DATA_OUT_SIZE-1:0] out_req_byteen_r, out_req_byteen_n;
     logic [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] out_req_addr_r, out_req_addr_n;
+    logic [OUT_REQS-1:0][ATYPE_WIDTH-1:0] out_req_atype_r, out_req_atype_n;
     logic [OUT_REQS-1:0][DATA_OUT_WIDTH-1:0] out_req_data_r, out_req_data_n;
     logic [OUT_TAG_WIDTH-1:0] out_req_tag_r, out_req_tag_n;
 
@@ -107,6 +111,7 @@ module VX_mem_coalescer #(
     
     logic [OUT_REQS-1:0] batch_valid_r, batch_valid_n;
     logic [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] seed_addr_r, seed_addr_n;
+    logic [OUT_REQS-1:0][ATYPE_WIDTH-1:0] seed_atype_r, seed_atype_n;
     logic [NUM_REQS-1:0] processed_mask_r, processed_mask_n;
 
     wire [OUT_REQS-1:0][NUM_REQS_W-1:0] seed_idx;
@@ -141,10 +146,12 @@ module VX_mem_coalescer #(
             state_r          <= state_n;
             out_req_valid_r  <= out_req_valid_n;
             batch_valid_r    <= batch_valid_n;
-            seed_addr_r      <= seed_addr_n;    
+            seed_addr_r      <= seed_addr_n;
+            seed_atype_r     <= seed_atype_n;  
             out_req_rw_r     <= out_req_rw_n; 
             out_req_mask_r   <= out_req_mask_n;     
             out_req_addr_r   <= out_req_addr_n;
+            out_req_atype_r  <= out_req_atype_n;
             out_req_byteen_r <= out_req_byteen_n;
             out_req_data_r   <= out_req_data_n;
             out_req_tag_r    <= out_req_tag_n;
@@ -171,9 +178,11 @@ module VX_mem_coalescer #(
         state_n          = state_r;
         out_req_valid_n  = out_req_valid_r;
         seed_addr_n      = seed_addr_r;
+        seed_atype_n     = seed_atype_r;
         out_req_rw_n     = out_req_rw_r;      
         out_req_mask_n   = out_req_mask_r;     
         out_req_addr_n   = out_req_addr_r;
+        out_req_atype_n  = out_req_atype_r;
         out_req_byteen_n = out_req_byteen_r;
         out_req_data_n   = out_req_data_r;
         out_req_tag_n    = out_req_tag_r;
@@ -185,6 +194,7 @@ module VX_mem_coalescer #(
             // find the next seed address
             for (integer i = 0; i < OUT_REQS; ++i) begin
                 seed_addr_n[i] = in_addr_base[seed_idx[i]];
+                seed_atype_n[i] = in_req_atype[seed_idx[i]];
             end
             // wait for pending outgoing request to submit
             if (out_req_valid && out_req_ready) begin
@@ -220,6 +230,7 @@ module VX_mem_coalescer #(
                 end
                 out_req_mask_n[i] = batch_valid_r[i];
                 out_req_addr_n[i] = seed_addr_r[i];
+                out_req_atype_n[i]= seed_atype_r[i];
             end
             if (in_req_ready_n) begin
                 processed_mask_n = '0;
@@ -262,15 +273,14 @@ module VX_mem_coalescer #(
     );
     `UNUSED_VAR (ibuf_empty)
 
-    assign out_req_valid = out_req_valid_r;
-    assign out_req_rw = out_req_rw_r;
-    for (genvar i = 0; i < OUT_REQS; ++i) begin
-        assign out_req_mask[i]   = out_req_mask_r[i];
-        assign out_req_byteen[i] = out_req_byteen_r[i];
-        assign out_req_addr[i]   = out_req_addr_r[i];
-        assign out_req_data[i]   = out_req_data_r[i];
-    end
-    assign out_req_tag = out_req_tag_r;
+    assign out_req_valid  = out_req_valid_r;
+    assign out_req_rw     = out_req_rw_r;
+    assign out_req_mask   = out_req_mask_r;
+    assign out_req_byteen = out_req_byteen_r;
+    assign out_req_addr   = out_req_addr_r;
+    assign out_req_atype  = out_req_atype_r;
+    assign out_req_data   = out_req_data_r;
+    assign out_req_tag    = out_req_tag_r;
 
     assign in_req_ready = in_req_ready_n;
 
@@ -341,14 +351,18 @@ module VX_mem_coalescer #(
         if (out_req_fire) begin
             if (out_req_rw) begin
                 `TRACE(1, ("%d: %s-out-req-wr: valid=%b, addr=", $time, INSTANCE_ID, out_req_mask));
-                `TRACE_ARRAY1D(1, "0x%h", out_req_addr, OUT_REQS);                       
+                `TRACE_ARRAY1D(1, "0x%h", out_req_addr, OUT_REQS);     
+                `TRACE(1, (", atype="));
+                `TRACE_ARRAY1D(1, "%b", out_req_atype, OUT_REQS);                  
                 `TRACE(1, (", byteen="));
                 `TRACE_ARRAY1D(1, "0x%h", out_req_byteen, OUT_REQS);
                 `TRACE(1, (", data="));
                 `TRACE_ARRAY1D(1, "0x%0h", out_req_data, OUT_REQS);         
             end else begin
                 `TRACE(1, ("%d: %s-out-req-rd: valid=%b, addr=", $time, INSTANCE_ID, out_req_mask));
-                `TRACE_ARRAY1D(1, "0x%h", out_req_addr, OUT_REQS);                
+                `TRACE_ARRAY1D(1, "0x%h", out_req_addr, OUT_REQS);
+                `TRACE(1, (", atype="));
+                `TRACE_ARRAY1D(1, "%b", out_req_atype, OUT_REQS);
             end
             `TRACE(1, (", offset=")); 
             `TRACE_ARRAY1D(1, "%0d", out_req_offset, NUM_REQS);
