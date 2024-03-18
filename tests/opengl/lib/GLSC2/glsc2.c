@@ -199,9 +199,15 @@ GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat
         _err = GL_INVALID_OPERATION;
         return;
     if (binaryFormat == CL_PROGRAM){
-        programs[program].binary=(*(cl_program*)binary);
+        // CREATE BINARY
+        cl_program triangle_cl = clCreateProgramWithSource(
+            _context, 1, (const char**)&binary, &length, &_err);
+
+        programs[program].binary=(*(cl_program*)triangle_cl);
         programs[program].length=length;
     }
+
+
 }
 
 GL_APICALL void GL_APIENTRY glUseProgram (GLuint program){

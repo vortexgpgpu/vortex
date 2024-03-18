@@ -6,7 +6,7 @@ typedef struct {
 } CONTEXT;
 
 void generateContext(CONTEXT* _context, GLuint w, GLuint h) {
-    glGenFramebuffers(2, &_context->framebuffers);
+    glGenFramebuffers(2, _context->framebuffers);
     glBindFramebuffer(GL_FRAMEBUFFER ,_context->framebuffers[1]);
     glBufferData(GL_FRAMEBUFFER,w*h*4*sizeof(float), (void *) 0, GL_STATIC_DRAW);
 
@@ -25,4 +25,5 @@ void swapBuffers(CONTEXT* _context) {
 
 void writeBuffer(CONTEXT* _context) {
     //glReadnPixels()
+    //fprintf(FILE,char*)
 }

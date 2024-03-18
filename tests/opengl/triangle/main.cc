@@ -215,43 +215,43 @@ int main (int argc, char **argv) {
   return errors;
 }
 
+#include "../common.c"
+
+#define WIDTH 600
+#define HEIGHT 400
 
 int _main() {
-    // Set up vertex buffer object
-    GLuint program = glCreateProgram();
-    GLuint vao, vbo;
+  // Set up vertex buffer object
+  CONTEXT context;
+  GLuint vbo, program;
+  size_t kernel_size;
 
-     // Getting platform and device information
-  cl_platform_id platform_id;
-  cl_device_id device_id = NULL;
-  uint8_t *kernel_bin = NULL;
+  // Set up context
+  generateContext(context, WIDTH, HEIGHT);
 
+  // Create program
+  program = glCreateProgram();
+  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
+    return -1;
+  glProgramBinary (program, 0, (void*) kernel_bin, kernel_size);
+  
+  glViewport(0, 0, WIDTH, HEIGHT); 
 
-  clGetPlatformIDs(1, &platform_id, NULL);
-  clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL);
+  // Set up render
+  glGenBuffers(1, &vbo);
+  glBufferData(GL_ARRAY_BUFFER,sizeof(triangle),triangle,GL_STATIC_DRAW);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+  glEnableVertexAttribArray(0); 
+  glUseProgram(program);
+  // Draw
+  while(1) {
+    glClearColor();
 
-  printf("Create context\n");
-  cl_context context = clCreateContext(NULL, 1, &device_id, NULL, NULL,  &_err);
-
-  read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
-
-
-  cl_program triangle_cl = clCreateProgramWithSource(
-      context, 1, (const char**)&kernel_bin, &kernel_size, &_err);
-
-  glProgramBinary (program, CL_PROGRAM, &cl_program, kernel_size);
-    
-    glViewport(0, 0, WIDTH, HEIGHT);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glUseProgram(program);
-
-    //vbo
-    glGenBuffers(1, &vbo);
-    glBufferData(GL_ARRAY_BUFFER,sizeof(triangle),triangle,GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0); 
-    
-    //print
     glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    swapBuffers(context);
+    writeBuffer(context);
+    return 0; // Just one frame
+  }
+  
 }
