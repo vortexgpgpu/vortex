@@ -30,10 +30,6 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
     `STATIC_ASSERT(0 == (`LMEM_BASE_ADDR % (1 << `LMEM_LOG_SIZE)), ("invalid parameter"))
 
     localparam LMEM_ADDR_WIDTH = `LMEM_LOG_SIZE - `CLOG2(DCACHE_WORD_SIZE);
-    localparam MEM_ASHIFT      = `CLOG2(`MEM_BLOCK_SIZE);
-    localparam MEM_ADDRW       = `MEM_ADDR_WIDTH - MEM_ASHIFT;
-    localparam LMEM_START_B    = MEM_ADDRW'(`XLEN'(`LMEM_BASE_ADDR) >> MEM_ASHIFT);
-    localparam LMEM_END_B      = MEM_ADDRW'((`XLEN'(`LMEM_BASE_ADDR) + (1 << `LMEM_LOG_SIZE)) >> MEM_ASHIFT);
 
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_WORD_SIZE),
@@ -47,11 +43,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
 
     `RESET_RELAY (switch_reset, reset);
 
-    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin    
-        
-        wire [MEM_ADDRW-1:0] block_addr = dcache_bus_in_if[i].req_data.addr[DCACHE_ADDR_WIDTH-1 -: MEM_ADDRW];
-        wire bus_sel = (block_addr >= LMEM_START_B) && (block_addr < LMEM_END_B);
-
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
         VX_mem_switch #(
             .NUM_REQS     (2),
             .DATA_SIZE    (DCACHE_WORD_SIZE),
@@ -62,7 +54,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         ) lmem_switch (
             .clk        (clk),
             .reset      (switch_reset),
-            .bus_sel    (bus_sel),
+            .bus_sel    (dcache_bus_in_if[i].req_data.atype[`ADDR_TYPE_LOCAL]),
             .bus_in_if  (dcache_bus_in_if[i]),
             .bus_out_if (switch_out_bus_if[i * 2 +: 2])
         );

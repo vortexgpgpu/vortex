@@ -56,7 +56,7 @@ module VX_cache_bypass #(
     localparam DIRECT_PASSTHRU  = PASSTHRU && (`CS_WORD_SEL_BITS == 0) && (NUM_REQS == 1);
 
     localparam REQ_SEL_BITS     = `CLOG2(NUM_REQS);
-    localparam MUX_DATAW        = CORE_TAG_WIDTH + CORE_DATA_WIDTH + WORD_SIZE + CORE_ADDR_WIDTH + 1;
+    localparam MUX_DATAW        = 1 + WORD_SIZE + CORE_ADDR_WIDTH + `ADDR_TYPE_WIDTH + CORE_DATA_WIDTH + CORE_TAG_WIDTH;
 
     localparam WORDS_PER_LINE   = LINE_SIZE / WORD_SIZE;
     localparam WSEL_BITS        = `CLOG2(WORDS_PER_LINE);
@@ -64,9 +64,6 @@ module VX_cache_bypass #(
     localparam CORE_TAG_ID_BITS = CORE_TAG_WIDTH - UUID_WIDTH;
     localparam MEM_TAG_ID_BITS  = REQ_SEL_BITS + WSEL_BITS + CORE_TAG_ID_BITS;
     localparam MEM_TAG_BYPASS_BITS = UUID_WIDTH + MEM_TAG_ID_BITS;
-
-    localparam MEM_ASHIFT       = `CLOG2(`MEM_BLOCK_SIZE);    
-    localparam MEM_ADDRW        = `MEM_ADDR_WIDTH - MEM_ASHIFT;    
 
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % `MEM_BLOCK_SIZE), ("invalid parameter"))
 
@@ -83,8 +80,7 @@ module VX_cache_bypass #(
         if (PASSTHRU != 0) begin
             assign core_req_nc_idxs[i] = 1'b1;
         end else if (NC_ENABLE) begin
-            wire [MEM_ADDRW-1:0] block_addr = core_bus_in_if[i].req_data.addr[CORE_ADDR_WIDTH-1 -: MEM_ADDRW];
-            assign core_req_nc_idxs[i] = (block_addr >= MEM_ADDRW'(`XLEN'(`IO_BASE_ADDR) >> MEM_ASHIFT));
+            assign core_req_nc_idxs[i] = core_bus_in_if[i].req_data.atype[`ADDR_TYPE_IO];
         end else begin
             assign core_req_nc_idxs[i] = 1'b0;
         end  
@@ -118,15 +114,17 @@ module VX_cache_bypass #(
     wire                        mem_req_out_rw;
     wire [LINE_SIZE-1:0]        mem_req_out_byteen;
     wire [`CS_MEM_ADDR_WIDTH-1:0] mem_req_out_addr;
+    wire [`ADDR_TYPE_WIDTH-1:0] mem_req_out_atype;
     wire [`CS_LINE_WIDTH-1:0]   mem_req_out_data;
     wire [MEM_TAG_OUT_WIDTH-1:0] mem_req_out_tag;
     wire                        mem_req_out_ready;
-
-    wire [CORE_TAG_WIDTH-1:0]   core_req_nc_sel_tag;
-    wire [CORE_DATA_WIDTH-1:0]  core_req_nc_sel_data;
+    
+    wire                        core_req_nc_sel_rw;
     wire [WORD_SIZE-1:0]        core_req_nc_sel_byteen;
     wire [CORE_ADDR_WIDTH-1:0]  core_req_nc_sel_addr;
-    wire                        core_req_nc_sel_rw;
+    wire [`ADDR_TYPE_WIDTH-1:0] core_req_nc_sel_atype;
+    wire [CORE_DATA_WIDTH-1:0]  core_req_nc_sel_data;
+    wire [CORE_TAG_WIDTH-1:0]   core_req_nc_sel_tag;
 
     wire [NUM_REQS-1:0][MUX_DATAW-1:0] core_req_nc_mux_in;
     for (genvar i = 0; i < NUM_REQS; ++i) begin
@@ -134,6 +132,7 @@ module VX_cache_bypass #(
             core_bus_in_if[i].req_data.rw,        
             core_bus_in_if[i].req_data.byteen,
             core_bus_in_if[i].req_data.addr,
+            core_bus_in_if[i].req_data.atype,
             core_bus_in_if[i].req_data.data,
             core_bus_in_if[i].req_data.tag            
         };
@@ -143,6 +142,7 @@ module VX_cache_bypass #(
         core_req_nc_sel_rw,
         core_req_nc_sel_byteen,
         core_req_nc_sel_addr,
+        core_req_nc_sel_atype,
         core_req_nc_sel_data,
         core_req_nc_sel_tag      
     } = core_req_nc_mux_in[core_req_nc_idx];
@@ -152,6 +152,7 @@ module VX_cache_bypass #(
     assign mem_req_out_valid = mem_bus_in_if.req_valid || core_req_nc_valid;
     assign mem_req_out_rw    = mem_bus_in_if.req_valid ? mem_bus_in_if.req_data.rw : core_req_nc_sel_rw;
     assign mem_req_out_addr  = mem_bus_in_if.req_valid ? mem_bus_in_if.req_data.addr : core_req_nc_sel_addr[WSEL_BITS +: MEM_ADDR_WIDTH];
+    assign mem_req_out_atype = mem_bus_in_if.req_valid ? mem_bus_in_if.req_data.atype : core_req_nc_sel_atype;
 
     wire [MEM_TAG_ID_BITS-1:0] mem_req_tag_id_bypass;
 
@@ -218,7 +219,7 @@ module VX_cache_bypass #(
     assign mem_bus_in_if.req_ready = mem_req_out_ready;
 
     VX_elastic_buffer #(
-        .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_OUT_WIDTH),
+        .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `ADDR_TYPE_WIDTH + `CS_LINE_WIDTH + MEM_TAG_OUT_WIDTH),
         .SIZE    ((!DIRECT_PASSTHRU) ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
         .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
     ) mem_req_buf (
@@ -226,8 +227,8 @@ module VX_cache_bypass #(
         .reset     (reset),
         .valid_in  (mem_req_out_valid), 
         .ready_in  (mem_req_out_ready), 
-        .data_in   ({mem_req_out_rw, mem_req_out_byteen, mem_req_out_addr, mem_req_out_data, mem_req_out_tag}),
-        .data_out  ({mem_bus_out_if.req_data.rw, mem_bus_out_if.req_data.byteen, mem_bus_out_if.req_data.addr, mem_bus_out_if.req_data.data, mem_bus_out_if.req_data.tag}), 
+        .data_in   ({mem_req_out_rw,             mem_req_out_byteen,             mem_req_out_addr,             mem_req_out_atype,             mem_req_out_data,             mem_req_out_tag}),
+        .data_out  ({mem_bus_out_if.req_data.rw, mem_bus_out_if.req_data.byteen, mem_bus_out_if.req_data.addr, mem_bus_out_if.req_data.atype, mem_bus_out_if.req_data.data, mem_bus_out_if.req_data.tag}),
         .valid_out (mem_bus_out_if.req_valid), 
         .ready_out (mem_bus_out_if.req_ready)
     );

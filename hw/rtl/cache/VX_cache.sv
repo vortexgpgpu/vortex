@@ -100,13 +100,14 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         assign core_req_valid[i]  = core_bus_if[i].req_valid;
-        assign core_req_addr[i]   = core_bus_if[i].req_data.addr;
         assign core_req_rw[i]     = core_bus_if[i].req_data.rw;
         assign core_req_byteen[i] = core_bus_if[i].req_data.byteen;
+        assign core_req_addr[i]   = core_bus_if[i].req_data.addr;
         assign core_req_data[i]   = core_bus_if[i].req_data.data;
         assign core_req_tag[i]    = core_bus_if[i].req_data.tag;
         assign core_bus_if[i].req_ready = core_req_ready[i];
-    end
+        `UNUSED_VAR (core_bus_if[i].req_data.atype)
+    end    
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -163,6 +164,8 @@ module VX_cache import VX_gpu_pkg::*; #(
         .valid_out (mem_bus_if.req_valid), 
         .ready_out (mem_bus_if.req_ready)
     );
+    
+    assign mem_bus_if.req_data.atype = '0;
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -288,7 +291,8 @@ module VX_cache import VX_gpu_pkg::*; #(
         .NUM_INPUTS  (NUM_REQS),
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (CORE_REQ_DATAW),
-        .PERF_CTR_BITS (`PERF_CTR_BITS)
+        .PERF_CTR_BITS (`PERF_CTR_BITS),
+        .OUT_BUF     ((NUM_REQS > 4) ? 2 : 0)
     ) req_xbar (
         .clk       (clk),
         .reset     (req_xbar_reset),

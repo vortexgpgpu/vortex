@@ -77,6 +77,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][BANK_ADDR_WIDTH-1:0] req_bank_addr;
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         assign req_bank_addr[i] = mem_bus_if[i].req_data.addr[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
+        `UNUSED_VAR (mem_bus_if[i].req_data.atype)
     end
 
     // bank requests dispatch

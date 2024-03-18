@@ -32,7 +32,7 @@ module VX_mem_switch import VX_gpu_pkg::*; #(
 );  
     localparam ADDR_WIDTH = (MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE));
     localparam DATA_WIDTH = (8 * DATA_SIZE);
-    localparam REQ_DATAW  = TAG_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
+    localparam REQ_DATAW  = TAG_WIDTH + ADDR_WIDTH + `ADDR_TYPE_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
     localparam RSP_DATAW  = TAG_WIDTH + DATA_WIDTH;
 
     // handle requests ////////////////////////////////////////////////////////
