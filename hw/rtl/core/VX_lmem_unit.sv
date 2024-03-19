@@ -45,8 +45,8 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
                                         && lsu_mem_in_if[i].req_data.atype[j][`ADDR_TYPE_LOCAL];
         end
         
-        wire is_addr_local = (| is_addr_local_mask);
-        wire is_addr_global = (| ~is_addr_local_mask);
+        wire is_addr_local = | is_addr_local_mask;
+        wire is_addr_global = | (~is_addr_local_mask);
         
         assign lsu_mem_out_if[i].req_valid      = lsu_mem_in_if[i].req_valid && is_addr_global;
         assign lsu_mem_out_if[i].req_data.mask  = lsu_mem_in_if[i].req_data.mask & ~is_addr_local_mask;

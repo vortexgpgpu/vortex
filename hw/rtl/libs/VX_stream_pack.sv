@@ -13,7 +13,7 @@
 
 `include "VX_platform.vh"
 
-//`TRACING_OFF
+`TRACING_OFF
 module VX_stream_pack #(
     parameter NUM_REQS      = 1, 
     parameter DATA_WIDTH    = 1, 
@@ -109,4 +109,4 @@ module VX_stream_pack #(
     end
 
 endmodule
-//`TRACING_ON
+`TRACING_ON
