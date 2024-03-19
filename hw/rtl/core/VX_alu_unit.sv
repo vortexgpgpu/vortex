@@ -38,9 +38,7 @@ module VX_alu_unit #(
 
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)
-    ) execute_if[BLOCK_SIZE]();
-
-    `RESET_RELAY (dispatch_reset, reset);
+    ) per_block_execute_if[BLOCK_SIZE]();
 
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
@@ -48,16 +46,18 @@ module VX_alu_unit #(
         .OUT_BUF    (PARTIAL_BW ? 1 : 0)
     ) dispatch_unit (
         .clk        (clk),
-        .reset      (dispatch_reset),
+        .reset      (reset),
         .dispatch_if(dispatch_if),
-        .execute_if (execute_if)
+        .execute_if (per_block_execute_if)
     );
 
     VX_commit_if #(
         .NUM_LANES (NUM_LANES)
-    ) commit_block_if[BLOCK_SIZE]();
+    ) per_block_commit_if[BLOCK_SIZE]();
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin
+
+        `RESET_RELAY (block_reset, reset);
 
         wire is_muldiv_op;
 
@@ -65,14 +65,14 @@ module VX_alu_unit #(
             .NUM_LANES (NUM_LANES)
         ) int_execute_if();
 
-        assign int_execute_if.valid = execute_if[block_idx].valid && ~is_muldiv_op;
-        assign int_execute_if.data = execute_if[block_idx].data;
+        assign int_execute_if.valid = per_block_execute_if[block_idx].valid && ~is_muldiv_op;
+        assign int_execute_if.data = per_block_execute_if[block_idx].data;
 
         VX_commit_if #(
             .NUM_LANES (NUM_LANES)
         ) int_commit_if();
 
-        `RESET_RELAY (int_reset, reset);
+        `RESET_RELAY (int_reset, block_reset);
 
         VX_int_unit #(
             .CORE_ID   (CORE_ID),
@@ -88,16 +88,16 @@ module VX_alu_unit #(
 
     `ifdef EXT_M_ENABLE
 
-        assign is_muldiv_op = `INST_ALU_IS_M(execute_if[block_idx].data.op_mod);
+        assign is_muldiv_op = `INST_ALU_IS_M(per_block_execute_if[block_idx].data.op_mod);
 
-        `RESET_RELAY (mdv_reset, reset);
+        `RESET_RELAY (mdv_reset, block_reset);
 
         VX_execute_if #(
             .NUM_LANES (NUM_LANES)
         ) mdv_execute_if();
         
-        assign mdv_execute_if.valid = execute_if[block_idx].valid && is_muldiv_op;
-        assign mdv_execute_if.data = execute_if[block_idx].data;
+        assign mdv_execute_if.valid = per_block_execute_if[block_idx].valid && is_muldiv_op;
+        assign mdv_execute_if.data = per_block_execute_if[block_idx].data;
 
         VX_commit_if #(
             .NUM_LANES (NUM_LANES)
@@ -113,12 +113,12 @@ module VX_alu_unit #(
             .commit_if  (mdv_commit_if)
         );       
        
-        assign execute_if[block_idx].ready = is_muldiv_op ? mdv_execute_if.ready : int_execute_if.ready;
+        assign per_block_execute_if[block_idx].ready = is_muldiv_op ? mdv_execute_if.ready : int_execute_if.ready;
 
     `else
 
         assign is_muldiv_op = 0;
-        assign execute_if[block_idx].ready = int_execute_if.ready;
+        assign per_block_execute_if[block_idx].ready = int_execute_if.ready;
 
     `endif
 
@@ -130,7 +130,7 @@ module VX_alu_unit #(
             .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) rsp_arb (
             .clk       (clk),
-            .reset     (reset),
+            .reset     (block_reset),
             .valid_in  ({                
             `ifdef EXT_M_ENABLE
                 mdv_commit_if.valid,
@@ -149,14 +149,12 @@ module VX_alu_unit #(
             `endif
                 int_commit_if.data
             }),
-            .data_out  (commit_block_if[block_idx].data),
-            .valid_out (commit_block_if[block_idx].valid), 
-            .ready_out (commit_block_if[block_idx].ready),            
+            .data_out  (per_block_commit_if[block_idx].data),
+            .valid_out (per_block_commit_if[block_idx].valid), 
+            .ready_out (per_block_commit_if[block_idx].ready),            
             `UNUSED_PIN (sel_out)
         );
     end
-
-    `RESET_RELAY (commit_reset, reset);
 
     VX_gather_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
@@ -164,8 +162,8 @@ module VX_alu_unit #(
         .OUT_BUF    (PARTIAL_BW ? 3 : 0)
     ) gather_unit (
         .clk           (clk),
-        .reset         (commit_reset),
-        .commit_in_if  (commit_block_if),
+        .reset         (reset),
+        .commit_in_if  (per_block_commit_if),
         .commit_out_if (commit_if)
     );
 

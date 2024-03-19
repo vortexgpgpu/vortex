@@ -37,9 +37,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
 
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)
-    ) execute_if[BLOCK_SIZE]();
-
-    `RESET_RELAY (dispatch_reset, reset);
+    ) per_block_execute_if[BLOCK_SIZE]();
 
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
@@ -47,20 +45,22 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         .OUT_BUF    (PARTIAL_BW ? 1 : 0)
     ) dispatch_unit (
         .clk        (clk),
-        .reset      (dispatch_reset),
+        .reset      (reset),
         .dispatch_if(dispatch_if),
-        .execute_if (execute_if)
+        .execute_if (per_block_execute_if)
     );
 
     VX_commit_if #(
         .NUM_LANES (NUM_LANES)
-    ) commit_block_if[BLOCK_SIZE]();
+    ) per_block_commit_if[BLOCK_SIZE]();
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin
-        `UNUSED_VAR (execute_if[block_idx].data.tid)
-        `UNUSED_VAR (execute_if[block_idx].data.wb)
-        `UNUSED_VAR (execute_if[block_idx].data.use_PC)
-        `UNUSED_VAR (execute_if[block_idx].data.use_imm)
+        `UNUSED_VAR (per_block_execute_if[block_idx].data.tid)
+        `UNUSED_VAR (per_block_execute_if[block_idx].data.wb)
+        `UNUSED_VAR (per_block_execute_if[block_idx].data.use_PC)
+        `UNUSED_VAR (per_block_execute_if[block_idx].data.use_imm)
+
+        `RESET_RELAY (block_reset, reset);
 
         // Store request info
         wire fpu_req_valid, fpu_req_ready;
@@ -81,10 +81,10 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         wire [TAG_WIDTH-1:0] fpu_req_tag, fpu_rsp_tag;    
         wire mdata_full;
 
-        wire [`INST_FMT_BITS-1:0] fpu_fmt = execute_if[block_idx].data.imm[`INST_FMT_BITS-1:0];
-        wire [`INST_FRM_BITS-1:0] fpu_frm = execute_if[block_idx].data.op_mod[`INST_FRM_BITS-1:0];
+        wire [`INST_FMT_BITS-1:0] fpu_fmt = per_block_execute_if[block_idx].data.imm[`INST_FMT_BITS-1:0];
+        wire [`INST_FRM_BITS-1:0] fpu_frm = per_block_execute_if[block_idx].data.op_mod[`INST_FRM_BITS-1:0];
 
-        wire execute_fire = execute_if[block_idx].valid && execute_if[block_idx].ready;
+        wire execute_fire = per_block_execute_if[block_idx].valid && per_block_execute_if[block_idx].ready;
         wire fpu_rsp_fire = fpu_rsp_valid && fpu_rsp_ready;
 
         VX_index_buffer #(
@@ -92,10 +92,10 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             .SIZE   (`FPUQ_SIZE)
         ) tag_store (
             .clk          (clk),
-            .reset        (reset),
+            .reset        (block_reset),
             .acquire_en   (execute_fire), 
             .write_addr   (fpu_req_tag), 
-            .write_data   ({execute_if[block_idx].data.uuid, execute_if[block_idx].data.wid, execute_if[block_idx].data.tmask, execute_if[block_idx].data.PC, execute_if[block_idx].data.rd, execute_if[block_idx].data.pid, execute_if[block_idx].data.sop, execute_if[block_idx].data.eop}),
+            .write_data   ({per_block_execute_if[block_idx].data.uuid, per_block_execute_if[block_idx].data.wid, per_block_execute_if[block_idx].data.tmask, per_block_execute_if[block_idx].data.PC, per_block_execute_if[block_idx].data.rd, per_block_execute_if[block_idx].data.pid, per_block_execute_if[block_idx].data.sop, per_block_execute_if[block_idx].data.eop}),
             .read_data    ({fpu_rsp_uuid, fpu_rsp_wid, fpu_rsp_tmask, fpu_rsp_PC, fpu_rsp_rd, fpu_rsp_pid, fpu_rsp_sop, fpu_rsp_eop}),
             .read_addr    (fpu_rsp_tag),
             .release_en   (fpu_rsp_fire), 
@@ -105,16 +105,16 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
 
         // resolve dynamic FRM from CSR   
         wire [`INST_FRM_BITS-1:0] fpu_req_frm; 
-        `ASSIGN_BLOCKED_WID (fpu_to_csr_if[block_idx].read_wid, execute_if[block_idx].data.wid, block_idx, `NUM_FPU_BLOCKS)
-        assign fpu_req_frm = (execute_if[block_idx].data.op_type != `INST_FPU_MISC 
+        `ASSIGN_BLOCKED_WID (fpu_to_csr_if[block_idx].read_wid, per_block_execute_if[block_idx].data.wid, block_idx, `NUM_FPU_BLOCKS)
+        assign fpu_req_frm = (per_block_execute_if[block_idx].data.op_type != `INST_FPU_MISC 
                            && fpu_frm == `INST_FRM_DYN) ? fpu_to_csr_if[block_idx].read_frm : fpu_frm;
 
         // submit FPU request
 
-        assign fpu_req_valid = execute_if[block_idx].valid && ~mdata_full;
-        assign execute_if[block_idx].ready = fpu_req_ready && ~mdata_full;
+        assign fpu_req_valid = per_block_execute_if[block_idx].valid && ~mdata_full;
+        assign per_block_execute_if[block_idx].ready = fpu_req_ready && ~mdata_full;
 
-        `RESET_RELAY (fpu_reset, reset);   
+        `RESET_RELAY (fpu_reset, block_reset);  
 
     `ifdef FPU_DPI
 
@@ -127,13 +127,13 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             .reset      (fpu_reset),
 
             .valid_in   (fpu_req_valid),
-            .op_type    (execute_if[block_idx].data.op_type),
-            .lane_mask  (execute_if[block_idx].data.tmask),
+            .op_type    (per_block_execute_if[block_idx].data.op_type),
+            .lane_mask  (per_block_execute_if[block_idx].data.tmask),
             .fmt        (fpu_fmt),
             .frm        (fpu_req_frm),
-            .dataa      (execute_if[block_idx].data.rs1_data),
-            .datab      (execute_if[block_idx].data.rs2_data),
-            .datac      (execute_if[block_idx].data.rs3_data),
+            .dataa      (per_block_execute_if[block_idx].data.rs1_data),
+            .datab      (per_block_execute_if[block_idx].data.rs2_data),
+            .datac      (per_block_execute_if[block_idx].data.rs3_data),
             .tag_in     (fpu_req_tag),
             .ready_in   (fpu_req_ready),
 
@@ -156,13 +156,13 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             .reset      (fpu_reset), 
 
             .valid_in   (fpu_req_valid),
-            .op_type    (execute_if[block_idx].data.op_type),
-            .lane_mask  (execute_if[block_idx].data.tmask),
+            .op_type    (per_block_execute_if[block_idx].data.op_type),
+            .lane_mask  (per_block_execute_if[block_idx].data.tmask),
             .fmt        (fpu_fmt),
             .frm        (fpu_req_frm),
-            .dataa      (execute_if[block_idx].data.rs1_data),
-            .datab      (execute_if[block_idx].data.rs2_data),
-            .datac      (execute_if[block_idx].data.rs3_data), 
+            .dataa      (per_block_execute_if[block_idx].data.rs1_data),
+            .datab      (per_block_execute_if[block_idx].data.rs2_data),
+            .datac      (per_block_execute_if[block_idx].data.rs3_data), 
             .tag_in     (fpu_req_tag),
             .ready_in   (fpu_req_ready),
 
@@ -185,13 +185,13 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             .reset      (fpu_reset), 
 
             .valid_in   (fpu_req_valid),
-            .lane_mask  (execute_if[block_idx].data.tmask),
-            .op_type    (execute_if[block_idx].data.op_type),
+            .lane_mask  (per_block_execute_if[block_idx].data.tmask),
+            .op_type    (per_block_execute_if[block_idx].data.op_type),
             .fmt        (fpu_fmt),
             .frm        (fpu_req_frm),
-            .dataa      (execute_if[block_idx].data.rs1_data),
-            .datab      (execute_if[block_idx].data.rs2_data),
-            .datac      (execute_if[block_idx].data.rs3_data), 
+            .dataa      (per_block_execute_if[block_idx].data.rs1_data),
+            .datab      (per_block_execute_if[block_idx].data.rs2_data),
+            .datac      (per_block_execute_if[block_idx].data.rs3_data), 
             .tag_in     (fpu_req_tag),
             .ready_in   (fpu_req_ready),
 
@@ -212,7 +212,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         if (PID_BITS != 0) begin
             fflags_t fpu_rsp_fflags_r;
             always @(posedge clk) begin
-                if (reset) begin
+                if (block_reset) begin
                     fpu_rsp_fflags_r <= '0;
                 end else if (fpu_rsp_fire) begin
                     fpu_rsp_fflags_r <= fpu_rsp_eop ? '0 : (fpu_rsp_fflags_r | fpu_rsp_fflags);
@@ -234,18 +234,16 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             .SIZE  (0)
         ) rsp_buf (
             .clk       (clk),
-            .reset     (reset),
+            .reset     (block_reset),
             .valid_in  (fpu_rsp_valid),
             .ready_in  (fpu_rsp_ready),
             .data_in   ({fpu_rsp_uuid, fpu_rsp_wid, fpu_rsp_tmask, fpu_rsp_PC, fpu_rsp_rd, fpu_rsp_result, fpu_rsp_pid, fpu_rsp_sop, fpu_rsp_eop}),
-            .data_out  ({commit_block_if[block_idx].data.uuid, commit_block_if[block_idx].data.wid, commit_block_if[block_idx].data.tmask, commit_block_if[block_idx].data.PC, commit_block_if[block_idx].data.rd, commit_block_if[block_idx].data.data, commit_block_if[block_idx].data.pid, commit_block_if[block_idx].data.sop, commit_block_if[block_idx].data.eop}),
-            .valid_out (commit_block_if[block_idx].valid),
-            .ready_out (commit_block_if[block_idx].ready)
+            .data_out  ({per_block_commit_if[block_idx].data.uuid, per_block_commit_if[block_idx].data.wid, per_block_commit_if[block_idx].data.tmask, per_block_commit_if[block_idx].data.PC, per_block_commit_if[block_idx].data.rd, per_block_commit_if[block_idx].data.data, per_block_commit_if[block_idx].data.pid, per_block_commit_if[block_idx].data.sop, per_block_commit_if[block_idx].data.eop}),
+            .valid_out (per_block_commit_if[block_idx].valid),
+            .ready_out (per_block_commit_if[block_idx].ready)
         );
-        assign commit_block_if[block_idx].data.wb = 1'b1;
+        assign per_block_commit_if[block_idx].data.wb = 1'b1;
     end
-
-    `RESET_RELAY (commit_reset, reset);
 
     VX_gather_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
@@ -253,8 +251,8 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         .OUT_BUF    (PARTIAL_BW ? 3 : 0)
     ) gather_unit (
         .clk           (clk),
-        .reset         (commit_reset),
-        .commit_in_if  (commit_block_if),
+        .reset         (reset),
+        .commit_in_if  (per_block_commit_if),
         .commit_out_if (commit_if)
     );
 

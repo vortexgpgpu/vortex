@@ -52,9 +52,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)
-    ) execute_if[BLOCK_SIZE]();
-
-    `RESET_RELAY (dispatch_reset, reset);
+    ) per_block_execute_if[BLOCK_SIZE]();
 
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
@@ -62,15 +60,14 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .OUT_BUF    (1)
     ) dispatch_unit (
         .clk        (clk),
-        .reset      (dispatch_reset),
+        .reset      (reset),
         .dispatch_if(dispatch_if),
-        .execute_if (execute_if)
+        .execute_if (per_block_execute_if)
     );
 
     wire [RSP_ARB_SIZE-1:0] rsp_arb_valid_in;
     wire [RSP_ARB_SIZE-1:0] rsp_arb_ready_in;
-    wire [RSP_ARB_SIZE-1:0][RSP_ARB_DATAW-1:0] rsp_arb_data_in;
-    
+    wire [RSP_ARB_SIZE-1:0][RSP_ARB_DATAW-1:0] rsp_arb_data_in;    
 
     // Warp control block    
     VX_execute_if #(
@@ -80,8 +77,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .NUM_LANES (NUM_LANES)
     ) wctl_commit_if();
     
-    assign wctl_execute_if.valid = execute_if[0].valid && `INST_SFU_IS_WCTL(execute_if[0].data.op_type);
-    assign wctl_execute_if.data = execute_if[0].data;
+    assign wctl_execute_if.valid = per_block_execute_if[0].valid && `INST_SFU_IS_WCTL(per_block_execute_if[0].data.op_type);
+    assign wctl_execute_if.data = per_block_execute_if[0].data;
 
     `RESET_RELAY (wctl_reset, reset);
     
@@ -108,8 +105,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .NUM_LANES (NUM_LANES)
     ) csr_commit_if();
 
-    assign csr_execute_if.valid = execute_if[0].valid && `INST_SFU_IS_CSR(execute_if[0].data.op_type);
-    assign csr_execute_if.data = execute_if[0].data;
+    assign csr_execute_if.valid = per_block_execute_if[0].valid && `INST_SFU_IS_CSR(per_block_execute_if[0].data.op_type);
+    assign csr_execute_if.data = per_block_execute_if[0].data;
 
     `RESET_RELAY (csr_reset, reset);
 
@@ -145,18 +142,16 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 
     reg sfu_req_ready;
     always @(*) begin
-        case (execute_if[0].data.op_type)
+        case (per_block_execute_if[0].data.op_type)
          `INST_SFU_CSRRW,
          `INST_SFU_CSRRS,
          `INST_SFU_CSRRC: sfu_req_ready = csr_execute_if.ready;
         default: sfu_req_ready = wctl_execute_if.ready;
         endcase
     end
-    assign execute_if[0].ready = sfu_req_ready;
+    assign per_block_execute_if[0].ready = sfu_req_ready;
 
     // response arbitration
-    
-    `RESET_RELAY (commit_reset, reset);
 
     VX_commit_if #(
         .NUM_LANES (NUM_LANES)
@@ -169,7 +164,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .OUT_BUF    (3)
     ) rsp_arb (
         .clk       (clk),
-        .reset     (commit_reset), 
+        .reset     (reset), 
         .valid_in  (rsp_arb_valid_in),
         .ready_in  (rsp_arb_ready_in),
         .data_in   (rsp_arb_data_in),
@@ -185,7 +180,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .OUT_BUF    (1)
     ) gather_unit (
         .clk           (clk),
-        .reset         (commit_reset),
+        .reset         (reset),
         .commit_in_if  (arb_commit_if),
         .commit_out_if (commit_if)
     );
