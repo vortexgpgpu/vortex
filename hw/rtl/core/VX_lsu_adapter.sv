@@ -11,9 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_platform.vh"
+`include "VX_define.vh"
 
-module VX_lsu_adapter #(
+module VX_lsu_adapter import VX_gpu_pkg::*; #(
     parameter NUM_LANES     = 1, 
     parameter DATA_SIZE     = 1,    
     parameter TAG_WIDTH     = 1, 
