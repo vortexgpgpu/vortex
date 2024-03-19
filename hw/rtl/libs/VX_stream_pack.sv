@@ -13,33 +13,31 @@
 
 `include "VX_platform.vh"
 
-`TRACING_OFF
-module VX_stream_merge #(
+//`TRACING_OFF
+module VX_stream_pack #(
     parameter NUM_REQS      = 1, 
     parameter DATA_WIDTH    = 1, 
     parameter TAG_WIDTH     = 1,    
     parameter TAG_SEL_BITS  = 0,
+    parameter `STRING ARBITER = "P",
     parameter OUT_BUF       = 0
 ) (
     input wire                          clk,
     input wire                          reset,
 
-    // input response
-    input wire [NUM_REQS-1:0]           rsp_valid_in,
-    input wire [NUM_REQS-1:0][DATA_WIDTH-1:0] rsp_data_in,
-    input wire [NUM_REQS-1:0][TAG_WIDTH-1:0] rsp_tag_in,
-    output wire [NUM_REQS-1:0]          rsp_ready_in,
+    // input
+    input wire [NUM_REQS-1:0]           valid_in,
+    input wire [NUM_REQS-1:0][DATA_WIDTH-1:0] data_in,
+    input wire [NUM_REQS-1:0][TAG_WIDTH-1:0] tag_in,
+    output wire [NUM_REQS-1:0]          ready_in,
 
-    // output responses
-    output wire                         rsp_valid_out,
-    output wire [NUM_REQS-1:0]          rsp_mask_out,
-    output wire [NUM_REQS-1:0][DATA_WIDTH-1:0] rsp_data_out,
-    output wire [TAG_WIDTH-1:0]         rsp_tag_out,
-    input wire                          rsp_ready_out
+    // output
+    output wire                         valid_out,
+    output wire [NUM_REQS-1:0]          mask_out,
+    output wire [NUM_REQS-1:0][DATA_WIDTH-1:0] data_out,
+    output wire [TAG_WIDTH-1:0]         tag_out,
+    input wire                          ready_out
 );
-    `UNUSED_VAR (clk)
-    `UNUSED_VAR (reset)
-
     localparam LOG_NUM_REQS = `CLOG2(NUM_REQS);
 
     if (NUM_REQS > 1) begin
@@ -51,35 +49,35 @@ module VX_stream_merge #(
         VX_generic_arbiter #(
             .NUM_REQS (NUM_REQS),
             .LOCK_ENABLE (1),
-            .TYPE ("P")
+            .TYPE (ARBITER)
         ) arbiter (
             .clk         (clk),
             .reset       (reset),
-            .requests    (rsp_valid_in), 
+            .requests    (valid_in), 
             .grant_valid (grant_valid),
             .grant_index (grant_index),
             `UNUSED_PIN (grant_onehot),
             .grant_unlock(grant_ready)
         );
 
-        reg [NUM_REQS-1:0] rsp_valid_sel;
-        reg [NUM_REQS-1:0] rsp_ready_sel;
-        wire rsp_ready_unqual;
+        reg [NUM_REQS-1:0] valid_sel;
+        reg [NUM_REQS-1:0] ready_sel;
+        wire ready_unqual;
 
-        wire [TAG_WIDTH-1:0] rsp_tag_sel = rsp_tag_in[grant_index];
+        wire [TAG_WIDTH-1:0] tag_sel = tag_in[grant_index];
         
         always @(*) begin                
-            rsp_valid_sel = '0;              
-            rsp_ready_sel = '0;            
+            valid_sel = '0;              
+            ready_sel = '0;            
             for (integer i = 0; i < NUM_REQS; ++i) begin
-                if (rsp_tag_in[i][TAG_SEL_BITS-1:0] == rsp_tag_sel[TAG_SEL_BITS-1:0]) begin
-                    rsp_valid_sel[i] = rsp_valid_in[i];                    
-                    rsp_ready_sel[i] = rsp_ready_unqual;
+                if (tag_in[i][TAG_SEL_BITS-1:0] == tag_sel[TAG_SEL_BITS-1:0]) begin
+                    valid_sel[i] = valid_in[i];                    
+                    ready_sel[i] = ready_unqual;
                 end
             end
         end                            
 
-        assign grant_ready = rsp_ready_unqual;
+        assign grant_ready = ready_unqual;
         
         VX_elastic_buffer #(
             .DATAW   (NUM_REQS + TAG_WIDTH + (NUM_REQS * DATA_WIDTH)),
@@ -89,24 +87,26 @@ module VX_stream_merge #(
             .clk       (clk),
             .reset     (reset),
             .valid_in  (grant_valid),        
-            .data_in   ({rsp_valid_sel, rsp_tag_sel, rsp_data_in}),
-            .ready_in  (rsp_ready_unqual),      
-            .valid_out (rsp_valid_out),
-            .data_out  ({rsp_mask_out, rsp_tag_out, rsp_data_out}),
-            .ready_out (rsp_ready_out)
+            .data_in   ({valid_sel, tag_sel, data_in}),
+            .ready_in  (ready_unqual),      
+            .valid_out (valid_out),
+            .data_out  ({mask_out, tag_out, data_out}),
+            .ready_out (ready_out)
         );  
 
-        assign rsp_ready_in = rsp_ready_sel;     
+        assign ready_in = ready_sel;     
         
     end else begin
 
-        assign rsp_valid_out = rsp_valid_in;
-        assign rsp_mask_out  = 1'b1;
-        assign rsp_tag_out   = rsp_tag_in;
-        assign rsp_data_out  = rsp_data_in;
-        assign rsp_ready_in  = rsp_ready_out;
+        `UNUSED_VAR (clk)
+        `UNUSED_VAR (reset)
+        assign valid_out = valid_in;
+        assign mask_out  = 1'b1;
+        assign data_out  = data_in;
+        assign tag_out   = tag_in;
+        assign ready_in  = ready_out;
 
     end
 
 endmodule
-`TRACING_ON
+//`TRACING_ON

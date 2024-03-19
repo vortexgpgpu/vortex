@@ -27,21 +27,19 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     // Outputs    
     VX_commit_if.master     commit_if,
-    VX_mem_bus_if.master    cache_bus_if [DCACHE_CHANNELS]
+    VX_lsu_mem_if.master    lsu_mem_if
 );
-    localparam WORD_SIZE    = `XLEN / 8;
-    localparam ADDR_WIDTH   = `MEM_ADDR_WIDTH - `CLOG2(WORD_SIZE);
     localparam NUM_LANES    = `NUM_LSU_LANES;
     localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
     localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
     localparam LSUQ_SIZEW   = `LOG2UP(`LSUQ_IN_SIZE);
-    localparam REQ_ASHIFT   = `CLOG2(WORD_SIZE);
+    localparam REQ_ASHIFT   = `CLOG2(LSU_WORD_SIZE);
     localparam MEM_ASHIFT   = `CLOG2(`MEM_BLOCK_SIZE);
     localparam MEM_ADDRW    = `MEM_ADDR_WIDTH - MEM_ASHIFT;
 
     // tag_id = wid + PC + rd + op_type + align + pid + pkt_addr 
-    localparam TAG_ID_WIDTH = `NW_WIDTH + `XLEN + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * (REQ_ASHIFT)) + PID_WIDTH + LSUQ_SIZEW;
+    localparam TAG_ID_WIDTH = `NW_WIDTH + `XLEN + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * REQ_ASHIFT) + PID_WIDTH + LSUQ_SIZEW;
 
     // tag = uuid + tag_id 
     localparam TAG_WIDTH = `UUID_WIDTH + TAG_ID_WIDTH;
@@ -99,15 +97,15 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire                            mem_req_valid;
     wire [NUM_LANES-1:0]            mem_req_mask;
     wire                            mem_req_rw;  
-    wire [NUM_LANES-1:0][`MEM_ADDR_WIDTH-REQ_ASHIFT-1:0] mem_req_addr;
-    reg  [NUM_LANES-1:0][WORD_SIZE-1:0] mem_req_byteen;
-    reg  [NUM_LANES-1:0][`XLEN-1:0] mem_req_data;    
+    wire [NUM_LANES-1:0][LSU_ADDR_WIDTH-1:0] mem_req_addr;
+    reg  [NUM_LANES-1:0][LSU_WORD_SIZE-1:0] mem_req_byteen;
+    reg  [NUM_LANES-1:0][LSU_WORD_SIZE*8-1:0] mem_req_data;    
     wire [TAG_WIDTH-1:0]            mem_req_tag;
     wire                            mem_req_ready;
 
     wire                            mem_rsp_valid;
     wire [NUM_LANES-1:0]            mem_rsp_mask;
-    wire [NUM_LANES-1:0][`XLEN-1:0] mem_rsp_data;
+    wire [NUM_LANES-1:0][LSU_WORD_SIZE*8-1:0] mem_rsp_data;
     wire [TAG_WIDTH-1:0]            mem_rsp_tag;
     wire                            mem_rsp_sop;
     wire                            mem_rsp_eop;
@@ -154,7 +152,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                     mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:2], 2'b11}] = 1'b1;
                 end
             `endif
-                default : mem_req_byteen[i] = {WORD_SIZE{1'b1}};
+                default : mem_req_byteen[i] = {LSU_WORD_SIZE{1'b1}};
             endcase
         end
     end
@@ -268,28 +266,31 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         pkt_waddr
     };
 
-    wire [DCACHE_CHANNELS-1:0]              cache_req_valid;
-    wire [DCACHE_CHANNELS-1:0]              cache_req_rw;
-    wire [DCACHE_CHANNELS-1:0][DCACHE_WORD_SIZE-1:0] cache_req_byteen;
-    wire [DCACHE_CHANNELS-1:0][DCACHE_ADDR_WIDTH-1:0] cache_req_addr;
-    wire [DCACHE_CHANNELS-1:0][`ADDR_TYPE_WIDTH-1:0] cache_req_atype;
-    wire [DCACHE_CHANNELS-1:0][(DCACHE_WORD_SIZE*8)-1:0] cache_req_data;
-    wire [DCACHE_CHANNELS-1:0][DCACHE_TAG_WIDTH-1:0] cache_req_tag;
-    wire [DCACHE_CHANNELS-1:0]              cache_req_ready;
-    wire [DCACHE_CHANNELS-1:0]              cache_rsp_valid;
-    wire [DCACHE_CHANNELS-1:0][(DCACHE_WORD_SIZE*8)-1:0] cache_rsp_data;
-    wire [DCACHE_CHANNELS-1:0][DCACHE_TAG_WIDTH-1:0] cache_rsp_tag;
-    wire [DCACHE_CHANNELS-1:0]              cache_rsp_ready;
+    wire                                    lsu_mem_req_valid;
+    wire                                    lsu_mem_req_rw;
+    wire [NUM_LANES-1:0]                    lsu_mem_req_mask;
+    wire [NUM_LANES-1:0][LSU_WORD_SIZE-1:0] lsu_mem_req_byteen;
+    wire [NUM_LANES-1:0][LSU_ADDR_WIDTH-1:0] lsu_mem_req_addr;
+    wire [NUM_LANES-1:0][`ADDR_TYPE_WIDTH-1:0] lsu_mem_req_atype;
+    wire [NUM_LANES-1:0][(LSU_WORD_SIZE*8)-1:0] lsu_mem_req_data;
+    wire [LSU_TAG_WIDTH-1:0]                lsu_mem_req_tag;
+    wire                                    lsu_mem_req_ready;
+
+    wire                                    lsu_mem_rsp_valid;
+    wire [NUM_LANES-1:0]                    lsu_mem_rsp_mask;
+    wire [NUM_LANES-1:0][(LSU_WORD_SIZE*8)-1:0] lsu_mem_rsp_data;
+    wire [LSU_TAG_WIDTH-1:0]                lsu_mem_rsp_tag;
+    wire                                    lsu_mem_rsp_ready;
 
     `RESET_RELAY (mem_scheduler_reset, reset);
 
     VX_mem_scheduler #(
         .INSTANCE_ID ($sformatf("core%0d-lsu-memsched%0d", CORE_ID, BLOCK_ID)),
-        .CORE_REQS   (`NUM_LSU_LANES),
-        .MEM_CHANNELS(DCACHE_CHANNELS),        
-        .WORD_SIZE   (WORD_SIZE),
-        .LINE_SIZE   (DCACHE_WORD_SIZE),
-        .ADDR_WIDTH  (ADDR_WIDTH),
+        .CORE_REQS   (NUM_LANES),
+        .MEM_CHANNELS(NUM_LANES),        
+        .WORD_SIZE   (LSU_WORD_SIZE),
+        .LINE_SIZE   (LSU_WORD_SIZE),
+        .ADDR_WIDTH  (LSU_ADDR_WIDTH),
         .ATYPE_WIDTH (`ADDR_TYPE_WIDTH),
         .TAG_WIDTH   (TAG_WIDTH),        
         .CORE_QUEUE_SIZE (`LSUQ_IN_SIZE),
@@ -324,37 +325,39 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .core_rsp_ready (mem_rsp_ready),
 
         // Memory request
-        .mem_req_valid  (cache_req_valid),
-        .mem_req_rw     (cache_req_rw),
-        .mem_req_byteen (cache_req_byteen),
-        .mem_req_addr   (cache_req_addr),
-        .mem_req_atype  (cache_req_atype),
-        .mem_req_data   (cache_req_data),
-        .mem_req_tag    (cache_req_tag),
-        .mem_req_ready  (cache_req_ready),
+        .mem_req_valid  (lsu_mem_req_valid),
+        .mem_req_rw     (lsu_mem_req_rw),
+        .mem_req_mask   (lsu_mem_req_mask),
+        .mem_req_byteen (lsu_mem_req_byteen),
+        .mem_req_addr   (lsu_mem_req_addr),
+        .mem_req_atype  (lsu_mem_req_atype),
+        .mem_req_data   (lsu_mem_req_data),
+        .mem_req_tag    (lsu_mem_req_tag),
+        .mem_req_ready  (lsu_mem_req_ready),
 
         // Memory response
-        .mem_rsp_valid  (cache_rsp_valid),
-        .mem_rsp_data   (cache_rsp_data),
-        .mem_rsp_tag    (cache_rsp_tag),
-        .mem_rsp_ready  (cache_rsp_ready)
+        .mem_rsp_valid  (lsu_mem_rsp_valid),
+        .mem_rsp_mask   (lsu_mem_rsp_mask),
+        .mem_rsp_data   (lsu_mem_rsp_data),
+        .mem_rsp_tag    (lsu_mem_rsp_tag),
+        .mem_rsp_ready  (lsu_mem_rsp_ready)
     );
 
-    for (genvar i = 0; i < DCACHE_CHANNELS; ++i) begin
-        assign cache_bus_if[i].req_valid = cache_req_valid[i];
-        assign cache_bus_if[i].req_data.rw = cache_req_rw[i];
-        assign cache_bus_if[i].req_data.byteen = cache_req_byteen[i];
-        assign cache_bus_if[i].req_data.addr = cache_req_addr[i];
-        assign cache_bus_if[i].req_data.atype = cache_req_atype[i];
-        assign cache_bus_if[i].req_data.data = cache_req_data[i];
-        assign cache_bus_if[i].req_data.tag = cache_req_tag[i];
-        assign cache_req_ready[i] = cache_bus_if[i].req_ready;
+    assign lsu_mem_if.req_valid = lsu_mem_req_valid;
+    assign lsu_mem_if.req_data.mask = lsu_mem_req_mask;
+    assign lsu_mem_if.req_data.rw = lsu_mem_req_rw;
+    assign lsu_mem_if.req_data.byteen = lsu_mem_req_byteen;
+    assign lsu_mem_if.req_data.addr = lsu_mem_req_addr;
+    assign lsu_mem_if.req_data.atype = lsu_mem_req_atype;
+    assign lsu_mem_if.req_data.data = lsu_mem_req_data;
+    assign lsu_mem_if.req_data.tag = lsu_mem_req_tag;
+    assign lsu_mem_req_ready = lsu_mem_if.req_ready;
 
-        assign cache_rsp_valid[i] = cache_bus_if[i].rsp_valid;
-        assign cache_rsp_data[i] = cache_bus_if[i].rsp_data.data;
-        assign cache_rsp_tag[i] = cache_bus_if[i].rsp_data.tag;
-        assign cache_bus_if[i].rsp_ready = cache_rsp_ready[i];
-    end
+    assign lsu_mem_rsp_valid = lsu_mem_if.rsp_valid;
+    assign lsu_mem_rsp_mask = lsu_mem_if.rsp_data.mask;
+    assign lsu_mem_rsp_data = lsu_mem_if.rsp_data.data;
+    assign lsu_mem_rsp_tag = lsu_mem_if.rsp_data.tag;
+    assign lsu_mem_if.rsp_ready = lsu_mem_rsp_ready;
     
     wire [`UUID_WIDTH-1:0] rsp_uuid;
     wire [`NW_WIDTH-1:0] rsp_wid;
@@ -455,8 +458,6 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     assign commit_st_if.data.data = commit_ld_if.data.data; // force arbiter passthru
 
     // lsu commit
-    
-    `RESET_RELAY (commit_arb_reset, reset);
 
     VX_stream_arb #(
         .NUM_INPUTS (2),
@@ -464,7 +465,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .OUT_BUF    (3)
     ) rsp_arb (
         .clk       (clk),
-        .reset     (commit_arb_reset),
+        .reset     (reset),
         .valid_in  ({commit_st_if.valid, commit_ld_if.valid}),
         .ready_in  ({commit_st_if.ready, commit_ld_if.ready}),
         .data_in   ({commit_st_if.data, commit_ld_if.data}),
@@ -531,8 +532,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
             .clk    (clk),
             .probe0 ({mem_req_data_0, execute_if.data.uuid, execute_if.data.wid, execute_if.data.PC, mem_req_mask, full_addr_0, mem_req_byteen, mem_req_rw, mem_req_ready, mem_req_valid}),
             .probe1 ({rsp_data_0, rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, mem_rsp_mask, rsp_wid, mem_rsp_ready, mem_rsp_valid}),
-            .probe2 ({cache_bus_if.req_data.data, cache_bus_if.req_data.tag, cache_bus_if.req_data.byteen, cache_bus_if.req_data.addr, cache_bus_if.req_data.rw, cache_bus_if.req_ready, cache_bus_if.req_valid}),
-            .probe3 ({cache_bus_if.rsp_data.data, cache_bus_if.rsp_data.tag, cache_bus_if.rsp_ready, cache_bus_if.rsp_valid})
+            .probe2 ({lsu_mem_if.req_data.data, lsu_mem_if.req_data.tag, lsu_mem_if.req_data.byteen, lsu_mem_if.req_data.addr, lsu_mem_if.req_data.rw, lsu_mem_if.req_ready, lsu_mem_if.req_valid}),
+            .probe3 ({lsu_mem_if.rsp_data.data, lsu_mem_if.rsp_data.tag, lsu_mem_if.rsp_ready, lsu_mem_if.rsp_valid})
         );
     `endif
     end

@@ -77,6 +77,46 @@ package VX_gpu_pkg;
 
     /* verilator lint_off UNUSED */
 
+    ///////////////////////// LSU memory Parameters ///////////////////////////
+
+    localparam LSU_WORD_SIZE        = `XLEN / 8;
+    localparam LSU_ADDR_WIDTH	    = (`MEM_ADDR_WIDTH - `CLOG2(LSU_WORD_SIZE));
+    localparam LSU_MEM_BATCHES      = 1;
+    localparam LSU_TAG_ID_BITS      = (`CLOG2(`LSUQ_IN_SIZE) + `CLOG2(LSU_MEM_BATCHES));
+    localparam LSU_TAG_WIDTH        = (`UUID_WIDTH + LSU_TAG_ID_BITS);
+    localparam LSU_NUM_REQS	        = `NUM_LSU_BLOCKS * `NUM_LSU_LANES;
+
+    ////////////////////////// Dcache Parameters //////////////////////////////
+
+    // Word size in bytes
+    localparam DCACHE_WORD_SIZE	    = `LSU_LINE_SIZE;
+    localparam DCACHE_ADDR_WIDTH	= (`MEM_ADDR_WIDTH - `CLOG2(DCACHE_WORD_SIZE));
+
+    // Block size in bytes
+    localparam DCACHE_LINE_SIZE 	= `L1_LINE_SIZE;
+
+    // Input request size
+    localparam DCACHE_CHANNELS	    = `UP((`NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE);
+    localparam DCACHE_NUM_REQS	    = `NUM_LSU_BLOCKS * DCACHE_CHANNELS;
+
+    // Core request tag Id bits        
+    localparam DCACHE_MERGED_REQS   = (`NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE;
+    localparam DCACHE_MEM_BATCHES   = (DCACHE_MERGED_REQS + DCACHE_CHANNELS - 1) / DCACHE_CHANNELS;
+    localparam DCACHE_TAG_ID_BITS   = (`CLOG2(`LSUQ_OUT_SIZE) + `CLOG2(DCACHE_MEM_BATCHES));
+
+    // Core request tag bits
+    localparam DCACHE_TAG_WIDTH	    = (`UUID_WIDTH + DCACHE_TAG_ID_BITS);
+    
+    // Memory request data bits
+    localparam DCACHE_MEM_DATA_WIDTH = (DCACHE_LINE_SIZE * 8);
+
+    // Memory request tag bits
+    `ifdef DCACHE_ENABLE
+    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_MEM_TAG_WIDTH(`DCACHE_MSHR_SIZE, `DCACHE_NUM_BANKS, DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `SOCKET_SIZE, `NUM_DCACHES);
+    `else
+    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `SOCKET_SIZE, `NUM_DCACHES);
+    `endif
+
     ////////////////////////// Icache Parameters //////////////////////////////
 
     // Word size in bytes
@@ -100,38 +140,6 @@ package VX_gpu_pkg;
     localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(`ICACHE_MSHR_SIZE, 1, `NUM_ICACHES);
     `else
     localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(1, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, `SOCKET_SIZE, `NUM_ICACHES);
-    `endif
-
-    ////////////////////////// Dcache Parameters //////////////////////////////
-
-    // Word size in bytes
-    localparam DCACHE_WORD_SIZE	    = `LSU_LINE_SIZE;
-    localparam DCACHE_ADDR_WIDTH	= (`MEM_ADDR_WIDTH - `CLOG2(DCACHE_WORD_SIZE));
-
-    // Block size in bytes
-    localparam DCACHE_LINE_SIZE 	= `L1_LINE_SIZE;
-
-    // Input request size
-    localparam DCACHE_CHANNELS	    = `UP((`NUM_LSU_LANES * (`XLEN / 8)) / DCACHE_WORD_SIZE);
-    localparam DCACHE_NUM_REQS	    = `NUM_LSU_BLOCKS * DCACHE_CHANNELS;
-
-    // Core request tag Id bits
-        
-    localparam DCACHE_MERGED_REQS   = (`NUM_LSU_LANES * (`XLEN / 8)) / DCACHE_WORD_SIZE;
-    localparam DCACHE_MEM_BATCHES   = (DCACHE_MERGED_REQS + DCACHE_CHANNELS - 1) / DCACHE_CHANNELS;
-    localparam DCACHE_TAG_ID_BITS   = (`CLOG2(`LSUQ_OUT_SIZE) + `CLOG2(DCACHE_MEM_BATCHES));
-
-    // Core request tag bits
-    localparam DCACHE_TAG_WIDTH	    = (`UUID_WIDTH + DCACHE_TAG_ID_BITS);
-    
-    // Memory request data bits
-    localparam DCACHE_MEM_DATA_WIDTH = (DCACHE_LINE_SIZE * 8);
-
-    // Memory request tag bits
-    `ifdef DCACHE_ENABLE
-    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_MEM_TAG_WIDTH(`DCACHE_MSHR_SIZE, `DCACHE_NUM_BANKS, DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `SOCKET_SIZE, `NUM_DCACHES);
-    `else
-    localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `SOCKET_SIZE, `NUM_DCACHES);
     `endif
 
     /////////////////////////////// L1 Parameters /////////////////////////////
