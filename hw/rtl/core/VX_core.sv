@@ -315,7 +315,8 @@ module VX_core import VX_gpu_pkg::*; #(
             .NUM_LANES    (DCACHE_CHANNELS),
             .DATA_SIZE    (DCACHE_WORD_SIZE), 
             .TAG_WIDTH    (DCACHE_TAG_WIDTH),    
-            .TAG_SEL_BITS (DCACHE_TAG_WIDTH - `UUID_WIDTH)
+            .TAG_SEL_BITS (DCACHE_TAG_WIDTH - `UUID_WIDTH),
+            .REQ_OUT_BUF  (3) // external bus should be registered
         ) lsu_adapter (
             .clk        (clk),
             .reset      (lsu_adapter_reset),
