@@ -231,7 +231,7 @@ module VX_mem_scheduler #(
             .DATA_IN_SIZE   (WORD_SIZE),
             .DATA_OUT_SIZE  (LINE_SIZE),
             .ADDR_WIDTH     (ADDR_WIDTH),
-            .ATYPE_WIDTH    (`ADDR_TYPE_WIDTH),
+            .ATYPE_WIDTH    (ATYPE_WIDTH),
             .TAG_WIDTH      (REQQ_TAG_WIDTH),
             .UUID_WIDTH     (UUID_WIDTH),
             .QUEUE_SIZE     (MEM_QUEUE_SIZE)
