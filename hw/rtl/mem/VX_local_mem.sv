@@ -153,6 +153,8 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0] per_bank_rsp_tag;   
     wire [NUM_BANKS-1:0]                per_bank_rsp_ready;
 
+    `RESET_RELAY (bank_reset, reset);
+
     for (genvar i = 0; i < NUM_BANKS; ++i) begin        
         VX_sp_ram #(
             .DATAW (WORD_WIDTH),
@@ -178,7 +180,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .SIZE  (0)
         ) bank_buf (
             .clk       (clk),
-            .reset     (reset),
+            .reset     (bank_reset),
             .valid_in  (per_bank_req_valid_w),
             .ready_in  (per_bank_req_ready_w),
             .data_in   ({per_bank_req_idx[i], per_bank_req_tag[i]}),

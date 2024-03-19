@@ -500,7 +500,7 @@
 
 // Number of Banks
 `ifndef LMEM_NUM_BANKS
-`define LMEM_NUM_BANKS `DCACHE_NUM_BANKS
+`define LMEM_NUM_BANKS `NUM_LSU_LANES
 `endif
 
 // L2cache Configurable Knobs /////////////////////////////////////////////////

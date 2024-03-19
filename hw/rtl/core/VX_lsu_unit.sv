@@ -26,11 +26,11 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     // Outputs    
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
-    VX_mem_bus_if.master    cache_bus_if [DCACHE_NUM_REQS]
+    VX_lsu_mem_if.master    lsu_mem_if [`NUM_LSU_BLOCKS]
 );
     localparam BLOCK_SIZE = `NUM_LSU_BLOCKS;
     localparam NUM_LANES  = `NUM_LSU_LANES;
-
+    
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)
     ) per_block_execute_if[BLOCK_SIZE]();
@@ -51,16 +51,18 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     ) per_block_commit_if[BLOCK_SIZE]();
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin
-        `RESET_RELAY (slice_reset, reset);
+
+        `RESET_RELAY (block_reset, reset);
+
         VX_lsu_slice #(
             .CORE_ID  (CORE_ID),
             .BLOCK_ID (block_idx)
         ) lsu_slice(
-            .clk          (clk),
-            .reset        (slice_reset),
-            .execute_if   (per_block_execute_if[block_idx]),
-            .commit_if    (per_block_commit_if[block_idx]),
-            .cache_bus_if (cache_bus_if[block_idx * DCACHE_CHANNELS +: DCACHE_CHANNELS])
+            .clk        (clk),
+            .reset      (block_reset),
+            .execute_if (per_block_execute_if[block_idx]),
+            .commit_if  (per_block_commit_if[block_idx]),
+            .lsu_mem_if (lsu_mem_if[block_idx])
         );
     end
 
