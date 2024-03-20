@@ -44,7 +44,7 @@ module VX_dcr_data import VX_gpu_pkg::*; (
 
     assign base_dcrs = dcrs;
 
-`ifdef DBG_TRACE_CORE_PIPELINE
+`ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (dcr_bus_if.write_valid) begin
             `TRACE(1, ("%d: base-dcr: state=", $time));

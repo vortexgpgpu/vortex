@@ -179,7 +179,7 @@ module VX_int_unit #(
 
     assign commit_if.data.PC = PC_r;
  
-`ifdef DBG_TRACE_CORE_PIPELINE
+`ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (branch_ctl_if.valid) begin
             `TRACE(1, ("%d: core%0d-branch: wid=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",

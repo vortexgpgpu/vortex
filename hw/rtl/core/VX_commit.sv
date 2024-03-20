@@ -178,7 +178,7 @@ module VX_commit import VX_gpu_pkg::*; #(
     end
     assign sim_wb_value = sim_wb_value_r;
     
-`ifdef DBG_TRACE_CORE_PIPELINE
+`ifdef DBG_TRACE_PIPELINE
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         for (genvar j = 0; j < `NUM_EX_UNITS; ++j) begin
             always @(posedge clk) begin

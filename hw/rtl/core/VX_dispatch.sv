@@ -117,7 +117,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     end
 `endif
 
-`ifdef DBG_TRACE_CORE_PIPELINE
+`ifdef DBG_TRACE_PIPELINE
     for (genvar i=0; i < `ISSUE_WIDTH; ++i) begin
         always @(posedge clk) begin
             if (operands_if[i].valid && operands_if[i].ready) begin

@@ -264,7 +264,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 timeout_ctr <= '0;
             end else begin        
                 if (staging_if[i].valid && ~staging_if[i].ready) begin
-                `ifdef DBG_TRACE_CORE_PIPELINE
+                `ifdef DBG_TRACE_PIPELINE
                     `TRACE(3, ("%d: *** core%0d-scoreboard-stall: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)\n",
                         $time, CORE_ID, i, staging_if[i].data.PC, staging_if[i].data.tmask, timeout_ctr,
                         operands_busy_r, staging_if[i].data.uuid));

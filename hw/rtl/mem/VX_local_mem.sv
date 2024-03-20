@@ -275,7 +275,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
 `endif
 
-`ifdef DBG_TRACE_LMEM
+`ifdef DBG_TRACE_MEM
 
     wire [NUM_REQS-1:0][`UP(UUID_WIDTH)-1:0] req_uuid;
     wire [NUM_REQS-1:0][`UP(UUID_WIDTH)-1:0] rsp_uuid;

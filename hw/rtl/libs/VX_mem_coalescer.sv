@@ -323,7 +323,7 @@ module VX_mem_coalescer #(
     assign in_rsp_tag    = {out_rsp_tag[OUT_TAG_WIDTH-1 -: UUID_WIDTH], ibuf_dout_tag};
     assign out_rsp_ready = in_rsp_ready;
 
-`ifndef NDEBUG
+`ifdef DBG_TRACE_MEM
     wire [`UP(UUID_WIDTH)-1:0] out_req_uuid;
     wire [`UP(UUID_WIDTH)-1:0] out_rsp_uuid;
 
