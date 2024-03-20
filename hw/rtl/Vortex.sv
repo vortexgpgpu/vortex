@@ -194,7 +194,7 @@ module Vortex import VX_gpu_pkg::*; (
     
 `endif
 
-`ifdef DBG_TRACE_CORE_MEM
+`ifdef DBG_TRACE_MEM
     always @(posedge clk) begin
         if (mem_req_fire) begin
             if (mem_req_rw)

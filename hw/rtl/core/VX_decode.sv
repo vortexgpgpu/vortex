@@ -537,7 +537,7 @@ module VX_decode  #(
     assign fetch_if.ibuf_pop = decode_if.ibuf_pop;
 `endif
 
-`ifdef DBG_TRACE_CORE_PIPELINE
+`ifdef DBG_TRACE_PIPELINE
 `ifdef FLEN_64
     wire fdst_d = decode_if.data.imm[0];
 `else

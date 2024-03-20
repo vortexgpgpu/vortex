@@ -557,7 +557,7 @@ module VX_mem_scheduler #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-`ifndef NDEBUG
+`ifdef DBG_TRACE_MEM
     wire [`UP(UUID_WIDTH)-1:0] mem_req_dbg_uuid;
     wire [`UP(UUID_WIDTH)-1:0] mem_rsp_dbg_uuid;
     wire [`UP(UUID_WIDTH)-1:0] rsp_dbg_uuid;

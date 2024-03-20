@@ -475,7 +475,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         `UNUSED_PIN (sel_out)
     );
 
-`ifdef DBG_TRACE_CORE_MEM
+`ifdef DBG_TRACE_MEM
     always @(posedge clk) begin    
         if (execute_if.valid && fence_wait) begin
             `TRACE(1, ("%d: *** D$%0d fence wait\n", $time, CORE_ID));
