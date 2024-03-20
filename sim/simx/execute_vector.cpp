@@ -124,11 +124,22 @@ template <typename T, typename R>
 class Mulh {
   public:
     static R apply(T first, T second, R) {
-      __int128_t first_ext = sext((__int128_t)second, (sizeof(T) * 8));
-      __int128_t second_ext = sext((__int128_t)first, (sizeof(T) * 8));
+      __int128_t first_ext = sext((__int128_t)first, (sizeof(T) * 8));
+      __int128_t second_ext = sext((__int128_t)second, (sizeof(T) * 8));
       return (first_ext * second_ext) >> (sizeof(T) * 8);
     }
     static std::string name() {return "Mulh";}
+};
+
+template <typename T, typename R>
+class Mulhsu {
+  public:
+    static R apply(T first, T second, R) {
+      __int128_t first_ext = zext((__int128_t)first, (sizeof(T) * 8));
+      __int128_t second_ext = sext((__int128_t)second, (sizeof(T) * 8));
+      return (first_ext * second_ext) >> (sizeof(T) * 8);
+    }
+    static std::string name() {return "Mulhsu";}
 };
 
 template <typename T, typename R>
@@ -2615,6 +2626,12 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             vector_op_vv<Mul, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
+        case 38: { // vmulhsu.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv<Mulhsu, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
         case 39: { // vmulh.vv
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
@@ -3491,6 +3508,13 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             if (!tmask_.test(t)) continue;
             auto &src1 = ireg_file_.at(t).at(rsrc0);
             vector_op_vix<Mul, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 38: { // vmulhsu.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix<Mulhsu, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 39: { // vmulh.vx
