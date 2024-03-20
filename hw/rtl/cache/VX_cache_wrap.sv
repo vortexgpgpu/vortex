@@ -199,7 +199,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         
     end
 
-`ifdef DBG_TRACE_CACHE_BANK
+`ifdef DBG_TRACE_CACHE
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         wire [`UP(UUID_WIDTH)-1:0] core_req_uuid;

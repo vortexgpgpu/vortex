@@ -95,7 +95,7 @@ module VX_cache_tags #(
         assign tag_matches[i] = read_valid && (line_tag == read_tag);
     end
     
-`ifdef DBG_TRACE_CACHE_TAG
+`ifdef DBG_TRACE_CACHE
     always @(posedge clk) begin
         if (fill && ~stall) begin
             `TRACE(3, ("%d: %s-bank%0d tag-fill: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, line_tag));

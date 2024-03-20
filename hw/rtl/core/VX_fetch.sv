@@ -170,7 +170,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     `SCOPE_IO_UNUSED()
 `endif
 
-`ifdef DBG_TRACE_CORE_ICACHE
+`ifdef DBG_TRACE_CORE_MEM
     wire schedule_fire = schedule_if.valid && schedule_if.ready;
     wire fetch_fire = fetch_if.valid && fetch_if.ready;
     always @(posedge clk) begin
