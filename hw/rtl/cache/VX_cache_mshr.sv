@@ -227,7 +227,7 @@ module VX_cache_mshr #(
 
     `UNUSED_VAR (lookup_valid)
 
-`ifdef DBG_TRACE_CACHE_MSHR        
+`ifdef DBG_TRACE_CACHE
     reg show_table;
     always @(posedge clk) begin
         if (reset) begin

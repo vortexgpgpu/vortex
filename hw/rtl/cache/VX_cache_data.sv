@@ -135,7 +135,7 @@ module VX_cache_data #(
 
     `UNUSED_VAR (stall)
 
-`ifdef DBG_TRACE_CACHE_DATA
+`ifdef DBG_TRACE_CACHE
     always @(posedge clk) begin 
         if (fill && ~stall) begin
             `TRACE(3, ("%d: %s-bank%0d data-fill: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, fill_data));
