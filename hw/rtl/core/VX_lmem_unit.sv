@@ -29,6 +29,8 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
     `STATIC_ASSERT(`IS_DIVISBLE((1 << `LMEM_LOG_SIZE), `MEM_BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT(0 == (`LMEM_BASE_ADDR % (1 << `LMEM_LOG_SIZE)), ("invalid parameter"))
 
+    localparam REQ_DATAW = `NUM_LSU_LANES + 1 + `NUM_LSU_LANES * (LSU_WORD_SIZE + LSU_ADDR_WIDTH + `ADDR_TYPE_WIDTH + LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
+    localparam RSP_DATAW = `NUM_LSU_LANES + `NUM_LSU_LANES * (LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
     localparam LMEM_ADDR_WIDTH = `LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE);
 
      VX_lsu_mem_if #(
@@ -36,6 +38,8 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lmem_lsu_if[`NUM_LSU_BLOCKS]();
+
+    `RESET_RELAY (req_reset, reset);
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
         
@@ -47,30 +51,77 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         
         wire is_addr_local = | is_addr_local_mask;
         wire is_addr_global = | (~is_addr_local_mask);
-        
-        assign lsu_mem_out_if[i].req_valid      = lsu_mem_in_if[i].req_valid && is_addr_global;
-        assign lsu_mem_out_if[i].req_data.mask  = lsu_mem_in_if[i].req_data.mask & ~is_addr_local_mask;
-        assign lsu_mem_out_if[i].req_data.rw    = lsu_mem_in_if[i].req_data.rw;
-        assign lsu_mem_out_if[i].req_data.byteen= lsu_mem_in_if[i].req_data.byteen;
-        assign lsu_mem_out_if[i].req_data.addr  = lsu_mem_in_if[i].req_data.addr;
-        assign lsu_mem_out_if[i].req_data.atype = lsu_mem_in_if[i].req_data.atype;
-        assign lsu_mem_out_if[i].req_data.data  = lsu_mem_in_if[i].req_data.data;
-        assign lsu_mem_out_if[i].req_data.tag   = lsu_mem_in_if[i].req_data.tag;
 
-        assign lmem_lsu_if[i].req_valid         = lsu_mem_in_if[i].req_valid && is_addr_local;
-        assign lmem_lsu_if[i].req_data.mask     = lsu_mem_in_if[i].req_data.mask & is_addr_local_mask;
-        assign lmem_lsu_if[i].req_data.rw       = lsu_mem_in_if[i].req_data.rw;
-        assign lmem_lsu_if[i].req_data.byteen   = lsu_mem_in_if[i].req_data.byteen;
-        assign lmem_lsu_if[i].req_data.addr     = lsu_mem_in_if[i].req_data.addr;
-        assign lmem_lsu_if[i].req_data.atype    = lsu_mem_in_if[i].req_data.atype;
-        assign lmem_lsu_if[i].req_data.data     = lsu_mem_in_if[i].req_data.data;
-        assign lmem_lsu_if[i].req_data.tag      = lsu_mem_in_if[i].req_data.tag;
+        wire req_global_ready;
+        wire req_local_ready;
 
-        assign lsu_mem_in_if[i].req_ready = (lsu_mem_out_if[i].req_ready && is_addr_global) 
-                                         || (lmem_lsu_if[i].req_ready && is_addr_local);
+        VX_elastic_buffer #(
+            .DATAW   (REQ_DATAW),
+            .SIZE    (0),
+            .OUT_REG (0)
+        ) req_global_buf (
+            .clk       (clk),
+            .reset     (req_reset),
+            .valid_in  (lsu_mem_in_if[i].req_valid && is_addr_global),              
+            .data_in   ({
+                lsu_mem_in_if[i].req_data.mask & ~is_addr_local_mask,
+                lsu_mem_in_if[i].req_data.rw,
+                lsu_mem_in_if[i].req_data.byteen,
+                lsu_mem_in_if[i].req_data.addr,
+                lsu_mem_in_if[i].req_data.atype,
+                lsu_mem_in_if[i].req_data.data,
+                lsu_mem_in_if[i].req_data.tag
+            }),
+            .ready_in  (req_global_ready),
+            .valid_out (lsu_mem_out_if[i].req_valid),
+            .data_out  ({
+                lsu_mem_out_if[i].req_data.mask,
+                lsu_mem_out_if[i].req_data.rw,
+                lsu_mem_out_if[i].req_data.byteen,
+                lsu_mem_out_if[i].req_data.addr,
+                lsu_mem_out_if[i].req_data.atype,
+                lsu_mem_out_if[i].req_data.data,
+                lsu_mem_out_if[i].req_data.tag
+            }),            
+            .ready_out (lsu_mem_out_if[i].req_ready)
+        );
+
+        VX_elastic_buffer #(
+            .DATAW   (REQ_DATAW),
+            .SIZE    (0),
+            .OUT_REG (0)
+        ) req_local_buf (
+            .clk       (clk),
+            .reset     (req_reset),
+            .valid_in  (lsu_mem_in_if[i].req_valid && is_addr_local),              
+            .data_in   ({
+                lsu_mem_in_if[i].req_data.mask & is_addr_local_mask,
+                lsu_mem_in_if[i].req_data.rw,
+                lsu_mem_in_if[i].req_data.byteen,
+                lsu_mem_in_if[i].req_data.addr,
+                lsu_mem_in_if[i].req_data.atype,
+                lsu_mem_in_if[i].req_data.data,
+                lsu_mem_in_if[i].req_data.tag
+            }),
+            .ready_in  (req_local_ready),
+            .valid_out (lmem_lsu_if[i].req_valid),
+            .data_out  ({
+                lmem_lsu_if[i].req_data.mask,
+                lmem_lsu_if[i].req_data.rw,
+                lmem_lsu_if[i].req_data.byteen,
+                lmem_lsu_if[i].req_data.addr,
+                lmem_lsu_if[i].req_data.atype,
+                lmem_lsu_if[i].req_data.data,
+                lmem_lsu_if[i].req_data.tag
+            }),            
+            .ready_out (lmem_lsu_if[i].req_ready)
+        );
+
+        assign lsu_mem_in_if[i].req_ready = (req_global_ready && is_addr_global) 
+                                         || (req_local_ready && is_addr_local);
     end
 
-    `RESET_RELAY (arb_reset, reset);
+    `RESET_RELAY (rsp_reset, reset);
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
         
@@ -84,7 +135,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .TYPE        ("R")
         ) arbiter (
             .clk         (clk),
-            .reset       (arb_reset),
+            .reset       (rsp_reset),
             .requests    ({     
                 lmem_lsu_if[i].rsp_valid,
                 lsu_mem_out_if[i].rsp_valid
@@ -94,14 +145,32 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             `UNUSED_PIN (grant_onehot),
             .grant_unlock(rsp_arb_ready)
         );
+        
+        VX_elastic_buffer #(
+            .DATAW   (RSP_DATAW),
+            .SIZE    (2),
+            .OUT_REG (0)
+        ) rsp_buf (
+            .clk       (clk),
+            .reset     (rsp_reset),
+            .valid_in  (rsp_arb_valid),              
+            .data_in   ({
+                rsp_arb_index ? lmem_lsu_if[i].rsp_data.mask : lsu_mem_out_if[i].rsp_data.mask,
+                rsp_arb_index ? lmem_lsu_if[i].rsp_data.data : lsu_mem_out_if[i].rsp_data.data,
+                rsp_arb_index ? lmem_lsu_if[i].rsp_data.tag : lsu_mem_out_if[i].rsp_data.tag
+            }),
+            .ready_in  (rsp_arb_ready),
+            .valid_out (lsu_mem_in_if[i].rsp_valid),
+            .data_out  ({
+                lsu_mem_in_if[i].rsp_data.mask, 
+                lsu_mem_in_if[i].rsp_data.data, 
+                lsu_mem_in_if[i].rsp_data.tag
+            }),            
+            .ready_out (lsu_mem_in_if[i].rsp_ready)
+        );
 
-        assign lsu_mem_in_if[i].rsp_valid = rsp_arb_valid;
-        assign lsu_mem_in_if[i].rsp_data.mask = rsp_arb_index ? lmem_lsu_if[i].rsp_data.mask : lsu_mem_out_if[i].rsp_data.mask;
-        assign lsu_mem_in_if[i].rsp_data.data = rsp_arb_index ? lmem_lsu_if[i].rsp_data.data : lsu_mem_out_if[i].rsp_data.data;
-        assign lsu_mem_in_if[i].rsp_data.tag = rsp_arb_index ? lmem_lsu_if[i].rsp_data.tag : lsu_mem_out_if[i].rsp_data.tag;
-        assign lsu_mem_out_if[i].rsp_ready = lsu_mem_in_if[i].rsp_ready && ~rsp_arb_index;
-        assign lmem_lsu_if[i].rsp_ready = lsu_mem_in_if[i].rsp_ready && rsp_arb_index;        
-        assign rsp_arb_ready = lsu_mem_in_if[i].rsp_ready;
+        assign lsu_mem_out_if[i].rsp_ready = rsp_arb_ready && ~rsp_arb_index;
+        assign lmem_lsu_if[i].rsp_ready = rsp_arb_ready && rsp_arb_index;
     end
 
     VX_mem_bus_if #(
@@ -121,7 +190,8 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .NUM_LANES    (`NUM_LSU_LANES),
             .DATA_SIZE    (LSU_WORD_SIZE), 
             .TAG_WIDTH    (LSU_TAG_WIDTH),
-            .TAG_SEL_BITS (LSU_TAG_WIDTH - `UUID_WIDTH)
+            .TAG_SEL_BITS (LSU_TAG_WIDTH - `UUID_WIDTH),
+            .REQ_OUT_BUF  (2)
         ) lsu_adapter (
             .clk        (clk),
             .reset      (adapter_reset),
