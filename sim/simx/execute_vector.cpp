@@ -189,6 +189,28 @@ class Macc {
 };
 
 template <typename T, typename R>
+class Maccsu {
+  public:
+    static R apply(T first, T second, R third) {
+      R first_ext = sext((R)first, (sizeof(T) * 8));
+      R second_ext = zext((R)second, (sizeof(T) * 8));
+      return (first_ext * second_ext) + third;
+    }
+    static std::string name() {return "Maccsu";}
+};
+
+template <typename T, typename R>
+class Maccus {
+  public:
+    static R apply(T first, T second, R third) {
+      R first_ext = zext((R)first, (sizeof(T) * 8));
+      R second_ext = sext((R)second, (sizeof(T) * 8));
+      return (first_ext * second_ext) + third;
+    }
+    static std::string name() {return "Maccus";}
+};
+
+template <typename T, typename R>
 class Nmsub {
   public:
     static R apply(T first, T second, R third) {
@@ -2844,6 +2866,12 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             vector_op_vv_w<Macc, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
+        case 63: { // vwmaccsu.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_w<Maccsu, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
         default:
           std::cout << "Unrecognised mask vector - vector instruction func3: " << func3 << " func6: " << func6 << std::endl;
           std::abort();
@@ -3811,6 +3839,20 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             if (!tmask_.test(t)) continue;
             auto &src1 = ireg_file_.at(t).at(rsrc0);
             vector_op_vix_w<Macc, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 62: { // vwmaccus.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_w<Maccus, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 63: { // vwmaccsu.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_w<Maccsu, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         default:
