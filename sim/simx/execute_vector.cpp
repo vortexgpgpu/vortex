@@ -29,6 +29,42 @@ class Sub {
 };
 
 template <typename T, typename R>
+class Adc {
+  public:
+    static R apply(T first, T second, R third) {
+      return (R)first + (R)second + third;
+    }
+    static std::string name() {return "Adc";}
+};
+
+template <typename T, typename R>
+class Madc {
+  public:
+    static R apply(T first, T second, R third) {
+      return (R)first + (R)second + third > (R)std::numeric_limits<T>::max();
+    }
+    static std::string name() {return "Madc";}
+};
+
+template <typename T, typename R>
+class Sbc {
+  public:
+    static R apply(T first, T second, R third) {
+      return (R)second - (R)first - third;
+    }
+    static std::string name() {return "Sbc";}
+};
+
+template <typename T, typename R>
+class Msbc {
+  public:
+    static R apply(T first, T second, R third) {
+      return (R)second < (R)first + third;
+    }
+    static std::string name() {return "Msbc";}
+};
+
+template <typename T, typename R>
 class Ssub {
   public:
     static R apply(T first, T second, uint32_t, uint32_t &vxsat_) {
@@ -1402,6 +1438,68 @@ void vector_op_vix(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_
   }
 }
 
+template <template <typename DT1, typename DT2> class OP, typename DT>
+void vector_op_vix_carry(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl)
+{
+  for (uint32_t i = 0; i < vl; i++) {    
+    DT second = getVregData<DT>(vreg_file, rsrc0, i);
+    bool third = !isMasked(vreg_file, 0, i, false);
+    DT result = OP<DT, DT>::apply(first, second, third);
+    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    getVregData<DT>(vreg_file, rdest, i) = result;
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vix_carry(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl)
+{
+  if (vsew == 8) {
+    vector_op_vix_carry<OP, DT8>(src1, vreg_file, rsrc0, rdest, vl);
+  } else if (vsew == 16) {
+    vector_op_vix_carry<OP, DT16>(src1, vreg_file, rsrc0, rdest, vl);
+  } else if (vsew == 32) {
+    vector_op_vix_carry<OP, DT32>(src1, vreg_file, rsrc0, rdest, vl);
+  } else if (vsew == 64) {
+    vector_op_vix_carry<OP, DT64>(src1, vreg_file, rsrc0, rdest, vl);
+  } else {
+    std::cout << "Failed to execute VI/VX carry for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
+void vector_op_vix_carry_out(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl, uint32_t vmask)
+{
+  for (uint32_t i = 0; i < vl; i++) {    
+    DT second = getVregData<DT>(vreg_file, rsrc0, i);
+    bool third = !vmask && !isMasked(vreg_file, 0, i, vmask);
+    bool result = OP<DT, DTR>::apply(first, second, third);
+    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    if (result) {
+      getVregData<uint8_t>(vreg_file, rdest, i / 8) |= 1 << (i % 8);
+    } else {
+      getVregData<uint8_t>(vreg_file, rdest, i / 8) &= ~(1 << (i % 8));
+    }
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64, typename DT128>
+void vector_op_vix_carry_out(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vix_carry_out<OP, DT8, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else if (vsew == 16) {
+    vector_op_vix_carry_out<OP, DT16, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else if (vsew == 32) {
+    vector_op_vix_carry_out<OP, DT32, DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else if (vsew == 64) {
+    vector_op_vix_carry_out<OP, DT64, DT128>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else {
+    std::cout << "Failed to execute VI/VX carry out for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
 template <typename DT>
 void vector_op_vix_merge(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
@@ -1764,6 +1862,70 @@ void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uin
     vector_op_vv<OP, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
   } else {
     std::cout << "Failed to execute VV for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT>
+void vector_op_vv_carry(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    DT first  = getVregData<DT>(vreg_file, rsrc0, i);
+    DT second = getVregData<DT>(vreg_file, rsrc1, i);
+    bool third = !isMasked(vreg_file, 0, i, false);
+    DT result = OP<DT, DT>::apply(first, second, third);
+    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    getVregData<DT>(vreg_file, rdest, i) = result;
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vv_carry(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl)
+{
+  if (vsew == 8) {
+    vector_op_vv_carry<OP, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl);
+  } else if (vsew == 16) {
+    vector_op_vv_carry<OP, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl);
+  } else if (vsew == 32) {
+    vector_op_vv_carry<OP, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl);
+  } else if (vsew == 64) {
+    vector_op_vv_carry<OP, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl);
+  } else {
+    std::cout << "Failed to execute VV carry for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
+void vector_op_vv_carry_out(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    DT first  = getVregData<DT>(vreg_file, rsrc0, i);
+    DT second = getVregData<DT>(vreg_file, rsrc1, i);
+    bool third = !vmask && !isMasked(vreg_file, 0, i, vmask);
+    bool result = OP<DT, DTR>::apply(first, second, third);
+    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    if (result) {
+      getVregData<uint8_t>(vreg_file, rdest, i / 8) |= 1 << (i % 8);
+    } else {
+      getVregData<uint8_t>(vreg_file, rdest, i / 8) &= ~(1 << (i % 8));
+    }
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64, typename DT128>
+void vector_op_vv_carry_out(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vv_carry_out<OP, DT8, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 16) {
+    vector_op_vv_carry_out<OP, DT16, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 32) {
+    vector_op_vv_carry_out<OP, DT32, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 64) {
+    vector_op_vv_carry_out<OP, DT64, DT128>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else {
+    std::cout << "Failed to execute VV carry out for vsew: " << vsew << std::endl;
     std::abort();
   }
 }
@@ -2190,6 +2352,30 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
               vector_op_vv_gather<uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, true, VLMAX, vmask);
+            }
+          } break;
+          case 16: { // vadc.vvm
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_carry<Adc, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_);
+            }
+          } break;
+          case 17: { // vmadc.vv, vmadc.vvm
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_carry_out<Madc, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 18: { // vsbc.vvm
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_carry<Sbc, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_);
+            }
+          } break;
+          case 19: { // vmsbc.vv, vmsbc.vvm
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_carry_out<Msbc, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 23: {
@@ -2927,6 +3113,18 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
           vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(uimmsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, VLMAX, vmask, false);
         }
       } break;
+      case 16: { // vadc.vim
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          vector_op_vix_carry<Adc, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_);
+        }
+      } break;
+      case 17: { // vmadc.vi, vmadc.vim
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t)) continue;
+          vector_op_vix_carry_out<Madc, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(immsrc, vreg_file_, rsrc0, rdest, vtype_.vsew, vl_, vmask);
+        }
+      } break;
       case 23: { // vmv.v.i
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t)) continue;
@@ -3178,6 +3376,34 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
             vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, VLMAX, vmask, false);
+          }
+        } break;
+        case 16: { // vadc.vxm
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_carry<Adc, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_);
+          }
+        } break;
+        case 17: { // vmadc.vx, vmadc.vxm
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_carry_out<Madc, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 18: { // vsbc.vxm
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_carry<Sbc, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_);
+          }
+        } break;
+        case 19: { // vmsbc.vx, vmsbc.vxm
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_carry_out<Msbc, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 23: {
