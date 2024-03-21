@@ -1457,6 +1457,21 @@ void vector_op_vix_w(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint3
   }
 }
 
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vix_wx(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vix<OP, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else if (vsew == 16) {
+    vector_op_vix<OP, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else if (vsew == 32) {
+    vector_op_vix<OP, DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask);
+  } else {
+    std::cout << "Failed to execute VI/VX widening wx for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
 template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
 void vector_op_vix_n(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat)
 {
@@ -1815,6 +1830,36 @@ void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, u
     vector_op_vv_w<OP, DT32, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
   } else {
     std::cout << "Failed to execute VV widening for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
+void vector_op_vv_wv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    DT first = getVregData<DT>(vreg_file, rsrc0, i);
+    DTR second = getVregData<DTR>(vreg_file, rsrc1, i);
+    DTR third = getVregData<DTR>(vreg_file, rdest, i);
+    DTR result = OP<DTR, DTR>::apply(first, second, third);
+    DP(1, "Widening wv " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    getVregData<DTR>(vreg_file, rdest, i) = result;
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vv_wv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vv_wv<OP, DT8, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 16) {
+    vector_op_vv_wv<OP, DT16, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 32) {
+    vector_op_vv_wv<OP, DT32, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else {
+    std::cout << "Failed to execute VV widening wv for vsew: " << vsew << std::endl;
     std::abort();
   }
 }
@@ -2743,6 +2788,30 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
             vector_op_vv_w<Sub, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 52: { // vwaddu.wv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_wv<Add, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 53: { // vwadd.wv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_wv<Add, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 54: { // vwsubu.wv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_wv<Sub, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 55: { // vwsub.wv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_wv<Sub, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 56: { // vwmulu.vv
@@ -3677,6 +3746,36 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             if (!tmask_.test(t)) continue;
             auto &src1 = ireg_file_.at(t).at(rsrc0);
             vector_op_vix_w<Sub, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 52: { // vwaddu.wx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_wx<Add, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 53: { // vwadd.wx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            Word src1_ext = sext(src1, vtype_.vsew);
+            vector_op_vix_wx<Add, int8_t, int16_t, int32_t, int64_t>(src1_ext, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 54: { // vwsubu.wx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_wx<Sub, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 55: { // vwsub.wx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            Word &src1 = ireg_file_.at(t).at(rsrc0);
+            Word src1_ext = sext(src1, vtype_.vsew);
+            vector_op_vix_wx<Sub, int8_t, int16_t, int32_t, int64_t>(src1_ext, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 56: { // vwmulu.vx
