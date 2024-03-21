@@ -30,7 +30,7 @@ then
              vfmacc vfnmacc vfmsac vfnmsac vfmadd vfnmadd vfmsub vfnmsub \
              vredsum vredand vredor vredxor vredmin vredmax \
              vmand vmor vmxor vmnand vmnor vmxnor \
-             vdiv vrem vmul \
+             vdiv vrem vmul vsmul \
              vwaddu.v vwadd.v vwsubu.v vwsub.v vwmulu.v vwmul.v vwmacc.v vwmaccu.v \
              vrsub vcompress vnclip vssub vsadd vnsra vnsrl \
              vsext vzext \

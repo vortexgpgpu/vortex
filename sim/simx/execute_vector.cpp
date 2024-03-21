@@ -224,7 +224,7 @@ bool bitAt(T value, R pos, R negOffset) {
 template <typename T, typename R>
 bool anyBitUpTo(T value, R to, R negOffset) {
   R offsetTo = to - negOffset;
-  return to >= negOffset && (value & ((1 << (offsetTo + 1)) - 1));
+  return to >= negOffset && (value & (((R)1 << (offsetTo + 1)) - 1));
 }
 
 template <typename T, typename R>
@@ -991,7 +991,6 @@ template <typename T, typename R>
 class Clip {
   public:
     static R apply(T first, T second, uint32_t vxrm, uint32_t &vxsat_) {
-      // ignoring rounding mode for now, simply rounding up to pass the tests
       // The low lg2(2*SEW) bits of the vector or scalar shift-amount value (e.g., the low 6 bits for a SEW=64-bit to
       // SEW=32-bit narrowing operation) are used to control the right shift amount, which provides the scaling.
       R firstValid = first & (sizeof(T) * 8 - 1);
@@ -1001,6 +1000,20 @@ class Clip {
       return clippedResult;
     }
     static std::string name() {return "Clip";}
+};
+
+template <typename T, typename R>
+class Smul {
+  public:
+    static R apply(T first, T second, uint32_t vxrm, uint32_t &vxsat_) {
+      R shift = sizeof(R) * 8 - 1;
+      T unshiftedResult = first * second;
+      T unclippedResult = (unshiftedResult >> shift) + roundBit(unshiftedResult, shift, vxrm);
+      R clippedResult = std::clamp(unclippedResult, (T)std::numeric_limits<R>::min(), (T)std::numeric_limits<R>::max());
+      vxsat_ |= clippedResult != unclippedResult;
+      return clippedResult;
+    }
+    static std::string name() {return "Smul";}
 };
 
 bool isMasked(std::vector<std::vector<Byte>> &vreg_file, uint32_t maskVreg, uint32_t byteI, bool vmask) {
@@ -2175,6 +2188,15 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               vector_op_vv<Sll, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
+          case 39: { // vsmul.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+              uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+              vector_op_vv_sat<Smul, int8_t, int16_t, int32_t, int64_t, __int128_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+              core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
+            }
+          } break;
           case 40: { // vsrl.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
@@ -3107,6 +3129,16 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             if (!tmask_.test(t)) continue;
             auto& src1 = ireg_file_.at(t).at(rsrc0);
             vector_op_vix<Sll, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 39: { // vsmul.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto& src1 = ireg_file_.at(t).at(rsrc0);
+            uint32_t vxrm = core_->get_csr(VX_CSR_VXRM, t, warp_id_);
+            uint32_t vxsat = core_->get_csr(VX_CSR_VXSAT, t, warp_id_);
+            vector_op_vix_sat<Smul, int8_t, int16_t, int32_t, int64_t, __int128_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask, vxrm, vxsat);
+            core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
           }
         } break;
         case 40: { // vsrl.vx
