@@ -146,9 +146,9 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.A_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.B_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.C_addr));
+  RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.A_addr));
+  RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.B_addr));
+  RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.C_addr));
 
   kernel_arg.num_tasks = num_points;
   kernel_arg.size = size;

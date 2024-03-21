@@ -95,11 +95,6 @@ public:
             ALLOC_MAX_ADDR - ALLOC_BASE_ADDR,
             RAM_PAGE_SIZE,
             CACHE_BLOCK_SIZE)
-        , local_mem_(
-            LMEM_BASE_ADDR,
-            (1ull << LMEM_LOG_SIZE),
-            RAM_PAGE_SIZE,
-            1)
     {
         // attach memory module
         processor_.attach_ram(&ram_);
@@ -111,37 +106,19 @@ public:
         }
     }    
 
-    int mem_alloc(uint64_t size, int type, uint64_t* dev_addr) {
-        if (type == VX_MEM_TYPE_GLOBAL) {
-            return global_mem_.allocate(size, dev_addr);
-        } else if (type == VX_MEM_TYPE_LOCAL) {
-            return local_mem_.allocate(size, dev_addr);
-        }
-        return -1;
+    int mem_alloc(uint64_t size, uint64_t* dev_addr) {
+        return global_mem_.allocate(size, dev_addr);
     }
 
     int mem_free(uint64_t dev_addr) {
-        if (dev_addr >= LMEM_BASE_ADDR) {
-            return local_mem_.release(dev_addr);
-        } else {
-            return global_mem_.release(dev_addr);
-        }
+        return global_mem_.release(dev_addr);
     }
 
-    int mem_info(int type, uint64_t* mem_free, uint64_t* mem_used) const {
-        if (type == VX_MEM_TYPE_GLOBAL) {
-            if (mem_free)
-                *mem_free = global_mem_.free();
-            if (mem_used)
-                *mem_used = global_mem_.allocated();
-        } else if (type == VX_MEM_TYPE_LOCAL) {
-            if (mem_free)
-                *mem_free = local_mem_.free();
-            if (mem_used)
-                *mem_free = local_mem_.allocated();
-        } else {
-            return -1;
-        }
+    int mem_info(uint64_t* mem_free, uint64_t* mem_used) const {
+        if (mem_free)
+            *mem_free = global_mem_.free();
+        if (mem_used)
+            *mem_used = global_mem_.allocated();
         return 0;
     }
 
@@ -222,7 +199,6 @@ private:
     RAM                 ram_;
     Processor           processor_;
     MemoryAllocator     global_mem_;
-    MemoryAllocator     local_mem_;
     DeviceConfig        dcrs_;
     std::future<void>   future_;
 };
@@ -296,6 +272,12 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
     case VX_CAPS_GLOBAL_MEM_SIZE:
         *value = GLOBAL_MEM_SIZE;
         break;
+    case VX_CAPS_LOCAL_MEM_SIZE:
+        *value = (1 << LMEM_LOG_SIZE);
+        break;    
+    case VX_CAPS_LOCAL_MEM_ADDR:
+        *value = LMEM_BASE_ADDR;
+        break;
     case VX_CAPS_KERNEL_BASE_ADDR:
         *value = (uint64_t(device->read_dcr(VX_DCR_BASE_STARTUP_ADDR1)) << 32)
                          | device->read_dcr(VX_DCR_BASE_STARTUP_ADDR0);
@@ -312,14 +294,14 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
     return 0;
 }
 
-extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, int type, uint64_t* dev_addr) {
+extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_addr) {
     if (nullptr == hdevice 
      || nullptr == dev_addr
      || 0 == size)
         return -1;
 
     vx_device *device = ((vx_device*)hdevice);
-    return device->mem_alloc(size, type, dev_addr);
+    return device->mem_alloc(size, dev_addr);
 }
 
 extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_addr) {
@@ -333,12 +315,12 @@ extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_addr) {
     return device->mem_free(dev_addr);
 }
 
-extern int vx_mem_info(vx_device_h hdevice, int type, uint64_t* mem_free, uint64_t* mem_used) {
+extern int vx_mem_info(vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_used) {
     if (nullptr == hdevice)
         return -1;
 
     auto device = ((vx_device*)hdevice);
-    return device->mem_info(type, mem_free, mem_used);
+    return device->mem_info(mem_free, mem_used);
 }
 
 extern int vx_copy_to_dev(vx_device_h hdevice, uint64_t dev_addr, const void* host_ptr, uint64_t size) {

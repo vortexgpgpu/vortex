@@ -152,7 +152,7 @@ int main(int argc, char *argv[]) {
 
   uint32_t num_points = count;
 
-  RT_CHECK(vx_mem_alloc(device, NUM_ADDRS * sizeof(int32_t), VX_MEM_TYPE_GLOBAL, &usr_test_mem));
+  RT_CHECK(vx_mem_alloc(device, NUM_ADDRS * sizeof(int32_t), &usr_test_mem));
 
   // generate input data
   gen_src_addrs(num_points);
@@ -172,9 +172,9 @@ int main(int argc, char *argv[]) {
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;  
 
-  RT_CHECK(vx_mem_alloc(device, src_buf_size, VX_MEM_TYPE_GLOBAL, &value));
+  RT_CHECK(vx_mem_alloc(device, src_buf_size, &value));
   kernel_arg.src_addr = value;
-  RT_CHECK(vx_mem_alloc(device, dst_buf_size, VX_MEM_TYPE_GLOBAL, &value));
+  RT_CHECK(vx_mem_alloc(device, dst_buf_size, &value));
   kernel_arg.dst_addr = value;
   kernel_arg.num_points = num_points;
 

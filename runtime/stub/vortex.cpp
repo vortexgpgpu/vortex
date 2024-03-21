@@ -25,7 +25,7 @@ extern int vx_dev_caps(vx_device_h /*hdevice*/, uint32_t /*caps_id*/, uint64_t* 
     return -1;
 }
 
-extern int vx_mem_alloc(vx_device_h /*hdevice*/, uint64_t /*size*/, int /*type*/, uint64_t* /*dev_addr*/) {
+extern int vx_mem_alloc(vx_device_h /*hdevice*/, uint64_t /*size*/, uint64_t* /*dev_addr*/) {
     return -1;
 }
 
@@ -33,7 +33,7 @@ extern int vx_mem_free(vx_device_h /*hdevice*/, uint64_t /*dev_addr*/) {
     return -1;
 }
 
-extern int vx_mem_info(vx_device_h /*hdevice*/, int /*type*/, uint64_t* /*mem_free*/, uint64_t* /*mem_used*/) {
+extern int vx_mem_info(vx_device_h /*hdevice*/, uint64_t* /*mem_free*/, uint64_t* /*mem_used*/) {
     return 0;
 }
 
