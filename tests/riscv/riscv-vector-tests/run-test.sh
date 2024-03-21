@@ -34,6 +34,7 @@ then
              vmadd vnmsub vmacc vnmsac \
              vwadd vwsub vwmul vwmacc \
              vrsub vcompress vnclip vssub vsadd vnsra vnsrl \
+             vadc vmadc vsbc vmsbc \
              vsext vzext \
              vid)
   if [ $XLEN -eq 64 ]; then
