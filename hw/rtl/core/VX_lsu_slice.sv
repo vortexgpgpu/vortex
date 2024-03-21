@@ -297,7 +297,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .MEM_QUEUE_SIZE (`LSUQ_OUT_SIZE),
         .UUID_WIDTH  (`UUID_WIDTH),
         .RSP_PARTIAL (1),
-        .MEM_OUT_BUF (2)
+        .MEM_OUT_BUF (0),
+        .CORE_OUT_BUF(0)
     ) mem_scheduler (
         .clk            (clk),
         .reset          (mem_scheduler_reset),
