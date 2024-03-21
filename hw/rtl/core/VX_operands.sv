@@ -25,7 +25,9 @@ module VX_operands import VX_gpu_pkg::*; #(
 );
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin        
+        
         `RESET_RELAY (slice_reset, reset);
+
         VX_gpr_slice #(
             .CORE_ID (CORE_ID)
         ) gpr_slice (

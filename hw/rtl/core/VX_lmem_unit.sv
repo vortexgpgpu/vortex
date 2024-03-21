@@ -45,20 +45,19 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         
         wire [`NUM_LSU_LANES-1:0] is_addr_local_mask;
         for (genvar j = 0; j < `NUM_LSU_LANES; ++j) begin
-            assign is_addr_local_mask[j] = lsu_mem_in_if[i].req_data.mask[j] 
-                                        && lsu_mem_in_if[i].req_data.atype[j][`ADDR_TYPE_LOCAL];
+            assign is_addr_local_mask[j] = lsu_mem_in_if[i].req_data.atype[j][`ADDR_TYPE_LOCAL];
         end
         
-        wire is_addr_local = | is_addr_local_mask;
-        wire is_addr_global = | (~is_addr_local_mask);
+        wire is_addr_global = | (lsu_mem_in_if[i].req_data.mask & ~is_addr_local_mask);
+        wire is_addr_local = | (lsu_mem_in_if[i].req_data.mask & is_addr_local_mask);        
 
         wire req_global_ready;
         wire req_local_ready;
 
         VX_elastic_buffer #(
             .DATAW   (REQ_DATAW),
-            .SIZE    (0),
-            .OUT_REG (0)
+            .SIZE    (2),
+            .OUT_REG (1)
         ) req_global_buf (
             .clk       (clk),
             .reset     (req_reset),
@@ -191,7 +190,8 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .DATA_SIZE    (LSU_WORD_SIZE), 
             .TAG_WIDTH    (LSU_TAG_WIDTH),
             .TAG_SEL_BITS (LSU_TAG_WIDTH - `UUID_WIDTH),
-            .REQ_OUT_BUF  (2)
+            .REQ_OUT_BUF  (2),
+            .RSP_OUT_BUF  (1)
         ) lsu_adapter (
             .clk        (clk),
             .reset      (adapter_reset),
