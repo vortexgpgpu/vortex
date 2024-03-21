@@ -121,6 +121,16 @@ class Mul {
 };
 
 template <typename T, typename R>
+class Mulsu {
+  public:
+    static R apply(T first, T second, R) {
+      R first_ext = zext((R)first, (sizeof(T) * 8));
+      return first_ext * (R)second;
+    }
+    static std::string name() {return "Mulsu";}
+};
+
+template <typename T, typename R>
 class Mulh {
   public:
     static R apply(T first, T second, R) {
@@ -2741,6 +2751,12 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             vector_op_vv_w<Mul, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
+        case 58: { // vwmulsu.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv_w<Mulsu, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
         case 59: { // vwmul.vv
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
@@ -3668,6 +3684,13 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             if (!tmask_.test(t)) continue;
             auto &src1 = ireg_file_.at(t).at(rsrc0);
             vector_op_vix_w<Mul, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 58: { // vwmulsu.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix_w<Mulsu, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 59: { // vwmul.vx

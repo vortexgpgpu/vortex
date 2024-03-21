@@ -32,7 +32,7 @@ then
              vmand vmor vmxor vmnand vmnor vmxnor \
              vdiv vrem vmul vsmul \
              vmadd vnmsub vmacc vnmsac \
-             vwaddu.v vwadd.v vwsubu.v vwsub.v vwmulu.v vwmul.v vwmacc.v vwmaccu.v \
+             vwaddu.v vwadd.v vwsubu.v vwsub.v vwmul vwmacc.v vwmaccu.v \
              vrsub vcompress vnclip vssub vsadd vnsra vnsrl \
              vsext vzext \
              vid)
