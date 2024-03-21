@@ -152,12 +152,39 @@ class Mulhu {
 };
 
 template <typename T, typename R>
+class Madd {
+  public:
+    static R apply(T first, T second, R third) {
+      return ((R)first * third) + (R)second;
+    }
+    static std::string name() {return "Madd";}
+};
+
+template <typename T, typename R>
+class Nmsac {
+  public:
+    static R apply(T first, T second, R third) {
+      return -((R)first * (R)second) + third;
+    }
+    static std::string name() {return "Nmsac";}
+};
+
+template <typename T, typename R>
 class Macc {
   public:
     static R apply(T first, T second, R third) {
       return ((R)first * (R)second) + third;
     }
     static std::string name() {return "Macc";}
+};
+
+template <typename T, typename R>
+class Nmsub {
+  public:
+    static R apply(T first, T second, R third) {
+      return -((R)first * third) + (R)second;
+    }
+    static std::string name() {return "Nmsub";}
 };
 
 template <typename T, typename R>
@@ -2660,6 +2687,30 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             vector_op_vv<Mulh, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
+        case 41: { // vmadd.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv<Madd, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 43: { // vnmsub.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv<Nmsub, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 45: { // vmacc.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv<Macc, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 47: { // vnmsac.vv
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            vector_op_vv<Nmsac, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
         case 48: { // vwaddu.vv
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t)) continue;
@@ -3554,6 +3605,34 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             if (!tmask_.test(t)) continue;
             auto &src1 = ireg_file_.at(t).at(rsrc0);
             vector_op_vix<Mulh, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 41: { // vmadd.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix<Madd, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 43: { // vnmsub.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix<Nmsub, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 45: { // vmacc.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix<Macc, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+          }
+        } break;
+        case 47: { // vnmsac.vx
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t)) continue;
+            auto &src1 = ireg_file_.at(t).at(rsrc0);
+            vector_op_vix<Nmsac, int8_t, int16_t, int32_t, int64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
           }
         } break;
         case 48: { // vwaddu.vx
