@@ -32,8 +32,9 @@ typedef void* vx_device_h;
 #define VX_CAPS_CACHE_LINE_SIZE     0x4
 #define VX_CAPS_GLOBAL_MEM_SIZE     0x5
 #define VX_CAPS_LOCAL_MEM_SIZE      0x6
-#define VX_CAPS_KERNEL_BASE_ADDR    0x7
-#define VX_CAPS_ISA_FLAGS           0x8
+#define VX_CAPS_LOCAL_MEM_ADDR      0x7
+#define VX_CAPS_KERNEL_BASE_ADDR    0x8
+#define VX_CAPS_ISA_FLAGS           0x9
 
 // device isa flags
 #define VX_ISA_STD_A                (1ull << 0)
@@ -54,10 +55,6 @@ typedef void* vx_device_h;
 #define VX_ISA_EXT_L3CACHE          (1ull << 35)
 #define VX_ISA_EXT_LMEM             (1ull << 36)
 
-// device memory types
-#define VX_MEM_TYPE_GLOBAL          0
-#define VX_MEM_TYPE_LOCAL           1
-
 // ready wait timeout
 #define VX_MAX_TIMEOUT              (24*60*60*1000)   // 24 Hr
 
@@ -71,13 +68,13 @@ int vx_dev_close(vx_device_h hdevice);
 int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value);
 
 // allocate device memory and return address
-int vx_mem_alloc(vx_device_h hdevice, uint64_t size, int type, uint64_t* dev_addr);
+int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_addr);
 
 // release device memory
 int vx_mem_free(vx_device_h hdevice, uint64_t dev_addr);
 
 // get device memory info
-int vx_mem_info(vx_device_h hdevice, int type, uint64_t* mem_free, uint64_t* mem_used);
+int vx_mem_info(vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_used);
 
 // Copy bytes from host to device memory
 int vx_copy_to_dev(vx_device_h hdevice, uint64_t dev_addr, const void* host_ptr, uint64_t size);

@@ -213,13 +213,6 @@ public:
         this->global_mem_ = std::make_shared<vortex::MemoryAllocator>(
             ALLOC_BASE_ADDR, ALLOC_MAX_ADDR, RAM_PAGE_SIZE, CACHE_BLOCK_SIZE);
 
-        uint64_t local_mem_size = 0;
-        vx_dev_caps(this, VX_CAPS_LOCAL_MEM_SIZE, &local_mem_size);
-        if (local_mem_size <= 1) {        
-            this->local_mem_ = std::make_shared<vortex::MemoryAllocator>(
-                LMEM_BASE_ADDR, local_mem_size, RAM_PAGE_SIZE, 1);
-        }
-
     #ifdef BANK_INTERLEAVE
         xrtBuffers_.reserve(num_banks);
         for (uint32_t i = 0; i < num_banks; ++i) {            
@@ -238,91 +231,66 @@ public:
         return 0;
     }
 
-    int mem_alloc(uint64_t size, int type, uint64_t* dev_addr) {
+    int mem_alloc(uint64_t size, uint64_t* dev_addr) {
         uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-
         uint64_t addr;
-
-        if (type == VX_MEM_TYPE_GLOBAL) {
-            CHECK_ERR(global_mem_->allocate(asize, &addr), {
-                return -1;
-            });
-        #ifndef BANK_INTERLEAVE
-            uint32_t bank_id;
-            CHECK_ERR(this->get_bank_info(addr, &bank_id, nullptr), {
-                return -1;
-            });
-            CHECK_ERR(get_buffer(bank_id, nullptr), {
-                return -1;
-            });
-        #endif
-        } else if (type == VX_MEM_TYPE_LOCAL) {
-            if CHECK_ERR(local_mem_->allocate(asize, &addr), {
-                return -1;
-            });
-        } else {
+        CHECK_ERR(global_mem_->allocate(asize, &addr), {
             return -1;
-        }       
+        });
+    #ifndef BANK_INTERLEAVE
+        uint32_t bank_id;
+        CHECK_ERR(this->get_bank_info(addr, &bank_id, nullptr), {
+            return -1;
+        });
+        CHECK_ERR(get_buffer(bank_id, nullptr), {
+            return -1;
+        });
+    #endif
         *dev_addr = addr;
         return 0;
     }
 
     int mem_free(uint64_t dev_addr) {    
-        if (dev_addr >= LMEM_BASE_ADDR) {
-            CHECK_ERR(local_mem_->release(dev_addr), {
-                return -1;
-            });    
-        } else {
-            CHECK_ERR(global_mem_->release(dev_addr), {
-                return -1;
-            });    
-        #ifdef BANK_INTERLEAVE
-            if (0 == global_mem_->allocated()) {
-            #ifndef CPP_API
-                for (auto& entry : xrtBuffers_) {
-                    xrtBOFree(entry);
-                }
-            #endif
-                xrtBuffers_.clear();
-            }
-        #else
-            uint32_t bank_id;
-            CHECK_ERR(this->get_bank_info(dev_addr, &bank_id, nullptr), {
-                return -1;
-            });
-            auto it = xrtBuffers_.find(bank_id);
-            if (it != xrtBuffers_.end()) {
-                auto count = --it->second.count;            
-                if (0 == count) {               
-                    printf("freeing bank%d...\n", bank_id); 
-                #ifndef CPP_API
-                    xrtBOFree(it->second.xrtBuffer);
-                #endif
-                    xrtBuffers_.erase(it);
-                }
-            } else {
-                fprintf(stderr, "[VXDRV] Error: invalid device memory address: 0x%lx\n", dev_addr);
-                return -1;
+        CHECK_ERR(global_mem_->release(dev_addr), {
+            return -1;
+        });    
+    #ifdef BANK_INTERLEAVE
+        if (0 == global_mem_->allocated()) {
+        #ifndef CPP_API
+            for (auto& entry : xrtBuffers_) {
+                xrtBOFree(entry);
             }
         #endif
+            xrtBuffers_.clear();
         }
+    #else
+        uint32_t bank_id;
+        CHECK_ERR(this->get_bank_info(dev_addr, &bank_id, nullptr), {
+            return -1;
+        });
+        auto it = xrtBuffers_.find(bank_id);
+        if (it != xrtBuffers_.end()) {
+            auto count = --it->second.count;            
+            if (0 == count) {               
+                printf("freeing bank%d...\n", bank_id); 
+            #ifndef CPP_API
+                xrtBOFree(it->second.xrtBuffer);
+            #endif
+                xrtBuffers_.erase(it);
+            }
+        } else {
+            fprintf(stderr, "[VXDRV] Error: invalid device memory address: 0x%lx\n", dev_addr);
+            return -1;
+        }
+    #endif
         return 0;
     }
 
-    int mem_info(int type, uint64_t* mem_free, uint64_t* mem_used) const {
-        if (type == VX_MEM_TYPE_GLOBAL) {
-            if (mem_free)
-                *mem_free = global_mem_->free();
-            if (mem_used)
-                *mem_used = global_mem_->allocated();
-        } else if (type == VX_MEM_TYPE_LOCAL) {
-            if (mem_free)
-                *mem_free = local_mem_->free();
-            if (mem_used)
-                *mem_free = local_mem_->allocated();
-        } else {
-            return -1;
-        }
+    int mem_info(uint64_t* mem_free, uint64_t* mem_used) const {
+        if (mem_free)
+            *mem_free = global_mem_->free();
+        if (mem_used)
+            *mem_used = global_mem_->allocated();
         return 0;
     }
 
@@ -433,8 +401,6 @@ private:
     xrt_kernel_t xrtKernel_;
     const platform_info_t platform_;    
     std::shared_ptr<vortex::MemoryAllocator> global_mem_;
-    std::shared_ptr<vortex::MemoryAllocator> local_mem_;
-
 #ifdef BANK_INTERLEAVE
 
     std::vector<xrt_buffer_t> xrtBuffers_;
@@ -548,6 +514,9 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         break;
     case VX_CAPS_LOCAL_MEM_SIZE:
         *value = 1ull << ((device->dev_caps >> 40) & 0xff);
+        break;
+    case VX_CAPS_LOCAL_MEM_ADDR:
+        *value = LMEM_BASE_ADDR;
         break;
     case VX_CAPS_KERNEL_BASE_ADDR:
         *value = (uint64_t(device->dcrs.read(VX_DCR_BASE_STARTUP_ADDR1)) << 32) | 
@@ -762,14 +731,14 @@ extern int vx_dev_close(vx_device_h hdevice) {
     return 0;
 }
 
-extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, int type, uint64_t* dev_addr) {
+extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_addr) {
    if (nullptr == hdevice 
     || nullptr == dev_addr
     || 0 == size)
         return -1;
 
     auto device = ((vx_device*)hdevice);
-    return device->mem_alloc(size, type, dev_addr);
+    return device->mem_alloc(size, dev_addr);
 }
 
 extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_addr) {
@@ -783,12 +752,12 @@ extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_addr) {
     return device->mem_free(dev_addr);
 }
 
-extern int vx_mem_info(vx_device_h hdevice, int type, uint64_t* mem_free, uint64_t* mem_used) {
+extern int vx_mem_info(vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_used) {
     if (nullptr == hdevice)
         return -1;
 
     auto device = (vx_device*)hdevice;
-    return device->mem_info(type, mem_free, mem_used);
+    return device->mem_info(mem_free, mem_used);
 }
 
 extern int vx_copy_to_dev(vx_device_h hdevice, uint64_t dev_addr, const void* host_ptr, uint64_t size) {

@@ -118,7 +118,6 @@ public:
     opae_drv_api_t api;
     fpga_handle fpga;
     std::shared_ptr<vortex::MemoryAllocator> global_mem;
-    std::shared_ptr<vortex::MemoryAllocator> local_mem;
     DeviceConfig dcrs;
     uint64_t dev_caps;
     uint64_t isa_caps;
@@ -158,6 +157,9 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         break;
     case VX_CAPS_LOCAL_MEM_SIZE:
         *value = 1ull << ((device->dev_caps >> 40) & 0xff);
+        break;
+    case VX_CAPS_LOCAL_MEM_ADDR:
+        *value = LMEM_BASE_ADDR;
         break;
     case VX_CAPS_KERNEL_BASE_ADDR:
         *value = (uint64_t(device->dcrs.read(VX_DCR_BASE_STARTUP_ADDR1)) << 32) |
@@ -275,13 +277,6 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
     device->global_mem = std::make_shared<vortex::MemoryAllocator>(
         ALLOC_BASE_ADDR, ALLOC_MAX_ADDR - ALLOC_BASE_ADDR, RAM_PAGE_SIZE, CACHE_BLOCK_SIZE);
-
-    uint64_t local_mem_size = 0;
-    vx_dev_caps(device, VX_CAPS_LOCAL_MEM_SIZE, &local_mem_size);
-    if (local_mem_size <= 1) {        
-        device->local_mem = std::make_shared<vortex::MemoryAllocator>(
-            LMEM_BASE_ADDR, local_mem_size, RAM_PAGE_SIZE, 1);
-    }
     
 #ifdef SCOPE
     {
@@ -348,19 +343,14 @@ extern int vx_dev_close(vx_device_h hdevice) {
     return 0;
 }
 
-extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, int type, uint64_t* dev_addr) {
+extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_addr) {
     if (nullptr == hdevice 
      || nullptr == dev_addr
      || 0 == size)
         return -1;
 
     auto device = ((vx_device*)hdevice);
-    if (type == VX_MEM_TYPE_GLOBAL) {
-        return device->global_mem->allocate(size, dev_addr);
-    } else if (type == VX_MEM_TYPE_LOCAL) {        
-        return device->local_mem->allocate(size, dev_addr);
-    }
-    return -1;
+    return device->global_mem->allocate(size, dev_addr);
 }
 
 extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_addr) {
@@ -371,31 +361,18 @@ extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_addr) {
         return 0;
 
     auto device = ((vx_device*)hdevice);
-    if (dev_addr >= LMEM_BASE_ADDR) {
-        return device->local_mem->release(dev_addr);
-    } else {    
-        return device->global_mem->release(dev_addr);
-    }
+    return device->global_mem->release(dev_addr);
 }
 
-extern int vx_mem_info(vx_device_h hdevice, int type, uint64_t* mem_free, uint64_t* mem_used) {
+extern int vx_mem_info(vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_used) {
     if (nullptr == hdevice)
         return -1;
-
-    auto device = ((vx_device*)hdevice);    
-    if (type == VX_MEM_TYPE_GLOBAL) {
-        if (mem_free)
-            *mem_free = device->global_mem->free();
-        if (mem_used)
-            *mem_used = device->global_mem->allocated();
-    } else if (type == VX_MEM_TYPE_LOCAL) {
-        if (mem_free)
-            *mem_free = device->local_mem->free();
-        if (mem_used)
-            *mem_free = device->local_mem->allocated();
-    } else {
-        return -1;
-    }
+    
+    auto device = ((vx_device*)hdevice);
+    if (mem_free)
+        *mem_free = device->global_mem->free();
+    if (mem_used)
+        *mem_used = device->global_mem->allocated();
     return 0;
 }
 
