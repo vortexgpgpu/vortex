@@ -148,9 +148,10 @@ void LsuUnit::tick() {
             auto& output = Outputs.at(iw);
             output.send(trace, 1);
             pending_rd_reqs_.release(mem_rsp.tag);
+            smem_rsp_port.pop();  
+            --pending_loads_;
         } 
-        smem_rsp_port.pop();  
-        --pending_loads_;
+        
     }
 
     if (fence_lock_) {
