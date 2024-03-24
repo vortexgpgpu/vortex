@@ -92,7 +92,7 @@ module VX_fpu_ncp import VX_fpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_PES; ++i) begin
         VX_fncp_unit #(
-            .LATENCY (`LATENCY_FCVT)
+            .LATENCY (`LATENCY_FNCP)
         ) fncp_unit (
             .clk        (clk),
             .reset      (reset),

@@ -85,11 +85,6 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
         assign fflags_out[i] = data_out[i][32 +: `FP_FLAGS_BITS];
     end
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign result[i] = data_out[i][0 +: 32];
-        assign fflags_out[i] = data_out[i][32 +: `FP_FLAGS_BITS];
-    end
-
     for (genvar i = 0; i < NUM_PES; ++i) begin
         VX_fcvt_unit #(
             .LATENCY (`LATENCY_FCVT)

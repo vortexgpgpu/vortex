@@ -98,7 +98,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
         .DATA_IN_WIDTH(3*32),
         .DATA_OUT_WIDTH(`FP_FLAGS_BITS + 32),
         .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
-        .PE_REG     (0)
+        .PE_REG     (1)
     ) pe_serializer (
         .clk        (clk),
         .reset      (reset),
@@ -172,7 +172,16 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
         fflags_t f;
 
         always @(*) begin        
-            dpi_fmadd (valid_in && pe_enable, int'(0), {32'hffffffff, pe_data_in[i][0 +: 32]}, {32'hffffffff, pe_data_in[i][32 +: 32]}, {32'hffffffff, pe_data_in[i][64 +: 32]}, frm, r, f);
+            dpi_fmadd (
+                pe_enable, 
+                int'(0), 
+                {32'hffffffff, pe_data_in[i][0 +: 32]}, 
+                {32'hffffffff, pe_data_in[i][32 +: 32]}, 
+                {32'hffffffff, pe_data_in[i][64 +: 32]}, 
+                frm, 
+                r, 
+                f
+            );
         end
 
         VX_shift_register #(
