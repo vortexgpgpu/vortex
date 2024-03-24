@@ -193,6 +193,9 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [`CS_LINE_SEL_BITS-1:0] init_line_sel;
     wire init_enable;
 
+    // this reset relay is required to sync with bank initialization
+    `RESET_RELAY (init_reset, reset);
+
     VX_cache_init #( 
         .CACHE_SIZE (CACHE_SIZE),
         .LINE_SIZE  (LINE_SIZE), 
@@ -200,7 +203,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .NUM_WAYS   (NUM_WAYS)
     ) cache_init (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (init_reset),
         .addr_out  (init_line_sel),
         .valid_out (init_enable)
     );
