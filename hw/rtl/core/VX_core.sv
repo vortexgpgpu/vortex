@@ -313,6 +313,11 @@ module VX_core import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
 
+        VX_mem_bus_if #(
+            .DATA_SIZE (DCACHE_WORD_SIZE),
+            .TAG_WIDTH (DCACHE_TAG_WIDTH)
+        ) dcache_bus_tmp_if[DCACHE_CHANNELS]();
+
         VX_lsu_adapter #(
             .NUM_LANES    (DCACHE_CHANNELS),
             .DATA_SIZE    (DCACHE_WORD_SIZE), 
@@ -324,8 +329,12 @@ module VX_core import VX_gpu_pkg::*; #(
             .clk        (clk),
             .reset      (lsu_adapter_reset),
             .lsu_mem_if (dcache_coalesced_if[i]),
-            .mem_bus_if (dcache_bus_if[i * DCACHE_CHANNELS +: DCACHE_CHANNELS])
+            .mem_bus_if (dcache_bus_tmp_if)
         );
+
+        for (genvar j = 0; j < DCACHE_CHANNELS; ++j) begin
+            `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[i * DCACHE_CHANNELS + j], dcache_bus_tmp_if[j]);
+        end
     end
 
 `ifdef PERF_ENABLE
