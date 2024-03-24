@@ -689,6 +689,38 @@ public:
   }
 };
 
+class Test_MINMAX : public ITestCase {
+public:
+  Test_MINMAX(TestSuite* suite) : ITestCase(suite, "minmax") {}
+
+  int setup(uint32_t n, void* src1, void* src2) override {
+    auto a = (float*)src1;
+    auto b = (float*)src2;
+    for (uint32_t i = 0; i < n; ++i) {
+      a[i] = fround((n - i) * (1.0f/n));
+      b[i] = fround((n + i) * (1.0f/n));
+    }
+    return 0;
+  }
+  
+  int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
+    int errors = 0;
+    auto a = (float*)src1;
+    auto b = (float*)src2;
+    auto c = (float*)dst;
+    for (uint32_t i = 0; i < n; ++i) {
+      auto x = fmin(a[i], b[i]);
+      auto y = fmax(a[i], b[i]);
+      auto ref = x + y;
+      if (!almost_equal(c[i], ref)) {
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        ++errors;
+      }
+    }
+    return errors;
+  }
+};
+
 class Test_BAR : public ITestCase {
 public:
   Test_BAR(TestSuite* suite) : ITestCase(suite, "bar") {}
@@ -794,6 +826,7 @@ TestSuite::TestSuite(vx_device_h device)
   this->add_test(new Test_FTOU(this));
   this->add_test(new Test_ITOF(this));
   this->add_test(new Test_UTOF(this));
+  this->add_test(new Test_MINMAX(this));
   this->add_test(new Test_BAR(this));
   this->add_test(new Test_GBAR(this));
 }

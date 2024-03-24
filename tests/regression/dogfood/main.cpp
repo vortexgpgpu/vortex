@@ -14,7 +14,7 @@ TestSuite* testSuite = nullptr;
 const char* kernel_file = "kernel.bin";
 int count = 0;
 std::unordered_set<int> included;
-std::unordered_set<int> excluded;
+std::unordered_set<std::string> excluded;
 int testid_s = 0;
 int testid_e = 0;
 bool stop_on_error = true;
@@ -28,7 +28,7 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
-   std::cout << "Usage: [-t<testid>: selected test] [-s<testid>: start test] [-e<testid>: end test] [-x<testid>: excluded tests]" << std::endl;
+   std::cout << "Usage: [-t<testid>: selected test] [-s<testid>: start test] [-e<testid>: end test] [-x<name>: excluded tests]" << std::endl;
    std::cout << "       [-k<kernel>] [-n<words>] [-c] [-h: help]" << std::endl;
 }
 
@@ -43,7 +43,7 @@ static void parse_args(int argc, char **argv) {
       included.insert(atoi(optarg));
       break;
     case 'x':
-      excluded.insert(atoi(optarg));
+      excluded.insert(optarg);
       break;
     case 's':
       testid_s = atoi(optarg);
@@ -148,12 +148,14 @@ int main(int argc, char *argv[]) {
       if (included.count(t) == 0)
         continue;
     }
-    if (!excluded.empty()) {
-      if (excluded.count(t) != 0)
-        continue;
-    }
+    
     auto test = testSuite->get_test(t);
     auto name = test->name();
+
+    if (!excluded.empty()) {
+      if (excluded.count(name) != 0)
+        continue;
+    }
 
     std::cout << "Test" << t << ": " << name << std::endl;
 
