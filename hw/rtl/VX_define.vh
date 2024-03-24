@@ -298,40 +298,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define SOA_TO_AOS(__nf__, __fw__, __ne__, __in__, __out__) \
-    generate begin \
-        localparam int __field_widths__[__nf__] = __fw__; \
-        localparam int __struct_width__ = $bits(__in__) / __ne__; \
-        VX_soa_to_aos #( \
-            .NUM_FIELDS(__nf__), \
-            .FIELD_WIDTHS(__field_widths__), \
-            .NUM_ELEMENTS(__ne__), \
-            .STRUCT_WIDTH(__struct_width__) \
-        ) soa_to_aos ( \
-            .soa_in(__in__), \
-            .aos_out(__out__) \
-        ); \
-    end \
-    endgenerate
-
-`define AOS_TO_SOA(__nf__, __fw__, __ne__, __in__, __out__) \
-    generate begin \
-        localparam int __field_widths__[__nf__] = __fw__; \
-        localparam int __struct_width__ = $bits(__in__) / __ne__; \
-        VX_aos_to_soa #( \
-            .NUM_FIELDS(__nf__), \
-            .FIELD_WIDTHS(__field_widths__), \
-            .NUM_ELEMENTS(__ne__), \
-            .STRUCT_WIDTH(__struct_width__) \
-        ) aos_to_soa ( \
-            .aos_in(__in__), \
-            .soa_out(__out__) \
-        ); \
-    end \
-    endgenerate
-
-///////////////////////////////////////////////////////////////////////////////
-
 `define BUFFER_EX(dst, src, ena, latency) \
     VX_pipe_register #( \
         .DATAW  ($bits(dst)), \
