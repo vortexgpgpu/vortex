@@ -78,12 +78,12 @@ regression()
     CONFIGS="-DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
 
     # test local barrier
-    ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -t19"
-    ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -t19"
+    ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
+    ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -tbar"
 
     # test global barrier
-    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -t20" --cores=2
-    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -t20" --cores=2
+    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
+    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -tgbar" --cores=2
 
     # test FPU core
 
@@ -278,65 +278,85 @@ synthesis()
 show_usage()
 {
     echo "Vortex Regression Test" 
-    echo "Usage: $0 [--unittest] [--isa] [--regression] [--opencl] [--cluster] [--debug] [--config] [--stress[#n]] [--synthesis] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--isa] [--regression] [--opencl] [--cluster] [--debug] [--config] [--stress[#n]] [--synthesis] [--all] [--h|--help]"
 }
 
 start=$SECONDS
 
+declare -a tests=()
+clean=0
+
 while [ "$1" != "" ]; do
     case $1 in
-        --unittest )
-                unittest
+        --clean )
+                clean=1
                 ;;
-        --isa ) isa
+        --unittest )
+                tests+=("unittest")
+                ;;
+        --isa ) 
+                tests+=("isa")
                 ;;
         --regression )
-                regression
+                tests+=("regression")
                 ;;
         --opencl )
-                opencl
+                tests+=("opencl")
                 ;;
         --cluster )
-                cluster
+                tests+=("cluster")
                 ;;
         --debug )
-                debug
+                tests+=("debug")
                 ;;
         --config )
-                config
+                tests+=("config")
                 ;;
         --stress0 )
-                stress0
+                tests+=("stress0")
                 ;;
         --stress1 )
-                stress1
+                tests+=("stress1")
                 ;;
         --stress )
-                stress0
-                stress1
+                tests+=("stress0")
+                tests+=("stress1")
                 ;;
         --synthesis )
-                synthesis
+                tests+=("synthesis")
                 ;;
-        --all ) unittest               
-                isa
-                regression
-                opencl
-                cluster
-                debug
-                config
-                stress0
-                stress1
-                synthesis
+        --all )
+                tests=()
+                tests+=("unittest")
+                tests+=("isa")
+                tests+=("regression")
+                tests+=("opencl")
+                tests+=("cluster")
+                tests+=("debug")
+                tests+=("config")
+                tests+=("stress0")
+                tests+=("stress1")
+                tests+=("synthesis")
                 ;;
         -h | --help )
                 show_usage
                 exit
                 ;;
-        * )     show_usage
+        * )     
+                show_usage
                 exit 1
     esac
     shift
+done
+
+if [ $clean -eq 1 ];
+then
+    make clean
+    make -s
+fi
+
+for test in "${tests[@]}"; do
+    $test
 done
 
 echo "Regression completed!"
