@@ -306,6 +306,23 @@ void kernel_utof(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	}
 }
 
+void kernel_minmax(int task_id, kernel_arg_t* __UNIFORM__ arg) {
+	auto count  = arg->task_size;
+	auto src0_ptr = (float*)arg->src0_addr;
+	auto src1_ptr = (float*)arg->src1_addr;
+	auto dst_ptr  = (float*)arg->dst_addr;	
+	auto offset = task_id * count;
+
+	for (uint32_t i = 0; i < count; ++i) {
+		auto a = src0_ptr[offset+i];
+		auto b = src1_ptr[offset+i];
+		auto c = fmin(a, b);
+		auto d = fmax(a, b);
+		auto e = c + d;
+		dst_ptr[offset+i] = e;
+	}
+}
+
 void kernel_bar(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	auto num_warps = vx_num_warps();
 	auto num_threads = vx_num_threads();
@@ -385,6 +402,7 @@ static const PFN_Kernel sc_tests[] = {
 	kernel_ftou,
 	kernel_itof,
 	kernel_utof,
+	kernel_minmax,
 	kernel_bar,
 	kernel_gbar
 };
