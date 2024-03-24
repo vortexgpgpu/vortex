@@ -34,7 +34,7 @@ LLVM_POCL ?= $(TOOLDIR)/llvm-vortex
 
 K_CFLAGS   += -v -O3 --sysroot=$(RISCV_SYSROOT) --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH) -Xclang -target-feature -Xclang +vortex
 K_CFLAGS   += -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
-K_CFLAGS   += -I$(VORTEX_KN_PATH)/include -DNDEBUG -DLLVM_VOTEX
+K_CFLAGS   += -I$(VORTEX_KN_PATH)/include -DNDEBUG
 K_LDFLAGS  += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortexrt.a -lm
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
