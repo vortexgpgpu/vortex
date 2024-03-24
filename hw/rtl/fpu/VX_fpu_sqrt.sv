@@ -132,7 +132,7 @@ module VX_fpu_sqrt import VX_fpu_pkg::*; #(
 
         always @(*) begin        
             dpi_fsqrt (
-                valid_in && pe_enable, 
+                pe_enable, 
                 int'(0), 
                 {32'hffffffff, pe_data_in[i]}, 
                 frm, 

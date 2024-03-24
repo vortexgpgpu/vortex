@@ -49,7 +49,7 @@ module VX_pe_serializer #(
 
     VX_shift_register #(
         .DATAW  (1 + TAG_WIDTH),
-        .DEPTH  (LATENCY),
+        .DEPTH  (LATENCY + PE_REG),
         .RESETW (1)
     ) shift_reg (
         .clk      (clk),
@@ -64,13 +64,8 @@ module VX_pe_serializer #(
         localparam BATCH_SIZE = NUM_LANES / NUM_PES;
         localparam BATCH_SIZEW = `LOG2UP(BATCH_SIZE);
 
-        wire valid_out_b;
-        wire ready_out_r;
-
         reg [BATCH_SIZEW-1:0] batch_in_idx;
         reg [BATCH_SIZEW-1:0] batch_out_idx;
-
-        assign enable = (ready_out_r || ~valid_out_b) || (~valid_out_b && valid_out_s);
 
         always @(posedge clk) begin
             if (reset) begin
@@ -89,59 +84,61 @@ module VX_pe_serializer #(
         wire batch_in_done = (batch_in_idx == BATCH_SIZEW'(BATCH_SIZE-1)); 
         wire batch_out_done = (batch_out_idx == BATCH_SIZEW'(BATCH_SIZE-1));
 
-        assign valid_out_b = valid_out_s && batch_out_done;
-        assign ready_in = enable && batch_in_done;
-
         wire [NUM_PES-1:0][DATA_IN_WIDTH-1:0] pe_data_in_s;
         for (genvar i = 0; i < NUM_PES; ++i) begin
             assign pe_data_in_s[i] = data_in[batch_in_idx * NUM_PES + i];
         end
 
         VX_pipe_register #(
-            .DATAW  (1 + NUM_PES * DATA_IN_WIDTH),
-            .RESETW (1),
-            .DEPTH  (PE_REG)
+            .DATAW (NUM_PES * DATA_IN_WIDTH),
+            .DEPTH (PE_REG)
         ) pe_reg (
             .clk      (clk),
             .reset    (reset),
-            .enable   (1'b1),
-            .data_in  ({enable, pe_data_in_s}),
-            .data_out ({pe_enable, pe_data_in})
+            .enable   (enable),
+            .data_in  (pe_data_in_s),
+            .data_out (pe_data_in)
         );
 
         reg valid_out_r;
         reg [BATCH_SIZE-1:0][NUM_PES-1:0][DATA_OUT_WIDTH-1:0] data_out_r;
         reg [TAG_WIDTH-1:0] tag_out_r;
 
+        wire valid_out_b = valid_out_s && batch_out_done;        
+        wire enable_r = ready_out || ~valid_out;
+
         always @(posedge clk) begin
             if (reset) begin
                 valid_out_r <= 1'b0;
-            end else if (enable) begin
+            end else if (enable_r) begin
                 valid_out_r <= valid_out_b;
             end
-            if (enable) begin            
+            if (enable_r) begin            
                 data_out_r[batch_out_idx] <= pe_data_out;
                 tag_out_r <= tag_out_s;
             end
         end
+        
+        assign enable    = (enable_r || ~valid_out_b);
+        assign ready_in  = enable && batch_in_done;
 
-        assign valid_out   = valid_out_r;
-        assign data_out    = data_out_r;
-        assign tag_out     = tag_out_r;
-        assign ready_out_r = ready_out || ~valid_out;
+        assign pe_enable = enable;
+
+        assign valid_out = valid_out_r;
+        assign data_out  = data_out_r;
+        assign tag_out   = tag_out_r;
 
     end else begin
 
-        assign enable      = ready_out || ~valid_out;
+        assign enable    = ready_out || ~valid_out;
+        assign ready_in  = enable;
 
-        assign ready_in    = enable;
+        assign pe_enable = enable;
+        assign pe_data_in= data_in;        
 
-        assign pe_enable   = enable;
-        assign pe_data_in  = data_in;        
-
-        assign valid_out   = valid_out_s;        
-        assign data_out    = pe_data_out;
-        assign tag_out     = tag_out_s;
+        assign valid_out = valid_out_s;        
+        assign data_out  = pe_data_out;
+        assign tag_out   = tag_out_s;
         
     end
 

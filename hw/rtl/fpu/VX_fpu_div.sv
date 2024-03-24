@@ -140,7 +140,7 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
 
         always @(*) begin        
             dpi_fdiv (
-                valid_in && pe_enable, 
+                pe_enable, 
                 int'(0), 
                 {32'hffffffff, pe_data_in[i][0 +: 32]}, 
                 {32'hffffffff, pe_data_in[i][32 +: 32]}, 
