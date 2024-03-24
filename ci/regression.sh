@@ -104,14 +104,6 @@ cluster()
 {
     echo "begin clustering tests..."
 
-    # warp/threads configurations
-    ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=1 --threads=1 --app=diverge
-    ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=2 --app=diverge
-    ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=8 --app=diverge
-    ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=8 --threads=2 --app=diverge
-    ./ci/blackbox.sh --driver=simx --cores=1 --warps=1 --threads=1 --app=diverge
-    ./ci/blackbox.sh --driver=simx --cores=1 --warps=8 --threads=16 --app=diverge
-
     # cores clustering
     ./ci/blackbox.sh --driver=rtlsim --cores=1 --clusters=1 --app=diverge --args="-n1"
     ./ci/blackbox.sh --driver=rtlsim --cores=4 --clusters=1 --app=diverge --args="-n1"
@@ -157,6 +149,14 @@ debug()
 config() 
 {
     echo "begin configuration tests..."
+
+    # warp/threads configurations
+    ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=1 --threads=1 --app=diverge
+    ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=2 --app=diverge
+    ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=8 --app=diverge
+    ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=8 --threads=2 --app=diverge
+    ./ci/blackbox.sh --driver=simx --cores=1 --warps=1 --threads=1 --app=diverge
+    ./ci/blackbox.sh --driver=simx --cores=1 --warps=8 --threads=16 --app=diverge
 
     # disable DPI
     CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood

@@ -22,7 +22,7 @@ module VX_fpu_fpnew
     import defs_div_sqrt_mvp::*;
 #(      
     parameter NUM_LANES = 1,
-    parameter TAGW      = 1,
+    parameter TAG_WIDTH = 1,
     parameter OUT_BUF   = 0
 ) (
     input wire clk,
@@ -31,9 +31,9 @@ module VX_fpu_fpnew
     input wire  valid_in,
     output wire ready_in,
 
-    input wire [NUM_LANES-1:0] lane_mask,
+    input wire [NUM_LANES-1:0] mask_in,
 
-    input wire [TAGW-1:0] tag_in,
+    input wire [TAG_WIDTH-1:0] tag_in,
     
     input wire [`INST_FPU_BITS-1:0] op_type,
     input wire [`INST_FMT_BITS-1:0] fmt,
@@ -47,13 +47,13 @@ module VX_fpu_fpnew
     output wire has_fflags,
     output wire [`FP_FLAGS_BITS-1:0] fflags,
 
-    output wire [TAGW-1:0] tag_out,
+    output wire [TAG_WIDTH-1:0] tag_out,
 
     input wire  ready_out,
     output wire valid_out
 );  
     localparam LATENCY_FDIVSQRT = `MAX(`LATENCY_FDIV, `LATENCY_FSQRT);
-    localparam RSP_DATAW = (NUM_LANES * `XLEN) + 1 + $bits(fflags_t) + TAGW;
+    localparam RSP_DATAW = (NUM_LANES * `XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
 
 `ifdef XLEN_64
     // use scalar configuration for mixed formats
@@ -93,7 +93,7 @@ module VX_fpu_fpnew
     wire fpu_ready_in, fpu_valid_in;    
     wire fpu_ready_out, fpu_valid_out;
 
-    reg [TAGW-1:0] fpu_tag_in, fpu_tag_out;
+    reg [TAG_WIDTH-1:0] fpu_tag_in, fpu_tag_out;
     
     reg [2:0][NUM_LANES-1:0][`XLEN-1:0] fpu_operands;
 
@@ -185,9 +185,9 @@ module VX_fpu_fpnew
     end
 
 `ifdef XLEN_64
-    `UNUSED_VAR (lane_mask)
+    `UNUSED_VAR (mask_in)
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        wire [(TAGW+1)-1:0] fpu_tag;        
+        wire [(TAG_WIDTH+1)-1:0] fpu_tag;        
         wire fpu_valid_out_uq;
         wire fpu_ready_in_uq;
         fpnew_pkg::status_t fpu_status_uq;
@@ -199,7 +199,7 @@ module VX_fpu_fpnew
         fpnew_top #( 
             .Features       (FPU_FEATURES),
             .Implementation (FPU_IMPLEMENTATION),
-            .TagType        (logic[(TAGW+1)-1:0])
+            .TagType        (logic[(TAG_WIDTH+1)-1:0])
         ) fpnew_core (
             .clk_i          (clk),
             .rst_ni         (~reset),
@@ -235,7 +235,7 @@ module VX_fpu_fpnew
     fpnew_top #( 
         .Features       (FPU_FEATURES),
         .Implementation (FPU_IMPLEMENTATION),
-        .TagType        (logic[(TAGW+1)-1:0]),
+        .TagType        (logic[(TAG_WIDTH+1)-1:0]),
         .TrueSIMDClass  (1),
         .EnableSIMDMask (1)
     ) fpnew_core (
@@ -249,7 +249,7 @@ module VX_fpu_fpnew
         .dst_fmt_i      (fpu_dst_fmt),
         .int_fmt_i      (fpu_int_fmt),
         .vectorial_op_i (1'b1),
-        .simd_mask_i    (lane_mask),
+        .simd_mask_i    (mask_in),
         .tag_i          ({fpu_tag_in, fpu_has_fflags}),        
         .in_valid_i     (fpu_valid_in),
         .in_ready_o     (fpu_ready_in),
@@ -283,4 +283,5 @@ module VX_fpu_fpnew
     );
 
 endmodule
+
 `endif

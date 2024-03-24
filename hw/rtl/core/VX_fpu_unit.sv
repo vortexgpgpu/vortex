@@ -120,15 +120,15 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
 
         VX_fpu_dpi #(
             .NUM_LANES  (NUM_LANES),
-            .TAGW       (TAG_WIDTH),
+            .TAG_WIDTH  (TAG_WIDTH),
             .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) fpu_dpi (
             .clk        (clk),
             .reset      (fpu_reset),
 
             .valid_in   (fpu_req_valid),
+            .mask_in    (per_block_execute_if[block_idx].data.tmask),
             .op_type    (per_block_execute_if[block_idx].data.op_type),
-            .lane_mask  (per_block_execute_if[block_idx].data.tmask),
             .fmt        (fpu_fmt),
             .frm        (fpu_req_frm),
             .dataa      (per_block_execute_if[block_idx].data.rs1_data),
@@ -149,15 +149,15 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
 
         VX_fpu_fpnew #(
             .NUM_LANES  (NUM_LANES),
-            .TAGW       (TAG_WIDTH),
+            .TAG_WIDTH  (TAG_WIDTH),
             .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) fpu_fpnew (
             .clk        (clk),
             .reset      (fpu_reset), 
 
             .valid_in   (fpu_req_valid),
+            .mask_in    (per_block_execute_if[block_idx].data.tmask),
             .op_type    (per_block_execute_if[block_idx].data.op_type),
-            .lane_mask  (per_block_execute_if[block_idx].data.tmask),
             .fmt        (fpu_fmt),
             .frm        (fpu_req_frm),
             .dataa      (per_block_execute_if[block_idx].data.rs1_data),
@@ -178,14 +178,14 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
 
         VX_fpu_dsp #(
             .NUM_LANES  (NUM_LANES),
-            .TAGW       (TAG_WIDTH),
+            .TAG_WIDTH  (TAG_WIDTH),
             .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) fpu_dsp (
             .clk        (clk),
             .reset      (fpu_reset), 
 
             .valid_in   (fpu_req_valid),
-            .lane_mask  (per_block_execute_if[block_idx].data.tmask),
+            .mask_in    (per_block_execute_if[block_idx].data.tmask),
             .op_type    (per_block_execute_if[block_idx].data.op_type),
             .fmt        (fpu_fmt),
             .frm        (fpu_req_frm),

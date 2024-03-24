@@ -17,7 +17,7 @@
 
 module VX_fpu_dsp import VX_fpu_pkg::*; #(
     parameter NUM_LANES = 4, 
-    parameter TAGW      = 4,
+    parameter TAG_WIDTH = 4,
     parameter OUT_BUF   = 0
 ) (
     input wire clk,
@@ -26,9 +26,9 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     input wire  valid_in,
     output wire ready_in,
 
-    input wire [NUM_LANES-1:0] lane_mask,
+    input wire [NUM_LANES-1:0] mask_in,
 
-    input wire [TAGW-1:0] tag_in,
+    input wire [TAG_WIDTH-1:0] tag_in,
     
     input wire [`INST_FPU_BITS-1:0] op_type,
     input wire [`INST_FMT_BITS-1:0] fmt,
@@ -42,7 +42,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     output wire has_fflags,
     output wire [`FP_FLAGS_BITS-1:0] fflags,
 
-    output wire [TAGW-1:0] tag_out,
+    output wire [TAG_WIDTH-1:0] tag_out,
 
     input wire  ready_out,
     output wire valid_out
@@ -54,13 +54,13 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     localparam NUM_FPC     = 4;
     localparam FPC_BITS    = `LOG2UP(NUM_FPC);
 
-    localparam RSP_DATAW = (NUM_LANES * 32) + 1 + $bits(fflags_t) + TAGW;
+    localparam RSP_DATAW = (NUM_LANES * 32) + 1 + $bits(fflags_t) + TAG_WIDTH;
 
     `UNUSED_VAR (fmt)    
 
     wire [NUM_FPC-1:0] per_core_ready_in;
     wire [NUM_FPC-1:0][NUM_LANES-1:0][31:0] per_core_result;
-    wire [NUM_FPC-1:0][TAGW-1:0] per_core_tag_out;
+    wire [NUM_FPC-1:0][TAG_WIDTH-1:0] per_core_tag_out;
     wire [NUM_FPC-1:0] per_core_ready_out;
     wire [NUM_FPC-1:0] per_core_valid_out;    
     wire [NUM_FPC-1:0] per_core_has_fflags;  
@@ -68,7 +68,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
 
     wire div_ready_in, sqrt_ready_in;
     wire [NUM_LANES-1:0][31:0] div_result, sqrt_result;
-    wire [TAGW-1:0] div_tag_out, sqrt_tag_out;
+    wire [TAG_WIDTH-1:0] div_tag_out, sqrt_tag_out;
     wire div_ready_out, sqrt_ready_out;
     wire div_valid_out, sqrt_valid_out;    
     wire div_has_fflags, sqrt_has_fflags;  
@@ -124,13 +124,13 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
 
     VX_fpu_fma #(
         .NUM_LANES (NUM_LANES),
-        .TAGW      (TAGW)
+        .TAG_WIDTH (TAG_WIDTH)
     ) fpu_fma (
         .clk        (clk), 
         .reset      (fma_reset), 
         .valid_in   (valid_in && (core_select == FPU_FMA)),
         .ready_in   (per_core_ready_in[FPU_FMA]),
-        .lane_mask  (lane_mask),
+        .mask_in    (mask_in),
         .tag_in     (tag_in), 
         .frm        (frm),
         .is_madd    (is_madd),
@@ -149,13 +149,13 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
 
     VX_fpu_div #(
         .NUM_LANES (NUM_LANES),
-        .TAGW      (TAGW)
+        .TAG_WIDTH (TAG_WIDTH)
     ) fpu_div (
         .clk        (clk), 
         .reset      (div_reset), 
         .valid_in   (valid_in && (core_select == FPU_DIVSQRT) && is_div),
         .ready_in   (div_ready_in),
-        .lane_mask  (lane_mask),
+        .mask_in    (mask_in),
         .tag_in     (tag_in),
         .frm        (frm), 
         .dataa      (dataa_s), 
@@ -170,13 +170,13 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
 
     VX_fpu_sqrt #(
         .NUM_LANES (NUM_LANES),
-        .TAGW      (TAGW)
+        .TAG_WIDTH (TAG_WIDTH)
     ) fpu_sqrt (
         .clk        (clk), 
         .reset      (sqrt_reset), 
         .valid_in   (valid_in && (core_select == FPU_DIVSQRT) && ~is_div),
         .ready_in   (sqrt_ready_in),
-        .lane_mask  (lane_mask),
+        .mask_in    (mask_in),
         .tag_in     (tag_in),
         .frm        (frm), 
         .dataa      (dataa_s), 
@@ -193,13 +193,13 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
 
     VX_fpu_cvt #(
         .NUM_LANES (NUM_LANES),
-        .TAGW      (TAGW+1)
+        .TAG_WIDTH (TAG_WIDTH+1)
     ) fpu_cvt (
         .clk        (clk), 
         .reset      (cvt_reset), 
         .valid_in   (valid_in && (core_select == FPU_CVT)),
         .ready_in   (per_core_ready_in[FPU_CVT]),
-        .lane_mask  (lane_mask),
+        .mask_in    (mask_in),
         .tag_in     ({cvt_rt_int_in, tag_in}), 
         .frm        (frm),
         .is_itof    (is_itof), 
@@ -221,15 +221,15 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     wire ncp_rt_sext_in = `INST_FPU_IS_MVXW(op_type, frm);
     wire ncp_rt_sext_out;
     
-    VX_fpu_ncomp #(
+    VX_fpu_ncp #(
         .NUM_LANES (NUM_LANES),
-        .TAGW      (TAGW+2)
-    ) fpu_ncomp (
+        .TAG_WIDTH (TAG_WIDTH+2)
+    ) fpu_ncp (
         .clk        (clk),
         .reset      (ncp_reset), 
         .valid_in   (valid_in && (core_select == FPU_NCP)),
         .ready_in   (per_core_ready_in[FPU_NCP]),
-        .lane_mask  (lane_mask),
+        .mask_in    (mask_in),
         .tag_in     ({ncp_rt_sext_in, ncp_rt_int_in, tag_in}),
         .op_type    (op_type),
         .frm        (frm),
@@ -259,7 +259,12 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
         .ready_in  ({sqrt_ready_out, div_ready_out}),
         .data_in   ({{sqrt_result, sqrt_has_fflags, sqrt_fflags, sqrt_tag_out}, 
                      {div_result, div_has_fflags, div_fflags, div_tag_out}}),
-        .data_out  ({per_core_result[FPU_DIVSQRT], per_core_has_fflags[FPU_DIVSQRT], per_core_fflags[FPU_DIVSQRT], per_core_tag_out[FPU_DIVSQRT]}),
+        .data_out  ({
+            per_core_result[FPU_DIVSQRT], 
+            per_core_has_fflags[FPU_DIVSQRT], 
+            per_core_fflags[FPU_DIVSQRT], 
+            per_core_tag_out[FPU_DIVSQRT]
+        }),
         .valid_out (per_core_valid_out[FPU_DIVSQRT]),
         .ready_out (per_core_ready_out[FPU_DIVSQRT]),
         `UNUSED_PIN (sel_out)
@@ -271,7 +276,12 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     
     always @(*) begin
         for (integer i = 0; i < NUM_FPC; ++i) begin
-            per_core_data_out[i][RSP_DATAW+1:2] = {per_core_result[i], per_core_has_fflags[i], per_core_fflags[i], per_core_tag_out[i]};
+            per_core_data_out[i][RSP_DATAW+1:2] = {
+                per_core_result[i], 
+                per_core_has_fflags[i], 
+                per_core_fflags[i], 
+                per_core_tag_out[i]
+            };
             per_core_data_out[i][1:0] = '0;
         end        
         per_core_data_out[FPU_CVT][1:0] = {1'b1, cvt_rt_int_out};
@@ -322,4 +332,5 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     assign ready_in = per_core_ready_in[core_select];
 
 endmodule
+
 `endif 

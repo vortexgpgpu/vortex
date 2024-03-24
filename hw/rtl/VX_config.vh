@@ -383,6 +383,26 @@
 `define LATENCY_FCVT 5
 `endif
 
+`ifndef FMA_PE_RATIO
+`define FMA_PE_RATIO 1    
+`endif
+
+`ifndef FDIV_PE_RATIO
+`define FDIV_PE_RATIO 8
+`endif
+
+`ifndef FSQRT_PE_RATIO
+`define FSQRT_PE_RATIO 8    
+`endif
+
+`ifndef FCVT_PE_RATIO
+`define FCVT_PE_RATIO 8   
+`endif
+
+`ifndef FNCP_PE_RATIO
+`define FNCP_PE_RATIO 2    
+`endif
+
 // Icache Configurable Knobs //////////////////////////////////////////////////
 
 // Cache Enable

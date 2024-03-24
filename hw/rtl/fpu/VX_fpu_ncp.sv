@@ -15,13 +15,13 @@
 
 `ifdef FPU_DSP
 
-module VX_fpu_cvt import VX_fpu_pkg::*; #(
-    parameter NUM_LANES = 5,
-    parameter NUM_PES   = `UP(NUM_LANES / `FCVT_PE_RATIO),
+module VX_fpu_ncp import VX_fpu_pkg::*; #(
+    parameter NUM_LANES = 1,
+    parameter NUM_PES   = `UP(NUM_LANES / `FNCP_PE_RATIO),
     parameter TAG_WIDTH = 1
 ) (
     input wire clk,
-    input wire reset, 
+    input wire reset,
 
     output wire ready_in,
     input wire  valid_in,
@@ -30,12 +30,11 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
 
     input wire [TAG_WIDTH-1:0] tag_in,
 
+    input wire [`INST_FPU_BITS-1:0] op_type,
     input wire [`INST_FRM_BITS-1:0] frm,
 
-    input wire is_itof,
-    input wire is_signed,
-
     input wire [NUM_LANES-1:0][31:0]  dataa,
+    input wire [NUM_LANES-1:0][31:0]  datab,
     output wire [NUM_LANES-1:0][31:0] result, 
 
     output wire has_fflags,
@@ -45,30 +44,36 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
 
     input wire  ready_out,
     output wire valid_out
-);   
+);  
     `UNUSED_VAR (frm)
 
+    wire [NUM_LANES-1:0][2*32-1:0] data_in;
     wire [NUM_LANES-1:0] mask_out;    
     wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+32)-1:0] data_out;
     fflags_t [NUM_LANES-1:0] fflags_out;
 
     wire pe_enable;    
-    wire [NUM_PES-1:0][31:0] pe_data_in;
+    wire [NUM_PES-1:0][2*32-1:0] pe_data_in;
     wire [NUM_PES-1:0][(`FP_FLAGS_BITS+32)-1:0] pe_data_out;
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        assign data_in[i][0  +: 32] = dataa[i];
+        assign data_in[i][32 +: 32] = datab[i];
+    end
     
     VX_pe_serializer #(
         .NUM_LANES  (NUM_LANES), 
         .NUM_PES    (NUM_PES), 
-        .LATENCY    (`LATENCY_FCVT),
-        .DATA_IN_WIDTH(32),
+        .LATENCY    (`LATENCY_FNCP),
+        .DATA_IN_WIDTH(2*32),
         .DATA_OUT_WIDTH(`FP_FLAGS_BITS + 32),
         .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
-        .PE_REG    (0)
+        .PE_REG     (0)
     ) pe_serializer (
         .clk        (clk),
         .reset      (reset),
         .valid_in   (valid_in),
-        .data_in    (dataa),
+        .data_in    (data_in),
         .tag_in     ({mask_in, tag_in}),
         .ready_in   (ready_in),
         .pe_enable  (pe_enable),
@@ -85,22 +90,17 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
         assign fflags_out[i] = data_out[i][32 +: `FP_FLAGS_BITS];
     end
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign result[i] = data_out[i][0 +: 32];
-        assign fflags_out[i] = data_out[i][32 +: `FP_FLAGS_BITS];
-    end
-
     for (genvar i = 0; i < NUM_PES; ++i) begin
-        VX_fcvt_unit #(
+        VX_fncp_unit #(
             .LATENCY (`LATENCY_FCVT)
-        ) fcvt_unit (
+        ) fncp_unit (
             .clk        (clk),
             .reset      (reset),
             .enable     (pe_enable),
-            .frm        (frm),
-            .is_itof    (is_itof),
-            .is_signed  (is_signed),            
+            .frm        (frm), 
+            .op_type    (op_type),  
             .dataa      (pe_data_in[i][0 +: 32]),
+            .datab      (pe_data_in[i][32 +: 32]),
             .result     (pe_data_out[i][0 +: 32]),
             .fflags     (pe_data_out[i][32 +: `FP_FLAGS_BITS])
         );
@@ -111,5 +111,4 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
     `FPU_MERGE_FFLAGS(fflags, fflags_out, mask_out, NUM_LANES);
 
 endmodule
-
 `endif
