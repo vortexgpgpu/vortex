@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_int_unit #(
+module VX_alu_int #(
     parameter CORE_ID   = 0,
     parameter BLOCK_IDX = 0,
     parameter NUM_LANES = 1
