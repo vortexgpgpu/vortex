@@ -57,10 +57,10 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
     // Input processing
     
     fclass_t fclass;      
-    VX_fpu_class #( 
+    VX_fp_classifier #( 
         .EXP_BITS (EXP_BITS),
         .MAN_BITS (MAN_BITS)
-    ) fp_class (
+    ) fp_classifier (
         .exp_i  (dataa[INT_WIDTH-2:MAN_BITS]),
         .man_i  (dataa[MAN_BITS-1:0]),
         .clss_o (fclass)
@@ -218,7 +218,7 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
     wire rounded_sign_s2;
 
     // Perform the rounding
-    VX_fpu_rounding #(
+    VX_fp_rounding #(
         .DAT_WIDTH (32)
     ) fp_rounding (
         .abs_value_i (pre_round_abs_s2),

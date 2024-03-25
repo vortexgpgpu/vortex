@@ -134,6 +134,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
             .c  (pe_data_in[i][64 +: 32]),
             .q  (pe_data_out[i][0 +: 32])
         );
+        assign pe_data_out[i][32 +: `FP_FLAGS_BITS] = 'x;
     end
     
     assign has_fflags = 0;
