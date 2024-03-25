@@ -38,7 +38,7 @@ import VX_fpu_pkg::*;
     VX_commit_csr_if.slave              commit_csr_if,
 
 `ifdef EXT_F_ENABLE
-    VX_fpu_to_csr_if.slave              fpu_to_csr_if [`NUM_FPU_BLOCKS],
+    VX_fpu_csr_if.slave                 fpu_csr_if [`NUM_FPU_BLOCKS],
 `endif
 
     input wire [`PERF_CTR_BITS-1:0]     cycles,
@@ -71,9 +71,9 @@ import VX_fpu_pkg::*;
     wire [`NUM_FPU_BLOCKS-1:0][`NW_WIDTH-1:0] fpu_write_wid;
     fflags_t [`NUM_FPU_BLOCKS-1:0]          fpu_write_fflags;
     for (genvar i = 0; i < `NUM_FPU_BLOCKS; ++i) begin
-        assign fpu_write_enable[i] = fpu_to_csr_if[i].write_enable;
-        assign fpu_write_wid[i]    = fpu_to_csr_if[i].write_wid;
-        assign fpu_write_fflags[i] = fpu_to_csr_if[i].write_fflags;
+        assign fpu_write_enable[i] = fpu_csr_if[i].write_enable;
+        assign fpu_write_wid[i]    = fpu_csr_if[i].write_wid;
+        assign fpu_write_fflags[i] = fpu_csr_if[i].write_fflags;
     end
     always @(*) begin
         fcsr_n = fcsr;
@@ -94,7 +94,7 @@ import VX_fpu_pkg::*;
     end
     
     for (genvar i = 0; i < `NUM_FPU_BLOCKS; ++i) begin
-        assign fpu_to_csr_if[i].read_frm = fcsr[fpu_to_csr_if[i].read_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS];
+        assign fpu_csr_if[i].read_frm = fcsr[fpu_csr_if[i].read_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS];
     end
 
     always @(posedge clk) begin

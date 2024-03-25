@@ -25,7 +25,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
 
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],    
-    VX_fpu_to_csr_if.master fpu_to_csr_if[`NUM_FPU_BLOCKS]
+    VX_fpu_csr_if.master    fpu_csr_if[`NUM_FPU_BLOCKS]
 );
     `UNUSED_PARAM (CORE_ID)
     localparam BLOCK_SIZE = `NUM_FPU_BLOCKS;
@@ -105,9 +105,9 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
 
         // resolve dynamic FRM from CSR   
         wire [`INST_FRM_BITS-1:0] fpu_req_frm; 
-        `ASSIGN_BLOCKED_WID (fpu_to_csr_if[block_idx].read_wid, per_block_execute_if[block_idx].data.wid, block_idx, `NUM_FPU_BLOCKS)
+        `ASSIGN_BLOCKED_WID (fpu_csr_if[block_idx].read_wid, per_block_execute_if[block_idx].data.wid, block_idx, `NUM_FPU_BLOCKS)
         assign fpu_req_frm = (per_block_execute_if[block_idx].data.op_type != `INST_FPU_MISC 
-                           && fpu_frm == `INST_FRM_DYN) ? fpu_to_csr_if[block_idx].read_frm : fpu_frm;
+                           && fpu_frm == `INST_FRM_DYN) ? fpu_csr_if[block_idx].read_frm : fpu_frm;
 
         // submit FPU request
 
@@ -223,9 +223,9 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             assign fpu_rsp_fflags_q = fpu_rsp_fflags;
         end
         
-        assign fpu_to_csr_if[block_idx].write_enable = fpu_rsp_fire && fpu_rsp_eop && fpu_rsp_has_fflags;
-        `ASSIGN_BLOCKED_WID (fpu_to_csr_if[block_idx].write_wid, fpu_rsp_wid, block_idx, `NUM_FPU_BLOCKS)
-        assign fpu_to_csr_if[block_idx].write_fflags = fpu_rsp_fflags_q;
+        assign fpu_csr_if[block_idx].write_enable = fpu_rsp_fire && fpu_rsp_eop && fpu_rsp_has_fflags;
+        `ASSIGN_BLOCKED_WID (fpu_csr_if[block_idx].write_wid, fpu_rsp_wid, block_idx, `NUM_FPU_BLOCKS)
+        assign fpu_csr_if[block_idx].write_fflags = fpu_rsp_fflags_q;
 
         // send response
 

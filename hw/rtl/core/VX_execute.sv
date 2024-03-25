@@ -50,7 +50,7 @@ module VX_execute import VX_gpu_pkg::*; #(
 );
 
 `ifdef EXT_F_ENABLE
-    VX_fpu_to_csr_if fpu_to_csr_if[`NUM_FPU_BLOCKS]();
+    VX_fpu_csr_if fpu_csr_if[`NUM_FPU_BLOCKS]();
 `endif
 
     `RESET_RELAY (alu_reset, reset);
@@ -90,7 +90,7 @@ module VX_execute import VX_gpu_pkg::*; #(
         .reset          (fpu_reset),    
         .dispatch_if    (dispatch_if[`EX_FPU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),         
         .commit_if      (commit_if[`EX_FPU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
-        .fpu_to_csr_if  (fpu_to_csr_if)
+        .fpu_csr_if     (fpu_csr_if)
     );
 `endif
 
@@ -107,7 +107,7 @@ module VX_execute import VX_gpu_pkg::*; #(
         .dispatch_if    (dispatch_if[`EX_SFU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),            
         .commit_if      (commit_if[`EX_SFU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
     `ifdef EXT_F_ENABLE
-        .fpu_to_csr_if  (fpu_to_csr_if),
+        .fpu_csr_if     (fpu_csr_if),
     `endif    
         .commit_csr_if  (commit_csr_if),
         .sched_csr_if   (sched_csr_if),        
