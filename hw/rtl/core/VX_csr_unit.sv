@@ -28,7 +28,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 `endif
     
 `ifdef EXT_F_ENABLE
-    VX_fpu_to_csr_if.slave      fpu_to_csr_if [`NUM_FPU_BLOCKS],
+    VX_fpu_csr_if.slave         fpu_csr_if [`NUM_FPU_BLOCKS],
 `endif
 
     VX_commit_csr_if.slave      commit_csr_if,
@@ -88,7 +88,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .thread_masks   (sched_csr_if.thread_masks),
     
     `ifdef EXT_F_ENABLE
-        .fpu_to_csr_if  (fpu_to_csr_if), 
+        .fpu_csr_if     (fpu_csr_if), 
     `endif    
 
         .read_enable    (csr_req_valid && csr_rd_enable),

@@ -13,7 +13,7 @@
 
 `include "VX_fpu_define.vh"
 
-interface VX_fpu_to_csr_if import VX_fpu_pkg::*; ();
+interface VX_fpu_csr_if import VX_fpu_pkg::*; ();
 
     wire                    write_enable;
     wire [`NW_WIDTH-1:0]    write_wid;
