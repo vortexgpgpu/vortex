@@ -12,8 +12,8 @@
 
 TestSuite* testSuite = nullptr;
 const char* kernel_file = "kernel.bin";
-int count = 0;
-std::unordered_set<int> included;
+int count = 1;
+std::unordered_set<std::string> selected;
 std::unordered_set<std::string> excluded;
 int testid_s = 0;
 int testid_e = 0;
@@ -28,7 +28,7 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
-   std::cout << "Usage: [-t<testid>: selected test] [-s<testid>: start test] [-e<testid>: end test] [-x<name>: excluded tests]" << std::endl;
+   std::cout << "Usage: [-t<name>: select test [-x<name>: exclude test]] [-s<testid>: start test] [-e<testid>: end test]" << std::endl;
    std::cout << "       [-k<kernel>] [-n<words>] [-c] [-h: help]" << std::endl;
 }
 
@@ -40,7 +40,7 @@ static void parse_args(int argc, char **argv) {
       count = atoi(optarg);
       break;
     case 't':
-      included.insert(atoi(optarg));
+      selected.insert(optarg);
       break;
     case 'x':
       excluded.insert(optarg);
@@ -143,14 +143,14 @@ int main(int argc, char *argv[]) {
     testid_e = (testSuite->size() - 1);
   }
   // execute tests
-  for (int t = testid_s; t <= testid_e; ++t) { 
-    if (!included.empty()) {
-      if (included.count(t) == 0)
-        continue;
-    }
-    
+  for (int t = testid_s; t <= testid_e; ++t) {   
     auto test = testSuite->get_test(t);
     auto name = test->name();
+    
+    if (!selected.empty()) {
+      if (selected.count(name) == 0)
+        continue;
+    }
 
     if (!excluded.empty()) {
       if (excluded.count(name) != 0)

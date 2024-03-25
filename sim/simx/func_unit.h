@@ -74,7 +74,6 @@ public:
 private:
 
 	int send_requests(instr_trace_t* trace, int block_idx, int tag);
-	int send_coalesced_requests(instr_trace_t* trace, int block_idx, int tag);
 
 	struct pending_req_t {
 		instr_trace_t* trace;
