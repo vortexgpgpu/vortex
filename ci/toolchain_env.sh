@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Copyright 2023 blaise
+# Copyright 2019-2023
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
