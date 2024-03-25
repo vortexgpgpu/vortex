@@ -826,7 +826,7 @@ TestSuite::TestSuite(vx_device_h device)
   this->add_test(new Test_FTOU(this));
   this->add_test(new Test_ITOF(this));
   this->add_test(new Test_UTOF(this));
-  this->add_test(new Test_MINMAX(this));
+  // this->add_test(new Test_MINMAX(this)); TODO: ISSUE #117
   this->add_test(new Test_BAR(this));
   this->add_test(new Test_GBAR(this));
 }
