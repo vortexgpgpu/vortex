@@ -44,7 +44,8 @@ Core::Core(const SimContext& ctx,
   , operands_(ISSUE_WIDTH)
   , dispatchers_((uint32_t)FUType::Count)
   , func_units_((uint32_t)FUType::Count)
-  , lsu_demux_(DCACHE_NUM_REQS)
+  , lsu_demux_(LSU_NUM_REQS)
+  , mem_coalescers_(NUM_LSU_BLOCKS)
   , pending_icache_(arch_.num_warps())
   , commit_arbs_(ISSUE_WIDTH)
 {
@@ -54,26 +55,49 @@ Core::Core(const SimContext& ctx,
     operands_.at(i) = SimPlatform::instance().create_object<Operand>();
   }
 
-  // initialize local memory
+  // create the memory coalescer
+  for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
+    snprintf(sname, 100, "core%d-coalescer%d", core_id, i);
+    mem_coalescers_.at(i) = MemCoalescer::Create(sname, LSU_CHANNELS, DCACHE_CHANNELS, DCACHE_WORD_SIZE, LSUQ_OUT_SIZE, 1);
+  }
+
+  // create local memory
   snprintf(sname, 100, "core%d-local_mem", core_id);
   local_mem_ = LocalMem::Create(sname, LocalMem::Config{
     (1 << LMEM_LOG_SIZE),
-    DCACHE_WORD_SIZE,
-    DCACHE_NUM_REQS, 
+    LSU_WORD_SIZE,
+    LSU_NUM_REQS,
     LMEM_NUM_BANKS,
     false
   });
-  for (uint32_t i = 0; i < DCACHE_NUM_REQS; ++i) {
+
+  // create lsu demux
+  for (uint32_t i = 0; i < LSU_NUM_REQS; ++i) {
     snprintf(sname, 100, "core%d-lsu_demux%d", core_id, i);
-    auto lmem_demux = LocalMemDemux::Create(sname);
+    lsu_demux_.at(i) = LocalMemDemux::Create(sname, 1);
+  }
 
-    lmem_demux->ReqDC.bind(&dcache_req_ports.at(i));
-    dcache_rsp_ports.at(i).bind(&lmem_demux->RspDC);
+  // connect dcache-coalescer
+  for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
+    for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
+      uint32_t i = b * DCACHE_CHANNELS + c;
+      mem_coalescers_.at(b)->ReqOut.at(c).bind(&dcache_req_ports.at(i));
+      dcache_rsp_ports.at(i).bind(&mem_coalescers_.at(b)->RspOut.at(c));  
+    }
+  }
+  
+  // connect lsu demux
+  for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
+    for (uint32_t c = 0; c < LSU_CHANNELS; ++c) {
+      uint32_t i = b * LSU_CHANNELS + c;
+      auto lmem_demux = lsu_demux_.at(i);
+      
+      lmem_demux->ReqDC.bind(&mem_coalescers_.at(b)->ReqIn.at(c));
+      mem_coalescers_.at(b)->RspIn.at(c).bind(&lmem_demux->RspDC);
 
-    lmem_demux->ReqSM.bind(&local_mem_->Inputs.at(i));
-    local_mem_->Outputs.at(i).bind(&lmem_demux->RspSM);
-
-    lsu_demux_.at(i) = lmem_demux;
+      lmem_demux->ReqSM.bind(&local_mem_->Inputs.at(i));
+      local_mem_->Outputs.at(i).bind(&lmem_demux->RspSM);      
+    }
   }
 
   // initialize dispatchers
@@ -204,7 +228,7 @@ void Core::decode() {
   auto& ibuffer = ibuffers_.at(trace->wid);
   if (ibuffer.full()) {
     if (!trace->log_once(true)) {
-      DT(3, "*** ibuffer-stall: " << *trace);
+      DT(4, "*** ibuffer-stall: " << *trace);
     }
     ++perf_stats_.ibuf_stalls;
     return;
@@ -237,7 +261,7 @@ void Core::issue() {
       trace->log_once(false);
     } else {
       if (!trace->log_once(true)) {
-        DT(3, "*** dispatch-stall: " << *trace);
+        DT(4, "*** dispatch-stall: " << *trace);
       }
     }
   }
@@ -255,7 +279,7 @@ void Core::issue() {
     if (scoreboard_.in_use(trace)) {
       auto uses = scoreboard_.get_uses(trace);
       if (!trace->log_once(true)) {
-        DTH(3, "*** scoreboard-stall: dependents={");
+        DTH(4, "*** scoreboard-stall: dependents={");
         for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
           auto& use = uses.at(j);
           __unused (use);

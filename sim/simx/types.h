@@ -509,8 +509,22 @@ public:
     if (I == O)
       return;
         
-    // process incomming requests        
     for (uint32_t o = 0; o < O; ++o) {
+      // process incoming responses
+      if (!RspOut.at(o).empty()) {
+        auto& rsp = RspOut.at(o).front();
+        uint32_t i = 0;
+        if (lg_num_reqs_ != 0) {
+          i = rsp.tag & (R-1);
+          rsp.tag >>= lg_num_reqs_;
+        }      
+        DT(4, this->name() << "-" << rsp);
+        uint32_t j = o * R + i;
+        RspIn.at(j).push(rsp, 1);      
+        RspOut.at(o).pop();
+      }
+
+      // process incoming requests
       for (uint32_t r = 0; r < R; ++r) {
         uint32_t i = (cursors_.at(o) + r) & (R-1);
         uint32_t j = o * R + i;
@@ -530,20 +544,6 @@ public:
           break;
         }
       }
-      
-      // process incoming reponses
-      if (!RspOut.at(o).empty()) {
-        auto& rsp = RspOut.at(o).front();
-        uint32_t i = 0;
-        if (lg_num_reqs_ != 0) {
-          i = rsp.tag & (R-1);
-          rsp.tag >>= lg_num_reqs_;
-        }      
-        DT(4, this->name() << "-" << rsp);
-        uint32_t j = o * R + i;
-        RspIn.at(j).push(rsp, 1);      
-        RspOut.at(o).pop();
-      }
     }
   }
 
@@ -559,6 +559,8 @@ private:
   std::vector<uint32_t> cursors_;
   uint32_t lg_num_reqs_;
 };
+
+using MemSwitch = Switch<MemReq, MemRsp>;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -576,53 +578,15 @@ public:
   LocalMemDemux(
     const SimContext& ctx, 
     const char* name, 
-    uint32_t delay = 1
-  ) : SimObject<LocalMemDemux>(ctx, name)    
-    , ReqIn(this)
-    , RspIn(this)
-    , ReqSM(this)
-    , RspSM(this)
-    , ReqDC(this)
-    , RspDC(this)
-    , delay_(delay)
-  {}
+    uint32_t delay
+  );
 
-  void reset() {}
+  void reset();
 
-  void tick() {      
-    // process incoming reponses
-    if (!RspSM.empty()) {
-      auto& rsp = RspSM.front();
-      DT(4, this->name() << "-" << rsp);
-      RspIn.push(rsp, 1);
-      RspSM.pop();
-    }
-    if (!RspDC.empty()) {
-      auto& rsp = RspDC.front();
-      DT(4, this->name() << "-" << rsp);
-      RspIn.push(rsp, 1);
-      RspDC
-      .pop();
-    }
-    // process incomming requests  
-    if (!ReqIn.empty()) {
-      auto& req = ReqIn.front();
-      DT(4, this->name() << "-" << req);
-      if (req.type == AddrType::Shared) {
-        ReqSM.push(req, delay_);
-      } else {
-        ReqDC.push(req, delay_);
-      }
-      ReqIn.pop();
-    }   
-  }
+  void tick();
 
 private:
   uint32_t delay_;
 };
-
-///////////////////////////////////////////////////////////////////////////////
-
-using MemSwitch = Switch<MemReq, MemRsp>;
 
 }

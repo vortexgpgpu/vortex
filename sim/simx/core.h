@@ -25,6 +25,7 @@
 #include "operand.h"
 #include "dispatcher.h"
 #include "func_unit.h"
+#include "mem_coalescer.h"
 
 namespace vortex {
 
@@ -146,6 +147,7 @@ private:
   std::vector<FuncUnit::Ptr> func_units_;  
   LocalMem::Ptr local_mem_;
   std::vector<LocalMemDemux::Ptr> lsu_demux_;
+  std::vector<MemCoalescer::Ptr> mem_coalescers_;
 
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;
