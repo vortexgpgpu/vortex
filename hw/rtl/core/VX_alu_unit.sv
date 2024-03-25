@@ -74,11 +74,11 @@ module VX_alu_unit #(
 
         `RESET_RELAY (int_reset, block_reset);
 
-        VX_int_unit #(
+        VX_alu_int #(
             .CORE_ID   (CORE_ID),
             .BLOCK_IDX (block_idx),
             .NUM_LANES (NUM_LANES)
-        ) int_unit (
+        ) alu_int (
             .clk        (clk),
             .reset      (int_reset),
             .execute_if (int_execute_if),
@@ -103,7 +103,7 @@ module VX_alu_unit #(
             .NUM_LANES (NUM_LANES)
         ) mdv_commit_if();
 
-        VX_muldiv_unit #(
+        VX_alu_muldiv #(
             .CORE_ID   (CORE_ID),
             .NUM_LANES (NUM_LANES)
         ) mdv_unit (

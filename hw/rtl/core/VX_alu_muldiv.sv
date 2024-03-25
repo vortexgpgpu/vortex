@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_muldiv_unit #(
+module VX_alu_muldiv #(
     parameter CORE_ID   = 0,
     parameter NUM_LANES = 1
 ) (
