@@ -42,7 +42,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
 `ifdef SCOPE
     localparam scope_socket = 0;
-    `SCOPE_IO_SWITCH (scope_socket + `NUM_SOCKETS);
+    `SCOPE_IO_SWITCH (`NUM_SOCKETS);
 `endif    
 
 `ifdef PERF_ENABLE
