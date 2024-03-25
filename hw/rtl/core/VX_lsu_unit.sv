@@ -30,6 +30,11 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 );
     localparam BLOCK_SIZE = `NUM_LSU_BLOCKS;
     localparam NUM_LANES  = `NUM_LSU_LANES;
+
+`ifdef SCOPE
+    localparam scope_lsu = 0;
+    `SCOPE_IO_SWITCH (BLOCK_SIZE);
+`endif
     
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)
@@ -58,6 +63,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             .CORE_ID  (CORE_ID),
             .BLOCK_ID (block_idx)
         ) lsu_slice(
+            `SCOPE_IO_BIND  (scope_lsu+block_idx)
             .clk        (clk),
             .reset      (block_reset),
             .execute_if (per_block_execute_if[block_idx]),
