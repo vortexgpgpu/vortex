@@ -18,7 +18,7 @@
 /// Modified port of rouding module from fpnew Libray
 /// reference: https://github.com/pulp-platform/fpnew
 
-module VX_fpu_rounding #(
+module VX_fp_rounding #(
     parameter DAT_WIDTH = 2 // Width of the abolute value, without sign bit
 ) (
     // inputs

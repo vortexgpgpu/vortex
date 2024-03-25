@@ -63,7 +63,7 @@ module VX_fncp_unit import VX_fpu_pkg::*; #(
     assign b_exponent = datab[30:23];
     assign b_mantissa = datab[22:0];
 
-    VX_fpu_class #( 
+    VX_fp_classifier #( 
         .EXP_BITS (EXP_BITS),
         .MAN_BITS (MAN_BITS)
     ) fp_class_a (
@@ -72,7 +72,7 @@ module VX_fncp_unit import VX_fpu_pkg::*; #(
         .clss_o (a_fclass)
     );
 
-    VX_fpu_class #( 
+    VX_fp_classifier #( 
         .EXP_BITS (EXP_BITS),
         .MAN_BITS (MAN_BITS)
     ) fp_class_b (
