@@ -1254,6 +1254,15 @@ void Warp::loadVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
           vector_op_vix_load(vreg_file_, core_, rsdata, rdest, instr.getVsew(), vl, stride, vmask);
           break;
         }
+        case 0b1011: { // vlm.v
+          if (vtype_.vsew != 8) {
+            std::cout << "vlm.v only supports EEW=8, but EEW was: " << vtype_.vsew << std::endl;
+            std::abort();
+          }
+          WordI stride = vtype_.vsew / 8;
+          vector_op_vix_load(vreg_file_, core_, rsdata, rdest, vtype_.vsew, (vl_ + 7) / 8, stride, true);
+          break;
+        }
         default:
           std::cout << "Load vector - unsupported lumop: " << lumop << std::endl;
           std::abort();
@@ -1383,6 +1392,14 @@ void Warp::storeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
           DP(1, "Whole vector register store with nreg: " << nreg);
           uint32_t vl = nreg * VLEN / 8;
           vector_op_vix_store<uint8_t>(vreg_file_, core_, rsdata, vs3, vl, stride, vmask);
+          break;
+        }
+        case 0b1011: { // vsm.v
+          if (vtype_.vsew != 8) {
+            std::cout << "vsm.v only supports EEW=8, but EEW was: " << vtype_.vsew << std::endl;
+            std::abort();
+          }
+          vector_op_vix_store(vreg_file_, core_, rsdata, vs3, vtype_.vsew, (vl_ + 7) / 8, stride, true);
           break;
         }
         default:
