@@ -1236,6 +1236,7 @@ void Warp::loadVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata) {
     case 0b00: { // unit-stride
       auto lumop  = instr.getVumop();
       switch (lumop) {
+        case 0b10000: // vle8ff.v, vle16ff.v, vle32ff.v, vle64ff.v - we do not support exceptions -> treat like regular unit stride
         case 0b0000: { // vle8.v, vle16.v, vle32.v, vle64.v
           WordI stride = vtype_.vsew / 8;
           vector_op_vix_load(vreg_file_, core_, rsdata, rdest, vtype_.vsew, vl_, stride, vmask);
