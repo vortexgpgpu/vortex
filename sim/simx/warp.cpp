@@ -29,7 +29,7 @@ Warp::Warp(Core *core, uint32_t warp_id)
     , core_(core)
     , ireg_file_(core->arch().num_threads(), std::vector<Word>(core->arch().num_regs()))
     , freg_file_(core->arch().num_threads(), std::vector<uint64_t>(core->arch().num_regs()))
-    , vreg_file_(core->arch().num_threads(), std::vector<Byte>(core->arch().vsize()))
+    , vreg_file_(core->arch().num_regs(), std::vector<Byte>(core->arch().vsize()))
 {
   this->reset();
 }
