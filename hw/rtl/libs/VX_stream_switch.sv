@@ -19,7 +19,7 @@ module VX_stream_switch #(
     parameter NUM_OUTPUTS   = 1,
     parameter DATAW         = 1,
     parameter OUT_BUF       = 0,
-    parameter NUM_REQS      = (NUM_INPUTS > NUM_OUTPUTS) ? ((NUM_INPUTS + NUM_OUTPUTS - 1) / NUM_OUTPUTS) : ((NUM_OUTPUTS + NUM_INPUTS - 1) / NUM_INPUTS),
+    parameter NUM_REQS      = (NUM_INPUTS > NUM_OUTPUTS) ? `CDIV(NUM_INPUTS, NUM_OUTPUTS) : `CDIV(NUM_OUTPUTS, NUM_INPUTS),
     parameter SEL_COUNT     = `MIN(NUM_INPUTS, NUM_OUTPUTS),
     parameter LOG_NUM_REQS  = `CLOG2(NUM_REQS)
 ) (

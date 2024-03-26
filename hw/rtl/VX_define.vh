@@ -243,7 +243,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define ARB_SEL_BITS(I, O)  ((I > O) ? `CLOG2((I + O - 1) / O) : 0)
+`define ARB_SEL_BITS(I, O)  ((I > O) ? `CLOG2(`CDIV(I, O)) : 0)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -371,7 +371,7 @@
 
 `define PERF_COUNTER_ADD(dst, src, field, width, dst_count, src_count, reg_enable) \
     for (genvar __d = 0; __d < dst_count; ++__d) begin \
-        localparam __count = ((src_count > dst_count) ? ((src_count + dst_count - 1) / dst_count) : 1); \
+        localparam __count = ((src_count > dst_count) ? `CDIV(src_count, dst_count) : 1); \
         wire [__count-1:0][width-1:0] __reduce_add_i_``src``field; \
         wire [width-1:0] __reduce_add_o_``dst``field; \
         for (genvar __i = 0; __i < __count; ++__i) begin \

@@ -21,7 +21,7 @@ module VX_stream_arb #(
     parameter `STRING ARBITER = "P",
     parameter MAX_FANOUT    = `MAX_FANOUT,
     parameter OUT_BUF       = 0 ,
-    parameter NUM_REQS      = (NUM_INPUTS + NUM_OUTPUTS - 1) / NUM_OUTPUTS,
+    parameter NUM_REQS      = `CDIV(NUM_INPUTS, NUM_OUTPUTS),
     parameter LOG_NUM_REQS  = `CLOG2(NUM_REQS),
     parameter NUM_REQS_W    = `UP(LOG_NUM_REQS)
 ) (
