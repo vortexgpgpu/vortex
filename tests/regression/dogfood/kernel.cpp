@@ -306,7 +306,19 @@ void kernel_utof(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	}
 }
 
-void kernel_minmax(int task_id, kernel_arg_t* __UNIFORM__ arg) {
+float clamp(float a, float b, float c) {
+    float result;
+    asm (
+        "fmin.s %[result], %[a], %[c]\n\t" // result = min(a, c)
+        "fmax.s %[result], %[result], %[b]" // result = max(result, b)
+        : [result] "=f" (result) // Output
+        : [a] "f" (a), [b] "f" (b), [c] "f" (c) // Inputs
+        : // No clobbered registers
+    );
+    return result;
+}
+
+void kernel_fclamp(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	auto count  = arg->task_size;
 	auto src0_ptr = (float*)arg->src0_addr;
 	auto src1_ptr = (float*)arg->src1_addr;
@@ -316,14 +328,12 @@ void kernel_minmax(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
-		auto c = fmin(a, b);
-		auto d = fmax(a, b);
-		auto e = c + d;
-		dst_ptr[offset+i] = e;
+		dst_ptr[offset+i] = clamp(1.0f, a, b);
 	}
 }
 
 void kernel_bar(int task_id, kernel_arg_t* __UNIFORM__ arg) {
+	auto num_cores = vx_num_cores();
 	auto num_warps = vx_num_warps();
 	auto num_threads = vx_num_threads();
 
@@ -334,11 +344,14 @@ void kernel_bar(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	auto src0_ptr = (uint32_t*)arg->src0_addr;
 	auto dst_ptr  = (uint32_t*)arg->dst_addr;
 
-	// per warp delay
-	uint32_t barrier_stall = 0;	
-	for (int i = 0; i <= wid; ++i) {
-		barrier_stall += src0_ptr[0] * src0_ptr[i];
-	}
+	// update destination using the first threads in core
+	if (wid == 0 && tid == 0) {
+		int block_size = arg->num_tasks / num_cores;
+		int offset = cid * block_size;
+		for (int i = 0; i <= block_size; ++i) {
+			dst_ptr[i + offset] = src0_ptr[i + offset];
+		}
+	}	
 
 	// memory fence
 	vx_fence();
@@ -347,8 +360,7 @@ void kernel_bar(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	vx_barrier(0, num_warps);
 	
 	// update destination
-	auto src_idx = (cid * num_warps + (num_warps - 1 - wid)) * num_threads + tid;
-	dst_ptr[task_id] = src0_ptr[src_idx] + barrier_stall;
+	dst_ptr[task_id] += 1;
 }
 
 void kernel_gbar(int task_id, kernel_arg_t* __UNIFORM__ arg) {
@@ -363,13 +375,12 @@ void kernel_gbar(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	auto src0_ptr = (uint32_t*)arg->src0_addr;
 	auto dst_ptr  = (uint32_t*)arg->dst_addr;
 
-	// per core delay
-	uint32_t barrier_stall = 0;
-	for (int i = 0; i <= cid; ++i) {
-		for (int j = 0; j <= wid; ++j) {
-			barrier_stall += src0_ptr[0] * src0_ptr[i + j];
+	// update destination using the first threads in processor
+	if (cid == 0 && wid == 0 && tid == 0) {
+		for (int i = 0, n = arg->num_tasks; i <= n; ++i) {
+			dst_ptr[i] = src0_ptr[i];
 		}
-	}
+	}	
 
 	// memory fence
 	vx_fence();
@@ -378,8 +389,7 @@ void kernel_gbar(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	vx_barrier(0x80000000, num_cores);
 	
 	// update destination
-	auto src_idx = ((num_cores - 1 - cid) * num_warps + (num_warps - 1 - wid)) * num_threads + tid;
-	dst_ptr[task_id] = src0_ptr[src_idx] + barrier_stall;
+	dst_ptr[task_id] += 1;
 }
 
 static const PFN_Kernel sc_tests[] = {
@@ -402,7 +412,7 @@ static const PFN_Kernel sc_tests[] = {
 	kernel_ftou,
 	kernel_itof,
 	kernel_utof,
-	kernel_minmax,
+	kernel_fclamp,
 	kernel_bar,
 	kernel_gbar
 };

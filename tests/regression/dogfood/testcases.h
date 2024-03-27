@@ -689,9 +689,9 @@ public:
   }
 };
 
-class Test_MINMAX : public ITestCase {
+class Test_FCLAMP : public ITestCase {
 public:
-  Test_MINMAX(TestSuite* suite) : ITestCase(suite, "minmax") {}
+  Test_FCLAMP(TestSuite* suite) : ITestCase(suite, "fclamp") {}
 
   int setup(uint32_t n, void* src1, void* src2) override {
     auto a = (float*)src1;
@@ -709,9 +709,7 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto x = fmin(a[i], b[i]);
-      auto y = fmax(a[i], b[i]);
-      auto ref = x + y;
+      auto ref = fmin(fmax(1.0f, a[i]), b[i]);
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -744,11 +742,7 @@ public:
     auto a = (uint32_t*)src1;
     auto c = (uint32_t*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto tid = i % num_threads_;
-      auto wid = (i / num_threads_) % num_warps_;
-      auto cid = i / (num_warps_ * num_threads_);
-      auto src_idx = (cid * num_warps_ + (num_warps_ - 1 - wid)) * num_threads_ + tid;
-      uint32_t ref = a[src_idx];
+      uint32_t ref = a[i] + 1;
       if (c[i] != ref) {
         std::cout << "error at result #" << i << ": expected=" << std::hex << ref << ", actual=" << c[i] << std::endl;
         ++errors;
@@ -785,11 +779,7 @@ public:
     auto a = (uint32_t*)src1;
     auto c = (uint32_t*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto tid = i % num_threads_;
-      auto wid = (i / num_threads_) % num_warps_;
-      auto cid = i / (num_warps_ * num_threads_);
-      auto src_idx = ((num_cores_ - 1 - cid) * num_warps_ + (num_warps_ - 1 - wid)) * num_threads_ + tid;
-      uint32_t ref = a[src_idx];
+      uint32_t ref = a[i] + 1;
       if (c[i] != ref) {
         std::cout << "error at result #" << i << ": expected=" << std::hex << ref << ", actual=" << c[i] << std::endl;
         ++errors;
@@ -826,7 +816,7 @@ TestSuite::TestSuite(vx_device_h device)
   this->add_test(new Test_FTOU(this));
   this->add_test(new Test_ITOF(this));
   this->add_test(new Test_UTOF(this));
-  // this->add_test(new Test_MINMAX(this)); TODO: ISSUE #117
+  this->add_test(new Test_FCLAMP(this));
   this->add_test(new Test_BAR(this));
   this->add_test(new Test_GBAR(this));
 }
