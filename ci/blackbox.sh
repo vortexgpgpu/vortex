@@ -23,7 +23,7 @@ show_help()
 {
     show_usage
     echo "  where"
-    echo "--driver: simx, rtlsim, oape, xrt"
+    echo "--driver: gpu, simx, rtlsim, oape, xrt"
     echo "--app: any subfolder test under regression or opencl"
     echo "--class: 0=disable, 1=pipeline, 2=memsys"
     echo "--rebuild: 0=disable, 1=force, 2=auto, 3=temp"
@@ -130,6 +130,9 @@ then
 fi
 
 case $DRIVER in
+    gpu)
+        DRIVER_PATH=
+        ;;
     simx)
         DRIVER_PATH=$VORTEX_HOME/runtime/simx
         ;;
@@ -157,6 +160,23 @@ then
 else
     echo "Application folder not found: $APP"
     exit -1
+fi
+
+if [ "$DRIVER" = "gpu" ]; 
+then
+    # running application
+    if [ $HAS_ARGS -eq 1 ]
+    then
+        echo "running: OPTS=$ARGS make -C $APP_PATH run-$DRIVER"
+        OPTS=$ARGS make -C $APP_PATH run-$DRIVER
+        status=$?
+    else
+        echo "running: make -C $APP_PATH run-$DRIVER"
+        make -C $APP_PATH run-$DRIVER
+        status=$?
+    fi
+
+    exit $status
 fi
 
 CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_THREADS=$THREADS $L2 $L3 $PERF_FLAG $CONFIGS"

@@ -2,6 +2,6 @@ PROJECT = oclprintf
 
 SRCS = main.cc
 
-OPTS ?= -n1
+OPTS ?= -n4
 
 include ../common.mk

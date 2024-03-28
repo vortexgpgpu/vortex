@@ -30,7 +30,11 @@
 
 // Name of the file with the source code for the computation kernel
 // *********************************************************************
+#ifdef HOSTGPU
+const char* cSourceFile = "kernel.cl";
+#else
 const char* cSourceFile = "kernel.pocl";
+#endif
 
 // Host buffers for demo
 // *********************************************************************
@@ -73,6 +77,11 @@ char ***gp_argv = NULL;
 // *********************************************************************
 int main(int argc, char **argv)
 {
+    uint32_t size;
+    if(shrGetCmdLineArgumentu(argc, (const char**)argv, "size", &size)== shrTRUE) {
+        iNumElements = size;
+    }
+
     gp_argc = &argc;
     gp_argv = &argv;
 
@@ -160,16 +169,23 @@ int main(int argc, char **argv)
 
     // Create the program
     shrLog("clCreateProgramWithSource...\n");
-    cl_int binary_status;
-    cl_program program =
-      clCreateProgramWithBinary(cxGPUContext, 1, cdDevices, &szKernelLength, (const uint8_t**)&cSourceCL, &binary_status, &ciErrNum);
+    cl_int binary_status;    
+    cl_program program;
+#ifdef HOSTGPU
+    program = clCreateProgramWithSource(
+        cxGPUContext, 1, (const char**)&cSourceCL, &szKernelLength, &ciErrNum);  
+#else
+     program = clCreateProgramWithBinary(cxGPUContext, 1, cdDevices, &szKernelLength, (const uint8_t**)&cSourceCL, &binary_status, &ciErrNum);
+#endif
     oclCheckErrorEX(ciErrNum, CL_SUCCESS, pCleanup);
-        // Build the program with 'mad' Optimization option
+    
+    /*// Build the program with 'mad' Optimization option
     #ifdef MAC
         char* flags = "-cl-fast-relaxed-math -DMAC";
     #else
         char* flags = "-cl-fast-relaxed-math";
     #endif
+    */
     shrLog("clBuildProgram...\n");
     ciErrNum = clBuildProgram(program, 0, NULL, NULL, NULL, NULL);
     if (ciErrNum != CL_SUCCESS)
@@ -219,9 +235,9 @@ int main(int argc, char **argv)
     shrBOOL bMatch = shrComparefet((const float*)Golden, (const float*)dst, (unsigned int)iNumElements, 0.0f, 0);
 
     // Cleanup and leave
-    Cleanup (EXIT_SUCCESS);
+    Cleanup((bMatch == shrTRUE) ? EXIT_SUCCESS : EXIT_FAILURE);
 
-    return (bMatch == shrTRUE) ? 0 : 1; 
+    return 0; 
 }
 
 // "Golden" Host processing dot product function for comparison purposes
@@ -229,11 +245,9 @@ int main(int argc, char **argv)
 void DotProductHost(const float* pfData1, const float* pfData2, float* pfResult, int iNumElements)
 {
     int i, j, k;
-    for (i = 0, j = 0; i < iNumElements; i++)
-    {
+    for (i = 0, j = 0; i < iNumElements; i++) {
         pfResult[i] = 0.0f;
-        for (k = 0; k < 4; k++, j++)
-        {
+        for (k = 0; k < 4; k++, j++) {
             pfResult[i] += pfData1[j] * pfData2[j];
         }
     }
