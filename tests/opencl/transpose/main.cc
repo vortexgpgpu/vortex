@@ -26,7 +26,7 @@
 #define BLOCK_DIM 16
 
 // max GPU's to manage for multi-GPU parallel compute
-const unsigned int MAX_GPU_COUNT = 8;
+const unsigned int MAX_GPU_COUNT = 1;
 
 // global variables
 cl_platform_id cpPlatform;
@@ -181,8 +181,8 @@ int runTest( const int argc, const char** argv)
     cl_uint ciDeviceCount;
     //unsigned int size_x = 2048;
     //unsigned int size_y = 2048;
-    unsigned int size_x = 64;
-    unsigned int size_y = 64;
+    unsigned int size_x = 128;
+    unsigned int size_y = 128;
 
     int temp;
     if( shrGetCmdLineArgumenti( argc, argv,"width", &temp) ){
@@ -308,6 +308,20 @@ int runTest( const int argc, const char** argv)
     uint8_t *kernel_bin = NULL;
     size_t kernel_size;
     cl_int binary_status = 0;  
+
+#ifdef HOSTGPU
+    ciErrNum = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
+    if (ciErrNum != CL_SUCCESS) {
+        shrLog(" Error %i in read_kernel_file call !!!\n\n", ciErrNum);
+        return ciErrNum;
+    }
+    rv_program = clCreateProgramWithSource(
+        cxGPUContext, 1, (const char**)&kernel_bin, &kernel_size, &ciErrNum);
+    if (ciErrNum != CL_SUCCESS) {
+        shrLog(" Error %i in clCreateProgramWithSource call !!!\n\n", ciErrNum);
+        return ciErrNum;
+    }
+#else
     ciErrNum = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
     if (ciErrNum != CL_SUCCESS) {
         shrLog(" Error %i in read_kernel_file call !!!\n\n", ciErrNum);
@@ -319,6 +333,7 @@ int runTest( const int argc, const char** argv)
         shrLog(" Error %i in clCreateProgramWithBinary call !!!\n\n", ciErrNum);
         return ciErrNum;
     }
+#endif    
     
     // build the program
     ciErrNum = clBuildProgram(rv_program, 0, NULL, "-cl-fast-relaxed-math", NULL, NULL);

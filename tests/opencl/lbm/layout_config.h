@@ -15,8 +15,11 @@
 
 //Unchangeable settings: volume simulation size for the given example
 #define SIZE_X (32)
-#define SIZE_Y (16)
+#define SIZE_Y (32)
 #define SIZE_Z (8)
+//#define SIZE_X (120)
+//#define SIZE_Y (120)
+//#define SIZE_Z (150)
 
 //Changeable settings
 //Padding in each dimension

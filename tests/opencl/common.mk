@@ -42,13 +42,6 @@ CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-narrowing
 CXXFLAGS += -pthread
 CXXFLAGS += -I$(POCL_RT_PATH)/include
 
-ifdef HOSTGPU
-	CXXFLAGS += -DHOSTGPU
-	LDFLAGS += -lOpenCL
-else
-	LDFLAGS += -L$(VORTEX_RT_PATH)/stub -lvortex $(POCL_RT_PATH)/lib/libOpenCL.so
-endif
-
 # Debugigng
 ifdef DEBUG
 	CXXFLAGS += -g -O0
@@ -68,7 +61,7 @@ endif
 endif
 endif
 
-OBJS := $(addsuffix .o, $(notdir $(SRCS)))
+OBJS := $(addsuffix .o, $(notdir $(filter-out main.cc,$(SRCS))))
 
 all: $(PROJECT) kernel.pocl
  
@@ -84,11 +77,20 @@ kernel.pocl: kernel.cl
 %.c.o: %.c
 	$(CC) $(CXXFLAGS) -c $< -o $@
 
-$(PROJECT): $(OBJS)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+main.cc.o: main.cc
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-run-hostgpu: $(PROJECT) kernel.pocl
-	./$(PROJECT) $(OPTS)
+main.cc.host.o: main.cc
+	$(CXX) $(CXXFLAGS) -DHOSTGPU -c $< -o $@
+
+$(PROJECT): main.cc.o $(OBJS) 
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -L$(VORTEX_RT_PATH)/stub -lvortex -L$(POCL_RT_PATH)/lib -lOpenCL -o $@
+
+$(PROJECT).host: main.cc.host.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -lOpenCL -o $@
+
+run-gpu: $(PROJECT).host kernel.pocl
+	./$(PROJECT).host $(OPTS)
 
 run-simx: $(PROJECT) kernel.pocl   
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
@@ -110,7 +112,7 @@ endif
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf $(PROJECT) *.o .depend
+	rm -rf $(PROJECT) $(PROJECT).host *.o .depend
 
 clean-all: clean
 	rm -rf *.dump *.pocl

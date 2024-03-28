@@ -13,9 +13,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <parboil.h>
-//#include "file.h"
+#include "file.h"
 #include "ocl.h"
-//#include "common.h"
+#include <math.h>
 
 #define CHECK_ERROR(errorMessage)           \
   if(clStatus != CL_SUCCESS)                \
@@ -35,13 +35,82 @@ static int read_data(float *A0, int nx,int ny,int nz,FILE *fp)
 		{
 			for(k=0;k<nx;k++)
 			{
-                                //fread(A0+s,sizeof(float),1,fp);
-																A0[s] = k;
+        fread(A0+s,sizeof(float),1,fp);
 				s++;
 			}
 		}
 	}
 	return 0;
+}
+
+static char* replaceFilenameExtension(const char* filename, const char* ext) {
+  const char* dot = strrchr(filename, '.');
+  int baseLen = dot ? (dot - filename) : strlen(filename);
+  char* sz_out = (char*)malloc(baseLen + strlen(ext) + 1);
+  if (!sz_out) 
+    return NULL;
+  strncpy(sz_out, filename, baseLen);
+  strcpy(sz_out + baseLen, ext);
+  return sz_out;
+}
+
+static float* read_output_file(const char* filename, int* out_size) {
+    FILE* file = fopen(filename, "rb");
+    if (file == NULL) {
+        perror("Error opening file");
+        return NULL;
+    }
+    int size;
+    // Read the size (number of floats)
+    if (fread(&size, sizeof(int), 1, file) != 1) {
+        fclose(file);
+        perror("Error reading size from file");
+        return NULL;
+    }
+    // Allocate memory for the floats
+    float* floats = (float*)malloc(size * sizeof(float));
+    if (floats == NULL) {
+        fclose(file);
+        perror("Memory allocation failed");
+        return NULL;
+    }
+    // Read the float data
+    if (fread(floats, sizeof(float), size, file) != size) {
+        fclose(file);
+        free(floats);
+        perror("Error reading floats from file");
+        return NULL;
+    }
+    // Close the file
+    fclose(file);
+    // If out_size is not NULL, store the size there
+    if (out_size != NULL) {
+        *out_size = size;
+    }
+    return floats;
+}
+
+static int compare_floats(const float* src, const float* gold, int count) {
+  int num_errors = 0;
+  float abstol = 0.0f;
+  float max_value = 0.0f;  
+  // Find the maximum magnitude in the gold array for absolute tolerance calculation  
+  for (int i = 0; i < count; i++) {
+    if (fabs(gold[i]) > max_value)
+      max_value = fabs(gold[i]);
+  }
+  // Absolute tolerance is 0.01% of the maximum magnitude of gold array
+  abstol = 1e-4 * max_value;
+  // Compare each pair of floats
+  for (int i = 0; i < count; i++) {
+      float diff = fabs(gold[i] - src[i]);
+      if (!(diff <= abstol || diff < 0.002 * fabs(gold[i]))) {
+          if (num_errors < 10)
+              printf("Fail at row %d: (gold) %f != %f (computed)\n", i, gold[i], src[i]);
+          num_errors++;
+      }
+  }
+  return num_errors;
 }
 
 static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
@@ -89,7 +158,7 @@ int main(int argc, char** argv) {
 	float c0=1.0f/6.0f;
 	float c1=1.0f/6.0f/6.0f;
 
-	/*if (argc<5) 
+	if (argc<5) 
     	{
 	     printf("Usage: probe nx ny nz t\n"
 	     "nx: the grid size x\n"
@@ -110,12 +179,7 @@ int main(int argc, char** argv) {
 		return -1;
 	iteration = atoi(argv[4]);
 	if(iteration<1)
-		return -1;*/
-
-		nx = 64;
-		ny = 64;
-		nz = 8;
-		iteration = 1;
+		return -1;
 	
   cl_int clStatus;
   cl_context clContext;
@@ -145,11 +209,21 @@ int main(int argc, char** argv) {
 	uint8_t *kernel_bin = NULL;
 	size_t kernel_size;
 	cl_int binary_status = 0;  
-	clStatus = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
-	CHECK_ERROR("read_kernel_file")  
-	cl_program clProgram = clCreateProgramWithBinary(
-		clContext, 1, &clDevice, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &clStatus);
-	CHECK_ERROR("clCreateProgramWithSource")
+  cl_program clProgram;
+
+#ifdef HOSTGPU
+  clStatus = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
+  CHECK_ERROR("read_kernel_file")  
+	clProgram = clCreateProgramWithSource(
+        clContext, 1, (const char**)&kernel_bin, &kernel_size, &clStatus);
+  CHECK_ERROR("clCreateProgramWithSource")
+#else
+  clStatus = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
+  CHECK_ERROR("read_kernel_file")  
+	clProgram = clCreateProgramWithBinary(
+      clContext, 1, &clDevice, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &clStatus);
+  CHECK_ERROR("clCreateProgramWithBinary")
+#endif
 
 	char clOptions[50];
 	sprintf(clOptions,"-I src/opencl_base");
@@ -174,9 +248,9 @@ int main(int argc, char** argv) {
 	h_A0=(float*)malloc(sizeof(float)*size);
 	h_Anext=(float*)malloc(sizeof(float)*size);
 	pb_SwitchToTimer(&timers, pb_TimerID_IO);
-	//FILE *fp = fopen(parameters->inpFiles[0], "rb");
-	read_data(h_A0, nx,ny,nz,NULL);
-  	//fclose(fp);
+	FILE *fp = fopen(parameters->inpFiles[0], "rb");
+	read_data(h_A0, nx,ny,nz, fp);
+  fclose(fp);
  	memcpy (h_Anext,h_A0,sizeof(float)*size);
 
 	pb_SwitchToTimer(&timers, pb_TimerID_COPY);
@@ -201,10 +275,10 @@ int main(int argc, char** argv) {
 	size_t grid[3] = {(nx-2+tx-1)/tx*tx,ny-2,nz-2};
   	//size_t grid[3] = {nx-2,ny-2,nz-2};
   	size_t offset[3] = {1,1,1};
-  	printf("grid size in x/y/z = %d %d %d\n",grid[0],grid[1],grid[2]);
-	printf("block size in x/y/z = %d %d %d\n",block[0],block[1],block[2]);
+  	printf("grid size in x/y/z = %ld %ld %ld\n",grid[0],grid[1],grid[2]);
+	printf("block size in x/y/z = %ld %ld %ld\n",block[0],block[1],block[2]);
   
-  	printf ("blocks = %d\n", (grid[0]/block[0])*(grid[1]/block[1])*(grid[2]*block[2]));
+  	printf ("blocks = %ld\n", (grid[0]/block[0])*(grid[1]/block[1])*(grid[2]*block[2]));
 
 	clStatus = clSetKernelArg(clKernel,0,sizeof(float),(void*)&c0);
 	clStatus = clSetKernelArg(clKernel,1,sizeof(float),(void*)&c1);
@@ -240,20 +314,44 @@ int main(int argc, char** argv) {
 	clStatus = clEnqueueReadBuffer(clCommandQueue,d_Anext,CL_TRUE,0,size*sizeof(float),h_Anext,0,NULL,NULL);
 	CHECK_ERROR("clEnqueueReadBuffer")
 
-    clStatus = clReleaseMemObject(d_A0);
+  clStatus = clReleaseMemObject(d_A0);
 	clStatus = clReleaseKernel(clKernel);
 	clStatus = clReleaseProgram(clProgram);
 	clStatus = clReleaseCommandQueue(clCommandQueue);
 	clStatus = clReleaseContext(clContext);
 	CHECK_ERROR("clReleaseContext")
+  clStatus = clReleaseDevice(clDevice);
+
+	int output_size = nx*ny*nz; 
  
 	if (parameters->outFile) {
 		pb_SwitchToTimer(&timers, pb_TimerID_IO);
-		//outputData(parameters->outFile,h_Anext,nx,ny,nz);		
+		outputData(parameters->outFile,h_Anext,output_size);		
 	}
+
+	// verify output
+  int gold_size;
+  char* gold_file = replaceFilenameExtension(parameters->inpFiles[0], ".gold");
+  float* gold_data = read_output_file(gold_file, &gold_size);
+  if (!gold_data)
+    return -1;
+  if (gold_size != output_size) {
+    printf("error: gold data size mismatch: current=%d, expected=%d\n", output_size, gold_size);
+    return -1;
+  }
+  int errors = compare_floats(h_Anext, gold_data, gold_size);
+  if (errors > 0) {
+    printf("FAILED!\n");
+  } else {
+    printf("PASSED!\n");
+  }
+  free(gold_data);
+  free(gold_file);
+
 	pb_SwitchToTimer(&timers, pb_TimerID_COMPUTE);
 		
 	//free((void*)clSource[0]);
+  if (kernel_bin) free(kernel_bin);
 
 	free(h_A0);
 	free(h_Anext);
@@ -262,5 +360,5 @@ int main(int argc, char** argv) {
 	pb_PrintTimerSet(&timers);
 	pb_FreeParameters(parameters);
 
-	return 0;
+	return errors;
 }
