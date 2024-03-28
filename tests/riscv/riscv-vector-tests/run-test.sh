@@ -17,6 +17,8 @@ then
              vlm.v vsm.v \ 
              vle8 vle16 vle32 \
              vse8 vse16 vse32 \
+             vlseg vlsseg vluxseg vloxseg \
+             vsseg vssseg vsuxseg vsoxseg \
              vlse8 vlse16 vlse32 \
              vsse8 vsse16 vsse32 \
              vloxei vluxei vsoxei vsuxei \
