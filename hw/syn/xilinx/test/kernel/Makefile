@@ -7,7 +7,11 @@ else
 CFLAGS += -march=rv32imaf -mabi=ilp32f
 endif
 
-BIN2COE_PATH ?= ../../../../../../bin2coe
+SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/test/kernel
+
+SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
+
+BIN2COE_PATH ?= $(SCRIPT_DIR)/bin2coe
 
 CC = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
 AR = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar
@@ -15,13 +19,13 @@ DP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
 CFLAGS += -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
-CFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
+CFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_HOME)/hw
 
 LDFLAGS += -lm -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000
 
 PROJECT = kernel
 
-SRCS = main.c start.S
+SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/start.S
 
 all: $(PROJECT).elf $(PROJECT).hex $(PROJECT).bin $(PROJECT).dump $(PROJECT).bin.coe
 

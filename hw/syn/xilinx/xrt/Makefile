@@ -19,14 +19,17 @@ NUM_CORES ?= 1
 PREFIX ?= build$(XLEN)
 MAX_JOBS ?= 8
 
-RTL_DIR = ../../../../rtl
-AFU_DIR = $(RTL_DIR)/afu/xrt
-DPI_DIR = ../../../../dpi
-SCRIPT_DIR = ../../../../scripts
-THIRD_PARTY_DIR = ../../../../../third_party
+SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/xrt
 
-VIVADO = $(XILINX_VIVADO)/bin/vivado
-VPP = $(XILINX_VITIS)/bin/v++
+RTL_DIR := $(VORTEX_HOME)/hw/rtl
+DPI_DIR := $(VORTEX_HOME)/hw/dpi
+AFU_DIR := $(RTL_DIR)/afu/opae
+THIRD_PARTY_DIR := $(VORTEX_HOME)/third_party
+SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
+
+VIVADO := $(XILINX_VIVADO)/bin/vivado
+VPP := $(XILINX_VITIS)/bin/v++
+
 CP = cp -rf
 RMDIR = rm -rf
 ECHO = @echo
@@ -40,11 +43,11 @@ XSA := $(call PLATFORM_TO_XSA, $(PLATFORM))
 DEV_ARCH := $(shell platforminfo -p $(PLATFORM) | grep 'FPGA Family' | sed 's/.*://' | sed '/ai_engine/d' | sed 's/^[[:space:]]*//')
 CPU_TYPE := $(shell platforminfo -p $(PLATFORM) | grep 'CPU Type' | sed 's/.*://' | sed '/ai_engine/d' | sed 's/^[[:space:]]*//')
 
-BUILD_DIR = $(PREFIX)_$(XSA)_$(TARGET)
-BIN_DIR   = $(BUILD_DIR)/bin
+BUILD_DIR := $(PREFIX)_$(XSA)_$(TARGET)
+BIN_DIR := $(BUILD_DIR)/bin
 
-XO_CONTAINER = $(BIN_DIR)/vortex_afu.xo
-XCLBIN_CONTAINER = $(BIN_DIR)/vortex_afu.xclbin
+XO_CONTAINER := $(BIN_DIR)/vortex_afu.xo
+XCLBIN_CONTAINER := $(BIN_DIR)/vortex_afu.xclbin
 
 # Control RTL debug tracing states
 DBG_TRACE_FLAGS += -DDBG_TRACE_PIPELINE
@@ -92,7 +95,7 @@ VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem_0:HBM[0:15]
 endif
 
 VPP_FLAGS += --report_level 2
-VPP_FLAGS += --config ../vitis.ini
+VPP_FLAGS += --config $(SRC_DIR)/vitis.ini
 
 # Enable perf counters
 ifdef PERF
