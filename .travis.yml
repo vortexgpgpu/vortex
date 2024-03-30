@@ -34,50 +34,50 @@ jobs:
     - stage: setup
       name: build32
       script:
-        - mkdir -p $HOME/build32 && cd $HOME/build32 && ../configure && make -s > /dev/null
+        - mkdir -p build32 && cd build32 && ../configure && make -s > /dev/null
     - stage: setup
       name: build64
       script:
-        - mkdir -p $HOME/build64 && cd $HOME/build64 && XLEN=64 ../configure && make -s > /dev/null
+        - mkdir -p build64 && cd build64 && XLEN=64 ../configure && make -s > /dev/null
     - stage: test 
       name: unittest
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --unittest
+      script: cd build32 && ./ci/travis_run.py ./ci/regression.sh --unittest
     - stage: test 
       name: isa
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --isa
+      script: cd build32 && ./ci/travis_run.py ./ci/regression.sh --isa
     - stage: test 
       name: isa64
-      script: cd $HOME/build64 && ./ci/travis_run.py ./ci/regression.sh --isa
+      script: cd build64 && ./ci/travis_run.py ./ci/regression.sh --isa
     - stage: test 
       name: regression
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --regression
+      script: cd build32 && ./ci/travis_run.py ./ci/regression.sh --regression
     - stage: test 
       name: regression64
-      script: cd $HOME/build64 && ./ci/travis_run.py ./ci/regression.sh --regression
+      script: cd build64 && ./ci/travis_run.py ./ci/regression.sh --regression
     - stage: test 
       name: opencl
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --opencl    
+      script: cd build32 && ./ci/travis_run.py ./ci/regression.sh --opencl    
     - stage: test 
       name: cluster
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --cluster    
+      script: cd build32 && ./ci/travis_run.py ./ci/regression.sh --cluster    
     - stage: test 
       name: config
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --config
+      script: cd build32 && ./ci/travis_run.py ./ci/regression.sh --config
     - stage: test
       name: debug
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --debug
+      script: cd build32 && ./ci/travis_run.py ./ci/regression.sh --debug
     - stage: test 
       name: stress0
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --stress0
+      script: cd build32 && ./ci/travis_run.py ./ci/regression.sh --stress0
     - stage: test 
       name: stress1
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --stress1
+      script: cd build32 && ./ci/travis_run.py ./ci/regression.sh --stress1
     - stage: test 
       name: synthesis
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --synthesis
+      script: cd build32 && ./ci/travis_run.py ./ci/regression.sh --synthesis
     - stage: test 
       name: synthesis64
-      script: cd $HOME/build64 && ./ci/travis_run.py ./ci/regression.sh --synthesis
+      script: cd build64 && ./ci/travis_run.py ./ci/regression.sh --synthesis
             
 after_success:
   # Gather code coverage
