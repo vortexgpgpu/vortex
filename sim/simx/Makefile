@@ -1,12 +1,12 @@
-XLEN ?= 32
-DESTDIR ?= $(CURDIR)
-HW_DIR = $(abspath ../../hw)
-COMMON_DIR = $(abspath ../common)
-THIRD_PARTY_DIR = $(abspath ../../third_party)
+include ../common.mk
 
-CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
+DESTDIR ?= $(CURDIR)
+
+SRC_DIR = $(VORTEX_HOME)/sim/simx
+
+CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I$(CURDIR) -I$(COMMON_DIR) -I$(HW_DIR)
+CXXFLAGS += -I$(SRC_DIR) -I$(COMMON_DIR) -I$(ROOT_DIR)/hw
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)
 CXXFLAGS += -DXLEN_$(XLEN)
@@ -16,7 +16,7 @@ LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 LDFLAGS += -L$(THIRD_PARTY_DIR)/ramulator -lramulator
 
 SRCS = $(COMMON_DIR)/util.cpp $(COMMON_DIR)/mem.cpp $(COMMON_DIR)/rvfloats.cpp
-SRCS += processor.cpp cluster.cpp socket.cpp core.cpp emulator.cpp decode.cpp execute.cpp func_unit.cpp cache_sim.cpp mem_sim.cpp local_mem.cpp mem_coalescer.cpp dcrs.cpp types.cpp
+SRCS += $(SRC_DIR)/processor.cpp $(SRC_DIR)/cluster.cpp $(SRC_DIR)/socket.cpp $(SRC_DIR)/core.cpp $(SRC_DIR)/emulator.cpp $(SRC_DIR)/decode.cpp $(SRC_DIR)/execute.cpp $(SRC_DIR)/func_unit.cpp $(SRC_DIR)/cache_sim.cpp $(SRC_DIR)/mem_sim.cpp $(SRC_DIR)/local_mem.cpp $(SRC_DIR)/mem_coalescer.cpp $(SRC_DIR)/dcrs.cpp $(SRC_DIR)/types.cpp
 
 # Debugigng
 ifdef DEBUG
@@ -26,11 +26,11 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
-PROJECT = simx
+PROJECT := simx
 
 all: $(DESTDIR)/$(PROJECT)
 	
-$(DESTDIR)/$(PROJECT): $(SRCS) main.cpp
+$(DESTDIR)/$(PROJECT): $(SRCS) $(SRC_DIR)/main.cpp
 	$(CXX) $(CXXFLAGS) -DSTARTUP_ADDR=0x80000000 $^ $(LDFLAGS) -o $@
 
 $(DESTDIR)/lib$(PROJECT).so: $(SRCS)

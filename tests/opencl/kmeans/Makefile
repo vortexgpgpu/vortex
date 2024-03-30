@@ -1,6 +1,11 @@
-PROJECT = kmeans
+ROOT_DIR := $(realpath ../../..)
+include $(ROOT_DIR)/config.mk
 
-SRCS = main.cc read_input.c rmse.c kmeans_clustering.c cluster.c getopt.c
+PROJECT := kmeans
+
+SRC_DIR := $(VORTEX_HOME)/tests/opencl/$(PROJECT)
+
+SRCS := $(SRC_DIR)/main.cc $(SRC_DIR)/read_input.c $(SRC_DIR)/rmse.c $(SRC_DIR)/kmeans_clustering.c $(SRC_DIR)/cluster.c $(SRC_DIR)/getopt.c
 
 OPTS ?= 
 

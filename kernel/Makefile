@@ -1,18 +1,14 @@
-XLEN ?= 32
-TOOLDIR ?= /opt
+ROOT_DIR := $(realpath ..)
+include $(ROOT_DIR)/config.mk
 
 ifeq ($(XLEN),64)
-RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv64-gnu-toolchain
 CFLAGS += -march=rv64imafd -mabi=lp64d
 else
-RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv-gnu-toolchain
 CFLAGS += -march=rv32imaf -mabi=ilp32f
 endif
 
-RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
-RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)
-
-LLVM_VORTEX ?= $(TOOLDIR)/llvm-vortex
+INC_DIR := $(VORTEX_HOME)/kernel/include
+SRC_DIR := $(VORTEX_HOME)/kernel/src
 
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
@@ -34,27 +30,27 @@ DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
-CFLAGS += -I./include -I../hw
+CFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/hw
 CFLAGS += -DXLEN_$(XLEN)
 
-PROJECT = libvortexrt
+PROJECT := libvortexrt
 
-SRCS = ./src/vx_start.S ./src/vx_syscalls.c ./src/vx_print.S ./src/tinyprintf.c ./src/vx_print.c ./src/vx_spawn.c ./src/vx_serial.S ./src/vx_perf.c
+SRCS = $(SRC_DIR)/vx_start.S $(SRC_DIR)/vx_syscalls.c $(SRC_DIR)/vx_print.S $(SRC_DIR)/tinyprintf.c $(SRC_DIR)/vx_print.c $(SRC_DIR)/vx_spawn.c $(SRC_DIR)/vx_serial.S $(SRC_DIR)/vx_perf.c
 
-OBJS := $(addsuffix .o, $(notdir $(SRCS)))
+OBJS = $(addsuffix .o, $(notdir $(SRCS)))
 
 all: $(PROJECT).a $(PROJECT).dump
 
 $(PROJECT).dump: $(PROJECT).a
 	$(DP) -D $(PROJECT).a > $(PROJECT).dump
 
-%.S.o: src/%.S
+%.S.o: $(SRC_DIR)/%.S
 	$(CC) $(CFLAGS) -c $< -o $@
 
-%.cpp.o: src/%.cpp
+%.cpp.o: $(SRC_DIR)/%.cpp
 	$(CXX) $(CFLAGS) -c $< -o $@
 
-%.c.o: src/%.c
+%.c.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(PROJECT).a: $(OBJS)

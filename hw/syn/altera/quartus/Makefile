@@ -1,3 +1,5 @@
+include ../common.mk
+
 PREFIX ?= build
 
 BUILD_DIR=$(PREFIX)_$(DEVICE_FAMILY)

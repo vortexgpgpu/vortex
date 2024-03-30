@@ -51,17 +51,19 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
     $ sudo apt-get install build-essential
     $ sudo apt-get install git
 ### Install Vortex codebase
-    $ git clone --recursive https://github.com/vortexgpgpu/vortex.git
+    $ git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
     $ cd Vortex
 ### Install prebuilt toolchain
-    # By default, the toolchain will install to /opt folder which requires sudo access. Alternatively, you could also install the toolchain to a different location of your choice by setting the TOOLDIR environment variable
+    # By default, the toolchain will install to /opt folder which requires sudo access. Alternatively, you could also install the toolchain to a different location of your choice by setting TOOLDIR
 
-    $ export TOOLDIR=$HOME/tools    
-    $ ./ci/toolchain_install.sh --all
+    $ TOOLDIR=$HOME/tools ./ci/toolchain_install.sh --all
 
 ### Set up environment variables
     $ source ./ci/toolchain_env.sh
-### Build Vortex sources
-    $ make -s
+### Building Vortex
+    $ mkdir build
+    $ cd build
+    $ TOOLDIR=$HOME/tools ../configure
+    $ make
 ### Quick demo running vecadd OpenCL kernel on 2 cores
-    $ ./ci/blackbox.sh --cores=2 --app=vecadd
+    $ ./ci/blackbox.sh --cores=2 --app=vecadd    

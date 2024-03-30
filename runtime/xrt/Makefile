@@ -1,15 +1,17 @@
+include ../common.mk
+
+SRC_DIR := $(VORTEX_HOME)/runtime/xrt
+
 CXXFLAGS += -std=c++14 -Wall -Wextra -Wfatal-errors
-
-CXXFLAGS += -I../include -I../common -I../../hw -I$(XILINX_XRT)/include -I../../sim/common
-
+CXXFLAGS += -I$(INC_DIR) -I$(COMMON_DIR) -I$(ROOT_DIR)/hw -I$(XILINX_XRT)/include -I$(SIM_DIR)/common
 CXXFLAGS += -fPIC
 
 LDFLAGS += -shared -pthread
 LDFLAGS += -L$(XILINX_XRT)/lib -luuid -lxrt_coreutil
 
-SRCS = vortex.cpp ../common/utils.cpp ../../sim/common/util.cpp
+SRCS := $(SRC_DIR)/vortex.cpp $(COMMON_DIR)/utils.cpp $(SIM_DIR)/common/util.cpp
 
-PROJECT = libvortex.so
+PROJECT := libvortex.so
 
 # Debugigng
 ifdef DEBUG
@@ -21,7 +23,7 @@ endif
 # Enable scope logic analyzer
 ifdef SCOPE
 	CXXFLAGS += -DSCOPE	
-	SRCS += ../common/scope.cpp
+	SRCS += $(COMMON_DIR)/scope.cpp
 endif
 
 all: $(PROJECT)

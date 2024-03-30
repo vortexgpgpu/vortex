@@ -1,11 +1,12 @@
-XLEN ?= 32
+include ../common.mk
+
 DESTDIR ?= $(CURDIR)
-SIM_DIR = $(abspath ../../sim)
-HW_DIR = $(abspath ../../hw)
+
+SRC_DIR := $(VORTEX_HOME)/runtime/simx
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I../include -I../common -I$(HW_DIR) -I$(SIM_DIR)/simx -I$(SIM_DIR)/common
+CXXFLAGS += -I$(INC_DIR) -I../common -I$(ROOT_DIR)/hw -I$(SIM_DIR)/simx -I$(COMMON_DIR) -I$(SIM_DIR)/common
 CXXFLAGS += $(CONFIGS)
 CXXFLAGS += -DDUMP_PERF_STATS
 CXXFLAGS += -DXLEN_$(XLEN)
@@ -13,7 +14,7 @@ CXXFLAGS += -DXLEN_$(XLEN)
 LDFLAGS += -shared -pthread
 LDFLAGS += -L$(DESTDIR) -lsimx
 
-SRCS = vortex.cpp ../common/utils.cpp
+SRCS := $(SRC_DIR)/vortex.cpp $(COMMON_DIR)/utils.cpp
 
 # Debugigng
 ifdef DEBUG
@@ -22,14 +23,14 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
-PROJECT = libvortex.so
+PROJECT := libvortex.so
 
 all: $(DESTDIR)/$(PROJECT)
 
 $(DESTDIR)/$(PROJECT): $(SRCS)
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(SIM_DIR)/simx $(DESTDIR)/libsimx.so
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx $(DESTDIR)/libsimx.so
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 clean:
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(SIM_DIR)/simx clean
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx clean
 	rm -rf $(DESTDIR)/$(PROJECT) *.o

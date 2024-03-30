@@ -11,12 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_fpu_define.vh"
+// Modified port of noncomp module from fpnew Libray 
+// reference: https://github.com/pulp-platform/fpnew
 
 `ifdef FPU_DSP
 
-/// Modified port of noncomp module from fpnew Libray 
-/// reference: https://github.com/pulp-platform/fpnew
+`include "VX_fpu_define.vh"
 
 module VX_fncp_unit import VX_fpu_pkg::*; #(
     parameter LATENCY  = 2,

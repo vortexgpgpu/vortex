@@ -1,19 +1,22 @@
+ROOT_DIR := $(realpath ../../..)
+include $(ROOT_DIR)/config.mk
+
+SRC_DIR := $(VORTEX_HOME)/hw/syn/yosys
+
 TOP_LEVEL_ENTITY ?= Vortex
 PREFIX ?= build
 NUM_CORES ?= 1
-XLEN ?= 32
 
-SCRIPT_DIR = ../../../scripts
-RTL_DIR = ../../../rtl
-DPI_DIR = ../../../dpi
-THIRD_PARTY_DIR = ../../../../third_party
+SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
+RTL_DIR := $(VORTEX_HOME)/hw/rtl
+THIRD_PARTY_DIR := $(VORTEX_HOME)/third_party
 
 CP = cp -rf
 RMDIR = rm -rf
 ECHO = @echo
 
-BUILD_DIR = $(PREFIX)_$(TOP_LEVEL_ENTITY)
-BIN_DIR   = $(BUILD_DIR)/bin
+BUILD_DIR := $(PREFIX)_$(TOP_LEVEL_ENTITY)
+BIN_DIR := $(BUILD_DIR)/bin
 
 # control RTL debug tracing states
 DBG_TRACE_FLAGS += -DDBG_TRACE_PIPELINE
@@ -81,10 +84,10 @@ $(BUILD_DIR)/project.v: gen-sources
 	cd $(BUILD_DIR); $(SCRIPT_DIR)/sv2v.sh -t$(TOP_LEVEL_ENTITY) -Isrc -oproject.v
 
 build: $(BUILD_DIR)/project.v
-	cd $(BUILD_DIR); ../synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v
+	cd $(BUILD_DIR); $(SRC_DIR)/synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v
 
 elaborate: $(BUILD_DIR)/project.v
-	cd $(BUILD_DIR); ../synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v -P="elaborate"
+	cd $(BUILD_DIR); $(SRC_DIR)/synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v -P="elaborate"
 
 clean:
 	$(RMDIR) $(BUILD_DIR)

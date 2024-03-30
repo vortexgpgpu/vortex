@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+`ifdef FPU_DPI
+
 `include "VX_fpu_define.vh"
 
 module VX_fpu_dpi import VX_fpu_pkg::*; #( 
@@ -485,3 +487,4 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
     assign ready_in = per_core_ready_in[core_select];
 
 endmodule
+`endif

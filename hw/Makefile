@@ -1,5 +1,9 @@
-RTL_DIR=./rtl
-SCRIPT_DIR=./scripts
+ROOT_DIR := $(realpath ..)
+include $(ROOT_DIR)/config.mk
+
+HW_DIR := $(VORTEX_HOME)/hw
+SCRIPT_DIR := $(HW_DIR)/scripts
+RTL_DIR := $(HW_DIR)/rtl
 
 all: config
 

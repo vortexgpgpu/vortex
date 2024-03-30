@@ -1,5 +1,8 @@
+ROOT_DIR := $(realpath ../../../..)
+include $(ROOT_DIR)/config.mk
+
 DEVICE_FAMILY ?= arria10
-XLEN ?= 32
+
 PREFIX ?= build$(XLEN)
 TARGET ?= fpga
 NUM_CORES ?= 1
