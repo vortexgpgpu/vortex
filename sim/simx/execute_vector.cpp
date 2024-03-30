@@ -1054,10 +1054,12 @@ class Fmul {
       uint32_t fflags = 0;
       // ignoring rounding mode for now
       uint32_t frm = 0;
-      if (sizeof(T) == 4) {
+      if (sizeof(R) == 4) {
         return rv_fmul_s(first, second, frm, &fflags);
-      } else if (sizeof(T) == 8) {
-        return rv_fmul_d(first, second, frm, &fflags);
+      } else if (sizeof(R) == 8) {
+        uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first);
+        uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second);
+        return rv_fmul_d(first_d, second_d, frm, &fflags);
       } else {
         std::cout << "Fmul only supports f32 and f64" << std::endl;
         std::abort();
@@ -2886,6 +2888,12 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               vector_op_vv_wfv<Fsub, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
+          case 56: { // vfwmul.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_w<Fmul, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
           default:
             std::cout << "Unrecognised float vector - vector instruction func3: " << func3 << " func6: " << func6 << std::endl;
             std::abort();
@@ -4001,6 +4009,13 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               auto &src1 = freg_file_.at(t).at(rsrc0);
               uint64_t src1_d = rv_ftod(src1);
               vector_op_vix_wx<Fsub, uint8_t, uint16_t, uint32_t, uint64_t>(src1_d, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 56: { // vfwmul.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix_w<Fmul, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           default:
