@@ -1,3 +1,6 @@
+ROOT_DIR := $(realpath ../../../..)
+include $(ROOT_DIR)/config.mk
+
 ifneq ($(findstring Makefile, $(MAKEFILE_LIST)), Makefile)
 help:
 	$(ECHO) "Makefile Usage:"
@@ -11,7 +14,7 @@ endif
 
 TARGET ?= hw
 PLATFORM ?=
-XLEN ?= 32
+
 NUM_CORES ?= 1
 PREFIX ?= build$(XLEN)
 MAX_JOBS ?= 8

@@ -1,3 +1,5 @@
+include ../common.mk
+
 RTL_DIR = ../../../../../rtl
 AFU_DIR = $(RTL_DIR)/afu/opae
 THIRD_PARTY_DIR = ../../../../../../third_party

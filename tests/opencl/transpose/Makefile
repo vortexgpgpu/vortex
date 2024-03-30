@@ -1,6 +1,11 @@
-PROJECT = transpose
+ROOT_DIR := $(realpath ../../..)
+include $(ROOT_DIR)/config.mk
 
-SRCS = main.cc oclUtils.cpp shrUtils.cpp cmd_arg_reader.cpp transpose_gold.cpp
+PROJECT := transpose
+
+SRC_DIR := $(VORTEX_HOME)/tests/opencl/$(PROJECT)
+
+SRCS := $(SRC_DIR)/main.cc $(SRC_DIR)/oclUtils.cpp $(SRC_DIR)/shrUtils.cpp $(SRC_DIR)/cmd_arg_reader.cpp $(SRC_DIR)/transpose_gold.cpp
 
 OPTS ?= -width=128 -height=128
 

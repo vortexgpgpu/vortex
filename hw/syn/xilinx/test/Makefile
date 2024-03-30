@@ -1,3 +1,5 @@
+include ../common.mk
+
 VIVADO = $(XILINX_VIVADO)/bin/vivado
 
 RTL_DIR = ../../../rtl

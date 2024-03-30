@@ -1,17 +1,12 @@
-XLEN ?= 32
-TOOLDIR ?= /opt
+ROOT_DIR := $(realpath ../../../../..)
+include $(ROOT_DIR)/config.mk
 
 ifeq ($(XLEN),64)
-RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv64-gnu-toolchain
 CFLAGS += -march=rv64imafd -mabi=lp64d
 else
-RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv-gnu-toolchain
 CFLAGS += -march=rv32imaf -mabi=ilp32f
 endif
 
-RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
-
-VORTEX_RT_PATH ?= $(realpath ../../../../../kernel)
 BIN2COE_PATH ?= ../../../../../../bin2coe
 
 CC = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc

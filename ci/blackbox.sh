@@ -30,7 +30,7 @@ show_help()
 }
 
 SCRIPT_DIR=$(dirname "$0")
-VORTEX_HOME=$SCRIPT_DIR/..
+ROOT_DIR=$SCRIPT_DIR/..
 
 DRIVER=simx
 APP=sgemm
@@ -134,16 +134,16 @@ case $DRIVER in
         DRIVER_PATH=
         ;;
     simx)
-        DRIVER_PATH=$VORTEX_HOME/runtime/simx
+        DRIVER_PATH=$ROOT_DIR/runtime/simx
         ;;
     rtlsim)
-        DRIVER_PATH=$VORTEX_HOME/runtime/rtlsim
+        DRIVER_PATH=$ROOT_DIR/runtime/rtlsim
         ;;
     opae)
-        DRIVER_PATH=$VORTEX_HOME/runtime/opae
+        DRIVER_PATH=$ROOT_DIR/runtime/opae
         ;;
     xrt)
-        DRIVER_PATH=$VORTEX_HOME/runtime/xrt
+        DRIVER_PATH=$ROOT_DIR/runtime/xrt
         ;;
     *)
         echo "invalid driver: $DRIVER"
@@ -151,12 +151,12 @@ case $DRIVER in
         ;;
 esac
 
-if [ -d "$VORTEX_HOME/tests/opencl/$APP" ];
+if [ -d "$ROOT_DIR/tests/opencl/$APP" ];
 then
-    APP_PATH=$VORTEX_HOME/tests/opencl/$APP
-elif [ -d "$VORTEX_HOME/tests/regression/$APP" ];
+    APP_PATH=$ROOT_DIR/tests/opencl/$APP
+elif [ -d "$ROOT_DIR/tests/regression/$APP" ];
 then
-    APP_PATH=$VORTEX_HOME/tests/regression/$APP
+    APP_PATH=$ROOT_DIR/tests/regression/$APP
 else
     echo "Application folder not found: $APP"
     exit -1
@@ -204,10 +204,10 @@ export PERF_CLASS=$PERF_CLASS
 status=0
 
 # ensure config update
-make -C $VORTEX_HOME/hw config > /dev/null
+make -C $ROOT_DIR/hw config > /dev/null
 
 # ensure the stub driver is present
-make -C $VORTEX_HOME/runtime/stub > /dev/null
+make -C $ROOT_DIR/runtime/stub > /dev/null
 
 if [ $DEBUG -ne 0 ]
 then    

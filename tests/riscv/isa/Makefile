@@ -1,3 +1,7 @@
+include ../common.mk
+
+TEST_DIR := $(VORTEX_HOME)/tests/riscv/isa
+
 # TODO: Missing features
 # - unaligned LD/ST (RTL)
 # - 64-bit float extension (RTL)
@@ -7,22 +11,18 @@
 # - atomics extension
 # - vector extension
 
-XLEN ?= 32
+TESTS_32I := $(filter-out $(TEST_DIR)/rv32ui-p-ma_data.hex $(TEST_DIR)/rv32ui-p-fence_i.hex, $(wildcard $(TEST_DIR)/rv32ui-p-*.hex))
+TESTS_32M := $(wildcard $(TEST_DIR)/rv32um-p-*.hex)
+TESTS_32A := $(wildcard $(TEST_DIR)/rv32ua-p-*.hex)
+TESTS_32F := $(wildcard $(TEST_DIR)/rv32uf-p-*.hex)
+TESTS_32D := $(wildcard $(TEST_DIR)/rv32ud-p-*.hex)
 
-SIM_DIR = ../../../sim
-
-TESTS_32I := $(filter-out rv32ui-p-ma_data.hex rv32ui-p-fence_i.hex, $(wildcard rv32ui-p-*.hex))
-TESTS_32M := $(wildcard rv32um-p-*.hex)
-TESTS_32A := $(wildcard rv32ua-p-*.hex)
-TESTS_32F := $(wildcard rv32uf-p-*.hex)
-TESTS_32D := $(wildcard rv32ud-p-*.hex)
-
-TESTS_64I := $(filter-out rv64ui-p-ma_data.hex rv64ui-p-fence_i.hex, $(wildcard rv64ui-p-*.hex))
-TESTS_64M := $(wildcard rv64um-p-*.hex)
-TESTS_64A := $(wildcard rv64ua-p-*.hex)
-TESTS_64F := $(wildcard rv64uf-p-*.hex)
-TESTS_64FX := $(filter-out rv64uf-p-fcvt.hex rv64uf-p-fcvt_w.hex, $(wildcard rv64uf-p-*.hex))
-TESTS_64D := $(wildcard rv64ud-p-*.hex)
+TESTS_64I := $(filter-out $(TEST_DIR)/rv64ui-p-ma_data.hex $(TEST_DIR)/rv64ui-p-fence_i.hex, $(wildcard $(TEST_DIR)/rv64ui-p-*.hex))
+TESTS_64M := $(wildcard $(TEST_DIR)/rv64um-p-*.hex)
+TESTS_64A := $(wildcard $(TEST_DIR)/rv64ua-p-*.hex)
+TESTS_64F := $(wildcard $(TEST_DIR)/rv64uf-p-*.hex)
+TESTS_64FX := $(filter-out $(TEST_DIR)/rv64uf-p-fcvt.hex $(TEST_DIR)/rv64uf-p-fcvt_w.hex, $(wildcard $(TEST_DIR)/rv64uf-p-*.hex))
+TESTS_64D := $(wildcard $(TEST_DIR)/rv64ud-p-*.hex)
 
 all:
 

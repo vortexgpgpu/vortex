@@ -1,7 +1,5 @@
-VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
-
 CXXFLAGS += -I$(VORTEX_RT_PATH)/common
 
 # Debugigng

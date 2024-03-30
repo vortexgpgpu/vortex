@@ -15,6 +15,7 @@
 #define __WARP_H
 
 #include <vector>
+#include <sstream>
 #include <stack>
 #include <mem.h>
 #include "types.h"

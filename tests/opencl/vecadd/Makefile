@@ -1,6 +1,11 @@
-PROJECT = vecadd
+ROOT_DIR := $(realpath ../../..)
+include $(ROOT_DIR)/config.mk
 
-SRCS = main.cc
+PROJECT := vecadd
+
+SRC_DIR := $(VORTEX_HOME)/tests/opencl/$(PROJECT)
+
+SRCS := $(SRC_DIR)/main.cc
 
 OPTS ?= -n64
 

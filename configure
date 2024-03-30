@@ -1,0 +1,94 @@
+#!/bin/bash
+
+# Copyright © 2019-2023
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# options
+XLEN=${XLEN:=32}
+TOOLDIR=${TOOLDIR:=/opt}
+
+# project subdirectories to build
+SUBDIRS=("." "!ci" "!perf" "hw*" "kernel*" "runtime*" "sim*" "tests*")
+
+# Get the directory of the script
+SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# Determine the current working directory
+CURRENT_DIR=$(pwd)
+
+THIRD_PARTY_DIR=$SCRIPT_DIR/third_party
+
+# Path to the template file
+TEMPLATE="$SCRIPT_DIR/config.in"
+
+# Output file
+OUTPUT="config.mk"
+
+# Function to process config.in and generate config.mk
+generate_config() {
+    if [ -f "$TEMPLATE" ]; then
+        # Replace tokens
+        sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g " "$TEMPLATE" > "$CURRENT_DIR/$OUTPUT"
+    else
+        echo "Template file $TEMPLATE not found."
+        exit 1
+    fi
+}
+
+# Function to recursively copy Makefiles, skipping the current directory
+copy_makefiles() {
+    local source_dir="$1"
+    local target_dir="$2"
+    #echo "source_dir=$source_dir, target_dir=$target_dir"
+    
+    for pattern in "${SUBDIRS[@]}"; do
+        if [[ "$pattern" == !* ]]; then
+            local dir_to_copy="${pattern#!}" # Remove the "!" from the start
+            cp -r "$source_dir/$dir_to_copy" "$target_dir/"
+        elif [[ "$pattern" == "." ]]; then
+            # Handle the current script directory explicitly
+            if [ -f "$source_dir/Makefile" ]; then
+                mkdir -p "$target_dir"
+                cp "$source_dir/Makefile" "$target_dir"
+            fi
+        else
+            # Use find to match the directory pattern and process each matched directory
+            find "$source_dir" -type d -path "$source_dir/$pattern" 2>/dev/null | while read dir; do
+                # Compute the relative path of the directory
+                local rel_path="${dir#$source_dir}"
+                rel_path="${rel_path#/}" # Remove leading slash, if present
+                local full_target_dir="$target_dir/$rel_path"
+                
+                # Function to copy and update file includes
+                copy_and_update_includes() {
+                    local file="$1"
+                    local dest="$2/$file"
+                    if [ -f "$dir/$file" ]; then
+                        mkdir -p "$2"
+                        cp "$dir/$file" "$dest"
+                    fi
+                }
+                
+                # Copy and update Makefile and common.mk if they exist
+                copy_and_update_includes "Makefile" "$full_target_dir"
+                copy_and_update_includes "common.mk" "$full_target_dir"
+            done
+        fi
+    done
+}
+
+generate_config
+
+if [ "$(realpath "$SCRIPT_DIR")" != "$(realpath "$CURRENT_DIR")" ]; then
+    copy_makefiles "$SCRIPT_DIR" "$CURRENT_DIR"
+fi

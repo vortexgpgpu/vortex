@@ -1,19 +1,18 @@
-XLEN ?= 32
+include ../common.mk
+
 DESTDIR ?= $(CURDIR)
-SIM_DIR = $(abspath ../../sim)
-HW_DIR = $(abspath ../../hw)
+
+SRC_DIR := $(VORTEX_HOME)/runtime/stub
 
 CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
-
-CXXFLAGS += -I../include -I../common -I$(HW_DIR) -I$(SIM_DIR)/common
-
+CXXFLAGS += -I$(INC_DIR) -I$(COMMON_DIR) -I$(ROOT_DIR)/hw -I$(SIM_DIR)/common
 CXXFLAGS += -fPIC
 
 LDFLAGS += -shared -pthread
 
-SRCS = vortex.cpp ../common/utils.cpp
+SRCS := $(SRC_DIR)/vortex.cpp $(COMMON_DIR)/utils.cpp
 
-PROJECT = libvortex.so
+PROJECT := libvortex.so
 
 all: $(PROJECT)
 
