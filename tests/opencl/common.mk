@@ -71,11 +71,15 @@ main.cc.o: $(SRC_DIR)/main.cc
 main.cc.host.o: $(SRC_DIR)/main.cc
 	$(CXX) $(CXXFLAGS) -DHOSTGPU -c $< -o $@
 
-$(PROJECT): main.cc.o $(OBJS) 
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -L$(ROOT_DIR)/runtime/stub -lvortex -L$(POCL_RT_PATH)/lib -lOpenCL -o $@
+ifndef USE_SETUP
+setup:
+endif
 
-$(PROJECT).host: main.cc.host.o $(OBJS)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -lOpenCL -o $@
+$(PROJECT): setup main.cc.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $(filter-out setup, $^) $(LDFLAGS) -L$(ROOT_DIR)/runtime/stub -lvortex -L$(POCL_RT_PATH)/lib -lOpenCL -o $@
+
+$(PROJECT).host: setup main.cc.host.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $(filter-out setup, $^) $(LDFLAGS) -lOpenCL -o $@
 
 run-gpu: $(PROJECT).host kernel.pocl
 	./$(PROJECT).host $(OPTS)
@@ -100,7 +104,7 @@ endif
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf $(PROJECT) $(PROJECT).host *.o .depend
+	rm -rf $(PROJECT) $(PROJECT).host *.o *.log .depend
 
 clean-all: clean
 	rm -rf *.dump *.pocl

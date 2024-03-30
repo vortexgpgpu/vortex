@@ -37,4 +37,4 @@ run-simx: $(PROJECT).bin
 	$(CC) $(CFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf *.elf *.bin *.dump .depend 
+	rm -rf *.elf *.bin *.dump *.log .depend 

@@ -7,6 +7,6 @@ SRC_DIR := $(VORTEX_HOME)/tests/opencl/$(PROJECT)
 
 SRCS := $(SRC_DIR)/main.cc
 
-OPTS ?= 
+OPTS ?= $(SRC_DIR)/graph4096.txt
 
 include ../common.mk

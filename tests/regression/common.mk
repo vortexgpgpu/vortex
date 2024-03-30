@@ -98,7 +98,7 @@ endif
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf $(PROJECT) *.o .depend
+	rm -rf $(PROJECT) *.o *.log .depend
 
 clean-all: clean
 	rm -rf *.elf *.bin *.dump

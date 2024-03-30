@@ -182,14 +182,20 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 int main(int argc, char *argv[]) {
 	printf("enter demo main\n");
 
+  int errors = 0;
   int no_of_nodes;
   int edge_list_size;
   FILE *fp;
   Node *h_graph_nodes;
   char *h_graph_mask, *h_updating_graph_mask, *h_graph_visited;
+
+  if (argc < 2) {
+    printf("graph file missing!\n");
+    return 0;
+  }
   
   try {
-    char *input_f = "graph4096.txt";
+    char *input_f = argv[1];
     printf("Reading File\n");
     // Read in Graph from a file
     fp = fopen(input_f, "r");
@@ -277,7 +283,7 @@ int main(int argc, char *argv[]) {
                 h_cost_ref);
     //---------------------------------------------------------
     //--result varification
-    compare_results<int>(h_cost_ref, h_cost, no_of_nodes);
+    errors = compare_results<int>(h_cost_ref, h_cost, no_of_nodes);
     // release host memory
     free(h_graph_nodes);
     free(h_graph_mask);
@@ -292,6 +298,12 @@ int main(int argc, char *argv[]) {
     free(h_updating_graph_mask);
     free(h_graph_visited);
   }
+
+  if (errors != 0) {
+    printf("Failed!\n");
+    return errors;
+  }
+
   printf("Passed!\n");
   return 0;
 }
