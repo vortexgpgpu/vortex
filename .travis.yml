@@ -19,9 +19,11 @@ cache:
     - $TOOLDIR
 
 before_install:
-  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ]; then  
+  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat $TOOLDIR/version.txt)" != "v2" ]; then
+      rm -rf $TOOLDIR;
       mkdir -p $TOOLDIR;
       OSDIR=ubuntu/focal ./ci/toolchain_install.sh --all;
+      echo "v2" > $TOOLDIR/version.txt
     fi
   - source ./ci/toolchain_env.sh
 
