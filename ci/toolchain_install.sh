@@ -98,9 +98,9 @@ llvm-pocl()
 
 pocl()
 {
-    wget $REPOSITORY/pocl/$OSDIR/pocl.tar.bz2
-    tar -xvf pocl.tar.bz2
-    rm -f pocl.tar.bz2
+    wget $REPOSITORY/pocl/$OSDIR/pocl2.tar.bz2
+    tar -xvf pocl2.tar.bz2
+    rm -f pocl2.tar.bz2
     cp -r pocl $TOOLDIR
     rm -rf pocl
 }
