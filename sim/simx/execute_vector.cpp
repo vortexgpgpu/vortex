@@ -484,10 +484,12 @@ class Fadd {
       uint32_t fflags = 0;
       // ignoring rounding mode for now
       uint32_t frm = 0;
-      if (sizeof(T) == 4) {
+      if (sizeof(R) == 4) {
         return rv_fadd_s(first, second, frm, &fflags);
-      } else if (sizeof(T) == 8) {
-        return rv_fadd_d(first, second, frm, &fflags);
+      } else if (sizeof(R) == 8) {
+        uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first);
+        uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second);
+        return rv_fadd_d(first_d, second_d, frm, &fflags);
       } else {
         std::cout << "Fadd only supports f32 and f64" << std::endl;
         std::abort();
@@ -504,10 +506,12 @@ class Fsub {
       uint32_t fflags = 0;
       // ignoring rounding mode for now
       uint32_t frm = 0;
-      if (sizeof(T) == 4) {
+      if (sizeof(R) == 4) {
         return rv_fsub_s(second, first, frm, &fflags);
-      } else if (sizeof(T) == 8) {
-        return rv_fsub_d(second, first, frm, &fflags);
+      } else if (sizeof(R) == 8) {
+        uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first);
+        uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second);
+        return rv_fsub_d(second_d, first_d, frm, &fflags);
       } else {
         std::cout << "Fsub only supports f32 and f64" << std::endl;
         std::abort();
@@ -2146,6 +2150,32 @@ void vector_op_vv_wv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, 
 }
 
 template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
+void vector_op_vv_wfv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    DT first = getVregData<DT>(vreg_file, rsrc0, i);
+    DTR second = getVregData<DTR>(vreg_file, rsrc1, i);
+    DTR third = getVregData<DTR>(vreg_file, rdest, i);
+    DTR result = OP<DTR, DTR>::apply(rv_ftod(first), second, third);
+    DP(1, "Widening wfv " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    getVregData<DTR>(vreg_file, rdest, i) = result;
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vv_wfv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 32) {
+    vector_op_vv_wfv<OP, DT32, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else {
+    std::cout << "Failed to execute VV widening wfv for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
 void vector_op_vv_n(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat)
 {
   for (uint32_t i = 0; i < vl; i++) {
@@ -2830,6 +2860,30 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
               vector_op_vv<Fnmsac, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 48: { // vfwadd.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_w<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 50: { // vfwsub.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_w<Fsub, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 52: { // vfwadd.wv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_wfv<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 54: { // vfwsub.wv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_wfv<Fsub, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           default:
@@ -3917,6 +3971,36 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               if (!tmask_.test(t)) continue;
               auto &src1 = freg_file_.at(t).at(rsrc0);
               vector_op_vix<Fnmsac, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 48: { // vfwadd.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix_w<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 50: { // vfwsub.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix_w<Fsub, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 52: { // vfwadd.wf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              uint64_t src1_d = rv_ftod(src1);
+              vector_op_vix_wx<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(src1_d, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 54: { // vfwsub.wf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              uint64_t src1_d = rv_ftod(src1);
+              vector_op_vix_wx<Fsub, uint8_t, uint16_t, uint32_t, uint64_t>(src1_d, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           default:
