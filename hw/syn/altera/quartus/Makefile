@@ -1,16 +1,19 @@
-include ../common.mk
+ROOT_DIR := $(realpath ../../../..)
+include $(ROOT_DIR)/config.mk
 
 PREFIX ?= build
 
-BUILD_DIR=$(PREFIX)_$(DEVICE_FAMILY)
+BUILD_DIR := $(PREFIX)_$(DEVICE_FAMILY)
 
-IP_CACHE_DIR=../ip_cache/$(DEVICE_FAMILY)
+SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
+
+IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
 
 .PHONY: dogfood unittest pipeline lmem cache fpu core vortex top test
 
 ip-gen: $(IP_CACHE_DIR)/ip_gen.log
 $(IP_CACHE_DIR)/ip_gen.log:
-	../ip_gen.sh $(IP_CACHE_DIR)
+	$(SCRIPT_DIR)/ip_gen.sh $(IP_CACHE_DIR)
 
 dogfood:
 	mkdir -p dogfood/$(BUILD_DIR)

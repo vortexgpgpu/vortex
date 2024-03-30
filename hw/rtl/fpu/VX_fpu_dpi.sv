@@ -11,9 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`ifdef FPU_DPI
-
 `include "VX_fpu_define.vh"
+
+`ifdef FPU_DPI
 
 module VX_fpu_dpi import VX_fpu_pkg::*; #( 
     parameter NUM_LANES = 1,

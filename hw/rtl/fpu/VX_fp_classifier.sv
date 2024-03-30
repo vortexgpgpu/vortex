@@ -11,9 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`ifdef FPU_DSP
-
 `include "VX_fpu_define.vh"
+
+`ifdef FPU_DSP
 
 module VX_fp_classifier import VX_fpu_pkg::*; #(    
     parameter MAN_BITS = 23,

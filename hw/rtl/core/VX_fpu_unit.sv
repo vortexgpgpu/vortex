@@ -11,7 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_define.vh"
 `include "VX_fpu_define.vh"
 
 module VX_fpu_unit import VX_fpu_pkg::*; #(

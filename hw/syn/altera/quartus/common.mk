@@ -1,11 +1,14 @@
-include ../common.mk
+ROOT_DIR := $(realpath ../../../../../..)
+include $(ROOT_DIR)/config.mk
 
-RTL_DIR = ../../../../../rtl
-AFU_DIR = $(RTL_DIR)/afu/opae
-THIRD_PARTY_DIR = ../../../../../../third_party
-IP_CACHE_DIR = ../../../ip_cache/$(DEVICE_FAMILY)
-SCRIPT_DIR = ../../../../../scripts
-THIRD_PARTY_DIR = ../../../../../../third_party
+SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/quartus
+
+RTL_DIR := $(VORTEX_HOME)/hw/rtl
+AFU_DIR := $(RTL_DIR)/afu/opae
+THIRD_PARTY_DIR := $(VORTEX_HOME)/third_party
+SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
+
+IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
 
 ifeq ($(DEVICE_FAMILY), stratix10)
     FAMILY = "Stratix 10"
@@ -77,7 +80,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES): gen-sources
-	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "src"
+	quartus_sh -t $(SRC_DIR)/project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc $(SRC_DIR)/project.sdc -inc "src"
 	
 syn.chg:
 	$(STAMP) syn.chg
