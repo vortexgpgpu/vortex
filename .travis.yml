@@ -34,15 +34,11 @@ jobs:
     - stage: setup
       name: build32
       script:
-        - mkdir -p $HOME/build32 && cd $HOME/build32 
-        - ../configure
-        - make -s > /dev/null
+        - mkdir -p $HOME/build32 && cd $HOME/build32 && ../configure && make -s > /dev/null
     - stage: setup
       name: build64
       script:
-        - mkdir -p $HOME/build64 && cd $HOME/build64 
-        - XLEN=64 ../configure
-        - make -s > /dev/null
+        - mkdir -p $HOME/build64 && cd $HOME/build64 && XLEN=64 ../configure && make -s > /dev/null
     - stage: test 
       name: unittest
       script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --unittest
