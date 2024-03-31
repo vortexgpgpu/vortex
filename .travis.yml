@@ -31,7 +31,7 @@ before_install:
       make -C third_party > /dev/null;
       cp -r third_party $HOME/third_party;
     else
-      rsync -av --ignore-existing $HOME/third_party/ third_party/;
+      rsync -v --ignore-existing $HOME/third_party/ third_party/;
     fi
   - source ./ci/toolchain_env.sh
 
@@ -53,43 +53,43 @@ jobs:
         - cd $HOME/build64 && XLEN=64 $TRAVIS_BUILD_DIR/configure && make -s > /dev/null
     - stage: test 
       name: unittest
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --unittest
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --unittest
     - stage: test 
       name: isa
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --isa
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --isa
     - stage: test 
       name: isa64
-      script: cd $HOME/build64 && ./ci/travis_run.py ./ci/regression.sh --isa
+      script: cp -r $HOME/build64 build && cd build && ./ci/travis_run.py ./ci/regression.sh --isa
     - stage: test 
       name: regression
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --regression
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --regression
     - stage: test 
       name: regression64
-      script: cd $HOME/build64 && ./ci/travis_run.py ./ci/regression.sh --regression
+      script: cp -r $HOME/build64 build && cd build && ./ci/travis_run.py ./ci/regression.sh --regression
     - stage: test 
       name: opencl
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --opencl    
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --opencl    
     - stage: test 
       name: cluster
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --cluster    
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --cluster    
     - stage: test 
       name: config
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --config
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --config
     - stage: test
       name: debug
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --debug
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --debug
     - stage: test 
       name: stress0
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --stress0
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --stress0
     - stage: test 
       name: stress1
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --stress1
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --stress1
     - stage: test 
       name: synthesis
-      script: cd $HOME/build32 && ./ci/travis_run.py ./ci/regression.sh --synthesis
+      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --synthesis
     - stage: test 
       name: synthesis64
-      script: cd $HOME/build64 && ./ci/travis_run.py ./ci/regression.sh --synthesis
+      script: cp -r $HOME/build64 build && cd build && ./ci/travis_run.py ./ci/regression.sh --synthesis
             
 after_success:
   # Gather code coverage
