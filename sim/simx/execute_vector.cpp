@@ -528,10 +528,12 @@ class Fmacc {
       uint32_t fflags = 0;
       // ignoring rounding mode for now
       uint32_t frm = 0;
-      if (sizeof(T) == 4) {
+      if (sizeof(R) == 4) {
         return rv_fmadd_s(first, second, third, frm, &fflags);
-      } else if (sizeof(T) == 8) {
-        return rv_fmadd_d(first, second, third, frm, &fflags);
+      } else if (sizeof(R) == 8) {
+        uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first);
+        uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second);
+        return rv_fmadd_d(first_d, second_d, third, frm, &fflags);
       } else {
         std::cout << "Fmacc only supports f32 and f64" << std::endl;
         std::abort();
@@ -548,10 +550,12 @@ class Fnmacc {
       uint32_t fflags = 0;
       // ignoring rounding mode for now
       uint32_t frm = 0;
-      if (sizeof(T) == 4) {
+      if (sizeof(R) == 4) {
         return rv_fnmadd_s(first, second, third, frm, &fflags);
-      } else if (sizeof(T) == 8) {
-        return rv_fnmadd_d(first, second, third, frm, &fflags);
+      } else if (sizeof(R) == 8) {
+        uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first);
+        uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second);
+        return rv_fnmadd_d(first_d, second_d, third, frm, &fflags);
       } else {
         std::cout << "Fnmacc only supports f32 and f64" << std::endl;
         std::abort();
@@ -568,10 +572,12 @@ class Fmsac {
       uint32_t fflags = 0;
       // ignoring rounding mode for now
       uint32_t frm = 0;
-      if (sizeof(T) == 4) {
+      if (sizeof(R) == 4) {
         return rv_fmadd_s(first, second, rv_fsgnjn_s(third, third), frm, &fflags);
-      } else if (sizeof(T) == 8) {
-        return rv_fmadd_d(first, second, rv_fsgnjn_d(third, third), frm, &fflags);
+      } else if (sizeof(R) == 8) {
+        uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first);
+        uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second);
+        return rv_fmadd_d(first_d, second_d, rv_fsgnjn_d(third, third), frm, &fflags);
       } else {
         std::cout << "Fmsac only supports f32 and f64" << std::endl;
         std::abort();
@@ -588,10 +594,12 @@ class Fnmsac {
       uint32_t fflags = 0;
       // ignoring rounding mode for now
       uint32_t frm = 0;
-      if (sizeof(T) == 4) {
+      if (sizeof(R) == 4) {
         return rv_fnmadd_s(first, second, rv_fsgnjn_s(third, third), frm, &fflags);
-      } else if (sizeof(T) == 8) {
-        return rv_fnmadd_d(first, second, rv_fsgnjn_d(third, third), frm, &fflags);
+      } else if (sizeof(R) == 8) {
+        uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first);
+        uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second);
+        return rv_fnmadd_d(first_d, second_d, rv_fsgnjn_d(third, third), frm, &fflags);
       } else {
         std::cout << "Fnmsac only supports f32 and f64" << std::endl;
         std::abort();
@@ -2894,6 +2902,30 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               vector_op_vv_w<Fmul, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
+          case 60: { // vfwmacc.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_w<Fmacc, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 61: { // vfwnmacc.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_w<Fnmacc, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 62: { // vfwmsac.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_w<Fmsac, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 63: { // vfwnmsac.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_w<Fnmsac, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
           default:
             std::cout << "Unrecognised float vector - vector instruction func3: " << func3 << " func6: " << func6 << std::endl;
             std::abort();
@@ -4016,6 +4048,34 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               if (!tmask_.test(t)) continue;
               auto &src1 = freg_file_.at(t).at(rsrc0);
               vector_op_vix_w<Fmul, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 60: { // vfwmacc.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix_w<Fmacc, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 61: { // vfwnmacc.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix_w<Fnmacc, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 62: { // vfwmsac.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix_w<Fmsac, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 63: { // vfwnmsac.vf
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              auto &src1 = freg_file_.at(t).at(rsrc0);
+              vector_op_vix_w<Fnmsac, uint8_t, uint16_t, uint32_t, uint64_t>(src1, vreg_file_, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           default:
