@@ -51,6 +51,7 @@ endif
 
 OBJS := $(addsuffix .o, $(filter-out main.cc,$(notdir $(SRCS))))
 
+.DEFAULT_GOAL := all
 all: $(PROJECT) kernel.pocl
  
 kernel.cl: $(SRC_DIR)/kernel.cl
