@@ -31,6 +31,9 @@ __kernel void sgemm2(__global float *A,
         for (int j = 0; j < LOCAL_SIZE; j++) {
             sum += localA[localRow][j] * localB[j][localCol];
         }
+
+        // Ensure computation is done before loading next block
+        barrier(CLK_LOCAL_MEM_FENCE);
     }
 
     C[globalRow * N + globalCol] = sum;

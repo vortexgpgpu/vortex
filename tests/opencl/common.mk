@@ -53,6 +53,9 @@ OBJS := $(addsuffix .o, $(filter-out main.cc,$(notdir $(SRCS))))
 
 all: $(PROJECT) kernel.pocl
  
+kernel.cl: $(SRC_DIR)/kernel.cl
+	cp $(SRC_DIR)/kernel.cl $@
+
 kernel.pocl: $(SRC_DIR)/kernel.cl
 	LD_LIBRARY_PATH=$(LLVM_POCL)/lib:$(POCL_CC_PATH)/lib:$(LLVM_VORTEX)/lib:$(LD_LIBRARY_PATH) LLVM_PREFIX=$(LLVM_VORTEX) POCL_DEBUG=all POCL_VORTEX_CFLAGS="$(K_CFLAGS)" POCL_VORTEX_LDFLAGS="$(K_LDFLAGS)" $(POCL_CC_PATH)/bin/poclcc -o kernel.pocl $^
  
@@ -78,10 +81,10 @@ endif
 $(PROJECT): setup main.cc.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out setup, $^) $(LDFLAGS) -L$(ROOT_DIR)/runtime/stub -lvortex -L$(POCL_RT_PATH)/lib -lOpenCL -o $@
 
-$(PROJECT).host: setup main.cc.host.o $(OBJS)
+$(PROJECT).host: setup main.cc.host.o $(OBJS)	
 	$(CXX) $(CXXFLAGS) $(filter-out setup, $^) $(LDFLAGS) -lOpenCL -o $@
 
-run-gpu: $(PROJECT).host kernel.pocl
+run-gpu: $(PROJECT).host kernel.cl
 	./$(PROJECT).host $(OPTS)
 
 run-simx: $(PROJECT) kernel.pocl   
