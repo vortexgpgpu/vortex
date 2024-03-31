@@ -1,3 +1,6 @@
+ROOT_DIR := $(realpath ../..)
+include $(ROOT_DIR)/config.mk
+
 all:
 	$(MAKE) -C basic
 	$(MAKE) -C demo
