@@ -22,31 +22,35 @@ cache:
     - $HOME/build64
 
 before_install:
-  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ]; then
-      rm -rf $TOOLDIR;
-      mkdir -p $TOOLDIR;
-      OSDIR=ubuntu/focal ./ci/toolchain_install.sh --all;
-    fi
-  - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ]; then
-      make -C third_party > /dev/null;
-      cp -r third_party $HOME/third_party;
-    else
-      rsync -v --ignore-existing $HOME/third_party/ third_party/;
-    fi
+  - cp -r $HOME/third_party third_party;
   - source ./ci/toolchain_env.sh
 
 stages:
   - setup
+  - build
   - test
 
 jobs:     
   include:
     - stage: setup
+      script:
+        - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v1" ]; then
+          rm -rf $TOOLDIR;
+          mkdir -p $TOOLDIR;
+          OSDIR=ubuntu/focal ./ci/toolchain_install.sh --all;
+          echo "v1" > "$TOOLDIR/version.txt";
+        fi
+      - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v1" ]; then
+          make -C third_party > /dev/null;
+          cp -r third_party $HOME/third_party;
+          echo "v1" > "$HOME/third_party/version.txt";          
+        fi
+    - stage: build
       name: build32
       script:
         - rm -rf $HOME/build32 && mkdir -p $HOME/build32
         - cd $HOME/build32 && $TRAVIS_BUILD_DIR/configure && make -s > /dev/null
-    - stage: setup
+    - stage: build
       name: build64
       script:
         - rm -rf $HOME/build64 && mkdir -p $HOME/build64
