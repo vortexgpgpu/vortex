@@ -23,7 +23,7 @@ before_install:
       rm -rf $TOOLDIR;
       mkdir -p $TOOLDIR;
       OSDIR=ubuntu/focal ./ci/toolchain_install.sh --all;
-      echo "v2" > $TOOLDIR/version.txt
+      echo "v2" > $TOOLDIR/version.txt;
     fi
   - source ./ci/toolchain_env.sh
 
