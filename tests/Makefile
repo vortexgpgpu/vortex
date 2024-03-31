@@ -1,3 +1,6 @@
+ROOT_DIR := $(realpath ..)
+include $(ROOT_DIR)/config.mk
+
 all: unittest kernel regression opencl riscv
 
 unittest:

@@ -1,3 +1,6 @@
+ROOT_DIR := $(realpath ..)
+include $(ROOT_DIR)/config.mk
+
 all:
 	$(MAKE) -C simx
 	$(MAKE) -C rtlsim
