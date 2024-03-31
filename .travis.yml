@@ -35,16 +35,16 @@ jobs:
     - stage: setup
       script:
         - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v1" ]; then
-          rm -rf $TOOLDIR;
-          mkdir -p $TOOLDIR;
-          OSDIR=ubuntu/focal ./ci/toolchain_install.sh --all;
-          echo "v1" > "$TOOLDIR/version.txt";
-        fi
-      - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v1" ]; then
-          make -C third_party > /dev/null;
-          cp -r third_party $HOME/third_party;
-          echo "v1" > "$HOME/third_party/version.txt";          
-        fi
+            rm -rf $TOOLDIR;
+            mkdir -p $TOOLDIR;
+            OSDIR=ubuntu/focal ./ci/toolchain_install.sh --all;
+            echo "v1" > "$TOOLDIR/version.txt";
+          fi
+        - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v1" ]; then
+            make -C third_party > /dev/null;
+            cp -r third_party $HOME/third_party;
+            echo "v1" > "$HOME/third_party/version.txt";          
+          fi
     - stage: build
       name: build32
       script:
