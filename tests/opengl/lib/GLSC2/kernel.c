@@ -1,45 +1,67 @@
 #include <CL/opencl.h>
 
 cl_int _err;
-extern VIEWPORT_TRANSFORM viewportTransform;
+// TODO deberia ser independiente de glsc2.c, es decir pasar por parametro de funcion todas las variables que necesitemos
+extern BOX viewportTransform;
 extern PROGRAM_OBJECT _current_program;
 
-cl_platform_id* _getPlatformID() {
+cl_platform_id _getPlatformID() {
     static cl_platform_id platform_id = NULL;
     
     if (!platform_id) clGetPlatformIDs(1, &platform_id, NULL);
-    return &platform_id;
+    return platform_id;
 }
 
-cl_device_id* _getDeviceID() {
+cl_device_id _getDeviceID() {
     static cl_device_id device_id = NULL;
     
-    if (!device_id) clGetDeviceIDs(*_getPlatformID(), CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL);
+    if (!device_id) clGetDeviceIDs(_getPlatformID(), CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL);
 
-    return &device_id;
+    return device_id;
 }
 
-cl_context _context = clCreateContext(NULL, 1, _getDeviceID(), NULL, NULL,  &_err);
+cl_context _getContext() {
+    static cl_context context = NULL;
 
-cl_program _createProgram(){
+    if (!context) context = clCreateContext(NULL, 1, _getDeviceID(), NULL, NULL,  &_err);
+
+    return context;
+} 
+
+cl_program _createProgram(const char* filename){
     uint8_t *kernel_bin = NULL;
     size_t kernel_size;
 
     //HOSTCPU
-    if (0 != read_kernel_file("pipeline.cl", &kernel_bin, &kernel_size))
+    if (0 != read_kernel_file(filename, &kernel_bin, &kernel_size))
         return -1;
     
-    cl_program pipeline = clCreateProgramWithSource(
-        _context, 1, (const char**)&kernel_bin, &kernel_size, &_err);  
-    // Build program
-    clBuildProgram(pipeline, 1, _getDeviceID(), NULL, NULL, NULL);
-    return pipeline;
+    cl_device_id device_id = _getDeviceID();
+    cl_program program = clCreateProgramWithBinary(
+        _getContext(), 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, NULL, &_err);
+
+    return program;
 }
 
-cl_program pipeline_program = _createProgram();
+cl_program _getPipelineProgram() {
+    static cl_program program = NULL;
 
+    if (!program) program = _createProgram("pipeline.pocl");
 
-void vertex_shader(GLint first, GLsizei count, float* clip_coords){
+    return program;
+}
+
+cl_program createProgramWithBinary(binary, length) {
+    cl_device_id device_id = _getDeviceID();
+
+    cl_program program = clCreateProgramWithBinary(
+        _getContext(), 1, &device_id, &length, (const uint8_t**)&binary, NULL, &_err);
+    
+    return program;
+}
+
+// Esto es funcional?? o se ha quedao deprecado?? No deveria acceder al glsc2
+void vertex_shader(int first, int count, float* clip_coords){
     //VERTEX SHADER
     cl_program vertex_shader = _current_program.binary;
   
@@ -80,36 +102,36 @@ void perspective_division(unsigned int numVerts, float* clip_coords){
     size_t kernel_size;
 
     // Create kernel
-    cl_kernel perspective_kernel = clCreateKernel(pipeline_program, "perspective_division", &_err);
+    cl_kernel perspective_kernel = clCreateKernel(_getPipelineProgram(), "perspective_division", &_err);
 
-    cl_mem clipCoordsBuff = clCreateBuffer(context, CL_MEM_READ_WRITE, numVerts*4*sizeof(float), NULL, &_err);
+    cl_mem clipCoordsBuff = clCreateBuffer(_getContext(), CL_MEM_READ_WRITE, numVerts*4*sizeof(float), NULL, &_err);
     
     clSetKernelArg(perspective_kernel, 0, sizeof(cl_mem), (void*)&clipCoordsBuff);
 
-  cl_command_queue commandQueue = clCreateCommandQueue(context, _getDeviceID(), 0, &_err);
-  size_t global_work_size[1] = {numVerts};
-  clEnqueueNDRangeKernel(commandQueue, perspective_kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
-  clFinish(commandQueue);  
-  clEnqueueReadBuffer(commandQueue, clipCoordsBuff, CL_TRUE, 0, numVerts*4*sizeof(float), clip_coords, 0, NULL, NULL);
+    cl_command_queue commandQueue = clCreateCommandQueue(_getContext(), _getDeviceID(), 0, &_err);
+    size_t global_work_size[1] = {numVerts};
+    clEnqueueNDRangeKernel(commandQueue, perspective_kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
+    clFinish(commandQueue);  
+    clEnqueueReadBuffer(commandQueue, clipCoordsBuff, CL_TRUE, 0, numVerts*4*sizeof(float), clip_coords, 0, NULL, NULL);
 }
 
 void viewport_transformation(unsigned int numVerts, float* ndc_coords){
 
     // Create kernel
-    cl_kernel viewport_kernel = clCreateKernel(pipeline_program, "viewport_division", &_err);
-    cl_mem ndcCoordsBuff = clCreateBuffer(context, CL_MEM_READ_WRITE, numVerts*4*sizeof(float), NULL, &_err);
+    cl_kernel viewport_kernel = clCreateKernel(_getPipelineProgram(), "viewport_division", &_err);
+    cl_mem ndcCoordsBuff = clCreateBuffer(_getContext(), CL_MEM_READ_WRITE, numVerts*4*sizeof(float), NULL, &_err);
 
-    clSetKernelArg(viewport_transformation_kernel, 0, sizeof(cl_mem), ndcCoordsBuff);
-    clSetKernelArg(viewport_transformation_kernel, 1, sizeof(GLint), viewportTransform.w);
-    clSetKernelArg(viewport_transformation_kernel, 2, sizeof(GLint), viewportTransform.h);
-    clSetKernelArg(viewport_transformation_kernel, 3, sizeof(GLint), (viewportTransform.x+viewportTransform.w/2));
-    clSetKernelArg(viewport_transformation_kernel, 4, sizeof(GLint), (viewportTransform.y+viewportTransform.h/2));
-    clSetKernelArg(viewport_transformation_kernel, 5, sizeof(GLfloat), viewportTransform.n);
-    clSetKernelArg(viewport_transformation_kernel, 6, sizeof(GLfloat), viewportTransform.f);
+    clSetKernelArg(viewport_kernel, 0, sizeof(cl_mem), ndcCoordsBuff);
+    clSetKernelArg(viewport_kernel, 1, sizeof(int), viewportTransform.w);
+    clSetKernelArg(viewport_kernel, 2, sizeof(int), viewportTransform.h);
+    clSetKernelArg(viewport_kernel, 3, sizeof(int), (viewportTransform.x+viewportTransform.w/2));
+    clSetKernelArg(viewport_kernel, 4, sizeof(int), (viewportTransform.y+viewportTransform.h/2));
+    clSetKernelArg(viewport_kernel, 5, sizeof(float), viewportTransform.n);
+    clSetKernelArg(viewport_kernel, 6, sizeof(float), viewportTransform.f);
 
-    cl_command_queue commandQueue = clCreateCommandQueue(context, _getDeviceID(), 0, &_err);
+    cl_command_queue commandQueue = clCreateCommandQueue(_getContext(), _getDeviceID(), 0, &_err);
     size_t global_work_size[1] = {numVerts};
-    clEnqueueNDRangeKernel(commandQueue, viewport_transformation_kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
+    clEnqueueNDRangeKernel(commandQueue, viewport_kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
     clFinish(commandQueue);  
     clEnqueueReadBuffer(commandQueue, ndcCoordsBuff, CL_TRUE, 0, 4*numVerts*sizeof(float), ndcCoordsBuff, 0, NULL, NULL);
 }
@@ -117,16 +139,16 @@ void viewport_transformation(unsigned int numVerts, float* ndc_coords){
 void rasterization(unsigned int numVerts, float* primitives, float* fragments, unsigned int grid_size){
 
     // Create kernel
-    cl_kernel rasterization_kernel = clCreateKernel(pipeline_program, "rasterization", &_err);
-    cl_mem primitivesBuff = clCreateBuffer(_context, CL_MEM_READ_ONLY, numVerts*4*sizeof(float), NULL, &_err);
-    cl_mem fragmentsBuff = clCreateBuffer(_context, CL_MEM_WRITE_ONLY, grid_size*4*sizeof(float), NULL, &_err);
+    cl_kernel rasterization_kernel = clCreateKernel(_getPipelineProgram(), "rasterization", &_err);
+    cl_mem primitivesBuff = clCreateBuffer(_getContext(), CL_MEM_READ_ONLY, numVerts*4*sizeof(float), NULL, &_err);
+    cl_mem fragmentsBuff = clCreateBuffer(_getContext(), CL_MEM_WRITE_ONLY, grid_size*4*sizeof(float), NULL, &_err);
 
-    clSetKernelArg(rasterization_kernel, 0, sizeof(GLuint), grid_size);
+    clSetKernelArg(rasterization_kernel, 0, sizeof(unsigned int), grid_size);
     clSetKernelArg(rasterization_kernel, 1, sizeof(cl_mem), primitivesBuff);
     clSetKernelArg(rasterization_kernel, 2, sizeof(cl_mem), fragmentsBuff);
-    clSetKernelArg(rasterization_kernel, 3, sizeof(GLuint), grid_size);
+    clSetKernelArg(rasterization_kernel, 3, sizeof(unsigned int), grid_size);
 
-    cl_command_queue commandQueue = clCreateCommandQueue(_context, _getDeviceID(), 0, &_err);
+    cl_command_queue commandQueue = clCreateCommandQueue(_getContext(), _getDeviceID(), 0, &_err);
     size_t global_work_size[1] = {grid_size};
     clEnqueueNDRangeKernel(commandQueue, rasterization_kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);
     clFinish(commandQueue);  
@@ -143,11 +165,43 @@ void fragment_shader(){
 }
 
 void fill(cl_mem buff, size_t size, void* pattern, size_t pattern_size) {
-    cl_command_queue commandQueue = clCreateCommandQueue(_context, _getDeviceID(), 0, &_err);
+    cl_command_queue commandQueue = clCreateCommandQueue(_getContext(), _getDeviceID(), 0, &_err);
     clEnqueueFillBuffer(commandQueue, buff, pattern, pattern_size, 0, size, 0, NULL, NULL);
 }
 
-void read(cl_mem buff, void* ptr, size_t nbytes, size_t offset) {
-    cl_command_queue commandQueue = clCreateCommandQueue(_context, _getDeviceID(), 0, &_err);
-    clEnqueueReadBuffer(commandQueue, buff, CL_TRUE, offset, nbytes, ptr, 0, NULL, NULL);
+// formats
+#define RGBA8 0x0
+#define RGBA4 0x1
+
+void readnPixels(cl_mem buff, int x, int y, int width, int height, unsigned int src_format, unsigned int dst_format, int bufSize, void *data) {
+
+    static cl_program program = NULL;
+    if (! program) { program = _createProgram("kernel.readnpixels.pocl"); }
+    
+    if (src_format == dst_format) {
+
+        cl_command_queue commandQueue = clCreateCommandQueue(_getContext(), _getDeviceID(), 0, &_err);
+        clEnqueueReadBuffer(commandQueue, buff, CL_TRUE, 0, bufSize, data, 0, NULL, NULL);
+
+    } else if (src_format == RGBA4 && dst_format == RGBA8) {
+
+        cl_kernel kernel = clCreateKernel(program, "rgba4_rgba8", &_err);
+        cl_mem dst_buff = clCreateBuffer(_getContext(), CL_MEM_WRITE_ONLY, bufSize, NULL, &_err);
+
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), buff);
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), dst_buff);
+        clSetKernelArg(kernel, 2, sizeof(int), &x);
+        clSetKernelArg(kernel, 3, sizeof(int), &y);
+        clSetKernelArg(kernel, 4, sizeof(int), &width);
+        clSetKernelArg(kernel, 5, sizeof(int), &height);
+
+        cl_command_queue commandQueue = clCreateCommandQueue(_getContext(), _getDeviceID(), 0, &_err);
+        size_t global_work_size = bufSize/4; // 4 bytes x color
+        clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, &global_work_size, NULL, 0, NULL, NULL);
+
+        clFinish(commandQueue);  
+        clEnqueueReadBuffer(commandQueue, dst_buff, CL_TRUE, 0, bufSize, data, 0, NULL, NULL);
+
+    }
+
 }

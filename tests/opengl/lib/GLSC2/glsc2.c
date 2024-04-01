@@ -1,9 +1,5 @@
 #include <GLSC2/glsc2.h>
-#include "kernel.c"
-
-#define VERTEX_SHADER "kernel.vert.cl"
-#define PERS_DIV "kernel-persp-div.cl"
-#define VIEWPORT_TRANS "kernel-viewport-trans.cl"
+#include "kernel.c" // TODO may be interesting to extract it to an interface so could be re implementated with CUDA
 
 #define MAX_PROGRAMS 255 // TODO
 #define _MAX_VERTEX_ATTRIBS 255 // TODO update GL_MAX_VERTEX_ATTRIBS
@@ -18,8 +14,6 @@ typedef struct {
     GLsizei width;
     GLsizei height;
 } BOX;
-
-
 
 BOX viewportTransform;
 
@@ -97,7 +91,6 @@ GLuint _renderbuffer_binding;
 // Color
 typedef struct { GLboolean red, green, blue, alpha } COLOR_MASK;
 
-GLboolean _color_enabled = 1;
 COLOR_MASK _color_mask = {1, 1, 1, 1};
 // Depth
 typedef struct { GLfloat n, f } DEPTH_RANGE; // z-near & z-far
@@ -105,7 +98,7 @@ typedef struct { GLfloat n, f } DEPTH_RANGE; // z-near & z-far
 GLboolean   _depth_enabled = 0;
 GLboolean   _depth_mask = 1;
 GLenum      _depth_func = GL_LESS;
-DEPTH_RANGE _depth_range = { 0.0, 1.0};
+DEPTH_RANGE _depth_range = {0.0, 1.0};
 // Scissor
 
 GLuint _scissor_enabled = 0;
@@ -145,10 +138,10 @@ GL_APICALL void GL_APIENTRY glBufferData (GLenum target, GLsizeiptr size, const 
 
     if (target == GL_ARRAY_BUFFER) {
         if (usage == GL_STATIC_DRAW) {
-            _buffers[_buffer_binding].mem = clCreateBuffer(_context, CL_MEM_READ_ONLY, size, data, &_err);
+            _buffers[_buffer_binding].mem = clCreateBuffer(_getContext(), CL_MEM_READ_ONLY, size, data, &_err);
         }
         else if (usage == GL_DYNAMIC_DRAW || usage == GL_STREAM_DRAW) {
-            _buffers[_buffer_binding].mem = clCreateBuffer(_context, CL_MEM_READ_WRITE, size, data, &_err);
+            _buffers[_buffer_binding].mem = clCreateBuffer(_getContext(), CL_MEM_READ_WRITE, size, data, &_err);
         }
     }
 }
@@ -243,6 +236,7 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     else if (mode==GL_LINES); // TODO
     else if (mode==GL_TRIANGLES) 
         _glDrawArraysTriangles(first, count);
+
 }
 
 GL_APICALL void GL_APIENTRY glDrawRangeElements (GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const void *indices);
@@ -334,24 +328,19 @@ GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat
         _err = GL_INVALID_OPERATION;
         return;
     if (binaryFormat == CL_PROGRAM){
-        // CREATE BINARY
-        cl_program triangle_cl = clCreateProgramWithSource(
-            _context, 1, (const char**)&binary, &length, &_err); // vertex + fragment
-
-        programs[program].binary=(*(cl_program*)triangle_cl);
+        programs[program].binary=createProgramWithBinary(binary, length);
         programs[program].length=length;
     }
-
-
 }
 GL_APICALL void GL_APIENTRY glReadnPixels (GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLsizei bufSize, void *data) {
     if (format == GL_RGBA && type == GL_UNSIGNED_BYTE) {
         if (_framebuffer_binding) {
             RENDERBUFFER color_attachment0 = _renderbuffers[_framebuffers[_framebuffer_binding].color_attachment0];
 
-            // TODO use width and height to get a cutted version of the image
-            // TODO this may need a program to convert 4b to 8b rgba
-            read(color_attachment0.mem, data, bufSize, 0);
+            unsigned int src_format;
+            if (color_attachment0.internalformat == GL_RGBA4) src_format = GL_RGBA4;
+
+            readnPixels(color_attachment0.mem,x,y,width,height, src_format, RGBA8, bufSize, data);
         }
     }
 }
