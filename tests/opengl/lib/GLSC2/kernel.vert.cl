@@ -1,9 +1,9 @@
 struct VAO{
     bool enable, normalized;
-    GLuint index;
-    GLint size;
-    GLenum type;
-    GLsizei stride;
+    unsigned int index;
+    int size;
+    unsigned int type;
+    unsigned int stride;
     const void *pointer;
 };
 

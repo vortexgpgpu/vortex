@@ -141,3 +141,13 @@ void fragment_shader(){
     cl_kernel fragmentShaderKernel = clCreateKernel(fragment_shader, "fragment_shader", &_err);
     //...
 }
+
+void fill(cl_mem buff, size_t size, void* pattern, size_t pattern_size) {
+    cl_command_queue commandQueue = clCreateCommandQueue(_context, _getDeviceID(), 0, &_err);
+    clEnqueueFillBuffer(commandQueue, buff, pattern, pattern_size, 0, size, 0, NULL, NULL);
+}
+
+void read(cl_mem buff, void* ptr, size_t nbytes, size_t offset) {
+    cl_command_queue commandQueue = clCreateCommandQueue(_context, _getDeviceID(), 0, &_err);
+    clEnqueueReadBuffer(commandQueue, buff, CL_TRUE, offset, nbytes, ptr, 0, NULL, NULL);
+}
