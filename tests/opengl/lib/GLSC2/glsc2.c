@@ -1,8 +1,21 @@
 #include <GLSC2/glsc2.h>
-#include "kernel.c" // TODO may be interesting to extract it to an interface so could be re implementated with CUDA
+#include "kernel.c" // TODO: may be interesting to extract it to an interface so could be re implementated with CUDA
 
-#define MAX_PROGRAMS 255 // TODO
-#define _MAX_VERTEX_ATTRIBS 255 // TODO update GL_MAX_VERTEX_ATTRIBS
+// Our definitions
+#define MAX_BUFFER 256
+#define MAX_FRAMEBUFFER 256
+#define MAX_RENDERBUFFER 256
+#define MAX_PROGRAMS 256
+#define MAX_UNIFORM_VECTORS 16
+#define MAX_NAME_SIZE 64
+#define MAX_INFO_SIZE 256
+#define MAX_UNIFORM_SIZE sizeof(float)*4*4 // Limited to a matf4x4
+
+// OpenGL required definitions
+#define MAX_VERTEX_ATTRIBS 16
+#define MAX_VERTEX_UNIFORM_VECTORS 16 // atMost MAX_UNIFORM_VECTORS
+#define MAX_FRAGMENT_UNIFORM_VECTORS 16 // atMost MAX_UNIFORM_VECTORS
+
 
 /****** GENERIC objects ******\
  * 
@@ -15,23 +28,46 @@ typedef struct {
     GLsizei height;
 } BOX;
 
-BOX viewportTransform;
-
-//entiendo que
-// binary = kernel_bin
-// length = kernel_length
 typedef struct {
-    GLboolean created;
-    cl_program binary;
-    GLsizei length;
-}PROGRAM_OBJECT;
+    unsigned char info[MAX_INFO_SIZE];
+    int length;
+} LOG;
 
-PROGRAM_OBJECT programs [MAX_PROGRAMS];
-GLboolean _no_program = GL_TRUE;
-PROGRAM_OBJECT _current_program;
+BOX _viewport;
+
+/****** PROGRAM objects ******\
+ * 
+ * 
+*/
+typedef struct {
+    GLint location, size, type;
+    unsigned char name[MAX_NAME_SIZE]; 
+    uint8_t *data[MAX_UNIFORM_SIZE];
+} UNIFORM;
+
+typedef struct {
+    GLint location, size, type;
+    unsigned char name[MAX_NAME_SIZE]; 
+} ATTRIBUTE;
+
+typedef struct {
+    GLboolean used;
+    GLuint object_name;
+    GLboolean load_status, validation_status;
+    LOG log;
+    GLuint active_uniforms, active_attributes;
+    UNIFORM uniforms[MAX_UNIFORM_VECTORS];
+    ATTRIBUTE attributes[16];
+    cl_program program;
+} PROGRAM;
+
+PROGRAM _programs[MAX_PROGRAMS];
+GLuint _current_program; // ZERO is reserved for NULL program
 
 /****** BUFFER objects ******\
- * 
+ * TODO: Re think this, I think it is actually more tricky than the first though. 
+ * Seams that the program object holds also the vertex attributes, and the VAO is on 
+ * server side.
  * 
 */
 
@@ -50,9 +86,9 @@ typedef struct {
     const void *pointer;
 } VERTEX_ATTRIB;
 
-BUFFER _buffers[255];
+BUFFER _buffers[MAX_BUFFER];
 GLuint _buffer_binding;
-VERTEX_ATTRIB vertex_attrib[_MAX_VERTEX_ATTRIBS]; 
+VERTEX_ATTRIB _vertex_attrib[MAX_VERTEX_ATTRIBS];
 
 /****** FRAMEBUFFER objects ******\
  * 
@@ -65,7 +101,7 @@ typedef struct {
     GLboolean used;
 } FRAMEBUFFER;
 
-FRAMEBUFFER _framebuffers[255];
+FRAMEBUFFER _framebuffers[MAX_FRAMEBUFFER];
 GLuint _framebuffer_binding;
 
 /****** RENDERBUFFER objects ******\
@@ -80,7 +116,7 @@ typedef struct {
     GLboolean used;
 } RENDERBUFFER;
 
-RENDERBUFFER _renderbuffers[255];
+RENDERBUFFER _renderbuffers[MAX_RENDERBUFFER];
 GLuint _renderbuffer_binding;
 
 /****** PER-FRAGMENT objects ******\
@@ -187,13 +223,29 @@ GL_APICALL void GL_APIENTRY glColorMask (GLboolean red, GLboolean green, GLboole
     _color_mask.alpha = alpha;
 }
 
+GL_APICALL GLuint GL_APIENTRY glCreateProgram (void){
+    GLuint program = 0; // ZERO is reserved
+    while(! ++program < MAX_PROGRAMS) {
+        if (!_programs[program].used)
+        {
+            _programs[program].used=GL_TRUE;
+            _programs[program].active_attributes=0;
+            _programs[program].active_uniforms=0;
+            _programs[program].load_status=0;
+            _programs[program].validation_status=0;
+            return program;
+        }
+    }
+    return 0; // TODO maybe throw some error ??
+}
+
 // TODO move this to another file
 inline void gl_pipeline(GLint first, GLsizei count){
     //pipeline
     unsigned int numVerts = count-first;
     //vertex shader
     float primitives[4*GL_MAX_VERTEX_ATTRIBS];
-    if(!_no_program == GL_TRUE)
+    if(! _current_program)
         vertex_shader(first, count, primitives);
     //clip coord
     perspective_division(numVerts, primitives);
@@ -256,7 +308,7 @@ GL_APICALL void GL_APIENTRY glDisableVertexAttribArray (GLuint index) {
         return;
     }
 
-    vertex_attrib[index].enable = 0;
+    _vertex_attrib[index].enable = 0;
 }
 
 GL_APICALL void GL_APIENTRY glEnable (GLenum cap) {
@@ -274,7 +326,7 @@ GL_APICALL void GL_APIENTRY glEnableVertexAttribArray (GLuint index) {
         return;
     }
 
-    vertex_attrib[index].enable = 1;
+    _vertex_attrib[index].enable = 1;
 }
 
 GL_APICALL void GL_APIENTRY glFinish (void);
@@ -309,29 +361,18 @@ GL_APICALL void GL_APIENTRY glGenFramebuffers (GLsizei n, GLuint *framebuffers) 
     }
 }
 
-// TODO check if this has sense does not convice me using CL word or #define it would never be included from the client file 
-#define CL_PROGRAM 0
-
-
-GL_APICALL GLuint GL_APIENTRY glCreateProgram (void){
-    for (int i=1; i<MAX_PROGRAMS; i++)
-        if (!programs[i].created)
-        {
-            programs[i].created=GL_TRUE;
-            return i;
-        }
-    return 0;
-}
+#define POCL_BINARY 0x0
 
 GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat, const void *binary, GLsizei length){
-    if(!programs[program].binary == (void*)0)
+    if(!_programs[program].program == (void*)0) {
         _err = GL_INVALID_OPERATION;
         return;
-    if (binaryFormat == CL_PROGRAM){
-        programs[program].binary=createProgramWithBinary(binary, length);
-        programs[program].length=length;
+    }
+    if (binaryFormat == POCL_BINARY) {
+        _programs[program].program=createProgramWithBinary(binary, length);
     }
 }
+
 GL_APICALL void GL_APIENTRY glReadnPixels (GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLsizei bufSize, void *data) {
     if (format == GL_RGBA && type == GL_UNSIGNED_BYTE) {
         if (_framebuffer_binding) {
@@ -372,16 +413,14 @@ GL_APICALL void GL_APIENTRY glStencilMaskSeparate (GLenum face, GLuint mask) {
 }
 
 GL_APICALL void GL_APIENTRY glUseProgram (GLuint program){
-    if (program=0){
-        _no_program=GL_TRUE;
-        return;
+    if (program) {
+        if (!_programs[program].load_status){
+            _err = GL_INVALID_OPERATION;
+            return;
+        }
+        // TODO install program
     }
-    if(programs[program].binary==(void*)0){
-        _err = GL_INVALID_OPERATION;
-        return;
-    }
-    _no_program=GL_FALSE;
-    _current_program=programs[program];
+    _current_program=program;
 }
 
 GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer) {
@@ -410,16 +449,16 @@ GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLe
         //normalizar integers
     }
 
-    vertex_attrib[index].size = size;
-    vertex_attrib[index].type = type;
-    vertex_attrib[index].normalized = normalized;
-    vertex_attrib[index].stride = stride;
-    vertex_attrib[index].pointer = pointer;
+    _vertex_attrib[index].size = size;
+    _vertex_attrib[index].type = type;
+    _vertex_attrib[index].normalized = normalized;
+    _vertex_attrib[index].stride = stride;
+    _vertex_attrib[index].pointer = pointer;
 }
 GL_APICALL void GL_APIENTRY glViewport (GLint x, GLint y, GLsizei width, GLsizei height){
-    viewportTransform.x=x;
-    viewportTransform.y=y;
-    viewportTransform.width=width;
-    viewportTransform.height=height;
+    _viewport.x=x;
+    _viewport.y=y;
+    _viewport.width=width;
+    _viewport.height=height;
 }
 
