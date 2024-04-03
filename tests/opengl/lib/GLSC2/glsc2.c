@@ -146,6 +146,15 @@ GLuint _stencil_enabled = 0;
 STENCIL_MASK _stencil_mask = {1, 1};
 // TODO blending & dithering
 
+/****** Interface for utils & inline functions ******\
+ * Utility or inline function are implemented at the end of the file. 
+*/
+#define COLOR_ATTACHMENT0 _renderbuffers[_framebuffers[_framebuffer_binding].color_attachment0]
+
+void* createVertexKernel(GLenum mode, GLint first, GLsizei count, void* primitive_buff);
+void* createFragmentKernel(GLenum mode, GLint first, GLsizei count, void* primitive_buff);
+
+
 /****** OpenGL Interface Implementations ******\
  * 
  * 
@@ -280,15 +289,38 @@ GL_APICALL void GL_APIENTRY glDepthRangef (GLfloat n, GLfloat f) {
 }
 
 GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei count) {
+    GLsizei num_primitives, num_primitive_blocks, num_fragments;
+    
     if (first <0){
         _err= GL_INVALID_VALUE;
         return;
     }
-    if (mode==GL_POINTS); // TODO
-    else if (mode==GL_LINES); // TODO
-    else if (mode==GL_TRIANGLES) 
-        _glDrawArraysTriangles(first, count);
+    
+    num_primitives = count-first;
+    if (mode==GL_POINTS) 
+        num_primitive_blocks = num_primitives; 
+    else if (mode==GL_LINES) 
+        num_primitive_blocks = num_primitives / 2;
+    else if (mode==GL_TRIANGLES)
+        num_primitive_blocks = num_primitives / 3;
+    num_fragments = COLOR_ATTACHMENT0.width * COLOR_ATTACHMENT0.height;
 
+    void* command_queue = createCommandQueue(0);
+    // VERTEX
+    void* primitive_buff = createBuffer(MEM_READ_WRITE, sizeof(float)*4*num_primitives); // TODO: this size has to be calculated with VAO
+    void* vertex_kernel = createVertexKernel(mode, first, count, primitive_buff);
+    enqueueNDRangeKernel(command_queue, vertex_kernel, &num_primitives);
+    // FRAGMENT
+    void* fragment_kernel = createFragmentKernel(mode, first, count, primitive_buff);
+    for(uint32_t block=0; block < num_primitive_blocks; ++block) {
+        setKernelArg(
+            fragment_kernel,
+            0, // TODO: define a location for the iteration primitive
+            sizeof(uint32_t),
+            &block
+        );
+        enqueueNDRangeKernel(command_queue, fragment_kernel, &num_fragments);   
+    }
 }
 
 GL_APICALL void GL_APIENTRY glDrawRangeElements (GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const void *indices);
@@ -462,3 +494,69 @@ GL_APICALL void GL_APIENTRY glViewport (GLint x, GLint y, GLsizei width, GLsizei
     _viewport.height=height;
 }
 
+/**** Utils & inline functions ****\
+ *
+*/
+void* createVertexKernel(GLenum mode, GLint first, GLsizei count, void* primitive_buff) {
+    void *kernel = createKernel(_programs[_current_program].program, "gl_vertex");
+    // VAO locations
+    GLuint attribute;
+    while(attribute < _programs[_current_program].active_attributes) {
+        setKernelArg(
+            kernel, 
+            _programs[_current_program].attributes[attribute].location,
+            _programs[_current_program].attributes[attribute].size,
+            (void*)0 // TODO: 
+            );
+        ++attribute;
+    }
+    // Uniform locations
+    GLuint uniform;
+    while(uniform < _programs[_current_program].active_uniforms) {
+        setKernelArg(
+            kernel, 
+            _programs[_current_program].uniforms[uniform].location,
+            _programs[_current_program].uniforms[uniform].size, 
+            _programs[_current_program].uniforms[uniform].data
+            );
+        ++uniform;
+    }
+    // Primitive is the last location
+    setKernelArg(
+        kernel,
+        _programs[_current_program].active_attributes + _programs[_current_program].active_uniforms,
+        sizeof(primitive_buff),
+        primitive_buff
+    );
+
+    return kernel;
+}
+
+void* createFragmentKernel(GLenum mode, GLint first, GLsizei count, void* primitive_buff) {
+    void *kernel = createKernel(_programs[_current_program].program, "gl_fragment");
+    // VAO locations
+    GLuint attribute;
+    while(attribute < _programs[_current_program].active_attributes) {
+        setKernelArg(
+            kernel, 
+            _programs[_current_program].attributes[attribute].location,
+            _programs[_current_program].attributes[attribute].size,
+            (void*)0 // TODO 
+            );
+        ++attribute;
+    }
+    // Uniform locations
+    GLuint uniform;
+    while(uniform < _programs[_current_program].active_uniforms) {
+        setKernelArg(
+            kernel, 
+            _programs[_current_program].uniforms[uniform].location,
+            _programs[_current_program].uniforms[uniform].size, 
+            _programs[_current_program].uniforms[uniform].data
+            );
+        ++uniform;
+    }
+    // missing other locations width,height,colorbuff,depthbuff,stencilbuff,primitive_index,flags 
+
+    return kernel;
+}

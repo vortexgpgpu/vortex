@@ -164,6 +164,40 @@ void fragment_shader(){
     //...
 }
 
+/**** BASIC OPERATIONS
+ * It works as an interface, OpenGL does not has to know that is implemented with OpenCL,
+ * 
+*/
+#define MEM_READ_ONLY CL_MEM_READ_ONLY
+#define MEM_WRITE_ONLY CL_MEM_WRITE_ONLY
+#define MEM_READ_WRITE CL_MEM_READ_WRITE
+
+void* createBuffer(uint64_t flags, size_t size){
+    return clCreateBuffer(_getContext(), flags, size, NULL, &_err);
+}
+
+void* createCommandQueue(uint64_t properties) {
+    cl_command_queue commandQueue = clCreateCommandQueue(_getContext(), _getDeviceID(), properties, &_err);
+}
+
+void* createKernel(void* program, const char* name) {
+    return clCreateKernel((cl_program) program, name, &_err);
+}
+
+void setKernelArg(void* kernel, unsigned int location, size_t size, void* value) {
+    clSetKernelArg((cl_kernel) kernel, location, size, value);
+}
+
+// I decide to make it simple, but maybe it will need to be extendend in future.
+void enqueueNDRangeKernel(void* commandQueue, void* kernel, const size_t* global_work_size) {
+    clEnqueueNDRangeKernel(
+        (cl_command_queue) commandQueue, (cl_kernel) kernel,
+        1, NULL, global_work_size, NULL, 0, NULL, NULL);
+}
+
+/**** SHORT CUTS
+ * 
+*/
 void fill(cl_mem buff, size_t size, void* pattern, size_t pattern_size) {
     cl_command_queue commandQueue = clCreateCommandQueue(_getContext(), _getDeviceID(), 0, &_err);
     clEnqueueFillBuffer(commandQueue, buff, pattern, pattern_size, 0, size, 0, NULL, NULL);

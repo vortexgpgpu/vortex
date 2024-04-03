@@ -1,5 +1,5 @@
 
-__kernel void vertex (
+__kernel void gl_vertex (
   __global const float3 *vbo,
   __global float4 *primitives
 ) {
@@ -8,7 +8,7 @@ __kernel void vertex (
   primitives[gid] = (float4) (vbo[gid],1.0f);
 }
 
-__kernel void fragment (
+__kernel void gl_fragment (
   // user values
   __global const float4 *position,
   // implementation values 
