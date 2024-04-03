@@ -498,7 +498,7 @@ GL_APICALL void GL_APIENTRY glViewport (GLint x, GLint y, GLsizei width, GLsizei
  *
 */
 void* createVertexKernel(GLenum mode, GLint first, GLsizei count, void* primitive_buff) {
-    void *kernel = createKernel(_programs[_current_program].program, "gl_vertex");
+    void *kernel = createKernel(_programs[_current_program].program, "gl_main_vs");
     // VAO locations
     GLuint attribute;
     while(attribute < _programs[_current_program].active_attributes) {

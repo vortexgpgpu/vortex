@@ -1,11 +1,12 @@
 
-__kernel void gl_vertex (
-  __global const float3 *vbo,
-  __global float4 *primitives
+void gl_vertex (
+  const float3 *attributes,
+  const void *uniforms, 
+  float4 *primitives
 ) {
   int gid = get_global_id(0);
 
-  primitives[gid] = (float4) (vbo[gid],1.0f);
+  primitives[gid] = (float4) (attributes[0],1.0f);
 }
 
 __kernel void gl_fragment (
