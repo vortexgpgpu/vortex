@@ -519,7 +519,7 @@ void Core::cout_flush() {
   }
 }
 
-uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
+Word Core::get_csr(Word addr, uint32_t tid, uint32_t wid) {
   switch (addr) {
   case VX_CSR_SATP:
   case VX_CSR_PMPCFG0:
@@ -540,6 +540,24 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
     return (fcsrs_.at(wid) >> 5);
   case VX_CSR_FCSR:
     return fcsrs_.at(wid);
+  // Vector CRSs
+  case VX_CSR_VSTART:
+    return csrs_.at(wid).at(tid)[VX_CSR_VSTART];
+  case VX_CSR_VXSAT:
+    return csrs_.at(wid).at(tid)[VX_CSR_VXSAT];
+  case VX_CSR_VXRM:
+    return csrs_.at(wid).at(tid)[VX_CSR_VXRM];
+  case VX_CSR_VCSR: {
+    Word vxsat = csrs_.at(wid).at(tid)[VX_CSR_VXSAT];
+    Word vxrm = csrs_.at(wid).at(tid)[VX_CSR_VXRM];
+    return (vxrm << 1) | vxsat;
+  }
+  case VX_CSR_VL:
+    return csrs_.at(wid).at(tid)[VX_CSR_VL];  
+  case VX_CSR_VTYPE:
+    return csrs_.at(wid).at(tid)[VX_CSR_VTYPE];  
+  case VX_CSR_VLENB:
+    return VLEN / 8;
   case VX_CSR_MHARTID: // global thread ID
     return (core_id_ * arch_.num_warps() + wid) * arch_.num_threads() + tid;
   case VX_CSR_THREAD_ID: // thread ID
@@ -688,7 +706,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   return 0;
 }
 
-void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
+void Core::set_csr(Word addr, Word value, uint32_t tid, uint32_t wid) {
   __unused (tid);
   switch (addr) {
   case VX_CSR_FFLAGS:
@@ -700,6 +718,27 @@ void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
   case VX_CSR_FCSR:
     fcsrs_.at(wid) = value & 0xff;
     break;
+  // Vector CRSs
+  case VX_CSR_VSTART:
+    csrs_.at(wid).at(tid)[VX_CSR_VSTART] = value;
+    break;
+  case VX_CSR_VXSAT:
+    csrs_.at(wid).at(tid)[VX_CSR_VXSAT] = value & 0b1;
+    break;
+  case VX_CSR_VXRM:
+    csrs_.at(wid).at(tid)[VX_CSR_VXRM] = value & 0b11;
+    break;
+  case VX_CSR_VCSR:
+    csrs_.at(wid).at(tid)[VX_CSR_VXSAT] = value & 0b1;
+    csrs_.at(wid).at(tid)[VX_CSR_VXRM] = (value >> 1) & 0b11;
+    break;
+  case VX_CSR_VL: // read only, written by vset(i)vl(i)
+    csrs_.at(wid).at(tid)[VX_CSR_VL] = value;
+    break;
+  case VX_CSR_VTYPE: // read only, written by vset(i)vl(i)
+    csrs_.at(wid).at(tid)[VX_CSR_VTYPE] = value;
+    break;
+  case VX_CSR_VLENB: // read only, set to VLEN / 8
   case VX_CSR_SATP:
   case VX_CSR_MSTATUS:
   case VX_CSR_MEDELEG:
@@ -730,7 +769,7 @@ void Core::trigger_ebreak() {
 }
 
 bool Core::check_exit(Word* exitcode, bool riscv_test) const {
-  if (exited_) {
+  if (exited_) {    
     Word ec = warps_.at(0)->getIRegValue(3);
     if (riscv_test) {
       *exitcode = (1 - ec);

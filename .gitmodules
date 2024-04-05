@@ -3,7 +3,10 @@
 	url = https://github.com/pulp-platform/fpnew.git
 [submodule "third_party/softfloat"]
 	path = third_party/softfloat
-	url = https://github.com/ucb-bar/berkeley-softfloat-3.git
+	url = https://github.com/troibe/berkeley-softfloat-3
 [submodule "third_party/ramulator"]
 	path = third_party/ramulator
 	url = https://github.com/CMU-SAFARI/ramulator.git
+[submodule "third_party/riscv-vector-tests"]
+	path = third_party/riscv-vector-tests
+	url = https://github.com/ksco/riscv-vector-tests.git

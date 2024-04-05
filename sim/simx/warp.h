@@ -20,6 +20,18 @@
 
 namespace vortex {
 
+union reg_data_t {
+  Word     u;
+  WordI    i;
+  WordF    f;
+  float    f32;
+  double   f64;
+  uint32_t u32;
+  uint64_t u64; 
+  int32_t  i32;
+  int64_t  i64;
+};
+
 class Arch;
 class Core;
 class Instr;
@@ -44,7 +56,8 @@ struct DomStackEntry {
 
 struct vtype {
   uint32_t vill;
-  uint32_t vediv;
+  uint32_t vma;
+  uint32_t vta;
   uint32_t vsew;
   uint32_t vlmul;
 };
@@ -88,6 +101,9 @@ public:
 private:
 
   void execute(const Instr &instr, pipeline_trace_t *trace);
+  void executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata);
+  void loadVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata);
+  void storeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata);
 
   UUIDGenerator uui_gen_;
   
@@ -106,6 +122,7 @@ private:
 
   struct vtype vtype_;
   uint32_t vl_;
+  Word VLMAX;
 };
 
 }
