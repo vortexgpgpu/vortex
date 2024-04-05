@@ -2297,6 +2297,70 @@ void vector_op_vv_red(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0,
   }
 }
 
+template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
+void vector_op_vv_red_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    // use rdest as accumulator
+    if (i == 0) {
+      getVregData<DTR>(vreg_file, rdest, 0) = getVregData<DTR>(vreg_file, rsrc0, 0);
+    }
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    DTR first = getVregData<DTR>(vreg_file, rdest, 0);
+    DT second = getVregData<DT>(vreg_file, rsrc1, i);
+    DTR second_w = std::is_signed<DT>() ? sext((DTR) second, sizeof(DT) * 8) : zext((DTR) second, sizeof(DT) * 8);
+    DTR result = OP<DTR, DTR>::apply(first, second_w, 0);
+    DP(1, "Widening reduction " << (OP<DTR, DTR>::name()) << "(" << +first << ", " << +second_w << ")" << " = " << +result);
+    getVregData<DTR>(vreg_file, rdest, 0) = result;
+  } 
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vv_red_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 8) {
+    vector_op_vv_red_w<OP, DT8, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 16) {
+    vector_op_vv_red_w<OP, DT16, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else if (vsew == 32) {
+    vector_op_vv_red_w<OP, DT32, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else {
+    std::cout << "Failed to execute VV widening reduction for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
+void vector_op_vv_red_wf(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vl, uint32_t vmask)
+{
+  for (uint32_t i = 0; i < vl; i++) {
+    // use rdest as accumulator
+    if (i == 0) {
+      getVregData<DTR>(vreg_file, rdest, 0) = getVregData<DTR>(vreg_file, rsrc0, 0);
+    }
+    if (isMasked(vreg_file, 0, i, vmask)) continue;
+
+    DTR first = getVregData<DTR>(vreg_file, rdest, 0);
+    DT second = getVregData<DT>(vreg_file, rsrc1, i);
+    DTR second_w = rv_ftod(second);
+    DTR result = OP<DTR, DTR>::apply(first, second_w, 0);
+    DP(1, "Float widening reduction " << (OP<DTR, DTR>::name()) << "(" << +first << ", " << +second_w << ")" << " = " << +result);
+    getVregData<DTR>(vreg_file, rdest, 0) = result;
+  } 
+}
+
+template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
+void vector_op_vv_red_wf(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
+{
+  if (vsew == 32) {
+    vector_op_vv_red_wf<OP, DT32, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
+  } else {
+    std::cout << "Failed to execute VV float widening reduction for vsew: " << vsew << std::endl;
+    std::abort();
+  }
+}
+
 template <typename DT>
 void vector_op_vid(std::vector<std::vector<Byte>> &vreg_file, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
@@ -2684,6 +2748,18 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
               core_->set_csr(VX_CSR_VXSAT, vxsat, t, warp_id_);
             }
           } break;
+          case 48: { // vwredsumu.vs
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_red_w<Add, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 49: { // vwredsum.vs
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_red_w<Add, int8_t, int16_t, int32_t, int64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
           default:
             std::cout << "Unrecognised vector - vector instruction func3: " << func3 << " func6: " << func6 << std::endl;
             std::abort();
@@ -2876,6 +2952,13 @@ void Warp::executeVector(const Instr &instr, std::vector<reg_data_t[3]> &rsdata,
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!tmask_.test(t)) continue;
               vector_op_vv_w<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
+            }
+          } break;
+          case 51: // vfwredosum.vs - treated the same as vfwredosum.vs
+          case 49: { // vfwredusum.vv
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (!tmask_.test(t)) continue;
+              vector_op_vv_red_wf<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file_, rsrc0, rsrc1, rdest, vtype_.vsew, vl_, vmask);
             }
           } break;
           case 50: { // vfwsub.vv

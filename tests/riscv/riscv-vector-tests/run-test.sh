@@ -32,6 +32,7 @@ then
              vfadd vfredusum vfsub vfredosum vfredmin vfredmax vfsgnj vmf vfdiv vfrdiv vfmul vfrsub \
              vfmacc vfnmacc vfmsac vfnmsac vfmadd vfnmadd vfmsub vfnmsub \
              vredsum vredand vredor vredxor vredmin vredmax \
+             vwred vfwred \
              vmand vmor vmxor vmnand vmnor vmxnor \
              vdiv vrem vmul vsmul \
              vmadd vnmsub vmacc vnmsac \
