@@ -39,18 +39,13 @@
    $ TOOLDIR=$HOME/tools ./ci/toolchain_install.sh --all
    ```
 
-5. Set up environment:
-
-   ```
-   $ source ./ci/toolchain_env.sh
-   ```
-
-6. Build Vortex
+5. Build Vortex
 
    ```
    $ mkdir build
    $ cd build
    $ TOOLDIR=$HOME/tools ../configure
+   $ source ./ci/toolchain_env.sh
    $ make
    ```
 
@@ -92,17 +87,12 @@ Note: depending on the system, some of the toolchain may need to be recompiled f
    $ TOOLDIR=$HOME/tools ./ci/toolchain_install.sh --all
    ```
 
-6. Set up environment:
-
-   ```
-   $ source ./ci/toolchain_env.sh
-   ```
-
-7. Build Vortex
+6. Build Vortex
 
    ```
    $ mkdir build
    $ cd build
    $ TOOLDIR=$HOME/tools ../configure
+   $ source ./ci/toolchain_env.sh
    $ make
    ```

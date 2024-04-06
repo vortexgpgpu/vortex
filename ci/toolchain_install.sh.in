@@ -17,7 +17,7 @@
 set -e
 
 REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/master
-TOOLDIR=${TOOLDIR:=/opt}
+TOOLDIR=${TOOLDIR:=@TOOLDIR@}
 OSDIR=${OSDIR:=ubuntu/bionic}
 
 OS="${OS:=ubuntu/bionic}"
