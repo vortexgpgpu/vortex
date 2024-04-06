@@ -12,4 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#define LOCAL_SIZE 4
+#define LOCAL_SIZE 16
