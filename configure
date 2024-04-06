@@ -16,6 +16,7 @@
 # options
 XLEN=${XLEN:=32}
 TOOLDIR=${TOOLDIR:=/opt}
+OSDIR=${OSDIR:=ubuntu/bionic}
 
 # project subdirectories to build
 SUBDIRS=("." "!ci" "!perf" "hw*" "kernel*" "runtime*" "sim*" "tests*")
