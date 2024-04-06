@@ -306,16 +306,8 @@ void kernel_utof(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	}
 }
 
-float clamp(float a, float b, float c) {
-    float result;
-    asm (
-        "fmin.s %[result], %[a], %[c]\n\t" // result = min(a, c)
-        "fmax.s %[result], %[result], %[b]" // result = max(result, b)
-        : [result] "=f" (result) // Output
-        : [a] "f" (a), [b] "f" (b), [c] "f" (c) // Inputs
-        : // No clobbered registers
-    );
-    return result;
+float fclamp(float a, float b, float c) {
+    return fmin(fmax(a, b), c);
 }
 
 void kernel_fclamp(int task_id, kernel_arg_t* __UNIFORM__ arg) {
@@ -328,7 +320,7 @@ void kernel_fclamp(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
-		dst_ptr[offset+i] = clamp(1.0f, a, b);
+		dst_ptr[offset+i] = fclamp(1.0f, a, b);
 	}
 }
 

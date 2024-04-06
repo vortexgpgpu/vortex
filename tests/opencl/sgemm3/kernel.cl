@@ -35,39 +35,3 @@ __kernel void sgemm3(__global float *A,
 
     C[globalRow * N + globalCol] = sum;
 }
-
-/*__kernel void sgemm2(__global float *A, 
-                       __global float *B, 
-                       __global float *C, 
-                       const unsigned int N)
-{
-    int globalRow = get_global_id(1);
-    int globalCol = get_global_id(0);
-    int localRow  = get_local_id(1);
-    int localCol  = get_local_id(0);
-
-    // Static local memory declaration
-    __local float localA[16][16];
-    __local float localB[16][16];
-
-    float sum = 0.0f;
-
-    // Iterate over blocks
-    for (int k = 0; k < N; k += 16) {
-        // Load a block of matrix A into local memory
-        localA[localRow][localCol] = A[globalRow * N + k + localCol];
-
-        // Load a block of matrix B into local memory
-        localB[localRow][localCol] = B[(k + localRow) * N + globalCol];
-
-        // Ensure the entire block is loaded
-        barrier(CLK_LOCAL_MEM_FENCE);
-
-        // Compute multiplication for this block
-        for (int j = 0; j < 16; j++) {
-            sum += localA[localRow][j] * localB[j][localCol];
-        }
-    }
-
-    C[globalRow * N + globalCol] = sum;
-}*/
