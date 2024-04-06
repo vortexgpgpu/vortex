@@ -77,6 +77,15 @@ llvm-vortex()
     rm -rf llvm-vortex
 }
 
+libc-vortex()
+{
+    wget $REPOSITORY/libc-vortex/$OSDIR/libc-vortex.tar.bz2
+    tar -xvf libc-vortex.tar.bz2
+    rm -f libc-vortex.tar.bz2
+    cp -r libc-vortex $TOOLDIR
+    rm -rf libc-vortex
+}
+
 llvm-pocl()
 {
     case $OSDIR in
@@ -145,7 +154,7 @@ yosys()
 show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
-    echo "Usage: $0 [[--riscv] [--riscv64] [--llvm-vortex] [--llvm-pocl] [--pocl] [--verilator] [--sv2v] [--yosys] [--all] [-h|--help]]"
+    echo "Usage: $0 [[--riscv] [--riscv64] [--llvm-vortex] [--libc-vortex] [--llvm-pocl] [--pocl] [--verilator] [--sv2v] [--yosys] [--all] [-h|--help]]"
 }
 
 while [ "$1" != "" ]; do
@@ -160,6 +169,8 @@ while [ "$1" != "" ]; do
                 ;;
         --llvm-vortex ) llvm-vortex
                 ;;
+        --libc-vortex ) libc-vortex
+                ;;
         --llvm-pocl ) llvm-pocl                
                 ;;
         --sv2v ) sv2v
@@ -171,6 +182,7 @@ while [ "$1" != "" ]; do
                 sv2v
                 yosys
                 llvm-vortex
+                libc-vortex
                 riscv
                 riscv64                
                 ;;
