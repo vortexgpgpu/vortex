@@ -16,7 +16,7 @@ endif
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex
-#LLVM_CFLAGS += -mllvm -vortex-branch-divergence=2
+#LLVM_CFLAGS += -mllvm -vortex-branch-divergence=0
 #LLVM_CFLAGS += -mllvm -print-after-all 
 #LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0/$(RISCV_PREFIX) 
 #LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0
@@ -33,12 +33,13 @@ VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 #VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 #VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
-VX_CFLAGS += -v -O3 -std=c++11
-VX_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
+VX_CFLAGS += -v -O3 -std=c++11 -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(ROOT_DIR)/hw
-VX_CFLAGS += -DNDEBUG -DLLVM_VORTEX
+VX_CFLAGS += -DNDEBUG
 
-VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a
+VX_LIBS += -L$(LIBC_VORTEX)/lib -lm -lc -lgcc
+
+VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a $(VX_LIBS)
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 CXXFLAGS += -I$(VORTEX_RT_PATH)/include -I$(ROOT_DIR)/hw
