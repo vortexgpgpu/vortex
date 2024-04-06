@@ -96,7 +96,7 @@ extern "C" void initBlackScholes(cl_context cxGPUContext, cl_command_queue cqPar
         }
 
     //Save ptx code to separate file
-    oclLogPtx(cpBlackScholes, oclGetFirstDev(cxGPUContext), "BlackScholes.ptx");
+    //oclLogPtx(cpBlackScholes, oclGetFirstDev(cxGPUContext), "BlackScholes.ptx");
 
     shrLog("...creating BlackScholes kernels\n");
         ckBlackScholes = clCreateKernel(cpBlackScholes, "BlackScholes", &ciErrNum);

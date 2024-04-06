@@ -19,6 +19,8 @@ TOOLDIR ?= @TOOLDIR@
 
 LLVM_VORTEX ?= $(TOOLDIR)/llvm-vortex
 
+LIBC_VORTEX ?= $(TOOLDIR)/libc-vortex
+
 ifeq ($(XLEN),64)
 RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv64-gnu-toolchain
 else

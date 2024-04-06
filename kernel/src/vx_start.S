@@ -73,9 +73,9 @@ _start:
 .size _start, .-_start
 
 .section .text
-.type _exit, @function
-.global _exit
-_exit:
+.type _Exit, @function
+.global _Exit
+_Exit:
   mv    s0, a0
   call  vx_perf_dump 
   mv    gp, s0

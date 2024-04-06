@@ -20,10 +20,15 @@ POCL_RT_PATH ?= $(TOOLDIR)/pocl/runtime
 
 LLVM_POCL ?= $(TOOLDIR)/llvm-vortex
 
+LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc -lgcc
+
 K_CFLAGS  += -v -O3 --sysroot=$(RISCV_SYSROOT) --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH) -Xclang -target-feature -Xclang +vortex
-K_CFLAGS  += -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
+K_CFLAGS  += -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
+#K_CFLAGS  += -mllvm -vortex-branch-divergence=0
+#K_CFLAGS += -mllvm -print-after-all
+K_CFLAGS  += -mllvm -disable-loop-idiom-all	# disable memset/memcpy loop idiom
 K_CFLAGS  += -I$(VORTEX_KN_PATH)/include -DNDEBUG
-K_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a -lm
+K_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a $(LIBC_LIB)
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-narrowing
@@ -58,7 +63,7 @@ kernel.cl: $(SRC_DIR)/kernel.cl
 	cp $(SRC_DIR)/kernel.cl $@
 
 kernel.pocl: $(SRC_DIR)/kernel.cl
-	LD_LIBRARY_PATH=$(LLVM_POCL)/lib:$(POCL_CC_PATH)/lib:$(LLVM_VORTEX)/lib:$(LD_LIBRARY_PATH) LLVM_PREFIX=$(LLVM_VORTEX) POCL_DEBUG=all POCL_VORTEX_CFLAGS="$(K_CFLAGS)" POCL_VORTEX_LDFLAGS="$(K_LDFLAGS)" $(POCL_CC_PATH)/bin/poclcc -o kernel.pocl $^
+	LD_LIBRARY_PATH=$(LLVM_POCL)/lib:$(POCL_CC_PATH)/lib:$(LLVM_VORTEX)/lib:$(LD_LIBRARY_PATH) LLVM_PREFIX=$(LLVM_VORTEX) POCL_DEBUG=all POCL_KERNEL_CACHE=0 POCL_VORTEX_CFLAGS="$(K_CFLAGS)" POCL_VORTEX_LDFLAGS="$(K_LDFLAGS)" $(POCL_CC_PATH)/bin/poclcc -o kernel.pocl $^
  
 %.cc.o: $(SRC_DIR)/%.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@

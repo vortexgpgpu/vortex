@@ -144,8 +144,14 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
     int nw = MIN(TW, NW);
 	  vx_wspawn(nw, spawn_tasks_all_cb);
 
-    // execute callback on warp 0
-    spawn_tasks_all_cb();
+    // activate all threads
+    vx_tmc(-1);
+
+    // call stub routine
+    spawn_tasks_all_stub();
+  
+    // back to single-threaded
+    vx_tmc_one();
 	}  
 
   if (rT != 0) {
@@ -307,8 +313,14 @@ void vx_spawn_pocl_kernel(pocl_kernel_context_t * ctx, pocl_kernel_cb callback, 
     int nw = MIN(TW, NW);
 	  vx_wspawn(nw, spawn_pocl_kernel_all_cb);
 
-    // execute callback on warp 0
-    spawn_pocl_kernel_all_cb();
+    // activate all threads
+    vx_tmc(-1);
+
+    // call stub routine
+    spawn_pocl_kernel_all_stub();
+
+    // disable warp
+    vx_tmc_zero();
 	}  
 
   if (rT != 0) {
