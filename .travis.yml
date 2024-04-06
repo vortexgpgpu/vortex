@@ -22,29 +22,27 @@ cache:
     - $HOME/build64
 
 before_install:
-  - cp -r $HOME/third_party .
+  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v1" ]; then
+      rm -rf $TOOLDIR;
+      mkdir -p $TOOLDIR;
+      OSDIR=ubuntu/focal ./ci/toolchain_install.sh --all;
+      echo "v1" > "$TOOLDIR/version.txt";
+    fi
+  - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v0" ]; then
+      make -C third_party > /dev/null;
+      cp -r third_party $HOME;
+      echo "v0" > "$HOME/third_party/version.txt";
+    else
+      cp -r $HOME/third_party .
+    fi
   - source ./ci/toolchain_env.sh
 
 stages:
-  - setup
   - build
   - test
 
 jobs:     
-  include:
-    - stage: setup
-      script:
-        - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v1" ]; then
-            rm -rf $TOOLDIR;
-            mkdir -p $TOOLDIR;
-            OSDIR=ubuntu/focal ./ci/toolchain_install.sh --all;
-            echo "v1" > "$TOOLDIR/version.txt";
-          fi
-        - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v0" ]; then
-            make -C third_party > /dev/null;
-            cp -r third_party $HOME;
-            echo "v0" > "$HOME/third_party/version.txt";
-          fi
+  include:        
     - stage: build
       name: build32
       script:

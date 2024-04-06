@@ -16,7 +16,7 @@
 # exit when any command fails
 set -e
 
-TOOLDIR=${TOOLDIR:=/opt}
+TOOLDIR=${TOOLDIR:=@TOOLDIR@}
 OSDIR=${OSDIR:=ubuntu/bionic}
 
 riscv() 

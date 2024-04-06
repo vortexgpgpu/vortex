@@ -58,12 +58,12 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 
     $ TOOLDIR=$HOME/tools ./ci/toolchain_install.sh --all
 
-### Set up environment variables
-    $ source ./ci/toolchain_env.sh
 ### Building Vortex
     $ mkdir build
     $ cd build
     $ TOOLDIR=$HOME/tools ../configure
     $ make
+### Set up environment variables
+    $ source ./ci/toolchain_env.sh
 ### Quick demo running vecadd OpenCL kernel on 2 cores
     $ ./ci/blackbox.sh --cores=2 --app=vecadd    

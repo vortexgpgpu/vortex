@@ -28,67 +28,65 @@ CURRENT_DIR=$(pwd)
 
 THIRD_PARTY_DIR=$SCRIPT_DIR/third_party
 
-# Path to the template file
-TEMPLATE="$SCRIPT_DIR/config.in"
-
-# Output file
-OUTPUT="config.mk"
-
-# Function to process config.in and generate config.mk
-generate_config() {
-    if [ -f "$TEMPLATE" ]; then
-        # Replace tokens
-        sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g " "$TEMPLATE" > "$CURRENT_DIR/$OUTPUT"
-    else
-        echo "Template file $TEMPLATE not found."
-        exit 1
-    fi
-}
-
-# Function to recursively copy Makefiles, skipping the current directory
-copy_makefiles() {
+# Function to recursively copy files, skipping the current directory
+copy_files() {
     local source_dir="$1"
     local target_dir="$2"
     #echo "source_dir=$source_dir, target_dir=$target_dir"
+
+    local same_dir=0
+    if [ "$(realpath "$source_dir")" == "$(realpath "$target_dir")" ]; then
+        same_dir=1
+    fi  
+            
+    # Function to copy and update file
+    copy_and_update() {
+        local src_pattern="$1"
+        local dest_dir="$2"
+        for file in $src_pattern; do
+            #echo "*** $file > $dest_dir"
+            if [ -f "$file" ]; then                
+                if [[ "$file" == *.in ]]; then
+                    filename=$(basename -- "$file")
+                    filename_no_ext="${filename%.in}"
+                    mkdir -p "$dest_dir"
+                    sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g" "$file" > "$dest_dir/$filename_no_ext"
+                else
+                    if [ $same_dir -eq 0 ]; then
+                        mkdir -p "$dest_dir"
+                        cp "$file" "$dest_dir"
+                    fi
+                fi
+            fi
+        done
+    }
     
     for pattern in "${SUBDIRS[@]}"; do
+        local full_copy=0
         if [[ "$pattern" == !* ]]; then
-            local dir_to_copy="${pattern#!}" # Remove the "!" from the start
-            cp -r "$source_dir/$dir_to_copy" "$target_dir/"
-        elif [[ "$pattern" == "." ]]; then
-            # Handle the current script directory explicitly
-            if [ -f "$source_dir/Makefile" ]; then
-                mkdir -p "$target_dir"
-                cp "$source_dir/Makefile" "$target_dir"
-            fi
-        else
-            # Use find to match the directory pattern and process each matched directory
-            find "$source_dir" -type d -path "$source_dir/$pattern" 2>/dev/null | while read dir; do
-                # Compute the relative path of the directory
-                local rel_path="${dir#$source_dir}"
-                rel_path="${rel_path#/}" # Remove leading slash, if present
-                local full_target_dir="$target_dir/$rel_path"
-                
-                # Function to copy and update file includes
-                copy_and_update_includes() {
-                    local file="$1"
-                    local dest="$2/$file"
-                    if [ -f "$dir/$file" ]; then
-                        mkdir -p "$2"
-                        cp "$dir/$file" "$dest"
-                    fi
-                }
-                
-                # Copy and update Makefile and common.mk if they exist
-                copy_and_update_includes "Makefile" "$full_target_dir"
-                copy_and_update_includes "common.mk" "$full_target_dir"
-            done
+            full_copy=1
+            pattern=${pattern:1}
         fi
+        local source_pattern="$source_dir/$pattern"
+        if [[ "$pattern" == "." ]]; then
+            source_pattern=$source_dir
+        fi
+        find "$source_dir" -type d -path "$source_pattern" 2>/dev/null | while read dir; do
+            # Compute the relative path of the directory
+            local rel_path="${dir#$source_dir}"
+            rel_path="${rel_path#/}" # Remove leading slash, if present
+            local full_target_dir="$target_dir/$rel_path"
+
+            # Copy and update Makefile and common.mk if they exist
+            if [ $full_copy -eq 1 ]; then
+                copy_and_update "$dir/*" "$full_target_dir"
+            else
+                copy_and_update "$dir/Makefile" "$full_target_dir"
+                copy_and_update "$dir/common.mk" "$full_target_dir"
+                copy_and_update "$dir/*.in" "$full_target_dir"
+            fi
+        done
     done
 }
 
-generate_config
-
-if [ "$(realpath "$SCRIPT_DIR")" != "$(realpath "$CURRENT_DIR")" ]; then
-    copy_makefiles "$SCRIPT_DIR" "$CURRENT_DIR"
-fi
+copy_files "$SCRIPT_DIR" "$CURRENT_DIR"
