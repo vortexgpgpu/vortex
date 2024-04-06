@@ -23,7 +23,8 @@ riscv()
 {
     echo "prebuilt riscv-gnu-toolchain..."
     tar -C $TOOLDIR -cvjf riscv-gnu-toolchain.tar.bz2 riscv-gnu-toolchain
-    split -b 50M riscv-gnu-toolchain.tar.bz2 "riscv-gnu-toolchain.tar.bz2.part"    
+    split -b 50M riscv-gnu-toolchain.tar.bz2 "riscv-gnu-toolchain.tar.bz2.part"
+    mkdir -p ./riscv-gnu-toolchain/$OSDIR
     mv riscv-gnu-toolchain.tar.bz2.part* ./riscv-gnu-toolchain/$OSDIR
     rm riscv-gnu-toolchain.tar.bz2
 }
@@ -32,7 +33,8 @@ riscv64()
 {
     echo "prebuilt riscv64-gnu-toolchain..."
     tar -C $TOOLDIR -cvjf riscv64-gnu-toolchain.tar.bz2 riscv64-gnu-toolchain
-    split -b 50M riscv64-gnu-toolchain.tar.bz2 "riscv64-gnu-toolchain.tar.bz2.part"    
+    split -b 50M riscv64-gnu-toolchain.tar.bz2 "riscv64-gnu-toolchain.tar.bz2.part"
+    mkdir -p ./riscv64-gnu-toolchain/$OSDIR
     mv riscv64-gnu-toolchain.tar.bz2.part* ./riscv64-gnu-toolchain/$OSDIR
     rm riscv64-gnu-toolchain.tar.bz2
 }
@@ -41,16 +43,26 @@ llvm-vortex()
 {
     echo "prebuilt llvm-vortex..."
     tar -C $TOOLDIR -cvjf llvm-vortex.tar.bz2 llvm-vortex
-    split -b 50M llvm-vortex.tar.bz2 "llvm-vortex.tar.bz2.part"    
+    split -b 50M llvm-vortex.tar.bz2 "llvm-vortex.tar.bz2.part"
+    mkdir -p ./llvm-vortex/$OSDIR
     mv llvm-vortex.tar.bz2.part* ./llvm-vortex/$OSDIR
     rm llvm-vortex.tar.bz2
+}
+
+libc-vortex() 
+{
+    echo "prebuilt libc-vortex..."
+    tar -C $TOOLDIR -cvjf libc-vortex.tar.bz2 libc-vortex
+    mkdir -p ./libc-vortex/$OSDIR
+    mv libc-vortex.tar.bz2 ./libc-vortex/$OSDIR
 }
 
 llvm-pocl() 
 {
     echo "prebuilt llvm-pocl..."
     tar -C $TOOLDIR -cvjf llvm-pocl.tar.bz2 llvm-pocl
-    split -b 50M llvm-pocl.tar.bz2 "llvm-pocl.tar.bz2.part"    
+    split -b 50M llvm-pocl.tar.bz2 "llvm-pocl.tar.bz2.part"
+    mkdir -p ./llvm-pocl/$OSDIR  
     mv llvm-pocl.tar.bz2.part* ./llvm-pocl/$OSDIR
     rm llvm-pocl.tar.bz2
 }
@@ -58,14 +70,16 @@ llvm-pocl()
 pocl() 
 {
     echo "prebuilt pocl..."
-    tar -C $TOOLDIR -cvjf pocl.tar.bz2 pocl
-    mv pocl.tar.bz2 ./pocl/$OSDIR
+    tar -C $TOOLDIR -cvjf pocl2.tar.bz2 pocl
+    mkdir -p ./pocl/$OSDIR
+    mv pocl2.tar.bz2 ./pocl/$OSDIR
 }
 
 verilator() 
 {
     echo "prebuilt verilator..."
     tar -C $TOOLDIR -cvjf verilator.tar.bz2 verilator
+    mkdir -p ./verilator/$OSDIR
     mv verilator.tar.bz2 ./verilator/$OSDIR
 }
 
@@ -73,6 +87,7 @@ sv2v()
 {
     echo "prebuilt sv2v..."
     tar -C $TOOLDIR -cvjf sv2v.tar.bz2 sv2v
+    mkdir -p ./sv2v/$OSDIR
     mv sv2v.tar.bz2 ./sv2v/$OSDIR
 }
 
@@ -80,7 +95,8 @@ yosys()
 {
     echo "prebuilt yosys..."
     tar -C $TOOLDIR -cvjf yosys.tar.bz2 yosys
-    split -b 50M yosys.tar.bz2 "yosys.tar.bz2.part"    
+    split -b 50M yosys.tar.bz2 "yosys.tar.bz2.part"
+    mkdir -p ./yosys/$OSDIR
     mv yosys.tar.bz2.part* ./yosys/$OSDIR
     rm yosys.tar.bz2
 }
@@ -88,7 +104,7 @@ yosys()
 show_usage()
 {
     echo "Setup Pre-built Vortex Toolchain"
-    echo "Usage: $0 [[--riscv] [--llvm-vortex] [--llvm-pocl] [--pocl] [--verilator] [--sv2v] [-yosys] [--all] [-h|--help]]"
+    echo "Usage: $0 [[--riscv] [--llvm-vortex] [--libc-vortex] [--llvm-pocl] [--pocl] [--verilator] [--sv2v] [-yosys] [--all] [-h|--help]]"
 }
 
 while [ "$1" != "" ]; do
@@ -103,6 +119,8 @@ while [ "$1" != "" ]; do
                 ;;
         --llvm-vortex ) llvm-vortex
                 ;;
+        --libc-vortex ) libc-vortex
+                ;;
         --llvm-pocl ) llvm-pocl
                 ;;
         --sv2v ) sv2v
@@ -112,6 +130,7 @@ while [ "$1" != "" ]; do
         --all ) riscv
                 riscv64
                 llvm-vortex
+                libc-vortex
                 llvm-pocl
                 pocl
                 verilator
