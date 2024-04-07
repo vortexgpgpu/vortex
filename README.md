@@ -53,17 +53,15 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 ### Install Vortex codebase
     $ git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
     $ cd Vortex
-### Install prebuilt toolchain
-    # By default, the toolchain will install to /opt folder which requires sudo access. Alternatively, you could also install the toolchain to a different location of your choice by setting TOOLDIR
-
-    $ TOOLDIR=$HOME/tools ./ci/toolchain_install.sh --all
-
-### Building Vortex
+### Configure your build folder
+    # By default, the toolchain default install location is the /opt folder and can be overridden by setting TOOLDIR.
     $ mkdir build
     $ cd build
     $ TOOLDIR=$HOME/tools ../configure
-    $ make
-### Set up environment variables
+### Install prebuilt toolchain
+    $ ./ci/toolchain_install.sh --all
     $ source ./ci/toolchain_env.sh
+### Building Vortex
+    $ make -s
 ### Quick demo running vecadd OpenCL kernel on 2 cores
     $ ./ci/blackbox.sh --cores=2 --app=vecadd    

@@ -13,21 +13,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# options
-XLEN=${XLEN:=32}
-TOOLDIR=${TOOLDIR:=/opt}
-OSDIR=${OSDIR:=ubuntu/bionic}
-
-# project subdirectories to build
-SUBDIRS=("." "!ci" "!perf" "hw*" "kernel*" "runtime*" "sim*" "tests*")
-
-# Get the directory of the script
-SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-
-# Determine the current working directory
-CURRENT_DIR=$(pwd)
-
-THIRD_PARTY_DIR=$SCRIPT_DIR/third_party
+# Function to detect current OS
+detect_os() {
+    local osdir="unsupported"
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release  # Source the os-release file to get OS information
+        case "$ID" in
+            ubuntu)
+                case "$VERSION_CODENAME" in
+                    bionic) osdir="ubuntu/bionic";;
+                    focal) osdir="ubuntu/focal";;
+                    # Add new versions as needed
+                esac
+                ;;
+            centos)
+                case "$VERSION_ID" in
+                    7) osdir="centos/7";;
+                    # Add new versions as needed
+                esac
+                ;;
+        esac
+    fi
+    echo "$osdir"
+}
 
 # Function to recursively copy files, skipping the current directory
 copy_files() {
@@ -50,12 +58,18 @@ copy_files() {
                 if [[ "$file" == *.in ]]; then
                     filename=$(basename -- "$file")
                     filename_no_ext="${filename%.in}"
+                    dest_file="$dest_dir/$filename_no_ext"
                     mkdir -p "$dest_dir"
-                    sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g" "$file" > "$dest_dir/$filename_no_ext"
+                    sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSDIR@|$OSDIR|g" "$file" > "$dest_file"
+                    # apply permissions to bash scripts
+                    read -r firstline < "$dest_file"
+                    if [[ "$firstline" =~ ^#!.*bash ]]; then
+                        chmod +x "$dest_file"
+                    fi
                 else
                     if [ $same_dir -eq 0 ]; then
                         mkdir -p "$dest_dir"
-                        cp "$file" "$dest_dir"
+                        cp -p "$file" "$dest_dir"
                     fi
                 fi
             fi
@@ -89,5 +103,29 @@ copy_files() {
         done
     done
 }
+
+###############################################################################
+
+# options
+XLEN=${XLEN:=32}
+TOOLDIR=${TOOLDIR:=/opt}
+OSDIR=${OSDIR:=$(detect_os)}
+
+# check OS
+if [ "$OSDIR" == "unsupported" ]; then
+    echo "Error: Unsupported OS."
+    exit -1
+fi
+
+# project subdirectories to build
+SUBDIRS=("." "!ci" "!perf" "hw*" "kernel*" "runtime*" "sim*" "tests*")
+
+# Get the directory of the script
+SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# Determine the current working directory
+CURRENT_DIR=$(pwd)
+
+THIRD_PARTY_DIR=$SCRIPT_DIR/third_party
 
 copy_files "$SCRIPT_DIR" "$CURRENT_DIR"

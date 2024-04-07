@@ -17,7 +17,7 @@
 set -e
 
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
-OSDIR=${OSDIR:=ubuntu/bionic}
+OSDIR=${OSDIR:=@OSDIR@}
 
 riscv() 
 {
