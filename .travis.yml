@@ -37,7 +37,7 @@ install:
     fi
 
 before_script:
-  - cd $HOME/build$XLEN && source ./ci/toolchain_env.sh
+  - source $HOME/build$XLEN/ci/toolchain_env.sh
 
 stages:
   - build
