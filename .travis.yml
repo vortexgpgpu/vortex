@@ -22,16 +22,16 @@ cache:
     - $HOME/build64
 
 install:
-  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v2" ]; then
+  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v2.1" ]; then
       rm -rf $TOOLDIR;
       mkdir -p $TOOLDIR;
       cd $HOME/build$XLEN && ./ci/toolchain_install.sh --all;
-      echo "v2" > "$TOOLDIR/version.txt";
+      echo "v2.1" > "$TOOLDIR/version.txt";
     fi
-  - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v2" ]; then
+  - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v2.1" ]; then
       make -C third_party > /dev/null;
       cp -r third_party $HOME;
-      echo "v2" > "$HOME/third_party/version.txt";
+      echo "v2.1" > "$HOME/third_party/version.txt";
     else
       cp -r $HOME/third_party . ;
     fi
@@ -73,6 +73,14 @@ jobs:
       name: isa64
       env: XLEN=64
       script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --isa
+    - stage: test 
+      name: kernel
+      env: XLEN=32
+      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --kernel
+    - stage: test 
+      name: kernel64
+      env: XLEN=64
+      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --kernel
     - stage: test 
       name: regression
       env: XLEN=32

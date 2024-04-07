@@ -62,12 +62,19 @@ isa()
     echo "isa tests done!"
 }
 
-regression() 
+kernel() 
 {
-    echo "begin regression tests..."
+    echo "begin kernel tests..."
 
     make -C tests/kernel run-simx
     make -C tests/kernel run-rtlsim
+
+    echo "kernel tests done!"
+}
+
+regression() 
+{
+    echo "begin regression tests..."
 
     make -C tests/regression run-simx
     make -C tests/regression run-rtlsim
@@ -278,7 +285,7 @@ synthesis()
 show_usage()
 {
     echo "Vortex Regression Test" 
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--regression] [--opencl] [--cluster] [--debug] [--config] [--stress[#n]] [--synthesis] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cluster] [--debug] [--config] [--stress[#n]] [--synthesis] [--all] [--h|--help]"
 }
 
 start=$SECONDS
@@ -296,6 +303,9 @@ while [ "$1" != "" ]; do
                 ;;
         --isa ) 
                 tests+=("isa")
+                ;;
+        --kernel )
+                tests+=("kernel")
                 ;;
         --regression )
                 tests+=("regression")
@@ -329,6 +339,7 @@ while [ "$1" != "" ]; do
                 tests=()
                 tests+=("unittest")
                 tests+=("isa")
+                tests+=("kernel")
                 tests+=("regression")
                 tests+=("opencl")
                 tests+=("cluster")

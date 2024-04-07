@@ -22,22 +22,22 @@ OSDIR=${OSDIR:=@OSDIR@}
 
 OS="${OS:=ubuntu/bionic}"
 
-riscv()
+riscv32()
 {
     case $OSDIR in
     "centos/7") parts=$(eval echo {a..h}) ;;
     *)          parts=$(eval echo {a..j}) ;;
     esac
-    rm -f riscv-gnu-toolchain.tar.bz2.parta*
+    rm -f riscv32-gnu-toolchain.tar.bz2.parta*
     for x in $parts
     do
-        wget $REPOSITORY/riscv-gnu-toolchain/$OSDIR/riscv-gnu-toolchain.tar.bz2.parta$x
+        wget $REPOSITORY/riscv32-gnu-toolchain/$OSDIR/riscv32-gnu-toolchain.tar.bz2.parta$x
     done
-    cat riscv-gnu-toolchain.tar.bz2.parta* > riscv-gnu-toolchain.tar.bz2
-    tar -xvf riscv-gnu-toolchain.tar.bz2
-    cp -r riscv-gnu-toolchain $TOOLDIR
-    rm -f riscv-gnu-toolchain.tar.bz2*    
-    rm -rf riscv-gnu-toolchain
+    cat riscv32-gnu-toolchain.tar.bz2.parta* > riscv32-gnu-toolchain.tar.bz2
+    tar -xvf riscv32-gnu-toolchain.tar.bz2
+    cp -r riscv32-gnu-toolchain $TOOLDIR
+    rm -f riscv32-gnu-toolchain.tar.bz2*    
+    rm -rf riscv32-gnu-toolchain
 }
 
 riscv64()
@@ -58,7 +58,7 @@ riscv64()
     rm -rf riscv64-gnu-toolchain
 }
 
-llvm-vortex()
+llvm()
 {
     case $OSDIR in
     "centos/7") parts=$(eval echo {a..b}) ;;
@@ -77,32 +77,22 @@ llvm-vortex()
     rm -rf llvm-vortex
 }
 
-libc-vortex()
+libc32()
 {
-    wget $REPOSITORY/libc-vortex/$OSDIR/libc-vortex.tar.bz2
-    tar -xvf libc-vortex.tar.bz2
-    rm -f libc-vortex.tar.bz2
-    cp -r libc-vortex $TOOLDIR
-    rm -rf libc-vortex
+    wget $REPOSITORY/libc32/libc32.tar.bz2
+    tar -xvf libc32.tar.bz2
+    rm -f libc32.tar.bz2
+    cp -r libc32 $TOOLDIR
+    rm -rf libc32
 }
 
-llvm-pocl()
+libc64()
 {
-    case $OSDIR in
-    "centos/7") parts=$(eval echo {a..b}) ;;
-    *)          parts=$(eval echo {a..b}) ;;
-    esac
-    echo $parts
-    rm -f llvm-pocl.tar.bz2.parta*
-    for x in $parts
-    do
-        wget $REPOSITORY/llvm-pocl/$OSDIR/llvm-pocl.tar.bz2.parta$x
-    done
-    cat llvm-pocl.tar.bz2.parta* > llvm-pocl.tar.bz2
-    tar -xvf llvm-pocl.tar.bz2
-    cp -r llvm-pocl $TOOLDIR
-    rm -f llvm-pocl.tar.bz2*    
-    rm -rf llvm-pocl
+    wget $REPOSITORY/libc64/libc64.tar.bz2
+    tar -xvf libc64.tar.bz2
+    rm -f libc64.tar.bz2
+    cp -r libc64 $TOOLDIR
+    rm -rf libc64
 }
 
 pocl()
@@ -154,7 +144,7 @@ yosys()
 show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
-    echo "Usage: $0 [[--riscv] [--riscv64] [--llvm-vortex] [--libc-vortex] [--llvm-pocl] [--pocl] [--verilator] [--sv2v] [--yosys] [--all] [-h|--help]]"
+    echo "Usage: $0 [--pocl] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libc32] [--libc64] [--sv2v] [--yosys] [--all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -163,15 +153,15 @@ while [ "$1" != "" ]; do
                 ;;
         --verilator ) verilator
                 ;;
-        --riscv ) riscv
+        --riscv32 ) riscv32
                 ;;
         --riscv64 ) riscv64
                 ;;
-        --llvm-vortex ) llvm-vortex
+        --llvm ) llvm
                 ;;
-        --libc-vortex ) libc-vortex
+        --libc32 ) libc32
                 ;;
-        --llvm-pocl ) llvm-pocl                
+        --libc64 ) libc64
                 ;;
         --sv2v ) sv2v
                 ;;
@@ -179,12 +169,13 @@ while [ "$1" != "" ]; do
                 ;;
         --all ) pocl
                 verilator
+                llvm
+                libc32
+                libc64
+                riscv32
+                riscv64
                 sv2v
                 yosys
-                llvm-vortex
-                libc-vortex
-                riscv
-                riscv64                
                 ;;
         -h | --help ) show_usage
                 exit
