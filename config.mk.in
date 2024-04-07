@@ -19,13 +19,9 @@ TOOLDIR ?= @TOOLDIR@
 
 LLVM_VORTEX ?= $(TOOLDIR)/llvm-vortex
 
-LIBC_VORTEX ?= $(TOOLDIR)/libc-vortex
+LIBC_VORTEX ?= $(TOOLDIR)/libc$(XLEN)
 
-ifeq ($(XLEN),64)
-RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv64-gnu-toolchain
-else
-RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv-gnu-toolchain
-endif
+RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv$(XLEN)-gnu-toolchain
 
 RISCV_PREFIX  ?= riscv$(XLEN)-unknown-elf
 RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)

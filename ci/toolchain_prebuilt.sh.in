@@ -19,14 +19,14 @@ set -e
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
 OSDIR=${OSDIR:=@OSDIR@}
 
-riscv() 
+riscv32() 
 {
-    echo "prebuilt riscv-gnu-toolchain..."
-    tar -C $TOOLDIR -cvjf riscv-gnu-toolchain.tar.bz2 riscv-gnu-toolchain
-    split -b 50M riscv-gnu-toolchain.tar.bz2 "riscv-gnu-toolchain.tar.bz2.part"
-    mkdir -p ./riscv-gnu-toolchain/$OSDIR
-    mv riscv-gnu-toolchain.tar.bz2.part* ./riscv-gnu-toolchain/$OSDIR
-    rm riscv-gnu-toolchain.tar.bz2
+    echo "prebuilt riscv32-gnu-toolchain..."
+    tar -C $TOOLDIR -cvjf riscv32-gnu-toolchain.tar.bz2 riscv32-gnu-toolchain
+    split -b 50M riscv32-gnu-toolchain.tar.bz2 "riscv32-gnu-toolchain.tar.bz2.part"
+    mkdir -p ./riscv32-gnu-toolchain/$OSDIR
+    mv riscv32-gnu-toolchain.tar.bz2.part* ./riscv32-gnu-toolchain/$OSDIR
+    rm riscv32-gnu-toolchain.tar.bz2
 }
 
 riscv64() 
@@ -39,7 +39,7 @@ riscv64()
     rm riscv64-gnu-toolchain.tar.bz2
 }
 
-llvm-vortex() 
+llvm() 
 {
     echo "prebuilt llvm-vortex..."
     tar -C $TOOLDIR -cvjf llvm-vortex.tar.bz2 llvm-vortex
@@ -49,22 +49,20 @@ llvm-vortex()
     rm llvm-vortex.tar.bz2
 }
 
-libc-vortex() 
+libc32() 
 {
-    echo "prebuilt libc-vortex..."
-    tar -C $TOOLDIR -cvjf libc-vortex.tar.bz2 libc-vortex
-    mkdir -p ./libc-vortex/$OSDIR
-    mv libc-vortex.tar.bz2 ./libc-vortex/$OSDIR
+    echo "prebuilt libc32..."
+    tar -C $TOOLDIR -cvjf libc32.tar.bz2 libc32
+    mkdir -p ./libc32
+    mv libc32.tar.bz2 ./libc32
 }
 
-llvm-pocl() 
+libc64() 
 {
-    echo "prebuilt llvm-pocl..."
-    tar -C $TOOLDIR -cvjf llvm-pocl.tar.bz2 llvm-pocl
-    split -b 50M llvm-pocl.tar.bz2 "llvm-pocl.tar.bz2.part"
-    mkdir -p ./llvm-pocl/$OSDIR  
-    mv llvm-pocl.tar.bz2.part* ./llvm-pocl/$OSDIR
-    rm llvm-pocl.tar.bz2
+    echo "prebuilt libc64..."
+    tar -C $TOOLDIR -cvjf libc64.tar.bz2 libc64
+    mkdir -p ./libc64
+    mv libc64.tar.bz2 ./libc64
 }
 
 pocl() 
@@ -104,7 +102,7 @@ yosys()
 show_usage()
 {
     echo "Setup Pre-built Vortex Toolchain"
-    echo "Usage: $0 [[--riscv] [--llvm-vortex] [--libc-vortex] [--llvm-pocl] [--pocl] [--verilator] [--sv2v] [-yosys] [--all] [-h|--help]]"
+    echo "Usage: $0 [--pocl] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libc32] [--libc64] [--sv2v] [-yosys] [--all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -113,27 +111,27 @@ while [ "$1" != "" ]; do
                 ;;
         --verilator ) verilator
                 ;;
-        --riscv ) riscv
+        --riscv32 ) riscv32
                 ;;
         --riscv64 ) riscv64
                 ;;
-        --llvm-vortex ) llvm-vortex
+        --llvm ) llvm
                 ;;
-        --libc-vortex ) libc-vortex
+        --libc32 ) libc32
                 ;;
-        --llvm-pocl ) llvm-pocl
+        --libc64 ) libc64
                 ;;
         --sv2v ) sv2v
                 ;;
         --yosys ) yosys
                 ;;
-        --all ) riscv
-                riscv64
-                llvm-vortex
-                libc-vortex
-                llvm-pocl
-                pocl
+        --all ) pocl
                 verilator
+                riscv32
+                riscv64
+                llvm
+                libc32
+                libc64
                 sv2v
                 yosys
                 ;;
