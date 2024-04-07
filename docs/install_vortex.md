@@ -28,25 +28,16 @@
    ```
    git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
    ```
-
-4. Install Vortex's prebuilt toolchain:
+4. Build Vortex
 
    ```
    $ cd vortex
- 
-   # By default, the toolchain will install to /opt folder which requires sudo access. Alternatively, you could also install the toolchain to a different location of your choice by setting TOOLDIR
-    
-   $ TOOLDIR=$HOME/tools ./ci/toolchain_install.sh --all
-   ```
-
-5. Build Vortex
-
-   ```
-   $ mkdir build
+   $ mkdir -p build
    $ cd build
    $ TOOLDIR=$HOME/tools ../configure
+   $ ./ci/toolchain_install.sh --all
    $ source ./ci/toolchain_env.sh
-   $ make
+   $ make -s
    ```
 
 
@@ -77,22 +68,14 @@ Note: depending on the system, some of the toolchain may need to be recompiled f
    git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
    ```
 
-5. Install Vortex's prebuilt toolchain:
+5. Build Vortex
 
    ```
    $ cd vortex
- 
-   # By default, the toolchain will install to /opt folder which requires sudo access. Alternatively, you could also install the toolchain to a different location of your choice by setting TOOLDIR
-   
-   $ TOOLDIR=$HOME/tools ./ci/toolchain_install.sh --all
-   ```
-
-6. Build Vortex
-
-   ```
-   $ mkdir build
+   $ mkdir -p build
    $ cd build
    $ TOOLDIR=$HOME/tools ../configure
+   $ ./ci/toolchain_install.sh --all
    $ source ./ci/toolchain_env.sh
-   $ make
+   $ make -s
    ```
