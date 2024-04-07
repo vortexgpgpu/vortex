@@ -26,6 +26,7 @@ riscv32()
 {
     case $OSDIR in
     "centos/7") parts=$(eval echo {a..h}) ;;
+    "ubuntu/focal") parts=$(eval echo {a..k}) ;;
     *)          parts=$(eval echo {a..j}) ;;
     esac
     rm -f riscv32-gnu-toolchain.tar.bz2.parta*
