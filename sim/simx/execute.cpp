@@ -256,7 +256,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       } else {
         switch (func3) {
         case 0: {
-          if (func7) {
+          if (func7 & 0x20) {
             // RV32I: SUB
             rddata[t].i = rsdata[t][0].i - rsdata[t][1].i;
           } else {
@@ -290,7 +290,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         case 5: {
           Word shamt_mask = ((Word)1 << log2up(XLEN)) - 1;
           Word shamt = rsdata[t][1].i & shamt_mask;
-          if (func7) {
+          if (func7 & 0x20) {
             // RV32I: SRA
             rddata[t].i = rsdata[t][0].i >> shamt;
           } else {
@@ -351,7 +351,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         break;
       }
       case 5: {
-        if (func7) {
+        if (func7 & 0x20) {
           // RV32I: SRAI
           Word result = rsdata[t][0].i >> immsrc;
           rddata[t].i = result;
@@ -462,7 +462,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       } else {
         switch (func3) {
         case 0: {
-          if (func7){
+          if (func7 & 0x20){
             // RV64I: SUBW
             uint32_t result = (uint32_t)rsdata[t][0].i - (uint32_t)rsdata[t][1].i;
             rddata[t].i = sext((uint64_t)result, 32);
@@ -486,7 +486,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           uint32_t shamt_mask = 0x1F;
           uint32_t shamt = rsdata[t][1].i & shamt_mask;
           uint32_t result;
-          if (func7) {
+          if (func7 & 0x20) {
             // RV64I: SRAW
             result = (int32_t)rsdata[t][0].i >> shamt;
           } else {
@@ -530,7 +530,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           uint32_t shamt_mask = 0x1F;
           uint32_t shamt = immsrc & shamt_mask;
           uint32_t result;
-          if (func7) {
+          if (func7 & 0x20) {
             // RV64I: SRAIW
             result = (int32_t)rsdata[t][0].i >> shamt;
           } else {
@@ -786,7 +786,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       if (!warp.tmask.test(t))
         continue;
       uint32_t csr_addr = immsrc;
-      uint32_t csr_value;
+      Word csr_value;
       if (func3 == 0) {
         trace->fu_type = FUType::ALU;
         trace->alu_type = AluType::SYSCALL;

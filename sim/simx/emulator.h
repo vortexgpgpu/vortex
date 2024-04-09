@@ -58,25 +58,22 @@ private:
     ipdom_entry_t(const ThreadMask &tmask, Word PC);
     ipdom_entry_t(const ThreadMask &tmask);
 
-    ThreadMask tmask;
-    Word PC;
-    bool fallthrough;
+    ThreadMask  tmask;
+    Word        PC;
+    bool        fallthrough;
   };
 
   struct warp_t {
     warp_t(const Arch& arch);
-
     void clear(const Arch& arch, const DCRS &dcrs);
 
-    Word PC;
-    ThreadMask tmask;
-
-    std::vector<std::vector<Word>>     ireg_file;
-    std::vector<std::vector<uint64_t>> freg_file;
-    std::stack<ipdom_entry_t>          ipdom_stack;
-    Byte fcsr;
-
-    UUIDGenerator uui_gen;
+    Word                              PC;
+    ThreadMask                        tmask;
+    std::vector<std::vector<Word>>    ireg_file;
+    std::vector<std::vector<uint64_t>>freg_file;
+    std::stack<ipdom_entry_t>         ipdom_stack;
+    Byte                              fcsr;
+    UUIDGenerator                     uui_gen;
   };
 
   std::shared_ptr<Instr> decode(uint32_t code) const;
@@ -99,9 +96,9 @@ private:
 
   void cout_flush();
 
-  uint32_t get_csr(uint32_t addr, uint32_t tid, uint32_t wid);
+  Word get_csr(uint32_t addr, uint32_t tid, uint32_t wid);
   
-  void set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid);
+  void set_csr(uint32_t addr, Word value, uint32_t tid, uint32_t wid);
 
   uint32_t get_fpu_rm(uint32_t func3, uint32_t tid, uint32_t wid);
 
@@ -113,13 +110,14 @@ private:
 
   const Arch& arch_;
   const DCRS& dcrs_;
-  Core* core_;
+  Core*       core_;
   std::vector<warp_t> warps_;
-  WarpMask active_warps_;
-  WarpMask stalled_warps_;
+  WarpMask    active_warps_;
+  WarpMask    stalled_warps_;
   std::vector<WarpMask> barriers_;
   std::unordered_map<int, std::stringstream> print_bufs_;  
-  MemoryUnit mmu_;
+  MemoryUnit  mmu_;
+  Word csr_mscratch_;
 };
 
 }
