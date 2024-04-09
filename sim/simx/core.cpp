@@ -283,10 +283,10 @@ void Core::issue() {
         for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
           auto& use = uses.at(j);
           __unused (use);
-          if (j) DTN(3, ", ");
-          DTN(3, use.reg_type << use.reg_id << "(#" << use.uuid << ")");
+          if (j) DTN(4, ", ");
+          DTN(4, use.reg_type << use.reg_id << "(#" << use.uuid << ")");
         }
-        DTN(3, "}, " << *trace << std::endl);
+        DTN(4, "}, " << *trace << std::endl);
       }
       for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
         auto& use = uses.at(j);

@@ -107,7 +107,7 @@ static const char* op_string(const Instr &instr) {
       }
     } else {
       switch (func3) {
-      case 0: return func7 ? "SUB" : "ADD";
+      case 0: return (func7 & 0x20) ? "SUB" : "ADD";
       case 1: return "SLL";
       case 2: return "SLT";
       case 3: return "SLTU";
@@ -179,9 +179,9 @@ static const char* op_string(const Instr &instr) {
       }
     } else {
       switch (func3) {
-      case 0: return func7 ? "SUBW" : "ADDW";
+      case 0: return (func7 & 0x20) ? "SUBW" : "ADDW";
       case 1: return "SLLW";
-      case 5: return func7 ? "SRAW" : "SRLW";  
+      case 5: return (func7 & 0x20) ? "SRAW" : "SRLW";  
       default:
         std::abort();
       }
@@ -190,7 +190,7 @@ static const char* op_string(const Instr &instr) {
     switch (func3) {
     case 0: return "ADDIW";
     case 1: return "SLLIW";
-    case 5: return func7 ? "SRAIW" : "SRLIW";
+    case 5: return (func7 & 0x20) ? "SRAIW" : "SRLIW";
     default:
       std::abort();
     }
