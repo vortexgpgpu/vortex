@@ -313,8 +313,8 @@ void vx_spawn_pocl_kernel(pocl_kernel_context_t * ctx, pocl_kernel_cb callback, 
     // call stub routine
     spawn_pocl_kernel_all_stub();
 
-    // disable warp
-    vx_tmc_zero();
+    // back to single-threaded
+    vx_tmc_one();
 	}  
 
   if (rT != 0) {
