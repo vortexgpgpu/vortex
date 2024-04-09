@@ -49,8 +49,6 @@ typedef struct {
   char log2X;
 } wspawn_pocl_kernel_args_t;
 
-void* g_wspawn_args[NUM_CORES_MAX];
-
 inline char is_log2(int x) {
   return ((x & (x-1)) == 0);
 }
@@ -61,11 +59,10 @@ inline int log2_fast(int x) {
 
 static void __attribute__ ((noinline)) spawn_tasks_all_stub() {
   int NT  = vx_num_threads();
-  int cid = vx_core_id();
   int wid = vx_warp_id();
   int tid = vx_thread_id();
 
-  wspawn_tasks_args_t* p_wspawn_args = (wspawn_tasks_args_t*)g_wspawn_args[cid];
+  wspawn_tasks_args_t* p_wspawn_args = (wspawn_tasks_args_t*)csr_read(VX_CSR_MSCRATCH);
 
   int wK = (p_wspawn_args->FWs * wid) + MIN(p_wspawn_args->RWs, wid);
   int tK = p_wspawn_args->FWs + (wid < p_wspawn_args->RWs);
@@ -79,10 +76,9 @@ static void __attribute__ ((noinline)) spawn_tasks_all_stub() {
 }
 
 static void __attribute__ ((noinline)) spawn_tasks_rem_stub() {
-  int cid = vx_core_id();
   int tid = vx_thread_id();
   
-  wspawn_tasks_args_t* p_wspawn_args = (wspawn_tasks_args_t*)g_wspawn_args[cid];
+  wspawn_tasks_args_t* p_wspawn_args = (wspawn_tasks_args_t*)csr_read(VX_CSR_MSCRATCH);
   int task_id = p_wspawn_args->remain + tid;
   (p_wspawn_args->callback)(task_id, p_wspawn_args->arg);
 }
@@ -136,8 +132,8 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
   int offset = core_id * tasks_per_core;
   int remain = offset + (tasks_per_core_n1 - rT);
 
-  wspawn_tasks_args_t wspawn_args = { callback, arg, offset, remain, fW, rW};
-  g_wspawn_args[core_id] = &wspawn_args;
+  wspawn_tasks_args_t wspawn_args = {callback, arg, offset, remain, fW, rW};
+  csr_write(VX_CSR_MSCRATCH, &wspawn_args);
 
 	if (TW >= 1)	{
     // execute callback on other warps
@@ -174,11 +170,10 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
 
 static void __attribute__ ((noinline)) spawn_pocl_kernel_all_stub() {
   int NT  = vx_num_threads();
-  int cid = vx_core_id();
   int wid = vx_warp_id();
   int tid = vx_thread_id();
 
-  wspawn_pocl_kernel_args_t* p_wspawn_args = (wspawn_pocl_kernel_args_t*)g_wspawn_args[cid];
+  wspawn_pocl_kernel_args_t* p_wspawn_args = (wspawn_pocl_kernel_args_t*)csr_read(VX_CSR_MSCRATCH);
   pocl_kernel_context_t* ctx = p_wspawn_args->ctx;
   void* arg = p_wspawn_args->arg;
 
@@ -212,10 +207,9 @@ static void __attribute__ ((noinline)) spawn_pocl_kernel_all_stub() {
 }
 
 static void __attribute__ ((noinline)) spawn_pocl_kernel_rem_stub() {
-  int cid = vx_core_id();
   int tid = vx_thread_id();
 
-  wspawn_pocl_kernel_args_t* p_wspawn_args = (wspawn_pocl_kernel_args_t*)g_wspawn_args[cid];
+  wspawn_pocl_kernel_args_t* p_wspawn_args = (wspawn_pocl_kernel_args_t*)csr_read(VX_CSR_MSCRATCH);
   pocl_kernel_context_t* ctx = p_wspawn_args->ctx;
   void* arg = p_wspawn_args->arg;
 
@@ -306,7 +300,7 @@ void vx_spawn_pocl_kernel(pocl_kernel_context_t * ctx, pocl_kernel_cb callback, 
   wspawn_pocl_kernel_args_t wspawn_args = { 
     ctx, callback, arg, local_size, offset, remain, fW, rW, isXYpow2, log2XY, log2X
   };
-  g_wspawn_args[core_id] = &wspawn_args;
+  csr_write(VX_CSR_MSCRATCH, &wspawn_args);
 
 	if (TW >= 1)	{
     // execute callback on other warps
