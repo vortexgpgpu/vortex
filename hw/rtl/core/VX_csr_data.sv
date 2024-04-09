@@ -17,6 +17,16 @@
 `include "VX_fpu_define.vh"
 `endif
 
+`ifdef XLEN_64
+    `define CSR_READ_64(addr, dst, src) \
+        addr : dst = `XLEN'(src)
+`else
+    `define CSR_READ_64(addr, dst, src) \
+        addr : dst = src[31:0]; \
+        (addr + (`VX_CSR_MPM_BASE_H-`VX_CSR_MPM_BASE)) : dst = 32'(src[$bits(src)-1:32])
+`endif
+
+
 module VX_csr_data
 import VX_gpu_pkg::*;
 `ifdef EXT_F_ENABLE
@@ -49,14 +59,14 @@ import VX_fpu_pkg::*;
     input wire [`UUID_WIDTH-1:0]        read_uuid,
     input wire [`NW_WIDTH-1:0]          read_wid,
     input wire [`VX_CSR_ADDR_BITS-1:0]  read_addr,
-    output wire [31:0]                  read_data_ro,
-    output wire [31:0]                  read_data_rw,
+    output wire [`XLEN-1:0]             read_data_ro,
+    output wire [`XLEN-1:0]             read_data_rw,
 
     input wire                          write_enable, 
     input wire [`UUID_WIDTH-1:0]        write_uuid,
     input wire [`NW_WIDTH-1:0]          write_wid,
     input wire [`VX_CSR_ADDR_BITS-1:0]  write_addr,
-    input wire [31:0]                   write_data
+    input wire [`XLEN-1:0]              write_data
 );
 
     `UNUSED_VAR (reset)
@@ -65,16 +75,20 @@ import VX_fpu_pkg::*;
 
     // CSRs Write /////////////////////////////////////////////////////////////
 
+    reg [`XLEN-1:0] mscratch;
+
 `ifdef EXT_F_ENABLE    
     reg [`NUM_WARPS-1:0][`INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr, fcsr_n;
     wire [`NUM_FPU_BLOCKS-1:0]              fpu_write_enable;
     wire [`NUM_FPU_BLOCKS-1:0][`NW_WIDTH-1:0] fpu_write_wid;
     fflags_t [`NUM_FPU_BLOCKS-1:0]          fpu_write_fflags;
+
     for (genvar i = 0; i < `NUM_FPU_BLOCKS; ++i) begin
         assign fpu_write_enable[i] = fpu_csr_if[i].write_enable;
         assign fpu_write_wid[i]    = fpu_csr_if[i].write_wid;
         assign fpu_write_fflags[i] = fpu_csr_if[i].write_fflags;
     end
+    
     always @(*) begin
         fcsr_n = fcsr;
         for (integer i = 0; i < `NUM_FPU_BLOCKS; ++i) begin
@@ -123,8 +137,13 @@ import VX_fpu_pkg::*;
                 `VX_CSR_MTVEC,
                 `VX_CSR_MEPC,
                 `VX_CSR_PMPCFG0,
-                `VX_CSR_PMPADDR0: /* do nothing!*/;
-                default: begin
+                `VX_CSR_PMPADDR0: begin
+                    // do nothing!
+                end
+                `VX_CSR_MSCRATCH: begin
+                    mscratch <= write_data;
+                end
+                default: begin  
                     `ASSERT(0, ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
                 end
             endcase
@@ -133,8 +152,8 @@ import VX_fpu_pkg::*;
 
     // CSRs read //////////////////////////////////////////////////////////////
 
-    reg [31:0] read_data_ro_r;
-    reg [31:0] read_data_rw_r;
+    reg [`XLEN-1:0] read_data_ro_r;
+    reg [`XLEN-1:0] read_data_rw_r;
     reg read_addr_valid_r;
 
     always @(*) begin
@@ -142,28 +161,31 @@ import VX_fpu_pkg::*;
         read_data_rw_r    = '0;
         read_addr_valid_r = 1;
         case (read_addr)            
-            `VX_CSR_MVENDORID  : read_data_ro_r = 32'(`VENDOR_ID);
-            `VX_CSR_MARCHID    : read_data_ro_r = 32'(`ARCHITECTURE_ID);
-            `VX_CSR_MIMPID     : read_data_ro_r = 32'(`IMPLEMENTATION_ID);
-            `VX_CSR_MISA       : read_data_ro_r = (((`CLOG2(`XLEN)-4) << (`XLEN-2)) | `MISA_STD);
+            `VX_CSR_MVENDORID  : read_data_ro_r = `XLEN'(`VENDOR_ID);
+            `VX_CSR_MARCHID    : read_data_ro_r = `XLEN'(`ARCHITECTURE_ID);
+            `VX_CSR_MIMPID     : read_data_ro_r = `XLEN'(`IMPLEMENTATION_ID);
+            `VX_CSR_MISA       : read_data_ro_r = `XLEN'({2'(`CLOG2(`XLEN/16)), 30'(`MISA_STD)});
         `ifdef EXT_F_ENABLE
-            `VX_CSR_FFLAGS     : read_data_rw_r = 32'(fcsr[read_wid][`FP_FLAGS_BITS-1:0]);
-            `VX_CSR_FRM        : read_data_rw_r = 32'(fcsr[read_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS]);
-            `VX_CSR_FCSR       : read_data_rw_r = 32'(fcsr[read_wid]);
+            `VX_CSR_FFLAGS     : read_data_rw_r = `XLEN'(fcsr[read_wid][`FP_FLAGS_BITS-1:0]);
+            `VX_CSR_FRM        : read_data_rw_r = `XLEN'(fcsr[read_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS]);
+            `VX_CSR_FCSR       : read_data_rw_r = `XLEN'(fcsr[read_wid]);            
         `endif
-            `VX_CSR_WARP_ID    : read_data_ro_r = 32'(read_wid);
-            `VX_CSR_CORE_ID    : read_data_ro_r = 32'(CORE_ID);
-            `VX_CSR_THREAD_MASK: read_data_ro_r = 32'(thread_masks[read_wid]);
-            `VX_CSR_WARP_MASK  : read_data_ro_r = 32'(active_warps);
-            `VX_CSR_NUM_THREADS: read_data_ro_r = 32'(`NUM_THREADS);
-            `VX_CSR_NUM_WARPS  : read_data_ro_r = 32'(`NUM_WARPS);
-            `VX_CSR_NUM_CORES  : read_data_ro_r = 32'(`NUM_CORES * `NUM_CLUSTERS);           
-            `VX_CSR_MCYCLE     : read_data_ro_r = 32'(cycles[31:0]);
-            `VX_CSR_MCYCLE_H   : read_data_ro_r = 32'(cycles[`PERF_CTR_BITS-1:32]);
+            `VX_CSR_MSCRATCH   : read_data_rw_r = mscratch;
+            
+            `VX_CSR_WARP_ID    : read_data_ro_r = `XLEN'(read_wid);
+            `VX_CSR_CORE_ID    : read_data_ro_r = `XLEN'(CORE_ID);
+            `VX_CSR_THREAD_MASK: read_data_ro_r = `XLEN'(thread_masks[read_wid]);
+            `VX_CSR_WARP_MASK  : read_data_ro_r = `XLEN'(active_warps);
+            `VX_CSR_NUM_THREADS: read_data_ro_r = `XLEN'(`NUM_THREADS);
+            `VX_CSR_NUM_WARPS  : read_data_ro_r = `XLEN'(`NUM_WARPS);
+            `VX_CSR_NUM_CORES  : read_data_ro_r = `XLEN'(`NUM_CORES * `NUM_CLUSTERS);
+            
+            `CSR_READ_64(`VX_CSR_MCYCLE, read_data_ro_r, cycles);
+
             `VX_CSR_MPM_RESERVED : read_data_ro_r = 'x;
             `VX_CSR_MPM_RESERVED_H : read_data_ro_r = 'x;  
-            `VX_CSR_MINSTRET   : read_data_ro_r = 32'(commit_csr_if.instret[31:0]);
-            `VX_CSR_MINSTRET_H : read_data_ro_r = 32'(commit_csr_if.instret[`PERF_CTR_BITS-1:32]);       
+            
+            `CSR_READ_64(`VX_CSR_MINSTRET, read_data_ro_r, commit_csr_if.instret);   
             
             `VX_CSR_SATP,
             `VX_CSR_MSTATUS,
@@ -174,7 +196,7 @@ import VX_fpu_pkg::*;
             `VX_CSR_MTVEC,
             `VX_CSR_MEPC,
             `VX_CSR_PMPCFG0,
-            `VX_CSR_PMPADDR0   : read_data_ro_r = 32'(0);
+            `VX_CSR_PMPADDR0 : read_data_ro_r = `XLEN'(0);
 
             default: begin
                 read_addr_valid_r = 0;
@@ -185,108 +207,66 @@ import VX_fpu_pkg::*;
                     case (base_dcrs.mpm_class)
                     `VX_DCR_MPM_CLASS_CORE: begin
                         case (read_addr)
-                        // PERF: pipeline
-                        `VX_CSR_MPM_SCHED_ID        : read_data_ro_r = pipeline_perf_if.sched_idles[31:0];
-                        `VX_CSR_MPM_SCHED_ID_H      : read_data_ro_r = 32'(pipeline_perf_if.sched_idles[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_SCHED_ST        : read_data_ro_r = pipeline_perf_if.sched_stalls[31:0];
-                        `VX_CSR_MPM_SCHED_ST_H      : read_data_ro_r = 32'(pipeline_perf_if.sched_stalls[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_IBUF_ST         : read_data_ro_r = pipeline_perf_if.ibf_stalls[31:0];
-                        `VX_CSR_MPM_IBUF_ST_H       : read_data_ro_r = 32'(pipeline_perf_if.ibf_stalls[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_SCRB_ST         : read_data_ro_r = pipeline_perf_if.scb_stalls[31:0];
-                        `VX_CSR_MPM_SCRB_ST_H       : read_data_ro_r = 32'(pipeline_perf_if.scb_stalls[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_SCRB_ALU        : read_data_ro_r = pipeline_perf_if.units_uses[`EX_ALU][31:0];
-                        `VX_CSR_MPM_SCRB_ALU_H      : read_data_ro_r = 32'(pipeline_perf_if.units_uses[`EX_ALU][`PERF_CTR_BITS-1:32]);
+                        // PERF: pipeline                        
+                        `CSR_READ_64(`VX_CSR_MPM_SCHED_ID, read_data_ro_r, pipeline_perf_if.sched_idles);
+                        `CSR_READ_64(`VX_CSR_MPM_SCHED_ST, read_data_ro_r, pipeline_perf_if.sched_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_IBUF_ST, read_data_ro_r, pipeline_perf_if.ibf_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_ST, read_data_ro_r, pipeline_perf_if.scb_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_ALU, read_data_ro_r, pipeline_perf_if.units_uses[`EX_ALU]);
                     `ifdef EXT_F_ENABLE
-                        `VX_CSR_MPM_SCRB_FPU        : read_data_ro_r = pipeline_perf_if.units_uses[`EX_FPU][31:0];
-                        `VX_CSR_MPM_SCRB_FPU_H      : read_data_ro_r = 32'(pipeline_perf_if.units_uses[`EX_FPU][`PERF_CTR_BITS-1:32]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_FPU, read_data_ro_r, pipeline_perf_if.units_uses[`EX_FPU]);
                     `else
-                        `VX_CSR_MPM_SCRB_FPU        : read_data_ro_r = '0;
-                        `VX_CSR_MPM_SCRB_FPU_H      : read_data_ro_r = '0;
+                        `VX_CSR_MPM_SCRB_FPU   : read_data_ro_r = '0;
+                        `VX_CSR_MPM_SCRB_FPU_H : read_data_ro_r = '0;
                     `endif
-                        `VX_CSR_MPM_SCRB_LSU        : read_data_ro_r = pipeline_perf_if.units_uses[`EX_LSU][31:0];
-                        `VX_CSR_MPM_SCRB_LSU_H      : read_data_ro_r = 32'(pipeline_perf_if.units_uses[`EX_LSU][`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_SCRB_SFU        : read_data_ro_r = pipeline_perf_if.units_uses[`EX_SFU][31:0];
-                        `VX_CSR_MPM_SCRB_SFU_H      : read_data_ro_r = 32'(pipeline_perf_if.units_uses[`EX_SFU][`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_SCRB_CSRS       : read_data_ro_r = pipeline_perf_if.sfu_uses[`SFU_CSRS][31:0];
-                        `VX_CSR_MPM_SCRB_CSRS_H     : read_data_ro_r = 32'(pipeline_perf_if.sfu_uses[`SFU_CSRS][`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_SCRB_WCTL       : read_data_ro_r = pipeline_perf_if.sfu_uses[`SFU_WCTL][31:0];
-                        `VX_CSR_MPM_SCRB_WCTL_H     : read_data_ro_r = 32'(pipeline_perf_if.sfu_uses[`SFU_WCTL][`PERF_CTR_BITS-1:32]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_LSU, read_data_ro_r, pipeline_perf_if.units_uses[`EX_LSU]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_SFU, read_data_ro_r, pipeline_perf_if.units_uses[`EX_SFU]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_CSRS, read_data_ro_r, pipeline_perf_if.sfu_uses[`SFU_CSRS]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_WCTL, read_data_ro_r, pipeline_perf_if.sfu_uses[`SFU_WCTL]);
                         // PERF: memory
-                        `VX_CSR_MPM_IFETCHES        : read_data_ro_r = pipeline_perf_if.ifetches[31:0];
-                        `VX_CSR_MPM_IFETCHES_H      : read_data_ro_r = 32'(pipeline_perf_if.ifetches[`PERF_CTR_BITS-1:32]); 
-                        `VX_CSR_MPM_LOADS           : read_data_ro_r = pipeline_perf_if.loads[31:0];
-                        `VX_CSR_MPM_LOADS_H         : read_data_ro_r = 32'(pipeline_perf_if.loads[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_STORES          : read_data_ro_r = pipeline_perf_if.stores[31:0];
-                        `VX_CSR_MPM_STORES_H        : read_data_ro_r = 32'(pipeline_perf_if.stores[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_IFETCH_LT       : read_data_ro_r = pipeline_perf_if.ifetch_latency[31:0];
-                        `VX_CSR_MPM_IFETCH_LT_H     : read_data_ro_r = 32'(pipeline_perf_if.ifetch_latency[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_LOAD_LT         : read_data_ro_r = pipeline_perf_if.load_latency[31:0];
-                        `VX_CSR_MPM_LOAD_LT_H       : read_data_ro_r = 32'(pipeline_perf_if.load_latency[`PERF_CTR_BITS-1:32]);            
+                        `CSR_READ_64(`VX_CSR_MPM_IFETCHES, read_data_ro_r, pipeline_perf_if.ifetches);
+                        `CSR_READ_64(`VX_CSR_MPM_LOADS, read_data_ro_r, pipeline_perf_if.loads);
+                        `CSR_READ_64(`VX_CSR_MPM_STORES, read_data_ro_r, pipeline_perf_if.stores);
+                        `CSR_READ_64(`VX_CSR_MPM_IFETCH_LT, read_data_ro_r, pipeline_perf_if.ifetch_latency);
+                        `CSR_READ_64(`VX_CSR_MPM_LOAD_LT, read_data_ro_r, pipeline_perf_if.load_latency);         
                         default:;
                         endcase
                     end
                     `VX_DCR_MPM_CLASS_MEM: begin
                         case (read_addr)
                         // PERF: icache
-                        `VX_CSR_MPM_ICACHE_READS    : read_data_ro_r = mem_perf_if.icache.reads[31:0];
-                        `VX_CSR_MPM_ICACHE_READS_H  : read_data_ro_r = 32'(mem_perf_if.icache.reads[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_ICACHE_MISS_R   : read_data_ro_r = mem_perf_if.icache.read_misses[31:0];
-                        `VX_CSR_MPM_ICACHE_MISS_R_H : read_data_ro_r = 32'(mem_perf_if.icache.read_misses[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_ICACHE_MSHR_ST  : read_data_ro_r = mem_perf_if.icache.mshr_stalls[31:0];
-                        `VX_CSR_MPM_ICACHE_MSHR_ST_H: read_data_ro_r = 32'(mem_perf_if.icache.mshr_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_READ_64(`VX_CSR_MPM_ICACHE_READS, read_data_ro_r, mem_perf_if.icache.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_ICACHE_MISS_R, read_data_ro_r, mem_perf_if.icache.read_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_ICACHE_MSHR_ST, read_data_ro_r, mem_perf_if.icache.mshr_stalls);
                         // PERF: dcache
-                        `VX_CSR_MPM_DCACHE_READS    : read_data_ro_r = mem_perf_if.dcache.reads[31:0];
-                        `VX_CSR_MPM_DCACHE_READS_H  : read_data_ro_r = 32'(mem_perf_if.dcache.reads[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_DCACHE_WRITES   : read_data_ro_r = mem_perf_if.dcache.writes[31:0];
-                        `VX_CSR_MPM_DCACHE_WRITES_H : read_data_ro_r = 32'(mem_perf_if.dcache.writes[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_DCACHE_MISS_R   : read_data_ro_r = mem_perf_if.dcache.read_misses[31:0];
-                        `VX_CSR_MPM_DCACHE_MISS_R_H : read_data_ro_r = 32'(mem_perf_if.dcache.read_misses[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_DCACHE_MISS_W   : read_data_ro_r = mem_perf_if.dcache.write_misses[31:0];
-                        `VX_CSR_MPM_DCACHE_MISS_W_H : read_data_ro_r = 32'(mem_perf_if.dcache.write_misses[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_DCACHE_BANK_ST  : read_data_ro_r = mem_perf_if.dcache.bank_stalls[31:0];
-                        `VX_CSR_MPM_DCACHE_BANK_ST_H: read_data_ro_r = 32'(mem_perf_if.dcache.bank_stalls[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_DCACHE_MSHR_ST  : read_data_ro_r = mem_perf_if.dcache.mshr_stalls[31:0];
-                        `VX_CSR_MPM_DCACHE_MSHR_ST_H: read_data_ro_r = 32'(mem_perf_if.dcache.mshr_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_READS, read_data_ro_r, mem_perf_if.dcache.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_WRITES, read_data_ro_r, mem_perf_if.dcache.writes);
+                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_MISS_R, read_data_ro_r, mem_perf_if.dcache.read_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_MISS_W, read_data_ro_r, mem_perf_if.dcache.write_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_BANK_ST, read_data_ro_r, mem_perf_if.dcache.bank_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_MSHR_ST, read_data_ro_r, mem_perf_if.dcache.mshr_stalls);
                         // PERF: lmem          
-                        `VX_CSR_MPM_LMEM_READS      : read_data_ro_r = mem_perf_if.lmem.reads[31:0];
-                        `VX_CSR_MPM_LMEM_READS_H    : read_data_ro_r = 32'(mem_perf_if.lmem.reads[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_LMEM_WRITES     : read_data_ro_r = mem_perf_if.lmem.writes[31:0];
-                        `VX_CSR_MPM_LMEM_WRITES_H   : read_data_ro_r = 32'(mem_perf_if.lmem.writes[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_LMEM_BANK_ST    : read_data_ro_r = mem_perf_if.lmem.bank_stalls[31:0];
-                        `VX_CSR_MPM_LMEM_BANK_ST_H  : read_data_ro_r = 32'(mem_perf_if.lmem.bank_stalls[`PERF_CTR_BITS-1:32]);
+                        `CSR_READ_64(`VX_CSR_MPM_LMEM_READS, read_data_ro_r, mem_perf_if.lmem.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_LMEM_WRITES, read_data_ro_r, mem_perf_if.lmem.writes);
+                        `CSR_READ_64(`VX_CSR_MPM_LMEM_BANK_ST, read_data_ro_r, mem_perf_if.lmem.bank_stalls);
                         // PERF: l2cache                        
-                        `VX_CSR_MPM_L2CACHE_READS   : read_data_ro_r = mem_perf_if.l2cache.reads[31:0];
-                        `VX_CSR_MPM_L2CACHE_READS_H : read_data_ro_r = 32'(mem_perf_if.l2cache.reads[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_L2CACHE_WRITES  : read_data_ro_r = mem_perf_if.l2cache.writes[31:0];
-                        `VX_CSR_MPM_L2CACHE_WRITES_H: read_data_ro_r = 32'(mem_perf_if.l2cache.writes[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_L2CACHE_MISS_R  : read_data_ro_r = mem_perf_if.l2cache.read_misses[31:0];
-                        `VX_CSR_MPM_L2CACHE_MISS_R_H: read_data_ro_r = 32'(mem_perf_if.l2cache.read_misses[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_L2CACHE_MISS_W  : read_data_ro_r = mem_perf_if.l2cache.write_misses[31:0];
-                        `VX_CSR_MPM_L2CACHE_MISS_W_H: read_data_ro_r = 32'(mem_perf_if.l2cache.write_misses[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_L2CACHE_BANK_ST : read_data_ro_r = mem_perf_if.l2cache.bank_stalls[31:0];
-                        `VX_CSR_MPM_L2CACHE_BANK_ST_H: read_data_ro_r = 32'(mem_perf_if.l2cache.bank_stalls[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_L2CACHE_MSHR_ST : read_data_ro_r = mem_perf_if.l2cache.mshr_stalls[31:0];
-                        `VX_CSR_MPM_L2CACHE_MSHR_ST_H: read_data_ro_r = 32'(mem_perf_if.l2cache.mshr_stalls[`PERF_CTR_BITS-1:32]);      
+                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_READS, read_data_ro_r, mem_perf_if.l2cache.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_WRITES, read_data_ro_r, mem_perf_if.l2cache.writes);
+                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MISS_R, read_data_ro_r, mem_perf_if.l2cache.read_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MISS_W, read_data_ro_r, mem_perf_if.l2cache.write_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_BANK_ST, read_data_ro_r, mem_perf_if.l2cache.bank_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MSHR_ST, read_data_ro_r, mem_perf_if.l2cache.mshr_stalls); 
                         // PERF: l3cache
-                        `VX_CSR_MPM_L3CACHE_READS   : read_data_ro_r = mem_perf_if.l3cache.reads[31:0];
-                        `VX_CSR_MPM_L3CACHE_READS_H : read_data_ro_r = 32'(mem_perf_if.l3cache.reads[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_L3CACHE_WRITES  : read_data_ro_r = mem_perf_if.l3cache.writes[31:0];
-                        `VX_CSR_MPM_L3CACHE_WRITES_H: read_data_ro_r = 32'(mem_perf_if.l3cache.writes[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_L3CACHE_MISS_R  : read_data_ro_r = mem_perf_if.l3cache.read_misses[31:0];
-                        `VX_CSR_MPM_L3CACHE_MISS_R_H: read_data_ro_r = 32'(mem_perf_if.l3cache.read_misses[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_L3CACHE_MISS_W  : read_data_ro_r = mem_perf_if.l3cache.write_misses[31:0];
-                        `VX_CSR_MPM_L3CACHE_MISS_W_H: read_data_ro_r = 32'(mem_perf_if.l3cache.write_misses[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_L3CACHE_BANK_ST : read_data_ro_r = mem_perf_if.l3cache.bank_stalls[31:0];
-                        `VX_CSR_MPM_L3CACHE_BANK_ST_H: read_data_ro_r = 32'(mem_perf_if.l3cache.bank_stalls[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_L3CACHE_MSHR_ST : read_data_ro_r = mem_perf_if.l3cache.mshr_stalls[31:0];
-                        `VX_CSR_MPM_L3CACHE_MSHR_ST_H: read_data_ro_r = 32'(mem_perf_if.l3cache.mshr_stalls[`PERF_CTR_BITS-1:32]); 
+                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_READS, read_data_ro_r, mem_perf_if.l3cache.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_WRITES, read_data_ro_r, mem_perf_if.l3cache.writes);
+                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_MISS_R, read_data_ro_r, mem_perf_if.l3cache.read_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_MISS_W, read_data_ro_r, mem_perf_if.l3cache.write_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_BANK_ST, read_data_ro_r, mem_perf_if.l3cache.bank_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_MSHR_ST, read_data_ro_r, mem_perf_if.l3cache.mshr_stalls);
                         // PERF: memory
-                        `VX_CSR_MPM_MEM_READS       : read_data_ro_r = mem_perf_if.mem.reads[31:0];
-                        `VX_CSR_MPM_MEM_READS_H     : read_data_ro_r = 32'(mem_perf_if.mem.reads[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_MEM_WRITES      : read_data_ro_r = mem_perf_if.mem.writes[31:0];
-                        `VX_CSR_MPM_MEM_WRITES_H    : read_data_ro_r = 32'(mem_perf_if.mem.writes[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_MEM_LT          : read_data_ro_r = mem_perf_if.mem.latency[31:0];
-                        `VX_CSR_MPM_MEM_LT_H        : read_data_ro_r = 32'(mem_perf_if.mem.latency[`PERF_CTR_BITS-1:32]);     
+                        `CSR_READ_64(`VX_CSR_MPM_MEM_READS, read_data_ro_r, mem_perf_if.mem.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_MEM_WRITES, read_data_ro_r, mem_perf_if.mem.writes);
+                        `CSR_READ_64(`VX_CSR_MPM_MEM_LT, read_data_ro_r, mem_perf_if.mem.latency);
                         default:;
                         endcase
                     end

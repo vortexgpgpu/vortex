@@ -306,7 +306,16 @@ void Emulator::cout_flush() {
   }
 }
 
-uint32_t Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {  
+#ifdef XLEN_64
+  #define CSR_READ_64(addr, value) \
+    case addr: return value
+#else
+  #define CSR_READ_64(addr, value) \
+    case addr : return (uint32_t)value; \
+    case (addr + (VX_CSR_MPM_BASE_H-VX_CSR_MPM_BASE)) : return ((value >> 32) & 0xFFFFFFFF)
+#endif
+
+Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {  
   auto core_perf = core_->perf_stats();  
   switch (addr) {
   case VX_CSR_SATP:
@@ -322,38 +331,21 @@ uint32_t Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   case VX_CSR_MNSTATUS:
     return 0;
 
-  case VX_CSR_FFLAGS:
-    return warps_.at(wid).fcsr & 0x1F;
-  case VX_CSR_FRM:
-    return (warps_.at(wid).fcsr >> 5);
-  case VX_CSR_FCSR:
-    return warps_.at(wid).fcsr;
-  case VX_CSR_MHARTID: // global thread ID
-    return (core_->id() * arch_.num_warps() + wid) * arch_.num_threads() + tid;
-  case VX_CSR_THREAD_ID: // thread ID
-    return tid;
-  case VX_CSR_WARP_ID: // warp ID
-    return wid;
-  case VX_CSR_CORE_ID: // core ID
-    return core_->id();
-  case VX_CSR_THREAD_MASK: // thread mask
-    return warps_.at(wid).tmask.to_ulong();
-  case VX_CSR_WARP_MASK: // active warps
-    return active_warps_.to_ulong();
-  case VX_CSR_NUM_THREADS: // Number of threads per warp
-    return arch_.num_threads();
-  case VX_CSR_NUM_WARPS: // Number of warps per core
-    return arch_.num_warps();
-  case VX_CSR_NUM_CORES: // Number of cores per cluster
-    return uint32_t(arch_.num_cores()) * arch_.num_clusters();
-  case VX_CSR_MCYCLE: // NumCycles
-    return core_perf.cycles & 0xffffffff;
-  case VX_CSR_MCYCLE_H: // NumCycles
-    return (uint32_t)(core_perf.cycles >> 32);
-  case VX_CSR_MINSTRET: // NumInsts
-    return core_perf.instrs & 0xffffffff;
-  case VX_CSR_MINSTRET_H: // NumInsts
-    return (uint32_t)(core_perf.instrs >> 32);
+  case VX_CSR_FFLAGS:     return warps_.at(wid).fcsr & 0x1F;
+  case VX_CSR_FRM:        return (warps_.at(wid).fcsr >> 5);
+  case VX_CSR_FCSR:       return warps_.at(wid).fcsr;
+  case VX_CSR_MHARTID:    return (core_->id() * arch_.num_warps() + wid) * arch_.num_threads() + tid;
+  case VX_CSR_THREAD_ID:  return tid;
+  case VX_CSR_WARP_ID:    return wid;
+  case VX_CSR_CORE_ID:    return core_->id();
+  case VX_CSR_THREAD_MASK:return warps_.at(wid).tmask.to_ulong();
+  case VX_CSR_WARP_MASK:  return active_warps_.to_ulong();
+  case VX_CSR_NUM_THREADS:return arch_.num_threads();
+  case VX_CSR_NUM_WARPS:  return arch_.num_warps();
+  case VX_CSR_NUM_CORES:  return uint32_t(arch_.num_cores()) * arch_.num_clusters();
+  case VX_CSR_MSCRATCH:   return csr_mscratch_;
+  CSR_READ_64(VX_CSR_MCYCLE, core_perf.cycles);
+  CSR_READ_64(VX_CSR_MINSTRET, core_perf.instrs);
   default:
     if ((addr >= VX_CSR_MPM_BASE && addr < (VX_CSR_MPM_BASE + 32))
      || (addr >= VX_CSR_MPM_BASE_H && addr < (VX_CSR_MPM_BASE_H + 32))) {
@@ -364,37 +356,22 @@ uint32_t Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         break;    
       case VX_DCR_MPM_CLASS_CORE: {
         switch (addr) {
-        case VX_CSR_MPM_SCHED_ID:  return core_perf.sched_idle & 0xffffffff; 
-        case VX_CSR_MPM_SCHED_ID_H:return core_perf.sched_idle >> 32;
-        case VX_CSR_MPM_SCHED_ST:  return core_perf.sched_stalls & 0xffffffff; 
-        case VX_CSR_MPM_SCHED_ST_H:return core_perf.sched_stalls >> 32;
-        case VX_CSR_MPM_IBUF_ST:   return core_perf.ibuf_stalls & 0xffffffff; 
-        case VX_CSR_MPM_IBUF_ST_H: return core_perf.ibuf_stalls >> 32; 
-        case VX_CSR_MPM_SCRB_ST:   return core_perf.scrb_stalls & 0xffffffff;
-        case VX_CSR_MPM_SCRB_ST_H: return core_perf.scrb_stalls >> 32;
-        case VX_CSR_MPM_SCRB_ALU:  return core_perf.scrb_alu & 0xffffffff;
-        case VX_CSR_MPM_SCRB_ALU_H:return core_perf.scrb_alu >> 32;
-        case VX_CSR_MPM_SCRB_FPU:  return core_perf.scrb_fpu & 0xffffffff;
-        case VX_CSR_MPM_SCRB_FPU_H:return core_perf.scrb_fpu >> 32;
-        case VX_CSR_MPM_SCRB_LSU:  return core_perf.scrb_lsu & 0xffffffff;
-        case VX_CSR_MPM_SCRB_LSU_H:return core_perf.scrb_lsu >> 32;
-        case VX_CSR_MPM_SCRB_SFU:  return core_perf.scrb_sfu & 0xffffffff;
-        case VX_CSR_MPM_SCRB_SFU_H:return core_perf.scrb_sfu >> 32;
-        case VX_CSR_MPM_SCRB_WCTL: return core_perf.scrb_wctl & 0xffffffff;
-        case VX_CSR_MPM_SCRB_WCTL_H: return core_perf.scrb_wctl >> 32;
-        case VX_CSR_MPM_SCRB_CSRS: return core_perf.scrb_csrs & 0xffffffff;
-        case VX_CSR_MPM_SCRB_CSRS_H: return core_perf.scrb_csrs >> 32;
-        case VX_CSR_MPM_IFETCHES:  return core_perf.ifetches & 0xffffffff; 
-        case VX_CSR_MPM_IFETCHES_H: return core_perf.ifetches >> 32; 
-        case VX_CSR_MPM_LOADS:     return core_perf.loads & 0xffffffff; 
-        case VX_CSR_MPM_LOADS_H:   return core_perf.loads >> 32; 
-        case VX_CSR_MPM_STORES:    return core_perf.stores & 0xffffffff; 
-        case VX_CSR_MPM_STORES_H:  return core_perf.stores >> 32;
-        case VX_CSR_MPM_IFETCH_LT: return core_perf.ifetch_latency & 0xffffffff; 
-        case VX_CSR_MPM_IFETCH_LT_H: return core_perf.ifetch_latency >> 32; 
-        case VX_CSR_MPM_LOAD_LT:   return core_perf.load_latency & 0xffffffff; 
-        case VX_CSR_MPM_LOAD_LT_H: return core_perf.load_latency >> 32;
-       }
+        CSR_READ_64(VX_CSR_MPM_SCHED_ID, core_perf.sched_idle);
+        CSR_READ_64(VX_CSR_MPM_SCHED_ST, core_perf.sched_stalls);
+        CSR_READ_64(VX_CSR_MPM_IBUF_ST, core_perf.ibuf_stalls);
+        CSR_READ_64(VX_CSR_MPM_SCRB_ST, core_perf.scrb_stalls);
+        CSR_READ_64(VX_CSR_MPM_SCRB_ALU, core_perf.scrb_alu);
+        CSR_READ_64(VX_CSR_MPM_SCRB_FPU, core_perf.scrb_fpu);
+        CSR_READ_64(VX_CSR_MPM_SCRB_LSU, core_perf.scrb_lsu);
+        CSR_READ_64(VX_CSR_MPM_SCRB_SFU, core_perf.scrb_sfu);
+        CSR_READ_64(VX_CSR_MPM_SCRB_WCTL, core_perf.scrb_wctl);
+        CSR_READ_64(VX_CSR_MPM_SCRB_CSRS, core_perf.scrb_csrs);
+        CSR_READ_64(VX_CSR_MPM_IFETCHES, core_perf.ifetches);
+        CSR_READ_64(VX_CSR_MPM_LOADS, core_perf.loads);
+        CSR_READ_64(VX_CSR_MPM_STORES, core_perf.stores);
+        CSR_READ_64(VX_CSR_MPM_IFETCH_LT, core_perf.ifetch_latency);
+        CSR_READ_64(VX_CSR_MPM_LOAD_LT, core_perf.load_latency);
+        }
       } break; 
       case VX_DCR_MPM_CLASS_MEM: {
         auto proc_perf = core_->socket()->cluster()->processor()->perf_stats();
@@ -402,65 +379,38 @@ uint32_t Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         auto socket_perf = core_->socket()->perf_stats();
         auto lmem_perf = core_->local_mem()->perf_stats();
         switch (addr) {
-        case VX_CSR_MPM_ICACHE_READS:     return socket_perf.icache.reads & 0xffffffff; 
-        case VX_CSR_MPM_ICACHE_READS_H:   return socket_perf.icache.reads >> 32; 
-        case VX_CSR_MPM_ICACHE_MISS_R:    return socket_perf.icache.read_misses & 0xffffffff;
-        case VX_CSR_MPM_ICACHE_MISS_R_H:  return socket_perf.icache.read_misses >> 32;
-        case VX_CSR_MPM_ICACHE_MSHR_ST:   return socket_perf.icache.mshr_stalls & 0xffffffff; 
-        case VX_CSR_MPM_ICACHE_MSHR_ST_H: return socket_perf.icache.mshr_stalls >> 32;
+        CSR_READ_64(VX_CSR_MPM_ICACHE_READS, socket_perf.icache.reads);
+        CSR_READ_64(VX_CSR_MPM_ICACHE_MISS_R, socket_perf.icache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_ICACHE_MSHR_ST, socket_perf.icache.mshr_stalls);
         
-        case VX_CSR_MPM_DCACHE_READS:     return socket_perf.dcache.reads & 0xffffffff; 
-        case VX_CSR_MPM_DCACHE_READS_H:   return socket_perf.dcache.reads >> 32; 
-        case VX_CSR_MPM_DCACHE_WRITES:    return socket_perf.dcache.writes & 0xffffffff; 
-        case VX_CSR_MPM_DCACHE_WRITES_H:  return socket_perf.dcache.writes >> 32; 
-        case VX_CSR_MPM_DCACHE_MISS_R:    return socket_perf.dcache.read_misses & 0xffffffff; 
-        case VX_CSR_MPM_DCACHE_MISS_R_H:  return socket_perf.dcache.read_misses >> 32; 
-        case VX_CSR_MPM_DCACHE_MISS_W:    return socket_perf.dcache.write_misses & 0xffffffff; 
-        case VX_CSR_MPM_DCACHE_MISS_W_H:  return socket_perf.dcache.write_misses >> 32; 
-        case VX_CSR_MPM_DCACHE_BANK_ST:   return socket_perf.dcache.bank_stalls & 0xffffffff; 
-        case VX_CSR_MPM_DCACHE_BANK_ST_H: return socket_perf.dcache.bank_stalls >> 32;
-        case VX_CSR_MPM_DCACHE_MSHR_ST:   return socket_perf.dcache.mshr_stalls & 0xffffffff; 
-        case VX_CSR_MPM_DCACHE_MSHR_ST_H: return socket_perf.dcache.mshr_stalls >> 32;
+        CSR_READ_64(VX_CSR_MPM_DCACHE_READS, socket_perf.dcache.reads);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_WRITES, socket_perf.dcache.writes);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_MISS_R, socket_perf.dcache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_MISS_W, socket_perf.dcache.write_misses);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_BANK_ST, socket_perf.dcache.bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_MSHR_ST, socket_perf.dcache.mshr_stalls);
 
-        case VX_CSR_MPM_L2CACHE_READS:    return cluster_perf.l2cache.reads & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_READS_H:  return cluster_perf.l2cache.reads >> 32; 
-        case VX_CSR_MPM_L2CACHE_WRITES:   return cluster_perf.l2cache.writes & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_WRITES_H: return cluster_perf.l2cache.writes >> 32; 
-        case VX_CSR_MPM_L2CACHE_MISS_R:   return cluster_perf.l2cache.read_misses & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_MISS_R_H: return cluster_perf.l2cache.read_misses >> 32; 
-        case VX_CSR_MPM_L2CACHE_MISS_W:   return cluster_perf.l2cache.write_misses & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_MISS_W_H: return cluster_perf.l2cache.write_misses >> 32; 
-        case VX_CSR_MPM_L2CACHE_BANK_ST:  return cluster_perf.l2cache.bank_stalls & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_BANK_ST_H:return cluster_perf.l2cache.bank_stalls >> 32;
-        case VX_CSR_MPM_L2CACHE_MSHR_ST:  return cluster_perf.l2cache.mshr_stalls & 0xffffffff; 
-        case VX_CSR_MPM_L2CACHE_MSHR_ST_H:return cluster_perf.l2cache.mshr_stalls >> 32;
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_READS, cluster_perf.l2cache.reads);
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_WRITES, cluster_perf.l2cache.writes);
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_MISS_R, cluster_perf.l2cache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_MISS_W, cluster_perf.l2cache.write_misses);
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_BANK_ST, cluster_perf.l2cache.bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_MSHR_ST, cluster_perf.l2cache.mshr_stalls);
 
-        case VX_CSR_MPM_L3CACHE_READS:    return proc_perf.l3cache.reads & 0xffffffff; 
-        case VX_CSR_MPM_L3CACHE_READS_H:  return proc_perf.l3cache.reads >> 32; 
-        case VX_CSR_MPM_L3CACHE_WRITES:   return proc_perf.l3cache.writes & 0xffffffff; 
-        case VX_CSR_MPM_L3CACHE_WRITES_H: return proc_perf.l3cache.writes >> 32; 
-        case VX_CSR_MPM_L3CACHE_MISS_R:   return proc_perf.l3cache.read_misses & 0xffffffff; 
-        case VX_CSR_MPM_L3CACHE_MISS_R_H: return proc_perf.l3cache.read_misses >> 32; 
-        case VX_CSR_MPM_L3CACHE_MISS_W:   return proc_perf.l3cache.write_misses & 0xffffffff; 
-        case VX_CSR_MPM_L3CACHE_MISS_W_H: return proc_perf.l3cache.write_misses >> 32; 
-        case VX_CSR_MPM_L3CACHE_BANK_ST:  return proc_perf.l3cache.bank_stalls & 0xffffffff; 
-        case VX_CSR_MPM_L3CACHE_BANK_ST_H:return proc_perf.l3cache.bank_stalls >> 32;
-        case VX_CSR_MPM_L3CACHE_MSHR_ST:  return proc_perf.l3cache.mshr_stalls & 0xffffffff; 
-        case VX_CSR_MPM_L3CACHE_MSHR_ST_H:return proc_perf.l3cache.mshr_stalls >> 32;
+        CSR_READ_64(VX_CSR_MPM_L3CACHE_READS, proc_perf.l3cache.reads);
+        CSR_READ_64(VX_CSR_MPM_L3CACHE_WRITES, proc_perf.l3cache.writes);
+        CSR_READ_64(VX_CSR_MPM_L3CACHE_MISS_R, proc_perf.l3cache.read_misses);
+        CSR_READ_64(VX_CSR_MPM_L3CACHE_MISS_W, proc_perf.l3cache.write_misses);
+        CSR_READ_64(VX_CSR_MPM_L3CACHE_BANK_ST, proc_perf.l3cache.bank_stalls);
+        CSR_READ_64(VX_CSR_MPM_L3CACHE_MSHR_ST, proc_perf.l3cache.mshr_stalls);
 
-        case VX_CSR_MPM_MEM_READS:        return proc_perf.mem_reads & 0xffffffff; 
-        case VX_CSR_MPM_MEM_READS_H:      return proc_perf.mem_reads >> 32;
-        case VX_CSR_MPM_MEM_WRITES:       return proc_perf.mem_writes & 0xffffffff; 
-        case VX_CSR_MPM_MEM_WRITES_H:     return proc_perf.mem_writes >> 32; 
-        case VX_CSR_MPM_MEM_LT:           return proc_perf.mem_latency & 0xffffffff; 
-        case VX_CSR_MPM_MEM_LT_H :        return proc_perf.mem_latency >> 32;
-         
-        case VX_CSR_MPM_LMEM_READS:       return lmem_perf.reads & 0xffffffff;
-        case VX_CSR_MPM_LMEM_READS_H:     return lmem_perf.reads >> 32;
-        case VX_CSR_MPM_LMEM_WRITES:      return lmem_perf.writes & 0xffffffff;
-        case VX_CSR_MPM_LMEM_WRITES_H:    return lmem_perf.writes >> 32;
-        case VX_CSR_MPM_LMEM_BANK_ST:     return lmem_perf.bank_stalls & 0xffffffff; 
-        case VX_CSR_MPM_LMEM_BANK_ST_H:   return lmem_perf.bank_stalls >> 32; 
+        CSR_READ_64(VX_CSR_MPM_MEM_READS, proc_perf.mem_reads);
+        CSR_READ_64(VX_CSR_MPM_MEM_WRITES, proc_perf.mem_writes); 
+        CSR_READ_64(VX_CSR_MPM_MEM_LT, proc_perf.mem_latency); 
+        
+        CSR_READ_64(VX_CSR_MPM_LMEM_READS, lmem_perf.reads);
+        CSR_READ_64(VX_CSR_MPM_LMEM_WRITES, lmem_perf.writes);
+        CSR_READ_64(VX_CSR_MPM_LMEM_BANK_ST, lmem_perf.bank_stalls);
         }
       } break;
       default: {
@@ -476,7 +426,7 @@ uint32_t Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   return 0;
 }
 
-void Emulator::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
+void Emulator::set_csr(uint32_t addr, Word value, uint32_t tid, uint32_t wid) {
   __unused (tid);
   switch (addr) {
   case VX_CSR_FFLAGS:
@@ -487,6 +437,9 @@ void Emulator::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid
     break;
   case VX_CSR_FCSR:
     warps_.at(wid).fcsr = value & 0xff;
+    break;
+  case VX_CSR_MSCRATCH:
+    csr_mscratch_ = value;
     break;
   case VX_CSR_SATP:
   case VX_CSR_MSTATUS:
@@ -499,8 +452,7 @@ void Emulator::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid
   case VX_CSR_PMPADDR0:
   case VX_CSR_MNSTATUS:
     break;
-  default:
-    {
+  default: {
       std::cout << std::hex << "Error: invalid CSR write addr=0x" << addr << ", value=0x" << value << std::endl;
       std::abort();
     }

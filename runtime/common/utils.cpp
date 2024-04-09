@@ -166,10 +166,8 @@ int dcr_initialize(vx_device_h hdevice) {
 ///////////////////////////////////////////////////////////////////////////////
 
 static uint64_t get_csr_64(const void* ptr, int addr) {
-  auto w_ptr = reinterpret_cast<const uint32_t*>(ptr);
-  uint32_t value_lo = w_ptr[addr - VX_CSR_MPM_BASE];
-  uint32_t value_hi = w_ptr[addr - VX_CSR_MPM_BASE + 32];
-  return (uint64_t(value_hi) << 32) | value_lo;
+  int offset = addr - VX_CSR_MPM_BASE;
+  return ((const uint64_t*)ptr)[offset];
 }
 
 extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
@@ -253,7 +251,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   bool lmem_enable    = isa_flags & VX_ISA_EXT_LMEM;
 #endif
 
-  std::vector<uint8_t> staging_buf(64* sizeof(uint32_t));
+  std::vector<uint8_t> staging_buf(32 * sizeof(uint64_t));
 
   for (unsigned core_id = 0; core_id < num_cores; ++core_id) {
     uint64_t mpm_mem_addr = IO_CSR_ADDR + core_id * staging_buf.size();    
