@@ -324,6 +324,19 @@ void kernel_fclamp(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	}
 }
 
+void kernel_trigo(int task_id, kernel_arg_t* __UNIFORM__ arg) {
+	auto count  = arg->task_size;
+	auto src0_ptr = (float*)arg->src0_addr;
+	auto src1_ptr = (float*)arg->src1_addr;
+	auto dst_ptr  = (float*)arg->dst_addr;	
+	auto offset = task_id * count;
+	for (uint32_t i = 0; i < count; ++i) {
+		auto a = src0_ptr[offset+i];
+		auto b = src1_ptr[offset+i];
+		dst_ptr[offset+i] = sin(a) + cos(b);
+	}
+}
+
 void kernel_bar(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	auto num_cores = vx_num_cores();
 	auto num_warps = vx_num_warps();
@@ -405,6 +418,7 @@ static const PFN_Kernel sc_tests[] = {
 	kernel_itof,
 	kernel_utof,
 	kernel_fclamp,
+	kernel_trigo,
 	kernel_bar,
 	kernel_gbar
 };
