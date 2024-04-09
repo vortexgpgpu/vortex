@@ -67,7 +67,7 @@ void __init_tls(void) {
 
 #ifdef HAVE_INITFINI_ARRAY
 
-/* These magic symbols are provided by the linker.  */
+// These magic symbols are provided by the linker.
 extern void (*__preinit_array_start []) (void) __attribute__((weak));
 extern void (*__preinit_array_end []) (void) __attribute__((weak));
 extern void (*__init_array_start []) (void) __attribute__((weak));
@@ -77,7 +77,7 @@ extern void (*__init_array_end []) (void) __attribute__((weak));
 extern void _init (void);
 #endif
 
-/* Iterate over all the init routines.  */
+// Iterate over all the init routines.
 void __libc_init_array (void) {
   size_t count;
   size_t i;
@@ -118,6 +118,48 @@ void __libc_fini_array (void) {
 #endif
 }
 #endif
+
+#define FEXIT_COUNT 64
+
+static struct fl {
+	struct fl *next;
+	void (*f[FEXIT_COUNT])(void *);
+	void *a[FEXIT_COUNT];
+} fexit_builtin, *head_builtin;
+
+static int fexit_slot;
+
+void __funcs_on_exit() {
+	void (*func)(void *), *arg;
+	for (; head_builtin; head_builtin=head_builtin->next, fexit_slot=FEXIT_COUNT) while(fexit_slot-->0) {
+		func = head_builtin->f[fexit_slot];
+		arg = head_builtin->a[fexit_slot];
+		func(arg);
+	}
+}
+
+void __cxa_finalize(void *dso) {}
+
+int __cxa_atexit(void (*func)(void *), void *arg, void *dso) {
+	// Defer initialization of head so it can be in BSS
+	if (!head_builtin) head_builtin = &fexit_builtin;
+	// fail if function list is full
+	if (fexit_slot == FEXIT_COUNT)
+		return -1;
+	// Append function to the list.
+	head_builtin->f[fexit_slot] = func;
+	head_builtin->a[fexit_slot] = arg;
+	++fexit_slot;
+	return 0;
+}
+
+static void call(void *p) {
+	((void (*)(void))(uintptr_t)p)();
+}
+
+int atexit(void (*func)(void)) {
+	return __cxa_atexit(call, (void *)(uintptr_t)func, 0);
+}
 
 #ifdef __cplusplus
 }
