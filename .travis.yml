@@ -22,18 +22,20 @@ cache:
     - $HOME/build64
 
 install:
-  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v1" ]; then
-      rm -rf $TOOLDIR;
-      mkdir -p $TOOLDIR;
-      cd $HOME/build$XLEN && ./ci/toolchain_install.sh --all;
-      echo "v1" > "$TOOLDIR/version.txt";
+  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v2" ]; then
+      rm -rf $TOOLDIR
+      mkdir -p $TOOLDIR
+      pushd $HOME/build$XLEN 
+      ./ci/toolchain_install.sh --all
+      popd
+      echo "v2" > "$TOOLDIR/version.txt"
     fi
-  - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v1" ]; then
-      make -C third_party > /dev/null;
-      cp -r third_party $HOME;
-      echo "v1" > "$HOME/third_party/version.txt";
+  - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v2" ]; then
+      make -C third_party > /dev/null
+      cp -r third_party $HOME
+      echo "v2" > "$HOME/third_party/version.txt"
     else
-      cp -r $HOME/third_party . ;
+      cp -r $HOME/third_party .
     fi
 
 before_script:
