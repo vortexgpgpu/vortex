@@ -35,6 +35,7 @@ VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
 VX_CFLAGS += -v -O3 -std=c++11 -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(ROOT_DIR)/hw
+VX_CFLAGS += -DXLEN_$(XLEN)
 VX_CFLAGS += -DNDEBUG
 
 VX_LIBS += -L$(LIBC_VORTEX)/lib -lm -lc -lgcc

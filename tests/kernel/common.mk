@@ -13,6 +13,7 @@ CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(ROOT_DIR)/hw
+CFLAGS += -DXLEN_$(XLEN) -DNDEBUG
 
 LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc -lgcc
 

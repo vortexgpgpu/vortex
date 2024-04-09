@@ -27,7 +27,7 @@ K_CFLAGS  += -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -
 #K_CFLAGS  += -mllvm -vortex-branch-divergence=0
 #K_CFLAGS += -mllvm -print-after-all
 K_CFLAGS  += -mllvm -disable-loop-idiom-all	# disable memset/memcpy loop idiom
-K_CFLAGS  += -I$(VORTEX_KN_PATH)/include -DNDEBUG
+K_CFLAGS  += -I$(VORTEX_KN_PATH)/include -DXLEN_$(XLEN) -DNDEBUG
 K_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a $(LIBC_LIB)
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
