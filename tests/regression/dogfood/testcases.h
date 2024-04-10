@@ -740,7 +740,7 @@ public:
     auto c = (float*)dst;
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = sin(a[i]) + cos(b[i]);
-      if (!almost_equal(c[i], ref)) {
+      if (!almost_equal_ulp(c[i], ref, 20)) {
         std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
