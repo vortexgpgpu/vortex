@@ -187,7 +187,6 @@ void* createRasterizationTriangleKernel(GLenum mode, GLint first, GLsizei count)
 void* createFragmentKernel(GLenum mode, GLint first, GLsizei count);
 void* createColorKernel(GLenum mode, GLint first, GLsizei count);
 
-
 /****** OpenGL Interface Implementations ******\
  * 
  * 
@@ -279,28 +278,6 @@ GL_APICALL GLuint GL_APIENTRY glCreateProgram (void){
         }
     }
     return 0; // TODO maybe throw some error ??
-}
-
-// TODO move this to another file
-inline void gl_pipeline(GLint first, GLsizei count){
-    //pipeline
-    unsigned int numVerts = count-first;
-    //vertex shader
-    float primitives[4*GL_MAX_VERTEX_ATTRIBS];
-    if(! _current_program)
-        vertex_shader(first, count, primitives);
-    //clip coord
-    perspective_division(numVerts, primitives);
-    //normalized-device-coords
-    viewport_transformation(numVerts, primitives);
-    //rasterization
-    float fragments[4*viewportTransform.w*viewportTransform.h];//color
-    rasterization(numVerts, primitives, fragments, viewportTransform.w*viewportTransform.h);
-    //fragment-shader
-    fragment_shader();
-    //per-vertex-ops
-    per_vertex_operations();
-    //entiendo que aqui escribe en frame buff
 }
 
 // TODO move this to another file
