@@ -270,8 +270,8 @@ int main(int argc, char** argv) {
 	pb_SwitchToTimer(&timers, pb_TimerID_COMPUTE);
 
 	//only use 1D thread block
-  	int tx = 128;
-	size_t block[3] = {tx,1,1};
+  int tx = 128;
+	size_t block[3] = {1,1,1}; // {tx,1,1}
 	size_t grid[3] = {(nx-2+tx-1)/tx*tx,ny-2,nz-2};
   	//size_t grid[3] = {nx-2,ny-2,nz-2};
   	size_t offset[3] = {1,1,1};

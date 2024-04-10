@@ -182,7 +182,7 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 int main(int argc, char *argv[]) {
 	printf("enter demo main\n");
 
-  int errors = 0;
+  int errors = -1;
   int no_of_nodes;
   int edge_list_size;
   FILE *fp;
@@ -289,7 +289,6 @@ int main(int argc, char *argv[]) {
     free(h_graph_mask);
     free(h_updating_graph_mask);
     free(h_graph_visited);
-
   } catch (std::string msg) {
     printf("--cambine: exception in main ->%s\n", msg);
     // release host memory

@@ -193,6 +193,16 @@ int runTest( const int argc, const char** argv)
         size_y = temp;
     }
 
+    if ((size_x / BLOCK_DIM) * BLOCK_DIM != size_x) {
+        printf("Error: size_x must be a multiple of %d\n", BLOCK_DIM);
+        return -1;
+    }
+
+    if ((size_y / BLOCK_DIM) * BLOCK_DIM != size_y) {
+        printf("Error: size_y must be a multiple of %d\n", BLOCK_DIM);
+        return -1;
+    }
+
     // size of memory required to store the matrix
     const size_t mem_size = sizeof(float) * size_x * size_y;
 

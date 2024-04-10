@@ -259,7 +259,6 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   return 0;
 }
 
-
 cl_context cl_init_context(int platform, int dev,int quiet) {
     int printInfo=1;
     if (platform >= 0 && dev >= 0) printInfo = 0;
@@ -410,6 +409,10 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
     cl_errChk(status, "Oops!", true);
     context = clCreateContext(NULL, numDevices[0], devices, NULL, NULL,  &status);
     cl_errChk(status, "Oops!", true);
+    
+    char device_string[1024];
+    clGetDeviceInfo(devices[0], CL_DEVICE_NAME, sizeof(device_string), &device_string, NULL);
+    printf("Using device: %s\n", device_string);
 
     device=devices[device_touse];
 
@@ -876,13 +879,19 @@ cl_program cl_compileProgram(char* kernelPath, char* compileoptions, bool verbos
     uint8_t *kernel_bin = NULL;
     size_t kernel_size;
     cl_int binary_status = 0;  
-    int err = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
-    cl_errChk(err, "read_kernel_file", true);
-
+    cl_program clProgramReturn;
+    
     // Create the program object
-    //cl_program clProgramReturn = clCreateProgramWithSource(context, 1, (const char **)&source, NULL, &status);      
-    cl_program clProgramReturn = clCreateProgramWithBinary(
+#ifdef HOSTGPU
+    int err = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
+    cl_errChk(err, "read_kernel_file", true);
+    clProgramReturn = clCreateProgramWithSource(context, 1, (const char **)&kernel_bin, &kernel_size, &status);      
+#else
+    int err = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
+    cl_errChk(err, "read_kernel_file", true);    
+    clProgramReturn = clCreateProgramWithBinary(
         context, 1, devices, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &status);  
+#endif
     free(kernel_bin);
     cl_errChk(status, "Creating program", true);
     

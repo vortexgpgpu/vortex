@@ -35,7 +35,7 @@ double gettime() {
 #elif defined(RD_WG_SIZE)
 #define BLOCK_SIZE RD_WG_SIZE
 #else
-#define BLOCK_SIZE 256
+#define BLOCK_SIZE 1 //256
 #endif
 
 #ifdef RD_WG_SIZE_1_0
@@ -45,7 +45,7 @@ double gettime() {
 #elif defined(RD_WG_SIZE)
 #define BLOCK_SIZE2 RD_WG_SIZE
 #else
-#define BLOCK_SIZE2 256
+#define BLOCK_SIZE2 1 //256
 #endif
 
 // local variables
@@ -200,18 +200,28 @@ int allocate(int n_points, int n_features, int n_clusters, float **feature) {
   uint8_t *kernel_bin = NULL;
   size_t kernel_size;
   cl_int binary_status = 0;  
+  cl_program prog;
+#ifdef HOSTGPU
+  err = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
+  if (err != CL_SUCCESS) {
+    printf("ERROR: read_kernel_file() => %d\n", err);
+    return -1;
+  }
+  prog = clCreateProgramWithSource(
+      context, 1, (const char**)&kernel_bin, &kernel_size, &err);  
+#else
   err = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
   if (err != CL_SUCCESS) {
     printf("ERROR: read_kernel_file() => %d\n", err);
     return -1;
   }
-
-	cl_program prog = clCreateProgramWithBinary(
+	prog = clCreateProgramWithBinary(
       context, 1, device_list, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &err);
   if (err != CL_SUCCESS) {
     printf("ERROR: clCreateProgramWithBinary() => %d\n", err);
     return -1;
   }
+#endif
 
   free(kernel_bin);
 
