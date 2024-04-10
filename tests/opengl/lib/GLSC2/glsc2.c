@@ -181,6 +181,8 @@ STENCIL_MASK _stencil_mask = {1, 1};
 #define PROGRAM _programs[_current_program]
 
 void* createVertexKernel(GLenum mode, GLint first, GLsizei count);
+void* createPerspectiveDivisionKernel(GLenum mode, GLint first, GLsizei count);
+void* createViewportDivisionKernel(GLenum mode, GLint first, GLsizei count);
 void* createRasterizationTriangleKernel(GLenum mode, GLint first, GLsizei count);
 void* createFragmentKernel(GLenum mode, GLint first, GLsizei count);
 void* createColorKernel(GLenum mode, GLint first, GLsizei count);
@@ -337,7 +339,7 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     // Build memory buffers
     void *gl_Positions = createBuffer(MEM_READ_WRITE, sizeof(float[4])*num_vertices);
     void *gl_Primitives = createBuffer(MEM_READ_WRITE, sizeof(float[4])*PROGRAM.active_attributes);
-    void *gl_Rasterization = createBuffer(MEM_READ_WRITE, sizeof(float)*4*PROGRAM.active_attributes);
+    void *gl_Rasterization = createBuffer(MEM_READ_WRITE, sizeof(float[4])*PROGRAM.active_attributes);
     void *gl_FragCoord = createBuffer(MEM_READ_WRITE, sizeof(float[4])*num_fragments);
     void *gl_Discard = createBuffer(MEM_READ_WRITE, sizeof(uint8_t)*num_fragments);
     void *gl_FragColor = createBuffer(MEM_READ_WRITE, sizeof(float[4])*num_fragments);
@@ -353,9 +355,32 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
         sizeof(gl_Primitives), gl_Primitives
     );
 
+    void* perspective_division_kernel = createPerspectiveDivisionKernel(mode, first, count);
+    setKernelArg(perspective_division_kernel, 0,
+        sizeof(gl_Positions), gl_Positions
+    );
+    void* viewport_division_kernel = createViewportDivisionKernel(mode, first, count);
+    setKernelArg(viewport_division_kernel, 0,
+        sizeof(gl_Positions), gl_Positions
+    );
     void* rasterization_kernel; 
     if (mode==GL_TRIANGLES) {
         rasterization_kernel = createRasterizationTriangleKernel(mode, first, count);
+        setKernelArg(rasterization_kernel, 4,
+            sizeof(gl_FragCoord), gl_Positions
+        );
+        setKernelArg(rasterization_kernel, 5,
+            sizeof(gl_Primitives), gl_Primitives
+        );
+        setKernelArg(rasterization_kernel, 6,
+            sizeof(gl_FragCoord), gl_FragCoord
+        );
+        setKernelArg(rasterization_kernel, 7,
+            sizeof(gl_Rasterization), gl_Rasterization
+        );
+        setKernelArg(rasterization_kernel, 8,
+            sizeof(gl_Discard), gl_Discard
+        );
     }
 
     void* fragment_kernel = createFragmentKernel(mode, first, count);
@@ -392,19 +417,22 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     // VERTEX
 
     enqueueNDRangeKernel(command_queue, vertex_kernel, &num_vertices);
+    enqueueNDRangeKernel(command_queue, perspective_division_kernel, &num_vertices);
+    enqueueNDRangeKernel(command_queue, viewport_division_kernel, &num_vertices);
     // POST-VERTEX
-
+    
     for(uint32_t primitive=0; primitive < num_primitives; ++primitive) {
         // RASTERIZE
         setKernelArg(rasterization_kernel, 0, // TODO: Check in the implementation .cl
             sizeof(primitive), &primitive
         );
-        enqueueNDRangeKernel(command_queue, fragment_kernel, &num_fragments);   
+        enqueueNDRangeKernel(command_queue, rasterization_kernel, &num_fragments);   
         // FRAGMENT
         enqueueNDRangeKernel(command_queue, fragment_kernel, &num_fragments);   
         // POST-FRAGMENT
         enqueueNDRangeKernel(command_queue, color_kernel, &num_fragments);
     }
+
 }
 
 GL_APICALL void GL_APIENTRY glDrawRangeElements (GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const void *indices);
@@ -445,7 +473,9 @@ GL_APICALL void GL_APIENTRY glEnableVertexAttribArray (GLuint index) {
     _vertex_attrib[index].enable = 1;
 }
 
-GL_APICALL void GL_APIENTRY glFinish (void);
+GL_APICALL void GL_APIENTRY glFinish (void) {
+    // finish(); TODO
+}
 
 GL_APICALL void GL_APIENTRY glGenBuffers (GLsizei n, GLuint *buffers) {
     GLuint _id = 1; // _id = 0 is reserved for ARRAY_BUFFER
@@ -587,6 +617,8 @@ void* createVertexKernel(GLenum mode, GLint first, GLsizei count) {
     GLuint attribute;
     while(attribute < _programs[_current_program].active_attributes) {
         
+        if(0); // TODO diff between pointer and not
+
         setKernelArg(
             kernel, 
             _programs[_current_program].attributes[attribute].location,
@@ -611,10 +643,39 @@ void* createVertexKernel(GLenum mode, GLint first, GLsizei count) {
     return kernel;
 }
 
+void* createPerspectiveDivisionKernel(GLenum mode, GLint first, GLsizei count) {
+    void *kernel = 0; // TODO
+
+    return kernel;
+}
+
+void* createViewportDivisionKernel(GLenum mode, GLint first, GLsizei count) {
+    void *kernel = 0; // TODO
+
+    setKernelArg(kernel, 1,
+        sizeof(_viewport), &_viewport
+    );
+    setKernelArg(kernel, 2,
+        sizeof(_depth_range), &_depth_range
+    );
+
+    return kernel;
+}
+
 void* createRasterizationTriangleKernel(GLenum mode, GLint first, GLsizei count) {
     void *kernel = 0; // TODO
 
-    return kernel
+    setKernelArg(kernel, 0,
+        sizeof(COLOR_ATTACHMENT0.width), &COLOR_ATTACHMENT0.width
+    );
+    setKernelArg(kernel, 1,
+        sizeof(COLOR_ATTACHMENT0.height), &COLOR_ATTACHMENT0.height
+    );
+    setKernelArg(kernel, 2,
+        sizeof(PROGRAM.active_attributes), &PROGRAM.active_attributes
+    );
+
+    return kernel;
 }
 
 void* createFragmentKernel(GLenum mode, GLint first, GLsizei count) {
