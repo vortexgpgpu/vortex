@@ -1,26 +1,58 @@
+typedef struct _attribute_pointer
+{
+  int type; // byte, ubyte, short, ushort, float
+  int size; // to the next attribute
+  __global void* mem;
+} _attribute_pointer;
 
-void gl_vertex (
-  const float3 *attributes,
-  const void *uniforms, 
-  float4 *primitives
+typedef struct _attribute_int
+{
+  int4 values; 
+} _attribute_int;
+
+typedef struct _attribute_float
+{
+  float4 values;
+} _attribute_float;
+
+typedef union _attribute {
+  struct _attribute_int  attribute_int;
+  struct _attribute_float  attribute_float;
+  struct _attribute_pointer attribute_pointer;
+} _attribute;
+
+typedef struct __attribute__ ((packed)) attribute {
+  int type;
+  union _attribute attribute;
+} attribute;
+
+void gl_main_vs (
+  __global const float3* position,
+  // implementation values
+  __global float4 *gl_Positions,
+  __global float4 *gl_Primitives
 ) {
   int gid = get_global_id(0);
+  // in out vars
+  __global const float3* in_position = position + gid;
+  __global float4* gl_Position = gl_Positions + gid; 
 
-  primitives[gid] = (float4) (attributes[0],1.0f);
+  // vertex operations
+  *gl_Position = (float4) (*in_position,1.0f);
 }
 
-__kernel void gl_fragment (
+__kernel void gl_main_fs (
   // user values
-  __global const float4 *position,
   // implementation values 
-  __global const float3 *gl_position, // position of the fragment in the window space
-  __global unsigned short *gl_depth, // depth value of the fragment
-  __global unsigned char *gl_stencil, // stencil value of the fragment
-  __global bool *gl_discard, // if discarded
-  __global float4 *gl_fragcolor // out color of the fragment || It is deprecated in OpenGL 3.0 
+  __global float4 *gl_FragCoord, // position of the fragment in the window space, z is depth value
+  __global bool *gl_Discard, // if discarded
+  __global float4 *gl_FragColor, // out color of the fragment || It is deprecated in OpenGL 3.0 
+  __global const void *gl_Rasterization
 )
 {
   int gid = get_global_id(0);
+  // in out vars
 
-  gl_fragcolor[gid] = (float4) 1.0f;
+  // fragment operations
+  gl_FragColor[gid] = (float4) 1.0f;
 }

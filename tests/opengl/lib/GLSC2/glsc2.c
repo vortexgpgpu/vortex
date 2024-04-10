@@ -17,6 +17,34 @@
 #define MAX_FRAGMENT_UNIFORM_VECTORS 16 // atMost MAX_UNIFORM_VECTORS
 
 
+/****** DTO objects ******\
+ * TODO: externalize to could be imported from kernel cl programs
+*/
+typedef struct { 
+    int type; // byte, ubyte, short, ushort, float 
+    int size; 
+    void* mem; 
+} _attribute_pointer;
+
+typedef struct { int values[4]; } _attribute_int;
+
+typedef struct { float values[4]; } _attribute_float;
+
+typedef union {
+    _attribute_int  int4; // 0
+    _attribute_float  float4; // 1
+    _attribute_pointer pointer; // 2
+} _attribute;
+
+typedef struct __attribute__ ((packed)) {
+    int type; // 0, 1, 2
+    _attribute attribute;
+} attribute;
+
+typedef struct {
+
+} FRAGMENT_DATA;
+
 /****** GENERIC objects ******\
  * 
  * 
@@ -42,12 +70,13 @@ BOX _viewport;
 typedef struct {
     GLint location, size, type;
     unsigned char name[MAX_NAME_SIZE]; 
-    uint8_t *data[MAX_UNIFORM_SIZE];
+    uint8_t data[MAX_UNIFORM_SIZE]; // TODO: Use union types
 } UNIFORM;
 
 typedef struct {
     GLint location, size, type;
     unsigned char name[MAX_NAME_SIZE]; 
+    attribute data;
 } ATTRIBUTE;
 
 typedef struct {
@@ -96,7 +125,6 @@ VERTEX_ATTRIB _vertex_attrib[MAX_VERTEX_ATTRIBS];
 */
 
 typedef struct {
-    cl_mem mem;
     GLuint color_attachment0, depth_attachment, stencil_attachment;
     GLboolean used;
 } FRAMEBUFFER;
@@ -150,9 +178,12 @@ STENCIL_MASK _stencil_mask = {1, 1};
  * Utility or inline function are implemented at the end of the file. 
 */
 #define COLOR_ATTACHMENT0 _renderbuffers[_framebuffers[_framebuffer_binding].color_attachment0]
+#define PROGRAM _programs[_current_program]
 
-void* createVertexKernel(GLenum mode, GLint first, GLsizei count, void* primitive_buff);
-void* createFragmentKernel(GLenum mode, GLint first, GLsizei count, void* primitive_buff);
+void* createVertexKernel(GLenum mode, GLint first, GLsizei count);
+void* createRasterizationTriangleKernel(GLenum mode, GLint first, GLsizei count);
+void* createFragmentKernel(GLenum mode, GLint first, GLsizei count);
+void* createColorKernel(GLenum mode, GLint first, GLsizei count);
 
 
 /****** OpenGL Interface Implementations ******\
@@ -288,38 +319,91 @@ GL_APICALL void GL_APIENTRY glDepthRangef (GLfloat n, GLfloat f) {
     _depth_range.f=f;
 }
 
+/**
+ * TODO: first is expected to be 0
+*/
 GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei count) {
-    GLsizei num_primitives, num_primitive_blocks, num_fragments;
-    
     if (first <0){
         _err= GL_INVALID_VALUE;
         return;
     }
     
-    num_primitives = count-first;
-    if (mode==GL_POINTS) 
-        num_primitive_blocks = num_primitives; 
-    else if (mode==GL_LINES) 
-        num_primitive_blocks = num_primitives / 2;
-    else if (mode==GL_TRIANGLES)
-        num_primitive_blocks = num_primitives / 3;
-    num_fragments = COLOR_ATTACHMENT0.width * COLOR_ATTACHMENT0.height;
+    GLsizei num_vertices = count-first;
+    GLsizei num_fragments = COLOR_ATTACHMENT0.width * COLOR_ATTACHMENT0.height;
+    GLsizei num_primitives = num_vertices;
+    if (mode==GL_LINES) num_primitives /= 2;
+    else if (mode==GL_TRIANGLES) num_primitives /= 3;
 
-    void* command_queue = createCommandQueue(0);
+    // Build memory buffers
+    void *gl_Positions = createBuffer(MEM_READ_WRITE, sizeof(float[4])*num_vertices);
+    void *gl_Primitives = createBuffer(MEM_READ_WRITE, sizeof(float[4])*PROGRAM.active_attributes);
+    void *gl_Rasterization = createBuffer(MEM_READ_WRITE, sizeof(float)*4*PROGRAM.active_attributes);
+    void *gl_FragCoord = createBuffer(MEM_READ_WRITE, sizeof(float[4])*num_fragments);
+    void *gl_Discard = createBuffer(MEM_READ_WRITE, sizeof(uint8_t)*num_fragments);
+    void *gl_FragColor = createBuffer(MEM_READ_WRITE, sizeof(float[4])*num_fragments);
+
+    // Set up kernels
+    void* vertex_kernel = createVertexKernel(mode, first, count);
+    setKernelArg(vertex_kernel,
+        PROGRAM.active_attributes + PROGRAM.active_uniforms,
+        sizeof(gl_Positions), gl_Positions
+    );
+    setKernelArg(vertex_kernel,
+        PROGRAM.active_attributes + PROGRAM.active_uniforms + 1,
+        sizeof(gl_Primitives), gl_Primitives
+    );
+
+    void* rasterization_kernel; 
+    if (mode==GL_TRIANGLES) {
+        rasterization_kernel = createRasterizationTriangleKernel(mode, first, count);
+    }
+
+    void* fragment_kernel = createFragmentKernel(mode, first, count);
+    setKernelArg(fragment_kernel, 
+        PROGRAM.active_uniforms,
+        sizeof(gl_FragCoord), gl_FragCoord
+    );
+    setKernelArg(fragment_kernel, 
+        PROGRAM.active_uniforms + 1,
+        sizeof(gl_Discard), gl_Discard
+    );
+    setKernelArg(fragment_kernel, 
+        PROGRAM.active_uniforms + 2,
+        sizeof(gl_FragColor), gl_FragColor
+    );
+    setKernelArg(fragment_kernel, 
+        PROGRAM.active_uniforms + 3,
+        sizeof(gl_Rasterization), gl_Rasterization
+    );
+
+    void *color_kernel = createColorKernel(mode, first, count);
+    setKernelArg(fragment_kernel, 3,
+        sizeof(gl_FragCoord), gl_FragCoord
+    );
+    setKernelArg(fragment_kernel, 4,
+        sizeof(gl_Discard), gl_Discard
+    );
+    setKernelArg(fragment_kernel, 5,
+        sizeof(gl_FragColor), gl_FragColor
+    );
+
+    // Run Queue
+    void *command_queue = createCommandQueue(0);
     // VERTEX
-    void* primitive_buff = createBuffer(MEM_READ_WRITE, sizeof(float)*4*num_primitives); // TODO: this size has to be calculated with VAO
-    void* vertex_kernel = createVertexKernel(mode, first, count, primitive_buff);
-    enqueueNDRangeKernel(command_queue, vertex_kernel, &num_primitives);
-    // FRAGMENT
-    void* fragment_kernel = createFragmentKernel(mode, first, count, primitive_buff);
-    for(uint32_t block=0; block < num_primitive_blocks; ++block) {
-        setKernelArg(
-            fragment_kernel,
-            0, // TODO: define a location for the iteration primitive
-            sizeof(uint32_t),
-            &block
+
+    enqueueNDRangeKernel(command_queue, vertex_kernel, &num_vertices);
+    // POST-VERTEX
+
+    for(uint32_t primitive=0; primitive < num_primitives; ++primitive) {
+        // RASTERIZE
+        setKernelArg(rasterization_kernel, 0, // TODO: Check in the implementation .cl
+            sizeof(primitive), &primitive
         );
         enqueueNDRangeKernel(command_queue, fragment_kernel, &num_fragments);   
+        // FRAGMENT
+        enqueueNDRangeKernel(command_queue, fragment_kernel, &num_fragments);   
+        // POST-FRAGMENT
+        enqueueNDRangeKernel(command_queue, color_kernel, &num_fragments);
     }
 }
 
@@ -497,17 +581,18 @@ GL_APICALL void GL_APIENTRY glViewport (GLint x, GLint y, GLsizei width, GLsizei
 /**** Utils & inline functions ****\
  *
 */
-void* createVertexKernel(GLenum mode, GLint first, GLsizei count, void* primitive_buff) {
+void* createVertexKernel(GLenum mode, GLint first, GLsizei count) {
     void *kernel = createKernel(_programs[_current_program].program, "gl_main_vs");
     // VAO locations
     GLuint attribute;
     while(attribute < _programs[_current_program].active_attributes) {
+        
         setKernelArg(
             kernel, 
             _programs[_current_program].attributes[attribute].location,
             _programs[_current_program].attributes[attribute].size,
-            (void*)0 // TODO: 
-            );
+            &_programs[_current_program].attributes[attribute].data // TODO: 
+        );
         ++attribute;
     }
     // Uniform locations
@@ -521,30 +606,19 @@ void* createVertexKernel(GLenum mode, GLint first, GLsizei count, void* primitiv
             );
         ++uniform;
     }
-    // Primitive is the last location
-    setKernelArg(
-        kernel,
-        _programs[_current_program].active_attributes + _programs[_current_program].active_uniforms,
-        sizeof(primitive_buff),
-        primitive_buff
-    );
+    
 
     return kernel;
 }
 
-void* createFragmentKernel(GLenum mode, GLint first, GLsizei count, void* primitive_buff) {
-    void *kernel = createKernel(_programs[_current_program].program, "gl_fragment");
-    // VAO locations
-    GLuint attribute;
-    while(attribute < _programs[_current_program].active_attributes) {
-        setKernelArg(
-            kernel, 
-            _programs[_current_program].attributes[attribute].location,
-            _programs[_current_program].attributes[attribute].size,
-            (void*)0 // TODO 
-            );
-        ++attribute;
-    }
+void* createRasterizationTriangleKernel(GLenum mode, GLint first, GLsizei count) {
+    void *kernel = 0; // TODO
+
+    return kernel
+}
+
+void* createFragmentKernel(GLenum mode, GLint first, GLsizei count) {
+    void *kernel = createKernel(_programs[_current_program].program, "gl_main_fs");
     // Uniform locations
     GLuint uniform;
     while(uniform < _programs[_current_program].active_uniforms) {
@@ -556,7 +630,22 @@ void* createFragmentKernel(GLenum mode, GLint first, GLsizei count, void* primit
             );
         ++uniform;
     }
-    // missing other locations width,height,colorbuff,depthbuff,stencilbuff,primitive_index,flags 
+
+    return kernel;
+}
+
+void* createColorKernel(GLenum mode, GLint first, GLsizei count) {
+    void *kernel = 0; // TODO
+    // Uniform locations
+    setKernelArg(kernel, 0,
+        sizeof(COLOR_ATTACHMENT0.width), &COLOR_ATTACHMENT0.width
+    );
+    setKernelArg(kernel, 1,
+        sizeof(COLOR_ATTACHMENT0.height), &COLOR_ATTACHMENT0.height
+    );
+    setKernelArg(kernel, 2,
+        sizeof(COLOR_ATTACHMENT0.mem), COLOR_ATTACHMENT0.mem
+    );
 
     return kernel;
 }

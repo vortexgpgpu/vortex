@@ -177,7 +177,7 @@ void* createBuffer(uint64_t flags, size_t size){
 }
 
 void* createCommandQueue(uint64_t properties) {
-    cl_command_queue commandQueue = clCreateCommandQueue(_getContext(), _getDeviceID(), properties, &_err);
+    return clCreateCommandQueue(_getContext(), _getDeviceID(), properties, &_err);
 }
 
 void* createKernel(void* program, const char* name) {
