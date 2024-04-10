@@ -139,13 +139,17 @@ static void parse_args(int argc, char **argv) {
       exit(-1);
     }
   }
-
-  printf("Workload size=%d\n", size);
 }
 
 int main(int argc, char **argv) {
   // parse command arguments
   parse_args(argc, argv);
+
+  printf("input size=%d\n", size);
+  if (size < 3) {
+    printf("Error: input size must be >= 3\n");
+    return -1;
+  }
 
   cl_platform_id platform_id;
   cl_device_id device_id;
@@ -223,9 +227,9 @@ int main(int argc, char **argv) {
   CL_CHECK(clSetKernelArg(kernel, 10, sizeof(m7), (&m7)));
   CL_CHECK(clSetKernelArg(kernel, 11, sizeof(m8), (&m8)));
 
-  size_t global_offset[2] = {1, 1};
+  size_t global_offset[2]    = {1, 1};
   size_t global_work_size[2] = {size - 2, size - 2};
-  size_t local_work_size[2] = {size - 2, 1};
+  size_t local_work_size[2]  = {1, 1}; // {size-2,1}
 
   printf("enqueue write buffer\n"); 
   std::vector<float> ref_vec(size * size);

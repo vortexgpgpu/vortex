@@ -1363,7 +1363,7 @@ void pb_sig_clmem(char* s, cl_command_queue command_queue, cl_mem memobj, int ty
     printf ("Something wrong.\n");
     assert(0);
   } else {
-    printf ("size = %d\n", sz);
+    printf ("size = %ld\n", sz);
   }
   char* hp; // = (char*) malloc(sz);
   //posix_memalign((void**)&hp, 64, sz);

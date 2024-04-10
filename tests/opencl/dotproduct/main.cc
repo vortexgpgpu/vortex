@@ -120,7 +120,7 @@ int main(int argc, char **argv)
     shrLog("%s Starting...\n\n# of float elements per Array \t= %u\n", argv[0], iNumElements);
 
     // set and log Global and Local work size dimensions
-    szLocalWorkSize = 16;
+    szLocalWorkSize = 1; // 16
     szGlobalWorkSize = shrRoundUp((int)szLocalWorkSize, iNumElements);  // rounded up to the nearest multiple of the LocalWorkSize
     shrLog("Global Work Size \t\t= %u\nLocal Work Size \t\t= %u\n# of Work Groups \t\t= %u\n\n",
            szGlobalWorkSize, szLocalWorkSize, (szGlobalWorkSize % szLocalWorkSize + szGlobalWorkSize/szLocalWorkSize));

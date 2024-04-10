@@ -299,11 +299,10 @@ int main(int argc, char **argv) {
 
   pb_SwitchToTimer(&timers, pb_TimerID_COMPUTE);
 
-  size_t grid;
-  size_t block;
-
-  compute_active_thread(&block, &grid, nzcnt_len, pad, clDeviceProp.major,
-                        clDeviceProp.minor, clDeviceProp.multiProcessorCount);
+  size_t grid = nzcnt_len * pad;
+  size_t block = 1;
+  /*compute_active_thread(&block, &grid, nzcnt_len, pad, clDeviceProp.major,
+                        clDeviceProp.minor, clDeviceProp.multiProcessorCount);*/
   printf("grid size=%ld, block size=%ld, dim=%d\n", grid, block, dim);
 
   clStatus = clSetKernelArg(clKernel, 0, sizeof(cl_mem), &d_Ax_vector);

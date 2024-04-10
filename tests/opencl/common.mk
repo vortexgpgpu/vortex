@@ -54,7 +54,8 @@ endif
 endif
 endif
 
-OBJS := $(addsuffix .o, $(filter-out main.cc,$(notdir $(SRCS))))
+OBJS := $(addsuffix .o, $(notdir $(SRCS)))
+OBJS_HOST := $(addsuffix .host.o, $(notdir $(SRCS)))
 
 .DEFAULT_GOAL := all
 all: $(PROJECT) kernel.pocl
@@ -74,20 +75,23 @@ kernel.pocl: $(SRC_DIR)/kernel.cl
 %.c.o: $(SRC_DIR)/%.c
 	$(CC) $(CXXFLAGS) -c $< -o $@
 
-main.cc.o: $(SRC_DIR)/main.cc
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-main.cc.host.o: $(SRC_DIR)/main.cc
+%.cc.host.o: $(SRC_DIR)/%.cc
 	$(CXX) $(CXXFLAGS) -DHOSTGPU -c $< -o $@
+
+%.cpp.host.o: $(SRC_DIR)/%.cpp
+	$(CXX) $(CXXFLAGS) -DHOSTGPU -c $< -o $@
+
+%.c.host.o: $(SRC_DIR)/%.c
+	$(CC) $(CXXFLAGS) -DHOSTGPU -c $< -o $@
 
 ifndef USE_SETUP
 setup:
 endif
 
-$(PROJECT): setup main.cc.o $(OBJS)
+$(PROJECT): setup $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out setup, $^) $(LDFLAGS) -L$(ROOT_DIR)/runtime/stub -lvortex -L$(POCL_RT_PATH)/lib -lOpenCL -o $@
 
-$(PROJECT).host: setup main.cc.host.o $(OBJS)	
+$(PROJECT).host: setup $(OBJS_HOST)	
 	$(CXX) $(CXXFLAGS) $(filter-out setup, $^) $(LDFLAGS) -lOpenCL -o $@
 
 run-gpu: $(PROJECT).host kernel.cl
