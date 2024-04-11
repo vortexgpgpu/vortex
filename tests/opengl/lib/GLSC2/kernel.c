@@ -5,7 +5,7 @@ cl_int _err;
 // TODO deberia ser independiente de glsc2.c, es decir pasar por parametro de funcion todas las variables que necesitemos
 
 cl_platform_id _getPlatformID() {    
-    cl_platform_id platform_id = NULL;
+    static cl_platform_id platform_id = NULL;
 
     if (!platform_id) clGetPlatformIDs(1, &platform_id, NULL);
     
@@ -14,7 +14,7 @@ cl_platform_id _getPlatformID() {
 }
 
 cl_device_id _getDeviceID() {
-    cl_device_id device_id = NULL;
+    static cl_device_id device_id = NULL;
 
     if (!device_id) clGetDeviceIDs(_getPlatformID(), CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL);
 
@@ -23,7 +23,7 @@ cl_device_id _getDeviceID() {
 }
 
 cl_context _getContext() {
-    cl_context context = NULL;
+    static cl_context context = NULL;
 
     if (!context) {
         cl_device_id device_id = _getDeviceID();
@@ -34,13 +34,13 @@ cl_context _getContext() {
     return context;
 } 
 
-cl_program createProgramWithBinary(binary, length) {
+cl_program createProgramWithBinary(const uint8_t* binary, int length) {
     printf("createProgramWithBinary() binary=%x, length=%d\n", binary, length);
-    
+
     cl_device_id device_id = _getDeviceID();
 
     cl_program program = clCreateProgramWithBinary(
-        _getContext(), 1, &device_id, &length, (const uint8_t**)&binary, NULL, &_err);
+        _getContext(), 1, &device_id, &length, &binary, NULL, &_err);
     
     printf("createProgramWithBinary() return: %x\n", program);
     return program;
