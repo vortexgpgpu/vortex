@@ -87,36 +87,3 @@ void fill(cl_mem buff, size_t size, void* pattern, size_t pattern_size) {
 // formats
 #define RGBA8 0x0
 #define RGBA4 0x1
-
-void readnPixels(cl_mem buff, int x, int y, int width, int height, unsigned int src_format, unsigned int dst_format, int bufSize, void *data) {
-
-    static cl_program program = NULL;
-    if (! program) { program = _createProgram("kernel.readnpixels.pocl"); }
-    
-    if (src_format == dst_format) {
-
-        cl_command_queue commandQueue = clCreateCommandQueue(_getContext(), _getDeviceID(), 0, &_err);
-        clEnqueueReadBuffer(commandQueue, buff, CL_TRUE, 0, bufSize, data, 0, NULL, NULL);
-
-    } else if (src_format == RGBA4 && dst_format == RGBA8) {
-
-        cl_kernel kernel = clCreateKernel(program, "rgba4_rgba8", &_err);
-        cl_mem dst_buff = clCreateBuffer(_getContext(), CL_MEM_WRITE_ONLY, bufSize, NULL, &_err);
-
-        clSetKernelArg(kernel, 0, sizeof(cl_mem), buff);
-        clSetKernelArg(kernel, 1, sizeof(cl_mem), dst_buff);
-        clSetKernelArg(kernel, 2, sizeof(int), &x);
-        clSetKernelArg(kernel, 3, sizeof(int), &y);
-        clSetKernelArg(kernel, 4, sizeof(int), &width);
-        clSetKernelArg(kernel, 5, sizeof(int), &height);
-
-        cl_command_queue commandQueue = clCreateCommandQueue(_getContext(), _getDeviceID(), 0, &_err);
-        size_t global_work_size = bufSize/4; // 4 bytes x color
-        clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, &global_work_size, NULL, 0, NULL, NULL);
-
-        clFinish(commandQueue);  
-        clEnqueueReadBuffer(commandQueue, dst_buff, CL_TRUE, 0, bufSize, data, 0, NULL, NULL);
-
-    }
-
-}
