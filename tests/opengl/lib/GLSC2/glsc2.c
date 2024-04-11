@@ -212,6 +212,8 @@ GL_APICALL void GL_APIENTRY glBindBuffer (GLenum target, GLuint buffer) {
     _buffers[buffer].target = target;
 }
 GL_APICALL void GL_APIENTRY glBindFramebuffer (GLenum target, GLuint framebuffer) {
+    printf("glBindFramebuffer(framebuffer: %d)\n", framebuffer);
+
     if (!_framebuffers[framebuffer].used) {
         _err = GL_INVALID_OPERATION;
         return;
@@ -221,6 +223,8 @@ GL_APICALL void GL_APIENTRY glBindFramebuffer (GLenum target, GLuint framebuffer
     }
 }
 GL_APICALL void GL_APIENTRY glBindRenderbuffer (GLenum target, GLuint renderbuffer) {
+    printf("glBindRenderbuffer(renderbuffer: %d)\n", renderbuffer);
+
     if (!_renderbuffers[renderbuffer].used) {
         _err = GL_INVALID_OPERATION;
         return;
@@ -231,8 +235,7 @@ GL_APICALL void GL_APIENTRY glBindRenderbuffer (GLenum target, GLuint renderbuff
 }
 
 GL_APICALL void GL_APIENTRY glRenderbufferStorage (GLenum target, GLenum internalformat, GLsizei width, GLsizei height) {
-    printf("target: %d\n", target);
-    
+
     if (internalformat == RGBA4) {
         _renderbuffers[_renderbuffer_binding].mem = createBuffer(MEM_READ_WRITE, width*height*2, NULL);
     } else if (internalformat == GL_DEPTH_COMPONENT16) {
