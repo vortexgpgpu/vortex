@@ -109,7 +109,8 @@ init_regs:
   # ensure cache line alignment
   la    t1, __tcb_aligned_size
   mul   t0, t0, t1
-  la    tp, _end + 63
+  la    tp, _end
+  addi  tp, tp, 63
   add   tp, tp, t0
   and   tp, tp, -64
   ret
