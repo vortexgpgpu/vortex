@@ -187,6 +187,8 @@ STENCIL_MASK _stencil_mask = {1, 1};
 */
 #define COLOR_ATTACHMENT0 _renderbuffers[_framebuffers[_framebuffer_binding].color_attachment0]
 #define PROGRAM _programs[_current_program]
+#define RENDERBUFFER _renderbuffer[_renderbuffer_binding]
+#define FRAMEBUFFER _framebuffer[_framebuffer_binding]
 
 void* getCommandQueue();
 
@@ -221,6 +223,35 @@ GL_APICALL void GL_APIENTRY glBindFramebuffer (GLenum target, GLuint framebuffer
         _framebuffer_binding = framebuffer;
     }
 }
+GL_APICALL void GL_APIENTRY glBindRenderbuffer (GLenum target, GLuint renderbuffer) {
+    if (!_renderbuffer[renderbuffer].used) {
+        _err = GL_INVALID_OPERATION;
+        return;
+    }
+    if (target == GL_RENDERBUFFER) {
+        _renderbuffer_binding = renderbuffer;
+    }
+}
+
+GL_APICALL void GL_APIENTRY glRenderbufferStorage (GLenum target, GLenum internalformat, GLsizei width, GLsizei height) {
+    if (internalformat == RGBA4) {
+        RENDERBUFFER.mem = createBuffer(MEM_READ_WRITE, width*height*2, NULL);
+        RENDERBUFFER.internalformat = internalformat;
+        RENDERBUFFER.width = width;
+        RENDERBUFFER.height = height;
+    } else if (internalformat == GL_DEPTH_COMPONENT16) {
+        RENDERBUFFER.mem = createBuffer(MEM_READ_WRITE, width*height*2, NULL);
+        RENDERBUFFER.internalformat = internalformat;
+        RENDERBUFFER.width = width;
+        RENDERBUFFER.height = height;
+    } else if (internalformat == GL_STENCIL_INDEX8) {
+        RENDERBUFFER.mem = createBuffer(MEM_READ_WRITE, width*height*1, NULL);
+        RENDERBUFFER.internalformat = internalformat;
+        RENDERBUFFER.width = width;
+        RENDERBUFFER.height = height;
+    }
+}
+
 
 GL_APICALL void GL_APIENTRY glBufferData (GLenum target, GLsizeiptr size, const void *data, GLenum usage) {
 
@@ -457,6 +488,16 @@ GL_APICALL void GL_APIENTRY glFinish (void) {
     finish(getCommandQueue());
 }
 
+GL_APICALL void GL_APIENTRY glFramebufferRenderbuffer (GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer) {
+    if (attachment == GL_COLOR_ATTACHMENT0)
+        FRAMEBUFFER.color_attachment0=renderbuffer;
+    else if (attachment == GL_DEPTH_ATTACHMENT)
+        FRAMEBUFFER.depth_attachment=renderbuffer;
+    else if (attachment == GL_STENCIL_ATTACHMENT)
+        FRAMEBUFFER.stencil_attachment=renderbuffer;
+}
+
+
 GL_APICALL void GL_APIENTRY glGenBuffers (GLsizei n, GLuint *buffers) {
     GLuint _id = 1; // _id = 0 is reserved for ARRAY_BUFFER
 
@@ -486,6 +527,22 @@ GL_APICALL void GL_APIENTRY glGenFramebuffers (GLsizei n, GLuint *framebuffers) 
         _id += 1;
     }
 }
+
+GL_APICALL void GL_APIENTRY glGenRenderbuffers (GLsizei n, GLuint *renderbuffers) {
+    GLuint _id = 1; // _id = 0 is reserved for ARRAY_BUFFER
+
+    while(n > 0 && _id < 256) {
+        if (!_renderbuffers[_id].used) {
+            _renderbuffers[_id].used = GL_TRUE;
+            *renderbuffers = _id;
+
+            renderbuffers += 1; 
+            n -= 1;
+        }
+        _id += 1;
+    }
+}
+
 
 #define POCL_BINARY 0x0
 
