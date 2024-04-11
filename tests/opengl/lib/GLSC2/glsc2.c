@@ -1,7 +1,7 @@
 #include <GLSC2/glsc2.h>
 #include "kernel.c" // TODO: may be interesting to extract it to an interface so could be re implementated with CUDA
 #include "utils.c"
-#include "binary.c"
+#include "binary.h"
 
 // Our definitions
 #define MAX_BUFFER 256
@@ -493,11 +493,11 @@ GL_APICALL void GL_APIENTRY glGenFramebuffers (GLsizei n, GLuint *framebuffers) 
 GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat, const void *binary, GLsizei length){
     if(!_kernel_load_status) {
         
-        _color_kernel = createKernel(createProgramWithBinary(_color_binary, sizeof(_color_binary)), "gl_rbga4");
-        _rasterization_kernel = createKernel(createProgramWithBinary(_rasterization_binary, sizeof(_rasterization_binary)), "gl_rasterization_triangle");
-        _viewport_division_kernel = createKernel(createProgramWithBinary(_viewport_division_binary, sizeof(_viewport_division_binary)), "gl_viewport_division");
-        _perspective_division_kernel = createKernel(createProgramWithBinary(_perspective_division_binary, sizeof(_perspective_division_binary)), "gl_perspective_division");
-        _readnpixels_kernel = createKernel(createProgramWithBinary(_readnpixels_binary, sizeof(_readnpixels_binary)), "gl_rgba4_rgba8");
+        _color_kernel = createKernel(createProgramWithBinary(kernel_color_pocl, sizeof(kernel_color_pocl)), "gl_rbga4");
+        _rasterization_kernel = createKernel(createProgramWithBinary(kernel_rasterization_triangle_pocl, sizeof(kernel_rasterization_triangle_pocl)), "gl_rasterization_triangle");
+        _viewport_division_kernel = createKernel(createProgramWithBinary(kernel_viewport_division_pocl, sizeof(kernel_viewport_division_pocl)), "gl_viewport_division");
+        _perspective_division_kernel = createKernel(createProgramWithBinary(kernel_perspective_division_pocl, sizeof(kernel_perspective_division_pocl)), "gl_perspective_division");
+        _readnpixels_kernel = createKernel(createProgramWithBinary(kernel_readnpixels_pocl, sizeof(kernel_readnpixels_pocl)), "gl_rgba4_rgba8");
 
         _kernel_load_status = 1;
     }
