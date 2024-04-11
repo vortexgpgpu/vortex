@@ -36,7 +36,7 @@ run-simx:
 	$(MAKE) -C nearn run-simx
 	$(MAKE) -C guassian run-simx
 	$(MAKE) -C kmeans run-simx
-	$(MAKE) -C blackscholes run-simx
+#	$(MAKE) -C blackscholes run-simx
 	$(MAKE) -C bfs run-simx
 
 run-rtlsim:
@@ -55,7 +55,7 @@ run-rtlsim:
 	$(MAKE) -C nearn run-rtlsim
 	$(MAKE) -C guassian run-rtlsim
 	$(MAKE) -C kmeans run-rtlsim
-	$(MAKE) -C blackscholes run-rtlsim
+#	$(MAKE) -C blackscholes run-rtlsim
 	$(MAKE) -C bfs run-rtlsim
 
 run-opae:
@@ -74,7 +74,7 @@ run-opae:
 	$(MAKE) -C nearn run-opae
 	$(MAKE) -C guassian run-opae
 	$(MAKE) -C kmeans run-opae
-	$(MAKE) -C blackscholes run-opae
+#	$(MAKE) -C blackscholes run-opae
 	$(MAKE) -C bfs run-opae
 
 clean:
