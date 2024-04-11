@@ -98,6 +98,8 @@ int main() {
   unsigned char result[WIDTH][HEIGHT][4]; // RGBA8 32 bits x fragment
   GLuint vbo, program;
 
+  cl_platform_id platform_id;
+  clGetPlatformIDs(1, &platform_id, NULL);
   // Set up context
   createContext(&context, WIDTH, HEIGHT);
   glViewport(0, 0, WIDTH, HEIGHT); 
