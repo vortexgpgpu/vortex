@@ -3,27 +3,25 @@
 cl_int _err;
 // TODO deberia ser independiente de glsc2.c, es decir pasar por parametro de funcion todas las variables que necesitemos
 
-cl_platform_id _getPlatformID() {
-    static cl_platform_id platform_id;
+cl_platform_id _platform_id = NULL;
+cl_platform_id _getPlatformID() {    
+    if (!_platform_id) clGetPlatformIDs(1, &_platform_id, NULL);
     
-    if (!platform_id) clGetPlatformIDs(1, &platform_id, NULL);
-    return platform_id;
+    return _platform_id;
 }
 
+cl_device_id _device_id = NULL;
 cl_device_id _getDeviceID() {
-    static cl_device_id device_id;
-    
-    if (!device_id) clGetDeviceIDs(_getPlatformID(), CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL);
+    if (!_device_id) clGetDeviceIDs(_getPlatformID(), CL_DEVICE_TYPE_DEFAULT, 1, &_device_id, NULL);
 
-    return device_id;
+    return _device_id;
 }
 
+cl_context _context = NULL;
 cl_context _getContext() {
-    static cl_context context;
+    if (!_context) _context = clCreateContext(NULL, 1, _getDeviceID(), NULL, NULL,  &_err);
 
-    if (!context) context = clCreateContext(NULL, 1, _getDeviceID(), NULL, NULL,  &_err);
-
-    return context;
+    return _context;
 } 
 
 cl_program createProgramWithBinary(binary, length) {
