@@ -4,14 +4,14 @@ cl_int _err;
 // TODO deberia ser independiente de glsc2.c, es decir pasar por parametro de funcion todas las variables que necesitemos
 
 cl_platform_id _getPlatformID() {
-    static cl_platform_id platform_id = NULL;
+    static cl_platform_id platform_id;
     
     if (!platform_id) clGetPlatformIDs(1, &platform_id, NULL);
     return platform_id;
 }
 
 cl_device_id _getDeviceID() {
-    static cl_device_id device_id = NULL;
+    static cl_device_id device_id;
     
     if (!device_id) clGetDeviceIDs(_getPlatformID(), CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL);
 
@@ -19,7 +19,7 @@ cl_device_id _getDeviceID() {
 }
 
 cl_context _getContext() {
-    static cl_context context = NULL;
+    static cl_context context;
 
     if (!context) context = clCreateContext(NULL, 1, _getDeviceID(), NULL, NULL,  &_err);
 
