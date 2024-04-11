@@ -42,7 +42,7 @@ cl_program createProgramWithBinary(const uint8_t* binary, size_t length) {
     cl_program program = clCreateProgramWithBinary(
         _getContext(), 1, &device_id, &length, &binary, NULL, &_err);
     
-    printf("createProgramWithBinary() return: %x\n", program);
+    printf("\treturn=%x, error=%d\n", program, _err);
     return program;
 }
 
@@ -58,7 +58,7 @@ void* createBuffer(uint64_t flags, size_t size, void* data){
 
     void *buffer = clCreateBuffer(_getContext(), flags, size, data, &_err);
     
-    printf("createBuffer() return: %x\n", buffer);
+    printf("createBuffer() return=%x, error=%d\n", buffer, _err);
 
     return buffer;
 }
@@ -68,10 +68,10 @@ void* createCommandQueue(uint64_t properties) {
 }
 
 void* createKernel(void* program, const char* name) {
-    printf("createKernel() program=%x\n, name=%s", program, name);
+    printf("createKernel() program=%x, name=%s\n", program, name);
     cl_kernel kernel = clCreateKernel((cl_program) program, name, &_err);
 
-    printf("\treturn=%x\n, error=%x", kernel, _err);
+    printf("\treturn=%x, error=%d\n", kernel, _err);
     return kernel;
 }
 
