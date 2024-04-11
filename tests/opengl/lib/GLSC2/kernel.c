@@ -99,13 +99,6 @@ void enqueueFillBuffer(void* command_queue, void* buffer, const void* pattern, s
     printf("enqueueFillBuffer() offset=%d, size=%d\n", offset, size);
     clEnqueueFillBuffer((cl_command_queue)command_queue, (cl_mem) buffer, pattern, pattern_size, offset, size, 0, NULL, NULL);
 }
-/**** SHORT CUTS
- * 
-*/
-void fill(cl_mem buff, size_t size, void* pattern, size_t pattern_size) {
-    cl_command_queue commandQueue = clCreateCommandQueue(_getContext(), _getDeviceID(), 0, &_err);
-    clEnqueueFillBuffer(commandQueue, buff, pattern, pattern_size, 0, size, 0, NULL, NULL);
-}
 
 // formats
 #define RGBA8 0x0

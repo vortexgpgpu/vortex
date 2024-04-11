@@ -88,7 +88,7 @@ int main() {
   vbo = createQuad();
 
   // Draw
-  glClear(GL_COLOR_BUFFER_BIT);
+  // glClear(GL_COLOR_BUFFER_BIT);
 
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
   printf("drawArrays\n");

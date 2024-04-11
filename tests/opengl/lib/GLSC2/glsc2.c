@@ -285,14 +285,14 @@ GL_APICALL void GL_APIENTRY glClearDepthf (GLfloat d) {
 
     if (depth_attachment.internalformat == GL_DEPTH_COMPONENT16) {
         unsigned short value = 65535*d;
-        fill(depth_attachment.mem, depth_attachment.width*depth_attachment.height*2, &value, 2);
+        //fill(depth_attachment.mem, depth_attachment.width*depth_attachment.height*2, &value, 2);
     }
 }
 GL_APICALL void GL_APIENTRY glClearStencil (GLint s) {
     RENDERBUFFER stencil_attachment = _renderbuffers[_framebuffers[_framebuffer_binding].stencil_attachment];
 
     if (stencil_attachment.internalformat == GL_STENCIL_INDEX8) {
-        fill(stencil_attachment.mem, stencil_attachment.width*stencil_attachment.height, &s, 1);
+        //fill(stencil_attachment.mem, stencil_attachment.width*stencil_attachment.height, &s, 1);
     }
 }
 
