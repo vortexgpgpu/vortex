@@ -60,9 +60,13 @@ void createContext(CONTEXT* display, GLuint width, GLuint height) {
     glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA4, width, height);
     printf("end\n");
     glBindRenderbuffer(GL_RENDERBUFFER, display->renderbuffers[0].depthbuffer);
+    printf("try0\n");
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, width, height);
+    printf("end0\n");
     glBindRenderbuffer(GL_RENDERBUFFER, display->renderbuffers[0].stencilbuffer);
+    printf("try1\n");
     glRenderbufferStorage(GL_RENDERBUFFER, GL_STENCIL_INDEX8, width, height);
+    printf("end1\n");
     // Associate buffers
     printf("try2\n");
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, display->renderbuffers[0].colorbuffer);
