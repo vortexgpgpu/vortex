@@ -545,7 +545,7 @@ GL_APICALL void GL_APIENTRY glGenRenderbuffers (GLsizei n, GLuint *renderbuffers
 #define POCL_BINARY 0x0
 
 static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
-  if (nullptr == filename || nullptr == data || 0 == size)
+  if (NULL == filename || NULL == data || 0 == size)
     return -1;
 
   FILE* fp = fopen(filename, "r");
@@ -571,7 +571,7 @@ GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat
         size_t kernel_size;
         read_kernel_file("../lib/GLSC2/kernel.color.pocl", &kernel_bin, &kernel_size);
         _color_kernel = createKernel(createProgramWithBinary(kernel_bin, kernel_size), , "gl_rbga4");
-        
+
         _color_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_color_pocl, sizeof(GLSC2_kernel_color_pocl)), "gl_rbga4");
         _rasterization_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_rasterization_triangle_pocl, sizeof(GLSC2_kernel_rasterization_triangle_pocl)), "gl_rasterization_triangle");
         _viewport_division_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_viewport_division_pocl, sizeof(GLSC2_kernel_viewport_division_pocl)), "gl_viewport_division");
