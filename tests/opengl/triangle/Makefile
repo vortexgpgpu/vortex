@@ -2,6 +2,6 @@ PROJECT = triangle
 
 SRCS = main.cc
 
-OPTS ?= -n64
+OPTS ?=
 
 include ../common.mk

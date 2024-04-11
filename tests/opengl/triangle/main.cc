@@ -97,24 +97,30 @@ int main() {
   CONTEXT context;
   unsigned char result[WIDTH][HEIGHT][4]; // RGBA8 32 bits x fragment
   GLuint vbo, program;
-
-  cl_platform_id platform_id;
-  clGetPlatformIDs(1, &platform_id, NULL);
+  printf("start\n");
+  cl_platform_id id;
+  clGetPlatformIDs(1, &id, NULL);
   // Set up context
+  printf("createContext");
   createContext(&context, WIDTH, HEIGHT);
   glViewport(0, 0, WIDTH, HEIGHT); 
 
   // Create program & vbo
+  printf("createProgram");
   program = createProgram("kernel.pocl");
   glUseProgram(program);
+
+  printf("createQuad");
   vbo = createQuad();
 
   // Draw
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  printf("drawArrays");
   glDrawArrays(GL_TRIANGLES, 0, 6);
   glFinish();
+  printf("readPixels\n");
   glReadnPixels(0,0,WIDTH, HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, WIDTH*HEIGHT*4, result);
 
   printf("Verify result\n");

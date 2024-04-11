@@ -23,6 +23,7 @@ RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)
 
 POCL_CC_PATH ?= $(TOOLDIR)/pocl/compiler
 POCL_RT_PATH ?= $(TOOLDIR)/pocl/runtime
+OPENGL_PATH ?= $(realpath ..)
 
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 VORTEX_KN_PATH ?= $(realpath ../../../kernel)
@@ -41,12 +42,13 @@ CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-narrowing
 CXXFLAGS += -pthread
 CXXFLAGS += -I$(POCL_RT_PATH)/include
+CXXFLAGS += -I$(OPENGL_PATH)/include
 
 ifdef HOSTGPU
 	CXXFLAGS += -DHOSTGPU
 	LDFLAGS += -lOpenCL
 else
-	LDFLAGS += -L$(VORTEX_RT_PATH)/stub -lvortex $(POCL_RT_PATH)/lib/libOpenCL.so
+	LDFLAGS += -L$(VORTEX_RT_PATH)/stub -lvortex $(POCL_RT_PATH)/lib/libOpenCL.so $(OPENGL_PATH)/lib/GLSC2/glsc2.c.o
 endif
 
 # Debugigng
