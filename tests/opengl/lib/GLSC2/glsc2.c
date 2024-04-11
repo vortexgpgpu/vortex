@@ -507,32 +507,32 @@ GL_APICALL void GL_APIENTRY glGenBuffers (GLsizei n, GLuint *buffers) {
 }
 
 GL_APICALL void GL_APIENTRY glGenFramebuffers (GLsizei n, GLuint *framebuffers) {
-    GLuint _id = 1; // _id = 0 is reserved for ARRAY_BUFFER
+    GLuint id = 1; // _id = 0 is reserved for ARRAY_BUFFER
 
-    while(n > 0 && _id < 256) {
-        if (!_framebuffers[_id].used) {
-            _framebuffers[_id].used = GL_TRUE;
-            *framebuffers = _id;
-
+    while(n > 0 && id < MAX_FRAMEBUFFER) {
+        if (!_framebuffers[id].used) {
+            _framebuffers[id].used = GL_TRUE;
+            
+            *framebuffers = id;
             framebuffers += 1; 
             n -= 1;
         }
-        _id += 1;
+        id += 1;
     }
 }
 
 GL_APICALL void GL_APIENTRY glGenRenderbuffers (GLsizei n, GLuint *renderbuffers) {
-    GLuint _id = 1; // _id = 0 is reserved for ARRAY_BUFFER
+    GLuint id = 1; // id = 0 is reserved for ARRAY_BUFFER
 
-    while(n > 0 && _id < 256) {
-        if (!_renderbuffers[_id].used) {
-            _renderbuffers[_id].used = GL_TRUE;
-            *renderbuffers = _id;
+    while(n > 0 && id < MAX_RENDERBUFFER) {
+        if (!_renderbuffers[id].used) {
+            _renderbuffers[id].used = GL_TRUE;
+            *renderbuffers = id;
 
             renderbuffers += 1; 
             n -= 1;
         }
-        _id += 1;
+        id += 1;
     }
 }
 
