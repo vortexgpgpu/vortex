@@ -74,7 +74,6 @@ int main() {
   GLuint vbo, program;
   printf("start\n");
   cl_platform_id platform_id;
-  CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
   // Set up context
   printf("createContext");
   createContext(&context, WIDTH, HEIGHT);
@@ -88,6 +87,8 @@ int main() {
   printf("createQuad");
   vbo = createQuad();
 
+  printf("clGetPlatform");
+  CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
   // Draw
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
