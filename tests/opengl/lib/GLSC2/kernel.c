@@ -25,7 +25,10 @@ cl_device_id _getDeviceID() {
 cl_context _getContext() {
     cl_context context = NULL;
 
-    if (!context) context = clCreateContext(NULL, 1, _getDeviceID(), NULL, NULL,  &_err);
+    if (!context) {
+        cl_device_id device_id = _getDeviceID();
+        context = clCreateContext(NULL, 1, &device_id, NULL, NULL,  &_err);
+    }
 
     printf("_getContext() return: %x\n", context);
     return context;
