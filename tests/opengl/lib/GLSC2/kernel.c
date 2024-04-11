@@ -26,29 +26,6 @@ cl_context _getContext() {
     return context;
 } 
 
-cl_program _createProgram(const char* filename){
-    uint8_t *kernel_bin = NULL;
-    size_t kernel_size;
-
-    //HOSTCPU
-    if (0 != read_kernel_file(filename, &kernel_bin, &kernel_size))
-        return -1;
-    
-    cl_device_id device_id = _getDeviceID();
-    cl_program program = clCreateProgramWithBinary(
-        _getContext(), 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, NULL, &_err);
-
-    return program;
-}
-
-cl_program _getPipelineProgram() {
-    static cl_program program = NULL;
-
-    if (!program) program = _createProgram("pipeline.pocl");
-
-    return program;
-}
-
 cl_program createProgramWithBinary(binary, length) {
     cl_device_id device_id = _getDeviceID();
 

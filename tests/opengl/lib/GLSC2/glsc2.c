@@ -492,11 +492,11 @@ GL_APICALL void GL_APIENTRY glGenFramebuffers (GLsizei n, GLuint *framebuffers) 
 GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat, const void *binary, GLsizei length){
     if(!_kernel_load_status) {
         
-        _color_kernel = createKernel(createProgramWithBinary(kernel_color_pocl, sizeof(kernel_color_pocl)), "gl_rbga4");
-        _rasterization_kernel = createKernel(createProgramWithBinary(kernel_rasterization_triangle_pocl, sizeof(kernel_rasterization_triangle_pocl)), "gl_rasterization_triangle");
-        _viewport_division_kernel = createKernel(createProgramWithBinary(kernel_viewport_division_pocl, sizeof(kernel_viewport_division_pocl)), "gl_viewport_division");
-        _perspective_division_kernel = createKernel(createProgramWithBinary(kernel_perspective_division_pocl, sizeof(kernel_perspective_division_pocl)), "gl_perspective_division");
-        _readnpixels_kernel = createKernel(createProgramWithBinary(kernel_readnpixels_pocl, sizeof(kernel_readnpixels_pocl)), "gl_rgba4_rgba8");
+        _color_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_color_pocl, sizeof(GLSC2_kernel_color_pocl)), "gl_rbga4");
+        _rasterization_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_rasterization_triangle_pocl, sizeof(GLSC2_kernel_rasterization_triangle_pocl)), "gl_rasterization_triangle");
+        _viewport_division_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_viewport_division_pocl, sizeof(GLSC2_kernel_viewport_division_pocl)), "gl_viewport_division");
+        _perspective_division_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_perspective_division_pocl, sizeof(GLSC2_kernel_perspective_division_pocl)), "gl_perspective_division");
+        _readnpixels_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_readnpixels_pocl, sizeof(GLSC2_kernel_readnpixels_pocl)), "gl_rgba4_rgba8");
 
         _kernel_load_status = 1;
     }
