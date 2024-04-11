@@ -235,6 +235,7 @@ GL_APICALL void GL_APIENTRY glBindRenderbuffer (GLenum target, GLuint renderbuff
 }
 
 GL_APICALL void GL_APIENTRY glRenderbufferStorage (GLenum target, GLenum internalformat, GLsizei width, GLsizei height) {
+    printf("glRenderbufferStorage()\n");
 
     if (internalformat == RGBA4) {
         _renderbuffers[_renderbuffer_binding].mem = createBuffer(MEM_READ_WRITE, width*height*2, NULL);

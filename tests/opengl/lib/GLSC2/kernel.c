@@ -1,27 +1,34 @@
 #include <CL/opencl.h>
+#include <stdio.h>
 
 cl_int _err;
 // TODO deberia ser independiente de glsc2.c, es decir pasar por parametro de funcion todas las variables que necesitemos
 
-cl_platform_id _platform_id = NULL;
 cl_platform_id _getPlatformID() {    
-    if (!_platform_id) clGetPlatformIDs(1, &_platform_id, NULL);
+    cl_platform_id platform_id = NULL;
+
+    if (!platform_id) clGetPlatformIDs(1, &platform_id, NULL);
     
-    return _platform_id;
+    printf("_getPlatformID() return: %x\n", platform_id);
+    return platform_id;
 }
 
-cl_device_id _device_id = NULL;
 cl_device_id _getDeviceID() {
-    if (!_device_id) clGetDeviceIDs(_getPlatformID(), CL_DEVICE_TYPE_DEFAULT, 1, &_device_id, NULL);
+    cl_device_id device_id = NULL;
 
-    return _device_id;
+    if (!device_id) clGetDeviceIDs(_getPlatformID(), CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL);
+
+    printf("_getDeviceID() return: %x\n", device_id);
+    return device_id;
 }
 
-cl_context _context = NULL;
 cl_context _getContext() {
-    if (!_context) _context = clCreateContext(NULL, 1, _getDeviceID(), NULL, NULL,  &_err);
+    cl_context context = NULL;
 
-    return _context;
+    if (!context) context = clCreateContext(NULL, 1, _getDeviceID(), NULL, NULL,  &_err);
+
+    printf("_getContext() return: %x\n", context);
+    return context;
 } 
 
 cl_program createProgramWithBinary(binary, length) {
@@ -42,7 +49,12 @@ cl_program createProgramWithBinary(binary, length) {
 #define MEM_READ_WRITE CL_MEM_READ_WRITE
 
 void* createBuffer(uint64_t flags, size_t size, void* data){
-    return clCreateBuffer(_getContext(), flags, size, data, &_err);
+
+    void *buffer = clCreateBuffer(_getContext(), flags, size, data, &_err);
+    
+    printf("createBuffer() return: %x\n", buffer);
+
+    return buffer;
 }
 
 void* createCommandQueue(uint64_t properties) {
