@@ -570,7 +570,7 @@ GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat
         uint8_t *kernel_bin;
         size_t kernel_size;
         read_kernel_file("../lib/GLSC2/kernel.color.pocl", &kernel_bin, &kernel_size);
-        _color_kernel = createKernel(createProgramWithBinary(kernel_bin, kernel_size), , "gl_rbga4");
+        _color_kernel = createKernel(createProgramWithBinary(kernel_bin, kernel_size), "gl_rbga4");
 
         _color_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_color_pocl, sizeof(GLSC2_kernel_color_pocl)), "gl_rbga4");
         _rasterization_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_rasterization_triangle_pocl, sizeof(GLSC2_kernel_rasterization_triangle_pocl)), "gl_rasterization_triangle");
