@@ -53,7 +53,7 @@ float3 get_baricentric_coords(float2 p, float4 v0, float4 v1, float4 v2) {
     return barycentricCoords;
 }
 
-__kernel void gl_main_rasterization_triangle (
+__kernel void gl_rasterization_triangle (
     const int index, // 
     const int width,
     const int height,

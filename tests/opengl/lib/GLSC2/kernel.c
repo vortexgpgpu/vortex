@@ -66,8 +66,8 @@ cl_program createProgramWithBinary(binary, length) {
 #define MEM_WRITE_ONLY CL_MEM_WRITE_ONLY
 #define MEM_READ_WRITE CL_MEM_READ_WRITE
 
-void* createBuffer(uint64_t flags, size_t size){
-    return clCreateBuffer(_getContext(), flags, size, NULL, &_err);
+void* createBuffer(uint64_t flags, size_t size, void* data){
+    return clCreateBuffer(_getContext(), flags, size, data, &_err);
 }
 
 void* createCommandQueue(uint64_t properties) {
@@ -88,6 +88,12 @@ void enqueueNDRangeKernel(void* commandQueue, void* kernel, const size_t* global
         (cl_command_queue) commandQueue, (cl_kernel) kernel,
         1, NULL, global_work_size, NULL, 0, NULL, NULL);
 }
+
+void enqueueReadBuffer(void* command_queue, void* buffer, size_t bufSize, void* data) {
+
+    clEnqueueReadBuffer(command_queue, (cl_mem) buffer, CL_TRUE, 0, bufSize, data, 0, NULL, NULL);
+}
+
 
 void finish(void* command_queue) {
     clFinish((cl_command_queue) command_queue);

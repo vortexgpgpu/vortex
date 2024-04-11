@@ -104,12 +104,11 @@ int main() {
 
   // Create program & vbo
   program = createProgram("kernel.pocl");
+  glUseProgram(program);
   vbo = createQuad();
 
   // Draw
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-  glUseProgram(program);
 
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
   glDrawArrays(GL_TRIANGLES, 0, 6);

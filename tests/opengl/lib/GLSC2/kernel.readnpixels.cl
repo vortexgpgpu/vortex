@@ -1,4 +1,4 @@
-__kernel void rgba4_rgba8(
+__kernel void gl_rgba4_rgba8(
     __global const unsigned short* buf_in,
     __global unsigned int* buf_out,
     const int x,

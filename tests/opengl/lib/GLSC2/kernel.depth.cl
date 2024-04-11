@@ -1,4 +1,4 @@
-__kernel void less (
+__kernel void gl_less (
   __global unsigned short *depthbuffer,
   const unsigned int width,
   //

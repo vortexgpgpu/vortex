@@ -1,4 +1,4 @@
-__kernel void rgba4 (
+__kernel void gl_rgba4 (
   const unsigned int gl_Width,
   const unsigned int gl_Height,
   __global unsigned short *gl_ColorBuffer,
