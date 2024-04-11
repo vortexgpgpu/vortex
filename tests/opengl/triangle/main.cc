@@ -8,32 +8,7 @@
 #include <string.h>
 #include <chrono>
 
-static void show_usage() {
-  printf("Usage: [-n size] [-h: help]\n");
-}
-
-static void parse_args(int argc, char **argv) {
-  int c;
-  while ((c = getopt(argc, argv, "n:h?")) != -1) {
-    switch (c) {
-    case 'n':
-      //size = atoi(optarg);
-      break;
-    case 'h':
-    case '?': {
-      show_usage();
-      exit(0);
-    } break;
-    default:
-      show_usage();
-      exit(-1);
-    }
-  }
-
-  //printf("Workload size=%d\n", size);
-}
-
-
+#include "../debug.cc"
 #include "../common.c"
 
 #define WIDTH 600
@@ -98,8 +73,8 @@ int main() {
   unsigned char result[WIDTH][HEIGHT][4]; // RGBA8 32 bits x fragment
   GLuint vbo, program;
   printf("start\n");
-  cl_platform_id id;
-  clGetPlatformIDs(1, &id, NULL);
+  cl_platform_id platform_id;
+  CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
   // Set up context
   printf("createContext");
   createContext(&context, WIDTH, HEIGHT);
