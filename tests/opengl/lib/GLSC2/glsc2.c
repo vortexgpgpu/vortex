@@ -187,8 +187,8 @@ STENCIL_MASK _stencil_mask = {1, 1};
 */
 #define COLOR_ATTACHMENT0 _renderbuffers[_framebuffers[_framebuffer_binding].color_attachment0]
 #define PROGRAM _programs[_current_program]
-#define RENDERBUFFER _renderbuffer[_renderbuffer_binding]
-#define FRAMEBUFFER _framebuffer[_framebuffer_binding]
+#define RENDERBUFFER _renderbuffers[_renderbuffer_binding]
+#define FRAMEBUFFER _framebuffers[_framebuffer_binding]
 
 void* getCommandQueue();
 
@@ -224,7 +224,7 @@ GL_APICALL void GL_APIENTRY glBindFramebuffer (GLenum target, GLuint framebuffer
     }
 }
 GL_APICALL void GL_APIENTRY glBindRenderbuffer (GLenum target, GLuint renderbuffer) {
-    if (!_renderbuffer[renderbuffer].used) {
+    if (!_renderbuffers[renderbuffer].used) {
         _err = GL_INVALID_OPERATION;
         return;
     }
