@@ -186,9 +186,6 @@ STENCIL_MASK _stencil_mask = {1, 1};
  * Utility or inline function are implemented at the end of the file. 
 */
 #define COLOR_ATTACHMENT0 _renderbuffers[_framebuffers[_framebuffer_binding].color_attachment0]
-#define PROGRAM _programs[_current_program]
-#define RENDERBUFFER _renderbuffers[_renderbuffer_binding]
-#define FRAMEBUFFER _framebuffers[_framebuffer_binding]
 
 void* getCommandQueue();
 
@@ -234,22 +231,18 @@ GL_APICALL void GL_APIENTRY glBindRenderbuffer (GLenum target, GLuint renderbuff
 }
 
 GL_APICALL void GL_APIENTRY glRenderbufferStorage (GLenum target, GLenum internalformat, GLsizei width, GLsizei height) {
+    
     if (internalformat == RGBA4) {
-        RENDERBUFFER.mem = createBuffer(MEM_READ_WRITE, width*height*2, NULL);
-        RENDERBUFFER.internalformat = internalformat;
-        RENDERBUFFER.width = width;
-        RENDERBUFFER.height = height;
+        _renderbuffers[_renderbuffer_binding].mem = createBuffer(MEM_READ_WRITE, width*height*2, NULL);
     } else if (internalformat == GL_DEPTH_COMPONENT16) {
-        RENDERBUFFER.mem = createBuffer(MEM_READ_WRITE, width*height*2, NULL);
-        RENDERBUFFER.internalformat = internalformat;
-        RENDERBUFFER.width = width;
-        RENDERBUFFER.height = height;
+        _renderbuffers[_renderbuffer_binding].mem = createBuffer(MEM_READ_WRITE, width*height*2, NULL);
     } else if (internalformat == GL_STENCIL_INDEX8) {
-        RENDERBUFFER.mem = createBuffer(MEM_READ_WRITE, width*height*1, NULL);
-        RENDERBUFFER.internalformat = internalformat;
-        RENDERBUFFER.width = width;
-        RENDERBUFFER.height = height;
+        _renderbuffers[_renderbuffer_binding].mem = createBuffer(MEM_READ_WRITE, width*height*1, NULL);
     }
+    _renderbuffers[_renderbuffer_binding].internalformat = internalformat;
+    _renderbuffers[_renderbuffer_binding].width = width;
+    _renderbuffers[_renderbuffer_binding].height = height;
+    
 }
 
 
@@ -352,8 +345,8 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
 
     // Build memory buffers
     void *gl_Positions = createBuffer(MEM_READ_WRITE, sizeof(float[4])*num_vertices, NULL);
-    void *gl_Primitives = createBuffer(MEM_READ_WRITE, sizeof(float[4])*PROGRAM.active_attributes, NULL);
-    void *gl_Rasterization = createBuffer(MEM_READ_WRITE, sizeof(float[4])*PROGRAM.active_attributes, NULL);
+    void *gl_Primitives = createBuffer(MEM_READ_WRITE, sizeof(float[4])*_programs[_current_program].active_attributes, NULL);
+    void *gl_Rasterization = createBuffer(MEM_READ_WRITE, sizeof(float[4])*_programs[_current_program].active_attributes, NULL);
     void *gl_FragCoord = createBuffer(MEM_READ_WRITE, sizeof(float[4])*num_fragments, NULL);
     void *gl_Discard = createBuffer(MEM_READ_WRITE, sizeof(uint8_t)*num_fragments, NULL);
     void *gl_FragColor = createBuffer(MEM_READ_WRITE, sizeof(float[4])*num_fragments, NULL);
@@ -361,11 +354,11 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     // Set up kernels
     void* vertex_kernel = createVertexKernel(mode, first, count);
     setKernelArg(vertex_kernel,
-        PROGRAM.active_attributes + PROGRAM.active_uniforms,
+        _programs[_current_program].active_attributes + _programs[_current_program].active_uniforms,
         sizeof(gl_Positions), gl_Positions
     );
     setKernelArg(vertex_kernel,
-        PROGRAM.active_attributes + PROGRAM.active_uniforms + 1,
+        _programs[_current_program].active_attributes + _programs[_current_program].active_uniforms + 1,
         sizeof(gl_Primitives), gl_Primitives
     );
 
@@ -399,19 +392,19 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
 
     void* fragment_kernel = createFragmentKernel(mode, first, count);
     setKernelArg(fragment_kernel, 
-        PROGRAM.active_uniforms,
+        _programs[_current_program].active_uniforms,
         sizeof(gl_FragCoord), gl_FragCoord
     );
     setKernelArg(fragment_kernel, 
-        PROGRAM.active_uniforms + 1,
+        _programs[_current_program].active_uniforms + 1,
         sizeof(gl_Discard), gl_Discard
     );
     setKernelArg(fragment_kernel, 
-        PROGRAM.active_uniforms + 2,
+        _programs[_current_program].active_uniforms + 2,
         sizeof(gl_FragColor), gl_FragColor
     );
     setKernelArg(fragment_kernel, 
-        PROGRAM.active_uniforms + 3,
+        _programs[_current_program].active_uniforms + 3,
         sizeof(gl_Rasterization), gl_Rasterization
     );
 
@@ -490,11 +483,11 @@ GL_APICALL void GL_APIENTRY glFinish (void) {
 
 GL_APICALL void GL_APIENTRY glFramebufferRenderbuffer (GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer) {
     if (attachment == GL_COLOR_ATTACHMENT0)
-        FRAMEBUFFER.color_attachment0=renderbuffer;
+        _framebuffers[_framebuffer_binding].color_attachment0=renderbuffer;
     else if (attachment == GL_DEPTH_ATTACHMENT)
-        FRAMEBUFFER.depth_attachment=renderbuffer;
+        _framebuffers[_framebuffer_binding].depth_attachment=renderbuffer;
     else if (attachment == GL_STENCIL_ATTACHMENT)
-        FRAMEBUFFER.stencil_attachment=renderbuffer;
+        _framebuffers[_framebuffer_binding].stencil_attachment=renderbuffer;
 }
 
 
@@ -660,14 +653,14 @@ GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLe
             // TODO
         } else {
             mem = createBuffer(MEM_READ_ONLY, size, pointer) + stride;
-            PROGRAM.attributes[PROGRAM.active_attributes].data.type = 0x3;
+            _programs[_current_program].attributes[_programs[_current_program].active_attributes].data.type = 0x3;
         }
-        PROGRAM.attributes[PROGRAM.active_attributes].data.attribute.pointer.mem = mem;
-        PROGRAM.attributes[PROGRAM.active_attributes].data.attribute.pointer.size = size;
-        PROGRAM.attributes[PROGRAM.active_attributes].data.attribute.pointer.type = type;
-        PROGRAM.attributes[PROGRAM.active_attributes].location = index;
-        PROGRAM.attributes[PROGRAM.active_attributes].size = sizeof(void*);
-        PROGRAM.attributes[PROGRAM.active_attributes].type = type;
+        _programs[_current_program].attributes[_programs[_current_program].active_attributes].data.attribute.pointer.mem = mem;
+        _programs[_current_program].attributes[_programs[_current_program].active_attributes].data.attribute.pointer.size = size;
+        _programs[_current_program].attributes[_programs[_current_program].active_attributes].data.attribute.pointer.type = type;
+        _programs[_current_program].attributes[_programs[_current_program].active_attributes].location = index;
+        _programs[_current_program].attributes[_programs[_current_program].active_attributes].size = sizeof(void*);
+        _programs[_current_program].attributes[_programs[_current_program].active_attributes].type = type;
     }
 }
 GL_APICALL void GL_APIENTRY glViewport (GLint x, GLint y, GLsizei width, GLsizei height){
@@ -694,12 +687,12 @@ void* createVertexKernel(GLenum mode, GLint first, GLsizei count) {
     GLuint attribute;
     while(attribute < _programs[_current_program].active_attributes) {
         
-        if(PROGRAM.attributes[attribute].data.type == 0x3) {
+        if(_programs[_current_program].attributes[attribute].data.type == 0x3) {
             setKernelArg(
                 kernel, 
-                PROGRAM.attributes[attribute].location,
-                PROGRAM.attributes[attribute].size,
-                PROGRAM.attributes[attribute].data.attribute.pointer.mem // TODO: 
+                _programs[_current_program].attributes[attribute].location,
+                _programs[_current_program].attributes[attribute].size,
+                _programs[_current_program].attributes[attribute].data.attribute.pointer.mem // TODO: 
             );
         } else {
 
@@ -755,7 +748,7 @@ void* getRasterizationTriangleKernel(GLenum mode, GLint first, GLsizei count) {
         sizeof(COLOR_ATTACHMENT0.height), &COLOR_ATTACHMENT0.height
     );
     setKernelArg(kernel, 2,
-        sizeof(PROGRAM.active_attributes), &PROGRAM.active_attributes
+        sizeof(_programs[_current_program].active_attributes), &_programs[_current_program].active_attributes
     );
 
     return kernel;
