@@ -686,6 +686,7 @@ GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLe
         _programs[_current_program].attributes[_programs[_current_program].active_attributes].location = index;
         _programs[_current_program].attributes[_programs[_current_program].active_attributes].size = sizeof(void*);
         _programs[_current_program].attributes[_programs[_current_program].active_attributes].type = type;
+        _programs[_current_program].active_attributes += 1;
     }
 }
 GL_APICALL void GL_APIENTRY glViewport (GLint x, GLint y, GLsizei width, GLsizei height){

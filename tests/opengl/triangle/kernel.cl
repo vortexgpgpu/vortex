@@ -1,5 +1,5 @@
 
-void gl_main_vs (
+__kernel void gl_main_vs (
   // my imp
   __global const float3* position,
   // implementation values

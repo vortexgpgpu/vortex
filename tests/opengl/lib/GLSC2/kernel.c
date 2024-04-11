@@ -68,9 +68,10 @@ void* createCommandQueue(uint64_t properties) {
 }
 
 void* createKernel(void* program, const char* name) {
+    printf("createKernel() program=%x\n, name=%s", program, name);
     cl_kernel kernel = clCreateKernel((cl_program) program, name, &_err);
 
-    printf("createKernel() return: %x\n", kernel);
+    printf("\treturn=%x\n, error=%x", kernel, _err);
     return kernel;
 }
 
