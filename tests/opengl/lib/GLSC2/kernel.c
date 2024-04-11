@@ -34,7 +34,7 @@ cl_context _getContext() {
     return context;
 } 
 
-cl_program createProgramWithBinary(const uint8_t* binary, int length) {
+cl_program createProgramWithBinary(const uint8_t* binary, size_t length) {
     printf("createProgramWithBinary() binary=%x, length=%d\n", binary, length);
 
     cl_device_id device_id = _getDeviceID();
