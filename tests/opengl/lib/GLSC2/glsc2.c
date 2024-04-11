@@ -1,7 +1,6 @@
 #include <GLSC2/glsc2.h>
 #include "kernel.c" // TODO: may be interesting to extract it to an interface so could be re implementated with CUDA
-#include "utils.c"
-#include "binary.h"
+#include "binary.c"
 
 // Our definitions
 #define MAX_BUFFER 256
