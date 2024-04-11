@@ -40,6 +40,7 @@ cl_program createProgramWithBinary(binary, length) {
     cl_program program = clCreateProgramWithBinary(
         _getContext(), 1, &device_id, &length, (const uint8_t**)&binary, NULL, &_err);
     
+    printf("createProgramWithBinary() return: %x\n", program);
     return program;
 }
 
@@ -65,7 +66,10 @@ void* createCommandQueue(uint64_t properties) {
 }
 
 void* createKernel(void* program, const char* name) {
-    return clCreateKernel((cl_program) program, name, &_err);
+    cl_kernel kernel = clCreateKernel((cl_program) program, name, &_err);
+
+    printf("createKernel() return: %x\n", kernel);
+    return kernel;
 }
 
 void setKernelArg(void* kernel, unsigned int location, size_t size, void* value) {
