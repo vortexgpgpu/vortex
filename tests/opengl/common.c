@@ -50,7 +50,12 @@ void createContext(CONTEXT* display, GLuint width, GLuint height) {
 
     // Gen framebuffers & renderbuffers
     glGenFramebuffers(2, display->framebuffers);
-    glGenRenderbuffers(6, (GLuint*) display->renderbuffers);
+    glGenRenderbuffers(1, &display->renderbuffers[0].colorbuffer);
+    glGenRenderbuffers(1, &display->renderbuffers[0].depthbuffer);
+    glGenRenderbuffers(1, &display->renderbuffers[0].stencilbuffer);
+    glGenRenderbuffers(1, &display->renderbuffers[1].colorbuffer);
+    glGenRenderbuffers(1, &display->renderbuffers[1].depthbuffer);
+    glGenRenderbuffers(1, &display->renderbuffers[1].stencilbuffer);
 
     // Framebuffer0
     glBindFramebuffer(GL_FRAMEBUFFER, display->framebuffers[0]);
