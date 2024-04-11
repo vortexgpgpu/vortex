@@ -270,15 +270,14 @@ GL_APICALL void GL_APIENTRY glClear (GLbitfield mask) {
 }
 
 GL_APICALL void GL_APIENTRY glClearColor (GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) {
-    RENDERBUFFER color_attachment0 = _renderbuffers[_framebuffers[_framebuffer_binding].color_attachment0];
 
-    if (color_attachment0.internalformat == GL_RGBA4) {
+    if (COLOR_ATTACHMENT0.internalformat == GL_RGBA4) {
         unsigned short color;
         color |= (unsigned short) (15*red);
         color |= (unsigned short) (15*green) << 4;
         color |= (unsigned short) (15*blue) << 8;
         color |= (unsigned short) (15*alpha) << 12;
-        fill(color_attachment0.mem, color_attachment0.width*color_attachment0.height*2, &color, 2);
+        enqueueFillBuffer(getCommandQueue(), COLOR_ATTACHMENT0.mem, &color, 2, 0, COLOR_ATTACHMENT0.width*COLOR_ATTACHMENT0.height*2);
     }
 }
 GL_APICALL void GL_APIENTRY glClearDepthf (GLfloat d) {
@@ -567,10 +566,6 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
 
 GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat, const void *binary, GLsizei length){
     if(!_kernel_load_status) {
-        uint8_t *kernel_bin;
-        size_t kernel_size;
-        read_kernel_file("../lib/GLSC2/kernel.color.pocl", &kernel_bin, &kernel_size);
-        _color_kernel = createKernel(createProgramWithBinary(kernel_bin, kernel_size), "gl_rbga4");
 
         _color_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_color_pocl, sizeof(GLSC2_kernel_color_pocl)), "gl_rbga4");
         _rasterization_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_rasterization_triangle_pocl, sizeof(GLSC2_kernel_rasterization_triangle_pocl)), "gl_rasterization_triangle");

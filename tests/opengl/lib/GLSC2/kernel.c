@@ -95,6 +95,10 @@ void finish(void* command_queue) {
     clFinish((cl_command_queue) command_queue);
 }
 
+void enqueueFillBuffer(void* command_queue, void* buffer, const void* pattern, size_t pattern_size, size_t offset, size_t size) {
+    printf("enqueueFillBuffer() offset=%d, size=%d\n", offset, size);
+    clEnqueueFillBuffer((cl_command_queue)command_queue, (cl_mem) buffer, pattern, pattern_size, offset, size, 0, NULL, NULL);
+}
 /**** SHORT CUTS
  * 
 */
