@@ -272,12 +272,13 @@ GL_APICALL void GL_APIENTRY glClear (GLbitfield mask) {
 GL_APICALL void GL_APIENTRY glClearColor (GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) {
 
     if (COLOR_ATTACHMENT0.internalformat == GL_RGBA4) {
-        unsigned short color;
-        color |= (unsigned short) (15*red);
-        color |= (unsigned short) (15*green) << 4;
-        color |= (unsigned short) (15*blue) << 8;
-        color |= (unsigned short) (15*alpha) << 12;
-        enqueueFillBuffer(getCommandQueue(), COLOR_ATTACHMENT0.mem, &color, 2, 0, COLOR_ATTACHMENT0.width*COLOR_ATTACHMENT0.height*2);
+        unsigned int color;
+        color |= (unsigned int) (15*red);
+        color |= (unsigned int) (15*green) << 4;
+        color |= (unsigned int) (15*blue) << 8;
+        color |= (unsigned int) (15*alpha) << 12;
+        color |= color << 16;
+        enqueueFillBuffer(getCommandQueue(), COLOR_ATTACHMENT0.mem, &color, 4, 0, COLOR_ATTACHMENT0.width*COLOR_ATTACHMENT0.height*2);
     }
 }
 GL_APICALL void GL_APIENTRY glClearDepthf (GLfloat d) {
