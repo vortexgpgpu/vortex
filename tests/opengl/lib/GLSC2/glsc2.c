@@ -660,6 +660,7 @@ GL_APICALL void GL_APIENTRY glUseProgram (GLuint program){
 }
 
 GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer) {
+    printf("glVertexAttribPointer() index=%d, size=%d, type=%d, stride=%d, pointer=%x\n", index, size, type, stride, pointer);
     if (index >= MAX_VERTEX_ATTRIBS) {
         _err = GL_INVALID_VALUE;
         return;
@@ -675,12 +676,11 @@ GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLe
         return;
     }
 
-    if (type != GL_BYTE || type != GL_UNSIGNED_BYTE || type != GL_SHORT || type != GL_UNSIGNED_SHORT || type != GL_FLOAT){
+    if (type != GL_BYTE && type != GL_UNSIGNED_BYTE && type != GL_SHORT && type != GL_UNSIGNED_SHORT && type != GL_FLOAT){
         _err=GL_INVALID_VALUE;
         return;
     }
     // TODO: normalized & strid
-    printf("glVertexAttribPointer() _current_program=%d\n",_current_program);
     if (!_current_program) {
         // TODO:
     } else {
