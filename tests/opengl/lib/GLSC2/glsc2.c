@@ -569,7 +569,7 @@ GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat
         void *gl_program;
         gl_program = createProgramWithBinary(GLSC2_kernel_color_pocl, sizeof(GLSC2_kernel_color_pocl));
         buildProgram(gl_program);
-        _color_kernel = createKernel(gl_program, "gl_rbga4");
+        _color_kernel = createKernel(gl_program, "gl_rgba4");
         gl_program = createProgramWithBinary(GLSC2_kernel_rasterization_triangle_pocl, sizeof(GLSC2_kernel_rasterization_triangle_pocl));
         buildProgram(gl_program);
         _rasterization_kernel = createKernel(gl_program, "gl_rasterization_triangle");
@@ -697,7 +697,10 @@ GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLe
         _programs[_current_program].attributes[_programs[_current_program].active_attributes].location = index;
         _programs[_current_program].attributes[_programs[_current_program].active_attributes].size = sizeof(void*);
         _programs[_current_program].attributes[_programs[_current_program].active_attributes].type = type;
+        
         _programs[_current_program].active_attributes += 1;
+    
+        printf("active_attributes=%d", _programs[_current_program].active_attributes);
     }
 }
 GL_APICALL void GL_APIENTRY glViewport (GLint x, GLint y, GLsizei width, GLsizei height){
