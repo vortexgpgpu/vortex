@@ -32,6 +32,19 @@ inline float fround(float x, int32_t precision = 8) {
   return std::round(x * power_of_10) / power_of_10;
 }
 
+inline bool almost_equal_precision(float a, float b, int precision = 4) {
+  auto power_of_10 = std::pow(10, precision);
+  auto ap = std::round(a * power_of_10) / power_of_10;
+  auto bp = std::round(b * power_of_10) / power_of_10;
+  auto eps = std::numeric_limits<float>::epsilon();
+  auto d = fabs(ap - bp);
+  if (d > eps) {
+    std::cout << "*** almost_equal_precision: d=" << d << ", precision=" << precision << std::endl;
+    return false;
+  }
+  return true;
+}
+
 inline bool almost_equal_eps(float a, float b, int ulp = 128) {
   auto eps = std::numeric_limits<float>::epsilon() * (std::max(fabs(a), fabs(b)) * ulp);
   auto d = fabs(a - b);
@@ -727,8 +740,8 @@ public:
     auto a = (float*)src1;
     auto b = (float*)src2;
     for (uint32_t i = 0; i < n; ++i) {
-      a[i] = fround((n - i) * (1.0f/n));
-      b[i] = fround((n + i) * (1.0f/n));
+      a[i] = fround((2*i-n) * (1.0f/n) * 3.1416);
+      b[i] = fround((2*i-n) * (1.0f/n) * 3.1416);
     }
     return 0;
   }
@@ -740,7 +753,7 @@ public:
     auto c = (float*)dst;
     for (uint32_t i = 0; i < n; ++i) {
       auto ref = sin(a[i]) + cos(b[i]);
-      if (!almost_equal_ulp(c[i], ref, 20)) {
+      if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }

@@ -518,10 +518,6 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
     case VX_CAPS_LOCAL_MEM_ADDR:
         *value = LMEM_BASE_ADDR;
         break;
-    case VX_CAPS_KERNEL_BASE_ADDR:
-        *value = (uint64_t(device->dcrs.read(VX_DCR_BASE_STARTUP_ADDR1)) << 32) | 
-                           device->dcrs.read(VX_DCR_BASE_STARTUP_ADDR0);
-        break;
     case VX_CAPS_ISA_FLAGS:
         *value = device->isa_caps;
         break;
@@ -766,6 +762,8 @@ extern int vx_copy_to_dev(vx_device_h hdevice, uint64_t dev_addr, const void* ho
     
     auto device = (vx_device*)hdevice;
 
+    DBGPRINT("COPY_TO_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_addr, (uintptr_t)host_ptr, size);
+
     // check alignment
     if (!is_aligned(dev_addr, CACHE_BLOCK_SIZE))
         return -1;
@@ -779,8 +777,6 @@ extern int vx_copy_to_dev(vx_device_h hdevice, uint64_t dev_addr, const void* ho
     CHECK_ERR(device->upload(dev_addr, host_ptr, asize), {
         return -1;
     });
-
-    DBGPRINT("COPY_TO_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_addr, (uintptr_t)host_ptr, size);
     
     return 0;
 }
@@ -790,6 +786,8 @@ extern int vx_copy_from_dev(vx_device_h hdevice, void* host_ptr, uint64_t dev_ad
         return -1;
 
     auto device = (vx_device*)hdevice;
+
+    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_addr, (uintptr_t)host_ptr, asize);
 
     // check alignment
     if (!is_aligned(dev_addr, CACHE_BLOCK_SIZE))
@@ -804,25 +802,38 @@ extern int vx_copy_from_dev(vx_device_h hdevice, void* host_ptr, uint64_t dev_ad
     CHECK_ERR(device->download(host_ptr, dev_addr, asize), {
         return -1;
     });
-
-    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_addr, (uintptr_t)host_ptr, asize);
     
     return 0;
 }
 
-extern int vx_start(vx_device_h hdevice) {
+extern int vx_start(vx_device_h hdevice, uint64_t krnl_addr, uint64_t args_addr) {
     if (nullptr == hdevice)
         return -1;
 
+    //wait_for_enter("\nPress ENTER to continue after setting up ILA trigger...");
+    
+    DBGPRINT("START: krnl_addr=0x%lx, args_addr=0x%lx\n", krnl_addr, args_addr);
+
+    // set kernel info    
+    CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ADDR0, krnl_addr & 0xffffffff), {
+        return -1;
+    });
+    CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ADDR0, krnl_addr >> 32), {
+        return -1;
+    });
+    CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ARG0, args_addr & 0xffffffff), {
+        return -1;
+    });
+    CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ARG0, args_addr >> 32), {
+        return -1;
+    });
+
     auto device = (vx_device*)hdevice;
 
-    //wait_for_enter("\nPress ENTER to continue after setting up ILA trigger...");
-
+    // start execution
     CHECK_ERR(device->write_register(MMIO_CTL_ADDR, CTL_AP_START), {
         return -1;
     });
-    
-    DBGPRINT("START\n");
 
     return 0;
 }
@@ -832,6 +843,8 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
         return -1;
 
     auto device = (vx_device*)hdevice;
+
+    DBGPRINT("%s\n", "WAIT");
 
     struct timespec sleep_time; 
 
@@ -862,11 +875,26 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     return 0;
 }
 
-extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
+extern int vx_dcr_read(vx_device_h hdevice, uint32_t addr, uint32_t* value) {
     if (nullptr == hdevice)
         return -1;
 
     auto device = (vx_device*)hdevice;
+
+    *value = device->dcrs.read(addr);
+
+    DBGPRINT("DCR_READ: addr=0x%x, value=0x%x\n", addr, *value);
+        
+    return 0;
+}
+
+extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint32_t value) {
+    if (nullptr == hdevice)
+        return -1;
+
+    auto device = (vx_device*)hdevice;
+
+    DBGPRINT("DCR_WRITE: addr=0x%x, value=0x%x\n", addr, value);
    
     CHECK_ERR(device->write_register(MMIO_DCR_ADDR, addr), {
         return -1;
@@ -875,9 +903,7 @@ extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
     CHECK_ERR(device->write_register(MMIO_DCR_ADDR + 4, value), {
         return -1;
     });
-
-    // save the value
-    DBGPRINT("DCR_WRITE: addr=0x%x, value=0x%lx\n", addr, value);
+    
     device->dcrs.write(addr, value);
     
     return 0;

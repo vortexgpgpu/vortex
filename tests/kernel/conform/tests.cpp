@@ -1,6 +1,7 @@
 #include "tests.h"
 #include <stdio.h>
 #include <algorithm>
+#include <VX_config.h>
 #include <vx_intrinsics.h>
 #include <vx_print.h>
 #include <vx_spawn.h>

@@ -33,8 +33,7 @@ typedef void* vx_device_h;
 #define VX_CAPS_GLOBAL_MEM_SIZE     0x5
 #define VX_CAPS_LOCAL_MEM_SIZE      0x6
 #define VX_CAPS_LOCAL_MEM_ADDR      0x7
-#define VX_CAPS_KERNEL_BASE_ADDR    0x8
-#define VX_CAPS_ISA_FLAGS           0x9
+#define VX_CAPS_ISA_FLAGS           0x8
 
 // device isa flags
 #define VX_ISA_STD_A                (1ull << 0)
@@ -83,21 +82,27 @@ int vx_copy_to_dev(vx_device_h hdevice, uint64_t dev_addr, const void* host_ptr,
 int vx_copy_from_dev(vx_device_h hdevice, void* host_ptr, uint64_t dev_addr, uint64_t size);
 
 // Start device execution
-int vx_start(vx_device_h hdevice);
+int vx_start(vx_device_h hdevice, uint64_t krnl_addr, uint64_t args_addr);
 
 // Wait for device ready with milliseconds timeout
 int vx_ready_wait(vx_device_h hdevice, uint64_t timeout);
 
+// read device configuration registers
+int vx_dcr_read(vx_device_h hdevice, uint32_t addr, uint32_t* value);
+
 // write device configuration registers
-int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value);
+int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint32_t value);
 
 ////////////////////////////// UTILITY FUNCTIONS //////////////////////////////
 
-// upload kernel bytes to device
-int vx_upload_kernel_bytes(vx_device_h hdevice, const void* content, uint64_t size);
-
 // upload kernel file to device
-int vx_upload_kernel_file(vx_device_h hdevice, const char* filename);
+int vx_upload_kernel_file(vx_device_h hdevice, const char* filename, uint64_t* addr);
+
+// upload bytes to device
+int vx_upload_bytes(vx_device_h hdevice, const void* content, uint64_t size, uint64_t* addr);
+
+// upload file to device
+int vx_upload_file(vx_device_h hdevice, const char* filename, uint64_t* addr);
 
 // performance counters
 int vx_dump_perf(vx_device_h hdevice, FILE* stream);

@@ -55,6 +55,7 @@ package VX_gpu_pkg;
 
     typedef struct packed {
         logic [`XLEN-1:0]   startup_addr;
+        logic [`XLEN-1:0]   startup_arg;
         logic [7:0]         mpm_class;
     } base_dcrs_t;
 

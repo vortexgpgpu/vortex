@@ -45,7 +45,7 @@ void kernel_body(uint32_t task_id, kernel_arg_t* __UNIFORM__ arg) {
 }
 
 int main() {
-    kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
+    kernel_arg_t* arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
     if (arg->lmem_addr != 0) {
         // populate local memory
         auto W = reinterpret_cast<TYPE*>(arg->W_addr);

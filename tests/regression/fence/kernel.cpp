@@ -18,7 +18,7 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 }
 
 int main() {
-	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
+	kernel_arg_t* arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
 	vx_spawn_tasks(arg->num_tasks, (vx_spawn_tasks_cb)kernel_body, arg);
 	return 0;
 }

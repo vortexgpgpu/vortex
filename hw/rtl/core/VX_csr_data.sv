@@ -121,6 +121,9 @@ import VX_fpu_pkg::*;
 `endif
 
     always @(posedge clk) begin
+        if (reset) begin
+            mscratch <= base_dcrs.startup_arg;
+        end
         if (write_enable) begin
             case (write_addr)
             `ifdef EXT_F_ENABLE

@@ -20,6 +20,7 @@ LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex -mllvm -vortex-branch-div
 
 #CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
 #CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
+#AR  = $(LLVM_VORTEX)/bin/llvm-ar
 #DP  = $(LLVM_VORTEX)/bin/llvm-objdump
 #CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
@@ -29,7 +30,7 @@ AR  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar
 DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
-CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
+CFLAGS += -O3 -mcmodel=medany -fno-exceptions -fdata-sections -ffunction-sections
 CFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/hw
 CFLAGS += -DXLEN_$(XLEN)
 

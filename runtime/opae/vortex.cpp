@@ -59,6 +59,12 @@
 
 #define RAM_PAGE_SIZE       4096
 
+#ifndef NDEBUG
+#define DBGPRINT(format, ...) do { printf("[VXDRV] " format "", ##__VA_ARGS__); } while (0)
+#else
+#define DBGPRINT(format, ...) ((void)0)
+#endif
+
 #define CHECK_HANDLE(handle, _expr, _cleanup)   \
     auto handle = _expr;                        \
     if (handle == nullptr) {                    \
@@ -66,12 +72,21 @@
         _cleanup                                \
     }
 
-#define CHECK_ERR(_expr, _cleanup)              \
+#define CHECK_FPGA_ERR(_expr, _cleanup)              \
     do {                                        \
         auto err = _expr;                       \
         if (err == 0)                           \
             break;                              \
         printf("[VXDRV] Error: '%s' returned %d, %s!\n", #_expr, (int)err, api.fpgaErrStr(err)); \
+        _cleanup                                \
+    } while (false)
+
+#define CHECK_ERR(_expr, _cleanup)              \
+    do {                                        \
+        auto err = _expr;                       \
+        if (err == 0)                           \
+            break;                              \
+        printf("[VXDRV] Error: '%s' returned %d!\n", #_expr, (int)err); \
         _cleanup                                \
     } while (false)
 
@@ -100,12 +115,12 @@ public:
         }
 
         // allocate new buffer
-        CHECK_ERR(api.fpgaPrepareBuffer(fpga, asize, (void**)&staging_ptr, &staging_wsid, 0), {
+        CHECK_FPGA_ERR(api.fpgaPrepareBuffer(fpga, asize, (void**)&staging_ptr, &staging_wsid, 0), {
             return -1;
         });
 
         // get the physical address of the buffer in the accelerator
-        CHECK_ERR(api.fpgaGetIOAddress(fpga, staging_wsid, &staging_ioaddr), {
+        CHECK_FPGA_ERR(api.fpgaGetIOAddress(fpga, staging_wsid, &staging_ioaddr), {
             api.fpgaReleaseBuffer(fpga, staging_wsid);
             return -1;
         });
@@ -161,10 +176,6 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
     case VX_CAPS_LOCAL_MEM_ADDR:
         *value = LMEM_BASE_ADDR;
         break;
-    case VX_CAPS_KERNEL_BASE_ADDR:
-        *value = (uint64_t(device->dcrs.read(VX_DCR_BASE_STARTUP_ADDR1)) << 32) |
-                           device->dcrs.read(VX_DCR_BASE_STARTUP_ADDR0);
-        break;
     case VX_CAPS_ISA_FLAGS:
         *value = device->isa_caps;
         break;
@@ -197,11 +208,11 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     }
     
     // Set up a filter that will search for an accelerator
-    CHECK_ERR(api.fpgaGetProperties(nullptr, &filter), {
+    CHECK_FPGA_ERR(api.fpgaGetProperties(nullptr, &filter), {
         return -1;
     });
     
-    CHECK_ERR(api.fpgaPropertiesSetObjectType(filter, FPGA_ACCELERATOR), {
+    CHECK_FPGA_ERR(api.fpgaPropertiesSetObjectType(filter, FPGA_ACCELERATOR), {
         api.fpgaDestroyProperties(&filter);
         return -1;
     });
@@ -210,19 +221,19 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     std::string s_uuid(AFU_ACCEL_UUID);
     std::replace(s_uuid.begin(), s_uuid.end(), '_', '-');
     uuid_parse(s_uuid.c_str(), guid);    
-    CHECK_ERR(api.fpgaPropertiesSetGUID(filter, guid), {        
+    CHECK_FPGA_ERR(api.fpgaPropertiesSetGUID(filter, guid), {        
         api.fpgaDestroyProperties(&filter);
         return -1;
     });
 
     // Do the search across the available FPGA contexts
-    CHECK_ERR(api.fpgaEnumerate(&filter, 1, &accel_token, 1, &num_matches), {
+    CHECK_FPGA_ERR(api.fpgaEnumerate(&filter, 1, &accel_token, 1, &num_matches), {
         api.fpgaDestroyProperties(&filter);
         return -1;
     });
 
     // Not needed anymore
-    CHECK_ERR(api.fpgaDestroyProperties(&filter), {
+    CHECK_FPGA_ERR(api.fpgaDestroyProperties(&filter), {
         api.fpgaDestroyToken(&accel_token);
         return -1;
     });
@@ -234,13 +245,13 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     }
 
     // Open accelerator
-    CHECK_ERR(api.fpgaOpen(accel_token, &accel_handle, 0), {
+    CHECK_FPGA_ERR(api.fpgaOpen(accel_token, &accel_handle, 0), {
         api.fpgaDestroyToken(&accel_token);
         return -1;
     });
 
     // Done with token
-    CHECK_ERR(api.fpgaDestroyToken(&accel_token), {
+    CHECK_FPGA_ERR(api.fpgaDestroyToken(&accel_token), {
         api.fpgaClose(accel_handle);
         return -1;
     });
@@ -257,19 +268,19 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
     {   
         // retrieve FPGA global memory size
-        CHECK_ERR(api.fpgaPropertiesGetLocalMemorySize(filter, &device->global_mem_size), {
+        CHECK_FPGA_ERR(api.fpgaPropertiesGetLocalMemorySize(filter, &device->global_mem_size), {
             // assume 8GB as default
             device->global_mem_size = GLOBAL_MEM_SIZE;
         });
 
         // Load ISA CAPS
-        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_ISA_CAPS, &device->isa_caps), {
+        CHECK_FPGA_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_ISA_CAPS, &device->isa_caps), {
             api.fpgaClose(accel_handle);
             return -1;
         });
 
         // Load device CAPS        
-        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_DEV_CAPS, &device->dev_caps), {
+        CHECK_FPGA_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_DEV_CAPS, &device->dev_caps), {
             api.fpgaClose(accel_handle);
             return -1;
         });
@@ -383,6 +394,8 @@ extern int vx_copy_to_dev(vx_device_h hdevice, uint64_t dev_addr, const void* ho
     auto device = (vx_device*)hdevice;
     auto& api = device->api;
 
+    DBGPRINT("COPY_TO_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_addr, (uintptr_t)host_ptr, size);
+
     if (device->ensure_staging(size) != 0)
         return -1; 
 
@@ -405,16 +418,16 @@ extern int vx_copy_to_dev(vx_device_h hdevice, uint64_t dev_addr, const void* ho
 
     auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
 
-    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, device->staging_ioaddr >> ls_shift), {
+    CHECK_FPGA_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, device->staging_ioaddr >> ls_shift), {
         return -1; 
     });    
-    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, dev_addr >> ls_shift), {
+    CHECK_FPGA_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, dev_addr >> ls_shift), {
         return -1; 
     });
-    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG2, asize >> ls_shift), {
+    CHECK_FPGA_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG2, asize >> ls_shift), {
         return -1; 
     });
-    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_MEM_WRITE), {
+    CHECK_FPGA_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_MEM_WRITE), {
         return -1; 
     });
 
@@ -431,6 +444,8 @@ extern int vx_copy_from_dev(vx_device_h hdevice, void* host_ptr, uint64_t dev_ad
 
     auto device = (vx_device*)hdevice;
     auto& api = device->api;
+
+    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_addr, (uintptr_t)host_ptr, asize);
 
     if (device->ensure_staging(size) != 0)
         return -1;
@@ -451,16 +466,16 @@ extern int vx_copy_from_dev(vx_device_h hdevice, void* host_ptr, uint64_t dev_ad
 
     auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
 
-    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, device->staging_ioaddr >> ls_shift), {
+    CHECK_FPGA_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, device->staging_ioaddr >> ls_shift), {
         return -1; 
     });
-    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, dev_addr >> ls_shift), {
+    CHECK_FPGA_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, dev_addr >> ls_shift), {
         return -1; 
     });
-    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG2, asize >> ls_shift), {
+    CHECK_FPGA_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG2, asize >> ls_shift), {
         return -1; 
     });
-    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_MEM_READ), {
+    CHECK_FPGA_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_MEM_READ), {
         return -1; 
     });
 
@@ -474,19 +489,35 @@ extern int vx_copy_from_dev(vx_device_h hdevice, void* host_ptr, uint64_t dev_ad
     return 0;
 }
 
-extern int vx_start(vx_device_h hdevice) {
+extern int vx_start(vx_device_h hdevice, uint64_t krnl_addr, uint64_t args_addr) {
     if (nullptr == hdevice)
         return -1;   
 
     auto device = ((vx_device*)hdevice);
     auto& api = device->api;
 
-    // Ensure ready for new command
+    DBGPRINT("START: krnl_addr=0x%lx, args_addr=0x%lx\n", krnl_addr, args_addr);
+
+    // ensure ready for new command
     if (vx_ready_wait(hdevice, VX_MAX_TIMEOUT) != 0)
-        return -1;    
+        return -1;
+
+    // set kernel info
+    CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ADDR0, krnl_addr & 0xffffffff), {
+        return -1;
+    });
+    CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ADDR0, krnl_addr >> 32), {
+        return -1;
+    });
+    CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ARG0, args_addr & 0xffffffff), {
+        return -1;
+    });
+    CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ARG0, args_addr >> 32), {
+        return -1;
+    });
   
-    // start execution    
-    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_RUN), {
+    // start execution
+    CHECK_FPGA_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_RUN), {
         return -1; 
     });
 
@@ -502,6 +533,8 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     auto device = ((vx_device*)hdevice);
     auto& api = device->api;
 
+    DBGPRINT("%s\n", "WAIT");
+
     struct timespec sleep_time; 
 
     sleep_time.tv_sec = 0;
@@ -512,7 +545,7 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     
     for (;;) {
         uint64_t status;
-        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_STATUS, &status), {
+        CHECK_FPGA_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_STATUS, &status), {
             return -1; 
         });
 
@@ -529,7 +562,7 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
                     std::cout << std::dec << "#" << cout_tid << ": " << ss_buf.str() << std::flush;
                     ss_buf.str("");
                 }
-                CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_STATUS, &status), {
+                CHECK_FPGA_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_STATUS, &status), {
                     return -1; 
                 });
                 cout_data = status >> STATUS_STATE_BITS;
@@ -558,29 +591,43 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     return 0;
 }
 
-extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
+extern int vx_dcr_read(vx_device_h hdevice, uint32_t addr, uint32_t* value) {
+    if (nullptr == hdevice)
+        return -1;
+
+    auto device = (vx_device*)hdevice;
+
+    *value = device->dcrs.read(addr);
+
+    DBGPRINT("DCR_READ: addr=0x%x, value=0x%x\n", addr, *value);
+        
+    return 0;
+}
+
+extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint32_t value) {
     if (nullptr == hdevice)
         return -1;
 
     auto device = ((vx_device*)hdevice);
     auto& api = device->api;
 
+    DBGPRINT("DCR_WRITE: addr=0x%x, value=0x%x\n", addr, value);
+
     // Ensure ready for new command
     if (vx_ready_wait(hdevice, -1) != 0)
         return -1;    
   
     // write DCR value
-    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, addr), {
+    CHECK_FPGA_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, addr), {
         return -1; 
     });
-    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, value), {
+    CHECK_FPGA_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, value), {
         return -1; 
     });
-    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_DCR_WRITE), {
+    CHECK_FPGA_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_DCR_WRITE), {
         return -1; 
     });
 
-    // save the value
     device->dcrs.write(addr, value);
 
     return 0;

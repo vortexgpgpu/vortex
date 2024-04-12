@@ -32,6 +32,8 @@ std::vector<int32_t> ref_data;
 
 vx_device_h device = nullptr;
 std::vector<uint8_t> staging_buf;
+uint64_t kernel_prog_addr;
+uint64_t kernel_args_addr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -65,6 +67,8 @@ void cleanup() {
   if (device) {
     vx_mem_free(device, kernel_arg.src_addr);
     vx_mem_free(device, kernel_arg.dst_addr);
+    vx_mem_free(device, kernel_prog_addr);
+    vx_mem_free(device, kernel_args_addr);
     vx_mem_free(device, usr_test_mem);
     vx_dev_close(device);
   }
@@ -93,45 +97,6 @@ void gen_ref_data(uint32_t num_points) {
     int32_t j = i % NUM_ADDRS;
     ref_data[i] = j * j;
   }
-}
-
-int run_test(const kernel_arg_t& kernel_arg,
-             uint32_t buf_size, 
-             uint32_t num_points) {
-  // start device
-  std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start(device));
-
-  // wait for completion
-  std::cout << "wait for completion" << std::endl;
-  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
-
-  // download destination buffer
-  std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(device, staging_buf.data(), kernel_arg.dst_addr, buf_size));
-
-  // verify result
-  std::cout << "verify result" << std::endl;  
-  {
-    int errors = 0;
-    auto buf_ptr = (int32_t*)staging_buf.data();
-    for (uint32_t i = 0; i < num_points; ++i) {
-      int ref = ref_data.at(i);
-      int cur = buf_ptr[i];
-      if (cur != ref) {
-        std::cout << "error at result #" << std::dec << i
-                  << std::hex << ": actual 0x" << cur << ", expected 0x" << ref << std::endl;
-        ++errors;
-      }
-    }
-    if (errors != 0) {
-      std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
-      std::cout << "FAILED!" << std::endl;
-      return 1;  
-    }
-  }
-
-  return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -165,10 +130,6 @@ int main(int argc, char *argv[]) {
 
   std::cout << "number of points: " << std::dec << num_points << std::endl;
 
-  // upload program
-  std::cout << "upload program" << std::endl;  
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file));
-
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;  
 
@@ -184,15 +145,8 @@ int main(int argc, char *argv[]) {
   // allocate staging buffer  
   std::cout << "allocate staging buffer" << std::endl;    
   uint32_t staging_buf_size = std::max<uint32_t>(NUM_ADDRS * sizeof(uint64_t),
-                                std::max<uint32_t>(src_buf_size,
-                                  std::max<uint32_t>(dst_buf_size, 
-                                    sizeof(kernel_arg_t))));
+                                std::max<uint32_t>(src_buf_size, dst_buf_size));
   staging_buf.resize(staging_buf_size);
-  
-  // upload kernel argument  
-  std::cout << "upload kernel argument" << std::endl;
-  memcpy(staging_buf.data(), &kernel_arg, sizeof(kernel_arg_t));
-  RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
   
   // upload test address data
   {
@@ -223,9 +177,46 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_copy_to_dev(device, kernel_arg.dst_addr, staging_buf.data(), dst_buf_size));  
   }
 
-  // run tests
-  std::cout << "run tests" << std::endl;
-  RT_CHECK(run_test(kernel_arg, dst_buf_size, num_points));
+  // upload program
+  std::cout << "upload program" << std::endl;  
+  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &kernel_prog_addr));
+  
+  // upload kernel argument  
+  std::cout << "upload kernel argument" << std::endl;
+  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &kernel_args_addr));
+
+  // start device
+  std::cout << "start device" << std::endl;
+  RT_CHECK(vx_start(device, kernel_prog_addr, kernel_args_addr));
+
+  // wait for completion
+  std::cout << "wait for completion" << std::endl;
+  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
+
+  // download destination buffer
+  std::cout << "download destination buffer" << std::endl;
+  RT_CHECK(vx_copy_from_dev(device, staging_buf.data(), kernel_arg.dst_addr, dst_buf_size));
+
+  // verify result
+  std::cout << "verify result" << std::endl;  
+  {
+    int errors = 0;
+    auto buf_ptr = (int32_t*)staging_buf.data();
+    for (uint32_t i = 0; i < num_points; ++i) {
+      int ref = ref_data.at(i);
+      int cur = buf_ptr[i];
+      if (cur != ref) {
+        std::cout << "error at result #" << std::dec << i
+                  << std::hex << ": actual 0x" << cur << ", expected 0x" << ref << std::endl;
+        ++errors;
+      }
+    }
+    if (errors != 0) {
+      std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
+      std::cout << "FAILED!" << std::endl;
+      return 1;  
+    }
+  }
 
   // cleanup
   std::cout << "cleanup" << std::endl;  

@@ -45,7 +45,7 @@ extern int vx_copy_from_dev(vx_device_h /*hdevice*/, void* /*host_ptr*/, uint64_
      return -1;
 }
 
-extern int vx_start(vx_device_h /*hdevice*/) {
+extern int vx_start(vx_device_h /*hdevice*/, uint64_t /*krnl_addr*/, uint64_t /*args_add*/) {
     return -1;
 }
 
@@ -53,6 +53,11 @@ extern int vx_ready_wait(vx_device_h /*hdevice*/, uint64_t /*timeout*/) {
     return -1;
 }
 
-extern int vx_dcr_write(vx_device_h /*hdevice*/, uint32_t /*addr*/, uint64_t /*value*/) {
+extern int vx_dcr_read(vx_device_h /*hdevice*/, uint32_t /*addr*/, uint32_t* /*value*/) {
+    return -1;
+}
+
+
+extern int vx_dcr_write(vx_device_h /*hdevice*/, uint32_t /*addr*/, uint32_t /*value*/) {
     return -1;
 }

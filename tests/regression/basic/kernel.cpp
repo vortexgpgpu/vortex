@@ -3,7 +3,7 @@
 #include "common.h"
 
 int main() {
-	kernel_arg_t* __UNIFORM__ arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
+	kernel_arg_t* __UNIFORM__ arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
 	uint32_t count   = arg->count;
 	int32_t* src_ptr = (int32_t*)arg->src_addr;
 	int32_t* dst_ptr = (int32_t*)arg->dst_addr;

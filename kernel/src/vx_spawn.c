@@ -20,8 +20,6 @@
 extern "C" {
 #endif
 
-#define NUM_CORES_MAX 1024
-
 #ifndef MIN
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
@@ -99,11 +97,7 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
   int NC = vx_num_cores();
   int NW = vx_num_warps();
   int NT = vx_num_threads();
-
-  // current core id
   int core_id = vx_core_id();
-  if (core_id >= NUM_CORES_MAX)
-    return;
 
   // calculate necessary active cores
   int WT = NW * NT;
@@ -258,11 +252,7 @@ void vx_spawn_pocl_kernel(pocl_kernel_context_t * ctx, pocl_kernel_cb callback, 
   int NC = vx_num_cores();
   int NW = vx_num_warps();
   int NT = vx_num_threads();
-
-  // current core id
-  int core_id = vx_core_id();  
-  if (core_id >= NUM_CORES_MAX)
-    return;
+  int core_id = vx_core_id();
 
   // calculate necessary active cores
   int WT = NW * NT;

@@ -348,6 +348,8 @@ task trace_base_dcr(input int level, input [`VX_DCR_ADDR_WIDTH-1:0] addr);
     case (addr)
         `VX_DCR_BASE_STARTUP_ADDR0: `TRACE(level, ("STARTUP_ADDR0"));
         `VX_DCR_BASE_STARTUP_ADDR1: `TRACE(level, ("STARTUP_ADDR1"));
+        `VX_DCR_BASE_STARTUP_ARG0:  `TRACE(level, ("STARTUP_ARG0"));
+        `VX_DCR_BASE_STARTUP_ARG1:  `TRACE(level, ("STARTUP_ARG1"));
         `VX_DCR_BASE_MPM_CLASS:     `TRACE(level, ("MPM_CLASS"));
         default:                    `TRACE(level, ("?"));
     endcase

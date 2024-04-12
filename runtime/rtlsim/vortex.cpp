@@ -32,6 +32,12 @@
 
 #define RAM_PAGE_SIZE 4096
 
+#ifndef NDEBUG
+#define DBGPRINT(format, ...) do { printf("[VXDRV] " format "", ##__VA_ARGS__); } while (0)
+#else
+#define DBGPRINT(format, ...) ((void)0)
+#endif
+
 using namespace vortex;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -108,11 +114,18 @@ public:
         return 0;
     }
 
-    int start() {   
+    int start(uint64_t krnl_addr, uint64_t args_addr) {   
         // ensure prior run completed
         if (future_.valid()) {
             future_.wait();
         }
+
+        // set kernel info
+        this->write_dcr(VX_DCR_BASE_STARTUP_ADDR0, krnl_addr & 0xffffffff);
+        this->write_dcr(VX_DCR_BASE_STARTUP_ADDR1, krnl_addr >> 32);
+        this->write_dcr(VX_DCR_BASE_STARTUP_ARG0, args_addr & 0xffffffff);
+        this->write_dcr(VX_DCR_BASE_STARTUP_ARG1, args_addr >> 32);
+
         // start new run
         future_ = std::async(std::launch::async, [&]{
             processor_.run();
@@ -163,7 +176,7 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
    if (nullptr == hdevice)
         return  -1;
 
-    vx_device *device = ((vx_device*)hdevice);
+    //vx_device *device = ((vx_device*)hdevice);
 
     switch (caps_id) {
     case VX_CAPS_VERSION:
@@ -190,10 +203,6 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
     case VX_CAPS_LOCAL_MEM_ADDR:
         *value = LMEM_BASE_ADDR;
         break;
-    case VX_CAPS_KERNEL_BASE_ADDR:
-         *value = (uint64_t(device->read_dcr(VX_DCR_BASE_STARTUP_ADDR1)) << 32)
-                          | device->read_dcr(VX_DCR_BASE_STARTUP_ADDR0);
-        break;    
     case VX_CAPS_ISA_FLAGS:
         *value = ((uint64_t(MISA_EXT))<<32) | ((log2floor(XLEN)-4) << 30) | MISA_STD;
         break;
@@ -278,6 +287,9 @@ extern int vx_copy_to_dev(vx_device_h hdevice, uint64_t dev_addr, const void* ho
         return -1;
 
     auto device = (vx_device*)hdevice;
+
+    DBGPRINT("COPY_TO_DEV: dev_addr=0x%lx, host_addr=0x%p, size=%ld\n", dev_addr, host_ptr, size);
+
     return device->upload(dev_addr, host_ptr, size);
 }
 
@@ -286,26 +298,50 @@ extern int vx_copy_from_dev(vx_device_h hdevice, void* host_ptr, uint64_t dev_ad
         return -1;
 
     auto device = (vx_device*)hdevice;
+
+    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%p, size=%ld\n", dev_addr, host_ptr, size); 
+
     return device->download(host_ptr, dev_addr, size);
 }
 
-extern int vx_start(vx_device_h hdevice) {
+extern int vx_start(vx_device_h hdevice, uint64_t krnl_addr, uint64_t args_addr) {
     if (nullptr == hdevice)
-        return -1;
+        return -1;    
+    
+    DBGPRINT("START: krnl_addr=0x%lx, args_addr=0x%lx\n", krnl_addr, args_addr);
 
     vx_device *device = ((vx_device*)hdevice);
-    return device->start();
+    return device->start(krnl_addr, args_addr);
 }
 
 extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     if (nullptr == hdevice)
-        return -1;
+        return -1;    
+    
+    DBGPRINT("%s\n", "WAIT");
 
     vx_device *device = ((vx_device*)hdevice);
     return device->wait(timeout);
 }
 
-extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
+extern int vx_dcr_read(vx_device_h hdevice, uint32_t addr, uint32_t* value) {
+    if (nullptr == hdevice || NULL == value)
+        return -1;
+
+    vx_device *device = ((vx_device*)hdevice);
+
+    // Ensure ready for new command
+    if (vx_ready_wait(hdevice, -1) != 0)
+        return -1;
+
+    *value = device->read_dcr(addr);
+
+    DBGPRINT("DCR_READ: addr=0x%x, value=0x%x\n", addr, *value);
+
+    return 0;
+}
+
+extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint32_t value) {
     if (nullptr == hdevice)
         return -1;
 
@@ -314,5 +350,8 @@ extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
     // Ensure ready for new command
     if (vx_ready_wait(hdevice, -1) != 0)
         return -1;  
+
+    DBGPRINT("DCR_WRITE: addr=0x%x, value=0x%x\n", addr, value);
+
     return device->write_dcr(addr, value);
 }
