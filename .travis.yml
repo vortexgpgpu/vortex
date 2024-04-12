@@ -22,12 +22,12 @@ cache:
     - $HOME/build64
 
 install:
-  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0" ]; then
+  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0.1" ]; then
       rm -rf $TOOLDIR;
       mkdir -p $TOOLDIR;
       cd $HOME/build$XLEN;
       ./ci/toolchain_install.sh --all;
-      echo "v0" > "$TOOLDIR/version.txt";
+      echo "v0.1" > "$TOOLDIR/version.txt";
     fi
   - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v0" ]; then
       cd $TRAVIS_BUILD_DIR;
