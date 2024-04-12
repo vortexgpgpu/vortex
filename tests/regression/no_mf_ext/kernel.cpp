@@ -4,7 +4,7 @@
 #include "common.h"
 
 int main() {
-	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
+	kernel_arg_t* arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
 
 	uint32_t size    = arg->size;
 	int32_t* src_ptr = (int32_t*)arg->src_addr;

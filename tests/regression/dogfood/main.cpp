@@ -20,10 +20,11 @@ int testid_e = 0;
 bool stop_on_error = true;
 
 vx_device_h device = nullptr;
-std::vector<uint8_t> arg_buf;
 std::vector<uint8_t> src1_buf;
 std::vector<uint8_t> src2_buf;
 std::vector<uint8_t> dst_buf;
+uint64_t kernel_prog_addr;
+uint64_t kernel_args_addr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -77,6 +78,8 @@ void cleanup() {
     vx_mem_free(device, kernel_arg.src0_addr);
     vx_mem_free(device, kernel_arg.src1_addr);
     vx_mem_free(device, kernel_arg.dst_addr);
+    vx_mem_free(device, kernel_prog_addr);
+    vx_mem_free(device, kernel_args_addr);
     vx_dev_close(device);
   }
 }
@@ -113,15 +116,12 @@ int main(int argc, char *argv[]) {
   std::cout << "number of points: " << num_points << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
 
-  // upload program
-  std::cout << "upload kernel" << std::endl;  
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file));
-
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
   RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.src0_addr));
   RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.src1_addr));
   RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.dst_addr));
+  RT_CHECK(vx_mem_alloc(device, sizeof(kernel_arg_t), &kernel_args_addr));
 
   kernel_arg.num_tasks = num_tasks;
   kernel_arg.task_size = count;
@@ -132,7 +132,6 @@ int main(int argc, char *argv[]) {
   
   // allocate staging buffer  
   std::cout << "allocate staging buffer" << std::endl;
-  arg_buf.resize(sizeof(kernel_arg_t));
   src1_buf.resize(buf_size);
   src2_buf.resize(buf_size);
   dst_buf.resize(buf_size);
@@ -142,6 +141,11 @@ int main(int argc, char *argv[]) {
   if (testid_e == 0) {
     testid_e = (testSuite->size() - 1);
   }
+
+  // upload program
+  std::cout << "upload kernel" << std::endl;  
+  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &kernel_prog_addr));
+
   // execute tests
   for (int t = testid_s; t <= testid_e; ++t) {   
     auto test = testSuite->get_test(t);
@@ -158,12 +162,6 @@ int main(int argc, char *argv[]) {
     }
 
     std::cout << "Test" << t << ": " << name << std::endl;
-
-    // upload kernel argument
-    std::cout << "upload kernel argument" << std::endl;
-    kernel_arg.testid = t;
-    memcpy(arg_buf.data(), &kernel_arg, sizeof(kernel_arg_t));
-    RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, arg_buf.data(), sizeof(kernel_arg_t)));
 
     // get test arguments
     std::cout << "get test arguments" << std::endl;
@@ -184,9 +182,14 @@ int main(int argc, char *argv[]) {
     }         
     RT_CHECK(vx_copy_to_dev(device, kernel_arg.dst_addr, dst_buf.data(), buf_size));
 
+    // upload kernel argument
+    std::cout << "upload kernel argument" << std::endl;
+    kernel_arg.testid = t;
+    RT_CHECK(vx_copy_to_dev(device, kernel_args_addr, &kernel_arg, sizeof(kernel_arg_t)));
+
     // start device
     std::cout << "start device" << std::endl;
-    RT_CHECK(vx_start(device));
+    RT_CHECK(vx_start(device, kernel_prog_addr, kernel_args_addr));
 
     // wait for completion
     std::cout << "wait for completion" << std::endl;

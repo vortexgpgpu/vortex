@@ -96,45 +96,6 @@ void perf_remove_device(vx_device_h hdevice) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-extern int vx_upload_kernel_bytes(vx_device_h hdevice, const void* content, uint64_t size) {
-  int err = 0;
-
-  if (NULL == content || 0 == size)
-    return -1;
-
-  uint64_t kernel_base_addr;
-  err = vx_dev_caps(hdevice, VX_CAPS_KERNEL_BASE_ADDR, &kernel_base_addr);
-  if (err != 0)
-    return err;
-
-  return vx_copy_to_dev(hdevice, kernel_base_addr, content, size);
-}
-
-extern int vx_upload_kernel_file(vx_device_h hdevice, const char* filename) {
-  std::ifstream ifs(filename);
-  if (!ifs) {
-    std::cout << "error: " << filename << " not found" << std::endl;
-    return -1;
-  }
-
-  // read file content
-  ifs.seekg(0, ifs.end);
-  auto size = ifs.tellg();
-  auto content = new char [size];   
-  ifs.seekg(0, ifs.beg);
-  ifs.read(content, size);
-
-  // upload
-  int err = vx_upload_kernel_bytes(hdevice, content, size);
-
-  // release buffer
-  delete[] content;
-
-  return err;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
 void DeviceConfig::write(uint32_t addr, uint32_t value) {
   data_[addr] = value;
 }
@@ -146,18 +107,29 @@ uint32_t DeviceConfig::read(uint32_t addr) const {
   return data_.at(addr);
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 int dcr_initialize(vx_device_h hdevice) {
   const uint64_t startup_addr(STARTUP_ADDR);
+
   RT_CHECK(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ADDR0, startup_addr & 0xffffffff), {
-    return -1;
+    return _ret;
   });
 
   RT_CHECK(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ADDR1, startup_addr >> 32), {
-    return -1;
+    return _ret;
+  });
+
+  RT_CHECK(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ARG0, 0), {
+    return _ret;
+  });
+
+  RT_CHECK(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ARG1, 0), {
+    return _ret;
   });
 
   RT_CHECK(vx_dcr_write(hdevice, VX_DCR_BASE_MPM_CLASS, 0), {
-    return -1;
+    return _ret;
   });
   
   return 0;
@@ -165,14 +137,94 @@ int dcr_initialize(vx_device_h hdevice) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static uint64_t get_csr_64(const void* ptr, int addr) {
-  int offset = addr - VX_CSR_MPM_BASE;
-  return ((const uint64_t*)ptr)[offset];
+int vx_upload_kernel_file(vx_device_h hdevice, const char* filename, uint64_t* addr) {
+  std::ifstream ifs(filename);
+  if (!ifs) {
+    std::cout << "error: " << filename << " not found" << std::endl;
+    return -1;
+  }
+
+  // read file content
+  ifs.seekg(0, ifs.end);
+  auto size = ifs.tellg();
+  std::vector<char> content(size);   
+  ifs.seekg(0, ifs.beg);
+  ifs.read(content.data(), size);
+
+  uint64_t _addr = STARTUP_ADDR;
+
+  RT_CHECK(vx_copy_to_dev(hdevice, _addr, content.data(), size), {
+    vx_mem_free(hdevice, _addr);
+    return _ret;
+  });
+
+  *addr = _addr;
+
+  return 0;
 }
 
-extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
-  int ret = 0;
+extern int vx_upload_bytes(vx_device_h hdevice, const void* content, uint64_t size, uint64_t* addr) {
+  if (NULL == content || 0 == size || NULL == addr)
+    return -1;
 
+  uint64_t _addr;
+
+  RT_CHECK(vx_mem_alloc(hdevice, size, &_addr), {
+    return _ret;
+  });
+
+  RT_CHECK(vx_copy_to_dev(hdevice, _addr, content, size), {
+    vx_mem_free(hdevice, _addr);
+    return _ret;
+  });
+
+  *addr = _addr;
+
+  return 0;
+}
+
+extern int vx_upload_file(vx_device_h hdevice, const char* filename, uint64_t* addr) {
+  std::ifstream ifs(filename);
+  if (!ifs) {
+    std::cout << "error: " << filename << " not found" << std::endl;
+    return -1;
+  }
+
+  // read file content
+  ifs.seekg(0, ifs.end);
+  auto size = ifs.tellg();
+  std::vector<char> content(size);   
+  ifs.seekg(0, ifs.beg);
+  ifs.read(content.data(), size);
+
+  // upload buffer
+  RT_CHECK(vx_upload_bytes(hdevice, content.data(), size, addr), {
+    return _ret;
+  });
+
+  return 0;
+}
+
+extern int vx_set_kernel_args(vx_device_h hdevice, const void* content, uint64_t size) {
+  if (NULL == content || 0 == size)
+    return -1;
+
+  uint64_t startup_arg;
+  RT_CHECK(vx_mem_alloc(hdevice, size, &startup_arg), {
+    return _ret;
+  });
+
+  RT_CHECK(vx_copy_to_dev(hdevice, startup_arg, content, size), {
+    vx_mem_free(hdevice, startup_arg);
+    return _ret;
+  });
+
+  return 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t total_instrs = 0;
   uint64_t total_cycles = 0;
   uint64_t max_cycles = 0;
@@ -234,16 +286,15 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
 #endif
 
   uint64_t num_cores;
-  ret = vx_dev_caps(hdevice, VX_CAPS_NUM_CORES, &num_cores);
-  if (ret != 0)
-    return ret;
+  RT_CHECK(vx_dev_caps(hdevice, VX_CAPS_NUM_CORES, &num_cores), {
+    return _ret;
+  });
 
 #ifdef PERF_ENABLE
   uint64_t isa_flags;
-  ret = vx_dev_caps(hdevice, VX_CAPS_ISA_FLAGS, &isa_flags);
-  if (ret != 0)
-    return ret;
-
+  RT_CHECK(vx_dev_caps(hdevice, VX_CAPS_ISA_FLAGS, &isa_flags), {
+    return _ret;
+  });
   bool icache_enable  = isa_flags & VX_ISA_EXT_ICACHE;
   bool dcache_enable  = isa_flags & VX_ISA_EXT_DCACHE;
   bool l2cache_enable = isa_flags & VX_ISA_EXT_L2CACHE;
@@ -251,16 +302,20 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   bool lmem_enable    = isa_flags & VX_ISA_EXT_LMEM;
 #endif
 
-  std::vector<uint8_t> staging_buf(32 * sizeof(uint64_t));
+  std::vector<uint64_t> staging_buf(32);
+
+  auto get_mpm_csr = [&staging_buf](int csr_addr) {
+    return staging_buf.at(csr_addr - VX_CSR_MPM_BASE);
+  };
 
   for (unsigned core_id = 0; core_id < num_cores; ++core_id) {
     uint64_t mpm_mem_addr = IO_CSR_ADDR + core_id * staging_buf.size();    
-    ret = vx_copy_from_dev(hdevice, staging_buf.data(), mpm_mem_addr, staging_buf.size());
-    if (ret != 0)
-      return ret;
+    RT_CHECK(vx_copy_from_dev(hdevice, staging_buf.data(), mpm_mem_addr, staging_buf.size()), {
+      return _ret;
+    });
 
-    uint64_t cycles_per_core = get_csr_64(staging_buf.data(), VX_CSR_MCYCLE);
-    uint64_t instrs_per_core = get_csr_64(staging_buf.data(), VX_CSR_MINSTRET);    
+    uint64_t cycles_per_core = get_mpm_csr(VX_CSR_MCYCLE);
+    uint64_t instrs_per_core = get_mpm_csr(VX_CSR_MINSTRET);    
 
   #ifdef PERF_ENABLE
     switch (perf_class) {
@@ -268,7 +323,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       // PERF: pipeline    
       // scheduler idles
       {
-        uint64_t sched_idles_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCHED_ID);        
+        uint64_t sched_idles_per_core = get_mpm_csr(VX_CSR_MPM_SCHED_ID);        
         if (num_cores > 1) {
           int idles_percent_per_core = calcAvgPercent(sched_idles_per_core, cycles_per_core);
           fprintf(stream, "PERF: core%d: scheduler idle=%ld (%d%%)\n", core_id, sched_idles_per_core, idles_percent_per_core);
@@ -277,7 +332,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       }
       // scheduler stalls
       {
-        uint64_t sched_stalls_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCHED_ST);        
+        uint64_t sched_stalls_per_core = get_mpm_csr(VX_CSR_MPM_SCHED_ST);        
         if (num_cores > 1) {
           int stalls_percent_per_core = calcAvgPercent(sched_stalls_per_core, cycles_per_core);
           fprintf(stream, "PERF: core%d: scheduler stalls=%ld (%d%%)\n", core_id, sched_stalls_per_core, stalls_percent_per_core);
@@ -286,7 +341,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       }
       // ibuffer_stalls
       {
-        uint64_t ibuffer_stalls_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_IBUF_ST);        
+        uint64_t ibuffer_stalls_per_core = get_mpm_csr(VX_CSR_MPM_IBUF_ST);        
         if (num_cores > 1) {
           int ibuffer_percent_per_core = calcAvgPercent(ibuffer_stalls_per_core, cycles_per_core);
           fprintf(stream, "PERF: core%d: ibuffer stalls=%ld (%d%%)\n", core_id, ibuffer_stalls_per_core, ibuffer_percent_per_core);
@@ -295,11 +350,11 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       }
       // issue_stalls
       {
-        uint64_t scrb_stalls_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_ST);
-        uint64_t scrb_alu_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_ALU);
-        uint64_t scrb_fpu_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_FPU);
-        uint64_t scrb_lsu_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_LSU);
-        uint64_t scrb_sfu_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_SFU);        
+        uint64_t scrb_stalls_per_core = get_mpm_csr(VX_CSR_MPM_SCRB_ST);
+        uint64_t scrb_alu_per_core = get_mpm_csr(VX_CSR_MPM_SCRB_ALU);
+        uint64_t scrb_fpu_per_core = get_mpm_csr(VX_CSR_MPM_SCRB_FPU);
+        uint64_t scrb_lsu_per_core = get_mpm_csr(VX_CSR_MPM_SCRB_LSU);
+        uint64_t scrb_sfu_per_core = get_mpm_csr(VX_CSR_MPM_SCRB_SFU);        
         scrb_alu += scrb_alu_per_core;
         scrb_fpu += scrb_fpu_per_core;
         scrb_lsu += scrb_lsu_per_core;
@@ -316,9 +371,9 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       }
       // sfu_stalls
       {
-        uint64_t scrb_sfu_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_SFU);  
-        uint64_t scrb_wctl_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_WCTL);
-        uint64_t scrb_csrs_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_SCRB_CSRS);
+        uint64_t scrb_sfu_per_core = get_mpm_csr(VX_CSR_MPM_SCRB_SFU);  
+        uint64_t scrb_wctl_per_core = get_mpm_csr(VX_CSR_MPM_SCRB_WCTL);
+        uint64_t scrb_csrs_per_core = get_mpm_csr(VX_CSR_MPM_SCRB_CSRS);
         if (num_cores > 1) {
           uint64_t sfu_total = scrb_wctl_per_core + scrb_csrs_per_core;
           fprintf(stream, "PERF: core%d: sfu stalls=%ld (scrs=%d%%, wctl=%d%%)\n"
@@ -334,11 +389,11 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       // PERF: memory
       // ifetches
       {
-        uint64_t ifetches_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_IFETCHES);
+        uint64_t ifetches_per_core = get_mpm_csr(VX_CSR_MPM_IFETCHES);
         if (num_cores > 1) fprintf(stream, "PERF: core%d: ifetches=%ld\n", core_id, ifetches_per_core);
         ifetches += ifetches_per_core;
 
-        uint64_t ifetch_lat_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_IFETCH_LT);        
+        uint64_t ifetch_lat_per_core = get_mpm_csr(VX_CSR_MPM_IFETCH_LT);        
         if (num_cores > 1) {
           int mem_avg_lat = caclAverage(ifetch_lat_per_core, ifetches_per_core);
           fprintf(stream, "PERF: core%d: ifetch latency=%d cycles\n", core_id, mem_avg_lat);
@@ -347,11 +402,11 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       }
       // loads
       {
-        uint64_t loads_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_LOADS);
+        uint64_t loads_per_core = get_mpm_csr(VX_CSR_MPM_LOADS);
         if (num_cores > 1) fprintf(stream, "PERF: core%d: loads=%ld\n", core_id, loads_per_core);
         loads += loads_per_core;
 
-        uint64_t load_lat_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_LOAD_LT);        
+        uint64_t load_lat_per_core = get_mpm_csr(VX_CSR_MPM_LOAD_LT);        
         if (num_cores > 1) {
           int mem_avg_lat = caclAverage(load_lat_per_core, loads_per_core);
           fprintf(stream, "PERF: core%d: load latency=%d cycles\n", core_id, mem_avg_lat);
@@ -360,7 +415,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       }
       // stores
       {
-        uint64_t stores_per_core = get_csr_64(staging_buf.data(), VX_CSR_MPM_STORES);
+        uint64_t stores_per_core = get_mpm_csr(VX_CSR_MPM_STORES);
         if (num_cores > 1) fprintf(stream, "PERF: core%d: stores=%ld\n", core_id, stores_per_core);
         stores += stores_per_core;
       }
@@ -368,9 +423,9 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     case VX_DCR_MPM_CLASS_MEM: { 
       if (lmem_enable) {
         // PERF: lmem
-        uint64_t lmem_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_LMEM_READS);
-        uint64_t lmem_writes = get_csr_64(staging_buf.data(), VX_CSR_MPM_LMEM_WRITES);
-        uint64_t lmem_bank_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_LMEM_BANK_ST);
+        uint64_t lmem_reads = get_mpm_csr(VX_CSR_MPM_LMEM_READS);
+        uint64_t lmem_writes = get_mpm_csr(VX_CSR_MPM_LMEM_WRITES);
+        uint64_t lmem_bank_stalls = get_mpm_csr(VX_CSR_MPM_LMEM_BANK_ST);
         int lmem_bank_utilization = calcAvgPercent(lmem_reads + lmem_writes, lmem_reads + lmem_writes + lmem_bank_stalls);
         fprintf(stream, "PERF: core%d: lmem reads=%ld\n", core_id, lmem_reads);
         fprintf(stream, "PERF: core%d: lmem writes=%ld\n", core_id, lmem_writes); 
@@ -379,9 +434,9 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
 
       if (icache_enable) {
         // PERF: Icache
-        uint64_t icache_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_ICACHE_READS);
-        uint64_t icache_read_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_ICACHE_MISS_R);
-        uint64_t icache_mshr_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_ICACHE_MSHR_ST);
+        uint64_t icache_reads = get_mpm_csr(VX_CSR_MPM_ICACHE_READS);
+        uint64_t icache_read_misses = get_mpm_csr(VX_CSR_MPM_ICACHE_MISS_R);
+        uint64_t icache_mshr_stalls = get_mpm_csr(VX_CSR_MPM_ICACHE_MSHR_ST);
         int icache_read_hit_ratio = calcRatio(icache_read_misses, icache_reads); 
         int mshr_utilization = calcAvgPercent(icache_read_misses, icache_read_misses + icache_mshr_stalls);
         fprintf(stream, "PERF: core%d: icache reads=%ld\n", core_id, icache_reads);
@@ -391,12 +446,12 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       
       if (dcache_enable) {
         // PERF: Dcache
-        uint64_t dcache_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_READS);
-        uint64_t dcache_writes = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_WRITES);
-        uint64_t dcache_read_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_MISS_R);
-        uint64_t dcache_write_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_MISS_W);
-        uint64_t dcache_bank_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_BANK_ST);
-        uint64_t dcache_mshr_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_DCACHE_MSHR_ST);
+        uint64_t dcache_reads = get_mpm_csr(VX_CSR_MPM_DCACHE_READS);
+        uint64_t dcache_writes = get_mpm_csr(VX_CSR_MPM_DCACHE_WRITES);
+        uint64_t dcache_read_misses = get_mpm_csr(VX_CSR_MPM_DCACHE_MISS_R);
+        uint64_t dcache_write_misses = get_mpm_csr(VX_CSR_MPM_DCACHE_MISS_W);
+        uint64_t dcache_bank_stalls = get_mpm_csr(VX_CSR_MPM_DCACHE_BANK_ST);
+        uint64_t dcache_mshr_stalls = get_mpm_csr(VX_CSR_MPM_DCACHE_MSHR_ST);
         int dcache_read_hit_ratio = calcRatio(dcache_read_misses, dcache_reads);
         int dcache_write_hit_ratio = calcRatio(dcache_write_misses, dcache_writes);
         int dcache_bank_utilization = calcAvgPercent(dcache_reads + dcache_writes, dcache_reads + dcache_writes + dcache_bank_stalls);
@@ -411,29 +466,29 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
 
       if (l2cache_enable) {
         // PERF: L2cache
-        l2cache_reads += get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_READS);
-        l2cache_writes += get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_WRITES);
-        l2cache_read_misses += get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_MISS_R);
-        l2cache_write_misses += get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_MISS_W);
-        l2cache_bank_stalls += get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_BANK_ST);
-        l2cache_mshr_stalls += get_csr_64(staging_buf.data(), VX_CSR_MPM_L2CACHE_MSHR_ST);
+        l2cache_reads += get_mpm_csr(VX_CSR_MPM_L2CACHE_READS);
+        l2cache_writes += get_mpm_csr(VX_CSR_MPM_L2CACHE_WRITES);
+        l2cache_read_misses += get_mpm_csr(VX_CSR_MPM_L2CACHE_MISS_R);
+        l2cache_write_misses += get_mpm_csr(VX_CSR_MPM_L2CACHE_MISS_W);
+        l2cache_bank_stalls += get_mpm_csr(VX_CSR_MPM_L2CACHE_BANK_ST);
+        l2cache_mshr_stalls += get_mpm_csr(VX_CSR_MPM_L2CACHE_MSHR_ST);
       }
 
       if (0 == core_id) {      
         if (l3cache_enable) {
           // PERF: L3cache
-          l3cache_reads = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_READS);
-          l3cache_writes = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_WRITES);
-          l3cache_read_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_MISS_R);
-          l3cache_write_misses = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_MISS_W);
-          l3cache_bank_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_BANK_ST);
-          l3cache_mshr_stalls = get_csr_64(staging_buf.data(), VX_CSR_MPM_L3CACHE_MSHR_ST);
+          l3cache_reads = get_mpm_csr(VX_CSR_MPM_L3CACHE_READS);
+          l3cache_writes = get_mpm_csr(VX_CSR_MPM_L3CACHE_WRITES);
+          l3cache_read_misses = get_mpm_csr(VX_CSR_MPM_L3CACHE_MISS_R);
+          l3cache_write_misses = get_mpm_csr(VX_CSR_MPM_L3CACHE_MISS_W);
+          l3cache_bank_stalls = get_mpm_csr(VX_CSR_MPM_L3CACHE_BANK_ST);
+          l3cache_mshr_stalls = get_mpm_csr(VX_CSR_MPM_L3CACHE_MSHR_ST);
         }
       
         // PERF: memory
-        mem_reads  = get_csr_64(staging_buf.data(), VX_CSR_MPM_MEM_READS);
-        mem_writes = get_csr_64(staging_buf.data(), VX_CSR_MPM_MEM_WRITES);
-        mem_lat    = get_csr_64(staging_buf.data(), VX_CSR_MPM_MEM_LT);
+        mem_reads  = get_mpm_csr(VX_CSR_MPM_MEM_READS);
+        mem_writes = get_mpm_csr(VX_CSR_MPM_MEM_WRITES);
+        mem_lat    = get_mpm_csr(VX_CSR_MPM_MEM_LT);
       }
     } break;
     default:
@@ -528,18 +583,18 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
 }
 
 extern int vx_perf_counter(vx_device_h hdevice, int counter, int core_id, uint64_t* value) {
-  int ret = 0;
   uint64_t num_cores;
-  ret = vx_dev_caps(hdevice, VX_CAPS_NUM_CORES, &num_cores);
-  if (ret != 0)
-    return ret;
+  
+  RT_CHECK(vx_dev_caps(hdevice, VX_CAPS_NUM_CORES, &num_cores), {
+    return _ret;
+  });
 
   if (core_id >= (int)num_cores) {
     std::cout << "error: core_id out of range" << std::endl;
     return -1;
   }
 
-  std::vector<uint8_t> staging_buf(64 * sizeof(uint32_t));
+  std::vector<uint64_t> staging_buf(64);
 
   uint64_t _value = 0;
   
@@ -551,11 +606,11 @@ extern int vx_perf_counter(vx_device_h hdevice, int counter, int core_id, uint64
       
   for (i = 0; i < num_cores; ++i) {
     uint64_t mpm_mem_addr = IO_CSR_ADDR + i * staging_buf.size();    
-    ret = vx_copy_from_dev(hdevice, staging_buf.data(), mpm_mem_addr, staging_buf.size());
-    if (ret != 0)
-      return ret;
+    RT_CHECK(vx_copy_from_dev(hdevice, staging_buf.data(), mpm_mem_addr, staging_buf.size()), {
+      return _ret;
+    });
 
-    auto per_core_value = get_csr_64(staging_buf.data(), counter);     
+    auto per_core_value = staging_buf.at(counter-VX_CSR_MPM_BASE);
     if (counter == VX_CSR_MCYCLE) {
       _value = std::max<uint64_t>(per_core_value, _value);
     } else {

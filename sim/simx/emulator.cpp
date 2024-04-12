@@ -46,22 +46,23 @@ Emulator::warp_t::warp_t(const Arch& arch)
   , freg_file(arch.num_threads(), std::vector<uint64_t>(arch.num_regs()))
 {}
 
-void Emulator::warp_t::clear(const Arch& arch, const DCRS &dcrs) {
-  this->PC = dcrs.base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR0);
-#if (XLEN == 64)
-  this->PC = (uint64_t(dcrs.base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR1)) << 32) | this->PC;
-#endif
+void Emulator::warp_t::clear(uint64_t startup_addr) {
+  this->PC = startup_addr;
   this->tmask.reset();
-  for (uint32_t i = 0, n = arch.num_threads(); i < n; ++i) {
-    for (auto& reg : this->ireg_file.at(i)) {
-      reg = 0;
-    }
-    for (auto& reg : this->freg_file.at(i)) {
+  this->uui_gen.reset();
+  this->fcsr = 0;  
+
+  for (auto& reg_file : this->ireg_file) {
+    for (auto& reg : reg_file) {
       reg = 0;
     }
   }
-  this->fcsr = 0;
-  this->uui_gen.reset();
+
+  for (auto& reg_file : this->freg_file) {
+    for (auto& reg : reg_file) {
+      reg = 0;
+    }
+  } 
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -81,13 +82,25 @@ Emulator::~Emulator() {
 }
 
 void Emulator::clear() {  
+  uint32_t startup_addr = dcrs_.base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR0);
+#if (XLEN == 64)
+  startup_addr |= (uint64_t(dcrs.base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR1)) << 32);
+#endif
+
+  uint32_t startup_arg = dcrs_.base_dcrs.read(VX_DCR_BASE_STARTUP_ARG0);
+#if (XLEN == 64)
+  startup_arg |= (uint64_t(dcrs.base_dcrs.read(VX_DCR_BASE_STARTUP_ARG1)) << 32);
+#endif
+
   for (auto& warp : warps_) {
-    warp.clear(arch_, dcrs_);
+    warp.clear(startup_addr);
   }
   
   for (auto& barrier : barriers_) {
     barrier.reset();
   }
+  
+  csr_mscratch_ = startup_arg;
 
   stalled_warps_.reset();
   active_warps_.reset();

@@ -36,7 +36,7 @@ public:
   static bool compare(int a, int b, int index, int errors) { 
     if (a != b) {
       if (errors < 100) {
-        printf("*** error: [%d] expected=%d, actual=%d\n", index, a, b);
+        printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
       }
       return false;
     }
@@ -61,7 +61,7 @@ public:
     auto d = std::abs(fa.i - fb.i);
     if (d > FLOAT_ULP) {
       if (errors < 100) {
-        printf("*** error: [%d] expected=%f, actual=%f\n", index, a, b);
+        printf("*** error: [%d] expected=%f, actual=%f\n", index, b, a);
       }
       return false;
     }
@@ -95,7 +95,8 @@ int size = 32;
 bool use_lmem = false;
 
 vx_device_h device = nullptr;
-std::vector<uint8_t> staging_buf;
+uint64_t kernel_prog_addr;
+uint64_t kernel_args_addr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -135,6 +136,8 @@ void cleanup() {
       vx_mem_free(device, kernel_arg.W_addr);
     }
     vx_mem_free(device, kernel_arg.O_addr);
+    vx_mem_free(device, kernel_prog_addr);
+    vx_mem_free(device, kernel_args_addr);
     vx_dev_close(device);
   }
 }
@@ -157,10 +160,6 @@ int main(int argc, char *argv[]) {
   uint32_t o_points = size * size;
   uint32_t i_points = (size+2) * (size+2);
   uint32_t w_points = 3 * 3;
-
-  // upload program
-  std::cout << "upload program" << std::endl;  
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file));
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;  
@@ -192,16 +191,6 @@ int main(int argc, char *argv[]) {
   std::cout << "dev_argI=0x" << std::hex << kernel_arg.I_addr << std::endl;
   std::cout << "dev_argW=0x" << std::hex << kernel_arg.W_addr << std::endl;
   std::cout << "dev_argO=0x" << std::hex << kernel_arg.O_addr << std::endl;
-  
-  // allocate staging buffer  
-  std::cout << "allocate staging buffer" << std::endl;    
-  uint32_t alloc_size = std::max<uint32_t>(i_nbytes, sizeof(kernel_arg_t));
-  staging_buf.resize(alloc_size);
-  
-  // upload kernel argument
-  std::cout << "upload kernel argument" << std::endl;
-  memcpy(staging_buf.data(), &kernel_arg, sizeof(kernel_arg_t));
-  RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
 
   // Generate input values
   std::vector<TYPE> h_I(i_points);
@@ -219,38 +208,32 @@ int main(int argc, char *argv[]) {
   for (uint32_t i = 0; i < w_points; ++i) {
     h_W[i] = static_cast<TYPE>(rand()) / RAND_MAX;
   }
-  convolution_cpu(h_O.data(), h_I.data(), h_W.data(), size, size);
 
   // upload input buffer
   {
     std::cout << "upload source buffer" << std::endl;
-    auto buf_ptr = (TYPE*)staging_buf.data();
-    for (uint32_t i = 0; i < i_points; ++i) {
-      buf_ptr[i] = h_I[i];
-    }
-    RT_CHECK(vx_copy_to_dev(device, kernel_arg.I_addr, staging_buf.data(), i_nbytes));
+    RT_CHECK(vx_copy_to_dev(device, kernel_arg.I_addr, h_I.data(), i_nbytes));
   }
 
   // upload weight buffer
   {
     std::cout << "upload weight buffer" << std::endl;
-    auto buf_ptr = (TYPE*)staging_buf.data();
-    for (uint32_t i = 0; i < w_points; ++i) {
-      buf_ptr[i] = h_W[i];
-    }   
-    RT_CHECK(vx_copy_to_dev(device, kernel_arg.W_addr, staging_buf.data(), w_nbytes));
+    RT_CHECK(vx_copy_to_dev(device, kernel_arg.W_addr, h_W.data(), w_nbytes));
   }
 
-  // clear destination buffer
-  std::cout << "clear destination buffer" << std::endl;
-  memset(staging_buf.data(), 0, o_nbytes);
-  RT_CHECK(vx_copy_to_dev(device, kernel_arg.O_addr, staging_buf.data(), o_nbytes));  
+  // upload program
+  std::cout << "upload program" << std::endl;  
+  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &kernel_prog_addr));
+  
+  // upload kernel argument
+  std::cout << "upload kernel argument" << std::endl;
+  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &kernel_args_addr));
 
   auto time_start = std::chrono::high_resolution_clock::now();
   
   // start device
   std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start(device));
+  RT_CHECK(vx_start(device, kernel_prog_addr, kernel_args_addr));
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;
@@ -262,16 +245,18 @@ int main(int argc, char *argv[]) {
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(device, staging_buf.data(), kernel_arg.O_addr, o_nbytes));
+  RT_CHECK(vx_copy_from_dev(device, h_O.data(), kernel_arg.O_addr, o_nbytes));
 
   // verify result
   std::cout << "verify result" << std::endl;  
   {
+    std::vector<TYPE> h_ref(o_points);
+    convolution_cpu(h_ref.data(), h_I.data(), h_W.data(), size, size);
+    
     int errors = 0;
-    auto buf_ptr = (TYPE*)staging_buf.data();
-    for (uint32_t i = 0; i < h_O.size(); ++i) {
-      auto ref = h_O[i];
-      auto cur = buf_ptr[i];
+    for (uint32_t i = 0; i < h_ref.size(); ++i) {
+      auto ref = h_ref[i];
+      auto cur = h_O[i];
       if (!Comparator<TYPE>::compare(cur, ref, i, errors)) {
         ++errors;
       }

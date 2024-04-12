@@ -24,6 +24,8 @@ uint32_t count = 0;
 
 vx_device_h device = nullptr;
 std::vector<uint8_t> staging_buf;
+uint64_t kernel_prog_addr;
+uint64_t kernel_args_addr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -60,6 +62,8 @@ void cleanup() {
   if (device) {
     vx_mem_free(device, kernel_arg.src_addr);
     vx_mem_free(device, kernel_arg.dst_addr);
+    vx_mem_free(device, kernel_prog_addr);
+    vx_mem_free(device, kernel_args_addr);
     vx_dev_close(device);
   }
 }
@@ -168,7 +172,7 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   // start device
   std::cout << "start execution" << std::endl;
   auto t2 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_start(device));
+  RT_CHECK(vx_start(device, kernel_prog_addr, kernel_args_addr));
   RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
   auto t3 = std::chrono::high_resolution_clock::now();
 
@@ -246,8 +250,7 @@ int main(int argc, char *argv[]) {
 
   // allocate staging buffer  
   std::cout << "allocate staging buffer" << std::endl;
-  uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
-  staging_buf.resize(alloc_size);
+  staging_buf.resize(buf_size);
 
   // run tests  
   if (0 == test || -1 == test) {
@@ -258,12 +261,11 @@ int main(int argc, char *argv[]) {
   if (1 == test || -1 == test) {
     // upload program
     std::cout << "upload program" << std::endl;  
-    RT_CHECK(vx_upload_kernel_file(device, kernel_file));
+    RT_CHECK(vx_upload_kernel_file(device, kernel_file, &kernel_prog_addr));
 
     // upload kernel argument
     std::cout << "upload kernel argument" << std::endl;
-    memcpy(staging_buf.data(), &kernel_arg, sizeof(kernel_arg_t));
-    RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
+    RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &kernel_args_addr));
 
     std::cout << "run kernel test" << std::endl;
     RT_CHECK(run_kernel_test(kernel_arg, buf_size, num_points));

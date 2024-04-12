@@ -65,7 +65,7 @@ private:
 
   struct warp_t {
     warp_t(const Arch& arch);
-    void clear(const Arch& arch, const DCRS &dcrs);
+    void clear(uint64_t startup_addr);
 
     Word                              PC;
     ThreadMask                        tmask;
