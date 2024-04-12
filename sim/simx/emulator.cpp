@@ -84,12 +84,12 @@ Emulator::~Emulator() {
 void Emulator::clear() {  
   uint32_t startup_addr = dcrs_.base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR0);
 #if (XLEN == 64)
-  startup_addr |= (uint64_t(dcrs.base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR1)) << 32);
+  startup_addr |= (uint64_t(dcrs_.base_dcrs.read(VX_DCR_BASE_STARTUP_ADDR1)) << 32);
 #endif
 
   uint32_t startup_arg = dcrs_.base_dcrs.read(VX_DCR_BASE_STARTUP_ARG0);
 #if (XLEN == 64)
-  startup_arg |= (uint64_t(dcrs.base_dcrs.read(VX_DCR_BASE_STARTUP_ARG1)) << 32);
+  startup_arg |= (uint64_t(dcrs_.base_dcrs.read(VX_DCR_BASE_STARTUP_ARG1)) << 32);
 #endif
 
   for (auto& warp : warps_) {
