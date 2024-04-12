@@ -561,6 +561,7 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
 }
 
 GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat, const void *binary, GLsizei length){
+    printf("glProgramBinary() program=%d, binaryFormat=%d",program,binaryFormat);
     if(!_kernel_load_status) {
         void *gl_program;
         gl_program = createProgramWithBinary(GLSC2_kernel_color_pocl, sizeof(GLSC2_kernel_color_pocl));
@@ -581,7 +582,7 @@ GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat
 
         _kernel_load_status = 1;
     }
-    if(!_programs[program].program == (void*)0) {
+    if(_programs[program].program) {
         _err = GL_INVALID_OPERATION;
         return;
     }
