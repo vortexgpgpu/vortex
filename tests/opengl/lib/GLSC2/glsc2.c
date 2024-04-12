@@ -588,6 +588,9 @@ GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat
     if (binaryFormat == POCL_BINARY) {
         _programs[program].program=createProgramWithBinary(binary, length);
         buildProgram(_programs[program].program);
+        // TODO: Check this logic
+        _programs[program].load_status = GL_TRUE;
+        _programs[program].validation_status = GL_TRUE;
     }
 }
 
