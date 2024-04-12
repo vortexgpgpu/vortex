@@ -45,7 +45,16 @@ cl_program createProgramWithBinary(const uint8_t* binary, size_t length) {
     printf("\treturn=%x, error=%d\n", program, _err);
     return program;
 }
+int buildProgram(void *program) {
+    printf("buildProgram() program=%x\n", program);
 
+    cl_device_id device_id = _getDeviceID();
+
+    _err = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
+    
+    printf("\treturn=%d, error=%d\n", _err, _err);
+    return _err;
+}
 /**** BASIC OPERATIONS
  * It works as an interface, OpenGL does not has to know that is implemented with OpenCL,
  * 

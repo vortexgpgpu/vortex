@@ -566,12 +566,22 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
 
 GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat, const void *binary, GLsizei length){
     if(!_kernel_load_status) {
-
-        _color_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_color_pocl, sizeof(GLSC2_kernel_color_pocl)), "gl_rbga4");
-        _rasterization_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_rasterization_triangle_pocl, sizeof(GLSC2_kernel_rasterization_triangle_pocl)), "gl_rasterization_triangle");
-        _viewport_division_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_viewport_division_pocl, sizeof(GLSC2_kernel_viewport_division_pocl)), "gl_viewport_division");
-        _perspective_division_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_perspective_division_pocl, sizeof(GLSC2_kernel_perspective_division_pocl)), "gl_perspective_division");
-        _readnpixels_kernel = createKernel(createProgramWithBinary(GLSC2_kernel_readnpixels_pocl, sizeof(GLSC2_kernel_readnpixels_pocl)), "gl_rgba4_rgba8");
+        void *gl_program;
+        gl_program = createProgramWithBinary(GLSC2_kernel_color_pocl, sizeof(GLSC2_kernel_color_pocl));
+        buildProgram(gl_program);
+        _color_kernel = createKernel(gl_program, "gl_rbga4");
+        gl_program = createProgramWithBinary(GLSC2_kernel_rasterization_triangle_pocl, sizeof(GLSC2_kernel_rasterization_triangle_pocl));
+        buildProgram(gl_program);
+        _rasterization_kernel = createKernel(gl_program, "gl_rasterization_triangle");
+        gl_program = createProgramWithBinary(GLSC2_kernel_viewport_division_pocl, sizeof(GLSC2_kernel_viewport_division_pocl));
+        buildProgram(gl_program);
+        _viewport_division_kernel = createKernel(gl_program, "gl_viewport_division");
+        gl_program = createProgramWithBinary(GLSC2_kernel_perspective_division_pocl, sizeof(GLSC2_kernel_perspective_division_pocl));
+        buildProgram(gl_program);
+        _perspective_division_kernel = createKernel(gl_program, "gl_perspective_division");
+        gl_program = createProgramWithBinary(GLSC2_kernel_readnpixels_pocl, sizeof(GLSC2_kernel_readnpixels_pocl));
+        buildProgram(gl_program);
+        _readnpixels_kernel = createKernel(gl_program, "gl_rgba4_rgba8");
 
         _kernel_load_status = 1;
     }
@@ -581,6 +591,7 @@ GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat
     }
     if (binaryFormat == POCL_BINARY) {
         _programs[program].program=createProgramWithBinary(binary, length);
+        buildProgram(_programs[program].program);
     }
 }
 
