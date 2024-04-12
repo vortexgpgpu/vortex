@@ -106,9 +106,31 @@ void finish(void* command_queue) {
     clFinish((cl_command_queue) command_queue);
 }
 
+#include "kernel.fill.c"
+
+cl_kernel _getKernelFill() {
+    static cl_program program;
+    static cl_kernel kernel;
+
+    if (kernel == NULL) {
+        program = createProgramWithBinary(GLSC2_kernel_fill_pocl, sizeof(GLSC2_kernel_fill_pocl));
+        buildProgram(program);
+        kernel = createKernel(program, "gl_fill");
+    }
+
+    return kernel;
+}
+
 void enqueueFillBuffer(void* command_queue, void* buffer, const void* pattern, size_t pattern_size, size_t offset, size_t size) {
     printf("enqueueFillBuffer() offset=%d, size=%d\n", offset, size);
-    clEnqueueFillBuffer((cl_command_queue)command_queue, (cl_mem) buffer, pattern, pattern_size, offset, size, 0, NULL, NULL);
+    // just valid for pattern size == 4
+    cl_kernel kernel = _getKernelFill();
+    size_t global_work_size = size / 4;
+    clSetKernelArg(kernel, 0, 4, pattern);
+    clSetKernelArg(kernel, 1, sizeof(buffer), buffer);
+    clEnqueueNDRangeKernel((cl_command_queue) command_queue, kernel, 1, NULL, &global_work_size, NULL, 0, NULL, NULL);
+    // TODO: It brokes 
+    // clEnqueueFillBuffer((cl_command_queue)command_queue, (cl_mem) buffer, pattern, pattern_size, offset, size, 0, NULL, NULL);
 }
 
 // formats
