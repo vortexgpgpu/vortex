@@ -397,15 +397,15 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     );
     setKernelArg(fragment_kernel, 
         _programs[_current_program].active_uniforms + 1,
-        sizeof(gl_Discard), &gl_Discard
+        sizeof(gl_Rasterization), &gl_Rasterization
     );
     setKernelArg(fragment_kernel, 
         _programs[_current_program].active_uniforms + 2,
-        sizeof(gl_FragColor), &gl_FragColor
+        sizeof(gl_Discard), &gl_Discard
     );
     setKernelArg(fragment_kernel, 
         _programs[_current_program].active_uniforms + 3,
-        sizeof(gl_Rasterization), &gl_Rasterization
+        sizeof(gl_FragColor), &gl_FragColor
     );
 
     void *color_kernel = getColorKernel(mode, first, count);
