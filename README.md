@@ -60,6 +60,8 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
     $ TOOLDIR=$HOME/tools ../configure
 ### Install prebuilt toolchain
     $ ./ci/toolchain_install.sh --all
+### set environment variables
+    # should always run before using the toolchain!
     $ source ./ci/toolchain_env.sh
 ### Building Vortex
     $ make -s
