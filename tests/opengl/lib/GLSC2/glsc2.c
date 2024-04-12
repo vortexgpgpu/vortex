@@ -660,7 +660,7 @@ GL_APICALL void GL_APIENTRY glUseProgram (GLuint program){
 }
 
 GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer) {
-    if (index >= GL_MAX_VERTEX_ATTRIBS) {
+    if (index >= MAX_VERTEX_ATTRIBS) {
         _err = GL_INVALID_VALUE;
         return;
     }
