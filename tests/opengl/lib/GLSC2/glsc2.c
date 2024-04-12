@@ -304,17 +304,13 @@ GL_APICALL void GL_APIENTRY glColorMask (GLboolean red, GLboolean green, GLboole
 }
 
 GL_APICALL GLuint GL_APIENTRY glCreateProgram (void){
-    GLuint program = 0; // ZERO is reserved
-    while(! ++program < MAX_PROGRAMS) {
-        if (!_programs[program].used)
-        {
+    GLuint program = 1; // ZERO is reserved
+    while(program < MAX_PROGRAMS) {
+        if (!_programs[program].used) {
             _programs[program].used=GL_TRUE;
-            _programs[program].active_attributes=0;
-            _programs[program].active_uniforms=0;
-            _programs[program].load_status=0;
-            _programs[program].validation_status=0;
             return program;
-        }
+        } 
+        ++program;
     }
     return 0; // TODO maybe throw some error ??
 }
@@ -676,19 +672,17 @@ GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLe
         _err=GL_INVALID_VALUE;
         return;
     }
-
-    if (normalized == GL_TRUE){ 
-        // TODO: 
-    }
+    // TODO: normalized & strid
 
     if (!_current_program) {
         // TODO:
     } else {
         void *mem;
         if (pointer == NULL) {
-            // TODO
+            mem = _buffers[_buffer_binding].mem;
+            _programs[_current_program].attributes[_programs[_current_program].active_attributes].data.type = 0x2;
         } else {
-            mem = createBuffer(MEM_READ_ONLY, size, pointer) + stride;
+            mem = createBuffer(MEM_READ_ONLY, size, pointer);
             _programs[_current_program].attributes[_programs[_current_program].active_attributes].data.type = 0x3;
         }
         _programs[_current_program].attributes[_programs[_current_program].active_attributes].data.attribute.pointer.mem = mem;
@@ -727,7 +721,7 @@ void* createVertexKernel(GLenum mode, GLint first, GLsizei count) {
     GLuint attribute;
     while(attribute < _programs[_current_program].active_attributes) {
         
-        if(_programs[_current_program].attributes[attribute].data.type == 0x3) {
+        if(_programs[_current_program].attributes[attribute].data.type >= 0x2) {
             setKernelArg(
                 kernel, 
                 _programs[_current_program].attributes[attribute].location,
@@ -735,7 +729,6 @@ void* createVertexKernel(GLenum mode, GLint first, GLsizei count) {
                 _programs[_current_program].attributes[attribute].data.attribute.pointer.mem // TODO: 
             );
         } else {
-
             setKernelArg(
                 kernel, 
                 _programs[_current_program].attributes[attribute].location,
