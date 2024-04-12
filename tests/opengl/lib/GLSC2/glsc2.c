@@ -714,7 +714,7 @@ void* createVertexKernel(GLenum mode, GLint first, GLsizei count) {
                 kernel, 
                 _programs[_current_program].attributes[attribute].location,
                 _programs[_current_program].attributes[attribute].size,
-                _programs[_current_program].attributes[attribute].data.attribute.int4 // TODO: 
+                _programs[_current_program].attributes[attribute].data.attribute.int4.values // TODO: 
             );
         }
         ++attribute;
