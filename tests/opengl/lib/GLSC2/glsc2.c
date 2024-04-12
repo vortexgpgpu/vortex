@@ -561,7 +561,7 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
 }
 
 GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat, const void *binary, GLsizei length){
-    printf("glProgramBinary() program=%d, binaryFormat=%d",program,binaryFormat);
+    printf("glProgramBinary() program=%d, binaryFormat=%d\n",program,binaryFormat);
     if(!_kernel_load_status) {
         void *gl_program;
         gl_program = createProgramWithBinary(GLSC2_kernel_color_pocl, sizeof(GLSC2_kernel_color_pocl));
@@ -646,8 +646,11 @@ GL_APICALL void GL_APIENTRY glStencilMaskSeparate (GLenum face, GLuint mask) {
 }
 
 GL_APICALL void GL_APIENTRY glUseProgram (GLuint program){
+    printf("glUseProgram() program=%d\n", program);
     if (program) {
         if (!_programs[program].load_status){
+            printf("\tERROR load_status=%d\n", _programs[program].load_status);
+
             _err = GL_INVALID_OPERATION;
             return;
         }
@@ -677,19 +680,14 @@ GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLe
         return;
     }
     // TODO: normalized & strid
-
+    printf("glVertexAttribPointer() _current_program=%d\n",_current_program);
     if (!_current_program) {
         // TODO:
     } else {
-        void *mem;
-        if (pointer == NULL) {
-            mem = _buffers[_buffer_binding].mem;
+        if (_buffer_binding) {
+            _programs[_current_program].attributes[_programs[_current_program].active_attributes].data.attribute.pointer.mem = _buffers[_buffer_binding].mem;
             _programs[_current_program].attributes[_programs[_current_program].active_attributes].data.type = 0x2;
-        } else {
-            mem = createBuffer(MEM_READ_ONLY, size, pointer);
-            _programs[_current_program].attributes[_programs[_current_program].active_attributes].data.type = 0x3;
         }
-        _programs[_current_program].attributes[_programs[_current_program].active_attributes].data.attribute.pointer.mem = mem;
         _programs[_current_program].attributes[_programs[_current_program].active_attributes].data.attribute.pointer.size = size;
         _programs[_current_program].attributes[_programs[_current_program].active_attributes].data.attribute.pointer.type = type;
         _programs[_current_program].attributes[_programs[_current_program].active_attributes].location = index;
@@ -698,7 +696,7 @@ GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLe
         
         _programs[_current_program].active_attributes += 1;
     
-        printf("active_attributes=%d", _programs[_current_program].active_attributes);
+        printf("\nactive_attributes=%d\n", _programs[_current_program].active_attributes);
     }
 }
 GL_APICALL void GL_APIENTRY glViewport (GLint x, GLint y, GLsizei width, GLsizei height){
@@ -725,7 +723,7 @@ void* createVertexKernel(GLenum mode, GLint first, GLsizei count) {
     GLuint attribute;
     while(attribute < _programs[_current_program].active_attributes) {
         
-        if(_programs[_current_program].attributes[attribute].data.type >= 0x2) {
+        if(_programs[_current_program].attributes[attribute].data.type == 0x2) {
             setKernelArg(
                 kernel, 
                 _programs[_current_program].attributes[attribute].location,
