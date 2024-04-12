@@ -92,7 +92,7 @@ int main() {
 
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
   printf("drawArrays\n");
-  glDrawArrays(GL_TRIANGLES, 0, 6);
+  glDrawArrays(GL_TRIANGLES, 0, 3);
   glFinish();
   printf("readPixels\n");
   glReadnPixels(0,0,WIDTH, HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, WIDTH*HEIGHT*4, result);
