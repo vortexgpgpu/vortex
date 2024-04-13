@@ -57,7 +57,7 @@ __kernel void gl_rasterization_triangle (
     const int index, // 
     const int width,
     const int height,
-    const int primitives_sz,
+    const int attributes,
     __global const float4 *gl_Positions,
     __global const float4 *gl_Primitives,
     __global float4 *gl_FragCoords,
@@ -68,9 +68,9 @@ __kernel void gl_rasterization_triangle (
     int gid = get_global_id(0);
     // input values
     __global const float4 *position = gl_Positions + index*3;
-    __global const float4 *primitives = gl_Primitives + index*3*primitives_sz;
+    __global const float4 *primitives = gl_Primitives + index*3*attributes;
     __global float4 *fragCoord = gl_FragCoords + gid;
-    __global float4 *rasterization = gl_Rasterization + gid*primitives_sz;
+    __global float4 *rasterization = gl_Rasterization + gid*attributes;
 
     //frag coords norm
     float xf = gid % width;
@@ -87,15 +87,16 @@ __kernel void gl_rasterization_triangle (
     fragCoord->z = calculateFragmentDepth(abc, v0.z, v1.z, v2.z);
     fragCoord->w = abc.x*v0.w + abc.y*v1.w + abc.z*v2.w;
 
-    for(int primitive = 0 ; primitive < primitives_sz; primitive += 3 ) {
-        __global const float4 *p0 = primitives + primitive;
-        __global const float4 *p1 = primitives + primitive + 1;
-        __global const float4 *p2 = primitives + primitive + 2;
+    for(int attribute = 0 ; attribute < attributes; attribute += 1) {
+        __global const float4 *p0 = primitives;
+        __global const float4 *p1 = primitives + 1;
+        __global const float4 *p2 = primitives + 2;
         rasterization->x = abc.x*p0->x + abc.y*p1->x + abc.z*p2->x;
         rasterization->y = abc.x*p0->y + abc.y*p1->y + abc.z*p2->y;
         rasterization->z = abc.x*p0->z + abc.y*p1->z + abc.z*p2->z;
         rasterization->w = abc.x*p0->w + abc.y*p1->w + abc.z*p2->w;
-        ++rasterization;
+        rasterization += 1;
+        primitives += 3;
     }
 
     if (abc.x >= 0 && abc.y >= 0 && abc.z >= 0) {
