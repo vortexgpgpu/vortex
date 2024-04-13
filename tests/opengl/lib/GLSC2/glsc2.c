@@ -756,13 +756,13 @@ void* getViewportDivisionKernel(GLenum mode, GLint first, GLsizei count) {
 void* getRasterizationTriangleKernel(GLenum mode, GLint first, GLsizei count) {
     void *kernel = _rasterization_kernel;
 
-    setKernelArg(kernel, 0,
+    setKernelArg(kernel, 1,
         sizeof(COLOR_ATTACHMENT0.width), &COLOR_ATTACHMENT0.width
     );
-    setKernelArg(kernel, 1,
+    setKernelArg(kernel, 2,
         sizeof(COLOR_ATTACHMENT0.height), &COLOR_ATTACHMENT0.height
     );
-    setKernelArg(kernel, 2,
+    setKernelArg(kernel, 3,
         sizeof(_programs[_current_program].active_attributes), &_programs[_current_program].active_attributes
     );
 
