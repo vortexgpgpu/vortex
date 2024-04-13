@@ -346,8 +346,8 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
 
     // Build memory buffers
     void *gl_Positions = createBuffer(MEM_READ_WRITE, sizeof(float[4])*num_vertices, NULL);
-    void *gl_Primitives = createBuffer(MEM_READ_WRITE, sizeof(float[4])*_programs[_current_program].active_attributes, NULL);
-    void *gl_Rasterization = createBuffer(MEM_READ_WRITE, sizeof(float[4])*_programs[_current_program].active_attributes, NULL);
+    void *gl_Primitives = createBuffer(MEM_READ_WRITE, sizeof(float[4])*num_vertices*_programs[_current_program].active_attributes, NULL);
+    void *gl_Rasterization = createBuffer(MEM_READ_WRITE, sizeof(float[4])*num_fragments*_programs[_current_program].active_attributes, NULL);
     void *gl_FragCoord = createBuffer(MEM_READ_WRITE, sizeof(float[4])*num_fragments, NULL);
     void *gl_Discard = createBuffer(MEM_READ_WRITE, sizeof(uint8_t)*num_fragments, NULL);
     void *gl_FragColor = createBuffer(MEM_READ_WRITE, sizeof(float[4])*num_fragments, NULL);
