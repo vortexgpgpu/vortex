@@ -12,10 +12,10 @@ __kernel void gl_rgba4 (
 
   float4 color = gl_FragColor[gid];
   unsigned short value = 0;
-  value |= (unsigned short) (color[0] * 0xF);
-  value |= (unsigned short) (color[0] * 0xF) << 4;
-  value |= (unsigned short) (color[0] * 0xF) << 8;
-  value |= (unsigned short) (color[0] * 0xF) << 12;
+  value |= (unsigned short) (color.x * 15);
+  value |= (unsigned short) (color.y * 15) << 4;
+  value |= (unsigned short) (color.z * 15) << 8;
+  value |= (unsigned short) (color.w * 15) << 12;
 
   unsigned int x, y;
   x = gl_FragCoord[gid][0]*gl_Width;

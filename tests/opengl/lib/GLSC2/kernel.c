@@ -84,7 +84,7 @@ void* createKernel(void* program, const char* name) {
     return kernel;
 }
 
-void setKernelArg(void* kernel, unsigned int location, size_t size, void* value) {
+void setKernelArg(void* kernel, unsigned int location, size_t size, const void* value) {
     clSetKernelArg((cl_kernel) kernel, location, size, value);
 }
 
