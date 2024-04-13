@@ -87,6 +87,7 @@ __kernel void gl_rasterization_triangle (
     fragCoord->z = calculateFragmentDepth(abc, v0.z, v1.z, v2.z);
     fragCoord->w = abc.x*v0.w + abc.y*v1.w + abc.z*v2.w;
 
+    /*
     for(int attribute = 0 ; attribute < attributes; attribute += 1) {
         __global const float4 *p0 = primitives;
         __global const float4 *p1 = primitives + 1;
@@ -98,6 +99,7 @@ __kernel void gl_rasterization_triangle (
         rasterization += 1;
         primitives += 3;
     }
+    */
 
     if (abc.x >= 0 && abc.y >= 0 && abc.z >= 0) {
         gl_Discard[gid] = true;

@@ -410,13 +410,13 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     );
 
     void *color_kernel = getColorKernel(mode, first, count);
-    setKernelArg(fragment_kernel, 3,
+    setKernelArg(color_kernel, 3,
         sizeof(gl_FragCoord), &gl_FragCoord
     );
-    setKernelArg(fragment_kernel, 4,
+    setKernelArg(color_kernel, 4,
         sizeof(gl_Discard), &gl_Discard
     );
-    setKernelArg(fragment_kernel, 5,
+    setKernelArg(color_kernel, 5,
         sizeof(gl_FragColor), &gl_FragColor
     );
 
