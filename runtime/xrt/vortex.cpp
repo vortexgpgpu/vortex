@@ -818,13 +818,13 @@ extern int vx_start(vx_device_h hdevice, uint64_t krnl_addr, uint64_t args_addr)
     CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ADDR0, krnl_addr & 0xffffffff), {
         return -1;
     });
-    CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ADDR0, krnl_addr >> 32), {
+    CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ADDR1, krnl_addr >> 32), {
         return -1;
     });
     CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ARG0, args_addr & 0xffffffff), {
         return -1;
     });
-    CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ARG0, args_addr >> 32), {
+    CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_STARTUP_ARG1, args_addr >> 32), {
         return -1;
     });
 
