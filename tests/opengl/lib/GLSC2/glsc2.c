@@ -97,6 +97,7 @@ GLuint _current_program; // ZERO is reserved for NULL program
 GLboolean _kernel_load_status;
 void *_color_kernel;
 void *_rasterization_kernel;
+void *_basic_kernel;
 void *_viewport_division_kernel;
 void *_perspective_division_kernel;
 void *_readnpixels_kernel;
@@ -394,6 +395,14 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
         exit(0);
     }
 
+    void *basic_kernel = _basic_kernel;
+    setKernelArg(rasterization_kernel, 0,
+        sizeof(gl_FragCoord), &gl_FragCoord
+    );
+    setKernelArg(rasterization_kernel, 1,
+        sizeof(gl_Discard), &gl_Discard
+    );
+
     void* fragment_kernel = createFragmentKernel(mode, first, count);
     setKernelArg(fragment_kernel, 
         _programs[_current_program].active_uniforms,
@@ -433,8 +442,9 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     
     for(uint32_t primitive=0; primitive < num_primitives; ++primitive) {
         // Rasterization
-        setKernelArg(rasterization_kernel, 0, sizeof(primitive), &primitive);
-        enqueueNDRangeKernel(command_queue, rasterization_kernel, &num_fragments);   
+        // setKernelArg(rasterization_kernel, 0, sizeof(primitive), &primitive);
+        // enqueueNDRangeKernel(command_queue, rasterization_kernel, &num_fragments);   
+        enqueueNDRangeKernel(command_queue, basic_kernel, &num_fragments);   
         // Fragment
         enqueueNDRangeKernel(command_queue, fragment_kernel, &num_fragments);   
         // Post-Fragment
@@ -550,9 +560,12 @@ GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat
         gl_program = createProgramWithBinary(GLSC2_kernel_color_pocl, sizeof(GLSC2_kernel_color_pocl));
         buildProgram(gl_program);
         _color_kernel = createKernel(gl_program, "gl_rgba4");
-        gl_program = createProgramWithBinary(GLSC2_kernel_rasterization_test_pocl, sizeof(GLSC2_kernel_rasterization_test_pocl));
+        gl_program = createProgramWithBinary(GLSC2_kernel_rasterization_triangle_pocl, sizeof(GLSC2_kernel_rasterization_triangle_pocl));
         buildProgram(gl_program);
         _rasterization_kernel = createKernel(gl_program, "gl_rasterization_triangle");
+        gl_program = createProgramWithBinary(GLSC2_kernel_rasterization_test_pocl, sizeof(GLSC2_kernel_rasterization_test_pocl));
+        buildProgram(gl_program);
+        _basic_kernel = createKernel(gl_program, "gl_rasterization_triangle");
         gl_program = createProgramWithBinary(GLSC2_kernel_viewport_division_pocl, sizeof(GLSC2_kernel_viewport_division_pocl));
         buildProgram(gl_program);
         _viewport_division_kernel = createKernel(gl_program, "gl_viewport_division");

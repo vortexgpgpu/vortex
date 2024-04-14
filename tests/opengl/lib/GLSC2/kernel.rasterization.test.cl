@@ -1,12 +1,5 @@
 __kernel void gl_rasterization_triangle (
-    const int index,
-    const int width,
-    const int height,
-    const int attributes,
-    __global const float4 *gl_Positions,
-    __global const float4 *gl_Primitives,
     __global float4 *gl_FragCoords,
-    __global float4 *gl_Rasterization,
     __global bool *gl_Discard
 )
 {
