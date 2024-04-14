@@ -85,7 +85,11 @@ void* createKernel(void* program, const char* name) {
 }
 
 void setKernelArg(void* kernel, unsigned int location, size_t size, const void* value) {
-    clSetKernelArg((cl_kernel) kernel, location, size, value);
+    printf("setKernelArg() location=%d, size=%d, value=%x\n", location, size, value);
+    
+    int err = clSetKernelArg((cl_kernel) kernel, location, size, value);
+
+    printf("\terror=%d\n", err);
 }
 
 // I decide to make it simple, but maybe it will need to be extendend in future.
