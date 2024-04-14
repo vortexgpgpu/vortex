@@ -20,11 +20,7 @@
 const char* kernel_file = "kernel.bin";
 uint32_t count = 0;
 
-std::vector<TYPE> src_data;
-std::vector<TYPE> ref_data;
-
 vx_device_h device = nullptr;
-std::vector<uint8_t> staging_buf;
 uint64_t kernel_prog_addr;
 uint64_t kernel_args_addr;
 kernel_arg_t kernel_arg = {};
@@ -66,24 +62,22 @@ void cleanup() {
   }
 }
 
-void gen_input_data(uint32_t num_points) {
-  src_data.resize(num_points);
-
-  for (uint32_t i = 0; i < num_points; ++i) {
+void gen_src_data(std::vector<TYPE>& src_data, uint32_t size) {
+  src_data.resize(size);
+  for (uint32_t i = 0; i < size; ++i) {
     auto r = static_cast<float>(std::rand()) / RAND_MAX;
-    auto value = static_cast<TYPE>(r * num_points);
+    auto value = static_cast<TYPE>(r * size);
     src_data[i] = value;
     std::cout << std::dec << i << ": value=" << value << std::endl;
   }  
 }
 
-void gen_ref_data(uint32_t num_points) {
-  ref_data.resize(num_points);
-
-  for (uint32_t i = 0; i < num_points; ++i) {
+void gen_ref_data(std::vector<TYPE>& ref_data, const std::vector<TYPE>& src_data, uint32_t size) {
+  ref_data.resize(size);
+  for (uint32_t i = 0; i < size; ++i) {
     TYPE ref_value = src_data.at(i);
     uint32_t pos = 0;
-    for (uint32_t j = 0; j < num_points; ++j) {
+    for (uint32_t j = 0; j < size; ++j) {
       TYPE cur_value = src_data.at(j);
       pos += (cur_value < ref_value) || (cur_value == ref_value && j < i);
     }
@@ -105,58 +99,41 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;  
   RT_CHECK(vx_dev_open(&device));
 
-  uint32_t num_points = count;
+  uint64_t num_cores, num_warps, num_threads;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
 
-  // generate input data
-  gen_input_data(num_points);
-
-  // generate reference data
-  gen_ref_data(num_points);
-
-  uint32_t src_buf_size = src_data.size() * sizeof(int32_t);  
-  uint32_t dst_buf_size = ref_data.size() * sizeof(int32_t);
+  uint32_t num_tasks  = num_cores * num_warps * num_threads;
+  uint32_t num_points = count * num_tasks;
+  uint32_t buf_size   = num_points * sizeof(TYPE);
 
   std::cout << "number of points: " << num_points << std::endl;
-  std::cout << "buffer size: " << dst_buf_size << " bytes" << std::endl;
+  std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
+  
+  kernel_arg.num_points = num_points;
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, src_buf_size, &kernel_arg.src_addr));
-  RT_CHECK(vx_mem_alloc(device, dst_buf_size, &kernel_arg.dst_addr));
-
-  kernel_arg.num_points = num_points;
+  RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.src_addr));
+  RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.dst_addr));
 
   std::cout << "dev_src=0x" << std::hex << kernel_arg.src_addr << std::endl;
   std::cout << "dev_dst=0x" << std::hex << kernel_arg.dst_addr << std::endl;
   
-  // allocate staging buffer  
-  {
-    std::cout << "allocate staging buffer" << std::endl;    
-    uint32_t staging_buf_size = std::max<uint32_t>(src_buf_size, dst_buf_size);
-    staging_buf.resize(staging_buf_size);
-  }
+  // allocate host buffers  
+  std::cout << "allocate host buffers" << std::endl;
+  std::vector<TYPE> h_src;
+  std::vector<TYPE> h_dst(num_points);
+  gen_src_data(h_src, num_points);
   
   // upload source buffer
-  {
-    std::cout << "upload source buffer" << std::endl;
-    auto buf_ptr = staging_buf.data();
-    memcpy(buf_ptr, src_data.data(), num_points * sizeof(TYPE));      
-    RT_CHECK(vx_copy_to_dev(device, kernel_arg.src_addr, staging_buf.data(), src_buf_size));
-  }
-
-  // clear destination buffer
-  {
-    std::cout << "clear destination buffer" << std::endl;
-    auto buf_ptr = (int32_t*)staging_buf.data();
-    for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr[i] = 0xdeadbeef;
-    }    
-    RT_CHECK(vx_copy_to_dev(device, kernel_arg.dst_addr, staging_buf.data(), dst_buf_size));  
-  }
+  std::cout << "upload source buffer" << std::endl;
+  RT_CHECK(vx_copy_to_dev(device, kernel_arg.src_addr, h_src.data(), buf_size));
 
   // upload program
   std::cout << "upload program" << std::endl;  
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &kernel_prog_addr));
+  RT_CHECK(vx_upload_file(device, kernel_file, &kernel_prog_addr));
   
   // upload kernel argument  
   std::cout << "upload kernel argument" << std::endl;
@@ -172,32 +149,35 @@ int main(int argc, char *argv[]) {
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(device, staging_buf.data(), kernel_arg.dst_addr, dst_buf_size));
+  RT_CHECK(vx_copy_from_dev(device, h_dst.data(), kernel_arg.dst_addr, buf_size));
 
   // verify result
   std::cout << "verify result" << std::endl;  
+  int errors = 0;
   {
-    int errors = 0;
-    auto buf_ptr = (TYPE*)staging_buf.data();
+    std::vector<TYPE> h_ref;
+    gen_ref_data(h_ref, h_src, num_points);
+
     for (uint32_t i = 0; i < num_points; ++i) {
-      TYPE ref = ref_data.at(i);
-      TYPE cur = buf_ptr[i];
+      TYPE ref = h_ref[i];
+      TYPE cur = h_dst[i];
       if (cur != ref) {
         std::cout << "error at result #" << std::dec << i
                   << std::hex << ": actual=" << cur << ", expected=" << ref << std::endl;
         ++errors;
       }
     }
-    if (errors != 0) {
-      std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
-      std::cout << "FAILED!" << std::endl;
-      return 1;  
-    }
   }
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
   cleanup();
+
+  if (errors != 0) {
+    std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
+    std::cout << "FAILED!" << std::endl;
+    return errors;  
+  }
 
   std::cout << "PASSED!" << std::endl;
 

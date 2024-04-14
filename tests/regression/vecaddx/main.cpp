@@ -73,8 +73,6 @@ const char* kernel_file = "kernel.bin";
 uint32_t size = 16;
 
 vx_device_h device = nullptr;
-std::vector<TYPE> source_data;
-std::vector<uint8_t> staging_buf;
 uint64_t kernel_prog_addr;
 uint64_t kernel_args_addr;
 kernel_arg_t kernel_arg = {};
@@ -127,14 +125,6 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;  
   RT_CHECK(vx_dev_open(&device));
 
-  uint64_t num_cores, num_warps, num_threads;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
-  std::cout << "number of cores: " << num_cores << std::endl;
-  std::cout << "number of warps: " << num_warps << std::endl;
-  std::cout << "number of threads: " << num_threads << std::endl;
-
   uint32_t num_points = size;  
   uint32_t buf_size = num_points * sizeof(TYPE);
 
@@ -142,51 +132,44 @@ int main(int argc, char *argv[]) {
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
 
+  kernel_arg.num_points = num_points;
+
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
   RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.src0_addr));
   RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.src1_addr));
   RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.dst_addr));
 
-  kernel_arg.num_points = num_points;
-
   std::cout << "dev_src0=0x" << std::hex << kernel_arg.src0_addr << std::endl;
   std::cout << "dev_src1=0x" << std::hex << kernel_arg.src1_addr << std::endl;
   std::cout << "dev_dst=0x" << std::hex << kernel_arg.dst_addr << std::endl;
   
-  // allocate staging buffer  
-  std::cout << "allocate staging buffer" << std::endl;
-  staging_buf.resize(buf_size);
+  // allocate host buffers
+  std::cout << "allocate host buffers" << std::endl;
+  std::vector<TYPE> h_src0(num_points);
+  std::vector<TYPE> h_src1(num_points);
+  std::vector<TYPE> h_dst(num_points);
 
-  // generate source data
-  source_data.resize(2 * num_points);
-  for (uint32_t i = 0; i < source_data.size(); ++i) {
-    source_data[i] = Comparator<TYPE>::generate();
+  for (uint32_t i = 0; i < num_points; ++i) {
+    h_src0[i] = Comparator<TYPE>::generate();
+    h_src1[i] = Comparator<TYPE>::generate();
   }
 
   // upload source buffer0
   {
     std::cout << "upload source buffer0" << std::endl;
-    auto buf_ptr = (TYPE*)staging_buf.data();
-    for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr[i] = source_data[2 * i + 0];
-    }
-    RT_CHECK(vx_copy_to_dev(device, kernel_arg.src0_addr, staging_buf.data(), buf_size));
+    RT_CHECK(vx_copy_to_dev(device, kernel_arg.src0_addr, h_src0.data(), buf_size));
   }
 
   // upload source buffer1
   {
     std::cout << "upload source buffer1" << std::endl;
-    auto buf_ptr = (TYPE*)staging_buf.data();
-    for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr[i] = source_data[2 * i + 1];
-    }   
-    RT_CHECK(vx_copy_to_dev(device, kernel_arg.src1_addr, staging_buf.data(), buf_size));
+    RT_CHECK(vx_copy_to_dev(device, kernel_arg.src1_addr, h_src1.data(), buf_size));
   }
 
   // upload program
   std::cout << "upload program" << std::endl;  
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &kernel_prog_addr));
+  RT_CHECK(vx_upload_file(device, kernel_file, &kernel_prog_addr));
   
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
@@ -202,30 +185,28 @@ int main(int argc, char *argv[]) {
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(device, staging_buf.data(), kernel_arg.dst_addr, buf_size));
+  RT_CHECK(vx_copy_from_dev(device, h_dst.data(), kernel_arg.dst_addr, buf_size));
 
   // verify result
-  std::cout << "verify result" << std::endl;  
-  {
-    int errors = 0;
-    auto buf_ptr = (TYPE*)staging_buf.data();
-    for (uint32_t i = 0; i < num_points; ++i) {
-      auto ref = source_data[2 * i + 0] + source_data[2 * i + 1];
-      auto cur = buf_ptr[i];
-      if (!Comparator<TYPE>::compare(cur, ref, i, errors)) {
-        ++errors;
-      }
-    }
-    if (errors != 0) {
-      std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
-      std::cout << "FAILED!" << std::endl;
-      return 1;  
+  std::cout << "verify result" << std::endl;
+  int errors = 0;
+  for (uint32_t i = 0; i < num_points; ++i) {
+    auto ref = h_src0[i] + h_src1[i];
+    auto cur = h_dst[i];
+    if (!Comparator<TYPE>::compare(cur, ref, i, errors)) {
+      ++errors;
     }
   }
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
   cleanup();
+
+  if (errors != 0) {
+    std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
+    std::cout << "FAILED!" << std::endl;
+    return 1;  
+  }
 
   std::cout << "PASSED!" << std::endl;
 

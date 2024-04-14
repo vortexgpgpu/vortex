@@ -95,9 +95,6 @@ int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint32_t value);
 
 ////////////////////////////// UTILITY FUNCTIONS //////////////////////////////
 
-// upload kernel file to device
-int vx_upload_kernel_file(vx_device_h hdevice, const char* filename, uint64_t* addr);
-
 // upload bytes to device
 int vx_upload_bytes(vx_device_h hdevice, const void* content, uint64_t size, uint64_t* addr);
 
