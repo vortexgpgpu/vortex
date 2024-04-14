@@ -396,10 +396,10 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     }
 
     void *basic_kernel = _basic_kernel;
-    setKernelArg(rasterization_kernel, 0,
+    setKernelArg(basic_kernel, 0,
         sizeof(gl_FragCoord), &gl_FragCoord
     );
-    setKernelArg(rasterization_kernel, 1,
+    setKernelArg(basic_kernel, 1,
         sizeof(gl_Discard), &gl_Discard
     );
 
