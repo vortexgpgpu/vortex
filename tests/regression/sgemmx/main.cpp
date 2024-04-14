@@ -143,15 +143,15 @@ int main(int argc, char *argv[]) {
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "matrix size: " << size << "x" << size << std::endl;
 
+  kernel_arg.num_tasks = num_points;
+  kernel_arg.size = size;
+  kernel_arg.log2_size = log2(size);
+
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
   RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.A_addr));
   RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.B_addr));
   RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.C_addr));
-
-  kernel_arg.num_tasks = num_points;
-  kernel_arg.size = size;
-  kernel_arg.log2_size = log2(size);
 
   std::cout << "dev_argA=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "dev_argB=0x" << std::hex << kernel_arg.B_addr << std::endl;
@@ -182,7 +182,7 @@ int main(int argc, char *argv[]) {
 
   // upload program
   std::cout << "upload program" << std::endl;  
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &kernel_prog_addr));
+  RT_CHECK(vx_upload_file(device, kernel_file, &kernel_prog_addr));
   
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
@@ -207,27 +207,28 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_copy_from_dev(device, h_C.data(), kernel_arg.C_addr, buf_size));
 
   // verify result
-  std::cout << "verify result" << std::endl;  
+  std::cout << "verify result" << std::endl;
+  int errors = 0;
   {
     std::vector<TYPE> h_ref(num_points);
     matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), size, size);
     
-    int errors = 0;    
     for (uint32_t i = 0; i < h_ref.size(); ++i) {
       if (!Comparator<TYPE>::compare(h_C[i], h_ref[i], i, errors)) {
         ++errors;
       }
-    }
-    if (errors != 0) {
-      std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
-      std::cout << "FAILED!" << std::endl;
-      return 1;  
     }
   }
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
   cleanup();
+  
+  if (errors != 0) {
+    std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
+    std::cout << "FAILED!" << std::endl;
+    return errors;  
+  }
 
   std::cout << "PASSED!" << std::endl;
 

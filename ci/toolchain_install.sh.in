@@ -20,8 +20,6 @@ REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/master
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
 OSDIR=${OSDIR:=@OSDIR@}
 
-OS="${OS:=ubuntu/bionic}"
-
 riscv32()
 {
     case $OSDIR in

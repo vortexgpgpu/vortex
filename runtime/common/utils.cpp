@@ -137,32 +137,6 @@ int dcr_initialize(vx_device_h hdevice) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-int vx_upload_kernel_file(vx_device_h hdevice, const char* filename, uint64_t* addr) {
-  std::ifstream ifs(filename);
-  if (!ifs) {
-    std::cout << "error: " << filename << " not found" << std::endl;
-    return -1;
-  }
-
-  // read file content
-  ifs.seekg(0, ifs.end);
-  auto size = ifs.tellg();
-  std::vector<char> content(size);   
-  ifs.seekg(0, ifs.beg);
-  ifs.read(content.data(), size);
-
-  uint64_t _addr = STARTUP_ADDR;
-
-  RT_CHECK(vx_copy_to_dev(hdevice, _addr, content.data(), size), {
-    vx_mem_free(hdevice, _addr);
-    return _ret;
-  });
-
-  *addr = _addr;
-
-  return 0;
-}
-
 extern int vx_upload_bytes(vx_device_h hdevice, const void* content, uint64_t size, uint64_t* addr) {
   if (NULL == content || 0 == size || NULL == addr)
     return -1;

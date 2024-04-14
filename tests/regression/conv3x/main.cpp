@@ -157,6 +157,10 @@ int main(int argc, char *argv[]) {
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "matrix size: " << size << "x" << size << std::endl;
 
+  kernel_arg.num_tasks = num_points;
+  kernel_arg.width = size;
+  kernel_arg.log2_width = log2(size);
+
   uint32_t o_points = size * size;
   uint32_t i_points = (size+2) * (size+2);
   uint32_t w_points = 3 * 3;
@@ -183,10 +187,6 @@ int main(int argc, char *argv[]) {
   } else {
     kernel_arg.lmem_addr = 0;
   }
-
-  kernel_arg.num_tasks = num_points;
-  kernel_arg.width = size;
-  kernel_arg.log2_width = log2(size);
 
   std::cout << "dev_argI=0x" << std::hex << kernel_arg.I_addr << std::endl;
   std::cout << "dev_argW=0x" << std::hex << kernel_arg.W_addr << std::endl;
@@ -223,7 +223,7 @@ int main(int argc, char *argv[]) {
 
   // upload program
   std::cout << "upload program" << std::endl;  
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &kernel_prog_addr));
+  RT_CHECK(vx_upload_file(device, kernel_file, &kernel_prog_addr));
   
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
@@ -248,12 +248,12 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_copy_from_dev(device, h_O.data(), kernel_arg.O_addr, o_nbytes));
 
   // verify result
-  std::cout << "verify result" << std::endl;  
+  std::cout << "verify result" << std::endl;
+  int errors = 0;
   {
     std::vector<TYPE> h_ref(o_points);
     convolution_cpu(h_ref.data(), h_I.data(), h_W.data(), size, size);
     
-    int errors = 0;
     for (uint32_t i = 0; i < h_ref.size(); ++i) {
       auto ref = h_ref[i];
       auto cur = h_O[i];
@@ -261,16 +261,17 @@ int main(int argc, char *argv[]) {
         ++errors;
       }
     }
-    if (errors != 0) {
-      std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
-      std::cout << "FAILED!" << std::endl;
-      return 1;  
-    }
   }
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
   cleanup();
+  
+  if (errors != 0) {
+    std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
+    std::cout << "FAILED!" << std::endl;
+    return errors;  
+  }
 
   std::cout << "PASSED!" << std::endl;
 

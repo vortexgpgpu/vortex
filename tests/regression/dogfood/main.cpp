@@ -116,15 +116,15 @@ int main(int argc, char *argv[]) {
   std::cout << "number of points: " << num_points << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
 
+  kernel_arg.num_tasks = num_tasks;
+  kernel_arg.task_size = count;
+
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
   RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.src0_addr));
   RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.src1_addr));
   RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.dst_addr));
   RT_CHECK(vx_mem_alloc(device, sizeof(kernel_arg_t), &kernel_args_addr));
-
-  kernel_arg.num_tasks = num_tasks;
-  kernel_arg.task_size = count;
 
   std::cout << "dev_src0=0x" << std::hex << kernel_arg.src0_addr << std::dec << std::endl;
   std::cout << "dev_src1=0x" << std::hex << kernel_arg.src1_addr << std::dec << std::endl;
@@ -144,7 +144,7 @@ int main(int argc, char *argv[]) {
 
   // upload program
   std::cout << "upload kernel" << std::endl;  
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &kernel_prog_addr));
+  RT_CHECK(vx_upload_file(device, kernel_file, &kernel_prog_addr));
 
   // execute tests
   for (int t = testid_s; t <= testid_e; ++t) {   

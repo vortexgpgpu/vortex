@@ -6,7 +6,7 @@
 
 void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	int cid = vx_core_id();
-	int* src_ptr = (int*)arg->src_addr;
+	char* src_ptr = (char*)arg->src_addr;
 	char value = 'A' + src_ptr[task_id];
 	vx_printf("cid=%d: task=%d, value=%c\n", cid, task_id, value);
 }
