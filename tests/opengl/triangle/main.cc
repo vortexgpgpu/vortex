@@ -102,7 +102,7 @@ int main() {
     if (rgba8[i] != ref) {
       if (errors < 100) 
         printf("*** error: [%d] expected=%08x, actual=%08x\n", i, ref, rgba8[i]);
-        ++errors;
+      ++errors;
     }
   }
   if (0 == errors) {

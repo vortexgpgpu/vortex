@@ -7,4 +7,5 @@
 #include "kernel.perspective_division.c"
 #include "kernel.viewport_division.c"
 #include "kernel.rasterization.triangle.c"
+#include "kernel.rasterization.test.c"
 #include "kernel.readnpixels.c"

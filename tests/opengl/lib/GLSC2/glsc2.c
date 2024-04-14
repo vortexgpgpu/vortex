@@ -389,6 +389,9 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
         setKernelArg(rasterization_kernel, 8,
             sizeof(gl_Discard), &gl_Discard
         );
+    } else {
+        printf("NOT IMPLEMENTED\n");
+        exit(0);
     }
 
     void* fragment_kernel = createFragmentKernel(mode, first, count);
@@ -547,7 +550,7 @@ GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat
         gl_program = createProgramWithBinary(GLSC2_kernel_color_pocl, sizeof(GLSC2_kernel_color_pocl));
         buildProgram(gl_program);
         _color_kernel = createKernel(gl_program, "gl_rgba4");
-        gl_program = createProgramWithBinary(GLSC2_kernel_rasterization_triangle_pocl, sizeof(GLSC2_kernel_rasterization_triangle_pocl));
+        gl_program = createProgramWithBinary(GLSC2_kernel_rasterization_test_pocl, sizeof(GLSC2_kernel_rasterization_test_pocl));
         buildProgram(gl_program);
         _rasterization_kernel = createKernel(gl_program, "gl_rasterization_triangle");
         gl_program = createProgramWithBinary(GLSC2_kernel_viewport_division_pocl, sizeof(GLSC2_kernel_viewport_division_pocl));
