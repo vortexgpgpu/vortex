@@ -20,9 +20,6 @@ int testid_e = 0;
 bool stop_on_error = true;
 
 vx_device_h device = nullptr;
-std::vector<uint8_t> src1_buf;
-std::vector<uint8_t> src2_buf;
-std::vector<uint8_t> dst_buf;
 uint64_t kernel_prog_addr;
 uint64_t kernel_args_addr;
 kernel_arg_t kernel_arg = {};
@@ -84,9 +81,7 @@ void cleanup() {
   }
 }
 
-int main(int argc, char *argv[]) {
-  int exitcode = 0;
-  
+int main(int argc, char *argv[]) {  
   // parse command arguments
   parse_args(argc, argv);
 
@@ -130,11 +125,11 @@ int main(int argc, char *argv[]) {
   std::cout << "dev_src1=0x" << std::hex << kernel_arg.src1_addr << std::dec << std::endl;
   std::cout << "dev_dst=0x" << std::hex << kernel_arg.dst_addr << std::dec << std::endl;
   
-  // allocate staging buffer  
-  std::cout << "allocate staging buffer" << std::endl;
-  src1_buf.resize(buf_size);
-  src2_buf.resize(buf_size);
-  dst_buf.resize(buf_size);
+  // allocate host buffers  
+  std::cout << "allocate host buffers" << std::endl;  
+  std::vector<uint8_t> src1_buf(buf_size);
+  std::vector<uint8_t> src2_buf(buf_size);
+  std::vector<uint8_t> dst_buf(buf_size);
 
   // allocate test suite
   testSuite = new TestSuite(device);
@@ -147,6 +142,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_upload_file(device, kernel_file, &kernel_prog_addr));
 
   // execute tests
+  int errors = 0;
   for (int t = testid_s; t <= testid_e; ++t) {   
     auto test = testSuite->get_test(t);
     auto name = test->name();
@@ -201,15 +197,13 @@ int main(int argc, char *argv[]) {
 
     // verify destination
     std::cout << "verify test result" << std::endl;
-    int errors = test->verify(num_points, dst_buf.data(), src1_buf.data(), src2_buf.data());
-    if (errors != 0) {
-      std::cout << "found " << std::dec << errors << " errors!" << std::endl;
+    int err = test->verify(num_points, dst_buf.data(), src1_buf.data(), src2_buf.data());
+    if (err != 0) {
+      std::cout << "found " << std::dec << err << " errors!" << std::endl;
       std::cout << "Test" << t << "-" << name << " FAILED!" << std::endl << std::flush;
-      if (stop_on_error) {
-        cleanup();
-        exit(1);  
-      }
-      exitcode = 1;
+      errors += err;      
+      if (stop_on_error)
+        break;
     } else {
       std::cout << "Test" << t << "-" << name << " PASSED!" << std::endl << std::flush;
     }
@@ -219,5 +213,5 @@ int main(int argc, char *argv[]) {
   std::cout << "cleanup" << std::endl;  
   cleanup();
 
-  return exitcode;
+  return errors;
 }
