@@ -25,6 +25,7 @@
         "random": "c",
         "stack": "c",
         "string": "c",
-        "vector": "c"
+        "vector": "c",
+        "binary.c": "cpp"
     }
 }
