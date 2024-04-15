@@ -438,7 +438,7 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     
     for(uint32_t primitive=0; primitive < num_primitives; ++primitive) {
         // Rasterization
-        setKernelArg(rasterization_kernel, 0, sizeof(primitive), &primitive);
+        //setKernelArg(rasterization_kernel, 0, sizeof(primitive), &primitive);
         enqueueNDRangeKernel(command_queue, rasterization_kernel, &num_fragments);   
         // enqueueNDRangeKernel(command_queue, basic_kernel, &num_fragments);   
         // Fragment
@@ -767,7 +767,10 @@ void* getViewportDivisionKernel(GLenum mode, GLint first, GLsizei count) {
 
 void* getRasterizationTriangleKernel(GLenum mode, GLint first, GLsizei count) {
     void *kernel = _rasterization_kernel;
-
+    int index = 0;
+    setKernelArg(kernel, 0,
+        sizeof(index), &index
+    );
     setKernelArg(kernel, 1,
         sizeof(COLOR_ATTACHMENT0.width), &COLOR_ATTACHMENT0.width
     );
