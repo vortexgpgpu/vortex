@@ -236,7 +236,6 @@ GL_APICALL void GL_APIENTRY glBindRenderbuffer (GLenum target, GLuint renderbuff
 }
 
 GL_APICALL void GL_APIENTRY glRenderbufferStorage (GLenum target, GLenum internalformat, GLsizei width, GLsizei height) {
-    printf("glRenderbufferStorage()\n");
 
     if (internalformat == GL_RGBA4) {
         _renderbuffers[_renderbuffer_binding].mem = createBuffer(MEM_READ_WRITE, width*height*2, NULL);
@@ -244,6 +243,9 @@ GL_APICALL void GL_APIENTRY glRenderbufferStorage (GLenum target, GLenum interna
         _renderbuffers[_renderbuffer_binding].mem = createBuffer(MEM_READ_WRITE, width*height*2, NULL);
     } else if (internalformat == GL_STENCIL_INDEX8) {
         _renderbuffers[_renderbuffer_binding].mem = createBuffer(MEM_READ_WRITE, width*height*1, NULL);
+    } else {
+        printf("NOT IMPLEMENTED\n");
+        exit(0);
     }
     _renderbuffers[_renderbuffer_binding].internalformat = internalformat;
     _renderbuffers[_renderbuffer_binding].width = width;
@@ -256,16 +258,16 @@ GL_APICALL void GL_APIENTRY glBufferData (GLenum target, GLsizeiptr size, const 
 
     if (target == GL_ARRAY_BUFFER) {
         if (usage == GL_STATIC_DRAW) {
-            _buffers[_buffer_binding].mem = clCreateBuffer(_getContext(), CL_MEM_READ_ONLY, size, data, &_err);
+            _buffers[_buffer_binding].mem = createBuffer(MEM_READ_ONLY, size, data);
         }
         else if (usage == GL_DYNAMIC_DRAW || usage == GL_STREAM_DRAW) {
-            _buffers[_buffer_binding].mem = clCreateBuffer(_getContext(), CL_MEM_READ_WRITE, size, data, &_err);
+            _buffers[_buffer_binding].mem = createBuffer(MEM_READ_WRITE, size, data);
         }
     }
 }
 
 GL_APICALL void GL_APIENTRY glClear (GLbitfield mask) {
-    if(mask & GL_COLOR_BUFFER_BIT) glClearColor(0.0,0.0,0.0,0.0);
+    if(mask & GL_COLOR_BUFFER_BIT) glClearColor(0.0,0.0,0.0,1.0);
     if(mask & GL_DEPTH_BUFFER_BIT) glClearDepthf(1.0);
     if(mask & GL_STENCIL_BUFFER_BIT) glClearStencil(0);
 }
@@ -280,8 +282,12 @@ GL_APICALL void GL_APIENTRY glClearColor (GLfloat red, GLfloat green, GLfloat bl
         color |= (unsigned int) (15*alpha) << 12;
         color |= color << 16;
         enqueueFillBuffer(getCommandQueue(), COLOR_ATTACHMENT0.mem, &color, 4, 0, COLOR_ATTACHMENT0.width*COLOR_ATTACHMENT0.height*2);
+    } else {
+        printf("NOT IMPLEMENTED");
+        exit(0);
     }
 }
+// TODO:
 GL_APICALL void GL_APIENTRY glClearDepthf (GLfloat d) {
     RENDERBUFFER depth_attachment = _renderbuffers[_framebuffers[_framebuffer_binding].depth_attachment];
 
@@ -290,6 +296,7 @@ GL_APICALL void GL_APIENTRY glClearDepthf (GLfloat d) {
         //fill(depth_attachment.mem, depth_attachment.width*depth_attachment.height*2, &value, 2);
     }
 }
+// TODO:
 GL_APICALL void GL_APIENTRY glClearStencil (GLint s) {
     RENDERBUFFER stencil_attachment = _renderbuffers[_framebuffers[_framebuffer_binding].stencil_attachment];
 
@@ -334,6 +341,7 @@ GL_APICALL void GL_APIENTRY glDepthRangef (GLfloat n, GLfloat f) {
  * TODO: first is expected to be 0
 */
 GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei count) {
+
     if (first <0){
         _err= GL_INVALID_VALUE;
         return;
@@ -342,6 +350,7 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     GLsizei num_vertices = count-first;
     GLsizei num_fragments = COLOR_ATTACHMENT0.width * COLOR_ATTACHMENT0.height;
     GLsizei num_primitives = num_vertices;
+    
     if (mode==GL_LINES) num_primitives /= 2;
     else if (mode==GL_TRIANGLES) num_primitives /= 3;
 
@@ -446,6 +455,7 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
         // Post-Fragment
         enqueueNDRangeKernel(command_queue, color_kernel, &num_fragments);
     }
+    
 
 }
 
@@ -712,7 +722,7 @@ void* getCommandQueue() {
 void* createVertexKernel(GLenum mode, GLint first, GLsizei count) {
     void *kernel = createKernel(_programs[_current_program].program, "gl_main_vs");
     // VAO locations
-    GLuint attribute;
+    GLuint attribute = 0;
     while(attribute < _programs[_current_program].active_attributes) {
         
         if(_programs[_current_program].attributes[attribute].data.type == 0x2) {
@@ -720,9 +730,11 @@ void* createVertexKernel(GLenum mode, GLint first, GLsizei count) {
                 kernel, 
                 _programs[_current_program].attributes[attribute].location,
                 _programs[_current_program].attributes[attribute].size,
-                &_programs[_current_program].attributes[attribute].data.attribute.pointer.mem // TODO: 
+                &_programs[_current_program].attributes[attribute].data.attribute.pointer.mem
             );
         } else {
+            printf("NOT IMPLEMENTED\n");
+            exit(0);
             setKernelArg(
                 kernel, 
                 _programs[_current_program].attributes[attribute].location,
@@ -733,8 +745,10 @@ void* createVertexKernel(GLenum mode, GLint first, GLsizei count) {
         ++attribute;
     }
     // Uniform locations
-    GLuint uniform;
+    GLuint uniform = 0;
     while(uniform < _programs[_current_program].active_uniforms) {
+        printf("NOT IMPLEMENTED\n");
+        exit(0);
         setKernelArg(
             kernel, 
             _programs[_current_program].uniforms[uniform].location,
@@ -767,7 +781,7 @@ void* getViewportDivisionKernel(GLenum mode, GLint first, GLsizei count) {
 
 void* getRasterizationTriangleKernel(GLenum mode, GLint first, GLsizei count) {
     void *kernel = _rasterization_kernel;
-    int index = 0;
+    static int index = 0;
     setKernelArg(kernel, 0,
         sizeof(index), &index
     );

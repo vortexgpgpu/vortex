@@ -3,7 +3,7 @@ __kernel void gl_viewport_division(
 	__private const int4 viewport,
 	__private const float2 depth_range
 ) {
-  gl_position[0] = viewport[0]/2 * gl_position[0] + viewport[2];
-  gl_position[1] = viewport[1]/2 * gl_position[1] + viewport[3];
-  gl_position[2] = (depth_range[1]-depth_range[0])/2 * gl_position[1] + (depth_range[1]+depth_range[0])/2;
+  gl_position->x = viewport.x/2 * gl_position->x + viewport.z; // z == width
+  gl_position->y = viewport.y/2 * gl_position->y + viewport.w; // w == height
+  gl_position->z = (depth_range.y-depth_range.x)/2 * gl_position->z + (depth_range.y+depth_range.x)/2;
 }
