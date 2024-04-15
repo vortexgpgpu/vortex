@@ -225,8 +225,6 @@ uint64_t dpi_uuid_gen(bool reset, int wid, uint64_t PC) {
     uuid_gen = it->second;
   }
   uint32_t instr_uuid = uuid_gen->get_uuid(PC);
-  uint32_t instr_id  = instr_uuid & 0xffff;
-  uint32_t instr_ref = instr_uuid >> 16;
-  uint64_t uuid = (uint64_t(instr_ref) << 32) | (wid << 16) | instr_id;
+  uint64_t uuid = (uint64_t(instr_uuid) << 12) | wid;
   return uuid;
 }
