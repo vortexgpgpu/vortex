@@ -24,19 +24,19 @@ public:
     virtual ~UUIDGenerator() {}
 
     uint32_t get_uuid(uint64_t PC) {
-        uint32_t id;
-        uint32_t ref;
+        uint16_t id;
+        uint16_t ref;
         auto it = uuid_map_.find(PC);
         if (it != uuid_map_.end()) {
-            uint64_t value = it->second;
-            id  = value & 0xffff;
-            ref = value >> 16;
+            uint32_t value = it->second;
+            ref = value & 0xffff;
+            id  = value >> 16;
+            ++ref;
         } else {
+            ref = 0;
             id = ids_++;
-            ref = -1;
-        }
-        ++ref;
-        uint64_t ret = (uint64_t(ref) << 16) | id;
+        }        
+        uint32_t ret = (uint32_t(id) << 16) | ref;
         uuid_map_[PC] = ret;
         return ret;
     }
@@ -49,7 +49,7 @@ public:
 private:
 
     std::unordered_map<uint64_t, uint32_t> uuid_map_;
-    uint32_t ids_;
+    uint16_t ids_;
 };
 
 }
