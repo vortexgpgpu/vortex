@@ -26,6 +26,7 @@
         "stack": "c",
         "string": "c",
         "vector": "c",
-        "binary.c": "cpp"
+        "binary.c": "cpp",
+        "xiosbase": "cpp"
     }
 }
