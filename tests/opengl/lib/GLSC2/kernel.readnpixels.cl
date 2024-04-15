@@ -14,10 +14,10 @@ __kernel void gl_rgba4_rgba8(
   unsigned short color4 = buf_in[(j+y)*width+(i+x)];
 
   unsigned int color8 = 0x0;
-  color8 |= (unsigned int) (color4 & 0x000F) << 4;
-  color8 |= (unsigned int) (color4 & 0x00F0) << 8;
-  color8 |= (unsigned int) (color4 & 0x0F00) << 12;
-  color8 |= (unsigned int) (color4 & 0xF000) << 16;
+  color8 |= (unsigned int) (color4 & 0x000F) << 4 | (color4 & 0x000F);
+  color8 |= (unsigned int) (color4 & 0x00F0) << 8 | (color4 & 0x00F0) << 4;
+  color8 |= (unsigned int) (color4 & 0x0F00) << 12 | (color4 & 0x0F00) << 8;
+  color8 |= (unsigned int) (color4 & 0xF000) << 16 | (color4 & 0xF000) << 12;
 
-  buf_out[j*width+i] = color8;
+  buf_out[j* +i] = color8;
 }

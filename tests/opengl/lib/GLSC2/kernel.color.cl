@@ -24,5 +24,6 @@ __kernel void gl_rgba4 (
 
   gl_ColorBuffer[y*gl_Width + x] = value;
   */
+  // TODO: Use gl_FragCoord
   gl_ColorBuffer[gid] = value;
 }
