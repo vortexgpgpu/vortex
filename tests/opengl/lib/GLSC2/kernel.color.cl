@@ -17,9 +17,12 @@ __kernel void gl_rgba4 (
   value |= (unsigned short) (color.z * 15) << 8;
   value |= (unsigned short) (color.w * 15) << 12;
 
+  /*
   unsigned int x, y;
-  x = gl_FragCoord[gid][0]*gl_Width;
-  y = gl_FragCoord[gid][1]*gl_Height;
+  x = gl_FragCoord[gid][0];
+  y = gl_FragCoord[gid][1];
 
   gl_ColorBuffer[y*gl_Width + x] = value;
+  */
+  gl_ColorBuffer[gid] = value;
 }
