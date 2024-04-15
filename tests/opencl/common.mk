@@ -24,10 +24,11 @@ LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc -lgcc
 
 VX_CFLAGS  += -O3 -mcmodel=medany --sysroot=$(RISCV_SYSROOT) --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH) -Xclang -target-feature -Xclang +vortex
 VX_CFLAGS  += -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
+VX_CFLAGS  += -I$(ROOT_DIR)/hw -I$(VORTEX_KN_PATH)/include -DXLEN_$(XLEN) -DNDEBUG
+VX_CFLAGS  += -mllvm -disable-loop-idiom-all # disable memset/memcpy loop idiom
 #VX_CFLAGS += -mllvm -vortex-branch-divergence=0
 #VX_CFLAGS += -mllvm -print-after-all
-VX_CFLAGS  += -mllvm -disable-loop-idiom-all	# disable memset/memcpy loop idiom
-VX_CFLAGS  += -I$(ROOT_DIR)/hw -I$(VORTEX_KN_PATH)/include -DXLEN_$(XLEN) -DNDEBUG
+
 VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a $(LIBC_LIB)
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors

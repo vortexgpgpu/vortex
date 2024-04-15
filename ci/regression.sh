@@ -201,13 +201,10 @@ config()
     make -C tests/regression/dogfood clean-all
     make -C tests/regression/dogfood
 
-    # disabling M extension
-    CONFIGS="-DEXT_M_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_mf_ext
-
-    # disabling F extension
-    CONFIGS="-DEXT_F_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_mf_ext
-    CONFIGS="-DEXT_F_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_mf_ext --perf=1
-    CONFIGS="-DEXT_F_DISABLE" ./ci/blackbox.sh --driver=simx --cores=1 --app=no_mf_ext --perf=1
+    # disabling M & F extensions
+    make -C sim/rtlsim clean && CONFIGS="-DEXT_M_DISABLE -DEXT_F_DISABLE" make -C sim/rtlsim > /dev/null
+    make -C tests/riscv/isa run-rtlsim-i32
+    rm -f blackbox.*.cache
 
     # disable local memory
     CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo --perf=1

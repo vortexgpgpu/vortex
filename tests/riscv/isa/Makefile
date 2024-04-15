@@ -32,6 +32,9 @@ run-simx-32imafd:
 run-simx-64imafd:
 	$(foreach test, $(TESTS_64I) $(TESTS_64M) $(TESTS_64F) $(TESTS_64D) $(TESTS_64A), $(SIM_DIR)/simx/simx -r $(test) || exit;)
 
+run-simx-32i:
+	$(foreach test, $(TESTS_32I), $(SIM_DIR)/simx/simx -r $(test) || exit;)
+
 run-simx-32im:
 	$(foreach test, $(TESTS_32I) $(TESTS_32M), $(SIM_DIR)/simx/simx -r $(test) || exit;)
 	
@@ -64,6 +67,9 @@ run-rtlsim-32imf:
 
 run-rtlsim-64imf:
 	$(foreach test, $(TESTS_64I) $(TESTS_64M) $(TESTS_64F), $(SIM_DIR)/rtlsim/rtlsim -r $(test) || exit;)
+
+run-rtlsim-32i:
+	$(foreach test, $(TESTS_32I), $(SIM_DIR)/rtlsim/rtlsim -r $(test) || exit;)
 
 run-rtlsim-32im:
 	$(foreach test, $(TESTS_32I) $(TESTS_32M), $(SIM_DIR)/rtlsim/rtlsim -r $(test) || exit;)
