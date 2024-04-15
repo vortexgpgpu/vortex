@@ -1,7 +1,7 @@
 __kernel void gl_rasterization_triangle (
     __global float4 *gl_FragCoords,
     __global bool *gl_Discard,
-    __private unsigned int index
+    __local unsigned int *index
 )
 {
     int gid = get_global_id(0);
