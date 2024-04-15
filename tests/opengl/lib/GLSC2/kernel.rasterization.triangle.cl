@@ -54,7 +54,7 @@ float3 get_baricentric_coords(float2 p, float4 v0, float4 v1, float4 v2) {
 }
 
 __kernel void gl_rasterization_triangle (
-    __local const int *index, // 
+    const int gl_Index, // 
     const int width,
     const int height,
     const int attributes,
@@ -67,8 +67,8 @@ __kernel void gl_rasterization_triangle (
 {
     int gid = get_global_id(0);
     // input values
-    __global const float4 *position = gl_Positions + (int) index*3;
-    __global const float4 *primitives = gl_Primitives + (int) index*3*attributes;
+    __global const float4 *position = gl_Positions + gl_Index*3;
+    __global const float4 *primitives = gl_Primitives + gl_Index*3*attributes;
     __global float4 *fragCoord = gl_FragCoords + gid;
     __global float4 *rasterization = gl_Rasterization + gid*attributes;
 

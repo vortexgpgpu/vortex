@@ -438,8 +438,7 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     
     for(uint32_t primitive=0; primitive < num_primitives; ++primitive) {
         // Rasterization
-        void *index = primitive;
-        setKernelArg(rasterization_kernel, 0, sizeof(index), &index);
+        setKernelArg(rasterization_kernel, 0, sizeof(primitive), &primitive);
         enqueueNDRangeKernel(command_queue, rasterization_kernel, &num_fragments);   
         // enqueueNDRangeKernel(command_queue, basic_kernel, &num_fragments);   
         // Fragment
