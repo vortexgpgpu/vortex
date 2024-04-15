@@ -396,12 +396,10 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     }
 
     void *basic_kernel = _basic_kernel;
-    setKernelArg(basic_kernel, 0,
-        sizeof(gl_FragCoord), &gl_FragCoord
-    );
-    setKernelArg(basic_kernel, 1,
-        sizeof(gl_Discard), &gl_Discard
-    );
+    uint32_t index = 1;
+    setKernelArg(basic_kernel, 0, sizeof(gl_FragCoord), &gl_FragCoord);
+    setKernelArg(basic_kernel, 1, sizeof(gl_Discard), &gl_Discard);
+    setKernelArg(basic_kernel, 2, sizeof(index), &index);
 
     void* fragment_kernel = createFragmentKernel(mode, first, count);
     setKernelArg(fragment_kernel, 
@@ -442,7 +440,6 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     
     for(uint32_t primitive=0; primitive < num_primitives; ++primitive) {
         // Rasterization
-        setKernelArg(basic_kernel, 2, sizeof(primitive), &primitive);
         // enqueueNDRangeKernel(command_queue, rasterization_kernel, &num_fragments);   
         enqueueNDRangeKernel(command_queue, basic_kernel, &num_fragments);   
         // Fragment
