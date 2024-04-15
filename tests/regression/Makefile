@@ -11,7 +11,6 @@ all:
 	$(MAKE) -C diverge
 	$(MAKE) -C sort
 	$(MAKE) -C fence
-	$(MAKE) -C no_mf_ext
 	$(MAKE) -C vecaddx
 	$(MAKE) -C sgemmx
 	$(MAKE) -C conv3x
@@ -26,7 +25,6 @@ run-simx:
 	$(MAKE) -C diverge run-simx
 	$(MAKE) -C sort run-simx
 	$(MAKE) -C fence run-simx
-	$(MAKE) -C no_mf_ext run-simx
 	$(MAKE) -C vecaddx run-simx
 	$(MAKE) -C sgemmx run-simx
 	$(MAKE) -C conv3x run-simx
@@ -41,7 +39,6 @@ run-rtlsim:
 	$(MAKE) -C diverge run-rtlsim
 	$(MAKE) -C sort run-rtlsim
 	$(MAKE) -C fence run-rtlsim
-	$(MAKE) -C no_mf_ext run-rtlsim
 	$(MAKE) -C vecaddx run-rtlsim
 	$(MAKE) -C sgemmx run-rtlsim
 	$(MAKE) -C conv3x run-rtlsim
@@ -56,7 +53,6 @@ run-opae:
 	$(MAKE) -C diverge run-opae
 	$(MAKE) -C sort run-opae
 	$(MAKE) -C fence run-opae
-	$(MAKE) -C no_mf_ext run-opae
 	$(MAKE) -C vecaddx run-opae
 	$(MAKE) -C sgemmx run-opae
 	$(MAKE) -C conv3x run-opae
@@ -71,7 +67,6 @@ clean:
 	$(MAKE) -C diverge clean
 	$(MAKE) -C sort clean
 	$(MAKE) -C fence clean
-	$(MAKE) -C no_mf_ext clean
 	$(MAKE) -C vecaddx clean
 	$(MAKE) -C sgemmx clean
 	$(MAKE) -C conv3x clean
@@ -86,7 +81,6 @@ clean-all:
 	$(MAKE) -C diverge clean-all
 	$(MAKE) -C sort clean-all
 	$(MAKE) -C fence clean-all
-	$(MAKE) -C no_mf_ext clean-all
 	$(MAKE) -C vecaddx clean-all
 	$(MAKE) -C sgemmx clean-all
 	$(MAKE) -C conv3x clean-all
