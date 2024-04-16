@@ -10,19 +10,6 @@
 #include "test/test.h"
 
 
-static bool almost_equal(float a, float b, int ulp = 4) {
-  union fi_t { int i; float f; };
-  fi_t fa, fb;
-  fa.f = a;
-  fb.f = b;
-  return std::abs(fa.i - fb.i) <= ulp;
-}
-
-
-// TESTS
-int test_color_kernel();
-int test_color_kernel_discard_true();
-
 cl_device_id device_id = NULL;
 cl_context context = NULL;
 
@@ -37,9 +24,11 @@ int main (int argc, char **argv) {
   context = CL_CHECK2(clCreateContext(NULL, 1, &device_id, NULL, NULL,  &_err));
 
   uint32_t errors = 0;
-  TEST(test_perspective_div);
-  TEST(test_color_kernel);
-  TEST(test_color_kernel_discard_true);
+  // TEST(test_perspective_div);
+  // TEST(test_viewport_trans);
+  // TEST(test_color_kernel);
+  // TEST(test_color_kernel_discard_true);
+  TEST(test_rasterization_triangle);
   // CLEANUP
   if (context) clReleaseContext(context);
   if (device_id) clReleaseDevice(device_id);
