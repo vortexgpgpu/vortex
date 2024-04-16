@@ -66,7 +66,7 @@ int buildProgram(void *program) {
 
 void* createBuffer(uint64_t flags, size_t size, const void* data){
 
-    void *buffer = clCreateBuffer(_getContext(), flags, size, &data, &_err);
+    void *buffer = clCreateBuffer(_getContext(), flags, size, data, &_err);
     
     printf("createBuffer() return=%x, error=%d\n", buffer, _err);
 
