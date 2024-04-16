@@ -29,13 +29,14 @@
    })
 
 
-#define TEST(_func) 
-  ({
-    printf("Running %s.\n",#_func);
-    uint32_t result = _func();
-    if (!result) printf("PASSED.\n");
-    else printf("FAILED with %d errors.\n", result);
-    errors += result;
+#define TEST(func)                                                     \
+  ({                                                                   \
+    char function_name[] = #func;                                      \
+    printf("Running %s.\n",function_name);                             \
+    uint32_t result = func();                                          \
+    if (!result) printf("PASSED.\n");                                  \
+    else printf("FAILED with %d errors.\n", result);                   \
+    errors += result;                                                  \
   })
 
 
@@ -58,7 +59,6 @@ cl_context context = NULL;
 int main (int argc, char **argv) {
   
   cl_platform_id platform_id;
-  size_t kernel_size;
   
   // Getting platform and device information
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
@@ -97,10 +97,6 @@ int test_color_kernel() {
   for (uint32_t i=0; i<width*height; ++i) {
     color_init[i] = 0x0000;
     discard_init[i] = 0x00;
-    color_init[i][0] = 1.f;
-    color_init[i][1] = 1.f;
-    color_init[i][2] = 1.f;
-    color_init[i][3] = 1.f;
   }
 
   colorBuffer = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, width*height*2, color_init, &_err));
@@ -132,7 +128,7 @@ int test_color_kernel() {
     unsigned short ref = 0xFFFF;
     if (color_out[i] != ref) {
       if (errors < 1) 
-        printf("*** error: [%d] expected=%08x, actual=%08x\n", i, ref, rgba8[i]);
+        printf("*** error: [%d] expected=%08x, actual=%08x\n", i, ref, color_out[i]);
       ++errors;
     }
   }
@@ -167,10 +163,6 @@ int test_color_kernel_discard_true() {
   for (uint32_t i=0; i<width*height; ++i) {
     color_init[i] = 0x0000;
     discard_init[i] = 0x01;
-    color_init[i][0] = 1.f;
-    color_init[i][1] = 1.f;
-    color_init[i][2] = 1.f;
-    color_init[i][3] = 1.f;
   }
 
   colorBuffer = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, width*height*2, color_init, &_err));
@@ -202,7 +194,7 @@ int test_color_kernel_discard_true() {
     unsigned short ref = 0x0000;
     if (color_out[i] != ref) {
       if (errors < 1) 
-        printf("*** error: [%d] expected=%08x, actual=%08x\n", i, ref, rgba8[i]);
+        printf("*** error: [%d] expected=%08x, actual=%08x\n", i, ref, color_out[i]);
       ++errors;
     }
   }
