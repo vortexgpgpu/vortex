@@ -48,7 +48,7 @@ ifdef HOSTGPU
 	CXXFLAGS += -DHOSTGPU
 	LDFLAGS += -lOpenCL
 else
-	LDFLAGS += -L$(VORTEX_RT_PATH)/stub -lvortex $(POCL_RT_PATH)/lib/libOpenCL.so $(OPENGL_PATH)/lib/GLSC2/glsc2.c.o
+	LDFLAGS += -L$(VORTEX_RT_PATH)/stub -lvortex $(POCL_RT_PATH)/lib/libOpenCL.so
 endif
 
 # Debugigng
@@ -87,7 +87,7 @@ kernel.pocl: kernel.cl
 	$(CC) $(CXXFLAGS) -c $< -o $@
 
 $(PROJECT): $(OBJS)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) $(OPENGL_PATH)/lib/GLSC2/glsc2.c.o -o $@
 
 run-hostgpu: $(PROJECT) kernel.pocl
 	./$(PROJECT) $(OPTS)
