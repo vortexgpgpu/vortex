@@ -34,3 +34,4 @@ extern cl_context context;
 
 #include "test_perspective_div.c"
 #include "test_color_kernel.c"
+#include "test_viewport_trans.c"

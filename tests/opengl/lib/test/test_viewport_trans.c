@@ -1,6 +1,6 @@
-int test_perspective_div() {
+int test_viewport_trans() {
 
-  const char KERNEL_NAME[] = "gl_perspective_division";
+  const char KERNEL_NAME[] = "gl_viewport_division";
   uint num_triangle = 3;
 
   cl_program program = NULL;
@@ -8,20 +8,24 @@ int test_perspective_div() {
 
   cl_mem triangleBuffer;
 
-  size_t kernel_size = sizeof(GLSC2_kernel_perspective_division_pocl);
+  size_t kernel_size = sizeof(GLSC2_kernel_viewport_division_pocl);
   size_t triangle_size = num_triangle*4;
 
   float triangle_init[triangle_size]={
-    0.0, 2.0, 0.0, 2.0,
-    -2.0, -2.0, 0.0, 2.0,
-    2.0, -2.0, 0.0, 2.0
+    0.0, 1.0, 0.0, 1.0,
+    -1.0, -1.0, 0.0, 1.0,
+    1.0, -1.0, 0.0, 1.0
   };
+
+  int viewport[4] = {0, 0, 600, 400};
+
+  float depth_range[2] = {0,0};
 
   float triangle_out[triangle_size];
 
   triangleBuffer = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(triangle_init), &triangle_init, &_err));
 
-  const uint8_t *kernel_bin = GLSC2_kernel_perspective_division_pocl;
+  const uint8_t *kernel_bin = GLSC2_kernel_viewport_division_pocl;
 
   program = CL_CHECK2(clCreateProgramWithBinary(
     context, 1, &device_id, &kernel_size, &kernel_bin, NULL, &_err));
@@ -30,7 +34,9 @@ int test_perspective_div() {
 
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
-  CL_CHECK(clSetKernelArg(kernel, 0, sizeof(float*), &triangleBuffer));	
+  CL_CHECK(clSetKernelArg(kernel, 0, sizeof(float*), &triangleBuffer));
+  CL_CHECK(clSetKernelArg(kernel, 1, sizeof(viewport), &viewport));
+  CL_CHECK(clSetKernelArg(kernel, 2, sizeof(depth_range), &depth_range));
 
   cl_command_queue commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));
   size_t global_work_size = num_triangle;
