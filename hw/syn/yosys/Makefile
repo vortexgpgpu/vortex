@@ -80,6 +80,7 @@ gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -Csrc -Osources.txt
 
+sv2v: $(BUILD_DIR)/project.v
 $(BUILD_DIR)/project.v: gen-sources
 	cd $(BUILD_DIR); $(SCRIPT_DIR)/sv2v.sh -t$(TOP_LEVEL_ENTITY) -Isrc -oproject.v
 
