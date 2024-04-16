@@ -99,10 +99,10 @@ int test_color_kernel() {
     discard_init[i] = 0x00;
   }
 
-  colorBuffer = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, width*height*2, color_init, &_err));
+  colorBuffer = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, width*height*2, color_init, &_err));
   fragCoord = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float[4])*width*height, NULL, &_err));
-  discard = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(uint8_t)*width*height, discard_init, &_err));
-  fragColor = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float[4])*width*height, NULL, &_err));
+  discard = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(uint8_t)*width*height, discard_init, &_err));
+  fragColor = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float[4])*width*height, NULL, &_err));
 
   program = CL_CHECK2(clCreateProgramWithBinary(
     context, 1, &device_id, &kernel_size, (const uint8_t**)&GLSC2_kernel_color_pocl, NULL, &_err));
@@ -165,10 +165,10 @@ int test_color_kernel_discard_true() {
     discard_init[i] = 0x01;
   }
 
-  colorBuffer = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, width*height*2, color_init, &_err));
+  colorBuffer = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, width*height*2, color_init, &_err));
   fragCoord = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float[4])*width*height, NULL, &_err));
-  discard = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(uint8_t)*width*height, discard_init, &_err));
-  fragColor = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float[4])*width*height, NULL, &_err));
+  discard = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(uint8_t)*width*height, discard_init, &_err));
+  fragColor = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float[4])*width*height, NULL, &_err));
 
   program = CL_CHECK2(clCreateProgramWithBinary(
     context, 1, &device_id, &kernel_size, (const uint8_t**)&GLSC2_kernel_color_pocl, NULL, &_err));
