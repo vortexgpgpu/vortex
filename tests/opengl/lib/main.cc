@@ -97,18 +97,33 @@ int test_color_kernel() {
   for (uint32_t i=0; i<width*height; ++i) {
     color_init[i] = 0x0000;
     discard_init[i] = 0x00;
+    
+    fragColor_init[i][0] = 1.f;
+    fragColor_init[i][1] = 1.f;
+    fragColor_init[i][2] = 1.f;
+    fragColor_init[i][3] = 1.f;
   }
 
-  colorBuffer = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, width*height*2, color_init, &_err));
+  printf("0\n");
+  colorBuffer = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, width*height*2, &color_init, &_err));
+  printf("1\n");
   fragCoord = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float[4])*width*height, NULL, &_err));
-  discard = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(uint8_t)*width*height, discard_init, &_err));
-  fragColor = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float[4])*width*height, NULL, &_err));
+  discard = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(uint8_t)*width*height, &discard_init, &_err));
+  fragColor = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float[4])*width*height, &fragColor_init, &_err));
 
+  printf("AAA kernel_size=%d\n", kernel_size);
+  const uint8_t *kernel_bin = GLSC2_kernel_color_pocl;
   program = CL_CHECK2(clCreateProgramWithBinary(
-    context, 1, &device_id, &kernel_size, (const uint8_t**)&GLSC2_kernel_color_pocl, NULL, &_err));
+    context, 1, &device_id, &kernel_size, &kernel_bin, NULL, &_err));
 
+  printf("ABA\n");
+  
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
+  
+  printf("ABB\n");
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
+
+  printf("AAB\n");
 
   CL_CHECK(clSetKernelArg(kernel, 0, sizeof(width), &width));	
   CL_CHECK(clSetKernelArg(kernel, 1, sizeof(height), &height));	
@@ -116,13 +131,18 @@ int test_color_kernel() {
   CL_CHECK(clSetKernelArg(kernel, 3, sizeof(fragCoord), &fragCoord));	
   CL_CHECK(clSetKernelArg(kernel, 4, sizeof(discard), &discard));	
   CL_CHECK(clSetKernelArg(kernel, 5, sizeof(fragColor), &fragColor));	
+  
+  printf("BBB\n");
 
   cl_command_queue commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));
   size_t global_work_size = width*height;
   CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, &global_work_size, NULL, 0, NULL, NULL));
   CL_CHECK(clFinish(commandQueue));
+
+  printf("CCC\n");
   CL_CHECK(clEnqueueReadBuffer(commandQueue, colorBuffer, CL_TRUE, 0, sizeof(uint16_t)*width*height, color_out, 0, NULL, NULL));
 
+  printf("DDD\n");
   int errors = 0;
   for (int i = 0; i < width*height; ++i) {
     unsigned short ref = 0xFFFF;
@@ -165,9 +185,9 @@ int test_color_kernel_discard_true() {
     discard_init[i] = 0x01;
   }
 
-  colorBuffer = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, width*height*2, color_init, &_err));
+  colorBuffer = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, width*height*2, &color_init, &_err));
   fragCoord = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float[4])*width*height, NULL, &_err));
-  discard = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(uint8_t)*width*height, discard_init, &_err));
+  discard = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(uint8_t)*width*height, &discard_init, &_err));
   fragColor = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float[4])*width*height, NULL, &_err));
 
   program = CL_CHECK2(clCreateProgramWithBinary(
