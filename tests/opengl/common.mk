@@ -87,7 +87,7 @@ kernel.pocl: kernel.cl
 	$(CC) $(CXXFLAGS) -c $< -o $@
 
 $(PROJECT): $(OBJS)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) $(OPENGL_PATH)/lib/GLSC2/glsc2.c.o -o $@
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) $(PROJECT_FLAGS) -o $@
 
 run-hostgpu: $(PROJECT) kernel.pocl
 	./$(PROJECT) $(OPTS)

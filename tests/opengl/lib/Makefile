@@ -2,12 +2,11 @@ PROJECT = lib
 
 SRCS = main.cc
 
+LD_PROJECT_FLAGS ?= 
+
 OPTS ?=
 
 include ../common.mk
-
-test: $(OBJS)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 GLSC2: kernel.color.pocl kernel.perspective_division.pocl kernel.readnpixels.pocl kernel.rasterization.triangle.pocl kernel.viewport_division.pocl kernel.fill.pocl glsc2.c.o
 
