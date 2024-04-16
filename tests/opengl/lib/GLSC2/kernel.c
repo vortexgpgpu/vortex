@@ -62,10 +62,11 @@ int buildProgram(void *program) {
 #define MEM_READ_ONLY CL_MEM_READ_ONLY
 #define MEM_WRITE_ONLY CL_MEM_WRITE_ONLY
 #define MEM_READ_WRITE CL_MEM_READ_WRITE
+#define MEM_COPY_HOST_PTR CL_MEM_COPY_HOST_PTR 
 
-void* createBuffer(uint64_t flags, size_t size, void* data){
+void* createBuffer(uint64_t flags, size_t size, const void* data){
 
-    void *buffer = clCreateBuffer(_getContext(), flags, size, data, &_err);
+    void *buffer = clCreateBuffer(_getContext(), flags, size, &data, &_err);
     
     printf("createBuffer() return=%x, error=%d\n", buffer, _err);
 

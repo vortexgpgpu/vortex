@@ -257,10 +257,10 @@ GL_APICALL void GL_APIENTRY glBufferData (GLenum target, GLsizeiptr size, const 
 
     if (target == GL_ARRAY_BUFFER) {
         if (usage == GL_STATIC_DRAW) {
-            _buffers[_buffer_binding].mem = createBuffer(MEM_READ_ONLY, size, data);
+            _buffers[_buffer_binding].mem = createBuffer(MEM_READ_ONLY | MEM_COPY_HOST_PTR, size, data);
         }
         else if (usage == GL_DYNAMIC_DRAW || usage == GL_STREAM_DRAW) {
-            _buffers[_buffer_binding].mem = createBuffer(MEM_READ_WRITE, size, data);
+            _buffers[_buffer_binding].mem = createBuffer(MEM_READ_WRITE | MEM_COPY_HOST_PTR, size, data);
         }
     }
 }
