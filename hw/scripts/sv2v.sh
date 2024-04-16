@@ -70,4 +70,5 @@ do
 done
 
 # system-verilog to verilog conversion
+echo "sv2v $top $macro_args $inc_args $file_args -v -w $output_file"
 sv2v $top $macro_args $inc_args $file_args -v -w $output_file
