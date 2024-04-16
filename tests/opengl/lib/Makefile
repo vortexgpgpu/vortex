@@ -1,3 +1,9 @@
+PROJECT = lib
+
+SRCS = main.cc
+
+OPTS ?=
+
 include ../common.mk
 
 GLSC2: kernel.color.pocl kernel.perspective_division.pocl kernel.readnpixels.pocl kernel.rasterization.triangle.pocl kernel.viewport_division.pocl kernel.fill.pocl glsc2.c.o
