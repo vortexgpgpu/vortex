@@ -87,7 +87,7 @@ kernel.pocl: kernel.cl
 	$(CC) $(CXXFLAGS) -c $< -o $@
 
 $(PROJECT): $(OBJS)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) $(PROJECT_FLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) $(LD_PROJECT_FLAGS) -o $@
 
 run-hostgpu: $(PROJECT) kernel.pocl
 	./$(PROJECT) $(OPTS)
