@@ -73,7 +73,7 @@ kernel.dump: kernel.elf
 	$(VX_DP) -D $< > $@
 
 kernel.vxbin: kernel.elf
-	OBJCOPY=$(VX_CP) $(VORTEX_HOME)/kernel/scripts/elf2vxbin.py $< $@
+	OBJCOPY=$(VX_CP) $(VORTEX_HOME)/kernel/scripts/vxbin.py $< $@
 
 kernel.elf: $(VX_SRCS)
 	$(VX_CXX) $(VX_CFLAGS) $^ $(VX_LDFLAGS) -o kernel.elf

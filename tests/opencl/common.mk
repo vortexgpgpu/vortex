@@ -65,7 +65,7 @@ kernel.cl: $(SRC_DIR)/kernel.cl
 	cp $< $@
 
 kernel.pocl: $(SRC_DIR)/kernel.cl
-	LD_LIBRARY_PATH=$(LLVM_POCL)/lib:$(POCL_CC_PATH)/lib:$(LLVM_VORTEX)/lib:$(LD_LIBRARY_PATH) LLVM_PREFIX=$(LLVM_VORTEX) POCL_DEBUG=all POCL_KERNEL_CACHE=0 POCL_VORTEX_BINTOOL="OBJCOPY=$(LLVM_VORTEX)/bin/llvm-objcopy $(VORTEX_HOME)/kernel/scripts/elf2vxbin.py" POCL_VORTEX_CFLAGS="$(VX_CFLAGS)" POCL_VORTEX_LDFLAGS="$(VX_LDFLAGS)" $(POCL_CC_PATH)/bin/poclcc -o $@ $<
+	LD_LIBRARY_PATH=$(LLVM_POCL)/lib:$(POCL_CC_PATH)/lib:$(LLVM_VORTEX)/lib:$(LD_LIBRARY_PATH) LLVM_PREFIX=$(LLVM_VORTEX) POCL_DEBUG=all POCL_KERNEL_CACHE=0 POCL_VORTEX_BINTOOL="OBJCOPY=$(LLVM_VORTEX)/bin/llvm-objcopy $(VORTEX_HOME)/kernel/scripts/vxbin.py" POCL_VORTEX_CFLAGS="$(VX_CFLAGS)" POCL_VORTEX_LDFLAGS="$(VX_LDFLAGS)" $(POCL_CC_PATH)/bin/poclcc -o $@ $<
  
 %.cc.o: $(SRC_DIR)/%.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@
