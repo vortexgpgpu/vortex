@@ -70,7 +70,7 @@ __kernel void gl_rasterization_triangle (
     __global const float4 *position = gl_Positions + gl_Index*3;
     __global const float4 *primitives = gl_Primitives + gl_Index*3*attributes;
     __global float4 *fragCoord = gl_FragCoords + gid;
-    __global float4 *rasterization = gl_Rasterization + gid*attributes;
+    __global float4 *rasterization = gl_Rasterization + gid;
 
     //frag coords norm
     float xf = gid % width;
@@ -87,21 +87,23 @@ __kernel void gl_rasterization_triangle (
     fragCoord->z = calculateFragmentDepth(abc, v0.z, v1.z, v2.z);
     fragCoord->w = abc.x*v0.w + abc.y*v1.w + abc.z*v2.w;
 
+    __global const float4 *p0 = primitives;
+    __global const float4 *p1 = primitives + 1;
+    __global const float4 *p2 = primitives + 2;
 
-    for(int attribute = 0 ; attribute < attributes; attribute += 1) {
-        __global const float4 *p0 = primitives;
-        __global const float4 *p1 = primitives + 1;
-        __global const float4 *p2 = primitives + 2;
-        rasterization->x = abc.x*p0->x + abc.y*p1->x + abc.z*p2->x;
-        rasterization->y = abc.x*p0->y + abc.y*p1->y + abc.z*p2->y;
-        rasterization->z = abc.x*p0->z + abc.y*p1->z + abc.z*p2->z;
-        rasterization->w = abc.x*p0->w + abc.y*p1->w + abc.z*p2->w;
-        rasterization += 1;
+    int buffSize = width*height;
+
+    for(int attribute = 0 ; attribute < attributes; attribute++) {
+        rasterization[attribute].x = abc.x*p0->x + abc.y*p1->x + abc.z*p2->x;
+        rasterization[attribute].y = abc.x*p0->y + abc.y*p1->y + abc.z*p2->y;
+        rasterization[attribute].z = abc.x*p0->z + abc.y*p1->z + abc.z*p2->z;
+        rasterization[attribute].w = abc.x*p0->w + abc.y*p1->w + abc.z*p2->w;
+        rasterization+=buffSize;
         primitives += 3;
     }
 
 
-    if (abc.x >= 0 && abc.y >= 0 && abc.z >= 0) {
+    if ((abc.x >= 0.0f) && (abc.y >= 0.0f) && (abc.z >= 0.0f) && ((abc.x+abc.y+abc.z)<=1.f)) {
         gl_Discard[gid] = false;
     } else {
         gl_Discard[gid] = true;
