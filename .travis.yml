@@ -10,6 +10,8 @@ addons:
       - valgrind
       - libstdc++6
       - binutils
+      - python
+      - uuid-dev
 
 env:
   global:
@@ -31,8 +33,9 @@ install:
       echo "v0" > "$TOOLDIR/version.txt";
     fi
   - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v0" ]; then
+      rm -rf $HOME/third_party;
       cd $TRAVIS_BUILD_DIR;
-      make -C third_party > /dev/null;
+      make -C third_party > /dev/null;      
       cp -r third_party $HOME;
       echo "v0" > "$HOME/third_party/version.txt";
     else

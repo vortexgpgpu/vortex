@@ -49,6 +49,9 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 - [Sv2v](https://github.com/zachjs/sv2v)
 ### Install development tools 
     $ sudo apt-get install build-essential
+    $ sudo apt-get install binutils
+    $ sudo apt-get install python
+    $ sudo apt-get install uuid-dev
     $ sudo apt-get install git
 ### Install Vortex codebase
     $ git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
