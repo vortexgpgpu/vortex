@@ -41,7 +41,7 @@ VX_CFLAGS += -DNDEBUG
 
 VX_LIBS += -L$(LIBC_VORTEX)/lib -lm -lc -lgcc
 
-VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a $(VX_LIBS)
+VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a $(VX_LIBS)
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 CXXFLAGS += -I$(VORTEX_RT_PATH)/include -I$(ROOT_DIR)/hw
@@ -67,30 +67,30 @@ endif
 endif
 endif
 
-all: $(PROJECT) kernel.bin kernel.dump
+all: $(PROJECT) kernel.vxbin kernel.dump
 
 kernel.dump: kernel.elf
-	$(VX_DP) -D kernel.elf > kernel.dump
+	$(VX_DP) -D $< > $@
 
-kernel.bin: kernel.elf
-	$(VX_CP) -O binary kernel.elf kernel.bin
+kernel.vxbin: kernel.elf
+	OBJCOPY=$(VX_CP) $(VORTEX_HOME)/kernel/scripts/elf2vxbin.py $< $@
 
 kernel.elf: $(VX_SRCS)
-	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o kernel.elf
+	$(VX_CXX) $(VX_CFLAGS) $^ $(VX_LDFLAGS) -o kernel.elf
 
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-run-simx: $(PROJECT) kernel.bin   
+run-simx: $(PROJECT) kernel.vxbin   
 	LD_LIBRARY_PATH=$(ROOT_DIR)/runtime/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 	
-run-opae: $(PROJECT) kernel.bin   
+run-opae: $(PROJECT) kernel.vxbin   
 	SCOPE_JSON_PATH=$(ROOT_DIR)/runtime/opae/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(ROOT_DIR)/runtime/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
-run-rtlsim: $(PROJECT) kernel.bin   
+run-rtlsim: $(PROJECT) kernel.vxbin   
 	LD_LIBRARY_PATH=$(ROOT_DIR)/runtime/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
-run-xrt: $(PROJECT) kernel.bin
+run-xrt: $(PROJECT) kernel.vxbin
 ifeq ($(TARGET), hw)
 	XRT_INI_PATH=$(XRT_SYN_DIR)/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(ROOT_DIR)/runtime/xrt:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 else

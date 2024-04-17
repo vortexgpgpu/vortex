@@ -733,6 +733,8 @@ extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_addr) 
     || 0 == size)
         return -1;
 
+    DBGPRINT("MEM_ALLOC: size=%ld\n", size);
+
     auto device = ((vx_device*)hdevice);
     return device->mem_alloc(size, dev_addr);
 }
@@ -744,6 +746,8 @@ extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_addr) {
     if (0 == dev_addr)
         return 0;
 
+    DBGPRINT("MEM_FREE: dev_addr=0x%lx\n", dev_addr);
+
     auto device = (vx_device*)hdevice;
     return device->mem_free(dev_addr);
 }
@@ -751,6 +755,8 @@ extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_addr) {
 extern int vx_mem_info(vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_used) {
     if (nullptr == hdevice)
         return -1;
+
+    DBGPRINT("%s\n", "MEM_INFO");
 
     auto device = (vx_device*)hdevice;
     return device->mem_info(mem_free, mem_used);
@@ -787,7 +793,7 @@ extern int vx_copy_from_dev(vx_device_h hdevice, void* host_ptr, uint64_t dev_ad
 
     auto device = (vx_device*)hdevice;
 
-    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_addr, (uintptr_t)host_ptr, asize);
+    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_addr, (uintptr_t)host_ptr, size);
 
     // check alignment
     if (!is_aligned(dev_addr, CACHE_BLOCK_SIZE))

@@ -121,35 +121,33 @@ void __libc_fini_array (void) {
 
 #define FEXIT_COUNT 64
 
-static struct fl {
-	struct fl *next;
+typedef struct {
 	void (*f[FEXIT_COUNT])(void *);
 	void *a[FEXIT_COUNT];
-} fexit_builtin, *head_builtin;
+} fexit_list_t;
 
-static int fexit_slot;
+static fexit_list_t g_fexit_list;
+static int g_num_fexits;
 
 void __funcs_on_exit() {
 	void (*func)(void *), *arg;
-	for (; head_builtin; head_builtin=head_builtin->next, fexit_slot=FEXIT_COUNT) while(fexit_slot-->0) {
-		func = head_builtin->f[fexit_slot];
-		arg = head_builtin->a[fexit_slot];
-		func(arg);
-	}
+  fexit_list_t* fexit_list = &g_fexit_list;
+  for (int i = 0; i < g_num_fexits; ++i) {
+    func = fexit_list->f[i];
+    arg = fexit_list->a[i];
+    func(arg);
+  }
 }
 
 void __cxa_finalize(void *dso) {}
 
 int __cxa_atexit(void (*func)(void *), void *arg, void *dso) {
-	// Defer initialization of head so it can be in BSS
-	if (!head_builtin) head_builtin = &fexit_builtin;
-	// fail if function list is full
-	if (fexit_slot == FEXIT_COUNT)
+	if (g_num_fexits == FEXIT_COUNT)
 		return -1;
-	// Append function to the list.
-	head_builtin->f[fexit_slot] = func;
-	head_builtin->a[fexit_slot] = arg;
-	++fexit_slot;
+  fexit_list_t* fexit_list = &g_fexit_list;
+	fexit_list->f[g_num_fexits] = func;
+	fexit_list->a[g_num_fexits] = arg;
+	++g_num_fexits;
 	return 0;
 }
 

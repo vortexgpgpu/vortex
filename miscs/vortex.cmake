@@ -27,7 +27,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -v --gcc-toolchain=${TOOLDIR}/riscv-gnu-
 set(CMAKE_SYSROOT "${TOOLDIR}/riscv-gnu-toolchain/riscv32-unknown-elf")
 
 # Linker flags
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld -nostartfiles -Wl,-Bstatic,--gc-sections,-T,${VORTEX_HOME}/kernel/linker/vx_link32.ld,--defsym=STARTUP_ADDR=${STARTUP_ADDR} ${VORTEX_BUILD}/kernel/libvortexrt.a")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld -nostartfiles -Wl,-Bstatic,--gc-sections,-T,${VORTEX_HOME}/kernel/scripts/link32.ld,--defsym=STARTUP_ADDR=${STARTUP_ADDR} ${VORTEX_BUILD}/kernel/libvortexrt.a")
 
 # Don't run the linker on compiler check
 #set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)

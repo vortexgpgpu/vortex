@@ -29,7 +29,7 @@ VX_CFLAGS  += -mllvm -disable-loop-idiom-all # disable memset/memcpy loop idiom
 #VX_CFLAGS += -mllvm -vortex-branch-divergence=0
 #VX_CFLAGS += -mllvm -print-after-all
 
-VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a $(LIBC_LIB)
+VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a $(LIBC_LIB)
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-narrowing
@@ -62,10 +62,10 @@ OBJS_HOST := $(addsuffix .host.o, $(notdir $(SRCS)))
 all: $(PROJECT) kernel.pocl
  
 kernel.cl: $(SRC_DIR)/kernel.cl
-	cp $(SRC_DIR)/kernel.cl $@
+	cp $< $@
 
 kernel.pocl: $(SRC_DIR)/kernel.cl
-	LD_LIBRARY_PATH=$(LLVM_POCL)/lib:$(POCL_CC_PATH)/lib:$(LLVM_VORTEX)/lib:$(LD_LIBRARY_PATH) LLVM_PREFIX=$(LLVM_VORTEX) POCL_DEBUG=all POCL_KERNEL_CACHE=0 POCL_VORTEX_CFLAGS="$(VX_CFLAGS)" POCL_VORTEX_LDFLAGS="$(VX_LDFLAGS)" $(POCL_CC_PATH)/bin/poclcc -o kernel.pocl $^
+	LD_LIBRARY_PATH=$(LLVM_POCL)/lib:$(POCL_CC_PATH)/lib:$(LLVM_VORTEX)/lib:$(LD_LIBRARY_PATH) LLVM_PREFIX=$(LLVM_VORTEX) POCL_DEBUG=all POCL_KERNEL_CACHE=0 POCL_VORTEX_BINTOOL="OBJCOPY=$(LLVM_VORTEX)/bin/llvm-objcopy $(VORTEX_HOME)/kernel/scripts/elf2vxbin.py" POCL_VORTEX_CFLAGS="$(VX_CFLAGS)" POCL_VORTEX_LDFLAGS="$(VX_LDFLAGS)" $(POCL_CC_PATH)/bin/poclcc -o $@ $<
  
 %.cc.o: $(SRC_DIR)/%.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@

@@ -32,18 +32,18 @@ CFLAGS += -DXLEN_$(XLEN) -DNDEBUG
 
 LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc -lgcc
 
-LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000 $(ROOT_DIR)/kernel/libvortexrt.a $(LIBC_LIB)
+LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000 $(ROOT_DIR)/kernel/libvortexrt.a $(LIBC_LIB)
 
 all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
 
 $(PROJECT).dump: $(PROJECT).elf
-	$(DP) -D $(PROJECT).elf > $(PROJECT).dump
+	$(DP) -D $< > $@
 
 $(PROJECT).bin: $(PROJECT).elf
-	$(CP) -O binary $(PROJECT).elf $(PROJECT).bin
+	$(CP) -O binary $< $@
 
 $(PROJECT).elf: $(SRCS)
-	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT).elf
+	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
 run-rtlsim: $(PROJECT).bin
 	$(ROOT_DIR)/sim/rtlsim/rtlsim $(PROJECT).bin
