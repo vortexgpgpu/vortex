@@ -137,6 +137,62 @@ int dcr_initialize(vx_device_h hdevice) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+extern int vx_upload_kernel_bytes(vx_device_h hdevice, const void* content, uint64_t size, uint64_t* addr) {
+  if (NULL == content || size <= 8 || NULL == addr)
+    return -1;
+
+  auto bytes = reinterpret_cast<const uint8_t*>(content);  
+  
+  uint64_t _addr;
+
+#ifdef NDEBUG
+  auto runtime_size = *reinterpret_cast<const uint64_t*>(bytes);
+  RT_CHECK(vx_mem_alloc(hdevice, runtime_size, &_addr), {
+    return _ret;
+  });
+#else
+    uint32_t startup_addr0, startup_addr1;
+    RT_CHECK(vx_dcr_read(hdevice, VX_DCR_BASE_STARTUP_ADDR0, &startup_addr0), {
+      return _ret;
+    });
+    RT_CHECK(vx_dcr_read(hdevice, VX_DCR_BASE_STARTUP_ADDR1, &startup_addr1), {
+      return _ret;
+    });
+    _addr = (uint64_t(startup_addr1) << 32) | startup_addr0;
+#endif
+
+  RT_CHECK(vx_copy_to_dev(hdevice, _addr, bytes + 8, size - 8), {
+    vx_mem_free(hdevice, _addr);
+    return _ret;
+  });
+
+  *addr = _addr;
+
+  return 0;  
+}
+
+extern int vx_upload_kernel_file(vx_device_h hdevice, const char* filename, uint64_t* addr) {
+  std::ifstream ifs(filename);
+  if (!ifs) {
+    std::cout << "error: " << filename << " not found" << std::endl;
+    return -1;
+  }
+
+  // read file content
+  ifs.seekg(0, ifs.end);
+  auto size = ifs.tellg();
+  std::vector<char> content(size);   
+  ifs.seekg(0, ifs.beg);
+  ifs.read(content.data(), size);
+
+  // upload buffer
+  RT_CHECK(vx_upload_kernel_bytes(hdevice, content.data(), size, addr), {
+    return _ret;
+  });
+
+  return 0;
+}
+
 extern int vx_upload_bytes(vx_device_h hdevice, const void* content, uint64_t size, uint64_t* addr) {
   if (NULL == content || 0 == size || NULL == addr)
     return -1;
@@ -283,8 +339,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   };
 
   for (unsigned core_id = 0; core_id < num_cores; ++core_id) {
-    uint64_t mpm_mem_addr = IO_CSR_ADDR + core_id * staging_buf.size();    
-    RT_CHECK(vx_copy_from_dev(hdevice, staging_buf.data(), mpm_mem_addr, staging_buf.size()), {
+    uint64_t mpm_mem_addr = IO_CSR_ADDR + core_id * staging_buf.size() * sizeof(uint64_t);    
+    RT_CHECK(vx_copy_from_dev(hdevice, staging_buf.data(), mpm_mem_addr, staging_buf.size() * sizeof(uint64_t)), {
       return _ret;
     });
 
@@ -568,7 +624,7 @@ extern int vx_perf_counter(vx_device_h hdevice, int counter, int core_id, uint64
     return -1;
   }
 
-  std::vector<uint64_t> staging_buf(64);
+  std::vector<uint64_t> staging_buf(32);
 
   uint64_t _value = 0;
   
@@ -579,8 +635,8 @@ extern int vx_perf_counter(vx_device_h hdevice, int counter, int core_id, uint64
   }
       
   for (i = 0; i < num_cores; ++i) {
-    uint64_t mpm_mem_addr = IO_CSR_ADDR + i * staging_buf.size();    
-    RT_CHECK(vx_copy_from_dev(hdevice, staging_buf.data(), mpm_mem_addr, staging_buf.size()), {
+    uint64_t mpm_mem_addr = IO_CSR_ADDR + i * staging_buf.size() * sizeof(uint64_t);    
+    RT_CHECK(vx_copy_from_dev(hdevice, staging_buf.data(), mpm_mem_addr, staging_buf.size() * sizeof(uint64_t)), {
       return _ret;
     });
 

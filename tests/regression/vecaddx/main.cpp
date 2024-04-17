@@ -69,7 +69,7 @@ public:
   }  
 };
 
-const char* kernel_file = "kernel.bin";
+const char* kernel_file = "kernel.vxbin";
 uint32_t size = 16;
 
 vx_device_h device = nullptr;
@@ -156,20 +156,16 @@ int main(int argc, char *argv[]) {
   }
 
   // upload source buffer0
-  {
-    std::cout << "upload source buffer0" << std::endl;
-    RT_CHECK(vx_copy_to_dev(device, kernel_arg.src0_addr, h_src0.data(), buf_size));
-  }
+  std::cout << "upload source buffer0" << std::endl;
+  RT_CHECK(vx_copy_to_dev(device, kernel_arg.src0_addr, h_src0.data(), buf_size));
 
   // upload source buffer1
-  {
-    std::cout << "upload source buffer1" << std::endl;
-    RT_CHECK(vx_copy_to_dev(device, kernel_arg.src1_addr, h_src1.data(), buf_size));
-  }
+  std::cout << "upload source buffer1" << std::endl;
+  RT_CHECK(vx_copy_to_dev(device, kernel_arg.src1_addr, h_src1.data(), buf_size));
 
   // upload program
   std::cout << "upload program" << std::endl;  
-  RT_CHECK(vx_upload_file(device, kernel_file, &kernel_prog_addr));
+  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &kernel_prog_addr));
   
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;

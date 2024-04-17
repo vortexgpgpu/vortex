@@ -17,7 +17,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-const char* kernel_file = "kernel.bin";
+const char* kernel_file = "kernel.vxbin";
 uint32_t count = 0;
 
 vx_device_h device = nullptr;
@@ -122,7 +122,7 @@ int main(int argc, char *argv[]) {
   
   // upload program
   std::cout << "upload program" << std::endl;  
-  RT_CHECK(vx_upload_file(device, kernel_file, &kernel_prog_addr));
+  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &kernel_prog_addr));
   
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;

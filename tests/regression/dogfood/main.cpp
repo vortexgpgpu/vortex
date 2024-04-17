@@ -11,7 +11,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 TestSuite* testSuite = nullptr;
-const char* kernel_file = "kernel.bin";
+const char* kernel_file = "kernel.vxbin";
 int count = 1;
 std::unordered_set<std::string> selected;
 std::unordered_set<std::string> excluded;
@@ -139,7 +139,7 @@ int main(int argc, char *argv[]) {
 
   // upload program
   std::cout << "upload kernel" << std::endl;  
-  RT_CHECK(vx_upload_file(device, kernel_file, &kernel_prog_addr));
+  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &kernel_prog_addr));
 
   // execute tests
   int errors = 0;
