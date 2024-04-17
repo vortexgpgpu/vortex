@@ -6,9 +6,10 @@ compiler: gcc
 addons:  
   apt:
     packages:
-      - build-essential
+      - build-essential      
       - valgrind
       - libstdc++6
+      - binutils
 
 env:
   global:

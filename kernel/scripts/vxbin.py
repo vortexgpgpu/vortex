@@ -26,7 +26,7 @@ def get_vma_size(elf_file):
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         output, errors = process.communicate()
         if process.returncode != 0:
-            print "Error running objdump:", errors.strip()
+            print "Error running readelf:", errors.strip()
             sys.exit(-1)
 
         min_vma = 2**64 - 1
@@ -76,7 +76,7 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:
-        print("Usage: elf2vxbin.py <input>.elf <output>.vxbin")
+        print("Usage: vxbin.py <input>.elf <output>.vxbin")
         sys.exit(-1)
 
     objcopy_path = os.getenv('OBJCOPY', 'objcopy')  # Default to 'objcopy' if not set
