@@ -26,7 +26,7 @@ def get_vma_size(elf_file):
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         output, errors = process.communicate()
         if process.returncode != 0:
-            print "Error running readelf:", errors.strip()
+            print("Error running readelf: {}".format(errors.strip()))
             sys.exit(-1)
 
         min_vma = 2**64 - 1
@@ -48,7 +48,7 @@ def get_vma_size(elf_file):
         return total_vma_span  # Return the calculated size
 
     except Exception as e:
-        print "Failed to calculate vma size due to an error:", str(e)
+        print("Failed to calculate vma size due to an error: {}".format(str(e)))
         sys.exit(-1)
 
 def create_vxbin_binary(input_elf, output_bin, objcopy_path):
