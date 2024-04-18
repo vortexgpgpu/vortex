@@ -73,28 +73,27 @@ jobs:
       env: XLEN=32
       script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --unittest
       script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --isa
-      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --kernel     
+      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --kernel
+      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --synthesis
     - stage: test 
       name: unittest64
       env: XLEN=64
       script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --isa
-      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --kernel     
+      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --kernel
+      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --synthesis
     - stage: test 
       name: regression
       env: XLEN=32
       script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --regression
+      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --opencl
     - stage: test 
       name: regression64
       env: XLEN=64
       script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --regression
     - stage: test 
-      name: opencl
-      env: XLEN=32
-      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --opencl    
-    - stage: test 
       name: cluster
       env: XLEN=32
-      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --cluster    
+      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --cluster
     - stage: test 
       name: config
       env: XLEN=32
@@ -103,19 +102,7 @@ jobs:
       name: debug
       env: XLEN=32
       script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --debug
-    - stage: test 
-      name: stress0
+    - stage: test
+      name: stress
       env: XLEN=32
-      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --stress0
-    - stage: test 
-      name: stress1
-      env: XLEN=32
-      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --stress1
-    - stage: test 
-      name: synthesis
-      env: XLEN=32
-      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --synthesis
-    - stage: test 
-      name: synthesis64
-      env: XLEN=3264
-      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --synthesis
+      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --stress

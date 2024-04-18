@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # Copyright © 2019-2023
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 # http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,13 +19,13 @@ set -e
 # clear blackbox cache
 rm -f blackbox.*.cache
 
-unittest() 
+unittest()
 {
     make -C tests/unittest run
     make -C hw/unittest > /dev/null
 }
 
-isa() 
+isa()
 {
     echo "begin isa tests..."
 
@@ -62,7 +62,7 @@ isa()
     echo "isa tests done!"
 }
 
-kernel() 
+kernel()
 {
     echo "begin kernel tests..."
 
@@ -72,7 +72,7 @@ kernel()
     echo "kernel tests done!"
 }
 
-regression() 
+regression()
 {
     echo "begin regression tests..."
 
@@ -97,7 +97,7 @@ regression()
     echo "regression tests done!"
 }
 
-opencl() 
+opencl()
 {
     echo "begin opencl tests..."
 
@@ -107,7 +107,7 @@ opencl()
     echo "opencl tests done!"
 }
 
-cluster() 
+cluster()
 {
     echo "begin clustering tests..."
 
@@ -153,7 +153,7 @@ debug()
     echo "debugging tests done!"
 }
 
-config() 
+config()
 {
     echo "begin configuration tests..."
 
@@ -248,25 +248,17 @@ config()
     echo "configuration tests done!"
 }
 
-stress0() 
+stress()
 {
-    echo "begin stress0 tests..."
+    echo "begin stress tests..."
 
     # test verilator reset values
     CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
     CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
     CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --app=printf
-
-    echo "stress0 tests done!"
-}
-
-stress1() 
-{
-    echo "begin stress1 tests..."
-
     ./ci/blackbox.sh --driver=rtlsim --app=sgemm --args="-n128" --l2cache
 
-    echo "stress1 tests done!"
+    echo "stress tests done!"
 }
 
 synthesis()
@@ -281,8 +273,8 @@ synthesis()
 
 show_usage()
 {
-    echo "Vortex Regression Test" 
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cluster] [--debug] [--config] [--stress[#n]] [--synthesis] [--all] [--h|--help]"
+    echo "Vortex Regression Test"
+    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cluster] [--debug] [--config] [--stress] [--synthesis] [--all] [--h|--help]"
 }
 
 start=$SECONDS
@@ -298,7 +290,7 @@ while [ "$1" != "" ]; do
         --unittest )
                 tests+=("unittest")
                 ;;
-        --isa ) 
+        --isa )
                 tests+=("isa")
                 ;;
         --kernel )
@@ -319,15 +311,8 @@ while [ "$1" != "" ]; do
         --config )
                 tests+=("config")
                 ;;
-        --stress0 )
-                tests+=("stress0")
-                ;;
-        --stress1 )
-                tests+=("stress1")
-                ;;
         --stress )
-                tests+=("stress0")
-                tests+=("stress1")
+                tests+=("stress")
                 ;;
         --synthesis )
                 tests+=("synthesis")
@@ -342,15 +327,14 @@ while [ "$1" != "" ]; do
                 tests+=("cluster")
                 tests+=("debug")
                 tests+=("config")
-                tests+=("stress0")
-                tests+=("stress1")
+                tests+=("stress")
                 tests+=("synthesis")
                 ;;
         -h | --help )
                 show_usage
                 exit
                 ;;
-        * )     
+        * )
                 show_usage
                 exit 1
     esac
