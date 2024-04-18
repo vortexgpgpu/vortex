@@ -1,18 +1,19 @@
 
 __kernel void gl_main_vs (
   // my imp
-  __global const float3* position,
+  __global const float* positions,
   // implementation values
   __global float4 *gl_Positions,
   __global float4 *gl_Primitives
 ) {
   int gid = get_global_id(0);
   // in out vars
-  __global const float3* in_position = position + gid;
-  __global float4* gl_Position = gl_Positions + gid; 
+  float x = positions[gid*3];
+  float y = positions[gid*3+1];
+  float z = positions[gid*3+2];
 
   // vertex operations
-  *gl_Position = (float4) (*in_position,1.0f);
+  gl_Positions[gid] = (float4) (x, y, z, 1.0f);
 }
 
 __kernel void gl_main_fs (
