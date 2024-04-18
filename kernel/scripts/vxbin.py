@@ -23,7 +23,7 @@ import re
 def get_vma_size(elf_file):
     try:
         cmd = ['readelf', '-l', elf_file]
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
         output, errors = process.communicate()
         if process.returncode != 0:
             print("Error running readelf: {}".format(errors.strip()))
