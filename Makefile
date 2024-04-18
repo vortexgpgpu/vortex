@@ -8,6 +8,13 @@ all:
 	$(MAKE) -C runtime
 	$(MAKE) -C tests
 
+build:
+	$(MAKE) -C hw
+	$(MAKE) -C sim
+	$(MAKE) -C kernel
+	$(MAKE) -C runtime
+	$(MAKE) -C tests
+
 clean:
 	$(MAKE) -C hw clean
 	$(MAKE) -C sim clean
