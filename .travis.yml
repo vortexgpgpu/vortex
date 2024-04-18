@@ -72,22 +72,13 @@ jobs:
       name: unittest
       env: XLEN=32
       script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --unittest
-    - stage: test 
-      name: isa
-      env: XLEN=32
       script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --isa
+      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --kernel     
     - stage: test 
-      name: isa64
+      name: unittest64
       env: XLEN=64
       script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --isa
-    - stage: test 
-      name: kernel
-      env: XLEN=32
-      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --kernel
-    - stage: test 
-      name: kernel64
-      env: XLEN=64
-      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --kernel
+      script: cp -r $HOME/build$XLEN build && cd build && ./ci/travis_run.py ./ci/regression.sh --kernel     
     - stage: test 
       name: regression
       env: XLEN=32
