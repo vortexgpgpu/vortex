@@ -14,7 +14,7 @@
 `ifndef VX_TYPES_VH
 `define VX_TYPES_VH
 
-// Device configuration registers
+// Device configuration registers /////////////////////////////////////////////
 
 `define VX_CSR_ADDR_BITS                12
 `define VX_DCR_ADDR_BITS                12
@@ -30,13 +30,13 @@
 `define VX_DCR_BASE_STATE(addr)         ((addr) - `VX_DCR_BASE_STATE_BEGIN)
 `define VX_DCR_BASE_STATE_COUNT         (`VX_DCR_BASE_STATE_END-`VX_DCR_BASE_STATE_BEGIN)
 
-// Machine Performance-monitoring counters classes
+// Machine Performance-monitoring counters classes ////////////////////////////
 
 `define VX_DCR_MPM_CLASS_NONE           0           
 `define VX_DCR_MPM_CLASS_CORE           1
 `define VX_DCR_MPM_CLASS_MEM            2
 
-// User Floating-Point CSRs
+// User Floating-Point CSRs ///////////////////////////////////////////////////
 
 `define VX_CSR_FFLAGS                   12'h001
 `define VX_CSR_FRM                      12'h002
@@ -64,14 +64,17 @@
 `define VX_CSR_MPM_USER                 12'hB03
 `define VX_CSR_MPM_USER_H               12'hB83
 
-// Machine Performance-monitoring core counters
-// PERF: Standard
+// Machine Performance-monitoring core counters (Standard) ////////////////////
+
 `define VX_CSR_MCYCLE                   12'hB00
 `define VX_CSR_MCYCLE_H                 12'hB80
 `define VX_CSR_MPM_RESERVED             12'hB01
 `define VX_CSR_MPM_RESERVED_H           12'hB81
 `define VX_CSR_MINSTRET                 12'hB02
 `define VX_CSR_MINSTRET_H               12'hB82
+
+// Machine Performance-monitoring core counters (class 1) /////////////////////
+
 // PERF: pipeline
 `define VX_CSR_MPM_SCHED_ID             12'hB03
 `define VX_CSR_MPM_SCHED_ID_H           12'hB83
@@ -106,7 +109,8 @@
 `define VX_CSR_MPM_SCRB_CSRS            12'hB11
 `define VX_CSR_MPM_SCRB_CSRS_H          12'hB91
 
-// Machine Performance-monitoring memory counters
+// Machine Performance-monitoring memory counters (class 2) ///////////////////
+
 // PERF: icache
 `define VX_CSR_MPM_ICACHE_READS         12'hB03     // total reads
 `define VX_CSR_MPM_ICACHE_READS_H       12'hB83
@@ -168,7 +172,10 @@
 `define VX_CSR_MPM_LMEM_BANK_ST         12'hB1D     // bank conflicts
 `define VX_CSR_MPM_LMEM_BANK_ST_H       12'hB9D
 
-// Machine Information Registers
+// Machine Performance-monitoring memory counters (class 3) ///////////////////
+// <Add your own counters: use addresses hB03..B1F, hB83..hB9F>
+
+// Machine Information Registers //////////////////////////////////////////////
 
 `define VX_CSR_MVENDORID                12'hF11
 `define VX_CSR_MARCHID                  12'hF12
