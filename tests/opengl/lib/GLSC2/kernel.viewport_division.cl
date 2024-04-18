@@ -11,5 +11,5 @@ __kernel void gl_viewport_division(
 
   gl_position[gid].x = viewport.z/2 * gl_position[gid].x + ox; // z == width
   gl_position[gid].y = viewport.w/2 * gl_position[gid].y + oy; // w == height
-  gl_position[gid].z = (depth_range.y-depth_range.x)/2 * gl_position->z + (depth_range.y+depth_range.x)/2;
+  gl_position[gid].z = (depth_range.y-depth_range.x)/2 * gl_position[gid].z + (depth_range.y+depth_range.x)/2;
 }
