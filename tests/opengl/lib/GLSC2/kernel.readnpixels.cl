@@ -19,5 +19,5 @@ __kernel void gl_rgba4_rgba8(
   color8 |= (unsigned int) (color4 & 0x0F00) << 12 | (color4 & 0x0F00) << 8;
   color8 |= (unsigned int) (color4 & 0xF000) << 16 | (color4 & 0xF000) << 12;
 
-  buf_out[j* +i] = color8;
+  buf_out[j*width+i] = color8;
 }
