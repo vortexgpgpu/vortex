@@ -38,7 +38,10 @@ def execute(command):
     while True:
         output = process.stdout.readline()
         if output:
-            line = output.decode('utf-8').rstrip()
+            try:
+                line = output.decode('utf-8').rstrip()
+            except UnicodeDecodeError:
+                line = repr(output)  # Safely print raw binary data
             print(">>> " + line)
             process.stdout.flush()
         ret = process.poll()

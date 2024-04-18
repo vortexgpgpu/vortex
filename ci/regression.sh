@@ -203,7 +203,7 @@ config()
 
     # disabling M & F extensions
     make -C sim/rtlsim clean && CONFIGS="-DEXT_M_DISABLE -DEXT_F_DISABLE" make -C sim/rtlsim > /dev/null
-    make -C tests/riscv/isa run-rtlsim-i32
+    make -C tests/riscv/isa run-rtlsim-32i
     rm -f blackbox.*.cache
 
     # disable local memory
