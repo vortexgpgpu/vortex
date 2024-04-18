@@ -367,6 +367,7 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
         _programs[_current_program].active_attributes + _programs[_current_program].active_uniforms,
         sizeof(gl_Positions), &gl_Positions
     );
+
     setKernelArg(vertex_kernel,
         _programs[_current_program].active_attributes + _programs[_current_program].active_uniforms + 1,
         sizeof(gl_Primitives), &gl_Primitives
@@ -436,6 +437,13 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     void *command_queue = getCommandQueue();
     // Vertex
     enqueueNDRangeKernel(command_queue, vertex_kernel, &num_vertices);
+    finish(command_queue);
+    float _gl_Positions[num_vertices][4];
+    enqueueReadBuffer(command_queue, gl_Positions,sizeof(float[4])*num_vertices,_gl_Positions);
+    for (int i = 0; i < num_vertices; i+=1) {
+        printf("vertex %d, x=%f, y=%f, z=%f, w=%f\n", i, _gl_Positions[i][0],_gl_Positions[i][1],_gl_Positions[i][2], _gl_Positions[i][3]);
+    }
+    exit(0);
     // Post-Vertex
     enqueueNDRangeKernel(command_queue, perspective_division_kernel, &num_vertices);
     enqueueNDRangeKernel(command_queue, viewport_division_kernel, &num_vertices);

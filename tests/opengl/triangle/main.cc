@@ -98,7 +98,7 @@ int main() {
   int errors = 0;
   unsigned int *rgba8 = (unsigned int*) result;
   for (int i = 0; i < WIDTH*HEIGHT; ++i) {
-    unsigned int ref = 0xF0F0F0F0;
+    unsigned int ref = 0xFFFFFFFF;
     if (rgba8[i] != ref) {
       if (errors < 100) 
         printf("*** error: [%d] expected=%08x, actual=%08x\n", i, ref, rgba8[i]);
