@@ -93,3 +93,18 @@ void swapBuffers(CONTEXT* display) {
     glBindFramebuffer(GL_FRAMEBUFFER ,display->framebuffers[to_activate]);
     display->activated = to_activate;
 }
+
+/* Image utils */
+void printPPM(const char* filename, size_t width, size_t height, const uint8_t *data) {
+  FILE *f = fopen(filename, "wb");
+  fprintf(f, "P6\n%i %i 255\n", width, height);
+  for (int y=0; y<height; y++) {
+      for (int x=0; x<width; x++) {
+          fputc(data[0], f); 
+          fputc(data[1], f); // 0 .. 255
+          fputc(data[2], f);  // 0 .. 255
+          data += 4;
+      }
+  }
+  fclose(f);
+}

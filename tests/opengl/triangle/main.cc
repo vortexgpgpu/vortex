@@ -111,5 +111,8 @@ int main() {
     printf("FAILED! - %d errors\n", errors);    
   }
 
+  const uint8_t* out = (uint8_t*) rgba8;
+  printPPM("image.ppm", WIDTH, HEIGHT, out);
+
   return errors; 
 }
