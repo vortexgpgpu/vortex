@@ -1,0 +1,1 @@
+feh -Z -F -R 5 -Y ~/home/vortex/test/opengl/cube/image.ppm

@@ -29,19 +29,22 @@ GLuint createProgram(const char* filename) {
   return program;
 }
 
-GLuint createTriangle() {
-  static float triangle[] = {
-    0.0, 1.0, 0.0,
+GLuint createCube() {
+  static float cube[] = {
+    -1.0, 1.0, 0.0,
     -1.0, -1.0, 0.0,
-    1.0, -1.0, 0.0
+    1.0, -1.0, 0.0,
+    -1.0, 1.0, 0.0,
+    1.0, -1.0, 0.0,
+    1.0, 1.0, 0.0,
   };
 
   GLuint vbo;
 
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER,sizeof(triangle),triangle,GL_STATIC_DRAW);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float[3]), (void*)0);
+  glBufferData(GL_ARRAY_BUFFER,sizeof(cube),cube,GL_STATIC_DRAW);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float[3]), 0);
   glEnableVertexAttribArray(0); 
 
   return vbo;
@@ -65,18 +68,16 @@ int main() {
   program = createProgram("kernel.pocl");
   glUseProgram(program);
 
-  vbo = createTriangle();
+  vbo = createCube();
 
   // Draw
   glClear(GL_COLOR_BUFFER_BIT);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glDrawArrays(GL_TRIANGLES, 0, 3);
+  glDrawArrays(GL_TRIANGLES, 0, 36);
   glFinish();
   glReadnPixels(0,0,WIDTH, HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, WIDTH*HEIGHT*4, result);
 
   printf("Verify result\n");
-
-  /* TODO: this is for quad not for triangle
   int errors = 0;
   unsigned int *rgba8 = (unsigned int*) result;
   for (int i = 0; i < WIDTH*HEIGHT; ++i) {
@@ -92,9 +93,9 @@ int main() {
   } else {
     printf("FAILED! - %d errors\n", errors);    
   }
-  */
 
-  printPPM("image.ppm", WIDTH, HEIGHT, (uint8_t*) result);
+  const uint8_t* out = (uint8_t*) rgba8;
+  printPPM("image.ppm", WIDTH, HEIGHT, out);
 
-  return 0; 
+  return errors; 
 }
