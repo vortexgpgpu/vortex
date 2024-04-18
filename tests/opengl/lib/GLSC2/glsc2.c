@@ -436,7 +436,7 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     // Enqueue kernels
     void *command_queue = getCommandQueue();
     // Vertex
-    enqueueNDRangeKernel(command_queue, vertex_kernel, &num_vertices);
+    enqueueNDRangeKernel(command_queue, vertex_kernel, num_vertices);
     finish(command_queue);
     float _gl_Positions[num_vertices][4];
     enqueueReadBuffer(command_queue, gl_Positions,sizeof(float[4])*num_vertices,_gl_Positions);
@@ -445,18 +445,17 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     }
     exit(0);
     // Post-Vertex
-    enqueueNDRangeKernel(command_queue, perspective_division_kernel, &num_vertices);
-    enqueueNDRangeKernel(command_queue, viewport_division_kernel, &num_vertices);
+    enqueueNDRangeKernel(command_queue, perspective_division_kernel, num_vertices);
+    enqueueNDRangeKernel(command_queue, viewport_division_kernel, num_vertices);
     
     for(uint32_t primitive=0; primitive < num_primitives; ++primitive) {
         // Rasterization
-        setKernelArg(rasterization_kernel, 0, sizeof(primitive), &primitive);
-        enqueueNDRangeKernel(command_queue, rasterization_kernel, &num_fragments);   
-        // enqueueNDRangeKernel(command_queue, basic_kernel, &num_fragments);   
+        setKernelArg(rasterization_kernel, 0, sizeof(primitive), primitive);
+        enqueueNDRangeKernel(command_queue, rasterization_kernel, num_fragments);   
         // Fragment
-        enqueueNDRangeKernel(command_queue, fragment_kernel, &num_fragments);   
+        enqueueNDRangeKernel(command_queue, fragment_kernel, num_fragments);   
         // Post-Fragment
-        enqueueNDRangeKernel(command_queue, color_kernel, &num_fragments);
+        enqueueNDRangeKernel(command_queue, color_kernel, num_fragments);
     }
     
 
@@ -615,7 +614,7 @@ GL_APICALL void GL_APIENTRY glReadnPixels (GLint x, GLint y, GLsizei width, GLsi
 
             void *command_queue = getCommandQueue();
             size_t global_work_size = bufSize/4; // 4 bytes x color
-            enqueueNDRangeKernel(command_queue, _readnpixels_kernel, &global_work_size);
+            enqueueNDRangeKernel(command_queue, _readnpixels_kernel, global_work_size);
             enqueueReadBuffer(command_queue, dst_buff, bufSize, data);
         }
     }
