@@ -68,9 +68,9 @@ __kernel void gl_rasterization_triangle (
     int gid = get_global_id(0);
     // input values
     __global const float4 *position = gl_Positions + gl_Index*3;
-    __global const float4 *primitives = gl_Primitives + gl_Index*3*attributes;
+    __global const float4 *primitives = gl_Primitives + gl_Index*3*(attributes-1);
     __global float4 *fragCoord = gl_FragCoords + gid;
-    __global float4 *rasterization = gl_Rasterization + gid;
+    __global float4 *rasterization = gl_Rasterization + gid*3*(attributes-1);
 
     //frag coords norm
     float xf = gid % width;

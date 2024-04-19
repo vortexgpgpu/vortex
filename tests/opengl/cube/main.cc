@@ -11,8 +11,11 @@
 #include "../debug.cc"
 #include "../common.c"
 
-#define WIDTH 10
-#define HEIGHT 10
+#define WIDTH 20
+#define HEIGHT 20
+
+void perspectiveMatrix(float* mat, float angle, float ratio, float near, float far);
+void rotateMatrix(float* mat, float angle, float x, float y, float z);
 
 GLuint createProgram(const char* filename) {
   GLuint program;
@@ -29,25 +32,110 @@ GLuint createProgram(const char* filename) {
   return program;
 }
 
-GLuint createCube() {
+void createCube() {
   static float cube[] = {
-    -1.0, 1.0, 0.0,
-    -1.0, -1.0, 0.0,
-    1.0, -1.0, 0.0,
-    -1.0, 1.0, 0.0,
-    1.0, -1.0, 0.0,
-    1.0, 1.0, 0.0,
+    // FRONT
+    -0.5, 0.5, -0.5,
+    -0.5, -0.5, -0.5,
+    0.5, -0.5, -0.5,
+    -0.5, 0.5, -0.5,
+    0.5, 0.5, -0.5,
+    0.5, -0.5, -0.5,
+    // BACK
+    -0.5, 0.5, 0.5,
+    -0.5, -0.5, 0.5,
+    0.5, -0.5, 0.5,
+    -0.5, 0.5, 0.5,
+    0.5, 0.5, 0.5,
+    0.5, -0.5, 0.5,
+    // TOP
+    -0.5, 0.5, 0.5,
+    -0.5, 0.5, -0.5,
+    0.5, 0.5, -0.5,
+    -0.5, 0.5, 0.5,
+    0.5, 0.5, 0.5,
+    0.5, 0.5, -0.5,
+    // BOTTOM
+    -0.5, -0.5, 0.5,
+    -0.5, -0.5, -0.5,
+    0.5, -0.5, -0.5,
+    -0.5, -0.5, 0.5,
+    0.5, -0.5, 0.5,
+    0.5, -0.5, -0.5,
+    // LEFT
+    -0.5, 0.5, -0.5,
+    -0.5, -0.5, -0.5,
+    -0.5, -0.5, 0.5,
+    -0.5, 0.5, -0.5,
+    -0.5, 0.5, 0.5,
+    -0.5, -0.5, 0.5,
+    // RIGHT
+    0.5, 0.5, -0.5,
+    0.5, -0.5, -0.5,
+    0.5, -0.5, 0.5,
+    0.5, 0.5, -0.5,
+    0.5, 0.5, 0.5,
+    0.5, -0.5, 0.5,
   };
 
-  GLuint vbo;
+  static float color[] = {
+    // FRONT
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+    // BACK
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+    // TOP
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+    // BOTTOM
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+    // LEFT
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+    // RIGHT
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+  };
 
-  glGenBuffers(1, &vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  GLuint vbo[2];
+
+  glGenBuffers(2, vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
   glBufferData(GL_ARRAY_BUFFER,sizeof(cube),cube,GL_STATIC_DRAW);
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float[3]), 0);
   glEnableVertexAttribArray(0); 
 
-  return vbo;
+  glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
+  glBufferData(GL_ARRAY_BUFFER,sizeof(cube),cube,GL_STATIC_DRAW);
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float[3]), 0);
+  glEnableVertexAttribArray(1); 
+
 }
 
 int main() {
@@ -68,34 +156,60 @@ int main() {
   program = createProgram("kernel.pocl");
   glUseProgram(program);
 
-  vbo = createCube();
+  createCube();
 
+  GLfloat perspective[16];
+  GLfloat model[16];
+
+  perspectiveMatrix(perspective, M_PI / 2, (float) WIDTH / (float) HEIGHT, 0.0f, 1.0f);
+  glUniformMatrix4fv(0, 4, GL_FALSE, perspective);
   // Draw
-  glClear(GL_COLOR_BUFFER_BIT);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glDrawArrays(GL_TRIANGLES, 0, 36);
-  glFinish();
-  glReadnPixels(0,0,WIDTH, HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, WIDTH*HEIGHT*4, result);
+  uint rotation = 0;
+  while (true) {
+    glClear(GL_COLOR_BUFFER_BIT);
 
-  printf("Verify result\n");
-  int errors = 0;
-  unsigned int *rgba8 = (unsigned int*) result;
-  for (int i = 0; i < WIDTH*HEIGHT; ++i) {
-    unsigned int ref = 0xFFFFFFFF;
-    if (rgba8[i] != ref) {
-      if (errors < 100) 
-        printf("*** error: [%d] expected=%08x, actual=%08x\n", i, ref, rgba8[i]);
-      ++errors;
-    }
-  }
-  if (0 == errors) {
-    printf("PASSED!\n");
-  } else {
-    printf("FAILED! - %d errors\n", errors);    
+    rotateMatrix(model, M_PI/6*(rotation++), 0,1,0);
+    glUniformMatrix4fv(1, 4, GL_FALSE, model);
+
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glFinish();
+    glReadnPixels(0,0,WIDTH, HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, WIDTH*HEIGHT*4, result);
+    printPPM("image.ppm", WIDTH, HEIGHT, (uint8_t*) result);
   }
 
-  const uint8_t* out = (uint8_t*) rgba8;
-  printPPM("image.ppm", WIDTH, HEIGHT, out);
+  return 0; 
+}
 
-  return errors; 
+void perspectiveMatrix(float* mat, float angle, float ratio, float near, float far) {
+  for(int i=0; i<16; ++i) mat[i]=0.f;
+  
+  float tan_half_angle = tan(angle/2);
+  mat[0] = 1.0f / (ratio * tan_half_angle);
+  mat[5] = 1.0f / tan_half_angle;
+  mat[10] = -(far + near) / (far - near);
+  mat[11] = -(2 * far * near) / (far - near);
+  mat[14] = -1.0f;
+}
+
+void rotateMatrix(float *mat, float angle, float x, float y, float z) {
+  for(int i=0; i<16; ++i) mat[i]=0.f;
+
+  float sx, sy, sz, cx, cy, cz;
+  sx = sin(angle*x);
+  sy = sin(angle*y);
+  sz = sin(angle*z);
+  cx = cos(angle*x);
+  cy = cos(angle*y);
+  cz = cos(angle*z);
+
+  mat[0] = cy*cx;
+  mat[1] = sz*sy*cx - cz*sy;
+  mat[2] = cz*sy*cx + sz*sx;
+  mat[4] = cy*sx;
+  mat[5] = sz*sy*sx + cy*cx;
+  mat[6] = cz*sy*sx - sz*cx;
+  mat[8] = -sy;
+  mat[9] = sz*cy;
+  mat[10] = cz*cy;
+  mat[15] = 1.f;
 }
