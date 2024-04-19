@@ -2,6 +2,12 @@
 #include "kernel.c" // TODO: may be interesting to extract it to an interface so could be re implementated with CUDA
 #include "binary.c"
 
+#define NOT_IMPLEMENTED              \
+    ({                               \
+        printf("NOT_IMPLEMENTED");   \
+        exit(0);                     \
+    })
+
 // Our definitions
 #define MAX_BUFFER 256
 #define MAX_FRAMEBUFFER 256
@@ -654,6 +660,30 @@ GL_APICALL void GL_APIENTRY glStencilMaskSeparate (GLenum face, GLuint mask) {
     }
 }
 
+#define UMAT4 0x0;
+
+GL_APICALL void GL_APIENTRY glUniformMatrix4fv (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) {
+    if (transpose) NOT_IMPLEMENTED;
+    if (!_current_program) NOT_IMPLEMENTED;
+    if (count > 4) NOT_IMPLEMENTED;
+    if (count < 1) NOT_IMPLEMENTED;
+
+    uint32_t uniform_id = _programs[_current_program].active_uniforms;
+    _programs[_current_program].uniforms[uniform_id].location = location;
+    _programs[_current_program].uniforms[uniform_id].size = sizeof(float[4])*count;
+    _programs[_current_program].uniforms[uniform_id].type = UMAT4;
+
+    float *data_ptr = _programs[_current_program].uniforms[uniform_id].data;
+    for(uint32_t i=0; i<count; ++i) {
+        data_ptr[0] = *(value + 4*i);
+        data_ptr[1] = *(value + 4*i + 1);
+        data_ptr[2] = *(value + 4*i + 2);
+        data_ptr[3] = *(value + 4*i + 3);
+        data_ptr +=4;
+    }
+    _programs[_current_program].active_uniforms += 1;
+}
+
 GL_APICALL void GL_APIENTRY glUseProgram (GLuint program){
     printf("glUseProgram() program=%d\n", program);
     if (program) {
@@ -740,8 +770,7 @@ void* createVertexKernel(GLenum mode, GLint first, GLsizei count) {
                 &_programs[_current_program].attributes[attribute].data.attribute.pointer.mem
             );
         } else {
-            printf("NOT IMPLEMENTED\n");
-            exit(0);
+            NOT_IMPLEMENTED;
             setKernelArg(
                 kernel, 
                 _programs[_current_program].attributes[attribute].location,
@@ -753,12 +782,11 @@ void* createVertexKernel(GLenum mode, GLint first, GLsizei count) {
     }
     // Uniform locations
     GLuint uniform = 0;
+    GLuint active_attributes = _programs[_current_program].active_uniforms; 
     while(uniform < _programs[_current_program].active_uniforms) {
-        printf("NOT IMPLEMENTED\n");
-        exit(0);
         setKernelArg(
             kernel, 
-            _programs[_current_program].uniforms[uniform].location,
+            _programs[_current_program].uniforms[uniform].location + active_attributes,
             _programs[_current_program].uniforms[uniform].size, 
             &_programs[_current_program].uniforms[uniform].data
             );
@@ -811,7 +839,7 @@ void* createFragmentKernel(GLenum mode, GLint first, GLsizei count) {
             kernel, 
             _programs[_current_program].uniforms[uniform].location,
             _programs[_current_program].uniforms[uniform].size, 
-            _programs[_current_program].uniforms[uniform].data
+            &_programs[_current_program].uniforms[uniform].data
             );
         ++uniform;
     }
