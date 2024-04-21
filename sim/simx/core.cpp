@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -25,10 +25,10 @@
 
 using namespace vortex;
 
-Core::Core(const SimContext& ctx, 
-           uint32_t core_id, 
+Core::Core(const SimContext& ctx,
+           uint32_t core_id,
            Socket* socket,
-           const Arch &arch, 
+           const Arch &arch,
            const DCRS &dcrs)
   : SimObject(ctx, "core")
   , icache_req_ports(1, this)
@@ -67,7 +67,7 @@ Core::Core(const SimContext& ctx,
     (1 << LMEM_LOG_SIZE),
     LSU_WORD_SIZE,
     LSU_NUM_REQS,
-    LMEM_NUM_BANKS,
+    log2ceil(LMEM_NUM_BANKS),
     false
   });
 
@@ -82,21 +82,21 @@ Core::Core(const SimContext& ctx,
     for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
       uint32_t i = b * DCACHE_CHANNELS + c;
       mem_coalescers_.at(b)->ReqOut.at(c).bind(&dcache_req_ports.at(i));
-      dcache_rsp_ports.at(i).bind(&mem_coalescers_.at(b)->RspOut.at(c));  
+      dcache_rsp_ports.at(i).bind(&mem_coalescers_.at(b)->RspOut.at(c));
     }
   }
-  
+
   // connect lsu demux
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
     for (uint32_t c = 0; c < LSU_CHANNELS; ++c) {
       uint32_t i = b * LSU_CHANNELS + c;
       auto lmem_demux = lsu_demux_.at(i);
-      
+
       lmem_demux->ReqDC.bind(&mem_coalescers_.at(b)->ReqIn.at(c));
       mem_coalescers_.at(b)->RspIn.at(c).bind(&lmem_demux->RspDC);
 
       lmem_demux->ReqSM.bind(&local_mem_->Inputs.at(i));
-      local_mem_->Outputs.at(i).bind(&lmem_demux->RspSM);      
+      local_mem_->Outputs.at(i).bind(&lmem_demux->RspSM);
     }
   }
 
@@ -136,7 +136,7 @@ void Core::reset() {
   for (auto& exe_unit : func_units_) {
     exe_unit->reset();
   }
- 
+
   for (auto& commit_arb : commit_arbs_) {
     commit_arb->reset();
   }
@@ -243,13 +243,13 @@ void Core::decode() {
 
   DT(3, "pipeline-decode: " << *trace);
 
-  // insert to ibuffer 
+  // insert to ibuffer
   ibuffer.push(trace);
 
   decode_latch_.pop();
 }
 
-void Core::issue() { 
+void Core::issue() {
   // operands to dispatchers
   for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
     auto& operand = operands_.at(i);
@@ -348,7 +348,7 @@ void Core::execute() {
 }
 
 void Core::commit() {
-  // process completed instructions 
+  // process completed instructions
   for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
     auto& commit_arb = commit_arbs_.at(i);
     if (commit_arb->Outputs.at(0).empty())

@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -28,17 +28,17 @@ struct params_t {
 	uint32_t words_per_line;
 	uint32_t log2_num_inputs;
 
-	uint32_t word_select_addr_start;
-	uint32_t word_select_addr_end;
+	int32_t word_select_addr_start;
+	int32_t word_select_addr_end;
 
-	uint32_t bank_select_addr_start;
-	uint32_t bank_select_addr_end;
+	int32_t bank_select_addr_start;
+	int32_t bank_select_addr_end;
 
-	uint32_t set_select_addr_start;
-	uint32_t set_select_addr_end;
+	int32_t set_select_addr_start;
+	int32_t set_select_addr_end;
 
-	uint32_t tag_select_addr_start;
-	uint32_t tag_select_addr_end;
+	int32_t tag_select_addr_start;
+	int32_t tag_select_addr_end;
 
 	params_t(const CacheSim::Config& config) {
 		int32_t offset_bits = config.L - config.W;
@@ -53,7 +53,7 @@ struct params_t {
 		this->words_per_line = 1 << offset_bits;
 
 		assert(config.ports_per_bank <= this->words_per_line);
-						
+
 		// Word select
 		this->word_select_addr_start = config.W;
 		this->word_select_addr_end = (this->word_select_addr_start+offset_bits-1);
@@ -91,7 +91,7 @@ struct params_t {
 		else
 			return 0;
 	}
-	
+
 	uint64_t mem_addr(uint32_t bank_id, uint32_t set_id, uint64_t tag) const {
 		uint64_t addr(0);
 		if (bank_select_addr_end >= bank_select_addr_start)
@@ -119,8 +119,8 @@ struct line_t {
 struct set_t {
 	std::vector<line_t> lines;
 
-	set_t(uint32_t num_ways) 
-		: lines(num_ways) 
+	set_t(uint32_t num_ways)
+		: lines(num_ways)
 	{}
 
 	void clear() {
@@ -136,7 +136,7 @@ struct bank_req_port_t {
 	bool     valid;
 
 	void clear() {
-		valid = false; 
+		valid = false;
 	}
 };
 
@@ -158,7 +158,7 @@ struct bank_req_t {
 	bool     write;
 
 	bank_req_t(uint32_t num_ports)
-		: ports(num_ports) 
+		: ports(num_ports)
 	{}
 
 	void clear() {
@@ -173,8 +173,8 @@ struct mshr_entry_t {
 	bank_req_t bank_req;
 	uint32_t   line_id;
 
-	mshr_entry_t(uint32_t num_ports) 
-		: bank_req(num_ports) 
+	mshr_entry_t(uint32_t num_ports)
+		: bank_req(num_ports)
 	{}
 
 	void clear() {
@@ -190,13 +190,13 @@ private:
 public:
 	MSHR(uint32_t size, uint32_t num_ports)
 		: entries_(size, num_ports)
-		, size_(0) 
+		, size_(0)
 	{}
 
 	bool empty() const {
 		return (0 == size_);
 	}
-	
+
 	bool full() const {
 		return (size_ == entries_.size());
 	}
@@ -204,7 +204,7 @@ public:
 	bool lookup(const bank_req_t& bank_req) {
 		for (auto& entry : entries_) {;
 			if (entry.bank_req.type != bank_req_t::None
-		 	 && entry.bank_req.set_id == bank_req.set_id 
+		 	 && entry.bank_req.set_id == bank_req.set_id
 		   && entry.bank_req.tag == bank_req.tag) {
 				return true;
 			}
@@ -230,8 +230,8 @@ public:
 		assert(root_entry.bank_req.type == bank_req_t::Core);
 		// mark all related mshr entries for replay
 		for (auto& entry : entries_) {
-			if (entry.bank_req.type == bank_req_t::Core 
-			 && entry.bank_req.set_id == root_entry.bank_req.set_id 
+			if (entry.bank_req.type == bank_req_t::Core
+			 && entry.bank_req.set_id == root_entry.bank_req.set_id
 			 && entry.bank_req.tag == root_entry.bank_req.tag) {
 				entry.bank_req.type = bank_req_t::Replay;
 			}
@@ -263,8 +263,8 @@ struct bank_t {
 	std::vector<set_t> sets;
 	MSHR               mshr;
 
-	bank_t(const CacheSim::Config& config, 
-				 const params_t& params) 
+	bank_t(const CacheSim::Config& config,
+				 const params_t& params)
 		: sets(params.sets_per_bank, params.lines_per_set)
 		, mshr(config.mshr_size, config.ports_per_bank)
 	{}
@@ -297,7 +297,7 @@ private:
 	uint64_t pending_fill_reqs_;
 
 public:
-	Impl(CacheSim* simobject, const Config& config) 
+	Impl(CacheSim* simobject, const Config& config)
 		: simobject_(simobject)
 		, config_(config)
 		, params_(config)
@@ -319,7 +319,7 @@ public:
 			simobject->MemRspPort.bind(&bypass_switch_->RspOut.at(0));
 			return;
 		}
-		
+
 		bypass_switch_ = MemSwitch::Create(sname, ArbiterType::Priority, 2);
 		bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPort);
 		simobject->MemRspPort.bind(&bypass_switch_->RspOut.at(0));
@@ -480,7 +480,7 @@ public:
 
 		// process active request
 		this->processBankRequests();
-	} 
+	}
 
 	const PerfStats& perf_stats() const {
 		return perf_stats_;
@@ -517,7 +517,7 @@ private:
 		for (uint32_t bank_id = 0, n = (1 << config_.B); bank_id < n; ++bank_id) {
 			auto& bank = banks_.at(bank_id);
 			auto pipeline_req = pipeline_reqs_.at(bank_id);
-			
+
 			switch (pipeline_req.type) {
 			case bank_req_t::None:
 				break;
@@ -559,7 +559,7 @@ private:
 						repl_line_id = i;
 					}
 					if (line.valid) {
-						if (line.tag == pipeline_req.tag) { 
+						if (line.tag == pipeline_req.tag) {
 							hit_line_id = i;
 							line.lru_ctr = 0;
 						} else {
@@ -647,7 +647,7 @@ private:
 
 						// allocate MSHR
 						auto mshr_id = bank.mshr.allocate(pipeline_req, (free_line_id != -1) ? free_line_id : repl_line_id);
-						
+
 						// send fill request
 						if (!mshr_pending) {
 							MemReq mem_req;
@@ -672,7 +672,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-CacheSim::CacheSim(const SimContext& ctx, const char* name, const Config& config) 
+CacheSim::CacheSim(const SimContext& ctx, const char* name, const Config& config)
 	: SimObject<CacheSim>(ctx, name)
 	, CoreReqPorts(config.num_inputs, this)
 	, CoreRspPorts(config.num_inputs, this)
