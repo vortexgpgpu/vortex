@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,8 +24,8 @@ protected:
 	LocalMem* simobject_;
 	Config    config_;
 	RAM       ram_;
-	uint32_t  bank_sel_addr_start_;
-	uint32_t  bank_sel_addr_end_;
+	int32_t   bank_sel_addr_start_;
+  int32_t   bank_sel_addr_end_;
 	PerfStats perf_stats_;
 
 	uint64_t to_local_addr(uint64_t addr) {
@@ -36,14 +36,14 @@ protected:
 	}
 
 public:
-	Impl(LocalMem* simobject, const Config& config) 
+	Impl(LocalMem* simobject, const Config& config)
 		: simobject_(simobject)
 		, config_(config)
 		, ram_(config.capacity)
 		, bank_sel_addr_start_(0)
-		, bank_sel_addr_end_(0 + log2ceil(config.num_banks)-1)
+		, bank_sel_addr_end_(config.B-1)
 	{}
-	
+
 	virtual ~Impl() {}
 
 	void reset() {
@@ -63,7 +63,7 @@ public:
 	}
 
 	void tick() {
-		std::vector<bool> in_used_banks(config_.num_banks);
+		std::vector<bool> in_used_banks(1 << config_.B);
 		for (uint32_t req_id = 0; req_id < config_.num_reqs; ++req_id) {
 			auto& core_req_port = simobject_->Inputs.at(req_id);
 			if (core_req_port.empty())
@@ -72,7 +72,7 @@ public:
 			auto& core_req = core_req_port.front();
 
 			uint32_t bank_id = 0;
-			if (bank_sel_addr_start_ <= bank_sel_addr_end_) {
+			if (bank_sel_addr_end_ >= bank_sel_addr_start_) {
 				bank_id = (uint32_t)bit_getw(core_req.addr, bank_sel_addr_start_, bank_sel_addr_end_);
 			}
 
@@ -99,15 +99,15 @@ public:
 		}
 	}
 
-	const PerfStats& perf_stats() const { 
-		return perf_stats_; 
+	const PerfStats& perf_stats() const {
+		return perf_stats_;
 	}
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-LocalMem::LocalMem(const SimContext& ctx, const char* name, const Config& config) 
-	: SimObject<LocalMem>(ctx, name) 
+LocalMem::LocalMem(const SimContext& ctx, const char* name, const Config& config)
+	: SimObject<LocalMem>(ctx, name)
 	, Inputs(config.num_reqs, this)
 	, Outputs(config.num_reqs, this)
 	, impl_(new Impl(this, config))
