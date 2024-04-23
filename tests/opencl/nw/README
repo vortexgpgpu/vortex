@@ -1,0 +1,13 @@
+Note: This program generate two sequences randomly. Please specify your own sequences for different uses.
+      At the current stage, the program only supports two sequences with the same lengh, which can be divided by 16. 
+Usage: ./nw 2048 10 ./nw.cl
+	  2048 //the length of the sequence
+	  10 //penalty value
+	  ./nw.cl  //ocl kernel file
+
+******Adjustable work group size*****
+RD_WG_SIZE_0 or RD_WG_SIZE_0_0 
+
+USAGE:
+make clean
+make KERNEL_DIM="-DRD_WG_SIZE_0=16"

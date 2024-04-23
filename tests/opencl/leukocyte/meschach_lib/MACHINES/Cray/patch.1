@@ -1,0 +1,56 @@
+*** err.h	Thu Jan 13 16:38:12 1994
+--- err.h.orig	Wed Oct 26 17:56:36 1994
+***************
+*** 129,135 ****
+  	{	jmp_buf _save;	int _err_num, _old_flag; \
+  		_old_flag = set_err_flag(EF_SILENT); \
+  		MEM_COPY(restart,_save,sizeof(jmp_buf)); \
+! 		if ( (_err_num=setjmp(restart)) == 0 ) \
+  		{	ok_part; \
+  			set_err_flag(_old_flag); \
+  			MEM_COPY(_save,restart,sizeof(jmp_buf));	} \
+--- 129,136 ----
+  	{	jmp_buf _save;	int _err_num, _old_flag; \
+  		_old_flag = set_err_flag(EF_SILENT); \
+  		MEM_COPY(restart,_save,sizeof(jmp_buf)); \
+! 		_err_num=setjmp(restart); \
+! 		if ( _err_num == 0 ) \
+  		{	ok_part; \
+  			set_err_flag(_old_flag); \
+  			MEM_COPY(_save,restart,sizeof(jmp_buf));	} \
+***************
+*** 149,155 ****
+  	{	jmp_buf _save;	int _err_num, _old_flag; \
+  		_old_flag = set_err_flag(EF_SILENT); \
+  		MEM_COPY(restart,_save,sizeof(jmp_buf)); \
+! 		if ( (_err_num=setjmp(restart)) == 0 ) \
+  		{	ok_part; \
+  			set_err_flag(_old_flag); \
+  			MEM_COPY(_save,restart,sizeof(jmp_buf));	} \
+--- 150,157 ----
+  	{	jmp_buf _save;	int _err_num, _old_flag; \
+  		_old_flag = set_err_flag(EF_SILENT); \
+  		MEM_COPY(restart,_save,sizeof(jmp_buf)); \
+! 		_err_num=setjmp(restart); \
+! 		if ( _err_num == 0 ) \
+  		{	ok_part; \
+  			set_err_flag(_old_flag); \
+  			MEM_COPY(_save,restart,sizeof(jmp_buf));	} \
+***************
+*** 166,172 ****
+  	{	jmp_buf _save;	int _err_num, _old_flag; \
+  		_old_flag = set_err_flag(EF_JUMP); \
+  		MEM_COPY(restart,_save,sizeof(jmp_buf)); \
+! 		if ( (_err_num=setjmp(restart)) == 0 ) \
+  		{	ok_part; \
+  			set_err_flag(_old_flag); \
+  			MEM_COPY(_save,restart,sizeof(jmp_buf));	} \
+--- 168,175 ----
+  	{	jmp_buf _save;	int _err_num, _old_flag; \
+  		_old_flag = set_err_flag(EF_JUMP); \
+  		MEM_COPY(restart,_save,sizeof(jmp_buf)); \
+! 		_err_num=setjmp(restart) ;\
+! 		if (  _err_num  == 0 ) \
+  		{	ok_part; \
+  			set_err_flag(_old_flag); \
+  			MEM_COPY(_save,restart,sizeof(jmp_buf));	} \

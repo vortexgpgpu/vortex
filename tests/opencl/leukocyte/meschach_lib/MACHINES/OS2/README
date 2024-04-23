@@ -1,0 +1,32 @@
+Message received from Wenzel Matiaske:
+
+From mati1831@perform.ww.TU-Berlin.DE Wed Oct  4 11:34:38 1995
+Date: Wed, 04 Oct 95 17:32:37 GMT
+From: Wenzel Matiaske <mati1831@perform.ww.TU-Berlin.DE>
+To: david.stewart@anu.edu.au
+Subject: meschach documentation
+
+Dear David,
+
+[snip]
+
+By the way: I have installed the library with EMX 0.9a + gcc under
+OS/2. I have included the makefile, may it is useful for others. 
+
+[Note: I have also put the "standard" gcc machine.h here as well.
+				-- David Stewart, 4th Oct, 1995]
+
+Best regards
+
+//wenzel
+
+-- 
+                             ___      
+wenzel matiaske  |           / /_/-Berlin
+                 |
+                 |  mail:   Technical University Berlin
+                 |          Dept. of Economics & Management, WW6
+                 |          Uhlandstr. 4-5, D-10623 Berlin
+                 |  phone:  +49 30 314-22574
+                 |  email:  W.Matiaske@ww.TU-Berlin.de
+

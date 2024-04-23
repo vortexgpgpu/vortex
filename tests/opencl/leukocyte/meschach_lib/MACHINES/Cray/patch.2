@@ -1,0 +1,23 @@
+*** iter0.c	Mon Jun 20 15:22:36 1994
+--- iter0.c.orig	Fri Oct 28 01:49:19 1994
+***************
+*** 103,111 ****
+     if (lenx > 0) ip->x = v_get(lenx);
+     else ip->x = (VEC *)NULL;
+  
+!    ip->Ax = ip->A_par = NULL;
+!    ip->ATx = ip->AT_par = NULL;
+!    ip->Bx = ip->B_par = NULL;
+     ip->info = iter_std_info;
+     ip->stop_crit = iter_std_stop_crit;
+     ip->init_res = 0.0;
+--- 103,111 ----
+     if (lenx > 0) ip->x = v_get(lenx);
+     else ip->x = (VEC *)NULL;
+  
+!    ip->Ax = NULL;  ip->A_par = NULL;
+!    ip->ATx = NULL; ip->AT_par = NULL;
+!    ip->Bx = NULL;  ip->B_par = NULL;
+     ip->info = iter_std_info;
+     ip->stop_crit = iter_std_stop_crit;
+     ip->init_res = 0.0;

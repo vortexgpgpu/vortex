@@ -1,0 +1,235 @@
+From - Fri Dec  4 08:05:39 1998
+Received: from cliffy.statsci.com (root@cliffy.statsci.com [206.63.206.72]) by server.divms.uiowa.edu with id MAA14931 for <dstewart@math.uiowa.edu>; Thu, 3 Dec 1998 12:28:13 -0600 (CST)
+Received: from adlib2 (adlib2 [206.63.206.104])
+	by cliffy.statsci.com (8.8.8/8.8.8/Hub) with SMTP id KAA28911;
+	Thu, 3 Dec 1998 10:28:02 -0800
+Message-Id: <3.0.5.32.19981203102809.01371ec0@mailhost.statsci.com>
+X-Sender: johnc@mailhost.statsci.com
+X-Mailer: QUALCOMM Windows Eudora Pro Version 3.0.5 (32)
+Date: Thu, 03 Dec 1998 10:28:09 -0800
+To: David Stewart <dstewart@math.uiowa.edu>
+From: John Cornelison <johnc@statsci.com>
+Subject: Re: VStudio version of Meschach Library available?!
+Cc: Zbigniew Leyk <zleyk@wolfram.com>
+In-Reply-To: <36669B2E.809B959C@math.uiowa.edu>
+References: <3.0.5.32.19981202145120.0106bec0@mailhost.statsci.com>
+Mime-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+X-Mozilla-Status: 8013
+X-Mozilla-Status2: 00000000
+
+Thanks for the fast reply.  I'll send you another note once it's working.
+It now compiles fine into a .DLL with the following mods (hacks?!):
+
+The largest problem was figuring out to not include some of the
+miscellaneous source files that are used for QA & utility & legacy support.
+ Once I read the makefile it was easy to set up.  I'll send you the
+necessary project files once I complete things.
+
+As far as coding goes, in machine.h, right near the end, I've added:
+
+#ifndef WIN32
+#define LIBEXPORT
+#else
+
+/* Comment out the following line if NOT building Meschach.DLL! */
+/* TODO: Eventually this should be defined on the compile line only when
+building the DLL */
+#define DLLCREATION
+
+#ifdef DLLCREATION
+	/* Including code is internal to the DLL */
+	#define MLibImport _declspec(dllexport)
+	#define MLibExport _declspec(dllimport)
+	#define LIBEXPORT MLibImport
+#else
+	/* Including code is external to the DLL */
+	#define MLibImport _declspec(dllimport)
+	#define MLibExport _declspec(dllexport)
+	#define LIBEXPORT MLibExport
+#endif
+
+#ifdef WORDS_BIGENDIAN
+	/* Win32 is always little endian */
+	#undef WORDS_BIGENDIAN
+#endif
+
+#ifdef HUGE_VAL
+	/* HUGE_VAL later defined in math.h */
+	#undef HUGE_VAL
+#endif
+
+#if defined(_DEBUG) && defined(_MSC_VER)
+	/* WARNING: Disabling the many "signed/unsigned mismatch" warnings so
+others stand out! */
+	/* These happen when comparing an unsigned int with a regular signed int
+but should be fixed! */
+	#pragma warning(disable:4018)
+#endif
+#endif  /* WIN32 */
+
+The only significant thing here is to explicitly define what routines are
+being exported (or imported) from the DLL.  This is done with Microsoft's
+delightful _declspec(dllexport) & _declspec(dllimport) expressions.  Next I
+had to go through all function declarations & insert the LIBEXPORT define.
+Ideally this should ONLY be done for routines that are made publicly
+available from the library, i.e., not utility routines for internal use
+only, but I put it in all the declarations in sparse.h; err.h; iter.h;
+matrix.h; sparse2.h; meminfo.h.  I left the complex libraries for another day.
+
+A sample of this is from the matrix.h file:
+
+/* miscellaneous functions */
+
+#ifndef ANSI_C
+
+extern	double LIBEXPORT	square(), cube(), mrand();
+extern	void LIBEXPORT	smrand(), mrandlist();
+extern  void LIBEXPORT    m_dump(), px_dump(), v_dump(), iv_dump();
+extern MAT LIBEXPORT *band2mat();
+extern BAND LIBEXPORT *mat2band();
+
+#else
+
+double LIBEXPORT	square(double x), 	/* returns x^2 */
+  cube(double x), 		/* returns x^3 */
+  mrand(void);                  /* returns random # in [0,1) */
+
+void LIBEXPORT	smrand(int seed),            /* seeds mrand() */
+  mrandlist(Real *x, int len);       /* generates len random numbers */
+
+void LIBEXPORT    m_dump(FILE *fp,MAT *a), px_dump(FILE *,PERM *px),
+        v_dump(FILE *fp,VEC *x), iv_dump(FILE *fp, IVEC *ix);
+
+MAT LIBEXPORT *band2mat(BAND *bA, MAT *A);
+BAND LIBEXPORT *mat2band(MAT *A, int lb,int ub, BAND *bA);
+
+#endif
+
+It is sort of ugly, and I probably messed up all your formatting but it at
+least works and won't break things on other platforms.  The only warnings
+that now appear during a full compilation (again, I've left out all the
+z*.c routines) are:
+
+Deleting intermediate files and output files for project 'Meschach - Win32
+Debug'.
+--------------------Configuration: Meschach - Win32 Debug--------------------
+Compiling...
+bdfactor.c
+bkpfacto.c
+chfactor.c
+copy.c
+err.c
+D:\Meschach\Source\err.c(328) : warning C4113: 'void (__cdecl *)()' differs
+in parameter lists from 'void (__cdecl *)(int )'
+D:\Meschach\Source\err.c(337) : warning C4113: 'void (__cdecl *)()' differs
+in parameter lists from 'void (__cdecl *)(int )'
+fft.c
+givens.c
+hessen.c
+hsehldr.c
+init.c
+iter0.c
+iternsym.c
+itersym.c
+D:\Meschach\Source\itersym.c(424) : warning C4113: 'int (__cdecl *)()'
+differs in parameter lists from 'int (__cdecl *)(const void *,const void *)'
+ivecop.c
+lufactor.c
+machine.c
+matlab.c
+matop.c
+matrixio.c
+meminfo.c
+memory.c
+memstat.c
+mfunc.c
+D:\Meschach\Source\mfunc.c(174) : warning C4244: '=' : conversion from
+'double ' to 'int ', possible loss of data
+norm.c
+otherio.c
+pxop.c
+qrfactor.c
+schur.c
+D:\Meschach\Source\schur.c(158) : warning C4101: 't' : unreferenced local
+variable
+solve.c
+sparse.c
+sparseio.c
+spbkp.c
+D:\Meschach\Source\spbkp.c(1244) : warning C4113: 'int (__cdecl *)()'
+differs in parameter lists from 'int (__cdecl *)(const void *,const void *)'
+spchfctr.c
+splufctr.c
+sprow.c
+spswap.c
+submat.c
+svd.c
+symmeig.c
+update.c
+vecop.c
+version.c
+Linking...
+   Creating library Debug/Meschach.lib and object Debug/Meschach.exp
+Creating browse info file...
+
+Meschach.dll - 0 error(s), 6 warning(s)
+
+
+
+At 08:07 AM 12/3/98 -0600, David Stewart wrote:
+>John Cornelison wrote:
+>> 
+>> Hi, I'm starting to get the library to work in the Win32 environment and
+>> was curious if you are aware of anyone else that may have done this
+already.
+>> 
+>> Specifically I'd appreciate pointers to anyone that has wrapped this into a
+>> Visual Studio project.  I know Visual Studio is super platform specific so
+>> is not something you are likely to promote, but knowing about this would
+>> save us some time.
+>> 
+>> Also I understand from the readme that you have an electronic form of the
+>> manual I can ask for.  If easy, I would appreciate a copy of that.  We are
+>> using the sparse matrix processing functionality for a small research
+>> project we're considering and getting improvements of many magnitudes over
+>> our previous techniques.
+>> 
+>> Thanks in advance for doing all this incredible work!
+>> 
+>> -John
+>
+>You can get a **partial** on-line manual via 
+>
+>	http://www.math.uiowa.edu/~dstewart/meschach/
+>
+>However, this doesn't include the sparse matrix stuff.
+>There have been some others who have worked on MS-DOS ports of
+>Meschach.  However, I haven't been keeping up with the status of these
+>efforts.  And I ceratinly haven't heard of anyone using it in
+>Visual Studio.  Zbigniew and I are glad to hear of another happy
+>user though!
+>
+>Neither Zbigniew nor I have had much time to devote to Meschach
+>in the past few years, which has (unfortunately) stalled its
+>development...  You should also look for matrix re-ordering techniques
+>(I have some code for the Gibbs-Poole-Stockmeyer method for
+>Meschach, if you would like that.  Someone else developed it,
+>so I can't say much regarding it; the algorithm is not the best
+>matrix re-ordering technique for general sparse matrices, but
+>it definitely better than standard orderings for most problems.)
+
+Sure, if convenient, I would appreciate getting this.
+
+>Also: please note the new email addresses!
+>
+>	-- David Stewart
+
+Thanks again for developing the library!
+
+----------------------------------------------------------------------------
+http://www.MathSoft.com, Data Analysis Products Division
+1700 Westlake Av N, Suite 500, Seattle, WA 98109-3012
+206.283.8802x243, 283.8691fax, johnc@statsci.com, NIC JHC7
+----------------------------------------------------------------------------
+

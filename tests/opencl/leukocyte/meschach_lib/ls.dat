@@ -1,0 +1,14 @@
+# No. of a problem
+2
+# A = 
+Matrix: 5 by 3
+row 0:              3             -1              2 
+row 1:              2             -1            1.2 
+row 2:            2.5              1           -1.5 
+row 3:              3              1              1 
+row 4:             -1              1           -2.2 
+
+# b =
+Vector: dim: 5
+           5            3            2            4            6 
+

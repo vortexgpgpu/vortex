@@ -1,0 +1,12 @@
+# No. of a problem
+1
+# Initial time
+0
+# Final time
+1
+# Solution is x(t) = (cos(t),-sin(t))
+# x(0) =
+Vector: dim: 2
+1       0
+# Step size
+0.1

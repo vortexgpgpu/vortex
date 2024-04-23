@@ -1,0 +1,10 @@
+******Adjustable work group size*****
+RD_WG_SIZE  for all
+RD_WG_SIZE_1 or RD_WG_SIZE_1_0 for initialize_variables
+RD_WG_SIZE_2 or RD_WG_SIZE_2_0 for compute_step_factor
+RD_WG_SIZE_3 or RD_WG_SIZE_3_0 for compute_flux
+RD_WG_SIZE_4 or RD_WG_SIZE_4_0 for time_step
+
+USAGE:
+make clean
+make KERNEL_DIM="-DRD_WG_SIZE_1=128 -DRD_WG_SIZE_2=192 -DRD_WG_SIZE_3=128 -DRD_WG_SIZE_4=256"

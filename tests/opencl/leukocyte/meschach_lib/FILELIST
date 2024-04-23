@@ -1,0 +1,187 @@
+-rw-r--r-- 1         5066 Nov 21 2002 arnoldi.c
+-rw-r--r-- 1        18361 Dec 6 2002 bdfactor.c
+-rw-r--r-- 1         8682 Dec 2 2002 bkpfacto.c
+-rw-r--r-- 1         5524 Dec 2 2002 chfactor.c
+-rwxr-xr-x 1        60386 Nov 25 2002 configure
+-rw-r--r-- 1         3711 Nov 26 2002 configure.in
+-rw-r--r-- 1         8278 May 10 1995 conjgrad.c
+-rw-r--r-- 1         6338 Dec 2 2002 copy.c
+-rw-r--r-- 1         1124 Jan 12 1994 copyright
+-rw-r--r-- 1         1402 Jan 12 1994 dmacheps.c
+-rw-r--r-- 1        10319 Dec 2 2002 err.c
+-rw-r--r-- 2         5718 Oct 6 2003 err.h
+-rw-r--r-- 1        10931 Jun 8 1995 extras.c
+-rw-r--r-- 1         4082 Dec 2 2002 fft.c
+-rw-r--r-- 1            0 Sep 12 15:28 FILELIST
+-rw-r--r-- 1         1400 Jan 12 1994 fmacheps.c
+-rw-r--r-- 1         4167 Dec 2 2002 givens.c
+-rw-r--r-- 1         4494 Dec 2 2002 hessen.c
+-rw-r--r-- 1         6489 Dec 2 2002 hsehldr.c
+-rw-r--r-- 1         6499 Nov 27 2002 init.c
+-rw-r--r-- 1         3396 Jan 13 1994 iotort.c
+-rw-r--r-- 1         9894 Oct 7 2003 iter0.c
+-rw-r--r-- 1         7143 Dec 10 2002 iter.h
+-rw-r--r-- 1        33308 Dec 10 2002 iternsym.c
+-rw-r--r-- 1        15322 Dec 10 2002 itersym.c
+-rw-r--r-- 1        16178 Dec 12 1994 itertort.c
+-rw-r--r-- 1         7537 Nov 27 2002 ivecop.c
+-rw-r--r-- 1         7849 Nov 21 2002 lanczos.c
+-rw-r--r-- 1          397 Jan 12 1994 ls.dat
+-rw-r--r-- 1         7434 Dec 2 2002 lufactor.c
+-rw-r--r-- 1         4184 Nov 27 2002 machine.c
+-rw-r--r-- 1         3820 Oct 6 2003 machine.h
+-rw-r--r-- 1         4485 Nov 25 2002 machine.h.in
+-rw-r--r-- 1         5640 Nov 4 2003 makefile
+-rw-r--r-- 1         5898 Jun 22 1994 makefile.in
+-rw-r--r-- 1         5563 Dec 2 2002 matlab.c
+-rw-r--r-- 2         3030 Oct 6 2003 matlab.h
+-rw-r--r-- 1        13336 Nov 27 2002 matop.c
+-rw-r--r-- 1         8919 Oct 7 2003 matrix2.h
+-rw-r--r-- 1        21822 Oct 28 2003 matrix.h
+-rw-r--r-- 1        19519 Oct 7 2003 matrixio.c
+-rw-r--r-- 1         1257 Jan 12 1994 maxint.c
+-rw-r--r-- 1        10285 Dec 2 2002 meminfo.c
+-rw-r--r-- 2         4433 Nov 27 2002 meminfo.h
+-rw-r--r-- 1        20695 Nov 27 2002 memory.c
+-rw-r--r-- 1         9822 Oct 7 2003 memstat.c
+-rw-r--r-- 1        17441 Oct 29 2003 memtort.c
+-rw-r--r-- 1         9887 Dec 3 2002 mfunc.c
+-rw-r--r-- 1         4533 Jan 13 1994 mfuntort.c
+-rw-r--r-- 1         4698 Dec 3 2002 norm.c
+-rw-r--r-- 2         3853 Jan 12 1994 oldnames.h
+-rw-r--r-- 1         4520 Nov 27 2002 otherio.c
+-rw-r--r-- 1         8200 Dec 2 2002 pxop.c
+-rw-r--r-- 1        14475 Dec 2 2002 qrfactor.c
+-rw-r--r-- 1        18006 Apr 5 1994 README
+-rw-r--r-- 1          141 Jan 12 1994 rk4.dat
+-rw-r--r-- 1        18931 Dec 6 2002 schur.c
+-rw-r--r-- 1         7288 Dec 2 2002 solve.c
+-rw-r--r-- 1         3263 Oct 7 2003 sparse2.h
+-rw-r--r-- 1        26329 Dec 3 2002 sparse.c
+-rw-r--r-- 1         6730 Oct 7 2003 sparse.h
+-rw-r--r-- 1         9214 Nov 2 2003 sparseio.c
+-rw-r--r-- 1        36832 Oct 7 2003 spbkp.c
+-rw-r--r-- 1        16329 Dec 3 2002 spchfctr.c
+-rw-r--r-- 1        11245 Oct 7 2003 splufctr.c
+-rw-r--r-- 1        18991 Oct 7 2003 sprow.c
+-rw-r--r-- 1         7929 Dec 9 2002 spswap.c
+-rw-r--r-- 1        11295 Jun 9 1995 sptort.c
+-rw-r--r-- 1         5259 Dec 2 2002 submat.c
+-rw-r--r-- 1        10508 Dec 2 2002 svd.c
+-rw-r--r-- 1         6229 Dec 2 2002 symmeig.c
+-rw-r--r-- 1        28117 Nov 26 2002 torture.c
+-rw-r--r-- 1         4508 May 19 1994 tutadv.c
+-rw-r--r-- 1         7794 Nov 27 2002 tutorial.c
+-rw-r--r-- 1         3599 Dec 2 2002 update.c
+-rw-r--r-- 1        15005 Dec 2 2002 vecop.c
+-rw-r--r-- 1         2599 Aug 20 1996 version.c
+-rw-r--r-- 1         5842 Oct 7 2003 zcopy.c
+-rw-r--r-- 1         4556 Nov 15 2002 zfunc.c
+-rw-r--r-- 1         4907 Nov 15 2002 zgivens.c
+-rw-r--r-- 1         4159 Nov 26 2002 zhessen.c
+-rw-r--r-- 1         6651 Nov 27 2002 zhsehldr.c
+-rw-r--r-- 1         7259 Nov 26 2002 zlufctr.c
+-rw-r--r-- 1         4909 Oct 7 2003 zmachine.c
+-rw-r--r-- 1        11566 Dec 10 2002 zmatio.c
+-rw-r--r-- 1         6155 Jun 7 1995 zmatlab.c
+-rw-r--r-- 1        15369 May 10 1995 zmatop.c
+-rw-r--r-- 2         4273 Nov 26 2002 zmatrix2.h
+-rw-r--r-- 1        10779 Oct 7 2003 zmatrix.h
+-rw-r--r-- 1        15742 Dec 11 2002 zmemory.c
+-rw-r--r-- 1         4624 Nov 15 2002 znorm.c
+-rw-r--r-- 1        14186 Nov 26 2002 zqrfctr.c
+-rw-r--r-- 1        11267 Nov 21 2002 zschur.c
+-rw-r--r-- 1         7608 Nov 15 2002 zsolve.c
+-rw-r--r-- 1        20120 Nov 27 2002 ztorture.c
+-rw-r--r-- 1        12512 Oct 7 2003 zvecop.c
+
+DOC:
+total 72
+-rw------- 1        17186 Jan 13 1994 fnindex.txt
+-rw------- 1        45980 Jan 13 1994 tutorial.txt
+
+MACHINES:
+total 40
+-rw------- 1         7979 Dec 4 1998 cornelison
+drwx------ 2         8192 Jan 3 1998 Cray
+drwx------ 2           96 Jan 3 1998 GCC
+drwx------ 2           96 Jan 3 1998 Linux
+drwx------ 2           96 Mar 1 2001 MicroSoft
+drwx------ 2           96 Jan 3 1998 OS2
+drwx------ 2           96 Jan 3 1998 RS6000
+drwx------ 2           96 Jan 3 1998 SGI
+drwx------ 2           96 Jan 3 1998 SPARC
+drwx------ 2         8192 Jan 3 1998 ThinkC
+drwx------ 2         8192 Jan 3 1998 TurboC
+drwx------ 2           96 Jan 3 1998 WatcomPC
+-rw------- 1         7287 Aug 28 1995 w-mckinnon
+
+MACHINES/Cray:
+total 64
+-rw------- 1         4645 Oct 27 1994 machine.h
+-rw------- 1         6053 Oct 27 1994 makefile
+-rw------- 1         7565 Sep 11 1997 mesch-cray.tar.Z
+-rw------- 1        10459 Sep 11 1997 mesch-cray.tar.Z.uu
+-rw------- 1         1951 Oct 27 1994 patch.1
+-rw------- 1          687 Oct 27 1994 patch.2
+-rw------- 1          298 Oct 27 1994 patch.3
+
+MACHINES/GCC:
+total 16
+-rw------- 1         3775 Jan 13 1994 machine.h
+-rw------- 1         5192 Mar 27 1995 makefile
+
+MACHINES/Linux:
+total 16
+-rw------- 1         3820 Mar 2 1994 machine.h
+-rw------- 1         5604 Mar 27 1995 makefile
+
+MACHINES/MicroSoft:
+total 24
+-rw------- 1         4812 Feb 28 2001 machine.h
+-rw------- 1         6930 Feb 28 2001 makefile
+-rw------- 1         4007 Mar 1 2001 stewart.zip
+
+MACHINES/OS2:
+total 24
+-rw------- 1         3775 Oct 4 1995 machine.h
+-rw------- 1         5556 Oct 4 1995 makefile
+-rw------- 1          924 Oct 4 1995 README
+
+MACHINES/RS6000:
+total 24
+-rw------- 1         6129 Jan 24 1994 machine.c
+-rw------- 1         3502 Jan 13 1994 machine.h
+-rw------- 1         5663 Mar 27 1995 makefile
+
+MACHINES/SGI:
+total 16
+-rw------- 1         4635 Oct 27 1994 machine.h
+-rw------- 1         5938 Oct 27 1994 makefile
+
+MACHINES/SPARC:
+total 16
+-rw------- 1         3524 Jan 13 1994 machine.h
+-rw------- 1         5195 Mar 27 1995 makefile
+
+MACHINES/ThinkC:
+total 64
+-rw------- 1         9551 Jun 8 1995 machine.h
+-rw------- 1         3777 Sep 8 1995 README
+-rw------- 1        10293 Jun 13 1995 TC-machine-2.h
+-rw------- 1        10226 Jun 9 1995 TC-machine.h
+-rw------- 1         7145 Jun 9 1995 TC-README
+
+MACHINES/TurboC:
+total 400
+-rw------- 1           44 Sep 11 1997 filelist
+-rw------- 1         5305 Aug 21 1996 machine.h
+-rw------- 1       122628 Jan 19 1996 mail
+-rw------- 1         8142 Oct 14 1995 meschach.mak
+-rw------- 1       104575 Sep 11 1997 meschtc.zip
+-rw------- 1       144112 Sep 11 1997 meschtc.zip.uu
+-rw------- 1          749 Oct 14 1995 README
+
+MACHINES/WatcomPC:
+total 8
+-rw------- 1         4788 May 7 1996 machine.h

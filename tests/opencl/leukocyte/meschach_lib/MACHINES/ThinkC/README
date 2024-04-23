@@ -1,0 +1,103 @@
+README file for compiling Meschach with Think C
+===============================================
+
+Received 8th June, 1995 from Brent Boyer (boyer@jumpjibe.stanford.edu).
+
+
+I have modified this file to make the Meschach routines work on a
+Macintosh with THINK C 7.0.4.  I realize that THINK C is now on
+version 8.x and that Metrowerk's CodeWarrior is a competetive
+development environment, but 7.0.4 is what I have available.  My
+system is a Quadra 650 running MacOS 7.5.1.  The compile options
+described below should work for any 68K Mac with a floating point
+unit; they probably have to be modified for Power Macs.
+
+Below I describe the steps I took to build a library project for all
+the Meschach routines.
+
+
+Step 1)
+_________
+
+	First create an appropriate version of THINK's ANSI library.
+What I did was copy their project "ANSI" to one I called
+"ANSI(020, 881, 4b ints)".  I then selected these compiler ("THINK
+C...") options before bringing the project up to date:
+		
+	-- first, under "Language Settings"
+		1)  choose "Factory Settings"
+		2)  also change "Infer prototypes" to "Require prototypes"
+			(as a former Pascal programmer, I curse the
+			person who introduced infered prototypes!)
+			(Note: you _cannot_ choose "ANSI Settings"; if
+			you do, then the compilation of the ANSI
+			project will fail!  Talk to the people at
+			Symantec about this one ...) 
+
+	-- next, under "Compiler Settings"
+		1) turn "Generate 68020 instructions" ON
+		2) turn "Generate 68881 instructions" ON
+		3) turn "4-byte ints" ON
+			(so int == long int <==> 32 bits)
+		4) make sure that "8-byte doubles" turned OFF
+			(so double == long double)
+		5) turn "Native floating-point format" ON
+
+		(The other options probably do not matter either way)
+			
+		(Note: 2) and 5) ==> type double will be the 96 bit
+		MC68881 floating point extended precision type;
+		these options give the best speed and good accuracy too)
+
+	-- optionally, under "Code Optimization"
+		1) turn "Use Global Optimizer" ON
+
+
+Step 2)
+_________
+
+	Create a project ("Meschach") containing all the Meschach
+routines that can serve as a library.  After opening a new project
+("ANSI Project" type) to which you added all the source code files,
+select these compiler ("THINK C...") options before bringing the
+project up to date: 
+	-- first, under "Language Settings"
+		1)  choose "ANSI Settings"
+		(tragically, will have to leave "Infer prototypes" on)
+
+	-- next, under "Compiler Settings", make the same choices as
+		when compiled "ANSI(020, 881, 4b ints)"
+		1) turn "Generate 68020 instructions" ON
+		2) turn "Generate 68881 instructions" ON
+		3) turn "4-byte ints" ON (so int == long int <==> 32 bits)
+		4) make sure that "8-byte doubles" turned OFF
+			(so double == long double)
+		5) turn "Native floating-point format" ON
+
+		(Note: the THINK C compiler, quite correctly, insists
+		that pointer types agree exactly. 
+		This means that the function "px_sign" in the file
+		"pxop.c" will not compile unless the line
+			numtransp = myqsort(px2->pe, px2->size);
+		is replaced with
+			numtransp = myqsort( (int *) px2->pe, px2->size );
+		since the field "pe" is a pointer to type u_int, not
+		an int, which the function "myqsort" expects.
+		I made this change.)
+		[D.Stewart:  This change will be made to the next
+		distribution of Meschach.]
+
+You should then be able to simply add this project to any of your own
+projects so that it functions as a library.  The original "machine.h"
+file may be found in the folder "origStuff" along with the *.shar
+files.
+
+		
+	-- Brent Boyer
+		6/7/95
+
+[Note: The file MACHINES/ThinkC/totalMacSetup.hqx has been moved to the
+top directory, and is not automatically part of the main distribution.
+The reason for this is the amount of space it takes up.
+
+				-- David Stewart, 8th Sept., 1995.]

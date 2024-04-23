@@ -1,0 +1,25 @@
+This directory contains a makefile for Borland C++.
+It was written by Andrew Gockel (contact information below).
+Use at own risk.  This is provided as part of the standard Meschach
+distribution to give the library the widest possible use.
+However, problems with the makefile should be directed to the author,
+not the developers of Meschach (David Stewart and Zbigniew Leyk).
+
+No representations are made concerning the fitness of this software for any
+particular purpose.
+
+# Borland C++ V4 Makefile
+#
+# Saturday, 14 October, 1995
+#
+# Andrew Gockel
+# 123 Settlement Road
+# THE GAP, QLD., 4061
+# AUSTRALIA
+#
+# Email
+# INTERNET:andrew@kittyhawk.aero.rmit.edu.au
+# CIS:100245.1253@compuserve.com
+# MSN:Andrew_Gockel@msn.com
+#
+# c:\meschach\meschach.mak

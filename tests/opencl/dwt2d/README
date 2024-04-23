@@ -1,0 +1,22 @@
+//DESCRITPTION
+
+This is the OpenCL version of the code.
+
+The JPEG2000 standard uses 2D Discrete Wavelet Transform (2D DWT), which consumes a significant part of the total encoding time
+
+
+// USE
+**************OUTPUT********************
+USAGE:
+make clean
+make OUTPUT=Y
+
+
+**************PARAMETERS*****************
+USEAGE:
+./dwt2d [otpions] src_img.rgb <out_img.dwt>
+
+  -d, --dimension     dimensions of src img, e.g. 1920x1080
+  -l, --level         DWT level, default 3
+  -f, --forward       forward transform
+  -5, --53            5/3 transform

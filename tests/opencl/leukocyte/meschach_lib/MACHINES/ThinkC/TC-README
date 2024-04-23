@@ -1,0 +1,184 @@
+From boyer@jumpjibe.stanford.edu Fri Jun  9 03:54:33 1995
+Received: from jumpjibe.stanford.edu (jumpjibe.Stanford.EDU [36.4.0.23]) by gluttony.isc.tamu.edu (8.6.11/8.6.11) with ESMTP id DAA18702 for <des@isc.tamu.edu>; Fri, 9 Jun 1995 03:54:31 -0500
+Received: (from boyer@localhost) by jumpjibe.stanford.edu (8.6.10/8.6.10) id BAA13677 for des@isc.tamu.edu; Fri, 9 Jun 1995 01:54:48 -0700
+Message-Id: <199506090854.BAA13677@jumpjibe.stanford.edu>
+From: boyer@jumpjibe.stanford.edu (Brent Boyer)
+Date: Fri, 9 Jun 1995 01:54:48 PDT
+In-Reply-To: David Stewart <des@isc.tamu.edu>
+       "Re: Meschach setup question" (Jun  8, 19:07)
+X-Mailer: Mail User's Shell (7.2.0 10/31/90)
+To: David Stewart <des@isc.tamu.edu>
+Subject: second additional message
+Content-Length: 6352
+X-Lines: 168
+Status: RO
+
+dave,
+
+	below is the text for a file I call "Mac/TC README" which
+explains everything I did to get it running.
+
+	-brent
+
+
+
+
+
+/*
+
+
+
+
+Introduction					-- Brent Boyer 6/7/95
+_____________________
+
+
+I have found a procedure which gets the Meschach routines to work on a Macintosh with THINK C 7.0.4.
+My system is a Quadra 650 running MacOS 7.5.1.  The compile options described below should work for
+any 68K Mac with a floating point unit; they probably have to be modified for Power Macs
+(in particular, check the floating point type mapping and precision).
+
+	(Note: THINK C is now on version 8.x, perhaps they have fixed some of the terrible features of
+			the 7.x release; Metrowerk's CodeWarrior is supposed to be a better development environment
+			and it allegedly can easily translate THINK C projects)
+
+
+	
+			
+Procedure
+_____________________
+
+
+Note: all projects described here should have the folowing options made under "Set Project Type..."
+(which is found under the "Project" menu):
+	1)  "Application" type 
+	2)  "Far CODE" and "Far DATA" checked
+	3)  Partition should be raised from 384 to 4000 (required to get all the *tort*.c projects to run)
+	4)  Under "SIZE Flags", you can set "32-Bit Compatible" but leave the rest unchecked
+
+
+Step #1
+_________
+
+	Create an appropriate version of THINK's ANSI library.
+			
+		 -- first, you will have to modify two of Symantecs "Standard Library" files to let the
+		 	function "isascii" become available (this function is required in "err.c")
+		 	
+			1)  in THINK's file "ctype.h" add this code in the appropriate places:
+					a)  int	isascii(int);
+					b)  #define isascii(c)	((unsigned)(c)<=0177)
+					
+			2)  in THINK's file "ctype.c" add this code:
+					a)  int
+						(isascii)(int c)
+						{
+							return (isascii(c));
+						}
+	
+	What I next did was copy their project "ANSI" to one I called "ANSI (for Meschach)".  I then selected
+	these compiler ("THINK C...") options before bringing the project up to date:
+
+		 -- first, under "Language Settings"
+			1)  choose "Factory Settings"
+			2)  also change "Infer prototypes" to "Require prototypes"
+				(as a former Pascal programmer, I curse the person who introduced infered prototypes!)
+				
+			(Note: you _cannot_ choose "ANSI Settings"; if you do, then the compilation of the ANSI project
+			 will fail!  Talk to the people at Symantec about this one ...)
+
+		-- then, under "Compiler Settings"
+			1) turn "Generate 68020 instructions" ON
+			2) turn "Generate 68881 instructions" ON
+			3) turn "4-byte ints" ON (so int == long int <==> 32 bits)
+			4) make sure that "8-byte doubles" turned OFF (so double == long double)
+			5) turn "Native floating-point format" ON
+		
+			(The other options probably do not matter either way)
+			
+			(Note: 2) and 5) ==> type double will be the 96 bit MC68881 floating point extended precision type;
+					these options give the best speed and good accuracy too)
+					
+			(Also: this 96 bit floating point type will cause the test in "memtort.c" to wrongly report that
+					756 blocks were allocated when only 516 should have been)
+
+		-- optionally, under "Code Optimization"
+			1) turn "Use Global Optimizer" ON
+
+
+Step #2
+_________
+
+	Next create an appropriate version of THINK's UNIX library.  What I did was copy their project
+	"unix" to one I called "unix (for Meschach)".  Build this project with the same "Language Settings"
+	and "Compiler Settings" options described in Step #1.
+
+
+Step #3
+_________
+
+	Correct some errors in the "Meschach" source code files:
+	
+	1) the function "Mmmtr" in the file "extras.c" has an error in the line
+				Mmv(n,p,alpha,&(A[i][Aj0]),B,Bj0,&(C[i][Cj0]));
+		the correct line should read
+				Mmv(n,p,alpha,B,Bj0,&(A[i][Aj0]),1.0,&(C[i][Cj0]));
+	2) the function "px_sign" in the file "pxop.c" will not compile unless the line
+				numtransp = myqsort(px2->pe, px2->size);
+		is replaced with
+				numtransp = myqsort( (int *) px2->pe, px2->size );
+	3) the function "chk_col_access" in the file "sptort.c" conflicts with the same named function
+		in the file "spbkp.c".  This causes a link error.  To solve this problem, I suggest renaming it as
+				chk_col_access -> chk_col_accessSPT
+				
+	(Dave Stewart tells me that these errors are corrected (along with other stuff?) in a
+	to-be-released version of "Meschach".)
+
+
+Step #4
+_________
+
+	Ideally, you would next create a single large library containing all the Meschach routines.  Unfortunately,
+	you cannot do this because THINK C requires libraries to either be, or be built from, single segment projects,
+	and individual segments can only have 32K of compiled code size, which is way too small for all the
+	Meschach routines.
+	
+	Instead, what I had to do was create 7 smaller, single segment projects.  I added code to the segments
+	strictly in alphabetical order, with no regard to partitioning (i.e. putting similar routines together).
+	
+	To make each such project, I first opened a new project ("ANSI Project" type) and then added alot of
+	source code files.  I then selected these compiler ("THINK C...") options before bringing the project
+	up to date:
+	
+		-- first, under "Language Settings"
+			1)  choose "ANSI Settings" (tragically, will have to leave "Infer prototypes" on)
+		
+		-- next, under "Compiler Settings", make the same choices as when compiled "ANSI (for Meschach)"
+			1) turn "Generate 68020 instructions" ON
+			2) turn "Generate 68881 instructions" ON
+			3) turn "4-byte ints" ON (so int == long int <==> 32 bits)
+			4) make sure that "8-byte doubles" turned OFF (so double == long double)
+			5) turn "Native floating-point format" ON
+
+	If the resulting single segment was over 32K, I removed files from the bottom of the list until the segment
+	had < 32K left.  The file "main.c" which was automatically generated was also removed.
+		
+	
+	Note:  I never added the *tort*.c files or any of the other files with a main routine (e.g. "maxint.c")
+			in them to these projects.  The *tort*.c files were made into separate projects.  In order to
+			echo the screen output to a file when running the torture tests, you need to add these lines
+			to each *tort*.c file:
+				a)  #include	<console.h>					(put near top)
+				b)  cecho2file("filename", 0, stdout);		(put inside main)
+
+
+
+
+You should then be able to simply add all these projects to any of your own projects -- this will give you the
+whole library.
+
+
+
+
+*/
+
