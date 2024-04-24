@@ -132,8 +132,9 @@ void enqueueFillBuffer(void* command_queue, void* buffer, const void* pattern, s
     printf("enqueueFillBuffer() offset=%d, size=%d\n", offset, size);
     // just valid for pattern size == 4
     cl_kernel kernel = _getKernelFill();
+    uint32_t value = *((uint32_t*) pattern);
     size_t global_work_size = size / 4;
-    clSetKernelArg(kernel, 0, 4, pattern);
+    clSetKernelArg(kernel, 0, 4, &value);
     clSetKernelArg(kernel, 1, sizeof(buffer), &buffer);
     clEnqueueNDRangeKernel((cl_command_queue) command_queue, kernel, 1, NULL, &global_work_size, NULL, 0, NULL, NULL);
     // TODO: It brokes 
