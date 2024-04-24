@@ -32,6 +32,7 @@ extern cl_context context;
     errors += result;                                                  \
   })
 
+#include "test_readnpixels.c"
 #include "test_perspective_div.c"
 #include "test_color_kernel.c"
 #include "test_viewport_trans.c"
