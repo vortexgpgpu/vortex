@@ -280,13 +280,14 @@ GL_APICALL void GL_APIENTRY glClear (GLbitfield mask) {
 GL_APICALL void GL_APIENTRY glClearColor (GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) {
 
     if (COLOR_ATTACHMENT0.internalformat == GL_RGBA4) {
-        unsigned int color;
-        color |= (unsigned int) (15*red);
-        color |= (unsigned int) (15*green) << 4;
-        color |= (unsigned int) (15*blue) << 8;
-        color |= (unsigned int) (15*alpha) << 12;
+        unsigned int color = 0;
+        color |= (unsigned int) (red*15);
+        color |= (unsigned int) (green*15) << 4;
+        color |= (unsigned int) (blue*15) << 8;
+        color |= (unsigned int) (alpha*15) << 12;
         color |= color << 16;
         enqueueFillBuffer(getCommandQueue(), COLOR_ATTACHMENT0.mem, &color, 4, 0, COLOR_ATTACHMENT0.width*COLOR_ATTACHMENT0.height*2);
+    
     } else {
         printf("NOT IMPLEMENTED");
         exit(0);
@@ -468,7 +469,8 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
         enqueueNDRangeKernel(command_queue, rasterization_kernel, num_fragments);   
         // Fragment
         enqueueNDRangeKernel(command_queue, fragment_kernel, num_fragments);   
-        // Post-Fragment
+        
+	// Post-Fragment
         enqueueNDRangeKernel(command_queue, color_kernel, num_fragments);
     }
     
@@ -782,7 +784,7 @@ void* createVertexKernel(GLenum mode, GLint first, GLsizei count) {
     }
     // Uniform locations
     GLuint uniform = 0;
-    GLuint active_attributes = _programs[_current_program].active_uniforms; 
+    GLuint active_attributes = _programs[_current_program].active_attributes; 
     while(uniform < _programs[_current_program].active_uniforms) {
         setKernelArg(
             kernel, 

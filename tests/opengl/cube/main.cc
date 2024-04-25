@@ -11,8 +11,8 @@
 #include "../debug.cc"
 #include "../common.c"
 
-#define WIDTH 20
-#define HEIGHT 20
+#define WIDTH 600
+#define HEIGHT 400
 
 void perspectiveMatrix(float* mat, float angle, float ratio, float near, float far);
 void rotateMatrix(float* mat, float angle, float x, float y, float z);
@@ -132,7 +132,7 @@ void createCube() {
   glEnableVertexAttribArray(0); 
 
   glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
-  glBufferData(GL_ARRAY_BUFFER,sizeof(cube),cube,GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER,sizeof(color),color,GL_STATIC_DRAW);
   glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float[3]), 0);
   glEnableVertexAttribArray(1); 
 
@@ -161,55 +161,83 @@ int main() {
   GLfloat perspective[16];
   GLfloat model[16];
 
-  perspectiveMatrix(perspective, M_PI / 2, (float) WIDTH / (float) HEIGHT, 0.0f, 1.0f);
+  perspectiveMatrix(perspective, M_PI / 2.f, (float) WIDTH / (float) HEIGHT, 0.0f, 1.0f);
   glUniformMatrix4fv(0, 4, GL_FALSE, perspective);
   // Draw
   uint rotation = 0;
-  while (true) {
+  // while (true) {
     glClear(GL_COLOR_BUFFER_BIT);
 
-    rotateMatrix(model, M_PI/6*(rotation++), 0,1,0);
+    rotateMatrix(model, M_PI/4*(rotation++), 0,1,0);
     glUniformMatrix4fv(1, 4, GL_FALSE, model);
 
-    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
     glFinish();
     glReadnPixels(0,0,WIDTH, HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, WIDTH*HEIGHT*4, result);
     printPPM("image.ppm", WIDTH, HEIGHT, (uint8_t*) result);
-  }
+  // }
 
   return 0; 
 }
 
-void perspectiveMatrix(float* mat, float angle, float ratio, float near, float far) {
-  for(int i=0; i<16; ++i) mat[i]=0.f;
-  
-  float tan_half_angle = tan(angle/2);
-  mat[0] = 1.0f / (ratio * tan_half_angle);
-  mat[5] = 1.0f / tan_half_angle;
-  mat[10] = -(far + near) / (far - near);
-  mat[11] = -(2 * far * near) / (far - near);
-  mat[14] = -1.0f;
+void perspectiveMatrix(float* matrix, float angle, float ratio, float near, float far) {
+    float f = 1.0f / tan(angle / 2.0f);
+    matrix[0] = f / ratio;
+    matrix[1] = 0.0f;
+    matrix[2] = 0.0f;
+    matrix[3] = 0.0f;
+    matrix[4] = 0.0f;
+    matrix[5] = f;
+    matrix[6] = 0.0f;
+    matrix[7] = 0.0f;
+    matrix[8] = 0.0f;
+    matrix[9] = 0.0f;
+    matrix[10] = (far + near) / (near - far);
+    matrix[11] = (2.0f * far * near) / (near - far);
+    matrix[12] = 0.0f;
+    matrix[13] = 0.0f;
+    matrix[14] = -1.0f;
+    matrix[15] = 0.0f;
 }
 
-void rotateMatrix(float *mat, float angle, float x, float y, float z) {
-  for(int i=0; i<16; ++i) mat[i]=0.f;
+void rotateMatrix(float *matrix, float angle, float x, float y, float z) {
+    float c = cos(angle);
+    float s = sin(angle);
+    float one_c = 1.0f - c;
 
-  float sx, sy, sz, cx, cy, cz;
-  sx = sin(angle*x);
-  sy = sin(angle*y);
-  sz = sin(angle*z);
-  cx = cos(angle*x);
-  cy = cos(angle*y);
-  cz = cos(angle*z);
+    float mag = sqrt(x * x + y * y + z * z);
+    if (mag > 0.0f) {
+        x /= mag;
+        y /= mag;
+        z /= mag;
+    }
+    float xx = x * x;
+    float yy = y * y;
+    float zz = z * z;
+    float xy = x * y;
+    float yz = y * z;
+    float zx = z * x;
+    float xs = x * s;
+    float ys = y * s;
+    float zs = z * s;
 
-  mat[0] = cy*cx;
-  mat[1] = sz*sy*cx - cz*sy;
-  mat[2] = cz*sy*cx + sz*sx;
-  mat[4] = cy*sx;
-  mat[5] = sz*sy*sx + cy*cx;
-  mat[6] = cz*sy*sx - sz*cx;
-  mat[8] = -sy;
-  mat[9] = sz*cy;
-  mat[10] = cz*cy;
-  mat[15] = 1.f;
+    matrix[0] = (one_c * xx) + c;
+    matrix[1] = (one_c * xy) - zs;
+    matrix[2] = (one_c * zx) + ys;
+    matrix[3] = 0.0f;
+
+    matrix[4] = (one_c * xy) + zs;
+    matrix[5] = (one_c * yy) + c;
+    matrix[6] = (one_c * yz) - xs;
+    matrix[7] = 0.0f;
+
+    matrix[8] = (one_c * zx) - ys;
+    matrix[9] = (one_c * yz) + xs;
+    matrix[10] = (one_c * zz) + c;
+    matrix[11] = 0.0f;
+
+    matrix[12] = 0.0f;
+    matrix[13] = 0.0f;
+    matrix[14] = 0.0f;
+    matrix[15] = 1.0f;
 }

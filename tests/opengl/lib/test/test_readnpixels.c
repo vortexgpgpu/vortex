@@ -1,6 +1,6 @@
 
-int test_color_kernel() {
-  const char KERNEL_NAME[] = "gl_rgba4";
+int test_readnpixels() {
+  const char KERNEL_NAME[] = "gl_rgba4_rgba8";
 
   cl_program program = NULL;
   cl_kernel kernel = NULL;
@@ -11,14 +11,14 @@ int test_color_kernel() {
   size_t kernel_size = sizeof(GLSC2_kernel_readnpixels_pocl);
 
   uint16_t buf_in_init[width*height];
-  uint8_t buf_out_out[width*height];
+  uint32_t buf_out_out[width*height];
 
   for (uint32_t i=0; i<width*height; ++i) {
-    buf_in[i] = 0x0001;
+    buf_in_init[i] = 0xABCD;
   }
 
   buf_in = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(uint16_t)*width*height, &buf_in_init, &_err));
-  buf_out = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(uint8_t)*width*height, NULL, &_err));
+  buf_out = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(uint32_t)*width*height, NULL, &_err));
 
   const uint8_t *kernel_bin = GLSC2_kernel_readnpixels_pocl;
 
@@ -44,14 +44,14 @@ int test_color_kernel() {
   CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, &global_work_size, NULL, 0, NULL, NULL));
   CL_CHECK(clFinish(commandQueue));
 
-  CL_CHECK(clEnqueueReadBuffer(commandQueue, buf_out, CL_TRUE, 0, sizeof(uint16_t)*width*height, buf_out_out, 0, NULL, NULL));
+  CL_CHECK(clEnqueueReadBuffer(commandQueue, buf_out, CL_TRUE, 0, sizeof(uint32_t)*width*height, buf_out_out, 0, NULL, NULL));
 
   int errors = 0;
   for (int i = 0; i < width*height; ++i) {
-    unsigned int ref = 1;
+    unsigned int ref = 0xAABBCCDD;
     if (buf_out_out[i] != ref) {
       if (errors < 1) 
-        printf("*** error: [%d] expected=%08x, actual=%08x\n", i, ref, color_out[i]);
+        printf("*** error: [%d] expected=%08x, actual=%08x\n", i, ref, buf_out_out[i]);
       ++errors;
     }
   }

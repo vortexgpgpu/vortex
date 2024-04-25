@@ -4,8 +4,9 @@ __kernel void gl_perspective_division(
   int gid = get_global_id(0);
 
   float w = gl_Positions[gid].w;
-
-  gl_Positions[gid].x /= w;
-  gl_Positions[gid].y /= w;
-  gl_Positions[gid].z /= w;
+  if (w != 0.0) {
+    gl_Positions[gid].x /= w;
+    gl_Positions[gid].y /= w;
+    gl_Positions[gid].z /= w;
+  }
 }

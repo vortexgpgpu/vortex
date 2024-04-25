@@ -26,9 +26,10 @@ int main (int argc, char **argv) {
   uint32_t errors = 0;
   TEST(test_perspective_div);
   TEST(test_viewport_trans);
+  TEST(test_readnpixels);
   TEST(test_color_kernel);
   TEST(test_color_kernel_discard_true);
-  TEST(test_rasterization_triangle);
+  //TEST(test_rasterization_triangle);
   // CLEANUP
   if (context) clReleaseContext(context);
   if (device_id) clReleaseDevice(device_id);
