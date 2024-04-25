@@ -132,7 +132,7 @@ void createCube() {
   glEnableVertexAttribArray(0); 
 
   glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
-  glBufferData(GL_ARRAY_BUFFER,sizeof(cube),cube,GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER,sizeof(color),color,GL_STATIC_DRAW);
   glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float[3]), 0);
   glEnableVertexAttribArray(1); 
 
@@ -161,7 +161,7 @@ int main() {
   GLfloat perspective[16];
   GLfloat model[16];
 
-  perspectiveMatrix(perspective, M_PI / 2, (float) WIDTH / (float) HEIGHT, 0.0f, 1.0f);
+  perspectiveMatrix(perspective, M_PI / 2.f, (float) WIDTH / (float) HEIGHT, 0.0f, 1.0f);
   glUniformMatrix4fv(0, 4, GL_FALSE, perspective);
   // Draw
   uint rotation = 0;
@@ -171,7 +171,7 @@ int main() {
     rotateMatrix(model, M_PI/4*(rotation++), 0,1,0);
     glUniformMatrix4fv(1, 4, GL_FALSE, model);
 
-    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
     glFinish();
     glReadnPixels(0,0,WIDTH, HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, WIDTH*HEIGHT*4, result);
     printPPM("image.ppm", WIDTH, HEIGHT, (uint8_t*) result);
@@ -193,16 +193,17 @@ void perspectiveMatrix(float* matrix, float angle, float ratio, float near, floa
     matrix[8] = 0.0f;
     matrix[9] = 0.0f;
     matrix[10] = (far + near) / (near - far);
-    matrix[11] = -1.0f;
+    matrix[11] = (2.0f * far * near) / (near - far);
     matrix[12] = 0.0f;
     matrix[13] = 0.0f;
-    matrix[14] = (2.0f * far * near) / (near - far);
+    matrix[14] = -1.0f;
     matrix[15] = 0.0f;
 }
 
 void rotateMatrix(float *matrix, float angle, float x, float y, float z) {
     float c = cos(angle);
     float s = sin(angle);
+    float one_c = 1.0f - c;
 
     float mag = sqrt(x * x + y * y + z * z);
     if (mag > 0.0f) {
@@ -219,20 +220,19 @@ void rotateMatrix(float *matrix, float angle, float x, float y, float z) {
     float xs = x * s;
     float ys = y * s;
     float zs = z * s;
-    float one_c = 1.0f - c;
 
     matrix[0] = (one_c * xx) + c;
-    matrix[1] = (one_c * xy) + zs;
-    matrix[2] = (one_c * zx) - ys;
+    matrix[1] = (one_c * xy) - zs;
+    matrix[2] = (one_c * zx) + ys;
     matrix[3] = 0.0f;
 
-    matrix[4] = (one_c * xy) - zs;
+    matrix[4] = (one_c * xy) + zs;
     matrix[5] = (one_c * yy) + c;
-    matrix[6] = (one_c * yz) + xs;
+    matrix[6] = (one_c * yz) - xs;
     matrix[7] = 0.0f;
 
-    matrix[8] = (one_c * zx) + ys;
-    matrix[9] = (one_c * yz) - xs;
+    matrix[8] = (one_c * zx) - ys;
+    matrix[9] = (one_c * yz) + xs;
     matrix[10] = (one_c * zz) + c;
     matrix[11] = 0.0f;
 

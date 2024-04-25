@@ -35,7 +35,9 @@ __kernel void gl_main_vs (
 
   // vertex operations
   gl_Positions[gid] = mul(perspective,mul(model,(float4) (x, y, z, 1.0f)));
-  gl_Primitives[gid] = (float4) (r,g,b,1.0f);
+ 
+  gl_Primitives[gid*2] = (float4) (r,g,b,1.0f);
+  gl_Primitives[gid*2+1] = (float4) (1.f,1.f,1.f,1.0f);
 }
 
 __kernel void gl_main_fs (
@@ -53,5 +55,5 @@ __kernel void gl_main_fs (
   // in out vars
 
   // fragment operations
-  gl_FragColor[gid] = gl_Rasterization[gid];
+  gl_FragColor[gid] = gl_Rasterization[gid*2];
 }
