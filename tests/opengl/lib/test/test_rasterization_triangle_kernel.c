@@ -1,11 +1,9 @@
-#define WIDTH 600
-#define HEIGHT 400
-
 int test_rasterization_triangle() {
 
   const char KERNEL_NAME[] = "gl_rasterization_triangle";
   uint num_triangle = 3;
 
+  unsigned int width = 600, height = 400;
   cl_program program = NULL;
   cl_kernel kernel = NULL;
 
@@ -30,15 +28,15 @@ int test_rasterization_triangle() {
 
   float depth_range[2] = {0,0};
 
-  float fragCoordOut[4*WIDTH*HEIGHT];
-  float gl_RasterizationOut[4*WIDTH*HEIGHT];
-  char gl_DiscardOut[WIDTH*HEIGHT];
+  float fragCoordOut[4*width*height];
+  float gl_RasterizationOut[4*width*height];
+  char gl_DiscardOut[width*height];
 
   gl_Positions = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(gl_Positions_init), &gl_Positions_init, &_err));
   primitives = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(attrb_init), &attrb_init, &_err));
-  fragCoord = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float[4])*WIDTH*HEIGHT, NULL, &_err));
-  gl_Rasterization = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float[4])*WIDTH*HEIGHT, NULL, &_err));
-  gl_Discard = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(char)*WIDTH*HEIGHT, NULL, &_err));
+  fragCoord = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float[4])*width*height, NULL, &_err));
+  gl_Rasterization = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float[4])*width*height, NULL, &_err));
+  gl_Discard = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(char)*width*height, NULL, &_err));
 
   const uint8_t *kernel_bin = GLSC2_kernel_rasterization_triangle_pocl;
 
@@ -49,7 +47,7 @@ int test_rasterization_triangle() {
 
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
-  int index =0, width = WIDTH, height=HEIGHT, num_attrs=1;
+  int index =0, num_attrs=1;
 
   CL_CHECK(clSetKernelArg(kernel, 0, sizeof(int), &index));
   CL_CHECK(clSetKernelArg(kernel, 1, sizeof(int), &width));
@@ -63,7 +61,7 @@ int test_rasterization_triangle() {
   CL_CHECK(clSetKernelArg(kernel, 8, sizeof(char*), &gl_Discard));
 
   cl_command_queue commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));
-  size_t global_work_size = WIDTH*HEIGHT;
+  size_t global_work_size = width*height;
   CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, &global_work_size, NULL, 0, NULL, NULL));
   CL_CHECK(clFinish(commandQueue));
 
@@ -73,7 +71,7 @@ int test_rasterization_triangle() {
 
 
   int errors = 0;
-  for (int i = 0; i < WIDTH*HEIGHT*4; i+=4) {
+  for (int i = 0; i < width*height*4; i+=4) {
     unsigned short ref = 0xFFFF;
     // if (color_out[i] != ref) {
     //   if (errors < 1) 
@@ -81,7 +79,7 @@ int test_rasterization_triangle() {
     //   ++errors;
     // }
     if (gl_DiscardOut[i>>2] == 0)
-      printf("fragColor (%d,%d), x=%f, y=%f, z=%f, w = %f\n", ((i>>2)/WIDTH), ((i>>2)%WIDTH), gl_RasterizationOut[i],gl_RasterizationOut[i+1],gl_RasterizationOut[i+2], gl_RasterizationOut[i+3]);
+      printf("fragColor (%d,%d), x=%f, y=%f, z=%f, w = %f\n", ((i>>2)/width), ((i>>2)%width), gl_RasterizationOut[i],gl_RasterizationOut[i+1],gl_RasterizationOut[i+2], gl_RasterizationOut[i+3]);
   }
 
   if (commandQueue) clReleaseCommandQueue(commandQueue);

@@ -31,8 +31,10 @@ extern cl_context context;
     else printf("FAILED with %d errors.\n", result);                   \
     errors += result;                                                  \
   })
-
+  
+#include "test_rasterization_triangle_kernel.c"
 #include "test_readnpixels.c"
 #include "test_perspective_div.c"
 #include "test_color_kernel.c"
 #include "test_viewport_trans.c"
+
