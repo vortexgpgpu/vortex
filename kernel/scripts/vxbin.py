@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 
 # Copyright 2019-2023
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -33,7 +33,7 @@ def get_vma_size(elf_file):
         max_vma = 0
         regex = re.compile(r'\s*LOAD\s+(\w+)\s+(\w+)\s+(\w+)\s+(\w+)\s+(\w+)')
 
-        for line in output.splitlines():            
+        for line in output.splitlines():
             match = regex.match(line)
             if match:
                 vma = int(match.group(2), 16)
@@ -44,15 +44,14 @@ def get_vma_size(elf_file):
                 vma_size = max_vma - min_vma
                 #print("vma={0:x}, size={1}, min_vma={2:x}, max_vma={3:x}, vma_size={4}".format(vma, size, min_vma, max_vma, vma_size))
 
-        total_vma_span = max_vma - min_vma
-        return total_vma_span  # Return the calculated size
+        return min_vma, max_vma
 
     except Exception as e:
         print("Failed to calculate vma size due to an error: {}".format(str(e)))
         sys.exit(-1)
 
 def create_vxbin_binary(input_elf, output_bin, objcopy_path):
-    vma_size = get_vma_size(input_elf)
+    min_vma, max_vma = get_vma_size(input_elf)
 
     # Create a binary data from the ELF file using objcopy
     temp_bin_path = '/tmp/temp_kernel.bin'
@@ -62,17 +61,19 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
     with open(temp_bin_path, 'rb') as temp_file:
         binary_data = temp_file.read()
 
-    # Pack size into 64-bit unsigned integer
-    total_size_bytes = struct.pack('<Q', vma_size)
+    # Pack addresses into 64-bit unsigned integer
+    min_vma_bytes = struct.pack('<Q', min_vma)
+    max_vma_bytes = struct.pack('<Q', max_vma)
 
     # Write the total size and binary data to the final output file
     with open(output_bin, 'wb') as bin_file:
-        bin_file.write(total_size_bytes)
+        bin_file.write(min_vma_bytes)
+        bin_file.write(max_vma_bytes)
         bin_file.write(binary_data)
 
     # Remove the temporary binary file
     os.remove(temp_bin_path)
-    print("Binary created successfully: {}, vma_size={}".format(output_bin, vma_size))
+    print("Binary created successfully: {}, min_vma={:x}, max_vma={:x}".format(output_bin, min_vma, max_vma))
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:
