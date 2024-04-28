@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -35,7 +35,7 @@ union reg_data_t {
   float    f32;
   double   f64;
   uint32_t u32;
-  uint64_t u64; 
+  uint64_t u64;
   int32_t  i32;
   int64_t  i64;
 };
@@ -49,7 +49,7 @@ inline bool is_nan_boxed(uint64_t value) {
   return (uint32_t(value >> 32) == 0xffffffff);
 }
 
-inline int64_t check_boxing(int64_t a) {  
+inline int64_t check_boxing(int64_t a) {
   if (is_nan_boxed(a))
     return a;
   return nan_box(0x7fc00000); // NaN
@@ -68,18 +68,18 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   trace->rdest_type = instr.getRDType();
 
   auto next_pc = warp.PC + 4;
-  auto next_tmask = warp.tmask; 
+  auto next_tmask = warp.tmask;
 
   auto opcode = instr.getOpcode();
   auto func2  = instr.getFunc2();
   auto func3  = instr.getFunc3();
-  auto func7  = instr.getFunc7();  
+  auto func7  = instr.getFunc7();
   auto rdest  = instr.getRDest();
   auto rsrc0  = instr.getRSrc(0);
   auto rsrc1  = instr.getRSrc(1);
-  auto rsrc2  = instr.getRSrc(2);  
+  auto rsrc2  = instr.getRSrc(2);
   auto immsrc = sext((Word)instr.getImm(), 32);
-  
+
   auto num_threads = arch_.num_threads();
 
   uint32_t thread_start = 0;
@@ -92,31 +92,31 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   std::vector<reg_data_t> rddata(num_threads);
 
   auto num_rsrcs = instr.getNRSrc();
-  if (num_rsrcs) {              
-    for (uint32_t i = 0; i < num_rsrcs; ++i) {          
+  if (num_rsrcs) {
+    for (uint32_t i = 0; i < num_rsrcs; ++i) {
       auto type = instr.getRSType(i);
-      auto reg = instr.getRSrc(i);        
+      auto reg = instr.getRSrc(i);
       switch (type) {
-      case RegType::Integer: 
+      case RegType::Integer:
         DPH(2, "Src" << std::dec << i << " Reg: " << type << std::dec << reg << "={");
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!warp.tmask.test(t)) {
             DPN(2, "-");
-            continue;            
+            continue;
           }
-          rsdata[t][i].u = warp.ireg_file.at(t)[reg];          
+          rsdata[t][i].u = warp.ireg_file.at(t)[reg];
           DPN(2, "0x" << std::hex << rsdata[t][i].i);
         }
         DPN(2, "}" << std::endl);
         break;
-      case RegType::Float: 
+      case RegType::Float:
         DPH(2, "Src" << std::dec << i << " Reg: " << type << std::dec << reg << "={");
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!warp.tmask.test(t)) {
             DPN(2, "-");
-            continue;            
+            continue;
           }
           rsdata[t][i].u64 = warp.freg_file.at(t)[reg];
           DPN(2, "0x" << std::hex << rsdata[t][i].f);
@@ -125,13 +125,13 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         break;
       case RegType::None:
         break;
-      }      
+      }
     }
   }
 
   bool rd_write = false;
-  
-  switch (opcode) {  
+
+  switch (opcode) {
   case Opcode::LUI: {
     // RV32I: LUI
     trace->fu_type = FUType::ALU;
@@ -140,10 +140,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       if (!warp.tmask.test(t))
         continue;
       rddata[t].i = immsrc;
-    }    
+    }
     rd_write = true;
     break;
-  }  
+  }
   case Opcode::AUIPC: {
     // RV32I: AUIPC
     trace->fu_type = FUType::ALU;
@@ -152,12 +152,12 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       if (!warp.tmask.test(t))
         continue;
       rddata[t].i = immsrc + warp.PC;
-    }    
+    }
     rd_write = true;
     break;
   }
   case Opcode::R: {
-    trace->fu_type = FUType::ALU;    
+    trace->fu_type = FUType::ALU;
     trace->alu_type = AluType::ARITH;
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
@@ -181,13 +181,13 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           break;
         }
         case 2: {
-          // RV32M: MULHSU       
+          // RV32M: MULHSU
           auto first = static_cast<DWordI>(rsdata[t][0].i);
           auto second = static_cast<DWord>(rsdata[t][1].u);
           rddata[t].i = (first * second) >> XLEN;
           trace->alu_type = AluType::IMUL;
           break;
-        } 
+        }
         case 3: {
           // RV32M: MULHU
           auto first = static_cast<DWord>(rsdata[t][0].u);
@@ -195,12 +195,12 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           rddata[t].i = (first * second) >> XLEN;
           trace->alu_type = AluType::IMUL;
           break;
-        } 
+        }
         case 4: {
           // RV32M: DIV
           auto dividen = rsdata[t][0].i;
-          auto divisor = rsdata[t][1].i; 
-          auto largest_negative = WordI(1) << (XLEN-1);  
+          auto divisor = rsdata[t][1].i;
+          auto largest_negative = WordI(1) << (XLEN-1);
           if (divisor == 0) {
             rddata[t].i = -1;
           } else if (dividen == largest_negative && divisor == -1) {
@@ -210,7 +210,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           }
           trace->alu_type = AluType::IDIV;
           break;
-        } 
+        }
         case 5: {
           // RV32M: DIVU
           auto dividen = rsdata[t][0].u;
@@ -222,7 +222,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           }
           trace->alu_type = AluType::IDIV;
           break;
-        } 
+        }
         case 6: {
           // RV32M: REM
           auto dividen = rsdata[t][0].i;
@@ -237,7 +237,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           }
           trace->alu_type = AluType::IDIV;
           break;
-        } 
+        }
         case 7: {
           // RV32M: REMU
           auto dividen = rsdata[t][0].u;
@@ -249,7 +249,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           }
           trace->alu_type = AluType::IDIV;
           break;
-        } 
+        }
         default:
           std::abort();
         }
@@ -313,13 +313,13 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           std::abort();
         }
       }
-    }    
+    }
     rd_write = true;
     break;
   }
   case Opcode::I: {
-    trace->fu_type = FUType::ALU;    
-    trace->alu_type = AluType::ARITH;    
+    trace->fu_type = FUType::ALU;
+    trace->alu_type = AluType::ARITH;
     trace->used_iregs.set(rsrc0);
     for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!warp.tmask.test(t))
@@ -344,7 +344,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         // RV32I: SLTIU
         rddata[t].i = rsdata[t][0].u < immsrc;
         break;
-      } 
+      }
       case 4: {
         // RV32I: XORI
         rddata[t].i = rsdata[t][0].i ^ immsrc;
@@ -378,7 +378,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     break;
   }
   case Opcode::R_W: {
-    trace->fu_type = FUType::ALU;    
+    trace->fu_type = FUType::ALU;
     trace->alu_type = AluType::ARITH;
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
@@ -410,7 +410,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
             rddata[t].i = sext((uint64_t)quotient, 32);
             trace->alu_type = AluType::IDIV;
             break;
-          }      
+          }
           case 5: {
             // RV64M: DIVUW
             uint32_t dividen = (uint32_t)rsdata[t][0].i;
@@ -424,7 +424,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
             rddata[t].i = sext((uint64_t)quotient, 32);
             trace->alu_type = AluType::IDIV;
             break;
-          } 
+          }
           case 6: {
             // RV64M: REMW
             int32_t dividen = (uint32_t)rsdata[t][0].i;
@@ -441,7 +441,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
             rddata[t].i = sext((uint64_t)remainder, 32);
             trace->alu_type = AluType::IDIV;
             break;
-          }  
+          }
           case 7: {
             // RV64M: REMUW
             uint32_t dividen = (uint32_t)rsdata[t][0].i;
@@ -455,7 +455,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
             rddata[t].i = sext((uint64_t)remainder, 32);
             trace->alu_type = AluType::IDIV;
             break;
-          }  
+          }
           default:
             std::abort();
         }
@@ -471,7 +471,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
             // RV64I: ADDW
             uint32_t result = (uint32_t)rsdata[t][0].i + (uint32_t)rsdata[t][1].i;
             rddata[t].i = sext((uint64_t)result, 32);
-          }    
+          }
           break;
         }
         case 1: {
@@ -502,11 +502,11 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       }
     }
     rd_write = true;
-    break; 
+    break;
   }
   case Opcode::I_W: {
-    trace->fu_type = FUType::ALU;    
-    trace->alu_type = AluType::ARITH;    
+    trace->fu_type = FUType::ALU;
+    trace->alu_type = AluType::ARITH;
     trace->used_iregs.set(rsrc0);
     for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!warp.tmask.test(t))
@@ -525,7 +525,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           uint32_t result = rsdata[t][0].i << shamt;
           rddata[t].i = sext((uint64_t)result, 32);
           break;
-        }  
+        }
         case 5: {
           uint32_t shamt_mask = 0x1F;
           uint32_t shamt = immsrc & shamt_mask;
@@ -547,19 +547,22 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     rd_write = true;
     break;
   }
-  case Opcode::B: {   
-    trace->fu_type = FUType::ALU;    
-    trace->alu_type = AluType::BRANCH;    
+  case Opcode::B: {
+    trace->fu_type = FUType::ALU;
+    trace->alu_type = AluType::BRANCH;
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
+    bool all_taken = false;
     for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!warp.tmask.test(t))
         continue;
+      bool curr_taken = false;
       switch (func3) {
       case 0: {
         // RV32I: BEQ
         if (rsdata[t][0].i == rsdata[t][1].i) {
           next_pc = warp.PC + immsrc;
+          curr_taken = true;
         }
         break;
       }
@@ -567,6 +570,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         // RV32I: BNE
         if (rsdata[t][0].i != rsdata[t][1].i) {
           next_pc = warp.PC + immsrc;
+          curr_taken = true;
         }
         break;
       }
@@ -574,6 +578,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         // RV32I: BLT
         if (rsdata[t][0].i < rsdata[t][1].i) {
           next_pc = warp.PC + immsrc;
+          curr_taken = true;
         }
         break;
       }
@@ -581,6 +586,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         // RV32I: BGE
         if (rsdata[t][0].i >= rsdata[t][1].i) {
           next_pc = warp.PC + immsrc;
+          curr_taken = true;
         }
         break;
       }
@@ -588,6 +594,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         // RV32I: BLTU
         if (rsdata[t][0].u < rsdata[t][1].u) {
           next_pc = warp.PC + immsrc;
+          curr_taken = true;
         }
         break;
       }
@@ -595,20 +602,28 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         // RV32I: BGEU
         if (rsdata[t][0].u >= rsdata[t][1].u) {
           next_pc = warp.PC + immsrc;
+          curr_taken = true;
         }
         break;
       }
       default:
         std::abort();
       }
-      break; // runonce
+      if (t == thread_start) {
+        all_taken = curr_taken;
+      } else {
+        if (all_taken != curr_taken) {
+          std::cout << "divergent branch! PC=0x" << std::hex << warp.PC << " (#" << std::dec << trace->uuid << ")\n" << std::flush;
+          std::abort();
+        }
+      }
     }
     trace->fetch_stall = true;
     break;
-  }  
+  }
   case Opcode::JAL: {
     // RV32I: JAL
-    trace->fu_type = FUType::ALU;    
+    trace->fu_type = FUType::ALU;
     trace->alu_type = AluType::BRANCH;
     for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!warp.tmask.test(t))
@@ -619,10 +634,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     trace->fetch_stall = true;
     rd_write = true;
     break;
-  }  
+  }
   case Opcode::JALR: {
     // RV32I: JALR
-    trace->fu_type = FUType::ALU;    
+    trace->fu_type = FUType::ALU;
     trace->alu_type = AluType::BRANCH;
     trace->used_iregs.set(rsrc0);
     for (uint32_t t = thread_start; t < num_threads; ++t) {
@@ -637,7 +652,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   }
   case Opcode::L:
   case Opcode::FL: {
-    trace->fu_type = FUType::LSU;    
+    trace->fu_type = FUType::LSU;
     trace->lsu_type = LsuType::LOAD;
     trace->used_iregs.set(rsrc0);
     auto trace_data = std::make_shared<LsuTraceData>(num_threads);
@@ -647,7 +662,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!warp.tmask.test(t))
         continue;
-      uint64_t mem_addr = rsdata[t][0].i + immsrc;         
+      uint64_t mem_addr = rsdata[t][0].i + immsrc;
       uint64_t read_data = 0;
       this->dcache_read(&read_data, mem_addr, data_bytes);
       trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
@@ -673,18 +688,18 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         rddata[t].u64 = read_data;
         break;
       default:
-        std::abort();      
+        std::abort();
       }
     }
     rd_write = true;
     break;
   }
-  case Opcode::S:   
+  case Opcode::S:
   case Opcode::FS: {
-    trace->fu_type = FUType::LSU;    
+    trace->fu_type = FUType::LSU;
     trace->lsu_type = LsuType::STORE;
     trace->used_iregs.set(rsrc0);
-    trace->used_iregs.set(rsrc1);    
+    trace->used_iregs.set(rsrc1);
     auto trace_data = std::make_shared<LsuTraceData>(num_threads);
     trace->data = trace_data;
     uint32_t data_bytes = 1 << (func3 & 0x3);
@@ -699,7 +714,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       case 1:
       case 2:
       case 3:
-        this->dcache_write(&write_data, mem_addr, data_bytes);  
+        this->dcache_write(&write_data, mem_addr, data_bytes);
         break;
       default:
         std::abort();
@@ -708,7 +723,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     break;
   }
   case Opcode::AMO: {
-    trace->fu_type = FUType::LSU;    
+    trace->fu_type = FUType::LSU;
     trace->lsu_type = LsuType::LOAD;
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
@@ -724,10 +739,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
       if (amo_type == 0x02) { // LR
         uint64_t read_data = 0;
-        this->dcache_read(&read_data, mem_addr, data_bytes);        
+        this->dcache_read(&read_data, mem_addr, data_bytes);
         this->dcache_amo_reserve(mem_addr);
         rddata[t].i = sext((Word)read_data, data_width);
-      } else 
+      } else
       if (amo_type == 0x03) { // SC
         if (this->dcache_amo_check(mem_addr)) {
           this->dcache_write(&rsdata[t][1].u64, mem_addr, data_bytes);
@@ -735,10 +750,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         } else {
           rddata[t].i = 1;
         }
-      } else {      
+      } else {
         uint64_t read_data = 0;
         this->dcache_read(&read_data, mem_addr, data_bytes);
-        auto read_data_i = sext((WordI)read_data, data_width);        
+        auto read_data_i = sext((WordI)read_data, data_width);
         auto rs1_data_i  = sext((WordI)rsdata[t][1].u64, data_width);
         auto read_data_u = zext((Word)read_data, data_width);
         auto rs1_data_u  = zext((Word)rsdata[t][1].u64, data_width);
@@ -792,11 +807,11 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->alu_type = AluType::SYSCALL;
         trace->fetch_stall = true;
         switch (csr_addr) {
-        case 0: 
+        case 0:
           // RV32I: ECALL
           this->trigger_ecall();
           break;
-        case 1: 
+        case 1:
           // RV32I: EBREAK
           this->trigger_ebreak();
           break;
@@ -806,16 +821,16 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           break;
         default:
           std::abort();
-        }                
+        }
       } else {
-        trace->fu_type = FUType::SFU;        
+        trace->fu_type = FUType::SFU;
         trace->fetch_stall = true;
         csr_value = this->get_csr(csr_addr, t, wid);
         switch (func3) {
         case 1: {
           // RV32I: CSRRW
           rddata[t].i = csr_value;
-          this->set_csr(csr_addr, rsdata[t][0].i, t, wid);      
+          this->set_csr(csr_addr, rsdata[t][0].i, t, wid);
           trace->used_iregs.set(rsrc0);
           trace->sfu_type = SfuType::CSRRW;
           rd_write = true;
@@ -847,7 +862,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           // RV32I: CSRRWI
           rddata[t].i = csr_value;
           this->set_csr(csr_addr, rsrc0, t, wid);
-          trace->sfu_type = SfuType::CSRRW;    
+          trace->sfu_type = SfuType::CSRRW;
           rd_write = true;
           break;
         }
@@ -875,20 +890,20 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           break;
         }
       }
-    } 
+    }
     break;
-  }  
+  }
   case Opcode::FENCE: {
     // RV32I: FENCE
-    trace->fu_type = FUType::LSU;    
+    trace->fu_type = FUType::LSU;
     trace->lsu_type = LsuType::FENCE;
     break;
   }
-  case Opcode::FCI: {     
-    trace->fu_type = FUType::FPU;     
+  case Opcode::FCI: {
+    trace->fu_type = FUType::FPU;
     for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!warp.tmask.test(t))
-        continue; 
+        continue;
       uint32_t frm = this->get_fpu_rm(func3, t, wid);
       uint32_t fflags = 0;
       switch (func7) {
@@ -949,13 +964,13 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         break;
       }
       case 0x10: {
-        switch (func3) {            
+        switch (func3) {
         case 0: // RV32F: FSGNJ.S
           rddata[t].u64 = nan_box(rv_fsgnj_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64)));
-          break;          
+          break;
         case 1: // RV32F: FSGNJN.S
           rddata[t].u64 = nan_box(rv_fsgnjn_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64)));
-          break;          
+          break;
         case 2: // RV32F: FSGNJX.S
           rddata[t].u64 = nan_box(rv_fsgnjx_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64)));
           break;
@@ -966,13 +981,13 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         break;
       }
       case 0x11: {
-        switch (func3) {            
+        switch (func3) {
         case 0: // RV32D: FSGNJ.D
           rddata[t].u64 = rv_fsgnj_d(rsdata[t][0].u64, rsdata[t][1].u64);
-          break;          
+          break;
         case 1: // RV32D: FSGNJN.D
           rddata[t].u64 = rv_fsgnjn_d(rsdata[t][0].u64, rsdata[t][1].u64);
-          break;          
+          break;
         case 2: // RV32D: FSGNJX.D
           rddata[t].u64 = rv_fsgnjx_d(rsdata[t][0].u64, rsdata[t][1].u64);
           break;
@@ -982,7 +997,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->used_fregs.set(rsrc1);
         break;
       }
-      case 0x14: {   
+      case 0x14: {
         if (func3) {
           // RV32F: FMAX.S
           rddata[t].u64 = nan_box(rv_fmax_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), &fflags));
@@ -992,10 +1007,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         }
         trace->fpu_type = FpuType::FNCP;
         trace->used_fregs.set(rsrc0);
-        trace->used_fregs.set(rsrc1);        
+        trace->used_fregs.set(rsrc1);
         break;
       }
-      case 0x15: {            
+      case 0x15: {
         if (func3) {
           // RV32D: FMAX.D
           rddata[t].u64 = rv_fmax_d(rsdata[t][0].u64, rsdata[t][1].u64, &fflags);
@@ -1005,21 +1020,21 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         }
         trace->fpu_type = FpuType::FNCP;
         trace->used_fregs.set(rsrc0);
-        trace->used_fregs.set(rsrc1);        
+        trace->used_fregs.set(rsrc1);
         break;
       }
       case 0x20: {
         // RV32D: FCVT.S.D
         rddata[t].u64 = nan_box(rv_dtof(rsdata[t][0].u64));
         trace->fpu_type = FpuType::FNCP;
-        trace->used_fregs.set(rsrc0);    
+        trace->used_fregs.set(rsrc0);
         break;
       }
       case 0x21: {
         // RV32D: FCVT.D.S
         rddata[t].u64 = rv_ftod(check_boxing(rsdata[t][0].u64));
         trace->fpu_type = FpuType::FNCP;
-        trace->used_fregs.set(rsrc0);   
+        trace->used_fregs.set(rsrc0);
         break;
       }
       case 0x2c: { // RV32F: FSQRT.S
@@ -1032,51 +1047,51 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         rddata[t].u64 = rv_fsqrt_d(rsdata[t][0].u64, frm, &fflags);
         trace->fpu_type = FpuType::FSQRT;
         trace->used_fregs.set(rsrc0);
-        break;  
-      }     
-      case 0x50: {      
-        switch (func3) {              
+        break;
+      }
+      case 0x50: {
+        switch (func3) {
         case 0:
           // RV32F: FLE.S
-          rddata[t].i = rv_fle_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), &fflags);    
-          break;              
+          rddata[t].i = rv_fle_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), &fflags);
+          break;
         case 1:
           // RV32F: FLT.S
           rddata[t].i = rv_flt_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), &fflags);
-          break;              
+          break;
         case 2:
           // RV32F: FEQ.S
           rddata[t].i = rv_feq_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), &fflags);
           break;
-        } 
+        }
         trace->fpu_type = FpuType::FNCP;
         trace->used_fregs.set(rsrc0);
         trace->used_fregs.set(rsrc1);
-        break; 
+        break;
       }
-      case 0x51: {           
-        switch (func3) {              
+      case 0x51: {
+        switch (func3) {
         case 0:
           // RV32D: FLE.D
-          rddata[t].i = rv_fle_d(rsdata[t][0].u64, rsdata[t][1].u64, &fflags);    
-          break;              
+          rddata[t].i = rv_fle_d(rsdata[t][0].u64, rsdata[t][1].u64, &fflags);
+          break;
         case 1:
           // RV32D: FLT.D
           rddata[t].i = rv_flt_d(rsdata[t][0].u64, rsdata[t][1].u64, &fflags);
-          break;              
+          break;
         case 2:
           // RV32D: FEQ.D
           rddata[t].i = rv_feq_d(rsdata[t][0].u64, rsdata[t][1].u64, &fflags);
           break;
-        } 
+        }
         trace->fpu_type = FpuType::FNCP;
         trace->used_fregs.set(rsrc0);
         trace->used_fregs.set(rsrc1);
-        break;  
-      }    
+        break;
+      }
       case 0x60: {
         switch (rsrc1) {
-        case 0: 
+        case 0:
           // RV32F: FCVT.W.S
           rddata[t].i = sext((uint64_t)rv_ftoi_s(check_boxing(rsdata[t][0].u64), frm, &fflags), 32);
           break;
@@ -1099,7 +1114,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       }
       case 0x61: {
         switch (rsrc1) {
-        case 0: 
+        case 0:
           // RV32D: FCVT.W.D
           rddata[t].i = sext((uint64_t)rv_ftoi_d(rsdata[t][0].u64, frm, &fflags), 32);
           break;
@@ -1119,10 +1134,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->fpu_type = FpuType::FCVT;
         trace->used_fregs.set(rsrc0);
         break;
-      }  
+      }
       case 0x68: {
         switch (rsrc1) {
-        case 0: 
+        case 0:
           // RV32F: FCVT.S.W
           rddata[t].u64 = nan_box(rv_itof_s(rsdata[t][0].i, frm, &fflags));
           break;
@@ -1145,7 +1160,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       }
       case 0x69: {
         switch (rsrc1) {
-        case 0: 
+        case 0:
           // RV32D: FCVT.D.W
           rddata[t].u64 = rv_itof_d(rsdata[t][0].i, frm, &fflags);
           break;
@@ -1166,27 +1181,27 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         break;
       }
-      case 0x70: {     
+      case 0x70: {
         if (func3) {
           // RV32F: FCLASS.S
           rddata[t].i = rv_fclss_s(check_boxing(rsdata[t][0].u64));
-        } else {          
+        } else {
           // RV32F: FMV.X.S
           uint32_t result = (uint32_t)rsdata[t][0].u64;
           rddata[t].i = sext((uint64_t)result, 32);
-        }        
+        }
         trace->fpu_type = FpuType::FNCP;
         trace->used_fregs.set(rsrc0);
         break;
       }
-      case 0x71: {    
+      case 0x71: {
         if (func3) {
           // RV32D: FCLASS.D
           rddata[t].i = rv_fclss_d(rsdata[t][0].u64);
-        } else {          
+        } else {
           // RV64D: FMV.X.D
           rddata[t].i = rsdata[t][0].u64;
-        }        
+        }
         trace->fpu_type = FpuType::FNCP;
         trace->used_fregs.set(rsrc0);
         break;
@@ -1209,8 +1224,8 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     rd_write = true;
     break;
   }
-  case Opcode::FMADD:      
-  case Opcode::FMSUB:      
+  case Opcode::FMADD:
+  case Opcode::FMSUB:
   case Opcode::FMNMADD:
   case Opcode::FMNMSUB: {
     trace->fpu_type = FpuType::FMA;
@@ -1235,7 +1250,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         if (func2)
           // RV32D: FMSUB.D
           rddata[t].u64 = rv_fmsub_d(rsdata[t][0].u64, rsdata[t][1].u64, rsdata[t][2].u64, frm, &fflags);
-        else 
+        else
           // RV32F: FMSUB.S
           rddata[t].u64 = nan_box(rv_fmsub_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), check_boxing(rsdata[t][2].u64), frm, &fflags));
         break;
@@ -1246,7 +1261,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         else
           // RV32F: FNMADD.S
           rddata[t].u64 = nan_box(rv_fnmadd_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), check_boxing(rsdata[t][2].u64), frm, &fflags));
-        break; 
+        break;
       case Opcode::FMNMSUB:
         if (func2)
           // RV32D: FNMSUB.D
@@ -1257,19 +1272,19 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         break;
       default:
         break;
-      }              
+      }
       this->update_fcrs(fflags, t, wid);
     }
     rd_write = true;
     break;
   }
-  case Opcode::EXT1: {   
+  case Opcode::EXT1: {
     switch (func7) {
     case 0: {
       switch (func3) {
       case 0: {
-        // TMC  
-        trace->fu_type = FUType::SFU;     
+        // TMC
+        trace->fu_type = FUType::SFU;
         trace->sfu_type = SfuType::TMC;
         trace->used_iregs.set(rsrc0);
         trace->fetch_stall = true;
@@ -1285,7 +1300,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->fetch_stall = true;
-        this->wspawn(rsdata.at(thread_start)[0].i, rsdata.at(thread_start)[1].i);
+        trace->data = std::make_shared<SFUTraceData>(rsdata.at(thread_start)[0].i, rsdata.at(thread_start)[1].i);
       } break;
       case 2: {
         // SPLIT
@@ -1302,9 +1317,9 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         }
 
         bool is_divergent = then_tmask.any() && else_tmask.any();
-        if (is_divergent) {             
+        if (is_divergent) {
           if (warp.ipdom_stack.size() == arch_.ipdom_size()) {
-            std::cout << "IPDOM stack is full! size=" << std::dec << warp.ipdom_stack.size() << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << trace->uuid << ")\n" << std::dec << std::flush;
+            std::cout << "IPDOM stack is full! size=" << std::dec << warp.ipdom_stack.size() << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << trace->uuid << ")\n" << std::flush;
             std::abort();
           }
           // set new thread mask
@@ -1336,13 +1351,13 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           next_tmask = warp.ipdom_stack.top().tmask;
           if (!warp.ipdom_stack.top().fallthrough) {
             next_pc = warp.ipdom_stack.top().PC;
-          }          
+          }
           warp.ipdom_stack.pop();
-        }    
+        }
       } break;
       case 4: {
         // BAR
-        trace->fu_type = FUType::SFU; 
+        trace->fu_type = FUType::SFU;
         trace->sfu_type = SfuType::BAR;
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
@@ -1350,8 +1365,8 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->data = std::make_shared<SFUTraceData>(rsdata[thread_start][0].i, rsdata[thread_start][1].i);
       } break;
       case 5: {
-        // PRED  
-        trace->fu_type = FUType::SFU;     
+        // PRED
+        trace->fu_type = FUType::SFU;
         trace->sfu_type = SfuType::PRED;
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
@@ -1364,7 +1379,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           next_tmask &= pred;
         } else {
           next_tmask = warp.ireg_file.at(thread_start).at(rsrc1);
-        }      
+        }
       } break;
       default:
         std::abort();
@@ -1374,7 +1389,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       std::abort();
     }
   } break;
-  case Opcode::EXT2: {    
+  case Opcode::EXT2: {
     switch (func3) {
     case 1:
       switch (func2) {
@@ -1386,7 +1401,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->used_iregs.set(rsrc2);
         for (uint32_t t = thread_start; t < num_threads; ++t) {
           if (!warp.tmask.test(t))
-            continue;     
+            continue;
           rddata[t].i = rsdata[t][0].i ? rsdata[t][1].i : rsdata[t][2].i;
         }
         rd_write = true;
@@ -1394,30 +1409,30 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       default:
         std::abort();
       }
-      break;       
+      break;
     default:
       std::abort();
     }
-  } break;   
+  } break;
   default:
     std::abort();
   }
 
   if (rd_write) {
     trace->wb = true;
-    auto type = instr.getRDType();    
+    auto type = instr.getRDType();
     switch (type) {
-    case RegType::Integer:      
-      if (rdest) {   
-        DPH(2, "Dest Reg: " << type << std::dec << rdest << "={");    
+    case RegType::Integer:
+      if (rdest) {
+        DPH(2, "Dest Reg: " << type << std::dec << rdest << "={");
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!warp.tmask.test(t)) {
             DPN(2, "-");
-            continue;            
+            continue;
           }
           warp.ireg_file.at(t)[rdest] = rddata[t].i;
-          DPN(2, "0x" << std::hex << rddata[t].i);         
+          DPN(2, "0x" << std::hex << rddata[t].i);
         }
         DPN(2, "}" << std::endl);
         trace->used_iregs[rdest] = 1;
@@ -1433,10 +1448,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         if (t) DPN(2, ", ");
         if (!warp.tmask.test(t)) {
           DPN(2, "-");
-          continue;            
+          continue;
         }
-        warp.freg_file.at(t)[rdest] = rddata[t].u64;        
-        DPN(2, "0x" << std::hex << rddata[t].f);         
+        warp.freg_file.at(t)[rdest] = rddata[t].u64;
+        DPN(2, "0x" << std::hex << rddata[t].f);
       }
       DPN(2, "}" << std::endl);
       trace->used_fregs[rdest] = 1;
@@ -1448,13 +1463,13 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   }
 
   warp.PC += 4;
-  
+
   if (warp.PC != next_pc) {
     DP(3, "*** Next PC=0x" << std::hex << next_pc << std::dec);
     warp.PC = next_pc;
   }
 
-  if (warp.tmask != next_tmask) {    
+  if (warp.tmask != next_tmask) {
     DPH(3, "*** New Tmask=");
     for (uint32_t i = 0; i < num_threads; ++i)
       DPN(3, next_tmask.test(i));

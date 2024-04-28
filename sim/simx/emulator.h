@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -30,7 +30,7 @@ class instr_trace_t;
 
 class Emulator {
 public:
-  Emulator(const Arch &arch, 
+  Emulator(const Arch &arch,
            const DCRS &dcrs,
            Core* core);
 
@@ -47,8 +47,10 @@ public:
   void suspend(uint32_t wid);
 
   void resume(uint32_t wid);
-  
+
   void barrier(uint32_t bar_id, uint32_t count, uint32_t wid);
+
+  bool wspawn(uint32_t num_warps, Word nextPC);
 
   int get_exitcode() const;
 
@@ -80,8 +82,6 @@ private:
 
   void execute(const Instr &instr, uint32_t wid, instr_trace_t *trace);
 
-  void wspawn(uint32_t num_warps, Word nextPC);
-
   void icache_read(void* data, uint64_t addr, uint32_t size);
 
   void dcache_read(void* data, uint64_t addr, uint32_t size);
@@ -91,13 +91,13 @@ private:
   void dcache_amo_reserve(uint64_t addr);
 
   bool dcache_amo_check(uint64_t addr);
-  
+
   void writeToStdOut(const void* data, uint64_t addr, uint32_t size);
 
   void cout_flush();
 
   Word get_csr(uint32_t addr, uint32_t tid, uint32_t wid);
-  
+
   void set_csr(uint32_t addr, Word value, uint32_t tid, uint32_t wid);
 
   uint32_t get_fpu_rm(uint32_t func3, uint32_t tid, uint32_t wid);
@@ -115,7 +115,7 @@ private:
   WarpMask    active_warps_;
   WarpMask    stalled_warps_;
   std::vector<WarpMask> barriers_;
-  std::unordered_map<int, std::stringstream> print_bufs_;  
+  std::unordered_map<int, std::stringstream> print_bufs_;
   MemoryUnit  mmu_;
   Word csr_mscratch_;
 };
