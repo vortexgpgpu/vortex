@@ -1,8 +1,8 @@
 #include "common.h"
 
-__kernel void sgemm2(__global float *A, 
-                     __global float *B, 
-                     __global float *C, 
+__kernel void sgemm2(__global float *A,
+                     __global float *B,
+                     __global float *C,
                      const unsigned int N)
 {
     int globalRow = get_global_id(1);
@@ -16,13 +16,15 @@ __kernel void sgemm2(__global float *A,
 
     float sum = 0.0f;
 
+    //printf("l=(%d, %d), g=(%d, %d)\n", localCol, localRow, globalCol, globalRow);
+
     // Iterate over blocks
     for (int k = 0; k < N; k += LOCAL_SIZE) {
-        // Load a block of matrix A into local memory
-        localA[localRow][localCol] = A[globalRow * N + k + localCol];
+        float a = A[globalRow * N + k + localCol];
+        float b = B[(k + localRow) * N + globalCol];
 
-        // Load a block of matrix B into local memory
-        localB[localRow][localCol] = B[(k + localRow) * N + globalCol];
+        localA[localRow][localCol] = a;
+        localB[localRow][localCol] = b;
 
         // Ensure the entire block is loaded
         barrier(CLK_LOCAL_MEM_FENCE);
@@ -34,6 +36,8 @@ __kernel void sgemm2(__global float *A,
 
         // Ensure computation is done before loading next block
         barrier(CLK_LOCAL_MEM_FENCE);
+
+        //printf("k=%d, a=%f, b=%f, sum=%f\n", k, a, b, sum);
     }
 
     C[globalRow * N + globalCol] = sum;
