@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -179,8 +179,8 @@
 `endif
 `define IO_COUT_SIZE `MEM_BLOCK_SIZE
 
-`ifndef IO_CSR_ADDR
-`define IO_CSR_ADDR (`IO_COUT_ADDR + `IO_COUT_SIZE)
+`ifndef IO_MPM_ADDR
+`define IO_MPM_ADDR (`IO_COUT_ADDR + `IO_COUT_SIZE)
 `endif
 `define IO_CSR_SIZE (4 * 64 * `NUM_CORES * `NUM_CLUSTERS)
 
@@ -318,20 +318,20 @@
 // FMA Latency
 `ifndef LATENCY_FMA
 `ifdef FPU_DPI
-`define LATENCY_FMA 4    
+`define LATENCY_FMA 4
 `endif
 `ifdef FPU_FPNEW
-`define LATENCY_FMA 4    
+`define LATENCY_FMA 4
 `endif
 `ifdef FPU_DSP
 `ifdef QUARTUS
 `define LATENCY_FMA 4
 `endif
 `ifdef VIVADO
-`define LATENCY_FMA 16    
+`define LATENCY_FMA 16
 `endif
 `ifndef LATENCY_FMA
-`define LATENCY_FMA 4    
+`define LATENCY_FMA 4
 `endif
 `endif
 `endif
@@ -339,17 +339,17 @@
 // FDIV Latency
 `ifndef LATENCY_FDIV
 `ifdef FPU_DPI
-`define LATENCY_FDIV 15    
+`define LATENCY_FDIV 15
 `endif
 `ifdef FPU_FPNEW
-`define LATENCY_FDIV 16    
+`define LATENCY_FDIV 16
 `endif
 `ifdef FPU_DSP
 `ifdef QUARTUS
 `define LATENCY_FDIV 15
 `endif
 `ifdef VIVADO
-`define LATENCY_FDIV 28    
+`define LATENCY_FDIV 28
 `endif
 `ifndef LATENCY_FDIV
 `define LATENCY_FDIV 16
@@ -360,20 +360,20 @@
 // FSQRT Latency
 `ifndef LATENCY_FSQRT
 `ifdef FPU_DPI
-`define LATENCY_FSQRT 10    
+`define LATENCY_FSQRT 10
 `endif
 `ifdef FPU_FPNEW
-`define LATENCY_FSQRT 16    
+`define LATENCY_FSQRT 16
 `endif
 `ifdef FPU_DSP
 `ifdef QUARTUS
 `define LATENCY_FSQRT 10
 `endif
 `ifdef VIVADO
-`define LATENCY_FSQRT 28    
+`define LATENCY_FSQRT 28
 `endif
 `ifndef LATENCY_FSQRT
-`define LATENCY_FSQRT 16    
+`define LATENCY_FSQRT 16
 `endif
 `endif
 `endif
@@ -384,7 +384,7 @@
 `endif
 
 `ifndef FMA_PE_RATIO
-`define FMA_PE_RATIO 1    
+`define FMA_PE_RATIO 1
 `endif
 
 `ifndef FDIV_PE_RATIO
@@ -392,15 +392,15 @@
 `endif
 
 `ifndef FSQRT_PE_RATIO
-`define FSQRT_PE_RATIO 8    
+`define FSQRT_PE_RATIO 8
 `endif
 
 `ifndef FCVT_PE_RATIO
-`define FCVT_PE_RATIO 8   
+`define FCVT_PE_RATIO 8
 `endif
 
 `ifndef FNCP_PE_RATIO
-`define FNCP_PE_RATIO 2    
+`define FNCP_PE_RATIO 2
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
