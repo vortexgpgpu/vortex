@@ -20,8 +20,11 @@ int testid_e = 0;
 bool stop_on_error = true;
 
 vx_device_h device = nullptr;
-uint64_t kernel_prog_addr;
-uint64_t kernel_args_addr;
+vx_buffer_h src0_buffer = nullptr;
+vx_buffer_h src1_buffer = nullptr;
+vx_buffer_h dst_buffer = nullptr;
+vx_buffer_h krnl_buffer = nullptr;
+vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
@@ -67,21 +70,21 @@ static void parse_args(int argc, char **argv) {
   }
 }
 
-void cleanup() {  
+void cleanup() {
   if (testSuite) {
     delete testSuite;
   }
   if (device) {
-    vx_mem_free(device, kernel_arg.src0_addr);
-    vx_mem_free(device, kernel_arg.src1_addr);
-    vx_mem_free(device, kernel_arg.dst_addr);
-    vx_mem_free(device, kernel_prog_addr);
-    vx_mem_free(device, kernel_args_addr);
+    vx_mem_free(src0_buffer);
+    vx_mem_free(src1_buffer);
+    vx_mem_free(dst_buffer);
+    vx_mem_free(krnl_buffer);
+    vx_mem_free(args_buffer);
     vx_dev_close(device);
   }
 }
 
-int main(int argc, char *argv[]) {  
+int main(int argc, char *argv[]) {
   // parse command arguments
   parse_args(argc, argv);
 
@@ -96,7 +99,7 @@ int main(int argc, char *argv[]) {
   std::cout << "using kernel: " << kernel_file << std::endl;
 
   // open device connection
-  std::cout << "open device connection" << std::endl;  
+  std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
 
   uint64_t num_cores, num_warps, num_threads;
@@ -107,7 +110,7 @@ int main(int argc, char *argv[]) {
   int num_tasks = num_cores * num_warps * num_threads;
   int num_points = count * num_tasks;
   size_t buf_size = num_points * sizeof(uint32_t);
-  
+
   std::cout << "number of points: " << num_points << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
 
@@ -116,17 +119,20 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.src0_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.src1_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.dst_addr));
-  RT_CHECK(vx_mem_alloc(device, sizeof(kernel_arg_t), &kernel_args_addr));
+  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &src0_buffer));
+  RT_CHECK(vx_mem_address(src0_buffer, &kernel_arg.src0_addr));
+  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &src1_buffer));
+  RT_CHECK(vx_mem_address(src1_buffer, &kernel_arg.src1_addr));
+  RT_CHECK(vx_mem_alloc(device, sizeof(kernel_arg_t), VX_MEM_READ, &args_buffer));
+  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &dst_buffer));
+  RT_CHECK(vx_mem_address(dst_buffer, &kernel_arg.dst_addr));
 
   std::cout << "dev_src0=0x" << std::hex << kernel_arg.src0_addr << std::dec << std::endl;
   std::cout << "dev_src1=0x" << std::hex << kernel_arg.src1_addr << std::dec << std::endl;
   std::cout << "dev_dst=0x" << std::hex << kernel_arg.dst_addr << std::dec << std::endl;
-  
-  // allocate host buffers  
-  std::cout << "allocate host buffers" << std::endl;  
+
+  // allocate host buffers
+  std::cout << "allocate host buffers" << std::endl;
   std::vector<uint8_t> src1_buf(buf_size);
   std::vector<uint8_t> src2_buf(buf_size);
   std::vector<uint8_t> dst_buf(buf_size);
@@ -138,15 +144,15 @@ int main(int argc, char *argv[]) {
   }
 
   // upload program
-  std::cout << "upload kernel" << std::endl;  
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &kernel_prog_addr));
+  std::cout << "upload kernel" << std::endl;
+  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
 
   // execute tests
   int errors = 0;
-  for (int t = testid_s; t <= testid_e; ++t) {   
+  for (int t = testid_s; t <= testid_e; ++t) {
     auto test = testSuite->get_test(t);
     auto name = test->name();
-    
+
     if (!selected.empty()) {
       if (selected.count(name) == 0)
         continue;
@@ -162,30 +168,30 @@ int main(int argc, char *argv[]) {
     // get test arguments
     std::cout << "get test arguments" << std::endl;
     RT_CHECK(test->setup(num_points, (void*)src1_buf.data(), (void*)src2_buf.data()));
-    
-    // upload source buffer0
-    std::cout << "upload source buffer0" << std::endl;      
-    RT_CHECK(vx_copy_to_dev(device, kernel_arg.src0_addr, src1_buf.data(), buf_size));
-    
-    // upload source buffer1
-    std::cout << "upload source buffer1" << std::endl;   
-    RT_CHECK(vx_copy_to_dev(device, kernel_arg.src1_addr, src2_buf.data(), buf_size));
 
-    // clear destination buffer    
-    std::cout << "clear destination buffer" << std::endl;     
+    // upload source buffer0
+    std::cout << "upload source buffer0" << std::endl;
+    RT_CHECK(vx_copy_to_dev(src0_buffer, src1_buf.data(), 0, buf_size));
+
+    // upload source buffer1
+    std::cout << "upload source buffer1" << std::endl;
+    RT_CHECK(vx_copy_to_dev(src1_buffer, src2_buf.data(), 0, buf_size));
+
+    // clear destination buffer
+    std::cout << "clear destination buffer" << std::endl;
     for (int i = 0; i < num_points; ++i) {
       ((uint32_t*)dst_buf.data())[i] = 0xdeadbeef;
-    }         
-    RT_CHECK(vx_copy_to_dev(device, kernel_arg.dst_addr, dst_buf.data(), buf_size));
+    }
+    RT_CHECK(vx_copy_to_dev(dst_buffer, dst_buf.data(), 0, buf_size));
 
     // upload kernel argument
     std::cout << "upload kernel argument" << std::endl;
     kernel_arg.testid = t;
-    RT_CHECK(vx_copy_to_dev(device, kernel_args_addr, &kernel_arg, sizeof(kernel_arg_t)));
+    RT_CHECK(vx_copy_to_dev(args_buffer, &kernel_arg, 0, sizeof(kernel_arg_t)));
 
     // start device
     std::cout << "start device" << std::endl;
-    RT_CHECK(vx_start(device, kernel_prog_addr, kernel_args_addr));
+    RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
 
     // wait for completion
     std::cout << "wait for completion" << std::endl;
@@ -193,7 +199,7 @@ int main(int argc, char *argv[]) {
 
     // download destination buffer
     std::cout << "download destination buffer" << std::endl;
-    RT_CHECK(vx_copy_from_dev(device, dst_buf.data(), kernel_arg.dst_addr, buf_size));
+    RT_CHECK(vx_copy_from_dev(dst_buf.data(), dst_buffer, 0, buf_size));
 
     // verify destination
     std::cout << "verify test result" << std::endl;
@@ -201,16 +207,16 @@ int main(int argc, char *argv[]) {
     if (err != 0) {
       std::cout << "found " << std::dec << err << " errors!" << std::endl;
       std::cout << "Test" << t << "-" << name << " FAILED!" << std::endl << std::flush;
-      errors += err;      
+      errors += err;
       if (stop_on_error)
         break;
     } else {
       std::cout << "Test" << t << "-" << name << " PASSED!" << std::endl << std::flush;
     }
-  } 
+  }
 
   // cleanup
-  std::cout << "cleanup" << std::endl;  
+  std::cout << "cleanup" << std::endl;
   cleanup();
 
   return errors;

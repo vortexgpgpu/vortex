@@ -26,7 +26,7 @@ void kernel_body(uint32_t task_id, kernel_arg_t* __UNIFORM__ arg) {
     for (int e = 0; e < size; ++e) {
         sum += A[row * size + e] * B[e * size + col];
     }
-    
+
     C[row * size + col] = sum;
 }
 

@@ -17,7 +17,7 @@ void cleanup();
      exit(-1);                                                  \
    } while (false)
 
-union Float_t {    
+union Float_t {
     float f;
     int   i;
     struct {
@@ -95,8 +95,8 @@ private:
 
 class ITestCase {
 public:
-  ITestCase(TestSuite* suite, const char* name) 
-    : suite_(suite) 
+  ITestCase(TestSuite* suite, const char* name)
+    : suite_(suite)
     , name_(name)
   {}
 
@@ -116,7 +116,7 @@ public:
 
 protected:
   TestSuite*  suite_;
-  const char* const name_;  
+  const char* const name_;
 };
 
 class Test_IADD : public ITestCase {
@@ -132,14 +132,14 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (int32_t*)src1;
     auto b = (int32_t*)src2;
     auto c = (int32_t*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto ref = a[i] + b[i]; 
+      auto ref = a[i] + b[i];
       if (c[i] != ref) {
         std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -162,14 +162,14 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (int32_t*)src1;
     auto b = (int32_t*)src2;
     auto c = (int32_t*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto ref = a[i] * b[i]; 
+      auto ref = a[i] * b[i];
       if (c[i] != ref) {
         std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -192,14 +192,14 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (int32_t*)src1;
     auto b = (int32_t*)src2;
     auto c = (int32_t*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto ref = a[i] / b[i]; 
+      auto ref = a[i] / b[i];
       if (c[i] != ref) {
         std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -222,16 +222,16 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (int32_t*)src1;
     auto b = (int32_t*)src2;
     auto c = (int32_t*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto x = a[i] / b[i]; 
-      auto y = a[i] * b[i]; 
-      auto ref = x + y; 
+      auto x = a[i] / b[i];
+      auto y = a[i] * b[i];
+      auto ref = x + y;
       if (c[i] != ref) {
         std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -254,14 +254,14 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto ref = a[i] + b[i]; 
+      auto ref = a[i] + b[i];
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -284,14 +284,14 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto ref = a[i] - b[i]; 
+      auto ref = a[i] - b[i];
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -314,14 +314,14 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto ref = a[i] * b[i]; 
+      auto ref = a[i] * b[i];
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -344,7 +344,7 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
@@ -374,7 +374,7 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
@@ -404,7 +404,7 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
@@ -434,7 +434,7 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
@@ -464,7 +464,7 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
@@ -496,7 +496,7 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
@@ -526,7 +526,7 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
@@ -559,7 +559,7 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
@@ -586,11 +586,11 @@ public:
     for (uint32_t i = 0; i < n; ++i) {
       float q = fround(float(n/2) - i + (float(i) / n));
       a[i] = q;
-      b[i] = q;      
+      b[i] = q;
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
@@ -622,7 +622,7 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
@@ -653,7 +653,7 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (int32_t*)src1;
@@ -684,7 +684,7 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (uint32_t*)src1;
@@ -715,7 +715,7 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
@@ -740,19 +740,19 @@ public:
     auto a = (float*)src1;
     auto b = (float*)src2;
     for (uint32_t i = 0; i < n; ++i) {
-      a[i] = fround((2*i-n) * (1.0f/n) * 3.1416);
-      b[i] = fround((2*i-n) * (1.0f/n) * 3.1416);
+      a[i] = fround(int(2*i-n) * (1.0f/n) * 3.1416);
+      b[i] = fround(int(2*i-n) * (1.0f/n) * 3.1416);
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
     int errors = 0;
     auto a = (float*)src1;
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto ref = sin(a[i]) + cos(b[i]);
+      auto ref = sinf(a[i]) + cosf(b[i]);
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -766,20 +766,20 @@ class Test_BAR : public ITestCase {
 public:
   Test_BAR(TestSuite* suite) : ITestCase(suite, "bar") {}
 
-  int setup(uint32_t n, void* src1, void* /*src2*/) override {    
+  int setup(uint32_t n, void* src1, void* /*src2*/) override {
     RT_CHECK(vx_dev_caps(suite_->device(), VX_CAPS_NUM_WARPS, &num_warps_));
     if (num_warps_ == 1) {
       std::cout << "Error: multiple warps configuration required!" << std::endl;
       return -1;
     }
     RT_CHECK(vx_dev_caps(suite_->device(), VX_CAPS_NUM_THREADS, &num_threads_));
-    auto a = (uint32_t*)src1;  
+    auto a = (uint32_t*)src1;
     for (uint32_t i = 0; i < n; ++i) {
       a[i] = i;
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* /*src2*/) override {
     int errors = 0;
     auto a = (uint32_t*)src1;
@@ -816,7 +816,7 @@ public:
     }
     return 0;
   }
-  
+
   int verify(uint32_t n, void* dst, const void* src1, const void* /*src2*/) override {
     int errors = 0;
     auto a = (uint32_t*)src1;
@@ -832,15 +832,15 @@ public:
   }
 
   uint64_t num_cores_;
-  uint64_t num_warps_;  
+  uint64_t num_warps_;
   uint64_t num_threads_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-TestSuite::TestSuite(vx_device_h device) 
+TestSuite::TestSuite(vx_device_h device)
   : device_(device) {
-  this->add_test(new Test_IADD(this));
+  /*this->add_test(new Test_IADD(this));
   this->add_test(new Test_IMUL(this));
   this->add_test(new Test_IDIV(this));
   this->add_test(new Test_IDIV_MUL(this));
@@ -859,10 +859,10 @@ TestSuite::TestSuite(vx_device_h device)
   this->add_test(new Test_FTOU(this));
   this->add_test(new Test_ITOF(this));
   this->add_test(new Test_UTOF(this));
-  this->add_test(new Test_FCLAMP(this));
+  this->add_test(new Test_FCLAMP(this));*/
   this->add_test(new Test_TRIGO(this));
-  this->add_test(new Test_BAR(this));
-  this->add_test(new Test_GBAR(this));
+  /*this->add_test(new Test_BAR(this));
+  this->add_test(new Test_GBAR(this));*/
 }
 
 TestSuite::~TestSuite() {

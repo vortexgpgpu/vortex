@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -20,11 +20,11 @@
 #include <VX_types.h>
 
 class DeviceConfig {
-public:    
+public:
     void write(uint32_t addr, uint32_t value);
-    uint32_t read(uint32_t addr) const;
+    int read(uint32_t addr, uint32_t* value) const;
 private:
-     std::unordered_map<uint32_t, uint32_t> data_;
+     std::unordered_map<uint32_t, uint32_t> store_;
 };
 
 int dcr_initialize(vx_device_h device);
@@ -39,7 +39,6 @@ void perf_remove_device(vx_device_h device);
 
 #define CACHE_BLOCK_SIZE    64
 #define ALLOC_BASE_ADDR     CACHE_BLOCK_SIZE
-#define ALLOC_MAX_ADDR      STARTUP_ADDR
 #if (XLEN == 64)
 #define GLOBAL_MEM_SIZE      0x200000000  // 8 GB
 #else

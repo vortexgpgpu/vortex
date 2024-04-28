@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -23,9 +23,10 @@ extern "C" {
 #endif
 
 typedef void* vx_device_h;
+typedef void* vx_buffer_h;
 
 // device caps ids
-#define VX_CAPS_VERSION             0x0 
+#define VX_CAPS_VERSION             0x0
 #define VX_CAPS_NUM_THREADS         0x1
 #define VX_CAPS_NUM_WARPS           0x2
 #define VX_CAPS_NUM_CORES           0x3
@@ -57,6 +58,11 @@ typedef void* vx_device_h;
 // ready wait timeout
 #define VX_MAX_TIMEOUT              (24*60*60*1000)   // 24 Hr
 
+// device memory access
+#define VX_MEM_READ                 0x1
+#define VX_MEM_WRITE                0x2
+#define VX_MEM_READ_WRITE           0x3
+
 // open the device and connect to it
 int vx_dev_open(vx_device_h* hdevice);
 
@@ -67,22 +73,31 @@ int vx_dev_close(vx_device_h hdevice);
 int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value);
 
 // allocate device memory and return address
-int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_addr);
+int vx_mem_alloc(vx_device_h hdevice, uint64_t size, int flags, vx_buffer_h* hbuffer);
+
+// reserve memory address range
+int vx_mem_reserve(vx_device_h hdevice, uint64_t address, uint64_t size, int flags, vx_buffer_h* hbuffer);
 
 // release device memory
-int vx_mem_free(vx_device_h hdevice, uint64_t dev_addr);
+int vx_mem_free(vx_buffer_h hbuffer);
+
+// set device memory access rights
+int vx_mem_access(vx_buffer_h hbuffer, uint64_t offset, uint64_t size, int flags);
+
+// return device memory address
+int vx_mem_address(vx_buffer_h hbuffer, uint64_t* address);
 
 // get device memory info
 int vx_mem_info(vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_used);
 
 // Copy bytes from host to device memory
-int vx_copy_to_dev(vx_device_h hdevice, uint64_t dev_addr, const void* host_ptr, uint64_t size);
+int vx_copy_to_dev(vx_buffer_h hbuffer, const void* host_ptr, uint64_t dst_offset, uint64_t size);
 
 // Copy bytes from device memory to host
-int vx_copy_from_dev(vx_device_h hdevice, void* host_ptr, uint64_t dev_addr, uint64_t size);
+int vx_copy_from_dev(void* host_ptr, vx_buffer_h hbuffer, uint64_t src_offset, uint64_t size);
 
 // Start device execution
-int vx_start(vx_device_h hdevice, uint64_t krnl_addr, uint64_t args_addr);
+int vx_start(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments);
 
 // Wait for device ready with milliseconds timeout
 int vx_ready_wait(vx_device_h hdevice, uint64_t timeout);
@@ -93,23 +108,25 @@ int vx_dcr_read(vx_device_h hdevice, uint32_t addr, uint32_t* value);
 // write device configuration registers
 int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint32_t value);
 
+// query device performance counter
+int vx_mpm_query(vx_device_h hdevice, uint32_t addr, uint32_t core_id, uint64_t* value);
+
 ////////////////////////////// UTILITY FUNCTIONS //////////////////////////////
 
 // upload bytes to device
-int vx_upload_kernel_bytes(vx_device_h hdevice, const void* content, uint64_t size, uint64_t* addr);
+int vx_upload_kernel_bytes(vx_device_h hdevice, const void* content, uint64_t size, vx_buffer_h* hbuffer);
 
 // upload file to device
-int vx_upload_kernel_file(vx_device_h hdevice, const char* filename, uint64_t* addr);
+int vx_upload_kernel_file(vx_device_h hdevice, const char* filename, vx_buffer_h* hbuffer);
 
 // upload bytes to device
-int vx_upload_bytes(vx_device_h hdevice, const void* content, uint64_t size, uint64_t* addr);
+int vx_upload_bytes(vx_device_h hdevice, const void* content, uint64_t size, vx_buffer_h* hbuffer);
 
 // upload file to device
-int vx_upload_file(vx_device_h hdevice, const char* filename, uint64_t* addr);
+int vx_upload_file(vx_device_h hdevice, const char* filename, vx_buffer_h* hbuffer);
 
 // performance counters
 int vx_dump_perf(vx_device_h hdevice, FILE* stream);
-int vx_perf_counter(vx_device_h hdevice, int counter, int core_id, uint64_t* value);
 
 #ifdef __cplusplus
 }
