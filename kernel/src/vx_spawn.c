@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -30,7 +30,7 @@ typedef struct {
 	int offset; // task offset
   int remain; // remaining offset
 	int FWs;    // number of NW batches where NW=<total warps per core>.
-	int RWs;    // number of remaining warps in the core  
+	int RWs;    // number of remaining warps in the core
 } wspawn_tasks_args_t;
 
 typedef struct {
@@ -41,7 +41,7 @@ typedef struct {
   int offset; // task offset
   int remain; // remaining offset
 	int FWs;    // number of NW batches where NW=<total warps per core>.
-	int RWs;    // number of remaining warps in the core  
+	int RWs;    // number of remaining warps in the core
   char isXYpow2;
   char log2XY;
   char log2X;
@@ -75,13 +75,13 @@ static void __attribute__ ((noinline)) spawn_tasks_all_stub() {
 
 static void __attribute__ ((noinline)) spawn_tasks_rem_stub() {
   int tid = vx_thread_id();
-  
+
   wspawn_tasks_args_t* p_wspawn_args = (wspawn_tasks_args_t*)csr_read(VX_CSR_MSCRATCH);
   int task_id = p_wspawn_args->remain + tid;
   (p_wspawn_args->callback)(task_id, p_wspawn_args->arg);
 }
 
-static void __attribute__ ((noinline)) spawn_tasks_all_cb() {  
+static void __attribute__ ((noinline)) spawn_tasks_all_cb() {
   // activate all threads
   vx_tmc(-1);
 
@@ -108,9 +108,9 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
 
   // number of tasks per core
   int tasks_per_core = num_tasks / nc;
-  int tasks_per_core_n1 = tasks_per_core;  
-  if (core_id == (nc-1)) {    
-    int rem = num_tasks - (nc * tasks_per_core); 
+  int tasks_per_core_n1 = tasks_per_core;
+  if (core_id == (nc-1)) {
+    int rem = num_tasks - (nc * tasks_per_core);
     tasks_per_core_n1 += rem; // last core also executes remaining tasks
   }
 
@@ -139,13 +139,13 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
 
     // call stub routine
     spawn_tasks_all_stub();
-  
+
     // back to single-threaded
     vx_tmc_one();
-	}  
+	}
 
   if (rT != 0) {
-    // activate remaining threads  
+    // activate remaining threads
     int tmask = (1 << rT) - 1;
     vx_tmc(tmask);
 
@@ -155,9 +155,6 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
     // back to single-threaded
     vx_tmc_one();
   }
-    
-  // wait for spawn warps to terminate
-  vx_wspawn_wait();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -229,7 +226,7 @@ static void __attribute__ ((noinline)) spawn_pocl_kernel_rem_stub() {
   }
 }
 
-static void __attribute__ ((noinline)) spawn_pocl_kernel_all_cb() {  
+static void __attribute__ ((noinline)) spawn_pocl_kernel_all_cb() {
   // activate all threads
   vx_tmc(-1);
 
@@ -240,14 +237,14 @@ static void __attribute__ ((noinline)) spawn_pocl_kernel_all_cb() {
   vx_tmc_zero();
 }
 
-void vx_spawn_pocl_kernel(pocl_kernel_context_t * ctx, pocl_kernel_cb callback, void * arg) {  
+void vx_spawn_pocl_kernel(pocl_kernel_context_t * ctx, pocl_kernel_cb callback, void * arg) {
   // total number of WGs
   int X  = ctx->num_groups[0];
   int Y  = ctx->num_groups[1];
   int Z  = ctx->num_groups[2];
   int XY = X * Y;
   int num_tasks = XY * Z;
-  
+
   // device specs
   int NC = vx_num_cores();
   int NW = vx_num_warps();
@@ -263,9 +260,9 @@ void vx_spawn_pocl_kernel(pocl_kernel_context_t * ctx, pocl_kernel_cb callback, 
 
   // number of tasks per core
   int tasks_per_core = num_tasks / nc;
-  int tasks_per_core_n1 = tasks_per_core;  
-  if (core_id == (nc-1)) {    
-    int rem = num_tasks - (nc * tasks_per_core); 
+  int tasks_per_core_n1 = tasks_per_core;
+  if (core_id == (nc-1)) {
+    int rem = num_tasks - (nc * tasks_per_core);
     tasks_per_core_n1 += rem; // last core also executes remaining WGs
   }
 
@@ -287,7 +284,7 @@ void vx_spawn_pocl_kernel(pocl_kernel_context_t * ctx, pocl_kernel_cb callback, 
   int offset = core_id * tasks_per_core;
   int remain = offset + (tasks_per_core_n1 - rT);
 
-  wspawn_pocl_kernel_args_t wspawn_args = { 
+  wspawn_pocl_kernel_args_t wspawn_args = {
     ctx, callback, arg, local_size, offset, remain, fW, rW, isXYpow2, log2XY, log2X
   };
   csr_write(VX_CSR_MSCRATCH, &wspawn_args);
@@ -305,7 +302,7 @@ void vx_spawn_pocl_kernel(pocl_kernel_context_t * ctx, pocl_kernel_cb callback, 
 
     // back to single-threaded
     vx_tmc_one();
-	}  
+	}
 
   if (rT != 0) {
     // activate remaining threads
@@ -318,9 +315,6 @@ void vx_spawn_pocl_kernel(pocl_kernel_context_t * ctx, pocl_kernel_cb callback, 
     // back to single-threaded
     vx_tmc_one();
   }
-    
-  // wait for spawn warps to terminate
-  vx_wspawn_wait();
 }
 
 #ifdef __cplusplus

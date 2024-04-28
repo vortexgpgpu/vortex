@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,7 +19,7 @@
 .section .init, "ax"
 .global _start
 .type   _start, @function
-_start:  
+_start:
 
   # initialize per-thread registers
   csrr  t0, VX_CSR_NUM_WARPS  # get num warps
@@ -31,9 +31,6 @@ _start:
   li    t0, 1
   .insn r RISCV_CUSTOM0, 0, 0, x0, t0, x0  # tmc t0
 
-  # wait for spawn warps to terminate
-  jal vx_wspawn_wait
-
   # initialize TLS for all warps
   csrr  t0, VX_CSR_NUM_WARPS  # get num warps
   la    t1, init_tls_all
@@ -44,9 +41,6 @@ _start:
   li    t0, 1
   .insn r RISCV_CUSTOM0, 0, 0, x0, t0, x0  # tmc t0
 
-  # wait for spawn warps to terminate
-  jal vx_wspawn_wait
-  
   # clear BSS segment
   la    a0, _edata
   la    a2, _end
@@ -59,11 +53,11 @@ _start:
   # csrw mtvec, t0
 
   # register global termination functions
-  la    a0, __libc_fini_array   
-  call  atexit                  
+  la    a0, __libc_fini_array
+  call  atexit
 
   # run global initialization functions
-  call  __libc_init_array  
+  call  __libc_init_array
 
   # call main program routine
   call  main
@@ -77,7 +71,7 @@ _start:
 .global _Exit
 _Exit:
   mv    s0, a0
-  call  vx_perf_dump 
+  call  vx_perf_dump
   mv    gp, s0
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
 
@@ -90,7 +84,7 @@ init_regs:
   .option norelax
   la    gp, __global_pointer
   .option pop
-  
+
   # set stack pointer register
 #if (XLEN == 64)
   li    t0, (STACK_BASE_ADDR >> 32)
@@ -123,7 +117,7 @@ init_regs_all:
   .insn r RISCV_CUSTOM0, 0, 0, x0, t0, x0  # tmc t0
   jal   init_regs
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
-  ret  
+  ret
 
 .section .text
 .type init_tls_all, @function
@@ -133,15 +127,6 @@ init_tls_all:
   .insn r RISCV_CUSTOM0, 0, 0, x0, t0, x0  # tmc t0
   call  __init_tls
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
-  ret 
-
-.section .text
-.type vx_wspawn_wait, @function
-.global vx_wspawn_wait
-vx_wspawn_wait:
-  csrr  t0, VX_CSR_WARP_MASK
-  li    t1, 1
-  bne   t0, t1, vx_wspawn_wait
   ret
 
 .section .data
