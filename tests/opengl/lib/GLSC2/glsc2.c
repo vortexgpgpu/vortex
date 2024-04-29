@@ -12,6 +12,7 @@
 #define MAX_BUFFER 256
 #define MAX_FRAMEBUFFER 256
 #define MAX_RENDERBUFFER 256
+#define MAX_TEXTURE 256
 #define MAX_PROGRAMS 256
 #define MAX_UNIFORM_VECTORS 16
 #define MAX_NAME_SIZE 64
@@ -161,6 +162,26 @@ typedef struct {
 RENDERBUFFER _renderbuffers[MAX_RENDERBUFFER];
 GLuint _renderbuffer_binding;
 
+/****** TEXTURE 2D objects ******\
+ * 
+ * 
+*/
+
+typedef struct {
+    GLsizei width, height;
+    cl_mem mem;
+} SAMPLER_2D;
+
+typedef struct {
+    cl_mem mem;
+    GLenum internalformat;
+    GLsizei width, height;
+    GLboolean used;
+} TEXTURE_2D;
+
+TEXTURE_2D _textures[MAX_RENDERBUFFER];
+GLuint _texture_binding;
+
 /****** PER-FRAGMENT objects ******\
  * 
  * 
@@ -229,14 +250,21 @@ GL_APICALL void GL_APIENTRY glBindFramebuffer (GLenum target, GLuint framebuffer
     }
 }
 GL_APICALL void GL_APIENTRY glBindRenderbuffer (GLenum target, GLuint renderbuffer) {
-    printf("glBindRenderbuffer(renderbuffer: %d)\n", renderbuffer);
-
     if (!_renderbuffers[renderbuffer].used) {
         _err = GL_INVALID_OPERATION;
         return;
     }
     if (target == GL_RENDERBUFFER) {
         _renderbuffer_binding = renderbuffer;
+    }
+}
+GL_APICALL void GL_APIENTRY glBindTexture (GLenum target, GLuint texture) {
+    if (!_texture[texture].used) {
+        _err = GL_INVALID_OPERATION;
+        return;
+    }
+    if (target == GL_TEXTURE_2D) {
+        _texture_binding = texture;
     }
 }
 
@@ -406,26 +434,24 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
         setKernelArg(rasterization_kernel, 8,
             sizeof(gl_Discard), &gl_Discard
         );
-    } else {
-        printf("NOT IMPLEMENTED\n");
-        exit(0);
-    }
+    } else NOT_IMPLEMENTED;
 
     void* fragment_kernel = createFragmentKernel(mode, first, count);
+    int active_textures = _texture_binding != 0;
     setKernelArg(fragment_kernel, 
-        _programs[_current_program].active_uniforms,
+        _programs[_current_program].active_uniforms + active_textures,
         sizeof(gl_FragCoord), &gl_FragCoord
     );
     setKernelArg(fragment_kernel, 
-        _programs[_current_program].active_uniforms + 1,
+        _programs[_current_program].active_uniforms + active_textures + 1,
         sizeof(gl_Rasterization), &gl_Rasterization
     );
     setKernelArg(fragment_kernel, 
-        _programs[_current_program].active_uniforms + 2,
+        _programs[_current_program].active_uniforms + active_textures + 2,
         sizeof(gl_Discard), &gl_Discard
     );
     setKernelArg(fragment_kernel, 
-        _programs[_current_program].active_uniforms + 3,
+        _programs[_current_program].active_uniforms + active_textures + 3,
         sizeof(gl_FragColor), &gl_FragColor
     );
 
@@ -574,6 +600,20 @@ GL_APICALL void GL_APIENTRY glGenRenderbuffers (GLsizei n, GLuint *renderbuffers
     }
 }
 
+GL_APICALL void GL_APIENTRY glGenTextures (GLsizei n, GLuint *textures) {
+    GLuint id = 1;
+
+    while(n > 0 && id < MAX_RENDERBUFFER) {
+        if (!_textures[id].used) {
+            _textures[id].used = GL_TRUE;
+            *textures = id;
+
+            textures += 1; 
+            n -= 1;
+        }
+        id += 1;
+    }
+}
 
 #define POCL_BINARY 0x0
 
@@ -660,6 +700,22 @@ GL_APICALL void GL_APIENTRY glStencilMaskSeparate (GLenum face, GLuint mask) {
         _stencil_mask.front = mask;
         _stencil_mask.back = mask;
     }
+}
+
+GL_APICALL void GL_APIENTRY glTexStorage2D (GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height) {
+    if ( target == GL_TEXTURE_2D && internalformat == GL_RGBA8) {
+        _textures[_texture_binding].width = width;
+        _textures[_texture_binding].height = height;
+        _textures[_texture_binding].mem = createBuffer(MEM_READ_ONLY, width*height*sizeof(uint32_t), NULL);
+    } else NOT_IMPLEMENTED;
+}
+
+GL_APICALL void GL_APIENTRY glTexSubImage2D (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels) {
+    if (target == GL_TEXTURE_2D) {
+        if (format == GL_RGBA && type == GL_UNSIGNED_BYTE) {
+            enqueueWriteBuffer(getCommandQueue(),_textures[_texture_binding],width*height*sizeof(uint8_t[4]),pixels);
+        } else NOT_IMPLEMENTED;
+    } else NOT_IMPLEMENTED;
 }
 
 #define UMAT4 0x0;
@@ -835,7 +891,7 @@ void* getRasterizationTriangleKernel(GLenum mode, GLint first, GLsizei count) {
 void* createFragmentKernel(GLenum mode, GLint first, GLsizei count) {
     void *kernel = createKernel(_programs[_current_program].program, "gl_main_fs");
     // Uniform locations
-    GLuint uniform;
+    GLuint uniform = 0;
     while(uniform < _programs[_current_program].active_uniforms) {
         setKernelArg(
             kernel, 
@@ -844,6 +900,20 @@ void* createFragmentKernel(GLenum mode, GLint first, GLsizei count) {
             &_programs[_current_program].uniforms[uniform].data
             );
         ++uniform;
+    }
+    GLuint texture = 0;
+    while(texture < 1) {
+        SAMPLER_2D sampler;
+        sampler.width = _textures[_texture_binding].width;
+        sampler.height = _textures[_texture_binding].height;
+        sampler.mem = _textures[_texture_binding].mem;
+        setKernelArg(
+            kernel, 
+            _programs[_current_program].active_uniforms,
+            sizeof(sampler), 
+            &sampler
+            );
+        ++texture;
     }
 
     return kernel;

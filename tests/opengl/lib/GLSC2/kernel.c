@@ -108,6 +108,13 @@ void enqueueReadBuffer(void* command_queue, void* buffer, size_t bufSize, void* 
     clEnqueueReadBuffer(command_queue, (cl_mem) buffer, CL_TRUE, 0, bufSize, data, 0, NULL, NULL);
 }
 
+void enqueueWriteBuffer(void* command_queue, void* buffer, size_t size, void* ptr) {
+
+    clEnqueueWriteBuffer(command_queue, buffer, CL_TRUE, 0, size, ptr, 0, NULL, NULL);
+}
+
+
+
 
 void finish(void* command_queue) {
     clFinish((cl_command_queue) command_queue);

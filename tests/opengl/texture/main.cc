@@ -29,7 +29,7 @@ GLuint createProgram(const char* filename) {
   return program;
 }
 
-GLuint createQuad() {
+void createTexturedQuad() {
   static float quad[] = {
     -1.0, 1.0, 0.0,
     -1.0, -1.0, 0.0,
@@ -38,16 +38,47 @@ GLuint createQuad() {
     1.0, -1.0, 0.0,
     1.0, 1.0, 0.0,
   };
+  static float texture[] = {
+    0, 1,
+    0, 0,
+    1, 0,
+    0, 1,
+    1, 0,
+    1, 1
+  };
 
-  GLuint vbo;
+  GLuint vbo[2];
 
-  glGenBuffers(1, &vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  glGenBuffers(2, vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
   glBufferData(GL_ARRAY_BUFFER,sizeof(quad),quad,GL_STATIC_DRAW);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float[3]), 0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
   glEnableVertexAttribArray(0); 
 
-  return vbo;
+  glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
+  glBufferData(GL_ARRAY_BUFFER,sizeof(texture),texture,GL_STATIC_DRAW);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, 0);
+  glEnableVertexAttribArray(1); 
+
+}
+
+void createTexture() {
+  unsigned int texture;
+  glGenTextures(1, &texture);
+  glBindTexture(GL_TEXTURE_2D, texture);
+
+  static int8_t texture_image[256][256][4];
+  for(uint8_t r=0; r<=255; ++r)
+    for(uint8_t g=0; g<=255; ++g) {
+      texture_image[r][g][0] = r;
+      texture_image[r][g][1] = g;
+      texture_image[r][g][2] = 255;
+      texture_image[r][g][3] = 255;
+  }
+
+  glTexStorage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 256, 256);
+  glTexSubImage2D(GL_TEXTURE_2D,0,0,0,255,255, GL_RGBA, GL_UNSIGNED_BYTE, &texture_image);
+
 }
 
 int main() {
@@ -68,11 +99,10 @@ int main() {
   program = createProgram("kernel.pocl");
   glUseProgram(program);
 
-  vbo = createQuad();
-
+  createTexturedQuad();
+  createTexture();
   // Draw
   glClear(GL_COLOR_BUFFER_BIT);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
   glDrawArrays(GL_TRIANGLES, 0, 6);
   glFinish();
   glReadnPixels(0,0,WIDTH, HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, WIDTH*HEIGHT*4, result);
