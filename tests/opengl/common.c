@@ -108,3 +108,36 @@ void printPPM(const char* filename, size_t width, size_t height, const uint8_t *
   }
   fclose(f);
 }
+
+typedef struct {
+  int w, h;
+  uint8_t *data;
+} PPMImage;
+
+PPMImage* readPPM(const char* filename) {
+  char buff[16];
+  FILE *f = fopen(filename, "r");
+  // read format
+  if(!fgets(buff, sizeof(buff), f)) {
+    exit(1);
+  }
+
+  PPMImage *img = (PPMImage*) malloc(sizeof(PPMImage));
+  // check comments
+  fscanf(f, "%d %d", &img->w, &img->h);
+  int rgb;
+  fscanf(f, "%d", &rgb);
+  while(fgetc(f) != '\n');
+  img->data = (uint8_t*) malloc(img->w*img->h*sizeof(uint8_t[4]));
+
+  int count = 0;
+  while(count < img->h) {
+    fread(img->data + count*4,sizeof(uint8_t[3]),1,f);
+    img->data[count*4+3]=0xFFu;
+    count++; 
+  }
+  return img;
+}
+
+
+

@@ -703,7 +703,8 @@ GL_APICALL void GL_APIENTRY glStencilMaskSeparate (GLenum face, GLuint mask) {
 }
 
 GL_APICALL void GL_APIENTRY glTexStorage2D (GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height) {
-    if ( target == GL_TEXTURE_2D && internalformat == GL_RGBA8) {
+    printf("heeey\n");
+	if ( target == GL_TEXTURE_2D && internalformat == GL_RGBA8) {
         _textures[_texture_binding].width = width;
         _textures[_texture_binding].height = height;
         _textures[_texture_binding].mem = createBuffer(MEM_READ_ONLY, width*height*sizeof(uint32_t), NULL);

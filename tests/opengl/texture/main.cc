@@ -11,8 +11,8 @@
 #include "../debug.cc"
 #include "../common.c"
 
-#define WIDTH 10
-#define HEIGHT 10
+#define WIDTH 100
+#define HEIGHT 100
 
 GLuint createProgram(const char* filename) {
   GLuint program;
@@ -67,17 +67,19 @@ void createTexture() {
   glGenTextures(1, &texture);
   glBindTexture(GL_TEXTURE_2D, texture);
 
+  PPMImage* image = readPPM("dog.ppm");
+
   static int8_t texture_image[256][256][4];
-  for(uint8_t r=0; r<=255; ++r)
-    for(uint8_t g=0; g<=255; ++g) {
+  for(uint32_t r=0; r<=255; ++r)
+    for(uint32_t g=0; g<=255; ++g) {
       texture_image[r][g][0] = r;
       texture_image[r][g][1] = g;
       texture_image[r][g][2] = 255;
       texture_image[r][g][3] = 255;
   }
 
-  glTexStorage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 256, 256);
-  glTexSubImage2D(GL_TEXTURE_2D,0,0,0,255,255, GL_RGBA, GL_UNSIGNED_BYTE, &texture_image);
+  glTexStorage2D(GL_TEXTURE_2D, 0, GL_RGBA8, image->w, image->h);
+  glTexSubImage2D(GL_TEXTURE_2D,0,0,0,image->w,image->h, GL_RGBA, GL_UNSIGNED_BYTE, &image->data);
 
 }
 

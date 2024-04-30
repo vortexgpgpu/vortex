@@ -19,12 +19,12 @@ __kernel void gl_main_vs (
 }
 
 
-float4 texture2d(int width, int height, __global const unsigned char4* texture, float4 texCoord) {
+float4 texture2d(int width, int height, __global const unsigned char* texture, float4 texCoord) {
   int w = width * texCoord.x;
   int h = height * texCoord.y;
-  unsigned char4 color = texture[h*texture.width + w];
+  __global const unsigned char* color = texture + (h*width + w)*4;
   
-  return (float4) ((float)color.x / 255, (float)color.y / 255, (float)color.z / 255, (float)color.w / 255);
+  return (float4) ((float)*color / 255, (float)*(color+1) / 255, (float)*(color+2) / 255, (float)*(color+3) / 255);
 
 }
 
@@ -32,7 +32,7 @@ __kernel void gl_main_fs (
   // user values
   int width,
   int height,
-  __global const unsigned char4 *texture,
+  __global const unsigned char *texture,
   // implementation values 
   __global float4 *gl_FragCoord, // position of the fragment in the window space, z is depth value
   __global const float4 *gl_Rasterization,
