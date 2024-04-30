@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -22,7 +22,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // Inputs
     VX_execute_if.slave     execute_if,
-    
+
     // Outputs
     VX_warp_ctl_if.master   warp_ctl_if,
     VX_commit_if.master     commit_if
@@ -32,12 +32,12 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
     localparam WCTL_WIDTH = $bits(tmc_t) + $bits(wspawn_t) + $bits(split_t) + $bits(join_t) + $bits(barrier_t);
-    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + WCTL_WIDTH + PID_WIDTH + 1 + 1;
+    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + WCTL_WIDTH + PID_WIDTH + 1 + 1 + `DV_STACK_SIZEW;
 
     `UNUSED_VAR (execute_if.data.rs3_data)
-    
+
     tmc_t       tmc, tmc_r;
-    wspawn_t    wspawn, wspawn_r;    
+    wspawn_t    wspawn, wspawn_r;
     split_t     split, split_r;
     join_t      sjoin, sjoin_r;
     barrier_t   barrier, barrier_r;
@@ -55,14 +55,16 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     end else begin
         assign tid = 0;
     end
-    
+
     wire [`XLEN-1:0] rs1_data = execute_if.data.rs1_data[tid];
     wire [`XLEN-1:0] rs2_data = execute_if.data.rs2_data[tid];
     `UNUSED_VAR (rs1_data)
-    
+
+    wire not_pred = execute_if.data.op_mod[0];
+
     wire [NUM_LANES-1:0] taken;
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign taken[i] = execute_if.data.rs1_data[i][0];
+        assign taken[i] = (execute_if.data.rs1_data[i][0] ^ not_pred);
     end
 
     reg [`NUM_THREADS-1:0] then_tmask_r, then_tmask_n;
@@ -93,17 +95,20 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign tmc.tmask = is_pred ? pred_mask : rs1_data[`NUM_THREADS-1:0];
 
     // split
-    
+
     assign split.valid      = is_split;
     assign split.is_dvg     = has_then && has_else;
     assign split.then_tmask = then_tmask_n;
     assign split.else_tmask = else_tmask_n;
     assign split.next_pc    = execute_if.data.PC + 4;
 
+    assign warp_ctl_if.dvstack_wid = execute_if.data.wid;
+    wire [`DV_STACK_SIZEW-1:0] dvstack_ptr;
+
     // join
 
-    assign sjoin.valid      = is_join;   
-    assign sjoin.is_dvg     = rs1_data[0];
+    assign sjoin.valid      = is_join;
+    assign sjoin.stack_ptr  = rs1_data[`DV_STACK_SIZEW-1:0];
 
     // barrier
     assign barrier.valid    = is_bar;
@@ -126,7 +131,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign wspawn.pc    = rs2_data;
 
     // response
-    
+
     VX_elastic_buffer #(
         .DATAW (DATAW),
         .SIZE  (2)
@@ -135,8 +140,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (execute_if.valid),
         .ready_in  (execute_if.ready),
-        .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, {tmc, wspawn, split, sjoin, barrier}}),
-        .data_out  ({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.PC, commit_if.data.rd, commit_if.data.wb, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop, {tmc_r, wspawn_r, split_r, sjoin_r, barrier_r}}),
+        .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, {tmc, wspawn, split, sjoin, barrier}, warp_ctl_if.dvstack_ptr}),
+        .data_out  ({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.PC, commit_if.data.rd, commit_if.data.wb, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop, {tmc_r, wspawn_r, split_r, sjoin_r, barrier_r}, dvstack_ptr}),
         .valid_out (commit_if.valid),
         .ready_out (commit_if.ready)
     );
@@ -148,9 +153,9 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign warp_ctl_if.split   = split_r;
     assign warp_ctl_if.sjoin   = sjoin_r;
     assign warp_ctl_if.barrier = barrier_r;
-    
+
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign commit_if.data.data[i] = `XLEN'(split_r.is_dvg);
+        assign commit_if.data.data[i] = `XLEN'(dvstack_ptr);
     end
 
 endmodule

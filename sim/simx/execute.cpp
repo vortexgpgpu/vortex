@@ -1309,17 +1309,20 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->fetch_stall = true;
 
+        auto stack_size = warp.ipdom_stack.size();
+
         ThreadMask then_tmask, else_tmask;
+        auto not_pred = immsrc & 0x1;
         for (uint32_t t = 0; t < num_threads; ++t) {
-          auto cond = warp.ireg_file.at(t).at(rsrc0);
+          auto cond = (warp.ireg_file.at(t).at(rsrc0) & 0x1) ^ not_pred;
           then_tmask[t] = warp.tmask.test(t) && cond;
           else_tmask[t] = warp.tmask.test(t) && !cond;
         }
 
         bool is_divergent = then_tmask.any() && else_tmask.any();
         if (is_divergent) {
-          if (warp.ipdom_stack.size() == arch_.ipdom_size()) {
-            std::cout << "IPDOM stack is full! size=" << std::dec << warp.ipdom_stack.size() << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << trace->uuid << ")\n" << std::flush;
+          if (stack_size == arch_.ipdom_size()) {
+            std::cout << "IPDOM stack is full! size=" << std::dec << stack_size << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << trace->uuid << ")\n" << std::flush;
             std::abort();
           }
           // set new thread mask
@@ -1331,7 +1334,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         }
         // return divergent state
         for (uint32_t t = thread_start; t < num_threads; ++t) {
-          rddata[t].i = is_divergent;
+          rddata[t].i = stack_size;
         }
         rd_write = true;
       } break;
@@ -1342,8 +1345,8 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->fetch_stall = true;
 
-        int is_divergent = warp.ireg_file.at(thread_start).at(rsrc0);
-        if (is_divergent != 0) {
+        auto stack_ptr = warp.ireg_file.at(thread_start).at(rsrc0);
+        if (stack_ptr != warp.ipdom_stack.size()) {
           if (warp.ipdom_stack.empty()) {
             std::cout << "IPDOM stack is empty!\n" << std::flush;
             std::abort();
@@ -1372,8 +1375,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->used_iregs.set(rsrc1);
         trace->fetch_stall = true;
         ThreadMask pred;
+        auto not_pred = immsrc & 0x1;
         for (uint32_t t = 0; t < num_threads; ++t) {
-          pred[t] = warp.tmask.test(t) && (warp.ireg_file.at(t).at(rsrc0) & 0x1);
+          auto cond = (warp.ireg_file.at(t).at(rsrc0) & 0x1) ^ not_pred;
+          pred[t] = warp.tmask.test(t) && cond;
         }
         if (pred.any()) {
           next_tmask &= pred;

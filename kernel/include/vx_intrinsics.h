@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -121,6 +121,11 @@ inline void vx_pred(int condition, int thread_mask) {
     asm volatile (".insn r %0, 5, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(condition), "r"(thread_mask));
 }
 
+// Set thread not predicate
+inline void vx_pred_n(int condition, int thread_mask) {
+    asm volatile (".insn r %0, 5, 0, x1, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(condition), "r"(thread_mask));
+}
+
 typedef void (*vx_wspawn_pfn)();
 
 // Spawn warps
@@ -132,6 +137,13 @@ inline void vx_wspawn(size_t num_warps, vx_wspawn_pfn func_ptr) {
 inline int vx_split(int predicate) {
     size_t ret;
     asm volatile (".insn r %1, 2, 0, %0, %2, x0" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate));
+    return ret;
+}
+
+// Split on a not predicate
+inline int vx_split_n(int predicate) {
+    size_t ret;
+    asm volatile (".insn r %1, 2, 0, %0, %2, x1" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate));
     return ret;
 }
 
@@ -191,7 +203,7 @@ inline int vx_num_threads() {
 inline int vx_num_warps() {
     int ret;
     asm volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_WARPS));
-    return ret;   
+    return ret;
 }
 
 // Return the number of cores per cluster
