@@ -1,1 +1,1 @@
-feh -Z -F -R 5 -Y ~/home/vortex/test/opengl/cube/image.ppm
+feh -Z -F --force-aliasing -R 1 -Y $PWD/tests/opengl/cube/image.ppm

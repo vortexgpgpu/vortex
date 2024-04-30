@@ -11,8 +11,8 @@
 #include "../debug.cc"
 #include "../common.c"
 
-#define WIDTH 600
-#define HEIGHT 400
+#define WIDTH 75
+#define HEIGHT 50
 
 void perspectiveMatrix(float* mat, float angle, float ratio, float near, float far);
 void rotateMatrix(float* mat, float angle, float x, float y, float z);
@@ -165,17 +165,17 @@ int main() {
   glUniformMatrix4fv(0, 4, GL_FALSE, perspective);
   // Draw
   uint rotation = 0;
-  // while (true) {
+  while (rotation < 5) {
     glClear(GL_COLOR_BUFFER_BIT);
 
-    rotateMatrix(model, M_PI/4*(rotation++), 0,1,0);
+    rotateMatrix(model, M_PI/4*(rotation++), 1,1,1);
     glUniformMatrix4fv(1, 4, GL_FALSE, model);
 
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
     glFinish();
     glReadnPixels(0,0,WIDTH, HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, WIDTH*HEIGHT*4, result);
     printPPM("image.ppm", WIDTH, HEIGHT, (uint8_t*) result);
-  // }
+  }
 
   return 0; 
 }

@@ -671,6 +671,11 @@ GL_APICALL void GL_APIENTRY glUniformMatrix4fv (GLint location, GLsizei count, G
     if (count < 1) NOT_IMPLEMENTED;
 
     uint32_t uniform_id = _programs[_current_program].active_uniforms;
+    if (location < uniform_id) {
+       uniform_id = location;
+    } else {
+       _programs[_current_program].active_uniforms += 1;
+    }
     _programs[_current_program].uniforms[uniform_id].location = location;
     _programs[_current_program].uniforms[uniform_id].size = sizeof(float[4])*count;
     _programs[_current_program].uniforms[uniform_id].type = UMAT4;
@@ -683,7 +688,6 @@ GL_APICALL void GL_APIENTRY glUniformMatrix4fv (GLint location, GLsizei count, G
         data_ptr[3] = *(value + 4*i + 3);
         data_ptr +=4;
     }
-    _programs[_current_program].active_uniforms += 1;
 }
 
 GL_APICALL void GL_APIENTRY glUseProgram (GLuint program){

@@ -78,8 +78,8 @@ int test_rasterization_triangle() {
     //     printf("*** error: [%d] expected=%08x, actual=%08x\n", i, ref, color_out[i]);
     //   ++errors;
     // }
-    if (gl_DiscardOut[i>>2] == 0)
-      printf("fragColor (%d,%d), x=%f, y=%f, z=%f, w = %f\n", ((i>>2)/width), ((i>>2)%width), gl_RasterizationOut[i],gl_RasterizationOut[i+1],gl_RasterizationOut[i+2], gl_RasterizationOut[i+3]);
+    //if (gl_DiscardOut[i>>2] == 0)
+      //printf("fragColor (%d,%d), x=%f, y=%f, z=%f, w = %f\n", ((i>>2)/width), ((i>>2)%width), gl_RasterizationOut[i],gl_RasterizationOut[i+1],gl_RasterizationOut[i+2], gl_RasterizationOut[i+3]);
   }
 
   if (commandQueue) clReleaseCommandQueue(commandQueue);

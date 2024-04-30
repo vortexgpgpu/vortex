@@ -4,8 +4,8 @@ float4 mul(float16 mat, float4 vec) {
 
   for(int i=0; i<4;++i) {
     float value = 0;
-    for(int j=0; j<16; j+=4) {
-      value += mat[j+i]*vec[i];
+    for(int j=0; j<4; j+=1) {
+      value += mat[i*4+j]*vec[j];
     }
     result[i] = value;
   }
@@ -37,7 +37,7 @@ __kernel void gl_main_vs (
   gl_Positions[gid] = mul(perspective,mul(model,(float4) (x, y, z, 1.0f)));
  
   gl_Primitives[gid*2] = (float4) (r,g,b,1.0f);
-  gl_Primitives[gid*2+1] = (float4) (1.f,1.f,1.f,1.0f);
+  // gl_Primitives[gid*2+1] = (float4) (1.f,1.f,1.f,1.0f);
 }
 
 __kernel void gl_main_fs (

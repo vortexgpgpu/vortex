@@ -53,7 +53,7 @@ int test_viewport_trans() {
     //     printf("*** error: [%d] expected=%08x, actual=%08x\n", i, ref, color_out[i]);
     //   ++errors;
     // }
-    printf("vertex %d, x=%f, y=%f, z=%f\n", i>>2, triangle_out[i],triangle_out[i+1],triangle_out[i+2]);
+    //printf("vertex %d, x=%f, y=%f, z=%f\n", i>>2, triangle_out[i],triangle_out[i+1],triangle_out[i+2]);
   }
 
   if (commandQueue) clReleaseCommandQueue(commandQueue);
