@@ -69,6 +69,14 @@ void createTexture() {
 
   PPMImage* image = readPPM("dog.ppm");
 
+  uint8_t* data = (uint8_t*) malloc(image->x*image->y);
+  for(uint32_t i=0; image->x*image->y; ++i) {
+    data[i*4+0] = image->data[i*3].red;
+    data[i*4+1] = image->data[i*3].green;
+    data[i*4+2] = image->data[i*3].blue;
+    data[i*4+3] = 0xFFu;
+  }
+
   static int8_t texture_image[256][256][4];
   for(uint32_t r=0; r<=255; ++r)
     for(uint32_t g=0; g<=255; ++g) {
@@ -78,8 +86,8 @@ void createTexture() {
       texture_image[r][g][3] = 255;
   }
 
-  glTexStorage2D(GL_TEXTURE_2D, 0, GL_RGBA8, image->w, image->h);
-  glTexSubImage2D(GL_TEXTURE_2D,0,0,0,image->w,image->h, GL_RGBA, GL_UNSIGNED_BYTE, &image->data);
+  glTexStorage2D(GL_TEXTURE_2D, 0, GL_RGBA8, image->x, image->y);
+  glTexSubImage2D(GL_TEXTURE_2D,0,0,0,image->x,image->y, GL_RGBA, GL_UNSIGNED_BYTE, data);
 
 }
 
