@@ -41,7 +41,7 @@ VX_CFLAGS += -DNDEBUG
 
 VX_LIBS += -L$(LIBC_VORTEX)/lib -lm -lc
 
-VX_LIBS += libclang_rt.builtins-riscv32.a
+VX_LIBS += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 #VX_LIBS += -lgcc
 
 VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a $(VX_LIBS)

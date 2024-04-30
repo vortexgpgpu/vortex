@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # Copyright © 2019-2023
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 # http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,7 +19,7 @@ set -e
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
 OSDIR=${OSDIR:=@OSDIR@}
 
-riscv32() 
+riscv32()
 {
     echo "prebuilt riscv32-gnu-toolchain..."
     tar -C $TOOLDIR -cvjf riscv32-gnu-toolchain.tar.bz2 riscv32-gnu-toolchain
@@ -29,7 +29,7 @@ riscv32()
     rm riscv32-gnu-toolchain.tar.bz2
 }
 
-riscv64() 
+riscv64()
 {
     echo "prebuilt riscv64-gnu-toolchain..."
     tar -C $TOOLDIR -cvjf riscv64-gnu-toolchain.tar.bz2 riscv64-gnu-toolchain
@@ -39,17 +39,33 @@ riscv64()
     rm riscv64-gnu-toolchain.tar.bz2
 }
 
-llvm() 
+llvm()
 {
-    echo "prebuilt llvm-vortex..."
-    tar -C $TOOLDIR -cvjf llvm-vortex.tar.bz2 llvm-vortex
-    split -b 50M llvm-vortex.tar.bz2 "llvm-vortex.tar.bz2.part"
+    echo "prebuilt llvm-vortex2..."
+    tar -C $TOOLDIR -cvjf llvm-vortex2.tar.bz2 llvm-vortex
+    split -b 50M llvm-vortex2.tar.bz2 "llvm-vortex2.tar.bz2.part"
     mkdir -p ./llvm-vortex/$OSDIR
-    mv llvm-vortex.tar.bz2.part* ./llvm-vortex/$OSDIR
-    rm llvm-vortex.tar.bz2
+    mv llvm-vortex2.tar.bz2.part* ./llvm-vortex/$OSDIR
+    rm llvm-vortex2.tar.bz2
 }
 
-libc32() 
+libcrt32()
+{
+    echo "prebuilt libcrt32..."
+    tar -C $TOOLDIR -cvjf libcrt32.tar.bz2 libc32
+    mkdir -p ./libcrt32
+    mv libcrt32.tar.bz2 ./libcrt32
+}
+
+libcrt64()
+{
+    echo "prebuilt libcrt64..."
+    tar -C $TOOLDIR -cvjf libcrt64.tar.bz2 libc64
+    mkdir -p ./libcrt64
+    mv libcrt64.tar.bz2 ./libcrt64
+}
+
+libc32()
 {
     echo "prebuilt libc32..."
     tar -C $TOOLDIR -cvjf libc32.tar.bz2 libc32
@@ -57,7 +73,7 @@ libc32()
     mv libc32.tar.bz2 ./libc32
 }
 
-libc64() 
+libc64()
 {
     echo "prebuilt libc64..."
     tar -C $TOOLDIR -cvjf libc64.tar.bz2 libc64
@@ -65,7 +81,7 @@ libc64()
     mv libc64.tar.bz2 ./libc64
 }
 
-pocl() 
+pocl()
 {
     echo "prebuilt pocl..."
     tar -C $TOOLDIR -cvjf pocl2.tar.bz2 pocl
@@ -73,7 +89,7 @@ pocl()
     mv pocl2.tar.bz2 ./pocl/$OSDIR
 }
 
-verilator() 
+verilator()
 {
     echo "prebuilt verilator..."
     tar -C $TOOLDIR -cvjf verilator.tar.bz2 verilator
@@ -81,7 +97,7 @@ verilator()
     mv verilator.tar.bz2 ./verilator/$OSDIR
 }
 
-sv2v() 
+sv2v()
 {
     echo "prebuilt sv2v..."
     tar -C $TOOLDIR -cvjf sv2v.tar.bz2 sv2v
@@ -102,7 +118,7 @@ yosys()
 show_usage()
 {
     echo "Setup Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libc32] [--libc64] [--sv2v] [-yosys] [--all] [-h|--help]"
+    echo "Usage: $0 [--pocl] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [-yosys] [--all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -117,6 +133,10 @@ while [ "$1" != "" ]; do
                 ;;
         --llvm ) llvm
                 ;;
+        --libcrt32 ) libcrt32
+                ;;
+        --libcrt64 ) libcrt64
+                ;;
         --libc32 ) libc32
                 ;;
         --libc64 ) libc64
@@ -130,6 +150,8 @@ while [ "$1" != "" ]; do
                 riscv32
                 riscv64
                 llvm
+                libcrt32
+                libcrt64
                 libc32
                 libc64
                 sv2v
