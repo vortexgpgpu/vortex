@@ -840,7 +840,7 @@ public:
 
 TestSuite::TestSuite(vx_device_h device)
   : device_(device) {
-  /*this->add_test(new Test_IADD(this));
+  this->add_test(new Test_IADD(this));
   this->add_test(new Test_IMUL(this));
   this->add_test(new Test_IDIV(this));
   this->add_test(new Test_IDIV_MUL(this));
@@ -859,10 +859,10 @@ TestSuite::TestSuite(vx_device_h device)
   this->add_test(new Test_FTOU(this));
   this->add_test(new Test_ITOF(this));
   this->add_test(new Test_UTOF(this));
-  this->add_test(new Test_FCLAMP(this));*/
+  this->add_test(new Test_FCLAMP(this));
   this->add_test(new Test_TRIGO(this));
-  /*this->add_test(new Test_BAR(this));
-  this->add_test(new Test_GBAR(this));*/
+  this->add_test(new Test_BAR(this));
+  this->add_test(new Test_GBAR(this));
 }
 
 TestSuite::~TestSuite() {

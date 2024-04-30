@@ -37,7 +37,7 @@ run-simx:
 	$(MAKE) -C guassian run-simx
 	$(MAKE) -C kmeans run-simx
 #	$(MAKE) -C blackscholes run-simx
-	$(MAKE) -C bfs run-simx
+#	$(MAKE) -C bfs run-simx
 
 run-rtlsim:
 	$(MAKE) -C vecadd run-rtlsim
@@ -47,7 +47,7 @@ run-rtlsim:
 	$(MAKE) -C saxpy run-rtlsim
 	$(MAKE) -C sfilter run-rtlsim
 	$(MAKE) -C oclprintf run-rtlsim
-	$(MAKE) -C dotproduct run-rtlsim	
+	$(MAKE) -C dotproduct run-rtlsim
 	$(MAKE) -C transpose run-rtlsim
 	$(MAKE) -C spmv run-rtlsim
 	$(MAKE) -C stencil run-rtlsim
@@ -56,7 +56,7 @@ run-rtlsim:
 	$(MAKE) -C guassian run-rtlsim
 	$(MAKE) -C kmeans run-rtlsim
 #	$(MAKE) -C blackscholes run-rtlsim
-	$(MAKE) -C bfs run-rtlsim
+#	$(MAKE) -C bfs run-rtlsim
 
 run-opae:
 	$(MAKE) -C vecadd run-opae
@@ -75,7 +75,7 @@ run-opae:
 	$(MAKE) -C guassian run-opae
 	$(MAKE) -C kmeans run-opae
 #	$(MAKE) -C blackscholes run-opae
-	$(MAKE) -C bfs run-opae
+#	$(MAKE) -C bfs run-opae
 
 clean:
 	$(MAKE) -C vecadd clean
