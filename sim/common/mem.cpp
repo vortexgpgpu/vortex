@@ -252,7 +252,7 @@ bool ACLManager::check(uint64_t addr, uint64_t size, int flags) const {
   while (it != acl_map_.end() && it->first < end) {
     if (it->second.end > addr) {
       if ((it->second.flags & flags) != flags) {
-        std::cout << "Memory access violation from 0x" << std::hex << addr << " to 0x" << end << ", flags=" << (it->second.flags ^ flags) << std::endl;
+        std::cout << "Memory access violation from 0x" << std::hex << addr << " to 0x" << end << ", curent flags=" << it->second.flags << ", access flags=" << flags << std::endl;
         return false; // Overlapping entry is missing at least one required flag bit
       }
       addr = it->second.end; // Move to the end of the current matching range

@@ -22,7 +22,7 @@ LLVM_POCL ?= $(TOOLDIR)/llvm-vortex
 
 VX_LIBS += -L$(LIBC_VORTEX)/lib -lm -lc
 
-VX_LIBS += libclang_rt.builtins-riscv32.a
+VX_LIBS += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 #VX_LIBS += -lgcc
 
 VX_CFLAGS  += -O3 -mcmodel=medany --sysroot=$(RISCV_SYSROOT) --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH) -Xclang -target-feature -Xclang +vortex

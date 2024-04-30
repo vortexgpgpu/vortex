@@ -160,11 +160,13 @@ extern int vx_upload_kernel_bytes(vx_device_h hdevice, const void* content, uint
   });
 #endif
 
+  // mask binary region as read-only
   RT_CHECK(vx_mem_access(_hbuffer, 0, bin_size, VX_MEM_READ), {
     vx_mem_free(_hbuffer);
     return _ret;
   });
 
+  // mark global variables region as read-write
   RT_CHECK(vx_mem_access(_hbuffer, bin_size, runtime_size - bin_size, VX_MEM_READ_WRITE), {
     vx_mem_free(_hbuffer);
     return _ret;

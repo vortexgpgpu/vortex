@@ -54,9 +54,9 @@ int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
 
   *data = (uint8_t*)malloc(fsize);
   *size = fread(*data, 1, fsize, fp);
-  
+
   fclose(fp);
-  
+
   return 0;
 }
 
@@ -251,7 +251,7 @@ free(allPlatforms);*/
                                                   &source,
                                                   sourceSize,
                                                   &resultCL);*/
-  // read kernel binary from file  
+  // read kernel binary from file
   uint8_t *kernel_bin = NULL;
   size_t kernel_size;
   cl_int binary_status = 0;
@@ -260,7 +260,7 @@ free(allPlatforms);*/
   if (0 != read_kernel_file("kernel.cl", &kernel_bin, &kernel_size))
     std::abort();
   oclHandles.program = clCreateProgramWithSource(
-    oclHandles.context, 1, (const char**)&kernel_bin, &kernel_size, &resultCL);  
+    oclHandles.context, 1, (const char**)&kernel_bin, &kernel_size, &resultCL);
 #else
   if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
     std::abort();
@@ -469,7 +469,7 @@ cl_mem _clMallocRW(int size, void *h_mem_ptr) throw(string) {
 cl_mem _clMalloc(int size, void *h_mem_ptr) throw(string) {
   cl_mem d_mem;
   d_mem = clCreateBuffer(oclHandles.context,
-                         CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, size,
+                         CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, size,
                          h_mem_ptr, &oclHandles.cl_status);
 #ifdef ERRMSG
   if (oclHandles.cl_status != CL_SUCCESS)
