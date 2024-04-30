@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -39,7 +39,7 @@ package VX_gpu_pkg;
 
     typedef struct packed {
         logic valid;
-        logic is_dvg;
+        logic [`DV_STACK_SIZEW-1:0] stack_ptr;
     } join_t;
 
     typedef struct packed {
@@ -100,14 +100,14 @@ package VX_gpu_pkg;
     localparam DCACHE_CHANNELS	    = `UP((`NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE);
     localparam DCACHE_NUM_REQS	    = `NUM_LSU_BLOCKS * DCACHE_CHANNELS;
 
-    // Core request tag Id bits        
+    // Core request tag Id bits
     localparam DCACHE_MERGED_REQS   = (`NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE;
     localparam DCACHE_MEM_BATCHES   = `CDIV(DCACHE_MERGED_REQS, DCACHE_CHANNELS);
     localparam DCACHE_TAG_ID_BITS   = (`CLOG2(`LSUQ_OUT_SIZE) + `CLOG2(DCACHE_MEM_BATCHES));
 
     // Core request tag bits
     localparam DCACHE_TAG_WIDTH	    = (`UUID_WIDTH + DCACHE_TAG_ID_BITS);
-    
+
     // Memory request data bits
     localparam DCACHE_MEM_DATA_WIDTH = (DCACHE_LINE_SIZE * 8);
 
@@ -127,7 +127,7 @@ package VX_gpu_pkg;
     // Block size in bytes
     localparam ICACHE_LINE_SIZE	    = `L1_LINE_SIZE;
 
-    // Core request tag Id bits       
+    // Core request tag Id bits
     localparam ICACHE_TAG_ID_BITS	= `NW_WIDTH;
 
     // Core request tag bits
@@ -147,7 +147,7 @@ package VX_gpu_pkg;
 
     localparam L1_MEM_TAG_WIDTH     = `MAX(ICACHE_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
     localparam L1_MEM_ARB_TAG_WIDTH = (L1_MEM_TAG_WIDTH + `CLOG2(2));
-    
+
     /////////////////////////////// L2 Parameters /////////////////////////////
 
     localparam ICACHE_MEM_ARB_IDX = 0;
@@ -198,21 +198,21 @@ package VX_gpu_pkg;
     /////////////////////////////// Issue parameters //////////////////////////
 
     localparam ISSUE_ISW   = `CLOG2(`ISSUE_WIDTH);
-    localparam ISSUE_ISW_W = `UP(ISSUE_ISW);   
+    localparam ISSUE_ISW_W = `UP(ISSUE_ISW);
     localparam ISSUE_RATIO = `NUM_WARPS / `ISSUE_WIDTH;
     localparam ISSUE_WIS   = `CLOG2(ISSUE_RATIO);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS);
-    
+
 `IGNORE_UNUSED_BEGIN
     function logic [`NW_WIDTH-1:0] wis_to_wid(
-        input logic [ISSUE_WIS_W-1:0] wis, 
+        input logic [ISSUE_WIS_W-1:0] wis,
         input logic [ISSUE_ISW_W-1:0] isw
     );
         if (ISSUE_WIS == 0) begin
             wis_to_wid = `NW_WIDTH'(isw);
         end else if (ISSUE_ISW == 0) begin
             wis_to_wid = `NW_WIDTH'(wis);
-        end else begin 
+        end else begin
             wis_to_wid = `NW_WIDTH'({wis, isw});
         end
     endfunction
@@ -220,7 +220,7 @@ package VX_gpu_pkg;
     function logic [ISSUE_ISW_W-1:0] wid_to_isw(
         input logic [`NW_WIDTH-1:0] wid
     );
-        if (ISSUE_ISW != 0) begin    
+        if (ISSUE_ISW != 0) begin
             wid_to_isw = wid[ISSUE_ISW_W-1:0];
         end else begin
             wid_to_isw = 0;

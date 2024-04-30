@@ -296,11 +296,13 @@ module VX_schedule import VX_gpu_pkg::*; #(
         .split      (warp_ctl_if.split),
         .sjoin      (warp_ctl_if.sjoin),
         .join_valid (join_valid),
-        .join_is_dvg (join_is_dvg),
-        .join_is_else (join_is_else),
+        .join_is_dvg(join_is_dvg),
+        .join_is_else(join_is_else),
         .join_wid   (join_wid),
         .join_tmask (join_tmask),
-        .join_pc    (join_pc)
+        .join_pc    (join_pc),
+        .stack_wid  (warp_ctl_if.dvstack_wid),
+        .stack_ptr  (warp_ctl_if.dvstack_ptr)
     );
 
     // schedule the next ready warp
@@ -308,7 +310,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     wire [`NUM_WARPS-1:0] ready_warps = active_warps & ~(stalled_warps | barrier_stalls);
 
     VX_lzc #(
-        .N       (`NUM_WARPS),
+        .N (`NUM_WARPS),
         .REVERSE (1)
     ) wid_select (
         .data_in   (ready_warps),

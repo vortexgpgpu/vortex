@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -42,7 +42,7 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   {Opcode::AMO,     InstType::R},
   {Opcode::FL,      InstType::I},
   {Opcode::FS,      InstType::S},
-  {Opcode::FCI,     InstType::R}, 
+  {Opcode::FCI,     InstType::R},
   {Opcode::FMADD,   InstType::R4},
   {Opcode::FMSUB,   InstType::R4},
   {Opcode::FMNMADD, InstType::R4},
@@ -71,7 +71,7 @@ enum Constants {
   shift_func7 = shift_rs2 + width_reg,
   shift_rs3   = shift_func7 + width_func2,
 
-  mask_opcode = (1 << width_opcode) - 1,  
+  mask_opcode = (1 << width_opcode) - 1,
   mask_reg    = (1 << width_reg)   - 1,
   mask_func2  = (1 << width_func2) - 1,
   mask_func3  = (1 << width_func3) - 1,
@@ -131,7 +131,7 @@ static const char* op_string(const Instr &instr) {
     case 7: return "ANDI";
     default:
       std::abort();
-    }  
+    }
   case Opcode::B:
     switch (func3) {
     case 0: return "BEQ";
@@ -181,7 +181,7 @@ static const char* op_string(const Instr &instr) {
       switch (func3) {
       case 0: return (func7 & 0x20) ? "SUBW" : "ADDW";
       case 1: return "SLLW";
-      case 5: return (func7 & 0x20) ? "SRAW" : "SRLW";  
+      case 5: return (func7 & 0x20) ? "SRAW" : "SRLW";
       default:
         std::abort();
       }
@@ -194,7 +194,7 @@ static const char* op_string(const Instr &instr) {
     default:
       std::abort();
     }
-  case Opcode::SYS: 
+  case Opcode::SYS:
     switch (func3) {
     case 0:
       switch (imm) {
@@ -204,7 +204,7 @@ static const char* op_string(const Instr &instr) {
       case 0x102: return "SRET";
       case 0x302: return "MRET";
       default:
-        std::abort();      
+        std::abort();
       }
     case 1: return "CSRRW";
     case 2: return "CSRRS";
@@ -216,20 +216,20 @@ static const char* op_string(const Instr &instr) {
       std::abort();
     }
   case Opcode::FENCE: return "FENCE";
-  case Opcode::FL: 
+  case Opcode::FL:
     switch (func3) {
     case 0x1: return "VL";
     case 0x2: return "FLW";
     case 0x3: return "FLD";
-    default: 
+    default:
       std::abort();
     }
-  case Opcode::FS: 
+  case Opcode::FS:
     switch (func3) {
     case 0x1: return "VS";
     case 0x2: return "FSW";
     case 0x3: return "FSD";
-    default: 
+    default:
       std::abort();
     }
   case Opcode::AMO: {
@@ -267,11 +267,11 @@ static const char* op_string(const Instr &instr) {
         default:
           std::abort();
         }
-      default: 
+      default:
         std::abort();
     }
   }
-  case Opcode::FCI: 
+  case Opcode::FCI:
     switch (func7) {
     case 0x00: return "FADD.S";
     case 0x01: return "FADD.D";
@@ -284,7 +284,7 @@ static const char* op_string(const Instr &instr) {
     case 0x2c: return "FSQRT.S";
     case 0x2d: return "FSQRT.D";
     case 0x10:
-      switch (func3) {            
+      switch (func3) {
       case 0: return "FSGNJ.S";
       case 1: return "FSGNJN.S";
       case 2: return "FSGNJX.S";
@@ -292,7 +292,7 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     case 0x11:
-      switch (func3) {            
+      switch (func3) {
       case 0: return "FSGNJ.D";
       case 1: return "FSGNJN.D";
       case 2: return "FSGNJX.D";
@@ -300,14 +300,14 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     case 0x14:
-      switch (func3) {            
+      switch (func3) {
       case 0: return "FMIN.S";
       case 1: return "FMAX.S";
       default:
         std::abort();
       }
     case 0x15:
-      switch (func3) {            
+      switch (func3) {
       case 0: return "FMIN.D";
       case 1: return "FMAX.D";
       default:
@@ -315,23 +315,23 @@ static const char* op_string(const Instr &instr) {
       }
     case 0x20: return "FCVT.S.D";
     case 0x21: return "FCVT.D.S";
-    case 0x50: 
-      switch (func3) {              
-      case 0: return "FLE.S"; 
-      case 1: return "FLT.S"; 
+    case 0x50:
+      switch (func3) {
+      case 0: return "FLE.S";
+      case 1: return "FLT.S";
       case 2: return "FEQ.S";
       default:
         std::abort();
       }
-    case 0x51: 
-      switch (func3) {              
-      case 0: return "FLE.D"; 
-      case 1: return "FLT.D"; 
+    case 0x51:
+      switch (func3) {
+      case 0: return "FLE.D";
+      case 1: return "FLT.D";
       case 2: return "FEQ.D";
       default:
         std::abort();
       }
-    case 0x60: 
+    case 0x60:
       switch (rs2) {
       case 0: return "FCVT.W.S";
       case 1: return "FCVT.WU.S";
@@ -349,7 +349,7 @@ static const char* op_string(const Instr &instr) {
       default:
         std::abort();
       }
-    case 0x68: 
+    case 0x68:
       switch (rs2) {
       case 0: return "FCVT.S.W";
       case 1: return "FCVT.S.WU";
@@ -381,13 +381,13 @@ static const char* op_string(const Instr &instr) {
   case Opcode::EXT1:
     switch (func7) {
     case 0:
-      switch (func3) {            
+      switch (func3) {
       case 0: return "TMC";
       case 1: return "WSPAWN";
-      case 2: return "SPLIT";
+      case 2: return imm ? "SPLIT.N" : "SPLIT";
       case 3: return "JOIN";
       case 4: return "BAR";
-      case 5: return "PRED";
+      case 5: return imm ? "PRED.N" : "PRED";
       default:
         std::abort();
       }
@@ -398,7 +398,7 @@ static const char* op_string(const Instr &instr) {
     switch (func3) {
     case 1: {
       switch (func2) {
-      case 0: return "CMOV"; 
+      case 0: return "CMOV";
       default:
         std::abort();
       }
@@ -412,16 +412,16 @@ static const char* op_string(const Instr &instr) {
 }
 
 namespace vortex {
-std::ostream &operator<<(std::ostream &os, const Instr &instr) {  
+std::ostream &operator<<(std::ostream &os, const Instr &instr) {
   os << op_string(instr);
   int sep = 0;
   if (instr.getRDType() != RegType::None) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << instr.getRDType() << std::dec << instr.getRDest();
   }
-  for (uint32_t i = 0; i < instr.getNRSrc(); ++i) {    
+  for (uint32_t i = 0; i < instr.getNRSrc(); ++i) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
-    if (instr.getRSType(i) != RegType::None) {   
+    if (instr.getRSType(i) != RegType::None) {
       os << instr.getRSType(i) << std::dec << instr.getRSrc(i);
     } else {
       os << "0x" << std::hex << instr.getRSrc(0);
@@ -435,7 +435,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 }
 }
 
-std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {  
+std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
   auto instr = std::make_shared<Instr>();
   auto op = Opcode((code >> shift_opcode) & mask_opcode);
   instr->setOpcode(op);
@@ -460,12 +460,12 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
   case InstType::R:
     switch (op) {
     case Opcode::FCI:
-      switch (func7) {  
+      switch (func7) {
       case 0x2c: // FSQRT.S
       case 0x2d: // FSQRT.D
         instr->setDestReg(rd, RegType::Float);
         instr->addSrcReg(rs1, RegType::Float);
-        break;    
+        break;
       case 0x50: // FLE.S, FLT.S, FEQ.S
       case 0x51: // FLE.D, FLT.D, FEQ.D
         instr->setDestReg(rd, RegType::Integer);
@@ -485,39 +485,44 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
         instr->addSrcReg(rs2, RegType::None);
         break;
       case 0x70: // FCLASS.S, FMV.X.S
-      case 0x71: // FCLASS.D, FMV.X.D        
+      case 0x71: // FCLASS.D, FMV.X.D
         instr->setDestReg(rd, RegType::Integer);
         instr->addSrcReg(rs1, RegType::Float);
         break;
       case 0x78: // FMV.S.X
-      case 0x79: // FMV.D.X        
+      case 0x79: // FMV.D.X
         instr->setDestReg(rd, RegType::Float);
         instr->addSrcReg(rs1, RegType::Integer);
         break;
       default:
         instr->setDestReg(rd, RegType::Float);
         instr->addSrcReg(rs1, RegType::Float);
-        instr->addSrcReg(rs2, RegType::Float);        
+        instr->addSrcReg(rs2, RegType::Float);
         break;
       }
       break;
     case Opcode::EXT1:
       switch (func7) {
       case 0:
-        switch (func3) {         
+        switch (func3) {
         case 0: // TMC
         case 3: // JOIN
           instr->addSrcReg(rs1, RegType::Integer);
           break;
-        case 1: // WSPAWN        
+        case 1: // WSPAWN
         case 4: // BAR
+          instr->addSrcReg(rs1, RegType::Integer);
+          instr->addSrcReg(rs2, RegType::Integer);
+          break;
         case 5: // PRED
           instr->addSrcReg(rs1, RegType::Integer);
           instr->addSrcReg(rs2, RegType::Integer);
+          instr->setImm(rd);
           break;
         case 2: // SPLIT
           instr->setDestReg(rd, RegType::Integer);
           instr->addSrcReg(rs1, RegType::Integer);
+          instr->setImm(rs2);
           break;
         default:
           std::abort();
@@ -542,7 +547,7 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
     case Opcode::I:
     case Opcode::I_W:
     case Opcode::JALR:
-      instr->setDestReg(rd, RegType::Integer);      
+      instr->setDestReg(rd, RegType::Integer);
       instr->addSrcReg(rs1, RegType::Integer);
       instr->setFunc3(func3);
       if (func3 == 0x1 || func3 == 0x5) {
@@ -560,7 +565,7 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
         auto imm = code >> shift_rs2;
         instr->setImm(sext(imm, width_i_imm));
       }
-      break;    
+      break;
     case Opcode::L:
     case Opcode::FL: {
       instr->setDestReg(rd, (op == Opcode::FL) ? RegType::Float : RegType::Integer);
@@ -578,24 +583,24 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
         // CSR instructions
         instr->setDestReg(rd, RegType::Integer);
         instr->setFunc3(func3);
-        if (func3 < 5) { 
+        if (func3 < 5) {
           instr->addSrcReg(rs1, RegType::Integer);
-        } else {          
-          // zimm       
+        } else {
+          // zimm
           instr->addSrcReg(rs1, RegType::None);
         }
         instr->setImm(code >> shift_rs2);
       } else {
         // ECALL/EBREACK instructions
         instr->setImm(code >> shift_rs2);
-      }     
+      }
       break;
     default:
-      std::abort();      
+      std::abort();
       break;
     }
   } break;
-  case InstType::S: {    
+  case InstType::S: {
     instr->addSrcReg(rs1, RegType::Integer);
     instr->addSrcReg(rs2, (op == Opcode::FS) ? RegType::Float : RegType::Integer);
     instr->setFunc3(func3);

@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -26,17 +26,17 @@ task trace_ex_type(input int level, input [`EX_BITS-1:0] ex_type);
     endcase
 endtask
 
-task trace_ex_op(input int level, 
-                 input [`EX_BITS-1:0] ex_type, 
-                 input [`INST_OP_BITS-1:0] op_type, 
-                 input [`INST_MOD_BITS-1:0] op_mod,  
+task trace_ex_op(input int level,
+                 input [`EX_BITS-1:0] ex_type,
+                 input [`INST_OP_BITS-1:0] op_type,
+                 input [`INST_MOD_BITS-1:0] op_mod,
                  input use_imm,
                  input fdst_d,
                  input fcvt_l,
                  input rd_float
 );
     case (ex_type)
-    `EX_ALU: begin 
+    `EX_ALU: begin
         if (`INST_ALU_IS_BR(op_mod)) begin
             case (`INST_BR_BITS'(op_type))
                 `INST_BR_EQ:    `TRACE(level, ("BEQ"));
@@ -131,7 +131,7 @@ task trace_ex_op(input int level,
             end
         end
     end
-    `EX_LSU: begin        
+    `EX_LSU: begin
         if (rd_float) begin
             case (`INST_LSU_BITS'(op_type))
                 `INST_LSU_LW: `TRACE(level, ("FLW"));
@@ -161,55 +161,55 @@ task trace_ex_op(input int level,
     `EX_FPU: begin
         case (`INST_FPU_BITS'(op_type))
             `INST_FPU_ADD: begin
-                if  (fdst_d) 
+                if  (fdst_d)
                     `TRACE(level, ("FADD.D"));
                 else
                     `TRACE(level, ("FADD.S"));
             end
             `INST_FPU_SUB: begin
-                if  (fdst_d) 
+                if  (fdst_d)
                     `TRACE(level, ("FSUB.D"));
                 else
                     `TRACE(level, ("FSUB.S"));
             end
             `INST_FPU_MUL: begin
-                if  (fdst_d) 
+                if  (fdst_d)
                     `TRACE(level, ("FMUL.D"));
                 else
                     `TRACE(level, ("FMUL.S"));
             end
             `INST_FPU_DIV: begin
-                if  (fdst_d) 
+                if  (fdst_d)
                     `TRACE(level, ("FDIV.D"));
                 else
                     `TRACE(level, ("FDIV.S"));
             end
             `INST_FPU_SQRT: begin
-                if  (fdst_d) 
+                if  (fdst_d)
                     `TRACE(level, ("FSQRT.D"));
                 else
                     `TRACE(level, ("FSQRT.S"));
             end
             `INST_FPU_MADD: begin
-                if  (fdst_d) 
+                if  (fdst_d)
                     `TRACE(level, ("FMADD.D"));
                 else
                     `TRACE(level, ("FMADD.S"));
             end
             `INST_FPU_MSUB: begin
-                if  (fdst_d) 
+                if  (fdst_d)
                     `TRACE(level, ("FMSUB.D"));
                 else
                     `TRACE(level, ("FMSUB.S"));
             end
             `INST_FPU_NMADD: begin
-                if  (fdst_d) 
+                if  (fdst_d)
                     `TRACE(level, ("FNMADD.D"));
                 else
                     `TRACE(level, ("FNMADD.S"));
             end
             `INST_FPU_NMSUB: begin
-                if  (fdst_d) 
+                if  (fdst_d)
                     `TRACE(level, ("FNMSUB.D"));
                 else
                     `TRACE(level, ("FNMSUB.S"));
@@ -330,10 +330,10 @@ task trace_ex_op(input int level,
             case (`INST_SFU_BITS'(op_type))
             `INST_SFU_TMC:   `TRACE(level, ("TMC"));
             `INST_SFU_WSPAWN:`TRACE(level, ("WSPAWN"));
-            `INST_SFU_SPLIT: `TRACE(level, ("SPLIT"));
+            `INST_SFU_SPLIT: begin if (op_mod[0]) `TRACE(level, ("SPLIT.N")); else `TRACE(level, ("SPLIT")); end
             `INST_SFU_JOIN:  `TRACE(level, ("JOIN"));
             `INST_SFU_BAR:   `TRACE(level, ("BAR"));
-            `INST_SFU_PRED:  `TRACE(level, ("PRED"));
+            `INST_SFU_PRED:  begin if (op_mod[0]) `TRACE(level, ("PRED.N")); else `TRACE(level, ("PRED")); end
             `INST_SFU_CSRRW: begin if (use_imm) `TRACE(level, ("CSRRWI")); else `TRACE(level, ("CSRRW")); end
             `INST_SFU_CSRRS: begin if (use_imm) `TRACE(level, ("CSRRSI")); else `TRACE(level, ("CSRRS")); end
             `INST_SFU_CSRRC: begin if (use_imm) `TRACE(level, ("CSRRCI")); else `TRACE(level, ("CSRRC")); end
