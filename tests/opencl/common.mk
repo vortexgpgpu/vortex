@@ -20,7 +20,10 @@ POCL_RT_PATH ?= $(TOOLDIR)/pocl/runtime
 
 LLVM_POCL ?= $(TOOLDIR)/llvm-vortex
 
-LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc -lgcc
+VX_LIBS += -L$(LIBC_VORTEX)/lib -lm -lc
+
+VX_LIBS += libclang_rt.builtins-riscv32.a
+#VX_LIBS += -lgcc
 
 VX_CFLAGS  += -O3 -mcmodel=medany --sysroot=$(RISCV_SYSROOT) --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH) -Xclang -target-feature -Xclang +vortex
 VX_CFLAGS  += -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
@@ -29,7 +32,7 @@ VX_CFLAGS  += -mllvm -disable-loop-idiom-all # disable memset/memcpy loop idiom
 #VX_CFLAGS += -mllvm -vortex-branch-divergence=0
 #VX_CFLAGS += -mllvm -print-after-all
 
-VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a $(LIBC_LIB)
+VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a $(VX_LIBS)
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-narrowing
@@ -39,7 +42,7 @@ CXXFLAGS += -I$(POCL_RT_PATH)/include
 # Debugigng
 ifdef DEBUG
 	CXXFLAGS += -g -O0
-else    
+else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
@@ -51,7 +54,7 @@ ifeq ($(TARGET), asesim)
 else
 ifeq ($(TARGET), opaesim)
 	OPAE_DRV_PATHS ?= libopae-c-sim.so
-endif	
+endif
 endif
 endif
 
@@ -60,13 +63,13 @@ OBJS_HOST := $(addsuffix .host.o, $(notdir $(SRCS)))
 
 .DEFAULT_GOAL := all
 all: $(PROJECT) kernel.pocl
- 
+
 kernel.cl: $(SRC_DIR)/kernel.cl
 	cp $< $@
 
 kernel.pocl: $(SRC_DIR)/kernel.cl
 	LD_LIBRARY_PATH=$(LLVM_POCL)/lib:$(POCL_CC_PATH)/lib:$(LLVM_VORTEX)/lib:$(LD_LIBRARY_PATH) LLVM_PREFIX=$(LLVM_VORTEX) POCL_DEBUG=all POCL_KERNEL_CACHE=0 POCL_VORTEX_BINTOOL="OBJCOPY=$(LLVM_VORTEX)/bin/llvm-objcopy $(VORTEX_HOME)/kernel/scripts/vxbin.py" POCL_VORTEX_CFLAGS="$(VX_CFLAGS)" POCL_VORTEX_LDFLAGS="$(VX_LDFLAGS)" $(POCL_CC_PATH)/bin/poclcc -o $@ $<
- 
+
 %.cc.o: $(SRC_DIR)/%.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
@@ -92,16 +95,16 @@ endif
 $(PROJECT): setup $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out setup, $^) $(LDFLAGS) -L$(ROOT_DIR)/runtime/stub -lvortex -L$(POCL_RT_PATH)/lib -lOpenCL -o $@
 
-$(PROJECT).host: setup $(OBJS_HOST)	
+$(PROJECT).host: setup $(OBJS_HOST)
 	$(CXX) $(CXXFLAGS) $(filter-out setup, $^) $(LDFLAGS) -lOpenCL -o $@
 
 run-gpu: $(PROJECT).host kernel.cl
 	./$(PROJECT).host $(OPTS)
 
-run-simx: $(PROJECT) kernel.pocl   
+run-simx: $(PROJECT) kernel.pocl
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(ROOT_DIR)/runtime/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
-run-rtlsim: $(PROJECT) kernel.pocl   
+run-rtlsim: $(PROJECT) kernel.pocl
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(ROOT_DIR)/runtime/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-opae: $(PROJECT) kernel.pocl
