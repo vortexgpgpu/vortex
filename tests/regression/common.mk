@@ -19,14 +19,14 @@ LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex
 LLVM_CFLAGS += -mllvm -disable-loop-idiom-all # disable memset/memcpy loop idiom
 #LLVM_CFLAGS += -mllvm -vortex-branch-divergence=0
 #LLVM_CFLAGS += -mllvm -print-after-all
-#LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0/$(RISCV_PREFIX) 
+#LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0/$(RISCV_PREFIX)
 #LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0
 #LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/$(RISCV_PREFIX)/9.2.0
 #LLVM_CFLAGS += --rtlib=libgcc
 
 VX_CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
 VX_CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
-VX_DP  = $(LLVM_VORTEX)/bin/llvm-objdump 
+VX_DP  = $(LLVM_VORTEX)/bin/llvm-objdump
 VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
 #VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
@@ -39,7 +39,10 @@ VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(ROOT_DIR)/hw
 VX_CFLAGS += -DXLEN_$(XLEN)
 VX_CFLAGS += -DNDEBUG
 
-VX_LIBS += -L$(LIBC_VORTEX)/lib -lm -lc -lgcc
+VX_LIBS += -L$(LIBC_VORTEX)/lib -lm -lc
+
+VX_LIBS += libclang_rt.builtins-riscv32.a
+#VX_LIBS += -lgcc
 
 VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a $(VX_LIBS)
 
@@ -51,7 +54,7 @@ LDFLAGS += -L$(ROOT_DIR)/runtime/stub -lvortex
 # Debugigng
 ifdef DEBUG
 	CXXFLAGS += -g -O0
-else    
+else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
@@ -63,7 +66,7 @@ ifeq ($(TARGET), asesim)
 else
 ifeq ($(TARGET), opaesim)
 	OPAE_DRV_PATHS ?= libopae-c-sim.so
-endif	
+endif
 endif
 endif
 
@@ -81,13 +84,13 @@ kernel.elf: $(VX_SRCS)
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-run-simx: $(PROJECT) kernel.vxbin   
+run-simx: $(PROJECT) kernel.vxbin
 	LD_LIBRARY_PATH=$(ROOT_DIR)/runtime/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
-	
-run-opae: $(PROJECT) kernel.vxbin   
+
+run-opae: $(PROJECT) kernel.vxbin
 	SCOPE_JSON_PATH=$(ROOT_DIR)/runtime/opae/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(ROOT_DIR)/runtime/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
-run-rtlsim: $(PROJECT) kernel.vxbin   
+run-rtlsim: $(PROJECT) kernel.vxbin
 	LD_LIBRARY_PATH=$(ROOT_DIR)/runtime/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-xrt: $(PROJECT) kernel.vxbin
