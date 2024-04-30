@@ -68,9 +68,9 @@ void createTexture() {
   glBindTexture(GL_TEXTURE_2D, texture);
 
   PPMImage* image = readPPM("dog.ppm");
-
-  uint8_t* data = (uint8_t*) malloc(image->x*image->y);
-  for(uint32_t i=0; image->x*image->y; ++i) {
+  printf("convert\n");
+  uint8_t* data = (uint8_t*) malloc(image->x*image->y*sizeof(uint8_t[4]));
+  for(uint32_t i=0; i<image->x*image->y; ++i) {
     data[i*4+0] = image->data[i*3].red;
     data[i*4+1] = image->data[i*3].green;
     data[i*4+2] = image->data[i*3].blue;
