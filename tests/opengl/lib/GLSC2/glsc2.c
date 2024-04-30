@@ -259,7 +259,7 @@ GL_APICALL void GL_APIENTRY glBindRenderbuffer (GLenum target, GLuint renderbuff
     }
 }
 GL_APICALL void GL_APIENTRY glBindTexture (GLenum target, GLuint texture) {
-    if (!_texture[texture].used) {
+    if (!_textures[texture].used) {
         _err = GL_INVALID_OPERATION;
         return;
     }
@@ -439,19 +439,19 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     void* fragment_kernel = createFragmentKernel(mode, first, count);
     int active_textures = _texture_binding != 0;
     setKernelArg(fragment_kernel, 
-        _programs[_current_program].active_uniforms + active_textures,
+        _programs[_current_program].active_uniforms + active_textures*3,
         sizeof(gl_FragCoord), &gl_FragCoord
     );
     setKernelArg(fragment_kernel, 
-        _programs[_current_program].active_uniforms + active_textures + 1,
+        _programs[_current_program].active_uniforms + active_textures*3 + 1,
         sizeof(gl_Rasterization), &gl_Rasterization
     );
     setKernelArg(fragment_kernel, 
-        _programs[_current_program].active_uniforms + active_textures + 2,
+        _programs[_current_program].active_uniforms + active_textures*3 + 2,
         sizeof(gl_Discard), &gl_Discard
     );
     setKernelArg(fragment_kernel, 
-        _programs[_current_program].active_uniforms + active_textures + 3,
+        _programs[_current_program].active_uniforms + active_textures*3 + 3,
         sizeof(gl_FragColor), &gl_FragColor
     );
 
@@ -713,7 +713,7 @@ GL_APICALL void GL_APIENTRY glTexStorage2D (GLenum target, GLsizei levels, GLenu
 GL_APICALL void GL_APIENTRY glTexSubImage2D (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels) {
     if (target == GL_TEXTURE_2D) {
         if (format == GL_RGBA && type == GL_UNSIGNED_BYTE) {
-            enqueueWriteBuffer(getCommandQueue(),_textures[_texture_binding],width*height*sizeof(uint8_t[4]),pixels);
+            enqueueWriteBuffer(getCommandQueue(),_textures[_texture_binding].mem,width*height*sizeof(uint8_t[4]),pixels);
         } else NOT_IMPLEMENTED;
     } else NOT_IMPLEMENTED;
 }
@@ -910,9 +910,22 @@ void* createFragmentKernel(GLenum mode, GLint first, GLsizei count) {
         setKernelArg(
             kernel, 
             _programs[_current_program].active_uniforms,
-            sizeof(sampler), 
-            &sampler
+            sizeof(sampler.width), 
+            &sampler.width
             );
+	setKernelArg(
+            kernel, 
+            _programs[_current_program].active_uniforms+1,
+            sizeof(sampler.height), 
+            &sampler.height
+            );
+	setKernelArg(
+            kernel, 
+            _programs[_current_program].active_uniforms+2,
+            sizeof(sampler.mem), 
+            &sampler.mem
+            );
+	
         ++texture;
     }
 
