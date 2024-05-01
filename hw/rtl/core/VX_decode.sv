@@ -384,27 +384,27 @@ module VX_decode  #(
                     end
                 `ifdef FLEN_64
                     5'b01000: begin
-                        // CVT.S.D, CVT.D.S
+                        // FCVT.S.D, FCVT.D.S
                         op_type = `INST_OP_BITS'(`INST_FPU_F2F);
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                     end
                 `endif
                     5'b01011: begin
-                        // SQRT
+                        // FSQRT
                         op_type = `INST_OP_BITS'(`INST_FPU_SQRT);
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                     end
                     5'b10100: begin
-                        // CMP
+                        // FCMP
                         op_type = `INST_OP_BITS'(`INST_FPU_CMP);
                         `USED_IREG (rd);
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
                     end
                     5'b11000: begin
-                        // CVT.W.X, CVT.WU.X
+                        // FCVT.W.X, FCVT.WU.X
                         op_type = (rs2[0]) ? `INST_OP_BITS'(`INST_FPU_F2U) : `INST_OP_BITS'(`INST_FPU_F2I);
                     `ifdef XLEN_64
                         imm[1] = rs2[1]; // is 64-bit integer
@@ -413,7 +413,7 @@ module VX_decode  #(
                         `USED_FREG (rs1);
                     end
                     5'b11010: begin
-                        // CVT.X.W, CVT.X.WU
+                        // FCVT.X.W, FCVT.X.WU
                         op_type = (rs2[0]) ? `INST_OP_BITS'(`INST_FPU_U2F) : `INST_OP_BITS'(`INST_FPU_I2F);
                     `ifdef XLEN_64
                         imm[1] = rs2[1]; // is 64-bit integer

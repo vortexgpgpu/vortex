@@ -70,7 +70,7 @@ void gen_src_data(std::vector<TYPE>& src_data, uint32_t size) {
     auto r = static_cast<float>(std::rand()) / RAND_MAX;
     auto value = static_cast<TYPE>(r * size);
     src_data[i] = value;
-    std::cout << std::dec << i << ": value=" << value << std::endl;
+    //std::cout << std::dec << i << ": value=" << value << std::endl;
   }
 }
 
