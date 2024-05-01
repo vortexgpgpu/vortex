@@ -15,7 +15,7 @@ __kernel void gl_main_vs (
 
   // vertex operations
   gl_Positions[gid] = (float4) (x, y, z, 1.0f);
-  gl_Primitives[gid*2] = (float4) (texCoord[gid].x,texCoord[gid].y, 1.0f, 1.0f);
+  gl_Primitives[gid*2] = (float4) (texCoord[gid].x, texCoord[gid].y, 1.0f, 1.0f);
 }
 
 
