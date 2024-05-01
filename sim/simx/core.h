@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -56,7 +56,7 @@ public:
     uint64_t ifetch_latency;
     uint64_t load_latency;
 
-    PerfStats() 
+    PerfStats()
       : cycles(0)
       , instrs(0)
       , sched_idle(0)
@@ -83,10 +83,10 @@ public:
   std::vector<SimPort<MemReq>> dcache_req_ports;
   std::vector<SimPort<MemRsp>> dcache_rsp_ports;
 
-  Core(const SimContext& ctx, 
-       uint32_t core_id, 
+  Core(const SimContext& ctx,
+       uint32_t core_id,
        Socket* socket,
-       const Arch &arch, 
+       const Arch &arch,
        const DCRS &dcrs);
 
   ~Core();
@@ -102,6 +102,8 @@ public:
   void resume(uint32_t wid);
 
   void barrier(uint32_t bar_id, uint32_t count, uint32_t wid);
+
+  void wspawn(uint32_t num_warps, Word nextPC);
 
   uint32_t id() const {
     return core_id_;
@@ -139,26 +141,26 @@ private:
   const Arch& arch_;
 
   Emulator emulator_;
-  
+
   std::vector<IBuffer> ibuffers_;
   Scoreboard scoreboard_;
   std::vector<Operand::Ptr> operands_;
   std::vector<Dispatcher::Ptr> dispatchers_;
-  std::vector<FuncUnit::Ptr> func_units_;  
+  std::vector<FuncUnit::Ptr> func_units_;
   LocalMem::Ptr local_mem_;
   std::vector<LocalMemDemux::Ptr> lsu_demux_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;
 
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;
-  
+
   HashTable<instr_trace_t*> pending_icache_;
   uint64_t pending_instrs_;
 
   uint64_t pending_ifetches_;
-  
+
   PerfStats perf_stats_;
-  
+
   std::vector<TraceSwitch::Ptr> commit_arbs_;
 
   uint32_t commit_exe_;

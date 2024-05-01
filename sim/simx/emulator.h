@@ -50,7 +50,7 @@ public:
 
   void barrier(uint32_t bar_id, uint32_t count, uint32_t wid);
 
-  bool wspawn(uint32_t num_warps, Word nextPC);
+  void wspawn(uint32_t num_warps, Word nextPC);
 
   int get_exitcode() const;
 
@@ -76,6 +76,12 @@ private:
     std::stack<ipdom_entry_t>         ipdom_stack;
     Byte                              fcsr;
     UUIDGenerator                     uui_gen;
+  };
+
+  struct wspawn_t {
+    bool valid;
+    uint32_t num_warps;
+    Word nextPC;
   };
 
   std::shared_ptr<Instr> decode(uint32_t code) const;
@@ -117,7 +123,8 @@ private:
   std::vector<WarpMask> barriers_;
   std::unordered_map<int, std::stringstream> print_bufs_;
   MemoryUnit  mmu_;
-  Word csr_mscratch_;
+  Word        csr_mscratch_;
+  wspawn_t    wspawn_;
 };
 
 }

@@ -257,12 +257,12 @@ void SfuUnit::tick() {
 
 		switch  (sfu_type) {
 		case SfuType::WSPAWN:
+			output.push(trace, 1);
 			if (trace->eop) {
 				auto trace_data = std::dynamic_pointer_cast<SFUTraceData>(trace->data);
-				if (!core_->emulator_.wspawn(trace_data->arg1, trace_data->arg2))
-					return;
+				core_->wspawn(trace_data->arg1, trace_data->arg2);
+				release_warp = false;
 			}
-			output.push(trace, 1);
 			break;
 		case SfuType::TMC:
 		case SfuType::SPLIT:
@@ -275,11 +275,11 @@ void SfuUnit::tick() {
 			break;
 		case SfuType::BAR: {
 			output.push(trace, 1);
-			auto trace_data = std::dynamic_pointer_cast<SFUTraceData>(trace->data);
 			if (trace->eop) {
+				auto trace_data = std::dynamic_pointer_cast<SFUTraceData>(trace->data);
 				core_->barrier(trace_data->arg1, trace_data->arg2, trace->wid);
+				release_warp = false;
 			}
-			release_warp = false;
 		} break;
 		case SfuType::CMOV:
 			output.push(trace, 3);

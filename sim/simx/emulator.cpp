@@ -108,6 +108,7 @@ void Emulator::clear() {
   // activate first warp and thread
   active_warps_.set(0);
   warps_[0].tmask.set(0);
+  wspawn_.valid = false;
 }
 
 void Emulator::attach_ram(RAM* ram) {
@@ -121,6 +122,19 @@ void Emulator::attach_ram(RAM* ram) {
 
 instr_trace_t* Emulator::step() {
   int scheduled_warp = -1;
+
+  // process pending wspawn
+  if (wspawn_.valid && active_warps_.count() == 1) {
+    DP(3, "*** Activate " << (wspawn_.num_warps-1) << " warps at PC: " << std::hex << wspawn_.nextPC);
+    for (uint32_t i = 1; i < wspawn_.num_warps; ++i) {
+      auto& warp = warps_.at(i);
+      warp.PC = wspawn_.nextPC;
+      warp.tmask.set(0);
+      active_warps_.set(i);
+    }
+    wspawn_.valid = false;
+    stalled_warps_.reset(0);
+  }
 
   // find next ready warp
   for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {
@@ -210,19 +224,10 @@ void Emulator::resume(uint32_t wid) {
   }
 }
 
-bool Emulator::wspawn(uint32_t num_warps, Word nextPC) {
-  // wait for single warp
-  if (active_warps_.count() != 1)
-    return false;
-  uint32_t active_warps = std::min<uint32_t>(num_warps, arch_.num_warps());
-  DP(3, "*** Activate " << (active_warps-1) << " warps at PC: " << std::hex << nextPC);
-  for (uint32_t i = 1; i < active_warps; ++i) {
-    auto& warp = warps_.at(i);
-    warp.PC = nextPC;
-    warp.tmask.set(0);
-    active_warps_.set(i);
-  }
-  return true;
+void Emulator::wspawn(uint32_t num_warps, Word nextPC) {
+  wspawn_.valid = true;
+  wspawn_.num_warps = std::min<uint32_t>(num_warps, arch_.num_warps());
+  wspawn_.nextPC = nextPC;
 }
 
 void Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
