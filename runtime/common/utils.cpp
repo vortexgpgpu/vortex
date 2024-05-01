@@ -558,7 +558,10 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_DCACHE_BANK_ST, core_id, &dcache_bank_stalls), {
           return _ret;
         });
-        uint64_t dcache_mshr_stalls = get_mpm_csr(VX_CSR_MPM_DCACHE_MSHR_ST);
+        uint64_t dcache_mshr_stalls;
+        RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_DCACHE_MSHR_ST, core_id, &dcache_mshr_stalls), {
+          return _ret;
+        });
         int dcache_read_hit_ratio = calcRatio(dcache_read_misses, dcache_reads);
         int dcache_write_hit_ratio = calcRatio(dcache_write_misses, dcache_writes);
         int dcache_bank_utilization = calcAvgPercent(dcache_reads + dcache_writes, dcache_reads + dcache_writes + dcache_bank_stalls);
@@ -573,29 +576,69 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
 
       if (l2cache_enable) {
         // PERF: L2cache
-        l2cache_reads += get_mpm_csr(VX_CSR_MPM_L2CACHE_READS);
-        l2cache_writes += get_mpm_csr(VX_CSR_MPM_L2CACHE_WRITES);
-        l2cache_read_misses += get_mpm_csr(VX_CSR_MPM_L2CACHE_MISS_R);
-        l2cache_write_misses += get_mpm_csr(VX_CSR_MPM_L2CACHE_MISS_W);
-        l2cache_bank_stalls += get_mpm_csr(VX_CSR_MPM_L2CACHE_BANK_ST);
-        l2cache_mshr_stalls += get_mpm_csr(VX_CSR_MPM_L2CACHE_MSHR_ST);
-      }
+        uint64_t tmp;
+        RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_READS, core_id, &tmp), {
+          return _ret;
+        });
+        l2cache_reads += tmp;
 
+        RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_WRITES, core_id, &tmp), {
+          return _ret;
+        });
+        l2cache_writes += tmp;
+
+        RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_MISS_R, core_id, &tmp), {
+          return _ret;
+        });
+        l2cache_read_misses += tmp;
+
+        RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_MISS_W, core_id, &tmp), {
+          return _ret;
+        });
+        l2cache_write_misses += tmp;
+
+        RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_BANK_ST, core_id, &tmp), {
+          return _ret;
+        });
+        l2cache_bank_stalls += tmp;
+
+        RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_MSHR_ST, core_id, &tmp), {
+          return _ret;
+        });
+        l2cache_mshr_stalls += tmp;
+      }
       if (0 == core_id) {
         if (l3cache_enable) {
           // PERF: L3cache
-          l3cache_reads = get_mpm_csr(VX_CSR_MPM_L3CACHE_READS);
-          l3cache_writes = get_mpm_csr(VX_CSR_MPM_L3CACHE_WRITES);
-          l3cache_read_misses = get_mpm_csr(VX_CSR_MPM_L3CACHE_MISS_R);
-          l3cache_write_misses = get_mpm_csr(VX_CSR_MPM_L3CACHE_MISS_W);
-          l3cache_bank_stalls = get_mpm_csr(VX_CSR_MPM_L3CACHE_BANK_ST);
-          l3cache_mshr_stalls = get_mpm_csr(VX_CSR_MPM_L3CACHE_MSHR_ST);
+          RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_L3CACHE_READS, core_id, &l3cache_reads), {
+            return _ret;
+          });
+          RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_L3CACHE_WRITES, core_id, &l3cache_writes), {
+            return _ret;
+          });
+          RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_L3CACHE_MISS_R, core_id, &l3cache_read_misses), {
+            return _ret;
+          });
+          RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_L3CACHE_MISS_W, core_id, &l3cache_write_misses), {
+            return _ret;
+          });
+          RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_L3CACHE_BANK_ST, core_id, &l3cache_bank_stalls), {
+            return _ret;
+          });
+          RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_L3CACHE_MSHR_ST, core_id, &l3cache_mshr_stalls), {
+            return _ret;
+          });
         }
-
         // PERF: memory
-        mem_reads  = get_mpm_csr(VX_CSR_MPM_MEM_READS);
-        mem_writes = get_mpm_csr(VX_CSR_MPM_MEM_WRITES);
-        mem_lat    = get_mpm_csr(VX_CSR_MPM_MEM_LT);
+        RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_READS, core_id, &mem_reads), {
+          return _ret;
+        });
+        RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_WRITES, core_id, &mem_writes), {
+          return _ret;
+        });
+        RT_CHECK(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_LT, core_id, &mem_lat), {
+          return _ret;
+        });
       }
     } break;
     default:
