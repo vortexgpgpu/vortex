@@ -155,6 +155,9 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
     // back to single-threaded
     vx_tmc_one();
   }
+
+  // wait for spawned tasks to complete
+  vx_wspawn(1, 0);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -315,6 +318,9 @@ void vx_spawn_pocl_kernel(pocl_kernel_context_t * ctx, pocl_kernel_cb callback, 
     // back to single-threaded
     vx_tmc_one();
   }
+
+  // wait for spawned tasks to complete
+  vx_wspawn(1, 0);
 }
 
 #ifdef __cplusplus

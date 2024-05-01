@@ -332,9 +332,14 @@ void kernel_trigo(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	auto dst_ptr  = (float*)arg->dst_addr;
 	auto offset = task_id * count;
 	for (uint32_t i = 0; i < count; ++i) {
-		auto a = src0_ptr[offset+i];
-		auto b = src1_ptr[offset+i];
-		dst_ptr[offset+i] = sinf(a * b);
+		uint32_t j = offset + i;
+		auto a = src0_ptr[j];
+		auto b = src1_ptr[j];
+		auto c = a * b;
+		if ((j % 4) == 0) {
+			c = sinf(c);
+		}
+		dst_ptr[j] = c;
 	}
 }
 
