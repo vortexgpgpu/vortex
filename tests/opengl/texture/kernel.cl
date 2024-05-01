@@ -31,7 +31,6 @@ __kernel void gl_main_fs (
   // user values
   int width,
   int height,
-  sampler_t a,
   __global const unsigned char *texture,
   // implementation values 
   __global float4 *gl_FragCoord, // position of the fragment in the window space, z is depth value
