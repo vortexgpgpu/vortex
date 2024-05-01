@@ -356,7 +356,7 @@ GL_APICALL void GL_APIENTRY glClearColor (GLfloat red, GLfloat green, GLfloat bl
 GL_APICALL void GL_APIENTRY glClearDepthf (GLfloat d) {
     uint32_t pattern = 0;
 
-    if (depth_attachment.internalformat == GL_DEPTH_COMPONENT16) {
+    if (DEPTH_ATTACHMENT.internalformat == GL_DEPTH_COMPONENT16) {
         pattern = d*0xFFFFu;
         pattern |= pattern << 16;
     } else NOT_IMPLEMENTED;
@@ -744,7 +744,7 @@ GL_APICALL void GL_APIENTRY glStencilMaskSeparate (GLenum face, GLuint mask) {
     }
 }
 
-
+#define max(a, b) (a >= b ? a : b)
 #define IS_POWER_OF_2(a) !(a & 0x1u) 
 
 GL_APICALL void GL_APIENTRY glTexStorage2D (GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height) {
@@ -758,7 +758,7 @@ GL_APICALL void GL_APIENTRY glTexStorage2D (GLenum target, GLsizei levels, GLenu
         RETURN_ERROR(GL_INVALID_OPERATION);
     if (levels != 1 && (IS_POWER_OF_2(width) || IS_POWER_OF_2(height)))
         RETURN_ERROR(GL_INVALID_OPERATION);
-    if (_texture[_texture_binding].used)
+    if (_textures[_texture_binding].used)
         RETURN_ERROR(GL_INVALID_OPERATION);
 
     uint32_t pixel_size;
@@ -806,7 +806,7 @@ GL_APICALL void GL_APIENTRY glTexSubImage2D (GLenum target, GLint level, GLint x
     if (level < 0 || level > (int) log2f(max(_textures[_texture_binding].width,_textures[_texture_binding].height)))
         RETURN_ERROR(GL_INVALID_VALUE);
 
-    if (xoffset < 0 || yoffset < 0 || xoffset + width > _textures[_texture_binding].width || yoffset + height > _textures[_texture_binding])
+    if (xoffset < 0 || yoffset < 0 || xoffset + width > _textures[_texture_binding].width || yoffset + height > _textures[_texture_binding].height)
         RETURN_ERROR(GL_INVALID_VALUE);
 
     // TODO subImage2d kernel
