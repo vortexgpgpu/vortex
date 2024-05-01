@@ -119,12 +119,13 @@ void __libc_fini_array (void) {
 }
 #endif
 
+/*
 #define MAX_CORES 64
-
 volatile int g_cxa_locks[MAX_CORES] = {0};
+*/
 
 void __cxa_lock() {
-  int core_id = vx_core_id();
+  /*int core_id = vx_core_id();
   g_cxa_locks[core_id] = 1;
   vx_fence();
   for (int i = 1; i < MAX_CORES; ++i) {
@@ -132,13 +133,13 @@ void __cxa_lock() {
     while (g_cxa_locks[other]) {
       vx_fence(); // cache coherence not supported, so we need to flush the caches
     }
-  }
+  }*/
 }
 
 void __cxa_unlock() {
-  vx_fence();
+  /*vx_fence();
   int core_id = vx_core_id();
-  g_cxa_locks[core_id] = 0;
+  g_cxa_locks[core_id] = 0;*/
 }
 
 #define MAX_FEXITS 64
