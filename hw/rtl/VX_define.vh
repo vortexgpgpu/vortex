@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -90,10 +90,10 @@
 
 `define INST_FL         7'b0000111 // float load instruction
 `define INST_FS         7'b0100111 // float store  instruction
-`define INST_FMADD      7'b1000011  
+`define INST_FMADD      7'b1000011
 `define INST_FMSUB      7'b1000111
 `define INST_FNMSUB     7'b1001011
-`define INST_FNMADD     7'b1001111 
+`define INST_FNMADD     7'b1001111
 `define INST_FCI        7'b1010011 // float common instructions
 
 // Custom extension opcodes
@@ -143,8 +143,8 @@
 
 `define INST_BR_EQ           4'b0000
 `define INST_BR_NE           4'b0010
-`define INST_BR_LTU          4'b0100 
-`define INST_BR_GEU          4'b0110 
+`define INST_BR_LTU          4'b0100
+`define INST_BR_GEU          4'b0110
 `define INST_BR_LT           4'b0101
 `define INST_BR_GE           4'b0111
 `define INST_BR_JAL          4'b1000
@@ -184,17 +184,18 @@
 `define INST_FMT_HU          3'b101
 `define INST_FMT_WU          3'b110
 
-`define INST_LSU_LB          4'b0000 
+`define INST_LSU_LB          4'b0000
 `define INST_LSU_LH          4'b0001
 `define INST_LSU_LW          4'b0010
 `define INST_LSU_LD          4'b0011 // new for RV64I LD
 `define INST_LSU_LBU         4'b0100
 `define INST_LSU_LHU         4'b0101
 `define INST_LSU_LWU         4'b0110 // new for RV64I LWU
-`define INST_LSU_SB          4'b1000 
+`define INST_LSU_SB          4'b1000
 `define INST_LSU_SH          4'b1001
 `define INST_LSU_SW          4'b1010
 `define INST_LSU_SD          4'b1011 // new for RV64I SD
+`define INST_MLOAD           4'b1100 // Mod2 adding op-type
 `define INST_LSU_FENCE       4'b1111
 `define INST_LSU_BITS        4
 `define INST_LSU_FMT(op)     op[2:0]
@@ -205,9 +206,9 @@
 `define INST_FENCE_D         1'h0
 `define INST_FENCE_I         1'h1
 
-`define INST_FPU_ADD         4'b0000 
-`define INST_FPU_SUB         4'b0001 
-`define INST_FPU_MUL         4'b0010 
+`define INST_FPU_ADD         4'b0000
+`define INST_FPU_SUB         4'b0001
+`define INST_FPU_MUL         4'b0010
 `define INST_FPU_DIV         4'b0011
 `define INST_FPU_SQRT        4'b0100
 `define INST_FPU_CMP         4'b0101 // mod: LE=0, LT=1, EQ=2
@@ -217,9 +218,9 @@
 `define INST_FPU_F2U         4'b1001
 `define INST_FPU_I2F         4'b1010
 `define INST_FPU_U2F         4'b1011
-`define INST_FPU_MADD        4'b1100 
-`define INST_FPU_MSUB        4'b1101   
-`define INST_FPU_NMSUB       4'b1110   
+`define INST_FPU_MADD        4'b1100
+`define INST_FPU_MSUB        4'b1101
+`define INST_FPU_NMSUB       4'b1110
 `define INST_FPU_NMADD       4'b1111
 `define INST_FPU_BITS        4
 `define INST_FPU_IS_W(mod)   (mod[4])
@@ -227,7 +228,7 @@
 `define INST_FPU_IS_MVXW(op, mod) (op == `INST_FPU_MISC && mod == 4)
 
 `define INST_SFU_TMC         4'h0
-`define INST_SFU_WSPAWN      4'h1 
+`define INST_SFU_WSPAWN      4'h1
 `define INST_SFU_SPLIT       4'h2
 `define INST_SFU_JOIN        4'h3
 `define INST_SFU_BAR         4'h4
@@ -259,7 +260,6 @@
 
 `define CACHE_MEM_TAG_WIDTH(mshr_size, num_banks) \
         (`CLOG2(mshr_size) + `CLOG2(num_banks) + `NC_TAG_BITS)
-        
 `define CACHE_NC_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width) \
         (`CLOG2(num_reqs) + `CLOG2(line_size / word_size) + tag_width)
 
@@ -272,7 +272,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `define CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches) \
-        (tag_width + `ARB_SEL_BITS(num_inputs, `UP(num_caches)))  
+        (tag_width + `ARB_SEL_BITS(num_inputs, `UP(num_caches)))
 
 `define CACHE_CLUSTER_MEM_ARB_TAG(tag_width, num_caches) \
         (tag_width + `ARB_SEL_BITS(`UP(num_caches), 1))
@@ -298,7 +298,7 @@
 `define L1_ENABLE
 `endif
 
-`define VX_MEM_BYTEEN_WIDTH     `L3_LINE_SIZE   
+`define VX_MEM_BYTEEN_WIDTH     `L3_LINE_SIZE
 `define VX_MEM_ADDR_WIDTH       (`MEM_ADDR_WIDTH - `CLOG2(`L3_LINE_SIZE))
 `define VX_MEM_DATA_WIDTH       (`L3_LINE_SIZE * 8)
 `define VX_MEM_TAG_WIDTH        L3_MEM_TAG_WIDTH
