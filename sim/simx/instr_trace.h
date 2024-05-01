@@ -38,9 +38,9 @@ struct LsuTraceData : public ITraceData {
 
 struct SFUTraceData : public ITraceData {
   using Ptr = std::shared_ptr<SFUTraceData>;
-  uint32_t arg1;
-  uint32_t arg2;
-  SFUTraceData(uint32_t arg1, uint32_t arg2) : arg1(arg1), arg2(arg2) {}
+  Word arg1;
+  Word arg2;
+  SFUTraceData(Word arg1, Word arg2) : arg1(arg1), arg2(arg2) {}
 };
 
 struct instr_trace_t {

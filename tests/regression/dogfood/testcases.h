@@ -752,7 +752,7 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (uint32_t i = 0; i < n; ++i) {
-      auto ref = sinf(a[i]) + cosf(b[i]);
+      auto ref = sinf(a[i] * b[i]);
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;

@@ -110,7 +110,6 @@ void ProcessorImpl::reset() {
   perf_mem_writes_ = 0;
   perf_mem_latency_ = 0;
   perf_mem_pending_reads_ = 0;
-
 }
 
 void ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {

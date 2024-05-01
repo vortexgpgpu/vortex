@@ -52,7 +52,7 @@ llvm()
 libcrt32()
 {
     echo "prebuilt libcrt32..."
-    tar -C $TOOLDIR -cvjf libcrt32.tar.bz2 libc32
+    tar -C $TOOLDIR -cvjf libcrt32.tar.bz2 libcrt32
     mkdir -p ./libcrt32
     mv libcrt32.tar.bz2 ./libcrt32
 }
@@ -60,7 +60,7 @@ libcrt32()
 libcrt64()
 {
     echo "prebuilt libcrt64..."
-    tar -C $TOOLDIR -cvjf libcrt64.tar.bz2 libc64
+    tar -C $TOOLDIR -cvjf libcrt64.tar.bz2 libcrt64
     mkdir -p ./libcrt64
     mv libcrt64.tar.bz2 ./libcrt64
 }

@@ -61,7 +61,7 @@ int main(int argc, char **argv)
         *h_X,
         *h_T;
 
-    const unsigned int   optionCount = 64*64;
+    const unsigned int   optionCount = 16*16; //64*64;
     const float                    R = 0.02f;
     const float                    V = 0.30f;
 
@@ -70,7 +70,7 @@ int main(int argc, char **argv)
     // Get the NVIDIA platform
     ciErrNum = oclGetPlatformID(&cpPlatform);
     oclCheckErrorEX(ciErrNum, CL_SUCCESS, NULL);
-    shrLog("clGetPlatformID...\n"); 
+    shrLog("clGetPlatformID...\n");
 
     //Get all the devices
     cl_uint uiNumDevices = 0;           // Number of devices available
@@ -84,20 +84,20 @@ int main(int argc, char **argv)
     oclCheckErrorEX(ciErrNum, CL_SUCCESS, NULL);
 
     // Get command line device options and config accordingly
-    shrLog("  # of Devices Available = %u\n", uiNumDevices); 
-    if(shrGetCmdLineArgumentu(argc, (const char**)argv, "device", &uiTargetDevice)== shrTRUE) 
+    shrLog("  # of Devices Available = %u\n", uiNumDevices);
+    if(shrGetCmdLineArgumentu(argc, (const char**)argv, "device", &uiTargetDevice)== shrTRUE)
     {
         uiTargetDevice = CLAMP(uiTargetDevice, 0, (uiNumDevices - 1));
     }
-    shrLog("  Using Device %u: ", uiTargetDevice); 
+    shrLog("  Using Device %u: ", uiTargetDevice);
     oclPrintDevName(LOGBOTH, cdDevices[uiTargetDevice]);
     ciErrNum = clGetDeviceInfo(cdDevices[uiTargetDevice], CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(uiNumComputeUnits), &uiNumComputeUnits, NULL);
     oclCheckErrorEX(ciErrNum, CL_SUCCESS, NULL);
-    shrLog("\n  # of Compute Units = %u\n", uiNumComputeUnits); 
+    shrLog("\n  # of Compute Units = %u\n", uiNumComputeUnits);
 
     // set logfile name and start logs
     shrSetLogFileName ("oclBlackScholes.txt");
-    shrLog("%s Starting...\n\n", argv[0]); 
+    shrLog("%s Starting...\n\n", argv[0]);
 
     shrLog("Allocating and initializing host memory...\n");
         h_CallCPU = (float *)malloc(optionCount * sizeof(float));
@@ -191,7 +191,7 @@ int main(int argc, char **argv)
 
     //Calculate performance metrics by wallclock time
     double gpuTime = shrDeltaT(0) / numIterations;
-    shrLogEx(LOGBOTH | MASTER, 0, "oclBlackScholes, Throughput = %.4f GOptions/s, Time = %.5f s, Size = %u options, NumDevsUsed = %i, Workgroup = %u\n", 
+    shrLogEx(LOGBOTH | MASTER, 0, "oclBlackScholes, Throughput = %.4f GOptions/s, Time = %.5f s, Size = %u options, NumDevsUsed = %i, Workgroup = %u\n",
         (double)(2.0 * optionCount * 1.0e-9)/gpuTime, gpuTime, (2 * optionCount), 1, 0);
 
     //Get profiling info
@@ -208,7 +208,7 @@ int main(int argc, char **argv)
         ciErrNum = clEnqueueReadBuffer(cqCommandQueue, d_Put, CL_TRUE, 0, optionCount * sizeof(float), h_PutGPU, 0, NULL, NULL);
         oclCheckError(ciErrNum, CL_SUCCESS);
 
-    shrLog("Comparing against Host/C++ computation...\n"); 
+    shrLog("Comparing against Host/C++ computation...\n");
         BlackScholesCPU(h_CallCPU, h_PutCPU, h_S, h_X, h_T, R, V, optionCount);
         double deltaCall = 0, deltaPut = 0, sumCall = 0, sumPut = 0;
         double L1call, L1put;
@@ -219,7 +219,7 @@ int main(int argc, char **argv)
             deltaCall += fabs(h_CallCPU[i] - h_CallGPU[i]);
             deltaPut  += fabs(h_PutCPU[i] - h_PutGPU[i]);
         }
-        L1call = deltaCall / sumCall; 
+        L1call = deltaCall / sumCall;
         L1put = deltaPut / sumPut;
         shrLog("Relative L1 (call, put) = (%.3e, %.3e)\n\n", L1call, L1put);
 
