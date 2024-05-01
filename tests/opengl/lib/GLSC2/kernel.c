@@ -148,6 +148,13 @@ void enqueueFillBuffer(void* command_queue, void* buffer, const void* pattern, s
     // clEnqueueFillBuffer((cl_command_queue)command_queue, (cl_mem) buffer, pattern, pattern_size, offset, size, 0, NULL, NULL);
 }
 
-// formats
-#define RGBA8 0x0
-#define RGBA4 0x1
+void* createImage2D(const cl_image_format *image_format, size_t image_width, size_t image_height, size_t image_row_pitch, void *host_ptr) {
+    
+    void *image = clCreateImage2D(_getContext(), CL_MEM_READ_ONLY, image_format, image_width, image_height, image_row_pitch, host_ptr, _err);
+    if (_err) {
+        printf("createImage2D() image_format=%08x, image_width=%d, image_height=%d, image_row_pitch=%d, host_ptr=%08x\n", image_format, image_width, image_height, image_row_pitch, host_ptr);
+        printf("\terror=%d\n", _err);
+    }
+
+    return image;
+}

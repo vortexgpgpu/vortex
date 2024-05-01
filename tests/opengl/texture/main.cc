@@ -85,7 +85,7 @@ void createTexture() {
       texture_image[r][g][3] = 255;
   }
 
-  glTexStorage2D(GL_TEXTURE_2D, 0, GL_RGBA8, image->x, image->y);
+  glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, image->x, image->y);
   glTexSubImage2D(GL_TEXTURE_2D,0,0,0,image->x,image->y, GL_RGBA, GL_UNSIGNED_BYTE, data);
 
 }

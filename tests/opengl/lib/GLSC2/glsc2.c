@@ -1,11 +1,26 @@
+#include <math.h>
 #include <GLSC2/glsc2.h>
 #include "kernel.c" // TODO: may be interesting to extract it to an interface so could be re implementated with CUDA
 #include "binary.c"
 
 #define NOT_IMPLEMENTED              \
     ({                               \
-        printf("NOT_IMPLEMENTED");   \
+        printf("NOT_IMPLEMENTED\n"); \
         exit(0);                     \
+    })
+
+#define INTERNAL_ERROR               \
+    ({                               \
+        printf("INTERNAL_ERROR\n");  \
+        exit(0);                     \
+    })
+
+int gl_error = 0;
+
+#define RETURN_ERROR(error)          \
+    ({                               \
+        gl_error = error;            \
+        return;                      \
     })
 
 // Our definitions
@@ -17,7 +32,7 @@
 #define MAX_UNIFORM_VECTORS 16
 #define MAX_NAME_SIZE 64
 #define MAX_INFO_SIZE 256
-#define MAX_UNIFORM_SIZE sizeof(float)*4*4 // Limited to a matf4x4
+#define MAX_UNIFORM_SIZE sizeof(float[4][4]) // Limited to a matf4x4
 
 // OpenGL required definitions
 #define MAX_VERTEX_ATTRIBS 16
@@ -101,8 +116,17 @@ typedef struct {
 PROGRAM _programs[MAX_PROGRAMS];
 GLuint _current_program; // ZERO is reserved for NULL program
 
+typedef struct {
+    void *less;
+} DEPTH_KERNEL;
+
+typedef struct {
+    void *rgba4, *rgba8;
+} COLOR_KERNEL;
+
 GLboolean _kernel_load_status;
-void *_color_kernel;
+DEPTH_KERNEL _depth_kernel;
+COLOR_KERNEL _color_kernel;
 void *_rasterization_kernel;
 void *_viewport_division_kernel;
 void *_perspective_division_kernel;
@@ -179,7 +203,7 @@ typedef struct {
     GLboolean used;
 } TEXTURE_2D;
 
-TEXTURE_2D _textures[MAX_RENDERBUFFER];
+TEXTURE_2D _textures[MAX_TEXTURE];
 GLuint _texture_binding;
 
 /****** PER-FRAGMENT objects ******\
@@ -213,12 +237,14 @@ STENCIL_MASK _stencil_mask = {1, 1};
  * Utility or inline function are implemented at the end of the file. 
 */
 #define COLOR_ATTACHMENT0 _renderbuffers[_framebuffers[_framebuffer_binding].color_attachment0]
+#define DEPTH_ATTACHMENT _renderbuffers[_framebuffers[_framebuffer_binding].depth_attachment]
 
 void* getCommandQueue();
 
 void* getPerspectiveDivisionKernel(GLenum mode, GLint first, GLsizei count);
 void* getViewportDivisionKernel(GLenum mode, GLint first, GLsizei count);
 void* getRasterizationTriangleKernel(GLenum mode, GLint first, GLsizei count);
+void* getDepthKernel(GLenum mode, GLint first, GLsizei count);
 void* getColorKernel(GLenum mode, GLint first, GLsizei count);
 
 void* createVertexKernel(GLenum mode, GLint first, GLsizei count);
@@ -306,29 +332,36 @@ GL_APICALL void GL_APIENTRY glClear (GLbitfield mask) {
 }
 
 GL_APICALL void GL_APIENTRY glClearColor (GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) {
+    uint32_t pattern = 0;
+    uint32_t pixel_size = 0;
 
     if (COLOR_ATTACHMENT0.internalformat == GL_RGBA4) {
-        unsigned int color = 0;
-        color |= (unsigned int) (red*15);
-        color |= (unsigned int) (green*15) << 4;
-        color |= (unsigned int) (blue*15) << 8;
-        color |= (unsigned int) (alpha*15) << 12;
-        color |= color << 16;
-        enqueueFillBuffer(getCommandQueue(), COLOR_ATTACHMENT0.mem, &color, 4, 0, COLOR_ATTACHMENT0.width*COLOR_ATTACHMENT0.height*2);
+        pattern |= (unsigned int) (red   * 0xFFu) << 0;
+        pattern |= (unsigned int) (green * 0xFFu) << 4;
+        pattern |= (unsigned int) (blue  * 0xFFu) << 8;
+        pattern |= (unsigned int) (alpha * 0xFFu) << 12;
+        pattern |= pattern << 16;
+        pixel_size = sizeof(uint8_t[2]);
+    } else if(COLOR_ATTACHMENT0.internalformat == GL_RGBA8) {
+        pattern |= (unsigned int) (red   * 0xFFFFu) << 0;
+        pattern |= (unsigned int) (green * 0xFFFFu) << 8;
+        pattern |= (unsigned int) (blue  * 0xFFFFu) << 16;
+        pattern |= (unsigned int) (alpha * 0xFFFFu) << 24;
+        pixel_size = sizeof(uint8_t[4]);
+    } else NOT_IMPLEMENTED;
     
-    } else {
-        printf("NOT IMPLEMENTED");
-        exit(0);
-    }
+    enqueueFillBuffer(getCommandQueue(), COLOR_ATTACHMENT0.mem, &pattern, 4, 0, COLOR_ATTACHMENT0.width*COLOR_ATTACHMENT0.height*pixel_size);
 }
-// TODO:
+
 GL_APICALL void GL_APIENTRY glClearDepthf (GLfloat d) {
-    RENDERBUFFER depth_attachment = _renderbuffers[_framebuffers[_framebuffer_binding].depth_attachment];
+    uint32_t pattern = 0;
 
     if (depth_attachment.internalformat == GL_DEPTH_COMPONENT16) {
-        unsigned short value = 65535*d;
-        //fill(depth_attachment.mem, depth_attachment.width*depth_attachment.height*2, &value, 2);
-    }
+        pattern = d*0xFFFFu;
+        pattern |= pattern << 16;
+    } else NOT_IMPLEMENTED;
+
+    enqueueFillBuffer(getCommandQueue(), DEPTH_ATTACHMENT.mem, &pattern, 4, 0, DEPTH_ATTACHMENT.width*DEPTH_ATTACHMENT.height*2);
 }
 // TODO:
 GL_APICALL void GL_APIENTRY glClearStencil (GLint s) {
@@ -455,16 +488,16 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
         sizeof(gl_FragColor), &gl_FragColor
     );
 
+    void *depth_kernel; 
+    if (_depth_enabled) {
+        depth_kernel = getDepthKernel(mode, first, count);
+        setKernelArg(depth_kernel, 1, sizeof(gl_Discard), &gl_Discard);
+        setKernelArg(depth_kernel, 2, sizeof(gl_FragCoord), &gl_FragCoord);
+    }
+
     void *color_kernel = getColorKernel(mode, first, count);
-    setKernelArg(color_kernel, 3,
-        sizeof(gl_FragCoord), &gl_FragCoord
-    );
-    setKernelArg(color_kernel, 4,
-        sizeof(gl_Discard), &gl_Discard
-    );
-    setKernelArg(color_kernel, 5,
-        sizeof(gl_FragColor), &gl_FragColor
-    );
+    setKernelArg(color_kernel, 1, sizeof(gl_Discard), &gl_Discard);
+    setKernelArg(color_kernel, 2, sizeof(gl_FragColor), &gl_FragColor);
 
     // Enqueue kernels
     void *command_queue = getCommandQueue();
@@ -495,8 +528,10 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
         enqueueNDRangeKernel(command_queue, rasterization_kernel, num_fragments);   
         // Fragment
         enqueueNDRangeKernel(command_queue, fragment_kernel, num_fragments);   
-        
-	// Post-Fragment
+	    // Post-Fragment
+        if (_depth_enabled) {
+            enqueueNDRangeKernel(command_queue, depth_kernel, num_fragments);
+        }
         enqueueNDRangeKernel(command_queue, color_kernel, num_fragments);
     }
     
@@ -603,7 +638,7 @@ GL_APICALL void GL_APIENTRY glGenRenderbuffers (GLsizei n, GLuint *renderbuffers
 GL_APICALL void GL_APIENTRY glGenTextures (GLsizei n, GLuint *textures) {
     GLuint id = 1;
 
-    while(n > 0 && id < MAX_RENDERBUFFER) {
+    while(n > 0 && id < MAX_TEXTURE) {
         if (!_textures[id].used) {
             _textures[id].used = GL_TRUE;
             *textures = id;
@@ -621,9 +656,16 @@ GL_APICALL void GL_APIENTRY glProgramBinary (GLuint program, GLenum binaryFormat
     printf("glProgramBinary() program=%d, binaryFormat=%d\n",program,binaryFormat);
     if(!_kernel_load_status) {
         void *gl_program;
+
+        gl_program = createProgramWithBinary(GLSC2_kernel_depth_pocl, sizeof(GLSC2_kernel_depth_pocl));
+        buildProgram(gl_program);
+        _depth_kernel.less = createKernel(gl_program, "gl_less");
+
         gl_program = createProgramWithBinary(GLSC2_kernel_color_pocl, sizeof(GLSC2_kernel_color_pocl));
         buildProgram(gl_program);
-        _color_kernel = createKernel(gl_program, "gl_rgba4");
+        _color_kernel.rgba4 = createKernel(gl_program, "gl_rgba4");
+        _color_kernel.rgba8 = createKernel(gl_program, "gl_rgba8");
+
         gl_program = createProgramWithBinary(GLSC2_kernel_rasterization_triangle_pocl, sizeof(GLSC2_kernel_rasterization_triangle_pocl));
         buildProgram(gl_program);
         _rasterization_kernel = createKernel(gl_program, "gl_rasterization_triangle");
@@ -702,20 +744,75 @@ GL_APICALL void GL_APIENTRY glStencilMaskSeparate (GLenum face, GLuint mask) {
     }
 }
 
+
+#define IS_POWER_OF_2(a) !(a & 0x1u) 
+
 GL_APICALL void GL_APIENTRY glTexStorage2D (GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height) {
-    printf("heeey\n");
-	if ( target == GL_TEXTURE_2D && internalformat == GL_RGBA8) {
-        _textures[_texture_binding].width = width;
-        _textures[_texture_binding].height = height;
-        _textures[_texture_binding].mem = createBuffer(MEM_READ_ONLY, width*height*sizeof(uint32_t), NULL);
-    } else NOT_IMPLEMENTED;
+	if (target != GL_TEXTURE_2D) return; // Unknown behaviour
+
+    if (!_texture_binding) 
+        RETURN_ERROR(GL_INVALID_OPERATION);
+    if (width < 1 || height < 1 || levels < 1) // not sure of this
+        RETURN_ERROR(GL_INVALID_VALUE);
+    if (levels > (int) log2f(max(width,height)) + 1)
+        RETURN_ERROR(GL_INVALID_OPERATION);
+    if (levels != 1 && (IS_POWER_OF_2(width) || IS_POWER_OF_2(height)))
+        RETURN_ERROR(GL_INVALID_OPERATION);
+    if (_texture[_texture_binding].used)
+        RETURN_ERROR(GL_INVALID_OPERATION);
+
+    uint32_t pixel_size;
+    switch (internalformat) {
+        case GL_RGBA8:
+            pixel_size = sizeof(uint8_t[4]);
+            break;
+        case GL_RGB8:
+            pixel_size = sizeof(uint8_t[3]);
+            break;
+        case GL_RG8:
+            pixel_size = sizeof(uint8_t[2]);
+            break;
+        case GL_R8:
+            pixel_size = sizeof(uint8_t[1]);
+            break;
+        case GL_RGBA4:
+        case GL_RGB5_A1:
+        case GL_RGB565:
+            pixel_size = sizeof(uint8_t[2]);
+            break;
+        default:
+            RETURN_ERROR(GL_INVALID_ENUM);
+    }
+
+    _textures[_texture_binding].width = width;
+    _textures[_texture_binding].height = height;
+    _textures[_texture_binding].used = GL_TRUE;
+    _textures[_texture_binding].internalformat = internalformat;
+
+    // TODO: There has to be a formula for mipmap.
+    GLsizei level = 0;
+    size_t total_pixels = 0;
+    while (level++<levels) { 
+        total_pixels += width * height;
+        width /= 2;
+        height /= 2;
+    } 
+    _textures[_texture_binding].mem = createBuffer(MEM_READ_ONLY, total_pixels*pixel_size, NULL);
 }
 
 GL_APICALL void GL_APIENTRY glTexSubImage2D (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels) {
-    if (target == GL_TEXTURE_2D) {
-        if (format == GL_RGBA && type == GL_UNSIGNED_BYTE) {
-            enqueueWriteBuffer(getCommandQueue(),_textures[_texture_binding].mem,width*height*sizeof(uint8_t[4]),pixels);
-        } else NOT_IMPLEMENTED;
+    if (target != GL_TEXTURE_2D) return; // Unknown behaviour
+    
+    if (level < 0 || level > (int) log2f(max(_textures[_texture_binding].width,_textures[_texture_binding].height)))
+        RETURN_ERROR(GL_INVALID_VALUE);
+
+    if (xoffset < 0 || yoffset < 0 || xoffset + width > _textures[_texture_binding].width || yoffset + height > _textures[_texture_binding])
+        RETURN_ERROR(GL_INVALID_VALUE);
+
+    // TODO subImage2d kernel
+
+    if (_textures[_texture_binding].internalformat == GL_RGBA8 && format == GL_RGBA && type == GL_UNSIGNED_BYTE) {
+        enqueueWriteBuffer(getCommandQueue(),_textures[_texture_binding].mem,width*height*sizeof(uint8_t[4]),pixels);
     } else NOT_IMPLEMENTED;
 }
 
@@ -936,19 +1033,41 @@ void* createFragmentKernel(GLenum mode, GLint first, GLsizei count) {
 
     return kernel;
 }
+void* getDepthKernel(GLenum mode, GLint first, GLsizei count) {
+    void *kernel;
+
+    if (DEPTH_ATTACHMENT.internalformat != GL_DEPTH_COMPONENT16)
+        NOT_IMPLEMENTED;
+
+    switch (_depth_func) {
+        case GL_LESS:
+            kernel = _depth_kernel.less;
+            break;
+        // TODO add more depth kernels
+        default:
+            INTERNAL_ERROR;
+    }
+
+    setKernelArg(kernel, 0, sizeof(DEPTH_ATTACHMENT.mem), &DEPTH_ATTACHMENT.mem);
+
+    return kernel;
+}
 
 void* getColorKernel(GLenum mode, GLint first, GLsizei count) {
-    void *kernel = _color_kernel;
+    void *kernel;
+    switch (COLOR_ATTACHMENT0.internalformat) {
+        case GL_RGBA8:
+            kernel = _color_kernel.rgba8;
+            break;
+        case GL_RGBA4:
+            kernel = _color_kernel.rgba4;
+            break;
+        // TODO add more color kernels
+        default:
+            INTERNAL_ERROR;
+    }
 
-    setKernelArg(kernel, 0,
-        sizeof(COLOR_ATTACHMENT0.width), &COLOR_ATTACHMENT0.width
-    );
-    setKernelArg(kernel, 1,
-        sizeof(COLOR_ATTACHMENT0.height), &COLOR_ATTACHMENT0.height
-    );
-    setKernelArg(kernel, 2,
-        sizeof(COLOR_ATTACHMENT0.mem), &COLOR_ATTACHMENT0.mem
-    );
+    setKernelArg(kernel, 0, sizeof(COLOR_ATTACHMENT0.mem), &COLOR_ATTACHMENT0.mem);
 
     return kernel;
 }

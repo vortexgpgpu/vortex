@@ -1,7 +1,7 @@
 __kernel void gl_less (
-  __global const float4 *gl_FragCoord,
   __global unsigned short *gl_Depth,
-  __global bool *gl_Discard
+  __global bool *gl_Discard,
+  __global const float4 *gl_FragCoord
 ) {
 
   int gid = get_global_id(0);
