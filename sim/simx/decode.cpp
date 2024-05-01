@@ -85,6 +85,7 @@ static const char* op_string(const Instr &instr) {
   auto func2  = instr.getFunc2();
   auto func3  = instr.getFunc3();
   auto func7  = instr.getFunc7();
+  auto rd     = instr.getRDest();
   auto rs2    = instr.getRSrc(1);
   auto imm    = instr.getImm();
 
@@ -384,10 +385,10 @@ static const char* op_string(const Instr &instr) {
       switch (func3) {
       case 0: return "TMC";
       case 1: return "WSPAWN";
-      case 2: return imm ? "SPLIT.N" : "SPLIT";
+      case 2: return rs2 ? "SPLIT.N" : "SPLIT";
       case 3: return "JOIN";
       case 4: return "BAR";
-      case 5: return imm ? "PRED.N" : "PRED";
+      case 5: return rd ? "PRED.N" : "PRED";
       default:
         std::abort();
       }
@@ -515,14 +516,14 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
           instr->addSrcReg(rs2, RegType::Integer);
           break;
         case 5: // PRED
+          instr->setDestReg(rd, RegType::None);
           instr->addSrcReg(rs1, RegType::Integer);
           instr->addSrcReg(rs2, RegType::Integer);
-          instr->setImm(rd);
           break;
         case 2: // SPLIT
           instr->setDestReg(rd, RegType::Integer);
           instr->addSrcReg(rs1, RegType::Integer);
-          instr->setImm(rs2);
+          instr->addSrcReg(rs2, RegType::None);
           break;
         default:
           std::abort();

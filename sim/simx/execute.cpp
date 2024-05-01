@@ -1312,7 +1312,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         auto stack_size = warp.ipdom_stack.size();
 
         ThreadMask then_tmask, else_tmask;
-        auto not_pred = immsrc & 0x1;
+        auto not_pred = rsrc2 & 0x1;
         for (uint32_t t = 0; t < num_threads; ++t) {
           auto cond = (warp.ireg_file.at(t).at(rsrc0) & 0x1) ^ not_pred;
           then_tmask[t] = warp.tmask.test(t) && cond;
@@ -1375,7 +1375,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->used_iregs.set(rsrc1);
         trace->fetch_stall = true;
         ThreadMask pred;
-        auto not_pred = immsrc & 0x1;
+        auto not_pred = rdest & 0x1;
         for (uint32_t t = 0; t < num_threads; ++t) {
           auto cond = (warp.ireg_file.at(t).at(rsrc0) & 0x1) ^ not_pred;
           pred[t] = warp.tmask.test(t) && cond;
