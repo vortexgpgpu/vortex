@@ -514,7 +514,7 @@ module VX_decode  #(
                     `USED_IREG (rs1);
                     `USED_IREG (rs2);
                     // Output register
-                    use_rd  = 1;
+                    // use_rd  = 1; TODO: is this needed? hint: probably not
                     `USED_IREG (rd);
                     end
                 endcase

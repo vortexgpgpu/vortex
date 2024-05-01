@@ -322,8 +322,17 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         `UNUSED_VAR (pkt_raddr)
     end
 
+    // For mload, destination registers are 4 and are contiguous in the register file.
+    wire [`NR_BITS-1:0] mem_req_rd;
+    if (execute_if[0].data.op_type == `INST_MLOAD) begin
+        assign mem_req_rd = execute_if[0].data.rd + `NR_BITS(mload_finished);
+    end else begin
+        assign mem_req_rd = execute_if[0].data.rd;
+    end
+
     assign mem_req_tag = {
-        execute_if[0].data.uuid, lsu_addr_type, execute_if[0].data.wid, execute_if[0].data.tmask, execute_if[0].data.PC, execute_if[0].data.rd, execute_if[0].data.op_type, req_align, execute_if[0].data.pid, pkt_waddr
+        execute_if[0].data.uuid, lsu_addr_type, execute_if[0].data.wid, execute_if[0].data.tmask, execute_if[0].data.PC,
+        mem_req_rd , execute_if[0].data.op_type, req_align, execute_if[0].data.pid, pkt_waddr
     `ifdef LSU_DUP_ENABLE
         , lsu_is_dup
     `endif
