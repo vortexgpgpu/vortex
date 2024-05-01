@@ -355,11 +355,11 @@ void kernel_bar(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	auto src0_ptr = (uint32_t*)arg->src0_addr;
 	auto dst_ptr  = (uint32_t*)arg->dst_addr;
 
-	// update destination using the first threads in core
+	// update destination using the first thread in core
 	if (wid == 0 && tid == 0) {
 		int block_size = arg->num_tasks / num_cores;
 		int offset = cid * block_size;
-		for (int i = 0; i <= block_size; ++i) {
+		for (int i = 0; i < block_size; ++i) {
 			dst_ptr[i + offset] = src0_ptr[i + offset];
 		}
 	}
@@ -386,7 +386,7 @@ void kernel_gbar(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	auto src0_ptr = (uint32_t*)arg->src0_addr;
 	auto dst_ptr  = (uint32_t*)arg->dst_addr;
 
-	// update destination using the first threads in processor
+	// update destination using the first thread in processor
 	if (cid == 0 && wid == 0 && tid == 0) {
 		for (int i = 0, n = arg->num_tasks; i <= n; ++i) {
 			dst_ptr[i] = src0_ptr[i];

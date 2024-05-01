@@ -123,9 +123,9 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_address(src0_buffer, &kernel_arg.src0_addr));
   RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &src1_buffer));
   RT_CHECK(vx_mem_address(src1_buffer, &kernel_arg.src1_addr));
-  RT_CHECK(vx_mem_alloc(device, sizeof(kernel_arg_t), VX_MEM_READ, &args_buffer));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &dst_buffer));
+  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ_WRITE, &dst_buffer));
   RT_CHECK(vx_mem_address(dst_buffer, &kernel_arg.dst_addr));
+  RT_CHECK(vx_mem_alloc(device, sizeof(kernel_arg_t), VX_MEM_READ, &args_buffer));
 
   std::cout << "dev_src0=0x" << std::hex << kernel_arg.src0_addr << std::dec << std::endl;
   std::cout << "dev_src1=0x" << std::hex << kernel_arg.src1_addr << std::dec << std::endl;
