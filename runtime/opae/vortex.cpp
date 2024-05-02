@@ -379,25 +379,6 @@ public:
         return 0;
     }
 
-    int dcr_write(uint32_t addr, uint32_t value) {
-        // write DCR value
-        CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_ARG0, addr), {
-            return -1;
-        });
-        CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_ARG1, value), {
-            return -1;
-        });
-        CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_TYPE, CMD_DCR_WRITE), {
-            return -1;
-        });
-        dcrs_.write(addr, value);
-        return 0;
-    }
-
-    int dcr_read(uint32_t addr, uint32_t* value) const {
-        return dcrs_.read(addr, value);
-    }
-
     int start(uint64_t krnl_addr, uint64_t args_addr) {
         // set kernel info
         CHECK_ERR(this->dcr_write(VX_DCR_BASE_STARTUP_ADDR0, krnl_addr & 0xffffffff), {
@@ -417,6 +398,9 @@ public:
         CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_TYPE, CMD_RUN), {
             return -1;
         });
+
+        // clear mpm cache
+        mpm_cache_.clear();
 
         return 0;
     }
@@ -478,6 +462,39 @@ public:
         return 0;
     }
 
+    int dcr_write(uint32_t addr, uint32_t value) {
+        // write DCR value
+        CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_ARG0, addr), {
+            return -1;
+        });
+        CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_ARG1, value), {
+            return -1;
+        });
+        CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_TYPE, CMD_DCR_WRITE), {
+            return -1;
+        });
+        dcrs_.write(addr, value);
+        return 0;
+    }
+
+    int dcr_read(uint32_t addr, uint32_t* value) const {
+        return dcrs_.read(addr, value);
+    }
+
+    int mpm_query(uint32_t addr, uint32_t core_id, uint64_t* value) {
+        uint32_t offset = addr - VX_CSR_MPM_BASE;
+        if (offset > 31)
+            return -1;
+        if (mpm_cache_.count(core_id) == 0) {
+            uint64_t mpm_mem_addr = IO_MPM_ADDR + core_id * 32 * sizeof(uint64_t);
+            CHECK_ERR(this->download(mpm_cache_[core_id].data(), mpm_mem_addr, 32 * sizeof(uint64_t)), {
+                return err;
+            });
+        }
+        *value = mpm_cache_.at(core_id).at(offset);
+        return 0;
+    }
+
 private:
 
     int ensure_staging(uint64_t size) {
@@ -517,6 +534,7 @@ private:
     uint64_t staging_ioaddr_;
     uint8_t* staging_ptr_;
     uint64_t staging_size_;
+    std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
 };
 
 struct vx_buffer {
@@ -821,17 +839,11 @@ extern int vx_mpm_query(vx_device_h hdevice, uint32_t addr, uint32_t core_id, ui
     if (nullptr == hdevice)
         return -1;
 
-    uint32_t offset = addr - VX_CSR_MPM_BASE;
-    if (offset > 31)
-        return -1;
-
     auto device = ((vx_device*)hdevice);
-
-    uint64_t mpm_mem_addr = IO_MPM_ADDR + (core_id * 32 + offset) * sizeof(uint64_t);
 
     uint64_t _value;
 
-    CHECK_ERR(device->download(&_value, mpm_mem_addr, sizeof(uint64_t)), {
+    CHECK_ERR(device->mpm_query(addr, core_id, &_value), {
         return err;
     });
 
