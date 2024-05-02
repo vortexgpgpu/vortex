@@ -29,9 +29,8 @@ float4 texture2d(int width, int height, __global const unsigned char* texture, f
 
 __kernel void gl_main_fs (
   // user values
-  int width,
-  int height,
-  __global const unsigned char *texture,
+  read_only image2d_t image,
+  read_only sampler_t sampler,
   // implementation values 
   __global float4 *gl_FragCoord, // position of the fragment in the window space, z is depth value
   __global const float4 *gl_Rasterization,
@@ -43,5 +42,5 @@ __kernel void gl_main_fs (
   // in out vars
   float4 texCoord = gl_Rasterization[gid*2];
   // fragment operations
-  gl_FragColor[gid] = texture2d(width, height, texture, texCoord);
+  gl_FragColor[gid] = read_imagef(image, sampler, (int2) texCoord.x);
 }
