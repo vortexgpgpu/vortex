@@ -66,29 +66,34 @@ jobs:
     - stage: test
       name: regression
       env: XLEN=32
-      script: ./ci/travis_run.py ./ci/regression.sh --unittest
-      script: ./ci/travis_run.py ./ci/regression.sh --isa
-      script: ./ci/travis_run.py ./ci/regression.sh --kernel
-      script: ./ci/travis_run.py ./ci/regression.sh --synthesis
-      script: ./ci/travis_run.py ./ci/regression.sh --regression
-      script: ./ci/travis_run.py ./ci/regression.sh --opencl
+      script:
+        - ./ci/travis_run.py ./ci/regression.sh --unittest
+        - ./ci/travis_run.py ./ci/regression.sh --isa
+        - ./ci/travis_run.py ./ci/regression.sh --kernel
+        - ./ci/travis_run.py ./ci/regression.sh --synthesis
+        - ./ci/travis_run.py ./ci/regression.sh --regression
+        - ./ci/travis_run.py ./ci/regression.sh --opencl
     - stage: test
       name: regression64
       env: XLEN=64
-      script: ./ci/travis_run.py ./ci/regression.sh --isa
-      script: ./ci/travis_run.py ./ci/regression.sh --kernel
-      script: ./ci/travis_run.py ./ci/regression.sh --synthesis
-      script: ./ci/travis_run.py ./ci/regression.sh --regression
+      script:
+        - ./ci/travis_run.py ./ci/regression.sh --isa
+        - ./ci/travis_run.py ./ci/regression.sh --kernel
+        - ./ci/travis_run.py ./ci/regression.sh --synthesis
+        - ./ci/travis_run.py ./ci/regression.sh --regression
     - stage: test
       name: config
       env: XLEN=32
-      script: ./ci/travis_run.py ./ci/regression.sh --cluster
-      script: ./ci/travis_run.py ./ci/regression.sh --config
+      script:
+        - ./ci/travis_run.py ./ci/regression.sh --cluster
+        - ./ci/travis_run.py ./ci/regression.sh --config
     - stage: test
       name: debug
       env: XLEN=32
-      script: ./ci/travis_run.py ./ci/regression.sh --debug
+      script:
+        - ./ci/travis_run.py ./ci/regression.sh --debug
     - stage: test
       name: stress
       env: XLEN=32
-      script: ./ci/travis_run.py ./ci/regression.sh --stress
+      script:
+        - ./ci/travis_run.py ./ci/regression.sh --stress
