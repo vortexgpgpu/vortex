@@ -209,6 +209,10 @@ public:
         future_ = std::async(std::launch::async, [&]{
             processor_.run();
         });
+
+        // clear mpm cache
+        mpm_cache_.clear();
+
         return 0;
     }
 
@@ -240,6 +244,20 @@ public:
         return dcrs_.read(addr, value);
     }
 
+    int mpm_query(uint32_t addr, uint32_t core_id, uint64_t* value) {
+        uint32_t offset = addr - VX_CSR_MPM_BASE;
+        if (offset > 31)
+            return -1;
+        if (mpm_cache_.count(core_id) == 0) {
+            uint64_t mpm_mem_addr = IO_MPM_ADDR + core_id * 32 * sizeof(uint64_t);
+            CHECK_ERR(this->download(mpm_cache_[core_id].data(), mpm_mem_addr, 32 * sizeof(uint64_t)), {
+                return err;
+            });
+        }
+        *value = mpm_cache_.at(core_id).at(offset);
+        return 0;
+    }
+
 private:
 
     RAM                 ram_;
@@ -247,6 +265,7 @@ private:
     MemoryAllocator     global_mem_;
     DeviceConfig        dcrs_;
     std::future<void>   future_;
+    std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
 };
 
 struct vx_buffer {
@@ -527,17 +546,11 @@ extern int vx_mpm_query(vx_device_h hdevice, uint32_t addr, uint32_t core_id, ui
     if (nullptr == hdevice)
         return -1;
 
-    uint32_t offset = addr - VX_CSR_MPM_BASE;
-    if (offset > 31)
-        return -1;
-
     auto device = ((vx_device*)hdevice);
-
-    uint64_t mpm_mem_addr = IO_MPM_ADDR + (core_id * 32 + offset) * sizeof(uint64_t);
 
     uint64_t _value;
 
-    CHECK_ERR(device->download(&_value, mpm_mem_addr, sizeof(uint64_t)), {
+    CHECK_ERR(device->mpm_query(addr, core_id, &_value), {
         return err;
     });
 
