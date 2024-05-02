@@ -194,11 +194,11 @@ public:
             scope_callback_t callback;
             callback.registerWrite = [](vx_device_h hdevice, uint64_t value)->int {
                 auto device = (vx_device*)hdevice;
-                return api_.fpgaWriteMMIO64(fpga_, 0, MMIO_SCOPE_WRITE, value);
+                return device->api_.fpgaWriteMMIO64(device->fpga_, 0, MMIO_SCOPE_WRITE, value);
             };
             callback.registerRead = [](vx_device_h hdevice, uint64_t* value)->int {
                 auto device = (vx_device*)hdevice;
-                return api_.fpgaReadMMIO64(fpga_, 0, MMIO_SCOPE_READ, value);
+                return device->api_.fpgaReadMMIO64(device->fpga_, 0, MMIO_SCOPE_READ, value);
             };
             int ret = vx_scope_start(&callback, this, 0, -1);
             if (ret != 0) {
