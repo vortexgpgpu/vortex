@@ -212,11 +212,11 @@ GLuint _texture_binding;
 */
 
 // Color
-typedef struct { GLboolean red, green, blue, alpha } COLOR_MASK;
+typedef struct { GLboolean red, green, blue, alpha; } COLOR_MASK;
 
 COLOR_MASK _color_mask = {1, 1, 1, 1};
 // Depth
-typedef struct { GLfloat n, f } DEPTH_RANGE; // z-near & z-far
+typedef struct { GLfloat n, f; } DEPTH_RANGE; // z-near & z-far
 
 GLboolean   _depth_enabled = 0;
 GLboolean   _depth_mask = 1;
@@ -227,7 +227,7 @@ DEPTH_RANGE _depth_range = {0.0, 1.0};
 GLuint _scissor_enabled = 0;
 BOX _scissor_box;
 // Stencil
-typedef struct { GLboolean front, back } STENCIL_MASK;
+typedef struct { GLboolean front, back; } STENCIL_MASK;
 
 GLuint _stencil_enabled = 0;
 STENCIL_MASK _stencil_mask = {1, 1};
@@ -488,7 +488,7 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
         sizeof(gl_FragColor), &gl_FragColor
     );
 
-    void *depth_kernel; 
+    void *depth_kernel = NULL; 
     if (_depth_enabled) {
         depth_kernel = getDepthKernel(mode, first, count);
         setKernelArg(depth_kernel, 1, sizeof(gl_Discard), &gl_Discard);
@@ -522,14 +522,14 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
         printf("vertex %d, x=%f, y=%f, z=%f, w=%f\n", i, _gl_Positions[i][0],_gl_Positions[i][1],_gl_Positions[i][2], _gl_Positions[i][3]);
     }
 
-    for(uint32_t primitive=0; primitive < num_primitives; ++primitive) {
+    for(GLsizei primitive=0; primitive < num_primitives; ++primitive) {
         // Rasterization
         setKernelArg(rasterization_kernel, 0, sizeof(primitive), &primitive);
         enqueueNDRangeKernel(command_queue, rasterization_kernel, num_fragments);   
         // Fragment
         enqueueNDRangeKernel(command_queue, fragment_kernel, num_fragments);   
 	    // Post-Fragment
-        if (_depth_enabled) {
+        if (depth_kernel != NULL) {
             enqueueNDRangeKernel(command_queue, depth_kernel, num_fragments);
         }
         enqueueNDRangeKernel(command_queue, color_kernel, num_fragments);
@@ -698,9 +698,7 @@ GL_APICALL void GL_APIENTRY glReadnPixels (GLint x, GLint y, GLsizei width, GLsi
     if (format == GL_RGBA && type == GL_UNSIGNED_BYTE) {
         if (_framebuffer_binding) {
 
-            unsigned int src_format;
-            if (COLOR_ATTACHMENT0.internalformat == GL_RGBA4) src_format = GL_RGBA4;
-
+            if (COLOR_ATTACHMENT0.internalformat != GL_RGBA4) NOT_IMPLEMENTED;
             void *dst_buff = createBuffer(MEM_WRITE_ONLY, bufSize, NULL);
 
             setKernelArg(_readnpixels_kernel, 0, sizeof(COLOR_ATTACHMENT0.mem), &COLOR_ATTACHMENT0.mem);
@@ -758,7 +756,7 @@ GL_APICALL void GL_APIENTRY glTexStorage2D (GLenum target, GLsizei levels, GLenu
         RETURN_ERROR(GL_INVALID_OPERATION);
     if (levels != 1 && (IS_POWER_OF_2(width) || IS_POWER_OF_2(height)))
         RETURN_ERROR(GL_INVALID_OPERATION);
-    if (_textures[_texture_binding].used)
+    if (_textures[_texture_binding].width || _textures[_texture_binding].height)
         RETURN_ERROR(GL_INVALID_OPERATION);
 
     uint32_t pixel_size;
@@ -796,7 +794,7 @@ GL_APICALL void GL_APIENTRY glTexStorage2D (GLenum target, GLsizei levels, GLenu
         total_pixels += width * height;
         width /= 2;
         height /= 2;
-    } 
+    }
     _textures[_texture_binding].mem = createBuffer(MEM_READ_ONLY, total_pixels*pixel_size, NULL);
 }
 
@@ -824,7 +822,7 @@ GL_APICALL void GL_APIENTRY glUniformMatrix4fv (GLint location, GLsizei count, G
     if (count > 4) NOT_IMPLEMENTED;
     if (count < 1) NOT_IMPLEMENTED;
 
-    uint32_t uniform_id = _programs[_current_program].active_uniforms;
+    GLint uniform_id = _programs[_current_program].active_uniforms;
     if (location < uniform_id) {
        uniform_id = location;
     } else {
@@ -834,8 +832,8 @@ GL_APICALL void GL_APIENTRY glUniformMatrix4fv (GLint location, GLsizei count, G
     _programs[_current_program].uniforms[uniform_id].size = sizeof(float[4])*count;
     _programs[_current_program].uniforms[uniform_id].type = UMAT4;
 
-    float *data_ptr = _programs[_current_program].uniforms[uniform_id].data;
-    for(uint32_t i=0; i<count; ++i) {
+    float *data_ptr = (float*) _programs[_current_program].uniforms[uniform_id].data;
+    for(GLsizei i=0; i<count; ++i) {
         data_ptr[0] = *(value + 4*i);
         data_ptr[1] = *(value + 4*i + 1);
         data_ptr[2] = *(value + 4*i + 2);
@@ -859,7 +857,6 @@ GL_APICALL void GL_APIENTRY glUseProgram (GLuint program){
 }
 
 GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer) {
-    printf("glVertexAttribPointer() index=%d, size=%d, type=%d, stride=%d, pointer=%x\n", index, size, type, stride, pointer);
     if (index >= MAX_VERTEX_ATTRIBS) {
         _err = GL_INVALID_VALUE;
         return;
@@ -895,7 +892,6 @@ GL_APICALL void GL_APIENTRY glVertexAttribPointer (GLuint index, GLint size, GLe
         
         _programs[_current_program].active_attributes += 1;
     
-        printf("\nactive_attributes=%d\n", _programs[_current_program].active_attributes);
     }
 }
 GL_APICALL void GL_APIENTRY glViewport (GLint x, GLint y, GLsizei width, GLsizei height){

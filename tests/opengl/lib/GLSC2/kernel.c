@@ -9,7 +9,7 @@ cl_platform_id _getPlatformID() {
 
     if (!platform_id) clGetPlatformIDs(1, &platform_id, NULL);
     
-    printf("_getPlatformID() return: %x\n", platform_id);
+    printf("_getPlatformID() return: %p\n", platform_id);
     return platform_id;
 }
 
@@ -18,7 +18,7 @@ cl_device_id _getDeviceID() {
 
     if (!device_id) clGetDeviceIDs(_getPlatformID(), CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL);
 
-    printf("_getDeviceID() return: %x\n", device_id);
+    printf("_getDeviceID() return: %p\n", device_id);
     return device_id;
 }
 
@@ -30,23 +30,23 @@ cl_context _getContext() {
         context = clCreateContext(NULL, 1, &device_id, NULL, NULL,  &_err);
     }
 
-    printf("_getContext() return: %x\n", context);
+    printf("_getContext() return: %p\n", context);
     return context;
 } 
 
 cl_program createProgramWithBinary(const uint8_t* binary, size_t length) {
-    printf("createProgramWithBinary() binary=%x, length=%d\n", binary, length);
+    printf("createProgramWithBinary() binary=%p, length=%ld\n", binary, length);
 
     cl_device_id device_id = _getDeviceID();
 
     cl_program program = clCreateProgramWithBinary(
         _getContext(), 1, &device_id, &length, &binary, NULL, &_err);
     
-    printf("\treturn=%x, error=%d\n", program, _err);
+    printf("\treturn=%p, error=%d\n", program, _err);
     return program;
 }
 int buildProgram(void *program) {
-    printf("buildProgram() program=%x\n", program);
+    printf("buildProgram() program=%p\n", program);
 
     cl_device_id device_id = _getDeviceID();
 
@@ -64,11 +64,11 @@ int buildProgram(void *program) {
 #define MEM_READ_WRITE CL_MEM_READ_WRITE
 #define MEM_COPY_HOST_PTR CL_MEM_COPY_HOST_PTR 
 
-void* createBuffer(uint64_t flags, size_t size, const void* data){
+void* createBuffer(uint64_t flags, size_t size, void* data){
 
     void *buffer = clCreateBuffer(_getContext(), flags, size, data, &_err);
     
-    printf("createBuffer() return=%x, error=%d\n", buffer, _err);
+    printf("createBuffer() return=%p, error=%d\n", buffer, _err);
 
     return buffer;
 }
@@ -78,15 +78,15 @@ void* createCommandQueue(uint64_t properties) {
 }
 
 void* createKernel(void* program, const char* name) {
-    printf("createKernel() program=%x, name=%s\n", program, name);
+    printf("createKernel() program=%p, name=%s\n", program, name);
     cl_kernel kernel = clCreateKernel((cl_program) program, name, &_err);
 
-    printf("\treturn=%x, error=%d\n", kernel, _err);
+    printf("\treturn=%p, error=%d\n", kernel, _err);
     return kernel;
 }
 
 void setKernelArg(void* kernel, unsigned int location, size_t size, const void* value) {
-    printf("setKernelArg() location=%d, size=%d, value=%x\n", location, size, value);
+    printf("setKernelArg() location=%d, size=%ld, value=%p\n", location, size, value);
     
     int err = clSetKernelArg((cl_kernel) kernel, location, size, value);
 
@@ -95,7 +95,7 @@ void setKernelArg(void* kernel, unsigned int location, size_t size, const void* 
 
 // I decide to make it simple, but maybe it will need to be extendend in future.
 void enqueueNDRangeKernel(void* commandQueue, void* kernel, const size_t global_work_size) {
-    printf("enqueueND() work=%d\n", global_work_size);
+    printf("enqueueND() work=%ld\n", global_work_size);
 	int err = clEnqueueNDRangeKernel(
         (cl_command_queue) commandQueue, (cl_kernel) kernel,
         1, NULL, &global_work_size, NULL, 0, NULL, NULL);
@@ -108,7 +108,7 @@ void enqueueReadBuffer(void* command_queue, void* buffer, size_t bufSize, void* 
     clEnqueueReadBuffer(command_queue, (cl_mem) buffer, CL_TRUE, 0, bufSize, data, 0, NULL, NULL);
 }
 
-void enqueueWriteBuffer(void* command_queue, void* buffer, size_t size, void* ptr) {
+void enqueueWriteBuffer(void* command_queue, void* buffer, size_t size, const void* ptr) {
 
     clEnqueueWriteBuffer(command_queue, buffer, CL_TRUE, 0, size, ptr, 0, NULL, NULL);
 }
@@ -136,7 +136,7 @@ cl_kernel _getKernelFill() {
 }
 
 void enqueueFillBuffer(void* command_queue, void* buffer, const void* pattern, size_t pattern_size, size_t offset, size_t size) {
-    printf("enqueueFillBuffer() offset=%d, size=%d\n", offset, size);
+    printf("enqueueFillBuffer() offset=%ld, size=%ld\n", offset, size);
     // just valid for pattern size == 4
     cl_kernel kernel = _getKernelFill();
     uint32_t value = *((uint32_t*) pattern);
@@ -150,9 +150,9 @@ void enqueueFillBuffer(void* command_queue, void* buffer, const void* pattern, s
 
 void* createImage2D(const cl_image_format *image_format, size_t image_width, size_t image_height, size_t image_row_pitch, void *host_ptr) {
     
-    void *image = clCreateImage2D(_getContext(), CL_MEM_READ_ONLY, image_format, image_width, image_height, image_row_pitch, host_ptr, _err);
+    void *image = clCreateImage2D(_getContext(), CL_MEM_READ_ONLY, image_format, image_width, image_height, image_row_pitch, host_ptr, &_err);
     if (_err) {
-        printf("createImage2D() image_format=%08x, image_width=%d, image_height=%d, image_row_pitch=%d, host_ptr=%08x\n", image_format, image_width, image_height, image_row_pitch, host_ptr);
+        printf("createImage2D() image_format=%p, image_width=%ld, image_height=%ld, image_row_pitch=%ld, host_ptr=%p\n", image_format, image_width, image_height, image_row_pitch, host_ptr);
         printf("\terror=%d\n", _err);
     }
 
