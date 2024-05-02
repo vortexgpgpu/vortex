@@ -388,7 +388,7 @@ void kernel_gbar(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 
 	// update destination using the first thread in processor
 	if (cid == 0 && wid == 0 && tid == 0) {
-		for (int i = 0, n = arg->num_tasks; i <= n; ++i) {
+		for (int i = 0, n = arg->num_tasks; i < n; ++i) {
 			dst_ptr[i] = src0_ptr[i];
 		}
 	}

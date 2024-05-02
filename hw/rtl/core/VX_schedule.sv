@@ -57,7 +57,6 @@ module VX_schedule import VX_gpu_pkg::*; #(
     wire                    schedule_ready;
 
     // split/join
-    wire [`NUM_THREADS-1:0] split_tmask;
     wire                    join_valid;
     wire                    join_is_dvg;
     wire                    join_is_else;
@@ -138,7 +137,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
         // split handling
         if (warp_ctl_if.valid && warp_ctl_if.split.valid) begin
             if (warp_ctl_if.split.is_dvg) begin
-                thread_masks_n[warp_ctl_if.wid] = split_tmask;
+                thread_masks_n[warp_ctl_if.wid] = warp_ctl_if.split.then_tmask;
             end
             stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
         end
@@ -296,7 +295,6 @@ module VX_schedule import VX_gpu_pkg::*; #(
         .wid        (warp_ctl_if.wid),
         .split      (warp_ctl_if.split),
         .sjoin      (warp_ctl_if.sjoin),
-        .split_tmask(split_tmask),
         .join_valid (join_valid),
         .join_is_dvg(join_is_dvg),
         .join_is_else(join_is_else),
