@@ -1325,12 +1325,17 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
             std::cout << "IPDOM stack is full! size=" << std::dec << stack_size << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << trace->uuid << ")\n" << std::flush;
             std::abort();
           }
-          // set new thread mask
-          next_tmask = then_tmask;
+          // set new thread mask to the larger set
+          if (then_tmask.count() >= else_tmask.count()) {
+            next_tmask = then_tmask;
+          } else {
+            next_tmask = else_tmask;
+          }
           // push reconvergence thread mask onto the stack
           warp.ipdom_stack.emplace(warp.tmask);
-          // push else's thread mask onto the stack
-          warp.ipdom_stack.emplace(else_tmask, next_pc);
+          // push not taken thread mask onto the stack
+          auto ntaken_tmask = ~next_tmask & warp.tmask;
+          warp.ipdom_stack.emplace(ntaken_tmask, next_pc);
         }
         // return divergent state
         for (uint32_t t = thread_start; t < num_threads; ++t) {

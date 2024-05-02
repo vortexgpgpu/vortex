@@ -22,6 +22,7 @@ module VX_split_join import VX_gpu_pkg::*; #(
     input  wire [`NW_WIDTH-1:0]     wid,
     input  split_t                  split,
     input  join_t                   sjoin,
+    output wire [`NUM_THREADS-1:0]  split_tmask,
     output wire                     join_valid,
     output wire                     join_is_dvg,
     output wire                     join_is_else,
@@ -37,8 +38,15 @@ module VX_split_join import VX_gpu_pkg::*; #(
     wire [`DV_STACK_SIZEW-1:0] ipdom_q_ptr [`NUM_WARPS-1:0];
     wire ipdom_set [`NUM_WARPS-1:0];
 
+    wire [`CLOG2(`NUM_THREADS+1)-1:0] then_tmask_cnt, else_tmask_cnt;
+    `POP_COUNT(then_tmask_cnt, split.then_tmask);
+    `POP_COUNT(else_tmask_cnt, split.else_tmask);
+    wire then_first = (then_tmask_cnt >= else_tmask_cnt);
+    assign split_tmask = then_first ? split.then_tmask : split.else_tmask;
+    wire [`NUM_THREADS-1:0] ntaken_tmask = then_first ? split.else_tmask : split.then_tmask;
+
     wire [(`XLEN+`NUM_THREADS)-1:0] ipdom_q0 = {split.then_tmask | split.else_tmask, `XLEN'(0)};
-    wire [(`XLEN+`NUM_THREADS)-1:0] ipdom_q1 = {split.else_tmask, split.next_pc};
+    wire [(`XLEN+`NUM_THREADS)-1:0] ipdom_q1 = {ntaken_tmask, split.next_pc};
 
     wire sjoin_is_dvg = (sjoin.stack_ptr != ipdom_q_ptr[wid]);
 
