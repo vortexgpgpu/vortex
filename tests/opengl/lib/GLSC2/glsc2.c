@@ -238,6 +238,7 @@ STENCIL_MASK _stencil_mask = {1, 1};
 */
 #define COLOR_ATTACHMENT0 _renderbuffers[_framebuffers[_framebuffer_binding].color_attachment0]
 #define DEPTH_ATTACHMENT _renderbuffers[_framebuffers[_framebuffer_binding].depth_attachment]
+#define STENCIL_ATTACHMENT _renderbuffers[_framebuffers[_framebuffer_binding].stencil_attachment]
 
 void* getCommandQueue();
 
@@ -326,6 +327,7 @@ GL_APICALL void GL_APIENTRY glBufferData (GLenum target, GLsizeiptr size, const 
 }
 
 GL_APICALL void GL_APIENTRY glClear (GLbitfield mask) {
+    // TODO: Check behaviour on the specs
     if(mask & GL_COLOR_BUFFER_BIT) glClearColor(0.0,0.0,0.0,1.0);
     if(mask & GL_DEPTH_BUFFER_BIT) glClearDepthf(1.0);
     if(mask & GL_STENCIL_BUFFER_BIT) glClearStencil(0);
@@ -348,7 +350,39 @@ GL_APICALL void GL_APIENTRY glClearColor (GLfloat red, GLfloat green, GLfloat bl
         pattern |= (unsigned int) (blue  * 0xFFFFu) << 16;
         pattern |= (unsigned int) (alpha * 0xFFFFu) << 24;
         pixel_size = sizeof(uint8_t[4]);
-    } else NOT_IMPLEMENTED;
+    } else if(COLOR_ATTACHMENT0.internalformat == GL_RGB8) {
+        NOT_IMPLEMENTED; // TODO: Update enqueueFillBuffer
+    } else if(COLOR_ATTACHMENT0.internalformat == GL_RG8) {
+        pattern |= (unsigned int) (red   * 0xFFFFu) << 0;
+        pattern |= (unsigned int) (green * 0xFFFFu) << 8;
+        pattern |= pattern << 8;
+        pattern |= pattern << 16;
+        pattern |= pattern << 24;
+        pixel_size = sizeof(uint8_t[2]);
+    } else if(COLOR_ATTACHMENT0.internalformat == GL_R8) {
+        pattern |= (unsigned int) (red   * 0xFFFFu) << 0;
+        pattern |= pattern << 4;
+        pattern |= pattern << 8;
+        pattern |= pattern << 12;
+        pattern |= pattern << 16;
+        pattern |= pattern << 20;
+        pattern |= pattern << 24;
+        pattern |= pattern << 28;
+        pixel_size = sizeof(uint8_t[1]);
+    } else if(COLOR_ATTACHMENT0.internalformat == GL_RGB5_A1) {
+        pattern |= (unsigned int) (red   * 0x1FFu) << 0;
+        pattern |= (unsigned int) (green * 0x1FFu) << 5;
+        pattern |= (unsigned int) (blue  * 0x1FFu) << 10;
+        pattern |= (unsigned int) (alpha * 0x1u)   << 15;
+        pattern |= pattern << 16;
+        pixel_size = sizeof(uint8_t[2]);
+    } else if(COLOR_ATTACHMENT0.internalformat == GL_RGB565) {
+        pattern |= (unsigned int) (red   * 0x1FFu) << 0;
+        pattern |= (unsigned int) (green * 0x3FFu) << 5;
+        pattern |= (unsigned int) (blue  * 0x1FFu) << 11;
+        pattern |= pattern << 16;
+        pixel_size = sizeof(uint8_t[2]);
+    else RETURN_ERROR(GL_INVALID_OPERATION);
     
     enqueueFillBuffer(getCommandQueue(), COLOR_ATTACHMENT0.mem, &pattern, 4, 0, COLOR_ATTACHMENT0.width*COLOR_ATTACHMENT0.height*pixel_size);
 }
@@ -363,13 +397,18 @@ GL_APICALL void GL_APIENTRY glClearDepthf (GLfloat d) {
 
     enqueueFillBuffer(getCommandQueue(), DEPTH_ATTACHMENT.mem, &pattern, 4, 0, DEPTH_ATTACHMENT.width*DEPTH_ATTACHMENT.height*2);
 }
-// TODO:
-GL_APICALL void GL_APIENTRY glClearStencil (GLint s) {
-    RENDERBUFFER stencil_attachment = _renderbuffers[_framebuffers[_framebuffer_binding].stencil_attachment];
 
-    if (stencil_attachment.internalformat == GL_STENCIL_INDEX8) {
-        //fill(stencil_attachment.mem, stencil_attachment.width*stencil_attachment.height, &s, 1);
-    }
+GL_APICALL void GL_APIENTRY glClearStencil (GLint s) {
+    uint32_t pattern = 0;
+
+    if (STENCIL_ATTACHMENT.internalformat == GL_STENCIL_INDEX8) {
+        pattern = s*0xFFu;
+        pattern |= pattern << 8;
+        pattern |= pattern << 16;
+        pattern |= pattern << 24;
+    } else NOT_IMPLEMENTED;
+
+    enqueueFillBuffer(getCommandQueue(), STENCIL_ATTACHMENT.mem, &pattern, 4, 0, STENCIL_ATTACHMENT.width*STENCIL_ATTACHMENT.height*1);
 }
 
 GL_APICALL void GL_APIENTRY glColorMask (GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha) {

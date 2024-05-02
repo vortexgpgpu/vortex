@@ -159,17 +159,27 @@ int main() {
   createCube();
 
   GLfloat perspective[16];
+  GLfloat view[16];
   GLfloat model[16];
 
   perspectiveMatrix(perspective, M_PI / 2.f, (float) WIDTH / (float) HEIGHT, 0.0f, 1.0f);
+  // TODO: glGetUniformLocation(program, "perspective");
   glUniformMatrix4fv(0, 4, GL_FALSE, perspective);
+
+  float eye[3] = {0.f, 0.f, -1.f}; 
+  float center[3] = {0.f, 0.f, 0.f}; 
+  float up[3] = {0.f, 1.f, 0.f}; 
+  lookAtRH(view, eye, center, up);
+  // TODO: glGetUniformLocation(program, "view");
+  glUniformMatrix4fv(1, 4, GL_FALSE, view);
+  glEnable(GL_DEPTH_TEST);
   // Draw
   uint rotation = 0;
   while (rotation < 5) {
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     rotateMatrix(model, M_PI/4*(rotation++), 1,1,1);
-    glUniformMatrix4fv(1, 4, GL_FALSE, model);
+    glUniformMatrix4fv(2, 4, GL_FALSE, model);
 
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glFinish();
@@ -240,4 +250,44 @@ void rotateMatrix(float *matrix, float angle, float x, float y, float z) {
     matrix[13] = 0.0f;
     matrix[14] = 0.0f;
     matrix[15] = 1.0f;
+}
+
+#define DOT(a, b) a[0]*b[0]+a[1]*b[1]+a[2]*b[2] 
+
+void lookAtRH(float *matrix, const float eye[3], const float center[3], const float up[3]) {
+  
+  float f[3];
+  f[0] = center[0] - eye[0];
+  f[1] = center[1] - eye[1];
+  f[2] = center[2] - eye[2];
+  float mag_f = sqrtf(f[0]*f[0] + f[1]*f[1] + f[2]*f[2]);
+  f[0] /= mag_f; f[1] /= mag_f; f[2] /= mag_f;
+
+  float s[3];
+  s[0] = f[1]*up[2] - f[2]*up[1];
+  s[1] = f[2]*up[0] - f[0]*up[2];
+  s[2] = f[0]*up[1] - f[1]*up[0];
+  float mag_s = sqrtf(s[0]*s[0] + s[1]*s[1] + s[2]*s[2]);
+  s[0] /= mag_s; s[1] /= mag_s; s[2] /= mag_s;
+
+  float u[3];
+  u[0] = s[1]*f[2] - s[2]*f[1];
+  u[1] = s[2]*f[0] - s[0]*f[2];
+  u[2] = s[0]*f[1] - s[1]*f[0];
+
+	matrix[0] = s[0];
+	matrix[1] = u[0];
+	matrix[2] =-f[0];
+	matrix[3] = 0.f;
+	matrix[4] = s[1];
+	matrix[5] = u[1];
+	matrix[6] =-f[1];
+	matrix[8] = s[2];
+	matrix[9] = u[2];
+	matrix[10] =-f[2];
+	matrix[11] = 0.f;
+	matrix[12] =-DOT(s, eye);
+	matrix[13] =-DOT(u, eye);
+	matrix[14] = DOT(f, eye);
+	matrix[15] = 1.f;
 }
