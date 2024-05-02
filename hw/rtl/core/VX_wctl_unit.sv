@@ -96,10 +96,17 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // split
 
+    wire [`CLOG2(`NUM_THREADS+1)-1:0] then_tmask_cnt, else_tmask_cnt;
+    `POP_COUNT(then_tmask_cnt, then_tmask_n);
+    `POP_COUNT(else_tmask_cnt, else_tmask_n);
+    wire then_first = (then_tmask_cnt >= else_tmask_cnt);
+    wire [`NUM_THREADS-1:0] taken_tmask = then_first ? then_tmask_n : else_tmask_n;
+    wire [`NUM_THREADS-1:0] ntaken_tmask = then_first ? else_tmask_n : then_tmask_n;
+
     assign split.valid      = is_split;
     assign split.is_dvg     = has_then && has_else;
-    assign split.then_tmask = then_tmask_n;
-    assign split.else_tmask = else_tmask_n;
+    assign split.then_tmask = taken_tmask;
+    assign split.else_tmask = ntaken_tmask;
     assign split.next_pc    = execute_if.data.PC + 4;
 
     assign warp_ctl_if.dvstack_wid = execute_if.data.wid;
