@@ -517,6 +517,7 @@ module VX_decode  #(
                     // use_rd  = 1; TODO: is this needed? hint: probably not
                     `USED_IREG (rd);
                     end
+                    default:;
                 endcase
             end
             default:;

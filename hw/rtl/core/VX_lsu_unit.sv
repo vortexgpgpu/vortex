@@ -88,28 +88,32 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
 
     reg [2:0] mload_finished;
-    wire addr_offset;
+    wire [1:0] addr_offset_1;
+    wire [1:0] addr_offset_2;
+
     // First matrix accesses have offset (tid / 2) * 2
     assign addr_offset_1 = (execute_if[0].data.tid >> 1) << 1;
     // Second matrix accesses have offset (tid % 2)
-    assign addr_offset_2 = (execute_if[0].data.tid[0]);
+    assign addr_offset_2 = 2'(execute_if[0].data.tid[0]);
 
     // Full address calculation
     // TODO set different address calculation for different op_type (for load)
     wire [NUM_LANES-1:0][`XLEN-1:0] full_addr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        if (execute_if[0].data.op_type == `INST_MLOAD) begin
-            if (mload_finished < 2) begin
-                // First two loads
-                assign full_addr[i] = execute_if[0].data.rs1_data[i][`XLEN-1:0] + addr_offset_1
-                                    + (mload_finished == 3'b1); // Stride is 1 for the second element accessed
+        always @(*) begin
+            if (execute_if[0].data.op_type == `INST_MLOAD) begin
+                if (mload_finished < 2) begin
+                    // First two loads
+                    assign full_addr[i] = execute_if[0].data.rs1_data[i][`XLEN-1:0] + 32'(addr_offset_1)
+                                        + 32'(mload_finished == 3'h1); // Stride is 1 for the second element accessed
+                end else begin
+                    // Second two loads
+                    assign full_addr[i] = execute_if[0].data.rs2_data[i][`XLEN-1:0] + 32'(addr_offset_2)
+                                        + 32'(mload_finished == 3'h3) << 1; // Stride is 2 for the second element accessed
+                end
             end else begin
-                // Second two loads
-                assign full_addr[i] = execute_if[0].data.rs2_data[i][`XLEN-1:0] + addr_offset_2
-                                    + (mload_finished == 3'b3) << 1; // Stride is 2 for the second element accessed
+                assign full_addr[i] = execute_if[0].data.rs1_data[i][`XLEN-1:0] + execute_if[0].data.imm;
             end
-        end else begin
-            assign full_addr[i] = execute_if[0].data.rs1_data[i][`XLEN-1:0] + execute_if[0].data.imm;
         end
     end
 
@@ -324,11 +328,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     // For mload, destination registers are 4 and are contiguous in the register file.
     wire [`NR_BITS-1:0] mem_req_rd;
-    if (execute_if[0].data.op_type == `INST_MLOAD) begin
-        assign mem_req_rd = execute_if[0].data.rd + `NR_BITS(mload_finished);
-    end else begin
-        assign mem_req_rd = execute_if[0].data.rd;
-    end
+    assign mem_req_rd = execute_if[0].data.rd + `NR_BITS'(mload_finished) & `NR_BITS'(execute_if[0].data.op_type == `INST_MLOAD);
 
     assign mem_req_tag = {
         execute_if[0].data.uuid, lsu_addr_type, execute_if[0].data.wid, execute_if[0].data.tmask, execute_if[0].data.PC,
@@ -605,7 +605,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 // Mod4 set control for mload partial operations
 always @(posedge clk) begin
     if (reset) begin
-        mload_finished <= 2b'0;
+        mload_finished <= 3'b0;
     end else begin
         // Add 1 for the first partial load
         mload_finished <= mload_finished + 3'((execute_if[0].data.op_type == `INST_MLOAD) && mem_rsp_fire);
