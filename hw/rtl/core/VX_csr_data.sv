@@ -247,13 +247,13 @@ import VX_fpu_pkg::*;
                         `VX_CSR_MPM_DCACHE_BANK_ST_H: read_data_ro_r = 32'(mem_perf_if.dcache.bank_stalls[`PERF_CTR_BITS-1:32]);
                         `VX_CSR_MPM_DCACHE_MSHR_ST  : read_data_ro_r = mem_perf_if.dcache.mshr_stalls[31:0];
                         `VX_CSR_MPM_DCACHE_MSHR_ST_H: read_data_ro_r = 32'(mem_perf_if.dcache.mshr_stalls[`PERF_CTR_BITS-1:32]);
-                        // PERF: smem          
-                        `VX_CSR_MPM_SMEM_READS      : read_data_ro_r = mem_perf_if.smem.reads[31:0];
-                        `VX_CSR_MPM_SMEM_READS_H    : read_data_ro_r = 32'(mem_perf_if.smem.reads[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_SMEM_WRITES     : read_data_ro_r = mem_perf_if.smem.writes[31:0];
-                        `VX_CSR_MPM_SMEM_WRITES_H   : read_data_ro_r = 32'(mem_perf_if.smem.writes[`PERF_CTR_BITS-1:32]);
-                        `VX_CSR_MPM_SMEM_BANK_ST    : read_data_ro_r = mem_perf_if.smem.bank_stalls[31:0];
-                        `VX_CSR_MPM_SMEM_BANK_ST_H  : read_data_ro_r = 32'(mem_perf_if.smem.bank_stalls[`PERF_CTR_BITS-1:32]);
+                        // PERF: lmem          
+                        `VX_CSR_MPM_LMEM_READS      : read_data_ro_r = mem_perf_if.lmem.reads[31:0];
+                        `VX_CSR_MPM_LMEM_READS_H    : read_data_ro_r = 32'(mem_perf_if.lmem.reads[`PERF_CTR_BITS-1:32]);
+                        `VX_CSR_MPM_LMEM_WRITES     : read_data_ro_r = mem_perf_if.lmem.writes[31:0];
+                        `VX_CSR_MPM_LMEM_WRITES_H   : read_data_ro_r = 32'(mem_perf_if.lmem.writes[`PERF_CTR_BITS-1:32]);
+                        `VX_CSR_MPM_LMEM_BANK_ST    : read_data_ro_r = mem_perf_if.lmem.bank_stalls[31:0];
+                        `VX_CSR_MPM_LMEM_BANK_ST_H  : read_data_ro_r = 32'(mem_perf_if.lmem.bank_stalls[`PERF_CTR_BITS-1:32]);
                         // PERF: l2cache                        
                         `VX_CSR_MPM_L2CACHE_READS   : read_data_ro_r = mem_perf_if.l2cache.reads[31:0];
                         `VX_CSR_MPM_L2CACHE_READS_H : read_data_ro_r = 32'(mem_perf_if.l2cache.reads[`PERF_CTR_BITS-1:32]);
@@ -307,7 +307,7 @@ import VX_fpu_pkg::*;
 
 `ifdef PERF_ENABLE
     `UNUSED_VAR (mem_perf_if.icache);
-    `UNUSED_VAR (mem_perf_if.smem);
+    `UNUSED_VAR (mem_perf_if.lmem);
 `endif
 
 endmodule

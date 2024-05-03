@@ -49,15 +49,14 @@ module VX_commit import VX_gpu_pkg::*; #(
     wire [`ISSUE_WIDTH-1:0][`NUM_THREADS-1:0] commit_tmask;
     wire [`ISSUE_WIDTH-1:0] commit_eop;
 
+    `RESET_RELAY (arb_reset, reset);
+
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-
-        `RESET_RELAY (arb_reset, reset);
-
         VX_stream_arb #(
             .NUM_INPUTS (`NUM_EX_UNITS),
             .DATAW      (DATAW),
             .ARBITER    ("R"),
-            .OUT_REG    (1)
+            .OUT_BUF    (1)
         ) commit_arb (
             .clk       (clk),
             .reset     (arb_reset),

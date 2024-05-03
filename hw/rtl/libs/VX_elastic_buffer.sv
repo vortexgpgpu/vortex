@@ -59,7 +59,7 @@ module VX_elastic_buffer #(
 
         VX_skid_buffer #(
             .DATAW   (DATAW),
-            .FULL_BW (OUT_REG != 2),
+            .HALF_BW (OUT_REG == 2),
             .OUT_REG (OUT_REG)
         ) skid_buffer (
             .clk       (clk),

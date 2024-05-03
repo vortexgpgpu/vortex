@@ -32,7 +32,6 @@ public:
     Scoreboard(const Arch &arch) 
         : in_use_iregs_(arch.num_warps())
         , in_use_fregs_(arch.num_warps())
-        , in_use_vregs_(arch.num_warps())
     {
         this->clear();
     }
@@ -41,15 +40,13 @@ public:
         for (uint32_t i = 0, n = in_use_iregs_.size(); i < n; ++i) {
             in_use_iregs_.at(i).reset();
             in_use_fregs_.at(i).reset();
-            in_use_vregs_.at(i).reset();
         }
         owners_.clear();
     }
 
     bool in_use(pipeline_trace_t* trace) const {
         return (trace->used_iregs & in_use_iregs_.at(trace->wid)) != 0 
-            || (trace->used_fregs & in_use_fregs_.at(trace->wid)) != 0
-            || (trace->used_vregs & in_use_vregs_.at(trace->wid)) != 0;
+            || (trace->used_fregs & in_use_fregs_.at(trace->wid)) != 0;
     }
 
     std::vector<reg_use_t> get_uses(pipeline_trace_t* trace) const {
@@ -57,7 +54,6 @@ public:
         
         auto used_iregs = trace->used_iregs & in_use_iregs_.at(trace->wid);
         auto used_fregs = trace->used_fregs & in_use_fregs_.at(trace->wid);
-        auto used_vregs = trace->used_vregs & in_use_vregs_.at(trace->wid);
 
         for (uint32_t r = 0; r < MAX_NUM_REGS; ++r) {
             if (used_iregs.test(r)) {
@@ -75,14 +71,6 @@ public:
             }
         }
 
-        for (uint32_t r = 0; r < MAX_NUM_REGS; ++r) {
-            if (used_vregs.test(r)) {
-                uint32_t tag = (r << 16) | (trace->wid << 4) | (int)RegType::Vector;
-                auto owner = owners_.at(tag);
-                out.push_back({RegType::Vector, r, owner->exe_type, owner->sfu_type, owner->uuid});
-            }
-        }
-
         return out;
     }
     
@@ -95,10 +83,8 @@ public:
         case RegType::Float:
             in_use_fregs_.at(trace->wid).set(trace->rdest);
             break;
-        case RegType::Vector:
-            in_use_vregs_.at(trace->wid).set(trace->rdest);
-            break;
-        default: assert(false);
+        default: 
+            assert(false);
         }      
         uint32_t tag = (trace->rdest << 16) | (trace->wid << 4) | (int)trace->rdest_type;
         assert(owners_.count(tag) == 0);
@@ -115,10 +101,8 @@ public:
         case RegType::Float:
             in_use_fregs_.at(trace->wid).reset(trace->rdest);
             break;
-        case RegType::Vector:
-            in_use_vregs_.at(trace->wid).reset(trace->rdest);
-            break;
-        default: assert(false);
+        default: 
+            assert(false);
         }      
         uint32_t tag = (trace->rdest << 16) | (trace->wid << 4) | (int)trace->rdest_type;
         owners_.erase(tag);
@@ -128,7 +112,6 @@ private:
 
     std::vector<RegMask> in_use_iregs_;
     std::vector<RegMask> in_use_fregs_;
-    std::vector<RegMask> in_use_vregs_;
     std::unordered_map<uint32_t, pipeline_trace_t*> owners_;
 };
 

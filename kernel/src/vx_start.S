@@ -98,7 +98,7 @@ init_regs:
   li    sp, (STACK_BASE_ADDR & 0xffffffff)
   or    sp, sp, t0
 #else
-  li    sp, STACK_BASE_ADDR # load stack base address
+  li    sp, STACK_BASE_ADDR
 #endif
   csrr  t0, VX_CSR_MHARTID
   sll   t1, t0, STACK_LOG2_SIZE

@@ -30,7 +30,7 @@
 #include "warp.h"
 #include "pipeline.h"
 #include "cache_sim.h"
-#include "shared_mem.h"
+#include "local_mem.h"
 #include "ibuffer.h"
 #include "scoreboard.h"
 #include "operand.h"
@@ -181,8 +181,8 @@ private:
   std::vector<Operand::Ptr> operands_;
   std::vector<Dispatcher::Ptr> dispatchers_;
   std::vector<ExeUnit::Ptr> exe_units_;
-  SharedMem::Ptr shared_mem_;
-  std::vector<SMemDemux::Ptr> smem_demuxs_;
+  LocalMem::Ptr local_mem_;
+  std::vector<LocalMemDemux::Ptr> lmem_demuxs_;
 
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;

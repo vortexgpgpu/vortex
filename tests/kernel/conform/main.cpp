@@ -6,7 +6,7 @@ int main() {
 
 	errors += test_global_memory();
 
-	errors += test_shared_memory();
+	errors += test_local_memory();
 
 	errors += test_tmc();
 

@@ -55,11 +55,11 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     // enable bypass for non-cacheable addresses
     parameter NC_ENABLE             = 0,
 
-    // Core response output register
-    parameter CORE_OUT_REG          = 0,
+    // Core response output buffer
+    parameter CORE_OUT_BUF          = 0,
 
-    // Memory request output register
-    parameter MEM_OUT_REG           = 0
+    // Memory request output buffer
+    parameter MEM_OUT_BUF           = 0
  ) (    
     input wire clk,
     input wire reset,
@@ -75,8 +75,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     localparam NUM_CACHES = `UP(NUM_UNITS);
     localparam PASSTHRU   = (NUM_UNITS == 0);
     localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_CACHES);    
-    localparam MEM_TAG_WIDTH = PASSTHRU ? (NC_ENABLE ? `CACHE_NC_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) : 
-                                                       `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH)) : 
+    localparam MEM_TAG_WIDTH = PASSTHRU ? `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) : 
                                           (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) :
                                                        `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS));
 
@@ -122,8 +121,8 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .TAG_WIDTH    (TAG_WIDTH),
             .TAG_SEL_IDX  (TAG_SEL_IDX),
             .ARBITER      ("R"),
-            .OUT_REG_REQ  ((NUM_INPUTS != NUM_CACHES) ? 2 : 0),
-            .OUT_REG_RSP  ((NUM_INPUTS != NUM_CACHES) ? 2 : 0)
+            .REQ_OUT_BUF  ((NUM_INPUTS != NUM_CACHES) ? 2 : 0),
+            .RSP_OUT_BUF  ((NUM_INPUTS != NUM_CACHES) ? 2 : 0)
         ) cache_arb (
             .clk        (clk),
             .reset      (cache_arb_reset),
@@ -155,8 +154,9 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .WRITE_ENABLE (WRITE_ENABLE),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (ARB_TAG_WIDTH),
-            .CORE_OUT_REG ((NUM_INPUTS != NUM_CACHES) ? 2 : CORE_OUT_REG),
-            .MEM_OUT_REG  ((NUM_CACHES > 1) ? 2 : MEM_OUT_REG),
+            .TAG_SEL_IDX  (TAG_SEL_IDX),
+            .CORE_OUT_BUF ((NUM_INPUTS != NUM_CACHES) ? 2 : CORE_OUT_BUF),
+            .MEM_OUT_BUF  ((NUM_CACHES > 1) ? 2 : MEM_OUT_BUF),
             .NC_ENABLE    (NC_ENABLE),
             .PASSTHRU     (PASSTHRU)
         ) cache_wrap (
@@ -181,10 +181,10 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         .NUM_INPUTS   (NUM_CACHES),
         .DATA_SIZE    (LINE_SIZE),
         .TAG_WIDTH    (MEM_TAG_WIDTH),
-        .TAG_SEL_IDX  (1), // Skip 0 for NC flag
+        .TAG_SEL_IDX  (TAG_SEL_IDX),
         .ARBITER      ("R"),
-        .OUT_REG_REQ ((NUM_CACHES > 1) ? 2 : 0),
-        .OUT_REG_RSP ((NUM_CACHES > 1) ? 2 : 0)
+        .REQ_OUT_BUF ((NUM_CACHES > 1) ? 2 : 0),
+        .RSP_OUT_BUF ((NUM_CACHES > 1) ? 2 : 0)
     ) mem_arb (
         .clk        (clk),
         .reset      (mem_arb_reset),

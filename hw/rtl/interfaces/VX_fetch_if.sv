@@ -26,8 +26,8 @@ interface VX_fetch_if ();
     logic  valid;
     data_t data;
     logic  ready;
-`ifndef L1_ENABLE    
-    logic [`ISSUE_WIDTH-1:0] ibuf_pop;
+`ifndef L1_ENABLE
+    logic [`NUM_WARPS-1:0] ibuf_pop;
 `endif
 
     modport master (

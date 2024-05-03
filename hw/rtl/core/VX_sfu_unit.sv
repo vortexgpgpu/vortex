@@ -59,7 +59,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_REG    (1)
+        .OUT_BUF    (1)
     ) dispatch_unit (
         .clk        (clk),
         .reset      (dispatch_reset),
@@ -166,7 +166,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .NUM_INPUTS (RSP_ARB_SIZE),
         .DATAW      (RSP_ARB_DATAW),
         .ARBITER    ("R"),
-        .OUT_REG    (3)
+        .OUT_BUF    (3)
     ) rsp_arb (
         .clk       (clk),
         .reset     (commit_reset), 
@@ -182,7 +182,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     VX_gather_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_REG    (1)
+        .OUT_BUF    (1)
     ) gather_unit (
         .clk           (clk),
         .reset         (commit_reset),

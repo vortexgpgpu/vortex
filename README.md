@@ -12,7 +12,7 @@ Vortex is a full-stack open-source RISC-V GPGPU.
     - configurable number of cores, warps, and threads.
     - configurable number of ALU, FPU, LSU, and SFU units per core.
     - configurable pipeline issue width.
-    - optional shared memory, L1, L2, and L3 caches.
+    - optional local memory, L1, L2, and L3 caches.
 - Software: 
     - OpenCL 1.2 Support.
 - Supported FPGAs: 
@@ -54,10 +54,12 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
     $ git clone --recursive https://github.com/vortexgpgpu/vortex.git
     $ cd Vortex
 ### Install prebuilt toolchain
-    By default, the toolchain will install to /opt folder which requires sudo access. 
-    You can install the toolchain to a different location of your choice by setting TOOLDIR (e.g. export TOOLDIR=$HOME/tools).
-    $ export TOOLDIR=/opt
+    # By default, the toolchain will install to /opt folder which requires sudo access. Alternatively, you could also install the toolchain to a different location of your choice by setting the TOOLDIR environment variable
+
+    $ export TOOLDIR=$HOME/tools    
     $ ./ci/toolchain_install.sh --all
+
+### Set up environment variables
     $ source ./ci/toolchain_env.sh
 ### Build Vortex sources
     $ make -s

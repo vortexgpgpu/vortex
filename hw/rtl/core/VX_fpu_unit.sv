@@ -42,7 +42,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_REG    (PARTIAL_BW ? 1 : 0)
+        .OUT_BUF    (PARTIAL_BW ? 1 : 0)
     ) dispatch_unit (
         .clk        (clk),
         .reset      (dispatch_reset),
@@ -119,7 +119,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         VX_fpu_dpi #(
             .NUM_LANES  (NUM_LANES),
             .TAGW       (TAG_WIDTH),
-            .OUT_REG    (PARTIAL_BW ? 1 : 3)
+            .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) fpu_dpi (
             .clk        (clk),
             .reset      (fpu_reset),
@@ -148,7 +148,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         VX_fpu_fpnew #(
             .NUM_LANES  (NUM_LANES),
             .TAGW       (TAG_WIDTH),
-            .OUT_REG    (PARTIAL_BW ? 1 : 3)
+            .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) fpu_fpnew (
             .clk        (clk),
             .reset      (fpu_reset), 
@@ -177,7 +177,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         VX_fpu_dsp #(
             .NUM_LANES  (NUM_LANES),
             .TAGW       (TAG_WIDTH),
-            .OUT_REG    (PARTIAL_BW ? 1 : 3)
+            .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) fpu_dsp (
             .clk        (clk),
             .reset      (fpu_reset), 
@@ -248,7 +248,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
     VX_gather_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_REG    (PARTIAL_BW ? 3 : 0)
+        .OUT_BUF    (PARTIAL_BW ? 3 : 0)
     ) gather_unit (
         .clk           (clk),
         .reset         (commit_reset),

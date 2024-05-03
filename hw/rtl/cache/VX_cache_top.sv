@@ -48,11 +48,11 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // core request tag size
     parameter TAG_WIDTH             = 16,
 
-    // Core response output register
-    parameter CORE_OUT_REG          = 2,
+    // Core response output buffer
+    parameter CORE_OUT_BUF          = 2,
 
-    // Memory request output register
-    parameter MEM_OUT_REG           = 2,
+    // Memory request output buffer
+    parameter MEM_OUT_BUF           = 2,
 
     parameter MEM_TAG_WIDTH = `CLOG2(MSHR_SIZE) + `CLOG2(NUM_BANKS)
  ) (    
@@ -153,8 +153,8 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .TAG_WIDTH      (TAG_WIDTH),
         .UUID_WIDTH     (UUID_WIDTH),
         .WRITE_ENABLE   (WRITE_ENABLE),
-        .CORE_OUT_REG   (CORE_OUT_REG),
-        .MEM_OUT_REG    (MEM_OUT_REG)
+        .CORE_OUT_BUF   (CORE_OUT_BUF),
+        .MEM_OUT_BUF    (MEM_OUT_BUF)
     ) cache (
     `ifdef PERF_ENABLE
         .cache_perf     (cache_perf),

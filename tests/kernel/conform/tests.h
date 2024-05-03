@@ -5,7 +5,7 @@
 
 int test_global_memory();
 
-int test_shared_memory();
+int test_local_memory();
 
 int test_tmc();
 

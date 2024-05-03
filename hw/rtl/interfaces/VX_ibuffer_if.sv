@@ -17,7 +17,6 @@ interface VX_ibuffer_if import VX_gpu_pkg::*; ();
 
     typedef struct packed {
         logic [`UUID_WIDTH-1:0]     uuid;
-        logic [ISSUE_WIS_W-1:0]     wis;
         logic [`NUM_THREADS-1:0]    tmask;
         logic [`EX_BITS-1:0]        ex_type;    
         logic [`INST_OP_BITS-1:0]   op_type;

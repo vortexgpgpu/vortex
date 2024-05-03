@@ -1,0 +1,4 @@
+triangle
+*.o
+*.pocl
+*.log

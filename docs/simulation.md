@@ -20,7 +20,7 @@ Running tests under specific drivers (rtlsim,simx,fpga) is done using the script
 - *Cores* - used to specify the number of cores (processing element containing multiple warps) within a configuration.
 - *Warps* - used to specify the number of warps (collection of concurrent hardware threads) within a configuration.
 - *Threads* - used to specify the number of threads (smallest unit of computation) within a configuration.
-- *L2cache* - used to enable the shard l2cache among the Vortex cores.
+- *L2cache* - used to enable the shared l2cache among the Vortex cores.
 - *L3cache* - used to enable the shared l3cache among the Vortex clusters.
 - *Driver* - used to specify which driver to run the Vortex simulation (either rtlsim, opae, xrt, simx).
 - *Debug* - used to enable debug mode for the Vortex simulation.

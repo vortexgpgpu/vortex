@@ -45,33 +45,31 @@ int test_global_memory() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-int* smem_addr = (int*)SMEM_BASE_ADDR;
+int* lmem_addr = (int*)LMEM_BASE_ADDR;
 
-int smem_buffer[8];
+int lmem_buffer[8];
 
-void __attribute__((noinline)) do_smem_wr() {
+void __attribute__((noinline)) do_lmem_wr() {
 	unsigned tid = vx_thread_id();
-	smem_addr[tid] = 65 + tid;
+	lmem_addr[tid] = 65 + tid;
 }
 
-void __attribute__((noinline)) do_smem_rd() {
+void __attribute__((noinline)) do_lmem_rd() {
 	unsigned tid = vx_thread_id();
-	smem_buffer[tid] = smem_addr[tid];
+	lmem_buffer[tid] = lmem_addr[tid];
 }
 
-int test_shared_memory() {
-	static const int SHARED_MEM_SZ = 8;
-
-	PRINTF("Shared Memory Test\n");	
+int test_local_memory() {
+	PRINTF("Local Memory Test\n");
 
 	int num_threads = std::min(vx_num_threads(), 8);
 	int tmask = make_full_tmask(num_threads);
 	vx_tmc(tmask);	
-	do_smem_wr();
-	do_smem_rd();
+	do_lmem_wr();
+	do_lmem_rd();
 	vx_tmc_one();
 
-	return check_error(smem_buffer, 0, num_threads);
+	return check_error(lmem_buffer, 0, num_threads);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -270,7 +268,7 @@ int __attribute__((noinline)) do_tmask() {
 int test_tmask() {
 	PRINTF("Thread Mask Test\n");
 
-	// activate all thread to populate shared variables
+	// activate all thread
 	vx_tmc(-1);
 
 	int num_threads = std::min(vx_num_threads(), 8);

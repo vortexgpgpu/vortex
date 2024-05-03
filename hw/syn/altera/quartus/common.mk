@@ -34,7 +34,7 @@ all: gen-sources $(PROJECT).sta.rpt $(PROJECT).pow.rpt
 gen-sources: src
 src:
 	mkdir -p src
-	$(SCRIPT_DIR)/gen_sources.sh $(CONFIGS) $(RTL_INCLUDE) -P -Csrc
+	$(SCRIPT_DIR)/gen_sources.sh $(CONFIGS) $(RTL_INCLUDE) -T$(TOP_LEVEL_ENTITY) -P -Csrc
 
 syn: $(PROJECT).syn.rpt
 

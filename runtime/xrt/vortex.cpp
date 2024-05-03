@@ -217,7 +217,7 @@ public:
         vx_dev_caps(this, VX_CAPS_LOCAL_MEM_SIZE, &local_mem_size);
         if (local_mem_size <= 1) {        
             this->local_mem_ = std::make_shared<vortex::MemoryAllocator>(
-                SMEM_BASE_ADDR, local_mem_size, RAM_PAGE_SIZE, 1);
+                LMEM_BASE_ADDR, local_mem_size, RAM_PAGE_SIZE, 1);
         }
 
     #ifdef BANK_INTERLEAVE
@@ -268,7 +268,7 @@ public:
     }
 
     int mem_free(uint64_t dev_addr) {    
-        if (dev_addr >= SMEM_BASE_ADDR) {
+        if (dev_addr >= LMEM_BASE_ADDR) {
             CHECK_ERR(local_mem_->release(dev_addr), {
                 return -1;
             });    

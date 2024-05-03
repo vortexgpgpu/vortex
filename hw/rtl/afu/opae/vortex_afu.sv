@@ -97,7 +97,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire [127:0] afu_id = `AFU_ACCEL_UUID;
 
     wire [63:0] dev_caps = {16'b0,
-                            8'(`SM_ENABLED ? `SMEM_LOG_SIZE : 0),
+                            8'(`LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
                             16'(`NUM_CORES * `NUM_CLUSTERS), 
                             8'(`NUM_WARPS), 
                             8'(`NUM_THREADS), 
@@ -482,8 +482,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .DST_ADDR_WIDTH (LMEM_ADDR_WIDTH),         
         .SRC_TAG_WIDTH  (CCI_ADDR_WIDTH),
         .DST_TAG_WIDTH  (AVS_REQ_TAGW),
-        .OUT_REG_REQ    (0),
-        .OUT_REG_RSP    (0)
+        .REQ_OUT_BUF    (0),
+        .RSP_OUT_BUF    (0)
     ) cci_mem_adapter (
         .clk                (clk),
         .reset              (reset),
@@ -530,8 +530,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .DST_ADDR_WIDTH (LMEM_ADDR_WIDTH),
         .SRC_TAG_WIDTH  (`VX_MEM_TAG_WIDTH),
         .DST_TAG_WIDTH  (AVS_REQ_TAGW),
-        .OUT_REG_REQ    (0),
-        .OUT_REG_RSP    (2)
+        .REQ_OUT_BUF    (0),
+        .RSP_OUT_BUF    (2)
     ) vx_mem_adapter (
         .clk                (clk),
         .reset              (reset),
@@ -578,8 +578,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .ADDR_WIDTH  (LMEM_ADDR_WIDTH),
         .TAG_WIDTH   (AVS_REQ_TAGW),
         .ARBITER     ("P"),
-        .OUT_REG_REQ (0),
-        .OUT_REG_RSP (0)
+        .REQ_OUT_BUF (0),
+        .RSP_OUT_BUF (0)
     ) mem_arb (
         .clk        (clk),
         .reset      (mem_arb_reset),
@@ -598,8 +598,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .NUM_BANKS     (NUM_LOCAL_MEM_BANKS),
         .TAG_WIDTH     (AVS_REQ_TAGW + 1),
         .RD_QUEUE_SIZE (AVS_RD_QUEUE_SIZE),
-        .OUT_REG_REQ   (2),
-        .OUT_REG_RSP   (0)
+        .REQ_OUT_BUF   (2),
+        .RSP_OUT_BUF   (0)
     ) avs_adapter (
         .clk              (clk),
         .reset            (avs_adapter_reset),

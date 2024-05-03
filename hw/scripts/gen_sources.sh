@@ -18,19 +18,27 @@ includes=()
 externs=()
 
 output_file=""
-global_file=""
+define_header=""
+top_module=""
 copy_folder=""
 prepropressor=0
 
 defines_str=""
+params_str=""
 includes_str=""
 
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
 # parse command arguments
-while getopts D:I:J:O:G:C:Ph flag
+while getopts D:G:T:I:J:O:H:C:Ph flag
 do
   case "${flag}" in
     D)  defines+=( ${OPTARG} )
         defines_str+="-D${OPTARG} "
+        ;;
+    G)  params_str+="-G${OPTARG} "
+        ;;
+    T)  top_module=( ${OPTARG} )
         ;;
     I)  includes+=( ${OPTARG} )
         includes_str+="-I${OPTARG} "
@@ -38,25 +46,28 @@ do
     J)  externs+=( ${OPTARG} )
         includes_str+="-I${OPTARG} "
         ;;
-    O)  output_file=( ${OPTARG} );;
-    G)  global_file=( ${OPTARG} );;
-    C)  copy_folder=( ${OPTARG} );;
-    P)  prepropressor=1;;
-    h)  echo "Usage: [-D<macro>] [-I<include-path>] [-J<external-path>] [-O<output-file>] [-C<dest-folder>: copy to] [-G<global_header>] [-P: macro prepropressing] [-h help]"
+    O)  output_file=( ${OPTARG} )
+        ;;
+    H)  define_header=( ${OPTARG} )
+        ;;
+    C)  copy_folder=( ${OPTARG} )
+        ;;
+    P)  prepropressor=1
+        ;;
+    h)  echo "Usage: [-D<macro>] [-G<param>=<value>] [-T<top-module>] [-I<include-path>] [-J<external-path>] [-O<output-file>] [-C<dest-folder>: copy to] [-H<define_header>] [-P: macro prepropressing] [-h help]"
         exit 0
-    ;;
-  \?)
-    echo "Invalid option: -$OPTARG" 1>&2
-    exit 1
-    ;;
+        ;;
+    \?) echo "Invalid option: -$OPTARG" 1>&2
+        exit 1
+        ;;
   esac
 done
 
-if [ "$global_file" != "" ]; then
-    directory=$(dirname "$global_file")
+if [ "$define_header" != "" ]; then
+    directory=$(dirname "$define_header")
     mkdir -p "$directory"
     {
-        # dump defines into a global header
+        # dump defines into a header file
         for value in ${defines[@]}; do
             arrNV=(${value//=/ })
             if (( ${#arrNV[@]} > 1 ));
@@ -66,7 +77,7 @@ if [ "$global_file" != "" ]; then
                 echo "\`define $value"
             fi        
         done
-    } > $global_file
+    } > $define_header
 fi
 
 if [ "$copy_folder" != "" ]; then
@@ -74,9 +85,16 @@ if [ "$copy_folder" != "" ]; then
     mkdir -p $copy_folder
     for dir in ${includes[@]}; do
         find "$dir" -maxdepth 1 -type f | while read -r file; do
-            ext="${file##*.}"
-            if [ $prepropressor != 0 ] && { [ "$ext" == "v" ] || [ "$ext" == "sv" ]; }; then
-                verilator $defines_str $includes_str -E -P $file > $copy_folder/$(basename -- $file)
+            file_ext="${file##*.}"
+            file_name=$(basename -- $file)
+            if [ $prepropressor != 0 ] && { [ "$file_ext" == "v" ] || [ "$file_ext" == "sv" ]; }; then
+                if [[ -n "$params_str" && $file_name == "$top_module."* ]]; then
+                    temp_file=$(mktemp)
+                    $script_dir/repl_params.py $params_str -T$top_module $file > $temp_file
+                    verilator $defines_str $includes_str -E -P $temp_file > $copy_folder/$file_name
+                else
+                    verilator $defines_str $includes_str -E -P $file > $copy_folder/$file_name
+                fi                
             else
                 cp $file $copy_folder
             fi
@@ -86,7 +104,7 @@ fi
 
 if [ "$output_file" != "" ]; then
     {
-        if [ "$global_file" == "" ]; then
+        if [ "$define_header" == "" ]; then
             # dump defines
             for value in ${defines[@]}; do
                 echo "+define+$value"

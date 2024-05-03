@@ -46,8 +46,8 @@ public:
             RAM_PAGE_SIZE,
             CACHE_BLOCK_SIZE)
         , local_mem_(
-            SMEM_BASE_ADDR,
-            (1ull << SMEM_LOG_SIZE),
+            LMEM_BASE_ADDR,
+            (1ull << LMEM_LOG_SIZE),
             RAM_PAGE_SIZE,
             1) 
     {
@@ -70,7 +70,7 @@ public:
     }
 
     int mem_free(uint64_t dev_addr) {
-        if (dev_addr >= SMEM_BASE_ADDR) {
+        if (dev_addr >= LMEM_BASE_ADDR) {
             return local_mem_.release(dev_addr);
         } else {
             return global_mem_.release(dev_addr);

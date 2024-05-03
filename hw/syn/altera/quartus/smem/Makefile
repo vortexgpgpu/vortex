@@ -1,4 +1,4 @@
-PROJECT = VX_shared_mem
+PROJECT = VX_local_mem_top
 TOP_LEVEL_ENTITY = $(PROJECT)
 SRC_FILE = $(PROJECT).sv
 

@@ -169,7 +169,8 @@
 `define CLOG2(x)    $clog2(x)
 `define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > (x)) ? 1 : 0))
 `define LOG2UP(x)   (((x) > 1) ? $clog2(x) : 1)
-`define ISPOW2(x)   (((x) != 0) && (0 == ((x) & ((x) - 1))))
+`define IS_POW2(x)   (((x) != 0) && (0 == ((x) & ((x) - 1))))
+`define IS_DIVISBLE(n, d) (((n) % (d)) == 0)
 
 `define ABS(x)      (((x) < 0) ? (-(x)) : (x));
 
@@ -181,13 +182,10 @@
 `define MAX(x, y)   (((x) > (y)) ? (x) : (y))
 `endif
 
-`ifndef CLAMP
 `define CLAMP(x, lo, hi)   (((x) > (hi)) ? (hi) : (((x) < (lo)) ? (lo) : (x)))
-`endif
 
-`ifndef UP
 `define UP(x)       (((x) != 0) ? (x) : 1)
-`endif
+
 
 `define RTRIM(x, s) x[$bits(x)-1:($bits(x)-s)]
 
@@ -229,10 +227,10 @@
     `RESET_RELAY_EX (dst, src, 1, 0)
 
 // size(x): 0 -> 0, 1 -> 1, 2 -> 2, 3 -> 2, 4-> 2
-`define OUT_REG_TO_EB_SIZE(out_reg)   `MIN(out_reg, 2)
+`define TO_OUT_BUF_SIZE(out_reg)    `MIN(out_reg, 2)
 
 // reg(x): 0 -> 0, 1 -> 1, 2 -> 0, 3 -> 1, 4 -> 2
-`define OUT_REG_TO_EB_REG(out_reg)    ((out_reg & 1) + ((out_reg >> 2) << 1))
+`define TO_OUT_BUF_REG(out_reg)     ((out_reg & 1) + ((out_reg >> 2) << 1))
 
 `define REPEAT(n,f,s)   `_REPEAT_``n(f,s)
 `define _REPEAT_0(f,s)

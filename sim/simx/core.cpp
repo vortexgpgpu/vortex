@@ -51,7 +51,7 @@ Core::Core(const SimContext& ctx,
     , operands_(ISSUE_WIDTH)
     , dispatchers_((uint32_t)ExeType::ExeTypeCount)
     , exe_units_((uint32_t)ExeType::ExeTypeCount)
-    , smem_demuxs_(NUM_LSU_LANES)
+    , lmem_demuxs_(NUM_LSU_LANES)
     , fetch_latch_("fetch")
     , decode_latch_("decode")
     , pending_icache_(arch_.num_warps())
@@ -72,26 +72,26 @@ Core::Core(const SimContext& ctx,
     operands_.at(i) = SimPlatform::instance().create_object<Operand>();
   }
 
-  // initialize shared memory
-  snprintf(sname, 100, "core%d-shared_mem", core_id);
-  shared_mem_ = SharedMem::Create(sname, SharedMem::Config{
-    (1 << SMEM_LOG_SIZE),
+  // initialize local memory
+  snprintf(sname, 100, "core%d-local_mem", core_id);
+  local_mem_ = LocalMem::Create(sname, LocalMem::Config{
+    (1 << LMEM_LOG_SIZE),
     sizeof(Word),
     NUM_LSU_LANES, 
     NUM_LSU_LANES,
     false
   });
   for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
-    snprintf(sname, 100, "core%d-smem_demux%d", core_id, i);
-    auto smem_demux = SMemDemux::Create(sname);
+    snprintf(sname, 100, "core%d-lmem_demux%d", core_id, i);
+    auto lmem_demux = LocalMemDemux::Create(sname);
     
-    smem_demux->ReqDC.bind(&dcache_req_ports.at(i));
-    dcache_rsp_ports.at(i).bind(&smem_demux->RspDC);
+    lmem_demux->ReqDC.bind(&dcache_req_ports.at(i));
+    dcache_rsp_ports.at(i).bind(&lmem_demux->RspDC);
 
-    smem_demux->ReqSM.bind(&shared_mem_->Inputs.at(i));
-    shared_mem_->Outputs.at(i).bind(&smem_demux->RspSM);
+    lmem_demux->ReqSM.bind(&local_mem_->Inputs.at(i));
+    local_mem_->Outputs.at(i).bind(&lmem_demux->RspSM);
 
-    smem_demuxs_.at(i) = smem_demux;
+    lmem_demuxs_.at(i) = lmem_demux;
   }
 
   // initialize dispatchers
@@ -445,8 +445,8 @@ void Core::icache_read(void *data, uint64_t addr, uint32_t size) {
 }
 
 AddrType Core::get_addr_type(uint64_t addr) {
-  if (SM_ENABLED) {
-    if (addr >= SMEM_BASE_ADDR && addr < (SMEM_BASE_ADDR + (1 << SMEM_LOG_SIZE))) {
+  if (LMEM_ENABLED) {
+    if (addr >= LMEM_BASE_ADDR && addr < (LMEM_BASE_ADDR + (1 << LMEM_LOG_SIZE))) {
         return AddrType::Shared;
     }
   }
@@ -459,7 +459,7 @@ AddrType Core::get_addr_type(uint64_t addr) {
 void Core::dcache_read(void *data, uint64_t addr, uint32_t size) {  
   auto type = this->get_addr_type(addr);
   if (type == AddrType::Shared) {
-    shared_mem_->read(data, addr, size);
+    local_mem_->read(data, addr, size);
   } else {  
     mmu_.read(data, addr, size, 0);
   }
@@ -474,7 +474,7 @@ void Core::dcache_write(const void* data, uint64_t addr, uint32_t size) {
      this->writeToStdOut(data, addr, size);
   } else {
     if (type == AddrType::Shared) {
-      shared_mem_->write(data, addr, size);
+      local_mem_->write(data, addr, size);
     } else {
       mmu_.write(data, addr, size, 0);
     }
@@ -612,7 +612,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         auto proc_perf = socket_->cluster()->processor()->perf_stats();
         auto cluster_perf = socket_->cluster()->perf_stats();
         auto socket_perf = socket_->perf_stats();
-        auto smem_perf = shared_mem_->perf_stats();
+        auto lmem_perf = local_mem_->perf_stats();
         switch (addr) {
         case VX_CSR_MPM_ICACHE_READS:     return socket_perf.icache.reads & 0xffffffff; 
         case VX_CSR_MPM_ICACHE_READS_H:   return socket_perf.icache.reads >> 32; 
@@ -667,12 +667,12 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case VX_CSR_MPM_MEM_LT:           return proc_perf.mem_latency & 0xffffffff; 
         case VX_CSR_MPM_MEM_LT_H :        return proc_perf.mem_latency >> 32;
          
-        case VX_CSR_MPM_SMEM_READS:       return smem_perf.reads & 0xffffffff;
-        case VX_CSR_MPM_SMEM_READS_H:     return smem_perf.reads >> 32;
-        case VX_CSR_MPM_SMEM_WRITES:      return smem_perf.writes & 0xffffffff;
-        case VX_CSR_MPM_SMEM_WRITES_H:    return smem_perf.writes >> 32;
-        case VX_CSR_MPM_SMEM_BANK_ST:     return smem_perf.bank_stalls & 0xffffffff; 
-        case VX_CSR_MPM_SMEM_BANK_ST_H:   return smem_perf.bank_stalls >> 32; 
+        case VX_CSR_MPM_LMEM_READS:       return lmem_perf.reads & 0xffffffff;
+        case VX_CSR_MPM_LMEM_READS_H:     return lmem_perf.reads >> 32;
+        case VX_CSR_MPM_LMEM_WRITES:      return lmem_perf.writes & 0xffffffff;
+        case VX_CSR_MPM_LMEM_WRITES_H:    return lmem_perf.writes >> 32;
+        case VX_CSR_MPM_LMEM_BANK_ST:     return lmem_perf.bank_stalls & 0xffffffff; 
+        case VX_CSR_MPM_LMEM_BANK_ST_H:   return lmem_perf.bank_stalls >> 32; 
         }
       } break;
       default: {

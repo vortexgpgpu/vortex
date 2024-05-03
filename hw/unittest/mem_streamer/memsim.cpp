@@ -105,24 +105,24 @@ void MemSim::reset() {
 }
 
 void MemSim::attach_core() {
-	if (msu_->req_ready) {
-		msu_->req_valid 	= generate_rand(0, 1);
-		msu_->req_rw 		= generate_rand(0, 1);
-		msu_->req_mask 		= generate_rand(0b0001, 0b1111);
-		msu_->req_byteen 	= 0b1;
-		msu_->req_addr 		= generate_rand(0, 0x10000000);
-		msu_->req_data 		= generate_rand(0x60000000, 0x80000000);
-		msu_->req_tag 		= generate_rand(0x00, 0xFF);
+	if (msu_->core_req_ready) {
+		msu_->core_req_valid 	= generate_rand(0, 1);
+		msu_->core_req_rw 		= generate_rand(0, 1);
+		msu_->core_req_mask 		= generate_rand(0b0001, 0b1111);
+		msu_->core_req_byteen 	= 0b1;
+		msu_->core_req_addr 		= generate_rand(0, 0x10000000);
+		msu_->core_req_data 		= generate_rand(0x60000000, 0x80000000);
+		msu_->core_req_tag 		= generate_rand(0x00, 0xFF);
 	}
-	msu_->rsp_ready = true;
+	msu_->core_rsp_ready = true;
 }
 
 void MemSim::attach_ram (RAM *ram) {
 
 	req_t req;
-	req.valid 			= msu_->mem_req_valid;
+	req.valid 		= msu_->mem_req_valid;
 	req.rw 				= msu_->mem_req_rw;
-	req.byteen			= msu_->mem_req_byteen;
+	req.byteen		= msu_->mem_req_byteen;
 	req.addr 			= msu_->mem_req_addr;
 	req.data 			= msu_->mem_req_data;
 	req.tag 			= msu_->mem_req_tag;
