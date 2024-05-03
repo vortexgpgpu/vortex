@@ -154,7 +154,7 @@ inline void vx_barrier(unsigned barried_id, unsigned num_warps) {
 }
 
 // Mod 0 
-inline void vx_mload(int input[32], int weights[32]) {
+inline void vx_mload(int32_t* input, int32_t* weights) {
     // Load input and weights matrices
     //             .insn r opcode6, func3, func7, rd, rs1, rs2
     asm volatile (".insn r %0, 0, 0, 1, %1, %2" :: "i"(RISCV_CUSTOM2), "r"(input), "r"(weights));

@@ -8,6 +8,7 @@ all:
 	$(MAKE) -C diverge
 	$(MAKE) -C sort
 	$(MAKE) -C fence
+	$(MAKE) -C tmul
 	$(MAKE) -C no_mf_ext
 	$(MAKE) -C no_smem
 	$(MAKE) -C vecaddx
@@ -23,6 +24,7 @@ run-simx:
 	$(MAKE) -C diverge run-simx
 	$(MAKE) -C sort run-simx
 	$(MAKE) -C fence run-simx
+	$(MAKE) -C tmul run-simx
 	$(MAKE) -C no_mf_ext run-simx
 	$(MAKE) -C no_smem run-simx
 	$(MAKE) -C vecaddx run-simx
@@ -38,6 +40,7 @@ run-rtlsim:
 	$(MAKE) -C diverge run-rtlsim
 	$(MAKE) -C sort run-rtlsim
 	$(MAKE) -C fence run-rtlsim
+	$(MAKE) -C tmul run-rtlsim
 	$(MAKE) -C no_mf_ext run-rtlsim
 	$(MAKE) -C no_smem run-rtlsim
 	$(MAKE) -C vecaddx run-rtlsim
@@ -53,6 +56,7 @@ run-opae:
 	$(MAKE) -C diverge run-opae
 	$(MAKE) -C sort run-opae
 	$(MAKE) -C fence run-opae
+	$(MAKE) -C tmul run-opae
 	$(MAKE) -C no_mf_ext run-opae
 	$(MAKE) -C no_smem run-opae
 	$(MAKE) -C vecaddx run-opae
@@ -68,6 +72,7 @@ clean:
 	$(MAKE) -C diverge clean
 	$(MAKE) -C sort clean
 	$(MAKE) -C fence clean
+	$(MAKE) -C tmul clean
 	$(MAKE) -C no_mf_ext clean
 	$(MAKE) -C no_smem clean
 	$(MAKE) -C vecaddx clean
@@ -83,6 +88,7 @@ clean-all:
 	$(MAKE) -C diverge clean-all
 	$(MAKE) -C sort clean-all
 	$(MAKE) -C fence clean-all
+	$(MAKE) -C tmul clean-all
 	$(MAKE) -C no_mf_ext clean-all
 	$(MAKE) -C no_smem clean-all
 	$(MAKE) -C vecaddx clean-all
