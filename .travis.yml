@@ -24,9 +24,12 @@ cache:
     - $HOME/build32
     - $HOME/build64
 
+install:
+  - cp -r $HOME/third_party $TRAVIS_BUILD_DIR
+  - cp -r $HOME/build$XLEN build && cd build
+
 before_script:
   - source $HOME/build$XLEN/ci/toolchain_env.sh
-  - cp -r $HOME/build$XLEN build && cd build
 
 stages:
   - build
@@ -58,8 +61,6 @@ jobs:
             rm -rf $TRAVIS_BUILD_DIR/third_party;
             cp -r $HOME/third_party $TRAVIS_BUILD_DIR;
           fi
-      before_script:
-        - source $HOME/build32/ci/toolchain_env.sh
       script:
         - make -C $HOME/build32 build -s > /dev/null
         - make -C $HOME/build64 build -s > /dev/null
