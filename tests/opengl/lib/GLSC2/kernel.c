@@ -148,13 +148,46 @@ void enqueueFillBuffer(void* command_queue, void* buffer, const void* pattern, s
     // clEnqueueFillBuffer((cl_command_queue)command_queue, (cl_mem) buffer, pattern, pattern_size, offset, size, 0, NULL, NULL);
 }
 
-void* createImage2D(const cl_image_format *image_format, size_t image_width, size_t image_height, size_t image_row_pitch, void *host_ptr) {
+void* createImage2D(uint64_t flags, const cl_image_format *image_format, size_t image_width, size_t image_height, size_t image_row_pitch, void *host_ptr) {
     
-    void *image = clCreateImage2D(_getContext(), CL_MEM_READ_ONLY, image_format, image_width, image_height, image_row_pitch, host_ptr, &_err);
+    void *image = clCreateImage2D(_getContext(), flags, image_format, image_width, image_height, image_row_pitch, host_ptr, &_err);
     if (_err) {
         printf("createImage2D() image_format=%p, image_width=%ld, image_height=%ld, image_row_pitch=%ld, host_ptr=%p\n", image_format, image_width, image_height, image_row_pitch, host_ptr);
         printf("\terror=%d\n", _err);
     }
 
     return image;
+}
+
+void* createImage(uint64_t flags, const cl_image_format *image_format, const cl_image_desc* image_desc, void *host_ptr) {
+    
+    void *image = clCreateImage(_getContext(), flags, image_format, image_desc, host_ptr, &_err);
+    if (_err) {
+        printf("createImage2D()\n");
+        printf("\terror=%d\n", _err);
+    }
+
+    return image;
+}
+
+int enqueueWriteImage(void* command_queue, void* image, const size_t* origin, const size_t* region, size_t input_row_pitch, size_t input_slice_pitch, const void *ptr) {
+    int err = clEnqueueWriteImage(command_queue, image, CL_TRUE, origin, region, input_row_pitch, input_slice_pitch, ptr, 0, NULL, NULL );
+    
+    if (err) {
+        printf("enqueueWriteImage()\n");
+        printf("\terror=%d\n", err);
+    }
+
+    return err;
+}
+
+void* createSampler(cl_bool normalized_coords, cl_addressing_mode addressing_mode, cl_filter_mode filter_mode) {
+    cl_sampler sampler = clCreateSampler(_getContext(),normalized_coords, addressing_mode, filter_mode, &_err);
+
+    if (_err) {
+        printf("createSampler()\n");
+        printf("\terror=%d\n", _err);
+    }
+
+    return sampler;
 }
