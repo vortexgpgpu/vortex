@@ -1,0 +1,31 @@
+# Executables
+## Ignore all
+*
+## Unignore all with extensions
+!*.*
+## Unignore all dirs
+!*/
+# CI
+ci/*
+# Dependencies
+deps/*
+# Object files
+*.o
+*.a
+*.cache
+*.vh
+*.depend
+# Third party
+third_party/*
+# Shared
+*.so
+# Others
+*.dump
+*.pocl
+*.bin
+*.elf
+
+.python-version
+compile_commands.json
+run.log
+trace.vcd

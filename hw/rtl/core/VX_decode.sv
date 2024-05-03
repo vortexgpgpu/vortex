@@ -508,14 +508,14 @@ module VX_decode  #(
             `INST_EXT3: begin // Mod3
                 case (func3)
                     3'h0: begin
-                    op_type = `INST_OP_BITS'(`INST_MLOAD);
-                    ex_type = `EX_LSU;
-                    // Input addresses
-                    `USED_IREG (rs1);
-                    `USED_IREG (rs2);
-                    // Output register
-                    // use_rd  = 1; TODO: is this needed? hint: probably not
-                    `USED_IREG (rd);
+                        op_type = `INST_OP_BITS'(`INST_MLOAD);
+                        ex_type = `EX_LSU;
+                        // Input addresses
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                        // Output register
+                        use_rd  = 1;
+                        `USED_IREG (rd);
                     end
                     default:;
                 endcase

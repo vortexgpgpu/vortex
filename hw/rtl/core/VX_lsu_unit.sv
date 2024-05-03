@@ -96,6 +96,9 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     // Second matrix accesses have offset (tid % 2)
     assign addr_offset_2 = 2'(execute_if[0].data.tid[0]);
 
+    // For mload, destination registers are 4 and are contiguous in the register file.
+    wire [`NR_BITS-1:0] mem_req_rd;
+
     // Full address calculation
     // TODO set different address calculation for different op_type (for load)
     wire [NUM_LANES-1:0][`XLEN-1:0] full_addr;
@@ -116,6 +119,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             end
         end
     end
+
+    assign mem_req_rd = execute_if[0].data.rd + ((`NR_BITS)'(mload_finished) & {(`NR_BITS){(execute_if[0].data.op_type == `INST_MLOAD)}});
 
     // detect duplicate addresses
 
@@ -325,10 +330,6 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         assign mem_rsp_eop_pkt = mem_rsp_eop;
         `UNUSED_VAR (pkt_raddr)
     end
-
-    // For mload, destination registers are 4 and are contiguous in the register file.
-    wire [`NR_BITS-1:0] mem_req_rd;
-    assign mem_req_rd = execute_if[0].data.rd + `NR_BITS'(mload_finished) & `NR_BITS'(execute_if[0].data.op_type == `INST_MLOAD);
 
     assign mem_req_tag = {
         execute_if[0].data.uuid, lsu_addr_type, execute_if[0].data.wid, execute_if[0].data.tmask, execute_if[0].data.PC,
@@ -602,21 +603,21 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .commit_in_if  (commit_arb_if),
         .commit_out_if (commit_if)
     );
-// Mod4 set control for mload partial operations
-always @(posedge clk) begin
-    if (reset) begin
-        mload_finished <= 3'b0;
-    end else begin
-        // Add 1 for the first partial load
-        mload_finished <= mload_finished + 3'((execute_if[0].data.op_type == `INST_MLOAD) && mem_rsp_fire);
-
-        // TODO be sure of this
-        // Reset the counter after the last partial load
-        if (mload_finished == 3'h4) begin
+    // Mod4 set control for mload partial operations
+    always @(posedge clk) begin
+        if (reset) begin
             mload_finished <= 3'b0;
+        end else begin
+            // Add 1 for the first partial load
+            mload_finished <= mload_finished + 3'((execute_if[0].data.op_type == `INST_MLOAD) && mem_rsp_fire);
+
+            // TODO be sure of this
+            // Reset the counter after the last partial load
+            if (mload_finished == 3'h4) begin
+                mload_finished <= 3'b0;
+            end
         end
     end
-end
 
 
 `ifdef DBG_SCOPE_LSU
