@@ -176,10 +176,10 @@ int main() {
   glEnable(GL_DEPTH_TEST);
   // Draw
   uint rotation = 0;
-  while (rotation < 5) {
+  while (rotation < 1) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    rotateMatrix(model, M_PI/4*(rotation++), 1,1,1);
+    rotateMatrix(model, M_PI/8*(rotation++), 1,1,1);
     glUniformMatrix4fv(2, 4, GL_FALSE, model);
 
     glDrawArrays(GL_TRIANGLES, 0, 36);

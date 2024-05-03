@@ -336,48 +336,42 @@ GL_APICALL void GL_APIENTRY glClearColor (GLfloat red, GLfloat green, GLfloat bl
     uint32_t pixel_size = 0;
 
     if (COLOR_ATTACHMENT0.internalformat == GL_RGBA4) {
-        pattern |= (unsigned int) (red   * 0xFFu) << 0;
-        pattern |= (unsigned int) (green * 0xFFu) << 4;
-        pattern |= (unsigned int) (blue  * 0xFFu) << 8;
-        pattern |= (unsigned int) (alpha * 0xFFu) << 12;
+        pattern |= (unsigned int) (red   * 0xFu) << 0;
+        pattern |= (unsigned int) (green * 0xFu) << 4;
+        pattern |= (unsigned int) (blue  * 0xFu) << 8;
+        pattern |= (unsigned int) (alpha * 0xFu) << 12;
         pattern |= pattern << 16;
         pixel_size = sizeof(uint8_t[2]);
     } else if(COLOR_ATTACHMENT0.internalformat == GL_RGBA8) {
-        pattern |= (unsigned int) (red   * 0xFFFFu) << 0;
-        pattern |= (unsigned int) (green * 0xFFFFu) << 8;
-        pattern |= (unsigned int) (blue  * 0xFFFFu) << 16;
-        pattern |= (unsigned int) (alpha * 0xFFFFu) << 24;
+        pattern |= (unsigned int) (red   * 0xFFu) << 0;
+        pattern |= (unsigned int) (green * 0xFFu) << 8;
+        pattern |= (unsigned int) (blue  * 0xFFu) << 16;
+        pattern |= (unsigned int) (alpha * 0xFFu) << 24;
         pixel_size = sizeof(uint8_t[4]);
     } else if(COLOR_ATTACHMENT0.internalformat == GL_RGB8) {
         NOT_IMPLEMENTED; // TODO: Update enqueueFillBuffer
     } else if(COLOR_ATTACHMENT0.internalformat == GL_RG8) {
-        pattern |= (unsigned int) (red   * 0xFFFFu) << 0;
-        pattern |= (unsigned int) (green * 0xFFFFu) << 8;
-        pattern |= pattern << 8;
+        pattern |= (unsigned int) (red   * 0xFFu) << 0;
+        pattern |= (unsigned int) (green * 0xFFu) << 8;
         pattern |= pattern << 16;
-        pattern |= pattern << 24;
         pixel_size = sizeof(uint8_t[2]);
     } else if(COLOR_ATTACHMENT0.internalformat == GL_R8) {
-        pattern |= (unsigned int) (red   * 0xFFFFu) << 0;
-        pattern |= pattern << 4;
+        pattern |= (unsigned int) (red   * 0xFFu) << 0;
         pattern |= pattern << 8;
-        pattern |= pattern << 12;
         pattern |= pattern << 16;
-        pattern |= pattern << 20;
         pattern |= pattern << 24;
-        pattern |= pattern << 28;
         pixel_size = sizeof(uint8_t[1]);
     } else if(COLOR_ATTACHMENT0.internalformat == GL_RGB5_A1) {
-        pattern |= (unsigned int) (red   * 0x1FFu) << 0;
-        pattern |= (unsigned int) (green * 0x1FFu) << 5;
-        pattern |= (unsigned int) (blue  * 0x1FFu) << 10;
+        pattern |= (unsigned int) (red   * 0x1Fu) << 0;
+        pattern |= (unsigned int) (green * 0x1Fu) << 5;
+        pattern |= (unsigned int) (blue  * 0x1Fu) << 10;
         pattern |= (unsigned int) (alpha * 0x1u)   << 15;
         pattern |= pattern << 16;
         pixel_size = sizeof(uint8_t[2]);
     } else if(COLOR_ATTACHMENT0.internalformat == GL_RGB565) {
-        pattern |= (unsigned int) (red   * 0x1FFu) << 0;
-        pattern |= (unsigned int) (green * 0x3FFu) << 5;
-        pattern |= (unsigned int) (blue  * 0x1FFu) << 11;
+        pattern |= (unsigned int) (red   * 0x1Fu) << 0;
+        pattern |= (unsigned int) (green * 0x3Fu) << 5;
+        pattern |= (unsigned int) (blue  * 0x1Fu) << 11;
         pattern |= pattern << 16;
         pixel_size = sizeof(uint8_t[2]);
     } else RETURN_ERROR(GL_INVALID_OPERATION);
@@ -509,19 +503,19 @@ GL_APICALL void GL_APIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei coun
     void* fragment_kernel = createFragmentKernel(mode, first, count);
     int active_textures = _texture_binding != 0;
     setKernelArg(fragment_kernel, 
-        _programs[_current_program].active_uniforms + active_textures*3,
+        _programs[_current_program].active_uniforms + active_textures*2,
         sizeof(gl_FragCoord), &gl_FragCoord
     );
     setKernelArg(fragment_kernel, 
-        _programs[_current_program].active_uniforms + active_textures*3 + 1,
+        _programs[_current_program].active_uniforms + active_textures*2 + 1,
         sizeof(gl_Rasterization), &gl_Rasterization
     );
     setKernelArg(fragment_kernel, 
-        _programs[_current_program].active_uniforms + active_textures*3 + 2,
+        _programs[_current_program].active_uniforms + active_textures*2 + 2,
         sizeof(gl_Discard), &gl_Discard
     );
     setKernelArg(fragment_kernel, 
-        _programs[_current_program].active_uniforms + active_textures*3 + 3,
+        _programs[_current_program].active_uniforms + active_textures*2 + 3,
         sizeof(gl_FragColor), &gl_FragColor
     );
 

@@ -35,7 +35,7 @@ __kernel void gl_main_vs (
   float b = color[gid*3+2];
 
   // vertex operations
-  gl_Positions[gid] = mul(perspective,mul(view,mul(model,(float4) (x, y, z, 1.0f))));
+  gl_Positions[gid] =  mul(view,mul(model,(float4) (x, y, z, 1.0f)));
  
   gl_Primitives[gid*2] = (float4) (r,g,b,1.0f);
   // gl_Primitives[gid*2+1] = (float4) (1.f,1.f,1.f,1.0f);
@@ -44,6 +44,7 @@ __kernel void gl_main_vs (
 __kernel void gl_main_fs (
   // user values
   const float16 perspective,
+  const float16 view,
   const float16 model,
   // implementation values 
   __global float4 *gl_FragCoord, // position of the fragment in the window space, z is depth value
