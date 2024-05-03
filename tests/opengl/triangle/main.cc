@@ -11,8 +11,8 @@
 #include "../debug.cc"
 #include "../common.c"
 
-#define WIDTH 300
-#define HEIGHT 200
+#define WIDTH 150
+#define HEIGHT 100
 
 GLuint createProgram(const char* filename) {
   GLuint program;

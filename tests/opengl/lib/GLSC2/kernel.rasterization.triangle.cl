@@ -30,11 +30,11 @@ float calculateFragmentDepth(float3 barycentricCoords, float depthV0, float dept
     return barycentricCoords.x * depthV0 + barycentricCoords.y * depthV1 + barycentricCoords.z * depthV2;
 }
 
-float cross4d(float4 a, float4 b) {
+inline float cross4d(float4 a, float4 b) {
     return a.x * b.y - a.y * b.x;
 }
 
-float cross2d(float2 a, float2 b) {
+inline float cross2d(float2 a, float2 b) {
     return a.x * b.y - a.y * b.x;
 }
 
@@ -47,7 +47,7 @@ float3 get_baricentric_coords(float2 p, float4 v0, float4 v1, float4 v2) {
 
     barycentricCoords.x = areaPBC / areaABC;
     barycentricCoords.y = areaPCA / areaABC;
-    barycentricCoords.z = 1.f-barycentricCoords.x-barycentricCoords.y;
+    barycentricCoords.z = 1.f-barycentricCoords.x-barycentricCoords.y; // What is this??
 
     return barycentricCoords;
 }
@@ -72,21 +72,20 @@ __kernel void gl_rasterization_triangle (
     __global float4 *rasterization = gl_Rasterization + gid*attributes;
 
     //frag coords norm
-    float xf = (gid % width)+0.5f;
-    float yf = (gid / width)+0.5f;
+    float xf = (gid % width);
+    float yf = (gid / width);
 
     float4 v0 = position[0];
     float4 v1 = position[1];
     float4 v2 = position[2];
-
-	float3 abc = get_baricentric_coords((float2) (xf,yf), v0, v1, v2);
-
+    
+    
+    float3 abc = get_baricentric_coords((float2) (xf,yf), v0, v1, v2);
     fragCoord->x = xf;
     fragCoord->y = yf;
     fragCoord->z = calculateFragmentDepth(abc, v0.z, v1.z, v2.z);
     fragCoord->w = abc.x*v0.w + abc.y*v1.w + abc.z*v2.w;
 
-    int buffSize = width*height;
 
     for(int attribute = 0 ; attribute < attributes; attribute++) {
         __global const float4 *p0 = primitives;
@@ -100,7 +99,6 @@ __kernel void gl_rasterization_triangle (
 
         primitives++;
     }
-
 
     if ((abc.x >= 0.0f) && (abc.y >= 0.0f) && (abc.z >= 0.0f)) {
         gl_Discard[gid] = false;

@@ -16,6 +16,7 @@
 
 void perspectiveMatrix(float* mat, float angle, float ratio, float near, float far);
 void rotateMatrix(float* mat, float angle, float x, float y, float z);
+void lookAtRH(float *matrix, const float eye[3], const float center[3], const float up[3]);
 
 GLuint createProgram(const char* filename) {
   GLuint program;
@@ -175,10 +176,10 @@ int main() {
   glEnable(GL_DEPTH_TEST);
   // Draw
   uint rotation = 0;
-  while (rotation < 5) {
+  while (rotation < 1) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    rotateMatrix(model, M_PI/4*(rotation++), 1,1,1);
+    rotateMatrix(model, M_PI/8*(rotation++), 1,1,1);
     glUniformMatrix4fv(2, 4, GL_FALSE, model);
 
     glDrawArrays(GL_TRIANGLES, 0, 36);
