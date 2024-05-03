@@ -192,16 +192,13 @@ GLuint _renderbuffer_binding;
 */
 
 typedef struct {
-    GLsizei width, height;
-    cl_mem mem;
-} SAMPLER_2D;
-
-typedef struct {
     cl_mem mem;
     GLenum internalformat;
     GLsizei width, height;
     GLboolean used;
+    #ifdef IMAGE_SUPPORT
     cl_sampler sampler;
+    #endif
 } TEXTURE_2D;
 
 TEXTURE_2D _textures[MAX_TEXTURE];
@@ -799,6 +796,44 @@ GL_APICALL void GL_APIENTRY glTexStorage2D (GLenum target, GLsizei levels, GLenu
     if (_textures[_texture_binding].width || _textures[_texture_binding].height)
         RETURN_ERROR(GL_INVALID_OPERATION);
     
+    #ifndef IMAGE_SUPPORT
+    uint32_t pixel_size;
+
+    switch (internalformat) {
+    case GL_RGBA8:
+        pixel_size = sizeof(uint8_t[4]);
+        break;
+    case GL_RGB8:
+        pixel_size = sizeof(uint8_t[3]);
+        break;
+    case GL_RG8:
+        pixel_size = sizeof(uint8_t[2]);
+        break;
+    case GL_R8:
+        pixel_size = sizeof(uint8_t[1]);
+        break;
+    case GL_RGBA4:
+    case GL_RGB5_A1:
+    case GL_RGB565:
+        pixel_size = sizeof(uint8_t[2]);
+        break;
+    default:
+        RETURN_ERROR(GL_INVALID_ENUM);
+    }
+
+    _textures[_texture_binding].width = width;
+    _textures[_texture_binding].height = height;
+    _textures[_texture_binding].internalformat = internalformat;
+
+    GLsizei level = 0;
+    size_t total_pixels = 0;
+    while (level++<levels) { 
+        total_pixels += width * height;
+        width /= 2;
+        height /= 2;
+    }
+    _textures[_texture_binding].mem = createBuffer(MEM_READ_ONLY, total_pixels*pixel_size, NULL);
+    #else 
     // https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#_mapping_to_external_image_formats
     cl_image_format format; 
     cl_image_desc desc;
@@ -838,13 +873,8 @@ GL_APICALL void GL_APIENTRY glTexStorage2D (GLenum target, GLsizei levels, GLenu
     desc.image_type = CL_MEM_OBJECT_IMAGE2D;
     desc.num_mip_levels = levels - 1;
 
-    // TODO: refact
-
-    _textures[_texture_binding].width = width;
-    _textures[_texture_binding].height = height;
-    _textures[_texture_binding].used = GL_TRUE;
-    _textures[_texture_binding].internalformat = internalformat;
     _textures[_texture_binding].mem = createImage(MEM_READ_ONLY, &format, &desc, NULL);
+    #endif
 }
 
 GL_APICALL void GL_APIENTRY glTexParameterf (GLenum target, GLenum pname, GLfloat param) {
@@ -874,6 +904,11 @@ GL_APICALL void GL_APIENTRY glTexSubImage2D (GLenum target, GLint level, GLint x
         RETURN_ERROR(GL_INVALID_VALUE);
 
     // TODO subImage2d kernel
+    #ifndef IMAGE_SUPPORT
+    if (_textures[_texture_binding].internalformat == GL_RGBA8 && format == GL_RGBA && type == GL_UNSIGNED_BYTE && xoffset == 0 && yoffset == 0) {
+        enqueueWriteBuffer(getCommandQueue(),_textures[_texture_binding].mem,width*height*sizeof(uint8_t[4]),pixels);
+    } else NOT_IMPLEMENTED;
+    #else
     size_t origin[2], region[2], pixel_size;
     origin[0] = xoffset;
     origin[1] = yoffset;
@@ -890,6 +925,7 @@ GL_APICALL void GL_APIENTRY glTexSubImage2D (GLenum target, GLint level, GLint x
     else RETURN_ERROR(GL_INVALID_ENUM);
 
     enqueueWriteImage(getCommandQueue(), _textures[_texture_binding].mem, &origin, &region, pixel_size*width, 0, pixels);
+    #endif
 }
 
 #define UMAT4 0x0;
@@ -1078,20 +1114,32 @@ void* createFragmentKernel(GLenum mode, GLint first, GLsizei count) {
         ++uniform;
     }
     GLuint texture = 0;
-    while(texture < 1) {
-        
-        void *sampler = createSampler(CL_FALSE, CL_ADDRESS_CLAMP, CL_FILTER_NEAREST);
+    while(texture < 1) { // TODO: Add support for more than one texture
+        #ifndef IMAGE_SUPPORT
+        int size[2];
+        size[0] = _textures[_texture_binding].width;
+        size[1] = _textures[_texture_binding].height;
+
         setKernelArg(
             kernel, 
             _programs[_current_program].active_uniforms,
-            sizeof(_textures[_texture_binding].mem), 
-            &_textures[_texture_binding].mem
-        );
+            sizeof(size), 
+            &size
+            );
+        #else
+        void *sampler = createSampler(CL_FALSE, CL_ADDRESS_CLAMP, CL_FILTER_NEAREST);
 	    setKernelArg(
             kernel, 
-            _programs[_current_program].active_uniforms+1,
+            _programs[_current_program].active_uniforms,
             sizeof(sampler), 
             &sampler
+        );
+        #endif
+        setKernelArg(
+            kernel, 
+            _programs[_current_program].active_uniforms + 1,
+            sizeof(_textures[_texture_binding].mem), 
+            &_textures[_texture_binding].mem
         );
         ++texture;
     }

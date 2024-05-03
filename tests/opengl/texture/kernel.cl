@@ -19,18 +19,23 @@ __kernel void gl_main_vs (
 }
 
 
-float4 texture2d(int width, int height, __global const unsigned char* texture, float4 texCoord) {
-  int w = (int) (width * texCoord.x) % width;
-  int h = height - ((int) (height * texCoord.y) % height) - 1;
-  __global const unsigned char* color = texture + (h*width + w)*4;
+float4 texture2d(int2 size, __global const unsigned char* texture, float2 texCoord) {
+  int w = (int) (size.x * texCoord.x) % size.x;
+  int h = size.y - ((int) (size.y * texCoord.y) % size.y) - 1;
+  __global const unsigned char* color = texture + (h*size.x + w)*4;
   
   return (float4) ((float)*color / 255, (float)*(color+1) / 255, (float)*(color+2) / 255, (float)*(color+3) / 255);
 }
 
 __kernel void gl_main_fs (
   // user values
-  read_only image2d_t image,
+  #ifndef IMAGE_SUPPORT
+  const int2 size,
+  __global const unsigned char *image,
+  #else
   sampler_t sampler,
+  read_only image2d_t image,
+  #endif
   // implementation values 
   __global float4 *gl_FragCoord, // position of the fragment in the window space, z is depth value
   __global const float4 *gl_Rasterization,
@@ -42,5 +47,9 @@ __kernel void gl_main_fs (
   // in out vars
   float4 texCoord = gl_Rasterization[gid*2];
   // fragment operations
-  gl_FragColor[gid] = read_imagef(image, sampler, (int2) texCoord.x);
+  #ifndef IMAGE_SUPPORT
+  gl_FragColor[gid] = texture2d(size, image, (float2) (texCoord.x, texCoord.y));
+  #else
+  gl_FragColor[gid] = read_imagef(image, sampler, (float2) (texCoord.x, texCoord.y));
+  #endif
 }

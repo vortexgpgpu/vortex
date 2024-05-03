@@ -16,6 +16,7 @@
 
 void perspectiveMatrix(float* mat, float angle, float ratio, float near, float far);
 void rotateMatrix(float* mat, float angle, float x, float y, float z);
+void lookAtRH(float *matrix, const float eye[3], const float center[3], const float up[3]);
 
 GLuint createProgram(const char* filename) {
   GLuint program;
