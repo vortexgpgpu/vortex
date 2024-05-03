@@ -62,6 +62,7 @@ jobs:
             cp -r $HOME/third_party $TRAVIS_BUILD_DIR;
           fi
       script:
+        - source $HOME/build32/ci/toolchain_env.sh
         - make -C $HOME/build32 build -s > /dev/null
         - make -C $HOME/build64 build -s > /dev/null
     - stage: test
