@@ -15,7 +15,7 @@
 
 module VX_sfu_unit import VX_gpu_pkg::*; #(
     parameter CORE_ID = 0
-) (    
+) (
     input wire              clk,
     input wire              reset,
 
@@ -28,7 +28,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 
     // Inputs
     VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
-    
 `ifdef EXT_F_ENABLE
     VX_fpu_to_csr_if.slave  fpu_to_csr_if [`NUM_FPU_BLOCKS],
 `endif
@@ -37,7 +36,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
     VX_commit_csr_if.slave  commit_csr_if,
     VX_sched_csr_if.slave   sched_csr_if,
-    VX_warp_ctl_if.master   warp_ctl_if    
+    VX_warp_ctl_if.master   warp_ctl_if
 );
     `UNUSED_PARAM (CORE_ID)
     localparam BLOCK_SIZE   = 1;
@@ -45,7 +44,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
 
-    localparam RSP_ARB_DATAW = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + (NUM_LANES * `XLEN) + `NR_BITS + 1 + `XLEN + PID_WIDTH + 1 + 1;
+    localparam RSP_ARB_DATAW = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + (NUM_LANES * `XLEN) + `NR_BITS + 1 + `XLEN + PID_WIDTH + 1 + 1 + `NT_BITS + 1 + 1;
     localparam RSP_ARB_SIZE = 1 + 1;
     localparam RSP_ARB_IDX_WCTL = 0;
     localparam RSP_ARB_IDX_CSRS = 1;
@@ -155,7 +154,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     assign execute_if[0].ready = sfu_req_ready;
 
     // response arbitration
-    
     `RESET_RELAY (commit_reset, reset);
 
     VX_commit_if #(
@@ -178,6 +176,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .ready_out (arb_commit_if[0].ready),
         `UNUSED_PIN (sel_out)
     );
+
 
     VX_gather_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),

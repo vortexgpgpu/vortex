@@ -18,8 +18,8 @@ module VX_execute import VX_gpu_pkg::*; #(
 ) (
     `SCOPE_IO_DECL
 
-    input wire              clk, 
-    input wire              reset,    
+    input wire              clk,
+    input wire              reset,
 
     input base_dcrs_t       base_dcrs,
 
@@ -41,15 +41,14 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_dispatch_if.slave    fpu_dispatch_if [`ISSUE_WIDTH],
     VX_commit_if.master     fpu_commit_if [`ISSUE_WIDTH],
 `endif
-  
     VX_dispatch_if.slave    alu_dispatch_if [`ISSUE_WIDTH],
     VX_commit_if.master     alu_commit_if [`ISSUE_WIDTH],
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
-    
-    VX_dispatch_if.slave    lsu_dispatch_if [`ISSUE_WIDTH],  
+
+    VX_dispatch_if.slave    lsu_dispatch_if [`ISSUE_WIDTH],
     VX_commit_if.master     lsu_commit_if [`ISSUE_WIDTH],
-    
-    VX_dispatch_if.slave    sfu_dispatch_if [`ISSUE_WIDTH], 
+
+    VX_dispatch_if.slave    sfu_dispatch_if [`ISSUE_WIDTH],
     VX_commit_if.master     sfu_commit_if [`ISSUE_WIDTH],
     VX_warp_ctl_if.master   warp_ctl_if,
 
@@ -64,7 +63,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     `RESET_RELAY (alu_reset, reset);
     `RESET_RELAY (lsu_reset, reset);
     `RESET_RELAY (sfu_reset, reset);
-    
+
     VX_alu_unit #(
         .CORE_ID (CORE_ID)
     ) alu_unit (
@@ -95,8 +94,8 @@ module VX_execute import VX_gpu_pkg::*; #(
         .CORE_ID (CORE_ID)
     ) fpu_unit (
         .clk            (clk),
-        .reset          (fpu_reset),    
-        .dispatch_if    (fpu_dispatch_if), 
+        .reset          (fpu_reset),
+        .dispatch_if    (fpu_dispatch_if),
         .fpu_to_csr_if  (fpu_to_csr_if),
         .commit_if      (fpu_commit_if)
     );
@@ -113,22 +112,33 @@ module VX_execute import VX_gpu_pkg::*; #(
         .pipeline_perf_if (pipeline_perf_if),
     `endif
 
-        .base_dcrs      (base_dcrs),            
+        .base_dcrs      (base_dcrs),
 
         .dispatch_if    (sfu_dispatch_if),
-    
     `ifdef EXT_F_ENABLE
         .fpu_to_csr_if  (fpu_to_csr_if),
     `endif
-    
         .commit_csr_if  (commit_csr_if),
         .sched_csr_if   (sched_csr_if),
         .warp_ctl_if    (warp_ctl_if),
         .commit_if      (sfu_commit_if)
     );
 
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
+        assign alu_commit_if[i].data.microop_id = '0;
+        assign alu_commit_if[i].data.is_microop = '0;
+
+        `ifdef EXT_F_ENABLE
+        assign fpu_commit_if[i].data.microop_id = '0;
+        assign fpu_commit_if[i].data.is_microop = '0;
+        `endif
+
+        assign sfu_commit_if[i].data.microop_id = '0;
+        assign sfu_commit_if[i].data.is_microop = '0;
+    end
+
     // simulation helper signal to get RISC-V tests Pass/Fail status
-    assign sim_ebreak = alu_dispatch_if[0].valid && alu_dispatch_if[0].ready 
+    assign sim_ebreak = alu_dispatch_if[0].valid && alu_dispatch_if[0].ready
                      && alu_dispatch_if[0].data.wis == 0
                      && `INST_ALU_IS_BR(alu_dispatch_if[0].data.op_mod)
                      && (`INST_BR_BITS'(alu_dispatch_if[0].data.op_type) == `INST_BR_EBREAK

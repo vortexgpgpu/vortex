@@ -154,10 +154,10 @@ inline void vx_barrier(unsigned barried_id, unsigned num_warps) {
 }
 
 // Mod 0 
-inline void vx_mload(int32_t* input, int32_t* weights) {
+inline void vx_mload(int* input, int* weights) {
     // Load input and weights matrices
     //             .insn r opcode6, func3, func7, rd, rs1, rs2
-    asm volatile (".insn r %0, 0, 0, 1, %1, %2" :: "i"(RISCV_CUSTOM2), "r"(input), "r"(weights));
+    asm volatile (".insn r %0, 0, 0, x1, %1, %2" :: "i"(RISCV_CUSTOM2), "r"(input), "r"(weights));
 }
 
 // Return current thread identifier

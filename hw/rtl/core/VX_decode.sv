@@ -42,7 +42,7 @@ module VX_decode  #(
     VX_decode_sched_if.master decode_sched_if
 );
 
-    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + (`NR_BITS * 4) + `XLEN + 1 + 1;
+    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + (`NR_BITS * 4) + `XLEN + 1 + 1 + 1;
 
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (clk)
@@ -146,7 +146,6 @@ module VX_decode  #(
 `endif
 
     always @(*) begin
-
         ex_type   = '0;
         op_type   = 'x;
         op_mod    = '0;
@@ -505,16 +504,13 @@ module VX_decode  #(
                     default:;
                 endcase
             end
-            `INST_EXT3: begin // Mod3
+            `INST_EXT3: begin
                 case (func3)
                     3'h0: begin
-                        op_type = `INST_OP_BITS'(`INST_MLOAD);
+                        op_type = `INST_OP_BITS'(`INST_LSU_MLOAD);
                         ex_type = `EX_LSU;
-                        // Input addresses
                         `USED_IREG (rs1);
                         `USED_IREG (rs2);
-                        // Output register
-                        use_rd  = 1;
                         `USED_IREG (rd);
                     end
                     default:;

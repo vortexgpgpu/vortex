@@ -25,14 +25,14 @@ module VX_alu_unit #(
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS]
-);   
+);
 
     `UNUSED_PARAM (CORE_ID)
     localparam BLOCK_SIZE   = `NUM_ALU_BLOCKS;
     localparam NUM_LANES    = `NUM_ALU_LANES;
     localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
-    localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
+    localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1 + `NT_BITS + 1 + 1;
     localparam RSP_ARB_SIZE = 1 + `EXT_M_ENABLED;
     localparam PARTIAL_BW   = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `NUM_THREADS);
 
@@ -114,13 +114,12 @@ module VX_alu_unit #(
         );       
        
         assign execute_if[block_idx].ready = is_muldiv_op ? mdv_execute_if.ready : int_execute_if.ready;
-
     `else
 
         assign is_muldiv_op = 0;
         assign execute_if[block_idx].ready = int_execute_if.ready;
-
     `endif
+
 
         // send response
 
@@ -150,8 +149,8 @@ module VX_alu_unit #(
                 int_commit_if.data
             }),
             .data_out  (commit_block_if[block_idx].data),
-            .valid_out (commit_block_if[block_idx].valid), 
-            .ready_out (commit_block_if[block_idx].ready),            
+            .valid_out (commit_block_if[block_idx].valid),
+            .ready_out (commit_block_if[block_idx].ready),
             `UNUSED_PIN (sel_out)
         );
     end
@@ -168,5 +167,4 @@ module VX_alu_unit #(
         .commit_in_if  (commit_block_if),
         .commit_out_if (commit_if)
     );
-
 endmodule

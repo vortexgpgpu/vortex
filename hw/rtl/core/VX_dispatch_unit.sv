@@ -227,14 +227,14 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
             .reset     (buf_out_reset),
             .valid_in  (valid_p),
             .ready_in  (ready_p),
-            .data_in   ({                
+            .data_in   ({
                 dispatch_data[issue_idx][IN_DATAW-1 : DATA_TMASK_OFF+`NUM_THREADS+ISSUE_WIS_W],
                 block_wid,
                 block_tmask[block_idx],
                 dispatch_data[issue_idx][DATA_TMASK_OFF-1 : DATA_REGS_OFF + 3 * `NUM_THREADS * `XLEN],
                 block_regs[block_idx][0],
                 block_regs[block_idx][1],
-                block_regs[block_idx][2],     
+                block_regs[block_idx][2],
                 block_pid[block_idx],
                 block_sop[block_idx],
                 block_eop[block_idx]}),

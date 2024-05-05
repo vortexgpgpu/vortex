@@ -68,6 +68,7 @@ public:
   }
 };
 
+/*
 static void matmul_cpu(TYPE* out, const TYPE* A, const TYPE* B, uint32_t width, uint32_t height) {
   for (uint32_t row = 0; row < height; ++row) {
     for (uint32_t col = 0; col < width; ++col) {
@@ -79,6 +80,7 @@ static void matmul_cpu(TYPE* out, const TYPE* A, const TYPE* B, uint32_t width, 
     }
   }
 }
+*/
 
 const char* kernel_file = "kernel.bin";
 uint32_t size = 32;

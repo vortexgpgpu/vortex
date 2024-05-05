@@ -28,12 +28,10 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (CORE_ID)
     localparam ISW_WIDTH  = `LOG2UP(`ISSUE_WIDTH);
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + (`NR_BITS * 4);
-    
     wire [`ISSUE_WIDTH-1:0] ibuf_ready_in;
 
     wire [ISW_WIDTH-1:0] decode_isw = wid_to_isw(decode_if.data.wid);
     wire [ISSUE_WIS_W-1:0] decode_wis = wid_to_wis(decode_if.data.wid);
-    
     assign decode_if.ready = ibuf_ready_in[decode_isw];
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin

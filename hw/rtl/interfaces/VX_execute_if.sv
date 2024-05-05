@@ -18,9 +18,9 @@ interface VX_execute_if #(
     parameter PID_WIDTH = `LOG2UP(`NUM_THREADS / NUM_LANES)
 ) ();
     typedef struct packed {
-        logic [`UUID_WIDTH-1:0]         uuid;                
+        logic [`UUID_WIDTH-1:0]         uuid;
         logic [`NW_WIDTH-1:0]           wid;
-        logic [NUM_LANES-1:0]           tmask;       
+        logic [NUM_LANES-1:0]           tmask;
         logic [`INST_ALU_BITS-1:0]      op_type;
         logic [`INST_MOD_BITS-1:0]      op_mod;
         logic                           wb;

@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -49,7 +49,7 @@ module VX_issue #(
         .CORE_ID (CORE_ID)
     ) ibuffer (
         .clk            (clk),
-        .reset          (ibuf_reset), 
+        .reset          (ibuf_reset),
         .decode_if      (decode_if),
         .ibuffer_if     (ibuffer_if)
     );
@@ -72,8 +72,8 @@ module VX_issue #(
     VX_operands #(
         .CORE_ID (CORE_ID)
     ) operands (
-        .clk            (clk), 
-        .reset          (operands_reset), 
+        .clk            (clk),
+        .reset          (operands_reset),
         .writeback_if   (writeback_if),
         .scoreboard_if  (scoreboard_if),
         .operands_if    (operands_if)
@@ -82,7 +82,7 @@ module VX_issue #(
     VX_dispatch #(
         .CORE_ID (CORE_ID)
     ) dispatch (
-        .clk            (clk), 
+        .clk            (clk),
         .reset          (dispatch_reset),
     `ifdef PERF_ENABLE
         `UNUSED_PIN     (perf_stalls),
@@ -94,7 +94,7 @@ module VX_issue #(
         .fpu_dispatch_if(fpu_dispatch_if),
     `endif
         .sfu_dispatch_if(sfu_dispatch_if)
-    ); 
+    );
 
 `ifdef DBG_SCOPE_ISSUE
     if (CORE_ID == 0) begin
@@ -114,9 +114,9 @@ module VX_issue #(
             .start(1'b0),
             .stop(1'b0),
             .triggers({
-                reset, 
+                reset,
                 operands_if_fire,
-                operands_if_not_ready, 
+                operands_if_not_ready,
                 writeback_if_valid
             }),
             .probes({
@@ -142,7 +142,7 @@ module VX_issue #(
             .bus_in(scope_bus_in),
             .bus_out(scope_bus_out)
         );
-    `endif        
+    `endif
     `ifdef CHIPSCOPE
         ila_issue ila_issue_inst (
             .clk    (clk),
@@ -157,7 +157,6 @@ module VX_issue #(
 
 `ifdef PERF_ENABLE
     reg [`PERF_CTR_BITS-1:0] perf_ibf_stalls;
-    
     wire decode_stall = decode_if.valid && ~decode_if.ready;
 
     always @(posedge clk) begin

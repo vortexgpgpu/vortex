@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,7 +14,7 @@
 `include "VX_platform.vh"
 
 `TRACING_OFF
-module VX_reduce #(    
+module VX_reduce #(
     parameter DATAW_IN   = 1,
     parameter DATAW_OUT  = DATAW_IN,
     parameter N          = 1,
@@ -42,22 +42,22 @@ module VX_reduce #(
         end
 
         VX_reduce #(
-            .DATAW_IN  (DATAW_IN), 
+            .DATAW_IN  (DATAW_IN),
             .DATAW_OUT (DATAW_OUT),
             .N  (N_A),
             .OP (OP)
         ) reduce_A (
-            .data_in  (in_A), 
+            .data_in  (in_A),
             .data_out (out_A)
         );
 
         VX_reduce #(
-            .DATAW_IN  (DATAW_IN), 
+            .DATAW_IN  (DATAW_IN),
             .DATAW_OUT (DATAW_OUT),
             .N  (N_B),
             .OP (OP)
         ) reduce_B (
-            .data_in  (in_B), 
+            .data_in  (in_B),
             .data_out (out_B)
         );
 
@@ -67,6 +67,5 @@ module VX_reduce #(
         else if (OP == "|") assign data_out = out_A | out_B;
         else `ERROR(("invalid parameter"));
     end
-  
 endmodule
 `TRACING_ON

@@ -173,6 +173,7 @@ task trace_ex_op(input int level,
                 `INST_LSU_SW: `TRACE(level, ("SW"));
                 `INST_LSU_SD: `TRACE(level, ("SD"));
                 `INST_LSU_FENCE:`TRACE(level,("FENCE"));
+                `INST_LSU_MLOAD:  `TRACE(level,("MLOAD"));
                 default:      `TRACE(level, ("?"));
             endcase
         end

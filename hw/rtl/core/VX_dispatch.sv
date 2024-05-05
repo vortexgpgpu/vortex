@@ -209,7 +209,6 @@ module VX_dispatch import VX_gpu_pkg::*; #(
             end
         end
     end
-    
     for (genvar i=0; i < `NUM_EX_UNITS; ++i) begin
         assign perf_stalls[i] = perf_stalls_r[i];
     end

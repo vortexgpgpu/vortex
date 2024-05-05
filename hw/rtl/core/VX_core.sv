@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,11 +17,10 @@
 `include "VX_fpu_define.vh"
 `endif
 
-module VX_core import VX_gpu_pkg::*; #( 
+module VX_core import VX_gpu_pkg::*; #(
     parameter CORE_ID = 0
-) (        
+) (
     `SCOPE_IO_DECL
-    
     // Clock
     input wire              clk,
     input wire              reset,
@@ -180,19 +179,17 @@ module VX_core import VX_gpu_pkg::*; #(
         .CORE_ID (CORE_ID)
     ) execute (
         `SCOPE_IO_BIND  (2)
-        
         .clk            (clk),
         .reset          (execute_reset),
 
         .base_dcrs      (base_dcrs),
 
     `ifdef PERF_ENABLE
-        .mem_perf_if    (mem_perf_tmp_if),        
+        .mem_perf_if    (mem_perf_tmp_if),
         .pipeline_perf_if(pipeline_perf_if),
-    `endif 
+    `endif
 
         .dcache_bus_if  (dcache_bus_tmp_if),
-    
     `ifdef EXT_F_ENABLE
         .fpu_dispatch_if(fpu_dispatch_if),
         .fpu_commit_if  (fpu_commit_if),
@@ -200,7 +197,6 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .commit_csr_if  (commit_csr_if),
         .sched_csr_if   (sched_csr_if),
-        
         .alu_dispatch_if(alu_dispatch_if),
         .lsu_dispatch_if(lsu_dispatch_if),
         .sfu_dispatch_if(sfu_dispatch_if),
@@ -213,7 +209,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .sfu_commit_if  (sfu_commit_if),
 
         .sim_ebreak     (sim_ebreak)
-    );    
+    );
 
     VX_commit #(
         .CORE_ID (CORE_ID)
@@ -227,9 +223,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .fpu_commit_if  (fpu_commit_if),
     `endif
         .sfu_commit_if  (sfu_commit_if),
-        
         .writeback_if   (writeback_if),
-        
         .commit_csr_if  (commit_csr_if),
         .commit_sched_if(commit_sched_if),
 
@@ -262,7 +256,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
     wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_rd_req_per_cycle;
     wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_wr_req_per_cycle;
-    wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_rsp_per_cycle;    
+    wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_rsp_per_cycle;
 
     wire [1:0] perf_icache_pending_read_cycle;
     wire [`CLOG2(DCACHE_NUM_REQS+1)+1-1:0] perf_dcache_pending_read_cycle;
@@ -293,7 +287,6 @@ module VX_core import VX_gpu_pkg::*; #(
     `POP_COUNT(perf_dcache_rd_req_per_cycle, perf_dcache_rd_req_fire_r);
     `POP_COUNT(perf_dcache_wr_req_per_cycle, perf_dcache_wr_req_fire_r);
     `POP_COUNT(perf_dcache_rsp_per_cycle, perf_dcache_rsp_fire);
-      
     assign perf_icache_pending_read_cycle = perf_icache_req_fire - perf_icache_rsp_fire;
     assign perf_dcache_pending_read_cycle = perf_dcache_rd_req_per_cycle - perf_dcache_rsp_per_cycle;
 
@@ -306,7 +299,6 @@ module VX_core import VX_gpu_pkg::*; #(
             perf_dcache_pending_reads <= $signed(perf_dcache_pending_reads) + `PERF_CTR_BITS'($signed(perf_dcache_pending_read_cycle));
         end
     end
-    
     reg [`PERF_CTR_BITS-1:0] perf_icache_lat;
     reg [`PERF_CTR_BITS-1:0] perf_dcache_lat;
 

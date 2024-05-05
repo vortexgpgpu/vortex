@@ -34,7 +34,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     localparam NUM_LANES    = `NUM_LSU_LANES;
     localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
-    localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
+    localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1 + 1 +  `NT_BITS+1 + 1;
     localparam LSUQ_SIZEW   = `LOG2UP(`LSUQ_SIZE);
     localparam MEM_ASHIFT   = `CLOG2(`MEM_BLOCK_SIZE);
     localparam MEM_ADDRW    = `XLEN - MEM_ASHIFT;
@@ -86,41 +86,39 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     wire [NUM_LANES-1:0][`CACHE_ADDR_TYPE_BITS-1:0] lsu_addr_type;
 
-
-    reg [2:0] mload_finished;
-    wire [1:0] addr_offset_1;
-    wire [1:0] addr_offset_2;
+    reg [`NT_BITS:0] mload_count;
+    wire [`XLEN-1:0] addr_offset_1;
+    wire [`XLEN-1:0] addr_offset_2;
 
     // First matrix accesses have offset (tid / 2) * 2
-    assign addr_offset_1 = (execute_if[0].data.tid >> 1) << 1;
+    assign addr_offset_1 = (`XLEN)'(execute_if[0].data.tid) >> 1 << 1;
     // Second matrix accesses have offset (tid % 2)
-    assign addr_offset_2 = 2'(execute_if[0].data.tid[0]);
+    assign addr_offset_2 = (`XLEN)'(execute_if[0].data.tid[0]);
 
     // For mload, destination registers are 4 and are contiguous in the register file.
     wire [`NR_BITS-1:0] mem_req_rd;
 
+    wire is_microop;
+    assign is_microop = execute_if[0].data.op_type == `INST_LSU_MLOAD;
+
     // Full address calculation
-    // TODO set different address calculation for different op_type (for load)
     wire [NUM_LANES-1:0][`XLEN-1:0] full_addr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin
+        // TODO: CHECK ADDRESS OFFSET
         always @(*) begin
-            if (execute_if[0].data.op_type == `INST_MLOAD) begin
-                if (mload_finished < 2) begin
-                    // First two loads
-                    assign full_addr[i] = execute_if[0].data.rs1_data[i][`XLEN-1:0] + 32'(addr_offset_1)
-                                        + 32'(mload_finished == 3'h1); // Stride is 1 for the second element accessed
+            if (is_microop) begin
+                if (mload_count < 2) begin
+                    full_addr[i] = execute_if[0].data.rs1_data[i][`XLEN-1:0] + addr_offset_1 + (`XLEN)'(mload_count == 'h1);
                 end else begin
-                    // Second two loads
-                    assign full_addr[i] = execute_if[0].data.rs2_data[i][`XLEN-1:0] + 32'(addr_offset_2)
-                                        + 32'(mload_finished == 3'h3) << 1; // Stride is 2 for the second element accessed
+                    full_addr[i] = execute_if[0].data.rs2_data[i][`XLEN-1:0] + addr_offset_2 + (`XLEN)'(mload_count == 'h3) << 1;
                 end
             end else begin
-                assign full_addr[i] = execute_if[0].data.rs1_data[i][`XLEN-1:0] + execute_if[0].data.imm;
+                full_addr[i] =  execute_if[0].data.rs1_data[i][`XLEN-1:0] + execute_if[0].data.imm;
             end
         end
     end
 
-    assign mem_req_rd = execute_if[0].data.rd + ((`NR_BITS)'(mload_finished) & {(`NR_BITS){(execute_if[0].data.op_type == `INST_MLOAD)}});
+    assign mem_req_rd = execute_if[0].data.rd + ((`NR_BITS)'(mload_count) & {(`NR_BITS){is_microop}});
 
     // detect duplicate addresses
 
@@ -162,8 +160,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     wire is_fence = `INST_LSU_IS_FENCE(execute_if[0].data.op_type);
     wire fence_wait = is_fence && ~mem_req_empty;
 
-    // TODO 1 stall when
-    assign lsu_valid = execute_if[0].valid && ~fence_wait;
+    assign lsu_valid = execute_if[0].valid;
     assign execute_if[0].ready = lsu_ready && ~fence_wait;
 
     // schedule memory request
@@ -186,8 +183,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     wire                            mem_rsp_ready;
 
     assign mem_req_valid = lsu_valid;
-    assign lsu_ready = mem_req_ready
-                   && (~mem_req_rw || st_rsp_ready); // writes commit directly
+    assign lsu_ready = mem_req_ready && (~mem_req_rw || st_rsp_ready); // writes commit directly
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign mem_req_mask[i] = execute_if[0].data.tmask[i] && (~lsu_is_dup || (i == 0));
@@ -532,19 +528,18 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     assign rsp_tmask = rsp_is_dup ? rsp_tmask_uq : mem_rsp_mask;
 
-
     // load commit
 
     VX_elastic_buffer #(
-        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1),
+        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1 + `NT_BITS + 1 + 1),
         .SIZE  (2)
     ) ld_rsp_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (mem_rsp_valid),
         .ready_in  (mem_rsp_ready),
-        .data_in   ({rsp_uuid, rsp_wid, rsp_tmask, rsp_pc, rsp_rd, rsp_data, rsp_pid, mem_rsp_sop_pkt, mem_rsp_eop_pkt}),
-        .data_out  ({commit_ld_if.data.uuid, commit_ld_if.data.wid, commit_ld_if.data.tmask, commit_ld_if.data.PC, commit_ld_if.data.rd, commit_ld_if.data.data, commit_ld_if.data.pid, commit_ld_if.data.sop, commit_ld_if.data.eop}),
+        .data_in   ({rsp_uuid, rsp_wid, rsp_tmask, rsp_pc, rsp_rd, rsp_data, rsp_pid, mem_rsp_sop_pkt, mem_rsp_eop_pkt, mload_count, is_microop}),
+        .data_out  ({commit_ld_if.data.uuid, commit_ld_if.data.wid, commit_ld_if.data.tmask, commit_ld_if.data.PC, commit_ld_if.data.rd, commit_ld_if.data.data, commit_ld_if.data.pid, commit_ld_if.data.sop, commit_ld_if.data.eop, commit_ld_if.data.microop_id, commit_ld_if.data.is_microop}),
         .valid_out (commit_ld_if.valid),
         .ready_out (commit_ld_if.ready)
     );
@@ -552,17 +547,19 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     assign commit_ld_if.data.wb = 1'b1;
 
     // store commit
+    wire [`NT_BITS:0] store_microop_id;
+    assign store_microop_id = '0;
 
     VX_elastic_buffer #(
-        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + PID_WIDTH + 1 + 1),
+        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + PID_WIDTH + 1 + 1 + `NT_BITS+1 + 1),
         .SIZE  (2)
     ) st_rsp_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (mem_req_fire && mem_req_rw),
         .ready_in  (st_rsp_ready),
-        .data_in   ({execute_if[0].data.uuid, execute_if[0].data.wid, execute_if[0].data.tmask, execute_if[0].data.PC, execute_if[0].data.pid, execute_if[0].data.sop, execute_if[0].data.eop}),
-        .data_out  ({commit_st_if.data.uuid, commit_st_if.data.wid, commit_st_if.data.tmask, commit_st_if.data.PC, commit_st_if.data.pid, commit_st_if.data.sop, commit_st_if.data.eop}),
+        .data_in   ({execute_if[0].data.uuid, execute_if[0].data.wid, execute_if[0].data.tmask, execute_if[0].data.PC, execute_if[0].data.pid, execute_if[0].data.sop, execute_if[0].data.eop, store_microop_id, 1'b0 }),
+        .data_out  ({commit_st_if.data.uuid, commit_st_if.data.wid, commit_st_if.data.tmask, commit_st_if.data.PC, commit_st_if.data.pid, commit_st_if.data.sop, commit_st_if.data.eop, commit_st_if.data.microop_id, commit_st_if.data.is_microop }),
         .valid_out (commit_st_if.valid),
         .ready_out (commit_st_if.ready)
     );
@@ -603,18 +600,15 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .commit_in_if  (commit_arb_if),
         .commit_out_if (commit_if)
     );
-    // Mod4 set control for mload partial operations
+
     always @(posedge clk) begin
         if (reset) begin
-            mload_finished <= 3'b0;
+            mload_count <= '0;
         end else begin
-            // Add 1 for the first partial load
-            mload_finished <= mload_finished + 3'((execute_if[0].data.op_type == `INST_MLOAD) && mem_rsp_fire);
-
-            // TODO be sure of this
-            // Reset the counter after the last partial load
-            if (mload_finished == 3'h4) begin
-                mload_finished <= 3'b0;
+            if (mload_count == 'h4) begin
+                mload_count <='0;
+            end else if (commit_ld_if.data.is_microop) begin
+                mload_count <= mload_count + '1;
             end
         end
     end
@@ -674,7 +668,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
                 `TRACE_ARRAY1D(1, full_addr, NUM_LANES);
                 `TRACE(1, (", tag=0x%0h, byteen=0x%0h, type=", mem_req_tag, mem_req_byteen));
                 `TRACE_ARRAY1D(1, lsu_addr_type, NUM_LANES);
-                `TRACE(1, (", rd=%0d, is_dup=%b (#%0d)\n", execute_if[0].data.rd, lsu_is_dup, execute_if[0].data.uuid));
+                `TRACE(1, (", rd=%0d, is_dup=%b, is_microop=%b (#%0d)\n", execute_if[0].data.rd, lsu_is_dup, is_microop, execute_if[0].data.uuid));
             end
         end
         if (mem_rsp_fire) begin

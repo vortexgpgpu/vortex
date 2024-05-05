@@ -25,7 +25,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     VX_operands_if.master   operands_if [`ISSUE_WIDTH]
 );
     `UNUSED_PARAM (CORE_ID)
-    localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + `NR_BITS;
+    localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + 1 + `XLEN + `NR_BITS;
     localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * ISSUE_RATIO);
 
     localparam STATE_IDLE   = 2'd0;
@@ -207,7 +207,7 @@ module VX_operands import VX_gpu_pkg::*; #(
                 scoreboard_if[i].data.uuid,
                 scoreboard_if[i].data.wis,
                 scoreboard_if[i].data.tmask,
-                scoreboard_if[i].data.PC, 
+                scoreboard_if[i].data.PC,
                 scoreboard_if[i].data.wb,
                 scoreboard_if[i].data.ex_type,
                 scoreboard_if[i].data.op_type,
@@ -223,7 +223,7 @@ module VX_operands import VX_gpu_pkg::*; #(
                 operands_if[i].data.uuid,
                 operands_if[i].data.wis,
                 operands_if[i].data.tmask,
-                operands_if[i].data.PC, 
+                operands_if[i].data.PC,
                 operands_if[i].data.wb,
                 operands_if[i].data.ex_type,
                 operands_if[i].data.op_type,
@@ -242,7 +242,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 
         // GPR banks
 
-        reg [RAM_ADDRW-1:0] gpr_rd_addr;       
+        reg [RAM_ADDRW-1:0] gpr_rd_addr;
         wire [RAM_ADDRW-1:0] gpr_wr_addr;
         if (ISSUE_WIS != 0) begin
             assign gpr_wr_addr = {writeback_if[i].data.wis, writeback_if[i].data.rd};
