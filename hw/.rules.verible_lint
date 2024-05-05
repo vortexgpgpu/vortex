@@ -1,0 +1,5 @@
+parameter-name-style=localparam_style:ALL_CAPS
+-always-comb
+-explicit-parameter-storage-type
+-no-trailing-spaces
+-generate-label

@@ -28,8 +28,6 @@ interface VX_commit_if #(
         logic [PID_WIDTH-1:0]       pid;
         logic                       sop;
         logic                       eop;
-        logic [`NT_BITS:0]          microop_id;
-        logic                       is_microop;
     } data_t;
 
     logic  valid;

@@ -219,8 +219,19 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 end else if (ibuffer_if[i].valid && ibuffer_if[i].ready) begin
                     timeout_ctr <= '0;
                 end
+
+                `ifdef DBG_TRACE_CORE_PIPELINE
+                    if (writeback_if[i].valid) begin
+                        `TRACE(1, ("%d: *** core%0d-scoreboard-writeback: wid=%0d, PC=0x%0h, tmask=%b, rd=%d, sop=%b, eop=%b, data=",
+                            $time, CORE_ID, wis_to_wid(writeback_if[i].data.wis, i), writeback_if[i].data.PC, writeback_if[i].data.tmask, writeback_if[i].data.rd, writeback_if[i].data.sop, writeback_if[i].data.eop));
+                         
+                        `TRACE_ARRAY1D(1, writeback_if[i].data, `ISSUE_WIDTH);
+                        `TRACE(1,  ("(#%0d)\n", writeback_if[i].data.uuid));
+                    end
+                `endif
             end
         end
+
         `RUNTIME_ASSERT((timeout_ctr < `STALL_TIMEOUT),
                         ("%t: *** core%0d-scoreboard-timeout: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)",
                             $time, CORE_ID, wis_to_wid(ibuffer_if[i].data.wis, i), ibuffer_if[i].data.PC, ibuffer_if[i].data.tmask, timeout_ctr,

@@ -200,7 +200,6 @@
 `define INST_LSU_BITS        4
 `define INST_LSU_FMT(op)     op[2:0]
 `define INST_LSU_WSIZE(op)   op[1:0]
-`define INST_LSU_IS_FENCE(op) (op[3:2] == 3)
 
 `define INST_FENCE_BITS      1
 `define INST_FENCE_D         1'h0

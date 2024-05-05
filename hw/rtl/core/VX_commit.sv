@@ -36,7 +36,7 @@ module VX_commit import VX_gpu_pkg::*; #(
     output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value
 );
     `UNUSED_PARAM (CORE_ID)
-    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + `NUM_THREADS * `XLEN + 1 + 1 + 1 + `NT_BITS + 1 + 1;
+    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + `NUM_THREADS * `XLEN + 1 + 1 + 1;
     localparam COMMIT_SIZEW = `CLOG2(`NUM_THREADS + 1);
     localparam COMMIT_ALL_SIZEW = COMMIT_SIZEW + `ISSUE_WIDTH - 1;
 
@@ -181,8 +181,6 @@ module VX_commit import VX_gpu_pkg::*; #(
         assign writeback_if[i].data.data = commit_if[i].data.data;
         assign writeback_if[i].data.sop  = commit_if[i].data.sop;
         assign writeback_if[i].data.eop  = commit_if[i].data.eop;
-        assign writeback_if[i].data.microop_id  = commit_if[i].data.microop_id;
-        assign writeback_if[i].data.is_microop  = commit_if[i].data.is_microop;
         assign commit_if[i].ready = 1'b1; // writeback has no backpressure
     end
     // simulation helper signal to get RISC-V tests Pass/Fail status
@@ -205,7 +203,7 @@ module VX_commit import VX_gpu_pkg::*; #(
             if (lsu_commit_if[i].valid && lsu_commit_if[i].ready) begin
                 `TRACE(1, ("%d: core%0d-commit: wid=%0d, PC=0x%0h, ex=LSU, tmask=%b, wb=%0d, rd=%0d, sop=%b, eop=%b, data=", $time, CORE_ID, lsu_commit_if[i].data.wid, lsu_commit_if[i].data.PC, lsu_commit_if[i].data.tmask, lsu_commit_if[i].data.wb, lsu_commit_if[i].data.rd, lsu_commit_if[i].data.sop, lsu_commit_if[i].data.eop));
                 `TRACE_ARRAY1D(1, lsu_commit_if[i].data.data, `NUM_THREADS);
-                `TRACE(1, (" microop_id=%b is_microop=%b (#%0d)\n",  lsu_commit_if[i].data.microop_id, lsu_commit_if[i].data.is_microop, lsu_commit_if[i].data.uuid));
+                `TRACE(1, (" (#%0d)\n", lsu_commit_if[i].data.uuid));
             end
         `ifdef EXT_F_ENABLE
             if (fpu_commit_if[i].valid && fpu_commit_if[i].ready) begin

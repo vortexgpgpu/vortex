@@ -24,10 +24,6 @@ interface VX_writeback_if import VX_gpu_pkg::*; ();
         logic [`NUM_THREADS-1:0][`XLEN-1:0] data;
         logic                           sop;
         logic                           eop;
-       /* verilator lint_off UNUSED */
-        logic [`NT_BITS:0]              microop_id;
-       /* verilator lint_off UNUSED */
-        logic                           is_microop;
     } data_t;
 
     logic  valid;

@@ -74,6 +74,8 @@ VL_FLAGS += -j $(THREADS)
 ifdef DEBUG
 	VL_FLAGS += --trace --trace-structs $(DBG_FLAGS)
 	CXXFLAGS += -g -O0 $(DBG_FLAGS)
+    # Faster compilation times
+    VL_FLAGS += --hierarchical
 else    
 	VL_FLAGS += -DNDEBUG
 	CXXFLAGS += -O2 -DNDEBUG

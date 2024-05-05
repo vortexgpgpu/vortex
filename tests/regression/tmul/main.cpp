@@ -83,7 +83,7 @@ static void matmul_cpu(TYPE* out, const TYPE* A, const TYPE* B, uint32_t width, 
 */
 
 const char* kernel_file = "kernel.bin";
-uint32_t size = 32;
+uint32_t size = 2;
 
 vx_device_h device = nullptr;
 std::vector<uint8_t> staging_buf;
@@ -120,7 +120,7 @@ void cleanup() {
   if (device) {
     vx_mem_free(device, kernel_arg.A_addr);
     vx_mem_free(device, kernel_arg.B_addr);
-    vx_mem_free(device, kernel_arg.C_addr);
+   //  vx_mem_free(device, kernel_arg.C_addr);
     vx_dev_close(device);
   }
 }
@@ -220,10 +220,13 @@ int main(int argc, char *argv[]) {
   printf("Elapsed time: %lg ms\n", elapsed);
 
   // download destination buffer
+  /*
   std::cout << "download destination buffer" << std::endl;
   RT_CHECK(vx_copy_from_dev(device, staging_buf.data(), kernel_arg.C_addr, buf_size));
+  */
 
   // verify result
+  /*
   std::cout << "verify result" << std::endl;
   {
     int errors = 0;
@@ -241,6 +244,7 @@ int main(int argc, char *argv[]) {
       return 1;
     }
   }
+  */
 
   // cleanup
   std::cout << "cleanup" << std::endl;

@@ -124,19 +124,6 @@ module VX_execute import VX_gpu_pkg::*; #(
         .commit_if      (sfu_commit_if)
     );
 
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        assign alu_commit_if[i].data.microop_id = '0;
-        assign alu_commit_if[i].data.is_microop = '0;
-
-        `ifdef EXT_F_ENABLE
-        assign fpu_commit_if[i].data.microop_id = '0;
-        assign fpu_commit_if[i].data.is_microop = '0;
-        `endif
-
-        assign sfu_commit_if[i].data.microop_id = '0;
-        assign sfu_commit_if[i].data.is_microop = '0;
-    end
-
     // simulation helper signal to get RISC-V tests Pass/Fail status
     assign sim_ebreak = alu_dispatch_if[0].valid && alu_dispatch_if[0].ready
                      && alu_dispatch_if[0].data.wis == 0
