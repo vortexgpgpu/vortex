@@ -19,6 +19,9 @@ all:
 	$(MAKE) -C kmeans
 	$(MAKE) -C blackscholes
 	$(MAKE) -C bfs
+	$(MAKE) -C sgemm2
+	$(MAKE) -C sgemm3
+	$(MAKE) -C psum
 
 run-simx:
 	$(MAKE) -C vecadd run-simx
@@ -38,6 +41,9 @@ run-simx:
 	$(MAKE) -C kmeans run-simx
 	$(MAKE) -C blackscholes run-simx
 	$(MAKE) -C bfs run-simx
+	$(MAKE) -C sgemm2 run-simx
+	$(MAKE) -C sgemm3 run-simx
+	$(MAKE) -C psum run-simx
 
 run-rtlsim:
 	$(MAKE) -C vecadd run-rtlsim
@@ -57,6 +63,9 @@ run-rtlsim:
 	$(MAKE) -C kmeans run-rtlsim
 	$(MAKE) -C blackscholes run-rtlsim
 	$(MAKE) -C bfs run-rtlsim
+	$(MAKE) -C sgemm2 run-rtlsim
+	$(MAKE) -C sgemm3 run-rtlsim
+	$(MAKE) -C psum run-rtlsim
 
 run-opae:
 	$(MAKE) -C vecadd run-opae
@@ -76,6 +85,9 @@ run-opae:
 	$(MAKE) -C kmeans run-opae
 	$(MAKE) -C blackscholes run-opae
 	$(MAKE) -C bfs run-opae
+	$(MAKE) -C sgemm2 run-opae
+	$(MAKE) -C sgemm3 run-opae
+	$(MAKE) -C psum run-opae
 
 clean:
 	$(MAKE) -C vecadd clean
@@ -95,6 +107,9 @@ clean:
 	$(MAKE) -C kmeans clean
 	$(MAKE) -C blackscholes clean
 	$(MAKE) -C bfs clean
+	$(MAKE) -C sgemm2 clean
+	$(MAKE) -C sgemm3 clean
+	$(MAKE) -C psum clean
 
 clean-all:
 	$(MAKE) -C vecadd clean-all
@@ -114,3 +129,6 @@ clean-all:
 	$(MAKE) -C kmeans clean-all
 	$(MAKE) -C blackscholes clean-all
 	$(MAKE) -C bfs clean-all
+	$(MAKE) -C sgemm2 clean-all
+	$(MAKE) -C sgemm3 clean-all
+	$(MAKE) -C psum clean-all
