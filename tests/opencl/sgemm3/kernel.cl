@@ -1,24 +1,24 @@
-__kernel void sgemm3(__global float *A, 
-                     __global float *B, 
-                     __global float *C, 
-                     const unsigned int N, 
-                     __local float *localA, 
-                     __local float *localB)
+#include "common.h"
+
+__kernel void sgemm3(__global TYPE *A,
+                     __global TYPE *B,
+                     __global TYPE *C,
+                     const unsigned int N,
+                     __local TYPE *localA,
+                     __local TYPE *localB)
 {
     int globalRow = get_global_id(1);
     int globalCol = get_global_id(0);
     int localRow  = get_local_id(1);
     int localCol  = get_local_id(0);
-    int localSize = get_local_size(0);  // assuming square local size
+    int localSize = get_local_size(0);
 
-    float sum = 0.0f;
+    TYPE sum = 0;
 
-    // Loop over all blocks of both matrices
+    // Iterate over blocks
     for (int k = 0; k < N; k += localSize) {
-        // Load block of matrix A to local memory
-        localA[localRow * localSize + localCol] = A[globalRow * N + k + localCol];
-
-        // Load block of matrix B to local memory, adjusting for column-major access
+        // Load block of matrix A & B to local memory
+        localA[localRow * localSize + localCol] = A[globalRow * N + (k + localCol)];
         localB[localRow * localSize + localCol] = B[(k + localRow) * N + globalCol];
 
         // Synchronize to make sure the tiles are loaded
