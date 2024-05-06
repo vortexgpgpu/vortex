@@ -178,17 +178,17 @@ inline int vx_core_id() {
     return ret;
 }
 
-// Return current thread mask
-inline int vx_thread_mask() {
+// Return active threads mask
+inline int vx_active_threads() {
     int ret;
-    asm volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_THREAD_MASK));
+    asm volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_ACTIVE_THREADS));
     return ret;
 }
 
 // Return active warps mask
-inline int vx_warp_mask() {
+inline int vx_active_warps() {
     int ret;
-    asm volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_WARP_MASK));
+    asm volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_ACTIVE_WARPS));
     return ret;
 }
 
@@ -210,6 +210,13 @@ inline int vx_num_warps() {
 inline int vx_num_cores() {
     int ret;
     asm volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_CORES));
+    return ret;
+}
+
+// Return the number of barriers
+inline int vx_num_barriers() {
+    int ret;
+    asm volatile ("csrr %0, %1" : "=r"(ret) : "i"(VX_CSR_NUM_BARRIERS));
     return ret;
 }
 

@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -62,7 +62,7 @@ import VX_fpu_pkg::*;
     output wire [`XLEN-1:0]             read_data_ro,
     output wire [`XLEN-1:0]             read_data_rw,
 
-    input wire                          write_enable, 
+    input wire                          write_enable,
     input wire [`UUID_WIDTH-1:0]        write_uuid,
     input wire [`NW_WIDTH-1:0]          write_wid,
     input wire [`VX_CSR_ADDR_BITS-1:0]  write_addr,
@@ -77,7 +77,7 @@ import VX_fpu_pkg::*;
 
     reg [`XLEN-1:0] mscratch;
 
-`ifdef EXT_F_ENABLE    
+`ifdef EXT_F_ENABLE
     reg [`NUM_WARPS-1:0][`INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr, fcsr_n;
     wire [`NUM_FPU_BLOCKS-1:0]              fpu_write_enable;
     wire [`NUM_FPU_BLOCKS-1:0][`NW_WIDTH-1:0] fpu_write_wid;
@@ -88,7 +88,7 @@ import VX_fpu_pkg::*;
         assign fpu_write_wid[i]    = fpu_csr_if[i].write_wid;
         assign fpu_write_fflags[i] = fpu_csr_if[i].write_fflags;
     end
-    
+
     always @(*) begin
         fcsr_n = fcsr;
         for (integer i = 0; i < `NUM_FPU_BLOCKS; ++i) begin
@@ -96,7 +96,7 @@ import VX_fpu_pkg::*;
                 fcsr_n[fpu_write_wid[i]][`FP_FLAGS_BITS-1:0] = fcsr[fpu_write_wid[i]][`FP_FLAGS_BITS-1:0]
                                                              | fpu_write_fflags[i];
             end
-        end            
+        end
         if (write_enable) begin
             case (write_addr)
                 `VX_CSR_FFLAGS: fcsr_n[write_wid][`FP_FLAGS_BITS-1:0] = write_data[`FP_FLAGS_BITS-1:0];
@@ -106,7 +106,7 @@ import VX_fpu_pkg::*;
             endcase
         end
     end
-    
+
     for (genvar i = 0; i < `NUM_FPU_BLOCKS; ++i) begin
         assign fpu_csr_if[i].read_frm = fcsr[fpu_csr_if[i].read_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS];
     end
@@ -146,7 +146,7 @@ import VX_fpu_pkg::*;
                 `VX_CSR_MSCRATCH: begin
                     mscratch <= write_data;
                 end
-                default: begin  
+                default: begin
                     `ASSERT(0, ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
                 end
             endcase
@@ -163,7 +163,7 @@ import VX_fpu_pkg::*;
         read_data_ro_r    = '0;
         read_data_rw_r    = '0;
         read_addr_valid_r = 1;
-        case (read_addr)            
+        case (read_addr)
             `VX_CSR_MVENDORID  : read_data_ro_r = `XLEN'(`VENDOR_ID);
             `VX_CSR_MARCHID    : read_data_ro_r = `XLEN'(`ARCHITECTURE_ID);
             `VX_CSR_MIMPID     : read_data_ro_r = `XLEN'(`IMPLEMENTATION_ID);
@@ -171,25 +171,26 @@ import VX_fpu_pkg::*;
         `ifdef EXT_F_ENABLE
             `VX_CSR_FFLAGS     : read_data_rw_r = `XLEN'(fcsr[read_wid][`FP_FLAGS_BITS-1:0]);
             `VX_CSR_FRM        : read_data_rw_r = `XLEN'(fcsr[read_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS]);
-            `VX_CSR_FCSR       : read_data_rw_r = `XLEN'(fcsr[read_wid]);            
+            `VX_CSR_FCSR       : read_data_rw_r = `XLEN'(fcsr[read_wid]);
         `endif
             `VX_CSR_MSCRATCH   : read_data_rw_r = mscratch;
-            
+
             `VX_CSR_WARP_ID    : read_data_ro_r = `XLEN'(read_wid);
             `VX_CSR_CORE_ID    : read_data_ro_r = `XLEN'(CORE_ID);
-            `VX_CSR_THREAD_MASK: read_data_ro_r = `XLEN'(thread_masks[read_wid]);
-            `VX_CSR_WARP_MASK  : read_data_ro_r = `XLEN'(active_warps);
+            `VX_CSR_ACTIVE_THREADS: read_data_ro_r = `XLEN'(thread_masks[read_wid]);
+            `VX_CSR_ACTIVE_WARPS: read_data_ro_r = `XLEN'(active_warps);
             `VX_CSR_NUM_THREADS: read_data_ro_r = `XLEN'(`NUM_THREADS);
             `VX_CSR_NUM_WARPS  : read_data_ro_r = `XLEN'(`NUM_WARPS);
             `VX_CSR_NUM_CORES  : read_data_ro_r = `XLEN'(`NUM_CORES * `NUM_CLUSTERS);
-            
+            `VX_CSR_NUM_BARRIERS: read_data_ro_r = `XLEN'(`NUM_BARRIERS);
+
             `CSR_READ_64(`VX_CSR_MCYCLE, read_data_ro_r, cycles);
 
             `VX_CSR_MPM_RESERVED : read_data_ro_r = 'x;
-            `VX_CSR_MPM_RESERVED_H : read_data_ro_r = 'x;  
-            
-            `CSR_READ_64(`VX_CSR_MINSTRET, read_data_ro_r, commit_csr_if.instret);   
-            
+            `VX_CSR_MPM_RESERVED_H : read_data_ro_r = 'x;
+
+            `CSR_READ_64(`VX_CSR_MINSTRET, read_data_ro_r, commit_csr_if.instret);
+
             `VX_CSR_SATP,
             `VX_CSR_MSTATUS,
             `VX_CSR_MNSTATUS,
@@ -210,7 +211,7 @@ import VX_fpu_pkg::*;
                     case (base_dcrs.mpm_class)
                     `VX_DCR_MPM_CLASS_CORE: begin
                         case (read_addr)
-                        // PERF: pipeline                        
+                        // PERF: pipeline
                         `CSR_READ_64(`VX_CSR_MPM_SCHED_ID, read_data_ro_r, pipeline_perf_if.sched_idles);
                         `CSR_READ_64(`VX_CSR_MPM_SCHED_ST, read_data_ro_r, pipeline_perf_if.sched_stalls);
                         `CSR_READ_64(`VX_CSR_MPM_IBUF_ST, read_data_ro_r, pipeline_perf_if.ibf_stalls);
@@ -231,7 +232,7 @@ import VX_fpu_pkg::*;
                         `CSR_READ_64(`VX_CSR_MPM_LOADS, read_data_ro_r, pipeline_perf_if.loads);
                         `CSR_READ_64(`VX_CSR_MPM_STORES, read_data_ro_r, pipeline_perf_if.stores);
                         `CSR_READ_64(`VX_CSR_MPM_IFETCH_LT, read_data_ro_r, pipeline_perf_if.ifetch_latency);
-                        `CSR_READ_64(`VX_CSR_MPM_LOAD_LT, read_data_ro_r, pipeline_perf_if.load_latency);         
+                        `CSR_READ_64(`VX_CSR_MPM_LOAD_LT, read_data_ro_r, pipeline_perf_if.load_latency);
                         default:;
                         endcase
                     end
@@ -248,17 +249,17 @@ import VX_fpu_pkg::*;
                         `CSR_READ_64(`VX_CSR_MPM_DCACHE_MISS_W, read_data_ro_r, mem_perf_if.dcache.write_misses);
                         `CSR_READ_64(`VX_CSR_MPM_DCACHE_BANK_ST, read_data_ro_r, mem_perf_if.dcache.bank_stalls);
                         `CSR_READ_64(`VX_CSR_MPM_DCACHE_MSHR_ST, read_data_ro_r, mem_perf_if.dcache.mshr_stalls);
-                        // PERF: lmem          
+                        // PERF: lmem
                         `CSR_READ_64(`VX_CSR_MPM_LMEM_READS, read_data_ro_r, mem_perf_if.lmem.reads);
                         `CSR_READ_64(`VX_CSR_MPM_LMEM_WRITES, read_data_ro_r, mem_perf_if.lmem.writes);
                         `CSR_READ_64(`VX_CSR_MPM_LMEM_BANK_ST, read_data_ro_r, mem_perf_if.lmem.bank_stalls);
-                        // PERF: l2cache                        
+                        // PERF: l2cache
                         `CSR_READ_64(`VX_CSR_MPM_L2CACHE_READS, read_data_ro_r, mem_perf_if.l2cache.reads);
                         `CSR_READ_64(`VX_CSR_MPM_L2CACHE_WRITES, read_data_ro_r, mem_perf_if.l2cache.writes);
                         `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MISS_R, read_data_ro_r, mem_perf_if.l2cache.read_misses);
                         `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MISS_W, read_data_ro_r, mem_perf_if.l2cache.write_misses);
                         `CSR_READ_64(`VX_CSR_MPM_L2CACHE_BANK_ST, read_data_ro_r, mem_perf_if.l2cache.bank_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MSHR_ST, read_data_ro_r, mem_perf_if.l2cache.mshr_stalls); 
+                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MSHR_ST, read_data_ro_r, mem_perf_if.l2cache.mshr_stalls);
                         // PERF: l3cache
                         `CSR_READ_64(`VX_CSR_MPM_L3CACHE_READS, read_data_ro_r, mem_perf_if.l3cache.reads);
                         `CSR_READ_64(`VX_CSR_MPM_L3CACHE_WRITES, read_data_ro_r, mem_perf_if.l3cache.writes);

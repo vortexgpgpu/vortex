@@ -91,7 +91,7 @@
 `endif
 
 `ifndef NUM_BARRIERS
-`define NUM_BARRIERS 4
+`define NUM_BARRIERS (`NUM_WARPS/2)
 `endif
 
 `ifndef SOCKET_SIZE
