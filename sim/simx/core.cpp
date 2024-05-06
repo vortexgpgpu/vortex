@@ -133,10 +133,6 @@ void Core::reset() {
 
   emulator_.clear();
 
-  for (auto& exe_unit : func_units_) {
-    exe_unit->reset();
-  }
-
   for (auto& commit_arb : commit_arbs_) {
     commit_arb->reset();
   }
@@ -336,12 +332,12 @@ void Core::issue() {
 void Core::execute() {
   for (uint32_t i = 0; i < (uint32_t)FUType::Count; ++i) {
     auto& dispatch = dispatchers_.at(i);
-    auto& exe_unit = func_units_.at(i);
+    auto& func_unit = func_units_.at(i);
     for (uint32_t j = 0; j < ISSUE_WIDTH; ++j) {
       if (dispatch->Outputs.at(j).empty())
         continue;
       auto trace = dispatch->Outputs.at(j).front();
-      exe_unit->Inputs.at(j).push(trace, 1);
+      func_unit->Inputs.at(j).push(trace, 1);
       dispatch->Outputs.at(j).pop();
     }
   }

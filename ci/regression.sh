@@ -204,7 +204,7 @@ config()
     # disabling M & F extensions
     make -C sim/rtlsim clean && CONFIGS="-DEXT_M_DISABLE -DEXT_F_DISABLE" make -C sim/rtlsim > /dev/null
     make -C tests/riscv/isa run-rtlsim-32i
-    rm -f blackbox.*.cache
+    make -C sim/rtlsim clean && make -C sim/rtlsim > /dev/null
 
     # disable local memory
     CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo --perf=1
