@@ -45,11 +45,11 @@ jobs:
         - cd $HOME/build32 && TOOLDIR=$TOOLDIR XLEN=32 $TRAVIS_BUILD_DIR/configure
         - cd $HOME/build64 && TOOLDIR=$TOOLDIR XLEN=64 $TRAVIS_BUILD_DIR/configure
       install:
-        - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0.2" ]; then
+        - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0.1" ]; then
             rm -rf $TOOLDIR;
             mkdir -p $TOOLDIR;
             $HOME/build32/ci/toolchain_install.sh --all;
-            echo "v0.2" > "$TOOLDIR/version.txt";
+            echo "v0.1" > "$TOOLDIR/version.txt";
           fi
         - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v0.1" ]; then
             rm -rf $HOME/third_party;
