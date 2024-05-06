@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -32,7 +32,7 @@
 
 // Machine Performance-monitoring counters classes ////////////////////////////
 
-`define VX_DCR_MPM_CLASS_NONE           0           
+`define VX_DCR_MPM_CLASS_NONE           0
 `define VX_DCR_MPM_CLASS_CORE           1
 `define VX_DCR_MPM_CLASS_MEM            2
 
@@ -41,7 +41,7 @@
 `define VX_CSR_FFLAGS                   12'h001
 `define VX_CSR_FRM                      12'h002
 `define VX_CSR_FCSR                     12'h003
- 
+
 `define VX_CSR_SATP                     12'h180
 
 `define VX_CSR_PMPCFG0                  12'h3A0
@@ -101,7 +101,7 @@
 `define VX_CSR_MPM_STORES_H             12'hB8D
 `define VX_CSR_MPM_IFETCH_LT            12'hB0E
 `define VX_CSR_MPM_IFETCH_LT_H          12'hB8E
-`define VX_CSR_MPM_LOAD_LT              12'hB0F 
+`define VX_CSR_MPM_LOAD_LT              12'hB0F
 `define VX_CSR_MPM_LOAD_LT_H            12'hB8F
 // SFU: scoreboard
 `define VX_CSR_MPM_SCRB_WCTL            12'hB10
@@ -187,11 +187,12 @@
 `define VX_CSR_THREAD_ID                12'hCC0
 `define VX_CSR_WARP_ID                  12'hCC1
 `define VX_CSR_CORE_ID                  12'hCC2
-`define VX_CSR_WARP_MASK                12'hCC3
-`define VX_CSR_THREAD_MASK              12'hCC4     // warning! this value is also used in LLVM
+`define VX_CSR_ACTIVE_WARPS             12'hCC3
+`define VX_CSR_ACTIVE_THREADS           12'hCC4     // warning! this value is also used in LLVM
 
 `define VX_CSR_NUM_THREADS              12'hFC0
 `define VX_CSR_NUM_WARPS                12'hFC1
 `define VX_CSR_NUM_CORES                12'hFC2
+`define VX_CSR_NUM_BARRIERS             12'hFC3
 
 `endif // VX_TYPES_VH

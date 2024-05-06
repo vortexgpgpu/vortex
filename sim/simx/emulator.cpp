@@ -358,11 +358,12 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   case VX_CSR_THREAD_ID:  return tid;
   case VX_CSR_WARP_ID:    return wid;
   case VX_CSR_CORE_ID:    return core_->id();
-  case VX_CSR_THREAD_MASK:return warps_.at(wid).tmask.to_ulong();
-  case VX_CSR_WARP_MASK:  return active_warps_.to_ulong();
+  case VX_CSR_ACTIVE_THREADS:return warps_.at(wid).tmask.to_ulong();
+  case VX_CSR_ACTIVE_WARPS:return active_warps_.to_ulong();
   case VX_CSR_NUM_THREADS:return arch_.num_threads();
   case VX_CSR_NUM_WARPS:  return arch_.num_warps();
   case VX_CSR_NUM_CORES:  return uint32_t(arch_.num_cores()) * arch_.num_clusters();
+  case VX_CSR_NUM_BARRIERS:return arch_.num_barriers();
   case VX_CSR_MSCRATCH:   return csr_mscratch_;
   CSR_READ_64(VX_CSR_MCYCLE, core_perf.cycles);
   CSR_READ_64(VX_CSR_MINSTRET, core_perf.instrs);
