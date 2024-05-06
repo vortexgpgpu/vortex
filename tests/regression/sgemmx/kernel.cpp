@@ -22,12 +22,12 @@ void kernel_body(uint32_t task_id, kernel_arg_t* __UNIFORM__ arg) {
         col = task_id % size;
     }
 
-    TYPE sum (0);
+    TYPE sum(0);
     for (int e = 0; e < size; ++e) {
         sum += A[row * size + e] * B[e * size + col];
     }
 
-    C[row * size + col] = sum;
+    C[task_id] = sum;
 }
 
 int main() {
