@@ -15,8 +15,8 @@ VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
 STARTUP_ADDR ?= 0x80000000
 endif
 
-POCL_CC_PATH ?= $(TOOLDIR)/pocl/compiler
-POCL_RT_PATH ?= $(TOOLDIR)/pocl/runtime
+POCL_CC_PATH ?= $(TOOLDIR)/compiler
+POCL_RT_PATH ?= $(TOOLDIR)/runtime
 
 LLVM_POCL ?= $(TOOLDIR)/llvm-vortex
 
