@@ -92,7 +92,8 @@ regression()
     CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
     CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -tgbar" --cores=2
 
-    # test FPU core
+    # clear blackbox cache
+    rm -f blackbox.*.cache
 
     echo "regression tests done!"
 }
@@ -125,6 +126,9 @@ cluster()
     ./ci/blackbox.sh --driver=simx --cores=4 --clusters=2 --l2cache --app=diverge --args="-n1"
     ./ci/blackbox.sh --driver=simx --cores=4 --clusters=4 --l2cache --l3cache --app=diverge --args="-n1"
 
+    # clear blackbox cache
+    rm -f blackbox.*.cache
+
     echo "clustering tests done!"
 }
 
@@ -149,6 +153,9 @@ debug()
     ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --debug=1 --app=demo --args="-n1"
     ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --debug=1 --app=demo --args="-n1"
     ./ci/blackbox.sh --driver=opae --cores=1 --scope --app=basic --args="-t0 -n1"
+
+    # clear blackbox cache
+    rm -f blackbox.*.cache
 
     echo "debugging tests done!"
 }
@@ -245,6 +252,9 @@ config()
     # test 27-bit DRAM address
     CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=opae --cores=1 --app=demo
 
+    # clear blackbox cache
+    rm -f blackbox.*.cache
+
     echo "configuration tests done!"
 }
 
@@ -257,6 +267,9 @@ stress()
     CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
     CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --app=printf
     ./ci/blackbox.sh --driver=rtlsim --app=sgemm --args="-n128" --l2cache
+
+    # clear blackbox cache
+    rm -f blackbox.*.cache
 
     echo "stress tests done!"
 }
