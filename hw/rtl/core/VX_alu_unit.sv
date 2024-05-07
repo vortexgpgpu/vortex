@@ -65,12 +65,12 @@ module VX_alu_unit #(
             .NUM_LANES (NUM_LANES)
         ) int_execute_if();
 
-        assign int_execute_if.valid = per_block_execute_if[block_idx].valid && ~is_muldiv_op;
-        assign int_execute_if.data = per_block_execute_if[block_idx].data;
-
         VX_commit_if #(
             .NUM_LANES (NUM_LANES)
         ) int_commit_if();
+
+        assign int_execute_if.valid = per_block_execute_if[block_idx].valid && ~is_muldiv_op;
+        assign int_execute_if.data = per_block_execute_if[block_idx].data;
 
         `RESET_RELAY (int_reset, block_reset);
 
@@ -88,18 +88,18 @@ module VX_alu_unit #(
 
     `ifdef EXT_M_ENABLE
 
-        `RESET_RELAY (mdv_reset, block_reset);
-
         VX_execute_if #(
             .NUM_LANES (NUM_LANES)
         ) mdv_execute_if();
 
-        assign mdv_execute_if.valid = per_block_execute_if[block_idx].valid && is_muldiv_op;
-        assign mdv_execute_if.data = per_block_execute_if[block_idx].data;
-
         VX_commit_if #(
             .NUM_LANES (NUM_LANES)
         ) mdv_commit_if();
+
+        assign mdv_execute_if.valid = per_block_execute_if[block_idx].valid && is_muldiv_op;
+        assign mdv_execute_if.data = per_block_execute_if[block_idx].data;
+
+        `RESET_RELAY (mdv_reset, block_reset);
 
         VX_alu_muldiv #(
             .CORE_ID   (CORE_ID),
