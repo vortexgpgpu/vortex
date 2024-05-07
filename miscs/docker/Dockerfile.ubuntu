@@ -1,0 +1,40 @@
+# Use Ubuntu 20.04 as the base image
+FROM ubuntu:20.04
+
+# Set non-interactive installation to avoid user input during build
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Update and install basic and necessary dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    binutils \
+    python \
+    uuid-dev \
+    git \
+    wget \
+    curl \
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Clone the Vortex repository
+RUN git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git /vortex
+
+# Set the initial working directory
+WORKDIR /vortex
+
+# Configure the build folder
+RUN mkdir build && cd build && \
+    TOOLDIR=$HOME/tools ../configure
+
+# Install prebuilt toolchain
+RUN cd build && ./ci/toolchain_install.sh --all
+
+# Source tools environment variables and add to bashrc
+RUN source source /vortex/build/ci/toolchain_env.sh
+RUN echo "source /vortex/build/ci/toolchain_env.sh" >> ~/.bashrc
+
+# Build Vortex
+RUN cd build && make -s
+
+# Set the working directory to /vortex/build
+WORKDIR /vortex/build

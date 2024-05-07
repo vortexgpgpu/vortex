@@ -64,8 +64,8 @@ jobs:
       before_script:
         - source $HOME/build32/ci/toolchain_env.sh
       script:
-        - make -C $HOME/build32 build -s > /dev/null
-        - make -C $HOME/build64 build -s > /dev/null
+        - cd $HOME/build32 && make build -s > /dev/null
+        - cd $HOME/build64 && make build -s > /dev/null
     - stage: test
       name: regression
       env: XLEN=32

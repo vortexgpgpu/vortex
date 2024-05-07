@@ -187,7 +187,6 @@ static void __attribute__ ((noinline)) process_all_tasks_ex() {
   void* arg = targs->arg;
 
   for (int group_id = start_group; group_id < end_group; group_id += groups_per_core) {
-    //vx_printf("*** warp_id=%d, thread_id=%d, local_task_id=%d, group_id=%d\n", warp_id, thread_id, local_task_id, group_id);
     callback(local_task_id, group_id, arg);
   }
 }
@@ -199,7 +198,6 @@ static void __attribute__ ((noinline)) process_all_tasks_ex_stub() {
   int warp_id = vx_warp_id();
   int group_warp_id = warp_id % warps_per_group;
   int threads_mask = (group_warp_id == warps_per_group-1) ? remaining_mask : -1;
- //vx_printf("*** warp_id=%d, threads_mask=0x%x\n", warp_id, threads_mask);
 
   // activate threads
   vx_tmc(threads_mask);
@@ -227,7 +225,6 @@ void vx_syncthreads(int barrier_id) {
     vx_printf("error: out of barrier resource (%d:%d)\n", id+1, num_barriers);
     return;
   }
-  //vx_printf("*** warp_id=%d, barrier_id=%d, id=%d\n", warp_id, barrier_id, id);
   vx_barrier(id, warps_per_group);
 }
 
@@ -296,8 +293,6 @@ void vx_spawn_tasks_ex(int num_groups, int group_size, vx_spawn_tasks_ex_cb call
     barrier_enabled
   };
   csr_write(VX_CSR_MSCRATCH, &wspawn_args);
-
-  //vx_printf("*** group_offset=%d, warp_batches=%d, remaining_warps=%d, warps_per_group=%d, groups_per_core=%d, remaining_mask=%d\n", group_offset, warp_batches, remaining_warps, warps_per_group, groups_per_core, remaining_mask);
 
   // execute callback on other warps
   vx_wspawn(active_warps, process_all_tasks_ex_stub);
