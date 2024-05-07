@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,14 +18,14 @@ module VX_alu_unit #(
 ) (
     input wire              clk,
     input wire              reset,
-    
+
     // Inputs
     VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
 
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS]
-);   
+);
 
     `UNUSED_PARAM (CORE_ID)
     localparam BLOCK_SIZE   = `NUM_ALU_BLOCKS;
@@ -59,7 +59,7 @@ module VX_alu_unit #(
 
         `RESET_RELAY (block_reset, reset);
 
-        wire is_muldiv_op;
+        wire is_muldiv_op = `EXT_M_ENABLED && `INST_ALU_IS_M(per_block_execute_if[block_idx].data.op_mod);
 
         VX_execute_if #(
             .NUM_LANES (NUM_LANES)
@@ -88,14 +88,12 @@ module VX_alu_unit #(
 
     `ifdef EXT_M_ENABLE
 
-        assign is_muldiv_op = `INST_ALU_IS_M(per_block_execute_if[block_idx].data.op_mod);
-
         `RESET_RELAY (mdv_reset, block_reset);
 
         VX_execute_if #(
             .NUM_LANES (NUM_LANES)
         ) mdv_execute_if();
-        
+
         assign mdv_execute_if.valid = per_block_execute_if[block_idx].valid && is_muldiv_op;
         assign mdv_execute_if.data = per_block_execute_if[block_idx].data;
 
@@ -111,16 +109,15 @@ module VX_alu_unit #(
             .reset      (mdv_reset),
             .execute_if (mdv_execute_if),
             .commit_if  (mdv_commit_if)
-        );       
-       
-        assign per_block_execute_if[block_idx].ready = is_muldiv_op ? mdv_execute_if.ready : int_execute_if.ready;
-
-    `else
-
-        assign is_muldiv_op = 0;
-        assign per_block_execute_if[block_idx].ready = int_execute_if.ready;
+        );
 
     `endif
+
+        assign per_block_execute_if[block_idx].ready =
+        `ifdef EXT_M_ENABLE
+            is_muldiv_op ? mdv_execute_if.ready :
+        `endif
+            int_execute_if.ready;
 
         // send response
 
@@ -131,7 +128,7 @@ module VX_alu_unit #(
         ) rsp_arb (
             .clk       (clk),
             .reset     (block_reset),
-            .valid_in  ({                
+            .valid_in  ({
             `ifdef EXT_M_ENABLE
                 mdv_commit_if.valid,
             `endif
@@ -150,8 +147,8 @@ module VX_alu_unit #(
                 int_commit_if.data
             }),
             .data_out  (per_block_commit_if[block_idx].data),
-            .valid_out (per_block_commit_if[block_idx].valid), 
-            .ready_out (per_block_commit_if[block_idx].ready),            
+            .valid_out (per_block_commit_if[block_idx].valid),
+            .ready_out (per_block_commit_if[block_idx].ready),
             `UNUSED_PIN (sel_out)
         );
     end
