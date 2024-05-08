@@ -614,7 +614,10 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             LSU_NORMAL: begin
                 mload_count_n = '0;
                 if (is_mload) begin
-                    state_n = LSU_MLOAD;
+                    if (lsu_ready) begin
+                        state_n = LSU_MLOAD;
+                        mload_count_n = mload_count_q + 1'b1;
+                    end
                 end
             end
             LSU_MLOAD: begin
