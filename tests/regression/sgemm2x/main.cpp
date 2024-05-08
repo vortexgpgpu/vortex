@@ -160,7 +160,7 @@ int main(int argc, char *argv[]) {
 
   uint32_t group_size = tile_size * tile_size;
 	uint32_t num_groups = (size * size) / group_size;
-  uint32_t local_mem = 2 * num_groups * group_size * sizeof(TYPE);
+  uint32_t local_mem = 2 * group_size * sizeof(TYPE);
 
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "matrix size: " << size << "x" << size << std::endl;
@@ -174,23 +174,15 @@ int main(int argc, char *argv[]) {
   kernel_arg.size = size;
   kernel_arg.tile_size = tile_size;
 
-  // check work group capacity
-  uint64_t num_warps, num_threads;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
-  uint32_t threads_per_core = num_warps * num_threads;
-  RT_CHECK(threads_per_core < group_size);
-
-  // check local memory capacity
-  uint64_t max_local_mem;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_LOCAL_MEM_SIZE, &max_local_mem));
-  RT_CHECK(max_local_mem < local_mem);
-
-  // acquire local memory address
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_LOCAL_MEM_ADDR, &kernel_arg.local_addr));
+  // check work group occupancy
+  uint32_t max_barriers, max_localmem;
+  RT_CHECK(vx_check_occupancy(device, group_size, &max_barriers, &max_localmem));
+  RT_CHECK(max_barriers < 2);
+  RT_CHECK(max_localmem < local_mem);
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_LOCAL_MEM_ADDR, &kernel_arg.local_addr));
   RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &A_buffer));
   RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
   RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &B_buffer));
@@ -212,8 +204,6 @@ int main(int argc, char *argv[]) {
   // generate source data
   for (uint32_t i = 0; i < size_sq; ++i) {
     h_A[i] = Comparator<TYPE>::generate();
-  }
-  for (uint32_t i = 0; i < size_sq; ++i) {
     h_B[i] = Comparator<TYPE>::generate();
   }
 

@@ -4,7 +4,7 @@
 #include <vx_print.h>
 #include "common.h"
 
-void sgemm_kernel(int local_task_id, int group_id, kernel_arg_t *arg) {
+void sgemm_kernel(int local_task_id, int group_id, int local_group_id, int warps_per_group, kernel_arg_t *arg) {
 	auto local_ptr = reinterpret_cast<TYPE*>(arg->local_addr);
 	auto A_ptr     = reinterpret_cast<TYPE*>(arg->A_addr);
 	auto B_ptr     = reinterpret_cast<TYPE*>(arg->B_addr);
@@ -24,8 +24,8 @@ void sgemm_kernel(int local_task_id, int group_id, kernel_arg_t *arg) {
   auto g_col = (group_id % num_tiles) * tile_size + l_col;
 
 	// Allocate local memory for the tile of matrix A & B
-	auto local_A = local_ptr + group_id * group_size;
-	auto local_B = local_A + num_groups * group_size;
+	auto local_A = local_ptr + local_group_id * group_size * 2;
+	auto local_B = local_A + group_size;
 
 	TYPE sum(0);
 
@@ -35,16 +35,16 @@ void sgemm_kernel(int local_task_id, int group_id, kernel_arg_t *arg) {
 		local_A[l_row * tile_size + l_col] = A_ptr[g_row * size + (k + l_col)];
 		local_B[l_row * tile_size + l_col] = B_ptr[(k + l_row) * size + g_col];
 
-		// Synchronize all threads in current group
-		vx_syncthreads(0);
+		// Synchronize all warps in current group
+		vx_barrier(local_group_id * 2 + 0, warps_per_group);
 
 		// Compute partial sum for the local tile
 		for (uint32_t j = 0; j < tile_size; ++j) {
 			sum += local_A[l_row * tile_size + j] * local_B[j * tile_size + l_col];
 		}
 
-		// Synchronize all threads in current group
-		vx_syncthreads(1);
+		// Synchronize all warps in current group
+		vx_barrier(local_group_id * 2 + 1, warps_per_group);
 	}
 
 	// Store the computed sum into the result matrix C
