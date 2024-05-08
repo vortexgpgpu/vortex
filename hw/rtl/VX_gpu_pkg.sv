@@ -51,6 +51,7 @@ package VX_gpu_pkg;
     `else
         logic [`NW_WIDTH-1:0]   size_m1;
     `endif
+        logic                   is_noop;
     } barrier_t;
 
     typedef struct packed {

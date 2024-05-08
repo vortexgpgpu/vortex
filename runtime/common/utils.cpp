@@ -757,7 +757,11 @@ int vx_check_occupancy(vx_device_h hdevice, uint32_t group_size, uint32_t* max_b
     RT_CHECK(vx_dev_caps(hdevice, VX_CAPS_NUM_BARRIERS, &num_barriers), {
       return _ret;
     });
-    *max_barriers = num_barriers / groups_per_core;
+    if (warps_per_group < 2) {
+      *max_barriers = -1;
+    } else {
+      *max_barriers = num_barriers / groups_per_core;
+    }
   }
 
   // check local memory capacity
