@@ -126,6 +126,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign barrier.is_global = 1'b0;
 `endif
     assign barrier.size_m1  = rs2_data[$bits(barrier.size_m1)-1:0] - $bits(barrier.size_m1)'(1);
+    assign barrier.is_noop  = (rs2_data[$bits(barrier.size_m1)-1:0] == $bits(barrier.size_m1)'(1));
 
     // wspawn
 

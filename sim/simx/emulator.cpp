@@ -224,13 +224,20 @@ void Emulator::resume(uint32_t wid) {
   }
 }
 
-void Emulator::wspawn(uint32_t num_warps, Word nextPC) {
+bool Emulator::wspawn(uint32_t num_warps, Word nextPC) {
+  num_warps = std::min<uint32_t>(num_warps, arch_.num_warps());
+  if (num_warps < 2)
+    return true;
   wspawn_.valid = true;
-  wspawn_.num_warps = std::min<uint32_t>(num_warps, arch_.num_warps());
+  wspawn_.num_warps = num_warps;
   wspawn_.nextPC = nextPC;
+  return false;
 }
 
-void Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
+bool Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
+  if (count < 2)
+    return true;
+
   uint32_t bar_idx = bar_id & 0x7fffffff;
   bool is_global = (bar_id >> 31);
 
@@ -257,6 +264,7 @@ void Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
       barrier.reset();
     }
   }
+  return false;
 }
 
 void Emulator::icache_read(void *data, uint64_t addr, uint32_t size) {

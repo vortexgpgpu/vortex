@@ -101,9 +101,9 @@ public:
 
   void resume(uint32_t wid);
 
-  void barrier(uint32_t bar_id, uint32_t count, uint32_t wid);
+  bool barrier(uint32_t bar_id, uint32_t count, uint32_t wid);
 
-  void wspawn(uint32_t num_warps, Word nextPC);
+  bool wspawn(uint32_t num_warps, Word nextPC);
 
   uint32_t id() const {
     return core_id_;
