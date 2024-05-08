@@ -731,3 +731,43 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
 
   return 0;
 }
+
+int vx_check_occupancy(vx_device_h hdevice, uint32_t group_size, uint32_t* max_barriers, uint32_t* max_localmem) {
+   // check group size
+  uint64_t warps_per_core, threads_per_warp;
+  RT_CHECK(vx_dev_caps(hdevice, VX_CAPS_NUM_WARPS, &warps_per_core), {
+    return _ret;
+  });
+  RT_CHECK(vx_dev_caps(hdevice, VX_CAPS_NUM_THREADS, &threads_per_warp), {
+    return _ret;
+  });
+  uint32_t threads_per_core = warps_per_core * threads_per_warp;
+  if (group_size > threads_per_core) {
+    printf("Error: device cannot schedule group size > (%d)\n", threads_per_core);
+    return -1;
+  }
+
+  // calculate groups occupancy
+  int warps_per_group = (group_size + threads_per_warp-1) / threads_per_warp;
+  int groups_per_core = warps_per_core / warps_per_group;
+
+  // check barriers capacity
+  if (max_barriers) {
+    uint64_t num_barriers;
+    RT_CHECK(vx_dev_caps(hdevice, VX_CAPS_NUM_BARRIERS, &num_barriers), {
+      return _ret;
+    });
+    *max_barriers = num_barriers / groups_per_core;
+  }
+
+  // check local memory capacity
+  if (max_localmem) {
+    uint64_t local_mem_size;
+    RT_CHECK(vx_dev_caps(hdevice, VX_CAPS_LOCAL_MEM_SIZE, &local_mem_size), {
+      return _ret;
+    });
+    *max_localmem = local_mem_size / groups_per_core;
+  }
+
+  return 0;
+}
