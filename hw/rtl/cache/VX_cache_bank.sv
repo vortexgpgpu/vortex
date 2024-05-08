@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,23 +18,23 @@ module VX_cache_bank #(
     parameter BANK_ID           = 0,
 
     // Number of Word requests per cycle
-    parameter NUM_REQS          = 1, 
+    parameter NUM_REQS          = 1,
 
     // Size of cache in bytes
-    parameter CACHE_SIZE        = 1024, 
+    parameter CACHE_SIZE        = 1024,
     // Size of line inside a bank in bytes
-    parameter LINE_SIZE         = 16, 
+    parameter LINE_SIZE         = 16,
     // Number of banks
     parameter NUM_BANKS         = 1,
-    // Number of associative ways 
-    parameter NUM_WAYS          = 1, 
+    // Number of associative ways
+    parameter NUM_WAYS          = 1,
     // Size of a word in bytes
-    parameter WORD_SIZE         = 4, 
+    parameter WORD_SIZE         = 4,
 
     // Core Response Queue Size
     parameter CRSQ_SIZE         = 1,
     // Miss Reserv Queue Knob
-    parameter MSHR_SIZE         = 1, 
+    parameter MSHR_SIZE         = 1,
     // Memory Request Queue Size
     parameter MREQ_SIZE         = 1,
 
@@ -66,18 +66,18 @@ module VX_cache_bank #(
     output wire perf_mshr_stalls,
 `endif
 
-    // Core Request    
+    // Core Request
     input wire                          core_req_valid,
     input wire [`CS_LINE_ADDR_WIDTH-1:0] core_req_addr,
-    input wire                          core_req_rw, 
+    input wire                          core_req_rw,
     input wire [WORD_SEL_WIDTH-1:0]     core_req_wsel,
     input wire [WORD_SIZE-1:0]          core_req_byteen,
-    input wire [`CS_WORD_WIDTH-1:0]     core_req_data, 
+    input wire [`CS_WORD_WIDTH-1:0]     core_req_data,
     input wire [TAG_WIDTH-1:0]          core_req_tag,
     input wire [REQ_SEL_WIDTH-1:0]      core_req_idx,
     output wire                         core_req_ready,
-    
-    // Core Response    
+
+    // Core Response
     output wire                         core_rsp_valid,
     output wire [`CS_WORD_WIDTH-1:0]    core_rsp_data,
     output wire [TAG_WIDTH-1:0]         core_rsp_tag,
@@ -88,12 +88,12 @@ module VX_cache_bank #(
     output wire                         mem_req_valid,
     output wire [`CS_LINE_ADDR_WIDTH-1:0] mem_req_addr,
     output wire                         mem_req_rw,
-    output wire [WORD_SEL_WIDTH-1:0]    mem_req_wsel,  
+    output wire [WORD_SEL_WIDTH-1:0]    mem_req_wsel,
     output wire [WORD_SIZE-1:0]         mem_req_byteen,
     output wire [`CS_WORD_WIDTH-1:0]    mem_req_data,
     output wire [MSHR_ADDR_WIDTH-1:0]   mem_req_id,
     input  wire                         mem_req_ready,
-    
+
     // Memory response
     input wire                          mem_rsp_valid,
     input wire [`CS_LINE_WIDTH-1:0]     mem_rsp_data,
@@ -112,9 +112,9 @@ module VX_cache_bank #(
     wire                            crsq_stall;
     wire                            mshr_alm_full;
     wire                            mreq_alm_full;
-    
+
     wire [`CS_LINE_ADDR_WIDTH-1:0]  mem_rsp_addr;
-        
+
     wire                            replay_valid;
     wire [`CS_LINE_ADDR_WIDTH-1:0]  replay_addr;
     wire                            replay_rw;
@@ -125,7 +125,7 @@ module VX_cache_bank #(
     wire [REQ_SEL_WIDTH-1:0]        replay_idx;
     wire [MSHR_ADDR_WIDTH-1:0]      replay_id;
     wire                            replay_ready;
-    
+
     wire [`CS_LINE_ADDR_WIDTH-1:0]  addr_sel, addr_st0, addr_st1;
     wire                            rw_st0, rw_st1;
     wire [WORD_SEL_WIDTH-1:0]       wsel_st0, wsel_st1;
@@ -141,7 +141,7 @@ module VX_cache_bank #(
     wire                            is_fill_st0, is_fill_st1;
     wire                            is_replay_st0, is_replay_st1;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_alloc_id_st0;
-    wire [MSHR_ADDR_WIDTH-1:0]      mshr_tail_st0, mshr_tail_st1;
+    wire [MSHR_ADDR_WIDTH-1:0]      mshr_prev_st0, mshr_prev_st1;
     wire                            mshr_pending_st0, mshr_pending_st1;
 
     wire rdw_hazard_st0;
@@ -153,7 +153,7 @@ module VX_cache_bank #(
     // mshr replay has highest priority to maximize utilization since there is no miss.
     // handle memory responses next to prevent deadlock with potential memory request from a miss.
     wire replay_grant = ~init_enable;
-    wire replay_enable = replay_grant && replay_valid; 
+    wire replay_enable = replay_grant && replay_valid;
 
     wire fill_grant  = ~init_enable && ~replay_enable;
     wire fill_enable = fill_grant && mem_rsp_valid;
@@ -167,7 +167,7 @@ module VX_cache_bank #(
 
     assign mem_rsp_ready = fill_grant
                         && ~pipe_stall;
-    
+
     assign core_req_ready = creq_grant
                         && ~mreq_alm_full
                         && ~mshr_alm_full
@@ -179,7 +179,7 @@ module VX_cache_bank #(
     wire core_req_fire = core_req_valid && core_req_ready;
 
     wire [TAG_WIDTH-1:0] mshr_creq_tag = replay_enable ? replay_tag : core_req_tag;
-    
+
     if (UUID_WIDTH != 0) begin
         assign req_uuid_sel = mshr_creq_tag[TAG_WIDTH-1 -: UUID_WIDTH];
     end else begin
@@ -191,7 +191,7 @@ module VX_cache_bank #(
     assign valid_sel = init_fire || replay_fire || mem_rsp_fire || core_req_fire;
 
     assign addr_sel = init_enable ? `CS_LINE_ADDR_WIDTH'(init_line_sel) :
-                        (replay_valid ? replay_addr : 
+                        (replay_valid ? replay_addr :
                             (mem_rsp_valid ? mem_rsp_addr : core_req_addr));
 
     assign data_sel[`CS_WORD_WIDTH-1:0] = (mem_rsp_valid || !WRITE_ENABLE) ? mem_rsp_data[`CS_WORD_WIDTH-1:0] : (replay_valid ? replay_data : core_req_data);
@@ -216,7 +216,7 @@ module VX_cache_bank #(
             data_sel,
             replay_valid ? replay_rw : core_req_rw,
             replay_valid ? replay_byteen : core_req_byteen,
-            replay_valid ? replay_wsel : core_req_wsel, 
+            replay_valid ? replay_wsel : core_req_wsel,
             replay_valid ? replay_idx : core_req_idx,
             replay_valid ? replay_tag : core_req_tag,
             replay_id
@@ -244,19 +244,19 @@ module VX_cache_bank #(
 
     VX_cache_tags #(
         .INSTANCE_ID(INSTANCE_ID),
-        .BANK_ID    (BANK_ID), 
+        .BANK_ID    (BANK_ID),
         .CACHE_SIZE (CACHE_SIZE),
         .LINE_SIZE  (LINE_SIZE),
         .NUM_BANKS  (NUM_BANKS),
         .NUM_WAYS   (NUM_WAYS),
-        .WORD_SIZE  (WORD_SIZE), 
+        .WORD_SIZE  (WORD_SIZE),
         .UUID_WIDTH (UUID_WIDTH)
     ) cache_tags (
         .clk        (clk),
         .reset      (tag_reset),
 
         .req_uuid   (req_uuid_st0),
-        
+
         .stall      (pipe_stall),
 
         // read/Fill
@@ -277,8 +277,8 @@ module VX_cache_bank #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~pipe_stall),
-        .data_in  ({valid_st0, is_replay_st0, is_fill_st0, is_creq_st0, rw_st0, addr_st0, data_st0, byteen_st0, wsel_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_tail_st0, tag_matches_st0, way_sel_st0, mshr_pending_st0}),
-        .data_out ({valid_st1, is_replay_st1, is_fill_st1, is_creq_st1, rw_st1, addr_st1, data_st1, byteen_st1, wsel_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_tail_st1, tag_matches_st1, way_sel_st1, mshr_pending_st1})
+        .data_in  ({valid_st0, is_replay_st0, is_fill_st0, is_creq_st0, rw_st0, addr_st0, data_st0, byteen_st0, wsel_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_prev_st0, tag_matches_st0, way_sel_st0, mshr_pending_st0}),
+        .data_out ({valid_st1, is_replay_st1, is_fill_st1, is_creq_st1, rw_st1, addr_st1, data_st1, byteen_st1, wsel_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_prev_st1, tag_matches_st1, way_sel_st1, mshr_pending_st1})
     );
 
     // we have a tag hit
@@ -318,10 +318,10 @@ module VX_cache_bank #(
     wire [`CS_LINE_WIDTH-1:0] fill_data_st1 = data_st1;
 
     `RESET_RELAY (data_reset, reset);
- 
+
     VX_cache_data #(
         .INSTANCE_ID  (INSTANCE_ID),
-        .BANK_ID      (BANK_ID), 
+        .BANK_ID      (BANK_ID),
         .CACHE_SIZE   (CACHE_SIZE),
         .LINE_SIZE    (LINE_SIZE),
         .NUM_BANKS    (NUM_BANKS),
@@ -337,25 +337,25 @@ module VX_cache_bank #(
 
         .stall      (pipe_stall),
 
-        .read       (do_read_hit_st1 || do_replay_rd_st1), 
-        .fill       (do_fill_st1), 
+        .read       (do_read_hit_st1 || do_replay_rd_st1),
+        .fill       (do_fill_st1),
         .write      (do_write_hit_st1 || do_replay_wr_st1),
         .way_sel    (way_sel_st1 | tag_matches_st1),
         .line_addr  (addr_st1),
         .wsel       (wsel_st1),
         .byteen     (byteen_st1),
-        .fill_data  (fill_data_st1), 
+        .fill_data  (fill_data_st1),
         .write_data (write_data_st1),
         .read_data  (read_data_st1)
     );
-    
+
     wire [MSHR_SIZE-1:0] mshr_matches_st0;
     wire mshr_allocate_st0 = valid_st0 && is_creq_st0 && ~pipe_stall;
     wire mshr_lookup_st0   = mshr_allocate_st0;
     wire mshr_finalize_st1 = valid_st1 && is_creq_st1 && ~pipe_stall;
     wire mshr_release_st1  = is_hit_st1 || (rw_st1 && ~mshr_pending_st1);
 
-    VX_pending_size #( 
+    VX_pending_size #(
         .SIZE (MSHR_SIZE)
     ) mshr_pending_size (
         .clk   (clk),
@@ -371,7 +371,7 @@ module VX_cache_bank #(
 
     VX_cache_mshr #(
         .INSTANCE_ID (INSTANCE_ID),
-        .BANK_ID     (BANK_ID), 
+        .BANK_ID     (BANK_ID),
         .LINE_SIZE   (LINE_SIZE),
         .NUM_BANKS   (NUM_BANKS),
         .MSHR_SIZE   (MSHR_SIZE),
@@ -393,7 +393,7 @@ module VX_cache_bank #(
         // dequeue
         .dequeue_valid  (replay_valid),
         .dequeue_addr   (replay_addr),
-        .dequeue_rw     (replay_rw),        
+        .dequeue_rw     (replay_rw),
         .dequeue_data   ({replay_wsel, replay_byteen, replay_data, replay_tag, replay_idx}),
         .dequeue_id     (replay_id),
         .dequeue_ready  (replay_ready),
@@ -404,7 +404,7 @@ module VX_cache_bank #(
         .allocate_rw    (rw_st0),
         .allocate_data  ({wsel_st0, byteen_st0, write_data_st0, tag_st0, req_idx_st0}),
         .allocate_id    (mshr_alloc_id_st0),
-        .allocate_tail  (mshr_tail_st0),
+        .allocate_prev  (mshr_prev_st0),
         `UNUSED_PIN     (allocate_ready),
 
         // lookup
@@ -417,7 +417,7 @@ module VX_cache_bank #(
         .finalize_release(mshr_release_st1),
         .finalize_pending(mshr_pending_st1),
         .finalize_id    (mshr_id_st1),
-        .finalize_tail  (mshr_tail_st1)
+        .finalize_prev  (mshr_prev_st1)
     );
 
     // ignore allocated id from mshr matches
@@ -428,7 +428,7 @@ module VX_cache_bank #(
     assign mshr_pending_st0 = (| lookup_matches);
 
     // schedule core response
-    
+
     wire crsq_valid, crsq_ready;
     wire [`CS_WORD_WIDTH-1:0] crsq_data;
     wire [REQ_SEL_WIDTH-1:0] crsq_idx;
@@ -450,7 +450,7 @@ module VX_cache_bank #(
         .reset     (crsp_reset),
         .valid_in  (crsq_valid && ~rdw_hazard_st1),
         .ready_in  (crsq_ready),
-        .data_in   ({crsq_tag, crsq_data, crsq_idx}), 
+        .data_in   ({crsq_tag, crsq_data, crsq_idx}),
         .data_out  ({core_rsp_tag, core_rsp_data, core_rsp_idx}),
         .valid_out (core_rsp_valid),
         .ready_out (core_rsp_ready)
@@ -483,7 +483,7 @@ module VX_cache_bank #(
     `RESET_RELAY (mreq_reset, reset);
 
     VX_fifo_queue #(
-        .DATAW    (1 + `CS_LINE_ADDR_WIDTH + MSHR_ADDR_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + `CS_WORD_WIDTH), 
+        .DATAW    (1 + `CS_LINE_ADDR_WIDTH + MSHR_ADDR_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + `CS_WORD_WIDTH),
         .DEPTH    (MREQ_SIZE),
         .ALM_FULL (MREQ_SIZE-2),
         .OUT_REG  (`TO_OUT_BUF_REG(MEM_OUT_BUF))
@@ -494,10 +494,10 @@ module VX_cache_bank #(
         .pop        (mreq_pop),
         .data_in    ({mreq_rw, mreq_addr, mreq_id, mreq_byteen, mreq_wsel, mreq_data}),
         .data_out   ({mem_req_rw, mem_req_addr, mem_req_id, mem_req_byteen, mem_req_wsel, mem_req_data}),
-        .empty      (mreq_empty), 
+        .empty      (mreq_empty),
         .alm_full   (mreq_alm_full),
         `UNUSED_PIN (full),
-        `UNUSED_PIN (alm_empty), 
+        `UNUSED_PIN (alm_empty),
         `UNUSED_PIN (size)
     );
 
@@ -513,7 +513,7 @@ module VX_cache_bank #(
 
 `ifdef DBG_TRACE_CACHE
     wire crsq_fire = crsq_valid && crsq_ready;
-    wire pipeline_stall = (replay_valid || mem_rsp_valid || core_req_valid) 
+    wire pipeline_stall = (replay_valid || mem_rsp_valid || core_req_valid)
                        && ~(replay_fire || mem_rsp_fire || core_req_fire);
     always @(posedge clk) begin
         if (pipeline_stall) begin
@@ -543,7 +543,7 @@ module VX_cache_bank #(
             else
                 `TRACE(2, ("%d: %s-bank%0d fill-req: addr=0x%0h, mshr_id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(mreq_addr, BANK_ID), mreq_id, req_uuid_st1));
         end
-    end    
+    end
 `endif
 
 endmodule
