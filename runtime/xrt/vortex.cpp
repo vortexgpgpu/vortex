@@ -246,6 +246,9 @@ public:
         case VX_CAPS_NUM_CORES:
             _value = (dev_caps_ >> 24) & 0xffff;
             break;
+        case VX_CAPS_NUM_BARRIERS:
+            _value = (dev_caps_ >> 40) & 0xff;
+            break;
         case VX_CAPS_CACHE_LINE_SIZE:
             _value = CACHE_BLOCK_SIZE;
             break;
@@ -253,7 +256,7 @@ public:
             _value = global_mem_size_;
             break;
         case VX_CAPS_LOCAL_MEM_SIZE:
-            _value = 1ull << ((dev_caps_ >> 40) & 0xff);
+            _value = 1ull << ((dev_caps_ >> 48) & 0xff);
             break;
         case VX_CAPS_LOCAL_MEM_ADDR:
             _value = LMEM_BASE_ADDR;
