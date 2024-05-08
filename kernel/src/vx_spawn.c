@@ -161,7 +161,6 @@ typedef struct {
   int warps_per_group;
   int groups_per_core;
   int remaining_mask;
-  int barrier_enabled;
 } wspawn_tasks_ex_args_t;
 
 static void __attribute__ ((noinline)) process_all_tasks_ex() {
@@ -187,7 +186,7 @@ static void __attribute__ ((noinline)) process_all_tasks_ex() {
   void* arg = targs->arg;
 
   for (int group_id = start_group; group_id < end_group; group_id += groups_per_core) {
-    callback(local_task_id, group_id, arg);
+    callback(local_task_id, group_id, start_group, warps_per_group, arg);
   }
 }
 
@@ -211,21 +210,8 @@ static void __attribute__ ((noinline)) process_all_tasks_ex_stub() {
 
 void vx_syncthreads(int barrier_id) {
   wspawn_tasks_ex_args_t* targs = (wspawn_tasks_ex_args_t*)csr_read(VX_CSR_MSCRATCH);
-  int barrier_enabled = targs->barrier_enabled;
-  if (!barrier_enabled)
-    return; // no need to synchronize
   int warps_per_group = targs->warps_per_group;
-  int groups_per_core = targs->groups_per_core;
-  int num_barriers = vx_num_barriers();
-  int warp_id = vx_warp_id();
-  int local_group_id = warp_id / warps_per_group;
-  int id = barrier_id * groups_per_core + local_group_id;
-  // check barrier resource
-  if (id >= num_barriers) {
-    vx_printf("error: out of barrier resource (%d:%d)\n", id+1, num_barriers);
-    return;
-  }
-  vx_barrier(id, warps_per_group);
+  vx_barrier(barrier_id, warps_per_group);
 }
 
 void vx_spawn_tasks_ex(int num_groups, int group_size, vx_spawn_tasks_ex_cb callback, void * arg) {
@@ -277,9 +263,6 @@ void vx_spawn_tasks_ex(int num_groups, int group_size, vx_spawn_tasks_ex_cb call
   // calculate offsets for group distribution
   int group_offset = core_id * total_groups_per_core + MIN(core_id, remaining_groups_per_core);
 
-  // check if warp barriers are needed
-  int barrier_enabled = (group_size > threads_per_warp);
-
   // prepare scheduler arguments
   wspawn_tasks_ex_args_t wspawn_args = {
     callback,
@@ -289,8 +272,7 @@ void vx_spawn_tasks_ex(int num_groups, int group_size, vx_spawn_tasks_ex_cb call
     remaining_warps,
     warps_per_group,
     groups_per_core,
-    remaining_mask,
-    barrier_enabled
+    remaining_mask
   };
   csr_write(VX_CSR_MSCRATCH, &wspawn_args);
 
