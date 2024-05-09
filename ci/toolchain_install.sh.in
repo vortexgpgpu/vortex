@@ -34,8 +34,8 @@ riscv32()
     done
     cat riscv32-gnu-toolchain.tar.bz2.parta* > riscv32-gnu-toolchain.tar.bz2
     tar -xvf riscv32-gnu-toolchain.tar.bz2
-    mv -f riscv32-gnu-toolchain $TOOLDIR
-    rm -f riscv32-gnu-toolchain.tar.bz2*
+    cp -rf riscv32-gnu-toolchain $TOOLDIR
+    rm -rf riscv32-gnu-toolchain.tar.bz2*
 }
 
 riscv64()
@@ -51,8 +51,8 @@ riscv64()
     done
     cat riscv64-gnu-toolchain.tar.bz2.parta* > riscv64-gnu-toolchain.tar.bz2
     tar -xvf riscv64-gnu-toolchain.tar.bz2
-    mv -f riscv64-gnu-toolchain $TOOLDIR
-    rm -f riscv64-gnu-toolchain.tar.bz2*
+    cp -rf riscv64-gnu-toolchain $TOOLDIR
+    rm -rf riscv64-gnu-toolchain riscv64-gnu-toolchain.tar.bz2*
 }
 
 llvm()
@@ -69,80 +69,80 @@ llvm()
     done
     cat llvm-vortex2.tar.bz2.parta* > llvm-vortex2.tar.bz2
     tar -xvf llvm-vortex2.tar.bz2
-    mv -f llvm-vortex $TOOLDIR
-    rm -f llvm-vortex2.tar.bz2*
+    cp -rf llvm-vortex $TOOLDIR
+    rm -rf llvm-vortex llvm-vortex2.tar.bz2*
 }
 
 libc32()
 {
     wget $REPOSITORY/libc32/libc32.tar.bz2
     tar -xvf libc32.tar.bz2
-    mv -f libc32 $TOOLDIR
-    rm -f libc32.tar.bz2
+    cp -rf libc32 $TOOLDIR
+    rm -rf libc32 libc32.tar.bz2
 }
 
 libc64()
 {
     wget $REPOSITORY/libc64/libc64.tar.bz2
     tar -xvf libc64.tar.bz2
-    mv -f libc64 $TOOLDIR
-    rm -f libc64.tar.bz2
+    cp -rf libc64 $TOOLDIR
+    rm -rf libc64 libc64.tar.bz2
 }
 
 libcrt32()
 {
     wget $REPOSITORY/libcrt32/libcrt32.tar.bz2
     tar -xvf libcrt32.tar.bz2
-    mv -f libcrt32 $TOOLDIR
-    rm -f libcrt32.tar.bz2
+    cp -rf libcrt32 $TOOLDIR
+    rm -rf libcrt32 libcrt32.tar.bz2
 }
 
 libcrt64()
 {
     wget $REPOSITORY/libcrt64/libcrt64.tar.bz2
     tar -xvf libcrt64.tar.bz2
-    mv -f libcrt64 $TOOLDIR
-    rm -f libcrt64.tar.bz2
+    cp -rf libcrt64 $TOOLDIR
+    rm -rf libcrt64 libcrt64.tar.bz2
 }
 
 libc32()
 {
     wget $REPOSITORY/libc32/libc32.tar.bz2
     tar -xvf libc32.tar.bz2
-    mv -f libc32 $TOOLDIR
-    rm -f libc32.tar.bz2
+    cp -rf libc32 $TOOLDIR
+    rm -rf libc32 libc32.tar.bz2
 }
 
 libc64()
 {
     wget $REPOSITORY/libc64/libc64.tar.bz2
     tar -xvf libc64.tar.bz2
-    mv -f libc64 $TOOLDIR
-    rm -f libc64.tar.bz2
+    cp -rf libc64 $TOOLDIR
+    rm -rf libc64 libc64.tar.bz2
 }
 
 pocl()
 {
     wget $REPOSITORY/pocl/$OSDIR/pocl2.tar.bz2
     tar -xvf pocl2.tar.bz2
-    mv -f pocl $TOOLDIR
-    rm -f pocl2.tar.bz2
+    cp -rf pocl $TOOLDIR
+    rm -rf pocl2 pocl2.tar.bz2
 }
 
 verilator()
 {
     wget $REPOSITORY/verilator/$OSDIR/verilator.tar.bz2
     tar -xvf verilator.tar.bz2
-    mv -f verilator $TOOLDIR
-    rm -f verilator.tar.bz2
+    cp -rf verilator $TOOLDIR
+    rm -rf verilator verilator.tar.bz2
 }
 
 sv2v()
 {
     wget $REPOSITORY/sv2v/$OSDIR/sv2v.tar.bz2
     tar -xvf sv2v.tar.bz2
-    mv -f sv2v $TOOLDIR
-    rm -f sv2v.tar.bz2
+    cp -rf sv2v $TOOLDIR
+    rm -rf sv2v sv2v.tar.bz2
 }
 
 yosys()
@@ -159,8 +159,8 @@ yosys()
     done
     cat yosys.tar.bz2.parta* > yosys.tar.bz2
     tar -xvf yosys.tar.bz2
-    mv -f yosys $TOOLDIR
-    rm -f yosys.tar.bz2* yosys
+    cp -rf yosys $TOOLDIR
+    rm -rf yosys yosys.tar.bz2* yosys
 }
 
 show_usage()
