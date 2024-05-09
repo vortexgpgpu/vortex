@@ -19,10 +19,11 @@ env:
 
 cache:
   directories:
+    - $TOOLDIR
     - $HOME/third_party
     - $HOME/build32
     - $HOME/build64
-    - $TOOLDIR
+    timeout: 1200
 
 install:
   - cp -rf $HOME/third_party $TRAVIS_BUILD_DIR
