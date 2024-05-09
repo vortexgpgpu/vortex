@@ -19,14 +19,14 @@ env:
 
 cache:
   directories:
-    - $TOOLDIR
     - $HOME/third_party
     - $HOME/build32
     - $HOME/build64
+    - $TOOLDIR
 
 install:
-  - cp -r $HOME/third_party $TRAVIS_BUILD_DIR
-  - cp -r $HOME/build$XLEN build && cd build
+  - cp -rf $HOME/third_party $TRAVIS_BUILD_DIR
+  - cp -rf $HOME/build$XLEN build && cd build
 
 before_script:
   - source $HOME/build$XLEN/ci/toolchain_env.sh
@@ -39,6 +39,7 @@ jobs:
   include:
     - stage: build
       name: build
+      env: XLEN=32
       before_install:
         - rm -rf $HOME/build32 && mkdir -p $HOME/build32
         - rm -rf $HOME/build64 && mkdir -p $HOME/build64
@@ -47,22 +48,17 @@ jobs:
       install:
         - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0.1" ]; then
             rm -rf $TOOLDIR;
-            mkdir -p $TOOLDIR;
             $HOME/build32/ci/toolchain_install.sh --all;
             echo "v0.1" > "$TOOLDIR/version.txt";
           fi
         - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v0.1" ]; then
-            rm -rf $HOME/third_party;
             cd $TRAVIS_BUILD_DIR;
             make -C third_party > /dev/null;
-            cp -r third_party $HOME;
+            cp -rf third_party $HOME;
             echo "v0.1" > "$HOME/third_party/version.txt";
           else
-            rm -rf $TRAVIS_BUILD_DIR/third_party;
-            cp -r $HOME/third_party $TRAVIS_BUILD_DIR;
+            cp -rf $HOME/third_party $TRAVIS_BUILD_DIR;
           fi
-      before_script:
-        - source $HOME/build32/ci/toolchain_env.sh
       script:
         - cd $HOME/build32 && make build -s > /dev/null
         - cd $HOME/build64 && make build -s > /dev/null
