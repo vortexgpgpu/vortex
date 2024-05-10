@@ -23,8 +23,8 @@ cache:
     - $HOME/third_party
 
 before_install:
-  - mkdir -p $HOME/build
-  - cd $HOME/build && TOOLDIR=$TOOLDIR XLEN=$XLEN ../configure
+  - mkdir -p build && cd build
+  - TOOLDIR=$TOOLDIR XLEN=$XLEN ../configure
 install:
   - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0.2" ]; then
       rm -rf $TOOLDIR;
