@@ -51,20 +51,22 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire                            csr_wr_enable;
     wire                            csr_req_ready;
 
+    wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.imm[`VX_CSR_ADDR_BITS-1:0];
+    wire [`NRI_BITS-1:0] csr_imm = execute_if.data.imm[`VX_CSR_ADDR_BITS +: `NRI_BITS];
+
+    wire is_fpu_csr = (csr_addr <= `VX_CSR_FCSR);
+
     // wait for all pending instructions for current warp to complete
     assign sched_csr_if.alm_empty_wid = execute_if.data.wid;
-    wire no_pending_instr = sched_csr_if.alm_empty;
+    wire no_pending_instr = sched_csr_if.alm_empty || ~is_fpu_csr;
 
     wire csr_req_valid = execute_if.valid && no_pending_instr;
     assign execute_if.ready = csr_req_ready && no_pending_instr;
 
-    wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.imm[`VX_CSR_ADDR_BITS-1:0];
-    wire [`NRI_BITS-1:0] csr_imm = execute_if.data.imm[`VX_CSR_ADDR_BITS +: `NRI_BITS];
-
     wire [NUM_LANES-1:0][`XLEN-1:0] rs1_data;
     `UNUSED_VAR (rs1_data)
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign rs1_data[i] = execute_if.data.rs1_data[i][`XLEN-1:0];
+        assign rs1_data[i] = execute_if.data.rs1_data[i];
     end
 
     wire csr_write_enable = (execute_if.data.op_type == `INST_SFU_CSRRW);
@@ -151,7 +153,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     end
 
     // unlock the warp
-    assign sched_csr_if.unlock_warp = csr_req_valid && csr_req_ready && execute_if.data.eop;
+    assign sched_csr_if.unlock_warp = csr_req_valid && csr_req_ready && execute_if.data.eop && is_fpu_csr;
     assign sched_csr_if.unlock_wid = execute_if.data.wid;
 
     VX_elastic_buffer #(

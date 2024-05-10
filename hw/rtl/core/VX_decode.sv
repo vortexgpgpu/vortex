@@ -78,6 +78,7 @@ module VX_decode  #(
     `UNUSED_VAR (use_rs3)
 
     wire is_itype_sh = func3[0] && ~func3[1];
+    wire is_fpu_csr = (u_12 <= `VX_CSR_FCSR);
 
     wire [19:0] ui_imm  = instr[31:12];
 `ifdef XLEN_64
@@ -280,7 +281,7 @@ module VX_decode  #(
                     ex_type = `EX_SFU;
                     op_type = `INST_OP_BITS'(`INST_SFU_CSR(func3[1:0]));
                     use_rd  = 1;
-                    is_wstall = 1;
+                    is_wstall = is_fpu_csr; // only stall for FPU CSRs
                     use_imm = func3[2];
                     imm[`VX_CSR_ADDR_BITS-1:0] = u_12; // addr
                     `USED_IREG (rd);
