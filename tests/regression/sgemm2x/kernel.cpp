@@ -4,7 +4,7 @@
 #include <vx_print.h>
 #include "common.h"
 
-void sgemm_kernel(int local_task_id, int group_id, int local_group_id, int warps_per_group, kernel_arg_t *arg) {
+void kernel_body(int local_task_id, int group_id, int local_group_id, int warps_per_group, kernel_arg_t *arg) {
 	auto local_ptr = reinterpret_cast<TYPE*>(arg->local_addr);
 	auto A_ptr     = reinterpret_cast<TYPE*>(arg->A_addr);
 	auto B_ptr     = reinterpret_cast<TYPE*>(arg->B_addr);
@@ -53,6 +53,6 @@ void sgemm_kernel(int local_task_id, int group_id, int local_group_id, int warps
 
 int main() {
 	kernel_arg_t* arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
-	vx_spawn_tasks_ex(arg->num_groups, arg->group_size, (vx_spawn_tasks_ex_cb)sgemm_kernel, arg);
+	vx_spawn_task_groups(arg->num_groups, arg->group_size, (vx_spawn_task_groups_cb)kernel_body, arg);
 	return 0;
 }
