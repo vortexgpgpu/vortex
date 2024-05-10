@@ -59,10 +59,7 @@ jobs:
         - ./ci/travis_run.py ./ci/regression.sh --synthesis
         - ./ci/travis_run.py ./ci/regression.sh --opencl
         - ./ci/travis_run.py ./ci/regression.sh --regression
-        - ./ci/travis_run.py ./ci/regression.sh --cluster
-        - ./ci/travis_run.py ./ci/regression.sh --config
-        - ./ci/travis_run.py ./ci/regression.sh --debug
-        - ./ci/travis_run.py ./ci/regression.sh --stress
+
     - stage: test
       name: regression64
       env: XLEN=64
@@ -71,3 +68,17 @@ jobs:
         - ./ci/travis_run.py ./ci/regression.sh --kernel
         - ./ci/travis_run.py ./ci/regression.sh --synthesis
         - ./ci/travis_run.py ./ci/regression.sh --regression
+
+    - stage: test
+      name: config
+      env: XLEN=32
+      script:
+        - ./ci/travis_run.py ./ci/regression.sh --cluster
+        - ./ci/travis_run.py ./ci/regression.sh --config
+
+    - stage: test
+      name: debug
+      env: XLEN=32
+      script:
+        - ./ci/travis_run.py ./ci/regression.sh --debug
+        - ./ci/travis_run.py ./ci/regression.sh --stress
