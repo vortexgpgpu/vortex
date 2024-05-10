@@ -40,10 +40,10 @@ install:
     else
       cp -rf $HOME/third_party $TRAVIS_BUILD_DIR;
     fi
-  - cd $TRAVIS_BUILD_DIR/build
-  - make build -s > /dev/null
 before_script:
+  - cd $TRAVIS_BUILD_DIR/build
   - source ci/toolchain_env.sh
+  - make build -s > /dev/null
 stages:
   - test
 
