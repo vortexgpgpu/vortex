@@ -23,7 +23,7 @@ cache:
     - $HOME/third_party
 
 before_install:
-  - cd $TRAVIS_BUILD_DIR/build
+  - mkdir -p build && cd build
   - TOOLDIR=$TOOLDIR XLEN=$XLEN ../configure
 install:
   - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0.2" ]; then
