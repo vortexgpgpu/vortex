@@ -23,11 +23,12 @@ cache:
     - $HOME/third_party
 
 before_install:
-  - mkdir -p build && cd build
+  - cd $TRAVIS_BUILD_DIR/build
   - TOOLDIR=$TOOLDIR XLEN=$XLEN ../configure
 install:
   - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0.2" ]; then
       rm -rf $TOOLDIR;
+      cd $TRAVIS_BUILD_DIR/build;
       ci/toolchain_install.sh --all;
       echo "v0.2" > "$TOOLDIR/version.txt";
     fi
@@ -39,7 +40,8 @@ install:
     else
       cp -rf $HOME/third_party $TRAVIS_BUILD_DIR;
     fi
-    make build -s > /dev/null
+  - cd $TRAVIS_BUILD_DIR/build
+  - make build -s > /dev/null
 before_script:
   - source ci/toolchain_env.sh
 stages:
