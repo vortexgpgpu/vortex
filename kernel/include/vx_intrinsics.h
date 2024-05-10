@@ -11,6 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// The intrinsics implemented use RISC-V assembler pseudo-directives defined here:
+// https://sourceware.org/binutils/docs/as/RISC_002dV_002dFormats.html
+
 #ifndef __VX_INTRINSICS_H__
 #define __VX_INTRINSICS_H__
 
@@ -126,9 +129,8 @@ inline void vx_pred_n(int condition, int thread_mask) {
     asm volatile (".insn r %0, 5, 0, x1, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(condition), "r"(thread_mask));
 }
 
-typedef void (*vx_wspawn_pfn)();
-
 // Spawn warps
+typedef void (*vx_wspawn_pfn)();
 inline void vx_wspawn(size_t num_warps, vx_wspawn_pfn func_ptr) {
     asm volatile (".insn r %0, 1, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(num_warps), "r"(func_ptr));
 }

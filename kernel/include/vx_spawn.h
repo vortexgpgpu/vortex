@@ -23,13 +23,13 @@ extern "C" {
 
 typedef void (*vx_spawn_tasks_cb)(int task_id, void *arg);
 
-typedef void (*vx_spawn_tasks_ex_cb)(int local_task_id, int group_id, int local_group_id, int warps_per_group, void *arg);
+typedef void (*vx_spawn_task_groups_cb)(int local_task_id, int group_id, int local_group_id, int warps_per_group, void *arg);
 
 typedef void (*vx_serial_cb)(void *arg);
 
 void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback, void * arg);
 
-void vx_spawn_tasks_ex(int num_groups, int group_size, vx_spawn_tasks_ex_cb callback, void * arg);
+void vx_spawn_task_groups(int num_groups, int group_size, vx_spawn_task_groups_cb callback, void * arg);
 
 void vx_serial(vx_serial_cb callback, void * arg);
 
