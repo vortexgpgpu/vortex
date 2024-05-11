@@ -40,8 +40,6 @@ before_install:
     else
       cp -rf $HOME/third_party $TRAVIS_BUILD_DIR;
     fi
-
-install:
   - if [ ! -d "$HOME/build$XLEN" ] || [ -z "$(ls -A $HOME/build$XLEN)" ] || [ "$(cat "$HOME/build$XLEN/version.txt")" != "$TRAVIS_COMMIT" ]; then
       mkdir -p $TRAVIS_BUILD_DIR/build$XLEN && cd $TRAVIS_BUILD_DIR/build$XLEN;
       TOOLDIR=$TOOLDIR XLEN=$XLEN ../configure;
@@ -56,7 +54,7 @@ install:
 before_script:
   - cd $TRAVIS_BUILD_DIR/build$XLEN
   - source ci/toolchain_env.sh
-  
+
 stages:
   - test
 
