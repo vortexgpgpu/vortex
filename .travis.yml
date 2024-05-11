@@ -21,14 +21,14 @@ cache:
   directories:
     - $TOOLDIR
     - $HOME/third_party
+    - $HOME/build32
+    - $HOME/build64
 
 before_install:
-  - mkdir -p build && cd build
-  - TOOLDIR=$TOOLDIR XLEN=$XLEN ../configure
-install:
   - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0.2" ]; then
       rm -rf $TOOLDIR;
-      cd $TRAVIS_BUILD_DIR/build;
+      mkdir -p $TRAVIS_BUILD_DIR/build && cd $TRAVIS_BUILD_DIR/build;
+      TOOLDIR=$TOOLDIR ../configure;
       ci/toolchain_install.sh --all;
       echo "v0.2" > "$TOOLDIR/version.txt";
     fi
@@ -40,10 +40,23 @@ install:
     else
       cp -rf $HOME/third_party $TRAVIS_BUILD_DIR;
     fi
+
+install:
+  - if [ ! -d "$HOME/build$XLEN" ] || [ -z "$(ls -A $HOME/build$XLEN)" ] || [ "$(cat "$HOME/build$XLEN/version.txt")" != "$TRAVIS_COMMIT" ]; then
+      mkdir -p $TRAVIS_BUILD_DIR/build$XLEN && cd $TRAVIS_BUILD_DIR/build$XLEN;
+      TOOLDIR=$TOOLDIR XLEN=$XLEN ../configure;
+      source ci/toolchain_env.sh;
+      make build -s > /dev/null;
+      cp -rf build$XLEN $HOME;
+      echo "$TRAVIS_COMMIT" > "$HOME/build$XLEN/version.txt";
+    else
+      cp -rf $HOME/build$XLEN $TRAVIS_BUILD_DIR;
+    fi
+
 before_script:
-  - cd $TRAVIS_BUILD_DIR/build
+  - cd $TRAVIS_BUILD_DIR/build$XLEN
   - source ci/toolchain_env.sh
-  - make build -s > /dev/null
+  
 stages:
   - test
 
