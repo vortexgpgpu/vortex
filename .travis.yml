@@ -35,18 +35,20 @@ before_install:
   - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v0.2" ]; then
       cd $TRAVIS_BUILD_DIR;
       make -C third_party > /dev/null;
+      echo "v0.2" > "third_party/version.txt";
       cp -rf third_party $HOME;
-      echo "v0.2" > "$HOME/third_party/version.txt";
     else
       cp -rf $HOME/third_party $TRAVIS_BUILD_DIR;
     fi
+
+install:
   - if [ ! -d "$HOME/build$XLEN" ] || [ -z "$(ls -A $HOME/build$XLEN)" ] || [ "$(cat "$HOME/build$XLEN/version.txt")" != "$TRAVIS_COMMIT" ]; then
       mkdir -p $TRAVIS_BUILD_DIR/build$XLEN && cd $TRAVIS_BUILD_DIR/build$XLEN;
       TOOLDIR=$TOOLDIR XLEN=$XLEN ../configure;
       source ci/toolchain_env.sh;
       make build -s > /dev/null;
-      cp -rf build$XLEN $HOME;
-      echo "$TRAVIS_COMMIT" > "$HOME/build$XLEN/version.txt";
+      echo "$TRAVIS_COMMIT" > version.txt;
+      cp -rf $TRAVIS_BUILD_DIR/build$XLEN $HOME;
     else
       cp -rf $HOME/build$XLEN $TRAVIS_BUILD_DIR;
     fi
