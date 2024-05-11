@@ -226,7 +226,7 @@ void Emulator::resume(uint32_t wid) {
 
 bool Emulator::wspawn(uint32_t num_warps, Word nextPC) {
   num_warps = std::min<uint32_t>(num_warps, arch_.num_warps());
-  if (num_warps < 2)
+  if (num_warps < 2 && active_warps_.count() == 1)
     return true;
   wspawn_.valid = true;
   wspawn_.num_warps = num_warps;
