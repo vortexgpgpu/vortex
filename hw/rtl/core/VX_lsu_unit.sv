@@ -34,7 +34,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     localparam NUM_LANES    = `NUM_LSU_LANES;
     localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
-    localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1 + 1;
+    localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1 + 1 + 1;
     localparam LSUQ_SIZEW   = `LOG2UP(`LSUQ_SIZE);
     localparam MEM_ASHIFT   = `CLOG2(`MEM_BLOCK_SIZE);
     localparam MEM_ADDRW    = `XLEN - MEM_ASHIFT;
@@ -80,7 +80,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 `endif
 
     // tag = uuid + addr_type + wid + PC + tmask + rd + op_type + align + is_dup + pid + pkt_addr
-    localparam TAG_WIDTH = `UUID_WIDTH + (NUM_LANES * `CACHE_ADDR_TYPE_BITS) + `NW_WIDTH + `XLEN + NUM_LANES + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * (REQ_ASHIFT)) + `LSU_DUP_ENABLED + PID_WIDTH + LSUQ_SIZEW;
+    localparam TAG_WIDTH = `UUID_WIDTH + (NUM_LANES * `CACHE_ADDR_TYPE_BITS) + `NW_WIDTH + `XLEN + NUM_LANES + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * (REQ_ASHIFT)) + `LSU_DUP_ENABLED + PID_WIDTH + LSUQ_SIZEW + 1;
 
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % `MEM_BLOCK_SIZE), ("invalid parameter"))
 
@@ -100,12 +100,13 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         wire [`XLEN-1:0] addr_offset_1;
         wire [`XLEN-1:0] addr_offset_2;
-        // First matrix accesses have offset (tid / 2) * 2
-        assign addr_offset_1 = (`XLEN)'(i) >> 1 << 1;
-        // Second matrix accesses have offset (tid % 2)
-        assign addr_offset_2 = (`XLEN)'(i[0]);
-        always @(*) begin
 
+        // First matrix accesses have offset (tid / 2) * 2
+        assign addr_offset_1 = (`XLEN)'(execute_if[0].data.tid) >> 1 << 1;
+        // Second matrix accesses have offset (tid % 2)
+        assign addr_offset_2 = (`XLEN)'(execute_if[0].data.tid[0]);
+
+        always @(*) begin
             if (is_mload) begin
                 if (mload_count_q < 2) begin
                     full_addr[i] = execute_if[0].data.rs1_data[i] + ((`XLEN/8) * (addr_offset_1 + (`XLEN)'(mload_count_q == 'h1)));
@@ -331,7 +332,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     assign mem_req_tag = {
         execute_if[0].data.uuid, lsu_addr_type, execute_if[0].data.wid, execute_if[0].data.tmask, execute_if[0].data.PC,
-        mem_req_rd , execute_if[0].data.op_type, req_align, execute_if[0].data.pid, pkt_waddr
+        mem_req_rd , execute_if[0].data.op_type, req_align, execute_if[0].data.pid, pkt_waddr, (mload_count_q == 3'h3 && state_q == LSU_MLOAD) || (~is_mload && state_q == LSU_NORMAL)
     `ifdef LSU_DUP_ENABLE
         , lsu_is_dup
     `endif
@@ -476,8 +477,9 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     assign rsp_is_dup = 0;
 `endif
 
+    wire rsp_true_eop;
     assign {
-        rsp_uuid, rsp_addr_type, rsp_wid, rsp_tmask_uq, rsp_pc, rsp_rd, rsp_op_type, rsp_align, rsp_pid, pkt_raddr
+        rsp_uuid, rsp_addr_type, rsp_wid, rsp_tmask_uq, rsp_pc, rsp_rd, rsp_op_type, rsp_align, rsp_pid, pkt_raddr, rsp_true_eop
     `ifdef LSU_DUP_ENABLE
         , rsp_is_dup
     `endif
@@ -533,15 +535,15 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     // load commit
 
     VX_elastic_buffer #(
-        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1),
+        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1 + 1),
         .SIZE  (2)
     ) ld_rsp_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (mem_rsp_valid),
         .ready_in  (mem_rsp_ready),
-        .data_in   ({rsp_uuid, rsp_wid, rsp_tmask, rsp_pc, rsp_rd, rsp_data, rsp_pid, mem_rsp_sop_pkt, mem_rsp_eop_pkt }),
-        .data_out  ({commit_ld_if.data.uuid, commit_ld_if.data.wid, commit_ld_if.data.tmask, commit_ld_if.data.PC, commit_ld_if.data.rd, commit_ld_if.data.data, commit_ld_if.data.pid, commit_ld_if.data.sop, commit_ld_if.data.eop }),
+        .data_in   ({rsp_uuid, rsp_wid, rsp_tmask, rsp_pc, rsp_rd, rsp_data, rsp_pid, mem_rsp_sop_pkt, mem_rsp_eop_pkt, rsp_true_eop}),
+        .data_out  ({commit_ld_if.data.uuid, commit_ld_if.data.wid, commit_ld_if.data.tmask, commit_ld_if.data.PC, commit_ld_if.data.rd, commit_ld_if.data.data, commit_ld_if.data.pid, commit_ld_if.data.sop, commit_ld_if.data.eop, commit_ld_if.data.true_eop}),
         .valid_out (commit_ld_if.valid),
         .ready_out (commit_ld_if.ready)
     );
@@ -559,10 +561,11 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .valid_in  (mem_req_fire && mem_req_rw),
         .ready_in  (st_rsp_ready),
         .data_in   ({execute_if[0].data.uuid, execute_if[0].data.wid, execute_if[0].data.tmask, execute_if[0].data.PC, execute_if[0].data.pid, execute_if[0].data.sop, execute_if[0].data.eop}),
-        .data_out  ({commit_st_if.data.uuid, commit_st_if.data.wid, commit_st_if.data.tmask, commit_st_if.data.PC, commit_st_if.data.pid, commit_st_if.data.sop, commit_st_if.data.eop }),
+        .data_out  ({commit_st_if.data.uuid, commit_st_if.data.wid, commit_st_if.data.tmask, commit_st_if.data.PC, commit_st_if.data.pid, commit_st_if.data.sop, commit_st_if.data.eop}),
         .valid_out (commit_st_if.valid),
         .ready_out (commit_st_if.ready)
     );
+    assign commit_st_if.data.true_eop = 1'b1;
     assign commit_st_if.data.rd   = '0;
     assign commit_st_if.data.wb   = 1'b0;
     assign commit_st_if.data.data = commit_ld_if.data.data; // force arbiter passthru

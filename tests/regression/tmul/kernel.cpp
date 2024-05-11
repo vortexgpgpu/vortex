@@ -1,6 +1,5 @@
 #include <stdint.h>
 #include "vx_intrinsics.h"
-#include "vx_print.h"
 #include "vx_spawn.h"
 #include "common.h"
 
@@ -8,7 +7,6 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	TYPE* A = reinterpret_cast<TYPE*>(arg->A_addr);
 	TYPE* B = reinterpret_cast<TYPE*>(arg->B_addr);
 	
-	vx_printf("%p\t%p\n",A, B);
 	vx_mload(A, B);
 	vx_fence();
 }

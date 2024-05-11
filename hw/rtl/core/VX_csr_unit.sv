@@ -39,7 +39,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (CORE_ID)
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
-    localparam DATAW      = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + NUM_LANES * 32 + PID_WIDTH + 1 + 1;
+    localparam DATAW      = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + NUM_LANES * 32 + PID_WIDTH + 1 + 1 + 1;
 
     `UNUSED_VAR (execute_if.data.rs3_data)
     
@@ -166,14 +166,15 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (csr_req_valid),
         .ready_in  (csr_req_ready),
-        .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, csr_read_data, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop}),
-        .data_out  ({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.PC, commit_if.data.rd, commit_if.data.wb, csr_commit_data, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop}),
+        .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, csr_read_data, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, 1'b1}),
+        .data_out  ({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.PC, commit_if.data.rd, commit_if.data.wb, csr_commit_data, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop, commit_if.data.true_eop}),
         .valid_out (commit_if.valid),
         .ready_out (commit_if.ready)
     );
     
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign commit_if.data.data[i] = `XLEN'(csr_commit_data[i]);
+        assign commit_if.data.true_eop = 1'b1;
     end
 
 endmodule

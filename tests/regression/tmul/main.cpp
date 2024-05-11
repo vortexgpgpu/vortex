@@ -219,33 +219,6 @@ int main(int argc, char *argv[]) {
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
 
-  // download destination buffer
-  /*
-  std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(device, staging_buf.data(), kernel_arg.C_addr, buf_size));
-  */
-
-  // verify result
-  /*
-  std::cout << "verify result" << std::endl;
-  {
-    int errors = 0;
-    auto buf_ptr = (TYPE*)staging_buf.data();
-    for (uint32_t i = 0; i < refs.size(); ++i) {
-      auto ref = refs[i];
-      auto cur = buf_ptr[i];
-      if (!Comparator<TYPE>::compare(cur, ref, i, errors)) {
-        ++errors;
-      }
-    }
-    if (errors != 0) {
-      std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
-      std::cout << "FAILED!" << std::endl;
-      return 1;
-    }
-  }
-  */
-
   // cleanup
   std::cout << "cleanup" << std::endl;
   cleanup();

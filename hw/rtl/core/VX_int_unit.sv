@@ -136,14 +136,14 @@ module VX_int_unit #(
     end   
 
     VX_elastic_buffer #(
-        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `NR_BITS + 1 + PID_WIDTH + 1 + 1 + (NUM_LANES * `XLEN) + `XLEN + `XLEN + 1 + `INST_BR_BITS + LANE_WIDTH)
+        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `NR_BITS + 1 + PID_WIDTH + 1 + 1 + (NUM_LANES * `XLEN) + `XLEN + `XLEN + 1 + `INST_BR_BITS + LANE_WIDTH + 1)
     ) rsp_buf (
         .clk      (clk),
         .reset    (reset),
         .valid_in (execute_if.valid),
         .ready_in (execute_if.ready),
-        .data_in  ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, alu_result, execute_if.data.PC, execute_if.data.imm, is_br_op, br_op, tid}),
-        .data_out ({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.rd, commit_if.data.wb, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop, alu_result_r, PC_r, imm_r, is_br_op_r, br_op_r, tid_r}),
+        .data_in  ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, alu_result, execute_if.data.PC, execute_if.data.imm, is_br_op, br_op, tid , 1'b1}),
+        .data_out ({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.rd, commit_if.data.wb, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop, alu_result_r, PC_r, imm_r, is_br_op_r, br_op_r, tid_r, commit_if.data.true_eop}),
         .valid_out (commit_if.valid),
         .ready_out (commit_if.ready)
     );

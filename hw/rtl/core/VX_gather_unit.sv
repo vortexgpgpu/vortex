@@ -31,7 +31,7 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
     localparam BLOCK_SIZE_W = `LOG2UP(BLOCK_SIZE);
     localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
-    localparam DATAW        = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + 1 + `NR_BITS + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
+    localparam DATAW        = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + 1 + `NR_BITS + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1 + 1;
     localparam DATA_WIS_OFF = DATAW - (`UUID_WIDTH + `NW_WIDTH);
 
     wire [BLOCK_SIZE-1:0] commit_in_valid;
@@ -121,7 +121,8 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
             commit_data_r,
             1'b0, // PID
             commit_tmp_if.data.sop,
-            commit_tmp_if.data.eop
+            commit_tmp_if.data.eop,
+            commit_tmp_if.data.true_eop
         };
         assign commit_tmp_if.ready = commit_out_if[i].ready;
     end

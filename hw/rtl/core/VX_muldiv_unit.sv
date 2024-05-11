@@ -323,16 +323,16 @@ module VX_muldiv_unit #(
 
     VX_stream_arb #(
         .NUM_INPUTS (2),
-        .DATAW (TAGW + (NUM_LANES * `XLEN)),
+        .DATAW (TAGW + (NUM_LANES * `XLEN) + 1),
         .OUT_REG (1)
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  ({div_valid_out, mul_valid_out}),
         .ready_in  ({div_ready_out, mul_ready_out}),
-        .data_in   ({{div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, div_pid_out, div_sop_out, div_eop_out, div_result_out},
-                     {mul_uuid_out, mul_wid_out, mul_tmask_out, mul_PC_out, mul_rd_out, mul_wb_out, mul_pid_out, mul_sop_out, mul_eop_out, mul_result_out}}),
-        .data_out  ({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.PC, commit_if.data.rd, commit_if.data.wb, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop, commit_if.data.data}),
+        .data_in   ({{div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, div_pid_out, div_sop_out, div_eop_out, div_result_out, 1'b1},
+                     {mul_uuid_out, mul_wid_out, mul_tmask_out, mul_PC_out, mul_rd_out, mul_wb_out, mul_pid_out, mul_sop_out, mul_eop_out, mul_result_out, 1'b1}}),
+        .data_out  ({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.PC, commit_if.data.rd, commit_if.data.wb, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop, commit_if.data.data, commit_if.data.true_eop}),
         .valid_out (commit_if.valid),
         .ready_out (commit_if.ready),
         `UNUSED_PIN (sel_out)

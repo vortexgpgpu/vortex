@@ -152,7 +152,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     `endif
         if (warp_ctl_if.valid && warp_ctl_if.barrier.valid) begin
             if (~warp_ctl_if.barrier.is_global 
-             && (active_barrier_count[`NW_WIDTH-1:0] == warp_ctl_if.barrier.size_m1[`NW_WIDTH-1:0])) begin                                
+             && (active_barrier_count[`NW_WIDTH-1:0] == warp_ctl_if.barrier.size_m1[`NW_WIDTH-1:0])) begin
                 barrier_masks_n[warp_ctl_if.barrier.id] = '0;
                 barrier_stalls_n &= ~barrier_masks[warp_ctl_if.barrier.id];
             end else begin
@@ -353,7 +353,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
         .reset     (pending_instr_reset),
         .incr      (schedule_if_fire),
         .incr_wid  (schedule_if.data.wid),
-        .decr      (commit_sched_if.committed),
+        .decr      (commit_sched_if.committed & {(`ISSUE_WIDTH){commit_sched_if.true_eop}}),
         .decr_wid  (commit_sched_if.committed_wid),
         .alm_empty_wid (sched_csr_if.alm_empty_wid),
         .alm_empty (sched_csr_if.alm_empty),
