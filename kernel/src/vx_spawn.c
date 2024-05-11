@@ -96,12 +96,14 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
     tasks_per_core++;
 
   // calculate number of warps to activate
-  int active_warps = tasks_per_core / threads_per_warp;
-  int remaining_tasks = tasks_per_core - active_warps * threads_per_warp;
+  int total_warps_per_core = tasks_per_core / threads_per_warp;
+  int remaining_tasks = tasks_per_core - total_warps_per_core * threads_per_warp;
+  int active_warps = total_warps_per_core;
   int warp_batches = 1, remaining_warps = 0;
   if (active_warps > warps_per_core) {
-    warp_batches = active_warps / warps_per_core;
-    remaining_warps = active_warps - warp_batches * warps_per_core;
+    active_warps = warps_per_core;
+    warp_batches = total_warps_per_core / active_warps;
+    remaining_warps = total_warps_per_core - warp_batches * active_warps;
   }
 
   // calculate offsets for task distribution
@@ -121,8 +123,7 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
 
 	if (active_warps >= 1) {
     // execute callback on other warps
-    int num_total_warps = MIN(active_warps, warps_per_core);
-    vx_wspawn(num_total_warps, process_all_tasks_stub);
+    vx_wspawn(active_warps, process_all_tasks_stub);
 
     // activate all threads
     vx_tmc(-1);
@@ -252,8 +253,8 @@ void vx_spawn_task_groups(int num_groups, int group_size, vx_spawn_task_groups_c
   // calculate number of warps to activate
   int groups_per_core = warps_per_core / warps_per_group;
   int total_warps_per_core = total_groups_per_core * warps_per_group;
-  int warp_batches = 1, remaining_warps = 0;
   int active_warps = total_warps_per_core;
+  int warp_batches = 1, remaining_warps = 0;
   if (active_warps > warps_per_core) {
     active_warps = groups_per_core * warps_per_group;
     warp_batches = total_warps_per_core / active_warps;
