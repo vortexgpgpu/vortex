@@ -8,7 +8,6 @@ CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I$(INC_DIR) -I../common -I$(ROOT_DIR)/hw -I$(SIM_DIR)/simx -I$(COMMON_DIR) -I$(SIM_DIR)/common
 CXXFLAGS += $(CONFIGS)
-CXXFLAGS += -DDUMP_PERF_STATS
 CXXFLAGS += -DXLEN_$(XLEN)
 
 LDFLAGS += -shared -pthread
@@ -19,7 +18,7 @@ SRCS := $(SRC_DIR)/vortex.cpp $(COMMON_DIR)/utils.cpp
 # Debugigng
 ifdef DEBUG
 	CXXFLAGS += -g -O0
-else    
+else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 

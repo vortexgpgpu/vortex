@@ -18,9 +18,6 @@ CXXFLAGS += -fPIC
 # Add external configuration
 CXXFLAGS += $(CONFIGS)
 
-# Dump perf stats
-CXXFLAGS += -DDUMP_PERF_STATS
-
 LDFLAGS += -shared -luuid -ldl -pthread
 
 SRCS = $(SRC_DIR)/vortex.cpp $(SRC_DIR)/driver.cpp $(COMMON_DIR)/utils.cpp
@@ -42,13 +39,13 @@ endif
 # Debugigng
 ifdef DEBUG
 	CXXFLAGS += -g -O0
-else    
+else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
 # Enable scope logic analyzer
 ifdef SCOPE
-	CXXFLAGS += -DSCOPE	
+	CXXFLAGS += -DSCOPE
 	SRCS += $(COMMON_DIR)/scope.cpp
 endif
 

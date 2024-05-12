@@ -154,6 +154,7 @@ public:
 #ifndef CPP_API
 
     ~vx_device() {
+        profiling_remove(profiling_id_);
         for (auto& entry : xrtBuffers_) {
         #ifdef BANK_INTERLEAVE
             xrtBOFree(entry);
@@ -226,6 +227,12 @@ public:
             printf("*** allocated bank%u/%u, size=%lu\n", i, num_banks, bank_size);
         }
     #endif
+
+        CHECK_ERR(dcr_initialize(this), {
+            return err;
+        });
+
+        profiling_id_ = profiling_add(this);
 
         return 0;
     }
@@ -505,6 +512,8 @@ public:
             return err;
         });
 
+        profiling_begin(profiling_id_);
+
         // start execution
         CHECK_ERR(device->write_register(MMIO_CTL_ADDR, CTL_AP_START), {
             return err;
@@ -535,12 +544,17 @@ public:
                 return err;
             });
             bool is_done = (status & CTL_AP_DONE) == CTL_AP_DONE;
-            if (is_done || 0 == timeout) {
+            if (is_done)
                 break;
+            if (0 == timeout) {
+                return -1;
             }
             nanosleep(&sleep_time, nullptr);
             timeout -= sleep_time_ms;
         };
+
+        profiling_end(profiling_id_);
+        
         return 0;
     }
 
@@ -584,6 +598,7 @@ private:
     uint64_t global_mem_size_;
     DeviceConfig dcrs_;
     std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
+    int profiling_id_;
 
 #ifdef BANK_INTERLEAVE
 
@@ -841,15 +856,6 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     }
 #endif
 
-    CHECK_ERR(dcr_initialize(device), {
-        delete device;
-        return err;
-    });
-
-#ifdef DUMP_PERF_STATS
-    perf_add_device(device);
-#endif
-
     DBGPRINT("DEV_OPEN: hdevice=%p\n", (void*)device);
 
     *hdevice = device;
@@ -1078,7 +1084,11 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
 
     auto device = ((vx_device*)hdevice);
 
-    return device->ready_wait(timeout);
+    CHECK_ERR(device->ready_wait(timeout), {
+        return err;
+    });
+
+    return  0;
 }
 
 extern int vx_dcr_read(vx_device_h hdevice, uint32_t addr, uint32_t* value) {

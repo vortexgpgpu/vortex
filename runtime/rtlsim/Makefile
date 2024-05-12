@@ -14,9 +14,6 @@ CXXFLAGS += -fPIC
 # Add external configuration
 CXXFLAGS += $(CONFIGS)
 
-# Dump perf stats
-CXXFLAGS += -DDUMP_PERF_STATS
-
 LDFLAGS += -shared -pthread
 LDFLAGS += -L$(DESTDIR) -lrtlsim
 
@@ -25,7 +22,7 @@ SRCS := $(SRC_DIR)/vortex.cpp $(COMMON_DIR)/utils.cpp
 # Debugigng
 ifdef DEBUG
 	CXXFLAGS += -g -O0
-else    
+else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
@@ -37,7 +34,7 @@ endif
 PROJECT := libvortex.so
 
 all: $(DESTDIR)/$(PROJECT)
-	
+
 $(DESTDIR)/$(PROJECT): $(SRCS)
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/rtlsim $(DESTDIR)/librtlsim.so
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
