@@ -195,7 +195,7 @@
 `define INST_LSU_SH          4'b1001
 `define INST_LSU_SW          4'b1010
 `define INST_LSU_SD          4'b1011 // new for RV64I SD
-`define INST_LSU_MLOAD       4'b1110 // Mod2 adding op-type
+`define INST_LSU_MLOAD       4'b1110 // new fow MLOAD
 `define INST_LSU_FENCE       4'b1111
 `define INST_LSU_BITS        4
 `define INST_LSU_FMT(op)     op[2:0]
