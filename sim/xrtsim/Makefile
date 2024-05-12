@@ -2,8 +2,8 @@ include ../common.mk
 
 DESTDIR ?= $(CURDIR)
 
-SRC_DIR := $(VORTEX_HOME)/sim/opaesim
-AFU_DIR := $(RTL_DIR)/afu/opae
+SRC_DIR := $(VORTEX_HOME)/sim/xrtsim
+AFU_DIR := $(RTL_DIR)/afu/xrt
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
@@ -49,9 +49,8 @@ DBG_FLAGS += -DDEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 
 SRCS = $(COMMON_DIR)/util.cpp $(COMMON_DIR)/mem.cpp $(COMMON_DIR)/rvfloats.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
-SRCS += $(SRC_DIR)/fpga.cpp $(SRC_DIR)/opae_sim.cpp
+SRCS += $(SRC_DIR)/fpga.cpp $(SRC_DIR)/xrt_sim.cpp
 
-RTL_PKGS = $(AFU_DIR)/local_mem_cfg_pkg.sv $(AFU_DIR)/ccip/ccip_if_pkg.sv
 RTL_PKGS += $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
@@ -60,7 +59,7 @@ ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
 	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src
 endif
 RTL_INCLUDE = -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
-RTL_INCLUDE += -I$(AFU_DIR) -I$(AFU_DIR)/ccip
+RTL_INCLUDE += -I$(AFU_DIR)
 
 TOP = vortex_afu_shim
 
@@ -104,11 +103,11 @@ ifdef PERF
 	CXXFLAGS += -DPERF_ENABLE
 endif
 
-# use our OPAE shim
-VL_FLAGS += -DNOPAE
-CXXFLAGS += -DNOPAE
+# use our XRT shim
+VL_FLAGS += -DNOXRT
+CXXFLAGS += -DNOXRT
 
-PROJECT := libopae-c-sim.so
+PROJECT := libxrtsim.so
 
 all: $(DESTDIR)/$(PROJECT)
 
@@ -118,11 +117,8 @@ $(DESTDIR)/vortex.xml:
 $(DESTDIR)/scope.json: $(DESTDIR)/vortex.xml
 	$(SCRIPT_DIR)/scope.py $^ -o $@
 
-$(DESTDIR)/vortex_afu.h : $(AFU_DIR)/vortex_afu.vh
-	$(SCRIPT_DIR)/gen_config.py -i $^ -o $@
-
-$(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/vortex_afu.h $(SCOPE_JSON)
+$(DESTDIR)/$(PROJECT): $(SRCS) $(SCOPE_JSON)
 	verilator --build --exe -O3 $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $(DESTDIR)/obj_dir -o $@
 
 clean:
-	rm -rf $(DESTDIR)/obj_dir $(DESTDIR)/vortex.xml $(DESTDIR)/scope.json $(DESTDIR)/vortex_afu.h $(DESTDIR)/$(PROJECT)
+	rm -rf $(DESTDIR)/obj_dir $(DESTDIR)/vortex.xml $(DESTDIR)/scope.json $(DESTDIR)/$(PROJECT)
