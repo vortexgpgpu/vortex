@@ -1,12 +1,12 @@
 #!/bin/sh
 
 # Copyright © 2019-2023
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 # http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -91,12 +91,12 @@ case $i in
         ;;
     --scope)
         SCOPE=1
-        CORES=1        
+        CORES=1
         shift
         ;;
     --perf=*)
         PERF_FLAG=-DPERF_ENABLE
-        PERF_CLASS=${i#*=}    
+        PERF_CLASS=${i#*=}
         shift
         ;;
     --args=*)
@@ -117,8 +117,8 @@ case $i in
         exit 0
         ;;
     *)
-        show_usage   
-        exit -1       
+        show_usage
+        exit -1
         ;;
 esac
 done
@@ -162,7 +162,7 @@ else
     exit -1
 fi
 
-if [ "$DRIVER" = "gpu" ]; 
+if [ "$DRIVER" = "gpu" ];
 then
     # running application
     if [ $HAS_ARGS -eq 1 ]
@@ -183,11 +183,11 @@ CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_TH
 
 echo "CONFIGS=$CONFIGS"
 
-if [ $REBUILD -ne 0 ] 
+if [ $REBUILD -ne 0 ]
 then
-    BLACKBOX_CACHE=blackbox.$DRIVER.cache    
+    BLACKBOX_CACHE=blackbox.$DRIVER.cache
     if [ -f "$BLACKBOX_CACHE" ]
-    then 
+    then
         LAST_CONFIGS=`cat $BLACKBOX_CACHE`
     fi
 
@@ -199,7 +199,7 @@ then
 fi
 
 # export performance monitor class identifier
-export PERF_CLASS=$PERF_CLASS
+export VORTEX_PROFILING=$PERF_CLASS
 
 status=0
 
@@ -210,7 +210,7 @@ make -C $ROOT_DIR/hw config > /dev/null
 make -C $ROOT_DIR/runtime/stub > /dev/null
 
 if [ $DEBUG -ne 0 ]
-then    
+then
     # running application
     if [ $TEMPBUILD -eq 1 ]
     then
@@ -265,18 +265,18 @@ then
             status=$?
         fi
     fi
-    
+
     if [ -f "$APP_PATH/trace.vcd" ]
-    then 
+    then
         mv -f $APP_PATH/trace.vcd .
     fi
-else    
+else
     if [ $TEMPBUILD -eq 1 ]
     then
         # setup temp directory
         TEMPDIR=$(mktemp -d)
         mkdir -p "$TEMPDIR/$DRIVER"
-        
+
         # driver initialization
         if [ $SCOPE -eq 1 ]
         then
@@ -286,7 +286,7 @@ else
             echo "running: DESTDIR=$TEMPDIR/$DRIVER CONFIGS=$CONFIGS make -C $DRIVER_PATH"
             DESTDIR="$TEMPDIR/$DRIVER" CONFIGS="$CONFIGS" make -C $DRIVER_PATH > /dev/null
         fi
-        
+
         # running application
         if [ $HAS_ARGS -eq 1 ]
         then
@@ -302,7 +302,7 @@ else
         # cleanup temp directory
         trap "rm -rf $TEMPDIR" EXIT
     else
-        
+
         # driver initialization
         if [ $SCOPE -eq 1 ]
         then

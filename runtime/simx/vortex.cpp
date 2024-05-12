@@ -68,6 +68,15 @@ public:
         if (future_.valid()) {
             future_.wait();
         }
+        profiling_remove(profiling_id_);
+    }
+
+    int init() {
+        CHECK_ERR(dcr_initialize(this), {
+            return err;
+        });
+        profiling_id_ = profiling_add(this);
+        return 0;
     }
 
     int get_caps(uint32_t caps_id, uint64_t *value) {
@@ -203,6 +212,8 @@ public:
         this->dcr_write(VX_DCR_BASE_STARTUP_ARG0, args_addr & 0xffffffff);
         this->dcr_write(VX_DCR_BASE_STARTUP_ARG1, args_addr >> 32);
 
+        profiling_begin(profiling_id_);
+
         // start new run
         future_ = std::async(std::launch::async, [&]{
             processor_.run();
@@ -222,10 +233,12 @@ public:
         for (;;) {
             // wait for 1 sec and check status
             auto status = future_.wait_for(wait_time);
-            if (status == std::future_status::ready
-             || 0 == timeout_sec--)
+            if (status == std::future_status::ready)
                 break;
+            if (0 == timeout_sec--)
+                return -1;
         }
+        profiling_end(profiling_id_);
         return 0;
     }
 
@@ -264,6 +277,7 @@ private:
     DeviceConfig        dcrs_;
     std::future<void>   future_;
     std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
+    int profiling_id_;
 };
 
 struct vx_buffer {
@@ -282,15 +296,10 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     if (device == nullptr)
         return -1;
 
-    int err = dcr_initialize(device);
-    if (err != 0) {
+    CHECK_ERR(device->init(), {
         delete device;
         return err;
-    }
-
-#ifdef DUMP_PERF_STATS
-    perf_add_device(device);
-#endif
+    });
 
     DBGPRINT("DEV_OPEN: hdevice=%p\n", (void*)device);
 
@@ -306,10 +315,6 @@ extern int vx_dev_close(vx_device_h hdevice) {
     DBGPRINT("DEV_CLOSE: hdevice=%p\n", hdevice);
 
     auto device = ((vx_device*)hdevice);
-
-#ifdef DUMP_PERF_STATS
-    perf_remove_device(hdevice);
-#endif
 
     delete device;
 
@@ -507,6 +512,7 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     DBGPRINT("READY_WAIT: hdevice=%p, timeout=%ld\n", hdevice, timeout);
 
     auto device = ((vx_device*)hdevice);
+
     return device->ready_wait(timeout);
 }
 

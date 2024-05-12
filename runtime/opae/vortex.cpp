@@ -112,6 +112,8 @@ public:
             }
             api_.fpgaClose(fpga_);
         }
+
+        profiling_remove(profiling_id_);
     }
 
     int init() {
@@ -208,7 +210,13 @@ public:
         }
     #endif
 
-        return dcr_initialize(this);
+        CHECK_ERR(dcr_initialize(this), {
+            return err;
+        });
+
+        profiling_id_ = profiling_add(this);
+
+        return 0;
     }
 
     int get_caps(uint32_t caps_id, uint64_t *value) {
@@ -397,6 +405,8 @@ public:
             return err;
         });
 
+        profiling_begin(profiling_id_);
+
         // start execution
         CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_TYPE, CMD_RUN), {
             return -1;
@@ -455,6 +465,7 @@ public:
                 }
                 if (state != 0) {
                     fprintf(stdout, "[VXDRV] ready-wait timed out: state=%d\n", state);
+                    return -1;
                 }
                 break;
             }
@@ -462,6 +473,9 @@ public:
             nanosleep(&sleep_time, nullptr);
             timeout -= sleep_time_ms;
         };
+
+        profiling_end(profiling_id_);
+
         return 0;
     }
 
@@ -538,6 +552,7 @@ private:
     uint8_t* staging_ptr_;
     uint64_t staging_size_;
     std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
+    int profiling_id_;
 };
 
 struct vx_buffer {
@@ -569,10 +584,6 @@ extern int vx_dev_open(vx_device_h* hdevice) {
         return err;
     });
 
-#ifdef DUMP_PERF_STATS
-    perf_add_device(device);
-#endif
-
     DBGPRINT("DEV_OPEN: hdevice=%p\n", (void*)device);
 
     *hdevice = device;
@@ -590,10 +601,6 @@ extern int vx_dev_close(vx_device_h hdevice) {
 
 #ifdef SCOPE
     vx_scope_stop(hdevice);
-#endif
-
-#ifdef DUMP_PERF_STATS
-    perf_remove_device(hdevice);
 #endif
 
     delete device;
@@ -758,11 +765,7 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, const void* host_ptr, uint64_t ds
 
     DBGPRINT("COPY_TO_DEV: hbuffer=%p, host_addr=%p, dst_offset=%ld, size=%ld\n", hbuffer, host_ptr, dst_offset, size);
 
-    CHECK_ERR(device->upload(buffer->addr + dst_offset, host_ptr, size), {
-        return err;
-    });
-
-    return 0;
+    return device->upload(buffer->addr + dst_offset, host_ptr, size);
 }
 
 extern int vx_copy_from_dev(void* host_ptr, vx_buffer_h hbuffer, uint64_t src_offset, uint64_t size) {
@@ -777,11 +780,7 @@ extern int vx_copy_from_dev(void* host_ptr, vx_buffer_h hbuffer, uint64_t src_of
 
     DBGPRINT("COPY_FROM_DEV: hbuffer=%p, host_addr=%p, src_offset=%ld, size=%ld\n", hbuffer, host_ptr, src_offset, size);
 
-    CHECK_ERR(device->download(host_ptr, buffer->addr + src_offset, size), {
-        return err;
-    });
-
-    return 0;
+    return device->download(host_ptr, buffer->addr + src_offset, size);
 }
 
 extern int vx_start(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments) {
