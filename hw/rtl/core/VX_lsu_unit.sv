@@ -102,9 +102,9 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         wire [`XLEN-1:0] addr_offset_2;
 
         // First matrix accesses have offset (tid / 2) * 2
-        assign addr_offset_1 = (`XLEN)'(execute_if[0].data.tid) >> 1 << 1;
+        assign addr_offset_1 = (`XLEN)'(i) >> 1 << 1;
         // Second matrix accesses have offset (tid % 2)
-        assign addr_offset_2 = (`XLEN)'(execute_if[0].data.tid[0]);
+        assign addr_offset_2 = (`XLEN)'(i[0]);
 
         always @(*) begin
             if (is_mload) begin

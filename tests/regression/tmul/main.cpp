@@ -175,8 +175,8 @@ int main(int argc, char *argv[]) {
   std::vector<TYPE> refs(num_points);
   for (uint32_t i = 0; i < size; ++i) {
     for (uint32_t j = 0; j < size; ++j) {
-      src_A[i] = static_cast<TYPE>(i == j);
-      src_B[i] = static_cast<TYPE>(i == j);
+      src_A[i * size + j] = static_cast<TYPE>(i == j);
+      src_B[i * size + j] = static_cast<TYPE>(i == j);
     }
   }
 
