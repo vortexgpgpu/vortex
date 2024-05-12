@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -77,7 +77,8 @@
                               /* verilator lint_off IMPLICIT */ \
                               /* verilator lint_off PINMISSING */ \
                               /* verilator lint_off IMPORTSTAR */ \
-                              /* verilator lint_off UNSIGNED */
+                              /* verilator lint_off UNSIGNED */ \
+                              /* verilator lint_off SYMRSVDWORD */
 
 `define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */ \
                               /* verilator lint_on PINCONNECTEMPTY */ \
@@ -88,7 +89,8 @@
                               /* verilator lint_on IMPLICIT */ \
                               /* verilator lint_off PINMISSING */ \
                               /* verilator lint_on IMPORTSTAR */ \
-                              /* verilator lint_on UNSIGNED */
+                              /* verilator lint_on UNSIGNED */ \
+                              /* verilator lint_on SYMRSVDWORD */
 
 `define UNUSED_PARAM(x)  /* verilator lint_off UNUSED */ \
                          localparam  __``x = x; \
