@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # Copyright © 2019-2023
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 # http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,27 +14,27 @@
 # limitations under the License.
 
 # Function to detect current OS
-detect_os() {
-    local osdir="unsupported"
+detect_osversion() {
+    local osversion="unsupported"
     if [ -f /etc/os-release ]; then
         . /etc/os-release  # Source the os-release file to get OS information
         case "$ID" in
             ubuntu)
                 case "$VERSION_CODENAME" in
-                    bionic) osdir="ubuntu/bionic";;
-                    focal) osdir="ubuntu/focal";;
+                    bionic) osversion="ubuntu/bionic";;
+                    focal) osversion="ubuntu/focal";;
                     # Add new versions as needed
                 esac
                 ;;
             centos)
                 case "$VERSION_ID" in
-                    7) osdir="centos/7";;
+                    7) osversion="centos/7";;
                     # Add new versions as needed
                 esac
                 ;;
         esac
     fi
-    echo "$osdir"
+    echo "$osversion"
 }
 
 # Function to recursively copy files, skipping the current directory
@@ -46,21 +46,21 @@ copy_files() {
     local same_dir=0
     if [ "$(realpath "$source_dir")" == "$(realpath "$target_dir")" ]; then
         same_dir=1
-    fi  
-            
+    fi
+
     # Function to copy and update file
     copy_and_update() {
         local src_pattern="$1"
         local dest_dir="$2"
         for file in $src_pattern; do
             #echo "*** $file > $dest_dir"
-            if [ -f "$file" ]; then                
+            if [ -f "$file" ]; then
                 if [[ "$file" == *.in ]]; then
                     filename=$(basename -- "$file")
                     filename_no_ext="${filename%.in}"
                     dest_file="$dest_dir/$filename_no_ext"
                     mkdir -p "$dest_dir"
-                    sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSDIR@|$OSDIR|g" "$file" > "$dest_file"
+                    sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g" "$file" > "$dest_file"
                     # apply permissions to bash scripts
                     read -r firstline < "$dest_file"
                     if [[ "$firstline" =~ ^#!.*bash ]]; then
@@ -75,7 +75,7 @@ copy_files() {
             fi
         done
     }
-    
+
     for pattern in "${SUBDIRS[@]}"; do
         local full_copy=0
         if [[ "$pattern" == !* ]]; then
@@ -106,13 +106,49 @@ copy_files() {
 
 ###############################################################################
 
-# options
-XLEN=${XLEN:=32}
-TOOLDIR=${TOOLDIR:=/opt}
-OSDIR=${OSDIR:=$(detect_os)}
+# default configuration parameters
+default_xlen=32
+default_tooldir=/opt
+default_osversion=$(detect_osversion)
+
+# load default configuration parameters from existing config.mk
+if [ -f "config.mk" ]; then
+    while IFS='=' read -r key value; do
+        value=${value//[@]/} # Remove placeholder characters
+        case $key in
+            XLEN\ ?*) default_xlen=${value//\?=/} ;;
+            TOOLDIR\ ?*) default_tooldir=${value//\?=/} ;;
+            OSVERSION\ ?*) default_osversion=${value//\?=/} ;;
+        esac
+    done < config.mk
+fi
+
+# set configuration parameters
+XLEN=${XLEN:=$default_xlen}
+TOOLDIR=${TOOLDIR:=$default_tooldir}
+OSVERSION=${OSVERSION:=$default_osversion}
+
+# parse command line arguments
+usage() {
+    echo "Usage: $0 [--xlen=<value>] [--tooldir=<path>] [--osversion=<version>]"
+    echo "  --xlen=<value>       Set the XLEN value (default: 32)"
+    echo "  --tooldir=<path>     Set the TOOLDIR path (default: /opt)"
+    echo "  --osversion=<version>  Set the OS Version (default: $(detect_os))"
+    exit 1
+}
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --xlen=*) XLEN="${1#*=}" ;;
+        --tooldir=*) TOOLDIR="${1#*=}" ;;
+        --osversion=*) OSVERSION="${1#*=}" ;;
+        -h|--help) usage ;;
+        *) echo "Unknown parameter passed: $1"; usage ;;
+    esac
+    shift
+done
 
 # check OS
-if [ "$OSDIR" == "unsupported" ]; then
+if [ "$OSVERSION" == "unsupported" ]; then
     echo "Error: Unsupported OS."
     exit -1
 fi

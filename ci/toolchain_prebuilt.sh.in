@@ -17,15 +17,15 @@
 set -e
 
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
-OSDIR=${OSDIR:=@OSDIR@}
+OSVERSION=${OSVERSION:=@OSVERSION@}
 
 riscv32()
 {
     echo "prebuilt riscv32-gnu-toolchain..."
     tar -C $TOOLDIR -cvjf riscv32-gnu-toolchain.tar.bz2 riscv32-gnu-toolchain
     split -b 50M riscv32-gnu-toolchain.tar.bz2 "riscv32-gnu-toolchain.tar.bz2.part"
-    mkdir -p ./riscv32-gnu-toolchain/$OSDIR
-    mv riscv32-gnu-toolchain.tar.bz2.part* ./riscv32-gnu-toolchain/$OSDIR
+    mkdir -p ./riscv32-gnu-toolchain/$OSVERSION
+    mv riscv32-gnu-toolchain.tar.bz2.part* ./riscv32-gnu-toolchain/$OSVERSION
     rm riscv32-gnu-toolchain.tar.bz2
 }
 
@@ -34,8 +34,8 @@ riscv64()
     echo "prebuilt riscv64-gnu-toolchain..."
     tar -C $TOOLDIR -cvjf riscv64-gnu-toolchain.tar.bz2 riscv64-gnu-toolchain
     split -b 50M riscv64-gnu-toolchain.tar.bz2 "riscv64-gnu-toolchain.tar.bz2.part"
-    mkdir -p ./riscv64-gnu-toolchain/$OSDIR
-    mv riscv64-gnu-toolchain.tar.bz2.part* ./riscv64-gnu-toolchain/$OSDIR
+    mkdir -p ./riscv64-gnu-toolchain/$OSVERSION
+    mv riscv64-gnu-toolchain.tar.bz2.part* ./riscv64-gnu-toolchain/$OSVERSION
     rm riscv64-gnu-toolchain.tar.bz2
 }
 
@@ -44,8 +44,8 @@ llvm()
     echo "prebuilt llvm-vortex2..."
     tar -C $TOOLDIR -cvjf llvm-vortex2.tar.bz2 llvm-vortex
     split -b 50M llvm-vortex2.tar.bz2 "llvm-vortex2.tar.bz2.part"
-    mkdir -p ./llvm-vortex/$OSDIR
-    mv llvm-vortex2.tar.bz2.part* ./llvm-vortex/$OSDIR
+    mkdir -p ./llvm-vortex/$OSVERSION
+    mv llvm-vortex2.tar.bz2.part* ./llvm-vortex/$OSVERSION
     rm llvm-vortex2.tar.bz2
 }
 
@@ -85,24 +85,24 @@ pocl()
 {
     echo "prebuilt pocl..."
     tar -C $TOOLDIR -cvjf pocl2.tar.bz2 pocl
-    mkdir -p ./pocl/$OSDIR
-    mv pocl2.tar.bz2 ./pocl/$OSDIR
+    mkdir -p ./pocl/$OSVERSION
+    mv pocl2.tar.bz2 ./pocl/$OSVERSION
 }
 
 verilator()
 {
     echo "prebuilt verilator..."
     tar -C $TOOLDIR -cvjf verilator.tar.bz2 verilator
-    mkdir -p ./verilator/$OSDIR
-    mv verilator.tar.bz2 ./verilator/$OSDIR
+    mkdir -p ./verilator/$OSVERSION
+    mv verilator.tar.bz2 ./verilator/$OSVERSION
 }
 
 sv2v()
 {
     echo "prebuilt sv2v..."
     tar -C $TOOLDIR -cvjf sv2v.tar.bz2 sv2v
-    mkdir -p ./sv2v/$OSDIR
-    mv sv2v.tar.bz2 ./sv2v/$OSDIR
+    mkdir -p ./sv2v/$OSVERSION
+    mv sv2v.tar.bz2 ./sv2v/$OSVERSION
 }
 
 yosys()
@@ -110,8 +110,8 @@ yosys()
     echo "prebuilt yosys..."
     tar -C $TOOLDIR -cvjf yosys.tar.bz2 yosys
     split -b 50M yosys.tar.bz2 "yosys.tar.bz2.part"
-    mkdir -p ./yosys/$OSDIR
-    mv yosys.tar.bz2.part* ./yosys/$OSDIR
+    mkdir -p ./yosys/$OSVERSION
+    mv yosys.tar.bz2.part* ./yosys/$OSVERSION
     rm yosys.tar.bz2
 }
 

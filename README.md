@@ -1,5 +1,4 @@
 [![Build Status](https://travis-ci.com/vortexgpgpu/vortex.svg?branch=master)](https://travis-ci.com/vortexgpgpu/vortex)
-[![codecov](https://codecov.io/gh/vortexgpgpu/vortex/branch/master/graph/badge.svg)](https://codecov.io/gh/vortexgpgpu/vortex)
 
 # Vortex GPGPU
 
@@ -13,9 +12,9 @@ Vortex is a full-stack open-source RISC-V GPGPU.
     - configurable number of ALU, FPU, LSU, and SFU units per core.
     - configurable pipeline issue width.
     - optional local memory, L1, L2, and L3 caches.
-- Software: 
+- Software:
     - OpenCL 1.2 Support.
-- Supported FPGAs: 
+- Supported FPGAs:
     - Altera Arria 10
     - Altera Stratix 10
     - Xilinx Alveo U50, U250, U280
@@ -47,7 +46,7 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 - [Ramulator](https://github.com/CMU-SAFARI/ramulator.git)
 - [Yosys](https://github.com/YosysHQ/yosys)
 - [Sv2v](https://github.com/zachjs/sv2v)
-### Install development tools 
+### Install development tools
     $ sudo apt-get install build-essential
     $ sudo apt-get install binutils
     $ sudo apt-get install python
@@ -57,10 +56,10 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
     $ git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
     $ cd Vortex
 ### Configure your build folder
-    # By default, the toolchain default install location is the /opt folder and can be overridden by setting TOOLDIR.
+    # By default, the toolchain default install location is the /opt folder and can be overridden by setting --tooldir.
     $ mkdir build
     $ cd build
-    $ TOOLDIR=$HOME/tools ../configure
+    $ ../configure --xlen=32 --tooldir=$HOME/tools
 ### Install prebuilt toolchain
     $ ./ci/toolchain_install.sh --all
 ### set environment variables
@@ -69,4 +68,4 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 ### Building Vortex
     $ make -s
 ### Quick demo running vecadd OpenCL kernel on 2 cores
-    $ ./ci/blackbox.sh --cores=2 --app=vecadd    
+    $ ./ci/blackbox.sh --cores=2 --app=vecadd
