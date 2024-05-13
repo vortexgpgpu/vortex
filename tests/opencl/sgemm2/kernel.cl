@@ -11,13 +11,13 @@ __kernel void sgemm2(__global TYPE *A,
     int localCol  = get_local_id(0);
 
     // Static local memory declaration
-    __local TYPE localA[LOCAL_SIZE][LOCAL_SIZE];
-    __local TYPE localB[LOCAL_SIZE][LOCAL_SIZE];
+    __local TYPE localA[TILE_SIZE][TILE_SIZE];
+    __local TYPE localB[TILE_SIZE][TILE_SIZE];
 
     TYPE sum = 0;
 
     // Iterate over blocks
-    for (int k = 0; k < N; k += LOCAL_SIZE) {
+    for (int k = 0; k < N; k += TILE_SIZE) {
         // Load block of matrix A & B to local memory
         localA[localRow][localCol] = A[globalRow * N + (k + localCol)];
         localB[localRow][localCol] = B[(k + localRow) * N + globalCol];
@@ -26,7 +26,7 @@ __kernel void sgemm2(__global TYPE *A,
         barrier(CLK_LOCAL_MEM_FENCE);
 
         // Compute multiplication for this block
-        for (int j = 0; j < LOCAL_SIZE; j++) {
+        for (int j = 0; j < TILE_SIZE; j++) {
             sum += localA[localRow][j] * localB[j][localCol];
         }
 

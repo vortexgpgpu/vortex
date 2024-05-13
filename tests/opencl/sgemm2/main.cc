@@ -170,9 +170,9 @@ int main (int argc, char **argv) {
 
   uint32_t size_sq = size * size;
 
-  printf("Matrix size=%d\n", size);
-  if ((size / LOCAL_SIZE) * LOCAL_SIZE != size) {
-    printf("Error: matrix size must be a multiple of %d\n", LOCAL_SIZE);
+  printf("Matrix size=%dx%d, tile size=%dx%d\n", size, size, TILE_SIZE, TILE_SIZE);
+  if ((size / TILE_SIZE) * TILE_SIZE != size) {
+    printf("Error: matrix size must be a multiple of %d\n", TILE_SIZE);
     return -1;
   }
 
@@ -220,7 +220,7 @@ int main (int argc, char **argv) {
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
   size_t global_size[2] = {size, size};
-  size_t local_size[2] = {LOCAL_SIZE, LOCAL_SIZE};
+  size_t local_size[2] = {TILE_SIZE, TILE_SIZE};
 
   // Set kernel arguments
   CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj));

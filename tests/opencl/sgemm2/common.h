@@ -1,7 +1,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#define LOCAL_SIZE 4
+#define TILE_SIZE 8
 
 #ifndef TYPE
 #define TYPE float
