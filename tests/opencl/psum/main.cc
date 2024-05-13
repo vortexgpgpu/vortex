@@ -10,8 +10,6 @@
 #include <algorithm>
 #include <numeric>
 
-#define LOCAL_SIZE 16
-
 #define FLOAT_ULP 6
 
 #define KERNEL_NAME "parallelSum"
@@ -97,18 +95,22 @@ static void cleanup() {
   if (kernel_bin) free(kernel_bin);
 }
 
-int size = 16;
+size_t size = 16;
+size_t local_size = 8;
 
 static void show_usage() {
-  printf("Usage: [-n size] [-h: help]\n");
+  printf("Usage: [-n size] [-l local size] [-h: help]\n");
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:h?")) != -1) {
+  while ((c = getopt(argc, argv, "n:l:h?")) != -1) {
     switch (c) {
     case 'n':
       size = atoi(optarg);
+      break;
+    case 'l':
+      local_size = atoi(optarg);
       break;
     case 'h':
     case '?': {
@@ -126,14 +128,14 @@ int main (int argc, char **argv) {
   // parse command arguments
   parse_args(argc, argv);
 
-  printf("input size=%d\n", size);
-  if ((size / LOCAL_SIZE) * LOCAL_SIZE != size) {
-    printf("Error: input size must be a multiple of %d\n", LOCAL_SIZE);
+  printf("input size=%ld, local size=%ld\n", size, local_size);
+  if ((size / local_size) * local_size != size) {
+    printf("Error: input size must be a multiple of %ld\n", local_size);
     return -1;
   }
 
   uint32_t num_inputs = size;
-  uint32_t num_outputs = size / LOCAL_SIZE;
+  uint32_t num_outputs = size / local_size;
 
   cl_platform_id platform_id;
   size_t kernel_size;
@@ -178,14 +180,11 @@ int main (int argc, char **argv) {
   // Create kernel
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
-  size_t global_size[1] = {size};
-  size_t local_size[1] =  {LOCAL_SIZE};
-
   // Set kernel arguments
   CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj));
   CL_CHECK(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&c_memobj));
   CL_CHECK(clSetKernelArg(kernel, 2, sizeof(uint32_t), &size));
-  CL_CHECK(clSetKernelArg(kernel, 3, local_size[0]*sizeof(float), NULL));
+  CL_CHECK(clSetKernelArg(kernel, 3, local_size*sizeof(float), NULL));
 
  // Allocate memories for input arrays and output arrays.
  std::vector<float> h_a(num_inputs);
@@ -204,7 +203,7 @@ int main (int argc, char **argv) {
 
   printf("Execute the kernel\n");
   auto time_start = std::chrono::high_resolution_clock::now();
-  CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, global_size, local_size, 0, NULL, NULL));
+  CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, &size, &local_size, 0, NULL, NULL));
   CL_CHECK(clFinish(commandQueue));
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();

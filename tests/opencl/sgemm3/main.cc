@@ -9,8 +9,6 @@
 #include <vector>
 #include "common.h"
 
-#define LOCAL_SIZE 4
-
 #define FLOAT_ULP 6
 
 #define KERNEL_NAME "sgemm3"
@@ -142,17 +140,21 @@ static void cleanup() {
 }
 
 int size = 16;
+int tile_size = 8;
 
 static void show_usage() {
-  printf("Usage: [-n size] [-h: help]\n");
+  printf("Usage: [-n size] [-t tile size] [-h: help]\n");
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:h?")) != -1) {
+  while ((c = getopt(argc, argv, "n:t:h?")) != -1) {
     switch (c) {
     case 'n':
       size = atoi(optarg);
+      break;
+    case 't':
+      tile_size = atoi(optarg);
       break;
     case 'h':
     case '?': {
@@ -172,9 +174,9 @@ int main (int argc, char **argv) {
 
   uint32_t size_sq = size * size;
 
-  printf("Matrix size=%d\n", size);
-  if ((size / LOCAL_SIZE) * LOCAL_SIZE != size) {
-    printf("Error: matrix size must be a multiple of %d\n", LOCAL_SIZE);
+  printf("Matrix size=%dx%d, tile size=%dx%d\n", size, size, tile_size, tile_size);
+  if ((size / tile_size) * tile_size != size) {
+    printf("Error: matrix size must be a multiple of %d\n", tile_size);
     return -1;
   }
 
@@ -222,7 +224,7 @@ int main (int argc, char **argv) {
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
   size_t global_size[2] = {size, size};
-  size_t local_size[2] = {LOCAL_SIZE, LOCAL_SIZE};
+  size_t local_size[2] = {tile_size, tile_size};
 
   // Set kernel arguments
   CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj));
