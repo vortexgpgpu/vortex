@@ -16,9 +16,9 @@
 module VX_afu_wrap #(
 	  parameter C_S_AXI_CTRL_ADDR_WIDTH = 8,
 	  parameter C_S_AXI_CTRL_DATA_WIDTH	= 32,
-	  parameter C_M_AXI_MEM_ID_WIDTH    = 16,
-	  parameter C_M_AXI_MEM_ADDR_WIDTH  = 32,
-	  parameter C_M_AXI_MEM_DATA_WIDTH  = 512
+	  parameter C_M_AXI_MEM_ID_WIDTH    = `M_AXI_MEM_ID_WIDTH,
+	  parameter C_M_AXI_MEM_ADDR_WIDTH  = `MEM_ADDR_WIDTH,
+	  parameter C_M_AXI_MEM_DATA_WIDTH  = `VX_MEM_DATA_WIDTH
 ) (
     // System signals
     input wire ap_clk,
@@ -236,8 +236,8 @@ module VX_afu_wrap #(
 		.dcr_wr_data	(dcr_wr_data)
 	);
 
-	wire [`XLEN-1:0] m_axi_mem_awaddr_w [C_M_AXI_MEM_NUM_BANKS];
-	wire [`XLEN-1:0] m_axi_mem_araddr_w [C_M_AXI_MEM_NUM_BANKS];
+	wire [`MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_w [C_M_AXI_MEM_NUM_BANKS];
+	wire [`MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_w [C_M_AXI_MEM_NUM_BANKS];
 
 	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin
 		assign m_axi_mem_awaddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_awaddr_w[i]) + C_M_AXI_MEM_ADDR_WIDTH'(mem_base[i]);
@@ -248,7 +248,7 @@ module VX_afu_wrap #(
 
 	Vortex_axi #(
 		.AXI_DATA_WIDTH (C_M_AXI_MEM_DATA_WIDTH),
-		.AXI_ADDR_WIDTH (`XLEN),
+		.AXI_ADDR_WIDTH (`MEM_ADDR_WIDTH),
 		.AXI_TID_WIDTH  (C_M_AXI_MEM_ID_WIDTH),
 		.AXI_NUM_BANKS  (C_M_AXI_MEM_NUM_BANKS)
 	) vortex_axi (
