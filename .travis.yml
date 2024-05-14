@@ -28,7 +28,7 @@ before_install:
   - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0.3" ]; then
       rm -rf $TOOLDIR;
       mkdir -p $TRAVIS_BUILD_DIR/build && cd $TRAVIS_BUILD_DIR/build;
-      TOOLDIR=$TOOLDIR ../configure;
+      ../configure --tooldir=$TOOLDIR;
       ci/toolchain_install.sh --all;
       echo "v0.3" > "$TOOLDIR/version.txt";
     fi
@@ -44,7 +44,7 @@ before_install:
 install:
   - if [ ! -d "$HOME/build$XLEN" ] || [ -z "$(ls -A $HOME/build$XLEN)" ] || [ "$(cat "$HOME/build$XLEN/version.txt")" != "$TRAVIS_COMMIT" ]; then
       mkdir -p $TRAVIS_BUILD_DIR/build$XLEN && cd $TRAVIS_BUILD_DIR/build$XLEN;
-      TOOLDIR=$TOOLDIR XLEN=$XLEN ../configure;
+      ../configure --tooldir=$TOOLDIR --xlen=$XLEN;
       source ci/toolchain_env.sh;
       make build -s > /dev/null;
       echo "$TRAVIS_COMMIT" > version.txt;
