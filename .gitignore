@@ -59,3 +59,10 @@ tests/regression/rop/
 tests/regression/tex/
 tests/opencl/matmul/matmul
 tests/opencl/oclprintf/oclprintf
+tests/opencl/nw/nw
+tests/opencl/lud/lud
+tests/opencl/particlefilter/particlefilter
+tests/opencl/hybridsort/hybridsort
+tests/opencl/convolution/convolution
+tests/opencl/cfd/cfd
+tests/opencl/lavaMD/lavaMD
