@@ -115,6 +115,8 @@ default_osversion=$(detect_osversion)
 if [ -f "config.mk" ]; then
     while IFS='=' read -r key value; do
         value=${value//[@]/} # Remove placeholder characters
+        value="${value#"${value%%[![:space:]]*}"}"   # Remove leading whitespace
+        value="${value%"${value##*[![:space:]]}"}"   # Remove trailing whitespace
         case $key in
             XLEN\ ?*) default_xlen=${value//\?=/} ;;
             TOOLDIR\ ?*) default_tooldir=${value//\?=/} ;;
