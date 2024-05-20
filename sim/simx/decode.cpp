@@ -47,60 +47,11 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   {Opcode::FMSUB,   InstType::R4},
   {Opcode::FMNMADD, InstType::R4},
   {Opcode::FMNMSUB, InstType::R4},
+  {Opcode::VSET,    InstType::V},
   {Opcode::EXT1,    InstType::R},
   {Opcode::EXT2,    InstType::R4},
   {Opcode::R_W,     InstType::R},
   {Opcode::I_W,     InstType::I},
-};
-
-enum Constants {
-  width_opcode= 7,
-  width_reg   = 5,
-  width_func2 = 2,
-  width_func3 = 3,
-  width_func6 = 6,
-  width_func7 = 7,
-  width_mop   = 3,
-  width_vmask = 1,
-  width_i_imm = 12,
-  width_j_imm = 20,
-  width_v_zimm = 11,
-  width_v_ma = 1,
-  width_v_ta = 1,
-  width_v_sew = 3,
-  width_v_lmul = 3,
-  width_aq    = 1,
-  width_rl    = 1,
-
-  shift_opcode= 0,
-  shift_rd    = width_opcode,
-  shift_func3 = shift_rd + width_reg,
-  shift_rs1   = shift_func3 + width_func3,
-  shift_rs2   = shift_rs1 + width_reg,
-  shift_func2 = shift_rs2 + width_reg,
-  shift_func7 = shift_rs2 + width_reg,
-  shift_rs3   = shift_func7 + width_func2,
-  shift_vmop  = shift_func7 + width_vmask,
-  shift_vnf   = shift_vmop + width_mop,
-  shift_func6 = shift_func7 + width_vmask,
-  shift_vset  = shift_func7 + width_func6,
-  shift_v_sew = width_v_lmul,
-  shift_v_ta  = shift_v_sew + width_v_sew,
-  shift_v_ma  = shift_v_ta + width_v_ta,
-
-  mask_opcode = (1 << width_opcode) - 1,
-  mask_reg    = (1 << width_reg)   - 1,
-  mask_func2  = (1 << width_func2) - 1,
-  mask_func3  = (1 << width_func3) - 1,
-  mask_func6  = (1 << width_func6) - 1,
-  mask_func7  = (1 << width_func7) - 1,
-  mask_i_imm  = (1 << width_i_imm) - 1,
-  mask_j_imm  = (1 << width_j_imm) - 1,
-  mask_v_zimm = (1 << width_v_zimm) - 1,
-  mask_v_ma   = (1 << width_v_ma) - 1,
-  mask_v_ta   = (1 << width_v_ta) - 1,
-  mask_v_sew  = (1 << width_v_sew) - 1,
-  mask_v_lmul  = (1 << width_v_lmul) - 1,
 };
 
 static const char* op_string(const Instr &instr) {
@@ -411,6 +362,7 @@ static const char* op_string(const Instr &instr) {
   case Opcode::FMSUB:   return func2 ? "FMSUB.D" : "FMSUB.S";
   case Opcode::FMNMADD: return func2 ? "FNMADD.D" : "FNMADD.S";
   case Opcode::FMNMSUB: return func2 ? "FNMSUB.D" : "FNMSUB.S";
+  case Opcode::VSET:    return "VSET";
   case Opcode::EXT1:
     switch (func7) {
     case 0:
@@ -464,6 +416,11 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << "0x" << std::hex << instr.getImm();
   }
+  if (instr.getOpcode() == Opcode::SYS && instr.getFunc3() >= 5) {
+    // CSRs with immediate values
+    if (sep++ != 0) { os << ", "; } else { os << " "; }
+    os << "0x" << std::hex << instr.getRSrc(0);
+  }
   return os;
 }
 }
@@ -490,6 +447,12 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
   }
 
   auto iType = op_it->second;
+  if (op == Opcode::FL || op == Opcode::FS) {
+    if (func3 != 0x2 && func3 != 0x3) {
+      iType = InstType::V;
+    }
+  }
+
   switch (iType) {
   case InstType::R:
     switch (op) {

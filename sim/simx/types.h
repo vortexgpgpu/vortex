@@ -54,8 +54,6 @@ typedef std::bitset<MAX_NUM_REGS>    RegMask;
 typedef std::bitset<MAX_NUM_THREADS> ThreadMask;
 typedef std::bitset<MAX_NUM_WARPS>   WarpMask;
 
-typedef std::unordered_map<uint32_t, uint32_t> CSRs;
-
 ///////////////////////////////////////////////////////////////////////////////
 
 enum class RegType {

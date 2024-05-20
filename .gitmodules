@@ -4,6 +4,7 @@
 [submodule "third_party/softfloat"]
 	path = third_party/softfloat
 	url = https://github.com/troibe/berkeley-softfloat-3
+	branch = sync-with-spike-version-3d
 [submodule "third_party/ramulator"]
 	path = third_party/ramulator
 	url = https://github.com/CMU-SAFARI/ramulator.git

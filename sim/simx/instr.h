@@ -17,8 +17,6 @@
 
 namespace vortex {
 
-class Emulator;
-
 enum class Opcode {   
   NONE      = 0,    
   R         = 0x33,

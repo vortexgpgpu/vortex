@@ -25,19 +25,9 @@
 #include "emulator.h"
 #include "instr.h"
 #include "core.h"
+#include "processor_impl.h"
 
 using namespace vortex;
-
-inline uint32_t get_fpu_rm(uint32_t func3, Core* core, uint32_t tid, uint32_t wid) {
-  return (func3 == 0x7) ? core->get_csr(VX_CSR_FRM, tid, wid) : func3;
-}
-
-inline void update_fcrs(uint32_t fflags, Core* core, uint32_t tid, uint32_t wid) {
-  if (fflags) {
-    core->set_csr(VX_CSR_FCSR, core->get_csr(VX_CSR_FCSR, tid, wid) | fflags, tid, wid);
-    core->set_csr(VX_CSR_FFLAGS, core->get_csr(VX_CSR_FFLAGS, tid, wid) | fflags, tid, wid);
-  }
-}
 
 inline uint64_t nan_box(uint32_t value) {
   uint64_t mask = 0xffffffff00000000;
@@ -697,7 +687,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       }
       rd_write = true;
     } else {
-      loadVector(instr, warp, rsdata);
+      loadVector(instr, wid, rsdata);
     }
     break;
   }
@@ -731,7 +721,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         }
       }
     } else {
-      storeVector(instr, warp, rsdata);
+      storeVector(instr, wid, rsdata);
     }
     break;
   }
@@ -917,7 +907,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!warp.tmask.test(t))
         continue;
-      uint32_t frm = this->get_fpu_rm(func3, t, wid);
+      uint32_t frm = (func3 == 0x7) ? this->get_csr(VX_CSR_FRM, t, wid) : func3;
       uint32_t fflags = 0;
       switch (func7) {
       case 0x00: { // RV32F: FADD.S
@@ -1232,7 +1222,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         break;
       }
       }
-      this->update_fcrs(fflags, t, wid);
+      if (fflags) {
+        this->set_csr(VX_CSR_FCSR, this->get_csr(VX_CSR_FCSR, t, wid) | fflags, t, wid);
+        this->set_csr(VX_CSR_FFLAGS, this->get_csr(VX_CSR_FFLAGS, t, wid) | fflags, t, wid);
+      }
     }
     rd_write = true;
     break;
@@ -1286,7 +1279,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       default:
         break;
       }
-      this->update_fcrs(fflags, t, wid);
+      if (fflags) {
+        this->set_csr(VX_CSR_FCSR, this->get_csr(VX_CSR_FCSR, t, wid) | fflags, t, wid);
+        this->set_csr(VX_CSR_FFLAGS, this->get_csr(VX_CSR_FFLAGS, t, wid) | fflags, t, wid);
+      }
     }
     rd_write = true;
     break;
@@ -1442,7 +1438,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     if ((func3 == 0x7) || (func3 == 0x2 && func6 == 16) || (func3 == 0x1 && func6 == 16)) {
       rd_write = true;
     }
-    executeVector(instr, warp, rsdata, rddata);
+    executeVector(instr, wid, rsdata, rddata);
   } break;
   default:
     std::abort();
