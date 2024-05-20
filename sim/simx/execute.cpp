@@ -28,17 +28,16 @@
 
 using namespace vortex;
 
-union reg_data_t {
-  Word     u;
-  WordI    i;
-  WordF    f;
-  float    f32;
-  double   f64;
-  uint32_t u32;
-  uint64_t u64;
-  int32_t  i32;
-  int64_t  i64;
-};
+inline uint32_t get_fpu_rm(uint32_t func3, Core* core, uint32_t tid, uint32_t wid) {
+  return (func3 == 0x7) ? core->get_csr(VX_CSR_FRM, tid, wid) : func3;
+}
+
+inline void update_fcrs(uint32_t fflags, Core* core, uint32_t tid, uint32_t wid) {
+  if (fflags) {
+    core->set_csr(VX_CSR_FCSR, core->get_csr(VX_CSR_FCSR, tid, wid) | fflags, tid, wid);
+    core->set_csr(VX_CSR_FFLAGS, core->get_csr(VX_CSR_FFLAGS, tid, wid) | fflags, tid, wid);
+  }
+}
 
 inline uint64_t nan_box(uint32_t value) {
   uint64_t mask = 0xffffffff00000000;
@@ -122,6 +121,8 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           DPN(2, "0x" << std::hex << rsdata[t][i].f);
         }
         DPN(2, "}" << std::endl);
+        break;
+      case RegType::Vector:
         break;
       case RegType::None:
         break;
@@ -657,41 +658,47 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     trace->used_iregs.set(rsrc0);
     auto trace_data = std::make_shared<LsuTraceData>(num_threads);
     trace->data = trace_data;
-    uint32_t data_bytes = 1 << (func3 & 0x3);
-    uint32_t data_width = 8 * data_bytes;
-    for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!warp.tmask.test(t))
-        continue;
-      uint64_t mem_addr = rsdata[t][0].i + immsrc;
-      uint64_t read_data = 0;
-      this->dcache_read(&read_data, mem_addr, data_bytes);
-      trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
-      switch (func3) {
-      case 0: // RV32I: LB
-      case 1: // RV32I: LH
-        rddata[t].i = sext((Word)read_data, data_width);
-        break;
-      case 2:
-        if (opcode == Opcode::L) {
-          // RV32I: LW
+    if ((opcode == Opcode::L )
+     || (opcode == Opcode::FL && func3 == 2)
+     || (opcode == Opcode::FL && func3 == 3)) {
+      uint32_t data_bytes = 1 << (func3 & 0x3);
+      uint32_t data_width = 8 * data_bytes;
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!warp.tmask.test(t))
+          continue;
+        uint64_t mem_addr = rsdata[t][0].i + immsrc;         
+        uint64_t read_data = 0;
+        this->dcache_read(&read_data, mem_addr, data_bytes);
+        trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
+        switch (func3) {
+        case 0: // RV32I: LB
+        case 1: // RV32I: LH
           rddata[t].i = sext((Word)read_data, data_width);
-        } else {
-          // RV32F: FLW
-          rddata[t].u64 = nan_box((uint32_t)read_data);
+          break;
+        case 2:
+          if (opcode == Opcode::L) {
+            // RV32I: LW
+            rddata[t].i = sext((Word)read_data, data_width);
+          } else {
+            // RV32F: FLW
+            rddata[t].u64 = nan_box((uint32_t)read_data);
+          }
+          break;
+        case 3: // RV64I: LD
+                // RV32D: FLD
+        case 4: // RV32I: LBU
+        case 5: // RV32I: LHU
+        case 6: // RV64I: LWU
+          rddata[t].u64 = read_data;
+          break;
+        default:
+          std::abort();      
         }
-        break;
-      case 3: // RV64I: LD
-              // RV32D: FLD
-      case 4: // RV32I: LBU
-      case 5: // RV32I: LHU
-      case 6: // RV64I: LWU
-        rddata[t].u64 = read_data;
-        break;
-      default:
-        std::abort();
       }
+      rd_write = true;
+    } else {
+      loadVector(instr, warp, rsdata);
     }
-    rd_write = true;
     break;
   }
   case Opcode::S:
@@ -702,23 +709,29 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     trace->used_iregs.set(rsrc1);
     auto trace_data = std::make_shared<LsuTraceData>(num_threads);
     trace->data = trace_data;
-    uint32_t data_bytes = 1 << (func3 & 0x3);
-    for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!warp.tmask.test(t))
-        continue;
-      uint64_t mem_addr = rsdata[t][0].i + immsrc;
-      uint64_t write_data = rsdata[t][1].u64;
-      trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
-      switch (func3) {
-      case 0:
-      case 1:
-      case 2:
-      case 3:
-        this->dcache_write(&write_data, mem_addr, data_bytes);
-        break;
-      default:
-        std::abort();
+    if ((opcode == Opcode::S)
+     || (opcode == Opcode::FS && func3 == 2)
+     || (opcode == Opcode::FS && func3 == 3)) {
+      uint32_t data_bytes = 1 << (func3 & 0x3);
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!warp.tmask.test(t))
+          continue;
+        uint64_t mem_addr = rsdata[t][0].i + immsrc;
+        uint64_t write_data = rsdata[t][1].u64;
+        trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
+        switch (func3) {
+        case 0:
+        case 1:
+        case 2:
+        case 3:
+          this->dcache_write(&write_data, mem_addr, data_bytes);  
+          break;
+        default:
+          std::abort();
+        }
       }
+    } else {
+      storeVector(instr, warp, rsdata);
     }
     break;
   }
@@ -1424,6 +1437,13 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       std::abort();
     }
   } break;
+  case Opcode::VSET: {
+    auto func6 = instr.getFunc6();
+    if ((func3 == 0x7) || (func3 == 0x2 && func6 == 16) || (func3 == 0x1 && func6 == 16)) {
+      rd_write = true;
+    }
+    executeVector(instr, warp, rsdata, rddata);
+  } break;
   default:
     std::abort();
   }
@@ -1467,6 +1487,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       trace->used_fregs[rdest] = 1;
       break;
     default:
+      std::cout << "Unrecognized register write back type: " << type << std::endl;
       std::abort();
       break;
     }

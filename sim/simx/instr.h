@@ -17,6 +17,8 @@
 
 namespace vortex {
 
+class Emulator;
+
 enum class Opcode {   
   NONE      = 0,    
   R         = 0x33,
@@ -42,6 +44,8 @@ enum class Opcode {
   // RV64 Standard Extension
   R_W       = 0x3b,
   I_W       = 0x1b,
+  // Vector Extension  
+  VSET      = 0x57,
   // Custom Extensions
   EXT1      = 0x0b,
   EXT2      = 0x2b,
@@ -56,6 +60,7 @@ enum class InstType {
   B, 
   U, 
   J,
+  V,
   R4
 };
 
@@ -70,7 +75,20 @@ public:
     , rdest_(0)
     , func2_(0)
     , func3_(0)
-    , func7_(0) {
+    , func6_(0)
+    , func7_(0)
+    , vmask_(0)
+    , vlsWidth_(0)
+    , vMop_(0)
+    , vUmop_(0)
+    , vNf_(0)
+    , vs3_(0)
+    , has_zimm_(false)
+    , vlmul_(0)
+    , vsew_(0)
+    , vta_(0)
+    , vma_(0)
+    , vediv_(0)   {
     for (uint32_t i = 0; i < MAX_REG_SOURCES; ++i) {
        rsrc_type_[i] = RegType::None;
        rsrc_[i] = 0;
@@ -94,12 +112,26 @@ public:
   }
   void setFunc2(uint32_t func2) { func2_ = func2; }
   void setFunc3(uint32_t func3) { func3_ = func3; }
+  void setFunc6(uint32_t func6) { func6_ = func6; }
   void setFunc7(uint32_t func7) { func7_ = func7; }
   void setImm(uint32_t imm) { has_imm_ = true; imm_ = imm; }
+  void setVlsWidth(uint32_t width) { vlsWidth_ = width; }
+  void setVmop(uint32_t mop) { vMop_ = mop; }
+  void setVumop(uint32_t umop) { vUmop_ = umop; }
+  void setVnf(uint32_t nf) { vNf_ = nf; }
+  void setVmask(uint32_t mask) { vmask_ = mask; }
+  void setVs3(uint32_t vs) { vs3_ = vs; }
+  void setZimm(bool has_zimm) { has_zimm_ = has_zimm; }
+  void setVlmul(uint32_t lmul) { vlmul_ = lmul; }
+  void setVsew(uint32_t sew) { vsew_ = sew; }
+  void setVta(uint32_t vta) { vta_ = vta; }
+  void setVma(uint32_t vma) { vma_ = vma; }
+  void setVediv(uint32_t ediv) { vediv_ = 1 << ediv; }
 
   Opcode   getOpcode() const { return opcode_; }
   uint32_t getFunc2() const { return func2_; }
   uint32_t getFunc3() const { return func3_; }
+  uint32_t getFunc6() const { return func6_; }
   uint32_t getFunc7() const { return func7_; }
   uint32_t getNRSrc() const { return num_rsrcs_; }
   uint32_t getRSrc(uint32_t i) const { return rsrc_[i]; }
@@ -108,6 +140,19 @@ public:
   RegType  getRDType() const { return rdest_type_; }  
   bool     hasImm() const { return has_imm_; }
   uint32_t getImm() const { return imm_; }
+  uint32_t getVlsWidth() const { return vlsWidth_; }
+  uint32_t getVmop() const { return vMop_; }
+  uint32_t getVumop() const { return vUmop_; }
+  uint32_t getVnf() const { return vNf_; }
+  uint32_t getVmask() const { return vmask_; }
+  uint32_t getVs3() const { return vs3_; }
+  bool     hasZimm() const { return has_zimm_; }
+  uint32_t getVlmul() const { return vlmul_; }
+  uint32_t getVsew() const { return 1 << (3 + vsew_); }
+  uint32_t getVsewO() const { return vsew_; }
+  uint32_t getVta() const { return vta_; }
+  uint32_t getVma() const { return vma_; }
+  uint32_t getVediv() const { return vediv_; }
 
 private:
 
@@ -125,7 +170,22 @@ private:
   uint32_t rdest_;
   uint32_t func2_;
   uint32_t func3_;
+  uint32_t func6_;
   uint32_t func7_;
+
+  // Vector
+  uint32_t vmask_;
+  uint32_t vlsWidth_;
+  uint32_t vMop_;
+  uint32_t vUmop_;
+  uint32_t vNf_;
+  uint32_t vs3_;
+  bool     has_zimm_;
+  uint32_t vlmul_;
+  uint32_t vsew_;
+  uint32_t vta_;
+  uint32_t vma_;
+  uint32_t vediv_;   
 
   friend std::ostream &operator<<(std::ostream &, const Instr&);
 };

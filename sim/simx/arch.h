@@ -42,7 +42,7 @@ public:
     , num_cores_(num_cores)
     , num_clusters_(NUM_CLUSTERS)
     , socket_size_(SOCKET_SIZE)
-    , vsize_(16)
+    , vsize_(VLEN / 8)
     , num_regs_(32)
     , num_csrs_(4096)
     , num_barriers_(NUM_BARRIERS)

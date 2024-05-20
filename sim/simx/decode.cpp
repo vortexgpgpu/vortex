@@ -58,9 +58,19 @@ enum Constants {
   width_reg   = 5,
   width_func2 = 2,
   width_func3 = 3,
+  width_func6 = 6,
   width_func7 = 7,
+  width_mop   = 3,
+  width_vmask = 1,
   width_i_imm = 12,
   width_j_imm = 20,
+  width_v_zimm = 11,
+  width_v_ma = 1,
+  width_v_ta = 1,
+  width_v_sew = 3,
+  width_v_lmul = 3,
+  width_aq    = 1,
+  width_rl    = 1,
 
   shift_opcode= 0,
   shift_rd    = width_opcode,
@@ -70,14 +80,27 @@ enum Constants {
   shift_func2 = shift_rs2 + width_reg,
   shift_func7 = shift_rs2 + width_reg,
   shift_rs3   = shift_func7 + width_func2,
+  shift_vmop  = shift_func7 + width_vmask,
+  shift_vnf   = shift_vmop + width_mop,
+  shift_func6 = shift_func7 + width_vmask,
+  shift_vset  = shift_func7 + width_func6,
+  shift_v_sew = width_v_lmul,
+  shift_v_ta  = shift_v_sew + width_v_sew,
+  shift_v_ma  = shift_v_ta + width_v_ta,
 
   mask_opcode = (1 << width_opcode) - 1,
   mask_reg    = (1 << width_reg)   - 1,
   mask_func2  = (1 << width_func2) - 1,
   mask_func3  = (1 << width_func3) - 1,
+  mask_func6  = (1 << width_func6) - 1,
   mask_func7  = (1 << width_func7) - 1,
   mask_i_imm  = (1 << width_i_imm) - 1,
   mask_j_imm  = (1 << width_j_imm) - 1,
+  mask_v_zimm = (1 << width_v_zimm) - 1,
+  mask_v_ma   = (1 << width_v_ma) - 1,
+  mask_v_ta   = (1 << width_v_ta) - 1,
+  mask_v_sew  = (1 << width_v_sew) - 1,
+  mask_v_lmul  = (1 << width_v_lmul) - 1,
 };
 
 static const char* op_string(const Instr &instr) {
@@ -219,10 +242,14 @@ static const char* op_string(const Instr &instr) {
   case Opcode::FENCE: return "FENCE";
   case Opcode::FL:
     switch (func3) {
-    case 0x1: return "VL";
     case 0x2: return "FLW";
     case 0x3: return "FLD";
+    case 0x0: return "VL8";
+    case 0x5: return "VL16";
+    case 0x6: return "VL32";
+    case 0x7: return "VL64";
     default:
+      std::cout << "Could not decode float/vector load with func3: " << func3 << std::endl;
       std::abort();
     }
   case Opcode::FS:
@@ -230,7 +257,12 @@ static const char* op_string(const Instr &instr) {
     case 0x1: return "VS";
     case 0x2: return "FSW";
     case 0x3: return "FSD";
+    case 0x0: return "VS8";
+    case 0x5: return "VS16";
+    case 0x6: return "VS32";
+    case 0x7: return "VS64";
     default:
+      std::cout << "Could not decode float/vector store with func3: " << func3 << std::endl;
       std::abort();
     }
   case Opcode::AMO: {
@@ -443,6 +475,7 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
 
   auto func2 = (code >> shift_func2) & mask_func2;
   auto func3 = (code >> shift_func3) & mask_func3;
+  auto func6 = (code >> shift_func6) & mask_func6;
   auto func7 = (code >> shift_func7) & mask_func7;
 
   auto rd  = (code >> shift_rd)  & mask_reg;
@@ -637,7 +670,103 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
     auto imm = (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
     instr->setImm(sext(imm, width_j_imm+1));
   } break;
+    
+  case InstType::V:
+    switch (op) {
+    case Opcode::VSET: {
+      instr->setDestReg(rd, RegType::Integer);
+      instr->setFunc3(func3);
+      switch (func3) {
+        case 7: {
+          if (code >> (shift_vset - 1) == 0b10) { // vsetvl
+            instr->addSrcReg(rs1, RegType::Integer);
+            instr->addSrcReg(rs2, RegType::Integer);
+          } else {
+            auto zimm = (code >> shift_rs2) & mask_v_zimm;
+            instr->setZimm(true);
+            instr->setVlmul(zimm & mask_v_lmul);
+            instr->setVsew((zimm >> shift_v_sew) & mask_v_sew);
+            instr->setVta((zimm >> shift_v_ta) & mask_v_ta);
+            instr->setVma((zimm >> shift_v_ma) & mask_v_ma);
+            if ((code >> shift_vset)) { // vsetivli
+              instr->setImm(rs1);
+            } else { // vsetvli
+              instr->addSrcReg(rs1, RegType::Integer);
+            }
+          }
+        } break;
+        case 3: { // Vector - immediate arithmetic instructions
+          instr->setDestReg(rd, RegType::Vector);
+          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setImm(rs1);
+          instr->setVmask((code >> shift_func7) & 0x1);
+          instr->setFunc6(func6);
+        } break;
+        default: { // Vector - vector/scalar arithmetic instructions
+          if (func3 == 1 && func6 == 16) {
+            instr->setDestReg(rd, RegType::Float);
+          } else if (func3 == 2 && func6 == 16) {
+            instr->setDestReg(rd, RegType::Integer);
+          } else {
+            instr->setDestReg(rd, RegType::Vector);
+          }
+          instr->addSrcReg(rs1, RegType::Vector);
+          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setVmask((code >> shift_func7) & 0x1);
+          instr->setFunc6(func6);
+        }
+      }
+    } break;
 
+    case Opcode::FL:
+      instr->addSrcReg(rs1, RegType::Integer);
+      instr->setVmop((code >> shift_vmop) & 0b11);
+      switch (instr->getVmop()) {
+        case 0b00:
+          instr->setVumop(rs2);
+          break;
+        case 0b10:
+          instr->addSrcReg(rs2, RegType::Integer);
+          break;
+        case 0b01:
+        case 0b11:
+          instr->addSrcReg(rs2, RegType::Vector);
+          break;
+      }
+      instr->setVsew(func3 & 0x3);
+      instr->setDestReg(rd, RegType::Vector);
+      instr->setVlsWidth(func3);
+      instr->setVmask((code >> shift_func7) & 0x1);
+      instr->setVnf((code >> shift_vnf) & mask_func3);
+      break;
+
+    case Opcode::FS:
+      instr->addSrcReg(rs1, RegType::Integer);
+      instr->setVmop((code >> shift_vmop) & 0b11);
+      switch (instr->getVmop()) {
+        case 0b00:
+          instr->setVumop(rs2);
+          break;
+        case 0b10:
+          instr->addSrcReg(rs2, RegType::Integer);
+          break;
+        case 0b01:
+        case 0b11:
+          instr->addSrcReg(rs2, RegType::Vector);
+          break;
+      }
+      instr->setVsew(func3 & 0x3);
+      instr->addSrcReg(rd, RegType::Vector);
+      instr->setVlsWidth(func3);
+      instr->setVmask((code >> shift_func7) & 0x1);
+      instr->setVmop((code >> shift_vmop) & 0b11);
+      instr->setVnf((code >> shift_vnf) & mask_func3);
+      break;
+
+    default:
+      std::abort();
+    }
+    break;
   case InstType::R4:
     if (op == Opcode::EXT2) {
       switch (func3) {

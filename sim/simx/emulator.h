@@ -28,6 +28,14 @@ class Core;
 class Instr;
 class instr_trace_t;
 
+struct vtype {
+  uint32_t vill;
+  uint32_t vma;
+  uint32_t vta;
+  uint32_t vsew;
+  uint32_t vlmul;
+};
+
 class Emulator {
 public:
   Emulator(const Arch &arch,
@@ -54,6 +62,18 @@ public:
 
   int get_exitcode() const;
 
+  union reg_data_t {
+    Word     u;
+    WordI    i;
+    WordF    f;
+    float    f32;
+    double   f64;
+    uint32_t u32;
+    uint64_t u64;
+    int32_t  i32;
+    int64_t  i64;
+  };
+
 private:
 
   struct ipdom_entry_t {
@@ -73,9 +93,14 @@ private:
     ThreadMask                        tmask;
     std::vector<std::vector<Word>>    ireg_file;
     std::vector<std::vector<uint64_t>>freg_file;
+    std::vector<std::vector<Byte>>    vreg_file;
     std::stack<ipdom_entry_t>         ipdom_stack;
     Byte                              fcsr;
     UUIDGenerator                     uui_gen;
+
+    struct vtype vtype;
+    uint32_t vl;
+    Word VLMAX;
   };
 
   struct wspawn_t {
@@ -87,6 +112,12 @@ private:
   std::shared_ptr<Instr> decode(uint32_t code) const;
 
   void execute(const Instr &instr, uint32_t wid, instr_trace_t *trace);
+
+  void executeVector(const Instr &instr, warp_t &warp, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata);
+
+  void loadVector(const Instr &instr, warp_t &warp, std::vector<reg_data_t[3]> &rsdata);
+
+  void storeVector(const Instr &instr, warp_t &warp, std::vector<reg_data_t[3]> &rsdata);
 
   void icache_read(void* data, uint64_t addr, uint32_t size);
 
@@ -125,6 +156,7 @@ private:
   MemoryUnit  mmu_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
+  std::vector<std::vector<CSRs>> csrs_;
 };
 
 }
