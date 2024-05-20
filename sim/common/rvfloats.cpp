@@ -158,6 +158,34 @@ uint64_t rv_fdiv_d(uint64_t a, uint64_t b, uint32_t frm, uint32_t* fflags) {
   return from_float64_t(r);
 }
 
+uint32_t rv_frecip7_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  softfloat_roundingMode = frm;
+  auto r = f32_recip7(to_float32_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_frecip7_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  softfloat_roundingMode = frm;
+  auto r = f64_recip7(to_float64_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
+uint32_t rv_frsqrt7_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  softfloat_roundingMode = frm;
+  auto r = f32_rsqrte7(to_float32_t(a));
+  if (fflags) { *fflags =softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint64_t rv_frsqrt7_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  softfloat_roundingMode = frm;
+  auto r = f64_rsqrte7(to_float64_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float64_t(r);
+}
+
 uint32_t rv_fsqrt_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   rv_init(frm);
   auto r = f32_sqrt(to_float32_t(a));
@@ -484,6 +512,11 @@ uint64_t rv_fsgnjx_d(uint64_t a, uint64_t b) {
   auto sign2 = b & F64_SIGN;
   auto r = (sign1 ^ sign2) | (a & ~F64_SIGN);
   return r;
+}
+
+uint32_t rv_dtof_r(uint64_t a, uint32_t frm) {
+  rv_init(frm);
+  return rv_dtof(a);
 }
 
 uint32_t rv_dtof(uint64_t a) {
