@@ -55,6 +55,10 @@
 `define UUID_WIDTH      1
 `endif
 
+`define PC_BITS         (`XLEN-1)
+`define OFFSET_BITS     12
+`define IMM_BITS        `XLEN
+
 ///////////////////////////////////////////////////////////////////////////////
 
 `define EX_ALU          0
@@ -105,6 +109,10 @@
 `define INST_EXT3       7'b1011011 // 0x5B
 `define INST_EXT4       7'b1111011 // 0x7B
 
+// Opcode extensions
+`define INST_R_F7_MUL   7'b0000001
+`define INST_R_F7_ZICOND 7'b0000111
+
 ///////////////////////////////////////////////////////////////////////////////
 
 `define INST_FRM_RNE    3'b000  // round to nearest even
@@ -118,7 +126,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `define INST_OP_BITS    4
-`define INST_MOD_BITS   3
+`define INST_MOD_BITS   $bits(op_mod_t)
 `define INST_FMT_BITS   2
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -135,14 +143,23 @@
 `define INST_ALU_OR          4'b1101
 `define INST_ALU_XOR         4'b1110
 `define INST_ALU_SLL         4'b1111
-`define INST_ALU_OTHER       4'b0111
+`define INST_ALU_CZEQ        4'b1010
+`define INST_ALU_CZNE        4'b1011
+//`define INST_ALU_UNUSED    4'b0001
+//`define INST_ALU_UNUSED    4'b0110
+
+
+`define ALU_TYPE_BITS        2
+`define ALU_TYPE_ARITH       0
+`define ALU_TYPE_BRANCH      1
+`define ALU_TYPE_MULDIV      2
+`define ALU_TYPE_OTHER       3
+
 `define INST_ALU_BITS        4
 `define INST_ALU_CLASS(op)   op[3:2]
 `define INST_ALU_SIGNED(op)  op[0]
 `define INST_ALU_IS_SUB(op)  op[1]
-`define INST_ALU_IS_BR(mod)  mod[0]
-`define INST_ALU_IS_M(mod)   mod[1]
-`define INST_ALU_IS_W(mod)   mod[2]
+`define INST_ALU_IS_CZERO(op) (op[3:1] == 3'b101)
 
 `define INST_BR_EQ           4'b0000
 `define INST_BR_NE           4'b0010
@@ -225,9 +242,8 @@
 `define INST_FPU_NMSUB       4'b1110
 `define INST_FPU_NMADD       4'b1111
 `define INST_FPU_BITS        4
-`define INST_FPU_IS_W(mod)   (mod[4])
-`define INST_FPU_IS_CLASS(op, mod) (op == `INST_FPU_MISC && mod == 3)
-`define INST_FPU_IS_MVXW(op, mod) (op == `INST_FPU_MISC && mod == 4)
+`define INST_FPU_IS_CLASS(op, frm) (op == `INST_FPU_MISC && frm == 3)
+`define INST_FPU_IS_MVXW(op, frm) (op == `INST_FPU_MISC && frm == 4)
 
 `define INST_SFU_TMC         4'h0
 `define INST_SFU_WSPAWN      4'h1
@@ -238,7 +254,6 @@
 `define INST_SFU_CSRRW       4'h6
 `define INST_SFU_CSRRS       4'h7
 `define INST_SFU_CSRRC       4'h8
-`define INST_SFU_CMOV        4'h9
 `define INST_SFU_BITS        4
 `define INST_SFU_CSR(f3)     (4'h6 + 4'(f3) - 4'h1)
 `define INST_SFU_IS_WCTL(op) (op <= 5)
@@ -414,13 +429,10 @@
     data.uuid, \
     data.wis, \
     data.tmask, \
+    data.PC, \
     data.op_type, \
     data.op_mod, \
     data.wb, \
-    data.use_PC, \
-    data.use_imm, \
-    data.PC, \
-    data.imm, \
     data.rd, \
     tid, \
     data.rs1_data, \

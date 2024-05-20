@@ -32,7 +32,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
     localparam WCTL_WIDTH = $bits(tmc_t) + $bits(wspawn_t) + $bits(split_t) + $bits(join_t) + $bits(barrier_t);
-    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + WCTL_WIDTH + PID_WIDTH + 1 + 1 + `DV_STACK_SIZEW;
+    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + WCTL_WIDTH + PID_WIDTH + 1 + 1 + `DV_STACK_SIZEW;
 
     `UNUSED_VAR (execute_if.data.rs3_data)
 
@@ -60,7 +60,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire [`XLEN-1:0] rs2_data = execute_if.data.rs2_data[tid];
     `UNUSED_VAR (rs1_data)
 
-    wire not_pred = execute_if.data.op_mod[0];
+    wire not_pred = execute_if.data.op_mod.wctl.is_neg;
 
     wire [NUM_LANES-1:0] taken;
     for (genvar i = 0; i < NUM_LANES; ++i) begin
@@ -107,7 +107,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign split.is_dvg     = has_then && has_else;
     assign split.then_tmask = taken_tmask;
     assign split.else_tmask = ntaken_tmask;
-    assign split.next_pc    = execute_if.data.PC + 4;
+    assign split.next_pc    = execute_if.data.PC + 2;
 
     assign warp_ctl_if.dvstack_wid = execute_if.data.wid;
     wire [`DV_STACK_SIZEW-1:0] dvstack_ptr;
@@ -136,7 +136,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     end
     assign wspawn.valid = is_wspawn;
     assign wspawn.wmask = wspawn_wmask;
-    assign wspawn.pc    = rs2_data;
+    assign wspawn.pc    = rs2_data[1 +: `PC_BITS];
 
     // response
 

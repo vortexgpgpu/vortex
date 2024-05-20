@@ -164,6 +164,22 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!warp.tmask.test(t))
         continue;
+      if (func7 == 0x7) {
+        auto value = rsdata[t][0].i;
+        auto cond = rsdata[t][1].i;
+        if (func3 == 0x5) {
+          // CZERO.EQZ
+          rddata[t].i = (cond == 0) ? 0 : value;
+          trace->alu_type = AluType::ARITH;
+        } else
+        if (func3 == 0x7) {
+          // CZERO.NEZ
+          rddata[t].i = (cond != 0) ? 0 : value;
+          trace->alu_type = AluType::ARITH;
+        } else {
+          std::abort();
+        }
+      } else
       if (func7 & 0x1) {
         switch (func3) {
         case 0: {
@@ -1395,31 +1411,6 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         std::abort();
       }
     } break;
-    default:
-      std::abort();
-    }
-  } break;
-  case Opcode::EXT2: {
-    switch (func3) {
-    case 1:
-      switch (func2) {
-      case 0: { // CMOV
-        trace->fu_type = FUType::SFU;
-        trace->sfu_type = SfuType::CMOV;
-        trace->used_iregs.set(rsrc0);
-        trace->used_iregs.set(rsrc1);
-        trace->used_iregs.set(rsrc2);
-        for (uint32_t t = thread_start; t < num_threads; ++t) {
-          if (!warp.tmask.test(t))
-            continue;
-          rddata[t].i = rsdata[t][0].i ? rsdata[t][1].i : rsdata[t][2].i;
-        }
-        rd_write = true;
-      } break;
-      default:
-        std::abort();
-      }
-      break;
     default:
       std::abort();
     }

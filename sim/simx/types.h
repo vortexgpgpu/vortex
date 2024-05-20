@@ -203,8 +203,7 @@ enum class SfuType {
   PRED,
   CSRRW,
   CSRRS,
-  CSRRC,
-  CMOV
+  CSRRC
 };
 
 inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
@@ -218,7 +217,6 @@ inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
   case SfuType::CSRRW:  os << "CSRRW"; break;
   case SfuType::CSRRS:  os << "CSRRS"; break;
   case SfuType::CSRRC:  os << "CSRRC"; break;
-  case SfuType::CMOV:   os << "CMOV"; break;
   default: assert(false);
   }
   return os;
