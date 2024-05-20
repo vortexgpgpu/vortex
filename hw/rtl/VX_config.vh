@@ -40,7 +40,7 @@
 `define EXT_F_ENABLE
 `endif
 
-`ifndef EXT_ZICOND_ENABLE
+`ifndef EXT_ZICOND_DISABLE
 `define EXT_ZICOND_ENABLE
 `endif
 

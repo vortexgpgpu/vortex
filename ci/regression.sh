@@ -201,6 +201,9 @@ config()
     make -C tests/riscv/isa run-rtlsim-32i
     make -C sim/rtlsim clean && make -C sim/rtlsim > /dev/null
 
+    # disabling ZICOND extension
+    CONFIGS="-DEXT_ZICOND_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo
+
     # disable local memory
     CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo --perf=1
     CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --cores=1 --app=demo --perf=1
