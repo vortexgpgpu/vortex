@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -31,7 +31,7 @@ module VX_commit import VX_gpu_pkg::*; #(
     output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value
 );
     `UNUSED_PARAM (CORE_ID)
-    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + `NUM_THREADS * `XLEN + 1 + 1 + 1;
+    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS + 1 + `NR_BITS + `NUM_THREADS * `XLEN + 1 + 1 + 1;
     localparam COMMIT_SIZEW = `CLOG2(`NUM_THREADS + 1);
     localparam COMMIT_ALL_SIZEW = COMMIT_SIZEW + `ISSUE_WIDTH - 1;
 
@@ -47,7 +47,7 @@ module VX_commit import VX_gpu_pkg::*; #(
     `RESET_RELAY (arb_reset, reset);
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        
+
         wire [`NUM_EX_UNITS-1:0]            valid_in;
         wire [`NUM_EX_UNITS-1:0][DATAW-1:0] data_in;
         wire [`NUM_EX_UNITS-1:0]            ready_in;
@@ -75,14 +75,14 @@ module VX_commit import VX_gpu_pkg::*; #(
             `UNUSED_PIN (sel_out)
         );
 
-        assign commit_fire[i] = commit_arb_if[i].valid && commit_arb_if[i].ready;        
+        assign commit_fire[i] = commit_arb_if[i].valid && commit_arb_if[i].ready;
         assign commit_tmask[i]= {`NUM_THREADS{commit_fire[i]}} & commit_arb_if[i].data.tmask;
         assign commit_wid[i]  = commit_arb_if[i].data.wid;
         assign commit_eop[i]  = commit_arb_if[i].data.eop;
     end
 
     // CSRs update
-    
+
     wire [`ISSUE_WIDTH-1:0][COMMIT_SIZEW-1:0] commit_size, commit_size_r;
     wire [COMMIT_ALL_SIZEW-1:0] commit_size_all_r, commit_size_all_rr;
     wire commit_fire_any, commit_fire_any_r, commit_fire_any_rr;
@@ -158,17 +158,17 @@ module VX_commit import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         assign writeback_if[i].valid     = commit_arb_if[i].valid && commit_arb_if[i].data.wb;
-        assign writeback_if[i].data.uuid = commit_arb_if[i].data.uuid; 
+        assign writeback_if[i].data.uuid = commit_arb_if[i].data.uuid;
         assign writeback_if[i].data.wis  = wid_to_wis(commit_arb_if[i].data.wid);
-        assign writeback_if[i].data.PC   = commit_arb_if[i].data.PC; 
-        assign writeback_if[i].data.tmask= commit_arb_if[i].data.tmask; 
-        assign writeback_if[i].data.rd   = commit_arb_if[i].data.rd; 
-        assign writeback_if[i].data.data = commit_arb_if[i].data.data; 
-        assign writeback_if[i].data.sop  = commit_arb_if[i].data.sop; 
+        assign writeback_if[i].data.PC   = commit_arb_if[i].data.PC;
+        assign writeback_if[i].data.tmask= commit_arb_if[i].data.tmask;
+        assign writeback_if[i].data.rd   = commit_arb_if[i].data.rd;
+        assign writeback_if[i].data.data = commit_arb_if[i].data.data;
+        assign writeback_if[i].data.sop  = commit_arb_if[i].data.sop;
         assign writeback_if[i].data.eop  = commit_arb_if[i].data.eop;
         assign commit_arb_if[i].ready = 1'b1; // writeback has no backpressure
     end
-    
+
     // simulation helper signal to get RISC-V tests Pass/Fail status
     reg [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value_r;
     always @(posedge clk) begin
@@ -177,13 +177,13 @@ module VX_commit import VX_gpu_pkg::*; #(
         end
     end
     assign sim_wb_value = sim_wb_value_r;
-    
+
 `ifdef DBG_TRACE_PIPELINE
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         for (genvar j = 0; j < `NUM_EX_UNITS; ++j) begin
             always @(posedge clk) begin
                 if (commit_if[j * `ISSUE_WIDTH + i].valid && commit_if[j * `ISSUE_WIDTH + i].ready) begin
-                    `TRACE(1, ("%d: core%0d-commit: wid=%0d, PC=0x%0h, ex=", $time, CORE_ID, commit_if[j * `ISSUE_WIDTH + i].data.wid, commit_if[j * `ISSUE_WIDTH + i].data.PC));
+                    `TRACE(1, ("%d: core%0d-commit: wid=%0d, PC=0x%0h, ex=", $time, CORE_ID, commit_if[j * `ISSUE_WIDTH + i].data.wid, {commit_if[j * `ISSUE_WIDTH + i].data.PC, 1'b0}));
                     trace_ex_type(1, j);
                     `TRACE(1, (", tmask=%b, wb=%0d, rd=%0d, sop=%b, eop=%b, data=", commit_if[j * `ISSUE_WIDTH + i].data.tmask, commit_if[j * `ISSUE_WIDTH + i].data.wb, commit_if[j * `ISSUE_WIDTH + i].data.rd, commit_if[j * `ISSUE_WIDTH + i].data.sop, commit_if[j * `ISSUE_WIDTH + i].data.eop));
                     `TRACE_ARRAY1D(1, "0x%0h", commit_if[j * `ISSUE_WIDTH + i].data.data, `NUM_THREADS);

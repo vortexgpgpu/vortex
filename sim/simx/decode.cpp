@@ -93,6 +93,16 @@ static const char* op_string(const Instr &instr) {
   case Opcode::LUI:   return "LUI";
   case Opcode::AUIPC: return "AUIPC";
   case Opcode::R:
+    if (func7 == 0x7) {
+      if (func3 == 0x5) {
+        return "CZERO.EQZ";
+      } else
+      if (func3 == 0x7) {
+        return "CZERO.NEZ";
+      } else {
+        std::abort();
+      }
+    } else
     if (func7 & 0x1) {
       switch (func3) {
       case 0: return "MUL";
@@ -395,18 +405,6 @@ static const char* op_string(const Instr &instr) {
     default:
       std::abort();
     }
-  case Opcode::EXT2:
-    switch (func3) {
-    case 1: {
-      switch (func2) {
-      case 0: return "CMOV";
-      default:
-        std::abort();
-      }
-    }
-    default:
-      std::abort();
-    }
   default:
     std::abort();
   }
@@ -639,29 +637,10 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
   } break;
 
   case InstType::R4:
-    if (op == Opcode::EXT2) {
-      switch (func3) {
-      case 1:
-        switch (func2) {
-        case 0: // CMOV
-          instr->setDestReg(rd, RegType::Integer);
-          instr->addSrcReg(rs1, RegType::Integer);
-          instr->addSrcReg(rs2, RegType::Integer);
-          instr->addSrcReg(rs3, RegType::Integer);
-          break;
-        default:
-          std::abort();
-        }
-        break;
-      default:
-        std::abort();
-      }
-    } else {
-      instr->setDestReg(rd, RegType::Float);
-      instr->addSrcReg(rs1, RegType::Float);
-      instr->addSrcReg(rs2, RegType::Float);
-      instr->addSrcReg(rs3, RegType::Float);
-    }
+    instr->setDestReg(rd, RegType::Float);
+    instr->addSrcReg(rs1, RegType::Float);
+    instr->addSrcReg(rs2, RegType::Float);
+    instr->addSrcReg(rs3, RegType::Float);
     instr->setFunc2(func2);
     instr->setFunc3(func3);
     break;

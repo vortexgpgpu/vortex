@@ -40,6 +40,10 @@
 `define EXT_F_ENABLE
 `endif
 
+`ifndef EXT_ZICOND_ENABLE
+`define EXT_ZICOND_ENABLE
+`endif
+
 `ifndef XLEN_32
 `ifndef XLEN_64
 `define XLEN_32
@@ -637,6 +641,12 @@
     `define EXT_M_ENABLED   0
 `endif
 
+`ifdef EXT_ZICOND_ENABLE
+    `define EXT_ZICOND_ENABLED 1
+`else
+    `define EXT_ZICOND_ENABLED 0
+`endif
+
 `define ISA_STD_A           0
 `define ISA_STD_C           2
 `define ISA_STD_D           3
@@ -654,12 +664,14 @@
 `define ISA_EXT_L2CACHE     2
 `define ISA_EXT_L3CACHE     3
 `define ISA_EXT_LMEM        4
+`define ISA_EXT_ZICOND      5
 
 `define MISA_EXT  (`ICACHE_ENABLED  << `ISA_EXT_ICACHE) \
                 | (`DCACHE_ENABLED  << `ISA_EXT_DCACHE) \
                 | (`L2_ENABLED      << `ISA_EXT_L2CACHE) \
                 | (`L3_ENABLED      << `ISA_EXT_L3CACHE) \
-                | (`LMEM_ENABLED    << `ISA_EXT_LMEM)
+                | (`LMEM_ENABLED    << `ISA_EXT_LMEM) \
+                | (`EXT_ZICOND_ENABLED << `ISA_EXT_ZICOND)
 
 `define MISA_STD  (`EXT_A_ENABLED <<  0) /* A - Atomic Instructions extension */ \
                 | (0 <<  1) /* B - Tentatively reserved for Bit operations extension */ \
