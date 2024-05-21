@@ -88,7 +88,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         break;
   }
 
-  uint32_t thread_last = num_threads - 1;
+  int32_t thread_last = num_threads - 1;
   for (; thread_last >= 0; --thread_last) {
       if (warp.tmask.test(thread_last))
         break;
