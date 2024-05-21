@@ -36,7 +36,7 @@ def monitor(stop_event):
             sys.stdout.flush()
             elapsed_time = 0
 
-def execute_verbose(command):
+def execute(command):
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     while True:
         output = process.stdout.readline()
@@ -49,14 +49,8 @@ def execute_verbose(command):
             process.stdout.flush()
         ret = process.poll()
         if ret is not None:
-            print(" + exitcode="+str(ret))
             return ret
     return -1
-
-def execute(command):
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    ret = process.wait()
-    return ret
 
 def main(argv):
     if not argv:

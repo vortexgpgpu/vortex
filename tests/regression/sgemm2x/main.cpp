@@ -159,7 +159,7 @@ int main(int argc, char *argv[]) {
   uint32_t buf_size = size_sq * sizeof(TYPE);
 
   uint32_t group_size = tile_size * tile_size;
-	uint32_t num_groups = (size * size) / group_size;
+	uint32_t num_groups = size_sq / group_size;
   uint32_t local_mem = 2 * group_size * sizeof(TYPE);
 
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
@@ -177,6 +177,7 @@ int main(int argc, char *argv[]) {
   // check work group occupancy
   uint32_t max_barriers, max_localmem;
   RT_CHECK(vx_check_occupancy(device, group_size, &max_barriers, &max_localmem));
+  std::cout << "occupancy: max_barriers=" << max_barriers << ", max_localmem=" << max_localmem << " bytes" << std::endl;
   RT_CHECK(max_barriers < 2);
   RT_CHECK(max_localmem < local_mem);
 
