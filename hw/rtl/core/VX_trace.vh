@@ -82,8 +82,8 @@
                                 `INST_ALU_XOR:   `TRACE(level, ("XOR"));
                                 `INST_ALU_OR:    `TRACE(level, ("OR"));
                                 `INST_ALU_AND:   `TRACE(level, ("AND"));
-                                `INST_ALU_CZEQ:  `TRACE(level, ("CZEQ"));
-                                `INST_ALU_CZNE:  `TRACE(level, ("CZNE"));
+                                `INST_ALU_CZEQ:  `TRACE(level, ("CZERO.EQZ"));
+                                `INST_ALU_CZNE:  `TRACE(level, ("CZERO.NEZ"));
                                 default:         `TRACE(level, ("?"));
                             endcase
                         end

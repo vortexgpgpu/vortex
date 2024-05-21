@@ -88,6 +88,12 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         break;
   }
 
+  in32_t thread_last = num_threads - 1;
+  for (; thread_last >= 0; --thread_last) {
+      if (warp.tmask.test(thread_last))
+        break;
+  }
+
   std::vector<reg_data_t[3]> rsdata(num_threads);
   std::vector<reg_data_t> rddata(num_threads);
 
@@ -661,7 +667,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         continue;
       rddata[t].i = next_pc;
     }
-    next_pc = rsdata[thread_start][0].i + immsrc;
+    next_pc = rsdata[thread_last][0].i + immsrc;
     trace->fetch_stall = true;
     rd_write = true;
     break;
@@ -1306,7 +1312,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->fetch_stall = true;
         next_tmask.reset();
         for (uint32_t t = 0; t < num_threads; ++t) {
-          next_tmask.set(t, rsdata.at(thread_start)[0].i & (1 << t));
+          next_tmask.set(t, rsdata.at(thread_last)[0].i & (1 << t));
         }
       } break;
       case 1: {
@@ -1316,7 +1322,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->fetch_stall = true;
-        trace->data = std::make_shared<SFUTraceData>(rsdata.at(thread_start)[0].i, rsdata.at(thread_start)[1].i);
+        trace->data = std::make_shared<SFUTraceData>(rsdata.at(thread_last)[0].i, rsdata.at(thread_last)[1].i);
       } break;
       case 2: {
         // SPLIT
@@ -1366,7 +1372,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->fetch_stall = true;
 
-        auto stack_ptr = warp.ireg_file.at(thread_start).at(rsrc0);
+        auto stack_ptr = warp.ireg_file.at(thread_last).at(rsrc0);
         if (stack_ptr != warp.ipdom_stack.size()) {
           if (warp.ipdom_stack.empty()) {
             std::cout << "IPDOM stack is empty!\n" << std::flush;
@@ -1386,7 +1392,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->fetch_stall = true;
-        trace->data = std::make_shared<SFUTraceData>(rsdata[thread_start][0].i, rsdata[thread_start][1].i);
+        trace->data = std::make_shared<SFUTraceData>(rsdata[thread_last][0].i, rsdata[thread_last][1].i);
       } break;
       case 5: {
         // PRED
@@ -1404,7 +1410,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         if (pred.any()) {
           next_tmask &= pred;
         } else {
-          next_tmask = warp.ireg_file.at(thread_start).at(rsrc1);
+          next_tmask = warp.ireg_file.at(thread_last).at(rsrc1);
         }
       } break;
       default:
