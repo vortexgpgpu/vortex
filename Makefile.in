@@ -30,12 +30,7 @@ clean-all:
 	$(MAKE) -C tests clean-all
 
 # Install setup
-KERNEL_DIRS = $(PREFIX)/kernel/include $(PREFIX)/kernel/lib
-RUNTIME_DIRS = $(PREFIX)/runtime/include $(PREFIX)/runtime/lib
-KERNEL_LIB = kernel/libvortex.a
-RUNTIME_LIB = runtime/stub/libvortex.so
-
-KERNEL_LIB_DST = $(PREFIX)/kernel/lib
+KERNEL_LIB_DST = $(PREFIX)/kernel/lib$(XLEN)
 RUNTIME_LIB_DST = $(PREFIX)/runtime/lib
 KERNEL_INC_DST = $(PREFIX)/kernel/include
 RUNTIME_INC_DST = $(PREFIX)/runtime/include
