@@ -13,6 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Determine the current working directory
+CURRENT_DIR=$(pwd)
+
 # Function to detect current OS
 detect_osversion() {
     local osversion="unsupported"
@@ -60,7 +63,7 @@ copy_files() {
                     filename_no_ext="${filename%.in}"
                     dest_file="$dest_dir/$filename_no_ext"
                     mkdir -p "$dest_dir"
-                    sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g" "$file" > "$dest_file"
+                    sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g; s|@PREFIX@|$PREFIX|g" "$file" > "$dest_file"
                     # apply permissions to bash scripts
                     read -r firstline < "$dest_file"
                     if [[ "$firstline" =~ ^#!.*bash ]]; then
@@ -110,6 +113,7 @@ copy_files() {
 default_xlen=32
 default_tooldir=/opt
 default_osversion=$(detect_osversion)
+default_prefix=$CURRENT_DIR
 
 # load default configuration parameters from existing config.mk
 if [ -f "config.mk" ]; then
@@ -121,6 +125,7 @@ if [ -f "config.mk" ]; then
             XLEN\ ?*) default_xlen=${value//\?=/} ;;
             TOOLDIR\ ?*) default_tooldir=${value//\?=/} ;;
             OSVERSION\ ?*) default_osversion=${value//\?=/} ;;
+            PREFIX\ ?*) default_prefix=${value//\?=/} ;;
         esac
     done < config.mk
 fi
@@ -129,13 +134,15 @@ fi
 XLEN=${XLEN:=$default_xlen}
 TOOLDIR=${TOOLDIR:=$default_tooldir}
 OSVERSION=${OSVERSION:=$default_osversion}
+PREFIX=${PREFIX:=$default_prefix}
 
 # parse command line arguments
 usage() {
     echo "Usage: $0 [--xlen=<value>] [--tooldir=<path>] [--osversion=<version>]"
     echo "  --xlen=<value>       Set the XLEN value (default: 32)"
     echo "  --tooldir=<path>     Set the TOOLDIR path (default: /opt)"
-    echo "  --osversion=<version>  Set the OS Version (default: $(detect_os))"
+    echo "  --osversion=<version> Set the OS Version (default: $(detect_os))"
+    echo "  --prefix=<path>      Set installation directory"
     exit 1
 }
 while [[ "$#" -gt 0 ]]; do
@@ -143,6 +150,7 @@ while [[ "$#" -gt 0 ]]; do
         --xlen=*) XLEN="${1#*=}" ;;
         --tooldir=*) TOOLDIR="${1#*=}" ;;
         --osversion=*) OSVERSION="${1#*=}" ;;
+        --prefix=*) PREFIX="${1#*=}" ;;
         -h|--help) usage ;;
         *) echo "Unknown parameter passed: $1"; usage ;;
     esac
@@ -160,9 +168,6 @@ SUBDIRS=("." "!ci" "!perf" "hw*" "kernel*" "runtime*" "sim*" "tests*")
 
 # Get the directory of the script
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-
-# Determine the current working directory
-CURRENT_DIR=$(pwd)
 
 THIRD_PARTY_DIR=$SCRIPT_DIR/third_party
 
