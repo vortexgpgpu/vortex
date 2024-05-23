@@ -29,6 +29,8 @@
 #include <mem.h>
 #include <util.h>
 #include <processor.h>
+#include <unordered_map>
+#include <array>
 
 using namespace vortex;
 

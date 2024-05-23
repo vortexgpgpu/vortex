@@ -32,6 +32,8 @@
 #include <arch.h>
 #include <mem.h>
 #include <constants.h>
+#include <unordered_map>
+#include <array>
 
 using namespace vortex;
 
@@ -261,7 +263,8 @@ public:
             return -1;
         if (mpm_cache_.count(core_id) == 0) {
             uint64_t mpm_mem_addr = IO_MPM_ADDR + core_id * 32 * sizeof(uint64_t);
-            CHECK_ERR(this->download(mpm_cache_[core_id].data(), mpm_mem_addr, 32 * sizeof(uint64_t)), {
+            auto x = mpm_cache_[core_id].data();
+            CHECK_ERR(this->download(x, mpm_mem_addr, 32 * sizeof(uint64_t)), {
                 return err;
             });
         }
