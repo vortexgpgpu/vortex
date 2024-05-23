@@ -27,9 +27,9 @@
     endtask
 
     task trace_ex_op(input int level,
-                    input [`EX_BITS-1:0] ex_type,
-                    input [`INST_OP_BITS-1:0] op_type,
-                    input VX_gpu_pkg::op_mod_t op_mod
+                     input [`EX_BITS-1:0] ex_type,
+                     input [`INST_OP_BITS-1:0] op_type,
+                     input VX_gpu_pkg::op_mod_t op_mod
     );
         case (ex_type)
         `EX_ALU: begin
@@ -131,6 +131,7 @@
                         endcase
                     end
                 end
+                default: `TRACE(level, ("?"));
             endcase
         end
         `EX_LSU: begin
