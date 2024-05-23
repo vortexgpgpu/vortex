@@ -161,7 +161,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
                     stalled_warps_n &= ~barrier_masks[warp_ctl_if.barrier.id]; // unlock warps
                     stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
                 end else begin
-                    barrier_ctrs_n[warp_ctl_if.barrier.id] = barrier_ctrs[warp_ctl_if.barrier.id] + 1;
+                    barrier_ctrs_n[warp_ctl_if.barrier.id] = barrier_ctrs[warp_ctl_if.barrier.id] + `NW_WIDTH'(1);
                     barrier_masks_n[warp_ctl_if.barrier.id] = curr_barrier_mask_p1;
                 end
             end else begin
@@ -203,7 +203,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
         // advance PC
         if (schedule_if_fire) begin
-            warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + 2;
+            warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + `PC_BITS'(2);
         end
     end
 
@@ -412,7 +412,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
             end
         end
     end
-    `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT, ("%t: *** core%0d-scheduler-timeout: stalled_warps=%b", $time, CORE_ID, stalled_warps));
+    `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT, ("%t: *** core%0d-scheduler-timeout: stalled_warps=%b", $time, CORE_ID, stalled_warps))
 
 `ifdef PERF_ENABLE
     reg [`PERF_CTR_BITS-1:0] perf_sched_idles;
