@@ -86,30 +86,34 @@ package VX_gpu_pkg;
     } alu_mod_t;
 
     typedef struct packed {
+        logic [($bits(alu_mod_t)-`INST_FRM_BITS-`INST_FMT_BITS)-1:0] __padding;
         logic [`INST_FRM_BITS-1:0] frm;
         logic [`INST_FMT_BITS-1:0] fmt;
     } fpu_mod_t;
 
     typedef struct packed {
+        logic [($bits(alu_mod_t)-1-`OFFSET_BITS)-1:0] __padding;
         logic is_float;
         logic [`OFFSET_BITS-1:0] offset;
     } lsu_mod_t;
 
     typedef struct packed {
+        logic [($bits(alu_mod_t)-1-`VX_CSR_ADDR_BITS-5)-1:0] __padding;
         logic use_imm;
         logic [`VX_CSR_ADDR_BITS-1:0] addr;
         logic [4:0] imm;
     } csr_mod_t;
 
     typedef struct packed {
+        logic [($bits(alu_mod_t)-1)-1:0] __padding;
         logic is_neg;
     } wctl_mod_t;
 
     typedef union packed {
-        alu_mod_t alu;
-        fpu_mod_t fpu;
-        lsu_mod_t lsu;
-        csr_mod_t csr;
+        alu_mod_t  alu;
+        fpu_mod_t  fpu;
+        lsu_mod_t  lsu;
+        csr_mod_t  csr;
         wctl_mod_t wctl;
     } op_mod_t;
 
