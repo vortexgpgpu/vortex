@@ -117,7 +117,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     // simulation helper signal to get RISC-V tests Pass/Fail status
     assign sim_ebreak = dispatch_if[0].valid && dispatch_if[0].ready
                      && dispatch_if[0].data.wis == 0
-                     && (dispatch_if[0].data.op_mod.alu.xtype == `ALU_TYPE_BRANCH)
+                     && (dispatch_if[0].data.op_args.alu.xtype == `ALU_TYPE_BRANCH)
                      && (`INST_BR_BITS'(dispatch_if[0].data.op_type) == `INST_BR_EBREAK
                       || `INST_BR_BITS'(dispatch_if[0].data.op_type) == `INST_BR_ECALL);
 

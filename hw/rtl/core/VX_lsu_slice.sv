@@ -52,7 +52,6 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .NUM_LANES (NUM_LANES)
     ) commit_no_rsp_if();
 
-    `UNUSED_VAR (execute_if.data.op_mod)
     `UNUSED_VAR (execute_if.data.rs3_data)
     `UNUSED_VAR (execute_if.data.tid)
 
@@ -62,7 +61,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     wire [NUM_LANES-1:0][`XLEN-1:0] full_addr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign full_addr[i] = execute_if.data.rs1_data[i] + `SEXT(`XLEN, execute_if.data.op_mod.lsu.offset);
+        assign full_addr[i] = execute_if.data.rs1_data[i] + `SEXT(`XLEN, execute_if.data.op_args.lsu.offset);
     end
 
     // address type calculation
@@ -129,24 +128,24 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     end
 
     wire req_skip = req_is_fence && ~execute_if.data.eop;
-    wire no_rsp_buf_use = (mem_req_rw && ~execute_if.data.wb) || req_skip;
+    wire no_rsp_buf_enable = (mem_req_rw && ~execute_if.data.wb) || req_skip;
 
     assign mem_req_valid = execute_if.valid
                         && ~req_skip
-                        && ~(no_rsp_buf_use && ~no_rsp_buf_ready)
+                        && ~(no_rsp_buf_enable && ~no_rsp_buf_ready)
                         && ~fence_lock;
 
     assign no_rsp_buf_valid = execute_if.valid
-                           && no_rsp_buf_use
+                           && no_rsp_buf_enable
                            && (req_skip || mem_req_ready)
                            && ~fence_lock;
 
     assign execute_if.ready = (mem_req_ready || req_skip)
-                           && ~(no_rsp_buf_use && ~no_rsp_buf_ready)
+                           && ~(no_rsp_buf_enable && ~no_rsp_buf_ready)
                            && ~fence_lock;
 
     assign mem_req_mask = execute_if.data.tmask;
-    assign mem_req_rw = execute_if.data.op_mod.lsu.is_store;
+    assign mem_req_rw = execute_if.data.op_args.lsu.is_store;
 
     // address formatting
 

@@ -126,7 +126,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `define INST_OP_BITS    4
-`define INST_MOD_BITS   $bits(op_mod_t)
+`define INST_ARGS_BITS   $bits(op_args_t)
 `define INST_FMT_BITS   2
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -432,7 +432,7 @@
     data.tmask, \
     data.PC, \
     data.op_type, \
-    data.op_mod, \
+    data.op_args, \
     data.wb, \
     data.rd, \
     tid, \

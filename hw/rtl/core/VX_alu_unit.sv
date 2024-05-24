@@ -59,7 +59,7 @@ module VX_alu_unit #(
 
         `RESET_RELAY (block_reset, reset);
 
-        wire is_muldiv_op = `EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_mod.alu.xtype == `ALU_TYPE_MULDIV);
+        wire is_muldiv_op = `EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == `ALU_TYPE_MULDIV);
 
         VX_execute_if #(
             .NUM_LANES (NUM_LANES)

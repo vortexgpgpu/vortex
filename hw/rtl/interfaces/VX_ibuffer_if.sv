@@ -21,7 +21,7 @@ interface VX_ibuffer_if import VX_gpu_pkg::*; ();
         logic [`PC_BITS-1:0]        PC;
         logic [`EX_BITS-1:0]        ex_type;
         logic [`INST_OP_BITS-1:0]   op_type;
-        op_mod_t                    op_mod;
+        op_args_t                   op_args;
         logic                       wb;
         logic [`NR_BITS-1:0]        rd;
         logic [`NR_BITS-1:0]        rs1;
