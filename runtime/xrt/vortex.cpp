@@ -22,6 +22,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <array>
 
 #ifdef SCOPE
 #include "scope.h"
