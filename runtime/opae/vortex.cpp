@@ -26,6 +26,7 @@
 #include <cmath>
 #include <sstream>
 #include <unordered_map>
+#include <array>
 #include <algorithm>
 #include <memory>
 #include <list>
