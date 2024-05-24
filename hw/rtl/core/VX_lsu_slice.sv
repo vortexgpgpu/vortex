@@ -38,25 +38,27 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     localparam MEM_ASHIFT   = `CLOG2(`MEM_BLOCK_SIZE);
     localparam MEM_ADDRW    = `MEM_ADDR_WIDTH - MEM_ASHIFT;
 
-    // tag_id = wid + PC + rd + op_type + align + pid + pkt_addr
-    localparam TAG_ID_WIDTH = `NW_WIDTH + `PC_BITS + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * REQ_ASHIFT) + PID_WIDTH + LSUQ_SIZEW;
+    // tag_id = wid + PC + wb + rd + op_type + align + pid + pkt_addr + fence
+    localparam TAG_ID_WIDTH = `NW_WIDTH + `PC_BITS + 1 + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * REQ_ASHIFT) + PID_WIDTH + LSUQ_SIZEW + 1;
 
     // tag = uuid + tag_id
     localparam TAG_WIDTH = `UUID_WIDTH + TAG_ID_WIDTH;
 
     VX_commit_if #(
         .NUM_LANES (NUM_LANES)
-    ) commit_st_if();
+    ) commit_rsp_if();
 
     VX_commit_if #(
         .NUM_LANES (NUM_LANES)
-    ) commit_ld_if();
+    ) commit_no_rsp_if();
 
     `UNUSED_VAR (execute_if.data.op_mod)
     `UNUSED_VAR (execute_if.data.rs3_data)
     `UNUSED_VAR (execute_if.data.tid)
 
     // full address calculation
+
+    wire req_is_fence, rsp_is_fence;
 
     wire [NUM_LANES-1:0][`XLEN-1:0] full_addr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin
@@ -70,6 +72,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         wire [MEM_ADDRW-1:0] block_addr = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
         // is I/O address
         wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`XLEN'(`IO_BASE_ADDR) >> MEM_ASHIFT);
+        assign mem_req_atype[i][`ADDR_TYPE_FLUSH] = req_is_fence;
         assign mem_req_atype[i][`ADDR_TYPE_IO] = (block_addr >= io_addr_start);
     `ifdef LMEM_ENABLE
         // is local memory address
@@ -78,17 +81,6 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         assign mem_req_atype[i][`ADDR_TYPE_LOCAL] = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);
     `endif
     end
-
-    wire mem_req_empty;
-    wire st_rsp_ready;
-    wire lsu_valid, lsu_ready;
-
-    // fence: stall the pipeline until all pending requests are sent
-    wire is_fence = `INST_LSU_IS_FENCE(execute_if.data.op_type);
-    wire fence_wait = is_fence && ~mem_req_empty;
-
-    assign lsu_valid = execute_if.valid && ~fence_wait;
-    assign execute_if.ready = lsu_ready && ~fence_wait;
 
     // schedule memory request
 
@@ -109,17 +101,52 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire                            mem_rsp_eop;
     wire                            mem_rsp_ready;
 
-    assign mem_req_valid = lsu_valid;
-    assign lsu_ready = mem_req_ready
-                    && (~mem_req_rw || st_rsp_ready); // writes commit directly
-
-    assign mem_req_mask = execute_if.data.tmask;
-    assign mem_req_rw = ~execute_if.data.wb;
-
     wire mem_req_fire = mem_req_valid && mem_req_ready;
     wire mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
     `UNUSED_VAR (mem_req_fire)
     `UNUSED_VAR (mem_rsp_fire)
+
+    wire mem_rsp_sop_pkt, mem_rsp_eop_pkt;
+    wire no_rsp_buf_valid, no_rsp_buf_ready;
+
+    // fence handling
+
+    reg fence_lock;
+
+    assign req_is_fence = `INST_LSU_IS_FENCE(execute_if.data.op_type);
+
+    always @(posedge clk) begin
+        if (reset) begin
+            fence_lock <= 0;
+        end else begin
+            if (mem_req_fire && req_is_fence && execute_if.data.eop) begin
+                fence_lock <= 1;
+            end
+            if (mem_rsp_fire && rsp_is_fence && mem_rsp_eop_pkt) begin
+                fence_lock <= 0;
+            end
+        end
+    end
+
+    wire req_skip = req_is_fence && ~execute_if.data.eop;
+    wire no_rsp_buf_use = (mem_req_rw && ~execute_if.data.wb) || req_skip;
+
+    assign mem_req_valid = execute_if.valid
+                        && ~req_skip
+                        && ~(no_rsp_buf_use && ~no_rsp_buf_ready)
+                        && ~fence_lock;
+
+    assign no_rsp_buf_valid = execute_if.valid
+                           && no_rsp_buf_use
+                           && (req_skip || mem_req_ready)
+                           && ~fence_lock;
+
+    assign execute_if.ready = (mem_req_ready || req_skip)
+                           && ~(no_rsp_buf_use && ~no_rsp_buf_ready)
+                           && ~fence_lock;
+
+    assign mem_req_mask = execute_if.data.tmask;
+    assign mem_req_rw = execute_if.data.op_mod.lsu.is_store;
 
     // address formatting
 
@@ -158,7 +185,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // memory misalignment not supported!
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         wire lsu_req_fire = execute_if.valid && execute_if.ready;
-        `RUNTIME_ASSERT((~lsu_req_fire || ~execute_if.data.tmask[i] || is_fence || (full_addr[i] % (1 << `INST_LSU_WSIZE(execute_if.data.op_type))) == 0),
+        `RUNTIME_ASSERT((~lsu_req_fire || ~execute_if.data.tmask[i] || req_is_fence || (full_addr[i] % (1 << `INST_LSU_WSIZE(execute_if.data.op_type))) == 0),
             ("misaligned memory access, wid=%0d, PC=0x%0h, addr=0x%0h, wsize=%0d! (#%0d)",
                 execute_if.data.wid, {execute_if.data.PC, 1'b0}, full_addr[i], `INST_LSU_WSIZE(execute_if.data.op_type), execute_if.data.uuid));
     end
@@ -185,13 +212,12 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // track SOP/EOP for out-of-order memory responses
 
     wire [LSUQ_SIZEW-1:0] pkt_waddr, pkt_raddr;
-    wire mem_rsp_sop_pkt, mem_rsp_eop_pkt;
 
     if (PID_BITS != 0) begin
         reg [`LSUQ_IN_SIZE-1:0][PID_BITS:0] pkt_ctr;
         reg [`LSUQ_IN_SIZE-1:0] pkt_sop, pkt_eop;
 
-        wire mem_req_rd_fire     = mem_req_fire && execute_if.data.wb;
+        wire mem_req_rd_fire     = mem_req_fire && ~mem_req_rw;
         wire mem_req_rd_sop_fire = mem_req_rd_fire && execute_if.data.sop;
         wire mem_req_rd_eop_fire = mem_req_rd_fire && execute_if.data.eop;
         wire mem_rsp_eop_fire    = mem_rsp_fire && mem_rsp_eop;
@@ -258,10 +284,13 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         execute_if.data.uuid,
         execute_if.data.wid,
         execute_if.data.PC,
+        execute_if.data.wb,
         execute_if.data.rd,
         execute_if.data.op_type,
-        req_align, execute_if.data.pid,
-        pkt_waddr
+        req_align,
+        execute_if.data.pid,
+        pkt_waddr,
+        req_is_fence
     };
 
     wire                                    lsu_mem_req_valid;
@@ -311,7 +340,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .core_req_data  (mem_req_data),
         .core_req_tag   (mem_req_tag),
         .core_req_ready (mem_req_ready),
-        .core_req_empty (mem_req_empty),
+        `UNUSED_PIN (core_req_empty),
         `UNUSED_PIN (core_req_sent),
 
         // Output response
@@ -361,6 +390,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire [`UUID_WIDTH-1:0] rsp_uuid;
     wire [`NW_WIDTH-1:0] rsp_wid;
     wire [`PC_BITS-1:0] rsp_pc;
+    wire rsp_wb;
     wire [`NR_BITS-1:0] rsp_rd;
     wire [`INST_LSU_BITS-1:0] rsp_op_type;
     wire [NUM_LANES-1:0][REQ_ASHIFT-1:0] rsp_align;
@@ -371,11 +401,14 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     assign {
         rsp_uuid,
         rsp_wid,
-        rsp_pc, rsp_rd,
+        rsp_pc,
+        rsp_wb,
+        rsp_rd,
         rsp_op_type,
         rsp_align,
         rsp_pid,
-        pkt_raddr
+        pkt_raddr,
+        rsp_is_fence
     } = mem_rsp_tag;
 
     // load response formatting
@@ -419,44 +452,38 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         end
     end
 
-    // load commit
+    // commit
 
     VX_elastic_buffer #(
-        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1),
+        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + 1 + `NR_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1),
         .SIZE  (2)
-    ) ld_rsp_buf (
+    ) rsp_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (mem_rsp_valid),
         .ready_in  (mem_rsp_ready),
-        .data_in   ({rsp_uuid, rsp_wid, mem_rsp_mask, rsp_pc, rsp_rd, rsp_data, rsp_pid, mem_rsp_sop_pkt, mem_rsp_eop_pkt}),
-        .data_out  ({commit_ld_if.data.uuid, commit_ld_if.data.wid, commit_ld_if.data.tmask, commit_ld_if.data.PC, commit_ld_if.data.rd, commit_ld_if.data.data, commit_ld_if.data.pid, commit_ld_if.data.sop, commit_ld_if.data.eop}),
-        .valid_out (commit_ld_if.valid),
-        .ready_out (commit_ld_if.ready)
+        .data_in   ({rsp_uuid, rsp_wid, mem_rsp_mask, rsp_pc, rsp_wb, rsp_rd, rsp_data, rsp_pid, mem_rsp_sop_pkt, mem_rsp_eop_pkt}),
+        .data_out  ({commit_rsp_if.data.uuid, commit_rsp_if.data.wid, commit_rsp_if.data.tmask, commit_rsp_if.data.PC, commit_rsp_if.data.wb, commit_rsp_if.data.rd, commit_rsp_if.data.data, commit_rsp_if.data.pid, commit_rsp_if.data.sop, commit_rsp_if.data.eop}),
+        .valid_out (commit_rsp_if.valid),
+        .ready_out (commit_rsp_if.ready)
     );
-
-    assign commit_ld_if.data.wb = 1'b1;
-
-    // store commit
 
     VX_elastic_buffer #(
         .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + PID_WIDTH + 1 + 1),
         .SIZE  (2)
-    ) st_rsp_buf (
+    ) no_rsp_buf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (mem_req_fire && mem_req_rw),
-        .ready_in  (st_rsp_ready),
+        .valid_in  (no_rsp_buf_valid),
+        .ready_in  (no_rsp_buf_ready),
         .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop}),
-        .data_out  ({commit_st_if.data.uuid, commit_st_if.data.wid, commit_st_if.data.tmask, commit_st_if.data.PC, commit_st_if.data.pid, commit_st_if.data.sop, commit_st_if.data.eop}),
-        .valid_out (commit_st_if.valid),
-        .ready_out (commit_st_if.ready)
+        .data_out  ({commit_no_rsp_if.data.uuid, commit_no_rsp_if.data.wid, commit_no_rsp_if.data.tmask, commit_no_rsp_if.data.PC, commit_no_rsp_if.data.pid, commit_no_rsp_if.data.sop, commit_no_rsp_if.data.eop}),
+        .valid_out (commit_no_rsp_if.valid),
+        .ready_out (commit_no_rsp_if.ready)
     );
-    assign commit_st_if.data.rd   = '0;
-    assign commit_st_if.data.wb   = 1'b0;
-    assign commit_st_if.data.data = commit_ld_if.data.data; // force arbiter passthru
-
-    // lsu commit
+    assign commit_no_rsp_if.data.rd   = '0;
+    assign commit_no_rsp_if.data.wb   = 1'b0;
+    assign commit_no_rsp_if.data.data = commit_rsp_if.data.data; // arbiter MUX optimization
 
     VX_stream_arb #(
         .NUM_INPUTS (2),
@@ -465,9 +492,9 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  ({commit_st_if.valid, commit_ld_if.valid}),
-        .ready_in  ({commit_st_if.ready, commit_ld_if.ready}),
-        .data_in   ({commit_st_if.data, commit_ld_if.data}),
+        .valid_in  ({commit_no_rsp_if.valid, commit_rsp_if.valid}),
+        .ready_in  ({commit_no_rsp_if.ready, commit_rsp_if.ready}),
+        .data_in   ({commit_no_rsp_if.data, commit_rsp_if.data}),
         .data_out  (commit_if.data),
         .valid_out (commit_if.valid),
         .ready_out (commit_if.ready),
@@ -476,7 +503,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
 `ifdef DBG_TRACE_MEM
     always @(posedge clk) begin
-        if (execute_if.valid && fence_wait) begin
+        if (execute_if.valid && fence_lock) begin
             `TRACE(1, ("%d: *** D$%0d fence wait\n", $time, CORE_ID));
         end
         if (mem_req_fire) begin
