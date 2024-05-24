@@ -116,7 +116,7 @@ package VX_gpu_pkg;
         lsu_mod_t  lsu;
         csr_mod_t  csr;
         wctl_mod_t wctl;
-    } op_mod_t;
+    } op_args_t;
 
     /* verilator lint_off UNUSED */
 

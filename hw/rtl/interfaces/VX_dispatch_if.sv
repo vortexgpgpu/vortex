@@ -21,7 +21,7 @@ interface VX_dispatch_if import VX_gpu_pkg::*; ();
         logic [`NUM_THREADS-1:0]            tmask;
         logic [`PC_BITS-1:0]                PC;
         logic [`INST_ALU_BITS-1:0]          op_type;
-        op_mod_t                            op_mod;
+        op_args_t                           op_args;
         logic                               wb;
         logic [`NR_BITS-1:0]                rd;
         logic [`NT_WIDTH-1:0]               tid;

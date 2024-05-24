@@ -38,7 +38,7 @@ module VX_alu_muldiv #(
     wire is_mulx_op = `INST_M_IS_MULX(muldiv_op);
     wire is_signed_op = `INST_M_SIGNED(muldiv_op);
 `ifdef XLEN_64
-    wire is_alu_w = execute_if.data.op_mod.alu.is_w;
+    wire is_alu_w = execute_if.data.op_args.alu.is_w;
 `else
     wire is_alu_w = 0;
 `endif
