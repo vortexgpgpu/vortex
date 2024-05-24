@@ -304,6 +304,9 @@ module VX_decode import VX_gpu_pkg::*; #(
             `INST_FENCE: begin
                 ex_type = `EX_LSU;
                 op_type = `INST_LSU_FENCE;
+                op_mod.lsu.is_store = 0;
+                op_mod.lsu.is_float = 0;
+                op_mod.lsu.offset = 0;
             end
             `INST_SYS : begin
                 if (func3[1:0] != 0) begin
@@ -338,6 +341,7 @@ module VX_decode import VX_gpu_pkg::*; #(
             `INST_L: begin
                 ex_type = `EX_LSU;
                 op_type = `INST_OP_BITS'({1'b0, func3});
+                op_mod.lsu.is_store = 0;
                 op_mod.lsu.is_float = opcode[2];
                 op_mod.lsu.offset = u_12;
                 use_rd  = 1;
@@ -355,6 +359,7 @@ module VX_decode import VX_gpu_pkg::*; #(
             `INST_S: begin
                 ex_type = `EX_LSU;
                 op_type = `INST_OP_BITS'({1'b1, func3});
+                op_mod.lsu.is_store = 1;
                 op_mod.lsu.is_float = opcode[2];
                 op_mod.lsu.offset = s_imm;
                 `USED_IREG (rs1);
