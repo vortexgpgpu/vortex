@@ -11,16 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <malloc.h>
-#include <utils.h>
-#include <VX_config.h>
-#include <VX_types.h>
-#include <stdarg.h>
-#include <util.h>
-#include <limits>
-#include <vector>
-#include <string>
-#include <unordered_map>
+#include <common.h>
 
 #ifdef SCOPE
 #include "scope.h"
@@ -38,7 +29,12 @@
 #include <fpga.h>
 #endif
 
-#include <callbacks.h>
+#include <stdarg.h>
+#include <util.h>
+#include <limits>
+#include <vector>
+#include <string>
+#include <unordered_map>
 
 using namespace vortex;
 
@@ -91,19 +87,11 @@ static const platform_info_t g_platforms [] = {
 
 #endif
 
-#define RAM_PAGE_SIZE 4096
-
 #define DEFAULT_DEVICE_INDEX 0
 
 #define DEFAULT_XCLBIN_PATH "vortex_afu.xclbin"
 
 #define KERNEL_NAME "vortex_afu"
-
-#ifndef NDEBUG
-#define DBGPRINT(format, ...) do { printf("[VXDRV] " format "", ##__VA_ARGS__); } while (0)
-#else
-#define DBGPRINT(format, ...) ((void)0)
-#endif
 
 #define CHECK_HANDLE(handle, _expr, _cleanup)   \
     auto handle = _expr;                        \
@@ -111,15 +99,6 @@ static const platform_info_t g_platforms [] = {
         printf("[VXDRV] Error: '%s' returned NULL!\n", #_expr); \
         _cleanup                                \
     }
-
-#define CHECK_ERR(_expr, _cleanup)              \
-    do {                                        \
-        auto err = _expr;                       \
-        if (err == 0)                           \
-            break;                              \
-        printf("[VXDRV] Error: '%s' returned %d!\n", #_expr, (int)err); \
-        _cleanup                                \
-    } while (false)
 
 #ifndef CPP_API
 
@@ -164,7 +143,6 @@ public:
 #ifndef CPP_API
 
     ~vx_device() {
-        profiling_remove(profiling_id_);
         for (auto& entry : xrtBuffers_) {
         #ifdef BANK_INTERLEAVE
             xrtBOFree(entry);
@@ -237,12 +215,6 @@ public:
             printf("*** allocated bank%u/%u, size=%lu\n", i, num_banks, bank_size);
         }
     #endif
-
-        CHECK_ERR(dcr_initialize(this), {
-            return err;
-        });
-
-        profiling_id_ = profiling_add(this);
 
         return 0;
     }
@@ -522,8 +494,6 @@ public:
             return err;
         });
 
-        profiling_begin(profiling_id_);
-
         // start execution
         CHECK_ERR(this->write_register(MMIO_CTL_ADDR, CTL_AP_START), {
             return err;
@@ -562,8 +532,6 @@ public:
             nanosleep(&sleep_time, nullptr);
             timeout -= sleep_time_ms;
         };
-
-        profiling_end(profiling_id_);
 
         return 0;
     }
@@ -608,7 +576,6 @@ private:
     uint64_t global_mem_size_;
     DeviceConfig dcrs_;
     std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
-    int profiling_id_;
 
 #ifdef BANK_INTERLEAVE
 

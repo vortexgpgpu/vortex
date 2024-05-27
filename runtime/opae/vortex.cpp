@@ -11,9 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <utils.h>
-#include <malloc.h>
+#include <common.h>
+#include <vortex_afu.h>
+
 #include "driver.h"
+#ifdef SCOPE
+#include "scope.h"
+#endif
+
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,16 +33,6 @@
 #include <algorithm>
 #include <memory>
 #include <list>
-
-#include <VX_config.h>
-#include <VX_types.h>
-#include <vortex_afu.h>
-
-#ifdef SCOPE
-#include "scope.h"
-#endif
-
-#include <callbacks.h>
 
 using namespace vortex;
 
@@ -58,14 +53,6 @@ using namespace vortex;
 
 #define STATUS_STATE_BITS   8
 
-#define RAM_PAGE_SIZE       4096
-
-#ifndef NDEBUG
-#define DBGPRINT(format, ...) do { printf("[VXDRV] " format "", ##__VA_ARGS__); } while (0)
-#else
-#define DBGPRINT(format, ...) ((void)0)
-#endif
-
 #define CHECK_HANDLE(handle, _expr, _cleanup)   \
     auto handle = _expr;                        \
     if (handle == nullptr) {                    \
@@ -79,15 +66,6 @@ using namespace vortex;
         if (err == 0)                           \
             break;                              \
         printf("[VXDRV] Error: '%s' returned %d, %s!\n", #_expr, (int)err, api_.fpgaErrStr(err)); \
-        _cleanup                                \
-    } while (false)
-
-#define CHECK_ERR(_expr, _cleanup)              \
-    do {                                        \
-        auto err = _expr;                       \
-        if (err == 0)                           \
-            break;                              \
-        printf("[VXDRV] Error: '%s' returned %d!\n", #_expr, (int)err); \
         _cleanup                                \
     } while (false)
 
@@ -113,8 +91,6 @@ public:
             }
             api_.fpgaClose(fpga_);
         }
-
-        profiling_remove(profiling_id_);
     }
 
     int init() {
@@ -210,12 +186,6 @@ public:
             }
         }
     #endif
-
-        CHECK_ERR(dcr_initialize(this), {
-            return err;
-        });
-
-        profiling_id_ = profiling_add(this);
 
         return 0;
     }
@@ -406,8 +376,6 @@ public:
             return err;
         });
 
-        profiling_begin(profiling_id_);
-
         // start execution
         CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_CMD_TYPE, CMD_RUN), {
             return -1;
@@ -474,8 +442,6 @@ public:
             nanosleep(&sleep_time, nullptr);
             timeout -= sleep_time_ms;
         };
-
-        profiling_end(profiling_id_);
 
         return 0;
     }
@@ -553,7 +519,6 @@ private:
     uint8_t* staging_ptr_;
     uint64_t staging_size_;
     std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
-    int profiling_id_;
 };
 
 struct vx_buffer {

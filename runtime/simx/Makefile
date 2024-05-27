@@ -13,7 +13,7 @@ CXXFLAGS += -DXLEN_$(XLEN)
 LDFLAGS += -shared -pthread
 LDFLAGS += -L$(DESTDIR) -lsimx
 
-SRCS := $(SRC_DIR)/vortex.cpp $(COMMON_DIR)/utils.cpp
+SRCS := $(SRC_DIR)/vortex.cpp
 
 # Debugigng
 ifdef DEBUG
