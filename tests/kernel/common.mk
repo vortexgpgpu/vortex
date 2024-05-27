@@ -28,7 +28,7 @@ CFLAGS += -DXLEN_$(XLEN) -DNDEBUG
 
 LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc -lgcc
 
-LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000 $(ROOT_DIR)/kernel/libvortexrt.a $(LIBC_LIB)
+LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000 $(ROOT_DIR)/kernel/libvortex.a $(LIBC_LIB)
 
 all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
 

@@ -1,6 +1,6 @@
 include ../common.mk
 
-DESTDIR ?= $(CURDIR)
+DESTDIR ?= $(CURDIR)/..
 
 SRC_DIR := $(VORTEX_HOME)/runtime/simx
 
@@ -22,14 +22,16 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
-PROJECT := libvortex.so
+PROJECT := libvortex-simx.so
 
 all: $(DESTDIR)/$(PROJECT)
 
-$(DESTDIR)/$(PROJECT): $(SRCS)
+$(DESTDIR)/libsimx.so:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx $(DESTDIR)/libsimx.so
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+$(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/libsimx.so
+	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
 clean:
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx clean
-	rm -rf $(DESTDIR)/$(PROJECT) *.o
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx clean-lib
+	rm -f $(DESTDIR)/$(PROJECT)

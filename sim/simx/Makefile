@@ -22,14 +22,14 @@ SRCS += $(SRC_DIR)/processor.cpp $(SRC_DIR)/cluster.cpp $(SRC_DIR)/socket.cpp $(
 ifdef DEBUG
 	CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG)
 	#CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG) -fsanitize=address -fno-omit-frame-pointer
-else    
+else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
 PROJECT := simx
 
 all: $(DESTDIR)/$(PROJECT)
-	
+
 $(DESTDIR)/$(PROJECT): $(SRCS) $(SRC_DIR)/main.cpp
 	$(CXX) $(CXXFLAGS) -DSTARTUP_ADDR=0x80000000 $^ $(LDFLAGS) -o $@
 
@@ -39,5 +39,10 @@ $(DESTDIR)/lib$(PROJECT).so: $(SRCS)
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
-clean:
-	rm -rf $(DESTDIR)/$(PROJECT) $(DESTDIR)/lib$(PROJECT).so
+clean-lib:
+	rm -f $(DESTDIR)/lib$(PROJECT).so
+
+clean-exe:
+	rm -f $(DESTDIR)/$(PROJECT)
+
+clean: clean-lib clean-exe

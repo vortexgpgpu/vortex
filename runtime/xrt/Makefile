@@ -2,7 +2,7 @@ include ../common.mk
 
 TARGET ?= xrtsim
 
-DESTDIR ?= $(CURDIR)
+DESTDIR ?= $(CURDIR)/..
 
 SRC_DIR := $(VORTEX_HOME)/runtime/xrt
 
@@ -24,7 +24,7 @@ else
 	LDFLAGS += -luuid -lxrt_coreutil
 endif
 
-PROJECT := libvortex.so
+PROJECT := libvortex-xrt.so
 
 # Debugigng
 ifdef DEBUG
@@ -49,5 +49,5 @@ $(DESTDIR)/$(PROJECT): $(SRCS) $(XRTSIM)
 
 clean:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/xrtsim clean
-	rm -rf $(DESTDIR)/$(PROJECT)
+	rm -f $(DESTDIR)/$(PROJECT)
 
