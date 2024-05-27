@@ -1,6 +1,6 @@
 include ../common.mk
 
-DESTDIR ?= $(CURDIR)
+DESTDIR ?= $(CURDIR)/..
 
 SRC_DIR := $(VORTEX_HOME)/runtime/rtlsim
 
@@ -31,14 +31,16 @@ ifdef PERF
 	CXXFLAGS += -DPERF_ENABLE
 endif
 
-PROJECT := libvortex.so
+PROJECT := libvortex-rtlsim.so
 
 all: $(DESTDIR)/$(PROJECT)
 
-$(DESTDIR)/$(PROJECT): $(SRCS)
+$(DESTDIR)/librtlsim.so:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/rtlsim $(DESTDIR)/librtlsim.so
+
+$(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/librtlsim.so
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
 clean:
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/rtlsim clean
-	rm -rf $(DESTDIR)/$(PROJECT) *.o
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/rtlsim clean-lib
+	rm -f $(DESTDIR)/$(PROJECT)

@@ -2,7 +2,7 @@ include ../common.mk
 
 TARGET ?= opaesim
 
-DESTDIR ?= $(CURDIR)
+DESTDIR ?= $(CURDIR)/..
 
 SYN_DIR := $(HW_DIR)/syn/altera/opae
 
@@ -54,7 +54,7 @@ ifdef PERF
 	CXXFLAGS += -DPERF_ENABLE
 endif
 
-PROJECT := libvortex.so
+PROJECT := libvortex-opae.so
 
 all: $(DESTDIR)/$(PROJECT)
 
@@ -66,4 +66,4 @@ $(DESTDIR)/$(PROJECT): $(SRCS) $(OPAESIM)
 
 clean:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/opaesim clean
-	rm -rf $(DESTDIR)/$(PROJECT)
+	rm -f $(DESTDIR)/$(PROJECT)

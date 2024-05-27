@@ -73,7 +73,7 @@ public:
     vx_dump_perf(device, stdout);
   }
 
-  int get_perf_class() const {
+  int perf_class() const {
     return perf_class_;
   }
 
@@ -82,7 +82,7 @@ private:
   int perf_class_;
 };
 
-AutoPerfDump gAutoPerfDump;
+static AutoPerfDump gAutoPerfDump;
 
 int profiling_add(vx_device_h hdevice) {
   return gAutoPerfDump.add(hdevice);
@@ -283,7 +283,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     return int(caclAverage(part, total) * 100);
   };
 
-  auto perf_class = gAutoPerfDump.get_perf_class();
+  auto perf_class = gAutoPerfDump.perf_class();
 
   // PERF: pipeline stalls
   uint64_t sched_idles = 0;

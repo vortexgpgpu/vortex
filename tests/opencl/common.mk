@@ -37,7 +37,7 @@ VX_CFLAGS  += -mllvm -disable-loop-idiom-all # disable memset/memcpy loop idiom
 VX_LLCFLAGS += -target-feature +m -target-feature +vortex
 #VX_LLCFLAGS += -mllvm -vortex-branch-divergence=0
 
-VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a $(VX_LIBS)
+VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortex.a $(VX_LIBS)
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-narrowing
@@ -100,7 +100,7 @@ setup:
 endif
 
 $(PROJECT): setup $(OBJS)
-	$(CXX) $(CXXFLAGS) $(filter-out setup, $^) $(LDFLAGS) -L$(ROOT_DIR)/runtime/stub -lvortex -L$(POCL_RT_PATH)/lib -lOpenCL -o $@
+	$(CXX) $(CXXFLAGS) $(filter-out setup, $^) $(LDFLAGS) -L$(ROOT_DIR)/runtime -lvortex -L$(POCL_RT_PATH)/lib -lOpenCL -o $@
 
 $(PROJECT).host: setup $(OBJS_HOST)
 	$(CXX) $(CXXFLAGS) $(filter-out setup, $^) $(LDFLAGS) -lOpenCL -o $@
@@ -109,19 +109,19 @@ run-gpu: $(PROJECT).host kernel.cl
 	./$(PROJECT).host $(OPTS)
 
 run-simx: $(PROJECT) kernel.pocl
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(ROOT_DIR)/runtime/simx:$(LD_LIBRARY_PATH) $(POCL_RT_FLAGS) ./$(PROJECT) $(OPTS)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(ROOT_DIR)/runtime:$(LD_LIBRARY_PATH) $(POCL_RT_FLAGS) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)
 
 run-rtlsim: $(PROJECT) kernel.pocl
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(ROOT_DIR)/runtime/rtlsim:$(LD_LIBRARY_PATH) $(POCL_RT_FLAGS) ./$(PROJECT) $(OPTS)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(ROOT_DIR)/runtime:$(LD_LIBRARY_PATH) $(POCL_RT_FLAGS) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
 
 run-opae: $(PROJECT) kernel.pocl
-	SCOPE_JSON_PATH=$(ROOT_DIR)/runtime/opae/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(ROOT_DIR)/runtime/opae:$(LD_LIBRARY_PATH) $(POCL_RT_FLAGS) ./$(PROJECT) $(OPTS)
+	SCOPE_JSON_PATH=$(ROOT_DIR)/runtime/opae/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(ROOT_DIR)/runtime:$(LD_LIBRARY_PATH) $(POCL_RT_FLAGS) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
 
 run-xrt: $(PROJECT) kernel.pocl
 ifeq ($(TARGET), hw)
-	XRT_INI_PATH=$(XRT_SYN_DIR)/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(POCL_RT_PATH)/lib:$(ROOT_DIR)/runtime/xrt:$(LD_LIBRARY_PATH) $(POCL_RT_FLAGS) ./$(PROJECT) $(OPTS)
+	XRT_INI_PATH=$(XRT_SYN_DIR)/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(POCL_RT_PATH)/lib:$(ROOT_DIR)/runtime:$(LD_LIBRARY_PATH) $(POCL_RT_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 else
-	XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(XRT_SYN_DIR)/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(POCL_RT_PATH)/lib:$(ROOT_DIR)/runtime/xrt:$(LD_LIBRARY_PATH) $(POCL_RT_FLAGS) ./$(PROJECT) $(OPTS)
+	XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(XRT_SYN_DIR)/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(POCL_RT_PATH)/lib:$(ROOT_DIR)/runtime:$(LD_LIBRARY_PATH) $(POCL_RT_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 endif
 
 .depend: $(SRCS)

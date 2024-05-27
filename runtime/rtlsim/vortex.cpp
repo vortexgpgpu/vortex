@@ -30,6 +30,8 @@
 #include <util.h>
 #include <processor.h>
 
+#include <callbacks.h>
+
 using namespace vortex;
 
 #define RAM_PAGE_SIZE 4096
@@ -293,7 +295,7 @@ struct vx_buffer {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-extern int vx_dev_open(vx_device_h* hdevice) {
+int vx_rtlsim_dev_open(vx_device_h* hdevice) {
     if (nullptr == hdevice)
         return  -1;
 
@@ -313,7 +315,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     return 0;
 }
 
-extern int vx_dev_close(vx_device_h hdevice) {
+int vx_rtlsim_dev_close(vx_device_h hdevice) {
     if (nullptr == hdevice)
         return -1;
 
@@ -326,7 +328,7 @@ extern int vx_dev_close(vx_device_h hdevice) {
     return 0;
 }
 
-extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
+int vx_rtlsim_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
    if (nullptr == hdevice)
         return -1;
 
@@ -345,7 +347,7 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
     return 0;
 }
 
-extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, int flags, vx_buffer_h* hbuffer) {
+int vx_rtlsim_mem_alloc(vx_device_h hdevice, uint64_t size, int flags, vx_buffer_h* hbuffer) {
     if (nullptr == hdevice
      || nullptr == hbuffer
      || 0 == size)
@@ -371,7 +373,7 @@ extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, int flags, vx_buffer
     return 0;
 }
 
-extern int vx_mem_reserve(vx_device_h hdevice, uint64_t address, uint64_t size, int flags, vx_buffer_h* hbuffer) {
+int vx_rtlsim_mem_reserve(vx_device_h hdevice, uint64_t address, uint64_t size, int flags, vx_buffer_h* hbuffer) {
     if (nullptr == hdevice
      || nullptr == hbuffer
      || 0 == size)
@@ -396,7 +398,7 @@ extern int vx_mem_reserve(vx_device_h hdevice, uint64_t address, uint64_t size, 
     return 0;
 }
 
-extern int vx_mem_free(vx_buffer_h hbuffer) {
+int vx_rtlsim_mem_free(vx_buffer_h hbuffer) {
     if (nullptr == hbuffer)
         return 0;
 
@@ -414,7 +416,7 @@ extern int vx_mem_free(vx_buffer_h hbuffer) {
     return err;
 }
 
-extern int vx_mem_access(vx_buffer_h hbuffer, uint64_t offset, uint64_t size, int flags) {
+int vx_rtlsim_mem_access(vx_buffer_h hbuffer, uint64_t offset, uint64_t size, int flags) {
    if (nullptr == hbuffer)
         return -1;
 
@@ -429,7 +431,7 @@ extern int vx_mem_access(vx_buffer_h hbuffer, uint64_t offset, uint64_t size, in
     return device->mem_access(buffer->addr + offset, size, flags);
 }
 
-extern int vx_mem_address(vx_buffer_h hbuffer, uint64_t* address) {
+int vx_rtlsim_mem_address(vx_buffer_h hbuffer, uint64_t* address) {
     if (nullptr == hbuffer)
         return -1;
 
@@ -442,7 +444,7 @@ extern int vx_mem_address(vx_buffer_h hbuffer, uint64_t* address) {
     return 0;
 }
 
-extern int vx_mem_info(vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_used) {
+int vx_rtlsim_mem_info(vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_used) {
     if (nullptr == hdevice)
         return -1;
 
@@ -467,7 +469,7 @@ extern int vx_mem_info(vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_us
     return 0;
 }
 
-extern int vx_copy_to_dev(vx_buffer_h hbuffer, const void* host_ptr, uint64_t dst_offset, uint64_t size) {
+int vx_rtlsim_copy_to_dev(vx_buffer_h hbuffer, const void* host_ptr, uint64_t dst_offset, uint64_t size) {
     if (nullptr == hbuffer || nullptr == host_ptr)
         return -1;
 
@@ -482,7 +484,7 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, const void* host_ptr, uint64_t ds
     return device->upload(buffer->addr + dst_offset, host_ptr, size);
 }
 
-extern int vx_copy_from_dev(void* host_ptr, vx_buffer_h hbuffer, uint64_t src_offset, uint64_t size) {
+int vx_rtlsim_copy_from_dev(void* host_ptr, vx_buffer_h hbuffer, uint64_t src_offset, uint64_t size) {
     if (nullptr == hbuffer || nullptr == host_ptr)
         return -1;
 
@@ -497,7 +499,7 @@ extern int vx_copy_from_dev(void* host_ptr, vx_buffer_h hbuffer, uint64_t src_of
     return device->download(host_ptr, buffer->addr + src_offset, size);
 }
 
-extern int vx_start(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments) {
+int vx_rtlsim_start(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments) {
     if (nullptr == hdevice || nullptr == hkernel || nullptr == harguments)
         return -1;
 
@@ -510,7 +512,7 @@ extern int vx_start(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h hargum
     return device->start(kernel->addr, arguments->addr);
 }
 
-extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
+int vx_rtlsim_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     if (nullptr == hdevice)
         return -1;
 
@@ -521,7 +523,7 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     return device->ready_wait(timeout);
 }
 
-extern int vx_dcr_read(vx_device_h hdevice, uint32_t addr, uint32_t* value) {
+int vx_rtlsim_dcr_read(vx_device_h hdevice, uint32_t addr, uint32_t* value) {
     if (nullptr == hdevice || NULL == value)
         return -1;
 
@@ -540,7 +542,7 @@ extern int vx_dcr_read(vx_device_h hdevice, uint32_t addr, uint32_t* value) {
     return 0;
 }
 
-extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint32_t value) {
+int vx_rtlsim_dcr_write(vx_device_h hdevice, uint32_t addr, uint32_t value) {
     if (nullptr == hdevice)
         return -1;
 
@@ -551,7 +553,7 @@ extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint32_t value) {
     return device->dcr_write(addr, value);
 }
 
-extern int vx_mpm_query(vx_device_h hdevice, uint32_t addr, uint32_t core_id, uint64_t* value) {
+int vx_rtlsim_mpm_query(vx_device_h hdevice, uint32_t addr, uint32_t core_id, uint64_t* value) {
     if (nullptr == hdevice)
         return -1;
 
@@ -569,3 +571,5 @@ extern int vx_mpm_query(vx_device_h hdevice, uint32_t addr, uint32_t core_id, ui
 
     return 0;
 }
+
+__VX_DEV_INT(rtlsim)
