@@ -20,7 +20,7 @@ CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += -shared -luuid -ldl -pthread
 
-SRCS = $(SRC_DIR)/vortex.cpp $(SRC_DIR)/driver.cpp $(COMMON_DIR)/utils.cpp
+SRCS = $(SRC_DIR)/vortex.cpp $(SRC_DIR)/driver.cpp
 
 # set up target types
 ifeq ($(TARGET), opaesim)
@@ -47,11 +47,6 @@ endif
 ifdef SCOPE
 	CXXFLAGS += -DSCOPE
 	SRCS += $(COMMON_DIR)/scope.cpp
-endif
-
-# Enable perf counters
-ifdef PERF
-	CXXFLAGS += -DPERF_ENABLE
 endif
 
 PROJECT := libvortex-opae.so

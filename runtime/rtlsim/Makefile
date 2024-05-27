@@ -17,18 +17,13 @@ CXXFLAGS += $(CONFIGS)
 LDFLAGS += -shared -pthread
 LDFLAGS += -L$(DESTDIR) -lrtlsim
 
-SRCS := $(SRC_DIR)/vortex.cpp $(COMMON_DIR)/utils.cpp
+SRCS := $(SRC_DIR)/vortex.cpp
 
 # Debugigng
 ifdef DEBUG
 	CXXFLAGS += -g -O0
 else
 	CXXFLAGS += -O2 -DNDEBUG
-endif
-
-# Enable perf counters
-ifdef PERF
-	CXXFLAGS += -DPERF_ENABLE
 endif
 
 PROJECT := libvortex-rtlsim.so
