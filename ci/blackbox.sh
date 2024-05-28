@@ -193,7 +193,7 @@ then
 
     if [ $REBUILD -eq 1 ] || [ "$CONFIGS+$DEBUG+$SCOPE" != "$LAST_CONFIGS" ];
     then
-        make -C $DRIVER_PATH clean > /dev/null
+        make -C $DRIVER_PATH clean-driver > /dev/null
         echo "$CONFIGS+$DEBUG+$SCOPE" > $BLACKBOX_CACHE
     fi
 fi

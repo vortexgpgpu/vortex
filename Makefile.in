@@ -22,13 +22,6 @@ clean:
 	$(MAKE) -C runtime clean
 	$(MAKE) -C tests clean
 
-clean-all:
-	$(MAKE) -C hw clean
-	$(MAKE) -C sim clean
-	$(MAKE) -C kernel clean
-	$(MAKE) -C runtime clean
-	$(MAKE) -C tests clean-all
-
 # Install setup
 KERNEL_INC_DST = $(PREFIX)/kernel/include
 KERNEL_LIB_DST = $(PREFIX)/kernel/lib$(XLEN)

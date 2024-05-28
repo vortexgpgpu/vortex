@@ -235,12 +235,10 @@ config()
     CONFIGS="-DISSUE_WIDTH=4 -DNUM_LSU_BLOCK=4 -DNUM_LSU_LANES=4" ./ci/blackbox.sh --driver=simx --app=vecaddx
 
     # custom program startup address
-    make -C tests/regression/dogfood clean-all
+    make -C tests/regression/dogfood clean-kernel
     STARTUP_ADDR=0x40000000 make -C tests/regression/dogfood
-    CONFIGS="-DSTARTUP_ADDR=0x40000000" ./ci/blackbox.sh --driver=simx --app=dogfood
-    CONFIGS="-DSTARTUP_ADDR=0x40000000" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-    make -C tests/regression/dogfood clean-all
-    make -C tests/regression/dogfood
+    ./ci/blackbox.sh --driver=simx --app=dogfood
+    ./ci/blackbox.sh --driver=rtlsim --app=dogfood
 
     # disabling M & F extensions
     make -C sim/rtlsim clean && CONFIGS="-DEXT_M_DISABLE -DEXT_F_DISABLE" make -C sim/rtlsim > /dev/null

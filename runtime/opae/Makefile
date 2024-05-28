@@ -53,12 +53,20 @@ PROJECT := libvortex-opae.so
 
 all: $(DESTDIR)/$(PROJECT)
 
+driver: $(DESTDIR)/libopae-c-sim.so
+
 $(DESTDIR)/libopae-c-sim.so:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/opaesim $(DESTDIR)/libopae-c-sim.so
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(OPAESIM)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
-clean:
+clean-driver:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/opaesim clean
+
+clean-runtime:
 	rm -f $(DESTDIR)/$(PROJECT)
+
+clean: clean-driver clean-runtime
+
+.PHONY: all driver clean-driver clean-runtime clean

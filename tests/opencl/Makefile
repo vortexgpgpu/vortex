@@ -110,25 +110,3 @@ clean:
 	$(MAKE) -C sgemm2 clean
 	$(MAKE) -C sgemm3 clean
 	$(MAKE) -C psum clean
-
-clean-all:
-	$(MAKE) -C vecadd clean-all
-	$(MAKE) -C sgemm clean-all
-	$(MAKE) -C conv3 clean-all
-	$(MAKE) -C psort clean-all
-	$(MAKE) -C saxpy clean-all
-	$(MAKE) -C sfilter clean-all
-	$(MAKE) -C oclprintf clean-all
-	$(MAKE) -C dotproduct clean-all
-	$(MAKE) -C transpose clean-all
-	$(MAKE) -C spmv clean-all
-	$(MAKE) -C stencil clean-all
-	$(MAKE) -C lbm clean-all
-	$(MAKE) -C nearn clean-all
-	$(MAKE) -C guassian clean-all
-	$(MAKE) -C kmeans clean-all
-	$(MAKE) -C blackscholes clean-all
-	$(MAKE) -C bfs clean-all
-	$(MAKE) -C sgemm2 clean-all
-	$(MAKE) -C sgemm3 clean-all
-	$(MAKE) -C psum clean-all

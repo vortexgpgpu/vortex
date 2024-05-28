@@ -28,3 +28,5 @@ $(DESTDIR)/$(PROJECT): $(SRCS)
 
 clean:
 	rm -f $(DESTDIR)/$(PROJECT)
+
+.PHONY: all clean

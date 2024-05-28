@@ -41,13 +41,20 @@ endif
 
 all: $(DESTDIR)/$(PROJECT)
 
+driver: $(DESTDIR)/libxrtsim.so
+
 $(DESTDIR)/libxrtsim.so:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/xrtsim $(DESTDIR)/libxrtsim.so
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(XRTSIM)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
-clean:
+clean-driver:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/xrtsim clean
+
+clean-runtime:
 	rm -f $(DESTDIR)/$(PROJECT)
 
+clean: clean-driver clean-runtime
+
+.PHONY: all driver clean-driver clean-runtime clean

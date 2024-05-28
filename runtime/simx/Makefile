@@ -26,12 +26,20 @@ PROJECT := libvortex-simx.so
 
 all: $(DESTDIR)/$(PROJECT)
 
+driver: $(DESTDIR)/libsimx.so
+
 $(DESTDIR)/libsimx.so:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx $(DESTDIR)/libsimx.so
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/libsimx.so
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
-clean:
+clean-driver:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx clean-lib
+
+clean-runtime:
 	rm -f $(DESTDIR)/$(PROJECT)
+
+clean: clean-driver clean-runtime
+
+.PHONY: all driver clean-driver clean-runtime clean
