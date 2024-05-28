@@ -127,11 +127,13 @@ endif
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
-clean:
+clean-kernel:
+	rm -rf *.dump *.pocl
+
+clean-host:
 	rm -rf $(PROJECT) $(PROJECT).host *.o *.log .depend
 
-clean-all: clean
-	rm -rf *.dump *.pocl
+clean: clean-kernel clean-host
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend
