@@ -26,6 +26,12 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
+# Enable perf counters
+ifdef PERF
+	VL_FLAGS += -DPERF_ENABLE
+	CXXFLAGS += -DPERF_ENABLE
+endif
+
 PROJECT := simx
 
 all: $(DESTDIR)/$(PROJECT)

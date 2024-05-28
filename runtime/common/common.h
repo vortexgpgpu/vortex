@@ -22,16 +22,16 @@
 #include <cstdint>
 #include <unordered_map>
 
-#define CACHE_BLOCK_SIZE    64
+#define CACHE_BLOCK_SIZE  64
 
-#define RAM_PAGE_SIZE       4096
+#define RAM_PAGE_SIZE     4096
 
-#define ALLOC_BASE_ADDR     CACHE_BLOCK_SIZE
+#define ALLOC_BASE_ADDR   CACHE_BLOCK_SIZE
 
 #if (XLEN == 64)
-#define GLOBAL_MEM_SIZE      0x200000000  // 8 GB
+#define GLOBAL_MEM_SIZE    0x200000000  // 8 GB
 #else
-#define GLOBAL_MEM_SIZE      0x100000000  // 4 GB
+#define GLOBAL_MEM_SIZE    0x100000000  // 4 GB
 #endif
 
 #ifndef NDEBUG
@@ -40,30 +40,29 @@
 #define DBGPRINT(format, ...) ((void)0)
 #endif
 
-#define CHECK_ERR(_expr, _cleanup)              \
-    do {                                        \
-        auto err = _expr;                       \
-        if (err == 0)                           \
-            break;                              \
-        printf("[VXDRV] Error: '%s' returned %d!\n", #_expr, (int)err); \
-        _cleanup                                \
-    } while (false)
+#define CHECK_ERR(_expr, _cleanup) \
+  do { \
+    auto err = _expr; \
+    if (err == 0) \
+      break; \
+    printf("[VXDRV] Error: '%s' returned %d!\n", #_expr, (int)err); \
+    _cleanup \
+  } while (false)
 
 class DeviceConfig {
 public:
-    void write(uint32_t addr, uint32_t value) {
-        store_[addr] = value;
-    }
-
-    int read(uint32_t addr, uint32_t* value) const {
-        auto it = store_.find(addr);
-        if (it == store_.end())
-            return -1;
-        *value = it->second;
-        return 0;
-    }
+  void write(uint32_t addr, uint32_t value) {
+    store_[addr] = value;
+  }
+  int read(uint32_t addr, uint32_t* value) const {
+    auto it = store_.find(addr);
+    if (it == store_.end())
+      return -1;
+    *value = it->second;
+    return 0;
+  }
 private:
-     std::unordered_map<uint32_t, uint32_t> store_;
+  std::unordered_map<uint32_t, uint32_t> store_;
 };
 
 inline uint64_t aligned_size(uint64_t size, uint64_t alignment) {
