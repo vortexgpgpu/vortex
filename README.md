@@ -69,3 +69,6 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
     $ make -s
 ### Quick demo running vecadd OpenCL kernel on 2 cores
     $ ./ci/blackbox.sh --cores=2 --app=vecadd
+
+
+
