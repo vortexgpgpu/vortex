@@ -27,8 +27,8 @@ extern "C" {
 
 typedef struct {
 	const char* format;
-	va_list* va;
-	int ret;
+	va_list*    va;
+	int         ret;
 } printf_arg_t;
 
 typedef struct {
@@ -91,6 +91,15 @@ int vx_vprintf(const char* format, va_list va) {
 	arg.va = &va;
 	vx_serial((vx_serial_cb)__vprintf_cb, &arg);
   	return arg.ret;
+}
+
+int vx_printf(const char * format, ...) {
+	int ret;
+	va_list va;
+	va_start(va, format);
+	ret = vx_vprintf(format, va);
+	va_end(va);
+  	return ret;
 }
 
 #ifdef __cplusplus

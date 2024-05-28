@@ -19,13 +19,11 @@ LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex -mllvm -vortex-branch-div
 #LLVM_CFLAGS += --rtlib=libgcc
 
 #CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
-#CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
 #AR  = $(LLVM_VORTEX)/bin/llvm-ar
 #DP  = $(LLVM_VORTEX)/bin/llvm-objdump
 #CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
 CC  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
-CXX = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-g++
 AR  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar
 DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
@@ -47,9 +45,6 @@ $(PROJECT).dump: $(PROJECT).a
 
 %.S.o: $(SRC_DIR)/%.S
 	$(CC) $(CFLAGS) -c $< -o $@
-
-%.cpp.o: $(SRC_DIR)/%.cpp
-	$(CXX) $(CFLAGS) -c $< -o $@
 
 %.c.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
