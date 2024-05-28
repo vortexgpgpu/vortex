@@ -182,8 +182,7 @@ public:
     ram_ = ram;
   }
 
-  int run() {
-    int exitcode = 0;
+  void run() {
 
   #ifndef NDEBUG
     std::cout << std::dec << timestamp << ": [sim] run()" << std::endl;
@@ -200,10 +199,6 @@ public:
 
     // wait on device to go idle
     while (device_->busy) {
-      if (get_ebreak()) {
-        exitcode = (int)get_last_wb_value(3);
-        break;
-      }
       this->tick();
     }
 
@@ -211,8 +206,6 @@ public:
     this->reset();
 
     this->cout_flush();
-
-    return exitcode;
   }
 
   void dcr_write(uint32_t addr, uint32_t value) {
@@ -607,22 +600,6 @@ private:
     }
   }
 
-  bool get_ebreak() const {
-  #ifdef AXI_BUS
-    return (bool)device_->Vortex_axi->vortex->sim_ebreak;
-  #else
-    return (bool)device_->Vortex->sim_ebreak;
-  #endif
-  }
-
-  uint64_t get_last_wb_value(int reg) const {
-  #ifdef AXI_BUS
-    return ((Word*)device_->Vortex_axi->vortex->sim_wb_value.data())[reg];
-  #else
-    return ((Word*)device_->Vortex->sim_wb_value.data())[reg];
-  #endif
-  }
-
 private:
 
   typedef struct {
@@ -675,8 +652,8 @@ void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-int Processor::run() {
-  return impl_->run();
+void Processor::run() {
+  impl_->run();
 }
 
 void Processor::dcr_write(uint32_t addr, uint32_t value) {

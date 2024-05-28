@@ -73,7 +73,7 @@ def create_vxbin_binary(input_elf, output_bin, objcopy_path):
 
     # Remove the temporary binary file
     os.remove(temp_bin_path)
-    print("Binary created successfully: {}, min_vma={:x}, max_vma={:x}".format(output_bin, min_vma, max_vma))
+    # print("Binary created successfully: {}, min_vma={:x}, max_vma={:x}".format(output_bin, min_vma, max_vma))
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:

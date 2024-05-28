@@ -286,7 +286,7 @@ void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
   auto type = get_addr_type(addr);
   if (addr >= uint64_t(IO_COUT_ADDR)
    && addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
-     this->writeToStdOut(data, addr, size);
+    this->writeToStdOut(data, addr, size);
   } else {
     if (type == AddrType::Shared) {
       core_->local_mem()->write(data, addr, size);
@@ -357,6 +357,7 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   case VX_CSR_MTVEC:
   case VX_CSR_MEPC:
   case VX_CSR_MNSTATUS:
+  case VX_CSR_MCAUSE:
     return 0;
 
   case VX_CSR_FFLAGS:     return warps_.at(wid).fcsr & 0x1F;
@@ -480,6 +481,7 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t tid, uint32_t wid) {
   case VX_CSR_PMPCFG0:
   case VX_CSR_PMPADDR0:
   case VX_CSR_MNSTATUS:
+  case VX_CSR_MCAUSE:
     break;
   default: {
       std::cout << std::hex << "Error: invalid CSR write addr=0x" << addr << ", value=0x" << value << std::endl;
@@ -497,12 +499,4 @@ void Emulator::update_fcrs(uint32_t fflags, uint32_t tid, uint32_t wid) {
     this->set_csr(VX_CSR_FCSR, this->get_csr(VX_CSR_FCSR, tid, wid) | fflags, tid, wid);
     this->set_csr(VX_CSR_FFLAGS, this->get_csr(VX_CSR_FFLAGS, tid, wid) | fflags, tid, wid);
   }
-}
-
-void Emulator::trigger_ecall() {
-  active_warps_.reset();
-}
-
-void Emulator::trigger_ebreak() {
-  active_warps_.reset();
 }

@@ -53,9 +53,10 @@
 `define VX_CSR_MIDELEG                  12'h303
 `define VX_CSR_MIE                      12'h304
 `define VX_CSR_MTVEC                    12'h305
-`define VX_CSR_MSCRATCH                 12'h340
 
+`define VX_CSR_MSCRATCH                 12'h340
 `define VX_CSR_MEPC                     12'h341
+`define VX_CSR_MCAUSE                   12'h342
 
 `define VX_CSR_MNSTATUS                 12'h744
 
