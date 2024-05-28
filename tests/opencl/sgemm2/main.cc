@@ -139,7 +139,7 @@ static void cleanup() {
   if (kernel_bin) free(kernel_bin);
 }
 
-int size = 16;
+uint32_t size = 16;
 
 static void show_usage() {
   printf("Usage: [-n size] [-h: help]\n");

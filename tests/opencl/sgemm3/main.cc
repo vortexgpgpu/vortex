@@ -139,8 +139,8 @@ static void cleanup() {
   if (kernel_bin) free(kernel_bin);
 }
 
-int size = 16;
-int tile_size = 8;
+uint32_t size = 16;
+uint32_t tile_size = 8;
 
 static void show_usage() {
   printf("Usage: [-n size] [-t tile size] [-h: help]\n");

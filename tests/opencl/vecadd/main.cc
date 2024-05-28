@@ -133,7 +133,7 @@ static void cleanup() {
   if (kernel_bin) free(kernel_bin);
 }
 
-int size = 64;
+uint32_t size = 64;
 
 static void show_usage() {
   printf("Usage: [-n size] [-h: help]\n");
