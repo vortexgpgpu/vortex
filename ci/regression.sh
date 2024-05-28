@@ -169,7 +169,6 @@ test_csv_trace()
         if [[ -f "$file" ]]; then
             file2="${file//simx/rtlsim}"
             if [[ -f "$file2" ]]; then
-                echo "*** Comparing $file and $file2 ***"
                 ./ci/trace_csv.py -tsimx $file -otrace_simx.csv
                 ./ci/trace_csv.py -trtlsim $file2 -otrace_rtlsim.csv
                 diff trace_rtlsim.csv trace_simx.csv

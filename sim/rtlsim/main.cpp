@@ -95,21 +95,10 @@ int main(int argc, char **argv) {
 	}
 
 	// run simulation
-	exitcode = processor.run();
+	processor.run();
 
-	if (riscv_test) {
-		if (1 == exitcode) {
-			std::cout << "Passed" << std::endl;
-			exitcode = 0;
-		} else {
-			std::cout << "Failed" << std::endl;
-			exitcode = 1;
-		}
-	} else {
-		if (exitcode != 0) {
-			std::cout << "*** error: exitcode=" << exitcode << std::endl;
-		}
-	}
+	// read exitcode from @MPM.1
+  ram.read(&exitcode, (IO_MPM_ADDR + 8), 4);
 
 	return exitcode;
 }

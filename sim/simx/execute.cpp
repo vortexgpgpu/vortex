@@ -829,17 +829,11 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->alu_type = AluType::SYSCALL;
         trace->fetch_stall = true;
         switch (csr_addr) {
-        case 0:
-          // RV32I: ECALL
-          this->trigger_ecall();
-          break;
-        case 1:
-          // RV32I: EBREAK
-          this->trigger_ebreak();
-          break;
-        case 0x002: // URET
-        case 0x102: // SRET
-        case 0x302: // MRET
+        case 0x000: // RV32I: ECALL
+        case 0x001: // RV32I: EBREAK
+        case 0x002: // RV32I: URET
+        case 0x102: // RV32I: SRET
+        case 0x302: // RV32I: MRET
           break;
         default:
           std::abort();
