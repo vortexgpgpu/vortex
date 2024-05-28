@@ -1,3 +1,16 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #ifndef CALLBACKS_H
 #define CALLBACKS_H
 
@@ -59,31 +72,6 @@ typedef struct {
 } callbacks_t;
 
 int vx_dev_init(callbacks_t* callbacks);
-
-#define __VX_DEV_INT(drv) \
-  extern int vx_dev_init(callbacks_t* callbacks) { \
-      if (nullptr == callbacks) \
-        return -1; \
-      *callbacks = { \
-          vx_##drv##_dev_open, \
-          vx_##drv##_dev_close, \
-          vx_##drv##_dev_caps, \
-          vx_##drv##_mem_alloc, \
-          vx_##drv##_mem_reserve, \
-          vx_##drv##_mem_free, \
-          vx_##drv##_mem_access, \
-          vx_##drv##_mem_address, \
-          vx_##drv##_mem_info, \
-          vx_##drv##_copy_to_dev, \
-          vx_##drv##_copy_from_dev, \
-          vx_##drv##_start, \
-          vx_##drv##_ready_wait, \
-          vx_##drv##_dcr_read, \
-          vx_##drv##_dcr_write, \
-          vx_##drv##_mpm_query \
-      }; \
-      return 0; \
-  }
 
 #ifdef __cplusplus
 }
