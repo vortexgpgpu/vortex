@@ -188,7 +188,7 @@ debug()
     test_csv_trace
     ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
     ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
-    ./ci/blackbox.sh --driver=opae --cores=1 --scope --app=basic --args="-t0 -n1"
+    ./ci/blackbox.sh --driver=opae --cores=1 --scope --app=demo --args="-n1"
 
     echo "debugging tests done!"
 }
