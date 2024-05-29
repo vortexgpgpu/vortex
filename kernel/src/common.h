@@ -16,12 +16,12 @@
 #define IO_MPM_EXITCODE (IO_MPM_ADDR + 8)
 
 #ifdef XLEN_64
-  #define LOAD_IMMEDIATE(rd, imm) \
+  #define LOAD_IMMEDIATE64(rd, imm) \
     li   t0, (imm >> 32); \
     slli t0, t0, 32; \
     li   rd, (imm & 0xffffffff); \
     or   rd, rd, t0
 #else
-  #define LOAD_IMMEDIATE(rd, imm) \
+  #define LOAD_IMMEDIATE64(rd, imm) \
     li   rd, imm
 #endif

@@ -35,7 +35,10 @@ public:
     : arch_(NUM_THREADS, NUM_WARPS, NUM_CORES)
     , ram_(0, RAM_PAGE_SIZE)
     , processor_(arch_)
-    , global_mem_(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR, RAM_PAGE_SIZE, CACHE_BLOCK_SIZE)
+    , global_mem_(ALLOC_BASE_ADDR,
+                  GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR,
+                  RAM_PAGE_SIZE,
+                  CACHE_BLOCK_SIZE)
   {
     // attach memory module
     processor_.attach_ram(&ram_);

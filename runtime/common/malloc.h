@@ -70,7 +70,7 @@ public:
     size = alignSize(size, pageAlign_);
 
     // Check if the reservation is within memory capacity bounds
-    if (addr < baseAddress_ || addr + size > baseAddress_ + capacity_) {
+    if (addr + size > capacity_) {
       printf("error: address range out of bounds\n");
       return -1;
     }

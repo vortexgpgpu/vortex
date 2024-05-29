@@ -29,7 +29,7 @@
 using namespace vortex;
 
 static void show_usage() {
-   std::cout << "Usage: [-c <cores>] [-w <warps>] [-t <threads>] [-r: riscv-test] [-s: stats] [-h: help] <program>" << std::endl;
+   std::cout << "Usage: [-c <cores>] [-w <warps>] [-t <threads>] [-s: stats] [-h: help] <program>" << std::endl;
 }
 
 uint32_t num_threads = NUM_THREADS;
