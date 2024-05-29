@@ -90,9 +90,9 @@ run-simx: $(PROJECT) kernel.vxbin
 
 run-rtlsim: $(PROJECT) kernel.vxbin
 	LD_LIBRARY_PATH=$(ROOT_DIR)/runtime:$(LD_LIBRARY_PATH) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
-	
+
 run-opae: $(PROJECT) kernel.vxbin
-	SCOPE_JSON_PATH=$(ROOT_DIR)/runtime/opae/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(ROOT_DIR)/runtime:$(LD_LIBRARY_PATH) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
+	SCOPE_JSON_PATH=$(ROOT_DIR)/runtime/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(ROOT_DIR)/runtime:$(LD_LIBRARY_PATH) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
 
 run-xrt: $(PROJECT) kernel.vxbin
 ifeq ($(TARGET), hw)
