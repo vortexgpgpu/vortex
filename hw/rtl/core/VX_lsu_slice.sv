@@ -71,8 +71,9 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         wire [MEM_ADDRW-1:0] block_addr = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
         // is I/O address
         wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`XLEN'(`IO_BASE_ADDR) >> MEM_ASHIFT);
+        wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(`XLEN'(`IO_END_ADDR) >> MEM_ASHIFT);
         assign mem_req_atype[i][`ADDR_TYPE_FLUSH] = req_is_fence;
-        assign mem_req_atype[i][`ADDR_TYPE_IO] = (block_addr >= io_addr_start);
+        assign mem_req_atype[i][`ADDR_TYPE_IO] = (block_addr >= io_addr_start) && (block_addr < io_addr_end);
     `ifdef LMEM_ENABLE
         // is local memory address
         wire [MEM_ADDRW-1:0] lmem_addr_start = MEM_ADDRW'(`XLEN'(`LMEM_BASE_ADDR) >> MEM_ASHIFT);

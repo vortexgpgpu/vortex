@@ -75,13 +75,16 @@ using namespace vortex;
 class vx_device {
 public:
   vx_device()
-    : fpga_(nullptr),
-      global_mem_(ALLOC_BASE_ADDR,
+    : fpga_(nullptr)
+    , global_mem_(ALLOC_BASE_ADDR,
                   GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR,
                   RAM_PAGE_SIZE,
-                  CACHE_BLOCK_SIZE),
-      staging_wsid_(0), staging_ioaddr_(0), staging_ptr_(nullptr),
-      staging_size_(0) {}
+                  CACHE_BLOCK_SIZE)
+    , staging_wsid_(0)
+    , staging_ioaddr_(0)
+    , staging_ptr_(nullptr)
+    , staging_size_(0)
+  {}
 
   ~vx_device() {
   #ifdef SCOPE

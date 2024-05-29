@@ -32,7 +32,10 @@ class vx_device {
 public:
   vx_device()
     : ram_(0, RAM_PAGE_SIZE)
-    , global_mem_(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR, RAM_PAGE_SIZE, CACHE_BLOCK_SIZE)
+    , global_mem_(ALLOC_BASE_ADDR,
+                  GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR,
+                  RAM_PAGE_SIZE,
+                  CACHE_BLOCK_SIZE)
   {
     processor_.attach_ram(&ram_);
   }

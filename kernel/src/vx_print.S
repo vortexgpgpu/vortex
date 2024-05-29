@@ -18,9 +18,9 @@
 .type vx_putchar, @function
 .global vx_putchar
 vx_putchar:
-    LOAD_IMMEDIATE(t1, IO_COUT_ADDR)
     csrr t0, VX_CSR_MHARTID
     andi t0, t0, %lo(IO_COUT_SIZE-1)
+    li t1, IO_COUT_ADDR
     add t0, t0, t1
     sb a0, 0(t0)
     ret

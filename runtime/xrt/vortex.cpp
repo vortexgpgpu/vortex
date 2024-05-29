@@ -134,12 +134,13 @@ static void wait_for_enter(const std::string &msg) {
 class vx_device {
 public:
   vx_device()
-    : xrtDevice_(nullptr), xrtKernel_(nullptr),
-      global_mem_(ALLOC_BASE_ADDR,
+    : xrtDevice_(nullptr)
+    , xrtKernel_(nullptr)
+    , global_mem_(ALLOC_BASE_ADDR,
                   GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR,
                   RAM_PAGE_SIZE,
                   CACHE_BLOCK_SIZE)
-      {}
+  {}
 
   ~vx_device() {
   #ifdef SCOPE

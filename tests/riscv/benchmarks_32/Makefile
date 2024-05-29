@@ -7,9 +7,9 @@ TESTS := $(wildcard $(TEST_DIR)/*.bin)
 all:
 
 run-simx:
-	$(foreach test, $(TESTS), $(SIM_DIR)/simx/simx $(test) || exit;)
+	@for test in $(TESTS); do $(SIM_DIR)/simx/simx $$test || exit 1; done
 
 run-rtlsim:
-	$(foreach test, $(TESTS), $(SIM_DIR)/rtlsim/rtlsim $(test) || exit;)
+	@for test in $(TESTS); do $(SIM_DIR)/rtlsim/rtlsim $$test || exit 1; done
 
 clean:

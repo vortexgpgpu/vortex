@@ -70,8 +70,8 @@ _start:
 .global _Exit
 _Exit:
   call vx_perf_dump
-  LOAD_IMMEDIATE(t1, IO_MPM_EXITCODE)
-  sw a0, 0(t1)
+  li t0, IO_MPM_EXITCODE
+  sw a0, 0(t0)
   fence
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
 
@@ -86,7 +86,7 @@ init_regs:
   .option pop
 
   # set stack pointer register
-  LOAD_IMMEDIATE(sp, STACK_BASE_ADDR)
+  LOAD_IMMEDIATE64(sp, STACK_BASE_ADDR)
   csrr  t0, VX_CSR_MHARTID
   sll   t1, t0, STACK_LOG2_SIZE
   sub   sp, sp, t1

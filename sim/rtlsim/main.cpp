@@ -26,19 +26,15 @@
 using namespace vortex;
 
 static void show_usage() {
-   std::cout << "Usage: [-r: riscv-test] [-h: help] <program>" << std::endl;
+   std::cout << "Usage: [-h: help] <program>" << std::endl;
 }
 
-bool riscv_test = false;
 const char* program = nullptr;
 
 static void parse_args(int argc, char **argv) {
   	int c;
   	while ((c = getopt(argc, argv, "rh?")) != -1) {
     	switch (c) {
-		case 'r':
-			riscv_test = true;
-			break;
     	case 'h':
     	case '?':
       		show_usage();
