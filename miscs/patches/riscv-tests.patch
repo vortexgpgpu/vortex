@@ -95,7 +95,7 @@ index fde4f23..317fd77 100644
  install-link:
  	rm -rf $(instbasedir)/$(instname)
 diff --git a/benchmarks/common/crt.S b/benchmarks/common/crt.S
-index 3f5bb2c..4223544 100644
+index 3f5bb2c..811412c 100644
 --- a/benchmarks/common/crt.S
 +++ b/benchmarks/common/crt.S
 @@ -134,7 +134,22 @@ _start:
@@ -106,14 +106,14 @@ index 3f5bb2c..4223544 100644
 +  .align 2
 +  .globl exit
 +exit:
-+  LOAD_IMMEDIATE(t1, VX_IO_MPM_EXITCODE)
-+  sw a0, 0(t1)
++  li t0, VX_IO_MPM_EXITCODE
++  sw a0, 0(t0)
 +  fence
 +  .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0
 +  .align 2
 +  .globl putchar
 +putchar:
-+  LOAD_IMMEDIATE(t1, VX_IO_COUT_ADDR)
++  li t1, VX_IO_COUT_ADDR
 +  csrr t0, CSR_MHARTID
 +  andi t0, t0, %lo(VX_IO_COUT_SIZE-1)
 +  add t0, t0, t1
