@@ -42,9 +42,11 @@ A regression test typically implements the following files:
 - ***main.cpp*** contains the host CPU code.
 - ***Makefile*** defines the compiler build commands for the CPU and GPU binaries.
 
-Compile your test: `make -C tests/regression/<test-name>`
+Sync your build folder: `$ ../configure`
 
-Run your test: `./ci/blackbox.sh --driver=simx --app=<test-name> --debug`
+Compile your test: `$ make -C tests/regression/<test-name>`
+
+Run your test: `$ ./ci/blackbox.sh --driver=simx --app=<test-name> --debug`
 
 ## Adding Your Tests to the CI Pipeline
 See `continuous_integration.md`
