@@ -402,9 +402,6 @@ public:
     case VX_CAPS_LOCAL_MEM_SIZE:
       _value = 1ull << ((dev_caps_ >> 48) & 0xff);
       break;
-    case VX_CAPS_LOCAL_MEM_ADDR:
-      _value = LMEM_BASE_ADDR;
-      break;
     case VX_CAPS_ISA_FLAGS:
       _value = isa_caps_;
       break;

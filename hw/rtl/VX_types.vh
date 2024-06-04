@@ -194,6 +194,6 @@
 `define VX_CSR_NUM_THREADS              12'hFC0
 `define VX_CSR_NUM_WARPS                12'hFC1
 `define VX_CSR_NUM_CORES                12'hFC2
-`define VX_CSR_NUM_BARRIERS             12'hFC3
+`define VX_CSR_LOCAL_MEM_BASE           12'hFC3
 
 `endif // VX_TYPES_VH
