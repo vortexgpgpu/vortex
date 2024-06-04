@@ -109,7 +109,7 @@ module VX_cache_bank #(
     wire [`UP(UUID_WIDTH)-1:0] req_uuid_sel, req_uuid_st0, req_uuid_st1;
 `IGNORE_UNUSED_END
 
-    wire                            crsq_stall;
+    wire                            crsp_stall;
     wire                            mshr_alm_full;
     wire                            mreq_alm_full;
 
@@ -147,7 +147,7 @@ module VX_cache_bank #(
     wire rdw_hazard_st0;
     reg rdw_hazard_st1;
 
-    wire pipe_stall = crsq_stall || rdw_hazard_st1;
+    wire pipe_stall = crsp_stall || rdw_hazard_st1;
 
     // inputs arbitration:
     // mshr replay has highest priority to maximize utilization since there is no miss.
@@ -429,15 +429,15 @@ module VX_cache_bank #(
 
     // schedule core response
 
-    wire crsq_valid, crsq_ready;
-    wire [`CS_WORD_WIDTH-1:0] crsq_data;
-    wire [REQ_SEL_WIDTH-1:0] crsq_idx;
-    wire [TAG_WIDTH-1:0] crsq_tag;
+    wire crsp_valid, crsp_ready;
+    wire [`CS_WORD_WIDTH-1:0] crsp_data;
+    wire [REQ_SEL_WIDTH-1:0] crsp_idx;
+    wire [TAG_WIDTH-1:0] crsp_tag;
 
-    assign crsq_valid = do_read_hit_st1 || do_replay_rd_st1;
-    assign crsq_idx   = req_idx_st1;
-    assign crsq_data  = read_data_st1;
-    assign crsq_tag   = tag_st1;
+    assign crsp_valid = do_read_hit_st1 || do_replay_rd_st1;
+    assign crsp_idx   = req_idx_st1;
+    assign crsp_data  = read_data_st1;
+    assign crsp_tag   = tag_st1;
 
     `RESET_RELAY (crsp_reset, reset);
 
@@ -448,15 +448,15 @@ module VX_cache_bank #(
     ) core_rsp_queue (
         .clk       (clk),
         .reset     (crsp_reset),
-        .valid_in  (crsq_valid && ~rdw_hazard_st1),
-        .ready_in  (crsq_ready),
-        .data_in   ({crsq_tag, crsq_data, crsq_idx}),
+        .valid_in  (crsp_valid && ~rdw_hazard_st1),
+        .ready_in  (crsp_ready),
+        .data_in   ({crsp_tag, crsp_data, crsp_idx}),
         .data_out  ({core_rsp_tag, core_rsp_data, core_rsp_idx}),
         .valid_out (core_rsp_valid),
         .ready_out (core_rsp_ready)
     );
 
-    assign crsq_stall = crsq_valid && ~crsq_ready;
+    assign crsp_stall = crsp_valid && ~crsp_ready;
 
     // schedule memory request
 
@@ -512,12 +512,12 @@ module VX_cache_bank #(
 `endif
 
 `ifdef DBG_TRACE_CACHE
-    wire crsq_fire = crsq_valid && crsq_ready;
+    wire crsp_fire = crsp_valid && crsp_ready;
     wire pipeline_stall = (replay_valid || mem_rsp_valid || core_req_valid)
                        && ~(replay_fire || mem_rsp_fire || core_req_fire);
     always @(posedge clk) begin
         if (pipeline_stall) begin
-            `TRACE(3, ("%d: *** %s-bank%0d stall: crsq=%b, mreq=%b, mshr=%b\n", $time, INSTANCE_ID, BANK_ID, crsq_stall, mreq_alm_full, mshr_alm_full));
+            `TRACE(3, ("%d: *** %s-bank%0d stall: crsq=%b, mreq=%b, mshr=%b\n", $time, INSTANCE_ID, BANK_ID, crsp_stall, mreq_alm_full, mshr_alm_full));
         end
         if (init_enable) begin
             `TRACE(2, ("%d: %s-bank%0d init: addr=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(init_line_sel, BANK_ID)));
@@ -534,8 +534,8 @@ module VX_cache_bank #(
             else
                 `TRACE(2, ("%d: %s-bank%0d core-rd-req: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(core_req_addr, BANK_ID), core_req_tag, core_req_idx, req_uuid_sel));
         end
-        if (crsq_fire) begin
-            `TRACE(2, ("%d: %s-bank%0d core-rd-rsp: addr=0x%0h, tag=0x%0h, req_idx=%0d, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), crsq_tag, crsq_idx, crsq_data, req_uuid_st1));
+        if (crsp_fire) begin
+            `TRACE(2, ("%d: %s-bank%0d core-rd-rsp: addr=0x%0h, tag=0x%0h, req_idx=%0d, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), crsp_tag, crsp_idx, crsp_data, req_uuid_st1));
         end
         if (mreq_push) begin
             if (do_creq_wr_st1)
