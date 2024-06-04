@@ -38,6 +38,9 @@ INSTALL_DIRS = $(KERNEL_LIB_DST) $(RUNTIME_LIB_DST) $(KERNEL_INC_DST) $(RUNTIME_
 $(INSTALL_DIRS):
 	mkdir -p $@
 
+$(KERNEL_INC_DST)/VX_types.h: hw/VX_types.h | $(KERNEL_INC_DST)
+	cp $< $@
+
 $(KERNEL_INC_DST)/%.h: $(VORTEX_HOME)/kernel/include/%.h | $(KERNEL_INC_DST)
 	cp $< $@
 
@@ -51,7 +54,8 @@ $(RUNTIME_LIB_DST)/%.so: runtime/%.so | $(RUNTIME_LIB_DST)
 	cp $< $@
 
 install: $(INSTALL_DIRS) \
-         $(KERNEL_HEADERS:$(VORTEX_HOME)/kernel/include/%=$(KERNEL_INC_DST)/%) \
+         $(KERNEL_INC_DST)/VX_types.h \
+		 $(KERNEL_HEADERS:$(VORTEX_HOME)/kernel/include/%=$(KERNEL_INC_DST)/%) \
          $(RUNTIME_HEADERS:$(VORTEX_HOME)/runtime/include/%=$(RUNTIME_INC_DST)/%) \
 		 $(KERNEL_LIBS:kernel/%=$(KERNEL_LIB_DST)/%) \
 		 $(RUNTIME_LIBS:runtime/%=$(RUNTIME_LIB_DST)/%)
