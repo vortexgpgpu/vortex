@@ -33,9 +33,8 @@ typedef void* vx_buffer_h;
 #define VX_CAPS_CACHE_LINE_SIZE     0x4
 #define VX_CAPS_GLOBAL_MEM_SIZE     0x5
 #define VX_CAPS_LOCAL_MEM_SIZE      0x6
-#define VX_CAPS_LOCAL_MEM_ADDR      0x7
-#define VX_CAPS_ISA_FLAGS           0x8
-#define VX_CAPS_NUM_BARRIERS        0x9
+#define VX_CAPS_ISA_FLAGS           0x7
+#define VX_CAPS_NUM_BARRIERS        0x8
 
 // device isa flags
 #define VX_ISA_STD_A                (1ull << 0)
