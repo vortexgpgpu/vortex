@@ -12,28 +12,8 @@
 #include "../common.c"
 
 #define KERNEL_NAME "gl_main_fs"
-#define WIDTH 100
-#define HEIGHT 100
-
-void readTexture(uint32_t* size[2]) {
-  unsigned int texture;
-
-  PPMImage* image = readPPM("dog.ppm");
-  uint8_t* data = (uint8_t*) malloc(image->x*image->y*sizeof(uint8_t[4]));
-  for(uint32_t i=0; i<image->x*image->y; ++i) {
-    data[i*4+0] = image->data[i].red;
-    data[i*4+1] = image->data[i].green;
-    data[i*4+2] = image->data[i].blue;
-    data[i*4+3] = 0xFFu;
-  }
-
-  (*size)[0] = image->x;
-  (*size)[1] = image->y;
-
-  glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, image->x, image->y);
-  glTexSubImage2D(GL_TEXTURE_2D,0,0,0,image->x,image->y, GL_RGBA, GL_UNSIGNED_BYTE, data);
-
-}
+#define WIDTH 700
+#define HEIGHT 700
 
 int main (int argc, char **argv) {
   // parse command arguments
@@ -45,7 +25,8 @@ int main (int argc, char **argv) {
   cl_mem m_image, gl_FragCoord, gl_Rasterization, gl_Discard, gl_FragColor;
   cl_int _err;
   size_t kernel_size;
-  
+
+  printf("Hey\n");
   // Getting platform and device information
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
   CL_CHECK(clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL));
@@ -62,17 +43,17 @@ int main (int argc, char **argv) {
     data[i*4+3] = 0xFFu;
   }
   printf("Allocate device buffers\n");
-  m_image = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_PTR, image->x*image->y*sizeof(uint8_t[4]), data, &_err));
+  m_image = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, image->x*image->y*sizeof(uint8_t[4]), data, &_err));
   
-  float data_coord[WIDTH][HEIGHT][4];
+  float* data_coord = (float*)malloc(WIDTH*HEIGHT*4);
   for(int w=0; w<WIDTH; ++w) {
     for(int h=0; h<HEIGHT; ++h) {
-      data_coord[w][h][0] = w;
-      data_coord[w][h][1] = h;
+      data_coord[w*HEIGHT*4+h*4] = w;
+      data_coord[w*HEIGHT*4+h*4+1] = h;
     }
   }
-  gl_Rasterization = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_PTR, WIDTH*HEIGHT*sizeof(float[4]), &data_coord, &_err));
-  gl_FragCoord = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, WIDTH*HEIGHT*sizeof(float[4]), NULL, &_err));
+  gl_Rasterization = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, WIDTH*HEIGHT*sizeof(float[4]), data_coord, &_err));
+  gl_FragColor = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, WIDTH*HEIGHT*sizeof(float[4]), NULL, &_err));
 
   gl_FragCoord = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, 1, NULL, &_err));
   gl_Discard = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, 1, NULL, &_err));
@@ -119,7 +100,7 @@ int main (int argc, char **argv) {
 
   printf("Download destination buffer\n");
   float result[WIDTH][HEIGHT][4];
-  CL_CHECK(clEnqueueReadBuffer(commandQueue, gl_FragColor, CL_TRUE, 0, sizeof(result), result, 0, NULL, NULL));
+  CL_CHECK(clEnqueueReadBuffer(commandQueue, gl_FragColor, CL_TRUE, 0, sizeof(result), &result, 0, NULL, NULL));
   // Draw
 
   return 0; 
