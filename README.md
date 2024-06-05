@@ -47,26 +47,31 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 - [Yosys](https://github.com/YosysHQ/yosys)
 - [Sv2v](https://github.com/zachjs/sv2v)
 ### Install development tools
-    $ sudo apt-get install build-essential
-    $ sudo apt-get install binutils
-    $ sudo apt-get install python
-    $ sudo apt-get install uuid-dev
-    $ sudo apt-get install git
+```
+    sudo apt-get install build-essential
+    sudo apt-get install binutils
+    sudo apt-get install python
+    sudo apt-get install uuid-dev
+    sudo apt-get install git
+```
 ### Install Vortex codebase
-    $ git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
-    $ cd Vortex
+```
+    git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
+    cd Vortex
+```
 ### Configure your build folder
     $ mkdir build
     $ cd build
     $ ../configure --xlen=32 --tooldir=$HOME/tools
 ### Install prebuilt toolchain
-    $ ./ci/toolchain_install.sh --all
+    # We will use the precomipled tools in volvo toolchanin directory
 ### set environment variables
     # should always run before using the toolchain!
-    $ source ./ci/toolchain_env.sh
+    source ./ci/toolchain_env.sh
 ### Building Vortex
-    $ make -s
+    make -s
 ### Quick demo running vecadd OpenCL kernel on 2 cores
+<<<<<<< HEAD
     $ ./ci/blackbox.sh --cores=2 --app=vecadd
 
 ### Common Developer Tips
