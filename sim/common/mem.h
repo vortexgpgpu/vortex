@@ -18,8 +18,22 @@
 #include <map>
 #include <unordered_map>
 #include <cstdint>
+#include <unordered_set>
+#include <stdexcept>
 
 namespace vortex {
+
+enum VA_MODE {
+  BARE,
+  SV32
+};
+
+enum ACCESS_TYPE {
+  LOAD,
+  STORE,
+  FETCH
+};
+
 struct BadAddress {};
 struct OutOfRange {};
 
@@ -73,30 +87,38 @@ public:
 class MemoryUnit {
 public:
 
+// HW: Expand PageFault struct to contain access_type info for debug purposes
   struct PageFault {
     PageFault(uint64_t a, bool nf)
       : faultAddr(a)
       , notFound(nf)
+      , access_type(ACCESS_TYPE::LOAD)
     {}
-    uint64_t  faultAddr;
-    bool      notFound;
+    uint64_t    faultAddr;
+    bool        notFound;
+    ACCESS_TYPE access_type;
   };
 
   MemoryUnit(uint64_t pageSize = 0);
 
   void attach(MemDevice &m, uint64_t start, uint64_t end);
 
-  void read(void* data, uint64_t addr, uint64_t size, bool sup);
-  void write(const void* data, uint64_t addr, uint64_t size, bool sup);
+  void read(void* data, uint64_t addr, uint64_t size, bool sup, ACCESS_TYPE type = ACCESS_TYPE::LOAD);
+  void write(const void* data, uint64_t addr, uint64_t size, bool sup, ACCESS_TYPE type = ACCESS_TYPE::LOAD);
 
   void amo_reserve(uint64_t addr);
   bool amo_check(uint64_t addr);
 
   void tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags);
+  void tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags, uint64_t size_bits);
+
   void tlbRm(uint64_t vaddr);
   void tlbFlush() {
     tlb_.clear();
   }
+
+  uint32_t get_satp();  
+  void set_satp(uint32_t satp);
 
 private:
 
@@ -137,10 +159,40 @@ private:
     TLBEntry(uint32_t pfn, uint32_t flags)
       : pfn(pfn)
       , flags(flags)
-    {}
+      , mru_bit(true)
+    {};
+    TLBEntry(uint32_t pfn, uint32_t flags, uint64_t size_bits)
+      : pfn(pfn)
+      , flags(flags)
+      , mru_bit(true)
+      , size_bits (size_bits)
+    {
+      d = bit(7);
+      a = bit(6);
+      g = bit(5);
+      u = bit(4);
+      x = bit(3);
+      w = bit(2);
+      r = bit(1);
+      v = bit(0);
+    }
+    bool bit(uint8_t idx)
+    {
+        return (flags) & (1 << idx);
+    }
+
     uint32_t pfn;
+    bool d, a, g, u, x, w, r, v;
+    bool mru_bit;
+    uint64_t size_bits;
     uint32_t flags;
   };
+
+  std::pair<bool, uint64_t> tlbLookup(uint64_t vAddr, ACCESS_TYPE type, uint64_t* size_bits);
+
+  uint64_t vAddr_to_pAddr(uint64_t vAddr, ACCESS_TYPE type);
+
+  std::pair<uint64_t, uint8_t> page_table_walk(uint64_t vAddr_bits, ACCESS_TYPE type, uint64_t* size_bits);
 
   TLBEntry tlbLookup(uint64_t vAddr, uint32_t flagMask);
 
@@ -150,6 +202,13 @@ private:
   uint64_t  pageSize_;
   ADecoder  decoder_;
   bool      enableVM_;
+
+  uint32_t satp;
+  VA_MODE mode;
+  uint32_t ptbr;
+
+  std::unordered_set<uint64_t> unique_translations;
+  uint64_t TLB_HIT, TLB_MISS, TLB_EVICT, PTW, PERF_UNIQUE_PTW;
 
   amo_reservation_t amo_reservation_;
 };
@@ -217,6 +276,68 @@ private:
   mutable uint64_t last_page_index_;
   ACLManager acl_mngr_;
   bool check_acl_;
+};
+
+class PTE_SV32_t 
+{
+
+  private:
+    uint64_t address;
+    uint64_t bits(uint64_t addr, uint8_t s_idx, uint8_t e_idx)
+    {
+        return (addr >> s_idx) & ((1 << (e_idx - s_idx + 1)) - 1);
+    }
+    bool bit(uint8_t idx)
+    {
+        return (address) & (1 << idx);
+    }
+
+  public:
+    uint64_t ppn[2];
+    uint32_t rsw;
+    uint32_t flags;
+    bool d, a, g, u, x, w, r, v;
+    PTE_SV32_t(uint64_t address) : address(address)
+    { 
+      flags =  bits(address,0,7);
+      rsw = bits(address,8,9);
+      ppn[0] = bits(address,10,19);
+      ppn[1] = bits(address,20,31);
+
+      d = bit(7);
+      a = bit(6);
+      g = bit(5);
+      u = bit(4);
+      x = bit(3);
+      w = bit(2);
+      r = bit(1);
+      v = bit(0);
+    }
+};
+
+class vAddr_SV32_t 
+{
+
+  private:
+    uint64_t address;
+    uint64_t bits(uint64_t addr, uint8_t s_idx, uint8_t e_idx)
+    {
+        return (addr >> s_idx) & ((1 << (e_idx - s_idx + 1)) - 1);
+    }
+    bool bit(uint64_t addr, uint8_t idx)
+    {
+        return (addr) & (1 << idx);
+    }
+
+  public:
+    uint64_t vpn[2];
+    uint64_t pgoff;
+    vAddr_SV32_t(uint64_t address) : address(address)
+    {
+      vpn[0] = bits(address,12,21);
+      vpn[1] = bits(address,22,31);
+      pgoff = bits(address,0,11);
+    }
 };
 
 } // namespace vortex
