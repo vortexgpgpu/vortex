@@ -62,12 +62,9 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 ### Configure your build folder
     # By default, the toolchain default install location is the /opt folder and can be overridden by setting --tooldir.
     # This is the example for volvo server
-```
     mkdir build
     cd build
     ../configure --xlen=32 --tooldir=/software/vortex-toolchain-2024-05-22
-    source ./ci/toolchain_env.sh -all
-```
 ### Install prebuilt toolchain
     # We will use the precomipled tools in volvo toolchanin directory
 ### set environment variables
