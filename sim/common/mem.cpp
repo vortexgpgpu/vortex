@@ -17,8 +17,21 @@
 #include <fstream>
 #include <assert.h>
 #include "util.h"
+#include <VX_config.h>
+#include <bitset>
 
 using namespace vortex;
+
+uint64_t bits(uint64_t addr, uint8_t s_idx, uint8_t e_idx)
+{
+    return (addr >> s_idx) & ((1 << (e_idx - s_idx + 1)) - 1);
+}
+
+bool bit(uint64_t addr, uint8_t idx)
+{
+    return (addr) & (1 << idx);
+}
+
 
 RamMemDevice::RamMemDevice(const char *filename, uint32_t wordSize)
   : wordSize_(wordSize) {
@@ -158,12 +171,12 @@ uint64_t MemoryUnit::toPhyAddr(uint64_t addr, uint32_t flagMask) {
   return pAddr;
 }
 
-void MemoryUnit::read(void* data, uint64_t addr, uint64_t size, bool sup) {
+void MemoryUnit::read(void* data, uint64_t addr, uint64_t size, bool sup, ACCESS_TYPE type) {
   uint64_t pAddr = this->toPhyAddr(addr, sup ? 8 : 1);
   return decoder_.read(data, pAddr, size);
 }
 
-void MemoryUnit::write(const void* data, uint64_t addr, uint64_t size, bool sup) {
+void MemoryUnit::write(const void* data, uint64_t addr, uint64_t size, bool sup, ACCESS_TYPE type) {
   uint64_t pAddr = this->toPhyAddr(addr, sup ? 16 : 1);
   decoder_.write(data, pAddr, size);
   amo_reservation_.valid = false;
@@ -179,8 +192,32 @@ bool MemoryUnit::amo_check(uint64_t addr) {
   uint64_t pAddr = this->toPhyAddr(addr, 1);
   return amo_reservation_.valid && (amo_reservation_.addr == pAddr);
 }
+
 void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags) {
   tlb_[virt / pageSize_] = TLBEntry(phys / pageSize_, flags);
+}
+
+void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags, uint64_t size_bits) {
+  // HW: evict TLB by Most Recently Used
+  if (tlb_.size() == TLB_SIZE - 1) {
+    for (auto& entry : tlb_)
+    {
+      entry.second.mru_bit = false;
+    }
+    
+  } else if (tlb_.size() == TLB_SIZE) {
+    uint64_t del;
+    for (auto entry : tlb_) {
+      if (!entry.second.mru_bit)
+      {
+        del = entry.first;
+        break;
+      }
+    }
+    tlb_.erase(tlb_.find(del));
+    TLB_EVICT++;
+  }
+  tlb_[virt / pageSize_] = TLBEntry(phys / pageSize_, flags, size_bits);
 }
 
 void MemoryUnit::tlbRm(uint64_t va) {
