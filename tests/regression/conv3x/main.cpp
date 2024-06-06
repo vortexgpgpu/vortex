@@ -188,8 +188,6 @@ int main(int argc, char *argv[]) {
       cleanup();
       exit(1);
     }
-    RT_CHECK(vx_dev_caps(device, VX_CAPS_LOCAL_MEM_ADDR, &kernel_arg.lmem_addr));
-    std::cout << "using local memory: base_addr=" << std::hex << kernel_arg.lmem_addr << std::dec << std::endl;
   } else {
     kernel_arg.lmem_addr = 0;
   }

@@ -93,8 +93,7 @@ init_regs:
 
   # set thread pointer register
   # use address space after BSS region
-  # ensure cache line alignment
-  la    t1, __tcb_aligned_size
+  la    t1, __tbss_size
   mul   t0, t0, t1
   la    tp, _end
   addi  tp, tp, 63

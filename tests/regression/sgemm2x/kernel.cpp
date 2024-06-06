@@ -5,7 +5,6 @@
 #include "common.h"
 
 void kernel_body(int local_task_id, int group_id, int local_group_id, int warps_per_group, kernel_arg_t *arg) {
-	auto local_ptr = reinterpret_cast<TYPE*>(arg->local_addr);
 	auto A_ptr     = reinterpret_cast<TYPE*>(arg->A_addr);
 	auto B_ptr     = reinterpret_cast<TYPE*>(arg->B_addr);
 	auto C_ptr     = reinterpret_cast<TYPE*>(arg->C_addr);
@@ -14,6 +13,7 @@ void kernel_body(int local_task_id, int group_id, int local_group_id, int warps_
 	auto num_groups = arg->num_groups;
 	auto group_size = arg->group_size;
 	auto num_tiles = size / tile_size;
+	auto local_mem = vx_local_malloc(local_group_id, group_size * 2);
 
 	// Determine row and column indices of the current subtask
 	auto l_row = local_task_id / tile_size;
@@ -24,7 +24,7 @@ void kernel_body(int local_task_id, int group_id, int local_group_id, int warps_
   auto g_col = (group_id % num_tiles) * tile_size + l_col;
 
 	// Allocate local memory for the tile of matrix A & B
-	auto local_A = local_ptr + local_group_id * group_size * 2;
+	auto local_A = (TYPE*)local_mem;
 	auto local_B = local_A + group_size;
 
 	TYPE sum(0);

@@ -209,12 +209,6 @@ static void __attribute__ ((noinline)) process_all_task_groups_stub() {
   vx_tmc(0 == vx_warp_id());
 }
 
-void vx_syncthreads(int barrier_id) {
-  wspawn_task_groups_args_t* targs = (wspawn_task_groups_args_t*)csr_read(VX_CSR_MSCRATCH);
-  int warps_per_group = targs->warps_per_group;
-  vx_barrier(barrier_id, warps_per_group);
-}
-
 void vx_spawn_task_groups(int num_groups, int group_size, vx_spawn_task_groups_cb callback, void * arg) {
   // device specifications
   int num_cores = vx_num_cores();
