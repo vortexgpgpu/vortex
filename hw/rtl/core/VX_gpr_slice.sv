@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -25,7 +25,7 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
     VX_operands_if.master   operands_if
 );
     `UNUSED_PARAM (CORE_ID)
-    localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + `NR_BITS;
+    localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + `NR_BITS;
     localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * ISSUE_RATIO);
 
     localparam STATE_IDLE   = 2'd0;
@@ -58,7 +58,7 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
     reg data_ready, data_ready_n;
 
     wire stg_valid_in, stg_ready_in;
-    
+
     wire is_rs1_zero = (scoreboard_if.data.rs1 == 0);
     wire is_rs2_zero = (scoreboard_if.data.rs2 == 0);
     wire is_rs3_zero = (scoreboard_if.data.rs3 == 0);
@@ -87,8 +87,8 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
             end
             if (scoreboard_if.valid && data_ready_n == 0) begin
                 data_ready_n = 1;
-                if (is_rs3_zero || (CACHE_ENABLE != 0 && 
-                                    scoreboard_if.data.rs3 == cache_reg[scoreboard_if.data.wis] && 
+                if (is_rs3_zero || (CACHE_ENABLE != 0 &&
+                                    scoreboard_if.data.rs3 == cache_reg[scoreboard_if.data.wis] &&
                                     (scoreboard_if.data.tmask & cache_tmask[scoreboard_if.data.wis]) == scoreboard_if.data.tmask)) begin
                     rs3_data_n   = (is_rs3_zero || CACHE_ENABLE == 0) ? '0 : cache_data[scoreboard_if.data.wis];
                     rs3_ready_n  = 1;
@@ -98,8 +98,8 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
                     data_ready_n = 0;
                     state_n      = STATE_FETCH3;
                 end
-                if (is_rs2_zero || (CACHE_ENABLE != 0 && 
-                                    scoreboard_if.data.rs2 == cache_reg[scoreboard_if.data.wis] && 
+                if (is_rs2_zero || (CACHE_ENABLE != 0 &&
+                                    scoreboard_if.data.rs2 == cache_reg[scoreboard_if.data.wis] &&
                                     (scoreboard_if.data.tmask & cache_tmask[scoreboard_if.data.wis]) == scoreboard_if.data.tmask)) begin
                     rs2_data_n   = (is_rs2_zero || CACHE_ENABLE == 0) ? '0 : cache_data[scoreboard_if.data.wis];
                     rs2_ready_n  = 1;
@@ -109,8 +109,8 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
                     data_ready_n = 0;
                     state_n      = STATE_FETCH2;
                 end
-                if (is_rs1_zero || (CACHE_ENABLE != 0 && 
-                                    scoreboard_if.data.rs1 == cache_reg[scoreboard_if.data.wis] && 
+                if (is_rs1_zero || (CACHE_ENABLE != 0 &&
+                                    scoreboard_if.data.rs1 == cache_reg[scoreboard_if.data.wis] &&
                                     (scoreboard_if.data.tmask & cache_tmask[scoreboard_if.data.wis]) == scoreboard_if.data.tmask)) begin
                     rs1_data_n   = (is_rs1_zero || CACHE_ENABLE == 0) ? '0 : cache_data[scoreboard_if.data.wis];
                 end else begin
@@ -152,9 +152,9 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
             state_n = STATE_IDLE;
         end
         endcase
-        
+
         if (CACHE_ENABLE != 0 && writeback_if.valid) begin
-            if ((cache_reg[writeback_if.data.wis] == writeback_if.data.rd) 
+            if ((cache_reg[writeback_if.data.wis] == writeback_if.data.rd)
                 || (cache_eop[writeback_if.data.wis] && writeback_if.data.sop)) begin
                 for (integer j = 0; j < `NUM_THREADS; ++j) begin
                     if (writeback_if.data.tmask[j]) begin
@@ -163,14 +163,14 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
                 end
                 cache_reg_n[writeback_if.data.wis] = writeback_if.data.rd;
                 cache_eop_n[writeback_if.data.wis] = writeback_if.data.eop;
-                cache_tmask_n[writeback_if.data.wis] = writeback_if.data.sop ? writeback_if.data.tmask : 
+                cache_tmask_n[writeback_if.data.wis] = writeback_if.data.sop ? writeback_if.data.tmask :
                                                                 (cache_tmask_n[writeback_if.data.wis] | writeback_if.data.tmask);
             end
         end
     end
 
     always @(posedge clk)  begin
-        if (reset) begin 
+        if (reset) begin
             state       <= STATE_IDLE;
             cache_eop   <= {ISSUE_RATIO{1'b1}};
             data_ready  <= 0;
@@ -187,14 +187,14 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
         rs3         <= rs3_n;
         rs1_data    <= rs1_data_n;
         rs2_data    <= rs2_data_n;
-        rs3_data    <= rs3_data_n;          
+        rs3_data    <= rs3_data_n;
         cache_data  <= cache_data_n;
         cache_reg   <= cache_reg_n;
         cache_tmask <= cache_tmask_n;
     end
 
     assign stg_valid_in = scoreboard_if.valid && data_ready;
-    assign scoreboard_if.ready = stg_ready_in && data_ready;        
+    assign scoreboard_if.ready = stg_ready_in && data_ready;
 
     VX_toggle_buffer #(
         .DATAW (DATAW)
@@ -206,14 +206,11 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
             scoreboard_if.data.uuid,
             scoreboard_if.data.wis,
             scoreboard_if.data.tmask,
-            scoreboard_if.data.PC, 
+            scoreboard_if.data.PC,
             scoreboard_if.data.wb,
             scoreboard_if.data.ex_type,
             scoreboard_if.data.op_type,
             scoreboard_if.data.op_mod,
-            scoreboard_if.data.use_PC,
-            scoreboard_if.data.use_imm,
-            scoreboard_if.data.imm,
             scoreboard_if.data.rd
         }),
         .ready_in  (stg_ready_in),
@@ -222,14 +219,11 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
             operands_if.data.uuid,
             operands_if.data.wis,
             operands_if.data.tmask,
-            operands_if.data.PC, 
+            operands_if.data.PC,
             operands_if.data.wb,
             operands_if.data.ex_type,
             operands_if.data.op_type,
             operands_if.data.op_mod,
-            operands_if.data.use_PC,
-            operands_if.data.use_imm,
-            operands_if.data.imm,
             operands_if.data.rd
         }),
         .ready_out (operands_if.ready)
@@ -241,7 +235,7 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
 
     // GPR banks
 
-    reg [RAM_ADDRW-1:0] gpr_rd_addr;       
+    reg [RAM_ADDRW-1:0] gpr_rd_addr;
     wire [RAM_ADDRW-1:0] gpr_wr_addr;
     if (ISSUE_WIS != 0) begin
         assign gpr_wr_addr = {writeback_if.data.wis, writeback_if.data.rd};
@@ -254,7 +248,7 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
             gpr_rd_addr <= gpr_rd_rid_n;
         end
     end
-    
+
 `ifdef GPR_RESET
     reg wr_enabled = 0;
     always @(posedge clk) begin
@@ -281,7 +275,7 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
             .write (wr_enabled && writeback_if.valid && writeback_if.data.tmask[j]),
         `else
             .write (writeback_if.valid && writeback_if.data.tmask[j]),
-        `endif              
+        `endif
             .waddr (gpr_wr_addr),
             .wdata (writeback_if.data.data[j]),
             .raddr (gpr_rd_addr),

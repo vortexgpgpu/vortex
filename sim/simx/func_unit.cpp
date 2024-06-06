@@ -279,9 +279,6 @@ void SfuUnit::tick() {
 				release_warp = core_->barrier(trace_data->arg1, trace_data->arg2, trace->wid);
 			}
 		} break;
-		case SfuType::CMOV:
-			output.push(trace, 3);
-			break;
 		default:
 			std::abort();
 		}

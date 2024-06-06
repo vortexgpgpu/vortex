@@ -29,6 +29,7 @@ VX_CFLAGS  += -O3 -mcmodel=medany --sysroot=$(RISCV_SYSROOT) --gcc-toolchain=$(R
 VX_CFLAGS  += -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 VX_CFLAGS  += -I$(ROOT_DIR)/hw -I$(VORTEX_KN_PATH)/include -DXLEN_$(XLEN) -DNDEBUG
 VX_CFLAGS  += -Xclang -target-feature -Xclang +vortex
+VX_CFLAGS  += -Xclang -target-feature -Xclang +zicond
 VX_CFLAGS  += -mllvm -disable-loop-idiom-all # disable memset/memcpy loop idiom
 #VX_CFLAGS += -mllvm -vortex-branch-divergence=0
 #VX_CFLAGS += -mllvm -print-after-all
@@ -46,6 +47,7 @@ CXXFLAGS += -I$(POCL_RT_PATH)/include
 # Debugigng
 ifdef DEBUG
 	CXXFLAGS += -g -O0
+	POCL_CC_FLAGS += POCL_DEBUG=all
 	POCL_RT_FLAGS += POCL_DEBUG=all
 else
 	CXXFLAGS += -O2 -DNDEBUG
@@ -73,7 +75,7 @@ kernel.cl: $(SRC_DIR)/kernel.cl
 	cp $< $@
 
 kernel.pocl: $(SRC_DIR)/kernel.cl
-	LD_LIBRARY_PATH=$(LLVM_POCL)/lib:$(POCL_CC_PATH)/lib:$(LLVM_VORTEX)/lib:$(LD_LIBRARY_PATH) LLVM_PREFIX=$(LLVM_VORTEX) POCL_KERNEL_CACHE=0 POCL_VORTEX_BINTOOL="OBJCOPY=$(LLVM_VORTEX)/bin/llvm-objcopy $(VORTEX_HOME)/kernel/scripts/vxbin.py" POCL_VORTEX_LLCFLAGS="$(VX_LLCFLAGS)" POCL_VORTEX_CFLAGS="$(VX_CFLAGS)" POCL_VORTEX_LDFLAGS="$(VX_LDFLAGS)" $(POCL_CC_PATH)/bin/poclcc -o $@ $<
+	LD_LIBRARY_PATH=$(LLVM_POCL)/lib:$(POCL_CC_PATH)/lib:$(LD_LIBRARY_PATH) LLVM_PREFIX=$(LLVM_VORTEX) $(POCL_CC_FLAGS) POCL_VORTEX_BINTOOL="OBJCOPY=$(LLVM_VORTEX)/bin/llvm-objcopy $(VORTEX_HOME)/kernel/scripts/vxbin.py" POCL_VORTEX_LLCFLAGS="$(VX_LLCFLAGS)" POCL_VORTEX_CFLAGS="$(VX_CFLAGS)" POCL_VORTEX_LDFLAGS="$(VX_LDFLAGS)" $(POCL_CC_PATH)/bin/poclcc -o $@ $<
 
 %.cc.o: $(SRC_DIR)/%.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@

@@ -26,7 +26,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic                   valid;
         logic [`NUM_WARPS-1:0]  wmask;
-        logic [`XLEN-1:0]       pc;
+        logic [`PC_BITS-1:0]    pc;
     } wspawn_t;
 
     typedef struct packed {
@@ -34,7 +34,7 @@ package VX_gpu_pkg;
         logic                    is_dvg;
         logic [`NUM_THREADS-1:0] then_tmask;
         logic [`NUM_THREADS-1:0] else_tmask;
-        logic [`XLEN-1:0]        next_pc;
+        logic [`PC_BITS-1:0]     next_pc;
     } split_t;
 
     typedef struct packed {
@@ -55,9 +55,9 @@ package VX_gpu_pkg;
     } barrier_t;
 
     typedef struct packed {
-        logic [`XLEN-1:0]   startup_addr;
-        logic [`XLEN-1:0]   startup_arg;
-        logic [7:0]         mpm_class;
+        logic [`XLEN-1:0]       startup_addr;
+        logic [`XLEN-1:0]       startup_arg;
+        logic [7:0]             mpm_class;
     } base_dcrs_t;
 
     typedef struct packed {
@@ -76,6 +76,46 @@ package VX_gpu_pkg;
         logic [`PERF_CTR_BITS-1:0] writes;
         logic [`PERF_CTR_BITS-1:0] latency;
     } mem_perf_t;
+
+    typedef struct packed {
+        logic use_PC;
+        logic use_imm;
+        logic is_w;
+        logic [`ALU_TYPE_BITS-1:0] xtype;
+        logic [`IMM_BITS-1:0] imm;
+    } alu_mod_t;
+
+    typedef struct packed {
+        logic [($bits(alu_mod_t)-`INST_FRM_BITS-`INST_FMT_BITS)-1:0] __padding;
+        logic [`INST_FRM_BITS-1:0] frm;
+        logic [`INST_FMT_BITS-1:0] fmt;
+    } fpu_mod_t;
+
+    typedef struct packed {
+        logic [($bits(alu_mod_t)-1-`OFFSET_BITS)-1:0] __padding;
+        logic is_float;
+        logic [`OFFSET_BITS-1:0] offset;
+    } lsu_mod_t;
+
+    typedef struct packed {
+        logic [($bits(alu_mod_t)-1-`VX_CSR_ADDR_BITS-5)-1:0] __padding;
+        logic use_imm;
+        logic [`VX_CSR_ADDR_BITS-1:0] addr;
+        logic [4:0] imm;
+    } csr_mod_t;
+
+    typedef struct packed {
+        logic [($bits(alu_mod_t)-1)-1:0] __padding;
+        logic is_neg;
+    } wctl_mod_t;
+
+    typedef union packed {
+        alu_mod_t  alu;
+        fpu_mod_t  fpu;
+        lsu_mod_t  lsu;
+        csr_mod_t  csr;
+        wctl_mod_t wctl;
+    } op_mod_t;
 
     /* verilator lint_off UNUSED */
 
