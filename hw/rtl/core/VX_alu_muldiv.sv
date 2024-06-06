@@ -29,7 +29,7 @@ module VX_alu_muldiv #(
     `UNUSED_PARAM (CORE_ID)
     localparam PID_BITS  = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH = `UP(PID_BITS);
-    localparam TAG_WIDTH = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + PID_WIDTH + 1 + 1;
+    localparam TAG_WIDTH = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + PID_WIDTH + 1 + 1;
 
     `UNUSED_VAR (execute_if.data.rs3_data)
 
@@ -38,7 +38,7 @@ module VX_alu_muldiv #(
     wire is_mulx_op = `INST_M_IS_MULX(muldiv_op);
     wire is_signed_op = `INST_M_SIGNED(muldiv_op);
 `ifdef XLEN_64
-    wire is_alu_w = `INST_ALU_IS_W(execute_if.data.op_mod);
+    wire is_alu_w = execute_if.data.op_mod.alu.is_w;
 `else
     wire is_alu_w = 0;
 `endif
@@ -47,7 +47,7 @@ module VX_alu_muldiv #(
     wire [`UUID_WIDTH-1:0] mul_uuid_out;
     wire [`NW_WIDTH-1:0] mul_wid_out;
     wire [NUM_LANES-1:0] mul_tmask_out;
-    wire [`XLEN-1:0] mul_PC_out;
+    wire [`PC_BITS-1:0] mul_PC_out;
     wire [`NR_BITS-1:0] mul_rd_out;
     wire mul_wb_out;
     wire [PID_WIDTH-1:0] mul_pid_out;
@@ -203,7 +203,7 @@ module VX_alu_muldiv #(
     wire [`UUID_WIDTH-1:0] div_uuid_out;
     wire [`NW_WIDTH-1:0] div_wid_out;
     wire [NUM_LANES-1:0] div_tmask_out;
-    wire [`XLEN-1:0] div_PC_out;
+    wire [`PC_BITS-1:0] div_PC_out;
     wire [`NR_BITS-1:0] div_rd_out;
     wire div_wb_out;
     wire [PID_WIDTH-1:0] div_pid_out;

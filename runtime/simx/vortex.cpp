@@ -32,6 +32,8 @@
 #include <arch.h>
 #include <mem.h>
 #include <constants.h>
+#include <unordered_map>
+#include <array>
 
 using namespace vortex;
 

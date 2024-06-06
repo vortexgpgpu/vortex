@@ -16,6 +16,7 @@ endif
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex
+LLVM_CFLAGS += -Xclang -target-feature -Xclang +zicond
 LLVM_CFLAGS += -mllvm -disable-loop-idiom-all # disable memset/memcpy loop idiom
 #LLVM_CFLAGS += -mllvm -vortex-branch-divergence=0
 #LLVM_CFLAGS += -mllvm -print-after-all
@@ -107,7 +108,7 @@ clean:
 	rm -rf $(PROJECT) *.o *.log .depend
 
 clean-all: clean
-	rm -rf *.elf *.bin *.dump
+	rm -rf *.elf *.vxbin *.dump
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend

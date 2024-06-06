@@ -307,8 +307,8 @@ void kernel_utof(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	}
 }
 
-float fclamp(float a, float b, float c) {
-    return fmin(fmax(a, b), c);
+inline float fclamp(float a, float b, float c) {
+  return fmin(fmax(a, b), c);
 }
 
 void kernel_fclamp(int task_id, kernel_arg_t* __UNIFORM__ arg) {
@@ -322,6 +322,24 @@ void kernel_fclamp(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 		auto a = src0_ptr[offset+i];
 		auto b = src1_ptr[offset+i];
 		dst_ptr[offset+i] = fclamp(1.0f, a, b);
+	}
+}
+
+inline int iclamp(int a, int b, int c) {
+  return std::min(std::max(a, b), c);
+}
+
+void kernel_iclamp(int task_id, kernel_arg_t* __UNIFORM__ arg) {
+	auto count  = arg->task_size;
+	auto src0_ptr = (int*)arg->src0_addr;
+	auto src1_ptr = (int*)arg->src1_addr;
+	auto dst_ptr  = (int*)arg->dst_addr;
+	auto offset = task_id * count;
+
+	for (uint32_t i = 0; i < count; ++i) {
+		auto a = src0_ptr[offset+i];
+		auto b = src1_ptr[offset+i];
+		dst_ptr[offset+i] = iclamp(1, a, b);
 	}
 }
 
@@ -403,31 +421,32 @@ void kernel_gbar(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	dst_ptr[task_id] += 1;
 }
 
-static PFN_Kernel sc_tests[23];
+static PFN_Kernel sc_tests[24];
 void register_tests() {
-    sc_tests[0] = kernel_iadd;
-    sc_tests[1] = kernel_imul;
-    sc_tests[2] = kernel_idiv;
-    sc_tests[3] = kernel_idiv_mul;
-    sc_tests[4] = kernel_fadd;
-    sc_tests[5] = kernel_fsub;
-    sc_tests[6] = kernel_fmul;
-    sc_tests[7] = kernel_fmadd;
-    sc_tests[8] = kernel_fmsub;
-    sc_tests[9] = kernel_fnmadd;
-    sc_tests[10] = kernel_fnmsub;
-    sc_tests[11] = kernel_fnmadd_madd;
-    sc_tests[12] = kernel_fdiv;
-    sc_tests[13] = kernel_fdiv2;
-    sc_tests[14] = kernel_fsqrt;
-    sc_tests[15] = kernel_ftoi;
-    sc_tests[16] = kernel_ftou;
-    sc_tests[17] = kernel_itof;
-    sc_tests[18] = kernel_utof;
-    sc_tests[19] = kernel_fclamp;
-    sc_tests[20] = kernel_trigo;
-    sc_tests[21] = kernel_bar;
-    sc_tests[22] = kernel_gbar;
+	sc_tests[0] = kernel_iadd;
+	sc_tests[1] = kernel_imul;
+	sc_tests[2] = kernel_idiv;
+	sc_tests[3] = kernel_idiv_mul;
+	sc_tests[4] = kernel_fadd;
+	sc_tests[5] = kernel_fsub;
+	sc_tests[6] = kernel_fmul;
+	sc_tests[7] = kernel_fmadd;
+	sc_tests[8] = kernel_fmsub;
+	sc_tests[9] = kernel_fnmadd;
+	sc_tests[10] = kernel_fnmsub;
+	sc_tests[11] = kernel_fnmadd_madd;
+	sc_tests[12] = kernel_fdiv;
+	sc_tests[13] = kernel_fdiv2;
+	sc_tests[14] = kernel_fsqrt;
+	sc_tests[15] = kernel_ftoi;
+	sc_tests[16] = kernel_ftou;
+	sc_tests[17] = kernel_itof;
+	sc_tests[18] = kernel_utof;
+	sc_tests[19] = kernel_fclamp;
+	sc_tests[20] = kernel_iclamp;
+	sc_tests[21] = kernel_trigo;
+	sc_tests[22] = kernel_bar;
+	sc_tests[23] = kernel_gbar;
 }
 
 int main() {

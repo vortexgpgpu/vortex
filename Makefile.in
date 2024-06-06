@@ -1,6 +1,6 @@
 include config.mk
 
-all: 
+all:
 	$(MAKE) -C $(VORTEX_HOME)/third_party
 	$(MAKE) -C hw
 	$(MAKE) -C sim
@@ -28,3 +28,35 @@ clean-all:
 	$(MAKE) -C kernel clean
 	$(MAKE) -C runtime clean
 	$(MAKE) -C tests clean-all
+
+# Install setup
+KERNEL_LIB_DST = $(PREFIX)/kernel/lib$(XLEN)
+RUNTIME_LIB_DST = $(PREFIX)/runtime/lib
+KERNEL_INC_DST = $(PREFIX)/kernel/include
+RUNTIME_INC_DST = $(PREFIX)/runtime/include
+
+KERNEL_HEADERS = $(wildcard $(VORTEX_HOME)/kernel/include/*.h)
+RUNTIME_HEADERS = $(wildcard $(VORTEX_HOME)/runtime/include/*.h)
+
+INSTALL_DIRS = $(KERNEL_LIB_DST) $(RUNTIME_LIB_DST) $(KERNEL_INC_DST) $(RUNTIME_INC_DST)
+
+$(INSTALL_DIRS):
+	mkdir -p $@
+
+$(KERNEL_INC_DST)/%.h: $(VORTEX_HOME)/kernel/include/%.h | $(KERNEL_INC_DST)
+	cp $< $@
+
+$(RUNTIME_INC_DST)/%.h: $(VORTEX_HOME)/runtime/include/%.h | $(RUNTIME_INC_DST)
+	cp $< $@
+
+$(KERNEL_LIB_DST)/libvortex.a: kernel/libvortexrt.a | $(KERNEL_LIB_DST)
+	cp $< $@
+
+$(RUNTIME_LIB_DST)/libvortex.so: runtime/stub/libvortex.so | $(RUNTIME_LIB_DST)
+	cp $< $@
+
+install: $(INSTALL_DIRS) \
+         $(KERNEL_HEADERS:$(VORTEX_HOME)/kernel/include/%=$(KERNEL_INC_DST)/%) \
+         $(RUNTIME_HEADERS:$(VORTEX_HOME)/runtime/include/%=$(RUNTIME_INC_DST)/%) \
+         $(KERNEL_LIB_DST)/libvortex.a \
+         $(RUNTIME_LIB_DST)/libvortex.so

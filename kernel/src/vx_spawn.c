@@ -206,7 +206,7 @@ static void __attribute__ ((noinline)) process_all_task_groups_stub() {
   process_all_task_groups();
 
   // disable all warps except warp0
-  vx_tmc(0 == warp_id);
+  vx_tmc(0 == vx_warp_id());
 }
 
 void vx_syncthreads(int barrier_id) {

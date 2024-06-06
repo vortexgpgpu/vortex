@@ -32,7 +32,7 @@ module VX_alu_unit #(
     localparam NUM_LANES    = `NUM_ALU_LANES;
     localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
-    localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
+    localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
     localparam RSP_ARB_SIZE = 1 + `EXT_M_ENABLED;
     localparam PARTIAL_BW   = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `NUM_THREADS);
 
@@ -59,7 +59,7 @@ module VX_alu_unit #(
 
         `RESET_RELAY (block_reset, reset);
 
-        wire is_muldiv_op = `EXT_M_ENABLED && `INST_ALU_IS_M(per_block_execute_if[block_idx].data.op_mod);
+        wire is_muldiv_op = `EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_mod.alu.xtype == `ALU_TYPE_MULDIV);
 
         VX_execute_if #(
             .NUM_LANES (NUM_LANES)

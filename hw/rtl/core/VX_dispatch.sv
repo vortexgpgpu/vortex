@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -31,15 +31,15 @@ module VX_dispatch import VX_gpu_pkg::*; #(
 );
     `UNUSED_PARAM (CORE_ID)
 
-    localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + 1 + `XLEN + `XLEN + `NR_BITS + (3 * `NUM_THREADS * `XLEN) + `NT_WIDTH;
+    localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + `NR_BITS + (3 * `NUM_THREADS * `XLEN) + `NT_WIDTH;
 
     wire [`NUM_THREADS-1:0][`NT_WIDTH-1:0] tids;
-    for (genvar i = 0; i < `NUM_THREADS; ++i) begin                 
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign tids[i] = `NT_WIDTH'(i);
     end
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        
+
         wire [`NT_WIDTH-1:0] last_active_tid;
 
         VX_find_first #(
@@ -77,13 +77,13 @@ module VX_dispatch import VX_gpu_pkg::*; #(
         assign operands_if[i].ready = operands_reset[operands_if[i].data.ex_type];
     end
 
-`ifdef PERF_ENABLE    
+`ifdef PERF_ENABLE
     wire [`NUM_EX_UNITS-1:0] perf_unit_stalls_per_cycle, perf_unit_stalls_per_cycle_r;
     reg [`ISSUE_WIDTH-1:0][`NUM_EX_UNITS-1:0] perf_issue_unit_stalls_per_cycle;
     reg [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_stalls_r;
 
     for (genvar i=0; i < `ISSUE_WIDTH; ++i) begin
-        always @(*) begin        
+        always @(*) begin
             perf_issue_unit_stalls_per_cycle[i] = '0;
             if (operands_if[i].valid && ~operands_if[i].ready) begin
                 perf_issue_unit_stalls_per_cycle[i][operands_if[i].data.ex_type] = 1;
@@ -111,7 +111,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
             end
         end
     end
-    
+
     for (genvar i=0; i < `NUM_EX_UNITS; ++i) begin
         assign perf_stalls[i] = perf_stalls_r[i];
     end
@@ -121,14 +121,17 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     for (genvar i=0; i < `ISSUE_WIDTH; ++i) begin
         always @(posedge clk) begin
             if (operands_if[i].valid && operands_if[i].ready) begin
-                `TRACE(1, ("%d: core%0d-issue: wid=%0d, PC=0x%0h, ex=", $time, CORE_ID, wis_to_wid(operands_if[i].data.wis, i), operands_if[i].data.PC));
+                `TRACE(1, ("%d: core%0d-issue: wid=%0d, PC=0x%0h, ex=", $time, CORE_ID, wis_to_wid(operands_if[i].data.wis, i), {operands_if[i].data.PC, 1'b0}));
                 trace_ex_type(1, operands_if[i].data.ex_type);
-                `TRACE(1, (", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1_data=", operands_if[i].data.op_mod, operands_if[i].data.tmask, operands_if[i].data.wb, operands_if[i].data.rd));
+                `TRACE(1, (", op="));
+                trace_ex_op(1, operands_if[i].data.ex_type, operands_if[i].data.op_type, operands_if[i].data.op_mod);
+                `TRACE(1, (", tmask=%b, wb=%b, rd=%0d, rs1_data=", operands_if[i].data.tmask, operands_if[i].data.wb, operands_if[i].data.rd));
                 `TRACE_ARRAY1D(1, "0x%0h", operands_if[i].data.rs1_data, `NUM_THREADS);
                 `TRACE(1, (", rs2_data="));
                 `TRACE_ARRAY1D(1, "0x%0h", operands_if[i].data.rs2_data, `NUM_THREADS);
                 `TRACE(1, (", rs3_data="));
                 `TRACE_ARRAY1D(1, "0x%0h", operands_if[i].data.rs3_data, `NUM_THREADS);
+                trace_op_mod(1, operands_if[i].data.ex_type, operands_if[i].data.op_type, operands_if[i].data.op_mod);
                 `TRACE(1, (" (#%0d)\n", operands_if[i].data.uuid));
             end
         end

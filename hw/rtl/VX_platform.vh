@@ -195,6 +195,8 @@
 
 `define LTRIM(x, s) x[s-1:0]
 
+`define SEXT(len, x) {{(len-$bits(x)+1){x[$bits(x)-1]}}, x[$bits(x)-2:0]}
+
 `define TRACE_ARRAY1D(lvl, fmt, arr, n)              \
     `TRACE(lvl, ("{"));                         \
     for (integer __i = (n-1); __i >= 0; --__i) begin  \

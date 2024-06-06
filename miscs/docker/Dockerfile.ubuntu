@@ -9,12 +9,16 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     binutils \
     python \
+    python3 \
     uuid-dev \
     git \
     wget \
     curl \
     ca-certificates && \
     rm -rf /var/lib/apt/lists/*
+
+# upgrade installed components
+RUN apt-get upgrade && apt-get update
 
 # Clone the Vortex repository
 RUN git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git /vortex
@@ -24,17 +28,13 @@ WORKDIR /vortex
 
 # Configure the build folder
 RUN mkdir build && cd build && \
-    TOOLDIR=$HOME/tools ../configure
+    ../configure --tooldir=$HOME/tools
 
 # Install prebuilt toolchain
 RUN cd build && ./ci/toolchain_install.sh --all
 
 # Source tools environment variables and add to bashrc
-RUN source source /vortex/build/ci/toolchain_env.sh
 RUN echo "source /vortex/build/ci/toolchain_env.sh" >> ~/.bashrc
-
-# Build Vortex
-RUN cd build && make -s
 
 # Set the working directory to /vortex/build
 WORKDIR /vortex/build
