@@ -62,6 +62,12 @@ enum class InstType {
   R4
 };
 
+enum set_vuse_mask {
+  set_func3 = (1 << 0),
+  set_func6 = (1 << 1),
+  set_imm = (1 << 2)
+};
+
 class Instr {
 public:
   Instr() 
@@ -86,7 +92,9 @@ public:
     , vsew_(0)
     , vta_(0)
     , vma_(0)
-    , vediv_(0)   {
+    , vediv_(0)
+    , _vusemask(0)
+    , _is_vec(false)   {
     for (uint32_t i = 0; i < MAX_REG_SOURCES; ++i) {
        rsrc_type_[i] = RegType::None;
        rsrc_[i] = 0;
@@ -109,10 +117,10 @@ public:
     num_rsrcs_ = std::max<uint32_t>(num_rsrcs_, index+1); 
   }
   void setFunc2(uint32_t func2) { func2_ = func2; }
-  void setFunc3(uint32_t func3) { func3_ = func3; }
-  void setFunc6(uint32_t func6) { func6_ = func6; }
+  void setFunc3(uint32_t func3) { func3_ = func3; _vusemask |= set_func3; }
+  void setFunc6(uint32_t func6) { func6_ = func6; _vusemask |= set_func6; }
   void setFunc7(uint32_t func7) { func7_ = func7; }
-  void setImm(uint32_t imm) { has_imm_ = true; imm_ = imm; }
+  void setImm(uint32_t imm) { has_imm_ = true; imm_ = imm; _vusemask |= set_imm; }
   void setVlsWidth(uint32_t width) { vlsWidth_ = width; }
   void setVmop(uint32_t mop) { vMop_ = mop; }
   void setVumop(uint32_t umop) { vUmop_ = umop; }
@@ -125,6 +133,7 @@ public:
   void setVta(uint32_t vta) { vta_ = vta; }
   void setVma(uint32_t vma) { vma_ = vma; }
   void setVediv(uint32_t ediv) { vediv_ = 1 << ediv; }
+  void setVec(bool is_vec) { _is_vec = is_vec; }
 
   Opcode   getOpcode() const { return opcode_; }
   uint32_t getFunc2() const { return func2_; }
@@ -151,6 +160,8 @@ public:
   uint32_t getVta() const { return vta_; }
   uint32_t getVma() const { return vma_; }
   uint32_t getVediv() const { return vediv_; }
+  uint32_t getVUseMask() const { return _vusemask; }
+  bool     isVec() const { return _is_vec; }
 
 private:
 
@@ -183,7 +194,9 @@ private:
   uint32_t vsew_;
   uint32_t vta_;
   uint32_t vma_;
-  uint32_t vediv_;   
+  uint32_t vediv_;
+  uint32_t _vusemask;
+  bool     _is_vec;
 
   friend std::ostream &operator<<(std::ostream &, const Instr&);
 };
