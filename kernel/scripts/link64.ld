@@ -98,15 +98,14 @@ SECTIONS
      PROVIDE_HIDDEN (__tdata_end = .);
    }
    PROVIDE (__tdata_size = SIZEOF (.tdata));
-  .tbss		  : 
+  .tbss		  :
   {
     PROVIDE_HIDDEN (__tbss_start = .);
-    PROVIDE_HIDDEN (__tbss_offset = ABSOLUTE (__tbss_start - __tdata_start)); 
+    PROVIDE_HIDDEN (__tbss_offset = ABSOLUTE (__tbss_start - __tdata_start));
     *(.tbss .tbss.* .gnu.linkonce.tb.*) *(.tcommon)
     PROVIDE_HIDDEN (__tbss_end = .);
   }
   PROVIDE (__tbss_size = SIZEOF (.tbss));
-  PROVIDE (__tcb_aligned_size = ALIGN(__tbss_end - __tdata_start, 64));
   .preinit_array    :
   {
     PROVIDE_HIDDEN (__preinit_array_start = .);

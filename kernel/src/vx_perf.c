@@ -34,7 +34,7 @@ void vx_perf_dump() {
     int core_id = vx_core_id();
     uint32_t * const csr_mem = (uint32_t*)(IO_MPM_ADDR + 64 * sizeof(uint32_t) * core_id);
     DUMP_CSRS(0);
-    //DUMP_CSRS(1);
+    //DUMP_CSRS(1); reserved for exitcode
     DUMP_CSRS(2);
     DUMP_CSRS(3);
     DUMP_CSRS(4);

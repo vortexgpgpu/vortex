@@ -14,24 +14,28 @@
 #ifndef __VX_SPAWN_H__
 #define __VX_SPAWN_H__
 
+#include <VX_types.h>
 #include <stdint.h>
-#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef void (*vx_spawn_tasks_cb)(int task_id, void *arg);
+typedef void (*vx_spawn_tasks_cb)(int task_id, const void *arg);
 
-typedef void (*vx_spawn_task_groups_cb)(int local_task_id, int group_id, int local_group_id, int warps_per_group, void *arg);
+typedef void (*vx_spawn_task_groups_cb)(int local_task_id, int group_id, int local_group_id, int warps_per_group, const void *arg);
 
-typedef void (*vx_serial_cb)(void *arg);
+typedef void (*vx_serial_cb)(const void *arg);
 
-void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback, void * arg);
+void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback, const void * arg);
 
-void vx_spawn_task_groups(int num_groups, int group_size, vx_spawn_task_groups_cb callback, void * arg);
+void vx_spawn_task_groups(int num_groups, int group_size, vx_spawn_task_groups_cb callback, const void * arg);
 
-void vx_serial(vx_serial_cb callback, void * arg);
+inline void* vx_local_malloc(int local_group_id, int size) {
+  return (int8_t*)csr_read(VX_CSR_LOCAL_MEM_BASE) + local_group_id * size;
+}
+
+void vx_serial(vx_serial_cb callback, const void * arg);
 
 #ifdef __cplusplus
 }
