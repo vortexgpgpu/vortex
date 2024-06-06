@@ -419,6 +419,18 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << "0x" << std::hex << instr.getRSrc(0);
   }
+  if (instr.isVec()) {
+    os << std::endl DEBUG_HEADER << "Vec: ";
+    if (instr.getVUseMask() & set_func3) {
+      os << "func3=" << instr.getFunc3() << ", ";
+    }
+    if (instr.getVUseMask() & set_func6) {
+      os << "func6=" << instr.getFunc6() << ", ";
+    }
+    if (instr.getVUseMask() & set_imm) {
+      os << "imm=" << instr.getImm() << ", ";
+    }
+  }
   return os;
 }
 }
@@ -633,6 +645,7 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
   } break;
     
   case InstType::V:
+    instr->setVec(true);
     switch (op) {
     case Opcode::VSET: {
       instr->setDestReg(rd, RegType::Integer);

@@ -35,6 +35,7 @@ def parse_simx(log_filename):
     operands_pattern = r"Src\d+ Reg: (.+)"
     destination_pattern = r"Dest Reg: (.+)"
     uuid_pattern = r"#(\d+)"
+    vset_pattern = r"- (.+)"
     entries = []
     with open(log_filename, 'r') as log_file:
         instr_data = None
@@ -57,6 +58,8 @@ def parse_simx(log_filename):
                 instr_data["operands"] = (instr_data["operands"] + ', ' + src_reg) if 'operands' in instr_data else src_reg
             elif line.startswith("DEBUG Dest"):
                 instr_data["destination"] = re.search(destination_pattern, line).group(1)
+            elif line.startswith("DEBUG Vset"):
+                instr_data["operands"] += f",VTYPE{{{re.search(vset_pattern, line).group(1).replace(': ', '=').replace(' ', ',')}}}"
         if instr_data:
             entries.append(instr_data)
     return entries
