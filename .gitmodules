@@ -7,3 +7,4 @@
 [submodule "third_party/ramulator"]
 	path = third_party/ramulator
 	url = https://github.com/CMU-SAFARI/ramulator.git
+	ignore = dirty
