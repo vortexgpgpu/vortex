@@ -98,7 +98,6 @@ init_regs:
   la    tp, _end
   addi  tp, tp, 63
   add   tp, tp, t0
-  and   tp, tp, -64
   ret
 
 .section .text
