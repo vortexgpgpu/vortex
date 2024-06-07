@@ -56,7 +56,7 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 ```
 ### Install Vortex codebase
 ```
-    git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
+    git clone --depth=1 --recursive git@github.com:gthparch/vortex_vm.git
     cd Vortex
 ```
 ### Configure your build folder
