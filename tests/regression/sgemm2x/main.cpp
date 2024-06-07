@@ -29,9 +29,7 @@ public:
     return "integer";
   }
   static int generate() {
-    static int q(1);
-    return q++;
-    //return rand();
+    return rand();
   }
   static bool compare(int a, int b, int index, int errors) {
     if (a != b) {
@@ -80,7 +78,6 @@ static void matmul_cpu(TYPE* out, const TYPE* A, const TYPE* B, uint32_t width, 
         TYPE b = B[e * width + col];
         TYPE c = a * b;
         sum += c;
-        //printf("out[%d][%d]=%d; a=%d, b=%d, c=%d\n", row, col, sum, a, b, c);
       }
       out[row * width + col] = sum;
     }
@@ -157,20 +154,18 @@ int main(int argc, char *argv[]) {
 
   uint32_t size_sq = size * size;
   uint32_t buf_size = size_sq * sizeof(TYPE);
-
   uint32_t group_size = tile_size * tile_size;
-	uint32_t num_groups = size_sq / group_size;
   uint32_t local_mem = 2 * group_size * sizeof(TYPE);
 
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "matrix size: " << size << "x" << size << std::endl;
   std::cout << "tile size: " << tile_size << "x" << tile_size << std::endl;
-  std::cout << "group size: " << group_size << std::endl;
-  std::cout << "number of groups: " << num_groups << std::endl;
   std::cout << "local memory: " << local_mem << " bytes" << std::endl;
 
-  kernel_arg.num_groups = num_groups;
-  kernel_arg.group_size = group_size;
+  kernel_arg.grid_dim[0] = size / tile_size;
+  kernel_arg.grid_dim[1] = size / tile_size;
+  kernel_arg.block_dim[0] = tile_size;
+  kernel_arg.block_dim[1] = tile_size;
   kernel_arg.size = size;
   kernel_arg.tile_size = tile_size;
 
