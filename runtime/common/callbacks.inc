@@ -20,7 +20,7 @@ struct vx_buffer {
 extern int vx_dev_init(callbacks_t* callbacks) {
   if (nullptr == callbacks)
     return -1;
-    
+
   callbacks->dev_open = [](vx_device_h* hdevice)->int {
     if (nullptr == hdevice)
       return  -1;
@@ -103,7 +103,7 @@ extern int vx_dev_init(callbacks_t* callbacks) {
     DBGPRINT("MEM_FREE: hbuffer=%p\n", hbuffer);
     auto buffer = ((vx_buffer*)hbuffer);
     auto device = ((vx_device*)buffer->device);
-    vx_mem_access(hbuffer, 0, buffer->size, 0);
+    device->mem_access(buffer->addr, buffer->size, 0);
     int err = device->mem_free(buffer->addr);
     delete buffer;
     return err;
