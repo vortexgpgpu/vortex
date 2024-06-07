@@ -54,19 +54,13 @@ extern int vx_upload_kernel_bytes(vx_device_h hdevice, const void* content, uint
 
   auto min_vma = *bytes++;
   auto max_vma = *bytes++;
-  auto bin_size = size - 16;
+  auto bin_size = size - 2 * 8;
   auto runtime_size = (max_vma - min_vma);
 
   vx_buffer_h _hbuffer;
-#ifndef NDEBUG
   CHECK_ERR(vx_mem_reserve(hdevice, min_vma, runtime_size, 0, &_hbuffer), {
     return err;
   });
-#else
-  CHECK_ERR(vx_mem_alloc(hdevice, runtime_size, 0, &_hbuffer), {
-    return err;
-  });
-#endif
 
   // mask binary region as read-only
   CHECK_ERR(vx_mem_access(_hbuffer, 0, bin_size, VX_MEM_READ), {
