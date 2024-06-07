@@ -42,7 +42,7 @@ def get_vma_size(elf_file):
                 min_vma = min(min_vma, vma)
                 max_vma = max(max_vma, end_vma)
                 vma_size = max_vma - min_vma
-                #print("vma={0:x}, size={1}, min_vma={2:x}, max_vma={3:x}, vma_size={4}".format(vma, size, min_vma, max_vma, vma_size))
+                #print("vma={0:x}, size={1}, min_vma=0x{2:x}, max_vma=0x{3:x}, vma_size={4}".format(vma, size, min_vma, max_vma, vma_size))
 
         return min_vma, max_vma
 
