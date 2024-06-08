@@ -65,7 +65,19 @@ enum class InstType {
 enum set_vuse_mask {
   set_func3 = (1 << 0),
   set_func6 = (1 << 1),
-  set_imm = (1 << 2)
+  set_imm = (1 << 2),
+  set_vlswidth = (1 << 3),
+  set_vmop = (1 << 4),
+  set_vumop = (1 << 5),
+  set_vnf = (1 << 6),
+  set_vmask = (1 << 7),
+  set_vs3 = (1 << 8),
+  set_zimm = (1 << 9),
+  set_vlmul = (1 << 10),
+  set_vsew = (1 << 11),
+  set_vta = (1 << 12),
+  set_vma = (1 << 13),
+  set_vediv = (1 << 14)
 };
 
 class Instr {
@@ -121,18 +133,18 @@ public:
   void setFunc6(uint32_t func6) { func6_ = func6; _vusemask |= set_func6; }
   void setFunc7(uint32_t func7) { func7_ = func7; }
   void setImm(uint32_t imm) { has_imm_ = true; imm_ = imm; _vusemask |= set_imm; }
-  void setVlsWidth(uint32_t width) { vlsWidth_ = width; }
-  void setVmop(uint32_t mop) { vMop_ = mop; }
-  void setVumop(uint32_t umop) { vUmop_ = umop; }
-  void setVnf(uint32_t nf) { vNf_ = nf; }
-  void setVmask(uint32_t mask) { vmask_ = mask; }
-  void setVs3(uint32_t vs) { vs3_ = vs; }
-  void setZimm(bool has_zimm) { has_zimm_ = has_zimm; }
-  void setVlmul(uint32_t lmul) { vlmul_ = lmul; }
-  void setVsew(uint32_t sew) { vsew_ = sew; }
-  void setVta(uint32_t vta) { vta_ = vta; }
-  void setVma(uint32_t vma) { vma_ = vma; }
-  void setVediv(uint32_t ediv) { vediv_ = 1 << ediv; }
+  void setVlsWidth(uint32_t width) { vlsWidth_ = width; _vusemask |= set_vlswidth; }
+  void setVmop(uint32_t mop) { vMop_ = mop; _vusemask |= set_vmop; }
+  void setVumop(uint32_t umop) { vUmop_ = umop; _vusemask |= set_vumop; }
+  void setVnf(uint32_t nf) { vNf_ = nf; _vusemask |= set_vnf; }
+  void setVmask(uint32_t mask) { vmask_ = mask; _vusemask |= set_vmask; }
+  void setVs3(uint32_t vs) { vs3_ = vs; _vusemask |= set_vs3; }
+  void setZimm(bool has_zimm) { has_zimm_ = has_zimm; _vusemask |= set_zimm; }
+  void setVlmul(uint32_t lmul) { vlmul_ = lmul; _vusemask |= set_vlmul; }
+  void setVsew(uint32_t sew) { vsew_ = sew; _vusemask |= set_vsew; }
+  void setVta(uint32_t vta) { vta_ = vta; _vusemask |= set_vta; }
+  void setVma(uint32_t vma) { vma_ = vma; _vusemask |= set_vma; }
+  void setVediv(uint32_t ediv) { vediv_ = 1 << ediv; _vusemask |= set_vediv; }
   void setVec(bool is_vec) { _is_vec = is_vec; }
 
   Opcode   getOpcode() const { return opcode_; }
