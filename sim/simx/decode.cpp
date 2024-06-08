@@ -394,6 +394,39 @@ static const char* op_string(const Instr &instr) {
   }
 }
 
+inline void vec_log(std::ostream &os, const Instr &instr) {
+  if (instr.getVUseMask() & set_func3)
+    os << ", func3:" << instr.getFunc3();
+  if (instr.getVUseMask() & set_func6)
+    os << ", func6:" << instr.getFunc6();
+  if (instr.getVUseMask() & set_imm)
+    os << ", imm:" << instr.getImm();
+  if (instr.getVUseMask() & set_vlswidth)
+    os << ", width:" << instr.getVlsWidth();
+  if (instr.getVUseMask() & set_vmop)
+    os << ", mop:" << instr.getVmop();
+  if (instr.getVUseMask() & set_vumop)
+    os << ", umop:" << instr.getVumop();
+  if (instr.getVUseMask() & set_vnf)
+    os << ", nf:" << instr.getVnf();
+  if (instr.getVUseMask() & set_vmask)
+    os << ", vmask:" << instr.getVmask();
+  if (instr.getVUseMask() & set_vs3)
+    os << ", vs3:" << instr.getVs3();
+  if (instr.getVUseMask() & set_zimm)
+    os << ", zimm:" << ((instr.hasZimm()) ? "true" : "false");
+  if (instr.getVUseMask() & set_vlmul)
+    os << ", lmul:" << instr.getVlmul();
+  if (instr.getVUseMask() & set_vsew)
+    os << ", sew:" << instr.getVsew();
+  if (instr.getVUseMask() & set_vta)
+    os << ", ta:" << instr.getVta();
+  if (instr.getVUseMask() & set_vma)
+    os << ", ma:" << instr.getVma();
+  if (instr.getVUseMask() & set_vediv)
+    os << ", ediv:" << instr.getVediv();
+}
+
 namespace vortex {
 std::ostream &operator<<(std::ostream &os, const Instr &instr) {
   os << op_string(instr);
@@ -419,18 +452,8 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << "0x" << std::hex << instr.getRSrc(0);
   }
-  if (instr.isVec()) {
-    os << std::endl DEBUG_HEADER << "Vec: ";
-    if (instr.getVUseMask() & set_func3) {
-      os << "func3=" << instr.getFunc3() << ", ";
-    }
-    if (instr.getVUseMask() & set_func6) {
-      os << "func6=" << instr.getFunc6() << ", ";
-    }
-    if (instr.getVUseMask() & set_imm) {
-      os << "imm=" << instr.getImm() << ", ";
-    }
-  }
+  // Log vector-specific vtype and vreg info
+  if (instr.isVec()) vec_log(os, instr);
   return os;
 }
 }
