@@ -105,13 +105,15 @@ module VX_cache_bank #(
     input wire [`CS_LINE_SEL_BITS-1:0]  init_line_sel
 );
 
+    localparam PIPELINE_STAGES = 2;
+
 `IGNORE_UNUSED_BEGIN
     wire [`UP(UUID_WIDTH)-1:0] req_uuid_sel, req_uuid_st0, req_uuid_st1;
 `IGNORE_UNUSED_END
 
-    wire                            crsp_stall;
+    wire                            crsp_queue_stall;
     wire                            mshr_alm_full;
-    wire                            mreq_alm_full;
+    wire                            mreq_queue_alm_full;
 
     wire [`CS_LINE_ADDR_WIDTH-1:0]  mem_rsp_addr;
 
@@ -147,7 +149,7 @@ module VX_cache_bank #(
     wire rdw_hazard_st0;
     reg rdw_hazard_st1;
 
-    wire pipe_stall = crsp_stall || rdw_hazard_st1;
+    wire pipe_stall = crsp_queue_stall || rdw_hazard_st1;
 
     // inputs arbitration:
     // mshr replay has highest priority to maximize utilization since there is no miss.
@@ -169,12 +171,12 @@ module VX_cache_bank #(
                         && ~pipe_stall;
 
     assign core_req_ready = creq_grant
-                        && ~mreq_alm_full
+                        && ~mreq_queue_alm_full
                         && ~mshr_alm_full
                         && ~pipe_stall;
 
     wire init_fire     = init_enable;
-    wire replay_fire = replay_valid && replay_ready;
+    wire replay_fire   = replay_valid && replay_ready;
     wire mem_rsp_fire  = mem_rsp_valid && mem_rsp_ready;
     wire core_req_fire = core_req_valid && core_req_ready;
 
@@ -429,17 +431,17 @@ module VX_cache_bank #(
 
     // schedule core response
 
-    wire crsp_valid, crsp_ready;
-    wire [`CS_WORD_WIDTH-1:0] crsp_data;
-    wire [REQ_SEL_WIDTH-1:0] crsp_idx;
-    wire [TAG_WIDTH-1:0] crsp_tag;
+    wire crsp_queue_valid, crsp_queue_ready;
+    wire [`CS_WORD_WIDTH-1:0] crsp_queue_data;
+    wire [REQ_SEL_WIDTH-1:0] crsp_queue_idx;
+    wire [TAG_WIDTH-1:0] crsp_queue_tag;
 
-    assign crsp_valid = do_read_hit_st1 || do_replay_rd_st1;
-    assign crsp_idx   = req_idx_st1;
-    assign crsp_data  = read_data_st1;
-    assign crsp_tag   = tag_st1;
+    assign crsp_queue_valid = do_read_hit_st1 || do_replay_rd_st1;
+    assign crsp_queue_idx   = req_idx_st1;
+    assign crsp_queue_data  = read_data_st1;
+    assign crsp_queue_tag   = tag_st1;
 
-    `RESET_RELAY (crsp_reset, reset);
+    `RESET_RELAY (crsp_queue_reset, reset);
 
     VX_elastic_buffer #(
         .DATAW   (TAG_WIDTH + `CS_WORD_WIDTH + REQ_SEL_WIDTH),
@@ -447,61 +449,61 @@ module VX_cache_bank #(
         .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
     ) core_rsp_queue (
         .clk       (clk),
-        .reset     (crsp_reset),
-        .valid_in  (crsp_valid && ~rdw_hazard_st1),
-        .ready_in  (crsp_ready),
-        .data_in   ({crsp_tag, crsp_data, crsp_idx}),
+        .reset     (crsp_queue_reset),
+        .valid_in  (crsp_queue_valid && ~rdw_hazard_st1),
+        .ready_in  (crsp_queue_ready),
+        .data_in   ({crsp_queue_tag, crsp_queue_data, crsp_queue_idx}),
         .data_out  ({core_rsp_tag, core_rsp_data, core_rsp_idx}),
         .valid_out (core_rsp_valid),
         .ready_out (core_rsp_ready)
     );
 
-    assign crsp_stall = crsp_valid && ~crsp_ready;
+    assign crsp_queue_stall = crsp_queue_valid && ~crsp_queue_ready;
 
     // schedule memory request
 
-    wire mreq_push, mreq_pop, mreq_empty;
-    wire [`CS_WORD_WIDTH-1:0] mreq_data;
-    wire [WORD_SIZE-1:0] mreq_byteen;
-    wire [WORD_SEL_WIDTH-1:0] mreq_wsel;
-    wire [`CS_LINE_ADDR_WIDTH-1:0] mreq_addr;
-    wire [MSHR_ADDR_WIDTH-1:0] mreq_id;
-    wire mreq_rw;
+    wire mreq_queue_push, mreq_queue_pop, mreq_queue_empty;
+    wire [`CS_WORD_WIDTH-1:0] mreq_queue_data;
+    wire [WORD_SIZE-1:0] mreq_queue_byteen;
+    wire [WORD_SEL_WIDTH-1:0] mreq_queue_wsel;
+    wire [`CS_LINE_ADDR_WIDTH-1:0] mreq_queue_addr;
+    wire [MSHR_ADDR_WIDTH-1:0] mreq_queue_id;
+    wire mreq_queue_rw;
 
-    assign mreq_push = (do_read_miss_st1 && ~mshr_pending_st1)
-                     || do_creq_wr_st1;
+    assign mreq_queue_push = (do_read_miss_st1 && ~mshr_pending_st1)
+                          || do_creq_wr_st1;
 
-    assign mreq_pop = mem_req_valid && mem_req_ready;
+    assign mreq_queue_pop  = mem_req_valid && mem_req_ready;
 
-    assign mreq_rw   = WRITE_ENABLE && rw_st1;
-    assign mreq_addr = addr_st1;
-    assign mreq_id   = mshr_id_st1;
-    assign mreq_wsel = wsel_st1;
-    assign mreq_byteen = byteen_st1;
-    assign mreq_data = write_data_st1;
+    assign mreq_queue_rw   = WRITE_ENABLE && rw_st1;
+    assign mreq_queue_addr = addr_st1;
+    assign mreq_queue_id   = mshr_id_st1;
+    assign mreq_queue_wsel = wsel_st1;
+    assign mreq_queue_byteen = byteen_st1;
+    assign mreq_queue_data = write_data_st1;
 
-    `RESET_RELAY (mreq_reset, reset);
+    `RESET_RELAY (mreq_queue_reset, reset);
 
     VX_fifo_queue #(
         .DATAW    (1 + `CS_LINE_ADDR_WIDTH + MSHR_ADDR_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + `CS_WORD_WIDTH),
         .DEPTH    (MREQ_SIZE),
-        .ALM_FULL (MREQ_SIZE-2),
+        .ALM_FULL (MREQ_SIZE-PIPELINE_STAGES),
         .OUT_REG  (`TO_OUT_BUF_REG(MEM_OUT_BUF))
     ) mem_req_queue (
         .clk        (clk),
-        .reset      (mreq_reset),
-        .push       (mreq_push),
-        .pop        (mreq_pop),
-        .data_in    ({mreq_rw, mreq_addr, mreq_id, mreq_byteen, mreq_wsel, mreq_data}),
+        .reset      (mreq_queue_reset),
+        .push       (mreq_queue_push),
+        .pop        (mreq_queue_pop),
+        .data_in    ({mreq_queue_rw, mreq_queue_addr, mreq_queue_id, mreq_queue_byteen, mreq_queue_wsel, mreq_queue_data}),
         .data_out   ({mem_req_rw, mem_req_addr, mem_req_id, mem_req_byteen, mem_req_wsel, mem_req_data}),
-        .empty      (mreq_empty),
-        .alm_full   (mreq_alm_full),
+        .empty      (mreq_queue_empty),
+        .alm_full   (mreq_queue_alm_full),
         `UNUSED_PIN (full),
         `UNUSED_PIN (alm_empty),
         `UNUSED_PIN (size)
     );
 
-    assign mem_req_valid = ~mreq_empty;
+    assign mem_req_valid = ~mreq_queue_empty;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -512,12 +514,12 @@ module VX_cache_bank #(
 `endif
 
 `ifdef DBG_TRACE_CACHE
-    wire crsp_fire = crsp_valid && crsp_ready;
+    wire crsp_queue_fire = crsp_queue_valid && crsp_queue_ready;
     wire pipeline_stall = (replay_valid || mem_rsp_valid || core_req_valid)
                        && ~(replay_fire || mem_rsp_fire || core_req_fire);
     always @(posedge clk) begin
         if (pipeline_stall) begin
-            `TRACE(3, ("%d: *** %s-bank%0d stall: crsq=%b, mreq=%b, mshr=%b\n", $time, INSTANCE_ID, BANK_ID, crsp_stall, mreq_alm_full, mshr_alm_full));
+            `TRACE(3, ("%d: *** %s-bank%0d stall: crsq=%b, mreq=%b, mshr=%b\n", $time, INSTANCE_ID, BANK_ID, crsp_queue_stall, mreq_queue_alm_full, mshr_alm_full));
         end
         if (init_enable) begin
             `TRACE(2, ("%d: %s-bank%0d init: addr=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(init_line_sel, BANK_ID)));
@@ -534,14 +536,14 @@ module VX_cache_bank #(
             else
                 `TRACE(2, ("%d: %s-bank%0d core-rd-req: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(core_req_addr, BANK_ID), core_req_tag, core_req_idx, req_uuid_sel));
         end
-        if (crsp_fire) begin
-            `TRACE(2, ("%d: %s-bank%0d core-rd-rsp: addr=0x%0h, tag=0x%0h, req_idx=%0d, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), crsp_tag, crsp_idx, crsp_data, req_uuid_st1));
+        if (crsp_queue_fire) begin
+            `TRACE(2, ("%d: %s-bank%0d core-rd-rsp: addr=0x%0h, tag=0x%0h, req_idx=%0d, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), crsp_queue_tag, crsp_queue_idx, crsp_queue_data, req_uuid_st1));
         end
-        if (mreq_push) begin
+        if (mreq_queue_push) begin
             if (do_creq_wr_st1)
-                `TRACE(2, ("%d: %s-bank%0d writethrough: addr=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(mreq_addr, BANK_ID), mreq_byteen, mreq_data, req_uuid_st1));
+                `TRACE(2, ("%d: %s-bank%0d writethrough: addr=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_byteen, mreq_queue_data, req_uuid_st1));
             else
-                `TRACE(2, ("%d: %s-bank%0d fill-req: addr=0x%0h, mshr_id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(mreq_addr, BANK_ID), mreq_id, req_uuid_st1));
+                `TRACE(2, ("%d: %s-bank%0d fill-req: addr=0x%0h, mshr_id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_id, req_uuid_st1));
         end
     end
 `endif
