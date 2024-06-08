@@ -96,7 +96,6 @@ init_regs:
   la    t1, __tbss_size
   mul   t0, t0, t1
   la    tp, _end
-  addi  tp, tp, 63
   add   tp, tp, t0
   ret
 
