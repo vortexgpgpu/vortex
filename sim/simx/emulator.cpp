@@ -44,6 +44,7 @@ Emulator::ipdom_entry_t::ipdom_entry_t(const ThreadMask &tmask)
 Emulator::warp_t::warp_t(const Arch& arch)
   : ireg_file(arch.num_threads(), std::vector<Word>(arch.num_regs()))
   , freg_file(arch.num_threads(), std::vector<uint64_t>(arch.num_regs()))
+  , uuid(0)
 {}
 
 void Emulator::warp_t::clear(uint64_t startup_addr) {
@@ -153,7 +154,7 @@ instr_trace_t* Emulator::step() {
   assert(warp.tmask.any());
 
 #ifndef NDEBUG
-  uint32_t instr_uuid = warp.uui_gen.get_uuid(warp.PC);
+  uint32_t instr_uuid = warp.uuid++;
   uint32_t g_wid = core_->id() * arch_.num_warps() + scheduled_warp;
   uint64_t uuid = (uint64_t(g_wid) << 32) | instr_uuid;
 #else

@@ -75,7 +75,7 @@ private:
     std::vector<std::vector<uint64_t>>freg_file;
     std::stack<ipdom_entry_t>         ipdom_stack;
     Byte                              fcsr;
-    UUIDGenerator                     uui_gen;
+    uint32_t                          uuid;
   };
 
   struct wspawn_t {

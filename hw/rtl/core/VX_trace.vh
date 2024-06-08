@@ -303,7 +303,7 @@
                 end
                 `INST_FPU_MISC: begin
                     if  (op_args.fpu.fmt[0]) begin
-                        case (op_args)
+                        case (op_args.fpu.frm)
                             0: `TRACE(level, ("FSGNJ.D"));
                             1: `TRACE(level, ("FSGNJN.D"));
                             2: `TRACE(level, ("FSGNJX.D"));
@@ -314,7 +314,7 @@
                             7: `TRACE(level, ("FMAX.D"));
                         endcase
                     end else begin
-                        case (op_args)
+                        case (op_args.fpu.frm)
                             0: `TRACE(level, ("FSGNJ.S"));
                             1: `TRACE(level, ("FSGNJN.S"));
                             2: `TRACE(level, ("FSGNJX.S"));
