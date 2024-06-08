@@ -31,6 +31,8 @@ before_install:
       ../configure --tooldir=$TOOLDIR;
       ci/toolchain_install.sh --all;
       echo "v0.3" > "$TOOLDIR/version.txt";
+    else
+      echo "using existing tooldir build";
     fi
   - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v0.2" ]; then
       cd $TRAVIS_BUILD_DIR;
@@ -38,6 +40,7 @@ before_install:
       echo "v0.2" > "third_party/version.txt";
       cp -rf third_party $HOME;
     else
+      echo "using existing third_party build";
       cp -rf $HOME/third_party $TRAVIS_BUILD_DIR;
     fi
 
@@ -50,6 +53,7 @@ install:
       echo "$TRAVIS_COMMIT" > version.txt;
       cp -rf $TRAVIS_BUILD_DIR/build$XLEN $HOME;
     else
+      echo "using existing build for commit $TRAVIS_COMMIT";
       cp -rf $HOME/build$XLEN $TRAVIS_BUILD_DIR;
     fi
 
