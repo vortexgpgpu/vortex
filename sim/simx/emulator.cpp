@@ -50,7 +50,7 @@ Emulator::warp_t::warp_t(const Arch& arch)
 void Emulator::warp_t::clear(uint64_t startup_addr) {
   this->PC = startup_addr;
   this->tmask.reset();
-  this->uui_gen.reset();
+  this->uuid = 0;
   this->fcsr = 0;
 
   for (auto& reg_file : this->ireg_file) {
