@@ -338,9 +338,9 @@ module VX_schedule import VX_gpu_pkg::*; #(
 `ifdef SV_DPI
     always @(posedge clk) begin
         if (reset) begin
-            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(1, 0, 0));
+            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(1, 32'd0));
         end else if (schedule_fire) begin
-            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(0, 32'(g_wid), 64'(schedule_pc)));
+            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(0, 32'(g_wid)));
         end
     end
 `else

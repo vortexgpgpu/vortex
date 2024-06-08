@@ -22,7 +22,6 @@
 #include <stringutil.h>
 #include <VX_config.h>
 #include <simobject.h>
-#include "uuid_gen.h"
 #include "debug.h"
 
 namespace vortex {
