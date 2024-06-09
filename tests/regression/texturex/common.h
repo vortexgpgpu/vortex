@@ -15,8 +15,13 @@ struct uint2 { uint32_t x,y; };
 struct float2 { float x,y; };
 
 typedef struct {
+  #ifndef SKYBOX
   uint2 size;
   uint64_t image_addr;
+  #else 
+  uint64_t image
+  graphics::TexDCRS sampler;
+  #endif
   uint64_t fragCoord_addr;
   uint64_t rasterization_addr;  
   uint64_t discard_addr;  

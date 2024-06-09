@@ -5,6 +5,7 @@
 #include <vortex.h>
 #include "common.h"
 #include "common.c"
+#include <bitmanip.h>
 
 #define FLOAT_ULP 6
 
@@ -69,6 +70,10 @@ public:
     return true;
   }  
 };
+
+#define TEX_DCR_WRITE(addr, value)  \
+  vx_dcr_write(device, addr, value); \
+  kernel_arg.sampler.write(addr, value)
 
 const char* kernel_file = "kernel.bin";
 uint32_t size = 16;
@@ -237,6 +242,17 @@ int main(int argc, char *argv[]) {
   memset(staging_buf.data(), 0, num_fragments*sizeof(float4));
   RT_CHECK(vx_copy_to_dev(device, kernel_arg.fragColor_addr, staging_buf.data(), num_fragments*sizeof(float4)));  
   
+
+  // configure texture units
+  #ifdef SKYBOX
+	TEX_DCR_WRITE(VX_DCR_TEX_STAGE,   0);
+	TEX_DCR_WRITE(VX_DCR_TEX_LOGDIM,  (log2ceil(image->y) << 16) | log2ceil(image->x));	
+	TEX_DCR_WRITE(VX_DCR_TEX_FORMAT,  VX_TEX_FORMAT_A8R8G8B8);
+	TEX_DCR_WRITE(VX_DCR_TEX_WRAP,    (VX_TEX_WRAP_CLAMP << 16) | VX_TEX_WRAP_CLAMP);
+	TEX_DCR_WRITE(VX_DCR_TEX_FILTER,  (VX_TEX_FILTER_POINT ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT));
+	TEX_DCR_WRITE(VX_DCR_TEX_ADDR,    kernel_arg.image_addr / 64); // block address
+  #endif
+
   // run tests
   std::cout << "run tests" << std::endl;
   RT_CHECK(run_test(kernel_arg, num_fragments*sizeof(float4), num_fragments));
