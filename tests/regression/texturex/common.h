@@ -4,12 +4,14 @@
 #include <stdint.h>
 #include <VX_config.h>
 #include <VX_types.h>
+#ifdef SKYBOX
 #include <graphics.h>
+#endif
 
 #define KERNEL_ARG_DEV_MEM_ADDR 0x7ffff000
 
-#define WIDTH 700
-#define HEIGHT 700
+#define WIDTH 400
+#define HEIGHT 400
 
 #ifndef TYPE
 #define TYPE float
@@ -20,10 +22,9 @@ struct uint2 { uint32_t x,y; };
 struct float2 { float x,y; };
 
 typedef struct {
-  #ifndef SKYBOX
   uint2 size;
   uint64_t image_addr;
-  #else 
+  #ifdef SKYBOX
   uint64_t image;
   graphics::TexDCRS sampler;
   #endif

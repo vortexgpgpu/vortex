@@ -5,7 +5,6 @@
 #include <vortex.h>
 #include "common.h"
 #include "common.c"
-#include <bitmanip.h>
 
 #define FLOAT_ULP 6
 

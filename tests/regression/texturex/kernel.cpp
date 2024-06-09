@@ -1,17 +1,21 @@
 #include "common.h"
 #include <vx_intrinsics.h>
+#ifdef SKYBOX
 #include <bitmanip.h>
+#endif
 #include <vx_spawn.h>
 #include <vx_print.h>
 
+#ifdef SKYBOX
 using namespace graphics;
+#endif
 
-float4 texture2d(uint2 size, const unsigned char* texture, float2 texCoord) {
+unsigned int texture2d(uint2 size, const unsigned char* texture, float2 texCoord) {
   int w = (int) (size.x * texCoord.x) % size.x;
   int h = size.y - ((int) (size.y * texCoord.y) % size.y) - 1;
   const unsigned char* color = texture + (h*size.x + w)*4;
-  
-  return (float4) {(float)*color / 255, (float)*(color+1) / 255, (float)*(color+2) / 255, (float)*(color+3) / 255};
+  return *((unsigned int*) color);
+  //return (float4) {(float)*color / 255, (float)*(color+1) / 255, (float)*(color+2) / 255, (float)*(color+3) / 255};
 }
 
 #ifdef SKYBOX
@@ -33,7 +37,7 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	float4 texCoord = gl_Rasterization_ptr[task_id];
 	// fragment operations
 	#ifndef SKYBOX
-	gl_FragColor_ptr[task_id] = texture2d(size, image_ptr, {texCoord.x, texCoord.y});
+	gl_FragColor_ptr[task_id].x = texture2d(size, image_ptr, {texCoord.x, texCoord.y});
 	#else
 	gl_FragColor_ptr[task_id].x = vx_tex(0, texCoord.x, texCoord.y, lod);
 	#endif
