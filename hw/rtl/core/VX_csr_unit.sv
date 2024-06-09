@@ -69,7 +69,10 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         assign rs1_data[i] = execute_if.data.rs1_data[i];
     end
 
-    wire csr_write_enable = (execute_if.data.op_type == `INST_SFU_CSRRW);
+    wire csr_write_enable = ( (execute_if.data.op_type  == `INST_SFU_CSRRW   )  ||
+                              (execute_if.data.op_type  == `INST_VPU_VSETVL  )  ||
+                              (execute_if.data.op_type  == `INST_VPU_VSETVLI )  ||
+                              (execute_if.data.op_type  == `INST_VPU_VSETIVLI));
 
     VX_csr_data #(
         .CORE_ID (CORE_ID)
@@ -96,6 +99,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .read_enable    (csr_req_valid && csr_rd_enable),
         .read_uuid      (execute_if.data.uuid),
         .read_wid       (execute_if.data.wid),
+        .read_tid       (execute_if.data.tid),
         .read_addr      (csr_addr),
         .read_data_ro   (csr_read_data_ro),
         .read_data_rw   (csr_read_data_rw),
@@ -103,6 +107,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .write_enable   (csr_req_valid && csr_wr_enable),
         .write_uuid     (execute_if.data.uuid),
         .write_wid      (execute_if.data.wid),
+        .write_tid      (execute_if.data.tid),
         .write_addr     (csr_addr),
         .write_data     (csr_write_data)
     );
@@ -136,6 +141,70 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     assign csr_req_data = execute_if.data.op_mod.csr.use_imm ? `XLEN'(csr_imm) : rs1_data[0];
     assign csr_wr_enable = (csr_write_enable || (| csr_req_data));
+
+    reg [`NUM_WARPS-1:0][`XLEN-1:0] AVL;
+    reg [`NUM_WARPS-1:0][8:0]       VTYPEI;
+    reg [`NUM_WARPS-1:0][`XLEN-1:0] VLMAX;
+    reg [`NUM_WARPS-1:0][`XLEN-1:0] CSR_VL;
+
+    always @(*) begin
+        if (reset) 
+            begin
+                AVL = 0;
+                VTYPEI = 0;
+                VLMAX = 0;
+                CSR_VL = 0;
+            end
+        case (execute_if.data.op_type)
+            `INST_VPU_VSETVL: begin
+                VTYPEI[execute_if.data.wid] = execute_if.data.rs2_data[0][8:0]; // Unsure if this is correct?
+                AVL[execute_if.data.wid] =  (execute_if.data.op_mod.vpu.rs1 != 0) ? rs1_data[0] : ( (execute_if.data.rd != 0) ?  ~(`XLEN'b0) : CSR_VL[execute_if.data.wid] );
+            end
+            `INST_VPU_VSETIVLI: begin
+                VTYPEI[execute_if.data.wid][2:0] = execute_if.data.op_mod.vpu.vlmul;
+                VTYPEI[execute_if.data.wid][5:3] = execute_if.data.op_mod.vpu.vsew;
+                VTYPEI[execute_if.data.wid][6] = execute_if.data.op_mod.vpu.vta;
+                VTYPEI[execute_if.data.wid][7] = execute_if.data.op_mod.vpu.vma;
+                VTYPEI[execute_if.data.wid][8] = execute_if.data.op_mod.vpu.vill;
+                AVL[execute_if.data.wid] =  `XLEN'(execute_if.data.op_mod.vpu.rs1);
+            end
+            `INST_VPU_VSETVLI: begin
+                VTYPEI[execute_if.data.wid][2:0] = execute_if.data.op_mod.vpu.vlmul;
+                VTYPEI[execute_if.data.wid][5:3] = execute_if.data.op_mod.vpu.vsew;
+                VTYPEI[execute_if.data.wid][6] = execute_if.data.op_mod.vpu.vta;
+                VTYPEI[execute_if.data.wid][7] = execute_if.data.op_mod.vpu.vma;
+                VTYPEI[execute_if.data.wid][8] = execute_if.data.op_mod.vpu.vill;
+                AVL[execute_if.data.wid] = (execute_if.data.op_mod.vpu.rs1 != 0) ? rs1_data[0] : ( (execute_if.data.rd != 0) ?  ~(`XLEN'b0) : CSR_VL[execute_if.data.wid] );
+            end
+            default:
+                begin
+                    VTYPEI[execute_if.data.wid] = VTYPEI[execute_if.data.wid];
+                    AVL[execute_if.data.wid] = AVL[execute_if.data.wid];
+                end
+        endcase
+        if ((execute_if.data.op_type == `INST_VPU_VSETVL) || (execute_if.data.op_type == `INST_VPU_VSETIVLI) || (execute_if.data.op_type == `INST_VPU_VSETVLI))
+            begin
+            case (VTYPEI[execute_if.data.wid][5:3]) //LMUL = 1 is only supported
+                    3'h0:  VLMAX[execute_if.data.wid] = `VLMAX_SEW08_LMUL1;
+                    3'h1:  VLMAX[execute_if.data.wid] = `VLMAX_SEW16_LMUL1;
+                    3'h2:  VLMAX[execute_if.data.wid] = `VLMAX_SEW32_LMUL1;
+                    3'h3:  VLMAX[execute_if.data.wid] = `VLMAX_SEW64_LMUL1;
+                    default: VLMAX[execute_if.data.wid] = `VLMAX_SEW64_LMUL1;
+            endcase
+
+            // 6.3. Constraints on Setting vl (in the spec)
+            if ( AVL[execute_if.data.wid] <= VLMAX[execute_if.data.wid]) 
+                begin
+                    CSR_VL[execute_if.data.wid] = AVL[execute_if.data.wid];
+                end
+            else  
+                begin
+                    CSR_VL[execute_if.data.wid] = VLMAX[execute_if.data.wid];
+                end
+
+            csr_read_data = {`NUM_THREADS{CSR_VL[execute_if.data.wid]}};
+            end
+    end
 
     always @(*) begin
         case (execute_if.data.op_type)

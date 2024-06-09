@@ -58,6 +58,7 @@ import VX_fpu_pkg::*;
     input wire                          read_enable,
     input wire [`UUID_WIDTH-1:0]        read_uuid,
     input wire [`NW_WIDTH-1:0]          read_wid,
+    input wire [`UP(`NW_BITS)-1:0]      read_tid,
     input wire [`VX_CSR_ADDR_BITS-1:0]  read_addr,
     output wire [`XLEN-1:0]             read_data_ro,
     output wire [`XLEN-1:0]             read_data_rw,
@@ -65,6 +66,7 @@ import VX_fpu_pkg::*;
     input wire                          write_enable,
     input wire [`UUID_WIDTH-1:0]        write_uuid,
     input wire [`NW_WIDTH-1:0]          write_wid,
+    input wire [`UP(`NW_BITS)-1:0]      write_tid,
     input wire [`VX_CSR_ADDR_BITS-1:0]  write_addr,
     input wire [`XLEN-1:0]              write_data
 );
@@ -120,6 +122,17 @@ import VX_fpu_pkg::*;
     end
 `endif
 
+//Vector CSR
+`ifdef VECTOR_ENABLE
+    reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] vx_csr_vstart;
+    reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] vx_csr_vxsat;
+    reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] vx_csr_vxrm;
+    reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] vx_csr_vcsr;
+    reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] vx_csr_vl;
+    reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] vx_csr_vtype;
+    reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] vx_csr_vlenb;
+`endif
+
     always @(posedge clk) begin
         if (reset) begin
             mscratch <= base_dcrs.startup_arg;
@@ -146,6 +159,15 @@ import VX_fpu_pkg::*;
                 `VX_CSR_MSCRATCH: begin
                     mscratch <= write_data;
                 end
+            `ifdef VECTOR_ENABLE
+                `VX_CSR_VSTART:   vx_csr_vstart[write_wid][write_tid]   <= write_data;
+                `VX_CSR_VXSAT:    vx_csr_vxsat[write_wid][write_tid]    <= write_data;
+                `VX_CSR_VXRM:     vx_csr_vxrm[write_wid][write_tid]     <= write_data;
+                `VX_CSR_VCSR:     vx_csr_vcsr[write_wid][write_tid]     <= write_data;
+                `VX_CSR_VL:       vx_csr_vl[write_wid][write_tid]       <= write_data;
+                `VX_CSR_VTYPE:    vx_csr_vtype[write_wid][write_tid]    <= write_data;
+                `VX_CSR_VLENB:    vx_csr_vlenb[write_wid][write_tid]    <= write_data;
+            `endif
                 default: begin
                     `ASSERT(0, ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
                 end
@@ -201,6 +223,16 @@ import VX_fpu_pkg::*;
             `VX_CSR_MEPC,
             `VX_CSR_PMPCFG0,
             `VX_CSR_PMPADDR0 : read_data_ro_r = `XLEN'(0);
+
+        `ifdef VECTOR_ENABLE
+            `VX_CSR_VSTART     : read_data_ro_r = vx_csr_vstart[read_wid][read_tid];
+            `VX_CSR_VXSAT      : read_data_ro_r = vx_csr_vxsat[read_wid][read_tid];
+            `VX_CSR_VXRM       : read_data_ro_r = vx_csr_vxrm[read_wid][read_tid];
+            `VX_CSR_VCSR       : read_data_ro_r = vx_csr_vcsr[read_wid][read_tid];
+            `VX_CSR_VL         : read_data_ro_r = vx_csr_vl[read_wid][read_tid];
+            `VX_CSR_VTYPE      : read_data_ro_r = vx_csr_vtype[read_wid][read_tid];
+            `VX_CSR_VLENB      : read_data_ro_r = vx_csr_vlenb[read_wid][read_tid];
+        `endif
 
             default: begin
                 read_addr_valid_r = 0;

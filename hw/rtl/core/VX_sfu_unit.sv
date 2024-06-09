@@ -143,6 +143,9 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     reg sfu_req_ready;
     always @(*) begin
         case (per_block_execute_if[0].data.op_type)
+         `INST_VPU_VSETVL,
+         `INST_VPU_VSETVLI,
+         `INST_VPU_VSETIVLI,
          `INST_SFU_CSRRW,
          `INST_SFU_CSRRS,
          `INST_SFU_CSRRC: sfu_req_ready = csr_execute_if.ready;
