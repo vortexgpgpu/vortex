@@ -1,6 +1,11 @@
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
+#include <stdint.h>
+#include <VX_config.h>
+#include <VX_types.h>
+#include <graphics.h>
+
 #define KERNEL_ARG_DEV_MEM_ADDR 0x7ffff000
 
 #define WIDTH 700
@@ -19,7 +24,7 @@ typedef struct {
   uint2 size;
   uint64_t image_addr;
   #else 
-  uint64_t image
+  uint64_t image;
   graphics::TexDCRS sampler;
   #endif
   uint64_t fragCoord_addr;
