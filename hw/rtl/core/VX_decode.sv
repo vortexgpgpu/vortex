@@ -60,6 +60,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     wire [1:0] func2  = instr[26:25];
     wire [2:0] func3  = instr[14:12];
     wire [4:0] func5  = instr[31:27];
+    wire [5:0] func6  = instr[31:26];
     wire [6:0] func7  = instr[31:25];
     wire [11:0] u_12  = instr[31:20];
 
@@ -508,6 +509,91 @@ module VX_decode import VX_gpu_pkg::*; #(
                             end
                             default:;
                         endcase
+                    end
+                    default:;
+                endcase
+            end
+            `INST_V: begin
+                ex_type = `EX_VPU;
+                `TRACE(0, ("VPU instr=%b, func3=%d, func6=%d\n", instr, func3, func6));
+                case (func3)
+                    3'h7: begin
+                        ex_type = `EX_SFU;
+                        case (instr[31:30])
+                            2'b10: begin // vsetvl
+                                op_type = `INST_OP_BITS'(`INST_VPU_VSETVL);
+                                op_mod.vpu.rs1 = rs1;
+                                `USED_IREG(rs1);
+                                `USED_IREG(rs2);
+                            end
+                            2'b11: begin // vsetivli
+                                op_type = `INST_OP_BITS'(`INST_VPU_VSETIVLI);
+                                op_mod.csr.use_imm = 1;
+                                op_mod.vpu.uimm = instr[19:15];
+                                op_mod.vpu.vlmul = instr[22:20];
+                                op_mod.vpu.vsew = instr[25:23];
+                                op_mod.vpu.vta = instr[26];
+                                op_mod.vpu.vma = instr[27];
+                                op_mod.vpu.vill = instr[28]; // Unsure about vill
+                                `USED_IREG(rs1);
+                            end
+                            2'b00: begin // vsetvli
+                                op_type = `INST_OP_BITS'(`INST_VPU_VSETVLI);
+                                op_mod.csr.use_imm = 1;
+                                op_mod.vpu.vlmul = instr[22:20];
+                                op_mod.vpu.vsew = instr[25:23];
+                                op_mod.vpu.vta = instr[26];
+                                op_mod.vpu.vma = instr[27];
+                                op_mod.vpu.vill = instr[29]; // Unsure about vill
+                                op_mod.vpu.rs1 = rs1;
+                                `USED_IREG(rs1);
+                            end
+                            default:;
+                        endcase
+                        use_rd = 1;
+                    end
+                    3'h0: begin
+                        use_rd = 1;
+                        `USED_IREG (rd);
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                    end
+                    3'h1: begin
+                        use_rd = 1;
+                        `USED_IREG (rd);
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                    end
+                    3'h2: begin
+                        use_rd = 1;
+                        `USED_IREG (rd);
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                    end
+                    3'h3: begin
+                        op_mod.csr.use_imm = 1;
+                        op_mod.vpu.rs1 = rs1;
+                        use_rd = 1;
+                        `USED_IREG (rd);
+                        `USED_IREG (rs2);
+                    end
+                    3'h4: begin
+                        use_rd = 1;
+                        `USED_IREG (rd);
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                    end
+                    3'h5: begin
+                        use_rd = 1;
+                        `USED_IREG (rd);
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                    end
+                    3'h6: begin
+                        use_rd = 1;
+                        `USED_IREG (rd);
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
                     end
                     default:;
                 endcase

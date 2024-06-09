@@ -105,6 +105,19 @@ package VX_gpu_pkg;
     } csr_mod_t;
 
     typedef struct packed {
+        logic [($bits(alu_mod_t)-3-3-1-1-1-5-5)-1:0] __padding;
+        // Vtype
+        logic [2:0] vlmul;
+        logic [2:0] vsew;
+        logic vta;
+        logic vma;
+        logic vill;
+        // End Vtype
+        logic [4:0] rs1;
+        logic [4:0] uimm;
+    } vpu_mod_t;
+
+    typedef struct packed {
         logic [($bits(alu_mod_t)-1)-1:0] __padding;
         logic is_neg;
     } wctl_mod_t;
@@ -114,6 +127,7 @@ package VX_gpu_pkg;
         fpu_mod_t  fpu;
         lsu_mod_t  lsu;
         csr_mod_t  csr;
+        vpu_mod_t  vpu;
         wctl_mod_t wctl;
     } op_mod_t;
 

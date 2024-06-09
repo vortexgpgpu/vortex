@@ -22,6 +22,7 @@
             `EX_LSU: `TRACE(level, ("LSU"));
             `EX_FPU: `TRACE(level, ("FPU"));
             `EX_SFU: `TRACE(level, ("SFU"));
+            `EX_VPU: `TRACE(level, ("VPU"));
             default: `TRACE(level, ("?"));
         endcase
     endtask
@@ -339,7 +340,15 @@
                 `INST_SFU_CSRRW: begin if (op_mod.csr.use_imm) `TRACE(level, ("CSRRWI")); else `TRACE(level, ("CSRRW")); end
                 `INST_SFU_CSRRS: begin if (op_mod.csr.use_imm) `TRACE(level, ("CSRRSI")); else `TRACE(level, ("CSRRS")); end
                 `INST_SFU_CSRRC: begin if (op_mod.csr.use_imm) `TRACE(level, ("CSRRCI")); else `TRACE(level, ("CSRRC")); end
-                default:         `TRACE(level, ("?"));
+                `INST_VPU_VSETVL:       `TRACE(level, ("VSET"));
+                `INST_VPU_VSETVLI:      `TRACE(level, ("VSET"));
+                `INST_VPU_VSETIVLI:     `TRACE(level, ("VSET"));
+                default:                `TRACE(level, ("?"));
+            endcase
+        end
+        `EX_VPU: begin
+            case (op_type)
+                default:                `TRACE(level, ("?"));
             endcase
         end
         default: `TRACE(level, ("?"));
@@ -362,9 +371,15 @@
             `TRACE(level, (", fmt=0x%0h, frm=0x%0h", op_mod.fpu.fmt, op_mod.fpu.frm));
         end
         `EX_SFU: begin
-            if (`INST_SFU_IS_CSR(op_type)) begin
+            if ((op_type == `INST_VPU_VSETVL) || (op_type == `INST_VPU_VSETIVLI) || (op_type == `INST_VPU_VSETVLI)) begin
+                `TRACE(level, (", vlmul=%b, vsew=%b, vta=%b, vma=%b, vill=%b", op_mod.vpu.vlmul, op_mod.vpu.vsew, op_mod.vpu.vta, op_mod.vpu.vma, op_mod.vpu.vill));
+            end
+            else if (`INST_SFU_IS_CSR(op_type)) begin
                 `TRACE(level, (", addr=0x%0h, use_imm=%b, imm=0x%0h", op_mod.csr.addr, op_mod.csr.use_imm, op_mod.csr.imm));
             end
+        end
+        `EX_VPU: begin
+            `TRACE(level, (", vlmul=%b, vsew=%b, vta=%b, vma=%b, vill=%b", op_mod.vpu.vlmul, op_mod.vpu.vsew, op_mod.vpu.vta, op_mod.vpu.vma, op_mod.vpu.vill));
         end
         default:;
         endcase
