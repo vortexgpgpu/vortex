@@ -49,7 +49,7 @@ static void __attribute__ ((noinline)) process_all_tasks() {
   vx_spawn_tasks_cb callback = targs->callback;
   const void* arg = targs->arg;
   for (uint32_t task_id = start_task_id; task_id < end_task_id; task_id += threads_per_warp) {
-    callback(task_id, arg);
+    callback(task_id, (void*)arg);
   }
 }
 
@@ -59,7 +59,7 @@ static void __attribute__ ((noinline)) process_remaining_tasks() {
   uint32_t thread_id = vx_thread_id();
   uint32_t task_id = targs->remain_tasks_offset + thread_id;
 
-  (targs->callback)(task_id, targs->arg);
+  (targs->callback)(task_id, (void*)targs->arg);
 }
 
 static void __attribute__ ((noinline)) process_all_tasks_stub() {
@@ -205,7 +205,7 @@ static void __attribute__ ((noinline)) process_all_task_groups() {
     blockIdx.x = group_id % gridDim.x;
     blockIdx.y = (group_id / gridDim.x) % gridDim.y;
     blockIdx.z = group_id / (gridDim.x * gridDim.y);
-    callback(arg);
+    callback((void*)arg);
   }
 }
 
@@ -236,8 +236,8 @@ int vx_spawn_threads(uint32_t dimension,
   uint32_t num_groups = 1;
   uint32_t group_size = 1;
   for (uint32_t i = 0; i < 3; ++i) {
-    uint32_t gd = (i < dimension) ? grid_dim[i] : 1;
-    uint32_t bd = (i < dimension) ? block_dim[i] : 1;
+    uint32_t gd = (grid_dim && (i < dimension)) ? grid_dim[i] : 1;
+    uint32_t bd = (block_dim && (i < dimension)) ? block_dim[i] : 1;
     num_groups *= gd;
     group_size *= bd;
     gridDim.m[i] = gd;

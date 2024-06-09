@@ -58,13 +58,13 @@ static void __putfloat_cb(const putfloat_arg_t* arg) {
 	float value = arg->value;
 	int precision = arg->precision;
 	int ipart = (int)value;
-    vx_putint(ipart, 10);
-    if (precision != 0) {
-        vx_putchar('.');
+	vx_putint(ipart, 10);
+	if (precision != 0) {
+		vx_putchar('.');
 		float frac = value - (float)ipart;
-        float fscaled = frac * pow(10, precision);
-        vx_putint((int)fscaled, 10);
-    }
+		float fscaled = frac * pow(10, precision);
+		vx_putint((int)fscaled, 10);
+	}
 }
 
 static void __vprintf_cb(printf_arg_t* arg) {
@@ -90,7 +90,7 @@ int vx_vprintf(const char* format, va_list va) {
 	arg.format = format;
 	arg.va = &va;
 	vx_serial((vx_serial_cb)__vprintf_cb, &arg);
-  	return arg.ret;
+  return arg.ret;
 }
 
 int vx_printf(const char * format, ...) {
@@ -99,7 +99,7 @@ int vx_printf(const char * format, ...) {
 	va_start(va, format);
 	ret = vx_vprintf(format, va);
 	va_end(va);
-  	return ret;
+  return ret;
 }
 
 #ifdef __cplusplus

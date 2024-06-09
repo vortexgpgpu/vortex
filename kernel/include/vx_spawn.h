@@ -21,13 +21,13 @@
 extern "C" {
 #endif
 
-typedef void (*vx_spawn_tasks_cb)(uint32_t task_id, const void *arg);
+typedef void (*vx_spawn_tasks_cb)(uint32_t task_id, void *arg);
 
-typedef void (*vx_serial_cb)(const void *arg);
+typedef void (*vx_serial_cb)(void *arg);
 
 void vx_spawn_tasks(uint32_t num_tasks, vx_spawn_tasks_cb callback, const void * arg);
 
-void vx_serial(vx_serial_cb callback, void * arg);
+void vx_serial(vx_serial_cb callback, const void * arg);
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -49,7 +49,7 @@ extern __thread uint32_t __local_group_id;
 extern uint32_t __groups_per_core;
 extern uint32_t __warps_per_group;
 
-typedef void (*vx_kernel_func_cb)(const void *arg);
+typedef void (*vx_kernel_func_cb)(void *arg);
 
 #define __local_mem(size) \
   (void*)((int8_t*)csr_read(VX_CSR_LOCAL_MEM_BASE) + __local_group_id * size)
