@@ -25,7 +25,7 @@ cache:
     - $HOME/build64
 
 before_install:
-  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0.3" ]; then
+  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0.4" ]; then
       rm -rf $TOOLDIR;
       mkdir -p $TRAVIS_BUILD_DIR/build && cd $TRAVIS_BUILD_DIR/build;
       ../configure --tooldir=$TOOLDIR;
