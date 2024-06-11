@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -13,11 +13,11 @@
 
 `include "VX_define.vh"
 
-module VX_socket import VX_gpu_pkg::*; #( 
+module VX_socket import VX_gpu_pkg::*; #(
     parameter SOCKET_ID = 0
-) (        
+) (
     `SCOPE_IO_DECL
-    
+
     // Clock
     input wire              clk,
     input wire              reset,
@@ -36,11 +36,6 @@ module VX_socket import VX_gpu_pkg::*; #(
     // Barrier
     VX_gbar_bus_if.master   gbar_bus_if,
 `endif
-
-    // simulation helper signals
-    output wire             sim_ebreak,
-    output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value,
-
     // Status
     output wire             busy
 );
@@ -86,7 +81,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     `RESET_RELAY (icache_reset, reset);
 
     VX_cache_cluster #(
-        .INSTANCE_ID    ($sformatf("socket%0d-icache", SOCKET_ID)),    
+        .INSTANCE_ID    ($sformatf("socket%0d-icache", SOCKET_ID)),
         .NUM_UNITS      (`NUM_ICACHES),
         .NUM_INPUTS     (`SOCKET_SIZE),
         .TAG_SEL_IDX    (0),
@@ -102,7 +97,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .MREQ_SIZE      (`ICACHE_MREQ_SIZE),
         .TAG_WIDTH      (ICACHE_TAG_WIDTH),
         .UUID_WIDTH     (`UUID_WIDTH),
-        .WRITE_ENABLE   (0),      
+        .WRITE_ENABLE   (0),
         .NC_ENABLE      (0),
         .CORE_OUT_BUF   (2),
         .MEM_OUT_BUF    (2)
@@ -122,7 +117,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .DATA_SIZE (DCACHE_WORD_SIZE),
         .TAG_WIDTH (DCACHE_TAG_WIDTH)
     ) per_core_dcache_bus_if[`SOCKET_SIZE * DCACHE_NUM_REQS]();
-    
+
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_LINE_SIZE),
         .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
@@ -131,7 +126,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     `RESET_RELAY (dcache_reset, reset);
 
     VX_cache_cluster #(
-        .INSTANCE_ID    ($sformatf("socket%0d-dcache", SOCKET_ID)),    
+        .INSTANCE_ID    ($sformatf("socket%0d-dcache", SOCKET_ID)),
         .NUM_UNITS      (`NUM_DCACHES),
         .NUM_INPUTS     (`SOCKET_SIZE),
         .TAG_SEL_IDX    (0),
@@ -147,21 +142,21 @@ module VX_socket import VX_gpu_pkg::*; #(
         .MREQ_SIZE      (`DCACHE_MREQ_SIZE),
         .TAG_WIDTH      (DCACHE_TAG_WIDTH),
         .UUID_WIDTH     (`UUID_WIDTH),
-        .WRITE_ENABLE   (1),        
+        .WRITE_ENABLE   (1),
         .NC_ENABLE      (1),
         .CORE_OUT_BUF   (`LMEM_ENABLED ? 2 : 1),
         .MEM_OUT_BUF    (2)
     ) dcache (
     `ifdef PERF_ENABLE
         .cache_perf     (mem_perf_tmp_if.dcache),
-    `endif        
+    `endif
         .clk            (clk),
-        .reset          (dcache_reset),        
+        .reset          (dcache_reset),
         .core_bus_if    (per_core_dcache_bus_if),
         .mem_bus_if     (dcache_mem_bus_if)
     );
 
-    ///////////////////////////////////////////////////////////////////////////  
+    ///////////////////////////////////////////////////////////////////////////
 
     VX_mem_bus_if #(
         .DATA_SIZE (`L1_LINE_SIZE),
@@ -197,13 +192,6 @@ module VX_socket import VX_gpu_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [`SOCKET_SIZE-1:0] per_core_sim_ebreak;
-    wire [`SOCKET_SIZE-1:0][`NUM_REGS-1:0][`XLEN-1:0] per_core_sim_wb_value;
-    assign sim_ebreak = per_core_sim_ebreak[0];
-    assign sim_wb_value = per_core_sim_wb_value[0];
-    `UNUSED_VAR (per_core_sim_ebreak)
-    `UNUSED_VAR (per_core_sim_wb_value)
-
     wire [`SOCKET_SIZE-1:0] per_core_busy;
 
     `BUFFER_DCR_BUS_IF (core_dcr_bus_if, dcr_bus_if, (`SOCKET_SIZE > 1));
@@ -226,7 +214,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         `ifdef PERF_ENABLE
             .mem_perf_if    (mem_perf_tmp_if),
         `endif
-            
+
             .dcr_bus_if     (core_dcr_bus_if),
 
             .dcache_bus_if  (per_core_dcache_bus_if[i * DCACHE_NUM_REQS +: DCACHE_NUM_REQS]),
@@ -237,12 +225,10 @@ module VX_socket import VX_gpu_pkg::*; #(
             .gbar_bus_if    (per_core_gbar_bus_if[i]),
         `endif
 
-            .sim_ebreak     (per_core_sim_ebreak[i]),
-            .sim_wb_value   (per_core_sim_wb_value[i]),
             .busy           (per_core_busy[i])
         );
     end
 
     `BUFFER_EX(busy, (| per_core_busy), 1'b1, (`SOCKET_SIZE > 1));
-    
+
 endmodule

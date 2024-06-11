@@ -25,7 +25,7 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
     VX_operands_if.master   operands_if
 );
     `UNUSED_PARAM (CORE_ID)
-    localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + `NR_BITS;
+    localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + `NR_BITS;
     localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * ISSUE_RATIO);
 
     localparam STATE_IDLE   = 2'd0;
@@ -210,7 +210,7 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
             scoreboard_if.data.wb,
             scoreboard_if.data.ex_type,
             scoreboard_if.data.op_type,
-            scoreboard_if.data.op_mod,
+            scoreboard_if.data.op_args,
             scoreboard_if.data.rd
         }),
         .ready_in  (stg_ready_in),
@@ -223,7 +223,7 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
             operands_if.data.wb,
             operands_if.data.ex_type,
             operands_if.data.op_type,
-            operands_if.data.op_mod,
+            operands_if.data.op_args,
             operands_if.data.rd
         }),
         .ready_out (operands_if.ready)

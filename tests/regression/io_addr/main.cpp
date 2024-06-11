@@ -23,7 +23,7 @@
 const char* kernel_file = "kernel.vxbin";
 uint32_t count = 0;
 
-static uint64_t io_base_addr = IO_MPM_ADDR + IO_CSR_SIZE;
+static uint64_t io_base_addr = IO_MPM_ADDR;
 uint64_t usr_test_addr;
 
 vx_device_h device = nullptr;

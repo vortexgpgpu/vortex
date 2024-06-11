@@ -25,10 +25,7 @@ module VX_commit import VX_gpu_pkg::*; #(
     // outputs
     VX_writeback_if.master  writeback_if  [`ISSUE_WIDTH],
     VX_commit_csr_if.master commit_csr_if,
-    VX_commit_sched_if.master commit_sched_if,
-
-    // simulation helper signals
-    output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value
+    VX_commit_sched_if.master commit_sched_if
 );
     `UNUSED_PARAM (CORE_ID)
     localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS + 1 + `NR_BITS + `NUM_THREADS * `XLEN + 1 + 1 + 1;
@@ -168,15 +165,6 @@ module VX_commit import VX_gpu_pkg::*; #(
         assign writeback_if[i].data.eop  = commit_arb_if[i].data.eop;
         assign commit_arb_if[i].ready = 1'b1; // writeback has no backpressure
     end
-
-    // simulation helper signal to get RISC-V tests Pass/Fail status
-    reg [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value_r;
-    always @(posedge clk) begin
-        if (writeback_if[0].valid) begin
-            sim_wb_value_r[writeback_if[0].data.rd] <= writeback_if[0].data.data[0];
-        end
-    end
-    assign sim_wb_value = sim_wb_value_r;
 
 `ifdef DBG_TRACE_PIPELINE
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin

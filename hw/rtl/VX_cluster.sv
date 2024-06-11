@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,7 +15,7 @@
 
 module VX_cluster import VX_gpu_pkg::*; #(
     parameter CLUSTER_ID = 0
-) ( 
+) (
     `SCOPE_IO_DECL
 
     // Clock
@@ -32,10 +32,6 @@ module VX_cluster import VX_gpu_pkg::*; #(
     // Memory
     VX_mem_bus_if.master        mem_bus_if,
 
-    // simulation helper signals
-    output wire                 sim_ebreak,
-    output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value,
-
     // Status
     output wire                 busy
 );
@@ -43,16 +39,16 @@ module VX_cluster import VX_gpu_pkg::*; #(
 `ifdef SCOPE
     localparam scope_socket = 0;
     `SCOPE_IO_SWITCH (`NUM_SOCKETS);
-`endif    
+`endif
 
 `ifdef PERF_ENABLE
-    VX_mem_perf_if mem_perf_tmp_if();    
+    VX_mem_perf_if mem_perf_tmp_if();
     assign mem_perf_tmp_if.icache  = 'x;
     assign mem_perf_tmp_if.dcache  = 'x;
     assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
     assign mem_perf_tmp_if.lmem    = 'x;
     assign mem_perf_tmp_if.mem     = mem_perf_if.mem;
-`endif    
+`endif
 
 `ifdef GBAR_ENABLE
 
@@ -102,7 +98,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .MREQ_SIZE      (`L2_MREQ_SIZE),
         .TAG_WIDTH      (L2_TAG_WIDTH),
         .WRITE_ENABLE   (1),
-        .UUID_WIDTH     (`UUID_WIDTH),  
+        .UUID_WIDTH     (`UUID_WIDTH),
         .CORE_OUT_BUF   (2),
         .MEM_OUT_BUF    (2),
         .NC_ENABLE      (1),
@@ -118,13 +114,6 @@ module VX_cluster import VX_gpu_pkg::*; #(
     );
 
     ///////////////////////////////////////////////////////////////////////////
-
-    wire [`NUM_SOCKETS-1:0] per_socket_sim_ebreak;
-    wire [`NUM_SOCKETS-1:0][`NUM_REGS-1:0][`XLEN-1:0] per_socket_sim_wb_value;
-    assign sim_ebreak = per_socket_sim_ebreak[0];
-    assign sim_wb_value = per_socket_sim_wb_value[0];
-    `UNUSED_VAR (per_socket_sim_ebreak)
-    `UNUSED_VAR (per_socket_sim_wb_value)
 
     VX_dcr_bus_if socket_dcr_bus_tmp_if();
     assign socket_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `VX_DCR_BASE_STATE_BEGIN && dcr_bus_if.write_addr < `VX_DCR_BASE_STATE_END);
@@ -151,7 +140,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         `ifdef PERF_ENABLE
             .mem_perf_if    (mem_perf_tmp_if),
         `endif
-            
+
             .dcr_bus_if     (socket_dcr_bus_if),
 
             .mem_bus_if     (per_socket_mem_bus_if[i]),
@@ -160,8 +149,6 @@ module VX_cluster import VX_gpu_pkg::*; #(
             .gbar_bus_if    (per_socket_gbar_bus_if[i]),
         `endif
 
-            .sim_ebreak     (per_socket_sim_ebreak[i]),
-            .sim_wb_value   (per_socket_sim_wb_value[i]),
             .busy           (per_socket_busy[i])
         );
     end

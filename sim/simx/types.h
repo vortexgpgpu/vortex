@@ -22,7 +22,6 @@
 #include <stringutil.h>
 #include <VX_config.h>
 #include <simobject.h>
-#include "uuid_gen.h"
 #include "debug.h"
 
 namespace vortex {
@@ -142,7 +141,7 @@ enum class AddrType {
 };
 
 inline AddrType get_addr_type(uint64_t addr) {
-  if (addr >= IO_BASE_ADDR) {
+  if (addr >= IO_BASE_ADDR && addr < IO_END_ADDR) {
      return AddrType::IO;
   }
   if (LMEM_ENABLED) {

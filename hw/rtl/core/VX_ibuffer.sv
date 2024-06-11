@@ -26,7 +26,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     VX_ibuffer_if.master ibuffer_if [`NUM_WARPS]
 );
     `UNUSED_PARAM (CORE_ID)
-    localparam DATAW = `UUID_WIDTH + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + (`NR_BITS * 4);
+    localparam DATAW = `UUID_WIDTH + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + (`NR_BITS * 4);
 
     wire [`NUM_WARPS-1:0] ibuf_ready_in;
 
@@ -47,7 +47,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 decode_if.data.PC,
                 decode_if.data.ex_type,
                 decode_if.data.op_type,
-                decode_if.data.op_mod,
+                decode_if.data.op_args,
                 decode_if.data.wb,
                 decode_if.data.rd,
                 decode_if.data.rs1,

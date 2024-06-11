@@ -75,18 +75,3 @@ clean:
 	$(MAKE) -C sgemmx clean
 	$(MAKE) -C conv3x clean
 	$(MAKE) -C sgemm2x clean
-
-clean-all:
-	$(MAKE) -C basic clean-all
-	$(MAKE) -C demo clean-all
-	$(MAKE) -C dogfood clean-all
-	$(MAKE) -C mstress clean-all
-	$(MAKE) -C io_addr clean-all
-	$(MAKE) -C printf clean-all
-	$(MAKE) -C diverge clean-all
-	$(MAKE) -C sort clean-all
-	$(MAKE) -C fence clean-all
-	$(MAKE) -C vecaddx clean-all
-	$(MAKE) -C sgemmx clean-all
-	$(MAKE) -C conv3x clean-all
-	$(MAKE) -C sgemm2x clean-all

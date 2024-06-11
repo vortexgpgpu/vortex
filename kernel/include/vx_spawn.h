@@ -14,24 +14,49 @@
 #ifndef __VX_SPAWN_H__
 #define __VX_SPAWN_H__
 
+#include <vx_intrinsics.h>
 #include <stdint.h>
-#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef void (*vx_spawn_tasks_cb)(int task_id, void *arg);
+typedef union {
+  struct {
+    uint32_t x;
+    uint32_t y;
+    uint32_t z;
+  };
+  uint32_t m[3];
+} dim3_t;
 
-typedef void (*vx_spawn_task_groups_cb)(int local_task_id, int group_id, int local_group_id, int warps_per_group, void *arg);
+extern __thread dim3_t blockIdx;
+extern __thread dim3_t threadIdx;
+extern dim3_t gridDim;
+extern dim3_t blockDim;
+
+extern __thread uint32_t __local_group_id;
+extern uint32_t __warps_per_group;
+
+typedef void (*vx_kernel_func_cb)(void *arg);
 
 typedef void (*vx_serial_cb)(void *arg);
 
-void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback, void * arg);
+#define __local_mem(size) \
+  (void*)((int8_t*)csr_read(VX_CSR_LOCAL_MEM_BASE) + __local_group_id * size)
 
-void vx_spawn_task_groups(int num_groups, int group_size, vx_spawn_task_groups_cb callback, void * arg);
+#define __syncthreads() \
+  vx_barrier(__local_group_id, __warps_per_group)
 
-void vx_serial(vx_serial_cb callback, void * arg);
+// launch a kernel function with a grid of blocks and block of threads
+int vx_spawn_threads(uint32_t dimension,
+                     const uint32_t* grid_dim,
+                     const uint32_t* block_dim,
+                     vx_kernel_func_cb kernel_func,
+                     const void* arg);
+
+// function call serialization
+void vx_serial(vx_serial_cb callback, const void * arg);
 
 #ifdef __cplusplus
 }

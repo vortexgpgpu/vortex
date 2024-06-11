@@ -52,16 +52,14 @@ module VX_alu_int #(
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_result_r;
 
 `ifdef XLEN_64
-    wire is_alu_w = execute_if.data.op_mod.alu.is_w;
+    wire is_alu_w = execute_if.data.op_args.alu.is_w;
 `else
     wire is_alu_w = 0;
 `endif
 
-    `UNUSED_VAR (execute_if.data.op_mod)
-
     wire [`INST_ALU_BITS-1:0] alu_op = `INST_ALU_BITS'(execute_if.data.op_type);
     wire [`INST_BR_BITS-1:0]   br_op = `INST_BR_BITS'(execute_if.data.op_type);
-    wire                    is_br_op = (execute_if.data.op_mod.alu.xtype == `ALU_TYPE_BRANCH);
+    wire                    is_br_op = (execute_if.data.op_args.alu.xtype == `ALU_TYPE_BRANCH);
     wire                   is_sub_op = `INST_ALU_IS_SUB(alu_op);
     wire                   is_signed = `INST_ALU_SIGNED(alu_op);
     wire [1:0]              op_class = is_br_op ? `INST_BR_CLASS(alu_op) : `INST_ALU_CLASS(alu_op);
@@ -69,9 +67,9 @@ module VX_alu_int #(
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1 = execute_if.data.rs1_data;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2 = execute_if.data.rs2_data;
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1_PC  = execute_if.data.op_mod.alu.use_PC ? {NUM_LANES{execute_if.data.PC, 1'd0}} : alu_in1;
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if.data.op_mod.alu.use_imm ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_mod.alu.imm)}} : alu_in2;
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_br  = (execute_if.data.op_mod.alu.use_imm && ~is_br_op) ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_mod.alu.imm)}} : alu_in2;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{execute_if.data.PC, 1'd0}} : alu_in1;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_br  = (execute_if.data.op_args.alu.use_imm && ~is_br_op) ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign add_result[i] = alu_in1_PC[i] + alu_in2_imm[i];

@@ -9,6 +9,11 @@ SRCS := $(SRC_DIR)/main.cc $(SRC_DIR)/oclUtils.cpp $(SRC_DIR)/shrUtils.cpp $(SRC
 
 CXXFLAGS += -I$(SRC_DIR)
 
-OPTS ?= 
+kernel.cl: $(SRC_DIR)/kernel.cl
+	cp $< $@
+
+KERNEL_SRCS := kernel.cl
+
+OPTS ?=
 
 include ../common.mk

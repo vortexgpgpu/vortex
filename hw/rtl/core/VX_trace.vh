@@ -27,16 +27,16 @@
     endtask
 
     task trace_ex_op(input int level,
-                    input [`EX_BITS-1:0] ex_type,
-                    input [`INST_OP_BITS-1:0] op_type,
-                    input VX_gpu_pkg::op_mod_t op_mod
+                     input [`EX_BITS-1:0] ex_type,
+                     input [`INST_OP_BITS-1:0] op_type,
+                     input VX_gpu_pkg::op_args_t op_args
     );
         case (ex_type)
         `EX_ALU: begin
-            case (op_mod.alu.xtype)
+            case (op_args.alu.xtype)
                 `ALU_TYPE_ARITH: begin
-                    if (op_mod.alu.is_w) begin
-                        if (op_mod.alu.use_imm) begin
+                    if (op_args.alu.is_w) begin
+                        if (op_args.alu.use_imm) begin
                             case (`INST_ALU_BITS'(op_type))
                                 `INST_ALU_ADD: `TRACE(level, ("ADDIW"));
                                 `INST_ALU_SLL: `TRACE(level, ("SLLIW"));
@@ -55,7 +55,7 @@
                             endcase
                         end
                     end else begin
-                        if (op_mod.alu.use_imm) begin
+                        if (op_args.alu.use_imm) begin
                             case (`INST_ALU_BITS'(op_type))
                                 `INST_ALU_ADD:   `TRACE(level, ("ADDI"));
                                 `INST_ALU_SLL:   `TRACE(level, ("SLLI"));
@@ -108,7 +108,7 @@
                     endcase
                 end
                 `ALU_TYPE_MULDIV: begin
-                    if (op_mod.alu.is_w) begin
+                    if (op_args.alu.is_w) begin
                         case (`INST_M_BITS'(op_type))
                             `INST_M_MUL:  `TRACE(level, ("MULW"));
                             `INST_M_DIV:  `TRACE(level, ("DIVW"));
@@ -131,10 +131,11 @@
                         endcase
                     end
                 end
+                default: `TRACE(level, ("?"));
             endcase
         end
         `EX_LSU: begin
-            if (op_mod.lsu.is_float) begin
+            if (op_args.lsu.is_float) begin
                 case (`INST_LSU_BITS'(op_type))
                     `INST_LSU_LW: `TRACE(level, ("FLW"));
                     `INST_LSU_LD: `TRACE(level, ("FLD"));
@@ -163,69 +164,69 @@
         `EX_FPU: begin
             case (`INST_FPU_BITS'(op_type))
                 `INST_FPU_ADD: begin
-                    if  (op_mod.fpu.fmt[0])
+                    if  (op_args.fpu.fmt[0])
                         `TRACE(level, ("FADD.D"));
                     else
                         `TRACE(level, ("FADD.S"));
                 end
                 `INST_FPU_SUB: begin
-                    if  (op_mod.fpu.fmt[0])
+                    if  (op_args.fpu.fmt[0])
                         `TRACE(level, ("FSUB.D"));
                     else
                         `TRACE(level, ("FSUB.S"));
                 end
                 `INST_FPU_MUL: begin
-                    if  (op_mod.fpu.fmt[0])
+                    if  (op_args.fpu.fmt[0])
                         `TRACE(level, ("FMUL.D"));
                     else
                         `TRACE(level, ("FMUL.S"));
                 end
                 `INST_FPU_DIV: begin
-                    if  (op_mod.fpu.fmt[0])
+                    if  (op_args.fpu.fmt[0])
                         `TRACE(level, ("FDIV.D"));
                     else
                         `TRACE(level, ("FDIV.S"));
                 end
                 `INST_FPU_SQRT: begin
-                    if  (op_mod.fpu.fmt[0])
+                    if  (op_args.fpu.fmt[0])
                         `TRACE(level, ("FSQRT.D"));
                     else
                         `TRACE(level, ("FSQRT.S"));
                 end
                 `INST_FPU_MADD: begin
-                    if  (op_mod.fpu.fmt[0])
+                    if  (op_args.fpu.fmt[0])
                         `TRACE(level, ("FMADD.D"));
                     else
                         `TRACE(level, ("FMADD.S"));
                 end
                 `INST_FPU_MSUB: begin
-                    if  (op_mod.fpu.fmt[0])
+                    if  (op_args.fpu.fmt[0])
                         `TRACE(level, ("FMSUB.D"));
                     else
                         `TRACE(level, ("FMSUB.S"));
                 end
                 `INST_FPU_NMADD: begin
-                    if  (op_mod.fpu.fmt[0])
+                    if  (op_args.fpu.fmt[0])
                         `TRACE(level, ("FNMADD.D"));
                     else
                         `TRACE(level, ("FNMADD.S"));
                 end
                 `INST_FPU_NMSUB: begin
-                    if  (op_mod.fpu.fmt[0])
+                    if  (op_args.fpu.fmt[0])
                         `TRACE(level, ("FNMSUB.D"));
                     else
                         `TRACE(level, ("FNMSUB.S"));
                 end
                 `INST_FPU_CMP: begin
-                    if  (op_mod.fpu.fmt[0]) begin
-                        case (op_mod.fpu.frm[1:0])
+                    if  (op_args.fpu.fmt[0]) begin
+                        case (op_args.fpu.frm[1:0])
                         0:       `TRACE(level, ("FLE.D"));
                         1:       `TRACE(level, ("FLT.D"));
                         2:       `TRACE(level, ("FEQ.D"));
                         default: `TRACE(level, ("?"));
                         endcase
                     end else begin
-                        case (op_mod.fpu.frm[1:0])
+                        case (op_args.fpu.frm[1:0])
                         0:       `TRACE(level, ("FLE.S"));
                         1:       `TRACE(level, ("FLT.S"));
                         2:       `TRACE(level, ("FEQ.S"));
@@ -234,21 +235,21 @@
                     end
                 end
                 `INST_FPU_F2F: begin
-                    if (op_mod.fpu.fmt[0]) begin
+                    if (op_args.fpu.fmt[0]) begin
                         `TRACE(level, ("FCVT.D.S"));
                     end else begin
                         `TRACE(level, ("FCVT.S.D"));
                     end
                 end
                 `INST_FPU_F2I: begin
-                    if (op_mod.fpu.fmt[0]) begin
-                        if (op_mod.fpu.fmt[1]) begin
+                    if (op_args.fpu.fmt[0]) begin
+                        if (op_args.fpu.fmt[1]) begin
                             `TRACE(level, ("FCVT.L.D"));
                         end else begin
                             `TRACE(level, ("FCVT.W.D"));
                         end
                     end else begin
-                        if (op_mod.fpu.fmt[1]) begin
+                        if (op_args.fpu.fmt[1]) begin
                             `TRACE(level, ("FCVT.L.S"));
                         end else begin
                             `TRACE(level, ("FCVT.W.S"));
@@ -256,14 +257,14 @@
                     end
                 end
                 `INST_FPU_F2U: begin
-                    if (op_mod.fpu.fmt[0]) begin
-                        if (op_mod.fpu.fmt[1]) begin
+                    if (op_args.fpu.fmt[0]) begin
+                        if (op_args.fpu.fmt[1]) begin
                             `TRACE(level, ("FCVT.LU.D"));
                         end else begin
                             `TRACE(level, ("FCVT.WU.D"));
                         end
                     end else begin
-                        if (op_mod.fpu.fmt[1]) begin
+                        if (op_args.fpu.fmt[1]) begin
                             `TRACE(level, ("FCVT.LU.S"));
                         end else begin
                             `TRACE(level, ("FCVT.WU.S"));
@@ -271,14 +272,14 @@
                     end
                 end
                 `INST_FPU_I2F: begin
-                    if (op_mod.fpu.fmt[0]) begin
-                        if (op_mod.fpu.fmt[1]) begin
+                    if (op_args.fpu.fmt[0]) begin
+                        if (op_args.fpu.fmt[1]) begin
                             `TRACE(level, ("FCVT.D.L"));
                         end else begin
                             `TRACE(level, ("FCVT.D.W"));
                         end
                     end else begin
-                        if (op_mod.fpu.fmt[1]) begin
+                        if (op_args.fpu.fmt[1]) begin
                             `TRACE(level, ("FCVT.S.L"));
                         end else begin
                             `TRACE(level, ("FCVT.S.W"));
@@ -286,14 +287,14 @@
                     end
                 end
                 `INST_FPU_U2F: begin
-                    if (op_mod.fpu.fmt[0]) begin
-                        if (op_mod.fpu.fmt[1]) begin
+                    if (op_args.fpu.fmt[0]) begin
+                        if (op_args.fpu.fmt[1]) begin
                             `TRACE(level, ("FCVT.D.LU"));
                         end else begin
                             `TRACE(level, ("FCVT.D.WU"));
                         end
                     end else begin
-                        if (op_mod.fpu.fmt[1]) begin
+                        if (op_args.fpu.fmt[1]) begin
                             `TRACE(level, ("FCVT.S.LU"));
                         end else begin
                             `TRACE(level, ("FCVT.S.WU"));
@@ -301,8 +302,8 @@
                     end
                 end
                 `INST_FPU_MISC: begin
-                    if  (op_mod.fpu.fmt[0]) begin
-                        case (op_mod)
+                    if  (op_args.fpu.fmt[0]) begin
+                        case (op_args.fpu.frm)
                             0: `TRACE(level, ("FSGNJ.D"));
                             1: `TRACE(level, ("FSGNJN.D"));
                             2: `TRACE(level, ("FSGNJX.D"));
@@ -313,7 +314,7 @@
                             7: `TRACE(level, ("FMAX.D"));
                         endcase
                     end else begin
-                        case (op_mod)
+                        case (op_args.fpu.frm)
                             0: `TRACE(level, ("FSGNJ.S"));
                             1: `TRACE(level, ("FSGNJN.S"));
                             2: `TRACE(level, ("FSGNJX.S"));
@@ -332,13 +333,13 @@
             case (`INST_SFU_BITS'(op_type))
                 `INST_SFU_TMC:   `TRACE(level, ("TMC"));
                 `INST_SFU_WSPAWN:`TRACE(level, ("WSPAWN"));
-                `INST_SFU_SPLIT: begin if (op_mod.wctl.is_neg) `TRACE(level, ("SPLIT.N")); else `TRACE(level, ("SPLIT")); end
+                `INST_SFU_SPLIT: begin if (op_args.wctl.is_neg) `TRACE(level, ("SPLIT.N")); else `TRACE(level, ("SPLIT")); end
                 `INST_SFU_JOIN:  `TRACE(level, ("JOIN"));
                 `INST_SFU_BAR:   `TRACE(level, ("BAR"));
-                `INST_SFU_PRED:  begin if (op_mod.wctl.is_neg) `TRACE(level, ("PRED.N")); else `TRACE(level, ("PRED")); end
-                `INST_SFU_CSRRW: begin if (op_mod.csr.use_imm) `TRACE(level, ("CSRRWI")); else `TRACE(level, ("CSRRW")); end
-                `INST_SFU_CSRRS: begin if (op_mod.csr.use_imm) `TRACE(level, ("CSRRSI")); else `TRACE(level, ("CSRRS")); end
-                `INST_SFU_CSRRC: begin if (op_mod.csr.use_imm) `TRACE(level, ("CSRRCI")); else `TRACE(level, ("CSRRC")); end
+                `INST_SFU_PRED:  begin if (op_args.wctl.is_neg) `TRACE(level, ("PRED.N")); else `TRACE(level, ("PRED")); end
+                `INST_SFU_CSRRW: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRWI")); else `TRACE(level, ("CSRRW")); end
+                `INST_SFU_CSRRS: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRSI")); else `TRACE(level, ("CSRRS")); end
+                `INST_SFU_CSRRC: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRCI")); else `TRACE(level, ("CSRRC")); end
                 default:         `TRACE(level, ("?"));
             endcase
         end
@@ -346,24 +347,24 @@
         endcase
     endtask
 
-    task trace_op_mod(input int level,
-                      input [`EX_BITS-1:0] ex_type,
-                      input [`INST_OP_BITS-1:0] op_type,
-                      input VX_gpu_pkg::op_mod_t op_mod
+    task trace_op_args(input int level,
+                       input [`EX_BITS-1:0] ex_type,
+                       input [`INST_OP_BITS-1:0] op_type,
+                       input VX_gpu_pkg::op_args_t op_args
     );
         case (ex_type)
         `EX_ALU: begin
-            `TRACE(level, (", use_PC=%b, use_imm=%b, imm=0x%0h", op_mod.alu.use_PC, op_mod.alu.use_imm, op_mod.alu.imm));
+            `TRACE(level, (", use_PC=%b, use_imm=%b, imm=0x%0h", op_args.alu.use_PC, op_args.alu.use_imm, op_args.alu.imm));
         end
         `EX_LSU: begin
-            `TRACE(level, (", offset=0x%0h", op_mod.lsu.offset));
+            `TRACE(level, (", offset=0x%0h", op_args.lsu.offset));
         end
         `EX_FPU: begin
-            `TRACE(level, (", fmt=0x%0h, frm=0x%0h", op_mod.fpu.fmt, op_mod.fpu.frm));
+            `TRACE(level, (", fmt=0x%0h, frm=0x%0h", op_args.fpu.fmt, op_args.fpu.frm));
         end
         `EX_SFU: begin
             if (`INST_SFU_IS_CSR(op_type)) begin
-                `TRACE(level, (", addr=0x%0h, use_imm=%b, imm=0x%0h", op_mod.csr.addr, op_mod.csr.use_imm, op_mod.csr.imm));
+                `TRACE(level, (", addr=0x%0h, use_imm=%b, imm=0x%0h", op_args.csr.addr, op_args.csr.use_imm, op_args.csr.imm));
             end
         end
         default:;

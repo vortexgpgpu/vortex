@@ -29,9 +29,7 @@ public:
     return "integer";
   }
   static int generate() {
-    static int q(1);
-    return q++;
-    //return rand();
+    return rand();
   }
   static bool compare(int a, int b, int index, int errors) {
     if (a != b) {
@@ -80,7 +78,6 @@ static void matmul_cpu(TYPE* out, const TYPE* A, const TYPE* B, uint32_t width, 
         TYPE b = B[e * width + col];
         TYPE c = a * b;
         sum += c;
-        //printf("out[%d][%d]=%d; a=%d, b=%d, c=%d\n", row, col, sum, a, b, c);
       }
       out[row * width + col] = sum;
     }
@@ -157,33 +154,29 @@ int main(int argc, char *argv[]) {
 
   uint32_t size_sq = size * size;
   uint32_t buf_size = size_sq * sizeof(TYPE);
-
   uint32_t group_size = tile_size * tile_size;
-	uint32_t num_groups = size_sq / group_size;
   uint32_t local_mem = 2 * group_size * sizeof(TYPE);
 
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "matrix size: " << size << "x" << size << std::endl;
   std::cout << "tile size: " << tile_size << "x" << tile_size << std::endl;
-  std::cout << "group size: " << group_size << std::endl;
-  std::cout << "number of groups: " << num_groups << std::endl;
   std::cout << "local memory: " << local_mem << " bytes" << std::endl;
 
-  kernel_arg.num_groups = num_groups;
-  kernel_arg.group_size = group_size;
+  kernel_arg.grid_dim[0] = size / tile_size;
+  kernel_arg.grid_dim[1] = size / tile_size;
+  kernel_arg.block_dim[0] = tile_size;
+  kernel_arg.block_dim[1] = tile_size;
   kernel_arg.size = size;
   kernel_arg.tile_size = tile_size;
 
   // check work group occupancy
-  uint32_t max_barriers, max_localmem;
-  RT_CHECK(vx_check_occupancy(device, group_size, &max_barriers, &max_localmem));
-  std::cout << "occupancy: max_barriers=" << max_barriers << ", max_localmem=" << max_localmem << " bytes" << std::endl;
-  RT_CHECK(max_barriers < 2);
+  uint32_t max_localmem;
+  RT_CHECK(vx_check_occupancy(device, group_size, &max_localmem));
+  std::cout << "occupancy: max_localmem=" << max_localmem << " bytes" << std::endl;
   RT_CHECK(max_localmem < local_mem);
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_LOCAL_MEM_ADDR, &kernel_arg.local_addr));
   RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &A_buffer));
   RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
   RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &B_buffer));
@@ -191,7 +184,6 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &C_buffer));
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
 
-  std::cout << "local_addr=0x" << std::hex << kernel_arg.local_addr << std::endl;
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;

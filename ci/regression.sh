@@ -19,6 +19,37 @@ set -e
 # clear blackbox cache
 rm -f blackbox.*.cache
 
+split_file() {
+    if [[ $# -ne 2 ]]; then
+        echo "Usage: $0 <filename> <start_with>"
+        return 1
+    fi
+    input_file="$1"
+    start_with="$2"
+    if [[ ! -r "$input_file" ]]; then
+        echo "Error: File '$input_file' is not readable or does not exist."
+        return 1
+    fi
+    count=0
+    output_file=""
+    while IFS= read -r line; do
+        if [[ $line == $start_with* ]]; then
+            count=$((count + 1))
+            output_file="$input_file.part$count"
+            > "$output_file" # ensure empty
+        fi
+        if [[ -n "$output_file" ]]; then
+            echo "$line" >> "$output_file"
+        fi
+    done < "$input_file"
+
+    if [[ $count -eq 0 ]]; then
+        echo "No lines starting with '$start_with' were found in '$input_file'."
+    fi
+}
+
+###############################################################################
+
 unittest()
 {
     make -C tests/unittest run
@@ -102,6 +133,9 @@ opencl()
     make -C tests/opencl run-simx
     make -C tests/opencl run-rtlsim
 
+    ./ci/blackbox.sh --driver=simx --app=lbm --warps=8
+    ./ci/blackbox.sh --driver=rtlsim --app=lbm --warps=8
+
     echo "opencl tests done!"
 }
 
@@ -125,25 +159,39 @@ cluster()
     echo "clustering tests done!"
 }
 
-debug()
+test_csv_trace()
 {
-    echo "begin debugging tests..."
-
     # test CSV trace generation
     make -C sim/simx clean && DEBUG=3 make -C sim/simx > /dev/null
     make -C sim/rtlsim clean && DEBUG=3 CONFIGS="-DGPR_RESET" make -C sim/rtlsim > /dev/null
     make -C tests/riscv/isa run-simx-32im > run_simx.log
     make -C tests/riscv/isa run-rtlsim-32im > run_rtlsim.log
-    ./ci/trace_csv.py -trtlsim run_rtlsim.log -otrace_rtlsim.csv
-    ./ci/trace_csv.py -tsimx run_simx.log -otrace_simx.csv
-    diff trace_rtlsim.csv trace_simx.csv
+    split_file run_simx.log "Running "
+    split_file run_rtlsim.log "Running "
+    for file in ./run_simx.log.part*; do
+        if [[ -f "$file" ]]; then
+            file2="${file//simx/rtlsim}"
+            if [[ -f "$file2" ]]; then
+                ./ci/trace_csv.py -tsimx $file -otrace_simx.csv
+                ./ci/trace_csv.py -trtlsim $file2 -otrace_rtlsim.csv
+                diff trace_rtlsim.csv trace_simx.csv
+            else
+                echo "File $file2 not found."
+            fi
+        fi
+    done
     # restore default prebuilt configuration
     make -C sim/simx clean && make -C sim/simx > /dev/null
     make -C sim/rtlsim clean && make -C sim/rtlsim > /dev/null
+}
 
+debug()
+{
+    echo "begin debugging tests..."
+    test_csv_trace
     ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
     ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
-    ./ci/blackbox.sh --driver=opae --cores=1 --scope --app=basic --args="-t0 -n1"
+    ./ci/blackbox.sh --driver=opae --cores=1 --scope --app=demo --args="-n1"
 
     echo "debugging tests done!"
 }
@@ -189,12 +237,10 @@ config()
     CONFIGS="-DISSUE_WIDTH=4 -DNUM_LSU_BLOCK=4 -DNUM_LSU_LANES=4" ./ci/blackbox.sh --driver=simx --app=vecaddx
 
     # custom program startup address
-    make -C tests/regression/dogfood clean-all
+    make -C tests/regression/dogfood clean-kernel
     STARTUP_ADDR=0x40000000 make -C tests/regression/dogfood
-    CONFIGS="-DSTARTUP_ADDR=0x40000000" ./ci/blackbox.sh --driver=simx --app=dogfood
-    CONFIGS="-DSTARTUP_ADDR=0x40000000" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-    make -C tests/regression/dogfood clean-all
-    make -C tests/regression/dogfood
+    ./ci/blackbox.sh --driver=simx --app=dogfood
+    ./ci/blackbox.sh --driver=rtlsim --app=dogfood
 
     # disabling M & F extensions
     make -C sim/rtlsim clean && CONFIGS="-DEXT_M_DISABLE -DEXT_F_DISABLE" make -C sim/rtlsim > /dev/null

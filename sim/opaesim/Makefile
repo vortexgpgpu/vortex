@@ -122,7 +122,8 @@ $(DESTDIR)/vortex_afu.h : $(AFU_DIR)/vortex_afu.vh
 	$(SCRIPT_DIR)/gen_config.py -i $^ -o $@
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/vortex_afu.h $(SCOPE_JSON)
-	verilator --build --exe -O3 $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $(DESTDIR)/obj_dir -o $@
+	verilator --build --exe -O3 $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
 clean:
-	rm -rf $(DESTDIR)/obj_dir $(DESTDIR)/vortex.xml $(DESTDIR)/scope.json $(DESTDIR)/vortex_afu.h $(DESTDIR)/$(PROJECT)
+	rm -rf $(DESTDIR)/$(PROJECT).obj_dir
+	rm -f $(DESTDIR)/vortex.xml $(DESTDIR)/scope.json $(DESTDIR)/vortex_afu.h $(DESTDIR)/$(PROJECT)
