@@ -60,7 +60,6 @@ module VX_decode import VX_gpu_pkg::*; #(
     wire [1:0] func2  = instr[26:25];
     wire [2:0] func3  = instr[14:12];
     wire [4:0] func5  = instr[31:27];
-    wire [5:0] func6  = instr[31:26];
     wire [6:0] func7  = instr[31:25];
     wire [11:0] u_12  = instr[31:20];
 
@@ -515,7 +514,6 @@ module VX_decode import VX_gpu_pkg::*; #(
             end
             `INST_V: begin
                 ex_type = `EX_VPU;
-                `TRACE(0, ("VPU instr=%b, func3=%d, func6=%d\n", instr, func3, func6));
                 case (func3)
                     3'h7: begin
                         ex_type = `EX_SFU;
