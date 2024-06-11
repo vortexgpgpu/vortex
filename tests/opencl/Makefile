@@ -35,7 +35,6 @@ run-simx:
 	$(MAKE) -C transpose run-simx
 	$(MAKE) -C spmv run-simx
 	$(MAKE) -C stencil run-simx
-	$(MAKE) -C lbm run-simx
 	$(MAKE) -C nearn run-simx
 	$(MAKE) -C guassian run-simx
 	$(MAKE) -C kmeans run-simx
@@ -57,7 +56,6 @@ run-rtlsim:
 	$(MAKE) -C transpose run-rtlsim
 	$(MAKE) -C spmv run-rtlsim
 	$(MAKE) -C stencil run-rtlsim
-	$(MAKE) -C lbm run-rtlsim
 	$(MAKE) -C nearn run-rtlsim
 	$(MAKE) -C guassian run-rtlsim
 	$(MAKE) -C kmeans run-rtlsim
@@ -79,7 +77,6 @@ run-opae:
 	$(MAKE) -C transpose run-opae
 	$(MAKE) -C spmv run-opae
 	$(MAKE) -C stencil run-opae
-	$(MAKE) -C lbm run-opae
 	$(MAKE) -C nearn run-opae
 	$(MAKE) -C guassian run-opae
 	$(MAKE) -C kmeans run-opae

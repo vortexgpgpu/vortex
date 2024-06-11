@@ -218,9 +218,6 @@ public:
     case VX_CAPS_NUM_CORES:
       _value = (dev_caps_ >> 24) & 0xffff;
       break;
-    case VX_CAPS_NUM_BARRIERS:
-      _value = (dev_caps_ >> 40) & 0xff;
-      break;
     case VX_CAPS_CACHE_LINE_SIZE:
       _value = CACHE_BLOCK_SIZE;
       break;

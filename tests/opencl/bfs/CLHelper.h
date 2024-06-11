@@ -256,17 +256,10 @@ free(allPlatforms);*/
   size_t kernel_size;
   cl_int binary_status = 0;
 
-#ifdef HOSTGPU
   if (0 != read_kernel_file("kernel.cl", &kernel_bin, &kernel_size))
     std::abort();
   oclHandles.program = clCreateProgramWithSource(
     oclHandles.context, 1, (const char**)&kernel_bin, &kernel_size, &resultCL);
-#else
-  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
-    std::abort();
-  oclHandles.program = clCreateProgramWithBinary(
-      oclHandles.context, 1, &oclHandles.devices[DEVICE_ID_INUSED], &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &resultCL);
-#endif
   free(kernel_bin);
   if ((resultCL != CL_SUCCESS) || (oclHandles.program == NULL))
     throw(string("InitCL()::Error: Loading Binary into cl_program. "

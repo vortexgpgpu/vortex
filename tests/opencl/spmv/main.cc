@@ -22,7 +22,7 @@ static char* replaceFilenameExtension(const char* filename, const char* ext) {
   const char* dot = strrchr(filename, '.');
   int baseLen = dot ? (dot - filename) : strlen(filename);
   char* sz_out = (char*)malloc(baseLen + strlen(ext) + 1);
-  if (!sz_out) 
+  if (!sz_out)
     return NULL;
   strncpy(sz_out, filename, baseLen);
   strcpy(sz_out + baseLen, ext);
@@ -68,8 +68,8 @@ static float* read_output_file(const char* filename, int* out_size) {
 static int compare_floats(const float* src, const float* gold, int count) {
   int num_errors = 0;
   float abstol = 0.0f;
-  float max_value = 0.0f;  
-  // Find the maximum magnitude in the gold array for absolute tolerance calculation  
+  float max_value = 0.0f;
+  // Find the maximum magnitude in the gold array for absolute tolerance calculation
   for (int i = 0; i < count; i++) {
     if (fabs(gold[i]) > max_value)
       max_value = fabs(gold[i]);
@@ -103,9 +103,9 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
 
   *data = (uint8_t*)malloc(fsize);
   *size = fread(*data, 1, fsize, fp);
-  
+
   fclose(fp);
-  
+
   return CL_SUCCESS;
 }
 
@@ -159,22 +159,14 @@ int main(int argc, char **argv) {
   // clCreateProgramWithSource(clContext,1,clSource,NULL,&clStatus);
    uint8_t *kernel_bin = NULL;
   size_t kernel_size;
-  cl_int binary_status = 0;  
+  cl_int binary_status = 0;
   cl_program clProgram;
 
-#ifdef HOSTGPU
   clStatus = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
-  CHECK_ERROR("read_kernel_file")  
+  CHECK_ERROR("read_kernel_file")
 	clProgram = clCreateProgramWithSource(
         clContext, 1, (const char**)&kernel_bin, &kernel_size, &clStatus);
   CHECK_ERROR("clCreateProgramWithSource")
-#else
-  clStatus = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
-  CHECK_ERROR("read_kernel_file")  
-	clProgram = clCreateProgramWithBinary(
-      clContext, 1, &clDevice, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &clStatus);
-  CHECK_ERROR("clCreateProgramWithBinary")
-#endif
 
   char clOptions[50];
   sprintf(clOptions, "");
@@ -353,9 +345,9 @@ int main(int argc, char **argv) {
   clStatus = clReleaseMemObject(jds_ptr_int);
   clStatus = clReleaseMemObject(sh_zcnt_int);
 
-  CHECK_ERROR("clReleaseMemObject")  
+  CHECK_ERROR("clReleaseMemObject")
   clStatus = clReleaseContext(clContext);
-  clStatus = clReleaseDevice(clDevice);  
+  clStatus = clReleaseDevice(clDevice);
 
   if (parameters->outFile) {
     pb_SwitchToTimer(&timers, pb_TimerID_IO);

@@ -30,11 +30,7 @@
 
 // Name of the file with the source code for the computation kernel
 // *********************************************************************
-#ifdef HOSTGPU
 const char* cSourceFile = "kernel.cl";
-#else
-const char* cSourceFile = "kernel.pocl";
-#endif
 
 // Host buffers for demo
 // *********************************************************************
@@ -87,11 +83,11 @@ int main(int argc, char **argv)
 
     shrQAStart(argc, argv);
 
-    cl_uint uiNumComputeUnits; 
+    cl_uint uiNumComputeUnits;
 
     ciErrNum = clGetPlatformIDs(1, &cpPlatform, NULL);
     oclCheckErrorEX(ciErrNum, CL_SUCCESS, NULL);
-    
+
     cl_uint uiNumDevices = 1;
     cdDevices = (cl_device_id *)malloc(uiNumDevices * sizeof(cl_device_id));
     cl_uint uiTargetDevice = 0;
@@ -169,16 +165,13 @@ int main(int argc, char **argv)
 
     // Create the program
     shrLog("clCreateProgramWithSource...\n");
-    cl_int binary_status;    
+    cl_int binary_status;
     cl_program program;
-#ifdef HOSTGPU
+
     program = clCreateProgramWithSource(
-        cxGPUContext, 1, (const char**)&cSourceCL, &szKernelLength, &ciErrNum);  
-#else
-     program = clCreateProgramWithBinary(cxGPUContext, 1, cdDevices, &szKernelLength, (const uint8_t**)&cSourceCL, &binary_status, &ciErrNum);
-#endif
+        cxGPUContext, 1, (const char**)&cSourceCL, &szKernelLength, &ciErrNum);
     oclCheckErrorEX(ciErrNum, CL_SUCCESS, pCleanup);
-    
+
     /*// Build the program with 'mad' Optimization option
     #ifdef MAC
         char* flags = "-cl-fast-relaxed-math -DMAC";
@@ -237,7 +230,7 @@ int main(int argc, char **argv)
     // Cleanup and leave
     Cleanup((bMatch == shrTRUE) ? EXIT_SUCCESS : EXIT_FAILURE);
 
-    return 0; 
+    return 0;
 }
 
 // "Golden" Host processing dot product function for comparison purposes

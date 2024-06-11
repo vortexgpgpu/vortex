@@ -96,9 +96,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     wire [127:0] afu_id = `AFU_ACCEL_UUID;
 
-    wire [63:0] dev_caps = {8'b0,
+    wire [63:0] dev_caps = {16'b0,
                             8'(`LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
-                            8'(`NUM_BARRIERS),
                             16'(`NUM_CORES * `NUM_CLUSTERS),
                             8'(`NUM_WARPS),
                             8'(`NUM_THREADS),

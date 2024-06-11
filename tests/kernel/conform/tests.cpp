@@ -204,8 +204,8 @@ typedef struct {
 int st_buffer_src[ST_BUF_SZ];
 int st_buffer_dst[ST_BUF_SZ];
 
-void st_kernel(int task_id, const st_args_t * __UNIFORM__ arg) {
-  	arg->dst[task_id] = arg->src[task_id];
+void st_kernel(const st_args_t * __UNIFORM__ arg) {
+  arg->dst[blockIdx.x] = arg->src[blockIdx.x];
 }
 
 int test_spawn_tasks() {
@@ -219,7 +219,8 @@ int test_spawn_tasks() {
 		st_buffer_src[i] = 65 + i;
 	}
 
-	vx_spawn_tasks(ST_BUF_SZ, (vx_spawn_tasks_cb)st_kernel, &arg);
+	uint32_t num_tasks(ST_BUF_SZ);
+	vx_spawn_threads(1, &num_tasks, nullptr, (vx_kernel_func_cb)st_kernel, &arg);
 
 	return check_error(st_buffer_dst, 0, ST_BUF_SZ);
 }

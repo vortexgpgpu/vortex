@@ -17,8 +17,16 @@
 #ifndef __VX_INTRINSICS_H__
 #define __VX_INTRINSICS_H__
 
-#include <stddef.h>
+#include <stdint.h>
 #include <VX_types.h>
+
+#if __riscv_xlen == 64
+typedef unsigned long size_t;  // 64-bit RISC-V
+#elif __riscv_xlen == 32
+typedef unsigned int size_t;   // 32-bit RISC-V
+#else
+#error "Unknown RISC-V architecture"
+#endif
 
 #if defined(__clang__)
 #define __UNIFORM__   __attribute__((annotate("vortex.uniform")))

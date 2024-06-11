@@ -135,9 +135,7 @@ static void parse_args(int argc, char **argv) {
 void cleanup() {
   if (device) {
     vx_mem_free(I_buffer);
-    if (!use_lmem) {
-      vx_mem_free(W_buffer);
-    }
+    vx_mem_free(W_buffer);
     vx_mem_free(O_buffer);
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
@@ -155,14 +153,13 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
 
-  uint32_t num_points = size * size;
-
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "matrix size: " << size << "x" << size << std::endl;
 
-  kernel_arg.num_tasks = num_points;
+  kernel_arg.grid_dim[0] = size;
+  kernel_arg.grid_dim[1] = size;
   kernel_arg.width = size;
-  kernel_arg.log2_width = log2(size);
+  kernel_arg.use_lmem = use_lmem;
 
   uint32_t o_points = size * size;
   uint32_t i_points = (size+2) * (size+2);
@@ -188,8 +185,6 @@ int main(int argc, char *argv[]) {
       cleanup();
       exit(1);
     }
-  } else {
-    kernel_arg.lmem_addr = 0;
   }
 
   std::cout << "dev_argI=0x" << std::hex << kernel_arg.I_addr << std::endl;
