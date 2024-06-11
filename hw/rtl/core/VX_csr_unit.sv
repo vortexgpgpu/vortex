@@ -51,8 +51,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire                            csr_wr_enable;
     wire                            csr_req_ready;
 
-    wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.op_mod.csr.addr;
-    wire [`NRI_BITS-1:0] csr_imm = execute_if.data.op_mod.csr.imm;
+    wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.op_args.csr.addr;
+    wire [`NRI_BITS-1:0] csr_imm = execute_if.data.op_args.csr.imm;
 
     wire is_fpu_csr = (csr_addr <= `VX_CSR_FCSR);
 
@@ -134,7 +134,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     // CSR write
 
-    assign csr_req_data = execute_if.data.op_mod.csr.use_imm ? `XLEN'(csr_imm) : rs1_data[0];
+    assign csr_req_data = execute_if.data.op_args.csr.use_imm ? `XLEN'(csr_imm) : rs1_data[0];
     assign csr_wr_enable = (csr_write_enable || (| csr_req_data));
 
     always @(*) begin

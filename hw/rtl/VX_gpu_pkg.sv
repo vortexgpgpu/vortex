@@ -92,7 +92,8 @@ package VX_gpu_pkg;
     } fpu_mod_t;
 
     typedef struct packed {
-        logic [($bits(alu_mod_t)-1-`OFFSET_BITS)-1:0] __padding;
+        logic [($bits(alu_mod_t)-1-1-`OFFSET_BITS)-1:0] __padding;
+        logic is_store;
         logic is_float;
         logic [`OFFSET_BITS-1:0] offset;
     } lsu_mod_t;
@@ -115,7 +116,7 @@ package VX_gpu_pkg;
         lsu_mod_t  lsu;
         csr_mod_t  csr;
         wctl_mod_t wctl;
-    } op_mod_t;
+    } op_args_t;
 
     /* verilator lint_off UNUSED */
 

@@ -146,57 +146,71 @@
 
 `ifdef XLEN_64
 
-`ifndef STARTUP_ADDR
-`define STARTUP_ADDR 64'h180000000
+`ifndef STACK_BASE_ADDR
+`define STACK_BASE_ADDR 64'h1FFFF0000
 `endif
 
-`ifndef STACK_BASE_ADDR
-`define STACK_BASE_ADDR 64'h1FF000000
+`ifndef STARTUP_ADDR
+`define STARTUP_ADDR    64'h080000000
+`endif
+
+`ifndef USER_BASE_ADDR
+`define USER_BASE_ADDR  64'h000010000
+`endif
+
+`ifndef IO_BASE_ADDR
+`define IO_BASE_ADDR    64'h000000040
 `endif
 
 `else
 
-`ifndef STARTUP_ADDR
-`define STARTUP_ADDR 32'h80000000
-`endif
-
 `ifndef STACK_BASE_ADDR
-`define STACK_BASE_ADDR 32'hFF000000
+`define STACK_BASE_ADDR 32'hFFFF0000
+`endif
+
+`ifndef STARTUP_ADDR
+`define STARTUP_ADDR    32'h80000000
+`endif
+
+`ifndef USER_BASE_ADDR
+`define USER_BASE_ADDR  32'h00010000
+`endif
+
+`ifndef IO_BASE_ADDR
+`define IO_BASE_ADDR    32'h00000040
 `endif
 
 `endif
 
-`ifndef LMEM_BASE_ADDR
-`define LMEM_BASE_ADDR `STACK_BASE_ADDR
-`endif
+`define IO_END_ADDR     `USER_BASE_ADDR
 
 `ifndef LMEM_LOG_SIZE
 `define LMEM_LOG_SIZE   14
 `endif
 
-`ifndef IO_BASE_ADDR
-`define IO_BASE_ADDR (`LMEM_BASE_ADDR + (1 << `LMEM_LOG_SIZE))
+`ifndef LMEM_BASE_ADDR
+`define LMEM_BASE_ADDR  `STACK_BASE_ADDR
 `endif
 
 `ifndef IO_COUT_ADDR
-`define IO_COUT_ADDR `IO_BASE_ADDR
+`define IO_COUT_ADDR    `IO_BASE_ADDR
 `endif
-`define IO_COUT_SIZE `MEM_BLOCK_SIZE
+`define IO_COUT_SIZE    `MEM_BLOCK_SIZE
 
 `ifndef IO_MPM_ADDR
-`define IO_MPM_ADDR (`IO_COUT_ADDR + `IO_COUT_SIZE)
+`define IO_MPM_ADDR     (`IO_COUT_ADDR + `IO_COUT_SIZE)
 `endif
-`define IO_CSR_SIZE (4 * 64 * `NUM_CORES * `NUM_CLUSTERS)
+`define IO_MPM_SIZE     (8 * 32 * `NUM_CORES * `NUM_CLUSTERS)
 
 `ifndef STACK_LOG2_SIZE
 `define STACK_LOG2_SIZE 13
 `endif
-`define STACK_SIZE (1 << `STACK_LOG2_SIZE)
+`define STACK_SIZE      (1 << `STACK_LOG2_SIZE)
 
 `define RESET_DELAY 8
 
 `ifndef STALL_TIMEOUT
-`define STALL_TIMEOUT (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
+`define STALL_TIMEOUT   (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
 `endif
 
 `ifndef SV_DPI

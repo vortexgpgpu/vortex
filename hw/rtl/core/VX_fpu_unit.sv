@@ -78,8 +78,8 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         wire [TAG_WIDTH-1:0] fpu_req_tag, fpu_rsp_tag;
         wire mdata_full;
 
-        wire [`INST_FMT_BITS-1:0] fpu_fmt = per_block_execute_if[block_idx].data.op_mod.fpu.fmt;
-        wire [`INST_FRM_BITS-1:0] fpu_frm = per_block_execute_if[block_idx].data.op_mod.fpu.frm;
+        wire [`INST_FMT_BITS-1:0] fpu_fmt = per_block_execute_if[block_idx].data.op_args.fpu.fmt;
+        wire [`INST_FRM_BITS-1:0] fpu_frm = per_block_execute_if[block_idx].data.op_args.fpu.frm;
 
         wire execute_fire = per_block_execute_if[block_idx].valid && per_block_execute_if[block_idx].ready;
         wire fpu_rsp_fire = fpu_rsp_valid && fpu_rsp_ready;

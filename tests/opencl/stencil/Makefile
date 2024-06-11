@@ -9,6 +9,11 @@ SRCS := $(SRC_DIR)/main.cc $(SRC_DIR)/args.c $(SRC_DIR)/parboil_opencl.c $(SRC_D
 
 CXXFLAGS += -I$(SRC_DIR)
 
+kernel.cl: $(SRC_DIR)/kernel.cl
+	cp $< $@
+
+KERNEL_SRCS := kernel.cl
+
 # Usage: #nx #ny #nz #iter -i input_file [-o output_file]
 OPTS ?= 64 64 8 1 -i $(SRC_DIR)/64x64x8.bin
 

@@ -118,7 +118,8 @@ $(DESTDIR)/scope.json: $(DESTDIR)/vortex.xml
 	$(SCRIPT_DIR)/scope.py $^ -o $@
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(SCOPE_JSON)
-	verilator --build --exe -O3 $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $(DESTDIR)/obj_dir -o $@
+	verilator --build --exe -O3 $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
 clean:
-	rm -rf $(DESTDIR)/obj_dir $(DESTDIR)/vortex.xml $(DESTDIR)/scope.json $(DESTDIR)/$(PROJECT)
+	rm -rf $(DESTDIR)/$(PROJECT).obj_dir
+	rm -f $(DESTDIR)/vortex.xml $(DESTDIR)/scope.json $(DESTDIR)/$(PROJECT)

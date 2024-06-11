@@ -5,7 +5,7 @@ CXXFLAGS += -I$(VORTEX_RT_PATH)/common
 # Debugigng
 ifdef DEBUG
 	CXXFLAGS += -g -O0
-else    
+else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
@@ -19,9 +19,6 @@ run:
 
 clean:
 	rm -rf $(PROJECT) *.o *.log .depend
-
-clean-all: clean
-	rm -rf *.elf *.bin *.dump
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend

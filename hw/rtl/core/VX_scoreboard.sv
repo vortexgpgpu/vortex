@@ -30,7 +30,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     VX_scoreboard_if.master scoreboard_if [`ISSUE_WIDTH]
 );
     `UNUSED_PARAM (CORE_ID)
-    localparam DATAW = `UUID_WIDTH + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + (`NR_BITS * 4) + 1;
+    localparam DATAW = `UUID_WIDTH + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + (`NR_BITS * 4) + 1;
 
 `ifdef PERF_ENABLE
     reg [`NUM_WARPS-1:0][`NUM_EX_UNITS-1:0] perf_inuse_units_per_cycle;
@@ -319,7 +319,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 scoreboard_if[i].data.PC,
                 scoreboard_if[i].data.ex_type,
                 scoreboard_if[i].data.op_type,
-                scoreboard_if[i].data.op_mod,
+                scoreboard_if[i].data.op_args,
                 scoreboard_if[i].data.wb,
                 scoreboard_if[i].data.rd,
                 scoreboard_if[i].data.rs1,

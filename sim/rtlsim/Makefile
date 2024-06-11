@@ -67,7 +67,7 @@ VL_FLAGS += -j $(THREADS)
 ifdef DEBUG
 	VL_FLAGS += --trace --trace-structs $(DBG_FLAGS)
 	CXXFLAGS += -g -O0 $(DBG_FLAGS)
-else    
+else
 	VL_FLAGS += -DNDEBUG
 	CXXFLAGS += -O2 -DNDEBUG
 endif
@@ -83,10 +83,17 @@ PROJECT := rtlsim
 all: $(DESTDIR)/$(PROJECT)
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(SRC_DIR)/main.cpp
-	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS) -DSTARTUP_ADDR=0x80000000' -LDFLAGS '$(LDFLAGS)' --Mdir $(DESTDIR)/obj_dir -o $@
-	
-$(DESTDIR)/lib$(PROJECT).so: $(SRCS)
-	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' --Mdir $(DESTDIR)/obj_dir -o $@
+	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS) -DSTARTUP_ADDR=0x80000000' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
-clean:
-	rm -rf $(DESTDIR)/obj_dir $(DESTDIR)/$(PROJECT) $(DESTDIR)/lib$(PROJECT).so
+$(DESTDIR)/lib$(PROJECT).so: $(SRCS)
+	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' --Mdir $@.obj_dir -o $@
+
+clean-lib:
+	rm -rf $(DESTDIR)/lib$(PROJECT).so.obj_dir
+	rm -f $(DESTDIR)/lib$(PROJECT).so
+
+clean-exe:
+	rm -rf $(DESTDIR)/$(PROJECT).obj_dir
+	rm -f $(DESTDIR)/$(PROJECT)
+
+clean: clean-lib clean-exe

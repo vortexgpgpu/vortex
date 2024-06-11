@@ -43,10 +43,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_warp_ctl_if.master   warp_ctl_if,
 
     // commit interface
-    VX_commit_csr_if.slave  commit_csr_if,
-
-    // simulation helper signals
-    output wire             sim_ebreak
+    VX_commit_csr_if.slave  commit_csr_if
 );
 
 `ifdef EXT_F_ENABLE
@@ -113,12 +110,5 @@ module VX_execute import VX_gpu_pkg::*; #(
         .sched_csr_if   (sched_csr_if),
         .warp_ctl_if    (warp_ctl_if)
     );
-
-    // simulation helper signal to get RISC-V tests Pass/Fail status
-    assign sim_ebreak = dispatch_if[0].valid && dispatch_if[0].ready
-                     && dispatch_if[0].data.wis == 0
-                     && (dispatch_if[0].data.op_mod.alu.xtype == `ALU_TYPE_BRANCH)
-                     && (`INST_BR_BITS'(dispatch_if[0].data.op_type) == `INST_BR_EBREAK
-                      || `INST_BR_BITS'(dispatch_if[0].data.op_type) == `INST_BR_ECALL);
 
 endmodule

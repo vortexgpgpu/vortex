@@ -126,27 +126,27 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `define INST_OP_BITS    4
-`define INST_MOD_BITS   $bits(op_mod_t)
+`define INST_ARGS_BITS   $bits(op_args_t)
 `define INST_FMT_BITS   2
 
 ///////////////////////////////////////////////////////////////////////////////
 
 `define INST_ALU_ADD         4'b0000
+//`define INST_ALU_UNUSED    4'b0001
 `define INST_ALU_LUI         4'b0010
 `define INST_ALU_AUIPC       4'b0011
 `define INST_ALU_SLTU        4'b0100
 `define INST_ALU_SLT         4'b0101
+//`define INST_ALU_UNUSED    4'b0110
 `define INST_ALU_SUB         4'b0111
 `define INST_ALU_SRL         4'b1000
 `define INST_ALU_SRA         4'b1001
+`define INST_ALU_CZEQ        4'b1010
+`define INST_ALU_CZNE        4'b1011
 `define INST_ALU_AND         4'b1100
 `define INST_ALU_OR          4'b1101
 `define INST_ALU_XOR         4'b1110
 `define INST_ALU_SLL         4'b1111
-`define INST_ALU_CZEQ        4'b1010
-`define INST_ALU_CZNE        4'b1011
-//`define INST_ALU_UNUSED    4'b0001
-//`define INST_ALU_UNUSED    4'b0110
 
 
 `define ALU_TYPE_BITS        2
@@ -300,9 +300,10 @@
 `define L1_ENABLE
 `endif
 
-`define ADDR_TYPE_IO            0
-`define ADDR_TYPE_LOCAL         1
-`define ADDR_TYPE_WIDTH         (`LMEM_ENABLED + 1)
+`define ADDR_TYPE_FLUSH         0
+`define ADDR_TYPE_IO            1
+`define ADDR_TYPE_LOCAL         2 // shoud be last since optional
+`define ADDR_TYPE_WIDTH         (`ADDR_TYPE_LOCAL + `LMEM_ENABLED)
 
 `define VX_MEM_BYTEEN_WIDTH     `L3_LINE_SIZE
 `define VX_MEM_ADDR_WIDTH       (`MEM_ADDR_WIDTH - `CLOG2(`L3_LINE_SIZE))
@@ -431,7 +432,7 @@
     data.tmask, \
     data.PC, \
     data.op_type, \
-    data.op_mod, \
+    data.op_args, \
     data.wb, \
     data.rd, \
     tid, \

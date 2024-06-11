@@ -15,7 +15,7 @@ You can execute the same application of a GPU architecture with 2 cores:
 
     $ ./ci/blackbox.sh --core=2 --driver=simx --app=sgemm --args="-n10"
 
-When excuting, Blackbox needs to recompile the driver if the desired architecture changes. 
+When excuting, Blackbox needs to recompile the driver if the desired architecture changes.
 It tracks the latest configuration in a file under the current directory blackbox.<driver>.cache.
 To avoid having to rebuild the driver all the time, Blackbox checks if the latest cached configuration matches the current.
 
@@ -24,24 +24,29 @@ To avoid having to rebuild the driver all the time, Blackbox checks if the lates
 The Vortex test suite is located under the /test/ folder
 You can execute the default regression suite by running the following commands at the root folder.
 
-    $ make -C tests/regression run-simx 
+    $ make -C tests/regression run-simx
     $ make -C tests/regression run-rtlsim
 
 You can execute the default opncl suite by running the following commands at the root folder.
 
-    $ make -C tests/opencl run-simx 
+    $ make -C tests/opencl run-simx
     $ make -C tests/opencl run-rtlsim
 
-## Creating Your Own Regression Tests
-- Inside `test/` you will find a series of folders which are named based on what they test
-- You can view the tests to see which ones have tests similar to what you are trying to create new tests for
-- once you have found a similar baseline, you can copy the folder and rename it to what you are planning to test
-- `testcases.h` contains each of the test case templates
-- `main.cpp` contains the implementation of each of the test cases and builds a test suite of all the tests cases you want
+## Creating Your Own Regression Test
 
-Compile the test case: `make -C tests/regression/<testcase-name>/ clean-all && make -C tests/regression/<testcase-name>/`
+Inside `tests/regression` you will find a series of folders which are named based on what they test.
+You can view the tests to see which ones have tests similar to what you are trying to create new tests for.
+Once you have found a similar baseline, you can copy the folder and rename it to what you are planning to test.
+A regression test typically implements the following files:
+- ***kernel.cpp*** contains the GPU kernel code.
+- ***main.cpp*** contains the host CPU code.
+- ***Makefile*** defines the compiler build commands for the CPU and GPU binaries.
 
-Run the test case: `./ci/blackbox.sh --driver=simx --cores=4 --app=<testcase-name> --debug`
+Sync your build folder: `$ ../configure`
+
+Compile your test: `$ make -C tests/regression/<test-name>`
+
+Run your test: `$ ./ci/blackbox.sh --driver=simx --app=<test-name> --debug`
 
 ## Adding Your Tests to the CI Pipeline
-see `continuous_integration.md`
+See `continuous_integration.md`
