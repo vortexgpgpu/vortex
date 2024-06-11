@@ -69,9 +69,6 @@ public:
     case VX_CAPS_NUM_CORES:
       _value = NUM_CORES * NUM_CLUSTERS;
       break;
-    case VX_CAPS_NUM_BARRIERS:
-      _value = NUM_BARRIERS;
-      break;
     case VX_CAPS_CACHE_LINE_SIZE:
       _value = CACHE_BLOCK_SIZE;
       break;

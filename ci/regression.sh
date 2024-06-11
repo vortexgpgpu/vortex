@@ -133,6 +133,9 @@ opencl()
     make -C tests/opencl run-simx
     make -C tests/opencl run-rtlsim
 
+    ./ci/blackbox.sh --driver=simx --app=lbm --warps=8
+    ./ci/blackbox.sh --driver=rtlsim --app=lbm --warps=8
+
     echo "opencl tests done!"
 }
 

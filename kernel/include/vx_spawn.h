@@ -21,16 +21,6 @@
 extern "C" {
 #endif
 
-typedef void (*vx_spawn_tasks_cb)(uint32_t task_id, void *arg);
-
-typedef void (*vx_serial_cb)(void *arg);
-
-void vx_spawn_tasks(uint32_t num_tasks, vx_spawn_tasks_cb callback, const void * arg);
-
-void vx_serial(vx_serial_cb callback, const void * arg);
-
-///////////////////////////////////////////////////////////////////////////////
-
 typedef union {
   struct {
     uint32_t x;
@@ -46,22 +36,27 @@ extern dim3_t gridDim;
 extern dim3_t blockDim;
 
 extern __thread uint32_t __local_group_id;
-extern uint32_t __groups_per_core;
 extern uint32_t __warps_per_group;
 
 typedef void (*vx_kernel_func_cb)(void *arg);
+
+typedef void (*vx_serial_cb)(void *arg);
 
 #define __local_mem(size) \
   (void*)((int8_t*)csr_read(VX_CSR_LOCAL_MEM_BASE) + __local_group_id * size)
 
 #define __syncthreads() \
-  vx_barrier(__COUNTER__ * __groups_per_core + __local_group_id, __warps_per_group)
+  vx_barrier(__local_group_id, __warps_per_group)
 
+// launch a kernel function with a grid of blocks and block of threads
 int vx_spawn_threads(uint32_t dimension,
                      const uint32_t* grid_dim,
                      const uint32_t* block_dim,
                      vx_kernel_func_cb kernel_func,
                      const void* arg);
+
+// function call serialization
+void vx_serial(vx_serial_cb callback, const void * arg);
 
 #ifdef __cplusplus
 }

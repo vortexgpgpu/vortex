@@ -15,8 +15,10 @@ lbm_macros.h: $(SRC_DIR)/lbm_macros.h
 layout_config.h: $(SRC_DIR)/layout_config.h
 	cp $< $@
 
-setup: lbm_macros.h layout_config.h
-USE_SETUP := yes
+kernel.cl: $(SRC_DIR)/kernel.cl
+	cp $< $@
+
+KERNEL_SRCS := kernel.cl lbm_macros.h layout_config.h
 
 # Usage: #iter [-i input_file] [-o output_file]
 OPTS ?= 1 -i $(SRC_DIR)/32_32_8_ldc.of

@@ -10,8 +10,10 @@ SRCS := $(SRC_DIR)/main.cc
 common.h: $(SRC_DIR)/common.h
 	cp $< $@
 
-setup: common.h
-USE_SETUP := yes
+kernel.cl: $(SRC_DIR)/kernel.cl
+	cp $< $@
+
+KERNEL_SRCS := kernel.cl common.h
 
 OPTS ?= -n16
 
