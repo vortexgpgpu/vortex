@@ -137,16 +137,90 @@ void MemoryUnit::ADecoder::write(const void* data, uint64_t addr, uint64_t size)
 MemoryUnit::MemoryUnit(uint64_t pageSize)
   : pageSize_(pageSize)
   , enableVM_(pageSize != 0)
-  , amo_reservation_({0x0, false}) {
-  if (pageSize != 0) {
-    tlb_[0] = TLBEntry(0, 077);
+  , amo_reservation_({0x0, false}) 
+#ifdef VM_ENABLE
+  , TLB_HIT(0)
+  , TLB_MISS(0)
+  , TLB_EVICT(0)
+  , PTW(0) {};
+#else
+  {
+    if (pageSize != 0)
+    {
+      tlb_[0] = TLBEntry(0, 077);
+    }
   }
-}
+#endif
 
 void MemoryUnit::attach(MemDevice &m, uint64_t start, uint64_t end) {
   decoder_.map(start, end, m);
 }
 
+#ifdef VM_ENABLE
+std::pair<bool, uint64_t> MemoryUnit::tlbLookup(uint64_t vAddr, ACCESS_TYPE type, uint64_t* size_bits) {
+  
+  //Find entry while accounting for different sizes.
+  for (auto entry : tlb_)
+  {
+    if(entry.first == vAddr >> entry.second.size_bits)
+    {
+        *size_bits = entry.second.size_bits;
+        vAddr = vAddr >> (*size_bits);
+    }
+  }
+
+  
+  auto iter = tlb_.find(vAddr);
+  if (iter != tlb_.end()) {
+    TLBEntry e = iter->second;
+
+    //Set mru bit if it is a hit.
+    iter->second.mru_bit = true;
+
+    //If at full capacity and no other unset bits.
+    // Clear all bits except the one we just looked up.
+    if (tlb_.size() == TLB_SIZE)
+    {
+      // bool no_cleared = true;
+      // for (auto& entry : tlb_)
+      // {
+      //   no_cleared = no_cleared & entry.second.mru_bit;
+      // }
+
+      // if(no_cleared)
+      // {
+        for (auto& entry : tlb_)
+        {
+          entry.second.mru_bit = false;
+        }
+        iter->second.mru_bit = true;
+      //}
+      
+    }
+    //Check access permissions.
+    if ( (type == ACCESS_TYPE::FETCH) & ((e.r == 0) | (e.x == 0)) )
+    {
+      throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
+    }
+    else if ( (type == ACCESS_TYPE::LOAD) & (e.r == 0) )
+    {
+      throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
+    }
+    else if ( (type == ACCESS_TYPE::STORE) & (e.w == 0) )
+    {
+      throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
+    }
+    else
+    {
+      //TLB Hit
+      return std::make_pair(true, iter->second.pfn);
+    }
+  } else {
+    //TLB Miss
+    return std::make_pair(false, 0);
+  }
+}
+#endif //JAEWON
 MemoryUnit::TLBEntry MemoryUnit::tlbLookup(uint64_t vAddr, uint32_t flagMask) {
   auto iter = tlb_.find(vAddr / pageSize_);
   if (iter != tlb_.end()) {
@@ -171,16 +245,40 @@ uint64_t MemoryUnit::toPhyAddr(uint64_t addr, uint32_t flagMask) {
   return pAddr;
 }
 
-void MemoryUnit::read(void* data, uint64_t addr, uint64_t size, bool sup, ACCESS_TYPE type) {
+#ifdef VM_ENABLE
+void MemoryUnit::read(void* data, uint64_t addr, uint64_t size, ACCESS_TYPE type) {
+  uint64_t pAddr;
+  if (this->mode == VA_MODE::BARE) {
+    pAddr = addr;
+  } else {
+    pAddr = vAddr_to_pAddr(addr, type);
+  }
+  return decoder_.read(data, pAddr, size);
+}
+#else
+void MemoryUnit::read(void* data, uint64_t addr, uint64_t size, bool sup) {
   uint64_t pAddr = this->toPhyAddr(addr, sup ? 8 : 1);
   return decoder_.read(data, pAddr, size);
 }
-
-void MemoryUnit::write(const void* data, uint64_t addr, uint64_t size, bool sup, ACCESS_TYPE type) {
+#endif
+#ifdef VM_ENABLE
+void MemoryUnit::write(const void* data, uint64_t addr, uint64_t size, ACCESS_TYPE type) {
+  uint64_t pAddr;
+  if ( (this->mode == VA_MODE::BARE) | (addr >= IO_BASE_ADDR) ) {
+    pAddr = addr;
+  } else {
+    pAddr = vAddr_to_pAddr(addr, type);
+  }
+  decoder_.write(data, pAddr, size);
+  amo_reservation_.valid = false;
+}
+#else
+void MemoryUnit::write(const void* data, uint64_t addr, uint64_t size, bool sup) {
   uint64_t pAddr = this->toPhyAddr(addr, sup ? 16 : 1);
   decoder_.write(data, pAddr, size);
   amo_reservation_.valid = false;
 }
+#endif
 
 void MemoryUnit::amo_reserve(uint64_t addr) {
   uint64_t pAddr = this->toPhyAddr(addr, 1);
@@ -193,9 +291,8 @@ bool MemoryUnit::amo_check(uint64_t addr) {
   return amo_reservation_.valid && (amo_reservation_.addr == pAddr);
 }
 
-void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags) {
-  tlb_[virt / pageSize_] = TLBEntry(phys / pageSize_, flags);
-}
+
+#ifdef VM_ENABLE
 
 void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags, uint64_t size_bits) {
   // HW: evict TLB by Most Recently Used
@@ -219,6 +316,12 @@ void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags, uint64_t s
   }
   tlb_[virt / pageSize_] = TLBEntry(phys / pageSize_, flags, size_bits);
 }
+#else
+
+void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags) {
+  tlb_[virt / pageSize_] = TLBEntry(phys / pageSize_, flags);
+}
+#endif
 
 void MemoryUnit::tlbRm(uint64_t va) {
   if (tlb_.find(va / pageSize_) != tlb_.end())
@@ -472,3 +575,130 @@ void RAM::loadHexImage(const char* filename) {
     --size;
   }
 }
+
+#ifdef VM_ENABLE
+uint64_t MemoryUnit::vAddr_to_pAddr(uint64_t vAddr, ACCESS_TYPE type)
+{
+    uint64_t pfn;
+    uint64_t size_bits;
+
+    //First lookup TLB.
+    std::pair<bool, uint64_t> tlb_access = tlbLookup(vAddr, type,  &size_bits);
+    if (tlb_access.first)
+    {
+        pfn = tlb_access.second;
+        TLB_HIT++;
+    }
+    else //Else walk the PT.
+    {
+        std::pair<uint64_t, uint8_t> ptw_access = page_table_walk(vAddr, type, &size_bits);
+        tlbAdd(vAddr>>size_bits, ptw_access.first, ptw_access.second,size_bits);
+        pfn = ptw_access.first; TLB_MISS++; PTW++;
+        unique_translations.insert(vAddr>>size_bits);
+        PERF_UNIQUE_PTW = unique_translations.size();
+    }
+
+    //Construct final address using pfn and offset.
+    std::cout << "[MemoryUnit] translated vAddr: 0x" << std::hex << vAddr << " to pAddr: 0x" << std::hex << ((pfn << size_bits) + (vAddr & ((1 << size_bits) - 1))) << std::endl;
+    return (pfn << size_bits) + (vAddr & ((1 << size_bits) - 1));
+}
+
+std::pair<uint64_t, uint8_t> MemoryUnit::page_table_walk(uint64_t vAddr_bits, ACCESS_TYPE type, uint64_t* size_bits)
+{   
+    uint64_t LEVELS = 2;
+    vAddr_SV32_t vAddr(vAddr_bits);
+    uint64_t pte_bytes;
+
+    //Get base page table.
+    uint64_t a = this->ptbr << 12;
+    int i = LEVELS - 1; 
+
+    while(true)
+    {
+
+      //Read PTE.
+      decoder_.read(&pte_bytes, a+vAddr.vpn[i]*PTE_SIZE, sizeof(uint64_t));
+      PTE_SV32_t pte(pte_bytes);
+      
+      //Check if it has invalid flag bits.
+      if ( (pte.v == 0) | ( (pte.r == 0) & (pte.w == 1) ) )
+      {
+        throw Page_Fault_Exception("Page Fault : Attempted to access invalid entry.");
+      }
+
+      if ( (pte.r == 0) & (pte.w == 0) & (pte.x == 0))
+      {
+        //Not a leaf node as rwx == 000
+        i--;
+        if (i < 0)
+        {
+          throw Page_Fault_Exception("Page Fault : No leaf node found.");
+        }
+        else
+        {
+          //Continue on to next level.
+          a = (pte_bytes >> 10 ) << 12;
+        }
+      }
+      else
+      {
+        //Leaf node found, finished walking.
+        a = (pte_bytes >> 10 ) << 12;
+        break;
+      }
+    }
+
+    PTE_SV32_t pte(pte_bytes);
+
+    //Check RWX permissions according to access type.
+    if ( (type == ACCESS_TYPE::FETCH) & ((pte.r == 0) | (pte.x == 0)) )
+    {
+      throw Page_Fault_Exception("Page Fault : TYPE FETCH, Incorrect permissions.");
+    }
+    else if ( (type == ACCESS_TYPE::LOAD) & (pte.r == 0) )
+    {
+      throw Page_Fault_Exception("Page Fault : TYPE LOAD, Incorrect permissions.");
+    }
+    else if ( (type == ACCESS_TYPE::STORE) & (pte.w == 0) )
+    {
+      throw Page_Fault_Exception("Page Fault : TYPE STORE, Incorrect permissions.");
+    }
+
+    uint64_t pfn;
+    if (i > 0)
+    {
+      //It is a super page.
+      if (pte.ppn[0] != 0)
+      {
+        //Misss aligned super page.
+        throw Page_Fault_Exception("Page Fault : Miss Aligned Super Page.");
+
+      }
+      else
+      {
+        //Valid super page.
+        pfn = pte.ppn[1];
+        *size_bits = 22;
+      }
+    }
+    else
+    {
+      //Regular page.
+      *size_bits = 12;
+      pfn = a >> 12;
+    }
+    return std::make_pair(pfn, pte_bytes & 0xff);
+}
+
+
+uint32_t MemoryUnit::get_satp()
+{
+  return satp;
+}  
+void MemoryUnit::set_satp(uint32_t satp)
+{
+  this->satp = satp;
+  this->ptbr = satp & 0x003fffff; //22 bits
+  this->mode = satp & 0x80000000 ? VA_MODE::SV32 : VA_MODE::BARE;
+}
+#endif

@@ -107,6 +107,14 @@ void Socket::attach_ram(RAM* ram) {
   }
 }
 
+#ifdef VM_ENABLE
+void Socket::set_satp(uint32_t satp) {
+  for (auto core : cores_) {
+    core->set_satp(satp);
+  }
+}
+#endif
+
 bool Socket::running() const {
   for (auto& core : cores_) {
     if (core->running())
