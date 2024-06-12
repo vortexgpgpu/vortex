@@ -57,7 +57,7 @@ selected=0
 rm *".ddr4.log"
 for testcase in ${testcases[@]}; do
   rm "$testcase"*.elf "$testcase"*.bin "$testcase"*.dump "$testcase"*.log
-  cp -f ../../../../../third_party/riscv-vector-tests/out/v"$VLEN"x"$XLEN"machine/bin/stage2/"$testcase"* .
+  # cp -f ../../../../../third_party/riscv-vector-tests/out/v"$VLEN"x"$XLEN"machine/bin/stage2/"$testcase"* .
 done
 
 # count all available testcases, exclude *.elf, *.bin, *.dump, *.log to prevent double counting
