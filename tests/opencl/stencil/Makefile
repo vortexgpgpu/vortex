@@ -15,6 +15,6 @@ kernel.cl: $(SRC_DIR)/kernel.cl
 KERNEL_SRCS := kernel.cl
 
 # Usage: #nx #ny #nz #iter -i input_file [-o output_file]
-OPTS ?= 64 64 8 1 -i $(SRC_DIR)/64x64x8.bin
+OPTS ?= 32 32 8 1 -i $(SRC_DIR)/32x32x8.bin
 
 include ../common.mk
