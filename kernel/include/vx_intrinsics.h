@@ -17,16 +17,8 @@
 #ifndef __VX_INTRINSICS_H__
 #define __VX_INTRINSICS_H__
 
-#include <stdint.h>
+#include <stddef.h>
 #include <VX_types.h>
-
-#if __riscv_xlen == 64
-typedef unsigned long size_t;  // 64-bit RISC-V
-#elif __riscv_xlen == 32
-typedef unsigned int size_t;   // 32-bit RISC-V
-#else
-#error "Unknown RISC-V architecture"
-#endif
 
 #if defined(__clang__)
 #define __UNIFORM__   __attribute__((annotate("vortex.uniform")))
@@ -36,12 +28,6 @@ typedef unsigned int size_t;   // 32-bit RISC-V
 
 #ifdef __cplusplus
 extern "C" {
-#endif
-
-#ifdef __ASSEMBLY__
-#define __ASM_STR(x)	x
-#else
-#define __ASM_STR(x)	#x
 #endif
 
 #define RISCV_CUSTOM0   0x0B
@@ -110,7 +96,7 @@ extern "C" {
 })
 
 // Set thread mask
-inline void vx_tmc(size_t thread_mask) {
+inline void vx_tmc(int thread_mask) {
     __asm__ volatile (".insn r %0, 0, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0), "r"(thread_mask));
 }
 
@@ -139,20 +125,20 @@ inline void vx_pred_n(int condition, int thread_mask) {
 
 // Spawn warps
 typedef void (*vx_wspawn_pfn)();
-inline void vx_wspawn(size_t num_warps, vx_wspawn_pfn func_ptr) {
+inline void vx_wspawn(int num_warps, vx_wspawn_pfn func_ptr) {
     __asm__ volatile (".insn r %0, 1, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(num_warps), "r"(func_ptr));
 }
 
 // Split on a predicate
 inline int vx_split(int predicate) {
-    size_t ret;
+    int ret;
     __asm__ volatile (".insn r %1, 2, 0, %0, %2, x0" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate));
     return ret;
 }
 
 // Split on a not predicate
 inline int vx_split_n(int predicate) {
-    size_t ret;
+    int ret;
     __asm__ volatile (".insn r %1, 2, 0, %0, %2, x1" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate));
     return ret;
 }
