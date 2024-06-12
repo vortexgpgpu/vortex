@@ -396,3 +396,10 @@ bool Core::wspawn(uint32_t num_warps, Word nextPC) {
 void Core::attach_ram(RAM* ram) {
   emulator_.attach_ram(ram);
 }
+
+#ifdef VM_ENABLE
+void Core::set_satp(uint32_t satp) {
+  emulator_.set_satp(satp); //JAEWON wit, tid???
+  // emulator_.set_csr(VX_CSR_SATP,satp,0,0); //JAEWON wit, tid???
+}
+#endif
