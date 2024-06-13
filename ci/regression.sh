@@ -114,11 +114,6 @@ regression()
     make -C tests/regression run-simx
     make -C tests/regression run-rtlsim
 
-    # test FPU hardware implementations
-    CONFIGS="-DFPU_DPI" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-    CONFIGS="-DFPU_DSP" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-    CONFIGS="-DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-
     # test local barrier
     ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
     ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -tbar"

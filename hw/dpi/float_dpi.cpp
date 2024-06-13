@@ -54,11 +54,20 @@ extern "C" {
 }
 
 inline uint64_t nan_box(uint32_t value) {
+#ifdef XLEN_64
   return value | 0xffffffff00000000;
+#else
+  return value;
+#endif
 }
 
 inline bool is_nan_boxed(uint64_t value) {
+#ifdef XLEN_64
   return (uint32_t(value >> 32) == 0xffffffff);
+#else
+  __unused (value);
+  return true;
+#endif
 }
 
 inline int64_t check_boxing(int64_t a) {
