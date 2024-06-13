@@ -230,9 +230,9 @@
 `define INST_FPU_MUL         4'b0010
 `define INST_FPU_DIV         4'b0011
 `define INST_FPU_SQRT        4'b0100
-`define INST_FPU_CMP         4'b0101 // mod: LE=0, LT=1, EQ=2
+`define INST_FPU_CMP         4'b0101 // frm: LE=0, LT=1, EQ=2
 `define INST_FPU_F2F         4'b0110
-`define INST_FPU_MISC        4'b0111 // mod: SGNJ=0, SGNJN=1, SGNJX=2, CLASS=3, MVXW=4, MVWX=5, FMIN=6, FMAX=7
+`define INST_FPU_MISC        4'b0111 // frm: SGNJ=0, SGNJN=1, SGNJX=2, CLASS=3, MVXW=4, MVWX=5, FMIN=6, FMAX=7
 `define INST_FPU_F2I         4'b1000
 `define INST_FPU_F2U         4'b1001
 `define INST_FPU_I2F         4'b1010
