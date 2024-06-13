@@ -74,16 +74,20 @@ isa()
 
     if [ "$XLEN" == "64" ]
     then
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null
-        make -C tests/riscv/isa run-rtlsim-64f
 
-        make -C sim/rtlsim clean && CONFIGS="-DEXT_D_ENABLE -DFPU_FPNEW" make -C sim/rtlsim > /dev/null
-        make -C tests/riscv/isa run-rtlsim-64d || true
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null
+        make -C tests/riscv/isa run-rtlsim-64d
 
         make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null
+        make -C tests/riscv/isa run-rtlsim-64d
+
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null
         make -C tests/riscv/isa run-rtlsim-64f
 
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_DSP" make -C sim/rtlsim > /dev/null
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null
+        make -C tests/riscv/isa run-rtlsim-64f
+
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null
         make -C tests/riscv/isa run-rtlsim-64fx
     fi
 

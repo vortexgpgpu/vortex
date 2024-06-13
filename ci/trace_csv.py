@@ -225,7 +225,7 @@ def write_csv(log_filename, csv_filename, log_type):
 
     # write to CSV
     with open(csv_filename, 'w', newline='') as csv_file:
-        fieldnames = ["uuid", "PC", "opcode", "instr", "core_id", "warp_id", "tmask", "operands", "destination"]
+        fieldnames = ["uuid", "PC", "opcode", "instr", "core_id", "warp_id", "tmask", "destination", "operands"]
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         writer.writeheader()
         for entry in entries:

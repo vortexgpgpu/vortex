@@ -40,6 +40,14 @@
 `define EXT_F_ENABLE
 `endif
 
+`ifdef XLEN_64
+`ifndef FPU_DSP
+`ifndef EXT_D_DISABLE
+`define EXT_D_ENABLE
+`endif
+`endif
+`endif
+
 `ifndef EXT_ZICOND_DISABLE
 `define EXT_ZICOND_ENABLE
 `endif
