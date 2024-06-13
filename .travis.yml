@@ -74,8 +74,8 @@ jobs:
         - ./ci/travis_run.py ./ci/regression.sh --isa
         - ./ci/travis_run.py ./ci/regression.sh --kernel
         - ./ci/travis_run.py ./ci/regression.sh --synthesis
-        - ./ci/travis_run.py ./ci/regression.sh --opencl
         - ./ci/travis_run.py ./ci/regression.sh --regression
+        - ./ci/travis_run.py ./ci/regression.sh --opencl
 
     - stage: test
       name: regression64
@@ -85,6 +85,7 @@ jobs:
         - ./ci/travis_run.py ./ci/regression.sh --kernel
         - ./ci/travis_run.py ./ci/regression.sh --synthesis
         - ./ci/travis_run.py ./ci/regression.sh --regression
+        - ./ci/travis_run.py ./ci/regression.sh --opencl
 
     - stage: test
       name: config
