@@ -75,8 +75,8 @@ public:
     // attach memory module
     processor_.attach_ram(&ram_);
 #ifdef VM_ENABLE  
-        //Set 
-        processor_.set_processor_satp(VM_ADDR_MODE);
+        //Set
+        set_processor_satp(VM_ADDR_MODE);
 #endif
   }
 
@@ -133,12 +133,12 @@ public:
         bool is_pc = false;
         std::cout << "startup addr: " << std::hex << STARTUP_ADDR << std::endl;
         std::cout << "bit mode: " << std::dec << XLEN << std::endl;
+        if (get_mode() == VA_MODE::BARE)
+            return 0;
+
         if (*dev_maddr == STARTUP_ADDR || *dev_maddr == 0x7FFFF000) {
             is_pc = true;
         }
-
-        if (get_mode() == VA_MODE::BARE)
-            return 0;
 
         uint64_t ppn = *dev_maddr >> 12;
         uint64_t init_pAddr = *dev_maddr;
@@ -188,9 +188,10 @@ public:
             return err;
         });
 #ifdef VM_ENABLE
-        // VM address translation
         std::cout << "physical addr: " << std::hex << *dev_addr << std::endl;
+        // VM address translation
         map_local_mem(size, dev_addr);
+        std::cout << "virtual addr: " << std::hex << *dev_addr << std::endl;
 #endif
         *dev_addr = addr;
         return 0;
@@ -342,7 +343,7 @@ public:
 
 #ifdef VM_ENABLE
     /* VM Management */
-     void set_processor_satp(VA_MODE mode)
+    void set_processor_satp(VA_MODE mode)
     {
         uint32_t satp;
         if (mode == VA_MODE::BARE)
@@ -546,9 +547,11 @@ public:
         uint64_t asize = aligned_size(RAM_PAGE_SIZE, CACHE_BLOCK_SIZE);
         uint8_t *src = new uint8_t[RAM_PAGE_SIZE];
         for (uint64_t i = 0; i < RAM_PAGE_SIZE; ++i) {
-            src[i] = (0x00000000 >> ((i & 0x3) * 8)) & 0xff;
+            src[i] = (0x00000000 >> ((i & 0x3) << 3)) & 0xff;
         }
+        ram_.enable_acl(false);
         ram_.write((const uint8_t*)src, addr, asize);
+        ram_.enable_acl(true);
     }
 
     void read_page_table(uint64_t addr) {
@@ -567,7 +570,9 @@ public:
             src[i] = (value >> ((i & 0x3) * 8)) & 0xff;
         }
         //std::cout << "writing PTE to RAM addr 0x" << std::hex << addr << std::endl;
+        ram_.enable_acl(false);
         ram_.write((const uint8_t*)src, addr, PTE_SIZE);
+        ram_.enable_acl(true);
     }
 
     uint64_t read_pte(uint64_t addr) {
