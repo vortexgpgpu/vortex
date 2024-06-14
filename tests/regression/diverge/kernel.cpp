@@ -1,8 +1,6 @@
-#include <stdint.h>
+#include <vx_spawn.h>
 #include <assert.h>
 #include <algorithm>
-#include <vx_intrinsics.h>
-#include <vx_spawn.h>
 #include "common.h"
 
 // Parallel Selection sort

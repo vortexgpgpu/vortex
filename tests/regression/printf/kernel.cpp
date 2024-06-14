@@ -1,7 +1,5 @@
-#include <stdint.h>
-#include <vx_intrinsics.h>
-#include <vx_print.h>
 #include <vx_spawn.h>
+#include <vx_print.h>
 #include "common.h"
 
 void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
