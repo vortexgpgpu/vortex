@@ -41,8 +41,7 @@ union reg_data_t {
 };
 
 inline uint64_t nan_box(uint32_t value) {
-  uint64_t mask = 0xffffffff00000000;
-  return value | mask;
+  return value | 0xffffffff00000000;
 }
 
 inline bool is_nan_boxed(uint64_t value) {
