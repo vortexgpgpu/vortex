@@ -89,3 +89,8 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
     ```sh
     $ ../configure
     ```
+- To debug the GPU, you can generate a "run.log" trace. see /docs/debugging.md for more information.
+    ```sh
+    $ ./ci/blackbox.sh --app=demo --debug=3
+    ```
+- For additional information, check out the /docs.
