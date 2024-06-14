@@ -14,27 +14,6 @@
 `ifndef VX_CONFIG_VH
 `define VX_CONFIG_VH
 
-`ifndef VM_DISABLE
-`define VM_ENABLE
-`endif
-`ifdef VM_ENABLE
-    `ifndef VM_ADDR_MODE
-    `define VM_ADDR_MODE SV32
-    `endif
-    
-    `ifndef PTE_SIZE
-    `define PTE_SIZE 8
-    `endif
-
-    `ifndef TLB_SIZE
-    `define TLB_SIZE 32
-    `endif
-    
-    `ifndef SUPER_PAGING 
-    `define SUPER_PAGING 0
-    `endif
-
-`endif
 
 
 `ifndef MIN
@@ -272,6 +251,37 @@
 
 `ifndef DEBUG_LEVEL
 `define DEBUG_LEVEL 3
+`endif
+
+// Virtual Memory Configuration ///////////////////////////////////////////////////////
+`ifndef VM_DISABLE
+`define VM_ENABLE
+`endif
+`ifdef VM_ENABLE
+    `ifndef VM_ADDR_MODE
+    `define VM_ADDR_MODE SV32
+    `endif
+    
+    `ifndef PTE_SIZE
+        `ifdef XLEN_32
+            `define PTE_SIZE 4
+        `else
+            `ifdef XLEN_64
+                `define PTE_SIZE 8
+            `else 
+                `define PTE_SIZE 8
+            `endif
+        `endif
+    `endif
+
+    `ifndef TLB_SIZE
+    `define TLB_SIZE 32
+    `endif
+    
+    `ifndef SUPER_PAGING 
+    `define SUPER_PAGING 0
+    `endif
+
 `endif
 
 // Pipeline Configuration /////////////////////////////////////////////////////
