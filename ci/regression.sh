@@ -114,13 +114,13 @@ regression()
     make -C tests/regression run-simx
     make -C tests/regression run-rtlsim
 
-    # test local barrier
-    ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
-    ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -tbar"
-
     # test global barrier
     CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
     CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -tgbar" --cores=2
+
+    # test local barrier
+    ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
+    ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -tbar"
 
     echo "regression tests done!"
 }
