@@ -1,8 +1,6 @@
-#include <stdint.h>
-#include <math.h>
-#include <vx_intrinsics.h>
 #include <vx_spawn.h>
 #include <vx_print.h>
+#include <math.h>
 #include "common.h"
 
 typedef void (*PFN_Kernel)(kernel_arg_t* __UNIFORM__ arg);

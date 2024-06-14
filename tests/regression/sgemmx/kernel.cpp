@@ -1,11 +1,5 @@
-#include <stdint.h>
-#include <vx_intrinsics.h>
 #include <vx_spawn.h>
 #include "common.h"
-
-inline char is_log2(uint32_t x) {
-    return ((x & (x-1)) == 0);
-}
 
 void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	auto A = reinterpret_cast<TYPE*>(arg->A_addr);

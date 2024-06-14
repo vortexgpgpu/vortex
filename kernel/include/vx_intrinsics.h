@@ -18,6 +18,7 @@
 #define __VX_INTRINSICS_H__
 
 #include <stddef.h>
+#include <stdint.h>
 #include <VX_types.h>
 
 #if defined(__clang__)
