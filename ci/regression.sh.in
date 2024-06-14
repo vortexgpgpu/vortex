@@ -78,7 +78,6 @@ isa()
 
     if [ "$XLEN" == "64" ]
     then
-
         make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null
         make -C tests/riscv/isa run-rtlsim-64d
 
