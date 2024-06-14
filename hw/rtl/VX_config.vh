@@ -40,6 +40,14 @@
 `define EXT_F_ENABLE
 `endif
 
+`ifdef XLEN_64
+`ifndef FPU_DSP
+`ifndef EXT_D_DISABLE
+`define EXT_D_ENABLE
+`endif
+`endif
+`endif
+
 `ifndef EXT_ZICOND_DISABLE
 `define EXT_ZICOND_ENABLE
 `endif
@@ -248,7 +256,7 @@
 
 // Issue width
 `ifndef ISSUE_WIDTH
-`define ISSUE_WIDTH     1
+`define ISSUE_WIDTH     `UP(`NUM_WARPS / 8)
 `endif
 
 // Number of ALU units

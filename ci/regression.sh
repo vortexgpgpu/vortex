@@ -74,16 +74,20 @@ isa()
 
     if [ "$XLEN" == "64" ]
     then
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null
-        make -C tests/riscv/isa run-rtlsim-64f
 
-        make -C sim/rtlsim clean && CONFIGS="-DEXT_D_ENABLE -DFPU_FPNEW" make -C sim/rtlsim > /dev/null
-        make -C tests/riscv/isa run-rtlsim-64d || true
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null
+        make -C tests/riscv/isa run-rtlsim-64d
 
         make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null
+        make -C tests/riscv/isa run-rtlsim-64d
+
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null
         make -C tests/riscv/isa run-rtlsim-64f
 
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_DSP" make -C sim/rtlsim > /dev/null
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null
+        make -C tests/riscv/isa run-rtlsim-64f
+
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null
         make -C tests/riscv/isa run-rtlsim-64fx
     fi
 
@@ -110,18 +114,13 @@ regression()
     make -C tests/regression run-simx
     make -C tests/regression run-rtlsim
 
-    # test FPU hardware implementations
-    CONFIGS="-DFPU_DPI" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-    CONFIGS="-DFPU_DSP" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-    CONFIGS="-DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
+    # test global barrier
+    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
+    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -tgbar" --cores=2
 
     # test local barrier
     ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
     ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -tbar"
-
-    # test global barrier
-    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
-    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -tgbar" --cores=2
 
     echo "regression tests done!"
 }
