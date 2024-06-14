@@ -165,7 +165,7 @@ void Processor::dcr_write(uint32_t addr, uint32_t value) {
 
 #ifdef VM_ENABLE
 uint32_t Processor::get_satp() {
-  std::cout << "get SATP: 0x" << std::hex << this->satp << std::endl;
+  // std::cout << "get SATP: 0x" << std::hex << this->satp << std::endl;
   return this->satp;
 }
 
