@@ -19,6 +19,10 @@ set -e
 # clear blackbox cache
 rm -f blackbox.*.cache
 
+XLEN=${XLEN:=@XLEN@}
+
+echo "Vortex Regression Test: XLEN=$XLEN"
+
 split_file() {
     if [[ $# -ne 2 ]]; then
         echo "Usage: $0 <filename> <start_with>"
