@@ -26,7 +26,8 @@ CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -nostdlib -fdata-sec
 CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(ROOT_DIR)/hw
 CFLAGS += -DXLEN_$(XLEN) -DNDEBUG
 
-LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc -lgcc
+LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc
+LIBC_LIB += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 
 LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000 $(ROOT_DIR)/kernel/libvortex.a $(LIBC_LIB)
 
