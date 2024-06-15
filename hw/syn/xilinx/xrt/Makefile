@@ -23,7 +23,7 @@ SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/xrt
 
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
-AFU_DIR := $(RTL_DIR)/afu/opae
+AFU_DIR := $(RTL_DIR)/afu/xrt
 THIRD_PARTY_DIR := $(VORTEX_HOME)/third_party
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
@@ -117,10 +117,10 @@ ifdef DEBUG
 	VPP_FLAGS += -g --debug.protocol all
 	ifeq ($(TARGET), hw)
 		CFLAGS += -DNDEBUG -DSCOPE $(DBG_SCOPE_FLAGS)
-		SCOPE_JSON += $(BUILD_DIR)/scope.json		
+		SCOPE_JSON += $(BUILD_DIR)/scope.json
 		#CFLAGS += -DNDEBUG -DCHIPSCOPE $(DBG_SCOPE_FLAGS)
 		#VPP_FLAGS += --debug.chipscope vortex_afu_1
-	else		
+	else
 		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
 		CFLAGS += $(DBG_TRACE_FLAGS)
 	endif
@@ -152,7 +152,7 @@ $(BUILD_DIR)/sources.txt:
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -Csrc -Osources.txt
 
 gen-ast: $(BUILD_DIR)/vortex.xml
-$(BUILD_DIR)/vortex.xml:	
+$(BUILD_DIR)/vortex.xml:
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); verilator --xml-only -O0 $(XML_CFLAGS) vortex_afu.v --xml-output vortex.xml
 
 scope-json: $(BUILD_DIR)/scope.json
@@ -161,7 +161,7 @@ $(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 
 gen-xo: $(XO_CONTAINER)
 $(XO_CONTAINER): $(BUILD_DIR)/sources.txt
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source ../scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt $(SCRIPT_DIR) ../$(BUILD_DIR)
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source $(SRC_DIR)/scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt $(SCRIPT_DIR) ../$(BUILD_DIR)
 
 gen-bin: $(XCLBIN_CONTAINER)
 $(XCLBIN_CONTAINER): $(XO_CONTAINER) $(SCOPE_JSON)
@@ -175,13 +175,13 @@ report: $(XCLBIN_CONTAINER)
 ifeq ($(TARGET),$(findstring $(TARGET), hw))
 	cp $(BUILD_DIR)/_x/logs/link/syn/ulp_vortex_afu_1_0_synth_1_runme.log $(BUILD_DIR)/bin/runme.log
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_full_util_routed.rpt $(BUILD_DIR)/bin/synthesis.log
-	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt $(BUILD_DIR)/bin/timing.log	
+	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt $(BUILD_DIR)/bin/timing.log
 endif
-	
+
 hwserver:
 	debug_hw --xvc_pcie /dev/xfpga/xvc_pub.u2305.0 --hw_server &
 
-chipscope:	
+chipscope:
 	debug_hw --vivado --host localhost --ltx_file $(BUILD_DIR)/_x/link/vivado/vpl/prj/prj.runs/impl_1/debug_nets.ltx &
 
 clean:
