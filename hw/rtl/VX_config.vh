@@ -172,7 +172,15 @@
 `define IO_BASE_ADDR    64'h000000040
 `endif
 
-`else
+`ifndef PAGE_TABLE_BASE_ADDR  
+`define PAGE_TABLE_BASE_ADDR 64'h1F0000000
+`endif
+
+`ifndef PAGE_TABLE_SIZE 
+`define PAGE_TABLE_SIZE 4096
+`endif
+
+`else # XLEN_32
 
 `ifndef STACK_BASE_ADDR
 `define STACK_BASE_ADDR 32'hFFFF0000
@@ -188,6 +196,14 @@
 
 `ifndef IO_BASE_ADDR
 `define IO_BASE_ADDR    32'h00000040
+`endif
+
+`ifndef PAGE_TABLE_BASE_ADDR  
+`define PAGE_TABLE_BASE_ADDR 32'hF0000000
+`endif
+
+`ifndef PAGE_TABLE_SIZE 
+`define PAGE_TABLE_SIZE 4096
 `endif
 
 `endif
@@ -266,13 +282,17 @@
     `ifndef PTE_SIZE
         `ifdef XLEN_32
             `define PTE_SIZE 4
+            `define NUM_PTE_ENTRY 1024
         `else
             `ifdef XLEN_64
                 `define PTE_SIZE 8
+                `define NUM_PTE_ENTRY 1024
             `else 
                 `define PTE_SIZE 8
+                `define NUM_PTE_ENTRY 1024
             `endif
         `endif
+        `define PT_SIZE (PTE_SIZE * NUM_PTE_ENTRY)
     `endif
 
     `ifndef TLB_SIZE

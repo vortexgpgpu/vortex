@@ -83,17 +83,18 @@ bool bit(uint64_t addr, uint8_t idx)
 
 class vx_device {
 public:
-  vx_device()
-    : arch_(NUM_THREADS, NUM_WARPS, NUM_CORES)
-    , ram_(0, RAM_PAGE_SIZE)
-    , processor_(arch_)
-    , global_mem_(ALLOC_BASE_ADDR,
-                  GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR,
-                  RAM_PAGE_SIZE,
-                  CACHE_BLOCK_SIZE)
-  {
-    // attach memory module
-    processor_.attach_ram(&ram_);
+    vx_device()
+        : arch_(NUM_THREADS, NUM_WARPS, NUM_CORES)
+#ifdef VM_ENABLE  
+        , ram_(0, RAM_PAGE_SIZE<<11)
+#else
+        , ram_(0, RAM_PAGE_SIZE)
+#endif
+        , processor_(arch_)
+        , global_mem_(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR, RAM_PAGE_SIZE, CACHE_BLOCK_SIZE)
+    {
+        // attach memory module
+        processor_.attach_ram(&ram_);
 #ifdef VM_ENABLE  
         //Set
         set_processor_satp(VM_ADDR_MODE);
@@ -101,6 +102,9 @@ public:
   }
 
   ~vx_device() {
+#ifdef VM_ENABLE
+    this->mem_free(PAGE_TABLE_BASE_ADDR); // Right position?
+#endif
     if (future_.valid()) {
       future_.wait();
     }
@@ -147,66 +151,90 @@ public:
   }
 
 #ifdef VM_ENABLE  
-    // VM SUPPORT
-    uint64_t map_local_mem(uint64_t size, uint64_t* dev_pAddr) 
+    // virtual to phycial mapping
+    uint64_t map_p2v(uint64_t pAddr)
     {
-        bool no_trans = false;
-        std::cout << __PRETTY_FUNCTION__ << std::endl;
-        // std::cout << "startup addr: 0x" << std::hex << STARTUP_ADDR << std::endl;
-        std::cout << "Input device physical addr: 0x" << std::hex << *dev_pAddr<< std::endl;
-        std::cout << "bit mode: " << std::dec << XLEN << std::endl;
+        return pAddr + 0xf000000; 
+    }
+    bool need_trans(uint64_t dev_pAddr)
+    {
+        // Check if the this is the BARE mode
+        bool isBAREMode = (get_mode() == VA_MODE::BARE);
+        // Check if the address is reserved
+        bool isReserved = (dev_pAddr >= PAGE_TABLE_BASE_ADDR);
+        // Check if the address falls within the startup address range
+        bool isStartAddress = (STARTUP_ADDR <= dev_pAddr) && (dev_pAddr <= (STARTUP_ADDR + 0x40000));
+        
+        // Print the boolean results for debugging purposes
+        // printf("%p, %u, %u\n", (void *)dev_pAddr, isReserved, isStartAddress);
+
+        // Return true if the address needs translation (i.e., it's not reserved and not a start address)
+        return (!isBAREMode && !isReserved && !isStartAddress);
+    }
+
+    uint64_t phy_to_virt_map(uint64_t size, uint64_t* dev_pAddr, uint32_t flags) 
+    {
+        // DBGPRINT("====%s====\n", __PRETTY_FUNCTION__);
+        DBGPRINT("(size = 0x%lx, dev_pAddr= 0x%lx, flags = 0x%x)\n", size, *dev_pAddr, flags);
+        DBGPRINT("bit mode: %d\n", XLEN);
 
         // if (*dev_pAddr == STARTUP_ADDR || *dev_pAddr == 0x7FFFF000) {
-        if (*dev_pAddr >= 0xF0000000 )
-            no_trans = true;
-        }
 
-        if (get_mode() == VA_MODE::BARE || no_trans == true)
+        if (!need_trans(*dev_pAddr))
         {
-            std::cout << "No Translation is needed." << std::endl;
+            DBGPRINT("Translation is not needed.\n");
             return 0;
         }
 
         uint64_t init_pAddr = *dev_pAddr;
-        uint64_t init_vAddr = *dev_pAddr + 0xf000000; // vpn will change, but we want to return the vpn of the beginning of the virtual allocation
+        uint64_t init_vAddr = map_p2v(init_pAddr);
         uint64_t ppn = 0, vpn = 0 ;
-
 
         //dev_pAddr can be of size greater than a page, but we have to map and update
         //page tables on a page table granularity. So divide the allocation into pages.
+        bool is_start = false;
         for (ppn = (*dev_pAddr) >> 12; ppn < ((*dev_pAddr) >> 12) + (size/RAM_PAGE_SIZE) + 1; ppn++)
         {
+            vpn = map_p2v(ppn << 12) >> 12;
+            if (is_start == false) {
+                DBGPRINT("**Search vpn in page table:0x%lx\n", vpn);
+                is_start = true;
+            }
+            else {
+                DBGPRINT("Next vpn: 0x%lx\n",vpn);
+            }
+            
             //Currently a 1-1 mapping is used, this can be changed here to support different
             //mapping schemes
-            vpn = ppn + (0xf000000 >> 12);
 
             //If ppn to vpn mapping doesnt exist.
             if (addr_mapping.find(vpn) == addr_mapping.end())
             {
                 //Create mapping.
-                update_page_table(ppn, vpn);
+                update_page_table(ppn, vpn, flags);
                 addr_mapping[vpn] = ppn;
             }
         }
+        DBGPRINT("Mapped virtual addr: 0x%lx to physical addr: %lx\n", init_vAddr, init_pAddr);
 
-        std::cout << "Mapped virtual addr: " << init_vAddr << " to physical addr: " << init_pAddr << std::endl;
-        // sanity check
+        // Sanity check
         uint64_t pAddr = page_table_walk(init_vAddr);
         if (pAddr != init_pAddr)
         {
-            std::cout << "ERROR" << pAddr << "and" << init_pAddr << " is not the same" <<std::endl;
+            assert(pAddr == init_pAddr && "ERROR: translated virtual Addresses are not the same with physical Address");
         }
 
         *dev_pAddr = init_vAddr; // commit vpn to be returned to host
-        std::cout << "Translated device virtual addr: 0x" << std::hex << *dev_pAddr<< std::endl;
+        DBGPRINT("Translated device virtual addr: 0x%lx\n", *dev_pAddr);
+
         return 0;
     }
 #endif 
 
     int mem_alloc(uint64_t size, int flags, uint64_t* dev_addr) {
-        std::cout << __PRETTY_FUNCTION__ << std::endl;
 
         uint64_t addr;
+        DBGPRINT("mem_alloc size: 0x%lx\n",size);
         CHECK_ERR(global_mem_.allocate(size, &addr), {
             return err;
         });
@@ -217,25 +245,36 @@ public:
         *dev_addr = addr;
 #ifdef VM_ENABLE
         // VM address translation
-        map_local_mem(size, dev_addr);
+        phy_to_virt_map(size, dev_addr,flags);
 #endif
         return 0;
     }
 
-  int mem_reserve(uint64_t dev_addr, uint64_t size, int flags) {
-    CHECK_ERR(global_mem_.reserve(dev_addr, size), {
-      return err;
-    });
-    CHECK_ERR(this->mem_access(dev_addr, size, flags), {
-      global_mem_.release(dev_addr);
-      return err;
-    });
-    return 0;
-  }
+    int mem_reserve(uint64_t dev_addr, uint64_t size, int flags) {
+        CHECK_ERR(global_mem_.reserve(dev_addr, size), {
+            return err;
+        });
+        DBGPRINT("mem_reserve: addr: 0x%lx, size: 0x%lx\n",dev_addr, size);
+        CHECK_ERR(this->mem_access(dev_addr, size, flags), {
+            global_mem_.release(dev_addr);
+            return err;
+        });
+#ifdef VM_ENABLE
+        uint64_t paddr = dev_addr;
+        phy_to_virt_map(size, &paddr, flags);
+#endif
+        return 0;
+    }
 
-  int mem_free(uint64_t dev_addr) {
-    return global_mem_.release(dev_addr);
-  }
+    int mem_free(uint64_t dev_addr) {
+#ifdef VM_ENABLE
+        uint64_t pAddr = page_table_walk(dev_addr);
+        // VM address translation
+        return global_mem_.release(pAddr);
+#else
+        return global_mem_.release(dev_addr);
+#endif
+    }
 
   int mem_access(uint64_t dev_addr, uint64_t size, int flags) {
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
@@ -255,17 +294,13 @@ public:
   }
 
     int upload(uint64_t dest_addr, const void* src, uint64_t size) {
-        std::cout << __PRETTY_FUNCTION__ << std::endl;
+        // DBGPRINT("====%s====\n", __PRETTY_FUNCTION__);
         uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
         if (dest_addr + asize > GLOBAL_MEM_SIZE)
             return -1;
 #ifdef VM_ENABLE
         uint64_t pAddr = page_table_walk(dest_addr);
-        std::cout << "== Upload data to vAddr = 0x" << std::hex <<dest_addr << ", pAddr=0x" << pAddr << "."<< std::endl;
-        if (get_mode() != VA_MODE::BARE)
-            std::cout << "uploading to 0x" << dest_addr << "(VA)" << std::endl;
-        else
-            std::cout << "uploading to 0x" << dest_addr << std::endl;
+        DBGPRINT("Upload data to vAddr = 0x%lx (pAddr=0x%lx)\n", dest_addr, pAddr);
 
 #endif
 
@@ -287,7 +322,7 @@ public:
       return -1;
 #ifdef VM_ENABLE
         uint64_t pAddr = page_table_walk(src_addr);
-        std::cout << "== Download data to vAddr = 0x" << std::hex <<src_addr<< ", pAddr=0x" << pAddr << "."<< std::endl;
+        DBGPRINT("Download data to vAddr = 0x%lx (pAddr=0x%lx)\n", src_addr, pAddr);
 #endif
 
     ram_.enable_acl(false);
@@ -372,12 +407,17 @@ public:
     /* VM Management */
     void set_processor_satp(VA_MODE mode)
     {
+        // DBGPRINT("====%s====\n", __PRETTY_FUNCTION__);
         uint32_t satp;
         if (mode == VA_MODE::BARE)
+        {
+            DBGPRINT("VA_MODE = BARE MODE");
             satp = 0;
+        }
         else if (mode == VA_MODE::SV32)
         {
-            satp = (alloc_first_level_page_table() >> 12) | 0x80000000;
+            satp = (alloc_2nd_level_page_table() >> 12) | 0x80000000;
+            DBGPRINT("VA_MODE = SV32 MODE(satp = 0x%x)\n",satp);
         }
         processor_.set_satp(satp);
     }
@@ -387,52 +427,62 @@ public:
         // return processor_.get_satp();
         return processor_.get_satp() & 0x003fffff;
     }
+    uint64_t get_pte_address(uint64_t base_page, uint64_t vpn)
+    {
+        return (base_page << 12) + (vpn * PTE_SIZE);
+    }  
 
     VA_MODE get_mode()
     {
         return processor_.get_satp() & 0x80000000 ? VA_MODE::SV32 : VA_MODE::BARE;
     }  
 
-    void update_page_table(uint64_t ppn, uint64_t vpn) {
-        std::cout << __PRETTY_FUNCTION__ << std::endl;
-        std::cout << "mapping vpn: " << std::hex << vpn << " to ppn:" << ppn << std::endl;
+    void update_page_table(uint64_t ppn, uint64_t vpn, uint32_t flag) {
+        // DBGPRINT("====%s====\n", __PRETTY_FUNCTION__);
+        DBGPRINT("Mapping vpn 0x%05lx to ppn 0x%05lx(flags = %u)\n", vpn, ppn,flag);
+        assert((((ppn>> 20) == 0) && ((vpn >> 20) == 0)) && "Upper 12 bits are not zero!");
         //Updating page table with the following mapping of (vAddr) to (pAddr).
         // uint32_t page_bit_shift = log2ceil(PTE_SIZE*NUM_PTE_ENTRY);
-        uint32_t page_bit_shift = 12;
-        uint64_t ppn_1, pte_addr, pte_bytes;
+        uint64_t ppn_1 = 0, pte_addr = 0, pte_bytes = 0;
         uint64_t vpn_1 = bits(vpn, 10, 19);
         uint64_t vpn_0 = bits(vpn, 0, 9);
 
         //Read first level PTE.
-        pte_addr = (get_ptbr() << 12) + (vpn_1 * PTE_SIZE);
+        DBGPRINT("Start second-level page table\n");
+        pte_addr = get_pte_address(get_ptbr(), vpn_1);
         pte_bytes = read_pte(pte_addr);     
-        std::cout << "[PTE] addr 0x" << std::hex << pte_addr << ", PTE 0x" << std::hex << pte_bytes << std::endl;
+        DBGPRINT("[PTE] addr 0x%lx, PTE 0x%lx\n", pte_addr, pte_bytes);
+        ppn_1 = (pte_bytes >> 10);
 
         if ( bit(pte_bytes, 0) && ((pte_bytes & 0xFFFFFFFF) != 0xbaadf00d))
         {
             //If valid bit set, proceed to next level using new ppn form PTE.
-            std::cout << "PTE valid, continuing the walk..." << std::endl;
-            ppn_1 = (pte_bytes >> 10);
+            DBGPRINT("PTE valid (ppn 0x%lx), continuing the walk...\n",ppn_1);
         }
         else
         {
             //If valid bit not set, allocate a second level page table
             // in device memory and store ppn in PTE. Set rwx = 000 in PTE
             //to indicate this is a pointer to the next level of the page table.
-            std::cout << "PTE invalid, get second page table..." << std::endl;
-            ppn_1 = (alloc_second_level_page_table() >> 12);
+            DBGPRINT("PTE Invalid (ppn 0x%lx), continuing the walk...\n",ppn_1);
+            ppn_1 = (alloc_1st_level_page_table(vpn_1) >> 12);
             pte_bytes = ((ppn_1 << 10) | 0b0000000001) ;
+            assert((pte_addr>> 32) == 0 && "Upper 32 bits are not zero!");
             write_pte(pte_addr, pte_bytes);
+            // if (pte_bytes != read_pte(pte_addr))
+            //     DBGPRINT("Read/write values are different!\n");
         }
 
+
+        DBGPRINT("Move to first-level page table\n");
         //Read second level PTE.
-        pte_addr = (ppn_1 << page_bit_shift) + (vpn_0 * PTE_SIZE);
+        pte_addr = get_pte_address(ppn_1, vpn_0);
         pte_bytes = read_pte(pte_addr); 
-        std::cout << "got pte: " << std::hex << pte_bytes << std::endl;       
     
         if ( bit(pte_bytes, 0) && ((pte_bytes & 0xFFFFFFFF) != 0xbaadf00d))
         {
-            std::cout << "ERROR, shouldn't be here" << std::endl;
+            DBGPRINT("ERROR, shouldn't be here\n");
+            exit(1);
             //If valid bit is set, then the page is already allocated.
             //Should not reach this point, a sanity check.
         }
@@ -442,87 +492,62 @@ public:
             //to indicate this is a leaf PTE and has the stated permissions.
             pte_bytes = ( (ppn << 10) | 0b0000001111) ;
             write_pte(pte_addr, pte_bytes);
-
-            //If super paging is enabled.
-            /*
-            if (SUPER_PAGING)
-            {
-                //Check if this second level Page Table can be promoted to a super page. Brute force 
-                //method is used to iterate over all PTE entries of the table and check if they have 
-                //their valid bit set.
-                bool superpage = true;
-                for(int i = 0; i < 1024; i++)
-                {
-                    pte_addr = (ppn_1 << 12) + (i * PTE_SIZE);
-                    pte_bytes = read_pte(pte_addr); 
-                  
-                    if (!bit(pte_bytes, 0) && ((pte_bytes & 0xFFFFFFFF) != 0xbaadf00d))
-                    {
-                        superpage = false;
-                        break;
-                    }
-                }
-                if (superpage)
-                {
-                    //This can be promoted to a super page. Set root PTE to the first PTE of the 
-                    //second level. This is because the first PTE of the second level already has the
-                    //correct PPN1, PPN0 set to zero and correct access bits.
-                    pte_addr = (ppn_1 << 12);
-                    pte_bytes = read_pte(pte_addr);
-                    pte_addr = (get_ptbr() << 12) + (vpn_1 * PTE_SIZE);
-                    write_pte(pte_addr, pte_bytes);
-                }
-            }
-            */
+            if (pte_bytes != read_pte(pte_addr))
+                DBGPRINT("Read/write values are different!\n");
         }
     }
 
     uint64_t page_table_walk(uint64_t vAddr_bits)
     {   
-        
-        std::cout << "PTW on vAddr: 0x" << std::hex << vAddr_bits << std::endl;
+        // DBGPRINT("====%s====\n", __PRETTY_FUNCTION__);
+        DBGPRINT("PTW on vAddr: 0x%lx\n", vAddr_bits);
+        if (!need_trans(vAddr_bits))
+        {
+            DBGPRINT("Translation is not needed.\n");
+            return vAddr_bits;
+        }
         uint64_t LEVELS = 2;
         vAddr_SV32_t vAddr(vAddr_bits);
         uint64_t pte_addr, pte_bytes;
         uint64_t pt_ba = get_ptbr() << 12;
 
-
         //Get base page table.
 
-        for ( i = LEVELS-1 ; i >= 0  ; i--)
+        for ( int i = LEVELS-1 ; i >= 0  ; i--)
         {
             //Read PTE.
             pte_addr = pt_ba+vAddr.vpn[i]*PTE_SIZE;
-            std::cout << "reading PTE from RAM addr 0x" << std::hex << (pte_addr) << std::endl;
             pte_bytes = read_pte(pte_addr);
-            pte_bytes &= 0x00000000FFFFFFFF; // Only for 32 bit
             PTE_SV32_t pte(pte_bytes);
-            std::cout << "got pte: " << std::hex << pte_bytes << std::endl;
+            DBGPRINT("pte_bytes = 0x%lx, pte flags = %u)\n", pte.ppn , pte.flags);
             
             //Check if it has invalid flag bits.
             if ( (pte.v == 0) | ( (pte.r == 0) & (pte.w == 1) ) )
             {
-                std::cout << "Error on vAddr 0x" << std::hex << vAddr_bits << std::endl;
-                throw Page_Fault_Exception("Page Fault : Attempted to access invalid entry. Entry: 0x");
+                std::string msg= "Page Fault : Attempted to access invalid entry. Entry: 0x";
+                throw Page_Fault_Exception(msg);
             }
 
             if ( (pte.r == 0) & (pte.w == 0) & (pte.x == 0))
             {
                 //Not a leaf node as rwx == 000
                 if (i == 0)
+                {
                     throw Page_Fault_Exception("Page Fault : No leaf node found.");
+                }
                 else
                 {
                     //Continue on to next level.
-                    pt_ba = (pte_bytes >> 10 ) << 12;
-                    std::cout << "next pt_ba: " << pt_ba << std::endl;
+                    pt_ba = pte.ppn << 12;
+                    DBGPRINT("next pt_ba: %p\n", (void *)pt_ba);
+
                 }
             }
             else
             {
                 //Leaf node found, finished walking.
-                pt_ba = (pte_bytes >> 10 ) << 12;
-                std::cout << "Found PPN 0 = 0x" << pt_ba << std::endl;
+                pt_ba = pte.ppn << 12;
+                DBGPRINT("Found PT_Base_Address [%d] = %lx\n", i, pt_ba);
                 break;
             }
 
@@ -535,35 +560,35 @@ public:
         {
             throw Page_Fault_Exception("Page Fault : TYPE LOAD, Incorrect permissions.");
         }
-        //Regular page.
 
-        uint64_t paddr = pt_ba << 12 + vAddr.pgoff;
-        return paddr
+        uint64_t paddr = pt_ba  + vAddr.pgoff;
+        return paddr;
     }
 
-    uint64_t alloc_first_level_page_table() {
-        uint64_t addr=0xF0000000;
-        uint64_t size=1<<23;
+    uint64_t alloc_2nd_level_page_table() {
+        // DBGPRINT("====%s====\n", __PRETTY_FUNCTION__);
+        uint64_t addr=PAGE_TABLE_BASE_ADDR;
+        uint64_t size=1<<23; // 8MB !!!FIXME!!!
         CHECK_ERR(this->mem_reserve(addr, size, VX_MEM_READ_WRITE), {
             return err;
         });
-        // global_mem_.allocate(RAM_PAGE_SIZE, &addr);
-        std::cout << "address of page table 0x" << std::hex << addr << std::endl;
-        init_page_table(addr,size);
+        init_page_table(addr);
         return addr;
     }
-    uint64_t alloc_second_level_page_table(uint64_t vpn_1) {
-        uint64_t addr = 0xF0000000 + PTE_SIZE * NUM_PTE_ENTRY*(1+vpn_1)
-        std::cout << "address of page table 0x" << std::hex << addr << std::endl;
+    uint64_t alloc_1st_level_page_table(uint64_t vpn_1) {
+        // DBGPRINT("====%s====\n", __PRETTY_FUNCTION__);
+        uint64_t addr = PAGE_TABLE_BASE_ADDR + PTE_SIZE * NUM_PTE_ENTRY*(1+vpn_1);
+        init_page_table(addr);
         return addr;
     }
 
-    void init_page_table(uint64_t addr, uint64_t size) {
-        // uint64_t asize = aligned_size(RAM_PAGE_SIZE, CACHE_BLOCK_SIZE);
-        uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
+    void init_page_table(uint64_t addr) {
+        // DBGPRINT("====%s====\n", __PRETTY_FUNCTION__);
+        DBGPRINT("int_page_table (addr=0x%lx)\n", addr);
+        uint64_t asize = aligned_size(RAM_PAGE_SIZE, CACHE_BLOCK_SIZE);
+        // uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
         uint8_t *src = new uint8_t[RAM_PAGE_SIZE];
         for (uint64_t i = 0; i < RAM_PAGE_SIZE; ++i) {
-            // src[i] = (value >> (i << 3)) & 0xff;
             src[i] = 0;
         }
         ram_.enable_acl(false);
@@ -574,14 +599,14 @@ public:
     // void read_page_table(uint64_t addr) {
     //     uint8_t *dest = new uint8_t[RAM_PAGE_SIZE];
     //     download(dest,  addr,  RAM_PAGE_SIZE);
-    //     printf("VXDRV: download %d bytes from 0x%x\n", RAM_PAGE_SIZE, addr);
+    //     DBGPRINT("VXDRV: download %d bytes from 0x%x\n", RAM_PAGE_SIZE, addr);
     //     for (int i = 0; i < RAM_PAGE_SIZE; i += 4) {
-    //         printf("mem-read: 0x%x -> 0x%x\n", addr + i, *(uint64_t*)((uint8_t*)dest + i));
+    //         DBGPRINT("mem-read: 0x%x -> 0x%x\n", addr + i, *(uint64_t*)((uint8_t*)dest + i));
     //     }
     // }
 
     void write_pte(uint64_t addr, uint64_t value = 0xbaadf00d) {
-        std::cout << "writing pte 0x" << std::hex << value << " to pAddr: 0x" << std::hex << addr << std::endl;
+        DBGPRINT("[Write_pte] writing pte 0x%lx to pAddr: 0x%lx\n", value, addr);
         uint8_t *src = new uint8_t[PTE_SIZE];
         for (uint64_t i = 0; i < PTE_SIZE; ++i) {
             src[i] = (value >> (i << 3)) & 0xff;
@@ -596,15 +621,17 @@ public:
         uint8_t *dest = new uint8_t[PTE_SIZE];
         uint64_t mask = 0;
         if (XLEN == 32)
-            mask = 0xFFFFFFFF;
+            mask = 0x00000000FFFFFFFF;
         else if (XLEN == 64)
             mask = 0xFFFFFFFFFFFFFFFF;
         else
-            assert(0, "XLEN is not either 32 or 64")
+            assert(0 && "XLEN is not either 32 or 64");
 
-        std::cout << "[read_pte] reading PTE from RAM addr 0x" << std::hex << addr << std::endl;
         ram_.read((uint8_t*)dest, addr, PTE_SIZE);
-        return (*(uint64_t*)((uint8_t*)dest)) & mask;
+        uint64_t ret = (*(uint64_t*)((uint8_t*)dest)) & mask;
+        DBGPRINT("[read_pte] reading PTE 0x%lx from RAM addr 0x%lx\n", ret, addr);
+
+        return ret;
     }
 #endif // JAEWON
 
