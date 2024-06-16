@@ -116,17 +116,21 @@ public:
     // ACCESS_TYPE access_type;
   };
 
+#ifdef VM_ENABLE
+  MemoryUnit(uint64_t pageSize = PAGE_TABLE_SIZE);
+#else
   MemoryUnit(uint64_t pageSize = 0);
+#endif
 
   void attach(MemDevice &m, uint64_t start, uint64_t end);
 
 
 #ifdef VM_ENABLE
-  void read(void* data, uint64_t addr, uint64_t size, ACCESS_TYPE type = ACCESS_TYPE::LOAD);
-  void write(const void* data, uint64_t addr, uint64_t size, ACCESS_TYPE type = ACCESS_TYPE::STORE);
+  void read(void* data, uint64_t addr, uint32_t size, ACCESS_TYPE type = ACCESS_TYPE::LOAD);
+  void write(const void* data, uint64_t addr, uint32_t size, ACCESS_TYPE type = ACCESS_TYPE::STORE);
 #else
-  void read(void* data, uint64_t addr, uint64_t size, bool sup);
-  void write(const void* data, uint64_t addr, uint64_t size, bool sup);
+  void read(void* data, uint64_t addr, uint32_t size, bool sup);
+  void write(const void* data, uint64_t addr, uint32_t size, bool sup);
 #endif
 
   void amo_reserve(uint64_t addr);
@@ -220,14 +224,16 @@ private:
 #ifdef VM_ENABLE
   std::pair<bool, uint64_t> tlbLookup(uint64_t vAddr, ACCESS_TYPE type, uint64_t* size_bits);
 
+  bool need_trans(uint64_t dev_pAddr);
   uint64_t vAddr_to_pAddr(uint64_t vAddr, ACCESS_TYPE type);
 
   std::pair<uint64_t, uint8_t> page_table_walk(uint64_t vAddr_bits, ACCESS_TYPE type, uint64_t* size_bits);
+#else 
+  uint64_t toPhyAddr(uint64_t vAddr, uint32_t flagMask);
+  TLBEntry tlbLookup(uint64_t vAddr, uint32_t flagMask);
 #endif
 
-  TLBEntry tlbLookup(uint64_t vAddr, uint32_t flagMask);
 
-  uint64_t toPhyAddr(uint64_t vAddr, uint32_t flagMask);
 
   std::unordered_map<uint64_t, TLBEntry> tlb_;
   uint64_t  pageSize_;
@@ -328,7 +334,7 @@ class PTE_SV32_t
     }
 
   public:
-    uint64_t ppn[2];
+    uint64_t ppn;
     uint32_t rsw;
     uint32_t flags;
     bool d, a, g, u, x, w, r, v;
@@ -337,8 +343,7 @@ class PTE_SV32_t
       assert((address>> 32) == 0 && "Upper 32 bits are not zero!");
       flags =  bits(address,0,7);
       rsw = bits(address,8,9);
-      ppn[0] = bits(address,10,19);
-      ppn[1] = bits(address,20,31);
+      ppn = bits(address,10,31);
 
       d = bit(7);
       a = bit(6);
@@ -348,6 +353,7 @@ class PTE_SV32_t
       w = bit(2);
       r = bit(1);
       v = bit(0);
+      // printf("ppn = 0x%lx, flags= 0x%x, rsw= 0x%x\n",ppn,flags,rsw);
     }
 };
 
@@ -374,6 +380,7 @@ class vAddr_SV32_t
       vpn[0] = bits(address,12,21);
       vpn[1] = bits(address,22,31);
       pgoff = bits(address,0,11);
+      // printf("vpn[0] = 0x%lx, vpn[1] = 0x%lx, pgoff = 0x%lx\n",vpn[0],vpn[1],pgoff);
     }
 };
 #endif
