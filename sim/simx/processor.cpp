@@ -170,7 +170,6 @@ uint32_t Processor::get_satp() {
 }
 
 void Processor::set_satp(uint32_t satp) {
-  std::cout << "set SATP: 0x" << std::hex << this->satp << std::endl;
   impl_->set_satp(satp);
   this->satp = satp;
 }
