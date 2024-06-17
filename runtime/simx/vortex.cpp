@@ -32,7 +32,7 @@ using namespace vortex;
 class vx_device {
 public:
   vx_device()
-    : arch_(NUM_THREADS, NUM_WARPS, NUM_CORES)
+    : arch_(NUM_THREADS, NUM_WARPS, NUM_CORES, TC_SIZE, TC_NUM)
     , ram_(0, RAM_PAGE_SIZE)
     , processor_(arch_)
     , global_mem_(ALLOC_BASE_ADDR,
@@ -68,6 +68,12 @@ public:
       break;
     case VX_CAPS_NUM_CORES:
       _value = NUM_CORES * NUM_CLUSTERS;
+      break;
+    case VX_CAPS_TC_SIZE:
+      _value = TC_SIZE;
+      break;
+    case VX_CAPS_TC_NUM:
+      _value = TC_NUM;
       break;
     case VX_CAPS_CACHE_LINE_SIZE:
       _value = CACHE_BLOCK_SIZE;

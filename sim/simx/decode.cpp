@@ -51,6 +51,7 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   {Opcode::EXT2,    InstType::R4},
   {Opcode::R_W,     InstType::R},
   {Opcode::I_W,     InstType::I},
+  {Opcode::TCU,     InstType::I},
 };
 
 enum Constants {
@@ -405,6 +406,16 @@ static const char* op_string(const Instr &instr) {
     default:
       std::abort();
     }
+  
+  case Opcode::TCU:
+    switch(func3)
+    {
+      case 0: return "ML"; //
+      case 1: return "MS"; //
+      case 2: return "MATMUL";
+      default:
+        std::abort();
+    }
   default:
     std::abort();
   }
@@ -543,6 +554,14 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
 
   case InstType::I: {
     switch (op) {
+    case Opcode::TCU: {
+      instr->setDestReg(rs1, RegType::Integer);
+      instr->addSrcReg(rs1, RegType::Integer);
+      instr->setFunc3(func3);
+      instr->setFunc7(func7);
+      auto imm = code >> shift_rs2;
+      instr->setImm(sext(imm, width_i_imm));
+    } break;
     case Opcode::I:
     case Opcode::I_W:
     case Opcode::JALR:

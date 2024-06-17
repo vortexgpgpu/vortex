@@ -23,6 +23,7 @@
 #include <VX_config.h>
 #include <simobject.h>
 #include "debug.h"
+#include <iostream>
 
 namespace vortex {
 
@@ -78,6 +79,7 @@ enum class FUType {
   LSU,
   FPU,
   SFU,
+  TCU,
   Count
 };
 
@@ -87,6 +89,7 @@ inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
   case FUType::LSU: os << "LSU"; break;
   case FUType::FPU: os << "FPU"; break;
   case FUType::SFU: os << "SFU"; break;
+  case FUType::TCU: os << "TCU"; break;
   default: assert(false);
   }
   return os;
@@ -118,14 +121,30 @@ inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
 
 enum class LsuType {
   LOAD,
+  TCU_LOAD,
   STORE,
+  TCU_STORE,
   FENCE
 };
+
+enum class TCUType {
+  TCU_MUL
+};
+
+inline std::ostream &operator<<(std::ostream &os, const TCUType& type) {
+  switch (type) {
+  case TCUType::TCU_MUL: os << "TCU MUL"; break;
+  default: assert(false);
+  }
+  return os;
+}
 
 inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
   switch (type) {
   case LsuType::LOAD:  os << "LOAD"; break;
+  case LsuType::TCU_LOAD: os << "TCU_LOAD"; break;
   case LsuType::STORE: os << "STORE"; break;
+  case LsuType::TCU_STORE: os << "TCU_STORE"; break;
   case LsuType::FENCE: os << "FENCE"; break;
   default: assert(false);
   }
@@ -383,7 +402,7 @@ public:
     , type_(type)
     , delay_(delay)
     , cursors_(num_outputs, 0)
-    , num_reqs_(num_inputs / num_outputs)
+    , num_reqs_(log2ceil(num_inputs / num_outputs))
   {
     assert(delay != 0);
     assert(num_inputs <= 32);
@@ -407,7 +426,7 @@ public:
   void tick() {
     uint32_t I = Inputs.size();
     uint32_t O = Outputs.size();
-    uint32_t R = num_reqs_;
+    uint32_t R = 1 << num_reqs_;
 
     // skip bypass mode
     if (I == O)
