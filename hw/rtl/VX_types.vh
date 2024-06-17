@@ -196,4 +196,7 @@
 `define VX_CSR_NUM_CORES                12'hFC2
 `define VX_CSR_LOCAL_MEM_BASE           12'hFC3
 
+`define VX_MAT_MUL_SIZE                 12'hFC4
+
+
 `endif // VX_TYPES_VH

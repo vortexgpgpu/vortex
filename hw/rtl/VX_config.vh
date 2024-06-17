@@ -111,6 +111,24 @@
 `endif
 `define NUM_SOCKETS `UP(`NUM_CORES / `SOCKET_SIZE)
 
+`ifndef TC_SIZE
+`define TC_SIZE 4
+`endif
+
+`ifndef TC_NUM
+`define TC_NUM 1
+`endif
+
+// Number of TCU units
+`ifndef NUM_TCU_LANES
+`define NUM_TCU_LANES   `TC_NUM
+`endif
+
+// Number of TCU units
+`ifndef NUM_TCU_BLOCKS
+`define NUM_TCU_BLOCKS  `ISSUE_WIDTH
+`endif
+
 `ifdef L2_ENABLE
     `define L2_ENABLED   1
 `else

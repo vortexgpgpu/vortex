@@ -21,6 +21,7 @@
 #include "core.h"
 #include "constants.h"
 #include "cache_sim.h"
+#include "VX_types.h"
 
 using namespace vortex;
 
@@ -162,7 +163,7 @@ void LsuUnit::tick() {
 			continue;
 		}
 
-		bool is_write = (trace->lsu_type == LsuType::STORE);
+		bool is_write = ((trace->lsu_type == LsuType::STORE) || (trace->lsu_type == LsuType::TCU_STORE));
 
 		// check pending queue capacity
 		if (!is_write && state.pending_rd_reqs.full()) {
@@ -175,13 +176,14 @@ void LsuUnit::tick() {
 		}
 
 		uint32_t tag = 0;
+
 		if (!is_write) {
 			tag = state.pending_rd_reqs.allocate({trace, 0});
 		}
 
 		// send memory request
 		auto num_reqs = this->send_requests(trace, block_idx, tag);
-
+		
 		if (!is_write) {
 			state.pending_rd_reqs.at(tag).count = num_reqs;
 		}
@@ -200,7 +202,14 @@ int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
 	int count = 0;
 
 	auto trace_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
-	bool is_write = (trace->lsu_type == LsuType::STORE);
+	bool is_write = ((trace->lsu_type == LsuType::STORE) || (trace->lsu_type == LsuType::TCU_STORE));
+
+	uint16_t req_per_thread = 1;
+	if ((trace->lsu_type == LsuType::TCU_LOAD) || (trace->lsu_type == LsuType::TCU_STORE))
+	{
+ 		req_per_thread= (1>(trace_data->mem_addrs.at(0).size)/4)? 1: ((trace_data->mem_addrs.at(0).size)/4);
+	}
+	
 	auto t0 = trace->pid * NUM_LSU_LANES;
 
 	for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
@@ -213,29 +222,65 @@ int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
 
 		auto mem_addr = trace_data->mem_addrs.at(t);
 		auto type = get_addr_type(mem_addr.addr);
+		// DT(3, "addr_type = " << type << ", " << *trace);		
+		uint32_t mem_bytes = 1;
+		for (int i = 0; i < req_per_thread; i++)
+		{
+			MemReq mem_req;
+			mem_req.addr  = mem_addr.addr + (i*mem_bytes);
+			mem_req.write = is_write;
+			mem_req.type  = type;
+			mem_req.tag   = tag;
+			mem_req.cid   = trace->cid;
+			mem_req.uuid  = trace->uuid;
+		
+			dcache_req_port.push(mem_req, 1);
+			DT(3, "mem-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << tag
+				<< ", lsu_type=" << trace->lsu_type << ", rid=" << req_idx << ", addr_type=" << mem_req.type << ", " << *trace);
 
-		MemReq mem_req;
-		mem_req.addr  = mem_addr.addr;
-		mem_req.write = is_write;
-		mem_req.type  = type;
-		mem_req.tag   = tag;
-		mem_req.cid   = trace->cid;
-		mem_req.uuid  = trace->uuid;
-
-		dcache_req_port.push(mem_req, 1);
-		DT(3, "mem-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << tag
-			<< ", lsu_type=" << trace->lsu_type << ", rid=" << req_idx << ", addr_type=" << mem_req.type << ", " << *trace);
-
-		if (is_write) {
-			++core_->perf_stats_.stores;
-		} else {
-			++core_->perf_stats_.loads;
-			++pending_loads_;
+			if (is_write) {
+				++core_->perf_stats_.stores;
+			} else {
+				++core_->perf_stats_.loads;
+				++pending_loads_;
+			}
+		
+			++count;
 		}
-
-		++count;
 	}
 	return count;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+TcuUnit::TcuUnit(const SimContext& ctx, Core* core) 
+    : FuncUnit(ctx, core, "TCU")
+    , tc_size (core_->arch().tc_size())
+    {}
+
+void TcuUnit::tick() {
+
+	for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
+        auto& input = Inputs.at(i);
+        if (input.empty()) 
+            continue;
+        auto& output = Outputs.at(i);
+        auto trace = input.front();
+        uint32_t n_tiles = core_->emulator_.get_tiles();
+        switch (trace->tcu_type) {
+            case TCUType::TCU_MUL:
+            {    //mat size = n_tiles * tc_size
+                int matmul_latency = (n_tiles * tc_size) + tc_size + tc_size;
+                output.push(trace, matmul_latency);
+				DT(3, "matmul_latency = " << matmul_latency << ", " << *trace);
+                break;
+            }
+            default:
+                std::abort();
+        }    
+        DT(3, "pipeline-execute: op=" << trace->tcu_type << ", " << *trace);
+        input.pop();
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

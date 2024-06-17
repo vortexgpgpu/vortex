@@ -35,9 +35,11 @@ private:
   uint16_t num_barriers_;
   uint16_t ipdom_size_;
   uint64_t local_mem_base_;
+  uint16_t tc_size_;
+  uint16_t tc_num_;
 
 public:
-  Arch(uint16_t num_threads, uint16_t num_warps, uint16_t num_cores)
+  Arch(uint16_t num_threads, uint16_t num_warps, uint16_t num_cores, uint64_t tc_size, uint64_t tc_num)   
     : num_threads_(num_threads)
     , num_warps_(num_warps)
     , num_cores_(num_cores)
@@ -49,6 +51,8 @@ public:
     , num_barriers_(NUM_BARRIERS)
     , ipdom_size_((num_threads-1) * 2)
     , local_mem_base_(LMEM_BASE_ADDR)
+    , tc_size_ (tc_size)
+    , tc_num_ (tc_num)
   {}
 
   uint16_t vsize() const {
@@ -94,6 +98,15 @@ public:
   uint16_t socket_size() const {
     return socket_size_;
   }
+  
+  uint16_t tc_size() const {
+    return tc_size_;
+  }
+
+  uint16_t tc_num() const {
+    return tc_num_;
+  }
+
 };
 
 }

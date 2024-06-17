@@ -53,6 +53,8 @@ public:
   bool wspawn(uint32_t num_warps, Word nextPC);
 
   int get_exitcode() const;
+  
+  Word get_tiles();
 
 private:
 
@@ -121,6 +123,8 @@ private:
   MemoryUnit  mmu_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
+  std::vector<Word> scratchpad;
+  uint32_t mat_size;
 };
 
 }

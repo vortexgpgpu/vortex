@@ -48,6 +48,8 @@ PERF_CLASS=0
 REBUILD=2
 TEMPBUILD=0
 LOGFILE=run.log
+TC_SIZE=567
+TC_NUM=123
 
 for i in "$@"
 do
@@ -110,6 +112,14 @@ case $i in
         ;;
     --log=*)
         LOGFILE=${i#*=}
+        shift
+        ;;
+    --tc_size=*)
+        TC_SIZE=${i#*=}
+        shift
+        ;;
+    --tc_num=*)
+        TC_NUM=${i#*=}
         shift
         ;;
     --help)
@@ -180,7 +190,7 @@ then
 fi
 
 CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_THREADS=$THREADS $L2 $L3 $PERF_FLAG $CONFIGS"
-
+CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_THREADS=$THREADS -DTC_NUM=$TC_NUM -DTC_SIZE=$TC_SIZE $L2 $L3 $PERF_FLAG $CONFIGS"
 echo "CONFIGS=$CONFIGS"
 
 if [ $REBUILD -ne 0 ]
