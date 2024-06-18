@@ -1432,8 +1432,6 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     uint32_t data_bytes_store;
     uint32_t num_threads_per_tc = MAX (1, num_threads/TC_per_warp);
 
-    //int num_warps = MIN()
-    //int active_tcs =  MIN (TC_per_warp, num_output_tiles/num_warps)
     //LOAD
     if(num_threads > tc_size*tc_size*n_tiles*TC_per_warp)
     { 
@@ -1448,11 +1446,6 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     data_bytes_load = mem_bytes*num_data_per_thread;
 
     //STORE
-    
-    // DP(3, "DEBUG :: num_threads = " << num_threads);
-    // DP(3, "DEBUG :: tc_size*tc_size = " << tc_size*tc_size);
-    //DP(3, "imm = " << immsrc);
-    
     if(num_threads > tc_size*tc_size*TC_per_warp)
     { 
       num_threads_actv_st = tc_size*tc_size*TC_per_warp;
@@ -1499,8 +1492,6 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
               scratchpad[loop_offset + (immsrc*(n_tiles)*tc_size*tc_size) + (t*num_data_per_thread) + n] = *temp_ref;
               DP(3, "Scratchpad Index: " << loop_offset + (immsrc*(n_tiles)*tc_size*tc_size) + (t*num_data_per_thread) + n << ", Value: " << scratchpad[loop_offset + (immsrc*(n_tiles)*tc_size*tc_size) + (t*num_data_per_thread) + n]);
             }
-            //loop_offset += tc_size*tc_size;
-          //}
         }
         rd_write = true;  
       } break;
@@ -1531,7 +1522,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
             uint32_t csr_index = (2*num_data_per_thread_st) + n;
             uint32_t scratchpad_index = (tc_size*tc_size*2) + (t*num_data_per_thread) + n;
             
-            //scratchpad -> csr (TODO :: can intermediate step of moving to CSR be skipped?)
+            //scratchpad -> csr (TODO :: removed intermediate CSR stage ; incorporate limited scratchmad implementation)
             //core_->set_csr(csr_addr[(2*num_data_per_thread) + n], scratchpad[(n_tiles*tc_size*tc_size*2) + (t*num_data_per_thread) + n], t, warp_id_);
             Word* temp_ref = &(warp.ireg_file.at(t).at(rsrc0));
             *temp_ref = scratchpad[(n_tiles*tc_size*tc_size*2) + (t*num_data_per_thread_st) + n];
@@ -1562,14 +1553,14 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           //TC operation [only 1 thread in 1 warp needs to do this]
           if (t%threads_per_tc == 0)
           {
-            //TODO - change to systolic array implementation
+            //TODO : change to systolic array implementation
             uint32_t thread_offset = t*(tc_size*tc_size);
             int loop_offset = 0;
             int offset_b = n_tiles*n_tiles*n_tiles*tc_size*tc_size;
-            // Loop over all tiles - output stationary
-            //for(int tiles = 0 ; tiles < n_tiles ; tiles++)  //What's the HW implication of this?? A counter implementation?
-            //{ 
-              /*
+            /*
+            // TODO : Fix needed for functional correctness
+            for(int tiles = 0 ; tiles < n_tiles ; tiles++)  //What's the HW implication of this?? A counter implementation?
+            { 
               for (int i = 0; i < tc_size; i++) { //ROW-1
                 for (int j = 0; j < tc_size; j++) { //COL-2
                   int sum = 0;
@@ -1579,12 +1570,11 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
                   }
                   scratchpad[accu_offset + thread_offset +(i * tc_size + j)] += sum; //[i * col2 + j] = sum
                   DP(3, "Scratchpad Index: " << accu_offset + (i * tc_size + j) << " , Value=" << scratchpad[accu_offset + (i * tc_size + j)]);
-
                 }
               }
-              */
-              //loop_offset += tc_size*tc_size; //Move to the next tiled matmul fragment
-            //}
+              loop_offset += tc_size*tc_size; //Move to the next tiled matmul fragment
+            }
+            */
           }
         }
 
