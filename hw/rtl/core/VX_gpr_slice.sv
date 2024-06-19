@@ -26,7 +26,7 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
 );
     `UNUSED_PARAM (CORE_ID)
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + `NR_BITS;
-    localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * ISSUE_RATIO);
+    localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * PER_ISSUE_WARPS);
 
     localparam STATE_IDLE   = 2'd0;
     localparam STATE_FETCH1 = 2'd1;
@@ -38,13 +38,13 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
     reg [`NR_BITS-1:0] gpr_rd_rid, gpr_rd_rid_n;
     reg [ISSUE_WIS_W-1:0] gpr_rd_wis, gpr_rd_wis_n;
 
-    reg [`NUM_THREADS-1:0][`XLEN-1:0] cache_data [ISSUE_RATIO-1:0];
-    reg [`NUM_THREADS-1:0][`XLEN-1:0] cache_data_n [ISSUE_RATIO-1:0];
-    reg [`NR_BITS-1:0] cache_reg [ISSUE_RATIO-1:0];
-    reg [`NR_BITS-1:0] cache_reg_n [ISSUE_RATIO-1:0];
-    reg [`NUM_THREADS-1:0] cache_tmask [ISSUE_RATIO-1:0];
-    reg [`NUM_THREADS-1:0] cache_tmask_n [ISSUE_RATIO-1:0];
-    reg [ISSUE_RATIO-1:0] cache_eop, cache_eop_n;
+    reg [`NUM_THREADS-1:0][`XLEN-1:0] cache_data [PER_ISSUE_WARPS-1:0];
+    reg [`NUM_THREADS-1:0][`XLEN-1:0] cache_data_n [PER_ISSUE_WARPS-1:0];
+    reg [`NR_BITS-1:0] cache_reg [PER_ISSUE_WARPS-1:0];
+    reg [`NR_BITS-1:0] cache_reg_n [PER_ISSUE_WARPS-1:0];
+    reg [`NUM_THREADS-1:0] cache_tmask [PER_ISSUE_WARPS-1:0];
+    reg [`NUM_THREADS-1:0] cache_tmask_n [PER_ISSUE_WARPS-1:0];
+    reg [PER_ISSUE_WARPS-1:0] cache_eop, cache_eop_n;
 
     reg [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data, rs1_data_n;
     reg [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data, rs2_data_n;
@@ -155,7 +155,7 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
 
         if (CACHE_ENABLE != 0 && writeback_if.valid) begin
             if ((cache_reg[writeback_if.data.wis] == writeback_if.data.rd)
-                || (cache_eop[writeback_if.data.wis] && writeback_if.data.sop)) begin
+             || (cache_eop[writeback_if.data.wis] && writeback_if.data.sop)) begin
                 for (integer j = 0; j < `NUM_THREADS; ++j) begin
                     if (writeback_if.data.tmask[j]) begin
                         cache_data_n[writeback_if.data.wis][j] = writeback_if.data.data[j];
@@ -172,7 +172,7 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
     always @(posedge clk)  begin
         if (reset) begin
             state       <= STATE_IDLE;
-            cache_eop   <= {ISSUE_RATIO{1'b1}};
+            cache_eop   <= {PER_ISSUE_WARPS{1'b1}};
             data_ready  <= 0;
         end else begin
             state       <= state_n;
@@ -261,7 +261,7 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
     for (genvar j = 0; j < `NUM_THREADS; ++j) begin
         VX_dp_ram #(
             .DATAW (`XLEN),
-            .SIZE (`NUM_REGS * ISSUE_RATIO),
+            .SIZE (`NUM_REGS * PER_ISSUE_WARPS),
         `ifdef GPR_RESET
             .INIT_ENABLE (1),
             .INIT_VALUE (0),
