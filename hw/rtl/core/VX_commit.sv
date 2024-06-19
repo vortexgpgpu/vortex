@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_commit import VX_gpu_pkg::*; #(
+module VX_commit import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     parameter CORE_ID = 0
 ) (
     input wire              clk,
