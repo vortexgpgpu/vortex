@@ -180,7 +180,7 @@
 `define PAGE_TABLE_SIZE 4096
 `endif
 
-`else # XLEN_32
+`else // XLEN_32
 
 `ifndef STACK_BASE_ADDR
 `define STACK_BASE_ADDR 32'hFFFF0000
