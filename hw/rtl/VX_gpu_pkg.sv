@@ -241,8 +241,8 @@ package VX_gpu_pkg;
 
     localparam ISSUE_ISW   = `CLOG2(`ISSUE_WIDTH);
     localparam ISSUE_ISW_W = `UP(ISSUE_ISW);
-    localparam ISSUE_RATIO = `NUM_WARPS / `ISSUE_WIDTH;
-    localparam ISSUE_WIS   = `CLOG2(ISSUE_RATIO);
+    localparam PER_ISSUE_WARPS = `NUM_WARPS / `ISSUE_WIDTH;
+    localparam ISSUE_WIS   = `CLOG2(PER_ISSUE_WARPS);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS);
 
 `IGNORE_UNUSED_BEGIN

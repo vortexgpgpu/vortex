@@ -291,11 +291,11 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     `RESET_RELAY (arb_reset, reset);
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        wire [ISSUE_RATIO-1:0] valid_in;
-        wire [ISSUE_RATIO-1:0][DATAW-1:0] data_in;
-        wire [ISSUE_RATIO-1:0] ready_in;
+        wire [PER_ISSUE_WARPS-1:0] valid_in;
+        wire [PER_ISSUE_WARPS-1:0][DATAW-1:0] data_in;
+        wire [PER_ISSUE_WARPS-1:0] ready_in;
 
-        for (genvar j = 0; j < ISSUE_RATIO; ++j) begin
+        for (genvar j = 0; j < PER_ISSUE_WARPS; ++j) begin
             wire operands_ready = ~(| staging_opds_busy[j * `ISSUE_WIDTH + i]);
             assign valid_in[j]  = staging_if[j * `ISSUE_WIDTH + i].valid && operands_ready;
             assign data_in[j]   = staging_if[j * `ISSUE_WIDTH + i].data;
@@ -303,7 +303,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         end
 
         VX_stream_arb #(
-            .NUM_INPUTS (ISSUE_RATIO),
+            .NUM_INPUTS (PER_ISSUE_WARPS),
             .DATAW      (DATAW),
             .ARBITER    ("R"),
             .OUT_BUF    (2)
