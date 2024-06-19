@@ -11,10 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`ifndef VX_TRACE_VH
-`define VX_TRACE_VH
+`ifndef VX_TRACE_PKG_VH
+`define VX_TRACE_PKG_VH
+
+`include "VX_define.vh"
+
+package VX_trace_pkg;
 
 `ifdef SIMULATION
+
+`ifdef SV_DPI
+    import "DPI-C" function void dpi_trace(input int level, input string format /*verilator sformat*/);
+`endif
+
+    import VX_gpu_pkg::*;
 
     task trace_ex_type(input int level, input [`EX_BITS-1:0] ex_type);
         case (ex_type)
@@ -384,4 +394,6 @@
 
 `endif
 
-`endif // VX_TRACE_VH
+endpackage
+
+`endif // VX_TRACE_PKG_VH

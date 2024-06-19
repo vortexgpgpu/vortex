@@ -12,7 +12,6 @@
 // limitations under the License.
 
 `include "VX_define.vh"
-`include "VX_trace.vh"
 
 module VX_issue #(
     parameter CORE_ID = 0

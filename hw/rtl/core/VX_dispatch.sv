@@ -12,9 +12,8 @@
 // limitations under the License.
 
 `include "VX_define.vh"
-`include "VX_trace.vh"
 
-module VX_dispatch import VX_gpu_pkg::*; #(
+module VX_dispatch import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     parameter CORE_ID = 0
 ) (
     input wire              clk,
