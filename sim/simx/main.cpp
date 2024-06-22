@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
 
   {
     // create processor configuation
-    Arch arch(num_threads, num_warps, num_cores, tc_size, tc_num);
+    Arch arch(num_threads, num_warps, num_cores);
 
     // create memory module
     RAM ram(0, RAM_PAGE_SIZE);

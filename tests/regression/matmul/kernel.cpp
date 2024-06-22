@@ -13,7 +13,7 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	unsigned c_addr = reinterpret_cast<unsigned>(dst_ptr);
 
 	uint32_t tc_size = arg->tc_size;
-	int TC_per_warp = arg->TC_per_warp;
+	uint32_t TC_per_warp = arg->TC_per_warp;
 	unsigned num_threads = arg->num_threads;
 	int num_warps = arg->num_warps;
 	uint32_t matrix_size = arg->matrix_size;
@@ -104,6 +104,9 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 		unsigned b_addr_base = b_addr + offset*arg->data_size;
 		unsigned c_addr_base = c_addr + offset_c*arg->data_size;
 		csr_write(VX_MAT_MUL_SIZE,n_tiles);
+		csr_write(VX_TC_NUM,TC_per_warp);
+		csr_write(VX_TC_SIZE,tc_size);
+
 		mload (0, a_addr_base);
 		mload (1, b_addr_base);
 		//In case of multiple threads - sync load
