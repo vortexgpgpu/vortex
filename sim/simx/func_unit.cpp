@@ -255,7 +255,7 @@ int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
 
 TcuUnit::TcuUnit(const SimContext& ctx, Core* core) 
     : FuncUnit(ctx, core, "TCU")
-    , tc_size (core_->arch().tc_size())
+    // , tc_size (core_->arch().tc_size())
     {}
 
 void TcuUnit::tick() {
@@ -267,6 +267,8 @@ void TcuUnit::tick() {
         auto& output = Outputs.at(i);
         auto trace = input.front();
         uint32_t n_tiles = core_->emulator_.get_tiles();
+		uint32_t tc_size = core_->emulator_.get_tc_size();
+
         switch (trace->tcu_type) {
             case TCUType::TCU_MUL:
             {    //mat size = n_tiles * tc_size

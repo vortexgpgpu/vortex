@@ -1419,8 +1419,11 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   { //TODO - make it data-type flexible
     uint32_t mem_bytes = 1;
     DP(3, "mem_bytes=" << mem_bytes << std::endl);
-    uint16_t tc_size = core_->arch().tc_size();
-    uint32_t TC_per_warp = core_->arch().tc_num();
+    uint16_t tc_size = this->get_csr(VX_TC_SIZE, 0, wid);
+    uint32_t TC_per_warp = this->get_csr(VX_TC_NUM, 0, wid);
+
+    DP(3, "tc_size=" << tc_size << std::endl);
+    DP(3, "TC_per_warp=" << TC_per_warp << std::endl);
 
     //Number of loads - dependant on the thread config
     uint32_t n_tiles = this->get_csr(VX_MAT_MUL_SIZE, 0, wid);  //CSR instruction before MLOAD will ensure that this csr has value

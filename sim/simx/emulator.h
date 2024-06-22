@@ -55,6 +55,7 @@ public:
   int get_exitcode() const;
   
   Word get_tiles();
+  Word get_tc_size();
 
 private:
 
@@ -125,6 +126,8 @@ private:
   wspawn_t    wspawn_;
   std::vector<Word> scratchpad;
   uint32_t mat_size;
+  uint32_t tc_size;
+  uint32_t tc_num;
 };
 
 }
