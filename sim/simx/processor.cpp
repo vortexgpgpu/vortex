@@ -96,7 +96,7 @@ void ProcessorImpl::attach_ram(RAM* ram) {
   }
 }
 #ifdef VM_ENABLE
-void ProcessorImpl::set_satp(uint32_t satp) {
+void ProcessorImpl::set_satp(uint64_t satp) {
   for (auto cluster : clusters_) {
     cluster->set_satp(satp);
   }
@@ -164,12 +164,12 @@ void Processor::dcr_write(uint32_t addr, uint32_t value) {
 }
 
 #ifdef VM_ENABLE
-uint32_t Processor::get_satp() {
+uint64_t Processor::get_satp() {
   // std::cout << "get SATP: 0x" << std::hex << this->satp << std::endl;
   return this->satp;
 }
 
-void Processor::set_satp(uint32_t satp) {
+void Processor::set_satp(uint64_t satp) {
   impl_->set_satp(satp);
   this->satp = satp;
 }
