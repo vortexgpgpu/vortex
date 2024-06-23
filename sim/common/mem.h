@@ -34,13 +34,14 @@ namespace vortex {
 #ifdef VM_ENABLE
 enum VA_MODE {
   BARE,
-  SV32
+  SV32,
+  SV64
 };
 
 enum ACCESS_TYPE {
   LOAD,
   STORE,
-  FETCH
+  FENCE
 };
 
 class Page_Fault_Exception : public std::runtime_error /* or logic_error */
@@ -117,7 +118,7 @@ public:
   };
 
 #ifdef VM_ENABLE
-  MemoryUnit(uint64_t pageSize = PAGE_TABLE_SIZE);
+  MemoryUnit(uint64_t pageSize = MEM_PAGE_SIZE);
 #else
   MemoryUnit(uint64_t pageSize = 0);
 #endif
@@ -138,8 +139,8 @@ public:
 
 #ifdef VM_ENABLE
   void tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags, uint64_t size_bits);
-  uint32_t get_satp();  
-  void set_satp(uint32_t satp);
+  uint64_t get_satp();  
+  void set_satp(uint64_t satp);
 #else
   void tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags);
 #endif
@@ -238,14 +239,16 @@ private:
   std::unordered_map<uint64_t, TLBEntry> tlb_;
   uint64_t  pageSize_;
   ADecoder  decoder_;
+#ifndef VM_ENABLE
   bool      enableVM_;
+#endif
 
   amo_reservation_t amo_reservation_;
 #ifdef VM_ENABLE
 
-  uint32_t satp;
+  uint64_t satp;
   VA_MODE mode;
-  uint32_t ptbr;
+  uint64_t ptbr;
 
   std::unordered_set<uint64_t> unique_translations;
   uint64_t TLB_HIT, TLB_MISS, TLB_EVICT, PTW, PERF_UNIQUE_PTW;
@@ -380,7 +383,7 @@ class vAddr_SV32_t
       vpn[0] = bits(address,12,21);
       vpn[1] = bits(address,22,31);
       pgoff = bits(address,0,11);
-      // printf("vpn[0] = 0x%lx, vpn[1] = 0x%lx, pgoff = 0x%lx\n",vpn[0],vpn[1],pgoff);
+      // printf("vpn[1] = 0x%lx, vpn[0] = 0x%lx, pgoff = 0x%lx\n",vpn[1],vpn[0],pgoff);
     }
 };
 #endif

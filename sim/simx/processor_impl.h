@@ -40,8 +40,7 @@ public:
   void dcr_write(uint32_t addr, uint32_t value);
 
 #ifdef VM_ENABLE
-  // 32bit satp
-  void set_satp(uint32_t satp);
+  void set_satp(uint64_t satp);
 #endif
 
   PerfStats perf_stats() const;

@@ -271,7 +271,7 @@ bool Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
 
 #ifdef VM_ENABLE
 void Emulator::icache_read(void *data, uint64_t addr, uint32_t size) {
-  DPH(3, "*** icache_read 0x" << std::hex << addr << ", size = 0x "  << size);
+  // DP(1, "*** icache_read 0x" << std::hex << addr << ", size = 0x "  << size);
 
   try  
   {
@@ -290,7 +290,7 @@ void Emulator::icache_read(void *data, uint64_t addr, uint32_t size) {
 #endif
 
 #ifdef VM_ENABLE
-void Emulator::set_satp(uint32_t satp) {
+void Emulator::set_satp(uint64_t satp) {
   DPH(3, "set satp 0x" << std::hex << satp << " in emulator module\n");
   set_csr(VX_CSR_SATP,satp,0,0); 
 }
@@ -299,6 +299,7 @@ void Emulator::set_satp(uint32_t satp) {
 
 #ifdef VM_ENABLE
 void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
+  DP(1, "*** dcache_read 0x" << std::hex << addr << ", size = 0x "  << size);
   auto type = get_addr_type(addr);
   if (type == AddrType::Shared) {
     core_->local_mem()->read(data, addr, size);

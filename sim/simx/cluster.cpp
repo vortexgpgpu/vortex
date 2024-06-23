@@ -107,7 +107,7 @@ void Cluster::attach_ram(RAM* ram) {
 }
 
 #ifdef VM_ENABLE
-void Cluster::set_satp(uint32_t satp) {
+void Cluster::set_satp(uint64_t satp) {
   for (auto& socket : sockets_) {
     socket->set_satp(satp);
   }

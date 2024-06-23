@@ -33,6 +33,9 @@
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
+`ifndef VM_DISABLE
+`define VM_ENABLE
+`endif
 
 `ifndef EXT_M_DISABLE
 `define EXT_M_ENABLE
@@ -171,12 +174,11 @@
 `define IO_BASE_ADDR    64'h000000040
 `endif
 
+`ifdef VM_ENABLE
 `ifndef PAGE_TABLE_BASE_ADDR  
 `define PAGE_TABLE_BASE_ADDR 64'h1F0000000
 `endif
 
-`ifndef PAGE_TABLE_SIZE 
-`define PAGE_TABLE_SIZE 4096
 `endif
 
 `else // XLEN_32
@@ -197,12 +199,11 @@
 `define IO_BASE_ADDR    32'h00000040
 `endif
 
+`ifdef VM_ENABLE
 `ifndef PAGE_TABLE_BASE_ADDR  
 `define PAGE_TABLE_BASE_ADDR 32'hF0000000
 `endif
 
-`ifndef PAGE_TABLE_SIZE 
-`define PAGE_TABLE_SIZE 4096
 `endif
 
 `endif
@@ -270,38 +271,56 @@
 `endif
 
 // Virtual Memory Configuration ///////////////////////////////////////////////////////
-`ifndef VM_DISABLE
-`define VM_ENABLE
-`endif
 `ifdef VM_ENABLE
-    `ifndef VM_ADDR_MODE
-    `define VM_ADDR_MODE SV32
-    `endif
-    
-    `ifndef PTE_SIZE
-        `ifdef XLEN_32
-            `define PTE_SIZE 4
-            `define NUM_PTE_ENTRY 1024
-        `else
-            `ifdef XLEN_64
-                `define PTE_SIZE 8
-                `define NUM_PTE_ENTRY 1024
-            `else 
-                `define PTE_SIZE 8
-                `define NUM_PTE_ENTRY 1024
-            `endif
+    `ifdef XLEN_32
+        `ifndef VM_ADDR_MODE
+        `define VM_ADDR_MODE SV32  //or BARE
         `endif
-        `define PT_SIZE (PTE_SIZE * NUM_PTE_ENTRY)
+        `ifndef PTE_SIZE
+        `define PTE_SIZE (4)
+        `endif
+        `ifndef SATP_MODE_IDX
+        `define SATP_MODE_IDX (31)
+        `endif
+        `ifndef SATP_PPN_WIDTH
+        `define SATP_PPN_WIDTH (22)
+        `endif
+    `else
+        `ifndef VM_ADDR_MODE
+        `define VM_ADDR_MODE SV64 //or BARE
+        `endif
+        `ifndef PTE_SIZE
+        `define PTE_SIZE (8)
+        `endif
+        `ifndef SATP_MODE_IDX
+        `define SATP_MODE_IDX (63)
+        `endif
+        `ifndef SATP_PPN_WIDTH
+        `define SATP_PPN_WIDTH (44)
+        `endif
     `endif
+
+    `ifndef NUM_PTE_ENTRY 
+    `define NUM_PTE_ENTRY (1024)
+    `endif
+
+    `ifndef PT_SIZE
+    `define PT_SIZE (PTE_SIZE * NUM_PTE_ENTRY)
+    `endif
+
+    `ifndef PT_TOTAL_SIZE
+    `define PT_TOTAL_SIZE (PT_SIZE*(1+NUM_PTE_ENTRY))
+    `endif
+
 
     `ifndef TLB_SIZE
-    `define TLB_SIZE 32
-    `endif
-    
-    `ifndef SUPER_PAGING 
-    `define SUPER_PAGING 0
+    `define TLB_SIZE (32)
     `endif
 
+`endif
+
+`ifndef MEM_PAGE_SIZE
+`define MEM_PAGE_SIZE (4096)
 `endif
 
 // Pipeline Configuration /////////////////////////////////////////////////////
