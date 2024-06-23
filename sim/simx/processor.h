@@ -34,14 +34,14 @@ public:
 
   void dcr_write(uint32_t addr, uint32_t value);
 #ifdef VM_ENABLE
-  uint32_t get_satp();
-  void set_satp(uint32_t satp);
+  uint64_t get_satp();
+  void set_satp(uint64_t satp);
 #endif
 
 private:
   ProcessorImpl* impl_;
 #ifdef VM_ENABLE
-  uint32_t satp;
+  uint64_t satp;
 #endif
 };
 
