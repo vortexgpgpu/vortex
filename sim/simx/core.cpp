@@ -398,7 +398,7 @@ void Core::attach_ram(RAM* ram) {
 }
 
 #ifdef VM_ENABLE
-void Core::set_satp(uint32_t satp) {
+void Core::set_satp(uint64_t satp) {
   emulator_.set_satp(satp); //JAEWON wit, tid???
   // emulator_.set_csr(VX_CSR_SATP,satp,0,0); //JAEWON wit, tid???
 }
