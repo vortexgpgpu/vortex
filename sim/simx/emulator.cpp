@@ -74,7 +74,10 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     , core_(core)
     , warps_(arch.num_warps(), arch)
     , barriers_(arch.num_barriers(), 0)
-    , scratchpad(std::vector<Word>(32 * 32 * 32768)) //Fix this : Max TC_SIZE = 32
+    // Currently, tradeoff between scratchpad size & performance has not been evaluated. Scratchpad is
+    // considered to be big enough to hold input tiles for one output tile.
+    // In future versions, scratchpad size should be fixed to an appropriate value.
+    , scratchpad(std::vector<Word>(32 * 32 * 32768)) 
 {
   this->clear();
 }
@@ -358,6 +361,11 @@ Word Emulator::get_tiles()
 Word Emulator::get_tc_size()
 {
   return tc_size;
+}
+
+Word Emulator::get_tc_num()
+{
+  return tc_num;
 }
 
 Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {

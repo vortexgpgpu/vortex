@@ -255,7 +255,6 @@ int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
 
 TcuUnit::TcuUnit(const SimContext& ctx, Core* core) 
     : FuncUnit(ctx, core, "TCU")
-    // , tc_size (core_->arch().tc_size())
     {}
 
 void TcuUnit::tick() {

@@ -21,8 +21,6 @@
 
 const char* kernel_file = "kernel.vxbin";
 uint32_t matrix_size = 0;
-uint32_t tc_num = 4;
-uint32_t TC_size = 8;
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
@@ -41,7 +39,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv, uint32_t &data_size) {
   int c;
-  while ((c = getopt(argc, argv, "n:k:d:t:s:h?")) != -1) {
+  while ((c = getopt(argc, argv, "n:k:d:h?")) != -1) {
     switch (c) {
     case 'n':
       matrix_size = atoi(optarg);
@@ -51,12 +49,6 @@ static void parse_args(int argc, char **argv, uint32_t &data_size) {
       break;
     case 'd':
       data_size = atoi(optarg);
-      break; 
-    case 't':
-      tc_num = atoi(optarg);
-      break;
-    case 's':
-      TC_size = atoi(optarg);
       break; 
     case 'h':
     case '?': {
@@ -151,21 +143,15 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_open(&device));
 
   uint64_t num_cores, num_warps, num_threads;
-  uint32_t tc_size, TC_per_warp;
+  uint64_t tc_size, TC_per_warp;
 
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps));
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
   
-  std::cout << "Debug :: tc_size (optarg) = " << TC_size << std::endl;
-  std::cout << "Debug :: tc_num (optarg) = " << tc_num << std::endl;
-
   //Add assert/knob
-  tc_size = TC_size;
-  TC_per_warp = tc_num;
-
-  // RT_CHECK(vx_dev_caps(device, VX_CAPS_TC_SIZE, &tc_size));
-  // RT_CHECK(vx_dev_caps(device, VX_CAPS_TC_NUM, &TC_per_warp));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_TC_SIZE, &tc_size));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_TC_NUM, &TC_per_warp));
 
   std::cout << "Debug :: tc_size = " << tc_size << std::endl;
   std::cout << "Debug :: tc_num = " << TC_per_warp << std::endl;

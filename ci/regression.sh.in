@@ -124,7 +124,9 @@ regression()
     # test local barrier
     ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
     ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -tbar"
-    
+
+    # test for matmul
+    CONFIGS="-DTC_NUM=4 -DTC_SIZE=8" ./ci/blackbox.sh --cores=4 --app=matmul --driver=simx --threads=32 --warps=32 --args="-n128 -d1" 
 
     echo "regression tests done!"
 }

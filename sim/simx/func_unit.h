@@ -103,7 +103,6 @@ private:
 class TcuUnit : public FuncUnit {
 public:
     TcuUnit(const SimContext& ctx, Core*);
-    // uint64_t tc_size;
     void tick();
 };
 

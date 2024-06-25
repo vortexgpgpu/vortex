@@ -222,21 +222,19 @@ inline void vx_fence() {
 }
 
 //Matrix load
-//Converted instruction type cause destination registers were not getiing blocked otherwise
-inline void mload(unsigned dest, unsigned  addr) 
+inline void vx_matrix_load(unsigned dest, unsigned  addr) 
 {
     asm volatile (".insn i 0x7b, 0, x0, %0(%1)" :: "i"(dest), "r"(addr));
 }
 
-//mat store
-inline void ms(unsigned  addr) 
+//Matrix Store
+inline void vx_matrix_store(unsigned  addr) 
 {
     asm volatile (".insn i 0x7b, 1, x0, 0(%0)" :: "r"(addr));
 }
 
-//mat mul
-//num tiles along reduced K dimension of matmul as imm value (can use rd,rs field to expand range of n_tiles from 12 bits)
-inline void mm() 
+//Matrix Mul
+inline void vx_matrix_mul() 
 {
     asm volatile (".insn i 0x7b, 2, x0, 0(x0)");
 }

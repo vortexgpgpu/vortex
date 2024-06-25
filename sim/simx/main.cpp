@@ -35,8 +35,6 @@ static void show_usage() {
 uint32_t num_threads = NUM_THREADS;
 uint32_t num_warps = NUM_WARPS;
 uint32_t num_cores = NUM_CORES;
-uint32_t tc_size = TC_SIZE;
-uint32_t  tc_num = TC_NUM;
 bool showStats = false;
 const char* program = nullptr;
 

@@ -69,12 +69,12 @@ public:
     case VX_CAPS_NUM_CORES:
       _value = NUM_CORES * NUM_CLUSTERS;
       break;
-    // case VX_CAPS_TC_SIZE:
-    //   _value = TC_SIZE;
-    //   break;
-    // case VX_CAPS_TC_NUM:
-    //   _value = TC_NUM;
-    //   break;
+    case VX_CAPS_TC_SIZE:
+      _value = TC_SIZE;
+      break;
+    case VX_CAPS_TC_NUM:
+      _value = TC_NUM;
+      break;
     case VX_CAPS_CACHE_LINE_SIZE:
       _value = CACHE_BLOCK_SIZE;
       break;
