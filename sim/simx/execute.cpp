@@ -1429,8 +1429,8 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     uint32_t n_tiles = this->get_csr(VX_MAT_MUL_SIZE, 0, wid);  //CSR instruction before MLOAD will ensure that this csr has value
     int num_data_per_thread;
     int num_data_per_thread_st;
-    int num_threads_actv;
-    int num_threads_actv_st;
+    uint32_t num_threads_actv;
+    uint32_t num_threads_actv_st;
     uint32_t data_bytes_load;
     uint32_t data_bytes_store;
     uint32_t num_threads_per_tc = MAX (1, num_threads/TC_per_warp);
@@ -1506,7 +1506,6 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
 
         auto trace_data = std::make_shared<LsuTraceData>(num_threads);
         trace->data = trace_data;
-        uint32_t accu_offset = (n_tiles)*(n_tiles)*(n_tiles)*tc_size*tc_size*2;
 
         for (uint32_t t = thread_start; t < num_threads_actv_st; ++t) 
         {
@@ -1521,12 +1520,6 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           //Store C
           for (int n=0; n<num_data_per_thread_st; n++)
           {
-            uint64_t mem_addr = (base_addr+(n*mem_bytes));
-            uint32_t csr_index = (2*num_data_per_thread_st) + n;
-            uint32_t scratchpad_index = (tc_size*tc_size*2) + (t*num_data_per_thread) + n;
-            
-            //scratchpad -> csr (TODO :: removed intermediate CSR stage ; incorporate limited scratchmad implementation)
-            //core_->set_csr(csr_addr[(2*num_data_per_thread) + n], scratchpad[(n_tiles*tc_size*tc_size*2) + (t*num_data_per_thread) + n], t, warp_id_);
             Word* temp_ref = &(warp.ireg_file.at(t).at(rsrc0));
             *temp_ref = scratchpad[(n_tiles*tc_size*tc_size*2) + (t*num_data_per_thread_st) + n];
 
@@ -1534,7 +1527,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           }
         }
         //Clear the scratchpad
-        for(int i =0 ; i < scratchpad.size(); i++)
+        for(long unsigned int i=0 ; i < scratchpad.size(); i++)
         {
           scratchpad[i] = 0;
         }
@@ -1545,7 +1538,6 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         DP(4, "TCU MULTIPLY MAT");
         trace->fu_type = FUType::TCU;
         trace->tcu_type = TCUType::TCU_MUL;
-        uint32_t accu_offset = (n_tiles)*(n_tiles)*(n_tiles)*tc_size*tc_size*2;
         uint32_t threads_per_tc = MAX (1, num_threads/TC_per_warp);
         for (uint32_t t = thread_start; t < num_threads_actv; ++t) 
         {
@@ -1556,12 +1548,14 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           //TC operation [only 1 thread in 1 warp needs to do this]
           if (t%threads_per_tc == 0)
           {
-            //TODO : change to systolic array implementation
-            uint32_t thread_offset = t*(tc_size*tc_size);
-            int loop_offset = 0;
-            int offset_b = n_tiles*n_tiles*n_tiles*tc_size*tc_size;
             /*
             // TODO : Fix needed for functional correctness
+            // TODO : change to systolic array implementation
+            uint32_t thread_offset = t*(tc_size*tc_size);
+
+            int loop_offset = 0;
+            int offset_b = n_tiles*n_tiles*n_tiles*tc_size*tc_size;
+            uint32_t accu_offset = (n_tiles)*(n_tiles)*(n_tiles)*tc_size*tc_size*2;
             for(int tiles = 0 ; tiles < n_tiles ; tiles++)  //What's the HW implication of this?? A counter implementation?
             { 
               for (int i = 0; i < tc_size; i++) { //ROW-1

@@ -111,20 +111,20 @@
 `endif
 `define NUM_SOCKETS `UP(`NUM_CORES / `SOCKET_SIZE)
 
+// Size of Tensor Core
 `ifndef TC_SIZE
-`define TC_SIZE 4
+`define TC_SIZE 8
 `endif
 
+// Number of TCs per Warp
 `ifndef TC_NUM
-`define TC_NUM 1
+`define TC_NUM 4
 `endif
 
-// Number of TCU units
 `ifndef NUM_TCU_LANES
 `define NUM_TCU_LANES   `TC_NUM
 `endif
 
-// Number of TCU units
 `ifndef NUM_TCU_BLOCKS
 `define NUM_TCU_BLOCKS  `ISSUE_WIDTH
 `endif

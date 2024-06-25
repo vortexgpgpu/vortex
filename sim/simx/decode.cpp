@@ -410,9 +410,9 @@ static const char* op_string(const Instr &instr) {
   case Opcode::TCU:
     switch(func3)
     {
-      case 0: return "ML"; //
-      case 1: return "MS"; //
-      case 2: return "MATMUL";
+      case 0: return "ML";     // Matrix Load
+      case 1: return "MS";     // Matrix Store
+      case 2: return "MATMUL"; // Matrix Multiply
       default:
         std::abort();
     }

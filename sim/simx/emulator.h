@@ -56,7 +56,8 @@ public:
   
   Word get_tiles();
   Word get_tc_size();
-
+  Word get_tc_num();
+  
 private:
 
   struct ipdom_entry_t {

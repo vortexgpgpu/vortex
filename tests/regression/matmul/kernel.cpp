@@ -107,15 +107,15 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 		csr_write(VX_TC_NUM,TC_per_warp);
 		csr_write(VX_TC_SIZE,tc_size);
 
-		mload (0, a_addr_base);
-		mload (1, b_addr_base);
+		vx_matrix_load (0, a_addr_base);
+		vx_matrix_load (1, b_addr_base);
 		//In case of multiple threads - sync load
 		vx_fence();
 
-		mm();   //Assuming padding to ensure matrix size is a multiple of tc_size
+		vx_matrix_mul();   //Assuming padding to ensure matrix size is a multiple of tc_size
 		vx_fence();
 		if (((task_id%num_tasks_per_warp)/num_tasks_per_thread) < thread_limit_c)
-			ms(c_addr_base);
+			vx_matrix_store(c_addr_base);
 		//In case of multiple threads - sync store
 		vx_fence();
 	}	
