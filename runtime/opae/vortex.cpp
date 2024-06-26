@@ -13,7 +13,9 @@
 
 #include <common.h>
 #include <vortex_afu.h>
-
+#include <array>
+#include <unordered_map>
+#include <cstdint>
 #include "driver.h"
 #ifdef SCOPE
 #include "scope.h"

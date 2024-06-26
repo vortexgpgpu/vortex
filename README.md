@@ -34,7 +34,7 @@ Vortex is a full-stack open-source RISC-V GPGPU.
 ## Build Instructions
 More detailed build instructions can be found [here](docs/install_vortex.md).
 ### Supported OS Platforms
-- Ubuntu 18.04, 20.04
+- Ubuntu 18.04, 20.04 (22.04, 23.04 experimental)
 - Centos 7
 ### Toolchain Dependencies
 - [POCL](http://portablecl.org/)
@@ -47,19 +47,25 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 - [Yosys](https://github.com/YosysHQ/yosys)
 - [Sv2v](https://github.com/zachjs/sv2v)
 ### Install development tools
-    $ sudo apt-get install build-essential
-    $ sudo apt-get install binutils
-    $ sudo apt-get install python
-    $ sudo apt-get install uuid-dev
-    $ sudo apt-get install git
+    $ sudo apt-get install build-essential git binutils python3 uuid-dev wget ocl-icd-opencl-dev
 ### Install Vortex codebase
-    $ git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
-    $ cd Vortex
+    $ git clone https://github.com/vortexgpgpu/vortex.git
+    $ cd vortex
+    $ git submodule sync
+    $ git submodule update --init --recursive --jobs 6
 ### Configure your build folder
     # By default, the toolchain default install location is the /opt folder and can be overridden by setting --tooldir.
     $ mkdir build
     $ cd build
     $ ../configure --xlen=32 --tooldir=$HOME/tools
+
+### Only Ubuntu Jammy(22.04) and Mantic (23.04) fix
+    ensure that 
+    #include <cstdint>
+    is added to  ./third_party/ramulator/src/StatType.h
+    the configure script should have done this but just make sure as this is a
+    subrepo
+
 ### Install prebuilt toolchain
     $ ./ci/toolchain_install.sh --all
 ### set environment variables

@@ -12,7 +12,9 @@
 // limitations under the License.
 
 #include <common.h>
-
+#include <array>
+#include <unordered_map>
+#include <cstdint>
 #include <util.h>
 #include <processor.h>
 #include <arch.h>
@@ -225,12 +227,16 @@ public:
     uint32_t offset = addr - VX_CSR_MPM_BASE;
     if (offset > 31)
       return -1;
+    
     if (mpm_cache_.count(core_id) == 0) {
+      std::array<uint64_t, 32> temp_array;
       uint64_t mpm_mem_addr = IO_MPM_ADDR + core_id * 32 * sizeof(uint64_t);
-      CHECK_ERR(this->download(mpm_cache_[core_id].data(), mpm_mem_addr, 32 * sizeof(uint64_t)), {
+      CHECK_ERR(this->download(temp_array.data(), mpm_mem_addr, 32 * sizeof(uint64_t)), {
         return err;
       });
+      mpm_cache_[core_id] = std::move(temp_array);
     }
+    
     *value = mpm_cache_.at(core_id).at(offset);
     return 0;
   }
