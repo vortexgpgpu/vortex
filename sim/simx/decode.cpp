@@ -51,6 +51,8 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   {Opcode::EXT2,    InstType::R4},
   {Opcode::R_W,     InstType::R},
   {Opcode::I_W,     InstType::I},
+  {Opcode::VOTE,     InstType::I},
+  {Opcode::SHFL,     InstType::I},
 };
 
 enum Constants {
@@ -596,6 +598,22 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
         instr->setImm(code >> shift_rs2);
       }
       break;
+    case Opcode::VOTE:{
+      instr->setFunc3(func3);
+      instr->setDestReg(rd, RegType::Integer);
+      instr->addSrcReg(rs1, RegType::Integer);
+      auto imm = code >> shift_rs2;
+      instr->setImm(sext(imm, width_i_imm));
+      break;
+    }
+    case Opcode::SHFL:{
+      instr->setFunc3(func3);
+      instr->setDestReg(rd, RegType::Integer);
+      instr->addSrcReg(rs1, RegType::Integer);
+      auto imm = code >> shift_rs2;
+      instr->setImm(sext(imm, width_i_imm));
+      break;
+    }
     default:
       std::abort();
       break;
