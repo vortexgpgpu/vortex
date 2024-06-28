@@ -60,6 +60,8 @@ package VX_gpu_pkg;
         logic [7:0]             mpm_class;
     } base_dcrs_t;
 
+    //////////////////////////// Perf counter types ///////////////////////////
+
     typedef struct packed {
         logic [`PERF_CTR_BITS-1:0] reads;
         logic [`PERF_CTR_BITS-1:0] writes;
@@ -78,47 +80,62 @@ package VX_gpu_pkg;
     } mem_perf_t;
 
     typedef struct packed {
+        logic [`PERF_CTR_BITS-1:0] idles;
+        logic [`PERF_CTR_BITS-1:0] stalls;
+    } sched_perf_t;
+
+    typedef struct packed {
+        logic [`PERF_CTR_BITS-1:0] ibf_stalls;
+        logic [`PERF_CTR_BITS-1:0] scb_stalls;
+        logic [`PERF_CTR_BITS-1:0] opd_stalls;
+        logic [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] units_uses;
+        logic [`NUM_SFU_UNITS-1:0][`PERF_CTR_BITS-1:0] sfu_uses;
+    } issue_perf_t;
+
+    //////////////////////// instruction arguments ////////////////////////////
+
+    typedef struct packed {
         logic use_PC;
         logic use_imm;
         logic is_w;
         logic [`ALU_TYPE_BITS-1:0] xtype;
         logic [`IMM_BITS-1:0] imm;
-    } alu_mod_t;
+    } alu_args_t;
 
     typedef struct packed {
-        logic [($bits(alu_mod_t)-`INST_FRM_BITS-`INST_FMT_BITS)-1:0] __padding;
+        logic [($bits(alu_args_t)-`INST_FRM_BITS-`INST_FMT_BITS)-1:0] __padding;
         logic [`INST_FRM_BITS-1:0] frm;
         logic [`INST_FMT_BITS-1:0] fmt;
-    } fpu_mod_t;
+    } fpu_args_t;
 
     typedef struct packed {
-        logic [($bits(alu_mod_t)-1-1-`OFFSET_BITS)-1:0] __padding;
+        logic [($bits(alu_args_t)-1-1-`OFFSET_BITS)-1:0] __padding;
         logic is_store;
         logic is_float;
         logic [`OFFSET_BITS-1:0] offset;
-    } lsu_mod_t;
+    } lsu_args_t;
 
     typedef struct packed {
-        logic [($bits(alu_mod_t)-1-`VX_CSR_ADDR_BITS-5)-1:0] __padding;
+        logic [($bits(alu_args_t)-1-`VX_CSR_ADDR_BITS-5)-1:0] __padding;
         logic use_imm;
         logic [`VX_CSR_ADDR_BITS-1:0] addr;
         logic [4:0] imm;
-    } csr_mod_t;
+    } csr_args_t;
 
     typedef struct packed {
-        logic [($bits(alu_mod_t)-1)-1:0] __padding;
+        logic [($bits(alu_args_t)-1)-1:0] __padding;
         logic is_neg;
-    } wctl_mod_t;
+    } wctl_args_t;
 
     typedef union packed {
-        alu_mod_t  alu;
-        fpu_mod_t  fpu;
-        lsu_mod_t  lsu;
-        csr_mod_t  csr;
-        wctl_mod_t wctl;
+        alu_args_t  alu;
+        fpu_args_t  fpu;
+        lsu_args_t  lsu;
+        csr_args_t  csr;
+        wctl_args_t wctl;
     } op_args_t;
 
-    /* verilator lint_off UNUSED */
+`IGNORE_UNUSED_BEGIN
 
     ///////////////////////// LSU memory Parameters ///////////////////////////
 
@@ -154,11 +171,11 @@ package VX_gpu_pkg;
     localparam DCACHE_MEM_DATA_WIDTH = (DCACHE_LINE_SIZE * 8);
 
     // Memory request tag bits
-    `ifdef DCACHE_ENABLE
+`ifdef DCACHE_ENABLE
     localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_MEM_TAG_WIDTH(`DCACHE_MSHR_SIZE, `DCACHE_NUM_BANKS, DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `SOCKET_SIZE, `NUM_DCACHES);
-    `else
+`else
     localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `SOCKET_SIZE, `NUM_DCACHES);
-    `endif
+`endif
 
     ////////////////////////// Icache Parameters //////////////////////////////
 
@@ -179,11 +196,11 @@ package VX_gpu_pkg;
     localparam ICACHE_MEM_DATA_WIDTH = (ICACHE_LINE_SIZE * 8);
 
     // Memory request tag bits
-    `ifdef ICACHE_ENABLE
+`ifdef ICACHE_ENABLE
     localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(`ICACHE_MSHR_SIZE, 1, `NUM_ICACHES);
-    `else
+`else
     localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(1, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, `SOCKET_SIZE, `NUM_ICACHES);
-    `endif
+`endif
 
     /////////////////////////////// L1 Parameters /////////////////////////////
 
@@ -208,11 +225,11 @@ package VX_gpu_pkg;
     localparam L2_MEM_DATA_WIDTH	= (`L2_LINE_SIZE * 8);
 
     // Memory request tag bits
-    `ifdef L2_ENABLE
+`ifdef L2_ENABLE
     localparam L2_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`L2_MSHR_SIZE, `L2_NUM_BANKS, L2_NUM_REQS, `L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
-    `else
+`else
     localparam L2_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L2_NUM_REQS, `L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
-    `endif
+`endif
 
     /////////////////////////////// L3 Parameters /////////////////////////////
 
@@ -229,13 +246,11 @@ package VX_gpu_pkg;
     localparam L3_MEM_DATA_WIDTH	= (`L3_LINE_SIZE * 8);
 
     // Memory request tag bits
-    `ifdef L3_ENABLE
+`ifdef L3_ENABLE
     localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`L3_MSHR_SIZE, `L3_NUM_BANKS, L3_NUM_REQS, `L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
-    `else
+`else
     localparam L3_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L3_NUM_REQS, `L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
-    `endif
-
-    /* verilator lint_on UNUSED */
+`endif
 
     /////////////////////////////// Issue parameters //////////////////////////
 
@@ -245,7 +260,6 @@ package VX_gpu_pkg;
     localparam ISSUE_WIS   = `CLOG2(PER_ISSUE_WARPS);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS);
 
-`IGNORE_UNUSED_BEGIN
     function logic [`NW_WIDTH-1:0] wis_to_wid(
         input logic [ISSUE_WIS_W-1:0] wis,
         input logic [ISSUE_ISW_W-1:0] isw
@@ -278,6 +292,7 @@ package VX_gpu_pkg;
             wid_to_wis = 0;
         end
     endfunction
+
 `IGNORE_UNUSED_END
 
 endpackage

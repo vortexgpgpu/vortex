@@ -182,6 +182,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t sched_stalls = 0;
   uint64_t ibuffer_stalls = 0;
   uint64_t scrb_stalls = 0;
+  uint64_t opds_stalls = 0;
   uint64_t scrb_alu = 0;
   uint64_t scrb_fpu = 0;
   uint64_t scrb_lsu = 0;
@@ -268,7 +269,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         }
         sched_stalls += sched_stalls_per_core;
       }
-      // ibuffer_stalls
+      // ibuffer stalls
       {
         uint64_t ibuffer_stalls_per_core;
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_IBUF_ST, core_id, &ibuffer_stalls_per_core), {
@@ -280,7 +281,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         }
         ibuffer_stalls += ibuffer_stalls_per_core;
       }
-      // issue_stalls
+      // issue stalls
       {
         uint64_t scrb_stalls_per_core;
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_SCRB_ST, core_id, &scrb_stalls_per_core), {
@@ -316,7 +317,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         }
         scrb_stalls += scrb_stalls_per_core;
       }
-      // sfu_stalls
+      // sfu stalls
       {
         uint64_t scrb_sfu_per_core;
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_SCRB_SFU, core_id, &scrb_sfu_per_core), {
@@ -341,6 +342,18 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         }
         scrb_wctl += scrb_wctl_per_core;
         scrb_csrs += scrb_csrs_per_core;
+      }
+      // operands stalls
+      {
+        uint64_t opds_stalls_per_core;
+        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_OPDS_ST, core_id, &opds_stalls_per_core), {
+          return err;
+        });
+        if (num_cores > 1) {
+          int opds_percent_per_core = calcAvgPercent(opds_stalls_per_core, cycles_per_core);
+          fprintf(stream, "PERF: core%d: operands stalls=%ld (%d%%)\n", core_id, opds_stalls_per_core, opds_percent_per_core);
+        }
+        opds_stalls += opds_stalls_per_core;
       }
       // PERF: memory
       // ifetches
@@ -554,6 +567,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     int sched_idles_percent = calcAvgPercent(sched_idles, total_cycles);
     int sched_stalls_percent = calcAvgPercent(sched_stalls, total_cycles);
     int ibuffer_percent = calcAvgPercent(ibuffer_stalls, total_cycles);
+    int opds_percent = calcAvgPercent(opds_stalls, total_cycles);
     int ifetch_avg_lat = (int)(double(ifetch_lat) / double(ifetches));
     int load_avg_lat = (int)(double(load_lat) / double(loads));
     uint64_t scrb_total = scrb_alu + scrb_fpu + scrb_lsu + scrb_sfu;
@@ -571,6 +585,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       , calcAvgPercent(scrb_csrs, sfu_total)
       , calcAvgPercent(scrb_wctl, sfu_total)
     );
+    fprintf(stream, "PERF: operands stalls=%ld (%d%%)\n", opds_stalls, opds_percent);
     fprintf(stream, "PERF: ifetches=%ld\n", ifetches);
     fprintf(stream, "PERF: loads=%ld\n", loads);
     fprintf(stream, "PERF: stores=%ld\n", stores);
