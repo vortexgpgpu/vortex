@@ -14,8 +14,9 @@
 `include "VX_define.vh"
 
 module VX_gpr_slice import VX_gpu_pkg::*; #(
-    parameter CORE_ID = 0,
-    parameter CACHE_ENABLE = 0
+    parameter CORE_ID   = 0,
+    parameter NUM_BANKS = 4,
+    parameter OUT_REG   = 0
 ) (
     input wire              clk,
     input wire              reset,
@@ -25,180 +26,121 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
     VX_operands_if.master   operands_if
 );
     `UNUSED_PARAM (CORE_ID)
-    localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + `NR_BITS;
+    localparam NUM_SRC_REGS = 3;
+    localparam REQ_SEL_BITS = `CLOG2(NUM_SRC_REGS);
+    localparam REQ_SEL_WIDTH = `UP(REQ_SEL_BITS);
+    localparam BANK_SEL_BITS = `CLOG2(NUM_BANKS);
+    localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
+    localparam PER_BANK_REGS = `NUM_REGS / NUM_BANKS;
+    localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + `NR_BITS + 3 * `NUM_THREADS * `XLEN;
     localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * PER_ISSUE_WARPS);
+    localparam PER_BANK_ADDRW = RAM_ADDRW - BANK_SEL_BITS;
+    localparam XLEN_SIZE = `XLEN / 8;
+    localparam BYTEENW = `NUM_THREADS * XLEN_SIZE;
 
-    localparam STATE_IDLE   = 2'd0;
-    localparam STATE_FETCH1 = 2'd1;
-    localparam STATE_FETCH2 = 2'd2;
-    localparam STATE_FETCH3 = 2'd3;
-    localparam STATE_BITS   = 2;
+    `UNUSED_VAR (writeback_if.data.sop)
 
-    wire [`NUM_THREADS-1:0][`XLEN-1:0] gpr_rd_data;
-    reg [`NR_BITS-1:0] gpr_rd_rid, gpr_rd_rid_n;
-    reg [ISSUE_WIS_W-1:0] gpr_rd_wis, gpr_rd_wis_n;
+    wire [NUM_SRC_REGS-1:0] req_valid_in;
+    wire [NUM_SRC_REGS-1:0] req_ready_in;
+    wire [NUM_SRC_REGS-1:0][PER_BANK_ADDRW-1:0] req_data_in;
+    wire [NUM_SRC_REGS-1:0][BANK_SEL_WIDTH-1:0] req_bank_idx;
 
-    reg [`NUM_THREADS-1:0][`XLEN-1:0] cache_data [PER_ISSUE_WARPS-1:0];
-    reg [`NUM_THREADS-1:0][`XLEN-1:0] cache_data_n [PER_ISSUE_WARPS-1:0];
-    reg [`NR_BITS-1:0] cache_reg [PER_ISSUE_WARPS-1:0];
-    reg [`NR_BITS-1:0] cache_reg_n [PER_ISSUE_WARPS-1:0];
-    reg [`NUM_THREADS-1:0] cache_tmask [PER_ISSUE_WARPS-1:0];
-    reg [`NUM_THREADS-1:0] cache_tmask_n [PER_ISSUE_WARPS-1:0];
-    reg [PER_ISSUE_WARPS-1:0] cache_eop, cache_eop_n;
+    wire [NUM_BANKS-1:0] gpr_rd_valid;
+    wire [NUM_BANKS-1:0][PER_BANK_ADDRW-1:0] gpr_rd_addr;
+    wire [NUM_BANKS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] gpr_rd_data;
+    wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] gpr_rd_req_idx;
 
-    reg [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data, rs1_data_n;
-    reg [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data, rs2_data_n;
-    reg [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data, rs3_data_n;
+    reg [NUM_SRC_REGS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data, src_data_n;
+    wire [NUM_SRC_REGS-1:0] src_valid;
+    reg [NUM_SRC_REGS-1:0] data_fetched;
+    reg data_ready;
 
-    reg [STATE_BITS-1:0] state, state_n;
-    reg [`NR_BITS-1:0] rs2, rs2_n;
-    reg [`NR_BITS-1:0] rs3, rs3_n;
-    reg rs2_ready, rs2_ready_n;
-    reg rs3_ready, rs3_ready_n;
-    reg data_ready, data_ready_n;
+    assign src_valid[0] = (scoreboard_if.data.rs1 != 0) && ~data_fetched[0];
+    assign src_valid[1] = (scoreboard_if.data.rs2 != 0) && ~data_fetched[1];
+    assign src_valid[2] = (scoreboard_if.data.rs3 != 0) && ~data_fetched[2];
 
-    wire stg_valid_in, stg_ready_in;
+    assign req_valid_in[0] = scoreboard_if.valid && src_valid[0];
+    assign req_valid_in[1] = scoreboard_if.valid && src_valid[1];
+    assign req_valid_in[2] = scoreboard_if.valid && src_valid[2];
 
-    wire is_rs1_zero = (scoreboard_if.data.rs1 == 0);
-    wire is_rs2_zero = (scoreboard_if.data.rs2 == 0);
-    wire is_rs3_zero = (scoreboard_if.data.rs3 == 0);
+    if (ISSUE_WIS != 0) begin
+        assign req_data_in[0] = {scoreboard_if.data.wis, scoreboard_if.data.rs1[`NR_BITS-1:BANK_SEL_BITS]};
+        assign req_data_in[1] = {scoreboard_if.data.wis, scoreboard_if.data.rs2[`NR_BITS-1:BANK_SEL_BITS]};
+        assign req_data_in[2] = {scoreboard_if.data.wis, scoreboard_if.data.rs3[`NR_BITS-1:BANK_SEL_BITS]};
+    end else begin
+        assign req_data_in[0] = {scoreboard_if.data.rs1[`NR_BITS-1:BANK_SEL_BITS]};
+        assign req_data_in[1] = {scoreboard_if.data.rs2[`NR_BITS-1:BANK_SEL_BITS]};
+        assign req_data_in[2] = {scoreboard_if.data.rs3[`NR_BITS-1:BANK_SEL_BITS]};
+    end
+
+    if (NUM_BANKS > 1) begin
+        assign req_bank_idx[0] = scoreboard_if.data.rs1[BANK_SEL_BITS-1:0];
+        assign req_bank_idx[1] = scoreboard_if.data.rs2[BANK_SEL_BITS-1:0];
+        assign req_bank_idx[2] = scoreboard_if.data.rs3[BANK_SEL_BITS-1:0];
+    end else begin
+        assign req_bank_idx = '0;
+    end
+
+    VX_stream_xbar #(
+        .NUM_INPUTS  (NUM_SRC_REGS),
+        .NUM_OUTPUTS (NUM_BANKS),
+        .DATAW       (PER_BANK_ADDRW),
+        .PERF_CTR_BITS(`PERF_CTR_BITS),
+        .OUT_BUF     (1) // single-cycle EB since ready_out=1
+    ) req_xbar (
+        .clk       (clk),
+        .reset     (reset),
+        `UNUSED_PIN(collisions),
+        .valid_in  (req_valid_in),
+        .data_in   (req_data_in),
+        .sel_in    (req_bank_idx),
+        .ready_in  (req_ready_in),
+        .valid_out (gpr_rd_valid),
+        .data_out  (gpr_rd_addr),
+        .sel_out   (gpr_rd_req_idx),
+        .ready_out ({NUM_BANKS{1'b1}})
+    );
 
     always @(*) begin
-        state_n      = state;
-        rs2_n        = rs2;
-        rs3_n        = rs3;
-        rs2_ready_n  = rs2_ready;
-        rs3_ready_n  = rs3_ready;
-        rs1_data_n   = rs1_data;
-        rs2_data_n   = rs2_data;
-        rs3_data_n   = rs3_data;
-        cache_data_n = cache_data;
-        cache_reg_n  = cache_reg;
-        cache_tmask_n= cache_tmask;
-        cache_eop_n  = cache_eop;
-        gpr_rd_rid_n = gpr_rd_rid;
-        gpr_rd_wis_n = gpr_rd_wis;
-        data_ready_n = data_ready;
-
-        case (state)
-        STATE_IDLE: begin
-            if (operands_if.valid && operands_if.ready) begin
-                data_ready_n = 0;
-            end
-            if (scoreboard_if.valid && data_ready_n == 0) begin
-                data_ready_n = 1;
-                if (is_rs3_zero || (CACHE_ENABLE != 0 &&
-                                    scoreboard_if.data.rs3 == cache_reg[scoreboard_if.data.wis] &&
-                                    (scoreboard_if.data.tmask & cache_tmask[scoreboard_if.data.wis]) == scoreboard_if.data.tmask)) begin
-                    rs3_data_n   = (is_rs3_zero || CACHE_ENABLE == 0) ? '0 : cache_data[scoreboard_if.data.wis];
-                    rs3_ready_n  = 1;
-                end else begin
-                    rs3_ready_n  = 0;
-                    gpr_rd_rid_n = scoreboard_if.data.rs3;
-                    data_ready_n = 0;
-                    state_n      = STATE_FETCH3;
-                end
-                if (is_rs2_zero || (CACHE_ENABLE != 0 &&
-                                    scoreboard_if.data.rs2 == cache_reg[scoreboard_if.data.wis] &&
-                                    (scoreboard_if.data.tmask & cache_tmask[scoreboard_if.data.wis]) == scoreboard_if.data.tmask)) begin
-                    rs2_data_n   = (is_rs2_zero || CACHE_ENABLE == 0) ? '0 : cache_data[scoreboard_if.data.wis];
-                    rs2_ready_n  = 1;
-                end else begin
-                    rs2_ready_n  = 0;
-                    gpr_rd_rid_n = scoreboard_if.data.rs2;
-                    data_ready_n = 0;
-                    state_n      = STATE_FETCH2;
-                end
-                if (is_rs1_zero || (CACHE_ENABLE != 0 &&
-                                    scoreboard_if.data.rs1 == cache_reg[scoreboard_if.data.wis] &&
-                                    (scoreboard_if.data.tmask & cache_tmask[scoreboard_if.data.wis]) == scoreboard_if.data.tmask)) begin
-                    rs1_data_n   = (is_rs1_zero || CACHE_ENABLE == 0) ? '0 : cache_data[scoreboard_if.data.wis];
-                end else begin
-                    gpr_rd_rid_n = scoreboard_if.data.rs1;
-                    data_ready_n = 0;
-                    state_n      = STATE_FETCH1;
-                end
-            end
-            gpr_rd_wis_n = scoreboard_if.data.wis;
-            rs2_n = scoreboard_if.data.rs2;
-            rs3_n = scoreboard_if.data.rs3;
-        end
-        STATE_FETCH1: begin
-            rs1_data_n = gpr_rd_data;
-            if (~rs2_ready) begin
-                gpr_rd_rid_n = rs2;
-                state_n = STATE_FETCH2;
-            end else if (~rs3_ready) begin
-                gpr_rd_rid_n = rs3;
-                state_n = STATE_FETCH3;
-            end else begin
-                data_ready_n = 1;
-                state_n = STATE_IDLE;
-            end
-        end
-        STATE_FETCH2: begin
-            rs2_data_n = gpr_rd_data;
-            if (~rs3_ready) begin
-                gpr_rd_rid_n = rs3;
-                state_n = STATE_FETCH3;
-            end else begin
-                data_ready_n = 1;
-                state_n = STATE_IDLE;
-            end
-        end
-        STATE_FETCH3: begin
-            rs3_data_n = gpr_rd_data;
-            data_ready_n = 1;
-            state_n = STATE_IDLE;
-        end
-        endcase
-
-        if (CACHE_ENABLE != 0 && writeback_if.valid) begin
-            if ((cache_reg[writeback_if.data.wis] == writeback_if.data.rd)
-             || (cache_eop[writeback_if.data.wis] && writeback_if.data.sop)) begin
-                for (integer j = 0; j < `NUM_THREADS; ++j) begin
-                    if (writeback_if.data.tmask[j]) begin
-                        cache_data_n[writeback_if.data.wis][j] = writeback_if.data.data[j];
-                    end
-                end
-                cache_reg_n[writeback_if.data.wis] = writeback_if.data.rd;
-                cache_eop_n[writeback_if.data.wis] = writeback_if.data.eop;
-                cache_tmask_n[writeback_if.data.wis] = writeback_if.data.sop ? writeback_if.data.tmask :
-                                                                (cache_tmask_n[writeback_if.data.wis] | writeback_if.data.tmask);
+        src_data_n = src_data;
+        for (integer b = 0; b < NUM_BANKS; ++b) begin
+            if (gpr_rd_valid[b]) begin
+                src_data_n[gpr_rd_req_idx[b]] = gpr_rd_data[b];
             end
         end
     end
 
-    always @(posedge clk)  begin
+    always @(posedge clk) begin
         if (reset) begin
-            state       <= STATE_IDLE;
-            cache_eop   <= {PER_ISSUE_WARPS{1'b1}};
-            data_ready  <= 0;
+            data_fetched <= '0;
+            src_data     <= '0;
+            data_ready   <= '0;
         end else begin
-            state       <= state_n;
-            cache_eop   <= cache_eop_n;
-            data_ready  <= data_ready_n;
+            if (scoreboard_if.ready) begin
+                data_fetched <= '0;
+                src_data     <= '0;
+                data_ready   <= '0;
+            end else begin
+                data_fetched <= data_fetched | req_ready_in;
+                src_data     <= src_data_n;
+                data_ready   <= scoreboard_if.valid
+                             && (~src_valid[0] || req_ready_in[0])
+                             && (~src_valid[1] || req_ready_in[1])
+                             && (~src_valid[2] || req_ready_in[2]);
+            end
         end
-        gpr_rd_rid  <= gpr_rd_rid_n;
-        gpr_rd_wis  <= gpr_rd_wis_n;
-        rs2_ready   <= rs2_ready_n;
-        rs3_ready   <= rs3_ready_n;
-        rs2         <= rs2_n;
-        rs3         <= rs3_n;
-        rs1_data    <= rs1_data_n;
-        rs2_data    <= rs2_data_n;
-        rs3_data    <= rs3_data_n;
-        cache_data  <= cache_data_n;
-        cache_reg   <= cache_reg_n;
-        cache_tmask <= cache_tmask_n;
     end
+
+    wire stg_valid_in, stg_ready_in;
 
     assign stg_valid_in = scoreboard_if.valid && data_ready;
     assign scoreboard_if.ready = stg_ready_in && data_ready;
 
+    // We use a toggle buffer since the input signal also toggles
     VX_toggle_buffer #(
-        .DATAW (DATAW)
-    ) toggle_buffer (
+        .DATAW (DATAW),
+        .PASSTHRU (~OUT_REG)
+    ) rsp_buffer (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (stg_valid_in),
@@ -211,7 +153,10 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
             scoreboard_if.data.ex_type,
             scoreboard_if.data.op_type,
             scoreboard_if.data.op_args,
-            scoreboard_if.data.rd
+            scoreboard_if.data.rd,
+            src_data_n[0],
+            src_data_n[1],
+            src_data_n[2]
         }),
         .ready_in  (stg_ready_in),
         .valid_out (operands_if.valid),
@@ -224,44 +169,50 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
             operands_if.data.ex_type,
             operands_if.data.op_type,
             operands_if.data.op_args,
-            operands_if.data.rd
+            operands_if.data.rd,
+            operands_if.data.rs1_data,
+            operands_if.data.rs2_data,
+            operands_if.data.rs3_data
         }),
         .ready_out (operands_if.ready)
     );
 
-    assign operands_if.data.rs1_data = rs1_data;
-    assign operands_if.data.rs2_data = rs2_data;
-    assign operands_if.data.rs3_data = rs3_data;
-
-    // GPR banks
-
-    reg [RAM_ADDRW-1:0] gpr_rd_addr;
     wire [RAM_ADDRW-1:0] gpr_wr_addr;
     if (ISSUE_WIS != 0) begin
         assign gpr_wr_addr = {writeback_if.data.wis, writeback_if.data.rd};
-        always @(posedge clk) begin
-            gpr_rd_addr <= {gpr_rd_wis_n, gpr_rd_rid_n};
-        end
     end else begin
         assign gpr_wr_addr = writeback_if.data.rd;
+    end
+
+    `ifdef GPR_RESET
+        reg wr_enabled = 0;
         always @(posedge clk) begin
-            gpr_rd_addr <= gpr_rd_rid_n;
+            if (reset) begin
+                wr_enabled <= 1;
+            end
         end
-    end
+    `else
+        wire wr_enabled = 1;
+    `endif
 
-`ifdef GPR_RESET
-    reg wr_enabled = 0;
-    always @(posedge clk) begin
-        if (reset) begin
-            wr_enabled <= 1;
+    for (genvar b = 0; b < NUM_BANKS; ++b) begin
+        wire gpr_wr_enabled;
+        if (BANK_SEL_BITS != 0) begin
+            assign gpr_wr_enabled = wr_enabled && writeback_if.valid
+                                 && (gpr_wr_addr[BANK_SEL_BITS-1:0] == BANK_SEL_BITS'(b));
+        end else begin
+            assign gpr_wr_enabled = wr_enabled && writeback_if.valid;
         end
-    end
-`endif
 
-    for (genvar j = 0; j < `NUM_THREADS; ++j) begin
+        wire [BYTEENW-1:0] wren;
+        for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+            assign wren[i*XLEN_SIZE+:XLEN_SIZE] = {XLEN_SIZE{writeback_if.data.tmask[i]}};
+        end
+
         VX_dp_ram #(
-            .DATAW (`XLEN),
-            .SIZE (`NUM_REGS * PER_ISSUE_WARPS),
+            .DATAW (`XLEN * `NUM_THREADS),
+            .SIZE  (PER_BANK_REGS * PER_ISSUE_WARPS),
+            .WRENW (BYTEENW),
         `ifdef GPR_RESET
             .INIT_ENABLE (1),
             .INIT_VALUE (0),
@@ -270,16 +221,12 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
         ) gpr_ram (
             .clk   (clk),
             .read  (1'b1),
-            `UNUSED_PIN (wren),
-        `ifdef GPR_RESET
-            .write (wr_enabled && writeback_if.valid && writeback_if.data.tmask[j]),
-        `else
-            .write (writeback_if.valid && writeback_if.data.tmask[j]),
-        `endif
-            .waddr (gpr_wr_addr),
-            .wdata (writeback_if.data.data[j]),
-            .raddr (gpr_rd_addr),
-            .rdata (gpr_rd_data[j])
+            .wren  (wren),
+            .write (gpr_wr_enabled),
+            .waddr (gpr_wr_addr[BANK_SEL_BITS +: PER_BANK_ADDRW]),
+            .wdata (writeback_if.data.data),
+            .raddr (gpr_rd_addr[b]),
+            .rdata (gpr_rd_data[b])
         );
     end
 
