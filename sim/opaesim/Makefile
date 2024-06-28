@@ -73,7 +73,6 @@ VL_FLAGS += $(CONFIGS)
 VL_FLAGS += $(SRC_DIR)/verilator.vlt
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(RTL_PKGS)
-VL_FLAGS += $(DBG_SCOPE_FLAGS)
 
 CXXFLAGS += $(CONFIGS)
 
@@ -93,7 +92,7 @@ endif
 
 # Enable scope analyzer
 ifdef SCOPE
-	VL_FLAGS += -DSCOPE
+	VL_FLAGS += -DSCOPE $(DBG_SCOPE_FLAGS)
 	CXXFLAGS += -DSCOPE
 	SCOPE_JSON = $(DESTDIR)/scope.json
 endif

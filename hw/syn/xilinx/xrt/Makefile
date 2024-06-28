@@ -34,7 +34,7 @@ CP = cp -rf
 RMDIR = rm -rf
 ECHO = @echo
 
-NCPUS := $(shell grep -c ^processor /proc/cpuinfo)
+NCPUS := $(shell lscpu | grep "^Core(s) per socket:" | awk '{print $$4}')
 JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
 
 PLATFORM_TO_XSA = $(strip $(patsubst %.xpfm, % , $(shell basename $(PLATFORM))))
@@ -115,11 +115,8 @@ endif
 # Debugigng
 ifdef DEBUG
 	VPP_FLAGS += -g --debug.protocol all
-	ifeq ($(TARGET), hw)
-		CFLAGS += -DNDEBUG -DSCOPE $(DBG_SCOPE_FLAGS)
-		SCOPE_JSON += $(BUILD_DIR)/scope.json
-		#CFLAGS += -DNDEBUG -DCHIPSCOPE $(DBG_SCOPE_FLAGS)
-		#VPP_FLAGS += --debug.chipscope vortex_afu_1
+	ifneq ($(TARGET), hw)
+		CFLAGS += -DNDEBUG
 	else
 		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
 		CFLAGS += $(DBG_TRACE_FLAGS)
@@ -127,6 +124,12 @@ ifdef DEBUG
 else
 	VPP_FLAGS += --optimize 3
 	CFLAGS += -DNDEBUG
+endif
+
+# Enable scope analyzer
+ifdef SCOPE
+	CFLAGS += -DSCOPE $(DBG_SCOPE_FLAGS)
+	SCOPE_JSON += $(BUILD_DIR)/scope.json
 endif
 
 # compilation flags
