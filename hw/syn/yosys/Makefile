@@ -52,15 +52,15 @@ RTL_INCLUDE += $(FPU_INCLUDE)
 
 # Debugigng
 ifdef DEBUG
-	CFLAGS += -DNDEBUG -DSCOPE $(DBG_SCOPE_FLAGS)
-	SCOPE_JSON += $(BUILD_DIR)/scope.json
-else    
+	CFLAGS += $(DBG_TRACE_FLAGS)
+else
 	CFLAGS += -DNDEBUG
 endif
 
 # Enable scope analyzer
 ifdef SCOPE
-	CFLAGS += -DSCOPE
+	CFLAGS += -DSCOPE $(DBG_SCOPE_FLAGS)
+	SCOPE_JSON += $(BUILD_DIR)/scope.json
 endif
 
 # Enable perf counters
