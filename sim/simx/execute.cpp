@@ -1424,6 +1424,163 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       std::abort();
     }
   } break;
+  case Opcode::VOTE: {
+    bool check;
+    trace->fu_type = FUType::SFU;
+    trace->sfu_type = SfuType::VOTE;
+    trace->used_iregs.set(rsrc0);
+    uint32_t address = immsrc & 0xfff;
+    auto mask =  warp.ireg_file.at(0)[address];  // Same mask stored in all threads
+    switch (func3) {
+    case 0:{ //all
+      check = true;
+      if (!(1 << 3 & rsrc0)){ //Predicate not negated
+        for (uint32_t t = thread_start; t < num_threads; ++t) {
+          if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+            if(!(1 << 0 & rsdata[t][0].u)){ // check src predicate 
+              check = false;
+            }
+          }
+        }
+      }
+      else{
+        for (uint32_t t = thread_start; t < num_threads; ++t) {
+          if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+            if(1 << 0 & rsdata[t][0].u){ // check src predicate is true in no threads
+              check = false;
+            }
+          }
+        }
+      }
+      rd_write = true;
+      for (uint32_t t = thread_start; t < num_threads; ++t) { //Write dest predicate common to all threads
+        if(check)
+          rddata[t].i = 1;
+        else
+          rddata[t].i = 0;
+      } 
+    } break;
+    case 1:{ //any
+      check = false;
+      if (!(1 << 3 & rsrc0)){ //Predicate not negated
+        for (uint32_t t = thread_start; t < num_threads; ++t) {
+          if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+            if(1 << 0 & rsdata[t][0].u){ // check src predicate 
+              check = true;
+            }
+          }
+        }
+      }
+      else{
+        for (uint32_t t = thread_start; t < num_threads; ++t) {
+          if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+            if(!(1 << 0 & rsdata[t][0].u)){ // check src predicate is true in not all threads
+              check = true;
+            }
+          }
+        }
+      }
+      rd_write = true;
+      for (uint32_t t = thread_start; t < num_threads; ++t) { //Write dest predicate common to all threads
+        if(check)
+          rddata[t].i = 1;
+        else
+          rddata[t].i = 0;
+      } 
+    } break;
+    case 2:{ //uni
+      check = true;
+      bool first = true;
+      auto val = rsdata[0][0].u;
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+          if(first){
+            first = false;
+            val = rsdata[t][0].u;
+          }
+          else{
+            if(val != rsdata[t][0].u)
+             check = false;
+          }
+        }
+      }
+      rd_write = true;
+      for (uint32_t t = thread_start; t < num_threads; ++t) { //Write dest predicate common to all threads
+        if(check)
+          rddata[t].i = 1;
+        else
+          rddata[t].i = 0;
+      } 
+    } break;
+    case 3:{ //ballot
+      auto val = rsdata[0][0].u*0; //setting val to 0
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+          val = (val << 1) + (1 << 0 & rsdata[t][0].u); //Write the t-th bit with predicate value
+        }
+        else{
+          val = (val << 1);                             // Add 0 to t-th bit if not in threadmask
+        }
+      }
+      rd_write = true;
+      for (uint32_t t = thread_start; t < num_threads; ++t) { //Write dest predicate common to all threads
+        rddata[t].i = val;
+      } 
+    } break;
+    default:{
+      std::abort();
+    } break;
+    }
+  }break;
+  case Opcode::SHFL:{
+    trace->fu_type = FUType::SFU;
+    trace->sfu_type = SfuType::SHFL;
+    trace->used_iregs.set(rsrc0);
+    uint32_t address = immsrc & 0x00f;
+    auto mask =  warp.ireg_file.at(0)[address];  // Same mask stored in all threads
+    for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if(!((1 << t & mask) && warp.tmask.test(t))){
+          std::abort();
+        }
+    }
+    uint32_t b = (immsrc & 0xf00) >> 8;
+    uint32_t c_add = (immsrc & 0x0f0) >> 4;
+    uint32_t lane;
+    bool p;
+    for (uint32_t t = thread_start; t < num_threads; ++t) { 
+      auto val = warp.ireg_file.at(t)[c_add];
+      auto c = val & 0x0000000f;
+      auto segmask = (val & 0x000000f0) >> 4;
+      auto maxLane = (t & segmask) | (c & ~segmask);
+      auto minLane = (t & segmask);
+      switch (func3) {
+      case 0:{ //up
+        lane = t - b;
+        p = (lane >= maxLane);
+      }break;
+      case 1:{ //down
+        lane = t + b;
+        p = (lane <= maxLane);
+      }break;
+      case 2:{ //bfly
+        lane = t ^ b;
+        p = (lane <= maxLane);
+      }break;
+      case 3:{ //idx
+        lane = minLane | (b & ~segmask);
+        p = (lane <= maxLane);
+      }break;
+      default:{
+        std::abort();
+      } break;
+      }
+      if(!p)
+        lane = t;
+      rddata[t].i = rsdata[lane][0].u;
+    }
+    rd_write = true;
+    
+  }break;
   default:
     std::abort();
   }
