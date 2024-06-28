@@ -322,7 +322,7 @@
         .DATAW  ($bits(dst)), \
         .RESETW ($bits(dst)), \
         .DEPTH  (latency) \
-    ) __``dst ( \
+    ) __``dst``__ ( \
         .clk      (clk), \
         .reset    (reset), \
         .enable   (ena), \
@@ -336,12 +336,17 @@
     VX_popcount #( \
         .N ($bits(in)), \
         .MODEL (model) \
-    ) __``out ( \
+    ) __``out``__ ( \
         .data_in  (in), \
         .data_out (out) \
     )
 
 `define POP_COUNT(out, in) `POP_COUNT_EX(out, in, 1)
+
+`define ASSIGN_VX_IF(dst, src) \
+    assign dst.valid = src.valid; \
+    assign dst.data  = src.data; \
+    assign src.ready = dst.ready
 
 `define ASSIGN_VX_MEM_BUS_IF(dst, src) \
     assign dst.req_valid  = src.req_valid; \
@@ -377,42 +382,42 @@
     assign dst.rsp_ready  = src.rsp_ready
 
 `define BUFFER_DCR_BUS_IF(dst, src, enable) \
-    logic [(1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH)-1:0] __``dst; \
     if (enable) begin \
+        reg [(1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH)-1:0] __dst; \
         always @(posedge clk) begin \
-            __``dst <= {src.write_valid, src.write_addr, src.write_data}; \
+            __dst <= {src.write_valid, src.write_addr, src.write_data}; \
         end \
+        assign {dst.write_valid, dst.write_addr, dst.write_data} = __dst; \
     end else begin \
-        assign __``dst = {src.write_valid, src.write_addr, src.write_data}; \
-    end \
-    VX_dcr_bus_if dst(); \
-    assign {dst.write_valid, dst.write_addr, dst.write_data} = __``dst
+        assign {dst.write_valid, dst.write_addr, dst.write_data} = {src.write_valid, src.write_addr, src.write_data}; \
+    end
 
-`define PERF_COUNTER_ADD(dst, src, field, width, dst_count, src_count, reg_enable) \
-    for (genvar __d = 0; __d < dst_count; ++__d) begin \
-        localparam __count = ((src_count > dst_count) ? `CDIV(src_count, dst_count) : 1); \
-        wire [__count-1:0][width-1:0] __reduce_add_i_``src``field; \
-        wire [width-1:0] __reduce_add_o_``dst``field; \
-        for (genvar __i = 0; __i < __count; ++__i) begin \
-            assign __reduce_add_i_``src``field[__i] = ``src[__d * __count + __i].``field; \
+`define PERF_COUNTER_ADD(dst, src, field, width, count, reg_enable) \
+    if (count > 1) begin \
+        wire [count-1:0][width-1:0] __reduce_add_i_``field; \
+        wire [width-1:0] __reduce_add_o_``field; \
+        for (genvar __i = 0; __i < count; ++__i) begin \
+            assign __reduce_add_i_``field[__i] = src[__i].``field; \
         end \
-        VX_reduce #(.DATAW_IN(width), .N(__count), .OP("+")) __reduce_add_``dst``field ( \
-            __reduce_add_i_``src``field, \
-            __reduce_add_o_``dst``field \
+        VX_reduce #(.DATAW_IN(width), .N(count), .OP("+")) __reduce_add_``field ( \
+            __reduce_add_i_``field, \
+            __reduce_add_o_``field \
         ); \
         if (reg_enable) begin \
-            reg [width-1:0] __reduce_add_r_``dst``field; \
+            reg [width-1:0] __reduce_add_r_``field; \
             always @(posedge clk) begin \
                 if (reset) begin \
-                    __reduce_add_r_``dst``field <= '0; \
+                    __reduce_add_r_``field <= '0; \
                 end else begin \
-                    __reduce_add_r_``dst``field <= __reduce_add_o_``dst``field; \
+                    __reduce_add_r_``field <= __reduce_add_o_``field; \
                 end \
             end \
-            assign ``dst[__d].``field = __reduce_add_r_``dst``field; \
+            assign dst.``field = __reduce_add_r_``field; \
         end else begin \
-            assign ``dst[__d].``field = __reduce_add_o_``dst``field; \
+            assign dst.``field = __reduce_add_o_``field; \
         end \
+    end else begin \
+        assign dst.``field = src[0].``field; \
     end
 
 `define ASSIGN_BLOCKED_WID(dst, src, block_idx, block_size) \
@@ -425,21 +430,5 @@
     end else begin \
         assign dst = src; \
     end
-
-`define TO_DISPATCH_DATA(data, tid) { \
-    data.uuid, \
-    data.wis, \
-    data.tmask, \
-    data.PC, \
-    data.op_type, \
-    data.op_args, \
-    data.wb, \
-    data.rd, \
-    tid, \
-    data.rs1_data, \
-    data.rs2_data, \
-    data.rs3_data}
-
-///////////////////////////////////////////////////////////////////////////////
 
 `endif // VX_DEFINE_VH
