@@ -68,7 +68,7 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
     mkdir out
     export OUT_DIR=`pwd`/out
     cd build
-    ../configure --xlen=32 --tooldir=/software/vortex-toolchain-2024-05-22 --prefix=$OUT_DIR
+    ../configure --xlen=32 --tooldir=/software/vortex-toolchain-2024-6-14 --prefix=$OUT_DIR
 
 ### Install prebuilt toolchain
     # We will use the precomipled tools in volvo toolchanin directory
