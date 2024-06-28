@@ -67,13 +67,8 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
     mkdir out
     export OUT_DIR=`pwd`/out
     cd build
-    ../configure --xlen=32 --tooldir=/software/vortex-toolchain-2024-05-22 --prefix=$OUT_DIR
-### Ignore the commit for ramulator when it is compiled
-    # Please add ignore = dirty entry on .gitmodules
-    [submodule "third_party/ramulator"]
-        path = third_party/ramulator
-        url = https://github.com/CMU-SAFARI/ramulator.git
-        ignore = dirty
+    ../configure --xlen=32 --tooldir=/software/vortex-toolchain-2024-6-14 --prefix=$OUT_DIR
+
 ### Install prebuilt toolchain
     # We will use the precomipled tools in volvo toolchanin directory
 ### set environment variables
