@@ -204,7 +204,9 @@ enum class SfuType {
   CSRRW,
   CSRRS,
   CSRRC,
-  CMOV
+  CMOV,
+  VOTE,
+  SHFL
 };
 
 inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
