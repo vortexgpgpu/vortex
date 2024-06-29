@@ -32,17 +32,85 @@ namespace vortex {
 
 
 #ifdef VM_ENABLE
-enum VA_MODE {
-  BARE,
-  SV32,
-  SV64
-};
+
+// VA MODE
+#define BARE 0x0
+#define SV32 0x1
+#define SV39 0x8
 
 enum ACCESS_TYPE {
   LOAD,
   STORE,
-  FENCE
+  FETCH
 };
+class SATP_t
+{
+  private:
+    uint64_t address;
+    uint16_t asid;
+    uint8_t  mode;
+    uint64_t ppn;
+    uint64_t satp;
+
+    uint64_t bits(uint64_t input, uint8_t s_idx, uint8_t e_idx)
+    {
+        return (input>> s_idx) & (((uint64_t)1 << (e_idx - s_idx + 1)) - 1);
+    }
+    bool bit(uint64_t input , uint8_t idx)
+    {
+        return (input ) & ((uint64_t)1 << idx);
+    }
+
+  public:
+    SATP_t(uint64_t satp) : satp(satp)
+    {
+#ifdef XLEN_32 
+      mode = bit(satp, 31);
+      asid = bits(satp, 22, 30);
+      ppn  = bits(satp, 0,21);
+#else
+      mode = bits(satp, 60,63);
+      asid = bits(satp, 44, 59);
+      ppn  = bits(satp, 0,43);
+#endif 
+      address = ppn << MEM_PAGE_LOG2_SIZE;
+    }
+
+    SATP_t(uint64_t address, uint16_t asid) : address(address), asid(asid)
+    { 
+#ifdef XLEN_32 
+      assert((address >> 32) == 0 && "Upper 32 bits are not zero!");
+#endif
+      mode= VM_ADDR_MODE;
+      // asid = 0 ; 
+      ppn = address >> MEM_PAGE_LOG2_SIZE;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshift-count-overflow"
+#ifdef XLEN_32 
+      satp = (((uint64_t)mode << 31) | ((uint64_t)asid << 22) | ppn);
+#else
+      satp = (((uint64_t)mode << 60) | ((uint64_t)asid << 44) | ppn);
+#endif
+#pragma GCC diagnostic pop
+    }
+    uint8_t get_mode()
+    {
+      return mode;
+    } 
+    uint16_t get_asid()
+    {
+      return asid;
+    } 
+    uint64_t get_base_ppn()
+    {
+      return ppn;
+    } 
+    uint64_t get_satp()
+    {
+      return satp;
+    } 
+};
+
 
 class Page_Fault_Exception : public std::runtime_error /* or logic_error */
 {
@@ -119,6 +187,7 @@ public:
 
 #ifdef VM_ENABLE
   MemoryUnit(uint64_t pageSize = MEM_PAGE_SIZE);
+  ~MemoryUnit(){delete this->satp_;};
 #else
   MemoryUnit(uint64_t pageSize = 0);
 #endif
@@ -139,7 +208,9 @@ public:
 
 #ifdef VM_ENABLE
   void tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags, uint64_t size_bits);
-  uint64_t get_satp();  
+  uint64_t get_satp();
+  uint8_t get_mode();
+  uint64_t get_base_ppn();
   void set_satp(uint64_t satp);
 #else
   void tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags);
@@ -228,6 +299,7 @@ private:
   bool need_trans(uint64_t dev_pAddr);
   uint64_t vAddr_to_pAddr(uint64_t vAddr, ACCESS_TYPE type);
 
+  uint64_t get_pte_address(uint64_t base_ppn, uint64_t vpn);
   std::pair<uint64_t, uint8_t> page_table_walk(uint64_t vAddr_bits, ACCESS_TYPE type, uint64_t* size_bits);
 #else 
   uint64_t toPhyAddr(uint64_t vAddr, uint32_t flagMask);
@@ -245,13 +317,9 @@ private:
 
   amo_reservation_t amo_reservation_;
 #ifdef VM_ENABLE
-
-  uint64_t satp;
-  VA_MODE mode;
-  uint64_t ptbr;
-
   std::unordered_set<uint64_t> unique_translations;
   uint64_t TLB_HIT, TLB_MISS, TLB_EVICT, PTW, PERF_UNIQUE_PTW;
+  SATP_t *satp_;
 #endif
 
 };
@@ -322,68 +390,146 @@ private:
 };
 
 #ifdef VM_ENABLE
-class PTE_SV32_t 
+class PTE_t 
 {
 
   private:
     uint64_t address;
-    uint64_t bits(uint64_t addr, uint8_t s_idx, uint8_t e_idx)
+    uint64_t bits(uint64_t input, uint8_t s_idx, uint8_t e_idx)
     {
-        return (addr >> s_idx) & ((1 << (e_idx - s_idx + 1)) - 1);
+        return (input>> s_idx) & (((uint64_t)1 << (e_idx - s_idx + 1)) - 1);
     }
-    bool bit(uint8_t idx)
+    bool bit(uint64_t input, uint8_t idx)
     {
-        return (address) & (1 << idx);
+        return (input) & ((uint64_t)1 << idx);
     }
 
   public:
+#if VM_ADDR_MODE == SV39
+    bool N;
+    uint8_t PBMT;
+#endif
     uint64_t ppn;
     uint32_t rsw;
     uint32_t flags;
+    uint8_t level;
     bool d, a, g, u, x, w, r, v;
-    PTE_SV32_t(uint64_t address) : address(address)
-    { 
-      assert((address>> 32) == 0 && "Upper 32 bits are not zero!");
-      flags =  bits(address,0,7);
-      rsw = bits(address,8,9);
-      ppn = bits(address,10,31);
+    uint64_t pte_bytes;
 
-      d = bit(7);
-      a = bit(6);
-      g = bit(5);
-      u = bit(4);
-      x = bit(3);
-      w = bit(2);
-      r = bit(1);
-      v = bit(0);
-      // printf("ppn = 0x%lx, flags= 0x%x, rsw= 0x%x\n",ppn,flags,rsw);
+    void set_flags (uint32_t flag)
+    {
+      this->flags = flag;
+      d = bit(flags,7);
+      a = bit(flags,6);
+      g = bit(flags,5);
+      u = bit(flags,4);
+      x = bit(flags,3);
+      w = bit(flags,2);
+      r = bit(flags,1);
+      v = bit(flags,0);
+    }
+
+    PTE_t(uint64_t address, uint32_t flags) : address(address)
+    {
+#if VM_ADDR_MODE == SV39
+      N = 0;
+      PBMT = 0;
+      level = 3;
+      ppn = address >> MEM_PAGE_LOG2_SIZE;
+      // Reserve for Super page support
+      // ppn = new uint32_t [level];
+      // ppn[2]=bits(address,28,53);
+      // ppn[1]=bits(address,19,27);
+      // ppn[0]=bits(address,10,18);
+      set_flags(flags);
+      // pte_bytes = (N  << 63) | (PBMT  << 61) | (ppn <<10) | flags ;
+      pte_bytes = (ppn <<10) | flags ;
+#else // if VM_ADDR_MODE == SV32
+      assert((address>> 32) == 0 && "Upper 32 bits are not zero!");
+      level = 2;
+      ppn = address >> MEM_PAGE_LOG2_SIZE;
+      // Reserve for Super page support
+      // ppn = new uint32_t[level];
+      // ppn[1]=bits(address,20,31);
+      // ppn[0]=bits(address,10,19);
+      set_flags(flags);
+      pte_bytes = ppn <<10 | flags ;
+#endif
+    }
+
+    PTE_t(uint64_t pte_bytes) : pte_bytes(pte_bytes)
+    { 
+#if VM_ADDR_MODE == SV39
+      N = bit(pte_bytes,63);
+      PBMT = bits(pte_bytes,61,62);
+      level = 3;
+      ppn=bits(pte_bytes,10,53);
+      address = ppn << MEM_PAGE_LOG2_SIZE; 
+      // Reserve for Super page support
+      // ppn = new uint32_t [level];
+      // ppn[2]=bits(pte_bytes,28,53);
+      // ppn[1]=bits(pte_bytes,19,27);
+      // ppn[0]=bits(pte_bytes,10,18);
+#else //#if VM_ADDR_MODE == SV32
+      assert((pte_bytes >> 32) == 0 && "Upper 32 bits are not zero!");
+      level = 2;
+      ppn=bits(pte_bytes,10, 31);
+      address = ppn << MEM_PAGE_LOG2_SIZE; 
+      // Reserve for Super page support
+      // ppn = new uint32_t[level];
+      // ppn[1]=bits(address, 20,31);
+      // ppn[0]=bits(address, 10,19);
+#endif
+      rsw = bits(pte_bytes,8,9);
+      set_flags((uint32_t)(bits(pte_bytes,0,7)));
+    }
+    ~PTE_t()
+    {
+      // Reserve for Super page support
+      // delete ppn;
     }
 };
 
-class vAddr_SV32_t 
+class vAddr_t 
 {
 
   private:
     uint64_t address;
-    uint64_t bits(uint64_t addr, uint8_t s_idx, uint8_t e_idx)
+    uint64_t bits(uint8_t s_idx, uint8_t e_idx)
     {
-        return (addr >> s_idx) & ((1 << (e_idx - s_idx + 1)) - 1);
+        return (address>> s_idx) & (((uint64_t)1 << (e_idx - s_idx + 1)) - 1);
     }
-    bool bit(uint64_t addr, uint8_t idx)
+    bool bit( uint8_t idx)
     {
-        return (addr) & (1 << idx);
+        return (address) & ((uint64_t)1 << idx);
     }
 
   public:
-    uint64_t vpn[2];
+    uint64_t *vpn;
     uint64_t pgoff;
-    vAddr_SV32_t(uint64_t address) : address(address)
+    uint8_t level;
+    vAddr_t(uint64_t address) : address(address)
     {
+#if VM_ADDR_MODE == SV39
+      level = 3;
+      vpn = new uint64_t [level];
+      vpn[2] = bits(30,38);
+      vpn[1] = bits(21,29);
+      vpn[0] = bits(12,20);
+      pgoff = bits(0,11);
+#else //#if VM_ADDR_MODE == SV32
       assert((address>> 32) == 0 && "Upper 32 bits are not zero!");
-      vpn[0] = bits(address,12,21);
-      vpn[1] = bits(address,22,31);
-      pgoff = bits(address,0,11);
-      // printf("vpn[1] = 0x%lx, vpn[0] = 0x%lx, pgoff = 0x%lx\n",vpn[1],vpn[0],pgoff);
+      level = 2;
+      vpn = new uint64_t [level];
+      vpn[1] = bits(22,31);
+      vpn[0] = bits(12,21);
+      pgoff = bits(0,11);
+#endif
+    }
+
+    ~vAddr_t()
+    {
+      delete vpn;
     }
 };
 #endif
