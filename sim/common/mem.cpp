@@ -21,6 +21,7 @@
 #include <bitset>
 
 using namespace vortex;
+
 #ifdef VM_ENABLE
 #ifndef NDEBUG
 #define DBGPRINT(format, ...) do { printf("[VXDRV] " format "", ##__VA_ARGS__); } while (0)
@@ -28,16 +29,6 @@ using namespace vortex;
 #define DBGPRINT(format, ...) ((void)0)
 #endif
 #endif
-
-uint64_t bits(uint64_t addr, uint8_t s_idx, uint8_t e_idx)
-{
-    return (addr >> s_idx) & ((1 << (e_idx - s_idx + 1)) - 1);
-}
-
-bool bit(uint64_t addr, uint8_t idx)
-{
-    return (addr) & (1 << idx);
-}
 
 
 RamMemDevice::RamMemDevice(const char *filename, uint32_t wordSize)
@@ -124,6 +115,7 @@ void MemoryUnit::ADecoder::map(uint64_t start, uint64_t end, MemDevice &md) {
 void MemoryUnit::ADecoder::read(void* data, uint64_t addr, uint64_t size) {
   mem_accessor_t ma;
   if (!this->lookup(addr, size, &ma)) {
+    assert(0);
     std::cout << "lookup of 0x" << std::hex << addr << " failed.\n";
     throw BadAddress();
   }
@@ -133,6 +125,7 @@ void MemoryUnit::ADecoder::read(void* data, uint64_t addr, uint64_t size) {
 void MemoryUnit::ADecoder::write(const void* data, uint64_t addr, uint64_t size) {
   mem_accessor_t ma;
   if (!this->lookup(addr, size, &ma)) {
+    assert(0);
     std::cout << "lookup of 0x" << std::hex << addr << " failed.\n";
     throw BadAddress();
   }
@@ -208,7 +201,7 @@ std::pair<bool, uint64_t> MemoryUnit::tlbLookup(uint64_t vAddr, ACCESS_TYPE type
       
     }
     //Check access permissions.
-    if ( (type == ACCESS_TYPE::FENCE) & ((e.r == 0) | (e.x == 0)) )
+    if ( (type == ACCESS_TYPE::FETCH) & ((e.r == 0) | (e.x == 0)) )
     {
       throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
     }
@@ -601,12 +594,33 @@ void RAM::loadHexImage(const char* filename) {
 
 #ifdef VM_ENABLE
 
+uint64_t MemoryUnit::get_base_ppn()
+{
+  return satp_->get_base_ppn();
+}  
+
+uint64_t MemoryUnit::get_satp()
+{
+  return satp_->get_satp();
+}  
+
+uint8_t MemoryUnit::get_mode()
+{
+  return satp_->get_mode();
+}  
+void MemoryUnit::set_satp(uint64_t satp)
+{
+  // uint16_t asid = 0; // set asid for different process
+  satp_ = new SATP_t (satp );
+}
+
 bool MemoryUnit::need_trans(uint64_t dev_pAddr)
   {
       // Check if the this is the BARE mode
-      bool isBAREMode = (this->mode == VA_MODE::BARE);
+      bool isBAREMode = (get_mode() == BARE);
       // Check if the address is reserved for system usage
-      bool isReserved = (dev_pAddr >= PAGE_TABLE_BASE_ADDR);
+      // bool isReserved = (PAGE_TABLE_BASE_ADDR <= dev_pAddr && dev_pAddr < PAGE_TABLE_BASE_ADDR + PT_SIZE_LIMIT);
+      bool isReserved = (PAGE_TABLE_BASE_ADDR <= dev_pAddr);
       // Check if the address is reserved for IO usage
       bool isIO= (dev_pAddr < USER_BASE_ADDR);
       // Check if the address falls within the startup address range
@@ -634,7 +648,6 @@ uint64_t MemoryUnit::vAddr_to_pAddr(uint64_t vAddr, ACCESS_TYPE type)
     if (tlb_access.first)
     {
 
-        // printf("Found pfn %lx in TLB\n",tlb_access.second);
         pfn = tlb_access.second;
         TLB_HIT++;
     }
@@ -649,91 +662,86 @@ uint64_t MemoryUnit::vAddr_to_pAddr(uint64_t vAddr, ACCESS_TYPE type)
     }
 
     //Construct final address using pfn and offset.
-    DBGPRINT("  [MMU: V2P] translated vAddr: 0x%lx to pAddr 0x%lx",vAddr,((pfn << size_bits) + (vAddr & ((1 << size_bits) - 1))));
+    DBGPRINT("  [MMU: V2P] translated vAddr: 0x%lx to pAddr 0x%lx\n",vAddr,((pfn << size_bits) + (vAddr & ((1 << size_bits) - 1))));
     return (pfn << size_bits) + (vAddr & ((1 << size_bits) - 1));
 }
 
-std::pair<uint64_t, uint8_t> MemoryUnit::page_table_walk(uint64_t vAddr_bits, ACCESS_TYPE type, uint64_t* size_bits)
-{   
-    DBGPRINT("  [MMU:PTW] Start: vaddr = 0x%lx, type = %u, size_bits %lu\n", vAddr_bits, type, *size_bits);
-    uint64_t LEVELS = 2;
-    vAddr_SV32_t vAddr(vAddr_bits);
-    uint64_t pte_bytes = 0;
+uint64_t MemoryUnit::get_pte_address(uint64_t base_ppn, uint64_t vpn)
+{
+  return (base_ppn * PT_SIZE) + (vpn * PTE_SIZE);
+}
 
-    uint64_t pte_addr =0;
-    //Get base page table.
-    uint64_t pt_ba = this->ptbr << 12;
-    int i = LEVELS - 1; 
+std::pair<uint64_t, uint8_t> MemoryUnit::page_table_walk(uint64_t vAddr_bits, ACCESS_TYPE type, uint64_t *size_bits)
+{
+  DBGPRINT("  [MMU:PTW] Start: vaddr = 0x%lx, type = %u.\n", vAddr_bits, type);
+  uint8_t level = PT_LEVEL;
+  int i = level-1;
+  vAddr_t vaddr(vAddr_bits);
+  uint32_t flags =0;
+  uint64_t pte_addr = 0, pte_bytes = 0;
+  uint64_t cur_base_ppn = get_base_ppn();
+  // Need to fix for super page
+  *size_bits = 12; 
 
-    while(true)
+  while (true)
+  {
+    // Read PTE.
+    pte_addr = get_pte_address(cur_base_ppn, vaddr.vpn[i]);
+    decoder_.read(&pte_bytes, pte_addr, PTE_SIZE);
+    PTE_t pte(pte_bytes);
+    DBGPRINT("  [MMU:PTW] Level[%u] pte_addr=0x%lx, pte_bytes =0x%lx, pte.ppn= 0x%lx, pte.flags = %u)\n", i, pte_addr, pte_bytes, pte.ppn, pte.flags);
+
+    assert(((pte.pte_bytes & 0xFFFFFFFF) != 0xbaadf00d) && "ERROR: uninitialzed PTE\n" );
+
+    // Check if it has invalid flag bits.
+    if ((pte.v == 0) | ((pte.r == 0) & (pte.w == 1)))
     {
+       assert(0);
+      throw Page_Fault_Exception("  [MMU:PTW] Page Fault : Attempted to access invalid entry.");
+    }
 
-      //Read PTE.
-      pte_addr = pt_ba+vAddr.vpn[i] * PTE_SIZE;
-      decoder_.read(&pte_bytes, pte_addr, PTE_SIZE);
-      PTE_SV32_t pte(pte_bytes);
-      DBGPRINT("  [MMU:PTW] Level[%u] pte_bytes = 0x%lx, pte flags = %u)\n", i, pte.ppn , pte.flags);
-      
-      //Check if it has invalid flag bits.
-      if ( (pte.v == 0) | ( (pte.r == 0) & (pte.w == 1) ) )
+    if ((pte.r == 0) & (pte.w == 0) & (pte.x == 0))
+    {
+      // Not a leaf node as rwx == 000
+      i--;
+      if (i < 0)
       {
-        throw Page_Fault_Exception("  [MMU:PTW] Page Fault : Attempted to access invalid entry.");
-      }
-
-      if ( (pte.r == 0) & (pte.w == 0) & (pte.x == 0))
-      {
-        //Not a leaf node as rwx == 000
-        i--;
-        if (i < 0)
-        {
-          throw Page_Fault_Exception("  [MMU:PTW] Page Fault : No leaf node found.");
-        }
-        else
-        {
-          //Continue on to next level.
-          pt_ba = (pte_bytes >> 10 ) << 12;
-        }
+        assert(0);
+        throw Page_Fault_Exception("  [MMU:PTW] Page Fault : No leaf node found.");
       }
       else
       {
-        //Leaf node found, finished walking.
-        pt_ba = (pte_bytes >> 10 ) << 12;
-        break;
+        // Continue on to next level.
+        cur_base_ppn= pte.ppn;
+        DBGPRINT("  [MMU:PTW] next base_ppn: 0x%lx\n", cur_base_ppn);
+        continue;
       }
     }
-
-    PTE_SV32_t pte(pte_bytes);
-
-    //Check RWX permissions according to access type.
-    if ( (type == ACCESS_TYPE::FENCE) & ((pte.r == 0) | (pte.x == 0)) )
+    else
     {
-      throw Page_Fault_Exception("  [MMU:PTW] Page Fault : TYPE FENCE, Incorrect permissions.");
+      // Leaf node found, finished walking.
+      // Check RWX permissions according to access type.
+      if ((type == ACCESS_TYPE::FETCH) & ((pte.r == 0) | (pte.x == 0)))
+      {
+        assert(0);
+        throw Page_Fault_Exception("  [MMU:PTW] Page Fault : TYPE FETCH, Incorrect permissions.");
+      }
+      else if ((type == ACCESS_TYPE::LOAD) & (pte.r == 0))
+      {
+        assert(0);
+        throw Page_Fault_Exception("  [MMU:PTW] Page Fault : TYPE LOAD, Incorrect permissions.");
+      }
+      else if ((type == ACCESS_TYPE::STORE) & (pte.w == 0))
+      {
+        assert(0);
+        throw Page_Fault_Exception("  [MMU:PTW] Page Fault : TYPE STORE, Incorrect permissions.");
+      }
+      cur_base_ppn = pte.ppn;
+      flags = pte.flags;
+      break;
     }
-    else if ( (type == ACCESS_TYPE::LOAD) & (pte.r == 0) )
-    {
-      throw Page_Fault_Exception("  [MMU:PTW] Page Fault : TYPE LOAD, Incorrect permissions.");
-    }
-    else if ( (type == ACCESS_TYPE::STORE) & (pte.w == 0) )
-    {
-      throw Page_Fault_Exception("  [MMU:PTW] Page Fault : TYPE STORE, Incorrect permissions.");
-    }
-    *size_bits = 12;
-    uint64_t pfn = pt_ba >> *size_bits;
-    return std::make_pair(pfn, pte_bytes & 0xff);
+  }
+  return std::make_pair(cur_base_ppn, flags);
 }
 
-uint64_t MemoryUnit::get_satp()
-{
-  return satp;
-}  
-void MemoryUnit::set_satp(uint64_t satp)
-{
-  this->satp = satp;
-  this->ptbr = satp & ( (1<< SATP_PPN_WIDTH) - 1);
-#ifdef XLEN_32
-  this->mode = satp & (1<< SATP_MODE_IDX) ? VA_MODE::SV32 : VA_MODE::BARE;
-#else // 64 bit
-  this->mode = satp & (1<< SATP_MODE_IDX) ? VA_MODE::SV64 : VA_MODE::BARE;
-#endif
-}
 #endif

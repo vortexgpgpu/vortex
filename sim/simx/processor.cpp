@@ -136,6 +136,9 @@ Processor::Processor(const Arch& arch)
 
 Processor::~Processor() {
   delete impl_;
+#ifdef VM_ENABLE
+  delete satp_;
+#endif
 }
 
 void Processor::attach_ram(RAM* mem) {
@@ -151,13 +154,19 @@ void Processor::dcr_write(uint32_t addr, uint32_t value) {
 }
 
 #ifdef VM_ENABLE
-uint64_t Processor::get_satp() {
-  // std::cout << "get SATP: 0x" << std::hex << this->satp << std::endl;
-  return this->satp;
-}
-
-void Processor::set_satp(uint64_t satp) {
+int16_t Processor::set_satp_by_addr(uint64_t base_addr) {
+  uint16_t asid = 0;
+  satp_ = new SATP_t (base_addr,asid);
+  if (satp_ == NULL)
+    return 1;
+  uint64_t satp = satp_->get_satp();
   impl_->set_satp(satp);
-  this->satp = satp;
+  return 0;
+}
+uint8_t Processor::get_satp_mode() {
+  return satp_->get_mode();
+}
+uint64_t Processor::get_base_ppn() {
+  return satp_->get_base_ppn();
 }
 #endif

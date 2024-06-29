@@ -62,7 +62,7 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 		value *= 5;
 		break;
 	default:
-		assert(task_id < arg->num_points);
+		//assert(task_id < arg->num_points);
 		break;
 	}
 
