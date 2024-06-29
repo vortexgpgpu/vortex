@@ -56,8 +56,8 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 ```
 ### Install Vortex codebase
 ```
-    git clone --depth=1 --recursive git@github.com:gthparch/vortex_vm.git
-    cd vortex_vm
+    git clone --depth=1 --recursive git@github.com:vortexgpgpu/vortex.git -b vortex_vm
+    cd vortex
 ```
 
 ### Configure your build folder
@@ -68,22 +68,19 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
     mkdir out
     export OUT_DIR=`pwd`/out
     cd build
-    ../configure --xlen=32 --tooldir=/software/vortex-toolchain-2024-05-22 --prefix=$OUT_DIR
-### Ignore the commit for ramulator when it is compiled
-    # Please add ignore = dirty entry on .gitmodules
-    [submodule "third_party/ramulator"]
-        path = third_party/ramulator
-        url = https://github.com/CMU-SAFARI/ramulator.git
-        ignore = dirty
+    ../configure --xlen=32 --tooldir=/software/vortex-toolchain-2024-6-14 --prefix=$OUT_DIR
+
 ### Install prebuilt toolchain
     # We will use the precomipled tools in volvo toolchanin directory
+    
 ### set environment variables
     # should always run before using the toolchain!
     source ./ci/toolchain_env.sh
+    
 ### Building Vortex
     make -s
+    
 ### Quick demo running vecadd OpenCL kernel on 2 cores
-<<<<<<< HEAD
     $ ./ci/blackbox.sh --cores=2 --app=vecadd
 
 ### Common Developer Tips
