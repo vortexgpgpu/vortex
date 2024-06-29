@@ -27,10 +27,8 @@
 #include <future>
 #include <chrono>
 
-#ifdef VM_ENABLE
 #include <VX_config.h>
-// #include <vortex.h>
-//#include <utils.h>
+#ifdef VM_ENABLE
 #include <malloc.h>
 
 #include <VX_types.h>
@@ -44,41 +42,9 @@
 #include <unordered_map>
 #include <array>
 #include <cmath>
-#include <cassert>
 #endif
 
 using namespace vortex;
-
-#ifdef VM_ENABLE  
-#ifndef NDEBUG
-#define DBGPRINT(format, ...) do { printf("[VXDRV] " format "", ##__VA_ARGS__); } while (0)
-#else
-#define DBGPRINT(format, ...) ((void)0)
-#endif
-
-#define CHECK_ERR(_expr, _cleanup)              \
-    do {                                        \
-        auto err = _expr;                       \
-        if (err == 0)                           \
-            break;                              \
-        printf("[VXDRV] Error: '%s' returned %d!\n", #_expr, (int)err); \
-        _cleanup                                \
-    } while (false)
-
-///////////////////////////////////////////////////////////////////////////////
-//
-#include <bitset>
-#include <unistd.h>
-
-uint64_t bits(uint64_t addr, uint8_t s_idx, uint8_t e_idx)
-{
-    return (addr >> s_idx) & ((1 << (e_idx - s_idx + 1)) - 1);
-}
-bool bit(uint64_t addr, uint8_t idx)
-{
-    return (addr) & (1 << idx);
-}
-#endif 
 
 class vx_device {
 public:
@@ -91,14 +57,16 @@ public:
         // attach memory module
         processor_.attach_ram(&ram_);
 #ifdef VM_ENABLE  
-        //Set
-        set_processor_satp(VM_ADDR_MODE);
+        CHECK_ERR(init_VM(), );
 #endif
-  }
+    }
 
   ~vx_device() {
 #ifdef VM_ENABLE
-    this->mem_free(PAGE_TABLE_BASE_ADDR); // Right position?
+  global_mem_.release(PAGE_TABLE_BASE_ADDR);
+  // for (auto i = addr_mapping.begin(); i != addr_mapping.end(); i++) 
+  //   page_table_mem_->release(i->second << MEM_PAGE_SIZE);
+  delete page_table_mem_;
 #endif
     if (future_.valid()) {
       future_.wait();
@@ -154,9 +122,10 @@ public:
   bool need_trans(uint64_t dev_pAddr)
   {
     // Check if the this is the BARE mode
-    bool isBAREMode = (get_mode() == VA_MODE::BARE);
+    bool isBAREMode = (get_mode() == BARE);
     // Check if the address is reserved for system usage
-    bool isReserved = (dev_pAddr >= PAGE_TABLE_BASE_ADDR);
+    // bool isReserved = (PAGE_TABLE_BASE_ADDR <= dev_pAddr && dev_pAddr < PAGE_TABLE_BASE_ADDR + PT_SIZE_LIMIT);
+    bool isReserved = (PAGE_TABLE_BASE_ADDR <= dev_pAddr);
     // Check if the address is reserved for IO usage
     bool isIO = (dev_pAddr < USER_BASE_ADDR);
     // Check if the address falls within the startup address range
@@ -172,14 +141,12 @@ public:
   uint64_t phy_to_virt_map(uint64_t size, uint64_t *dev_pAddr, uint32_t flags)
   {
     // DBGPRINT("====%s====\n", __PRETTY_FUNCTION__);
-    DBGPRINT("  [RT:PTV_MAP] size = 0x%lx, dev_pAddr= 0x%lx, flags = 0x%x\n", size, *dev_pAddr, flags);
-    DBGPRINT("  [RT:PTV_MAP] bit mode: %d\n", XLEN);
-
-    // if (*dev_pAddr == STARTUP_ADDR || *dev_pAddr == 0x7FFFF000) {
+    DBGPRINT(" [RT:PTV_MAP] size = 0x%lx, dev_pAddr= 0x%lx, flags = 0x%x\n", size, *dev_pAddr, flags);
+    DBGPRINT(" [RT:PTV_MAP] bit mode: %d\n", XLEN);
 
     if (!need_trans(*dev_pAddr))
     {
-      DBGPRINT("  [RT:PTV_MAP] Translation is not needed.\n");
+      DBGPRINT(" [RT:PTV_MAP] Translation is not needed.\n");
       return 0;
     }
 
@@ -189,42 +156,30 @@ public:
 
     // dev_pAddr can be of size greater than a page, but we have to map and update
     // page tables on a page table granularity. So divide the allocation into pages.
-    bool is_start = false;
-    for (ppn = (*dev_pAddr) >> 12; ppn < ((*dev_pAddr) >> 12) + (size / MEM_PAGE_SIZE) + 1; ppn++)
+    // FUTURE Work: Super Page
+    for (ppn = (*dev_pAddr >> MEM_PAGE_LOG2_SIZE); ppn < ((*dev_pAddr) >> MEM_PAGE_LOG2_SIZE) + (size >> MEM_PAGE_LOG2_SIZE) ; ppn++)
     {
-      vpn = map_p2v(ppn << 12) >> 12;
-      if (is_start == false)
-      {
-        DBGPRINT("  [RT:PTV_MAP] Search vpn in page table:0x%lx\n", vpn);
-        is_start = true;
-      }
-      else
-      {
-        DBGPRINT("  [RT:PTV_MAP] Next vpn: 0x%lx\n", vpn);
-      }
-
+      vpn = map_p2v(ppn << MEM_PAGE_LOG2_SIZE) >> MEM_PAGE_LOG2_SIZE;
+      DBGPRINT(" [RT:PTV_MAP] Search vpn in page table:0x%lx\n", vpn);
       // Currently a 1-1 mapping is used, this can be changed here to support different
       // mapping schemes
-
       // If ppn to vpn mapping doesnt exist.
       if (addr_mapping.find(vpn) == addr_mapping.end())
       {
         // Create mapping.
-        update_page_table(ppn, vpn, flags);
+        DBGPRINT(" [RT:PTV_MAP] Not found. Allocate new page table or update a PTE.\n");
+        CHECK_ERR(update_page_table(ppn, vpn, flags),);
         addr_mapping[vpn] = ppn;
       }
     }
-    DBGPRINT("  [RT:PTV_MAP] Mapped virtual addr: 0x%lx to physical addr: %lx\n", init_vAddr, init_pAddr);
-
+    DBGPRINT(" [RT:PTV_MAP] Mapped virtual addr: 0x%lx to physical addr: 0x%lx\n", init_vAddr, init_pAddr);
     // Sanity check
     uint64_t pAddr = page_table_walk(init_vAddr);
-    if (pAddr != init_pAddr)
-    {
-      assert(pAddr == init_pAddr && "ERROR: translated virtual Addresses are not the same with physical Address");
-    }
+    DBGPRINT(" [RT:PTV_MAP] physical addr from PTW: 0x%lx\n", pAddr);
 
+    assert(pAddr == init_pAddr && "ERROR: translated virtual Addresses are not the same with physical Address\n");
     *dev_pAddr = init_vAddr; // commit vpn to be returned to host
-    DBGPRINT("  [RT:PTV_MAP] Translated device virtual addr: 0x%lx\n", *dev_pAddr);
+    DBGPRINT(" [RT:PTV_MAP] Translated device virtual addr: 0x%lx\n", *dev_pAddr);
 
     return 0;
   }
@@ -232,47 +187,44 @@ public:
 
   int mem_alloc(uint64_t size, int flags, uint64_t *dev_addr)
   {
+    uint64_t asize = aligned_size(size, MEM_PAGE_SIZE);
+    uint64_t addr = 0;
 
-    uint64_t addr;
-    DBGPRINT("  [RT:mem_alloc] mem_alloc size: 0x%lx\n", size);
-    CHECK_ERR(global_mem_.allocate(size, &addr), {
+    DBGPRINT("[RT:mem_alloc] size: 0x%lx, asize, 0x%lx,flag : 0x%d\n", size, asize, flags);
+    CHECK_ERR(global_mem_.allocate(asize, &addr), {
       return err;
     });
-    CHECK_ERR(this->mem_access(addr, size, flags), {
+    CHECK_ERR(this->mem_access(addr, asize, flags), {
       global_mem_.release(addr);
       return err;
     });
     *dev_addr = addr;
 #ifdef VM_ENABLE
     // VM address translation
-    phy_to_virt_map(size, dev_addr, flags);
+    phy_to_virt_map(asize, dev_addr, flags);
 #endif
     return 0;
   }
 
   int mem_reserve(uint64_t dev_addr, uint64_t size, int flags)
   {
-    CHECK_ERR(global_mem_.reserve(dev_addr, size), {
+    uint64_t asize = aligned_size(size, MEM_PAGE_SIZE);
+    CHECK_ERR(global_mem_.reserve(dev_addr, asize), {
       return err;
     });
-    DBGPRINT("  [RT:mem_reserve] mem_reserve: addr: 0x%lx, size: 0x%lx\n", dev_addr, size);
-    CHECK_ERR(this->mem_access(dev_addr, size, flags), {
+    DBGPRINT("[RT:mem_reserve] addr: 0x%lx, asize:0x%lx, size: 0x%lx\n", dev_addr, asize, size);
+    CHECK_ERR(this->mem_access(dev_addr, asize, flags), {
       global_mem_.release(dev_addr);
       return err;
     });
-#ifdef VM_ENABLE
-    uint64_t paddr = dev_addr;
-    phy_to_virt_map(size, &paddr, flags);
-#endif
     return 0;
   }
 
   int mem_free(uint64_t dev_addr)
   {
 #ifdef VM_ENABLE
-    uint64_t pAddr = page_table_walk(dev_addr);
-    // VM address translation
-    return global_mem_.release(pAddr);
+    uint64_t paddr= page_table_walk(dev_addr);
+    return global_mem_.release(paddr);
 #else
     return global_mem_.release(dev_addr);
 #endif
@@ -313,8 +265,8 @@ public:
     ram_.write((const uint8_t *)src, dest_addr, size);
     ram_.enable_acl(true);
 
-
-    /*DBGPRINT("upload %ld bytes to 0x%lx\n", size, dest_addr);
+    /*
+    DBGPRINT("upload %ld bytes to 0x%lx\n", size, dest_addr);
     for (uint64_t i = 0; i < size && i < 1024; i += 4) {
         DBGPRINT("  0x%lx <- 0x%x\n", dest_addr + i, *(uint32_t*)((uint8_t*)src + i));
     }*/
@@ -418,200 +370,195 @@ public:
     *value = mpm_cache_.at(core_id).at(offset);
     return 0;
   }
-
 #ifdef VM_ENABLE
   /* VM Management */
-  void set_processor_satp(VA_MODE mode)
-  {
-    // DBGPRINT("====%s====\n", __PRETTY_FUNCTION__);
-    uint64_t satp = 0;
-    if (mode == VA_MODE::BARE)
-    {
-      DBGPRINT("  [RT:set_satp] VA_MODE = BARE MODE");
-    }
-    else
-    {
-      satp = (alloc_2nd_level_page_table() / MEM_PAGE_SIZE) | (1 << SATP_MODE_IDX);
-      DBGPRINT("  [RT:set_satp] VA_MODE = SV mode (satp = 0x%lx)\n", satp);
-    }
-    processor_.set_satp(satp);
-  }
-
-  uint64_t get_ptbr()
-  {
-    // return processor_.get_satp();
-    return processor_.get_satp() & ((1 << SATP_PPN_WIDTH) - 1);
-  }
-  uint64_t get_pte_address(uint64_t base_page, uint64_t vpn)
-  {
-    return (base_page * MEM_PAGE_SIZE) + (vpn * PTE_SIZE);
-  }
-
-  VA_MODE get_mode()
-  {
-#ifdef XLEN_32
-    return processor_.get_satp() & (1 << SATP_MODE_IDX) ? VA_MODE::SV32 : VA_MODE::BARE;
-#else // 64 bit
-    return processor_.get_satp() & (1 << SATP_MODE_IDX) ? VA_MODE::SV64 : VA_MODE::BARE;
-#endif
-  }
-
-  void update_page_table(uint64_t ppn, uint64_t vpn, uint32_t flag)
-  {
-    // DBGPRINT("====%s====\n", __PRETTY_FUNCTION__);
-    DBGPRINT("  [RT:Update PT] Mapping vpn 0x%05lx to ppn 0x%05lx(flags = %u)\n", vpn, ppn, flag);
-    assert((((ppn >> 20) == 0) && ((vpn >> 20) == 0)) && "Upper 12 bits are not zero!");
-    // Updating page table with the following mapping of (vAddr) to (pAddr).
-    //  uint32_t page_bit_shift = log2ceil(PTE_SIZE*NUM_PTE_ENTRY);
-    uint64_t ppn_1 = 0, pte_addr = 0, pte_bytes = 0;
-    uint64_t vpn_1 = bits(vpn, 10, 19);
-    uint64_t vpn_0 = bits(vpn, 0, 9);
-
-    // Read first level PTE.
-    DBGPRINT("  [RT:Update PT]Start second-level page table\n");
-    pte_addr = get_pte_address(get_ptbr(), vpn_1);
-    pte_bytes = read_pte(pte_addr);
-    DBGPRINT("  [RT:Update PT] PTE addr 0x%lx, PTE bytes 0x%lx\n", pte_addr, pte_bytes);
-    ppn_1 = (pte_bytes >> 10);
-
-    if (bit(pte_bytes, 0) && ((pte_bytes & 0xFFFFFFFF) != 0xbaadf00d))
-    {
-      // If valid bit set, proceed to next level using new ppn form PTE.
-      DBGPRINT("  [RT:Update PT] PTE valid (ppn 0x%lx), continuing the walk...\n", ppn_1);
-    }
-    else
-    {
-      // If valid bit not set, allocate a second level page table
-      //  in device memory and store ppn in PTE. Set rwx = 000 in PTE
-      // to indicate this is a pointer to the next level of the page table.
-      DBGPRINT("  [RT:Update PT] PTE Invalid (ppn 0x%lx), continuing the walk...\n", ppn_1);
-      ppn_1 = (alloc_1st_level_page_table(vpn_1) >> 12);
-      pte_bytes = ((ppn_1 << 10) | 0b0000000001);
-      assert((pte_addr >> 32) == 0 && "Upper 32 bits are not zero!");
-      write_pte(pte_addr, pte_bytes);
-      // if (pte_bytes != read_pte(pte_addr))
-      //     DBGPRINT("Read/write values are different!\n");
-    }
-
-    DBGPRINT("  [RT:Update PT] Move to first-level page table\n");
-    // Read second level PTE.
-    pte_addr = get_pte_address(ppn_1, vpn_0);
-    pte_bytes = read_pte(pte_addr);
-
-    if (bit(pte_bytes, 0) && ((pte_bytes & 0xFFFFFFFF) != 0xbaadf00d))
-    {
-      DBGPRINT("  [RT:Update PT] ERROR, shouldn't be here\n");
-      exit(1);
-      // If valid bit is set, then the page is already allocated.
-      // Should not reach this point, a sanity check.
-    }
-    else
-    {
-      // If valid bit not set, write ppn of pAddr in PTE. Set rwx = 111 in PTE
-      // to indicate this is a leaf PTE and has the stated permissions.
-      pte_bytes = ((ppn << 10) | 0b0000001111);
-      write_pte(pte_addr, pte_bytes);
-      if (pte_bytes != read_pte(pte_addr))
-        DBGPRINT("  [RT:Update PT] PTE write value and read value are not matched!\n");
-    }
-  }
-
-  uint64_t page_table_walk(uint64_t vAddr_bits)
-  {
-    // DBGPRINT("====%s====\n", __PRETTY_FUNCTION__);
-    DBGPRINT("  [RT:PTW] start vAddr: 0x%lx\n", vAddr_bits);
-    if (!need_trans(vAddr_bits))
-    {
-      DBGPRINT("  [RT:PTW] Translation is not needed.\n");
-      return vAddr_bits;
-    }
-    uint64_t LEVELS = 2;
-    vAddr_SV32_t vAddr(vAddr_bits);
-    uint64_t pte_addr, pte_bytes;
-    uint64_t pt_ba = get_ptbr() << 12;
-
-    // Get base page table.
-
-    for (int i = LEVELS - 1; i >= 0; i--)
-    {
-      // Read PTE.
-      pte_addr = pt_ba + vAddr.vpn[i] * PTE_SIZE;
-      pte_bytes = read_pte(pte_addr);
-      PTE_SV32_t pte(pte_bytes);
-      DBGPRINT("  [RT:PTW] Level[%u] pte_bytes = 0x%lx, pte flags = %u)\n", i, pte.ppn, pte.flags);
-
-      // Check if it has invalid flag bits.
-      if ((pte.v == 0) | ((pte.r == 0) & (pte.w == 1)))
-      {
-        std::string msg = "  [RT:PTW] Page Fault : Attempted to access invalid entry. Entry: 0x";
-        throw Page_Fault_Exception(msg);
-      }
-
-      if ((pte.r == 0) & (pte.w == 0) & (pte.x == 0))
-      {
-        // Not a leaf node as rwx == 000
-        if (i == 0)
-        {
-          throw Page_Fault_Exception("  [RT:PTW] Page Fault : No leaf node found.");
-        }
-        else
-        {
-          // Continue on to next level.
-          pt_ba = pte.ppn << 12;
-          DBGPRINT("  [RT:PTW] next pt_ba: %p\n", (void *)pt_ba);
-        }
-      }
-      else
-      {
-        // Leaf node found, finished walking.
-        pt_ba = pte.ppn << 12;
-        DBGPRINT("  [RT:PTW] Found PT_Base_Address [%d] = %lx\n", i, pt_ba);
-        break;
-      }
-    }
-
-    // pte_bytes is final leaf
-    PTE_SV32_t pte(pte_bytes);
-    // Check RWX permissions according to access type.
-    if (pte.r == 0)
-    {
-      throw Page_Fault_Exception("  [RT:PTW] Page Fault : TYPE LOAD, Incorrect permissions.");
-    }
-
-    uint64_t paddr = pt_ba + vAddr.pgoff;
-    return paddr;
-  }
-
-  uint64_t alloc_2nd_level_page_table()
-  {
-    uint64_t addr = PAGE_TABLE_BASE_ADDR;
-    uint64_t size = PT_TOTAL_SIZE;
-    CHECK_ERR(this->mem_reserve(addr, size, VX_MEM_READ_WRITE), {
-      return err;
-    });
-    init_page_table(addr);
-    return addr;
-  }
-  uint64_t alloc_1st_level_page_table(uint64_t vpn_1)
-  {
-    uint64_t addr = PAGE_TABLE_BASE_ADDR + PT_SIZE * (1 + vpn_1);
-    init_page_table(addr);
-    return addr;
-  }
 
   // Initialize to zero the target page table area. 32bit 4K, 64bit 8K
-  void init_page_table(uint64_t addr)
+  uint16_t init_page_table(uint64_t addr, uint64_t size)
   {
-    uint64_t asize = aligned_size(PT_SIZE, CACHE_BLOCK_SIZE);
+    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
     DBGPRINT("  [RT:init_page_table] (addr=0x%lx, size=0x%lx)\n", addr, asize);
     uint8_t *src = new uint8_t[asize];
-    for (uint64_t i = 0; i < PT_SIZE; ++i)
+    if (src == NULL)
+      return 1;
+
+    for (uint64_t i = 0; i < asize; ++i)
     {
       src[i] = 0;
     }
     ram_.enable_acl(false);
     ram_.write((const uint8_t *)src, addr, asize);
     ram_.enable_acl(true);
+    return 0;
+  }
+
+  uint8_t alloc_page_table (uint64_t * pt_addr)
+  {
+      CHECK_ERR(page_table_mem_->allocate(PT_SIZE, pt_addr), { return err; });
+      CHECK_ERR(init_page_table(*pt_addr, PT_SIZE), { return err; });
+      DBGPRINT("   [RT:alloc_page_table] addr= 0x%lx\n", *pt_addr);
+      return 0;
+  }
+
+  int16_t init_VM()
+  {
+    uint64_t pt_addr = 0;
+    // Reserve space for PT
+    DBGPRINT("[RT:init_VM] Initialize VM\n");
+    CHECK_ERR(mem_reserve(PAGE_TABLE_BASE_ADDR, PT_SIZE_LIMIT, VX_MEM_READ_WRITE), {
+      return err;
+    });
+    page_table_mem_ = new MemoryAllocator (PAGE_TABLE_BASE_ADDR, PT_SIZE_LIMIT, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
+    if (page_table_mem_ == NULL)
+    {
+      CHECK_ERR(this->mem_free(PAGE_TABLE_BASE_ADDR),);
+      return 1;
+    }
+
+    if (VM_ADDR_MODE == BARE)
+      DBGPRINT("[RT:init_VM] VA_MODE = BARE MODE(addr= 0x0)");
+    else
+      CHECK_ERR(alloc_page_table(&pt_addr),{return err;});
+    
+    CHECK_ERR(processor_.set_satp_by_addr(pt_addr),{return err;});
+    return 0;
+  }
+
+  // Return value in in ptbr
+  uint64_t get_base_ppn()
+  {
+    return processor_.get_base_ppn();
+  }
+  uint64_t get_pte_address(uint64_t base_ppn, uint64_t vpn)
+  {
+    return (base_ppn * PT_SIZE) + (vpn * PTE_SIZE);
+  }
+
+  uint8_t get_mode()
+  {
+    return processor_.get_satp_mode();
+  }
+
+  int16_t update_page_table(uint64_t ppn, uint64_t vpn, uint32_t flag)
+  {
+    DBGPRINT("  [RT:Update PT] Mapping vpn 0x%05lx to ppn 0x%05lx(flags = %u)\n", vpn, ppn, flag);
+    // sanity check
+#if VM_ADDR_MODE == SV39
+    assert((((ppn >> 44) == 0) && ((vpn >> 27) == 0)) && "Upper bits are not zero!");
+    uint8_t level = 3;
+#else // Default is SV32, BARE will not reach this point.
+    assert((((ppn >> 20) == 0) && ((vpn >> 20) == 0)) && "Upper 12 bits are not zero!");
+    uint8_t level = 2;
+#endif
+    int i = level - 1;
+    vAddr_t vaddr(vpn << MEM_PAGE_LOG2_SIZE);
+    uint64_t pte_addr = 0, pte_bytes = 0;
+    uint64_t pt_addr = 0;
+    uint64_t cur_base_ppn = get_base_ppn();
+
+    while (i >= 0)
+    {
+      DBGPRINT("  [RT:Update PT]Start %u-level page table\n", i);
+      pte_addr = get_pte_address(cur_base_ppn, vaddr.vpn[i]);
+      pte_bytes = read_pte(pte_addr);
+      PTE_t pte_chk(pte_bytes);
+      DBGPRINT("  [RT:Update PT] PTE addr 0x%lx, PTE bytes 0x%lx\n", pte_addr, pte_bytes);
+      if (pte_chk.v == 1 && ((pte_bytes & 0xFFFFFFFF) != 0xbaadf00d))
+      {
+        DBGPRINT("  [RT:Update PT] PTE valid (ppn 0x%lx), continuing the walk...\n", pte_chk.ppn);
+        cur_base_ppn = pte_chk.ppn;
+      }
+      else
+      {
+        // If valid bit not set, allocate a next level page table
+        DBGPRINT("  [RT:Update PT] PTE Invalid (ppn 0x%lx) ...\n", pte_chk.ppn);
+        if (i == 0)
+        {
+          // Reach to leaf
+          DBGPRINT("  [RT:Update PT] Reached to level 0. This should be a leaf node(flag = %x) \n",flag);
+          uint32_t pte_flag = (flag << 1) | 0x3;
+          PTE_t new_pte(ppn <<MEM_PAGE_LOG2_SIZE, pte_flag);
+          write_pte(pte_addr, new_pte.pte_bytes);
+          break;
+        }
+        else
+        {
+          //  in device memory and store ppn in PTE. Set rwx = 000 in PTE
+          // to indicate this is a pointer to the next level of the page table.
+          // flag would READ: 0x1, Write 0x2, RW:0x3, which is matched with PTE flags if it is lsh by one.
+          alloc_page_table(&pt_addr);
+          uint32_t pte_flag = 0x1;
+          PTE_t new_pte(pt_addr, pte_flag);
+          write_pte(pte_addr, new_pte.pte_bytes);
+          cur_base_ppn = new_pte.ppn;
+        }
+      }
+      i--;
+    }
+    return 0;
+  }
+
+  uint64_t page_table_walk(uint64_t vAddr_bits)
+  {
+    DBGPRINT("  [RT:PTW] start vAddr: 0x%lx\n", vAddr_bits);
+    if (!need_trans(vAddr_bits))
+    {
+      DBGPRINT("  [RT:PTW] Translation is not needed.\n");
+      return vAddr_bits;
+    }
+    uint8_t level = PT_LEVEL;
+    int i = level-1;
+    vAddr_t vaddr(vAddr_bits);
+    uint64_t pte_addr = 0, pte_bytes = 0;
+    uint64_t cur_base_ppn = get_base_ppn();
+    while (true)
+    {
+      DBGPRINT("  [RT:PTW]Start %u-level page table walk\n",i);
+      // Read PTE.
+      pte_addr = get_pte_address(cur_base_ppn, vaddr.vpn[i]);
+      pte_bytes = read_pte(pte_addr);
+      PTE_t pte(pte_bytes);
+      DBGPRINT("  [RT:PTW] PTE addr 0x%lx, PTE bytes 0x%lx\n", pte_addr, pte_bytes);
+
+      assert(((pte.pte_bytes & 0xFFFFFFFF) != 0xbaadf00d) && "ERROR: uninitialzed PTE\n" );
+      // Check if it has invalid flag bits.
+      if ((pte.v == 0) | ((pte.r == 0) & (pte.w == 1)))
+      {
+        std::string msg = "  [RT:PTW] Page Fault : Attempted to access invalid entry.";
+        throw Page_Fault_Exception(msg);
+      }
+
+      if ((pte.r == 0) & (pte.w == 0) & (pte.x == 0))
+      {
+        i--;
+        // Not a leaf node as rwx == 000
+        if (i < 0)
+        {
+          throw Page_Fault_Exception("  [RT:PTW] Page Fault : No leaf node found.");
+        }
+        else
+        {
+          // Continue on to next level.
+          cur_base_ppn= pte.ppn ;
+          DBGPRINT("  [RT:PTW] next base_ppn: 0x%lx\n", cur_base_ppn);
+          continue;
+        }
+      }
+      else
+      {
+        // Leaf node found. 
+        // Check RWX permissions according to access type.
+        if (pte.r == 0)
+        {
+          throw Page_Fault_Exception("  [RT:PTW] Page Fault : TYPE LOAD, Incorrect permissions.");
+        }
+        cur_base_ppn= pte.ppn ;
+        DBGPRINT("  [RT:PTW] Found PT_Base_Address(0x%lx) on Level %d.\n", pte.ppn,i);
+        break;
+      }
+    }
+    uint64_t paddr = (cur_base_ppn << MEM_PAGE_LOG2_SIZE) + vaddr.pgoff;
+    return paddr;
   }
 
   // void read_page_table(uint64_t addr) {
@@ -652,7 +599,7 @@ public:
 
     return ret;
   }
-#endif // JAEWON
+#endif // VM_ENABLE
 
 private:
   Arch arch_;
@@ -664,6 +611,7 @@ private:
   std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
 #ifdef VM_ENABLE
   std::unordered_map<uint64_t, uint64_t> addr_mapping;
+  MemoryAllocator* page_table_mem_;
 #endif
 };
 
