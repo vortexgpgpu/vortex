@@ -116,7 +116,7 @@ void Emulator::clear() {
 void Emulator::attach_ram(RAM* ram) {
   // bind RAM to memory unit
 #if (XLEN == 64)
-  mmu_.attach(*ram, 0, 0xFFFFFFFFFFFFFFFF);
+  mmu_.attach(*ram, 0, 0x7FFFFFFFFF); //39bit SV39
 #else
   mmu_.attach(*ram, 0, 0xFFFFFFFF);
 #endif
@@ -271,11 +271,11 @@ bool Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
 
 #ifdef VM_ENABLE
 void Emulator::icache_read(void *data, uint64_t addr, uint32_t size) {
-  // DP(1, "*** icache_read 0x" << std::hex << addr << ", size = 0x "  << size);
+  DP(3, "*** icache_read 0x" << std::hex << addr << ", size = 0x "  << size);
 
   try  
   {
-    mmu_.read(data, addr, size, ACCESS_TYPE::LOAD);
+    mmu_.read(data, addr, size, ACCESS_TYPE::FETCH);
   }
   catch (Page_Fault_Exception& page_fault)  
   {
@@ -306,8 +306,7 @@ void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
   } else {
     try  
     {
-    // mmu_.read(data, addr, size, 0);
-    mmu_.read(data, addr, size, ACCESS_TYPE::LOAD);
+      mmu_.read(data, addr, size, ACCESS_TYPE::LOAD);
     }
     catch (Page_Fault_Exception& page_fault)  
     {

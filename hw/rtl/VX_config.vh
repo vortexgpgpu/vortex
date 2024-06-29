@@ -163,7 +163,7 @@
 `endif
 
 `ifndef STARTUP_ADDR
-`define STARTUP_ADDR    64'h080000000
+`define STARTUP_ADDR    64'h180000000
 `endif
 
 `ifndef USER_BASE_ADDR
@@ -270,57 +270,57 @@
 `define DEBUG_LEVEL 3
 `endif
 
+`ifndef MEM_PAGE_SIZE
+`define MEM_PAGE_SIZE (4096)
+`endif
+`ifndef MEM_PAGE_LOG2_SIZE
+`define MEM_PAGE_LOG2_SIZE (12)
+`endif
+
 // Virtual Memory Configuration ///////////////////////////////////////////////////////
 `ifdef VM_ENABLE
     `ifdef XLEN_32
         `ifndef VM_ADDR_MODE
         `define VM_ADDR_MODE SV32  //or BARE
         `endif
+        `ifndef PT_LEVEL 
+        `define PT_LEVEL (2)
+        `endif
         `ifndef PTE_SIZE
         `define PTE_SIZE (4)
         `endif
-        `ifndef SATP_MODE_IDX
-        `define SATP_MODE_IDX (31)
+        `ifndef NUM_PTE_ENTRY 
+        `define NUM_PTE_ENTRY (1024)
         `endif
-        `ifndef SATP_PPN_WIDTH
-        `define SATP_PPN_WIDTH (22)
+        `ifndef PT_SIZE_LIMIT
+        `define PT_SIZE_LIMIT (1<<23)
         `endif
     `else
         `ifndef VM_ADDR_MODE
-        `define VM_ADDR_MODE SV64 //or BARE
+        `define VM_ADDR_MODE SV39 //or BARE
+        `endif
+        `ifndef PT_LEVEL 
+        `define PT_LEVEL (3)
         `endif
         `ifndef PTE_SIZE
         `define PTE_SIZE (8)
         `endif
-        `ifndef SATP_MODE_IDX
-        `define SATP_MODE_IDX (63)
+        `ifndef NUM_PTE_ENTRY 
+        `define NUM_PTE_ENTRY (512)
         `endif
-        `ifndef SATP_PPN_WIDTH
-        `define SATP_PPN_WIDTH (44)
+        `ifndef PT_SIZE_LIMIT
+        `define PT_SIZE_LIMIT (1<<25)
         `endif
-    `endif
-
-    `ifndef NUM_PTE_ENTRY 
-    `define NUM_PTE_ENTRY (1024)
     `endif
 
     `ifndef PT_SIZE
-    `define PT_SIZE (PTE_SIZE * NUM_PTE_ENTRY)
+    `define PT_SIZE MEM_PAGE_SIZE
     `endif
-
-    `ifndef PT_TOTAL_SIZE
-    `define PT_TOTAL_SIZE (PT_SIZE*(1+NUM_PTE_ENTRY))
-    `endif
-
 
     `ifndef TLB_SIZE
     `define TLB_SIZE (32)
     `endif
 
-`endif
-
-`ifndef MEM_PAGE_SIZE
-`define MEM_PAGE_SIZE (4096)
 `endif
 
 // Pipeline Configuration /////////////////////////////////////////////////////
