@@ -144,7 +144,6 @@ public:
 
   uint64_t phy_to_virt_map(uint64_t size, uint64_t *dev_pAddr, uint32_t flags)
   {
-    // DBGPRINT("====%s====\n", __PRETTY_FUNCTION__);
     DBGPRINT(" [RT:PTV_MAP] size = 0x%lx, dev_pAddr= 0x%lx, flags = 0x%x\n", size, *dev_pAddr, flags);
     DBGPRINT(" [RT:PTV_MAP] bit mode: %d\n", XLEN);
 
@@ -178,10 +177,8 @@ public:
     }
     DBGPRINT(" [RT:PTV_MAP] Mapped virtual addr: 0x%lx to physical addr: 0x%lx\n", init_vAddr, init_pAddr);
     // Sanity check
-    uint64_t pAddr = page_table_walk(init_vAddr);
-    DBGPRINT(" [RT:PTV_MAP] physical addr from PTW: 0x%lx\n", pAddr);
+    assert(page_table_walk(init_vAddr) == init_pAddr && "ERROR: translated virtual Addresses are not the same with physical Address\n");
 
-    assert(pAddr == init_pAddr && "ERROR: translated virtual Addresses are not the same with physical Address\n");
     *dev_pAddr = init_vAddr; // commit vpn to be returned to host
     DBGPRINT(" [RT:PTV_MAP] Translated device virtual addr: 0x%lx\n", *dev_pAddr);
 
@@ -255,7 +252,6 @@ public:
 
   int upload(uint64_t dest_addr, const void *src, uint64_t size)
   {
-    // DBGPRINT("====%s====\n", __PRETTY_FUNCTION__);
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
     if (dest_addr + asize > GLOBAL_MEM_SIZE)
       return -1;

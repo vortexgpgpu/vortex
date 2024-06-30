@@ -240,7 +240,11 @@ config()
 
     # custom program startup address
     make -C tests/regression/dogfood clean-kernel
-    STARTUP_ADDR=0x40000000 make -C tests/regression/dogfood
+        if [ "$XLEN" == "64" ]; then
+    	STARTUP_ADDR=0x180000000 make -C tests/regression/dogfood
+    else
+    	STARTUP_ADDR=0x80000000 make -C tests/regression/dogfood
+    fi
     ./ci/blackbox.sh --driver=simx --app=dogfood
     ./ci/blackbox.sh --driver=rtlsim --app=dogfood
 
