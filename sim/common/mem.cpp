@@ -23,11 +23,11 @@
 using namespace vortex;
 
 #ifdef VM_ENABLE
-#ifndef NDEBUG
-#define DBGPRINT(format, ...) do { printf("[VXDRV] " format "", ##__VA_ARGS__); } while (0)
-#else
+// #ifndef NDEBUG
+// #define DBGPRINT(format, ...) do { printf("[VXDRV] " format "", ##__VA_ARGS__); } while (0)
+// #else
 #define DBGPRINT(format, ...) ((void)0)
-#endif
+// #endif
 #endif
 
 
