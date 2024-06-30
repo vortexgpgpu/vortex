@@ -596,16 +596,26 @@ void RAM::loadHexImage(const char* filename) {
 
 uint64_t MemoryUnit::get_base_ppn()
 {
+  assert(satp_!= NULL);
   return satp_->get_base_ppn();
 }  
 
 uint64_t MemoryUnit::get_satp()
 {
-  return satp_->get_satp();
+  if (is_satp_unset())
+    return 0;
+  else
+    return satp_->get_satp();
+}  
+
+uint8_t MemoryUnit::is_satp_unset()
+{
+  return (satp_==NULL);
 }  
 
 uint8_t MemoryUnit::get_mode()
 {
+  assert(satp_!= NULL);
   return satp_->get_mode();
 }  
 void MemoryUnit::set_satp(uint64_t satp)
@@ -616,22 +626,26 @@ void MemoryUnit::set_satp(uint64_t satp)
 
 bool MemoryUnit::need_trans(uint64_t dev_pAddr)
   {
-      // Check if the this is the BARE mode
-      bool isBAREMode = (get_mode() == BARE);
-      // Check if the address is reserved for system usage
-      // bool isReserved = (PAGE_TABLE_BASE_ADDR <= dev_pAddr && dev_pAddr < PAGE_TABLE_BASE_ADDR + PT_SIZE_LIMIT);
-      bool isReserved = (PAGE_TABLE_BASE_ADDR <= dev_pAddr);
-      // Check if the address is reserved for IO usage
-      bool isIO= (dev_pAddr < USER_BASE_ADDR);
-      // Check if the address falls within the startup address range
-      bool isStartAddress = (STARTUP_ADDR <= dev_pAddr) && (dev_pAddr <= (STARTUP_ADDR + 0x40000));
-      
-      // Print the boolean results for debugging purposes
-      // printf("%p, %u, %u\n", (void *)dev_pAddr, isReserved, isStartAddress);
+    // Check if the satp is set and BARE mode
+    if ( is_satp_unset() || (get_mode() == BARE))
+      return 0;
 
-      // Return true if the address needs translation (i.e., it's not reserved and not a start address)
-      return (!isBAREMode && !isReserved && !isIO && !isStartAddress);
+    // Check if the address is reserved for system usage
+    // bool isReserved = (PAGE_TABLE_BASE_ADDR <= dev_pAddr && dev_pAddr < PAGE_TABLE_BASE_ADDR + PT_SIZE_LIMIT);
+    if (PAGE_TABLE_BASE_ADDR <= dev_pAddr)
+      return 0;
+
+    // Check if the address is reserved for IO usage
+    if (dev_pAddr < USER_BASE_ADDR)
+      return 0;
+    // Check if the address falls within the startup address range
+    if ((STARTUP_ADDR <= dev_pAddr) && (dev_pAddr <= (STARTUP_ADDR + 0x40000)))
+      return 0;
+
+    // Now all conditions are not met. Return true because the address needs translation 
+    return 1;
   }
+
 uint64_t MemoryUnit::vAddr_to_pAddr(uint64_t vAddr, ACCESS_TYPE type)
 {
     uint64_t pfn;

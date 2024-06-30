@@ -124,9 +124,6 @@ private:
   MemoryUnit  mmu_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
-#ifdef VM_ENABLE
-  Word        ptbr_;
-#endif
 };
 
 }
