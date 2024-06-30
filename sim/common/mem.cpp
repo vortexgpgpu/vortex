@@ -144,7 +144,8 @@ MemoryUnit::MemoryUnit(uint64_t pageSize)
   , TLB_HIT(0)
   , TLB_MISS(0)
   , TLB_EVICT(0)
-  , PTW(0) {};
+  , PTW(0)
+  , satp_(NULL) {};
 #else
   {
     if (pageSize != 0)
