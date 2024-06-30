@@ -186,8 +186,12 @@ public:
   };
 
 #ifdef VM_ENABLE
-  MemoryUnit(uint64_t pageSize = MEM_PAGE_SIZE);
-  ~MemoryUnit(){delete this->satp_;};
+  MemoryUnit(uint64_t pageSize = MEM_PAGE_SIZE) :satp_(NULL)
+  {};
+  ~MemoryUnit(){
+    if ( this->satp_ != NULL) 
+      delete this->satp_;
+  };
 #else
   MemoryUnit(uint64_t pageSize = 0);
 #endif
@@ -208,6 +212,7 @@ public:
 
 #ifdef VM_ENABLE
   void tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags, uint64_t size_bits);
+  uint8_t is_satp_unset();
   uint64_t get_satp();
   uint8_t get_mode();
   uint64_t get_base_ppn();
