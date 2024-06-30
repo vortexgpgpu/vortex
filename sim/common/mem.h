@@ -186,8 +186,7 @@ public:
   };
 
 #ifdef VM_ENABLE
-  MemoryUnit(uint64_t pageSize = MEM_PAGE_SIZE) :satp_(NULL)
-  {};
+  MemoryUnit(uint64_t pageSize = MEM_PAGE_SIZE);
   ~MemoryUnit(){
     if ( this->satp_ != NULL) 
       delete this->satp_;
