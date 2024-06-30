@@ -37,6 +37,7 @@ public:
 
   void dcr_write(uint32_t addr, uint32_t value);
 #ifdef VM_ENABLE
+  bool is_satp_unset();
   uint8_t get_satp_mode();
   uint64_t get_base_ppn();
   int16_t set_satp_by_addr(uint64_t addr);
