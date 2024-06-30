@@ -121,21 +121,25 @@ public:
   }
   bool need_trans(uint64_t dev_pAddr)
   {
-    // Check if the this is the BARE mode
-    bool isBAREMode = (get_mode() == BARE);
+
+    // Check if the satp is set and BARE mode
+    if (processor_.is_satp_unset() || get_mode() == BARE)
+      return 0;
+
     // Check if the address is reserved for system usage
     // bool isReserved = (PAGE_TABLE_BASE_ADDR <= dev_pAddr && dev_pAddr < PAGE_TABLE_BASE_ADDR + PT_SIZE_LIMIT);
-    bool isReserved = (PAGE_TABLE_BASE_ADDR <= dev_pAddr);
+    if (PAGE_TABLE_BASE_ADDR <= dev_pAddr)
+      return 0;
+
     // Check if the address is reserved for IO usage
-    bool isIO = (dev_pAddr < USER_BASE_ADDR);
+    if (dev_pAddr < USER_BASE_ADDR)
+      return 0;
     // Check if the address falls within the startup address range
-    bool isStartAddress = (STARTUP_ADDR <= dev_pAddr) && (dev_pAddr <= (STARTUP_ADDR + 0x40000));
+    if ((STARTUP_ADDR <= dev_pAddr) && (dev_pAddr <= (STARTUP_ADDR + 0x40000)))
+      return 0;
 
-    // Print the boolean results for debugging purposes
-    // printf("%p, %u, %u\n", (void *)dev_pAddr, isReserved, isStartAddress);
-
-    // Return true if the address needs translation (i.e., it's not reserved and not a start address)
-    return (!isBAREMode && !isReserved && !isIO && !isStartAddress);
+    // Now all conditions are not met. Return true because the address needs translation 
+    return 1;
   }
 
   uint64_t phy_to_virt_map(uint64_t size, uint64_t *dev_pAddr, uint32_t flags)

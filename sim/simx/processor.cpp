@@ -145,12 +145,17 @@ ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
 
 Processor::Processor(const Arch& arch)
   : impl_(new ProcessorImpl(arch))
-{}
+{
+#ifdef VM_ENABLE
+  satp_ = NULL;
+#endif
+}
 
 Processor::~Processor() {
   delete impl_;
 #ifdef VM_ENABLE
-  delete satp_;
+  if (satp_ != NULL)
+    delete satp_;
 #endif
 }
 
@@ -176,10 +181,15 @@ int16_t Processor::set_satp_by_addr(uint64_t base_addr) {
   impl_->set_satp(satp);
   return 0;
 }
+bool Processor::is_satp_unset() {
+  return (satp_== NULL);
+}
 uint8_t Processor::get_satp_mode() {
+  assert (satp_!=NULL);
   return satp_->get_mode();
 }
 uint64_t Processor::get_base_ppn() {
+  assert (satp_!=NULL);
   return satp_->get_base_ppn();
 }
 #endif

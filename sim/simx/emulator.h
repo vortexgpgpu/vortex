@@ -125,9 +125,6 @@ private:
   uint32_t    ipdom_size_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
-#ifdef VM_ENABLE
-  Word        ptbr_;
-#endif
 };
 
 }
