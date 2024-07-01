@@ -1,6 +1,6 @@
 include ../common.mk
 
-DESTDIR ?= $(CURDIR)
+DESTDIR ?= $(CURDIR)/..
 
 SRC_DIR := $(VORTEX_HOME)/runtime/simx
 
@@ -13,7 +13,7 @@ CXXFLAGS += -DXLEN_$(XLEN)
 LDFLAGS += -shared -pthread
 LDFLAGS += -L$(DESTDIR) -lsimx
 
-SRCS := $(SRC_DIR)/vortex.cpp $(COMMON_DIR)/utils.cpp
+SRCS := $(SRC_DIR)/vortex.cpp
 
 # Debugigng
 ifdef DEBUG
@@ -22,14 +22,24 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
-PROJECT := libvortex.so
+PROJECT := libvortex-simx.so
 
 all: $(DESTDIR)/$(PROJECT)
 
-$(DESTDIR)/$(PROJECT): $(SRCS)
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx $(DESTDIR)/libsimx.so
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+driver: $(DESTDIR)/libsimx.so
 
-clean:
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx clean
-	rm -rf $(DESTDIR)/$(PROJECT) *.o
+$(DESTDIR)/libsimx.so:
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx $(DESTDIR)/libsimx.so
+
+$(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/libsimx.so
+	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
+
+clean-driver:
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx clean-lib
+
+clean-runtime:
+	rm -f $(DESTDIR)/$(PROJECT)
+
+clean: clean-driver clean-runtime
+
+.PHONY: all driver clean-driver clean-runtime clean

@@ -31,9 +31,9 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
 
   *data = (uint8_t*)malloc(fsize);
   *size = fread(*data, 1, fsize, fp);
-  
+
   fclose(fp);
-  
+
   return CL_SUCCESS;
 }
 
@@ -52,17 +52,12 @@ extern "C" void initBlackScholes(cl_context cxGPUContext, cl_command_queue cqPar
     size_t kernel_size;
     cl_int binary_status = 0;
     cl_device_id device_id = oclGetFirstDev(cxGPUContext);
-#ifdef HOSTGPU
+
     ciErrNum = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
     shrCheckError(ciErrNum, CL_SUCCESS);
-    cpBlackScholes = clCreateProgramWithSource(cxGPUContext, 1, (const char **)&kernel_bin, &kernel_size, &ciErrNum);        
-#else    
-    ciErrNum = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
-    shrCheckError(ciErrNum, CL_SUCCESS);    
-    cpBlackScholes = clCreateProgramWithBinary(
-        cxGPUContext, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &ciErrNum);
-#endif
+    cpBlackScholes = clCreateProgramWithSource(cxGPUContext, 1, (const char **)&kernel_bin, &kernel_size, &ciErrNum);
     shrCheckError(ciErrNum, CL_SUCCESS);
+    
     shrLog("...building BlackScholes program\n");
         ciErrNum = clBuildProgram(cpBlackScholes, 0, NULL, "-cl-fast-relaxed-math -Werror", NULL, NULL);
 

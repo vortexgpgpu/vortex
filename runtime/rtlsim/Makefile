@@ -1,6 +1,6 @@
 include ../common.mk
 
-DESTDIR ?= $(CURDIR)
+DESTDIR ?= $(CURDIR)/..
 
 SRC_DIR := $(VORTEX_HOME)/runtime/rtlsim
 
@@ -17,7 +17,7 @@ CXXFLAGS += $(CONFIGS)
 LDFLAGS += -shared -pthread
 LDFLAGS += -L$(DESTDIR) -lrtlsim
 
-SRCS := $(SRC_DIR)/vortex.cpp $(COMMON_DIR)/utils.cpp
+SRCS := $(SRC_DIR)/vortex.cpp
 
 # Debugigng
 ifdef DEBUG
@@ -26,19 +26,24 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
-# Enable perf counters
-ifdef PERF
-	CXXFLAGS += -DPERF_ENABLE
-endif
-
-PROJECT := libvortex.so
+PROJECT := libvortex-rtlsim.so
 
 all: $(DESTDIR)/$(PROJECT)
 
-$(DESTDIR)/$(PROJECT): $(SRCS)
+driver: $(DESTDIR)/librtlsim.so
+
+$(DESTDIR)/librtlsim.so:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/rtlsim $(DESTDIR)/librtlsim.so
+
+$(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/librtlsim.so
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
-clean:
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/rtlsim clean
-	rm -rf $(DESTDIR)/$(PROJECT) *.o
+clean-driver:
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/rtlsim clean-lib
+
+clean-runtime:
+	rm -f $(DESTDIR)/$(PROJECT)
+
+clean: clean-driver clean-runtime
+
+.PHONY: all driver clean-driver clean-runtime clean

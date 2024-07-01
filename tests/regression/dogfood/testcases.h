@@ -732,6 +732,36 @@ public:
   }
 };
 
+class Test_ICLAMP : public ITestCase {
+public:
+  Test_ICLAMP(TestSuite* suite) : ITestCase(suite, "iclamp") {}
+
+  int setup(uint32_t n, void* src1, void* src2) override {
+    auto a = (int*)src1;
+    auto b = (int*)src2;
+    for (uint32_t i = 0; i < n; ++i) {
+      a[i] = n/2 - i;
+      b[i] = n/2 - i;
+    }
+    return 0;
+  }
+
+  int verify(uint32_t n, void* dst, const void* src1, const void* src2) override {
+    int errors = 0;
+    auto a = (int*)src1;
+    auto b = (int*)src2;
+    auto c = (int*)dst;
+    for (uint32_t i = 0; i < n; ++i) {
+      auto ref = std::min(std::max(1, a[i]), b[i]);
+      if (c[i] != ref) {
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        ++errors;
+      }
+    }
+    return errors;
+  }
+};
+
 class Test_TRIGO : public ITestCase {
 public:
   Test_TRIGO(TestSuite* suite) : ITestCase(suite, "trig") {}
@@ -863,6 +893,7 @@ TestSuite::TestSuite(vx_device_h device)
   this->add_test(new Test_ITOF(this));
   this->add_test(new Test_UTOF(this));
   this->add_test(new Test_FCLAMP(this));
+  this->add_test(new Test_ICLAMP(this));
   this->add_test(new Test_TRIGO(this));
   this->add_test(new Test_BAR(this));
   this->add_test(new Test_GBAR(this));

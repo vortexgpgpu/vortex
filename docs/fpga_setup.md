@@ -1,4 +1,4 @@
-# FPGA Startup and Configuration Guide 
+# FPGA Startup and Configuration Guide
 
 OPAE Environment Setup
 ----------------------
@@ -55,7 +55,7 @@ If the build fails and you need to restart it, clean up the build folder using t
 
 The file `vortex_afu.gbs` should exist when the build is done:
 
-    $ ls -lsa <build_dir>/vortex_afu.gbs
+    $ ls -lsa <build_dir>/synth/vortex_afu.gbs
 
 
 Signing the bitstream and Programming the FPGA
@@ -70,5 +70,5 @@ FPGA sample test running OpenCL sgemm kernel
 
 Run the following from the Vortex root directory
 
-    $ ./ci/blackbox.sh --driver=fpga --app=sgemm --args="-n64"
+    $ TARGET=fpga ./ci/blackbox.sh --driver=opae --app=sgemm --args="-n128"
 

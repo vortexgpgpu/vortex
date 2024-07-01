@@ -1,0 +1,240 @@
+diff --git a/benchmarks/Makefile b/benchmarks/Makefile
+index fde4f23..317fd77 100644
+--- a/benchmarks/Makefile
++++ b/benchmarks/Makefile
+@@ -22,7 +22,6 @@ bmarks = \
+ 	qsort \
+ 	rsort \
+ 	towers \
+-	vvadd \
+ 	memcpy \
+ 	multiply \
+ 	mm \
+@@ -31,11 +30,7 @@ bmarks = \
+ 	mt-vvadd \
+ 	mt-matmul \
+ 	mt-memcpy \
+-	pmp \
+-	vec-memcpy \
+-	vec-daxpy \
+-	vec-sgemm \
+-	vec-strcmp \
++	pmp
+ 
+ #--------------------------------------------------------------------
+ # Build rules
+@@ -43,9 +38,15 @@ bmarks = \
+ 
+ RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf-
+ RISCV_GCC ?= $(RISCV_PREFIX)gcc
+-RISCV_GCC_OPTS ?= -DPREALLOCATE=1 -mcmodel=medany -static -std=gnu99 -O2 -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv$(XLEN)gcv -mabi=lp64d
++ifeq ($(XLEN),64)
++RISCV_GCC_OPTS ?= -DPREALLOCATE=1 -mcmodel=medany -static -std=gnu99 -O2 -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64imafd -mabi=lp64d
++else
++RISCV_GCC_OPTS ?= -DPREALLOCATE=1 -mcmodel=medany -static -std=gnu99 -O2 -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv32imaf -mabi=ilp32f
++endif
+ RISCV_LINK ?= $(RISCV_GCC) -T $(src_dir)/common/test.ld $(incs)
+ RISCV_LINK_OPTS ?= -static -nostdlib -nostartfiles -lm -lgcc -T $(src_dir)/common/test.ld
++RISCV_HEX ?= $(RISCV_PREFIX)objcopy -O ihex
++RISCV_BIN ?= $(RISCV_PREFIX)objcopy -O binary
+ RISCV_OBJDUMP ?= $(RISCV_PREFIX)objdump --disassemble-all --disassemble-zeroes --section=.text --section=.text.startup --section=.text.init --section=.data
+ RISCV_SIM ?= spike --isa=rv$(XLEN)gcv
+ 
+@@ -53,7 +54,7 @@ incs  += -I$(src_dir)/../env -I$(src_dir)/common $(addprefix -I$(src_dir)/, $(bm
+ objs  :=
+ 
+ define compile_template
+-$(1).riscv: $(wildcard $(src_dir)/$(1)/*) $(wildcard $(src_dir)/common/*)
++$(1).elf: $(wildcard $(src_dir)/$(1)/*) $(wildcard $(src_dir)/common/*)
+ 	$$(RISCV_GCC) $$(incs) $$(RISCV_GCC_OPTS) -o $$@ $(wildcard $(src_dir)/$(1)/*.c) $(wildcard $(src_dir)/$(1)/*.S) $(wildcard $(src_dir)/common/*.c) $(wildcard $(src_dir)/common/*.S) $$(RISCV_LINK_OPTS)
+ endef
+ 
+@@ -62,20 +63,28 @@ $(foreach bmark,$(bmarks),$(eval $(call compile_template,$(bmark))))
+ #------------------------------------------------------------
+ # Build and run benchmarks on riscv simulator
+ 
+-bmarks_riscv_bin  = $(addsuffix .riscv,  $(bmarks))
+-bmarks_riscv_dump = $(addsuffix .riscv.dump, $(bmarks))
+-bmarks_riscv_out  = $(addsuffix .riscv.out,  $(bmarks))
++bmarks_riscv_elf  = $(addsuffix .elf,  $(bmarks))
++bmarks_riscv_bin  = $(addsuffix .bin,  $(bmarks))
++bmarks_riscv_hex  = $(addsuffix .hex,  $(bmarks))
++bmarks_riscv_dump = $(addsuffix .dump, $(bmarks))
++bmarks_riscv_out  = $(addsuffix .out,  $(bmarks))
+ 
+-$(bmarks_riscv_dump): %.riscv.dump: %.riscv
++$(bmarks_riscv_hex): %.hex: %.elf
++	$(RISCV_HEX) $< $@
++
++$(bmarks_riscv_bin): %.bin: %.elf
++	$(RISCV_BIN) $< $@
++
++$(bmarks_riscv_dump): %.dump: %.elf
+ 	$(RISCV_OBJDUMP) $< > $@
+ 
+-$(bmarks_riscv_out): %.riscv.out: %.riscv
++$(bmarks_riscv_out): %.out: %.elf
+ 	$(RISCV_SIM) $< > $@
+ 
+-riscv: $(bmarks_riscv_dump)
++riscv: $(bmarks_riscv_bin) $(bmarks_riscv_hex) $(bmarks_riscv_dump)
+ run: $(bmarks_riscv_out)
+ 
+-junk += $(bmarks_riscv_bin) $(bmarks_riscv_dump) $(bmarks_riscv_hex) $(bmarks_riscv_out)
++junk += $(bmarks_riscv_elf) $(bmarks_riscv_dump) $(bmarks_riscv_hex) $(bmarks_riscv_bin) $(bmarks_riscv_out)
+ 
+ #------------------------------------------------------------
+ # Default
+@@ -91,7 +100,7 @@ latest_install = $(shell ls -1 -d $(instbasedir)/$(instname)* | tail -n 1)
+ 
+ install:
+ 	mkdir $(install_dir)
+-	cp -r $(bmarks_riscv_bin) $(bmarks_riscv_dump) $(install_dir)
++	cp -r $(bmarks_riscv_elf) $(bmarks_riscv_dump) $(bmarks_riscv_hex) $(bmarks_riscv_bin) $(install_dir)
+ 
+ install-link:
+ 	rm -rf $(instbasedir)/$(instname)
+diff --git a/benchmarks/common/crt.S b/benchmarks/common/crt.S
+index 3f5bb2c..811412c 100644
+--- a/benchmarks/common/crt.S
++++ b/benchmarks/common/crt.S
+@@ -134,7 +134,22 @@ _start:
+   add tp, tp, a2
+ 
+   j _init
+-
++  .align 2
++  .globl exit
++exit:
++  li t0, VX_IO_MPM_EXITCODE
++  sw a0, 0(t0)
++  fence
++  .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0
++  .align 2
++  .globl putchar
++putchar:
++  li t1, VX_IO_COUT_ADDR
++  csrr t0, CSR_MHARTID
++  andi t0, t0, %lo(VX_IO_COUT_SIZE-1)
++  add t0, t0, t1
++  sb a0, 0(t0)
++  ret
+   .align 2
+ trap_entry:
+   addi sp, sp, -272
+diff --git a/benchmarks/common/syscalls.c b/benchmarks/common/syscalls.c
+index 7a7b7fd..1195fb4 100644
+--- a/benchmarks/common/syscalls.c
++++ b/benchmarks/common/syscalls.c
+@@ -64,10 +64,10 @@ uintptr_t __attribute__((weak)) handle_trap(uintptr_t cause, uintptr_t epc, uint
+   tohost_exit(1337);
+ }
+ 
+-void exit(int code)
++/*void exit(int code)
+ {
+   tohost_exit(code);
+-}
++}*/
+ 
+ void abort()
+ {
+@@ -76,7 +76,7 @@ void abort()
+ 
+ void printstr(const char* s)
+ {
+-  syscall(SYS_write, 1, (uintptr_t)s, strlen(s));
++  printf(s);
+ }
+ 
+ void __attribute__((weak)) thread_entry(int cid, int nc)
+@@ -122,7 +122,7 @@ void _init(int cid, int nc)
+   exit(ret);
+ }
+ 
+-#undef putchar
++/*#undef putchar
+ int putchar(int ch)
+ {
+   static __thread char buf[64] __attribute__((aligned(64)));
+@@ -137,7 +137,7 @@ int putchar(int ch)
+   }
+ 
+   return 0;
+-}
++}*/
+ 
+ void printhex(uint64_t x)
+ {
+@@ -226,7 +226,7 @@ static void vprintfmt(void (*putch)(int, void**), void **putdat, const char *fmt
+     case '-':
+       padc = '-';
+       goto reswitch;
+-      
++
+     // flag to pad with 0's instead of spaces
+     case '0':
+       padc = '0';
+@@ -335,7 +335,7 @@ static void vprintfmt(void (*putch)(int, void**), void **putdat, const char *fmt
+     case '%':
+       putch(ch, putdat);
+       break;
+-      
++
+     // unrecognized escape sequence - just print it literally
+     default:
+       putch('%', putdat);
+diff --git a/env b/env
+index 4fabfb4..1c577dc 160000
+--- a/env
++++ b/env
+@@ -1 +1 @@
+-Subproject commit 4fabfb4e0d3eacc1dc791da70e342e4b68ea7e46
++Subproject commit 1c577dc7c7d6aee27b8d5cb0e2e87c8473e3ad12-dirty
+diff --git a/isa/Makefile b/isa/Makefile
+index bf85e1f..3ba32bd 100644
+--- a/isa/Makefile
++++ b/isa/Makefile
+@@ -47,6 +47,7 @@ RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf-
+ RISCV_GCC ?= $(RISCV_PREFIX)gcc
+ RISCV_GCC_OPTS ?= -static -mcmodel=medany -fvisibility=hidden -nostdlib -nostartfiles
+ RISCV_OBJDUMP ?= $(RISCV_PREFIX)objdump --disassemble-all --disassemble-zeroes --section=.text --section=.text.startup --section=.text.init --section=.data
++RISCV_BIN ?= $(RISCV_PREFIX)objcopy -O binary
+ RISCV_SIM ?= spike
+ 
+ vpath %.S $(src_dir)
+@@ -57,6 +58,12 @@ vpath %.S $(src_dir)
+ %.dump: %
+ 	$(RISCV_OBJDUMP) $< > $@
+ 
++%.hex: %
++	$(RISCV_HEX) $< $@
++
++%.bin: %
++	$(RISCV_BIN) $< $@
++
+ %.out: %
+ 	$(RISCV_SIM) --isa=rv64gc_zfh_zicboz_svnapot_zicntr_zba_zbb_zbc_zbs --misaligned $< 2> $@
+ 
+@@ -119,18 +126,19 @@ $(eval $(call compile_template,rv64mi,-march=rv64g -mabi=lp64))
+ endif
+ 
+ tests_dump = $(addsuffix .dump, $(tests))
++tests_bin = $(addsuffix .bin, $(tests))
+ tests_hex = $(addsuffix .hex, $(tests))
+ tests_out = $(addsuffix .out, $(filter rv64%,$(tests)))
+ tests32_out = $(addsuffix .out32, $(filter rv32%,$(tests)))
+ 
+ run: $(tests_out) $(tests32_out)
+ 
+-junk += $(tests) $(tests_dump) $(tests_hex) $(tests_out) $(tests32_out)
++junk += $(tests) $(tests_dump) $(tests_hex) $(tests_bin) $(tests_out) $(tests32_out)
+ 
+ #------------------------------------------------------------
+ # Default
+ 
+-all: $(tests_dump)
++all: $(tests_dump) $(tests_bin)
+ 
+ #------------------------------------------------------------
+ # Clean up

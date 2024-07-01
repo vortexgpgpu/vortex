@@ -10,6 +10,34 @@ ENTRY(_start)
 SECTIONS
 {
   . = STARTUP_ADDR;
+  /DISCARD/ : {
+    *(.interp)
+    *(.dynsym)
+    *(.dynstr)
+    *(.gnu.version)
+    *(.gnu.version_d)
+    *(.gnu.version_r)
+    *(.rela.dyn)
+    *(.rela.init)
+    *(.rela.text .rela.text.* .rela.gnu.linkonce.t.*)
+    *(.rela.fini)
+    *(.rela.rodata .rela.rodata.* .rela.gnu.linkonce.r.*)
+    *(.rela.data.rel.ro .rela.data.rel.ro.* .rela.gnu.linkonce.d.rel.ro.*)
+    *(.rela.data .rela.data.* .rela.gnu.linkonce.d.*)
+    *(.rela.tdata .rela.tdata.* .rela.gnu.linkonce.td.*)
+    *(.rela.tbss .rela.tbss.* .rela.gnu.linkonce.tb.*)
+    *(.rela.ctors)
+    *(.rela.dtors)
+    *(.rela.got)
+    *(.rela.sdata .rela.sdata.* .rela.gnu.linkonce.s.*)
+    *(.rela.sbss .rela.sbss.* .rela.gnu.linkonce.sb.*)
+    *(.rela.sdata2 .rela.sdata2.* .rela.gnu.linkonce.s2.*)
+    *(.rela.sbss2 .rela.sbss2.* .rela.gnu.linkonce.sb2.*)
+    *(.rela.bss .rela.bss.* .rela.gnu.linkonce.b.*)
+    *(.rela.iplt)
+    *(.rela.plt)
+    *(.dynamic)
+  }
   .interp         : { *(.interp) }
   .note.gnu.build-id  : { *(.note.gnu.build-id) }
   .hash           : { *(.hash) }
@@ -19,32 +47,6 @@ SECTIONS
   .gnu.version    : { *(.gnu.version) }
   .gnu.version_d  : { *(.gnu.version_d) }
   .gnu.version_r  : { *(.gnu.version_r) }
-  .rela.init      : { *(.rela.init) }
-  .rela.text      : { *(.rela.text .rela.text.* .rela.gnu.linkonce.t.*) }
-  .rela.fini      : { *(.rela.fini) }
-  .rela.rodata    : { *(.rela.rodata .rela.rodata.* .rela.gnu.linkonce.r.*) }
-  .rela.data.rel.ro   : { *(.rela.data.rel.ro .rela.data.rel.ro.* .rela.gnu.linkonce.d.rel.ro.*) }
-  .rela.data      : { *(.rela.data .rela.data.* .rela.gnu.linkonce.d.*) }
-  .rela.tdata	  : { *(.rela.tdata .rela.tdata.* .rela.gnu.linkonce.td.*) }
-  .rela.tbss	  : { *(.rela.tbss .rela.tbss.* .rela.gnu.linkonce.tb.*) }
-  .rela.ctors     : { *(.rela.ctors) }
-  .rela.dtors     : { *(.rela.dtors) }
-  .rela.got       : { *(.rela.got) }
-  .rela.sdata     : { *(.rela.sdata .rela.sdata.* .rela.gnu.linkonce.s.*) }
-  .rela.sbss      : { *(.rela.sbss .rela.sbss.* .rela.gnu.linkonce.sb.*) }
-  .rela.sdata2    : { *(.rela.sdata2 .rela.sdata2.* .rela.gnu.linkonce.s2.*) }
-  .rela.sbss2     : { *(.rela.sbss2 .rela.sbss2.* .rela.gnu.linkonce.sb2.*) }
-  .rela.bss       : { *(.rela.bss .rela.bss.* .rela.gnu.linkonce.b.*) }
-  .rela.iplt      :
-    {
-      PROVIDE_HIDDEN (__rela_iplt_start = .);
-      *(.rela.iplt)
-      PROVIDE_HIDDEN (__rela_iplt_end = .);
-    }
-  .rela.plt       :
-    {
-      *(.rela.plt)
-    }
   .init           :
   {
     KEEP (*(SORT_NONE(.init)))
@@ -98,15 +100,14 @@ SECTIONS
      PROVIDE_HIDDEN (__tdata_end = .);
    }
    PROVIDE (__tdata_size = SIZEOF (.tdata));
-  .tbss		  : 
+  .tbss	ALIGN(4) :
   {
     PROVIDE_HIDDEN (__tbss_start = .);
-    PROVIDE_HIDDEN (__tbss_offset = ABSOLUTE (__tbss_start - __tdata_start)); 
+    PROVIDE_HIDDEN (__tbss_offset = ABSOLUTE (__tbss_start - __tdata_start));
     *(.tbss .tbss.* .gnu.linkonce.tb.*) *(.tcommon)
     PROVIDE_HIDDEN (__tbss_end = .);
   }
-  PROVIDE (__tbss_size = SIZEOF (.tbss));
-  PROVIDE (__tcb_aligned_size = ALIGN(__tbss_end - __tdata_start, 64));
+  PROVIDE(__tbss_size = ALIGN(SIZEOF(.tbss), 4));
   .preinit_array    :
   {
     PROVIDE_HIDDEN (__preinit_array_start = .);

@@ -69,3 +69,28 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
     $ make -s
 ### Quick demo running vecadd OpenCL kernel on 2 cores
     $ ./ci/blackbox.sh --cores=2 --app=vecadd
+
+### Common Developer Tips
+- Installing Vortex kernel and runtime libraries to use with external tools requires passing --prefix=<install-path> to the configure script.
+    ```sh
+    $ ../configure --xlen=32 --tooldir=$HOME/tools --prefix=<install-path>
+    $ make -s
+    $ make install
+    ``````
+- Building Vortex 64-bit simply requires using --xlen=64 configure option.
+    ```sh
+    $ ../configure --xlen=32 --tooldir=$HOME/tools
+    ```
+- Sourcing "./ci/toolchain_env.sh" is required everytime you start a new terminal. we recommend adding "source <build-path>/ci/toolchain_env.sh" to your ~/.bashrc file to automate the process at login.
+    ```sh
+    $ echo "source <build-path>/ci/toolchain_env.sh" >> ~/.bashrc
+    ```
+- Making changes to Makefiles in your source tree or adding new folders will require executing the "configure" script again to get it propagated into your build folder.
+    ```sh
+    $ ../configure
+    ```
+- To debug the GPU, you can generate a "run.log" trace. see /docs/debugging.md for more information.
+    ```sh
+    $ ./ci/blackbox.sh --app=demo --debug=3
+    ```
+- For additional information, check out the /docs.

@@ -25,12 +25,14 @@ cache:
     - $HOME/build64
 
 before_install:
-  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0.3" ]; then
+  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0.4" ]; then
       rm -rf $TOOLDIR;
       mkdir -p $TRAVIS_BUILD_DIR/build && cd $TRAVIS_BUILD_DIR/build;
-      TOOLDIR=$TOOLDIR ../configure;
+      ../configure --tooldir=$TOOLDIR;
       ci/toolchain_install.sh --all;
       echo "v0.3" > "$TOOLDIR/version.txt";
+    else
+      echo "using existing tooldir build";
     fi
   - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v0.2" ]; then
       cd $TRAVIS_BUILD_DIR;
@@ -38,18 +40,20 @@ before_install:
       echo "v0.2" > "third_party/version.txt";
       cp -rf third_party $HOME;
     else
+      echo "using existing third_party build";
       cp -rf $HOME/third_party $TRAVIS_BUILD_DIR;
     fi
 
 install:
   - if [ ! -d "$HOME/build$XLEN" ] || [ -z "$(ls -A $HOME/build$XLEN)" ] || [ "$(cat "$HOME/build$XLEN/version.txt")" != "$TRAVIS_COMMIT" ]; then
       mkdir -p $TRAVIS_BUILD_DIR/build$XLEN && cd $TRAVIS_BUILD_DIR/build$XLEN;
-      TOOLDIR=$TOOLDIR XLEN=$XLEN ../configure;
+      ../configure --tooldir=$TOOLDIR --xlen=$XLEN;
       source ci/toolchain_env.sh;
       make build -s > /dev/null;
       echo "$TRAVIS_COMMIT" > version.txt;
       cp -rf $TRAVIS_BUILD_DIR/build$XLEN $HOME;
     else
+      echo "using existing build for commit $TRAVIS_COMMIT";
       cp -rf $HOME/build$XLEN $TRAVIS_BUILD_DIR;
     fi
 
@@ -70,8 +74,8 @@ jobs:
         - ./ci/travis_run.py ./ci/regression.sh --isa
         - ./ci/travis_run.py ./ci/regression.sh --kernel
         - ./ci/travis_run.py ./ci/regression.sh --synthesis
-        - ./ci/travis_run.py ./ci/regression.sh --opencl
         - ./ci/travis_run.py ./ci/regression.sh --regression
+        - ./ci/travis_run.py ./ci/regression.sh --opencl
 
     - stage: test
       name: regression64
@@ -81,6 +85,7 @@ jobs:
         - ./ci/travis_run.py ./ci/regression.sh --kernel
         - ./ci/travis_run.py ./ci/regression.sh --synthesis
         - ./ci/travis_run.py ./ci/regression.sh --regression
+        - ./ci/travis_run.py ./ci/regression.sh --opencl
 
     - stage: test
       name: config

@@ -2,7 +2,7 @@ include ../common.mk
 
 TARGET ?= xrtsim
 
-DESTDIR ?= $(CURDIR)
+DESTDIR ?= $(CURDIR)/..
 
 SRC_DIR := $(VORTEX_HOME)/runtime/xrt
 
@@ -13,7 +13,7 @@ CXXFLAGS += -fPIC
 LDFLAGS += -shared -pthread
 LDFLAGS += -L$(XILINX_XRT)/lib
 
-SRCS := $(SRC_DIR)/vortex.cpp $(COMMON_DIR)/utils.cpp $(SIM_DIR)/common/util.cpp
+SRCS := $(SRC_DIR)/vortex.cpp $(SIM_DIR)/common/util.cpp
 
 # set up target types
 ifeq ($(TARGET), xrtsim)
@@ -24,7 +24,7 @@ else
 	LDFLAGS += -luuid -lxrt_coreutil
 endif
 
-PROJECT := libvortex.so
+PROJECT := libvortex-xrt.so
 
 # Debugigng
 ifdef DEBUG
@@ -41,13 +41,20 @@ endif
 
 all: $(DESTDIR)/$(PROJECT)
 
+driver: $(DESTDIR)/libxrtsim.so
+
 $(DESTDIR)/libxrtsim.so:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/xrtsim $(DESTDIR)/libxrtsim.so
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(XRTSIM)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
-clean:
+clean-driver:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/xrtsim clean
-	rm -rf $(DESTDIR)/$(PROJECT)
 
+clean-runtime:
+	rm -f $(DESTDIR)/$(PROJECT)
+
+clean: clean-driver clean-runtime
+
+.PHONY: all driver clean-driver clean-runtime clean

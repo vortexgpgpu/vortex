@@ -75,7 +75,7 @@ private:
     std::vector<std::vector<uint64_t>>freg_file;
     std::stack<ipdom_entry_t>         ipdom_stack;
     Byte                              fcsr;
-    UUIDGenerator                     uui_gen;
+    uint32_t                          uuid;
   };
 
   struct wspawn_t {
@@ -109,10 +109,6 @@ private:
   uint32_t get_fpu_rm(uint32_t func3, uint32_t tid, uint32_t wid);
 
   void update_fcrs(uint32_t fflags, uint32_t tid, uint32_t wid);
-
-  void trigger_ecall();
-
-  void trigger_ebreak();
 
   const Arch& arch_;
   const DCRS& dcrs_;

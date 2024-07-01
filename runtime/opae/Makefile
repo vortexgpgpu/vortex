@@ -2,7 +2,7 @@ include ../common.mk
 
 TARGET ?= opaesim
 
-DESTDIR ?= $(CURDIR)
+DESTDIR ?= $(CURDIR)/..
 
 SYN_DIR := $(HW_DIR)/syn/altera/opae
 
@@ -20,7 +20,7 @@ CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += -shared -luuid -ldl -pthread
 
-SRCS = $(SRC_DIR)/vortex.cpp $(SRC_DIR)/driver.cpp $(COMMON_DIR)/utils.cpp
+SRCS = $(SRC_DIR)/vortex.cpp $(SRC_DIR)/driver.cpp
 
 # set up target types
 ifeq ($(TARGET), opaesim)
@@ -49,14 +49,11 @@ ifdef SCOPE
 	SRCS += $(COMMON_DIR)/scope.cpp
 endif
 
-# Enable perf counters
-ifdef PERF
-	CXXFLAGS += -DPERF_ENABLE
-endif
-
-PROJECT := libvortex.so
+PROJECT := libvortex-opae.so
 
 all: $(DESTDIR)/$(PROJECT)
+
+driver: $(DESTDIR)/libopae-c-sim.so
 
 $(DESTDIR)/libopae-c-sim.so:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/opaesim $(DESTDIR)/libopae-c-sim.so
@@ -64,6 +61,12 @@ $(DESTDIR)/libopae-c-sim.so:
 $(DESTDIR)/$(PROJECT): $(SRCS) $(OPAESIM)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
-clean:
+clean-driver:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/opaesim clean
-	rm -rf $(DESTDIR)/$(PROJECT)
+
+clean-runtime:
+	rm -f $(DESTDIR)/$(PROJECT)
+
+clean: clean-driver clean-runtime
+
+.PHONY: all driver clean-driver clean-runtime clean

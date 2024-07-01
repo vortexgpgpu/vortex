@@ -9,10 +9,6 @@ endif
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex -mllvm -vortex-branch-divergence=0
-#LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0/$(RISCV_PREFIX) 
-#LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0
-#LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/$(RISCV_PREFIX)/9.2.0
-#LLVM_CFLAGS += --rtlib=libgcc
 
 #CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
 #CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
@@ -30,9 +26,10 @@ CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -nostdlib -fdata-sec
 CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(ROOT_DIR)/hw
 CFLAGS += -DXLEN_$(XLEN) -DNDEBUG
 
-LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc -lgcc
+LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc
+LIBC_LIB += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 
-LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000 $(ROOT_DIR)/kernel/libvortexrt.a $(LIBC_LIB)
+LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000 $(ROOT_DIR)/kernel/libvortex.a $(LIBC_LIB)
 
 all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
 
@@ -55,4 +52,4 @@ run-simx: $(PROJECT).bin
 	$(CC) $(CFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf *.elf *.bin *.dump *.log .depend 
+	rm -rf *.elf *.bin *.dump *.log .depend

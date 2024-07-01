@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,14 +19,11 @@ interface VX_operands_if import VX_gpu_pkg::*; ();
         logic [`UUID_WIDTH-1:0]         uuid;
         logic [ISSUE_WIS_W-1:0]         wis;
         logic [`NUM_THREADS-1:0]        tmask;
-        logic [`XLEN-1:0]               PC;
+        logic [`PC_BITS-1:0]            PC;
         logic [`EX_BITS-1:0]            ex_type;
         logic [`INST_OP_BITS-1:0]       op_type;
-        logic [`INST_MOD_BITS-1:0]      op_mod;
+        op_args_t                       op_args;
         logic                           wb;
-        logic                           use_PC;
-        logic                           use_imm;
-        logic [`XLEN-1:0]               imm;
         logic [`NR_BITS-1:0]            rd;
         logic [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data;
         logic [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data;
@@ -36,7 +33,7 @@ interface VX_operands_if import VX_gpu_pkg::*; ();
     logic  valid;
     data_t data;
     logic  ready;
-    
+
     modport master (
         output valid,
         output data,

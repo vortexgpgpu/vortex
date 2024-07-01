@@ -9,6 +9,11 @@ SRCS := $(SRC_DIR)/main.cc $(SRC_DIR)/parboil_opencl.c $(SRC_DIR)/args.c $(SRC_D
 
 CXXFLAGS += -I$(SRC_DIR)
 
+kernel.cl: $(SRC_DIR)/kernel.cl
+	cp $< $@
+
+KERNEL_SRCS := kernel.cl
+
 # Usage: -i matrix_file,vector_file [-o output_file]
 OPTS ?= -i $(SRC_DIR)/1138_bus.mtx,$(SRC_DIR)/1138_bus.vec
 

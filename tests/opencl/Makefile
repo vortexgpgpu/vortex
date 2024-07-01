@@ -35,7 +35,6 @@ run-simx:
 	$(MAKE) -C transpose run-simx
 	$(MAKE) -C spmv run-simx
 	$(MAKE) -C stencil run-simx
-	$(MAKE) -C lbm run-simx
 	$(MAKE) -C nearn run-simx
 	$(MAKE) -C guassian run-simx
 	$(MAKE) -C kmeans run-simx
@@ -57,7 +56,6 @@ run-rtlsim:
 	$(MAKE) -C transpose run-rtlsim
 	$(MAKE) -C spmv run-rtlsim
 	$(MAKE) -C stencil run-rtlsim
-	$(MAKE) -C lbm run-rtlsim
 	$(MAKE) -C nearn run-rtlsim
 	$(MAKE) -C guassian run-rtlsim
 	$(MAKE) -C kmeans run-rtlsim
@@ -79,7 +77,6 @@ run-opae:
 	$(MAKE) -C transpose run-opae
 	$(MAKE) -C spmv run-opae
 	$(MAKE) -C stencil run-opae
-	$(MAKE) -C lbm run-opae
 	$(MAKE) -C nearn run-opae
 	$(MAKE) -C guassian run-opae
 	$(MAKE) -C kmeans run-opae
@@ -110,25 +107,3 @@ clean:
 	$(MAKE) -C sgemm2 clean
 	$(MAKE) -C sgemm3 clean
 	$(MAKE) -C psum clean
-
-clean-all:
-	$(MAKE) -C vecadd clean-all
-	$(MAKE) -C sgemm clean-all
-	$(MAKE) -C conv3 clean-all
-	$(MAKE) -C psort clean-all
-	$(MAKE) -C saxpy clean-all
-	$(MAKE) -C sfilter clean-all
-	$(MAKE) -C oclprintf clean-all
-	$(MAKE) -C dotproduct clean-all
-	$(MAKE) -C transpose clean-all
-	$(MAKE) -C spmv clean-all
-	$(MAKE) -C stencil clean-all
-	$(MAKE) -C lbm clean-all
-	$(MAKE) -C nearn clean-all
-	$(MAKE) -C guassian clean-all
-	$(MAKE) -C kmeans clean-all
-	$(MAKE) -C blackscholes clean-all
-	$(MAKE) -C bfs clean-all
-	$(MAKE) -C sgemm2 clean-all
-	$(MAKE) -C sgemm3 clean-all
-	$(MAKE) -C psum clean-all

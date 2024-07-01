@@ -48,11 +48,11 @@ module VX_schedule import VX_gpu_pkg::*; #(
     reg [`NUM_WARPS-1:0] stalled_warps, stalled_warps_n;  // set when branch/gpgpu instructions are issued
 
     reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks, thread_masks_n;
-    reg [`NUM_WARPS-1:0][`XLEN-1:0] warp_pcs, warp_pcs_n;
+    reg [`NUM_WARPS-1:0][`PC_BITS-1:0] warp_pcs, warp_pcs_n;
 
     wire [`NW_WIDTH-1:0]    schedule_wid;
     wire [`NUM_THREADS-1:0] schedule_tmask;
-    wire [`XLEN-1:0]        schedule_pc;
+    wire [`PC_BITS-1:0]     schedule_pc;
     wire                    schedule_valid;
     wire                    schedule_ready;
 
@@ -62,7 +62,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     wire                    join_is_else;
     wire [`NW_WIDTH-1:0]    join_wid;
     wire [`NUM_THREADS-1:0] join_tmask;
-    wire [`XLEN-1:0]        join_pc;
+    wire [`PC_BITS-1:0]     join_pc;
 
     reg [`PERF_CTR_BITS-1:0] cycles;
 
@@ -75,7 +75,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     wire [`NUM_ALU_BLOCKS-1:0]                  branch_valid;
     wire [`NUM_ALU_BLOCKS-1:0][`NW_WIDTH-1:0]   branch_wid;
     wire [`NUM_ALU_BLOCKS-1:0]                  branch_taken;
-    wire [`NUM_ALU_BLOCKS-1:0][`XLEN-1:0]       branch_dest;
+    wire [`NUM_ALU_BLOCKS-1:0][`PC_BITS-1:0]    branch_dest;
     for (genvar i = 0; i < `NUM_ALU_BLOCKS; ++i) begin
         assign branch_valid[i] = branch_ctl_if[i].valid;
         assign branch_wid[i]   = branch_ctl_if[i].wid;
@@ -161,7 +161,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
                     stalled_warps_n &= ~barrier_masks[warp_ctl_if.barrier.id]; // unlock warps
                     stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
                 end else begin
-                    barrier_ctrs_n[warp_ctl_if.barrier.id] = barrier_ctrs[warp_ctl_if.barrier.id] + 1;
+                    barrier_ctrs_n[warp_ctl_if.barrier.id] = barrier_ctrs[warp_ctl_if.barrier.id] + `NW_WIDTH'(1);
                     barrier_masks_n[warp_ctl_if.barrier.id] = curr_barrier_mask_p1;
                 end
             end else begin
@@ -203,7 +203,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
         // advance PC
         if (schedule_if_fire) begin
-            warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + 4;
+            warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + `PC_BITS'(2);
         end
     end
 
@@ -226,7 +226,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
             wspawn.valid    <=  0;
 
             // activate first warp
-            warp_pcs[0]     <= base_dcrs.startup_addr;
+            warp_pcs[0]     <= base_dcrs.startup_addr[1 +: `PC_BITS];
             active_warps[0] <= 1;
             thread_masks[0][0] <= 1;
             is_single_warp  <= 1;
@@ -321,14 +321,14 @@ module VX_schedule import VX_gpu_pkg::*; #(
         .valid_out (schedule_valid)
     );
 
-    wire [`NUM_WARPS-1:0][(`NUM_THREADS + `XLEN)-1:0] schedule_data;
+    wire [`NUM_WARPS-1:0][(`NUM_THREADS + `PC_BITS)-1:0] schedule_data;
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin
         assign schedule_data[i] = {thread_masks[i], warp_pcs[i]};
     end
 
     assign {schedule_tmask, schedule_pc} = {
-        schedule_data[schedule_wid][(`NUM_THREADS + `XLEN)-1:(`NUM_THREADS + `XLEN)-4],
-        schedule_data[schedule_wid][(`NUM_THREADS + `XLEN)-5:0]
+        schedule_data[schedule_wid][(`NUM_THREADS + `PC_BITS)-1:(`NUM_THREADS + `PC_BITS)-4],
+        schedule_data[schedule_wid][(`NUM_THREADS + `PC_BITS)-5:0]
     };
 
 `ifndef NDEBUG
@@ -338,9 +338,9 @@ module VX_schedule import VX_gpu_pkg::*; #(
 `ifdef SV_DPI
     always @(posedge clk) begin
         if (reset) begin
-            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(1, 0, 0));
+            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(1, 32'd0));
         end else if (schedule_fire) begin
-            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(0, 32'(g_wid), 64'(schedule_pc)));
+            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(0, 32'(g_wid)));
         end
     end
 `else
@@ -354,7 +354,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
 `endif
 
     VX_elastic_buffer #(
-        .DATAW (`NUM_THREADS + `XLEN + `NW_WIDTH)
+        .DATAW (`NUM_THREADS + `PC_BITS + `NW_WIDTH)
     ) out_buf (
         .clk       (clk),
         .reset     (reset),
@@ -412,7 +412,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
             end
         end
     end
-    `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT, ("%t: *** core%0d-scheduler-timeout: stalled_warps=%b", $time, CORE_ID, stalled_warps));
+    `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT, ("%t: *** core%0d-scheduler-timeout: stalled_warps=%b", $time, CORE_ID, stalled_warps))
 
 `ifdef PERF_ENABLE
     reg [`PERF_CTR_BITS-1:0] perf_sched_idles;

@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -22,21 +22,22 @@
 
 namespace vortex {
 
-class Arch {  
+class Arch {
 private:
   uint16_t num_threads_;
   uint16_t num_warps_;
-  uint16_t num_cores_;  
-  uint16_t num_clusters_;  
+  uint16_t num_cores_;
+  uint16_t num_clusters_;
   uint16_t socket_size_;
   uint16_t vsize_;
   uint16_t num_regs_;
   uint16_t num_csrs_;
   uint16_t num_barriers_;
   uint16_t ipdom_size_;
-  
+  uint64_t local_mem_base_;
+
 public:
-  Arch(uint16_t num_threads, uint16_t num_warps, uint16_t num_cores)   
+  Arch(uint16_t num_threads, uint16_t num_warps, uint16_t num_cores)
     : num_threads_(num_threads)
     , num_warps_(num_warps)
     , num_cores_(num_cores)
@@ -47,10 +48,11 @@ public:
     , num_csrs_(4096)
     , num_barriers_(NUM_BARRIERS)
     , ipdom_size_((num_threads-1) * 2)
+    , local_mem_base_(LMEM_BASE_ADDR)
   {}
 
-  uint16_t vsize() const { 
-    return vsize_; 
+  uint16_t vsize() const {
+    return vsize_;
   }
 
   uint16_t num_regs() const {
@@ -63,6 +65,10 @@ public:
 
   uint16_t num_barriers() const {
     return num_barriers_;
+  }
+
+  uint64_t local_mem_base() const {
+    return local_mem_base_;
   }
 
   uint16_t ipdom_size() const {
@@ -80,7 +86,7 @@ public:
   uint16_t num_cores() const {
     return num_cores_;
   }
-  
+
   uint16_t num_clusters() const {
     return num_clusters_;
   }
