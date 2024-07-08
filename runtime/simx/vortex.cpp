@@ -165,7 +165,7 @@ public:
     }
 
     uint64_t init_pAddr = *dev_pAddr;
-    uint64_t init_vAddr = (map_p2v(init_pAddr >> MEM_PAGE_LOG2_SIZE, flags) << MEM_PAGE_LOG2_SIZE) & ((1 << MEM_PAGE_LOG2_SIZE) - 1);
+    uint64_t init_vAddr = (map_p2v(init_pAddr >> MEM_PAGE_LOG2_SIZE, flags) << MEM_PAGE_LOG2_SIZE) | (init_pAddr & ((1 << MEM_PAGE_LOG2_SIZE) - 1));
     uint64_t ppn = 0, vpn = 0;
 
     // dev_pAddr can be of size greater than a page, but we have to map and update
