@@ -53,7 +53,11 @@ public:
   bool wspawn(uint32_t num_warps, Word nextPC);
 
   int get_exitcode() const;
-
+  
+  Word get_tiles();
+  Word get_tc_size();
+  Word get_tc_num();
+  
 private:
 
   struct ipdom_entry_t {
@@ -121,6 +125,10 @@ private:
   MemoryUnit  mmu_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
+  std::vector<Word> scratchpad;
+  uint32_t mat_size;
+  uint32_t tc_size;
+  uint32_t tc_num;
 };
 
 }

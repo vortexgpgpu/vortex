@@ -74,6 +74,10 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     , core_(core)
     , warps_(arch.num_warps(), arch)
     , barriers_(arch.num_barriers(), 0)
+    // Currently, tradeoff between scratchpad size & performance has not been evaluated. Scratchpad is
+    // considered to be big enough to hold input tiles for one output tile.
+    // In future versions, scratchpad size should be fixed to an appropriate value.
+    , scratchpad(std::vector<Word>(32 * 32 * 32768)) 
 {
   this->clear();
 }
@@ -110,6 +114,11 @@ void Emulator::clear() {
   active_warps_.set(0);
   warps_[0].tmask.set(0);
   wspawn_.valid = false;
+
+  for (auto& reg : scratchpad) 
+  {
+    reg = 0;
+  }
 }
 
 void Emulator::attach_ram(RAM* ram) {
@@ -344,6 +353,21 @@ void Emulator::cout_flush() {
     case (addr + (VX_CSR_MPM_BASE_H-VX_CSR_MPM_BASE)) : return ((value >> 32) & 0xFFFFFFFF)
 #endif
 
+Word Emulator::get_tiles()
+{
+  return mat_size;
+}
+
+Word Emulator::get_tc_size()
+{
+  return tc_size;
+}
+
+Word Emulator::get_tc_num()
+{
+  return tc_num;
+}
+
 Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   auto core_perf = core_->perf_stats();
   switch (addr) {
@@ -375,6 +399,10 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   case VX_CSR_NUM_CORES:  return uint32_t(arch_.num_cores()) * arch_.num_clusters();
   case VX_CSR_LOCAL_MEM_BASE: return arch_.local_mem_base();
   case VX_CSR_MSCRATCH:   return csr_mscratch_;
+  case VX_MAT_MUL_SIZE:   return mat_size;
+  case VX_TC_NUM:         return tc_num;
+  case VX_TC_SIZE:        return tc_size;
+
   CSR_READ_64(VX_CSR_MCYCLE, core_perf.cycles);
   CSR_READ_64(VX_CSR_MINSTRET, core_perf.instrs);
   default:
@@ -484,6 +512,16 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t tid, uint32_t wid) {
   case VX_CSR_MNSTATUS:
   case VX_CSR_MCAUSE:
     break;
+  case VX_MAT_MUL_SIZE:
+    mat_size = value;
+    break;
+  case VX_TC_NUM:
+    tc_num = value;
+    break;
+  case VX_TC_SIZE:
+    tc_size = value;
+    break;
+  
   default: {
       std::cout << std::hex << "Error: invalid CSR write addr=0x" << addr << ", value=0x" << value << std::endl;
       std::abort();

@@ -170,6 +170,7 @@ private:
   friend class AluUnit;
   friend class FpuUnit;
   friend class SfuUnit;
+  friend class TcuUnit;
 };
 
 } // namespace vortex
