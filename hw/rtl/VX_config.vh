@@ -109,7 +109,6 @@
 `ifndef SOCKET_SIZE
 `define SOCKET_SIZE `MIN(4, `NUM_CORES)
 `endif
-`define NUM_SOCKETS `UP(`NUM_CORES / `SOCKET_SIZE)
 
 `ifdef L2_ENABLE
     `define L2_ENABLED   1

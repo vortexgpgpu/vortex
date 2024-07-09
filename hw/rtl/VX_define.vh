@@ -59,6 +59,8 @@
 `define OFFSET_BITS     12
 `define IMM_BITS        `XLEN
 
+`define NUM_SOCKETS     `UP(`NUM_CORES / `SOCKET_SIZE)
+
 ///////////////////////////////////////////////////////////////////////////////
 
 `define EX_ALU          0
