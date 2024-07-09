@@ -51,9 +51,9 @@ module VX_issue import VX_gpu_pkg::*; #(
 
     `SCOPE_IO_SWITCH (`ISSUE_WIDTH)
 
-    for (genvar issue_id = 0; issue_id < `ISSUE_WIDTH; ++issue_id) begin
+    for (genvar issue_id = 0; issue_id < `ISSUE_WIDTH; ++issue_id) begin : issue_slices
         VX_decode_if #(
-            .WID_WiDTH(ISSUE_WIS_W)
+            .NUM_WARPS (PER_ISSUE_WARPS)
         ) per_issue_decode_if();
 
         VX_dispatch_if per_issue_dispatch_if[`NUM_EX_UNITS]();
@@ -72,6 +72,9 @@ module VX_issue import VX_gpu_pkg::*; #(
         assign per_issue_decode_if.data.rs2 = decode_if.data.rs2;
         assign per_issue_decode_if.data.rs3 = decode_if.data.rs3;
         assign decode_ready_in[issue_id] = per_issue_decode_if.ready;
+    `ifndef L1_ENABLE
+        assign decode_if.ibuf_pop[issue_id * PER_ISSUE_WARPS +: PER_ISSUE_WARPS] = per_issue_decode_if.ibuf_pop;
+    `endif
 
         `RESET_RELAY (slice_reset, reset);
 
