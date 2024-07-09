@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -20,7 +20,8 @@ module VX_stream_arb #(
     parameter DATAW         = 1,
     parameter `STRING ARBITER = "P",
     parameter MAX_FANOUT    = `MAX_FANOUT,
-    parameter OUT_BUF       = 0 ,
+    parameter OUT_BUF       = 0,
+    parameter LUTRAM        = 0,
     parameter NUM_REQS      = `CDIV(NUM_INPUTS, NUM_OUTPUTS),
     parameter LOG_NUM_REQS  = `CLOG2(NUM_REQS),
     parameter NUM_REQS_W    = `UP(LOG_NUM_REQS)
@@ -42,7 +43,7 @@ module VX_stream_arb #(
         if (NUM_OUTPUTS > 1) begin
 
             // (#inputs > #outputs) and (#outputs > 1)
-            
+
             for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
 
                 localparam BATCH_BEGIN = i * NUM_REQS;
@@ -57,7 +58,8 @@ module VX_stream_arb #(
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
                     .MAX_FANOUT  (MAX_FANOUT),
-                    .OUT_BUF     (OUT_BUF)
+                    .OUT_BUF     (OUT_BUF),
+                    .LUTRAM      (LUTRAM)
                 ) arb_slice (
                     .clk       (clk),
                     .reset     (slice_reset),
@@ -81,8 +83,8 @@ module VX_stream_arb #(
 
             wire [NUM_BATCHES-1:0]                  valid_tmp;
             wire [NUM_BATCHES-1:0][DATAW+LOG_NUM_REQS2-1:0] data_tmp;
-            wire [NUM_BATCHES-1:0]                  ready_tmp;            
-                        
+            wire [NUM_BATCHES-1:0]                  ready_tmp;
+
             for (genvar i = 0; i < NUM_BATCHES; ++i) begin
 
                 localparam BATCH_BEGIN = i * MAX_FANOUT;
@@ -97,18 +99,19 @@ module VX_stream_arb #(
                 if (MAX_FANOUT != 1) begin
                     VX_stream_arb #(
                         .NUM_INPUTS  (BATCH_SIZE),
-                        .NUM_OUTPUTS (1),   
+                        .NUM_OUTPUTS (1),
                         .DATAW       (DATAW),
                         .ARBITER     (ARBITER),
                         .MAX_FANOUT  (MAX_FANOUT),
-                        .OUT_BUF     (OUT_BUF)
+                        .OUT_BUF     (OUT_BUF),
+                        .LUTRAM      (LUTRAM)
                     ) fanout_slice_arb (
                         .clk       (clk),
                         .reset     (slice_reset),
                         .valid_in  (valid_in[BATCH_END-1: BATCH_BEGIN]),
                         .data_in   (data_in[BATCH_END-1: BATCH_BEGIN]),
-                        .ready_in  (ready_in[BATCH_END-1: BATCH_BEGIN]),   
-                        .valid_out (valid_tmp[i]),   
+                        .ready_in  (ready_in[BATCH_END-1: BATCH_BEGIN]),
+                        .valid_out (valid_tmp[i]),
                         .data_out  (data_tmp_u),
                         .sel_out   (sel_tmp_u),
                         .ready_out (ready_tmp[i])
@@ -123,11 +126,12 @@ module VX_stream_arb #(
 
             VX_stream_arb #(
                 .NUM_INPUTS  (NUM_BATCHES),
-                .NUM_OUTPUTS (1),   
+                .NUM_OUTPUTS (1),
                 .DATAW       (DATAW + LOG_NUM_REQS2),
                 .ARBITER     (ARBITER),
                 .MAX_FANOUT  (MAX_FANOUT),
-                .OUT_BUF     (OUT_BUF)
+                .OUT_BUF     (OUT_BUF),
+                .LUTRAM      (LUTRAM)
             ) fanout_join_arb (
                 .clk       (clk),
                 .reset     (reset),
@@ -150,7 +154,7 @@ module VX_stream_arb #(
             wire                    valid_in_r;
             wire [DATAW-1:0]        data_in_r;
             wire                    ready_in_r;
-        
+
             wire                    arb_valid;
             wire [NUM_REQS_W-1:0]   arb_index;
             wire [NUM_REQS-1:0]     arb_onehot;
@@ -181,7 +185,8 @@ module VX_stream_arb #(
             VX_elastic_buffer #(
                 .DATAW   (LOG_NUM_REQS + DATAW),
                 .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
-                .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
+                .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
+                .LUTRAM  (LUTRAM)
             ) out_buf (
                 .clk       (clk),
                 .reset     (reset),
@@ -214,7 +219,8 @@ module VX_stream_arb #(
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
                     .MAX_FANOUT  (MAX_FANOUT),
-                    .OUT_BUF     (OUT_BUF)
+                    .OUT_BUF     (OUT_BUF),
+                    .LUTRAM      (LUTRAM)
                 ) arb_slice (
                     .clk       (clk),
                     .reset     (slice_reset),
@@ -248,19 +254,20 @@ module VX_stream_arb #(
                 .DATAW       (DATAW),
                 .ARBITER     (ARBITER),
                 .MAX_FANOUT  (MAX_FANOUT),
-                .OUT_BUF     (OUT_BUF)
+                .OUT_BUF     (OUT_BUF),
+                .LUTRAM      (LUTRAM)
             ) fanout_fork_arb (
                 .clk       (clk),
                 .reset     (reset),
                 .valid_in  (valid_in),
                 .ready_in  (ready_in),
-                .data_in   (data_in),               
+                .data_in   (data_in),
                 .data_out  (data_tmp),
                 .valid_out (valid_tmp),
                 .ready_out (ready_tmp),
                 `UNUSED_PIN (sel_out)
             );
-            
+
             for (genvar i = 0; i < NUM_BATCHES; ++i) begin
 
                 localparam BATCH_BEGIN = i * MAX_FANOUT;
@@ -271,11 +278,12 @@ module VX_stream_arb #(
 
                 VX_stream_arb #(
                     .NUM_INPUTS  (1),
-                    .NUM_OUTPUTS (BATCH_SIZE), 
+                    .NUM_OUTPUTS (BATCH_SIZE),
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
                     .MAX_FANOUT  (MAX_FANOUT),
-                    .OUT_BUF     (OUT_BUF)
+                    .OUT_BUF     (OUT_BUF),
+                    .LUTRAM      (LUTRAM)
                 ) fanout_slice_arb (
                     .clk       (clk),
                     .reset     (slice_reset),
@@ -293,8 +301,8 @@ module VX_stream_arb #(
 
             // (#inputs == 1) and (#outputs <= max_fanout)
 
-            wire [NUM_OUTPUTS-1:0]  ready_in_r;        
-        
+            wire [NUM_OUTPUTS-1:0]  ready_in_r;
+
             wire [NUM_OUTPUTS-1:0]  arb_requests;
             wire                    arb_valid;
             wire [NUM_OUTPUTS-1:0]  arb_onehot;
@@ -320,9 +328,10 @@ module VX_stream_arb #(
 
             for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
                 VX_elastic_buffer #(
-                    .DATAW    (DATAW),
-                    .SIZE     (`TO_OUT_BUF_SIZE(OUT_BUF)),
-                    .OUT_REG  (`TO_OUT_BUF_REG(OUT_BUF))
+                    .DATAW   (DATAW),
+                    .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+                    .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
+                    .LUTRAM  (LUTRAM)
                 ) out_buf (
                     .clk       (clk),
                     .reset     (reset),
@@ -337,7 +346,7 @@ module VX_stream_arb #(
         end
 
         assign sel_out = 0;
-    
+
     end else begin
 
         // #Inputs == #Outputs
@@ -349,7 +358,8 @@ module VX_stream_arb #(
             VX_elastic_buffer #(
                 .DATAW   (DATAW),
                 .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
-                .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
+                .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
+                .LUTRAM  (LUTRAM)
             ) out_buf (
                 .clk       (clk),
                 .reset     (out_buf_reset),
@@ -363,6 +373,6 @@ module VX_stream_arb #(
             assign sel_out[i] = NUM_REQS_W'(i);
         end
     end
-    
+
 endmodule
 `TRACING_ON
