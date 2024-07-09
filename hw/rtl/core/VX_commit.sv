@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 module VX_commit import VX_gpu_pkg::*, VX_trace_pkg::*; #(
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
     input wire              reset,
@@ -27,7 +27,7 @@ module VX_commit import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     VX_commit_csr_if.master commit_csr_if,
     VX_commit_sched_if.master commit_sched_if
 );
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS + 1 + `NR_BITS + `NUM_THREADS * `XLEN + 1 + 1 + 1;
     localparam COMMIT_SIZEW = `CLOG2(`NUM_THREADS + 1);
     localparam COMMIT_ALL_SIZEW = COMMIT_SIZEW + `ISSUE_WIDTH - 1;
@@ -171,7 +171,7 @@ module VX_commit import VX_gpu_pkg::*, VX_trace_pkg::*; #(
         for (genvar j = 0; j < `NUM_EX_UNITS; ++j) begin
             always @(posedge clk) begin
                 if (commit_if[j * `ISSUE_WIDTH + i].valid && commit_if[j * `ISSUE_WIDTH + i].ready) begin
-                    `TRACE(1, ("%d: core%0d-commit: wid=%0d, PC=0x%0h, ex=", $time, CORE_ID, commit_if[j * `ISSUE_WIDTH + i].data.wid, {commit_if[j * `ISSUE_WIDTH + i].data.PC, 1'b0}));
+                    `TRACE(1, ("%d: %s: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, commit_if[j * `ISSUE_WIDTH + i].data.wid, {commit_if[j * `ISSUE_WIDTH + i].data.PC, 1'b0}));
                     trace_ex_type(1, j);
                     `TRACE(1, (", tmask=%b, wb=%0d, rd=%0d, sop=%b, eop=%b, data=", commit_if[j * `ISSUE_WIDTH + i].data.tmask, commit_if[j * `ISSUE_WIDTH + i].data.wb, commit_if[j * `ISSUE_WIDTH + i].data.rd, commit_if[j * `ISSUE_WIDTH + i].data.sop, commit_if[j * `ISSUE_WIDTH + i].data.eop));
                     `TRACE_ARRAY1D(1, "0x%0h", commit_if[j * `ISSUE_WIDTH + i].data.data, `NUM_THREADS);

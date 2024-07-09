@@ -18,7 +18,8 @@
 `endif
 
 module VX_core import VX_gpu_pkg::*; #(
-    parameter CORE_ID = 0
+    parameter CORE_ID = 0,
+    parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
 
@@ -94,13 +95,14 @@ module VX_core import VX_gpu_pkg::*; #(
     `SCOPE_IO_SWITCH (3)
 
     VX_schedule #(
+        .INSTANCE_ID ($sformatf("%s-schedule", INSTANCE_ID)),
         .CORE_ID (CORE_ID)
     ) schedule (
         .clk            (clk),
         .reset          (schedule_reset),
 
     `ifdef PERF_ENABLE
-        .perf_schedule_if (pipeline_perf_if.schedule),
+        .sched_perf     (pipeline_perf_if.sched),
     `endif
 
         .base_dcrs      (base_dcrs),
@@ -121,7 +123,7 @@ module VX_core import VX_gpu_pkg::*; #(
     );
 
     VX_fetch #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID ($sformatf("%s-fetch", INSTANCE_ID))
     ) fetch (
         `SCOPE_IO_BIND  (0)
         .clk            (clk),
@@ -132,7 +134,7 @@ module VX_core import VX_gpu_pkg::*; #(
     );
 
     VX_decode #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID ($sformatf("%s-decode", INSTANCE_ID))
     ) decode (
         .clk            (clk),
         .reset          (decode_reset),
@@ -142,7 +144,7 @@ module VX_core import VX_gpu_pkg::*; #(
     );
 
     VX_issue #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID ($sformatf("%s-issue", INSTANCE_ID))
     ) issue (
         `SCOPE_IO_BIND  (1)
 
@@ -150,7 +152,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .reset          (issue_reset),
 
     `ifdef PERF_ENABLE
-        .perf_issue_if  (pipeline_perf_if.issue),
+        .issue_perf     (pipeline_perf_if.issue),
     `endif
 
         .decode_if      (decode_if),
@@ -159,6 +161,7 @@ module VX_core import VX_gpu_pkg::*; #(
     );
 
     VX_execute #(
+        .INSTANCE_ID ($sformatf("%s-execute", INSTANCE_ID)),
         .CORE_ID (CORE_ID)
     ) execute (
         `SCOPE_IO_BIND  (2)
@@ -186,7 +189,7 @@ module VX_core import VX_gpu_pkg::*; #(
     );
 
     VX_commit #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID ($sformatf("%s-commit", INSTANCE_ID))
     ) commit (
         .clk            (clk),
         .reset          (commit_reset),
@@ -210,7 +213,7 @@ module VX_core import VX_gpu_pkg::*; #(
     `RESET_RELAY (lmem_unit_reset, reset);
 
     VX_lmem_unit #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID ($sformatf("%s-lmem", INSTANCE_ID))
     ) lmem_unit (
         .clk            (clk),
         .reset          (lmem_unit_reset),
@@ -242,7 +245,7 @@ module VX_core import VX_gpu_pkg::*; #(
         for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
 
             VX_mem_coalescer #(
-                .INSTANCE_ID    ($sformatf("core%0d-coalescer", CORE_ID)),
+                .INSTANCE_ID    ($sformatf("%s-coalescer%0d", INSTANCE_ID, i)),
                 .NUM_REQS       (`NUM_LSU_LANES),
                 .DATA_IN_SIZE   (LSU_WORD_SIZE),
                 .DATA_OUT_SIZE  (DCACHE_WORD_SIZE),

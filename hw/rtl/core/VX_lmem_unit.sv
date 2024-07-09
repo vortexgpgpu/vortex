@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,11 +14,11 @@
 `include "VX_define.vh"
 
 module VX_lmem_unit import VX_gpu_pkg::*; #(
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
     input wire              reset,
-    
+
 `ifdef PERF_ENABLE
     output cache_perf_t     cache_perf,
 `endif
@@ -42,14 +42,14 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
     `RESET_RELAY (req_reset, reset);
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
-        
+
         wire [`NUM_LSU_LANES-1:0] is_addr_local_mask;
         for (genvar j = 0; j < `NUM_LSU_LANES; ++j) begin
             assign is_addr_local_mask[j] = lsu_mem_in_if[i].req_data.atype[j][`ADDR_TYPE_LOCAL];
         end
-        
+
         wire is_addr_global = | (lsu_mem_in_if[i].req_data.mask & ~is_addr_local_mask);
-        wire is_addr_local = | (lsu_mem_in_if[i].req_data.mask & is_addr_local_mask);        
+        wire is_addr_local = | (lsu_mem_in_if[i].req_data.mask & is_addr_local_mask);
 
         wire req_global_ready;
         wire req_local_ready;
@@ -61,7 +61,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         ) req_global_buf (
             .clk       (clk),
             .reset     (req_reset),
-            .valid_in  (lsu_mem_in_if[i].req_valid && is_addr_global),              
+            .valid_in  (lsu_mem_in_if[i].req_valid && is_addr_global),
             .data_in   ({
                 lsu_mem_in_if[i].req_data.mask & ~is_addr_local_mask,
                 lsu_mem_in_if[i].req_data.rw,
@@ -81,7 +81,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
                 lsu_mem_out_if[i].req_data.atype,
                 lsu_mem_out_if[i].req_data.data,
                 lsu_mem_out_if[i].req_data.tag
-            }),            
+            }),
             .ready_out (lsu_mem_out_if[i].req_ready)
         );
 
@@ -92,7 +92,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         ) req_local_buf (
             .clk       (clk),
             .reset     (req_reset),
-            .valid_in  (lsu_mem_in_if[i].req_valid && is_addr_local),              
+            .valid_in  (lsu_mem_in_if[i].req_valid && is_addr_local),
             .data_in   ({
                 lsu_mem_in_if[i].req_data.mask & is_addr_local_mask,
                 lsu_mem_in_if[i].req_data.rw,
@@ -112,18 +112,18 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
                 lmem_lsu_if[i].req_data.atype,
                 lmem_lsu_if[i].req_data.data,
                 lmem_lsu_if[i].req_data.tag
-            }),            
+            }),
             .ready_out (lmem_lsu_if[i].req_ready)
         );
 
-        assign lsu_mem_in_if[i].req_ready = (req_global_ready && is_addr_global) 
+        assign lsu_mem_in_if[i].req_ready = (req_global_ready && is_addr_global)
                                          || (req_local_ready && is_addr_local);
     end
 
     `RESET_RELAY (rsp_reset, reset);
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
-        
+
         wire rsp_arb_valid;
         wire rsp_arb_index;
         wire rsp_arb_ready;
@@ -135,7 +135,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         ) arbiter (
             .clk         (clk),
             .reset       (rsp_reset),
-            .requests    ({     
+            .requests    ({
                 lmem_lsu_if[i].rsp_valid,
                 lsu_mem_out_if[i].rsp_valid
             }),
@@ -144,7 +144,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             `UNUSED_PIN (grant_onehot),
             .grant_unlock(rsp_arb_ready)
         );
-        
+
         VX_elastic_buffer #(
             .DATAW   (RSP_DATAW),
             .SIZE    (2),
@@ -152,7 +152,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         ) rsp_buf (
             .clk       (clk),
             .reset     (rsp_reset),
-            .valid_in  (rsp_arb_valid),              
+            .valid_in  (rsp_arb_valid),
             .data_in   ({
                 rsp_arb_index ? lmem_lsu_if[i].rsp_data.mask : lsu_mem_out_if[i].rsp_data.mask,
                 rsp_arb_index ? lmem_lsu_if[i].rsp_data.data : lsu_mem_out_if[i].rsp_data.data,
@@ -161,10 +161,10 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .ready_in  (rsp_arb_ready),
             .valid_out (lsu_mem_in_if[i].rsp_valid),
             .data_out  ({
-                lsu_mem_in_if[i].rsp_data.mask, 
-                lsu_mem_in_if[i].rsp_data.data, 
+                lsu_mem_in_if[i].rsp_data.mask,
+                lsu_mem_in_if[i].rsp_data.data,
                 lsu_mem_in_if[i].rsp_data.tag
-            }),            
+            }),
             .ready_out (lsu_mem_in_if[i].rsp_ready)
         );
 
@@ -187,7 +187,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
 
         VX_lsu_adapter #(
             .NUM_LANES    (`NUM_LSU_LANES),
-            .DATA_SIZE    (LSU_WORD_SIZE), 
+            .DATA_SIZE    (LSU_WORD_SIZE),
             .TAG_WIDTH    (LSU_TAG_WIDTH),
             .TAG_SEL_BITS (LSU_TAG_WIDTH - `UUID_WIDTH),
             .REQ_OUT_BUF  (2),
@@ -205,17 +205,17 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
     end
 
     `RESET_RELAY (lmem_reset, reset);
-    
+
     VX_local_mem #(
-        .INSTANCE_ID($sformatf("core%0d-lmem", CORE_ID)),
+        .INSTANCE_ID($sformatf("%s-lmem", INSTANCE_ID)),
         .SIZE       (1 << `LMEM_LOG_SIZE),
         .NUM_REQS   (LSU_NUM_REQS),
         .NUM_BANKS  (`LMEM_NUM_BANKS),
         .WORD_SIZE  (LSU_WORD_SIZE),
         .ADDR_WIDTH (LMEM_ADDR_WIDTH),
-        .UUID_WIDTH (`UUID_WIDTH), 
+        .UUID_WIDTH (`UUID_WIDTH),
         .TAG_WIDTH  (LSU_TAG_WIDTH)
-    ) local_mem (        
+    ) local_mem (
         .clk        (clk),
         .reset      (lmem_reset),
     `ifdef PERF_ENABLE

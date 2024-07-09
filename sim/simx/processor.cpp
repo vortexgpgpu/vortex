@@ -70,6 +70,17 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     --perf_mem_pending_reads_;
   });
 
+  // dump device configuration
+  std::cout << "CONFIGS:"
+            << " num_threads=" << arch.num_threads()
+            << ", num_warps=" << arch.num_warps()
+            << ", num_cores=" << arch.num_cores()
+            << ", num_clusters=" << arch.num_clusters()
+            << ", socket_size=" << arch.socket_size()
+            << ", local_mem_base=0x" << std::hex << arch.local_mem_base() << std::dec
+            << ", num_barriers=" << arch.num_barriers()
+            << std::endl;
+
   this->reset();
 }
 

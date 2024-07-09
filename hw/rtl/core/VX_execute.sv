@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 
 module VX_execute import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0
 ) (
     `SCOPE_IO_DECL
@@ -55,7 +56,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     `RESET_RELAY (sfu_reset, reset);
 
     VX_alu_unit #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID ($sformatf("%s-alu", INSTANCE_ID))
     ) alu_unit (
         .clk            (clk),
         .reset          (alu_reset),
@@ -67,7 +68,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     `SCOPE_IO_SWITCH (1)
 
     VX_lsu_unit #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID ($sformatf("%s-lsu", INSTANCE_ID))
     ) lsu_unit (
         `SCOPE_IO_BIND  (0)
         .clk            (clk),
@@ -81,7 +82,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     `RESET_RELAY (fpu_reset, reset);
 
     VX_fpu_unit #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID ($sformatf("%s-fpu", INSTANCE_ID))
     ) fpu_unit (
         .clk            (clk),
         .reset          (fpu_reset),
@@ -92,6 +93,7 @@ module VX_execute import VX_gpu_pkg::*; #(
 `endif
 
     VX_sfu_unit #(
+        .INSTANCE_ID ($sformatf("%s-sfu", INSTANCE_ID)),
         .CORE_ID (CORE_ID)
     ) sfu_unit (
         .clk            (clk),

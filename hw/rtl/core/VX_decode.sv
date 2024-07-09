@@ -28,7 +28,7 @@
 `endif
 
 module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
     input wire              reset,
@@ -43,7 +43,7 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
 
     localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + 1 + (`NR_BITS * 4);
 
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
 
@@ -143,6 +143,12 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
         endcase
     end
 `endif
+
+    `STATIC_ASSERT($bits(alu_args_t)  == $bits(op_args_t), ("alu_args_t size mismatch: current=%0d, expected=%0d", $bits(alu_args_t), $bits(op_args_t)));
+    `STATIC_ASSERT($bits(fpu_args_t)  == $bits(op_args_t), ("fpu_args_t size mismatch: current=%0d, expected=%0d", $bits(fpu_args_t), $bits(op_args_t)));
+    `STATIC_ASSERT($bits(lsu_args_t)  == $bits(op_args_t), ("lsu_args_t size mismatch: current=%0d, expected=%0d", $bits(lsu_args_t), $bits(op_args_t)));
+    `STATIC_ASSERT($bits(csr_args_t)  == $bits(op_args_t), ("csr_args_t size mismatch: current=%0d, expected=%0d", $bits(csr_args_t), $bits(op_args_t)));
+    `STATIC_ASSERT($bits(wctl_args_t) == $bits(op_args_t), ("wctl_args_t size mismatch: current=%0d, expected=%0d", $bits(wctl_args_t), $bits(op_args_t)));
 
     always @(*) begin
 
@@ -551,7 +557,7 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (decode_if.valid && decode_if.ready) begin
-            `TRACE(1, ("%d: core%0d-decode: wid=%0d, PC=0x%0h, instr=0x%0h, ex=", $time, CORE_ID, decode_if.data.wid, {decode_if.data.PC, 1'd0}, instr));
+            `TRACE(1, ("%d: %s: wid=%0d, PC=0x%0h, instr=0x%0h, ex=", $time, INSTANCE_ID, decode_if.data.wid, {decode_if.data.PC, 1'd0}, instr));
             trace_ex_type(1, decode_if.data.ex_type);
             `TRACE(1, (", op="));
             trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);

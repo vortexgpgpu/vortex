@@ -1336,7 +1336,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
 
         bool is_divergent = then_tmask.any() && else_tmask.any();
         if (is_divergent) {
-          if (stack_size == arch_.ipdom_size()) {
+          if (stack_size == ipdom_size_) {
             std::cout << "IPDOM stack is full! size=" << std::dec << stack_size << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << trace->uuid << ")\n" << std::flush;
             std::abort();
           }

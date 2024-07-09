@@ -14,7 +14,7 @@
 `include "VX_fpu_define.vh"
 
 module VX_fpu_unit import VX_fpu_pkg::*; #(
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire clk,
     input wire reset,
@@ -26,7 +26,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
     VX_fpu_csr_if.master    fpu_csr_if[`NUM_FPU_BLOCKS]
 );
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE = `NUM_FPU_BLOCKS;
     localparam NUM_LANES  = `NUM_FPU_LANES;
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
