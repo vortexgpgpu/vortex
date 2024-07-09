@@ -96,7 +96,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 `endif
 
     VX_ibuffer_if staging_if [PER_ISSUE_WARPS]();
-    wire [PER_ISSUE_WARPS-1:0][3:0] staging_opds_busy;
+    reg [PER_ISSUE_WARPS-1:0] operands_ready;
 
     for (genvar i = 0; i < PER_ISSUE_WARPS; ++i) begin
         VX_elastic_buffer #(
@@ -241,6 +241,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 end
             end
             operands_busy <= operands_busy_n;
+            operands_ready[i] <= ~(| operands_busy_n);
         `ifdef PERF_ENABLE
             if (staging_fire && staging_if[i].data.wb) begin
                 inuse_units[staging_if[i].data.rd] <= staging_if[i].data.ex_type;
@@ -250,8 +251,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         `endif
         end
-
-        assign staging_opds_busy[i] = operands_busy;
 
     `ifdef SIMULATION
         reg [31:0] timeout_ctr;
@@ -290,10 +289,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
     for (genvar i = 0; i < PER_ISSUE_WARPS; ++i) begin
-        wire operands_ready = ~(| staging_opds_busy[i]);
-        assign arb_valid_in[i] = staging_if[i].valid && operands_ready;
+        assign arb_valid_in[i] = staging_if[i].valid && operands_ready[i];
         assign arb_data_in[i] = staging_if[i].data;
-        assign staging_if[i].ready = arb_ready_in[i] && operands_ready;
+        assign staging_if[i].ready = arb_ready_in[i] && operands_ready[i];
     end
 
     `RESET_RELAY (arb_reset, reset);
@@ -302,7 +300,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         .NUM_INPUTS (PER_ISSUE_WARPS),
         .DATAW      (DATAW),
         .ARBITER    ("R"),
-        .OUT_BUF    (2)
+        .LUTRAM     (1),
+        .OUT_BUF    (4) // using 2-cycle EB for area reduction
     ) out_arb (
         .clk      (clk),
         .reset    (arb_reset),
