@@ -15,7 +15,7 @@
 
 module VX_issue_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter ISSUE_ID
+    parameter ISSUE_ID = 0
 ) (
     `SCOPE_IO_DECL
 
