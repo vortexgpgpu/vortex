@@ -119,6 +119,7 @@ private:
   std::vector<WarpMask> barriers_;
   std::unordered_map<int, std::stringstream> print_bufs_;
   MemoryUnit  mmu_;
+  uint32_t    ipdom_size_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
 };

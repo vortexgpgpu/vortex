@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,8 +14,8 @@
 `include "VX_define.vh"
 
 module VX_lsu_unit import VX_gpu_pkg::*; #(
-    parameter CORE_ID = 0
-) (    
+    parameter `STRING INSTANCE_ID = ""
+) (
     `SCOPE_IO_DECL
 
     input wire              clk,
@@ -24,7 +24,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     // Inputs
     VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
 
-    // Outputs    
+    // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
     VX_lsu_mem_if.master    lsu_mem_if [`NUM_LSU_BLOCKS]
 );
@@ -32,10 +32,9 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     localparam NUM_LANES  = `NUM_LSU_LANES;
 
 `ifdef SCOPE
-    localparam scope_lsu = 0;
     `SCOPE_IO_SWITCH (BLOCK_SIZE);
 `endif
-    
+
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)
     ) per_block_execute_if[BLOCK_SIZE]();
@@ -55,15 +54,14 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .NUM_LANES (NUM_LANES)
     ) per_block_commit_if[BLOCK_SIZE]();
 
-    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin
+    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : lsu_slices
 
         `RESET_RELAY (block_reset, reset);
 
         VX_lsu_slice #(
-            .CORE_ID  (CORE_ID),
-            .BLOCK_ID (block_idx)
+            .INSTANCE_ID ($sformatf("%s%0d", INSTANCE_ID, block_idx))
         ) lsu_slice(
-            `SCOPE_IO_BIND  (scope_lsu+block_idx)
+            `SCOPE_IO_BIND  (block_idx)
             .clk        (clk),
             .reset      (block_reset),
             .execute_if (per_block_execute_if[block_idx]),
@@ -82,5 +80,5 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .commit_in_if  (per_block_commit_if),
         .commit_out_if (commit_if)
     );
-    
+
 endmodule

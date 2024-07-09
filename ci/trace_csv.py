@@ -96,7 +96,8 @@ def append_value(text, reg, value, tmask_arr, sep):
     return text, sep
 
 def parse_rtlsim(log_filename):
-    line_pattern = r"\d+: core(\d+)-(decode|issue|commit)"
+    config_pattern = r"CONFIGS: num_threads=(\d+), num_warps=(\d+), num_cores=(\d+), num_clusters=(\d+), socket_size=(\d+), local_mem_base=(\d+), num_barriers=(\d+)"
+    line_pattern = r"\d+: cluster(\d+)-socket(\d+)-core(\d+)-(decode|issue|commit)"
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
     instr_pattern = r"instr=(0x[0-9a-fA-F]+)"
     ex_pattern = r"ex=([a-zA-Z]+)"
@@ -118,21 +119,42 @@ def parse_rtlsim(log_filename):
     entries = []
     with open(log_filename, 'r') as log_file:
         instr_data = {}
+        num_threads = 0
+        num_warps = 0
+        num_cores = 0
+        num_clusters = 0
+        socket_size = 0
+        local_mem_base = 0
+        num_barriers = 0
+        num_sockets = 0
         for lineno, line in enumerate(log_file, start=1):
             try:
+                config_match = re.search(config_pattern, line)
+                if config_match:
+                    num_threads = int(config_match.group(1))
+                    num_warps = int(config_match.group(2))
+                    num_cores = int(config_match.group(3))
+                    num_clusters = int(config_match.group(4))
+                    socket_size = int(config_match.group(5))
+                    local_mem_base = int(config_match.group(6))
+                    num_barriers = int(config_match.group(7))
+                    num_sockets = (num_cores + socket_size - 1) // socket_size
+                    continue
                 line_match = re.search(line_pattern, line)
                 if line_match:
                     PC = re.search(pc_pattern, line).group(1)
                     warp_id = re.search(warp_id_pattern, line).group(1)
                     tmask = re.search(tmask_pattern, line).group(1)
                     uuid = re.search(uuid_pattern, line).group(1)
-                    core_id = line_match.group(1)
-                    stage = line_match.group(2)
+                    cluster_id = line_match.group(1)
+                    socket_id = line_match.group(2)
+                    core_id = line_match.group(3)
+                    stage = line_match.group(4)
                     if stage == "decode":
                         trace = {}
                         trace["uuid"] = uuid
                         trace["PC"] = PC
-                        trace["core_id"] = core_id
+                        trace["core_id"] = ((((cluster_id * num_sockets) + socket_id) * socket_size) + core_id)
                         trace["warp_id"] = warp_id
                         trace["tmask"] = reverse_binary(tmask)
                         trace["instr"] = re.search(instr_pattern, line).group(1)

@@ -44,6 +44,11 @@ module Vortex import VX_gpu_pkg::*; (
     output wire                             busy
 );
 
+`ifdef SCOPE
+    localparam scope_cluster = 0;
+    `SCOPE_IO_SWITCH (`NUM_CLUSTERS);
+`endif
+
 `ifdef PERF_ENABLE
     VX_mem_perf_if mem_perf_if();
     assign mem_perf_if.icache  = 'x;
@@ -121,19 +126,19 @@ module Vortex import VX_gpu_pkg::*; (
 
     wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
 
-    `SCOPE_IO_SWITCH (`NUM_CLUSTERS)
-
     // Generate all clusters
-    for (genvar i = 0; i < `NUM_CLUSTERS; ++i) begin
+    for (genvar cluster_id = 0; cluster_id < `NUM_CLUSTERS; ++cluster_id) begin : clusters
 
         `RESET_RELAY (cluster_reset, reset);
 
+        VX_dcr_bus_if cluster_dcr_bus_if();
         `BUFFER_DCR_BUS_IF (cluster_dcr_bus_if, dcr_bus_if, (`NUM_CLUSTERS > 1));
 
         VX_cluster #(
-            .CLUSTER_ID (i)
+            .CLUSTER_ID (cluster_id),
+            .INSTANCE_ID ($sformatf("cluster%0d", cluster_id))
         ) cluster (
-            `SCOPE_IO_BIND (i)
+            `SCOPE_IO_BIND (scope_cluster + cluster_id)
 
             .clk                (clk),
             .reset              (cluster_reset),
@@ -144,9 +149,9 @@ module Vortex import VX_gpu_pkg::*; (
 
             .dcr_bus_if         (cluster_dcr_bus_if),
 
-            .mem_bus_if         (per_cluster_mem_bus_if[i]),
+            .mem_bus_if         (per_cluster_mem_bus_if[cluster_id]),
 
-            .busy               (per_cluster_busy[i])
+            .busy               (per_cluster_busy[cluster_id])
         );
     end
 
