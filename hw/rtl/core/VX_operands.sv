@@ -16,7 +16,7 @@
 module VX_operands import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_BANKS = 4,
-    parameter OUT_REG   = 0
+    parameter OUT_BUF   = 4 // using 2-cycle EB for area reduction
 ) (
     input wire              clk,
     input wire              reset,
@@ -36,7 +36,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     localparam BANK_SEL_BITS = `CLOG2(NUM_BANKS);
     localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
     localparam PER_BANK_REGS = `NUM_REGS / NUM_BANKS;
-    localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + `NR_BITS + 3 * `NUM_THREADS * `XLEN;
+    localparam METADATAW = ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + `NR_BITS;
+    localparam DATAW = `UUID_WIDTH + METADATAW + 3 * `NUM_THREADS * `XLEN;
     localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * PER_ISSUE_WARPS);
     localparam PER_BANK_ADDRW = RAM_ADDRW - BANK_SEL_BITS;
     localparam XLEN_SIZE = `XLEN / 8;
@@ -44,130 +45,171 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     `UNUSED_VAR (writeback_if.data.sop)
 
+    wire [NUM_SRC_REGS-1:0] src_valid;
     wire [NUM_SRC_REGS-1:0] req_valid_in;
     wire [NUM_SRC_REGS-1:0] req_ready_in;
     wire [NUM_SRC_REGS-1:0][PER_BANK_ADDRW-1:0] req_data_in;
     wire [NUM_SRC_REGS-1:0][BANK_SEL_WIDTH-1:0] req_bank_idx;
 
-    wire [NUM_BANKS-1:0] gpr_rd_valid;
-    wire [NUM_BANKS-1:0][PER_BANK_ADDRW-1:0] gpr_rd_addr;
+    wire [NUM_BANKS-1:0] gpr_rd_valid_n, gpr_rd_ready;
+    reg [NUM_BANKS-1:0] gpr_rd_valid;
+    wire [NUM_BANKS-1:0][PER_BANK_ADDRW-1:0] gpr_rd_addr_n;
+    reg [NUM_BANKS-1:0][PER_BANK_ADDRW-1:0] gpr_rd_addr;
     wire [NUM_BANKS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] gpr_rd_data;
-    wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] gpr_rd_req_idx;
+    wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] gpr_rd_req_idx_n;
+    reg [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] gpr_rd_req_idx;
+
+    wire pipe_ready_in;
+    reg pipe_valid_out;
+    wire pipe_ready_out;
+    reg [`UUID_WIDTH-1:0] pipe_uuid_out;
+    reg [METADATAW-1:0] pipe_data_out;
 
     reg [NUM_SRC_REGS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data, src_data_n;
-    wire [NUM_SRC_REGS-1:0] src_valid;
     reg [NUM_SRC_REGS-1:0] data_fetched;
-    reg data_ready;
+    reg has_collision, has_collision_n;
+    reg is_dup_rs1_rs2, is_dup_rs1_rs3, is_dup_rs2_rs3;
 
-    assign src_valid[0] = (scoreboard_if.data.rs1 != 0) && ~data_fetched[0];
-    assign src_valid[1] = (scoreboard_if.data.rs2 != 0) && ~data_fetched[1];
-    assign src_valid[2] = (scoreboard_if.data.rs3 != 0) && ~data_fetched[2];
+    wire stg_valid_in, stg_ready_in;
 
-    assign req_valid_in[0] = scoreboard_if.valid && src_valid[0];
-    assign req_valid_in[1] = scoreboard_if.valid && src_valid[1];
-    assign req_valid_in[2] = scoreboard_if.valid && src_valid[2];
+    wire [NUM_SRC_REGS-1:0][`NR_BITS-1:0] src_regs = {scoreboard_if.data.rs3,
+                                                      scoreboard_if.data.rs2,
+                                                      scoreboard_if.data.rs1};
 
-    if (ISSUE_WIS != 0) begin
-        assign req_data_in[0] = {scoreboard_if.data.wis, scoreboard_if.data.rs1[`NR_BITS-1:BANK_SEL_BITS]};
-        assign req_data_in[1] = {scoreboard_if.data.wis, scoreboard_if.data.rs2[`NR_BITS-1:BANK_SEL_BITS]};
-        assign req_data_in[2] = {scoreboard_if.data.wis, scoreboard_if.data.rs3[`NR_BITS-1:BANK_SEL_BITS]};
-    end else begin
-        assign req_data_in[0] = {scoreboard_if.data.rs1[`NR_BITS-1:BANK_SEL_BITS]};
-        assign req_data_in[1] = {scoreboard_if.data.rs2[`NR_BITS-1:BANK_SEL_BITS]};
-        assign req_data_in[2] = {scoreboard_if.data.rs3[`NR_BITS-1:BANK_SEL_BITS]};
+    for (genvar i = 0; i < NUM_SRC_REGS; ++i) begin
+        if (ISSUE_WIS != 0) begin
+            assign req_data_in[i] = {scoreboard_if.data.wis, src_regs[i][`NR_BITS-1:BANK_SEL_BITS]};
+        end else begin
+            assign req_data_in[i] = src_regs[i][`NR_BITS-1:BANK_SEL_BITS];
+        end
+        if (NUM_BANKS != 1) begin
+            assign req_bank_idx[i] = src_regs[i][BANK_SEL_BITS-1:0];
+        end else begin
+            assign req_bank_idx[i] = '0;
+        end
     end
 
-    if (NUM_BANKS > 1) begin
-        assign req_bank_idx[0] = scoreboard_if.data.rs1[BANK_SEL_BITS-1:0];
-        assign req_bank_idx[1] = scoreboard_if.data.rs2[BANK_SEL_BITS-1:0];
-        assign req_bank_idx[2] = scoreboard_if.data.rs3[BANK_SEL_BITS-1:0];
-    end else begin
-        assign req_bank_idx = '0;
-    end
+    assign src_valid = ~data_fetched;
+
+    assign req_valid_in = {NUM_SRC_REGS{scoreboard_if.valid}} & src_valid;
 
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_SRC_REGS),
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (PER_BANK_ADDRW),
+        .ARBITER     ("P"), // use priority arbiter
         .PERF_CTR_BITS(`PERF_CTR_BITS),
-        .OUT_BUF     (1) // single-cycle EB since ready_out=1
+        .OUT_BUF     (0) // no output buffering
     ) req_xbar (
         .clk       (clk),
         .reset     (reset),
-    `ifdef PERF_ENABLE
-        .collisions(perf_stalls),
-    `else
         `UNUSED_PIN(collisions),
-    `endif
         .valid_in  (req_valid_in),
         .data_in   (req_data_in),
         .sel_in    (req_bank_idx),
         .ready_in  (req_ready_in),
-        .valid_out (gpr_rd_valid),
-        .data_out  (gpr_rd_addr),
-        .sel_out   (gpr_rd_req_idx),
-        .ready_out ({NUM_BANKS{1'b1}})
+        .valid_out (gpr_rd_valid_n),
+        .data_out  (gpr_rd_addr_n),
+        .sel_out   (gpr_rd_req_idx_n),
+        .ready_out (gpr_rd_ready)
     );
+
+    assign gpr_rd_ready = {NUM_BANKS{stg_ready_in}};
+
+    always @(*) begin
+        has_collision_n = 0;
+        for (integer i = 0; i < NUM_SRC_REGS; ++i) begin
+            for (integer j = 1; j < (NUM_SRC_REGS-i); ++j) begin
+                has_collision_n |= src_valid[i]
+                                && src_valid[j+i]
+                                && (req_bank_idx[i] == req_bank_idx[j+i])
+                                && (src_regs[i] != src_regs[j+i]);
+            end
+        end
+    end
 
     always @(*) begin
         src_data_n = src_data;
         for (integer b = 0; b < NUM_BANKS; ++b) begin
             if (gpr_rd_valid[b]) begin
                 src_data_n[gpr_rd_req_idx[b]] = gpr_rd_data[b];
+                // data forwarding
+                if (gpr_rd_req_idx[b] == 0 && is_dup_rs1_rs2) begin
+                    src_data_n[1] = gpr_rd_data[b];
+                end
+                if (gpr_rd_req_idx[b] == 0 && is_dup_rs1_rs3) begin
+                    src_data_n[2] = gpr_rd_data[b];
+                end
+                if (gpr_rd_req_idx[b] == 1 && is_dup_rs2_rs3) begin
+                    src_data_n[2] = gpr_rd_data[b];
+                end
             end
         end
     end
+
+    wire pipe_stall = pipe_valid_out && ~pipe_ready_out;
+    assign pipe_ready_in = ~pipe_stall;
+
+    assign scoreboard_if.ready = pipe_ready_in && ~has_collision_n;
 
     always @(posedge clk) begin
         if (reset) begin
-            data_fetched <= '0;
-            src_data     <= '0;
-            data_ready   <= '0;
+            data_fetched   <= '0;
+            gpr_rd_valid   <= '0;
+            pipe_valid_out <= 0;
         end else begin
-            if (scoreboard_if.ready) begin
-                data_fetched <= '0;
-                src_data     <= '0;
-                data_ready   <= '0;
-            end else begin
-                data_fetched <= data_fetched | req_ready_in;
-                src_data     <= src_data_n;
-                data_ready   <= scoreboard_if.valid
-                             && (~src_valid[0] || req_ready_in[0])
-                             && (~src_valid[1] || req_ready_in[1])
-                             && (~src_valid[2] || req_ready_in[2]);
+            if (~pipe_stall) begin
+                gpr_rd_valid   <= gpr_rd_valid_n;
+                pipe_valid_out <= scoreboard_if.valid;
+                if (scoreboard_if.ready) begin
+                    data_fetched <= '0;
+                end else begin
+                    data_fetched <= data_fetched | req_ready_in;
+                end
             end
+        end
+        if (~pipe_stall) begin
+            pipe_uuid_out  <= scoreboard_if.data.uuid;
+            pipe_data_out  <= {
+                scoreboard_if.data.wis,
+                scoreboard_if.data.tmask,
+                scoreboard_if.data.PC,
+                scoreboard_if.data.wb,
+                scoreboard_if.data.ex_type,
+                scoreboard_if.data.op_type,
+                scoreboard_if.data.op_args,
+                scoreboard_if.data.rd
+            };
+            src_data       <= src_data_n;
+            has_collision  <= has_collision_n;
+            is_dup_rs1_rs2 <= (scoreboard_if.data.rs1 == scoreboard_if.data.rs2);
+            is_dup_rs1_rs3 <= (scoreboard_if.data.rs1 == scoreboard_if.data.rs3);
+            is_dup_rs2_rs3 <= (scoreboard_if.data.rs2 == scoreboard_if.data.rs3);
+            gpr_rd_addr  <= gpr_rd_addr_n;
+            gpr_rd_req_idx <= gpr_rd_req_idx_n;
         end
     end
 
-    wire stg_valid_in, stg_ready_in;
+    assign pipe_ready_out = stg_ready_in;
+    assign stg_valid_in = pipe_valid_out && ~has_collision;
 
-    assign stg_valid_in = scoreboard_if.valid && data_ready;
-    assign scoreboard_if.ready = stg_ready_in && data_ready;
-
-    // We use a toggle buffer since the input signal also toggles
-    VX_toggle_buffer #(
-        .DATAW (DATAW),
-        .PASSTHRU (~OUT_REG)
-    ) rsp_buffer (
+    VX_elastic_buffer #(
+        .DATAW   (DATAW),
+        .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+        .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
+        .LUTRAM  (1)
+    ) out_buffer (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (stg_valid_in),
+        .ready_in  (stg_ready_in),
         .data_in   ({
-            scoreboard_if.data.uuid,
-            scoreboard_if.data.wis,
-            scoreboard_if.data.tmask,
-            scoreboard_if.data.PC,
-            scoreboard_if.data.wb,
-            scoreboard_if.data.ex_type,
-            scoreboard_if.data.op_type,
-            scoreboard_if.data.op_args,
-            scoreboard_if.data.rd,
+            pipe_uuid_out,
+            pipe_data_out,
             src_data_n[0],
             src_data_n[1],
             src_data_n[2]
         }),
-        .ready_in  (stg_ready_in),
-        .valid_out (operands_if.valid),
         .data_out  ({
             operands_if.data.uuid,
             operands_if.data.wis,
@@ -182,6 +224,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             operands_if.data.rs2_data,
             operands_if.data.rs3_data
         }),
+        .valid_out (operands_if.valid),
         .ready_out (operands_if.ready)
     );
 
@@ -206,7 +249,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     for (genvar b = 0; b < NUM_BANKS; ++b) begin
         wire gpr_wr_enabled;
         if (BANK_SEL_BITS != 0) begin
-            assign gpr_wr_enabled = wr_enabled && writeback_if.valid
+            assign gpr_wr_enabled = wr_enabled
+                                 && writeback_if.valid
                                  && (gpr_wr_addr[BANK_SEL_BITS-1:0] == BANK_SEL_BITS'(b));
         end else begin
             assign gpr_wr_enabled = wr_enabled && writeback_if.valid;
@@ -221,10 +265,8 @@ module VX_operands import VX_gpu_pkg::*; #(
             .DATAW (`XLEN * `NUM_THREADS),
             .SIZE  (PER_BANK_REGS * PER_ISSUE_WARPS),
             .WRENW (BYTEENW),
-        `ifdef GPR_RESET
             .INIT_ENABLE (1),
             .INIT_VALUE (0),
-        `endif
             .NO_RWCHECK (1)
         ) gpr_ram (
             .clk   (clk),
@@ -237,5 +279,17 @@ module VX_operands import VX_gpu_pkg::*; #(
             .rdata (gpr_rd_data[b])
         );
     end
+
+`ifdef PERF_ENABLE
+    reg [`PERF_CTR_BITS-1:0] collisions_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            collisions_r <= '0;
+        end else begin
+            collisions_r <= collisions_r + `PERF_CTR_BITS'(scoreboard_if.valid && pipe_ready_in && has_collision_n);
+        end
+    end
+    assign perf_stalls = collisions_r;
+`endif
 
 endmodule
