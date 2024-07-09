@@ -13,11 +13,13 @@
 
 `include "VX_define.vh"
 
-interface VX_decode_if import VX_gpu_pkg::*; ();
+interface VX_decode_if import VX_gpu_pkg::*; #(
+    parameter WID_WiDTH = `NW_WIDTH
+);
 
     typedef struct packed {
         logic [`UUID_WIDTH-1:0]     uuid;
-        logic [`NW_WIDTH-1:0]       wid;
+        logic [WID_WiDTH-1:0]       wid;
         logic [`NUM_THREADS-1:0]    tmask;
         logic [`PC_BITS-1:0]        PC;
         logic [`EX_BITS-1:0]        ex_type;
