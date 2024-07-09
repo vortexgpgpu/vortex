@@ -66,6 +66,7 @@ public:
   global_mem_.release(PAGE_TABLE_BASE_ADDR);
   // for (auto i = addr_mapping.begin(); i != addr_mapping.end(); i++) 
   //   page_table_mem_->release(i->second << MEM_PAGE_SIZE);
+  delete virtual_mem_;
   delete page_table_mem_;
 #endif
     if (future_.valid()) {
@@ -114,6 +115,7 @@ public:
   }
 
 #ifdef VM_ENABLE
+
   // virtual (vpn) to phycial (ppn) mapping
   uint64_t map_p2v(uint64_t ppn, uint32_t flags)
   {
@@ -130,6 +132,7 @@ public:
     addr_mapping[ppn] = vpn;
     return vpn;
   }
+
   bool need_trans(uint64_t dev_pAddr)
   {
 
@@ -423,6 +426,7 @@ public:
     virtual_mem_ = new MemoryAllocator(ALLOC_BASE_ADDR >> MEM_PAGE_LOG2_SIZE, (GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR) >> MEM_PAGE_LOG2_SIZE, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
     if (virtual_mem_ == nullptr) {
       // virtual_mem_ does not intefere with physical mem, so no need to free space
+      
       return 1;
     }
     
