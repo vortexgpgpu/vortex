@@ -318,21 +318,21 @@ module VX_cache import VX_gpu_pkg::*; #(
     end
 
     // Banks access
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin : banks
+    for (genvar bank_id = 0; bank_id < NUM_BANKS; ++bank_id) begin : banks
         wire [`CS_LINE_ADDR_WIDTH-1:0] curr_bank_mem_req_addr;
         wire curr_bank_mem_rsp_valid;
 
         if (NUM_BANKS == 1) begin
             assign curr_bank_mem_rsp_valid = mem_rsp_valid_s;
         end else begin
-            assign curr_bank_mem_rsp_valid = mem_rsp_valid_s && (`CS_MEM_TAG_TO_BANK_ID(mem_rsp_tag_s) == i);
+            assign curr_bank_mem_rsp_valid = mem_rsp_valid_s && (`CS_MEM_TAG_TO_BANK_ID(mem_rsp_tag_s) == bank_id);
         end
 
         `RESET_RELAY (bank_reset, reset);
 
         VX_cache_bank #(
-            .BANK_ID      (i),
-            .INSTANCE_ID  (INSTANCE_ID),
+            .BANK_ID      (bank_id),
+            .INSTANCE_ID  ($sformatf("%s-bank%0d", INSTANCE_ID, bank_id)),
             .CACHE_SIZE   (CACHE_SIZE),
             .LINE_SIZE    (LINE_SIZE),
             .NUM_BANKS    (NUM_BANKS),
@@ -352,44 +352,44 @@ module VX_cache import VX_gpu_pkg::*; #(
             .reset              (bank_reset),
 
         `ifdef PERF_ENABLE
-            .perf_read_misses   (perf_read_miss_per_bank[i]),
-            .perf_write_misses  (perf_write_miss_per_bank[i]),
-            .perf_mshr_stalls   (perf_mshr_stall_per_bank[i]),
+            .perf_read_misses   (perf_read_miss_per_bank[bank_id]),
+            .perf_write_misses  (perf_write_miss_per_bank[bank_id]),
+            .perf_mshr_stalls   (perf_mshr_stall_per_bank[bank_id]),
         `endif
 
             // Core request
-            .core_req_valid     (per_bank_core_req_valid[i]),
-            .core_req_addr      (per_bank_core_req_addr[i]),
-            .core_req_rw        (per_bank_core_req_rw[i]),
-            .core_req_wsel      (per_bank_core_req_wsel[i]),
-            .core_req_byteen    (per_bank_core_req_byteen[i]),
-            .core_req_data      (per_bank_core_req_data[i]),
-            .core_req_tag       (per_bank_core_req_tag[i]),
-            .core_req_idx       (per_bank_core_req_idx[i]),
-            .core_req_ready     (per_bank_core_req_ready[i]),
+            .core_req_valid     (per_bank_core_req_valid[bank_id]),
+            .core_req_addr      (per_bank_core_req_addr[bank_id]),
+            .core_req_rw        (per_bank_core_req_rw[bank_id]),
+            .core_req_wsel      (per_bank_core_req_wsel[bank_id]),
+            .core_req_byteen    (per_bank_core_req_byteen[bank_id]),
+            .core_req_data      (per_bank_core_req_data[bank_id]),
+            .core_req_tag       (per_bank_core_req_tag[bank_id]),
+            .core_req_idx       (per_bank_core_req_idx[bank_id]),
+            .core_req_ready     (per_bank_core_req_ready[bank_id]),
 
             // Core response
-            .core_rsp_valid     (per_bank_core_rsp_valid[i]),
-            .core_rsp_data      (per_bank_core_rsp_data[i]),
-            .core_rsp_tag       (per_bank_core_rsp_tag[i]),
-            .core_rsp_idx       (per_bank_core_rsp_idx[i]),
-            .core_rsp_ready     (per_bank_core_rsp_ready[i]),
+            .core_rsp_valid     (per_bank_core_rsp_valid[bank_id]),
+            .core_rsp_data      (per_bank_core_rsp_data[bank_id]),
+            .core_rsp_tag       (per_bank_core_rsp_tag[bank_id]),
+            .core_rsp_idx       (per_bank_core_rsp_idx[bank_id]),
+            .core_rsp_ready     (per_bank_core_rsp_ready[bank_id]),
 
             // Memory request
-            .mem_req_valid      (per_bank_mem_req_valid[i]),
+            .mem_req_valid      (per_bank_mem_req_valid[bank_id]),
             .mem_req_addr       (curr_bank_mem_req_addr),
-            .mem_req_rw         (per_bank_mem_req_rw[i]),
-            .mem_req_wsel       (per_bank_mem_req_wsel[i]),
-            .mem_req_byteen     (per_bank_mem_req_byteen[i]),
-            .mem_req_data       (per_bank_mem_req_data[i]),
-            .mem_req_id         (per_bank_mem_req_id[i]),
-            .mem_req_ready      (per_bank_mem_req_ready[i]),
+            .mem_req_rw         (per_bank_mem_req_rw[bank_id]),
+            .mem_req_wsel       (per_bank_mem_req_wsel[bank_id]),
+            .mem_req_byteen     (per_bank_mem_req_byteen[bank_id]),
+            .mem_req_data       (per_bank_mem_req_data[bank_id]),
+            .mem_req_id         (per_bank_mem_req_id[bank_id]),
+            .mem_req_ready      (per_bank_mem_req_ready[bank_id]),
 
             // Memory response
             .mem_rsp_valid      (curr_bank_mem_rsp_valid),
             .mem_rsp_data       (mem_rsp_data_s),
             .mem_rsp_id         (`CS_MEM_TAG_TO_REQ_ID(mem_rsp_tag_s)),
-            .mem_rsp_ready      (per_bank_mem_rsp_ready[i]),
+            .mem_rsp_ready      (per_bank_mem_rsp_ready[bank_id]),
 
             // initialization
             .init_enable        (init_enable),
@@ -397,9 +397,9 @@ module VX_cache import VX_gpu_pkg::*; #(
         );
 
         if (NUM_BANKS == 1) begin
-            assign per_bank_mem_req_addr[i] = curr_bank_mem_req_addr;
+            assign per_bank_mem_req_addr[bank_id] = curr_bank_mem_req_addr;
         end else begin
-            assign per_bank_mem_req_addr[i] = `CS_LINE_TO_MEM_ADDR(curr_bank_mem_req_addr, i);
+            assign per_bank_mem_req_addr[bank_id] = `CS_LINE_TO_MEM_ADDR(curr_bank_mem_req_addr, bank_id);
         end
     end
 

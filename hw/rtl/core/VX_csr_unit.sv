@@ -73,7 +73,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire csr_write_enable = (execute_if.data.op_type == `INST_SFU_CSRRW);
 
     VX_csr_data #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID (INSTANCE_ID),
+        .CORE_ID     (CORE_ID)
     ) csr_data (
         .clk            (clk),
         .reset          (reset),
