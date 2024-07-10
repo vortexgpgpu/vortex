@@ -256,6 +256,11 @@ module VX_operands import VX_gpu_pkg::*; #(
             assign gpr_wr_enabled = wr_enabled && writeback_if.valid;
         end
 
+        wire [PER_BANK_ADDRW-1:0] gpr_wr_addr_b = gpr_wr_addr[BANK_SEL_BITS +: PER_BANK_ADDRW];
+
+        // prevent degenerate writes to R0
+        wire gpr_wr_enabled_qual = gpr_wr_enabled && (| gpr_wr_addr);
+
         wire [BYTEENW-1:0] wren;
         for (genvar i = 0; i < `NUM_THREADS; ++i) begin
             assign wren[i*XLEN_SIZE+:XLEN_SIZE] = {XLEN_SIZE{writeback_if.data.tmask[i]}};
@@ -272,8 +277,8 @@ module VX_operands import VX_gpu_pkg::*; #(
             .clk   (clk),
             .read  (1'b1),
             .wren  (wren),
-            .write (gpr_wr_enabled),
-            .waddr (gpr_wr_addr[BANK_SEL_BITS +: PER_BANK_ADDRW]),
+            .write (gpr_wr_enabled_qual),
+            .waddr (gpr_wr_addr_b),
             .wdata (writeback_if.data.data),
             .raddr (gpr_rd_addr[b]),
             .rdata (gpr_rd_data[b])
