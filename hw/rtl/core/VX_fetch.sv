@@ -89,7 +89,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
 `endif
 
     `RUNTIME_ASSERT((!schedule_if.valid || schedule_if.data.PC != 0),
-        ("%t: *** invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", $time, {schedule_if.data.PC, 1'b0}, schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.uuid))
+        ("%t: *** %s invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", $time, INSTANCE_ID, {schedule_if.data.PC, 1'b0}, schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.uuid))
 
     // Icache Request
 

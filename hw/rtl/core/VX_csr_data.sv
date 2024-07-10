@@ -32,6 +32,7 @@ import VX_gpu_pkg::*;
 import VX_fpu_pkg::*;
 `endif
 #(
+    parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0
 ) (
     input wire                          clk,
@@ -146,7 +147,7 @@ import VX_fpu_pkg::*;
                     mscratch <= write_data;
                 end
                 default: begin
-                    `ASSERT(0, ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
+                    `ASSERT(0, ("%t: *** %s invalid CSR write address: %0h (#%0d)", $time, INSTANCE_ID, write_addr, write_uuid));
                 end
             endcase
         end
