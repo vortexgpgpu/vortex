@@ -103,7 +103,7 @@ module VX_stream_arb #(
                         .DATAW       (DATAW),
                         .ARBITER     (ARBITER),
                         .MAX_FANOUT  (MAX_FANOUT),
-                        .OUT_BUF     (OUT_BUF),
+                        .OUT_BUF     (3), // registered output
                         .LUTRAM      (LUTRAM)
                     ) fanout_slice_arb (
                         .clk       (clk),
@@ -254,7 +254,7 @@ module VX_stream_arb #(
                 .DATAW       (DATAW),
                 .ARBITER     (ARBITER),
                 .MAX_FANOUT  (MAX_FANOUT),
-                .OUT_BUF     (OUT_BUF),
+                .OUT_BUF     (3), // registered output
                 .LUTRAM      (LUTRAM)
             ) fanout_fork_arb (
                 .clk       (clk),

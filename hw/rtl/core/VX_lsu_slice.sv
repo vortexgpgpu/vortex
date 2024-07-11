@@ -537,14 +537,14 @@ module VX_lsu_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
         .TRIGGERW (3),
         .PROBEW   (`UUID_WIDTH+NUM_LANES*(`XLEN+4+`XLEN)+1+`UUID_WIDTH+NUM_LANES*`XLEN)
     ) scope_tap (
-        .clk (clk),
-        .reset (scope_reset),
-        .start (1'b0),
-        .stop (1'b0),
-        .triggers ({reset, mem_req_fire, mem_rsp_fire}),
+        .clk    (clk),
+        .reset  (scope_reset),
+        .start  (1'b0),
+        .stop   (1'b0),
+        .triggers({reset, mem_req_fire, mem_rsp_fire}),
         .probes ({execute_if.data.uuid, full_addr, mem_req_rw, mem_req_byteen, mem_req_data, rsp_uuid, rsp_data}),
         .bus_in (scope_bus_in),
-        .bus_out (scope_bus_out)
+        .bus_out(scope_bus_out)
     );
 `else
     `SCOPE_IO_UNUSED()
