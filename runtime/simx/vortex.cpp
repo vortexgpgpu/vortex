@@ -119,7 +119,7 @@ public:
   // virtual (vpn) to phycial (ppn) mapping
   uint64_t map_p2v(uint64_t ppn, uint32_t flags)
   {
-    DBGPRINT(" [RT:MAP_P2V] ppn: %x\n", ppn);
+    DBGPRINT(" [RT:MAP_P2V] ppn: %lx\n", ppn);
     // std::cout << std::hex << pAddr << std::endl;
     // return pAddr + 0xf000000;
     if (addr_mapping.find(ppn) != addr_mapping.end()) return addr_mapping[ppn];
@@ -128,6 +128,7 @@ public:
     DBGPRINT(" [RT:MAP_P2V] Not found. Allocate new page table or update a PTE.\n");
     uint64_t vpn;
     virtual_mem_->allocate(MEM_PAGE_SIZE, &vpn);
+    vpn = vpn >> MEM_PAGE_LOG2_SIZE;
     CHECK_ERR(update_page_table(ppn, vpn, flags),);
     addr_mapping[ppn] = vpn;
     return vpn;
@@ -176,8 +177,7 @@ public:
     // FUTURE Work: Super Page
     for (ppn = (*dev_pAddr >> MEM_PAGE_LOG2_SIZE); ppn < ((*dev_pAddr) >> MEM_PAGE_LOG2_SIZE) + (size >> MEM_PAGE_LOG2_SIZE) ; ppn++)
     {
-
-      vpn = map_p2v(ppn << MEM_PAGE_LOG2_SIZE, flags) >> MEM_PAGE_LOG2_SIZE;
+      vpn = map_p2v(ppn, flags) >> MEM_PAGE_LOG2_SIZE;
       DBGPRINT(" [RT:PTV_MAP] Search vpn in page table:0x%lx\n", vpn);
       // Currently a 1-1 mapping is used, this can be changed here to support different
       // mapping schemes
@@ -438,14 +438,11 @@ public:
     }
 
     // HW: virtual mem allocator has the same address range as global_mem. next step is to adjust it
-    virtual_mem_ = new MemoryAllocator(ALLOC_BASE_ADDR >> MEM_PAGE_LOG2_SIZE, (GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR) >> MEM_PAGE_LOG2_SIZE, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
-    CHECK_ERR(virtual_mem_reserve(PAGE_TABLE_BASE_ADDR >> MEM_PAGE_LOG2_SIZE, (GLOBAL_MEM_SIZE - PAGE_TABLE_BASE_ADDR) >> MEM_PAGE_LOG2_SIZE, VX_MEM_READ_WRITE), {
+    virtual_mem_ = new MemoryAllocator(ALLOC_BASE_ADDR, (GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR), MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
+    CHECK_ERR(virtual_mem_reserve(PAGE_TABLE_BASE_ADDR, (GLOBAL_MEM_SIZE - PAGE_TABLE_BASE_ADDR), VX_MEM_READ_WRITE), {
       return err;
     });
-    CHECK_ERR(virtual_mem_reserve(0, USER_BASE_ADDR >> MEM_PAGE_LOG2_SIZE, VX_MEM_READ_WRITE), {
-      return err;
-    });
-    CHECK_ERR(virtual_mem_reserve(STARTUP_ADDR >> MEM_PAGE_LOG2_SIZE, (STARTUP_ADDR + 0x40000) >> MEM_PAGE_LOG2_SIZE, VX_MEM_READ_WRITE), {
+    CHECK_ERR(virtual_mem_reserve(STARTUP_ADDR, 0x40000, VX_MEM_READ_WRITE), {
       return err;
     });
     
@@ -646,13 +643,13 @@ private:
   RAM ram_;
   Processor processor_;
   MemoryAllocator global_mem_;
-  MemoryAllocator* virtual_mem_;
   DeviceConfig dcrs_;
   std::future<void> future_;
   std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
 #ifdef VM_ENABLE
   std::unordered_map<uint64_t, uint64_t> addr_mapping; // HW: key: ppn; value: vpn
   MemoryAllocator* page_table_mem_;
+  MemoryAllocator* virtual_mem_;
 #endif
 };
 
