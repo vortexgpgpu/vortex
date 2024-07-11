@@ -121,13 +121,15 @@ module VX_alu_unit #(
 
         // send response
 
+        `RESET_RELAY (arb_reset, block_reset);
+
         VX_stream_arb #(
             .NUM_INPUTS (RSP_ARB_SIZE),
             .DATAW      (RSP_ARB_DATAW),
             .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) rsp_arb (
             .clk       (clk),
-            .reset     (block_reset),
+            .reset     (arb_reset),
             .valid_in  ({
             `ifdef EXT_M_ENABLE
                 muldiv_commit_if.valid,

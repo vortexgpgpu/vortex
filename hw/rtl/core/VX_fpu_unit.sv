@@ -84,12 +84,14 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         wire execute_fire = per_block_execute_if[block_idx].valid && per_block_execute_if[block_idx].ready;
         wire fpu_rsp_fire = fpu_rsp_valid && fpu_rsp_ready;
 
+        `RESET_RELAY (ibuf_reset, block_reset);
+
         VX_index_buffer #(
             .DATAW  (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + PID_WIDTH + 1 + 1),
             .SIZE   (`FPUQ_SIZE)
         ) tag_store (
             .clk          (clk),
-            .reset        (block_reset),
+            .reset        (ibuf_reset),
             .acquire_en   (execute_fire),
             .write_addr   (fpu_req_tag),
             .write_data   ({per_block_execute_if[block_idx].data.uuid, per_block_execute_if[block_idx].data.wid, per_block_execute_if[block_idx].data.tmask, per_block_execute_if[block_idx].data.PC, per_block_execute_if[block_idx].data.rd, per_block_execute_if[block_idx].data.pid, per_block_execute_if[block_idx].data.sop, per_block_execute_if[block_idx].data.eop}),
@@ -226,12 +228,14 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
 
         // send response
 
+        `RESET_RELAY (rsp_reset, block_reset);
+
         VX_elastic_buffer #(
             .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1),
             .SIZE  (0)
         ) rsp_buf (
             .clk       (clk),
-            .reset     (block_reset),
+            .reset     (rsp_reset),
             .valid_in  (fpu_rsp_valid),
             .ready_in  (fpu_rsp_ready),
             .data_in   ({fpu_rsp_uuid, fpu_rsp_wid, fpu_rsp_tmask, fpu_rsp_PC, fpu_rsp_rd, fpu_rsp_result, fpu_rsp_pid, fpu_rsp_sop, fpu_rsp_eop}),

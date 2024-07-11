@@ -41,8 +41,6 @@ module VX_commit import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     wire [`ISSUE_WIDTH-1:0][`NUM_THREADS-1:0] commit_tmask;
     wire [`ISSUE_WIDTH-1:0] commit_eop;
 
-    `RESET_RELAY (arb_reset, reset);
-
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
 
         wire [`NUM_EX_UNITS-1:0]            valid_in;
@@ -54,6 +52,8 @@ module VX_commit import VX_gpu_pkg::*, VX_trace_pkg::*; #(
             assign data_in[j]  = commit_if[j * `ISSUE_WIDTH + i].data;
             assign commit_if[j * `ISSUE_WIDTH + i].ready = ready_in[j];
         end
+
+        `RESET_RELAY (arb_reset, reset);
 
         VX_stream_arb #(
             .NUM_INPUTS (`NUM_EX_UNITS),

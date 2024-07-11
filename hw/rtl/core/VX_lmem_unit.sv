@@ -41,8 +41,6 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
 
-        `RESET_RELAY (switch_reset, reset);
-
         wire [`NUM_LSU_LANES-1:0] is_addr_local_mask;
         for (genvar j = 0; j < `NUM_LSU_LANES; ++j) begin
             assign is_addr_local_mask[j] = lsu_mem_in_if[i].req_data.atype[j][`ADDR_TYPE_LOCAL];
@@ -53,6 +51,8 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
 
         wire req_global_ready;
         wire req_local_ready;
+
+        `RESET_RELAY (switch_reset, reset);
 
         VX_elastic_buffer #(
             .DATAW   (REQ_DATAW),
@@ -151,13 +151,13 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lmem_bus_if[LSU_NUM_REQS]();
 
-    `RESET_RELAY (adapter_reset, reset);
-
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
         VX_mem_bus_if #(
             .DATA_SIZE (LSU_WORD_SIZE),
             .TAG_WIDTH (LSU_TAG_WIDTH)
         ) lmem_bus_tmp_if[`NUM_LSU_LANES]();
+
+        `RESET_RELAY (adapter_reset, reset);
 
         VX_lsu_adapter #(
             .NUM_LANES    (`NUM_LSU_LANES),
