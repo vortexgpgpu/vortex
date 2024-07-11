@@ -234,8 +234,6 @@ module VX_core import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
 
-        `RESET_RELAY (lsu_adapter_reset, reset);
-
         VX_lsu_mem_if #(
             .NUM_LANES (DCACHE_CHANNELS),
             .DATA_SIZE (DCACHE_WORD_SIZE),
@@ -243,6 +241,8 @@ module VX_core import VX_gpu_pkg::*; #(
         ) dcache_coalesced_if();
 
         if (LSU_WORD_SIZE != DCACHE_WORD_SIZE) begin
+
+            `RESET_RELAY (mem_coalescer_reset, reset);
 
             VX_mem_coalescer #(
                 .INSTANCE_ID    ($sformatf("%s-coalescer%0d", INSTANCE_ID, i)),
@@ -254,9 +254,9 @@ module VX_core import VX_gpu_pkg::*; #(
                 .TAG_WIDTH      (LSU_TAG_WIDTH),
                 .UUID_WIDTH     (`UUID_WIDTH),
                 .QUEUE_SIZE     (`LSUQ_OUT_SIZE)
-            ) coalescer (
+            ) mem_coalescer (
                 .clk   (clk),
-                .reset (lsu_adapter_reset),
+                .reset (mem_coalescer_reset),
 
                 // Input request
                 .in_req_valid   (lsu_dcache_if[i].req_valid),
@@ -305,6 +305,8 @@ module VX_core import VX_gpu_pkg::*; #(
             .DATA_SIZE (DCACHE_WORD_SIZE),
             .TAG_WIDTH (DCACHE_TAG_WIDTH)
         ) dcache_bus_tmp_if[DCACHE_CHANNELS]();
+
+        `RESET_RELAY (lsu_adapter_reset, reset);
 
         VX_lsu_adapter #(
             .NUM_LANES    (DCACHE_CHANNELS),

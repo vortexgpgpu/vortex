@@ -96,8 +96,6 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         .TAG_WIDTH (ARB_TAG_WIDTH)
     ) arb_core_bus_if[NUM_CACHES * NUM_REQS]();
 
-    `RESET_RELAY (arb_reset, reset);
-
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_mem_bus_if #(
             .DATA_SIZE (WORD_SIZE),
@@ -112,6 +110,8 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         for (genvar j = 0; j < NUM_INPUTS; ++j) begin
             `ASSIGN_VX_MEM_BUS_IF (core_bus_tmp_if[j], core_bus_if[j * NUM_REQS + i]);
         end
+
+        `RESET_RELAY (arb_reset, reset);
 
         VX_mem_arb #(
             .NUM_INPUTS   (NUM_INPUTS),
@@ -134,9 +134,9 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         end
     end
 
-    `RESET_RELAY (cache_reset, reset);
+     for (genvar i = 0; i < NUM_CACHES; ++i) begin : caches
 
-    for (genvar i = 0; i < NUM_CACHES; ++i) begin : caches
+        `RESET_RELAY (cache_reset, reset);
 
         VX_cache_wrap #(
             .INSTANCE_ID  ($sformatf("%s%0d", INSTANCE_ID, i)),

@@ -53,9 +53,10 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     wire [`NUM_EX_UNITS-1:0] operands_reset;
     assign operands_if.ready = operands_reset[operands_if.data.ex_type];
 
-    `RESET_RELAY (buf_reset, reset);
-
     for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin
+
+        `RESET_RELAY (buffer_reset, reset);
+
         VX_elastic_buffer #(
             .DATAW   (DATAW),
             .SIZE    (2),
@@ -63,7 +64,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
             .LUTRAM  (1)
         ) buffer (
             .clk        (clk),
-            .reset      (buf_reset),
+            .reset      (buffer_reset),
             .valid_in   (operands_if.valid && (operands_if.data.ex_type == `EX_BITS'(i))),
             .ready_in   (operands_reset[i]),
             .data_in    ({
