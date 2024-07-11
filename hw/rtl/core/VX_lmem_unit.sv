@@ -37,11 +37,11 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         .NUM_LANES (`NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lmem_lsu_if[`NUM_LSU_BLOCKS]();
-
-    `RESET_RELAY (req_reset, reset);
+    ) lsu_switch_if[`NUM_LSU_BLOCKS]();
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
+
+        `RESET_RELAY (switch_reset, reset);
 
         wire [`NUM_LSU_LANES-1:0] is_addr_local_mask;
         for (genvar j = 0; j < `NUM_LSU_LANES; ++j) begin
@@ -57,10 +57,10 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         VX_elastic_buffer #(
             .DATAW   (REQ_DATAW),
             .SIZE    (2),
-            .OUT_REG (1)
+            .OUT_REG (0)
         ) req_global_buf (
             .clk       (clk),
-            .reset     (req_reset),
+            .reset     (switch_reset),
             .valid_in  (lsu_mem_in_if[i].req_valid && is_addr_global),
             .data_in   ({
                 lsu_mem_in_if[i].req_data.mask & ~is_addr_local_mask,
@@ -91,7 +91,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .OUT_REG (0)
         ) req_local_buf (
             .clk       (clk),
-            .reset     (req_reset),
+            .reset     (switch_reset),
             .valid_in  (lsu_mem_in_if[i].req_valid && is_addr_local),
             .data_in   ({
                 lsu_mem_in_if[i].req_data.mask & is_addr_local_mask,
@@ -103,43 +103,40 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
                 lsu_mem_in_if[i].req_data.tag
             }),
             .ready_in  (req_local_ready),
-            .valid_out (lmem_lsu_if[i].req_valid),
+            .valid_out (lsu_switch_if[i].req_valid),
             .data_out  ({
-                lmem_lsu_if[i].req_data.mask,
-                lmem_lsu_if[i].req_data.rw,
-                lmem_lsu_if[i].req_data.byteen,
-                lmem_lsu_if[i].req_data.addr,
-                lmem_lsu_if[i].req_data.atype,
-                lmem_lsu_if[i].req_data.data,
-                lmem_lsu_if[i].req_data.tag
+                lsu_switch_if[i].req_data.mask,
+                lsu_switch_if[i].req_data.rw,
+                lsu_switch_if[i].req_data.byteen,
+                lsu_switch_if[i].req_data.addr,
+                lsu_switch_if[i].req_data.atype,
+                lsu_switch_if[i].req_data.data,
+                lsu_switch_if[i].req_data.tag
             }),
-            .ready_out (lmem_lsu_if[i].req_ready)
+            .ready_out (lsu_switch_if[i].req_ready)
         );
 
         assign lsu_mem_in_if[i].req_ready = (req_global_ready && is_addr_global)
                                          || (req_local_ready && is_addr_local);
-    end
 
-    `RESET_RELAY (rsp_reset, reset);
-
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
         VX_stream_arb #(
             .NUM_INPUTS (2),
             .DATAW      (RSP_DATAW),
-            .ARBITER    ("R")
+            .ARBITER    ("R"),
+            .OUT_BUF    (1)
         ) rsp_arb (
             .clk       (clk),
-            .reset     (rsp_reset),
+            .reset     (switch_reset),
             .valid_in  ({
-                lmem_lsu_if[i].rsp_valid,
+                lsu_switch_if[i].rsp_valid,
                 lsu_mem_out_if[i].rsp_valid
             }),
             .ready_in  ({
-                lmem_lsu_if[i].rsp_ready,
+                lsu_switch_if[i].rsp_ready,
                 lsu_mem_out_if[i].rsp_ready
             }),
             .data_in   ({
-                lmem_lsu_if[i].rsp_data,
+                lsu_switch_if[i].rsp_data,
                 lsu_mem_out_if[i].rsp_data
             }),
             .data_out  (lsu_mem_in_if[i].rsp_data),
@@ -156,7 +153,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
 
     `RESET_RELAY (adapter_reset, reset);
 
-    for (genvar  i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
+    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
         VX_mem_bus_if #(
             .DATA_SIZE (LSU_WORD_SIZE),
             .TAG_WIDTH (LSU_TAG_WIDTH)
@@ -167,12 +164,12 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .DATA_SIZE    (LSU_WORD_SIZE),
             .TAG_WIDTH    (LSU_TAG_WIDTH),
             .TAG_SEL_BITS (LSU_TAG_WIDTH - `UUID_WIDTH),
-            .REQ_OUT_BUF  (2),
-            .RSP_OUT_BUF  (1)
+            .REQ_OUT_BUF  (3),
+            .RSP_OUT_BUF  (0)
         ) lsu_adapter (
             .clk        (clk),
             .reset      (adapter_reset),
-            .lsu_mem_if (lmem_lsu_if[i]),
+            .lsu_mem_if (lsu_switch_if[i]),
             .mem_bus_if (lmem_bus_tmp_if)
         );
 
@@ -191,7 +188,8 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         .WORD_SIZE  (LSU_WORD_SIZE),
         .ADDR_WIDTH (LMEM_ADDR_WIDTH),
         .UUID_WIDTH (`UUID_WIDTH),
-        .TAG_WIDTH  (LSU_TAG_WIDTH)
+        .TAG_WIDTH  (LSU_TAG_WIDTH),
+        .OUT_BUF    (3)
     ) local_mem (
         .clk        (clk),
         .reset      (lmem_reset),
