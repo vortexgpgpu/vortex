@@ -407,6 +407,21 @@ public:
       return 0;
   }
 
+  // reserve IO space, startup space, and local mem area
+  int virtual_mem_reserve(uint64_t dev_addr, uint64_t size, int flags)
+  {
+    // uint64_t asize = aligned_size(size, MEM_PAGE_SIZE);
+    CHECK_ERR(virtual_mem_->reserve(dev_addr, size), {
+      return err;
+    });
+    DBGPRINT("[RT:mem_reserve] addr: 0x%lx, size:0x%lx, size: 0x%lx\n", dev_addr, size, size);
+    // CHECK_ERR(this->mem_access(dev_addr, asize, flags), {
+    //   global_mem_.release(dev_addr);
+    //   return err;
+    // });
+    return 0;
+  }
+
   int16_t init_VM()
   {
     uint64_t pt_addr = 0;
@@ -424,6 +439,16 @@ public:
 
     // HW: virtual mem allocator has the same address range as global_mem. next step is to adjust it
     virtual_mem_ = new MemoryAllocator(ALLOC_BASE_ADDR >> MEM_PAGE_LOG2_SIZE, (GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR) >> MEM_PAGE_LOG2_SIZE, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
+    CHECK_ERR(virtual_mem_reserve(PAGE_TABLE_BASE_ADDR >> MEM_PAGE_LOG2_SIZE, (GLOBAL_MEM_SIZE - PAGE_TABLE_BASE_ADDR) >> MEM_PAGE_LOG2_SIZE, VX_MEM_READ_WRITE), {
+      return err;
+    });
+    CHECK_ERR(virtual_mem_reserve(0, USER_BASE_ADDR >> MEM_PAGE_LOG2_SIZE, VX_MEM_READ_WRITE), {
+      return err;
+    });
+    CHECK_ERR(virtual_mem_reserve(STARTUP_ADDR >> MEM_PAGE_LOG2_SIZE, (STARTUP_ADDR + 0x40000) >> MEM_PAGE_LOG2_SIZE, VX_MEM_READ_WRITE), {
+      return err;
+    });
+    
     if (virtual_mem_ == nullptr) {
       // virtual_mem_ does not intefere with physical mem, so no need to free space
       
