@@ -123,53 +123,30 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
     `RESET_RELAY (rsp_reset, reset);
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
-
-        wire rsp_arb_valid;
-        wire rsp_arb_index;
-        wire rsp_arb_ready;
-
-        VX_generic_arbiter #(
-            .NUM_REQS    (2),
-            .LOCK_ENABLE (1),
-            .TYPE        ("R")
-        ) arbiter (
-            .clk         (clk),
-            .reset       (rsp_reset),
-            .requests    ({
+        VX_stream_arb #(
+            .NUM_INPUTS (2),
+            .DATAW      (RSP_DATAW),
+            .ARBITER    ("R")
+        ) rsp_arb (
+            .clk       (clk),
+            .reset     (rsp_reset),
+            .valid_in  ({
                 lmem_lsu_if[i].rsp_valid,
                 lsu_mem_out_if[i].rsp_valid
             }),
-            .grant_valid (rsp_arb_valid),
-            .grant_index (rsp_arb_index),
-            `UNUSED_PIN (grant_onehot),
-            .grant_unlock(rsp_arb_ready)
-        );
-
-        VX_elastic_buffer #(
-            .DATAW   (RSP_DATAW),
-            .SIZE    (2),
-            .OUT_REG (0)
-        ) rsp_buf (
-            .clk       (clk),
-            .reset     (rsp_reset),
-            .valid_in  (rsp_arb_valid),
+            .ready_in  ({
+                lmem_lsu_if[i].rsp_ready,
+                lsu_mem_out_if[i].rsp_ready
+            }),
             .data_in   ({
-                rsp_arb_index ? lmem_lsu_if[i].rsp_data.mask : lsu_mem_out_if[i].rsp_data.mask,
-                rsp_arb_index ? lmem_lsu_if[i].rsp_data.data : lsu_mem_out_if[i].rsp_data.data,
-                rsp_arb_index ? lmem_lsu_if[i].rsp_data.tag : lsu_mem_out_if[i].rsp_data.tag
+                lmem_lsu_if[i].rsp_data,
+                lsu_mem_out_if[i].rsp_data
             }),
-            .ready_in  (rsp_arb_ready),
+            .data_out  (lsu_mem_in_if[i].rsp_data),
             .valid_out (lsu_mem_in_if[i].rsp_valid),
-            .data_out  ({
-                lsu_mem_in_if[i].rsp_data.mask,
-                lsu_mem_in_if[i].rsp_data.data,
-                lsu_mem_in_if[i].rsp_data.tag
-            }),
-            .ready_out (lsu_mem_in_if[i].rsp_ready)
+            .ready_out (lsu_mem_in_if[i].rsp_ready),
+            `UNUSED_PIN (sel_out)
         );
-
-        assign lsu_mem_out_if[i].rsp_ready = rsp_arb_ready && ~rsp_arb_index;
-        assign lmem_lsu_if[i].rsp_ready = rsp_arb_ready && rsp_arb_index;
     end
 
     VX_mem_bus_if #(
