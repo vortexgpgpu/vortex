@@ -124,8 +124,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             for (integer j = 1; j < (NUM_SRC_REGS-i); ++j) begin
                 has_collision_n |= src_valid[i]
                                 && src_valid[j+i]
-                                && (req_bank_idx[i] == req_bank_idx[j+i])
-                                && (src_regs[i][`NR_BITS-1:BANK_SEL_BITS] != src_regs[j+i][`NR_BITS-1:BANK_SEL_BITS]);
+                                && (req_bank_idx[i] == req_bank_idx[j+i]);
             end
         end
     end
