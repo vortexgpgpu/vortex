@@ -123,7 +123,7 @@ module VX_operands import VX_gpu_pkg::*; #(
                 has_collision_n |= src_valid[i]
                                 && src_valid[j+i]
                                 && (req_bank_idx[i] == req_bank_idx[j+i])
-                                && (src_regs[i] != src_regs[j+i]);
+                                && (src_regs[i][`NR_BITS-1:BANK_SEL_BITS] != src_regs[j+i][`NR_BITS-1:BANK_SEL_BITS]);
             end
         end
     end
@@ -185,7 +185,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             is_dup_rs1_rs2 <= (scoreboard_if.data.rs1 == scoreboard_if.data.rs2);
             is_dup_rs1_rs3 <= (scoreboard_if.data.rs1 == scoreboard_if.data.rs3);
             is_dup_rs2_rs3 <= (scoreboard_if.data.rs2 == scoreboard_if.data.rs3);
-            gpr_rd_addr  <= gpr_rd_addr_n;
+            gpr_rd_addr    <= gpr_rd_addr_n;
             gpr_rd_req_idx <= gpr_rd_req_idx_n;
         end
     end
@@ -228,11 +228,18 @@ module VX_operands import VX_gpu_pkg::*; #(
         .ready_out (operands_if.ready)
     );
 
-    wire [RAM_ADDRW-1:0] gpr_wr_addr;
+    wire [PER_BANK_ADDRW-1:0] gpr_wr_addr;
     if (ISSUE_WIS != 0) begin
-        assign gpr_wr_addr = {writeback_if.data.wis, writeback_if.data.rd};
+        assign gpr_wr_addr = {writeback_if.data.wis, writeback_if.data.rd[`NR_BITS-1:BANK_SEL_BITS]};
     end else begin
-        assign gpr_wr_addr = writeback_if.data.rd;
+        assign gpr_wr_addr = writeback_if.data.rd[`NR_BITS-1:BANK_SEL_BITS];
+    end
+
+    wire [BANK_SEL_WIDTH-1:0] gpr_wr_bank_idx;
+    if (NUM_BANKS != 1) begin
+        assign gpr_wr_bank_idx = writeback_if.data.rd[BANK_SEL_BITS-1:0];
+    end else begin
+        assign gpr_wr_bank_idx = '0;
     end
 
     `ifdef GPR_RESET
@@ -251,15 +258,13 @@ module VX_operands import VX_gpu_pkg::*; #(
         if (BANK_SEL_BITS != 0) begin
             assign gpr_wr_enabled = wr_enabled
                                  && writeback_if.valid
-                                 && (gpr_wr_addr[BANK_SEL_BITS-1:0] == BANK_SEL_BITS'(b));
+                                 && (gpr_wr_bank_idx == BANK_SEL_BITS'(b));
         end else begin
             assign gpr_wr_enabled = wr_enabled && writeback_if.valid;
         end
 
-        wire [PER_BANK_ADDRW-1:0] gpr_wr_addr_b = gpr_wr_addr[BANK_SEL_BITS +: PER_BANK_ADDRW];
-
         // prevent degenerate writes to R0
-        wire gpr_wr_enabled_qual = gpr_wr_enabled && (| gpr_wr_addr);
+        wire gpr_wr_enabled_qual = gpr_wr_enabled && (writeback_if.data.rd != 0);
 
         wire [BYTEENW-1:0] wren;
         for (genvar i = 0; i < `NUM_THREADS; ++i) begin
@@ -278,7 +283,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             .read  (1'b1),
             .wren  (wren),
             .write (gpr_wr_enabled_qual),
-            .waddr (gpr_wr_addr_b),
+            .waddr (gpr_wr_addr),
             .wdata (writeback_if.data.data),
             .raddr (gpr_rd_addr[b]),
             .rdata (gpr_rd_data[b])
