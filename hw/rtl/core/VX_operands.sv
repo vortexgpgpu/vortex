@@ -67,8 +67,8 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     reg [NUM_SRC_REGS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data, src_data_n;
     reg [NUM_SRC_REGS-1:0] data_fetched;
+    reg [NUM_SRC_REGS-1:0] is_reg_zero;
     reg has_collision, has_collision_n;
-    reg is_dup_rs1_rs2, is_dup_rs1_rs3, is_dup_rs2_rs3;
 
     wire stg_valid_in, stg_ready_in;
 
@@ -78,7 +78,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_SRC_REGS; ++i) begin
         if (ISSUE_WIS != 0) begin
-            assign req_data_in[i] = {scoreboard_if.data.wis, src_regs[i][`NR_BITS-1:BANK_SEL_BITS]};
+            assign req_data_in[i] = {src_regs[i][`NR_BITS-1:BANK_SEL_BITS], scoreboard_if.data.wis};
         end else begin
             assign req_data_in[i] = src_regs[i][`NR_BITS-1:BANK_SEL_BITS];
         end
@@ -89,7 +89,9 @@ module VX_operands import VX_gpu_pkg::*; #(
         end
     end
 
-    assign src_valid = ~data_fetched;
+    for (genvar i = 0; i < NUM_SRC_REGS; ++i) begin
+        assign src_valid[i] = (src_regs[i] != 0) && ~data_fetched[i];
+    end
 
     assign req_valid_in = {NUM_SRC_REGS{scoreboard_if.valid}} & src_valid;
 
@@ -133,16 +135,11 @@ module VX_operands import VX_gpu_pkg::*; #(
         for (integer b = 0; b < NUM_BANKS; ++b) begin
             if (gpr_rd_valid[b]) begin
                 src_data_n[gpr_rd_req_idx[b]] = gpr_rd_data[b];
-                // data forwarding
-                if (gpr_rd_req_idx[b] == 0 && is_dup_rs1_rs2) begin
-                    src_data_n[1] = gpr_rd_data[b];
-                end
-                if (gpr_rd_req_idx[b] == 0 && is_dup_rs1_rs3) begin
-                    src_data_n[2] = gpr_rd_data[b];
-                end
-                if (gpr_rd_req_idx[b] == 1 && is_dup_rs2_rs3) begin
-                    src_data_n[2] = gpr_rd_data[b];
-                end
+            end
+        end
+        for (integer i = 0; i < NUM_SRC_REGS; ++i) begin
+            if (pipe_valid_out && is_reg_zero[i]) begin
+                src_data_n[i] = 'b0;
             end
         end
     end
@@ -182,9 +179,9 @@ module VX_operands import VX_gpu_pkg::*; #(
             };
             src_data       <= src_data_n;
             has_collision  <= has_collision_n;
-            is_dup_rs1_rs2 <= (scoreboard_if.data.rs1 == scoreboard_if.data.rs2);
-            is_dup_rs1_rs3 <= (scoreboard_if.data.rs1 == scoreboard_if.data.rs3);
-            is_dup_rs2_rs3 <= (scoreboard_if.data.rs2 == scoreboard_if.data.rs3);
+            for (integer i = 0; i < NUM_SRC_REGS; ++i) begin
+                is_reg_zero[i] <= (src_regs[i] == 'b0);
+            end
             gpr_rd_addr    <= gpr_rd_addr_n;
             gpr_rd_req_idx <= gpr_rd_req_idx_n;
         end
@@ -230,7 +227,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     wire [PER_BANK_ADDRW-1:0] gpr_wr_addr;
     if (ISSUE_WIS != 0) begin
-        assign gpr_wr_addr = {writeback_if.data.wis, writeback_if.data.rd[`NR_BITS-1:BANK_SEL_BITS]};
+        assign gpr_wr_addr = {writeback_if.data.rd[`NR_BITS-1:BANK_SEL_BITS], writeback_if.data.wis};
     end else begin
         assign gpr_wr_addr = writeback_if.data.rd[`NR_BITS-1:BANK_SEL_BITS];
     end
@@ -263,9 +260,6 @@ module VX_operands import VX_gpu_pkg::*; #(
             assign gpr_wr_enabled = wr_enabled && writeback_if.valid;
         end
 
-        // prevent degenerate writes to R0
-        wire gpr_wr_enabled_qual = gpr_wr_enabled && (writeback_if.data.rd != 0);
-
         wire [BYTEENW-1:0] wren;
         for (genvar i = 0; i < `NUM_THREADS; ++i) begin
             assign wren[i*XLEN_SIZE+:XLEN_SIZE] = {XLEN_SIZE{writeback_if.data.tmask[i]}};
@@ -274,15 +268,14 @@ module VX_operands import VX_gpu_pkg::*; #(
         VX_dp_ram #(
             .DATAW (`XLEN * `NUM_THREADS),
             .SIZE  (PER_BANK_REGS * PER_ISSUE_WARPS),
+            .ADDR_MIN ((b == 0) ? PER_ISSUE_WARPS : 0),
             .WRENW (BYTEENW),
-            .INIT_ENABLE (1),
-            .INIT_VALUE (0),
             .NO_RWCHECK (1)
         ) gpr_ram (
             .clk   (clk),
             .read  (1'b1),
             .wren  (wren),
-            .write (gpr_wr_enabled_qual),
+            .write (gpr_wr_enabled),
             .waddr (gpr_wr_addr),
             .wdata (writeback_if.data.data),
             .raddr (gpr_rd_addr[b]),
