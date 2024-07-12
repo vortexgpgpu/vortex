@@ -47,6 +47,7 @@ typedef uint64_t WordF;
 #define MAX_NUM_THREADS 32
 #define MAX_NUM_WARPS   32
 #define MAX_NUM_REGS    32
+#define NUM_SRC_REGS    3
 
 typedef std::bitset<MAX_NUM_CORES>   CoreMask;
 typedef std::bitset<MAX_NUM_REGS>    RegMask;
@@ -58,7 +59,8 @@ typedef std::bitset<MAX_NUM_WARPS>   WarpMask;
 enum class RegType {
   None,
   Integer,
-  Float
+  Float,
+  Count
 };
 
 inline std::ostream &operator<<(std::ostream &os, const RegType& type) {

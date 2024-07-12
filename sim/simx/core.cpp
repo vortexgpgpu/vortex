@@ -366,6 +366,11 @@ void Core::commit() {
       perf_stats_.instrs += trace->tmask.count();
     }
 
+    perf_stats_.opds_stalls = 0;
+    for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
+      perf_stats_.opds_stalls += operands_.at(i)->total_stalls();
+    }
+
     commit_arb->Outputs.at(0).pop();
 
     // delete the trace

@@ -44,6 +44,7 @@ public:
     uint64_t sched_stalls;
     uint64_t ibuf_stalls;
     uint64_t scrb_stalls;
+    uint64_t opds_stalls;
     uint64_t scrb_alu;
     uint64_t scrb_fpu;
     uint64_t scrb_lsu;
@@ -63,6 +64,7 @@ public:
       , sched_stalls(0)
       , ibuf_stalls(0)
       , scrb_stalls(0)
+      , opds_stalls(0)
       , scrb_alu(0)
       , scrb_fpu(0)
       , scrb_lsu(0)
