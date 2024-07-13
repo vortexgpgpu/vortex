@@ -224,8 +224,6 @@ import VX_fpu_pkg::*;
                     `endif
                         `CSR_READ_64(`VX_CSR_MPM_SCRB_LSU, read_data_ro_r, pipeline_perf_if.issue.units_uses[`EX_LSU]);
                         `CSR_READ_64(`VX_CSR_MPM_SCRB_SFU, read_data_ro_r, pipeline_perf_if.issue.units_uses[`EX_SFU]);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_CSRS, read_data_ro_r, pipeline_perf_if.issue.sfu_uses[`SFU_CSRS]);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_WCTL, read_data_ro_r, pipeline_perf_if.issue.sfu_uses[`SFU_WCTL]);
                         `CSR_READ_64(`VX_CSR_MPM_OPDS_ST, read_data_ro_r, pipeline_perf_if.issue.opd_stalls);
                         // PERF: memory
                         `CSR_READ_64(`VX_CSR_MPM_IFETCHES, read_data_ro_r, pipeline_perf_if.ifetches);

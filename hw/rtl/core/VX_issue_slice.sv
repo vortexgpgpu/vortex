@@ -61,7 +61,6 @@ module VX_issue_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     `ifdef PERF_ENABLE
         .perf_stalls    (issue_perf.scb_stalls),
         .perf_units_uses(issue_perf.units_uses),
-        .perf_sfu_uses  (issue_perf.sfu_uses),
     `endif
         .writeback_if   (writeback_if),
         .ibuffer_if     (ibuffer_if),

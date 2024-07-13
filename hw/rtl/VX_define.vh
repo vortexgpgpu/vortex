@@ -397,27 +397,27 @@
 
 `define PERF_COUNTER_ADD(dst, src, field, width, count, reg_enable) \
     if (count > 1) begin \
-        wire [count-1:0][width-1:0] __reduce_add_i_``field; \
-        wire [width-1:0] __reduce_add_o_``field; \
+        wire [count-1:0][width-1:0] __reduce_add_i_field; \
+        wire [width-1:0] __reduce_add_o_field; \
         for (genvar __i = 0; __i < count; ++__i) begin \
-            assign __reduce_add_i_``field[__i] = src[__i].``field; \
+            assign __reduce_add_i_field[__i] = src[__i].``field; \
         end \
-        VX_reduce #(.DATAW_IN(width), .N(count), .OP("+")) __reduce_add_``field ( \
-            __reduce_add_i_``field, \
-            __reduce_add_o_``field \
+        VX_reduce #(.DATAW_IN(width), .N(count), .OP("+")) __reduce_add_field ( \
+            __reduce_add_i_field, \
+            __reduce_add_o_field \
         ); \
         if (reg_enable) begin \
-            reg [width-1:0] __reduce_add_r_``field; \
+            reg [width-1:0] __reduce_add_r_field; \
             always @(posedge clk) begin \
                 if (reset) begin \
-                    __reduce_add_r_``field <= '0; \
+                    __reduce_add_r_field <= '0; \
                 end else begin \
-                    __reduce_add_r_``field <= __reduce_add_o_``field; \
+                    __reduce_add_r_field <= __reduce_add_o_field; \
                 end \
             end \
-            assign dst.``field = __reduce_add_r_``field; \
+            assign dst.``field = __reduce_add_r_field; \
         end else begin \
-            assign dst.``field = __reduce_add_o_``field; \
+            assign dst.``field = __reduce_add_o_field; \
         end \
     end else begin \
         assign dst.``field = src[0].``field; \
