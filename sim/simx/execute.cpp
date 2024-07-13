@@ -718,8 +718,9 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   case Opcode::FS: {
     trace->fu_type = FUType::LSU;
     trace->lsu_type = LsuType::STORE;
+    auto data_type = (opcode == Opcode::FS) ? RegType::Float : RegType::Integer;
     trace->src_regs[0] = {RegType::Integer, rsrc0};
-    trace->src_regs[1] = {RegType::Integer, rsrc1};
+    trace->src_regs[1] = {data_type, rsrc1};
     auto trace_data = std::make_shared<LsuTraceData>(num_threads);
     trace->data = trace_data;
     uint32_t data_bytes = 1 << (func3 & 0x3);
@@ -838,7 +839,8 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         }
       } else {
         trace->fu_type = FUType::SFU;
-        trace->fetch_stall = true;
+        // stall the fetch stage for FPU CSRs
+        trace->fetch_stall = (csr_addr <= VX_CSR_FCSR);
         csr_value = this->get_csr(csr_addr, t, wid);
         switch (func3) {
         case 1: {

@@ -21,6 +21,7 @@
 #include <util.h>
 #include <stringutil.h>
 #include <VX_config.h>
+#include <VX_types.h>
 #include <simobject.h>
 #include "debug.h"
 
