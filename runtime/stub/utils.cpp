@@ -187,8 +187,6 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t scrb_fpu = 0;
   uint64_t scrb_lsu = 0;
   uint64_t scrb_sfu = 0;
-  uint64_t scrb_wctl = 0;
-  uint64_t scrb_csrs = 0;
   uint64_t ifetches = 0;
   uint64_t loads = 0;
   uint64_t stores = 0;
@@ -281,7 +279,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         }
         ibuffer_stalls += ibuffer_stalls_per_core;
       }
-      // issue stalls
+      // scoreboard stalls
       {
         uint64_t scrb_stalls_per_core;
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_SCRB_ST, core_id, &scrb_stalls_per_core), {
@@ -309,39 +307,14 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         scrb_sfu += scrb_sfu_per_core;
         if (num_cores > 1) {
           uint64_t scrb_total = scrb_alu_per_core + scrb_fpu_per_core + scrb_lsu_per_core + scrb_sfu_per_core;
-          fprintf(stream, "PERF: core%d: issue stalls=%ld (alu=%d%%, fpu=%d%%, lsu=%d%%, sfu=%d%%)\n", core_id, scrb_stalls_per_core,
+          int scrb_percent_per_core = calcAvgPercent(scrb_stalls_per_core, cycles_per_core);
+          fprintf(stream, "PERF: core%d: scoreboard stalls=%ld (%d%%) (alu=%d, fpu=%d, lsu=%d, sfu=%d)\n", core_id, scrb_stalls_per_core, scrb_percent_per_core,
           calcAvgPercent(scrb_alu_per_core, scrb_total),
           calcAvgPercent(scrb_fpu_per_core, scrb_total),
           calcAvgPercent(scrb_lsu_per_core, scrb_total),
           calcAvgPercent(scrb_sfu_per_core, scrb_total));
         }
         scrb_stalls += scrb_stalls_per_core;
-      }
-      // sfu stalls
-      {
-        uint64_t scrb_sfu_per_core;
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_SCRB_SFU, core_id, &scrb_sfu_per_core), {
-          return err;
-        });
-        uint64_t scrb_wctl_per_core;
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_SCRB_WCTL, core_id, &scrb_wctl_per_core), {
-          return err;
-        });
-        uint64_t scrb_csrs_per_core;
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_SCRB_CSRS, core_id, &scrb_csrs_per_core), {
-          return err;
-        });
-        if (num_cores > 1) {
-          uint64_t sfu_total = scrb_wctl_per_core + scrb_csrs_per_core;
-          fprintf(stream, "PERF: core%d: sfu stalls=%ld (scrs=%d%%, wctl=%d%%)\n"
-            , core_id
-            , scrb_sfu_per_core
-            , calcAvgPercent(scrb_csrs_per_core, sfu_total)
-            , calcAvgPercent(scrb_wctl_per_core, sfu_total)
-          );
-        }
-        scrb_wctl += scrb_wctl_per_core;
-        scrb_csrs += scrb_csrs_per_core;
       }
       // operands stalls
       {
@@ -567,24 +540,19 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     int sched_idles_percent = calcAvgPercent(sched_idles, total_cycles);
     int sched_stalls_percent = calcAvgPercent(sched_stalls, total_cycles);
     int ibuffer_percent = calcAvgPercent(ibuffer_stalls, total_cycles);
+    int scrb_percent = calcAvgPercent(scrb_stalls, total_cycles);
     int opds_percent = calcAvgPercent(opds_stalls, total_cycles);
     int ifetch_avg_lat = (int)(double(ifetch_lat) / double(ifetches));
     int load_avg_lat = (int)(double(load_lat) / double(loads));
     uint64_t scrb_total = scrb_alu + scrb_fpu + scrb_lsu + scrb_sfu;
-    uint64_t sfu_total = scrb_wctl + scrb_csrs;
     fprintf(stream, "PERF: scheduler idle=%ld (%d%%)\n", sched_idles, sched_idles_percent);
     fprintf(stream, "PERF: scheduler stalls=%ld (%d%%)\n", sched_stalls, sched_stalls_percent);
     fprintf(stream, "PERF: ibuffer stalls=%ld (%d%%)\n", ibuffer_stalls, ibuffer_percent);
-    fprintf(stream, "PERF: issue stalls=%ld (alu=%d%%, fpu=%d%%, lsu=%d%%, sfu=%d%%)\n", scrb_stalls,
+    fprintf(stream, "PERF: scoreboard stalls=%ld (%d%%) (alu=%d, fpu=%d, lsu=%d, sfu=%d)\n", scrb_stalls, scrb_percent,
       calcAvgPercent(scrb_alu, scrb_total),
       calcAvgPercent(scrb_fpu, scrb_total),
       calcAvgPercent(scrb_lsu, scrb_total),
       calcAvgPercent(scrb_sfu, scrb_total));
-    fprintf(stream, "PERF: sfu stalls=%ld (scrs=%d%%, wctl=%d%%)\n"
-      , scrb_sfu
-      , calcAvgPercent(scrb_csrs, sfu_total)
-      , calcAvgPercent(scrb_wctl, sfu_total)
-    );
     fprintf(stream, "PERF: operands stalls=%ld (%d%%)\n", opds_stalls, opds_percent);
     fprintf(stream, "PERF: ifetches=%ld\n", ifetches);
     fprintf(stream, "PERF: loads=%ld\n", loads);

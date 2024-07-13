@@ -22,7 +22,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE
     output reg [`PERF_CTR_BITS-1:0] perf_stalls,
     output reg [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_units_uses,
-    output reg [`NUM_SFU_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_sfu_uses,
 `endif
 
     VX_writeback_if.slave   writeback_if,
@@ -32,17 +31,12 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam DATAW = `UUID_WIDTH + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + (`NR_BITS * 4) + 1;
 
+    VX_ibuffer_if staging_if [PER_ISSUE_WARPS]();
+    reg [PER_ISSUE_WARPS-1:0] operands_ready;
+
 `ifdef PERF_ENABLE
     reg [PER_ISSUE_WARPS-1:0][`NUM_EX_UNITS-1:0] perf_inuse_units_per_cycle;
     wire [`NUM_EX_UNITS-1:0] perf_units_per_cycle, perf_units_per_cycle_r;
-
-    reg [PER_ISSUE_WARPS-1:0][`NUM_SFU_UNITS-1:0] perf_inuse_sfu_per_cycle;
-    wire [`NUM_SFU_UNITS-1:0] perf_sfu_per_cycle, perf_sfu_per_cycle_r;
-
-    wire [PER_ISSUE_WARPS-1:0] perf_issue_stalls_per_cycle;
-    wire [`CLOG2(PER_ISSUE_WARPS+1)-1:0] perf_stalls_per_cycle, perf_stalls_per_cycle_r;
-
-    `POP_COUNT(perf_stalls_per_cycle, perf_issue_stalls_per_cycle);
 
     VX_reduce #(
         .DATAW_IN (`NUM_EX_UNITS),
@@ -53,24 +47,20 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         .data_out (perf_units_per_cycle)
     );
 
-    VX_reduce #(
-        .DATAW_IN (`NUM_SFU_UNITS),
-        .N  (PER_ISSUE_WARPS),
-        .OP ("|")
-    ) perf_sfu_reduce (
-        .data_in  (perf_inuse_sfu_per_cycle),
-        .data_out (perf_sfu_per_cycle)
-    );
-
-    `BUFFER(perf_stalls_per_cycle_r, perf_stalls_per_cycle);
     `BUFFER_EX(perf_units_per_cycle_r, perf_units_per_cycle, 1'b1, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
-    `BUFFER_EX(perf_sfu_per_cycle_r, perf_sfu_per_cycle, 1'b1, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
+
+    wire [PER_ISSUE_WARPS-1:0] stg_valid_in;
+    for (genvar i = 0; i < PER_ISSUE_WARPS; ++i) begin
+        assign stg_valid_in[i] = staging_if[i].valid;
+    end
+
+    wire perf_stall_per_cycle = (|stg_valid_in) && ~(|(stg_valid_in & operands_ready));
 
     always @(posedge clk) begin
         if (reset) begin
             perf_stalls <= '0;
         end else begin
-            perf_stalls <= perf_stalls + `PERF_CTR_BITS'(perf_stalls_per_cycle_r);
+            perf_stalls <= perf_stalls + `PERF_CTR_BITS'(perf_stall_per_cycle);
         end
     end
 
@@ -83,20 +73,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         end
     end
-
-    for (genvar i = 0; i < `NUM_SFU_UNITS; ++i) begin
-        always @(posedge clk) begin
-            if (reset) begin
-                perf_sfu_uses[i] <= '0;
-            end else begin
-                perf_sfu_uses[i] <= perf_sfu_uses[i] + `PERF_CTR_BITS'(perf_sfu_per_cycle_r[i]);
-            end
-        end
-    end
 `endif
-
-    VX_ibuffer_if staging_if [PER_ISSUE_WARPS]();
-    reg [PER_ISSUE_WARPS-1:0] operands_ready;
 
     for (genvar i = 0; i < PER_ISSUE_WARPS; ++i) begin
         VX_elastic_buffer #(
@@ -129,49 +106,24 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     `ifdef PERF_ENABLE
         reg [`NUM_REGS-1:0][`EX_WIDTH-1:0] inuse_units;
-        reg [`NUM_REGS-1:0][`SFU_WIDTH-1:0] inuse_sfu;
-
-        reg [`SFU_WIDTH-1:0] sfu_type;
-        always @(*) begin
-            case (staging_if[i].data.op_type)
-            `INST_SFU_CSRRW,
-            `INST_SFU_CSRRS,
-            `INST_SFU_CSRRC: sfu_type = `SFU_CSRS;
-            default: sfu_type = `SFU_WCTL;
-            endcase
-        end
 
         always @(*) begin
             perf_inuse_units_per_cycle[i] = '0;
-            perf_inuse_sfu_per_cycle[i] = '0;
             if (staging_if[i].valid) begin
                 if (operands_busy[0]) begin
                     perf_inuse_units_per_cycle[i][inuse_units[staging_if[i].data.rd]] = 1;
-                    if (inuse_units[staging_if[i].data.rd] == `EX_SFU) begin
-                        perf_inuse_sfu_per_cycle[i][inuse_sfu[staging_if[i].data.rd]] = 1;
-                    end
                 end
                 if (operands_busy[1]) begin
                     perf_inuse_units_per_cycle[i][inuse_units[staging_if[i].data.rs1]] = 1;
-                    if (inuse_units[staging_if[i].data.rs1] == `EX_SFU) begin
-                        perf_inuse_sfu_per_cycle[i][inuse_sfu[staging_if[i].data.rs1]] = 1;
-                    end
                 end
                 if (operands_busy[2]) begin
                     perf_inuse_units_per_cycle[i][inuse_units[staging_if[i].data.rs2]] = 1;
-                    if (inuse_units[staging_if[i].data.rs2] == `EX_SFU) begin
-                        perf_inuse_sfu_per_cycle[i][inuse_sfu[staging_if[i].data.rs2]] = 1;
-                    end
                 end
                 if (operands_busy[3]) begin
                     perf_inuse_units_per_cycle[i][inuse_units[staging_if[i].data.rs3]] = 1;
-                    if (inuse_units[staging_if[i].data.rs3] == `EX_SFU) begin
-                        perf_inuse_sfu_per_cycle[i][inuse_sfu[staging_if[i].data.rs3]] = 1;
-                    end
                 end
             end
         end
-        assign perf_issue_stalls_per_cycle[i] = staging_if[i].valid && ~staging_if[i].ready;
     `endif
 
         always @(*) begin
@@ -245,9 +197,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         `ifdef PERF_ENABLE
             if (staging_fire && staging_if[i].data.wb) begin
                 inuse_units[staging_if[i].data.rd] <= staging_if[i].data.ex_type;
-                if (staging_if[i].data.ex_type == `EX_SFU) begin
-                    inuse_sfu[staging_if[i].data.rd] <= sfu_type;
-                end
             end
         `endif
         end
