@@ -33,15 +33,18 @@ void AluUnit::tick() {
 			continue;
 		auto& output = Outputs.at(iw);
 		auto trace = input.front();
+		int delay = 2;
 		switch (trace->alu_type) {
 		case AluType::ARITH:
 		case AluType::BRANCH:
 		case AluType::SYSCALL:
+			output.push(trace, 2+delay);
+			break;
 		case AluType::IMUL:
-			output.push(trace, LATENCY_IMUL+1);
+			output.push(trace, LATENCY_IMUL+delay);
 			break;
 		case AluType::IDIV:
-			output.push(trace, XLEN+1);
+			output.push(trace, XLEN+delay);
 			break;
 		default:
 			std::abort();
@@ -65,21 +68,22 @@ void FpuUnit::tick() {
 			continue;
 		auto& output = Outputs.at(iw);
 		auto trace = input.front();
+		int delay = 2;
 		switch (trace->fpu_type) {
 		case FpuType::FNCP:
-			output.push(trace, 2);
+			output.push(trace, 2+delay);
 			break;
 		case FpuType::FMA:
-			output.push(trace, LATENCY_FMA+1);
+			output.push(trace, LATENCY_FMA+delay);
 			break;
 		case FpuType::FDIV:
-			output.push(trace, LATENCY_FDIV+1);
+			output.push(trace, LATENCY_FDIV+delay);
 			break;
 		case FpuType::FSQRT:
-			output.push(trace, LATENCY_FSQRT+1);
+			output.push(trace, LATENCY_FSQRT+delay);
 			break;
 		case FpuType::FCVT:
-			output.push(trace, LATENCY_FCVT+1);
+			output.push(trace, LATENCY_FCVT+delay);
 			break;
 		default:
 			std::abort();
@@ -254,10 +258,10 @@ void SfuUnit::tick() {
 		auto trace = input.front();
 		auto sfu_type = trace->sfu_type;
 		bool release_warp = trace->fetch_stall;
-
+		int delay = 2;
 		switch  (sfu_type) {
 		case SfuType::WSPAWN:
-			output.push(trace, 1);
+			output.push(trace, 2+delay);
 			if (trace->eop) {
 				auto trace_data = std::dynamic_pointer_cast<SFUTraceData>(trace->data);
 				release_warp = core_->wspawn(trace_data->arg1, trace_data->arg2);
@@ -270,10 +274,10 @@ void SfuUnit::tick() {
 		case SfuType::CSRRW:
 		case SfuType::CSRRS:
 		case SfuType::CSRRC:
-			output.push(trace, 1);
+			output.push(trace, 2+delay);
 			break;
 		case SfuType::BAR: {
-			output.push(trace, 1);
+			output.push(trace, 2+delay);
 			if (trace->eop) {
 				auto trace_data = std::dynamic_pointer_cast<SFUTraceData>(trace->data);
 				release_warp = core_->barrier(trace_data->arg1, trace_data->arg2, trace->wid);

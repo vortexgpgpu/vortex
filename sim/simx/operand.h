@@ -21,7 +21,7 @@ class Operand : public SimObject<Operand> {
 private:
 		static constexpr uint32_t NUM_BANKS = 4;
 		uint32_t total_stalls_ = 0;
-		
+
 public:
     SimPort<instr_trace_t*> Input;
     SimPort<instr_trace_t*> Output;
@@ -63,7 +63,7 @@ public:
 
 			total_stalls_ += stalls;
 
-			Output.push(trace, 1 + stalls);
+			Output.push(trace, 2 + stalls);
 
 			DT(3, "pipeline-operands: " << *trace);
 

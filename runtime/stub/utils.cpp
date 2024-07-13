@@ -308,7 +308,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         if (num_cores > 1) {
           uint64_t scrb_total = scrb_alu_per_core + scrb_fpu_per_core + scrb_lsu_per_core + scrb_sfu_per_core;
           int scrb_percent_per_core = calcAvgPercent(scrb_stalls_per_core, cycles_per_core);
-          fprintf(stream, "PERF: core%d: scoreboard stalls=%ld (%d%%) (alu=%d, fpu=%d, lsu=%d, sfu=%d)\n", core_id, scrb_stalls_per_core, scrb_percent_per_core,
+          fprintf(stream, "PERF: core%d: scoreboard stalls=%ld (%d%%) (alu=%d%%, fpu=%d%%, lsu=%d%%, sfu=%d%%)\n", core_id, scrb_stalls_per_core, scrb_percent_per_core,
           calcAvgPercent(scrb_alu_per_core, scrb_total),
           calcAvgPercent(scrb_fpu_per_core, scrb_total),
           calcAvgPercent(scrb_lsu_per_core, scrb_total),
@@ -548,7 +548,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     fprintf(stream, "PERF: scheduler idle=%ld (%d%%)\n", sched_idles, sched_idles_percent);
     fprintf(stream, "PERF: scheduler stalls=%ld (%d%%)\n", sched_stalls, sched_stalls_percent);
     fprintf(stream, "PERF: ibuffer stalls=%ld (%d%%)\n", ibuffer_stalls, ibuffer_percent);
-    fprintf(stream, "PERF: scoreboard stalls=%ld (%d%%) (alu=%d, fpu=%d, lsu=%d, sfu=%d)\n", scrb_stalls, scrb_percent,
+    fprintf(stream, "PERF: scoreboard stalls=%ld (%d%%) (alu=%d%%, fpu=%d%%, lsu=%d%%, sfu=%d%%)\n", scrb_stalls, scrb_percent,
       calcAvgPercent(scrb_alu, scrb_total),
       calcAvgPercent(scrb_fpu, scrb_total),
       calcAvgPercent(scrb_lsu, scrb_total),
