@@ -161,9 +161,8 @@ module VX_stream_arb #(
             wire                    arb_ready;
 
             VX_generic_arbiter #(
-                .NUM_REQS    (NUM_REQS),
-                .LOCK_ENABLE (1),
-                .TYPE        (ARBITER)
+                .NUM_REQS (NUM_REQS),
+                .TYPE     (ARBITER)
             ) arbiter (
                 .clk          (clk),
                 .reset        (reset),
@@ -171,7 +170,7 @@ module VX_stream_arb #(
                 .grant_valid  (arb_valid),
                 .grant_index  (arb_index),
                 .grant_onehot (arb_onehot),
-                .grant_unlock (arb_ready)
+                .grant_ready  (arb_ready)
             );
 
             assign valid_in_r = arb_valid;
@@ -309,17 +308,16 @@ module VX_stream_arb #(
             wire                    arb_ready;
 
             VX_generic_arbiter #(
-                .NUM_REQS    (NUM_OUTPUTS),
-                .LOCK_ENABLE (1),
-                .TYPE        (ARBITER)
+                .NUM_REQS (NUM_OUTPUTS),
+                .TYPE     (ARBITER)
             ) arbiter (
                 .clk          (clk),
                 .reset        (reset),
                 .requests     (arb_requests),
                 .grant_valid  (arb_valid),
-                `UNUSED_PIN (grant_index),
+                `UNUSED_PIN   (grant_index),
                 .grant_onehot (arb_onehot),
-                .grant_unlock (arb_ready)
+                .grant_ready  (arb_ready)
             );
 
             assign arb_requests = ready_in_r;
