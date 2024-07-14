@@ -84,41 +84,102 @@ static void matmul_cpu(TYPE* out, const TYPE* A, const TYPE* B, uint32_t width, 
   }
 }
 
-const char* kernel_file = "kernel.vxbin";
-uint32_t size = 16;
-uint32_t block_size = 4;
+static void stencil_cpu(TYPE *out, const TYPE *in, uint32_t width, uint32_t height, uint32_t depth)
+{
+  // We'll need to handle boundary conditions. Let's assume we use boundary replication.
+  for (uint32_t z = 0; z < depth; z++)
+  {
+    for (uint32_t y = 0; y < height; y++)
+    {
+      for (uint32_t x = 0; x < width; x++)
+      {
+        TYPE sum = 0;
+        int count = 0;
 
-vx_device_h device = nullptr;
-vx_buffer_h A_buffer = nullptr;
-vx_buffer_h B_buffer = nullptr;
-vx_buffer_h C_buffer = nullptr;
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
-kernel_arg_t kernel_arg = {};
+        // Iterate over the neighborhood
+        for (int dz = -1; dz <= 1; dz++)
+        {
+          for (int dy = -1; dy <= 1; dy++)
+          {
+            for (int dx = -1; dx <= 1; dx++)
+            {
+              // Compute the neighbor's index
+              int nx = x + dx;
+              int ny = y + dy;
+              int nz = z + dz;
 
-static void show_usage() {
-   std::cout << "Vortex Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-n matrix_size] [-b:block_size] [-h: help]" << std::endl;
+              // Check bounds and replicate the boundary values
+              if (nx < 0){
+                nx = 0;
+              }
+              else if (nx >= width) {
+                nx = width - 1;
+              }
+              if (ny < 0) {
+                ny = 0;
+              }
+              else if (ny >= height) { 
+                ny = height - 1;
+              }
+              if (nz < 0) {
+                nz = 0;
+              }
+              else if (nz >= depth) {
+                nz = depth - 1;
+              }
+              // Sum up the values
+              sum += in[nz * width * height + ny * width + nx];
+              count++;
+            }
+          }
+        }
+
+        // Write the averaged value to the output array
+        out[z * width * height + y * width + x] = sum / count;
+      }
+    }
+  }
 }
 
-static void parse_args(int argc, char **argv) {
-  int c;
-  while ((c = getopt(argc, argv, "n:t:k:h?")) != -1) {
-    switch (c) {
-    case 'n':
-      size = atoi(optarg);
-      break;
-    case 'b':
-      block_size = atoi(optarg);
-      break;
-    case 'k':
-      kernel_file = optarg;
-      break;
-    case 'h':
-    case '?': {
-      show_usage();
-      exit(0);
-    } break;
+  const char *kernel_file = "kernel.vxbin";
+  uint32_t size = 64;
+  uint32_t block_size = 2;
+
+  vx_device_h device = nullptr;
+  vx_buffer_h A_buffer = nullptr;
+  vx_buffer_h B_buffer = nullptr;
+  vx_buffer_h krnl_buffer = nullptr;
+  vx_buffer_h args_buffer = nullptr;
+  kernel_arg_t kernel_arg = {};
+
+  static void show_usage()
+  {
+    std::cout << "Vortex Test." << std::endl;
+    std::cout << "Usage: [-k: kernel] [-n matrix_size] [-b:block_size] [-h: help]" << std::endl;
+  }
+
+  static void parse_args(int argc, char **argv)
+  {
+    int c;
+    while ((c = getopt(argc, argv, "n:t:k:h?")) != -1)
+    {
+      switch (c)
+      {
+      case 'n':
+        size = atoi(optarg);
+        break;
+      case 'b':
+        block_size = atoi(optarg);
+        break;
+      case 'k':
+        kernel_file = optarg;
+        break;
+      case 'h':
+      case '?':
+      {
+        show_usage();
+        exit(0);
+      } break;
     default:
       show_usage();
       exit(-1);
@@ -130,7 +191,6 @@ void cleanup() {
   if (device) {
     vx_mem_free(A_buffer);
     vx_mem_free(B_buffer);
-    vx_mem_free(C_buffer);
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
     vx_dev_close(device);
@@ -152,61 +212,47 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
 
-  uint32_t size_sq = size * size;
-  uint32_t buf_size = size_sq * sizeof(TYPE);
-  uint32_t group_size = block_size * block_size;
-  uint32_t local_mem = 2 * group_size * sizeof(TYPE);
+  uint32_t size_cubed = size * size * size;
+  uint32_t buf_size = size_cubed * sizeof(TYPE);
+  uint32_t group_size = block_size * block_size * block_size;
+ 
 
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "matrix size: " << size << "x" << size << std::endl;
   std::cout << "block size: " << block_size << "x" << block_size << std::endl;
-  std::cout << "local memory: " << local_mem << " bytes" << std::endl;
 
   kernel_arg.grid_dim[0] = size / block_size;
   kernel_arg.grid_dim[1] = size / block_size;
+  kernel_arg.grid_dim[2] = size / block_size;
   kernel_arg.block_dim[0] = block_size;
   kernel_arg.block_dim[1] = block_size;
+  kernel_arg.block_dim[2] = block_size;
   kernel_arg.size = size;
   kernel_arg.block_size = block_size;
-
-  // check work group occupancy
-  uint32_t max_localmem;
-  RT_CHECK(vx_check_occupancy(device, group_size, &max_localmem));
-  std::cout << "occupancy: max_localmem=" << max_localmem << " bytes" << std::endl;
-  RT_CHECK(max_localmem < local_mem);
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
   RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &A_buffer));
   RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &B_buffer));
+  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &B_buffer));
   RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &C_buffer));
-  RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
-  std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
 
   // allocate host buffers
   std::cout << "allocate host buffers" << std::endl;
-  std::vector<TYPE> h_A(size_sq);
-  std::vector<TYPE> h_B(size_sq);
-  std::vector<TYPE> h_C(size_sq);
+  std::vector<TYPE> h_A(size_cubed);
+  std::vector<TYPE> h_B(size_cubed);
 
   // generate source data
-  for (uint32_t i = 0; i < size_sq; ++i) {
+  for (uint32_t i = 0; i < size_cubed; ++i) {
     h_A[i] = Comparator<TYPE>::generate();
-    h_B[i] = Comparator<TYPE>::generate();
   }
 
   // upload source buffer0
   std::cout << "upload source buffer0" << std::endl;
   RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, buf_size));
-
-  // upload source buffer1
-  std::cout << "upload source buffer1" << std::endl;
-  RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, buf_size));
 
   // upload program
   std::cout << "upload program" << std::endl;
@@ -226,17 +272,17 @@ int main(int argc, char *argv[]) {
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, buf_size));
+  RT_CHECK(vx_copy_from_dev(h_B.data(), B_buffer, 0, buf_size));
 
   // verify result
   std::cout << "verify result" << std::endl;
   int errors = 0;
   {
-    std::vector<TYPE> h_ref(size_sq);
-    matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), size, size);
+    std::vector<TYPE> h_ref(size_cubed);
+    stencil_cpu(h_ref.data(), h_A.data(), size, size, size);
 
     for (uint32_t i = 0; i < h_ref.size(); ++i) {
-      if (!Comparator<TYPE>::compare(h_C[i], h_ref[i], i, errors)) {
+      if (!Comparator<TYPE>::compare(h_B[i], h_ref[i], i, errors)) {
         ++errors;
       }
     }
