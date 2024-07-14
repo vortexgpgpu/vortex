@@ -19,6 +19,7 @@ all:
 	$(MAKE) -C om
 	$(MAKE) -C conv3x
 	$(MAKE) -C sgemm2x
+	$(MAKE) -C stencil
 
 run-simx:
 	$(MAKE) -C basic run-simx
@@ -38,6 +39,7 @@ run-simx:
 	$(MAKE) -C om run-simx
 	$(MAKE) -C conv3x run-simx
 	$(MAKE) -C sgemm2x run-simx
+	$(MAKE) -C stencil run-simx
 
 run-rtlsim:
 	$(MAKE) -C basic run-rtlsim
@@ -57,6 +59,7 @@ run-rtlsim:
 	$(MAKE) -C om run-rtlsim
 	$(MAKE) -C conv3x run-rtlsim
 	$(MAKE) -C sgemm2x run-rtlsim
+	$(MAKE) -C stencil run-rtlsim
 
 run-opae:
 	$(MAKE) -C basic run-opae
@@ -76,6 +79,7 @@ run-opae:
 	$(MAKE) -C om run-opae
 	$(MAKE) -C conv3x run-opae
 	$(MAKE) -C sgemm2x run-opae
+	$(MAKE) -C stencil run-opae
 
 clean:
 	$(MAKE) -C basic clean
@@ -95,3 +99,4 @@ clean:
 	$(MAKE) -C om clean
 	$(MAKE) -C conv3x clean
 	$(MAKE) -C sgemm2x clean
+	$(MAKE) -C stencil clean
