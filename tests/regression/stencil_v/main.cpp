@@ -7,33 +7,42 @@
 
 #define FLOAT_ULP 6
 
-#define RT_CHECK(_expr)                                         \
-   do {                                                         \
-     int _ret = _expr;                                          \
-     if (0 == _ret)                                             \
-       break;                                                   \
-     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);   \
-	 cleanup();			                                              \
-     exit(-1);                                                  \
-   } while (false)
+#define RT_CHECK(_expr)                                      \
+  do                                                         \
+  {                                                          \
+    int _ret = _expr;                                        \
+    if (0 == _ret)                                           \
+      break;                                                 \
+    printf("Error: '%s' returned %d!\n", #_expr, (int)_ret); \
+    cleanup();                                               \
+    exit(-1);                                                \
+  } while (false)
 
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Type>
-class Comparator {};
+class Comparator
+{
+};
 
 template <>
-class Comparator<int> {
+class Comparator<int>
+{
 public:
-  static const char* type_str() {
+  static const char *type_str()
+  {
     return "integer";
   }
-  static int generate() {
+  static int generate()
+  {
     return rand();
   }
-  static bool compare(int a, int b, int index, int errors) {
-    if (a != b) {
-      if (errors < 100) {
+  static bool compare(int a, int b, int index, int errors)
+  {
+    if (a != b)
+    {
+      if (errors < 100)
+      {
         printf("*** error: [%d] expected=%d, actual=%d\n", index, a, b);
       }
       return false;
@@ -43,24 +52,39 @@ public:
 };
 
 template <>
-class Comparator<float> {
+class Comparator<float>
+{
 private:
-  union Float_t { float f; int i; };
+  union Float_t
+  {
+    float f;
+    int i;
+  };
+
 public:
-  static const char* type_str() {
+  static const char *type_str()
+  {
     return "float";
   }
-  static float generate() {
+  static float generate()
+  {
     return static_cast<float>(rand()) / RAND_MAX;
   }
-  static bool compare(float a, float b, int index, int errors) {
-    union fi_t { float f; int32_t i; };
+  static bool compare(float a, float b, int index, int errors)
+  {
+    union fi_t
+    {
+      float f;
+      int32_t i;
+    };
     fi_t fa, fb;
     fa.f = a;
     fb.f = b;
     auto d = std::abs(fa.i - fb.i);
-    if (d > FLOAT_ULP) {
-      if (errors < 100) {
+    if (d > FLOAT_ULP)
+    {
+      if (errors < 100)
+      {
         printf("*** error: [%d] expected=%f, actual=%f\n", index, a, b);
       }
       return false;
@@ -68,21 +92,6 @@ public:
     return true;
   }
 };
-
-static void matmul_cpu(TYPE* out, const TYPE* A, const TYPE* B, uint32_t width, uint32_t height) {
-  for (uint32_t row = 0; row < height; ++row) {
-    for (uint32_t col = 0; col < width; ++col) {
-      TYPE sum(0);
-      for (uint32_t e = 0; e < width; ++e) {
-        TYPE a = A[row * width + e];
-        TYPE b = B[e * width + col];
-        TYPE c = a * b;
-        sum += c;
-      }
-      out[row * width + col] = sum;
-    }
-  }
-}
 
 static void stencil_cpu(TYPE *out, const TYPE *in, uint32_t width, uint32_t height, uint32_t depth)
 {
@@ -104,29 +113,36 @@ static void stencil_cpu(TYPE *out, const TYPE *in, uint32_t width, uint32_t heig
             for (int dx = -1; dx <= 1; dx++)
             {
               // Compute the neighbor's index
-              int nx = x + dx;
-              int ny = y + dy;
-              int nz = z + dz;
+              int nx = (int)x + dx;
+              int ny = (int)y + dy;
+              int nz = (int)z + dz;
 
               // Check bounds and replicate the boundary values
-              if (nx < 0){
+              if (nx < 0)
+              {
                 nx = 0;
               }
-              else if (nx >= width) {
+              else if (nx >= (int)width)
+              {
                 nx = width - 1;
               }
-              if (ny < 0) {
+              if (ny < 0)
+              {
                 ny = 0;
               }
-              else if (ny >= height) { 
+              else if (ny >= (int)height)
+              {
                 ny = height - 1;
               }
-              if (nz < 0) {
+              if (nz < 0)
+              {
                 nz = 0;
               }
-              else if (nz >= depth) {
+              else if (nz >= (int)depth)
+              {
                 nz = depth - 1;
               }
+
               // Sum up the values
               sum += in[nz * width * height + ny * width + nx];
               count++;
@@ -141,45 +157,46 @@ static void stencil_cpu(TYPE *out, const TYPE *in, uint32_t width, uint32_t heig
   }
 }
 
-  const char *kernel_file = "kernel.vxbin";
-  uint32_t size = 64;
-  uint32_t block_size = 2;
+const char *kernel_file = "kernel.vxbin";
+uint32_t size = 64;
+uint32_t block_size = 2;
 
-  vx_device_h device = nullptr;
-  vx_buffer_h A_buffer = nullptr;
-  vx_buffer_h B_buffer = nullptr;
-  vx_buffer_h krnl_buffer = nullptr;
-  vx_buffer_h args_buffer = nullptr;
-  kernel_arg_t kernel_arg = {};
+vx_device_h device = nullptr;
+vx_buffer_h A_buffer = nullptr;
+vx_buffer_h B_buffer = nullptr;
+vx_buffer_h krnl_buffer = nullptr;
+vx_buffer_h args_buffer = nullptr;
+kernel_arg_t kernel_arg = {};
 
-  static void show_usage()
+static void show_usage()
+{
+  std::cout << "Vortex Test." << std::endl;
+  std::cout << "Usage: [-k: kernel] [-n matrix_size] [-b:block_size] [-h: help]" << std::endl;
+}
+
+static void parse_args(int argc, char **argv)
+{
+  int c;
+  while ((c = getopt(argc, argv, "n:t:k:h?")) != -1)
   {
-    std::cout << "Vortex Test." << std::endl;
-    std::cout << "Usage: [-k: kernel] [-n matrix_size] [-b:block_size] [-h: help]" << std::endl;
-  }
-
-  static void parse_args(int argc, char **argv)
-  {
-    int c;
-    while ((c = getopt(argc, argv, "n:t:k:h?")) != -1)
+    switch (c)
     {
-      switch (c)
-      {
-      case 'n':
-        size = atoi(optarg);
-        break;
-      case 'b':
-        block_size = atoi(optarg);
-        break;
-      case 'k':
-        kernel_file = optarg;
-        break;
-      case 'h':
-      case '?':
-      {
-        show_usage();
-        exit(0);
-      } break;
+    case 'n':
+      size = atoi(optarg);
+      break;
+    case 'b':
+      block_size = atoi(optarg);
+      break;
+    case 'k':
+      kernel_file = optarg;
+      break;
+    case 'h':
+    case '?':
+    {
+      show_usage();
+      exit(0);
+    }
+    break;
     default:
       show_usage();
       exit(-1);
@@ -187,8 +204,10 @@ static void stencil_cpu(TYPE *out, const TYPE *in, uint32_t width, uint32_t heig
   }
 }
 
-void cleanup() {
-  if (device) {
+void cleanup()
+{
+  if (device)
+  {
     vx_mem_free(A_buffer);
     vx_mem_free(B_buffer);
     vx_mem_free(krnl_buffer);
@@ -197,11 +216,13 @@ void cleanup() {
   }
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   // parse command arguments
   parse_args(argc, argv);
 
-  if ((size / block_size) * block_size != size) {
+  if ((size / block_size) * block_size != size)
+  {
     printf("Error: matrix size %d must be a multiple of block size %d\n", size, block_size);
     return -1;
   }
@@ -214,8 +235,6 @@ int main(int argc, char *argv[]) {
 
   uint32_t size_cubed = size * size * size;
   uint32_t buf_size = size_cubed * sizeof(TYPE);
-  uint32_t group_size = block_size * block_size * block_size;
- 
 
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "matrix size: " << size << "x" << size << std::endl;
@@ -246,7 +265,8 @@ int main(int argc, char *argv[]) {
   std::vector<TYPE> h_B(size_cubed);
 
   // generate source data
-  for (uint32_t i = 0; i < size_cubed; ++i) {
+  for (uint32_t i = 0; i < size_cubed; ++i)
+  {
     h_A[i] = Comparator<TYPE>::generate();
   }
 
@@ -281,8 +301,10 @@ int main(int argc, char *argv[]) {
     std::vector<TYPE> h_ref(size_cubed);
     stencil_cpu(h_ref.data(), h_A.data(), size, size, size);
 
-    for (uint32_t i = 0; i < h_ref.size(); ++i) {
-      if (!Comparator<TYPE>::compare(h_B[i], h_ref[i], i, errors)) {
+    for (uint32_t i = 0; i < h_ref.size(); ++i)
+    {
+      if (!Comparator<TYPE>::compare(h_B[i], h_ref[i], i, errors))
+      {
         ++errors;
       }
     }
@@ -292,7 +314,8 @@ int main(int argc, char *argv[]) {
   std::cout << "cleanup" << std::endl;
   cleanup();
 
-  if (errors != 0) {
+  if (errors != 0)
+  {
     std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
     std::cout << "FAILED!" << std::endl;
     return errors;
