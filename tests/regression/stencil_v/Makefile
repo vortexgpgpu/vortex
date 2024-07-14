@@ -9,6 +9,6 @@ SRCS := $(SRC_DIR)/main.cpp
 
 VX_SRCS := $(SRC_DIR)/kernel.cpp
 
-OPTS ?= -n64 -b2 # 128x128x128 matrix and block size of 2x2x2
+OPTS ?= -n32-b2 # 128x128x128 matrix and block size of 2x2x2
 
 include ../common.mk

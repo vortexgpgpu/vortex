@@ -7,9 +7,10 @@ void kernel_body(kernel_arg_t *arg)
   auto B = reinterpret_cast<TYPE *>(arg->B_addr);
   auto size = arg->size; // Assuming 'size' now represents one dimension of a cubic space.
 
-  int col = blockIdx.x;
-  int row = blockIdx.y;
-  int dep = blockIdx.z;
+  // Calculate global column, row, and depth indices using both block and thread indices
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
+  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  int dep = blockIdx.z * blockDim.z + threadIdx.z;
 
   TYPE sum = 0;
   int count = 0;
