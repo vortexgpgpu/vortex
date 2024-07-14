@@ -21,20 +21,28 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Type>
-class Comparator {};
+class Comparator
+{
+};
 
 template <>
-class Comparator<int> {
+class Comparator<int>
+{
 public:
-  static const char* type_str() {
+  static const char *type_str()
+  {
     return "integer";
   }
-  static int generate() {
+  static int generate()
+  {
     return rand();
   }
-  static bool compare(int a, int b, int index, int errors) {
-    if (a != b) {
-      if (errors < 100) {
+  static bool compare(int a, int b, int index, int errors)
+  {
+    if (a != b)
+    {
+      if (errors < 100)
+      {
         printf("*** error: [%d] expected=%d, actual=%d\n", index, a, b);
       }
       return false;
@@ -44,24 +52,39 @@ public:
 };
 
 template <>
-class Comparator<float> {
+class Comparator<float>
+{
 private:
-  union Float_t { float f; int i; };
+  union Float_t
+  {
+    float f;
+    int i;
+  };
+
 public:
-  static const char* type_str() {
+  static const char *type_str()
+  {
     return "float";
   }
-  static float generate() {
+  static float generate()
+  {
     return static_cast<float>(rand()) / RAND_MAX;
   }
-  static bool compare(float a, float b, int index, int errors) {
-    union fi_t { float f; int32_t i; };
+  static bool compare(float a, float b, int index, int errors)
+  {
+    union fi_t
+    {
+      float f;
+      int32_t i;
+    };
     fi_t fa, fb;
     fa.f = a;
     fb.f = b;
     auto d = std::abs(fa.i - fb.i);
-    if (d > FLOAT_ULP) {
-      if (errors < 100) {
+    if (d > FLOAT_ULP)
+    {
+      if (errors < 100)
+      {
         printf("*** error: [%d] expected=%f, actual=%f\n", index, a, b);
       }
       return false;
@@ -90,29 +113,36 @@ static void stencil_cpu(TYPE *out, const TYPE *in, uint32_t width, uint32_t heig
             for (int dx = -1; dx <= 1; dx++)
             {
               // Compute the neighbor's index
-              int nx = x + dx;
-              int ny = y + dy;
-              int nz = z + dz;
+              int nx = (int)x + dx;
+              int ny = (int)y + dy;
+              int nz = (int)z + dz;
 
               // Check bounds and replicate the boundary values
-              if (nx < 0){
+              if (nx < 0)
+              {
                 nx = 0;
               }
-              else if (nx >= width) {
+              else if (nx >= (int)width)
+              {
                 nx = width - 1;
               }
-              if (ny < 0) {
+              if (ny < 0)
+              {
                 ny = 0;
               }
-              else if (ny >= height) { 
+              else if (ny >= (int)height)
+              {
                 ny = height - 1;
               }
-              if (nz < 0) {
+              if (nz < 0)
+              {
                 nz = 0;
               }
-              else if (nz >= depth) {
+              else if (nz >= (int)depth)
+              {
                 nz = depth - 1;
               }
+
               // Sum up the values
               sum += in[nz * width * height + ny * width + nx];
               count++;
@@ -174,8 +204,10 @@ static void parse_args(int argc, char **argv)
   }
 }
 
-void cleanup() {
-  if (device) {
+void cleanup()
+{
+  if (device)
+  {
     vx_mem_free(A_buffer);
     vx_mem_free(B_buffer);
     vx_mem_free(krnl_buffer);
@@ -184,11 +216,13 @@ void cleanup() {
   }
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   // parse command arguments
   parse_args(argc, argv);
 
-  if ((size / block_size) * block_size != size) {
+  if ((size / block_size) * block_size != size)
+  {
     printf("Error: matrix size %d must be a multiple of block size %d\n", size, block_size);
     return -1;
   }
@@ -231,7 +265,8 @@ int main(int argc, char *argv[]) {
   std::vector<TYPE> h_B(size_cubed);
 
   // generate source data
-  for (uint32_t i = 0; i < size_cubed; ++i) {
+  for (uint32_t i = 0; i < size_cubed; ++i)
+  {
     h_A[i] = Comparator<TYPE>::generate();
   }
 
@@ -266,8 +301,10 @@ int main(int argc, char *argv[]) {
     std::vector<TYPE> h_ref(size_cubed);
     stencil_cpu(h_ref.data(), h_A.data(), size, size, size);
 
-    for (uint32_t i = 0; i < h_ref.size(); ++i) {
-      if (!Comparator<TYPE>::compare(h_B[i], h_ref[i], i, errors)) {
+    for (uint32_t i = 0; i < h_ref.size(); ++i)
+    {
+      if (!Comparator<TYPE>::compare(h_B[i], h_ref[i], i, errors))
+      {
         ++errors;
       }
     }
@@ -277,7 +314,8 @@ int main(int argc, char *argv[]) {
   std::cout << "cleanup" << std::endl;
   cleanup();
 
-  if (errors != 0) {
+  if (errors != 0)
+  {
     std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
     std::cout << "FAILED!" << std::endl;
     return errors;
