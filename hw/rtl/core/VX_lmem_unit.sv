@@ -57,7 +57,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         VX_elastic_buffer #(
             .DATAW   (REQ_DATAW),
             .SIZE    (2),
-            .OUT_REG (0)
+            .OUT_REG (1)
         ) req_global_buf (
             .clk       (clk),
             .reset     (switch_reset),

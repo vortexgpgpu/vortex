@@ -313,7 +313,7 @@ module VX_core import VX_gpu_pkg::*; #(
             .DATA_SIZE    (DCACHE_WORD_SIZE),
             .TAG_WIDTH    (DCACHE_TAG_WIDTH),
             .TAG_SEL_BITS (DCACHE_TAG_WIDTH - `UUID_WIDTH),
-            .REQ_OUT_BUF  (3),
+            .REQ_OUT_BUF  (0),
             .RSP_OUT_BUF  (0)
         ) lsu_adapter (
             .clk        (clk),
