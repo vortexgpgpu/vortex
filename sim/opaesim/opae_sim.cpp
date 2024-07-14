@@ -269,20 +269,8 @@ public:
 private:
 
   void reset() {
-    cci_reads_.clear();
-    cci_writes_.clear();
-    device_->vcp2af_sRxPort_c0_mmioRdValid = 0;
-    device_->vcp2af_sRxPort_c0_mmioWrValid = 0;
-    device_->vcp2af_sRxPort_c0_rspValid = 0;
-    device_->vcp2af_sRxPort_c1_rspValid = 0;
-    device_->vcp2af_sRxPort_c0_TxAlmFull = 0;
-    device_->vcp2af_sRxPort_c1_TxAlmFull = 0;
-
-    for (int b = 0; b < MEMORY_BANKS; ++b) {
-      pending_mem_reqs_[b].clear();
-      device_->avs_readdatavalid[b] = 0;
-      device_->avs_waitrequest[b] = 0;
-    }
+    this->cci_bus_reset();
+    this->avs_bus_reset();
 
     device_->reset = 1;
 
@@ -307,9 +295,8 @@ private:
   }
 
   void tick() {
-    this->sRxPort_bus();
-    this->sTxPort_bus();
-    this->avs_bus();
+    this->cci_bus_eval();
+    this->avs_bus_eval();
 
     if (!dram_queue_.empty()) {
       if (ramulator_->send(dram_queue_.front()))
@@ -345,7 +332,23 @@ private:
     ++timestamp;
   }
 
-  void sRxPort_bus() {
+  void cci_bus_reset() {
+    cci_reads_.clear();
+    cci_writes_.clear();
+    device_->vcp2af_sRxPort_c0_mmioRdValid = 0;
+    device_->vcp2af_sRxPort_c0_mmioWrValid = 0;
+    device_->vcp2af_sRxPort_c0_rspValid = 0;
+    device_->vcp2af_sRxPort_c1_rspValid = 0;
+    device_->vcp2af_sRxPort_c0_TxAlmFull = 0;
+    device_->vcp2af_sRxPort_c1_TxAlmFull = 0;
+  }
+
+  void cci_bus_eval() {
+    this->sRxPort_bus_eval();
+    this->sTxPort_bus_eval();
+  }
+
+  void sRxPort_bus_eval() {
     // check mmio request
     bool mmio_req_enabled = device_->vcp2af_sRxPort_c0_mmioRdValid
                         || device_->vcp2af_sRxPort_c0_mmioWrValid;
@@ -395,7 +398,7 @@ private:
     }
   }
 
-  void sTxPort_bus() {
+  void sTxPort_bus_eval() {
     // process read requests
     if (device_->af2cp_sTxPort_c0_valid) {
       assert(!device_->vcp2af_sRxPort_c0_TxAlmFull);
@@ -425,7 +428,15 @@ private:
     device_->vcp2af_sRxPort_c1_TxAlmFull = (cci_writes_.size() >= (CCI_WQ_SIZE-1));
   }
 
-  void avs_bus() {
+  void avs_bus_reset() {
+    for (int b = 0; b < MEMORY_BANKS; ++b) {
+      pending_mem_reqs_[b].clear();
+      device_->avs_readdatavalid[b] = 0;
+      device_->avs_waitrequest[b] = 0;
+    }
+  }
+
+  void avs_bus_eval() {
     for (int b = 0; b < MEMORY_BANKS; ++b) {
       // process memory responses
       device_->avs_readdatavalid[b] = 0;
