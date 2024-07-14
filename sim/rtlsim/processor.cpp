@@ -241,12 +241,12 @@ private:
     mem_wr_rsp_active_ = false;
 
   #ifdef AXI_BUS
-    this->reset_axi_bus();
+    this->axi_bus_reset();
   #else
-    this->reset_avs_bus();
+    this->avs_bus_reset();
   #endif
 
-    this->reset_dcr_bus();
+    this->dcr_bus_reset();
 
     device_->reset = 1;
 
@@ -264,21 +264,21 @@ private:
     this->eval();
 
   #ifdef AXI_BUS
-    this->eval_axi_bus(0);
+    this->axi_bus_eval(0);
   #else
-    this->eval_avs_bus(0);
+    this->avs_bus_eval(0);
   #endif
-    this->eval_dcr_bus(0);
+    this->dcr_bus_eval(0);
 
     device_->clk = 1;
     this->eval();
 
   #ifdef AXI_BUS
-    this->eval_axi_bus(1);
+    this->axi_bus_eval(1);
   #else
-    this->eval_avs_bus(1);
+    this->avs_bus_eval(1);
   #endif
-    this->eval_dcr_bus(1);
+    this->dcr_bus_eval(1);
 
     if (MEM_CYCLE_RATIO > 0) {
       auto cycle = timestamp / 2;
@@ -313,7 +313,7 @@ private:
 
 #ifdef AXI_BUS
 
-  void reset_axi_bus() {
+  void axi_bus_reset() {
     device_->m_axi_wready[0]  = 0;
     device_->m_axi_awready[0] = 0;
     device_->m_axi_arready[0] = 0;
@@ -321,7 +321,7 @@ private:
     device_->m_axi_bvalid[0]  = 0;
   }
 
-  void eval_axi_bus(bool clk) {
+  void axi_bus_eval(bool clk) {
     if (!clk) {
       mem_rd_rsp_ready_ = device_->m_axi_rready[0];
       mem_wr_rsp_ready_ = device_->m_axi_bready[0];
@@ -474,12 +474,12 @@ private:
 
 #else
 
-  void reset_avs_bus() {
+  void avs_bus_reset() {
     device_->mem_req_ready = 0;
     device_->mem_rsp_valid = 0;
   }
 
-  void eval_avs_bus(bool clk) {
+  void avs_bus_eval(bool clk) {
     if (!clk) {
       mem_rd_rsp_ready_ = device_->mem_rsp_ready;
       return;
@@ -592,11 +592,11 @@ private:
 
 #endif
 
-  void  reset_dcr_bus() {
+  void dcr_bus_reset() {
     device_->dcr_wr_valid = 0;
   }
 
-  void  eval_dcr_bus(bool clk) {
+  void dcr_bus_eval(bool clk) {
     if (!clk) {
       return;
     }

@@ -192,7 +192,8 @@ public:
 private:
 
   void reset() {
-    //--
+    this->axi_ctrl_bus_reset();
+    this->axi_mem_bus_reset();
 
     device_->ap_rst_n = 0;
 
@@ -217,7 +218,8 @@ private:
   }
 
   void tick() {
-    //--
+    this->axi_ctrl_bus_eval();
+    this->axi_mem_bus_eval();
 
     if (!dram_queue_.empty()) {
       if (ramulator_->send(dram_queue_.front()))
@@ -251,6 +253,58 @@ private:
     }
   #endif
     ++timestamp;
+  }
+
+  void axi_ctrl_bus_reset() {
+    // address write request
+    device_->s_axi_ctrl_awvalid = 0;
+    //device_->s_axi_ctrl_awaddr = 0;
+
+    // data write request
+    device_->s_axi_ctrl_wvalid = 0;
+    //device_->s_axi_ctrl_wdata = 0;
+    //device_->s_axi_ctrl_wstrb = 0;
+
+    // address read request
+    device_->s_axi_ctrl_arvalid = 0;
+    //device_->s_axi_ctrl_araddr = 0;
+
+    // data read response
+    device_->s_axi_ctrl_rready = 0;
+
+    // data write response
+    device_->s_axi_ctrl_bready = 0;
+  }
+
+  void axi_ctrl_bus_eval() {
+    //--
+  }
+
+  void axi_mem_bus_reset() {
+    // address write request
+    device_->m_axi_mem_0_awready = 0;
+
+    // data write request
+    device_->m_axi_mem_0_wready = 0;
+
+    // address read request
+    device_->m_axi_mem_0_arready = 0;
+
+    // data read response
+    device_->m_axi_mem_0_rvalid = 0;
+    //device_->m_axi_mem_0_rdata = 0;
+    //device_->m_axi_mem_0_rlast = 0;
+    //device_->m_axi_mem_0_rid = 0;
+    //device_->m_axi_mem_0_rresp = 0;
+
+    // data write response
+    device_->m_axi_mem_0_bvalid = 0;
+    //device_->m_axi_mem_0_bresp = 0;
+    //device_->m_axi_mem_0_bid = 0;
+  }
+
+  void axi_mem_bus_eval() {
+    //--
   }
 
   Vvortex_afu_shim *device_;
