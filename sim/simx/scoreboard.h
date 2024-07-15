@@ -26,6 +26,7 @@ public:
 		RegType  reg_type;
 		uint32_t reg_id;
 		FUType   fu_type;
+		SfuType  sfu_type;
 		uint64_t uuid;
 	};
 
@@ -70,7 +71,7 @@ public:
 			if (in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).test(trace->dst_reg.idx)) {
 				uint32_t tag = (trace->dst_reg.idx << 16) | (trace->wid << 4) | (int)trace->dst_reg.type;
 				auto owner = owners_.at(tag);
-				out.push_back({trace->dst_reg.type, trace->dst_reg.idx, owner->fu_type, owner->uuid});
+				out.push_back({trace->dst_reg.type, trace->dst_reg.idx, owner->fu_type, owner->sfu_type, owner->uuid});
 			}
 		}
 		for (uint32_t i = 0; i < trace->src_regs.size(); ++i) {
@@ -78,7 +79,7 @@ public:
 				if (in_use_regs_.at(trace->wid).at((int)trace->src_regs[i].type).test(trace->src_regs[i].idx)) {
 					uint32_t tag = (trace->src_regs[i].idx << 16) | (trace->wid << 4) | (int)trace->src_regs[i].type;
 					auto owner = owners_.at(tag);
-					out.push_back({trace->src_regs[i].type, trace->src_regs[i].idx, owner->fu_type, owner->uuid});
+					out.push_back({trace->src_regs[i].type, trace->src_regs[i].idx, owner->fu_type, owner->sfu_type, owner->uuid});
 				}
 			}
 		}

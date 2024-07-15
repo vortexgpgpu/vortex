@@ -9,7 +9,6 @@ NUM_CORES ?= 1
 
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
-THIRD_PARTY_DIR := $(VORTEX_HOME)/third_party
 
 CP = cp -rf
 RMDIR = rm -rf

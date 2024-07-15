@@ -408,22 +408,27 @@
 `define LATENCY_FCVT 5
 `endif
 
+// FMA Bandwidth ratio
 `ifndef FMA_PE_RATIO
 `define FMA_PE_RATIO 1
 `endif
 
+// FDIV Bandwidth ratio
 `ifndef FDIV_PE_RATIO
 `define FDIV_PE_RATIO 8
 `endif
 
+// FSQRT Bandwidth ratio
 `ifndef FSQRT_PE_RATIO
 `define FSQRT_PE_RATIO 8
 `endif
 
+// FCVT Bandwidth ratio
 `ifndef FCVT_PE_RATIO
 `define FCVT_PE_RATIO 8
 `endif
 
+// FNCP Bandwidth ratio
 `ifndef FNCP_PE_RATIO
 `define FNCP_PE_RATIO 2
 `endif
@@ -530,7 +535,7 @@
 `define DCACHE_NUM_WAYS 1
 `endif
 
-// SM Configurable Knobs //////////////////////////////////////////////////////
+// LMEM Configurable Knobs ////////////////////////////////////////////////////
 
 `ifndef LMEM_DISABLE
 `define LMEM_ENABLE

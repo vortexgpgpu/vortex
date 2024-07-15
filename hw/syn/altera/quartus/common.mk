@@ -5,7 +5,6 @@ SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/quartus
 
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 AFU_DIR := $(RTL_DIR)/afu/opae
-THIRD_PARTY_DIR := $(VORTEX_HOME)/third_party
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
 IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
@@ -81,7 +80,7 @@ smart.log: $(PROJECT_FILES)
 # Project initialization
 $(PROJECT_FILES): gen-sources
 	quartus_sh -t $(SRC_DIR)/project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc $(SRC_DIR)/project.sdc -inc "src"
-	
+
 syn.chg:
 	$(STAMP) syn.chg
 
@@ -99,6 +98,6 @@ pow.chg:
 
 program: $(PROJECT).sof
 	quartus_pgm --no_banner --mode=jtag -o "$(PROJECT).sof"
-	
+
 clean:
 	rm -rf src bin *.rpt *.chg *.qsf *.qpf *.qws *.log *.htm *.eqn *.pin *.sof *.pof qdb incremental_db tmp-clearbox

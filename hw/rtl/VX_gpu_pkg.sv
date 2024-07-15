@@ -89,6 +89,7 @@ package VX_gpu_pkg;
         logic [`PERF_CTR_BITS-1:0] scb_stalls;
         logic [`PERF_CTR_BITS-1:0] opd_stalls;
         logic [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] units_uses;
+        logic [`NUM_SFU_UNITS-1:0][`PERF_CTR_BITS-1:0] sfu_uses;
     } issue_perf_t;
 
     //////////////////////// instruction arguments ////////////////////////////
@@ -145,6 +146,31 @@ package VX_gpu_pkg;
     localparam LSU_TAG_WIDTH        = (`UUID_WIDTH + LSU_TAG_ID_BITS);
     localparam LSU_NUM_REQS	        = `NUM_LSU_BLOCKS * `NUM_LSU_LANES;
 
+    ////////////////////////// Icache Parameters //////////////////////////////
+
+    // Word size in bytes
+    localparam ICACHE_WORD_SIZE	    = 4;
+    localparam ICACHE_ADDR_WIDTH	= (`MEM_ADDR_WIDTH - `CLOG2(ICACHE_WORD_SIZE));
+
+    // Block size in bytes
+    localparam ICACHE_LINE_SIZE	    = `L1_LINE_SIZE;
+
+    // Core request tag Id bits
+    localparam ICACHE_TAG_ID_BITS	= `NW_WIDTH;
+
+    // Core request tag bits
+    localparam ICACHE_TAG_WIDTH	    = (`UUID_WIDTH + ICACHE_TAG_ID_BITS);
+
+    // Memory request data bits
+    localparam ICACHE_MEM_DATA_WIDTH = (ICACHE_LINE_SIZE * 8);
+
+    // Memory request tag bits
+`ifdef ICACHE_ENABLE
+    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(`ICACHE_MSHR_SIZE, 1, `NUM_ICACHES);
+`else
+    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(1, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, `SOCKET_SIZE, `NUM_ICACHES);
+`endif
+
     ////////////////////////// Dcache Parameters //////////////////////////////
 
     // Word size in bytes
@@ -174,31 +200,6 @@ package VX_gpu_pkg;
     localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_MEM_TAG_WIDTH(`DCACHE_MSHR_SIZE, `DCACHE_NUM_BANKS, DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `SOCKET_SIZE, `NUM_DCACHES);
 `else
     localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_TAG_WIDTH, `SOCKET_SIZE, `NUM_DCACHES);
-`endif
-
-    ////////////////////////// Icache Parameters //////////////////////////////
-
-    // Word size in bytes
-    localparam ICACHE_WORD_SIZE	    = 4;
-    localparam ICACHE_ADDR_WIDTH	= (`MEM_ADDR_WIDTH - `CLOG2(ICACHE_WORD_SIZE));
-
-    // Block size in bytes
-    localparam ICACHE_LINE_SIZE	    = `L1_LINE_SIZE;
-
-    // Core request tag Id bits
-    localparam ICACHE_TAG_ID_BITS	= `NW_WIDTH;
-
-    // Core request tag bits
-    localparam ICACHE_TAG_WIDTH	    = (`UUID_WIDTH + ICACHE_TAG_ID_BITS);
-
-    // Memory request data bits
-    localparam ICACHE_MEM_DATA_WIDTH = (ICACHE_LINE_SIZE * 8);
-
-    // Memory request tag bits
-`ifdef ICACHE_ENABLE
-    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(`ICACHE_MSHR_SIZE, 1, `NUM_ICACHES);
-`else
-    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(1, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, `SOCKET_SIZE, `NUM_ICACHES);
 `endif
 
     /////////////////////////////// L1 Parameters /////////////////////////////
@@ -290,6 +291,19 @@ package VX_gpu_pkg;
         end else begin
             wid_to_wis = 0;
         end
+    endfunction
+
+    ///////////////////////// Miscaellaneous functions ////////////////////////
+
+    function logic [`SFU_WIDTH-1:0] op_to_sfu_type(
+        input logic [`INST_OP_BITS-1:0] op_type
+    );
+        case (op_type)
+        `INST_SFU_CSRRW,
+        `INST_SFU_CSRRS,
+        `INST_SFU_CSRRC: op_to_sfu_type = `SFU_CSRS;
+        default: op_to_sfu_type = `SFU_WCTL;
+        endcase
     endfunction
 
 `IGNORE_UNUSED_END

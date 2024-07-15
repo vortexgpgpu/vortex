@@ -216,6 +216,7 @@ import VX_fpu_pkg::*;
                         `CSR_READ_64(`VX_CSR_MPM_SCHED_ST, read_data_ro_r, pipeline_perf_if.sched.stalls);
                         `CSR_READ_64(`VX_CSR_MPM_IBUF_ST, read_data_ro_r, pipeline_perf_if.issue.ibf_stalls);
                         `CSR_READ_64(`VX_CSR_MPM_SCRB_ST, read_data_ro_r, pipeline_perf_if.issue.scb_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_OPDS_ST, read_data_ro_r, pipeline_perf_if.issue.opd_stalls);
                         `CSR_READ_64(`VX_CSR_MPM_SCRB_ALU, read_data_ro_r, pipeline_perf_if.issue.units_uses[`EX_ALU]);
                     `ifdef EXT_F_ENABLE
                         `CSR_READ_64(`VX_CSR_MPM_SCRB_FPU, read_data_ro_r, pipeline_perf_if.issue.units_uses[`EX_FPU]);
@@ -224,7 +225,8 @@ import VX_fpu_pkg::*;
                     `endif
                         `CSR_READ_64(`VX_CSR_MPM_SCRB_LSU, read_data_ro_r, pipeline_perf_if.issue.units_uses[`EX_LSU]);
                         `CSR_READ_64(`VX_CSR_MPM_SCRB_SFU, read_data_ro_r, pipeline_perf_if.issue.units_uses[`EX_SFU]);
-                        `CSR_READ_64(`VX_CSR_MPM_OPDS_ST, read_data_ro_r, pipeline_perf_if.issue.opd_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_CSRS, read_data_ro_r, pipeline_perf_if.issue.sfu_uses[`SFU_CSRS]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_WCTL, read_data_ro_r, pipeline_perf_if.issue.sfu_uses[`SFU_WCTL]);
                         // PERF: memory
                         `CSR_READ_64(`VX_CSR_MPM_IFETCHES, read_data_ro_r, pipeline_perf_if.ifetches);
                         `CSR_READ_64(`VX_CSR_MPM_LOADS, read_data_ro_r, pipeline_perf_if.loads);

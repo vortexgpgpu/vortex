@@ -266,8 +266,8 @@ void Core::issue() {
   for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
     bool has_instrs = false;
     bool found_match = false;
-    for (uint32_t k = 0; k < PER_ISSUE_WARPS; ++k) {
-      uint32_t kk = (ibuffer_idx_ + k) % PER_ISSUE_WARPS;
+    for (uint32_t w = 0; w < PER_ISSUE_WARPS; ++w) {
+      uint32_t kk = (ibuffer_idx_ + w) % PER_ISSUE_WARPS;
       uint32_t ii = kk * ISSUE_WIDTH + i;
       auto& ibuffer = ibuffers_.at(ii);
       if (ibuffer.empty())
@@ -293,7 +293,21 @@ void Core::issue() {
           case FUType::ALU: ++perf_stats_.scrb_alu; break;
           case FUType::FPU: ++perf_stats_.scrb_fpu; break;
           case FUType::LSU: ++perf_stats_.scrb_lsu; break;
-          case FUType::SFU: ++perf_stats_.scrb_sfu; break;
+          case FUType::SFU: {
+            ++perf_stats_.scrb_sfu;
+            switch (use.sfu_type) {
+            case SfuType::TMC:
+            case SfuType::WSPAWN:
+            case SfuType::SPLIT:
+            case SfuType::JOIN:
+            case SfuType::BAR:
+            case SfuType::PRED: ++perf_stats_.scrb_wctl; break;
+            case SfuType::CSRRW:
+            case SfuType::CSRRS:
+            case SfuType::CSRRC: ++perf_stats_.scrb_csrs; break;
+            default: assert(false);
+            }
+          } break;
           default: assert(false);
           }
         }

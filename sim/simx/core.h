@@ -49,6 +49,8 @@ public:
     uint64_t scrb_fpu;
     uint64_t scrb_lsu;
     uint64_t scrb_sfu;
+    uint64_t scrb_csrs;
+    uint64_t scrb_wctl;
     uint64_t ifetches;
     uint64_t loads;
     uint64_t stores;
@@ -67,6 +69,8 @@ public:
       , scrb_fpu(0)
       , scrb_lsu(0)
       , scrb_sfu(0)
+      , scrb_csrs(0)
+      , scrb_wctl(0)
       , ifetches(0)
       , loads(0)
       , stores(0)
