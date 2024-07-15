@@ -20,6 +20,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <VX_types.h>
+#include <vx_print.h>
 
 #if defined(__clang__)
 #define __UNIFORM__   __attribute__((annotate("vortex.uniform")))
@@ -35,6 +36,8 @@ extern "C" {
 #define RISCV_CUSTOM1   0x2B
 #define RISCV_CUSTOM2   0x5B
 #define RISCV_CUSTOM3   0x7B
+#define RISCV_VOTE      0x5A
+#define RISCV_SHFL      0x5C
 
 #define csr_read(csr) ({                        \
 	size_t __r;	               		            \
@@ -219,6 +222,48 @@ inline int vx_hart_id() {
 
 inline void vx_fence() {
     __asm__ volatile ("fence iorw, iorw");
+}
+
+void vx_store(int val, int reg){
+    switch (reg){
+        case 0:
+    __asm__ volatile (
+        "mv a0, %0" :: "r"(val) : "a0");  // Load immediate value 3 into a0(x10) register (rs1 = a)
+        break;
+
+        case 1:
+    __asm__ volatile (
+        "mv a1, %0" :: "r"(val) : "a1");  // Load immediate value 3 into a0(x10) register (rs1 = a)
+        break;
+        
+        case 2:
+    __asm__ volatile (
+        "mv a2, %0" :: "r"(val) : "a2");  // Load immediate value 3 into a0(x10) register (rs1 = a)
+        break;
+        
+        case 3:
+    __asm__ volatile (
+        "mv a3, %0" :: "r"(val) : "a3");  // Load immediate value 3 into a0(x10) register (rs1 = a)
+        break;
+        
+        default:
+        break;
+    }
+}
+
+void vx_vote() {
+    __asm__ volatile (
+        "addi a2, x0, 4\n\t"  // Load immediate value 3 into a1(x11) register (membermask)
+        ".insn i %0, 2, x14, x13, 12" :: "i"(RISCV_VOTE));
+        //".insn i opcode6, func3, rd, rs1, simm12"
+}
+
+void vx_shfl() {
+    __asm__ volatile (
+        "addi a1, x0, 15\n\t"  // Load immediate value 195 into a1(x11) register (membermask)
+        "addi a2, x0, 15\n\t"  // Load immediate value 256 into a2(x12) register (c)
+        ".insn i %0, 3, x14, x13, 459" :: "i"(RISCV_SHFL)); //(b(1)+c(1100)+membermask(address(1011)))
+       //".insn i opcode6, func3, rd, rs1, simm12"
 }
 
 #ifdef __cplusplus
