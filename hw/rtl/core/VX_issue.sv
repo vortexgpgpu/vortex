@@ -38,6 +38,9 @@ module VX_issue import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin
         `PERF_COUNTER_ADD (issue_perf, per_issue_perf, units_uses[i], `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
     end
+    for (genvar i = 0; i < `NUM_SFU_UNITS; ++i) begin
+        `PERF_COUNTER_ADD (issue_perf, per_issue_perf, sfu_uses[i], `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
+    end
 `endif
 
     wire [ISSUE_ISW_W-1:0] decode_isw = wid_to_isw(decode_if.data.wid);

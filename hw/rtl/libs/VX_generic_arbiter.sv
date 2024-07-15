@@ -45,7 +45,7 @@ module VX_generic_arbiter #(
     end else if (TYPE == "R") begin
 
         VX_rr_arbiter #(
-            .NUM_REQS (NUM_REQS),
+            .NUM_REQS (NUM_REQS)
         ) rr_arbiter (
             .clk          (clk),
             .reset        (reset),
@@ -59,7 +59,7 @@ module VX_generic_arbiter #(
     end else if (TYPE == "F") begin
 
         VX_fair_arbiter #(
-            .NUM_REQS (NUM_REQS),
+            .NUM_REQS (NUM_REQS)
         ) fair_arbiter (
             .clk          (clk),
             .reset        (reset),
@@ -73,7 +73,7 @@ module VX_generic_arbiter #(
     end else if (TYPE == "M") begin
 
         VX_matrix_arbiter #(
-            .NUM_REQS (NUM_REQS),
+            .NUM_REQS (NUM_REQS)
         ) matrix_arbiter (
             .clk          (clk),
             .reset        (reset),
@@ -87,7 +87,7 @@ module VX_generic_arbiter #(
     end else if (TYPE == "C") begin
 
         VX_cyclic_arbiter #(
-            .NUM_REQS (NUM_REQS),
+            .NUM_REQS (NUM_REQS)
         ) cyclic_arbiter (
             .clk          (clk),
             .reset        (reset),

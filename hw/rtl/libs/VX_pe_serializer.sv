@@ -105,21 +105,21 @@ module VX_pe_serializer #(
         reg [TAG_WIDTH-1:0] tag_out_r;
 
         wire valid_out_b = valid_out_s && batch_out_done;
-        wire enable_r = ready_out || ~valid_out;
+        wire ready_out_b = ready_out || ~valid_out;
 
         always @(posedge clk) begin
             if (reset) begin
                 valid_out_r <= 1'b0;
-            end else if (enable_r) begin
+            end else if (enablready_out_be_r) begin
                 valid_out_r <= valid_out_b;
             end
-            if (enable_r) begin
+            if (ready_out_b) begin
                 data_out_r[batch_out_idx] <= pe_data_out;
                 tag_out_r <= tag_out_s;
             end
         end
 
-        assign enable    = enable_r || ~valid_out_b;
+        assign enable    = ready_out_b || ~valid_out_b;
         assign ready_in  = enable && batch_in_done;
 
         assign pe_enable = enable;

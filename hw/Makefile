@@ -16,7 +16,7 @@ VX_types.h: $(RTL_DIR)/VX_types.vh
 	$(SCRIPT_DIR)/gen_config.py -i $(RTL_DIR)/VX_types.vh -o VX_types.h
 
 clean:
-	$(MAKE) -C unitest clean
+	$(MAKE) -C unittest clean
 	rm -f VX_config.h VX_types.h
 
 .PHONY: VX_config.h VX_types.h
