@@ -90,7 +90,6 @@ static const char* op_string(const Instr &instr) {
   auto rd     = instr.getRDest();
   auto rs2    = instr.getRSrc(1);
   auto imm    = instr.getImm();
-
   switch (opcode) {
   case Opcode::LUI:   return "LUI";
   case Opcode::AUIPC: return "AUIPC";
@@ -407,6 +406,8 @@ static const char* op_string(const Instr &instr) {
     default:
       std::abort();
     }
+  case Opcode::VOTE:   return "VOTE";
+  case Opcode::SHFL:   return "SHFL";
   default:
     std::abort();
   }
