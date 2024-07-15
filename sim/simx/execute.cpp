@@ -1449,18 +1449,14 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     switch (func3) {
     case 0:{ //all
       check = true;
-      if (!(1 << 3 & rsrc0)){ //Predicate not negated
-        for (uint32_t t = thread_start; t < num_threads; ++t) {
-          if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+          if (!((1 << 31) & rsdata[t][0].u)){ //Predicate not negated
             if(!(1 << 0 & rsdata[t][0].u)){ // check src predicate 
               check = false;
             }
           }
-        }
-      }
-      else{
-        for (uint32_t t = thread_start; t < num_threads; ++t) {
-          if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+          else{
             if(1 << 0 & rsdata[t][0].u){ // check src predicate is true in no threads
               check = false;
             }
@@ -1477,23 +1473,19 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     } break;
     case 1:{ //any
       check = false;
-      if (!(1 << 3 & rsrc0)){ //Predicate not negated
-        for (uint32_t t = thread_start; t < num_threads; ++t) {
-          if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+          if (!((1 << 31) & rsdata[t][0].u)){ //Predicate not negated
             if(1 << 0 & rsdata[t][0].u){ // check src predicate 
               check = true;
             }
           }
-        }
-      }
-      else{
-        for (uint32_t t = thread_start; t < num_threads; ++t) {
-          if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+          else{
             if(!(1 << 0 & rsdata[t][0].u)){ // check src predicate is true in not all threads
               check = true;
-            }
           }
         }
+      }
       }
       rd_write = true;
       for (uint32_t t = thread_start; t < num_threads; ++t) { //Write dest predicate common to all threads
@@ -1550,14 +1542,8 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   case Opcode::SHFL:{
     trace->fu_type = FUType::SFU;
     trace->sfu_type = SfuType::SHFL;
-    trace->used_iregs.set(rsrc0);
     uint32_t address = immsrc & 0x00f;
     auto mask =  warp.ireg_file.at(0)[address];  // Same mask stored in all threads
-    for (uint32_t t = thread_start; t < num_threads; ++t) {
-        if(!((1 << t & mask) && warp.tmask.test(t))){
-          std::abort();
-        }
-    }
     uint32_t b = (immsrc & 0xf00) >> 8;
     uint32_t c_add = (immsrc & 0x0f0) >> 4;
     uint32_t lane;
@@ -1591,9 +1577,12 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       }
       if(!p)
         lane = t;
-      rddata[t].i = rsdata[lane][0].u;
+      if(((1 << t & mask) && warp.tmask.test(t) && (1 << lane & mask)) && (lane < num_threads)){
+        rddata[t].i = rsdata[lane][0].u;
+        rd_write = true;
+      }
     }
-    rd_write = true;
+    trace->used_iregs.set(rsrc0);
     
   }break;
   default:
