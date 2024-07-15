@@ -123,7 +123,6 @@ void Emulator::attach_ram(RAM* ram) {
 
 instr_trace_t* Emulator::step() {
   int scheduled_warp = -1;
-
   // process pending wspawn
   if (wspawn_.valid && active_warps_.count() == 1) {
     DP(3, "*** Activate " << (wspawn_.num_warps-1) << " warps at PC: " << std::hex << wspawn_.nextPC);
@@ -176,7 +175,6 @@ instr_trace_t* Emulator::step() {
     std::cout << std::hex << "Error: invalid instruction 0x" << instr_code << ", at PC=0x" << warp.PC << " (#" << std::dec << uuid << ")" << std::endl;
     std::abort();
   }
-
   DP(1, "Instr 0x" << std::hex << instr_code << ": " << *instr);
 
   // Create trace
@@ -199,7 +197,6 @@ instr_trace_t* Emulator::step() {
     }
     DPN(5, std::endl);
   }
-
   return trace;
 }
 
