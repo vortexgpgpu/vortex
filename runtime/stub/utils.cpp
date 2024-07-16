@@ -539,7 +539,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       break;
     }
 
-    float IPC = (float)(double(instrs_per_core) / double(cycles_per_core));
+    float IPC = caclAverage(instrs_per_core, cycles_per_core);
     if (num_cores > 1) fprintf(stream, "PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs_per_core, cycles_per_core, IPC);
     total_instrs += instrs_per_core;
     total_cycles += cycles_per_core;
@@ -553,8 +553,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     int ibuffer_percent = calcAvgPercent(ibuffer_stalls, total_cycles);
     int scrb_percent = calcAvgPercent(scrb_stalls, total_cycles);
     int opds_percent = calcAvgPercent(opds_stalls, total_cycles);
-    int ifetch_avg_lat = (int)(double(ifetch_lat) / double(ifetches));
-    int load_avg_lat = (int)(double(load_lat) / double(loads));
+    int ifetch_avg_lat = caclAverage(ifetch_lat, ifetches);
+    int load_avg_lat = caclAverage(load_lat, loads);
     uint64_t scrb_total = scrb_alu + scrb_fpu + scrb_lsu + scrb_csrs + scrb_wctl;
     fprintf(stream, "PERF: scheduler idle=%ld (%d%%)\n", sched_idles, sched_idles_percent);
     fprintf(stream, "PERF: scheduler stalls=%ld (%d%%)\n", sched_stalls, sched_stalls_percent);
@@ -616,7 +616,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     break;
   }
 
-  float IPC = (float)(double(total_instrs) / double(max_cycles));
+  float IPC = caclAverage(total_instrs, max_cycles);
   fprintf(stream, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", total_instrs, max_cycles, IPC);
 
   fflush(stream);
