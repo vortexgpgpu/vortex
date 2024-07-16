@@ -139,9 +139,9 @@ module VX_mem_scheduler #(
     wire                            mem_req_ready_s;
 
     wire                            mem_rsp_valid_s;
-    wire [CORE_REQS-1:0]            mem_rsp_mask_s;
-    wire [CORE_REQS-1:0][WORD_WIDTH-1:0] mem_rsp_data_s;
-    wire [REQQ_TAG_WIDTH-1:0]       mem_rsp_tag_s;
+    wire [CORE_CHANNELS-1:0]        mem_rsp_mask_s;
+    wire [CORE_CHANNELS-1:0][WORD_WIDTH-1:0] mem_rsp_data_s;
+    wire [MEM_TAG_WIDTH-1:0]        mem_rsp_tag_s;
     wire                            mem_rsp_ready_s;
 
     wire                            crsp_valid;
@@ -494,7 +494,7 @@ module VX_mem_scheduler #(
     end
 
     if (UUID_WIDTH != 0) begin
-        assign crsp_tag = {mem_rsp_tag_s[REQQ_TAG_WIDTH-1 -: UUID_WIDTH], ibuf_dout};
+        assign crsp_tag = {mem_rsp_tag_s[MEM_TAG_WIDTH-1 -: UUID_WIDTH], ibuf_dout};
     end else begin
         assign crsp_tag = ibuf_dout;
     end
@@ -564,8 +564,8 @@ module VX_mem_scheduler #(
     wire [`UP(UUID_WIDTH)-1:0] rsp_dbg_uuid;
 
     if (UUID_WIDTH != 0) begin
-        assign mem_req_dbg_uuid = mem_req_tag_s[REQQ_TAG_WIDTH-1 -: UUID_WIDTH];
-        assign mem_rsp_dbg_uuid = mem_rsp_tag_s[REQQ_TAG_WIDTH-1 -: UUID_WIDTH];
+        assign mem_req_dbg_uuid = mem_req_tag_s[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
+        assign mem_rsp_dbg_uuid = mem_rsp_tag_s[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
         assign rsp_dbg_uuid     = core_rsp_tag[TAG_WIDTH-1 -: UUID_WIDTH];
     end else begin
         assign mem_req_dbg_uuid = '0;

@@ -110,7 +110,7 @@ module VX_pe_serializer #(
         always @(posedge clk) begin
             if (reset) begin
                 valid_out_r <= 1'b0;
-            end else if (enablready_out_be_r) begin
+            end else if (ready_out_b) begin
                 valid_out_r <= valid_out_b;
             end
             if (ready_out_b) begin

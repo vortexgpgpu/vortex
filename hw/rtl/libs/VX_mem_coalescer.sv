@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,7 +24,7 @@ module VX_mem_coalescer #(
     parameter TAG_WIDTH     = 8,
     parameter UUID_WIDTH    = 0, // upper section of the request tag contains the UUID
     parameter QUEUE_SIZE    = 8,
-    
+
     parameter DATA_IN_WIDTH = DATA_IN_SIZE * 8,
     parameter DATA_OUT_WIDTH= DATA_OUT_SIZE * 8,
     parameter OUT_REQS      = (NUM_REQS * DATA_IN_WIDTH) / DATA_OUT_WIDTH,
@@ -45,7 +45,7 @@ module VX_mem_coalescer #(
     input wire [NUM_REQS-1:0][ADDR_WIDTH-1:0] in_req_addr,
     input wire [NUM_REQS-1:0][ATYPE_WIDTH-1:0] in_req_atype,
     input wire [NUM_REQS-1:0][DATA_IN_WIDTH-1:0] in_req_data,
-    input wire [TAG_WIDTH-1:0]          in_req_tag,    
+    input wire [TAG_WIDTH-1:0]          in_req_tag,
     output wire                         in_req_ready,
 
     // Input response
@@ -58,7 +58,7 @@ module VX_mem_coalescer #(
     // Output request
     output wire                         out_req_valid,
     output wire                         out_req_rw,
-    output wire [OUT_REQS-1:0]          out_req_mask,    
+    output wire [OUT_REQS-1:0]          out_req_mask,
     output wire [OUT_REQS-1:0][DATA_OUT_SIZE-1:0] out_req_byteen,
     output wire [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] out_req_addr,
     output wire [OUT_REQS-1:0][ATYPE_WIDTH-1:0] out_req_atype,
@@ -78,7 +78,7 @@ module VX_mem_coalescer #(
     `STATIC_ASSERT ((NUM_REQS * DATA_IN_WIDTH >= DATA_OUT_WIDTH), ("invalid parameter"))
     `RUNTIME_ASSERT ((~in_req_valid || in_req_mask != 0), ("invalid request mask"));
     `RUNTIME_ASSERT ((~out_rsp_valid || out_rsp_mask != 0), ("invalid request mask"));
-    
+
     localparam TAG_ID_WIDTH    = TAG_WIDTH - UUID_WIDTH;
     localparam NUM_REQS_W      = `LOG2UP(NUM_REQS);
     //                           tag          + mask     + offest
@@ -86,19 +86,19 @@ module VX_mem_coalescer #(
 
     localparam STATE_SETUP = 0;
     localparam STATE_SEND  = 1;
-    
-    logic state_r, state_n;
-    
-    logic out_req_valid_r, out_req_valid_n;
-    logic out_req_rw_r, out_req_rw_n;
-    logic [OUT_REQS-1:0] out_req_mask_r, out_req_mask_n;
-    logic [OUT_REQS-1:0][DATA_OUT_SIZE-1:0] out_req_byteen_r, out_req_byteen_n;
-    logic [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] out_req_addr_r, out_req_addr_n;
-    logic [OUT_REQS-1:0][ATYPE_WIDTH-1:0] out_req_atype_r, out_req_atype_n;
-    logic [OUT_REQS-1:0][DATA_OUT_WIDTH-1:0] out_req_data_r, out_req_data_n;
-    logic [OUT_TAG_WIDTH-1:0] out_req_tag_r, out_req_tag_n;
 
-    logic in_req_ready_n;    
+    logic state_r, state_n;
+
+    reg out_req_valid_r, out_req_valid_n;
+    reg out_req_rw_r, out_req_rw_n;
+    reg [OUT_REQS-1:0] out_req_mask_r, out_req_mask_n;
+    reg [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] out_req_addr_r, out_req_addr_n;
+    reg [OUT_REQS-1:0][ATYPE_WIDTH-1:0] out_req_atype_r, out_req_atype_n;
+    reg [OUT_REQS-1:0][DATA_OUT_SIZE-1:0] out_req_byteen_r, out_req_byteen_n;
+    reg [OUT_REQS-1:0][DATA_OUT_WIDTH-1:0] out_req_data_r, out_req_data_n;
+    reg [OUT_TAG_WIDTH-1:0] out_req_tag_r, out_req_tag_n;
+
+    logic in_req_ready_n;
 
     wire                        ibuf_push;
     wire                        ibuf_pop;
@@ -108,11 +108,11 @@ module VX_mem_coalescer #(
     wire                        ibuf_empty;
     wire [IBUF_DATA_WIDTH-1:0]  ibuf_din;
     wire [IBUF_DATA_WIDTH-1:0]  ibuf_dout;
-    
-    logic [OUT_REQS-1:0] batch_valid_r, batch_valid_n;
-    logic [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] seed_addr_r, seed_addr_n;
-    logic [OUT_REQS-1:0][ATYPE_WIDTH-1:0] seed_atype_r, seed_atype_n;
-    logic [NUM_REQS-1:0] processed_mask_r, processed_mask_n;
+
+    reg [OUT_REQS-1:0] batch_valid_r, batch_valid_n;
+    reg [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] seed_addr_r, seed_addr_n;
+    reg [OUT_REQS-1:0][ATYPE_WIDTH-1:0] seed_atype_r, seed_atype_n;
+    reg [NUM_REQS-1:0] processed_mask_r, processed_mask_n;
 
     wire [OUT_REQS-1:0][NUM_REQS_W-1:0] seed_idx;
 
@@ -147,9 +147,9 @@ module VX_mem_coalescer #(
             out_req_valid_r  <= out_req_valid_n;
             batch_valid_r    <= batch_valid_n;
             seed_addr_r      <= seed_addr_n;
-            seed_atype_r     <= seed_atype_n;  
-            out_req_rw_r     <= out_req_rw_n; 
-            out_req_mask_r   <= out_req_mask_n;     
+            seed_atype_r     <= seed_atype_n;
+            out_req_rw_r     <= out_req_rw_n;
+            out_req_mask_r   <= out_req_mask_n;
             out_req_addr_r   <= out_req_addr_n;
             out_req_atype_r  <= out_req_atype_n;
             out_req_byteen_r <= out_req_byteen_n;
@@ -159,38 +159,58 @@ module VX_mem_coalescer #(
         end
     end
 
-    logic [NUM_REQS-1:0] addr_matches;
+    wire [NUM_REQS-1:0] addr_matches;
 
-    always @(*) begin
-        addr_matches = '0;
-        for (integer i = 0; i < OUT_REQS; ++i) begin
-            for (integer j = 0; j < BATCH_SIZE; j++) begin
-                if (in_addr_base[BATCH_SIZE * i + j] == seed_addr_r[i]) begin
-                    addr_matches[BATCH_SIZE * i + j] = 1;
-                end
-            end
+    for (genvar i = 0; i < OUT_REQS; ++i) begin
+        for (genvar j = 0; j < BATCH_SIZE; ++j) begin
+            assign addr_matches[BATCH_SIZE * i + j] = (in_addr_base[BATCH_SIZE * i + j] == seed_addr_r[i]);
         end
     end
 
     wire [NUM_REQS-1:0] current_pmask = in_req_mask & addr_matches;
 
+    reg [OUT_REQS-1:0][DATA_OUT_SIZE-1:0] req_byteen_merged;
+    reg [OUT_REQS-1:0][DATA_OUT_WIDTH-1:0] req_data_merged;
+
+    always @(*) begin
+        req_byteen_merged = '0;
+        req_data_merged = 'x;
+        for (integer i = 0; i < OUT_REQS; ++i) begin
+            for (integer j = 0; j < BATCH_SIZE; ++j) begin
+                if (current_pmask[BATCH_SIZE * i + j]) begin
+                    req_byteen_merged[i][in_addr_offset[BATCH_SIZE * i + j] * DATA_IN_SIZE +: DATA_IN_SIZE] = in_req_byteen[BATCH_SIZE * i + j];
+                    req_data_merged[i][in_addr_offset[BATCH_SIZE * i + j] * DATA_IN_WIDTH +: DATA_IN_WIDTH] = in_req_data[BATCH_SIZE * i + j];
+                end
+            end
+        end
+    end
+
+    wire [OUT_REQS * BATCH_SIZE - 1:0] pending_mask;
+    for (genvar i = 0; i < OUT_REQS * BATCH_SIZE; ++i) begin
+        assign pending_mask[i] = in_req_mask[i] && ~addr_matches[i] && ~processed_mask_r[i];
+    end
+    wire batch_completed = ~(| pending_mask);
+
     always @(*) begin
         state_n          = state_r;
-        out_req_valid_n  = out_req_valid_r;
+
         seed_addr_n      = seed_addr_r;
         seed_atype_n     = seed_atype_r;
-        out_req_rw_n     = out_req_rw_r;      
-        out_req_mask_n   = out_req_mask_r;     
+
+        out_req_valid_n  = out_req_valid_r;
+        out_req_mask_n   = out_req_mask_r;
+        out_req_rw_n     = out_req_rw_r;
         out_req_addr_n   = out_req_addr_r;
         out_req_atype_n  = out_req_atype_r;
         out_req_byteen_n = out_req_byteen_r;
         out_req_data_n   = out_req_data_r;
         out_req_tag_n    = out_req_tag_r;
+
         processed_mask_n = processed_mask_r;
         in_req_ready_n   = 0;
 
         case (state_r)
-        STATE_SETUP: begin            
+        STATE_SETUP: begin
             // find the next seed address
             for (integer i = 0; i < OUT_REQS; ++i) begin
                 seed_addr_n[i] = in_addr_base[seed_idx[i]];
@@ -200,43 +220,28 @@ module VX_mem_coalescer #(
             if (out_req_valid && out_req_ready) begin
                 out_req_valid_n = 0;
             end
-            if (in_req_valid && ~out_req_valid_n && ~ibuf_full) begin                
+            if (in_req_valid && ~out_req_valid_n && ~ibuf_full) begin
                 state_n = STATE_SEND;
             end
         end
         default/*STATE_SEND*/: begin
             out_req_valid_n = 1;
-            out_req_rw_n = in_req_rw;
-            out_req_tag_n = {in_req_tag[TAG_WIDTH-1 -: UUID_WIDTH], ibuf_waddr};
-            in_req_ready_n = 1;
-            out_req_byteen_n = '0;
-            out_req_data_n = 'x;
-            for (integer i = 0; i < OUT_REQS; ++i) begin
-                for (integer j = 0; j < BATCH_SIZE; j++) begin
-                    if (in_req_mask[BATCH_SIZE * i + j]) begin
-                        if (addr_matches[BATCH_SIZE * i + j]) begin
-                            for (integer k = 0; k < DATA_IN_SIZE; ++k) begin
-                                if (in_req_byteen[BATCH_SIZE * i + j][k]) begin
-                                    out_req_byteen_n[i][in_addr_offset[BATCH_SIZE * i + j] * DATA_IN_SIZE + k +: 1] = 1'b1;
-                                    out_req_data_n[i][in_addr_offset[BATCH_SIZE * i + j] * DATA_IN_WIDTH + k * 8 +: 8] = in_req_data[BATCH_SIZE * i + j][k * 8 +: 8];
-                                end
-                            end
-                        end else begin
-                            if (!processed_mask_r[BATCH_SIZE * i + j]) begin
-                                in_req_ready_n = 0;    
-                            end
-                        end
-                    end
-                end
-                out_req_mask_n[i] = batch_valid_r[i];
-                out_req_addr_n[i] = seed_addr_r[i];
-                out_req_atype_n[i]= seed_atype_r[i];
-            end
-            if (in_req_ready_n) begin
+            out_req_mask_n  = batch_valid_r;
+            out_req_rw_n    = in_req_rw;
+            out_req_addr_n  = seed_addr_r;
+            out_req_atype_n = seed_atype_r;
+            out_req_byteen_n= req_byteen_merged;
+            out_req_data_n  = req_data_merged;
+            out_req_tag_n   = {in_req_tag[TAG_WIDTH-1 -: UUID_WIDTH], ibuf_waddr};
+
+            in_req_ready_n  = batch_completed;
+
+            if (batch_completed) begin
                 processed_mask_n = '0;
             end else begin
                 processed_mask_n = processed_mask_r | current_pmask;
             end
+
             state_n = STATE_SETUP;
         end
         endcase
@@ -248,11 +253,11 @@ module VX_mem_coalescer #(
 
     assign ibuf_push  = (state_r == STATE_SEND) && ~in_req_rw;
     assign ibuf_pop   = out_rsp_fire && out_rsp_eop;
-    assign ibuf_raddr = out_rsp_tag[QUEUE_ADDRW-1:0];    
+    assign ibuf_raddr = out_rsp_tag[QUEUE_ADDRW-1:0];
 
     wire [TAG_ID_WIDTH-1:0] ibuf_din_tag = in_req_tag[TAG_ID_WIDTH-1:0];
     wire [NUM_REQS-1:0][BATCH_SIZE_W-1:0] ibuf_din_offset = in_addr_offset;
-    wire [NUM_REQS-1:0] ibuf_din_pmask = current_pmask;    
+    wire [NUM_REQS-1:0] ibuf_din_pmask = current_pmask;
 
     assign ibuf_din = {ibuf_din_tag, ibuf_din_pmask, ibuf_din_offset};
 
@@ -286,7 +291,7 @@ module VX_mem_coalescer #(
 
     // unmerge responses
 
-    reg [QUEUE_SIZE-1:0][OUT_REQS-1:0] rsp_rem_mask;    
+    reg [QUEUE_SIZE-1:0][OUT_REQS-1:0] rsp_rem_mask;
     wire [OUT_REQS-1:0] rsp_rem_mask_n = rsp_rem_mask[ibuf_raddr] & ~out_rsp_mask;
     assign out_rsp_eop = ~(| rsp_rem_mask_n);
 
@@ -300,20 +305,18 @@ module VX_mem_coalescer #(
     end
 
     wire [NUM_REQS-1:0][BATCH_SIZE_W-1:0] ibuf_dout_offset;
-    reg [NUM_REQS-1:0] ibuf_dout_pmask;
+    wire [NUM_REQS-1:0] ibuf_dout_pmask;
     wire [TAG_ID_WIDTH-1:0] ibuf_dout_tag;
 
     assign {ibuf_dout_tag, ibuf_dout_pmask, ibuf_dout_offset} = ibuf_dout;
-    
-    logic [NUM_REQS-1:0][DATA_IN_WIDTH-1:0] in_rsp_data_n;
-    logic [NUM_REQS-1:0] in_rsp_mask_n;
 
-    always @(*) begin
-        for (integer i = 0; i < OUT_REQS; ++i) begin
-            for (integer j = 0; j < BATCH_SIZE; j++) begin
-                in_rsp_mask_n[BATCH_SIZE * i + j] = out_rsp_mask[i] && ibuf_dout_pmask[BATCH_SIZE * i + j];
-                in_rsp_data_n[BATCH_SIZE * i + j] = out_rsp_data[i][ibuf_dout_offset[BATCH_SIZE * i + j] * DATA_IN_WIDTH +: DATA_IN_WIDTH];
-            end
+    wire [NUM_REQS-1:0][DATA_IN_WIDTH-1:0] in_rsp_data_n;
+    wire [NUM_REQS-1:0] in_rsp_mask_n;
+
+    for (genvar i = 0; i < OUT_REQS; ++i) begin
+        for (genvar j = 0; j < BATCH_SIZE; ++j) begin
+            assign in_rsp_mask_n[BATCH_SIZE * i + j] = out_rsp_mask[i] && ibuf_dout_pmask[BATCH_SIZE * i + j];
+            assign in_rsp_data_n[BATCH_SIZE * i + j] = out_rsp_data[i][ibuf_dout_offset[BATCH_SIZE * i + j] * DATA_IN_WIDTH +: DATA_IN_WIDTH];
         end
     end
 
@@ -339,7 +342,7 @@ module VX_mem_coalescer #(
     reg [NUM_REQS-1:0] out_req_pmask;
 
     always @(posedge clk) begin
-        if (ibuf_push) begin            
+        if (ibuf_push) begin
             out_req_offset <= ibuf_din_offset;
             out_req_pmask <= ibuf_din_pmask;
         end
@@ -351,30 +354,30 @@ module VX_mem_coalescer #(
         if (out_req_fire) begin
             if (out_req_rw) begin
                 `TRACE(1, ("%d: %s-out-req-wr: valid=%b, addr=", $time, INSTANCE_ID, out_req_mask));
-                `TRACE_ARRAY1D(1, "0x%h", out_req_addr, OUT_REQS);     
+                `TRACE_ARRAY1D(1, "0x%h", out_req_addr, OUT_REQS);
                 `TRACE(1, (", atype="));
-                `TRACE_ARRAY1D(1, "%b", out_req_atype, OUT_REQS);                  
+                `TRACE_ARRAY1D(1, "%b", out_req_atype, OUT_REQS);
                 `TRACE(1, (", byteen="));
                 `TRACE_ARRAY1D(1, "0x%h", out_req_byteen, OUT_REQS);
                 `TRACE(1, (", data="));
-                `TRACE_ARRAY1D(1, "0x%0h", out_req_data, OUT_REQS);         
+                `TRACE_ARRAY1D(1, "0x%0h", out_req_data, OUT_REQS);
             end else begin
                 `TRACE(1, ("%d: %s-out-req-rd: valid=%b, addr=", $time, INSTANCE_ID, out_req_mask));
                 `TRACE_ARRAY1D(1, "0x%h", out_req_addr, OUT_REQS);
                 `TRACE(1, (", atype="));
                 `TRACE_ARRAY1D(1, "%b", out_req_atype, OUT_REQS);
             end
-            `TRACE(1, (", offset=")); 
+            `TRACE(1, (", offset="));
             `TRACE_ARRAY1D(1, "%0d", out_req_offset, NUM_REQS);
-            `TRACE(1, (", pmask=%b, tag=0x%0h (#%0d)\n", out_req_pmask, out_req_tag, out_req_uuid));       
+            `TRACE(1, (", pmask=%b, tag=0x%0h (#%0d)\n", out_req_pmask, out_req_tag, out_req_uuid));
             if ($countones(out_req_pmask) > 1) begin
-                `TRACE(1, ("%t: *** %s: coalescing=%b (#%0d)\n", $time, INSTANCE_ID, out_req_pmask, out_req_uuid)); 
-            end    
+                `TRACE(1, ("%t: *** %s: coalescing=%b (#%0d)\n", $time, INSTANCE_ID, out_req_pmask, out_req_uuid));
+            end
         end
         if (out_rsp_fire) begin
             `TRACE(1, ("%d: %s-out-rsp: valid=%b, data=", $time, INSTANCE_ID, out_rsp_mask));
             `TRACE_ARRAY1D(1, "0x%0h", out_rsp_data, OUT_REQS);
-            `TRACE(1, (", offset=")); 
+            `TRACE(1, (", offset="));
             `TRACE_ARRAY1D(1, "%0d", ibuf_dout_offset, NUM_REQS);
             `TRACE(1, (", eop=%b, pmask=%b, tag=0x%0h (#%0d)\n", out_rsp_eop, ibuf_dout_pmask, out_rsp_tag, out_rsp_uuid));
         end
