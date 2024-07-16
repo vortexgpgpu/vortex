@@ -270,70 +270,73 @@ void Core::issue() {
 
   // issue ibuffer instructions
   for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
-    uint32_t ii = (ibuffer_idx_ + i) % ibuffers_.size();
-    auto& ibuffer = ibuffers_.at(ii);
-    if (ibuffer.empty())
-      continue;
-
-    auto trace = ibuffer.top();
-
-    // check scoreboard
-    if (scoreboard_.in_use(trace)) {
-      auto uses = scoreboard_.get_uses(trace);
-      if (!trace->log_once(true)) {
-        DTH(3, "*** scoreboard-stall: dependents={");
+    bool has_instrs = false;
+    bool found_match = false;
+    for (uint32_t w = 0; w < PER_ISSUE_WARPS; ++w) {
+      uint32_t kk = (ibuffer_idx_ + w) % PER_ISSUE_WARPS;
+      uint32_t ii = kk * ISSUE_WIDTH + i;
+      auto& ibuffer = ibuffers_.at(ii);
+      if (ibuffer.empty())
+        continue;
+      // check scoreboard
+      has_instrs = true;
+      auto trace = ibuffer.top();
+      if (scoreboard_.in_use(trace)) {
+        auto uses = scoreboard_.get_uses(trace);
+        if (!trace->log_once(true)) {
+          DTH(4, "*** scoreboard-stall: dependents={");
+          for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
+            auto& use = uses.at(j);
+            __unused (use);
+            if (j) DTN(4, ", ");
+            DTN(4, use.reg_type << use.reg_id << "(#" << use.uuid << ")");
+          }
+          DTN(4, "}, " << *trace << std::endl);
+        }
         for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
           auto& use = uses.at(j);
-          __unused (use);
-          if (j) DTN(3, ", ");
-          DTN(3, use.reg_type << use.reg_id << "(#" << use.uuid << ")");
-        }
-        DTN(3, "}, " << *trace << std::endl);
-      }
-      for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
-        auto& use = uses.at(j);
-        switch (use.fu_type) {
-        case FUType::ALU: ++perf_stats_.scrb_alu; break;
-        case FUType::FPU: ++perf_stats_.scrb_fpu; break;
-        case FUType::LSU: ++perf_stats_.scrb_lsu; break;
-        case FUType::SFU: {
-          ++perf_stats_.scrb_sfu;
-          switch (use.sfu_type) {
-          case SfuType::TMC:
-          case SfuType::WSPAWN:
-          case SfuType::SPLIT:
-          case SfuType::JOIN:
-          case SfuType::BAR:
-          case SfuType::PRED: ++perf_stats_.scrb_wctl; break;
-          case SfuType::CSRRW:
-          case SfuType::CSRRS:
-          case SfuType::CSRRC: ++perf_stats_.scrb_csrs; break;
-          case SfuType::TEX: ++perf_stats_.scrb_tex; break;
-          case SfuType::RASTER: ++perf_stats_.scrb_raster; break;
-          case SfuType::OM: ++perf_stats_.scrb_om; break;
+          switch (use.fu_type) {
+          case FUType::ALU: ++perf_stats_.scrb_alu; break;
+          case FUType::FPU: ++perf_stats_.scrb_fpu; break;
+          case FUType::LSU: ++perf_stats_.scrb_lsu; break;
+          case FUType::SFU: {
+            ++perf_stats_.scrb_sfu;
+            switch (use.sfu_type) {
+            case SfuType::TMC:
+            case SfuType::WSPAWN:
+            case SfuType::SPLIT:
+            case SfuType::JOIN:
+            case SfuType::BAR:
+            case SfuType::PRED: ++perf_stats_.scrb_wctl; break;
+            case SfuType::CSRRW:
+            case SfuType::CSRRS:
+            case SfuType::CSRRC: ++perf_stats_.scrb_csrs; break;
+            case SfuType::TEX: ++perf_stats_.scrb_tex; break;
+            case SfuType::RASTER: ++perf_stats_.scrb_raster; break;
+            case SfuType::OM: ++perf_stats_.scrb_om; break;
+            default: assert(false);
+            }
+          } break;
           default: assert(false);
           }
-        } break;
-        default: assert(false);
         }
+      } else {
+        trace->log_once(false);
+        // update scoreboard
+        DT(3, "pipeline-scoreboard: " << *trace);
+        if (trace->wb) {
+          scoreboard_.reserve(trace);
+        }
+        // to operand stage
+        operands_.at(i)->Input.push(trace, 2);
+        ibuffer.pop();
+        found_match = true;
+        break;
       }
+    }
+    if (has_instrs && !found_match) {
       ++perf_stats_.scrb_stalls;
-      continue;
-    } else {
-      trace->log_once(false);
     }
-
-    // update scoreboard
-    if (trace->wb) {
-      scoreboard_.reserve(trace);
-    }
-
-    DT(3, "pipeline-scoreboard: " << *trace);
-
-    // to operand stage
-    operands_.at(i)->Input.push(trace, 1);
-
-    ibuffer.pop();
   }
   ++ibuffer_idx_;
 }

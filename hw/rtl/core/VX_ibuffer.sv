@@ -35,7 +35,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0] ibuf_ready_in;
     assign decode_if.ready = ibuf_ready_in[decode_if.data.wid];
 
-    for (genvar i = 0; i < PER_ISSUE_WARPS; ++i) begin
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin
         VX_elastic_buffer #(
             .DATAW   (DATAW),
             .SIZE    (`IBUF_SIZE),
@@ -43,7 +43,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
         ) instr_buf (
             .clk      (clk),
             .reset    (reset),
-            .valid_in (decode_if.valid && decode_if.data.wid == ISSUE_WIS_W'(i)),
+            .valid_in (decode_if.valid && decode_if.data.wid == ISSUE_WIS_W'(w)),
             .data_in  ({
                 decode_if.data.uuid,
                 decode_if.data.tmask,
@@ -57,13 +57,13 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 decode_if.data.rs2,
                 decode_if.data.rs3
             }),
-            .ready_in (ibuf_ready_in[i]),
-            .valid_out(ibuffer_if[i].valid),
-            .data_out (ibuffer_if[i].data),
-            .ready_out(ibuffer_if[i].ready)
+            .ready_in (ibuf_ready_in[w]),
+            .valid_out(ibuffer_if[w].valid),
+            .data_out (ibuffer_if[w].data),
+            .ready_out(ibuffer_if[w].ready)
         );
     `ifndef L1_ENABLE
-        assign decode_if.ibuf_pop[i] = ibuffer_if[i].valid && ibuffer_if[i].ready;
+        assign decode_if.ibuf_pop[w] = ibuffer_if[w].valid && ibuffer_if[w].ready;
     `endif
     end
 
