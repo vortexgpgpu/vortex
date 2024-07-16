@@ -1,12 +1,12 @@
 //!/bin/bash
 
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,7 +15,7 @@
 
 `include "VX_raster_define.vh"
 
-module VX_raster_csr import VX_raster_pkg::*; #( 
+module VX_raster_csr import VX_raster_pkg::*; #(
     parameter CORE_ID   = 0,
     parameter NUM_LANES = 1,
     parameter PID_WIDTH = `LOG2UP(`NUM_THREADS / NUM_LANES)
@@ -23,7 +23,7 @@ module VX_raster_csr import VX_raster_pkg::*; #(
     input wire clk,
     input wire reset,
 
-    // Inputs    
+    // Inputs
     input wire                              write_enable,
     input wire [`UUID_WIDTH-1:0]            write_uuid,
     input wire [`NW_WIDTH-1:0]              write_wid,
@@ -53,8 +53,8 @@ module VX_raster_csr import VX_raster_pkg::*; #(
         ) stamp_store (
             .clk   (clk),
             .read  (1'b1),
-            .write  (write[i]),            
-            `UNUSED_PIN (wren),               
+            .write  (write[i]),
+            `UNUSED_PIN (wren),
             .waddr (waddr),
             .wdata (wdata[i]),
             .raddr (raddr),
@@ -63,19 +63,19 @@ module VX_raster_csr import VX_raster_pkg::*; #(
     end
 
     // CSRs write
-    
+
     assign waddr = write_wid;
 
     always @(*) begin
         write = 0;
         wdata = 'x;
-        for (integer i = 0; i < NUM_LANES; ++i) begin        
+        for (integer i = 0; i < NUM_LANES; ++i) begin
             write[write_pid * NUM_LANES + i] = write_enable && write_tmask[i];
             wdata[write_pid * NUM_LANES + i].pos_mask = {write_data[i].pos_y, write_data[i].pos_x, write_data[i].mask};
             wdata[write_pid * NUM_LANES + i].bcoords  = write_data[i].bcoords;
         end
     end
-    
+
     // CSRs read
 
     assign raddr = raster_csr_if.read_wid;
@@ -118,16 +118,16 @@ module VX_raster_csr import VX_raster_pkg::*; #(
             `TRACE(1, ("%d: core%0d-raster-csr-read: wid=%0d, tmask=%b, state=", $time, CORE_ID, raster_csr_if.read_wid, raster_csr_if.read_tmask));
             `TRACE_RASTER_CSR(1, raster_csr_if.read_addr);
             `TRACE(1, (", data="));
-            `TRACE_ARRAY1D(1, raster_csr_if.read_data, NUM_LANES);
+            `TRACE_ARRAY1D(1, "0x%0h", raster_csr_if.read_data, NUM_LANES);
             `TRACE(1, (" (#%0d)\n", raster_csr_if.read_uuid));
         end
         if (write_enable) begin
             `TRACE(1, ("%d: core%0d-raster-fetch: wid=%0d, tmask=%b, pos_x=", $time, CORE_ID, write_wid, write_tmask));
-            `TRACE_ARRAY1D(1, pos_x, NUM_LANES);
+            `TRACE_ARRAY1D(1, "%0d", pos_x, NUM_LANES);
             `TRACE(1, (", pos_y="));
-            `TRACE_ARRAY1D(1, pos_y, NUM_LANES);
+            `TRACE_ARRAY1D(1, "%0d", pos_y, NUM_LANES);
             `TRACE(1, (", mask="));
-            `TRACE_ARRAY1D(1, mask, NUM_LANES);
+            `TRACE_ARRAY1D(1, "0x%0h", mask, NUM_LANES);
             `TRACE(1, (" (#%0d)\n", write_uuid));
         end
     end

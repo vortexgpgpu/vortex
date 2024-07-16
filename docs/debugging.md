@@ -3,14 +3,14 @@
 ## Testing changes to the RTL or simulator GPU driver.
 
 The Blackbox utility script will not pick up your changes if the h/w configuration is the same as during teh last run.
-To force the utility to build the driver, you need pass the --rebuild=1 option when running tests. 
+To force the utility to build the driver, you need pass the --rebuild=1 option when running tests.
 Using --rebuild=0 will prevent the rebuild even if the h/w configuration is different from last run.
 
     $ ./ci/blackbox.sh --driver=simx --app=demo --rebuild=1
 
 ## SimX Debugging
 
-SimX cycle-approximate simulator allows faster debugging of Vortex kernels' execution. 
+SimX cycle-approximate simulator allows faster debugging of Vortex kernels' execution.
 The recommended method to enable debugging is to pass the `--debug=<level>` flag to `blackbox` tool when running a program.
 
     // Running demo program on SimX in debug mode
@@ -53,13 +53,16 @@ A waveform trace `trace.vcd` will be generated in the current directory during t
 ## Analyzing Vortex trace log
 
 When debugging Vortex RTL or SimX Simulator, reading the trace run.log file can be overwhelming when the trace gets really large.
-We provide a trace sanitizer tool under ./hw/scripts/trace_csv.py that you can use to convert the large trace into a CSV file containing all the instructions that executed with their source and destination operands.
+We provide a trace sanitizer tool under ./hw/scripts/trace_csv.py that you can use to convert the large trace into a CSV file containing all the instructions that executed with their source and destination operands. To increase compatibility between traces you will need to initialize RTLSIM's GPRs to zero by defining GPR_RESET.
 
-    $ ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=3 --log=run_rtlsim.log
+    $ CONFIGS="-DGPR_RESET" ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=3 --log=run_rtlsim.log
     $ ./ci/trace_csv.py -trtlsim run_rtlsim.log -otrace_rtlsim.csv
 
     $ ./ci/blackbox.sh --driver=simx --app=demo --debug=3 --log=run_simx.log
     $ ./ci/trace_csv.py -tsimx run_simx.log -otrace_simx.csv
 
-The first column in the CSV trace is UUID (universal unique identifier) of the instruction and the content is sorted by the UUID. You can use the UUID to trace the same instruction running on either the RTL hw or SimX simulator. 
+    $ diff trace_rtlsim.csv trace_simx.csv
+
+The first column in the CSV trace is UUID (universal unique identifier) of the instruction and the content is sorted by the UUID.
+You can use the UUID to trace the same instruction running on either the RTL hw or SimX simulator.
 This can be very effective if you want to use SimX to debugging your RTL hardware by comparing CSV traces.

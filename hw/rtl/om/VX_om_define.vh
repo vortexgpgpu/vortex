@@ -1,12 +1,12 @@
 //!/bin/bash
 
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -55,9 +55,9 @@
     endcase
 
 `define PERF_OM_ADD(dst, src, dcount, scount) \
-    `PERF_COUNTER_ADD (dst, src, mem_reads,   `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
-    `PERF_COUNTER_ADD (dst, src, mem_writes,  `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
-    `PERF_COUNTER_ADD (dst, src, mem_latency, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
-    `PERF_COUNTER_ADD (dst, src, stall_cycles,`PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1))
+    `PERF_COUNTER_ADD_EX (dst, src, mem_reads,   `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
+    `PERF_COUNTER_ADD_EX (dst, src, mem_writes,  `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
+    `PERF_COUNTER_ADD_EX (dst, src, mem_latency, `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
+    `PERF_COUNTER_ADD_EX (dst, src, stall_cycles,`PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1))
 
 `endif // VX_OM_DEFINE_VH

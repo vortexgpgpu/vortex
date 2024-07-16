@@ -25,7 +25,7 @@ using namespace graphics;
 	OUTPUT_i(2, mask, x, y, color) \
 	OUTPUT_i(3, mask, x, y, color)
 
-void shader_function(int task_id, kernel_arg_t* __UNIFORM__ arg) {
+void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	const cocogfx::ColorARGB out_color[4] = {0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff};
 
 	for (;;) {
@@ -37,8 +37,6 @@ void shader_function(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 }
 
 int main() {
-	auto __UNIFORM__ arg = reinterpret_cast<kernel_arg_t*>(KERNEL_ARG_DEV_MEM_ADDR);
-	vx_spawn_tasks(arg->num_tasks, (vx_spawn_tasks_cb)shader_function, arg);
-	//shader_function(0, arg);
-	return 0;
+	auto __UNIFORM__ arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
+	return vx_spawn_threads(1, &arg->num_tasks, nullptr, (vx_kernel_func_cb)kernel_body, arg);
 }

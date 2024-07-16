@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -34,18 +34,18 @@ public:
     uint32_t tile_logsize;
     uint32_t block_logsize;
   };
-  
-  struct PerfStats {        
+
+  struct PerfStats {
     uint64_t reads;
     uint64_t latency;
     uint64_t stalls;
 
-    PerfStats() 
+    PerfStats()
       : reads(0)
       , latency(0)
       , stalls(0)
     {}
-    
+
     PerfStats& operator+=(const PerfStats& rhs) {
       this->reads   += rhs.reads;
       this->latency += rhs.latency;
@@ -58,22 +58,22 @@ public:
     using Ptr = std::shared_ptr<TraceData>;
     uint32_t raster_idx;
   };
-  
+
   using DCRS = graphics::RasterDCRS;
 
   SimPort<MemReq> MemReqs;
   SimPort<MemRsp> MemRsps;
 
-  SimPort<pipeline_trace_t*> Input;
-  SimPort<pipeline_trace_t*> Output;
-  
-  RasterUnit(const SimContext& ctx, 
+  SimPort<instr_trace_t*> Input;
+  SimPort<instr_trace_t*> Output;
+
+  RasterUnit(const SimContext& ctx,
             const char* name,
             uint32_t raster_index,
             uint32_t raster_count,
-            const Arch &arch, 
-            const DCRS& dcrs,            
-            const Config& config);    
+            const Arch &arch,
+            const DCRS& dcrs,
+            const Config& config);
 
   ~RasterUnit();
 
@@ -85,7 +85,7 @@ public:
 
   void attach_ram(RAM* mem);
 
-  uint32_t fetch(uint32_t cid, uint32_t wid, uint32_t tid, CSRs& csrs);
+  uint32_t fetch(CSRs& csrs);
 
   const PerfStats& perf_stats() const;
 

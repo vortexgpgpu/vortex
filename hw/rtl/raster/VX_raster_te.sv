@@ -1,12 +1,12 @@
 //!/bin/bash
 
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,7 +24,7 @@
 module VX_raster_te #(
     parameter `STRING INSTANCE_ID = "",
     parameter TILE_LOGSIZE  = 5,
-    parameter BLOCK_LOGSIZE = 2  
+    parameter BLOCK_LOGSIZE = 2
 ) (
     input wire clk,
     input wire reset,
@@ -37,7 +37,7 @@ module VX_raster_te #(
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_in,
     input wire [2:0][`RASTER_DATA_BITS-1:0] extents_in,
     output wire                         ready_in,
-    
+
     // Outputs
     output wire                         valid_out,
     output wire [`VX_RASTER_DIM_BITS-1:0] xloc_out,
@@ -77,7 +77,7 @@ module VX_raster_te #(
     wire [2:0][`RASTER_DATA_BITS-1:0]   fifo_edge_eval;
     wire [LEVEL_BITS-1:0]  fifo_level;
 
-    wire       fifo_arb_valid;    
+    wire       fifo_arb_valid;
     wire [1:0] fifo_arb_index;
     wire [3:0] fifo_arb_onehot;
 
@@ -98,24 +98,24 @@ module VX_raster_te #(
                     // select fifo input
                     tile_valid          <= 1;
                     tile_xloc           <= fifo_xloc;
-                    tile_yloc           <= fifo_yloc;                
-                    tile_edge_eval      <= fifo_edge_eval;                
+                    tile_yloc           <= fifo_yloc;
+                    tile_edge_eval      <= fifo_edge_eval;
                     tile_level          <= fifo_level;
-                end else 
+                end else
                 if (is_fifo_bypass) begin
                     // fifo bypass first sub-tile
                     tile_valid          <= 1;
                     tile_xloc           <= subtile_xloc_r[0];
-                    tile_yloc           <= subtile_yloc_r[0];                
-                    tile_edge_eval      <= subtile_edge_eval_r[0];                
+                    tile_yloc           <= subtile_yloc_r[0];
+                    tile_edge_eval      <= subtile_edge_eval_r[0];
                     tile_level          <= subtile_level_r;
                 end else
-                if (valid_in && ~tile_valid) begin   
-                    // select new tile input             
+                if (valid_in && ~tile_valid) begin
+                    // select new tile input
                     tile_valid          <= 1;
                     tile_extents        <= extents_in;
                     tile_edges          <= edges_in;
-                    tile_pid            <= pid_in;         
+                    tile_pid            <= pid_in;
                     tile_xloc           <= xloc_in;
                     tile_yloc           <= yloc_in;
                     tile_edge_eval[0]   <= edges_in[0][2];
@@ -146,8 +146,8 @@ module VX_raster_te #(
     for (genvar i = 0; i < 3; ++i) begin
         assign edge_eval[i] = tile_edge_eval[i] + (tile_extents[i] >> tile_level);
     end
-    wire overlap = ~(edge_eval[0][`RASTER_DATA_BITS-1] 
-                  || edge_eval[1][`RASTER_DATA_BITS-1] 
+    wire overlap = ~(edge_eval[0][`RASTER_DATA_BITS-1]
+                  || edge_eval[1][`RASTER_DATA_BITS-1]
                   || edge_eval[2][`RASTER_DATA_BITS-1]);
 
     wire tile_valid_e = tile_valid && overlap;
@@ -170,7 +170,7 @@ module VX_raster_te #(
 
     for (genvar i = 0; i < 4; ++i) begin
         wire fifo_valid_in = tile_valid_r && ~is_block_r && ~(is_fifo_bypass && i == 0);
-        wire fifo_ready_out = fifo_arb_onehot[i] && ~output_stall; 
+        wire fifo_ready_out = fifo_arb_onehot[i] && ~output_stall;
 
         VX_elastic_buffer #(
             .DATAW	 (FIFO_DATA_WIDTH),
@@ -191,9 +191,6 @@ module VX_raster_te #(
     VX_priority_arbiter #(
         .NUM_REQS (4)
     ) fifo_arbiter (
-        .clk          (clk),
-        .reset        (reset),        
-        `UNUSED_PIN   (unlock),
         .requests     (fifo_valid_out),
         .grant_index  (fifo_arb_index),
         .grant_onehot (fifo_arb_onehot),
@@ -216,7 +213,7 @@ module VX_raster_te #(
     assign valid_out = tile_valid_r && is_block_r;
     assign xloc_out  = tile_xloc_r;
     assign yloc_out  = tile_yloc_r;
-    assign pid_out   = tile_pid;    
+    assign pid_out   = tile_pid;
     `EDGE_UPDATE (edges_out, tile_edges, tile_edge_eval_r);
 
     `UNUSED_VAR (tile_level_r)

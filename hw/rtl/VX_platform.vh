@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -47,7 +47,7 @@
 `define UNUSED_VAR(x)
 `define UNUSED_PIN(x) . x ()
 `define UNUSED_ARG(x) x
-`define TRACE(level, args) $write args
+`define TRACE(level, args) if (level <= `DEBUG_LEVEL) $write args
 `else
 `ifdef VERILATOR
 `define TRACING_ON      /* verilator tracing_on */
@@ -77,7 +77,8 @@
                               /* verilator lint_off IMPLICIT */ \
                               /* verilator lint_off PINMISSING */ \
                               /* verilator lint_off IMPORTSTAR */ \
-                              /* verilator lint_off UNSIGNED */
+                              /* verilator lint_off UNSIGNED */ \
+                              /* verilator lint_off SYMRSVDWORD */
 
 `define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */ \
                               /* verilator lint_on PINCONNECTEMPTY */ \
@@ -88,7 +89,8 @@
                               /* verilator lint_on IMPLICIT */ \
                               /* verilator lint_off PINMISSING */ \
                               /* verilator lint_on IMPORTSTAR */ \
-                              /* verilator lint_on UNSIGNED */
+                              /* verilator lint_on UNSIGNED */ \
+                              /* verilator lint_on SYMRSVDWORD */
 
 `define UNUSED_PARAM(x)  /* verilator lint_off UNUSED */ \
                          localparam  __``x = x; \
@@ -110,8 +112,14 @@
 `define UNUSED_ARG(x)   /* verilator lint_off UNUSED */ \
                         x \
                         /* verilator lint_on UNUSED */
-`define TRACE(level, args) dpi_trace(level, $sformatf args)
 `endif
+
+`ifdef SV_DPI
+`define TRACE(level, args) dpi_trace(level, $sformatf args)
+`else
+`define TRACE(level, args) if (level <= `DEBUG_LEVEL) $write args
+`endif
+
 `endif
 
 `ifdef SIMULATION
@@ -140,21 +148,21 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `ifdef QUARTUS
-`define MAX_FANOUT      4
+`define MAX_FANOUT      8
 `define IF_DATA_SIZE(x) $bits(x.data)
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
 `define DISABLE_BRAM    (* ramstyle = "logic" *)
 `define PRESERVE_NET    (* preserve *)
 `elsif VIVADO
-`define MAX_FANOUT      4
+`define MAX_FANOUT      8
 `define IF_DATA_SIZE(x) $bits(x.data)
 `define USE_FAST_BRAM   (* ram_style = "distributed" *)
 `define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
 `define DISABLE_BRAM    (* ram_style = "registers" *)
 `define PRESERVE_NET    (* keep = "true" *)
 `else
-`define MAX_FANOUT      4
+`define MAX_FANOUT      8
 `define IF_DATA_SIZE(x) x.DATA_WIDTH
 `define USE_FAST_BRAM
 `define NO_RW_RAM_CHECK
@@ -169,7 +177,8 @@
 `define CLOG2(x)    $clog2(x)
 `define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > (x)) ? 1 : 0))
 `define LOG2UP(x)   (((x) > 1) ? $clog2(x) : 1)
-`define ISPOW2(x)   (((x) != 0) && (0 == ((x) & ((x) - 1))))
+`define IS_POW2(x)   (((x) != 0) && (0 == ((x) & ((x) - 1))))
+`define IS_DIVISBLE(n, d) (((n) % (d)) == 0)
 
 `define ABS(x)      (((x) < 0) ? (-(x)) : (x));
 
@@ -181,34 +190,35 @@
 `define MAX(x, y)   (((x) > (y)) ? (x) : (y))
 `endif
 
-`ifndef CLAMP
 `define CLAMP(x, lo, hi)   (((x) > (hi)) ? (hi) : (((x) < (lo)) ? (lo) : (x)))
-`endif
 
-`ifndef UP
 `define UP(x)       (((x) != 0) ? (x) : 1)
-`endif
+
+`define CDIV(n,d)   ((n + d - 1) / (d))
+
 
 `define RTRIM(x, s) x[$bits(x)-1:($bits(x)-s)]
 
 `define LTRIM(x, s) x[s-1:0]
 
-`define TRACE_ARRAY1D(lvl, arr, m)              \
+`define SEXT(len, x) {{(len-$bits(x)+1){x[$bits(x)-1]}}, x[$bits(x)-2:0]}
+
+`define TRACE_ARRAY1D(lvl, fmt, arr, n)              \
     `TRACE(lvl, ("{"));                         \
-    for (integer __i = (m-1); __i >= 0; --__i) begin  \
-        if (__i != (m-1)) `TRACE(lvl, (", "));    \
-        `TRACE(lvl, ("0x%0h", arr[__i]));         \
+    for (integer __i = (n-1); __i >= 0; --__i) begin  \
+        if (__i != (n-1)) `TRACE(lvl, (", "));    \
+        `TRACE(lvl, (fmt, arr[__i]));         \
     end                                         \
     `TRACE(lvl, ("}"));
 
-`define TRACE_ARRAY2D(lvl, arr, m, n)           \
+`define TRACE_ARRAY2D(lvl, fmt, arr, m, n)           \
     `TRACE(lvl, ("{"));                         \
     for (integer __i = n-1; __i >= 0; --__i) begin    \
         if (__i != (n-1)) `TRACE(lvl, (", "));    \
         `TRACE(lvl, ("{"));                     \
         for (integer __j = (m-1); __j >= 0; --__j) begin \
             if (__j != (m-1)) `TRACE(lvl, (", "));\
-            `TRACE(lvl, ("0x%0h", arr[__i][__j]));  \
+            `TRACE(lvl, (fmt, arr[__i][__j]));  \
         end                                     \
         `TRACE(lvl, ("}"));                     \
     end                                         \
@@ -229,10 +239,10 @@
     `RESET_RELAY_EX (dst, src, 1, 0)
 
 // size(x): 0 -> 0, 1 -> 1, 2 -> 2, 3 -> 2, 4-> 2
-`define OUT_REG_TO_EB_SIZE(out_reg)   `MIN(out_reg, 2)
+`define TO_OUT_BUF_SIZE(out_reg)    `MIN(out_reg, 2)
 
 // reg(x): 0 -> 0, 1 -> 1, 2 -> 0, 3 -> 1, 4 -> 2
-`define OUT_REG_TO_EB_REG(out_reg)    ((out_reg & 1) + ((out_reg >> 2) << 1))
+`define TO_OUT_BUF_REG(out_reg)     ((out_reg & 1) + ((out_reg >> 2) << 1))
 
 `define REPEAT(n,f,s)   `_REPEAT_``n(f,s)
 `define _REPEAT_0(f,s)

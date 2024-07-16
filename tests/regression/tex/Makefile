@@ -1,15 +1,20 @@
-PROJECT = tex
+ROOT_DIR := $(realpath ../../..)
+include $(ROOT_DIR)/config.mk
+
+PROJECT := tex
+
+SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
+
+SRCS := $(SRC_DIR)/main.cpp $(VORTEX_HOME)/sim/common/gfxutil.cpp
+
+VX_SRCS := $(SRC_DIR)/kernel.cpp $(VORTEX_HOME)/sim/common/graphics.cpp
+
+VX_CFLAGS += -I$(VORTEX_HOME)/sim/common -I$(THIRD_PARTY_DIR)
+
+CXXFLAGS += -I$(VORTEX_HOME)/sim/common -I$(THIRD_PARTY_DIR) -DASSETS_PATHS='"$(SRC_DIR)"'
+
+LDFLAGS += $(THIRD_PARTY_DIR)/cocogfx/libcocogfx.a -lpng -lz
 
 OPTS ?=
-
-VX_CFLAGS += -I$(VORTEX_KN_PATH)/../sim/common -I$(VORTEX_KN_PATH)/../third_party
-
-CXXFLAGS += -I$(VORTEX_KN_PATH)/../sim/common -I$(VORTEX_KN_PATH)/../third_party
-
-LDFLAGS += $(VORTEX_KN_PATH)/../third_party/cocogfx/libcocogfx.a -lpng -lz
-
-SRCS = main.cpp
-
-VX_SRCS = kernel.cpp $(VORTEX_KN_PATH)/../sim/common/graphics.cpp
 
 include ../common.mk

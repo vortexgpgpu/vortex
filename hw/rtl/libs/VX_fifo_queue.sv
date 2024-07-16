@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -22,28 +22,28 @@ module VX_fifo_queue #(
     parameter OUT_REG   = 0,
     parameter LUTRAM    = 1,
     parameter SIZEW     = `CLOG2(DEPTH+1)
-) ( 
+) (
     input  wire             clk,
-    input  wire             reset,    
+    input  wire             reset,
     input  wire             push,
-    input  wire             pop,        
+    input  wire             pop,
     input  wire [DATAW-1:0] data_in,
     output wire [DATAW-1:0] data_out,
-    output wire             empty,      
+    output wire             empty,
     output wire             alm_empty,
-    output wire             full,            
+    output wire             full,
     output wire             alm_full,
     output wire [SIZEW-1:0] size
-); 
-    
-    localparam ADDRW = `CLOG2(DEPTH);    
+);
+
+    localparam ADDRW = `CLOG2(DEPTH);
 
     `STATIC_ASSERT(ALM_FULL > 0, ("alm_full must be greater than 0!"))
     `STATIC_ASSERT(ALM_FULL < DEPTH, ("alm_full must be smaller than size!"))
     `STATIC_ASSERT(ALM_EMPTY > 0, ("alm_empty must be greater than 0!"))
     `STATIC_ASSERT(ALM_EMPTY < DEPTH, ("alm_empty must be smaller than size!"))
-    `STATIC_ASSERT(`ISPOW2(DEPTH), ("size must be a power of 2!"))
-    
+    `STATIC_ASSERT(`IS_POW2(DEPTH), ("size must be a power of 2!"))
+
     if (DEPTH == 1) begin
 
         reg [DATAW-1:0] head_r;
@@ -52,7 +52,7 @@ module VX_fifo_queue #(
         always @(posedge clk) begin
             if (reset) begin
                 head_r <= '0;
-                size_r <= '0;                    
+                size_r <= '0;
             end else begin
                 `ASSERT(~push || ~full, ("runtime error: writing to a full queue"));
                 `ASSERT(~pop || ~empty, ("runtime error: reading an empty queue"));
@@ -63,11 +63,11 @@ module VX_fifo_queue #(
                 end else if (pop) begin
                     size_r <= '0;
                 end
-                if (push) begin 
+                if (push) begin
                     head_r <= data_in;
                 end
             end
-        end        
+        end
 
         assign data_out  = head_r;
         assign empty     = (size_r == 0);
@@ -77,7 +77,7 @@ module VX_fifo_queue #(
         assign size      = size_r;
 
     end else begin
-        
+
         reg empty_r, alm_empty_r;
         reg full_r, alm_full_r;
         reg [ADDRW-1:0] used_r;
@@ -86,8 +86,8 @@ module VX_fifo_queue #(
         always @(posedge clk) begin
             if (reset) begin
                 empty_r     <= 1;
-                alm_empty_r <= 1;    
-                full_r      <= 0;        
+                alm_empty_r <= 1;
+                full_r      <= 0;
                 alm_full_r  <= 0;
                 used_r      <= '0;
             end else begin
@@ -106,21 +106,21 @@ module VX_fifo_queue #(
                 end else if (pop) begin
                     full_r <= 0;
                     if (used_r == ADDRW'(ALM_FULL))
-                        alm_full_r <= 0;            
+                        alm_full_r <= 0;
                     if (used_r == ADDRW'(1))
                         empty_r <= 1;
                     if (used_r == ADDRW'(ALM_EMPTY+1))
                         alm_empty_r <= 1;
-                end                
-                used_r <= used_n;  
-            end                   
+                end
+                used_r <= used_n;
+            end
         end
 
-        if (DEPTH == 2) begin
+        if (DEPTH == 2 && LUTRAM == 0) begin
 
             assign used_n = used_r ^ (push ^ pop);
 
-            if (0 == OUT_REG) begin 
+            if (0 == OUT_REG) begin
 
                 reg [1:0][DATAW-1:0] shift_reg;
 
@@ -131,8 +131,8 @@ module VX_fifo_queue #(
                     end
                 end
 
-                assign data_out = shift_reg[!used_r[0]];    
-                
+                assign data_out = shift_reg[!used_r[0]];
+
             end else begin
 
                 reg [DATAW-1:0] data_out_r;
@@ -152,16 +152,16 @@ module VX_fifo_queue #(
                 assign data_out = data_out_r;
 
             end
-        
+
         end else begin
-            
+
             assign used_n = $signed(used_r) + ADDRW'($signed(2'(push) - 2'(pop)));
 
-            if (0 == OUT_REG) begin          
+            if (0 == OUT_REG) begin
 
                 reg [ADDRW-1:0] rd_ptr_r;
                 reg [ADDRW-1:0] wr_ptr_r;
-                
+
                 always @(posedge clk) begin
                     if (reset) begin
                         rd_ptr_r <= '0;
@@ -169,7 +169,7 @@ module VX_fifo_queue #(
                     end else begin
                         wr_ptr_r <= wr_ptr_r + ADDRW'(push);
                         rd_ptr_r <= rd_ptr_r + ADDRW'(pop);
-                    end               
+                    end
                 end
 
                 VX_dp_ram #(
@@ -179,8 +179,8 @@ module VX_fifo_queue #(
                 ) dp_ram (
                     .clk(clk),
                     .read  (1'b1),
-                    .write (push),                    
-                    `UNUSED_PIN (wren),               
+                    .write (push),
+                    `UNUSED_PIN (wren),
                     .waddr (wr_ptr_r),
                     .wdata (data_in),
                     .raddr (rd_ptr_r),
@@ -196,18 +196,18 @@ module VX_fifo_queue #(
                 reg [ADDRW-1:0] rd_ptr_n_r;
 
                 always @(posedge clk) begin
-                    if (reset) begin  
+                    if (reset) begin
                         wr_ptr_r   <= '0;
                         rd_ptr_r   <= '0;
                         rd_ptr_n_r <= 1;
                     end else begin
                         wr_ptr_r <= wr_ptr_r + ADDRW'(push);
                         if (pop) begin
-                            rd_ptr_r <= rd_ptr_n_r;                       
-                            if (DEPTH > 2) begin    
+                            rd_ptr_r <= rd_ptr_n_r;
+                            if (DEPTH > 2) begin
                                 rd_ptr_n_r <= rd_ptr_r + ADDRW'(2);
                             end else begin // (DEPTH == 2);
-                                rd_ptr_n_r <= ~rd_ptr_n_r;                            
+                                rd_ptr_n_r <= ~rd_ptr_n_r;
                             end
                         end
                     end
@@ -227,13 +227,13 @@ module VX_fifo_queue #(
                 ) dp_ram (
                     .clk   (clk),
                     .read  (1'b1),
-                    .write (push),                    
-                    `UNUSED_PIN (wren),               
+                    .write (push),
+                    `UNUSED_PIN (wren),
                     .waddr (wr_ptr_r),
                     .wdata (data_in),
                     .raddr (rd_ptr_n_r),
                     .rdata (dout)
-                ); 
+                );
 
                 always @(posedge clk) begin
                     if (push && (empty_r || (going_empty && pop))) begin
@@ -246,12 +246,12 @@ module VX_fifo_queue #(
                 assign data_out = dout_r;
             end
         end
-        
-        assign empty     = empty_r;        
+
+        assign empty     = empty_r;
         assign alm_empty = alm_empty_r;
         assign full      = full_r;
         assign alm_full  = alm_full_r;
-        assign size      = {full_r, used_r};        
+        assign size      = {full_r, used_r};
     end
 
 endmodule

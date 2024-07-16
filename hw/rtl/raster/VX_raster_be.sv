@@ -1,12 +1,12 @@
 //!/bin/bash
 
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,7 +24,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter BLOCK_LOGSIZE   = 5,
     parameter OUTPUT_QUADS    = 2,
-    parameter QUAD_FIFO_DEPTH = 4    
+    parameter QUAD_FIFO_DEPTH = 4
 ) (
     // Standard inputs
     input wire clk,
@@ -33,17 +33,17 @@ module VX_raster_be import VX_raster_pkg::*; #(
     // Device configurations
     raster_dcrs_t dcrs,
 
-    input wire                          valid_in, 
+    input wire                          valid_in,
     input wire [`VX_RASTER_DIM_BITS-1:0] xloc_in,
     input wire [`VX_RASTER_DIM_BITS-1:0] yloc_in,
     input wire [`VX_RASTER_DIM_BITS-1:0] xmin_in,
     input wire [`VX_RASTER_DIM_BITS-1:0] xmax_in,
-    input wire [`VX_RASTER_DIM_BITS-1:0] ymin_in,   
+    input wire [`VX_RASTER_DIM_BITS-1:0] ymin_in,
     input wire [`VX_RASTER_DIM_BITS-1:0] ymax_in,
     input wire [`VX_RASTER_PID_BITS-1:0] pid_in,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_in,
-    output wire                         ready_in,    
-    
+    output wire                         ready_in,
+
      // Outputs
     output wire                         valid_out,
     output raster_stamp_t [OUTPUT_QUADS-1:0] stamps_out,
@@ -62,9 +62,9 @@ module VX_raster_be import VX_raster_pkg::*; #(
     wire valid_r;
     wire [`VX_RASTER_PID_BITS-1:0] pid_r;
     wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] quad_xloc, quad_xloc_r;
-    wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] quad_yloc, quad_yloc_r;        
+    wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] quad_yloc, quad_yloc_r;
     wire [PER_BLOCK_QUADS-1:0][2:0][2:0][`RASTER_DATA_BITS-1:0] quad_edges, quad_edges_r;
-    
+
     // Per-quad edge evaluation
     for (genvar i = 0; i < PER_BLOCK_QUADS; ++i) begin
         localparam ii = i % NUM_QUADS_DIM;
@@ -80,7 +80,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
 
     VX_pipe_register #(
         .DATAW  (1 + `VX_RASTER_PID_BITS + PER_BLOCK_QUADS * (2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
-        .RESETW (1)   
+        .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
@@ -90,13 +90,13 @@ module VX_raster_be import VX_raster_pkg::*; #(
     );
 
     wire qe_valid;
-    wire [PER_BLOCK_QUADS-1:0]  qe_overlap;    
+    wire [PER_BLOCK_QUADS-1:0]  qe_overlap;
     wire [`VX_RASTER_PID_BITS-1:0] qe_pid;
     wire [PER_BLOCK_QUADS-1:0][3:0] qe_mask;
     wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] qe_xloc;
-    wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] qe_yloc;    
+    wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] qe_yloc;
     wire [PER_BLOCK_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] qe_bcoords;
-    
+
     VX_raster_qe #(
         .INSTANCE_ID (INSTANCE_ID),
         .NUM_QUADS   (PER_BLOCK_QUADS)
@@ -105,7 +105,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
         .reset      (reset),
 
         .dcrs       (dcrs),
-                        
+
         .enable     (~stall),
 
         .valid_in   (valid_r),
@@ -115,7 +115,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
         .xmin_in    (xmin_in),
         .xmax_in    (xmax_in),
         .ymin_in    (ymin_in),
-        .ymax_in    (ymax_in),        
+        .ymax_in    (ymax_in),
         .edges_in   (quad_edges_r),
 
         .valid_out  (qe_valid),
@@ -123,15 +123,15 @@ module VX_raster_be import VX_raster_pkg::*; #(
         .pid_out    (qe_pid),
         .mask_out   (qe_mask),
         .xloc_out   (qe_xloc),
-        .yloc_out   (qe_yloc),                
+        .yloc_out   (qe_yloc),
         .bcoords_out(qe_bcoords)
     );
 
     // Populate fifo inputs
-    
+
     wire [OUTPUT_BATCHES-1:0][OUTPUT_QUADS-1:0] fifo_mask_in;
     raster_stamp_t [OUTPUT_BATCHES-1:0][OUTPUT_QUADS-1:0] fifo_stamp_in;
-        
+
     for (genvar i = 0; i < OUTPUT_BATCHES * OUTPUT_QUADS; ++i) begin
         localparam q = i % OUTPUT_QUADS;
         localparam b = i / OUTPUT_QUADS;
@@ -148,7 +148,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
         end
     end
 
-    // output batch select        
+    // output batch select
 
     wire [OUTPUT_BATCHES-1:0] batch_valid;
     reg [OUTPUT_BATCHES-1:0]  batch_sent;
@@ -158,7 +158,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
     wire [OUTPUT_BATCHES-1:0]  fifo_arb_onehot;
 
     wire fifo_fire;
-    
+
     for (genvar i = 0; i < OUTPUT_BATCHES; ++i) begin
         assign batch_valid[i] = qe_valid && (| fifo_mask_in[i]);
     end
@@ -166,9 +166,6 @@ module VX_raster_be import VX_raster_pkg::*; #(
     VX_priority_arbiter #(
         .NUM_REQS (OUTPUT_BATCHES)
     ) fifo_arbiter (
-        .clk          (clk),
-        .reset        (reset),        
-        `UNUSED_PIN   (unlock),
         .requests     (batch_valid & ~batch_sent),
         .grant_index  (fifo_arb_index),
         .grant_onehot (fifo_arb_onehot),
@@ -228,14 +225,14 @@ module VX_raster_be import VX_raster_pkg::*; #(
                 edges_in[1][0], edges_in[1][1], edges_in[1][2],
                 edges_in[2][0], edges_in[2][1], edges_in[2][2]));
         end
-        
+
         for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
             if (valid_out && ready_out) begin
                 `TRACE(2, ("%d: %s-be-out[%0d]: x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
                     $time, INSTANCE_ID, i, stamps_out[i].pos_x, stamps_out[i].pos_y, stamps_out[i].mask, stamps_out[i].pid,
-                    stamps_out[i].bcoords[0][0], stamps_out[i].bcoords[1][0], stamps_out[i].bcoords[2][0], 
-                    stamps_out[i].bcoords[0][1], stamps_out[i].bcoords[1][1], stamps_out[i].bcoords[2][1], 
-                    stamps_out[i].bcoords[0][2], stamps_out[i].bcoords[1][2], stamps_out[i].bcoords[2][2], 
+                    stamps_out[i].bcoords[0][0], stamps_out[i].bcoords[1][0], stamps_out[i].bcoords[2][0],
+                    stamps_out[i].bcoords[0][1], stamps_out[i].bcoords[1][1], stamps_out[i].bcoords[2][1],
+                    stamps_out[i].bcoords[0][2], stamps_out[i].bcoords[1][2], stamps_out[i].bcoords[2][2],
                     stamps_out[i].bcoords[0][3], stamps_out[i].bcoords[1][3], stamps_out[i].bcoords[2][3]));
             end
         end

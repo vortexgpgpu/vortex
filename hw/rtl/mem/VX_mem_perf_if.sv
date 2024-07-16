@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -28,7 +28,7 @@ interface VX_mem_perf_if import VX_gpu_pkg::*; ();
 `ifdef EXT_OM_ENABLE
     cache_perf_t ocache;
 `endif
-    cache_perf_t smem;
+    cache_perf_t lmem;
     mem_perf_t   mem;
 
     modport master (
@@ -45,7 +45,7 @@ interface VX_mem_perf_if import VX_gpu_pkg::*; ();
     `ifdef EXT_OM_ENABLE
         output ocache,
     `endif
-        output smem,
+        output lmem,
         output mem
     );
 
@@ -63,7 +63,7 @@ interface VX_mem_perf_if import VX_gpu_pkg::*; ();
     `ifdef EXT_OM_ENABLE
         input ocache,
     `endif
-        input smem,        
+        input lmem,
         input mem
     );
 

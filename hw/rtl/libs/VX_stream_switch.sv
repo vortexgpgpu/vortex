@@ -18,8 +18,8 @@ module VX_stream_switch #(
     parameter NUM_INPUTS    = 1,
     parameter NUM_OUTPUTS   = 1,
     parameter DATAW         = 1,
-    parameter OUT_REG       = 0,
-    parameter NUM_REQS      = (NUM_INPUTS > NUM_OUTPUTS) ? ((NUM_INPUTS + NUM_OUTPUTS - 1) / NUM_OUTPUTS) : ((NUM_OUTPUTS + NUM_INPUTS - 1) / NUM_INPUTS),
+    parameter OUT_BUF       = 0,
+    parameter NUM_REQS      = (NUM_INPUTS > NUM_OUTPUTS) ? `CDIV(NUM_INPUTS, NUM_OUTPUTS) : `CDIV(NUM_OUTPUTS, NUM_INPUTS),
     parameter SEL_COUNT     = `MIN(NUM_INPUTS, NUM_OUTPUTS),
     parameter LOG_NUM_REQS  = `CLOG2(NUM_REQS)
 ) (
@@ -78,8 +78,8 @@ module VX_stream_switch #(
 
             VX_elastic_buffer #(
                 .DATAW   (DATAW),
-                .SIZE    (`OUT_REG_TO_EB_SIZE(OUT_REG)),
-                .OUT_REG (`OUT_REG_TO_EB_REG(OUT_REG))
+                .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+                .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
             ) out_buf (
                 .clk       (clk),
                 .reset     (out_buf_reset),
@@ -113,8 +113,8 @@ module VX_stream_switch #(
 
                     VX_elastic_buffer #(
                         .DATAW    (DATAW),
-                        .SIZE     (`OUT_REG_TO_EB_SIZE(OUT_REG)),
-                        .OUT_REG  (`OUT_REG_TO_EB_REG(OUT_REG))
+                        .SIZE     (`TO_OUT_BUF_SIZE(OUT_BUF)),
+                        .OUT_REG  (`TO_OUT_BUF_REG(OUT_BUF))
                     ) out_buf (
                         .clk       (clk),
                         .reset     (out_buf_reset),
@@ -144,8 +144,8 @@ module VX_stream_switch #(
 
             VX_elastic_buffer #(
                 .DATAW    (DATAW),
-                .SIZE     (`OUT_REG_TO_EB_SIZE(OUT_REG)),
-                .OUT_REG  (`OUT_REG_TO_EB_REG(OUT_REG))
+                .SIZE     (`TO_OUT_BUF_SIZE(OUT_BUF)),
+                .OUT_REG  (`TO_OUT_BUF_REG(OUT_BUF))
             ) out_buf (
                 .clk       (clk),
                 .reset     (out_buf_reset),

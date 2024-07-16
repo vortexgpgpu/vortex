@@ -1,3 +1,6 @@
+ROOT_DIR := $(realpath ../..)
+include $(ROOT_DIR)/config.mk
+
 all:
 	$(MAKE) -C basic
 	$(MAKE) -C demo
@@ -8,14 +11,14 @@ all:
 	$(MAKE) -C diverge
 	$(MAKE) -C sort
 	$(MAKE) -C fence
-	$(MAKE) -C no_mf_ext
-	$(MAKE) -C no_smem
 	$(MAKE) -C vecaddx
 	$(MAKE) -C sgemmx
 	$(MAKE) -C tex
 	$(MAKE) -C draw3d
 	$(MAKE) -C raster
 	$(MAKE) -C om
+	$(MAKE) -C conv3x
+	$(MAKE) -C sgemm2x
 
 run-simx:
 	$(MAKE) -C basic run-simx
@@ -27,14 +30,14 @@ run-simx:
 	$(MAKE) -C diverge run-simx
 	$(MAKE) -C sort run-simx
 	$(MAKE) -C fence run-simx
-	$(MAKE) -C no_mf_ext run-simx
-	$(MAKE) -C no_smem run-simx
 	$(MAKE) -C vecaddx run-simx
 	$(MAKE) -C sgemmx run-simx
 	$(MAKE) -C tex run-simx
 	$(MAKE) -C draw3d run-simx
 	$(MAKE) -C raster run-simx
 	$(MAKE) -C om run-simx
+	$(MAKE) -C conv3x run-simx
+	$(MAKE) -C sgemm2x run-simx
 
 run-rtlsim:
 	$(MAKE) -C basic run-rtlsim
@@ -46,14 +49,14 @@ run-rtlsim:
 	$(MAKE) -C diverge run-rtlsim
 	$(MAKE) -C sort run-rtlsim
 	$(MAKE) -C fence run-rtlsim
-	$(MAKE) -C no_mf_ext run-rtlsim
-	$(MAKE) -C no_smem run-rtlsim
 	$(MAKE) -C vecaddx run-rtlsim
 	$(MAKE) -C sgemmx run-rtlsim
 	$(MAKE) -C tex run-rtlsim
 	$(MAKE) -C draw3d run-rtlsim
 	$(MAKE) -C raster run-rtlsim
 	$(MAKE) -C om run-rtlsim
+	$(MAKE) -C conv3x run-rtlsim
+	$(MAKE) -C sgemm2x run-rtlsim
 
 run-opae:
 	$(MAKE) -C basic run-opae
@@ -65,14 +68,14 @@ run-opae:
 	$(MAKE) -C diverge run-opae
 	$(MAKE) -C sort run-opae
 	$(MAKE) -C fence run-opae
-	$(MAKE) -C no_mf_ext run-opae
-	$(MAKE) -C no_smem run-opae
 	$(MAKE) -C vecaddx run-opae
 	$(MAKE) -C sgemmx run-opae
 	$(MAKE) -C tex run-opae
 	$(MAKE) -C draw3d run-opae
 	$(MAKE) -C raster run-opae
 	$(MAKE) -C om run-opae
+	$(MAKE) -C conv3x run-opae
+	$(MAKE) -C sgemm2x run-opae
 
 clean:
 	$(MAKE) -C basic clean
@@ -84,30 +87,11 @@ clean:
 	$(MAKE) -C diverge clean
 	$(MAKE) -C sort clean
 	$(MAKE) -C fence clean
-	$(MAKE) -C no_mf_ext clean
-	$(MAKE) -C no_smem clean
 	$(MAKE) -C vecaddx clean
 	$(MAKE) -C sgemmx clean
 	$(MAKE) -C tex clean
 	$(MAKE) -C draw3d clean
 	$(MAKE) -C raster clean
 	$(MAKE) -C om clean
-
-clean-all:
-	$(MAKE) -C basic clean-all
-	$(MAKE) -C demo clean-all
-	$(MAKE) -C dogfood clean-all
-	$(MAKE) -C mstress clean-all
-	$(MAKE) -C io_addr clean-all
-	$(MAKE) -C printf clean-all
-	$(MAKE) -C diverge clean-all
-	$(MAKE) -C sort clean-all
-	$(MAKE) -C fence clean-all
-	$(MAKE) -C no_mf_ext clean-all
-	$(MAKE) -C no_smem clean-all
-	$(MAKE) -C vecaddx clean-all
-	$(MAKE) -C sgemmx clean-all
-	$(MAKE) -C tex clean-all
-	$(MAKE) -C draw3d clean-all
-	$(MAKE) -C raster clean-all
-	$(MAKE) -C om clean-all
+	$(MAKE) -C conv3x clean
+	$(MAKE) -C sgemm2x clean

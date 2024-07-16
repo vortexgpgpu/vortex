@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,6 +19,8 @@
 #include <iostream>
 #include <map>
 #include <algorithm>
+#include <fstream>
+#include <sstream>
 
 using namespace cocogfx;
 using namespace graphics;
@@ -30,9 +32,9 @@ using rectf_t = TRect<float>;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static bool EdgeEquation(vec3f_t edges[3], 
-                         const vec4f_t& v0, 
-                         const vec4f_t& v1, 
+static bool EdgeEquation(vec3f_t edges[3],
+                         const vec4f_t& v0,
+                         const vec4f_t& v1,
                          const vec4f_t& v2) {
   // Calculate edge equation matrix
   auto a0 = (v1.y * v2.w) - (v2.y * v1.w);
@@ -51,7 +53,7 @@ static bool EdgeEquation(vec3f_t edges[3],
   edges[1] = {a1, b1, c1};
   edges[2] = {a2, b2, c2};
 
-  /*printf("E0.x=%f, E0.y=%f, E0.z=%f, E1.x=%f, E1.y=%f, E1.z=%f, E2.x=%f, E2.y=%f, E2.z=%f\n", 
+  /*printf("E0.x=%f, E0.y=%f, E0.z=%f, E1.x=%f, E1.y=%f, E1.z=%f, E2.x=%f, E2.y=%f, E2.z=%f\n",
       edges[0].x, edges[0].y, edges[0].z,
       edges[1].x, edges[1].y, edges[1].z,
       edges[2].x, edges[2].y, edges[2].z);*/
@@ -98,10 +100,10 @@ static void EdgeToFixed(vec3e_t out[3], vec3f_t in[3]) {
 namespace graphics {
 
 // scan primitives and perform tile assignment
-uint32_t Binning(std::vector<uint8_t>& tilebuf, 
+uint32_t Binning(std::vector<uint8_t>& tilebuf,
                  std::vector<uint8_t>& primbuf,
                  const std::unordered_map<uint32_t, CGLTrace::vertex_t>& vertices,
-                 const std::vector<CGLTrace::primitive_t>& primitives,                 
+                 const std::vector<CGLTrace::primitive_t>& primitives,
                  uint32_t width,
                  uint32_t height,
                  float near,
@@ -125,7 +127,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
     d.y = s.y; \
     d.z = s.z; \
     d.w = s.w
-  
+
   for (auto& primitive : primitives) {
     // get primitive vertices
     auto& v0 = vertices.at(primitive.i0);
@@ -143,8 +145,8 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
 
     {
       vec4f_t ph0, ph1, ph2;
-      
-      // Convert position from clip to 2D homogenous device space      
+
+      // Convert position from clip to 2D homogenous device space
       ClipToHDC(&ph0, p0, 0, width, 0, height, near, far);
       ClipToHDC(&ph1, p1, 0, width, 0, height, near, far);
       ClipToHDC(&ph2, p2, 0, width, 0, height, near, far);
@@ -155,10 +157,10 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
         printf("warning: degenerate primitive...\n");
         continue;
       }
-    }       
+    }
 
     {
-      // Convert position from clip to screen space      
+      // Convert position from clip to screen space
       ClipToScreen(&ps0, p0, 0, width, 0, height, near, far);
       ClipToScreen(&ps1, p1, 0, width, 0, height, near, far);
       ClipToScreen(&ps2, p2, 0, width, 0, height, near, far);
@@ -183,9 +185,9 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
       bbox.right  = std::min<int32_t>(tbb_right,  width);
       bbox.top    = std::max<int32_t>(tbb_top,    0);
       bbox.bottom = std::min<int32_t>(tbb_bottom, height);
-      
+
       // reject excluded primitives
-		  if (bbox.right <= bbox.left || 
+		  if (bbox.right <= bbox.left ||
 		      bbox.bottom <= bbox.top)
 			  continue;
 
@@ -204,21 +206,21 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
         d.y = FloatA(x1 - x2); \
         d.z = FloatA(x2)
 
-      rast_prim_t rast_prim;      		   
+      rast_prim_t rast_prim;
 
 			// add half-pixel offset
 			edges[0].z += edges[0].x * 0.5f + edges[0].y * 0.5f;
 			edges[1].z += edges[1].x * 0.5f + edges[1].y * 0.5f;
 			edges[2].z += edges[2].x * 0.5f + edges[2].y * 0.5f;
 
-    #ifdef FIXEDPOINT_RASTERIZER 
+    #ifdef FIXEDPOINT_RASTERIZER
       EdgeToFixed(rast_prim.edges, edges);
     #else
       rast_prim.edges[0] = edges[0];
       rast_prim.edges[1] = edges[1];
       rast_prim.edges[2] = edges[2];
     #endif
-         
+
       ATTRIBUTE_DELTA (rast_prim.attribs.z, ps0.z, ps1.z, ps2.z);
       ATTRIBUTE_DELTA (rast_prim.attribs.r, v0.color.r, v1.color.r, v2.color.r);
       ATTRIBUTE_DELTA (rast_prim.attribs.g, v0.color.g, v1.color.g, v2.color.g);
@@ -228,15 +230,15 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
       ATTRIBUTE_DELTA (rast_prim.attribs.v, v0.texcoord.v, v1.texcoord.v, v2.texcoord.v);
 
       p = rast_prims.size();
-      rast_prims.push_back(rast_prim);      
+      rast_prims.push_back(rast_prim);
     }
 
     // calculate tiles coverage
-    {    
+    {
       auto tileSize = 1 << tileLogSize;
       auto minTileX = bbox.left >> tileLogSize;
       auto maxTileX = (bbox.right + tileSize - 1) >> tileLogSize;
-      auto minTileY = bbox.top >> tileLogSize;      
+      auto minTileY = bbox.top >> tileLogSize;
       auto maxTileY = (bbox.bottom + tileSize - 1) >> tileLogSize;
 
       for (uint32_t ty = minTileY; ty < maxTileY; ++ty) {
@@ -252,7 +254,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
     primbuf.resize(rast_prims.size() * sizeof(rast_prim_t));
     memcpy(primbuf.data(), rast_prims.data(), primbuf.size());
   }
-  
+
   {
     tilebuf.resize(tiles.size() * sizeof(rast_tile_header_t) + total_prims * sizeof(uint32_t));
     auto tile_header = reinterpret_cast<rast_tile_header_t*>(tilebuf.data());
@@ -264,7 +266,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
       tile_header->pids_count = it.second.size();
       ++tile_header;
       memcpy(pids_buffer, it.second.data(), it.second.size() * sizeof(uint32_t));
-      pids_buffer += it.second.size() * sizeof(uint32_t);      
+      pids_buffer += it.second.size() * sizeof(uint32_t);
     }
   }
 
@@ -341,6 +343,23 @@ uint32_t toVXBlendFunc(CGLTrace::eBlendOp op) {
     exit(1);
   }
   return 0;
+}
+
+std::string ResolveFilePath(const std::string& filename, const std::string& searchPaths) {
+  std::ifstream ifs(filename);
+  if (!ifs) {
+    std::stringstream ss(searchPaths);
+    std::string path;
+    while (std::getline(ss, path, ',')) {
+      if (!path.empty()) {
+        std::string filePath = path + "/" + filename;
+        std::ifstream ifs(filePath);
+        if (ifs)
+          return filePath;
+      }
+    }
+  }
+  return filename;
 }
 
 } // namespace graphics

@@ -11,11 +11,82 @@
 #include <parboil.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "convert_dataset.h"
 #include "file.h"
 #include "gpu_info.h"
 #include "ocl.h"
+
+static char* replaceFilenameExtension(const char* filename, const char* ext) {
+  const char* dot = strrchr(filename, '.');
+  int baseLen = dot ? (dot - filename) : strlen(filename);
+  char* sz_out = (char*)malloc(baseLen + strlen(ext) + 1);
+  if (!sz_out)
+    return NULL;
+  strncpy(sz_out, filename, baseLen);
+  strcpy(sz_out + baseLen, ext);
+  return sz_out;
+}
+
+static float* read_output_file(const char* filename, int* out_size) {
+    FILE* file = fopen(filename, "rb");
+    if (file == NULL) {
+        perror("Error opening file");
+        return NULL;
+    }
+    int size;
+    // Read the size (number of floats)
+    if (fread(&size, sizeof(int), 1, file) != 1) {
+        fclose(file);
+        perror("Error reading size from file");
+        return NULL;
+    }
+    // Allocate memory for the floats
+    float* floats = (float*)malloc(size * sizeof(float));
+    if (floats == NULL) {
+        fclose(file);
+        perror("Memory allocation failed");
+        return NULL;
+    }
+    // Read the float data
+    if (fread(floats, sizeof(float), size, file) != size) {
+        fclose(file);
+        free(floats);
+        perror("Error reading floats from file");
+        return NULL;
+    }
+    // Close the file
+    fclose(file);
+    // If out_size is not NULL, store the size there
+    if (out_size != NULL) {
+        *out_size = size;
+    }
+    return floats;
+}
+
+static int compare_floats(const float* src, const float* gold, int count) {
+  int num_errors = 0;
+  float abstol = 0.0f;
+  float max_value = 0.0f;
+  // Find the maximum magnitude in the gold array for absolute tolerance calculation
+  for (int i = 0; i < count; i++) {
+    if (fabs(gold[i]) > max_value)
+      max_value = fabs(gold[i]);
+  }
+  // Absolute tolerance is 0.01% of the maximum magnitude of gold array
+  abstol = 1e-4 * max_value;
+  // Compare each pair of floats
+  for (int i = 0; i < count; i++) {
+      float diff = fabs(gold[i] - src[i]);
+      if (!(diff <= abstol || diff < 0.002 * fabs(gold[i]))) {
+          if (num_errors < 10)
+              printf("Fail at row %d: (gold) %f != %f (computed)\n", i, gold[i], src[i]);
+          num_errors++;
+      }
+  }
+  return num_errors;
+}
 
 static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
   if (nullptr == filename || nullptr == data || 0 == size)
@@ -32,9 +103,9 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
 
   *data = (uint8_t*)malloc(fsize);
   *size = fread(*data, 1, fsize, fp);
-  
+
   fclose(fp);
-  
+
   return CL_SUCCESS;
 }
 
@@ -56,15 +127,8 @@ int main(int argc, char **argv) {
          "Shengzhao Wu<wu14@illinois.edu>\n");
   printf("This version maintained by Chris Rodrigues  ***********\n");
   parameters = pb_ReadParameters(&argc, argv);
-  parameters->inpFiles = (char **)malloc(sizeof(char *) * 3);
-  parameters->inpFiles[0] = (char *)malloc(100);
-  parameters->inpFiles[1] = (char *)malloc(100);
-  parameters->inpFiles[2] = NULL;
-  strncpy(parameters->inpFiles[0], "1138_bus.mtx", 100);
-  strncpy(parameters->inpFiles[1], "vector.bin", 100);
-
   if ((parameters->inpFiles[0] == NULL) || (parameters->inpFiles[1] == NULL)) {
-    fprintf(stderr, "Expecting one input filename\n");
+    fprintf(stderr, "Expecting argment -i <matrix-file>,<vector-file>\n");
     exit(-1);
   }
 
@@ -95,11 +159,13 @@ int main(int argc, char **argv) {
   // clCreateProgramWithSource(clContext,1,clSource,NULL,&clStatus);
    uint8_t *kernel_bin = NULL;
   size_t kernel_size;
-  cl_int binary_status = 0;  
-  clStatus = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
-  CHECK_ERROR("read_kernel_file")  
-	cl_program clProgram = clCreateProgramWithBinary(
-      clContext, 1, &clDevice, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &clStatus);
+  cl_int binary_status = 0;
+  cl_program clProgram;
+
+  clStatus = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
+  CHECK_ERROR("read_kernel_file")
+	clProgram = clCreateProgramWithSource(
+        clContext, 1, (const char**)&kernel_bin, &kernel_size, &clStatus);
   CHECK_ERROR("clCreateProgramWithSource")
 
   char clOptions[50];
@@ -131,9 +197,7 @@ int main(int argc, char **argv) {
   // matrix
   cl_mem d_data;
   cl_mem d_indices;
-  cl_mem d_ptr;
   cl_mem d_perm;
-  cl_mem d_nzcnt;
 
   // vector
   cl_mem d_Ax_vector;
@@ -194,7 +258,6 @@ int main(int argc, char **argv) {
   d_Ax_vector = clCreateBuffer(clContext, CL_MEM_WRITE_ONLY,
                                dim * sizeof(float), NULL, &clStatus);
   CHECK_ERROR("clCreateBuffer")
-
   jds_ptr_int = clCreateBuffer(clContext, CL_MEM_READ_ONLY, 5000 * sizeof(int),
                                NULL, &clStatus);
   CHECK_ERROR("clCreateBuffer")
@@ -228,14 +291,11 @@ int main(int argc, char **argv) {
 
   pb_SwitchToTimer(&timers, pb_TimerID_COMPUTE);
 
-  size_t grid;
-  size_t block;
-
-  compute_active_thread(&block, &grid, nzcnt_len, pad, clDeviceProp.major,
-                        clDeviceProp.minor, clDeviceProp.multiProcessorCount);
-  //  printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!grid is %d and block is
-  //  %d=\n",grid,block);
-  //  printf("!!! dim is %d\n",dim);
+  size_t grid = nzcnt_len * pad;
+  size_t block = 1;
+  /*compute_active_thread(&block, &grid, nzcnt_len, pad, clDeviceProp.major,
+                        clDeviceProp.minor, clDeviceProp.multiProcessorCount);*/
+  printf("grid size=%ld, block size=%ld, dim=%d\n", grid, block, dim);
 
   clStatus = clSetKernelArg(clKernel, 0, sizeof(cl_mem), &d_Ax_vector);
   CHECK_ERROR("clSetKernelArg")
@@ -259,22 +319,21 @@ int main(int argc, char **argv) {
   pb_SwitchToTimer(&timers, pb_TimerID_KERNEL);
 
   int i;
-  for (i = 0; i < 50; i++) {
+  for (i = 0; i < 1; i++) {
     clStatus = clEnqueueNDRangeKernel(clCommandQueue, clKernel, 1, NULL, &grid,
                                       &block, 0, NULL, NULL);
     CHECK_ERROR("clEnqueueNDRangeKernel")
   }
-
   clStatus = clFinish(clCommandQueue);
   CHECK_ERROR("clFinish")
 
   pb_SwitchToTimer(&timers, pb_TimerID_COPY);
   // HtoD memory copy
-  clStatus =
-      clEnqueueReadBuffer(clCommandQueue, d_Ax_vector, CL_TRUE, 0,
+  clStatus = clEnqueueReadBuffer(clCommandQueue, d_Ax_vector, CL_TRUE, 0,
                           dim * sizeof(float), h_Ax_vector, 0, NULL, NULL);
   CHECK_ERROR("clEnqueueReadBuffer")
 
+  clStatus = clReleaseCommandQueue(clCommandQueue);
   clStatus = clReleaseKernel(clKernel);
   clStatus = clReleaseProgram(clProgram);
 
@@ -283,19 +342,41 @@ int main(int argc, char **argv) {
   clStatus = clReleaseMemObject(d_perm);
   clStatus = clReleaseMemObject(d_x_vector);
   clStatus = clReleaseMemObject(d_Ax_vector);
-  CHECK_ERROR("clReleaseMemObject")
+  clStatus = clReleaseMemObject(jds_ptr_int);
+  clStatus = clReleaseMemObject(sh_zcnt_int);
 
-  clStatus = clReleaseCommandQueue(clCommandQueue);
+  CHECK_ERROR("clReleaseMemObject")
   clStatus = clReleaseContext(clContext);
+  clStatus = clReleaseDevice(clDevice);
 
   if (parameters->outFile) {
     pb_SwitchToTimer(&timers, pb_TimerID_IO);
     outputData(parameters->outFile, h_Ax_vector, dim);
   }
 
+  // verify output
+  int gold_size;
+  char* gold_file = replaceFilenameExtension(parameters->inpFiles[0], ".gold");
+  float* gold_data = read_output_file(gold_file, &gold_size);
+  if (!gold_data)
+    return -1;
+  if (gold_size != dim) {
+    printf("error: gold data size mismatch: current=%d, expected=%d\n", dim, gold_size);
+    return -1;
+  }
+  int errors = compare_floats(h_Ax_vector, gold_data, gold_size);
+  if (errors > 0) {
+    printf("FAILED!\n");
+  } else {
+    printf("PASSED!\n");
+  }
+  free(gold_data);
+  free(gold_file);
+
   pb_SwitchToTimer(&timers, pb_TimerID_COMPUTE);
 
-  //free((void *)clSource[0]);
+  //free((void*)clSource[0]);
+  if (kernel_bin) free(kernel_bin);
 
   free(h_data);
   free(h_indices);
@@ -309,5 +390,5 @@ int main(int argc, char **argv) {
   pb_PrintTimerSet(&timers);
   pb_FreeParameters(parameters);
 
-  return 0;
+  return errors;
 }

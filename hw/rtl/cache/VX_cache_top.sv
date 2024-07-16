@@ -48,11 +48,11 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // core request tag size
     parameter TAG_WIDTH             = 16,
 
-    // Core response output register
-    parameter CORE_OUT_REG          = 2,
+    // Core response output buffer
+    parameter CORE_OUT_BUF          = 2,
 
-    // Memory request output register
-    parameter MEM_OUT_REG           = 2,
+    // Memory request output buffer
+    parameter MEM_OUT_BUF           = 2,
 
     parameter MEM_TAG_WIDTH = `CLOG2(MSHR_SIZE) + `CLOG2(NUM_BANKS)
  ) (    
@@ -69,6 +69,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     input  wire [NUM_REQS-1:0]                 core_req_rw,
     input  wire [NUM_REQS-1:0][WORD_SIZE-1:0]  core_req_byteen,
     input  wire [NUM_REQS-1:0][`CS_WORD_ADDR_WIDTH-1:0] core_req_addr,
+    input  wire [NUM_REQS-1:0][`ADDR_TYPE_WIDTH-1:0] core_req_atype,
     input  wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_req_data,
     input  wire [NUM_REQS-1:0][TAG_WIDTH-1:0]  core_req_tag,
     output wire [NUM_REQS-1:0]                 core_req_ready,
@@ -110,6 +111,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         assign core_bus_if[i].req_data.rw = core_req_rw[i];
         assign core_bus_if[i].req_data.byteen = core_req_byteen[i];
         assign core_bus_if[i].req_data.addr = core_req_addr[i];
+        assign core_bus_if[i].req_data.atype = core_req_atype[i];
         assign core_bus_if[i].req_data.data = core_req_data[i];
         assign core_bus_if[i].req_data.tag = core_req_tag[i];
         assign core_req_ready[i] = core_bus_if[i].req_ready;
@@ -131,6 +133,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     assign mem_req_data = mem_bus_if.req_data.data;  
     assign mem_req_tag = mem_bus_if.req_data.tag; 
     assign mem_bus_if.req_ready = mem_req_ready;
+    `UNUSED_VAR (mem_bus_if.req_data.atype)
     
     // Memory response
     assign mem_bus_if.rsp_valid = mem_rsp_valid;    
@@ -153,8 +156,8 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .TAG_WIDTH      (TAG_WIDTH),
         .UUID_WIDTH     (UUID_WIDTH),
         .WRITE_ENABLE   (WRITE_ENABLE),
-        .CORE_OUT_REG   (CORE_OUT_REG),
-        .MEM_OUT_REG    (MEM_OUT_REG)
+        .CORE_OUT_BUF   (CORE_OUT_BUF),
+        .MEM_OUT_BUF    (MEM_OUT_BUF)
     ) cache (
     `ifdef PERF_ENABLE
         .cache_perf     (cache_perf),

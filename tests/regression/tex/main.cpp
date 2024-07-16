@@ -8,10 +8,15 @@
 #include <vortex.h>
 #include "common.h"
 #include <bitmanip.h>
+#include <gfxutil.h>
 #include <cocogfx/include/blitter.hpp>
 #include <cocogfx/include/imageutil.hpp>
 
 using namespace cocogfx;
+
+#ifndef ASSETS_PATHS
+#define ASSETS_PATHS ""
+#endif
 
 #define RT_CHECK(_expr)                                         \
    do {                                                         \
@@ -25,7 +30,7 @@ using namespace cocogfx;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-const char* kernel_file = "kernel.bin";
+const char* kernel_file = "kernel.vxbin";
 const char* input_file  = "palette64.png";
 const char* output_file = "output.png";
 const char* reference_file  = nullptr;
@@ -36,11 +41,11 @@ int format  = VX_TEX_FORMAT_A8R8G8B8;
 ePixelFormat eformat = FORMAT_A8R8G8B8;
 bool use_sw = false;
 
-uint64_t dst_addr = 0;
-uint64_t src_addr = 0;
-
-vx_device_h device = nullptr;
-std::vector<uint8_t> staging_buf;
+vx_device_h device      = nullptr;
+vx_buffer_h krnl_buffer = nullptr;
+vx_buffer_h args_buffer = nullptr;
+vx_buffer_h dst_buffer  = nullptr;
+vx_buffer_h src_buffer  = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test." << std::endl;
@@ -82,7 +87,7 @@ static void parse_args(int argc, char **argv) {
       default:
         std::cout << "Error: invalid format: " << format << std::endl;
         exit(1);
-      }      
+      }
     } break;
     case 'g':
       filter = std::atoi(optarg);
@@ -107,15 +112,11 @@ static void parse_args(int argc, char **argv) {
 }
 
 void cleanup() {
-  if (src_addr) {
-    vx_mem_free(device, src_addr);
-  }
-  if (dst_addr) {
-    vx_mem_free(device, dst_addr);
-  }
-  if (device) {
-    vx_dev_close(device);
-  }
+  vx_mem_free(src_buffer);
+  vx_mem_free(dst_buffer);
+  vx_mem_free(krnl_buffer);
+  vx_mem_free(args_buffer);
+  vx_dev_close(device);
 }
 
 #define TEX_DCR_WRITE(addr, value)  \
@@ -127,21 +128,21 @@ int render(uint32_t buf_size, uint32_t width, uint32_t height) {
 
   // start device
   std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start(device));
+  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;
   RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
-  
+
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
   printf("Elapsed time: %lg ms\n", elapsed);
 
   // download destination buffer
   if (strcmp(output_file, "null") != 0) {
-    std::cout << "save output image" << std::endl;  
+    std::cout << "save output image" << std::endl;
     std::vector<uint8_t> dst_pixels(buf_size);
-    RT_CHECK(vx_copy_from_dev(device, dst_pixels.data(), dst_addr, buf_size));    
+    RT_CHECK(vx_copy_from_dev(dst_pixels.data(), dst_buffer, 0, buf_size));
     //DumpImage(dst_pixels, width, height, 4);
     RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, dst_pixels.data(), width, height, width * 4));
   }
@@ -150,17 +151,20 @@ int render(uint32_t buf_size, uint32_t width, uint32_t height) {
 }
 
 int main(int argc, char *argv[]) {
+  uint64_t src_addr;
+  uint64_t dst_addr;
   std::vector<uint8_t> src_pixels;
   std::vector<uint32_t> mip_offsets;
   uint32_t src_width;
   uint32_t src_height;
-  
+
   // parse command arguments
   parse_args(argc, argv);
 
   {
-    std::vector<uint8_t> staging;  
-    RT_CHECK(LoadImage(input_file, eformat, staging, &src_width, &src_height));  
+    std::vector<uint8_t> staging;
+    auto input_file_s = graphics::ResolveFilePath(input_file, ASSETS_PATHS);
+    RT_CHECK(LoadImage(input_file_s.c_str(), eformat, staging, &src_width, &src_height));
     // check power of two support
     if (!ispow2(src_width) || !ispow2(src_height)) {
       std::cout << "Error: only power of two textures supported: width=" << src_width << ", heigth=" << src_height << std::endl;
@@ -170,7 +174,7 @@ int main(int argc, char *argv[]) {
     uint32_t src_bpp = Format::GetInfo(eformat).BytePerPixel;
     uint32_t src_pitch = src_width * src_bpp;
     //DumpImage(staging, src_width, src_height, src_bpp);
-    RT_CHECK(GenerateMipmaps(src_pixels, mip_offsets, staging.data(), eformat, src_width, src_height, src_pitch));    
+    RT_CHECK(GenerateMipmaps(src_pixels, mip_offsets, staging.data(), eformat, src_width, src_height, src_pitch));
   }
 
   uint32_t src_logwidth = log2ceil(src_width);
@@ -189,7 +193,8 @@ int main(int argc, char *argv[]) {
 
   uint64_t isa_flags;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-  if (0 == (isa_flags & VX_ISA_EXT_TEX)) {
+  bool has_ext = (isa_flags & VX_ISA_EXT_TEX) != 0;
+  if (!has_ext) {
     std::cout << "texture extension not supported!" << std::endl;
     cleanup();
     return -1;
@@ -203,44 +208,26 @@ int main(int argc, char *argv[]) {
   uint32_t num_tasks = num_cores * num_warps * num_threads;
 
   std::cout << "number of tasks: " << std::dec << num_tasks << std::endl;
-  std::cout << "source staging_buf: width=" << src_width << ", heigth=" << src_height << ", size=" << src_bufsize << " bytes" << std::endl;
-  std::cout << "destination staging_buf: width=" << dst_width << ", heigth=" << dst_height << ", size=" << dst_bufsize << " bytes" << std::endl;
+  std::cout << "source image: width=" << src_width << ", heigth=" << src_height << ", size=" << src_bufsize << " bytes" << std::endl;
+  std::cout << "destination image: width=" << dst_width << ", heigth=" << dst_height << ", size=" << dst_bufsize << " bytes" << std::endl;
 
   // upload program
-  std::cout << "upload program" << std::endl;  
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file));
+  std::cout << "upload program" << std::endl;
+  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, src_bufsize, VX_MEM_TYPE_GLOBAL, &src_addr));
-  RT_CHECK(vx_mem_alloc(device, dst_bufsize, VX_MEM_TYPE_GLOBAL, &dst_addr));
+  RT_CHECK(vx_mem_alloc(device, src_bufsize, VX_MEM_READ, &src_buffer));
+  RT_CHECK(vx_mem_address(src_buffer, &src_addr));
+  RT_CHECK(vx_mem_alloc(device, dst_bufsize, VX_MEM_WRITE, &dst_buffer));
+  RT_CHECK(vx_mem_address(dst_buffer, &dst_addr));
 
   std::cout << "src_addr=0x" << std::hex << src_addr << std::dec << std::endl;
   std::cout << "dst_addr=0x" << std::hex << dst_addr << std::dec << std::endl;
 
-  // allocate staging buffer  
-  std::cout << "allocate staging buffer" << std::endl;    
-  uint32_t alloc_size = std::max<uint32_t>(sizeof(kernel_arg_t), 
-                            std::max<uint32_t>(src_bufsize, dst_bufsize));
-  staging_buf.resize(alloc_size);
-
-  // upload source buffer  
-  {
-    std::cout << "upload source buffer" << std::endl;
-    auto buf_ptr = staging_buf.data();
-    memcpy(buf_ptr, src_pixels.data(), src_bufsize);
-    RT_CHECK(vx_copy_to_dev(device, src_addr, staging_buf.data(), src_bufsize));
-  }
-
-  // clear destination buffer  
-  {    
-    std::cout << "clear destination buffer" << std::endl;      
-    auto buf_ptr = (uint32_t*)staging_buf.data();
-    for (uint32_t i = 0; i < (dst_bufsize/4); ++i) {
-      buf_ptr[i] = 0xdeadbeef;
-    }    
-    RT_CHECK(vx_copy_to_dev(device, dst_addr, staging_buf.data(), dst_bufsize));  
-  }
+  // upload source buffer
+  std::cout << "upload source buffer" << std::endl;
+  RT_CHECK(vx_copy_to_dev(src_buffer, src_pixels.data(), 0, src_bufsize));
 
   kernel_arg_t kernel_arg = {};
 
@@ -249,12 +236,12 @@ int main(int argc, char *argv[]) {
   kernel_arg.dst_width  = dst_width;
   kernel_arg.dst_height = dst_height;
   kernel_arg.dst_stride = dst_bpp;
-  kernel_arg.dst_pitch  = dst_bpp * dst_width;    
+  kernel_arg.dst_pitch  = dst_bpp * dst_width;
   kernel_arg.dst_addr   = dst_addr;
 
 	// configure texture units
 	TEX_DCR_WRITE(VX_DCR_TEX_STAGE,   0);
-	TEX_DCR_WRITE(VX_DCR_TEX_LOGDIM,  (src_logheight << 16) | src_logwidth);	
+	TEX_DCR_WRITE(VX_DCR_TEX_LOGDIM,  (src_logheight << 16) | src_logwidth);
 	TEX_DCR_WRITE(VX_DCR_TEX_FORMAT,  format);
 	TEX_DCR_WRITE(VX_DCR_TEX_WRAP,    (wrap << 16) | wrap);
 	TEX_DCR_WRITE(VX_DCR_TEX_FILTER,  (filter ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT));
@@ -263,31 +250,29 @@ int main(int argc, char *argv[]) {
     assert(i < VX_TEX_LOD_MAX);
 		TEX_DCR_WRITE(VX_DCR_TEX_MIPOFF(i), mip_offsets.at(i));
 	};
-  
+
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
-  {
-    memcpy(staging_buf.data(), &kernel_arg, sizeof(kernel_arg_t));
-    RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
-  }
+  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
   // render
   std::cout << "render" << std::endl;
   RT_CHECK(render(dst_bufsize, dst_width, dst_height));
 
   // cleanup
-  std::cout << "cleanup" << std::endl;  
+  std::cout << "cleanup" << std::endl;
   cleanup();
 
   if (reference_file) {
-    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8);
+    auto reference_file_s = graphics::ResolveFilePath(reference_file, ASSETS_PATHS);
+    auto errors = CompareImages(output_file, reference_file_s.c_str(), FORMAT_A8R8G8B8);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;
     } else {
       std::cout << "FAILED! " << errors << " errors." << std::endl;
       return errors;
     }
-  } 
+  }
 
   return 0;
 }

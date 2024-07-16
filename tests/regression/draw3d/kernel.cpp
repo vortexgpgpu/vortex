@@ -164,7 +164,7 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 	OUTPUT_i(2, mask, x, y, face, color, depth, func) \
 	OUTPUT_i(3, mask, x, y, face, color, depth, func)
 
-void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
+void shader_function_hw(kernel_arg_t* __UNIFORM__  arg) {
 	FloatA z[4], r[4], g[4], b[4], a[4], u[4], v[4];
 	FloatA dx[4], dy[4];
 	cocogfx::ColorARGB tex_color[4], out_color[4];
@@ -192,7 +192,7 @@ void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
 			INTERPOLATE(g, attribs.g);
 			INTERPOLATE(b, attribs.b);
 			INTERPOLATE(a, attribs.a);
-		}			
+		}
 		if (arg->tex_enabled) {
 			INTERPOLATE(u, attribs.u);
 			INTERPOLATE(v, attribs.v);
@@ -200,10 +200,10 @@ void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
 
 		if (arg->tex_enabled) {
 		#ifdef SW_ENABLE
-			if (arg->sw_tex) { 
+			if (arg->sw_tex) {
 				TEXTURING(tex_color, u, v, g_gpu_sw.tex);
-			} else 
-		#endif	
+			} else
+		#endif
 			{
 				TEXTURING(tex_color, u, v, vx_tex);
 			}
@@ -220,8 +220,8 @@ void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
 	#ifdef SW_ENABLE
 		if (arg->sw_om) {
 			OUTPUT(pos_mask, 0, out_color, z, g_gpu_sw.om);
-		} else 
-	#endif	
+		} else
+	#endif
 		{
 			OUTPUT(pos_mask, 0, out_color, z, vx_om);
 		}
@@ -229,10 +229,7 @@ void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
 }
 
 #ifdef SW_ENABLE
-void shader_function_sw_rast_cb(uint32_t pos_mask,
-							    graphics::vec3e_t bcoords[4],
-							    uint32_t pid,
-								void* /*cb_arg*/) {
+void shader_function_sw_rast_cb(uint32_t pos_mask, graphics::vec3e_t bcoords[4], uint32_t pid, void* /*cb_arg*/) {
 	FloatA z[4], r[4], g[4], b[4], a[4], u[4], v[4];
 	FloatA dx[4], dy[4];
 	cocogfx::ColorARGB tex_color[4], out_color[4];
@@ -253,14 +250,14 @@ void shader_function_sw_rast_cb(uint32_t pos_mask,
 		INTERPOLATE(g, attribs.g);
 		INTERPOLATE(b, attribs.b);
 		INTERPOLATE(a, attribs.a);
-	}			
+	}
 	if (arg->tex_enabled) {
 		INTERPOLATE(u, attribs.u);
 		INTERPOLATE(v, attribs.v);
 	}
 
 	if (arg->tex_enabled) {
-		if (arg->sw_tex) { 
+		if (arg->sw_tex) {
 			TEXTURING(tex_color, u, v, g_gpu_sw.tex);
 		} else {
 			TEXTURING(tex_color, u, v, vx_tex);
@@ -281,26 +278,22 @@ void shader_function_sw_rast_cb(uint32_t pos_mask,
 	}
 }
 
-void shader_function_sw(int task_id, kernel_arg_t* /*arg*/) {
-	g_gpu_sw.render(task_id);
+void shader_function_sw(kernel_arg_t* /*arg*/) {
+	g_gpu_sw.render(blockIdx.x);
 }
 #endif
 
-int main() {	
-	auto __UNIFORM__ arg = reinterpret_cast<kernel_arg_t*>(KERNEL_ARG_DEV_MEM_ADDR);
+int main() {
+	auto __UNIFORM__ arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
 
-	auto callback = (vx_spawn_tasks_cb)shader_function_hw;
-
+	auto callback = (vx_kernel_func_cb)shader_function_hw;
 #ifdef SW_ENABLE
 	g_gpu_sw.configure(arg);
 	if (arg->sw_rast) {
-		callback = (vx_spawn_tasks_cb)shader_function_sw;
+		callback = (vx_kernel_func_cb)shader_function_sw;
 	}
-#endif	
+#endif
 
 	uint32_t num_tasks = 1 << arg->log_num_tasks;
-	vx_spawn_tasks(num_tasks, callback, arg);
-	//callback(0, arg);
-
-	return 0;
+	return vx_spawn_threads(1, &num_tasks, nullptr, (vx_kernel_func_cb)callback, arg);
 }

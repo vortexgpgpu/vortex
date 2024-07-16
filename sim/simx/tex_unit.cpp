@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -48,15 +48,15 @@ public:
         if (tcache_rsp_port.empty())
             continue;
         auto& mem_rsp = tcache_rsp_port.front();
-        auto& entry = pending_reqs_.at(mem_rsp.tag);  
+        auto& entry = pending_reqs_.at(mem_rsp.tag);
         auto trace = entry.trace;
-        DT(3, simobject_->name() << "-tex-rsp: tag=" << mem_rsp.tag << ", tid=" << t << ", " << *trace);  
+        DT(3, simobject_->name() << "-tex-rsp: tag=" << mem_rsp.tag << ", tid=" << t << ", " << *trace);
         assert(entry.count);
-        --entry.count; // track remaining addresses 
+        --entry.count; // track remaining addresses
         if (0 == entry.count) {
-            simobject_->Output.send(trace, config_.sampler_latency);
+            simobject_->Output.push(trace, config_.sampler_latency);
             pending_reqs_.release(mem_rsp.tag);
-        }   
+        }
         tcache_rsp_port.pop();
     }
 
@@ -71,7 +71,7 @@ public:
 
     auto trace = simobject_->Input.front();
 
-    // check pending queue capacity    
+    // check pending queue capacity
     if (pending_reqs_.full()) {
         if (!trace->log_once(true)) {
             DT(3, "*** " << simobject_->name() << "-tex-queue-stall: " << *trace);
@@ -103,24 +103,21 @@ public:
               mem_req.tag   = tag;
               mem_req.cid   = trace->cid;
               mem_req.uuid  = trace->uuid;
-              tcache_req_port.send(mem_req, config_.address_latency);
-              DT(3, simobject_->name() << "-tex-req: addr=0x" << std::hex << mem_addr.addr << ", tag=" << tag 
+              tcache_req_port.push(mem_req, config_.address_latency);
+              DT(3, simobject_->name() << "-tex-req: addr=0x" << std::hex << mem_addr.addr << ", tag=" << tag
                   << ", tid=" << t << ", "<< trace);
               ++perf_stats_.reads;
           }
       }
     } else {
-      simobject_->Output.send(trace, 1);
+      simobject_->Output.push(trace, 1);
     }
 
     simobject_->Input.pop();
-  } 
+  }
 
-  uint32_t read(uint32_t cid, uint32_t wid, uint32_t tid,
-                uint32_t stage, int32_t u, int32_t v, uint32_t lod, 
-                const CSRs& csrs, TraceData::Ptr trace_data) {  
-    __unused (cid, wid, csrs);
-    mem_addrs_ = &trace_data->mem_addrs.at(tid);
+  uint32_t read(uint32_t stage, int32_t u, int32_t v, uint32_t lod, std::vector<mem_addr_size_t>& mem_addrs) {
+    mem_addrs_ = &mem_addrs;
     return sampler_.read(stage, u, v, lod);
   }
 
@@ -128,15 +125,15 @@ public:
     mem_ = mem;
   }
 
-  const PerfStats& perf_stats() const { 
-      return perf_stats_; 
+  const PerfStats& perf_stats() const {
+      return perf_stats_;
   }
 
 private:
 
   void texture_read(
     uint32_t* out,
-    const uint64_t* addr,    
+    const uint64_t* addr,
     uint32_t stride,
     uint32_t size) {
     for (uint32_t i = 0; i < size; ++i) {
@@ -145,9 +142,9 @@ private:
     }
   }
 
-  static void memoryCB(    
+  static void memoryCB(
     uint32_t* out,
-    const uint64_t* addr,    
+    const uint64_t* addr,
     uint32_t stride,
     uint32_t size,
     void* cb_arg) {
@@ -155,13 +152,13 @@ private:
   }
 
   struct pending_req_t {
-    pipeline_trace_t* trace;
+    instr_trace_t* trace;
     uint32_t count;
   };
 
   TexUnit* simobject_;
   Config config_;
-  const DCRS& dcrs_;    
+  const DCRS& dcrs_;
   graphics::TextureSampler sampler_;
   std::vector<mem_addr_size_t>* mem_addrs_;
   RAM* mem_;
@@ -172,17 +169,17 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-TexUnit::TexUnit(const SimContext& ctx, 
+TexUnit::TexUnit(const SimContext& ctx,
                  const char* name,
-                 const Arch &arch, 
-                 const DCRS& dcrs,   
+                 const Arch &arch,
+                 const DCRS& dcrs,
                  const Config& config)
   : SimObject<TexUnit>(ctx, name)
   , MemReqs(NUM_SFU_LANES, this)
   , MemRsps(NUM_SFU_LANES, this)
   , Input(this)
   , Output(this)
-  , impl_(new Impl(this, arch, dcrs, config)) 
+  , impl_(new Impl(this, arch, dcrs, config))
 {}
 
 TexUnit::~TexUnit() {
@@ -201,10 +198,9 @@ void TexUnit::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-uint32_t TexUnit::read(uint32_t cid, uint32_t wid, uint32_t tid,
-                       uint32_t stage, int32_t u, int32_t v, uint32_t lod, 
-                       const CSRs& csrs, TraceData::Ptr trace_data) {
-  return impl_->read(cid, wid, tid, stage, u, v, lod, csrs, trace_data);
+uint32_t TexUnit::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod,
+                       std::vector<mem_addr_size_t>& mem_addrs) {
+  return impl_->read(stage, u, v, lod, mem_addrs);
 }
 
 const TexUnit::PerfStats& TexUnit::perf_stats() const {

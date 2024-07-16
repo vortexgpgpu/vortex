@@ -1,12 +1,12 @@
 //!/bin/bash
 
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,7 +24,7 @@
 module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter INSTANCE_IDX  = 0,
-    parameter NUM_INSTANCES = 1, 
+    parameter NUM_INSTANCES = 1,
     parameter TILE_LOGSIZE  = 5,
     parameter QUEUE_SIZE    = 8
 ) (
@@ -46,7 +46,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     output wire [`VX_RASTER_PID_BITS-1:0] pid_out,
     output wire [`VX_RASTER_DIM_BITS-1:0] xloc_out,
     output wire [`VX_RASTER_DIM_BITS-1:0] yloc_out,
-    output wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_out,    
+    output wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_out,
     input wire                          ready_out
 );
     `UNUSED_VAR (dcrs)
@@ -62,13 +62,13 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     localparam STATE_IDLE       = 2'b00;
     localparam STATE_TILE       = 2'b01;
     localparam STATE_PRIM       = 2'b10;
-    
+
     localparam FETCH_FLAG_TILE  = 2'b00;
     localparam FETCH_FLAG_PID   = 2'b01;
     localparam FETCH_FLAG_PDATA = 2'b10;
 
     localparam TILE_HEADER_SIZEW = 8 / 4;
-    
+
     // A primitive data contains (xloc, yloc, pid, edges)
     localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS + `VX_RASTER_PID_BITS;
 
@@ -91,13 +91,13 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     reg [8:0][W_ADDR_BITS-1:0] mem_req_addr;
     reg [TAG_WIDTH-1:0] mem_req_tag;
     wire mem_req_ready;
-    
+
     // Memory response
     wire mem_rsp_valid;
-    wire [8:0][`RASTER_DATA_BITS-1:0] mem_rsp_data;    
+    wire [8:0][`RASTER_DATA_BITS-1:0] mem_rsp_data;
     wire [TAG_WIDTH-1:0] mem_rsp_tag;
     wire mem_rsp_ready;
-    
+
      // Primitive info
     wire [W_ADDR_BITS-1:0] pids_addr;
     wire prim_id_rsp_valid;
@@ -110,7 +110,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // Memory fetch FSM
 
     reg [FSM_BITS-1:0] state;
-    
+
     wire is_prim_id_req   = (mem_req_tag[FETCH_FLAG_BITS-1:0] == FETCH_FLAG_PID);
     wire is_prim_id_rsp   = (mem_rsp_tag[FETCH_FLAG_BITS-1:0] == FETCH_FLAG_PID);
 
@@ -135,16 +135,16 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
     // calculate address of primitive ids
     assign pids_addr = mem_req_addr[1] + W_ADDR_BITS'(th_pids_offset) + W_ADDR_BITS'(1);
-    
+
     // scheduler FSM
     always @(posedge clk) begin
         if (reset) begin
-            state <= STATE_IDLE; 
-            mem_req_valid <= 0;    
+            state <= STATE_IDLE;
+            mem_req_valid <= 0;
         end else begin
             // deassert memory request when fired
             if (mem_req_fire) begin
-                mem_req_valid <= 0; 
+                mem_req_valid <= 0;
             end
 
             case (state)
@@ -153,7 +153,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
                 if (start && (start_tile_count != 0)) begin
                     mem_req_valid <= 1;
                     state <= STATE_TILE;
-                end                
+                end
                 mem_req_addr[0] <= start_tbuf_addr;
                 mem_req_addr[1] <= start_tbuf_addr + W_ADDR_BITS'(1);
                 mem_req_mask    <= 9'b11;
@@ -167,11 +167,11 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
                     // handle tile header response
                     state           <= STATE_PRIM;
                     curr_xloc       <= `VX_RASTER_DIM_BITS'(th_tile_pos_x << TILE_LOGSIZE);
-                    curr_yloc       <= `VX_RASTER_DIM_BITS'(th_tile_pos_y << TILE_LOGSIZE);                    
+                    curr_yloc       <= `VX_RASTER_DIM_BITS'(th_tile_pos_y << TILE_LOGSIZE);
                     // fetch next primitive pid
-                    mem_req_valid   <= 1;   
+                    mem_req_valid   <= 1;
                     mem_req_addr[0] <= pids_addr;
-                    mem_req_mask    <= 9'b1;                    
+                    mem_req_mask    <= 9'b1;
                     mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_PID);
                     // set primitive counters
                     curr_pbuf_addr  <= pids_addr;
@@ -188,24 +188,24 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
                         curr_pid_reqs  <= curr_pid_reqs - `VX_RASTER_PID_BITS'(1);
                     end
 
-                    if ((curr_pid_reqs > 1) 
+                    if ((curr_pid_reqs > 1)
                      || (curr_pid_reqs == 1 && ~is_prim_id_req)) begin
                         // fetch next primitive pid
-                        mem_req_valid   <= 1;                        
+                        mem_req_valid   <= 1;
                         mem_req_mask    <= 9'b1;
                         mem_req_addr[0] <= curr_pbuf_addr + W_ADDR_BITS'(is_prim_id_req ? 1 : 0);
-                        mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_PID);                        
+                        mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_PID);
                     end
                 end
 
-                // handle primitive address response  
-                if (prim_addr_rsp_fire) begin                    
-                    mem_req_valid <= 1;                    
+                // handle primitive address response
+                if (prim_addr_rsp_fire) begin
+                    mem_req_valid <= 1;
                     mem_req_mask  <= 9'b111111111;
                     mem_req_addr  <= prim_mem_addr;
                     mem_req_tag   <= TAG_WIDTH'({primitive_id, FETCH_FLAG_PDATA});
-                end 
-                
+                end
+
                 // handle primitive data response
                 if (prim_data_rsp_fire) begin
                     if (curr_pid_rsps == 1) begin
@@ -238,7 +238,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
     // ensure that we have space in the output buffer to prevent memory deadlock
     wire pending_output_full;
-    VX_pending_size #( 
+    VX_pending_size #(
         .SIZE (QUEUE_SIZE-1)
     ) pending_reads (
         .clk   (clk),
@@ -248,7 +248,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .full  (pending_output_full),
         `UNUSED_PIN (size),
         `UNUSED_PIN (empty)
-    );    
+    );
     assign mem_req_valid_qual = mem_req_valid && (~is_prim_id_req || ~pending_output_full);
 
     // the memory response is for primitive id
@@ -265,7 +265,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     assign buf_in_valid = prim_data_rsp_valid;
 
     // stall the memory response
-    assign mem_rsp_ready = (~prim_id_rsp_valid || prim_addr_rsp_ready) 
+    assign mem_rsp_ready = (~prim_id_rsp_valid || prim_addr_rsp_ready)
                         && (~prim_data_rsp_valid || buf_in_ready);
 
     wire [8:0][RCACHE_ADDR_WIDTH-1:0] mem_req_addr_w;
@@ -277,83 +277,84 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
     // schedule memory request
 
-    wire [RCACHE_NUM_REQS-1:0]              cache_req_valid;
-    wire [RCACHE_NUM_REQS-1:0]              cache_req_rw;
-    wire [RCACHE_NUM_REQS-1:0][3:0]         cache_req_byteen;
-    wire [RCACHE_NUM_REQS-1:0][RCACHE_ADDR_WIDTH-1:0] cache_req_addr;
-    wire [RCACHE_NUM_REQS-1:0][31:0]        cache_req_data;
-    wire [RCACHE_NUM_REQS-1:0][RCACHE_TAG_WIDTH-1:0] cache_req_tag;
-    wire [RCACHE_NUM_REQS-1:0]              cache_req_ready;
-    wire [RCACHE_NUM_REQS-1:0]              cache_rsp_valid;
-    wire [RCACHE_NUM_REQS-1:0][31:0]        cache_rsp_data;
-    wire [RCACHE_NUM_REQS-1:0][RCACHE_TAG_WIDTH-1:0] cache_rsp_tag;
-    wire [RCACHE_NUM_REQS-1:0]              cache_rsp_ready;
+    VX_lsu_mem_if #(
+        .NUM_LANES (RCACHE_NUM_REQS),
+        .DATA_SIZE (`RASTER_DATA_BITS / 8),
+        .TAG_WIDTH (RCACHE_TAG_WIDTH)
+    ) mem_bus_if();
+
+    `RESET_RELAY (scheduler_reset, reset);
 
     VX_mem_scheduler #(
         .INSTANCE_ID  ($sformatf("%s-memsched", INSTANCE_ID)),
-        .NUM_REQS     (NUM_REQS), 
-        .NUM_BANKS    (RCACHE_NUM_REQS),
+        .CORE_REQS    (NUM_REQS),
+        .MEM_CHANNELS (RCACHE_NUM_REQS),
+        .WORD_SIZE    (`RASTER_DATA_BITS / 8),
         .ADDR_WIDTH   (RCACHE_ADDR_WIDTH),
-        .DATA_WIDTH   (`RASTER_DATA_BITS),
-        .QUEUE_SIZE   (`RASTER_MEM_QUEUE_SIZE),
+        .ATYPE_WIDTH  (`ADDR_TYPE_WIDTH),
         .TAG_WIDTH    (TAG_WIDTH),
-        .CORE_OUT_REG (2),
-        .MEM_OUT_REG  (2)
+        .CORE_QUEUE_SIZE(`RASTER_MEM_QUEUE_SIZE),
+        .RSP_PARTIAL  (0),
+        .MEM_OUT_BUF  (2),
+        .CORE_OUT_BUF (2)
     ) mem_scheduler (
         .clk            (clk),
-        .reset          (reset),
+        .reset          (scheduler_reset),
 
         // Input request
-        .req_valid      (mem_req_valid_qual),
-        .req_rw         (1'b0),
-        .req_mask       (mem_req_mask),
-        .req_byteen     (mem_req_byteen),
-        .req_addr       (mem_req_addr_w),
-        `UNUSED_PIN     (req_data),
-        .req_tag        (mem_req_tag),
-        `UNUSED_PIN     (req_empty),
-        .req_ready      (mem_req_ready),
-        `UNUSED_PIN     (write_notify),
-        
+        .core_req_valid (mem_req_valid_qual),
+        .core_req_rw    (1'b0),
+        .core_req_mask  (mem_req_mask),
+        .core_req_byteen(mem_req_byteen),
+        .core_req_addr  (mem_req_addr_w),
+        .core_req_atype (0),
+        `UNUSED_PIN (core_req_data),
+        .core_req_tag   (mem_req_tag),
+        .core_req_ready (mem_req_ready),
+        `UNUSED_PIN (core_req_empty),
+        `UNUSED_PIN (core_req_sent),
+
         // Output response
-        .rsp_valid      (mem_rsp_valid),
-        `UNUSED_PIN     (rsp_mask),
-        .rsp_data       (mem_rsp_data),
-        .rsp_tag        (mem_rsp_tag),
-        `UNUSED_PIN     (rsp_sop),
-        `UNUSED_PIN     (rsp_eop),        
-        .rsp_ready      (mem_rsp_ready),
+        .core_rsp_valid (mem_rsp_valid),
+        `UNUSED_PIN (core_rsp_mask),
+        .core_rsp_data  (mem_rsp_data),
+        .core_rsp_tag   (mem_rsp_tag),
+        `UNUSED_PIN (core_rsp_sop),
+        `UNUSED_PIN (core_rsp_eop),
+        .core_rsp_ready (mem_rsp_ready),
 
         // Memory request
-        .mem_req_valid  (cache_req_valid),
-        .mem_req_rw     (cache_req_rw),
-        .mem_req_byteen (cache_req_byteen),
-        .mem_req_addr   (cache_req_addr),
-        .mem_req_data   (cache_req_data),
-        .mem_req_tag    (cache_req_tag),
-        .mem_req_ready  (cache_req_ready),
+        .mem_req_valid  (mem_bus_if.req_valid),
+        .mem_req_rw     (mem_bus_if.req_data.rw),
+        .mem_req_mask   (mem_bus_if.req_data.mask),
+        .mem_req_byteen (mem_bus_if.req_data.byteen),
+        .mem_req_addr   (mem_bus_if.req_data.addr),
+        .mem_req_atype  (mem_bus_if.req_data.atype),
+        .mem_req_data   (mem_bus_if.req_data.data),
+        .mem_req_tag    (mem_bus_if.req_data.tag),
+        .mem_req_ready  (mem_bus_if.req_ready),
 
         // Memory response
-        .mem_rsp_valid  (cache_rsp_valid),
-        .mem_rsp_data   (cache_rsp_data),
-        .mem_rsp_tag    (cache_rsp_tag),
-        .mem_rsp_ready  (cache_rsp_ready)
+        .mem_rsp_valid  (mem_bus_if.rsp_valid),
+        .mem_rsp_mask   (mem_bus_if.rsp_data.mask),
+        .mem_rsp_data   (mem_bus_if.rsp_data.data),
+        .mem_rsp_tag    (mem_bus_if.rsp_data.tag),
+        .mem_rsp_ready  (mem_bus_if.rsp_ready)
     );
 
-    for (genvar i = 0; i < RCACHE_NUM_REQS; ++i) begin
-        assign cache_bus_if[i].req_valid = cache_req_valid[i];
-        assign cache_bus_if[i].req_data.rw = cache_req_rw[i];
-        assign cache_bus_if[i].req_data.byteen = cache_req_byteen[i];
-        assign cache_bus_if[i].req_data.addr = cache_req_addr[i];
-        assign cache_bus_if[i].req_data.data = cache_req_data[i]; 
-        assign cache_bus_if[i].req_data.tag = cache_req_tag[i];
-        assign cache_req_ready[i] = cache_bus_if[i].req_ready;
-
-        assign cache_rsp_valid[i] = cache_bus_if[i].rsp_valid;
-        assign cache_rsp_data[i] = cache_bus_if[i].rsp_data.data;
-        assign cache_rsp_tag[i] = cache_bus_if[i].rsp_data.tag;
-        assign cache_bus_if[i].rsp_ready = cache_rsp_ready[i]; 
-    end
+    VX_lsu_adapter #(
+        .NUM_LANES    (RCACHE_NUM_REQS),
+        .DATA_SIZE    (4),
+        .TAG_WIDTH    (RCACHE_TAG_WIDTH),
+        .TAG_SEL_BITS (RCACHE_TAG_WIDTH),
+        .REQ_OUT_BUF  (0),
+        .RSP_OUT_BUF  (0)
+    ) lsu_adapter (
+        .clk        (clk),
+        .reset      (reset),
+        .lsu_mem_if (mem_bus_if),
+        .mem_bus_if (cache_bus_if)
+    );
 
     wire [31:0] prim_mem_offset;
     `UNUSED_VAR (prim_mem_offset)
@@ -386,11 +387,11 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .enable   (prim_addr_rsp_ready),
         .data_in  ({prim_id_rsp_valid,   mem_rsp_data[0][`VX_RASTER_PID_BITS-1:0]}),
         .data_out ({prim_addr_rsp_valid, primitive_id})
-    );   
+    );
 
     // Output buffer
     VX_elastic_buffer #(
-        .DATAW   (PRIM_DATA_WIDTH), 
+        .DATAW   (PRIM_DATA_WIDTH),
         .SIZE    (QUEUE_SIZE),
         .OUT_REG (1)
     ) buf_out (
@@ -398,7 +399,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .reset      (reset),
         .valid_in   (buf_in_valid),
         .ready_in   (buf_in_ready),
-        .data_in    ({curr_xloc, curr_yloc, mem_rsp_data, mem_rsp_tag[FETCH_FLAG_BITS +: `VX_RASTER_PID_BITS]}),                
+        .data_in    ({curr_xloc, curr_yloc, mem_rsp_data, mem_rsp_tag[FETCH_FLAG_BITS +: `VX_RASTER_PID_BITS]}),
         .data_out   ({xloc_out,  yloc_out,  edges_out,    pid_out}),
         .valid_out  (valid_out),
         .ready_out  (ready_out)
@@ -415,7 +416,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
                 edges_out[0][0], edges_out[0][1], edges_out[0][2],
                 edges_out[1][0], edges_out[1][1], edges_out[1][2],
                 edges_out[2][0], edges_out[2][1], edges_out[2][2]));
-        end 
+        end
     end
 `endif
 

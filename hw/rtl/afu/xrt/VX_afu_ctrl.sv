@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -22,34 +22,34 @@ module VX_afu_ctrl #(
     input  wire                         clk,
     input  wire                         reset,
     input  wire                         clk_en,
-    
+
     input  wire                         s_axi_awvalid,
-    input  wire [AXI_ADDR_WIDTH-1:0]    s_axi_awaddr,    
+    input  wire [AXI_ADDR_WIDTH-1:0]    s_axi_awaddr,
     output wire                         s_axi_awready,
 
     input  wire                         s_axi_wvalid,
     input  wire [AXI_DATA_WIDTH-1:0]    s_axi_wdata,
-    input  wire [AXI_DATA_WIDTH/8-1:0]  s_axi_wstrb,    
+    input  wire [AXI_DATA_WIDTH/8-1:0]  s_axi_wstrb,
     output wire                         s_axi_wready,
 
     output wire                         s_axi_bvalid,
-    output wire [1:0]                   s_axi_bresp,    
+    output wire [1:0]                   s_axi_bresp,
     input  wire                         s_axi_bready,
 
     input  wire                         s_axi_arvalid,
-    input  wire [AXI_ADDR_WIDTH-1:0]    s_axi_araddr,    
+    input  wire [AXI_ADDR_WIDTH-1:0]    s_axi_araddr,
     output wire                         s_axi_arready,
 
     output wire                         s_axi_rvalid,
     output wire [AXI_DATA_WIDTH-1:0]    s_axi_rdata,
-    output wire [1:0]                   s_axi_rresp,    
-    input  wire                         s_axi_rready,    
-    
+    output wire [1:0]                   s_axi_rresp,
+    input  wire                         s_axi_rready,
+
     output wire                         ap_reset,
     output wire                         ap_start,
     input  wire                         ap_done,
     input  wire                         ap_ready,
-    input  wire                         ap_idle,  
+    input  wire                         ap_idle,
     output wire                         interrupt,
 
 `ifdef SCOPE
@@ -101,7 +101,7 @@ module VX_afu_ctrl #(
     // 0x48 : Control signal of MEM
     // (SC = Self Clear, COR = Clear on Read, TOW = Toggle on Write, COH = Clear on Handshake)
 
-    // Parameters    
+    // Parameters
     localparam
         ADDR_AP_CTRL    = 8'h00,
         ADDR_GIE        = 8'h04,
@@ -110,45 +110,47 @@ module VX_afu_ctrl #(
 
         ADDR_DEV_0      = 8'h10,
         ADDR_DEV_1      = 8'h14,
-        ADDR_DEV_CTRL   = 8'h18,
-        
+        //ADDR_DEV_CTRL   = 8'h18,
+
         ADDR_ISA_0      = 8'h1C,
         ADDR_ISA_1      = 8'h20,
-        ADDR_ISA_CTRL   = 8'h24,
-        
+        //ADDR_ISA_CTRL   = 8'h24,
+
         ADDR_DCR_0      = 8'h28,
         ADDR_DCR_1      = 8'h2C,
-        ADDR_DCR_CTRL   = 8'h30,
+        //ADDR_DCR_CTRL   = 8'h30,
 
+    `ifdef SCOPE
         ADDR_SCP_0      = 8'h34,
         ADDR_SCP_1      = 8'h38,
-        ADDR_SCP_CTRL   = 8'h3C,
+        //ADDR_SCP_CTRL   = 8'h3C,
+    `endif
 
         ADDR_MEM_0      = 8'h40,
         ADDR_MEM_1      = 8'h44,
-        ADDR_MEM_CTRL   = 8'h48,
-        
+        //ADDR_MEM_CTRL   = 8'h48,
+
         ADDR_BITS       = 8;
 
     localparam
         WSTATE_IDLE     = 2'd0,
         WSTATE_DATA     = 2'd1,
         WSTATE_RESP     = 2'd2;
-    
+
     localparam
         RSTATE_IDLE     = 2'd0,
         RSTATE_DATA     = 2'd1;
 
     // device caps
     wire [63:0] dev_caps = {16'b0,
-                            8'(`SM_ENABLED ? `SMEM_LOG_SIZE : 0),
-                            16'(`NUM_CORES * `NUM_CLUSTERS), 
-                            8'(`NUM_WARPS), 
-                            8'(`NUM_THREADS), 
+                            8'(`LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
+                            16'(`NUM_CORES * `NUM_CLUSTERS),
+                            8'(`NUM_WARPS),
+                            8'(`NUM_THREADS),
                             8'(`IMPLEMENTATION_ID)};
 
-    wire [63:0] isa_caps = {32'(`MISA_EXT), 
-                            2'(`CLOG2(`XLEN)-4), 
+    wire [63:0] isa_caps = {32'(`MISA_EXT),
+                            2'(`CLOG2(`XLEN)-4),
                             30'(`MISA_STD)};
 
     reg [1:0]   wstate;
@@ -156,7 +158,7 @@ module VX_afu_ctrl #(
     wire [31:0] wmask;
     wire        s_axi_aw_fire;
     wire        s_axi_w_fire;
-    
+
     reg [1:0]   rstate;
     reg [31:0]  rdata;
     wire [ADDR_BITS-1:0] raddr;
@@ -171,12 +173,12 @@ module VX_afu_ctrl #(
     reg [63:0]  mem_r [AXI_NUM_BANKS];
     reg [31:0]  dcra_r;
     reg [31:0]  dcrv_r;
-    reg         dcr_wr_valid_r;   
-      
+    reg         dcr_wr_valid_r;
+
 `ifdef SCOPE
 
     reg [63:0] scope_bus_wdata;
-    reg [63:0] scope_bus_rdata;    
+    reg [63:0] scope_bus_rdata;
     reg [5:0] scope_bus_ctr;
 
     reg cmd_scope_reading;
@@ -186,7 +188,7 @@ module VX_afu_ctrl #(
     always @(posedge clk) begin
         if (reset) begin
             cmd_scope_reading <= 0;
-            cmd_scope_writing <= 0;            
+            cmd_scope_writing <= 0;
             scope_bus_ctr <= '0;
             scope_bus_out_r <= 0;
         end else if (clk_en) begin
@@ -194,29 +196,29 @@ module VX_afu_ctrl #(
                 scope_bus_wdata[31:0] <= (s_axi_wdata & wmask) | (scope_bus_wdata[31:0] & ~wmask);
             end
             if (s_axi_w_fire && waddr == ADDR_SCP_1) begin
-                scope_bus_wdata[63:32] <= (s_axi_wdata & wmask) | (scope_bus_wdata[63:32] & ~wmask);           
+                scope_bus_wdata[63:32] <= (s_axi_wdata & wmask) | (scope_bus_wdata[63:32] & ~wmask);
                 cmd_scope_writing <= 1;
-                scope_bus_out_r   <= 1;    
+                scope_bus_out_r   <= 1;
                 scope_bus_ctr     <= 63;
-            end             
+            end
             if (scope_bus_in) begin
                 cmd_scope_reading <= 1;
                 scope_bus_ctr     <= 63;
-            end     
+            end
             if (cmd_scope_reading) begin
                 scope_bus_rdata <= {scope_bus_rdata[62:0], scope_bus_in};
                 scope_bus_ctr   <= scope_bus_ctr - 1;
                 if (scope_bus_ctr == 0) begin
                     cmd_scope_reading <= 0;
                 end
-            end            
+            end
             if (cmd_scope_writing) begin
                 scope_bus_out_r <= 1'(scope_bus_wdata >> scope_bus_ctr);
                 scope_bus_ctr <= scope_bus_ctr - 1;
                 if (scope_bus_ctr == 0) begin
                     cmd_scope_writing <= 0;
                 end
-            end          
+            end
         end
     end
 
@@ -224,7 +226,7 @@ module VX_afu_ctrl #(
 
 `endif
 
-    // AXI Write       
+    // AXI Write
 
     assign s_axi_awready = (wstate == WSTATE_IDLE);
     assign s_axi_wready  = (wstate == WSTATE_DATA);
@@ -259,14 +261,14 @@ module VX_afu_ctrl #(
                 waddr <= s_axi_awaddr[ADDR_BITS-1:0];
         end
     end
-    
+
     // wdata
     always @(posedge clk) begin
         if (reset) begin
             ap_start_r <= 0;
             ap_reset_r <= 0;
             auto_restart_r <= 0;
-            
+
             gie_r <= 0;
             ier_r <= '0;
             isr_r <= '0;
@@ -287,7 +289,7 @@ module VX_afu_ctrl #(
             if (s_axi_w_fire) begin
                 case (waddr)
                 ADDR_AP_CTRL: begin
-                    if (s_axi_wstrb[0]) begin 
+                    if (s_axi_wstrb[0]) begin
                         if (s_axi_wdata[0])
                             ap_start_r <= 1;
                         if (s_axi_wdata[4])
@@ -317,16 +319,16 @@ module VX_afu_ctrl #(
                 end
                 default: begin
                     for (integer i = 0; i < AXI_NUM_BANKS; ++i) begin
-                        if (waddr == (ADDR_MEM_0 + i * 12)) begin
+                        if (waddr == (ADDR_MEM_0 + 8'(i) * 8'd12)) begin
                             mem_r[i][31:0] <= (s_axi_wdata & wmask) | (mem_r[i][31:0] & ~wmask);
                         end
-                        if (waddr == (ADDR_MEM_1 + i * 12)) begin
+                        if (waddr == (ADDR_MEM_1 + 8'(i) * 8'd12)) begin
                             mem_r[i][63:32] <= (s_axi_wdata & wmask) | (mem_r[i][63:32] & ~wmask);
                         end
                     end
                 end
                 endcase
-                
+
                 if (ier_r[0] & ap_done)
                     isr_r[0] <= 1'b1;
                 if (ier_r[1] & ap_ready)
@@ -341,10 +343,10 @@ module VX_afu_ctrl #(
     assign s_axi_rvalid  = (rstate == RSTATE_DATA);
     assign s_axi_rdata   = rdata;
     assign s_axi_rresp   = 2'b00;  // OKAY
-    
+
     assign s_axi_ar_fire = s_axi_arvalid && s_axi_arready;
     assign raddr = s_axi_araddr[ADDR_BITS-1:0];
-    
+
     // rstate
     always @(posedge clk) begin
         if (reset) begin
@@ -414,6 +416,6 @@ module VX_afu_ctrl #(
 
     assign dcr_wr_valid = dcr_wr_valid_r;
     assign dcr_wr_addr  = `VX_DCR_ADDR_WIDTH'(dcra_r);
-    assign dcr_wr_data  = `VX_DCR_DATA_WIDTH'(dcrv_r);    
+    assign dcr_wr_data  = `VX_DCR_DATA_WIDTH'(dcrv_r);
 
 endmodule

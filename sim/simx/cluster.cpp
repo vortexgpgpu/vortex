@@ -115,17 +115,17 @@ Cluster::Cluster(const SimContext& ctx,
   snprintf(sname, 100, "cluster%d-l2cache", cluster_id);
   l2cache_ = CacheSim::Create(sname, CacheSim::Config{
     !L2_ENABLED,
-    log2ceil(L2_CACHE_SIZE), // C
-    log2ceil(MEM_BLOCK_SIZE), // L
-    log2ceil(L2_NUM_WAYS),  // W
-    0,                      // A
+    log2ceil(L2_CACHE_SIZE),// C
+    log2ceil(MEM_BLOCK_SIZE),// L
+    log2ceil(L1_LINE_SIZE), // W
+    log2ceil(L2_NUM_WAYS),  // A
     log2ceil(L2_NUM_BANKS), // B
     XLEN,                   // address bits  
     1,                      // number of ports
     5,                      // request size 
     true,                   // write-through
     false,                  // write response
-    L2_MSHR_SIZE,           // mshr
+    L2_MSHR_SIZE,           // mshr size
     2,                      // pipeline latency
   });
 
@@ -261,19 +261,12 @@ bool Cluster::running() const {
   return false;
 }
 
-bool Cluster::check_exit(Word* exitcode, bool riscv_test) const {
-  bool done = true;
-  Word exitcode_ = 0;
+int Cluster::get_exitcode() const {
+  int exitcode = 0;
   for (auto& socket : sockets_) {
-    Word ec;
-    if (socket->check_exit(&ec, riscv_test)) {
-      exitcode_ |= ec;
-    } else {
-      done = false;
-    }
+    exitcode |= socket->get_exitcode();
   }
-  *exitcode = exitcode_;
-  return done;
+  return exitcode;
 }
 
 void Cluster::barrier(uint32_t bar_id, uint32_t count, uint32_t core_id) {

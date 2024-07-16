@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -26,19 +26,15 @@
 using namespace vortex;
 
 static void show_usage() {
-   std::cout << "Usage: [-r: riscv-test] [-h: help] <program>" << std::endl;
+   std::cout << "Usage: [-h: help] <program>" << std::endl;
 }
 
-bool riscv_test = false;
 const char* program = nullptr;
 
 static void parse_args(int argc, char **argv) {
   	int c;
   	while ((c = getopt(argc, argv, "rh?")) != -1) {
     	switch (c) {
-		case 'r':
-			riscv_test = true;
-			break;
     	case 'h':
     	case '?':
       		show_usage();
@@ -61,11 +57,11 @@ static void parse_args(int argc, char **argv) {
 
 int main(int argc, char **argv) {
 	int exitcode = 0;
-	
-	parse_args(argc, argv);	
+
+	parse_args(argc, argv);
 
 	// create memory module
-	vortex::RAM ram(RAM_PAGE_SIZE);
+	vortex::RAM ram(0, RAM_PAGE_SIZE);
 
 	// create processor
 	vortex::Processor processor;
@@ -75,14 +71,14 @@ int main(int argc, char **argv) {
 
 	// setup base DCRs
 	const uint64_t startup_addr(STARTUP_ADDR);
-	processor.write_dcr(VX_DCR_BASE_STARTUP_ADDR0, startup_addr & 0xffffffff);
+	processor.dcr_write(VX_DCR_BASE_STARTUP_ADDR0, startup_addr & 0xffffffff);
 #if (XLEN == 64)
-    processor.write_dcr(VX_DCR_BASE_STARTUP_ADDR1, startup_addr >> 32);
+    processor.dcr_write(VX_DCR_BASE_STARTUP_ADDR1, startup_addr >> 32);
 #endif
-	processor.write_dcr(VX_DCR_BASE_MPM_CLASS, 0);	
+	processor.dcr_write(VX_DCR_BASE_MPM_CLASS, 0);
 
 	// load program
-	{		
+	{
 		std::string program_ext(fileExtension(program));
 		if (program_ext == "bin") {
 			ram.loadBinImage(program, startup_addr);
@@ -95,21 +91,10 @@ int main(int argc, char **argv) {
 	}
 
 	// run simulation
-	exitcode = processor.run();
-	
-	if (riscv_test) {
-		if (1 == exitcode) {
-			std::cout << "Passed" << std::endl;
-			exitcode = 0;
-		} else {
-			std::cout << "Failed" << std::endl;
-			exitcode = 1;
-		}
-	} else {
-		if (exitcode != 0) {
-			std::cout << "*** error: exitcode=" << exitcode << std::endl;
-		}
-	}
+	processor.run();
+
+	// read exitcode from @MPM.1
+  ram.read(&exitcode, (IO_MPM_ADDR + 8), 4);
 
 	return exitcode;
 }

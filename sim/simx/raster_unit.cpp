@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -50,15 +50,15 @@ public:
     uint32_t pos_mask;
     std::array<graphics::vec3e_t, 4> bcoords;
     uint32_t pid;
-    Stamp* next_;    
+    Stamp* next_;
     Stamp* prev_;
 
-    Stamp(uint32_t pos_mask, graphics::vec3e_t bcoords[4], uint32_t  pid) 
+    Stamp(uint32_t pos_mask, graphics::vec3e_t bcoords[4], uint32_t  pid)
       : pos_mask(pos_mask)
       , bcoords({bcoords[0], bcoords[1], bcoords[2], bcoords[3]})
       , pid(pid)
       , next_(nullptr)
-      , prev_(nullptr) 
+      , prev_(nullptr)
     {}
 
     void* operator new(size_t /*size*/) {
@@ -77,10 +77,10 @@ public:
     }
   };
 
-  Rasterizer(uint32_t raster_index,              
+  Rasterizer(uint32_t raster_index,
              uint32_t raster_count,
-             uint32_t tile_logsize, 
-             uint32_t block_logsize) 
+             uint32_t tile_logsize,
+             uint32_t block_logsize)
     : graphics::Rasterizer(shaderFunctionCB, this, tile_logsize, block_logsize)
     , raster_index_(raster_index)
     , raster_count_(raster_count)
@@ -92,14 +92,14 @@ public:
     assert(tile_logsize >= block_logsize);
   }
 
-  ~Rasterizer() {} 
-  
+  ~Rasterizer() {}
+
   uint32_t id() const {
     return raster_index_;
   }
 
   void configure(const graphics::RasterDCRS& dcrs) {
-    // get device configuration    
+    // get device configuration
     graphics::Rasterizer::configure(dcrs);
     num_tiles_     = dcrs.read(VX_DCR_RASTER_TILE_COUNT);
     tbuf_baseaddr_ = uint64_t(dcrs.read(VX_DCR_RASTER_TBUF_ADDR)) << 6;
@@ -123,26 +123,26 @@ public:
     }
     return this->dequeue_stamp();
   }
-  
+
   bool done() const {
     return done_ && (stamps_head_ == nullptr);
   }
 
-  auto& mem_traces() {
+  std::list<tile_mem_trace_t>& mem_traces() {
     return mem_traces_;
   }
 
-  auto& mem_traces() const {
+  const std::list<tile_mem_trace_t>& mem_traces() const {
     return mem_traces_;
   }
 
 private:
 
-  void renderNextPrimitive() {  
+  void renderNextPrimitive() {
     if (done_)
-      return;  
+      return;
     if (0 == pids_count_) {
-      mem_traces_.push_back({});      
+      mem_traces_.push_back({});
       auto& mem_trace = mem_traces_.back();
       mem_trace.end_of_tile = false;
 
@@ -156,7 +156,7 @@ private:
       tile_y_ = (tile_xy >> 16) << tile_logsize_;
       //printf("*** raster%d-mem: add=%d, tile_x=%d, tile_y=%d\n", raster_index_, tbuf_addr_, tile_x_, tile_y_);
       tbuf_addr_ += 4;
-      
+
       mem_->read(&prim_header, tbuf_addr_, 4);
       mem_trace.header_addrs.push_back(tbuf_addr_);
       pids_offset_ = (prim_header & 0xffff);
@@ -164,7 +164,7 @@ private:
       //printf("*** raster%d-mem: add=%d, prim_off=%d, prim_cnt=%d\n", raster_index_, tbuf_addr_, pids_offset_, pids_count_);
       tbuf_addr_ += 4;
 
-      assert(pids_count_ > 0);      
+      assert(pids_count_ > 0);
       cur_prim_ = 0;
     }
 
@@ -174,7 +174,7 @@ private:
 
     // read next primitive index from tile buffer
     prim_trace.prim_addr = tbuf_addr_ + (pids_offset_ << 2);
-    mem_->read(&pid_, prim_trace.prim_addr, 4);    
+    mem_->read(&pid_, prim_trace.prim_addr, 4);
     //printf("*** raster%d-mem: add=%d, pid=%d\n", raster_index_, prim_trace.prim_addr, pid_);
     ++pids_offset_;
 
@@ -189,22 +189,22 @@ private:
     for (int i = 0; i < 3; ++i) {
       mem_->read(&edges[i].x, pbuf_addr, 4);
       prim_trace.edge_addrs.push_back(pbuf_addr);
-      // printf("*** raster%d-mem: add=%d, edge.x=%d\n", raster_index_, pbuf_addr, edges[i].x.data());      
+      // printf("*** raster%d-mem: add=%d, edge.x=%d\n", raster_index_, pbuf_addr, edges[i].x.data());
       pbuf_addr += 4;
-      
+
       mem_->read(&edges[i].y, pbuf_addr, 4);
       prim_trace.edge_addrs.push_back(pbuf_addr);
       // printf("*** raster%d-mem: add=%d, edge.y=%d\n", raster_index_, pbuf_addr, edges[i].y.data());
       pbuf_addr += 4;
-      
+
       mem_->read(&edges[i].z, pbuf_addr, 4);
       prim_trace.edge_addrs.push_back(pbuf_addr);
       // printf("*** raster%d-mem: add=%d, edge.z=%d\n", raster_index_, pbuf_addr, edges[i].z.data());
-      pbuf_addr += 4;      
+      pbuf_addr += 4;
     }
 
-    /*printf("*** raster%d-edges={{0x%x, 0x%x, 0x%x}, {0x%x, 0x%x, 0x%x}, {0x%x, 0x%x, 0x%x}}\n", 
-      raster_index_, 
+    /*printf("*** raster%d-edges={{0x%x, 0x%x, 0x%x}, {0x%x, 0x%x, 0x%x}, {0x%x, 0x%x, 0x%x}}\n",
+      raster_index_,
       edges[0].x.data(), edges[0].y.data(), edges[0].z.data(),
       edges[1].x.data(), edges[1].y.data(), edges[1].z.data(),
       edges[2].x.data(), edges[2].y.data(), edges[2].z.data());*/
@@ -220,8 +220,8 @@ private:
     ++cur_prim_;
     if (cur_prim_ == pids_count_) {
       mem_trace.end_of_tile = true;
-      // Move to next tile      
-      cur_tile_  += raster_count_;      
+      // Move to next tile
+      cur_tile_  += raster_count_;
       tbuf_addr_ += (raster_count_-1) * sizeof(graphics::rast_tile_header_t);
       pids_count_ = 0;
       done_       = (cur_tile_ >= num_tiles_);
@@ -242,7 +242,7 @@ private:
 
   Stamp* dequeue_stamp() {
     auto stamp = stamps_head_;
-    if (stamp != nullptr) {    
+    if (stamp != nullptr) {
       stamps_head_ = stamp->prev_;
       if (stamps_head_)
         stamps_head_->next_ = nullptr;
@@ -253,26 +253,26 @@ private:
     return stamp;
   }
 
-  static void shaderFunctionCB(    
+  static void shaderFunctionCB(
     uint32_t  pos_mask,
     graphics::vec3e_t bcoords[4],
     uint32_t  pid,
     void*     cb_arg) {
     reinterpret_cast<Rasterizer*>(cb_arg)->enqueue_stamp(pos_mask, bcoords, pid);
   }
-      
+
   uint32_t raster_index_;
   uint32_t raster_count_;
-  RAM*     mem_;  
+  RAM*     mem_;
   uint32_t num_tiles_;
-  uint64_t tbuf_baseaddr_;    
+  uint64_t tbuf_baseaddr_;
   uint64_t pbuf_baseaddr_;
   uint32_t pbuf_stride_;
   uint64_t tbuf_addr_;
   uint32_t tile_x_;
   uint32_t tile_y_;
   uint32_t pids_offset_;
-  uint32_t pids_count_;    
+  uint32_t pids_count_;
   uint32_t cur_tile_;
   uint32_t cur_prim_;
   uint32_t pid_;
@@ -288,17 +288,17 @@ private:
 class RasterUnit::Impl {
 public:
 
-  Impl(RasterUnit* simobject,     
+  Impl(RasterUnit* simobject,
        uint32_t raster_index,
        uint32_t raster_count,
        const Arch &arch,
-       const DCRS& dcrs,       
-       const Config& config) 
-    : simobject_(simobject)  
+       const DCRS& dcrs,
+       const Config& config)
+    : simobject_(simobject)
     , arch_(arch)
     , dcrs_(dcrs)
     , rasterizer_(raster_index, raster_count, config.tile_logsize, config.block_logsize)
-    , pending_reqs_(RASTER_MEM_QUEUE_SIZE)    
+    , pending_reqs_(RASTER_MEM_QUEUE_SIZE)
     , mem_trace_state_(e_mem_trace_state::header)
   {}
 
@@ -320,16 +320,16 @@ public:
     // check input queue
     if (!simobject_->Input.empty()) {
       auto trace = simobject_->Input.front();
-      auto raster_done = rasterizer_.done() 
-                      && rasterizer_.mem_traces().empty() 
+      auto raster_done = rasterizer_.done()
+                      && rasterizer_.mem_traces().empty()
                       && stamps_.empty();
 
       if (raster_done) {
         // no more stamps
-        simobject_->Output.send(trace, 1);
+        simobject_->Output.push(trace, 1);
         simobject_->Input.pop();
       } else {
-        // fetch stamps to service each request 
+        // fetch stamps to service each request
         // the request size is the current number of active threads
         auto num_threads = trace->tmask.count();
         uint32_t fetched_stamps = fetched_stamps_;
@@ -342,11 +342,11 @@ public:
         }
         if (fetched_stamps >= num_threads) {
           fetched_stamps -= num_threads;
-          simobject_->Output.send(trace, 1);
+          simobject_->Output.push(trace, 1);
           simobject_->Input.pop();
         }
         fetched_stamps_ = fetched_stamps;
-      }                  
+      }
     }
 
     // process memory traces
@@ -356,7 +356,7 @@ public:
       auto& mem_rsp = simobject_->MemRsps.front();
       auto& entry = pending_reqs_.at(mem_rsp.tag);
       assert(entry.count);
-      --entry.count; // track remaining addresses 
+      --entry.count; // track remaining addresses
       if (0 == entry.count) {
         switch (mem_trace_state_) {
         case e_mem_trace_state::header: {
@@ -365,22 +365,22 @@ public:
         case e_mem_trace_state::primitive: {
           mem_trace_state_ = e_mem_trace_state::edges;
         } break;
-        case e_mem_trace_state::edges: {          
+        case e_mem_trace_state::edges: {
           auto& mem_trace = mem_traces.front();
           auto& primitive = mem_trace.primitives.front();
 
           stamps_.push(primitive.stamps);
-          
+
           mem_trace.primitives.pop_front();
           if (mem_trace.primitives.empty() && mem_trace.end_of_tile) {
             mem_trace_state_ = e_mem_trace_state::header;
             mem_traces.pop_front();
           } else {
             mem_trace_state_ = e_mem_trace_state::primitive;
-          }          
-        } break; 
+          }
+        } break;
         default:
-          break; 
+          break;
         }
         pending_reqs_.release(mem_rsp.tag);
       }
@@ -395,8 +395,8 @@ public:
     if (mem_traces.empty())
       return;
 
-    // check pending queue is empty    
-    if (!pending_reqs_.empty())          
+    // check pending queue is empty
+    if (!pending_reqs_.empty())
       return;
 
     auto& mem_trace = mem_traces.front();
@@ -414,19 +414,19 @@ public:
       }
     } break;
     case e_mem_trace_state::edges: {
-      if (!mem_trace.primitives.empty()) {    
+      if (!mem_trace.primitives.empty()) {
         auto& primitive = mem_trace.primitives.front();
         addresses = primitive.edge_addrs;
       }
-    } break; 
+    } break;
     default:
-      break; 
+      break;
     }
 
     if (addresses.empty())
       return;
 
-    // check pending queue capacity    
+    // check pending queue capacity
     if (pending_reqs_.full()) {
         ++perf_stats_.stalls;
         return;
@@ -440,17 +440,16 @@ public:
       mem_req.tag   = tag;
       mem_req.cid   = 0;
       mem_req.uuid  = 0;
-      simobject_->MemReqs.send(mem_req, 2);
+      simobject_->MemReqs.push(mem_req, 2);
       ++perf_stats_.reads;
     }
   }
 
   void attach_ram(RAM* mem) {
     rasterizer_.attach_ram(mem);
-  } 
+  }
 
-  uint32_t fetch(uint32_t cid, uint32_t wid, uint32_t tid, CSRs& csrs) {
-    __unused (cid, wid, tid);
+  uint32_t fetch(CSRs& csrs) {
     auto stamp = rasterizer_.fetch();
     if (nullptr == stamp)
       return 0;
@@ -464,7 +463,7 @@ public:
     csrs[VX_CSR_RASTER_BCOORD_Y1] = *(uint32_t*)&stamp->bcoords[1].y;
     csrs[VX_CSR_RASTER_BCOORD_Z1] = *(uint32_t*)&stamp->bcoords[1].z;
     csrs[VX_CSR_RASTER_BCOORD_X2] = *(uint32_t*)&stamp->bcoords[2].x;
-    csrs[VX_CSR_RASTER_BCOORD_Y2] = *(uint32_t*)&stamp->bcoords[2].y;    
+    csrs[VX_CSR_RASTER_BCOORD_Y2] = *(uint32_t*)&stamp->bcoords[2].y;
     csrs[VX_CSR_RASTER_BCOORD_Z2] = *(uint32_t*)&stamp->bcoords[2].z;
     csrs[VX_CSR_RASTER_BCOORD_X3] = *(uint32_t*)&stamp->bcoords[3].x;
     csrs[VX_CSR_RASTER_BCOORD_Y3] = *(uint32_t*)&stamp->bcoords[3].y;
@@ -473,11 +472,11 @@ public:
     return (stamp->pid << 1) | 1;
   }
 
-  const PerfStats& perf_stats() const { 
-    return perf_stats_; 
+  const PerfStats& perf_stats() const {
+    return perf_stats_;
   }
 
-private: 
+private:
 
   enum class e_mem_trace_state {
     header,
@@ -489,12 +488,13 @@ private:
     uint32_t count;
   };
 
-  RasterUnit* simobject_;        
+  RasterUnit* simobject_;
   const Arch& arch_;
   const DCRS& dcrs_;
-  Rasterizer rasterizer_;  
-  std::unordered_map<uint32_t, Rasterizer::Stamp*> csrs_;
-  std::queue<uint32_t> stamps_;  
+  std::unordered_map<uint32_t, uint32_t> csrs_;
+
+  Rasterizer rasterizer_;
+  std::queue<uint32_t> stamps_;
   uint32_t fetched_stamps_;
   HashTable<pending_req_t> pending_reqs_;
   e_mem_trace_state mem_trace_state_;
@@ -503,19 +503,19 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-RasterUnit::RasterUnit(const SimContext& ctx, 
-                       const char* name,     
-                       uint32_t index,                   
+RasterUnit::RasterUnit(const SimContext& ctx,
+                       const char* name,
+                       uint32_t index,
                        uint32_t cores_per_unit,
-                       const Arch &arch, 
+                       const Arch &arch,
                        const DCRS& dcrs,
-                       const Config& config) 
+                       const Config& config)
   : SimObject<RasterUnit>(ctx, name)
   , MemReqs(this)
   , MemRsps(this)
   , Input(this)
   , Output(this)
-  , impl_(new Impl(this, index, cores_per_unit, arch, dcrs, config)) 
+  , impl_(new Impl(this, index, cores_per_unit, arch, dcrs, config))
 {}
 
 RasterUnit::~RasterUnit() {
@@ -538,8 +538,8 @@ void RasterUnit::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-uint32_t RasterUnit::fetch(uint32_t cid, uint32_t wid, uint32_t tid, CSRs& csrs) {
-  return impl_->fetch(cid, wid, tid, csrs);
+uint32_t RasterUnit::fetch(CSRs& csrs) {
+  return impl_->fetch(csrs);
 }
 
 const RasterUnit::PerfStats& RasterUnit::perf_stats() const {

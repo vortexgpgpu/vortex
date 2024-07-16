@@ -1,12 +1,12 @@
 //!/bin/bash
 
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,13 +15,13 @@
 
 `include "VX_tex_define.vh"
 
-module VX_tex_unit import VX_gpu_pkg::*; import VX_tex_pkg::*; #(  
+module VX_tex_unit import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = 1,
     parameter TAG_WIDTH = 1
 ) (
     input wire  clk,
-    input wire  reset, 
+    input wire  reset,
 
     // PERF
 `ifdef PERF_ENABLE
@@ -35,12 +35,12 @@ module VX_tex_unit import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     VX_tex_bus_if.slave     tex_bus_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    
-    localparam BLEND_FRAC_W = (2 * NUM_LANES * `TEX_BLEND_FRAC);  
+
+    localparam BLEND_FRAC_W = (2 * NUM_LANES * `TEX_BLEND_FRAC);
     localparam W_ADDR_BITS = `TEX_ADDR_BITS + 6;
 
     // DCRs
-    
+
     tex_dcrs_t tex_dcrs;
 
     VX_tex_dcr #(
@@ -54,18 +54,18 @@ module VX_tex_unit import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .tex_dcrs   (tex_dcrs)
     );
 
-    // Texture stage select 
+    // Texture stage select
 
     wire                                        req_valid;
-    wire [NUM_LANES-1:0]                        req_mask;          
-    wire [`TEX_FILTER_BITS-1:0]                 req_filter;    
-    wire [`TEX_FORMAT_BITS-1:0]                 req_format;    
+    wire [NUM_LANES-1:0]                        req_mask;
+    wire [`TEX_FILTER_BITS-1:0]                 req_filter;
+    wire [`TEX_FORMAT_BITS-1:0]                 req_format;
     wire [1:0][`TEX_WRAP_BITS-1:0]              req_wraps;
     wire [1:0][`VX_TEX_LOD_BITS-1:0]            req_logdims;
     wire [`TEX_ADDR_BITS-1:0]                   req_baseaddr;
     wire [1:0][NUM_LANES-1:0][31:0]             req_coords;
     wire [NUM_LANES-1:0][`VX_TEX_LOD_BITS-1:0]  req_miplevel, sel_miplevel;
-    wire [NUM_LANES-1:0][`TEX_MIPOFF_BITS-1:0]  req_mipoff, sel_mipoff;    
+    wire [NUM_LANES-1:0][`TEX_MIPOFF_BITS-1:0]  req_mipoff, sel_mipoff;
     wire [TAG_WIDTH-1:0]                        req_tag;
     wire                                        req_ready;
 
@@ -101,7 +101,7 @@ module VX_tex_unit import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     wire mem_req_ready;
 
     `RESET_RELAY (addr_reset, reset);
-                
+
     VX_tex_addr #(
         .INSTANCE_ID (INSTANCE_ID),
         .REQ_INFOW   (TAG_WIDTH + `TEX_FORMAT_BITS),
@@ -117,7 +117,7 @@ module VX_tex_unit import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .req_format (req_format),
         .req_filter (req_filter),
         .req_wraps  (req_wraps),
-        .req_baseaddr(req_baseaddr), 
+        .req_baseaddr(req_baseaddr),
         .req_miplevel(req_miplevel),
         .req_mipoff (req_mipoff),
         .req_logdims(req_logdims),
@@ -125,9 +125,9 @@ module VX_tex_unit import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .req_ready  (req_ready),
 
         // outputs
-        .rsp_valid  (mem_req_valid), 
+        .rsp_valid  (mem_req_valid),
         .rsp_mask   (mem_req_mask),
-        .rsp_filter (mem_req_filter), 
+        .rsp_filter (mem_req_filter),
         .rsp_lgstride(mem_req_lgstride),
         .rsp_baseaddr(mem_req_baseaddr),
         .rsp_addr   (mem_req_addr),
@@ -136,14 +136,14 @@ module VX_tex_unit import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .rsp_ready  (mem_req_ready)
     );
 
-    // retrieve texel values from memory  
+    // retrieve texel values from memory
 
     wire mem_rsp_valid;
     wire [NUM_LANES-1:0][3:0][31:0] mem_rsp_data;
     wire [(TAG_WIDTH + `TEX_FORMAT_BITS + BLEND_FRAC_W)-1:0] mem_rsp_info;
-    wire mem_rsp_ready;      
+    wire mem_rsp_ready;
 
-    `RESET_RELAY (mem_reset, reset);  
+    `RESET_RELAY (mem_reset, reset);
 
     VX_tex_mem #(
         .INSTANCE_ID (INSTANCE_ID),
@@ -159,9 +159,9 @@ module VX_tex_unit import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         // inputs
         .req_valid (mem_req_valid),
         .req_mask  (mem_req_mask),
-        .req_filter(mem_req_filter), 
+        .req_filter(mem_req_filter),
         .req_lgstride(mem_req_lgstride),
-        .req_baseaddr(mem_req_baseaddr), 
+        .req_baseaddr(mem_req_baseaddr),
         .req_addr  (mem_req_addr),
         .req_info  ({mem_req_info, mem_req_blends}),
         .req_ready (mem_req_ready),
@@ -192,7 +192,7 @@ module VX_tex_unit import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
 
         // inputs
         .req_valid  (mem_rsp_valid),
-        .req_data   (mem_rsp_data), 
+        .req_data   (mem_rsp_data),
         .req_blends (mem_rsp_info[0 +: BLEND_FRAC_W]),
         .req_format (mem_rsp_info[BLEND_FRAC_W +: `TEX_FORMAT_BITS]),
         .req_info   (mem_rsp_info[(BLEND_FRAC_W + `TEX_FORMAT_BITS) +: TAG_WIDTH]),
@@ -236,7 +236,7 @@ module VX_tex_unit import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     `POP_COUNT(perf_mem_req_per_cycle, perf_mem_req_fire);
     `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_fire);
 
-    reg [`PERF_CTR_BITS-1:0] perf_pending_reads;   
+    reg [`PERF_CTR_BITS-1:0] perf_pending_reads;
     assign perf_pending_reads_cycle = perf_mem_req_per_cycle - perf_mem_rsp_per_cycle;
 
     always @(posedge clk) begin
@@ -260,7 +260,7 @@ module VX_tex_unit import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
             perf_stall_cycles <= '0;
         end else begin
             perf_mem_reads    <= perf_mem_reads + `PERF_CTR_BITS'(perf_mem_req_per_cycle);
-            perf_mem_latency  <= perf_mem_latency + `PERF_CTR_BITS'(perf_pending_reads);            
+            perf_mem_latency  <= perf_mem_latency + `PERF_CTR_BITS'(perf_pending_reads);
             perf_stall_cycles <= perf_stall_cycles + `PERF_CTR_BITS'(perf_stall_cycle);
         end
     end
@@ -268,21 +268,21 @@ module VX_tex_unit import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     assign perf_tex_if.mem_reads    = perf_mem_reads;
     assign perf_tex_if.mem_latency  = perf_mem_latency;
     assign perf_tex_if.stall_cycles = perf_stall_cycles;
-`endif  
+`endif
 
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin
         if (tex_bus_if.req_valid && tex_bus_if.req_ready) begin
-            `TRACE(1, ("%d: %s-req: valid=%b, stage=%0d, lod=0x%0h, u=", 
+            `TRACE(1, ("%d: %s-req: valid=%b, stage=%0d, lod=0x%0h, u=",
                     $time, INSTANCE_ID, tex_bus_if.req_data.mask, tex_bus_if.req_data.stage, tex_bus_if.req_data.lod));
-            `TRACE_ARRAY1D(1, tex_bus_if.req_data.coords[0], NUM_LANES);
+            `TRACE_ARRAY1D(1, "0x%0h", tex_bus_if.req_data.coords[0], NUM_LANES);
             `TRACE(1, (", v="));
-            `TRACE_ARRAY1D(1, tex_bus_if.req_data.coords[1], NUM_LANES);
+            `TRACE_ARRAY1D(1, "0x%0h", tex_bus_if.req_data.coords[1], NUM_LANES);
             `TRACE(1, (", tag=0x%0h (#%0d)\n", tex_bus_if.req_data.tag, tex_bus_if.req_data.tag[TAG_WIDTH-1 -: `UUID_WIDTH]));
         end
         if (tex_bus_if.rsp_valid && tex_bus_if.rsp_ready) begin
             `TRACE(1, ("%d: %s-rsp: texels=", $time, INSTANCE_ID));
-            `TRACE_ARRAY1D(1, tex_bus_if.rsp_data.texels, NUM_LANES);
+            `TRACE_ARRAY1D(1, "0x%0h", tex_bus_if.rsp_data.texels, NUM_LANES);
             `TRACE(1, (", tag=0x%0h (#%0d)\n", tex_bus_if.rsp_data.tag, tex_bus_if.rsp_data.tag[TAG_WIDTH-1 -: `UUID_WIDTH]));
         end
     end
@@ -292,13 +292,13 @@ endmodule
 
 ///////////////////////////////////////////////////////////////////////////////
 
-module VX_tex_unit_top import VX_gpu_pkg::*; import VX_tex_pkg::*; #(  
+module VX_tex_unit_top import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = `NUM_THREADS,
     parameter TAG_WIDTH = `TEX_REQ_TAG_WIDTH
 ) (
     input wire                              clk,
-    input wire                              reset, 
+    input wire                              reset,
 
     input wire                              dcr_write_valid,
     input wire [`VX_DCR_ADDR_WIDTH-1:0]     dcr_write_addr,
@@ -309,12 +309,12 @@ module VX_tex_unit_top import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     input  wire [1:0][NUM_LANES-1:0][31:0]  tex_req_coords,
     input  wire [NUM_LANES-1:0][`VX_TEX_LOD_BITS-1:0] tex_req_lod,
     input  wire [`VX_TEX_STAGE_BITS-1:0]    tex_req_stage,
-    input  wire [TAG_WIDTH-1:0]             tex_req_tag, 
+    input  wire [TAG_WIDTH-1:0]             tex_req_tag,
     output wire                             tex_req_ready,
 
     output wire                             tex_rsp_valid,
     output wire [NUM_LANES-1:0][31:0]       tex_rsp_texels,
-    output wire [TAG_WIDTH-1:0]             tex_rsp_tag, 
+    output wire [TAG_WIDTH-1:0]             tex_rsp_tag,
     input  wire                             tex_rsp_ready,
 
     output wire [TCACHE_NUM_REQS-1:0]       cache_req_valid,
@@ -330,7 +330,7 @@ module VX_tex_unit_top import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     input wire  [TCACHE_NUM_REQS-1:0][TCACHE_TAG_WIDTH-1:0] cache_rsp_tag,
     output wire [TCACHE_NUM_REQS-1:0]       cache_rsp_ready
 );
-    
+
     VX_tex_perf_if perf_tex_if();
 
     VX_dcr_bus_if dcr_bus_if();
@@ -349,12 +349,12 @@ module VX_tex_unit_top import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     assign tex_bus_if.req_data.coords = tex_req_coords;
     assign tex_bus_if.req_data.lod = tex_req_lod;
     assign tex_bus_if.req_data.stage = tex_req_stage;
-    assign tex_bus_if.req_data.tag = tex_req_tag;  
+    assign tex_bus_if.req_data.tag = tex_req_tag;
     assign tex_req_ready = tex_bus_if.req_ready;
 
     assign tex_rsp_valid = tex_bus_if.rsp_valid;
     assign tex_rsp_texels = tex_bus_if.rsp_data.texels;
-    assign tex_rsp_tag = tex_bus_if.rsp_data.tag; 
+    assign tex_rsp_tag = tex_bus_if.rsp_data.tag;
     assign tex_bus_if.rsp_ready = tex_rsp_ready;
 
     VX_mem_bus_if #(

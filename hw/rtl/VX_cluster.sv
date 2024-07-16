@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -26,8 +26,9 @@
 `endif
 
 module VX_cluster import VX_gpu_pkg::*; #(
-    parameter CLUSTER_ID = 0
-) ( 
+    parameter CLUSTER_ID = 0,
+    parameter `STRING INSTANCE_ID = ""
+) (
     `SCOPE_IO_DECL
 
     // Clock
@@ -44,27 +45,23 @@ module VX_cluster import VX_gpu_pkg::*; #(
     // Memory
     VX_mem_bus_if.master        mem_bus_if,
 
-    // simulation helper signals
-    output wire                 sim_ebreak,
-    output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value,
-
     // Status
     output wire                 busy
 );
 
 `ifdef SCOPE
-    localparam scope_socket = `EXT_RASTER_ENABLED ? `NUM_RASTER_UNITS : 0;
-    `SCOPE_IO_SWITCH (scope_socket + `NUM_SOCKETS);
-`endif    
+    localparam scope_socket = 0;
+    `SCOPE_IO_SWITCH (`NUM_SOCKETS);
+`endif
 
 `ifdef PERF_ENABLE
-    VX_mem_perf_if mem_perf_tmp_if();    
+    VX_mem_perf_if mem_perf_tmp_if();
     assign mem_perf_tmp_if.icache  = 'x;
     assign mem_perf_tmp_if.dcache  = 'x;
     assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
-    assign mem_perf_tmp_if.smem    = 'x;
+    assign mem_perf_tmp_if.lmem    = 'x;
     assign mem_perf_tmp_if.mem     = mem_perf_if.mem;
-`endif    
+`endif
 
 `ifdef GBAR_ENABLE
 
@@ -75,7 +72,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
     VX_gbar_arb #(
         .NUM_REQS (`NUM_SOCKETS),
-        .OUT_REG  ((`NUM_SOCKETS > 2) ? 1 : 0) // bgar_unit has no backpressure
+        .OUT_BUF  ((`NUM_SOCKETS > 2) ? 1 : 0) // bgar_unit has no backpressure
     ) gbar_arb (
         .clk        (clk),
         .reset      (gbar_reset),
@@ -135,6 +132,15 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .TAG_WIDTH (L2_TAG_WIDTH)
     ) l2_mem_bus_if[L2_NUM_REQS]();
 
+    VX_mem_bus_if #(
+        .DATA_SIZE (`L1_LINE_SIZE),
+        .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
+    ) per_socket_mem_bus_if[`NUM_SOCKETS]();
+
+    for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
+        `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[L1_MEM_L2_IDX + i], per_socket_mem_bus_if[i], L2_TAG_WIDTH, L1_MEM_ARB_TAG_WIDTH);
+    end
+
     `RESET_RELAY (graphics_reset, reset);
 
     VX_graphics #(
@@ -170,22 +176,13 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .ocache_mem_bus_if (l2_mem_bus_if[OCACHE_MEM_L2_IDX]),
     `endif
 
-        .dcr_bus_if (dcr_bus_if)        
+        .dcr_bus_if (dcr_bus_if)
     );
-    
-    VX_mem_bus_if #(
-        .DATA_SIZE (`L1_LINE_SIZE),
-        .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
-    ) per_socket_mem_bus_if[`NUM_SOCKETS]();
-
-    for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
-        `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[L1_MEM_L2_IDX + i], per_socket_mem_bus_if[i], L1X_MEM_TAG_WIDTH, L1_MEM_ARB_TAG_WIDTH);
-    end
 
     `RESET_RELAY (l2_reset, reset);
 
     VX_cache_wrap #(
-        .INSTANCE_ID    ("l2cache"),
+        .INSTANCE_ID    ($sformatf("%s-l2cache", INSTANCE_ID)),
         .CACHE_SIZE     (`L2_CACHE_SIZE),
         .LINE_SIZE      (`L2_LINE_SIZE),
         .NUM_BANKS      (`L2_NUM_BANKS),
@@ -198,9 +195,9 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .MREQ_SIZE      (`L2_MREQ_SIZE),
         .TAG_WIDTH      (L2_TAG_WIDTH),
         .WRITE_ENABLE   (1),
-        .UUID_WIDTH     (`UUID_WIDTH),  
-        .CORE_OUT_REG   (2),
-        .MEM_OUT_REG    (2),
+        .UUID_WIDTH     (`UUID_WIDTH),
+        .CORE_OUT_BUF   (2),
+        .MEM_OUT_BUF    (2),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L2_ENABLED)
     ) l2cache (
@@ -215,13 +212,6 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [`NUM_SOCKETS-1:0] per_socket_sim_ebreak;
-    wire [`NUM_SOCKETS-1:0][`NUM_REGS-1:0][`XLEN-1:0] per_socket_sim_wb_value;
-    assign sim_ebreak = per_socket_sim_ebreak[0];
-    assign sim_wb_value = per_socket_sim_wb_value[0];
-    `UNUSED_VAR (per_socket_sim_ebreak)
-    `UNUSED_VAR (per_socket_sim_wb_value)
-
     VX_dcr_bus_if socket_dcr_bus_tmp_if();
     assign socket_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `VX_DCR_BASE_STATE_BEGIN && dcr_bus_if.write_addr < `VX_DCR_BASE_STATE_END);
     assign socket_dcr_bus_tmp_if.write_addr  = dcr_bus_if.write_addr;
@@ -229,17 +219,19 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
     wire [`NUM_SOCKETS-1:0] per_socket_busy;
 
+    VX_dcr_bus_if socket_dcr_bus_if();
     `BUFFER_DCR_BUS_IF (socket_dcr_bus_if, socket_dcr_bus_tmp_if, (`NUM_SOCKETS > 1));
 
     // Generate all sockets
-    for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
+    for (genvar socket_id = 0; socket_id < `NUM_SOCKETS; ++socket_id) begin : sockets
 
         `RESET_RELAY (socket_reset, reset);
 
         VX_socket #(
-            .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + i)
+            .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + socket_id),
+            .INSTANCE_ID ($sformatf("%s-socket%0d", INSTANCE_ID, socket_id))
         ) socket (
-            `SCOPE_IO_BIND  (scope_socket+i)
+            `SCOPE_IO_BIND  (scope_socket+socket_id)
 
             .clk            (clk),
             .reset          (socket_reset),
@@ -247,40 +239,38 @@ module VX_cluster import VX_gpu_pkg::*; #(
         `ifdef PERF_ENABLE
             .mem_perf_if    (mem_perf_tmp_if),
         `endif
-            
+
             .dcr_bus_if     (socket_dcr_bus_if),
 
-            .mem_bus_if     (per_socket_mem_bus_if[i]),
+            .mem_bus_if     (per_socket_mem_bus_if[socket_id]),
 
         `ifdef EXT_RASTER_ENABLE
         `ifdef PERF_ENABLE
-            .perf_raster_if (perf_raster_if[i]),
+            .perf_raster_if (perf_raster_if[socket_id]),
         `endif
-            .raster_bus_if  (per_socket_raster_bus_if[i]),
+            .raster_bus_if  (per_socket_raster_bus_if[socket_id]),
         `endif
 
         `ifdef EXT_TEX_ENABLE
         `ifdef PERF_ENABLE
-            .perf_tex_if    (perf_tex_if[i]),
+            .perf_tex_if    (perf_tex_if[socket_id]),
         `endif
-            .tex_bus_if     (per_socket_tex_bus_if[i]),
+            .tex_bus_if     (per_socket_tex_bus_if[socket_id]),
         `endif
-      
+
         `ifdef EXT_OM_ENABLE
         `ifdef PERF_ENABLE
-            .perf_om_if     (perf_om_if[i]),
+            .perf_om_if     (perf_om_if[socket_id]),
         `endif
-            .om_bus_if      (per_socket_om_bus_if[i]),
+            .om_bus_if      (per_socket_om_bus_if[socket_id]),
         `endif
 
         `ifdef GBAR_ENABLE
-            .gbar_bus_if    (per_socket_gbar_bus_if[i]),
+            .gbar_bus_if    (per_socket_gbar_bus_if[socket_id]),
         `endif
 
-            .sim_ebreak     (per_socket_sim_ebreak[i]),
-            .sim_wb_value   (per_socket_sim_wb_value[i]),
-            .busy           (per_socket_busy[i])
-        );        
+            .busy           (per_socket_busy[socket_id])
+        );
     end
 
     `BUFFER_EX(busy, (| per_socket_busy), 1'b1, (`NUM_SOCKETS > 1));

@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -20,7 +20,7 @@
 
 using namespace vortex;
 
-RamMemDevice::RamMemDevice(const char *filename, uint32_t wordSize) 
+RamMemDevice::RamMemDevice(const char *filename, uint32_t wordSize)
   : wordSize_(wordSize) {
   std::ifstream input(filename);
 
@@ -39,19 +39,19 @@ RamMemDevice::RamMemDevice(const char *filename, uint32_t wordSize)
 }
 
 RamMemDevice::RamMemDevice(uint64_t size, uint32_t wordSize)
-  : contents_(size) 
+  : contents_(size)
   , wordSize_(wordSize)
 {}
 
 void RamMemDevice::read(void* data, uint64_t addr, uint64_t size) {
   auto addr_end = addr + size;
   if ((addr & (wordSize_-1))
-   || (addr_end & (wordSize_-1)) 
+   || (addr_end & (wordSize_-1))
    || (addr_end <= contents_.size())) {
     std::cout << "lookup of 0x" << std::hex << (addr_end-1) << " failed.\n";
     throw BadAddress();
-  }  
-  
+  }
+
   const uint8_t *s = contents_.data() + addr;
   for (uint8_t *d = (uint8_t*)data, *de = d + size; d != de;) {
     *d++ = *s++;
@@ -61,7 +61,7 @@ void RamMemDevice::read(void* data, uint64_t addr, uint64_t size) {
 void RamMemDevice::write(const void* data, uint64_t addr, uint64_t size) {
   auto addr_end = addr + size;
   if ((addr & (wordSize_-1))
-   || (addr_end & (wordSize_-1)) 
+   || (addr_end & (wordSize_-1))
    || (addr_end <= contents_.size())) {
     std::cout << "lookup of 0x" << std::hex << (addr_end-1) << " failed.\n";
     throw BadAddress();
@@ -106,7 +106,7 @@ void MemoryUnit::ADecoder::read(void* data, uint64_t addr, uint64_t size) {
   if (!this->lookup(addr, size, &ma)) {
     std::cout << "lookup of 0x" << std::hex << addr << " failed.\n";
     throw BadAddress();
-  }      
+  }
   ma.md->read(data, ma.addr, size);
 }
 
@@ -153,7 +153,7 @@ uint64_t MemoryUnit::toPhyAddr(uint64_t addr, uint32_t flagMask) {
     TLBEntry t = this->tlbLookup(addr, flagMask);
     pAddr = t.pfn * pageSize_ + addr % pageSize_;
   } else {
-    pAddr = addr;    
+    pAddr = addr;
   }
   return pAddr;
 }
@@ -190,14 +190,93 @@ void MemoryUnit::tlbRm(uint64_t va) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-RAM::RAM(uint32_t page_size, uint64_t capacity) 
+void ACLManager::set(uint64_t addr, uint64_t size, int flags) {
+  if (size == 0)
+    return;
+
+  uint64_t end = addr + size;
+
+  // get starting interval
+  auto it = acl_map_.lower_bound(addr);
+  if (it != acl_map_.begin() && (--it)->second.end < addr) {
+    ++it;
+  }
+
+  // Remove existing entries that overlap or are within the new range
+  while (it != acl_map_.end() && it->first < end) {
+    auto current = it++;
+    uint64_t current_end = current->second.end;
+    if (current_end <= addr)
+      continue; // No overlap, no need to adjust
+
+    // Adjust the current interval or erase it depending on overlap and flags
+    if (current->first < addr) {
+      if (current_end > end) {
+        acl_map_[end] = {current_end, current->second.flags};
+      }
+      current->second.end = addr;
+    } else {
+      if (current_end > end) {
+        acl_map_[end] = {current_end, current->second.flags};
+      }
+      acl_map_.erase(current);
+    }
+  }
+
+  // Insert new range if flags are not zero
+  if (flags != 0) {
+    it = acl_map_.emplace(addr, acl_entry_t{end, flags}).first;
+    // Merge adjacent ranges with the same flags
+    auto prev = it;
+    if (it != acl_map_.begin() && (--prev)->second.end == addr && prev->second.flags == flags) {
+      prev->second.end = it->second.end;
+      acl_map_.erase(it);
+      it = prev;
+    }
+    auto next = std::next(it);
+    if (next != acl_map_.end() && it->second.end == next->first && it->second.flags == next->second.flags) {
+      it->second.end = next->second.end;
+      acl_map_.erase(next);
+    }
+  }
+}
+
+bool ACLManager::check(uint64_t addr, uint64_t size, int flags) const {
+  uint64_t end = addr + size;
+
+  auto it = acl_map_.lower_bound(addr);
+  if (it != acl_map_.begin() && (--it)->second.end < addr) {
+    ++it;
+  }
+
+  while (it != acl_map_.end() && it->first < end) {
+    if (it->second.end > addr) {
+      if ((it->second.flags & flags) != flags) {
+        std::cout << "Memory access violation from 0x" << std::hex << addr << " to 0x" << end << ", curent flags=" << it->second.flags << ", access flags=" << flags << std::endl;
+        return false; // Overlapping entry is missing at least one required flag bit
+      }
+      addr = it->second.end; // Move to the end of the current matching range
+    }
+    ++it;
+  }
+
+  return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+RAM::RAM(uint64_t capacity, uint32_t page_size)
   : capacity_(capacity)
   , page_bits_(log2ceil(page_size))
   , last_page_(nullptr)
-  , last_page_index_(0) {    
-   assert(ispow2(page_size));
-   assert(0 == capacity || ispow2(capacity));
-   assert(0 == (capacity % page_size));
+  , last_page_index_(0)
+  , check_acl_(false) {
+  assert(ispow2(page_size));
+  if (capacity != 0) {
+    assert(ispow2(capacity));
+    assert(page_size <= capacity);
+    assert(0 == (capacity % page_size));
+  }
 }
 
 RAM::~RAM() {
@@ -218,7 +297,7 @@ uint8_t *RAM::get(uint64_t address) const {
   if (capacity_ != 0 && address >= capacity_) {
     throw OutOfRange();
   }
-  uint32_t page_size   = 1 << page_bits_;  
+  uint32_t page_size   = 1 << page_bits_;
   uint32_t page_offset = address & (page_size - 1);
   uint64_t page_index  = address >> page_bits_;
 
@@ -246,6 +325,9 @@ uint8_t *RAM::get(uint64_t address) const {
 }
 
 void RAM::read(void* data, uint64_t addr, uint64_t size) {
+  if (check_acl_ && acl_mngr_.check(addr, size, 0x1) == false) {
+    throw BadAddress();
+  }
   uint8_t* d = (uint8_t*)data;
   for (uint64_t i = 0; i < size; i++) {
     d[i] = *this->get(addr + i);
@@ -253,10 +335,20 @@ void RAM::read(void* data, uint64_t addr, uint64_t size) {
 }
 
 void RAM::write(const void* data, uint64_t addr, uint64_t size) {
+  if (check_acl_ && acl_mngr_.check(addr, size, 0x2) == false) {
+    throw BadAddress();
+  }
   const uint8_t* d = (const uint8_t*)data;
   for (uint64_t i = 0; i < size; i++) {
     *this->get(addr + i) = d[i];
   }
+}
+
+void RAM::set_acl(uint64_t addr, uint64_t size, int flags) {
+  if (capacity_ != 0 && (addr + size)> capacity_) {
+    throw OutOfRange();
+  }
+  acl_mngr_.set(addr, size, flags);
 }
 
 void RAM::loadBinImage(const char* filename, uint64_t destination) {

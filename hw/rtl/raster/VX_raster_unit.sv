@@ -1,12 +1,12 @@
 //!/bin/bash
 
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,13 +18,13 @@
 module VX_raster_unit import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter INSTANCE_IDX    = 0,
-    parameter NUM_INSTANCES   = 1, 
+    parameter NUM_INSTANCES   = 1,
     parameter NUM_SLICES      = 1, // number of slices
     parameter TILE_LOGSIZE    = 5, // tile log size
     parameter BLOCK_LOGSIZE   = 2, // block log size
     parameter MEM_FIFO_DEPTH  = 4, // memory queue size
     parameter QUAD_FIFO_DEPTH = 4, // quad queue size
-    parameter OUTPUT_QUADS    = 4   // number of output quads    
+    parameter OUTPUT_QUADS    = 4   // number of output quads
 ) (
     `SCOPE_IO_DECL
 
@@ -74,11 +74,11 @@ module VX_raster_unit import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire [`VX_RASTER_DIM_BITS-1:0] mem_yloc;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] mem_edges;
     wire [`VX_RASTER_PID_BITS-1:0] mem_pid;
-    
+
     // Memory unit status
     reg running;
     wire mem_unit_busy;
-    wire mem_unit_valid;    
+    wire mem_unit_valid;
     wire mem_unit_ready;
 
     `RESET_RELAY (mem_reset, reset);
@@ -100,7 +100,7 @@ module VX_raster_unit import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .clk          (clk),
         .reset        (mem_reset),
 
-        .start        (mem_unit_start), 
+        .start        (mem_unit_start),
         .busy         (mem_unit_busy),
 
         .dcrs         (raster_dcrs),
@@ -140,7 +140,7 @@ module VX_raster_unit import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .result (edge_eval)
     );
 
-    wire                            slice_arb_valid_in;  
+    wire                            slice_arb_valid_in;
     wire [`VX_RASTER_DIM_BITS-1:0]  slice_arb_xloc;
     wire [`VX_RASTER_DIM_BITS-1:0]  slice_arb_yloc;
     wire [`VX_RASTER_PID_BITS-1:0]  slice_arb_pid;
@@ -166,7 +166,7 @@ module VX_raster_unit import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
     assign mem_unit_ready = ~edge_func_stall;
 
-    wire [NUM_SLICES-1:0] slice_arb_valid_out;    
+    wire [NUM_SLICES-1:0] slice_arb_valid_out;
     wire [NUM_SLICES-1:0][PRIM_DATA_WIDTH-1:0] slice_arb_data_out;
     wire [NUM_SLICES-1:0] slice_arb_ready_out;
 
@@ -174,7 +174,7 @@ module VX_raster_unit import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .NUM_OUTPUTS (NUM_SLICES),
         .DATAW       (PRIM_DATA_WIDTH),
         .ARBITER     ("R"),
-        .OUT_REG     (2)       
+        .OUT_BUF     (2)
     ) slice_req_arb (
         .clk        (clk),
         .reset      (reset),
@@ -182,22 +182,22 @@ module VX_raster_unit import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .ready_in   (slice_arb_ready_in),
         .data_in    ({slice_arb_xloc, slice_arb_yloc, slice_arb_pid, slice_arb_edges_e, slice_arb_extents}),
         .data_out   (slice_arb_data_out),
-        .valid_out  (slice_arb_valid_out), 
+        .valid_out  (slice_arb_valid_out),
         .ready_out  (slice_arb_ready_out),
         `UNUSED_PIN (sel_out)
     );
 
-    // track pending tile data 
+    // track pending tile data
     // this is needed to determine when rasterization has completed
 
     wire no_pending_tiledata;
     wire mem_unit_fire = mem_unit_valid && mem_unit_ready;
     wire [NUM_SLICES-1:0] slice_arb_fire_out = slice_arb_valid_out & slice_arb_ready_out;
     wire [SLICES_BITS-1:0] slice_arb_fire_out_cnt;
-    
+
     `POP_COUNT(slice_arb_fire_out_cnt, slice_arb_fire_out);
 
-    VX_pending_size #( 
+    VX_pending_size #(
         .SIZE  (EDGE_FUNC_LATENCY + 2 * NUM_SLICES),
         .DECRW (SLICES_BITS)
     ) pending_slice_inputs (
@@ -211,8 +211,8 @@ module VX_raster_unit import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     );
 
     wire has_pending_inputs = mem_unit_start
-                           || mem_unit_busy 
-                           || mem_unit_valid 
+                           || mem_unit_busy
+                           || mem_unit_valid
                            || ~no_pending_tiledata;
 
     VX_raster_bus_if #(
@@ -243,7 +243,7 @@ module VX_raster_unit import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         `RESET_RELAY (slice_reset, reset);
 
         VX_raster_slice #(
-            .INSTANCE_ID     (INSTANCE_ID), 
+            .INSTANCE_ID     (INSTANCE_ID),
             .TILE_LOGSIZE    (TILE_LOGSIZE),
             .BLOCK_LOGSIZE   (BLOCK_LOGSIZE),
             .OUTPUT_QUADS    (OUTPUT_QUADS),
@@ -278,7 +278,7 @@ module VX_raster_unit import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
                                                    && ~(| slice_busy_out)
                                                    && ~(| slice_valid_out);
 
-        assign slice_raster_bus_if[i].req_valid = slice_valid_out[i] 
+        assign slice_raster_bus_if[i].req_valid = slice_valid_out[i]
                                                || slice_raster_bus_if[i].req_data.done;
     end
 
@@ -288,7 +288,7 @@ module VX_raster_unit import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .NUM_INPUTS (NUM_SLICES),
         .NUM_LANES  (OUTPUT_QUADS),
         .ARBITER    ("R"),
-        .OUT_REG    (3) // external bus should be registered
+        .OUT_BUF    (3) // external bus should be registered
     ) raster_arb (
         .clk        (clk),
         .reset      (raster_arb_reset),
@@ -362,7 +362,7 @@ module VX_raster_unit import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     `POP_COUNT(perf_mem_req_per_cycle, perf_mem_req_fire);
     `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_fire);
 
-    reg [`PERF_CTR_BITS-1:0] perf_pending_reads;   
+    reg [`PERF_CTR_BITS-1:0] perf_pending_reads;
     assign perf_pending_reads_cycle = perf_mem_req_per_cycle - perf_mem_rsp_per_cycle;
 
     always @(posedge clk) begin
@@ -403,9 +403,9 @@ module VX_raster_unit import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
                 `TRACE(1, ("%d: %s-out[%0d]: done=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
                     $time, INSTANCE_ID, i, raster_bus_if.req_data.done,
                     raster_bus_if.req_data.stamps[i].pos_x, raster_bus_if.req_data.stamps[i].pos_y, raster_bus_if.req_data.stamps[i].mask, raster_bus_if.req_data.stamps[i].pid,
-                    raster_bus_if.req_data.stamps[i].bcoords[0][0], raster_bus_if.req_data.stamps[i].bcoords[1][0], raster_bus_if.req_data.stamps[i].bcoords[2][0], 
-                    raster_bus_if.req_data.stamps[i].bcoords[0][1], raster_bus_if.req_data.stamps[i].bcoords[1][1], raster_bus_if.req_data.stamps[i].bcoords[2][1], 
-                    raster_bus_if.req_data.stamps[i].bcoords[0][2], raster_bus_if.req_data.stamps[i].bcoords[1][2], raster_bus_if.req_data.stamps[i].bcoords[2][2], 
+                    raster_bus_if.req_data.stamps[i].bcoords[0][0], raster_bus_if.req_data.stamps[i].bcoords[1][0], raster_bus_if.req_data.stamps[i].bcoords[2][0],
+                    raster_bus_if.req_data.stamps[i].bcoords[0][1], raster_bus_if.req_data.stamps[i].bcoords[1][1], raster_bus_if.req_data.stamps[i].bcoords[2][1],
+                    raster_bus_if.req_data.stamps[i].bcoords[0][2], raster_bus_if.req_data.stamps[i].bcoords[1][2], raster_bus_if.req_data.stamps[i].bcoords[2][2],
                     raster_bus_if.req_data.stamps[i].bcoords[0][3], raster_bus_if.req_data.stamps[i].bcoords[1][3], raster_bus_if.req_data.stamps[i].bcoords[2][3]));
             end
         end
@@ -419,24 +419,24 @@ endmodule
 module VX_raster_unit_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter INSTANCE_IDX    = 0,
-    parameter NUM_INSTANCES   = 1, 
+    parameter NUM_INSTANCES   = 1,
     parameter NUM_SLICES      = 1, // number of slices
     parameter TILE_LOGSIZE    = 5, // tile log size
     parameter BLOCK_LOGSIZE   = 2, // block log size
     parameter MEM_FIFO_DEPTH  = 8, // memory queue size
     parameter QUAD_FIFO_DEPTH = 8, // quad queue size
-    parameter OUTPUT_QUADS    = 4   // number of output quads    
+    parameter OUTPUT_QUADS    = 4   // number of output quads
 ) (
     input wire                              clk,
     input wire                              reset,
-    
+
     input wire                              dcr_write_valid,
     input wire [`VX_DCR_ADDR_WIDTH-1:0]     dcr_write_addr,
     input wire [`VX_DCR_DATA_WIDTH-1:0]     dcr_write_data,
 
-    output wire                             raster_req_valid, 
+    output wire                             raster_req_valid,
     output raster_stamp_t [OUTPUT_QUADS-1:0] raster_req_stamps,
-    output wire                             raster_req_done, 
+    output wire                             raster_req_done,
     input wire                              raster_req_ready,
 
     output wire [RCACHE_NUM_REQS-1:0]       cache_req_valid,
@@ -489,13 +489,13 @@ module VX_raster_unit_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     assign cache_rsp_ready = cache_bus_if.rsp_ready;
 
 `ifdef SCOPE
-    wire [0:0] scope_reset_w = 1'b0; 
-    wire [0:0] scope_bus_in_w = 1'b0; 
+    wire [0:0] scope_reset_w = 1'b0;
+    wire [0:0] scope_bus_in_w = 1'b0;
     wire [0:0] scope_bus_out_w;
     `UNUSED_VAR (scope_bus_out_w)
 `endif
 
-    VX_raster_unit #( 
+    VX_raster_unit #(
         .INSTANCE_ID     (INSTANCE_ID),
         .INSTANCE_IDX    (INSTANCE_IDX),
         .NUM_INSTANCES   (NUM_INSTANCES),
@@ -511,7 +511,7 @@ module VX_raster_unit_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .reset         (reset),
     `ifdef PERF_ENABLE
         .perf_raster_if(perf_raster_if),
-    `endif 
+    `endif
         .dcr_bus_if    (dcr_bus_if),
         .raster_bus_if (raster_bus_if),
         .cache_bus_if  (cache_bus_if)

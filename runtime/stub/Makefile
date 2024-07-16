@@ -1,24 +1,32 @@
-XLEN ?= 32
-DESTDIR ?= $(CURDIR)
-SIM_DIR = $(abspath ../../sim)
-HW_DIR = $(abspath ../../hw)
+include ../common.mk
 
-CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
+DESTDIR ?= $(CURDIR)/..
 
-CXXFLAGS += -I../include -I../common -I$(HW_DIR) -I$(SIM_DIR)/common
+SRC_DIR := $(VORTEX_HOME)/runtime/stub
 
+CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -I$(INC_DIR) -I$(COMMON_DIR) -I$(ROOT_DIR)/hw -I$(SIM_DIR)/common
 CXXFLAGS += -fPIC
 
-LDFLAGS += -shared -pthread
+LDFLAGS += -shared -pthread -ldl
 
-SRCS = vortex.cpp ../common/utils.cpp
+SRCS := $(SRC_DIR)/vortex.cpp $(SRC_DIR)/utils.cpp
 
-PROJECT = libvortex.so
+# Debugigng
+ifdef DEBUG
+	CXXFLAGS += -g -O0
+else
+	CXXFLAGS += -O2 -DNDEBUG
+endif
 
-all: $(PROJECT)
+PROJECT := libvortex.so
 
-$(PROJECT): $(SRCS) 
+all: $(DESTDIR)/$(PROJECT)
+
+$(DESTDIR)/$(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 clean:
-	rm -rf $(PROJECT) obj_dir
+	rm -f $(DESTDIR)/$(PROJECT)
+
+.PHONY: all clean

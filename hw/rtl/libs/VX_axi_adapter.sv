@@ -20,7 +20,7 @@ module VX_axi_adapter #(
     parameter TAG_WIDTH      = 8,
     parameter NUM_BANKS      = 1, 
     parameter AVS_ADDR_WIDTH = (ADDR_WIDTH - `CLOG2(DATA_WIDTH/8)),
-    parameter OUT_REG_RSP    = 0
+    parameter RSP_OUT_BUF    = 0
 ) (
     input  wire                     clk,
     input  wire                     reset,
@@ -208,7 +208,7 @@ module VX_axi_adapter #(
         .NUM_INPUTS (NUM_BANKS),
         .DATAW      (DATA_WIDTH + TAG_WIDTH),
         .ARBITER    ("R"),
-        .OUT_REG    (OUT_REG_RSP)
+        .OUT_BUF    (RSP_OUT_BUF)
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),

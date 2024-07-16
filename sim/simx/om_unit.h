@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -25,13 +25,13 @@ class RAM;
 
 class OMUnit : public SimObject<OMUnit> {
 public:
-  struct PerfStats {        
+  struct PerfStats {
     uint64_t reads;
     uint64_t writes;
     uint64_t latency;
     uint64_t stalls;
 
-    PerfStats() 
+    PerfStats()
       : reads(0)
       , writes(0)
       , latency(0)
@@ -59,13 +59,13 @@ public:
   std::vector<SimPort<MemReq>> MemReqs;
   std::vector<SimPort<MemRsp>> MemRsps;
 
-  SimPort<pipeline_trace_t*> Input;
-  SimPort<pipeline_trace_t*> Output;
+  SimPort<instr_trace_t*> Input;
+  SimPort<instr_trace_t*> Output;
 
-  OMUnit(const SimContext& ctx, 
+  OMUnit(const SimContext& ctx,
           const char* name,
-          const Arch &arch, 
-          const DCRS& dcrs);    
+          const Arch &arch,
+          const DCRS& dcrs);
 
   ~OMUnit();
 
@@ -75,9 +75,8 @@ public:
 
   void attach_ram(RAM* mem);
 
-  void write(uint32_t cid, uint32_t wid, uint32_t tid, 
-             uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, 
-             const CSRs& csrs, OMUnit::TraceData::Ptr trace_data);
+  void write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth,
+             OMUnit::TraceData::Ptr trace_data);
 
   const PerfStats& perf_stats() const;
 

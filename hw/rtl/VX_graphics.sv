@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -35,7 +35,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
     VX_tex_perf_if.master   perf_tex_if [`NUM_SOCKETS],
     output cache_perf_t     perf_tcache,
 `endif
-`endif 
+`endif
 
 `ifdef EXT_OM_ENABLE
     VX_om_bus_if.slave      per_socket_om_bus_if [`NUM_SOCKETS],
@@ -75,6 +75,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
     assign raster_dcr_bus_tmp_if.write_addr  = dcr_bus_if.write_addr;
     assign raster_dcr_bus_tmp_if.write_data  = dcr_bus_if.write_data;
 
+    VX_dcr_bus_if raster_dcr_bus_if();
     `BUFFER_DCR_BUS_IF (raster_dcr_bus_if, raster_dcr_bus_tmp_if, 1);
 
     // Generate all raster units
@@ -82,7 +83,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
 
         `RESET_RELAY (raster_reset, reset);
 
-        VX_raster_unit #( 
+        VX_raster_unit #(
             .INSTANCE_ID     ($sformatf("cluster%0d-raster%0d", CLUSTER_ID, i)),
             .INSTANCE_IDX    (CLUSTER_ID * `NUM_RASTER_UNITS + i),
             .NUM_INSTANCES   (`NUM_CLUSTERS * `NUM_RASTER_UNITS),
@@ -103,7 +104,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
             .raster_bus_if (raster_bus_if[i]),
             .cache_bus_if  (rcache_bus_if[i * RCACHE_NUM_REQS +: RCACHE_NUM_REQS])
         );
-    end    
+    end
 
     `RESET_RELAY (raster_arb_reset, reset);
 
@@ -112,7 +113,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .NUM_LANES   (`NUM_SFU_LANES),
         .NUM_OUTPUTS (`NUM_SOCKETS),
         .ARBITER     ("R"),
-        .OUT_REG     ((`NUM_SOCKETS != `NUM_RASTER_UNITS) ? 2 : 0)
+        .OUT_BUF     ((`NUM_SOCKETS != `NUM_RASTER_UNITS) ? 2 : 0)
     ) raster_arb (
         .clk        (clk),
         .reset      (raster_arb_reset),
@@ -144,21 +145,21 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .MREQ_SIZE      (`RCACHE_MREQ_SIZE),
         .TAG_WIDTH      (RCACHE_TAG_WIDTH),
         .WRITE_ENABLE   (0),
-        .UUID_WIDTH     (0),        
+        .UUID_WIDTH     (0),
         .NC_ENABLE      (0),
-        .CORE_OUT_REG   (2),
-        .MEM_OUT_REG    (2)
+        .CORE_OUT_BUF   (2),
+        .MEM_OUT_BUF    (2)
     ) rcache (
     `ifdef PERF_ENABLE
         .cache_perf     (perf_rcache),
-    `endif        
+    `endif
         .clk            (clk),
         .reset          (rcache_reset),
         .core_bus_if    (rcache_bus_if),
         .mem_bus_if     (rcache_mem_bus_tmp_if)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF_X (rcache_mem_bus_if, rcache_mem_bus_tmp_if, L1X_MEM_TAG_WIDTH, RCACHE_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_BUS_IF_X (rcache_mem_bus_if, rcache_mem_bus_tmp_if, L2_TAG_WIDTH, RCACHE_MEM_TAG_WIDTH);
 
 `endif
 
@@ -187,7 +188,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS  (`NUM_TEX_UNITS),
         .TAG_WIDTH    (`TEX_REQ_ARB1_TAG_WIDTH),
         .ARBITER      ("R"),
-        .OUT_REG_REQ  ((`NUM_SOCKETS != `NUM_TEX_UNITS) ? 2 : 0)
+        .OUT_BUF_REQ  ((`NUM_SOCKETS != `NUM_TEX_UNITS) ? 2 : 0)
     ) tex_arb (
         .clk        (clk),
         .reset      (tex_arb_reset),
@@ -200,6 +201,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
     assign tex_dcr_bus_tmp_if.write_addr  = dcr_bus_if.write_addr;
     assign tex_dcr_bus_tmp_if.write_data  = dcr_bus_if.write_data;
 
+    VX_dcr_bus_if tex_dcr_bus_if();
     `BUFFER_DCR_BUS_IF (tex_dcr_bus_if, tex_dcr_bus_tmp_if, 1);
 
     // Generate all texture units
@@ -216,7 +218,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
             .reset        (tex_reset),
         `ifdef PERF_ENABLE
             .perf_tex_if  (perf_tex_unit_if[i]),
-        `endif 
+        `endif
             .dcr_bus_if   (tex_dcr_bus_if),
             .tex_bus_if   (tex_bus_if[i]),
             .cache_bus_if (tcache_bus_if[i * TCACHE_NUM_REQS +: TCACHE_NUM_REQS])
@@ -249,20 +251,20 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .WRITE_ENABLE   (0),
         .UUID_WIDTH     (`UUID_WIDTH),
         .NC_ENABLE      (0),
-        .CORE_OUT_REG   (2),
-        .MEM_OUT_REG    (2)
+        .CORE_OUT_BUF   (2),
+        .MEM_OUT_BUF    (2)
     ) tcache (
     `ifdef PERF_ENABLE
         .cache_perf     (perf_tcache),
-    `endif        
+    `endif
         .clk            (clk),
         .reset          (tcache_reset),
         .core_bus_if    (tcache_bus_if),
         .mem_bus_if     (tcache_mem_bus_tmp_if)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF_X (tcache_mem_bus_if, tcache_mem_bus_tmp_if, L1X_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH);
-            
+    `ASSIGN_VX_MEM_BUS_IF_X (tcache_mem_bus_if, tcache_mem_bus_tmp_if, L2_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH);
+
 `endif
 
 `ifdef EXT_OM_ENABLE
@@ -288,7 +290,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .NUM_LANES   (`NUM_SFU_LANES),
         .NUM_OUTPUTS (`NUM_OM_UNITS),
         .ARBITER     ("R"),
-        .OUT_REG    ((`NUM_SOCKETS != `NUM_OM_UNITS) ? 2 : 0)
+        .OUT_BUF    ((`NUM_SOCKETS != `NUM_OM_UNITS) ? 2 : 0)
     ) om_arb (
         .clk        (clk),
         .reset      (om_arb_reset),
@@ -301,6 +303,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
     assign om_dcr_bus_tmp_if.write_addr  = dcr_bus_if.write_addr;
     assign om_dcr_bus_tmp_if.write_data  = dcr_bus_if.write_data;
 
+    VX_dcr_bus_if om_dcr_bus_if();
     `BUFFER_DCR_BUS_IF (om_dcr_bus_if, om_dcr_bus_tmp_if, 1);
 
     // Generate all OM units
@@ -318,7 +321,7 @@ module VX_graphics import VX_gpu_pkg::*; #(
             .perf_om_if    (perf_om_unit_if[i]),
         `endif
             .dcr_bus_if    (om_dcr_bus_if),
-            .om_bus_if     (om_bus_if[i]),            
+            .om_bus_if     (om_bus_if[i]),
             .cache_bus_if  (ocache_bus_if[i * OCACHE_NUM_REQS +: OCACHE_NUM_REQS])
         );
     end
@@ -349,12 +352,12 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .WRITE_ENABLE   (1),
         .UUID_WIDTH     (`UUID_WIDTH),
         .NC_ENABLE      (0),
-        .CORE_OUT_REG   (2),
-        .MEM_OUT_REG    (2)
+        .CORE_OUT_BUF   (2),
+        .MEM_OUT_BUF    (2)
     ) ocache (
     `ifdef PERF_ENABLE
         .cache_perf     (perf_ocache),
-    `endif        
+    `endif
         .clk            (clk),
         .reset          (ocache_reset),
 
@@ -362,8 +365,8 @@ module VX_graphics import VX_gpu_pkg::*; #(
         .mem_bus_if     (ocache_mem_bus_tmp_if)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF_X (ocache_mem_bus_if, ocache_mem_bus_tmp_if, L1X_MEM_TAG_WIDTH, OCACHE_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_BUS_IF_X (ocache_mem_bus_if, ocache_mem_bus_tmp_if, L2_TAG_WIDTH, OCACHE_MEM_TAG_WIDTH);
 
 `endif
-    
+
 endmodule

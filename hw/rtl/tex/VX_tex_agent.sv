@@ -1,12 +1,12 @@
 //!/bin/bash
 
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -25,7 +25,7 @@ module VX_tex_agent import VX_tex_pkg::*; #(
     // Inputs
     VX_execute_if.slave     execute_if,
     VX_sfu_csr_if.slave     tex_csr_if,
-            
+
     // Outputs
     VX_tex_bus_if.master    tex_bus_if,
     VX_commit_if.master     commit_if
@@ -64,46 +64,46 @@ module VX_tex_agent import VX_tex_pkg::*; #(
     wire [`UUID_WIDTH-1:0]  rsp_uuid;
     wire [`NW_WIDTH-1:0]    rsp_wid;
     wire [NUM_LANES-1:0]    rsp_tmask;
-    wire [`XLEN-1:0]        rsp_PC;
+    wire [`PC_BITS-1:0]     rsp_PC;
     wire [`NR_BITS-1:0]     rsp_rd;
     wire [PID_WIDTH-1:0]    rsp_pid;
     wire                    rsp_sop;
     wire                    rsp_eop;
- 
-    wire [REQ_QUEUE_BITS-1:0] mdata_waddr, mdata_raddr;    
+
+    wire [REQ_QUEUE_BITS-1:0] mdata_waddr, mdata_raddr;
     wire mdata_full;
 
-    assign sfu_exe_stage = execute_if.data.op_mod[`VX_TEX_STAGE_BITS-1:0];
+    assign sfu_exe_stage = execute_if.data.op_args.tex.stage;
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign sfu_exe_coords[0][i] = execute_if.data.rs1_data[i][31:0];
         assign sfu_exe_coords[1][i] = execute_if.data.rs2_data[i][31:0];
-        assign sfu_exe_lod[i]       = execute_if.data.rs3_data[i][0 +: `VX_TEX_LOD_BITS];        
+        assign sfu_exe_lod[i]       = execute_if.data.rs3_data[i][0 +: `VX_TEX_LOD_BITS];
     end
 
     wire mdata_push = execute_if.valid && execute_if.ready;
     wire mdata_pop  = tex_bus_if.rsp_valid && tex_bus_if.rsp_ready;
 
     VX_index_buffer #(
-        .DATAW (`NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + PID_WIDTH + 1 + 1),
+        .DATAW (`NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + PID_WIDTH + 1 + 1),
         .SIZE  (`TEX_REQ_QUEUE_SIZE)
     ) tag_store (
         .clk          (clk),
         .reset        (reset),
-        .acquire_en   (mdata_push), 
+        .acquire_en   (mdata_push),
         .write_addr   (mdata_waddr),
         .write_data   ({execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd,execute_if.data.pid, execute_if.data.sop, execute_if.data.eop}),
         .read_data    ({rsp_wid, rsp_tmask, rsp_PC, rsp_rd, rsp_pid, rsp_sop, rsp_eop}),
         .read_addr    (mdata_raddr),
-        .release_en   (mdata_pop), 
+        .release_en   (mdata_pop),
         .full         (mdata_full),
         `UNUSED_PIN (empty)
     );
 
     // submit texture request
 
-    wire valid_in, ready_in;    
+    wire valid_in, ready_in;
     assign valid_in = execute_if.valid && ~mdata_full;
-    assign execute_if.ready = ready_in && ~mdata_full;    
+    assign execute_if.ready = ready_in && ~mdata_full;
 
     wire [`TEX_REQ_TAG_WIDTH-1:0] req_tag = {execute_if.data.uuid, mdata_waddr};
 
@@ -130,7 +130,7 @@ module VX_tex_agent import VX_tex_pkg::*; #(
     wire [NUM_LANES-1:0][31:0] commit_data;
 
     VX_elastic_buffer #(
-        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + (NUM_LANES * 32) + PID_WIDTH + 1 + 1),
+        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + (NUM_LANES * 32) + PID_WIDTH + 1 + 1),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),
@@ -153,17 +153,17 @@ module VX_tex_agent import VX_tex_pkg::*; #(
     always @(posedge clk) begin
         if (execute_if.valid && execute_if.ready) begin
             `TRACE(1, ("%d: core%0d-tex-req: wid=%0d, PC=0x%0h, tmask=%b, u=", $time, CORE_ID, execute_if.data.wid, execute_if.data.PC, execute_if.data.tmask));
-            `TRACE_ARRAY1D(1, sfu_exe_coords[0], NUM_LANES);
+            `TRACE_ARRAY1D(1, "0x%0h", sfu_exe_coords[0], NUM_LANES);
             `TRACE(1, (", v="));
-            `TRACE_ARRAY1D(1, sfu_exe_coords[1], NUM_LANES);
+            `TRACE_ARRAY1D(1, "0x%0h", sfu_exe_coords[1], NUM_LANES);
             `TRACE(1, (", lod="));
-            `TRACE_ARRAY1D(1, sfu_exe_lod, NUM_LANES);
+            `TRACE_ARRAY1D(1, "0x%0h", sfu_exe_lod, NUM_LANES);
             `TRACE(1, (", stage=%0d, ibuf_idx=%0d (#%0d)\n", sfu_exe_stage, mdata_waddr, execute_if.data.uuid));
         end
         if (tex_bus_if.rsp_valid && tex_bus_if.rsp_ready) begin
-            `TRACE(1, ("%d: core%0d-tex-rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, texels=", $time, CORE_ID, 
+            `TRACE(1, ("%d: core%0d-tex-rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, texels=", $time, CORE_ID,
                 rsp_wid, rsp_PC, rsp_tmask, rsp_rd));
-            `TRACE_ARRAY1D(1, tex_bus_if.rsp_data.texels, NUM_LANES);
+            `TRACE_ARRAY1D(1, "0x%0h", tex_bus_if.rsp_data.texels, NUM_LANES);
             `TRACE(1, (" ibuf_idx=%0d (#%0d)\n", mdata_raddr, rsp_uuid));
         end
     end

@@ -16,6 +16,10 @@
 
 using namespace cocogfx;
 
+#ifndef ASSETS_PATHS
+#define ASSETS_PATHS ""
+#endif
+
 #define RT_CHECK(_expr)                                         \
    do {                                                         \
      int _ret = _expr;                                          \
@@ -28,7 +32,7 @@ using namespace cocogfx;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-const char* kernel_file = "kernel.bin";
+const char* kernel_file = "kernel.vxbin";
 const char* trace_file  = "triangle.cgltrace";
 const char* output_file = "output.png";
 const char* reference_file  = nullptr;
@@ -42,12 +46,16 @@ uint32_t cbuf_stride;
 uint32_t cbuf_pitch;
 uint32_t cbuf_size;
 
-vx_device_h device = nullptr;
-std::vector<uint8_t> staging_buf;
+uint64_t cbuf_addr;
+uint64_t tilebuf_addr;
+uint64_t primbuf_addr;
 
-uint64_t cbuf_addr    = 0;
-uint64_t tilebuf_addr = 0;
-uint64_t primbuf_addr = 0;
+vx_device_h device      = nullptr;
+vx_buffer_h krnl_buffer = nullptr;
+vx_buffer_h args_buffer = nullptr;
+vx_buffer_h color_buffer= nullptr;
+vx_buffer_h tile_buffer = nullptr;
+vx_buffer_h prim_buffer = nullptr;
 
 bool use_sw = false;
 
@@ -101,12 +109,12 @@ static void parse_args(int argc, char **argv) {
 }
 
 void cleanup() {
-  if (device) {     
-    if (cbuf_addr != 0) vx_mem_free(device, cbuf_addr);
-    if (tilebuf_addr != 0) vx_mem_free(device, tilebuf_addr);
-    if (primbuf_addr != 0) vx_mem_free(device, primbuf_addr);
-    vx_dev_close(device);
-  }
+  vx_mem_free(color_buffer);
+  vx_mem_free(tile_buffer);
+  vx_mem_free(prim_buffer);
+  vx_mem_free(krnl_buffer);
+  vx_mem_free(args_buffer);
+  vx_dev_close(device);
 }
 
 int render(const CGLTrace& trace) {
@@ -114,7 +122,7 @@ int render(const CGLTrace& trace) {
   for (auto& drawcall : trace.drawcalls) {
     std::vector<uint8_t> tilebuf;
     std::vector<uint8_t> primbuf;
-    
+
     // Perform tile binning
     auto num_tiles = graphics::Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tileLogSize);
     std::cout << "Binning allocated " << std::dec << num_tiles << " tiles with " << primbuf.size() << " total primitives." << std::endl;
@@ -122,25 +130,22 @@ int render(const CGLTrace& trace) {
       continue;
 
     // allocate tile memory
-    if (tilebuf_addr != 0) vx_mem_free(device, tilebuf_addr); 
-    if (primbuf_addr != 0) vx_mem_free(device, primbuf_addr);
-    RT_CHECK(vx_mem_alloc(device, tilebuf.size(), VX_MEM_TYPE_GLOBAL, &tilebuf_addr));
-    RT_CHECK(vx_mem_alloc(device, primbuf.size(), VX_MEM_TYPE_GLOBAL, &primbuf_addr));
-    std::cout << "tilebuf_addr=0x" << std::hex << tilebuf_addr << std::dec << std::endl;
-    std::cout << "primbuf_addr=0x" << std::hex << primbuf_addr << std::dec << std::endl;
+    if (tile_buffer != nullptr) vx_mem_free(tile_buffer);
+    if (prim_buffer != nullptr) vx_mem_free(prim_buffer);
+    RT_CHECK(vx_mem_alloc(device, tilebuf.size(), VX_MEM_READ, &tile_buffer));
+    RT_CHECK(vx_mem_address(tile_buffer, &tilebuf_addr));
+    RT_CHECK(vx_mem_alloc(device, primbuf.size(), VX_MEM_READ, &prim_buffer));
+    RT_CHECK(vx_mem_address(prim_buffer, &primbuf_addr));
+    std::cout << "tile_buffer=0x" << std::hex << tilebuf_addr << std::dec << std::endl;
+    std::cout << "prim_buffer=0x" << std::hex << primbuf_addr << std::dec << std::endl;
 
-    uint32_t alloc_size = std::max({tilebuf.size(), primbuf.size(), sizeof(kernel_arg_t)});
-    staging_buf.resize(alloc_size);
-    
     // upload tiles buffer
-    std::cout << "upload tile buffer" << std::endl;      
-    memcpy(staging_buf.data(), tilebuf.data(), tilebuf.size());
-    RT_CHECK(vx_copy_to_dev(device, tilebuf_addr, staging_buf.data(), tilebuf.size()));
-    
+    std::cout << "upload tile buffer" << std::endl;
+    RT_CHECK(vx_copy_to_dev(tile_buffer, tilebuf.data(), 0, tilebuf.size()));
+
     // upload primitives buffer
-    std::cout << "upload primitive buffer" << std::endl;      
-    memcpy(staging_buf.data(), primbuf.data(), primbuf.size());
-    RT_CHECK(vx_copy_to_dev(device, primbuf_addr, staging_buf.data(), primbuf.size()));
+    std::cout << "upload primitive buffer" << std::endl;
+    RT_CHECK(vx_copy_to_dev(prim_buffer, primbuf.data(), 0, primbuf.size()));
 
     // upload kernel argument
     std::cout << "upload kernel argument" << std::endl;
@@ -152,18 +157,17 @@ int render(const CGLTrace& trace) {
       kernel_arg.cbuf_addr   = cbuf_addr;
       kernel_arg.cbuf_stride = cbuf_stride;
       kernel_arg.cbuf_pitch  = cbuf_pitch;
-    
-      memcpy(staging_buf.data(), &kernel_arg, sizeof(kernel_arg_t));
-      RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
+
+      RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
     }
 
     uint32_t primbuf_stride = sizeof(graphics::rast_prim_t);
 
     // configure raster units
-    vx_dcr_write(device, VX_DCR_RASTER_TBUF_ADDR,   tilebuf_addr / 64);  // block address
-    vx_dcr_write(device, VX_DCR_RASTER_TILE_COUNT,  num_tiles);
-    vx_dcr_write(device, VX_DCR_RASTER_PBUF_ADDR,   primbuf_addr / 64);  // block address
-    vx_dcr_write(device, VX_DCR_RASTER_PBUF_STRIDE, primbuf_stride);    
+    vx_dcr_write(device, VX_DCR_RASTER_TBUF_ADDR, tilebuf_addr / 64);  // block address
+    vx_dcr_write(device, VX_DCR_RASTER_TILE_COUNT, num_tiles);
+    vx_dcr_write(device, VX_DCR_RASTER_PBUF_ADDR, primbuf_addr / 64);  // block address
+    vx_dcr_write(device, VX_DCR_RASTER_PBUF_STRIDE, primbuf_stride);
     vx_dcr_write(device, VX_DCR_RASTER_SCISSOR_X, (dst_width << 16) | 0);
     vx_dcr_write(device, VX_DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0);
 
@@ -171,12 +175,12 @@ int render(const CGLTrace& trace) {
 
     // start device
     std::cout << "start device" << std::endl;
-    RT_CHECK(vx_start(device));
+    RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
 
     // wait for completion
     std::cout << "wait for completion" << std::endl;
     RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
-    
+
     auto time_end = std::chrono::high_resolution_clock::now();
     double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
     printf("Elapsed time: %lg ms\n", elapsed);
@@ -187,7 +191,7 @@ int render(const CGLTrace& trace) {
   if (strcmp(output_file, "null") != 0) {
     std::cout << "save output image" << std::endl;
     std::vector<uint8_t> dst_pixels(cbuf_size);
-    RT_CHECK(vx_copy_from_dev(device, dst_pixels.data(), cbuf_addr, cbuf_size));
+    RT_CHECK(vx_copy_from_dev(dst_pixels.data(), color_buffer, 0, cbuf_size));
     //DumpImage(dst_pixels, dst_width, dst_height, 4);
     auto bits = dst_pixels.data() + (dst_height-1) * cbuf_pitch;
     RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -cbuf_pitch));
@@ -196,17 +200,18 @@ int render(const CGLTrace& trace) {
   return 0;
 }
 
-int main(int argc, char *argv[]) {  
+int main(int argc, char *argv[]) {
   // parse command arguments
   parse_args(argc, argv);
 
   // open device connection
-  std::cout << "open device connection" << std::endl;  
+  std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
 
   uint64_t isa_flags;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-  if (0 == (isa_flags & (VX_ISA_EXT_RASTER))) {
+  bool has_ext = (isa_flags & VX_ISA_EXT_RASTER) != 0;
+  if (!has_ext) {
     std::cout << "RASTER extensions not supported!" << std::endl;
     cleanup();
     return -1;
@@ -221,64 +226,57 @@ int main(int argc, char *argv[]) {
 
   std::cout << "number of tasks: " << std::dec << num_tasks << std::endl;
 
-  CGLTrace trace;    
-  RT_CHECK(trace.load(trace_file));
+  CGLTrace trace;
+  auto trace_file_s = graphics::ResolveFilePath(trace_file, ASSETS_PATHS);
+  RT_CHECK(trace.load(trace_file_s.c_str()));
 
   // upload program
-  std::cout << "upload program" << std::endl;  
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file));
+  std::cout << "upload program" << std::endl;
+  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
 
   cbuf_stride = 4;
   cbuf_pitch  = dst_width * cbuf_stride;
   cbuf_size   = dst_height * cbuf_pitch;
 
-  // allocate device memory  
-  RT_CHECK(vx_mem_alloc(device, cbuf_size, VX_MEM_TYPE_GLOBAL, &cbuf_addr));
+  // allocate device memory
+  RT_CHECK(vx_mem_alloc(device, cbuf_size, VX_MEM_WRITE, &color_buffer));
+  RT_CHECK(vx_mem_address(color_buffer, &cbuf_addr));
+  std::cout << "color_buffer=0x" << std::hex << cbuf_addr << std::dec << std::endl;
 
-  std::cout << "cbuf_addr=0x" << std::hex << cbuf_addr << std::dec << std::endl;
-
-  // allocate staging buffer  
+  // clear destination buffer
+  std::cout << "clear destination buffer" << std::endl;
   {
-    std::cout << "allocate staging buffer" << std::endl;
-    staging_buf.resize(cbuf_size);
-  }
-  
-  // clear destination buffer  
-  {    
-    std::cout << "clear destination buffer" << std::endl;      
-    auto buf_ptr = (uint32_t*)staging_buf.data();
-    for (uint32_t i = 0; i < (cbuf_size/4); ++i) {
-      buf_ptr[i] = clear_color;
-    }    
-    RT_CHECK(vx_copy_to_dev(device, cbuf_addr, staging_buf.data(), cbuf_size));  
+    std::vector<uint32_t> staging_buf(cbuf_size / 4, clear_color);
+    RT_CHECK(vx_copy_to_dev(color_buffer, staging_buf.data(), 0, cbuf_size));
   }
 
   // update kernel arguments
-  kernel_arg.num_tasks     = num_tasks;
-  kernel_arg.dst_width     = dst_width;
-  kernel_arg.dst_height    = dst_height;
+  kernel_arg.num_tasks  = num_tasks;
+  kernel_arg.dst_width  = dst_width;
+  kernel_arg.dst_height = dst_height;
 
-  kernel_arg.cbuf_stride   = cbuf_stride;
-  kernel_arg.cbuf_pitch    = cbuf_pitch;    
-  kernel_arg.cbuf_addr     = cbuf_addr;
+  kernel_arg.cbuf_stride= cbuf_stride;
+  kernel_arg.cbuf_pitch = cbuf_pitch;
+  kernel_arg.cbuf_addr  = cbuf_addr;
 
   // run tests
   std::cout << "render" << std::endl;
   RT_CHECK(render(trace));
 
   // cleanup
-  std::cout << "cleanup" << std::endl;  
-  cleanup();  
+  std::cout << "cleanup" << std::endl;
+  cleanup();
 
   if (strcmp (output_file, "") != 0 && reference_file) {
-    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8);
+    auto reference_file_s = graphics::ResolveFilePath(reference_file, ASSETS_PATHS);
+    auto errors = CompareImages(output_file, reference_file_s.c_str(), FORMAT_A8R8G8B8);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;
     } else {
       std::cout << "FAILED! " << errors << " errors." << std::endl;
       return errors;
     }
-  } 
+  }
 
   return 0;
 }

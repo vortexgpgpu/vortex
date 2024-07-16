@@ -1,9 +1,14 @@
-VIVADO = $(XILINX_VIVADO)/bin/vivado
+ROOT_DIR := $(realpath ../../../..)
+include $(ROOT_DIR)/config.mk
 
-RTL_DIR = ../../../rtl
-AFU_DIR = $(RTL_DIR)/afu/xrt
-SCRIPT_DIR = ../../../scripts
-THIRD_PARTY_DIR = ../../../../third_party
+VIVADO := $(XILINX_VIVADO)/bin/vivado
+
+SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/test
+
+RTL_DIR := $(VORTEX_HOME)/hw/rtl
+DPI_DIR := $(VORTEX_HOME)/hw/dpi
+AFU_DIR := $(RTL_DIR)/afu/opae
+SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
 # include paths
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
@@ -15,7 +20,7 @@ RASTER_INCLUDE = -I$(RTL_DIR)/raster
 OM_INCLUDE = -I$(RTL_DIR)/om
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(OM_INCLUDE)
-RTL_INCLUDE += -Iproject_1_files
+RTL_INCLUDE += -I$(SRC_DIR)/project_1_files
 
 # compilation flags
 CFLAGS += -DNDEBUG -DSYNTHESIS -DVIVADO
@@ -29,7 +34,7 @@ CFLAGS += -DEXT_F_DISABLE
 CFLAGS += -DSTARTUP_ADDR=32\'h80000
 CFLAGS += -DIO_BASE_ADDR=32\'hFF000
 
-COE_FILE := $(realpath project_1_files)/kernel.bin.coe
+COE_FILE := $(SRC_DIR)/project_1_files/kernel.bin.coe
 ESCAPED_COE_FILE := $(shell echo "$(COE_FILE)" | sed -e 's/[\/&]/\\&/g')
 
 all: build

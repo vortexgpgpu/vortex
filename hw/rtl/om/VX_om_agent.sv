@@ -1,12 +1,12 @@
 //!/bin/bash
 
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,14 +19,14 @@ module VX_om_agent import VX_om_pkg::*; #(
     parameter CORE_ID = 0,
     parameter NUM_LANES = 1
 ) (
-    input wire clk, 
+    input wire clk,
     input wire reset,
 
-    // Inputs    
+    // Inputs
     VX_execute_if.slave     execute_if,
-    VX_sfu_csr_if.slave     om_csr_if, 
+    VX_sfu_csr_if.slave     om_csr_if,
 
-    // Outputs    
+    // Outputs
     VX_om_bus_if.master     om_bus_if,
     VX_commit_if.master     commit_if
 );
@@ -34,10 +34,10 @@ module VX_om_agent import VX_om_pkg::*; #(
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
 
-    wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] sfu_exe_pos_x;
-    wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] sfu_exe_pos_y;
-    wire [NUM_LANES-1:0]                       sfu_exe_face;
-    wire [NUM_LANES-1:0][31:0]                 sfu_exe_color;
+    wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0]   sfu_exe_pos_x;
+    wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0]   sfu_exe_pos_y;
+    wire [NUM_LANES-1:0]                        sfu_exe_face;
+    wire [NUM_LANES-1:0][31:0]                  sfu_exe_color;
     wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] sfu_exe_depth;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
@@ -71,7 +71,7 @@ module VX_om_agent import VX_om_pkg::*; #(
     wire om_req_valid, om_req_ready;
     wire om_rsp_valid, om_rsp_ready;
 
-    // it is possible to have ready = f(valid) when using arbiters, 
+    // it is possible to have ready = f(valid) when using arbiters,
     // because of that we need to decouple execute_if and commit_if handshake with a pipe register
 
     VX_elastic_buffer #(
@@ -94,7 +94,7 @@ module VX_om_agent import VX_om_pkg::*; #(
     assign om_rsp_valid = execute_if.valid && om_req_ready;
 
     VX_elastic_buffer #(
-        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + PID_WIDTH + 1 + 1),
+        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + PID_WIDTH + 1 + 1),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),

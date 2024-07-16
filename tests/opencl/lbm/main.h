@@ -22,7 +22,7 @@ typedef struct {
 void MAIN_parseCommandLine( int nArgs, char* arg[], MAIN_Param* param, struct pb_Parameters* );
 void MAIN_printInfo( const MAIN_Param* param );
 void MAIN_initialize( const MAIN_Param* param, const OpenCL_Param* prm );
-void MAIN_finalize( const MAIN_Param* param, const OpenCL_Param* prm );
+int MAIN_finalize( const MAIN_Param* param, const OpenCL_Param* prm );
 
 void OpenCL_initialize(struct pb_Parameters*, OpenCL_Param* prm);
 

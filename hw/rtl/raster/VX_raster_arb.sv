@@ -1,12 +1,12 @@
 //!/bin/bash
 
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,13 +19,13 @@ module VX_raster_arb import VX_raster_pkg::*; #(
     parameter NUM_INPUTS     = 1,
     parameter NUM_OUTPUTS    = 1,
     parameter NUM_LANES      = 1,
-    parameter OUT_REG       = 0,
+    parameter OUT_BUF        = 0,
     parameter `STRING ARBITER = "R"
 ) (
     input wire              clk,
     input wire              reset,
 
-    // input request   
+    // input request
     VX_raster_bus_if.slave  bus_in_if [NUM_INPUTS],
 
     // output requests
@@ -58,7 +58,7 @@ module VX_raster_arb import VX_raster_pkg::*; #(
         .NUM_OUTPUTS(NUM_OUTPUTS),
         .DATAW      (REQ_DATAW),
         .ARBITER    (ARBITER),
-        .OUT_REG   (OUT_REG)
+        .OUT_BUF    (OUT_BUF)
     ) req_arb (
         .clk        (clk),
         .reset      (reset),
@@ -70,7 +70,7 @@ module VX_raster_arb import VX_raster_pkg::*; #(
         .ready_out  (req_ready_out),
         `UNUSED_PIN (sel_out)
     );
-    
+
     for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
         assign bus_out_if[i].req_valid = req_valid_out[i];
         assign {bus_out_if[i].req_data.stamps, bus_out_if[i].req_data.done} = req_data_out[i];

@@ -3,7 +3,7 @@ dist: focal
 os: linux
 compiler: gcc
 
-addons:  
+addons:
   apt:
     packages:
       - build-essential
@@ -11,6 +11,9 @@ addons:
       - libstdc++6
       - libpng-dev
       - libboost-serialization-dev
+      - binutils
+      - python
+      - uuid-dev
 
 env:
   global:
@@ -19,89 +22,92 @@ env:
 cache:
   directories:
     - $TOOLDIR
+    - $HOME/third_party
     - $HOME/build32
     - $HOME/build64
 
 before_install:
-  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ]; then  
-      mkdir -p $TOOLDIR;
-      OSDIR=ubuntu/focal ./ci/toolchain_install.sh --all;
+  - if [ ! -d "$TOOLDIR" ] || [ -z "$(ls -A $TOOLDIR)" ] || [ "$(cat "$TOOLDIR/version.txt")" != "v0.4" ]; then
+      rm -rf $TOOLDIR;
+      mkdir -p $TRAVIS_BUILD_DIR/build && cd $TRAVIS_BUILD_DIR/build;
+      ../configure --tooldir=$TOOLDIR;
+      ci/toolchain_install.sh --all;
+      echo "v0.3" > "$TOOLDIR/version.txt";
+    else
+      echo "using existing tooldir build";
     fi
-  - source ./ci/toolchain_env.sh
+  - if [ ! -d "$HOME/third_party" ] || [ -z "$(ls -A $HOME/third_party)" ] || [ "$(cat "$HOME/third_party/version.txt")" != "v0.2" ]; then
+      cd $TRAVIS_BUILD_DIR;
+      make -C third_party > /dev/null;
+      echo "v0.2" > "third_party/version.txt";
+      cp -rf third_party $HOME;
+    else
+      echo "using existing third_party build";
+      cp -rf $HOME/third_party $TRAVIS_BUILD_DIR;
+    fi
+
+install:
+  - if [ ! -d "$HOME/build$XLEN" ] || [ -z "$(ls -A $HOME/build$XLEN)" ] || [ "$(cat "$HOME/build$XLEN/version.txt")" != "$TRAVIS_COMMIT" ]; then
+      mkdir -p $TRAVIS_BUILD_DIR/build$XLEN && cd $TRAVIS_BUILD_DIR/build$XLEN;
+      ../configure --tooldir=$TOOLDIR --xlen=$XLEN;
+      source ci/toolchain_env.sh;
+      make build -s > /dev/null;
+      echo "$TRAVIS_COMMIT" > version.txt;
+      cp -rf $TRAVIS_BUILD_DIR/build$XLEN $HOME;
+    else
+      echo "using existing build for commit $TRAVIS_COMMIT";
+      cp -rf $HOME/build$XLEN $TRAVIS_BUILD_DIR;
+    fi
+
+before_script:
+  - cd $TRAVIS_BUILD_DIR/build$XLEN
+  - source ci/toolchain_env.sh
 
 stages:
-  - setup
   - test
 
-jobs:     
+jobs:
   include:
-    - stage: setup
+    - stage: test
+      name: regression32
+      env: XLEN=32
       script:
-        - rm -rf $HOME/build32 && cp -r $PWD $HOME/build32
-        - rm -rf $HOME/build64 && cp -r $PWD $HOME/build64
-        - make -C $HOME/build32
-        - XLEN=64 make -C $HOME/build64
-    - stage: test 
-      name: unittest
-      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --unittest
-    - stage: test 
-      name: isa
-      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --isa
-    - stage: test 
-      name: isa64
-      script: cp -r $HOME/build64 build && cd build && XLEN=64 ./ci/travis_run.py ./ci/regression.sh --isa
-    - stage: test 
-      name: regression
-      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --regression
-    - stage: test 
+        - ./ci/travis_run.py ./ci/regression.sh --unittest
+        - ./ci/travis_run.py ./ci/regression.sh --isa
+        - ./ci/travis_run.py ./ci/regression.sh --kernel
+        - ./ci/travis_run.py ./ci/regression.sh --synthesis
+        - ./ci/travis_run.py ./ci/regression.sh --regression
+        - ./ci/travis_run.py ./ci/regression.sh --opencl
+
+    - stage: test
       name: regression64
-      script: cp -r $HOME/build64 build && cd build && XLEN=64 ./ci/travis_run.py ./ci/regression.sh --regression
-    - stage: test 
-      name: opencl
-      script: cp -r $HOME/build32 $HOME/build32_opencl && cd $HOME/build32_opencl && ./ci/travis_run.py ./ci/regression.sh --opencl    
+      env: XLEN=64
+      script:
+        - ./ci/travis_run.py ./ci/regression.sh --isa
+        - ./ci/travis_run.py ./ci/regression.sh --kernel
+        - ./ci/travis_run.py ./ci/regression.sh --synthesis
+        - ./ci/travis_run.py ./ci/regression.sh --regression
+        - ./ci/travis_run.py ./ci/regression.sh --opencl
+
     - stage: test
       name: graphics
-      script: cp -r $HOME/build32 $HOME/build32_graphics && cd $HOME/build32_graphics && ./ci/travis_run.py ./ci/regression.sh --graphics
+      env: XLEN=32
+      script:
+        - ./ci/travis_run.py ./ci/regression.sh --graphics
+        - ./ci/travis_run.py ./ci/regression.sh --tex
+        - ./ci/travis_run.py ./ci/regression.sh --om
+        - ./ci/travis_run.py ./ci/regression.sh --raster
+
     - stage: test
-      name: graphics64
-      script: cp -r $HOME/build64 $HOME/build64_graphics && cd $HOME/build64_graphics && XLEN=64 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh --graphics
-    - stage: test
-      name: tex
-      script: cp -r $HOME/build32 $HOME/build32_tex && cd $HOME/build32_tex && ./ci/travis_run.py ./ci/regression.sh --tex
-    - stage: test
-      name: om
-      script: cp -r $HOME/build32 $HOME/build32_om && cd $HOME/build32_om && ./ci/travis_run.py ./ci/regression.sh --om
-    - stage: test
-      name: raster
-      script: cp -r $HOME/build32 $HOME/build32_raster && cd $HOME/build32_raster && ./ci/travis_run.py ./ci/regression.sh --raster
-    - stage: test 
-      name: cluster
-      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --cluster    
-    - stage: test 
       name: config
-      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --config
+      env: XLEN=32
+      script:
+        - ./ci/travis_run.py ./ci/regression.sh --cluster
+        - ./ci/travis_run.py ./ci/regression.sh --config
+
     - stage: test
       name: debug
-      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --debug
-    - stage: test 
-      name: stress0
-      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --stress0
-    - stage: test 
-      name: stress1
-      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --stress1
-    - stage: test 
-      name: synthesis
-      script: cp -r $HOME/build32 build && cd build && ./ci/travis_run.py ./ci/regression.sh --synthesis
-    - stage: test 
-      name: synthesis64
-      script: cp -r $HOME/build64 build && cd build && XLEN=64 ./ci/travis_run.py ./ci/regression.sh --synthesis
-            
-after_success:
-  # Gather code coverage
-  - lcov --directory runtime --capture --output-file runtime.cov # capture trace  
-  - lcov --directory sim --capture --output-file sim.cov # capture trace    
-  - lcov --list runtime.cov # output coverage data for debugging
-  - lcov --list sim.cov # output coverage data for debugging
-  # Upload coverage report
-  - bash <(curl -s https://codecov.io/bash) -f runtime.cov
-  - bash <(curl -s https://codecov.io/bash) -f sim.cov
+      env: XLEN=32
+      script:
+        - ./ci/travis_run.py ./ci/regression.sh --debug
+        - ./ci/travis_run.py ./ci/regression.sh --stress
