@@ -26,10 +26,10 @@ module VX_mem_coalescer #(
     parameter QUEUE_SIZE    = 8,
     parameter DATA_IN_WIDTH = DATA_IN_SIZE * 8,
     parameter DATA_OUT_WIDTH= DATA_OUT_SIZE * 8,
-    parameter OUT_REQS      = (NUM_REQS * DATA_IN_WIDTH) / DATA_OUT_WIDTH,
-    parameter BATCH_SIZE    = DATA_OUT_SIZE / DATA_IN_SIZE,
-    parameter BATCH_SIZE_W  = `LOG2UP(BATCH_SIZE),
-    parameter OUT_ADDR_WIDTH= ADDR_WIDTH - BATCH_SIZE_W,
+    parameter DATA_RATIO    = DATA_OUT_SIZE / DATA_IN_SIZE,
+    parameter DATA_RATIO_W  = `LOG2UP(DATA_RATIO),
+    parameter OUT_REQS      = NUM_REQS / DATA_RATIO,
+    parameter OUT_ADDR_WIDTH= ADDR_WIDTH - DATA_RATIO_W,
     parameter QUEUE_ADDRW   = `CLOG2(QUEUE_SIZE),
     parameter OUT_TAG_WIDTH = UUID_WIDTH + QUEUE_ADDRW
 ) (
@@ -77,15 +77,16 @@ module VX_mem_coalescer #(
     `STATIC_ASSERT ((NUM_REQS * DATA_IN_WIDTH >= DATA_OUT_WIDTH), ("invalid parameter"))
     `RUNTIME_ASSERT ((~in_req_valid || in_req_mask != 0), ("invalid request mask"));
     `RUNTIME_ASSERT ((~out_rsp_valid || out_rsp_mask != 0), ("invalid request mask"));
-    localparam TAG_ID_WIDTH    = TAG_WIDTH - UUID_WIDTH;
-    localparam NUM_REQS_W      = `LOG2UP(NUM_REQS);
+
+    localparam TAG_ID_WIDTH = TAG_WIDTH - UUID_WIDTH;
+    localparam NUM_REQS_W   = `LOG2UP(NUM_REQS);
     //                           tag          + mask     + offest
-    localparam IBUF_DATA_WIDTH = TAG_ID_WIDTH + NUM_REQS + (NUM_REQS * BATCH_SIZE_W);
+    localparam IBUF_DATA_WIDTH = TAG_ID_WIDTH + NUM_REQS + (NUM_REQS * DATA_RATIO_W);
 
     localparam STATE_SETUP = 0;
     localparam STATE_SEND  = 1;
 
-    logic state_r, state_n;
+    reg state_r, state_n;
 
     reg out_req_valid_r, out_req_valid_n;
     reg out_req_rw_r, out_req_rw_n;
@@ -96,7 +97,7 @@ module VX_mem_coalescer #(
     reg [OUT_REQS-1:0][DATA_OUT_WIDTH-1:0] out_req_data_r, out_req_data_n;
     reg [OUT_TAG_WIDTH-1:0] out_req_tag_r, out_req_tag_n;
 
-    logic in_req_ready_n;
+    reg in_req_ready_n;
 
     wire                        ibuf_push;
     wire                        ibuf_pop;
@@ -107,32 +108,44 @@ module VX_mem_coalescer #(
     wire [IBUF_DATA_WIDTH-1:0]  ibuf_din;
     wire [IBUF_DATA_WIDTH-1:0]  ibuf_dout;
 
-    reg [OUT_REQS-1:0] batch_valid_r, batch_valid_n;
-    reg [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] seed_addr_r, seed_addr_n;
-    reg [OUT_REQS-1:0][ATYPE_WIDTH-1:0] seed_atype_r, seed_atype_n;
-    reg [NUM_REQS-1:0] processed_mask_r, processed_mask_n;
+    logic [OUT_REQS-1:0] batch_valid_r, batch_valid_n;
+    logic [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] seed_addr_r, seed_addr_n;
+    logic [OUT_REQS-1:0][ATYPE_WIDTH-1:0] seed_atype_r, seed_atype_n;
+    logic [NUM_REQS-1:0] addr_matches_r, addr_matches_n;
+    logic [NUM_REQS-1:0] processed_mask_r, processed_mask_n;
 
     wire [OUT_REQS-1:0][NUM_REQS_W-1:0] seed_idx;
 
     wire [NUM_REQS-1:0][OUT_ADDR_WIDTH-1:0] in_addr_base;
-    wire [NUM_REQS-1:0][BATCH_SIZE_W-1:0] in_addr_offset;
+    wire [NUM_REQS-1:0][DATA_RATIO_W-1:0] in_addr_offset;
     for (genvar i = 0; i < NUM_REQS; i++) begin
-        assign in_addr_base[i] = in_req_addr[i][ADDR_WIDTH-1:BATCH_SIZE_W];
-        assign in_addr_offset[i] = in_req_addr[i][BATCH_SIZE_W-1:0];
+        assign in_addr_base[i] = in_req_addr[i][ADDR_WIDTH-1:DATA_RATIO_W];
+        assign in_addr_offset[i] = in_req_addr[i][DATA_RATIO_W-1:0];
     end
 
     for (genvar i = 0; i < OUT_REQS; ++i) begin
-        wire [BATCH_SIZE-1:0] batch_mask = in_req_mask[BATCH_SIZE * i +: BATCH_SIZE] & ~processed_mask_r[BATCH_SIZE * i +: BATCH_SIZE];
-        wire [BATCH_SIZE_W-1:0] batch_idx;
+        wire [DATA_RATIO-1:0] batch_mask = in_req_mask[i * DATA_RATIO +: DATA_RATIO] & ~processed_mask_r[i * DATA_RATIO +: DATA_RATIO];
+        wire [DATA_RATIO_W-1:0] batch_idx;
         VX_priority_encoder #(
-            .N (BATCH_SIZE)
+            .N (DATA_RATIO)
         ) priority_encoder (
             .data_in (batch_mask),
-            .index (batch_idx),
+            .index  (batch_idx),
             `UNUSED_PIN (onehot),
             .valid_out (batch_valid_n[i])
         );
-        assign seed_idx[i] = NUM_REQS_W'(BATCH_SIZE * i) + NUM_REQS_W'(batch_idx);
+        assign seed_idx[i] = NUM_REQS_W'(i * DATA_RATIO) + NUM_REQS_W'(batch_idx);
+    end
+
+    for (genvar i = 0; i < OUT_REQS; ++i) begin
+        assign seed_addr_n[i]  = in_addr_base[seed_idx[i]];
+        assign seed_atype_n[i] = in_req_atype[seed_idx[i]];
+    end
+
+    for (genvar i = 0; i < OUT_REQS; ++i) begin
+        for (genvar j = 0; j < DATA_RATIO; ++j) begin
+            assign addr_matches_n[i * DATA_RATIO + j] = (in_addr_base[i * DATA_RATIO + j] == seed_addr_n[i]);
+        end
     end
 
     always @(posedge clk) begin
@@ -142,12 +155,13 @@ module VX_mem_coalescer #(
             out_req_valid_r  <= 0;
         end else begin
             state_r          <= state_n;
-            out_req_valid_r  <= out_req_valid_n;
             batch_valid_r    <= batch_valid_n;
             seed_addr_r      <= seed_addr_n;
             seed_atype_r     <= seed_atype_n;
-            out_req_rw_r     <= out_req_rw_n;
+            addr_matches_r   <= addr_matches_n;
+            out_req_valid_r  <= out_req_valid_n;
             out_req_mask_r   <= out_req_mask_n;
+            out_req_rw_r     <= out_req_rw_n;
             out_req_addr_r   <= out_req_addr_n;
             out_req_atype_r  <= out_req_atype_n;
             out_req_byteen_r <= out_req_byteen_n;
@@ -157,43 +171,36 @@ module VX_mem_coalescer #(
         end
     end
 
-    wire [NUM_REQS-1:0] addr_matches;
+    wire [NUM_REQS-1:0] current_pmask = in_req_mask & addr_matches_r;
 
-    for (genvar i = 0; i < OUT_REQS; ++i) begin
-        for (genvar j = 0; j < BATCH_SIZE; ++j) begin
-            assign addr_matches[BATCH_SIZE * i + j] = (in_addr_base[BATCH_SIZE * i + j] == seed_addr_r[i]);
-        end
-    end
-
-    wire [NUM_REQS-1:0] current_pmask = in_req_mask & addr_matches;
-
-    reg [OUT_REQS-1:0][DATA_OUT_SIZE-1:0] req_byteen_merged;
-    reg [OUT_REQS-1:0][DATA_OUT_WIDTH-1:0] req_data_merged;
+    reg [OUT_REQS-1:0][DATA_RATIO-1:0][DATA_IN_SIZE-1:0] req_byteen_merged;
+    reg [OUT_REQS-1:0][DATA_RATIO-1:0][DATA_IN_WIDTH-1:0] req_data_merged;
 
     always @(*) begin
         req_byteen_merged = '0;
         req_data_merged = 'x;
         for (integer i = 0; i < OUT_REQS; ++i) begin
-            for (integer j = 0; j < BATCH_SIZE; ++j) begin
-                if (current_pmask[BATCH_SIZE * i + j]) begin
-                    req_byteen_merged[i][in_addr_offset[BATCH_SIZE * i + j] * DATA_IN_SIZE +: DATA_IN_SIZE] = in_req_byteen[BATCH_SIZE * i + j];
-                    req_data_merged[i][in_addr_offset[BATCH_SIZE * i + j] * DATA_IN_WIDTH +: DATA_IN_WIDTH] = in_req_data[BATCH_SIZE * i + j];
+            for (integer j = 0; j < DATA_RATIO; ++j) begin
+                if (current_pmask[i * DATA_RATIO + j]) begin
+                    for (integer k = 0; k < DATA_IN_SIZE; ++k) begin
+                        if (in_req_byteen[DATA_RATIO * i + j][k]) begin
+                            req_byteen_merged[i][in_addr_offset[DATA_RATIO * i + j]][k] = 1'b1;
+                            req_data_merged[i][in_addr_offset[DATA_RATIO * i + j]][k * 8 +: 8] = in_req_data[DATA_RATIO * i + j][k * 8 +: 8];
+                        end
+                    end
                 end
             end
         end
     end
 
-    wire [OUT_REQS * BATCH_SIZE - 1:0] pending_mask;
-    for (genvar i = 0; i < OUT_REQS * BATCH_SIZE; ++i) begin
-        assign pending_mask[i] = in_req_mask[i] && ~addr_matches[i] && ~processed_mask_r[i];
+    wire [OUT_REQS * DATA_RATIO - 1:0] pending_mask;
+    for (genvar i = 0; i < OUT_REQS * DATA_RATIO; ++i) begin
+        assign pending_mask[i] = in_req_mask[i] && ~addr_matches_r[i] && ~processed_mask_r[i];
     end
     wire batch_completed = ~(| pending_mask);
 
     always @(*) begin
         state_n          = state_r;
-
-        seed_addr_n      = seed_addr_r;
-        seed_atype_n     = seed_atype_r;
 
         out_req_valid_n  = out_req_valid_r;
         out_req_mask_n   = out_req_mask_r;
@@ -208,11 +215,6 @@ module VX_mem_coalescer #(
 
         case (state_r)
         STATE_SETUP: begin
-            // find the next seed address
-            for (integer i = 0; i < OUT_REQS; ++i) begin
-                seed_addr_n[i] = in_addr_base[seed_idx[i]];
-                seed_atype_n[i] = in_req_atype[seed_idx[i]];
-            end
             // wait for pending outgoing request to submit
             if (out_req_valid && out_req_ready) begin
                 out_req_valid_n = 0;
@@ -252,7 +254,7 @@ module VX_mem_coalescer #(
     assign ibuf_raddr = out_rsp_tag[QUEUE_ADDRW-1:0];
 
     wire [TAG_ID_WIDTH-1:0] ibuf_din_tag = in_req_tag[TAG_ID_WIDTH-1:0];
-    wire [NUM_REQS-1:0][BATCH_SIZE_W-1:0] ibuf_din_offset = in_addr_offset;
+    wire [NUM_REQS-1:0][DATA_RATIO_W-1:0] ibuf_din_offset = in_addr_offset;
     wire [NUM_REQS-1:0] ibuf_din_pmask = current_pmask;
 
     assign ibuf_din = {ibuf_din_tag, ibuf_din_pmask, ibuf_din_offset};
@@ -300,7 +302,7 @@ module VX_mem_coalescer #(
         end
     end
 
-    wire [NUM_REQS-1:0][BATCH_SIZE_W-1:0] ibuf_dout_offset;
+    wire [NUM_REQS-1:0][DATA_RATIO_W-1:0] ibuf_dout_offset;
     wire [NUM_REQS-1:0] ibuf_dout_pmask;
     wire [TAG_ID_WIDTH-1:0] ibuf_dout_tag;
 
@@ -310,9 +312,9 @@ module VX_mem_coalescer #(
     wire [NUM_REQS-1:0] in_rsp_mask_n;
 
     for (genvar i = 0; i < OUT_REQS; ++i) begin
-        for (genvar j = 0; j < BATCH_SIZE; ++j) begin
-            assign in_rsp_mask_n[BATCH_SIZE * i + j] = out_rsp_mask[i] && ibuf_dout_pmask[BATCH_SIZE * i + j];
-            assign in_rsp_data_n[BATCH_SIZE * i + j] = out_rsp_data[i][ibuf_dout_offset[BATCH_SIZE * i + j] * DATA_IN_WIDTH +: DATA_IN_WIDTH];
+        for (genvar j = 0; j < DATA_RATIO; ++j) begin
+            assign in_rsp_mask_n[i * DATA_RATIO + j] = out_rsp_mask[i] && ibuf_dout_pmask[i * DATA_RATIO + j];
+            assign in_rsp_data_n[i * DATA_RATIO + j] = out_rsp_data[i][ibuf_dout_offset[i * DATA_RATIO + j] * DATA_IN_WIDTH +: DATA_IN_WIDTH];
         end
     end
 
@@ -334,7 +336,7 @@ module VX_mem_coalescer #(
         assign out_rsp_uuid = '0;
     end
 
-    reg [NUM_REQS-1:0][BATCH_SIZE_W-1:0] out_req_offset;
+    reg [NUM_REQS-1:0][DATA_RATIO_W-1:0] out_req_offset;
     reg [NUM_REQS-1:0] out_req_pmask;
 
     always @(posedge clk) begin

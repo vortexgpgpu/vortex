@@ -69,7 +69,7 @@ module VX_alu_muldiv #(
     wire mul_fire_in = mul_valid_in && mul_ready_in;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        wire [`XLEN-1:0] mul_resultl, mul_resulth;
+        reg [`XLEN-1:0] mul_resultl, mul_resulth;
         wire [`XLEN-1:0] mul_in1 = is_alu_w ? (execute_if.data.rs1_data[i] & `XLEN'hFFFFFFFF) : execute_if.data.rs1_data[i];
         wire [`XLEN-1:0] mul_in2 = is_alu_w ? (execute_if.data.rs2_data[i] & `XLEN'hFFFFFFFF) : execute_if.data.rs2_data[i];
         always @(*) begin
@@ -235,7 +235,7 @@ module VX_alu_muldiv #(
     wire div_fire_in = div_valid_in && div_ready_in;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        wire [`XLEN-1:0] div_quotient, div_remainder;
+        reg [`XLEN-1:0] div_quotient, div_remainder;
         always @(*) begin
             dpi_idiv (div_fire_in, is_signed_op, div_in1[i], div_in2[i], div_quotient, div_remainder);
         end
