@@ -141,13 +141,13 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
     begin : fma
 
         reg [NUM_LANES-1:0][`XLEN-1:0] result_fma;
-        wire [NUM_LANES-1:0][63:0] result_fadd;
-        wire [NUM_LANES-1:0][63:0] result_fsub;
-        wire [NUM_LANES-1:0][63:0] result_fmul;
-        wire [NUM_LANES-1:0][63:0] result_fmadd;
-        wire [NUM_LANES-1:0][63:0] result_fmsub;
-        wire [NUM_LANES-1:0][63:0] result_fnmadd;
-        wire [NUM_LANES-1:0][63:0] result_fnmsub;
+        reg [NUM_LANES-1:0][63:0] result_fadd;
+        reg [NUM_LANES-1:0][63:0] result_fsub;
+        reg [NUM_LANES-1:0][63:0] result_fmul;
+        reg [NUM_LANES-1:0][63:0] result_fmadd;
+        reg [NUM_LANES-1:0][63:0] result_fmsub;
+        reg [NUM_LANES-1:0][63:0] result_fnmadd;
+        reg [NUM_LANES-1:0][63:0] result_fnmsub;
 
         fflags_t [NUM_LANES-1:0] fflags_fma;
         fflags_t [NUM_LANES-1:0] fflags_fadd;
@@ -217,7 +217,7 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
     begin : fdiv
 
         reg [NUM_LANES-1:0][`XLEN-1:0] result_fdiv_r;
-        wire [NUM_LANES-1:0][63:0] result_fdiv;
+        reg [NUM_LANES-1:0][63:0] result_fdiv;
         fflags_t [NUM_LANES-1:0] fflags_fdiv;
 
         wire fdiv_valid = (valid_in && core_select == FPU_DIVSQRT) && is_div;
@@ -256,7 +256,7 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
     begin : fsqrt
 
         reg [NUM_LANES-1:0][`XLEN-1:0] result_fsqrt_r;
-        wire [NUM_LANES-1:0][63:0] result_fsqrt;
+        reg [NUM_LANES-1:0][63:0] result_fsqrt;
         fflags_t [NUM_LANES-1:0] fflags_fsqrt;
 
         wire fsqrt_valid = (valid_in && core_select == FPU_DIVSQRT) && ~is_div;
@@ -295,11 +295,11 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
     begin : fcvt
 
         reg [NUM_LANES-1:0][`XLEN-1:0] result_fcvt;
-        wire [NUM_LANES-1:0][63:0] result_itof;
-        wire [NUM_LANES-1:0][63:0] result_utof;
-        wire [NUM_LANES-1:0][63:0] result_ftoi;
-        wire [NUM_LANES-1:0][63:0] result_ftou;
-        wire [NUM_LANES-1:0][63:0] result_f2f;
+        reg [NUM_LANES-1:0][63:0] result_itof;
+        reg [NUM_LANES-1:0][63:0] result_utof;
+        reg [NUM_LANES-1:0][63:0] result_ftoi;
+        reg [NUM_LANES-1:0][63:0] result_ftou;
+        reg [NUM_LANES-1:0][63:0] result_f2f;
 
         fflags_t [NUM_LANES-1:0] fflags_fcvt;
         fflags_t [NUM_LANES-1:0] fflags_itof;
@@ -359,15 +359,15 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
     begin : fncp
 
         reg [NUM_LANES-1:0][`XLEN-1:0]  result_fncp;
-        wire [NUM_LANES-1:0][63:0] result_fclss;
-        wire [NUM_LANES-1:0][63:0] result_flt;
-        wire [NUM_LANES-1:0][63:0] result_fle;
-        wire [NUM_LANES-1:0][63:0] result_feq;
-        wire [NUM_LANES-1:0][63:0] result_fmin;
-        wire [NUM_LANES-1:0][63:0] result_fmax;
-        wire [NUM_LANES-1:0][63:0] result_fsgnj;
-        wire [NUM_LANES-1:0][63:0] result_fsgnjn;
-        wire [NUM_LANES-1:0][63:0] result_fsgnjx;
+        reg [NUM_LANES-1:0][63:0] result_fclss;
+        reg [NUM_LANES-1:0][63:0] result_flt;
+        reg [NUM_LANES-1:0][63:0] result_fle;
+        reg [NUM_LANES-1:0][63:0] result_feq;
+        reg [NUM_LANES-1:0][63:0] result_fmin;
+        reg [NUM_LANES-1:0][63:0] result_fmax;
+        reg [NUM_LANES-1:0][63:0] result_fsgnj;
+        reg [NUM_LANES-1:0][63:0] result_fsgnjn;
+        reg [NUM_LANES-1:0][63:0] result_fsgnjx;
         reg [NUM_LANES-1:0][63:0] result_fmvx;
         reg [NUM_LANES-1:0][63:0] result_fmvf;
 

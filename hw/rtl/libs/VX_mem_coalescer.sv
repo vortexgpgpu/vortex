@@ -112,6 +112,7 @@ module VX_mem_coalescer #(
     reg [OUT_REQS-1:0] batch_valid_r, batch_valid_n;
     reg [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] seed_addr_r, seed_addr_n;
     reg [OUT_REQS-1:0][ATYPE_WIDTH-1:0] seed_atype_r, seed_atype_n;
+    reg [NUM_REQS-1:0] addr_matches_r, addr_matches_n;
     reg [NUM_REQS-1:0] processed_mask_r, processed_mask_n;
 
     wire [OUT_REQS-1:0][NUM_REQS_W-1:0] seed_idx;
@@ -137,6 +138,17 @@ module VX_mem_coalescer #(
         assign seed_idx[i] = NUM_REQS_W'(BATCH_SIZE * i) + NUM_REQS_W'(batch_idx);
     end
 
+    for (genvar i = 0; i < OUT_REQS; ++i) begin
+        assign seed_addr_n[i]  = in_addr_base[seed_idx[i]];
+        assign seed_atype_n[i] = in_req_atype[seed_idx[i]];
+    end
+
+    for (genvar i = 0; i < OUT_REQS; ++i) begin
+        for (genvar j = 0; j < BATCH_SIZE; ++j) begin
+            assign addr_matches_n[BATCH_SIZE * i + j] = (in_addr_base[BATCH_SIZE * i + j] == seed_addr_n[i]);
+        end
+    end
+
     always @(posedge clk) begin
         if (reset) begin
             state_r          <= STATE_SETUP;
@@ -144,12 +156,13 @@ module VX_mem_coalescer #(
             out_req_valid_r  <= 0;
         end else begin
             state_r          <= state_n;
-            out_req_valid_r  <= out_req_valid_n;
             batch_valid_r    <= batch_valid_n;
             seed_addr_r      <= seed_addr_n;
             seed_atype_r     <= seed_atype_n;
-            out_req_rw_r     <= out_req_rw_n;
+            addr_matches_r   <= addr_matches_n;
+            out_req_valid_r  <= out_req_valid_n;
             out_req_mask_r   <= out_req_mask_n;
+            out_req_rw_r     <= out_req_rw_n;
             out_req_addr_r   <= out_req_addr_n;
             out_req_atype_r  <= out_req_atype_n;
             out_req_byteen_r <= out_req_byteen_n;
@@ -159,15 +172,7 @@ module VX_mem_coalescer #(
         end
     end
 
-    wire [NUM_REQS-1:0] addr_matches;
-
-    for (genvar i = 0; i < OUT_REQS; ++i) begin
-        for (genvar j = 0; j < BATCH_SIZE; ++j) begin
-            assign addr_matches[BATCH_SIZE * i + j] = (in_addr_base[BATCH_SIZE * i + j] == seed_addr_r[i]);
-        end
-    end
-
-    wire [NUM_REQS-1:0] current_pmask = in_req_mask & addr_matches;
+    wire [NUM_REQS-1:0] current_pmask = in_req_mask & addr_matches_r;
 
     reg [OUT_REQS-1:0][DATA_OUT_SIZE-1:0] req_byteen_merged;
     reg [OUT_REQS-1:0][DATA_OUT_WIDTH-1:0] req_data_merged;
@@ -187,15 +192,12 @@ module VX_mem_coalescer #(
 
     wire [OUT_REQS * BATCH_SIZE - 1:0] pending_mask;
     for (genvar i = 0; i < OUT_REQS * BATCH_SIZE; ++i) begin
-        assign pending_mask[i] = in_req_mask[i] && ~addr_matches[i] && ~processed_mask_r[i];
+        assign pending_mask[i] = in_req_mask[i] && ~addr_matches_r[i] && ~processed_mask_r[i];
     end
     wire batch_completed = ~(| pending_mask);
 
     always @(*) begin
         state_n          = state_r;
-
-        seed_addr_n      = seed_addr_r;
-        seed_atype_n     = seed_atype_r;
 
         out_req_valid_n  = out_req_valid_r;
         out_req_mask_n   = out_req_mask_r;
@@ -211,11 +213,6 @@ module VX_mem_coalescer #(
 
         case (state_r)
         STATE_SETUP: begin
-            // find the next seed address
-            for (integer i = 0; i < OUT_REQS; ++i) begin
-                seed_addr_n[i] = in_addr_base[seed_idx[i]];
-                seed_atype_n[i] = in_req_atype[seed_idx[i]];
-            end
             // wait for pending outgoing request to submit
             if (out_req_valid && out_req_ready) begin
                 out_req_valid_n = 0;
