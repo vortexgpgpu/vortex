@@ -45,20 +45,20 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     input wire                              writeback_sop[`ISSUE_WIDTH],
     input wire                              writeback_eop[`ISSUE_WIDTH],
 
-    input wire                              dispatch_valid[`NUM_EX_UNITS * `ISSUE_WIDTH],
-    input wire [`UUID_WIDTH-1:0]            dispatch_uuid[`NUM_EX_UNITS * `ISSUE_WIDTH],
-    input wire [ISSUE_WIS_W-1:0]            dispatch_wis[`NUM_EX_UNITS * `ISSUE_WIDTH],
-    input wire [`NUM_THREADS-1:0]           dispatch_tmask[`NUM_EX_UNITS * `ISSUE_WIDTH],
-    input wire [`PC_BITS-1:0]               dispatch_PC[`NUM_EX_UNITS * `ISSUE_WIDTH],
-    input wire [`INST_ALU_BITS-1:0]         dispatch_op_type[`NUM_EX_UNITS * `ISSUE_WIDTH],
-    input op_args_t                         dispatch_op_args[`NUM_EX_UNITS * `ISSUE_WIDTH],
-    input wire                              dispatch_wb[`NUM_EX_UNITS * `ISSUE_WIDTH],
-    input wire [`NR_BITS-1:0]               dispatch_rd[`NUM_EX_UNITS * `ISSUE_WIDTH],
-    input wire [`NT_WIDTH-1:0]              dispatch_tid[`NUM_EX_UNITS * `ISSUE_WIDTH],
-    input wire [`NUM_THREADS-1:0][`XLEN-1:0] dispatch_rs1_data[`NUM_EX_UNITS * `ISSUE_WIDTH],
-    input wire [`NUM_THREADS-1:0][`XLEN-1:0] dispatch_rs2_data[`NUM_EX_UNITS * `ISSUE_WIDTH],
-    input wire [`NUM_THREADS-1:0][`XLEN-1:0] dispatch_rs3_data[`NUM_EX_UNITS * `ISSUE_WIDTH],
-    output wire                             dispatch_ready[`NUM_EX_UNITS * `ISSUE_WIDTH]
+    output wire                             dispatch_valid[`NUM_EX_UNITS * `ISSUE_WIDTH],
+    output wire [`UUID_WIDTH-1:0]           dispatch_uuid[`NUM_EX_UNITS * `ISSUE_WIDTH],
+    output wire [ISSUE_WIS_W-1:0]           dispatch_wis[`NUM_EX_UNITS * `ISSUE_WIDTH],
+    output wire [`NUM_THREADS-1:0]          dispatch_tmask[`NUM_EX_UNITS * `ISSUE_WIDTH],
+    output wire [`PC_BITS-1:0]              dispatch_PC[`NUM_EX_UNITS * `ISSUE_WIDTH],
+    output wire [`INST_ALU_BITS-1:0]        dispatch_op_type[`NUM_EX_UNITS * `ISSUE_WIDTH],
+    output op_args_t                        dispatch_op_args[`NUM_EX_UNITS * `ISSUE_WIDTH],
+    output wire                             dispatch_wb[`NUM_EX_UNITS * `ISSUE_WIDTH],
+    output wire [`NR_BITS-1:0]              dispatch_rd[`NUM_EX_UNITS * `ISSUE_WIDTH],
+    output wire [`NT_WIDTH-1:0]             dispatch_tid[`NUM_EX_UNITS * `ISSUE_WIDTH],
+    output wire [`NUM_THREADS-1:0][`XLEN-1:0] dispatch_rs1_data[`NUM_EX_UNITS * `ISSUE_WIDTH],
+    output wire [`NUM_THREADS-1:0][`XLEN-1:0] dispatch_rs2_data[`NUM_EX_UNITS * `ISSUE_WIDTH],
+    output wire [`NUM_THREADS-1:0][`XLEN-1:0] dispatch_rs3_data[`NUM_EX_UNITS * `ISSUE_WIDTH],
+    input wire                             dispatch_ready[`NUM_EX_UNITS * `ISSUE_WIDTH]
 );
 
     VX_decode_if    decode_if();
@@ -93,20 +93,20 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     end
 
     for (genvar i = 0; i < `NUM_EX_UNITS * `ISSUE_WIDTH; ++i) begin
-        assign dispatch_if[i].valid = dispatch_valid[i];
-        assign dispatch_if[i].data.uuid = dispatch_uuid[i];
-        assign dispatch_if[i].data.wis = dispatch_wis[i];
-        assign dispatch_if[i].data.tmask = dispatch_tmask[i];
-        assign dispatch_if[i].data.PC = dispatch_PC[i];
-        assign dispatch_if[i].data.op_type = dispatch_op_type[i];
-        assign dispatch_if[i].data.op_args = dispatch_op_args[i];
-        assign dispatch_if[i].data.wb = dispatch_wb[i];
-        assign dispatch_if[i].data.rd = dispatch_rd[i];
-        assign dispatch_if[i].data.tid = dispatch_tid[i];
-        assign dispatch_if[i].data.rs1_data = dispatch_rs1_data[i];
-        assign dispatch_if[i].data.rs2_data = dispatch_rs2_data[i];
-        assign dispatch_if[i].data.rs3_data = dispatch_rs3_data[i];
-        assign dispatch_ready[i] = dispatch_if[i].ready;
+        assign dispatch_valid[i] = dispatch_if[i].valid;
+        assign dispatch_uuid[i] = dispatch_if[i].data.uuid;
+        assign dispatch_wis[i] = dispatch_if[i].data.wis;
+        assign dispatch_tmask[i] = dispatch_if[i].data.tmask;
+        assign dispatch_PC[i] = dispatch_if[i].data.PC;
+        assign dispatch_op_type[i] = dispatch_if[i].data.op_type;
+        assign dispatch_op_args[i] = dispatch_if[i].data.op_args;
+        assign dispatch_wb[i] = dispatch_if[i].data.wb;
+        assign dispatch_rd[i] = dispatch_if[i].data.rd;
+        assign dispatch_tid[i] = dispatch_if[i].data.tid;
+        assign dispatch_rs1_data[i] = dispatch_if[i].data.rs1_data;
+        assign dispatch_rs2_data[i] = dispatch_if[i].data.rs2_data;
+        assign dispatch_rs3_data[i] = dispatch_if[i].data.rs3_data;
+        assign dispatch_if[i].ready = dispatch_ready[i];
     end
 
 `ifdef PERF_ENABLE
