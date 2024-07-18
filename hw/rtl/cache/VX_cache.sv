@@ -471,7 +471,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     VX_stream_arb #(
         .NUM_INPUTS (NUM_BANKS),
         .DATAW      (`CS_MEM_ADDR_WIDTH + 1  + WORD_SEL_WIDTH + WORD_SIZE + `CS_WORD_WIDTH + MSHR_ADDR_WIDTH),
-        .ARBITER    ("R")
+        .ARBITER    ("F")
     ) mem_req_arb (
         .clk       (clk),
         .reset     (mem_arb_reset),
