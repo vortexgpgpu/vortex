@@ -38,17 +38,17 @@ module VX_fair_arbiter #(
 
     end else begin
 
-        reg [NUM_REQS-1:0] buffer;
+        reg [NUM_REQS-1:0] grant_mask;
 
-        wire [NUM_REQS-1:0] buffer_qual   = buffer & requests;
-        wire [NUM_REQS-1:0] requests_qual = (| buffer) ? buffer_qual : requests;
-        wire [NUM_REQS-1:0] buffer_n      = requests_qual & ~grant_onehot;
+        wire [NUM_REQS-1:0] requests_rem = requests & ~grant_mask;
+        wire rem_valid = (| requests_rem);
+        wire [NUM_REQS-1:0] requests_qual = rem_valid ? requests_rem : requests;
 
         always @(posedge clk) begin
             if (reset) begin
-                buffer <= '0;
+                grant_mask <= '0;
             end else if (grant_ready) begin
-                buffer <= buffer_n;
+                grant_mask <= rem_valid ? (grant_mask | grant_onehot) : grant_onehot;
             end
         end
 
