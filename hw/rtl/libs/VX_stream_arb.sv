@@ -174,8 +174,16 @@ module VX_stream_arb #(
             );
 
             assign valid_in_r = arb_valid;
-            assign data_in_r  = data_in[arb_index];
             assign arb_ready  = ready_in_r;
+
+            VX_onehot_mux #(
+                .DATAW (DATAW),
+                .N     (NUM_REQS)
+            ) onehot_mux (
+                .data_in  (data_in),
+                .sel_in   (arb_onehot),
+                .data_out (data_in_r)
+            );
 
             for (genvar i = 0; i < NUM_REQS; ++i) begin
                 assign ready_in[i] = ready_in_r & arb_onehot[i];
