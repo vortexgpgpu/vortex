@@ -196,9 +196,15 @@ module VX_cache_bank #(
                         (replay_valid ? replay_addr :
                             (mem_rsp_valid ? mem_rsp_addr : core_req_addr));
 
-    assign data_sel[`CS_WORD_WIDTH-1:0] = (mem_rsp_valid || !WRITE_ENABLE) ? mem_rsp_data[`CS_WORD_WIDTH-1:0] : (replay_valid ? replay_data : core_req_data);
+    if (WRITE_ENABLE) begin
+        assign data_sel[`CS_WORD_WIDTH-1:0] = replay_valid ? replay_data : (mem_rsp_valid ? mem_rsp_data[`CS_WORD_WIDTH-1:0] : core_req_data);
+    end else begin
+        assign data_sel[`CS_WORD_WIDTH-1:0] = mem_rsp_data[`CS_WORD_WIDTH-1:0];
+        `UNUSED_VAR (core_req_data)
+        `UNUSED_VAR (replay_data)
+    end
     for (genvar i = `CS_WORD_WIDTH; i < `CS_LINE_WIDTH; ++i) begin
-        assign data_sel[i] = mem_rsp_data[i];
+        assign data_sel[i] = mem_rsp_data[i]; // only the memory response fills the upper words od data_sel
     end
 
     VX_pipe_register #(
