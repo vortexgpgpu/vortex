@@ -413,10 +413,6 @@ public:
       return err;
     });
     DBGPRINT("[RT:mem_reserve] addr: 0x%lx, size:0x%lx, size: 0x%lx\n", dev_addr, size, size);
-    // CHECK_ERR(this->mem_access(dev_addr, asize, flags), {
-    //   global_mem_.release(dev_addr);
-    //   return err;
-    // });
     return 0;
   }
 
