@@ -116,7 +116,7 @@ public:
 
 #ifdef VM_ENABLE
 
-  // virtual (vpn) to phycial (ppn) mapping
+  // physical (ppn) to virtual (vpn) mapping
   uint64_t map_p2v(uint64_t ppn, uint32_t flags)
   {
     DBGPRINT(" [RT:MAP_P2V] ppn: %lx\n", ppn);
