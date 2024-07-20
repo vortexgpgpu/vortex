@@ -120,8 +120,6 @@ public:
   uint64_t map_p2v(uint64_t ppn, uint32_t flags)
   {
     DBGPRINT(" [RT:MAP_P2V] ppn: %lx\n", ppn);
-    // std::cout << std::hex << pAddr << std::endl;
-    // return pAddr + 0xf000000;
     if (addr_mapping.find(ppn) != addr_mapping.end()) return addr_mapping[ppn];
 
     // If ppn to vpn mapping doesnt exist, create mapping
