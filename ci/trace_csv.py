@@ -26,7 +26,7 @@ def parse_args():
     parser.add_argument('log', help='Input log file')
     return parser.parse_args()
 
-def parse_simx(log_filename):
+def parse_simx(log_lines):
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
     instr_pattern = r"Instr (0x[0-9a-fA-F]+):"
     opcode_pattern = r"Instr 0x[0-9a-fA-F]+: ([0-9a-zA-Z_\.]+)"
@@ -37,32 +37,31 @@ def parse_simx(log_filename):
     destination_pattern = r"Dest Reg: (.+)"
     uuid_pattern = r"#(\d+)"
     entries = []
-    with open(log_filename, 'r') as log_file:
-        instr_data = None
-        for lineno, line in enumerate(log_file, start=1):
-            try:
-                if line.startswith("DEBUG Fetch:"):
-                    if instr_data:
-                        entries.append(instr_data)
-                    instr_data = {}
-                    instr_data["lineno"] = lineno
-                    instr_data["PC"] = re.search(pc_pattern, line).group(1)
-                    instr_data["core_id"] = re.search(core_id_pattern, line).group(1)
-                    instr_data["warp_id"] = re.search(warp_id_pattern, line).group(1)
-                    instr_data["tmask"] = re.search(tmask_pattern, line).group(1)
-                    instr_data["uuid"] = re.search(uuid_pattern, line).group(1)
-                elif line.startswith("DEBUG Instr"):
-                    instr_data["instr"] = re.search(instr_pattern, line).group(1)
-                    instr_data["opcode"] = re.search(opcode_pattern, line).group(1)
-                elif line.startswith("DEBUG Src"):
-                    src_reg = re.search(operands_pattern, line).group(1)
-                    instr_data["operands"] = (instr_data["operands"] + ', ' + src_reg) if 'operands' in instr_data else src_reg
-                elif line.startswith("DEBUG Dest"):
-                    instr_data["destination"] = re.search(destination_pattern, line).group(1)
-            except Exception as e:
-                print("Error at line {}: {}".format(lineno, e))
-        if instr_data:
-            entries.append(instr_data)
+    instr_data = None
+    for lineno, line in enumerate(log_lines, start=1):
+        try:
+            if line.startswith("DEBUG Fetch:"):
+                if instr_data:
+                    entries.append(instr_data)
+                instr_data = {}
+                instr_data["lineno"] = lineno
+                instr_data["PC"] = re.search(pc_pattern, line).group(1)
+                instr_data["core_id"] = re.search(core_id_pattern, line).group(1)
+                instr_data["warp_id"] = re.search(warp_id_pattern, line).group(1)
+                instr_data["tmask"] = re.search(tmask_pattern, line).group(1)
+                instr_data["uuid"] = re.search(uuid_pattern, line).group(1)
+            elif line.startswith("DEBUG Instr"):
+                instr_data["instr"] = re.search(instr_pattern, line).group(1)
+                instr_data["opcode"] = re.search(opcode_pattern, line).group(1)
+            elif line.startswith("DEBUG Src"):
+                src_reg = re.search(operands_pattern, line).group(1)
+                instr_data["operands"] = (instr_data["operands"] + ', ' + src_reg) if 'operands' in instr_data else src_reg
+            elif line.startswith("DEBUG Dest"):
+                instr_data["destination"] = re.search(destination_pattern, line).group(1)
+        except Exception as e:
+            print("Error at line {}: {}".format(lineno, e))
+    if instr_data:
+        entries.append(instr_data)
     return entries
 
 def reverse_binary(bin_str):
@@ -95,7 +94,7 @@ def append_value(text, reg, value, tmask_arr, sep):
     text += "}"
     return text, sep
 
-def parse_rtlsim(log_filename):
+def parse_rtlsim(log_lines):
     config_pattern = r"CONFIGS: num_threads=(\d+), num_warps=(\d+), num_cores=(\d+), num_clusters=(\d+), socket_size=(\d+), local_mem_base=(\d+), num_barriers=(\d+)"
     line_pattern = r"\d+: cluster(\d+)-socket(\d+)-core(\d+)-(decode|issue|commit)"
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
@@ -117,145 +116,166 @@ def parse_rtlsim(log_filename):
     eop_pattern = r"eop=(\d)"
     uuid_pattern = r"#(\d+)"
     entries = []
-    with open(log_filename, 'r') as log_file:
-        instr_data = {}
-        num_threads = 0
-        num_warps = 0
-        num_cores = 0
-        num_clusters = 0
-        socket_size = 0
-        local_mem_base = 0
-        num_barriers = 0
-        num_sockets = 0
-        for lineno, line in enumerate(log_file, start=1):
-            try:
-                config_match = re.search(config_pattern, line)
-                if config_match:
-                    num_threads = int(config_match.group(1))
-                    num_warps = int(config_match.group(2))
-                    num_cores = int(config_match.group(3))
-                    num_clusters = int(config_match.group(4))
-                    socket_size = int(config_match.group(5))
-                    local_mem_base = int(config_match.group(6))
-                    num_barriers = int(config_match.group(7))
-                    num_sockets = (num_cores + socket_size - 1) // socket_size
-                    continue
-                line_match = re.search(line_pattern, line)
-                if line_match:
-                    PC = re.search(pc_pattern, line).group(1)
-                    warp_id = re.search(warp_id_pattern, line).group(1)
-                    tmask = re.search(tmask_pattern, line).group(1)
-                    uuid = re.search(uuid_pattern, line).group(1)
-                    cluster_id = line_match.group(1)
-                    socket_id = line_match.group(2)
-                    core_id = line_match.group(3)
-                    stage = line_match.group(4)
-                    if stage == "decode":
-                        trace = {}
-                        trace["uuid"] = uuid
-                        trace["PC"] = PC
-                        trace["core_id"] = ((((cluster_id * num_sockets) + socket_id) * socket_size) + core_id)
-                        trace["warp_id"] = warp_id
-                        trace["tmask"] = reverse_binary(tmask)
-                        trace["instr"] = re.search(instr_pattern, line).group(1)
-                        trace["opcode"] = re.search(op_pattern, line).group(1)
-                        trace["opds"] = bin_to_array(re.search(opds_pattern, line).group(1))
-                        trace["rd"] = re.search(rd_pattern, line).group(1)
-                        trace["rs1"] = re.search(rs1_pattern, line).group(1)
-                        trace["rs2"] = re.search(rs2_pattern, line).group(1)
-                        trace["rs3"] = re.search(rs3_pattern, line).group(1)
+    instr_data = {}
+    num_threads = 0
+    num_warps = 0
+    num_cores = 0
+    num_clusters = 0
+    socket_size = 0
+    local_mem_base = 0
+    num_barriers = 0
+    num_sockets = 0
+    for lineno, line in enumerate(log_lines, start=1):
+        try:
+            config_match = re.search(config_pattern, line)
+            if config_match:
+                num_threads = int(config_match.group(1))
+                num_warps = int(config_match.group(2))
+                num_cores = int(config_match.group(3))
+                num_clusters = int(config_match.group(4))
+                socket_size = int(config_match.group(5))
+                local_mem_base = int(config_match.group(6))
+                num_barriers = int(config_match.group(7))
+                num_sockets = (num_cores + socket_size - 1) // socket_size
+                continue
+            line_match = re.search(line_pattern, line)
+            if line_match:
+                PC = re.search(pc_pattern, line).group(1)
+                warp_id = re.search(warp_id_pattern, line).group(1)
+                tmask = re.search(tmask_pattern, line).group(1)
+                uuid = re.search(uuid_pattern, line).group(1)
+                cluster_id = line_match.group(1)
+                socket_id = line_match.group(2)
+                core_id = line_match.group(3)
+                stage = line_match.group(4)
+                if stage == "decode":
+                    trace = {}
+                    trace["uuid"] = uuid
+                    trace["PC"] = PC
+                    trace["core_id"] = ((((cluster_id * num_sockets) + socket_id) * socket_size) + core_id)
+                    trace["warp_id"] = warp_id
+                    trace["tmask"] = reverse_binary(tmask)
+                    trace["instr"] = re.search(instr_pattern, line).group(1)
+                    trace["opcode"] = re.search(op_pattern, line).group(1)
+                    trace["opds"] = bin_to_array(re.search(opds_pattern, line).group(1))
+                    trace["rd"] = re.search(rd_pattern, line).group(1)
+                    trace["rs1"] = re.search(rs1_pattern, line).group(1)
+                    trace["rs2"] = re.search(rs2_pattern, line).group(1)
+                    trace["rs3"] = re.search(rs3_pattern, line).group(1)
+                    instr_data[uuid] = trace
+                elif stage == "issue":
+                    if uuid in instr_data:
+                        trace = instr_data[uuid]
+                        trace["lineno"] = lineno
+                        opds = trace["opds"]
+                        if opds[1]:
+                            trace["rs1_data"] = re.search(rs1_data_pattern, line).group(1).split(', ')[::-1]
+                        if opds[2]:
+                            trace["rs2_data"] = re.search(rs2_data_pattern, line).group(1).split(', ')[::-1]
+                        if opds[3]:
+                            trace["rs3_data"] = re.search(rs3_data_pattern, line).group(1).split(', ')[::-1]
+                        trace["issued"] = True
                         instr_data[uuid] = trace
-                    elif stage == "issue":
-                        if uuid in instr_data:
-                            trace = instr_data[uuid]
-                            trace["lineno"] = lineno
+                elif stage == "commit":
+                    if uuid in instr_data:
+                        trace = instr_data[uuid]
+                        if "issued" in trace:
                             opds = trace["opds"]
-                            if opds[1]:
-                                trace["rs1_data"] = re.search(rs1_data_pattern, line).group(1).split(', ')[::-1]
-                            if opds[2]:
-                                trace["rs2_data"] = re.search(rs2_data_pattern, line).group(1).split(', ')[::-1]
-                            if opds[3]:
-                                trace["rs3_data"] = re.search(rs3_data_pattern, line).group(1).split(', ')[::-1]
-                            trace["issued"] = True
+                            dst_tmask_arr = bin_to_array(tmask)[::-1]
+                            wb = re.search(wb_pattern, line).group(1) == "1"
+                            if wb:
+                                rd_data = re.search(rd_data_pattern, line).group(1).split(', ')[::-1]
+                                if 'rd_data' in trace:
+                                    merged_rd_data = trace['rd_data']
+                                    for i in range(len(dst_tmask_arr)):
+                                        if dst_tmask_arr[i] == 1:
+                                            merged_rd_data[i] = rd_data[i]
+                                    trace['rd_data'] = merged_rd_data
+                                else:
+                                    trace['rd_data'] = rd_data
                             instr_data[uuid] = trace
-                    elif stage == "commit":
-                        if uuid in instr_data:
-                            trace = instr_data[uuid]
-                            if "issued" in trace:
-                                opds = trace["opds"]
-                                dst_tmask_arr = bin_to_array(tmask)[::-1]
-                                wb = re.search(wb_pattern, line).group(1) == "1"
+                            eop = re.search(eop_pattern, line).group(1) == "1"
+                            if eop:
+                                tmask_arr = bin_to_array(trace["tmask"])
+                                destination = ''
                                 if wb:
-                                    rd_data = re.search(rd_data_pattern, line).group(1).split(', ')[::-1]
-                                    if 'rd_data' in trace:
-                                        merged_rd_data = trace['rd_data']
-                                        for i in range(len(dst_tmask_arr)):
-                                            if dst_tmask_arr[i] == 1:
-                                                merged_rd_data[i] = rd_data[i]
-                                        trace['rd_data'] = merged_rd_data
-                                    else:
-                                        trace['rd_data'] = rd_data
-                                instr_data[uuid] = trace
-                                eop = re.search(eop_pattern, line).group(1) == "1"
-                                if eop:
-                                    tmask_arr = bin_to_array(trace["tmask"])
-                                    destination = ''
-                                    if wb:
-                                        destination, sep = append_value(destination, trace["rd"], trace['rd_data'], tmask_arr, False)
-                                        del trace['rd_data']
-                                    trace["destination"] = destination
-                                    operands = ''
-                                    sep = False
-                                    if opds[1]:
-                                        operands, sep = append_value(operands, trace["rs1"], trace["rs1_data"], tmask_arr, sep)
-                                        del trace["rs1_data"]
-                                    if opds[2]:
-                                        operands, sep = append_value(operands, trace["rs2"], trace["rs2_data"], tmask_arr, sep)
-                                        del trace["rs2_data"]
-                                    if opds[3]:
-                                        operands, sep = append_value(operands, trace["rs3"], trace["rs3_data"], tmask_arr, sep)
-                                        del trace["rs3_data"]
-                                    trace["operands"] = operands
-                                    del trace["opds"]
-                                    del trace["rd"]
-                                    del trace["rs1"]
-                                    del trace["rs2"]
-                                    del trace["rs3"]
-                                    del trace["issued"]
-                                    del instr_data[uuid]
-                                    entries.append(trace)
-            except Exception as e:
-                print("Error at line {}: {}".format(lineno, e))
+                                    destination, sep = append_value(destination, trace["rd"], trace['rd_data'], tmask_arr, False)
+                                    del trace['rd_data']
+                                trace["destination"] = destination
+                                operands = ''
+                                sep = False
+                                if opds[1]:
+                                    operands, sep = append_value(operands, trace["rs1"], trace["rs1_data"], tmask_arr, sep)
+                                    del trace["rs1_data"]
+                                if opds[2]:
+                                    operands, sep = append_value(operands, trace["rs2"], trace["rs2_data"], tmask_arr, sep)
+                                    del trace["rs2_data"]
+                                if opds[3]:
+                                    operands, sep = append_value(operands, trace["rs3"], trace["rs3_data"], tmask_arr, sep)
+                                    del trace["rs3_data"]
+                                trace["operands"] = operands
+                                del trace["opds"]
+                                del trace["rd"]
+                                del trace["rs1"]
+                                del trace["rs2"]
+                                del trace["rs3"]
+                                del trace["issued"]
+                                del instr_data[uuid]
+                                entries.append(trace)
+        except Exception as e:
+            print("Error at line {}: {}".format(lineno, e))
     return entries
 
-def write_csv(log_filename, csv_filename, log_type):
-    entries = None
-
-    # parse log file
-    if log_type == "rtlsim":
-        entries = parse_rtlsim(log_filename)
-    elif log_type == "simx":
-        entries = parse_simx(log_filename)
-    else:
-        print('Error: invalid log type')
-        sys.exit()
-
-    # sort entries by uuid
-    entries.sort(key=lambda x: (int(x['uuid'])))
-    for entry in entries:
-        del entry['lineno']
-
-    # write to CSV
+def write_csv(sublogs, csv_filename, log_type):
     with open(csv_filename, 'w', newline='') as csv_file:
         fieldnames = ["uuid", "PC", "opcode", "instr", "core_id", "warp_id", "tmask", "destination", "operands"]
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         writer.writeheader()
-        for entry in entries:
-            writer.writerow(entry)
+
+        for sublog in sublogs:
+            entries = None
+
+            # parse sublog
+            if log_type == "rtlsim":
+                entries = parse_rtlsim(sublog)
+            elif log_type == "simx":
+                entries = parse_simx(sublog)
+            else:
+                print('Error: invalid log type')
+                sys.exit()
+
+            # sort entries by uuid
+            entries.sort(key=lambda x: (int(x['uuid'])))
+            for entry in entries:
+                del entry['lineno']
+
+            for entry in entries:
+                writer.writerow(entry)
+
+def split_log_file(log_filename):
+    with open(log_filename, 'r') as log_file:
+        log_lines = log_file.readlines()
+
+    sublogs = []
+    current_sublog = None
+
+    for line in log_lines:
+        if line.startswith("[VXDRV] START"):
+            if current_sublog is not None:
+                sublogs.append(current_sublog)
+            current_sublog = [line]
+        elif current_sublog is not None:
+            current_sublog.append(line)
+
+    if current_sublog is not None:
+        sublogs.append(current_sublog)
+
+    return sublogs
 
 def main():
     args = parse_args()
-    write_csv(args.log, args.csv, args.type)
+    sublogs = split_log_file(args.log)
+    write_csv(sublogs, args.csv, args.type)
 
 if __name__ == "__main__":
     main()
