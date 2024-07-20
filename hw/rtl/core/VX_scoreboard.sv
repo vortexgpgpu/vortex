@@ -289,7 +289,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     VX_stream_arb #(
         .NUM_INPUTS (PER_ISSUE_WARPS),
         .DATAW      (DATAW),
-        .ARBITER    ("R"),
+        .ARBITER    ("F"),
         .LUTRAM     (1),
         .OUT_BUF    (4) // using 2-cycle EB for area reduction
     ) out_arb (
