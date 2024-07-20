@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+        with:
+          submodules: recursive
 
       - name: Install Dependencies
         run: |
@@ -55,14 +57,12 @@ jobs:
           mkdir -p $GITHUB_WORKSPACE/build && cd $GITHUB_WORKSPACE/build
           ../configure --tooldir=$TOOLDIR
           ci/toolchain_install.sh --all
-          echo "v0.4" > "$TOOLDIR/version.txt"
 
       - name: Setup Third Party
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
           cd $GITHUB_WORKSPACE
           make -C third_party > /dev/null
-          echo "v0.2" > "third_party/version.txt"
           cp -rf third_party $HOME
 
   build:
@@ -79,11 +79,18 @@ jobs:
       - name: Setup Build Environment
         run: |
           TOOLDIR=$HOME/tools
+          cp -rf $HOME/third_party $GITHUB_WORKSPACE
           mkdir -p $GITHUB_WORKSPACE/build${{ matrix.xlen }}
           cd $GITHUB_WORKSPACE/build${{ matrix.xlen }}
           ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
           source ci/toolchain_env.sh
           make build -s > /dev/null
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: build-${{ matrix.xlen }}
+          path: $GITHUB_WORKSPACE/build${{ matrix.xlen }}
 
   tests:
     runs-on: ubuntu-20.04
@@ -96,15 +103,24 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: build-${{ matrix.xlen }}
+          path: $GITHUB_WORKSPACE/build${{ matrix.xlen }}
 
       - name: Setup build environment
         run: |
+          TOOLDIR=$HOME/tools
+          cp -rf $HOME/third_party $GITHUB_WORKSPACE
           cd $GITHUB_WORKSPACE/build${{ matrix.xlen }}
           source ci/toolchain_env.sh
 
       - name: Run tests
         run: |
-          TOOLDIR=$HOME/tools
           if [ "${{ matrix.name }}" == "regression32" ]; then
             ./ci/travis_run.py ./ci/regression.sh --unittest
             ./ci/travis_run.py ./ci/regression.sh --isa
