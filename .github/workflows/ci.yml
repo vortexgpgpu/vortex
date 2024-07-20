@@ -85,12 +85,13 @@ jobs:
           ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
           source ci/toolchain_env.sh
           make build -s > /dev/null
+          cp -rf $GITHUB_WORKSPACE/build${{ matrix.xlen }} $HOME;
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v2
         with:
           name: build-${{ matrix.xlen }}
-          path: $GITHUB_WORKSPACE/build${{ matrix.xlen }}
+          path: $HOME/build${{ matrix.xlen }}
 
   tests:
     runs-on: ubuntu-20.04
@@ -110,13 +111,13 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: build-${{ matrix.xlen }}
-          path: $GITHUB_WORKSPACE/build${{ matrix.xlen }}
+          path: $HOME/build${{ matrix.xlen }}
 
       - name: Setup build environment
         run: |
           TOOLDIR=$HOME/tools
           cp -rf $HOME/third_party $GITHUB_WORKSPACE
-          cd $GITHUB_WORKSPACE/build${{ matrix.xlen }}
+          cd $HOME/build${{ matrix.xlen }}
           source ci/toolchain_env.sh
 
       - name: Run tests
