@@ -251,7 +251,7 @@ module VX_cache_mshr #(
     assign dequeue_rw     = write_table[dequeue_id_r];
     assign dequeue_id     = dequeue_id_r;
 
-    assign lookup_matches = addr_matches;
+    assign lookup_matches = addr_matches & ~write_table;
 
     `UNUSED_VAR (lookup_valid)
 
