@@ -262,18 +262,21 @@ module VX_operands import VX_gpu_pkg::*; #(
             assign wren[i*XLEN_SIZE+:XLEN_SIZE] = {XLEN_SIZE{writeback_if.data.tmask[i]}};
         end
 
+    `ifdef GPR_RESET
+        VX_dp_ram_rst #(
+    `else
         VX_dp_ram #(
+    `endif
             .DATAW (`XLEN * `NUM_THREADS),
             .SIZE  (PER_BANK_REGS * PER_ISSUE_WARPS),
             .ADDR_MIN ((b == 0) ? PER_ISSUE_WARPS : 0),
             .WRENW (BYTEENW),
-        `ifdef GPR_RESET
-            .INIT_ENABLE (1),
-            .INIT_VALUE (0),
-        `endif
             .NO_RWCHECK (1)
         ) gpr_ram (
             .clk   (clk),
+        `ifdef GPR_RESET
+            .reset (reset),
+        `endif
             .read  (1'b1),
             .wren  (wren),
             .write (gpr_wr_enabled),
