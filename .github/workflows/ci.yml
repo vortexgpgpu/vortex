@@ -36,7 +36,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: $HOME/tools
-          key: ${{ runner.os }}-toolchain-v0.4
+          key: ${{ runner.os }}-toolchain-v0.1
           restore-keys: |
             ${{ runner.os }}-toolchain-
 
@@ -45,7 +45,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: $HOME/third_party
-          key: ${{ runner.os }}-thirdparty-v0.2
+          key: ${{ runner.os }}-thirdparty-v0.1
           restore-keys: |
             ${{ runner.os }}-thirdparty-
 
@@ -76,7 +76,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Setup Build Environment
+      - name: Cache Toolchain Directory
+        id: cache-toolchain
+        uses: actions/cache@v2
+        with:
+          path: $HOME/tools
+          key: ${{ runner.os }}-toolchain-v0.1
+          restore-keys: |
+            ${{ runner.os }}-toolchain-
+
+      - name: Cache Third Party Directory
+        id: cache-thirdparty
+        uses: actions/cache@v2
+        with:
+          path: $HOME/third_party
+          key: ${{ runner.os }}-thirdparty-v0.1
+          restore-keys: |
+            ${{ runner.os }}-thirdparty-
+
+      - name: Run Build
         run: |
           TOOLDIR=$HOME/tools
           cp -rf $HOME/third_party $GITHUB_WORKSPACE
@@ -104,8 +122,24 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+
+      - name: Cache Toolchain Directory
+        id: cache-toolchain
+        uses: actions/cache@v2
         with:
-          submodules: recursive
+          path: $HOME/tools
+          key: ${{ runner.os }}-toolchain-v0.1
+          restore-keys: |
+            ${{ runner.os }}-toolchain-
+
+      - name: Cache Third Party Directory
+        id: cache-thirdparty
+        uses: actions/cache@v2
+        with:
+          path: $HOME/third_party
+          key: ${{ runner.os }}-thirdparty-v0.1
+          restore-keys: |
+            ${{ runner.os }}-thirdparty-
 
       - name: Download Build Artifact
         uses: actions/download-artifact@v2
