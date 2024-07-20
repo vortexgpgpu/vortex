@@ -120,7 +120,7 @@ public:
   uint64_t map_p2v(uint64_t ppn, uint32_t flags)
   {
     DBGPRINT(" [RT:MAP_P2V] ppn: %lx\n", ppn);
-    if (addr_mapping.find(ppn) != addr_mapping.end()) return addr_mapping[ppn];
+    if (addr_mapping.contains(ppn)) return addr_mapping[ppn];
 
     // If ppn to vpn mapping doesnt exist, create mapping
     DBGPRINT(" [RT:MAP_P2V] Not found. Allocate new page table or update a PTE.\n");
