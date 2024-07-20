@@ -94,8 +94,8 @@ module VX_mem_coalescer #(
     reg [OUT_REQS-1:0] out_req_mask_r, out_req_mask_n;
     reg [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] out_req_addr_r, out_req_addr_n;
     reg [OUT_REQS-1:0][ATYPE_WIDTH-1:0] out_req_atype_r, out_req_atype_n;
-    reg [OUT_REQS-1:0][DATA_OUT_SIZE-1:0] out_req_byteen_r, out_req_byteen_n;
-    reg [OUT_REQS-1:0][DATA_OUT_WIDTH-1:0] out_req_data_r, out_req_data_n;
+    reg [OUT_REQS-1:0][DATA_RATIO-1:0][DATA_IN_SIZE-1:0] out_req_byteen_r, out_req_byteen_n;
+    reg [OUT_REQS-1:0][DATA_RATIO-1:0][DATA_IN_WIDTH-1:0] out_req_data_r, out_req_data_n;
     reg [OUT_TAG_WIDTH-1:0] out_req_tag_r, out_req_tag_n;
 
     reg in_req_ready_n;
@@ -252,7 +252,9 @@ module VX_mem_coalescer #(
 
     wire out_rsp_eop;
 
-    assign ibuf_push  = (state_r == STATE_SEND) && ~in_req_rw;
+    wire req_sent = (state_r == STATE_SEND);
+
+    assign ibuf_push  = req_sent && ~in_req_rw;
     assign ibuf_pop   = out_rsp_fire && out_rsp_eop;
     assign ibuf_raddr = out_rsp_tag[QUEUE_ADDRW-1:0];
 
@@ -343,7 +345,7 @@ module VX_mem_coalescer #(
     reg [NUM_REQS-1:0] out_req_pmask;
 
     always @(posedge clk) begin
-        if (ibuf_push) begin
+        if (req_sent) begin
             out_req_offset <= ibuf_din_offset;
             out_req_pmask <= ibuf_din_pmask;
         end
