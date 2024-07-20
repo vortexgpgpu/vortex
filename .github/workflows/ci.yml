@@ -1,0 +1,126 @@
+# Copyright 2024 blaise
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  setup:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential valgrind libstdc++6 binutils python uuid-dev
+
+      - name: Cache Toolchain Directory
+        id: cache-toolchain
+        uses: actions/cache@v2
+        with:
+          path: $HOME/tools
+          key: ${{ runner.os }}-toolchain-v0.4
+          restore-keys: |
+            ${{ runner.os }}-toolchain-
+
+      - name: Cache Third Party Directory
+        id: cache-thirdparty
+        uses: actions/cache@v2
+        with:
+          path: $HOME/third_party
+          key: ${{ runner.os }}-thirdparty-v0.2
+          restore-keys: |
+            ${{ runner.os }}-thirdparty-
+
+      - name: Setup Toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          TOOLDIR=$HOME/tools
+          rm -rf $TOOLDIR
+          mkdir -p $GITHUB_WORKSPACE/build && cd $GITHUB_WORKSPACE/build
+          ../configure --tooldir=$TOOLDIR
+          ci/toolchain_install.sh --all
+          echo "v0.4" > "$TOOLDIR/version.txt"
+
+      - name: Setup Third Party
+        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
+        run: |
+          cd $GITHUB_WORKSPACE
+          make -C third_party > /dev/null
+          echo "v0.2" > "third_party/version.txt"
+          cp -rf third_party $HOME
+
+  build:
+    runs-on: ubuntu-20.04
+    needs: setup
+    strategy:
+      matrix:
+        xlen: [32, 64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup Build Environment
+        run: |
+          TOOLDIR=$HOME/tools
+          mkdir -p $GITHUB_WORKSPACE/build${{ matrix.xlen }}
+          cd $GITHUB_WORKSPACE/build${{ matrix.xlen }}
+          ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
+          source ci/toolchain_env.sh
+          make build -s > /dev/null
+
+  tests:
+    runs-on: ubuntu-20.04
+    needs: build
+    strategy:
+      matrix:
+        name: [regression32, regression64, config, debug]
+        xlen: [32, 64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup build environment
+        run: |
+          cd $GITHUB_WORKSPACE/build${{ matrix.xlen }}
+          source ci/toolchain_env.sh
+
+      - name: Run tests
+        run: |
+          TOOLDIR=$HOME/tools
+          if [ "${{ matrix.name }}" == "regression32" ]; then
+            ./ci/travis_run.py ./ci/regression.sh --unittest
+            ./ci/travis_run.py ./ci/regression.sh --isa
+            ./ci/travis_run.py ./ci/regression.sh --kernel
+            ./ci/travis_run.py ./ci/regression.sh --synthesis
+            ./ci/travis_run.py ./ci/regression.sh --regression
+            ./ci/travis_run.py ./ci/regression.sh --opencl
+          elif [ "${{ matrix.name }}" == "regression64" ]; then
+            ./ci/travis_run.py ./ci/regression.sh --isa
+            ./ci/travis_run.py ./ci/regression.sh --kernel
+            ./ci/travis_run.py ./ci/regression.sh --synthesis
+            ./ci/travis_run.py ./ci/regression.sh --regression
+            ./ci/travis_run.py ./ci/regression.sh --opencl
+          elif [ "${{ matrix.name }}" == "config" ]; then
+            ./ci/travis_run.py ./ci/regression.sh --cluster
+            ./ci/travis_run.py ./ci/regression.sh --config
+          elif [ "${{ matrix.name }}" == "debug" ]; then
+            ./ci/travis_run.py ./ci/regression.sh --debug
+            ./ci/travis_run.py ./ci/regression.sh --stress
