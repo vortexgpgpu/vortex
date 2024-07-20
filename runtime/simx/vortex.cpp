@@ -408,7 +408,6 @@ public:
   // reserve IO space, startup space, and local mem area
   int virtual_mem_reserve(uint64_t dev_addr, uint64_t size, int flags)
   {
-    // uint64_t asize = aligned_size(size, MEM_PAGE_SIZE);
     CHECK_ERR(virtual_mem_->reserve(dev_addr, size), {
       return err;
     });
