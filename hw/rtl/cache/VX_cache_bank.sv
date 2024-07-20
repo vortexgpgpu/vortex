@@ -317,9 +317,9 @@ module VX_cache_bank #(
 
     // detect BRAM's read-during-write hazard
     assign rdw_hazard_st0 = do_fill_st0; // after a fill
-    always @(posedge clk) begin
+    always @(posedge clk) begin // after a write to same address
         rdw_hazard_st1 <= (do_creq_rd_st0 && do_write_hit_st1 && (addr_st0 == addr_st1))
-                       && ~rdw_hazard_st1; // after a write to same address
+                       && ~rdw_hazard_st1; // invalidate if pipeline stalled to avoid repeats
     end
 
     wire [`CS_WORD_WIDTH-1:0] write_data_st1 = data_st1[`CS_WORD_WIDTH-1:0];
@@ -357,7 +357,8 @@ module VX_cache_bank #(
         .read_data  (read_data_st1)
     );
 
-    wire [MSHR_SIZE-1:0] mshr_matches_st0;
+    wire [MSHR_SIZE-1:0] mshr_lookup_pending_st0;
+    wire [MSHR_SIZE-1:0] mshr_lookup_rw_st0;
     wire mshr_allocate_st0 = valid_st0 && is_creq_st0 && ~pipe_stall;
     wire mshr_lookup_st0   = mshr_allocate_st0;
     wire mshr_finalize_st1 = valid_st1 && is_creq_st1 && ~pipe_stall;
@@ -420,7 +421,8 @@ module VX_cache_bank #(
         // lookup
         .lookup_valid   (mshr_lookup_st0),
         .lookup_addr    (addr_st0),
-        .lookup_matches (mshr_matches_st0),
+        .lookup_pending (mshr_lookup_pending_st0),
+        .lookup_rw      (mshr_lookup_rw_st0),
 
         // finalize
         .finalize_valid (mshr_finalize_st1),
@@ -430,10 +432,12 @@ module VX_cache_bank #(
         .finalize_prev  (mshr_prev_st1)
     );
 
-    // ignore allocated id from mshr matches
+    // check if there are pending requests to same line in the MSHR
     wire [MSHR_SIZE-1:0] lookup_matches;
     for (genvar i = 0; i < MSHR_SIZE; ++i) begin
-        assign lookup_matches[i] = (i != mshr_alloc_id_st0) && mshr_matches_st0[i];
+        assign lookup_matches[i] = mshr_lookup_pending_st0[i]
+                                && (i != mshr_alloc_id_st0) // exclude current mshr id
+                                && ~mshr_lookup_rw_st0[i];  // exclude write requests
     end
     assign mshr_pending_st0 = (| lookup_matches);
 

@@ -104,7 +104,8 @@ module VX_cache_mshr #(
     // lookup
     input wire                          lookup_valid,
     input wire [`CS_LINE_ADDR_WIDTH-1:0] lookup_addr,
-    output wire [MSHR_SIZE-1:0]         lookup_matches,
+    output wire [MSHR_SIZE-1:0]         lookup_pending,
+    output wire [MSHR_SIZE-1:0]         lookup_rw,
 
     // finalize
     input wire                          finalize_valid,
@@ -251,7 +252,9 @@ module VX_cache_mshr #(
     assign dequeue_rw     = write_table[dequeue_id_r];
     assign dequeue_id     = dequeue_id_r;
 
-    assign lookup_matches = addr_matches & ~write_table;
+    // return pending entries for the given cache line
+    assign lookup_pending = addr_matches;
+    assign lookup_rw = write_table;
 
     `UNUSED_VAR (lookup_valid)
 
@@ -268,7 +271,7 @@ module VX_cache_mshr #(
                 `CS_LINE_TO_FULL_ADDR(allocate_addr, BANK_ID), allocate_prev, allocate_id, lkp_req_uuid));
         if (lookup_valid)
             `TRACE(3, ("%d: %s lookup: addr=0x%0h, matches=%b (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(lookup_addr, BANK_ID), lookup_matches, lkp_req_uuid));
+                `CS_LINE_TO_FULL_ADDR(lookup_addr, BANK_ID), lookup_pending, lkp_req_uuid));
         if (finalize_valid)
             `TRACE(3, ("%d: %s finalize release=%b, pending=%b, prev=%0d, id=%0d (#%0d)\n", $time, INSTANCE_ID,
                 finalize_release, finalize_pending, finalize_prev, finalize_id, fin_req_uuid));
