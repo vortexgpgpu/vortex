@@ -153,7 +153,6 @@ jobs:
           path: build${{ matrix.xlen }}
 
       - name: Run tests
-        continue-on-error: true
         run: |
           cd build${{ matrix.xlen }}
           source ci/toolchain_env.sh

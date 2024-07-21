@@ -25,14 +25,14 @@ using namespace vortex;
 
 class MemSim::Impl {
 private:
-	MemSim* simobject_;
-	Config config_;
-	DramSim dram_sim_;
+	MemSim*   simobject_;
+	Config    config_;
+	DramSim   dram_sim_;
 	PerfStats perf_stats_;
 
 	struct DramCallbackArgs {
 		MemSim* simobject;
-		MemReq request;
+		MemReq  request;
 	};
 
 public:
@@ -63,25 +63,29 @@ public:
 		auto& mem_req = simobject_->MemReqPort.front();
 
 		// try to enqueue the request to the memory system
+		auto req_args = new DramCallbackArgs{simobject_, mem_req};
 		auto enqueue_success = dram_sim_.send_request(
 			mem_req.write,
 			mem_req.addr,
-			mem_req.cid,
+			0,
 			[](void* arg) {
-				auto dram_args = reinterpret_cast<const DramCallbackArgs*>(arg);
-				if (dram_args->request.write)
-					return; // write's responses are not handled
-				MemRsp mem_rsp{dram_args->request.tag, dram_args->request.cid, dram_args->request.uuid};
-				dram_args->simobject->MemRspPort.push(mem_rsp, 1);
-				DT(3, dram_args->simobject->name() << "-" << mem_rsp);
-				delete dram_args;
+				auto rsp_args = reinterpret_cast<const DramCallbackArgs*>(arg);
+				// only send a response for read requests
+				if (!rsp_args->request.write) {
+					MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.cid, rsp_args->request.uuid};
+					rsp_args->simobject->MemRspPort.push(mem_rsp, 1);
+					DT(3, rsp_args->simobject->name() << "-" << mem_rsp);
+				}
+				delete rsp_args;
 			},
-			new DramCallbackArgs{simobject_, mem_req}
+			req_args
 		);
 
 		// check if the request was enqueued successfully
-		if (!enqueue_success)
+		if (!enqueue_success) {
+			delete req_args;
 			return;
+		}
 
 		if (mem_req.write) {
 			++perf_stats_.writes;
