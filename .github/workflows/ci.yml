@@ -148,11 +148,11 @@ jobs:
           cd build${{ matrix.xlen }}
           source ci/toolchain_env.sh
           if [ "${{ matrix.name }}" == "regression" ]; then
-            ./ci/regression.sh --unittest
-            ./ci/regression.sh --isa
-            ./ci/regression.sh --kernel
-            ./ci/regression.sh --synthesis
-            ./ci/regression.sh --regression
+            bash ./ci/regression.sh --unittest
+            bash ./ci/regression.sh --isa
+            bash ./ci/regression.sh --kernel
+            bash ./ci/regression.sh --synthesis
+            bash ./ci/regression.sh --regression
           else
-            ./ci/regression.sh --${{ matrix.name }}
+            bash ./ci/regression.sh --${{ matrix.name }}
           fi
