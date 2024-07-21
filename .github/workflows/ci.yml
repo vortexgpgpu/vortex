@@ -35,7 +35,7 @@ jobs:
         id: cache-toolchain
         uses: actions/cache@v2
         with:
-          path: $HOME/tools
+          path: tools
           key: ${{ runner.os }}-toolchain-v0.1
           restore-keys: |
             ${{ runner.os }}-toolchain-
@@ -44,26 +44,23 @@ jobs:
         id: cache-thirdparty
         uses: actions/cache@v2
         with:
-          path: $HOME/third_party
+          path: third_party
           key: ${{ runner.os }}-thirdparty-v0.1
           restore-keys: |
             ${{ runner.os }}-thirdparty-
 
-      - name: Setup Toolchain
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        run: |
-          TOOLDIR=$HOME/tools
-          rm -rf $TOOLDIR
-          mkdir -p $GITHUB_WORKSPACE/build && cd $GITHUB_WORKSPACE/build
-          ../configure --tooldir=$TOOLDIR
-          ci/toolchain_install.sh --all
-
       - name: Setup Third Party
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
-          cd $GITHUB_WORKSPACE
           make -C third_party > /dev/null
-          cp -rf third_party $HOME
+
+      - name: Setup Toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p build
+          cd build
+          ../configure --tooldir=tools
+          ci/toolchain_install.sh --all
 
   build:
     runs-on: ubuntu-20.04
@@ -80,7 +77,7 @@ jobs:
         id: cache-toolchain
         uses: actions/cache@v2
         with:
-          path: $HOME/tools
+          path: tools
           key: ${{ runner.os }}-toolchain-v0.1
           restore-keys: |
             ${{ runner.os }}-toolchain-
@@ -89,27 +86,24 @@ jobs:
         id: cache-thirdparty
         uses: actions/cache@v2
         with:
-          path: $HOME/third_party
+          path: third_party
           key: ${{ runner.os }}-thirdparty-v0.1
           restore-keys: |
             ${{ runner.os }}-thirdparty-
 
       - name: Run Build
         run: |
-          TOOLDIR=$HOME/tools
-          cp -rf $HOME/third_party $GITHUB_WORKSPACE
-          mkdir -p $GITHUB_WORKSPACE/build${{ matrix.xlen }}
-          cd $GITHUB_WORKSPACE/build${{ matrix.xlen }}
-          ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
+          mkdir -p build${{ matrix.xlen }}
+          cd build${{ matrix.xlen }}
+          ../configure --tooldir=tools --xlen=${{ matrix.xlen }}
           source ci/toolchain_env.sh
           make build -s > /dev/null
-          cp -rf $GITHUB_WORKSPACE/build${{ matrix.xlen }} $HOME;
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v2
         with:
           name: build-${{ matrix.xlen }}
-          path: $HOME/build${{ matrix.xlen }}
+          path: build${{ matrix.xlen }}
 
   tests:
     runs-on: ubuntu-20.04
@@ -127,7 +121,7 @@ jobs:
         id: cache-toolchain
         uses: actions/cache@v2
         with:
-          path: $HOME/tools
+          path: tools
           key: ${{ runner.os }}-toolchain-v0.1
           restore-keys: |
             ${{ runner.os }}-toolchain-
@@ -136,7 +130,7 @@ jobs:
         id: cache-thirdparty
         uses: actions/cache@v2
         with:
-          path: $HOME/third_party
+          path: third_party
           key: ${{ runner.os }}-thirdparty-v0.1
           restore-keys: |
             ${{ runner.os }}-thirdparty-
@@ -145,13 +139,11 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: build-${{ matrix.xlen }}
-          path: $HOME/build${{ matrix.xlen }}
+          path: build${{ matrix.xlen }}
 
       - name: Setup build environment
         run: |
-          TOOLDIR=$HOME/tools
-          cp -rf $HOME/third_party $GITHUB_WORKSPACE
-          cd $HOME/build${{ matrix.xlen }}
+          cd build${{ matrix.xlen }}
           source ci/toolchain_env.sh
 
       - name: Run tests
