@@ -91,6 +91,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-thirdparty-
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       - name: Run Build
         run: |
           mkdir -p build${{ matrix.xlen }}
