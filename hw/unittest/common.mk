@@ -3,7 +3,7 @@ DESTDIR ?= .
 CONFIGS +=
 PARAMS +=
 
-CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
+CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += $(CONFIGS)
 
