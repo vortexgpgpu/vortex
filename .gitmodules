@@ -6,4 +6,4 @@
 	url = https://github.com/ucb-bar/berkeley-softfloat-3.git
 [submodule "third_party/ramulator"]
 	path = third_party/ramulator
-	url = https://github.com/CMU-SAFARI/ramulator.git
+	url = https://github.com/CMU-SAFARI/ramulator2.git

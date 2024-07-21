@@ -70,6 +70,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     --perf_mem_pending_reads_;
   });
 
+#ifndef NDEBUG
   // dump device configuration
   std::cout << "CONFIGS:"
             << " num_threads=" << arch.num_threads()
@@ -80,7 +81,8 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
             << ", local_mem_base=0x" << std::hex << arch.local_mem_base() << std::dec
             << ", num_barriers=" << arch.num_barriers()
             << std::endl;
-
+#endif
+  // reset the device
   this->reset();
 }
 
