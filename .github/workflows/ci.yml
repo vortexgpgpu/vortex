@@ -27,7 +27,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          ./ci/system_updates.sh
+          bash ./ci/system_updates.sh
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
@@ -74,7 +74,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          ./ci/system_updates.sh
+          bash ./ci/system_updates.sh
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
@@ -126,7 +126,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          ./ci/system_updates.sh
+          bash ./ci/system_updates.sh
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
