@@ -94,9 +94,10 @@ jobs:
 
       - name: Run Build
         run: |
+          TOOLDIR=$PWD/tools
           mkdir -p build${{ matrix.xlen }}
           cd build${{ matrix.xlen }}
-          ../configure --tooldir=tools --xlen=${{ matrix.xlen }}
+          ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
           source ci/toolchain_env.sh
           make build -s > /dev/null
 
