@@ -141,26 +141,6 @@ opencl()
     echo "opencl tests done!"
 }
 
-cluster()
-{
-    echo "begin clustering tests..."
-
-    # cores clustering
-    ./ci/blackbox.sh --driver=rtlsim --cores=4 --clusters=1 --app=diverge --args="-n1"
-    ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --app=diverge --args="-n1"
-    ./ci/blackbox.sh --driver=simx --cores=4 --clusters=1 --app=diverge --args="-n1"
-    ./ci/blackbox.sh --driver=simx --cores=4 --clusters=2 --app=diverge --args="-n1"
-
-    # L2/L3
-    ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=diverge --args="-n1"
-    ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l3cache --app=diverge --args="-n1"
-    ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr --args="-n1"
-    ./ci/blackbox.sh --driver=simx --cores=4 --clusters=2 --l2cache --app=diverge --args="-n1"
-    ./ci/blackbox.sh --driver=simx --cores=4 --clusters=4 --l2cache --l3cache --app=diverge --args="-n1"
-
-    echo "clustering tests done!"
-}
-
 test_csv_trace()
 {
     # test CSV trace generation
@@ -198,17 +178,41 @@ debug()
     echo "debugging tests done!"
 }
 
+cluster()
+{
+    echo "begin clustering tests..."
+
+    # warp/threads
+    ./ci/blackbox.sh --driver=rtlsim --warps=1 --threads=1 --app=diverge
+    ./ci/blackbox.sh --driver=rtlsim --warps=2 --threads=2 --app=diverge
+    ./ci/blackbox.sh --driver=rtlsim --warps=2 --threads=8 --app=diverge
+    ./ci/blackbox.sh --driver=rtlsim --warps=8 --threads=2 --app=diverge
+    ./ci/blackbox.sh --driver=simx --warps=1 --threads=1 --app=diverge
+    ./ci/blackbox.sh --driver=simx --warps=8 --threads=16 --app=diverge
+
+    # cores clustering
+    ./ci/blackbox.sh --driver=rtlsim --cores=4 --clusters=1 --app=diverge --args="-n1"
+    ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --app=diverge --args="-n1"
+    ./ci/blackbox.sh --driver=simx --cores=4 --clusters=1 --app=diverge --args="-n1"
+    ./ci/blackbox.sh --driver=simx --cores=4 --clusters=2 --app=diverge --args="-n1"
+
+    # L2/L3
+    ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=diverge --args="-n1"
+    ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l3cache --app=diverge --args="-n1"
+    ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr --args="-n1"
+    ./ci/blackbox.sh --driver=simx --cores=4 --clusters=2 --l2cache --app=diverge --args="-n1"
+    ./ci/blackbox.sh --driver=simx --cores=4 --clusters=4 --l2cache --l3cache --app=diverge --args="-n1"
+
+    echo "clustering tests done!"
+}
+
 config()
 {
     echo "begin configuration tests..."
 
-    # warp/threads configurations
-    ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=1 --threads=1 --app=diverge
-    ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=2 --app=diverge
-    ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=8 --app=diverge
-    ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=8 --threads=2 --app=diverge
-    ./ci/blackbox.sh --driver=simx --cores=1 --warps=1 --threads=1 --app=diverge
-    ./ci/blackbox.sh --driver=simx --cores=1 --warps=8 --threads=16 --app=diverge
+    # test opaesim
+    ./ci/blackbox.sh --driver=opae --app=printf
+    ./ci/blackbox.sh --driver=opae --app=diverge
 
     # disable DPI
     CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
@@ -253,20 +257,20 @@ config()
     CONFIGS="-DEXT_ZICOND_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo
 
     # disable local memory
-    CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo --perf=1
-    CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --cores=1 --app=demo --perf=1
+    CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo --perf=1
+    CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=demo --perf=1
 
     # disable L1 cache
-    CONFIGS="-DL1_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemmx
-    CONFIGS="-DL1_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemmx
-    CONFIGS="-DDCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemmx
-    CONFIGS="-DICACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemmx
+    CONFIGS="-DL1_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DL1_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DDCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DICACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
 
     # multiple L1 caches per socket
     CONFIGS="-DSOCKET_SIZE=4 -DNUM_DCACHES=2 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --cores=8 --warps=1 --threads=2
 
     # test AXI bus
-    AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
+    AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --app=demo
 
     # reduce l1 line size
     CONFIGS="-DL1_LINE_SIZE=4" ./ci/blackbox.sh --driver=rtlsim --app=io_addr
@@ -278,18 +282,18 @@ config()
     CONFIGS="-DLMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
     CONFIGS="-DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
     CONFIGS="-DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=sgemmx
-    CONFIGS="-DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemmx
-    CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemmx
-    CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --cores=1 --app=sgemmx
+    CONFIGS="-DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=sgemmx
 
     # test 128-bit MEM block
-    CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=opae --cores=1 --app=demo
+    CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=opae --app=demo
 
     # test single-bank DRAM
-    CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1" ./ci/blackbox.sh --driver=opae --cores=1 --app=demo
+    CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1" ./ci/blackbox.sh --driver=opae --app=demo
 
     # test 27-bit DRAM address
-    CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=opae --cores=1 --app=demo
+    CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=opae --app=demo
 
     echo "configuration tests done!"
 }
@@ -300,9 +304,7 @@ stress()
 
     # test verilator reset values
     CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
-    CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
-    CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --app=printf
-    ./ci/blackbox.sh --driver=rtlsim --app=sgemm --args="-n128" --l2cache
+    CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --args="-n128" --l2cache
 
     echo "stress tests done!"
 }
