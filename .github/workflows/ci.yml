@@ -43,10 +43,10 @@ jobs:
       - name: Setup Toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
-          mkdir -p tools
+          TOOLDIR=$PWD/tools
           mkdir -p build
           cd build
-          ../configure --tooldir=$PWD/tools
+          ../configure --tooldir=$TOOLDIR
           ci/toolchain_install.sh --all
 
       - name: Cache Third Party Directory
