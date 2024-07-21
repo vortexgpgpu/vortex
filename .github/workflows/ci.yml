@@ -143,19 +143,16 @@ jobs:
           name: build-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
 
-      - name: Setup build environment
+      - name: Run tests
         run: |
           cd build${{ matrix.xlen }}
           source ci/toolchain_env.sh
-
-      - name: Run tests
-        run: |
           if [ "${{ matrix.name }}" == "regression" ]; then
-            ./ci/travis_run.py ./ci/regression.sh --unittest
-            ./ci/travis_run.py ./ci/regression.sh --isa
-            ./ci/travis_run.py ./ci/regression.sh --kernel
-            ./ci/travis_run.py ./ci/regression.sh --synthesis
-            ./ci/travis_run.py ./ci/regression.sh --regression
+            ./ci/regression.sh --unittest
+            ./ci/regression.sh --isa
+            ./ci/regression.sh --kernel
+            ./ci/regression.sh --synthesis
+            ./ci/regression.sh --regression
           else
-            ./ci/travis_run.py ./ci/regression.sh --${{ matrix.name }}
+            ./ci/regression.sh --${{ matrix.name }}
           fi
