@@ -100,6 +100,7 @@ jobs:
           ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
           source ci/toolchain_env.sh
           make build -s > /dev/null
+          find . -type f -executable -exec chmod +x {} + # Ensure all executables have correct permissions
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v2
