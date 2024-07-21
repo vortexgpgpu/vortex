@@ -24,6 +24,8 @@ RUN apt-get update && apt-get install -y \
     python \
     python3 \
     uuid-dev \
+    gcc-10 \
+    g++-10 \
     git \
     wget \
     curl \
