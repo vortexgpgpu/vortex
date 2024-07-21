@@ -290,7 +290,7 @@ private:
 
     if (!dram_queue_.empty()) {
       auto mem_req = dram_queue_.front();
-      if (dram_sim_.send_request(mem_req->write, mem_req->addr, 0, [](void* arg) {
+      if (dram_sim_.send_request(mem_req->write, mem_req->addr, mem_req->bank_id, [](void* arg) {
         auto orig_req = reinterpret_cast<mem_req_t*>(arg);
        if (orig_req->ready) {
           delete orig_req;
@@ -464,6 +464,7 @@ private:
         // send dram request
         auto mem_req = new mem_req_t();
         mem_req->addr  = device_->avs_address[b];
+        mem_req->bank_id = b;
         mem_req->write = true;
         mem_req->ready = true;
 
@@ -472,6 +473,7 @@ private:
       if (device_->avs_read[b]) {
         auto mem_req = new mem_req_t();
         mem_req->addr = device_->avs_address[b];
+        mem_req->bank_id = b;
         ram_->read(mem_req->data.data(), byte_addr, MEM_BLOCK_SIZE);
         mem_req->write = false;
         mem_req->ready = false;
@@ -497,6 +499,7 @@ private:
   typedef struct {
     std::array<uint8_t, MEM_BLOCK_SIZE> data;
     uint32_t addr;
+    uint32_t bank_id;
     bool write;
     bool ready;
   } mem_req_t;
