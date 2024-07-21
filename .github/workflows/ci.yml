@@ -40,6 +40,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-toolchain-
 
+      - name: Setup Toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p tools
+          mkdir -p build
+          cd build
+          ../configure --tooldir=$PWD/tools
+          ci/toolchain_install.sh --all
+
       - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v2
@@ -53,14 +62,6 @@ jobs:
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
           make -C third_party > /dev/null
-
-      - name: Setup Toolchain
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p build
-          cd build
-          ../configure --tooldir=tools
-          ci/toolchain_install.sh --all
 
   build:
     runs-on: ubuntu-20.04
@@ -91,9 +92,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-thirdparty-
 
-      #- name: Setup debug tmate session
-      #  uses: mxschmitt/action-tmate@v3
-
       - name: Run Build
         run: |
           mkdir -p build${{ matrix.xlen }}
@@ -113,7 +111,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        name: [regression32, regression64, config, debug]
+        name: [regression, opencl, config, cluster, debug, stress]
         xlen: [32, 64]
 
     steps:
@@ -151,22 +149,12 @@ jobs:
 
       - name: Run tests
         run: |
-          if [ "${{ matrix.name }}" == "regression32" ]; then
+          if [ "${{ matrix.name }}" == "regression" ]; then
             ./ci/travis_run.py ./ci/regression.sh --unittest
             ./ci/travis_run.py ./ci/regression.sh --isa
             ./ci/travis_run.py ./ci/regression.sh --kernel
             ./ci/travis_run.py ./ci/regression.sh --synthesis
             ./ci/travis_run.py ./ci/regression.sh --regression
-            ./ci/travis_run.py ./ci/regression.sh --opencl
-          elif [ "${{ matrix.name }}" == "regression64" ]; then
-            ./ci/travis_run.py ./ci/regression.sh --isa
-            ./ci/travis_run.py ./ci/regression.sh --kernel
-            ./ci/travis_run.py ./ci/regression.sh --synthesis
-            ./ci/travis_run.py ./ci/regression.sh --regression
-            ./ci/travis_run.py ./ci/regression.sh --opencl
-          elif [ "${{ matrix.name }}" == "config" ]; then
-            ./ci/travis_run.py ./ci/regression.sh --cluster
-            ./ci/travis_run.py ./ci/regression.sh --config
-          elif [ "${{ matrix.name }}" == "debug" ]; then
-            ./ci/travis_run.py ./ci/regression.sh --debug
-            ./ci/travis_run.py ./ci/regression.sh --stress
+          else
+            ./ci/travis_run.py ./ci/regression.sh --${{ matrix.name }}
+
