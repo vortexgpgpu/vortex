@@ -158,4 +158,4 @@ jobs:
             ./ci/travis_run.py ./ci/regression.sh --regression
           else
             ./ci/travis_run.py ./ci/regression.sh --${{ matrix.name }}
-
+          fi
