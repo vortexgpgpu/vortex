@@ -24,7 +24,7 @@ sudo apt-get install -y g++-11 gcc-11
 sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
 sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100
 
-sudo apt-get install -y build-essential valgrind libstdc++6 binutils python uuid-dev
+sudo apt-get install -y build-essential valgrind libstdc++6 binutils python uuid-dev ccache
 
 sudo apt-get upgrade -y
 sudo apt-get update -y
