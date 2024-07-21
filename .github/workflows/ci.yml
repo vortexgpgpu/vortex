@@ -100,7 +100,6 @@ jobs:
           ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
           source ci/toolchain_env.sh
           make build -s > /dev/null
-          find . -type f -executable -exec chmod +x {} + # Ensure all executables have correct permissions
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v2
@@ -148,12 +147,13 @@ jobs:
         run: |
           cd build${{ matrix.xlen }}
           source ci/toolchain_env.sh
+          find . -type f -executable -exec chmod +x {} + # Ensure all executables have correct permissions
           if [ "${{ matrix.name }}" == "regression" ]; then
-            bash ./ci/regression.sh --unittest
-            bash ./ci/regression.sh --isa
-            bash ./ci/regression.sh --kernel
-            bash ./ci/regression.sh --synthesis
-            bash ./ci/regression.sh --regression
+            ./ci/regression.sh --unittest
+            ./ci/regression.sh --isa
+            ./ci/regression.sh --kernel
+            ./ci/regression.sh --synthesis
+            ./ci/regression.sh --regression
           else
-            bash ./ci/regression.sh --${{ matrix.name }}
+            ./ci/regression.sh --${{ matrix.name }}
           fi
