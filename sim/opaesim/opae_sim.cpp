@@ -292,7 +292,7 @@ private:
       auto mem_req = dram_queue_.front();
       if (dram_sim_.send_request(mem_req->write, mem_req->addr, mem_req->bank_id, [](void* arg) {
         auto orig_req = reinterpret_cast<mem_req_t*>(arg);
-       if (orig_req->ready) {
+        if (orig_req->ready) {
           delete orig_req;
         } else {
           orig_req->ready = true;
