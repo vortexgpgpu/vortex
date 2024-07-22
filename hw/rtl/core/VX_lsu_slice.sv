@@ -535,14 +535,14 @@ module VX_lsu_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     VX_scope_tap #(
         .SCOPE_ID (3),
         .TRIGGERW (3),
-        .PROBEW   (`UUID_WIDTH+NUM_LANES*(`XLEN+4+`XLEN)+1+`UUID_WIDTH+NUM_LANES*`XLEN)
+        .PROBEW   (1 + NUM_LANES*(`XLEN + LSU_WORD_SIZE + LSU_WORD_SIZE*8) + `UUID_WIDTH + NUM_LANES*LSU_WORD_SIZE*8 + `UUID_WIDTH)
     ) scope_tap (
         .clk    (clk),
         .reset  (scope_reset),
         .start  (1'b0),
         .stop   (1'b0),
         .triggers({reset, mem_req_fire, mem_rsp_fire}),
-        .probes ({execute_if.data.uuid, full_addr, mem_req_rw, mem_req_byteen, mem_req_data, rsp_uuid, rsp_data}),
+        .probes ({mem_req_rw, full_addr, mem_req_byteen, mem_req_data, execute_if.data.uuid, rsp_data, rsp_uuid}),
         .bus_in (scope_bus_in),
         .bus_out(scope_bus_out)
     );
