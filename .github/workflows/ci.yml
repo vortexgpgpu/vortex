@@ -25,10 +25,6 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install Dependencies
-        run: |
-          bash ./ci/system_updates.sh
-
       - name: Cache Toolchain Directory
         id: cache-toolchain
         uses: actions/cache@v2
@@ -38,15 +34,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-toolchain-
 
-      - name: Setup Toolchain
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        run: |
-          TOOLDIR=$PWD/tools
-          mkdir -p build
-          cd build
-          ../configure --tooldir=$TOOLDIR
-          ci/toolchain_install.sh --all
-
       - name: Cache Third Party Directory
         id: cache-thirdparty
         uses: actions/cache@v2
@@ -55,6 +42,20 @@ jobs:
           key: ${{ runner.os }}-thirdparty-v0.1
           restore-keys: |
             ${{ runner.os }}-thirdparty-
+
+      - name: Install Dependencies
+        if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
+        run: |
+          bash ./ci/system_updates.sh
+
+      - name: Setup Toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          TOOLDIR=$PWD/tools
+          mkdir -p build
+          cd build
+          ../configure --tooldir=$TOOLDIR
+          ci/toolchain_install.sh --all
 
       - name: Setup Third Party
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'

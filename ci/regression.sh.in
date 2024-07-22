@@ -203,6 +203,9 @@ cluster()
     ./ci/blackbox.sh --driver=simx --cores=4 --clusters=2 --l2cache --app=diverge --args="-n1"
     ./ci/blackbox.sh --driver=simx --cores=4 --clusters=4 --l2cache --l3cache --app=diverge --args="-n1"
 
+    # multiple L1 caches per socket
+    CONFIGS="-DSOCKET_SIZE=4 -DNUM_DCACHES=2 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --cores=8 --warps=1 --threads=2
+
     echo "clustering tests done!"
 }
 
@@ -265,9 +268,6 @@ config()
     CONFIGS="-DL1_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
     CONFIGS="-DDCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
     CONFIGS="-DICACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
-
-    # multiple L1 caches per socket
-    CONFIGS="-DSOCKET_SIZE=4 -DNUM_DCACHES=2 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --cores=8 --warps=1 --threads=2
 
     # test AXI bus
     AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --app=demo

@@ -324,7 +324,7 @@ private:
       return;
     }
 
-    // process memory responses
+    // process memory read responses
     if (mem_rd_rsp_active_
      && device_->m_axi_rvalid[0] && mem_rd_rsp_ready_) {
       mem_rd_rsp_active_ = false;
@@ -355,7 +355,7 @@ private:
       }
     }
 
-    // send memory write response
+    // process memory write responses
     if (mem_wr_rsp_active_
      && device_->m_axi_bvalid[0] && mem_wr_rsp_ready_) {
       mem_wr_rsp_active_ = false;
@@ -386,13 +386,13 @@ private:
     // process memory requests
     if ((device_->m_axi_wvalid[0] || device_->m_axi_arvalid[0]) && running_) {
       if (device_->m_axi_wvalid[0]) {
-        uint64_t byteen = device_->m_axi_wstrb[0];
-        uint64_t base_addr = device_->m_axi_awaddr[0];
-        uint8_t* data = (uint8_t*)device_->m_axi_wdata[0].data();
+        auto byteen = device_->m_axi_wstrb[0];
+        auto base_addr = device_->m_axi_awaddr[0];
+        auto data = (uint8_t*)device_->m_axi_wdata[0].data();
 
-        // check console output
         if (base_addr >= uint64_t(IO_COUT_ADDR)
          && base_addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
+          // process console output
           for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
             if ((byteen >> i) & 0x1) {
               auto& ss_buf = print_bufs_[i];
@@ -405,6 +405,7 @@ private:
             }
           }
         } else {
+          // process writes
           /*
             printf("%0ld: [sim] MEM Wr: addr=%0x, byteen=%0lx, data=", timestamp, base_addr, byteen);
             for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
@@ -422,7 +423,7 @@ private:
           mem_req->tag   = device_->m_axi_awid[0];
           mem_req->addr  = device_->m_axi_awaddr[0];
           mem_req->write = true;
-          mem_req->ready = true;
+          mem_req->ready = false;
           pending_mem_reqs_.emplace_back(mem_req);
 
           // send dram request
@@ -466,7 +467,7 @@ private:
       return;
     }
 
-    // process memory responses
+    // process memory read responses
     if (mem_rd_rsp_active_
     && device_->mem_rsp_valid && mem_rd_rsp_ready_) {
       mem_rd_rsp_active_ = false;
@@ -498,13 +499,12 @@ private:
     if (device_->mem_req_valid && running_) {
       uint64_t byte_addr = (device_->mem_req_addr * MEM_BLOCK_SIZE);
       if (device_->mem_req_rw) {
-        // process writes
-        uint64_t byteen = device_->mem_req_byteen;
-        uint8_t* data = (uint8_t*)(device_->mem_req_data.data());
+        auto byteen = device_->mem_req_byteen;
+        auto data = (uint8_t*)(device_->mem_req_data.data());
 
-        // check console output
         if (byte_addr >= uint64_t(IO_COUT_ADDR)
          && byte_addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
+          // process console output
           for (int i = 0; i < IO_COUT_SIZE; i++) {
             if ((byteen >> i) & 0x1) {
               auto& ss_buf = print_bufs_[i];
@@ -517,6 +517,7 @@ private:
             }
           }
         } else {
+          // process writes
           /*
             printf("%0ld: [sim] MEM Wr: tag=%0lx, addr=%0x, byteen=%0lx, data=", timestamp, device_->mem_req_tag, byte_addr, byteen);
             for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
