@@ -178,9 +178,9 @@ debug()
     echo "debugging tests done!"
 }
 
-cluster()
+config1()
 {
-    echo "begin clustering tests..."
+    echo "begin configuration-1 tests..."
 
     # warp/threads
     ./ci/blackbox.sh --driver=rtlsim --warps=1 --threads=1 --app=diverge
@@ -195,31 +195,6 @@ cluster()
     ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --app=diverge --args="-n1"
     ./ci/blackbox.sh --driver=simx --cores=4 --clusters=1 --app=diverge --args="-n1"
     ./ci/blackbox.sh --driver=simx --cores=4 --clusters=2 --app=diverge --args="-n1"
-
-    # L2/L3
-    ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=diverge --args="-n1"
-    ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l3cache --app=diverge --args="-n1"
-    ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr --args="-n1"
-    ./ci/blackbox.sh --driver=simx --cores=4 --clusters=2 --l2cache --app=diverge --args="-n1"
-    ./ci/blackbox.sh --driver=simx --cores=4 --clusters=4 --l2cache --l3cache --app=diverge --args="-n1"
-
-    # multiple L1 caches per socket
-    CONFIGS="-DSOCKET_SIZE=4 -DNUM_DCACHES=2 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --cores=8 --warps=1 --threads=2
-
-    echo "clustering tests done!"
-}
-
-config()
-{
-    echo "begin configuration tests..."
-
-    # test opaesim
-    ./ci/blackbox.sh --driver=opae --app=printf
-    ./ci/blackbox.sh --driver=opae --app=diverge
-
-    # disable DPI
-    CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-    CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood
 
     # issue width
     CONFIGS="-DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=rtlsim --app=diverge
@@ -245,6 +220,31 @@ config()
     CONFIGS="-DISSUE_WIDTH=2 -DNUM_LSU_BLOCK=1 -DNUM_LSU_LANES=2" ./ci/blackbox.sh --driver=simx --app=vecaddx
     CONFIGS="-DISSUE_WIDTH=4 -DNUM_LSU_BLOCK=4 -DNUM_LSU_LANES=4" ./ci/blackbox.sh --driver=simx --app=vecaddx
 
+    # L2/L3
+    ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=diverge --args="-n1"
+    ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l3cache --app=diverge --args="-n1"
+    ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr --args="-n1"
+    ./ci/blackbox.sh --driver=simx --cores=4 --clusters=2 --l2cache --app=diverge --args="-n1"
+    ./ci/blackbox.sh --driver=simx --cores=4 --clusters=4 --l2cache --l3cache --app=diverge --args="-n1"
+
+    # multiple L1 caches per socket
+    CONFIGS="-DSOCKET_SIZE=4 -DNUM_DCACHES=2 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --cores=8 --warps=1 --threads=2
+
+    echo "configuration-1 tests done!"
+}
+
+config2()
+{
+    echo "begin configuration-2 tests..."
+
+    # test opaesim
+    ./ci/blackbox.sh --driver=opae --app=printf
+    ./ci/blackbox.sh --driver=opae --app=diverge
+
+    # disable DPI
+    CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
+    CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood
+
     # custom program startup address
     make -C tests/regression/dogfood clean-kernel
     STARTUP_ADDR=0x40000000 make -C tests/regression/dogfood
@@ -263,20 +263,20 @@ config()
     CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo --perf=1
     CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=demo --perf=1
 
+    # test AXI bus
+    AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --app=demo
+
     # disable L1 cache
     CONFIGS="-DL1_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
     CONFIGS="-DL1_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
     CONFIGS="-DDCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
     CONFIGS="-DICACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
 
-    # test AXI bus
-    AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --app=demo
-
     # reduce l1 line size
-    CONFIGS="-DL1_LINE_SIZE=4" ./ci/blackbox.sh --driver=rtlsim --app=io_addr
-    CONFIGS="-DL1_LINE_SIZE=4" ./ci/blackbox.sh --driver=simx --app=io_addr
-    CONFIGS="-DL1_LINE_SIZE=4 -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
-    CONFIGS="-DL1_LINE_SIZE=4 -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=sgemmx
+    CONFIGS="-DL1_LINE_SIZE=$XLEN/8" ./ci/blackbox.sh --driver=rtlsim --app=io_addr
+    CONFIGS="-DL1_LINE_SIZE=$XLEN/8" ./ci/blackbox.sh --driver=simx --app=io_addr
+    CONFIGS="-DL1_LINE_SIZE=$XLEN/8 -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DL1_LINE_SIZE=$XLEN/8 -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=sgemmx
 
     # test cache banking
     CONFIGS="-DLMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
@@ -295,7 +295,7 @@ config()
     # test 27-bit DRAM address
     CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=opae --app=demo
 
-    echo "configuration tests done!"
+    echo "configuration-2 tests done!"
 }
 
 stress()
@@ -322,7 +322,7 @@ synthesis()
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cluster] [--debug] [--config] [--stress] [--synthesis] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--config1] [--config2] [--debug] [--stress] [--synthesis] [--all] [--h|--help]"
 }
 
 start=$SECONDS
@@ -350,14 +350,14 @@ while [ "$1" != "" ]; do
         --opencl )
                 tests+=("opencl")
                 ;;
-        --cluster )
-                tests+=("cluster")
+        --config1 )
+                tests+=("config1")
+                ;;
+        --config2 )
+                tests+=("config2")
                 ;;
         --debug )
                 tests+=("debug")
-                ;;
-        --config )
-                tests+=("config")
                 ;;
         --stress )
                 tests+=("stress")
@@ -372,9 +372,9 @@ while [ "$1" != "" ]; do
                 tests+=("kernel")
                 tests+=("regression")
                 tests+=("opencl")
-                tests+=("cluster")
+                tests+=("config1")
+                tests+=("config2")
                 tests+=("debug")
-                tests+=("config")
                 tests+=("stress")
                 tests+=("synthesis")
                 ;;
