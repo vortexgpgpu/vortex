@@ -116,9 +116,6 @@ jobs:
       matrix:
         name: [regression, opencl, config, cluster, debug, stress]
         xlen: [32, 64]
-        exclude:
-          - name: config
-            xlen: 64
 
     steps:
       - name: Checkout code
