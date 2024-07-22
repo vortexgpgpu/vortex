@@ -18,9 +18,11 @@
 #ifdef AXI_BUS
 #include "VVortex_axi.h"
 #include "VVortex_axi__Syms.h"
+typedef VVortex_axi Device;
 #else
 #include "VVortex.h"
 #include "VVortex__Syms.h"
+typedef VVortex Device;
 #endif
 
 #ifdef VCD_OUTPUT
@@ -334,7 +336,7 @@ private:
         auto mem_rsp_it = pending_mem_reqs_.begin();
         auto mem_rsp = *mem_rsp_it;
         /*
-          printf("%0ld: [sim] MEM Rsp: addr=%0lx, data=", timestamp, mem_rsp->addr);
+          printf("%0ld: [sim] MEM Rd Rsp: addr=%0lx, data=", timestamp, mem_rsp->addr);
           for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
             printf("%02x", mem_rsp->block[(MEM_BLOCK_SIZE-1)-i]);
           }
@@ -420,7 +422,7 @@ private:
           mem_req->tag   = device_->m_axi_awid[0];
           mem_req->addr  = device_->m_axi_awaddr[0];
           mem_req->write = true;
-          mem_req->ready = false;
+          mem_req->ready = true;
           pending_mem_reqs_.emplace_back(mem_req);
 
           // send dram request
@@ -581,7 +583,7 @@ private:
 private:
 
   typedef struct {
-    VVortex *device;
+    Device* device;
     std::array<uint8_t, MEM_BLOCK_SIZE> block;
     uint64_t addr;
     uint64_t tag;
@@ -589,11 +591,8 @@ private:
     bool ready;
   } mem_req_t;
 
-#ifdef AXI_BUS
-  VVortex_axi *device_;
-#else
-  VVortex *device_;
-#endif
+  Device* device_;
+
 #ifdef VCD_OUTPUT
   VerilatedVcdC *trace_;
 #endif
