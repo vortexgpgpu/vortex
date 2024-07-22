@@ -115,7 +115,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        name: [regression, opencl, config, cluster, debug, stress]
+        name: [regression, opencl, config1, config2, debug, stress]
         xlen: [32, 64]
 
     steps:
