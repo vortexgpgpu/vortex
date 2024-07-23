@@ -102,7 +102,8 @@ jobs:
           cd build${{ matrix.xlen }}
           ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
           source ci/toolchain_env.sh
-          make build -s > /dev/null
+          make software -s > /dev/null
+          make tests -s > /dev/null
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v2
