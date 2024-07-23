@@ -89,7 +89,9 @@ int main(int argc, char **argv) {
 			return -1;
 		}
 	}
-
+#ifndef NDEBUG
+	std::cout << "[VXDRV] START: program=" << program << std::endl;
+#endif
 	// run simulation
 	processor.run();
 
