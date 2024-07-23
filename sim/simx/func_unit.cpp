@@ -131,8 +131,8 @@ void LsuUnit::tick() {
 			Outputs.at(iw).push(trace, 1);
 			state.pending_rd_reqs.release(lsu_rsp.tag);
 		}
+		pending_loads_ -= lsu_rsp.mask.count();
 		lsu_rsp_port.pop();
-		--pending_loads_;
 	}
 
 	// handle LSU requests
@@ -202,11 +202,13 @@ void LsuUnit::tick() {
 		core_->lsu_demux_.at(block_idx)->ReqIn.push(lsu_req);
 		DT(3, this->name() << "-" << lsu_req);
 
+		// update stats
+		auto num_addrs = lsu_req.mask.count();
 		if (is_write) {
-			++core_->perf_stats_.stores;
+			core_->perf_stats_.stores += num_addrs;
 		} else {
-			++core_->perf_stats_.loads;
-			++pending_loads_;
+			core_->perf_stats_.loads += num_addrs;
+			pending_loads_ += num_addrs;
 		}
 
 		// do not wait on writes
