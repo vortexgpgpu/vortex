@@ -152,6 +152,8 @@ private:
   LocalMem::Ptr local_mem_;
   std::vector<LocalMemDemux::Ptr> lsu_demux_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;
+  std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter_;
+  std::vector<LsuMemAdapter::Ptr> lsu_lmem_adapter_;
 
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;
