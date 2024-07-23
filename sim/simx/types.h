@@ -23,6 +23,7 @@
 #include <VX_config.h>
 #include <VX_types.h>
 #include <simobject.h>
+#include <bitvector.h>
 #include "debug.h"
 
 namespace vortex {
@@ -238,6 +239,62 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
   default: assert(false);
   }
   return os;
+}///////////////////////////////////////////////////////////////////////////////
+
+struct LsuReq {
+  BitVector<> mask;
+  std::vector<uint64_t> addrs;
+  bool     write;
+  uint32_t tag;
+  uint32_t cid;
+  uint64_t uuid;
+
+  LsuReq(uint32_t size)
+    : mask(size)
+    , addrs(size, 0)
+    , write(false)
+    , tag(0)
+    , cid(0)
+    , uuid(0)
+  {}
+};
+
+inline std::ostream &operator<<(std::ostream &os, const LsuReq& req) {
+  os << "lsu-req-" << (req.write ? "wr" : "rd") << ": mask=" << req.mask << ", ";
+  for (size_t i = 0; i < req.addrs.size(); ++i) {
+    os << "addr" << i << "=";
+    if (req.mask.test(i)) {
+      os << "0x" << std::hex << req.addrs.at(i);
+    } else {
+      os << "-";
+    }
+    os << ", ";
+  }
+  os << std::dec << "tag=" << req.tag << ", cid=" << req.cid;
+  os << " (#" << std::dec << req.uuid << ")";
+  return os;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+struct LsuRsp {
+  BitVector<> mask;
+  uint64_t tag;
+  uint32_t cid;
+  uint64_t uuid;
+
+ LsuRsp(uint32_t size)
+    : mask(size)
+    , tag (0)
+    , cid(0)
+    , uuid(0)
+  {}
+};
+
+inline std::ostream &operator<<(std::ostream &os, const LsuRsp& rsp) {
+  os << "lsu-rsp: mask=" << rsp.mask << ", tag=" << rsp.tag << ", cid=" << rsp.cid;
+  os << " (#" << std::dec << rsp.uuid << ")";
+  return os;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -266,7 +323,7 @@ struct MemReq {
 };
 
 inline std::ostream &operator<<(std::ostream &os, const MemReq& req) {
-  os << "mem-" << (req.write ? "wr" : "rd") << ": ";
+  os << "mem-req-" << (req.write ? "wr" : "rd") << ": ";
   os << "addr=0x" << std::hex << req.addr << ", type=" << req.type;
   os << std::dec << ", tag=" << req.tag << ", cid=" << req.cid;
   os << " (#" << std::dec << req.uuid << ")";
@@ -566,18 +623,43 @@ using MemSwitch = Switch<MemReq, MemRsp>;
 
 class LocalMemDemux : public SimObject<LocalMemDemux> {
 public:
-  SimPort<MemReq> ReqIn;
-  SimPort<MemRsp> RspIn;
+  SimPort<LsuReq> ReqIn;
+  SimPort<LsuRsp> RspIn;
 
-  SimPort<MemReq> ReqSM;
-  SimPort<MemRsp> RspSM;
+  SimPort<LsuReq> ReqLmem;
+  SimPort<LsuRsp> RspLmem;
 
-  SimPort<MemReq> ReqDC;
-  SimPort<MemRsp> RspDC;
+  SimPort<LsuReq> ReqDC;
+  SimPort<LsuRsp> RspDC;
 
   LocalMemDemux(
     const SimContext& ctx,
     const char* name,
+    uint32_t delay
+  );
+
+  void reset();
+
+  void tick();
+
+private:
+  uint32_t delay_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+class LsuMemAdapter : public SimObject<LsuMemAdapter> {
+public:
+  SimPort<LsuReq> ReqIn;
+  SimPort<LsuRsp> RspIn;
+
+  std::vector<SimPort<MemReq>> ReqOut;
+  std::vector<SimPort<MemRsp>> RspOut;
+
+  LsuMemAdapter(
+    const SimContext& ctx,
+    const char* name,
+    uint32_t num_inputs,
     uint32_t delay
   );
 
