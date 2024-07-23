@@ -46,7 +46,7 @@ jobs:
       - name: Install Dependencies
         if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
-          bash ./ci/system_updates.sh
+          sudo bash ./ci/system_updates.sh
 
       - name: Setup Toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
