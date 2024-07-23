@@ -19,6 +19,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # Update and install necessary dependencies
 RUN apt-get update && apt-get install -y \
+    software-properties-common \
     build-essential \
     python \
     python3 \
