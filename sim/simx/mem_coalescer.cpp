@@ -84,6 +84,8 @@ void MemCoalescer::tick() {
     return;
 
   auto& in_req = ReqIn.front();
+  assert(in_req.mask.size() == input_size_);
+  assert(!in_req.mask.none());
 
   // ensure we can allocate a response tag
   if (pending_rd_reqs_.full()) {
@@ -120,6 +122,7 @@ void MemCoalescer::tick() {
 
       out_mask.set(o);
       out_addrs.at(o) = seed_addr;
+      break;
     }
   }
 

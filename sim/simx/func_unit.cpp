@@ -178,7 +178,7 @@ void LsuUnit::tick() {
 		}
 
 		// build memory request
-		LsuReq lsu_req(NUM_ALU_LANES);
+		LsuReq lsu_req(NUM_LSU_LANES);
 		lsu_req.write = is_write;
 		{
 			auto trace_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
