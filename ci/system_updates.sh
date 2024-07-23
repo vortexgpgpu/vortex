@@ -16,15 +16,12 @@
 
 set -e
 
-sudo apt-get update -y
+apt-get update -y
 
-sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-sudo apt-get update
-sudo apt-get install -y g++-11 gcc-11
-sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
-sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100
+add-apt-repository -y ppa:ubuntu-toolchain-r/test
+apt-get update
+apt-get install -y g++-11 gcc-11
+update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
+update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100
 
-sudo apt-get install -y build-essential valgrind libstdc++6 binutils python uuid-dev ccache
-
-sudo apt-get upgrade -y
-sudo apt-get update -y
+apt-get install -y build-essential valgrind libstdc++6 binutils python uuid-dev ccache
