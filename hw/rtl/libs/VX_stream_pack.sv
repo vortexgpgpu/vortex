@@ -68,15 +68,17 @@ module VX_stream_pack #(
             .data_out (tag_sel)
         );
 
-        wire [NUM_REQS-1:0] mask_sel;
+        wire [NUM_REQS-1:0] tag_matches;
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin
-            assign mask_sel[i] = valid_in[i] && (tag_in[i][TAG_SEL_BITS-1:0] == tag_sel[TAG_SEL_BITS-1:0]);
+            assign tag_matches[i] = (tag_in[i][TAG_SEL_BITS-1:0] == tag_sel[TAG_SEL_BITS-1:0]);
         end
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin
-            assign ready_in[i] = grant_ready & mask_sel[i];
+            assign ready_in[i] = grant_ready & tag_matches[i];
         end
+
+        wire [NUM_REQS-1:0] mask_sel = valid_in & tag_matches;
 
         VX_elastic_buffer #(
             .DATAW   (NUM_REQS + TAG_WIDTH + (NUM_REQS * DATA_WIDTH)),
