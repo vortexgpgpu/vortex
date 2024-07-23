@@ -153,7 +153,6 @@ void LsuUnit::tick() {
 		if (input.empty())
 			continue;
 
-		auto& output = Outputs.at(iw);
 		auto trace = input.front();
 
 		if (trace->lsu_type == LsuType::FENCE) {
@@ -212,7 +211,7 @@ void LsuUnit::tick() {
 
 		// do not wait on writes
 		if (is_write) {
-			output.push(trace, 1);
+			Outputs.at(iw).push(trace, 1);
 		}
 
 		// remove input

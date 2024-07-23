@@ -261,7 +261,7 @@ struct LsuReq {
 
 inline std::ostream &operator<<(std::ostream &os, const LsuReq& req) {
   os << "lsu-req-" << (req.write ? "wr" : "rd") << ": mask=" << req.mask << ", ";
-  for (size_t i = 0; i < req.addrs.size(); ++i) {
+  for (size_t i = 0; i < req.mask.size(); ++i) {
     os << "addr" << i << "=";
     if (req.mask.test(i)) {
       os << "0x" << std::hex << req.addrs.at(i);
@@ -484,7 +484,6 @@ public:
         auto& req_in = Inputs.at(j);
         if (!req_in.empty()) {
           auto& req = req_in.front();
-          DT(4, this->name() << "-" << req);
           Outputs.at(o).push(req, delay_);
           req_in.pop();
           this->update_cursor(o, i);
