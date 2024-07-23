@@ -20,16 +20,17 @@ namespace vortex {
 template <typename T = uint32_t>
 class BitVector {
 private:
-  std::vector<uint8_t> bits_;
+  static constexpr size_t BITS_PER_WORD = sizeof(T) * 8;
+  std::vector<T> bits_;
   size_t size_;
   bool all_zero_;
 
-  size_t byteIndex(size_t pos) const {
-    return pos / (sizeof(T) * 8);
+  size_t wordIndex(size_t pos) const {
+    return pos / BITS_PER_WORD;
   }
 
-  uint8_t bitMask(size_t pos) const {
-    return 1 << (pos % (sizeof(T) * 8));
+  T bitMask(size_t pos) const {
+    return T(1) << (pos % BITS_PER_WORD);
   }
 
   void updateAllZero() {
@@ -38,14 +39,14 @@ private:
 
 public:
   explicit BitVector(size_t size = 0)
-    : bits_((size + (sizeof(T) * 8 - 1)) / (sizeof(T) * 8))
+    : bits_((size + (BITS_PER_WORD - 1)) / BITS_PER_WORD)
     , size_(size)
     , all_zero_(true)
   {}
 
   void set(size_t pos) {
     if (pos >= size_) throw std::out_of_range("Index out of range");
-    bits_[this->byteIndex(pos)] |= this->bitMask(pos);
+    bits_[this->wordIndex(pos)] |= this->bitMask(pos);
     all_zero_ = false;
   }
 
@@ -64,13 +65,13 @@ public:
 
   void reset(size_t pos) {
     if (pos >= size_) throw std::out_of_range("Index out of range");
-    bits_[this->byteIndex(pos)] &= ~this->bitMask(pos);
+    bits_[this->wordIndex(pos)] &= ~this->bitMask(pos);
     this->updateAllZero();
   }
 
   bool test(size_t pos) const {
     if (pos >= size_) throw std::out_of_range("Index out of range");
-    return bits_[this->byteIndex(pos)] & this->bitMask(pos);
+    return bits_[this->wordIndex(pos)] & this->bitMask(pos);
   }
 
   size_t size() const {
@@ -79,12 +80,12 @@ public:
 
   void resize(size_t new_size) {
     size_ = new_size;
-    bits_.resize((new_size + (sizeof(T) * 8 - 1)) / (sizeof(T) * 8));
+    bits_.resize((new_size + (BITS_PER_WORD - 1)) / BITS_PER_WORD, 0);
     this->updateAllZero();
   }
 
   bool operator==(const BitVector& other) const {
-    return size_ == other.size_ && bits_ == other.bits_;
+    return (size_ == other.size_) && (bits_ == other.bits_);
   }
 
   bool operator!=(const BitVector& other) const {
@@ -141,7 +142,7 @@ public:
   size_t count() const {
     size_t count = 0;
     for (const auto &word : bits_) {
-      count += std::bitset<sizeof(T) * 8>(word).count();
+      count += std::bitset<BITS_PER_WORD>(word).count();
     }
     return count;
   }
@@ -155,8 +156,8 @@ public:
   }
 
   bool all() const {
-    size_t full_bits = size_ / (sizeof(T) * 8);
-    size_t remaining_bits = size_ % (sizeof(T) * 8);
+    size_t full_bits = size_ / BITS_PER_WORD;
+    size_t remaining_bits = size_ % BITS_PER_WORD;
     T full_mask = ~T(0);
     for (size_t i = 0; i < full_bits; ++i) {
       if (bits_[i] != full_mask)
@@ -176,19 +177,19 @@ public:
       return *this;
     }
 
-    size_t byte_shift = pos / (sizeof(T) * 8);
-    size_t bit_shift = pos % (sizeof(T) * 8);
+    size_t word_shift = pos / BITS_PER_WORD;
+    size_t bit_shift = pos % BITS_PER_WORD;
 
-    if (byte_shift > 0) {
-      for (size_t i = bits_.size() - 1; i >= byte_shift; --i) {
-        bits_[i] = bits_[i - byte_shift];
+    if (word_shift > 0) {
+      for (size_t i = bits_.size() - 1; i >= word_shift; --i) {
+        bits_[i] = bits_[i - word_shift];
       }
-      std::fill(bits_.begin(), bits_.begin() + byte_shift, 0);
+      std::fill(bits_.begin(), bits_.begin() + word_shift, 0);
     }
 
     if (bit_shift > 0) {
       for (size_t i = bits_.size() - 1; i > 0; --i) {
-        bits_[i] = (bits_[i] << bit_shift) | (bits_[i - 1] >> (sizeof(T) * 8 - bit_shift));
+        bits_[i] = (bits_[i] << bit_shift) | (bits_[i - 1] >> (BITS_PER_WORD - bit_shift));
       }
       bits_[0] <<= bit_shift;
     }
@@ -203,19 +204,19 @@ public:
       return *this;
     }
 
-    size_t byte_shift = pos / (sizeof(T) * 8);
-    size_t bit_shift = pos % (sizeof(T) * 8);
+    size_t word_shift = pos / BITS_PER_WORD;
+    size_t bit_shift = pos % BITS_PER_WORD;
 
-    if (byte_shift > 0) {
-      for (size_t i = 0; i < bits_.size() - byte_shift; ++i) {
-        bits_[i] = bits_[i + byte_shift];
+    if (word_shift > 0) {
+      for (size_t i = 0; i < bits_.size() - word_shift; ++i) {
+        bits_[i] = bits_[i + word_shift];
       }
-      std::fill(bits_.end() - byte_shift, bits_.end(), 0);
+      std::fill(bits_.end() - word_shift, bits_.end(), 0);
     }
 
     if (bit_shift > 0) {
       for (size_t i = 0; i < bits_.size() - 1; ++i) {
-        bits_[i] = (bits_[i] >> bit_shift) | (bits_[i + 1] << (sizeof(T) * 8 - bit_shift));
+        bits_[i] = (bits_[i] >> bit_shift) | (bits_[i + 1] << (BITS_PER_WORD - bit_shift));
       }
       bits_.back() >>= bit_shift;
     }
