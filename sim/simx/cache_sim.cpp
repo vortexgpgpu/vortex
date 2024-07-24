@@ -539,7 +539,7 @@ private:
 							continue;
 						MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
 						simobject_->CoreRspPorts.at(info.req_id).push(core_rsp, config_.latency);
-						DT(3, simobject_->name() << "-core-" << core_rsp);
+						DT(3, simobject_->name() << "-replay-" << core_rsp);
 					}
 				}
 			} break;
@@ -583,7 +583,7 @@ private:
 							mem_req.cid   = pipeline_req.cid;
 							mem_req.uuid  = pipeline_req.uuid;
 							mem_req_ports_.at(bank_id).push(mem_req, 1);
-							DT(3, simobject_->name() << "-dram-" << mem_req);
+							DT(3, simobject_->name() << "-writethrough-" << mem_req);
 						} else {
 							// mark line as dirty
 							hit_line.dirty = true;
@@ -615,7 +615,7 @@ private:
 							mem_req.write = true;
 							mem_req.cid   = pipeline_req.cid;
 							mem_req_ports_.at(bank_id).push(mem_req, 1);
-							DT(3, simobject_->name() << "-dram-" << mem_req);
+							DT(3, simobject_->name() << "-writeback-" << mem_req);
 							++perf_stats_.evictions;
 						}
 					}
@@ -629,7 +629,7 @@ private:
 							mem_req.cid   = pipeline_req.cid;
 							mem_req.uuid  = pipeline_req.uuid;
 							mem_req_ports_.at(bank_id).push(mem_req, 1);
-							DT(3, simobject_->name() << "-dram-" << mem_req);
+							DT(3, simobject_->name() << "-writethrough-" << mem_req);
 						}
 						// send core response
 						if (config_.write_reponse) {

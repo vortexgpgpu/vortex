@@ -24,7 +24,7 @@
 
 using namespace vortex;
 
-AluUnit::AluUnit(const SimContext& ctx, Core* core) : FuncUnit(ctx, core, "ALU") {}
+AluUnit::AluUnit(const SimContext& ctx, Core* core) : FuncUnit(ctx, core, "alu-unit") {}
 
 void AluUnit::tick() {
   for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
@@ -49,7 +49,7 @@ void AluUnit::tick() {
 		default:
 			std::abort();
 		}
-		DT(3, "pipeline-execute: op=" << trace->alu_type << ", " << *trace);
+		DT(3, this->name() << ": op" << trace->alu_type << ", " << *trace);
 		if (trace->eop && trace->fetch_stall) {
 			core_->resume(trace->wid);
 		}
@@ -59,7 +59,7 @@ void AluUnit::tick() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-FpuUnit::FpuUnit(const SimContext& ctx, Core* core) : FuncUnit(ctx, core, "FPU") {}
+FpuUnit::FpuUnit(const SimContext& ctx, Core* core) : FuncUnit(ctx, core, "fpu-unit") {}
 
 void FpuUnit::tick() {
 	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
@@ -88,7 +88,7 @@ void FpuUnit::tick() {
 		default:
 			std::abort();
 		}
-		DT(3, "pipeline-execute: op=" << trace->fpu_type << ", " << *trace);
+		DT(3,this->name() << ": op=" << trace->fpu_type << ", " << *trace);
 		input.pop();
 	}
 }
@@ -96,7 +96,7 @@ void FpuUnit::tick() {
 ///////////////////////////////////////////////////////////////////////////////
 
 LsuUnit::LsuUnit(const SimContext& ctx, Core* core)
-	: FuncUnit(ctx, core, "LSU")
+	: FuncUnit(ctx, core, "lsu-unit")
 	, pending_loads_(0)
 {}
 
@@ -114,25 +114,25 @@ void LsuUnit::tick() {
 	core_->perf_stats_.load_latency += pending_loads_;
 
 	// handle memory responses
-	for (uint32_t r = 0; r < LSU_NUM_REQS; ++r) {
-		auto& dcache_rsp_port = core_->lsu_demux_.at(r)->RspIn;
-		if (dcache_rsp_port.empty())
+	for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
+		auto& lsu_rsp_port = core_->lsu_demux_.at(b)->RspIn;
+		if (lsu_rsp_port.empty())
 			continue;
-		uint32_t block_idx = r / LSU_CHANNELS;
-		auto& state = states_.at(block_idx);
-		auto& mem_rsp = dcache_rsp_port.front();
-		auto& entry = state.pending_rd_reqs.at(mem_rsp.tag);
+		auto& state = states_.at(b);
+		auto& lsu_rsp = lsu_rsp_port.front();
+		DT(3, this->name() << "-" << lsu_rsp);
+		auto& entry = state.pending_rd_reqs.at(lsu_rsp.tag);
 		auto trace = entry.trace;
-		DT(3, "mem-rsp: tag=" << mem_rsp.tag << ", type=" << trace->lsu_type << ", rid=" << r << ", " << *trace);
-		assert(entry.count);
-		--entry.count; // track remaining addresses
-		if (0 == entry.count) {
+		assert(!entry.mask.none());
+		entry.mask &= ~lsu_rsp.mask; // track remaining
+		if (entry.mask.none()) {
+			// whole response received, release trace
 			int iw = trace->wid % ISSUE_WIDTH;
 			Outputs.at(iw).push(trace, 1);
-			state.pending_rd_reqs.release(mem_rsp.tag);
+			state.pending_rd_reqs.release(lsu_rsp.tag);
 		}
-		dcache_rsp_port.pop();
-		--pending_loads_;
+		pending_loads_ -= lsu_rsp.mask.count();
+		lsu_rsp_port.pop();
 	}
 
 	// handle LSU requests
@@ -145,7 +145,7 @@ void LsuUnit::tick() {
 				continue;
 			Outputs.at(iw).push(state.fence_trace, 1);
 			state.fence_lock = false;
-			DT(3, "fence-unlock: " << state.fence_trace);
+			DT(3, this->name() << "-fence-unlock: " << state.fence_trace);
 		}
 
 		// check input queue
@@ -153,14 +153,13 @@ void LsuUnit::tick() {
 		if (input.empty())
 			continue;
 
-		auto& output = Outputs.at(iw);
 		auto trace = input.front();
 
 		if (trace->lsu_type == LsuType::FENCE) {
 			// schedule fence lock
 			state.fence_trace = trace;
 			state.fence_lock = true;
-			DT(3, "fence-lock: " << *trace);
+			DT(3, this->name() << "-fence-lock: " << *trace);
 			// remove input
 			input.pop();
 			continue;
@@ -178,21 +177,43 @@ void LsuUnit::tick() {
 			trace->log_once(false);
 		}
 
+		// build memory request
+		LsuReq lsu_req(NUM_LSU_LANES);
+		lsu_req.write = is_write;
+		{
+			auto trace_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
+			auto t0 = trace->pid * NUM_LSU_LANES;
+			for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
+				if (trace->tmask.test(t0 + i)) {
+					lsu_req.mask.set(i);
+					lsu_req.addrs.at(i) = trace_data->mem_addrs.at(t0 + i).addr;
+				}
+			}
+		}
 		uint32_t tag = 0;
 		if (!is_write) {
-			tag = state.pending_rd_reqs.allocate({trace, 0});
+			tag = state.pending_rd_reqs.allocate({trace, lsu_req.mask});
 		}
+		lsu_req.tag  = tag;
+		lsu_req.cid  = trace->cid;
+		lsu_req.uuid = trace->uuid;
 
 		// send memory request
-		auto num_reqs = this->send_requests(trace, block_idx, tag);
+		core_->lsu_demux_.at(block_idx)->ReqIn.push(lsu_req);
+		DT(3, this->name() << "-" << lsu_req);
 
-		if (!is_write) {
-			state.pending_rd_reqs.at(tag).count = num_reqs;
+		// update stats
+		auto num_addrs = lsu_req.mask.count();
+		if (is_write) {
+			core_->perf_stats_.stores += num_addrs;
+		} else {
+			core_->perf_stats_.loads += num_addrs;
+			pending_loads_ += num_addrs;
 		}
 
 		// do not wait on writes
 		if (is_write) {
-			output.push(trace, 1);
+			Outputs.at(iw).push(trace, 1);
 		}
 
 		// remove input
@@ -200,52 +221,10 @@ void LsuUnit::tick() {
 	}
 }
 
-int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
-	int count = 0;
-
-	auto trace_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
-	bool is_write = (trace->lsu_type == LsuType::STORE);
-	auto t0 = trace->pid * NUM_LSU_LANES;
-
-	for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
-		uint32_t t = t0 + i;
-		if (!trace->tmask.test(t))
-			continue;
-
-		int req_idx = block_idx * LSU_CHANNELS + (i % LSU_CHANNELS);
-		auto& dcache_req_port = core_->lsu_demux_.at(req_idx)->ReqIn;
-
-		auto mem_addr = trace_data->mem_addrs.at(t);
-		auto type = get_addr_type(mem_addr.addr);
-
-		MemReq mem_req;
-		mem_req.addr  = mem_addr.addr;
-		mem_req.write = is_write;
-		mem_req.type  = type;
-		mem_req.tag   = tag;
-		mem_req.cid   = trace->cid;
-		mem_req.uuid  = trace->uuid;
-
-		dcache_req_port.push(mem_req, 1);
-		DT(3, "mem-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << tag
-			<< ", lsu_type=" << trace->lsu_type << ", rid=" << req_idx << ", addr_type=" << mem_req.type << ", " << *trace);
-
-		if (is_write) {
-			++core_->perf_stats_.stores;
-		} else {
-			++core_->perf_stats_.loads;
-			++pending_loads_;
-		}
-
-		++count;
-	}
-	return count;
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
 SfuUnit::SfuUnit(const SimContext& ctx, Core* core)
-	: FuncUnit(ctx, core, "SFU")
+	: FuncUnit(ctx, core, "sfu-unit")
 {}
 
 void SfuUnit::tick() {
@@ -287,7 +266,7 @@ void SfuUnit::tick() {
 			std::abort();
 		}
 
-		DT(3, "pipeline-execute: op=" << trace->sfu_type << ", " << *trace);
+		DT(3, this->name() << ": op=" << trace->sfu_type << ", " << *trace);
 		if (trace->eop && release_warp)  {
 			core_->resume(trace->wid);
 		}
