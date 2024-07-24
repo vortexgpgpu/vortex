@@ -136,22 +136,22 @@ public:
   }
 
   int init() {
-    // force random values for unitialized signals
-    Verilated::randReset(VERILATOR_RESET_VALUE);
-    Verilated::randSeed(50);
-
-    // turn off assertion before reset
-    Verilated::assertOn(false);
-
     // create RTL module instance
     device_ = new Vvortex_afu_shim();
-
+    
   #ifdef VCD_OUTPUT
     Verilated::traceEverOn(true);
     trace_ = new VerilatedVcdC();
     device_->trace(trace_, 99);
     trace_->open("trace.vcd");
   #endif
+
+    // force random values for unitialized signals
+    Verilated::randReset(VERILATOR_RESET_VALUE);
+    Verilated::randSeed(50);
+
+    // turn off assertion before reset
+    Verilated::assertOn(false);
 
     ram_ = new RAM(0, RAM_PAGE_SIZE);
 
