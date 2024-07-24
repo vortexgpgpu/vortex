@@ -117,11 +117,7 @@ public:
     Verilated::assertOn(false);
 
     // create RTL module instance
-  #ifdef AXI_BUS
-    device_ = new VVortex_axi();
-  #else
-    device_ = new VVortex();
-  #endif
+    device_ = new Device();
 
   #ifdef VCD_OUTPUT
     Verilated::traceEverOn(true);
@@ -227,11 +223,7 @@ private:
     mem_rd_rsp_active_ = false;
     mem_wr_rsp_active_ = false;
 
-  #ifdef AXI_BUS
-    this->axi_bus_reset();
-  #else
-    this->avs_bus_reset();
-  #endif
+    this->mem_bus_reset();
 
     this->dcr_bus_reset();
 
@@ -250,21 +242,13 @@ private:
     device_->clk = 0;
     this->eval();
 
-  #ifdef AXI_BUS
-    this->axi_bus_eval(0);
-  #else
-    this->avs_bus_eval(0);
-  #endif
+    this->mem_bus_eval(0);
     this->dcr_bus_eval(0);
 
     device_->clk = 1;
     this->eval();
 
-  #ifdef AXI_BUS
-    this->axi_bus_eval(1);
-  #else
-    this->avs_bus_eval(1);
-  #endif
+    this->mem_bus_eval(1);
     this->dcr_bus_eval(1);
 
     dram_sim_.tick();
@@ -302,7 +286,7 @@ private:
 
 #ifdef AXI_BUS
 
-  void axi_bus_reset() {
+  void mem_bus_reset() {
     device_->m_axi_wready[0]  = 0;
     device_->m_axi_awready[0] = 0;
     device_->m_axi_arready[0] = 0;
@@ -310,7 +294,7 @@ private:
     device_->m_axi_bvalid[0]  = 0;
   }
 
-  void axi_bus_eval(bool clk) {
+  void mem_bus_eval(bool clk) {
     if (!clk) {
       mem_rd_rsp_ready_ = device_->m_axi_rready[0];
       mem_wr_rsp_ready_ = device_->m_axi_bready[0];
@@ -451,12 +435,12 @@ private:
 
 #else
 
-  void avs_bus_reset() {
+  void mem_bus_reset() {
     device_->mem_req_ready = 0;
     device_->mem_rsp_valid = 0;
   }
 
-  void avs_bus_eval(bool clk) {
+  void mem_bus_eval(bool clk) {
     if (!clk) {
       mem_rd_rsp_ready_ = device_->mem_rsp_ready;
       return;
