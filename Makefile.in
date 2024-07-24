@@ -1,5 +1,7 @@
 include config.mk
 
+.PHONY: build software tests
+
 all:
 	$(MAKE) -C $(VORTEX_HOME)/third_party
 	$(MAKE) -C hw
@@ -13,6 +15,14 @@ build:
 	$(MAKE) -C sim
 	$(MAKE) -C kernel
 	$(MAKE) -C runtime
+	$(MAKE) -C tests
+
+software:
+	$(MAKE) -C hw
+	$(MAKE) -C kernel
+	$(MAKE) -C runtime/stub
+
+tests:
 	$(MAKE) -C tests
 
 clean:

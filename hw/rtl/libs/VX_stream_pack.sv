@@ -38,11 +38,9 @@ module VX_stream_pack #(
     output wire [TAG_WIDTH-1:0]         tag_out,
     input wire                          ready_out
 );
-    localparam LOG_NUM_REQS = `CLOG2(NUM_REQS);
-
     if (NUM_REQS > 1) begin
 
-        wire [LOG_NUM_REQS-1:0] grant_index;
+        wire [NUM_REQS-1:0] grant_onehot;
         wire grant_valid;
         wire grant_ready;
 
@@ -54,29 +52,33 @@ module VX_stream_pack #(
             .reset       (reset),
             .requests    (valid_in),
             .grant_valid (grant_valid),
-            .grant_index (grant_index),
-            `UNUSED_PIN  (grant_onehot),
+            `UNUSED_PIN  (grant_index),
+            .grant_onehot(grant_onehot),
             .grant_ready (grant_ready)
         );
 
-        reg [NUM_REQS-1:0] valid_sel;
-        reg [NUM_REQS-1:0] ready_sel;
-        wire ready_unqual;
+        wire [TAG_WIDTH-1:0] tag_sel;
 
-        wire [TAG_WIDTH-1:0] tag_sel = tag_in[grant_index];
+        VX_onehot_mux #(
+            .DATAW (TAG_WIDTH),
+            .N     (NUM_REQS)
+        ) onehot_mux (
+            .data_in  (tag_in),
+            .sel_in   (grant_onehot),
+            .data_out (tag_sel)
+        );
 
-        always @(*) begin
-            valid_sel = '0;
-            ready_sel = '0;
-            for (integer i = 0; i < NUM_REQS; ++i) begin
-                if (tag_in[i][TAG_SEL_BITS-1:0] == tag_sel[TAG_SEL_BITS-1:0]) begin
-                    valid_sel[i] = valid_in[i];
-                    ready_sel[i] = ready_unqual;
-                end
-            end
+        wire [NUM_REQS-1:0] tag_matches;
+
+        for (genvar i = 0; i < NUM_REQS; ++i) begin
+            assign tag_matches[i] = (tag_in[i][TAG_SEL_BITS-1:0] == tag_sel[TAG_SEL_BITS-1:0]);
         end
 
-        assign grant_ready = ready_unqual;
+        for (genvar i = 0; i < NUM_REQS; ++i) begin
+            assign ready_in[i] = grant_ready & tag_matches[i];
+        end
+
+        wire [NUM_REQS-1:0] mask_sel = valid_in & tag_matches;
 
         VX_elastic_buffer #(
             .DATAW   (NUM_REQS + TAG_WIDTH + (NUM_REQS * DATA_WIDTH)),
@@ -86,14 +88,12 @@ module VX_stream_pack #(
             .clk       (clk),
             .reset     (reset),
             .valid_in  (grant_valid),
-            .data_in   ({valid_sel, tag_sel, data_in}),
-            .ready_in  (ready_unqual),
+            .data_in   ({mask_sel, tag_sel, data_in}),
+            .ready_in  (grant_ready),
             .valid_out (valid_out),
             .data_out  ({mask_out, tag_out, data_out}),
             .ready_out (ready_out)
         );
-
-        assign ready_in = ready_sel;
 
     end else begin
 

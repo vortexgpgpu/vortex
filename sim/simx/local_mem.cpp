@@ -82,11 +82,13 @@ public:
 				continue;
 			}
 
+			DT(4, simobject_->name() << "-" << core_req);
+
 			in_used_banks.at(bank_id) = true;
 
 			if (!core_req.write || config_.write_reponse) {
 				// send response
-				MemRsp core_rsp{core_req.tag, core_req.cid};
+				MemRsp core_rsp{core_req.tag, core_req.cid, core_req.uuid};
 				simobject_->Outputs.at(req_id).push(core_rsp, 1);
 			}
 

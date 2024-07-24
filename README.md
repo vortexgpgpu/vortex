@@ -56,7 +56,6 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
     $ git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
     $ cd Vortex
 ### Configure your build folder
-    # By default, the toolchain default install location is the /opt folder and can be overridden by setting --tooldir.
     $ mkdir build
     $ cd build
     $ ../configure --xlen=32 --tooldir=$HOME/tools

@@ -111,7 +111,7 @@ copy_files() {
 
 # default configuration parameters
 default_xlen=32
-default_tooldir=/opt
+default_tooldir=$HOME/tools
 default_osversion=$(detect_osversion)
 default_prefix=$CURRENT_DIR
 
@@ -140,7 +140,7 @@ PREFIX=${PREFIX:=$default_prefix}
 usage() {
     echo "Usage: $0 [--xlen=<value>] [--tooldir=<path>] [--osversion=<version>]"
     echo "  --xlen=<value>       Set the XLEN value (default: 32)"
-    echo "  --tooldir=<path>     Set the TOOLDIR path (default: /opt)"
+    echo "  --tooldir=<path>     Set the TOOLDIR path (default: $HOME/tools)"
     echo "  --osversion=<version> Set the OS Version (default: $(detect_osversion))"
     echo "  --prefix=<path>      Set installation directory"
     exit 1
