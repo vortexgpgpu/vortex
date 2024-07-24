@@ -334,11 +334,16 @@ module VX_mem_scheduler #(
 
     if (MEM_BATCHES != 1) begin
         reg [MEM_BATCH_BITS-1:0] req_batch_idx_r;
+
+        wire is_degenerate_batch = ~(| mem_req_mask_s);
+        wire mem_req_valid_b = reqq_valid_s && ~is_degenerate_batch;
+        wire mem_req_ready_b = mem_req_ready_s || is_degenerate_batch;
+
         always @(posedge clk) begin
             if (reset) begin
                 req_batch_idx_r <= '0;
             end else begin
-                if (reqq_valid_s && mem_req_ready_s) begin
+                if (reqq_valid_s && mem_req_ready_b) begin
                     if (req_sent_all) begin
                         req_batch_idx_r <= '0;
                     end else begin
@@ -368,19 +373,20 @@ module VX_mem_scheduler #(
             `UNUSED_PIN (valid_out)
         );
 
+        assign mem_req_valid_s = mem_req_valid_b;
         assign req_batch_idx = req_batch_idx_r;
-        assign req_sent_all  = mem_req_ready_s && (req_batch_idx_r == req_batch_idx_last);
+        assign req_sent_all  = mem_req_ready_b && (req_batch_idx_r == req_batch_idx_last);
         assign mem_req_tag_s = {reqq_tag_s, req_batch_idx};
 
     end else begin
 
+        assign mem_req_valid_s = reqq_valid_s;
         assign req_batch_idx = '0;
         assign req_sent_all  = mem_req_ready_s;
         assign mem_req_tag_s = reqq_tag_s;
 
     end
 
-    assign mem_req_valid_s = reqq_valid_s;
     assign reqq_ready_s = req_sent_all;
 
     VX_elastic_buffer #(
@@ -573,6 +579,8 @@ module VX_mem_scheduler #(
         assign rsp_dbg_uuid     = '0;
     end
 
+    wire [CORE_QUEUE_ADDRW-1:0] ibuf_waddr_s = mem_req_tag_s[MEM_BATCH_BITS +: CORE_QUEUE_ADDRW];
+
     wire mem_req_fire_s = mem_req_valid_s && mem_req_ready_s;
 
     always @(posedge clk) begin
@@ -591,7 +599,7 @@ module VX_mem_scheduler #(
             `TRACE(1, (", tag=0x%0h (#%0d)\n", core_req_tag, req_dbg_uuid));
         end
         if (core_rsp_valid && core_rsp_ready) begin
-            `TRACE(1, ("%d: %s-rsp: valid=%b, sop=%b, eop=%b, data=", $time, INSTANCE_ID, core_rsp_mask, core_rsp_sop, core_rsp_eop));
+            `TRACE(1, ("%d: %s-core-rsp: valid=%b, sop=%b, eop=%b, data=", $time, INSTANCE_ID, core_rsp_mask, core_rsp_sop, core_rsp_eop));
             `TRACE_ARRAY1D(1, "0x%0h", core_rsp_data, CORE_REQS);
             `TRACE(1, (", tag=0x%0h (#%0d)\n", core_rsp_tag, rsp_dbg_uuid));
         end
@@ -607,7 +615,7 @@ module VX_mem_scheduler #(
                 `TRACE(1, ("%d: %s-mem-req-rd: valid=%b, addr=", $time, INSTANCE_ID, mem_req_mask_s));
                 `TRACE_ARRAY1D(1, "0x%h", mem_req_addr_s, CORE_CHANNELS);
             end
-            `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_waddr, req_batch_idx, mem_req_dbg_uuid));
+            `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_waddr_s, req_batch_idx, mem_req_dbg_uuid));
         end
         if (mem_rsp_fire_s) begin
             `TRACE(1, ("%d: %s-mem-rsp: valid=%b, data=", $time, INSTANCE_ID, mem_rsp_mask_s));
