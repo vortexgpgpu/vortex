@@ -109,22 +109,22 @@ void sim_trace_enable(bool enable) {
 class Processor::Impl {
 public:
   Impl() : dram_sim_(MEM_CLOCK_RATIO) {
-    // force random values for unitialized signals
-    Verilated::randReset(VERILATOR_RESET_VALUE);
-    Verilated::randSeed(50);
-
-    // turn off assertion before reset
-    Verilated::assertOn(false);
-
     // create RTL module instance
     device_ = new Device();
-
+    
   #ifdef VCD_OUTPUT
     Verilated::traceEverOn(true);
     trace_ = new VerilatedVcdC();
     device_->trace(trace_, 99);
     trace_->open("trace.vcd");
   #endif
+
+    // force random values for unitialized signals
+    Verilated::randReset(VERILATOR_RESET_VALUE);
+    Verilated::randSeed(50);
+
+    // turn off assertion before reset
+    Verilated::assertOn(false);
 
     ram_ = nullptr;
 
