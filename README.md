@@ -67,7 +67,7 @@ cd build
 ```sh
 ./ci/toolchain_install.sh --all
 ```
-### set environment variables
+### Set environment variables
 ```sh
 # should always run before using the toolchain!
 source ./ci/toolchain_env.sh
