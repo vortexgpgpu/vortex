@@ -12,9 +12,11 @@
 // limitations under the License.
 
 #include <common.h>
-#include <vortex_afu.h>
 
 #include "driver.h"
+
+#include <vortex_afu.h>
+
 #ifdef SCOPE
 #include "scope.h"
 #endif
