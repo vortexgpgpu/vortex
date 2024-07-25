@@ -38,14 +38,10 @@ make chipscope TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1
 vitis_analyzer build_xilinx_u50_gen3x16_xdma_5_202210_1_hw_4c/bin/vortex_afu.xclbin.link_summary
 
 # running test
-TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
-TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
-TARGET=hw PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 ./ci/blackbox.sh --driver=xrt --app=demo
-TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 ./ci/blackbox.sh --driver=xrt --app=demo
-FPGA_BIN_DIR=<bin_dir> TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
-FPGA_BIN_DIR=<bin_dir> TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
-FPGA_BIN_DIR=<bin_dir> TARGET=hw_emu PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 ./ci/blackbox.sh --driver=xrt --app=demo
-FPGA_BIN_DIR=<bin_dir> XRT_DEVICE_INDEX=1 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 ./ci/blackbox.sh --driver=xrt --app=demo
+FPGA_BIN_DIR=<bin_dir> TARGET=hw_emu ./ci/blackbox.sh --driver=xrt --app=demo
+FPGA_BIN_DIR=<bin_dir> TARGET=hw ./ci/blackbox.sh --driver=xrt --app=demo
+FPGA_BIN_DIR=<bin_dir> TARGET=hw_emu ./ci/blackbox.sh --driver=xrt --app=demo
+FPGA_BIN_DIR=<bin_dir> XRT_DEVICE_INDEX=1 TARGET=hw ./ci/blackbox.sh --driver=xrt --app=demo
 
 # build report logs
 <build_dir>/bin/vortex_afu.xclbin.info
