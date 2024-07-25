@@ -87,7 +87,7 @@ module VX_lsu_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     wire [NUM_LANES-1:0]            mem_req_mask;
     wire                            mem_req_rw;
     wire [NUM_LANES-1:0][LSU_ADDR_WIDTH-1:0] mem_req_addr;
-    reg  [NUM_LANES-1:0][LSU_WORD_SIZE-1:0] mem_req_byteen;
+    wire [NUM_LANES-1:0][LSU_WORD_SIZE-1:0] mem_req_byteen;
     reg  [NUM_LANES-1:0][LSU_WORD_SIZE*8-1:0] mem_req_data;
     wire [TAG_WIDTH-1:0]            mem_req_tag;
     wire                            mem_req_ready;
@@ -158,27 +158,30 @@ module VX_lsu_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
 
     // byte enable formatting
     for (genvar i = 0; i < NUM_LANES; ++i) begin
+        reg [LSU_WORD_SIZE-1:0] mem_req_byteen_r;
         always @(*) begin
-            mem_req_byteen[i] = '0;
+            mem_req_byteen_r = '0;
             case (`INST_LSU_WSIZE(execute_if.data.op_type))
                 0: begin // 8-bit
-                    mem_req_byteen[i][req_align[i]] = 1'b1;
+                    mem_req_byteen_r[req_align[i]] = 1'b1;
                 end
                 1: begin // 16 bit
-                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:1], 1'b0}] = 1'b1;
-                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:1], 1'b1}] = 1'b1;
+                    mem_req_byteen_r[{req_align[i][REQ_ASHIFT-1:1], 1'b0}] = 1'b1;
+                    mem_req_byteen_r[{req_align[i][REQ_ASHIFT-1:1], 1'b1}] = 1'b1;
                 end
             `ifdef XLEN_64
                 2: begin // 32 bit
-                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:2], 2'b00}] = 1'b1;
-                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:2], 2'b01}] = 1'b1;
-                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:2], 2'b10}] = 1'b1;
-                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:2], 2'b11}] = 1'b1;
+                    mem_req_byteen_r[{req_align[i][REQ_ASHIFT-1:2], 2'b00}] = 1'b1;
+                    mem_req_byteen_r[{req_align[i][REQ_ASHIFT-1:2], 2'b01}] = 1'b1;
+                    mem_req_byteen_r[{req_align[i][REQ_ASHIFT-1:2], 2'b10}] = 1'b1;
+                    mem_req_byteen_r[{req_align[i][REQ_ASHIFT-1:2], 2'b11}] = 1'b1;
                 end
             `endif
-                default : mem_req_byteen[i] = {LSU_WORD_SIZE{1'b1}};
+                // 3: 64 bit
+                default : mem_req_byteen_r = {LSU_WORD_SIZE{1'b1}};
             endcase
         end
+        assign mem_req_byteen[i] = mem_req_byteen_r;
     end
 
     // memory misalignment not supported!
