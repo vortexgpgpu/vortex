@@ -26,6 +26,8 @@ detect_osversion() {
                 case "$VERSION_CODENAME" in
                     bionic) osversion="ubuntu/bionic";;
                     focal) osversion="ubuntu/focal";;
+                    jammy) osversion="ubuntu/focal";;
+                    mantic) osversion="ubuntu/focal";;
                     # Add new versions as needed
                 esac
                 ;;
@@ -39,6 +41,18 @@ detect_osversion() {
     fi
     echo "$osversion"
 }
+
+# Detect OS version
+os_version=$(detect_osversion)
+
+# Check if the detected OS version is jammy or mantic
+if [[ "$os_version" == "ubuntu/jammy" || "$os_version" == "ubuntu/mantic" ]]; then
+    # Define the content to insert
+    insert_content="#include <cstdint>\n"
+
+    # Insert the content into StatType.h after the #ifndef and #define lines
+    sed -i '/^#ifndef __STATTYPE_H$/,/^#define __STATTYPE_H$/s/^/#include <cstdint>\n/' ../third_party/ramulator/src/StatType.h
+fi
 
 # Function to recursively copy files, skipping the current directory
 copy_files() {

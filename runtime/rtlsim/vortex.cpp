@@ -12,7 +12,8 @@
 // limitations under the License.
 
 #include <common.h>
-
+#include <array> 
+#include <unordered_map>
 #include <mem.h>
 #include <util.h>
 #include <processor.h>
