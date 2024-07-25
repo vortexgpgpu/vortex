@@ -89,5 +89,8 @@ build: $(BUILD_DIR)/project.v
 elaborate: $(BUILD_DIR)/project.v
 	cd $(BUILD_DIR); $(SRC_DIR)/synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v -P="elaborate"
 
+synthesis: $(BUILD_DIR)/project.v
+	cd $(BUILD_DIR); $(SRC_DIR)/synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v -P="synthesis"
+
 clean:
 	$(RMDIR) $(BUILD_DIR)

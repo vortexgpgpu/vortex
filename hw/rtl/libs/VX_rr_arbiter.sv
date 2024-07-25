@@ -384,12 +384,18 @@ module VX_rr_arbiter #(
 
         wire [NUM_REQS-1:0] req_masked = requests & pointer_reg;
 
-        assign mask_higher_pri_regs[NUM_REQS-1:1] = mask_higher_pri_regs[NUM_REQS-2:0] | req_masked[NUM_REQS-2:0];
         assign mask_higher_pri_regs[0] = 1'b0;
+        for (genvar i = 1; i < NUM_REQS; ++i) begin
+            assign mask_higher_pri_regs[i] = mask_higher_pri_regs[i-1] | req_masked[i-1];
+        end
+
         assign grant_masked[NUM_REQS-1:0] = req_masked[NUM_REQS-1:0] & ~mask_higher_pri_regs[NUM_REQS-1:0];
 
-        assign unmask_higher_pri_regs[NUM_REQS-1:1] = unmask_higher_pri_regs[NUM_REQS-2:0] | requests[NUM_REQS-2:0];
         assign unmask_higher_pri_regs[0] = 1'b0;
+        for (genvar i = 1; i < NUM_REQS; ++i) begin
+            assign unmask_higher_pri_regs[i] = unmask_higher_pri_regs[i-1] | requests[i-1];
+        end
+
         assign grant_unmasked[NUM_REQS-1:0] = requests[NUM_REQS-1:0] & ~unmask_higher_pri_regs[NUM_REQS-1:0];
 
         wire no_req_masked = ~(|req_masked);
