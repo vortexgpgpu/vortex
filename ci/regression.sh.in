@@ -287,7 +287,7 @@ synthesis()
     echo "begin synthesis tests..."
 
     PREFIX=build_base make -C hw/syn/yosys clean
-    PREFIX=build_base CONFIGS="-DDPI_DISABLE -DEXT_F_DISABLE" make -C hw/syn/yosys elaborate
+    PREFIX=build_base CONFIGS="-DDPI_DISABLE -DEXT_F_DISABLE" make -C hw/syn/yosys synthesis
 
     echo "synthesis tests done!"
 }
