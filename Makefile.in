@@ -25,12 +25,15 @@ software:
 tests:
 	$(MAKE) -C tests
 
-clean:
+clean-build:
 	$(MAKE) -C hw clean
 	$(MAKE) -C sim clean
 	$(MAKE) -C kernel clean
 	$(MAKE) -C runtime clean
 	$(MAKE) -C tests clean
+
+clean: clean-build
+	$(MAKE) -C $(VORTEX_HOME)/third_party clean
 
 # Install setup
 KERNEL_INC_DST = $(PREFIX)/kernel/include
