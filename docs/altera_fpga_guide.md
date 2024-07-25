@@ -53,7 +53,7 @@ If the build fails and you need to restart it, clean up the build folder using t
 
     $ make clean
 
-The file `vortex_afu.gbs` should exist when the build is done:
+The bitstream file `vortex_afu.gbs` should exist when the build is done:
 
     $ ls -lsa <build_dir>/synth/vortex_afu.gbs
 
@@ -65,10 +65,15 @@ Signing the bitstream and Programming the FPGA
     $ PACSign PR -t UPDATE -H openssl_manager -i vortex_afu.gbs -o vortex_afu_unsigned_ssl.gbs
     $ fpgasupdate vortex_afu_unsigned_ssl.gbs
 
-FPGA sample test running OpenCL sgemm kernel
---------------------------------------------
+Sample FPGA Run Test
+--------------------
 
-Run the following from the Vortex root directory
+Ensure you have the correct opae runtime for the FPGA target
+
+    $ make -C runtime/opae clean
+    $ TARGET=FPGA make -C runtime/opae
+
+Run the following from your Vortex build directory
 
     $ TARGET=fpga ./ci/blackbox.sh --driver=opae --app=sgemm --args="-n128"
 
