@@ -47,18 +47,18 @@ void sim_trace_enable(bool enable) {
 }
 
 CacheSim::CacheSim() {
+  // force random values for uninitialized signals
+  Verilated::randReset(2);
+
   // create RTL module instance
   cache_ = new VVX_cache_top();
 
 #ifdef VCD_OUTPUT
   Verilated::traceEverOn(true);
-  trace_ = new VerilatedVcdC;
-  cache_->trace(trace_, 99);
-  trace_->open("trace.vcd");
+  tfp_ = new VerilatedVcdC;
+  cache_->trace(tfp_, 99);
+  tfp_->open("trace.vcd");
 #endif
-
-  // force random values for uninitialized signals
-  Verilated::randReset(2);
 
   ram_ = nullptr;
   mem_rsp_active_ = false;
@@ -67,7 +67,7 @@ CacheSim::CacheSim() {
 
 CacheSim::~CacheSim() {
 #ifdef VCD_OUTPUT
-  trace_->close();
+  tfp_->close();
 #endif
   delete cache_;
   //need to delete the req and rsp vectors
@@ -112,7 +112,7 @@ void CacheSim::step() {
 void CacheSim::eval() {
   cache_->eval();
 #ifdef VCD_OUTPUT
-  trace_->dump(timestamp);
+  tfp_->dump(timestamp);
 #endif
   ++timestamp;
 }

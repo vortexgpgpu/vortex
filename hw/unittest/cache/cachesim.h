@@ -96,9 +96,9 @@ private:
   uint32_t snp_req_size_;
   uint32_t pending_snp_reqs_;
 
-  VVX_cache_top *cache_;
-  RAM *ram_;
+  VVX_cache_top* cache_;
+  RAM* ram_;
 #ifdef VCD_OUTPUT
-  VerilatedVcdC *trace_;
+  VerilatedVcdC* tfp_;
 #endif
 };

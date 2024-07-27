@@ -13,9 +13,7 @@
 
 #include "xrt_sim.h"
 
-#include <verilated.h>
 #include "Vvortex_afu_shim.h"
-#include "Vvortex_afu_shim__Syms.h"
 
 #ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
@@ -101,7 +99,7 @@ public:
   , dram_sim_(MEM_CLOCK_RATIO)
   , stop_(false)
 #ifdef VCD_OUTPUT
-  , trace_(nullptr)
+  , tfp_(nullptr)
 #endif
   {}
 
@@ -111,9 +109,9 @@ public:
       future_.wait();
     }
   #ifdef VCD_OUTPUT
-    if (trace_) {
-      trace_->close();
-      delete trace_;
+    if (tfp_) {
+      tfp_->close();
+      delete tfp_;
     }
   #endif
     if (device_) {
@@ -125,22 +123,22 @@ public:
   }
 
   int init() {
-    // create RTL module instance
-    device_ = new Vvortex_afu_shim();
-
-  #ifdef VCD_OUTPUT
-    Verilated::traceEverOn(true);
-    trace_ = new VerilatedVcdC();
-    device_->trace(trace_, 99);
-    trace_->open("trace.vcd");
-  #endif
-  
     // force random values for unitialized signals
     Verilated::randReset(VERILATOR_RESET_VALUE);
     Verilated::randSeed(50);
 
     // turn off assertion before reset
     Verilated::assertOn(false);
+
+    // create RTL module instance
+    device_ = new Vvortex_afu_shim();
+
+  #ifdef VCD_OUTPUT
+    Verilated::traceEverOn(true);
+    tfp_ = new VerilatedVcdC();
+    device_->trace(tfp_, 99);
+    tfp_->open("trace.vcd");
+  #endif
 
     ram_ = new RAM(0, RAM_PAGE_SIZE);
 
@@ -241,7 +239,7 @@ private:
     device_->eval();
   #ifdef VCD_OUTPUT
     if (sim_trace_enabled()) {
-      trace_->dump(timestamp);
+      tfp_->dump(timestamp);
     }
   #endif
     ++timestamp;
@@ -320,7 +318,7 @@ private:
   std::queue<mem_req_t*> dram_queue_;
 
 #ifdef VCD_OUTPUT
-  VerilatedVcdC *trace_;
+  VerilatedVcdC* tfp_;
 #endif
 };
 

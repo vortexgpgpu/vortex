@@ -13,15 +13,11 @@
 
 #include "processor.h"
 
-#include <verilated.h>
-
 #ifdef AXI_BUS
 #include "VVortex_axi.h"
-#include "VVortex_axi__Syms.h"
 typedef VVortex_axi Device;
 #else
 #include "VVortex.h"
-#include "VVortex__Syms.h"
 typedef VVortex Device;
 #endif
 
@@ -109,22 +105,22 @@ void sim_trace_enable(bool enable) {
 class Processor::Impl {
 public:
   Impl() : dram_sim_(MEM_CLOCK_RATIO) {
-    // create RTL module instance
-    device_ = new Device();
-    
-  #ifdef VCD_OUTPUT
-    Verilated::traceEverOn(true);
-    trace_ = new VerilatedVcdC();
-    device_->trace(trace_, 99);
-    trace_->open("trace.vcd");
-  #endif
-
     // force random values for unitialized signals
     Verilated::randReset(VERILATOR_RESET_VALUE);
     Verilated::randSeed(50);
 
     // turn off assertion before reset
     Verilated::assertOn(false);
+
+    // create RTL module instance
+    device_ = new Device();
+
+  #ifdef VCD_OUTPUT
+    Verilated::traceEverOn(true);
+    tfp_ = new VerilatedVcdC();
+    device_->trace(tfp_, 99);
+    tfp_->open("trace.vcd");
+  #endif
 
     ram_ = nullptr;
 
@@ -151,8 +147,8 @@ public:
     this->cout_flush();
 
   #ifdef VCD_OUTPUT
-    trace_->close();
-    delete trace_;
+    tfp_->close();
+    delete tfp_;
   #endif
 
     delete device_;
@@ -276,7 +272,7 @@ private:
     device_->eval();
   #ifdef VCD_OUTPUT
     if (sim_trace_enabled()) {
-      trace_->dump(timestamp);
+      tfp_->dump(timestamp);
     } else {
       exit(-1);
     }
@@ -576,27 +572,27 @@ private:
     bool ready;
   } mem_req_t;
 
-  Device* device_;
-
-#ifdef VCD_OUTPUT
-  VerilatedVcdC *trace_;
-#endif
-
   std::unordered_map<int, std::stringstream> print_bufs_;
 
   std::list<mem_req_t*> pending_mem_reqs_;
+
+  std::queue<mem_req_t*> dram_queue_;
+
+  DramSim dram_sim_;
+
+  Device* device_;
+
+#ifdef VCD_OUTPUT
+  VerilatedVcdC *tfp_;
+#endif
+
+  RAM* ram_;
 
   bool mem_rd_rsp_active_;
   bool mem_rd_rsp_ready_;
 
   bool mem_wr_rsp_active_;
   bool mem_wr_rsp_ready_;
-
-  RAM *ram_;
-
-  DramSim dram_sim_;
-
-  std::queue<mem_req_t*> dram_queue_;
 
   bool running_;
 };
