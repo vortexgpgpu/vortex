@@ -119,6 +119,10 @@ public:
     if (dev_addr + asize > GLOBAL_MEM_SIZE)
       return -1;
 
+    if (flags | VX_MEM_WRITE) {
+      flags |= VX_MEM_READ; // ensure caches can handle fill requests
+    }
+
     ram_.set_acl(dev_addr, size, flags);
 
     return 0;
