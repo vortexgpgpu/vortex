@@ -61,23 +61,23 @@ int generate_rand_mask (int mask) {
 }
 
 MemSim::MemSim() {
+  // force random values for uninitialized signals
+  Verilated::randReset(2);
+
 	// create RTL module instance
 	msu_ = new VVX_mem_scheduler();
 
 #ifdef VCD_OUTPUT
   	Verilated::traceEverOn(true);
-  	trace_ = new VerilatedVcdC;
-  	cache_->trace(trace_, 99);
+  	tfp_ = new VerilatedVcdC;
+  	cache_->trace(tfp_, 99);
   	race_->open("trace.vcd");
 #endif
-
-  // force random values for uninitialized signals
-  Verilated::randReset(2);
 }
 
 MemSim::~MemSim() {
 #ifdef VCD_OUTPUT
-	trace_->close();
+	tfp_->close();
 #endif
 	delete msu_;
 }
@@ -85,7 +85,7 @@ MemSim::~MemSim() {
 void MemSim::eval() {
 	msu_->eval();
 #ifdef VCD_OUTPUT
-	trace_->dump(timestamp++);
+	tfp_->dump(timestamp++);
 #endif
 }
 
