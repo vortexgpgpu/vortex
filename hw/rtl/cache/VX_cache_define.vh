@@ -50,7 +50,7 @@
 `define CS_TAG_SEL_ADDR_START   (1+`CS_LINE_SEL_ADDR_END)
 `define CS_TAG_SEL_ADDR_END     (`CS_WORD_ADDR_WIDTH-1)
 
-`define CS_LINE_TAG_ADDR(x)     x[`CS_LINE_ADDR_WIDTH-1 : `CS_LINE_SEL_BITS]
+`define CS_LINE_ADDR_TAG(x)     x[`CS_LINE_ADDR_WIDTH-1 : `CS_LINE_SEL_BITS]
 
 ///////////////////////////////////////////////////////////////////////////////
 
