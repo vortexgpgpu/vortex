@@ -269,7 +269,6 @@ module VX_operands import VX_gpu_pkg::*; #(
     `endif
             .DATAW (`XLEN * `NUM_THREADS),
             .SIZE  (PER_BANK_REGS * PER_ISSUE_WARPS),
-            .ADDR_MIN ((b == 0) ? PER_ISSUE_WARPS : 0),
             .WRENW (BYTEENW),
             .NO_RWCHECK (1)
         ) gpr_ram (

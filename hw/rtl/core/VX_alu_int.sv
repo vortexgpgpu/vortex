@@ -181,7 +181,7 @@ module VX_alu_int #(
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({br_enable, br_wid, br_taken, br_dest}),
+        .data_in  ({br_enable,           br_wid,            br_taken,            br_dest}),
         .data_out ({branch_ctl_if.valid, branch_ctl_if.wid, branch_ctl_if.taken, branch_ctl_if.dest})
     );
 

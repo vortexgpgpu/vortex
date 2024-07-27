@@ -13,7 +13,7 @@
 
 `include "VX_platform.vh"
 
-`TRACING_OFF
+//`TRACING_OFF
 module VX_pending_size #(
     parameter SIZE      = 1,
     parameter INCRW     = 1,
@@ -32,8 +32,8 @@ module VX_pending_size #(
     output wire alm_full,
     output wire [SIZEW-1:0] size
 );
-    `STATIC_ASSERT(INCRW <= SIZEW, ("invalid parameter"))
-    `STATIC_ASSERT(DECRW <= SIZEW, ("invalid parameter"))
+    `STATIC_ASSERT(INCRW <= SIZEW, ("invalid parameter: %d vs %d", INCRW, SIZEW))
+    `STATIC_ASSERT(DECRW <= SIZEW, ("invalid parameter: %d vs %d", DECRW, SIZEW))
     localparam ADDRW = `LOG2UP(SIZE);
 
     reg empty_r, alm_empty_r;
@@ -53,8 +53,8 @@ module VX_pending_size #(
                 full_r      <= 0;
                 size_r      <= '0;
             end else begin
-                `ASSERT((incr >= decr) || (size_n >= size_r), ("runtime error: counter overflow"));
-                `ASSERT((incr <= decr) || (size_n <= size_r), ("runtime error: counter underflow"));
+                `ASSERT((SIZEW'(incr) >= SIZEW'(decr)) || (size_n >= size_r), ("runtime error: counter overflow"));
+                `ASSERT((SIZEW'(incr) <= SIZEW'(decr)) || (size_n <= size_r), ("runtime error: counter underflow"));
                 size_r      <= size_n;
                 empty_r     <= (size_n == SIZEW'(0));
                 alm_empty_r <= (size_n == SIZEW'(ALM_EMPTY));
@@ -127,4 +127,4 @@ module VX_pending_size #(
     assign full      = full_r;
 
 endmodule
-`TRACING_ON
+//`TRACING_ON
