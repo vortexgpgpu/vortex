@@ -89,7 +89,9 @@ module VX_cache_data #(
 
         always @(posedge clk) begin
             if (reset) begin
-                dirty_blocks_r <= '0;
+                for (integer i = 0; i < `CS_LINES_PER_BANK * NUM_WAYS; ++i) begin
+                    dirty_blocks_r[i] <= 0;
+                end
             end else begin
                 if (fill) begin
                     dirty_blocks_r[way_addr] <= 0;
