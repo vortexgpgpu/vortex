@@ -277,8 +277,9 @@ module VX_cache_bank #(
     wire do_fill_st0    = valid_st0 && is_fill_st0;
     wire do_lookup_st0  = valid_st0 && ~(is_fill_st0 || is_init_st0);
 
-    wire [`CS_WORD_WIDTH-1:0] write_data_st0 = data_st0[`CS_WORD_WIDTH-1:0];
+    wire do_cache_rd_st0 = do_creq_rd_st0 || do_replay_rd_st0;
 
+    wire [`CS_WORD_WIDTH-1:0] write_data_st0 = data_st0[`CS_WORD_WIDTH-1:0];
 
     wire [NUM_WAYS-1:0] repl_way_st0;
     wire [`CS_TAG_SEL_BITS-1:0] repl_tag_st0;
@@ -348,6 +349,9 @@ module VX_cache_bank #(
     wire do_replay_rd_st1 = valid_st1 && is_replay_st1 && ~rw_st1;
     wire do_replay_wr_st1 = valid_st1 && is_replay_st1 && rw_st1;
 
+    wire do_cache_rd_st1 = do_read_hit_st1 || do_replay_rd_st1;
+    wire do_cache_wr_st1 = do_write_hit_st1 || do_replay_wr_st1;
+
     wire do_read_hit_st1  = do_creq_rd_st1 && is_hit_st1;
     wire do_read_miss_st1 = do_creq_rd_st1 && ~is_hit_st1;
 
@@ -363,11 +367,10 @@ module VX_cache_bank #(
 
     // detect BRAM's read-during-write hazard
     assign rdw_hazard_st0 = do_fill_st0; // stall cycle after a fill
-    wire rdw_write_st1 = do_write_hit_st1 || do_replay_wr_st1;
-    wire rdw_read_st0 = do_creq_rd_st0 || do_replay_rd_st0
-                     || (!WRITEBACK || (do_flush_st0 || do_fill_st0)); // a writeback also do a data read
+    wire rdw_case1 = do_cache_rd_st0 && do_cache_wr_st1 && (addr_st0 == addr_st1); // standard cache access
+    wire rdw_case2 = WRITEBACK && (do_flush_st0 || do_fill_st0) && do_cache_wr_st1; // a writeback can evict preceeding write
     always @(posedge clk) begin // after a write to same address
-        rdw_hazard_st1 <= (rdw_read_st0 && rdw_write_st1 && (addr_st0 == addr_st1))
+        rdw_hazard_st1 <= (rdw_case1 || rdw_case2)
                        && ~rdw_hazard_st1; // invalidate if pipeline stalled to avoid repeats
     end
 
@@ -411,10 +414,10 @@ module VX_cache_bank #(
 
         .stall      (pipe_stall),
 
-        .read       (do_read_hit_st1 || do_replay_rd_st1),
-        .fill       (do_fill_st1),
+        .read       (do_cache_rd_st1),
+        .fill       (do_fill_st1 && ~rdw_hazard_st1),
         .flush      (do_flush_st1),
-        .write      (do_write_hit_st1 || do_replay_wr_st1),
+        .write      (do_cache_wr_st1),
         .way_sel    (way_sel_st1 | tag_matches_st1),
         .line_addr  (addr_st1),
         .wsel       (wsel_st1),
@@ -436,12 +439,12 @@ module VX_cache_bank #(
     // release allocated mshr entry if we had a hit
     wire mshr_release_st1;
     if (WRITEBACK) begin
-        assign mshr_release_st1  = is_hit_st1;
+        assign mshr_release_st1 = is_hit_st1;
     end else begin
         // we need to keep missed write requests in MSHR if there is already a pending entry to the same address
         // this ensures that missed write requests are replayed locally in case a pending fill arrives without the write content
         // this can happen when writes are sent late, when the fill was already in flight.
-        assign mshr_release_st1  = is_hit_st1 || (rw_st1 && ~mshr_pending_st1);
+        assign mshr_release_st1 = is_hit_st1 || (rw_st1 && ~mshr_pending_st1);
     end
 
     VX_pending_size #(
@@ -528,7 +531,7 @@ module VX_cache_bank #(
     wire [REQ_SEL_WIDTH-1:0] crsp_queue_idx;
     wire [TAG_WIDTH-1:0] crsp_queue_tag;
 
-    assign crsp_queue_valid = do_read_hit_st1 || do_replay_rd_st1;
+    assign crsp_queue_valid = do_cache_rd_st1;
     assign crsp_queue_idx   = req_idx_st1;
     assign crsp_queue_data  = read_data_st1;
     assign crsp_queue_tag   = tag_st1;
@@ -567,12 +570,14 @@ module VX_cache_bank #(
     `UNUSED_VAR (do_writeback_st1)
 
     if (WRITEBACK) begin
-        assign mreq_queue_push = ((do_read_miss_st1 || do_write_miss_st1) && ~mshr_pending_st1)
-                              || do_writeback_st1;
+        assign mreq_queue_push = (((do_read_miss_st1 || do_write_miss_st1) && ~mshr_pending_st1)
+                               || do_writeback_st1)
+                              && ~rdw_hazard_st1;
     end else begin
         `UNUSED_VAR (dirty_valid_st1)
-        assign mreq_queue_push = (do_read_miss_st1 && ~mshr_pending_st1)
-                              || do_creq_wr_st1;
+        assign mreq_queue_push = ((do_read_miss_st1 && ~mshr_pending_st1)
+                               || do_creq_wr_st1)
+                               && ~rdw_hazard_st1;
     end
 
     assign mreq_queue_pop  = mem_req_valid && mem_req_ready;
@@ -620,7 +625,7 @@ module VX_cache_bank #(
                        && ~(replay_fire || mem_rsp_fire || core_req_fire || line_flush_valid);
     always @(posedge clk) begin
         if (pipeline_stall) begin
-            `TRACE(3, ("%d: *** %s stall: crsq=%b, mreq=%b, mshr=%b\n", $time, INSTANCE_ID, crsp_queue_stall, mreq_queue_alm_full, mshr_alm_full));
+            `TRACE(3, ("%d: *** %s stall: crsq=%b, mreq=%b, mshr=%b, rdw_st0=%b\n", $time, INSTANCE_ID, crsp_queue_stall, mreq_queue_alm_full, mshr_alm_full, rdw_hazard_st0));
         end
         if (mem_rsp_fire) begin
             `TRACE(2, ("%d: %s fill-rsp: addr=0x%0h, mshr_id=%0d, data=0x%0h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_id, mem_rsp_data));
@@ -641,7 +646,7 @@ module VX_cache_bank #(
             if (do_creq_wr_st1 && !WRITEBACK)
                 `TRACE(2, ("%d: %s writethrough: addr=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_byteen, mreq_queue_data, req_uuid_st1));
             else if (do_writeback_st1)
-                `TRACE(2, ("%d: %s writeback: addr=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_byteen, mreq_queue_data, req_uuid_st1));
+                `TRACE(2, ("%d: %s writeback: addr=0x%0h, byteen=%b, data=0x%0h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_byteen, mreq_queue_data));
             else
                 `TRACE(2, ("%d: %s fill-req: addr=0x%0h, mshr_id=%0d (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_id, req_uuid_st1));
         end

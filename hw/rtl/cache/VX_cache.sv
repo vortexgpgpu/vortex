@@ -348,7 +348,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     end
 
     // Banks access
-    for (genvar bank_id = 0; bank_id < NUM_BANKS; ++bank_id) begin
+    for (genvar bank_id = 0; bank_id < NUM_BANKS; ++bank_id) begin : banks
         wire [`CS_LINE_ADDR_WIDTH-1:0] curr_bank_mem_req_addr;
         wire curr_bank_mem_rsp_valid;
 

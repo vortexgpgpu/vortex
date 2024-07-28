@@ -251,6 +251,10 @@ config2()
     CONFIGS="-DL1_LINE_SIZE=$XLEN/8 -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
     CONFIGS="-DL1_LINE_SIZE=$XLEN/8 -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=sgemmx
 
+    # test cache ways
+    CONFIGS="-DICACHE_NUM_WAYS=8 -DDCACHE_NUM_WAYS=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DICACHE_NUM_WAYS=8 -DDCACHE_NUM_WAYS=8" ./ci/blackbox.sh --driver=simx --app=sgemmx
+
     # test cache banking
     CONFIGS="-DLMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
     CONFIGS="-DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
