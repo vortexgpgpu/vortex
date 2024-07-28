@@ -74,7 +74,7 @@ public:
 				if (!rsp_args->request.write) {
 					MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.cid, rsp_args->request.uuid};
 					rsp_args->simobject->MemRspPort.push(mem_rsp, 1);
-					DT(3, rsp_args->simobject->name() << "-" << mem_rsp);
+					DT(3, rsp_args->simobject->name() << " mem-rsp: " << mem_rsp);
 				}
 				delete rsp_args;
 			},
@@ -93,7 +93,7 @@ public:
 			++perf_stats_.reads;
 		}
 
-		DT(3, simobject_->name() << "-" << mem_req);
+		DT(3, simobject_->name() << " mem-req: " << mem_req);
 
 		simobject_->MemReqPort.pop();
 	}

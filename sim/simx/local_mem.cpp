@@ -82,7 +82,7 @@ public:
 				continue;
 			}
 
-			DT(4, simobject_->name() << "-" << core_req);
+			DT(4, simobject_->name() << " mem-req" << req_id << ": "<< core_req);
 
 			in_used_banks.at(bank_id) = true;
 

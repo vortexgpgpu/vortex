@@ -45,7 +45,7 @@ void MemCoalescer::tick() {
   // process incoming responses
   if (!RspOut.empty()) {
     auto& out_rsp = RspOut.front();
-    DT(4, this->name() << "-" << out_rsp);
+    DT(4, this->name() << " mem-rsp: " << out_rsp);
     auto& entry = pending_rd_reqs_.at(out_rsp.tag);
 
     BitVector<> rsp_mask(input_size_);
@@ -89,7 +89,7 @@ void MemCoalescer::tick() {
 
   // ensure we can allocate a response tag
   if (pending_rd_reqs_.full()) {
-    DT(4, "*** " << this->name() << "-queue-full: " << in_req);
+    DT(4, "*** " << this->name() << " queue-full: " << in_req);
     return;
   }
 
@@ -145,7 +145,7 @@ void MemCoalescer::tick() {
 
   // send memory request
   ReqOut.push(out_req, delay_);
-  DT(4, this->name() << "-" << out_req << ", coalesced=" << cur_mask.count());
+  DT(4, this->name() << " mem-req: coalesced=" << cur_mask.count() << ", " << out_req);
 
   // update sent mask
   sent_mask_ |= cur_mask;

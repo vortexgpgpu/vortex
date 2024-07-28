@@ -260,7 +260,7 @@ struct LsuReq {
 };
 
 inline std::ostream &operator<<(std::ostream &os, const LsuReq& req) {
-  os << "lsu-req: rw=" << req.write << ", mask=" << req.mask << ", ";
+  os << "rw=" << req.write << ", mask=" << req.mask << ", ";
   for (size_t i = 0; i < req.mask.size(); ++i) {
     os << "addr" << i << "=";
     if (req.mask.test(i)) {
@@ -292,7 +292,7 @@ struct LsuRsp {
 };
 
 inline std::ostream &operator<<(std::ostream &os, const LsuRsp& rsp) {
-  os << "lsu-rsp: mask=" << rsp.mask << ", tag=" << rsp.tag << ", cid=" << rsp.cid;
+  os << "mask=" << rsp.mask << ", tag=" << rsp.tag << ", cid=" << rsp.cid;
   os << " (#" << std::dec << rsp.uuid << ")";
   return os;
 }
@@ -323,7 +323,7 @@ struct MemReq {
 };
 
 inline std::ostream &operator<<(std::ostream &os, const MemReq& req) {
-  os << "mem-req: rw=" << req.write << ", ";
+  os << "rw=" << req.write << ", ";
   os << "addr=0x" << std::hex << req.addr << ", type=" << req.type;
   os << std::dec << ", tag=" << req.tag << ", cid=" << req.cid;
   os << " (#" << std::dec << req.uuid << ")";
@@ -345,7 +345,7 @@ struct MemRsp {
 };
 
 inline std::ostream &operator<<(std::ostream &os, const MemRsp& rsp) {
-  os << "mem-rsp: tag=" << rsp.tag << ", cid=" << rsp.cid;
+  os << "tag=" << rsp.tag << ", cid=" << rsp.cid;
   os << " (#" << std::dec << rsp.uuid << ")";
   return os;
 }
@@ -574,7 +574,7 @@ public:
           i = rsp.tag & (R-1);
           rsp.tag >>= lg_num_reqs_;
         }
-        DT(4, this->name() << "-" << rsp);
+        DT(4, this->name() << " rsp" << o << ": " << rsp);
         uint32_t j = o * R + i;
         RspIn.at(j).push(rsp, 1);
         RspOut.at(o).pop();
@@ -593,7 +593,7 @@ public:
           if (lg_num_reqs_ != 0) {
             req.tag = (req.tag << lg_num_reqs_) | i;
           }
-          DT(4, this->name() << "-" << req);
+          DT(4, this->name() << " req" << j << ": " << req);
           ReqOut.at(o).push(req, delay_);
           req_in.pop();
           this->update_cursor(o, i);

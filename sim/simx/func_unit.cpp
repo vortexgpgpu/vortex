@@ -49,7 +49,7 @@ void AluUnit::tick() {
 		default:
 			std::abort();
 		}
-		DT(3, this->name() << ": op" << trace->alu_type << ", " << *trace);
+		DT(3, this->name() << ": op=" << trace->alu_type << ", " << *trace);
 		if (trace->eop && trace->fetch_stall) {
 			core_->resume(trace->wid);
 		}
@@ -120,7 +120,7 @@ void LsuUnit::tick() {
 			continue;
 		auto& state = states_.at(b);
 		auto& lsu_rsp = lsu_rsp_port.front();
-		DT(3, this->name() << "-" << lsu_rsp);
+		DT(3, this->name() << " mem-rsp: " << lsu_rsp);
 		auto& entry = state.pending_rd_reqs.at(lsu_rsp.tag);
 		auto trace = entry.trace;
 		assert(!entry.mask.none());
@@ -145,7 +145,7 @@ void LsuUnit::tick() {
 				continue;
 			Outputs.at(iw).push(state.fence_trace, 1);
 			state.fence_lock = false;
-			DT(3, this->name() << "-fence-unlock: " << state.fence_trace);
+			DT(3, this->name() << " fence-unlock: " << state.fence_trace);
 		}
 
 		// check input queue
@@ -159,7 +159,7 @@ void LsuUnit::tick() {
 			// schedule fence lock
 			state.fence_trace = trace;
 			state.fence_lock = true;
-			DT(3, this->name() << "-fence-lock: " << *trace);
+			DT(3, this->name() << " fence-lock: " << *trace);
 			// remove input
 			input.pop();
 			continue;
@@ -170,7 +170,7 @@ void LsuUnit::tick() {
 		// check pending queue capacity
 		if (!is_write && state.pending_rd_reqs.full()) {
 			if (!trace->log_once(true)) {
-				DT(4, "*** " << this->name() << "-queue-full: " << *trace);
+				DT(4, "*** " << this->name() << " queue-full: " << *trace);
 			}
 			continue;
 		} else {
@@ -200,7 +200,7 @@ void LsuUnit::tick() {
 
 		// send memory request
 		core_->lsu_demux_.at(block_idx)->ReqIn.push(lsu_req);
-		DT(3, this->name() << "-" << lsu_req);
+		DT(3, this->name() << " mem-req: " << lsu_req);
 
 		// update stats
 		auto num_addrs = lsu_req.mask.count();
