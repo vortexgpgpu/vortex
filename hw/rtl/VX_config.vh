@@ -537,7 +537,7 @@
 
 // Enable Cache Writeback
 `ifndef DCACHE_WRITEBACK
-`define DCACHE_WRITEBACK 1
+`define DCACHE_WRITEBACK 0
 `endif
 
 // LMEM Configurable Knobs ////////////////////////////////////////////////////
@@ -601,7 +601,7 @@
 
 // Enable Cache Writeback
 `ifndef L2_WRITEBACK
-`define L2_WRITEBACK 1
+`define L2_WRITEBACK 0
 `endif
 
 // L3cache Configurable Knobs /////////////////////////////////////////////////
@@ -647,7 +647,7 @@
 
 // Enable Cache Writeback
 `ifndef L3_WRITEBACK
-`define L3_WRITEBACK 1
+`define L3_WRITEBACK 0
 `endif
 
 // ISA Extensions /////////////////////////////////////////////////////////////
