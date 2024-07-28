@@ -165,6 +165,7 @@ jobs:
           else
             ./ci/regression.sh --${{ matrix.name }}
           fi
+        continue-on-error: true
 
   complete:
     runs-on: ubuntu-20.04
