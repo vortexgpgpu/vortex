@@ -68,6 +68,9 @@ module VX_cache_data #(
 
     localparam BYTEENW = (WRITE_ENABLE != 0 || (NUM_WAYS > 1)) ? (LINE_SIZE * NUM_WAYS) : 1;
 
+    wire [`CS_LINE_SEL_BITS-1:0] line_sel = line_addr[`CS_LINE_SEL_BITS-1:0];
+    wire [`LOG2UP(NUM_WAYS)-1:0] way_idx;
+
     if (WRITEBACK) begin
         reg [`CS_LINES_PER_BANK * NUM_WAYS-1:0][LINE_SIZE-1:0] dirty_bytes_r;
         reg [`CS_LINES_PER_BANK * NUM_WAYS-1:0] dirty_blocks_r;
@@ -135,8 +138,6 @@ module VX_cache_data #(
         assign wren  = fill;
     end
 
-    wire [`LOG2UP(NUM_WAYS)-1:0] way_idx;
-
     VX_onehot_encoder #(
         .N (NUM_WAYS)
     ) way_enc (
@@ -146,8 +147,6 @@ module VX_cache_data #(
     );
 
     wire [`CS_WORDS_PER_LINE-1:0][NUM_WAYS-1:0][`CS_WORD_WIDTH-1:0] rdata;
-
-    wire [`CS_LINE_SEL_BITS-1:0] line_sel = line_addr[`CS_LINE_SEL_BITS-1:0];
 
     VX_sp_ram #(
         .DATAW (`CS_LINE_WIDTH * NUM_WAYS),
@@ -190,10 +189,10 @@ module VX_cache_data #(
             `TRACE(3, ("%d: %s flush: addr=0x%0h, way=%b, blk_addr=%0d, dirty=%b, byteen=%b\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, dirty_valid, dirty_byteen));
         end
         if (read && ~stall) begin
-            `TRACE(3, ("%d: %s read: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, read_data, req_uuid));
+            `TRACE(3, ("%d: %s read: addr=0x%0h, way=%b, blk_addr=%0d, wsel=%0d, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, wsel, read_data, req_uuid));
         end
         if (write && ~stall) begin
-            `TRACE(3, ("%d: %s write: addr=0x%0h, way=%b, blk_addr=%0d, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, write_byteen, write_data, req_uuid));
+            `TRACE(3, ("%d: %s write: addr=0x%0h, way=%b, blk_addr=%0d, wsel=%0d, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, wsel, write_byteen[wsel], write_data[wsel], req_uuid));
         end
     end
 `endif
