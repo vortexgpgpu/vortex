@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,11 +15,11 @@
 
 using namespace vortex;
 
-Cluster::Cluster(const SimContext& ctx, 
+Cluster::Cluster(const SimContext& ctx,
                  uint32_t cluster_id,
-                 ProcessorImpl* processor, 
-                 const Arch &arch, 
-                 const DCRS &dcrs) 
+                 ProcessorImpl* processor,
+                 const Arch &arch,
+                 const DCRS &dcrs)
   : SimObject(ctx, "cluster")
   , mem_req_port(this)
   , mem_rsp_port(this)
@@ -43,9 +43,9 @@ Cluster::Cluster(const SimContext& ctx,
 
   for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
     uint32_t socket_id = cluster_id * sockets_per_cluster + i;
-    auto socket = Socket::Create(socket_id, 
-                                 this, 
-                                 arch, 
+    auto socket = Socket::Create(socket_id,
+                                 this,
+                                 arch,
                                  dcrs);
 
     socket->icache_mem_req_port.bind(&icache_switch->ReqIn.at(i));
@@ -58,7 +58,7 @@ Cluster::Cluster(const SimContext& ctx,
   }
 
   // Create l2cache
-  
+
   snprintf(sname, 100, "cluster%d-l2cache", cluster_id);
   l2cache_ = CacheSim::Create(sname, CacheSim::Config{
     !L2_ENABLED,
@@ -67,10 +67,10 @@ Cluster::Cluster(const SimContext& ctx,
     log2ceil(L1_LINE_SIZE), // W
     log2ceil(L2_NUM_WAYS),  // A
     log2ceil(L2_NUM_BANKS), // B
-    XLEN,                   // address bits  
+    XLEN,                   // address bits
     1,                      // number of ports
-    2,                      // request size 
-    true,                   // write-through
+    2,                      // request size
+    L2_WRITEBACK,           // write-back
     false,                  // write response
     L2_MSHR_SIZE,           // mshr size
     2,                      // pipeline latency
@@ -90,7 +90,7 @@ Cluster::~Cluster() {
   //--
 }
 
-void Cluster::reset() {  
+void Cluster::reset() {
   for (auto& barrier : barriers_) {
     barrier.reset();
   }
