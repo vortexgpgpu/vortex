@@ -151,7 +151,7 @@ module VX_cache_bank #(
     wire                            is_replay_st0, is_replay_st1;
     wire                            creq_flush_st0, creq_flush_st1;
     wire [NUM_WAYS-1:0]             way_sel_st0, way_sel_st1;
-    wire [NUM_WAYS-1:0]             tag_matches_st0, tag_matches_st1;
+    wire [NUM_WAYS-1:0]             tag_matches_st0;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_alloc_id_st0;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_prev_st0, mshr_prev_st1;
     wire                            mshr_pending_st0, mshr_pending_st1;
@@ -317,23 +317,23 @@ module VX_cache_bank #(
 
     assign mshr_id_st0 = is_creq_st0 ? mshr_alloc_id_st0 : replay_id_st0;
 
-    assign way_sel_st0 = is_fill_st0 ? repl_way_st0 : flush_way_st0;
+    assign way_sel_st0 = is_fill_st0 ? repl_way_st0 : (is_flush_st0 ? flush_way_st0 : tag_matches_st0);
 
     wire [`CS_LINE_ADDR_WIDTH-1:0] addr_r_st0 = (is_fill_st0 || is_flush_st0) ? {repl_tag_st0, addr_st0[`CS_LINE_SEL_BITS-1:0]} : addr_st0;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + MSHR_ADDR_WIDTH + NUM_WAYS + NUM_WAYS + 1),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + MSHR_ADDR_WIDTH + NUM_WAYS + 1),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~pipe_stall),
-        .data_in  ({valid_st0, is_flush_st0, is_replay_st0, is_fill_st0, is_creq_st0, creq_flush_st0, rw_st0, addr_r_st0, data_st0, byteen_st0, wsel_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_prev_st0, tag_matches_st0, way_sel_st0, mshr_pending_st0}),
-        .data_out ({valid_st1, is_flush_st1, is_replay_st1, is_fill_st1, is_creq_st1, creq_flush_st1, rw_st1, addr_st1,   data_st1, byteen_st1, wsel_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_prev_st1, tag_matches_st1, way_sel_st1, mshr_pending_st1})
+        .data_in  ({valid_st0, is_flush_st0, is_replay_st0, is_fill_st0, is_creq_st0, creq_flush_st0, rw_st0, addr_r_st0, data_st0, byteen_st0, wsel_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_prev_st0, way_sel_st0, mshr_pending_st0}),
+        .data_out ({valid_st1, is_flush_st1, is_replay_st1, is_fill_st1, is_creq_st1, creq_flush_st1, rw_st1, addr_st1,   data_st1, byteen_st1, wsel_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_prev_st1, way_sel_st1, mshr_pending_st1})
     );
 
     // we have a tag hit
-    wire is_hit_st1 = (| tag_matches_st1);
+    wire is_hit_st1 = (| way_sel_st1);
 
     if (UUID_WIDTH != 0) begin
         assign req_uuid_st1 = tag_st1[TAG_WIDTH-1 -: UUID_WIDTH];
@@ -418,7 +418,7 @@ module VX_cache_bank #(
         .fill       (do_fill_st1 && ~rdw_hazard_st1),
         .flush      (do_flush_st1),
         .write      (do_cache_wr_st1),
-        .way_sel    (way_sel_st1 | tag_matches_st1),
+        .way_sel    (way_sel_st1),
         .line_addr  (addr_st1),
         .wsel       (wsel_st1),
         .fill_data  (fill_data_st1),
