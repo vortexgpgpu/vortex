@@ -39,7 +39,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     XLEN,                     // address bits
     1,                        // number of ports
     uint8_t(arch.num_clusters()), // request size
-    true,                     // write-through
+    L3_WRITEBACK,             // write-back
     false,                    // write response
     L3_MSHR_SIZE,             // mshr size
     2,                        // pipeline latency

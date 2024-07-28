@@ -436,7 +436,7 @@ public:
 			auto port_id = req_id % config_.ports_per_bank;
 
 			// check MSHR capacity
-			if ((!core_req.write || !config_.write_through)
+			if ((!core_req.write || config_.write_back)
 		   && bank.mshr.full()) {
 				++perf_stats_.mshr_stalls;
 				continue;
@@ -572,7 +572,7 @@ private:
 					if (pipeline_req.write) {
 						// handle write has_hit
 						auto& hit_line = set.lines.at(hit_line_id);
-						if (config_.write_through) {
+						if (!config_.write_back) {
 							// forward write request to memory
 							MemReq mem_req;
 							mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, pipeline_req.tag);
@@ -603,7 +603,7 @@ private:
 					else
 						++perf_stats_.read_misses;
 
-					if (free_line_id == -1 && !config_.write_through) {
+					if (free_line_id == -1 && config_.write_back) {
 						// write back dirty line
 						auto& repl_line = set.lines.at(repl_line_id);
 						if (repl_line.dirty) {
@@ -617,7 +617,7 @@ private:
 						}
 					}
 
-					if (pipeline_req.write && config_.write_through) {
+					if (pipeline_req.write && !config_.write_back) {
 						// forward write request to memory
 						{
 							MemReq mem_req;
