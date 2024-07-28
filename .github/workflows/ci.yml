@@ -165,3 +165,11 @@ jobs:
           else
             ./ci/regression.sh --${{ matrix.name }}
           fi
+
+ complete:
+    runs-on: ubuntu-20.04
+    needs: tests
+
+    steps:
+      - name: Final check
+        run: echo "All matrix jobs passed"
