@@ -53,15 +53,25 @@ void Emulator::warp_t::clear(uint64_t startup_addr) {
   this->uuid = 0;
   this->fcsr = 0;
 
+  std::srand(50);
+
   for (auto& reg_file : this->ireg_file) {
     for (auto& reg : reg_file) {
+    #ifndef NDEBUG
       reg = 0;
+    #else
+      reg = std::rand();
+    #endif
     }
   }
 
   for (auto& reg_file : this->freg_file) {
     for (auto& reg : reg_file) {
+    #ifndef NDEBUG
       reg = 0;
+    #else
+      reg = std::rand();
+    #endif
     }
   }
 }
