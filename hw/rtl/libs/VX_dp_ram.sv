@@ -298,7 +298,7 @@ module VX_dp_ram #(
             if (write) begin
                 ram[waddr] <= ram_n;
             end
-            prev_write <= (| wren);
+            prev_write <= write;
             prev_data  <= ram[waddr];
             prev_waddr <= waddr;
         end
