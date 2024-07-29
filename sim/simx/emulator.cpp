@@ -157,7 +157,7 @@ instr_trace_t* Emulator::step() {
 #ifndef NDEBUG
   uint32_t instr_uuid = warp.uuid++;
   uint32_t g_wid = core_->id() * arch_.num_warps() + scheduled_warp;
-  uint64_t uuid = (uint64_t(g_wid) << 32) | instr_uuid;
+  uint64_t uuid = (uint64_t(instr_uuid) << 12) | g_wid;
 #else
   uint64_t uuid = 0;
 #endif

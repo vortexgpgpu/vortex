@@ -215,6 +215,6 @@ uint64_t dpi_uuid_gen(bool reset, int wid) {
     return 0;
   }
   uint32_t instr_uuid = g_uuid_gens[wid]++;
-  uint64_t uuid = (uint64_t(wid) << 32) | instr_uuid;
+  uint64_t uuid = (uint64_t(instr_uuid) << 12) | wid;
   return uuid;
 }
