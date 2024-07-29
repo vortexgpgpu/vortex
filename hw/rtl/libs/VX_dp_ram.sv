@@ -22,6 +22,7 @@ module VX_dp_ram #(
     parameter OUT_REG     = 0,
     parameter NO_RWCHECK  = 0,
     parameter LUTRAM      = 0,
+    parameter RW_ASSERT   = 0,
     parameter INIT_ENABLE = 0,
     parameter INIT_FILE   = "",
     parameter [DATAW-1:0] INIT_VALUE = 0,
@@ -50,6 +51,7 @@ module VX_dp_ram #(
         end                                        \
     end
 
+    `UNUSED_PARAM (RW_ASSERT)
     `UNUSED_VAR (read)
 
 `ifdef SYNTHESIS
@@ -307,6 +309,9 @@ module VX_dp_ram #(
             assign rdata = ram[raddr];
         end else begin
             assign rdata = (prev_write && (prev_waddr == raddr)) ? prev_data : ram[raddr];
+            if (RW_ASSERT) begin
+                `RUNTIME_ASSERT (~read || (rdata == ram[raddr]), ("read after write mismatch"));
+            end
         end
     end
 `endif

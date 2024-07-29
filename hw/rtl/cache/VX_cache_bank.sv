@@ -184,10 +184,11 @@ module VX_cache_bank #(
         .mshr_empty      (mshr_empty)
     );
 
-    wire rdw_hazard_st0;
-    reg rdw_hazard_st1;
+    wire rdw_hazard1_sel;
+    wire rdw_hazard2_sel;
+    reg rdw_hazard3_st1;
 
-    wire pipe_stall = crsp_queue_stall || rdw_hazard_st1;
+    wire pipe_stall = crsp_queue_stall || rdw_hazard3_st1;
 
     // inputs arbitration:
     // mshr replay has highest priority to maximize utilization since there is no miss.
@@ -206,14 +207,16 @@ module VX_cache_bank #(
     wire creq_enable = creq_grant && core_req_valid;
 
     assign replay_ready = replay_grant
-                       && ~rdw_hazard_st0
+                       && ~rdw_hazard1_sel
                        && ~pipe_stall;
 
     assign mem_rsp_ready = fill_grant
+                        && ~rdw_hazard2_sel
                         && ~pipe_stall;
 
     assign line_flush_ready = flush_grant
                            && ~mreq_queue_alm_full
+                           && ~rdw_hazard2_sel
                            && ~pipe_stall;
 
     assign core_req_ready = creq_grant
@@ -376,15 +379,14 @@ module VX_cache_bank #(
     `UNUSED_VAR (do_write_miss_st1)
 
     // ensure mshr replay always get a hit
-    `RUNTIME_ASSERT (~(valid_st1 && is_replay_st1) || is_hit_st1, ("runtime error: missed mshr replay"));
+    `RUNTIME_ASSERT (~(valid_st1 && is_replay_st1) || is_hit_st1, ("missed mshr replay"));
 
     // detect BRAM's read-during-write hazard
-    assign rdw_hazard_st0 = do_fill_st0; // stall cycle after a fill
-    wire rdw_case1 = do_cache_rd_st0 && do_cache_wr_st1 && (addr_st0 == addr_st1); // standard cache access
-    wire rdw_case2 = WRITEBACK && (do_flush_st0 || do_fill_st0) && do_cache_wr_st1; // a writeback can evict preceeding write
-    always @(posedge clk) begin // after a write to same address
-        rdw_hazard_st1 <= (rdw_case1 || rdw_case2)
-                       && ~rdw_hazard_st1; // invalidate if pipeline stalled to avoid repeats
+    assign rdw_hazard1_sel = do_fill_st0; // stall first replay following a fill
+    assign rdw_hazard2_sel = WRITEBACK && do_cache_wr_st0; // a writeback can evict any preceeding write
+    always @(posedge clk) begin // stall reads following writes to same address
+        rdw_hazard3_st1 <= do_cache_rd_st0 && do_cache_wr_st1 && (addr_st0 == addr_st1)
+                       && ~rdw_hazard3_st1; // release pipeline stall
     end
 
     wire [`CS_LINE_WIDTH-1:0] write_data_st1 = {`CS_WORDS_PER_LINE{data_st1[`CS_WORD_WIDTH-1:0]}};
@@ -427,8 +429,8 @@ module VX_cache_bank #(
         .stall      (pipe_stall),
 
         .read       (do_cache_rd_st1),
-        .fill       (do_fill_st1 && ~rdw_hazard_st1),
-        .flush      (do_flush_st1 && ~rdw_hazard_st1),
+        .fill       (do_fill_st1),
+        .flush      (do_flush_st1),
         .write      (do_cache_wr_st1),
         .way_sel    (way_sel_st1),
         .line_addr  (addr_st1),
@@ -556,7 +558,7 @@ module VX_cache_bank #(
     ) core_rsp_queue (
         .clk       (clk),
         .reset     (crsp_queue_reset),
-        .valid_in  (crsp_queue_valid && ~rdw_hazard_st1),
+        .valid_in  (crsp_queue_valid && ~rdw_hazard3_st1),
         .ready_in  (crsp_queue_ready),
         .data_in   ({crsp_queue_tag, crsp_queue_data, crsp_queue_idx}),
         .data_out  ({core_rsp_tag, core_rsp_data, core_rsp_idx}),
@@ -582,13 +584,11 @@ module VX_cache_bank #(
 
     if (WRITEBACK) begin
         assign mreq_queue_push = (((do_read_miss_st1 || do_write_miss_st1) && ~mshr_pending_st1)
-                               || do_writeback_st1)
-                              && ~rdw_hazard_st1;
+                               || do_writeback_st1);
     end else begin
         `UNUSED_VAR (evict_dirty_st1)
         assign mreq_queue_push = ((do_read_miss_st1 && ~mshr_pending_st1)
-                               || do_creq_wr_st1)
-                               && ~rdw_hazard_st1;
+                               || do_creq_wr_st1);
     end
 
     assign mreq_queue_pop  = mem_req_valid && mem_req_ready;
@@ -636,7 +636,7 @@ module VX_cache_bank #(
                    && ~(replay_fire || mem_rsp_fire || core_req_fire || line_flush_fire);
     always @(posedge clk) begin
         if (input_stall || pipe_stall) begin
-            `TRACE(3, ("%d: *** %s stall: crsq=%b, mreq=%b, mshr=%b, rdw_st0=%b, rdw_st1=%b\n", $time, INSTANCE_ID, crsp_queue_stall, mreq_queue_alm_full, mshr_alm_full, rdw_hazard_st0, rdw_hazard_st1));
+            `TRACE(3, ("%d: *** %s stall: crsq=%b, mreq=%b, mshr=%b, rdw1=%b, rdw2=%b, rdw3=%b\n", $time, INSTANCE_ID, crsp_queue_stall, mreq_queue_alm_full, mshr_alm_full, rdw_hazard1_sel, rdw_hazard2_sel, rdw_hazard3_st1));
         end
         if (mem_rsp_fire) begin
             `TRACE(2, ("%d: %s fill-rsp: addr=0x%0h, mshr_id=%0d, data=0x%h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_id, mem_rsp_data));
