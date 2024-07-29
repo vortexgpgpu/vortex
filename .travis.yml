@@ -100,3 +100,19 @@ jobs:
       script:
         - ./ci/travis_run.py ./ci/regression.sh --debug
         - ./ci/travis_run.py ./ci/regression.sh --stress
+
+    - stage: test
+      name: virtual_memory
+      env: XLEN=32 
+      env: VM_DISABLE=1
+      script:
+        - ./ci/travis_run.py ./ci/regression.sh --regression
+        - ./ci/travis_run.py ./ci/regression.sh --opencl
+    
+    - stage: test
+      name: virtual_memory
+      env: XLEN=64
+      env: VM_DISABLE=1
+      script:
+        - ./ci/travis_run.py ./ci/regression.sh --regression
+        - ./ci/travis_run.py ./ci/regression.sh --opencl
