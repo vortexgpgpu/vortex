@@ -19,6 +19,8 @@ set -e
 # clear blackbox cache
 rm -f blackbox.*.cache
 
+# HW: add a test "VM Test" to make sure VM feature is enabled
+
 XLEN=${XLEN:=@XLEN@}
 
 echo "Vortex Regression Test: XLEN=$XLEN"
