@@ -199,6 +199,7 @@ public:
     uint64_t addr = 0;
 
     DBGPRINT("[RT:mem_alloc] size: 0x%lx, asize, 0x%lx,flag : 0x%d\n", size, asize, flags);
+    // HW: when vm is supported this global_mem_ should be virtual memory allocator
     CHECK_ERR(global_mem_.allocate(asize, &addr), {
       return err;
     });
@@ -231,7 +232,7 @@ public:
   int mem_free(uint64_t dev_addr)
   {
 #ifdef VM_ENABLE
-    uint64_t paddr= page_table_walk(dev_addr);
+    uint64_t paddr = page_table_walk(dev_addr);
     return global_mem_.release(paddr);
 #else
     return global_mem_.release(dev_addr);
@@ -264,6 +265,14 @@ public:
       return -1;
 #ifdef VM_ENABLE
     uint64_t pAddr = page_table_walk(dest_addr);
+    // uint64_t pAddr;
+    // try { 
+    //   pAddr = page_table_walk(dest_addr);
+    // } catch ( Page_Fault_Exception ) {
+    //   // HW: place holder
+    //   // should be virt_to_phy_map here
+    //   phy_to_virt_map(0, dest_addr, 0);
+    // }
     DBGPRINT("  [RT:upload] Upload data to vAddr = 0x%lx (pAddr=0x%lx)\n", dest_addr, pAddr);
     dest_addr = pAddr; //Overwirte
 #endif
