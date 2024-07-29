@@ -88,8 +88,8 @@ ifdef DEBUG
 	VL_FLAGS += --trace --trace-structs $(DBG_FLAGS)
 	CXXFLAGS += -g -O0 $(DBG_FLAGS)
 else
-	VL_FLAGS += -O3 -DNDEBUG
-	CXXFLAGS += -O3 -DNDEBUG
+	VL_FLAGS += -DNDEBUG
+	CXXFLAGS += -O2 -DNDEBUG
 endif
 
 # Enable scope analyzer
@@ -123,7 +123,7 @@ $(DESTDIR)/vortex_afu.h : $(AFU_DIR)/vortex_afu.vh
 	$(SCRIPT_DIR)/gen_config.py -i $^ -o $@
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/vortex_afu.h $(SCOPE_JSON)
-	verilator --build --exe -O3 $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
+	verilator --build --exe $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
 clean:
 	rm -rf $(DESTDIR)/$(PROJECT).obj_dir
