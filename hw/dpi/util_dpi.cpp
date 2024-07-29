@@ -215,7 +215,6 @@ uint64_t dpi_uuid_gen(bool reset, int wid) {
     return 0;
   }
   uint32_t instr_uuid = g_uuid_gens[wid]++;
-  uint32_t total_warps = NUM_WARPS * NUM_CORES * NUM_CLUSTERS;
-  uint64_t uuid = uint64_t(instr_uuid) * total_warps + wid;
+  uint64_t uuid = (uint64_t(wid) << 32) | instr_uuid;
   return uuid;
 }
