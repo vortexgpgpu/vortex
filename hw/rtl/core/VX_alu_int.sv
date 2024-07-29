@@ -108,7 +108,7 @@ module VX_alu_int #(
                 2'b00: msc_result[i] = alu_in1[i] & alu_in2_imm[i]; // AND
                 2'b01: msc_result[i] = alu_in1[i] | alu_in2_imm[i]; // OR
                 2'b10: msc_result[i] = alu_in1[i] ^ alu_in2_imm[i]; // XOR
-                2'b11: msc_result[i] = alu_in1[i] << alu_in2_imm[i][SHIFT_IMM_BITS-1:0]; // SLL
+              default: msc_result[i] = alu_in1[i] << alu_in2_imm[i][SHIFT_IMM_BITS-1:0]; // SLL
             endcase
         end
         assign msc_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] << alu_in2_imm[i][4:0])); // SLLW
@@ -126,7 +126,7 @@ module VX_alu_int #(
                 3'b100: alu_result[i] = add_result_w[i];    // ADDIW, ADDW
                 3'b101: alu_result[i] = sub_result_w[i];    // SUBW
                 3'b110: alu_result[i] = shr_result_w[i];    // SRLW, SRAW, SRLIW, SRAIW
-                3'b111: alu_result[i] = msc_result_w[i];    // SLLW
+               default: alu_result[i] = msc_result_w[i];    // SLLW
             endcase
         end
     end

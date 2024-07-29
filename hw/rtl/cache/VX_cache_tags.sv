@@ -97,12 +97,17 @@ module VX_cache_tags #(
         assign evict_tag = read_tag;
     end
 
+    // fill and flush need to also read in writeback mode
+    wire fill_s = fill && (!WRITEBACK || ~stall);
+    wire flush_s = flush && (!WRITEBACK || ~stall);
+
     for (genvar i = 0; i < NUM_WAYS; ++i) begin
 
-        wire do_fill    = fill  && evict_way[i];
-        wire do_flush   = flush && (!WRITEBACK || way_sel[i]); // flush the whole line in writethrough mode
+        wire do_fill    = fill_s  && evict_way[i];
+        wire do_flush   = flush_s && (!WRITEBACK || way_sel[i]); // flush the whole line in writethrough mode
         wire do_write   = WRITEBACK && write && tag_matches[i];
 
+        wire line_read  = (lookup && ~stall) || (WRITEBACK && (fill_s || flush_s));
         wire line_write = init || do_fill || do_flush || do_write;
         wire line_valid = ~(init || flush);
 
@@ -121,10 +126,11 @@ module VX_cache_tags #(
         VX_sp_ram #(
             .DATAW (TAG_WIDTH),
             .SIZE  (`CS_LINES_PER_BANK),
-            .NO_RWCHECK (1)
+            .NO_RWCHECK (1),
+            .RW_ASSERT (1)
         ) tag_store (
             .clk   (clk),
-            .read  (1'b1),
+            .read  (line_read),
             .write (line_write),
             `UNUSED_PIN (wren),
             .addr  (line_sel),
@@ -139,20 +145,16 @@ module VX_cache_tags #(
 
     assign evict_dirty = (| read_dirty);
 
-    // ensure fills and flushes do not stall
-    `RUNTIME_ASSERT (~fill || ~stall, ("runtime error: stalled fill"));
-    `RUNTIME_ASSERT (~flush || ~stall, ("runtime error: stalled fill"));
-
 `ifdef DBG_TRACE_CACHE
     wire [`CS_LINE_ADDR_WIDTH-1:0] evict_line_addr = {evict_tag, line_sel};
     always @(posedge clk) begin
-        if (fill) begin
+        if (fill && ~stall) begin
             `TRACE(3, ("%d: %s fill: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h, dirty=%b, evict_addr=0x%0h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), evict_way, line_sel, line_tag, evict_dirty, `CS_LINE_TO_FULL_ADDR(evict_line_addr, BANK_ID)));
         end
         if (init) begin
             `TRACE(3, ("%d: %s init: addr=0x%0h, blk_addr=%0d\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel));
         end
-        if (flush) begin
+        if (flush && ~stall) begin
             `TRACE(3, ("%d: %s flush: addr=0x%0h, way=%b, blk_addr=%0d, dirty=%b\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(evict_line_addr, BANK_ID), way_sel, line_sel, evict_dirty));
         end
         if (lookup && ~stall) begin

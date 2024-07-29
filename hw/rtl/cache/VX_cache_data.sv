@@ -82,10 +82,12 @@ module VX_cache_data #(
 
         VX_sp_ram #(
             .DATAW (LINE_SIZE * NUM_WAYS),
-            .SIZE  (`CS_LINES_PER_BANK)
+            .SIZE  (`CS_LINES_PER_BANK),
+            .NO_RWCHECK (1),
+            .RW_ASSERT (1)
         ) byteen_store (
             .clk   (clk),
-            .read  (1'b1),
+            .read  (write || fill || flush),
             .write (write || fill || flush),
             `UNUSED_PIN (wren),
             .addr  (way_addr),
@@ -140,14 +142,18 @@ module VX_cache_data #(
         `UNUSED_PIN (valid_out)
     );
 
+    wire line_read = (read && ~stall)
+                  || (WRITEBACK && (fill || flush));
+
     VX_sp_ram #(
         .DATAW (`CS_LINE_WIDTH * NUM_WAYS),
         .SIZE  (`CS_LINES_PER_BANK),
         .WRENW (BYTEENW),
-        .NO_RWCHECK (1)
+        .NO_RWCHECK (1),
+        .RW_ASSERT (1)
     ) data_store (
         .clk   (clk),
-        .read  (1'b1),
+        .read  (line_read),
         .write (write || fill),
         .wren  (wren),
         .addr  (line_sel),
