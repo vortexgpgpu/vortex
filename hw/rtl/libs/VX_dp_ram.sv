@@ -54,7 +54,9 @@ module VX_dp_ram #(
     `UNUSED_PARAM (RW_ASSERT)
     `UNUSED_VAR (read)
 
-    `RUNTIME_ASSERT(~write || (| wren), ("invalid write enable mask"));
+    if (WRENW > 1) begin
+        `RUNTIME_ASSERT(~write || (| wren), ("invalid write enable mask"));
+    end
 
 `ifdef SYNTHESIS
     if (WRENW > 1) begin
