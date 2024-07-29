@@ -49,6 +49,9 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     // Enable cache writeback
     parameter WRITEBACK             = 0,
 
+    // Enable dirty bytes on writeback
+    parameter DIRTY_BYTES           = 0,
+
     // Request debug identifier
     parameter UUID_WIDTH            = 0,
 
@@ -155,6 +158,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .MREQ_SIZE    (MREQ_SIZE),
             .WRITE_ENABLE (WRITE_ENABLE),
             .WRITEBACK    (WRITEBACK),
+            .DIRTY_BYTES  (DIRTY_BYTES),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (ARB_TAG_WIDTH),
             .TAG_SEL_IDX  (TAG_SEL_IDX),

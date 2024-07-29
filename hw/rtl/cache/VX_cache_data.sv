@@ -30,6 +30,8 @@ module VX_cache_data #(
     parameter WRITE_ENABLE      = 1,
     // Enable cache writeback
     parameter WRITEBACK         = 0,
+    // Enable dirty bytes on writeback
+    parameter DIRTY_BYTES       = 0,
     // Request debug identifier
     parameter UUID_WIDTH        = 0
 ) (
@@ -80,20 +82,22 @@ module VX_cache_data #(
             assign way_addr = line_sel;
         end
 
-        VX_sp_ram #(
-            .DATAW (LINE_SIZE * NUM_WAYS),
-            .SIZE  (`CS_LINES_PER_BANK),
-            .NO_RWCHECK (1),
-            .RW_ASSERT (1)
-        ) byteen_store (
-            .clk   (clk),
-            .read  (write || fill || flush),
-            .write (write || fill || flush),
-            `UNUSED_PIN (wren),
-            .addr  (way_addr),
-            .wdata (write ? (dirty_byteen | write_byteen) : ((fill || flush) ? '0 : dirty_byteen)),
-            .rdata (dirty_byteen)
-        );
+        if (DIRTY_BYTES) begin
+            VX_sp_ram #(
+                .DATAW (LINE_SIZE * NUM_WAYS),
+                .SIZE  (`CS_LINES_PER_BANK)
+            ) byteen_store (
+                .clk   (clk),
+                .read  (write || fill || flush),
+                .write (write || fill || flush),
+                `UNUSED_PIN (wren),
+                .addr  (way_addr),
+                .wdata (write ? (dirty_byteen | write_byteen) : ((fill || flush) ? '0 : dirty_byteen)),
+                .rdata (dirty_byteen)
+            );
+        end else begin
+            assign dirty_byteen = {LINE_SIZE{1'b1}};
+        end
 
         wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] dirty_data_w;
         for (genvar i = 0; i < `CS_WORDS_PER_LINE; ++i) begin
