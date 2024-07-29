@@ -70,8 +70,8 @@ ifdef DEBUG
 	VL_FLAGS += --trace --trace-structs $(DBG_FLAGS)
 	CXXFLAGS += -g -O0 $(DBG_FLAGS)
 else
-	VL_FLAGS += -O3 -DNDEBUG
-	CXXFLAGS += -O3 -DNDEBUG
+	VL_FLAGS += -DNDEBUG
+	CXXFLAGS += -O2 -DNDEBUG
 endif
 
 # Enable perf counters
