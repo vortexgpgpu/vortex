@@ -316,11 +316,11 @@ private:
         auto mem_rsp_it = pending_mem_reqs_.begin();
         auto mem_rsp = *mem_rsp_it;
         /*
-          printf("%0ld: [sim] MEM Rd Rsp: addr=%0lx, data=", timestamp, mem_rsp->addr);
-          for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
-            printf("%02x", mem_rsp->block[(MEM_BLOCK_SIZE-1)-i]);
-          }
-          printf("\n");
+        printf("%0ld: [sim] MEM Rd Rsp: addr=0x%0lx, data=0x", timestamp, mem_rsp->addr);
+        for (int i = MEM_BLOCK_SIZE-1; i >= 0; --i) {
+          printf("%02x", mem_rsp->block[i]);
+        }
+        printf("\n");
         */
         device_->m_axi_rvalid[0] = 1;
         device_->m_axi_rid[0]    = mem_rsp->tag;
@@ -347,7 +347,7 @@ private:
         auto mem_rsp_it = pending_mem_reqs_.begin();
         auto mem_rsp = *mem_rsp_it;
         /*
-          printf("%0ld: [sim] MEM Wr Rsp: addr=%0lx\n", timestamp, mem_rsp->addr);
+         printf("%0ld: [sim] MEM Wr Rsp: addr=0x%0lx\n", timestamp, mem_rsp->addr);
         */
         device_->m_axi_bvalid[0] = 1;
         device_->m_axi_bid[0]    = mem_rsp->tag;
@@ -387,11 +387,15 @@ private:
         } else {
           // process writes
           /*
-            printf("%0ld: [sim] MEM Wr: addr=%0x, byteen=%0lx, data=", timestamp, base_addr, byteen);
-            for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
-              printf("%02x", data[(MEM_BLOCK_SIZE-1)-i]);
-            }
-            printf("\n");
+          printf("%0ld: [sim] MEM Wr: addr=0x%0lx, byteen=0x", timestamp, base_addr);
+          for (int i = (MEM_BLOCK_SIZE/4)-1; i >= 0; --i) {
+            printf("%x", (int)((byteen >> (4 * i)) & 0xf));
+          }
+          printf(", data=0x");
+          for (int i = MEM_BLOCK_SIZE-1; i >= 0; --i) {
+            printf("%02x", data[i]);
+          }
+          printf("\n");
           */
           for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
             if ((byteen >> i) & 0x1) {
@@ -459,11 +463,11 @@ private:
         auto mem_rsp_it = pending_mem_reqs_.begin();
         auto mem_rsp = *mem_rsp_it;
         /*
-          printf("%0ld: [sim] MEM Rd: tag=%0lx, addr=%0lx, data=", timestamp, mem_rsp->tag, mem_rsp->addr);
-          for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
-            printf("%02x", mem_rsp->block[(MEM_BLOCK_SIZE-1)-i]);
-          }
-          printf("\n");
+        printf("%0ld: [sim] MEM Rd Rsp: tag=0x%0lx, addr=0x%0lx, data=0x", timestamp, mem_rsp->tag, mem_rsp->addr);
+        for (int i = MEM_BLOCK_SIZE-1; i >= 0; --i) {
+          printf("%02x", mem_rsp->block[i]);
+        }
+        printf("\n");
         */
         memcpy(device_->mem_rsp_data.data(), mem_rsp->block.data(), MEM_BLOCK_SIZE);
         device_->mem_rsp_tag = mem_rsp->tag;
@@ -499,11 +503,15 @@ private:
         } else {
           // process writes
           /*
-            printf("%0ld: [sim] MEM Wr: tag=%0lx, addr=%0x, byteen=%0lx, data=", timestamp, device_->mem_req_tag, byte_addr, byteen);
-            for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
-              printf("%02x", data[(MEM_BLOCK_SIZE-1)-i]);
-            }
-            printf("\n");
+          printf("%0ld: [sim] MEM Wr Req: tag=0x%0lx, addr=0x%0lx, byteen=0x", timestamp, device_->mem_req_tag, byte_addr);
+          for (int i = (MEM_BLOCK_SIZE/4)-1; i >= 0; --i) {
+            printf("%x", (int)((byteen >> (4 * i)) & 0xf));
+          }
+          printf(", data=0x");
+          for (int i = MEM_BLOCK_SIZE-1; i >= 0; --i) {
+            printf("%d=%02x,", i, data[i]);
+          }
+          printf("\n");
           */
           for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
             if ((byteen >> i) & 0x1) {
@@ -530,7 +538,7 @@ private:
         ram_->read(mem_req->block.data(), byte_addr, MEM_BLOCK_SIZE);
         pending_mem_reqs_.emplace_back(mem_req);
 
-        //printf("%0ld: [sim] MEM Rd Req: addr=%0x, tag=%0lx\n", timestamp, byte_addr, device_->mem_req_tag);
+        //printf("%0ld: [sim] MEM Rd Req: addr=0x%0lx, tag=0x%0lx\n", timestamp, byte_addr, device_->mem_req_tag);
 
         // send dram request
         dram_queue_.push(mem_req);

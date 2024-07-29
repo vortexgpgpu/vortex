@@ -36,6 +36,7 @@ module VX_bank_flush #(
     input  wire flush_out_ready,
     input  wire mshr_empty
 );
+    // ways interation is only needed when eviction is enabled
     parameter CTR_WIDTH = `CS_LINE_SEL_BITS + (WRITEBACK ? `CS_WAY_SEL_BITS : 0);
 
     parameter STATE_IDLE  = 2'd0;
@@ -89,9 +90,7 @@ module VX_bank_flush #(
     end
 
     assign flush_in_ready  = flush_in_ready_r;
-
     assign flush_out_init  = (state_r == STATE_INIT);
-
     assign flush_out_valid = (state_r == STATE_FLUSH);
     assign flush_out_line  = counter_r[`CS_LINE_SEL_BITS-1:0];
 

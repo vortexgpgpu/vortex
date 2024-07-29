@@ -240,13 +240,13 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             MMIO_CMD_ARG0: begin
                 cmd_args[0] <= 64'(cp2af_sRxPort.c0.data);
             `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: MMIO_CMD_ARG0: data=0x%0h\n", $time, 64'(cp2af_sRxPort.c0.data)));
+                `TRACE(2, ("%d: MMIO_CMD_ARG0: data=0x%h\n", $time, 64'(cp2af_sRxPort.c0.data)));
             `endif
             end
             MMIO_CMD_ARG1: begin
                 cmd_args[1] <= 64'(cp2af_sRxPort.c0.data);
             `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: MMIO_CMD_ARG1: data=0x%0h\n", $time, 64'(cp2af_sRxPort.c0.data)));
+                `TRACE(2, ("%d: MMIO_CMD_ARG1: data=0x%h\n", $time, 64'(cp2af_sRxPort.c0.data)));
             `endif
             end
             MMIO_CMD_ARG2: begin
@@ -263,13 +263,13 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             `ifdef SCOPE
             MMIO_SCOPE_WRITE: begin
             `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: MMIO_SCOPE_WRITE: data=0x%0h\n", $time, cmd_scope_wdata));
+                `TRACE(2, ("%d: MMIO_SCOPE_WRITE: data=0x%h\n", $time, cmd_scope_wdata));
             `endif
             end
             `endif
             default: begin
                 `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: Unknown MMIO Wr: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data)));
+                `TRACE(2, ("%d: Unknown MMIO Wr: addr=0x%0h, data=0x%h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data)));
                 `endif
             end
             endcase
@@ -305,14 +305,14 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             MMIO_SCOPE_READ: begin
                 mmio_tx.data <= cmd_scope_rdata;
             `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: MMIO_SCOPE_READ: data=0x%0h\n", $time, cmd_scope_rdata));
+                `TRACE(2, ("%d: MMIO_SCOPE_READ: data=0x%h\n", $time, cmd_scope_rdata));
             `endif
             end
             `endif
             MMIO_DEV_CAPS: begin
                 mmio_tx.data <= dev_caps;
             `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: MMIO_DEV_CAPS: data=0x%0h\n", $time, dev_caps));
+                `TRACE(2, ("%d: MMIO_DEV_CAPS: data=0x%h\n", $time, dev_caps));
             `endif
             end
             MMIO_ISA_CAPS: begin
@@ -760,7 +760,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                 cci_mem_wr_req_addr_base <= cci_mem_wr_req_addr_base + CCI_ADDR_WIDTH'(CCI_RD_WINDOW_SIZE);
             end
         `ifdef DBG_TRACE_AFU
-            `TRACE(2, ("%d: CCI Rd Rsp: idx=%0d, ctr=%0d, data=0x%0h\n", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr, cp2af_sRxPort.c0.data));
+            `TRACE(2, ("%d: CCI Rd Rsp: idx=%0d, ctr=%0d, data=0x%h\n", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr, cp2af_sRxPort.c0.data));
         `endif
         end
 
@@ -906,7 +906,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             cci_wr_req_done <= 1;
             end
         `ifdef DBG_TRACE_AFU
-            `TRACE(2, ("%d: CCI Wr Req: addr=0x%0h, rem=%0d, pending=%0d, data=0x%0h\n", $time, cci_wr_req_addr, (cci_wr_req_ctr - 1), cci_pending_writes, af2cp_sTxPort.c1.data));
+            `TRACE(2, ("%d: CCI Wr Req: addr=0x%0h, rem=%0d, pending=%0d, data=0x%h\n", $time, cci_wr_req_addr, (cci_wr_req_ctr - 1), cci_pending_writes, af2cp_sTxPort.c1.data));
         `endif
         end
 
@@ -1093,13 +1093,13 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     always @(posedge clk) begin
         for (integer i = 0; i < NUM_LOCAL_MEM_BANKS; ++i) begin
             if (avs_write[i] && ~avs_waitrequest[i]) begin
-                `TRACE(2, ("%d: AVS Wr Req [%0d]: addr=0x%0h, byteen=0x%0h, burst=0x%0h, data=0x%0h\n", $time, i, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i], avs_writedata[i]));
+                `TRACE(2, ("%d: AVS Wr Req [%0d]: addr=0x%0h, byteen=0x%0h, burst=0x%0h, data=0x%h\n", $time, i, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i], avs_writedata[i]));
             end
             if (avs_read[i] && ~avs_waitrequest[i]) begin
                 `TRACE(2, ("%d: AVS Rd Req [%0d]: addr=0x%0h, byteen=0x%0h,  burst=0x%0h\n", $time, i, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i]));
             end
             if (avs_readdatavalid[i]) begin
-                `TRACE(2, ("%d: AVS Rd Rsp [%0d]: data=0x%0h\n", $time, i, avs_readdata[i]));
+                `TRACE(2, ("%d: AVS Rd Rsp [%0d]: data=0x%h\n", $time, i, avs_readdata[i]));
             end
         end
     end
