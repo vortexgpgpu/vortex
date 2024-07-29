@@ -107,7 +107,7 @@ module VX_cache_tags #(
         wire do_flush   = flush_s && (!WRITEBACK || way_sel[i]); // flush the whole line in writethrough mode
         wire do_write   = WRITEBACK && write && tag_matches[i];
 
-        wire line_read  = (lookup && ~stall) || (WRITEBACK && (fill_s || flush_s));
+        wire line_read  = (WRITEBACK && (fill_s || flush_s));
         wire line_write = init || do_fill || do_flush || do_write;
         wire line_valid = ~(init || flush);
 
@@ -159,9 +159,15 @@ module VX_cache_tags #(
         end
         if (lookup && ~stall) begin
             if (tag_matches != 0) begin
-                `TRACE(3, ("%d: %s hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid));
+                if (write)
+                    `TRACE(3, ("%d: %s write-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid));
+                else
+                    `TRACE(3, ("%d: %s write-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid));
             end else begin
-                `TRACE(3, ("%d: %s miss: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid));
+                if (write)
+                    `TRACE(3, ("%d: %s read-miss: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid));
+                else
+                    `TRACE(3, ("%d: %s read-miss: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid));
             end
         end
     end

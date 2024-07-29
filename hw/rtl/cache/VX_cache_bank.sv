@@ -44,6 +44,9 @@ module VX_cache_bank #(
     // Enable cache writeback
     parameter WRITEBACK         = 0,
 
+    // Enable dirty bytes on writeback
+    parameter DIRTY_BYTES       = 0,
+
     // Request debug identifier
     parameter UUID_WIDTH        = 0,
 
@@ -419,6 +422,7 @@ module VX_cache_bank #(
         .WORD_SIZE    (WORD_SIZE),
         .WRITE_ENABLE (WRITE_ENABLE),
         .WRITEBACK    (WRITEBACK),
+        .DIRTY_BYTES  (DIRTY_BYTES),
         .UUID_WIDTH   (UUID_WIDTH)
     ) cache_data (
         .clk        (clk),

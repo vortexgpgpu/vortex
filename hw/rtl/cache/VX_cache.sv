@@ -45,6 +45,9 @@ module VX_cache import VX_gpu_pkg::*; #(
     // Enable cache writeback
     parameter WRITEBACK             = 0,
 
+    // Enable dirty bytes on writeback
+    parameter DIRTY_BYTES           = 0,
+
     // Request debug identifier
     parameter UUID_WIDTH            = 0,
 
@@ -71,6 +74,7 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter"))
     `STATIC_ASSERT(WRITE_ENABLE || !WRITEBACK, ("invalid parameter"))
+    `STATIC_ASSERT(WRITEBACK || !DIRTY_BYTES, ("invalid parameter"))
 
     localparam REQ_SEL_WIDTH   = `UP(`CS_REQ_SEL_BITS);
     localparam WORD_SEL_WIDTH  = `UP(`CS_WORD_SEL_BITS);
@@ -373,6 +377,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .MSHR_SIZE    (MSHR_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
             .WRITE_ENABLE (WRITE_ENABLE),
+            .DIRTY_BYTES  (DIRTY_BYTES),
             .WRITEBACK    (WRITEBACK),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (TAG_WIDTH),
