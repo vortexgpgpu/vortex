@@ -116,13 +116,11 @@ public:
 
 #ifdef VM_ENABLE
 
-  // virtual (vpn) to phycial (ppn) mapping
+  // physical (ppn) to virtual (vpn) mapping
   uint64_t map_p2v(uint64_t ppn, uint32_t flags)
   {
     DBGPRINT(" [RT:MAP_P2V] ppn: %lx\n", ppn);
-    // std::cout << std::hex << pAddr << std::endl;
-    // return pAddr + 0xf000000;
-    if (addr_mapping.find(ppn) != addr_mapping.end()) return addr_mapping[ppn];
+    if (addr_mapping.contains(ppn)) return addr_mapping[ppn];
 
     // If ppn to vpn mapping doesnt exist, create mapping
     DBGPRINT(" [RT:MAP_P2V] Not found. Allocate new page table or update a PTE.\n");
@@ -419,15 +417,10 @@ public:
   // reserve IO space, startup space, and local mem area
   int virtual_mem_reserve(uint64_t dev_addr, uint64_t size, int flags)
   {
-    // uint64_t asize = aligned_size(size, MEM_PAGE_SIZE);
     CHECK_ERR(virtual_mem_->reserve(dev_addr, size), {
       return err;
     });
     DBGPRINT("[RT:mem_reserve] addr: 0x%lx, size:0x%lx, size: 0x%lx\n", dev_addr, size, size);
-    // CHECK_ERR(this->mem_access(dev_addr, asize, flags), {
-    //   global_mem_.release(dev_addr);
-    //   return err;
-    // });
     return 0;
   }
 
