@@ -63,6 +63,7 @@ void Emulator::warp_t::clear(uint64_t startup_addr) {
       reg = std::rand();
     #endif
     }
+    reg_file.at(0) = 0; // r0 = 0
   }
 
   for (auto& reg_file : this->freg_file) {
