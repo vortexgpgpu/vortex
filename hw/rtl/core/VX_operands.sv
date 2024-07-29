@@ -13,6 +13,13 @@
 
 `include "VX_define.vh"
 
+// reset all GPRs in debug mode
+`ifdef SIMULATION
+`ifndef NDEBUG
+`define GPR_RESET
+`endif
+`endif
+
 module VX_operands import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_BANKS = 4,
