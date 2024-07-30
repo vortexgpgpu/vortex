@@ -96,7 +96,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .CRSQ_SIZE      (`L2_CRSQ_SIZE),
         .MSHR_SIZE      (`L2_MSHR_SIZE),
         .MRSQ_SIZE      (`L2_MRSQ_SIZE),
-        .MREQ_SIZE      (`L2_MREQ_SIZE),
+        .MREQ_SIZE      (`L2_WRITEBACK ? `L2_MSHR_SIZE : `L2_MREQ_SIZE),
         .TAG_WIDTH      (L2_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`L2_WRITEBACK),
