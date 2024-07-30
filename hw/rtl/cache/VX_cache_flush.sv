@@ -76,7 +76,6 @@ module VX_cache_flush #(
         `UNUSED_VAR (bank_req_fire)
     end
 
-
     reg [1:0] state, state_n;
     reg [NUM_BANKS-1:0] flush_done, flush_done_n;
 
