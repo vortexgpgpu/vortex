@@ -215,11 +215,12 @@ module VX_cache_bank #(
                        && ~pipe_stall;
 
     assign mem_rsp_ready = fill_grant
+                        && (!WRITEBACK || ~mreq_queue_alm_full) // needed for evictions
                         && ~rdw_hazard2_sel
                         && ~pipe_stall;
 
     assign line_flush_ready = flush_grant
-                           && ~mreq_queue_alm_full
+                           && (!WRITEBACK || ~mreq_queue_alm_full) // needed for evictions
                            && ~rdw_hazard2_sel
                            && ~pipe_stall;
 
