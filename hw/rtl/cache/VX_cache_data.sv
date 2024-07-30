@@ -44,6 +44,7 @@ module VX_cache_data #(
 
     input wire                          stall,
 
+    input wire                          init,
     input wire                          read,
     input wire                          fill,
     input wire                          flush,
@@ -64,6 +65,7 @@ module VX_cache_data #(
     `UNUSED_VAR (reset)
     `UNUSED_VAR (stall)
     `UNUSED_VAR (line_addr)
+    `UNUSED_VAR (init)
     `UNUSED_VAR (read)
     `UNUSED_VAR (flush)
 
@@ -75,24 +77,24 @@ module VX_cache_data #(
     wire [`LOG2UP(NUM_WAYS)-1:0] way_idx;
 
     if (WRITEBACK) begin
-        wire [`CLOG2(`CS_LINES_PER_BANK * NUM_WAYS)-1:0] way_addr;
-        if (NUM_WAYS > 1) begin
-            assign way_addr = {line_sel, way_idx};
-        end else begin
-            assign way_addr = line_sel;
-        end
-
         if (DIRTY_BYTES) begin
+            wire [`CLOG2(`CS_LINES_PER_BANK * NUM_WAYS)-1:0] way_addr;
+            if (NUM_WAYS > 1) begin
+                assign way_addr = {line_sel, way_idx};
+            end else begin
+                assign way_addr = line_sel;
+            end
+
             VX_sp_ram #(
                 .DATAW (LINE_SIZE * NUM_WAYS),
                 .SIZE  (`CS_LINES_PER_BANK)
             ) byteen_store (
                 .clk   (clk),
                 .read  (write || fill || flush),
-                .write (write || fill || flush),
+                .write (init || write || fill || flush),
                 `UNUSED_PIN (wren),
                 .addr  (way_addr),
-                .wdata (write ? (dirty_byteen | write_byteen) : ((fill || flush) ? '0 : dirty_byteen)),
+                .wdata (write ? (dirty_byteen | write_byteen) : ((init || fill || flush) ? '0 : dirty_byteen)),
                 .rdata (dirty_byteen)
             );
         end else begin
