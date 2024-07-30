@@ -99,7 +99,7 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
             3'h4: r_type = `INST_ALU_XOR;
             3'h5: r_type = func7[5] ? `INST_ALU_SRA : `INST_ALU_SRL;
             3'h6: r_type = `INST_ALU_OR;
-            default: r_type = `INST_ALU_AND;
+            3'h7: r_type = `INST_ALU_AND;
         endcase
     end
 
@@ -111,7 +111,8 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
             3'h4: b_type = `INST_BR_LT;
             3'h5: b_type = `INST_BR_GE;
             3'h6: b_type = `INST_BR_LTU;
-            default: b_type = `INST_BR_GEU;
+            3'h7: b_type = `INST_BR_GEU;
+            default: b_type = 'x;
         endcase
     end
 
@@ -138,7 +139,7 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
             3'h4: m_type = `INST_M_DIV;
             3'h5: m_type = `INST_M_DIVU;
             3'h6: m_type = `INST_M_REM;
-         default: m_type = `INST_M_REMU;
+            3'h7: m_type = `INST_M_REMU;
         endcase
     end
 `endif
