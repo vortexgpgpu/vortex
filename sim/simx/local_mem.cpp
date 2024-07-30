@@ -52,13 +52,13 @@ public:
 
 	void read(void* data, uint64_t addr, uint32_t size) {
 		auto s_addr = to_local_addr(addr);
-		DPH(3, "Local Mem addr=0x" << std::hex << s_addr << std::endl);
+		DPH(3, "Local Mem addr=0x" << std::hex << s_addr << std::dec << std::endl);
 		ram_.read(data, s_addr, size);
 	}
 
 	void write(const void* data, uint64_t addr, uint32_t size) {
 		auto s_addr = to_local_addr(addr);
-		DPH(3, "Local Mem addr=0x" << std::hex << s_addr << std::endl);
+		DPH(3, "Local Mem addr=0x" << std::hex << s_addr << std::dec << std::endl);
 		ram_.write(data, s_addr, size);
 	}
 

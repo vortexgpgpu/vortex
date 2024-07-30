@@ -215,7 +215,7 @@ void Core::fetch() {
     auto& mem_rsp = icache_rsp_port.front();
     auto trace = pending_icache_.at(mem_rsp.tag);
     decode_latch_.push(trace);
-    DT(3, "icache-rsp: addr=0x" << std::hex << trace->PC << ", tag=" << mem_rsp.tag << ", " << *trace);
+    DT(3, "icache-rsp: addr=0x" << std::hex << trace->PC << ", tag=0x" << mem_rsp.tag << std::dec << ", " << *trace);
     pending_icache_.release(mem_rsp.tag);
     icache_rsp_port.pop();
     --pending_ifetches_;
@@ -232,7 +232,7 @@ void Core::fetch() {
   mem_req.cid   = trace->cid;
   mem_req.uuid  = trace->uuid;
   icache_req_ports.at(0).push(mem_req, 2);
-  DT(3, "icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << *trace);
+  DT(3, "icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=0x" << mem_req.tag << std::dec << ", " << *trace);
   fetch_latch_.pop();
   ++perf_stats_.ifetches;
   ++pending_ifetches_;
