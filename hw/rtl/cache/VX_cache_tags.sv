@@ -143,7 +143,7 @@ module VX_cache_tags #(
         assign tag_matches[i] = read_valid[i] && (line_tag == read_tag[i]);
     end
 
-    assign evict_dirty = (| read_dirty);
+    assign evict_dirty = | (read_dirty & evict_way);
 
 `ifdef DBG_TRACE_CACHE
     wire [`CS_LINE_ADDR_WIDTH-1:0] evict_line_addr = {evict_tag, line_sel};
@@ -162,12 +162,12 @@ module VX_cache_tags #(
                 if (write)
                     `TRACE(3, ("%d: %s write-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid));
                 else
-                    `TRACE(3, ("%d: %s write-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid));
+                    `TRACE(3, ("%d: %s read-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid));
             end else begin
                 if (write)
-                    `TRACE(3, ("%d: %s read-miss: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid));
+                    `TRACE(3, ("%d: %s write-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel, line_tag, req_uuid));
                 else
-                    `TRACE(3, ("%d: %s read-miss: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid));
+                    `TRACE(3, ("%d: %s read-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel, line_tag, req_uuid));
             end
         end
     end
