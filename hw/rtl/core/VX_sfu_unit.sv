@@ -179,7 +179,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     VX_gather_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_BUF    (1)
+        .OUT_BUF    (3)
     ) gather_unit (
         .clk           (clk),
         .reset         (reset),
