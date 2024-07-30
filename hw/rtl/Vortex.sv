@@ -80,7 +80,7 @@ module Vortex import VX_gpu_pkg::*; (
         .CRSQ_SIZE      (`L3_CRSQ_SIZE),
         .MSHR_SIZE      (`L3_MSHR_SIZE),
         .MRSQ_SIZE      (`L3_MRSQ_SIZE),
-        .MREQ_SIZE      (`L3_MREQ_SIZE),
+        .MREQ_SIZE      (`L3_WRITEBACK ? `L3_MSHR_SIZE : `L3_MREQ_SIZE),
         .TAG_WIDTH      (L2_MEM_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`L3_WRITEBACK),
