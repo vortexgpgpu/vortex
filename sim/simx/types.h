@@ -264,14 +264,14 @@ inline std::ostream &operator<<(std::ostream &os, const LsuReq& req) {
   for (size_t i = 0; i < req.mask.size(); ++i) {
     os << "addr" << i << "=";
     if (req.mask.test(i)) {
-      os << "0x" << std::hex << req.addrs.at(i);
+      os << "0x" << std::hex << req.addrs.at(i) << std::dec;
     } else {
       os << "-";
     }
     os << ", ";
   }
-  os << std::dec << "tag=" << req.tag << ", cid=" << req.cid;
-  os << " (#" << std::dec << req.uuid << ")";
+  os << "tag=0x" << std::hex << req.tag << std::dec << ", cid=" << req.cid;
+  os << " (#" << req.uuid << ")";
   return os;
 }
 
@@ -292,8 +292,8 @@ struct LsuRsp {
 };
 
 inline std::ostream &operator<<(std::ostream &os, const LsuRsp& rsp) {
-  os << "mask=" << rsp.mask << ", tag=" << rsp.tag << ", cid=" << rsp.cid;
-  os << " (#" << std::dec << rsp.uuid << ")";
+  os << "mask=" << rsp.mask << ", tag=0x" << std::hex << rsp.tag << std::dec << ", cid=" << rsp.cid;
+  os << " (#" << rsp.uuid << ")";
   return os;
 }
 
@@ -324,9 +324,9 @@ struct MemReq {
 
 inline std::ostream &operator<<(std::ostream &os, const MemReq& req) {
   os << "rw=" << req.write << ", ";
-  os << "addr=0x" << std::hex << req.addr << ", type=" << req.type;
-  os << std::dec << ", tag=" << req.tag << ", cid=" << req.cid;
-  os << " (#" << std::dec << req.uuid << ")";
+  os << "addr=0x" << std::hex << req.addr << std::dec << ", type=" << req.type;
+  os << ", tag=0x" << std::hex << req.tag << std::dec << ", cid=" << req.cid;
+  os << " (#" << req.uuid << ")";
   return os;
 }
 
@@ -345,8 +345,8 @@ struct MemRsp {
 };
 
 inline std::ostream &operator<<(std::ostream &os, const MemRsp& rsp) {
-  os << "tag=" << rsp.tag << ", cid=" << rsp.cid;
-  os << " (#" << std::dec << rsp.uuid << ")";
+  os << "tag=0x" << std::hex << rsp.tag << std::dec << ", cid=" << rsp.cid;
+  os << " (#" << rsp.uuid << ")";
   return os;
 }
 
