@@ -60,6 +60,7 @@ def parse_simx(log_lines):
                 instr_data["destination"] = re.search(destination_pattern, line).group(1)
         except Exception as e:
             print("Error at line {}: {}".format(lineno, e))
+            instr_data = None
     if instr_data:
         entries.append(instr_data)
     return entries
