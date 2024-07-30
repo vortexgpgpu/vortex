@@ -66,6 +66,7 @@ public:
   global_mem_.release(PAGE_TABLE_BASE_ADDR);
   // for (auto i = addr_mapping.begin(); i != addr_mapping.end(); i++) 
   //   page_table_mem_->release(i->second << MEM_PAGE_SIZE);
+  delete virtual_mem_;
   delete page_table_mem_;
 #endif
     if (future_.valid()) {
@@ -114,11 +115,23 @@ public:
   }
 
 #ifdef VM_ENABLE
-  // virtual to phycial mapping
-  uint64_t map_p2v(uint64_t pAddr)
+
+  // physical (ppn) to virtual (vpn) mapping
+  uint64_t map_p2v(uint64_t ppn, uint32_t flags)
   {
-    return pAddr + 0xf000000;
+    DBGPRINT(" [RT:MAP_P2V] ppn: %lx\n", ppn);
+    if (addr_mapping.contains(ppn)) return addr_mapping[ppn];
+
+    // If ppn to vpn mapping doesnt exist, create mapping
+    DBGPRINT(" [RT:MAP_P2V] Not found. Allocate new page table or update a PTE.\n");
+    uint64_t vpn;
+    virtual_mem_->allocate(MEM_PAGE_SIZE, &vpn);
+    vpn = vpn >> MEM_PAGE_LOG2_SIZE;
+    CHECK_ERR(update_page_table(ppn, vpn, flags),);
+    addr_mapping[ppn] = vpn;
+    return vpn;
   }
+
   bool need_trans(uint64_t dev_pAddr)
   {
 
@@ -154,7 +167,7 @@ public:
     }
 
     uint64_t init_pAddr = *dev_pAddr;
-    uint64_t init_vAddr = map_p2v(init_pAddr);
+    uint64_t init_vAddr = (map_p2v(init_pAddr >> MEM_PAGE_LOG2_SIZE, flags) << MEM_PAGE_LOG2_SIZE) | (init_pAddr & ((1 << MEM_PAGE_LOG2_SIZE) - 1));
     uint64_t ppn = 0, vpn = 0;
 
     // dev_pAddr can be of size greater than a page, but we have to map and update
@@ -162,18 +175,10 @@ public:
     // FUTURE Work: Super Page
     for (ppn = (*dev_pAddr >> MEM_PAGE_LOG2_SIZE); ppn < ((*dev_pAddr) >> MEM_PAGE_LOG2_SIZE) + (size >> MEM_PAGE_LOG2_SIZE) ; ppn++)
     {
-      vpn = map_p2v(ppn << MEM_PAGE_LOG2_SIZE) >> MEM_PAGE_LOG2_SIZE;
+      vpn = map_p2v(ppn, flags) >> MEM_PAGE_LOG2_SIZE;
       DBGPRINT(" [RT:PTV_MAP] Search vpn in page table:0x%lx\n", vpn);
       // Currently a 1-1 mapping is used, this can be changed here to support different
       // mapping schemes
-      // If ppn to vpn mapping doesnt exist.
-      if (addr_mapping.find(vpn) == addr_mapping.end())
-      {
-        // Create mapping.
-        DBGPRINT(" [RT:PTV_MAP] Not found. Allocate new page table or update a PTE.\n");
-        CHECK_ERR(update_page_table(ppn, vpn, flags),);
-        addr_mapping[vpn] = ppn;
-      }
     }
     DBGPRINT(" [RT:PTV_MAP] Mapped virtual addr: 0x%lx to physical addr: 0x%lx\n", init_vAddr, init_pAddr);
     // Sanity check
@@ -192,6 +197,7 @@ public:
     uint64_t addr = 0;
 
     DBGPRINT("[RT:mem_alloc] size: 0x%lx, asize, 0x%lx,flag : 0x%d\n", size, asize, flags);
+    // HW: when vm is supported this global_mem_ should be virtual memory allocator
     CHECK_ERR(global_mem_.allocate(asize, &addr), {
       return err;
     });
@@ -224,7 +230,7 @@ public:
   int mem_free(uint64_t dev_addr)
   {
 #ifdef VM_ENABLE
-    uint64_t paddr= page_table_walk(dev_addr);
+    uint64_t paddr = page_table_walk(dev_addr);
     return global_mem_.release(paddr);
 #else
     return global_mem_.release(dev_addr);
@@ -257,6 +263,14 @@ public:
       return -1;
 #ifdef VM_ENABLE
     uint64_t pAddr = page_table_walk(dest_addr);
+    // uint64_t pAddr;
+    // try { 
+    //   pAddr = page_table_walk(dest_addr);
+    // } catch ( Page_Fault_Exception ) {
+    //   // HW: place holder
+    //   // should be virt_to_phy_map here
+    //   phy_to_virt_map(0, dest_addr, 0);
+    // }
     DBGPRINT("  [RT:upload] Upload data to vAddr = 0x%lx (pAddr=0x%lx)\n", dest_addr, pAddr);
     dest_addr = pAddr; //Overwirte
 #endif
@@ -400,6 +414,16 @@ public:
       return 0;
   }
 
+  // reserve IO space, startup space, and local mem area
+  int virtual_mem_reserve(uint64_t dev_addr, uint64_t size, int flags)
+  {
+    CHECK_ERR(virtual_mem_->reserve(dev_addr, size), {
+      return err;
+    });
+    DBGPRINT("[RT:mem_reserve] addr: 0x%lx, size:0x%lx, size: 0x%lx\n", dev_addr, size, size);
+    return 0;
+  }
+
   int16_t init_VM()
   {
     uint64_t pt_addr = 0;
@@ -415,6 +439,21 @@ public:
       return 1;
     }
 
+    // HW: virtual mem allocator has the same address range as global_mem. next step is to adjust it
+    virtual_mem_ = new MemoryAllocator(ALLOC_BASE_ADDR, (GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR), MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
+    CHECK_ERR(virtual_mem_reserve(PAGE_TABLE_BASE_ADDR, (GLOBAL_MEM_SIZE - PAGE_TABLE_BASE_ADDR), VX_MEM_READ_WRITE), {
+      return err;
+    });
+    CHECK_ERR(virtual_mem_reserve(STARTUP_ADDR, 0x40000, VX_MEM_READ_WRITE), {
+      return err;
+    });
+    
+    if (virtual_mem_ == nullptr) {
+      // virtual_mem_ does not intefere with physical mem, so no need to free space
+      
+      return 1;
+    }
+    
     if (VM_ADDR_MODE == BARE)
       DBGPRINT("[RT:init_VM] VA_MODE = BARE MODE(addr= 0x0)");
     else
@@ -610,8 +649,9 @@ private:
   std::future<void> future_;
   std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
 #ifdef VM_ENABLE
-  std::unordered_map<uint64_t, uint64_t> addr_mapping;
+  std::unordered_map<uint64_t, uint64_t> addr_mapping; // HW: key: ppn; value: vpn
   MemoryAllocator* page_table_mem_;
+  MemoryAllocator* virtual_mem_;
 #endif
 };
 
