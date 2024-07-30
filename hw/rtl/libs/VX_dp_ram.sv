@@ -314,7 +314,7 @@ module VX_dp_ram #(
         end else begin
             assign rdata = (prev_write && (prev_waddr == raddr)) ? prev_data : ram[raddr];
             if (RW_ASSERT) begin
-                `RUNTIME_ASSERT(~read || (rdata == ram[raddr]), ("read after write mismatch"));
+                `RUNTIME_ASSERT(~read || (rdata == ram[raddr]), ("read after write hazard"));
             end
         end
     end

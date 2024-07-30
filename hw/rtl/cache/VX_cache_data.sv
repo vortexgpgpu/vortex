@@ -73,16 +73,17 @@ module VX_cache_data #(
 
     wire [`CS_LINE_SEL_BITS-1:0] line_sel = line_addr[`CS_LINE_SEL_BITS-1:0];
 
-    wire [`CS_WORDS_PER_LINE-1:0][NUM_WAYS-1:0][`CS_WORD_WIDTH-1:0] rdata;
+    wire [`CS_WORDS_PER_LINE-1:0][NUM_WAYS-1:0][`CS_WORD_WIDTH-1:0] line_rdata;
     wire [`LOG2UP(NUM_WAYS)-1:0] way_idx;
 
     if (WRITEBACK) begin
         if (DIRTY_BYTES) begin
-            wire [`CLOG2(`CS_LINES_PER_BANK * NUM_WAYS)-1:0] way_addr;
-            if (NUM_WAYS > 1) begin
-                assign way_addr = {line_sel, way_idx};
-            end else begin
-                assign way_addr = line_sel;
+            wire [NUM_WAYS-1:0][LINE_SIZE-1:0] bs_rdata;
+            wire [NUM_WAYS-1:0][LINE_SIZE-1:0] bs_wdata;
+
+            for (genvar i = 0; i < NUM_WAYS; ++i) begin
+                wire [LINE_SIZE-1:0] wdata = write ? (bs_rdata[i] | write_byteen) : ((fill || flush) ? '0 : bs_rdata[i]);
+                assign bs_wdata[i] = init ? '0 : (way_sel[i] ? wdata : bs_rdata[i]);
             end
 
             VX_sp_ram #(
@@ -93,21 +94,23 @@ module VX_cache_data #(
                 .read  (write || fill || flush),
                 .write (init || write || fill || flush),
                 `UNUSED_PIN (wren),
-                .addr  (way_addr),
-                .wdata (write ? (dirty_byteen | write_byteen) : ((init || fill || flush) ? '0 : dirty_byteen)),
-                .rdata (dirty_byteen)
+                .addr  (line_sel),
+                .wdata (bs_wdata),
+                .rdata (bs_rdata)
             );
+
+            assign dirty_byteen = bs_rdata[way_idx];
         end else begin
             assign dirty_byteen = {LINE_SIZE{1'b1}};
         end
 
-        wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] dirty_data_w;
+        wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] flipped_rdata;
         for (genvar i = 0; i < `CS_WORDS_PER_LINE; ++i) begin
             for (genvar j = 0; j < NUM_WAYS; ++j) begin
-                assign dirty_data_w[j][i] = rdata[i][j];
+                assign flipped_rdata[j][i] = line_rdata[i][j];
             end
         end
-        assign dirty_data = dirty_data_w[way_idx];
+        assign dirty_data = flipped_rdata[way_idx];
     end else begin
         assign dirty_byteen = '0;
         assign dirty_data = '0;
@@ -116,28 +119,25 @@ module VX_cache_data #(
     // order the data layout to perform ways multiplexing last.
     // this allows converting way index to binary in parallel with BRAM read.
 
-    wire [`CS_WORDS_PER_LINE-1:0][NUM_WAYS-1:0][`CS_WORD_WIDTH-1:0] wdata;
-    wire [BYTEENW-1:0] wren;
+    wire [`CS_WORDS_PER_LINE-1:0][NUM_WAYS-1:0][`CS_WORD_WIDTH-1:0] line_wdata;
+    wire [BYTEENW-1:0] line_wren;
 
     if (WRITE_ENABLE != 0 || (NUM_WAYS > 1)) begin
-        for (genvar i = 0; i < `CS_WORDS_PER_LINE; ++i) begin
-            assign wdata[i] = (fill || !WRITE_ENABLE) ? {NUM_WAYS{fill_data[i]}} : {NUM_WAYS{write_data[i]}};
-        end
-
         wire [`CS_WORDS_PER_LINE-1:0][NUM_WAYS-1:0][WORD_SIZE-1:0] wren_w;
         for (genvar i = 0; i < `CS_WORDS_PER_LINE; ++i) begin
             for (genvar j = 0; j < NUM_WAYS; ++j) begin
+                assign line_wdata[i][j] = (fill || !WRITE_ENABLE) ? fill_data[i] : write_data[i];
                 assign wren_w[i][j] = ((fill || !WRITE_ENABLE) ? {WORD_SIZE{1'b1}} : write_byteen[i])
                                     & {WORD_SIZE{(way_sel[j] || (NUM_WAYS == 1))}};
             end
         end
-        assign wren = wren_w;
+        assign line_wren = wren_w;
     end else begin
         `UNUSED_VAR (write)
         `UNUSED_VAR (write_byteen)
         `UNUSED_VAR (write_data)
-        assign wdata = fill_data;
-        assign wren  = fill;
+        assign line_wdata = fill_data;
+        assign line_wren  = fill;
     end
 
     VX_onehot_encoder #(
@@ -151,6 +151,8 @@ module VX_cache_data #(
     wire line_read = (read && ~stall)
                   || (WRITEBACK && (fill || flush));
 
+    wire line_write = write || fill;
+
     VX_sp_ram #(
         .DATAW (`CS_LINE_WIDTH * NUM_WAYS),
         .SIZE  (`CS_LINES_PER_BANK),
@@ -160,19 +162,19 @@ module VX_cache_data #(
     ) data_store (
         .clk   (clk),
         .read  (line_read),
-        .write (write || fill),
-        .wren  (wren),
+        .write (line_write),
+        .wren  (line_wren),
         .addr  (line_sel),
-        .wdata (wdata),
-        .rdata (rdata)
+        .wdata (line_wdata),
+        .rdata (line_rdata)
     );
 
     wire [NUM_WAYS-1:0][`CS_WORD_WIDTH-1:0] per_way_rdata;
     if (`CS_WORDS_PER_LINE > 1) begin
-        assign per_way_rdata = rdata[wsel];
+        assign per_way_rdata = line_rdata[wsel];
     end else begin
         `UNUSED_VAR (wsel)
-        assign per_way_rdata = rdata;
+        assign per_way_rdata = line_rdata;
     end
     assign read_data = per_way_rdata[way_idx];
 

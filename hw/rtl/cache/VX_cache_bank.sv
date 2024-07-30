@@ -140,6 +140,7 @@ module VX_cache_bank #(
     wire [NUM_WAYS-1:0]             flush_way_st0;
 
     wire [`CS_LINE_ADDR_WIDTH-1:0]  addr_sel, addr_st0, addr_st1;
+    wire [`CS_LINE_SEL_BITS-1:0]    line_sel_st0, line_sel_st1;
     wire                            rw_sel, rw_st0, rw_st1;
     wire [WORD_SEL_WIDTH-1:0]       wsel_sel, wsel_st0, wsel_st1;
     wire [WORD_SIZE-1:0]            byteen_sel, byteen_st0, byteen_st1;
@@ -291,6 +292,8 @@ module VX_cache_bank #(
 
     wire [`CS_WORD_WIDTH-1:0] write_data_st0 = data_st0[`CS_WORD_WIDTH-1:0];
 
+    assign line_sel_st0 = addr_st0[`CS_LINE_SEL_BITS-1:0];
+
     wire [NUM_WAYS-1:0] evict_way_st0;
     wire [`CS_TAG_SEL_BITS-1:0] evict_tag_st0;
 
@@ -338,7 +341,7 @@ module VX_cache_bank #(
 
     assign way_sel_st0 = (is_fill_st0 || is_flush2_st0) ? evict_way_st0 : tag_matches_st0;
 
-    assign addr2_st0 = (is_fill_st0 || is_flush2_st0) ? {evict_tag_st0, addr_st0[`CS_LINE_SEL_BITS-1:0]} : addr_st0;
+    assign addr2_st0 = (is_fill_st0 || is_flush2_st0) ? {evict_tag_st0, line_sel_st0} : addr_st0;
 
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + MSHR_ADDR_WIDTH + NUM_WAYS + 1 + 1),
@@ -381,16 +384,20 @@ module VX_cache_bank #(
     wire do_cache_rd_st1  = do_read_hit_st1 || do_replay_rd_st1;
     wire do_cache_wr_st1  = do_write_hit_st1 || do_replay_wr_st1;
 
+    assign line_sel_st1 = addr_st1[`CS_LINE_SEL_BITS-1:0];
+
     `UNUSED_VAR (do_write_miss_st1)
 
     // ensure mshr replay always get a hit
     `RUNTIME_ASSERT (~(valid_st1 && is_replay_st1) || is_hit_st1, ("missed mshr replay"));
 
-    // detect BRAM's read-during-write hazard
+    // both tag and data stores use BRAM with no read-during-write protection.
+    // we ned to stall the pipeline to prevent read-after-write hazards.
     assign rdw_hazard1_sel = do_fill_st0; // stall first replay following a fill
     assign rdw_hazard2_sel = WRITEBACK && do_cache_wr_st0; // a writeback can evict any preceeding write
-    always @(posedge clk) begin // stall reads following writes to same address
-        rdw_hazard3_st1 <= do_cache_rd_st0 && do_cache_wr_st1 && (addr_st0 == addr_st1)
+    always @(posedge clk) begin
+        // stall reads following writes to same line address
+        rdw_hazard3_st1 <= do_cache_rd_st0 && do_cache_wr_st1 && (line_sel_st0 == line_sel_st1)
                        && ~rdw_hazard3_st1; // release pipeline stall
     end
 
@@ -588,20 +595,21 @@ module VX_cache_bank #(
     wire is_fill_or_flush_st1 = is_fill_st1 || is_flush_st1;
     wire do_fill_or_flush_st1 = valid_st1 && is_fill_or_flush_st1;
     wire do_writeback_st1 = do_fill_or_flush_st1 && evict_dirty_st1;
-    `UNUSED_VAR (do_writeback_st1)
 
     if (WRITEBACK) begin
         if (DIRTY_BYTES) begin
-            // ensure dirty bytes are valid
+            // ensure dirty bytes match the tag info
             wire has_dirty_bytes = (| dirty_byteen_st1);
-            `RUNTIME_ASSERT (~do_fill_or_flush_st1 || (evict_dirty_st1 == has_dirty_bytes), ("missmatch dirty bytes"));
+            `RUNTIME_ASSERT (~do_fill_or_flush_st1 || (evict_dirty_st1 == has_dirty_bytes), ("missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", evict_dirty_st1, has_dirty_bytes, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID)));
         end
         assign mreq_queue_push = (((do_read_miss_st1 || do_write_miss_st1) && ~mshr_pending_st1)
-                               || do_writeback_st1);
+                               || do_writeback_st1)
+                              && ~rdw_hazard3_st1;
     end else begin
-        `UNUSED_VAR (evict_dirty_st1)
+        `UNUSED_VAR (do_writeback_st1)
         assign mreq_queue_push = ((do_read_miss_st1 && ~mshr_pending_st1)
-                               || do_creq_wr_st1);
+                               || do_creq_wr_st1)
+                              && ~rdw_hazard3_st1;
     end
 
     assign mreq_queue_pop = mem_req_valid && mem_req_ready;
