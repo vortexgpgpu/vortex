@@ -119,11 +119,12 @@ module VX_cache_flush #(
             STATE_WAIT: begin
                 if (no_inflight_reqs) begin
                     state_n = STATE_FLUSH;
+                    flush_done_n = '0;
                 end
             end
             STATE_FLUSH: begin
                 flush_done_n = flush_done | flush_ready;
-                if (flush_done_n == 0) begin
+                if (flush_done_n == {NUM_BANKS{1'b1}}) begin
                     state_n = STATE_DONE;
                     lock_released_n = flush_req_mask;
                 end
