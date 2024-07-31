@@ -43,8 +43,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     localparam BANK_SEL_BITS = `CLOG2(NUM_BANKS);
     localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
     localparam PER_BANK_REGS = `NUM_REGS / NUM_BANKS;
-    localparam METADATAW = ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + `NR_BITS;
-    localparam DATAW = `UUID_WIDTH + METADATAW + 3 * `NUM_THREADS * `XLEN;
+    localparam META_DATAW = ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + `NR_BITS + `UUID_WIDTH;
+    localparam DATAW = META_DATAW + 3 * `NUM_THREADS * `XLEN;
     localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * PER_ISSUE_WARPS);
     localparam PER_BANK_ADDRW = RAM_ADDRW - BANK_SEL_BITS;
     localparam XLEN_SIZE = `XLEN / 8;
@@ -69,8 +69,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     wire pipe_in_ready;
     reg pipe_out_valid;
     wire pipe_out_ready;
-    reg [`UUID_WIDTH-1:0] pipe_out_uuid;
-    reg [METADATAW-1:0] pipe_out_data;
+    reg [META_DATAW-1:0] pipe_out_data;
 
     reg [NUM_SRC_REGS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data, src_data_n;
     reg [NUM_SRC_REGS-1:0] data_fetched;
@@ -174,7 +173,6 @@ module VX_operands import VX_gpu_pkg::*; #(
             end
         end
         if (~pipe_stall) begin
-            pipe_out_uuid  <= scoreboard_if.data.uuid;
             pipe_out_data  <= {
                 scoreboard_if.data.wis,
                 scoreboard_if.data.tmask,
@@ -183,7 +181,8 @@ module VX_operands import VX_gpu_pkg::*; #(
                 scoreboard_if.data.ex_type,
                 scoreboard_if.data.op_type,
                 scoreboard_if.data.op_args,
-                scoreboard_if.data.rd
+                scoreboard_if.data.rd,
+                scoreboard_if.data.uuid
             };
             has_collision  <= has_collision_n;
             gpr_rd_addr    <= gpr_rd_addr_n;
@@ -205,14 +204,12 @@ module VX_operands import VX_gpu_pkg::*; #(
         .valid_in  (stg_in_valid),
         .ready_in  (stg_in_ready),
         .data_in   ({
-            pipe_out_uuid,
             pipe_out_data,
             src_data_n[0],
             src_data_n[1],
             src_data_n[2]
         }),
         .data_out  ({
-            operands_if.data.uuid,
             operands_if.data.wis,
             operands_if.data.tmask,
             operands_if.data.PC,
@@ -221,6 +218,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             operands_if.data.op_type,
             operands_if.data.op_args,
             operands_if.data.rd,
+            operands_if.data.uuid,
             operands_if.data.rs1_data,
             operands_if.data.rs2_data,
             operands_if.data.rs3_data
