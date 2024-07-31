@@ -1439,11 +1439,14 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       std::abort();
     }
   } break;
-  case Opcode::VOTE: {
+    case Opcode::VOTE: {
     bool check;
+    bool is_neg = (func3 >= 4);
+    func3 = func3%4;
     trace->fu_type = FUType::SFU;
     trace->sfu_type = SfuType::VOTE;
     trace->used_iregs.set(rsrc0);
+    trace->fetch_stall = true;
     uint32_t address = immsrc & 0xfff;
     auto mask =  warp.ireg_file.at(0)[address];  // Same mask stored in all threads
     switch (func3) {
@@ -1451,7 +1454,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       check = true;
       for (uint32_t t = thread_start; t < num_threads; ++t) {
         if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
-          if (!((1 << 31) & rsdata[t][0].u)){ //Predicate not negated
+          if (!(is_neg)){ //Predicate not negated
             if(!(1 << 0 & rsdata[t][0].u)){ // check src predicate 
               check = false;
             }
@@ -1475,7 +1478,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       check = false;
       for (uint32_t t = thread_start; t < num_threads; ++t) {
         if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
-          if (!((1 << 31) & rsdata[t][0].u)){ //Predicate not negated
+          if (!(is_neg)){ //Predicate not negated
             if(1 << 0 & rsdata[t][0].u){ // check src predicate 
               check = true;
             }
@@ -1542,10 +1545,11 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   case Opcode::SHFL:{
     trace->fu_type = FUType::SFU;
     trace->sfu_type = SfuType::SHFL;
+    trace->fetch_stall = true;
     uint32_t address = immsrc & 0x00f;
     auto mask =  warp.ireg_file.at(0)[address];  // Same mask stored in all threads
-    uint32_t b = (immsrc & 0xf00) >> 8;
-    uint32_t c_add = (immsrc & 0x0f0) >> 4;
+    uint32_t b = (immsrc & 0x0f0) >> 4;
+    uint32_t c_add = (immsrc & 0xf00) >> 8;
     uint32_t lane;
     bool p;
     for (uint32_t t = thread_start; t < num_threads; ++t) { 
