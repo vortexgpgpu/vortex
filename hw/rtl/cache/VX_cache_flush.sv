@@ -26,13 +26,16 @@ module VX_cache_flush #(
     VX_mem_bus_if.slave     core_bus_in_if [NUM_REQS],
     VX_mem_bus_if.master    core_bus_out_if [NUM_REQS],
     input wire [NUM_BANKS-1:0] bank_req_fire,
-    output wire [NUM_BANKS-1:0] flush_valid,
-    input wire [NUM_BANKS-1:0] flush_ready
+    output wire [NUM_BANKS-1:0] flush_begin,
+    input wire [NUM_BANKS-1:0] flush_end
 );
     localparam STATE_IDLE  = 0;
-    localparam STATE_WAIT  = 1;
+    localparam STATE_WAIT1 = 1;
     localparam STATE_FLUSH = 2;
-    localparam STATE_DONE  = 3;
+    localparam STATE_WAIT2 = 3;
+    localparam STATE_DONE  = 4;
+
+    reg [2:0] state, state_n;
 
     // track in-flight core requests
 
@@ -76,7 +79,6 @@ module VX_cache_flush #(
         `UNUSED_VAR (bank_req_fire)
     end
 
-    reg [1:0] state, state_n;
     reg [NUM_BANKS-1:0] flush_done, flush_done_n;
 
     wire [NUM_REQS-1:0] flush_req_mask;
@@ -112,17 +114,21 @@ module VX_cache_flush #(
         case (state)
             STATE_IDLE: begin
                 if (flush_req_enable) begin
-                    state_n = (BANK_SEL_LATENCY != 0) ? STATE_WAIT : STATE_FLUSH;
+                    state_n = (BANK_SEL_LATENCY != 0) ? STATE_WAIT1 : STATE_FLUSH;
                 end
             end
-            STATE_WAIT: begin
+            STATE_WAIT1: begin
                 if (no_inflight_reqs) begin
                     state_n = STATE_FLUSH;
                 end
             end
             STATE_FLUSH: begin
+                // generate a flush request pulse
+                state_n = STATE_WAIT2;
+            end
+            STATE_WAIT2: begin
                 // wait for all banks to finish flushing
-                flush_done_n = flush_done | flush_ready;
+                flush_done_n = flush_done | flush_end;
                 if (flush_done_n == {NUM_BANKS{1'b1}}) begin
                     state_n = STATE_DONE;
                     flush_done_n = '0;
@@ -154,6 +160,6 @@ module VX_cache_flush #(
         end
     end
 
-    assign flush_valid = {NUM_BANKS{state == STATE_FLUSH}};
+    assign flush_begin = {NUM_BANKS{state == STATE_FLUSH}};
 
 endmodule
