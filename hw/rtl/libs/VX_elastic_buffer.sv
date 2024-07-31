@@ -103,9 +103,9 @@ module VX_elastic_buffer #(
 
         assign ready_in = ~full;
 
-        VX_elastic_buffer #(
+        VX_pipe_buffer #(
             .DATAW (DATAW),
-            .SIZE  ((OUT_REG == 2) ? 1 : 0)
+            .DEPTH ((OUT_REG > 0) ? (OUT_REG-1) : 0)
         ) out_buf (
             .clk       (clk),
             .reset     (reset),
