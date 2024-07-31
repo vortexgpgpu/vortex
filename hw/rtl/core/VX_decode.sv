@@ -517,6 +517,67 @@ module VX_decode import VX_gpu_pkg::*; #(
                     default:;
                 endcase
             end
+            `INST_VOTE: begin
+                ex_type = `EX_ALU;
+                is_wstall = 1;
+                op_args.alu.use_imm = 1;
+                op_args.alu.imm = `SEXT(`IMM_BITS, u_12);
+                op_args.alu.xtype = `ALU_TYPE_OTHER;
+                op_args.alu.is_w = 1;
+                use_rd  = 1;
+                `USED_IREG (rd);
+                `USED_FREG (rs1);
+                `USED_FREG (rs2);  //membermask imm[23:20]
+                case (func3)
+                    3'b000: begin
+                        op_type = `INST_OP_BITS'(`VOTE_ALL);    
+                    end
+                    3'b001: begin
+                        op_type = `INST_OP_BITS'(`VOTE_ANY);    
+                    end
+                    3'b010: begin
+                        op_type = `INST_OP_BITS'(`VOTE_UNI);    
+                    end
+                    3'b011: begin
+                        op_type = `INST_OP_BITS'(`VOTE_BALLOT);    
+                    end
+                    3'b100: begin
+                        op_type = `INST_OP_BITS'(`VOTE_NONE);    
+                    end
+                    3'b101: begin
+                        op_type = `INST_OP_BITS'(`VOTE_NOT_ALL);    
+                    end
+                    default:;
+                endcase
+            end
+            `INST_SHFL: begin
+                ex_type = `EX_ALU;
+                is_wstall = 1;
+                op_args.alu.use_imm = 1;
+                op_args.alu.imm = `SEXT(`IMM_BITS, u_12);
+                op_args.alu.xtype = `ALU_TYPE_OTHER;
+                op_args.alu.is_w = 1;
+                use_rd  = 1;
+                `USED_IREG (rd);
+                `USED_FREG (rs1);
+                `USED_FREG (rs2);  //membermask imm[23:20]
+                `USED_FREG (rs3);  //c imm[31:27]
+                case (func3)
+                    3'b000: begin
+                        op_type = `INST_OP_BITS'(`SHFL_BFLY);    
+                    end
+                    3'b001: begin
+                        op_type = `INST_OP_BITS'(`SHFL_UP);    
+                    end
+                    3'b010: begin
+                        op_type = `INST_OP_BITS'(`SHFL_DOWN);    
+                    end
+                    3'b011: begin
+                        op_type = `INST_OP_BITS'(`SHFL_IDX);    
+                    end
+                    default:;
+                endcase
+            end
             default:;
         endcase
     end
