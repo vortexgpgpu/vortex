@@ -42,17 +42,15 @@ module VX_bank_flush #(
     localparam STATE_IDLE  = 2'd0;
     localparam STATE_INIT  = 2'd1;
     localparam STATE_FLUSH = 2'd2;
+    localparam STATE_DONE  = 2'd3;
 
     reg [CTR_WIDTH-1:0] counter_r;
     reg [1:0] state_r, state_n;
-    reg flush_in_ready_r, flush_in_ready_n;
 
     always @(*) begin
         state_n = state_r;
-        flush_in_ready_n = 0;
         case (state_r)
-            // STATE_IDLE
-            default: begin
+            STATE_IDLE: begin
                 if (flush_in_valid && mshr_empty) begin
                     state_n = STATE_FLUSH;
                 end
@@ -63,22 +61,23 @@ module VX_bank_flush #(
                 end
             end
             STATE_FLUSH: begin
-                if (counter_r == ((2 ** CTR_WIDTH)-1)) begin
-                    state_n = STATE_IDLE;
-                    flush_in_ready_n = 1;
+                if (counter_r == ((2 ** CTR_WIDTH)-1) && flush_out_ready) begin
+                    state_n = STATE_DONE;
                 end
+            end
+            STATE_DONE: begin
+                // generate a completion pulse
+                state_n = STATE_IDLE;
             end
         endcase
     end
 
     always @(posedge clk) begin
         if (reset) begin
-            state_r <= STATE_INIT;
+            state_r   <= STATE_INIT;
             counter_r <= '0;
-            flush_in_ready_r <= '0;
         end else begin
             state_r <= state_n;
-            flush_in_ready_r <= flush_in_ready_n;
             if (state_r != STATE_IDLE) begin
                 if ((state_r == STATE_INIT) || flush_out_ready) begin
                     counter_r <= counter_r + CTR_WIDTH'(1);
@@ -89,7 +88,8 @@ module VX_bank_flush #(
         end
     end
 
-    assign flush_in_ready  = flush_in_ready_r;
+    assign flush_in_ready  = (state_r == STATE_DONE);
+
     assign flush_out_init  = (state_r == STATE_INIT);
     assign flush_out_valid = (state_r == STATE_FLUSH);
     assign flush_out_line  = counter_r[`CS_LINE_SEL_BITS-1:0];
