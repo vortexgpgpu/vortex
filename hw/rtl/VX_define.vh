@@ -109,23 +109,6 @@
 `define INST_EXT3       7'b1011011 // 0x5B
 `define INST_EXT4       7'b1111011 // 0x7B
 
-// CUDA Vote Extension
-`define INST_VOTE       7'b1011010 // 0x5a
-`define INST_SHFL       7'b1011100 // 0x5c
-
-`define VOTE_ALL        4'b0000
-`define VOTE_ANY        4'b0001
-`define VOTE_UNI        4'b0010
-`define VOTE_BALLOT     4'b0011
-
-`define SHFL_BFLY       4'b0100
-`define SHFL_UP         4'b0101
-`define SHFL_DOWN       4'b0110
-`define SHFL_IDX        4'b0111
-
-`define VOTE_NONE       4'b1000
-`define VOTE_NOT_ALL    4'b1001
-
 // Opcode extensions
 `define INST_R_F7_MUL   7'b0000001
 `define INST_R_F7_ZICOND 7'b0000111
