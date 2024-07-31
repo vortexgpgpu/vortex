@@ -18,7 +18,7 @@ module VX_stream_arb #(
     parameter NUM_INPUTS    = 1,
     parameter NUM_OUTPUTS   = 1,
     parameter DATAW         = 1,
-    parameter `STRING ARBITER = "P",
+    parameter `STRING ARBITER = "R",
     parameter MAX_FANOUT    = `MAX_FANOUT,
     parameter OUT_BUF       = 0,
     parameter LUTRAM        = 0,

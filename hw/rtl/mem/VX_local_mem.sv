@@ -120,6 +120,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (REQ_DATAW),
         .PERF_CTR_BITS (`PERF_CTR_BITS),
+        .ARBITER     ("F"),
         .OUT_BUF     (3) // output should be registered for the data_store addressing
     ) req_xbar (
         .clk       (clk),
@@ -209,6 +210,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .NUM_INPUTS  (NUM_BANKS),
         .NUM_OUTPUTS (NUM_REQS),
         .DATAW       (RSP_DATAW),
+        .ARBITER     ("F"),
         .OUT_BUF     (OUT_BUF)
     ) rsp_xbar (
         .clk       (clk),

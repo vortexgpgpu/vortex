@@ -490,6 +490,7 @@ module VX_lsu_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     VX_stream_arb #(
         .NUM_INPUTS (2),
         .DATAW      (RSP_ARB_DATAW),
+        .ARBITER    ("P"), // prioritize commit_rsp_if
         .OUT_BUF    (3)
     ) rsp_arb (
         .clk       (clk),
