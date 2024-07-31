@@ -117,7 +117,7 @@ module VX_cache_data #(
     end
 
     // order the data layout to perform ways multiplexing last.
-    // this allows converting way index to binary in parallel with BRAM read.
+    // this allows converting way index to binary in parallel with BRAM readaccess  and way selection.
 
     wire [`CS_WORDS_PER_LINE-1:0][NUM_WAYS-1:0][`CS_WORD_WIDTH-1:0] line_wdata;
     wire [BYTEENW-1:0] line_wren;
