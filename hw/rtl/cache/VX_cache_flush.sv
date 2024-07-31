@@ -118,17 +118,22 @@ module VX_cache_flush #(
             STATE_WAIT: begin
                 if (no_inflight_reqs) begin
                     state_n = STATE_FLUSH;
-                    flush_done_n = '0;
                 end
             end
             STATE_FLUSH: begin
+                // wait for all banks to finish flushing
                 flush_done_n = flush_done | flush_ready;
                 if (flush_done_n == {NUM_BANKS{1'b1}}) begin
                     state_n = STATE_DONE;
+                    flush_done_n = '0;
+                    // only release current flush requests
+                    // and keep normal requests locked
                     lock_released_n = flush_req_mask;
                 end
             end
             STATE_DONE: begin
+                // wait until released flush requests are issued
+                // when returning to IDLE state other requests will unlock
                 lock_released_n = lock_released & ~core_bus_out_ready;
                 if (lock_released_n == 0) begin
                     state_n = STATE_IDLE;
