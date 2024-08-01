@@ -14,6 +14,7 @@
 `include "VX_cache_define.vh"
 
 module VX_bank_flush #(
+    parameter BANK_ID    = 0,
     // Size of cache in bytes
     parameter CACHE_SIZE = 1024,
     // Size of line inside a bank in bytes
@@ -34,16 +35,18 @@ module VX_bank_flush #(
     output wire [`CS_LINE_SEL_BITS-1:0] flush_line,
     output wire [NUM_WAYS-1:0] flush_way,
     input  wire flush_ready,
-    input  wire mshr_empty
+    input  wire mshr_empty,
+    input  wire bank_empty
 );
     // ways interation is only needed when eviction is enabled
     localparam CTR_WIDTH = `CS_LINE_SEL_BITS + (WRITEBACK ? `CS_WAY_SEL_BITS : 0);
 
     localparam STATE_IDLE  = 0;
     localparam STATE_INIT  = 1;
-    localparam STATE_WAIT  = 2;
+    localparam STATE_WAIT1 = 2;
     localparam STATE_FLUSH = 3;
-    localparam STATE_DONE  = 4;
+    localparam STATE_WAIT2 = 4;
+    localparam STATE_DONE  = 5;
 
     reg [2:0] state_r, state_n;
 
@@ -54,7 +57,7 @@ module VX_bank_flush #(
         case (state_r)
             STATE_IDLE: begin
                 if (flush_begin) begin
-                    state_n = STATE_WAIT;
+                    state_n = STATE_WAIT1;
                 end
             end
             STATE_INIT: begin
@@ -62,7 +65,7 @@ module VX_bank_flush #(
                     state_n = STATE_IDLE;
                 end
             end
-            STATE_WAIT: begin
+            STATE_WAIT1: begin
                 // wait for pending requests to complete
                 if (mshr_empty) begin
                     state_n = STATE_FLUSH;
@@ -70,6 +73,14 @@ module VX_bank_flush #(
             end
             STATE_FLUSH: begin
                 if (counter_r == ((2 ** CTR_WIDTH)-1) && flush_ready) begin
+                    state_n = (BANK_ID == 0) ? STATE_DONE : STATE_WAIT2;
+                end
+            end
+            STATE_WAIT2: begin
+                // ensure the bank is empty before notifying the cache flush unit,
+                // because the flush request to lower caches only goes through bank0
+                // and it is important that request gets send out last.
+                if (bank_empty) begin
                     state_n = STATE_DONE;
                 end
             end
