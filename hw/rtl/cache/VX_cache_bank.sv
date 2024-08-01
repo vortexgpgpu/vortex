@@ -120,6 +120,7 @@ module VX_cache_bank #(
 
     wire                            crsp_queue_stall;
     wire                            mshr_alm_full;
+    wire                            mreq_queue_empty;
     wire                            mreq_queue_alm_full;
 
     wire [`CS_LINE_ADDR_WIDTH-1:0]  mem_rsp_addr;
@@ -168,8 +169,12 @@ module VX_cache_bank #(
     wire [NUM_WAYS-1:0] flush_way;
     wire flush_ready;
 
+    // ensure we have no pending memory request in the bank
+    wire no_pending_req = ~valid_st0 && ~valid_st1 && mreq_queue_empty;
+
     // flush unit
     VX_bank_flush #(
+        .BANK_ID    (BANK_ID),
         .CACHE_SIZE (CACHE_SIZE),
         .LINE_SIZE  (LINE_SIZE),
         .NUM_BANKS  (NUM_BANKS),
@@ -185,7 +190,8 @@ module VX_cache_bank #(
         .flush_line  (flush_sel),
         .flush_way   (flush_way),
         .flush_ready (flush_ready),
-        .mshr_empty  (mshr_empty)
+        .mshr_empty  (mshr_empty),
+        .bank_empty  (no_pending_req)
     );
 
     wire rdw_hazard1_sel;
@@ -585,7 +591,7 @@ module VX_cache_bank #(
 
     // schedule memory request
 
-    wire mreq_queue_push, mreq_queue_pop, mreq_queue_empty;
+    wire mreq_queue_push, mreq_queue_pop;
     wire [`CS_LINE_WIDTH-1:0] mreq_queue_data;
     wire [LINE_SIZE-1:0] mreq_queue_byteen;
     wire [`CS_LINE_ADDR_WIDTH-1:0] mreq_queue_addr;
