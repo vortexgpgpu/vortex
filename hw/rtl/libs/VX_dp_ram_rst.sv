@@ -62,53 +62,52 @@ module VX_dp_ram_rst #(
         assign ram_n[i * WSELW +: WSELW] = ((WRENW == 1) | wren[i]) ? wdata[i * WSELW +: WSELW] : ram[waddr][i * WSELW +: WSELW];
     end
 
+    reg [DATAW-1:0] prev_data;
+    reg [ADDRW-1:0] prev_waddr;
+    reg prev_write;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            for (integer i = 0; i < SIZE; ++i) begin
+                ram[i] <= DATAW'(INIT_VALUE);
+            end
+            prev_write <= 0;
+            prev_data  <= '0;
+            prev_waddr <= '0;
+        end else begin
+            if (write) begin
+                ram[waddr] <= ram_n;
+            end
+            prev_write <= (| wren);
+            prev_data  <= ram[waddr];
+            prev_waddr <= waddr;
+        end
+    end
+
+    wire [DATAW-1:0] rdata_w;
+
+    if (LUTRAM || !NO_RWCHECK) begin
+        `UNUSED_VAR (prev_write)
+        `UNUSED_VAR (prev_data)
+        `UNUSED_VAR (prev_waddr)
+        assign rdata_w = ram[raddr];
+    end else begin
+        assign rdata_w = (prev_write && (prev_waddr == raddr)) ? prev_data : ram[raddr];
+        if (RW_ASSERT) begin
+            `RUNTIME_ASSERT(~read || (rdata_w == ram[raddr]), ("read after write hazard"));
+        end
+    end
+
     if (OUT_REG != 0) begin
         reg [DATAW-1:0] rdata_r;
         always @(posedge clk) begin
-            if (reset) begin
-                for (integer i = 0; i < SIZE; ++i) begin
-                    ram[i] <= DATAW'(INIT_VALUE);
-                end
-                rdata_r <= '0;
-            end else begin
-                if (write) begin
-                    ram[waddr] <= ram_n;
-                end
-                if (read) begin
-                    rdata_r <= ram[raddr];
-                end
+            if (read) begin
+                rdata_r <= rdata_w;
             end
         end
         assign rdata = rdata_r;
     end else begin
-        reg [DATAW-1:0] prev_data;
-        reg [ADDRW-1:0] prev_waddr;
-        reg prev_write;
-        always @(posedge clk) begin
-            if (reset) begin
-                for (integer i = 0; i < SIZE; ++i) begin
-                    ram[i] <= DATAW'(INIT_VALUE);
-                end
-                prev_write <= 0;
-                prev_data  <= '0;
-                prev_waddr <= '0;
-            end else begin
-                if (write) begin
-                    ram[waddr] <= ram_n;
-                end
-                prev_write <= (| wren);
-                prev_data  <= ram[waddr];
-                prev_waddr <= waddr;
-            end
-        end
-        if (LUTRAM || !NO_RWCHECK) begin
-            `UNUSED_VAR (prev_write)
-            `UNUSED_VAR (prev_data)
-            `UNUSED_VAR (prev_waddr)
-            assign rdata = ram[raddr];
-        end else begin
-            assign rdata = (prev_write && (prev_waddr == raddr)) ? prev_data : ram[raddr];
-        end
+        assign rdata = rdata_w;
     end
 
 endmodule
