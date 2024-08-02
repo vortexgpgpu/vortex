@@ -72,9 +72,10 @@ module VX_ipdom_stack #(
         .LUTRAM  (OUT_REG ? 0 : 1)
     ) store (
         .clk   (clk),
+        .reset (1'b0),
         .read  (1'b1),
         .write (push),
-        `UNUSED_PIN (wren),
+        .wren  (1'b1),
         .waddr (wr_ptr),
         .wdata ({q1, q0}),
         .raddr (rd_ptr),
