@@ -1443,8 +1443,8 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     bool check;
     bool is_neg = (func3 >= 4);
     func3 = func3%4;
-    trace->fu_type = FUType::SFU;
-    trace->sfu_type = SfuType::VOTE;
+    // trace->fu_type = FUType::SFU;
+    // trace->sfu_type = SfuType::VOTE;
     trace->used_iregs.set(rsrc0);
     trace->fetch_stall = true;
     uint32_t address = immsrc & 0xfff;
