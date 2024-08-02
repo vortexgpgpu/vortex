@@ -519,7 +519,7 @@ module VX_decode import VX_gpu_pkg::*; #(
             end
             `INST_VOTE: begin
                 ex_type = `EX_ALU;
-                is_wstall = 1;
+                //is_wstall = 1;
                 op_args.alu.use_imm = 1;
                 op_args.alu.imm = `SEXT(`IMM_BITS, u_12);
                 op_args.alu.xtype = `ALU_TYPE_OTHER;
