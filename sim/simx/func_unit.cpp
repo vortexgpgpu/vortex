@@ -279,6 +279,10 @@ void SfuUnit::tick() {
 				release_warp = core_->barrier(trace_data->arg1, trace_data->arg2, trace->wid);
 			}
 		} break;
+		case SfuType::VOTE: 
+		case SfuType::SHFL:
+			output.push(trace, 1);
+			break;
 		default:
 			std::abort();
 		}
