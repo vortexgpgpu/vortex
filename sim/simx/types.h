@@ -219,6 +219,8 @@ inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
   case SfuType::CSRRW:  os << "CSRRW"; break;
   case SfuType::CSRRS:  os << "CSRRS"; break;
   case SfuType::CSRRC:  os << "CSRRC"; break;
+  case SfuType::VOTE:  os << "VOTE"; break;
+  case SfuType::SHFL:  os << "SHFL"; break;
   default: assert(false);
   }
   return os;
