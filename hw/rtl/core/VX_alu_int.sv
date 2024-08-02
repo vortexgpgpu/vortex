@@ -147,6 +147,7 @@ module VX_alu_int #(
     wire [NUM_LANES-1:0][`XLEN-1:0] maxLane, minLane;
     reg [NUM_LANES-1:0][`XLEN-1:0] lane;
     reg [NUM_LANES-1:0] p;
+    wire [NUM_LANES-1:0][`XLEN-1:0] active_l;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign b[i] = (alu_in2_imm[i]>>4)&(`XLEN'(4'b1111));
@@ -180,7 +181,8 @@ module VX_alu_int #(
             if(p[i] == 1'b0) begin
                 lane[i] = `XLEN'(i);
             end
-            shfl_result[i] = alu_in1[i];//(active_t[i] && ((1 << lane[i]) & alu_in2[i]) && (lane[i] < NUM_LANES)) ? alu_in1[$signed(lane[i])] : alu_in1[i];
+            active_l[i] = lane[i] & alu_in2[i];
+            shfl_result[i] = (active_t[i] && (active_l[i] == `XLEN'(1'b1)) && (lane[i] < NUM_LANES)) ? alu_in1[$signed(lane[i])] : alu_in1[i];
         end
     end
 
