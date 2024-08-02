@@ -177,10 +177,11 @@ module VX_fifo_queue #(
                     .SIZE   (DEPTH),
                     .LUTRAM (LUTRAM)
                 ) dp_ram (
-                    .clk(clk),
+                    .clk   (clk),
+                    .reset (1'b0),
                     .read  (1'b1),
                     .write (push),
-                    `UNUSED_PIN (wren),
+                    .wren  (1'b1),
                     .waddr (wr_ptr_r),
                     .wdata (data_in),
                     .raddr (rd_ptr_r),
@@ -226,9 +227,10 @@ module VX_fifo_queue #(
                     .LUTRAM (LUTRAM)
                 ) dp_ram (
                     .clk   (clk),
+                    .reset (1'b0),
                     .read  (1'b1),
                     .write (push),
-                    `UNUSED_PIN (wren),
+                    .wren  (1'b1),
                     .waddr (wr_ptr_r),
                     .wdata (data_in),
                     .raddr (rd_ptr_n_r),

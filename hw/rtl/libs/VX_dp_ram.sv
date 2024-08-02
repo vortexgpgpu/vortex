@@ -23,12 +23,14 @@ module VX_dp_ram #(
     parameter NO_RWCHECK  = 0,
     parameter LUTRAM      = 0,
     parameter RW_ASSERT   = 0,
+    parameter RESET_RAM   = 0,
     parameter INIT_ENABLE = 0,
     parameter INIT_FILE   = "",
     parameter [DATAW-1:0] INIT_VALUE = 0,
     parameter ADDRW       = `LOG2UP(SIZE)
 ) (
     input wire               clk,
+    input wire               reset,
     input wire               read,
     input wire               write,
     input wire [WRENW-1:0]   wren,
@@ -192,12 +194,21 @@ module VX_dp_ram #(
     reg prev_write;
 
     always @(posedge clk) begin
-        if (write) begin
-            ram[waddr] <= ram_n;
+        if (RESET_RAM && reset) begin
+            for (integer i = 0; i < SIZE; ++i) begin
+                ram[i] <= DATAW'(INIT_VALUE);
+            end
+            prev_write <= 0;
+            prev_data  <= '0;
+            prev_waddr <= '0;
+        end else begin
+            if (write) begin
+                ram[waddr] <= ram_n;
+            end
+            prev_write <= write;
+            prev_data  <= ram[waddr];
+            prev_waddr <= waddr;
         end
-        prev_write <= write;
-        prev_data  <= ram[waddr];
-        prev_waddr <= waddr;
     end
 
     if (LUTRAM || !NO_RWCHECK) begin
@@ -216,7 +227,9 @@ module VX_dp_ram #(
     if (OUT_REG != 0) begin
         reg [DATAW-1:0] rdata_r;
         always @(posedge clk) begin
-            if (read) begin
+            if (reset) begin
+                rdata_r <= '0;
+            end else if (read) begin
                 rdata_r <= rdata_w;
             end
         end
