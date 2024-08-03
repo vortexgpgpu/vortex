@@ -182,7 +182,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
         VX_elastic_buffer #(
             .DATAW (REQ_SEL_WIDTH + TAG_WIDTH),
-            .SIZE  (0)
+            .SIZE  (1)
         ) bank_buf (
             .clk       (clk),
             .reset     (bank_reset),
