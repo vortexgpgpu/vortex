@@ -150,7 +150,7 @@ module VX_pe_serializer #(
     `RESET_RELAY (out_buf_reset, reset);
 
     VX_elastic_buffer #(
-        .DATAW   (DATA_OUT_WIDTH + TAG_WIDTH),
+        .DATAW   (NUM_LANES * DATA_OUT_WIDTH + TAG_WIDTH),
         .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
         .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
     ) out_buf (
