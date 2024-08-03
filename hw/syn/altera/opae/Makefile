@@ -76,7 +76,7 @@ endif
 # Debugging
 ifdef DEBUG
 	ifneq ($(TARGET), fpga)
-		CFLAGS += $(DBG_TRACE_FLAGS)
+		CFLAGS += -DDEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
 	else
 		CFLAGS += -DNDEBUG
 	endif
