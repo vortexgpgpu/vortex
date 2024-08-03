@@ -130,9 +130,10 @@ module VX_cache_tags #(
             .RW_ASSERT (1)
         ) tag_store (
             .clk   (clk),
+            .reset (1'b0),
             .read  (line_read),
             .write (line_write),
-            `UNUSED_PIN (wren),
+            .wren  (1'b1),
             .addr  (line_sel),
             .wdata (line_wdata),
             .rdata (line_rdata)

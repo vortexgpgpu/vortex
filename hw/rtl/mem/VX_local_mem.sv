@@ -166,6 +166,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .WRENW (WORD_SIZE)
         ) data_store (
             .clk   (clk),
+            .reset (1'b0),
             .read  (1'b1),
             .write (per_bank_req_valid[i] && per_bank_req_ready[i] && per_bank_req_rw[i]),
             .wren  (per_bank_req_byteen[i]),
