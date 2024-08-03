@@ -52,7 +52,7 @@ CXXFLAGS += -I$(VORTEX_RT_PATH)/include -I$(ROOT_DIR)/hw
 
 LDFLAGS += -L$(ROOT_DIR)/runtime -lvortex
 
-# Debugigng
+# Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0
 else

@@ -12,7 +12,7 @@ LDFLAGS += -shared -pthread -ldl
 
 SRCS := $(SRC_DIR)/vortex.cpp $(SRC_DIR)/utils.cpp
 
-# Debugigng
+# Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0
 else

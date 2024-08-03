@@ -111,7 +111,7 @@ ifeq ($(TARGET), hw_emu)
 	CFLAGS += -DSIMULATION
 endif
 
-# Debugigng
+# Debugging
 ifdef DEBUG
 	VPP_FLAGS += -g --debug.protocol all
 	ifneq ($(TARGET), hw)
