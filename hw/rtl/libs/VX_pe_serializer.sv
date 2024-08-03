@@ -21,7 +21,7 @@ module VX_pe_serializer #(
     parameter DATA_IN_WIDTH  = 1,
     parameter DATA_OUT_WIDTH = 1,
     parameter TAG_WIDTH      = 0,
-    parameter PE_REG         = 0'
+    parameter PE_REG         = 0,
     parameter OUT_BUF        = 0
 ) (
     input wire                          clk,
