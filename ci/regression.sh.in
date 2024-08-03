@@ -210,6 +210,13 @@ config1()
     CONFIGS="-DISSUE_WIDTH=2 -DNUM_FPU_BLOCK=1 -DNUM_FPU_LANES=2" ./ci/blackbox.sh --driver=simx --app=vecaddx
     CONFIGS="-DISSUE_WIDTH=4 -DNUM_FPU_BLOCK=4 -DNUM_FPU_LANES=4" ./ci/blackbox.sh --driver=simx --app=vecaddx
 
+    # FPU's PE scaling
+    CONFIGS="-DFMA_PE_RATIO=2" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-tfmadd"
+    CONFIGS="-DFCVT_PE_RATIO=2" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-tftoi"
+    CONFIGS="-DFDIV_PE_RATIO=2" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-tfdiv"
+    CONFIGS="-DFSQRT_PE_RATIO=2" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-tfsqrt"
+    CONFIGS="-DFNCP_PE_RATIO=2" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-tfclamp"
+
     # LSU scaling
     CONFIGS="-DISSUE_WIDTH=2 -DNUM_LSU_BLOCK=1 -DNUM_LSU_LANES=2" ./ci/blackbox.sh --driver=rtlsim --app=vecaddx
     CONFIGS="-DISSUE_WIDTH=4 -DNUM_LSU_BLOCK=4 -DNUM_LSU_LANES=4" ./ci/blackbox.sh --driver=rtlsim --app=vecaddx
