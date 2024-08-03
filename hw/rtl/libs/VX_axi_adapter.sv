@@ -204,6 +204,8 @@ module VX_axi_adapter #(
         `RUNTIME_ASSERT(~m_axi_rvalid[i] || m_axi_rresp[i] == 0, ("%t: *** AXI response error", $time));
     end
 
+    `RESET_RELAY (rsp_arb_reset, reset);
+
     VX_stream_arb #(
         .NUM_INPUTS (NUM_BANKS),
         .DATAW      (DATA_WIDTH + TAG_WIDTH),
@@ -211,7 +213,7 @@ module VX_axi_adapter #(
         .OUT_BUF    (RSP_OUT_BUF)
     ) rsp_arb (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (rsp_arb_reset),
         .valid_in  (rsp_arb_valid_in),
         .data_in   (rsp_arb_data_in),
         .ready_in  (rsp_arb_ready_in),
