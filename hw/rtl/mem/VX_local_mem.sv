@@ -159,11 +159,11 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0] per_bank_rsp_tag;
     wire [NUM_BANKS-1:0]                per_bank_rsp_ready;
 
-    `RESET_RELAY (bank_reset, reset);
-
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         wire bank_rsp_valid, bank_rsp_ready;
         wire [WORD_WIDTH-1:0] bank_rsp_data;
+
+        `RESET_RELAY (bram_reset, reset);
 
         VX_sp_ram #(
             .DATAW (WORD_WIDTH),
@@ -172,7 +172,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),
-            .reset (reset),
+            .reset (bram_reset),
             .read  (per_bank_req_valid[i] && per_bank_req_ready[i] && ~per_bank_req_rw[i]),
             .write (per_bank_req_valid[i] && per_bank_req_ready[i] && per_bank_req_rw[i]),
             .wren  (per_bank_req_byteen[i]),
@@ -185,7 +185,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         reg [BANK_ADDR_WIDTH-1:0] last_wr_addr;
         reg last_wr_valid;
         always @(posedge clk) begin
-            if (reset) begin
+            if (bram_reset) begin
                 last_wr_valid <= 0;
             end else begin
                 last_wr_valid <= per_bank_req_valid[i] && per_bank_req_ready[i] && per_bank_req_rw[i];
@@ -201,9 +201,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         // register BRAM output
         VX_pipe_buffer #(
             .DATAW (REQ_SEL_WIDTH + WORD_WIDTH + TAG_WIDTH)
-        ) bank_buf (
+        ) bram_buf (
             .clk       (clk),
-            .reset     (bank_reset),
+            .reset     (bram_reset),
             .valid_in  (bank_rsp_valid),
             .ready_in  (bank_rsp_ready),
             .data_in   ({per_bank_req_idx[i], bank_rsp_data,        per_bank_req_tag[i]}),

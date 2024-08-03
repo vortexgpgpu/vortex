@@ -172,6 +172,9 @@ module VX_cache_bank #(
     // ensure we have no pending memory request in the bank
     wire no_pending_req = ~valid_st0 && ~valid_st1 && mreq_queue_empty;
 
+    // this reset relay should match pipeline during tags initialization
+    `RESET_RELAY (flush_reset, reset);
+
     // flush unit
     VX_bank_flush #(
         .BANK_ID    (BANK_ID),
@@ -182,7 +185,7 @@ module VX_cache_bank #(
         .WRITEBACK  (WRITEBACK)
     ) flush_unit (
         .clk         (clk),
-        .reset       (reset),
+        .reset       (flush_reset),
         .flush_begin (flush_begin),
         .flush_end   (flush_end),
         .flush_init  (init_valid),
@@ -269,15 +272,17 @@ module VX_cache_bank #(
         assign req_uuid_sel = 0;
     end
 
+    `RESET_RELAY (pipe0_reset, reset);
+
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + NUM_WAYS + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + 1 + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
-        .reset    (reset),
+        .reset    (pipe0_reset),
         .enable   (~pipe_stall),
-        .data_in  ({valid_sel, init_valid, replay_enable, fill_enable, flush_enable, creq_enable, creq_flush_sel, flush_way, addr_sel, data_sel, rw_sel, byteen_sel, wsel_sel, req_idx_sel, tag_sel, replay_id}),
-        .data_out ({valid_st0, is_init_st0,     is_replay_st0, is_fill_st0, is_flush_st0, is_creq_st0, creq_flush_st0, flush_way_st0,  addr_st0, data_st0, rw_st0, byteen_st0, wsel_st0, req_idx_st0, tag_st0, replay_id_st0})
+        .data_in  ({valid_sel, init_valid,  replay_enable, fill_enable, flush_enable, creq_enable, creq_flush_sel, flush_way,      addr_sel, data_sel, rw_sel, byteen_sel, wsel_sel, req_idx_sel, tag_sel, replay_id}),
+        .data_out ({valid_st0, is_init_st0, is_replay_st0, is_fill_st0, is_flush_st0, is_creq_st0, creq_flush_st0, flush_way_st0,  addr_st0, data_st0, rw_st0, byteen_st0, wsel_st0, req_idx_st0, tag_st0, replay_id_st0})
     );
 
     if (UUID_WIDTH != 0) begin
@@ -304,7 +309,7 @@ module VX_cache_bank #(
     wire [NUM_WAYS-1:0] evict_way_st0;
     wire [`CS_TAG_SEL_BITS-1:0] evict_tag_st0;
 
-    `RESET_RELAY (tag_reset, reset);
+    `RESET_RELAY (tags_reset, reset);
 
     VX_cache_tags #(
         .INSTANCE_ID($sformatf("%s-tags", INSTANCE_ID)),
@@ -318,7 +323,7 @@ module VX_cache_bank #(
         .UUID_WIDTH (UUID_WIDTH)
     ) cache_tags (
         .clk        (clk),
-        .reset      (tag_reset),
+        .reset      (tags_reset),
 
         .req_uuid   (req_uuid_st0),
 
@@ -350,12 +355,14 @@ module VX_cache_bank #(
 
     assign addr2_st0 = (is_fill_st0 || is_flush2_st0) ? {evict_tag_st0, line_sel_st0} : addr_st0;
 
+    `RESET_RELAY (pipe1_reset, reset);
+
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + MSHR_ADDR_WIDTH + NUM_WAYS + 1 + 1),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
-        .reset    (reset),
+        .reset    (pipe1_reset),
         .enable   (~pipe_stall),
         .data_in  ({valid_st0, is_init_st0, is_replay_st0, is_fill_st0, is_flush2_st0, is_creq_st0, creq_flush_st0, rw_st0, addr2_st0, data_st0, byteen_st0, wsel_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_prev_st0, way_sel_st0, evict_dirty_st0, mshr_pending_st0}),
         .data_out ({valid_st1, is_init_st1, is_replay_st1, is_fill_st1, is_flush_st1,  is_creq_st1, creq_flush_st1, rw_st1, addr_st1,  data_st1, byteen_st1, wsel_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_prev_st1, way_sel_st1, evict_dirty_st1, mshr_pending_st1})
