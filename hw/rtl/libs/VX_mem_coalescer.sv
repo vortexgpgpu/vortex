@@ -87,7 +87,7 @@ module VX_mem_coalescer #(
     localparam STATE_SETUP = 0;
     localparam STATE_SEND  = 1;
 
-    reg state_r, state_n;
+    logic state_r, state_n;
 
     logic out_req_valid_r, out_req_valid_n;
     logic out_req_rw_r, out_req_rw_n;
@@ -228,7 +228,7 @@ module VX_mem_coalescer #(
     `RESET_RELAY (pipe_reset, reset);
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_REQS + 1 + 1 + NUM_REQS + OUT_REQS * (1 + 1 + OUT_ADDR_WIDTH + ATYPE_WIDTH + OUT_ADDR_WIDTH + ATYPE_WIDTH + DATA_OUT_SIZE + DATA_OUT_WIDTH + OUT_TAG_WIDTH)),
+        .DATAW  (1 + NUM_REQS + 1 + 1 + NUM_REQS + OUT_REQS * (1 + 1 + OUT_ADDR_WIDTH + ATYPE_WIDTH + OUT_ADDR_WIDTH + ATYPE_WIDTH + DATA_OUT_SIZE + DATA_OUT_WIDTH) + OUT_TAG_WIDTH),
         .RESETW (1 + NUM_REQS + 1)
     ) pipe_reg (
         .clk      (clk),
