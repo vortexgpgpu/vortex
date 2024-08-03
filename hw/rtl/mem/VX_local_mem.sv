@@ -160,6 +160,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     `RESET_RELAY (bank_reset, reset);
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
+        wire bank_req_valid, bank_req_ready;
+        wire [WORD_WIDTH-1:0] bank_rsp_data;
+
         VX_sp_ram #(
             .DATAW (WORD_WIDTH),
             .SIZE  (WORDS_PER_BANK),
@@ -172,24 +175,24 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .wren  (per_bank_req_byteen[i]),
             .addr  (per_bank_req_addr[i]),
             .wdata (per_bank_req_data[i]),
-            .rdata (per_bank_rsp_data[i])
+            .rdata (bank_rsp_data)
         );
 
         // drop write response
-        wire per_bank_req_valid_w, per_bank_req_ready_w;
-        assign per_bank_req_valid_w = per_bank_req_valid[i] && ~per_bank_req_rw[i];
-        assign per_bank_req_ready[i] = per_bank_req_ready_w || per_bank_req_rw[i];
+        assign bank_req_valid = per_bank_req_valid[i] && ~per_bank_req_rw[i];
+        assign per_bank_req_ready[i] = bank_req_ready || per_bank_req_rw[i];
 
+        // register BRAM output
         VX_elastic_buffer #(
-            .DATAW (REQ_SEL_WIDTH + TAG_WIDTH),
+            .DATAW (REQ_SEL_WIDTH + WORD_WIDTH + TAG_WIDTH),
             .SIZE  (1)
         ) bank_buf (
             .clk       (clk),
             .reset     (bank_reset),
-            .valid_in  (per_bank_req_valid_w),
-            .ready_in  (per_bank_req_ready_w),
-            .data_in   ({per_bank_req_idx[i], per_bank_req_tag[i]}),
-            .data_out  ({per_bank_rsp_idx[i], per_bank_rsp_tag[i]}),
+            .valid_in  (bank_req_valid),
+            .ready_in  (bank_req_ready),
+            .data_in   ({per_bank_req_idx[i], bank_rsp_data,        per_bank_req_tag[i]}),
+            .data_out  ({per_bank_rsp_idx[i], per_bank_rsp_data[i], per_bank_rsp_tag[i]}),
             .valid_out (per_bank_rsp_valid[i]),
             .ready_out (per_bank_rsp_ready[i])
         );
@@ -197,10 +200,10 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     // bank responses gather
 
-    wire [NUM_BANKS-1:0][RSP_DATAW-1:0] per_bank_rsp_data_all;
+    wire [NUM_BANKS-1:0][RSP_DATAW-1:0] per_bank_rsp_data2;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
-        assign per_bank_rsp_data_all[i] = {per_bank_rsp_data[i], per_bank_rsp_tag[i]};
+        assign per_bank_rsp_data2[i] = {per_bank_rsp_data[i], per_bank_rsp_tag[i]};
     end
 
     wire [NUM_REQS-1:0]                 rsp_valid_out;
@@ -219,7 +222,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         `UNUSED_PIN (collisions),
         .sel_in    (per_bank_rsp_idx),
         .valid_in  (per_bank_rsp_valid),
-        .data_in   (per_bank_rsp_data_all),
+        .data_in   (per_bank_rsp_data2),
         .ready_in  (per_bank_rsp_ready),
         .valid_out (rsp_valid_out),
         .data_out  (rsp_data_out),
