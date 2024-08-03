@@ -209,7 +209,7 @@ module VX_avs_adapter #(
         .OUT_BUF    (RSP_OUT_BUF)
     ) rsp_arb (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (rsp_arb_reset),
         .valid_in  (rsp_arb_valid_in),
         .data_in   (rsp_arb_data_in),
         .ready_in  (rsp_arb_ready_in),
