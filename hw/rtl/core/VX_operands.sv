@@ -277,14 +277,13 @@ module VX_operands import VX_gpu_pkg::*; #(
             .DATAW (`XLEN * `NUM_THREADS),
             .SIZE  (PER_BANK_REGS * PER_ISSUE_WARPS),
             .WRENW (BYTEENW),
+         `ifdef GPR_RESET
+            .RESET_RAM (1),
+         `endif
             .NO_RWCHECK (1)
         ) gpr_ram (
             .clk   (clk),
-        `ifdef GPR_RESET
             .reset (reset),
-        `else
-            .reset (1'b0),
-        `endif
             .read  (pipe_fire_st1),
             .wren  (wren),
             .write (gpr_wr_enabled),

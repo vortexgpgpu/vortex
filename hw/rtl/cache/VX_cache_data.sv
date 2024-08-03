@@ -62,7 +62,6 @@ module VX_cache_data #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (BANK_ID)
     `UNUSED_PARAM (WORD_SIZE)
-    `UNUSED_VAR (reset)
     `UNUSED_VAR (stall)
     `UNUSED_VAR (line_addr)
     `UNUSED_VAR (init)
@@ -91,7 +90,7 @@ module VX_cache_data #(
                 .SIZE  (`CS_LINES_PER_BANK)
             ) byteen_store (
                 .clk   (clk),
-                .reset (1'b0),
+                .reset (reset),
                 .read  (write || fill || flush),
                 .write (init || write || fill || flush),
                 .wren  (1'b1),
@@ -162,7 +161,7 @@ module VX_cache_data #(
         .RW_ASSERT (1)
     ) data_store (
         .clk   (clk),
-        .reset (1'b0),
+        .reset (reset),
         .read  (line_read),
         .write (line_write),
         .wren  (line_wren),

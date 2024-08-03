@@ -178,7 +178,7 @@ module VX_fifo_queue #(
                     .LUTRAM (LUTRAM)
                 ) dp_ram (
                     .clk   (clk),
-                    .reset (1'b0),
+                    .reset (reset),
                     .read  (1'b1),
                     .write (push),
                     .wren  (1'b1),
@@ -227,7 +227,7 @@ module VX_fifo_queue #(
                     .LUTRAM (LUTRAM)
                 ) dp_ram (
                     .clk   (clk),
-                    .reset (1'b0),
+                    .reset (reset),
                     .read  (1'b1),
                     .write (push),
                     .wren  (1'b1),

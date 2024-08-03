@@ -24,6 +24,7 @@ module VX_dp_ram #(
     parameter LUTRAM      = 0,
     parameter RW_ASSERT   = 0,
     parameter RESET_RAM   = 0,
+    parameter READ_ENABLE = 0,
     parameter INIT_ENABLE = 0,
     parameter INIT_FILE   = "",
     parameter [DATAW-1:0] INIT_VALUE = 0,
@@ -198,13 +199,16 @@ module VX_dp_ram #(
             for (integer i = 0; i < SIZE; ++i) begin
                 ram[i] <= DATAW'(INIT_VALUE);
             end
-            prev_write <= 0;
-            prev_data  <= '0;
-            prev_waddr <= '0;
         end else begin
             if (write) begin
                 ram[waddr] <= ram_n;
             end
+        end
+        if (reset) begin
+            prev_write <= 0;
+            prev_data  <= '0;
+            prev_waddr <= '0;
+        end else begin
             prev_write <= write;
             prev_data  <= ram[waddr];
             prev_waddr <= waddr;
@@ -227,9 +231,9 @@ module VX_dp_ram #(
     if (OUT_REG != 0) begin
         reg [DATAW-1:0] rdata_r;
         always @(posedge clk) begin
-            if (reset) begin
+            if (READ_ENABLE && reset) begin
                 rdata_r <= '0;
-            end else if (read) begin
+            end else if (!READ_ENABLE || read) begin
                 rdata_r <= rdata_w;
             end
         end
