@@ -30,7 +30,7 @@ else
 	CXXFLAGS += -I$(SYN_DIR)
 endif
 
-# Debugigng
+# Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0
 else

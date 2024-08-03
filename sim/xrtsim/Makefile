@@ -82,7 +82,7 @@ THREADS ?= $(shell python -c 'import multiprocessing as mp; print(mp.cpu_count()
 VL_FLAGS += -j $(THREADS)
 #VL_FLAGS += --threads $(THREADS)
 
-# Debugigng
+# Debugging
 ifdef DEBUG
 	VL_FLAGS += --trace --trace-structs $(DBG_FLAGS)
 	CXXFLAGS += -g -O0 $(DBG_FLAGS)
