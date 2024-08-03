@@ -91,9 +91,10 @@ module VX_cache_data #(
                 .SIZE  (`CS_LINES_PER_BANK)
             ) byteen_store (
                 .clk   (clk),
+                .reset (1'b0),
                 .read  (write || fill || flush),
                 .write (init || write || fill || flush),
-                `UNUSED_PIN (wren),
+                .wren  (1'b1),
                 .addr  (line_sel),
                 .wdata (bs_wdata),
                 .rdata (bs_rdata)
@@ -161,6 +162,7 @@ module VX_cache_data #(
         .RW_ASSERT (1)
     ) data_store (
         .clk   (clk),
+        .reset (1'b0),
         .read  (line_read),
         .write (line_write),
         .wren  (line_wren),

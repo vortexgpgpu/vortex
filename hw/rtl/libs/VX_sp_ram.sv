@@ -23,12 +23,14 @@ module VX_sp_ram #(
     parameter NO_RWCHECK  = 0,
     parameter RW_ASSERT   = 0,
     parameter LUTRAM      = 0,
+    parameter RESET_RAM   = 0,
     parameter INIT_ENABLE = 0,
     parameter INIT_FILE   = "",
     parameter [DATAW-1:0] INIT_VALUE = 0,
     parameter ADDRW       = `LOG2UP(SIZE)
 ) (
     input wire               clk,
+    input wire               reset,
     input wire               read,
     input wire               write,
     input wire [WRENW-1:0]   wren,
@@ -45,12 +47,14 @@ module VX_sp_ram #(
         .NO_RWCHECK (NO_RWCHECK),
         .RW_ASSERT (RW_ASSERT),
         .LUTRAM (LUTRAM),
+        .RESET_RAM (RESET_RAM),
         .INIT_ENABLE (INIT_ENABLE),
         .INIT_FILE (INIT_FILE),
         .INIT_VALUE (INIT_VALUE),
         .ADDRW (ADDRW)
     ) dp_ram (
         .clk   (clk),
+        .reset (reset),
         .read  (read),
         .write (write),
         .wren  (wren),
