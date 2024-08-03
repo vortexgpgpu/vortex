@@ -232,7 +232,7 @@ module VX_cache_mshr #(
         .LUTRAM (1)
     ) entries (
         .clk   (clk),
-        .reset (1'b0),
+        .reset (reset),
         .read  (1'b1),
         .write (allocate_valid),
         .wren  (1'b1),

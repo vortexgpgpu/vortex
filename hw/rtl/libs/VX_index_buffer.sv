@@ -54,7 +54,7 @@ module VX_index_buffer #(
         .LUTRAM (LUTRAM)
     ) data_table (
         .clk   (clk),
-        .reset (1'b0),
+        .reset (reset),
         .read  (1'b1),
         .write (acquire_en),
         .wren  (1'b1),

@@ -72,7 +72,7 @@ module VX_ipdom_stack #(
         .LUTRAM  (OUT_REG ? 0 : 1)
     ) store (
         .clk   (clk),
-        .reset (1'b0),
+        .reset (reset),
         .read  (1'b1),
         .write (push),
         .wren  (1'b1),
