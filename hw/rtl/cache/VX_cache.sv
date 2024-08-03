@@ -114,16 +114,13 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     wire [NUM_BANKS-1:0] per_bank_core_req_fire;
 
-    // this reset relay is required to sync with bank initialization
-    `RESET_RELAY (flush_reset, reset);
-
     VX_cache_flush #(
         .NUM_REQS  (NUM_REQS),
         .NUM_BANKS (NUM_BANKS),
         .BANK_SEL_LATENCY (`TO_OUT_BUF_REG(REQ_XBAR_BUF)) // bank xbar latency
     ) flush_unit (
         .clk             (clk),
-        .reset           (flush_reset),
+        .reset           (reset),
         .core_bus_in_if  (core_bus_if),
         .core_bus_out_if (core_bus2_if),
         .bank_req_fire   (per_bank_core_req_fire),
