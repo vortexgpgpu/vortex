@@ -98,8 +98,8 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
         .DATA_IN_WIDTH(3*32),
         .DATA_OUT_WIDTH(`FP_FLAGS_BITS + 32),
         .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
-        .PE_REG     ((`FMA_PE_RATIO != 1) ? 1 : 0),
-        .OUT_BUF    ((`FMA_PE_RATIO > 2) ? 1 : 0)
+        .PE_REG     ((NUM_LANES != NUM_PES) ? 1 : 0), // must be registered for DSPs
+        .OUT_BUF    (((NUM_LANES / NUM_PES) > 2) ? 1 : 0)
     ) pe_serializer (
         .clk        (clk),
         .reset      (reset),
