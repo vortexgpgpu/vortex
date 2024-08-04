@@ -122,8 +122,10 @@ void __libc_fini_array (void) {
 // This function will be called by LIBC at program exit.
 // Since this platform only support statically linked programs,
 // it is not required to support LIBC's exit functions registration via atexit().
-void __funcs_on_exit() {
+void __funcs_on_exit (void) {
+#ifdef HAVE_INITFINI_ARRAY
   __libc_fini_array();
+#endif
 }
 
 #ifdef __cplusplus
