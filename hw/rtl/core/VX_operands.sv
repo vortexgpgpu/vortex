@@ -43,8 +43,9 @@ module VX_operands import VX_gpu_pkg::*; #(
     localparam BANK_SEL_BITS = `CLOG2(NUM_BANKS);
     localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
     localparam PER_BANK_REGS = `NUM_REGS / NUM_BANKS;
-    localparam METADATAW = ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + `NR_BITS;
-    localparam DATAW = `UUID_WIDTH + METADATAW + 3 * `NUM_THREADS * `XLEN;
+    localparam META_DATAW = ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + `NR_BITS + `UUID_WIDTH;
+    localparam REGS_DATAW = NUM_SRC_REGS * `NUM_THREADS * `XLEN;
+    localparam DATAW = META_DATAW + REGS_DATAW;
     localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * PER_ISSUE_WARPS);
     localparam PER_BANK_ADDRW = RAM_ADDRW - BANK_SEL_BITS;
     localparam XLEN_SIZE = `XLEN / 8;
@@ -53,30 +54,28 @@ module VX_operands import VX_gpu_pkg::*; #(
     `UNUSED_VAR (writeback_if.data.sop)
 
     wire [NUM_SRC_REGS-1:0] src_valid;
-    wire [NUM_SRC_REGS-1:0] req_in_valid;
-    wire [NUM_SRC_REGS-1:0] req_in_ready;
+    wire [NUM_SRC_REGS-1:0] req_in_valid, req_in_ready;
     wire [NUM_SRC_REGS-1:0][PER_BANK_ADDRW-1:0] req_in_data;
     wire [NUM_SRC_REGS-1:0][BANK_SEL_WIDTH-1:0] req_bank_idx;
 
-    wire [NUM_BANKS-1:0] gpr_rd_valid_n, gpr_rd_ready;
-    reg [NUM_BANKS-1:0] gpr_rd_valid;
-    wire [NUM_BANKS-1:0][PER_BANK_ADDRW-1:0] gpr_rd_addr_n;
-    reg [NUM_BANKS-1:0][PER_BANK_ADDRW-1:0] gpr_rd_addr;
-    wire [NUM_BANKS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] gpr_rd_data;
-    wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] gpr_rd_req_idx_n;
-    reg [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] gpr_rd_req_idx;
+    wire [NUM_BANKS-1:0] gpr_rd_valid, gpr_rd_ready;
+    wire [NUM_BANKS-1:0] gpr_rd_valid_st1, gpr_rd_valid_st2;
+    wire [NUM_BANKS-1:0][PER_BANK_ADDRW-1:0] gpr_rd_addr, gpr_rd_addr_st1;
+    wire [NUM_BANKS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] gpr_rd_data_st1, gpr_rd_data_st2;
+    wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] gpr_rd_req_idx, gpr_rd_req_idx_st1, gpr_rd_req_idx_st2;
 
-    wire pipe_in_ready;
-    reg pipe_out_valid;
-    wire pipe_out_ready;
-    reg [`UUID_WIDTH-1:0] pipe_out_uuid;
-    reg [METADATAW-1:0] pipe_out_data;
+    wire pipe_valid_st1, pipe_ready_st1;
+    wire pipe_valid_st2, pipe_ready_st2;
+    wire [META_DATAW-1:0] pipe_data, pipe_data_st1, pipe_data_st2;
 
-    reg [NUM_SRC_REGS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data, src_data_n;
-    reg [NUM_SRC_REGS-1:0] data_fetched;
-    reg has_collision, has_collision_n;
+    reg [NUM_SRC_REGS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data_n;
+    wire [NUM_SRC_REGS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data_st1, src_data_st2;
 
-    wire stg_in_valid, stg_in_ready;
+    reg [NUM_SRC_REGS-1:0] data_fetched_n;
+    wire [NUM_SRC_REGS-1:0] data_fetched_st1;
+
+    reg has_collision_n;
+    wire has_collision_st1;
 
     wire [NUM_SRC_REGS-1:0][`NR_BITS-1:0] src_regs = {scoreboard_if.data.rs3,
                                                       scoreboard_if.data.rs2,
@@ -96,10 +95,12 @@ module VX_operands import VX_gpu_pkg::*; #(
     end
 
     for (genvar i = 0; i < NUM_SRC_REGS; ++i) begin
-        assign src_valid[i] = (src_regs[i] != 0) && ~data_fetched[i];
+        assign src_valid[i] = (src_regs[i] != 0) && ~data_fetched_st1[i];
     end
 
     assign req_in_valid = {NUM_SRC_REGS{scoreboard_if.valid}} & src_valid;
+
+    `RESET_RELAY (req_xbar_reset, reset);
 
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_SRC_REGS),
@@ -110,19 +111,26 @@ module VX_operands import VX_gpu_pkg::*; #(
         .OUT_BUF     (0) // no output buffering
     ) req_xbar (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (req_xbar_reset),
         `UNUSED_PIN(collisions),
         .valid_in  (req_in_valid),
         .data_in   (req_in_data),
         .sel_in    (req_bank_idx),
         .ready_in  (req_in_ready),
-        .valid_out (gpr_rd_valid_n),
-        .data_out  (gpr_rd_addr_n),
-        .sel_out   (gpr_rd_req_idx_n),
+        .valid_out (gpr_rd_valid),
+        .data_out  (gpr_rd_addr),
+        .sel_out   (gpr_rd_req_idx),
         .ready_out (gpr_rd_ready)
     );
 
-    assign gpr_rd_ready = {NUM_BANKS{stg_in_ready}};
+    wire pipe_in_ready = pipe_ready_st1 || ~pipe_valid_st1;
+
+    assign gpr_rd_ready = {NUM_BANKS{pipe_in_ready}};
+
+    assign scoreboard_if.ready = pipe_in_ready && ~has_collision_n;
+
+    wire pipe_fire_st1 = pipe_valid_st1 && pipe_ready_st1;
+    wire pipe_fire_st2 = pipe_valid_st2 && pipe_ready_st2;
 
     always @(*) begin
         has_collision_n = 0;
@@ -136,83 +144,86 @@ module VX_operands import VX_gpu_pkg::*; #(
     end
 
     always @(*) begin
-        src_data_n = src_data;
-        for (integer b = 0; b < NUM_BANKS; ++b) begin
-            if (gpr_rd_valid[b]) begin
-                src_data_n[gpr_rd_req_idx[b]] = gpr_rd_data[b];
-            end
-        end
-    end
-
-    wire pipe_stall = pipe_out_valid && ~pipe_out_ready;
-    assign pipe_in_ready = ~pipe_stall;
-
-    assign scoreboard_if.ready = pipe_in_ready && ~has_collision_n;
-
-    wire stg_in_fire = stg_in_valid && stg_in_ready;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            pipe_out_valid <= 0;
-            gpr_rd_valid   <= '0;
-            data_fetched   <= '0;
-            src_data       <= '0;
+        data_fetched_n = data_fetched_st1;
+         if (scoreboard_if.ready) begin
+            data_fetched_n = '0;
         end else begin
-            if (~pipe_stall) begin
-                pipe_out_valid <= scoreboard_if.valid;
-                gpr_rd_valid   <= gpr_rd_valid_n;
-                if (scoreboard_if.ready) begin
-                    data_fetched <= '0;
-                end else begin
-                    data_fetched <= data_fetched | req_in_ready;
-                end
-                if (stg_in_fire) begin
-                   src_data <= '0;
-                end else begin
-                   src_data <= src_data_n;
-                end
-            end
-        end
-        if (~pipe_stall) begin
-            pipe_out_uuid  <= scoreboard_if.data.uuid;
-            pipe_out_data  <= {
-                scoreboard_if.data.wis,
-                scoreboard_if.data.tmask,
-                scoreboard_if.data.PC,
-                scoreboard_if.data.wb,
-                scoreboard_if.data.ex_type,
-                scoreboard_if.data.op_type,
-                scoreboard_if.data.op_args,
-                scoreboard_if.data.rd
-            };
-            has_collision  <= has_collision_n;
-            gpr_rd_addr    <= gpr_rd_addr_n;
-            gpr_rd_req_idx <= gpr_rd_req_idx_n;
+            data_fetched_n = data_fetched_st1 | req_in_ready;
         end
     end
 
-    assign pipe_out_ready = stg_in_ready;
-    assign stg_in_valid = pipe_out_valid && ~has_collision;
+    assign pipe_data = {
+        scoreboard_if.data.wis,
+        scoreboard_if.data.tmask,
+        scoreboard_if.data.PC,
+        scoreboard_if.data.wb,
+        scoreboard_if.data.ex_type,
+        scoreboard_if.data.op_type,
+        scoreboard_if.data.op_args,
+        scoreboard_if.data.rd,
+        scoreboard_if.data.uuid
+    };
+
+    `RESET_RELAY (pipe1_reset, reset);
+
+    VX_pipe_register #(
+        .DATAW  (1 + NUM_SRC_REGS + NUM_BANKS + META_DATAW + 1 + NUM_BANKS * (PER_BANK_ADDRW + REQ_SEL_WIDTH)),
+        .RESETW (1 + NUM_SRC_REGS)
+    ) pipe_reg1 (
+        .clk      (clk),
+        .reset    (pipe1_reset),
+        .enable   (pipe_in_ready),
+        .data_in  ({scoreboard_if.valid, data_fetched_n,   gpr_rd_valid,     pipe_data,     has_collision_n,   gpr_rd_addr,     gpr_rd_req_idx}),
+        .data_out ({pipe_valid_st1,      data_fetched_st1, gpr_rd_valid_st1, pipe_data_st1, has_collision_st1, gpr_rd_addr_st1, gpr_rd_req_idx_st1})
+    );
+
+    assign pipe_ready_st1 = pipe_ready_st2 || ~pipe_valid_st2;
+
+    assign src_data_st1 = pipe_fire_st2 ? '0 : src_data_n;
+
+    wire pipe_valid2_st1 = pipe_valid_st1 && ~has_collision_st1;
+
+    `RESET_RELAY (pipe2_reset, reset);
+
+    VX_pipe_register #(
+        .DATAW  (1 + REGS_DATAW + NUM_BANKS + (NUM_BANKS * `XLEN * `NUM_THREADS) + META_DATAW + NUM_BANKS * REQ_SEL_WIDTH),
+        .RESETW (1 + REGS_DATAW)
+    ) pipe_reg2 (
+        .clk      (clk),
+        .reset    (pipe2_reset),
+        .enable   (pipe_ready_st1),
+        .data_in  ({pipe_valid2_st1, src_data_st1, gpr_rd_valid_st1, gpr_rd_data_st1, pipe_data_st1, gpr_rd_req_idx_st1}),
+        .data_out ({pipe_valid_st2,  src_data_st2, gpr_rd_valid_st2, gpr_rd_data_st2, pipe_data_st2, gpr_rd_req_idx_st2})
+    );
+
+    always @(*) begin
+        src_data_n = src_data_st2;
+        for (integer b = 0; b < NUM_BANKS; ++b) begin
+            if (gpr_rd_valid_st2[b]) begin
+                src_data_n[gpr_rd_req_idx_st2[b]] = gpr_rd_data_st2[b];
+            end
+        end
+    end
+
+    `RESET_RELAY (out_buf_reset, reset);
 
     VX_elastic_buffer #(
         .DATAW   (DATAW),
         .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
         .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
         .LUTRAM  (1)
-    ) out_buffer (
+    ) out_buf (
         .clk       (clk),
-        .reset     (reset),
-        .valid_in  (stg_in_valid),
-        .ready_in  (stg_in_ready),
+        .reset     (out_buf_reset),
+        .valid_in  (pipe_valid_st2),
+        .ready_in  (pipe_ready_st2),
         .data_in   ({
-            pipe_out_uuid,
-            pipe_out_data,
+            pipe_data_st2,
             src_data_n[0],
             src_data_n[1],
             src_data_n[2]
         }),
         .data_out  ({
-            operands_if.data.uuid,
             operands_if.data.wis,
             operands_if.data.tmask,
             operands_if.data.PC,
@@ -221,6 +232,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             operands_if.data.op_type,
             operands_if.data.op_args,
             operands_if.data.rd,
+            operands_if.data.uuid,
             operands_if.data.rs1_data,
             operands_if.data.rs2_data,
             operands_if.data.rs3_data
@@ -269,27 +281,26 @@ module VX_operands import VX_gpu_pkg::*; #(
             assign wren[i*XLEN_SIZE+:XLEN_SIZE] = {XLEN_SIZE{writeback_if.data.tmask[i]}};
         end
 
-    `ifdef GPR_RESET
-        VX_dp_ram_rst #(
-    `else
+        `RESET_RELAY (bram_reset, reset);
+
         VX_dp_ram #(
-    `endif
             .DATAW (`XLEN * `NUM_THREADS),
             .SIZE  (PER_BANK_REGS * PER_ISSUE_WARPS),
             .WRENW (BYTEENW),
+         `ifdef GPR_RESET
+            .RESET_RAM (1),
+         `endif
             .NO_RWCHECK (1)
         ) gpr_ram (
             .clk   (clk),
-        `ifdef GPR_RESET
-            .reset (reset),
-        `endif
-            .read  (1'b1),
+            .reset (bram_reset),
+            .read  (pipe_fire_st1),
             .wren  (wren),
             .write (gpr_wr_enabled),
             .waddr (gpr_wr_addr),
             .wdata (writeback_if.data.data),
-            .raddr (gpr_rd_addr[b]),
-            .rdata (gpr_rd_data[b])
+            .raddr (gpr_rd_addr_st1[b]),
+            .rdata (gpr_rd_data_st1[b])
         );
     end
 

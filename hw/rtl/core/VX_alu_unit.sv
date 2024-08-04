@@ -126,7 +126,8 @@ module VX_alu_unit #(
         VX_stream_arb #(
             .NUM_INPUTS (RSP_ARB_SIZE),
             .DATAW      (RSP_ARB_DATAW),
-            .OUT_BUF    (PARTIAL_BW ? 1 : 3)
+            .OUT_BUF    (PARTIAL_BW ? 1 : 3),
+            .ARBITER    ("F")
         ) rsp_arb (
             .clk       (clk),
             .reset     (arb_reset),

@@ -109,13 +109,10 @@ module VX_cache import VX_gpu_pkg::*; #(
         .TAG_WIDTH (TAG_WIDTH)
     ) core_bus2_if[NUM_REQS]();
 
-    wire [NUM_BANKS-1:0] per_bank_flush_valid;
-    wire [NUM_BANKS-1:0] per_bank_flush_ready;
+    wire [NUM_BANKS-1:0] per_bank_flush_begin;
+    wire [NUM_BANKS-1:0] per_bank_flush_end;
 
     wire [NUM_BANKS-1:0] per_bank_core_req_fire;
-
-    // this reset relay is required to sync with bank initialization
-    `RESET_RELAY (flush_reset, reset);
 
     VX_cache_flush #(
         .NUM_REQS  (NUM_REQS),
@@ -123,12 +120,12 @@ module VX_cache import VX_gpu_pkg::*; #(
         .BANK_SEL_LATENCY (`TO_OUT_BUF_REG(REQ_XBAR_BUF)) // bank xbar latency
     ) flush_unit (
         .clk             (clk),
-        .reset           (flush_reset),
+        .reset           (reset),
         .core_bus_in_if  (core_bus_if),
         .core_bus_out_if (core_bus2_if),
         .bank_req_fire   (per_bank_core_req_fire),
-        .flush_valid     (per_bank_flush_valid),
-        .flush_ready     (per_bank_flush_ready)
+        .flush_begin     (per_bank_flush_begin),
+        .flush_end       (per_bank_flush_end)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -324,6 +321,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (CORE_REQ_DATAW),
         .PERF_CTR_BITS (`PERF_CTR_BITS),
+        .ARBITER     ("F"),
         .OUT_BUF     (REQ_XBAR_BUF)
     ) req_xbar (
         .clk       (clk),
@@ -432,8 +430,8 @@ module VX_cache import VX_gpu_pkg::*; #(
             .mem_rsp_id         (`CS_MEM_TAG_TO_REQ_ID(mem_rsp_tag_s)),
             .mem_rsp_ready      (per_bank_mem_rsp_ready[bank_id]),
 
-            .flush_valid        (per_bank_flush_valid[bank_id]),
-            .flush_ready        (per_bank_flush_ready[bank_id])
+            .flush_begin        (per_bank_flush_begin[bank_id]),
+            .flush_end          (per_bank_flush_end[bank_id])
         );
 
         if (NUM_BANKS == 1) begin
@@ -457,7 +455,8 @@ module VX_cache import VX_gpu_pkg::*; #(
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_BANKS),
         .NUM_OUTPUTS (NUM_REQS),
-        .DATAW       (CORE_RSP_DATAW)
+        .DATAW       (CORE_RSP_DATAW),
+        .ARBITER     ("F")
     ) rsp_xbar (
         .clk       (clk),
         .reset     (rsp_xbar_reset),

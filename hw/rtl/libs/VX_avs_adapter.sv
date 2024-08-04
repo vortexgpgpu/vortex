@@ -82,11 +82,14 @@ module VX_avs_adapter #(
     end
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
+
+        `RESET_RELAY (rd_req_reset, reset);
+
         VX_pending_size #(
             .SIZE (RD_QUEUE_SIZE)
         ) pending_size (
             .clk   (clk),
-            .reset (reset),
+            .reset (rd_req_reset),
             .incr  (req_queue_push[i]),
             .decr  (req_queue_pop[i]),
             `UNUSED_PIN (empty),
@@ -102,7 +105,7 @@ module VX_avs_adapter #(
             .DEPTH (RD_QUEUE_SIZE)
         ) rd_req_queue (
             .clk      (clk),
-            .reset    (reset),
+            .reset    (rd_req_reset),
             .push     (req_queue_push[i]),
             .pop      (req_queue_pop[i]),
             .data_in  (mem_req_tag),
@@ -126,13 +129,15 @@ module VX_avs_adapter #(
         wire valid_out_w = mem_req_valid && ~req_queue_going_full[i] && (req_bank_sel == i);
         wire ready_out_w;
 
+        `RESET_RELAY (req_out_reset, reset);
+
         VX_elastic_buffer #(
             .DATAW    (1 + DATA_SIZE + BANK_OFFSETW + DATA_WIDTH),
             .SIZE     (`TO_OUT_BUF_SIZE(REQ_OUT_BUF)),
             .OUT_REG  (`TO_OUT_BUF_REG(REQ_OUT_BUF))
         ) req_out_buf (
             .clk       (clk),
-            .reset     (reset),
+            .reset     (req_out_reset),
             .valid_in  (valid_out_w),
             .ready_in  (ready_out_w),
             .data_in   ({mem_req_rw, mem_req_byteen, req_bank_off, mem_req_data}),
@@ -168,12 +173,15 @@ module VX_avs_adapter #(
     wire [NUM_BANKS-1:0] rsp_queue_empty;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
+
+        `RESET_RELAY (rd_rsp_reset, reset);
+
         VX_fifo_queue #(
             .DATAW (DATA_WIDTH),
             .DEPTH (RD_QUEUE_SIZE)
         ) rd_rsp_queue (
             .clk      (clk),
-            .reset    (reset),
+            .reset    (rd_rsp_reset),
             .push     (avs_readdatavalid[i]),
             .pop      (req_queue_pop[i]),
             .data_in  (avs_readdata[i]),
@@ -192,14 +200,16 @@ module VX_avs_adapter #(
         assign req_queue_pop[i]    = rsp_arb_valid_in[i] && rsp_arb_ready_in[i];
     end
 
+    `RESET_RELAY (rsp_arb_reset, reset);
+
     VX_stream_arb #(
         .NUM_INPUTS (NUM_BANKS),
         .DATAW      (DATA_WIDTH + TAG_WIDTH),
-        .ARBITER    ("R"),
+        .ARBITER    ("F"),
         .OUT_BUF    (RSP_OUT_BUF)
     ) rsp_arb (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (rsp_arb_reset),
         .valid_in  (rsp_arb_valid_in),
         .data_in   (rsp_arb_data_in),
         .ready_in  (rsp_arb_ready_in),

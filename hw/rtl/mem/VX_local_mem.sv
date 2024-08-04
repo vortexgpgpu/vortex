@@ -94,7 +94,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] per_bank_req_idx;
     wire [NUM_BANKS-1:0]                    per_bank_req_ready;
 
-    wire [NUM_BANKS-1:0][REQ_DATAW-1:0]     per_bank_req_data_all;
+    wire [NUM_BANKS-1:0][REQ_DATAW-1:0]     per_bank_req_data_aos;
 
     wire [NUM_REQS-1:0]                 req_valid_in;
     wire [NUM_REQS-1:0][REQ_DATAW-1:0]  req_data_in;
@@ -111,7 +111,8 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             req_bank_addr[i],
             mem_bus_if[i].req_data.byteen,
             mem_bus_if[i].req_data.data,
-            mem_bus_if[i].req_data.tag};
+            mem_bus_if[i].req_data.tag
+        };
         assign mem_bus_if[i].req_ready = req_ready_in[i];
     end
 
@@ -120,6 +121,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (REQ_DATAW),
         .PERF_CTR_BITS (`PERF_CTR_BITS),
+        .ARBITER     ("F"),
         .OUT_BUF     (3) // output should be registered for the data_store addressing
     ) req_xbar (
         .clk       (clk),
@@ -134,7 +136,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .sel_in    (req_bank_idx),
         .ready_in  (req_ready_in),
         .valid_out (per_bank_req_valid),
-        .data_out  (per_bank_req_data_all),
+        .data_out  (per_bank_req_data_aos),
         .sel_out   (per_bank_req_idx),
         .ready_out (per_bank_req_ready)
     );
@@ -145,7 +147,8 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             per_bank_req_addr[i],
             per_bank_req_byteen[i],
             per_bank_req_data[i],
-            per_bank_req_tag[i]} = per_bank_req_data_all[i];
+            per_bank_req_tag[i]
+        } = per_bank_req_data_aos[i];
     end
 
     // banks access
@@ -156,38 +159,55 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0] per_bank_rsp_tag;
     wire [NUM_BANKS-1:0]                per_bank_rsp_ready;
 
-    `RESET_RELAY (bank_reset, reset);
-
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
+        wire bank_rsp_valid, bank_rsp_ready;
+        wire [WORD_WIDTH-1:0] bank_rsp_data;
+
+        `RESET_RELAY (bram_reset, reset);
+
         VX_sp_ram #(
             .DATAW (WORD_WIDTH),
             .SIZE  (WORDS_PER_BANK),
-            .WRENW (WORD_SIZE)
+            .WRENW (WORD_SIZE),
+            .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),
-            .read  (1'b1),
+            .reset (bram_reset),
+            .read  (per_bank_req_valid[i] && per_bank_req_ready[i] && ~per_bank_req_rw[i]),
             .write (per_bank_req_valid[i] && per_bank_req_ready[i] && per_bank_req_rw[i]),
             .wren  (per_bank_req_byteen[i]),
             .addr  (per_bank_req_addr[i]),
             .wdata (per_bank_req_data[i]),
-            .rdata (per_bank_rsp_data[i])
+            .rdata (bank_rsp_data)
         );
 
-        // drop write response
-        wire per_bank_req_valid_w, per_bank_req_ready_w;
-        assign per_bank_req_valid_w = per_bank_req_valid[i] && ~per_bank_req_rw[i];
-        assign per_bank_req_ready[i] = per_bank_req_ready_w || per_bank_req_rw[i];
+        // read-during-write hazard detection
+        reg [BANK_ADDR_WIDTH-1:0] last_wr_addr;
+        reg last_wr_valid;
+        always @(posedge clk) begin
+            if (bram_reset) begin
+                last_wr_valid <= 0;
+            end else begin
+                last_wr_valid <= per_bank_req_valid[i] && per_bank_req_ready[i] && per_bank_req_rw[i];
+            end
+            last_wr_addr <= per_bank_req_addr[i];
+        end
+        wire is_rdw_hazard = last_wr_valid && ~per_bank_req_rw[i] && (per_bank_req_addr[i] == last_wr_addr);
 
-        VX_elastic_buffer #(
-            .DATAW (REQ_SEL_WIDTH + TAG_WIDTH),
-            .SIZE  (0)
-        ) bank_buf (
+        // drop write response and stall on read-during-write hazard
+        assign bank_rsp_valid = per_bank_req_valid[i] && ~per_bank_req_rw[i] && ~is_rdw_hazard;
+        assign per_bank_req_ready[i] = (bank_rsp_ready || per_bank_req_rw[i]) && ~is_rdw_hazard;
+
+        // register BRAM output
+        VX_pipe_buffer #(
+            .DATAW (REQ_SEL_WIDTH + WORD_WIDTH + TAG_WIDTH)
+        ) bram_buf (
             .clk       (clk),
-            .reset     (bank_reset),
-            .valid_in  (per_bank_req_valid_w),
-            .ready_in  (per_bank_req_ready_w),
-            .data_in   ({per_bank_req_idx[i], per_bank_req_tag[i]}),
-            .data_out  ({per_bank_rsp_idx[i], per_bank_rsp_tag[i]}),
+            .reset     (bram_reset),
+            .valid_in  (bank_rsp_valid),
+            .ready_in  (bank_rsp_ready),
+            .data_in   ({per_bank_req_idx[i], bank_rsp_data,        per_bank_req_tag[i]}),
+            .data_out  ({per_bank_rsp_idx[i], per_bank_rsp_data[i], per_bank_rsp_tag[i]}),
             .valid_out (per_bank_rsp_valid[i]),
             .ready_out (per_bank_rsp_ready[i])
         );
@@ -195,10 +215,10 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     // bank responses gather
 
-    wire [NUM_BANKS-1:0][RSP_DATAW-1:0] per_bank_rsp_data_all;
+    wire [NUM_BANKS-1:0][RSP_DATAW-1:0] per_bank_rsp_data_aos;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
-        assign per_bank_rsp_data_all[i] = {per_bank_rsp_data[i], per_bank_rsp_tag[i]};
+        assign per_bank_rsp_data_aos[i] = {per_bank_rsp_data[i], per_bank_rsp_tag[i]};
     end
 
     wire [NUM_REQS-1:0]                 rsp_valid_out;
@@ -209,6 +229,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .NUM_INPUTS  (NUM_BANKS),
         .NUM_OUTPUTS (NUM_REQS),
         .DATAW       (RSP_DATAW),
+        .ARBITER     ("P"), // this priority arbiter has negligeable impact om performance
         .OUT_BUF     (OUT_BUF)
     ) rsp_xbar (
         .clk       (clk),
@@ -216,7 +237,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         `UNUSED_PIN (collisions),
         .sel_in    (per_bank_rsp_idx),
         .valid_in  (per_bank_rsp_valid),
-        .data_in   (per_bank_rsp_data_all),
+        .data_in   (per_bank_rsp_data_aos),
         .ready_in  (per_bank_rsp_ready),
         .valid_out (rsp_valid_out),
         .data_out  (rsp_data_out),

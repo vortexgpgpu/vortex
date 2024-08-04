@@ -108,8 +108,8 @@ module VX_cache_bank #(
     output wire                         mem_rsp_ready,
 
     // flush
-    input wire                          flush_valid,
-    output wire                         flush_ready
+    input wire                          flush_begin,
+    output wire                         flush_end
 );
 
     localparam PIPELINE_STAGES = 2;
@@ -120,6 +120,7 @@ module VX_cache_bank #(
 
     wire                            crsp_queue_stall;
     wire                            mshr_alm_full;
+    wire                            mreq_queue_empty;
     wire                            mreq_queue_alm_full;
 
     wire [`CS_LINE_ADDR_WIDTH-1:0]  mem_rsp_addr;
@@ -162,30 +163,38 @@ module VX_cache_bank #(
     wire                            mshr_pending_st0, mshr_pending_st1;
     wire                            mshr_empty;
 
-    wire line_flush_valid;
-    wire line_flush_init;
-    wire [`CS_LINE_SEL_BITS-1:0] line_flush_sel;
-    wire [NUM_WAYS-1:0] line_flush_way;
-    wire line_flush_ready;
+    wire flush_valid;
+    wire init_valid;
+    wire [`CS_LINE_SEL_BITS-1:0] flush_sel;
+    wire [NUM_WAYS-1:0] flush_way;
+    wire flush_ready;
+
+    // ensure we have no pending memory request in the bank
+    wire no_pending_req = ~valid_st0 && ~valid_st1 && mreq_queue_empty;
+
+    // this reset relay should match pipeline during tags initialization
+    `RESET_RELAY (flush_reset, reset);
 
     // flush unit
     VX_bank_flush #(
+        .BANK_ID    (BANK_ID),
         .CACHE_SIZE (CACHE_SIZE),
         .LINE_SIZE  (LINE_SIZE),
         .NUM_BANKS  (NUM_BANKS),
         .NUM_WAYS   (NUM_WAYS),
         .WRITEBACK  (WRITEBACK)
     ) flush_unit (
-        .clk             (clk),
-        .reset           (reset),
-        .flush_in_valid  (flush_valid),
-        .flush_in_ready  (flush_ready),
-        .flush_out_init  (line_flush_init),
-        .flush_out_valid (line_flush_valid),
-        .flush_out_line  (line_flush_sel),
-        .flush_out_way   (line_flush_way),
-        .flush_out_ready (line_flush_ready),
-        .mshr_empty      (mshr_empty)
+        .clk         (clk),
+        .reset       (flush_reset),
+        .flush_begin (flush_begin),
+        .flush_end   (flush_end),
+        .flush_init  (init_valid),
+        .flush_valid (flush_valid),
+        .flush_line  (flush_sel),
+        .flush_way   (flush_way),
+        .flush_ready (flush_ready),
+        .mshr_empty  (mshr_empty),
+        .bank_empty  (no_pending_req)
     );
 
     wire rdw_hazard1_sel;
@@ -198,16 +207,16 @@ module VX_cache_bank #(
     // mshr replay has highest priority to maximize utilization since there is no miss.
     // handle memory responses next to prevent deadlock with potential memory request from a miss.
     // flush has precedence over core requests to ensure that the cache is in a consistent state.
-    wire replay_grant = ~line_flush_init;
+    wire replay_grant = ~init_valid;
     wire replay_enable = replay_grant && replay_valid;
 
-    wire fill_grant  = ~line_flush_init && ~replay_enable;
+    wire fill_grant  = ~init_valid && ~replay_enable;
     wire fill_enable = fill_grant && mem_rsp_valid;
 
-    wire flush_grant  = ~line_flush_init && ~replay_enable && ~fill_enable;
-    wire flush_enable = flush_grant && line_flush_valid;
+    wire flush_grant  = ~init_valid && ~replay_enable && ~fill_enable;
+    wire flush_enable = flush_grant && flush_valid;
 
-    wire creq_grant  = ~line_flush_init && ~replay_enable && ~fill_enable && ~flush_enable;
+    wire creq_grant  = ~init_valid && ~replay_enable && ~fill_enable && ~flush_enable;
     wire creq_enable = creq_grant && core_req_valid;
 
     assign replay_ready = replay_grant
@@ -219,23 +228,23 @@ module VX_cache_bank #(
                         && ~rdw_hazard2_sel
                         && ~pipe_stall;
 
-    assign line_flush_ready = flush_grant
-                           && (!WRITEBACK || ~mreq_queue_alm_full) // needed for evictions
-                           && ~rdw_hazard2_sel
-                           && ~pipe_stall;
+    assign flush_ready = flush_grant
+                      && (!WRITEBACK || ~mreq_queue_alm_full) // needed for evictions
+                      && ~rdw_hazard2_sel
+                      && ~pipe_stall;
 
     assign core_req_ready = creq_grant
                          && ~mreq_queue_alm_full
                          && ~mshr_alm_full
                          && ~pipe_stall;
 
-    wire init_fire     = line_flush_init;
+    wire init_fire     = init_valid;
     wire replay_fire   = replay_valid && replay_ready;
     wire mem_rsp_fire  = mem_rsp_valid && mem_rsp_ready;
-    wire line_flush_fire = line_flush_valid && line_flush_ready;
+    wire flush_fire = flush_valid && flush_ready;
     wire core_req_fire = core_req_valid && core_req_ready;
 
-    assign valid_sel   = init_fire || replay_fire || mem_rsp_fire || line_flush_fire || core_req_fire;
+    assign valid_sel   = init_fire || replay_fire || mem_rsp_fire || flush_fire || core_req_fire;
     assign rw_sel      = replay_valid ? replay_rw : core_req_rw;
     assign byteen_sel  = replay_valid ? replay_byteen : core_req_byteen;
     assign wsel_sel    = replay_valid ? replay_wsel : core_req_wsel;
@@ -243,7 +252,7 @@ module VX_cache_bank #(
     assign tag_sel     = replay_valid ? replay_tag : core_req_tag;
     assign creq_flush_sel = core_req_valid && core_req_flush;
 
-    assign addr_sel    = (line_flush_init | line_flush_valid) ? `CS_LINE_ADDR_WIDTH'(line_flush_sel) :
+    assign addr_sel    = (init_valid | flush_valid) ? `CS_LINE_ADDR_WIDTH'(flush_sel) :
                             (replay_valid ? replay_addr : (mem_rsp_valid ? mem_rsp_addr : core_req_addr));
 
     if (WRITE_ENABLE) begin
@@ -263,15 +272,17 @@ module VX_cache_bank #(
         assign req_uuid_sel = 0;
     end
 
+    `RESET_RELAY (pipe0_reset, reset);
+
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + NUM_WAYS + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + 1 + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
-        .reset    (reset),
+        .reset    (pipe0_reset),
         .enable   (~pipe_stall),
-        .data_in  ({valid_sel, line_flush_init, replay_enable, fill_enable, flush_enable, creq_enable, creq_flush_sel, line_flush_way, addr_sel, data_sel, rw_sel, byteen_sel, wsel_sel, req_idx_sel, tag_sel, replay_id}),
-        .data_out ({valid_st0, is_init_st0,     is_replay_st0, is_fill_st0, is_flush_st0, is_creq_st0, creq_flush_st0, flush_way_st0,  addr_st0, data_st0, rw_st0, byteen_st0, wsel_st0, req_idx_st0, tag_st0, replay_id_st0})
+        .data_in  ({valid_sel, init_valid,  replay_enable, fill_enable, flush_enable, creq_enable, creq_flush_sel, flush_way,      addr_sel, data_sel, rw_sel, byteen_sel, wsel_sel, req_idx_sel, tag_sel, replay_id}),
+        .data_out ({valid_st0, is_init_st0, is_replay_st0, is_fill_st0, is_flush_st0, is_creq_st0, creq_flush_st0, flush_way_st0,  addr_st0, data_st0, rw_st0, byteen_st0, wsel_st0, req_idx_st0, tag_st0, replay_id_st0})
     );
 
     if (UUID_WIDTH != 0) begin
@@ -298,7 +309,7 @@ module VX_cache_bank #(
     wire [NUM_WAYS-1:0] evict_way_st0;
     wire [`CS_TAG_SEL_BITS-1:0] evict_tag_st0;
 
-    `RESET_RELAY (tag_reset, reset);
+    `RESET_RELAY (tags_reset, reset);
 
     VX_cache_tags #(
         .INSTANCE_ID($sformatf("%s-tags", INSTANCE_ID)),
@@ -312,7 +323,7 @@ module VX_cache_bank #(
         .UUID_WIDTH (UUID_WIDTH)
     ) cache_tags (
         .clk        (clk),
-        .reset      (tag_reset),
+        .reset      (tags_reset),
 
         .req_uuid   (req_uuid_st0),
 
@@ -344,12 +355,14 @@ module VX_cache_bank #(
 
     assign addr2_st0 = (is_fill_st0 || is_flush2_st0) ? {evict_tag_st0, line_sel_st0} : addr_st0;
 
+    `RESET_RELAY (pipe1_reset, reset);
+
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + MSHR_ADDR_WIDTH + NUM_WAYS + 1 + 1),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
-        .reset    (reset),
+        .reset    (pipe1_reset),
         .enable   (~pipe_stall),
         .data_in  ({valid_st0, is_init_st0, is_replay_st0, is_fill_st0, is_flush2_st0, is_creq_st0, creq_flush_st0, rw_st0, addr2_st0, data_st0, byteen_st0, wsel_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_prev_st0, way_sel_st0, evict_dirty_st0, mshr_pending_st0}),
         .data_out ({valid_st1, is_init_st1, is_replay_st1, is_fill_st1, is_flush_st1,  is_creq_st1, creq_flush_st1, rw_st1, addr_st1,  data_st1, byteen_st1, wsel_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_prev_st1, way_sel_st1, evict_dirty_st1, mshr_pending_st1})
@@ -585,7 +598,7 @@ module VX_cache_bank #(
 
     // schedule memory request
 
-    wire mreq_queue_push, mreq_queue_pop, mreq_queue_empty;
+    wire mreq_queue_push, mreq_queue_pop;
     wire [`CS_LINE_WIDTH-1:0] mreq_queue_data;
     wire [LINE_SIZE-1:0] mreq_queue_byteen;
     wire [`CS_LINE_ADDR_WIDTH-1:0] mreq_queue_addr;
@@ -663,8 +676,8 @@ module VX_cache_bank #(
 
 `ifdef DBG_TRACE_CACHE
     wire crsp_queue_fire = crsp_queue_valid && crsp_queue_ready;
-    wire input_stall = (replay_valid || mem_rsp_valid || core_req_valid || line_flush_valid)
-                   && ~(replay_fire || mem_rsp_fire || core_req_fire || line_flush_fire);
+    wire input_stall = (replay_valid || mem_rsp_valid || core_req_valid || flush_valid)
+                   && ~(replay_fire || mem_rsp_fire || core_req_fire || flush_fire);
     always @(posedge clk) begin
         if (input_stall || pipe_stall) begin
             `TRACE(3, ("%d: *** %s stall: crsq=%b, mreq=%b, mshr=%b, rdw1=%b, rdw2=%b, rdw3=%b\n", $time, INSTANCE_ID, crsp_queue_stall, mreq_queue_alm_full, mshr_alm_full, rdw_hazard1_sel, rdw_hazard2_sel, rdw_hazard3_st1));

@@ -19,7 +19,7 @@ LDFLAGS += -L$(DESTDIR) -lrtlsim
 
 SRCS := $(SRC_DIR)/vortex.cpp
 
-# Debugigng
+# Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0
 else
