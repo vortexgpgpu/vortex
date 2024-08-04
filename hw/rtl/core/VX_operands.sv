@@ -167,14 +167,14 @@ module VX_operands import VX_gpu_pkg::*; #(
     `RESET_RELAY (pipe1_reset, reset);
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_BANKS + NUM_SRC_REGS + META_DATAW + 1 + NUM_BANKS * (PER_BANK_ADDRW + REQ_SEL_WIDTH)),
-        .RESETW (1 + NUM_BANKS + NUM_SRC_REGS)
+        .DATAW  (1 + NUM_SRC_REGS + NUM_BANKS + META_DATAW + 1 + NUM_BANKS * (PER_BANK_ADDRW + REQ_SEL_WIDTH)),
+        .RESETW (1 + NUM_SRC_REGS)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (pipe1_reset),
         .enable   (pipe_in_ready),
-        .data_in  ({scoreboard_if.valid, gpr_rd_valid,     data_fetched_n,   pipe_data,     has_collision_n,   gpr_rd_addr,     gpr_rd_req_idx}),
-        .data_out ({pipe_valid_st1,      gpr_rd_valid_st1, data_fetched_st1, pipe_data_st1, has_collision_st1, gpr_rd_addr_st1, gpr_rd_req_idx_st1})
+        .data_in  ({scoreboard_if.valid, data_fetched_n,   gpr_rd_valid,     pipe_data,     has_collision_n,   gpr_rd_addr,     gpr_rd_req_idx}),
+        .data_out ({pipe_valid_st1,      data_fetched_st1, gpr_rd_valid_st1, pipe_data_st1, has_collision_st1, gpr_rd_addr_st1, gpr_rd_req_idx_st1})
     );
 
     assign pipe_ready_st1 = pipe_ready_st2 || ~pipe_valid_st2;
@@ -186,14 +186,14 @@ module VX_operands import VX_gpu_pkg::*; #(
     `RESET_RELAY (pipe2_reset, reset);
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_BANKS + REGS_DATAW + (NUM_BANKS * `XLEN * `NUM_THREADS) + META_DATAW + NUM_BANKS * REQ_SEL_WIDTH),
-        .RESETW (1 + NUM_BANKS + REGS_DATAW)
+        .DATAW  (1 + REGS_DATAW + NUM_BANKS + (NUM_BANKS * `XLEN * `NUM_THREADS) + META_DATAW + NUM_BANKS * REQ_SEL_WIDTH),
+        .RESETW (1 + REGS_DATAW)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (pipe2_reset),
         .enable   (pipe_ready_st1),
-        .data_in  ({pipe_valid2_st1, gpr_rd_valid_st1, src_data_st1, gpr_rd_data_st1, pipe_data_st1, gpr_rd_req_idx_st1}),
-        .data_out ({pipe_valid_st2,  gpr_rd_valid_st2, src_data_st2, gpr_rd_data_st2, pipe_data_st2, gpr_rd_req_idx_st2})
+        .data_in  ({pipe_valid2_st1, src_data_st1, gpr_rd_valid_st1, gpr_rd_data_st1, pipe_data_st1, gpr_rd_req_idx_st1}),
+        .data_out ({pipe_valid_st2,  src_data_st2, gpr_rd_valid_st2, gpr_rd_data_st2, pipe_data_st2, gpr_rd_req_idx_st2})
     );
 
     always @(*) begin

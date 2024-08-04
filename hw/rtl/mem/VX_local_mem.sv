@@ -229,7 +229,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .NUM_INPUTS  (NUM_BANKS),
         .NUM_OUTPUTS (NUM_REQS),
         .DATAW       (RSP_DATAW),
-        .ARBITER     ("F"),
+        .ARBITER     ("P"), // this priority arbiter has negligeable impact om performance
         .OUT_BUF     (OUT_BUF)
     ) rsp_xbar (
         .clk       (clk),
