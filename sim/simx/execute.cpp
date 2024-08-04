@@ -1501,15 +1501,15 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     case 2:{ //uni
       check = true;
       bool first = true;
-      auto val = rsdata[0][0].u;
+      auto val = rsdata[0][0].u%2;
       for (uint32_t t = thread_start; t < num_threads; ++t) {
         if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
           if(first){
             first = false;
-            val = rsdata[t][0].u;
+            val = rsdata[t][0].u%2;
           }
           else{
-            if(val != rsdata[t][0].u)
+            if(val != rsdata[t][0].u%2)
              check = false;
           }
         }
@@ -1580,8 +1580,9 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       } break;
       }
       if(!p)
-        lane = t;
-      if(((1 << t & mask) && warp.tmask.test(t) && (1 << lane & mask)) && (lane < num_threads)){
+        lane = t; 
+      DPH(2, "\n###########" << (lane) << " " << (p)<< "\n");
+      if((1 << t & mask) && warp.tmask.test(t) && (1 << lane & mask) && (lane < num_threads)){
         rddata[t].i = rsdata[lane][0].u;
         rd_write = true;
       }
