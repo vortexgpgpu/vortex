@@ -51,8 +51,10 @@ _start:
   # la t0, trap_entry
   # csrw mtvec, t0
 
+#ifdef HAVE_INITFINI_ARRAY
   # run global initialization functions
   call  __libc_init_array
+#endif
 
   # call main program routine
   call  main

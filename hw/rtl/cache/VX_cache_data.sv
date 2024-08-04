@@ -62,7 +62,6 @@ module VX_cache_data #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (BANK_ID)
     `UNUSED_PARAM (WORD_SIZE)
-    `UNUSED_VAR (reset)
     `UNUSED_VAR (stall)
     `UNUSED_VAR (line_addr)
     `UNUSED_VAR (init)
@@ -91,9 +90,10 @@ module VX_cache_data #(
                 .SIZE  (`CS_LINES_PER_BANK)
             ) byteen_store (
                 .clk   (clk),
+                .reset (reset),
                 .read  (write || fill || flush),
                 .write (init || write || fill || flush),
-                `UNUSED_PIN (wren),
+                .wren  (1'b1),
                 .addr  (line_sel),
                 .wdata (bs_wdata),
                 .rdata (bs_rdata)
@@ -117,7 +117,7 @@ module VX_cache_data #(
     end
 
     // order the data layout to perform ways multiplexing last.
-    // this allows converting way index to binary in parallel with BRAM read.
+    // this allows converting way index to binary in parallel with BRAM readaccess  and way selection.
 
     wire [`CS_WORDS_PER_LINE-1:0][NUM_WAYS-1:0][`CS_WORD_WIDTH-1:0] line_wdata;
     wire [BYTEENW-1:0] line_wren;
@@ -161,6 +161,7 @@ module VX_cache_data #(
         .RW_ASSERT (1)
     ) data_store (
         .clk   (clk),
+        .reset (reset),
         .read  (line_read),
         .write (line_write),
         .wren  (line_wren),

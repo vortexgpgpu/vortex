@@ -21,7 +21,8 @@ module VX_pe_serializer #(
     parameter DATA_IN_WIDTH  = 1,
     parameter DATA_OUT_WIDTH = 1,
     parameter TAG_WIDTH      = 0,
-    parameter PE_REG         = 0
+    parameter PE_REG         = 0,
+    parameter OUT_BUF        = 0
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -43,6 +44,11 @@ module VX_pe_serializer #(
     output wire [TAG_WIDTH-1:0]         tag_out,
     input wire                          ready_out
 );
+    wire                    valid_out_u;
+    wire [NUM_LANES-1:0][DATA_OUT_WIDTH-1:0] data_out_u;
+    wire [TAG_WIDTH-1:0]    tag_out_u;
+    wire                    ready_out_u;
+
     wire [NUM_PES-1:0][DATA_IN_WIDTH-1:0] pe_data_in_s;
     wire valid_out_s;
     wire [TAG_WIDTH-1:0] tag_out_s;
@@ -105,7 +111,7 @@ module VX_pe_serializer #(
         reg [TAG_WIDTH-1:0] tag_out_r;
 
         wire valid_out_b = valid_out_s && batch_out_done;
-        wire ready_out_b = ready_out || ~valid_out;
+        wire ready_out_b = ready_out_u || ~valid_out_u;
 
         always @(posedge clk) begin
             if (reset) begin
@@ -119,29 +125,44 @@ module VX_pe_serializer #(
             end
         end
 
-        assign enable    = ready_out_b || ~valid_out_b;
-        assign ready_in  = enable && batch_in_done;
+        assign enable      = ready_out_b || ~valid_out_b;
+        assign ready_in    = enable && batch_in_done;
+        assign pe_enable   = enable;
 
-        assign pe_enable = enable;
-
-        assign valid_out = valid_out_r;
-        assign data_out  = data_out_r;
-        assign tag_out   = tag_out_r;
+        assign valid_out_u = valid_out_r;
+        assign data_out_u  = data_out_r;
+        assign tag_out_u   = tag_out_r;
 
     end else begin
 
         assign pe_data_in_s = data_in;
 
-        assign enable    = ready_out || ~valid_out;
-        assign ready_in  = enable;
+        assign enable      = ready_out_u || ~valid_out_u;
+        assign ready_in    = enable;
+        assign pe_enable   = enable;
 
-        assign pe_enable = enable;
-
-        assign valid_out = valid_out_s;
-        assign data_out  = pe_data_out;
-        assign tag_out   = tag_out_s;
+        assign valid_out_u = valid_out_s;
+        assign data_out_u  = pe_data_out;
+        assign tag_out_u   = tag_out_s;
 
     end
+
+    `RESET_RELAY (out_buf_reset, reset);
+
+    VX_elastic_buffer #(
+        .DATAW   (NUM_LANES * DATA_OUT_WIDTH + TAG_WIDTH),
+        .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+        .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
+    ) out_buf (
+        .clk       (clk),
+        .reset     (out_buf_reset),
+        .valid_in  (valid_out_u),
+        .ready_in  (ready_out_u),
+        .data_in   ({data_out_u, tag_out_u}),
+        .data_out  ({data_out, tag_out}),
+        .valid_out (valid_out),
+        .ready_out (ready_out)
+    );
 
 endmodule
 `TRACING_ON

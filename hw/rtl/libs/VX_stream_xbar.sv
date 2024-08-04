@@ -20,7 +20,7 @@ module VX_stream_xbar #(
     parameter DATAW         = 4,
     parameter IN_WIDTH      = `LOG2UP(NUM_INPUTS),
     parameter OUT_WIDTH     = `LOG2UP(NUM_OUTPUTS),
-    parameter ARBITER       = "P",
+    parameter ARBITER       = "R",
     parameter OUT_BUF       = 0,
     parameter LUTRAM        = 0,
     parameter MAX_FANOUT    = `MAX_FANOUT,

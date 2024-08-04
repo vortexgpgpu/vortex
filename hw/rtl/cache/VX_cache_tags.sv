@@ -57,7 +57,6 @@ module VX_cache_tags #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (BANK_ID)
-    `UNUSED_VAR (reset)
     `UNUSED_VAR (lookup)
 
     //                   valid,   dirty,           tag
@@ -130,9 +129,10 @@ module VX_cache_tags #(
             .RW_ASSERT (1)
         ) tag_store (
             .clk   (clk),
+            .reset (reset),
             .read  (line_read),
             .write (line_write),
-            `UNUSED_PIN (wren),
+            .wren  (1'b1),
             .addr  (line_sel),
             .wdata (line_wdata),
             .rdata (line_rdata)
