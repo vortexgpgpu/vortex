@@ -44,8 +44,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
     localparam PER_BANK_REGS = `NUM_REGS / NUM_BANKS;
     localparam META_DATAW = ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + `NR_BITS + `UUID_WIDTH;
-    localparam REGS_DATAW = NUM_SRC_REGS * `NUM_THREADS * `XLEN;
-    localparam DATAW = META_DATAW + REGS_DATAW;
+    localparam REGS_DATAW = `XLEN * `NUM_THREADS;
+    localparam DATAW = META_DATAW + NUM_SRC_REGS * REGS_DATAW;
     localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * PER_ISSUE_WARPS);
     localparam PER_BANK_ADDRW = RAM_ADDRW - BANK_SEL_BITS;
     localparam XLEN_SIZE = `XLEN / 8;
@@ -100,8 +100,6 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     assign req_in_valid = {NUM_SRC_REGS{scoreboard_if.valid}} & src_valid;
 
-    `RESET_RELAY (req_xbar_reset, reset);
-
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_SRC_REGS),
         .NUM_OUTPUTS (NUM_BANKS),
@@ -111,7 +109,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         .OUT_BUF     (0) // no output buffering
     ) req_xbar (
         .clk       (clk),
-        .reset     (req_xbar_reset),
+        .reset     (reset),
         `UNUSED_PIN(collisions),
         .valid_in  (req_in_valid),
         .data_in   (req_in_data),
@@ -164,14 +162,12 @@ module VX_operands import VX_gpu_pkg::*; #(
         scoreboard_if.data.uuid
     };
 
-    `RESET_RELAY (pipe1_reset, reset);
-
     VX_pipe_register #(
         .DATAW  (1 + NUM_SRC_REGS + NUM_BANKS + META_DATAW + 1 + NUM_BANKS * (PER_BANK_ADDRW + REQ_SEL_WIDTH)),
         .RESETW (1 + NUM_SRC_REGS)
     ) pipe_reg1 (
         .clk      (clk),
-        .reset    (pipe1_reset),
+        .reset    (reset),
         .enable   (pipe_in_ready),
         .data_in  ({scoreboard_if.valid, data_fetched_n,   gpr_rd_valid,     pipe_data,     has_collision_n,   gpr_rd_addr,     gpr_rd_req_idx}),
         .data_out ({pipe_valid_st1,      data_fetched_st1, gpr_rd_valid_st1, pipe_data_st1, has_collision_st1, gpr_rd_addr_st1, gpr_rd_req_idx_st1})
@@ -183,11 +179,11 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     wire pipe_valid2_st1 = pipe_valid_st1 && ~has_collision_st1;
 
-    `RESET_RELAY (pipe2_reset, reset);
+    `RESET_RELAY (pipe2_reset, reset); // needed for pipe_reg2's wide RESETW
 
     VX_pipe_register #(
-        .DATAW  (1 + REGS_DATAW + NUM_BANKS + (NUM_BANKS * `XLEN * `NUM_THREADS) + META_DATAW + NUM_BANKS * REQ_SEL_WIDTH),
-        .RESETW (1 + REGS_DATAW)
+        .DATAW  (1 + NUM_SRC_REGS * REGS_DATAW + NUM_BANKS + NUM_BANKS * REGS_DATAW + META_DATAW + NUM_BANKS * REQ_SEL_WIDTH),
+        .RESETW (1 + NUM_SRC_REGS * REGS_DATAW)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (pipe2_reset),
@@ -205,8 +201,6 @@ module VX_operands import VX_gpu_pkg::*; #(
         end
     end
 
-    `RESET_RELAY (out_buf_reset, reset);
-
     VX_elastic_buffer #(
         .DATAW   (DATAW),
         .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
@@ -214,7 +208,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         .LUTRAM  (1)
     ) out_buf (
         .clk       (clk),
-        .reset     (out_buf_reset),
+        .reset     (reset),
         .valid_in  (pipe_valid_st2),
         .ready_in  (pipe_ready_st2),
         .data_in   ({
@@ -281,10 +275,8 @@ module VX_operands import VX_gpu_pkg::*; #(
             assign wren[i*XLEN_SIZE+:XLEN_SIZE] = {XLEN_SIZE{writeback_if.data.tmask[i]}};
         end
 
-        `RESET_RELAY (bram_reset, reset);
-
         VX_dp_ram #(
-            .DATAW (`XLEN * `NUM_THREADS),
+            .DATAW (REGS_DATAW),
             .SIZE  (PER_BANK_REGS * PER_ISSUE_WARPS),
             .WRENW (BYTEENW),
          `ifdef GPR_RESET
@@ -293,7 +285,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             .NO_RWCHECK (1)
         ) gpr_ram (
             .clk   (clk),
-            .reset (bram_reset),
+            .reset (reset),
             .read  (pipe_fire_st1),
             .wren  (wren),
             .write (gpr_wr_enabled),

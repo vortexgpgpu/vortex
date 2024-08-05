@@ -206,15 +206,13 @@ module VX_mem_adapter #(
 
     end
 
-    `RESET_RELAY (req_out_reset, reset);
-
     VX_elastic_buffer #(
         .DATAW    (1 + DST_DATA_SIZE + DST_ADDR_WIDTH + DST_DATA_WIDTH + DST_TAG_WIDTH),
         .SIZE     (`TO_OUT_BUF_SIZE(REQ_OUT_BUF)),
         .OUT_REG  (`TO_OUT_BUF_REG(REQ_OUT_BUF))
     ) req_out_buf (
         .clk       (clk),
-        .reset     (req_out_reset),
+        .reset     (reset),
         .valid_in  (mem_req_valid_out_w),
         .ready_in  (mem_req_ready_out_w),
         .data_in   ({mem_req_rw_out_w, mem_req_byteen_out_w, mem_req_addr_out_w, mem_req_data_out_w, mem_req_tag_out_w}),
@@ -223,15 +221,13 @@ module VX_mem_adapter #(
         .ready_out (mem_req_ready_out)
     );
 
-    `RESET_RELAY (rsp_in_reset, reset);
-
     VX_elastic_buffer #(
         .DATAW    (SRC_DATA_WIDTH + SRC_TAG_WIDTH),
         .SIZE     (`TO_OUT_BUF_SIZE(RSP_OUT_BUF)),
         .OUT_REG  (`TO_OUT_BUF_REG(RSP_OUT_BUF))
     ) rsp_in_buf (
         .clk       (clk),
-        .reset     (rsp_in_reset),
+        .reset     (reset),
         .valid_in  (mem_rsp_valid_in_w),
         .ready_in  (mem_rsp_ready_in_w),
         .data_in   ({mem_rsp_data_in_w, mem_rsp_tag_in_w}),

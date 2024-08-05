@@ -580,8 +580,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .TAG_WIDTH  (AVS_REQ_TAGW+1)
     ) mem_bus_if[1]();
 
-    `RESET_RELAY (mem_arb_reset, reset);
-
     VX_mem_arb #(
         .NUM_INPUTS  (2),
         .DATA_SIZE   (LMEM_DATA_SIZE),
@@ -592,7 +590,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .RSP_OUT_BUF (0)
     ) mem_arb (
         .clk        (clk),
-        .reset      (mem_arb_reset),
+        .reset      (reset),
         .bus_in_if  (cci_vx_mem_bus_if),
         .bus_out_if (mem_bus_if)
     );
@@ -778,14 +776,12 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         end
     end
 
-    `RESET_RELAY (cci_rdq_reset, reset);
-
     VX_fifo_queue #(
         .DATAW (CCI_RD_QUEUE_DATAW),
         .DEPTH (CCI_RD_QUEUE_SIZE)
     ) cci_rd_req_queue (
         .clk      (clk),
-        .reset    (cci_rdq_reset),
+        .reset    (reset),
         .push     (cci_rdq_push),
         .pop      (cci_rdq_pop),
         .data_in  (cci_rdq_din),

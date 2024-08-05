@@ -383,16 +383,16 @@ module VX_schedule import VX_gpu_pkg::*; #(
     wire [`NUM_WARPS-1:0] pending_warp_empty;
     wire [`NUM_WARPS-1:0] pending_warp_alm_empty;
 
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
+    `RESET_RELAY_EX (pending_instr_reset, reset, `NUM_WARPS, `MAX_FANOUT);
 
-        `RESET_RELAY (pending_instr_reset, reset);
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
 
         VX_pending_size #(
             .SIZE      (4096),
             .ALM_EMPTY (1)
         ) counter (
             .clk       (clk),
-            .reset     (pending_instr_reset),
+            .reset     (pending_instr_reset[i]),
             .incr      (per_warp_incr[i]),
             .decr      (commit_sched_if.committed_warps[i]),
             .empty     (pending_warp_empty[i]),
