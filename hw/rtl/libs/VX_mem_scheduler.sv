@@ -167,15 +167,13 @@ module VX_mem_scheduler #(
         assign reqq_tag_u = ibuf_waddr;
     end
 
-    `RESET_RELAY (reqq_reset, reset);
-
     VX_elastic_buffer #(
         .DATAW   (1 + CORE_REQS * (1 + WORD_SIZE + ADDR_WIDTH + ATYPE_WIDTH + WORD_WIDTH) + REQQ_TAG_WIDTH),
         .SIZE    (CORE_QUEUE_SIZE),
         .OUT_REG (1)
     ) req_queue (
         .clk      (clk),
-        .reset    (reqq_reset),
+        .reset    (reset),
         .valid_in (reqq_valid_in),
         .ready_in (reqq_ready_in),
         .data_in  ({core_req_rw, core_req_mask, core_req_byteen, core_req_addr, core_req_atype, core_req_data, reqq_tag_u}),
@@ -391,15 +389,13 @@ module VX_mem_scheduler #(
 
     assign reqq_ready_s = req_sent_all;
 
-    `RESET_RELAY (mem_req_reset, reset);
-
     VX_elastic_buffer #(
         .DATAW   (MEM_CHANNELS + 1 + MEM_CHANNELS * (LINE_SIZE + MEM_ADDR_WIDTH + ATYPE_WIDTH + LINE_WIDTH) + MEM_TAG_WIDTH),
         .SIZE    (`TO_OUT_BUF_SIZE(MEM_OUT_BUF)),
         .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
     ) mem_req_buf (
         .clk       (clk),
-        .reset     (mem_req_reset),
+        .reset     (reset),
         .valid_in  (mem_req_valid_s),
         .ready_in  (mem_req_ready_s),
         .data_in   ({mem_req_mask_s, mem_req_rw_s, mem_req_byteen_s, mem_req_addr_s, mem_req_atype_s, mem_req_data_s, mem_req_tag_s}),
@@ -513,15 +509,13 @@ module VX_mem_scheduler #(
 
     // Send response to caller
 
-    `RESET_RELAY (crsp_reset, reset);
-
     VX_elastic_buffer #(
         .DATAW   (CORE_REQS + 1 + 1 + (CORE_REQS * WORD_WIDTH) + TAG_WIDTH),
         .SIZE    (`TO_OUT_BUF_SIZE(CORE_OUT_BUF)),
         .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
     ) rsp_buf (
         .clk       (clk),
-        .reset     (crsp_reset),
+        .reset     (reset),
         .valid_in  (crsp_valid),
         .ready_in  (crsp_ready),
         .data_in   ({crsp_mask, crsp_sop, crsp_eop, crsp_data, crsp_tag}),

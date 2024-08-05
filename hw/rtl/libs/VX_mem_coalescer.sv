@@ -225,14 +225,12 @@ module VX_mem_coalescer #(
         endcase
     end
 
-    `RESET_RELAY (pipe_reset, reset);
-
     VX_pipe_register #(
         .DATAW  (1 + NUM_REQS + 1 + 1 + NUM_REQS + OUT_REQS * (1 + 1 + OUT_ADDR_WIDTH + ATYPE_WIDTH + OUT_ADDR_WIDTH + ATYPE_WIDTH + DATA_OUT_SIZE + DATA_OUT_WIDTH) + OUT_TAG_WIDTH),
         .RESETW (1 + NUM_REQS + 1)
     ) pipe_reg (
         .clk      (clk),
-        .reset    (pipe_reset),
+        .reset    (reset),
         .enable   (1'b1),
         .data_in  ({state_n, processed_mask_n, out_req_valid_n, out_req_rw_n, addr_matches_n, batch_valid_n, out_req_mask_n, seed_addr_n, seed_atype_n, out_req_addr_n, out_req_atype_n, out_req_byteen_n, out_req_data_n, out_req_tag_n}),
         .data_out ({state_r, processed_mask_r, out_req_valid_r, out_req_rw_r, addr_matches_r, batch_valid_r, out_req_mask_r, seed_addr_r, seed_atype_r, out_req_addr_r, out_req_atype_r, out_req_byteen_r, out_req_data_r, out_req_tag_r})

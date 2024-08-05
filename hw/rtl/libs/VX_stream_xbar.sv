@@ -126,10 +126,9 @@ module VX_stream_xbar #(
         assign data_out_r = {NUM_OUTPUTS{data_in}};
         assign ready_in = ready_out_r[sel_in];
 
+        `RESET_RELAY_EX (out_buf_reset, reset, NUM_OUTPUTS, `MAX_FANOUT);
+
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-
-            `RESET_RELAY (out_buf_reset, reset);
-
             VX_elastic_buffer #(
                 .DATAW   (DATAW),
                 .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
@@ -137,7 +136,7 @@ module VX_stream_xbar #(
                 .LUTRAM  (LUTRAM)
             ) out_buf (
                 .clk       (clk),
-                .reset     (out_buf_reset),
+                .reset     (out_buf_reset[i]),
                 .valid_in  (valid_out_r[i]),
                 .ready_in  (ready_out_r[i]),
                 .data_in   (data_out_r[i]),

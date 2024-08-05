@@ -57,7 +57,7 @@ module VX_alu_unit #(
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin
 
-        `RESET_RELAY (block_reset, reset);
+        `RESET_RELAY_EN (block_reset, reset,(BLOCK_SIZE > 1));
 
         wire is_muldiv_op = `EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == `ALU_TYPE_MULDIV);
 
@@ -72,15 +72,13 @@ module VX_alu_unit #(
         assign int_execute_if.valid = per_block_execute_if[block_idx].valid && ~is_muldiv_op;
         assign int_execute_if.data = per_block_execute_if[block_idx].data;
 
-        `RESET_RELAY (int_reset, block_reset);
-
         VX_alu_int #(
             .INSTANCE_ID ($sformatf("%s-int%0d", INSTANCE_ID, block_idx)),
             .BLOCK_IDX (block_idx),
             .NUM_LANES (NUM_LANES)
         ) alu_int (
             .clk        (clk),
-            .reset      (int_reset),
+            .reset      (block_reset),
             .execute_if (int_execute_if),
             .branch_ctl_if (branch_ctl_if[block_idx]),
             .commit_if  (int_commit_if)
@@ -99,14 +97,12 @@ module VX_alu_unit #(
         assign muldiv_execute_if.valid = per_block_execute_if[block_idx].valid && is_muldiv_op;
         assign muldiv_execute_if.data = per_block_execute_if[block_idx].data;
 
-        `RESET_RELAY (muldiv_reset, block_reset);
-
         VX_alu_muldiv #(
             .INSTANCE_ID ($sformatf("%s-muldiv%0d", INSTANCE_ID, block_idx)),
             .NUM_LANES (NUM_LANES)
         ) muldiv_unit (
             .clk        (clk),
-            .reset      (muldiv_reset),
+            .reset      (block_reset),
             .execute_if (muldiv_execute_if),
             .commit_if  (muldiv_commit_if)
         );
@@ -121,8 +117,6 @@ module VX_alu_unit #(
 
         // send response
 
-        `RESET_RELAY (arb_reset, block_reset);
-
         VX_stream_arb #(
             .NUM_INPUTS (RSP_ARB_SIZE),
             .DATAW      (RSP_ARB_DATAW),
@@ -130,7 +124,7 @@ module VX_alu_unit #(
             .ARBITER    ("F")
         ) rsp_arb (
             .clk       (clk),
-            .reset     (arb_reset),
+            .reset     (block_reset),
             .valid_in  ({
             `ifdef EXT_M_ENABLE
                 muldiv_commit_if.valid,

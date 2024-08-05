@@ -217,15 +217,13 @@ module VX_cache_bypass #(
 
     assign mem_bus_in_if.req_ready = mem_req_out_ready;
 
-    `RESET_RELAY (mem_req_reset, reset);
-
     VX_elastic_buffer #(
         .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `ADDR_TYPE_WIDTH + `CS_LINE_WIDTH + MEM_TAG_OUT_WIDTH),
         .SIZE    ((!DIRECT_PASSTHRU) ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
         .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
     ) mem_req_buf (
         .clk       (clk),
-        .reset     (mem_req_reset),
+        .reset     (reset),
         .valid_in  (mem_req_out_valid),
         .ready_in  (mem_req_out_ready),
         .data_in   ({mem_req_out_rw,             mem_req_out_byteen,             mem_req_out_addr,             mem_req_out_atype,             mem_req_out_data,             mem_req_out_tag}),
@@ -311,16 +309,13 @@ module VX_cache_bypass #(
     end
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-
-        `RESET_RELAY (core_rsp_reset, reset);
-
         VX_elastic_buffer #(
             .DATAW   (`CS_WORD_WIDTH + CORE_TAG_WIDTH),
             .SIZE    ((!DIRECT_PASSTHRU) ? `TO_OUT_BUF_SIZE(CORE_OUT_BUF) : 0),
             .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
         ) core_rsp_buf (
             .clk       (clk),
-            .reset     (core_rsp_reset),
+            .reset     (reset),
             .valid_in  (core_rsp_in_valid[i]),
             .ready_in  (core_rsp_in_ready[i]),
             .data_in   ({core_rsp_in_data[i], core_rsp_in_tag[i]}),

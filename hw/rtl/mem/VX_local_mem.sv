@@ -163,7 +163,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         wire bank_rsp_valid, bank_rsp_ready;
         wire [WORD_WIDTH-1:0] bank_rsp_data;
 
-        `RESET_RELAY (bram_reset, reset);
+        `RESET_RELAY_EN (bram_reset, reset, (NUM_BANKS > 1));
 
         VX_sp_ram #(
             .DATAW (WORD_WIDTH),
