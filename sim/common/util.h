@@ -71,3 +71,27 @@ const char* fileExtension(const char* filepath);
 
 void *aligned_malloc(size_t size, size_t alignment);
 void aligned_free(void *ptr);
+
+namespace vortex {
+
+// Verilator data type casting
+template <typename R, size_t W, typename Enable = void>
+class VDataCast;
+template <typename R, size_t W>
+class VDataCast<R, W, typename std::enable_if<(W > 8)>::type> {
+public:
+  template <typename T>
+  static R get(T& obj) {
+    return reinterpret_cast<R>(obj.data());
+  }
+};
+template <typename R, size_t W>
+class VDataCast<R, W, typename std::enable_if<(W <= 8)>::type> {
+public:
+  template <typename T>
+  static R get(T& obj) {
+    return reinterpret_cast<R>(&obj);
+  }
+};
+
+}
