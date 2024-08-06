@@ -162,6 +162,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .DATA_SIZE    (LSU_WORD_SIZE),
             .TAG_WIDTH    (LSU_TAG_WIDTH),
             .TAG_SEL_BITS (LSU_TAG_WIDTH - `UUID_WIDTH),
+            .ARBITER      ("P"),
             .REQ_OUT_BUF  (3),
             .RSP_OUT_BUF  (0)
         ) lsu_adapter (

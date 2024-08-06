@@ -18,7 +18,8 @@ module VX_elastic_buffer #(
     parameter DATAW   = 1,
     parameter SIZE    = 1,
     parameter OUT_REG = 0,
-    parameter LUTRAM  = 0
+    parameter LUTRAM  = 0,
+    parameter MAX_FANOUT = 0
 ) (
     input  wire             clk,
     input  wire             reset,
@@ -39,6 +40,43 @@ module VX_elastic_buffer #(
         assign valid_out = valid_in;
         assign data_out  = data_in;
         assign ready_in  = ready_out;
+
+    end else if (MAX_FANOUT != 0 && (DATAW > (MAX_FANOUT + MAX_FANOUT/2))) begin
+
+        localparam NUM_SLICES = `CDIV(DATAW, MAX_FANOUT);
+        localparam N_DATAW = DATAW / NUM_SLICES;
+
+        for (genvar i = 0; i < NUM_SLICES; ++i) begin
+
+            localparam S_DATAW = (i == NUM_SLICES-1) ? (DATAW - i * N_DATAW) : N_DATAW;
+
+            wire valid_out_t, ready_in_t;
+            `UNUSED_VAR (valid_out_t)
+            `UNUSED_VAR (ready_in_t)
+
+            `RESET_RELAY (slice_reset, reset);
+
+            VX_elastic_buffer #(
+                .DATAW   (S_DATAW),
+                .SIZE    (SIZE),
+                .OUT_REG (OUT_REG),
+                .LUTRAM  (LUTRAM)
+                ) buffer_slice (
+                .clk       (clk),
+                .reset     (slice_reset),
+                .valid_in  (valid_in),
+                .data_in   (data_in[i * N_DATAW +: S_DATAW]),
+                .ready_in  (ready_in_t),
+                .valid_out (valid_out_t),
+                .data_out  (data_out[i * N_DATAW +: S_DATAW]),
+                .ready_out (ready_out)
+            );
+
+            if (i == 0) begin
+                assign ready_in = ready_in_t;
+                assign valid_out = valid_out_t;
+            end
+        end
 
     end else if (SIZE == 1) begin
 
