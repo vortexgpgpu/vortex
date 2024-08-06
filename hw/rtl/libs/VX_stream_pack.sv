@@ -39,8 +39,9 @@ module VX_stream_pack #(
     input wire                          ready_out
 );
     if (NUM_REQS > 1) begin
+        localparam LOG_NUM_REQS = `CLOG2(NUM_REQS);
 
-        wire [NUM_REQS-1:0] grant_onehot;
+        wire [LOG_NUM_REQS-1:0] grant_index;
         wire grant_valid;
         wire grant_ready;
 
@@ -52,21 +53,12 @@ module VX_stream_pack #(
             .reset       (reset),
             .requests    (valid_in),
             .grant_valid (grant_valid),
-            `UNUSED_PIN  (grant_index),
-            .grant_onehot(grant_onehot),
+            .grant_index (grant_index),
+            `UNUSED_PIN  (grant_onehot),
             .grant_ready (grant_ready)
         );
 
-        wire [TAG_WIDTH-1:0] tag_sel;
-
-        VX_onehot_mux #(
-            .DATAW (TAG_WIDTH),
-            .N     (NUM_REQS)
-        ) onehot_mux (
-            .data_in  (tag_in),
-            .sel_in   (grant_onehot),
-            .data_out (tag_sel)
-        );
+        wire [TAG_WIDTH-1:0] tag_sel = tag_in[grant_index];
 
         wire [NUM_REQS-1:0] tag_matches;
 
