@@ -39,6 +39,7 @@ typedef VVortex Device;
 #include <unordered_map>
 
 #include <dram_sim.h>
+#include <util.h>
 
 #ifndef MEMORY_BANKS
   #ifdef PLATFORM_PARAM_LOCAL_MEMORY_BANKS
@@ -469,7 +470,7 @@ private:
         }
         printf("\n");
         */
-        memcpy(device_->mem_rsp_data.data(), mem_rsp->block.data(), MEM_BLOCK_SIZE);
+        memcpy(VDataCast<void*, MEM_BLOCK_SIZE>::get(device_->mem_rsp_data), mem_rsp->block.data(), MEM_BLOCK_SIZE);
         device_->mem_rsp_tag = mem_rsp->tag;
         pending_mem_reqs_.erase(mem_rsp_it);
         mem_rd_rsp_active_ = true;
@@ -484,7 +485,7 @@ private:
       uint64_t byte_addr = (device_->mem_req_addr * MEM_BLOCK_SIZE);
       if (device_->mem_req_rw) {
         auto byteen = device_->mem_req_byteen;
-        auto data = (uint8_t*)(device_->mem_req_data.data());
+        auto data = VDataCast<uint8_t*, MEM_BLOCK_SIZE>::get(device_->mem_req_data);
 
         if (byte_addr >= uint64_t(IO_COUT_ADDR)
          && byte_addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {

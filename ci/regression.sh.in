@@ -21,6 +21,8 @@ rm -f blackbox.*.cache
 
 XLEN=${XLEN:=@XLEN@}
 
+XSIZE=$(XLEN/8)
+
 echo "Vortex Regression Test: XLEN=$XLEN"
 
 unittest()
@@ -97,11 +99,11 @@ regression()
 
     # test global barrier
     CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
-    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -tgbar" --cores=2
+    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tgbar" --cores=2
 
     # test local barrier
     ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
-    ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -tbar"
+    ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tbar"
 
     echo "regression tests done!"
 }
@@ -137,10 +139,10 @@ cache()
     CONFIGS="-DICACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
 
     # reduce l1 line size
-    CONFIGS="-DL1_LINE_SIZE=$XLEN/8" ./ci/blackbox.sh --driver=rtlsim --app=io_addr
-    CONFIGS="-DL1_LINE_SIZE=$XLEN/8" ./ci/blackbox.sh --driver=simx --app=io_addr
-    CONFIGS="-DL1_LINE_SIZE=$XLEN/8 -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
-    CONFIGS="-DL1_LINE_SIZE=$XLEN/8 -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=sgemmx
+    CONFIGS="-DL1_LINE_SIZE=$XSIZE" ./ci/blackbox.sh --driver=rtlsim --app=io_addr
+    CONFIGS="-DL1_LINE_SIZE=$XSIZE" ./ci/blackbox.sh --driver=simx --app=io_addr
+    CONFIGS="-DL1_LINE_SIZE=$XSIZE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DL1_LINE_SIZE=$XSIZE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=sgemmx
 
     # test cache ways
     CONFIGS="-DICACHE_NUM_WAYS=8 -DDCACHE_NUM_WAYS=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
@@ -254,16 +256,24 @@ config2()
     CONFIGS="-DEXT_ZICOND_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo
 
     # test AXI bus
-    AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --app=demo
+    AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --app=mstress
 
     # test 128-bit MEM block
-    CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=opae --app=demo
+    CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=opae --app=mstress
+
+    # test XLEN-bit MEM block
+    CONFIGS="-DMEM_BLOCK_SIZE=$XSIZE" ./ci/blackbox.sh --driver=opae --app=mstress
+    CONFIGS="-DMEM_BLOCK_SIZE=$XSIZE" ./ci/blackbox.sh --driver=simx --app=mstress
+
+    # test memory coalescing
+    CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=rtlsim --app=mstress --threads=8
+    CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=simx --app=mstress --threads=8
 
     # test single-bank DRAM
-    CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1" ./ci/blackbox.sh --driver=opae --app=demo
+    CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1" ./ci/blackbox.sh --driver=opae --app=mstress
 
     # test 27-bit DRAM address
-    CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=opae --app=demo
+    CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=opae --app=mstress
 
     echo "configuration-2 tests done!"
 }

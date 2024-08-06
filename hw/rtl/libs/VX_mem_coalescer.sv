@@ -135,7 +135,11 @@ module VX_mem_coalescer #(
             `UNUSED_PIN (onehot),
             .valid_out (batch_valid_n[i])
         );
-        assign seed_idx[i] = NUM_REQS_W'(i * DATA_RATIO) + NUM_REQS_W'(batch_idx);
+        if (OUT_REQS > 1) begin
+            assign seed_idx[i] = {(NUM_REQS_W-DATA_RATIO_W)'(i), batch_idx};
+        end else begin
+            assign seed_idx[i] = batch_idx;
+        end
     end
 
     for (genvar i = 0; i < OUT_REQS; ++i) begin
