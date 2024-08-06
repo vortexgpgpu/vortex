@@ -21,7 +21,7 @@ rm -f blackbox.*.cache
 
 XLEN=${XLEN:=@XLEN@}
 
-XSIZE=$(XLEN/8)
+XSIZE=$((XLEN / 8))
 
 echo "Vortex Regression Test: XLEN=$XLEN"
 
