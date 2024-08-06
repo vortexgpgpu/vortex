@@ -18,7 +18,7 @@ module VX_onehot_mux #(
     parameter DATAW = 1,
     parameter N     = 1,
     parameter MODEL = 1,
-    parameter LUT_OPT = 1
+    parameter LUT_OPT = 0
 ) (
     input wire [N-1:0][DATAW-1:0] data_in,
     input wire [N-1:0]            sel_in,
