@@ -183,8 +183,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     VX_pipe_register #(
         .DATAW  (1 + NUM_SRC_REGS * REGS_DATAW + NUM_BANKS + NUM_BANKS * REGS_DATAW + META_DATAW + NUM_BANKS * REQ_SEL_WIDTH),
-        .RESETW (1 + NUM_SRC_REGS * REGS_DATAW),
-        .MAX_FANOUT (`MAX_FANOUT * 64)
+        .RESETW (1 + NUM_SRC_REGS * REGS_DATAW)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (pipe2_reset),
@@ -206,8 +205,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         .DATAW   (DATAW),
         .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
         .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
-        .LUTRAM  (1),
-        .MAX_FANOUT (`MAX_FANOUT * 64)
+        .LUTRAM  (1)
     ) out_buf (
         .clk       (clk),
         .reset     (reset),
