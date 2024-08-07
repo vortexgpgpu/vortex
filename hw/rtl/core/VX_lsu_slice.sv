@@ -65,19 +65,19 @@ module VX_lsu_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
 
     // address type calculation
 
-    wire [NUM_LANES-1:0][`ADDR_TYPE_WIDTH-1:0] mem_req_atype;
+    wire [NUM_LANES-1:0][`MEM_REQ_FLAGS_WIDTH-1:0] mem_req_flags;
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         wire [MEM_ADDRW-1:0] block_addr = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
         // is I/O address
         wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`XLEN'(`IO_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(`XLEN'(`IO_END_ADDR) >> MEM_ASHIFT);
-        assign mem_req_atype[i][`ADDR_TYPE_FLUSH] = req_is_fence;
-        assign mem_req_atype[i][`ADDR_TYPE_IO] = (block_addr >= io_addr_start) && (block_addr < io_addr_end);
+        assign mem_req_flags[i][`MEM_REQ_FLAG_FLUSH] = req_is_fence;
+        assign mem_req_flags[i][`MEM_REQ_FLAG_IO] = (block_addr >= io_addr_start) && (block_addr < io_addr_end);
     `ifdef LMEM_ENABLE
         // is local memory address
         wire [MEM_ADDRW-1:0] lmem_addr_start = MEM_ADDRW'(`XLEN'(`LMEM_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] lmem_addr_end = MEM_ADDRW'((`XLEN'(`LMEM_BASE_ADDR) + `XLEN'(1 << `LMEM_LOG_SIZE)) >> MEM_ASHIFT);
-        assign mem_req_atype[i][`ADDR_TYPE_LOCAL] = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);
+        assign mem_req_flags[i][`MEM_REQ_FLAG_LOCAL] = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);
     `endif
     end
 
@@ -300,7 +300,7 @@ module VX_lsu_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     wire [NUM_LANES-1:0]                    lsu_mem_req_mask;
     wire [NUM_LANES-1:0][LSU_WORD_SIZE-1:0] lsu_mem_req_byteen;
     wire [NUM_LANES-1:0][LSU_ADDR_WIDTH-1:0] lsu_mem_req_addr;
-    wire [NUM_LANES-1:0][`ADDR_TYPE_WIDTH-1:0] lsu_mem_req_atype;
+    wire [NUM_LANES-1:0][`MEM_REQ_FLAGS_WIDTH-1:0] lsu_mem_req_flags;
     wire [NUM_LANES-1:0][(LSU_WORD_SIZE*8)-1:0] lsu_mem_req_data;
     wire [LSU_TAG_WIDTH-1:0]                lsu_mem_req_tag;
     wire                                    lsu_mem_req_ready;
@@ -320,7 +320,7 @@ module VX_lsu_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
         .WORD_SIZE   (LSU_WORD_SIZE),
         .LINE_SIZE   (LSU_WORD_SIZE),
         .ADDR_WIDTH  (LSU_ADDR_WIDTH),
-        .ATYPE_WIDTH (`ADDR_TYPE_WIDTH),
+        .FLAGS_WIDTH (`MEM_REQ_FLAGS_WIDTH),
         .TAG_WIDTH   (TAG_WIDTH),
         .CORE_QUEUE_SIZE (`LSUQ_IN_SIZE),
         .MEM_QUEUE_SIZE (`LSUQ_OUT_SIZE),
@@ -338,7 +338,7 @@ module VX_lsu_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
         .core_req_mask  (mem_req_mask),
         .core_req_byteen(mem_req_byteen),
         .core_req_addr  (mem_req_addr),
-        .core_req_atype (mem_req_atype),
+        .core_req_flags (mem_req_flags),
         .core_req_data  (mem_req_data),
         .core_req_tag   (mem_req_tag),
         .core_req_ready (mem_req_ready),
@@ -360,7 +360,7 @@ module VX_lsu_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
         .mem_req_mask   (lsu_mem_req_mask),
         .mem_req_byteen (lsu_mem_req_byteen),
         .mem_req_addr   (lsu_mem_req_addr),
-        .mem_req_atype  (lsu_mem_req_atype),
+        .mem_req_flags  (lsu_mem_req_flags),
         .mem_req_data   (lsu_mem_req_data),
         .mem_req_tag    (lsu_mem_req_tag),
         .mem_req_ready  (lsu_mem_req_ready),
@@ -378,7 +378,7 @@ module VX_lsu_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     assign lsu_mem_if.req_data.rw = lsu_mem_req_rw;
     assign lsu_mem_if.req_data.byteen = lsu_mem_req_byteen;
     assign lsu_mem_if.req_data.addr = lsu_mem_req_addr;
-    assign lsu_mem_if.req_data.atype = lsu_mem_req_atype;
+    assign lsu_mem_if.req_data.flags = lsu_mem_req_flags;
     assign lsu_mem_if.req_data.data = lsu_mem_req_data;
     assign lsu_mem_if.req_data.tag = lsu_mem_req_tag;
     assign lsu_mem_req_ready = lsu_mem_if.req_ready;
@@ -513,16 +513,16 @@ module VX_lsu_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
             if (mem_req_rw) begin
                 `TRACE(1, ("%d: %s Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask));
                 `TRACE_ARRAY1D(1, "0x%h", full_addr, NUM_LANES);
-                `TRACE(1, (", atype="));
-                `TRACE_ARRAY1D(1, "%b", mem_req_atype, NUM_LANES);
+                `TRACE(1, (", flags="));
+                `TRACE_ARRAY1D(1, "%b", mem_req_flags, NUM_LANES);
                 `TRACE(1, (", byteen=0x%0h, data=", mem_req_byteen));
                 `TRACE_ARRAY1D(1, "0x%0h", mem_req_data, NUM_LANES);
                 `TRACE(1, (", tag=0x%0h (#%0d)\n", mem_req_tag, execute_if.data.uuid));
             end else begin
                 `TRACE(1, ("%d: %s Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask));
                 `TRACE_ARRAY1D(1, "0x%h", full_addr, NUM_LANES);
-                `TRACE(1, (", atype="));
-                `TRACE_ARRAY1D(1, "%b", mem_req_atype, NUM_LANES);
+                `TRACE(1, (", flags="));
+                `TRACE_ARRAY1D(1, "%b", mem_req_flags, NUM_LANES);
                 `TRACE(1, (", byteen=0x%0h, rd=%0d, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if.data.rd, mem_req_tag, execute_if.data.uuid));
             end
         end

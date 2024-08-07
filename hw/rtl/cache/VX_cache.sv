@@ -185,7 +185,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .ready_out (mem_bus_if.req_ready)
     );
 
-    assign mem_bus_if.req_data.atype = mem_bus_if_flush ? `ADDR_TYPE_WIDTH'(1 << `ADDR_TYPE_FLUSH) : '0;
+    assign mem_bus_if.req_data.flags = mem_bus_if_flush ? `MEM_REQ_FLAGS_WIDTH'(1 << `MEM_REQ_FLAG_FLUSH) : '0;
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -273,7 +273,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         assign core_req_addr[i]   = core_bus2_if[i].req_data.addr;
         assign core_req_data[i]   = core_bus2_if[i].req_data.data;
         assign core_req_tag[i]    = core_bus2_if[i].req_data.tag;
-        assign core_req_flush[i]  = core_bus2_if[i].req_data.atype[`ADDR_TYPE_FLUSH];
+        assign core_req_flush[i]  = core_bus2_if[i].req_data.flags[`MEM_REQ_FLAG_FLUSH];
         assign core_bus2_if[i].req_ready = core_req_ready[i];
     end
 

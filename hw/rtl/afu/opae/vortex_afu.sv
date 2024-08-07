@@ -517,8 +517,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .mem_rsp_ready_out  (cci_vx_mem_bus_if[1].rsp_ready)
     );
 
-    assign cci_vx_mem_bus_if[1].req_data.atype = '0;
-    `UNUSED_VAR (cci_vx_mem_bus_if[1].req_data.atype)
+    assign cci_vx_mem_bus_if[1].req_data.flags = '0;
+    `UNUSED_VAR (cci_vx_mem_bus_if[1].req_data.flags)
 
     //--
 
@@ -570,8 +570,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .mem_rsp_ready_out  (cci_vx_mem_bus_if[0].rsp_ready)
     );
 
-    assign cci_vx_mem_bus_if[0].req_data.atype = '0;
-    `UNUSED_VAR (cci_vx_mem_bus_if[0].req_data.atype)
+    assign cci_vx_mem_bus_if[0].req_data.flags = '0;
+    `UNUSED_VAR (cci_vx_mem_bus_if[0].req_data.flags)
 
     //--
     VX_mem_bus_if #(
@@ -639,8 +639,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .avs_readdatavalid(avs_readdatavalid)
     );
 
-    assign mem_bus_if[0].req_data.atype = '0;
-    `UNUSED_VAR (mem_bus_if[0].req_data.atype)
+    assign mem_bus_if[0].req_data.flags = '0;
+    `UNUSED_VAR (mem_bus_if[0].req_data.flags)
 
     // CCI-P Read Request ///////////////////////////////////////////////////////////
 

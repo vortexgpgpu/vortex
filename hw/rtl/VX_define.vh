@@ -303,10 +303,10 @@
 `define L1_ENABLE
 `endif
 
-`define ADDR_TYPE_FLUSH         0
-`define ADDR_TYPE_IO            1
-`define ADDR_TYPE_LOCAL         2 // shoud be last since optional
-`define ADDR_TYPE_WIDTH         (`ADDR_TYPE_LOCAL + `LMEM_ENABLED)
+`define MEM_REQ_FLAG_FLUSH      0
+`define MEM_REQ_FLAG_IO         1
+`define MEM_REQ_FLAG_LOCAL      2 // shoud be last since optional
+`define MEM_REQ_FLAGS_WIDTH     (`MEM_REQ_FLAG_LOCAL + `LMEM_ENABLED)
 
 `define VX_MEM_BYTEEN_WIDTH     `L3_LINE_SIZE
 `define VX_MEM_ADDR_WIDTH       (`MEM_ADDR_WIDTH - `CLOG2(`L3_LINE_SIZE))
@@ -364,7 +364,7 @@
     assign dst.req_data.rw = src.req_data.rw; \
     assign dst.req_data.byteen = src.req_data.byteen; \
     assign dst.req_data.addr = src.req_data.addr; \
-    assign dst.req_data.atype = src.req_data.atype; \
+    assign dst.req_data.flags = src.req_data.flags; \
     assign dst.req_data.data = src.req_data.data; \
     if (TD != TS) \
         assign dst.req_data.tag = {src.req_data.tag, {(TD-TS){1'b0}}}; \

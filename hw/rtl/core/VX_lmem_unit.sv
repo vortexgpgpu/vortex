@@ -29,7 +29,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
     `STATIC_ASSERT(`IS_DIVISBLE((1 << `LMEM_LOG_SIZE), `MEM_BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT(0 == (`LMEM_BASE_ADDR % (1 << `LMEM_LOG_SIZE)), ("invalid parameter"))
 
-    localparam REQ_DATAW = `NUM_LSU_LANES + 1 + `NUM_LSU_LANES * (LSU_WORD_SIZE + LSU_ADDR_WIDTH + `ADDR_TYPE_WIDTH + LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
+    localparam REQ_DATAW = `NUM_LSU_LANES + 1 + `NUM_LSU_LANES * (LSU_WORD_SIZE + LSU_ADDR_WIDTH + `MEM_REQ_FLAGS_WIDTH + LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
     localparam RSP_DATAW = `NUM_LSU_LANES + `NUM_LSU_LANES * (LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
     localparam LMEM_ADDR_WIDTH = `LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE);
 
@@ -45,7 +45,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
 
         wire [`NUM_LSU_LANES-1:0] is_addr_local_mask;
         for (genvar j = 0; j < `NUM_LSU_LANES; ++j) begin
-            assign is_addr_local_mask[j] = lsu_mem_in_if[i].req_data.atype[j][`ADDR_TYPE_LOCAL];
+            assign is_addr_local_mask[j] = lsu_mem_in_if[i].req_data.flags[j][`MEM_REQ_FLAGE_LOCAL];
         end
 
         wire is_addr_global = | (lsu_mem_in_if[i].req_data.mask & ~is_addr_local_mask);
@@ -67,7 +67,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
                 lsu_mem_in_if[i].req_data.rw,
                 lsu_mem_in_if[i].req_data.byteen,
                 lsu_mem_in_if[i].req_data.addr,
-                lsu_mem_in_if[i].req_data.atype,
+                lsu_mem_in_if[i].req_data.flags,
                 lsu_mem_in_if[i].req_data.data,
                 lsu_mem_in_if[i].req_data.tag
             }),
@@ -78,7 +78,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
                 lsu_mem_out_if[i].req_data.rw,
                 lsu_mem_out_if[i].req_data.byteen,
                 lsu_mem_out_if[i].req_data.addr,
-                lsu_mem_out_if[i].req_data.atype,
+                lsu_mem_out_if[i].req_data.flags,
                 lsu_mem_out_if[i].req_data.data,
                 lsu_mem_out_if[i].req_data.tag
             }),
@@ -98,7 +98,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
                 lsu_mem_in_if[i].req_data.rw,
                 lsu_mem_in_if[i].req_data.byteen,
                 lsu_mem_in_if[i].req_data.addr,
-                lsu_mem_in_if[i].req_data.atype,
+                lsu_mem_in_if[i].req_data.flags,
                 lsu_mem_in_if[i].req_data.data,
                 lsu_mem_in_if[i].req_data.tag
             }),
@@ -109,7 +109,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
                 lsu_switch_if[i].req_data.rw,
                 lsu_switch_if[i].req_data.byteen,
                 lsu_switch_if[i].req_data.addr,
-                lsu_switch_if[i].req_data.atype,
+                lsu_switch_if[i].req_data.flags,
                 lsu_switch_if[i].req_data.data,
                 lsu_switch_if[i].req_data.tag
             }),

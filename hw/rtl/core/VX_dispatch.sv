@@ -61,7 +61,8 @@ module VX_dispatch import VX_gpu_pkg::*; #(
             .DATAW   (DATAW),
             .SIZE    (2),
             .OUT_REG (2), // 2-cycle EB for area reduction
-            .LUTRAM  (1)
+            .LUTRAM  (1),
+            .MAX_FANOUT (`MAX_FANOUT * 64)
         ) buffer (
             .clk        (clk),
             .reset      (buffer_reset),
