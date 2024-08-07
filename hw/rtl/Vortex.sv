@@ -109,7 +109,7 @@ module Vortex import VX_gpu_pkg::*; (
     assign mem_req_data  = mem_bus_if.req_data.data;
     assign mem_req_tag   = mem_bus_if.req_data.tag;
     assign mem_bus_if.req_ready = mem_req_ready;
-    `UNUSED_VAR (mem_bus_if.req_data.atype)
+    `UNUSED_VAR (mem_bus_if.req_data.flags)
 
     assign mem_bus_if.rsp_valid = mem_rsp_valid;
     assign mem_bus_if.rsp_data.data  = mem_rsp_data;

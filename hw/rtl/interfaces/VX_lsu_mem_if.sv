@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,18 +16,18 @@
 interface VX_lsu_mem_if #(
     parameter NUM_LANES  = 1,
     parameter DATA_SIZE  = 1,
-    parameter ATYPE_WIDTH= `ADDR_TYPE_WIDTH,
+    parameter FLAGS_WIDTH= `MEM_REQ_FLAGS_WIDTH,
     parameter TAG_WIDTH  = 1,
     parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
     parameter ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE)
 ) ();
 
     typedef struct packed {
-        logic                   rw;    
+        logic                   rw;
         logic [NUM_LANES-1:0]   mask;
         logic [NUM_LANES-1:0][DATA_SIZE-1:0]   byteen;
         logic [NUM_LANES-1:0][ADDR_WIDTH-1:0]  addr;
-        logic [NUM_LANES-1:0][ATYPE_WIDTH-1:0] atype;
+        logic [NUM_LANES-1:0][FLAGS_WIDTH-1:0] flags;
         logic [NUM_LANES-1:0][DATA_SIZE*8-1:0] data;
         logic [TAG_WIDTH-1:0]   tag;
     } req_data_t;

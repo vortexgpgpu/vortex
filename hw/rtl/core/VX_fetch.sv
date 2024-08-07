@@ -116,7 +116,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .ready_out (icache_bus_if.req_ready)
     );
 
-    assign icache_bus_if.req_data.atype  = '0;
+    assign icache_bus_if.req_data.flags  = '0;
     assign icache_bus_if.req_data.rw     = 0;
     assign icache_bus_if.req_data.byteen = 4'b1111;
     assign icache_bus_if.req_data.data   = '0;
