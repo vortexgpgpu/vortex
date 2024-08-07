@@ -13,6 +13,7 @@
 
 #include <VX_config.h>
 #include <VX_types.h>
+#include <newlib.h>
 #include "common.h"
 
 .section .init, "ax"
