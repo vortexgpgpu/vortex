@@ -31,9 +31,9 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
 
   *data = (uint8_t*)malloc(fsize);
   *size = fread(*data, 1, fsize, fp);
-  
+
   fclose(fp);
-  
+
   return CL_SUCCESS;
 }
 
@@ -48,17 +48,16 @@ extern "C" void initBlackScholes(cl_context cxGPUContext, cl_command_queue cqPar
         shrCheckError(cBlackScholes != NULL, shrTRUE);*/
 
     shrLog("...creating BlackScholes program\n");
-        //cpBlackScholes = clCreateProgramWithSource(cxGPUContext, 1, (const char **)&cBlackScholes, &kernelLength, &ciErrNum);        
-        uint8_t *kernel_bin = NULL;
-        size_t kernel_size;
-        cl_int binary_status = 0;  
-        ciErrNum = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
-        shrCheckError(ciErrNum, CL_SUCCESS);
-        cl_device_id device_id = oclGetFirstDev(cxGPUContext);
-        cpBlackScholes = clCreateProgramWithBinary(
-            cxGPUContext, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &ciErrNum);
-        shrCheckError(ciErrNum, CL_SUCCESS);
+    uint8_t *kernel_bin = NULL;
+    size_t kernel_size;
+    cl_int binary_status = 0;
+    cl_device_id device_id = oclGetFirstDev(cxGPUContext);
 
+    ciErrNum = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
+    shrCheckError(ciErrNum, CL_SUCCESS);
+    cpBlackScholes = clCreateProgramWithSource(cxGPUContext, 1, (const char **)&kernel_bin, &kernel_size, &ciErrNum);
+    shrCheckError(ciErrNum, CL_SUCCESS);
+    
     shrLog("...building BlackScholes program\n");
         ciErrNum = clBuildProgram(cpBlackScholes, 0, NULL, "-cl-fast-relaxed-math -Werror", NULL, NULL);
 
@@ -96,7 +95,7 @@ extern "C" void initBlackScholes(cl_context cxGPUContext, cl_command_queue cqPar
         }
 
     //Save ptx code to separate file
-    oclLogPtx(cpBlackScholes, oclGetFirstDev(cxGPUContext), "BlackScholes.ptx");
+    //oclLogPtx(cpBlackScholes, oclGetFirstDev(cxGPUContext), "BlackScholes.ptx");
 
     shrLog("...creating BlackScholes kernels\n");
         ckBlackScholes = clCreateKernel(cpBlackScholes, "BlackScholes", &ciErrNum);
@@ -144,8 +143,8 @@ extern "C" void BlackScholes(
     shrCheckError(ciErrNum, CL_SUCCESS);
 
     //Run the kernel
-    size_t globalWorkSize = 16;//60 * 1024;
-    size_t localWorkSize = 16;//128;
+    size_t globalWorkSize = 128;//60 * 1024;
+    size_t localWorkSize = 1;//128;
     ciErrNum = clEnqueueNDRangeKernel(cqCommandQueue, ckBlackScholes, 1, NULL, &globalWorkSize, &localWorkSize, 0, NULL, NULL);
     shrCheckError(ciErrNum, CL_SUCCESS);
 }

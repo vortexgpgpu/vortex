@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -38,6 +38,18 @@
 
 `ifndef EXT_F_DISABLE
 `define EXT_F_ENABLE
+`endif
+
+`ifdef XLEN_64
+`ifndef FPU_DSP
+`ifndef EXT_D_DISABLE
+`define EXT_D_ENABLE
+`endif
+`endif
+`endif
+
+`ifndef EXT_ZICOND_DISABLE
+`define EXT_ZICOND_ENABLE
 `endif
 
 `ifndef XLEN_32
@@ -91,13 +103,12 @@
 `endif
 
 `ifndef NUM_BARRIERS
-`define NUM_BARRIERS 4
+`define NUM_BARRIERS `UP(`NUM_WARPS/2)
 `endif
 
 `ifndef SOCKET_SIZE
 `define SOCKET_SIZE `MIN(4, `NUM_CORES)
 `endif
-`define NUM_SOCKETS `UP(`NUM_CORES / `SOCKET_SIZE)
 
 `ifdef L2_ENABLE
     `define L2_ENABLED   1
@@ -142,57 +153,71 @@
 
 `ifdef XLEN_64
 
-`ifndef STARTUP_ADDR
-`define STARTUP_ADDR 64'h180000000
+`ifndef STACK_BASE_ADDR
+`define STACK_BASE_ADDR 64'h1FFFF0000
 `endif
 
-`ifndef STACK_BASE_ADDR
-`define STACK_BASE_ADDR 64'h1FF000000
+`ifndef STARTUP_ADDR
+`define STARTUP_ADDR    64'h080000000
+`endif
+
+`ifndef USER_BASE_ADDR
+`define USER_BASE_ADDR  64'h000010000
+`endif
+
+`ifndef IO_BASE_ADDR
+`define IO_BASE_ADDR    64'h000000040
 `endif
 
 `else
 
-`ifndef STARTUP_ADDR
-`define STARTUP_ADDR 32'h80000000
-`endif
-
 `ifndef STACK_BASE_ADDR
-`define STACK_BASE_ADDR 32'hFF000000
+`define STACK_BASE_ADDR 32'hFFFF0000
+`endif
+
+`ifndef STARTUP_ADDR
+`define STARTUP_ADDR    32'h80000000
+`endif
+
+`ifndef USER_BASE_ADDR
+`define USER_BASE_ADDR  32'h00010000
+`endif
+
+`ifndef IO_BASE_ADDR
+`define IO_BASE_ADDR    32'h00000040
 `endif
 
 `endif
 
-`ifndef LMEM_BASE_ADDR
-`define LMEM_BASE_ADDR `STACK_BASE_ADDR
-`endif
+`define IO_END_ADDR     `USER_BASE_ADDR
 
 `ifndef LMEM_LOG_SIZE
 `define LMEM_LOG_SIZE   14
 `endif
 
-`ifndef IO_BASE_ADDR
-`define IO_BASE_ADDR (`LMEM_BASE_ADDR + (1 << `LMEM_LOG_SIZE))
+`ifndef LMEM_BASE_ADDR
+`define LMEM_BASE_ADDR  `STACK_BASE_ADDR
 `endif
 
 `ifndef IO_COUT_ADDR
-`define IO_COUT_ADDR `IO_BASE_ADDR
+`define IO_COUT_ADDR    `IO_BASE_ADDR
 `endif
-`define IO_COUT_SIZE `MEM_BLOCK_SIZE
+`define IO_COUT_SIZE    64
 
-`ifndef IO_CSR_ADDR
-`define IO_CSR_ADDR (`IO_COUT_ADDR + `IO_COUT_SIZE)
+`ifndef IO_MPM_ADDR
+`define IO_MPM_ADDR     (`IO_COUT_ADDR + `IO_COUT_SIZE)
 `endif
-`define IO_CSR_SIZE (4 * 64 * `NUM_CORES * `NUM_CLUSTERS)
+`define IO_MPM_SIZE     (8 * 32 * `NUM_CORES * `NUM_CLUSTERS)
 
 `ifndef STACK_LOG2_SIZE
 `define STACK_LOG2_SIZE 13
 `endif
-`define STACK_SIZE (1 << `STACK_LOG2_SIZE)
+`define STACK_SIZE      (1 << `STACK_LOG2_SIZE)
 
 `define RESET_DELAY 8
 
 `ifndef STALL_TIMEOUT
-`define STALL_TIMEOUT (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
+`define STALL_TIMEOUT   (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
 `endif
 
 `ifndef SV_DPI
@@ -230,7 +255,7 @@
 
 // Issue width
 `ifndef ISSUE_WIDTH
-`define ISSUE_WIDTH     `MIN(`NUM_WARPS, 4)
+`define ISSUE_WIDTH     `UP(`NUM_WARPS / 8)
 `endif
 
 // Number of ALU units
@@ -251,12 +276,18 @@
 
 // Number of LSU units
 `ifndef NUM_LSU_LANES
-`define NUM_LSU_LANES   `MIN(`NUM_THREADS, 4)
+`define NUM_LSU_LANES   `NUM_THREADS
+`endif
+`ifndef NUM_LSU_BLOCKS
+`define NUM_LSU_BLOCKS  1
 `endif
 
 // Number of SFU units
 `ifndef NUM_SFU_LANES
-`define NUM_SFU_LANES   `MIN(`NUM_THREADS, 4)
+`define NUM_SFU_LANES   `NUM_THREADS
+`endif
+`ifndef NUM_SFU_BLOCKS
+`define NUM_SFU_BLOCKS  1
 `endif
 
 // Size of Instruction Buffer
@@ -264,19 +295,19 @@
 `define IBUF_SIZE   4
 `endif
 
-// Size of LSU Request Queue
-`ifndef LSUQ_SIZE
-`define LSUQ_SIZE   (2 * (`NUM_THREADS / `NUM_LSU_LANES))
+// LSU line size
+`ifndef LSU_LINE_SIZE
+`define LSU_LINE_SIZE   `MIN(`NUM_LSU_LANES * (`XLEN / 8), `L1_LINE_SIZE)
 `endif
 
-// LSU Duplicate Address Check
-`ifndef LSU_DUP_DISABLE
-`define LSU_DUP_ENABLE
+// Size of LSU Core Request Queue
+`ifndef LSUQ_IN_SIZE
+`define LSUQ_IN_SIZE    (2 * (`NUM_THREADS / `NUM_LSU_LANES))
 `endif
-`ifdef LSU_DUP_ENABLE
-`define LSU_DUP_ENABLED 1
-`else
-`define LSU_DUP_ENABLED 0
+
+// Size of LSU Memory Request Queue
+`ifndef LSUQ_OUT_SIZE
+`define LSUQ_OUT_SIZE   `MAX(`LSUQ_IN_SIZE, `LSU_LINE_SIZE / (`XLEN / 8))
 `endif
 
 `ifdef GBAR_ENABLE
@@ -312,20 +343,20 @@
 // FMA Latency
 `ifndef LATENCY_FMA
 `ifdef FPU_DPI
-`define LATENCY_FMA 4    
+`define LATENCY_FMA 4
 `endif
 `ifdef FPU_FPNEW
-`define LATENCY_FMA 4    
+`define LATENCY_FMA 4
 `endif
 `ifdef FPU_DSP
 `ifdef QUARTUS
 `define LATENCY_FMA 4
 `endif
 `ifdef VIVADO
-`define LATENCY_FMA 16    
+`define LATENCY_FMA 16
 `endif
 `ifndef LATENCY_FMA
-`define LATENCY_FMA 4    
+`define LATENCY_FMA 4
 `endif
 `endif
 `endif
@@ -333,17 +364,17 @@
 // FDIV Latency
 `ifndef LATENCY_FDIV
 `ifdef FPU_DPI
-`define LATENCY_FDIV 15    
+`define LATENCY_FDIV 15
 `endif
 `ifdef FPU_FPNEW
-`define LATENCY_FDIV 16    
+`define LATENCY_FDIV 16
 `endif
 `ifdef FPU_DSP
 `ifdef QUARTUS
 `define LATENCY_FDIV 15
 `endif
 `ifdef VIVADO
-`define LATENCY_FDIV 28    
+`define LATENCY_FDIV 28
 `endif
 `ifndef LATENCY_FDIV
 `define LATENCY_FDIV 16
@@ -354,20 +385,20 @@
 // FSQRT Latency
 `ifndef LATENCY_FSQRT
 `ifdef FPU_DPI
-`define LATENCY_FSQRT 10    
+`define LATENCY_FSQRT 10
 `endif
 `ifdef FPU_FPNEW
-`define LATENCY_FSQRT 16    
+`define LATENCY_FSQRT 16
 `endif
 `ifdef FPU_DSP
 `ifdef QUARTUS
 `define LATENCY_FSQRT 10
 `endif
 `ifdef VIVADO
-`define LATENCY_FSQRT 28    
+`define LATENCY_FSQRT 28
 `endif
 `ifndef LATENCY_FSQRT
-`define LATENCY_FSQRT 16    
+`define LATENCY_FSQRT 16
 `endif
 `endif
 `endif
@@ -375,6 +406,31 @@
 // FCVT Latency
 `ifndef LATENCY_FCVT
 `define LATENCY_FCVT 5
+`endif
+
+// FMA Bandwidth ratio
+`ifndef FMA_PE_RATIO
+`define FMA_PE_RATIO 1
+`endif
+
+// FDIV Bandwidth ratio
+`ifndef FDIV_PE_RATIO
+`define FDIV_PE_RATIO 8
+`endif
+
+// FSQRT Bandwidth ratio
+`ifndef FSQRT_PE_RATIO
+`define FSQRT_PE_RATIO 8
+`endif
+
+// FCVT Bandwidth ratio
+`ifndef FCVT_PE_RATIO
+`define FCVT_PE_RATIO 8
+`endif
+
+// FNCP Bandwidth ratio
+`ifndef FNCP_PE_RATIO
+`define FNCP_PE_RATIO 2
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
@@ -479,7 +535,12 @@
 `define DCACHE_NUM_WAYS 1
 `endif
 
-// SM Configurable Knobs //////////////////////////////////////////////////////
+// Enable Cache Writeback
+`ifndef DCACHE_WRITEBACK
+`define DCACHE_WRITEBACK 0
+`endif
+
+// LMEM Configurable Knobs ////////////////////////////////////////////////////
 
 `ifndef LMEM_DISABLE
 `define LMEM_ENABLE
@@ -494,7 +555,7 @@
 
 // Number of Banks
 `ifndef LMEM_NUM_BANKS
-`define LMEM_NUM_BANKS (`NUM_LSU_LANES)
+`define LMEM_NUM_BANKS `NUM_LSU_LANES
 `endif
 
 // L2cache Configurable Knobs /////////////////////////////////////////////////
@@ -538,6 +599,11 @@
 `define L2_NUM_WAYS 2
 `endif
 
+// Enable Cache Writeback
+`ifndef L2_WRITEBACK
+`define L2_WRITEBACK 0
+`endif
+
 // L3cache Configurable Knobs /////////////////////////////////////////////////
 
 // Cache Size
@@ -579,6 +645,11 @@
 `define L3_NUM_WAYS 4
 `endif
 
+// Enable Cache Writeback
+`ifndef L3_WRITEBACK
+`define L3_WRITEBACK 0
+`endif
+
 // ISA Extensions /////////////////////////////////////////////////////////////
 
 `ifdef EXT_A_ENABLE
@@ -611,6 +682,12 @@
     `define EXT_M_ENABLED   0
 `endif
 
+`ifdef EXT_ZICOND_ENABLE
+    `define EXT_ZICOND_ENABLED 1
+`else
+    `define EXT_ZICOND_ENABLED 0
+`endif
+
 `define ISA_STD_A           0
 `define ISA_STD_C           2
 `define ISA_STD_D           3
@@ -628,12 +705,14 @@
 `define ISA_EXT_L2CACHE     2
 `define ISA_EXT_L3CACHE     3
 `define ISA_EXT_LMEM        4
+`define ISA_EXT_ZICOND      5
 
 `define MISA_EXT  (`ICACHE_ENABLED  << `ISA_EXT_ICACHE) \
                 | (`DCACHE_ENABLED  << `ISA_EXT_DCACHE) \
                 | (`L2_ENABLED      << `ISA_EXT_L2CACHE) \
                 | (`L3_ENABLED      << `ISA_EXT_L3CACHE) \
-                | (`LMEM_ENABLED    << `ISA_EXT_LMEM)
+                | (`LMEM_ENABLED    << `ISA_EXT_LMEM) \
+                | (`EXT_ZICOND_ENABLED << `ISA_EXT_ZICOND)
 
 `define MISA_STD  (`EXT_A_ENABLED <<  0) /* A - Atomic Instructions extension */ \
                 | (0 <<  1) /* B - Tentatively reserved for Bit operations extension */ \

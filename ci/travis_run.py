@@ -6,7 +6,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 # http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,48 +18,56 @@ import time
 import threading
 import subprocess
 
-# This script executes a long-running command while outputing "still running ..." periodically
+# This script executes a long-running command while printing "still running ..." periodically
 # to notify Travis build system that the program has not hanged
 
 PING_INTERVAL=300 # 5 minutes
+SLEEP_INTERVAL=1  # 1 second
 
-def monitor(stop):
-    wait_time = 0    
-    while True:                   
-        time.sleep(PING_INTERVAL)     
-        wait_time += PING_INTERVAL   
-        print(" + still running (" + str(wait_time) + "s) ...")
-        sys.stdout.flush()        
-        if stop(): 
-            break
+def monitor(stop_event):
+    wait_time = 0
+    elapsed_time = 0
+    while not stop_event.is_set():
+        time.sleep(SLEEP_INTERVAL)
+        elapsed_time += SLEEP_INTERVAL
+        if elapsed_time >= PING_INTERVAL:
+            wait_time += elapsed_time
+            print(" + still running (" + str(wait_time) + "s) ...")
+            sys.stdout.flush()
+            elapsed_time = 0
 
 def execute(command):
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     while True:
         output = process.stdout.readline()
         if output:
-            line = output.decode('utf-8').rstrip()
+            try:
+                line = output.decode('utf-8').rstrip()
+            except UnicodeDecodeError:
+                line = repr(output)  # Safely print raw binary data
             print(">>> " + line)
             process.stdout.flush()
         ret = process.poll()
         if ret is not None:
-            return ret        
+            return ret
     return -1
 
 def main(argv):
+    if not argv:
+        print("Usage: travis_run.py <command>")
+        sys.exit(1)
 
     # start monitoring thread
-    stop_monitor = False
-    t = threading.Thread(target = monitor, args =(lambda : stop_monitor, ))
+    stop_event = threading.Event()
+    t = threading.Thread(target=monitor, args=(stop_event,))
     t.start()
 
     # execute command
-    exitcode = execute(argv)    
+    exitcode = execute(argv)
     print(" + exitcode="+str(exitcode))
-    sys.stdout.flush()
-    
+
     # terminate monitoring thread
-    stop_monitor = True
+    stop_event.set()
     t.join()
 
     sys.exit(exitcode)

@@ -13,9 +13,9 @@
    ```
    sudo apt-get install gcc-11 g++-11
    ```
-   
+
    Multiple gcc versions on Ubuntu can be managed with update-alternatives, e.g.:
-   
+
    ```
    sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 9
    sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 9
@@ -26,30 +26,18 @@
 3. Download the Vortex codebase:
 
    ```
-   git clone --recursive https://github.com/vortexgpgpu/vortex.git
+   git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
    ```
-
-4. Install Vortex's prebuilt toolchain:
+4. Build Vortex
 
    ```
    $ cd vortex
-   
-   # By default, the toolchain will install to /opt folder which requires sudo access. Alternatively, you could also install the toolchain to a different location of your choice by setting the TOOLDIR environment variable
-    
-   $ export TOOLDIR=$HOME/tools    
+   $ mkdir -p build
+   $ cd build
+   $ ../configure --xlen=32 --tooldir=$HOME/tools
    $ ./ci/toolchain_install.sh --all
-   ```
-
-5. Set up environment:
-
-   ```
    $ source ./ci/toolchain_env.sh
-   ```
-
-6. Build Vortex
-
-   ```
-   $ make
+   $ make -s
    ```
 
 
@@ -67,7 +55,7 @@ Note: depending on the system, some of the toolchain may need to be recompiled f
    ```
    sudo yum install gcc-toolset-11
    ```
-	
+
    Multiple gcc versions on Red Hat can be managed with scl
 
 3. Install MPFR 4.2.0:
@@ -77,28 +65,17 @@ Note: depending on the system, some of the toolchain may need to be recompiled f
 4. Download the Vortex codebase:
 
    ```
-   git clone --recursive https://github.com/vortexgpgpu/vortex.git
+   git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
    ```
 
-5. Install Vortex's prebuilt toolchain:
+5. Build Vortex
 
    ```
    $ cd vortex
-   
-   # By default, the toolchain will install to /opt folder which requires sudo access. Alternatively, you could also install the toolchain to a different location of your choice by setting the TOOLDIR environment variable
-    
-   $ export TOOLDIR=$HOME/tools    
+   $ mkdir -p build
+   $ cd build
+   $ ../configure --xlen=32 --tooldir=$HOME/tools
    $ ./ci/toolchain_install.sh --all
-   ```
-
-6. Set up environment:
-
-   ```
    $ source ./ci/toolchain_env.sh
-   ```
-
-7. Build Vortex
-
-   ```
-   $ make
+   $ make -s
    ```

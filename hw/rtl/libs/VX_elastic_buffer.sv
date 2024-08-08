@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,15 +18,16 @@ module VX_elastic_buffer #(
     parameter DATAW   = 1,
     parameter SIZE    = 1,
     parameter OUT_REG = 0,
-    parameter LUTRAM  = 0
-) ( 
+    parameter LUTRAM  = 0,
+    parameter MAX_FANOUT = 0
+) (
     input  wire             clk,
     input  wire             reset,
 
     input  wire             valid_in,
-    output wire             ready_in,        
+    output wire             ready_in,
     input  wire [DATAW-1:0] data_in,
-    
+
     output wire [DATAW-1:0] data_out,
     input  wire             ready_out,
     output wire             valid_out
@@ -39,6 +40,43 @@ module VX_elastic_buffer #(
         assign valid_out = valid_in;
         assign data_out  = data_in;
         assign ready_in  = ready_out;
+
+    end else if (MAX_FANOUT != 0 && (DATAW > (MAX_FANOUT + MAX_FANOUT/2))) begin
+
+        localparam NUM_SLICES = `CDIV(DATAW, MAX_FANOUT);
+        localparam N_DATAW = DATAW / NUM_SLICES;
+
+        for (genvar i = 0; i < NUM_SLICES; ++i) begin
+
+            localparam S_DATAW = (i == NUM_SLICES-1) ? (DATAW - i * N_DATAW) : N_DATAW;
+
+            wire valid_out_t, ready_in_t;
+            `UNUSED_VAR (valid_out_t)
+            `UNUSED_VAR (ready_in_t)
+
+            `RESET_RELAY (slice_reset, reset);
+
+            VX_elastic_buffer #(
+                .DATAW   (S_DATAW),
+                .SIZE    (SIZE),
+                .OUT_REG (OUT_REG),
+                .LUTRAM  (LUTRAM)
+                ) buffer_slice (
+                .clk       (clk),
+                .reset     (slice_reset),
+                .valid_in  (valid_in),
+                .data_in   (data_in[i * N_DATAW +: S_DATAW]),
+                .ready_in  (ready_in_t),
+                .valid_out (valid_out_t),
+                .data_out  (data_out[i * N_DATAW +: S_DATAW]),
+                .ready_out (ready_out)
+            );
+
+            if (i == 0) begin
+                assign ready_in = ready_in_t;
+                assign valid_out = valid_out_t;
+            end
+        end
 
     end else if (SIZE == 1) begin
 
@@ -55,7 +93,7 @@ module VX_elastic_buffer #(
             .ready_out (ready_out)
         );
 
-    end else if (SIZE == 2) begin
+    end else if (SIZE == 2 && LUTRAM == 0) begin
 
         VX_skid_buffer #(
             .DATAW   (DATAW),
@@ -71,9 +109,9 @@ module VX_elastic_buffer #(
             .data_out  (data_out),
             .ready_out (ready_out)
         );
-    
+
     end else begin
-        
+
         wire empty, full;
 
         wire [DATAW-1:0] data_out_t;
@@ -93,7 +131,7 @@ module VX_elastic_buffer #(
             .push   (push),
             .pop    (pop),
             .data_in(data_in),
-            .data_out(data_out_t),    
+            .data_out(data_out_t),
             .empty  (empty),
             .full   (full),
             `UNUSED_PIN (alm_empty),
@@ -103,17 +141,17 @@ module VX_elastic_buffer #(
 
         assign ready_in = ~full;
 
-        VX_elastic_buffer #(
+        VX_pipe_buffer #(
             .DATAW (DATAW),
-            .SIZE  (OUT_REG == 2)
+            .DEPTH ((OUT_REG > 0) ? (OUT_REG-1) : 0)
         ) out_buf (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (~empty),
             .data_in   (data_out_t),
-            .ready_in  (ready_out_t),            
+            .ready_in  (ready_out_t),
             .valid_out (valid_out),
-            .data_out  (data_out),            
+            .data_out  (data_out),
             .ready_out (ready_out)
         );
 

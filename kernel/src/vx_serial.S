@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,7 +18,7 @@
 
 .type vx_serial, @function
 .global vx_serial
-vx_serial:    
+vx_serial:
 #if (XLEN == 64)
     addi sp, sp, -56
     sd   ra, 48(sp)
@@ -41,7 +41,7 @@ vx_serial:
     mv   s4, a0                 # s4 <- callback
     mv   s3, a1                 # s3 <- arg
     csrr s2, VX_CSR_NUM_THREADS # s2 <- NT
-    csrr s1, VX_CSR_THREAD_ID   # s1 <- tid    
+    csrr s1, VX_CSR_THREAD_ID   # s1 <- tid
     li	 s0, 0                  # s0 <- index
 label_loop:
     sub	 t0, s0, s1
@@ -72,6 +72,5 @@ label_join:
     lw   s1, 4(sp)
     lw   s0, 0(sp)
     addi sp, sp, 28
-#endif    
+#endif
     ret
-    
