@@ -43,18 +43,32 @@ int main(int argc, char *argv[]) {
   // find the resultsCount least distances
   findLowest(records, recordDistances, numRecords, resultsCount);
 
-  // print out results
-  if (!quiet)
+  // print out results  
+  if (!quiet) {
     for (i = 0; i < resultsCount; i++) {
       printf("%s --> Distance=%f\n", records[i].recString, records[i].distance);
     }
+  }
+  
+  // verify result
+  int errors = 0;
+  for (i = 1; i < resultsCount; ++i) {
+    if (records[i].distance < records[i-1].distance) {
+      ++errors;
+    }
+  }
+  
   free(recordDistances);
 
   cl_cleanup();
 
-  printf("Passed!\n");
-
-  return 0;
+  if (errors != 0) {
+    printf("Failed!\n");
+  } else {
+    printf("Passed!\n");
+  }
+  
+  return errors;
 }
 
 float *OpenClFindNearestNeighbors(cl_context context, int numRecords,
@@ -107,13 +121,14 @@ float *OpenClFindNearestNeighbors(cl_context context, int numRecords,
 
   // 4. enqueue kernel
   size_t globalWorkSize[1];
+  size_t localWorkSize[1] = {1};
   globalWorkSize[0] = numRecords;
   if (numRecords % 64)
     globalWorkSize[0] += 64 - (numRecords % 64);
   // printf("Global Work Size: %zu\n",globalWorkSize[0]);
 
   error = clEnqueueNDRangeKernel(command_queue, NN_kernel, 1, 0, globalWorkSize,
-                                 NULL, 0, NULL, &kernelEvent);
+                                 localWorkSize, 0, NULL, &kernelEvent);
 
   cl_errChk(error, "ERROR in Executing Kernel NearestNeighbor", true);
 

@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <math.h>
 #include <CL/opencl.h>
-#include <unistd.h> 
+#include <unistd.h>
 #include <string.h>
 #include <chrono>
 
@@ -47,9 +47,9 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
 
   *data = (uint8_t*)malloc(fsize);
   *size = fread(*data, 1, fsize, fp);
-  
+
   fclose(fp);
-  
+
   return 0;
 }
 
@@ -59,7 +59,7 @@ cl_command_queue commandQueue = NULL;
 cl_program program = NULL;
 cl_kernel kernel = NULL;
 cl_mem a_memobj = NULL;
-cl_mem c_memobj = NULL;  
+cl_mem c_memobj = NULL;
 int *h_a = NULL;
 int *h_c = NULL;
 uint8_t *kernel_bin = NULL;
@@ -69,10 +69,10 @@ static void cleanup() {
   if (kernel) clReleaseKernel(kernel);
   if (program) clReleaseProgram(program);
   if (a_memobj) clReleaseMemObject(a_memobj);
-  if (c_memobj) clReleaseMemObject(c_memobj);  
+  if (c_memobj) clReleaseMemObject(c_memobj);
   if (context) clReleaseContext(context);
   if (device_id) clReleaseDevice(device_id);
-  
+
   if (kernel_bin) free(kernel_bin);
   if (h_a) free(h_a);
   if (h_c) free(h_c);
@@ -112,10 +112,10 @@ static void parse_args(int argc, char **argv) {
 int main (int argc, char **argv) {
   // parse command arguments
   parse_args(argc, argv);
-  
+
   cl_platform_id platform_id;
   size_t kernel_size;
-  
+
   // Getting platform and device information
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
   CL_CHECK(clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL));
@@ -129,39 +129,32 @@ int main (int argc, char **argv) {
   c_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, nbytes, NULL, &_err));
 
   printf("Create program from kernel source\n");
-#ifdef HOSTGPU
   if (0 != read_kernel_file("kernel.cl", &kernel_bin, &kernel_size))
     return -1;
   program = CL_CHECK2(clCreateProgramWithSource(
-    context, 1, (const char**)&kernel_bin, &kernel_size, &_err));  
-#else
-  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
-    return -1;
-  program = CL_CHECK2(clCreateProgramWithBinary(
-    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, NULL, &_err));
-#endif
+    context, 1, (const char**)&kernel_bin, &kernel_size, &_err));
 
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
-  
+
   // Create kernel
   kernel = CL_CHECK2(clCreateKernel(program, (float_enable ? KERNEL1_NAME : KERNEL0_NAME), &_err));
 
   // Set kernel arguments
-  CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj));	
+  CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj));
   CL_CHECK(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&c_memobj));
 
-  // Allocate memories for input arrays and output arrays.    
+  // Allocate memories for input arrays and output arrays.
   h_a = (int*)malloc(nbytes);
-  h_c = (int*)malloc(nbytes);	
-	
+  h_c = (int*)malloc(nbytes);
+
   // Generate input values
   for (int i = 0; i < size; ++i) {
     if (float_enable) {
       float value = sinf(i)*sinf(i);
       ((float*)h_a)[i] = value;
       printf("*** [%d]: %f\n", i, value);
-    } else {      
+    } else {
       int value = size*sinf(i);
       h_a[i] = value;
       printf("*** [%d]: %d\n", i, value);
@@ -169,7 +162,7 @@ int main (int argc, char **argv) {
   }
 
   // Creating command queue
-  commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));  
+  commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));
 
 	printf("Upload source buffers\n");
   CL_CHECK(clEnqueueWriteBuffer(commandQueue, a_memobj, CL_TRUE, 0, nbytes, h_a, 0, NULL, NULL));
@@ -188,7 +181,7 @@ int main (int argc, char **argv) {
   CL_CHECK(clEnqueueReadBuffer(commandQueue, c_memobj, CL_TRUE, 0, nbytes, h_c, 0, NULL, NULL));
 
   printf("Verify result\n");
-  for (int i = 0; i < size; ++i) {    
+  for (int i = 0; i < size; ++i) {
     if (float_enable) {
       float value = ((float*)h_c)[i];
       printf("*** [%d]: %f\n", i, value);
@@ -198,30 +191,30 @@ int main (int argc, char **argv) {
     }
   }
   int errors = 0;
-  for (int i = 0; i < size; ++i) {    
+  for (int i = 0; i < size; ++i) {
     int pos = 0;
-    if (float_enable) {    
+    if (float_enable) {
       float ref = ((float*)h_a)[i];
-      for (int j = 0; j < size; ++j) {        
+      for (int j = 0; j < size; ++j) {
         float cur = ((float*)h_a)[j];
         pos += (cur < ref) || (cur == ref && j < i);
-      }        
+      }
       float value = ((float*)h_c)[pos];
       if (value != ref) {
-        if (errors < 100) {        
+        if (errors < 100) {
           printf("*** error: [%d] expected=%f, actual=%f\n", pos, ref, value);
-        }        
+        }
         ++errors;
       }
-    } else {      
+    } else {
       int ref = h_a[i];
-      for (int j = 0; j < size; ++j) {        
+      for (int j = 0; j < size; ++j) {
         int cur = h_a[j];
         pos += (cur < ref) || (cur == ref && j < i);
       }
       int value = h_c[pos];
       if (value != ref) {
-        if (errors < 100) {        
+        if (errors < 100) {
           printf("*** error: [%d] expected=%d, actual=%d\n", pos, ref, value);
         }
         ++errors;
@@ -231,11 +224,11 @@ int main (int argc, char **argv) {
   if (0 == errors) {
     printf("PASSED!\n");
   } else {
-    printf("FAILED! - %d errors\n", errors);    
+    printf("FAILED! - %d errors\n", errors);
   }
 
-  // Clean up		
-  cleanup();  
+  // Clean up
+  cleanup();
 
   return errors;
 }

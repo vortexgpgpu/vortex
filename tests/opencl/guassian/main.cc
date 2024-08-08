@@ -9,9 +9,9 @@ int main(int argc, char *argv[]) {
   printf("enter demo main\n");
   float *a = NULL, *b = NULL, *finalVec = NULL;
   float *m = NULL;
-  int size;
+  int size = 0;
 
-  FILE *fp;
+  FILE *fp = NULL;
 
   // args
   char filename[100];
@@ -19,26 +19,41 @@ int main(int argc, char *argv[]) {
 
   // parse command line
   if (parseCommandline(argc, argv, filename, &quiet, &timing, &platform,
-                       &device)) {
+                       &device, &size)) {
     printUsage();
     return 0;
   }
 
   context = cl_init_context(platform, device, quiet);
 
-  fp = fopen(filename, "r");
-  fscanf(fp, "%d", &size);
+  if (size == 0) {
+    fp = fopen(filename, "r");
+    fscanf(fp, "%d", &size);
 
-  a = (float *)malloc(size * size * sizeof(float));
+    printf("using %dx%d input matrix\n", size, size);
 
-  InitMat(fp, size, a, size, size);
-  // printf("The input matrix a is:\n");
-  // PrintMat(a, size, size, size);
-  b = (float *)malloc(size * sizeof(float));
+    a = (float *)malloc(size * size * sizeof(float));
 
-  InitAry(fp, b, size);
-  // printf("The input array b is:\n");
-  // PrintAry(b, size);
+    InitMat(fp, size, a, size, size);
+    // printf("The input matrix a is:\n");
+    // PrintMat(a, size, size, size);
+    b = (float *)malloc(size * sizeof(float));
+
+    InitAry(fp, b, size);
+    // printf("The input array b is:\n");
+    // PrintAry(b, size);
+  } else {
+    // create the input matrix
+    a = (float *)malloc(size * size * sizeof(float));
+    b = (float *)malloc(size * sizeof(float));
+
+    for (int i = 0, n = size * size; i < n; ++i) {
+      a[i] = static_cast<float>(std::rand()) / RAND_MAX;
+    }
+    for (int i = 0; i < size; ++i) {
+      b[i] = static_cast<float>(std::rand()) / RAND_MAX;
+    }
+  }
 
   // create the solution matrix
   m = (float *)malloc(size * size * sizeof(float));
@@ -68,7 +83,7 @@ int main(int argc, char *argv[]) {
     PrintAry(finalVec, size);
   }
 
-  fclose(fp);
+  if (fp) fclose(fp);
   free(m);
   free(a);
   free(b);
@@ -77,7 +92,6 @@ int main(int argc, char *argv[]) {
 
   cl_cleanup();
 
-  printf("Passed!\n");
   return 0;
 }
 
@@ -155,12 +169,10 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,
   writeMB = (float)(sizeof(float) * size * (size + size + 1) / 1e6);
 
   // 3. Determine block sizes
-  size_t globalWorksizeFan1[1];
-  size_t globalWorksizeFan2[2];
-
-  globalWorksizeFan1[0] = size;
-  globalWorksizeFan2[0] = size;
-  globalWorksizeFan2[1] = size;
+  size_t globalWorksizeFan1[1] = {size};
+  size_t globalWorksizeFan2[2] = {size, size};
+  size_t localWorksizeFan1[1] = {1};
+  size_t localWorksizeFan2[2] = {1, 1};
 
   int t;
   // 4. Setup and Run kernels
@@ -178,7 +190,7 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,
     // launch kernel
     error =
         clEnqueueNDRangeKernel(command_queue, fan1_kernel, 1, 0,
-                               globalWorksizeFan1, NULL, 0, NULL, &kernelEvent);
+                               globalWorksizeFan1, localWorksizeFan1, 0, NULL, &kernelEvent);
 
     cl_errChk(error, "ERROR in Executing Fan1 Kernel", true);
     if (timing) {
@@ -202,7 +214,7 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,
     // launch kernel
     error =
         clEnqueueNDRangeKernel(command_queue, fan2_kernel, 2, 0,
-                               globalWorksizeFan2, NULL, 0, NULL, &kernelEvent);
+                               globalWorksizeFan2, localWorksizeFan2, 0, NULL, &kernelEvent);
 
     cl_errChk(error, "ERROR in Executing Fan1 Kernel", true);
     if (timing) {
@@ -284,16 +296,20 @@ float eventTime(cl_event event, cl_command_queue command_queue) {
 }
 
 int parseCommandline(int argc, char *argv[], char *filename, int *q, int *t,
-                     int *p, int *d) {
+                     int *p, int *d, int* s) {
   int i;
-  // if (argc < 2) return 1; // error
-  strncpy(filename, "matrix4.txt", 100);
+  if (argc < 2) return 1; // error
   char flag;
 
   for (i = 1; i < argc; i++) {
     if (argv[i][0] == '-') { // flag
       flag = argv[i][1];
       switch (flag) {
+      case 'f': // matrix file
+        i++;
+	      strncpy(filename,argv[i],100);
+	      printf("Read file from %s \n", filename);
+        break;
       case 'h': // help
         return 1;
         break;
@@ -310,6 +326,10 @@ int parseCommandline(int argc, char *argv[], char *filename, int *q, int *t,
       case 'd': // device
         i++;
         *d = atoi(argv[i]);
+        break;
+      case 's': // size
+        i++;
+        *s = atoi(argv[i]);
         break;
       }
     }

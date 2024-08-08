@@ -1,0 +1,95 @@
+diff --git a/encoding.h b/encoding.h
+index 01889d1..362ebd8 100644
+--- a/encoding.h
++++ b/encoding.h
+@@ -231,6 +231,13 @@
+ #define MSECCFG_USEED  0x00000100
+ #define MSECCFG_SSEED  0x00000200
+ 
++// Vortex defines
++#define RISCV_CUSTOM0 0x0B
++#define VX_IO_COUT_ADDR 0x40
++#define VX_IO_COUT_SIZE 64
++#define VX_IO_MPM_ADDR (VX_IO_COUT_ADDR + VX_IO_COUT_SIZE)
++#define VX_IO_MPM_EXITCODE (VX_IO_MPM_ADDR + 8)
++
+ /* jvt fields */
+ #define JVT_MODE   0x3F
+ #define JVT_BASE   (~0x3F)
+diff --git a/p/riscv_test.h b/p/riscv_test.h
+index 7bf35cf..6dc759f 100644
+--- a/p/riscv_test.h
++++ b/p/riscv_test.h
+@@ -174,6 +174,13 @@
+ _start:                                                                 \
+         /* reset vector */                                              \
+         j reset_vector;                                                 \
++        .globl exit;                                                    \
++        .align 2;                                                       \
++exit:                                                                   \
++        li t0, VX_IO_MPM_EXITCODE;                                      \
++        sw a0, 0(t0);                                                   \
++        fence;                                                          \
++        .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0;                        \
+         .align 2;                                                       \
+ trap_vector:                                                            \
+         /* test whether the test came from pass/fail */                 \
+@@ -245,21 +252,14 @@ reset_vector:                                                           \
+ //-----------------------------------------------------------------------
+ 
+ #define RVTEST_PASS                                                     \
+-        fence;                                                          \
+-        li TESTNUM, 1;                                                  \
+-        li a7, 93;                                                      \
+         li a0, 0;                                                       \
+-        ecall
++        call exit
+ 
+ #define TESTNUM gp
+ #define RVTEST_FAIL                                                     \
+-        fence;                                                          \
+-1:      beqz TESTNUM, 1b;                                               \
+-        sll TESTNUM, TESTNUM, 1;                                        \
+-        or TESTNUM, TESTNUM, 1;                                         \
+-        li a7, 93;                                                      \
++     1: beqz TESTNUM, 1b;                                               \
+         addi a0, TESTNUM, 0;                                            \
+-        ecall
++        call exit
+ 
+ //-----------------------------------------------------------------------
+ // Data Section Macro
+diff --git a/v/entry.S b/v/entry.S
+index 13d46a3..39a6c34 100644
+--- a/v/entry.S
++++ b/v/entry.S
+@@ -17,8 +17,14 @@
+   .align 2
+ _start:
+   j handle_reset
+-
+-  /* NMI vector */
++  .globl exit
++  .align 2
++exit:
++  li t0, VX_IO_MPM_EXITCODE
++  sw a0, 0(t0)
++  fence
++  .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0
++/* NMI vector */
+   .align 2
+ nmi_vector:
+   j wtf
+diff --git a/v/riscv_test.h b/v/riscv_test.h
+index f56c022..7341d38 100644
+--- a/v/riscv_test.h
++++ b/v/riscv_test.h
+@@ -46,7 +46,7 @@ userstart:                                                              \
+ #define RVTEST_PASS li a0, 1; scall
+ 
+ #undef RVTEST_FAIL
+-#define RVTEST_FAIL sll a0, TESTNUM, 1; 1:beqz a0, 1b; or a0, a0, 1; scall;
++#define RVTEST_FAIL 1:beqz TESTNUM, 1b; addi a0, TESTNUM, 0; call exit
+ 
+ //-----------------------------------------------------------------------
+ // Data Section Macro

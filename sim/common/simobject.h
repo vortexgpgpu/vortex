@@ -57,8 +57,6 @@ public:
     , tx_cb_(nullptr)
   {}
 
-  void send(const Pkt& pkt, uint64_t delay = 1) const;
-
   void bind(SimPort<Pkt>* peer) {
     assert(peer_ == nullptr);
     peer_ = peer;
@@ -88,13 +86,7 @@ public:
     return queue_.front().pkt;
   }
 
-  const Pkt& back() const {
-    return queue_.back();
-  }
-
-  Pkt& back() {
-    return queue_.back().pkt;
-  }
+  void push(const Pkt& pkt, uint64_t delay = 1) const;
 
   uint64_t pop() {
     auto cycles = queue_.front().cycles;
@@ -122,12 +114,12 @@ protected:
   SimPort*   peer_;
   TxCallback tx_cb_;
 
-  void push(const Pkt& data, uint64_t cycles) {
+  void transfer(const Pkt& data, uint64_t cycles) {
     if (tx_cb_) {
       tx_cb_(data, cycles);
     }
     if (peer_) {
-      peer_->push(data, cycles);
+      peer_->transfer(data, cycles);
     } else {
       queue_.push({data, cycles});
     }
@@ -199,7 +191,7 @@ template <typename Pkt>
 class SimPortEvent : public SimEventBase {
 public:
   void fire() const override {
-    const_cast<SimPort<Pkt>*>(port_)->push(pkt_, cycles_);
+    const_cast<SimPort<Pkt>*>(port_)->transfer(pkt_, cycles_);
   }
 
   SimPortEvent(const SimPort<Pkt>* port, const Pkt& pkt, uint64_t cycles) 
@@ -409,9 +401,9 @@ typename SimObject<Impl>::Ptr SimObject<Impl>::Create(Args&&... args) {
 }
 
 template <typename Pkt>
-void SimPort<Pkt>::send(const Pkt& pkt, uint64_t delay) const {
+void SimPort<Pkt>::push(const Pkt& pkt, uint64_t delay) const {
   if (peer_ && !tx_cb_) {
-    reinterpret_cast<const SimPort<Pkt>*>(peer_)->send(pkt, delay);    
+    reinterpret_cast<const SimPort<Pkt>*>(peer_)->push(pkt, delay);    
   } else {
     SimPlatform::instance().schedule(this, pkt, delay);
   } 

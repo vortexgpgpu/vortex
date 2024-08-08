@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -20,8 +20,6 @@
 
 #include "svdpi.h"
 #include "verilated_vpi.h"
-
-#include "uuid_gen.h"
 
 #ifdef XLEN_64
 #define iword_t   int64_t
@@ -50,7 +48,7 @@ extern "C" {
   void dpi_trace_start();
   void dpi_trace_stop();
 
-  uint64_t dpi_uuid_gen(bool reset, int wid, uint64_t PC);
+  uint64_t dpi_uuid_gen(bool reset, int wid);
 }
 
 bool sim_trace_enabled();
@@ -70,7 +68,7 @@ public:
 
   void push(int value, bool enable) {
     if (!enable)
-      return;      
+      return;
     for (unsigned i = 0; i < depth_-1; ++i) {
       buffer_[i] = buffer_[i+1];
     }
@@ -85,7 +83,7 @@ private:
 
   std::vector<int> buffer_;
   bool init_;
-  unsigned depth_;  
+  unsigned depth_;
 };
 
 class Instances {
@@ -95,9 +93,9 @@ public:
   }
 
   int allocate() {
-    mutex_.lock();   
+    mutex_.lock();
     int inst = instances_.size();
-    instances_.resize(inst + 1); 
+    instances_.resize(inst + 1);
     mutex_.unlock();
     return inst;
   }
@@ -135,7 +133,7 @@ void dpi_imul(bool enable, bool is_signed_a, bool is_signed_b, iword_t a, iword_
   udword_t second = *(uword_t*)&b;
 
   udword_t mask = udword_t(-1) << (8 * sizeof(iword_t));
-    
+
   if (is_signed_a && a < 0) {
     first |= mask;
   }
@@ -171,11 +169,11 @@ void dpi_idiv(bool enable, bool is_signed, iword_t a, iword_t b, iword_t* quotie
     } else if (dividen == inf_neg && divisor == -1) {
       *remainder = 0;
       *quotient  = dividen;
-    } else { 
+    } else {
       *quotient  = (iword_t)dividen / (iword_t)divisor;
-      *remainder = (iword_t)dividen % (iword_t)divisor;      
+      *remainder = (iword_t)dividen % (iword_t)divisor;
     }
-  } else {    
+  } else {
     if (b == 0) {
       *quotient  = -1;
       *remainder = dividen;
@@ -188,45 +186,35 @@ void dpi_idiv(bool enable, bool is_signed, iword_t a, iword_t b, iword_t* quotie
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void dpi_trace(int level, const char* format, ...) { 
+void dpi_trace(int level, const char* format, ...) {
   if (level > DEBUG_LEVEL)
     return;
   if (!sim_trace_enabled())
     return;
   va_list va;
-	va_start(va, format);  
+	va_start(va, format);
 	vprintf(format, va);
-	va_end(va);		  
+	va_end(va);
 }
 
-void dpi_trace_start() { 
+void dpi_trace_start() {
   sim_trace_enable(true);
 }
 
-void dpi_trace_stop() { 
+void dpi_trace_stop() {
   sim_trace_enable(false);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-std::unordered_map<uint32_t, std::shared_ptr<vortex::UUIDGenerator>> g_uuid_gens;
+std::unordered_map<uint32_t, uint32_t> g_uuid_gens;
 
-uint64_t dpi_uuid_gen(bool reset, int wid, uint64_t PC) {
+uint64_t dpi_uuid_gen(bool reset, int wid) {
   if (reset) {
     g_uuid_gens.clear();
     return 0;
   }
-  std::shared_ptr<vortex::UUIDGenerator> uuid_gen;
-  auto it = g_uuid_gens.find(wid);
-  if (it == g_uuid_gens.end()) {
-    uuid_gen = std::make_shared<vortex::UUIDGenerator>();
-    g_uuid_gens.emplace(wid, uuid_gen);
-  } else {
-    uuid_gen = it->second;
-  }
-  uint32_t instr_uuid = uuid_gen->get_uuid(PC);
-  uint32_t instr_id  = instr_uuid & 0xffff;
-  uint32_t instr_ref = instr_uuid >> 16;
-  uint64_t uuid = (uint64_t(instr_ref) << 32) | (wid << 16) | instr_id;
+  uint32_t instr_uuid = g_uuid_gens[wid]++;
+  uint64_t uuid = (uint64_t(wid) << 32) | instr_uuid;
   return uuid;
 }

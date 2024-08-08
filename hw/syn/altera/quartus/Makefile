@@ -1,14 +1,19 @@
+ROOT_DIR := $(realpath ../../../..)
+include $(ROOT_DIR)/config.mk
+
 PREFIX ?= build
 
-BUILD_DIR=$(PREFIX)_$(DEVICE_FAMILY)
+BUILD_DIR := $(PREFIX)_$(DEVICE_FAMILY)
 
-IP_CACHE_DIR=../ip_cache/$(DEVICE_FAMILY)
+SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
-.PHONY: dogfood unittest pipeline smem cache fpu core vortex top test
+IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
+
+.PHONY: dogfood unittest pipeline lmem cache fpu core issue vortex top test
 
 ip-gen: $(IP_CACHE_DIR)/ip_gen.log
 $(IP_CACHE_DIR)/ip_gen.log:
-	../ip_gen.sh $(IP_CACHE_DIR)
+	$(SCRIPT_DIR)/ip_gen.sh $(IP_CACHE_DIR)
 
 dogfood:
 	mkdir -p dogfood/$(BUILD_DIR)
@@ -25,10 +30,10 @@ pipeline:
 	cp pipeline/Makefile pipeline/$(BUILD_DIR)
 	$(MAKE) -C pipeline/$(BUILD_DIR) clean && $(MAKE) -C pipeline/$(BUILD_DIR) > pipeline/$(BUILD_DIR)/build.log 2>&1 &
 
-smem:
-	mkdir -p smem/$(BUILD_DIR)
-	cp smem/Makefile smem/$(BUILD_DIR)
-	$(MAKE) -C smem/$(BUILD_DIR) clean && $(MAKE) -C smem/$(BUILD_DIR) > smem/$(BUILD_DIR)/build.log 2>&1 &
+lmem:
+	mkdir -p lmem/$(BUILD_DIR)
+	cp lmem/Makefile lmem/$(BUILD_DIR)
+	$(MAKE) -C lmem/$(BUILD_DIR) clean && $(MAKE) -C lmem/$(BUILD_DIR) > lmem/$(BUILD_DIR)/build.log 2>&1 &
 
 cache:
 	mkdir -p cache/$(BUILD_DIR)
@@ -44,6 +49,11 @@ core:
 	mkdir -p core/$(BUILD_DIR)
 	cp core/Makefile core/$(BUILD_DIR)
 	$(MAKE) -C core/$(BUILD_DIR) clean && $(MAKE) -C core/$(BUILD_DIR) > core/$(BUILD_DIR)/build.log 2>&1 &
+
+issue:
+	mkdir -p issue/$(BUILD_DIR)
+	cp issue/Makefile issue/$(BUILD_DIR)
+	$(MAKE) -C issue/$(BUILD_DIR) clean && $(MAKE) -C issue/$(BUILD_DIR) > issue/$(BUILD_DIR)/build.log 2>&1 &
 
 vortex: ip-gen
 	mkdir -p vortex/$(BUILD_DIR)

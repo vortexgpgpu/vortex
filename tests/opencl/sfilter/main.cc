@@ -76,9 +76,9 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
 
   *data = (uint8_t*)malloc(fsize);
   *size = fread(*data, 1, fsize, fp);
-  
+
   fclose(fp);
-  
+
   return 0;
 }
 
@@ -90,11 +90,11 @@ static bool almost_equal(float a, float b, int ulp = 4) {
   return std::abs(fa.i - fb.i) <= ulp;
 }
 
-void Cleanup(uint8_t *kernel_bin, cl_device_id device_id, cl_context context, 
+void Cleanup(uint8_t *kernel_bin, cl_device_id device_id, cl_context context,
              cl_command_queue commandQueue, cl_program program, cl_kernel kernel, cl_mem memObjects[2]) {
-  if (kernel_bin != NULL) 
+  if (kernel_bin != NULL)
     free(kernel_bin);
-  
+
   if (commandQueue != 0)
     clReleaseCommandQueue(commandQueue);
 
@@ -112,7 +112,7 @@ void Cleanup(uint8_t *kernel_bin, cl_device_id device_id, cl_context context,
   if (context != 0)
     clReleaseContext(context);
 
-  if (device_id != 0) 
+  if (device_id != 0)
     clReleaseDevice(device_id);
 }
 
@@ -139,13 +139,17 @@ static void parse_args(int argc, char **argv) {
       exit(-1);
     }
   }
-
-  printf("Workload size=%d\n", size);
 }
 
 int main(int argc, char **argv) {
   // parse command arguments
   parse_args(argc, argv);
+
+  printf("input size=%d\n", size);
+  if (size < 3) {
+    printf("Error: input size must be >= 3\n");
+    return -1;
+  }
 
   cl_platform_id platform_id;
   cl_device_id device_id;
@@ -167,17 +171,10 @@ int main(int argc, char **argv) {
   cl_mem memObjects[2] = {0, 0};
 
   printf("Create program from kernel source\n");
-#ifdef HOSTGPU
   if (0 != read_kernel_file("kernel.cl", &kernel_bin, &kernel_size))
     return -1;
   program = CL_CHECK_ERR(clCreateProgramWithSource(
-    context, 1, (const char**)&kernel_bin, &kernel_size, &_err));  
-#else
-  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
-    return -1;
-  program = CL_CHECK_ERR(clCreateProgramWithBinary(
-    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, NULL, &_err));
-#endif
+    context, 1, (const char**)&kernel_bin, &kernel_size, &_err));
 
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
@@ -223,11 +220,11 @@ int main(int argc, char **argv) {
   CL_CHECK(clSetKernelArg(kernel, 10, sizeof(m7), (&m7)));
   CL_CHECK(clSetKernelArg(kernel, 11, sizeof(m8), (&m8)));
 
-  size_t global_offset[2] = {1, 1};
+  size_t global_offset[2]    = {1, 1};
   size_t global_work_size[2] = {size - 2, size - 2};
-  size_t local_work_size[2] = {size - 2, 1};
+  size_t local_work_size[2]  = {1, 1}; // {size-2,1}
 
-  printf("enqueue write buffer\n"); 
+  printf("enqueue write buffer\n");
   std::vector<float> ref_vec(size * size);
   {
     std::vector<float> src_vec(size * size);
@@ -236,13 +233,13 @@ int main(int argc, char **argv) {
     for (int i = 0; i < size * size; ++i) {
       src_vec[i] = ((float)rand() / (float)(RAND_MAX)) * 100.0;
     }
-    
+
     CL_CHECK(clEnqueueWriteBuffer(queue, input_buffer, CL_TRUE, 0, nbytes, src_vec.data(), 0, NULL, NULL));
     CL_CHECK(clEnqueueWriteBuffer(queue, output_buffer, CL_TRUE, 0, nbytes, dst_vec.data(), 0, NULL, NULL));
-    
+
     // reference generation
     size_t num_groups_y = global_work_size[1] / local_work_size[1];
-    size_t num_groups_x = global_work_size[0] / local_work_size[0];    
+    size_t num_groups_x = global_work_size[0] / local_work_size[0];
     for (size_t workgroup_id_y = 0; workgroup_id_y < num_groups_y; ++workgroup_id_y) {
       for (size_t workgroup_id_x = 0; workgroup_id_x < num_groups_x; ++workgroup_id_x) {
         for (size_t local_id_y = 0; local_id_y < local_work_size[1]; ++local_id_y) {
@@ -252,7 +249,7 @@ int main(int argc, char **argv) {
             int global_id_y = global_offset[1] + local_work_size[1] * workgroup_id_y + local_id_y;
             // kernel operation
             int x = global_id_x;
-            int y = global_id_y;            
+            int y = global_id_y;
             float i0 = src_vec.at((x-1) + (y-1) * ldc) * m0;
             float i1 = src_vec.at((x+0) + (y-1) * ldc) * m1;
             float i2 = src_vec.at((x+1) + (y-1) * ldc) * m2;
@@ -287,16 +284,16 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < size * size; ++i) {
       if (!almost_equal(dst_vec[i], ref_vec[i])) {
-        if (errors < 100) 
+        if (errors < 100)
           printf("*** error: [%d] expected=%f, actual=%f\n", i, ref_vec[i], dst_vec[i]);
         ++errors;
       }
     }
-  
+
     if (0 == errors) {
       printf("PASSED!\n");
     } else {
-      printf("FAILED! - %d errors\n", errors);    
+      printf("FAILED! - %d errors\n", errors);
     }
   }
 

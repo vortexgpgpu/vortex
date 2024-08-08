@@ -1,17 +1,22 @@
+ROOT_DIR := $(realpath ../../../..)
+include $(ROOT_DIR)/config.mk
+
 DEVICE_FAMILY ?= arria10
-XLEN ?= 32
+
 PREFIX ?= build$(XLEN)
 TARGET ?= fpga
 NUM_CORES ?= 1
 
-SCRIPT_DIR = ../../../scripts
-RTL_DIR = ../../../rtl
-DPI_DIR = ../../../dpi
-AFU_DIR = $(RTL_DIR)/afu/opae
-THIRD_PARTY_DIR = ../../../../third_party
-IP_CACHE_DIR = ../ip_cache/$(DEVICE_FAMILY)
+SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/opae
 
-BUILD_DIR = $(PREFIX)_$(DEVICE_FAMILY)_$(TARGET)_$(NUM_CORES)c
+RTL_DIR := $(VORTEX_HOME)/hw/rtl
+DPI_DIR := $(VORTEX_HOME)/hw/dpi
+AFU_DIR := $(RTL_DIR)/afu/opae
+SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
+
+IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
+
+BUILD_DIR := $(PREFIX)_$(DEVICE_FAMILY)_$(TARGET)_$(NUM_CORES)c
 
 ifeq ($(shell which qsub-synth),)
 	RUN_SYNTH=$(OPAE_PLATFORM_ROOT)/bin/run.sh > build.log 2>&1 &
@@ -20,14 +25,9 @@ else
 endif
 
 # control RTL debug tracing states
-DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_PIPELINE  
-DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_ICACHE
-DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_DCACHE
-DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_MEM
-DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE_BANK 
-DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE_MSHR
-DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE_TAG
-DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE_DATA
+DBG_TRACE_FLAGS += -DDBG_TRACE_PIPELINE
+DBG_TRACE_FLAGS += -DDBG_TRACE_MEM
+DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE
 DBG_TRACE_FLAGS += -DDBG_TRACE_AFU
 DBG_TRACE_FLAGS += -DDBG_TRACE_GBAR
 
@@ -50,9 +50,9 @@ CONFIGS_1c  := -DNUM_CLUSTERS=1 -DNUM_CORES=1
 CONFIGS_2c  := -DNUM_CLUSTERS=1 -DNUM_CORES=2
 CONFIGS_4c  := -DNUM_CLUSTERS=1 -DNUM_CORES=4
 CONFIGS_8c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=8
-CONFIGS_16c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=16 -DL2_ENABLE
-CONFIGS_32c := -DNUM_CLUSTERS=2 -DNUM_CORES=16 -DL2_ENABLE
-CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16 -DL2_ENABLE
+CONFIGS_16c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=16
+CONFIGS_32c := -DNUM_CLUSTERS=2 -DNUM_CORES=16
+CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16
 CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 
 # include paths
@@ -73,21 +73,21 @@ ifneq ($(TARGET), fpga)
 	CFLAGS += -DSIMULATION
 endif
 
-# Debugigng
+# Debugging
 ifdef DEBUG
-	ifeq ($(TARGET), fpga)
-		CFLAGS += -DNDEBUG -DSCOPE $(DBG_SCOPE_FLAGS)
-		SCOPE_JSON += $(BUILD_DIR)/scope.json
+	ifneq ($(TARGET), fpga)
+		CFLAGS += -DDEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
 	else
-		CFLAGS += $(DBG_TRACE_FLAGS)
+		CFLAGS += -DNDEBUG
 	endif
-else    
+else
 	CFLAGS += -DNDEBUG
 endif
 
 # Enable scope analyzer
 ifdef SCOPE
-	CFLAGS += -DSCOPE
+	CFLAGS += -DSCOPE $(DBG_SCOPE_FLAGS)
+	SCOPE_JSON += $(BUILD_DIR)/scope.json
 endif
 
 # Enable perf counters
@@ -102,20 +102,20 @@ all: swconfig ip-gen setup build
 
 ip-gen: $(IP_CACHE_DIR)/ip-gen.log
 $(IP_CACHE_DIR)/ip-gen.log:
-	../ip_gen.sh $(IP_CACHE_DIR)
+	$(SCRIPT_DIR)/ip_gen.sh $(IP_CACHE_DIR)
 
 swconfig: vortex_afu.h
-vortex_afu.h: vortex_afu.json
+vortex_afu.h: $(SRC_DIR)/vortex_afu.json
 	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
 
 $(BUILD_DIR)/setup.cfg:
-	mkdir -p $(BUILD_DIR); cp setup.cfg $(BUILD_DIR)/setup.cfg
+	mkdir -p $(BUILD_DIR); cp $(SRC_DIR)/setup.cfg $(BUILD_DIR)/setup.cfg
 
 $(BUILD_DIR)/vortex_afu.qsf:
-	mkdir -p $(BUILD_DIR); cp vortex_afu.qsf $(BUILD_DIR)/vortex_afu.qsf
+	mkdir -p $(BUILD_DIR); cp $(SRC_DIR)/vortex_afu.qsf $(BUILD_DIR)/vortex_afu.qsf
 
 $(BUILD_DIR)/vortex_afu.json:
-	mkdir -p $(BUILD_DIR); cp vortex_afu.json $(BUILD_DIR)/vortex_afu.json
+	mkdir -p $(BUILD_DIR); cp $(SRC_DIR)/vortex_afu.json $(BUILD_DIR)/vortex_afu.json
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
@@ -127,7 +127,7 @@ ifeq ($(TARGET), asesim)
 	afu_sim_setup -s $(BUILD_DIR)/setup.cfg $(BUILD_DIR)/synth
 else
 	afu_synth_setup -s $(BUILD_DIR)/setup.cfg $(BUILD_DIR)/synth
-endif	
+endif
 
 build: ip-gen setup $(SCOPE_JSON)
 ifeq ($(TARGET), asesim)
@@ -144,5 +144,5 @@ scope-json: $(BUILD_DIR)/scope.json
 $(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 	$(SCRIPT_DIR)/scope.py $(BUILD_DIR)/vortex.xml -o $(BUILD_DIR)/scope.json
 
-clean:  
+clean:
 	rm -rf vortex_afu.h $(BUILD_DIR)

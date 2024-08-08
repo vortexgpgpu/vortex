@@ -36,7 +36,7 @@ struct oclHandleStruct oclHandles;
 char kernel_file[100] = "Kernels.cl";
 int total_kernels = 2;
 string kernel_names[2] = {"BFS_1", "BFS_2"};
-int work_group_size = 512;
+int work_group_size = 1; // 512
 int device_id_inused = 0; // deviced id used (default : 0)
 
 int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
@@ -54,9 +54,9 @@ int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
 
   *data = (uint8_t*)malloc(fsize);
   *size = fread(*data, 1, fsize, fp);
-  
+
   fclose(fp);
-  
+
   return 0;
 }
 
@@ -251,17 +251,16 @@ free(allPlatforms);*/
                                                   &source,
                                                   sourceSize,
                                                   &resultCL);*/
-  // read kernel binary from file  
+  // read kernel binary from file
   uint8_t *kernel_bin = NULL;
   size_t kernel_size;
   cl_int binary_status = 0;
-  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
+
+  if (0 != read_kernel_file("kernel.cl", &kernel_bin, &kernel_size))
     std::abort();
-
- oclHandles.program = clCreateProgramWithBinary(
-    oclHandles.context, 1, &oclHandles.devices[DEVICE_ID_INUSED], &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &resultCL);
+  oclHandles.program = clCreateProgramWithSource(
+    oclHandles.context, 1, (const char**)&kernel_bin, &kernel_size, &resultCL);
   free(kernel_bin);
-
   if ((resultCL != CL_SUCCESS) || (oclHandles.program == NULL))
     throw(string("InitCL()::Error: Loading Binary into cl_program. "
                  "(clCreateProgramWithBinary)"));
@@ -463,7 +462,7 @@ cl_mem _clMallocRW(int size, void *h_mem_ptr) throw(string) {
 cl_mem _clMalloc(int size, void *h_mem_ptr) throw(string) {
   cl_mem d_mem;
   d_mem = clCreateBuffer(oclHandles.context,
-                         CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, size,
+                         CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, size,
                          h_mem_ptr, &oclHandles.cl_status);
 #ifdef ERRMSG
   if (oclHandles.cl_status != CL_SUCCESS)

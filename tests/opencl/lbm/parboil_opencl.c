@@ -25,7 +25,7 @@ cl_command_queue *clCommandQueuePtr;
 
 static int is_async(enum pb_TimerID timer)
 {
-  return (timer == pb_TimerID_KERNEL) || 
+  return (timer == pb_TimerID_KERNEL) ||
              (timer == pb_TimerID_COPY_ASYNC);
 }
 
@@ -38,17 +38,17 @@ static int is_blocking(enum pb_TimerID timer)
 
 static int asyncs_outstanding(struct pb_TimerSet* timers)
 {
-  return (timers->async_markers != NULL) && 
+  return (timers->async_markers != NULL) &&
            (timers->async_markers->timerID != INVALID_TIMERID);
 }
 
-static struct pb_async_time_marker_list * 
+static struct pb_async_time_marker_list *
 get_last_async(struct pb_TimerSet* timers)
 {
   /* Find the last event recorded thus far */
   struct pb_async_time_marker_list * last_event = timers->async_markers;
   if(last_event != NULL && last_event->timerID != INVALID_TIMERID) {
-    while(last_event->next != NULL && 
+    while(last_event->next != NULL &&
             last_event->next->timerID != INVALID_TIMERID)
       last_event = last_event->next;
     return last_event;
@@ -66,7 +66,7 @@ static void insert_marker(struct pb_TimerSet* tset, enum pb_TimerID timer)
   }
 
   if(*new_event == NULL) {
-    *new_event = (struct pb_async_time_marker_list *) 
+    *new_event = (struct pb_async_time_marker_list *)
       			malloc(sizeof(struct pb_async_time_marker_list));
     (*new_event)->marker = calloc(1, sizeof(cl_event));
     /*
@@ -106,7 +106,7 @@ static void insert_submarker(struct pb_TimerSet* tset, char *label, enum pb_Time
   }
 
   if(*new_event == NULL) {
-    *new_event = (struct pb_async_time_marker_list *) 
+    *new_event = (struct pb_async_time_marker_list *)
       			malloc(sizeof(struct pb_async_time_marker_list));
     (*new_event)->marker = calloc(1, sizeof(cl_event));
     /*
@@ -143,12 +143,12 @@ static pb_Timestamp record_async_times(struct pb_TimerSet* tset)
   struct pb_async_time_marker_list * last_marker = get_last_async(tset);
   pb_Timestamp total_async_time = 0;
   enum pb_TimerID timer;
-  
-  for(next_interval = tset->async_markers; next_interval != last_marker; 
+
+  for(next_interval = tset->async_markers; next_interval != last_marker;
       next_interval = next_interval->next) {
     cl_ulong command_start=0, command_end=0;
     cl_int ciErrNum = CL_SUCCESS;
-    
+
     ciErrNum = clGetEventProfilingInfo(*((cl_event *)next_interval->marker), CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &command_start, NULL);
     if (ciErrNum != CL_SUCCESS) {
       fprintf(stderr, "Error getting first EventProfilingInfo: %d\n", ciErrNum);
@@ -157,8 +157,8 @@ static pb_Timestamp record_async_times(struct pb_TimerSet* tset)
     ciErrNum = clGetEventProfilingInfo(*((cl_event *)next_interval->next->marker), CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &command_end, NULL);
     if (ciErrNum != CL_SUCCESS) {
       fprintf(stderr, "Error getting second EventProfilingInfo: %d\n", ciErrNum);
-    } 
-    
+    }
+
     pb_Timestamp interval = (pb_Timestamp) (((double)(command_end - command_start)) / 1e3);
     tset->timers[next_interval->timerID].elapsed += interval;
     if (next_interval->label != NULL) {
@@ -169,15 +169,15 @@ static pb_Timestamp record_async_times(struct pb_TimerSet* tset)
           break;
         }
         subtimer = subtimer->next;
-      }      
-    }        
+      }
+    }
     total_async_time += interval;
     next_interval->timerID = INVALID_TIMERID;
   }
 
   if(next_interval != NULL)
     next_interval->timerID = INVALID_TIMERID;
-  
+
   return total_async_time;
 }
 
@@ -268,11 +268,11 @@ pb_StartTimerAndSubTimer(struct pb_Timer *timer, struct pb_Timer *subtimer)
   {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    
+
     if (numNotStopped & 0x2) {
       timer->init = tv.tv_sec * 1000000LL + tv.tv_usec;
     }
-  
+
     if (numNotStopped & 0x1) {
       subtimer->init = tv.tv_sec * 1000000LL + tv.tv_usec;
     }
@@ -351,7 +351,7 @@ void pb_StopTimerAndSubTimer(struct pb_Timer *timer, struct pb_Timer *subtimer) 
     accumulate_time(&timer->elapsed, timer->init, fini);
     timer->init = fini;
   }
-  
+
   if (numNotRunning & 0x1) {
     accumulate_time(&subtimer->elapsed, subtimer->init, fini);
     subtimer->init = fini;
@@ -391,7 +391,7 @@ pb_InitializeTimerSet(struct pb_TimerSet *timers)
   timers->current = pb_TimerID_NONE;
 
   timers->async_markers = NULL;
-  
+
   for (n = 0; n < pb_TimerID_LAST; n++) {
     pb_ResetTimer(&timers->timers[n]);
     timers->sub_timer_list[n] = NULL;
@@ -405,20 +405,20 @@ void pb_SetOpenCL(void *p_clContextPtr, void *p_clCommandQueuePtr) {
 }
 
 void
-pb_AddSubTimer(struct pb_TimerSet *timers, char *label, enum pb_TimerID pb_Category) {    
+pb_AddSubTimer(struct pb_TimerSet *timers, char *label, enum pb_TimerID pb_Category) {
 /*#ifndef DISABLE_PARBOIL_TIMER
-  
+
   struct pb_SubTimer *subtimer = (struct pb_SubTimer *) malloc
     (sizeof(struct pb_SubTimer));
-     
+
   int len = strlen(label);
-    
+
   subtimer->label = (char *) malloc (sizeof(char)*(len+1));
   sprintf(subtimer->label, "%s\0", label);
-  
+
   pb_ResetTimer(&subtimer->timer);
   subtimer->next = NULL;
-  
+
   struct pb_SubTimerList *subtimerlist = timers->sub_timer_list[pb_Category];
   if (subtimerlist == NULL) {
     subtimerlist = (struct pb_SubTimerList *) calloc
@@ -433,7 +433,7 @@ pb_AddSubTimer(struct pb_TimerSet *timers, char *label, enum pb_TimerID pb_Categ
     }
     element->next = subtimer;
   }
-  
+
 #endif*/
 }
 
@@ -447,7 +447,7 @@ pb_SwitchToTimer(struct pb_TimerSet *timers, enum pb_TimerID timer)
   if (timers->current != pb_TimerID_NONE) {
     struct pb_SubTimerList *subtimerlist = timers->sub_timer_list[timers->current];
     struct pb_SubTimer *currSubTimer = (subtimerlist != NULL) ? subtimerlist->current : NULL;
-  
+
     if (!is_async(timers->current) ) {
       if (timers->current != timer) {
         if (currSubTimer != NULL) {
@@ -467,62 +467,62 @@ pb_SwitchToTimer(struct pb_TimerSet *timers, enum pb_TimerID timer)
       }
     }
   }
-  
+
   pb_Timestamp currentTime = 0; //get_time();
 
-  /* The only cases we check for asynchronous task completion is 
-   * when an overlapping CPU operation completes, or the next 
+  /* The only cases we check for asynchronous task completion is
+   * when an overlapping CPU operation completes, or the next
    * segment blocks on completion of previous async operations */
-  if( asyncs_outstanding(timers) && 
+  if( asyncs_outstanding(timers) &&
       (!is_async(timers->current) || is_blocking(timer) ) ) {
 
     struct pb_async_time_marker_list * last_event = get_last_async(timers);
     /* CL_COMPLETE if completed */
-    
+
     cl_int ciErrNum = CL_SUCCESS;
     cl_int async_done = CL_COMPLETE;
-    
+
     ciErrNum = clGetEventInfo(*((cl_event *)last_event->marker), CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof(cl_int), &async_done, NULL);
     if (ciErrNum != CL_SUCCESS) {
       fprintf(stderr, "Error Querying EventInfo!\n");
     }
-    
+
 
     if(is_blocking(timer)) {
-      /* Async operations completed after previous CPU operations: 
-       * overlapped time is the total CPU time since this set of async 
+      /* Async operations completed after previous CPU operations:
+       * overlapped time is the total CPU time since this set of async
        * operations were first issued */
-       
-      // timer to switch to is COPY or NONE 
+
+      // timer to switch to is COPY or NONE
       if(async_done != CL_COMPLETE) {
-        accumulate_time(&(timers->timers[pb_TimerID_OVERLAP].elapsed), 
+        accumulate_time(&(timers->timers[pb_TimerID_OVERLAP].elapsed),
 	                  timers->async_begin,currentTime);
-      }	                  
-	                  
+      }
+
       /* Wait on async operation completion */
       ciErrNum = clWaitForEvents(1, (cl_event *)last_event->marker);
       if (ciErrNum != CL_SUCCESS) {
         fprintf(stderr, "Error Waiting for Events!\n");
       }
-      
+
       pb_Timestamp total_async_time = record_async_times(timers);
 
-      /* Async operations completed before previous CPU operations: 
+      /* Async operations completed before previous CPU operations:
        * overlapped time is the total async time */
       if(async_done == CL_COMPLETE) {
         //fprintf(stderr, "Async_done: total_async_type = %lld\n", total_async_time);
         timers->timers[pb_TimerID_OVERLAP].elapsed += total_async_time;
       }
 
-    } else 
+    } else
     /* implies (!is_async(timers->current) && asyncs_outstanding(timers)) */
     // i.e. Current Not Async (not KERNEL/COPY_ASYNC) but there are outstanding
     // so something is deeper in stack
     if(async_done == CL_COMPLETE ) {
-      /* Async operations completed before previous CPU operations: 
+      /* Async operations completed before previous CPU operations:
        * overlapped time is the total async time */
       timers->timers[pb_TimerID_OVERLAP].elapsed += record_async_times(timers);
-    }   
+    }
   }
 
   /* Start the new timer */
@@ -533,15 +533,15 @@ pb_SwitchToTimer(struct pb_TimerSet *timers, enum pb_TimerID timer)
       // toSwitchTo Is Async (KERNEL/COPY_ASYNC)
       if (!asyncs_outstanding(timers)) {
         /* No asyncs outstanding, insert a fresh async marker */
-      
+
         insert_marker(timers, timer);
         timers->async_begin = currentTime;
       } else if(!is_async(timers->current)) {
         /* Previous asyncs still in flight, but a previous SwitchTo
-         * already marked the end of the most recent async operation, 
-         * so we can rename that marker as the beginning of this async 
+         * already marked the end of the most recent async operation,
+         * so we can rename that marker as the beginning of this async
          * operation */
-         
+
         struct pb_async_time_marker_list * last_event = get_last_async(timers);
         last_event->label = NULL;
         last_event->timerID = timer;
@@ -558,13 +558,13 @@ pb_SwitchToTimer(struct pb_TimerSet *timers, enum pb_TimerID timer)
 }
 
 void
-pb_SwitchToSubTimer(struct pb_TimerSet *timers, char *label, enum pb_TimerID category) 
+pb_SwitchToSubTimer(struct pb_TimerSet *timers, char *label, enum pb_TimerID category)
 {
 #if 0
 #ifndef DISABLE_PARBOIL_TIMER
   struct pb_SubTimerList *subtimerlist = timers->sub_timer_list[timers->current];
   struct pb_SubTimer *curr = (subtimerlist != NULL) ? subtimerlist->current : NULL;
-  
+
   if (timers->current != pb_TimerID_NONE) {
     if (!is_async(timers->current) ) {
       if (timers->current != category) {
@@ -588,10 +588,10 @@ pb_SwitchToSubTimer(struct pb_TimerSet *timers, char *label, enum pb_TimerID cat
 
   pb_Timestamp currentTime = 0; //get_time();
 
-  /* The only cases we check for asynchronous task completion is 
-   * when an overlapping CPU operation completes, or the next 
+  /* The only cases we check for asynchronous task completion is
+   * when an overlapping CPU operation completes, or the next
    * segment blocks on completion of previous async operations */
-  if( asyncs_outstanding(timers) && 
+  if( asyncs_outstanding(timers) &&
       (!is_async(timers->current) || is_blocking(category) ) ) {
 
     struct pb_async_time_marker_list * last_event = get_last_async(timers);
@@ -599,23 +599,23 @@ pb_SwitchToSubTimer(struct pb_TimerSet *timers, char *label, enum pb_TimerID cat
 
     cl_int ciErrNum = CL_SUCCESS;
     cl_int async_done = CL_COMPLETE;
-    
+
     ciErrNum = clGetEventInfo(*((cl_event *)last_event->marker), CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof(cl_int), &async_done, NULL);
     if (ciErrNum != CL_SUCCESS) {
       fprintf(stderr, "Error Querying EventInfo!\n");
     }
 
     if(is_blocking(category)) {
-      /* Async operations completed after previous CPU operations: 
-       * overlapped time is the total CPU time since this set of async 
+      /* Async operations completed after previous CPU operations:
+       * overlapped time is the total CPU time since this set of async
        * operations were first issued */
-       
-      // timer to switch to is COPY or NONE 
+
+      // timer to switch to is COPY or NONE
       // if it hasn't already finished, then just take now and use that as the elapsed time in OVERLAP
       // anything happening after now isn't OVERLAP because everything is being stopped to wait for synchronization
       // it seems that the extra sync wall time isn't being recorded anywhere
-      if(async_done != CL_COMPLETE) 
-        accumulate_time(&(timers->timers[pb_TimerID_OVERLAP].elapsed), 
+      if(async_done != CL_COMPLETE)
+        accumulate_time(&(timers->timers[pb_TimerID_OVERLAP].elapsed),
 	                  timers->async_begin,currentTime);
 
       /* Wait on async operation completion */
@@ -625,28 +625,28 @@ pb_SwitchToSubTimer(struct pb_TimerSet *timers, char *label, enum pb_TimerID cat
       }
       pb_Timestamp total_async_time = record_async_times(timers);
 
-      /* Async operations completed before previous CPU operations: 
+      /* Async operations completed before previous CPU operations:
        * overlapped time is the total async time */
        // If it did finish, then accumulate all the async time that did happen into OVERLAP
        // the immediately preceding EventSynchronize theoretically didn't have any effect since it was already completed.
       if(async_done == CL_COMPLETE /*cudaSuccess*/)
         timers->timers[pb_TimerID_OVERLAP].elapsed += total_async_time;
 
-    } else 
+    } else
     /* implies (!is_async(timers->current) && asyncs_outstanding(timers)) */
     // i.e. Current Not Async (not KERNEL/COPY_ASYNC) but there are outstanding
     // so something is deeper in stack
     if(async_done == CL_COMPLETE /*cudaSuccess*/) {
-      /* Async operations completed before previous CPU operations: 
+      /* Async operations completed before previous CPU operations:
        * overlapped time is the total async time */
       timers->timers[pb_TimerID_OVERLAP].elapsed += record_async_times(timers);
-    }   
+    }
     // else, this isn't blocking, so just check the next time around
   }
-  
+
   subtimerlist = timers->sub_timer_list[category];
   struct pb_SubTimer *subtimer = NULL;
-  
+
   if (label != NULL) {
     subtimer = subtimerlist->subtimer_list;
     while (subtimer != NULL) {
@@ -660,11 +660,11 @@ pb_SwitchToSubTimer(struct pb_TimerSet *timers, char *label, enum pb_TimerID cat
 
   /* Start the new timer */
   if (category != pb_TimerID_NONE) {
-    if(!is_async(category)) {  
+    if(!is_async(category)) {
       if (subtimerlist != NULL) {
         subtimerlist->current = subtimer;
       }
-    
+
       if (category != timers->current && subtimer != NULL) {
         pb_StartTimerAndSubTimer(&timers->timers[category], &subtimer->timer);
       } else if (subtimer != NULL) {
@@ -676,7 +676,7 @@ pb_SwitchToSubTimer(struct pb_TimerSet *timers, char *label, enum pb_TimerID cat
       if (subtimerlist != NULL) {
         subtimerlist->current = subtimer;
       }
-    
+
       // toSwitchTo Is Async (KERNEL/COPY_ASYNC)
       if (!asyncs_outstanding(timers)) {
         /* No asyncs outstanding, insert a fresh async marker */
@@ -684,22 +684,22 @@ pb_SwitchToSubTimer(struct pb_TimerSet *timers, char *label, enum pb_TimerID cat
         timers->async_begin = currentTime;
       } else if(!is_async(timers->current)) {
         /* Previous asyncs still in flight, but a previous SwitchTo
-         * already marked the end of the most recent async operation, 
-         * so we can rename that marker as the beginning of this async 
+         * already marked the end of the most recent async operation,
+         * so we can rename that marker as the beginning of this async
          * operation */
-                  
+
         struct pb_async_time_marker_list * last_event = get_last_async(timers);
         last_event->timerID = category;
         last_event->label = label;
       } // else, marker for switchToThis was already inserted
-      
+
       //toSwitchto is already asynchronous, but if current/prev state is async too, then DRIVER is already running
       if (!is_async(timers->current)) {
         pb_StartTimer(&timers->timers[pb_TimerID_DRIVER]);
       }
     }
   }
-  
+
   timers->current = category;
 #endif
 #endif
@@ -714,22 +714,22 @@ pb_PrintTimerSet(struct pb_TimerSet *timers)
 
   struct pb_Timer *t = timers->timers;
   struct pb_SubTimer* sub = NULL;
-  
+
   int maxSubLength;
-    
+
   const char *categories[] = {
     "IO", "Kernel", "Copy", "Driver", "Copy Async", "Compute"
   };
-  
+
   const int maxCategoryLength = 10;
-  
+
   int i;
   for(i = 1; i < pb_TimerID_LAST-1; ++i) { // exclude NONE and OVRELAP from this format
     if(pb_GetElapsedTime(&t[i]) != 0) {
-    
+
       // Print Category Timer
       printf("%-*s: %f\n", maxCategoryLength, categories[i-1], pb_GetElapsedTime(&t[i]));
-      
+
       if (timers->sub_timer_list[i] != NULL) {
         sub = timers->sub_timer_list[i]->subtimer_list;
         maxSubLength = 0;
@@ -740,14 +740,14 @@ pb_PrintTimerSet(struct pb_TimerSet *timers)
           }
           sub = sub->next;
         }
-        
+
         // Fit to Categories
         if (maxSubLength <= maxCategoryLength) {
          maxSubLength = maxCategoryLength;
         }
-        
+
         sub = timers->sub_timer_list[i]->subtimer_list;
-        
+
         // Print SubTimers
         while (sub != NULL) {
           printf(" -%-*s: %f\n", maxSubLength, sub->label, pb_GetElapsedTime(&sub->timer));
@@ -756,13 +756,13 @@ pb_PrintTimerSet(struct pb_TimerSet *timers)
       }
     }
   }
-  
+
   if(pb_GetElapsedTime(&t[pb_TimerID_OVERLAP]) != 0)
     printf("CPU/Kernel Overlap: %f\n", pb_GetElapsedTime(&t[pb_TimerID_OVERLAP]));
-        
+
   float walltime = (wall_end - timers->wall_begin)/ 1e6;
   printf("Timer Wall Time: %f\n", walltime);
-  
+
 #endif
 #endif
 }
@@ -779,12 +779,12 @@ void pb_DestroyTimerSet(struct pb_TimerSet * timers)
     if (ciErrNum != CL_SUCCESS) {
       //fprintf(stderr, "Error Waiting for Events!\n");
     }
-    
+
     ciErrNum = clReleaseEvent( *((cl_event *)(event)->marker) );
     if (ciErrNum != CL_SUCCESS) {
       fprintf(stderr, "Error Release Events!\n");
     }
-    
+
     free((event)->marker);
     struct pb_async_time_marker_list* next = ((event)->next);
 
@@ -795,7 +795,7 @@ void pb_DestroyTimerSet(struct pb_TimerSet * timers)
   }
 
   int i = 0;
-  for(i = 0; i < pb_TimerID_LAST; ++i) {    
+  for(i = 0; i < pb_TimerID_LAST; ++i) {
     if (timers->sub_timer_list[i] != NULL) {
       struct pb_SubTimer *subtimer = timers->sub_timer_list[i]->subtimer_list;
       struct pb_SubTimer *prev = NULL;
@@ -854,7 +854,7 @@ pb_GetPlatforms() {
   return (pb_Platform**) ptr;
 }
 
-pb_Context* 
+pb_Context*
 createContext(pb_Platform* pb_platform, pb_Device* pb_device) {
   pb_Context* c = (pb_Context*) malloc(sizeof(pb_Context));
   cl_int clStatus;
@@ -928,7 +928,7 @@ pb_GetDevices(pb_Platform* pb_platform) {
       pb_platform->devices[i]->name = (char *) name;
 
       cl_bool available;
-      clGetDeviceInfo(dev_ids[i], CL_DEVICE_AVAILABLE, sizeof(cl_bool), &available, NULL); 
+      clGetDeviceInfo(dev_ids[i], CL_DEVICE_AVAILABLE, sizeof(cl_bool), &available, NULL);
       pb_platform->devices[i]->available = (int) available;
 
       pb_platform->devices[i]->in_use = 0;
@@ -1219,16 +1219,16 @@ pb_InitOpenCLContext(struct pb_Parameters* parameters) {
 
   _err = clGetPlatformIDs(1, &platform_id, NULL);
   if (_err != CL_SUCCESS) {
-    fprintf(stderr, "Error querying platform!\n");  
+    fprintf(stderr, "Error querying platform!\n");
     exit(-1);
   }
-  
+
   _err = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL);
   if (_err != CL_SUCCESS) {
-    fprintf(stderr, "Error querying device IDs!\n");  
+    fprintf(stderr, "Error querying device IDs!\n");
     exit(-1);
   }
-  
+
   context = clCreateContext(NULL, 1, &device_id, NULL, NULL, &_err);
   if (_err != CL_SUCCESS) {
     fprintf(stderr, "Error Creating device context!\n");
@@ -1240,15 +1240,15 @@ pb_InitOpenCLContext(struct pb_Parameters* parameters) {
   c->clDeviceId = device_id;
   c->clPlatformId = platform_id;
   c->pb_platform = (pb_Platform*)malloc(sizeof(pb_Platform));
-  c->pb_device = (pb_Device*)malloc(sizeof(pb_Device));  
-  c->pb_platform->devices = (pb_Device**)malloc(sizeof(pb_Device*) * 2);  
+  c->pb_device = (pb_Device*)malloc(sizeof(pb_Device));
+  c->pb_platform->devices = (pb_Device**)malloc(sizeof(pb_Device*) * 2);
   c->pb_platform->devices[0] = c->pb_device;
   c->pb_platform->devices[1] = NULL;
-  c->pb_platform->contexts = (pb_Context**)malloc(sizeof(pb_Context*) * 2);  
+  c->pb_platform->contexts = (pb_Context**)malloc(sizeof(pb_Context*) * 2);
   c->pb_platform->contexts[0] = c;
   c->pb_platform->contexts[1] = NULL;
   c->pb_platform->in_use = 1;
-  c->pb_device->in_use = 1;  
+  c->pb_device->in_use = 1;
   return c;
 }
 
@@ -1270,7 +1270,7 @@ pb_PrintPlatformInfo(pb_Context* c) {
   printf ("--------------------------------------------------------\n");
 
   while (*ps) {
-    printf ("PLATFORM = %s, %s", (*ps)->name, (*ps)->version); 
+    printf ("PLATFORM = %s, %s", (*ps)->name, (*ps)->version);
     if (c->pb_platform == *ps) printf (" (SELECTED)");
     printf ("\n");
 
@@ -1382,7 +1382,7 @@ void pb_sig_clmem(char* s, cl_command_queue command_queue, cl_mem memobj, int ty
     printf ("Something wrong.\n");
     assert(0);
   } else {
-    printf ("size = %d\n", sz);
+    printf ("size = %ld\n", sz);
   }
   char* hp; // = (char*) malloc(sz);
   //posix_memalign((void**)&hp, 64, sz);

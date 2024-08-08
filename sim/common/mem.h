@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <map>
 #include <unordered_map>
 #include <cstdint>
 
@@ -38,7 +39,7 @@ public:
   RamMemDevice(const char* filename, uint32_t wordSize);
   ~RamMemDevice() {}
 
-  void read(void* data, uint64_t addr, uint64_t size) override;  
+  void read(void* data, uint64_t addr, uint64_t size) override;
   void write(const void* data, uint64_t addr, uint64_t size) override;
 
   virtual uint64_t size() const {
@@ -55,13 +56,13 @@ protected:
 class RomMemDevice : public RamMemDevice {
 public:
   RomMemDevice(const char *filename, uint32_t wordSize)
-    : RamMemDevice(filename, wordSize) 
+    : RamMemDevice(filename, wordSize)
   {}
 
   RomMemDevice(uint64_t size, uint32_t wordSize)
-    : RamMemDevice(size, wordSize) 
+    : RamMemDevice(size, wordSize)
   {}
-  
+
   ~RomMemDevice();
 
   void write(const void* data, uint64_t addr, uint64_t size) override;
@@ -71,11 +72,11 @@ public:
 
 class MemoryUnit {
 public:
-  
+
   struct PageFault {
     PageFault(uint64_t a, bool nf)
       : faultAddr(a)
-      , notFound(nf) 
+      , notFound(nf)
     {}
     uint64_t  faultAddr;
     bool      notFound;
@@ -107,10 +108,10 @@ private:
   class ADecoder {
   public:
     ADecoder() {}
-    
+
     void read(void* data, uint64_t addr, uint64_t size);
     void write(const void* data, uint64_t addr, uint64_t size);
-    
+
     void map(uint64_t start, uint64_t end, MemDevice &md);
 
   private:
@@ -119,11 +120,11 @@ private:
       MemDevice*  md;
       uint64_t    addr;
     };
-    
+
     struct entry_t {
       MemDevice*  md;
       uint64_t    start;
-      uint64_t    end;        
+      uint64_t    end;
     };
 
     bool lookup(uint64_t addr, uint32_t wordSize, mem_accessor_t*);
@@ -135,7 +136,7 @@ private:
     TLBEntry() {}
     TLBEntry(uint32_t pfn, uint32_t flags)
       : pfn(pfn)
-      , flags(flags) 
+      , flags(flags)
     {}
     uint32_t pfn;
     uint32_t flags;
@@ -147,7 +148,7 @@ private:
 
   std::unordered_map<uint64_t, TLBEntry> tlb_;
   uint64_t  pageSize_;
-  ADecoder  decoder_;  
+  ADecoder  decoder_;
   bool      enableVM_;
 
   amo_reservation_t amo_reservation_;
@@ -155,17 +156,37 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+class ACLManager {
+public:
+
+    void set(uint64_t addr, uint64_t size, int flags);
+
+    bool check(uint64_t addr, uint64_t size, int flags) const;
+
+private:
+
+  struct acl_entry_t {
+    uint64_t end;
+    int32_t flags;
+  };
+
+  std::map<uint64_t, acl_entry_t> acl_map_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 class RAM : public MemDevice {
 public:
-  
-   RAM(uint32_t page_size, uint64_t capacity = 0);
+
+  RAM(uint64_t capacity, uint32_t page_size);
+  RAM(uint64_t capacity) : RAM(capacity, capacity) {}
   ~RAM();
 
   void clear();
 
   uint64_t size() const override;
 
-  void read(void* data, uint64_t addr, uint64_t size) override;  
+  void read(void* data, uint64_t addr, uint64_t size) override;
   void write(const void* data, uint64_t addr, uint64_t size) override;
 
   void loadBinImage(const char* filename, uint64_t destination);
@@ -179,15 +200,23 @@ public:
     return *this->get(address);
   }
 
+  void set_acl(uint64_t addr, uint64_t size, int flags);
+
+  void enable_acl(bool enable) {
+    check_acl_ = enable;
+  }
+
 private:
 
   uint8_t *get(uint64_t address) const;
 
   uint64_t capacity_;
-  uint32_t page_bits_;  
+  uint32_t page_bits_;
   mutable std::unordered_map<uint64_t, uint8_t*> pages_;
   mutable uint8_t* last_page_;
   mutable uint64_t last_page_index_;
+  ACLManager acl_mngr_;
+  bool check_acl_;
 };
 
 } // namespace vortex

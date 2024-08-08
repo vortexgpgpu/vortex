@@ -29,7 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h> 
+#include <unistd.h>
 #include <chrono>
 #include <vector>
 
@@ -73,9 +73,9 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
 
   *data = (uint8_t*)malloc(fsize);
   *size = fread(*data, 1, fsize, fp);
-  
+
   fclose(fp);
-  
+
   return 0;
 }
 
@@ -94,9 +94,9 @@ uint8_t *kernel_bin = NULL;
 //
 void Cleanup(cl_device_id device_id, cl_context context, cl_command_queue commandQueue,
              cl_program program, cl_kernel kernel, cl_mem memObjects[2]) {
-  if (kernel_bin) 
+  if (kernel_bin)
     free(kernel_bin);
-  
+
   if (commandQueue != 0)
     clReleaseCommandQueue(commandQueue);
 
@@ -114,7 +114,7 @@ void Cleanup(cl_device_id device_id, cl_context context, cl_command_queue comman
   if (context != 0)
     clReleaseContext(context);
 
-  if (device_id != 0) 
+  if (device_id != 0)
     clReleaseDevice(device_id);
 }
 
@@ -148,7 +148,7 @@ static void parse_args(int argc, char **argv) {
 int main(int argc, char **argv) {
   // parse command arguments
   parse_args(argc, argv);
-  
+
   cl_platform_id platform_id;
   cl_device_id device_id;
   cl_program program;
@@ -162,34 +162,27 @@ int main(int argc, char **argv) {
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
   CL_CHECK(clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL));
 
-  context = CL_CHECK_ERR(clCreateContext(NULL, 1, &device_id, &pfn_notify, NULL, &_err));  
+  context = CL_CHECK_ERR(clCreateContext(NULL, 1, &device_id, &pfn_notify, NULL, &_err));
   queue = CL_CHECK_ERR(clCreateCommandQueue(context, device_id, 0, &_err));
 
   cl_kernel kernel = 0;
   cl_mem memObjects[2] = {0, 0};
 
   printf("Create program from kernel source\n");
-#ifdef HOSTGPU
   if (0 != read_kernel_file("kernel.cl", &kernel_bin, &kernel_size))
     return -1;
   program = CL_CHECK_ERR(clCreateProgramWithSource(
-    context, 1, (const char**)&kernel_bin, &kernel_size, &_err));  
-#else
-  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
-    return -1;
-  program = CL_CHECK_ERR(clCreateProgramWithBinary(
-    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, NULL, &_err));
-#endif
+    context, 1, (const char**)&kernel_bin, &kernel_size, &_err));
 
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
 
   size_t nbytes = sizeof(float) * size;
 
-  printf("create input buffer\n");  
+  printf("create input buffer\n");
   input_buffer = CL_CHECK_ERR(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
 
-  printf("create output buffer\n");  
+  printf("create output buffer\n");
   output_buffer = CL_CHECK_ERR(clCreateBuffer(context, CL_MEM_READ_WRITE, nbytes, NULL, &_err));
 
   memObjects[0] = input_buffer;
@@ -214,7 +207,7 @@ int main(int argc, char **argv) {
   {
     std::vector<float> dst_vec(size, 0.0f);
     std::vector<float> src_vec(size);
-    
+
     for (int i = 0; i < size; i++) {
       src_vec[i] = ((float)rand() / (float)(RAND_MAX)) * 100.0;
     }
@@ -222,7 +215,7 @@ int main(int argc, char **argv) {
     CL_CHECK(clEnqueueWriteBuffer(queue, input_buffer, CL_TRUE, 0, nbytes, src_vec.data(), 0, NULL, NULL));
     CL_CHECK(clEnqueueWriteBuffer(queue, output_buffer, CL_TRUE, 0, nbytes, dst_vec.data(), 0, NULL, NULL));
 
-    size_t num_groups_x = global_work_size[0] / local_work_size[0];    
+    size_t num_groups_x = global_work_size[0] / local_work_size[0];
     for (size_t workgroup_id_x = 0; workgroup_id_x < num_groups_x; ++workgroup_id_x) {
       for (size_t local_id_x = 0; local_id_x < local_work_size[0]; ++local_id_x) {
         // Calculate global ID for the work-item
@@ -245,21 +238,21 @@ int main(int argc, char **argv) {
   printf("Verify result\n");
   int errors = 0;
   {
-    std::vector<float> dst_vec(size);    
+    std::vector<float> dst_vec(size);
     CL_CHECK(clEnqueueReadBuffer(queue, output_buffer, CL_TRUE, 0, nbytes, dst_vec.data(), 0, NULL, NULL));
 
     for (int i = 0; i < size; ++i) {
       if (!almost_equal(dst_vec[i], ref_vec[i])) {
-        if (errors < 100) 
+        if (errors < 100)
           printf("*** error: [%d] expected=%f, actual=%f\n", i, ref_vec[i], dst_vec[i]);
         ++errors;
       }
     }
-  
+
     if (0 == errors) {
       printf("PASSED!\n");
     } else {
-      printf("FAILED! - %d errors\n", errors);    
+      printf("FAILED! - %d errors\n", errors);
     }
   }
 

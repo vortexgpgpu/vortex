@@ -14,8 +14,6 @@
 #include <stdint.h>
 #include <vx_intrinsics.h>
 
-#define KERNEL_ARG_DEV_MEM_ADDR 0x40
-
 typedef struct {
   uint32_t count;
   uint32_t src_addr;
@@ -23,7 +21,7 @@ typedef struct {
 } kernel_arg_t;
 
 int main() {
-	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
+	kernel_arg_t* arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
 	uint32_t count   = arg->count;
 	int32_t* src_ptr = (int32_t*)arg->src_addr;
 	int32_t* dst_ptr = (int32_t*)arg->dst_addr;

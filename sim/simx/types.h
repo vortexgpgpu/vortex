@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,12 +16,14 @@
 #include <stdint.h>
 #include <bitset>
 #include <queue>
+#include <vector>
 #include <unordered_map>
 #include <util.h>
 #include <stringutil.h>
 #include <VX_config.h>
+#include <VX_types.h>
 #include <simobject.h>
-#include "uuid_gen.h"
+#include <bitvector.h>
 #include "debug.h"
 
 namespace vortex {
@@ -47,13 +49,12 @@ typedef uint64_t WordF;
 #define MAX_NUM_THREADS 32
 #define MAX_NUM_WARPS   32
 #define MAX_NUM_REGS    32
+#define NUM_SRC_REGS    3
 
 typedef std::bitset<MAX_NUM_CORES>   CoreMask;
 typedef std::bitset<MAX_NUM_REGS>    RegMask;
 typedef std::bitset<MAX_NUM_THREADS> ThreadMask;
 typedef std::bitset<MAX_NUM_WARPS>   WarpMask;
-
-typedef std::unordered_map<uint32_t, uint32_t> CSRs;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -61,15 +62,14 @@ enum class RegType {
   None,
   Integer,
   Float,
-  Vector
+  Count
 };
 
 inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
   switch (type) {
   case RegType::None: break;
-  case RegType::Integer: os << "x"; break;  
+  case RegType::Integer: os << "x"; break;
   case RegType::Float:   os << "f"; break;
-  case RegType::Vector:  os << "v"; break;
   default: assert(false);
   }
   return os;
@@ -77,20 +77,20 @@ inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-enum class ExeType {
+enum class FUType {
   ALU,
   LSU,
   FPU,
   SFU,
-  ExeTypeCount
+  Count
 };
 
-inline std::ostream &operator<<(std::ostream &os, const ExeType& type) {
+inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
   switch (type) {
-  case ExeType::ALU: os << "ALU"; break;
-  case ExeType::LSU: os << "LSU"; break;
-  case ExeType::FPU: os << "FPU"; break;
-  case ExeType::SFU: os << "SFU"; break;
+  case FUType::ALU: os << "ALU"; break;
+  case FUType::LSU: os << "LSU"; break;
+  case FUType::FPU: os << "FPU"; break;
+  case FUType::SFU: os << "SFU"; break;
   default: assert(false);
   }
   return os;
@@ -144,6 +144,18 @@ enum class AddrType {
   IO
 };
 
+inline AddrType get_addr_type(uint64_t addr) {
+  if (addr >= IO_BASE_ADDR && addr < IO_END_ADDR) {
+     return AddrType::IO;
+  }
+  if (LMEM_ENABLED) {
+    if (addr >= LMEM_BASE_ADDR && (addr-LMEM_BASE_ADDR) < (1 << LMEM_LOG_SIZE)) {
+        return AddrType::Shared;
+    }
+  }
+  return AddrType::Global;
+}
+
 inline std::ostream &operator<<(std::ostream &os, const AddrType& type) {
   switch (type) {
   case AddrType::Global: os << "Global"; break;
@@ -194,8 +206,7 @@ enum class SfuType {
   PRED,
   CSRRW,
   CSRRS,
-  CSRRC,
-  CMOV
+  CSRRC
 };
 
 inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
@@ -209,7 +220,6 @@ inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
   case SfuType::CSRRW:  os << "CSRRW"; break;
   case SfuType::CSRRS:  os << "CSRRS"; break;
   case SfuType::CSRRC:  os << "CSRRC"; break;
-  case SfuType::CMOV:   os << "CMOV"; break;
   default: assert(false);
   }
   return os;
@@ -229,22 +239,78 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
   default: assert(false);
   }
   return os;
+}///////////////////////////////////////////////////////////////////////////////
+
+struct LsuReq {
+  BitVector<> mask;
+  std::vector<uint64_t> addrs;
+  bool     write;
+  uint32_t tag;
+  uint32_t cid;
+  uint64_t uuid;
+
+  LsuReq(uint32_t size)
+    : mask(size)
+    , addrs(size, 0)
+    , write(false)
+    , tag(0)
+    , cid(0)
+    , uuid(0)
+  {}
+};
+
+inline std::ostream &operator<<(std::ostream &os, const LsuReq& req) {
+  os << "rw=" << req.write << ", mask=" << req.mask << ", ";
+  for (size_t i = 0; i < req.mask.size(); ++i) {
+    os << "addr" << i << "=";
+    if (req.mask.test(i)) {
+      os << "0x" << std::hex << req.addrs.at(i) << std::dec;
+    } else {
+      os << "-";
+    }
+    os << ", ";
+  }
+  os << "tag=0x" << std::hex << req.tag << std::dec << ", cid=" << req.cid;
+  os << " (#" << req.uuid << ")";
+  return os;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+struct LsuRsp {
+  BitVector<> mask;
+  uint64_t tag;
+  uint32_t cid;
+  uint64_t uuid;
+
+ LsuRsp(uint32_t size)
+    : mask(size)
+    , tag (0)
+    , cid(0)
+    , uuid(0)
+  {}
+};
+
+inline std::ostream &operator<<(std::ostream &os, const LsuRsp& rsp) {
+  os << "mask=" << rsp.mask << ", tag=0x" << std::hex << rsp.tag << std::dec << ", cid=" << rsp.cid;
+  os << " (#" << rsp.uuid << ")";
+  return os;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 struct MemReq {
   uint64_t addr;
-  bool write;
+  bool     write;
   AddrType type;
   uint32_t tag;
-  uint32_t cid;    
+  uint32_t cid;
   uint64_t uuid;
 
-  MemReq(uint64_t _addr = 0, 
+  MemReq(uint64_t _addr = 0,
           bool _write = false,
           AddrType _type = AddrType::Global,
-          uint64_t _tag = 0, 
+          uint64_t _tag = 0,
           uint32_t _cid = 0,
           uint64_t _uuid = 0
   ) : addr(_addr)
@@ -257,30 +323,30 @@ struct MemReq {
 };
 
 inline std::ostream &operator<<(std::ostream &os, const MemReq& req) {
-  os << "mem-" << (req.write ? "wr" : "rd") << ": ";
-  os << "addr=0x" << std::hex << req.addr << ", type=" << req.type;
-  os << std::dec << ", tag=" << req.tag << ", cid=" << req.cid;
-  os << " (#" << std::dec << req.uuid << ")";
+  os << "rw=" << req.write << ", ";
+  os << "addr=0x" << std::hex << req.addr << std::dec << ", type=" << req.type;
+  os << ", tag=0x" << std::hex << req.tag << std::dec << ", cid=" << req.cid;
+  os << " (#" << req.uuid << ")";
   return os;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 struct MemRsp {
-  uint64_t tag;    
+  uint64_t tag;
   uint32_t cid;
   uint64_t uuid;
-  
+
   MemRsp(uint64_t _tag = 0, uint32_t _cid = 0, uint64_t _uuid = 0)
-    : tag (_tag) 
+    : tag (_tag)
     , cid(_cid)
     , uuid(_uuid)
   {}
 };
 
 inline std::ostream &operator<<(std::ostream &os, const MemRsp& rsp) {
-  os << "mem-rsp: tag=" << rsp.tag << ", cid=" << rsp.cid;
-  os << " (#" << std::dec << rsp.uuid << ")";
+  os << "tag=0x" << std::hex << rsp.tag << std::dec << ", cid=" << rsp.cid;
+  os << " (#" << rsp.uuid << ")";
   return os;
 }
 
@@ -288,16 +354,16 @@ inline std::ostream &operator<<(std::ostream &os, const MemRsp& rsp) {
 
 template <typename T>
 class HashTable {
-public:    
+public:
   HashTable(uint32_t capacity)
     : entries_(capacity)
-    , size_(0) 
+    , size_(0)
   {}
 
   bool empty() const {
     return (0 == size_);
   }
-  
+
   bool full() const {
     return (size_ == entries_.size());
   }
@@ -328,7 +394,7 @@ public:
       if (!entry.first) {
         entry.first = true;
         entry.second = value;
-        ++size_;              
+        ++size_;
         return i;
       }
     }
@@ -365,13 +431,13 @@ public:
   std::vector<SimPort<Type>> Outputs;
 
   Mux(
-    const SimContext& ctx, 
-    const char* name, 
-    ArbiterType type, 
-    uint32_t num_inputs, 
+    const SimContext& ctx,
+    const char* name,
+    ArbiterType type,
+    uint32_t num_inputs,
     uint32_t num_outputs = 1,
     uint32_t delay = 1
-  ) : SimObject<Mux<Type>>(ctx, name)    
+  ) : SimObject<Mux<Type>>(ctx, name)
     , Inputs(num_inputs, this)
     , Outputs(num_outputs, this)
     , type_(type)
@@ -379,13 +445,13 @@ public:
     , cursors_(num_outputs, 0)
     , num_reqs_(num_inputs / num_outputs)
   {
-    assert(delay != 0);    
+    assert(delay != 0);
     assert(num_inputs <= 32);
     assert(num_outputs <= 32);
     assert(num_inputs >= num_outputs);
 
     // bypass mode
-    if (num_inputs == num_outputs) {      
+    if (num_inputs == num_outputs) {
       for (uint32_t i = 0; i < num_inputs; ++i) {
         Inputs.at(i).bind(&Outputs.at(i));
       }
@@ -406,20 +472,19 @@ public:
     // skip bypass mode
     if (I == O)
       return;
-        
-    // process inputs       
+
+    // process inputs
     for (uint32_t o = 0; o < O; ++o) {
       for (uint32_t r = 0; r < R; ++r) {
         uint32_t i = (cursors_.at(o) + r) & (R-1);
         uint32_t j = o * R + i;
         if (j >= I)
           continue;
-        
+
         auto& req_in = Inputs.at(j);
         if (!req_in.empty()) {
           auto& req = req_in.front();
-          DT(4, this->name() << "-" << req);
-          Outputs.at(o).send(req, delay_);                
+          Outputs.at(o).push(req, delay_);
           req_in.pop();
           this->update_cursor(o, i);
           break;
@@ -437,7 +502,7 @@ private:
   }
 
   ArbiterType type_;
-  uint32_t delay_;  
+  uint32_t delay_;
   std::vector<uint32_t> cursors_;
   uint32_t num_reqs_;
 };
@@ -450,33 +515,33 @@ public:
   std::vector<SimPort<Req>>  ReqIn;
   std::vector<SimPort<Rsp>>  RspIn;
 
-  std::vector<SimPort<Req>>  ReqOut;  
+  std::vector<SimPort<Req>>  ReqOut;
   std::vector<SimPort<Rsp>>  RspOut;
 
   Switch(
-    const SimContext& ctx, 
-    const char* name, 
-    ArbiterType type, 
-    uint32_t num_inputs, 
+    const SimContext& ctx,
+    const char* name,
+    ArbiterType type,
+    uint32_t num_inputs,
     uint32_t num_outputs = 1,
     uint32_t delay = 1
-  ) 
-    : SimObject<Switch<Req, Rsp>>(ctx, name)    
+  )
+    : SimObject<Switch<Req, Rsp>>(ctx, name)
     , ReqIn(num_inputs, this)
     , RspIn(num_inputs, this)
-    , ReqOut(num_outputs, this)    
+    , ReqOut(num_outputs, this)
     , RspOut(num_outputs, this)
     , type_(type)
     , delay_(delay)
     , cursors_(num_outputs, 0)
     , lg_num_reqs_(log2ceil(num_inputs / num_outputs))
   {
-    assert(delay != 0);    
+    assert(delay != 0);
     assert(num_inputs <= 32);
     assert(num_outputs <= 32);
     assert(num_inputs >= num_outputs);
 
-    // bypass mode    
+    // bypass mode
     if (num_inputs == num_outputs) {
       for (uint32_t i = 0; i < num_inputs; ++i) {
         ReqIn.at(i).bind(&ReqOut.at(i));
@@ -499,41 +564,41 @@ public:
     // skip bypass mode
     if (I == O)
       return;
-        
-    // process incomming requests        
+
     for (uint32_t o = 0; o < O; ++o) {
-      for (uint32_t r = 0; r < R; ++r) {
-        uint32_t i = (cursors_.at(o) + r) & (R-1);
-        uint32_t j = o * R + i;
-        if (j >= I)
-          continue;
-        
-        auto& req_in = ReqIn.at(j);
-        if (!req_in.empty()) {
-          auto& req = req_in.front();
-          if (lg_num_reqs_ != 0) {
-            req.tag = (req.tag << lg_num_reqs_) | i;
-          }
-          DT(4, this->name() << "-" << req);
-          ReqOut.at(o).send(req, delay_);                
-          req_in.pop();
-          this->update_cursor(o, i);
-          break;
-        }
-      }
-      
-      // process incoming reponses
+      // process incoming responses
       if (!RspOut.at(o).empty()) {
         auto& rsp = RspOut.at(o).front();
         uint32_t i = 0;
         if (lg_num_reqs_ != 0) {
           i = rsp.tag & (R-1);
           rsp.tag >>= lg_num_reqs_;
-        }      
-        DT(4, this->name() << "-" << rsp);
+        }
+        DT(4, this->name() << " rsp" << o << ": " << rsp);
         uint32_t j = o * R + i;
-        RspIn.at(j).send(rsp, 1);      
+        RspIn.at(j).push(rsp, 1);
         RspOut.at(o).pop();
+      }
+
+      // process incoming requests
+      for (uint32_t r = 0; r < R; ++r) {
+        uint32_t i = (cursors_.at(o) + r) & (R-1);
+        uint32_t j = o * R + i;
+        if (j >= I)
+          continue;
+
+        auto& req_in = ReqIn.at(j);
+        if (!req_in.empty()) {
+          auto& req = req_in.front();
+          if (lg_num_reqs_ != 0) {
+            req.tag = (req.tag << lg_num_reqs_) | i;
+          }
+          DT(4, this->name() << " req" << j << ": " << req);
+          ReqOut.at(o).push(req, delay_);
+          req_in.pop();
+          this->update_cursor(o, i);
+          break;
+        }
       }
     }
   }
@@ -546,67 +611,35 @@ public:
 
 private:
   ArbiterType type_;
-  uint32_t delay_;  
+  uint32_t delay_;
   std::vector<uint32_t> cursors_;
   uint32_t lg_num_reqs_;
 };
 
+using MemSwitch = Switch<MemReq, MemRsp>;
+
 ///////////////////////////////////////////////////////////////////////////////
 
-class SMemDemux : public SimObject<SMemDemux> {
+class LocalMemDemux : public SimObject<LocalMemDemux> {
 public:
-  SimPort<MemReq> ReqIn;
-  SimPort<MemRsp> RspIn;
+  SimPort<LsuReq> ReqIn;
+  SimPort<LsuRsp> RspIn;
 
-  SimPort<MemReq> ReqSM;
-  SimPort<MemRsp> RspSM;
+  SimPort<LsuReq> ReqLmem;
+  SimPort<LsuRsp> RspLmem;
 
-  SimPort<MemReq> ReqDC;
-  SimPort<MemRsp> RspDC;
+  SimPort<LsuReq> ReqDC;
+  SimPort<LsuRsp> RspDC;
 
-  SMemDemux(
-    const SimContext& ctx, 
-    const char* name, 
-    uint32_t delay = 1
-  ) : SimObject<SMemDemux>(ctx, name)    
-    , ReqIn(this)
-    , RspIn(this)
-    , ReqSM(this)
-    , RspSM(this)
-    , ReqDC(this)
-    , RspDC(this)
-    , delay_(delay)
-  {}
+  LocalMemDemux(
+    const SimContext& ctx,
+    const char* name,
+    uint32_t delay
+  );
 
-  void reset() {}
+  void reset();
 
-  void tick() {      
-    // process incoming reponses
-    if (!RspSM.empty()) {
-      auto& rsp = RspSM.front();
-      DT(4, this->name() << "-" << rsp);
-      RspIn.send(rsp, 1);
-      RspSM.pop();
-    }
-    if (!RspDC.empty()) {
-      auto& rsp = RspDC.front();
-      DT(4, this->name() << "-" << rsp);
-      RspIn.send(rsp, 1);
-      RspDC
-      .pop();
-    }
-    // process incomming requests  
-    if (!ReqIn.empty()) {
-      auto& req = ReqIn.front();
-      DT(4, this->name() << "-" << req);
-      if (req.type == AddrType::Shared) {
-        ReqSM.send(req, delay_);
-      } else {
-        ReqDC.send(req, delay_);
-      }
-      ReqIn.pop();
-    }   
-  }
+  void tick();
 
 private:
   uint32_t delay_;
@@ -614,6 +647,27 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-using MemSwitch = Switch<MemReq, MemRsp>;
+class LsuMemAdapter : public SimObject<LsuMemAdapter> {
+public:
+  SimPort<LsuReq> ReqIn;
+  SimPort<LsuRsp> RspIn;
+
+  std::vector<SimPort<MemReq>> ReqOut;
+  std::vector<SimPort<MemRsp>> RspOut;
+
+  LsuMemAdapter(
+    const SimContext& ctx,
+    const char* name,
+    uint32_t num_inputs,
+    uint32_t delay
+  );
+
+  void reset();
+
+  void tick();
+
+private:
+  uint32_t delay_;
+};
 
 }
