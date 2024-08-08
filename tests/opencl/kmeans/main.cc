@@ -35,7 +35,7 @@ double gettime() {
 #elif defined(RD_WG_SIZE)
 #define BLOCK_SIZE RD_WG_SIZE
 #else
-#define BLOCK_SIZE 256
+#define BLOCK_SIZE 1 //256
 #endif
 
 #ifdef RD_WG_SIZE_1_0
@@ -45,7 +45,7 @@ double gettime() {
 #elif defined(RD_WG_SIZE)
 #define BLOCK_SIZE2 RD_WG_SIZE
 #else
-#define BLOCK_SIZE2 256
+#define BLOCK_SIZE2 1 //256
 #endif
 
 // local variables
@@ -147,7 +147,7 @@ float *feature_d;
 float *clusters_d;
 float *center_d;
 
-	
+
 static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
   if (nullptr == filename || nullptr == data || 0 == size)
     return -1;
@@ -163,9 +163,9 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
 
   *data = (uint8_t*)malloc(fsize);
   *size = fread(*data, 1, fsize, fp);
-  
+
   fclose(fp);
-  
+
   return 0;
 }
 
@@ -188,7 +188,7 @@ int allocate(int n_points, int n_features, int n_clusters, float **feature) {
   fread(source + strlen(source), sourcesize, 1, fp);
   fclose(fp);*/
 
-  // OpenCL initialization  
+  // OpenCL initialization
   int use_gpu = 1;
   if (initialize(use_gpu))
     return -1;
@@ -199,19 +199,16 @@ int allocate(int n_points, int n_features, int n_clusters, float **feature) {
   //cl_program prog = clCreateProgramWithSource(context, 1, slist, NULL, &err);
   uint8_t *kernel_bin = NULL;
   size_t kernel_size;
-  cl_int binary_status = 0;  
-  err = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
+  cl_int binary_status = 0;
+  cl_program prog;
+  
+  err = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
   if (err != CL_SUCCESS) {
     printf("ERROR: read_kernel_file() => %d\n", err);
     return -1;
   }
-
-	cl_program prog = clCreateProgramWithBinary(
-      context, 1, device_list, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &err);
-  if (err != CL_SUCCESS) {
-    printf("ERROR: clCreateProgramWithBinary() => %d\n", err);
-    return -1;
-  }
+  prog = clCreateProgramWithSource(
+      context, 1, (const char**)&kernel_bin, &kernel_size, &err);
 
   free(kernel_bin);
 

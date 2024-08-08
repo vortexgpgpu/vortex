@@ -1,0 +1,174 @@
+#!/bin/bash
+
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Determine the current working directory
+CURRENT_DIR=$(pwd)
+
+# Function to detect current OS
+detect_osversion() {
+    local osversion="unsupported"
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release  # Source the os-release file to get OS information
+        case "$ID" in
+            ubuntu)
+                case "$VERSION_CODENAME" in
+                    bionic) osversion="ubuntu/bionic";;
+                    focal) osversion="ubuntu/focal";;
+                    # Add new versions as needed
+                esac
+                ;;
+            centos)
+                case "$VERSION_ID" in
+                    7) osversion="centos/7";;
+                    # Add new versions as needed
+                esac
+                ;;
+        esac
+    fi
+    echo "$osversion"
+}
+
+# Function to recursively copy files, skipping the current directory
+copy_files() {
+    local source_dir="$1"
+    local target_dir="$2"
+    #echo "source_dir=$source_dir, target_dir=$target_dir"
+
+    local same_dir=0
+    if [ "$(realpath "$source_dir")" == "$(realpath "$target_dir")" ]; then
+        same_dir=1
+    fi
+
+    # Function to copy and update file
+    copy_and_update() {
+        local src_pattern="$1"
+        local dest_dir="$2"
+        for file in $src_pattern; do
+            #echo "*** $file > $dest_dir"
+            if [ -f "$file" ]; then
+                if [[ "$file" == *.in ]]; then
+                    filename=$(basename -- "$file")
+                    filename_no_ext="${filename%.in}"
+                    dest_file="$dest_dir/$filename_no_ext"
+                    mkdir -p "$dest_dir"
+                    sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g; s|@INSTALLDIR@|$PREFIX|g" "$file" > "$dest_file"
+                    # apply permissions to bash scripts
+                    read -r firstline < "$dest_file"
+                    if [[ "$firstline" =~ ^#!.*bash ]]; then
+                        chmod +x "$dest_file"
+                    fi
+                else
+                    if [ $same_dir -eq 0 ]; then
+                        mkdir -p "$dest_dir"
+                        cp -p "$file" "$dest_dir"
+                    fi
+                fi
+            fi
+        done
+    }
+
+    for pattern in "${SUBDIRS[@]}"; do
+        local full_copy=0
+        if [[ "$pattern" == !* ]]; then
+            full_copy=1
+            pattern=${pattern:1}
+        fi
+        local source_pattern="$source_dir/$pattern"
+        if [[ "$pattern" == "." ]]; then
+            source_pattern=$source_dir
+        fi
+        find "$source_dir" -type d -path "$source_pattern" 2>/dev/null | while read dir; do
+            # Compute the relative path of the directory
+            local rel_path="${dir#$source_dir}"
+            rel_path="${rel_path#/}" # Remove leading slash, if present
+            local full_target_dir="$target_dir/$rel_path"
+
+            # Copy and update Makefile and common.mk if they exist
+            if [ $full_copy -eq 1 ]; then
+                copy_and_update "$dir/*" "$full_target_dir"
+            else
+                copy_and_update "$dir/Makefile" "$full_target_dir"
+                copy_and_update "$dir/common.mk" "$full_target_dir"
+                copy_and_update "$dir/*.in" "$full_target_dir"
+            fi
+        done
+    done
+}
+
+###############################################################################
+
+# default configuration parameters
+default_xlen=32
+default_tooldir=$HOME/tools
+default_osversion=$(detect_osversion)
+default_prefix=$CURRENT_DIR
+
+# load default configuration parameters from existing config.mk
+if [ -f "config.mk" ]; then
+    while IFS='=' read -r key value; do
+        value=${value//[@]/} # Remove placeholder characters
+        value="${value#"${value%%[![:space:]]*}"}"   # Remove leading whitespace
+        value="${value%"${value##*[![:space:]]}"}"   # Remove trailing whitespace
+        case $key in
+            XLEN\ ?*) default_xlen=${value//\?=/} ;;
+            TOOLDIR\ ?*) default_tooldir=${value//\?=/} ;;
+            OSVERSION\ ?*) default_osversion=${value//\?=/} ;;
+            PREFIX\ ?*) default_prefix=${value//\?=/} ;;
+        esac
+    done < config.mk
+fi
+
+# set configuration parameters
+XLEN=${XLEN:=$default_xlen}
+TOOLDIR=${TOOLDIR:=$default_tooldir}
+OSVERSION=${OSVERSION:=$default_osversion}
+PREFIX=${PREFIX:=$default_prefix}
+
+# parse command line arguments
+usage() {
+    echo "Usage: $0 [--xlen=<value>] [--tooldir=<path>] [--osversion=<version>]"
+    echo "  --xlen=<value>       Set the XLEN value (default: 32)"
+    echo "  --tooldir=<path>     Set the TOOLDIR path (default: $HOME/tools)"
+    echo "  --osversion=<version> Set the OS Version (default: $(detect_osversion))"
+    echo "  --prefix=<path>      Set installation directory"
+    exit 1
+}
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --xlen=*) XLEN="${1#*=}" ;;
+        --tooldir=*) TOOLDIR="${1#*=}" ;;
+        --osversion=*) OSVERSION="${1#*=}" ;;
+        --prefix=*) PREFIX="${1#*=}" ;;
+        -h|--help) usage ;;
+        *) echo "Unknown parameter passed: $1"; usage ;;
+    esac
+    shift
+done
+
+# check OS
+if [ "$OSVERSION" == "unsupported" ]; then
+    echo "Error: Unsupported OS."
+    exit -1
+fi
+
+# project subdirectories to build
+SUBDIRS=("." "!ci" "!perf" "hw*" "kernel*" "runtime*" "sim*" "tests*")
+
+# Get the directory of the script
+SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+THIRD_PARTY_DIR=$SCRIPT_DIR/third_party
+
+copy_files "$SCRIPT_DIR" "$CURRENT_DIR"

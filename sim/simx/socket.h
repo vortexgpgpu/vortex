@@ -17,7 +17,7 @@
 #include "dcrs.h"
 #include "arch.h"
 #include "cache_cluster.h"
-#include "shared_mem.h"
+#include "local_mem.h"
 #include "core.h"
 #include "constants.h"
 
@@ -62,7 +62,7 @@ public:
 
   bool running() const;
 
-  bool check_exit(Word* exitcode, bool riscv_test) const;  
+  int get_exitcode() const;  
 
   void barrier(uint32_t bar_id, uint32_t count, uint32_t core_id);
 

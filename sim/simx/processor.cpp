@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,7 +16,7 @@
 
 using namespace vortex;
 
-ProcessorImpl::ProcessorImpl(const Arch& arch) 
+ProcessorImpl::ProcessorImpl(const Arch& arch)
   : arch_(arch)
   , clusters_(arch.num_clusters())
 {
@@ -33,19 +33,19 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     !L3_ENABLED,
     log2ceil(L3_CACHE_SIZE),  // C
     log2ceil(MEM_BLOCK_SIZE), // L
-    log2ceil(L3_NUM_WAYS),    // W
-    0,                        // A
+    log2ceil(L2_LINE_SIZE),   // W
+    log2ceil(L3_NUM_WAYS),    // A
     log2ceil(L3_NUM_BANKS),   // B
-    XLEN,                     // address bits      
+    XLEN,                     // address bits
     1,                        // number of ports
-    uint8_t(arch.num_clusters()), // request size 
-    true,                     // write-through
+    uint8_t(arch.num_clusters()), // request size
+    L3_WRITEBACK,             // write-back
     false,                    // write response
-    L3_MSHR_SIZE,             // mshr
+    L3_MSHR_SIZE,             // mshr size
     2,                        // pipeline latency
     }
-  );        
-  
+  );
+
   // connect L3 memory ports
   l3cache_->MemReqPort.bind(&memsim_->MemReqPort);
   memsim_->MemRspPort.bind(&l3cache_->MemRspPort);
@@ -58,7 +58,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     l3cache_->CoreRspPorts.at(i).bind(&clusters_.at(i)->mem_rsp_port);
   }
 
-  // set up memory perf recording
+  // set up memory profiling
   memsim_->MemReqPort.tx_callback([&](const MemReq& req, uint64_t cycle){
     __unused (cycle);
     perf_mem_reads_   += !req.write;
@@ -70,6 +70,19 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     --perf_mem_pending_reads_;
   });
 
+#ifndef NDEBUG
+  // dump device configuration
+  std::cout << "CONFIGS:"
+            << " num_threads=" << arch.num_threads()
+            << ", num_warps=" << arch.num_warps()
+            << ", num_cores=" << arch.num_cores()
+            << ", num_clusters=" << arch.num_clusters()
+            << ", socket_size=" << arch.socket_size()
+            << ", local_mem_base=0x" << std::hex << arch.local_mem_base() << std::dec
+            << ", num_barriers=" << arch.num_barriers()
+            << std::endl;
+#endif
+  // reset the device
   this->reset();
 }
 
@@ -83,40 +96,32 @@ void ProcessorImpl::attach_ram(RAM* ram) {
   }
 }
 
-int ProcessorImpl::run(bool riscv_test) {
+void ProcessorImpl::run() {
   SimPlatform::instance().reset();
   this->reset();
-  
+
   bool done;
-  Word exitcode = 0;
   do {
     SimPlatform::instance().tick();
     done = true;
     for (auto cluster : clusters_) {
       if (cluster->running()) {
-        Word ec;   
-        if (cluster->check_exit(&ec, riscv_test)) {
-          exitcode |= ec;
-        } else {
-          done = false;
-        }
+        done = false;
+        continue;
       }
     }
     perf_mem_latency_ += perf_mem_pending_reads_;
   } while (!done);
-
-  return exitcode;
 }
- 
+
 void ProcessorImpl::reset() {
   perf_mem_reads_ = 0;
   perf_mem_writes_ = 0;
   perf_mem_latency_ = 0;
   perf_mem_pending_reads_ = 0;
-  
 }
 
-void ProcessorImpl::write_dcr(uint32_t addr, uint32_t value) {
+void ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
   dcrs_.write(addr, value);
 }
 
@@ -131,7 +136,7 @@ ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-Processor::Processor(const Arch& arch) 
+Processor::Processor(const Arch& arch)
   : impl_(new ProcessorImpl(arch))
 {}
 
@@ -143,10 +148,10 @@ void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-int Processor::run(bool riscv_test) {
-  return impl_->run(riscv_test);
+void Processor::run() {
+  impl_->run();
 }
 
-void Processor::write_dcr(uint32_t addr, uint32_t value) {
-  return impl_->write_dcr(addr, value);
+void Processor::dcr_write(uint32_t addr, uint32_t value) {
+  return impl_->dcr_write(addr, value);
 }

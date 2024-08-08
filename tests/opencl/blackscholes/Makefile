@@ -1,9 +1,19 @@
-PROJECT = blackscholes
+ROOT_DIR := $(realpath ../../..)
+include $(ROOT_DIR)/config.mk
 
-SRCS = main.cpp oclUtils.cpp shrUtils.cpp cmd_arg_reader.cpp oclBlackScholes_launcher.cpp oclBlackScholes_gold.cpp
+PROJECT := blackscholes
 
-CXXFLAGS += -I.
+SRC_DIR := $(VORTEX_HOME)/tests/opencl/$(PROJECT)
 
-OPTS ?= 
+SRCS := $(SRC_DIR)/main.cc $(SRC_DIR)/oclUtils.cpp $(SRC_DIR)/shrUtils.cpp $(SRC_DIR)/cmd_arg_reader.cpp $(SRC_DIR)/oclBlackScholes_launcher.cpp $(SRC_DIR)/oclBlackScholes_gold.cpp
+
+CXXFLAGS += -I$(SRC_DIR)
+
+kernel.cl: $(SRC_DIR)/kernel.cl
+	cp $< $@
+
+KERNEL_SRCS := kernel.cl
+
+OPTS ?=
 
 include ../common.mk

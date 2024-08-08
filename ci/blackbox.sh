@@ -1,12 +1,12 @@
 #!/bin/sh
 
 # Copyright © 2019-2023
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 # http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -23,14 +23,14 @@ show_help()
 {
     show_usage
     echo "  where"
-    echo "--driver: simx, rtlsim, oape, xrt"
+    echo "--driver: gpu, simx, rtlsim, oape, xrt"
     echo "--app: any subfolder test under regression or opencl"
     echo "--class: 0=disable, 1=pipeline, 2=memsys"
     echo "--rebuild: 0=disable, 1=force, 2=auto, 3=temp"
 }
 
 SCRIPT_DIR=$(dirname "$0")
-VORTEX_HOME=$SCRIPT_DIR/..
+ROOT_DIR=$SCRIPT_DIR/..
 
 DRIVER=simx
 APP=sgemm
@@ -91,12 +91,12 @@ case $i in
         ;;
     --scope)
         SCOPE=1
-        CORES=1        
+        CORES=1
         shift
         ;;
     --perf=*)
         PERF_FLAG=-DPERF_ENABLE
-        PERF_CLASS=${i#*=}    
+        PERF_CLASS=${i#*=}
         shift
         ;;
     --args=*)
@@ -117,8 +117,8 @@ case $i in
         exit 0
         ;;
     *)
-        show_usage   
-        exit -1       
+        show_usage
+        exit -1
         ;;
 esac
 done
@@ -130,17 +130,20 @@ then
 fi
 
 case $DRIVER in
+    gpu)
+        DRIVER_PATH=
+        ;;
     simx)
-        DRIVER_PATH=$VORTEX_HOME/runtime/simx
+        DRIVER_PATH=$ROOT_DIR/runtime/simx
         ;;
     rtlsim)
-        DRIVER_PATH=$VORTEX_HOME/runtime/rtlsim
+        DRIVER_PATH=$ROOT_DIR/runtime/rtlsim
         ;;
     opae)
-        DRIVER_PATH=$VORTEX_HOME/runtime/opae
+        DRIVER_PATH=$ROOT_DIR/runtime/opae
         ;;
     xrt)
-        DRIVER_PATH=$VORTEX_HOME/runtime/xrt
+        DRIVER_PATH=$ROOT_DIR/runtime/xrt
         ;;
     *)
         echo "invalid driver: $DRIVER"
@@ -148,49 +151,66 @@ case $DRIVER in
         ;;
 esac
 
-if [ -d "$VORTEX_HOME/tests/opencl/$APP" ];
+if [ -d "$ROOT_DIR/tests/opencl/$APP" ];
 then
-    APP_PATH=$VORTEX_HOME/tests/opencl/$APP
-elif [ -d "$VORTEX_HOME/tests/regression/$APP" ];
+    APP_PATH=$ROOT_DIR/tests/opencl/$APP
+elif [ -d "$ROOT_DIR/tests/regression/$APP" ];
 then
-    APP_PATH=$VORTEX_HOME/tests/regression/$APP
+    APP_PATH=$ROOT_DIR/tests/regression/$APP
 else
     echo "Application folder not found: $APP"
     exit -1
+fi
+
+if [ "$DRIVER" = "gpu" ];
+then
+    # running application
+    if [ $HAS_ARGS -eq 1 ]
+    then
+        echo "running: OPTS=$ARGS make -C $APP_PATH run-$DRIVER"
+        OPTS=$ARGS make -C $APP_PATH run-$DRIVER
+        status=$?
+    else
+        echo "running: make -C $APP_PATH run-$DRIVER"
+        make -C $APP_PATH run-$DRIVER
+        status=$?
+    fi
+
+    exit $status
 fi
 
 CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_THREADS=$THREADS $L2 $L3 $PERF_FLAG $CONFIGS"
 
 echo "CONFIGS=$CONFIGS"
 
-if [ $REBUILD -ne 0 ] 
+if [ $REBUILD -ne 0 ]
 then
-    BLACKBOX_CACHE=blackbox.$DRIVER.cache    
+    BLACKBOX_CACHE=blackbox.$DRIVER.cache
     if [ -f "$BLACKBOX_CACHE" ]
-    then 
+    then
         LAST_CONFIGS=`cat $BLACKBOX_CACHE`
     fi
 
     if [ $REBUILD -eq 1 ] || [ "$CONFIGS+$DEBUG+$SCOPE" != "$LAST_CONFIGS" ];
     then
-        make -C $DRIVER_PATH clean > /dev/null
+        make -C $DRIVER_PATH clean-driver > /dev/null
         echo "$CONFIGS+$DEBUG+$SCOPE" > $BLACKBOX_CACHE
     fi
 fi
 
 # export performance monitor class identifier
-export PERF_CLASS=$PERF_CLASS
+export VORTEX_PROFILING=$PERF_CLASS
 
 status=0
 
 # ensure config update
-make -C $VORTEX_HOME/hw config > /dev/null
+make -C $ROOT_DIR/hw config > /dev/null
 
 # ensure the stub driver is present
-make -C $VORTEX_HOME/runtime/stub > /dev/null
+make -C $ROOT_DIR/runtime/stub > /dev/null
 
 if [ $DEBUG -ne 0 ]
-then    
+then
     # running application
     if [ $TEMPBUILD -eq 1 ]
     then
@@ -212,11 +232,11 @@ then
         if [ $HAS_ARGS -eq 1 ]
         then
             echo "running: VORTEX_RT_PATH=$TEMPDIR OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1"
-            VORTEX_RT_PATH=$TEMPDIR OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
+            DEBUG=1 VORTEX_RT_PATH=$TEMPDIR OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
             status=$?
         else
             echo "running: VORTEX_RT_PATH=$TEMPDIR make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1"
-            VORTEX_RT_PATH=$TEMPDIR make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
+            DEBUG=1 VORTEX_RT_PATH=$TEMPDIR make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
             status=$?
         fi
 
@@ -237,26 +257,26 @@ then
         if [ $HAS_ARGS -eq 1 ]
         then
             echo "running: OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1"
-            OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
+            DEBUG=1 OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
             status=$?
         else
             echo "running: make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1"
-            make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
+            DEBUG=1 make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
             status=$?
         fi
     fi
-    
+
     if [ -f "$APP_PATH/trace.vcd" ]
-    then 
+    then
         mv -f $APP_PATH/trace.vcd .
     fi
-else    
+else
     if [ $TEMPBUILD -eq 1 ]
     then
         # setup temp directory
         TEMPDIR=$(mktemp -d)
         mkdir -p "$TEMPDIR/$DRIVER"
-        
+
         # driver initialization
         if [ $SCOPE -eq 1 ]
         then
@@ -266,7 +286,7 @@ else
             echo "running: DESTDIR=$TEMPDIR/$DRIVER CONFIGS=$CONFIGS make -C $DRIVER_PATH"
             DESTDIR="$TEMPDIR/$DRIVER" CONFIGS="$CONFIGS" make -C $DRIVER_PATH > /dev/null
         fi
-        
+
         # running application
         if [ $HAS_ARGS -eq 1 ]
         then
@@ -282,7 +302,7 @@ else
         # cleanup temp directory
         trap "rm -rf $TEMPDIR" EXIT
     else
-        
+
         # driver initialization
         if [ $SCOPE -eq 1 ]
         then

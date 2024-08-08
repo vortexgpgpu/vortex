@@ -1,0 +1,96 @@
+diff --git a/src/internal/atomic.h b/src/internal/atomic.h
+index 96c1552d..41b02e75 100644
+--- a/src/internal/atomic.h
++++ b/src/internal/atomic.h
+@@ -226,7 +226,7 @@ static inline void a_or_64(volatile uint64_t *p, uint64_t v)
+ #endif
+ 
+ #ifndef a_cas_p
+-typedef char a_cas_p_undefined_but_pointer_not_32bit[-sizeof(char) == 0xffffffff ? 1 : -1];
++//typedef char a_cas_p_undefined_but_pointer_not_32bit[-sizeof(char) == 0xffffffff ? 1 : -1];
+ #define a_cas_p a_cas_p
+ static inline void *a_cas_p(volatile void *p, void *t, void *s)
+ {
+diff --git a/src/setjmp/riscv32/longjmp.S b/src/setjmp/riscv32/longjmp.S
+index f9cb3318..0980ea23 100644
+--- a/src/setjmp/riscv32/longjmp.S
++++ b/src/setjmp/riscv32/longjmp.S
+@@ -23,6 +23,20 @@ longjmp:
+ 	lw ra,    52(a0)
+ 
+ #ifndef __riscv_float_abi_soft
++#ifdef __riscv_float_abi_single
++	flw fs0,  56(a0)
++	flw fs1,  64(a0)
++	flw fs2,  72(a0)
++	flw fs3,  80(a0)
++	flw fs4,  88(a0)
++	flw fs5,  96(a0)
++	flw fs6,  104(a0)
++	flw fs7,  112(a0)
++	flw fs8,  120(a0)
++	flw fs9,  128(a0)
++	flw fs10, 136(a0)
++	flw fs11, 144(a0)
++#else
+ 	fld fs0,  56(a0)
+ 	fld fs1,  64(a0)
+ 	fld fs2,  72(a0)
+@@ -35,6 +49,7 @@ longjmp:
+ 	fld fs9,  128(a0)
+ 	fld fs10, 136(a0)
+ 	fld fs11, 144(a0)
++#endif
+ #endif
+ 
+ 	seqz a0, a1
+diff --git a/src/setjmp/riscv32/setjmp.S b/src/setjmp/riscv32/setjmp.S
+index 8a75cf55..7efb10e0 100644
+--- a/src/setjmp/riscv32/setjmp.S
++++ b/src/setjmp/riscv32/setjmp.S
+@@ -23,18 +23,33 @@ setjmp:
+ 	sw ra,    52(a0)
+ 
+ #ifndef __riscv_float_abi_soft
+-	fsd fs0,  56(a0)
+-	fsd fs1,  64(a0)
+-	fsd fs2,  72(a0)
+-	fsd fs3,  80(a0)
+-	fsd fs4,  88(a0)
+-	fsd fs5,  96(a0)
+-	fsd fs6,  104(a0)
+-	fsd fs7,  112(a0)
+-	fsd fs8,  120(a0)
+-	fsd fs9,  128(a0)
+-	fsd fs10, 136(a0)
+-	fsd fs11, 144(a0)
++#ifdef __riscv_float_abi_single
++	flw fs0,  56(a0)
++	flw fs1,  64(a0)
++	flw fs2,  72(a0)
++	flw fs3,  80(a0)
++	flw fs4,  88(a0)
++	flw fs5,  96(a0)
++	flw fs6,  104(a0)
++	flw fs7,  112(a0)
++	flw fs8,  120(a0)
++	flw fs9,  128(a0)
++	flw fs10, 136(a0)
++	flw fs11, 144(a0)
++#else
++	fld fs0,  56(a0)
++	fld fs1,  64(a0)
++	fld fs2,  72(a0)
++	fld fs3,  80(a0)
++	fld fs4,  88(a0)
++	fld fs5,  96(a0)
++	fld fs6,  104(a0)
++	fld fs7,  112(a0)
++	fld fs8,  120(a0)
++	fld fs9,  128(a0)
++	fld fs10, 136(a0)
++	fld fs11, 144(a0)
++#endif
+ #endif
+ 
+ 	li a0, 0

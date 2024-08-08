@@ -1,9 +1,13 @@
-RTL_DIR = ../../../../../rtl
-AFU_DIR = $(RTL_DIR)/afu/opae
-THIRD_PARTY_DIR = ../../../../../../third_party
-IP_CACHE_DIR = ../../../ip_cache/$(DEVICE_FAMILY)
-SCRIPT_DIR = ../../../../../scripts
-THIRD_PARTY_DIR = ../../../../../../third_party
+ROOT_DIR := $(realpath ../../../../../..)
+include $(ROOT_DIR)/config.mk
+
+SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/quartus
+
+RTL_DIR := $(VORTEX_HOME)/hw/rtl
+AFU_DIR := $(RTL_DIR)/afu/opae
+SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
+
+IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
 
 ifeq ($(DEVICE_FAMILY), stratix10)
     FAMILY = "Stratix 10"
@@ -34,7 +38,7 @@ all: gen-sources $(PROJECT).sta.rpt $(PROJECT).pow.rpt
 gen-sources: src
 src:
 	mkdir -p src
-	$(SCRIPT_DIR)/gen_sources.sh $(CONFIGS) $(RTL_INCLUDE) -P -Csrc
+	$(SCRIPT_DIR)/gen_sources.sh $(CONFIGS) $(RTL_INCLUDE) -T$(TOP_LEVEL_ENTITY) -P -Csrc
 
 syn: $(PROJECT).syn.rpt
 
@@ -75,8 +79,8 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES): gen-sources
-	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "src"
-	
+	quartus_sh -t $(SRC_DIR)/project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc $(SRC_DIR)/project.sdc -inc "src"
+
 syn.chg:
 	$(STAMP) syn.chg
 
@@ -94,6 +98,6 @@ pow.chg:
 
 program: $(PROJECT).sof
 	quartus_pgm --no_banner --mode=jtag -o "$(PROJECT).sof"
-	
+
 clean:
 	rm -rf src bin *.rpt *.chg *.qsf *.qpf *.qws *.log *.htm *.eqn *.pin *.sof *.pof qdb incremental_db tmp-clearbox

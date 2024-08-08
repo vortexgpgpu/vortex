@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -13,12 +13,7 @@
 
 #pragma once
 
-#ifndef OPAESIM
-#include <opae/fpga.h>
-#include <uuid/uuid.h>
-#else
 #include <fpga.h>
-#endif
 
 typedef fpga_result (*pfn_fpgaGetProperties)(fpga_token token, fpga_properties *prop);
 typedef fpga_result (*pfn_fpgaPropertiesSetObjectType)(fpga_properties prop, fpga_objtype objtype);
@@ -38,7 +33,7 @@ typedef fpga_result (*pfn_fpgaReadMMIO64)(fpga_handle handle, uint32_t mmio_num,
 typedef const char *(*pfn_fpgaErrStr)(fpga_result e);
 
 struct opae_drv_api_t {
-	pfn_fpgaGetProperties 	fpgaGetProperties;
+	pfn_fpgaGetProperties fpgaGetProperties;
 	pfn_fpgaPropertiesSetObjectType fpgaPropertiesSetObjectType;
 	pfn_fpgaPropertiesSetGUID fpgaPropertiesSetGUID;
 	pfn_fpgaDestroyProperties fpgaDestroyProperties;
@@ -46,14 +41,14 @@ struct opae_drv_api_t {
 	pfn_fpgaDestroyToken 	fpgaDestroyToken;
 	pfn_fpgaPropertiesGetLocalMemorySize fpgaPropertiesGetLocalMemorySize;
 
-	pfn_fpgaOpen 			fpgaOpen;
-	pfn_fpgaClose 			fpgaClose;
-	pfn_fpgaPrepareBuffer 	fpgaPrepareBuffer;
-	pfn_fpgaReleaseBuffer 	fpgaReleaseBuffer;
+	pfn_fpgaOpen 					fpgaOpen;
+	pfn_fpgaClose 				fpgaClose;
+	pfn_fpgaPrepareBuffer fpgaPrepareBuffer;
+	pfn_fpgaReleaseBuffer fpgaReleaseBuffer;
 	pfn_fpgaGetIOAddress 	fpgaGetIOAddress;
 	pfn_fpgaWriteMMIO64  	fpgaWriteMMIO64;
-	pfn_fpgaReadMMIO64     	fpgaReadMMIO64;
-	pfn_fpgaErrStr        	fpgaErrStr;
+	pfn_fpgaReadMMIO64    fpgaReadMMIO64;
+	pfn_fpgaErrStr     		fpgaErrStr;
 };
 
 int drv_init(opae_drv_api_t* opae_drv_funcs);

@@ -1,15 +1,15 @@
-#include <stdint.h>
+#include <vx_spawn.h>
 #include <assert.h>
 #include <algorithm>
-#include <vx_intrinsics.h>
-#include <vx_spawn.h>
 #include "common.h"
 
 // Parallel Selection sort
 
-void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
+void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	int32_t* src_ptr = (int32_t*)arg->src_addr;
 	int32_t* dst_ptr = (int32_t*)arg->dst_addr;
+
+	uint32_t task_id = blockIdx.x;
 
 	int value = src_ptr[task_id];
 
@@ -18,8 +18,8 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 		value = 0;
 	} else {
 		value += 2;
-	}	
-	
+	}
+
 	// diverge
 	if (task_id > 1) {
 		if (task_id > 2) {
@@ -77,7 +77,6 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 }
 
 int main() {
-	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
-	vx_spawn_tasks(arg->num_points, (vx_spawn_tasks_cb)kernel_body, arg);
-	return 0;
+	kernel_arg_t* arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
+	return vx_spawn_threads(1, &arg->num_points, nullptr, (vx_kernel_func_cb)kernel_body, arg);
 }

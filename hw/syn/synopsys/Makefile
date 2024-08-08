@@ -1,4 +1,4 @@
-
+include ../common.mk
 
 SCRIPT_DIR=./scripts
 
