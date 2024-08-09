@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,38 +14,38 @@
 `include "VX_platform.vh"
 
 `TRACING_OFF
-module VX_priority_encoder #( 
-    parameter N       = 1,  
+module VX_priority_encoder #(
+    parameter N       = 1,
     parameter REVERSE = 0,
     parameter MODEL   = 1,
     parameter LN      = `LOG2UP(N)
 ) (
-    input  wire [N-1:0]  data_in,  
-    output wire [N-1:0]  onehot,
-    output wire [LN-1:0] index,
+    input  wire [N-1:0]  data_in,
+    output wire [N-1:0]  onehot_out,
+    output wire [LN-1:0] index_out,
     output wire          valid_out
 );
-    wire [N-1:0] reversed; 
+    wire [N-1:0] reversed;
 
     if (REVERSE != 0) begin
         for (genvar i = 0; i < N; ++i) begin
             assign reversed[N-i-1] = data_in[i];
-        end        
+        end
     end else begin
         assign reversed = data_in;
     end
 
     if (N == 1) begin
 
-        assign onehot    = reversed;
-        assign index     = '0;
-        assign valid_out = reversed;
+        assign onehot_out = reversed;
+        assign index_out  = '0;
+        assign valid_out  = reversed;
 
     end else if (N == 2) begin
 
-        assign onehot    = {~reversed[0], reversed[0]};
-        assign index     = ~reversed[0];
-        assign valid_out = (| reversed);
+        assign onehot_out = {~reversed[0], reversed[0]};
+        assign index_out  = ~reversed[0];
+        assign valid_out  = (| reversed);
 
     end else if (MODEL == 1) begin
 
@@ -64,12 +64,12 @@ module VX_priority_encoder #(
             .REVERSE (1)
         ) lzc (
             .data_in  (reversed),
-            .data_out (index),
+            .data_out (index_out),
             `UNUSED_PIN (valid_out)
         );
 
-        assign onehot    = scan_lo & {(~scan_lo[N-2:0]), 1'b1};
-        assign valid_out = scan_lo[N-1];
+        assign onehot_out = scan_lo & {(~scan_lo[N-2:0]), 1'b1};
+        assign valid_out  = scan_lo[N-1];
 
     end else if (MODEL == 2) begin
 
@@ -78,27 +78,27 @@ module VX_priority_encoder #(
     `IGNORE_WARNINGS_END
         assign higher_pri_regs[N-1:1] = higher_pri_regs[N-2:0] | reversed[N-2:0];
         assign higher_pri_regs[0]     = 1'b0;
-        assign onehot[N-1:0] = reversed[N-1:0] & ~higher_pri_regs[N-1:0];
+        assign onehot_out[N-1:0] = reversed[N-1:0] & ~higher_pri_regs[N-1:0];
 
         VX_lzc #(
             .N       (N),
             .REVERSE (1)
         ) lzc (
             .data_in   (reversed),
-            .data_out  (index),
+            .data_out  (index_out),
             .valid_out (valid_out)
         );
 
     end else if (MODEL == 3) begin
 
-        assign onehot = reversed & -reversed;
+        assign onehot_out = reversed & -reversed;
 
         VX_lzc #(
             .N       (N),
             .REVERSE (1)
         ) lzc (
             .data_in   (reversed),
-            .data_out  (index),
+            .data_out  (index_out),
             .valid_out (valid_out)
         );
 
@@ -117,13 +117,13 @@ module VX_priority_encoder #(
                     onehot_r[i] = 1'b1;
                 end
             end
-        end        
+        end
 
-        assign index  = index_r;
-        assign onehot = onehot_r;
-        assign valid_out = (| reversed);
+        assign index_out  = index_r;
+        assign onehot_out = onehot_r;
+        assign valid_out  = (| reversed);
 
-    end    
+    end
 
 endmodule
 `TRACING_ON
