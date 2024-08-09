@@ -125,16 +125,20 @@ module VX_mem_coalescer #(
     end
 
     for (genvar i = 0; i < OUT_REQS; ++i) begin
-        wire [DATA_RATIO-1:0] batch_mask = in_req_mask[i * DATA_RATIO +: DATA_RATIO] & ~processed_mask_r[i * DATA_RATIO +: DATA_RATIO];
+        wire [DATA_RATIO-1:0] batch_mask;
         wire [DATA_RATIO_W-1:0] batch_idx;
+
+        assign batch_mask = in_req_mask[i * DATA_RATIO +: DATA_RATIO] & ~processed_mask_r[i * DATA_RATIO +: DATA_RATIO];
+
         VX_priority_encoder #(
             .N (DATA_RATIO)
         ) priority_encoder (
-            .data_in (batch_mask),
-            .index  (batch_idx),
-            `UNUSED_PIN (onehot),
-            .valid_out (batch_valid_n[i])
+            .data_in    (batch_mask),
+            .index_out  (batch_idx),
+            `UNUSED_PIN (onehot_out),
+            .valid_out  (batch_valid_n[i])
         );
+
         if (OUT_REQS > 1) begin
             assign seed_idx[i] = {(NUM_REQS_W-DATA_RATIO_W)'(i), batch_idx};
         end else begin

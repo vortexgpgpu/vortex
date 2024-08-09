@@ -34,10 +34,10 @@ module VX_priority_arbiter #(
         VX_priority_encoder #(
             .N (NUM_REQS)
         ) priority_encoder (
-            .data_in   (requests),
-            .index     (grant_index),
-            .onehot    (grant_onehot),
-            .valid_out (grant_valid)
+            .data_in    (requests),
+            .index_out  (grant_index),
+            .onehot_out (grant_onehot),
+            .valid_out  (grant_valid)
         );
 
     end
