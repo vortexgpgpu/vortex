@@ -38,26 +38,27 @@ module VX_fair_arbiter #(
 
     end else begin
 
-        reg [NUM_REQS-1:0] requests_r;
+        reg [NUM_REQS-1:0] grant_hist;
 
-        wire [NUM_REQS-1:0] requests_sel = requests_r & requests;
-        wire [NUM_REQS-1:0] requests_qual = (| requests_sel) ? requests_sel : requests;
+        wire [NUM_REQS-1:0] requests_sel = requests & ~grant_hist;
+        wire rem_valid = (| requests_sel);
+        wire [NUM_REQS-1:0] requests_qual = rem_valid ? requests_sel : requests;
 
         always @(posedge clk) begin
             if (reset) begin
-                requests_r <= '0;
+                grant_hist <= '0;
             end else if (grant_ready) begin
-                requests_r <= requests_qual & ~grant_onehot;
+                grant_hist <= rem_valid ? (grant_hist | grant_onehot) : grant_onehot;
             end
         end
 
-        VX_priority_arbiter #(
-            .NUM_REQS (NUM_REQS)
-        ) priority_arbiter (
-            .requests     (requests_qual),
-            .grant_index  (grant_index),
-            .grant_onehot (grant_onehot),
-            .grant_valid  (grant_valid)
+        VX_priority_encoder #(
+            .N (NUM_REQS)
+        ) priority_enc (
+            .data_in    (requests_qual),
+            .index_out  (grant_index),
+            .onehot_out (grant_onehot),
+            .valid_out  (grant_valid)
         );
 
     end
