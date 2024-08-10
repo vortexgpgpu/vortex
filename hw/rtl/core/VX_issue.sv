@@ -29,6 +29,7 @@ module VX_issue import VX_gpu_pkg::*; #(
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
     VX_dispatch_if.master   dispatch_if [`NUM_EX_UNITS * `ISSUE_WIDTH]
 );
+    `STATIC_ASSERT (`ISSUE_WIDTH <= `NUM_WARPS, "invalid parameter");
 
 `ifdef PERF_ENABLE
     issue_perf_t per_issue_perf [`ISSUE_WIDTH];
