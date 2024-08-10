@@ -47,7 +47,7 @@ module VX_fair_arbiter #(
         always @(posedge clk) begin
             if (reset) begin
                 grant_hist <= '0;
-            end else if (grant_ready) begin
+            end else if (grant_valid && grant_ready) begin
                 grant_hist <= rem_valid ? (grant_hist | grant_onehot) : grant_onehot;
             end
         end

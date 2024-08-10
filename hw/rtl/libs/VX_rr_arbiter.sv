@@ -377,41 +377,38 @@ module VX_rr_arbiter #(
     end else if (MODEL == 1) begin
 
     `IGNORE_UNOPTFLAT_BEGIN
-        wire [NUM_REQS-1:0] mask_higher_pri_regs, unmask_higher_pri_regs;
+        wire [NUM_REQS-1:0] masked_pri_reqs, unmasked_pri_reqs;
     `IGNORE_UNOPTFLAT_END
-        wire [NUM_REQS-1:0] grant_masked, grant_unmasked;
+        reg [NUM_REQS-1:0] reqs_mask;
 
-        reg [NUM_REQS-1:0] pointer_reg;
+        wire [NUM_REQS-1:0] masked_reqs = requests & reqs_mask;
 
-        wire [NUM_REQS-1:0] req_masked = requests & pointer_reg;
-
-        assign mask_higher_pri_regs[0] = 1'b0;
+        assign masked_pri_reqs[0] = 1'b0;
         for (genvar i = 1; i < NUM_REQS; ++i) begin
-            assign mask_higher_pri_regs[i] = mask_higher_pri_regs[i-1] | req_masked[i-1];
+            assign masked_pri_reqs[i] = masked_pri_reqs[i-1] | masked_reqs[i-1];
         end
 
-        assign grant_masked[NUM_REQS-1:0] = req_masked[NUM_REQS-1:0] & ~mask_higher_pri_regs[NUM_REQS-1:0];
-
-        assign unmask_higher_pri_regs[0] = 1'b0;
+        assign unmasked_pri_reqs[0] = 1'b0;
         for (genvar i = 1; i < NUM_REQS; ++i) begin
-            assign unmask_higher_pri_regs[i] = unmask_higher_pri_regs[i-1] | requests[i-1];
+            assign unmasked_pri_reqs[i] = unmasked_pri_reqs[i-1] | requests[i-1];
         end
 
-        assign grant_unmasked[NUM_REQS-1:0] = requests[NUM_REQS-1:0] & ~unmask_higher_pri_regs[NUM_REQS-1:0];
+        wire [NUM_REQS-1:0] grant_masked = masked_reqs & ~masked_pri_reqs[NUM_REQS-1:0];
+        wire [NUM_REQS-1:0] grant_unmasked = requests & ~unmasked_pri_reqs[NUM_REQS-1:0];
 
-        wire no_req_masked = ~(|req_masked);
-        assign grant_onehot = ({NUM_REQS{no_req_masked}} & grant_unmasked) | grant_masked;
+        wire has_masked_reqs = (| masked_reqs);
+        wire has_unmasked_reqs = (| requests);
+
+        assign grant_onehot = ({NUM_REQS{~has_masked_reqs}} & grant_unmasked) | grant_masked;
 
         always @(posedge clk) begin
 		    if (reset) begin
-				pointer_reg <= {NUM_REQS{1'b1}};
+				reqs_mask <= {NUM_REQS{1'b1}};
 			end else if (grant_ready) begin
-				if (|req_masked) begin
-                    pointer_reg <= mask_higher_pri_regs;
-                end else if (|requests) begin
-                    pointer_reg <= unmask_higher_pri_regs;
-                end else begin
-                    pointer_reg <= pointer_reg;
+				if (has_masked_reqs) begin
+                    reqs_mask <= masked_pri_reqs;
+                end else if (has_unmasked_reqs) begin
+                    reqs_mask <= unmasked_pri_reqs;
                 end
 			end
 	    end
@@ -426,35 +423,41 @@ module VX_rr_arbiter #(
 
     end else begin
 
-        reg [LOG_NUM_REQS-1:0]  grant_index_r;
-        reg [NUM_REQS-1:0]      grant_onehot_r;
-        reg [NUM_REQS-1:0]      state;
+        reg                    grant_valid_r;
+        reg [LOG_NUM_REQS-1:0] grant_index_r;
+        reg [NUM_REQS-1:0]     grant_onehot_r;
+        reg [LOG_NUM_REQS-1:0] next_grant_index;
+
+        wire [NUM_REQS-1:0][LOG_NUM_REQS-1:0] next_grant_index_qual;
+        for (genvar i = 0; i < NUM_REQS; ++i) begin
+            assign next_grant_index_qual[i] = LOG_NUM_REQS'(i) + next_grant_index;
+        end
 
         always @(*) begin
             grant_index_r  = 'x;
             grant_onehot_r = 'x;
+            grant_valid_r  = 0;
             for (integer i = 0; i < NUM_REQS; ++i) begin
-                for (integer j = 0; j < NUM_REQS; ++j) begin
-                    if (state[i] && requests[(j + 1) % NUM_REQS]) begin
-                        grant_index_r  = LOG_NUM_REQS'((j + 1) % NUM_REQS);
-                        grant_onehot_r = '0;
-                        grant_onehot_r[(j + 1) % NUM_REQS] = 1;
-                    end
+                if (requests[next_grant_index_qual[i]]) begin
+                    grant_valid_r = 1;
+                    grant_index_r  = next_grant_index_qual[i];
+                    grant_onehot_r = NUM_REQS'(1) << next_grant_index_qual[i];
+                    break;
                 end
             end
         end
 
         always @(posedge clk) begin
             if (reset) begin
-                state <= '0;
-            end else if (grant_ready) begin
-                state <= grant_index_r;
+                next_grant_index <= '0;
+            end else if (grant_valid && grant_ready) begin
+                next_grant_index <= grant_index_r + LOG_NUM_REQS'(1);
             end
         end
 
         assign grant_index  = grant_index_r;
         assign grant_onehot = grant_onehot_r;
-        assign grant_valid  = (| requests);
+        assign grant_valid  = grant_valid_r;
     end
 
 endmodule
