@@ -416,14 +416,12 @@ module VX_rr_arbiter #(
 			end
 	    end
 
-        assign grant_valid = (| requests);
-
         VX_onehot_encoder #(
             .N (NUM_REQS)
         ) onehot_encoder (
             .data_in  (grant_onehot),
             .data_out (grant_index),
-            `UNUSED_PIN (valid_out)
+            .valid_out(grant_valid)
         );
 
     end else begin
