@@ -426,32 +426,30 @@ module VX_rr_arbiter #(
         reg                    grant_valid_r;
         reg [LOG_NUM_REQS-1:0] grant_index_r;
         reg [NUM_REQS-1:0]     grant_onehot_r;
-        reg [LOG_NUM_REQS-1:0] next_grant_index;
-
-        wire [NUM_REQS-1:0][LOG_NUM_REQS-1:0] next_grant_index_qual;
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
-            assign next_grant_index_qual[i] = LOG_NUM_REQS'(i) + next_grant_index;
-        end
+        reg [NUM_REQS-1:0][LOG_NUM_REQS-1:0] next_grant_index;
 
         always @(*) begin
             grant_index_r  = 'x;
             grant_onehot_r = 'x;
             grant_valid_r  = 0;
-            for (integer i = 0; i < NUM_REQS; ++i) begin
-                if (requests[next_grant_index_qual[i]]) begin
-                    grant_valid_r = 1;
-                    grant_index_r  = next_grant_index_qual[i];
-                    grant_onehot_r = NUM_REQS'(1) << next_grant_index_qual[i];
-                    break;
+            for (integer i = NUM_REQS-1; i >= 0; --i) begin
+                if (requests[next_grant_index[i]]) begin
+                    grant_valid_r  = 1;
+                    grant_index_r  = next_grant_index[i];
+                    grant_onehot_r = NUM_REQS'(1) << next_grant_index[i];
                 end
             end
         end
 
         always @(posedge clk) begin
             if (reset) begin
-                next_grant_index <= '0;
+                for (integer i = 0; i < NUM_REQS; ++i) begin
+                    next_grant_index[i] <= LOG_NUM_REQS'(i);
+                end
             end else if (grant_valid && grant_ready) begin
-                next_grant_index <= grant_index_r + LOG_NUM_REQS'(1);
+                for (integer i = 0; i < NUM_REQS; ++i) begin
+                    next_grant_index[i] <= grant_index_r + LOG_NUM_REQS'(i + 1);
+                end
             end
         end
 
