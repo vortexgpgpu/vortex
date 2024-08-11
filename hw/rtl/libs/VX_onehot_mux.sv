@@ -124,6 +124,16 @@ module VX_onehot_mux #(
             assign data_out[i] = (| gather);
         end
     end else if (MODEL == 2) begin
+        VX_find_first #(
+            .N     (N),
+            .DATAW (DATAW)
+        ) find_first (
+            .valid_in (sel_in),
+            .data_in  (data_in),
+            .data_out (data_out),
+            `UNUSED_PIN (valid_out)
+        );
+    end else if (MODEL == 3) begin
         reg [DATAW-1:0] data_out_r;
         always @(*) begin
             data_out_r = 'x;
