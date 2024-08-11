@@ -40,15 +40,14 @@ module VX_fair_arbiter #(
 
         reg [NUM_REQS-1:0] reqs_mask;
 
-        wire [NUM_REQS-1:0] requests_rem = requests & reqs_mask;
-        wire rem_valid = (| requests_rem);
-        wire [NUM_REQS-1:0] requests_qual = rem_valid ? requests_rem : requests;
+        wire [NUM_REQS-1:0] masked_reqs = requests & reqs_mask;
+        wire [NUM_REQS-1:0] requests_qual = (| masked_reqs) ? masked_reqs : requests;
 
         always @(posedge clk) begin
             if (reset) begin
                 reqs_mask <= '1;
             end else if (grant_valid && grant_ready) begin
-                reqs_mask <= rem_valid ? (reqs_mask & ~grant_onehot) : ~grant_onehot;
+                reqs_mask <= (| reqs_mask) ? (reqs_mask & ~grant_onehot) : ~grant_onehot;
             end
         end
 
