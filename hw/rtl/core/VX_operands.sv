@@ -23,7 +23,7 @@
 module VX_operands import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_BANKS = 4,
-    parameter OUT_BUF   = 4 // using 2-cycle EB for area reduction
+    parameter OUT_BUF   = 8+4 // using 2-cycle LUT EB for area reduction
 ) (
     input wire              clk,
     input wire              reset,
@@ -204,8 +204,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     VX_elastic_buffer #(
         .DATAW   (DATAW),
         .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
-        .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
-        .LUTRAM  (1)
+        .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
     ) out_buf (
         .clk       (clk),
         .reset     (reset),

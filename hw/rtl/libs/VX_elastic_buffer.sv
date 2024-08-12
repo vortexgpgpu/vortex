@@ -43,7 +43,8 @@ module VX_elastic_buffer #(
     end else if (SIZE == 1) begin
 
         VX_pipe_buffer #(
-            .DATAW (DATAW)
+            .DATAW (DATAW),
+            .DEPTH (`MAX(OUT_REG, 1))
         ) pipe_buffer (
             .clk       (clk),
             .reset     (reset),
@@ -57,16 +58,33 @@ module VX_elastic_buffer #(
 
     end else if (SIZE == 2 && LUTRAM == 0) begin
 
-        VX_skid_buffer #(
+        wire valid_out_t;
+        wire [DATAW-1:0] data_out_t;
+        wire ready_out_t;
+
+        VX_stream_buffer #(
             .DATAW   (DATAW),
-            .HALF_BW (OUT_REG == 2),
-            .OUT_REG (OUT_REG)
-        ) skid_buffer (
+            .OUT_REG (OUT_REG == 1)
+        ) stream_buffer (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (valid_in),
             .data_in   (data_in),
             .ready_in  (ready_in),
+            .valid_out (valid_out_t),
+            .data_out  (data_out_t),
+            .ready_out (ready_out_t)
+        );
+
+        VX_pipe_buffer #(
+            .DATAW (DATAW),
+            .DEPTH ((OUT_REG > 1) ? (OUT_REG-1) : 0)
+        ) out_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (valid_out_t),
+            .data_in   (data_out_t),
+            .ready_in  (ready_out_t),
             .valid_out (valid_out),
             .data_out  (data_out),
             .ready_out (ready_out)
@@ -105,7 +123,7 @@ module VX_elastic_buffer #(
 
         VX_pipe_buffer #(
             .DATAW (DATAW),
-            .DEPTH ((OUT_REG > 0) ? (OUT_REG-1) : 0)
+            .DEPTH ((OUT_REG > 1) ? (OUT_REG-1) : 0)
         ) out_buf (
             .clk       (clk),
             .reset     (reset),
