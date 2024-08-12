@@ -22,7 +22,6 @@ module VX_stream_xbar #(
     parameter OUT_WIDTH     = `LOG2UP(NUM_OUTPUTS),
     parameter ARBITER       = "R",
     parameter OUT_BUF       = 0,
-    parameter LUTRAM        = 0,
     parameter MAX_FANOUT    = `MAX_FANOUT,
     parameter PERF_CTR_BITS = `CLOG2(NUM_INPUTS+1)
 ) (
@@ -67,8 +66,7 @@ module VX_stream_xbar #(
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
                     .MAX_FANOUT  (MAX_FANOUT),
-                    .OUT_BUF     (OUT_BUF),
-                    .LUTRAM      (LUTRAM)
+                    .OUT_BUF     (OUT_BUF)
                 ) xbar_arb (
                     .clk       (clk),
                     .reset     (slice_reset),
@@ -96,8 +94,7 @@ module VX_stream_xbar #(
                 .DATAW       (DATAW),
                 .ARBITER     (ARBITER),
                 .MAX_FANOUT  (MAX_FANOUT),
-                .OUT_BUF     (OUT_BUF),
-                .LUTRAM      (LUTRAM)
+                .OUT_BUF     (OUT_BUF)
             ) xbar_arb (
                 .clk       (clk),
                 .reset     (reset),
@@ -133,7 +130,7 @@ module VX_stream_xbar #(
                 .DATAW   (DATAW),
                 .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
                 .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
-                .LUTRAM  (LUTRAM)
+                .LUTRAM  (`TO_OUT_BUF_LUTRAM(OUT_BUF))
             ) out_buf (
                 .clk       (clk),
                 .reset     (out_buf_reset[i]),
@@ -156,7 +153,7 @@ module VX_stream_xbar #(
             .DATAW   (DATAW),
             .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
             .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
-            .LUTRAM  (LUTRAM)
+            .LUTRAM  (`TO_OUT_BUF_LUTRAM(OUT_BUF))
         ) out_buf (
             .clk       (clk),
             .reset     (reset),

@@ -60,7 +60,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
         VX_elastic_buffer #(
             .DATAW   (DATAW),
             .SIZE    (2),
-            .OUT_REG (2), // 2-cycle EB for area reduction
+            .OUT_REG (2), // 2-cycle LUT EB for area reduction
             .LUTRAM  (1)
         ) buffer (
             .clk        (clk),

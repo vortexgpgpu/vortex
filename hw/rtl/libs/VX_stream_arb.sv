@@ -21,7 +21,6 @@ module VX_stream_arb #(
     parameter `STRING ARBITER = "R",
     parameter MAX_FANOUT    = `MAX_FANOUT,
     parameter OUT_BUF       = 0,
-    parameter LUTRAM        = 0,
     parameter NUM_REQS      = `CDIV(NUM_INPUTS, NUM_OUTPUTS),
     parameter LOG_NUM_REQS  = `CLOG2(NUM_REQS),
     parameter NUM_REQS_W    = `UP(LOG_NUM_REQS)
@@ -58,8 +57,7 @@ module VX_stream_arb #(
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
                     .MAX_FANOUT  (MAX_FANOUT),
-                    .OUT_BUF     (OUT_BUF),
-                    .LUTRAM      (LUTRAM)
+                    .OUT_BUF     (OUT_BUF)
                 ) arb_slice (
                     .clk       (clk),
                     .reset     (slice_reset),
@@ -103,8 +101,7 @@ module VX_stream_arb #(
                         .DATAW       (DATAW),
                         .ARBITER     (ARBITER),
                         .MAX_FANOUT  (MAX_FANOUT),
-                        .OUT_BUF     (3), // registered output
-                        .LUTRAM      (LUTRAM)
+                        .OUT_BUF     (`TO_OUT_RBUF(OUT_BUF)) // to registered output
                     ) fanout_slice_arb (
                         .clk       (clk),
                         .reset     (slice_reset),
@@ -130,8 +127,7 @@ module VX_stream_arb #(
                 .DATAW       (DATAW + LOG_NUM_REQS2),
                 .ARBITER     (ARBITER),
                 .MAX_FANOUT  (MAX_FANOUT),
-                .OUT_BUF     (OUT_BUF),
-                .LUTRAM      (LUTRAM)
+                .OUT_BUF     (OUT_BUF)
             ) fanout_join_arb (
                 .clk       (clk),
                 .reset     (reset),
@@ -185,7 +181,7 @@ module VX_stream_arb #(
                 .DATAW   (LOG_NUM_REQS + DATAW),
                 .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
                 .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
-                .LUTRAM  (LUTRAM)
+                .LUTRAM  (`TO_OUT_BUF_LUTRAM(OUT_BUF))
             ) out_buf (
                 .clk       (clk),
                 .reset     (reset),
@@ -218,8 +214,7 @@ module VX_stream_arb #(
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
                     .MAX_FANOUT  (MAX_FANOUT),
-                    .OUT_BUF     (OUT_BUF),
-                    .LUTRAM      (LUTRAM)
+                    .OUT_BUF     (OUT_BUF)
                 ) arb_slice (
                     .clk       (clk),
                     .reset     (slice_reset),
@@ -253,8 +248,7 @@ module VX_stream_arb #(
                 .DATAW       (DATAW),
                 .ARBITER     (ARBITER),
                 .MAX_FANOUT  (MAX_FANOUT),
-                .OUT_BUF     (3), // registered output
-                .LUTRAM      (LUTRAM)
+                .OUT_BUF     (`TO_OUT_RBUF(OUT_BUF)) // to registered output
             ) fanout_fork_arb (
                 .clk       (clk),
                 .reset     (reset),
@@ -281,8 +275,7 @@ module VX_stream_arb #(
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
                     .MAX_FANOUT  (MAX_FANOUT),
-                    .OUT_BUF     (OUT_BUF),
-                    .LUTRAM      (LUTRAM)
+                    .OUT_BUF     (OUT_BUF)
                 ) fanout_slice_arb (
                     .clk       (clk),
                     .reset     (slice_reset),
@@ -329,7 +322,7 @@ module VX_stream_arb #(
                     .DATAW   (DATAW),
                     .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
                     .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
-                    .LUTRAM  (LUTRAM)
+                    .LUTRAM  (`TO_OUT_BUF_LUTRAM(OUT_BUF))
                 ) out_buf (
                     .clk       (clk),
                     .reset     (reset),
@@ -357,7 +350,7 @@ module VX_stream_arb #(
                 .DATAW   (DATAW),
                 .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
                 .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
-                .LUTRAM  (LUTRAM)
+                .LUTRAM  (`TO_OUT_BUF_LUTRAM(OUT_BUF))
             ) out_buf (
                 .clk       (clk),
                 .reset     (out_buf_reset[i]),

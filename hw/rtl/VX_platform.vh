@@ -239,10 +239,16 @@
     `RESET_RELAY_EX (dst, src, 1, 0)
 
 // size(x): 0 -> 0, 1 -> 1, 2 -> 2, 3 -> 2, 4-> 2, 5 -> 2
-`define TO_OUT_BUF_SIZE(s)    `MIN(s, 2)
+`define TO_OUT_BUF_SIZE(s)    `MIN(s & 7, 2)
 
 // reg(x): 0 -> 0, 1 -> 1, 2 -> 0, 3 -> 1, 4 -> 2, 5 > 3
-`define TO_OUT_BUF_REG(s)     ((s < 2) ? s : (s - 2))
+`define TO_OUT_BUF_REG(s)     (((s & 7) < 2) ? (s & 7) : ((s & 7) - 2))
+
+// lut(x): (x & 8) != 0
+`define TO_OUT_BUF_LUTRAM(s)  ((s & 8) != 0)
+
+// rbuf(x): (x <= 2) ? 3 : x
+`define TO_OUT_RBUF(s)        ((s & 8) | `MAX(s & 7, 3))
 
 `define REPEAT(n,f,s)   `_REPEAT_``n(f,s)
 `define _REPEAT_0(f,s)
