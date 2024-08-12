@@ -296,7 +296,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     VX_stream_arb #(
         .NUM_INPUTS (NUM_FPC),
         .DATAW      (RSP_DATAW + 2),
-        .ARBITER    ("F"),
+        .ARBITER    ("R"),
         .OUT_BUF    (OUT_BUF)
     ) rsp_arb (
         .clk       (clk),

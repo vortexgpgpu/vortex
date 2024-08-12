@@ -56,20 +56,6 @@ module VX_generic_arbiter #(
             .grant_ready  (grant_ready)
         );
 
-    end else if (TYPE == "F") begin
-
-        VX_fair_arbiter #(
-            .NUM_REQS (NUM_REQS)
-        ) fair_arbiter (
-            .clk          (clk),
-            .reset        (reset),
-            .requests     (requests),
-            .grant_valid  (grant_valid),
-            .grant_index  (grant_index),
-            .grant_onehot (grant_onehot),
-            .grant_ready  (grant_ready)
-        );
-
     end else if (TYPE == "M") begin
 
         VX_matrix_arbiter #(

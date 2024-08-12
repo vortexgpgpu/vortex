@@ -203,11 +203,11 @@ module VX_axi_adapter #(
         `RUNTIME_ASSERT(~m_axi_rvalid[i] || m_axi_rlast[i] == 1, ("%t: *** AXI response error", $time));
         `RUNTIME_ASSERT(~m_axi_rvalid[i] || m_axi_rresp[i] == 0, ("%t: *** AXI response error", $time));
     end
-    
+
     VX_stream_arb #(
         .NUM_INPUTS (NUM_BANKS),
         .DATAW      (DATA_WIDTH + TAG_WIDTH),
-        .ARBITER    ("F"),
+        .ARBITER    ("R"),
         .OUT_BUF    (RSP_OUT_BUF)
     ) rsp_arb (
         .clk       (clk),

@@ -317,7 +317,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (CORE_REQ_DATAW),
         .PERF_CTR_BITS (`PERF_CTR_BITS),
-        .ARBITER     ("F"),
+        .ARBITER     ("R"),
         .OUT_BUF     (REQ_XBAR_BUF)
     ) req_xbar (
         .clk       (clk),
@@ -452,7 +452,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .NUM_INPUTS  (NUM_BANKS),
         .NUM_OUTPUTS (NUM_REQS),
         .DATAW       (CORE_RSP_DATAW),
-        .ARBITER     ("F")
+        .ARBITER     ("R")
     ) rsp_xbar (
         .clk       (clk),
         .reset     (rsp_xbar_reset),
@@ -501,7 +501,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     VX_stream_arb #(
         .NUM_INPUTS (NUM_BANKS),
         .DATAW      (`CS_MEM_ADDR_WIDTH + 1  + LINE_SIZE + `CS_LINE_WIDTH + MSHR_ADDR_WIDTH + 1),
-        .ARBITER    ("F")
+        .ARBITER    ("R")
     ) mem_req_arb (
         .clk       (clk),
         .reset     (reset),
