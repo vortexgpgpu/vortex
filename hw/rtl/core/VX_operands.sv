@@ -23,7 +23,7 @@
 module VX_operands import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_BANKS = 4,
-    parameter OUT_BUF   = 8+4 // using 2-cycle LUT EB for area reduction
+    parameter OUT_BUF   = 3
 ) (
     input wire              clk,
     input wire              reset,

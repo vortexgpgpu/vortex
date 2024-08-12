@@ -199,7 +199,7 @@ module VX_avs_adapter #(
     VX_stream_arb #(
         .NUM_INPUTS (NUM_BANKS),
         .DATAW      (DATA_WIDTH + TAG_WIDTH),
-        .ARBITER    ("F"),
+        .ARBITER    ("R"),
         .OUT_BUF    (RSP_OUT_BUF)
     ) rsp_arb (
         .clk       (clk),
