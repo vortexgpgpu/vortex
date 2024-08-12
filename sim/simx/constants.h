@@ -22,7 +22,7 @@
 #endif
 
 #ifndef MEMORY_BANKS
-#define MEMORY_BANKS      2
+#define MEMORY_BANKS      8
 #endif
 
 #define LSU_WORD_SIZE     (XLEN / 8)
