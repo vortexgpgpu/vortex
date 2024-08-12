@@ -84,8 +84,8 @@ module VX_mem_coalescer #(
     //                           tag          + mask     + offest
     localparam IBUF_DATA_WIDTH = TAG_ID_WIDTH + NUM_REQS + (NUM_REQS * DATA_RATIO_W);
 
-    localparam STATE_SETUP = 0;
-    localparam STATE_SEND  = 1;
+    localparam STATE_WAIT = 0;
+    localparam STATE_SEND = 1;
 
     logic state_r, state_n;
 
@@ -179,11 +179,9 @@ module VX_mem_coalescer #(
         end
     end
 
-    wire [OUT_REQS * DATA_RATIO - 1:0] pending_mask;
-    for (genvar i = 0; i < OUT_REQS * DATA_RATIO; ++i) begin
-        assign pending_mask[i] = in_req_mask[i] && ~addr_matches_r[i] && ~processed_mask_r[i];
-    end
-    wire batch_completed = ~(| pending_mask);
+    wire is_last_batch = ~(| (in_req_mask & ~addr_matches_r & ~processed_mask_r));
+
+    wire out_req_fire = out_req_valid && out_req_ready;
 
     always @(*) begin
         state_n          = state_r;
@@ -201,9 +199,9 @@ module VX_mem_coalescer #(
         in_req_ready_n   = 0;
 
         case (state_r)
-        STATE_SETUP: begin
+        STATE_WAIT: begin
             // wait for pending outgoing request to submit
-            if (out_req_valid && out_req_ready) begin
+            if (out_req_fire) begin
                 out_req_valid_n = 0;
             end
             if (in_req_valid && ~out_req_valid_n && ~ibuf_full) begin
@@ -220,15 +218,14 @@ module VX_mem_coalescer #(
             out_req_data_n  = req_data_merged;
             out_req_tag_n   = {in_req_tag[TAG_WIDTH-1 -: UUID_WIDTH], ibuf_waddr};
 
-            in_req_ready_n  = batch_completed;
+            in_req_ready_n  = is_last_batch;
 
-            if (batch_completed) begin
+            if (is_last_batch) begin
                 processed_mask_n = '0;
             end else begin
                 processed_mask_n = processed_mask_r | current_pmask;
             end
-
-            state_n = STATE_SETUP;
+            state_n = STATE_WAIT;
         end
         endcase
     end
@@ -346,8 +343,6 @@ module VX_mem_coalescer #(
             out_req_pmask <= ibuf_din_pmask;
         end
     end
-
-    wire out_req_fire = out_req_valid && out_req_ready;
 
     always @(posedge clk) begin
         if (out_req_fire) begin
