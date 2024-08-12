@@ -451,7 +451,7 @@ module VX_rr_arbiter #(
 
     end else if (MODEL == 2) begin
 
-        reg [LOG_NUM_REQS-1:0] grant_table [NUM_REQS-1:0];
+        reg [NUM_REQS-1:0][LOG_NUM_REQS-1:0] grant_table;
         reg [LOG_NUM_REQS-1:0] state;
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin
