@@ -87,7 +87,8 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
         .WORD_SIZE  (WORD_SIZE),
         .ADDR_WIDTH (ADDR_WIDTH),
         .UUID_WIDTH (UUID_WIDTH),
-        .TAG_WIDTH  (TAG_WIDTH)
+        .TAG_WIDTH  (TAG_WIDTH),
+        .OUT_BUF    (3)
     ) local_mem (
         .clk        (clk),
         .reset      (reset),
