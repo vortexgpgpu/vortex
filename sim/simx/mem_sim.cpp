@@ -70,7 +70,7 @@ public:
 			auto enqueue_success = dram_sim_.send_request(
 				mem_req.write,
 				mem_req.addr,
-				i,
+				0,
 				[](void* arg) {
 					auto rsp_args = reinterpret_cast<const DramCallbackArgs*>(arg);
 					// only send a response for read requests

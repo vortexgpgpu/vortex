@@ -67,8 +67,6 @@ public:
 		std::cout.rdbuf(nullstream.rdbuf());
 		ramulator_frontend_->finalize();
   		ramulator_memorysystem_->finalize();
-		delete ramulator_frontend_;
-		delete ramulator_memorysystem_;
 		std::cout.rdbuf(original_buf);
 	}
 

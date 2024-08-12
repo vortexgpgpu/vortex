@@ -340,6 +340,7 @@ public:
 				bypass_switch_->RspIn.at(0).bind(&mem_rsp_ports_.at(0));
 			}
 		} else {
+			// TODO: Change this into a crossbar
 			uint32_t max = MAX(2, config_.num_inputs);
 			//printf("%s connecting\n", simobject_->name().c_str());
 			//3
