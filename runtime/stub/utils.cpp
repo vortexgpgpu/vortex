@@ -211,6 +211,10 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t mem_reads = 0;
   uint64_t mem_writes = 0;
   uint64_t mem_lat = 0;
+  
+  // PERF: hbm
+  uint64_t hbm_counter = 0;
+  uint64_t hbm_ticks = 0;
 
   uint64_t num_cores;
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_CORES, &num_cores), {
@@ -219,6 +223,11 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
 
   uint64_t isa_flags;
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_ISA_FLAGS, &isa_flags), {
+    return err;
+  });
+
+  uint64_t l3cache_banks;
+  CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_L3CACHE_NUM_BANKS, &l3cache_banks), {
     return err;
   });
 
@@ -522,6 +531,14 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
           CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L3CACHE_MSHR_ST, core_id, &l3cache_mshr_stalls), {
             return err;
           });
+
+          // PERF: HBM
+          CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_HBM_BANK_CNTR, core_id, &hbm_counter), {
+            return err;
+          });
+          CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_HBM_BANK_TICK, core_id, &hbm_ticks), {
+            return err;
+          });
         }
         // PERF: memory
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_READS, core_id, &mem_reads), {
@@ -606,6 +623,10 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       fprintf(stream, "PERF: l3cache write misses=%ld (hit ratio=%d%%)\n", l3cache_write_misses, write_hit_ratio);
       fprintf(stream, "PERF: l3cache bank stalls=%ld (utilization=%d%%)\n", l3cache_bank_stalls, bank_utilization);
       fprintf(stream, "PERF: l3cache mshr stalls=%ld (utilization=%d%%)\n", l3cache_mshr_stalls, mshr_utilization);
+
+      // HBM
+      float util = (float)hbm_counter / (hbm_ticks * l3cache_banks) * 100;  
+      fprintf(stream, "PERF: hbm bank utilization=%f\n", util);
     }
 
     int mem_avg_lat = caclAverage(mem_lat, mem_reads);

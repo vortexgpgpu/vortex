@@ -617,7 +617,7 @@
 
 // Number of Banks
 `ifndef L3_NUM_BANKS
-`define L3_NUM_BANKS `MIN(4, `NUM_CLUSTERS)
+`define L3_NUM_BANKS `MIN(8, `NUM_CLUSTERS)
 `endif
 
 // Core Response Queue Size

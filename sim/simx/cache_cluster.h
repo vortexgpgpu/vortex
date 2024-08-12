@@ -77,8 +77,8 @@ public:
 				caches_.at(i)->CoreRspPorts.at(j).bind(&mem_arbs.at(j)->RspOut.at(i));
 			}
 
-			caches_.at(i)->MemReqPort.bind(&cache_arb->ReqIn.at(i));
-			cache_arb->RspIn.at(i).bind(&caches_.at(i)->MemRspPort);
+			caches_.at(i)->MemReqPorts.at(0).bind(&cache_arb->ReqIn.at(i));
+			cache_arb->RspIn.at(i).bind(&caches_.at(i)->MemRspPorts.at(0));
 		}
 
 		cache_arb->ReqOut.at(0).bind(&this->MemReqPort);

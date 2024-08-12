@@ -41,6 +41,7 @@ public:
 		dram_config["MemorySystem"]["DRAM"]["impl"] = "HBM2";
 		dram_config["MemorySystem"]["DRAM"]["org"]["preset"] = "HBM2_8Gb";
 		dram_config["MemorySystem"]["DRAM"]["org"]["density"] = 8192;
+		dram_config["MemorySystem"]["DRAM"]["org"]["channel"] = 8;
 		dram_config["MemorySystem"]["DRAM"]["timing"]["preset"] = "HBM2_2Gbps";
 		dram_config["MemorySystem"]["Controller"]["impl"] = "Generic";
 		dram_config["MemorySystem"]["Controller"]["Scheduler"]["impl"] = "FRFCFS";

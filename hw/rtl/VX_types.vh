@@ -173,6 +173,11 @@
 `define VX_CSR_MPM_LMEM_WRITES_H        12'hB9C
 `define VX_CSR_MPM_LMEM_BANK_ST         12'hB1D     // bank conflicts
 `define VX_CSR_MPM_LMEM_BANK_ST_H       12'hB9D
+// PERF: hbm
+`define VX_CSR_HBM_BANK_CNTR            12'hB1E     // hbm banks
+`define VX_CSR_HBM_BANK_CNTR_H          12'hB9E
+`define VX_CSR_HBM_BANK_TICK            12'hB1F     // hbm ticks
+`define VX_CSR_HBM_BANK_TICK_H          12'hB9F
 
 // Machine Performance-monitoring memory counters (class 3) ///////////////////
 // <Add your own counters: use addresses hB03..B1F, hB83..hB9F>
