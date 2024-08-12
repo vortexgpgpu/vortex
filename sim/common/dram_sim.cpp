@@ -46,7 +46,6 @@ public:
 		dram_config["MemorySystem"]["Controller"]["impl"] = "Generic";
 		dram_config["MemorySystem"]["Controller"]["Scheduler"]["impl"] = "FRFCFS";
 		dram_config["MemorySystem"]["Controller"]["RefreshManager"]["impl"] = "AllBank";
-		dram_config["MemorySystem"]["Controller"]["RefreshManager"]["impl"] = "AllBank";
 		dram_config["MemorySystem"]["Controller"]["RowPolicy"]["impl"] = "OpenRowPolicy";
 		{
 			YAML::Node draw_plugin;
@@ -67,7 +66,9 @@ public:
 		auto original_buf = std::cout.rdbuf();
 		std::cout.rdbuf(nullstream.rdbuf());
 		ramulator_frontend_->finalize();
-  	ramulator_memorysystem_->finalize();
+  		ramulator_memorysystem_->finalize();
+		delete ramulator_frontend_;
+		delete ramulator_memorysystem_;
 		std::cout.rdbuf(original_buf);
 	}
 
