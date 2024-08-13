@@ -73,11 +73,14 @@ module VX_priority_encoder #(
 
     end else if (MODEL == 2) begin
 
-    `IGNORE_WARNINGS_BEGIN
+    `IGNORE_UNOPTFLAT_BEGIN
         wire [N-1:0] higher_pri_regs;
-    `IGNORE_WARNINGS_END
-        assign higher_pri_regs[N-1:1] = higher_pri_regs[N-2:0] | reversed[N-2:0];
-        assign higher_pri_regs[0]     = 1'b0;
+    `IGNORE_UNOPTFLAT_END
+
+        assign higher_pri_regs[0] = 1'b0;
+        for (genvar i = 1; i < N; ++i) begin
+            assign higher_pri_regs[i] = higher_pri_regs[i-1] | reversed[i-1];
+        end
         assign onehot_out[N-1:0] = reversed[N-1:0] & ~higher_pri_regs[N-1:0];
 
         VX_lzc #(
