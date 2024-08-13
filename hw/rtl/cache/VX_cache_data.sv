@@ -75,7 +75,7 @@ module VX_cache_data #(
     wire [`CS_WORDS_PER_LINE-1:0][NUM_WAYS-1:0][`CS_WORD_WIDTH-1:0] line_rdata;
     wire [`LOG2UP(NUM_WAYS)-1:0] way_idx;
 
-    if (WRITEBACK) begin
+    if (WRITEBACK) begin : dirty_bytes
         if (DIRTY_BYTES) begin
             wire [NUM_WAYS-1:0][LINE_SIZE-1:0] bs_rdata;
             wire [NUM_WAYS-1:0][LINE_SIZE-1:0] bs_wdata;

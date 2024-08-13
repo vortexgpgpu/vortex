@@ -41,7 +41,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
 
     `RESET_RELAY_EX (block_reset, reset, `NUM_LSU_BLOCKS, 1);
 
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
+    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : demux_slices
 
         wire [`NUM_LSU_LANES-1:0] is_addr_local_mask;
         for (genvar j = 0; j < `NUM_LSU_LANES; ++j) begin
@@ -151,7 +151,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lmem_bus_if[LSU_NUM_REQS]();
 
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
+    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : adapter_slices
         VX_mem_bus_if #(
             .DATA_SIZE (LSU_WORD_SIZE),
             .TAG_WIDTH (LSU_TAG_WIDTH)
