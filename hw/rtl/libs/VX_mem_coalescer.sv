@@ -168,12 +168,8 @@ module VX_mem_coalescer #(
         for (integer i = 0; i < OUT_REQS; ++i) begin
             for (integer j = 0; j < DATA_RATIO; ++j) begin
                 if (current_pmask[i * DATA_RATIO + j]) begin
-                    for (integer k = 0; k < DATA_IN_SIZE; ++k) begin
-                        if (in_req_byteen[DATA_RATIO * i + j][k]) begin
-                            req_byteen_merged[i][in_addr_offset[DATA_RATIO * i + j]][k] = 1'b1;
-                            req_data_merged[i][in_addr_offset[DATA_RATIO * i + j]][k * 8 +: 8] = in_req_data[DATA_RATIO * i + j][k * 8 +: 8];
-                        end
-                    end
+                    req_byteen_merged[i][in_addr_offset[DATA_RATIO * i + j]] = in_req_byteen[DATA_RATIO * i + j];
+                    req_data_merged[i][in_addr_offset[DATA_RATIO * i + j]] = in_req_data[DATA_RATIO * i + j];
                 end
             end
         end
@@ -216,7 +212,7 @@ module VX_mem_coalescer #(
             out_req_byteen_n= req_byteen_merged;
             out_req_data_n  = req_data_merged;
             out_req_tag_n   = {in_req_tag[TAG_WIDTH-1 -: UUID_WIDTH], ibuf_waddr};
-            processed_mask_n= is_last_batch ? '0 (processed_mask_r | current_pmask);
+            processed_mask_n= is_last_batch ? '0 : (processed_mask_r | current_pmask);
             in_req_ready_n  = is_last_batch;
         end
         endcase
