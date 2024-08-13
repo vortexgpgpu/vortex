@@ -45,7 +45,7 @@ module VX_split_join import VX_gpu_pkg::*; #(
     wire ipdom_push = valid && split.valid && split.is_dvg;
     wire ipdom_pop = valid && sjoin.valid && sjoin_is_dvg;
 
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : ipdom_slices
 
         `RESET_RELAY (ipdom_reset, reset);
 

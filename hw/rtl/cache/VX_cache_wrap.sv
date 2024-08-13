@@ -103,7 +103,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         .TAG_WIDTH (CACHE_MEM_TAG_WIDTH)
     ) mem_bus_cache_if();
 
-    if (NC_OR_BYPASS) begin
+    if (NC_OR_BYPASS) begin : bypass_if
 
         `RESET_RELAY (nc_bypass_reset, reset);
 
@@ -148,31 +148,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_cache_if);
     end
 
-    if (PASSTHRU != 0) begin
-
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
-            `UNUSED_VAR (core_bus_cache_if[i].req_valid)
-            `UNUSED_VAR (core_bus_cache_if[i].req_data)
-            assign core_bus_cache_if[i].req_ready = 0;
-
-            assign core_bus_cache_if[i].rsp_valid = 0;
-            assign core_bus_cache_if[i].rsp_data  = '0;
-            `UNUSED_VAR (core_bus_cache_if[i].rsp_ready)
-        end
-
-        assign mem_bus_cache_if.req_valid = 0;
-        assign mem_bus_cache_if.req_data = '0;
-        `UNUSED_VAR (mem_bus_cache_if.req_ready)
-
-        `UNUSED_VAR (mem_bus_cache_if.rsp_valid)
-        `UNUSED_VAR (mem_bus_cache_if.rsp_data)
-        assign mem_bus_cache_if.rsp_ready = 0;
-
-    `ifdef PERF_ENABLE
-        assign cache_perf = '0;
-    `endif
-
-    end else begin
+    if (PASSTHRU == 0) begin : cache_if
 
         `RESET_RELAY (cache_reset, reset);
 
@@ -204,6 +180,30 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .core_bus_if    (core_bus_cache_if),
             .mem_bus_if     (mem_bus_cache_if)
         );
+
+    end else begin
+
+        for (genvar i = 0; i < NUM_REQS; ++i) begin
+            `UNUSED_VAR (core_bus_cache_if[i].req_valid)
+            `UNUSED_VAR (core_bus_cache_if[i].req_data)
+            assign core_bus_cache_if[i].req_ready = 0;
+
+            assign core_bus_cache_if[i].rsp_valid = 0;
+            assign core_bus_cache_if[i].rsp_data  = '0;
+            `UNUSED_VAR (core_bus_cache_if[i].rsp_ready)
+        end
+
+        assign mem_bus_cache_if.req_valid = 0;
+        assign mem_bus_cache_if.req_data = '0;
+        `UNUSED_VAR (mem_bus_cache_if.req_ready)
+
+        `UNUSED_VAR (mem_bus_cache_if.rsp_valid)
+        `UNUSED_VAR (mem_bus_cache_if.rsp_data)
+        assign mem_bus_cache_if.rsp_ready = 0;
+
+    `ifdef PERF_ENABLE
+        assign cache_perf = '0;
+    `endif
 
     end
 

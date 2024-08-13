@@ -232,7 +232,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
 `endif
 
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
+    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : coalescer_blocks
 
         VX_lsu_mem_if #(
             .NUM_LANES (DCACHE_CHANNELS),
@@ -240,7 +240,7 @@ module VX_core import VX_gpu_pkg::*; #(
             .TAG_WIDTH (DCACHE_TAG_WIDTH)
         ) dcache_coalesced_if();
 
-        if (LSU_WORD_SIZE != DCACHE_WORD_SIZE) begin
+        if (LSU_WORD_SIZE != DCACHE_WORD_SIZE) begin : coalescer_if
 
             `RESET_RELAY (mem_coalescer_reset, reset);
 
