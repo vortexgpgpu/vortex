@@ -30,6 +30,7 @@ module VX_cyclic_arbiter #(
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
+        `UNUSED_VAR (grant_ready)
 
         assign grant_index  = '0;
         assign grant_onehot = requests;
@@ -39,29 +40,35 @@ module VX_cyclic_arbiter #(
 
         localparam IS_POW2 = (1 << LOG_NUM_REQS) == NUM_REQS;
 
+        wire [LOG_NUM_REQS-1:0] grant_index_um, grant_index_ql;
         reg [LOG_NUM_REQS-1:0] grant_index_r;
 
         always @(posedge clk) begin
             if (reset) begin
                 grant_index_r <= '0;
-            end else begin
-                if (!IS_POW2 && grant_index_r == LOG_NUM_REQS'(NUM_REQS-1)) begin
+            end else if (grant_valid && grant_ready) begin
+                if (!IS_POW2 && grant_index_ql == LOG_NUM_REQS'(NUM_REQS-1)) begin
                     grant_index_r <= '0;
-                end else if (~grant_valid || grant_ready) begin
-                    grant_index_r <= grant_index_r + LOG_NUM_REQS'(1);
+                end else begin
+                    grant_index_r <= grant_index_ql + LOG_NUM_REQS'(1);
                 end
             end
         end
 
-        reg [NUM_REQS-1:0] grant_onehot_r;
-        always @(*) begin
-            grant_onehot_r = '0;
-            grant_onehot_r[grant_index_r] = 1'b1;
-        end
+        VX_priority_encoder #(
+            .N (NUM_REQS)
+        ) priority_encoder (
+            .data_in    (requests),
+            `UNUSED_PIN (onehot_out),
+            .index_out  (grant_index_um),
+            `UNUSED_PIN (valid_out)
+        );
 
-        assign grant_index  = grant_index_r;
-        assign grant_onehot = grant_onehot_r;
-        assign grant_valid  = requests[grant_index_r];
+        assign grant_index_ql = requests[grant_index_r] ? grant_index_r : grant_index_um;
+
+        assign grant_index  = grant_index_ql;
+        assign grant_onehot = NUM_REQS'(1) << grant_index_ql;
+        assign grant_valid  = (| requests);
 
     end
 
