@@ -459,7 +459,7 @@ module VX_rr_arbiter #(
                 grant_table[i] = 'x;
                 for (integer j = NUM_REQS-1; j >= 0; --j) begin
                     if (requests[(i+j+1) % NUM_REQS]) begin
-                        grant_table[i] = LOG_NUM_REQS'(i+j+1);
+                        grant_table[i] = LOG_NUM_REQS'((i+j+1) % NUM_REQS);
                     end
                 end
             end
