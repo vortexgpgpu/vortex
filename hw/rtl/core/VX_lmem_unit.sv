@@ -37,7 +37,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         .NUM_LANES (`NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_switch_if[`NUM_LSU_BLOCKS]();
+    ) lsu_lmem_if[`NUM_LSU_BLOCKS]();
 
     `RESET_RELAY_EX (block_reset, reset, `NUM_LSU_BLOCKS, 1);
 
@@ -103,17 +103,17 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
                 lsu_mem_in_if[i].req_data.tag
             }),
             .ready_in  (req_local_ready),
-            .valid_out (lsu_switch_if[i].req_valid),
+            .valid_out (lsu_lmem_if[i].req_valid),
             .data_out  ({
-                lsu_switch_if[i].req_data.mask,
-                lsu_switch_if[i].req_data.rw,
-                lsu_switch_if[i].req_data.byteen,
-                lsu_switch_if[i].req_data.addr,
-                lsu_switch_if[i].req_data.flags,
-                lsu_switch_if[i].req_data.data,
-                lsu_switch_if[i].req_data.tag
+                lsu_lmem_if[i].req_data.mask,
+                lsu_lmem_if[i].req_data.rw,
+                lsu_lmem_if[i].req_data.byteen,
+                lsu_lmem_if[i].req_data.addr,
+                lsu_lmem_if[i].req_data.flags,
+                lsu_lmem_if[i].req_data.data,
+                lsu_lmem_if[i].req_data.tag
             }),
-            .ready_out (lsu_switch_if[i].req_ready)
+            .ready_out (lsu_lmem_if[i].req_ready)
         );
 
         assign lsu_mem_in_if[i].req_ready = (req_global_ready && is_addr_global)
@@ -128,15 +128,15 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .clk       (clk),
             .reset     (block_reset[i]),
             .valid_in  ({
-                lsu_switch_if[i].rsp_valid,
+                lsu_lmem_if[i].rsp_valid,
                 lsu_mem_out_if[i].rsp_valid
             }),
             .ready_in  ({
-                lsu_switch_if[i].rsp_ready,
+                lsu_lmem_if[i].rsp_ready,
                 lsu_mem_out_if[i].rsp_ready
             }),
             .data_in   ({
-                lsu_switch_if[i].rsp_data,
+                lsu_lmem_if[i].rsp_data,
                 lsu_mem_out_if[i].rsp_data
             }),
             .data_out  (lsu_mem_in_if[i].rsp_data),
@@ -168,7 +168,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         ) lsu_adapter (
             .clk        (clk),
             .reset      (block_reset[i]),
-            .lsu_mem_if (lsu_switch_if[i]),
+            .lsu_mem_if (lsu_lmem_if[i]),
             .mem_bus_if (lmem_bus_tmp_if)
         );
 
