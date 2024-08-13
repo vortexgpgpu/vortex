@@ -49,11 +49,7 @@ module VX_stream_unpack #(
                 rem_mask <= '1;
             end else begin
                 if (valid_in) begin
-                    if (sent_all) begin
-                        rem_mask <= '1;
-                    end else begin
-                        rem_mask <= rem_mask_n;
-                    end
+                    rem_mask <= sent_all ? '1 : rem_mask_n;
                 end
             end
         end
