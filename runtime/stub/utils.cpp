@@ -211,10 +211,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t mem_reads = 0;
   uint64_t mem_writes = 0;
   uint64_t mem_lat = 0;
-  
-  // PERF: hbm
-  uint64_t hbm_counter = 0;
-  uint64_t hbm_ticks = 0;
+  uint64_t mem_req_counter = 0;
+  uint64_t mem_ticks = 0;
 
   uint64_t num_cores;
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_CORES, &num_cores), {
@@ -225,9 +223,9 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_ISA_FLAGS, &isa_flags), {
     return err;
   });
-
-  uint64_t l3cache_banks;
-  CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_L3CACHE_NUM_BANKS, &l3cache_banks), {
+  
+  uint64_t num_mem_bank_ports;
+  CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_MEM_BANKS, &num_mem_bank_ports), {
     return err;
   });
 
@@ -531,14 +529,6 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
           CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L3CACHE_MSHR_ST, core_id, &l3cache_mshr_stalls), {
             return err;
           });
-
-          // PERF: HBM
-          CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_HBM_BANK_CNTR, core_id, &hbm_counter), {
-            return err;
-          });
-          CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_HBM_BANK_TICK, core_id, &hbm_ticks), {
-            return err;
-          });
         }
         // PERF: memory
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_READS, core_id, &mem_reads), {
@@ -548,6 +538,12 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
           return err;
         });
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_LT, core_id, &mem_lat), {
+          return err;
+        });
+        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_BANK_CNTR, core_id, &mem_req_counter), {
+          return err;
+        });
+        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_BANK_TICK, core_id, &mem_ticks), {
           return err;
         });
       }
@@ -616,22 +612,20 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       int read_hit_ratio = calcRatio(l3cache_read_misses, l3cache_reads);
       int write_hit_ratio = calcRatio(l3cache_write_misses, l3cache_writes);
       int bank_utilization = calcAvgPercent(l3cache_reads + l3cache_writes, l3cache_reads + l3cache_writes + l3cache_bank_stalls);
-      int mshr_utilization = calcAvgPercent(l3cache_read_misses + l3cache_write_misses, l3cache_read_misses + l3cache_write_misses + l3cache_mshr_stalls);
+      int mshr_utilization = calcAvgPercent(l3cache_read_misses + l3cache_write_misses, l3cache_read_misses + l3cache_write_misses + l3cache_mshr_stalls); 
       fprintf(stream, "PERF: l3cache reads=%ld\n", l3cache_reads);
       fprintf(stream, "PERF: l3cache writes=%ld\n", l3cache_writes);
       fprintf(stream, "PERF: l3cache read misses=%ld (hit ratio=%d%%)\n", l3cache_read_misses, read_hit_ratio);
       fprintf(stream, "PERF: l3cache write misses=%ld (hit ratio=%d%%)\n", l3cache_write_misses, write_hit_ratio);
       fprintf(stream, "PERF: l3cache bank stalls=%ld (utilization=%d%%)\n", l3cache_bank_stalls, bank_utilization);
       fprintf(stream, "PERF: l3cache mshr stalls=%ld (utilization=%d%%)\n", l3cache_mshr_stalls, mshr_utilization);
-
-      // HBM
-      float util = (float)hbm_counter / (hbm_ticks * l3cache_banks) * 100;  
-      fprintf(stream, "PERF: hbm bank utilization=%f\n", util);
     }
 
     int mem_avg_lat = caclAverage(mem_lat, mem_reads);
+    int memory_bank_port_utilization = calcAvgPercent(mem_req_counter, (mem_ticks * num_mem_bank_ports));
     fprintf(stream, "PERF: memory requests=%ld (reads=%ld, writes=%ld)\n", (mem_reads + mem_writes), mem_reads, mem_writes);
     fprintf(stream, "PERF: memory latency=%d cycles\n", mem_avg_lat);
+    fprintf(stream, "PERF: memory bank port utilization=%d%%\n", memory_bank_port_utilization);
   } break;
   default:
     break;
