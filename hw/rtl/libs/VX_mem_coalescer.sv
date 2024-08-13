@@ -185,7 +185,6 @@ module VX_mem_coalescer #(
 
     always @(*) begin
         state_n          = state_r;
-
         out_req_valid_n  = out_req_valid_r;
         out_req_mask_n   = out_req_mask_r;
         out_req_rw_n     = out_req_rw_r;
@@ -194,7 +193,6 @@ module VX_mem_coalescer #(
         out_req_byteen_n = out_req_byteen_r;
         out_req_data_n   = out_req_data_r;
         out_req_tag_n    = out_req_tag_r;
-
         processed_mask_n = processed_mask_r;
         in_req_ready_n   = 0;
 
@@ -209,6 +207,7 @@ module VX_mem_coalescer #(
             end
         end
         default/*STATE_SEND*/: begin
+            state_n         = STATE_WAIT;
             out_req_valid_n = 1;
             out_req_mask_n  = batch_valid_r;
             out_req_rw_n    = in_req_rw;
@@ -217,15 +216,8 @@ module VX_mem_coalescer #(
             out_req_byteen_n= req_byteen_merged;
             out_req_data_n  = req_data_merged;
             out_req_tag_n   = {in_req_tag[TAG_WIDTH-1 -: UUID_WIDTH], ibuf_waddr};
-
+            processed_mask_n= is_last_batch ? '0 (processed_mask_r | current_pmask);
             in_req_ready_n  = is_last_batch;
-
-            if (is_last_batch) begin
-                processed_mask_n = '0;
-            end else begin
-                processed_mask_n = processed_mask_r | current_pmask;
-            end
-            state_n = STATE_WAIT;
         end
         endcase
     end
