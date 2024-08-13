@@ -47,7 +47,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
   );
 
   // connect L3 memory ports
-  for (uint32_t i = 0; i < L3_NUM_BANKS; ++i) {
+  for (uint32_t i = 0; i < NUM_MEM_PORTS; ++i) {
     l3cache_->MemReqPorts.at(i).bind(&memsim_->MemReqPorts.at(i));
     memsim_->MemRspPorts.at(i).bind(&l3cache_->MemRspPorts.at(i));
   }
@@ -61,7 +61,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
   }
 
   // set up memory profiling
-  for (uint32_t i = 0; i < L3_NUM_BANKS; ++i) {
+  for (uint32_t i = 0; i < NUM_MEM_PORTS; ++i) {
     memsim_->MemReqPorts.at(i).tx_callback([&](const MemReq& req, uint64_t cycle){
       __unused (cycle);
       perf_mem_reads_   += !req.write;

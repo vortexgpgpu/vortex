@@ -722,8 +722,8 @@ CacheSim::CacheSim(const SimContext& ctx, const char* name, const Config& config
 	: SimObject<CacheSim>(ctx, name)
 	, CoreReqPorts(config.num_inputs, this)
 	, CoreRspPorts(config.num_inputs, this)
-	, MemReqPorts((1 << config.B), this)
-	, MemRspPorts((1 << config.B), this)
+	, MemReqPorts(NUM_MEM_PORTS, this)
+	, MemRspPorts(NUM_MEM_PORTS, this)
 	, impl_(new Impl(this, config))
 {}
 
