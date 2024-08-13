@@ -168,8 +168,13 @@ module VX_mem_coalescer #(
         for (integer i = 0; i < OUT_REQS; ++i) begin
             for (integer j = 0; j < DATA_RATIO; ++j) begin
                 if (current_pmask[i * DATA_RATIO + j]) begin
-                    req_byteen_merged[i][in_addr_offset[DATA_RATIO * i + j]] = in_req_byteen[DATA_RATIO * i + j];
-                    req_data_merged[i][in_addr_offset[DATA_RATIO * i + j]] = in_req_data[DATA_RATIO * i + j];
+                    for (integer k = 0; k < DATA_IN_SIZE; ++k) begin
+                        // perform byte-level merge since each thread may have different bytes enabled
+                        if (in_req_byteen[DATA_RATIO * i + j][k]) begin
+                            req_byteen_merged[i][in_addr_offset[DATA_RATIO * i + j]][k] = 1'b1;
+                            req_data_merged[i][in_addr_offset[DATA_RATIO * i + j]][k * 8 +: 8] = in_req_data[DATA_RATIO * i + j][k * 8 +: 8];
+                        end
+                    end
                 end
             end
         end
