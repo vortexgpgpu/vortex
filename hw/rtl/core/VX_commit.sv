@@ -58,7 +58,7 @@ module VX_commit import VX_gpu_pkg::*, VX_trace_pkg::*; #(
         VX_stream_arb #(
             .NUM_INPUTS (`NUM_EX_UNITS),
             .DATAW      (DATAW),
-            .ARBITER    ("R"),
+            .ARBITER    ("P"),
             .OUT_BUF    (1)
         ) commit_arb (
             .clk        (clk),
