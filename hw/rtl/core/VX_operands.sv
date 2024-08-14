@@ -37,15 +37,15 @@ module VX_operands import VX_gpu_pkg::*; #(
     VX_operands_if.master   operands_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam NUM_SRC_REGS = 3;
-    localparam REQ_SEL_BITS = `CLOG2(NUM_SRC_REGS);
+    localparam NUM_SRC_OPDS = 3;
+    localparam REQ_SEL_BITS = `CLOG2(NUM_SRC_OPDS);
     localparam REQ_SEL_WIDTH = `UP(REQ_SEL_BITS);
     localparam BANK_SEL_BITS = `CLOG2(NUM_BANKS);
     localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
     localparam PER_BANK_REGS = `NUM_REGS / NUM_BANKS;
     localparam META_DATAW = ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + `NR_BITS + `UUID_WIDTH;
     localparam REGS_DATAW = `XLEN * `NUM_THREADS;
-    localparam DATAW = META_DATAW + NUM_SRC_REGS * REGS_DATAW;
+    localparam DATAW = META_DATAW + NUM_SRC_OPDS * REGS_DATAW;
     localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * PER_ISSUE_WARPS);
     localparam PER_BANK_ADDRW = RAM_ADDRW - BANK_SEL_BITS;
     localparam XLEN_SIZE = `XLEN / 8;
@@ -53,10 +53,10 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     `UNUSED_VAR (writeback_if.data.sop)
 
-    wire [NUM_SRC_REGS-1:0] src_valid;
-    wire [NUM_SRC_REGS-1:0] req_in_valid, req_in_ready;
-    wire [NUM_SRC_REGS-1:0][PER_BANK_ADDRW-1:0] req_in_data;
-    wire [NUM_SRC_REGS-1:0][BANK_SEL_WIDTH-1:0] req_bank_idx;
+    wire [NUM_SRC_OPDS-1:0] src_valid;
+    wire [NUM_SRC_OPDS-1:0] req_in_valid, req_in_ready;
+    wire [NUM_SRC_OPDS-1:0][PER_BANK_ADDRW-1:0] req_in_data;
+    wire [NUM_SRC_OPDS-1:0][BANK_SEL_WIDTH-1:0] req_bank_idx;
 
     wire [NUM_BANKS-1:0] gpr_rd_valid, gpr_rd_ready;
     wire [NUM_BANKS-1:0] gpr_rd_valid_st1, gpr_rd_valid_st2;
@@ -68,40 +68,39 @@ module VX_operands import VX_gpu_pkg::*; #(
     wire pipe_valid_st2, pipe_ready_st2;
     wire [META_DATAW-1:0] pipe_data, pipe_data_st1, pipe_data_st2;
 
-    reg [NUM_SRC_REGS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data_n;
-    wire [NUM_SRC_REGS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data_st1, src_data_st2;
+    reg [NUM_SRC_OPDS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data_n;
+    wire [NUM_SRC_OPDS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data_st1, src_data_st2;
 
-    reg [NUM_SRC_REGS-1:0] data_fetched_n;
-    wire [NUM_SRC_REGS-1:0] data_fetched_st1;
+    reg [NUM_SRC_OPDS-1:0] data_fetched_n;
+    wire [NUM_SRC_OPDS-1:0] data_fetched_st1;
 
     reg has_collision_n;
     wire has_collision_st1;
 
-    wire [NUM_SRC_REGS-1:0][`NR_BITS-1:0] src_regs = {scoreboard_if.data.rs3,
-                                                      scoreboard_if.data.rs2,
-                                                      scoreboard_if.data.rs1};
+    wire [NUM_SRC_OPDS-1:0][`NR_BITS-1:0] src_opds;
+    assign src_opds = {scoreboard_if.data.rs3, scoreboard_if.data.rs2, scoreboard_if.data.rs1};
 
-    for (genvar i = 0; i < NUM_SRC_REGS; ++i) begin
+    for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin
         if (ISSUE_WIS != 0) begin
-            assign req_in_data[i] = {src_regs[i][`NR_BITS-1:BANK_SEL_BITS], scoreboard_if.data.wis};
+            assign req_in_data[i] = {src_opds[i][`NR_BITS-1:BANK_SEL_BITS], scoreboard_if.data.wis};
         end else begin
-            assign req_in_data[i] = src_regs[i][`NR_BITS-1:BANK_SEL_BITS];
+            assign req_in_data[i] = src_opds[i][`NR_BITS-1:BANK_SEL_BITS];
         end
         if (NUM_BANKS != 1) begin
-            assign req_bank_idx[i] = src_regs[i][BANK_SEL_BITS-1:0];
+            assign req_bank_idx[i] = src_opds[i][BANK_SEL_BITS-1:0];
         end else begin
             assign req_bank_idx[i] = '0;
         end
     end
 
-    for (genvar i = 0; i < NUM_SRC_REGS; ++i) begin
-        assign src_valid[i] = (src_regs[i] != 0) && ~data_fetched_st1[i];
+    for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin
+        assign src_valid[i] = (src_opds[i] != 0) && ~data_fetched_st1[i];
     end
 
-    assign req_in_valid = {NUM_SRC_REGS{scoreboard_if.valid}} & src_valid;
+    assign req_in_valid = {NUM_SRC_OPDS{scoreboard_if.valid}} & src_valid;
 
     VX_stream_xbar #(
-        .NUM_INPUTS  (NUM_SRC_REGS),
+        .NUM_INPUTS  (NUM_SRC_OPDS),
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (PER_BANK_ADDRW),
         .ARBITER     ("P"), // use priority arbiter
@@ -132,8 +131,8 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     always @(*) begin
         has_collision_n = 0;
-        for (integer i = 0; i < NUM_SRC_REGS; ++i) begin
-            for (integer j = 1; j < (NUM_SRC_REGS-i); ++j) begin
+        for (integer i = 0; i < NUM_SRC_OPDS; ++i) begin
+            for (integer j = 1; j < (NUM_SRC_OPDS-i); ++j) begin
                 has_collision_n |= src_valid[i]
                                 && src_valid[j+i]
                                 && (req_bank_idx[i] == req_bank_idx[j+i]);
@@ -163,8 +162,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     };
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_SRC_REGS + NUM_BANKS + META_DATAW + 1 + NUM_BANKS * (PER_BANK_ADDRW + REQ_SEL_WIDTH)),
-        .RESETW (1 + NUM_SRC_REGS)
+        .DATAW  (1 + NUM_SRC_OPDS + NUM_BANKS + META_DATAW + 1 + NUM_BANKS * (PER_BANK_ADDRW + REQ_SEL_WIDTH)),
+        .RESETW (1 + NUM_SRC_OPDS)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
@@ -182,8 +181,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     `RESET_RELAY (pipe2_reset, reset); // needed for pipe_reg2's wide RESETW
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_SRC_REGS * REGS_DATAW + NUM_BANKS + NUM_BANKS * REGS_DATAW + META_DATAW + NUM_BANKS * REQ_SEL_WIDTH),
-        .RESETW (1 + NUM_SRC_REGS * REGS_DATAW)
+        .DATAW  (1 + NUM_SRC_OPDS * REGS_DATAW + NUM_BANKS + NUM_BANKS * REGS_DATAW + META_DATAW + NUM_BANKS * REQ_SEL_WIDTH),
+        .RESETW (1 + NUM_SRC_OPDS * REGS_DATAW)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (pipe2_reset),
