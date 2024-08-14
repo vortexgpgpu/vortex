@@ -17,6 +17,7 @@
 module VX_pipe_register #(
     parameter DATAW  = 1,
     parameter RESETW = 0,
+    parameter [`UP(RESETW)-1:0] INIT_VALUE = {`UP(RESETW){1'b0}},
     parameter DEPTH  = 1
 ) (
     input wire              clk,
@@ -46,7 +47,7 @@ module VX_pipe_register #(
 
             always @(posedge clk) begin
                 if (reset) begin
-                    value <= RESETW'(0);
+                    value <= INIT_VALUE;
                 end else if (enable) begin
                     value <= data_in;
                 end
@@ -58,7 +59,7 @@ module VX_pipe_register #(
 
             always @(posedge clk) begin
                 if (reset) begin
-                    value_r <= RESETW'(0);
+                    value_r <= INIT_VALUE;
                 end else if (enable) begin
                     value_r <= data_in[DATAW-1:DATAW-RESETW];
                 end
@@ -74,10 +75,12 @@ module VX_pipe_register #(
     end else begin
         wire [DEPTH:0][DATAW-1:0] data_delayed;
         assign data_delayed[0] = data_in;
+        
         for (genvar i = 1; i <= DEPTH; ++i) begin
             VX_pipe_register #(
                 .DATAW  (DATAW),
-                .RESETW (RESETW)
+                .RESETW (RESETW),
+                .INIT_VALUE (INIT_VALUE)
             ) pipe_reg (
                 .clk      (clk),
                 .reset    (reset),

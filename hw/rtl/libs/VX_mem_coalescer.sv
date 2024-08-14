@@ -113,12 +113,13 @@ module VX_mem_coalescer #(
     logic [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] seed_addr_r, seed_addr_n;
     logic [OUT_REQS-1:0][FLAGS_WIDTH-1:0] seed_flags_r, seed_flags_n;
     logic [NUM_REQS-1:0] addr_matches_r, addr_matches_n;
-    logic [NUM_REQS-1:0] processed_mask_r, processed_mask_n;
+    logic [NUM_REQS-1:0] req_rem_mask_r, req_rem_mask_n;
 
     wire [OUT_REQS-1:0][NUM_REQS_W-1:0] seed_idx;
 
     wire [NUM_REQS-1:0][OUT_ADDR_WIDTH-1:0] in_addr_base;
     wire [NUM_REQS-1:0][DATA_RATIO_W-1:0] in_addr_offset;
+
     for (genvar i = 0; i < NUM_REQS; i++) begin
         assign in_addr_base[i] = in_req_addr[i][ADDR_WIDTH-1:DATA_RATIO_W];
         assign in_addr_offset[i] = in_req_addr[i][DATA_RATIO_W-1:0];
@@ -128,7 +129,7 @@ module VX_mem_coalescer #(
         wire [DATA_RATIO-1:0] batch_mask;
         wire [DATA_RATIO_W-1:0] batch_idx;
 
-        assign batch_mask = in_req_mask[i * DATA_RATIO +: DATA_RATIO] & ~processed_mask_r[i * DATA_RATIO +: DATA_RATIO];
+        assign batch_mask = in_req_mask[i * DATA_RATIO +: DATA_RATIO] & req_rem_mask_r[i * DATA_RATIO +: DATA_RATIO];
 
         VX_priority_encoder #(
             .N (DATA_RATIO)
@@ -180,7 +181,7 @@ module VX_mem_coalescer #(
         end
     end
 
-    wire is_last_batch = ~(| (in_req_mask & ~addr_matches_r & ~processed_mask_r));
+    wire is_last_batch = ~(| (in_req_mask & ~addr_matches_r & req_rem_mask_r));
 
     wire out_req_fire = out_req_valid && out_req_ready;
 
@@ -194,7 +195,7 @@ module VX_mem_coalescer #(
         out_req_byteen_n = out_req_byteen_r;
         out_req_data_n   = out_req_data_r;
         out_req_tag_n    = out_req_tag_r;
-        processed_mask_n = processed_mask_r;
+        req_rem_mask_n   = req_rem_mask_r;
         in_req_ready_n   = 0;
 
         case (state_r)
@@ -217,7 +218,7 @@ module VX_mem_coalescer #(
             out_req_byteen_n= req_byteen_merged;
             out_req_data_n  = req_data_merged;
             out_req_tag_n   = {in_req_tag[TAG_WIDTH-1 -: UUID_WIDTH], ibuf_waddr};
-            processed_mask_n= is_last_batch ? '0 : (processed_mask_r | current_pmask);
+            req_rem_mask_n  = is_last_batch ? '1 : (req_rem_mask_r & ~current_pmask);
             in_req_ready_n  = is_last_batch;
         end
         endcase
@@ -225,13 +226,14 @@ module VX_mem_coalescer #(
 
     VX_pipe_register #(
         .DATAW  (1 + NUM_REQS + 1 + 1 + NUM_REQS + OUT_REQS * (1 + 1 + OUT_ADDR_WIDTH + FLAGS_WIDTH + OUT_ADDR_WIDTH + FLAGS_WIDTH + DATA_OUT_SIZE + DATA_OUT_WIDTH) + OUT_TAG_WIDTH),
-        .RESETW (1 + NUM_REQS + 1)
+        .RESETW (1 + NUM_REQS + 1),
+        .INIT_VALUE ({1'b0, {NUM_REQS{1'b1}}, 1'b0})
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({state_n, processed_mask_n, out_req_valid_n, out_req_rw_n, addr_matches_n, batch_valid_n, out_req_mask_n, seed_addr_n, seed_flags_n, out_req_addr_n, out_req_flags_n, out_req_byteen_n, out_req_data_n, out_req_tag_n}),
-        .data_out ({state_r, processed_mask_r, out_req_valid_r, out_req_rw_r, addr_matches_r, batch_valid_r, out_req_mask_r, seed_addr_r, seed_flags_r, out_req_addr_r, out_req_flags_r, out_req_byteen_r, out_req_data_r, out_req_tag_r})
+        .data_in  ({state_n, req_rem_mask_n, out_req_valid_n, out_req_rw_n, addr_matches_n, batch_valid_n, out_req_mask_n, seed_addr_n, seed_flags_n, out_req_addr_n, out_req_flags_n, out_req_byteen_n, out_req_data_n, out_req_tag_n}),
+        .data_out ({state_r, req_rem_mask_r, out_req_valid_r, out_req_rw_r, addr_matches_r, batch_valid_r, out_req_mask_r, seed_addr_r, seed_flags_r, out_req_addr_r, out_req_flags_r, out_req_byteen_r, out_req_data_r, out_req_tag_r})
     );
 
     wire out_rsp_fire = out_rsp_valid && out_rsp_ready;
