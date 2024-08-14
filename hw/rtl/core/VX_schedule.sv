@@ -357,7 +357,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     VX_elastic_buffer #(
         .DATAW (`NUM_THREADS + `PC_BITS + `NW_WIDTH),
-        .SIZE  (2),  // need a skid buffer to buffer out schedule_ready
+        .SIZE  (2),  // need to buffer out ready_in
         .OUT_REG (1) // should be registered for BRAM acces in fetch unit
     ) out_buf (
         .clk       (clk),
