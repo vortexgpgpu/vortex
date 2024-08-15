@@ -65,10 +65,10 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .data_in   ({
                 lsu_mem_in_if[i].req_data.mask & ~is_addr_local_mask,
                 lsu_mem_in_if[i].req_data.rw,
-                lsu_mem_in_if[i].req_data.byteen,
                 lsu_mem_in_if[i].req_data.addr,
-                lsu_mem_in_if[i].req_data.flags,
                 lsu_mem_in_if[i].req_data.data,
+                lsu_mem_in_if[i].req_data.byteen,
+                lsu_mem_in_if[i].req_data.flags,
                 lsu_mem_in_if[i].req_data.tag
             }),
             .ready_in  (req_global_ready),
@@ -76,10 +76,10 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .data_out  ({
                 lsu_mem_out_if[i].req_data.mask,
                 lsu_mem_out_if[i].req_data.rw,
-                lsu_mem_out_if[i].req_data.byteen,
                 lsu_mem_out_if[i].req_data.addr,
-                lsu_mem_out_if[i].req_data.flags,
                 lsu_mem_out_if[i].req_data.data,
+                lsu_mem_out_if[i].req_data.byteen,
+                lsu_mem_out_if[i].req_data.flags,
                 lsu_mem_out_if[i].req_data.tag
             }),
             .ready_out (lsu_mem_out_if[i].req_ready)
@@ -96,10 +96,10 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .data_in   ({
                 lsu_mem_in_if[i].req_data.mask & is_addr_local_mask,
                 lsu_mem_in_if[i].req_data.rw,
-                lsu_mem_in_if[i].req_data.byteen,
                 lsu_mem_in_if[i].req_data.addr,
-                lsu_mem_in_if[i].req_data.flags,
                 lsu_mem_in_if[i].req_data.data,
+                lsu_mem_in_if[i].req_data.byteen,
+                lsu_mem_in_if[i].req_data.flags,
                 lsu_mem_in_if[i].req_data.tag
             }),
             .ready_in  (req_local_ready),
@@ -107,10 +107,10 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .data_out  ({
                 lsu_lmem_if[i].req_data.mask,
                 lsu_lmem_if[i].req_data.rw,
-                lsu_lmem_if[i].req_data.byteen,
                 lsu_lmem_if[i].req_data.addr,
-                lsu_lmem_if[i].req_data.flags,
                 lsu_lmem_if[i].req_data.data,
+                lsu_lmem_if[i].req_data.byteen,
+                lsu_lmem_if[i].req_data.flags,
                 lsu_lmem_if[i].req_data.tag
             }),
             .ready_out (lsu_lmem_if[i].req_ready)

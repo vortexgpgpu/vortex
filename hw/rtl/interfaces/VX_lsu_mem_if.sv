@@ -25,10 +25,10 @@ interface VX_lsu_mem_if #(
     typedef struct packed {
         logic                   rw;
         logic [NUM_LANES-1:0]   mask;
-        logic [NUM_LANES-1:0][DATA_SIZE-1:0]   byteen;
         logic [NUM_LANES-1:0][ADDR_WIDTH-1:0]  addr;
-        logic [NUM_LANES-1:0][FLAGS_WIDTH-1:0] flags;
         logic [NUM_LANES-1:0][DATA_SIZE*8-1:0] data;
+        logic [NUM_LANES-1:0][DATA_SIZE-1:0]   byteen;
+        logic [NUM_LANES-1:0][FLAGS_WIDTH-1:0] flags;
         logic [TAG_WIDTH-1:0]   tag;
     } req_data_t;
 

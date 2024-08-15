@@ -129,20 +129,20 @@ module VX_cache_bypass #(
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         assign core_req_nc_mux_in[i] = {
             core_bus_in_if[i].req_data.rw,
-            core_bus_in_if[i].req_data.byteen,
             core_bus_in_if[i].req_data.addr,
-            core_bus_in_if[i].req_data.flags,
             core_bus_in_if[i].req_data.data,
+            core_bus_in_if[i].req_data.byteen,
+            core_bus_in_if[i].req_data.flags,
             core_bus_in_if[i].req_data.tag
         };
     end
 
     assign {
         core_req_nc_sel_rw,
-        core_req_nc_sel_byteen,
         core_req_nc_sel_addr,
-        core_req_nc_sel_flags,
         core_req_nc_sel_data,
+        core_req_nc_sel_byteen,
+        core_req_nc_sel_flags,
         core_req_nc_sel_tag
     } = core_req_nc_mux_in[core_req_nc_idx];
 
