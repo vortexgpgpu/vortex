@@ -33,10 +33,6 @@
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
-`ifndef VM_DISABLE
-`define VM_ENABLE
-`endif
-
 `ifndef EXT_M_DISABLE
 `define EXT_M_ENABLE
 `endif
