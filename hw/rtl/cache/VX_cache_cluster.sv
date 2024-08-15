@@ -197,6 +197,10 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         .bus_out_if (mem_bus_tmp_if)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_tmp_if[0]);
+    if (WRITE_ENABLE) begin
+        `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_tmp_if[0]);
+    end else begin
+        `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if, mem_bus_tmp_if[0]);
+    end
 
 endmodule

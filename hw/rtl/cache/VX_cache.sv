@@ -158,37 +158,6 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    // Memory request buffering
-    wire                             mem_req_valid_s;
-    wire [`CS_MEM_ADDR_WIDTH-1:0]    mem_req_addr_s;
-    wire                             mem_req_rw_s;
-    wire [LINE_SIZE-1:0]             mem_req_byteen_s;
-    wire [`CS_LINE_WIDTH-1:0]        mem_req_data_s;
-    wire [MEM_TAG_WIDTH-1:0]         mem_req_tag_s;
-    wire                             mem_req_flush_s;
-    wire                             mem_req_ready_s;
-
-    wire                             mem_bus_if_flush;
-
-    VX_elastic_buffer #(
-        .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_WIDTH + 1),
-        .SIZE    (MEM_REQ_BUF_ENABLE ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
-        .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
-    ) mem_req_buf (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (mem_req_valid_s),
-        .ready_in  (mem_req_ready_s),
-        .data_in   ({mem_req_rw_s, mem_req_byteen_s, mem_req_addr_s, mem_req_data_s, mem_req_tag_s, mem_req_flush_s}),
-        .data_out  ({mem_bus_if.req_data.rw, mem_bus_if.req_data.byteen, mem_bus_if.req_data.addr, mem_bus_if.req_data.data, mem_bus_if.req_data.tag, mem_bus_if_flush}),
-        .valid_out (mem_bus_if.req_valid),
-        .ready_out (mem_bus_if.req_ready)
-    );
-
-    assign mem_bus_if.req_data.flags = mem_bus_if_flush ? `MEM_REQ_FLAGS_WIDTH'(1 << `MEM_REQ_FLAG_FLUSH) : '0;
-
-    ///////////////////////////////////////////////////////////////////////////
-
     // Memory response buffering
     wire                         mem_rsp_valid_s;
     wire [`CS_LINE_WIDTH-1:0]    mem_rsp_data_s;
@@ -471,19 +440,17 @@ module VX_cache import VX_gpu_pkg::*; #(
         assign {core_rsp_data_s[i], core_rsp_tag_s[i]} = core_rsp_data_out[i];
     end
 
-    ///////////////////////////////////////////////////////////////////////////
-
-    wire                        mem_req_valid_p;
-    wire [`CS_MEM_ADDR_WIDTH-1:0] mem_req_addr_p;
-    wire                        mem_req_rw_p;
-    wire [LINE_SIZE-1:0]        mem_req_byteen_p;
-    wire [`CS_LINE_WIDTH-1:0]   mem_req_data_p;
-    wire [MEM_TAG_WIDTH-1:0]    mem_req_tag_p;
-    wire [MSHR_ADDR_WIDTH-1:0]  mem_req_id_p;
-    wire                        mem_req_flush_p;
-    wire                        mem_req_ready_p;
-
     // Memory request arbitration
+
+    wire                        mem_req_valid;
+    wire [`CS_MEM_ADDR_WIDTH-1:0] mem_req_addr;
+    wire                        mem_req_rw;
+    wire [LINE_SIZE-1:0]        mem_req_byteen;
+    wire [`CS_LINE_WIDTH-1:0]   mem_req_data;
+    wire [MEM_TAG_WIDTH-1:0]    mem_req_tag;
+    wire [MSHR_ADDR_WIDTH-1:0]  mem_req_id;
+    wire                        mem_req_flush;
+    wire                        mem_req_ready;
 
     wire [NUM_BANKS-1:0][(`CS_MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + LINE_SIZE + `CS_LINE_WIDTH + 1)-1:0] data_in;
 
@@ -508,39 +475,49 @@ module VX_cache import VX_gpu_pkg::*; #(
         .valid_in  (per_bank_mem_req_valid),
         .ready_in  (per_bank_mem_req_ready),
         .data_in   (data_in),
-        .data_out  ({mem_req_addr_p, mem_req_rw_p, mem_req_byteen_p, mem_req_data_p, mem_req_id_p, mem_req_flush_p}),
-        .valid_out (mem_req_valid_p),
-        .ready_out (mem_req_ready_p),
+        .data_out  ({mem_req_addr, mem_req_rw, mem_req_byteen, mem_req_data, mem_req_id, mem_req_flush}),
+        .valid_out (mem_req_valid),
+        .ready_out (mem_req_ready),
         `UNUSED_PIN (sel_out)
     );
 
     if (NUM_BANKS > 1) begin
-        wire [`CS_BANK_SEL_BITS-1:0] mem_req_bank_id = `CS_MEM_ADDR_TO_BANK_ID(mem_req_addr_p);
-        assign mem_req_tag_p = MEM_TAG_WIDTH'({mem_req_bank_id, mem_req_id_p});
+        wire [`CS_BANK_SEL_BITS-1:0] mem_req_bank_id = `CS_MEM_ADDR_TO_BANK_ID(mem_req_addr);
+        assign mem_req_tag = MEM_TAG_WIDTH'({mem_req_bank_id, mem_req_id});
     end else begin
-        assign mem_req_tag_p = MEM_TAG_WIDTH'(mem_req_id_p);
+        assign mem_req_tag = MEM_TAG_WIDTH'(mem_req_id);
     end
 
-    // Memory request multi-port handling
+    // Memory request buffering
 
-    assign mem_req_valid_s = mem_req_valid_p;
-    assign mem_req_addr_s  = mem_req_addr_p;
-    assign mem_req_tag_s   = mem_req_tag_p;
-    assign mem_req_flush_s = mem_req_flush_p;
-    assign mem_req_ready_p = mem_req_ready_s;
+    wire mem_req_flush_b;
 
-    if (WRITE_ENABLE != 0) begin
-        assign mem_req_rw_s     = mem_req_rw_p;
-        assign mem_req_byteen_s = mem_req_byteen_p;
-        assign mem_req_data_s   = mem_req_data_p;
+    VX_mem_bus_if #(
+        .DATA_SIZE (LINE_SIZE),
+        .TAG_WIDTH (MEM_TAG_WIDTH)
+    ) mem_bus_tmp_if();
+
+    VX_elastic_buffer #(
+        .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_WIDTH + 1),
+        .SIZE    (MEM_REQ_BUF_ENABLE ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
+        .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
+    ) mem_req_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (mem_req_valid),
+        .ready_in  (mem_req_ready),
+        .data_in   ({mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_data, mem_req_tag, mem_req_flush}),
+        .data_out  ({mem_bus_tmp_if.req_data.rw, mem_bus_tmp_if.req_data.byteen, mem_bus_tmp_if.req_data.addr, mem_bus_tmp_if.req_data.data, mem_bus_tmp_if.req_data.tag, mem_req_flush_b}),
+        .valid_out (mem_bus_tmp_if.req_valid),
+        .ready_out (mem_bus_tmp_if.req_ready)
+    );
+
+    assign mem_bus_tmp_if.req_data.flags = mem_req_flush_b ? `MEM_REQ_FLAGS_WIDTH'(1 << `MEM_REQ_FLAG_FLUSH) : '0;
+
+    if (WRITE_ENABLE) begin
+        `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_tmp_if);
     end else begin
-        `UNUSED_VAR (mem_req_byteen_p)
-        `UNUSED_VAR (mem_req_data_p)
-        `UNUSED_VAR (mem_req_rw_p)
-
-        assign mem_req_rw_s     = 0;
-        assign mem_req_byteen_s = {LINE_SIZE{1'b1}};
-        assign mem_req_data_s   = '0;
+        `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if, mem_bus_tmp_if);
     end
 
 `ifdef PERF_ENABLE
