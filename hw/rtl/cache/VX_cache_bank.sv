@@ -266,7 +266,7 @@ module VX_cache_bank #(
     if (UUID_WIDTH != 0) begin
         assign req_uuid_sel = tag_sel[TAG_WIDTH-1 -: UUID_WIDTH];
     end else begin
-        assign req_uuid_sel = 0;
+        assign req_uuid_sel = '0;
     end
 
     VX_pipe_register #(
@@ -283,7 +283,7 @@ module VX_cache_bank #(
     if (UUID_WIDTH != 0) begin
         assign req_uuid_st0 = tag_st0[TAG_WIDTH-1 -: UUID_WIDTH];
     end else begin
-        assign req_uuid_st0 = 0;
+        assign req_uuid_st0 = '0;
     end
 
     wire do_init_st0    = valid_st0 && is_init_st0;
@@ -365,7 +365,7 @@ module VX_cache_bank #(
     if (UUID_WIDTH != 0) begin
         assign req_uuid_st1 = tag_st1[TAG_WIDTH-1 -: UUID_WIDTH];
     end else begin
-        assign req_uuid_st1 = 0;
+        assign req_uuid_st1 = '0;
     end
 
     wire is_read_st1      = is_creq_st1 && ~rw_st1;
@@ -622,8 +622,8 @@ module VX_cache_bank #(
         assign mreq_queue_byteen = WRITEBACK ? dirty_byteen_st1 : write_byteen_st1;
     end else begin
         assign mreq_queue_rw = 0;
-        assign mreq_queue_data = 0;
-        assign mreq_queue_byteen = 0;
+        assign mreq_queue_data = '0;
+        assign mreq_queue_byteen = '0;
         `UNUSED_VAR (dirty_data_st1)
         `UNUSED_VAR (dirty_byteen_st1)
     end
