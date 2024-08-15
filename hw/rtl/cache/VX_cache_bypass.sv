@@ -268,11 +268,7 @@ module VX_cache_bypass #(
         assign rsp_idx = 1'b0;
     end
 
-    reg [NUM_REQS-1:0] rsp_nc_valid_r;
-    always @(*) begin
-        rsp_nc_valid_r = '0;
-        rsp_nc_valid_r[rsp_idx] = is_mem_rsp_nc;
-    end
+    reg [NUM_REQS-1:0] rsp_nc_valid_r = NUM_REQS'(is_mem_rsp_nc) << rsp_idx;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         assign core_rsp_in_valid[i] = core_bus_out_if[i].rsp_valid || rsp_nc_valid_r[i];

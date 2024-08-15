@@ -115,9 +115,8 @@ module VX_priority_encoder #(
             onehot_r = 'x;
             for (integer i = N-1; i >= 0; --i) begin
                 if (reversed[i]) begin
-                    index_r     = LN'(i);
-                    onehot_r    = '0;
-                    onehot_r[i] = 1'b1;
+                    index_r  = LN'(i);
+                    onehot_r = N'(1) << i;
                 end
             end
         end

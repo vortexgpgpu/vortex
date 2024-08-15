@@ -374,14 +374,6 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     // Track pending instructions per warp
 
-    reg [`NUM_WARPS-1:0] per_warp_incr;
-    always @(*) begin
-        per_warp_incr = 0;
-        if (schedule_if_fire) begin
-            per_warp_incr[schedule_if.data.wid] = 1;
-        end
-    end
-
     wire [`NUM_WARPS-1:0] pending_warp_empty;
     wire [`NUM_WARPS-1:0] pending_warp_alm_empty;
 
@@ -394,7 +386,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
         ) counter (
             .clk       (clk),
             .reset     (pending_instr_reset[i]),
-            .incr      (per_warp_incr[i]),
+            .incr      (schedule_if_fire && (schedule_if.data.wid == `NW_WIDTH'(i))),
             .decr      (commit_sched_if.committed_warps[i]),
             .empty     (pending_warp_empty[i]),
             .alm_empty (pending_warp_alm_empty[i]),
