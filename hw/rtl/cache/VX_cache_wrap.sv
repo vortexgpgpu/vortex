@@ -103,6 +103,11 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         .TAG_WIDTH (CACHE_MEM_TAG_WIDTH)
     ) mem_bus_cache_if();
 
+    VX_mem_bus_if #(
+        .DATA_SIZE (LINE_SIZE),
+        .TAG_WIDTH (MEM_TAG_WIDTH)
+    ) mem_bus_tmp_if();
+
     if (NC_OR_BYPASS) begin : bypass_if
 
         `RESET_RELAY (nc_bypass_reset, reset);
@@ -136,7 +141,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .core_bus_out_if(core_bus_cache_if),
 
             .mem_bus_in_if  (mem_bus_cache_if),
-            .mem_bus_out_if (mem_bus_if)
+            .mem_bus_out_if (mem_bus_tmp_if)
         );
 
     end else begin
@@ -145,7 +150,13 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             `ASSIGN_VX_MEM_BUS_IF (core_bus_cache_if[i], core_bus_if[i]);
         end
 
-        `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_cache_if);
+        `ASSIGN_VX_MEM_BUS_IF (mem_bus_tmp_if, mem_bus_cache_if);
+    end
+
+    if (WRITE_ENABLE) begin
+        `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_tmp_if);
+    end else begin
+        `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if, mem_bus_tmp_if);
     end
 
     if (PASSTHRU == 0) begin : cache_if
