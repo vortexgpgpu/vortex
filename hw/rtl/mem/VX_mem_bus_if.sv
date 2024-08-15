@@ -23,10 +23,10 @@ interface VX_mem_bus_if #(
 
     typedef struct packed {
         logic                   rw;
-        logic [DATA_SIZE-1:0]   byteen;
         logic [ADDR_WIDTH-1:0]  addr;
-        logic [FLAGS_WIDTH-1:0] flags;
         logic [DATA_SIZE*8-1:0] data;
+        logic [DATA_SIZE-1:0]   byteen;
+        logic [FLAGS_WIDTH-1:0] flags;
         logic [TAG_WIDTH-1:0]   tag;
     } req_data_t;
 

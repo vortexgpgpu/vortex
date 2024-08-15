@@ -44,10 +44,10 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign req_data_in[i] = {
             lsu_mem_if.req_data.rw,
-            lsu_mem_if.req_data.byteen[i],
             lsu_mem_if.req_data.addr[i],
-            lsu_mem_if.req_data.flags[i],
-            lsu_mem_if.req_data.data[i]
+            lsu_mem_if.req_data.data[i],
+            lsu_mem_if.req_data.byteen[i],
+            lsu_mem_if.req_data.flags[i]
         };
     end
 
@@ -55,10 +55,10 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
         assign mem_bus_if[i].req_valid = req_valid_out[i];
         assign {
             mem_bus_if[i].req_data.rw,
-            mem_bus_if[i].req_data.byteen,
             mem_bus_if[i].req_data.addr,
-            mem_bus_if[i].req_data.flags,
-            mem_bus_if[i].req_data.data
+            mem_bus_if[i].req_data.data,
+            mem_bus_if[i].req_data.byteen,
+            mem_bus_if[i].req_data.flags
          } = req_data_out[i];
         assign mem_bus_if[i].req_data.tag = req_tag_out[i];
         assign req_ready_out[i] = mem_bus_if[i].req_ready;
