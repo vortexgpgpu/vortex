@@ -77,6 +77,9 @@ public:
     case VX_CAPS_ISA_FLAGS:
       _value = ((uint64_t(MISA_EXT))<<32) | ((log2floor(XLEN)-4) << 30) | MISA_STD;
       break;
+    case VX_CAPS_NUM_MEM_BANKS:
+      _value = MEMORY_BANKS;
+      break;
     default:
       std::cout << "invalid caps id: " << caps_id << std::endl;
       std::abort();
