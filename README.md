@@ -67,7 +67,10 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
     mkdir out
     export OUT_DIR=`pwd`/out
     cd build
-    ../configure --xlen=32 --tooldir=/software/vortex-toolchain-2024-6-14 --prefix=$OUT_DIR
+    # Run the following to disble virtual memory feature in compilation
+    ../configure --xlen=32 --tooldir=/software/vortex-toolchain-2024-2024-08-09 --prefix=$OUT_DIR
+    # Run the following instead to enable virtual memory feature in compilation
+    ../configure --xlen=32 --tooldir=/software/vortex-toolchain-2024-2024-08-09 --prefix=$OUT_DIR --vm_enable=1
 
 ### Install prebuilt toolchain
     # We will use the precomipled tools in volvo toolchanin directory
@@ -77,7 +80,6 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 ### Building Vortex
     make -s
 ### Quick demo running vecadd OpenCL kernel on 2 cores
-<<<<<<< HEAD
     $ ./ci/blackbox.sh --cores=2 --app=vecadd
 
 ### Common Developer Tips
