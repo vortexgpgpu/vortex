@@ -102,8 +102,6 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         .TAG_WIDTH (ARB_TAG_WIDTH)
     ) arb_core_bus_if[NUM_CACHES * NUM_REQS]();
 
-    `RESET_RELAY_EX (cache_arb_reset, reset, NUM_REQS, `MAX_FANOUT);
-
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_mem_bus_if #(
             .DATA_SIZE (WORD_SIZE),
@@ -130,7 +128,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .RSP_OUT_BUF  ((NUM_INPUTS != NUM_CACHES) ? 2 : 0)
         ) cache_arb (
             .clk        (clk),
-            .reset      (cache_arb_reset[i]),
+            .reset      (reset),
             .bus_in_if  (core_bus_tmp_if),
             .bus_out_if (arb_core_bus_tmp_if)
         );

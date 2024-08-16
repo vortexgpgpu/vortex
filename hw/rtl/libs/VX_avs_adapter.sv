@@ -81,15 +81,13 @@ module VX_avs_adapter #(
         assign req_queue_push[i] = mem_req_valid && ~mem_req_rw && bank_req_ready[i] && (req_bank_sel == i);
     end
 
-    `RESET_RELAY_EX (bank_reset, reset, NUM_BANKS, 1);
-
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
 
         VX_pending_size #(
             .SIZE (RD_QUEUE_SIZE)
         ) pending_size (
             .clk   (clk),
-            .reset (bank_reset[i]),
+            .reset (reset),
             .incr  (req_queue_push[i]),
             .decr  (req_queue_pop[i]),
             `UNUSED_PIN (empty),
@@ -105,7 +103,7 @@ module VX_avs_adapter #(
             .DEPTH (RD_QUEUE_SIZE)
         ) rd_req_queue (
             .clk      (clk),
-            .reset    (bank_reset[i]),
+            .reset    (reset),
             .push     (req_queue_push[i]),
             .pop      (req_queue_pop[i]),
             .data_in  (mem_req_tag),
@@ -135,7 +133,7 @@ module VX_avs_adapter #(
             .OUT_REG  (`TO_OUT_BUF_REG(REQ_OUT_BUF))
         ) req_out_buf (
             .clk       (clk),
-            .reset     (bank_reset[i]),
+            .reset     (reset),
             .valid_in  (valid_out_w),
             .ready_in  (ready_out_w),
             .data_in   ({mem_req_rw, mem_req_byteen, req_bank_off, mem_req_data}),
@@ -177,7 +175,7 @@ module VX_avs_adapter #(
             .DEPTH (RD_QUEUE_SIZE)
         ) rd_rsp_queue (
             .clk      (clk),
-            .reset    (bank_reset[i]),
+            .reset    (reset),
             .push     (avs_readdatavalid[i]),
             .pop      (req_queue_pop[i]),
             .data_in  (avs_readdata[i]),

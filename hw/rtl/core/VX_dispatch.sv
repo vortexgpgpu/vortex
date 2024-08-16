@@ -54,16 +54,13 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     assign operands_if.ready = operands_reset[operands_if.data.ex_type];
 
     for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin
-
-        `RESET_RELAY (buffer_reset, reset);
-
         VX_elastic_buffer #(
             .DATAW   (DATAW),
             .SIZE    (2),
             .OUT_REG (1)
         ) buffer (
             .clk        (clk),
-            .reset      (buffer_reset),
+            .reset      (reset),
             .valid_in   (operands_if.valid && (operands_if.data.ex_type == `EX_BITS'(i))),
             .ready_in   (operands_reset[i]),
             .data_in    ({

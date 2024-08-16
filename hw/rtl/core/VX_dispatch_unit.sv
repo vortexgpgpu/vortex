@@ -85,8 +85,6 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
         wire [ISSUE_W-1:0] issue_idx = ISSUE_W'(batch_idx * BLOCK_SIZE) + ISSUE_W'(block_idx);
         assign issue_indices[block_idx] = issue_idx;
 
-        `RESET_RELAY_EN (block_reset, reset, (BLOCK_SIZE > 1));
-
         wire valid_p, ready_p;
 
         if (`NUM_THREADS != NUM_LANES) begin
@@ -102,7 +100,7 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
             wire fire_eop = fire_p && is_last_p;
 
             always @(posedge clk) begin
-                if (block_reset) begin
+                if (reset) begin
                     sent_mask_p <= '0;
                     is_first_p  <= 1;
                 end else begin
@@ -225,7 +223,7 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
             .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
         ) buf_out (
             .clk       (clk),
-            .reset     (block_reset),
+            .reset     (reset),
             .valid_in  (valid_p),
             .ready_in  (ready_p),
             .data_in   ({

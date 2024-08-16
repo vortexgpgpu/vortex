@@ -99,6 +99,8 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     assign req_in_valid = {NUM_SRC_OPDS{scoreboard_if.valid}} & src_valid;
 
+    `RESET_RELAY (req_xbar_reset, reset);
+
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_SRC_OPDS),
         .NUM_OUTPUTS (NUM_BANKS),
@@ -108,7 +110,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         .OUT_BUF     (0) // no output buffering
     ) req_xbar (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (req_xbar_reset),
         `UNUSED_PIN(collisions),
         .valid_in  (req_in_valid),
         .data_in   (req_in_data),
@@ -247,25 +249,13 @@ module VX_operands import VX_gpu_pkg::*; #(
         assign gpr_wr_bank_idx = '0;
     end
 
-    `ifdef GPR_RESET
-        reg wr_enabled = 0;
-        always @(posedge clk) begin
-            if (reset) begin
-                wr_enabled <= 1;
-            end
-        end
-    `else
-        wire wr_enabled = 1;
-    `endif
-
     for (genvar b = 0; b < NUM_BANKS; ++b) begin
         wire gpr_wr_enabled;
         if (BANK_SEL_BITS != 0) begin
-            assign gpr_wr_enabled = wr_enabled
-                                 && writeback_if.valid
+            assign gpr_wr_enabled = writeback_if.valid
                                  && (gpr_wr_bank_idx == BANK_SEL_BITS'(b));
         end else begin
-            assign gpr_wr_enabled = wr_enabled && writeback_if.valid;
+            assign gpr_wr_enabled = writeback_if.valid;
         end
 
         wire [BYTEENW-1:0] wren;

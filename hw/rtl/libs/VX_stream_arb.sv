@@ -49,8 +49,6 @@ module VX_stream_arb #(
                 localparam SLICE_END   = `MIN(SLICE_BEGIN + NUM_REQS, NUM_INPUTS);
                 localparam SLICE_SIZE  = SLICE_END - SLICE_BEGIN;
 
-                `RESET_RELAY (slice_reset, reset);
-
                 VX_stream_arb #(
                     .NUM_INPUTS  (SLICE_SIZE),
                     .NUM_OUTPUTS (1),
@@ -60,7 +58,7 @@ module VX_stream_arb #(
                     .OUT_BUF     (OUT_BUF)
                 ) arb_slice (
                     .clk       (clk),
-                    .reset     (slice_reset),
+                    .reset     (reset),
                     .valid_in  (valid_in[SLICE_END-1: SLICE_BEGIN]),
                     .ready_in  (ready_in[SLICE_END-1: SLICE_BEGIN]),
                     .data_in   (data_in[SLICE_END-1: SLICE_BEGIN]),
@@ -92,8 +90,6 @@ module VX_stream_arb #(
                 wire [DATAW-1:0] data_tmp_u;
                 wire [`LOG2UP(SLICE_SIZE)-1:0] sel_tmp_u;
 
-                `RESET_RELAY (slice_reset, reset);
-
                 if (MAX_FANOUT != 1) begin
                     VX_stream_arb #(
                         .NUM_INPUTS  (SLICE_SIZE),
@@ -104,7 +100,7 @@ module VX_stream_arb #(
                         .OUT_BUF     (`TO_OUT_RBUF(OUT_BUF)) // to registered output
                     ) fanout_slice_arb (
                         .clk       (clk),
-                        .reset     (slice_reset),
+                        .reset     (reset),
                         .valid_in  (valid_in[SLICE_END-1: SLICE_BEGIN]),
                         .data_in   (data_in[SLICE_END-1: SLICE_BEGIN]),
                         .ready_in  (ready_in[SLICE_END-1: SLICE_BEGIN]),
@@ -206,8 +202,6 @@ module VX_stream_arb #(
                 localparam SLICE_END   = `MIN(SLICE_BEGIN + NUM_REQS, NUM_OUTPUTS);
                 localparam SLICE_SIZE  = SLICE_END - SLICE_BEGIN;
 
-                `RESET_RELAY (slice_reset, reset);
-
                 VX_stream_arb #(
                     .NUM_INPUTS  (1),
                     .NUM_OUTPUTS (SLICE_SIZE),
@@ -217,7 +211,7 @@ module VX_stream_arb #(
                     .OUT_BUF     (OUT_BUF)
                 ) arb_slice (
                     .clk       (clk),
-                    .reset     (slice_reset),
+                    .reset     (reset),
                     .valid_in  (valid_in[i]),
                     .ready_in  (ready_in[i]),
                     .data_in   (data_in[i]),
@@ -267,8 +261,6 @@ module VX_stream_arb #(
                 localparam SLICE_END   = `MIN(SLICE_BEGIN + MAX_FANOUT, NUM_OUTPUTS);
                 localparam SLICE_SIZE  = SLICE_END - SLICE_BEGIN;
 
-                `RESET_RELAY (slice_reset, reset);
-
                 VX_stream_arb #(
                     .NUM_INPUTS  (1),
                     .NUM_OUTPUTS (SLICE_SIZE),
@@ -278,7 +270,7 @@ module VX_stream_arb #(
                     .OUT_BUF     (OUT_BUF)
                 ) fanout_slice_arb (
                     .clk       (clk),
-                    .reset     (slice_reset),
+                    .reset     (reset),
                     .valid_in  (valid_tmp[i]),
                     .ready_in  (ready_tmp[i]),
                     .data_in   (data_tmp[i]),
@@ -342,8 +334,6 @@ module VX_stream_arb #(
 
         // #Inputs == #Outputs
 
-        `RESET_RELAY_EX (out_buf_reset, reset, NUM_OUTPUTS, `MAX_FANOUT);
-
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
 
             VX_elastic_buffer #(
@@ -353,7 +343,7 @@ module VX_stream_arb #(
                 .LUTRAM  (`TO_OUT_BUF_LUTRAM(OUT_BUF))
             ) out_buf (
                 .clk       (clk),
-                .reset     (out_buf_reset[i]),
+                .reset     (reset),
                 .valid_in  (valid_in[i]),
                 .ready_in  (ready_in[i]),
                 .data_in   (data_in[i]),

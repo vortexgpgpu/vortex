@@ -306,8 +306,6 @@ module VX_core import VX_gpu_pkg::*; #(
             .TAG_WIDTH (DCACHE_TAG_WIDTH)
         ) dcache_bus_tmp_if[DCACHE_CHANNELS]();
 
-        `RESET_RELAY (lsu_adapter_reset, reset);
-
         VX_lsu_adapter #(
             .NUM_LANES    (DCACHE_CHANNELS),
             .DATA_SIZE    (DCACHE_WORD_SIZE),
@@ -318,7 +316,7 @@ module VX_core import VX_gpu_pkg::*; #(
             .RSP_OUT_BUF  (0)
         ) lsu_adapter (
             .clk        (clk),
-            .reset      (lsu_adapter_reset),
+            .reset      (reset),
             .lsu_mem_if (dcache_coalesced_if),
             .mem_bus_if (dcache_bus_tmp_if)
         );

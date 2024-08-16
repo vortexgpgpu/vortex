@@ -39,8 +39,6 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lsu_lmem_if[`NUM_LSU_BLOCKS]();
 
-    `RESET_RELAY_EX (block_reset, reset, `NUM_LSU_BLOCKS, 1);
-
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : demux_slices
 
         wire [`NUM_LSU_LANES-1:0] is_addr_local_mask;
@@ -60,7 +58,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .OUT_REG (3)
         ) req_global_buf (
             .clk       (clk),
-            .reset     (block_reset[i]),
+            .reset     (reset),
             .valid_in  (lsu_mem_in_if[i].req_valid && is_addr_global),
             .data_in   ({
                 lsu_mem_in_if[i].req_data.mask & ~is_addr_local_mask,
@@ -91,7 +89,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .OUT_REG (0)
         ) req_local_buf (
             .clk       (clk),
-            .reset     (block_reset[i]),
+            .reset     (reset),
             .valid_in  (lsu_mem_in_if[i].req_valid && is_addr_local),
             .data_in   ({
                 lsu_mem_in_if[i].req_data.mask & is_addr_local_mask,
@@ -126,7 +124,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .OUT_BUF    (1)
         ) rsp_arb (
             .clk       (clk),
-            .reset     (block_reset[i]),
+            .reset     (reset),
             .valid_in  ({
                 lsu_lmem_if[i].rsp_valid,
                 lsu_mem_out_if[i].rsp_valid
@@ -167,7 +165,7 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
             .RSP_OUT_BUF  (0)
         ) lsu_adapter (
             .clk        (clk),
-            .reset      (block_reset[i]),
+            .reset      (reset),
             .lsu_mem_if (lsu_lmem_if[i]),
             .mem_bus_if (lmem_bus_tmp_if)
         );

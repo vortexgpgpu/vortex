@@ -110,8 +110,6 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
     if (NC_OR_BYPASS) begin : bypass_if
 
-        `RESET_RELAY (nc_bypass_reset, reset);
-
         VX_cache_bypass #(
             .NUM_REQS          (NUM_REQS),
             .TAG_SEL_IDX       (TAG_SEL_IDX),
@@ -135,7 +133,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .MEM_OUT_BUF       (MEM_OUT_BUF)
         ) cache_bypass (
             .clk            (clk),
-            .reset          (nc_bypass_reset),
+            .reset          (reset),
 
             .core_bus_in_if (core_bus_if),
             .core_bus_out_if(core_bus_cache_if),
@@ -160,9 +158,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     end
 
     if (PASSTHRU == 0) begin : cache_if
-
-        `RESET_RELAY (cache_reset, reset);
-
+    
         VX_cache #(
             .INSTANCE_ID  (INSTANCE_ID),
             .CACHE_SIZE   (CACHE_SIZE),
@@ -184,7 +180,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .MEM_OUT_BUF  (NC_OR_BYPASS ? 1 : MEM_OUT_BUF)
         ) cache (
             .clk            (clk),
-            .reset          (cache_reset),
+            .reset          (reset),
         `ifdef PERF_ENABLE
             .cache_perf     (cache_perf),
         `endif

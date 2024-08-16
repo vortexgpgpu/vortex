@@ -136,17 +136,14 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   core_rsp_tag_s;
     wire [NUM_REQS-1:0]                  core_rsp_ready_s;
 
-    `RESET_RELAY_EX (core_rsp_reset, reset, NUM_REQS, `MAX_FANOUT);
-
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-
         VX_elastic_buffer #(
             .DATAW   (`CS_WORD_WIDTH + TAG_WIDTH),
             .SIZE    (CORE_REQ_BUF_ENABLE ? `TO_OUT_BUF_SIZE(CORE_OUT_BUF) : 0),
             .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
         ) core_rsp_buf (
             .clk       (clk),
-            .reset     (core_rsp_reset[i]),
+            .reset     (reset),
             .valid_in  (core_rsp_valid_s[i]),
             .ready_in  (core_rsp_ready_s[i]),
             .data_in   ({core_rsp_data_s[i], core_rsp_tag_s[i]}),

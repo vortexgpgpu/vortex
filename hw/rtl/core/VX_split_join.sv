@@ -46,15 +46,12 @@ module VX_split_join import VX_gpu_pkg::*; #(
     wire ipdom_pop = valid && sjoin.valid && sjoin_is_dvg;
 
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin : ipdom_slices
-
-        `RESET_RELAY (ipdom_reset, reset);
-
         VX_ipdom_stack #(
             .WIDTH (`NUM_THREADS+`PC_BITS),
             .DEPTH (`DV_STACK_SIZE)
         ) ipdom_stack (
             .clk   (clk),
-            .reset (ipdom_reset),
+            .reset (reset),
             .q0    (ipdom_q0),
             .q1    (ipdom_q1),
             .d     (ipdom_data[i]),
