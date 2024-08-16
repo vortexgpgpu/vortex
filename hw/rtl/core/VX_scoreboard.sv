@@ -239,8 +239,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         assign staging_if[w].ready = arb_ready_in[w] && operands_ready[w];
     end
 
-    `RESET_RELAY (arb_reset, reset);
-
     VX_stream_arb #(
         .NUM_INPUTS (PER_ISSUE_WARPS),
         .DATAW      (DATAW),
@@ -248,7 +246,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         .OUT_BUF    (3)
     ) out_arb (
         .clk      (clk),
-        .reset    (arb_reset),
+        .reset    (reset),
         .valid_in (arb_valid_in),
         .ready_in (arb_ready_in),
         .data_in  (arb_data_in),

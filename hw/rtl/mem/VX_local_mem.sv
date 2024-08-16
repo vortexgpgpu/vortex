@@ -116,6 +116,8 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         assign mem_bus_if[i].req_ready = req_ready_in[i];
     end
 
+    `RESET_RELAY (req_xbar_reset, reset);
+
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_REQS),
         .NUM_OUTPUTS (NUM_BANKS),
@@ -125,7 +127,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .OUT_BUF     (3) // output should be registered for the data_store addressing
     ) req_xbar (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (req_xbar_reset),
     `ifdef PERF_ENABLE
         .collisions (perf_collisions),
     `else
@@ -163,8 +165,6 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         wire bank_rsp_valid, bank_rsp_ready;
         wire [WORD_WIDTH-1:0] bank_rsp_data;
 
-        `RESET_RELAY_EN (bram_reset, reset, (NUM_BANKS > 1));
-
         VX_sp_ram #(
             .DATAW (WORD_WIDTH),
             .SIZE  (WORDS_PER_BANK),
@@ -172,7 +172,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),
-            .reset (bram_reset),
+            .reset (reset),
             .read  (per_bank_req_valid[i] && per_bank_req_ready[i] && ~per_bank_req_rw[i]),
             .write (per_bank_req_valid[i] && per_bank_req_ready[i] && per_bank_req_rw[i]),
             .wren  (per_bank_req_byteen[i]),
@@ -185,7 +185,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         reg [BANK_ADDR_WIDTH-1:0] last_wr_addr;
         reg last_wr_valid;
         always @(posedge clk) begin
-            if (bram_reset) begin
+            if (reset) begin
                 last_wr_valid <= 0;
             end else begin
                 last_wr_valid <= per_bank_req_valid[i] && per_bank_req_ready[i] && per_bank_req_rw[i];
@@ -203,7 +203,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .DATAW (REQ_SEL_WIDTH + WORD_WIDTH + TAG_WIDTH)
         ) bram_buf (
             .clk       (clk),
-            .reset     (bram_reset),
+            .reset     (reset),
             .valid_in  (bank_rsp_valid),
             .ready_in  (bank_rsp_ready),
             .data_in   ({per_bank_req_idx[i], bank_rsp_data,        per_bank_req_tag[i]}),
@@ -225,6 +225,8 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][RSP_DATAW-1:0]  rsp_data_out;
     wire [NUM_REQS-1:0]                 rsp_ready_out;
 
+    `RESET_RELAY (rsp_xbar_reset, reset);
+
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_BANKS),
         .NUM_OUTPUTS (NUM_REQS),
@@ -233,7 +235,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .OUT_BUF     (OUT_BUF)
     ) rsp_xbar (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (rsp_xbar_reset),
         `UNUSED_PIN (collisions),
         .sel_in    (per_bank_rsp_idx),
         .valid_in  (per_bank_rsp_valid),

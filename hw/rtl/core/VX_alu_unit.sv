@@ -57,7 +57,7 @@ module VX_alu_unit #(
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : alu_blocks
 
-        `RESET_RELAY_EN (block_reset, reset,(BLOCK_SIZE > 1));
+        `RESET_RELAY_EN (block_reset, reset, (BLOCK_SIZE > 1));
 
         wire is_muldiv_op = `EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == `ALU_TYPE_MULDIV);
 

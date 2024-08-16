@@ -72,8 +72,6 @@ module VX_stream_switch #(
             end
         end
 
-        `RESET_RELAY_EX (out_buf_reset, reset, NUM_OUTPUTS, `MAX_FANOUT);
-
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             VX_elastic_buffer #(
                 .DATAW   (DATAW),
@@ -81,7 +79,7 @@ module VX_stream_switch #(
                 .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
             ) out_buf (
                 .clk       (clk),
-                .reset     (out_buf_reset[i]),
+                .reset     (reset),
                 .valid_in  (valid_out_r[i]),
                 .ready_in  (ready_out_r[i]),
                 .data_in   (data_out_r[i]),
@@ -103,8 +101,6 @@ module VX_stream_switch #(
             assign ready_in[i] = ready_out_r[i][sel_in[i]];
         end
 
-        `RESET_RELAY_EX (out_buf_reset, reset, NUM_OUTPUTS, `MAX_FANOUT);
-
         for (genvar i = 0; i < NUM_INPUTS; ++i) begin
             for (genvar j = 0; j < NUM_REQS; ++j) begin
                 localparam ii = i * NUM_REQS + j;
@@ -115,7 +111,7 @@ module VX_stream_switch #(
                         .OUT_REG  (`TO_OUT_BUF_REG(OUT_BUF))
                     ) out_buf (
                         .clk       (clk),
-                        .reset     (out_buf_reset[ii]),
+                        .reset     (reset),
                         .valid_in  (valid_out_r[i][j]),
                         .ready_in  (ready_out_r[i][j]),
                         .data_in   (data_in[i]),
@@ -124,7 +120,7 @@ module VX_stream_switch #(
                         .ready_out (ready_out[ii])
                     );
                 end else begin
-                    `UNUSED_VAR (out_buf_reset[ii])
+                    `UNUSED_VAR (reset)
                     `UNUSED_VAR (valid_out_r[i][j])
                     assign ready_out_r[i][j] = '0;
                 end
@@ -137,8 +133,6 @@ module VX_stream_switch #(
 
         `UNUSED_VAR (sel_in)
 
-        `RESET_RELAY_EX (out_buf_reset, reset, NUM_OUTPUTS, `MAX_FANOUT);
-
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             VX_elastic_buffer #(
                 .DATAW    (DATAW),
@@ -146,7 +140,7 @@ module VX_stream_switch #(
                 .OUT_REG  (`TO_OUT_BUF_REG(OUT_BUF))
             ) out_buf (
                 .clk       (clk),
-                .reset     (out_buf_reset[i]),
+                .reset     (reset),
                 .valid_in  (valid_in[i]),
                 .ready_in  (ready_in[i]),
                 .data_in   (data_in[i]),

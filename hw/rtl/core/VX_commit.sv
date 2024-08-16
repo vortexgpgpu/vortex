@@ -53,8 +53,6 @@ module VX_commit import VX_gpu_pkg::*, VX_trace_pkg::*; #(
             assign commit_if[j * `ISSUE_WIDTH + i].ready = ready_in[j];
         end
 
-        `RESET_RELAY (arb_reset, reset);
-
         VX_stream_arb #(
             .NUM_INPUTS (`NUM_EX_UNITS),
             .DATAW      (DATAW),
@@ -62,7 +60,7 @@ module VX_commit import VX_gpu_pkg::*, VX_trace_pkg::*; #(
             .OUT_BUF    (1)
         ) commit_arb (
             .clk        (clk),
-            .reset      (arb_reset),
+            .reset      (reset),
             .valid_in   (valid_in),
             .ready_in   (ready_in),
             .data_in    (data_in),

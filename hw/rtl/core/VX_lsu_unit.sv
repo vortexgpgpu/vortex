@@ -56,7 +56,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : lsu_blocks
 
-        `RESET_RELAY (slice_reset, reset);
+        `RESET_RELAY_EN (slice_reset, reset, (BLOCK_SIZE > 1));
 
         VX_lsu_slice #(
             .INSTANCE_ID ($sformatf("%s%0d", INSTANCE_ID, block_idx))
