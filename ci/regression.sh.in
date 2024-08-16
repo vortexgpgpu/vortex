@@ -124,6 +124,30 @@ opencl()
     echo "opencl tests done!"
 }
 
+vm(){
+    echo "begin vm tests..."
+
+    make -C sim/simx
+    make -C runtime/simx
+
+    make -C tests/kernel run-simx
+	
+    # Regression tests
+    make -C tests/regression run-simx
+
+    # test global barrier
+    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
+
+    # test local barrier
+    ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
+
+    # OpenCL tests
+    make -C tests/opencl run-simx
+    ./ci/blackbox.sh --driver=simx --app=lbm --warps=8
+
+    echo "vm tests done!"
+}
+
 test_csv_trace()
 {
     # test CSV trace generation
@@ -315,6 +339,9 @@ clean=0
 
 while [ "$1" != "" ]; do
     case $1 in
+        --vm )
+                tests+=("vm")
+                ;;
         --clean )
                 clean=1
                 ;;
