@@ -210,7 +210,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .clk           (clk),
         .reset         (lmem_unit_reset),
     `ifdef PERF_ENABLE
-        .cache_perf    (mem_perf_tmp_if.lmem),
+        .lmem_perf     (mem_perf_tmp_if.lmem),
     `endif
         .lsu_mem_in_if (lsu_mem_if),
         .dcache_bus_if (dcache_bus_if)

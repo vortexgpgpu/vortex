@@ -43,7 +43,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     // PERF
 `ifdef PERF_ENABLE
-    output cache_perf_t cache_perf,
+    output cache_perf_t lmem_perf,
 `endif
 
     VX_mem_bus_if.slave mem_bus_if [NUM_REQS]
@@ -290,14 +290,14 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         end
     end
 
-    assign cache_perf.reads        = perf_reads;
-    assign cache_perf.writes       = perf_writes;
-    assign cache_perf.read_misses  = '0;
-    assign cache_perf.write_misses = '0;
-    assign cache_perf.bank_stalls  = perf_collisions;
-    assign cache_perf.mshr_stalls  = '0;
-    assign cache_perf.mem_stalls   = '0;
-    assign cache_perf.crsp_stalls  = perf_crsp_stalls;
+    assign lmem_perf.reads        = perf_reads;
+    assign lmem_perf.writes       = perf_writes;
+    assign lmem_perf.read_misses  = '0;
+    assign lmem_perf.write_misses = '0;
+    assign lmem_perf.bank_stalls  = perf_collisions;
+    assign lmem_perf.mshr_stalls  = '0;
+    assign lmem_perf.mem_stalls   = '0;
+    assign lmem_perf.crsp_stalls  = perf_crsp_stalls;
 
 `endif
 

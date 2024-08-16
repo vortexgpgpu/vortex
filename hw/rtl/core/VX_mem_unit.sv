@@ -20,7 +20,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     input wire              reset,
 
 `ifdef PERF_ENABLE
-    output cache_perf_t     cache_perf,
+    output cache_perf_t     lmem_perf,
 `endif
 
     VX_lsu_mem_if.slave     lsu_mem_in_if [`NUM_LSU_BLOCKS],
@@ -106,12 +106,14 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .clk        (clk),
         .reset      (lmem_reset),
     `ifdef PERF_ENABLE
-        .cache_perf (cache_perf),
+        .lmem_perf  (lmem_perf),
     `endif
         .mem_bus_if (lmem_bus_if)
     );
 
 `else
+
+    assign lmem_perf = '0;
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
         `ASSIGN_VX_LSU_MEM_IF (lsu_dcache_if[i], lsu_mem_if[i]);
