@@ -106,7 +106,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .WRITE_ENABLE   (0),
         .NC_ENABLE      (0),
         .CORE_OUT_BUF   (2),
-        .MEM_OUT_BUF    (2)
+        .MEM_OUT_BUF    (0)
     ) icache (
     `ifdef PERF_ENABLE
         .cache_perf     (mem_perf_tmp_if.icache),
@@ -153,7 +153,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .DIRTY_BYTES    (`DCACHE_WRITEBACK),
         .NC_ENABLE      (1),
         .CORE_OUT_BUF   (2),
-        .MEM_OUT_BUF    (2)
+        .MEM_OUT_BUF    (0)
     ) dcache (
     `ifdef PERF_ENABLE
         .cache_perf     (mem_perf_tmp_if.dcache),
@@ -185,8 +185,8 @@ module VX_socket import VX_gpu_pkg::*; #(
         .TAG_WIDTH    (L1_MEM_TAG_WIDTH),
         .TAG_SEL_IDX  (0),
         .ARBITER      ("R"),
-        .REQ_OUT_BUF  (2),
-        .RSP_OUT_BUF  (2)
+        .REQ_OUT_BUF  (0),
+        .RSP_OUT_BUF  (3)
     ) mem_arb (
         .clk        (clk),
         .reset      (reset),
