@@ -77,7 +77,7 @@ public:
 					if (!rsp_args->request.write) {
 						MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.cid, rsp_args->request.uuid};
 						rsp_args->simobject->MemRspPorts.at(rsp_args->i).push(mem_rsp, 1);
-						DT(3, rsp_args->simobject->name() << " mem-rsp: " << mem_rsp);
+						DT(3, rsp_args->simobject->name() << " mem-rsp: " << mem_rsp << " bank: " << rsp_args->i);
 					}
 					delete rsp_args;
 				},
