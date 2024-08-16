@@ -155,7 +155,13 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
+    VX_mem_bus_if #(
+        .DATA_SIZE (LINE_SIZE),
+        .TAG_WIDTH (MEM_TAG_WIDTH)
+    ) mem_bus_tmp_if();
+
     // Memory response buffering
+
     wire                         mem_rsp_valid_s;
     wire [`CS_LINE_WIDTH-1:0]    mem_rsp_data_s;
     wire [MEM_TAG_WIDTH-1:0]     mem_rsp_tag_s;
@@ -168,13 +174,50 @@ module VX_cache import VX_gpu_pkg::*; #(
     ) mem_rsp_queue (
         .clk        (clk),
         .reset      (reset),
-        .valid_in   (mem_bus_if.rsp_valid),
-        .ready_in   (mem_bus_if.rsp_ready),
-        .data_in    ({mem_bus_if.rsp_data.tag, mem_bus_if.rsp_data.data}),
+        .valid_in   (mem_bus_tmp_if.rsp_valid),
+        .ready_in   (mem_bus_tmp_if.rsp_ready),
+        .data_in    ({mem_bus_tmp_if.rsp_data.tag, mem_bus_tmp_if.rsp_data.data}),
         .data_out   ({mem_rsp_tag_s, mem_rsp_data_s}),
         .valid_out  (mem_rsp_valid_s),
         .ready_out  (mem_rsp_ready_s)
     );
+
+    // Memory request buffering
+
+    wire                        mem_req_valid;
+    wire [`CS_MEM_ADDR_WIDTH-1:0] mem_req_addr;
+    wire                        mem_req_rw;
+    wire [LINE_SIZE-1:0]        mem_req_byteen;
+    wire [`CS_LINE_WIDTH-1:0]   mem_req_data;
+    wire [MEM_TAG_WIDTH-1:0]    mem_req_tag;
+    wire [MSHR_ADDR_WIDTH-1:0]  mem_req_id;
+    wire                        mem_req_flush;
+    wire                        mem_req_ready;
+
+    wire mem_req_flush_b;
+
+    VX_elastic_buffer #(
+        .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_WIDTH + 1),
+        .SIZE    (MEM_REQ_BUF_ENABLE ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
+        .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
+    ) mem_req_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (mem_req_valid),
+        .ready_in  (mem_req_ready),
+        .data_in   ({mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_data, mem_req_tag, mem_req_flush}),
+        .data_out  ({mem_bus_tmp_if.req_data.rw, mem_bus_tmp_if.req_data.byteen, mem_bus_tmp_if.req_data.addr, mem_bus_tmp_if.req_data.data, mem_bus_tmp_if.req_data.tag, mem_req_flush_b}),
+        .valid_out (mem_bus_tmp_if.req_valid),
+        .ready_out (mem_bus_tmp_if.req_ready)
+    );
+
+    assign mem_bus_tmp_if.req_data.flags = mem_req_flush_b ? `MEM_REQ_FLAGS_WIDTH'(1 << `MEM_REQ_FLAG_FLUSH) : '0;
+
+    if (WRITE_ENABLE) begin
+        `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_tmp_if);
+    end else begin
+        `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if, mem_bus_tmp_if);
+    end
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -439,16 +482,6 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     // Memory request arbitration
 
-    wire                        mem_req_valid;
-    wire [`CS_MEM_ADDR_WIDTH-1:0] mem_req_addr;
-    wire                        mem_req_rw;
-    wire [LINE_SIZE-1:0]        mem_req_byteen;
-    wire [`CS_LINE_WIDTH-1:0]   mem_req_data;
-    wire [MEM_TAG_WIDTH-1:0]    mem_req_tag;
-    wire [MSHR_ADDR_WIDTH-1:0]  mem_req_id;
-    wire                        mem_req_flush;
-    wire                        mem_req_ready;
-
     wire [NUM_BANKS-1:0][(`CS_MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + LINE_SIZE + `CS_LINE_WIDTH + 1)-1:0] data_in;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
@@ -483,38 +516,6 @@ module VX_cache import VX_gpu_pkg::*; #(
         assign mem_req_tag = MEM_TAG_WIDTH'({mem_req_bank_id, mem_req_id});
     end else begin
         assign mem_req_tag = MEM_TAG_WIDTH'(mem_req_id);
-    end
-
-    // Memory request buffering
-
-    wire mem_req_flush_b;
-
-    VX_mem_bus_if #(
-        .DATA_SIZE (LINE_SIZE),
-        .TAG_WIDTH (MEM_TAG_WIDTH)
-    ) mem_bus_tmp_if();
-
-    VX_elastic_buffer #(
-        .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_WIDTH + 1),
-        .SIZE    (MEM_REQ_BUF_ENABLE ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
-        .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
-    ) mem_req_buf (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (mem_req_valid),
-        .ready_in  (mem_req_ready),
-        .data_in   ({mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_data, mem_req_tag, mem_req_flush}),
-        .data_out  ({mem_bus_tmp_if.req_data.rw, mem_bus_tmp_if.req_data.byteen, mem_bus_tmp_if.req_data.addr, mem_bus_tmp_if.req_data.data, mem_bus_tmp_if.req_data.tag, mem_req_flush_b}),
-        .valid_out (mem_bus_tmp_if.req_valid),
-        .ready_out (mem_bus_tmp_if.req_ready)
-    );
-
-    assign mem_bus_tmp_if.req_data.flags = mem_req_flush_b ? `MEM_REQ_FLAGS_WIDTH'(1 << `MEM_REQ_FLAG_FLUSH) : '0;
-
-    if (WRITE_ENABLE) begin
-        `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_tmp_if);
-    end else begin
-        `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if, mem_bus_tmp_if);
     end
 
 `ifdef PERF_ENABLE

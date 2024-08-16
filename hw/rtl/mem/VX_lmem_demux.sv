@@ -28,6 +28,9 @@ module VX_lmem_demux import VX_gpu_pkg::*; #(
     localparam RSP_DATAW = `NUM_LSU_LANES + `NUM_LSU_LANES * (LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
 
     wire [`NUM_LSU_LANES-1:0] is_addr_local_mask;
+    wire req_global_ready;
+    wire req_local_ready;
+
     for (genvar i = 0; i < `NUM_LSU_LANES; ++i) begin
         assign is_addr_local_mask[i] = lsu_in_if.req_data.flags[i][`MEM_REQ_FLAG_LOCAL];
     end
@@ -35,8 +38,8 @@ module VX_lmem_demux import VX_gpu_pkg::*; #(
     wire is_addr_global = | (lsu_in_if.req_data.mask & ~is_addr_local_mask);
     wire is_addr_local  = | (lsu_in_if.req_data.mask & is_addr_local_mask);
 
-    wire req_global_ready;
-    wire req_local_ready;
+    assign lsu_in_if.req_ready = (req_global_ready && is_addr_global)
+                              || (req_local_ready && is_addr_local);
 
     VX_elastic_buffer #(
         .DATAW   (REQ_DATAW),
@@ -99,9 +102,6 @@ module VX_lmem_demux import VX_gpu_pkg::*; #(
         }),
         .ready_out (lmem_out_if.req_ready)
     );
-
-    assign lsu_in_if.req_ready = (req_global_ready && is_addr_global)
-                              || (req_local_ready && is_addr_local);
 
     VX_stream_arb #(
         .NUM_INPUTS (2),
