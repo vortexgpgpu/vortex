@@ -166,6 +166,101 @@ jobs:
             ./ci/regression.sh --${{ matrix.name }}
           fi
 
+  build_vm:
+    runs-on: ubuntu-20.04
+    needs: setup
+    strategy:
+      matrix:
+        xlen: [32, 64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install Dependencies
+        run: |
+          sudo bash ./ci/system_updates.sh
+
+      - name: Cache Toolchain Directory
+        id: cache-toolchain
+        uses: actions/cache@v2
+        with:
+          path: tools
+          key: ${{ runner.os }}-toolchain-v0.1
+          restore-keys: |
+            ${{ runner.os }}-toolchain-
+
+      - name: Cache Third Party Directory
+        id: cache-thirdparty
+        uses: actions/cache@v2
+        with:
+          path: third_party
+          key: ${{ runner.os }}-thirdparty-v0.1
+          restore-keys: |
+            ${{ runner.os }}-thirdparty-
+
+      - name: Run Build
+        run: |
+          TOOLDIR=$PWD/tools
+          mkdir -p build${{ matrix.xlen }}
+          cd build${{ matrix.xlen }}
+          ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }} --vm_enable=1
+          source ci/toolchain_env.sh
+          make software -s > /dev/null
+          make tests -s > /dev/null
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: build-${{ matrix.xlen }}-vm
+          path: build${{ matrix.xlen }}-vm
+
+  test_vm:
+    runs-on: ubuntu-20.04
+    needs: build
+    strategy:
+      matrix:
+        xlen: [32, 64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install Dependencies
+        run: |
+          sudo bash ./ci/system_updates.sh
+
+      - name: Cache Toolchain Directory
+        id: cache-toolchain
+        uses: actions/cache@v2
+        with:
+          path: tools
+          key: ${{ runner.os }}-toolchain-v0.1
+          restore-keys: |
+            ${{ runner.os }}-toolchain-
+
+      - name: Cache Third Party Directory
+        id: cache-thirdparty
+        uses: actions/cache@v2
+        with:
+          path: third_party
+          key: ${{ runner.os }}-thirdparty-v0.1
+          restore-keys: |
+            ${{ runner.os }}-thirdparty-
+
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: build-${{ matrix.xlen }}-vm
+          path: build${{ matrix.xlen }}-vm
+
+      - name: Run tests
+        run: |
+          cd build${{ matrix.xlen }}-vm
+          source ci/toolchain_env.sh
+          chmod -R +x . # Ensure all files have executable permissions
+          ./ci/regression.sh --vm
+
   complete:
     runs-on: ubuntu-20.04
     needs: tests
