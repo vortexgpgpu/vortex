@@ -113,8 +113,9 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
 `else
 
+`ifdef PERF_ENABLE
     assign lmem_perf = '0;
-
+`endif
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
         `ASSIGN_VX_LSU_MEM_IF (lsu_dcache_if[i], lsu_mem_if[i]);
     end
