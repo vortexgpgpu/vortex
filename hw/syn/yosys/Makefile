@@ -1,8 +1,6 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-SRC_DIR := $(VORTEX_HOME)/hw/syn/yosys
-
 TOP_LEVEL_ENTITY ?= Vortex
 PREFIX ?= build
 NUM_CORES ?= 1
@@ -84,13 +82,13 @@ $(BUILD_DIR)/project.v: gen-sources
 	cd $(BUILD_DIR); $(SCRIPT_DIR)/sv2v.sh -t$(TOP_LEVEL_ENTITY) -Isrc -oproject.v
 
 build: $(BUILD_DIR)/project.v
-	cd $(BUILD_DIR); $(SRC_DIR)/synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v
+	cd $(BUILD_DIR); synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v
 
 elaborate: $(BUILD_DIR)/project.v
-	cd $(BUILD_DIR); $(SRC_DIR)/synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v -P="elaborate"
+	cd $(BUILD_DIR); synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v -P="elaborate"
 
 synthesis: $(BUILD_DIR)/project.v
-	cd $(BUILD_DIR); $(SRC_DIR)/synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v -P="synthesis"
+	cd $(BUILD_DIR); synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v -P="synthesis"
 
 clean:
 	$(RMDIR) $(BUILD_DIR)

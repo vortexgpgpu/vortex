@@ -1,8 +1,6 @@
 ROOT_DIR := $(realpath ../../../../../..)
 include $(ROOT_DIR)/config.mk
 
-SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/quartus
-
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 AFU_DIR := $(RTL_DIR)/afu/opae
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
@@ -79,7 +77,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES): gen-sources
-	quartus_sh -t $(SRC_DIR)/project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc $(SRC_DIR)/project.sdc -inc "src"
+	quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc project.sdc -inc "src"
 
 syn.chg:
 	$(STAMP) syn.chg
