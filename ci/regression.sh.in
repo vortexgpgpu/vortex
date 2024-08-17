@@ -105,6 +105,9 @@ regression()
     ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
     ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tbar"
 
+    # test temp driver mode for
+    ./ci/blackbox.sh --driver=simx --app=vecadd --rebuild=3
+
     echo "regression tests done!"
 }
 
