@@ -7,6 +7,8 @@ PREFIX ?= build$(XLEN)
 TARGET ?= fpga
 NUM_CORES ?= 1
 
+SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/opae
+
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/opae
@@ -103,17 +105,17 @@ $(IP_CACHE_DIR)/ip-gen.log:
 	$(SCRIPT_DIR)/ip_gen.sh $(IP_CACHE_DIR)
 
 swconfig: vortex_afu.h
-vortex_afu.h: vortex_afu.json
+vortex_afu.h: $(SRC_DIR)/vortex_afu.json
 	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
 
 $(BUILD_DIR)/setup.cfg:
-	mkdir -p $(BUILD_DIR); cp setup.cfg $(BUILD_DIR)/setup.cfg
+	mkdir -p $(BUILD_DIR); cp $(SRC_DIR)/setup.cfg $(BUILD_DIR)/setup.cfg
 
 $(BUILD_DIR)/vortex_afu.qsf:
-	mkdir -p $(BUILD_DIR); cp vortex_afu.qsf $(BUILD_DIR)/vortex_afu.qsf
+	mkdir -p $(BUILD_DIR); cp $(SRC_DIR)/vortex_afu.qsf $(BUILD_DIR)/vortex_afu.qsf
 
 $(BUILD_DIR)/vortex_afu.json:
-	mkdir -p $(BUILD_DIR); cp vortex_afu.json $(BUILD_DIR)/vortex_afu.json
+	mkdir -p $(BUILD_DIR); cp $(SRC_DIR)/vortex_afu.json $(BUILD_DIR)/vortex_afu.json
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
