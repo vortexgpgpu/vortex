@@ -1,3 +1,4 @@
+ROOT_DIR := $(realpath ../..)
 include ../common.mk
 
 TARGET ?= opaesim
@@ -25,9 +26,9 @@ SRCS = $(SRC_DIR)/vortex.cpp $(SRC_DIR)/driver.cpp
 # set up target types
 ifeq ($(TARGET), opaesim)
 	OPAESIM = $(DESTDIR)/libopae-c-sim.so
-	CXXFLAGS += -I$(SIM_DIR)/opaesim
+	CXXFLAGS += -DOPAESIM -I$(SIM_DIR)/opaesim
 else
-	CXXFLAGS += -I$(SYN_DIR)
+	CXXFLAGS += -I$(SYN_DIR) -I$(ROOT_DIR)/hw/syn/altera/opae
 endif
 
 # Debugging
