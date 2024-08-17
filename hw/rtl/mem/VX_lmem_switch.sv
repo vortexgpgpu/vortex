@@ -16,7 +16,8 @@
 module VX_lmem_switch import VX_gpu_pkg::*; #(
     parameter REQ0_OUT_BUF = 0,
     parameter REQ1_OUT_BUF = 0,
-    parameter RSP_OUT_BUF = 0
+    parameter RSP_OUT_BUF  = 0,
+    parameter `STRING ARBITER = "R"
 ) (
     input wire              clk,
     input wire              reset,
@@ -43,8 +44,8 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
 
     VX_elastic_buffer #(
         .DATAW   (REQ_DATAW),
-        .SIZE    (2),
-        .OUT_REG (REQ0_OUT_BUF)
+        .SIZE    (`TO_OUT_BUF_SIZE(REQ0_OUT_BUF)),
+        .OUT_REG (`TO_OUT_BUF_REG(REQ0_OUT_BUF))
     ) req_global_buf (
         .clk       (clk),
         .reset     (reset),
@@ -74,8 +75,8 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
 
     VX_elastic_buffer #(
         .DATAW   (REQ_DATAW),
-        .SIZE    (0),
-        .OUT_REG (REQ1_OUT_BUF)
+        .SIZE    (`TO_OUT_BUF_SIZE(REQ1_OUT_BUF)),
+        .OUT_REG (`TO_OUT_BUF_REG(REQ1_OUT_BUF))
     ) req_local_buf (
         .clk       (clk),
         .reset     (reset),
@@ -106,7 +107,7 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
     VX_stream_arb #(
         .NUM_INPUTS (2),
         .DATAW      (RSP_DATAW),
-        .ARBITER    ("R"),
+        .ARBITER    (ARBITER),
         .OUT_BUF    (RSP_OUT_BUF)
     ) rsp_arb (
         .clk       (clk),
