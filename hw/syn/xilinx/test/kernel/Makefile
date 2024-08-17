@@ -19,9 +19,9 @@ DP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
 CFLAGS += -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
-CFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_HOME)/hw
+CFLAGS += -I$(VORTEX_HOME)/runtime/include -I$(VORTEX_HOME)/hw
 
-LDFLAGS += -lm -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000
+LDFLAGS += -lm -Wl,-Bstatic,-T,$(VORTEX_HOME)/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000
 
 PROJECT = kernel
 
@@ -48,4 +48,4 @@ $(PROJECT).elf: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf *.bin *.elf *.hex *.dump *.coe .depend 
+	rm -rf *.bin *.elf *.hex *.dump *.coe .depend
