@@ -98,10 +98,10 @@ if [ "$copy_folder" != "" ]; then
             if [ $preprocessor != 0 ] && { [ "$file_ext" == "v" ] || [ "$file_ext" == "sv" ]; }; then
                 if [[ -n "$params_str" && $file_name == "$top_module."* ]]; then
                     temp_file=$(mktemp)
-                    "$SCRIPT_DIR/repl_params.py" "$params_str" -T"$top_module" "$file" > "$temp_file"
-                    verilator "$defines_str" "$includes_str" -E -P "$temp_file" > "$copy_folder/$file_name"
+                    $script_dir/repl_params.py $params_str -T$top_module "$file" > "$temp_file"
+                    verilator $defines_str $includes_str -E -P "$temp_file" > "$copy_folder/$file_name"
                 else
-                    verilator "$defines_str" "$includes_str" -E -P "$file" > "$copy_folder/$file_name"
+                    verilator $defines_str $includes_str -E -P "$file" > "$copy_folder/$file_name"
                 fi
             else
                 cp "$file" "$copy_folder"
