@@ -27,7 +27,7 @@
         use_``x = 1
 `endif
 
-module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
+module VX_decode import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
