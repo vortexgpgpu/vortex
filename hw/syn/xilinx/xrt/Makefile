@@ -19,8 +19,6 @@ NUM_CORES ?= 1
 PREFIX ?= build$(XLEN)
 MAX_JOBS ?= 8
 
-SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/xrt
-
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/xrt
@@ -94,7 +92,7 @@ VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem_0:HBM[0:15]
 endif
 
 VPP_FLAGS += --report_level 2
-VPP_FLAGS += --config $(SRC_DIR)/vitis.ini
+VPP_FLAGS += --config vitis.ini
 
 # Enable perf counters
 ifdef PERF
@@ -163,7 +161,7 @@ $(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 
 gen-xo: $(XO_CONTAINER)
 $(XO_CONTAINER): $(BUILD_DIR)/sources.txt
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source $(SRC_DIR)/scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt $(SCRIPT_DIR) ../$(BUILD_DIR)
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt $(SCRIPT_DIR) ../$(BUILD_DIR)
 
 gen-bin: $(XCLBIN_CONTAINER)
 $(XCLBIN_CONTAINER): $(XO_CONTAINER) $(SCOPE_JSON)
