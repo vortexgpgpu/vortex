@@ -214,7 +214,7 @@
 `endif
 `define STACK_SIZE      (1 << `STACK_LOG2_SIZE)
 
-`define RESET_DELAY     16
+`define RESET_DELAY     8
 
 `ifndef STALL_TIMEOUT
 `define STALL_TIMEOUT   (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
