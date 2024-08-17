@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_issue_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
+module VX_issue_slice import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter ISSUE_ID = 0
 ) (

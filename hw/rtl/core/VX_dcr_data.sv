@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_dcr_data import VX_gpu_pkg::*, VX_trace_pkg::*; (
+module VX_dcr_data import VX_gpu_pkg::*; (
     input wire              clk,
     input wire              reset,
 
