@@ -46,11 +46,11 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     ) lsu_lmem_if[`NUM_LSU_BLOCKS]();
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : demux_slices
-        VX_lmem_demux #(
+        VX_lmem_switch #(
             .REQ0_OUT_BUF (3),
             .REQ1_OUT_BUF (0),
             .RSP_OUT_BUF  (1)
-        ) lmem_demux (
+        ) lmem_switch (
             .clk          (clk),
             .reset        (reset),
             .lsu_in_if    (lsu_mem_in_if[i]),

@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_lmem_demux import VX_gpu_pkg::*; #(
+module VX_lmem_switch import VX_gpu_pkg::*; #(
     parameter REQ0_OUT_BUF = 0,
     parameter REQ1_OUT_BUF = 0,
     parameter RSP_OUT_BUF = 0
