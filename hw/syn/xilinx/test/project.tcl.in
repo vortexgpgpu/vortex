@@ -46,7 +46,6 @@ set proj_dir [get_property directory [current_project]]
 
 # Set project properties
 set obj [current_project]
-set_property -name "board_part" -value "xilinx.com:au280:part0:1.1" -objects $obj
 set_property -name "compxlib.activehdl_compiled_library_dir" -value "$proj_dir/${project_name}.cache/compile_simlib/activehdl" -objects $obj
 set_property -name "compxlib.funcsim" -value "1" -objects $obj
 set_property -name "compxlib.ies_compiled_library_dir" -value "$proj_dir/${project_name}.cache/compile_simlib/ies" -objects $obj
@@ -260,7 +259,7 @@ set_property -name "name" -value "utils_1" -objects $obj
 
 # Proc to create BD design_1
 proc cr_bd_design_1 { parentCell } {
-# The design that will be created by this Tcl proc contains the following 
+# The design that will be created by this Tcl proc contains the following
 # module references:
 # Vortex_top
 
@@ -277,7 +276,7 @@ set bCheckIPsPassed 1
 ##################################################################
 set bCheckIPs 1
 if { $bCheckIPs == 1 } {
-     set list_check_ips "\ 
+     set list_check_ips "\
   xilinx.com:ip:axi_bram_ctrl:4.1\
   xilinx.com:ip:blk_mem_gen:8.4\
   "
@@ -304,7 +303,7 @@ if { $bCheckIPs == 1 } {
   ##################################################################
   set bCheckModules 1
   if { $bCheckModules == 1 } {
-     set list_check_mods "\ 
+     set list_check_mods "\
   Vortex_top\
   "
 
@@ -369,7 +368,7 @@ set vx_reset [ create_bd_port -dir I -type rst vx_reset ]
 set_property -dict [ list \
   CONFIG.POLARITY {ACTIVE_HIGH} \
 ] $vx_reset
- 
+
 set dcr_wr_valid [ create_bd_port -dir I dcr_wr_valid ]
 set dcr_wr_addr [ create_bd_port -dir I -from 11 -to 0 dcr_wr_addr ]
 set dcr_wr_data [ create_bd_port -dir I -from 31 -to 0 dcr_wr_data ]
@@ -384,7 +383,7 @@ if { [catch {set Vortex_top_0 [create_bd_cell -type module -reference $block_nam
     catch {common::send_gid_msg -ssname BD::TCL -id 2096 -severity "ERROR" "Unable to referenced block <$block_name>. Please add the files for ${block_name}'s definition into the project."}
     return 1
   }
-  
+
 # Create instance: axi_bram_ctrl_0, and set properties
 set axi_bram_ctrl_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_bram_ctrl:4.1 axi_bram_ctrl_0 ]
 set_property -dict [ list \
@@ -399,7 +398,7 @@ set_property -dict [ list \
   CONFIG.Assume_Synchronous_Clk {true} \
   CONFIG.Byte_Size {8} \
   CONFIG.Load_Init_File {true} \
-  CONFIG.Coe_File {%COE_FILE%} \
+  CONFIG.Coe_File {@VORTEX_HOME@/hw/syn/xilinx/test/project_1_files/kernel.bin.coe} \
   CONFIG.EN_SAFETY_CKT {true} \
   CONFIG.Enable_32bit_Address {true} \
   CONFIG.Fill_Remaining_Memory_Locations {false} \
@@ -475,24 +474,24 @@ pagesize -pg 1 -db -bbox -sgen -180 0 1060 240
 
   validate_bd_design
   save_bd_design
-  close_bd_design $design_name 
+  close_bd_design $design_name
 }
 # End of cr_bd_design_1()
 cr_bd_design_1 ""
-set_property EXCLUDE_DEBUG_LOGIC "0" [get_files design_1.bd ] 
-set_property GENERATE_SYNTH_CHECKPOINT "1" [get_files design_1.bd ] 
-set_property IS_ENABLED "1" [get_files design_1.bd ] 
-set_property IS_GLOBAL_INCLUDE "0" [get_files design_1.bd ] 
-#set_property IS_LOCKED "0" [get_files design_1.bd ] 
-set_property LIBRARY "xil_defaultlib" [get_files design_1.bd ] 
-set_property PATH_MODE "RelativeFirst" [get_files design_1.bd ] 
-set_property PFM_NAME "" [get_files design_1.bd ] 
-set_property REGISTERED_WITH_MANAGER "1" [get_files design_1.bd ] 
-set_property SYNTH_CHECKPOINT_MODE "Hierarchical" [get_files design_1.bd ] 
-set_property USED_IN "synthesis implementation simulation" [get_files design_1.bd ] 
-set_property USED_IN_IMPLEMENTATION "1" [get_files design_1.bd ] 
-set_property USED_IN_SIMULATION "1" [get_files design_1.bd ] 
-set_property USED_IN_SYNTHESIS "1" [get_files design_1.bd ] 
+set_property EXCLUDE_DEBUG_LOGIC "0" [get_files design_1.bd ]
+set_property GENERATE_SYNTH_CHECKPOINT "1" [get_files design_1.bd ]
+set_property IS_ENABLED "1" [get_files design_1.bd ]
+set_property IS_GLOBAL_INCLUDE "0" [get_files design_1.bd ]
+#set_property IS_LOCKED "0" [get_files design_1.bd ]
+set_property LIBRARY "xil_defaultlib" [get_files design_1.bd ]
+set_property PATH_MODE "RelativeFirst" [get_files design_1.bd ]
+set_property PFM_NAME "" [get_files design_1.bd ]
+set_property REGISTERED_WITH_MANAGER "1" [get_files design_1.bd ]
+set_property SYNTH_CHECKPOINT_MODE "Hierarchical" [get_files design_1.bd ]
+set_property USED_IN "synthesis implementation simulation" [get_files design_1.bd ]
+set_property USED_IN_IMPLEMENTATION "1" [get_files design_1.bd ]
+set_property USED_IN_SIMULATION "1" [get_files design_1.bd ]
+set_property USED_IN_SYNTHESIS "1" [get_files design_1.bd ]
 
 #call make_wrapper to create wrapper files
 set wrapper_path [make_wrapper -fileset sources_1 -files [ get_files -norecurse design_1.bd] -top]

@@ -28,10 +28,7 @@ CFLAGS += -DEXT_F_DISABLE
 
 # update memory layout for 2MB RAM
 CFLAGS += -DSTARTUP_ADDR=32\'h80000
-CFLAGS += -DIO_BASE_ADDR=32\'hFF000
-
-COE_FILE := $(SRC_DIR)/project_1_files/kernel.bin.coe
-ESCAPED_COE_FILE := $(shell echo "$(COE_FILE)" | sed -e 's/[\/&]/\\&/g')
+CFLAGS += -DSTACK_BASE_ADDR=32\'hFF000
 
 all: build
 
@@ -39,9 +36,6 @@ gen-sources: project_1/sources.txt
 project_1/sources.txt:
 	mkdir -p project_1
 	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -P -Cproject_1/src -Oproject_1/sources.txt
-
-project.tcl: project.tcl.in
-	sed -e 's/%COE_FILE%/$(ESCAPED_COE_FILE)/g' < $< > $@
 
 build: project_1/vortex.xpr
 project_1/vortex.xpr: project_1/sources.txt project.tcl
@@ -51,4 +45,4 @@ run: project_1/vortex.xpr
 	$(VIVADO) project_1/vortex.xpr &
 
 clean:
-	rm -rf project_1 project.tcl
+	rm -rf project_1
