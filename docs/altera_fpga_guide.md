@@ -76,8 +76,8 @@ Run the following from your Vortex build directory
 
     $ TARGET=fpga ./ci/blackbox.sh --driver=opae --app=sgemm --args="-n128"
 
-Testing OPAE Synthesis using Intel ASE Simulation
--------------------------------------------------
+Testing Vortex using OPAE with Intel ASE Simulation
+---------------------------------------------------
 
 Building ASE synthesis
 
