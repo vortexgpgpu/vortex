@@ -88,19 +88,19 @@ make -s
 make -s
 make install
 ```
-- Building Vortex 64-bit simply requires using --xlen=64 configure option.
+- Building Vortex 64-bit requires setting --xlen=64 configure option.
 ```sh
-../configure --xlen=32 --tooldir=$HOME/tools
+../configure --xlen=64 --tooldir=$HOME/tools
 ```
 - Sourcing "./ci/toolchain_env.sh" is required everytime you start a new terminal. we recommend adding "source <build-path>/ci/toolchain_env.sh" to your ~/.bashrc file to automate the process at login.
 ```sh
 echo "source <build-path>/ci/toolchain_env.sh" >> ~/.bashrc
 ```
-- Making changes to Makefiles in your source tree or adding new folders will require executing the "configure" script again to get it propagated into your build folder.
+- Making changes to Makefiles in your source tree or adding new folders will require executing the "configure" script again without any options to get changes propagated to your build folder.
 ```sh
 ../configure
 ```
-- To debug the GPU, you can generate a "run.log" trace. see /docs/debugging.md for more information.
+- To debug the GPU, the simulation can generate a runtime trace for analysis. See /docs/debugging.md for more information.
 ```sh
 ./ci/blackbox.sh --app=demo --debug=3
 ```
