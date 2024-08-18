@@ -24,8 +24,6 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
     // Number of banks
     parameter NUM_BANKS         = 4,
 
-    // Address width
-    parameter ADDR_WIDTH        = `CLOG2(SIZE),
     // Size of a word in bytes
     parameter WORD_SIZE         = `XLEN/8,
 
@@ -33,7 +31,13 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
     parameter UUID_WIDTH        = 0,
 
     // Request tag size
-    parameter TAG_WIDTH         = 16
+    parameter TAG_WIDTH         = 16,
+
+    // Address width
+    parameter NUM_WORDS         = SIZE / WORD_SIZE,
+    parameter WORDS_PER_BANK    = NUM_WORDS / NUM_BANKS,
+    parameter BANK_ADDR_WIDTH   = `CLOG2(WORDS_PER_BANK),
+    parameter ADDR_WIDTH        = BANK_ADDR_WIDTH + `CLOG2(NUM_BANKS)
  ) (
     input wire clk,
     input wire reset,
@@ -56,7 +60,8 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
 );
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
-        .TAG_WIDTH (TAG_WIDTH)
+        .TAG_WIDTH (TAG_WIDTH),
+        .ADDR_WIDTH(ADDR_WIDTH)
     ) mem_bus_if[NUM_REQS]();
 
      // memory request
