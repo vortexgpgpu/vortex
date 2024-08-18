@@ -223,8 +223,6 @@ module VX_mem_scheduler #(
 
     if (COALESCE_ENABLE) begin
 
-        `RESET_RELAY (coalescer_reset, reset);
-
         VX_mem_coalescer #(
             .INSTANCE_ID    ($sformatf("%s-coalescer", INSTANCE_ID)),
             .NUM_REQS       (CORE_REQS),
@@ -236,8 +234,8 @@ module VX_mem_scheduler #(
             .UUID_WIDTH     (UUID_WIDTH),
             .QUEUE_SIZE     (MEM_QUEUE_SIZE)
         ) coalescer (
-            .clk   (clk),
-            .reset (coalescer_reset),
+            .clk            (clk),
+            .reset          (reset),
 
             // Input request
             .in_req_valid   (reqq_valid),
