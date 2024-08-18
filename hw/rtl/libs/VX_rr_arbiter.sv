@@ -16,7 +16,7 @@
 `TRACING_OFF
 module VX_rr_arbiter #(
     parameter NUM_REQS = 1,
-    parameter MODEL    = 2,
+    parameter MODEL    = 1,
     parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS),
     parameter LUT_OPT  = 0
 ) (
