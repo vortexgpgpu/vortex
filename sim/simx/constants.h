@@ -21,10 +21,6 @@
 #define MEM_CLOCK_RATIO   1
 #endif
 
-#ifndef MEMORY_BANKS
-#define MEMORY_BANKS      2
-#endif
-
 #define LSU_WORD_SIZE     (XLEN / 8)
 #define LSU_CHANNELS      NUM_LSU_LANES
 #define LSU_NUM_REQS	    (NUM_LSU_BLOCKS * LSU_CHANNELS)

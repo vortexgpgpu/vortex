@@ -166,6 +166,10 @@
 `define VX_CSR_MPM_MEM_WRITES_H         12'hB99
 `define VX_CSR_MPM_MEM_LT               12'hB1A     // memory latency
 `define VX_CSR_MPM_MEM_LT_H             12'hB9A
+`define VX_CSR_MPM_MEM_BANK_CNTR        12'hB1E     // memory bank requests
+`define VX_CSR_MPM_MEM_BANK_CNTR_H      12'hB9E
+`define VX_CSR_MPM_MEM_BANK_TICK        12'hB1F     // memory ticks
+`define VX_CSR_MPM_MEM_BANK_TICK_H      12'hB9F
 // PERF: lmem
 `define VX_CSR_MPM_LMEM_READS           12'hB1B     // memory reads
 `define VX_CSR_MPM_LMEM_READS_H         12'hB9B
