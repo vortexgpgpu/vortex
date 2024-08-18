@@ -26,6 +26,8 @@ detect_osversion() {
                 case "$VERSION_CODENAME" in
                     bionic) osversion="ubuntu/bionic";;
                     focal) osversion="ubuntu/focal";;
+                    jammy) osversion="ubuntu/focal";;
+                    noble) osversion="ubuntu/focal";;
                     # Add new versions as needed
                 esac
                 ;;
