@@ -51,6 +51,9 @@ set_global_assignment -name ADD_PASS_THROUGH_LOGIC_TO_INFERRED_RAMS ON
 set_global_assignment -name MESSAGE_DISABLE 16818
 set_global_assignment -name TIMEQUEST_DO_REPORT_TIMING ON
 
+#set_global_assignment -name OPTIMIZATION_TECHNIQUE AREA
+#set_global_assignment -name OPTIMIZATION_TECHNIQUE SPEED
+
 set_global_assignment -name SEED 1
 
 switch $opts(family) {

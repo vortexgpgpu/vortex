@@ -50,22 +50,15 @@ void verify_array(const datatype *cpuResults, const datatype *gpuResults, const 
     return ;
 }
 template<typename datatype>
-void compare_results(const datatype *cpu_results, const datatype *gpu_results, const int size){
-
-    char passed = true; 
+int compare_results(const datatype *cpu_results, const datatype *gpu_results, const int size) {
+    int errors = 0; 
 //#pragma omp parallel for
     for (int i=0; i<size; i++){
-      if (cpu_results[i]!=gpu_results[i]){
-         passed = false; 
+      if (cpu_results[i] != gpu_results[i]){
+         ++errors; 
       }
     }
-    if (passed){
-        std::cout << "--cambine: passed: -)" << endl;
-    }
-    else{
-        std::cout << "--cambine: failed :-(" << endl;
-    }
-    return ;
+    return errors;
 }
 
 #endif

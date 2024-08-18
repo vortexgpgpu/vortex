@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -23,8 +23,8 @@ module VX_priority_arbiter #(
     output wire [NUM_REQS-1:0]      grant_onehot,
     output wire                     grant_valid
 );
-    if (NUM_REQS == 1)  begin        
-        
+    if (NUM_REQS == 1)  begin
+
         assign grant_index  = '0;
         assign grant_onehot = requests;
         assign grant_valid  = requests[0];
@@ -41,6 +41,6 @@ module VX_priority_arbiter #(
         );
 
     end
-    
+
 endmodule
 `TRACING_ON

@@ -17,7 +17,7 @@
 module VX_skid_buffer #(
     parameter DATAW    = 32,
     parameter PASSTHRU = 0,
-    parameter FULL_BW  = 0,
+    parameter HALF_BW  = 0,
     parameter OUT_REG  = 0
 ) ( 
     input  wire             clk,
@@ -40,12 +40,11 @@ module VX_skid_buffer #(
         assign data_out  = data_in;
         assign ready_in  = ready_out;
 
-    end else if (FULL_BW != 0) begin
+    end else if (HALF_BW != 0) begin
 
-        VX_stream_buffer #(
-            .DATAW (DATAW),
-            .OUT_REG (OUT_REG)
-        ) stream_buffer (
+        VX_toggle_buffer #(
+            .DATAW (DATAW)
+        ) toggle_buffer (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (valid_in),
@@ -58,9 +57,10 @@ module VX_skid_buffer #(
 
     end else begin
 
-        VX_toggle_buffer #(
-            .DATAW (DATAW)
-        ) toggle_buffer (
+        VX_stream_buffer #(
+            .DATAW (DATAW),
+            .OUT_REG (OUT_REG)
+        ) stream_buffer (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (valid_in),

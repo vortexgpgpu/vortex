@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,61 +14,73 @@
 `include "VX_define.vh"
 
 module VX_ibuffer import VX_gpu_pkg::*; #(
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire          clk,
     input wire          reset,
+
+`ifdef PERF_ENABLE
+    output wire [`PERF_CTR_BITS-1:0] perf_stalls,
+`endif
 
     // inputs
     VX_decode_if.slave  decode_if,
 
     // outputs
-    VX_ibuffer_if.master ibuffer_if [`ISSUE_WIDTH]
+    VX_ibuffer_if.master ibuffer_if [PER_ISSUE_WARPS]
 );
-    `UNUSED_PARAM (CORE_ID)
-    localparam ISW_WIDTH  = `LOG2UP(`ISSUE_WIDTH);
-    localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + (`NR_BITS * 4);
-    
-    wire [`ISSUE_WIDTH-1:0] ibuf_ready_in;
+    `UNUSED_SPARAM (INSTANCE_ID)
+    localparam DATAW = `UUID_WIDTH + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + (`NR_BITS * 4);
 
-    wire [ISW_WIDTH-1:0] decode_isw = wid_to_isw(decode_if.data.wid);
-    wire [ISSUE_WIS_W-1:0] decode_wis = wid_to_wis(decode_if.data.wid);
-    
-    assign decode_if.ready = ibuf_ready_in[decode_isw];
+    wire [PER_ISSUE_WARPS-1:0] ibuf_ready_in;
+    assign decode_if.ready = ibuf_ready_in[decode_if.data.wid];
 
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin
         VX_elastic_buffer #(
             .DATAW   (DATAW),
             .SIZE    (`IBUF_SIZE),
-            .OUT_REG (1)
+            .OUT_REG (2) // 2-cycle EB for area reduction
         ) instr_buf (
             .clk      (clk),
             .reset    (reset),
-            .valid_in (decode_if.valid && decode_isw == i),
-            .ready_in (ibuf_ready_in[i]),
+            .valid_in (decode_if.valid && decode_if.data.wid == ISSUE_WIS_W'(w)),
             .data_in  ({
                 decode_if.data.uuid,
-                decode_wis,
                 decode_if.data.tmask,
+                decode_if.data.PC,
                 decode_if.data.ex_type,
                 decode_if.data.op_type,
-                decode_if.data.op_mod,
+                decode_if.data.op_args,
                 decode_if.data.wb,
-                decode_if.data.use_PC,
-                decode_if.data.use_imm,
-                decode_if.data.PC,
-                decode_if.data.imm,
-                decode_if.data.rd, 
-                decode_if.data.rs1, 
-                decode_if.data.rs2, 
-                decode_if.data.rs3}),
-            .data_out(ibuffer_if[i].data),
-            .valid_out (ibuffer_if[i].valid),
-            .ready_out(ibuffer_if[i].ready)
-        );        
+                decode_if.data.rd,
+                decode_if.data.rs1,
+                decode_if.data.rs2,
+                decode_if.data.rs3
+            }),
+            .ready_in (ibuf_ready_in[w]),
+            .valid_out(ibuffer_if[w].valid),
+            .data_out (ibuffer_if[w].data),
+            .ready_out(ibuffer_if[w].ready)
+        );
     `ifndef L1_ENABLE
-        assign decode_if.ibuf_pop[i] = ibuffer_if[i].valid && ibuffer_if[i].ready;
+        assign decode_if.ibuf_pop[w] = ibuffer_if[w].valid && ibuffer_if[w].ready;
     `endif
     end
+
+`ifdef PERF_ENABLE
+    reg [`PERF_CTR_BITS-1:0] perf_ibf_stalls;
+
+    wire decode_if_stall = decode_if.valid && ~decode_if.ready;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_ibf_stalls <= '0;
+        end else begin
+            perf_ibf_stalls <= perf_ibf_stalls + `PERF_CTR_BITS'(decode_if_stall);
+        end
+    end
+
+    assign perf_stalls = perf_ibf_stalls;
+`endif
 
 endmodule
