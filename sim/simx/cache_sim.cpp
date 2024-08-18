@@ -19,6 +19,7 @@
 #include <vector>
 #include <list>
 #include <queue>
+#include <string.h>
 
 using namespace vortex;
 
@@ -315,27 +316,75 @@ public:
 				simobject->CoreReqPorts.at(i).bind(&bypass_switch_->ReqIn.at(i));
 				bypass_switch_->RspIn.at(i).bind(&simobject->CoreRspPorts.at(i));
 			}
-			bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPort);
-			simobject->MemRspPort.bind(&bypass_switch_->RspOut.at(0));
+			bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPorts.at(0));
+			simobject->MemRspPorts.at(0).bind(&bypass_switch_->RspOut.at(0));
 			return;
 		}
 
-		bypass_switch_ = MemSwitch::Create(sname, ArbiterType::Priority, 2);
-		bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPort);
-		simobject->MemRspPort.bind(&bypass_switch_->RspOut.at(0));
+		if (strcmp(simobject->name().c_str(), "l3cache")) {
+			bypass_switch_ = MemSwitch::Create(sname, ArbiterType::Priority, 2);
+			bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPorts.at(0));
+			simobject->MemRspPorts.at(0).bind(&bypass_switch_->RspOut.at(0));
 
-		if (config.B != 0) {
-			snprintf(sname, 100, "%s-bank-arb", simobject->name().c_str());
-			bank_switch_ = MemSwitch::Create(sname, ArbiterType::RoundRobin, (1 << config.B));
-			for (uint32_t i = 0, n = (1 << config.B); i < n; ++i) {
-				mem_req_ports_.at(i).bind(&bank_switch_->ReqIn.at(i));
-				bank_switch_->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
+			if (config.B != 0) {
+				snprintf(sname, 100, "%s-bank-arb", simobject->name().c_str());
+				bank_switch_ = MemSwitch::Create(sname, ArbiterType::RoundRobin, (1 << config.B));
+				for (uint32_t i = 0, n = (1 << config.B); i < n; ++i) {
+					mem_req_ports_.at(i).bind(&bank_switch_->ReqIn.at(i));
+					bank_switch_->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
+				}
+				bank_switch_->ReqOut.at(0).bind(&bypass_switch_->ReqIn.at(0));
+				bypass_switch_->RspIn.at(0).bind(&bank_switch_->RspOut.at(0));
+			} else {
+				mem_req_ports_.at(0).bind(&bypass_switch_->ReqIn.at(0));
+				bypass_switch_->RspIn.at(0).bind(&mem_rsp_ports_.at(0));
 			}
-			bank_switch_->ReqOut.at(0).bind(&bypass_switch_->ReqIn.at(0));
-			bypass_switch_->RspIn.at(0).bind(&bank_switch_->RspOut.at(0));
 		} else {
-			mem_req_ports_.at(0).bind(&bypass_switch_->ReqIn.at(0));
-			bypass_switch_->RspIn.at(0).bind(&mem_rsp_ports_.at(0));
+			// TODO: Change this into a crossbar
+			uint32_t max = MAX(2, config_.num_inputs);
+			//printf("%s connecting\n", simobject_->name().c_str());
+			//3
+			if (config.B != 0) {
+				bypass_switch_ = MemSwitch::Create(sname, ArbiterType::Priority, max, max);
+				for (uint32_t i = 0; i < max; ++i) {
+					//printf("%s connecting input=%d to MemPorts\n", simobject_->name().c_str(), i);
+					bypass_switch_->ReqOut.at(i).bind(&simobject->MemReqPorts.at(i % (1 << config.B)));
+					simobject->MemRspPorts.at(i % (1 << config.B)).bind(&bypass_switch_->RspOut.at(i));
+				}
+			} else {
+				bypass_switch_ = MemSwitch::Create(sname, ArbiterType::Priority, 2);
+				bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPorts.at(0));
+				simobject->MemRspPorts.at(0).bind(&bypass_switch_->RspOut.at(0));
+			}
+
+			if (config.B != 0)
+			{
+				snprintf(sname, 100, "%s-bank-arb", simobject->name().c_str());
+				bank_switch_ = MemSwitch::Create(sname, ArbiterType::RoundRobin, (1 << config.B), (1 << config.B));
+				for (uint32_t i = 0, n = (1 << config.B); i < n; ++i)
+				{
+					//1
+					//printf("%s Connecting memory ports to bank=%d\n", simobject_->name().c_str(), i);
+					mem_req_ports_.at(i).bind(&bank_switch_->ReqIn.at(i));
+					bank_switch_->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
+				}
+				//2
+				if (config_.num_inputs > 1) {
+					for (uint32_t i = 0; i < max; ++i) {
+						//printf("%s connecting bank and bypass port=%d\n", simobject_->name().c_str(), i);
+						bank_switch_->ReqOut.at(i % (1 << config.B)).bind(&bypass_switch_->ReqIn.at(i));
+						bypass_switch_->RspIn.at(i).bind(&bank_switch_->RspOut.at(i % (1 << config.B)));
+					}
+				} else {
+					bank_switch_->ReqOut.at(0).bind(&bypass_switch_->ReqIn.at(0));
+					bypass_switch_->RspIn.at(0).bind(&bank_switch_->RspOut.at(0));
+				}
+			}
+			else
+			{
+				mem_req_ports_.at(0).bind(&bypass_switch_->ReqIn.at(0));
+				bypass_switch_->RspIn.at(0).bind(&mem_rsp_ports_.at(0));
+			}
 		}
 
 		// calculate cache initialization cycles
@@ -673,8 +722,8 @@ CacheSim::CacheSim(const SimContext& ctx, const char* name, const Config& config
 	: SimObject<CacheSim>(ctx, name)
 	, CoreReqPorts(config.num_inputs, this)
 	, CoreRspPorts(config.num_inputs, this)
-	, MemReqPort(this)
-	, MemRspPort(this)
+	, MemReqPorts(NUM_MEM_PORTS, this)
+	, MemRspPorts(NUM_MEM_PORTS, this)
 	, impl_(new Impl(this, config))
 {}
 

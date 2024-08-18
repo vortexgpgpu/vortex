@@ -232,6 +232,9 @@ public:
     case VX_CAPS_ISA_FLAGS:
       _value = isa_caps_;
       break;
+    case VX_CAPS_NUM_MEM_BANKS:
+      _value = MEMORY_BANKS;
+      break;
     default:
       fprintf(stderr, "[VXDRV] Error: invalid caps id: %d\n", caps_id);
       std::abort();
