@@ -24,6 +24,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     // LSU memory request
     input  wire [`NUM_LSU_BLOCKS-1:0]                   lsu_req_valid,
     input  wire [`NUM_LSU_BLOCKS-1:0]                   lsu_req_rw,
+    input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0] lsu_req_mask,
     input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0][LSU_WORD_SIZE-1:0] lsu_req_byteen,
     input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0][LSU_ADDR_WIDTH-1:0] lsu_req_addr,
     input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0][`MEM_REQ_FLAGS_WIDTH-1:0] lsu_req_flags,
@@ -33,6 +34,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
 
     // LSU memory response
     output wire [`NUM_LSU_BLOCKS-1:0]                   lsu_rsp_valid,
+    output wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0] lsu_rsp_mask,
     output wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0][LSU_WORD_WIDTH-1:0] lsu_rsp_data,
     output wire [`NUM_LSU_BLOCKS-1:0][LSU_TAG_WIDTH-1:0] lsu_rsp_tag,
     input  wire [`NUM_LSU_BLOCKS-1:0]                   lsu_rsp_ready,
@@ -63,6 +65,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
         assign lsu_mem_if[i].req_valid = lsu_req_valid[i];
         assign lsu_mem_if[i].req_data.rw = lsu_req_rw[i];
+        assign lsu_mem_if[i].req_data.mask = lsu_req_mask[i];
         assign lsu_mem_if[i].req_data.byteen = lsu_req_byteen[i];
         assign lsu_mem_if[i].req_data.addr = lsu_req_addr[i];
         assign lsu_mem_if[i].req_data.flags = lsu_req_flags[i];
@@ -74,6 +77,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     // LSU memory response
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
         assign lsu_rsp_valid[i] = lsu_mem_if[i].rsp_valid;
+        assign lsu_rsp_mask[i] = lsu_mem_if[i].rsp_data.mask;
         assign lsu_rsp_data[i] = lsu_mem_if[i].rsp_data.data;
         assign lsu_rsp_tag[i] = lsu_mem_if[i].rsp_data.tag;
         assign lsu_mem_if[i].rsp_ready = lsu_rsp_ready[i];
