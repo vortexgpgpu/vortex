@@ -205,7 +205,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .ARBITER      ("P"),
             .REQ_OUT_BUF  (0),
             .RSP_OUT_BUF  (0)
-        ) lsu_adapter (
+        ) dcache_adapter (
             .clk        (clk),
             .reset      (reset),
             .lsu_mem_if (dcache_coalesced_if),
