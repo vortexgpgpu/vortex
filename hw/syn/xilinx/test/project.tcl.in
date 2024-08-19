@@ -398,7 +398,7 @@ set_property -dict [ list \
   CONFIG.Assume_Synchronous_Clk {true} \
   CONFIG.Byte_Size {8} \
   CONFIG.Load_Init_File {true} \
-  CONFIG.Coe_File {@VORTEX_HOME@/hw/syn/xilinx/test/project_1_files/kernel.bin.coe} \
+  CONFIG.Coe_File {@VORTEX_HOME@/hw/syn/xilinx/test/kernel.bin.coe} \
   CONFIG.EN_SAFETY_CKT {true} \
   CONFIG.Enable_32bit_Address {true} \
   CONFIG.Fill_Remaining_Memory_Locations {false} \

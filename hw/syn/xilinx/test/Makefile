@@ -10,6 +10,8 @@ DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/opae
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
+KERNEL ?= fibonacci
+
 # include paths
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
@@ -32,17 +34,27 @@ CFLAGS += -DSTACK_BASE_ADDR=32\'hFF000
 
 all: build
 
+$(KERNEL).bin:
+	$(MAKE) -C $(ROOT_DIR)/kernel clean
+	STACK_BASE_ADDR=0xFF000 $(MAKE) -C $(ROOT_DIR)/kernel
+	$(MAKE) -C $(ROOT_DIR)/tests/kernel/$(KERNEL) clean
+	STARTUP_ADDR=0x8000 $(MAKE) -C $(ROOT_DIR)/tests/kernel/$(KERNEL)
+	cp $(ROOT_DIR)/tests/kernel/$(KERNEL)/$(KERNEL).bin $(KERNEL).bin
+
+kernel.bin.coe: $(KERNEL).bin
+	$(SCRIPT_DIR)/bin2coe.py --out=$@ --binary=$(KERNEL).bin --binaddr=8192 --depth=16384 --wordsize=64
+
 gen-sources: project_1/sources.txt
 project_1/sources.txt:
 	mkdir -p project_1
 	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -P -Cproject_1/src -Oproject_1/sources.txt
 
-build: project_1/vortex.xpr
-project_1/vortex.xpr: project_1/sources.txt project.tcl
+build: project_1/project_1.xpr
+project_1/project_1.xpr: project_1/sources.txt kernel.bin.coe project.tcl
 	$(VIVADO) -mode batch -source project.tcl -tclargs project_1/sources.txt project_1/src $(SCRIPT_DIR)
 
-run: project_1/vortex.xpr
-	$(VIVADO) project_1/vortex.xpr &
+run: project_1/project_1.xpr
+	$(VIVADO) project_1/project_1.xpr &
 
 clean:
-	rm -rf project_1
+	rm -rf project_1 $(KERNEL).bin kernel.bin.coe

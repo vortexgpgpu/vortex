@@ -8,6 +8,8 @@ endif
 
 VORTEX_KN_PATH ?= $(ROOT_DIR)/kernel
 
+STARTUP_ADDR ?= 0x80000000
+
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex -mllvm -vortex-branch-divergence=0
@@ -31,7 +33,7 @@ CFLAGS += -DXLEN_$(XLEN) -DNDEBUG
 LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc
 LIBC_LIB += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 
-LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000 $(VORTEX_KN_PATH)/libvortex.a $(LIBC_LIB)
+LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortex.a $(LIBC_LIB)
 
 all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
 
