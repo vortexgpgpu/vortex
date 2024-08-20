@@ -39,7 +39,7 @@ RUN git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git /v
 WORKDIR /vortex
 
 # install system dependencies
-RUN ./ci/system_updates.sh
+RUN ./ci/install_dependencies.sh
 
 # Configure the build folder
 RUN mkdir build && cd build && ../configure
