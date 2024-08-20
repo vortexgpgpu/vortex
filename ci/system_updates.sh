@@ -16,12 +16,31 @@
 
 set -e
 
+# Function to check if GCC version is less than 11
+check_gcc_version() {
+    local gcc_version
+    gcc_version=$(gcc -dumpversion)
+    if dpkg --compare-versions "$gcc_version" lt 11; then
+        return 0  # GCC version is less than 11
+    else
+        return 1  # GCC version is 11 or greater
+    fi
+}
+
+# Update package list
 apt-get update -y
 
-add-apt-repository -y ppa:ubuntu-toolchain-r/test
-apt-get update
-apt-get install -y g++-11 gcc-11
-update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
-update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100
+# install system dependencies
+apt-get install -y build-essential valgrind libstdc++6 binutils python3 uuid-dev ccache
 
-apt-get install -y build-essential valgrind libstdc++6 binutils python uuid-dev ccache
+# Check and install GCC 11 if necessary
+if check_gcc_version; then
+    echo "GCC version is less than 11. Installing GCC 11..."
+    add-apt-repository -y ppa:ubuntu-toolchain-r/test
+    apt-get update
+    apt-get install -y g++-11 gcc-11
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100
+else
+    echo "GCC version is 11 or greater. No need to install GCC 11."
+fi
