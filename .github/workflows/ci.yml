@@ -46,7 +46,7 @@ jobs:
       - name: Install Dependencies
         if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
-          sudo bash ./ci/system_updates.sh
+          sudo bash ./ci/install_dependencies.sh
 
       - name: Setup Toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
@@ -75,7 +75,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          sudo bash ./ci/system_updates.sh
+          sudo bash ./ci/install_dependencies.sh
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
@@ -126,7 +126,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          sudo bash ./ci/system_updates.sh
+          sudo bash ./ci/install_dependencies.sh
 
       - name: Cache Toolchain Directory
         id: cache-toolchain

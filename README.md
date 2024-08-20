@@ -44,18 +44,15 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 - [Ramulator](https://github.com/CMU-SAFARI/ramulator.git)
 - [Yosys](https://github.com/YosysHQ/yosys)
 - [Sv2v](https://github.com/zachjs/sv2v)
-### Install development tools
-```sh
-sudo apt-get install build-essential
-sudo apt-get install binutils
-sudo apt-get install python
-sudo apt-get install uuid-dev
-sudo apt-get install git
-```
 ### Install Vortex codebase
 ```sh
 git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
 cd vortex
+```
+### Install system dependencies
+```sh
+# ensure dependent libraries are present
+sudo ./ci/install_dependencies.sh
 ```
 ### Configure your build folder
 ```sh
