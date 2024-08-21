@@ -137,7 +137,7 @@ module VX_pe_serializer #(
 
         assign pe_data_in_s = data_in;
 
-        assign enable      = ready_out_u || ~valid_out_u;
+        assign enable      = ready_out_u || ~valid_out_s;
         assign ready_in    = enable;
         assign pe_enable   = enable;
 
