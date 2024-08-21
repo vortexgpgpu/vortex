@@ -132,18 +132,18 @@
                     end
                 end
                 `ALU_TYPE_OTHER: begin
-                    case (op_type)
-                    `VOTE_ALL:      `TRACE(level, ("VOTE.ALL"));
-                    `VOTE_ANY:      `TRACE(level, ("VOTE.ANY"));
-                    `VOTE_UNI:      `TRACE(level, ("VOTE.UNI"));
-                    `VOTE_BALLOT:   `TRACE(level, ("VOTE.BALLOT"));
-                    `SHFL_BFLY:     `TRACE(level, ("SHFL.BFLY"));
-                    `SHFL_UP:       `TRACE(level, ("SHFL.UP"));
-                    `SHFL_DOWN:     `TRACE(level, ("SHFL.DOWN"));
-                    `SHFL_IDX:      `TRACE(level, ("SHFL.IDX"));
-                    `VOTE_NONE:     `TRACE(level, ("VOTE.NONE"));
-                    `VOTE_NOT_ALL:  `TRACE(level, ("VOTE.NOT.ALL"));
-                    default:        `TRACE(level, ("?"));
+                    case(op_type)
+                    `VOTE_ALL: `TRACE(level, ("VOTE_ALL"));
+                    `VOTE_ANY: `TRACE(level, ("VOTE_ANY"));
+                    `VOTE_UNI: `TRACE(level, ("VOTE_UNI"));
+                    `VOTE_BALLOT: `TRACE(level, ("VOTE_BALLOT"));
+                    `VOTE_NONE: `TRACE(level, ("VOTE_NONE"));
+                    `VOTE_NOT_ALL: `TRACE(level, ("VOTE_NOT_ALL"));
+                    `SHFL_BFLY: `TRACE(level, ("SHFL_BFLY"));
+                    `SHFL_UP: `TRACE(level, ("SHFL_UP"));
+                    `SHFL_DOWN: `TRACE(level, ("SHFL_DOWN"));
+                    `SHFL_IDX: `TRACE(level, ("SHFL_IDX"));
+                    default:   `TRACE(level, ("?"));
                     endcase
                 end
                 default: `TRACE(level, ("?"));

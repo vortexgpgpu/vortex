@@ -118,18 +118,17 @@ module VX_alu_int #(
     end
 
     // VOTE 
-    wire [NUM_LANES-1:0] active_t = NUM_LANES'(alu_in2[0] & `XLEN'(execute_if.data.tmask));
+    wire [NUM_LANES-1:0] active_t = (alu_in2[0][NUM_LANES-1:0] & (execute_if.data.tmask));
     wire [NUM_LANES-1:0] is_pred;
     wire [NUM_LANES-1:0] vote_in = (is_pred & active_t);
     wire is_neg = alu_op[2];
     
     wire vote_all = (is_neg) ? (vote_in == NUM_LANES'(1'b0)) : (vote_in == active_t);
     wire vote_any = (is_neg) ? (vote_in != active_t) : (vote_in > NUM_LANES'(1'b0));
-    wire vote_uni = ((is_pred == active_t) || (is_pred == NUM_LANES'(1'b0)));
-    wire [NUM_LANES-1:0] vote_ballot;
+    wire vote_uni = ((vote_in == active_t) || (vote_in == NUM_LANES'(1'b0)));
+    wire [NUM_LANES-1:0] vote_ballot = vote_in;
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign is_pred[i] = alu_in1[i][0];
-        assign vote_ballot[i] = (active_t[i] && is_pred[i]);
+        assign is_pred[i] = alu_in1[i][0] & alu_in2[0][i];
         always @(*) begin
             case (alu_op[1:0])
                 2'b00: vote_result[i] = `XLEN'(vote_all);       // ALL, NONE
@@ -147,12 +146,12 @@ module VX_alu_int #(
     wire [NUM_LANES-1:0][`XLEN-1:0] maxLane, minLane;
     reg [NUM_LANES-1:0][`XLEN-1:0] lane;
     reg [NUM_LANES-1:0] p;
-    wire [NUM_LANES-1:0][`XLEN-1:0] active_l;
+    wire [NUM_LANES-1:0] active_l;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign b[i] = (alu_in2_imm[i]>>4)&(`XLEN'(4'b1111));
-        assign segmask[i] = ((alu_in3[i] & `XLEN'(12'h0f0))>>4);
-        assign c[i] = (alu_in3[i] & `XLEN'(12'h00f));
+        assign b[i] = (alu_in2_imm[i]>>5)&(`XLEN'(5'b11111));
+        assign segmask[i] = ((alu_in3[i]>>5)&(`XLEN'(5'b11111)));
+        assign c[i] = (alu_in3[i] & `XLEN'(5'b11111));
         assign maxLane[i] = ((`XLEN'(i) & segmask[i]) | (c[i] & ~(segmask[i])));
         assign minLane[i] = (`XLEN'(i) & segmask[i]);
         always @(*) begin
@@ -181,8 +180,8 @@ module VX_alu_int #(
             if(p[i] == 1'b0) begin
                 lane[i] = `XLEN'(i);
             end
-            active_l[i] = lane[i] & alu_in2[i];
-            shfl_result[i] = (active_t[i] && (active_l[i] == `XLEN'(1'b1)) && (lane[i] < NUM_LANES)) ? alu_in1[$signed(lane[i])] : alu_in1[i];
+            active_l[i] = (lane[i] < NUM_LANES) ? alu_in2[0][$signed(lane[i])] : alu_in2[0][i];
+            shfl_result[i] = (active_t[i] && active_l[i]) ? ( (lane[i] < NUM_LANES) ? alu_in1[$signed(lane[i])] : alu_in1[i]) : `XLEN'(1'b0);
         end
     end
 

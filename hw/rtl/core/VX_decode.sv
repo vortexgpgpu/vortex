@@ -66,7 +66,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     wire [4:0] rd  = instr[11:7];
     wire [4:0] rs1 = instr[19:15];
     wire [4:0] rs2 = instr[24:20];
-    wire [4:0] rs3 = instr[31:27];
+    wire [4:0] rs3 = (opcode == `INST_SHFL)? {3'b000,instr[31:30]} + instr[24:20] : instr[31:27];
 
     `UNUSED_VAR (func2)
     `UNUSED_VAR (func5)
@@ -519,15 +519,14 @@ module VX_decode import VX_gpu_pkg::*; #(
             end
             `INST_VOTE: begin
                 ex_type = `EX_ALU;
-                //is_wstall = 1;
                 op_args.alu.use_imm = 1;
                 op_args.alu.imm = `SEXT(`IMM_BITS, u_12);
                 op_args.alu.xtype = `ALU_TYPE_OTHER;
                 op_args.alu.is_w = 1;
                 use_rd  = 1;
                 `USED_IREG (rd);
-                `USED_FREG (rs1);
-                `USED_FREG (rs2);  //membermask imm[23:20]
+                `USED_IREG (rs1);
+                `USED_IREG (rs2);  //membermask imm[24:20]
                 case (func3)
                     3'b000: begin
                         op_type = `INST_OP_BITS'(`VOTE_ALL);    
@@ -552,16 +551,15 @@ module VX_decode import VX_gpu_pkg::*; #(
             end
             `INST_SHFL: begin
                 ex_type = `EX_ALU;
-                is_wstall = 1;
                 op_args.alu.use_imm = 1;
                 op_args.alu.imm = `SEXT(`IMM_BITS, u_12);
                 op_args.alu.xtype = `ALU_TYPE_OTHER;
                 op_args.alu.is_w = 1;
                 use_rd  = 1;
                 `USED_IREG (rd);
-                `USED_FREG (rs1);
-                `USED_FREG (rs2);  //membermask imm[23:20]
-                `USED_FREG (rs3);  //c imm[31:27]
+                `USED_IREG (rs1);
+                `USED_IREG (rs2);  //membermask imm[24:20]
+                `USED_IREG (rs3);  //c offset imm[31:28]
                 case (func3)
                     3'b000: begin
                         op_type = `INST_OP_BITS'(`SHFL_BFLY);    
