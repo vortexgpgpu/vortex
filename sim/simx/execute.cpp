@@ -1443,8 +1443,8 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     bool check;
     bool is_neg = (func3 >= 4);
     func3 = func3%4;
-    // trace->fu_type = FUType::SFU;
-    // trace->sfu_type = SfuType::VOTE;
+    trace->fu_type = FUType::ALU;
+    trace->alu_type = AluType::ARITH;
     trace->used_iregs.set(rsrc0);
     trace->fetch_stall = true;
     uint32_t address = immsrc & 0xfff;
@@ -1543,19 +1543,19 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     }
   }break;
   case Opcode::SHFL:{
-    trace->fu_type = FUType::SFU;
-    trace->sfu_type = SfuType::SHFL;
+    trace->fu_type = FUType::ALU;
+    trace->alu_type = AluType::ARITH;
     trace->fetch_stall = true;
-    uint32_t address = immsrc & 0x00f;
+    uint32_t address = immsrc & 0x01f;
     auto mask =  warp.ireg_file.at(0)[address];  // Same mask stored in all threads
-    uint32_t b = (immsrc & 0x0f0) >> 4;
-    uint32_t c_add = (immsrc & 0xf00) >> 8;
+    uint32_t b = (immsrc & 0x3e0) >> 5;
+    uint32_t c_add = ((immsrc & 0xc00) >> 10) + address;
     uint32_t lane;
     bool p;
     for (uint32_t t = thread_start; t < num_threads; ++t) { 
       auto val = warp.ireg_file.at(t)[c_add];
-      auto c = val & 0x0000000f;
-      auto segmask = (val & 0x000000f0) >> 4;
+      auto c = val & 0x0000001f;
+      auto segmask = ((val >> 5) & 0x0000001f);
       auto maxLane = (t & segmask) | (c & ~segmask);
       auto minLane = (t & segmask);
       switch (func3) {
@@ -1581,9 +1581,16 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       }
       if(!p)
         lane = t; 
-      DPH(2, "\n###########" << (lane) << " " << (p)<< "\n");
       if((1 << t & mask) && warp.tmask.test(t) && (1 << lane & mask) && (lane < num_threads)){
         rddata[t].i = rsdata[lane][0].u;
+        rd_write = true;
+      }
+      else if(lane >= num_threads){
+        rddata[t].i = rsdata[t][0].u;
+        rd_write = true;
+      }
+      else{
+        rddata[t].i = 0;
         rd_write = true;
       }
     }
