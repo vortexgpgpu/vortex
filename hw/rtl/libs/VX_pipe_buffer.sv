@@ -24,8 +24,9 @@
 
 `TRACING_OFF
 module VX_pipe_buffer #(
-    parameter DATAW = 1,
-    parameter DEPTH = 1
+    parameter DATAW  = 1,
+    parameter RESETW = 0,
+    parameter DEPTH  = 1
 ) (
     input  wire             clk,
     input  wire             reset,
@@ -57,7 +58,7 @@ module VX_pipe_buffer #(
             assign ready[i] = (ready[i+1] || ~valid[i+1]);
             VX_pipe_register #(
                 .DATAW  (1 + DATAW),
-                .RESETW (1)
+                .RESETW (1 + RESETW)
             ) pipe_register (
                 .clk      (clk),
                 .reset    (reset),

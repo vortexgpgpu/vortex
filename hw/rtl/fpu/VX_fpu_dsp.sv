@@ -51,20 +51,20 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     localparam FPU_DIVSQRT = 1;
     localparam FPU_CVT     = 2;
     localparam FPU_NCP     = 3;
-    localparam NUM_FPC     = 4;
-    localparam FPC_BITS    = `LOG2UP(NUM_FPC);
+    localparam NUM_FPCORES = 4;
+    localparam FPCORES_BITS = `LOG2UP(NUM_FPCORES);
 
     localparam RSP_DATAW = (NUM_LANES * 32) + 1 + $bits(fflags_t) + TAG_WIDTH;
 
     `UNUSED_VAR (fmt)
 
-    wire [NUM_FPC-1:0] per_core_ready_in;
-    wire [NUM_FPC-1:0][NUM_LANES-1:0][31:0] per_core_result;
-    wire [NUM_FPC-1:0][TAG_WIDTH-1:0] per_core_tag_out;
-    wire [NUM_FPC-1:0] per_core_ready_out;
-    wire [NUM_FPC-1:0] per_core_valid_out;
-    wire [NUM_FPC-1:0] per_core_has_fflags;
-    fflags_t [NUM_FPC-1:0] per_core_fflags;
+    wire [NUM_FPCORES-1:0] per_core_ready_in;
+    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_result;
+    wire [NUM_FPCORES-1:0][TAG_WIDTH-1:0] per_core_tag_out;
+    wire [NUM_FPCORES-1:0] per_core_ready_out;
+    wire [NUM_FPCORES-1:0] per_core_valid_out;
+    wire [NUM_FPCORES-1:0] per_core_has_fflags;
+    fflags_t [NUM_FPCORES-1:0] per_core_fflags;
 
     wire div_ready_in, sqrt_ready_in;
     wire [NUM_LANES-1:0][31:0] div_result, sqrt_result;
@@ -74,7 +74,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     wire div_has_fflags, sqrt_has_fflags;
     fflags_t div_fflags, sqrt_fflags;
 
-    reg [FPC_BITS-1:0] core_select;
+    reg [FPCORES_BITS-1:0] core_select;
     reg is_madd, is_sub, is_neg, is_div, is_itof, is_signed;
 
     always @(*) begin
@@ -121,6 +121,9 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     `UNUSED_VAR (dataa)
     `UNUSED_VAR (datab)
     `UNUSED_VAR (datac)
+
+    // can accept new request?
+    assign ready_in = per_core_ready_in[core_select];
 
     VX_fpu_fma #(
         .NUM_LANES (NUM_LANES),
@@ -272,10 +275,10 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    reg [NUM_FPC-1:0][RSP_DATAW+2-1:0] per_core_data_out;
+    reg [NUM_FPCORES-1:0][RSP_DATAW+2-1:0] per_core_data_out;
 
     always @(*) begin
-        for (integer i = 0; i < NUM_FPC; ++i) begin
+        for (integer i = 0; i < NUM_FPCORES; ++i) begin
             per_core_data_out[i][RSP_DATAW+1:2] = {
                 per_core_result[i],
                 per_core_has_fflags[i],
@@ -294,7 +297,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     `UNUSED_VAR (op_ret_int_out)
 
     VX_stream_arb #(
-        .NUM_INPUTS (NUM_FPC),
+        .NUM_INPUTS (NUM_FPCORES),
         .DATAW      (RSP_DATAW + 2),
         .ARBITER    ("R"),
         .OUT_BUF    (OUT_BUF)
@@ -325,9 +328,6 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
         assign result[i] = result_s[i];
     `endif
     end
-
-    // can accept new request?
-    assign ready_in = per_core_ready_in[core_select];
 
 endmodule
 

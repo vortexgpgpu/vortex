@@ -22,8 +22,8 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
     input wire              clk,
     input wire              reset,
     VX_lsu_mem_if.slave     lsu_in_if,
-    VX_lsu_mem_if.master    cache_out_if,
-    VX_lsu_mem_if.master    lmem_out_if
+    VX_lsu_mem_if.master    global_out_if,
+    VX_lsu_mem_if.master    local_out_if
 );
     localparam REQ_DATAW = `NUM_LSU_LANES + 1 + `NUM_LSU_LANES * (LSU_WORD_SIZE + LSU_ADDR_WIDTH + `MEM_REQ_FLAGS_WIDTH + LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
     localparam RSP_DATAW = `NUM_LSU_LANES + `NUM_LSU_LANES * (LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
@@ -60,17 +60,17 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
             lsu_in_if.req_data.tag
         }),
         .ready_in  (req_global_ready),
-        .valid_out (cache_out_if.req_valid),
+        .valid_out (global_out_if.req_valid),
         .data_out  ({
-            cache_out_if.req_data.mask,
-            cache_out_if.req_data.rw,
-            cache_out_if.req_data.addr,
-            cache_out_if.req_data.data,
-            cache_out_if.req_data.byteen,
-            cache_out_if.req_data.flags,
-            cache_out_if.req_data.tag
+            global_out_if.req_data.mask,
+            global_out_if.req_data.rw,
+            global_out_if.req_data.addr,
+            global_out_if.req_data.data,
+            global_out_if.req_data.byteen,
+            global_out_if.req_data.flags,
+            global_out_if.req_data.tag
         }),
-        .ready_out (cache_out_if.req_ready)
+        .ready_out (global_out_if.req_ready)
     );
 
     VX_elastic_buffer #(
@@ -91,17 +91,17 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
             lsu_in_if.req_data.tag
         }),
         .ready_in  (req_local_ready),
-        .valid_out (lmem_out_if.req_valid),
+        .valid_out (local_out_if.req_valid),
         .data_out  ({
-            lmem_out_if.req_data.mask,
-            lmem_out_if.req_data.rw,
-            lmem_out_if.req_data.addr,
-            lmem_out_if.req_data.data,
-            lmem_out_if.req_data.byteen,
-            lmem_out_if.req_data.flags,
-            lmem_out_if.req_data.tag
+            local_out_if.req_data.mask,
+            local_out_if.req_data.rw,
+            local_out_if.req_data.addr,
+            local_out_if.req_data.data,
+            local_out_if.req_data.byteen,
+            local_out_if.req_data.flags,
+            local_out_if.req_data.tag
         }),
-        .ready_out (lmem_out_if.req_ready)
+        .ready_out (local_out_if.req_ready)
     );
 
     VX_stream_arb #(
@@ -113,16 +113,16 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
         .clk       (clk),
         .reset     (reset),
         .valid_in  ({
-            lmem_out_if.rsp_valid,
-            cache_out_if.rsp_valid
+            local_out_if.rsp_valid,
+            global_out_if.rsp_valid
         }),
         .ready_in  ({
-            lmem_out_if.rsp_ready,
-            cache_out_if.rsp_ready
+            local_out_if.rsp_ready,
+            global_out_if.rsp_ready
         }),
         .data_in   ({
-            lmem_out_if.rsp_data,
-            cache_out_if.rsp_data
+            local_out_if.rsp_data,
+            global_out_if.rsp_data
         }),
         .data_out  (lsu_in_if.rsp_data),
         .valid_out (lsu_in_if.rsp_valid),
