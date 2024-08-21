@@ -55,8 +55,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .clk          (clk),
             .reset        (reset),
             .lsu_in_if    (lsu_mem_in_if[i]),
-            .cache_out_if (lsu_dcache_if[i]),
-            .lmem_out_if  (lsu_lmem_if[i])
+            .global_out_if(lsu_dcache_if[i]),
+            .local_out_if (lsu_lmem_if[i])
         );
     end
 
@@ -65,7 +65,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .TAG_WIDTH (LSU_TAG_WIDTH)
     ) lmem_bus_if[LSU_NUM_REQS]();
 
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : adapter_slices
+    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : lmem_adapter_slices
         VX_mem_bus_if #(
             .DATA_SIZE (LSU_WORD_SIZE),
             .TAG_WIDTH (LSU_TAG_WIDTH)
@@ -123,15 +123,15 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
 `endif
 
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : coalescer_blocks
+    VX_lsu_mem_if #(
+        .NUM_LANES (DCACHE_CHANNELS),
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (DCACHE_TAG_WIDTH)
+    ) dcache_coalesced_if[`NUM_LSU_BLOCKS]();
 
-        VX_lsu_mem_if #(
-            .NUM_LANES (DCACHE_CHANNELS),
-            .DATA_SIZE (DCACHE_WORD_SIZE),
-            .TAG_WIDTH (DCACHE_TAG_WIDTH)
-        ) dcache_coalesced_if();
+    if (LSU_WORD_SIZE != DCACHE_WORD_SIZE) begin : coalescer_if
 
-        if (LSU_WORD_SIZE != DCACHE_WORD_SIZE) begin : coalescer_if
+        for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : coalescer_blocks
 
             `RESET_RELAY (mem_coalescer_reset, reset);
 
@@ -168,29 +168,34 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .in_rsp_ready   (lsu_dcache_if[i].rsp_ready),
 
                 // Output request
-                .out_req_valid  (dcache_coalesced_if.req_valid),
-                .out_req_mask   (dcache_coalesced_if.req_data.mask),
-                .out_req_rw     (dcache_coalesced_if.req_data.rw),
-                .out_req_byteen (dcache_coalesced_if.req_data.byteen),
-                .out_req_addr   (dcache_coalesced_if.req_data.addr),
-                .out_req_flags  (dcache_coalesced_if.req_data.flags),
-                .out_req_data   (dcache_coalesced_if.req_data.data),
-                .out_req_tag    (dcache_coalesced_if.req_data.tag),
-                .out_req_ready  (dcache_coalesced_if.req_ready),
+                .out_req_valid  (dcache_coalesced_if[i].req_valid),
+                .out_req_mask   (dcache_coalesced_if[i].req_data.mask),
+                .out_req_rw     (dcache_coalesced_if[i].req_data.rw),
+                .out_req_byteen (dcache_coalesced_if[i].req_data.byteen),
+                .out_req_addr   (dcache_coalesced_if[i].req_data.addr),
+                .out_req_flags  (dcache_coalesced_if[i].req_data.flags),
+                .out_req_data   (dcache_coalesced_if[i].req_data.data),
+                .out_req_tag    (dcache_coalesced_if[i].req_data.tag),
+                .out_req_ready  (dcache_coalesced_if[i].req_ready),
 
                 // Output response
-                .out_rsp_valid  (dcache_coalesced_if.rsp_valid),
-                .out_rsp_mask   (dcache_coalesced_if.rsp_data.mask),
-                .out_rsp_data   (dcache_coalesced_if.rsp_data.data),
-                .out_rsp_tag    (dcache_coalesced_if.rsp_data.tag),
-                .out_rsp_ready  (dcache_coalesced_if.rsp_ready)
+                .out_rsp_valid  (dcache_coalesced_if[i].rsp_valid),
+                .out_rsp_mask   (dcache_coalesced_if[i].rsp_data.mask),
+                .out_rsp_data   (dcache_coalesced_if[i].rsp_data.data),
+                .out_rsp_tag    (dcache_coalesced_if[i].rsp_data.tag),
+                .out_rsp_ready  (dcache_coalesced_if[i].rsp_ready)
             );
-
-        end else begin
-
-            `ASSIGN_VX_LSU_MEM_IF (dcache_coalesced_if, lsu_dcache_if[i]);
-
         end
+
+    end else begin
+
+        for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
+            `ASSIGN_VX_LSU_MEM_IF (dcache_coalesced_if[i], lsu_dcache_if[i]);
+        end
+
+    end
+
+    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : dcache_adapter_slices
 
         VX_mem_bus_if #(
             .DATA_SIZE (DCACHE_WORD_SIZE),
@@ -208,7 +213,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         ) dcache_adapter (
             .clk        (clk),
             .reset      (reset),
-            .lsu_mem_if (dcache_coalesced_if),
+            .lsu_mem_if (dcache_coalesced_if[i]),
             .mem_bus_if (dcache_bus_tmp_if)
         );
 
