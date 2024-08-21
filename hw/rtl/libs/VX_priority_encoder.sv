@@ -65,11 +65,10 @@ module VX_priority_encoder #(
         ) lzc (
             .data_in  (reversed),
             .data_out (index_out),
-            `UNUSED_PIN (valid_out)
+            .valid_out(valid_out)
         );
 
         assign onehot_out = scan_lo & {(~scan_lo[N-2:0]), 1'b1};
-        assign valid_out  = scan_lo[N-1];
 
     end else if (MODEL == 2) begin
 
