@@ -49,6 +49,27 @@ module VX_priority_encoder #(
 
     end else if (MODEL == 1) begin
 
+    `IGNORE_UNOPTFLAT_BEGIN
+        wire [N-1:0] higher_pri_regs;
+    `IGNORE_UNOPTFLAT_END
+
+        assign higher_pri_regs[0] = 1'b0;
+        for (genvar i = 1; i < N; ++i) begin
+            assign higher_pri_regs[i] = higher_pri_regs[i-1] | reversed[i-1];
+        end
+        assign onehot_out[N-1:0] = reversed[N-1:0] & ~higher_pri_regs[N-1:0];
+
+        VX_lzc #(
+            .N       (N),
+            .REVERSE (1)
+        ) lzc (
+            .data_in   (reversed),
+            .data_out  (index_out),
+            .valid_out (valid_out)
+        );
+
+    end else if (MODEL == 2) begin
+
         wire [N-1:0] scan_lo;
 
         VX_scan #(
@@ -69,27 +90,6 @@ module VX_priority_encoder #(
         );
 
         assign onehot_out = scan_lo & {(~scan_lo[N-2:0]), 1'b1};
-
-    end else if (MODEL == 2) begin
-
-    `IGNORE_UNOPTFLAT_BEGIN
-        wire [N-1:0] higher_pri_regs;
-    `IGNORE_UNOPTFLAT_END
-
-        assign higher_pri_regs[0] = 1'b0;
-        for (genvar i = 1; i < N; ++i) begin
-            assign higher_pri_regs[i] = higher_pri_regs[i-1] | reversed[i-1];
-        end
-        assign onehot_out[N-1:0] = reversed[N-1:0] & ~higher_pri_regs[N-1:0];
-
-        VX_lzc #(
-            .N       (N),
-            .REVERSE (1)
-        ) lzc (
-            .data_in   (reversed),
-            .data_out  (index_out),
-            .valid_out (valid_out)
-        );
 
     end else if (MODEL == 3) begin
 
