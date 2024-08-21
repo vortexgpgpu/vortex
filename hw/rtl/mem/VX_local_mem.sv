@@ -163,12 +163,13 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         wire bank_rsp_valid, bank_rsp_ready;
-        wire [WORD_WIDTH-1:0] bank_rsp_data;
 
         VX_sp_ram #(
             .DATAW (WORD_WIDTH),
             .SIZE  (WORDS_PER_BANK),
             .WRENW (WORD_SIZE),
+            .READ_ENABLE (1),
+            .OUT_REG (1),
             .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),
@@ -178,7 +179,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .wren  (per_bank_req_byteen[i]),
             .addr  (per_bank_req_addr[i]),
             .wdata (per_bank_req_data[i]),
-            .rdata (bank_rsp_data)
+            .rdata (per_bank_rsp_data[i])
         );
 
         // read-during-write hazard detection
@@ -194,20 +195,20 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         end
         wire is_rdw_hazard = last_wr_valid && ~per_bank_req_rw[i] && (per_bank_req_addr[i] == last_wr_addr);
 
-        // drop write response and stall on read-during-write hazard
+        // drop write response
         assign bank_rsp_valid = per_bank_req_valid[i] && ~per_bank_req_rw[i] && ~is_rdw_hazard;
         assign per_bank_req_ready[i] = (bank_rsp_ready || per_bank_req_rw[i]) && ~is_rdw_hazard;
 
         // register BRAM output
         VX_pipe_buffer #(
-            .DATAW (REQ_SEL_WIDTH + WORD_WIDTH + TAG_WIDTH)
+            .DATAW (REQ_SEL_WIDTH + TAG_WIDTH)
         ) bram_buf (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (bank_rsp_valid),
             .ready_in  (bank_rsp_ready),
-            .data_in   ({per_bank_req_idx[i], bank_rsp_data,        per_bank_req_tag[i]}),
-            .data_out  ({per_bank_rsp_idx[i], per_bank_rsp_data[i], per_bank_rsp_tag[i]}),
+            .data_in   ({per_bank_req_idx[i], per_bank_req_tag[i]}),
+            .data_out  ({per_bank_rsp_idx[i], per_bank_rsp_tag[i]}),
             .valid_out (per_bank_rsp_valid[i]),
             .ready_out (per_bank_rsp_ready[i])
         );
