@@ -43,7 +43,7 @@ ifdef AXI_BUS
 	TOP = Vortex_axi
 	CXXFLAGS += -DAXI_BUS
 else
-	TOP = Vortex
+	TOP = Vortex_hbm
 endif
 
 VL_FLAGS = --exe
