@@ -3,17 +3,9 @@ include $(ROOT_DIR)/config.mk
 
 PREFIX ?= build
 
-BUILD_DIR := $(PREFIX)_$(DEVICE_FAMILY)
-
-SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
-
-IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
+BUILD_DIR := $(PREFIX)
 
 .PHONY: dogfood unittest pipeline mem_unit lmem cache fpu core issue vortex top
-
-ip-gen: $(IP_CACHE_DIR)/ip_gen.log
-$(IP_CACHE_DIR)/ip_gen.log:
-	$(SCRIPT_DIR)/ip_gen.sh $(IP_CACHE_DIR)
 
 dogfood:
 	mkdir -p dogfood/$(BUILD_DIR)
@@ -45,7 +37,7 @@ cache:
 	cp cache/Makefile cache/$(BUILD_DIR)
 	$(MAKE) -C cache/$(BUILD_DIR) clean && $(MAKE) -C cache/$(BUILD_DIR) > cache/$(BUILD_DIR)/build.log 2>&1 &
 
-fpu: ip-gen
+fpu:
 	mkdir -p fpu/$(BUILD_DIR)
 	cp fpu/Makefile fpu/$(BUILD_DIR)
 	$(MAKE) -C fpu/$(BUILD_DIR) clean && $(MAKE) -C fpu/$(BUILD_DIR) > fpu/$(BUILD_DIR)/build.log 2>&1 &
@@ -60,12 +52,12 @@ issue:
 	cp issue/Makefile issue/$(BUILD_DIR)
 	$(MAKE) -C issue/$(BUILD_DIR) clean && $(MAKE) -C issue/$(BUILD_DIR) > issue/$(BUILD_DIR)/build.log 2>&1 &
 
-vortex: ip-gen
+vortex:
 	mkdir -p vortex/$(BUILD_DIR)
 	cp vortex/Makefile vortex/$(BUILD_DIR)
 	$(MAKE) -C vortex/$(BUILD_DIR) clean && $(MAKE) -C vortex/$(BUILD_DIR) > vortex/$(BUILD_DIR)/build.log 2>&1 &
 
-top: ip-gen
+top:
 	mkdir -p top/$(BUILD_DIR)
 	cp top/Makefile top/$(BUILD_DIR)
 	$(MAKE) -C top/$(BUILD_DIR) clean && $(MAKE) -C top/$(BUILD_DIR) > top/$(BUILD_DIR)/build.log 2>&1 &

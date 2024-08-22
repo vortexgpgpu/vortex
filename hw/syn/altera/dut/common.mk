@@ -1,7 +1,7 @@
 ROOT_DIR := $(realpath ../../../../../..)
 include $(ROOT_DIR)/config.mk
 
-SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/quartus
+SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/dut
 
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 AFU_DIR := $(RTL_DIR)/afu/opae
@@ -21,7 +21,6 @@ endif
 CONFIGS += -DNDEBUG
 CONFIGS += -DQUARTUS
 CONFIGS += -DSYNTHESIS
-CONFIGS += -DNOGLOBALS
 
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
