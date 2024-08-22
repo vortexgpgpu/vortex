@@ -59,7 +59,7 @@ foreach def $vdefines_list {
 }
 
 # Synthesis
-synth_design -top $top_module -include_dirs $vincludes_list -flatten_hierarchy none
+synth_design -top $top_module -include_dirs $vincludes_list -mode out_of_context -flatten_hierarchy none
 write_checkpoint -force post_synth.dcp
 report_utilization -file utilization.rpt -hierarchical -hierarchical_percentages
 
