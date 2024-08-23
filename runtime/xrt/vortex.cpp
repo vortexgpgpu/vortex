@@ -134,12 +134,14 @@ static void wait_for_enter(const std::string &msg) {
 class vx_device {
 public:
   vx_device()
-    : xrtDevice_(nullptr)
-    , xrtKernel_(nullptr)
-    , global_mem_(ALLOC_BASE_ADDR,
+    : global_mem_(ALLOC_BASE_ADDR,
                   GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR,
                   RAM_PAGE_SIZE,
                   CACHE_BLOCK_SIZE)
+  #ifndef CPP_API
+    , xrtDevice_(nullptr)
+    , xrtKernel_(nullptr)
+  #endif
   {}
 
   ~vx_device() {
@@ -715,10 +717,10 @@ public:
 
 private:
 
+  MemoryAllocator global_mem_;
   xrt_device_t xrtDevice_;
   xrt_kernel_t xrtKernel_;
   platform_info_t platform_;
-  MemoryAllocator global_mem_;
   uint64_t dev_caps_;
   uint64_t isa_caps_;
   uint64_t global_mem_size_;

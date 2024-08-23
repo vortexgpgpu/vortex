@@ -12,9 +12,8 @@
 // limitations under the License.
 
 `include "VX_define.vh"
-`include "VX_trace.vh"
 
-module VX_dcr_data import VX_gpu_pkg::*; (
+module VX_dcr_data import VX_gpu_pkg::*, VX_trace_pkg::*; (
     input wire              clk,
     input wire              reset,
 

@@ -46,7 +46,7 @@ static float* read_output_file(const char* filename, int size) {
         return NULL;
     }
     // Read the float data
-    if (fread(floats, sizeof(float), size, file) != size) {
+    if (fread(floats, sizeof(float), size, file) != (size_t)size) {
         fclose(file);
         free(floats);
         perror("Error reading floats from file");
@@ -128,6 +128,7 @@ int main(int nArgs, char *arg[]) {
   MAIN_initialize(&param, &prm);
 
   for (t = 1; t <= param.nTimeSteps; t++) {
+    
     pb_SwitchToTimer(&timers, pb_TimerID_KERNEL);
     OpenCL_LBM_performStreamCollide(&prm, OpenCL_srcGrid, OpenCL_dstGrid);
     pb_SwitchToTimer(&timers, pb_TimerID_COMPUTE);
@@ -198,9 +199,9 @@ void MAIN_printInfo(const MAIN_Param *param) {
          "\tsimulation type: %s\n"
          "\tobstacle file  : %s\n\n",
          SIZE_X, SIZE_Y, SIZE_Z, 1e-6 * SIZE_X * SIZE_Y * SIZE_Z,
-         param->nTimeSteps, param->resultFilename, "store", "lid-driven cavity",
-         (param->obstacleFilename == NULL) ? "<none>"
-                                           : param->obstacleFilename);
+         param->nTimeSteps, ((param->resultFilename == NULL) ? "<none>" : param->resultFilename), "store", "lid-driven cavity",
+         ((param->obstacleFilename == NULL) ? "<none>" : param->obstacleFilename)
+  );
 }
 
 /*############################################################################*/
@@ -316,7 +317,7 @@ void OpenCL_initialize(struct pb_Parameters *p, OpenCL_Param *prm) {
   // read kernel binary from file
   uint8_t *kernel_bin = NULL;
   size_t kernel_size;
-  cl_int binary_status = 0;
+  //cl_int binary_status = 0;
 
   clStatus = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
   CHECK_ERROR("read_kernel_file")

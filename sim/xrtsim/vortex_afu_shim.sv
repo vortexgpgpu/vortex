@@ -50,7 +50,6 @@ module vortex_afu_shim #(
     output wire                                 interrupt
 `IGNORE_WARNINGS_END
 );
-
     vortex_afu #(
         .C_S_AXI_CTRL_ADDR_WIDTH(C_S_AXI_CTRL_ADDR_WIDTH),
         .C_S_AXI_CTRL_DATA_WIDTH(C_S_AXI_CTRL_DATA_WIDTH),

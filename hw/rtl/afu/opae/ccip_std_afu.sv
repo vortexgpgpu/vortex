@@ -5,6 +5,7 @@
 // To be done:
 // Check how to run this with OPAE. Looks like setup issue
 
+`ifndef NOPAE
 
 `include "platform_if.vh"
 
@@ -85,7 +86,7 @@ module ccip_std_afu #(
     t_local_mem_data      avs_writedata [NUM_LOCAL_MEM_BANKS];
     t_local_mem_addr      avs_address [NUM_LOCAL_MEM_BANKS];
     logic                 avs_write [NUM_LOCAL_MEM_BANKS];
-    logic                 avs_read [NUM_LOCAL_MEM_BANKS];    
+    logic                 avs_read [NUM_LOCAL_MEM_BANKS];
 
     for (genvar b = 0; b < NUM_LOCAL_MEM_BANKS; b++) begin
         assign local_mem[b].burstcount = avs_burstcount[b];
@@ -94,7 +95,7 @@ module ccip_std_afu #(
         assign local_mem[b].byteenable = avs_byteenable[b];
         assign local_mem[b].write      = avs_write[b];
         assign local_mem[b].read       = avs_read[b];
-        
+
         assign avs_waitrequest[b]   = local_mem[b].waitrequest;
         assign avs_readdata[b]      = local_mem[b].readdata;
         assign avs_readdatavalid[b] = local_mem[b].readdatavalid;
@@ -107,7 +108,7 @@ module ccip_std_afu #(
         .reset               (reset_T1),
 
         .cp2af_sRxPort       (cp2af_sRx_T1),
-        .af2cp_sTxPort       (af2cp_sTx_T0),        
+        .af2cp_sTxPort       (af2cp_sTx_T0),
 
         .avs_writedata       (avs_writedata),
         .avs_readdata        (avs_readdata),
@@ -121,3 +122,5 @@ module ccip_std_afu #(
     );
 
 endmodule
+
+`endif

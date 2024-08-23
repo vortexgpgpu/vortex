@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,7 +21,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
     parameter TAG_WIDTH = 1
 ) (
     input wire clk,
-    input wire reset, 
+    input wire reset,
 
     output wire ready_in,
     input wire  valid_in,
@@ -29,7 +29,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
     input wire [NUM_LANES-1:0] mask_in,
 
     input wire [TAG_WIDTH-1:0] tag_in,
-    
+
     input wire [`INST_FRM_BITS-1:0] frm,
 
     input wire  is_madd,
@@ -39,7 +39,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
     input wire [NUM_LANES-1:0][31:0]  dataa,
     input wire [NUM_LANES-1:0][31:0]  datab,
     input wire [NUM_LANES-1:0][31:0]  datac,
-    output wire [NUM_LANES-1:0][31:0] result, 
+    output wire [NUM_LANES-1:0][31:0] result,
 
     output wire has_fflags,
     output wire [`FP_FLAGS_BITS-1:0] fflags,
@@ -52,11 +52,11 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
     `UNUSED_VAR (frm)
 
     wire [NUM_LANES-1:0][3*32-1:0] data_in;
-    wire [NUM_LANES-1:0] mask_out;    
+    wire [NUM_LANES-1:0] mask_out;
     wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+32)-1:0] data_out;
     wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags_out;
 
-    wire pe_enable;    
+    wire pe_enable;
     wire [NUM_PES-1:0][3*32-1:0] pe_data_in;
     wire [NUM_PES-1:0][(`FP_FLAGS_BITS+32)-1:0] pe_data_out;
 
@@ -66,7 +66,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
         always @(*) begin
             if (is_madd) begin
                 // MADD / MSUB / NMADD / NMSUB
-                a[i] = is_neg ? {~dataa[i][31], dataa[i][30:0]} : dataa[i];                    
+                a[i] = is_neg ? {~dataa[i][31], dataa[i][30:0]} : dataa[i];
                 b[i] = datab[i];
                 c[i] = (is_neg ^ is_sub) ? {~datac[i][31], datac[i][30:0]} : datac[i];
             end else begin
@@ -81,7 +81,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
                     b[i] = dataa[i];
                     c[i] = is_sub ? {~datab[i][31], datab[i][30:0]} : datab[i];
                 end
-            end    
+            end
         end
     end
 
@@ -90,15 +90,15 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
         assign data_in[i][32 +: 32] = b[i];
         assign data_in[i][64 +: 32] = c[i];
     end
-    
+
     VX_pe_serializer #(
-        .NUM_LANES  (NUM_LANES), 
-        .NUM_PES    (NUM_PES), 
+        .NUM_LANES  (NUM_LANES),
+        .NUM_PES    (NUM_PES),
         .LATENCY    (`LATENCY_FMA),
         .DATA_IN_WIDTH(3*32),
         .DATA_OUT_WIDTH(`FP_FLAGS_BITS + 32),
         .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
-        .PE_REG     (1)
+        .PE_REG     ((NUM_LANES != NUM_PES) ? 1 : 0)
     ) pe_serializer (
         .clk        (clk),
         .reset      (reset),
@@ -123,7 +123,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
     fflags_t [NUM_LANES-1:0] per_lane_fflags;
 
 `ifdef QUARTUS
-    
+
     for (genvar i = 0; i < NUM_PES; ++i) begin
         acl_fmadd fmadd (
             .clk (clk),
@@ -136,7 +136,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
         );
         assign pe_data_out[i][32 +: `FP_FLAGS_BITS] = 'x;
     end
-    
+
     assign has_fflags = 0;
     assign per_lane_fflags = 'x;
 
@@ -144,7 +144,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_PES; ++i) begin
         wire [2:0] tuser;
-        
+
         xil_fma fma (
             .aclk                (clk),
             .aclken              (pe_enable),
@@ -172,15 +172,15 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
         `UNUSED_VAR (r)
         fflags_t f;
 
-        always @(*) begin        
+        always @(*) begin
             dpi_fmadd (
-                pe_enable, 
-                int'(0), 
-                {32'hffffffff, pe_data_in[i][0 +: 32]}, 
-                {32'hffffffff, pe_data_in[i][32 +: 32]}, 
-                {32'hffffffff, pe_data_in[i][64 +: 32]}, 
-                frm, 
-                r, 
+                pe_enable,
+                int'(0),
+                {32'hffffffff, pe_data_in[i][0 +: 32]},
+                {32'hffffffff, pe_data_in[i][32 +: 32]},
+                {32'hffffffff, pe_data_in[i][64 +: 32]},
+                frm,
+                r,
                 f
             );
         end

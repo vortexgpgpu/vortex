@@ -4,6 +4,7 @@ all:
 	$(MAKE) -C mem_streamer
 	$(MAKE) -C cache_top
 	$(MAKE) -C core_top
+	$(MAKE) -C issue_top
 
 run:
 	$(MAKE) -C cache run
@@ -11,6 +12,7 @@ run:
 	$(MAKE) -C mem_streamer run
 	$(MAKE) -C cache_top run
 	$(MAKE) -C core_top run
+	$(MAKE) -C issue_top run
 
 clean:
 	$(MAKE) -C cache clean
@@ -18,3 +20,4 @@ clean:
 	$(MAKE) -C mem_streamer clean
 	$(MAKE) -C cache_top clean
 	$(MAKE) -C core_top clean
+	$(MAKE) -C issue_top clean

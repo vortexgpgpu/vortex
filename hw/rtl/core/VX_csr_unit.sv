@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 
 module VX_csr_unit import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0,
     parameter NUM_LANES = 1
 ) (
@@ -36,7 +37,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     VX_execute_if.slave         execute_if,
     VX_commit_if.master         commit_if
 );
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
     localparam DATAW      = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
@@ -72,7 +73,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire csr_write_enable = (execute_if.data.op_type == `INST_SFU_CSRRW);
 
     VX_csr_data #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID (INSTANCE_ID),
+        .CORE_ID     (CORE_ID)
     ) csr_data (
         .clk            (clk),
         .reset          (reset),
