@@ -202,8 +202,8 @@ jobs:
       - name: Run Build
         run: |
           TOOLDIR=$PWD/tools
-          mkdir -p build${{ matrix.xlen }}
-          cd build${{ matrix.xlen }}
+          mkdir -p build${{ matrix.xlen }}-vm
+          cd build${{ matrix.xlen }}-vm
           ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }} --vm_enable=1
           source ci/toolchain_env.sh
           make software -s > /dev/null
