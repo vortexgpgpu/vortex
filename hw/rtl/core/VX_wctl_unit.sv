@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 module VX_wctl_unit import VX_gpu_pkg::*; #(
-    parameter CORE_ID = 0,
+    parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = 1
 ) (
     input wire              clk,
@@ -27,7 +27,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     VX_warp_ctl_if.master   warp_ctl_if,
     VX_commit_if.master     commit_if
 );
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam LANE_BITS  = `CLOG2(NUM_LANES);
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);

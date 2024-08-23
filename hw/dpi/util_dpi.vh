@@ -14,8 +14,6 @@
 `ifndef UTIL_DPI_VH
 `define UTIL_DPI_VH
 
-`include "VX_config.vh"
-
 `ifdef XLEN_64
 `define INT_TYPE longint
 `else

@@ -25,15 +25,9 @@ SRCS = $(SRC_DIR)/vortex.cpp $(SRC_DIR)/driver.cpp
 # set up target types
 ifeq ($(TARGET), opaesim)
 	OPAESIM = $(DESTDIR)/libopae-c-sim.so
-	CXXFLAGS += -DOPAESIM -I$(SIM_DIR)/opaesim
-	LDFLAGS += -L$(DESTDIR) -lopae-c-sim
+	CXXFLAGS += -I$(SIM_DIR)/opaesim
 else
 	CXXFLAGS += -I$(SYN_DIR)
-	ifeq ($(TARGET), asesim)
-		CXXFLAGS += -DASESIM
-	else
-		CXXFLAGS += -DFPGA
-	endif
 endif
 
 # Debugigng

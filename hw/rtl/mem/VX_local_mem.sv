@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,10 +17,10 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     parameter `STRING  INSTANCE_ID = "",
 
     // Size of cache in bytes
-    parameter SIZE              = (1024*16*8), 
-    
+    parameter SIZE              = (1024*16*8),
+
     // Number of Word requests per cycle
-    parameter NUM_REQS          = 4, 
+    parameter NUM_REQS          = 4,
     // Number of banks
     parameter NUM_BANKS         = 4,
 
@@ -33,8 +33,11 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     parameter UUID_WIDTH        = 0,
 
     // Request tag size
-    parameter TAG_WIDTH         = 16
- ) (    
+    parameter TAG_WIDTH         = 16,
+
+    // Response buffer
+    parameter OUT_BUF           = 0
+ ) (
     input wire clk,
     input wire reset,
 
@@ -59,7 +62,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     localparam REQ_DATAW       = 1 + BANK_ADDR_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH;
     localparam RSP_DATAW       = WORD_WIDTH + TAG_WIDTH;
 
-    `STATIC_ASSERT(ADDR_WIDTH == (BANK_ADDR_WIDTH + `CLOG2(NUM_BANKS)), ("invalid parameter"))    
+    `STATIC_ASSERT(ADDR_WIDTH == (BANK_ADDR_WIDTH + `CLOG2(NUM_BANKS)), ("invalid parameter"))
 
     // bank selection
 
@@ -70,7 +73,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         end
     end else begin
         assign req_bank_idx = 0;
-    end   
+    end
 
     // bank addressing
 
@@ -83,18 +86,18 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     // bank requests dispatch
 
     wire [NUM_BANKS-1:0]                    per_bank_req_valid;
-    wire [NUM_BANKS-1:0]                    per_bank_req_rw;      
+    wire [NUM_BANKS-1:0]                    per_bank_req_rw;
     wire [NUM_BANKS-1:0][BANK_ADDR_WIDTH-1:0] per_bank_req_addr;
     wire [NUM_BANKS-1:0][WORD_SIZE-1:0]     per_bank_req_byteen;
     wire [NUM_BANKS-1:0][WORD_WIDTH-1:0]    per_bank_req_data;
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]     per_bank_req_tag;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] per_bank_req_idx;
     wire [NUM_BANKS-1:0]                    per_bank_req_ready;
-    
+
     wire [NUM_BANKS-1:0][REQ_DATAW-1:0]     per_bank_req_data_all;
 
     wire [NUM_REQS-1:0]                 req_valid_in;
-    wire [NUM_REQS-1:0][REQ_DATAW-1:0]  req_data_in; 
+    wire [NUM_REQS-1:0][REQ_DATAW-1:0]  req_data_in;
     wire [NUM_REQS-1:0]                 req_ready_in;
 
 `ifdef PERF_ENABLE
@@ -104,13 +107,13 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         assign req_valid_in[i] = mem_bus_if[i].req_valid;
         assign req_data_in[i] = {
-            mem_bus_if[i].req_data.rw,        
+            mem_bus_if[i].req_data.rw,
             req_bank_addr[i],
             mem_bus_if[i].req_data.byteen,
             mem_bus_if[i].req_data.data,
             mem_bus_if[i].req_data.tag};
         assign mem_bus_if[i].req_ready = req_ready_in[i];
-    end    
+    end
 
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_REQS),
@@ -138,10 +141,10 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         assign {
-            per_bank_req_rw[i],        
+            per_bank_req_rw[i],
             per_bank_req_addr[i],
-            per_bank_req_byteen[i],        
-            per_bank_req_data[i],        
+            per_bank_req_byteen[i],
+            per_bank_req_data[i],
             per_bank_req_tag[i]} = per_bank_req_data_all[i];
     end
 
@@ -149,13 +152,13 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     wire [NUM_BANKS-1:0]                per_bank_rsp_valid;
     wire [NUM_BANKS-1:0][WORD_WIDTH-1:0] per_bank_rsp_data;
-    wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] per_bank_rsp_idx; 
-    wire [NUM_BANKS-1:0][TAG_WIDTH-1:0] per_bank_rsp_tag;   
+    wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] per_bank_rsp_idx;
+    wire [NUM_BANKS-1:0][TAG_WIDTH-1:0] per_bank_rsp_tag;
     wire [NUM_BANKS-1:0]                per_bank_rsp_ready;
 
     `RESET_RELAY (bank_reset, reset);
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin        
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin
         VX_sp_ram #(
             .DATAW (WORD_WIDTH),
             .SIZE  (WORDS_PER_BANK),
@@ -165,7 +168,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .read  (1'b1),
             .write (per_bank_req_valid[i] && per_bank_req_ready[i] && per_bank_req_rw[i]),
             .wren  (per_bank_req_byteen[i]),
-            .addr  (per_bank_req_addr[i]),            
+            .addr  (per_bank_req_addr[i]),
             .wdata (per_bank_req_data[i]),
             .rdata (per_bank_rsp_data[i])
         );
@@ -193,7 +196,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     // bank responses gather
 
     wire [NUM_BANKS-1:0][RSP_DATAW-1:0] per_bank_rsp_data_all;
-    
+
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         assign per_bank_rsp_data_all[i] = {per_bank_rsp_data[i], per_bank_rsp_tag[i]};
     end
@@ -206,7 +209,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .NUM_INPUTS  (NUM_BANKS),
         .NUM_OUTPUTS (NUM_REQS),
         .DATAW       (RSP_DATAW),
-        .OUT_BUF     (2)
+        .OUT_BUF     (OUT_BUF)
     ) rsp_xbar (
         .clk       (clk),
         .reset     (reset),
@@ -302,38 +305,38 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             assign per_bank_rsp_uuid[i] = 0;
         end
     end
-    
+
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         always @(posedge clk) begin
             if (mem_bus_if[i].req_valid && mem_bus_if[i].req_ready) begin
                 if (mem_bus_if[i].req_data.rw) begin
-                    `TRACE(1, ("%d: %s wr-req: req_idx=%0d, addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", 
+                    `TRACE(1, ("%d: %s wr-req: req_idx=%0d, addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n",
                         $time, INSTANCE_ID, i, mem_bus_if[i].req_data.addr, mem_bus_if[i].req_data.tag, mem_bus_if[i].req_data.byteen, mem_bus_if[i].req_data.data, req_uuid[i]));
                 end else begin
-                    `TRACE(1, ("%d: %s rd-req: req_idx=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n", 
+                    `TRACE(1, ("%d: %s rd-req: req_idx=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n",
                         $time, INSTANCE_ID, i, mem_bus_if[i].req_data.addr, mem_bus_if[i].req_data.tag, req_uuid[i]));
                 end
             end
             if (mem_bus_if[i].rsp_valid && mem_bus_if[i].rsp_ready) begin
-                `TRACE(1, ("%d: %s rd-rsp: req_idx=%0d, tag=0x%0h, data=0x%0h (#%0d)\n", 
+                `TRACE(1, ("%d: %s rd-rsp: req_idx=%0d, tag=0x%0h, data=0x%0h (#%0d)\n",
                     $time, INSTANCE_ID, i, mem_bus_if[i].rsp_data.tag, mem_bus_if[i].rsp_data.data[i], rsp_uuid[i]));
             end
         end
     end
-    
+
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         always @(posedge clk) begin
             if (per_bank_req_valid[i] && per_bank_req_ready[i]) begin
                 if (per_bank_req_rw[i]) begin
-                    `TRACE(2, ("%d: %s-bank%0d wr-req: addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", 
+                    `TRACE(2, ("%d: %s-bank%0d wr-req: addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n",
                         $time, INSTANCE_ID, i, per_bank_req_addr[i], per_bank_req_tag[i], per_bank_req_byteen[i], per_bank_req_data[i], per_bank_req_uuid[i]));
                 end else begin
-                    `TRACE(2, ("%d: %s-bank%0d rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n", 
+                    `TRACE(2, ("%d: %s-bank%0d rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n",
                         $time, INSTANCE_ID, i, per_bank_req_addr[i], per_bank_req_tag[i], per_bank_req_uuid[i]));
                 end
             end
             if (per_bank_rsp_valid[i] && per_bank_rsp_ready[i]) begin
-                `TRACE(2, ("%d: %s-bank%0d rd-rsp: tag=0x%0h, data=0x%0h (#%0d)\n", 
+                `TRACE(2, ("%d: %s-bank%0d rd-rsp: tag=0x%0h, data=0x%0h (#%0d)\n",
                     $time, INSTANCE_ID, i, per_bank_rsp_tag[i], per_bank_rsp_data[i], per_bank_rsp_uuid[i]));
             end
         end

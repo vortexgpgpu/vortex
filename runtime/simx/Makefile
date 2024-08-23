@@ -10,6 +10,10 @@ CXXFLAGS += -I$(INC_DIR) -I../common -I$(ROOT_DIR)/hw -I$(SIM_DIR)/simx -I$(COMM
 CXXFLAGS += $(CONFIGS)
 CXXFLAGS += -DXLEN_$(XLEN)
 
+ifeq ($(VM_ENABLE), 1)
+CXXFLAGS += -DVM_ENABLE
+endif
+
 LDFLAGS += -shared -pthread
 LDFLAGS += -L$(DESTDIR) -lsimx
 

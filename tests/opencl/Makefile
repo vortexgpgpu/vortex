@@ -65,27 +65,6 @@ run-rtlsim:
 	$(MAKE) -C sgemm3 run-rtlsim
 	$(MAKE) -C psum run-rtlsim
 
-run-opae:
-	$(MAKE) -C vecadd run-opae
-	$(MAKE) -C sgemm run-opae
-	$(MAKE) -C conv3 run-opae
-	$(MAKE) -C psort run-opae
-	$(MAKE) -C saxpy run-opae
-	$(MAKE) -C sfilter run-opae
-	$(MAKE) -C oclprintf run-opae
-	$(MAKE) -C dotproduct run-opae
-	$(MAKE) -C transpose run-opae
-	$(MAKE) -C spmv run-opae
-	$(MAKE) -C stencil run-opae
-	$(MAKE) -C nearn run-opae
-	$(MAKE) -C guassian run-opae
-	$(MAKE) -C kmeans run-opae
-	$(MAKE) -C blackscholes run-opae
-	$(MAKE) -C bfs run-opae
-	$(MAKE) -C sgemm2 run-opae
-	$(MAKE) -C sgemm3 run-opae
-	$(MAKE) -C psum run-opae
-
 clean:
 	$(MAKE) -C vecadd clean
 	$(MAKE) -C sgemm clean

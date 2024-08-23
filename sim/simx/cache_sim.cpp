@@ -400,7 +400,7 @@ public:
 				continue;
 
 			auto& mem_rsp = mem_rsp_port.front();
-			DT(3, simobject_->name() << "-dram-" << mem_rsp);
+			DT(3, simobject_->name() << "-bank" << bank_id << " fill-rsp: " << mem_rsp);
 			pipeline_req.type = bank_req_t::Fill;
 			pipeline_req.tag = mem_rsp.tag;
 			mem_rsp_port.pop();
@@ -436,7 +436,7 @@ public:
 			auto port_id = req_id % config_.ports_per_bank;
 
 			// check MSHR capacity
-			if ((!core_req.write || !config_.write_through)
+			if ((!core_req.write || config_.write_back)
 		   && bank.mshr.full()) {
 				++perf_stats_.mshr_stalls;
 				continue;
@@ -473,7 +473,6 @@ public:
 				++perf_stats_.reads;
 
 			// remove request
-			DT(3, simobject_->name() << "-core-" << core_req);
 			auto time = core_req_port.pop();
 			perf_stats_.pipeline_stalls += (SimPlatform::instance().cycles() - time);
 		}
@@ -493,23 +492,21 @@ private:
 		uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
 		MemRsp core_rsp{tag, mem_rsp.cid, mem_rsp.uuid};
 		simobject_->CoreRspPorts.at(req_id).push(core_rsp, config_.latency);
-		DT(3, simobject_->name() << "-core-" << core_rsp);
+		DT(3, simobject_->name() << " core-rsp: " << core_rsp);
 	}
 
 	void processBypassRequest(const MemReq& core_req, uint32_t req_id) {
-		DT(3, simobject_->name() << "-core-" << core_req);
-
 		{
 			MemReq mem_req(core_req);
 			mem_req.tag = (core_req.tag << params_.log2_num_inputs) + req_id;
 			bypass_switch_->ReqIn.at(1).push(mem_req, 1);
-			DT(3, simobject_->name() << "-dram-" << mem_req);
+			DT(3, simobject_->name() << " dram-req: " << mem_req);
 		}
 
 		if (core_req.write && config_.write_reponse) {
 			MemRsp core_rsp{core_req.tag, core_req.cid, core_req.uuid};
 			simobject_->CoreRspPorts.at(req_id).push(core_rsp, 1);
-			DT(3, simobject_->name() << "-core-" << core_rsp);
+			DT(3, simobject_->name() << " core-rsp: " << core_rsp);
 		}
 	}
 
@@ -539,7 +536,7 @@ private:
 							continue;
 						MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
 						simobject_->CoreRspPorts.at(info.req_id).push(core_rsp, config_.latency);
-						DT(3, simobject_->name() << "-core-" << core_rsp);
+						DT(3, simobject_->name() << "-bank" << bank_id << " replay: " << core_rsp);
 					}
 				}
 			} break;
@@ -575,7 +572,7 @@ private:
 					if (pipeline_req.write) {
 						// handle write has_hit
 						auto& hit_line = set.lines.at(hit_line_id);
-						if (config_.write_through) {
+						if (!config_.write_back) {
 							// forward write request to memory
 							MemReq mem_req;
 							mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, pipeline_req.tag);
@@ -583,7 +580,7 @@ private:
 							mem_req.cid   = pipeline_req.cid;
 							mem_req.uuid  = pipeline_req.uuid;
 							mem_req_ports_.at(bank_id).push(mem_req, 1);
-							DT(3, simobject_->name() << "-dram-" << mem_req);
+							DT(3, simobject_->name() << "-bank" << bank_id << " writethrough: " << mem_req);
 						} else {
 							// mark line as dirty
 							hit_line.dirty = true;
@@ -596,7 +593,7 @@ private:
 								continue;
 							MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
 							simobject_->CoreRspPorts.at(info.req_id).push(core_rsp, config_.latency);
-							DT(3, simobject_->name() << "-core-" << core_rsp);
+							DT(3, simobject_->name() << "-bank" << bank_id << " core-rsp: " << core_rsp);
 						}
 					}
 				} else {
@@ -606,7 +603,7 @@ private:
 					else
 						++perf_stats_.read_misses;
 
-					if (free_line_id == -1 && !config_.write_through) {
+					if (free_line_id == -1 && config_.write_back) {
 						// write back dirty line
 						auto& repl_line = set.lines.at(repl_line_id);
 						if (repl_line.dirty) {
@@ -615,12 +612,12 @@ private:
 							mem_req.write = true;
 							mem_req.cid   = pipeline_req.cid;
 							mem_req_ports_.at(bank_id).push(mem_req, 1);
-							DT(3, simobject_->name() << "-dram-" << mem_req);
+							DT(3, simobject_->name() << "-bank" << bank_id << " writeback: " << mem_req);
 							++perf_stats_.evictions;
 						}
 					}
 
-					if (pipeline_req.write && config_.write_through) {
+					if (pipeline_req.write && !config_.write_back) {
 						// forward write request to memory
 						{
 							MemReq mem_req;
@@ -629,7 +626,7 @@ private:
 							mem_req.cid   = pipeline_req.cid;
 							mem_req.uuid  = pipeline_req.uuid;
 							mem_req_ports_.at(bank_id).push(mem_req, 1);
-							DT(3, simobject_->name() << "-dram-" << mem_req);
+							DT(3, simobject_->name() << "-bank" << bank_id << " writethrough: " << mem_req);
 						}
 						// send core response
 						if (config_.write_reponse) {
@@ -638,7 +635,7 @@ private:
 									continue;
 								MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
 								simobject_->CoreRspPorts.at(info.req_id).push(core_rsp, config_.latency);
-								DT(3, simobject_->name() << "-core-" << core_rsp);
+								DT(3, simobject_->name() << "-bank" << bank_id << " core-rsp: " << core_rsp);
 							}
 						}
 					} else {
@@ -657,7 +654,7 @@ private:
 							mem_req.cid   = pipeline_req.cid;
 							mem_req.uuid  = pipeline_req.uuid;
 							mem_req_ports_.at(bank_id).push(mem_req, 1);
-							DT(3, simobject_->name() << "-dram-" << mem_req);
+							DT(3, simobject_->name() << "-bank" << bank_id << " fill: " << mem_req);
 							++pending_fill_reqs_;
 						}
 					}

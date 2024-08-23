@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,10 +14,10 @@
 `include "VX_define.vh"
 
 module VX_lsu_adapter import VX_gpu_pkg::*; #(
-    parameter NUM_LANES     = 1, 
-    parameter DATA_SIZE     = 1,    
-    parameter TAG_WIDTH     = 1, 
-    parameter TAG_SEL_BITS  = 0,    
+    parameter NUM_LANES     = 1,
+    parameter DATA_SIZE     = 1,
+    parameter TAG_WIDTH     = 1,
+    parameter TAG_SEL_BITS  = 0,
     parameter `STRING ARBITER = "P",
     parameter REQ_OUT_BUF   = 0,
     parameter RSP_OUT_BUF   = 0
@@ -63,12 +63,12 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
         assign mem_bus_if[i].req_data.tag = req_tag_out[i];
         assign req_ready_out[i] = mem_bus_if[i].req_ready;
     end
-    
+
     VX_stream_unpack #(
-        .NUM_REQS     (NUM_LANES),
-        .DATA_WIDTH   (REQ_DATA_WIDTH),
-        .TAG_WIDTH    (TAG_WIDTH),
-        .OUT_BUF      (REQ_OUT_BUF)
+        .NUM_REQS   (NUM_LANES),
+        .DATA_WIDTH (REQ_DATA_WIDTH),
+        .TAG_WIDTH  (TAG_WIDTH),
+        .OUT_BUF    (REQ_OUT_BUF)
     ) stream_unpack (
         .clk        (clk),
         .reset      (reset),
@@ -77,7 +77,7 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
         .data_in    (req_data_in),
         .tag_in     (lsu_mem_if.req_data.tag),
         .ready_in   (lsu_mem_if.req_ready),
-        .valid_out  (req_valid_out),       
+        .valid_out  (req_valid_out),
         .data_out   (req_data_out),
         .tag_out    (req_tag_out),
         .ready_out  (req_ready_out)

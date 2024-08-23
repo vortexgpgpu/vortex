@@ -623,7 +623,7 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
     instr->setDestReg(rd, RegType::Integer);
     auto imm = (code >> shift_func3) << shift_func3;
     instr->setImm(imm);
-  }  break;
+  } break;
 
   case InstType::J: {
     instr->setDestReg(rd, RegType::Integer);

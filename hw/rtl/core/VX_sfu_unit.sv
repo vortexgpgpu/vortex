@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 
 module VX_sfu_unit import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0
 ) (
     input wire              clk,
@@ -39,7 +40,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
     VX_warp_ctl_if.master   warp_ctl_if
 );
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE = 1;
     localparam NUM_LANES  = `NUM_SFU_LANES;
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
@@ -83,7 +84,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     `RESET_RELAY (wctl_reset, reset);
 
     VX_wctl_unit #(
-        .CORE_ID   (CORE_ID),
+        .INSTANCE_ID ($sformatf("%s-wctl", INSTANCE_ID)),
         .NUM_LANES (NUM_LANES)
     ) wctl_unit (
         .clk        (clk),
@@ -111,6 +112,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     `RESET_RELAY (csr_reset, reset);
 
     VX_csr_unit #(
+        .INSTANCE_ID ($sformatf("%s-csr", INSTANCE_ID)),
         .CORE_ID   (CORE_ID),
         .NUM_LANES (NUM_LANES)
     ) csr_unit (
