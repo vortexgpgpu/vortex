@@ -311,7 +311,6 @@ module VX_afu_wrap #(
     // SCOPE //////////////////////////////////////////////////////////////////////
 
 `ifdef DBG_SCOPE_AFU
-`ifdef SCOPE
 	`define TRIGGERS { \
 		reset, \
 		ap_start, \
@@ -330,35 +329,17 @@ module VX_afu_wrap #(
     VX_scope_tap #(
         .SCOPE_ID (0),
         .TRIGGERW ($bits(`TRIGGERS)),
-        .PROBEW   ($bits(`PROBES))
+        .PROBEW ($bits(`PROBES))
     ) scope_tap (
-        .clk(clk),
-        .reset(scope_reset_w[0]),
-        .start(1'b0),
-        .stop(1'b0),
-        .triggers(`TRIGGERS),
-        .probes(`PROBES),
-        .bus_in(scope_bus_in_w[0]),
-        .bus_out(scope_bus_out_w[0])
+        .clk (clk),
+        .reset (scope_reset_w[0]),
+        .start (1'b0),
+        .stop (1'b0),
+        .triggers (`TRIGGERS),
+        .probes (`PROBES),
+        .bus_in (scope_bus_in_w[0]),
+        .bus_out (scope_bus_out_w[0])
     );
-`endif
-`ifdef CHIPSCOPE
-    ila_afu ila_afu_inst (
-      	.clk (ap_clk),
-		.probe0 ({
-        	ap_start,
-        	ap_done,
-			ap_idle,
-			interrupt
-		}),
-		.probe1 ({
-        	vx_pending_writes,
-			vx_busy_wait,
-			vx_busy,
-			vx_running
-		})
-    );
-`endif
 `else
     `SCOPE_IO_UNUSED_W(0)
 `endif

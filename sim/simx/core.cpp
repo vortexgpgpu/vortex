@@ -44,8 +44,10 @@ Core::Core(const SimContext& ctx,
   , operands_(ISSUE_WIDTH)
   , dispatchers_((uint32_t)FUType::Count)
   , func_units_((uint32_t)FUType::Count)
-  , lsu_demux_(LSU_NUM_REQS)
+  , lsu_demux_(NUM_LSU_BLOCKS)
   , mem_coalescers_(NUM_LSU_BLOCKS)
+  , lsu_dcache_adapter_(NUM_LSU_BLOCKS)
+  , lsu_lmem_adapter_(NUM_LSU_BLOCKS)
   , pending_icache_(arch_.num_warps())
   , commit_arbs_(ISSUE_WIDTH)
 {
@@ -72,31 +74,53 @@ Core::Core(const SimContext& ctx,
   });
 
   // create lsu demux
-  for (uint32_t i = 0; i < LSU_NUM_REQS; ++i) {
+  for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
     snprintf(sname, 100, "core%d-lsu_demux%d", core_id, i);
     lsu_demux_.at(i) = LocalMemDemux::Create(sname, 1);
   }
 
-  // connect dcache-coalescer
-  for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-    for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
-      uint32_t i = b * DCACHE_CHANNELS + c;
-      mem_coalescers_.at(b)->ReqOut.at(c).bind(&dcache_req_ports.at(i));
-      dcache_rsp_ports.at(i).bind(&mem_coalescers_.at(b)->RspOut.at(c));
-    }
+  // create lsu dcache adapter
+  for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
+    snprintf(sname, 100, "core%d-lsu_dcache_adapter%d", core_id, i);
+    lsu_dcache_adapter_.at(i) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
+  }
+
+  // create lsu lmem adapter
+  for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
+    snprintf(sname, 100, "core%d-lsu_lmem_adapter%d", core_id, i);
+    lsu_lmem_adapter_.at(i) = LsuMemAdapter::Create(sname, LSU_CHANNELS, 1);
   }
 
   // connect lsu demux
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
+    lsu_demux_.at(b)->ReqDC.bind(&mem_coalescers_.at(b)->ReqIn);
+    mem_coalescers_.at(b)->RspIn.bind(&lsu_demux_.at(b)->RspDC);
+
+    lsu_demux_.at(b)->ReqLmem.bind(&lsu_lmem_adapter_.at(b)->ReqIn);
+    lsu_lmem_adapter_.at(b)->RspIn.bind(&lsu_demux_.at(b)->RspLmem);
+  }
+
+  // connect coalescer-adapter
+  for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
+    mem_coalescers_.at(b)->ReqOut.bind(&lsu_dcache_adapter_.at(b)->ReqIn);
+    lsu_dcache_adapter_.at(b)->RspIn.bind(&mem_coalescers_.at(b)->RspOut);
+  }
+
+  // connect adapter-dcache
+  for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
+    for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
+      uint32_t i = b * DCACHE_CHANNELS + c;
+      lsu_dcache_adapter_.at(b)->ReqOut.at(c).bind(&dcache_req_ports.at(i));
+      dcache_rsp_ports.at(i).bind(&lsu_dcache_adapter_.at(b)->RspOut.at(c));
+    }
+  }
+
+  // connect adapter-lmem
+  for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
     for (uint32_t c = 0; c < LSU_CHANNELS; ++c) {
       uint32_t i = b * LSU_CHANNELS + c;
-      auto lmem_demux = lsu_demux_.at(i);
-
-      lmem_demux->ReqDC.bind(&mem_coalescers_.at(b)->ReqIn.at(c));
-      mem_coalescers_.at(b)->RspIn.at(c).bind(&lmem_demux->RspDC);
-
-      lmem_demux->ReqSM.bind(&local_mem_->Inputs.at(i));
-      local_mem_->Outputs.at(i).bind(&lmem_demux->RspSM);
+      lsu_lmem_adapter_.at(b)->ReqOut.at(c).bind(&local_mem_->Inputs.at(i));
+      local_mem_->Outputs.at(i).bind(&lsu_lmem_adapter_.at(b)->RspOut.at(c));
     }
   }
 
@@ -264,69 +288,72 @@ void Core::issue() {
 
   // issue ibuffer instructions
   for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
-    uint32_t ii = (ibuffer_idx_ + i) % ibuffers_.size();
-    auto& ibuffer = ibuffers_.at(ii);
-    if (ibuffer.empty())
-      continue;
-
-    auto trace = ibuffer.top();
-
-    // check scoreboard
-    if (scoreboard_.in_use(trace)) {
-      auto uses = scoreboard_.get_uses(trace);
-      if (!trace->log_once(true)) {
-        DTH(4, "*** scoreboard-stall: dependents={");
+    bool has_instrs = false;
+    bool found_match = false;
+    for (uint32_t w = 0; w < PER_ISSUE_WARPS; ++w) {
+      uint32_t kk = (ibuffer_idx_ + w) % PER_ISSUE_WARPS;
+      uint32_t ii = kk * ISSUE_WIDTH + i;
+      auto& ibuffer = ibuffers_.at(ii);
+      if (ibuffer.empty())
+        continue;
+      // check scoreboard
+      has_instrs = true;
+      auto trace = ibuffer.top();
+      if (scoreboard_.in_use(trace)) {
+        auto uses = scoreboard_.get_uses(trace);
+        if (!trace->log_once(true)) {
+          DTH(4, "*** scoreboard-stall: dependents={");
+          for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
+            auto& use = uses.at(j);
+            __unused (use);
+            if (j) DTN(4, ", ");
+            DTN(4, use.reg_type << use.reg_id << "(#" << use.uuid << ")");
+          }
+          DTN(4, "}, " << *trace << std::endl);
+        }
         for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
           auto& use = uses.at(j);
-          __unused (use);
-          if (j) DTN(4, ", ");
-          DTN(4, use.reg_type << use.reg_id << "(#" << use.uuid << ")");
-        }
-        DTN(4, "}, " << *trace << std::endl);
-      }
-      for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
-        auto& use = uses.at(j);
-        switch (use.fu_type) {
-        case FUType::ALU: ++perf_stats_.scrb_alu; break;
-        case FUType::FPU: ++perf_stats_.scrb_fpu; break;
-        case FUType::LSU: ++perf_stats_.scrb_lsu; break;
-        case FUType::SFU: {
-          ++perf_stats_.scrb_sfu;
-          switch (use.sfu_type) {
-          case SfuType::TMC:
-          case SfuType::WSPAWN:
-          case SfuType::SPLIT:
-          case SfuType::JOIN:
-          case SfuType::BAR:
-          case SfuType::PRED: ++perf_stats_.scrb_wctl; break;
-          case SfuType::CSRRW:
-          case SfuType::CSRRS:
-          case SfuType::CSRRC: ++perf_stats_.scrb_csrs; break;
+          switch (use.fu_type) {
+          case FUType::ALU: ++perf_stats_.scrb_alu; break;
+          case FUType::FPU: ++perf_stats_.scrb_fpu; break;
+          case FUType::LSU: ++perf_stats_.scrb_lsu; break;
+          case FUType::SFU: {
+            ++perf_stats_.scrb_sfu;
+            switch (use.sfu_type) {
+            case SfuType::TMC:
+            case SfuType::WSPAWN:
+            case SfuType::SPLIT:
+            case SfuType::JOIN:
+            case SfuType::BAR:
+            case SfuType::PRED: ++perf_stats_.scrb_wctl; break;
+            case SfuType::CSRRW:
+            case SfuType::CSRRS:
+            case SfuType::CSRRC: ++perf_stats_.scrb_csrs; break;
+            default: assert(false);
+            }
+          } break;
           default: assert(false);
           }
-        } break;
-        default: assert(false);
         }
+      } else {
+        trace->log_once(false);
+        // update scoreboard
+        DT(3, "pipeline-scoreboard: " << *trace);
+        if (trace->wb) {
+          scoreboard_.reserve(trace);
+        }
+        // to operand stage
+        operands_.at(i)->Input.push(trace, 2);
+        ibuffer.pop();
+        found_match = true;
+        break;
       }
+    }
+    if (has_instrs && !found_match) {
       ++perf_stats_.scrb_stalls;
-      continue;
-    } else {
-      trace->log_once(false);
     }
-
-    // update scoreboard
-    if (trace->wb) {
-      scoreboard_.reserve(trace);
-    }
-
-    DT(3, "pipeline-scoreboard: " << *trace);
-
-    // to operand stage
-    operands_.at(i)->Input.push(trace, 1);
-
-    ibuffer.pop();
   }
-  ibuffer_idx_ += ISSUE_WIDTH;
+  ++ibuffer_idx_;
 }
 
 void Core::execute() {
@@ -337,7 +364,7 @@ void Core::execute() {
       if (dispatch->Outputs.at(j).empty())
         continue;
       auto trace = dispatch->Outputs.at(j).front();
-      func_unit->Inputs.at(j).push(trace, 1);
+      func_unit->Inputs.at(j).push(trace, 2);
       dispatch->Outputs.at(j).pop();
     }
   }
@@ -364,6 +391,11 @@ void Core::commit() {
       --pending_instrs_;
 
       perf_stats_.instrs += trace->tmask.count();
+    }
+
+    perf_stats_.opds_stalls = 0;
+    for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
+      perf_stats_.opds_stalls += operands_.at(i)->total_stalls();
     }
 
     commit_arb->Outputs.at(0).pop();

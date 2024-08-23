@@ -289,14 +289,14 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     end
 
     wire [NUM_LANES-1:0][31:0] result_s;
-    
+
     wire [1:0] op_ret_int_out;
     `UNUSED_VAR (op_ret_int_out)
 
     VX_stream_arb #(
         .NUM_INPUTS (NUM_FPC),
         .DATAW      (RSP_DATAW + 2),
-        .ARBITER    ("R"),
+        .ARBITER    ("F"),
         .OUT_BUF    (OUT_BUF)
     ) rsp_arb (
         .clk       (clk),

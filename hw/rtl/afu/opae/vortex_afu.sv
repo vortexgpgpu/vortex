@@ -587,7 +587,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .DATA_SIZE   (LMEM_DATA_SIZE),
         .ADDR_WIDTH  (LMEM_ADDR_WIDTH),
         .TAG_WIDTH   (AVS_REQ_TAGW),
-        .ARBITER     ("P"),
+        .ARBITER     ("P"), // prioritize VX requests
         .REQ_OUT_BUF (0),
         .RSP_OUT_BUF (0)
     ) mem_arb (
@@ -692,9 +692,11 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .reset (reset),
         .incr  (cci_rd_req_fire),
         .decr  (cci_rdq_pop),
+        `UNUSED_PIN (empty),
+        `UNUSED_PIN (alm_empty),
         .full  (cci_pending_reads_full),
-        .size  (cci_pending_reads),
-        `UNUSED_PIN (empty)
+        `UNUSED_PIN (alm_full),
+        .size  (cci_pending_reads)
     );
 
     `UNUSED_VAR (cci_pending_reads)
@@ -852,7 +854,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .incr  (cci_mem_rd_rsp_fire),
         .decr  (cci_wr_rsp_fire),
         .empty (cci_pending_writes_empty),
+        `UNUSED_PIN (alm_empty),
         .full  (cci_pending_writes_full),
+        `UNUSED_PIN (alm_full),
         .size  (cci_pending_writes)
     );
 
@@ -1010,7 +1014,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     // SCOPE //////////////////////////////////////////////////////////////////////
 
 `ifdef DBG_SCOPE_AFU
-`ifdef SCOPE
     wire mem_req_fire = mem_bus_if[0].req_valid && mem_bus_if[0].req_ready;
     wire mem_rsp_fire = mem_bus_if[0].rsp_valid && mem_bus_if[0].rsp_ready;
     wire avs_write_fire = avs_write[0] && ~avs_waitrequest[0];
@@ -1080,7 +1083,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .bus_in(scope_bus_in_w[0]),
         .bus_out(scope_bus_out_w[0])
     );
-`endif
 `else
     `SCOPE_IO_UNUSED_W(0)
 `endif

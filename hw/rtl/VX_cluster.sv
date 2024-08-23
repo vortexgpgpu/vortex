@@ -14,7 +14,8 @@
 `include "VX_define.vh"
 
 module VX_cluster import VX_gpu_pkg::*; #(
-    parameter CLUSTER_ID = 0
+    parameter CLUSTER_ID = 0,
+    parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
 
@@ -85,7 +86,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
     `RESET_RELAY (l2_reset, reset);
 
     VX_cache_wrap #(
-        .INSTANCE_ID    ("l2cache"),
+        .INSTANCE_ID    ($sformatf("%s-l2cache", INSTANCE_ID)),
         .CACHE_SIZE     (`L2_CACHE_SIZE),
         .LINE_SIZE      (`L2_LINE_SIZE),
         .NUM_BANKS      (`L2_NUM_BANKS),
@@ -98,6 +99,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .MREQ_SIZE      (`L2_MREQ_SIZE),
         .TAG_WIDTH      (L2_TAG_WIDTH),
         .WRITE_ENABLE   (1),
+        .WRITEBACK      (`L2_WRITEBACK),
         .UUID_WIDTH     (`UUID_WIDTH),
         .CORE_OUT_BUF   (2),
         .MEM_OUT_BUF    (2),
@@ -122,17 +124,19 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
     wire [`NUM_SOCKETS-1:0] per_socket_busy;
 
+    VX_dcr_bus_if socket_dcr_bus_if();
     `BUFFER_DCR_BUS_IF (socket_dcr_bus_if, socket_dcr_bus_tmp_if, (`NUM_SOCKETS > 1));
 
     // Generate all sockets
-    for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
+    for (genvar socket_id = 0; socket_id < `NUM_SOCKETS; ++socket_id) begin : sockets
 
         `RESET_RELAY (socket_reset, reset);
 
         VX_socket #(
-            .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + i)
+            .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + socket_id),
+            .INSTANCE_ID ($sformatf("%s-socket%0d", INSTANCE_ID, socket_id))
         ) socket (
-            `SCOPE_IO_BIND  (scope_socket+i)
+            `SCOPE_IO_BIND  (scope_socket+socket_id)
 
             .clk            (clk),
             .reset          (socket_reset),
@@ -143,13 +147,13 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
             .dcr_bus_if     (socket_dcr_bus_if),
 
-            .mem_bus_if     (per_socket_mem_bus_if[i]),
+            .mem_bus_if     (per_socket_mem_bus_if[socket_id]),
 
         `ifdef GBAR_ENABLE
-            .gbar_bus_if    (per_socket_gbar_bus_if[i]),
+            .gbar_bus_if    (per_socket_gbar_bus_if[socket_id]),
         `endif
 
-            .busy           (per_socket_busy[i])
+            .busy           (per_socket_busy[socket_id])
         );
     end
 

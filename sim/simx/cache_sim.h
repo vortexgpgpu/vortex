@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -30,12 +30,12 @@ public:
 		uint8_t addr_width;     // word address bits
 		uint8_t ports_per_bank; // number of ports per bank
 		uint8_t num_inputs;     // number of inputs
-		bool    write_through;  // is write-through
+		bool    write_back;     // is write-back
 		bool    write_reponse;  // enable write response
 		uint16_t mshr_size;     // MSHR buffer size
 		uint8_t latency;        // pipeline latency
 	};
-	
+
 	struct PerfStats {
 		uint64_t reads;
 		uint64_t writes;
@@ -47,7 +47,7 @@ public:
 		uint64_t mshr_stalls;
 		uint64_t mem_latency;
 
-		PerfStats() 
+		PerfStats()
 			: reads(0)
 			, writes(0)
 			, read_misses(0)
@@ -82,11 +82,11 @@ public:
 	~CacheSim();
 
 	void reset();
-	
+
 	void tick();
 
 	const PerfStats& perf_stats() const;
-	
+
 private:
 	class Impl;
 	Impl* impl_;

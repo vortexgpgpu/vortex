@@ -42,8 +42,8 @@ Emulator::ipdom_entry_t::ipdom_entry_t(const ThreadMask &tmask)
 {}
 
 Emulator::warp_t::warp_t(const Arch& arch)
-  : ireg_file(arch.num_threads(), std::vector<Word>(arch.num_regs()))
-  , freg_file(arch.num_threads(), std::vector<uint64_t>(arch.num_regs()))
+  : ireg_file(arch.num_threads(), std::vector<Word>(MAX_NUM_REGS))
+  , freg_file(arch.num_threads(), std::vector<uint64_t>(MAX_NUM_REGS))
   , uuid(0)
 {}
 
@@ -74,6 +74,7 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     , core_(core)
     , warps_(arch.num_warps(), arch)
     , barriers_(arch.num_barriers(), 0)
+    , ipdom_size_((arch.num_threads()-1) * 2)
 {
   this->clear();
 }
@@ -186,7 +187,7 @@ instr_trace_t* Emulator::step() {
   this->execute(*instr, scheduled_warp, trace);
 
   DP(5, "Register state:");
-  for (uint32_t i = 0; i < arch_.num_regs(); ++i) {
+  for (uint32_t i = 0; i < MAX_NUM_REGS; ++i) {
     DPN(5, "  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
     // Integer register file
     for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
@@ -467,12 +468,13 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         CSR_READ_64(VX_CSR_MPM_SCHED_ST, core_perf.sched_stalls);
         CSR_READ_64(VX_CSR_MPM_IBUF_ST, core_perf.ibuf_stalls);
         CSR_READ_64(VX_CSR_MPM_SCRB_ST, core_perf.scrb_stalls);
+        CSR_READ_64(VX_CSR_MPM_OPDS_ST, core_perf.opds_stalls);
         CSR_READ_64(VX_CSR_MPM_SCRB_ALU, core_perf.scrb_alu);
         CSR_READ_64(VX_CSR_MPM_SCRB_FPU, core_perf.scrb_fpu);
         CSR_READ_64(VX_CSR_MPM_SCRB_LSU, core_perf.scrb_lsu);
         CSR_READ_64(VX_CSR_MPM_SCRB_SFU, core_perf.scrb_sfu);
-        CSR_READ_64(VX_CSR_MPM_SCRB_WCTL, core_perf.scrb_wctl);
         CSR_READ_64(VX_CSR_MPM_SCRB_CSRS, core_perf.scrb_csrs);
+        CSR_READ_64(VX_CSR_MPM_SCRB_WCTL, core_perf.scrb_wctl);
         CSR_READ_64(VX_CSR_MPM_IFETCHES, core_perf.ifetches);
         CSR_READ_64(VX_CSR_MPM_LOADS, core_perf.loads);
         CSR_READ_64(VX_CSR_MPM_STORES, core_perf.stores);

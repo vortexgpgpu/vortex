@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,14 +19,14 @@ module VX_elastic_buffer #(
     parameter SIZE    = 1,
     parameter OUT_REG = 0,
     parameter LUTRAM  = 0
-) ( 
+) (
     input  wire             clk,
     input  wire             reset,
 
     input  wire             valid_in,
-    output wire             ready_in,        
+    output wire             ready_in,
     input  wire [DATAW-1:0] data_in,
-    
+
     output wire [DATAW-1:0] data_out,
     input  wire             ready_out,
     output wire             valid_out
@@ -55,7 +55,7 @@ module VX_elastic_buffer #(
             .ready_out (ready_out)
         );
 
-    end else if (SIZE == 2) begin
+    end else if (SIZE == 2 && LUTRAM == 0) begin
 
         VX_skid_buffer #(
             .DATAW   (DATAW),
@@ -71,9 +71,9 @@ module VX_elastic_buffer #(
             .data_out  (data_out),
             .ready_out (ready_out)
         );
-    
+
     end else begin
-        
+
         wire empty, full;
 
         wire [DATAW-1:0] data_out_t;
@@ -93,7 +93,7 @@ module VX_elastic_buffer #(
             .push   (push),
             .pop    (pop),
             .data_in(data_in),
-            .data_out(data_out_t),    
+            .data_out(data_out_t),
             .empty  (empty),
             .full   (full),
             `UNUSED_PIN (alm_empty),
@@ -105,15 +105,15 @@ module VX_elastic_buffer #(
 
         VX_elastic_buffer #(
             .DATAW (DATAW),
-            .SIZE  (OUT_REG == 2)
+            .SIZE  ((OUT_REG == 2) ? 1 : 0)
         ) out_buf (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (~empty),
             .data_in   (data_out_t),
-            .ready_in  (ready_out_t),            
+            .ready_in  (ready_out_t),
             .valid_out (valid_out),
-            .data_out  (data_out),            
+            .data_out  (data_out),
             .ready_out (ready_out)
         );
 

@@ -162,5 +162,22 @@ extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint32_t value) {
 }
 
 extern int vx_mpm_query(vx_device_h hdevice, uint32_t addr, uint32_t core_id, uint64_t* value) {
-  return (g_callbacks.mpm_query)(hdevice, addr, core_id, value);
+  if (core_id == 0xffffffff) {
+    uint64_t num_cores;
+    CHECK_ERR((g_callbacks.dev_caps)(hdevice, VX_CAPS_NUM_CORES, &num_cores), {
+      return err;
+    });
+    uint64_t sum_value = 0;
+    uint64_t cur_value;
+    for (uint32_t i = 0; i < num_cores; ++i) {
+      CHECK_ERR((g_callbacks.mpm_query)(hdevice, addr, i, &cur_value), {
+        return err;
+      });
+      sum_value += cur_value;
+    }
+    *value = sum_value;
+    return 0;
+  } else {
+    return (g_callbacks.mpm_query)(hdevice, addr, core_id, value);
+  }
 }
