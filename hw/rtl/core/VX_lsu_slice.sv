@@ -13,9 +13,8 @@
 
 `include "VX_define.vh"
 
-module VX_lsu_slice import VX_gpu_pkg::*; #(
-    parameter CORE_ID = 0,
-    parameter BLOCK_ID = 0
+module VX_lsu_slice import VX_gpu_pkg::*, VX_trace_pkg::*; #(
+    parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
 
@@ -88,7 +87,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0]            mem_req_mask;
     wire                            mem_req_rw;
     wire [NUM_LANES-1:0][LSU_ADDR_WIDTH-1:0] mem_req_addr;
-    reg  [NUM_LANES-1:0][LSU_WORD_SIZE-1:0] mem_req_byteen;
+    wire [NUM_LANES-1:0][LSU_WORD_SIZE-1:0] mem_req_byteen;
     reg  [NUM_LANES-1:0][LSU_WORD_SIZE*8-1:0] mem_req_data;
     wire [TAG_WIDTH-1:0]            mem_req_tag;
     wire                            mem_req_ready;
@@ -159,27 +158,30 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     // byte enable formatting
     for (genvar i = 0; i < NUM_LANES; ++i) begin
+        reg [LSU_WORD_SIZE-1:0] mem_req_byteen_r;
         always @(*) begin
-            mem_req_byteen[i] = '0;
+            mem_req_byteen_r = '0;
             case (`INST_LSU_WSIZE(execute_if.data.op_type))
                 0: begin // 8-bit
-                    mem_req_byteen[i][req_align[i]] = 1'b1;
+                    mem_req_byteen_r[req_align[i]] = 1'b1;
                 end
                 1: begin // 16 bit
-                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:1], 1'b0}] = 1'b1;
-                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:1], 1'b1}] = 1'b1;
+                    mem_req_byteen_r[{req_align[i][REQ_ASHIFT-1:1], 1'b0}] = 1'b1;
+                    mem_req_byteen_r[{req_align[i][REQ_ASHIFT-1:1], 1'b1}] = 1'b1;
                 end
             `ifdef XLEN_64
                 2: begin // 32 bit
-                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:2], 2'b00}] = 1'b1;
-                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:2], 2'b01}] = 1'b1;
-                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:2], 2'b10}] = 1'b1;
-                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:2], 2'b11}] = 1'b1;
+                    mem_req_byteen_r[{req_align[i][REQ_ASHIFT-1:2], 2'b00}] = 1'b1;
+                    mem_req_byteen_r[{req_align[i][REQ_ASHIFT-1:2], 2'b01}] = 1'b1;
+                    mem_req_byteen_r[{req_align[i][REQ_ASHIFT-1:2], 2'b10}] = 1'b1;
+                    mem_req_byteen_r[{req_align[i][REQ_ASHIFT-1:2], 2'b11}] = 1'b1;
                 end
             `endif
-                default : mem_req_byteen[i] = {LSU_WORD_SIZE{1'b1}};
+                // 3: 64 bit
+                default : mem_req_byteen_r = {LSU_WORD_SIZE{1'b1}};
             endcase
         end
+        assign mem_req_byteen[i] = mem_req_byteen_r;
     end
 
     // memory misalignment not supported!
@@ -312,7 +314,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     `RESET_RELAY (mem_scheduler_reset, reset);
 
     VX_mem_scheduler #(
-        .INSTANCE_ID ($sformatf("core%0d-lsu-memsched%0d", CORE_ID, BLOCK_ID)),
+        .INSTANCE_ID ($sformatf("%s-scheduler", INSTANCE_ID)),
         .CORE_REQS   (NUM_LANES),
         .MEM_CHANNELS(NUM_LANES),
         .WORD_SIZE   (LSU_WORD_SIZE),
@@ -504,11 +506,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 `ifdef DBG_TRACE_MEM
     always @(posedge clk) begin
         if (execute_if.valid && fence_lock) begin
-            `TRACE(1, ("%d: *** D$%0d fence wait\n", $time, CORE_ID));
+            `TRACE(1, ("%d: *** %s fence wait\n", $time, INSTANCE_ID));
         end
         if (mem_req_fire) begin
             if (mem_req_rw) begin
-                `TRACE(1, ("%d: D$%0d Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask));
+                `TRACE(1, ("%d: %s Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask));
                 `TRACE_ARRAY1D(1, "0x%h", full_addr, NUM_LANES);
                 `TRACE(1, (", atype="));
                 `TRACE_ARRAY1D(1, "%b", mem_req_atype, NUM_LANES);
@@ -516,7 +518,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                 `TRACE_ARRAY1D(1, "0x%0h", mem_req_data, NUM_LANES);
                 `TRACE(1, (", tag=0x%0h (#%0d)\n", mem_req_tag, execute_if.data.uuid));
             end else begin
-                `TRACE(1, ("%d: D$%0d Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask));
+                `TRACE(1, ("%d: %s Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask));
                 `TRACE_ARRAY1D(1, "0x%h", full_addr, NUM_LANES);
                 `TRACE(1, (", atype="));
                 `TRACE_ARRAY1D(1, "%b", mem_req_atype, NUM_LANES);
@@ -524,8 +526,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
             end
         end
         if (mem_rsp_fire) begin
-            `TRACE(1, ("%d: D$%0d Rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, sop=%b, eop=%b, data=",
-                $time, CORE_ID, rsp_wid, {rsp_pc, 1'b0}, mem_rsp_mask, rsp_rd, mem_rsp_sop, mem_rsp_eop));
+            `TRACE(1, ("%d: %s Rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, sop=%b, eop=%b, data=",
+                $time, INSTANCE_ID, rsp_wid, {rsp_pc, 1'b0}, mem_rsp_mask, rsp_rd, mem_rsp_sop, mem_rsp_eop));
             `TRACE_ARRAY1D(1, "0x%0h", mem_rsp_data, NUM_LANES);
             `TRACE(1, (", tag=0x%0h (#%0d)\n", mem_rsp_tag, rsp_uuid));
         end
@@ -533,36 +535,20 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef DBG_SCOPE_LSU
-    if (CORE_ID == 0 && BLOCK_ID == 0) begin
-    `ifdef SCOPE
-        VX_scope_tap #(
-            .SCOPE_ID (3),
-            .TRIGGERW (3),
-            .PROBEW   (`UUID_WIDTH+NUM_LANES*(`XLEN+4+`XLEN)+1+`UUID_WIDTH+NUM_LANES*`XLEN)
-        ) scope_tap (
-            .clk(clk),
-            .reset(scope_reset),
-            .start(1'b0),
-            .stop(1'b0),
-            .triggers({reset, mem_req_fire, mem_rsp_fire}),
-            .probes({execute_if.data.uuid, full_addr, mem_req_rw, mem_req_byteen, mem_req_data, rsp_uuid, rsp_data}),
-            .bus_in(scope_bus_in),
-            .bus_out(scope_bus_out)
-        );
-    `endif
-    `ifdef CHIPSCOPE
-        wire [31:0] full_addr_0 = full_addr[0];
-        wire [31:0] mem_req_data_0 = mem_req_data[0];
-        wire [31:0] rsp_data_0 = rsp_data[0];
-        ila_lsu ila_lsu_inst (
-            .clk    (clk),
-            .probe0 ({mem_req_data_0, execute_if.data.uuid, execute_if.data.wid, execute_if.data.PC, mem_req_mask, full_addr_0, mem_req_byteen, mem_req_rw, mem_req_ready, mem_req_valid}),
-            .probe1 ({rsp_data_0, rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, mem_rsp_mask, rsp_wid, mem_rsp_ready, mem_rsp_valid}),
-            .probe2 ({lsu_mem_if.req_data.data, lsu_mem_if.req_data.tag, lsu_mem_if.req_data.byteen, lsu_mem_if.req_data.addr, lsu_mem_if.req_data.rw, lsu_mem_if.req_ready, lsu_mem_if.req_valid}),
-            .probe3 ({lsu_mem_if.rsp_data.data, lsu_mem_if.rsp_data.tag, lsu_mem_if.rsp_ready, lsu_mem_if.rsp_valid})
-        );
-    `endif
-    end
+    VX_scope_tap #(
+        .SCOPE_ID (3),
+        .TRIGGERW (3),
+        .PROBEW   (1 + NUM_LANES*(`XLEN + LSU_WORD_SIZE + LSU_WORD_SIZE*8) + `UUID_WIDTH + NUM_LANES*LSU_WORD_SIZE*8 + `UUID_WIDTH)
+    ) scope_tap (
+        .clk    (clk),
+        .reset  (scope_reset),
+        .start  (1'b0),
+        .stop   (1'b0),
+        .triggers({reset, mem_req_fire, mem_rsp_fire}),
+        .probes ({mem_req_rw, full_addr, mem_req_byteen, mem_req_data, execute_if.data.uuid, rsp_data, rsp_uuid}),
+        .bus_in (scope_bus_in),
+        .bus_out(scope_bus_out)
+    );
 `else
     `SCOPE_IO_UNUSED()
 `endif

@@ -47,7 +47,7 @@
 `define UNUSED_VAR(x)
 `define UNUSED_PIN(x) . x ()
 `define UNUSED_ARG(x) x
-`define TRACE(level, args) $write args
+`define TRACE(level, args) if (level <= `DEBUG_LEVEL) $write args
 `else
 `ifdef VERILATOR
 `define TRACING_ON      /* verilator tracing_on */
@@ -112,8 +112,14 @@
 `define UNUSED_ARG(x)   /* verilator lint_off UNUSED */ \
                         x \
                         /* verilator lint_on UNUSED */
-`define TRACE(level, args) dpi_trace(level, $sformatf args)
 `endif
+
+`ifdef SV_DPI
+`define TRACE(level, args) dpi_trace(level, $sformatf args)
+`else
+`define TRACE(level, args) if (level <= `DEBUG_LEVEL) $write args
+`endif
+
 `endif
 
 `ifdef SIMULATION

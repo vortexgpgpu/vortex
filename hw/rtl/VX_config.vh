@@ -33,10 +33,6 @@
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
-`ifndef VM_DISABLE
-`define VM_ENABLE
-`endif
-
 `ifndef EXT_M_DISABLE
 `define EXT_M_ENABLE
 `endif
@@ -114,7 +110,6 @@
 `ifndef SOCKET_SIZE
 `define SOCKET_SIZE `MIN(4, `NUM_CORES)
 `endif
-`define NUM_SOCKETS `UP(`NUM_CORES / `SOCKET_SIZE)
 
 `ifdef L2_ENABLE
     `define L2_ENABLED   1
@@ -357,7 +352,7 @@
 
 // Number of SFU units
 `ifndef NUM_SFU_LANES
-`define NUM_SFU_LANES   `MIN(`NUM_THREADS, 4)
+`define NUM_SFU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_SFU_BLOCKS
 `define NUM_SFU_BLOCKS  1
@@ -481,22 +476,27 @@
 `define LATENCY_FCVT 5
 `endif
 
+// FMA Bandwidth ratio
 `ifndef FMA_PE_RATIO
 `define FMA_PE_RATIO 1
 `endif
 
+// FDIV Bandwidth ratio
 `ifndef FDIV_PE_RATIO
 `define FDIV_PE_RATIO 8
 `endif
 
+// FSQRT Bandwidth ratio
 `ifndef FSQRT_PE_RATIO
 `define FSQRT_PE_RATIO 8
 `endif
 
+// FCVT Bandwidth ratio
 `ifndef FCVT_PE_RATIO
 `define FCVT_PE_RATIO 8
 `endif
 
+// FNCP Bandwidth ratio
 `ifndef FNCP_PE_RATIO
 `define FNCP_PE_RATIO 2
 `endif
@@ -603,7 +603,12 @@
 `define DCACHE_NUM_WAYS 1
 `endif
 
-// SM Configurable Knobs //////////////////////////////////////////////////////
+// Enable Cache Writeback
+`ifndef DCACHE_WRITEBACK
+`define DCACHE_WRITEBACK 0
+`endif
+
+// LMEM Configurable Knobs ////////////////////////////////////////////////////
 
 `ifndef LMEM_DISABLE
 `define LMEM_ENABLE
@@ -662,6 +667,11 @@
 `define L2_NUM_WAYS 2
 `endif
 
+// Enable Cache Writeback
+`ifndef L2_WRITEBACK
+`define L2_WRITEBACK 0
+`endif
+
 // L3cache Configurable Knobs /////////////////////////////////////////////////
 
 // Cache Size
@@ -701,6 +711,11 @@
 // Number of Associative Ways
 `ifndef L3_NUM_WAYS
 `define L3_NUM_WAYS 4
+`endif
+
+// Enable Cache Writeback
+`ifndef L3_WRITEBACK
+`define L3_WRITEBACK 0
 `endif
 
 // ISA Extensions /////////////////////////////////////////////////////////////

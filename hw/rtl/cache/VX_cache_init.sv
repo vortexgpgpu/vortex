@@ -13,6 +13,7 @@
 
 `include "VX_cache_define.vh"
 
+// cache flush unit
 module VX_cache_init #(
     // Size of cache in bytes
     parameter CACHE_SIZE    = 1024, 
