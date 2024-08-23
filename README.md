@@ -56,11 +56,12 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 ```
 ### Install Vortex codebase
 ```
-    git clone --depth=1 --recursive git@github.com:gthparch/vortex_vm.git
-    cd vortex_vm
+    git clone --depth=1 --recursive git@github.com:vortexgpgpu/vortex.git -b vortex_vm
+    cd vortex
 ```
 
 ### Configure your build folder
+    # 
     # By default, the toolchain default install location is the /opt folder and can be overridden by setting --tooldir.
     # This is the example for volvo server
     mkdir build
