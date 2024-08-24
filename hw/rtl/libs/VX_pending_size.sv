@@ -98,11 +98,10 @@ module VX_pending_size #(
 
             reg [ADDRW-1:0] used_r;
 
-            wire is_empty_n = (used_r == ADDRW'(1));
-            wire is_full_n  = (used_r == ADDRW'(SIZE-1));
-
             if (SIZE > 2) begin
 
+                wire is_empty_n    = (used_r == ADDRW'(1));
+                wire is_full_n     = (used_r == ADDRW'(SIZE-1));
                 wire is_alm_empty  = (used_r == ADDRW'(ALM_EMPTY));
                 wire is_alm_empty_n= (used_r == ADDRW'(ALM_EMPTY+1));
                 wire is_alm_full   = (used_r == ADDRW'(ALM_FULL));
