@@ -49,15 +49,35 @@ module VX_stream_xbar #(
 
             // (#inputs > 1) and (#outputs > 1)
 
+            wire [NUM_INPUTS-1:0][NUM_OUTPUTS-1:0] per_output_valid_in;
+            wire [NUM_OUTPUTS-1:0][NUM_INPUTS-1:0] per_output_valid_in_w;
+
             wire [NUM_OUTPUTS-1:0][NUM_INPUTS-1:0] per_output_ready_in;
+            wire [NUM_INPUTS-1:0][NUM_OUTPUTS-1:0] per_output_ready_in_w;
+
+            VX_transpose #(
+                .N (NUM_OUTPUTS),
+                .M (NUM_INPUTS)
+            ) rdy_in_transpose (
+                .data_in (per_output_ready_in),
+                .data_out (per_output_ready_in_w)
+            );
+
+            VX_transpose #(
+                .N (NUM_INPUTS),
+                .M (NUM_OUTPUTS)
+            ) val_in_transpose (
+                .data_in (per_output_valid_in),
+                .data_out (per_output_valid_in_w)
+            );
+
+            for (genvar i = 0; i < NUM_INPUTS; ++i) begin
+                assign per_output_valid_in[i] = NUM_OUTPUTS'(valid_in[i]) << sel_in[i];
+                assign ready_in[i] = | per_output_ready_in_w[i];
+            end
 
             for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-
-                wire [NUM_INPUTS-1:0] valid_in_q;
-                for (genvar j = 0; j < NUM_INPUTS; ++j) begin
-                    assign valid_in_q[j] = valid_in[j] && (sel_in[j] == i);
-                end
-
+                
                 VX_stream_arb #(
                     .NUM_INPUTS  (NUM_INPUTS),
                     .NUM_OUTPUTS (1),
@@ -68,7 +88,7 @@ module VX_stream_xbar #(
                 ) xbar_arb (
                     .clk       (clk),
                     .reset     (reset),
-                    .valid_in  (valid_in_q),
+                    .valid_in  (per_output_valid_in_w[i]),
                     .data_in   (data_in),
                     .ready_in  (per_output_ready_in[i]),
                     .valid_out (valid_out[i]),
@@ -76,10 +96,6 @@ module VX_stream_xbar #(
                     .sel_out   (sel_out[i]),
                     .ready_out (ready_out[i])
                 );
-            end
-
-            for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-                assign ready_in[i] = per_output_ready_in[sel_in[i]][i];
             end
 
         end else begin
@@ -112,14 +128,12 @@ module VX_stream_xbar #(
 
         // (#inputs == 1) and (#outputs > 1)
 
-        logic [NUM_OUTPUTS-1:0] valid_out_r, ready_out_r;
-        logic [NUM_OUTPUTS-1:0][DATAW-1:0] data_out_r;
-        always @(*) begin
-            valid_out_r = '0;
-            valid_out_r[sel_in] = valid_in;
-        end
-        assign data_out_r = {NUM_OUTPUTS{data_in}};
-        assign ready_in = ready_out_r[sel_in];
+        wire [NUM_OUTPUTS-1:0] valid_out_w, ready_out_w;
+        wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out_w;
+
+        assign ready_in[0] = ready_out_w[sel_in[0]];
+        assign valid_out_w = NUM_OUTPUTS'(valid_in[0]) << sel_in[0];
+        assign data_out_w = {NUM_OUTPUTS{data_in[0]}};
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             VX_elastic_buffer #(
@@ -130,9 +144,9 @@ module VX_stream_xbar #(
             ) out_buf (
                 .clk       (clk),
                 .reset     (reset),
-                .valid_in  (valid_out_r[i]),
-                .ready_in  (ready_out_r[i]),
-                .data_in   (data_out_r[i]),
+                .valid_in  (valid_out_w[i]),
+                .ready_in  (ready_out_w[i]),
+                .data_in   (data_out_w[i]),
                 .data_out  (data_out[i]),
                 .valid_out (valid_out[i]),
                 .ready_out (ready_out[i])
