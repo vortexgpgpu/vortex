@@ -158,21 +158,21 @@ module VX_cache_bypass #(
     wire [CORE_TAG_ID_BITS-1:0] core_req_in_id = core_req_nc_sel_tag[CORE_TAG_ID_BITS-1:0];
 
     if (WORDS_PER_LINE > 1) begin
-        reg [WORDS_PER_LINE-1:0][WORD_SIZE-1:0] mem_req_byteen_in_r;
-        reg [WORDS_PER_LINE-1:0][CORE_DATA_WIDTH-1:0] mem_req_data_in_r;
+        reg [WORDS_PER_LINE-1:0][WORD_SIZE-1:0] mem_req_byteen_in_w;
+        reg [WORDS_PER_LINE-1:0][CORE_DATA_WIDTH-1:0] mem_req_data_in_w;
 
         wire [WSEL_BITS-1:0] req_wsel = core_req_nc_sel_addr[WSEL_BITS-1:0];
 
         always @(*) begin
-            mem_req_byteen_in_r = '0;
-            mem_req_byteen_in_r[req_wsel] = core_req_nc_sel_byteen;
+            mem_req_byteen_in_w = '0;
+            mem_req_byteen_in_w[req_wsel] = core_req_nc_sel_byteen;
 
-            mem_req_data_in_r = 'x;
-            mem_req_data_in_r[req_wsel] = core_req_nc_sel_data;
+            mem_req_data_in_w = 'x;
+            mem_req_data_in_w[req_wsel] = core_req_nc_sel_data;
         end
 
-        assign mem_req_out_byteen = mem_bus_in_if.req_valid ? mem_bus_in_if.req_data.byteen : mem_req_byteen_in_r;
-        assign mem_req_out_data = mem_bus_in_if.req_valid ? mem_bus_in_if.req_data.data : mem_req_data_in_r;
+        assign mem_req_out_byteen = mem_bus_in_if.req_valid ? mem_bus_in_if.req_data.byteen : mem_req_byteen_in_w;
+        assign mem_req_out_data = mem_bus_in_if.req_valid ? mem_bus_in_if.req_data.data : mem_req_data_in_w;
         if (NUM_REQS > 1) begin
             assign mem_req_tag_id_bypass = MEM_TAG_ID_BITS'({core_req_nc_idx, req_wsel, core_req_in_id});
         end else begin
@@ -268,10 +268,10 @@ module VX_cache_bypass #(
         assign rsp_idx = 1'b0;
     end
 
-    wire [NUM_REQS-1:0] rsp_nc_valid_r = NUM_REQS'(is_mem_rsp_nc) << rsp_idx;
+    wire [NUM_REQS-1:0] rsp_nc_valid = NUM_REQS'(is_mem_rsp_nc) << rsp_idx;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign core_rsp_in_valid[i] = core_bus_out_if[i].rsp_valid || rsp_nc_valid_r[i];
+        assign core_rsp_in_valid[i] = core_bus_out_if[i].rsp_valid || rsp_nc_valid[i];
         assign core_bus_out_if[i].rsp_ready = core_rsp_in_ready[i];
     end
 

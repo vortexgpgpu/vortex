@@ -414,12 +414,12 @@ module VX_cache_bank #(
     wire [LINE_SIZE-1:0] dirty_byteen_st1;
 
      if (`CS_WORDS_PER_LINE > 1) begin
-        reg [LINE_SIZE-1:0] write_byteen_r;
+        reg [`CS_WORDS_PER_LINE-1:0][WORD_SIZE-1:0] write_byteen_w;
         always @(*) begin
-            write_byteen_r = '0;
-            write_byteen_r[wsel_st1 * WORD_SIZE +: WORD_SIZE] = byteen_st1;
+            write_byteen_w = '0;
+            write_byteen_w[wsel_st1] = byteen_st1;
         end
-        assign write_byteen_st1 = write_byteen_r;
+        assign write_byteen_st1 = write_byteen_w;
     end else begin
         assign write_byteen_st1 = byteen_st1;
     end
