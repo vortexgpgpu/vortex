@@ -13,7 +13,7 @@
 
 `include "VX_platform.vh"
 
-//`TRACING_OFF
+`TRACING_OFF
 module VX_pending_size #(
     parameter SIZE      = 1,
     parameter INCRW     = 1,
@@ -34,97 +34,141 @@ module VX_pending_size #(
 );
     `STATIC_ASSERT(INCRW <= SIZEW, ("invalid parameter: %d vs %d", INCRW, SIZEW))
     `STATIC_ASSERT(DECRW <= SIZEW, ("invalid parameter: %d vs %d", DECRW, SIZEW))
-    localparam ADDRW = `LOG2UP(SIZE);
 
-    reg empty_r, alm_empty_r;
-    reg full_r, alm_full_r;
+    if (SIZE == 1) begin
 
-    if (INCRW != 1 || DECRW != 1) begin
-
-        reg [SIZEW-1:0] size_r;
-
-        wire [SIZEW-1:0] size_n = size_r + SIZEW'(incr) - SIZEW'(decr);
+        reg size_r;
 
         always @(posedge clk) begin
             if (reset) begin
-                empty_r     <= 1;
-                alm_empty_r <= 1;
-                alm_full_r  <= 0;
-                full_r      <= 0;
-                size_r      <= '0;
+                size_r <= '0;
             end else begin
-                `ASSERT((SIZEW'(incr) >= SIZEW'(decr)) || (size_n >= size_r), ("runtime error: counter overflow"));
-                `ASSERT((SIZEW'(incr) <= SIZEW'(decr)) || (size_n <= size_r), ("runtime error: counter underflow"));
-                size_r      <= size_n;
-                empty_r     <= (size_n == SIZEW'(0));
-                alm_empty_r <= (size_n == SIZEW'(ALM_EMPTY));
-                full_r      <= (size_n == SIZEW'(SIZE));
-                alm_full_r  <= (size_n == SIZEW'(ALM_FULL));
+                if (incr) begin
+                    if (~decr) begin
+                        size_r <= 1;
+                    end
+                end else if (decr) begin
+                    size_r <= '0;
+                end
             end
         end
 
-        assign size = size_r;
+        assign empty     = (size_r == 0);
+        assign full      = (size_r != 0);
+        assign alm_empty = 1'b1;
+        assign alm_full  = 1'b1;
+        assign size      = size_r;
 
     end else begin
 
-        reg [ADDRW-1:0] used_r;
-        wire [ADDRW-1:0] used_n;
+        logic empty_r, alm_empty_r;
+        logic full_r, alm_full_r;
 
-        always @(posedge clk) begin
-            if (reset) begin
-                empty_r     <= 1;
-                alm_empty_r <= 1;
-                full_r      <= 0;
-                alm_full_r  <= 0;
-                used_r      <= '0;
-            end else begin
-                `ASSERT(~(incr && ~decr) || ~full, ("runtime error: counter overflow"));
-                `ASSERT(~(decr && ~incr) || ~empty, ("runtime error: counter underflow"));
-                if (incr) begin
-                    if (~decr) begin
-                        empty_r <= 0;
-                        if (used_r == ADDRW'(ALM_EMPTY))
-                            alm_empty_r <= 0;
-                        if (used_r == ADDRW'(SIZE-1))
-                            full_r <= 1;
-                        if (used_r == ADDRW'(ALM_FULL-1))
-                            alm_full_r <= 1;
-                    end
-                end else if (decr) begin
-                    if (used_r == ADDRW'(1))
-                        empty_r <= 1;
-                    if (used_r == ADDRW'(ALM_EMPTY+1))
-                        alm_empty_r <= 1;
-                    full_r <= 0;
-                    if (used_r == ADDRW'(ALM_FULL))
-                        alm_full_r <= 0;
+        if (INCRW != 1 || DECRW != 1) begin
+
+            localparam SUBW = `MIN(SIZEW, `MAX(INCRW, DECRW)+1);
+
+            logic [SIZEW-1:0] size_n, size_r;
+
+            assign size_n = $signed(size_r) + SIZEW'($signed(SUBW'(incr) - SUBW'(decr)));
+
+            always @(posedge clk) begin
+                if (reset) begin
+                    empty_r     <= 1;
+                    full_r      <= 0;
+                    alm_empty_r <= 1;
+                    alm_full_r  <= 0;
+                    size_r      <= '0;
+                end else begin
+                    `ASSERT((SIZEW'(incr) >= SIZEW'(decr)) || (size_n >= size_r), ("runtime error: counter overflow"));
+                    `ASSERT((SIZEW'(incr) <= SIZEW'(decr)) || (size_n <= size_r), ("runtime error: counter underflow"));
+                    empty_r     <= (size_n == SIZEW'(0));
+                    full_r      <= (size_n == SIZEW'(SIZE));
+                    alm_empty_r <= (size_n <= SIZEW'(ALM_EMPTY));
+                    alm_full_r  <= (size_n >= SIZEW'(ALM_FULL));
+                    size_r      <= size_n;
                 end
-                used_r <= used_n;
             end
-        end
 
-        if (SIZE == 2) begin
-            assign used_n = used_r ^ (incr ^ decr);
+            assign size = size_r;
+
         end else begin
-            assign used_n = $signed(used_r) + ADDRW'($signed(2'(incr) - 2'(decr)));
-        end
 
-        if (SIZE > 1) begin
-            if (SIZEW > ADDRW) begin
-                assign size = {full_r, used_r};
+            localparam ADDRW = `LOG2UP(SIZE);
+
+            reg [ADDRW-1:0] used_r;
+
+            wire is_empty_n = (used_r == ADDRW'(1));
+            wire is_full_n  = (used_r == ADDRW'(SIZE-1));
+
+            if (SIZE > 2) begin
+
+                wire is_alm_empty  = (used_r == ADDRW'(ALM_EMPTY));
+                wire is_alm_empty_n= (used_r == ADDRW'(ALM_EMPTY+1));
+                wire is_alm_full   = (used_r == ADDRW'(ALM_FULL));
+                wire is_alm_full_n = (used_r == ADDRW'(ALM_FULL-1));
+
+                wire [1:0] push_minus_pop = {~incr & decr, incr ^ decr};
+
+                always @(posedge clk) begin
+                    if (reset) begin
+                        empty_r     <= 1;
+                        full_r      <= 0;
+                        alm_empty_r <= 0;
+                        alm_full_r  <= 0;
+                        used_r      <= '0;
+                    end else begin
+                        if (incr) begin
+                            if (~decr) begin
+                                empty_r <= 0;
+                                if (is_alm_empty)
+                                    alm_empty_r <= 0;
+                                if (is_full_n)
+                                    full_r <= 1;
+                                if (is_alm_full_n)
+                                    alm_full_r <= 1;
+                            end
+                        end else if (decr) begin
+                            full_r <= 0;
+                            if (is_alm_full)
+                                alm_full_r <= 0;
+                            if (is_empty_n)
+                                empty_r <= 1;
+                            if (is_alm_empty_n)
+                                alm_empty_r <= 1;
+                        end
+                        used_r <= $signed(used_r) + ADDRW'($signed(push_minus_pop));
+                    end
+                end
+
             end else begin
-                assign size = used_r;
+
+                always @(posedge clk) begin
+                    if (reset) begin
+                        empty_r <= 1;
+                        full_r  <= 0;
+                        used_r  <= '0;
+                    end else begin
+                        empty_r <= (empty_r & ~incr) | (~full_r & decr & ~incr);
+                        full_r  <= (~empty_r & incr & ~decr) | (full_r & ~(decr ^ incr));
+                        used_r  <= used_r ^ (incr ^ decr);
+                    end
+                end
+
+                assign alm_empty_r = used_r;
+                assign alm_full_r  = used_r;
             end
-        end else begin
-            assign size = full_r;
+
+            assign size = {full_r, used_r};
+
         end
+
+        assign empty     = empty_r;
+        assign full      = full_r;
+        assign alm_empty = alm_empty_r;
+        assign alm_full  = alm_full_r;
 
     end
 
-    assign empty     = empty_r;
-    assign alm_empty = alm_empty_r;
-    assign alm_full  = alm_full_r;
-    assign full      = full_r;
-
 endmodule
-//`TRACING_ON
+`TRACING_ON
