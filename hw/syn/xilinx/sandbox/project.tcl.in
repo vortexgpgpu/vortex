@@ -11,6 +11,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Start time
+set start_time [clock seconds]
+
 if { $::argc != 3 } {
     puts "ERROR: Program \"$::argv0\" requires 3 arguments!\n"
     puts "Usage: $::argv0 <device_part> <vcs_file> <tool_dir>\n"
@@ -139,7 +142,6 @@ set_property -name "top_auto_set" -value "0" -objects $obj
 set_property -name "top_lib" -value "xil_defaultlib" -objects $obj
 set_property -name "verilog_define" -value "" -objects $obj
 set_property -name "verilog_uppercase" -value "0" -objects $obj
-
 
 # Set 'utils_1' fileset object
 set obj [get_filesets utils_1]
@@ -405,6 +407,15 @@ open_run impl_1
 report_utilization -file utilization.rpt -hierarchical -hierarchical_percentages
 report_place_status -file place.rpt
 report_route_status -file route.rpt
-report_timing -file timing.rpt
+report_timing_summary -file timing.rpt
 report_power -file power.rpt
 report_drc -file drc.rpt
+
+# End time and calculation
+set elapsed_time [expr {[clock seconds] - $start_time}]
+
+# Display elapsed time
+set hours [format "%02d" [expr {$elapsed_time / 3600}]]
+set minutes [format "%02d" [expr {($elapsed_time % 3600) / 60}]]
+set seconds [format "%02d" [expr {$elapsed_time % 60}]]
+puts "Total elapsed time: ${hours}h ${minutes}m ${seconds}s"
