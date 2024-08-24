@@ -11,6 +11,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Start time
+set start_time [clock seconds]
+
 if { $::argc != 5 } {
     puts "ERROR: Program \"$::argv0\" requires 5 arguments!\n"
     puts "Usage: $::argv0 <top_module> <device_part> <vcs_file> <xdc_file> <tool_dir>\n"
@@ -77,6 +80,15 @@ write_checkpoint -force post_route.dcp
 report_route_status -file route.rpt
 
 # Generate the synthesis report
-report_timing -file timing.rpt
+report_timing_summary -file timing.rpt
 report_power -file power.rpt
 report_drc -file drc.rpt
+
+# End time and calculation
+set elapsed_time [expr {[clock seconds] - $start_time}]
+
+# Display elapsed time
+set hours [format "%02d" [expr {$elapsed_time / 3600}]]
+set minutes [format "%02d" [expr {($elapsed_time % 3600) / 60}]]
+set seconds [format "%02d" [expr {$elapsed_time % 60}]]
+puts "Total elapsed time: ${hours}h ${minutes}m ${seconds}s"
