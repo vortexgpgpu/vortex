@@ -143,9 +143,9 @@ module VX_stream_arb #(
 
             // (#inputs <= max_fanout) and (#outputs == 1)
 
-            wire                    valid_in_r;
-            wire [DATAW-1:0]        data_in_r;
-            wire                    ready_in_r;
+            wire                    valid_in_w;
+            wire [DATAW-1:0]        data_in_w;
+            wire                    ready_in_w;
 
             wire                    arb_valid;
             wire [NUM_REQS_W-1:0]   arb_index;
@@ -165,12 +165,12 @@ module VX_stream_arb #(
                 .grant_ready  (arb_ready)
             );
 
-            assign valid_in_r = arb_valid;
-            assign data_in_r  = data_in[arb_index];
-            assign arb_ready  = ready_in_r;
+            assign valid_in_w = arb_valid;
+            assign data_in_w  = data_in[arb_index];
+            assign arb_ready  = ready_in_w;
 
             for (genvar i = 0; i < NUM_REQS; ++i) begin
-                assign ready_in[i] = ready_in_r && arb_onehot[i];
+                assign ready_in[i] = ready_in_w && arb_onehot[i];
             end
 
             VX_elastic_buffer #(
@@ -181,9 +181,9 @@ module VX_stream_arb #(
             ) out_buf (
                 .clk       (clk),
                 .reset     (reset),
-                .valid_in  (valid_in_r),
-                .ready_in  (ready_in_r),
-                .data_in   ({arb_index, data_in_r}),
+                .valid_in  (valid_in_w),
+                .ready_in  (ready_in_w),
+                .data_in   ({arb_index, data_in_w}),
                 .data_out  ({sel_out, data_out}),
                 .valid_out (valid_out),
                 .ready_out (ready_out)
@@ -285,7 +285,7 @@ module VX_stream_arb #(
 
             // (#inputs == 1) and (#outputs <= max_fanout)
 
-            wire [NUM_OUTPUTS-1:0]  ready_in_r;
+            wire [NUM_OUTPUTS-1:0]  ready_in_w;
 
             wire [NUM_OUTPUTS-1:0]  arb_requests;
             wire                    arb_valid;
@@ -305,7 +305,7 @@ module VX_stream_arb #(
                 .grant_ready  (arb_ready)
             );
 
-            assign arb_requests = ready_in_r;
+            assign arb_requests = ready_in_w;
             assign arb_ready    = valid_in[0];
             assign ready_in     = arb_valid;
 
@@ -319,7 +319,7 @@ module VX_stream_arb #(
                     .clk       (clk),
                     .reset     (reset),
                     .valid_in  (valid_in && arb_onehot[i]),
-                    .ready_in  (ready_in_r[i]),
+                    .ready_in  (ready_in_w[i]),
                     .data_in   (data_in),
                     .data_out  (data_out[i]),
                     .valid_out (valid_out[i]),
