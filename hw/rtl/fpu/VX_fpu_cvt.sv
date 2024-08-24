@@ -64,7 +64,7 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
         .DATA_OUT_WIDTH(`FP_FLAGS_BITS + 32),
         .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
         .PE_REG     (0),
-        .OUT_BUF    (((NUM_LANES / NUM_PES) > 2) ? 1 : 0)
+        .OUT_BUF    (2)
     ) pe_serializer (
         .clk        (clk),
         .reset      (reset),
@@ -88,7 +88,8 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_PES; ++i) begin
         VX_fcvt_unit #(
-            .LATENCY (`LATENCY_FCVT)
+            .LATENCY (`LATENCY_FCVT),
+            .OUT_REG (((NUM_LANES / NUM_PES) > 2) ? 1 : 0)
         ) fcvt_unit (
             .clk        (clk),
             .reset      (reset),
