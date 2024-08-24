@@ -116,7 +116,7 @@ module VX_fifo_queue #(
                 .rdata (dout)
             );
 
-            wire going_empty = (ALM_EMPTY == 1) ? alm_empty : (size[ADDRW] == ADDRW'(1));
+            wire going_empty = (ALM_EMPTY == 1) ? alm_empty : (size[ADDRW-1:0] == ADDRW'(1));
 
             always @(posedge clk) begin
                 if (push && (empty || (going_empty && pop))) begin
