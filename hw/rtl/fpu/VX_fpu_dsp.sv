@@ -315,15 +315,15 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
     `ifdef FPU_RV64F
-        reg [`XLEN-1:0] result_r;
+        reg [`XLEN-1:0] result_w;
         always @(*) begin
             case (op_ret_int_out)
-            2'b11:   result_r = `XLEN'($signed(result_s[i]));
-            2'b01:   result_r = {32'h00000000, result_s[i]};
-            default: result_r = {32'hffffffff, result_s[i]};
+            2'b11:   result_w = `XLEN'($signed(result_s[i]));
+            2'b01:   result_w = {32'h00000000, result_s[i]};
+            default: result_w = {32'hffffffff, result_s[i]};
             endcase
         end
-        assign result[i] = result_r;
+        assign result[i] = result_w;
     `else
         assign result[i] = result_s[i];
     `endif

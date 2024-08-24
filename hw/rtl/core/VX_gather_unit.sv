@@ -94,31 +94,31 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
             .ready_out  (commit_tmp_if.ready)
         );
 
-        logic [`NUM_THREADS-1:0] commit_tmask_r;
-        logic [`NUM_THREADS-1:0][`XLEN-1:0] commit_data_r;
+        logic [`NUM_THREADS-1:0] commit_tmask_w;
+        logic [`NUM_THREADS-1:0][`XLEN-1:0] commit_data_w;
         if (PID_BITS != 0) begin
             always @(*) begin
-                commit_tmask_r = '0;
-                commit_data_r  = 'x;
+                commit_tmask_w = '0;
+                commit_data_w  = 'x;
                 for (integer j = 0; j < NUM_LANES; ++j) begin
-                    commit_tmask_r[commit_tmp_if.data.pid * NUM_LANES + j] = commit_tmp_if.data.tmask[j];
-                    commit_data_r[commit_tmp_if.data.pid * NUM_LANES + j] = commit_tmp_if.data.data[j];
+                    commit_tmask_w[commit_tmp_if.data.pid * NUM_LANES + j] = commit_tmp_if.data.tmask[j];
+                    commit_data_w[commit_tmp_if.data.pid * NUM_LANES + j] = commit_tmp_if.data.data[j];
                 end
             end
         end else begin
-            assign commit_tmask_r = commit_tmp_if.data.tmask;
-            assign commit_data_r = commit_tmp_if.data.data;
+            assign commit_tmask_w = commit_tmp_if.data.tmask;
+            assign commit_data_w = commit_tmp_if.data.data;
         end
 
         assign commit_out_if[i].valid = commit_tmp_if.valid;
         assign commit_out_if[i].data = {
             commit_tmp_if.data.uuid,
             commit_tmp_if.data.wid,
-            commit_tmask_r,
+            commit_tmask_w,
             commit_tmp_if.data.PC,
             commit_tmp_if.data.wb,
             commit_tmp_if.data.rd,
-            commit_data_r,
+            commit_data_w,
             1'b0, // PID
             commit_tmp_if.data.sop,
             commit_tmp_if.data.eop

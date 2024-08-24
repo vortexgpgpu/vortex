@@ -40,16 +40,16 @@ module VX_rr_arbiter #(
 
     end else if (LUT_OPT && NUM_REQS == 2)  begin
 
-        reg [LOG_NUM_REQS-1:0]  grant_index_r;
-        reg [LOG_NUM_REQS-1:0]  state;
+        reg [LOG_NUM_REQS-1:0] grant_index_w;
+        reg [LOG_NUM_REQS-1:0] state;
 
         always @(*) begin
             casez ({state, requests})
             3'b0_01,
-            3'b1_?1: begin grant_index_r = LOG_NUM_REQS'(0); end
+            3'b1_?1: begin grant_index_w = LOG_NUM_REQS'(0); end
             3'b0_1?,
-            3'b1_10: begin grant_index_r = LOG_NUM_REQS'(1); end
-            default: begin grant_index_r = 'x; end
+            3'b1_10: begin grant_index_w = LOG_NUM_REQS'(1); end
+            default: begin grant_index_w = 'x; end
             endcase
         end
 
@@ -57,31 +57,31 @@ module VX_rr_arbiter #(
             if (reset) begin
                 state <= '0;
             end else if (grant_ready) begin
-                state <= grant_index_r;
+                state <= grant_index_w;
             end
         end
 
-        assign grant_index  = grant_index_r;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_r;
+        assign grant_index  = grant_index_w;
+        assign grant_onehot = NUM_REQS'(1) << grant_index_w;
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 3)  begin
 
-        reg [LOG_NUM_REQS-1:0]  grant_index_r;
-        reg [LOG_NUM_REQS-1:0]  state;
+        reg [LOG_NUM_REQS-1:0] grant_index_w;
+        reg [LOG_NUM_REQS-1:0] state;
 
         always @(*) begin
             casez ({state, requests})
             5'b00_001,
             5'b01_0?1,
-            5'b10_??1: begin grant_index_r = LOG_NUM_REQS'(0); end
+            5'b10_??1: begin grant_index_w = LOG_NUM_REQS'(0); end
             5'b00_?1?,
             5'b01_010,
-            5'b10_?10: begin grant_index_r = LOG_NUM_REQS'(1); end
+            5'b10_?10: begin grant_index_w = LOG_NUM_REQS'(1); end
             5'b00_10?,
             5'b01_1??,
-            5'b10_100: begin grant_index_r = LOG_NUM_REQS'(2); end
-            default:   begin grant_index_r = 'x; end
+            5'b10_100: begin grant_index_w = LOG_NUM_REQS'(2); end
+            default:   begin grant_index_w = 'x; end
             endcase
         end
 
@@ -89,38 +89,38 @@ module VX_rr_arbiter #(
             if (reset) begin
                 state <= '0;
             end else if (grant_ready) begin
-                state <= grant_index_r;
+                state <= grant_index_w;
             end
         end
 
-        assign grant_index  = grant_index_r;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_r;
+        assign grant_index  = grant_index_w;
+        assign grant_onehot = NUM_REQS'(1) << grant_index_w;
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 4)  begin
 
-        reg [LOG_NUM_REQS-1:0]  grant_index_r;
-        reg [LOG_NUM_REQS-1:0]  state;
+        reg [LOG_NUM_REQS-1:0] grant_index_w;
+        reg [LOG_NUM_REQS-1:0] state;
 
         always @(*) begin
             casez ({state, requests})
             6'b00_0001,
             6'b01_00?1,
             6'b10_0??1,
-            6'b11_???1: begin grant_index_r = LOG_NUM_REQS'(0); end
+            6'b11_???1: begin grant_index_w = LOG_NUM_REQS'(0); end
             6'b00_??1?,
             6'b01_0010,
             6'b10_0?10,
-            6'b11_??10: begin grant_index_r = LOG_NUM_REQS'(1); end
+            6'b11_??10: begin grant_index_w = LOG_NUM_REQS'(1); end
             6'b00_?10?,
             6'b01_?1??,
             6'b10_0100,
-            6'b11_?100: begin grant_index_r = LOG_NUM_REQS'(2); end
+            6'b11_?100: begin grant_index_w = LOG_NUM_REQS'(2); end
             6'b00_100?,
             6'b01_10??,
             6'b10_1???,
-            6'b11_1000: begin grant_index_r = LOG_NUM_REQS'(3); end
-            default:    begin grant_index_r = 'x; end
+            6'b11_1000: begin grant_index_w = LOG_NUM_REQS'(3); end
+            default:    begin grant_index_w = 'x; end
             endcase
         end
 
@@ -128,18 +128,18 @@ module VX_rr_arbiter #(
             if (reset) begin
                 state <= '0;
             end else if (grant_ready) begin
-                state <= grant_index_r;
+                state <= grant_index_w;
             end
         end
 
-        assign grant_index  = grant_index_r;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_r;
+        assign grant_index  = grant_index_w;
+        assign grant_onehot = NUM_REQS'(1) << grant_index_w;
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 5)  begin
 
-        reg [LOG_NUM_REQS-1:0]  grant_index_r;
-        reg [LOG_NUM_REQS-1:0]  state;
+        reg [LOG_NUM_REQS-1:0] grant_index_w;
+        reg [LOG_NUM_REQS-1:0] state;
 
         always @(*) begin
             casez ({state, requests})
@@ -147,28 +147,28 @@ module VX_rr_arbiter #(
             8'b001_000?1,
             8'b010_00??1,
             8'b011_0???1,
-            8'b100_????1: begin grant_index_r = LOG_NUM_REQS'(0); end
+            8'b100_????1: begin grant_index_w = LOG_NUM_REQS'(0); end
             8'b000_???1?,
             8'b001_00010,
             8'b010_00?10,
             8'b011_0??10,
-            8'b100_???10: begin grant_index_r = LOG_NUM_REQS'(1); end
+            8'b100_???10: begin grant_index_w = LOG_NUM_REQS'(1); end
             8'b000_??10?,
             8'b001_??1??,
             8'b010_00100,
             8'b011_0?100,
-            8'b100_??100: begin grant_index_r = LOG_NUM_REQS'(2); end
+            8'b100_??100: begin grant_index_w = LOG_NUM_REQS'(2); end
             8'b000_?100?,
             8'b001_?10??,
             8'b010_?1???,
             8'b011_01000,
-            8'b100_?1000: begin grant_index_r = LOG_NUM_REQS'(3); end
+            8'b100_?1000: begin grant_index_w = LOG_NUM_REQS'(3); end
             8'b000_1000?,
             8'b001_100??,
             8'b010_10???,
             8'b011_1????,
-            8'b100_10000: begin grant_index_r = LOG_NUM_REQS'(4); end
-            default:      begin grant_index_r = 'x; end
+            8'b100_10000: begin grant_index_w = LOG_NUM_REQS'(4); end
+            default:      begin grant_index_w = 'x; end
             endcase
         end
 
@@ -176,18 +176,18 @@ module VX_rr_arbiter #(
             if (reset) begin
                 state <= '0;
             end else if (grant_ready) begin
-                state <= grant_index_r;
+                state <= grant_index_w;
             end
         end
 
-        assign grant_index  = grant_index_r;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_r;
+        assign grant_index  = grant_index_w;
+        assign grant_onehot = NUM_REQS'(1) << grant_index_w;
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 6)  begin
 
-        reg [LOG_NUM_REQS-1:0]  grant_index_r;
-        reg [LOG_NUM_REQS-1:0]  state;
+        reg [LOG_NUM_REQS-1:0] grant_index_w;
+        reg [LOG_NUM_REQS-1:0] state;
 
         always @(*) begin
             casez ({state, requests})
@@ -196,38 +196,38 @@ module VX_rr_arbiter #(
             9'b010_000??1,
             9'b011_00???1,
             9'b100_0????1,
-            9'b101_?????1: begin grant_index_r = LOG_NUM_REQS'(0); end
+            9'b101_?????1: begin grant_index_w = LOG_NUM_REQS'(0); end
             9'b000_????1?,
             9'b001_000010,
             9'b010_000?10,
             9'b011_00??10,
             9'b100_0???10,
-            9'b101_????10: begin grant_index_r = LOG_NUM_REQS'(1); end
+            9'b101_????10: begin grant_index_w = LOG_NUM_REQS'(1); end
             9'b000_???10?,
             9'b001_???1??,
             9'b010_000100,
             9'b011_00?100,
             9'b100_0??100,
-            9'b101_???100: begin grant_index_r = LOG_NUM_REQS'(2); end
+            9'b101_???100: begin grant_index_w = LOG_NUM_REQS'(2); end
             9'b000_??100?,
             9'b001_??10??,
             9'b010_??1???,
             9'b011_001000,
             9'b100_0?1000,
-            9'b101_??1000: begin grant_index_r = LOG_NUM_REQS'(3); end
+            9'b101_??1000: begin grant_index_w = LOG_NUM_REQS'(3); end
             9'b000_?1000?,
             9'b001_?100??,
             9'b010_?10???,
             9'b011_?1????,
             9'b100_010000,
-            9'b101_?10000: begin grant_index_r = LOG_NUM_REQS'(4); end
+            9'b101_?10000: begin grant_index_w = LOG_NUM_REQS'(4); end
             9'b000_10000?,
             9'b001_1000??,
             9'b010_100???,
             9'b011_10????,
             9'b100_1?????,
-            9'b101_100000: begin grant_index_r = LOG_NUM_REQS'(5); end
-            default:       begin grant_index_r = 'x; end
+            9'b101_100000: begin grant_index_w = LOG_NUM_REQS'(5); end
+            default:       begin grant_index_w = 'x; end
             endcase
         end
 
@@ -235,18 +235,18 @@ module VX_rr_arbiter #(
             if (reset) begin
                 state <= '0;
             end else if (grant_ready) begin
-                state <= grant_index_r;
+                state <= grant_index_w;
             end
         end
 
-        assign grant_index  = grant_index_r;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_r;
+        assign grant_index  = grant_index_w;
+        assign grant_onehot = NUM_REQS'(1) << grant_index_w;
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 7)  begin
 
-        reg [LOG_NUM_REQS-1:0]  grant_index_r;
-        reg [LOG_NUM_REQS-1:0]  state;
+        reg [LOG_NUM_REQS-1:0] grant_index_w;
+        reg [LOG_NUM_REQS-1:0] state;
 
         always @(*) begin
             casez ({state, requests})
@@ -256,50 +256,50 @@ module VX_rr_arbiter #(
             10'b011_000???1,
             10'b100_000???1,
             10'b101_00????1,
-            10'b110_??????1: begin grant_index_r = LOG_NUM_REQS'(0); end
+            10'b110_??????1: begin grant_index_w = LOG_NUM_REQS'(0); end
             10'b000_?????1?,
             10'b001_0000010,
             10'b010_0000?10,
             10'b011_000??10,
             10'b100_00???10,
             10'b101_0????10,
-            10'b110_?????10: begin grant_index_r = LOG_NUM_REQS'(1); end
+            10'b110_?????10: begin grant_index_w = LOG_NUM_REQS'(1); end
             10'b000_????10?,
             10'b001_????1??,
             10'b010_0000100,
             10'b011_000?100,
             10'b100_00??100,
             10'b101_0???100,
-            10'b110_????100: begin grant_index_r = LOG_NUM_REQS'(2); end
+            10'b110_????100: begin grant_index_w = LOG_NUM_REQS'(2); end
             10'b000_???100?,
             10'b001_???10??,
             10'b010_???1???,
             10'b011_0001000,
             10'b100_00?1000,
             10'b101_0??1000,
-            10'b110_???1000: begin grant_index_r = LOG_NUM_REQS'(3); end
+            10'b110_???1000: begin grant_index_w = LOG_NUM_REQS'(3); end
             10'b000_??1000?,
             10'b001_??100??,
             10'b010_??10???,
             10'b011_??1????,
             10'b100_0010000,
             10'b101_0?10000,
-            10'b110_??10000: begin grant_index_r = LOG_NUM_REQS'(4); end
+            10'b110_??10000: begin grant_index_w = LOG_NUM_REQS'(4); end
             10'b000_?10000?,
             10'b001_?1000??,
             10'b010_?100???,
             10'b011_?10????,
             10'b100_?1?????,
             10'b101_0100000,
-            10'b110_?100000: begin grant_index_r = LOG_NUM_REQS'(5); end
+            10'b110_?100000: begin grant_index_w = LOG_NUM_REQS'(5); end
             10'b000_100000?,
             10'b001_10000??,
             10'b010_1000???,
             10'b011_100????,
             10'b100_10?????,
             10'b101_1??????,
-            10'b110_1000000: begin grant_index_r = LOG_NUM_REQS'(6); end
-            default:        begin grant_index_r = 'x; end
+            10'b110_1000000: begin grant_index_w = LOG_NUM_REQS'(6); end
+            default:        begin grant_index_w = 'x; end
             endcase
         end
 
@@ -307,18 +307,18 @@ module VX_rr_arbiter #(
             if (reset) begin
                 state <= '0;
             end else if (grant_ready) begin
-                state <= grant_index_r;
+                state <= grant_index_w;
             end
         end
 
-        assign grant_index  = grant_index_r;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_r;
+        assign grant_index  = grant_index_w;
+        assign grant_onehot = NUM_REQS'(1) << grant_index_w;
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 8)  begin
 
-        reg [LOG_NUM_REQS-1:0]  grant_index_r;
-        reg [LOG_NUM_REQS-1:0]  state;
+        reg [LOG_NUM_REQS-1:0] grant_index_w;
+        reg [LOG_NUM_REQS-1:0] state;
 
         always @(*) begin
             casez ({state, requests})
@@ -329,7 +329,7 @@ module VX_rr_arbiter #(
             11'b100_000????1,
             11'b101_00?????1,
             11'b110_0??????1,
-            11'b111_???????1: begin grant_index_r = LOG_NUM_REQS'(0); end
+            11'b111_???????1: begin grant_index_w = LOG_NUM_REQS'(0); end
             11'b000_??????1?,
             11'b001_00000010,
             11'b010_00000?10,
@@ -337,7 +337,7 @@ module VX_rr_arbiter #(
             11'b100_000???10,
             11'b101_00????10,
             11'b110_0?????10,
-            11'b111_??????10: begin grant_index_r = LOG_NUM_REQS'(1); end
+            11'b111_??????10: begin grant_index_w = LOG_NUM_REQS'(1); end
             11'b000_?????10?,
             11'b001_?????1??,
             11'b010_00000100,
@@ -345,7 +345,7 @@ module VX_rr_arbiter #(
             11'b100_000??100,
             11'b101_00???100,
             11'b110_0????100,
-            11'b111_?????100: begin grant_index_r = LOG_NUM_REQS'(2); end
+            11'b111_?????100: begin grant_index_w = LOG_NUM_REQS'(2); end
             11'b000_????100?,
             11'b001_????10??,
             11'b010_????1???,
@@ -353,7 +353,7 @@ module VX_rr_arbiter #(
             11'b100_000?1000,
             11'b101_00??1000,
             11'b110_0???1000,
-            11'b111_????1000: begin grant_index_r = LOG_NUM_REQS'(3); end
+            11'b111_????1000: begin grant_index_w = LOG_NUM_REQS'(3); end
             11'b000_???1000?,
             11'b001_???100??,
             11'b010_???10???,
@@ -361,7 +361,7 @@ module VX_rr_arbiter #(
             11'b100_00010000,
             11'b101_00?10000,
             11'b110_0??10000,
-            11'b111_???10000: begin grant_index_r = LOG_NUM_REQS'(4); end
+            11'b111_???10000: begin grant_index_w = LOG_NUM_REQS'(4); end
             11'b000_??10000?,
             11'b001_??1000??,
             11'b010_??100???,
@@ -369,7 +369,7 @@ module VX_rr_arbiter #(
             11'b100_??1?????,
             11'b101_00100000,
             11'b110_0?100000,
-            11'b111_??100000: begin grant_index_r = LOG_NUM_REQS'(5); end
+            11'b111_??100000: begin grant_index_w = LOG_NUM_REQS'(5); end
             11'b000_?100000?,
             11'b001_?10000??,
             11'b010_?1000???,
@@ -377,7 +377,7 @@ module VX_rr_arbiter #(
             11'b100_?10?????,
             11'b101_?1??????,
             11'b110_01000000,
-            11'b111_?1000000: begin grant_index_r = LOG_NUM_REQS'(6); end
+            11'b111_?1000000: begin grant_index_w = LOG_NUM_REQS'(6); end
             11'b000_1000000?,
             11'b001_100000??,
             11'b010_10000???,
@@ -385,8 +385,8 @@ module VX_rr_arbiter #(
             11'b100_100?????,
             11'b101_10??????,
             11'b110_1???????,
-            11'b111_10000000: begin grant_index_r = LOG_NUM_REQS'(7); end
-            default:          begin grant_index_r = 'x; end
+            11'b111_10000000: begin grant_index_w = LOG_NUM_REQS'(7); end
+            default:          begin grant_index_w = 'x; end
             endcase
         end
 
@@ -394,12 +394,12 @@ module VX_rr_arbiter #(
             if (reset) begin
                 state <= '0;
             end else if (grant_ready) begin
-                state <= grant_index_r;
+                state <= grant_index_w;
             end
         end
 
-        assign grant_index  = grant_index_r;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_r;
+        assign grant_index  = grant_index_w;
+        assign grant_onehot = NUM_REQS'(1) << grant_index_w;
         assign grant_valid  = (| requests);
 
     end else if (MODEL == 1) begin

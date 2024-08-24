@@ -87,29 +87,29 @@ module VX_onehot_encoder #(
 
     end else begin
 
-        reg [LN-1:0] index_r;
+        reg [LN-1:0] index_w;
 
         if (REVERSE != 0) begin
             always @(*) begin
-                index_r = 'x;
+                index_w = 'x;
                 for (integer i = N-1; i >= 0; --i) begin
                     if (data_in[i]) begin
-                        index_r = LN'(N-1-i);
+                        index_w = LN'(N-1-i);
                     end
                 end
             end
         end else begin
             always @(*) begin
-                index_r = 'x;
+                index_w = 'x;
                 for (integer i = 0; i < N; ++i) begin
                     if (data_in[i]) begin
-                        index_r = LN'(i);
+                        index_w = LN'(i);
                     end
                 end
             end
         end
 
-        assign data_out  = index_r;
+        assign data_out  = index_w;
         assign valid_out = (| data_in);
     end
 

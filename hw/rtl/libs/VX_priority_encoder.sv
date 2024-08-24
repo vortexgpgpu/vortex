@@ -106,22 +106,22 @@ module VX_priority_encoder #(
 
     end else begin
 
-        reg [LN-1:0] index_r;
-        reg [N-1:0]  onehot_r;
+        reg [LN-1:0] index_w;
+        reg [N-1:0]  onehot_w;
 
         always @(*) begin
-            index_r  = 'x;
-            onehot_r = 'x;
+            index_w  = 'x;
+            onehot_w = 'x;
             for (integer i = N-1; i >= 0; --i) begin
                 if (reversed[i]) begin
-                    index_r  = LN'(i);
-                    onehot_r = N'(1) << i;
+                    index_w  = LN'(i);
+                    onehot_w = N'(1) << i;
                 end
             end
         end
 
-        assign index_out  = index_r;
-        assign onehot_out = onehot_r;
+        assign index_out  = index_w;
+        assign onehot_out = onehot_w;
         assign valid_out  = (| reversed);
 
     end

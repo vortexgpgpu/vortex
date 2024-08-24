@@ -15,15 +15,15 @@
 
 `ifdef EXT_F_ENABLE
     `define USED_IREG(x) \
-        x``_r = {1'b0, ``x}; \
+        x``_v = {1'b0, ``x}; \
         use_``x = 1
 
     `define USED_FREG(x) \
-        x``_r = {1'b1, ``x}; \
+        x``_v = {1'b1, ``x}; \
         use_``x = 1
 `else
     `define USED_IREG(x) \
-        x``_r = ``x; \
+        x``_v = ``x; \
         use_``x = 1
 `endif
 
@@ -50,7 +50,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     reg [`EX_BITS-1:0] ex_type;
     reg [`INST_OP_BITS-1:0] op_type;
     op_args_t op_args;
-    reg [`NR_BITS-1:0] rd_r, rs1_r, rs2_r, rs3_r;
+    reg [`NR_BITS-1:0] rd_v, rs1_v, rs2_v, rs3_v;
     reg use_rd, use_rs1, use_rs2, use_rs3;
     reg is_wstall;
 
@@ -155,10 +155,10 @@ module VX_decode import VX_gpu_pkg::*; #(
         ex_type   = '0;
         op_type   = 'x;
         op_args   = 'x;
-        rd_r      = '0;
-        rs1_r     = '0;
-        rs2_r     = '0;
-        rs3_r     = '0;
+        rd_v      = '0;
+        rs1_v     = '0;
+        rs2_v     = '0;
+        rs3_v     = '0;
         use_rd    = 0;
         use_rs1   = 0;
         use_rs2   = 0;
@@ -527,7 +527,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     end
 
     // disable write to integer register r0
-    wire wb = use_rd && (rd_r != 0);
+    wire wb = use_rd && (rd_v != 0);
 
     VX_elastic_buffer #(
         .DATAW (DATAW),
@@ -537,7 +537,7 @@ module VX_decode import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (fetch_if.valid),
         .ready_in  (fetch_if.ready),
-        .data_in   ({fetch_if.data.uuid, fetch_if.data.wid, fetch_if.data.tmask, fetch_if.data.PC, ex_type, op_type, op_args, wb, rd_r, rs1_r, rs2_r, rs3_r}),
+        .data_in   ({fetch_if.data.uuid, fetch_if.data.wid, fetch_if.data.tmask, fetch_if.data.PC, ex_type, op_type, op_args, wb, rd_v, rs1_v, rs2_v, rs3_v}),
         .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
         .valid_out (decode_if.valid),
         .ready_out (decode_if.ready)
