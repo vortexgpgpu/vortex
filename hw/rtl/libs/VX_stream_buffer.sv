@@ -85,8 +85,8 @@ module VX_stream_buffer #(
 
 		end else begin
 
-			reg [DATAW-1:0] shift_reg [1:0];
-			reg [1:0]       fifo_state;
+			reg [1:0][DATAW-1:0] shift_reg;
+			reg [1:0] fifo_state;
 
 			wire fire_in  = valid_in && ready_in;
 			wire fire_out = valid_out && ready_out;
