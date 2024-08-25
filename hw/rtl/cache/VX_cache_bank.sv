@@ -53,11 +53,11 @@ module VX_cache_bank #(
     // core request tag size
     parameter TAG_WIDTH         = UUID_WIDTH + 1,
 
-    // Core response output buffer
-    parameter CORE_OUT_BUF      = 0,
+    // Core response output register
+    parameter CORE_OUT_REG      = 0,
 
-    // Memory request output buffer
-    parameter MEM_OUT_BUF       = 0,
+    // Memory request output register
+    parameter MEM_OUT_REG       = 0,
 
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE),
     parameter REQ_SEL_WIDTH     = `UP(`CS_REQ_SEL_BITS),
@@ -567,7 +567,7 @@ module VX_cache_bank #(
     VX_elastic_buffer #(
         .DATAW   (TAG_WIDTH + `CS_WORD_WIDTH + REQ_SEL_WIDTH),
         .SIZE    (CRSQ_SIZE),
-        .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
+        .OUT_REG (CORE_OUT_REG)
     ) core_rsp_queue (
         .clk       (clk),
         .reset     (reset),
@@ -632,7 +632,7 @@ module VX_cache_bank #(
         .DATAW    (1 + `CS_LINE_ADDR_WIDTH + MSHR_ADDR_WIDTH + LINE_SIZE + `CS_LINE_WIDTH + 1),
         .DEPTH    (MREQ_SIZE),
         .ALM_FULL (MREQ_SIZE-PIPELINE_STAGES),
-        .OUT_REG  (`TO_OUT_BUF_REG(MEM_OUT_BUF))
+        .OUT_REG  (MEM_OUT_REG)
     ) mem_req_queue (
         .clk        (clk),
         .reset      (reset),
