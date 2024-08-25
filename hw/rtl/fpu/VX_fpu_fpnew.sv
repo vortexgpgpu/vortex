@@ -134,20 +134,13 @@ module VX_fpu_fpnew
                 fpu_op = fpnew_pkg::ADD;
                 fpu_operands[1] = dataa;
                 fpu_operands[2] = datab;
-            end
-            `INST_FPU_SUB: begin
-                fpu_op = fpnew_pkg::ADD;
-                fpu_operands[1] = dataa;
-                fpu_operands[2] = datab;
-                fpu_op_mod = 1;
+                fpu_op_mod = fmt[1]; // FADD or FSUB
             end
             `INST_FPU_MUL:   begin fpu_op = fpnew_pkg::MUL; end
+            `INST_FPU_MADD:  begin fpu_op = fpnew_pkg::FMADD; fpu_op_mod = fmt[1]; end
+            `INST_FPU_NMADD: begin fpu_op = fpnew_pkg::FNMSUB; fpu_op_mod = ~fmt[1]; end
             `INST_FPU_DIV:   begin fpu_op = fpnew_pkg::DIV; end
             `INST_FPU_SQRT:  begin fpu_op = fpnew_pkg::SQRT; end
-            `INST_FPU_MADD:  begin fpu_op = fpnew_pkg::FMADD; end
-            `INST_FPU_MSUB:  begin fpu_op = fpnew_pkg::FMADD; fpu_op_mod = 1; end
-            `INST_FPU_NMADD: begin fpu_op = fpnew_pkg::FNMSUB; fpu_op_mod = 1; end
-            `INST_FPU_NMSUB: begin fpu_op = fpnew_pkg::FNMSUB; end
         `ifdef FLEN_64
             `INST_FPU_F2F: begin fpu_op = fpnew_pkg::F2F; fpu_src_fmt = fmt[0] ? fpnew_pkg::FP32 : fpnew_pkg::FP64; end
         `endif

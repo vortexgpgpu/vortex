@@ -76,7 +76,6 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
 
     reg is_fadd, is_fsub, is_fmul, is_fmadd, is_fmsub, is_fnmadd, is_fnmsub;
     reg is_div, is_fcmp, is_itof, is_utof, is_ftoi, is_ftou, is_f2f;
-    reg dst_fmt, int_fmt;
 
     reg [NUM_LANES-1:0][63:0] operands [3];
 
@@ -88,7 +87,8 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
         end
     end
 
-    `UNUSED_VAR (fmt)
+    wire f_fmt = fmt[0];
+    wire i_fmt = fmt[1];
 
     always @(*) begin
         is_fadd   = 0;
@@ -106,25 +106,11 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
         is_ftou   = 0;
         is_f2f    = 0;
 
-        dst_fmt   = 0;
-        int_fmt   = 0;
-
-    `ifdef FLEN_64
-        dst_fmt = fmt[0];
-    `endif
-
-    `ifdef XLEN_64
-        int_fmt = fmt[1];
-    `endif
-
         case (op_type)
-            `INST_FPU_ADD:   begin core_select = FPU_FMA; is_fadd = 1; end
-            `INST_FPU_SUB:   begin core_select = FPU_FMA; is_fsub = 1; end
+            `INST_FPU_ADD:   begin core_select = FPU_FMA; is_fadd = ~i_fmt; is_fsub = i_fmt; end
+            `INST_FPU_MADD:  begin core_select = FPU_FMA; is_fmadd = ~i_fmt; is_fmsub = i_fmt; end
+            `INST_FPU_NMADD: begin core_select = FPU_FMA; is_fnmadd = ~i_fmt; is_fnmsub = i_fmt; end
             `INST_FPU_MUL:   begin core_select = FPU_FMA; is_fmul = 1; end
-            `INST_FPU_MADD:  begin core_select = FPU_FMA; is_fmadd = 1; end
-            `INST_FPU_MSUB:  begin core_select = FPU_FMA; is_fmsub = 1; end
-            `INST_FPU_NMADD: begin core_select = FPU_FMA; is_fnmadd = 1; end
-            `INST_FPU_NMSUB: begin core_select = FPU_FMA; is_fnmsub = 1; end
             `INST_FPU_DIV:   begin core_select = FPU_DIVSQRT; is_div = 1; end
             `INST_FPU_SQRT:  begin core_select = FPU_DIVSQRT; end
             `INST_FPU_CMP:   begin core_select = FPU_NCP; is_fcmp = 1; end
@@ -164,13 +150,13 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
 
         always @(*) begin
             for (integer i = 0; i < NUM_LANES; ++i) begin
-                dpi_fadd   (fma_fire, int'(dst_fmt), operands[0][i], operands[1][i], frm, result_fadd[i], fflags_fadd[i]);
-                dpi_fsub   (fma_fire, int'(dst_fmt), operands[0][i], operands[1][i], frm, result_fsub[i], fflags_fsub[i]);
-                dpi_fmul   (fma_fire, int'(dst_fmt), operands[0][i], operands[1][i], frm, result_fmul[i], fflags_fmul[i]);
-                dpi_fmadd  (fma_fire, int'(dst_fmt), operands[0][i], operands[1][i], operands[2][i], frm, result_fmadd[i], fflags_fmadd[i]);
-                dpi_fmsub  (fma_fire, int'(dst_fmt), operands[0][i], operands[1][i], operands[2][i], frm, result_fmsub[i], fflags_fmsub[i]);
-                dpi_fnmadd (fma_fire, int'(dst_fmt), operands[0][i], operands[1][i], operands[2][i], frm, result_fnmadd[i], fflags_fnmadd[i]);
-                dpi_fnmsub (fma_fire, int'(dst_fmt), operands[0][i], operands[1][i], operands[2][i], frm, result_fnmsub[i], fflags_fnmsub[i]);
+                dpi_fadd   (fma_fire, int'(f_fmt), operands[0][i], operands[1][i], frm, result_fadd[i], fflags_fadd[i]);
+                dpi_fsub   (fma_fire, int'(f_fmt), operands[0][i], operands[1][i], frm, result_fsub[i], fflags_fsub[i]);
+                dpi_fmul   (fma_fire, int'(f_fmt), operands[0][i], operands[1][i], frm, result_fmul[i], fflags_fmul[i]);
+                dpi_fmadd  (fma_fire, int'(f_fmt), operands[0][i], operands[1][i], operands[2][i], frm, result_fmadd[i], fflags_fmadd[i]);
+                dpi_fmsub  (fma_fire, int'(f_fmt), operands[0][i], operands[1][i], operands[2][i], frm, result_fmsub[i], fflags_fmsub[i]);
+                dpi_fnmadd (fma_fire, int'(f_fmt), operands[0][i], operands[1][i], operands[2][i], frm, result_fnmadd[i], fflags_fnmadd[i]);
+                dpi_fnmsub (fma_fire, int'(f_fmt), operands[0][i], operands[1][i], operands[2][i], frm, result_fnmsub[i], fflags_fnmsub[i]);
 
                 result_fma[i] = is_fadd   ? result_fadd[i][`XLEN-1:0] :
                                 is_fsub   ? result_fsub[i][`XLEN-1:0] :
@@ -226,7 +212,7 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
 
         always @(*) begin
             for (integer i = 0; i < NUM_LANES; ++i) begin
-                dpi_fdiv (fdiv_fire, int'(dst_fmt), operands[0][i], operands[1][i], frm, result_fdiv[i], fflags_fdiv[i]);
+                dpi_fdiv (fdiv_fire, int'(f_fmt), operands[0][i], operands[1][i], frm, result_fdiv[i], fflags_fdiv[i]);
                 result_fdiv_r[i] = result_fdiv[i][`XLEN-1:0];
             end
         end
@@ -265,7 +251,7 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
 
         always @(*) begin
             for (integer i = 0; i < NUM_LANES; ++i) begin
-                dpi_fsqrt (fsqrt_fire, int'(dst_fmt), operands[0][i], frm, result_fsqrt[i], fflags_fsqrt[i]);
+                dpi_fsqrt (fsqrt_fire, int'(f_fmt), operands[0][i], frm, result_fsqrt[i], fflags_fsqrt[i]);
                 result_fsqrt_r[i] = result_fsqrt[i][`XLEN-1:0];
             end
         end
@@ -313,11 +299,11 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
 
         always @(*) begin
             for (integer i = 0; i < NUM_LANES; ++i) begin
-                dpi_itof (fcvt_fire, int'(dst_fmt), int'(int_fmt), operands[0][i], frm, result_itof[i], fflags_itof[i]);
-                dpi_utof (fcvt_fire, int'(dst_fmt), int'(int_fmt), operands[0][i], frm, result_utof[i], fflags_utof[i]);
-                dpi_ftoi (fcvt_fire, int'(int_fmt), int'(dst_fmt), operands[0][i], frm, result_ftoi[i], fflags_ftoi[i]);
-                dpi_ftou (fcvt_fire, int'(int_fmt), int'(dst_fmt), operands[0][i], frm, result_ftou[i], fflags_ftou[i]);
-                dpi_f2f  (fcvt_fire, int'(dst_fmt), operands[0][i], result_f2f[i]);
+                dpi_itof (fcvt_fire, int'(f_fmt), int'(i_fmt), operands[0][i], frm, result_itof[i], fflags_itof[i]);
+                dpi_utof (fcvt_fire, int'(f_fmt), int'(i_fmt), operands[0][i], frm, result_utof[i], fflags_utof[i]);
+                dpi_ftoi (fcvt_fire, int'(i_fmt), int'(f_fmt), operands[0][i], frm, result_ftoi[i], fflags_ftoi[i]);
+                dpi_ftou (fcvt_fire, int'(i_fmt), int'(f_fmt), operands[0][i], frm, result_ftou[i], fflags_ftou[i]);
+                dpi_f2f  (fcvt_fire, int'(f_fmt), operands[0][i], result_f2f[i]);
 
                 result_fcvt[i] = is_itof ? result_itof[i][`XLEN-1:0] :
                                 is_utof ? result_utof[i][`XLEN-1:0] :
@@ -384,17 +370,17 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
 
         always @(*) begin
             for (integer i = 0; i < NUM_LANES; ++i) begin
-                dpi_fclss  (fncp_fire, int'(dst_fmt), operands[0][i], result_fclss[i]);
-                dpi_fle    (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_fle[i], fflags_fle[i]);
-                dpi_flt    (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_flt[i], fflags_flt[i]);
-                dpi_feq    (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_feq[i], fflags_feq[i]);
-                dpi_fmin   (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_fmin[i], fflags_fmin[i]);
-                dpi_fmax   (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_fmax[i], fflags_fmax[i]);
-                dpi_fsgnj  (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_fsgnj[i]);
-                dpi_fsgnjn (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_fsgnjn[i]);
-                dpi_fsgnjx (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_fsgnjx[i]);
-                result_fmvx[i] = dst_fmt ? operands[0][i] : 64'($signed(operands[0][i][31:0]));      // sign-extension
-                result_fmvf[i] = dst_fmt ? operands[0][i] : (operands[0][i] | 64'hffffffff00000000); // nan-boxing
+                dpi_fclss  (fncp_fire, int'(f_fmt), operands[0][i], result_fclss[i]);
+                dpi_fle    (fncp_fire, int'(f_fmt), operands[0][i], operands[1][i], result_fle[i], fflags_fle[i]);
+                dpi_flt    (fncp_fire, int'(f_fmt), operands[0][i], operands[1][i], result_flt[i], fflags_flt[i]);
+                dpi_feq    (fncp_fire, int'(f_fmt), operands[0][i], operands[1][i], result_feq[i], fflags_feq[i]);
+                dpi_fmin   (fncp_fire, int'(f_fmt), operands[0][i], operands[1][i], result_fmin[i], fflags_fmin[i]);
+                dpi_fmax   (fncp_fire, int'(f_fmt), operands[0][i], operands[1][i], result_fmax[i], fflags_fmax[i]);
+                dpi_fsgnj  (fncp_fire, int'(f_fmt), operands[0][i], operands[1][i], result_fsgnj[i]);
+                dpi_fsgnjn (fncp_fire, int'(f_fmt), operands[0][i], operands[1][i], result_fsgnjn[i]);
+                dpi_fsgnjx (fncp_fire, int'(f_fmt), operands[0][i], operands[1][i], result_fsgnjx[i]);
+                result_fmvx[i] = f_fmt ? operands[0][i] : 64'($signed(operands[0][i][31:0]));      // sign-extension
+                result_fmvf[i] = f_fmt ? operands[0][i] : (operands[0][i] | 64'hffffffff00000000); // nan-boxing
             end
         end
 

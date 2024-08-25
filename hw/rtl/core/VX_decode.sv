@@ -376,14 +376,16 @@ module VX_decode import VX_gpu_pkg::*; #(
                 `USED_IREG (rs2);
             end
         `ifdef EXT_F_ENABLE
-            `INST_FMADD,
-            `INST_FMSUB,
-            `INST_FNMSUB,
-            `INST_FNMADD: begin
+            `INST_FMADD,  // 7'b1000011
+            `INST_FMSUB,  // 7'b1000111
+            `INST_FNMSUB, // 7'b1001011
+            `INST_FNMADD: // 7'b1001111
+            begin
                 ex_type = `EX_FPU;
-                op_type = `INST_OP_BITS'({2'b11, opcode[3:2]});
+                op_type = `INST_OP_BITS'({2'b00, 1'b1, opcode[3]});
                 op_args.fpu.frm = func3;
                 op_args.fpu.fmt[0] = func2[0]; // float / double
+                op_args.fpu.fmt[1] = opcode[3] ^ opcode[2]; // SUB
                 use_rd  = 1;
                 `USED_FREG (rd);
                 `USED_FREG (rs1);
@@ -399,9 +401,10 @@ module VX_decode import VX_gpu_pkg::*; #(
                 case (func5)
                     5'b00000, // FADD
                     5'b00001, // FSUB
-                    5'b00010, // FMUL
-                    5'b00011: begin // FDIV
-                        op_type = `INST_OP_BITS'(func5[1:0]);
+                    5'b00010: // FMUL
+                    begin
+                        op_type = `INST_OP_BITS'({2'b00, 1'b0, func5[1]});
+                        op_args.fpu.fmt[1] = func5[0]; // SUB
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
@@ -430,6 +433,13 @@ module VX_decode import VX_gpu_pkg::*; #(
                         `USED_FREG (rs1);
                     end
                 `endif
+                    5'b00011: begin
+                        // FDIV
+                        op_type = `INST_OP_BITS'(`INST_FPU_DIV);
+                        `USED_FREG (rd);
+                        `USED_FREG (rs1);
+                        `USED_FREG (rs2);
+                    end
                     5'b01011: begin
                         // FSQRT
                         op_type = `INST_OP_BITS'(`INST_FPU_SQRT);

@@ -227,22 +227,19 @@
 `define INST_FENCE_D         1'h0
 `define INST_FENCE_I         1'h1
 
-`define INST_FPU_ADD         4'b0000
-`define INST_FPU_SUB         4'b0001
-`define INST_FPU_MUL         4'b0010
-`define INST_FPU_DIV         4'b0011
-`define INST_FPU_SQRT        4'b0100
-`define INST_FPU_CMP         4'b0101 // frm: LE=0, LT=1, EQ=2
-`define INST_FPU_F2F         4'b0110
-`define INST_FPU_MISC        4'b0111 // frm: SGNJ=0, SGNJN=1, SGNJX=2, CLASS=3, MVXW=4, MVWX=5, FMIN=6, FMAX=7
-`define INST_FPU_F2I         4'b1000
-`define INST_FPU_F2U         4'b1001
-`define INST_FPU_I2F         4'b1010
-`define INST_FPU_U2F         4'b1011
-`define INST_FPU_MADD        4'b1100
-`define INST_FPU_MSUB        4'b1101
-`define INST_FPU_NMSUB       4'b1110
-`define INST_FPU_NMADD       4'b1111
+`define INST_FPU_ADD         4'b0000 // SUB=fmt[1]
+`define INST_FPU_MUL         4'b0001
+`define INST_FPU_MADD        4'b0010 // SUB=fmt[1]
+`define INST_FPU_NMADD       4'b0011 // SUB=fmt[1]
+`define INST_FPU_DIV         4'b0100
+`define INST_FPU_SQRT        4'b0101
+`define INST_FPU_F2I         4'b1000 // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
+`define INST_FPU_F2U         4'b1001 // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
+`define INST_FPU_I2F         4'b1010 // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
+`define INST_FPU_U2F         4'b1011 // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
+`define INST_FPU_CMP         4'b1100 // frm: LE=0, LT=1, EQ=2
+`define INST_FPU_F2F         4'b1101 // fmt[0]: F32=0, F64=1
+`define INST_FPU_MISC        4'b1110 // frm: SGNJ=0, SGNJN=1, SGNJX=2, CLASS=3, MVXW=4, MVWX=5, FMIN=6, FMAX=7
 `define INST_FPU_BITS        4
 `define INST_FPU_IS_CLASS(op, frm) (op == `INST_FPU_MISC && frm == 3)
 `define INST_FPU_IS_MVXW(op, frm) (op == `INST_FPU_MISC && frm == 4)
