@@ -74,31 +74,29 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     wire div_has_fflags, sqrt_has_fflags;
     fflags_t div_fflags, sqrt_fflags;
 
-    reg [FPCORES_BITS-1:0] core_select;
     reg is_madd, is_sub, is_neg, is_div, is_itof, is_signed;
 
+    wire [FPCORES_BITS-1:0] core_select = op_type[3:2];
+
     always @(*) begin
-        is_madd   = 0;
-        is_sub    = 0;
-        is_neg    = 0;
-        is_div    = 0;
-        is_itof   = 0;
-        is_signed = 0;
+        is_madd   = 'x;
+        is_sub    = 'x;
+        is_neg    = 'x;
+        is_div    = 'x;
+        is_itof   = 'x;
+        is_signed = 'x;
         case (op_type)
-            `INST_FPU_ADD:    begin core_select = FPU_FMA; end
-            `INST_FPU_SUB:    begin core_select = FPU_FMA; is_sub = 1; end
-            `INST_FPU_MUL:    begin core_select = FPU_FMA; is_neg = 1; end
-            `INST_FPU_MADD:   begin core_select = FPU_FMA; is_madd = 1; end
-            `INST_FPU_MSUB:   begin core_select = FPU_FMA; is_madd = 1; is_sub = 1; end
-            `INST_FPU_NMADD:  begin core_select = FPU_FMA; is_madd = 1; is_neg = 1; end
-            `INST_FPU_NMSUB:  begin core_select = FPU_FMA; is_madd = 1; is_sub = 1; is_neg = 1; end
-            `INST_FPU_DIV:    begin core_select = FPU_DIVSQRT; is_div = 1; end
-            `INST_FPU_SQRT:   begin core_select = FPU_DIVSQRT; end
-            `INST_FPU_F2I:    begin core_select = FPU_CVT; is_signed = 1; end
-            `INST_FPU_F2U:    begin core_select = FPU_CVT; end
-            `INST_FPU_I2F:    begin core_select = FPU_CVT; is_itof = 1; is_signed = 1; end
-            `INST_FPU_U2F:    begin core_select = FPU_CVT; is_itof = 1; end
-            default:          begin core_select = FPU_NCP; end
+            `INST_FPU_ADD:   begin is_madd = 0; is_neg = 0; is_sub = fmt[1]; end
+            `INST_FPU_MUL:   begin is_madd = 0; is_neg = 1; is_sub = 0; end
+            `INST_FPU_MADD:  begin is_madd = 1; is_neg = 0; is_sub = fmt[1]; end
+            `INST_FPU_NMADD: begin is_madd = 1; is_neg = 1; is_sub = fmt[1]; end
+            `INST_FPU_DIV:   begin is_div  = 1; end
+            `INST_FPU_SQRT:  begin is_div  = 0; end
+            `INST_FPU_F2I:   begin is_itof = 0; is_signed = 1; end
+            `INST_FPU_F2U:   begin is_itof = 0; is_signed = 0; end
+            `INST_FPU_I2F:   begin is_itof = 1; is_signed = 1; end
+            `INST_FPU_U2F:   begin is_itof = 1; is_signed = 0; end
+            default:         begin end
         endcase
     end
 

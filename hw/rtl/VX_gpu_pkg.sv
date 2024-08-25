@@ -464,61 +464,64 @@ package VX_gpu_pkg;
         `EX_FPU: begin
             case (`INST_FPU_BITS'(op_type))
                 `INST_FPU_ADD: begin
-                    if  (op_args.fpu.fmt[0])
-                        `TRACE(level, ("FADD.D"));
-                    else
-                        `TRACE(level, ("FADD.S"));
+                    if (op_args.fpu.fmt[1]) begin
+                        if (op_args.fpu.fmt[0])
+                            `TRACE(level, ("FSUB.D"));
+                        else
+                            `TRACE(level, ("FSUB.S"));
+                    end else begin
+                        if (op_args.fpu.fmt[0])
+                            `TRACE(level, ("FADD.D"));
+                        else
+                            `TRACE(level, ("FADD.S"));
+                    end
                 end
-                `INST_FPU_SUB: begin
-                    if  (op_args.fpu.fmt[0])
-                        `TRACE(level, ("FSUB.D"));
-                    else
-                        `TRACE(level, ("FSUB.S"));
+                `INST_FPU_MADD: begin
+                    if (op_args.fpu.fmt[1]) begin
+                        if (op_args.fpu.fmt[0])
+                            `TRACE(level, ("FMSUB.D"));
+                        else
+                            `TRACE(level, ("FMSUB.S"));
+                    end else begin
+                        if (op_args.fpu.fmt[0])
+                            `TRACE(level, ("FMADD.D"));
+                        else
+                            `TRACE(level, ("FMADD.S"));
+                    end
+                end
+                `INST_FPU_NMADD: begin
+                    if (op_args.fpu.fmt[1]) begin
+                        if (op_args.fpu.fmt[0])
+                            `TRACE(level, ("FNMSUB.D"));
+                        else
+                            `TRACE(level, ("FNMSUB.S"));
+                    end else begin
+                        if (op_args.fpu.fmt[0])
+                            `TRACE(level, ("FNMADD.D"));
+                        else
+                            `TRACE(level, ("FNMADD.S"));
+                    end
                 end
                 `INST_FPU_MUL: begin
-                    if  (op_args.fpu.fmt[0])
+                    if (op_args.fpu.fmt[0])
                         `TRACE(level, ("FMUL.D"));
                     else
                         `TRACE(level, ("FMUL.S"));
                 end
                 `INST_FPU_DIV: begin
-                    if  (op_args.fpu.fmt[0])
+                    if (op_args.fpu.fmt[0])
                         `TRACE(level, ("FDIV.D"));
                     else
                         `TRACE(level, ("FDIV.S"));
                 end
                 `INST_FPU_SQRT: begin
-                    if  (op_args.fpu.fmt[0])
+                    if (op_args.fpu.fmt[0])
                         `TRACE(level, ("FSQRT.D"));
                     else
                         `TRACE(level, ("FSQRT.S"));
                 end
-                `INST_FPU_MADD: begin
-                    if  (op_args.fpu.fmt[0])
-                        `TRACE(level, ("FMADD.D"));
-                    else
-                        `TRACE(level, ("FMADD.S"));
-                end
-                `INST_FPU_MSUB: begin
-                    if  (op_args.fpu.fmt[0])
-                        `TRACE(level, ("FMSUB.D"));
-                    else
-                        `TRACE(level, ("FMSUB.S"));
-                end
-                `INST_FPU_NMADD: begin
-                    if  (op_args.fpu.fmt[0])
-                        `TRACE(level, ("FNMADD.D"));
-                    else
-                        `TRACE(level, ("FNMADD.S"));
-                end
-                `INST_FPU_NMSUB: begin
-                    if  (op_args.fpu.fmt[0])
-                        `TRACE(level, ("FNMSUB.D"));
-                    else
-                        `TRACE(level, ("FNMSUB.S"));
-                end
                 `INST_FPU_CMP: begin
-                    if  (op_args.fpu.fmt[0]) begin
+                    if (op_args.fpu.fmt[0]) begin
                         case (op_args.fpu.frm[1:0])
                         0:       `TRACE(level, ("FLE.D"));
                         1:       `TRACE(level, ("FLT.D"));
@@ -602,7 +605,7 @@ package VX_gpu_pkg;
                     end
                 end
                 `INST_FPU_MISC: begin
-                    if  (op_args.fpu.fmt[0]) begin
+                    if (op_args.fpu.fmt[0]) begin
                         case (op_args.fpu.frm)
                             0: `TRACE(level, ("FSGNJ.D"));
                             1: `TRACE(level, ("FSGNJN.D"));
