@@ -43,7 +43,7 @@ module VX_alu_unit #(
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_BUF    (PARTIAL_BW ? 1 : 0)
+        .OUT_BUF    (PARTIAL_BW ? 3 : 0)
     ) dispatch_unit (
         .clk        (clk),
         .reset      (reset),
