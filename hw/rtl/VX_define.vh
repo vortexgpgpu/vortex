@@ -390,14 +390,6 @@
     assign src.rsp_data.tag = dst.rsp_data.tag[TD-1 -: TS]; \
     assign dst.rsp_ready = src.rsp_ready
 
-`define ASSIGN_VX_LSU_MEM_IF(dst, src) \
-    assign dst.req_valid = src.req_valid; \
-    assign dst.req_data  = src.req_data; \
-    assign src.req_ready = dst.req_ready; \
-    assign src.rsp_valid = dst.rsp_valid; \
-    assign src.rsp_data  = dst.rsp_data; \
-    assign dst.rsp_ready = src.rsp_ready
-
 `define BUFFER_DCR_BUS_IF(dst, src, enable) \
     if (enable) begin \
         reg [(1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH)-1:0] __dst; \

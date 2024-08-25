@@ -118,7 +118,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     assign lmem_perf = '0;
 `endif
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
-        `ASSIGN_VX_LSU_MEM_IF (lsu_dcache_if[i], lsu_mem_if[i]);
+        `ASSIGN_VX_MEM_BUS_IF (lsu_dcache_if[i], lsu_mem_if[i]);
     end
 
 `endif
@@ -190,7 +190,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     end else begin
 
         for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
-            `ASSIGN_VX_LSU_MEM_IF (dcache_coalesced_if[i], lsu_dcache_if[i]);
+            `ASSIGN_VX_MEM_BUS_IF (dcache_coalesced_if[i], lsu_dcache_if[i]);
         end
 
     end
