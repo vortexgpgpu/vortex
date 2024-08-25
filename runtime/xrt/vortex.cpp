@@ -66,11 +66,14 @@ struct platform_info_t {
 };
 
 static const platform_info_t g_platforms[] = {
-  {"vortex_xrtsim",  4, 0x10, 0x0}, // 64 KB banks
-  {"xilinx_u50",     4, 0x1C, 0x0}, // 16 MB banks
-  {"xilinx_u200",    4, 0x1C, 0x0}, // 16 MB banks
-  {"xilinx_u280",    4, 0x1C, 0x0}, // 16 MB banks
-  {"xilinx_vck5000", 0, 0x21, 0xC000000000},
+  {"vortex_xrtsim",  4, 16, 0x0}, // 16 x 64 KB = 1 MB
+  {"xilinx_u200",    2, 34, 0x0}, // 4 x 16 GB = 64 GB DDR4
+  {"xilinx_u250",    2, 34, 0x0}, // 4 x 16 GB = 64 GB DDR4
+  {"xilinx_u50",     5, 28, 0x0}, // 32 x 256 MB = 8 GB HBM2
+  {"xilinx_u280",    5, 28, 0x0}, // 32 x 256 MB = 8 GB HBM2
+  {"xilinx_u55c",    5, 29, 0x0}, // 32 x 512 MB = 16 GB HBM2
+  {"xilinx_vck5000", 0, 33, 0xC000000000}, // 1 x 8 GB = 8 GB DDR4
+  {"xilinx_kv260",   0, 32, 0x0}, // 1 x 4 GB = 4 GB DDR4
 };
 
 #ifdef CPP_API
@@ -277,6 +280,8 @@ public:
     xrtDevice_ = xrtDevice;
     xrtKernel_ = xrtKernel;
 
+    printf("info: device name=%s.\n", device_name.c_str());
+
     CHECK_ERR(get_platform_info(device_name, &platform_), {
       fprintf(stderr, "[VXDRV] Error: platform not supported: %s\n", device_name.c_str());
       return err;
@@ -285,25 +290,6 @@ public:
     CHECK_ERR(this->write_register(MMIO_CTL_ADDR, CTL_AP_RESET), {
       return err;
     });
-
-    uint32_t num_banks = 1 << platform_.lg2_num_banks;
-    uint64_t bank_size = 1ull << platform_.lg2_bank_size;
-
-    for (uint32_t i = 0; i < num_banks; ++i) {
-      uint32_t reg_addr = MMIO_MEM_ADDR + (i * 12);
-      uint64_t reg_value = platform_.mem_base + i * bank_size;
-
-      CHECK_ERR(this->write_register(reg_addr, reg_value & 0xffffffff), {
-        return err;
-      });
-
-      CHECK_ERR(this->write_register(reg_addr + 4, (reg_value >> 32) & 0xffffffff), {
-        return err;
-      });
-    #ifndef BANK_INTERLEAVE
-      break;
-    #endif
-    }
 
     CHECK_ERR(this->read_register(MMIO_DEV_ADDR, (uint32_t *)&dev_caps_), {
       return err;
@@ -320,6 +306,37 @@ public:
     CHECK_ERR(this->read_register(MMIO_ISA_ADDR + 4, (uint32_t *)&isa_caps_ + 1), {
       return err;
     });
+
+    uint32_t num_banks = 1 << platform_.lg2_num_banks;
+    uint64_t bank_size = 1ull << platform_.lg2_bank_size;
+
+    // adjust memory bank size to architecture limit
+    int isa_arch = VX_ISA_ARCH(isa_caps_);
+    if (isa_arch == 32) {
+      uint64_t max_mem_size = 1ull << 32;
+      uint64_t need_bank_size = max_mem_size / num_banks;
+      if (bank_size > need_bank_size) {
+        printf("info: adjusted bank size from 0x%lx to 0x%lx bytes.\n", bank_size, need_bank_size);
+        bank_size = need_bank_size;
+        platform_.lg2_bank_size = log2ceil(bank_size);
+      }
+    }
+
+    for (uint32_t i = 0; i < num_banks; ++i) {
+      uint32_t reg_addr = MMIO_MEM_ADDR + (i * 12);
+      uint64_t reg_value = platform_.mem_base + i * bank_size;
+
+      CHECK_ERR(this->write_register(reg_addr, reg_value & 0xffffffff), {
+        return err;
+      });
+
+      CHECK_ERR(this->write_register(reg_addr + 4, (reg_value >> 32) & 0xffffffff), {
+        return err;
+      });
+    #ifndef BANK_INTERLEAVE
+      break;
+    #endif
+    }
 
     global_mem_size_ = num_banks * bank_size;
 
