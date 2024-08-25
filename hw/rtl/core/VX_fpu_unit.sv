@@ -71,9 +71,9 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         wire [NUM_LANES-1:0]    fpu_rsp_tmask;
         wire [`PC_BITS-1:0]     fpu_rsp_PC;
         wire [`NR_BITS-1:0]     fpu_rsp_rd;
-        wire [PID_WIDTH-1:0]    fpu_rsp_pid;
-        wire                    fpu_rsp_sop;
-        wire                    fpu_rsp_eop;
+        wire [PID_WIDTH-1:0]    fpu_rsp_pid, fpu_rsp_pid_u;
+        wire                    fpu_rsp_sop, fpu_rsp_sop_u;
+        wire                    fpu_rsp_eop, fpu_rsp_eop_u;
 
         wire [TAG_WIDTH-1:0] fpu_req_tag, fpu_rsp_tag;
         wire mdata_full;
@@ -93,12 +93,25 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             .acquire_en   (execute_fire),
             .write_addr   (fpu_req_tag),
             .write_data   ({per_block_execute_if[block_idx].data.uuid, per_block_execute_if[block_idx].data.wid, per_block_execute_if[block_idx].data.tmask, per_block_execute_if[block_idx].data.PC, per_block_execute_if[block_idx].data.rd, per_block_execute_if[block_idx].data.pid, per_block_execute_if[block_idx].data.sop, per_block_execute_if[block_idx].data.eop}),
-            .read_data    ({fpu_rsp_uuid, fpu_rsp_wid, fpu_rsp_tmask, fpu_rsp_PC, fpu_rsp_rd, fpu_rsp_pid, fpu_rsp_sop, fpu_rsp_eop}),
+            .read_data    ({fpu_rsp_uuid, fpu_rsp_wid, fpu_rsp_tmask, fpu_rsp_PC, fpu_rsp_rd, fpu_rsp_pid_u, fpu_rsp_sop_u, fpu_rsp_eop_u}),
             .read_addr    (fpu_rsp_tag),
             .release_en   (fpu_rsp_fire),
             .full         (mdata_full),
             `UNUSED_PIN (empty)
         );
+
+        if (PID_BITS != 0) begin
+            assign fpu_rsp_pid = fpu_rsp_pid_u;
+            assign fpu_rsp_sop = fpu_rsp_sop_u;
+            assign fpu_rsp_eop = fpu_rsp_eop_u;
+        end else begin
+            `UNUSED_VAR (fpu_rsp_pid_u)
+            `UNUSED_VAR (fpu_rsp_sop_u)
+            `UNUSED_VAR (fpu_rsp_eop_u)
+            assign fpu_rsp_pid = 0;
+            assign fpu_rsp_sop = 1;
+            assign fpu_rsp_eop = 1;
+        end
 
         // resolve dynamic FRM from CSR
         wire [`INST_FRM_BITS-1:0] fpu_req_frm;
@@ -200,8 +213,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
 
     `endif
 
-        // handle FPU response
-
+        // handle CSR update
         fflags_t fpu_rsp_fflags_q;
 
         if (PID_BITS != 0) begin
@@ -218,9 +230,21 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             assign fpu_rsp_fflags_q = fpu_rsp_fflags;
         end
 
-        assign fpu_csr_if[block_idx].write_enable = fpu_rsp_fire && fpu_rsp_eop && fpu_rsp_has_fflags;
-        `ASSIGN_BLOCKED_WID (fpu_csr_if[block_idx].write_wid, fpu_rsp_wid, block_idx, `NUM_FPU_BLOCKS)
-        assign fpu_csr_if[block_idx].write_fflags = fpu_rsp_fflags_q;
+        VX_fpu_csr_if fpu_csr_tmp_if();
+        assign fpu_csr_tmp_if.write_enable = fpu_rsp_fire && fpu_rsp_eop && fpu_rsp_has_fflags;
+        `ASSIGN_BLOCKED_WID (fpu_csr_tmp_if.write_wid, fpu_rsp_wid, block_idx, `NUM_FPU_BLOCKS)
+        assign fpu_csr_tmp_if.write_fflags = fpu_rsp_fflags_q;
+
+         VX_pipe_register #(
+            .DATAW  (1 + `NW_WIDTH + $bits(fflags_t)),
+            .RESETW (1)
+        ) fpu_csr_reg (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (1'b1),
+            .data_in  ({fpu_csr_tmp_if.write_enable,        fpu_csr_tmp_if.write_wid,        fpu_csr_tmp_if.write_fflags}),
+            .data_out ({fpu_csr_if[block_idx].write_enable, fpu_csr_if[block_idx].write_wid, fpu_csr_if[block_idx].write_fflags})
+        );
 
         // send response
 
