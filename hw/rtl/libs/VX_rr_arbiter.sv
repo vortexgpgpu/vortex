@@ -62,7 +62,7 @@ module VX_rr_arbiter #(
         end
 
         assign grant_index  = grant_index_w;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_w;
+        assign grant_onehot = NUM_REQS'(grant_valid) << grant_index_w;
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 3)  begin
@@ -94,7 +94,7 @@ module VX_rr_arbiter #(
         end
 
         assign grant_index  = grant_index_w;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_w;
+        assign grant_onehot = NUM_REQS'(grant_valid) << grant_index_w;
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 4)  begin
@@ -133,7 +133,7 @@ module VX_rr_arbiter #(
         end
 
         assign grant_index  = grant_index_w;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_w;
+        assign grant_onehot = NUM_REQS'(grant_valid) << grant_index_w;
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 5)  begin
@@ -181,7 +181,7 @@ module VX_rr_arbiter #(
         end
 
         assign grant_index  = grant_index_w;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_w;
+        assign grant_onehot = NUM_REQS'(grant_valid) << grant_index_w;
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 6)  begin
@@ -240,7 +240,7 @@ module VX_rr_arbiter #(
         end
 
         assign grant_index  = grant_index_w;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_w;
+        assign grant_onehot = NUM_REQS'(grant_valid) << grant_index_w;
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 7)  begin
@@ -312,7 +312,7 @@ module VX_rr_arbiter #(
         end
 
         assign grant_index  = grant_index_w;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_w;
+        assign grant_onehot = NUM_REQS'(grant_valid) << grant_index_w;
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 8)  begin
@@ -399,7 +399,7 @@ module VX_rr_arbiter #(
         end
 
         assign grant_index  = grant_index_w;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_w;
+        assign grant_onehot = NUM_REQS'(grant_valid) << grant_index_w;
         assign grant_valid  = (| requests);
 
     end else if (MODEL == 1) begin
@@ -474,7 +474,7 @@ module VX_rr_arbiter #(
         end
 
         assign grant_index  = grant_table[state];
-        assign grant_onehot = NUM_REQS'(1) << grant_index;
+        assign grant_onehot = NUM_REQS'(grant_valid) << grant_index;
         assign grant_valid  = (| requests);
 
     end

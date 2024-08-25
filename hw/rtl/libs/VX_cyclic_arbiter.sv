@@ -40,17 +40,17 @@ module VX_cyclic_arbiter #(
 
         localparam IS_POW2 = (1 << LOG_NUM_REQS) == NUM_REQS;
 
-        wire [LOG_NUM_REQS-1:0] grant_index_um, grant_index_ql;
+        wire [LOG_NUM_REQS-1:0] grant_index_um;
         reg [LOG_NUM_REQS-1:0] grant_index_r;
 
         always @(posedge clk) begin
             if (reset) begin
                 grant_index_r <= '0;
             end else if (grant_valid && grant_ready) begin
-                if (!IS_POW2 && grant_index_ql == LOG_NUM_REQS'(NUM_REQS-1)) begin
+                if (!IS_POW2 && grant_index == LOG_NUM_REQS'(NUM_REQS-1)) begin
                     grant_index_r <= '0;
                 end else begin
-                    grant_index_r <= grant_index_ql + LOG_NUM_REQS'(1);
+                    grant_index_r <= grant_index + LOG_NUM_REQS'(1);
                 end
             end
         end
@@ -64,10 +64,8 @@ module VX_cyclic_arbiter #(
             .valid_out  (grant_valid)
         );
 
-        assign grant_index_ql = requests[grant_index_r] ? grant_index_r : grant_index_um;
-
-        assign grant_index  = grant_index_ql;
-        assign grant_onehot = NUM_REQS'(1) << grant_index_ql;
+        assign grant_index  = requests[grant_index_r] ? grant_index_r : grant_index_um;
+        assign grant_onehot = NUM_REQS'(grant_valid) << grant_index;
 
     end
 
