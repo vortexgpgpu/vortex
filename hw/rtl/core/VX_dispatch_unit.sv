@@ -233,6 +233,8 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
 
         wire [`NW_WIDTH-1:0] block_wid = wis_to_wid(dispatch_data[issue_idx][DATA_TMASK_OFF+`NUM_THREADS +: ISSUE_WIS_W], isw);
 
+        logic [OUT_DATAW-1:0] execute_data, execute_data_w;
+
         VX_elastic_buffer #(
             .DATAW   (OUT_DATAW),
             .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
@@ -253,10 +255,20 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
                 block_pid[block_idx],
                 block_sop[block_idx],
                 block_eop[block_idx]}),
-            .data_out  (execute_if[block_idx].data),
+            .data_out  (execute_data),
             .valid_out (execute_if[block_idx].valid),
             .ready_out (execute_if[block_idx].ready)
         );
+
+        if (`NUM_THREADS != NUM_LANES) begin
+            assign execute_data_w = execute_data;
+        end else begin
+            always @(*) begin
+                execute_data_w = execute_data;
+                execute_data_w[2:0] = {1'b0, 1'b1, 1'b1}; // default pid, sop, and eop
+            end
+        end
+        assign execute_if[block_idx].data = execute_data_w;
     end
 
     reg [`ISSUE_WIDTH-1:0] ready_in;
