@@ -125,8 +125,8 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .TAG_SEL_IDX  (TAG_SEL_IDX),
             .ARBITER      ("R"),
             .REQ_OUT_BUF  ((NUM_INPUTS != NUM_CACHES) ? 2 : 0),
-            .RSP_OUT_BUF  ((NUM_INPUTS != NUM_CACHES) ? 2 : 0)
-        ) cache_arb (
+            .RSP_OUT_BUF  ((NUM_INPUTS != NUM_CACHES) ? CORE_OUT_BUF : 0)
+        ) core_arb (
             .clk        (clk),
             .reset      (reset),
             .bus_in_if  (core_bus_tmp_if),
@@ -186,7 +186,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         .TAG_WIDTH    (MEM_TAG_WIDTH),
         .TAG_SEL_IDX  (TAG_SEL_IDX),
         .ARBITER      ("R"),
-        .REQ_OUT_BUF ((NUM_CACHES > 1) ? 2 : 0),
+        .REQ_OUT_BUF ((NUM_CACHES > 1) ? MEM_OUT_BUF : 0),
         .RSP_OUT_BUF ((NUM_CACHES > 1) ? 2 : 0)
     ) mem_arb (
         .clk        (clk),

@@ -219,7 +219,7 @@ module VX_cache_bypass #(
 
     VX_elastic_buffer #(
         .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `MEM_REQ_FLAGS_WIDTH + `CS_LINE_WIDTH + MEM_TAG_OUT_WIDTH),
-        .SIZE    ((!DIRECT_PASSTHRU) ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
+        .SIZE    (DIRECT_PASSTHRU ? 0 : `TO_OUT_BUF_SIZE(MEM_OUT_BUF)),
         .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
     ) mem_req_buf (
         .clk       (clk),
@@ -307,7 +307,7 @@ module VX_cache_bypass #(
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_elastic_buffer #(
             .DATAW   (`CS_WORD_WIDTH + CORE_TAG_WIDTH),
-            .SIZE    ((!DIRECT_PASSTHRU) ? `TO_OUT_BUF_SIZE(CORE_OUT_BUF) : 0),
+            .SIZE    (DIRECT_PASSTHRU ? 0 : `TO_OUT_BUF_SIZE(CORE_OUT_BUF)),
             .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
         ) core_rsp_buf (
             .clk       (clk),

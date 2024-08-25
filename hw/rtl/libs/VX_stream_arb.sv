@@ -335,7 +335,6 @@ module VX_stream_arb #(
         // #Inputs == #Outputs
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-
             VX_elastic_buffer #(
                 .DATAW   (DATAW),
                 .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
