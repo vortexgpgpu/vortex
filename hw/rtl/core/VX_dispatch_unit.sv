@@ -55,7 +55,6 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
         assign dispatch_if[i].ready = dispatch_ready[i];
     end
 
-    wire [BLOCK_SIZE-1:0][ISSUE_W-1:0] issue_indices;
     wire [BLOCK_SIZE-1:0] block_ready;
     wire [BLOCK_SIZE-1:0][NUM_LANES-1:0] block_tmask;
     wire [BLOCK_SIZE-1:0][2:0][NUM_LANES-1:0][`XLEN-1:0] block_regs;
@@ -66,25 +65,42 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
 
     wire batch_done = (& block_done);
 
+    // batch select logic
+
     logic [BATCH_COUNT_W-1:0] batch_idx;
     if (BATCH_COUNT != 1) begin
-        always @(posedge clk) begin
-            if (reset) begin
-                batch_idx <= '0;
-            end else begin
-                batch_idx <= batch_idx + BATCH_COUNT_W'(batch_done);
-            end
+
+        wire [BATCH_COUNT-1:0] valid_batches;
+        for (genvar i = 0; i < BATCH_COUNT; ++i) begin
+            assign valid_batches[i] = | dispatch_valid[i * BLOCK_SIZE +: BLOCK_SIZE];
         end
+
+        VX_generic_arbiter #(
+            .NUM_REQS    (BATCH_COUNT),
+            .TYPE        ("P")
+        ) batch_sel (
+            .clk          (clk),
+            .reset        (reset),
+            .requests     (valid_batches),
+            .grant_index  (batch_idx),
+            `UNUSED_PIN (grant_onehot),
+            `UNUSED_PIN (grant_valid),
+            .grant_ready  (batch_done)
+        );
+
     end else begin
         assign batch_idx = 0;
         `UNUSED_VAR (batch_done)
     end
 
+    wire [BLOCK_SIZE-1:0][ISSUE_W-1:0] issue_indices;
+    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin
+        assign issue_indices[block_idx] = ISSUE_W'(batch_idx * BLOCK_SIZE) + ISSUE_W'(block_idx);
+    end
+
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin
 
-        wire [ISSUE_W-1:0] issue_idx = ISSUE_W'(batch_idx * BLOCK_SIZE) + ISSUE_W'(block_idx);
-        assign issue_indices[block_idx] = issue_idx;
-
+        wire [ISSUE_W-1:0] issue_idx = issue_indices[block_idx];
         wire valid_p, ready_p;
 
         if (`NUM_THREADS != NUM_LANES) begin
@@ -246,8 +262,8 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
     reg [`ISSUE_WIDTH-1:0] ready_in;
     always @(*) begin
         ready_in = 0;
-        for (integer i = 0; i < BLOCK_SIZE; ++i) begin
-            ready_in[issue_indices[i]] = block_ready[i] && block_eop[i];
+        for (integer block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin
+            ready_in[issue_indices[block_idx]] = block_ready[block_idx] && block_eop[block_idx];
         end
     end
     assign dispatch_ready = ready_in;
