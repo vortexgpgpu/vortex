@@ -13,6 +13,7 @@
 
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_onehot_shift #(
     parameter N = 1,
     parameter M = 1
@@ -28,3 +29,4 @@ module VX_onehot_shift #(
     end
 
 endmodule
+`TRACING_ON
