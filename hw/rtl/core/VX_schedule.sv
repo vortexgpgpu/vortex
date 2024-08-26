@@ -189,7 +189,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
         end
 
         // decode unlock
-        if (decode_sched_if.valid && ~decode_sched_if.is_wstall) begin
+        if (decode_sched_if.valid && decode_sched_if.unlock) begin
             stalled_warps_n[decode_sched_if.wid] = 0;
         end
 
@@ -415,7 +415,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
             timeout_ctr    <= '0;
             timeout_enable <= 0;
         end else begin
-            if (decode_sched_if.valid && ~decode_sched_if.is_wstall) begin
+            if (decode_sched_if.valid && decode_sched_if.unlock) begin
                 timeout_enable <= 1;
             end
             if (timeout_enable && active_warps !=0 && active_warps == stalled_warps) begin
