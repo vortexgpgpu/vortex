@@ -13,6 +13,7 @@
 
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_transpose #(
     parameter N = 1,
     parameter M = 1
@@ -27,3 +28,4 @@ module VX_transpose #(
     end
 
 endmodule
+`TRACING_ON
