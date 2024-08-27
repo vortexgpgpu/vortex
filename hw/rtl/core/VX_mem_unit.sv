@@ -50,7 +50,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .REQ0_OUT_BUF (3),
             .REQ1_OUT_BUF (0),
             .RSP_OUT_BUF  (1),
-            .ARBITER      ("R")
+            .ARBITER      ("P")
         ) lmem_switch (
             .clk          (clk),
             .reset        (reset),

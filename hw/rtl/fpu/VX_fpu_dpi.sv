@@ -430,7 +430,7 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
     VX_stream_arb #(
         .NUM_INPUTS (2),
         .DATAW      (RSP_DATAW),
-        .ARBITER    ("R"),
+        .ARBITER    ("P"),
         .OUT_BUF    (0)
     ) div_sqrt_arb (
         .clk       (clk),

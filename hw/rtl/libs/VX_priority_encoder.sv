@@ -43,7 +43,7 @@ module VX_priority_encoder #(
 
     end else if (N == 2) begin
 
-        assign onehot_out = {~reversed[0], reversed[0]};
+        assign onehot_out = {reversed[1] && ~reversed[0], reversed[0]};
         assign index_out  = ~reversed[0];
         assign valid_out  = (| reversed);
 
