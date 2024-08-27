@@ -41,6 +41,7 @@ module VX_cyclic_arbiter #(
         localparam IS_POW2 = (1 << LOG_NUM_REQS) == NUM_REQS;
 
         wire [LOG_NUM_REQS-1:0] grant_index_um;
+        wire [NUM_REQS-1:0] grant_onehot_um;
         reg [LOG_NUM_REQS-1:0] grant_index_r;
 
         always @(posedge clk) begin
@@ -59,13 +60,15 @@ module VX_cyclic_arbiter #(
             .N (NUM_REQS)
         ) priority_encoder (
             .data_in    (requests),
-            `UNUSED_PIN (onehot_out),
+            .onehot_out (grant_onehot_um),
             .index_out  (grant_index_um),
             .valid_out  (grant_valid)
         );
 
-        assign grant_index  = requests[grant_index_r] ? grant_index_r : grant_index_um;
-        assign grant_onehot = NUM_REQS'(grant_valid) << grant_index;
+        wire is_hit = requests[grant_index_r];
+
+        assign grant_index  = is_hit ? grant_index_r : grant_index_um;
+        assign grant_onehot = is_hit ? (NUM_REQS'(1) << grant_index) : grant_onehot_um;
 
     end
 
