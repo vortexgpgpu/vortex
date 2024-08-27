@@ -54,12 +54,12 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     localparam NUM_FPCORES = 4;
     localparam FPCORES_BITS = `LOG2UP(NUM_FPCORES);
 
-    localparam RSP_DATAW = (NUM_LANES * `XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
+    localparam RSP_DATAW = (NUM_LANES * 32) + 1 + $bits(fflags_t) + TAG_WIDTH;
 
     `UNUSED_VAR (fmt)
 
     wire [NUM_FPCORES-1:0] per_core_ready_in;
-    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][`XLEN-1:0] per_core_result;
+    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_result;
     wire [NUM_FPCORES-1:0][TAG_WIDTH-1:0] per_core_tag_out;
     wire [NUM_FPCORES-1:0] per_core_ready_out;
     wire [NUM_FPCORES-1:0] per_core_valid_out;
@@ -67,7 +67,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     fflags_t [NUM_FPCORES-1:0] per_core_fflags;
 
     wire [1:0] div_sqrt_ready_in;
-    wire [1:0][NUM_LANES*`XLEN-1:0] div_sqrt_result;
+    wire [1:0][NUM_LANES*32:0] div_sqrt_result;
     wire [1:0][TAG_WIDTH-1:0] div_sqrt_tag_out;
     wire [1:0] div_sqrt_ready_out;
     wire [1:0] div_sqrt_valid_out;
