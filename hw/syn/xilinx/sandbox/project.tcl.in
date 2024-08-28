@@ -397,14 +397,16 @@ update_compile_order -fileset sources_1
 launch_runs synth_1
 wait_on_run synth_1
 open_run synth_1
+write_checkpoint -force post_synth.dcp
+report_utilization -file utilization.rpt -hierarchical -hierarchical_percentages
 
 # Implementation
 launch_runs impl_1
 wait_on_run impl_1
 open_run impl_1
+write_checkpoint -force post_impl.dcp
 
 # Generate reports
-report_utilization -file utilization.rpt -hierarchical -hierarchical_percentages
 report_place_status -file place.rpt
 report_route_status -file route.rpt
 report_timing_summary -file timing.rpt

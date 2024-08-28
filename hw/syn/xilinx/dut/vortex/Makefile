@@ -1,6 +1,7 @@
 PROJECT = Vortex
 TOP_LEVEL_ENTITY = $(PROJECT)
 SRC_FILE = $(PROJECT).sv
+FPU_IP = 1
 
 include ../../common.mk
 
