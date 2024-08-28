@@ -517,13 +517,13 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                 `TRACE_ARRAY1D(1, "%b", mem_req_flags, NUM_LANES);
                 `TRACE(1, (", byteen=0x%0h, data=", mem_req_byteen));
                 `TRACE_ARRAY1D(1, "0x%0h", mem_req_data, NUM_LANES);
-                `TRACE(1, (", tag=0x%0h (#%0d)\n", mem_req_tag, execute_if.data.uuid));
+                `TRACE(1, (", sop=%b, eop=%b, tag=0x%0h (#%0d)\n", execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid));
             end else begin
                 `TRACE(1, ("%d: %s Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask));
                 `TRACE_ARRAY1D(1, "0x%h", full_addr, NUM_LANES);
                 `TRACE(1, (", flags="));
                 `TRACE_ARRAY1D(1, "%b", mem_req_flags, NUM_LANES);
-                `TRACE(1, (", byteen=0x%0h, rd=%0d, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if.data.rd, mem_req_tag, execute_if.data.uuid));
+                `TRACE(1, (", byteen=0x%0h, rd=%0d, sop=%b, eop=%b, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if.data.rd, execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid));
             end
         end
         if (mem_rsp_fire) begin
