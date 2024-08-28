@@ -360,7 +360,7 @@ module VX_mem_coalescer #(
             `TRACE_ARRAY1D(1, "%0d", out_req_offset, NUM_REQS);
             `TRACE(1, (", pmask=%b, tag=0x%0h (#%0d)\n", out_req_pmask, out_req_tag, out_req_uuid));
             if ($countones(out_req_pmask) > 1) begin
-                `TRACE(1, ("%t: *** %s: coalesced=%d (#%0d)\n", $time, INSTANCE_ID, $countones(out_req_pmask), out_req_uuid));
+                `TRACE(1, ("%t: *** %s: coalesced=%0d (#%0d)\n", $time, INSTANCE_ID, $countones(out_req_pmask), out_req_uuid));
             end
         end
         if (out_rsp_fire) begin
