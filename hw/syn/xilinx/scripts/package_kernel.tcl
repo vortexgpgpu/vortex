@@ -1,10 +1,10 @@
 # Copyright © 2019-2023
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 # http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -51,15 +51,15 @@ create_project -force kernel_pack $path_to_tmp_project
 add_files -norecurse ${vsources_list}
 
 set obj [get_filesets sources_1]
-set files [list \
+set ip_files [list \
  [file normalize "${build_dir}/ip/xil_fdiv/xil_fdiv.xci"] \
  [file normalize "${build_dir}/ip/xil_fma/xil_fma.xci"] \
  [file normalize "${build_dir}/ip/xil_fsqrt/xil_fsqrt.xci"] \
 ]
-add_files -verbose -norecurse -fileset $obj $files
+add_files -verbose -norecurse -fileset $obj $ip_files
 
 set_property include_dirs ${vincludes_list} [current_fileset]
-#set_property verilog_define ${vdefines_list} [current_fileset]
+set_property verilog_define ${vdefines_list} [current_fileset]
 
 set obj [get_filesets sources_1]
 set_property -verbose -name "top" -value ${krnl_name} -objects $obj
@@ -238,7 +238,7 @@ for {set i 0} {$i < 1} {incr i} {
     set reg [::ipx::add_register -quiet "MEM_$i" $addr_block]
     set_property address_offset [expr {0x040 + $i * 12}] $reg
     set_property size           [expr {8*8}]   $reg
-    set regparam [::ipx::add_register_parameter -quiet {ASSOCIATED_BUSIF} $reg] 
+    set regparam [::ipx::add_register_parameter -quiet {ASSOCIATED_BUSIF} $reg]
     set_property value m_axi_mem_$i $regparam
 }
 

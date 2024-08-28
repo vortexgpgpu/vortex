@@ -1,6 +1,7 @@
 PROJECT = VX_fpu_dsp
 TOP_LEVEL_ENTITY = $(PROJECT)
 SRC_FILE = $(PROJECT).sv
+FPU_IP = 1
 
 include ../../common.mk
 

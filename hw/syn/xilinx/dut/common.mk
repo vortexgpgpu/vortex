@@ -25,7 +25,11 @@ project_1/sources.txt:
 
 build: $(PROJECT).xpr
 $(PROJECT).xpr: project_1/sources.txt
-	$(VIVADO) -mode batch -source $(SRC_DIR)/project.tcl -tclargs $(TOP_LEVEL_ENTITY) $(DEVICE) project_1/sources.txt $(SRC_DIR)/project.xdc $(SCRIPT_DIR)
+ifdef FPU_IP
+	FPU_IP=project_1/ip $(VIVADO) -mode batch -source $(SRC_DIR)/project.tcl -tclargs $(TOP_LEVEL_ENTITY) $(DEVICE) project_1/sources.txt $(SRC_DIR)/project.xdc $(SCRIPT_DIR) $(SRC_DIR)/../scripts
+else
+	$(VIVADO) -mode batch -source $(SRC_DIR)/project.tcl -tclargs $(TOP_LEVEL_ENTITY) $(DEVICE) project_1/sources.txt $(SRC_DIR)/project.xdc $(SCRIPT_DIR) $(SRC_DIR)/../scripts
+endif
 
 clean:
 	rm -rf project_1

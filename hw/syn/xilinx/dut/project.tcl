@@ -14,9 +14,9 @@
 # Start time
 set start_time [clock seconds]
 
-if { $::argc != 5 } {
+if { $::argc != 6 } {
     puts "ERROR: Program \"$::argv0\" requires 5 arguments!\n"
-    puts "Usage: $::argv0 <top_module> <device_part> <vcs_file> <xdc_file> <tool_dir>\n"
+    puts "Usage: $::argv0 <top_module> <device_part> <vcs_file> <xdc_file> <tool_dir> <script_dir>\n"
     exit
 }
 
@@ -28,12 +28,21 @@ set device_part [lindex $::argv 1]
 set vcs_file [lindex $::argv 2]
 set xdc_file [lindex $::argv 3]
 set tool_dir [lindex $::argv 4]
+set script_dir [lindex $::argv 5]
 
 #puts top_module
 #puts $device_part
 #puts $vcs_file
 #puts xdc_file
 #puts $tool_dir
+
+# create fpu ip
+if {[info exists ::env(FPU_IP)]} {
+  set ip_dir $::env(FPU_IP)
+  set argv [list $ip_dir $device_part]
+  set argc 2
+  source ${script_dir}/gen_ip.tcl
+}
 
 source "${tool_dir}/parse_vcs_list.tcl"
 set vlist [parse_vcs_list "${vcs_file}"]
@@ -61,25 +70,38 @@ foreach def $vdefines_list {
   set_property verilog_define $def $obj
 }
 
+# add fpu ip
+if {[info exists ::env(FPU_IP)]} {
+  set ip_dir $::env(FPU_IP)
+  add_files -norecurse -verbose ${ip_dir}/xil_fma/xil_fma.xci
+  add_files -norecurse -verbose ${ip_dir}/xil_fdiv/xil_fdiv.xci
+  add_files -norecurse -verbose ${ip_dir}/xil_fsqrt/xil_fsqrt.xci
+}
+
+update_compile_order -fileset sources_1
+
+set_property top $top_module [current_fileset]
+set_property \
+    -name {STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS} \
+    -value {-mode out_of_context -flatten_hierarchy "rebuilt"} \
+    -objects [get_runs synth_1]
+
 # Synthesis
-synth_design -top $top_module -include_dirs $vincludes_list -mode out_of_context -flatten_hierarchy none
+launch_runs synth_1
+wait_on_run synth_1
+open_run synth_1
 write_checkpoint -force post_synth.dcp
 report_utilization -file utilization.rpt -hierarchical -hierarchical_percentages
 
-# Optimize
-opt_design
-
-# Place
-place_design
-write_checkpoint -force post_place.dcp
-report_place_status -file place.rpt
-
-# Route
-route_design
-write_checkpoint -force post_route.dcp
-report_route_status -file route.rpt
+# Implementation
+launch_runs impl_1
+wait_on_run impl_1
+open_run impl_1
+write_checkpoint -force post_impl.dcp
 
 # Generate the synthesis report
+report_place_status -file place.rpt
+report_route_status -file route.rpt
 report_timing_summary -file timing.rpt
 report_power -file power.rpt
 report_drc -file drc.rpt
