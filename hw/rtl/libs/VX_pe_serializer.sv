@@ -115,31 +115,25 @@ module VX_pe_serializer #(
             end
         end
 
-        reg [BATCH_SIZE-1:0][NUM_PES-1:0][DATA_OUT_WIDTH-1:0] data_out_r;
-        reg [TAG_WIDTH-1:0] tag_out_r;
-        reg valid_out_r;
+        reg [BATCH_SIZE-1:0][NUM_PES-1:0][DATA_OUT_WIDTH-1:0] data_out_r, data_out_n;
 
-        wire valid_out_b = pe_valid_in && batch_out_done;
-        wire ready_out_b = ready_out_u || ~valid_out_u;
-
-        always @(posedge clk) begin
-            if (reset) begin
-                valid_out_r <= 1'b0;
-            end else if (ready_out_b) begin
-                valid_out_r <= valid_out_b;
-            end
-            if (ready_out_b) begin
-                data_out_r[batch_out_idx] <= pe_data_in;
-                tag_out_r <= pe_tag_in;
+        always @(*) begin
+            data_out_n = data_out_r;
+            if (pe_valid_in) begin
+                data_out_n[batch_out_idx] = pe_data_in;
             end
         end
 
-        assign enable      = ready_out_b || ~valid_out_b;
+        always @(posedge clk) begin
+            data_out_r <= data_out_n;
+        end
+
+        assign enable      = ready_out_u || ~batch_out_done;
         assign ready_in    = enable && batch_in_done;
 
-        assign valid_out_u = valid_out_r;
-        assign data_out_u  = data_out_r;
-        assign tag_out_u   = tag_out_r;
+        assign valid_out_u = batch_out_done;
+        assign data_out_u  = data_out_n;
+        assign tag_out_u   = pe_tag_in;
 
     end else begin
 
