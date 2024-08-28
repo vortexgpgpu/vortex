@@ -158,7 +158,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     end
 
     if (PASSTHRU == 0) begin : cache_if
-    
+
         VX_cache #(
             .INSTANCE_ID  (INSTANCE_ID),
             .CACHE_SIZE   (CACHE_SIZE),
@@ -234,7 +234,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         always @(posedge clk) begin
             if (core_req_fire) begin
                 if (core_bus_if[i].req_data.rw)
-                    `TRACE(1, ("%d: %s core-wr-req: addr=0x%0h, tag=0x%0h, req_idx=%0d, byteen=%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag, i, core_bus_if[i].req_data.byteen, core_bus_if[i].req_data.data, core_req_uuid));
+                    `TRACE(1, ("%d: %s core-wr-req: addr=0x%0h, tag=0x%0h, req_idx=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag, i, core_bus_if[i].req_data.byteen, core_bus_if[i].req_data.data, core_req_uuid));
                 else
                     `TRACE(1, ("%d: %s core-rd-req: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag, i, core_req_uuid));
             end
@@ -261,7 +261,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     always @(posedge clk) begin
         if (mem_req_fire) begin
             if (mem_bus_if.req_data.rw)
-                `TRACE(1, ("%d: %s mem-wr-req: addr=0x%0h, tag=0x%0h, byteen=%h, data=0x%h (#%0d)\n",
+                `TRACE(1, ("%d: %s mem-wr-req: addr=0x%0h, tag=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n",
                     $time, INSTANCE_ID, `TO_FULL_ADDR(mem_bus_if.req_data.addr), mem_bus_if.req_data.tag, mem_bus_if.req_data.byteen, mem_bus_if.req_data.data, mem_req_uuid));
             else
                 `TRACE(1, ("%d: %s mem-rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n",

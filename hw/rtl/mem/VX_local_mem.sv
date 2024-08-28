@@ -334,7 +334,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         always @(posedge clk) begin
             if (mem_bus_if[i].req_valid && mem_bus_if[i].req_ready) begin
                 if (mem_bus_if[i].req_data.rw) begin
-                    `TRACE(1, ("%d: %s wr-req: req_idx=%0d, addr=0x%0h, tag=0x%0h, byteen=%h, data=0x%h (#%0d)\n",
+                    `TRACE(1, ("%d: %s wr-req: req_idx=%0d, addr=0x%0h, tag=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n",
                         $time, INSTANCE_ID, i, mem_bus_if[i].req_data.addr, mem_bus_if[i].req_data.tag, mem_bus_if[i].req_data.byteen, mem_bus_if[i].req_data.data, req_uuid[i]));
                 end else begin
                     `TRACE(1, ("%d: %s rd-req: req_idx=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n",
@@ -352,7 +352,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         always @(posedge clk) begin
             if (per_bank_req_valid[i] && per_bank_req_ready[i]) begin
                 if (per_bank_req_rw[i]) begin
-                    `TRACE(2, ("%d: %s-bank%0d wr-req: addr=0x%0h, tag=0x%0h, byteen=%h, data=0x%h (#%0d)\n",
+                    `TRACE(2, ("%d: %s-bank%0d wr-req: addr=0x%0h, tag=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n",
                         $time, INSTANCE_ID, i, per_bank_req_addr[i], per_bank_req_tag[i], per_bank_req_byteen[i], per_bank_req_data[i], per_bank_req_uuid[i]));
                 end else begin
                     `TRACE(2, ("%d: %s-bank%0d rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n",
