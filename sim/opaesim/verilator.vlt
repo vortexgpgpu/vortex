@@ -1,8 +1,0 @@
-`verilator_config
-
-lint_off -rule BLKANDNBLK -file "*/fpnew/src/*"
-lint_off -rule UNOPTFLAT -file "*/fpnew/src/*"
-lint_off -file "*/fpnew/src/*"
-
-lint_off -file "*/afu/opae/ccip/ccip_if_pkg.sv"
-lint_off -file "*/afu/opae/local_mem_cfg_pkg.sv"

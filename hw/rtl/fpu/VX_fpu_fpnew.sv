@@ -193,7 +193,7 @@ module VX_fpu_fpnew
             .tag_i          ({fpu_tag_in, fpu_has_fflags}),
             .in_valid_i     (fpu_valid_in),
             .in_ready_o     (fpu_ready_in_uq),
-            .flush_i        (reset),
+            .flush_i        (1'b0),
             .result_o       (fpu_result[i]),
             .status_o       (fpu_status_uq),
             .tag_o          (fpu_tag),
