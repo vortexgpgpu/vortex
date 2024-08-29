@@ -125,7 +125,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
 
 `ifdef QUARTUS
 
-    for (genvar i = 0; i < NUM_PES; ++i) begin : fmadds
+    for (genvar i = 0; i < NUM_PES; ++i) begin : fmas
         acl_fmadd fmadd (
             .clk (clk),
             .areset (1'b0),

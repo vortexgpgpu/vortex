@@ -134,7 +134,7 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
 
 `else
 
-    for (genvar i = 0; i < NUM_PES; ++i) begin fdivs
+    for (genvar i = 0; i < NUM_PES; ++i) begin : fdivs
         reg [63:0] r;
         `UNUSED_VAR (r)
         fflags_t f;
