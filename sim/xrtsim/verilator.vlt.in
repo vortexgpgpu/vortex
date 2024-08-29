@@ -1,0 +1,5 @@
+`verilator_config
+
+lint_off -rule BLKANDNBLK -file "@VORTEX_HOME@/third_party/cvfpu/*"
+lint_off -rule UNOPTFLAT -file "@VORTEX_HOME@/third_party/cvfpu/*"
+lint_off -file "@VORTEX_HOME@/third_party/cvfpu/*"

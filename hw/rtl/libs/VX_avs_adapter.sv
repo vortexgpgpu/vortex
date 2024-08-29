@@ -54,7 +54,6 @@ module VX_avs_adapter #(
     input  wire                     avs_readdatavalid [NUM_BANKS]
 );
     localparam DATA_SIZE = DATA_WIDTH/8;
-    localparam RD_QUEUE_ADDR_WIDTH = `CLOG2(RD_QUEUE_SIZE+1);
     localparam BANK_ADDRW = `LOG2UP(NUM_BANKS);
     localparam LOG2_NUM_BANKS = `CLOG2(NUM_BANKS);
     localparam BANK_OFFSETW = ADDR_WIDTH - LOG2_NUM_BANKS;
