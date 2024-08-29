@@ -460,6 +460,11 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
     switch (op) {
     case Opcode::FCI:
       switch (func7) {
+      case 0x20: // FCVT.S.D
+      case 0x21: // FCVT.D.S
+        instr->setDestReg(rd, RegType::Float);
+        instr->addSrcReg(rs1, RegType::Float);
+        break;
       case 0x2c: // FSQRT.S
       case 0x2d: // FSQRT.D
         instr->setDestReg(rd, RegType::Float);
