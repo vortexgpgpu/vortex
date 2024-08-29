@@ -30,17 +30,6 @@
 
 using namespace vortex;
 
-Emulator::ipdom_entry_t::ipdom_entry_t(const ThreadMask &tmask, Word PC)
-  : tmask(tmask)
-  , PC(PC)
-  , fallthrough(false)
-{}
-
-Emulator::ipdom_entry_t::ipdom_entry_t(const ThreadMask &tmask)
-  : tmask(tmask)
-  , fallthrough(true)
-{}
-
 Emulator::warp_t::warp_t(const Arch& arch)
   : ireg_file(arch.num_threads(), std::vector<Word>(MAX_NUM_REGS))
   , freg_file(arch.num_threads(), std::vector<uint64_t>(MAX_NUM_REGS))
@@ -85,7 +74,7 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     , core_(core)
     , warps_(arch.num_warps(), arch)
     , barriers_(arch.num_barriers(), 0)
-    , ipdom_size_((arch.num_threads()-1) * 2)
+    , ipdom_size_(arch.num_threads()-1)
 {
   this->clear();
 }

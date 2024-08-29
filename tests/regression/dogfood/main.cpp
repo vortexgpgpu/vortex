@@ -12,7 +12,7 @@
 
 TestSuite* testSuite = nullptr;
 const char* kernel_file = "kernel.vxbin";
-int count = 1;
+int count = 64;
 std::unordered_set<std::string> selected;
 std::unordered_set<std::string> excluded;
 int testid_s = 0;
