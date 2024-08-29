@@ -53,7 +53,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     wire [`NUM_EX_UNITS-1:0] operands_ready_in;
     assign operands_if.ready = operands_ready_in[operands_if.data.ex_type];
 
-    for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin
+    for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin : buffers
         VX_elastic_buffer #(
             .DATAW   (DATAW),
             .SIZE    (2),

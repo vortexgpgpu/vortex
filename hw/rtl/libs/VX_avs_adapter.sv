@@ -64,7 +64,6 @@ module VX_avs_adapter #(
     wire [NUM_BANKS-1:0] req_queue_push, req_queue_pop;
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0] req_queue_tag_out;
     wire [NUM_BANKS-1:0] req_queue_going_full;
-    wire [NUM_BANKS-1:0][RD_QUEUE_ADDR_WIDTH-1:0] req_queue_size;
     wire [BANK_ADDRW-1:0] req_bank_sel;
     wire [BANK_OFFSETW-1:0] req_bank_off;
     wire [NUM_BANKS-1:0] bank_req_ready;
@@ -81,8 +80,7 @@ module VX_avs_adapter #(
         assign req_queue_push[i] = mem_req_valid && ~mem_req_rw && bank_req_ready[i] && (req_bank_sel == i);
     end
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
-
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : pending_sizes
         VX_pending_size #(
             .SIZE (RD_QUEUE_SIZE)
         ) pending_size (
@@ -94,10 +92,11 @@ module VX_avs_adapter #(
             `UNUSED_PIN (alm_empty),
             .full  (req_queue_going_full[i]),
             `UNUSED_PIN (alm_full),
-            .size  (req_queue_size[i])
+            `UNUSED_PIN (size)
         );
-        `UNUSED_VAR (req_queue_size)
+    end
 
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : rd_req_queues
         VX_fifo_queue #(
             .DATAW (TAG_WIDTH),
             .DEPTH (RD_QUEUE_SIZE)
@@ -116,7 +115,7 @@ module VX_avs_adapter #(
         );
     end
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : req_out_bufs
         wire                  valid_out;
         wire                  rw_out;
         wire [DATA_SIZE-1:0]  byteen_out;
@@ -168,8 +167,7 @@ module VX_avs_adapter #(
     wire [NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_queue_data_out;
     wire [NUM_BANKS-1:0] rsp_queue_empty;
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
-
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : rd_rsp_queues
         VX_fifo_queue #(
             .DATAW (DATA_WIDTH),
             .DEPTH (RD_QUEUE_SIZE)

@@ -55,7 +55,7 @@ module VX_alu_unit #(
         .NUM_LANES (NUM_LANES)
     ) per_block_commit_if[BLOCK_SIZE]();
 
-    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : alu_blocks
+    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : alus
 
         `RESET_RELAY_EN (block_reset, reset, (BLOCK_SIZE > 1));
 

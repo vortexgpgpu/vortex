@@ -100,7 +100,7 @@ module VX_cache_tags #(
     wire fill_s = fill && (!WRITEBACK || ~stall);
     wire flush_s = flush && (!WRITEBACK || ~stall);
 
-    for (genvar i = 0; i < NUM_WAYS; ++i) begin : ways
+    for (genvar i = 0; i < NUM_WAYS; ++i) begin : tag_stores
 
         wire do_fill    = fill_s  && evict_way[i];
         wire do_flush   = flush_s && (!WRITEBACK || way_sel[i]); // flush the whole line in writethrough mode

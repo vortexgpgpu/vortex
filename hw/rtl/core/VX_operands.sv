@@ -246,7 +246,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         assign gpr_wr_bank_idx = '0;
     end
 
-    for (genvar b = 0; b < NUM_BANKS; ++b) begin
+    for (genvar b = 0; b < NUM_BANKS; ++b) begin : gpr_rams
         wire gpr_wr_enabled;
         if (BANK_SEL_BITS != 0) begin
             assign gpr_wr_enabled = writeback_if.valid

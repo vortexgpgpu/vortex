@@ -74,7 +74,7 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
         assign commit_in_ready[i] = commit_out_ready[commit_in_isw[i]];
     end
 
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin: out_bufs
         VX_commit_if #(
             .NUM_LANES (NUM_LANES)
         ) commit_tmp_if();

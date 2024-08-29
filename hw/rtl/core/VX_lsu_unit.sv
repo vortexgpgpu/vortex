@@ -54,7 +54,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .NUM_LANES (NUM_LANES)
     ) per_block_commit_if[BLOCK_SIZE]();
 
-    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : lsu_blocks
+    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : lsus
 
         `RESET_RELAY_EN (slice_reset, reset, (BLOCK_SIZE > 1));
 

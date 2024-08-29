@@ -101,7 +101,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     end
 `endif
 
-    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : stanging_bufs
         VX_pipe_buffer #(
             .DATAW (DATAW)
         ) stanging_buf (
