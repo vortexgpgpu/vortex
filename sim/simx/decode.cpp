@@ -86,7 +86,7 @@ static const char* op_string(const Instr &instr) {
   auto func3  = instr.getFunc3();
   auto func7  = instr.getFunc7();
   auto rd     = instr.getRDest();
-  auto rs2    = instr.getRSrc(1);
+  auto rs1    = instr.getRSrc(1);
   auto imm    = instr.getImm();
 
   switch (opcode) {
@@ -343,7 +343,7 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     case 0x60:
-      switch (rs2) {
+      switch (rs1) {
       case 0: return "FCVT.W.S";
       case 1: return "FCVT.WU.S";
       case 2: return "FCVT.L.S";
@@ -352,7 +352,7 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     case 0x61:
-      switch (rs2) {
+      switch (rs1) {
       case 0: return "FCVT.W.D";
       case 1: return "FCVT.WU.D";
       case 2: return "FCVT.L.D";
@@ -361,7 +361,7 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     case 0x68:
-      switch (rs2) {
+      switch (rs1) {
       case 0: return "FCVT.S.W";
       case 1: return "FCVT.S.WU";
       case 2: return "FCVT.S.L";
@@ -370,7 +370,7 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     case 0x69:
-      switch (rs2) {
+      switch (rs1) {
       case 0: return "FCVT.D.W";
       case 1: return "FCVT.D.WU";
       case 2: return "FCVT.D.L";
@@ -395,7 +395,7 @@ static const char* op_string(const Instr &instr) {
       switch (func3) {
       case 0: return "TMC";
       case 1: return "WSPAWN";
-      case 2: return rs2 ? "SPLIT.N" : "SPLIT";
+      case 2: return rs1 ? "SPLIT.N" : "SPLIT";
       case 3: return "JOIN";
       case 4: return "BAR";
       case 5: return rd ? "PRED.N" : "PRED";

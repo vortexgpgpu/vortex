@@ -162,10 +162,8 @@ instr_trace_t* Emulator::step() {
   uint64_t uuid = 0;
 #endif
 
-  DPH(1, "Fetch: cid=" << core_->id() << ", wid=" << scheduled_warp << ", tmask=");
-  for (uint32_t i = 0, n = arch_.num_threads(); i < n; ++i)
-    DPN(1, warp.tmask.test(i));
-  DPN(1, ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")" << std::endl);
+  DP(1, "Fetch: cid=" << core_->id() << ", wid=" << scheduled_warp << ", tmask=" << ThreadMaskOS(warp.tmask, arch_.num_threads())
+         << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")");
 
   // Fetch
   uint32_t instr_code = 0;
