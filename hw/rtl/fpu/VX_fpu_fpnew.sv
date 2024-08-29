@@ -176,8 +176,7 @@ module VX_fpu_fpnew
             .Features       (FPU_FEATURES),
             .Implementation (FPU_IMPLEMENTATION),
             .TagType        (logic[(TAG_WIDTH+1)-1:0]),
-            .TrueSIMDClass  (1),
-            .EnableSIMDMask (1)
+            .DivSqrtSel     (fpnew_pkg::PULP)
         ) fpnew_core (
             .clk_i          (clk),
             .rst_ni         (~reset),
@@ -189,7 +188,7 @@ module VX_fpu_fpnew
             .dst_fmt_i      (fpu_dst_fmt),
             .int_fmt_i      (fpu_int_fmt),
             .vectorial_op_i (1'b0),
-            .simd_mask_i    (mask_in[i]),
+            .simd_mask_i    (1'b1),
             .tag_i          ({fpu_tag_in, fpu_has_fflags}),
             .in_valid_i     (fpu_valid_in),
             .in_ready_o     (fpu_ready_in_uq),
