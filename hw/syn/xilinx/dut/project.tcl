@@ -65,10 +65,7 @@ read_xdc $xdc_file
 add_files -norecurse -verbose $vsources_list
 
 # process defines
-set obj [current_fileset]
-foreach def $vdefines_list {
-  set_property verilog_define $def $obj
-}
+set_property verilog_define ${vdefines_list} [current_fileset]
 
 # add fpu ip
 if {[info exists ::env(FPU_IP)]} {
