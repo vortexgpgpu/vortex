@@ -41,7 +41,7 @@ module VX_commit import VX_gpu_pkg::*; #(
     wire [`ISSUE_WIDTH-1:0][`NUM_THREADS-1:0] per_issue_commit_tmask;
     wire [`ISSUE_WIDTH-1:0] per_issue_commit_eop;
 
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : commit_arbs
 
         wire [`NUM_EX_UNITS-1:0]            valid_in;
         wire [`NUM_EX_UNITS-1:0][DATAW-1:0] data_in;

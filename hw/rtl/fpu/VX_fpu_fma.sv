@@ -125,7 +125,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
 
 `ifdef QUARTUS
 
-    for (genvar i = 0; i < NUM_PES; ++i) begin
+    for (genvar i = 0; i < NUM_PES; ++i) begin : fmadds
         acl_fmadd fmadd (
             .clk (clk),
             .areset (1'b0),
@@ -143,7 +143,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
 
 `elsif VIVADO
 
-    for (genvar i = 0; i < NUM_PES; ++i) begin
+    for (genvar i = 0; i < NUM_PES; ++i) begin : fmas
         wire [2:0] tuser;
 
         xil_fma fma (
@@ -168,7 +168,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
 
 `else
 
-    for (genvar i = 0; i < NUM_PES; ++i) begin
+    for (genvar i = 0; i < NUM_PES; ++i) begin : fmas
         reg [63:0] r;
         `UNUSED_VAR (r)
         fflags_t f;

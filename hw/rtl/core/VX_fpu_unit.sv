@@ -53,7 +53,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         .NUM_LANES (NUM_LANES)
     ) per_block_commit_if[BLOCK_SIZE]();
 
-    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : fpu_blocks
+    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : fpus
         `UNUSED_VAR (per_block_execute_if[block_idx].data.tid)
         `UNUSED_VAR (per_block_execute_if[block_idx].data.wb)
 

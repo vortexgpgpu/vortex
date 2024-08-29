@@ -102,7 +102,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         .TAG_WIDTH (ARB_TAG_WIDTH)
     ) arb_core_bus_if[NUM_CACHES * NUM_REQS]();
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : core_arbs
         VX_mem_bus_if #(
             .DATA_SIZE (WORD_SIZE),
             .TAG_WIDTH (TAG_WIDTH)

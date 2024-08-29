@@ -162,7 +162,7 @@ module VX_fpu_fpnew
     end
 
     `UNUSED_VAR (mask_in)
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : fpnew_cores
         wire [(TAG_WIDTH+1)-1:0] fpu_tag;
         wire fpu_valid_out_uq;
         wire fpu_ready_in_uq;

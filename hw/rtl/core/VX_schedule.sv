@@ -379,7 +379,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     `RESET_RELAY (pending_instr_reset, reset);
 
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : pending_sizes
         VX_pending_size #(
             .SIZE      (4096),
             .ALM_EMPTY (1)
