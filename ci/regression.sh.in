@@ -240,8 +240,14 @@ config2()
     ./ci/blackbox.sh --driver=opae --app=diverge
 
     # disable DPI
-    CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-    CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood
+    if [ "$XLEN" == "64" ]; then
+        # need to disable trig on 64-bit due to a bug inside fpnew's sqrt core.
+        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-xtrig -xbar -xgbar"
+        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-xtrig -xbar -xgbar"
+    else
+        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
+        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood
+    fi
 
     # custom program startup address
     make -C tests/regression/dogfood clean-kernel
