@@ -3,6 +3,8 @@ include $(ROOT_DIR)/config.mk
 
 DEVICE ?= xcu55c-fsvh2892-2L-e
 
+MAX_JOBS ?= 8
+
 VIVADO := $(XILINX_VIVADO)/bin/vivado
 
 SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/sandbox
@@ -13,6 +15,9 @@ AFU_DIR := $(RTL_DIR)/afu/xrt
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
 KERNEL ?= fibonacci
+
+NCPUS := $(shell lscpu | grep "^Core(s) per socket:" | awk '{print $$4}')
+JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
 
 COE_FILE := $(shell realpath kernel.bin.coe)
 ESCAPED_COE_FILE := $(shell echo "$(COE_FILE)" | sed -e 's/[\/&]/\\&/g')
@@ -58,7 +63,7 @@ project_1/sources.txt:
 
 build: project_1/project_1.xpr
 project_1/project_1.xpr: project_1/sources.txt kernel.bin.coe project2.tcl
-	$(VIVADO) -mode batch -source project2.tcl -tclargs $(DEVICE) project_1/sources.txt $(SCRIPT_DIR)
+	MAX_JOBS=$(JOBS) $(VIVADO) -mode batch -source project2.tcl -tclargs $(DEVICE) project_1/sources.txt $(SCRIPT_DIR)
 
 run: project_1/project_1.xpr
 	$(VIVADO) project_1/project_1.xpr &

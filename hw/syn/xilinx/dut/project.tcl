@@ -15,9 +15,9 @@
 set start_time [clock seconds]
 
 if { $::argc != 6 } {
-    puts "ERROR: Program \"$::argv0\" requires 5 arguments!\n"
-    puts "Usage: $::argv0 <top_module> <device_part> <vcs_file> <xdc_file> <tool_dir> <script_dir>\n"
-    exit
+  puts "ERROR: Program \"$::argv0\" requires 5 arguments!\n"
+  puts "Usage: $::argv0 <top_module> <device_part> <vcs_file> <xdc_file> <tool_dir> <script_dir>\n"
+  exit
 }
 
 # Set the project name
@@ -30,11 +30,20 @@ set xdc_file [lindex $::argv 3]
 set tool_dir [lindex $::argv 4]
 set script_dir [lindex $::argv 5]
 
-#puts top_module
-#puts $device_part
-#puts $vcs_file
-#puts xdc_file
-#puts $tool_dir
+puts "Using top_module=$top_module"
+puts "Using device_part=$device_part"
+puts "Using vcs_file=$vcs_file"
+puts "Using xdc_file=$xdc_file"
+puts "Using tool_dir=$tool_dir"
+puts "Using script_dir=$script_dir"
+
+# Set the number of jobs based on MAX_JOBS environment variable
+if {[info exists ::env(MAX_JOBS)]} {
+  set num_jobs $::env(MAX_JOBS)
+  puts "using num_jobs=$num_jobs"
+} else {
+  set num_jobs 0
+}
 
 # create fpu ip
 if {[info exists ::env(FPU_IP)]} {
@@ -84,14 +93,22 @@ set_property \
     -objects [get_runs synth_1]
 
 # Synthesis
-launch_runs synth_1
+if {$num_jobs != 0} {
+  launch_runs synth_1 -jobs $num_jobs
+} else {
+  launch_runs synth_1
+}
 wait_on_run synth_1
 open_run synth_1
 write_checkpoint -force post_synth.dcp
 report_utilization -file utilization.rpt -hierarchical -hierarchical_percentages
 
 # Implementation
-launch_runs impl_1
+if {$num_jobs != 0} {
+  launch_runs impl_1 -jobs $num_jobs
+} else {
+  launch_runs impl_1
+}
 wait_on_run impl_1
 open_run impl_1
 write_checkpoint -force post_impl.dcp
