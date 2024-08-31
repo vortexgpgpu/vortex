@@ -71,7 +71,7 @@ VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += -DSIMULATION -DSV_DPI
 VL_FLAGS += -DXLEN_$(XLEN)
 VL_FLAGS += $(CONFIGS)
-VL_FLAGS += $(SRC_DIR)/verilator.vlt
+VL_FLAGS += verilator.vlt
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(RTL_PKGS)
 

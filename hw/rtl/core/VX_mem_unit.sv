@@ -23,7 +23,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     output cache_perf_t     lmem_perf,
 `endif
 
-    VX_lsu_mem_if.slave     lsu_mem_in_if [`NUM_LSU_BLOCKS],
+    VX_lsu_mem_if.slave     lsu_mem_if [`NUM_LSU_BLOCKS],
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
 );
     VX_lsu_mem_if #(
@@ -54,7 +54,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         ) lmem_switch (
             .clk          (clk),
             .reset        (reset),
-            .lsu_in_if    (lsu_mem_in_if[i]),
+            .lsu_in_if    (lsu_mem_if[i]),
             .global_out_if(lsu_dcache_if[i]),
             .local_out_if (lsu_lmem_if[i])
         );

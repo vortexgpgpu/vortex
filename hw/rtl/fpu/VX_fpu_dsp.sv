@@ -54,11 +54,23 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     localparam NUM_FPCORES = 4;
     localparam FPCORES_BITS = `LOG2UP(NUM_FPCORES);
 
+    localparam REQ_DATAW = NUM_LANES + TAG_WIDTH + `INST_FPU_BITS + `INST_FMT_BITS + `INST_FRM_BITS + 3 * (NUM_LANES * `XLEN);
     localparam RSP_DATAW = (NUM_LANES * 32) + 1 + $bits(fflags_t) + TAG_WIDTH;
 
     `UNUSED_VAR (fmt)
 
+    wire [NUM_FPCORES-1:0] per_core_valid_in;
+    wire [NUM_FPCORES-1:0][REQ_DATAW-1:0] per_core_data_in;
+    wire [NUM_FPCORES-1:0][NUM_LANES-1:0] per_core_mask_in;
+    wire [NUM_FPCORES-1:0][TAG_WIDTH-1:0] per_core_tag_in;
+    wire [NUM_FPCORES-1:0][`INST_FPU_BITS-1:0] per_core_op_type;
+    wire [NUM_FPCORES-1:0][`INST_FMT_BITS-1:0] per_core_fmt;
+    wire [NUM_FPCORES-1:0][`INST_FRM_BITS-1:0] per_core_frm;
+    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_dataa;
+    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_datab;
+    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_datac;
     wire [NUM_FPCORES-1:0] per_core_ready_in;
+
     wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_result;
     wire [NUM_FPCORES-1:0][TAG_WIDTH-1:0] per_core_tag_out;
     wire [NUM_FPCORES-1:0] per_core_ready_out;
@@ -94,18 +106,44 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     `UNUSED_VAR (datab)
     `UNUSED_VAR (datac)
 
-    // Decode instruction type
+    // Decode fpu core type
     wire [FPCORES_BITS-1:0] core_select = op_type[3:2];
-    wire is_sqrt = op_type[0];
-    wire is_itof = op_type[1];
-    wire is_signed = ~op_type[0];
-    wire is_madd = op_type[1];
-    wire is_neg  = op_type[0];
-    wire is_sub  = fmt[1];
 
-    // can accept new request?
-    assign per_core_ready_in[FPU_DIVSQRT] = div_sqrt_ready_in[is_sqrt];
-    assign ready_in = per_core_ready_in[core_select];
+    VX_stream_switch #(
+        .DATAW       (REQ_DATAW),
+        .NUM_INPUTS  (1),
+        .NUM_OUTPUTS (NUM_FPCORES),
+        .OUT_BUF     (0)
+    ) req_switch (
+        .clk       (clk),
+        .reset     (reset),
+        .sel_in    (core_select),
+        .valid_in  (valid_in),
+        .ready_in  (ready_in),
+        .data_in   ({mask_in, tag_in, op_type, fmt, frm, dataa_s, datab_s, datac_s}),
+        .data_out  (per_core_data_in),
+        .valid_out (per_core_valid_in),
+        .ready_out (per_core_ready_in)
+    );
+
+    for (genvar i = 0; i < NUM_FPCORES; ++i) begin
+        assign {
+            per_core_mask_in[i],
+            per_core_tag_in[i],
+            per_core_op_type[i],
+            per_core_fmt[i],
+            per_core_frm[i],
+            per_core_dataa[i],
+            per_core_datab[i],
+            per_core_datac[i]
+        } = per_core_data_in[i];
+    end
+
+    // FMA core
+
+    wire is_madd = per_core_op_type[FPU_FMA][1];
+    wire is_neg  = per_core_op_type[FPU_FMA][0];
+    wire is_sub  = per_core_fmt[FPU_FMA][1];
 
     VX_fpu_fma #(
         .NUM_LANES (NUM_LANES),
@@ -113,17 +151,17 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     ) fpu_fma (
         .clk        (clk),
         .reset      (fma_reset),
-        .valid_in   (valid_in && (core_select == FPU_FMA)),
+        .valid_in   (per_core_valid_in[FPU_FMA]),
         .ready_in   (per_core_ready_in[FPU_FMA]),
-        .mask_in    (mask_in),
-        .tag_in     (tag_in),
-        .frm        (frm),
+        .mask_in    (per_core_mask_in[FPU_FMA]),
+        .tag_in     (per_core_tag_in[FPU_FMA]),
+        .frm        (per_core_frm[FPU_FMA]),
         .is_madd    (is_madd),
         .is_sub     (is_sub),
         .is_neg     (is_neg),
-        .dataa      (dataa_s),
-        .datab      (datab_s),
-        .datac      (datac_s),
+        .dataa      (per_core_dataa[FPU_FMA]),
+        .datab      (per_core_datab[FPU_FMA]),
+        .datac      (per_core_datac[FPU_FMA]),
         .has_fflags (per_core_has_fflags[FPU_FMA]),
         .fflags     (per_core_fflags[FPU_FMA]),
         .result     (per_core_result[FPU_FMA]),
@@ -132,19 +170,24 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
         .valid_out  (per_core_valid_out[FPU_FMA])
     );
 
+    // Div/Sqrt cores
+
+    wire is_sqrt = per_core_op_type[FPU_DIVSQRT][0];
+    assign per_core_ready_in[FPU_DIVSQRT] = div_sqrt_ready_in[is_sqrt];
+
     VX_fpu_div #(
         .NUM_LANES (NUM_LANES),
         .TAG_WIDTH (TAG_WIDTH)
     ) fpu_div (
         .clk        (clk),
         .reset      (div_reset),
-        .valid_in   (valid_in && (core_select == FPU_DIVSQRT) && ~is_sqrt),
+        .valid_in   (per_core_valid_in[FPU_DIVSQRT] && ~is_sqrt),
         .ready_in   (div_sqrt_ready_in[0]),
-        .mask_in    (mask_in),
-        .tag_in     (tag_in),
-        .frm        (frm),
-        .dataa      (dataa_s),
-        .datab      (datab_s),
+        .mask_in    (per_core_mask_in[FPU_DIVSQRT]),
+        .tag_in     (per_core_tag_in[FPU_DIVSQRT]),
+        .frm        (per_core_frm[FPU_DIVSQRT]),
+        .dataa      (per_core_dataa[FPU_DIVSQRT]),
+        .datab      (per_core_datab[FPU_DIVSQRT]),
         .has_fflags (div_sqrt_has_fflags[0]),
         .fflags     (div_sqrt_fflags[0]),
         .result     (div_sqrt_result[0]),
@@ -159,12 +202,12 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     ) fpu_sqrt (
         .clk        (clk),
         .reset      (sqrt_reset),
-        .valid_in   (valid_in && (core_select == FPU_DIVSQRT) && is_sqrt),
+        .valid_in   (per_core_valid_in[FPU_DIVSQRT] && is_sqrt),
         .ready_in   (div_sqrt_ready_in[1]),
-        .mask_in    (mask_in),
-        .tag_in     (tag_in),
-        .frm        (frm),
-        .dataa      (dataa_s),
+        .mask_in    (per_core_mask_in[FPU_DIVSQRT]),
+        .tag_in     (per_core_tag_in[FPU_DIVSQRT]),
+        .frm        (per_core_frm[FPU_DIVSQRT]),
+        .dataa      (per_core_dataa[FPU_DIVSQRT]),
         .has_fflags (div_sqrt_has_fflags[1]),
         .fflags     (div_sqrt_fflags[1]),
         .result     (div_sqrt_result[1]),
@@ -173,23 +216,27 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
         .ready_out  (div_sqrt_ready_out[1])
     );
 
+    // CVT core
+
+    wire is_itof = per_core_op_type[FPU_CVT][1];
+    wire is_signed = ~per_core_op_type[FPU_CVT][0];
     wire cvt_ret_int_in = ~is_itof;
     wire cvt_ret_int_out;
 
     VX_fpu_cvt #(
         .NUM_LANES (NUM_LANES),
-        .TAG_WIDTH (TAG_WIDTH+1)
+        .TAG_WIDTH (1+TAG_WIDTH)
     ) fpu_cvt (
         .clk        (clk),
         .reset      (cvt_reset),
-        .valid_in   (valid_in && (core_select == FPU_CVT)),
+        .valid_in   (per_core_valid_in[FPU_CVT]),
         .ready_in   (per_core_ready_in[FPU_CVT]),
-        .mask_in    (mask_in),
-        .tag_in     ({cvt_ret_int_in, tag_in}),
-        .frm        (frm),
+        .mask_in    (per_core_mask_in[FPU_CVT]),
+        .tag_in     ({cvt_ret_int_in, per_core_tag_in[FPU_CVT]}),
+        .frm        (per_core_frm[FPU_CVT]),
         .is_itof    (is_itof),
         .is_signed  (is_signed),
-        .dataa      (dataa_s),
+        .dataa      (per_core_dataa[FPU_CVT]),
         .has_fflags (per_core_has_fflags[FPU_CVT]),
         .fflags     (per_core_fflags[FPU_CVT]),
         .result     (per_core_result[FPU_CVT]),
@@ -198,12 +245,14 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
         .ready_out  (per_core_ready_out[FPU_CVT])
     );
 
-    wire ncp_ret_int_in = (op_type == `INST_FPU_CMP)
-                      || `INST_FPU_IS_CLASS(op_type, frm)
-                      || `INST_FPU_IS_MVXW(op_type, frm);
+    // NCP core
+
+    wire ncp_ret_int_in = (per_core_op_type[FPU_NCP] == `INST_FPU_CMP)
+                      || `INST_FPU_IS_CLASS(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP])
+                      || `INST_FPU_IS_MVXW(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP]);
     wire ncp_ret_int_out;
 
-    wire ncp_ret_sext_in = `INST_FPU_IS_MVXW(op_type, frm);
+    wire ncp_ret_sext_in = `INST_FPU_IS_MVXW(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP]);
     wire ncp_ret_sext_out;
 
     VX_fpu_ncp #(
@@ -212,14 +261,14 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     ) fpu_ncp (
         .clk        (clk),
         .reset      (ncp_reset),
-        .valid_in   (valid_in && (core_select == FPU_NCP)),
+        .valid_in   (per_core_valid_in[FPU_NCP]),
         .ready_in   (per_core_ready_in[FPU_NCP]),
-        .mask_in    (mask_in),
-        .tag_in     ({ncp_ret_sext_in, ncp_ret_int_in, tag_in}),
-        .op_type    (op_type),
-        .frm        (frm),
-        .dataa      (dataa_s),
-        .datab      (datab_s),
+        .mask_in    (per_core_mask_in[FPU_NCP]),
+        .tag_in     ({ncp_ret_sext_in, ncp_ret_int_in, per_core_tag_in[FPU_NCP]}),
+        .op_type    (per_core_op_type[FPU_NCP]),
+        .frm        (per_core_frm[FPU_NCP]),
+        .dataa      (per_core_dataa[FPU_NCP]),
+        .datab      (per_core_datab[FPU_NCP]),
         .result     (per_core_result[FPU_NCP]),
         .has_fflags (per_core_has_fflags[FPU_NCP]),
         .fflags     (per_core_fflags[FPU_NCP]),

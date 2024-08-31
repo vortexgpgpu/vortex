@@ -128,7 +128,7 @@ module VX_pe_serializer #(
             data_out_r <= data_out_n;
         end
 
-        assign enable      = ready_out_u || ~batch_out_done;
+        assign enable      = ready_out_u || ~valid_out_u;
         assign ready_in    = enable && batch_in_done;
 
         assign valid_out_u = batch_out_done;

@@ -97,7 +97,7 @@ module VX_stream_arb #(
                         .DATAW       (DATAW),
                         .ARBITER     (ARBITER),
                         .MAX_FANOUT  (MAX_FANOUT),
-                        .OUT_BUF     (`TO_OUT_RBUF(OUT_BUF)) // to registered output
+                        .OUT_BUF     (3)
                     ) fanout_slice_arb (
                         .clk       (clk),
                         .reset     (reset),
@@ -242,7 +242,7 @@ module VX_stream_arb #(
                 .DATAW       (DATAW),
                 .ARBITER     (ARBITER),
                 .MAX_FANOUT  (MAX_FANOUT),
-                .OUT_BUF     (`TO_OUT_RBUF(OUT_BUF)) // to registered output
+                .OUT_BUF     (3)
             ) fanout_fork_arb (
                 .clk       (clk),
                 .reset     (reset),

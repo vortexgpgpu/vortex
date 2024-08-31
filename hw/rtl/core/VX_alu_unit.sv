@@ -109,6 +109,7 @@ module VX_alu_unit #(
 
     `endif
 
+        // can accept new request?
         assign per_block_execute_if[block_idx].ready =
         `ifdef EXT_M_ENABLE
             is_muldiv_op ? muldiv_execute_if.ready :

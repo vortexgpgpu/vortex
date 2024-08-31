@@ -80,7 +80,6 @@ module VX_mem_coalescer #(
     `RUNTIME_ASSERT ((~out_rsp_valid || out_rsp_mask != 0), ("invalid request mask"));
 
     localparam TAG_ID_WIDTH = TAG_WIDTH - UUID_WIDTH;
-    localparam NUM_REQS_W   = `LOG2UP(NUM_REQS);
     //                           tag          + mask     + offest
     localparam IBUF_DATA_WIDTH = TAG_ID_WIDTH + NUM_REQS + (NUM_REQS * DATA_RATIO_W);
 
@@ -115,13 +114,8 @@ module VX_mem_coalescer #(
     logic [NUM_REQS-1:0] addr_matches_r, addr_matches_n;
     logic [NUM_REQS-1:0] req_rem_mask_r, req_rem_mask_n;
 
-    wire [OUT_REQS-1:0][NUM_REQS_W-1:0] seed_idx;
-
-    wire [NUM_REQS-1:0][OUT_ADDR_WIDTH-1:0] in_addr_base;
     wire [NUM_REQS-1:0][DATA_RATIO_W-1:0] in_addr_offset;
-
     for (genvar i = 0; i < NUM_REQS; i++) begin
-        assign in_addr_base[i] = in_req_addr[i][ADDR_WIDTH-1:DATA_RATIO_W];
         assign in_addr_offset[i] = in_req_addr[i][DATA_RATIO_W-1:0];
     end
 
@@ -140,21 +134,18 @@ module VX_mem_coalescer #(
             .valid_out  (batch_valid_n[i])
         );
 
-        if (OUT_REQS > 1) begin
-            assign seed_idx[i] = {(NUM_REQS_W-DATA_RATIO_W)'(i), batch_idx};
-        end else begin
-            assign seed_idx[i] = batch_idx;
-        end
-    end
-
-    for (genvar i = 0; i < OUT_REQS; ++i) begin
-        assign seed_addr_n[i]  = in_addr_base[seed_idx[i]];
-        assign seed_flags_n[i] = in_req_flags[seed_idx[i]];
-    end
-
-    for (genvar i = 0; i < OUT_REQS; ++i) begin
+        wire [DATA_RATIO-1:0][OUT_ADDR_WIDTH-1:0] addr_base;
+        wire [DATA_RATIO-1:0][FLAGS_WIDTH-1:0] req_flags;
         for (genvar j = 0; j < DATA_RATIO; ++j) begin
-            assign addr_matches_n[i * DATA_RATIO + j] = (in_addr_base[i * DATA_RATIO + j] == seed_addr_n[i]);
+            assign addr_base[j] = in_req_addr[DATA_RATIO * i + j][ADDR_WIDTH-1:DATA_RATIO_W];
+            assign req_flags[j] = in_req_flags[DATA_RATIO * i + j];
+        end
+
+        assign seed_addr_n[i]  = addr_base[batch_idx];
+        assign seed_flags_n[i] = req_flags[batch_idx];
+
+        for (genvar j = 0; j < DATA_RATIO; ++j) begin
+            assign addr_matches_n[i * DATA_RATIO + j] = (addr_base[j] == seed_addr_n[i]);
         end
     end
 

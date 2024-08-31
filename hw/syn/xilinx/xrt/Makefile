@@ -90,7 +90,11 @@ else ifeq ($(DEV_ARCH), versal)
 # versal
 else
 # alveo
-VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem_0:HBM[0:15]
+ifneq ($(findstring xilinx_u55c,$(XSA)),)
+  VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem_0:HBM[0:31]
+else
+  VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem_0:HBM[0:15]
+endif
 endif
 
 VPP_FLAGS += --report_level 2
