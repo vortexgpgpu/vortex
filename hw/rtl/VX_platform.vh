@@ -254,9 +254,6 @@
 // lut(x): (x & 8) != 0
 `define TO_OUT_BUF_LUTRAM(s)  ((s & 8) != 0)
 
-// rbuf(x): (x <= 2) ? 3 : x
-`define TO_OUT_RBUF(s)        ((s & 8) | `MAX(s & 7, 3))
-
 `define REPEAT(n,f,s)   `_REPEAT_``n(f,s)
 `define _REPEAT_0(f,s)
 `define _REPEAT_1(f,s)  `f(0)

@@ -325,7 +325,7 @@ module VX_alu_muldiv #(
         .NUM_INPUTS (2),
         .DATAW (TAG_WIDTH + (NUM_LANES * `XLEN)),
         .ARBITER ("P"),
-        .OUT_BUF (1)
+        .OUT_BUF (2)
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),

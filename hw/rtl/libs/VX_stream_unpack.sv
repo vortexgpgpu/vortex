@@ -39,9 +39,9 @@ module VX_stream_unpack #(
     if (NUM_REQS > 1) begin
 
         reg [NUM_REQS-1:0] rem_mask;
-        wire [NUM_REQS-1:0] ready_out_r;
+        wire [NUM_REQS-1:0] ready_out_w;
 
-        wire [NUM_REQS-1:0] rem_mask_n = rem_mask & ~ready_out_r;
+        wire [NUM_REQS-1:0] rem_mask_n = rem_mask & ~ready_out_w;
         wire sent_all = ~(| (mask_in & rem_mask_n));
 
         always @(posedge clk) begin
@@ -65,7 +65,7 @@ module VX_stream_unpack #(
                 .clk       (clk),
                 .reset     (reset),
                 .valid_in  (valid_in && mask_in[i] && rem_mask[i]),
-                .ready_in  (ready_out_r[i]),
+                .ready_in  (ready_out_w[i]),
                 .data_in   ({data_in[i],  tag_in}),
                 .data_out  ({data_out[i], tag_out[i]}),
                 .valid_out (valid_out[i]),
