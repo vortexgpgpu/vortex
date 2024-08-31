@@ -24,9 +24,18 @@ set device_part [lindex $::argv 0]
 set vcs_file [lindex $::argv 1]
 set tool_dir [lindex $::argv 2]
 
-#puts $device_part
-#puts $vcs_file
-#puts $tool_dir
+uuts "Using device_part=$device_part"
+puts "Using vcs_file=$vcs_file"
+puts "Using tool_dir=$tool_dir"
+
+# Set the number of jobs based on MAX_JOBS environment variable
+if {[info exists ::env(MAX_JOBS)]} {
+  set num_jobs $::env(MAX_JOBS)
+  puts "using num_jobs=$num_jobs"
+  #puts $num_jobs
+} else {
+  set num_jobs 0
+}
 
 set origin_dir [file normalize "."]
 
@@ -394,14 +403,22 @@ add_files -norecurse -fileset sources_1 $wrapper_path
 update_compile_order -fileset sources_1
 
 # Synthesis
-launch_runs synth_1
+if {$num_jobs != 0} {
+  launch_runs synth_1 -jobs $num_jobs
+} else {
+  launch_runs synth_1
+}
 wait_on_run synth_1
 open_run synth_1
 write_checkpoint -force post_synth.dcp
 report_utilization -file utilization.rpt -hierarchical -hierarchical_percentages
 
 # Implementation
-launch_runs impl_1
+if {$num_jobs != 0} {
+  launch_runs impl_1 -jobs $num_jobs
+} else {
+  launch_runs impl_1
+}
 wait_on_run impl_1
 open_run impl_1
 write_checkpoint -force post_impl.dcp

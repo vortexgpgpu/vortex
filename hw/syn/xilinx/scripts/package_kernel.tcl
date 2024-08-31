@@ -22,6 +22,11 @@ set vcs_file  [lindex $::argv 1]
 set tool_dir  [lindex $::argv 2]
 set build_dir [lindex $::argv 3]
 
+puts "Using krnl_name=$krnl_name"
+puts "Using vcs_file=$vcs_file"
+puts "Using tool_dir=$tool_dir"
+puts "Using build_dir=$build_dir"
+
 set path_to_packaged "${build_dir}/xo/packaged_kernel"
 set path_to_tmp_project "${build_dir}/xo/project"
 
