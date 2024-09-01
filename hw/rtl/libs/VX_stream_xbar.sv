@@ -72,12 +72,17 @@ module VX_stream_xbar #(
             );
 
             for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-                assign per_output_valid_in[i] = NUM_OUTPUTS'(valid_in[i]) << sel_in[i];
+                VX_decoder #(
+                    .N (OUT_WIDTH)
+                ) sel_in_decoder (
+                    .shift_in (sel_in[i]),
+                    .data_in  (valid_in[i]),
+                    .data_out (per_output_valid_in[i])
+                );
                 assign ready_in[i] = | per_output_ready_in_w[i];
             end
 
             for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-                
                 VX_stream_arb #(
                     .NUM_INPUTS  (NUM_INPUTS),
                     .NUM_OUTPUTS (1),
@@ -131,8 +136,15 @@ module VX_stream_xbar #(
         wire [NUM_OUTPUTS-1:0] valid_out_w, ready_out_w;
         wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out_w;
 
+        VX_decoder #(
+            .N (OUT_WIDTH)
+        ) sel_in_decoder (
+            .shift_in (sel_in[0]),
+            .data_in  (valid_in[0]),
+            .data_out (valid_out_w)
+        );
+
         assign ready_in[0] = ready_out_w[sel_in[0]];
-        assign valid_out_w = NUM_OUTPUTS'(valid_in[0]) << sel_in[0];
         assign data_out_w = {NUM_OUTPUTS{data_in[0]}};
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin

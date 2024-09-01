@@ -56,6 +56,7 @@ module VX_cache_bypass #(
     localparam DIRECT_PASSTHRU  = PASSTHRU && (`CS_WORD_SEL_BITS == 0) && (NUM_REQS == 1);
 
     localparam REQ_SEL_BITS     = `CLOG2(NUM_REQS);
+    localparam REQ_SEL_WIDTH    = `UP(REQ_SEL_BITS);
     localparam MUX_DATAW        = 1 + WORD_SIZE + CORE_ADDR_WIDTH + `MEM_REQ_FLAGS_WIDTH + CORE_DATA_WIDTH + CORE_TAG_WIDTH;
 
     localparam WORDS_PER_LINE   = LINE_SIZE / WORD_SIZE;
@@ -72,7 +73,7 @@ module VX_cache_bypass #(
     wire core_req_nc_valid;
     wire [NUM_REQS-1:0] core_req_nc_valids;
     wire [NUM_REQS-1:0] core_req_nc_idxs;
-    wire [`UP(REQ_SEL_BITS)-1:0] core_req_nc_idx;
+    wire [REQ_SEL_WIDTH-1:0] core_req_nc_idx;
     wire [NUM_REQS-1:0] core_req_nc_sel;
     wire core_req_nc_ready;
 
@@ -261,17 +262,15 @@ module VX_cache_bypass #(
         .data_out (mem_rsp_tag_id_nc)
     );
 
-    wire [`UP(REQ_SEL_BITS)-1:0] rsp_idx;
+    wire [REQ_SEL_WIDTH-1:0] rsp_idx;
     if (NUM_REQS > 1) begin
         assign rsp_idx = mem_rsp_tag_id_nc[(CORE_TAG_ID_BITS + WSEL_BITS) +: REQ_SEL_BITS];
     end else begin
         assign rsp_idx = 1'b0;
     end
 
-    wire [NUM_REQS-1:0] rsp_nc_valid = NUM_REQS'(is_mem_rsp_nc) << rsp_idx;
-
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign core_rsp_in_valid[i] = core_bus_out_if[i].rsp_valid || rsp_nc_valid[i];
+        assign core_rsp_in_valid[i] = core_bus_out_if[i].rsp_valid || (is_mem_rsp_nc && rsp_idx == REQ_SEL_WIDTH'(i));
         assign core_bus_out_if[i].rsp_ready = core_rsp_in_ready[i];
     end
 

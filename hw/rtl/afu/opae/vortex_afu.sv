@@ -963,7 +963,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     wire [COUT_TID_WIDTH-1:0] cout_tid;
 
-    VX_onehot_encoder #(
+    VX_encoder #(
         .N (`VX_MEM_BYTEEN_WIDTH)
     ) cout_tid_enc (
         .data_in  (vx_mem_req_byteen),

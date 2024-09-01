@@ -148,7 +148,7 @@ module VX_cache_mshr #(
         .valid_out (allocate_rdy_n)
     );
 
-    VX_onehot_encoder #(
+    VX_encoder #(
         .N (MSHR_SIZE)
     ) prev_sel (
         .data_in (addr_matches & ~next_table_x),
