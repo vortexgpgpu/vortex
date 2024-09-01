@@ -310,15 +310,15 @@ public:
     uint32_t num_banks = 1 << platform_.lg2_num_banks;
     uint64_t bank_size = 1ull << platform_.lg2_bank_size;
 
-    // adjust memory bank size to architecture limit
+    // adjust memory banks allocation to architecture limit
     int isa_arch = VX_ISA_ARCH(isa_caps_);
     if (isa_arch == 32) {
       uint64_t max_mem_size = 1ull << 32;
-      uint64_t need_bank_size = max_mem_size / num_banks;
-      if (bank_size > need_bank_size) {
-        printf("info: adjusted bank size from 0x%lx to 0x%lx bytes.\n", bank_size, need_bank_size);
-        bank_size = need_bank_size;
-        platform_.lg2_bank_size = log2ceil(bank_size);
+      uint32_t need_num_banks = max_mem_size / bank_size;
+      if (num_banks > need_num_banks) {
+        printf("info: adjusted number of banks from %d to %d.\n", num_banks, need_num_banks);
+        num_banks = need_num_banks;
+        platform_.lg2_num_banks = log2ceil(num_banks);
       }
     }
 
@@ -416,7 +416,7 @@ public:
       _value = global_mem_size_;
       break;
     case VX_CAPS_LOCAL_MEM_SIZE:
-      _value = 1ull << ((dev_caps_ >> 48) & 0xff);
+      _value = 1ull << ((dev_caps_ >> 40) & 0xff);
       break;
     case VX_CAPS_ISA_FLAGS:
       _value = isa_caps_;
