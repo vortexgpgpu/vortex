@@ -158,7 +158,7 @@
 `define MAX_FANOUT      8
 `define IF_DATA_SIZE(x) $bits(x.data)
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
-`define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
+`define NO_RW_RAM_CHECK (* ramstyle = "no_rw_check" *)
 `define DISABLE_BRAM    (* ramstyle = "logic" *)
 `define PRESERVE_NET    (* preserve *)
 `elsif VIVADO

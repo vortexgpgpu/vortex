@@ -120,7 +120,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .lmem_perf     (lmem_perf),
     `endif
-        .lsu_mem_in_if (lsu_mem_if),
+        .lsu_mem_if    (lsu_mem_if),
         .dcache_bus_if (mem_bus_if)
     );
 

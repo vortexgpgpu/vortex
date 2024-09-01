@@ -168,8 +168,8 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .DATAW (WORD_WIDTH),
             .SIZE  (WORDS_PER_BANK),
             .WRENW (WORD_SIZE),
-            .READ_ENABLE (1),
             .OUT_REG (1),
+            .READ_ENABLE (0),
             .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),
