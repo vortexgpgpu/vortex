@@ -74,7 +74,7 @@ module VX_matrix_arbiter #(
 
         assign grant_onehot = grant;
 
-        VX_onehot_encoder #(
+        VX_encoder #(
             .N (NUM_REQS)
         ) encoder (
             .data_in   (grant_onehot),

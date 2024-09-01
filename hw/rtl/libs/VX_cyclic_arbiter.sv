@@ -41,7 +41,7 @@ module VX_cyclic_arbiter #(
         localparam IS_POW2 = (1 << LOG_NUM_REQS) == NUM_REQS;
 
         wire [LOG_NUM_REQS-1:0] grant_index_um;
-        wire [NUM_REQS-1:0] grant_onehot_um;
+        wire [NUM_REQS-1:0] grant_onehot_w, grant_onehot_um;
         reg [LOG_NUM_REQS-1:0] grant_index_r;
 
         always @(posedge clk) begin
@@ -65,10 +65,18 @@ module VX_cyclic_arbiter #(
             .valid_out  (grant_valid)
         );
 
+        VX_decoder #(
+            .N (LOG_NUM_REQS)
+        ) grant_decoder (
+            .shift_in (grant_index),
+            .data_in  (1'b1),
+            .data_out (grant_onehot_w)
+        );
+
         wire is_hit = requests[grant_index_r];
 
         assign grant_index  = is_hit ? grant_index_r : grant_index_um;
-        assign grant_onehot = is_hit ? (NUM_REQS'(1) << grant_index) : grant_onehot_um;
+        assign grant_onehot = is_hit ? grant_onehot_w : grant_onehot_um;
 
     end
 

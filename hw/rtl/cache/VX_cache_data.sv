@@ -140,7 +140,7 @@ module VX_cache_data #(
         assign line_wren  = fill;
     end
 
-    VX_onehot_encoder #(
+    VX_encoder #(
         .N (NUM_WAYS)
     ) way_enc (
         .data_in  (way_sel),

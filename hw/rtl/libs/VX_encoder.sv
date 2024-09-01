@@ -17,7 +17,7 @@
 // Adapted from BaseJump STL: http://bjump.org/data_out.html
 
 `TRACING_OFF
-module VX_onehot_encoder #(
+module VX_encoder #(
     parameter N       = 1,
     parameter REVERSE = 0,
     parameter MODEL   = 1,
