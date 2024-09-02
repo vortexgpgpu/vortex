@@ -18,11 +18,12 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
     parameter NUM_LANES       = 0,
     parameter REQ_OUT_BUF     = 0,
     parameter RSP_OUT_BUF     = 0,
-    parameter `STRING ARBITER = "R"
+    parameter `STRING ARBITER = "R",
+    parameter PE_SEL_BITS = `CLOG2(PE_COUNT)
 ) (
     input wire          clk,
     input wire          reset,
-    input wire [PE_SEL_BITS-1:0] pe_sel,
+    input wire [`UP(PE_SEL_BITS)-1:0] pe_sel,
     VX_execute_if.slave execute_in_if,
     VX_commit_if.master commit_out_if,
     VX_execute_if.master execute_out_if[PE_COUNT],
@@ -32,7 +33,6 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
     localparam PID_WIDTH   = `UP(PID_BITS);
     localparam REQ_DATAW   = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `INST_ALU_BITS + $bits(op_args_t) + 1 + `NR_BITS + `NT_WIDTH + (3 * NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1;
     localparam RSP_DATAW   = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
-    localparam PE_SEL_BITS = `CLOG2(PE_COUNT);
 
     wire [PE_COUNT-1:0] pe_req_valid;
     wire [PE_COUNT-1:0][REQ_DATAW-1:0] pe_req_data;
