@@ -69,10 +69,9 @@ module VX_alu_unit #(
 
         reg [`UP(PE_SEL_BITS)-1:0] pe_select;
         always @(*) begin
+            pe_select = PE_IDX_INT;
             if (`EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == `ALU_TYPE_MULDIV))
                 pe_select = PE_IDX_MDV;
-            else
-                pe_select = PE_IDX_INT;
         end
 
         VX_pe_switch #(
