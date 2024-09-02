@@ -67,7 +67,7 @@ module VX_alu_unit #(
             .NUM_LANES (NUM_LANES)
         ) pe_commit_if[PE_COUNT]();
 
-        reg [PE_SEL_BITS-1:0] pe_select;
+        reg [`UP(PE_SEL_BITS)-1:0] pe_select;
         always @(*) begin
             if (`EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == `ALU_TYPE_MULDIV))
                 pe_select = PE_IDX_MDV;
