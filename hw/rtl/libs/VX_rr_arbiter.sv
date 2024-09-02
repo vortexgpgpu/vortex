@@ -483,8 +483,8 @@ module VX_rr_arbiter #(
         VX_decoder #(
             .N (LOG_NUM_REQS)
         ) grant_decoder (
-            .shift_in (grant_index),
-            .data_in  (grant_valid),
+            .data_in  (grant_index),
+            .valid_in (grant_valid),
             .data_out (grant_onehot)
         );
 
