@@ -168,22 +168,22 @@ public:
   {}
 
   void* operator new(size_t /*size*/) {
-    return allocator().allocate();
+    return allocator_.allocate();
   }
 
   void operator delete(void* ptr) {
-    allocator().deallocate(ptr);
+    allocator_.deallocate(ptr);
   }
 
 protected:
   Func func_;
   Pkt  pkt_;
 
-  static MemoryPool<SimCallEvent<Pkt>>& allocator() {
-    static MemoryPool<SimCallEvent<Pkt>> instance(64);
-    return instance;
-  }
+  static MemoryPool<SimCallEvent<Pkt>> allocator_;
 };
+
+template <typename Pkt>
+MemoryPool<SimCallEvent<Pkt>> SimCallEvent<Pkt>::allocator_(64);
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -201,22 +201,22 @@ public:
   {}
 
   void* operator new(size_t /*size*/) {
-    return allocator().allocate();
+    return allocator_.allocate();
   }
 
   void operator delete(void* ptr) {
-    allocator().deallocate(ptr);
+    allocator_.deallocate(ptr);
   }
 
 protected:
   const SimPort<Pkt>* port_; 
   Pkt pkt_;
 
-  static MemoryPool<SimPortEvent<Pkt>>& allocator() {
-    static MemoryPool<SimPortEvent<Pkt>> instance(64);
-    return instance;
-  }
+  static MemoryPool<SimPortEvent<Pkt>> allocator_;
 };
+
+template <typename Pkt>
+MemoryPool<SimPortEvent<Pkt>> SimPortEvent<Pkt>::allocator_(64);
 
 ///////////////////////////////////////////////////////////////////////////////
 

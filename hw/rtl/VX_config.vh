@@ -617,7 +617,7 @@
 
 // Number of Banks
 `ifndef L3_NUM_BANKS
-`define L3_NUM_BANKS `MIN(4, `NUM_CLUSTERS)
+`define L3_NUM_BANKS `MIN(8, `NUM_CLUSTERS)
 `endif
 
 // Core Response Queue Size
@@ -648,6 +648,15 @@
 // Enable Cache Writeback
 `ifndef L3_WRITEBACK
 `define L3_WRITEBACK 0
+`endif
+
+`ifndef MEMORY_BANKS
+`define MEMORY_BANKS 8
+`endif
+
+// Number of Memory Ports from LLC
+`ifndef NUM_MEM_PORTS
+`define NUM_MEM_PORTS `MIN(`MEMORY_BANKS, `L3_NUM_BANKS)
 `endif
 
 // ISA Extensions /////////////////////////////////////////////////////////////
