@@ -77,10 +77,9 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 
     reg [PE_SEL_BITS-1:0] pe_select;
     always @(*) begin
+        pe_select = PE_IDX_WCTL;
         if (`INST_SFU_IS_CSR(per_block_execute_if[0].data.op_type))
             pe_select = PE_IDX_CSRS;
-        else
-            pe_select = PE_IDX_WCTL;
     end
 
     VX_pe_switch #(
