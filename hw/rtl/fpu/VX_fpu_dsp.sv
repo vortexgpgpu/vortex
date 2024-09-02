@@ -111,9 +111,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
 
     VX_stream_switch #(
         .DATAW       (REQ_DATAW),
-        .NUM_INPUTS  (1),
-        .NUM_OUTPUTS (NUM_FPCORES),
-        .OUT_BUF     (0)
+        .NUM_OUTPUTS (NUM_FPCORES)
     ) req_switch (
         .clk       (clk),
         .reset     (reset),

@@ -64,7 +64,7 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
         .DATA_OUT_WIDTH(`FP_FLAGS_BITS + 32),
         .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
         .PE_REG     (0),
-        .OUT_BUF    ((NUM_LANES != NUM_PES) ? 2 : 0)
+        .OUT_BUF    (2)
     ) pe_serializer (
         .clk        (clk),
         .reset      (reset),
