@@ -20,26 +20,22 @@
 module VX_decoder #(
     parameter N = 1,
     parameter M = 1,
-`ifdef VIVADO
-    parameter MODEL = 1,
-`else
     parameter MODEL = 0,
-`endif
     parameter D = 1 << N
 ) (
-    input wire [N-1:0] shift_in,
-    input wire [M-1:0] data_in,
+    input wire [N-1:0] data_in,
+    input wire [M-1:0] valid_in,
     output wire [D-1:0][M-1:0] data_out
 );
     if (MODEL == 1) begin
         reg [D-1:0][M-1:0] data_out_w;
         always @(*) begin
             data_out_w = '0;
-            data_out_w[shift_in] = data_in;
+            data_out_w[data_in] = valid_in;
         end
         assign data_out = data_out_w;
     end else begin
-        assign data_out = (D*M)'(data_in) << (shift_in * M);
+        assign data_out = (D*M)'(valid_in) << (data_in * M);
     end
 
 endmodule

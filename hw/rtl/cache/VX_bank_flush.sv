@@ -117,8 +117,8 @@ module VX_bank_flush #(
         VX_decoder #(
             .N (`CS_WAY_SEL_BITS)
         ) ctr_decoder (
-            .shift_in (counter_r[`CS_LINE_SEL_BITS +: `CS_WAY_SEL_BITS]),
-            .data_in  (1'b1),
+            .data_in  (counter_r[`CS_LINE_SEL_BITS +: `CS_WAY_SEL_BITS]),
+            .valid_in (1'b1),
             .data_out (flush_way)
         );
     end else begin

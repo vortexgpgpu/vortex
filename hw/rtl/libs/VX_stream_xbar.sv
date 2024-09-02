@@ -75,8 +75,8 @@ module VX_stream_xbar #(
                 VX_decoder #(
                     .N (OUT_WIDTH)
                 ) sel_in_decoder (
-                    .shift_in (sel_in[i]),
-                    .data_in  (valid_in[i]),
+                    .data_in  (sel_in[i]),
+                    .valid_in (valid_in[i]),
                     .data_out (per_output_valid_in[i])
                 );
                 assign ready_in[i] = | per_output_ready_in_w[i];
@@ -139,8 +139,8 @@ module VX_stream_xbar #(
         VX_decoder #(
             .N (OUT_WIDTH)
         ) sel_in_decoder (
-            .shift_in (sel_in[0]),
-            .data_in  (valid_in[0]),
+            .data_in  (sel_in[0]),
+            .valid_in (valid_in[0]),
             .data_out (valid_out_w)
         );
 
