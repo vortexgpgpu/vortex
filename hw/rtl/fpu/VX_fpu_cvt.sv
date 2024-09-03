@@ -49,6 +49,7 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
     localparam DATAW = 32 + `INST_FRM_BITS + 1 + 1;
 
     wire [NUM_LANES-1:0][DATAW-1:0] data_in;
+
     wire [NUM_LANES-1:0] mask_out;
     wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+32)-1:0] data_out;
     fflags_t [NUM_LANES-1:0] fflags_out;
@@ -68,8 +69,8 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
         .NUM_LANES  (NUM_LANES),
         .NUM_PES    (NUM_PES),
         .LATENCY    (`LATENCY_FCVT),
-        .DATA_IN_WIDTH(DATAW),
-        .DATA_OUT_WIDTH(`FP_FLAGS_BITS + 32),
+        .DATA_IN_WIDTH (DATAW),
+        .DATA_OUT_WIDTH (`FP_FLAGS_BITS + 32),
         .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
         .PE_REG     (0),
         .OUT_BUF    (2)
