@@ -77,17 +77,7 @@ module VX_pe_serializer #(
         .data_out (pe_data_out)
     );
 
-    VX_pipe_register #(
-        .DATAW  (1),
-        .RESETW (1),
-        .DEPTH  (PE_REG)
-    ) pe_en_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (1'b1),
-        .data_in  (enable),
-        .data_out (pe_enable)
-    );
+    assign pe_enable = enable;
 
     if (NUM_LANES != NUM_PES) begin
 

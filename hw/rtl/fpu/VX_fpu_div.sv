@@ -46,13 +46,15 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
 );
     `UNUSED_VAR (frm)
 
-    wire [NUM_LANES-1:0][2*32-1:0] data_in;
+    localparam DATAW = 2 * 32;
+
+    wire [NUM_LANES-1:0][DATAW-1:0] data_in;
     wire [NUM_LANES-1:0] mask_out;
     wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+32)-1:0] data_out;
     wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags_out;
 
     wire pe_enable;
-    wire [NUM_PES-1:0][2*32-1:0] pe_data_in;
+    wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
     wire [NUM_PES-1:0][(`FP_FLAGS_BITS+32)-1:0] pe_data_out;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
@@ -64,7 +66,7 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
         .NUM_LANES  (NUM_LANES),
         .NUM_PES    (NUM_PES),
         .LATENCY    (`LATENCY_FDIV),
-        .DATA_IN_WIDTH(2*32),
+        .DATA_IN_WIDTH(DATAW),
         .DATA_OUT_WIDTH(`FP_FLAGS_BITS + 32),
         .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
         .PE_REG     (0),
