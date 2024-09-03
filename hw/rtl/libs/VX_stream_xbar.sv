@@ -63,14 +63,6 @@ module VX_stream_xbar #(
                 .data_out (per_output_ready_in_w)
             );
 
-            VX_transpose #(
-                .N (NUM_INPUTS),
-                .M (NUM_OUTPUTS)
-            ) val_in_transpose (
-                .data_in (per_output_valid_in),
-                .data_out (per_output_valid_in_w)
-            );
-
             for (genvar i = 0; i < NUM_INPUTS; ++i) begin
                 VX_decoder #(
                     .N (OUT_WIDTH)
@@ -81,6 +73,14 @@ module VX_stream_xbar #(
                 );
                 assign ready_in[i] = | per_output_ready_in_w[i];
             end
+
+            VX_transpose #(
+                .N (NUM_INPUTS),
+                .M (NUM_OUTPUTS)
+            ) val_in_transpose (
+                .data_in (per_output_valid_in),
+                .data_out (per_output_valid_in_w)
+            );
 
             for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
                 VX_stream_arb #(
