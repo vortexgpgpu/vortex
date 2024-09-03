@@ -52,6 +52,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
     localparam DATAW = 3 * 32 + `INST_FRM_BITS;
 
     wire [NUM_LANES-1:0][DATAW-1:0] data_in;
+
     wire [NUM_LANES-1:0] mask_out;
     wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+32)-1:0] data_out;
     wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags_out;
@@ -96,8 +97,8 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
         .NUM_LANES  (NUM_LANES),
         .NUM_PES    (NUM_PES),
         .LATENCY    (`LATENCY_FMA),
-        .DATA_IN_WIDTH(DATAW),
-        .DATA_OUT_WIDTH(`FP_FLAGS_BITS + 32),
+        .DATA_IN_WIDTH (DATAW),
+        .DATA_OUT_WIDTH (`FP_FLAGS_BITS + 32),
         .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
         .PE_REG     (1), // must be registered for DSPs
         .OUT_BUF    (2)

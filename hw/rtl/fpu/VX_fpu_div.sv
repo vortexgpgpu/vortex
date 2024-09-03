@@ -44,11 +44,10 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
     output wire valid_out,
     input wire  ready_out
 );
-    `UNUSED_VAR (frm)
-
-    localparam DATAW = 2 * 32;
+    localparam DATAW = 2 * 32 + `INST_FRM_BITS;
 
     wire [NUM_LANES-1:0][DATAW-1:0] data_in;
+
     wire [NUM_LANES-1:0] mask_out;
     wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+32)-1:0] data_out;
     wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags_out;
@@ -60,14 +59,15 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign data_in[i][0  +: 32] = dataa[i];
         assign data_in[i][32 +: 32] = datab[i];
+        assign data_in[i][64 +: `INST_FRM_BITS] = frm;
     end
 
     VX_pe_serializer #(
         .NUM_LANES  (NUM_LANES),
         .NUM_PES    (NUM_PES),
         .LATENCY    (`LATENCY_FDIV),
-        .DATA_IN_WIDTH(DATAW),
-        .DATA_OUT_WIDTH(`FP_FLAGS_BITS + 32),
+        .DATA_IN_WIDTH (DATAW),
+        .DATA_OUT_WIDTH (`FP_FLAGS_BITS + 32),
         .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
         .PE_REG     (0),
         .OUT_BUF    (2)
@@ -86,6 +86,8 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
         .tag_out    ({mask_out, tag_out}),
         .ready_out  (ready_out)
     );
+
+    `UNUSED_VAR (pe_data_in)
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign result[i] = data_out[i][0 +: 32];
@@ -145,9 +147,9 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
             dpi_fdiv (
                 pe_enable,
                 int'(0),
-                {32'hffffffff, pe_data_in[i][0 +: 32]},
-                {32'hffffffff, pe_data_in[i][32 +: 32]},
-                frm,
+                {32'hffffffff, pe_data_in[i][0 +: 32]},  // a
+                {32'hffffffff, pe_data_in[i][32 +: 32]}, // b
+                pe_data_in[0][64 +: `INST_FRM_BITS],     // frm
                 r,
                 f
             );
