@@ -39,7 +39,7 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 - [LLVM](https://llvm.org/)
 - [RISCV-GNU-TOOLCHAIN](https://github.com/riscv-collab/riscv-gnu-toolchain)
 - [Verilator](https://www.veripool.org/verilator)
-- [FpNew](https://github.com/pulp-platform/fpnew.git)
+- [cvfpu](https://github.com/openhwgroup/cvfpu.git)
 - [SoftFloat](https://github.com/ucb-bar/berkeley-softfloat-3.git)
 - [Ramulator](https://github.com/CMU-SAFARI/ramulator.git)
 - [Yosys](https://github.com/YosysHQ/yosys)
