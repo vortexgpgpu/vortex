@@ -45,27 +45,29 @@ module VX_fpu_ncp import VX_fpu_pkg::*; #(
     input wire  ready_out,
     output wire valid_out
 );
-    `UNUSED_VAR (frm)
+    localparam DATAW = 2 * 32 + `INST_FRM_BITS + `INST_FPU_BITS;
 
-    wire [NUM_LANES-1:0][2*32-1:0] data_in;
+    wire [NUM_LANES-1:0][DATAW-1:0] data_in;
     wire [NUM_LANES-1:0] mask_out;
     wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+32)-1:0] data_out;
     fflags_t [NUM_LANES-1:0] fflags_out;
 
     wire pe_enable;
-    wire [NUM_PES-1:0][2*32-1:0] pe_data_in;
+    wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
     wire [NUM_PES-1:0][(`FP_FLAGS_BITS+32)-1:0] pe_data_out;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign data_in[i][0  +: 32] = dataa[i];
         assign data_in[i][32 +: 32] = datab[i];
+        assign data_in[i][64 +: `INST_FRM_BITS] = frm;
+        assign data_in[i][64 + `INST_FRM_BITS +: `INST_FPU_BITS] = op_type;
     end
 
     VX_pe_serializer #(
         .NUM_LANES  (NUM_LANES),
         .NUM_PES    (NUM_PES),
         .LATENCY    (`LATENCY_FNCP),
-        .DATA_IN_WIDTH(2*32),
+        .DATA_IN_WIDTH(DATAW),
         .DATA_OUT_WIDTH(`FP_FLAGS_BITS + 32),
         .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
         .PE_REG     (0),
@@ -86,6 +88,8 @@ module VX_fpu_ncp import VX_fpu_pkg::*; #(
         .ready_out  (ready_out)
     );
 
+    `UNUSED_VAR (pe_data_in)
+
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign result[i] = data_out[i][0 +: 32];
         assign fflags_out[i] = data_out[i][32 +: `FP_FLAGS_BITS];
@@ -99,8 +103,8 @@ module VX_fpu_ncp import VX_fpu_pkg::*; #(
             .clk        (clk),
             .reset      (reset),
             .enable     (pe_enable),
-            .frm        (frm),
-            .op_type    (op_type),
+            .frm        (pe_data_in[0][64 +: `INST_FRM_BITS]),
+            .op_type    (pe_data_in[0][64 + `INST_FRM_BITS +: `INST_FPU_BITS]),
             .dataa      (pe_data_in[i][0 +: 32]),
             .datab      (pe_data_in[i][32 +: 32]),
             .result     (pe_data_out[i][0 +: 32]),

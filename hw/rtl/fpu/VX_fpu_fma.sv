@@ -49,15 +49,15 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
     input wire  ready_out,
     output wire valid_out
 );
-    `UNUSED_VAR (frm)
+    localparam DATAW = 3 * 32 + `INST_FRM_BITS;
 
-    wire [NUM_LANES-1:0][3*32-1:0] data_in;
+    wire [NUM_LANES-1:0][DATAW-1:0] data_in;
     wire [NUM_LANES-1:0] mask_out;
     wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+32)-1:0] data_out;
     wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags_out;
 
     wire pe_enable;
-    wire [NUM_PES-1:0][3*32-1:0] pe_data_in;
+    wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
     wire [NUM_PES-1:0][(`FP_FLAGS_BITS+32)-1:0] pe_data_out;
 
     reg [NUM_LANES-1:0][31:0] a, b, c;
@@ -66,9 +66,9 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
         always @(*) begin
             if (is_madd) begin
                 // MADD / MSUB / NMADD / NMSUB
-                a[i] = is_neg ? {~dataa[i][31], dataa[i][30:0]} : dataa[i];
+                a[i] = {is_neg ^ dataa[i][31], dataa[i][30:0]};
                 b[i] = datab[i];
-                c[i] = (is_neg ^ is_sub) ? {~datac[i][31], datac[i][30:0]} : datac[i];
+                c[i] = {is_neg ^ is_sub ^ datac[i][31], datac[i][30:0]};
             end else begin
                 if (is_neg) begin
                     // MUL
@@ -77,9 +77,9 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
                     c[i] = '0;
                 end else begin
                     // ADD / SUB
-                    a[i] = 32'h3f800000; // 1.0f
-                    b[i] = dataa[i];
-                    c[i] = is_sub ? {~datab[i][31], datab[i][30:0]} : datab[i];
+                    a[i] = dataa[i];
+                    b[i] = 32'h3f800000; // 1.0f
+                    c[i] = {is_sub ^ datab[i][31], datab[i][30:0]};
                 end
             end
         end
@@ -89,13 +89,14 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
         assign data_in[i][0  +: 32] = a[i];
         assign data_in[i][32 +: 32] = b[i];
         assign data_in[i][64 +: 32] = c[i];
+        assign data_in[i][96 +: `INST_FRM_BITS] = frm;
     end
 
     VX_pe_serializer #(
         .NUM_LANES  (NUM_LANES),
         .NUM_PES    (NUM_PES),
         .LATENCY    (`LATENCY_FMA),
-        .DATA_IN_WIDTH(3*32),
+        .DATA_IN_WIDTH(DATAW),
         .DATA_OUT_WIDTH(`FP_FLAGS_BITS + 32),
         .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
         .PE_REG     (1), // must be registered for DSPs
@@ -115,6 +116,8 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
         .tag_out    ({mask_out, tag_out}),
         .ready_out  (ready_out)
     );
+
+    `UNUSED_VAR (pe_data_in)
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign result[i] = data_out[i][0 +: 32];
@@ -177,10 +180,10 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
             dpi_fmadd (
                 pe_enable,
                 int'(0),
-                {32'hffffffff, pe_data_in[i][0 +: 32]},
-                {32'hffffffff, pe_data_in[i][32 +: 32]},
-                {32'hffffffff, pe_data_in[i][64 +: 32]},
-                frm,
+                {32'hffffffff, pe_data_in[i][0 +: 32]},  // a
+                {32'hffffffff, pe_data_in[i][32 +: 32]}, // b
+                {32'hffffffff, pe_data_in[i][64 +: 32]}, // c
+                pe_data_in[0][96 +: `INST_FRM_BITS],     // frm
                 r,
                 f
             );
