@@ -49,14 +49,12 @@ module VX_socket import VX_gpu_pkg::*; #(
 `ifdef GBAR_ENABLE
     VX_gbar_bus_if per_core_gbar_bus_if[`SOCKET_SIZE]();
 
-    `RESET_RELAY (gbar_arb_reset, reset);
-
     VX_gbar_arb #(
         .NUM_REQS (`SOCKET_SIZE),
         .OUT_BUF  ((`SOCKET_SIZE > 1) ? 2 : 0)
     ) gbar_arb (
         .clk        (clk),
-        .reset      (gbar_arb_reset),
+        .reset      (reset),
         .bus_in_if  (per_core_gbar_bus_if),
         .bus_out_if (gbar_bus_if)
     );
