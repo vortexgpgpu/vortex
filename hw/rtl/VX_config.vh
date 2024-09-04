@@ -651,7 +651,7 @@
 `endif
 
 `ifndef MEMORY_BANKS
-`define MEMORY_BANKS 8
+`define MEMORY_BANKS 2
 `endif
 
 // Number of Memory Ports from LLC
