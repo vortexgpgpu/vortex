@@ -25,9 +25,10 @@ SRCS = $(SRC_DIR)/vortex.cpp $(SRC_DIR)/driver.cpp
 
 # set up target types
 ifeq ($(TARGET), opaesim)
-	OPAESIM = $(DESTDIR)/libopae-c-sim.so
+	BUILD_DEPS = $(DESTDIR)/libopae-c-sim.so
 	CXXFLAGS += -DOPAESIM -I$(SIM_DIR)/opaesim
 else
+	BUILD_DEPS = $(ROOT_DIR)/hw/syn/altera/opae/vortex_afu.h
 	CXXFLAGS += -I$(SYN_DIR) -I$(ROOT_DIR)/hw/syn/altera/opae
 endif
 
@@ -48,12 +49,15 @@ PROJECT := libvortex-opae.so
 
 all: $(DESTDIR)/$(PROJECT)
 
+$(ROOT_DIR)/hw/syn/altera/opae/vortex_afu.h:
+	$(MAKE) -C $(ROOT_DIR)/hw/syn/altera/opae swconfig
+
 driver: $(DESTDIR)/libopae-c-sim.so
 
 $(DESTDIR)/libopae-c-sim.so:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/opaesim $(DESTDIR)/libopae-c-sim.so
 
-$(DESTDIR)/$(PROJECT): $(SRCS) $(OPAESIM)
+$(DESTDIR)/$(PROJECT): $(SRCS) $(BUILD_DEPS)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
 clean-driver:
