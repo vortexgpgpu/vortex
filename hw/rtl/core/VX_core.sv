@@ -75,7 +75,6 @@ module VX_core import VX_gpu_pkg::*; #(
     assign mem_perf_tmp_if.mem     = mem_perf_if.mem;
 `endif
 
-    `RESET_RELAY (dcr_data_reset, reset);
     `RESET_RELAY (schedule_reset, reset);
     `RESET_RELAY (fetch_reset, reset);
     `RESET_RELAY (decode_reset, reset);
@@ -87,7 +86,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
     VX_dcr_data dcr_data (
         .clk        (clk),
-        .reset      (dcr_data_reset),
+        .reset      (reset),
         .dcr_bus_if (dcr_bus_if),
         .base_dcrs  (base_dcrs)
     );
