@@ -14,6 +14,24 @@
 `ifndef VX_DEFINE_VH
 `define VX_DEFINE_VH
 
+`ifndef MEM_BLOCK_SIZE
+`ifdef PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH
+`define MEM_BLOCK_SIZE (`PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH/8)
+`endif
+`endif
+
+`ifndef MEM_ADDR_WIDTH
+`ifdef PLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH
+`define MEM_ADDR_WIDTH `PLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH
+`endif
+`endif
+
+`ifndef MEMORY_BANKS
+`ifdef PLATFORM_PARAM_LOCAL_MEMORY_BANKS
+`define MEMORY_BANKS `PLATFORM_PARAM_LOCAL_MEMORY_BANKS
+`endif
+`endif
+
 `include "VX_platform.vh"
 `include "VX_config.vh"
 `include "VX_types.vh"
