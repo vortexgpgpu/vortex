@@ -289,13 +289,11 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     // split/join handling
 
-    `RESET_RELAY (split_join_reset, reset);
-
     VX_split_join #(
         .INSTANCE_ID ($sformatf("%s-splitjoin", INSTANCE_ID))
     ) split_join (
         .clk        (clk),
-        .reset      (split_join_reset),
+        .reset      (reset),
         .valid      (warp_ctl_if.valid),
         .wid        (warp_ctl_if.wid),
         .split      (warp_ctl_if.split),
@@ -377,15 +375,13 @@ module VX_schedule import VX_gpu_pkg::*; #(
     wire [`NUM_WARPS-1:0] pending_warp_empty;
     wire [`NUM_WARPS-1:0] pending_warp_alm_empty;
 
-    `RESET_RELAY (pending_instr_reset, reset);
-
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin : pending_sizes
         VX_pending_size #(
             .SIZE      (4096),
             .ALM_EMPTY (1)
         ) counter (
             .clk       (clk),
-            .reset     (pending_instr_reset),
+            .reset     (reset),
             .incr      (schedule_if_fire && (schedule_if.data.wid == `NW_WIDTH'(i))),
             .decr      (commit_sched_if.committed_warps[i]),
             .empty     (pending_warp_empty[i]),

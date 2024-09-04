@@ -42,14 +42,14 @@ module VX_stream_unpack #(
         wire [NUM_REQS-1:0] ready_out_w;
 
         wire [NUM_REQS-1:0] rem_mask_n = rem_mask_r & ~ready_out_w;
-        wire sent_all = (mask_in & rem_mask_n) == '0;
+        wire sent_all = ~(| (mask_in & rem_mask_n));
 
         always @(posedge clk) begin
             if (reset) begin
-                rem_mask_r <= {NUM_REQS{1'b1}};
+                rem_mask_r <= '1;
             end else begin
                 if (valid_in) begin
-                    rem_mask_r <= {NUM_REQS{sent_all}} | rem_mask_n;
+                    rem_mask_r <= sent_all ? '1 : rem_mask_n;
                 end
             end
         end

@@ -77,15 +77,13 @@ module VX_issue import VX_gpu_pkg::*; #(
         assign decode_if.ibuf_pop[issue_id * PER_ISSUE_WARPS +: PER_ISSUE_WARPS] = per_issue_decode_if.ibuf_pop;
     `endif
 
-        `RESET_RELAY_EN (slice_reset, reset, (`ISSUE_WIDTH > 1));
-
         VX_issue_slice #(
             .INSTANCE_ID ($sformatf("%s%0d", INSTANCE_ID, issue_id)),
             .ISSUE_ID (issue_id)
         ) issue_slice (
             `SCOPE_IO_BIND(issue_id)
             .clk          (clk),
-            .reset        (slice_reset),
+            .reset        (reset),
         `ifdef PERF_ENABLE
             .issue_perf   (per_issue_perf[issue_id]),
         `endif

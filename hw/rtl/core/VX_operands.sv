@@ -99,8 +99,6 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     assign req_in_valid = {NUM_SRC_OPDS{scoreboard_if.valid}} & src_valid;
 
-    `RESET_RELAY (req_xbar_reset, reset);
-
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_SRC_OPDS),
         .NUM_OUTPUTS (NUM_BANKS),
@@ -110,7 +108,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         .OUT_BUF     (0) // no output buffering
     ) req_xbar (
         .clk       (clk),
-        .reset     (req_xbar_reset),
+        .reset     (reset),
         `UNUSED_PIN(collisions),
         .valid_in  (req_in_valid),
         .data_in   (req_in_data),
@@ -179,14 +177,12 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     wire pipe_valid2_st1 = pipe_valid_st1 && ~has_collision_st1;
 
-    `RESET_RELAY (pipe2_reset, reset); // needed for pipe_reg2's wide RESETW
-
     VX_pipe_buffer #(
         .DATAW  (NUM_SRC_OPDS * REGS_DATAW + NUM_BANKS + META_DATAW + NUM_BANKS * REQ_SEL_WIDTH),
         .RESETW (NUM_SRC_OPDS * REGS_DATAW)
     ) pipe_reg2 (
         .clk      (clk),
-        .reset    (pipe2_reset),
+        .reset    (reset),
         .valid_in (pipe_valid2_st1),
         .ready_in (pipe_ready_st1),
         .data_in  ({src_data_st1, gpr_rd_valid_st1, pipe_data_st1, gpr_rd_req_idx_st1}),

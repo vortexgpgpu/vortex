@@ -319,8 +319,6 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [`PERF_CTR_BITS-1:0] perf_collisions;
 `endif
 
-    `RESET_RELAY (req_xbar_reset, reset);
-
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_REQS),
         .NUM_OUTPUTS (NUM_BANKS),
@@ -330,7 +328,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .OUT_BUF     (REQ_XBAR_BUF)
     ) req_xbar (
         .clk       (clk),
-        .reset     (req_xbar_reset),
+        .reset     (reset),
     `ifdef PERF_ENABLE
         .collisions(perf_collisions),
     `else
@@ -369,8 +367,6 @@ module VX_cache import VX_gpu_pkg::*; #(
             assign curr_bank_mem_rsp_valid = mem_rsp_valid_s && (`CS_MEM_TAG_TO_BANK_ID(mem_rsp_tag_s) == bank_id);
         end
 
-        `RESET_RELAY (bank_reset, reset);
-
         VX_cache_bank #(
             .BANK_ID      (bank_id),
             .INSTANCE_ID  ($sformatf("%s-bank%0d", INSTANCE_ID, bank_id)),
@@ -392,7 +388,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .MEM_OUT_REG  (MEM_REQ_REG_DISABLE ? 0 : `TO_OUT_BUF_REG(MEM_OUT_BUF))
         ) bank (
             .clk                (clk),
-            .reset              (bank_reset),
+            .reset              (reset),
 
         `ifdef PERF_ENABLE
             .perf_read_misses   (perf_read_miss_per_bank[bank_id]),
@@ -455,8 +451,6 @@ module VX_cache import VX_gpu_pkg::*; #(
         assign core_rsp_data_in[i] = {per_bank_core_rsp_data[i], per_bank_core_rsp_tag[i]};
     end
 
-    `RESET_RELAY (rsp_xbar_reset, reset);
-
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_BANKS),
         .NUM_OUTPUTS (NUM_REQS),
@@ -464,7 +458,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .ARBITER     ("R")
     ) rsp_xbar (
         .clk       (clk),
-        .reset     (rsp_xbar_reset),
+        .reset     (reset),
         `UNUSED_PIN (collisions),
         .valid_in  (per_bank_core_rsp_valid),
         .data_in   (core_rsp_data_in),

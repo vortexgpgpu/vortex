@@ -36,16 +36,11 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     VX_scoreboard_if scoreboard_if();
     VX_operands_if operands_if();
 
-    `RESET_RELAY (ibuf_reset, reset);
-    `RESET_RELAY (scoreboard_reset, reset);
-    `RESET_RELAY (operands_reset, reset);
-    `RESET_RELAY (dispatch_reset, reset);
-
     VX_ibuffer #(
         .INSTANCE_ID ($sformatf("%s-ibuffer", INSTANCE_ID))
     ) ibuffer (
         .clk            (clk),
-        .reset          (ibuf_reset),
+        .reset          (reset),
      `ifdef PERF_ENABLE
         .perf_stalls    (issue_perf.ibf_stalls),
      `endif
@@ -57,7 +52,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .INSTANCE_ID ($sformatf("%s-scoreboard", INSTANCE_ID))
     ) scoreboard (
         .clk            (clk),
-        .reset          (scoreboard_reset),
+        .reset          (reset),
     `ifdef PERF_ENABLE
         .perf_stalls    (issue_perf.scb_stalls),
         .perf_units_uses(issue_perf.units_uses),
@@ -72,7 +67,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .INSTANCE_ID ($sformatf("%s-operands", INSTANCE_ID))
     ) operands (
         .clk            (clk),
-        .reset          (operands_reset),
+        .reset          (reset),
      `ifdef PERF_ENABLE
         .perf_stalls    (issue_perf.opd_stalls),
      `endif
@@ -85,7 +80,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .INSTANCE_ID ($sformatf("%s-dispatch", INSTANCE_ID))
     ) dispatch (
         .clk            (clk),
-        .reset          (dispatch_reset),
+        .reset          (reset),
     `ifdef PERF_ENABLE
         `UNUSED_PIN     (perf_stalls),
     `endif
@@ -105,7 +100,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
             `UUID_WIDTH + `NUM_THREADS + `NR_BITS + (`NUM_THREADS*`XLEN) + 1)
     ) scope_tap (
         .clk (clk),
-        .reset (scope_reset),
+        .reset (reset),
         .start (1'b0),
         .stop (1'b0),
         .triggers ({

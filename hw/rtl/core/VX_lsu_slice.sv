@@ -311,8 +311,6 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire [LSU_TAG_WIDTH-1:0]                lsu_mem_rsp_tag;
     wire                                    lsu_mem_rsp_ready;
 
-    `RESET_RELAY (mem_scheduler_reset, reset);
-
     VX_mem_scheduler #(
         .INSTANCE_ID ($sformatf("%s-scheduler", INSTANCE_ID)),
         .CORE_REQS   (NUM_LANES),
@@ -330,7 +328,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .CORE_OUT_BUF(0)
     ) mem_scheduler (
         .clk            (clk),
-        .reset          (mem_scheduler_reset),
+        .reset          (reset),
 
         // Input request
         .core_req_valid (mem_req_valid),

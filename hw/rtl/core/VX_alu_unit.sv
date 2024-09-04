@@ -57,8 +57,6 @@ module VX_alu_unit #(
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : alus
 
-        `RESET_RELAY_EN (block_reset, reset, (BLOCK_SIZE > 1));
-
         VX_execute_if #(
             .NUM_LANES (NUM_LANES)
         ) pe_execute_if[PE_COUNT]();
@@ -82,7 +80,7 @@ module VX_alu_unit #(
             .RSP_OUT_BUF (PARTIAL_BW ? 1 : 3)
         ) pe_switch (
             .clk            (clk),
-            .reset          (block_reset),
+            .reset          (reset),
             .pe_sel         (pe_select),
             .execute_in_if  (per_block_execute_if[block_idx]),
             .commit_out_if  (per_block_commit_if[block_idx]),
@@ -96,7 +94,7 @@ module VX_alu_unit #(
             .NUM_LANES (NUM_LANES)
         ) alu_int (
             .clk        (clk),
-            .reset      (block_reset),
+            .reset      (reset),
             .execute_if (pe_execute_if[PE_IDX_INT]),
             .branch_ctl_if (branch_ctl_if[block_idx]),
             .commit_if  (pe_commit_if[PE_IDX_INT])
@@ -108,7 +106,7 @@ module VX_alu_unit #(
             .NUM_LANES (NUM_LANES)
         ) muldiv_unit (
             .clk        (clk),
-            .reset      (block_reset),
+            .reset      (reset),
             .execute_if (pe_execute_if[PE_IDX_MDV]),
             .commit_if  (pe_commit_if[PE_IDX_MDV])
         );
