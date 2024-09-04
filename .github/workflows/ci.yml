@@ -106,7 +106,7 @@ jobs:
           make tests -s > /dev/null
 
       - name: Upload Build Artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: build-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
@@ -147,7 +147,7 @@ jobs:
             ${{ runner.os }}-thirdparty-
 
       - name: Download Build Artifact
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: build-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
