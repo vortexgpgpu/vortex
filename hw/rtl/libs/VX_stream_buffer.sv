@@ -52,16 +52,16 @@ module VX_stream_buffer #(
 			reg             no_buffer;
 
 			wire fire_in = valid_in && ready_in;
-			wire flow_out = ready_out || ~valid_out_r;
+			wire flow_out = ready_out || ~valid_out;
 
 			always @(posedge clk) begin
 				if (reset) begin
 					valid_out_r <= 0;
 					no_buffer  <= 1;
 				end else begin
-					if (ready_out) begin
+					if (flow_out) begin
 						no_buffer <= 1;
-					end else if (valid_in && valid_out) begin
+					end else if (valid_in) begin
 						no_buffer <= 0;
 					end
 					if (flow_out) begin

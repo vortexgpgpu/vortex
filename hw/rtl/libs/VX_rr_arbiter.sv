@@ -434,7 +434,7 @@ module VX_rr_arbiter #(
         wire has_masked_reqs = (| masked_reqs);
         wire has_unmasked_reqs = (| requests);
 
-        assign grant_onehot = ({NUM_REQS{~has_masked_reqs}} & grant_unmasked) | grant_masked;
+        assign grant_onehot = has_masked_reqs ? grant_masked : grant_unmasked;
 
         always @(posedge clk) begin
 		    if (reset) begin
