@@ -100,7 +100,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
         .DATA_IN_WIDTH (DATAW),
         .DATA_OUT_WIDTH (`FP_FLAGS_BITS + 32),
         .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
-        .PE_REG     (1), // must be registered for DSPs
+        .PE_REG     (0),
         .OUT_BUF    (2)
     ) pe_serializer (
         .clk        (clk),
