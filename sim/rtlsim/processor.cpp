@@ -41,14 +41,6 @@ typedef VVortex Device;
 #include <dram_sim.h>
 #include <util.h>
 
-#ifndef MEMORY_BANKS
-  #ifdef PLATFORM_PARAM_LOCAL_MEMORY_BANKS
-    #define MEMORY_BANKS PLATFORM_PARAM_LOCAL_MEMORY_BANKS
-  #else
-    #define MEMORY_BANKS 2
-  #endif
-#endif
-
 #ifndef MEM_CLOCK_RATIO
 #define MEM_CLOCK_RATIO 1
 #endif

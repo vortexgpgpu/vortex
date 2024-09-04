@@ -1011,7 +1011,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire mem_rsp_fire = mem_bus_if[0].rsp_valid && mem_bus_if[0].rsp_ready;
     wire avs_write_fire = avs_write[0] && ~avs_waitrequest[0];
     wire avs_read_fire = avs_read[0] && ~avs_waitrequest[0];
-    wire [$bits(t_local_mem_addr)-1:0] mem_bus_if_addr = mem_bus_if[0].req_data.addr;
+    wire [LMEM_ADDR_WIDTH-1:0] mem_bus_if_addr = mem_bus_if[0].req_data.addr;
 
     reg [STATE_WIDTH-1:0] state_prev;
     always @(posedge clk) begin

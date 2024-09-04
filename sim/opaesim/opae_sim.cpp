@@ -35,20 +35,9 @@
 #include <unordered_map>
 #include <util.h>
 
-//#ifndef MEMORY_BANKS
-  #ifdef PLATFORM_PARAM_LOCAL_MEMORY_BANKS
-    #define MEMORY_BANKS PLATFORM_PARAM_LOCAL_MEMORY_BANKS
-  #else
-    #define MEMORY_BANKS 2
-  #endif
-//#endif
-
 #ifndef MEM_CLOCK_RATIO
 #define MEM_CLOCK_RATIO 1
 #endif
-
-#undef MEM_BLOCK_SIZE
-#define MEM_BLOCK_SIZE (PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH / 8)
 
 #define CACHE_BLOCK_SIZE  64
 
@@ -419,7 +408,7 @@ private:
   }
 
   void avs_bus_reset() {
-    for (int b = 0; b < MEMORY_BANKS; ++b) {
+    for (int b = 0; b < PLATFORM_PARAM_LOCAL_MEMORY_BANKS; ++b) {
       pending_mem_reqs_[b].clear();
       device_->avs_readdatavalid[b] = 0;
       device_->avs_waitrequest[b] = 0;
@@ -427,7 +416,7 @@ private:
   }
 
   void avs_bus_eval() {
-    for (int b = 0; b < MEMORY_BANKS; ++b) {
+    for (int b = 0; b < PLATFORM_PARAM_LOCAL_MEMORY_BANKS; ++b) {
       // process memory responses
       device_->avs_readdatavalid[b] = 0;
       if (!pending_mem_reqs_[b].empty()
@@ -443,7 +432,7 @@ private:
 
       // process memory requests
       assert(!device_->avs_read[b] || !device_->avs_write[b]);
-      unsigned byte_addr = (device_->avs_address[b] * MEMORY_BANKS + b) * MEM_BLOCK_SIZE;
+      unsigned byte_addr = (device_->avs_address[b] * PLATFORM_PARAM_LOCAL_MEMORY_BANKS + b) * MEM_BLOCK_SIZE;
       if (device_->avs_write[b]) {
         uint64_t byteen = device_->avs_byteenable[b];
         uint8_t* data = (uint8_t*)(device_->avs_writedata[b].data());
@@ -530,7 +519,7 @@ private:
   std::unordered_map<int64_t, host_buffer_t> host_buffers_;
   int64_t host_buffer_ids_;
 
-  std::list<mem_req_t*> pending_mem_reqs_[MEMORY_BANKS];
+  std::list<mem_req_t*> pending_mem_reqs_[PLATFORM_PARAM_LOCAL_MEMORY_BANKS];
 
   std::list<cci_rd_req_t> cci_reads_;
   std::list<cci_wr_req_t> cci_writes_;
