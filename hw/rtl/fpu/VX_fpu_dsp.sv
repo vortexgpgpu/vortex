@@ -130,14 +130,12 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     wire is_neg  = per_core_op_type[FPU_FMA][0];
     wire is_sub  = per_core_fmt[FPU_FMA][1];
 
-    `RESET_RELAY (fma_reset, reset);
-
     VX_fpu_fma #(
         .NUM_LANES (NUM_LANES),
         .TAG_WIDTH (TAG_WIDTH)
     ) fpu_fma (
         .clk        (clk),
-        .reset      (fma_reset),
+        .reset      (reset),
         .valid_in   (per_core_valid_in[FPU_FMA]),
         .ready_in   (per_core_ready_in[FPU_FMA]),
         .mask_in    (per_core_mask_in[FPU_FMA]),
@@ -231,14 +229,12 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     `UNUSED_VAR (div_sqrt_datab)
     `UNUSED_VAR (div_sqrt_datac)
 
-    `RESET_RELAY (div_sqrt_reset, reset);
-
     VX_fpu_div #(
         .NUM_LANES (NUM_LANES),
         .TAG_WIDTH (TAG_WIDTH)
     ) fpu_div (
         .clk        (clk),
-        .reset      (div_sqrt_reset),
+        .reset      (reset),
         .valid_in   (div_sqrt_valid_in[0]),
         .ready_in   (div_sqrt_ready_in[0]),
         .mask_in    (div_sqrt_mask_in[0]),
@@ -313,14 +309,12 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     wire cvt_ret_int_in = ~is_itof;
     wire cvt_ret_int_out;
 
-    `RESET_RELAY (cvt_reset, reset);
-
     VX_fpu_cvt #(
         .NUM_LANES (NUM_LANES),
         .TAG_WIDTH (1+TAG_WIDTH)
     ) fpu_cvt (
         .clk        (clk),
-        .reset      (cvt_reset),
+        .reset      (reset),
         .valid_in   (per_core_valid_in[FPU_CVT]),
         .ready_in   (per_core_ready_in[FPU_CVT]),
         .mask_in    (per_core_mask_in[FPU_CVT]),
@@ -347,14 +341,12 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     wire ncp_ret_sext_in = `INST_FPU_IS_MVXW(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP]);
     wire ncp_ret_sext_out;
 
-    `RESET_RELAY (ncp_reset, reset);
-
     VX_fpu_ncp #(
         .NUM_LANES (NUM_LANES),
         .TAG_WIDTH (TAG_WIDTH+2)
     ) fpu_ncp (
         .clk        (clk),
-        .reset      (ncp_reset),
+        .reset      (reset),
         .valid_in   (per_core_valid_in[FPU_NCP]),
         .ready_in   (per_core_ready_in[FPU_NCP]),
         .mask_in    (per_core_mask_in[FPU_NCP]),

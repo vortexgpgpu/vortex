@@ -91,8 +91,6 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         end
     end
 
-    `RESET_RELAY (lmem_reset, reset);
-
     VX_local_mem #(
         .INSTANCE_ID($sformatf("%s-lmem", INSTANCE_ID)),
         .SIZE       (1 << `LMEM_LOG_SIZE),
@@ -105,7 +103,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .OUT_BUF    (3)
     ) local_mem (
         .clk        (clk),
-        .reset      (lmem_reset),
+        .reset      (reset),
     `ifdef PERF_ENABLE
         .lmem_perf  (lmem_perf),
     `endif
@@ -132,9 +130,6 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     if (LSU_WORD_SIZE != DCACHE_WORD_SIZE) begin : coalescer_if
 
         for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : coalescers
-
-            `RESET_RELAY (mem_coalescer_reset, reset);
-
             VX_mem_coalescer #(
                 .INSTANCE_ID    ($sformatf("%s-coalescer%0d", INSTANCE_ID, i)),
                 .NUM_REQS       (`NUM_LSU_LANES),
@@ -146,8 +141,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .UUID_WIDTH     (`UUID_WIDTH),
                 .QUEUE_SIZE     (`LSUQ_OUT_SIZE)
             ) mem_coalescer (
-                .clk   (clk),
-                .reset (mem_coalescer_reset),
+                .clk            (clk),
+                .reset          (reset),
 
                 // Input request
                 .in_req_valid   (lsu_dcache_if[i].req_valid),

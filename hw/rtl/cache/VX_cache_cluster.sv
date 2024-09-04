@@ -139,9 +139,6 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     end
 
      for (genvar i = 0; i < NUM_CACHES; ++i) begin : caches
-
-        `RESET_RELAY (cache_reset, reset);
-
         VX_cache_wrap #(
             .INSTANCE_ID  ($sformatf("%s%0d", INSTANCE_ID, i)),
             .CACHE_SIZE   (CACHE_SIZE),
@@ -169,7 +166,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .cache_perf  (perf_cache_unit[i]),
         `endif
             .clk         (clk),
-            .reset       (cache_reset),
+            .reset       (reset),
             .core_bus_if (arb_core_bus_if[i * NUM_REQS +: NUM_REQS]),
             .mem_bus_if  (cache_mem_bus_if[i])
         );

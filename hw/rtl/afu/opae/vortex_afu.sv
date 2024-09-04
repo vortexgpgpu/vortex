@@ -475,8 +475,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .TAG_WIDTH  (AVS_REQ_TAGW)
     ) cci_vx_mem_bus_if[2]();
 
-    `RESET_RELAY (cci_adapter_reset, reset);
-
     VX_mem_adapter #(
         .SRC_DATA_WIDTH (CCI_DATA_WIDTH),
         .DST_DATA_WIDTH (LMEM_DATA_WIDTH),
@@ -488,7 +486,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .RSP_OUT_BUF    (0)
     ) cci_mem_adapter (
         .clk                (clk),
-        .reset              (cci_adapter_reset),
+        .reset              (reset),
 
         .mem_req_valid_in   (cci_mem_req_valid),
         .mem_req_addr_in    (cci_mem_req_addr),
@@ -527,8 +525,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     assign vx_mem_req_valid_qual = vx_mem_req_valid && ~vx_mem_is_cout;
 
-    `RESET_RELAY (vx_adapter_reset, reset);
-
     VX_mem_adapter #(
         .SRC_DATA_WIDTH (`VX_MEM_DATA_WIDTH),
         .DST_DATA_WIDTH (LMEM_DATA_WIDTH),
@@ -540,7 +536,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .RSP_OUT_BUF    (2)
     ) vx_mem_adapter (
         .clk                (clk),
-        .reset              (vx_adapter_reset),
+        .reset              (reset),
 
         .mem_req_valid_in   (vx_mem_req_valid_qual),
         .mem_req_addr_in    (vx_mem_req_addr),
@@ -595,8 +591,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     //--
 
-    `RESET_RELAY (avs_adapter_reset, reset);
-
     VX_avs_adapter #(
         .DATA_WIDTH    (LMEM_DATA_WIDTH),
         .ADDR_WIDTH    (LMEM_ADDR_WIDTH),
@@ -608,7 +602,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .RSP_OUT_BUF   (0)
     ) avs_adapter (
         .clk              (clk),
-        .reset            (avs_adapter_reset),
+        .reset            (reset),
 
         // Memory request
         .mem_req_valid    (mem_bus_if[0].req_valid),

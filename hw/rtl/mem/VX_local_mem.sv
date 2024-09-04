@@ -116,8 +116,6 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         assign mem_bus_if[i].req_ready = req_ready_in[i];
     end
 
-    `RESET_RELAY (req_xbar_reset, reset);
-
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_REQS),
         .NUM_OUTPUTS (NUM_BANKS),
@@ -127,7 +125,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .OUT_BUF     (3) // output should be registered for the data_store addressing
     ) req_xbar (
         .clk       (clk),
-        .reset     (req_xbar_reset),
+        .reset     (reset),
     `ifdef PERF_ENABLE
         .collisions (perf_collisions),
     `else
@@ -226,8 +224,6 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][RSP_DATAW-1:0]  rsp_data_out;
     wire [NUM_REQS-1:0]                 rsp_ready_out;
 
-    `RESET_RELAY (rsp_xbar_reset, reset);
-
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_BANKS),
         .NUM_OUTPUTS (NUM_REQS),
@@ -236,7 +232,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .OUT_BUF     (OUT_BUF)
     ) rsp_xbar (
         .clk       (clk),
-        .reset     (rsp_xbar_reset),
+        .reset     (reset),
         `UNUSED_PIN (collisions),
         .sel_in    (per_bank_rsp_idx),
         .valid_in  (per_bank_rsp_valid),
