@@ -394,7 +394,7 @@ module VX_cache_bank #(
     `UNUSED_VAR (do_write_miss_st1)
 
     // ensure mshr replay always get a hit
-    `RUNTIME_ASSERT (~(valid_st1 && is_replay_st1) || is_hit_st1, ("missed mshr replay"));
+    `RUNTIME_ASSERT (~(valid_st1 && is_replay_st1) || is_hit_st1, ("%t: missed mshr replay", $time));
 
     // both tag and data stores use BRAM with no read-during-write protection.
     // we ned to stall the pipeline to prevent read-after-write hazards.
@@ -599,7 +599,7 @@ module VX_cache_bank #(
         if (DIRTY_BYTES) begin
             // ensure dirty bytes match the tag info
             wire has_dirty_bytes = (| dirty_byteen_st1);
-            `RUNTIME_ASSERT (~do_fill_or_flush_st1 || (evict_dirty_st1 == has_dirty_bytes), ("missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", evict_dirty_st1, has_dirty_bytes, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID)));
+            `RUNTIME_ASSERT (~do_fill_or_flush_st1 || (evict_dirty_st1 == has_dirty_bytes), ("%t: missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", $time, evict_dirty_st1, has_dirty_bytes, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID)));
         end
         assign mreq_queue_push = (((do_read_miss_st1 || do_write_miss_st1) && ~mshr_pending_st1)
                                || do_writeback_st1)
