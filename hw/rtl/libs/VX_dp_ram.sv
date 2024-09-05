@@ -59,7 +59,7 @@ module VX_dp_ram #(
     `UNUSED_VAR (read)
 
     if (WRENW > 1) begin
-        `RUNTIME_ASSERT(~write || (| wren), ("invalid write enable mask"));
+        `RUNTIME_ASSERT(~write || (| wren), ("%t: invalid write enable mask", $time));
     end
 
     if (OUT_REG && !READ_ENABLE) begin
@@ -341,7 +341,7 @@ module VX_dp_ram #(
 
             assign rdata_w = (prev_write && (prev_waddr == raddr)) ? prev_data : ram[raddr];
             if (RW_ASSERT) begin
-                `RUNTIME_ASSERT(~read || (rdata_w == ram[raddr]), ("read after write hazard"));
+                `RUNTIME_ASSERT(~read || (rdata_w == ram[raddr]), ("%t: read after write hazard", $time));
             end
         end
     `endif

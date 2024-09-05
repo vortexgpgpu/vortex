@@ -162,8 +162,8 @@ module VX_fifo_queue #(
         end
     end
 
-    `RUNTIME_ASSERT(~(push && ~pop) || ~full, ("runtime error: incrementing full queue"));
-    `RUNTIME_ASSERT(~(pop && ~push) || ~empty, ("runtime error: decrementing empty queue"));
+    `RUNTIME_ASSERT(~(push && ~pop) || ~full, ("%t: runtime error: incrementing full queue", $time));
+    `RUNTIME_ASSERT(~(pop && ~push) || ~empty, ("%t: runtime error: decrementing empty queue", $time));
 
 endmodule
 `TRACING_ON

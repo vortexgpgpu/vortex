@@ -90,7 +90,7 @@ module VX_generic_arbiter #(
 
     end
 
-    `RUNTIME_ASSERT ((~(| requests) || (grant_valid && (requests[grant_index] != 0) && (grant_onehot == (NUM_REQS'(1) << grant_index)))), ("invalid arbiter grant!"))
+    `RUNTIME_ASSERT ((~(| requests) || (grant_valid && (requests[grant_index] != 0) && (grant_onehot == (NUM_REQS'(1) << grant_index)))), ("%t: invalid arbiter grant!", $time))
 
 endmodule
 `TRACING_ON
