@@ -259,7 +259,7 @@ config2()
     AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --app=mstress
 
     # test 128-bit MEM block
-    CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128" ./ci/blackbox.sh --driver=opae --app=mstress
+    CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=opae --app=mstress
 
     # test XLEN-bit MEM block
     CONFIGS="-DMEM_BLOCK_SIZE=$XSIZE" ./ci/blackbox.sh --driver=opae --app=mstress
