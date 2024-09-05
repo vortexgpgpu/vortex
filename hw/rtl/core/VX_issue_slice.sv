@@ -100,7 +100,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
             `UUID_WIDTH + `NUM_THREADS + `NR_BITS + (`NUM_THREADS*`XLEN) + 1)
     ) scope_tap (
         .clk (clk),
-        .reset (reset),
+        .reset (scope_reset),
         .start (1'b0),
         .stop (1'b0),
         .triggers ({
