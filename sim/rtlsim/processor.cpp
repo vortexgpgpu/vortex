@@ -98,7 +98,7 @@ void sim_trace_enable(bool enable) {
 class Processor::Impl {
 public:
   Impl() : dram_sim_(MEM_CLOCK_RATIO) {
-    // force random values for unitialized signals
+    // force random values for uninitialized signals
     Verilated::randReset(VERILATOR_RESET_VALUE);
     Verilated::randSeed(50);
 
