@@ -21,7 +21,6 @@ module VX_afu_ctrl #(
     // axi4 lite slave signals
     input  wire                         clk,
     input  wire                         reset,
-    input  wire                         clk_en,
 
     input  wire                         s_axi_awvalid,
     input  wire [AXI_ADDR_WIDTH-1:0]    s_axi_awaddr,
@@ -191,7 +190,7 @@ module VX_afu_ctrl #(
             cmd_scope_writing <= 0;
             scope_bus_ctr <= '0;
             scope_bus_out_r <= 0;
-        end else if (clk_en) begin
+        end else begin
             if (s_axi_w_fire && waddr == ADDR_SCP_0) begin
                 scope_bus_wdata[31:0] <= (s_axi_wdata & wmask) | (scope_bus_wdata[31:0] & ~wmask);
             end
@@ -244,7 +243,7 @@ module VX_afu_ctrl #(
     always @(posedge clk) begin
         if (reset) begin
             wstate <= WSTATE_IDLE;
-        end else if (clk_en) begin
+        end else begin
             case (wstate)
             WSTATE_IDLE: wstate <= s_axi_awvalid ? WSTATE_DATA : WSTATE_IDLE;
             WSTATE_DATA: wstate <= s_axi_wvalid ? WSTATE_RESP : WSTATE_DATA;
@@ -256,10 +255,8 @@ module VX_afu_ctrl #(
 
     // waddr
     always @(posedge clk) begin
-        if (clk_en) begin
-            if (s_axi_aw_fire)
-                waddr <= s_axi_awaddr[ADDR_BITS-1:0];
-        end
+        if (s_axi_aw_fire)
+            waddr <= s_axi_awaddr[ADDR_BITS-1:0];
     end
 
     // wdata
@@ -280,11 +277,12 @@ module VX_afu_ctrl #(
             for (integer i = 0; i < AXI_NUM_BANKS; ++i) begin
                 mem_r[i] <= '0;
             end
-        end else if (clk_en) begin
+        end else begin
+            dcr_wr_valid_r <= 0;
+            ap_reset_r <= 0;
+
             if (ap_ready)
                 ap_start_r <= auto_restart_r;
-
-            dcr_wr_valid_r <= 0;
 
             if (s_axi_w_fire) begin
                 case (waddr)
@@ -351,7 +349,7 @@ module VX_afu_ctrl #(
     always @(posedge clk) begin
         if (reset) begin
             rstate <= RSTATE_IDLE;
-        end else if (clk_en) begin
+        end else begin
             case (rstate)
             RSTATE_IDLE: rstate <= s_axi_arvalid ? RSTATE_DATA : RSTATE_IDLE;
             RSTATE_DATA: rstate <= (s_axi_rready & s_axi_rvalid) ? RSTATE_IDLE : RSTATE_DATA;
@@ -362,49 +360,47 @@ module VX_afu_ctrl #(
 
     // rdata
     always @(posedge clk) begin
-        if (clk_en) begin
-            if (s_axi_ar_fire) begin
-                rdata <= '0;
-                case (raddr)
-                    ADDR_AP_CTRL: begin
-                        rdata[0] <= ap_start_r;
-                        rdata[1] <= ap_done;
-                        rdata[2] <= ap_idle;
-                        rdata[3] <= ap_ready;
-                        rdata[7] <= auto_restart_r;
-                    end
-                    ADDR_GIE: begin
-                        rdata <= 32'(gie_r);
-                    end
-                    ADDR_IER: begin
-                        rdata <= 32'(ier_r);
-                    end
-                    ADDR_ISR: begin
-                        rdata <= 32'(isr_r);
-                    end
-                    ADDR_DEV_0: begin
-                        rdata <= dev_caps[31:0];
-                    end
-                    ADDR_DEV_1: begin
-                        rdata <= dev_caps[63:32];
-                    end
-                    ADDR_ISA_0: begin
-                        rdata <= isa_caps[31:0];
-                    end
-                    ADDR_ISA_1: begin
-                        rdata <= isa_caps[63:32];
-                    end
-                `ifdef SCOPE
-                    ADDR_SCP_0: begin
-                        rdata <= scope_bus_rdata[31:0];
-                    end
-                    ADDR_SCP_1: begin
-                        rdata <= scope_bus_rdata[63:32];
-                    end
-                `endif
-                    default:;
-                endcase
-            end
+        if (s_axi_ar_fire) begin
+            rdata <= '0;
+            case (raddr)
+                ADDR_AP_CTRL: begin
+                    rdata[0] <= ap_start_r;
+                    rdata[1] <= ap_done;
+                    rdata[2] <= ap_idle;
+                    rdata[3] <= ap_ready;
+                    rdata[7] <= auto_restart_r;
+                end
+                ADDR_GIE: begin
+                    rdata <= 32'(gie_r);
+                end
+                ADDR_IER: begin
+                    rdata <= 32'(ier_r);
+                end
+                ADDR_ISR: begin
+                    rdata <= 32'(isr_r);
+                end
+                ADDR_DEV_0: begin
+                    rdata <= dev_caps[31:0];
+                end
+                ADDR_DEV_1: begin
+                    rdata <= dev_caps[63:32];
+                end
+                ADDR_ISA_0: begin
+                    rdata <= isa_caps[31:0];
+                end
+                ADDR_ISA_1: begin
+                    rdata <= isa_caps[63:32];
+                end
+            `ifdef SCOPE
+                ADDR_SCP_0: begin
+                    rdata <= scope_bus_rdata[31:0];
+                end
+                ADDR_SCP_1: begin
+                    rdata <= scope_bus_rdata[63:32];
+                end
+            `endif
+                default:;
+            endcase
         end
     end
 

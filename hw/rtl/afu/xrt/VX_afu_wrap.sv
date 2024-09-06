@@ -87,8 +87,7 @@ module VX_afu_wrap #(
 	reg [`CLOG2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
 	reg [15:0] vx_pending_writes;
 	reg vx_busy_wait;
-	reg vx_running;
-
+	reg vx_reset = 1; // asserted at initialization
 	wire vx_busy;
 
 	wire [63:0] mem_base [C_M_AXI_MEM_NUM_BANKS];
@@ -101,8 +100,8 @@ module VX_afu_wrap #(
 
 	wire ap_reset;
 	wire ap_start;
-	wire ap_idle  = ~vx_running;
-	wire ap_done  = ~(state == STATE_RUN || vx_pending_writes != 0);
+	wire ap_idle  = vx_reset;
+	wire ap_done  = (state == STATE_IDLE) && (vx_pending_writes == '0);
 	wire ap_ready = 1'b1;
 
 `ifdef SCOPE
@@ -110,54 +109,6 @@ module VX_afu_wrap #(
 	wire scope_bus_out;
   	wire scope_reset = reset;
 `endif
-
-	always @(posedge ap_clk) begin
-		if (reset || ap_reset) begin
-			state <= STATE_IDLE;
-			vx_busy_wait  <= 0;
-			vx_running    <= 0;
-		end else begin
-			case (state)
-			STATE_IDLE: begin
-				if (ap_start) begin
-				`ifdef DBG_TRACE_AFU
-					`TRACE(2, ("%d: STATE RUN\n", $time));
-				`endif
-					state <= STATE_RUN;
-					vx_running <= 0;
-				end
-			end
-			STATE_RUN: begin
-				if (vx_running) begin
-					if (vx_busy_wait) begin
-						// wait until processor goes busy
-						if (vx_busy) begin
-							vx_busy_wait <= 0;
-						end
-					end else begin
-						// wait until the processor is not busy
-						if (~vx_busy) begin
-							state <= STATE_IDLE;
-						`ifdef DBG_TRACE_AFU
-							`TRACE(2, ("%d: AFU: End execution\n", $time));
-							`TRACE(2, ("%d: STATE IDLE\n", $time));
-						`endif
-						end
-					end
-				end else begin
-					// wait until the reset sequence is complete
-					if (vx_reset_ctr == (`RESET_DELAY-1)) begin
-					`ifdef DBG_TRACE_AFU
-						`TRACE(2, ("%d: AFU: Begin execution\n", $time));
-					`endif
-						vx_running    <= 1;
-						vx_busy_wait  <= 1;
-					end
-				end
-			end
-			endcase
-		end
-	end
 
 	reg m_axi_mem_wfire;
 	reg m_axi_mem_bfire;
@@ -173,20 +124,61 @@ module VX_afu_wrap #(
 
 	always @(posedge ap_clk) begin
 		if (reset || ap_reset) begin
+			state             <= STATE_IDLE;
 			vx_pending_writes <= '0;
+			vx_reset_ctr      <= (`RESET_DELAY-1);
+			vx_reset          <= 1;
 		end else begin
+			case (state)
+			STATE_IDLE: begin
+				if (ap_start) begin
+				`ifdef DBG_TRACE_AFU
+					`TRACE(2, ("%d: STATE RUN\n", $time));
+				`endif
+					state <= STATE_RUN;
+					vx_reset_ctr <= 0;
+					vx_reset <= 1;
+				end
+			end
+			STATE_RUN: begin
+				if (vx_reset) begin
+					// wait until the reset network is ready
+					if (vx_reset_ctr == 0) begin
+					`ifdef DBG_TRACE_AFU
+						`TRACE(2, ("%d: AFU: Begin execution\n", $time));
+					`endif
+						vx_busy_wait <= 1;
+						vx_reset <= 0;
+					end
+				end else begin
+					if (vx_busy_wait) begin
+						// wait until processor goes busy
+						if (vx_busy) begin
+							vx_busy_wait <= 0;
+						end
+					end else begin
+						// wait until the processor is not busy
+						if (~vx_busy) begin
+						`ifdef DBG_TRACE_AFU
+							`TRACE(2, ("%d: AFU: End execution\n", $time));
+						`endif
+							state <= STATE_IDLE;
+						end
+					end
+				end
+			end
+			endcase
+
+			// ensure reset network initialization
+			if (vx_reset_ctr != 0) begin
+				vx_reset_ctr <= vx_reset_ctr - 1;
+			end
+
+			// track pending writes
 			if (m_axi_mem_wfire && ~m_axi_mem_bfire)
 				vx_pending_writes <= vx_pending_writes + 1;
 			if (~m_axi_mem_wfire && m_axi_mem_bfire)
 				vx_pending_writes <= vx_pending_writes - 1;
-		end
-	end
-
-	always @(posedge ap_clk) begin
-		if (state == STATE_RUN) begin
-			vx_reset_ctr <= vx_reset_ctr + 1;
-		end else begin
-			vx_reset_ctr <= '0;
 		end
 	end
 
@@ -196,8 +188,7 @@ module VX_afu_wrap #(
 		.AXI_NUM_BANKS  (C_M_AXI_MEM_NUM_BANKS)
 	) afu_ctrl (
 		.clk       		(ap_clk),
-		.reset     		(reset || ap_reset),
-		.clk_en         (1'b1),
+		.reset     		(reset),
 
 		.s_axi_awvalid  (s_axi_ctrl_awvalid),
 		.s_axi_awready  (s_axi_ctrl_awready),
@@ -255,7 +246,7 @@ module VX_afu_wrap #(
 		`SCOPE_IO_BIND  (1)
 
 		.clk			(ap_clk),
-		.reset			(reset || ap_reset || ~vx_running),
+		.reset			(vx_reset),
 
 		.m_axi_awvalid	(m_axi_mem_awvalid_a),
 		.m_axi_awready	(m_axi_mem_awready_a),
@@ -319,7 +310,7 @@ module VX_afu_wrap #(
 		interrupt, \
 		vx_busy_wait, \
 		vx_busy, \
-		vx_running \
+		vx_reset \
 	}
 
 	`define PROBES { \
