@@ -54,8 +54,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     `UNUSED_VAR (writeback_if.data.sop)
 
     wire [NUM_SRC_OPDS-1:0] src_valid;
-    wire [NUM_SRC_OPDS-1:0] req_in_valid, req_in_ready;
-    wire [NUM_SRC_OPDS-1:0][PER_BANK_ADDRW-1:0] req_in_data;
+    wire [NUM_SRC_OPDS-1:0] req_valid_in, req_ready_in;
+    wire [NUM_SRC_OPDS-1:0][PER_BANK_ADDRW-1:0] req_data_in;
     wire [NUM_SRC_OPDS-1:0][BANK_SEL_WIDTH-1:0] req_bank_idx;
 
     wire [NUM_BANKS-1:0] gpr_rd_valid, gpr_rd_ready;
@@ -64,7 +64,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] gpr_rd_data_st2;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] gpr_rd_req_idx, gpr_rd_req_idx_st1, gpr_rd_req_idx_st2;
 
-    wire pipe_valid_st1, pipe_ready_st1, pipe_in_ready;
+    wire pipe_ready_in;
+    wire pipe_valid_st1, pipe_ready_st1;
     wire pipe_valid_st2, pipe_ready_st2;
     wire [META_DATAW-1:0] pipe_data, pipe_data_st1, pipe_data_st2;
 
@@ -82,9 +83,9 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin
         if (ISSUE_WIS != 0) begin
-            assign req_in_data[i] = {src_opds[i][`NR_BITS-1:BANK_SEL_BITS], scoreboard_if.data.wis};
+            assign req_data_in[i] = {src_opds[i][`NR_BITS-1:BANK_SEL_BITS], scoreboard_if.data.wis};
         end else begin
-            assign req_in_data[i] = src_opds[i][`NR_BITS-1:BANK_SEL_BITS];
+            assign req_data_in[i] = src_opds[i][`NR_BITS-1:BANK_SEL_BITS];
         end
         if (NUM_BANKS != 1) begin
             assign req_bank_idx[i] = src_opds[i][BANK_SEL_BITS-1:0];
@@ -97,7 +98,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         assign src_valid[i] = (src_opds[i] != 0) && ~data_fetched_st1[i];
     end
 
-    assign req_in_valid = {NUM_SRC_OPDS{scoreboard_if.valid}} & src_valid;
+    assign req_valid_in = {NUM_SRC_OPDS{scoreboard_if.valid}} & src_valid;
 
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_SRC_OPDS),
@@ -110,17 +111,17 @@ module VX_operands import VX_gpu_pkg::*; #(
         .clk       (clk),
         .reset     (reset),
         `UNUSED_PIN(collisions),
-        .valid_in  (req_in_valid),
-        .data_in   (req_in_data),
+        .valid_in  (req_valid_in),
+        .data_in   (req_data_in),
         .sel_in    (req_bank_idx),
-        .ready_in  (req_in_ready),
+        .ready_in  (req_ready_in),
         .valid_out (gpr_rd_valid),
         .data_out  (gpr_rd_addr),
         .sel_out   (gpr_rd_req_idx),
         .ready_out (gpr_rd_ready)
     );
 
-    assign gpr_rd_ready = {NUM_BANKS{pipe_in_ready}};
+    assign gpr_rd_ready = {NUM_BANKS{pipe_ready_in}};
 
     always @(*) begin
         has_collision_n = 0;
@@ -138,7 +139,7 @@ module VX_operands import VX_gpu_pkg::*; #(
          if (scoreboard_if.ready) begin
             data_fetched_n = '0;
         end else begin
-            data_fetched_n = data_fetched_st1 | req_in_ready;
+            data_fetched_n = data_fetched_st1 | req_ready_in;
         end
     end
 
@@ -154,7 +155,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         scoreboard_if.data.uuid
     };
 
-    assign scoreboard_if.ready = pipe_in_ready && ~has_collision_n;
+    assign scoreboard_if.ready = pipe_ready_in && ~has_collision_n;
 
     wire pipe_fire_st1 = pipe_valid_st1 && pipe_ready_st1;
     wire pipe_fire_st2 = pipe_valid_st2 && pipe_ready_st2;
@@ -166,7 +167,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         .clk      (clk),
         .reset    (reset),
         .valid_in (scoreboard_if.valid),
-        .ready_in (pipe_in_ready),
+        .ready_in (pipe_ready_in),
         .data_in  ({data_fetched_n,   gpr_rd_valid,     pipe_data,     has_collision_n,   gpr_rd_addr,     gpr_rd_req_idx}),
         .data_out ({data_fetched_st1, gpr_rd_valid_st1, pipe_data_st1, has_collision_st1, gpr_rd_addr_st1, gpr_rd_req_idx_st1}),
         .valid_out(pipe_valid_st1),
@@ -285,7 +286,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         if (reset) begin
             collisions_r <= '0;
         end else begin
-            collisions_r <= collisions_r + `PERF_CTR_BITS'(scoreboard_if.valid && pipe_in_ready && has_collision_n);
+            collisions_r <= collisions_r + `PERF_CTR_BITS'(scoreboard_if.valid && pipe_ready_in && has_collision_n);
         end
     end
     assign perf_stalls = collisions_r;
