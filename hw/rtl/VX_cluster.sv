@@ -119,7 +119,8 @@ module VX_cluster import VX_gpu_pkg::*; #(
     ///////////////////////////////////////////////////////////////////////////
 
     VX_dcr_bus_if socket_dcr_bus_tmp_if();
-    assign socket_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `VX_DCR_BASE_STATE_BEGIN && dcr_bus_if.write_addr < `VX_DCR_BASE_STATE_END);
+    wire is_dcr_base_addr = (dcr_bus_if.write_addr >= `VX_DCR_BASE_STATE_BEGIN && dcr_bus_if.write_addr < `VX_DCR_BASE_STATE_END);
+    assign socket_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && is_dcr_base_addr;
     assign socket_dcr_bus_tmp_if.write_addr  = dcr_bus_if.write_addr;
     assign socket_dcr_bus_tmp_if.write_data  = dcr_bus_if.write_data;
 

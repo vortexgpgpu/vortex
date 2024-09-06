@@ -14,12 +14,9 @@
 # limitations under the License.
 #
 
-#log_wave -r *
-#run all
-#exit
+log_wave -r *
 
-open_vcd xsim_dump.vcd
-log_vcd /*
-run all
-close_vcd
-exit
+#open_vcd xsim_dump.vcd
+#log_vcd /*
+#run all
+#close_vcd

@@ -117,7 +117,7 @@ endif
 
 # Debugging
 ifdef DEBUG
-	VPP_FLAGS += -g --debug.protocol all
+	VPP_FLAGS += -g --optimize 0 --debug.protocol all
 	ifneq ($(TARGET), hw)
 		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
 		CFLAGS += -DDEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)

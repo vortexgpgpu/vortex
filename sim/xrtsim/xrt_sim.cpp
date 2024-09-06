@@ -112,7 +112,7 @@ public:
   }
 
   int init() {
-    // force random values for unitialized signals
+    // force random values for uninitialized signals
     Verilated::randReset(VERILATOR_RESET_VALUE);
     Verilated::randSeed(50);
 
