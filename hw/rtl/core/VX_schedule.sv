@@ -331,30 +331,23 @@ module VX_schedule import VX_gpu_pkg::*; #(
         schedule_data[schedule_wid][(`NUM_THREADS + `PC_BITS)-5:0]
     };
 
+    wire [`UUID_WIDTH-1:0] instr_uuid;
 `ifndef NDEBUG
-    localparam GNW_WIDTH = `LOG2UP(`NUM_CLUSTERS * `NUM_CORES * `NUM_WARPS);
-    reg [`UUID_WIDTH-1:0] instr_uuid;
-    wire [GNW_WIDTH-1:0] g_wid = (GNW_WIDTH'(CORE_ID) << `NW_BITS) + GNW_WIDTH'(schedule_wid);
-`ifdef SV_DPI
-    always @(posedge clk) begin
-        if (reset) begin
-            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(1, 32'd0));
-        end else if (schedule_fire) begin
-            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(0, 32'(g_wid)));
-        end
-    end
+    VX_uuid_gen #(
+        .CORE_ID (CORE_ID)
+    ) uuid_gen (
+        .clk   (clk),
+        .reset (reset),
+        .incr  (schedule_fire),
+        .wid   (schedule_wid),
+        .uuid  (instr_uuid)
+    );
 `else
-    wire [GNW_WIDTH+16-1:0] w_uuid = {g_wid, 16'(schedule_pc)};
-    always @(*) begin
-        instr_uuid = `UUID_WIDTH'(w_uuid);
-    end
-`endif
-`else
-    wire [`UUID_WIDTH-1:0] instr_uuid = '0;
+    assign instr_uuid = '0;
 `endif
 
     VX_elastic_buffer #(
-        .DATAW (`NUM_THREADS + `PC_BITS + `NW_WIDTH),
+        .DATAW (`NUM_THREADS + `PC_BITS + `NW_WIDTH + `UUID_WIDTH),
         .SIZE  (2),  // need to buffer out ready_in
         .OUT_REG (1) // should be registered for BRAM acces in fetch unit
     ) out_buf (
@@ -362,13 +355,11 @@ module VX_schedule import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (schedule_valid),
         .ready_in  (schedule_ready),
-        .data_in   ({schedule_tmask, schedule_pc, schedule_wid}),
-        .data_out  ({schedule_if.data.tmask, schedule_if.data.PC, schedule_if.data.wid}),
+        .data_in   ({schedule_tmask, schedule_pc, schedule_wid, instr_uuid}),
+        .data_out  ({schedule_if.data.tmask, schedule_if.data.PC, schedule_if.data.wid, schedule_if.data.uuid}),
         .valid_out (schedule_if.valid),
         .ready_out (schedule_if.ready)
     );
-
-    assign schedule_if.data.uuid = instr_uuid;
 
     // Track pending instructions per warp
 
