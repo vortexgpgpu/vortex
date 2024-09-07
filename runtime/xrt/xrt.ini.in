@@ -3,7 +3,7 @@ runtime_log=console
 
 [Emulation]
 debug_mode=batch
-user_pre_sim_script=@VORTEX_HOME@/hw/syn/xilinx/scripts/xsim.tcl
+user_pre_sim_script=@VORTEX_HOME@/runtime/xrt/xsim.tcl
 
 [Debug]
 profile=true
