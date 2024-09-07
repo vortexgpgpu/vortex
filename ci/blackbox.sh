@@ -61,11 +61,11 @@ parse_args() {
             --driver=*) DRIVER=${i#*=} ;;
             --app=*)    APP=${i#*=} ;;
             --clusters=*) CONFIGS=$(add_option "$CONFIGS" "-DNUM_CLUSTERS=${i#*=}") ;;
-            --cores=*) CONFIGS=$(add_option "$CONFIGS" "-DNUM_CORES=${i#*=}") ;;
-            --warps=*) CONFIGS=$(add_option "$CONFIGS" "-DNUM_WARPS=${i#*=}") ;;
+            --cores=*)  CONFIGS=$(add_option "$CONFIGS" "-DNUM_CORES=${i#*=}") ;;
+            --warps=*)  CONFIGS=$(add_option "$CONFIGS" "-DNUM_WARPS=${i#*=}") ;;
             --threads=*) CONFIGS=$(add_option "$CONFIGS" "-DNUM_THREADS=${i#*=}") ;;
-            --l2cache) CONFIGS=$(add_option "$CONFIGS" "-DL2_ENABLE") ;;
-            --l3cache) CONFIGS=$(add_option "$CONFIGS" "-DL3_ENABLE") ;;
+            --l2cache)  CONFIGS=$(add_option "$CONFIGS" "-DL2_ENABLE") ;;
+            --l3cache)  CONFIGS=$(add_option "$CONFIGS" "-DL3_ENABLE") ;;
             --perf=*)   CONFIGS=$(add_option "$CONFIGS" "-DPERF_ENABLE"); PERF_CLASS=${i#*=} ;;
             --debug=*)  DEBUG=1; DEBUG_LEVEL=${i#*=} ;;
             --scope)    SCOPE=1; ;;
@@ -143,7 +143,7 @@ run_app() {
         fi
     fi
     status=$?
-    exit $status
+    return $status
 }
 
 main() {
@@ -154,7 +154,7 @@ main() {
     # execute on default installed GPU
     if [ "$DRIVER" = "gpu" ]; then
         run_app
-        exit $status
+        exit $?
     fi
 
     if [ -n "$CONFIGS" ]; then
@@ -189,6 +189,7 @@ main() {
 
     build_driver
     run_app
+    status=$?
 
     if [ $DEBUG -eq 1 ] && [ -f "$APP_PATH/trace.vcd" ]; then
         mv -f $APP_PATH/trace.vcd .
