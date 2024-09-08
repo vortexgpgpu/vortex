@@ -47,7 +47,10 @@
 `define UNUSED_VAR(x)
 `define UNUSED_PIN(x) . x ()
 `define UNUSED_ARG(x) x
-`define TRACE(level, args) if (level <= `DEBUG_LEVEL) $write args
+`define TRACE(level, args) \
+    if (level <= `DEBUG_LEVEL) begin \
+        $write args; \
+    end
 `else
 `ifdef VERILATOR
 
@@ -122,9 +125,12 @@
 `endif
 
 `ifdef SV_DPI
-`define TRACE(level, args) dpi_trace(level, $sformatf args)
+`define TRACE(level, args) dpi_trace(level, $sformatf args);
 `else
-`define TRACE(level, args) if (level <= `DEBUG_LEVEL) $write args
+`define TRACE(level, args) \
+    if (level <= `DEBUG_LEVEL) begin \
+        $write args; \
+    end
 `endif
 
 `endif
@@ -211,23 +217,23 @@
 `define SEXT(len, x) {{(len-$bits(x)+1){x[$bits(x)-1]}}, x[$bits(x)-2:0]}
 
 `define TRACE_ARRAY1D(lvl, fmt, arr, n)              \
-    `TRACE(lvl, ("{"));                         \
+    `TRACE(lvl, ("{"))                         \
     for (integer __i = (n-1); __i >= 0; --__i) begin  \
-        if (__i != (n-1)) `TRACE(lvl, (", "));    \
-        `TRACE(lvl, (fmt, arr[__i]));         \
+        if (__i != (n-1)) `TRACE(lvl, (", "))    \
+        `TRACE(lvl, (fmt, arr[__i]))         \
     end                                         \
-    `TRACE(lvl, ("}"));
+    `TRACE(lvl, ("}"))
 
 `define TRACE_ARRAY2D(lvl, fmt, arr, m, n)           \
-    `TRACE(lvl, ("{"));                         \
+    `TRACE(lvl, ("{"))                         \
     for (integer __i = n-1; __i >= 0; --__i) begin    \
-        if (__i != (n-1)) `TRACE(lvl, (", "));    \
-        `TRACE(lvl, ("{"));                     \
+        if (__i != (n-1)) `TRACE(lvl, (", "))    \
+        `TRACE(lvl, ("{"))                     \
         for (integer __j = (m-1); __j >= 0; --__j) begin \
-            if (__j != (m-1)) `TRACE(lvl, (", "));\
-            `TRACE(lvl, (fmt, arr[__i][__j]));  \
+            if (__j != (m-1)) `TRACE(lvl, (", "))\
+            `TRACE(lvl, (fmt, arr[__i][__j]))  \
         end                                     \
-        `TRACE(lvl, ("}"));                     \
+        `TRACE(lvl, ("}"))                     \
     end                                         \
     `TRACE(lvl, ("}"))
 

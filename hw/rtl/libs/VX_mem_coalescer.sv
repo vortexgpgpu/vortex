@@ -76,8 +76,8 @@ module VX_mem_coalescer #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `STATIC_ASSERT (`IS_DIVISBLE(NUM_REQS * DATA_IN_WIDTH, DATA_OUT_WIDTH), ("invalid parameter"))
     `STATIC_ASSERT ((NUM_REQS * DATA_IN_WIDTH >= DATA_OUT_WIDTH), ("invalid parameter"))
-    `RUNTIME_ASSERT ((~in_req_valid || in_req_mask != 0), ("%t: invalid request mask", $time));
-    `RUNTIME_ASSERT ((~out_rsp_valid || out_rsp_mask != 0), ("%t: invalid request mask", $time));
+    `RUNTIME_ASSERT ((~in_req_valid || in_req_mask != 0), ("%t: invalid request mask", $time))
+    `RUNTIME_ASSERT ((~out_rsp_valid || out_rsp_mask != 0), ("%t: invalid request mask", $time))
 
     localparam TAG_ID_WIDTH = TAG_WIDTH - UUID_WIDTH;
     //                           tag          + mask     + offest
@@ -331,30 +331,30 @@ module VX_mem_coalescer #(
     always @(posedge clk) begin
         if (out_req_fire) begin
             if (out_req_rw) begin
-                `TRACE(1, ("%d: %s out-req-wr: valid=%b, addr=", $time, INSTANCE_ID, out_req_mask));
-                `TRACE_ARRAY1D(1, "0x%h", out_req_addr, OUT_REQS);
-                `TRACE(1, (", flags="));
-                `TRACE_ARRAY1D(1, "%b", out_req_flags, OUT_REQS);
-                `TRACE(1, (", byteen="));
-                `TRACE_ARRAY1D(1, "0x%h", out_req_byteen, OUT_REQS);
-                `TRACE(1, (", data="));
-                `TRACE_ARRAY1D(1, "0x%0h", out_req_data, OUT_REQS);
+                `TRACE(1, ("%d: %s out-req-wr: valid=%b, addr=", $time, INSTANCE_ID, out_req_mask))
+                `TRACE_ARRAY1D(1, "0x%h", out_req_addr, OUT_REQS)
+                `TRACE(1, (", flags="))
+                `TRACE_ARRAY1D(1, "%b", out_req_flags, OUT_REQS)
+                `TRACE(1, (", byteen="))
+                `TRACE_ARRAY1D(1, "0x%h", out_req_byteen, OUT_REQS)
+                `TRACE(1, (", data="))
+                `TRACE_ARRAY1D(1, "0x%0h", out_req_data, OUT_REQS)
             end else begin
-                `TRACE(1,  ("%d: %s out-req-rd: valid=%b, addr=", $time, INSTANCE_ID, out_req_mask));
-                `TRACE_ARRAY1D(1, "0x%h", out_req_addr, OUT_REQS);
-                `TRACE(1, (", flags="));
-                `TRACE_ARRAY1D(1, "%b", out_req_flags, OUT_REQS);
+                `TRACE(1,  ("%d: %s out-req-rd: valid=%b, addr=", $time, INSTANCE_ID, out_req_mask))
+                `TRACE_ARRAY1D(1, "0x%h", out_req_addr, OUT_REQS)
+                `TRACE(1, (", flags="))
+                `TRACE_ARRAY1D(1, "%b", out_req_flags, OUT_REQS)
             end
-            `TRACE(1, (", offset="));
-            `TRACE_ARRAY1D(1, "%0d", out_req_offset, NUM_REQS);
-            `TRACE(1, (", pmask=%b, coalesced=%0d, tag=0x%0h (#%0d)\n", out_req_pmask, $countones(out_req_pmask), out_req_tag, out_req_uuid));
+            `TRACE(1, (", offset="))
+            `TRACE_ARRAY1D(1, "%0d", out_req_offset, NUM_REQS)
+            `TRACE(1, (", pmask=%b, coalesced=%0d, tag=0x%0h (#%0d)\n", out_req_pmask, $countones(out_req_pmask), out_req_tag, out_req_uuid))
         end
         if (out_rsp_fire) begin
-            `TRACE(1, ("%d: %s out-rsp: valid=%b, data=", $time, INSTANCE_ID, out_rsp_mask));
-            `TRACE_ARRAY1D(1, "0x%0h", out_rsp_data, OUT_REQS);
-            `TRACE(1, (", offset="));
-            `TRACE_ARRAY1D(1, "%0d", ibuf_dout_offset, NUM_REQS);
-            `TRACE(1, (", eop=%b, pmask=%b, tag=0x%0h (#%0d)\n", out_rsp_eop, ibuf_dout_pmask, out_rsp_tag, out_rsp_uuid));
+            `TRACE(1, ("%d: %s out-rsp: valid=%b, data=", $time, INSTANCE_ID, out_rsp_mask))
+            `TRACE_ARRAY1D(1, "0x%0h", out_rsp_data, OUT_REQS)
+            `TRACE(1, (", offset="))
+            `TRACE_ARRAY1D(1, "%0d", ibuf_dout_offset, NUM_REQS)
+            `TRACE(1, (", eop=%b, pmask=%b, tag=0x%0h (#%0d)\n", out_rsp_eop, ibuf_dout_pmask, out_rsp_tag, out_rsp_uuid))
         end
     end
 `endif

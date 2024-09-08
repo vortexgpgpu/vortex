@@ -135,18 +135,18 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (operands_if.valid && operands_if.ready) begin
-            `TRACE(1, ("%d: %s: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wis_to_wid(operands_if.data.wis, ISSUE_ID), {operands_if.data.PC, 1'b0}));
+            `TRACE(1, ("%d: %s: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wis_to_wid(operands_if.data.wis, ISSUE_ID), {operands_if.data.PC, 1'b0}))
             trace_ex_type(1, operands_if.data.ex_type);
-            `TRACE(1, (", op="));
+            `TRACE(1, (", op="))
             trace_ex_op(1, operands_if.data.ex_type, operands_if.data.op_type, operands_if.data.op_args);
-            `TRACE(1, (", tmask=%b, wb=%b, rd=%0d, rs1_data=", operands_if.data.tmask, operands_if.data.wb, operands_if.data.rd));
-            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs1_data, `NUM_THREADS);
-            `TRACE(1, (", rs2_data="));
-            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs2_data, `NUM_THREADS);
-            `TRACE(1, (", rs3_data="));
-            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs3_data, `NUM_THREADS);
+            `TRACE(1, (", tmask=%b, wb=%b, rd=%0d, rs1_data=", operands_if.data.tmask, operands_if.data.wb, operands_if.data.rd))
+            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs1_data, `NUM_THREADS)
+            `TRACE(1, (", rs2_data="))
+            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs2_data, `NUM_THREADS)
+            `TRACE(1, (", rs3_data="))
+            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs3_data, `NUM_THREADS)
             trace_op_args(1, operands_if.data.ex_type, operands_if.data.op_type, operands_if.data.op_args);
-            `TRACE(1, (" (#%0d)\n", operands_if.data.uuid));
+            `TRACE(1, (" (#%0d)\n", operands_if.data.uuid))
         end
     end
 `endif

@@ -568,14 +568,14 @@ module VX_decode import VX_gpu_pkg::*; #(
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (decode_if.valid && decode_if.ready) begin
-            `TRACE(1, ("%d: %s: wid=%0d, PC=0x%0h, instr=0x%0h, ex=", $time, INSTANCE_ID, decode_if.data.wid, {decode_if.data.PC, 1'd0}, instr));
+            `TRACE(1, ("%d: %s: wid=%0d, PC=0x%0h, instr=0x%0h, ex=", $time, INSTANCE_ID, decode_if.data.wid, {decode_if.data.PC, 1'd0}, instr))
             trace_ex_type(1, decode_if.data.ex_type);
-            `TRACE(1, (", op="));
+            `TRACE(1, (", op="))
             trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
             `TRACE(1, (", tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, opds=%b%b%b%b",
-                decode_if.data.tmask, decode_if.data.wb, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3, use_rd, use_rs1, use_rs2, use_rs3));
+                decode_if.data.tmask, decode_if.data.wb, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3, use_rd, use_rs1, use_rs2, use_rs3))
             trace_op_args(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
-            `TRACE(1, (" (#%0d)\n", decode_if.data.uuid));
+            `TRACE(1, (" (#%0d)\n", decode_if.data.uuid))
         end
     end
 `endif

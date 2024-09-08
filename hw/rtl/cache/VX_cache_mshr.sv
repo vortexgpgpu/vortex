@@ -269,33 +269,33 @@ module VX_cache_mshr #(
         end
         if (allocate_fire)
             `TRACE(3, ("%d: %s allocate: addr=0x%0h, prev=%0d, id=%0d (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(allocate_addr, BANK_ID), allocate_prev, allocate_id, lkp_req_uuid));
+                `CS_LINE_TO_FULL_ADDR(allocate_addr, BANK_ID), allocate_prev, allocate_id, lkp_req_uuid))
         if (lookup_valid)
             `TRACE(3, ("%d: %s lookup: addr=0x%0h, matches=%b (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(lookup_addr, BANK_ID), lookup_pending, lkp_req_uuid));
+                `CS_LINE_TO_FULL_ADDR(lookup_addr, BANK_ID), lookup_pending, lkp_req_uuid))
         if (finalize_valid)
             `TRACE(3, ("%d: %s finalize release=%b, pending=%b, prev=%0d, id=%0d (#%0d)\n", $time, INSTANCE_ID,
-                finalize_release, finalize_pending, finalize_prev, finalize_id, fin_req_uuid));
+                finalize_release, finalize_pending, finalize_prev, finalize_id, fin_req_uuid))
         if (fill_valid)
             `TRACE(3, ("%d: %s fill: addr=0x%0h, addr=0x%0h, id=%0d\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(addr_table[fill_id], BANK_ID), `CS_LINE_TO_FULL_ADDR(fill_addr, BANK_ID), fill_id));
+                `CS_LINE_TO_FULL_ADDR(addr_table[fill_id], BANK_ID), `CS_LINE_TO_FULL_ADDR(fill_addr, BANK_ID), fill_id))
         if (dequeue_fire)
             `TRACE(3, ("%d: %s dequeue: addr=0x%0h, id=%0d (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(dequeue_addr, BANK_ID), dequeue_id_r, deq_req_uuid));
+                `CS_LINE_TO_FULL_ADDR(dequeue_addr, BANK_ID), dequeue_id_r, deq_req_uuid))
         if (show_table) begin
-            `TRACE(3, ("%d: %s table", $time, INSTANCE_ID));
+            `TRACE(3, ("%d: %s table", $time, INSTANCE_ID))
             for (integer i = 0; i < MSHR_SIZE; ++i) begin
                 if (valid_table[i]) begin
-                    `TRACE(3, (" %0d=0x%0h", i, `CS_LINE_TO_FULL_ADDR(addr_table[i], BANK_ID)));
+                    `TRACE(3, (" %0d=0x%0h", i, `CS_LINE_TO_FULL_ADDR(addr_table[i], BANK_ID)))
                     if (write_table[i])
-                        `TRACE(3, ("(w)"));
+                        `TRACE(3, ("(w)"))
                     else
-                        `TRACE(3, ("(r)"));
+                        `TRACE(3, ("(r)"))
                     if (next_table[i])
-                        `TRACE(3, ("->%0d", next_index[i]));
+                        `TRACE(3, ("->%0d", next_index[i]))
                 end
             end
-            `TRACE(3, ("\n"));
+            `TRACE(3, ("\n"))
         end
     end
 `endif
