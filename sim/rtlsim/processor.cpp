@@ -116,19 +116,7 @@ public:
   #endif
 
     ram_ = nullptr;
-
-  #ifndef NDEBUG
-    // dump device configuration
-    std::cout << "CONFIGS:"
-              << " num_threads=" << NUM_THREADS
-              << ", num_warps=" << NUM_WARPS
-              << ", num_cores=" << NUM_CORES
-              << ", num_clusters=" << NUM_CLUSTERS
-              << ", socket_size=" << SOCKET_SIZE
-              << ", local_mem_base=0x" << std::hex << LMEM_BASE_ADDR << std::dec
-              << ", num_barriers=" << NUM_BARRIERS
-              << std::endl;
-  #endif
+    
     // reset the device
     this->reset();
 
