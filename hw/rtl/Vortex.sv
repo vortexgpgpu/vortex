@@ -189,6 +189,12 @@ module Vortex import VX_gpu_pkg::*; (
 
 `endif
 
+    // dump device configuration
+    initial begin
+        `TRACE(0, ("CONFIGS: num_threads=%0d, num_warps=%0d, num_cores=%0d, num_clusters=%0d, socket_size=%0d, local_mem_base=0x%0h, num_barriers=%0d\n",
+                    `NUM_THREADS, `NUM_WARPS, `NUM_CORES, `NUM_CLUSTERS, `SOCKET_SIZE, `LMEM_BASE_ADDR, `NUM_BARRIERS));
+    end
+
 `ifdef DBG_TRACE_MEM
     always @(posedge clk) begin
         if (mem_req_fire) begin
