@@ -467,13 +467,43 @@ package VX_gpu_pkg;
             case (`INST_SFU_BITS'(op_type))
                 `INST_SFU_TMC:   `TRACE(level, ("TMC"))
                 `INST_SFU_WSPAWN:`TRACE(level, ("WSPAWN"))
-                `INST_SFU_SPLIT: begin if (op_args.wctl.is_neg) `TRACE(level, ("SPLIT.N")) else `TRACE(level, ("SPLIT")) end
+                `INST_SFU_SPLIT: begin
+                    if (op_args.wctl.is_neg) begin
+                        `TRACE(level, ("SPLIT.N"))
+                    end else begin
+                        `TRACE(level, ("SPLIT"))
+                    end
+                end
                 `INST_SFU_JOIN:  `TRACE(level, ("JOIN"))
                 `INST_SFU_BAR:   `TRACE(level, ("BAR"))
-                `INST_SFU_PRED:  begin if (op_args.wctl.is_neg) `TRACE(level, ("PRED.N")) else `TRACE(level, ("PRED")) end
-                `INST_SFU_CSRRW: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRWI")) else `TRACE(level, ("CSRRW")) end
-                `INST_SFU_CSRRS: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRSI")) else `TRACE(level, ("CSRRS")) end
-                `INST_SFU_CSRRC: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRCI")) else `TRACE(level, ("CSRRC")) end
+                `INST_SFU_PRED:  begin
+                    if (op_args.wctl.is_neg) begin
+                        `TRACE(level, ("PRED.N"))
+                    end else begin
+                        `TRACE(level, ("PRED"))
+                    end
+                end
+                `INST_SFU_CSRRW: begin
+                    if (op_args.csr.use_imm) begin
+                        `TRACE(level, ("CSRRWI"))
+                    end else begin
+                        `TRACE(level, ("CSRRW"))
+                    end
+                end
+                `INST_SFU_CSRRS: begin
+                    if (op_args.csr.use_imm) begin
+                        `TRACE(level, ("CSRRSI"))
+                    end else begin
+                        `TRACE(level, ("CSRRS"))
+                    end
+                end
+                `INST_SFU_CSRRC: begin
+                    if (op_args.csr.use_imm) begin
+                        `TRACE(level, ("CSRRCI"))
+                    end else begin
+                        `TRACE(level, ("CSRRC"))
+                    end
+                end
                 default:         `TRACE(level, ("?"))
             endcase
         end
@@ -482,60 +512,69 @@ package VX_gpu_pkg;
             case (`INST_FPU_BITS'(op_type))
                 `INST_FPU_ADD: begin
                     if (op_args.fpu.fmt[1]) begin
-                        if (op_args.fpu.fmt[0])
+                        if (op_args.fpu.fmt[0]) begin
                             `TRACE(level, ("FSUB.D"))
-                        else
+                        end else begin
                             `TRACE(level, ("FSUB.S"))
+                        end
                     end else begin
-                        if (op_args.fpu.fmt[0])
+                        if (op_args.fpu.fmt[0]) begin
                             `TRACE(level, ("FADD.D"))
-                        else
+                        end else begin
                             `TRACE(level, ("FADD.S"))
+                        end
                     end
                 end
                 `INST_FPU_MADD: begin
                     if (op_args.fpu.fmt[1]) begin
-                        if (op_args.fpu.fmt[0])
+                        if (op_args.fpu.fmt[0]) begin
                             `TRACE(level, ("FMSUB.D"))
-                        else
+                        end else begin
                             `TRACE(level, ("FMSUB.S"))
+                        end
                     end else begin
-                        if (op_args.fpu.fmt[0])
+                        if (op_args.fpu.fmt[0]) begin
                             `TRACE(level, ("FMADD.D"))
-                        else
+                        end else begin
                             `TRACE(level, ("FMADD.S"))
+                        end
                     end
                 end
                 `INST_FPU_NMADD: begin
                     if (op_args.fpu.fmt[1]) begin
-                        if (op_args.fpu.fmt[0])
+                        if (op_args.fpu.fmt[0]) begin
                             `TRACE(level, ("FNMSUB.D"))
-                        else
+                        end else begin
                             `TRACE(level, ("FNMSUB.S"))
+                        end
                     end else begin
-                        if (op_args.fpu.fmt[0])
+                        if (op_args.fpu.fmt[0]) begin
                             `TRACE(level, ("FNMADD.D"))
-                        else
+                        end else begin
                             `TRACE(level, ("FNMADD.S"))
+                        end
                     end
                 end
                 `INST_FPU_MUL: begin
-                    if (op_args.fpu.fmt[0])
+                    if (op_args.fpu.fmt[0]) begin
                         `TRACE(level, ("FMUL.D"))
-                    else
+                    end else begin
                         `TRACE(level, ("FMUL.S"))
+                        end
                 end
                 `INST_FPU_DIV: begin
-                    if (op_args.fpu.fmt[0])
+                    if (op_args.fpu.fmt[0]) begin
                         `TRACE(level, ("FDIV.D"))
-                    else
+                    end else begin
                         `TRACE(level, ("FDIV.S"))
+                        end
                 end
                 `INST_FPU_SQRT: begin
-                    if (op_args.fpu.fmt[0])
+                    if (op_args.fpu.fmt[0]) begin
                         `TRACE(level, ("FSQRT.D"))
-                    else
+                    end else begin
                         `TRACE(level, ("FSQRT.S"))
+                    end
                 end
                 `INST_FPU_CMP: begin
                     if (op_args.fpu.fmt[0]) begin
