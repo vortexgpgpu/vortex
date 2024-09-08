@@ -118,7 +118,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     assign icache_bus_if.req_data.flags  = '0;
     assign icache_bus_if.req_data.rw     = 0;
-    assign icache_bus_if.req_data.byteen = 4'b1111;
+    assign icache_bus_if.req_data.byteen = '1;
     assign icache_bus_if.req_data.data   = '0;
 
     // Icache Response

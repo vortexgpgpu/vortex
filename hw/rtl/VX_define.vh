@@ -361,7 +361,7 @@
     assign dst.req_data.rw = 0; \
     assign dst.req_data.addr = src.req_data.addr; \
     assign dst.req_data.data = '0; \
-    assign dst.req_data.byteen = '0; \
+    assign dst.req_data.byteen = '1; \
     assign dst.req_data.flags = src.req_data.flags; \
     assign dst.req_data.tag = src.req_data.tag; \
     assign src.req_ready = dst.req_ready; \

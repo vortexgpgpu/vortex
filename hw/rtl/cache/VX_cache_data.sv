@@ -101,7 +101,7 @@ module VX_cache_data #(
 
             assign dirty_byteen = bs_rdata[way_idx];
         end else begin
-            assign dirty_byteen = {LINE_SIZE{1'b1}};
+            assign dirty_byteen = '1;
         end
 
         wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] flipped_rdata;
@@ -112,7 +112,7 @@ module VX_cache_data #(
         end
         assign dirty_data = flipped_rdata[way_idx];
     end else begin
-        assign dirty_byteen = '0;
+        assign dirty_byteen = '1;
         assign dirty_data = '0;
     end
 
