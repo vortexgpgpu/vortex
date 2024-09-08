@@ -320,8 +320,10 @@ package VX_gpu_pkg;
         case (ex_type)
             `EX_ALU: `TRACE(level, ("ALU"));
             `EX_LSU: `TRACE(level, ("LSU"));
-            `EX_FPU: `TRACE(level, ("FPU"));
             `EX_SFU: `TRACE(level, ("SFU"));
+        `ifdef EXT_F_ENABLE
+            `EX_FPU: `TRACE(level, ("FPU"));
+        `endif
             default: `TRACE(level, ("?"));
         endcase
     endtask
@@ -664,14 +666,16 @@ package VX_gpu_pkg;
         `EX_LSU: begin
             `TRACE(level, (", offset=0x%0h", op_args.lsu.offset));
         end
-        `EX_FPU: begin
-            `TRACE(level, (", fmt=0x%0h, frm=0x%0h", op_args.fpu.fmt, op_args.fpu.frm));
-        end
         `EX_SFU: begin
             if (`INST_SFU_IS_CSR(op_type)) begin
                 `TRACE(level, (", addr=0x%0h, use_imm=%b, imm=0x%0h", op_args.csr.addr, op_args.csr.use_imm, op_args.csr.imm));
             end
         end
+    `ifdef EXT_F_ENABLE
+        `EX_FPU: begin
+            `TRACE(level, (", fmt=0x%0h, frm=0x%0h", op_args.fpu.fmt, op_args.fpu.frm));
+        end
+    `endif
         default:;
         endcase
     endtask
