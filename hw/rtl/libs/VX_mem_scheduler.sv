@@ -97,8 +97,8 @@ module VX_mem_scheduler #(
     `STATIC_ASSERT (`IS_DIVISBLE(CORE_REQS * WORD_SIZE, LINE_SIZE), ("invalid parameter"))
     `STATIC_ASSERT ((TAG_WIDTH >= UUID_WIDTH), ("invalid parameter"))
     `STATIC_ASSERT ((0 == RSP_PARTIAL) || (1 == RSP_PARTIAL), ("invalid parameter"))
-    `RUNTIME_ASSERT((~core_req_valid || core_req_mask != 0), ("%t: invalid request mask", $time));
-
+    `RUNTIME_ASSERT((~core_req_valid || core_req_mask != 0), ("%t: invalid request mask", $time))
+    
     wire                            ibuf_push;
     wire                            ibuf_pop;
     wire [CORE_QUEUE_ADDRW-1:0]     ibuf_waddr;
@@ -584,41 +584,41 @@ module VX_mem_scheduler #(
     always @(posedge clk) begin
         if (core_req_fire) begin
             if (core_req_rw) begin
-                `TRACE(1, ("%d: %s core-req-wr: valid=%b, addr=", $time, INSTANCE_ID, core_req_mask));
-                `TRACE_ARRAY1D(1, "0x%h", core_req_addr, CORE_REQS);
-                `TRACE(1, (", byteen="));
-                `TRACE_ARRAY1D(1, "0x%h", core_req_byteen, CORE_REQS);
-                `TRACE(1, (", data="));
-                `TRACE_ARRAY1D(1, "0x%0h", core_req_data, CORE_REQS);
+                `TRACE(1, ("%d: %s core-req-wr: valid=%b, addr=", $time, INSTANCE_ID, core_req_mask))
+                `TRACE_ARRAY1D(1, "0x%h", core_req_addr, CORE_REQS)
+                `TRACE(1, (", byteen="))
+                `TRACE_ARRAY1D(1, "0x%h", core_req_byteen, CORE_REQS)
+                `TRACE(1, (", data="))
+                `TRACE_ARRAY1D(1, "0x%0h", core_req_data, CORE_REQS)
             end else begin
-                `TRACE(1, ("%d: %s core-req-rd: valid=%b, addr=", $time, INSTANCE_ID, core_req_mask));
-                `TRACE_ARRAY1D(1, "0x%h", core_req_addr, CORE_REQS);
+                `TRACE(1, ("%d: %s core-req-rd: valid=%b, addr=", $time, INSTANCE_ID, core_req_mask))
+                `TRACE_ARRAY1D(1, "0x%h", core_req_addr, CORE_REQS)
             end
-            `TRACE(1, (", tag=0x%0h (#%0d)\n", core_req_tag, req_dbg_uuid));
+            `TRACE(1, (", tag=0x%0h (#%0d)\n", core_req_tag, req_dbg_uuid))
         end
         if (core_rsp_valid && core_rsp_ready) begin
-            `TRACE(1, ("%d: %s core-rsp: valid=%b, sop=%b, eop=%b, data=", $time, INSTANCE_ID, core_rsp_mask, core_rsp_sop, core_rsp_eop));
-            `TRACE_ARRAY1D(1, "0x%0h", core_rsp_data, CORE_REQS);
-            `TRACE(1, (", tag=0x%0h (#%0d)\n", core_rsp_tag, rsp_dbg_uuid));
+            `TRACE(1, ("%d: %s core-rsp: valid=%b, sop=%b, eop=%b, data=", $time, INSTANCE_ID, core_rsp_mask, core_rsp_sop, core_rsp_eop))
+            `TRACE_ARRAY1D(1, "0x%0h", core_rsp_data, CORE_REQS)
+            `TRACE(1, (", tag=0x%0h (#%0d)\n", core_rsp_tag, rsp_dbg_uuid))
         end
         if (| mem_req_fire_s) begin
             if (| mem_req_rw_s) begin
-                `TRACE(1, ("%d: %s mem-req-wr: valid=%b, addr=", $time, INSTANCE_ID, mem_req_mask_s));
-                `TRACE_ARRAY1D(1, "0x%h", mem_req_addr_s, CORE_CHANNELS);
-                `TRACE(1, (", byteen="));
-                `TRACE_ARRAY1D(1, "0x%h", mem_req_byteen_s, CORE_CHANNELS);
-                `TRACE(1, (", data="));
-                `TRACE_ARRAY1D(1, "0x%0h", mem_req_data_s, CORE_CHANNELS);
+                `TRACE(1, ("%d: %s mem-req-wr: valid=%b, addr=", $time, INSTANCE_ID, mem_req_mask_s))
+                `TRACE_ARRAY1D(1, "0x%h", mem_req_addr_s, CORE_CHANNELS)
+                `TRACE(1, (", byteen="))
+                `TRACE_ARRAY1D(1, "0x%h", mem_req_byteen_s, CORE_CHANNELS)
+                `TRACE(1, (", data="))
+                `TRACE_ARRAY1D(1, "0x%0h", mem_req_data_s, CORE_CHANNELS)
             end else begin
-                `TRACE(1, ("%d: %s mem-req-rd: valid=%b, addr=", $time, INSTANCE_ID, mem_req_mask_s));
-                `TRACE_ARRAY1D(1, "0x%h", mem_req_addr_s, CORE_CHANNELS);
+                `TRACE(1, ("%d: %s mem-req-rd: valid=%b, addr=", $time, INSTANCE_ID, mem_req_mask_s))
+                `TRACE_ARRAY1D(1, "0x%h", mem_req_addr_s, CORE_CHANNELS)
             end
-            `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_waddr_s, req_batch_idx, mem_req_dbg_uuid));
+            `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_waddr_s, req_batch_idx, mem_req_dbg_uuid))
         end
         if (mem_rsp_fire_s) begin
-            `TRACE(1, ("%d: %s mem-rsp: valid=%b, data=", $time, INSTANCE_ID, mem_rsp_mask_s));
-            `TRACE_ARRAY1D(1, "0x%0h", mem_rsp_data_s, CORE_CHANNELS);
-            `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_raddr, rsp_batch_idx, mem_rsp_dbg_uuid));
+            `TRACE(1, ("%d: %s mem-rsp: valid=%b, data=", $time, INSTANCE_ID, mem_rsp_mask_s))
+            `TRACE_ARRAY1D(1, "0x%0h", mem_rsp_data_s, CORE_CHANNELS)
+            `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_raddr, rsp_batch_idx, mem_rsp_dbg_uuid))
         end
     end
 `endif

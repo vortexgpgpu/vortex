@@ -61,10 +61,10 @@ module VX_gbar_unit #(
     always @(posedge clk) begin
         if (gbar_bus_if.req_valid && gbar_bus_if.req_ready) begin
             `TRACE(1, ("%d: %s acquire: bar_id=%0d, size=%0d, core_id=%0d\n",
-                $time, INSTANCE_ID, gbar_bus_if.req_id, gbar_bus_if.req_size_m1, gbar_bus_if.req_core_id));
+                $time, INSTANCE_ID, gbar_bus_if.req_id, gbar_bus_if.req_size_m1, gbar_bus_if.req_core_id))
         end
         if (gbar_bus_if.rsp_valid) begin
-            `TRACE(1, ("%d: %s release: bar_id=%0d\n", $time, INSTANCE_ID, gbar_bus_if.rsp_id));
+            `TRACE(1, ("%d: %s release: bar_id=%0d\n", $time, INSTANCE_ID, gbar_bus_if.rsp_id))
         end
     end
 `endif

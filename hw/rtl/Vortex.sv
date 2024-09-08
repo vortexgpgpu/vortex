@@ -192,19 +192,19 @@ module Vortex import VX_gpu_pkg::*; (
     // dump device configuration
     initial begin
         `TRACE(0, ("CONFIGS: num_threads=%0d, num_warps=%0d, num_cores=%0d, num_clusters=%0d, socket_size=%0d, local_mem_base=0x%0h, num_barriers=%0d\n",
-                    `NUM_THREADS, `NUM_WARPS, `NUM_CORES, `NUM_CLUSTERS, `SOCKET_SIZE, `LMEM_BASE_ADDR, `NUM_BARRIERS));
+                    `NUM_THREADS, `NUM_WARPS, `NUM_CORES, `NUM_CLUSTERS, `SOCKET_SIZE, `LMEM_BASE_ADDR, `NUM_BARRIERS))
     end
 
 `ifdef DBG_TRACE_MEM
     always @(posedge clk) begin
         if (mem_req_fire) begin
             if (mem_req_rw)
-                `TRACE(1, ("%d: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%h data=0x%h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data));
+                `TRACE(1, ("%d: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%h data=0x%h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data))
             else
-                `TRACE(1, ("%d: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen));
+                `TRACE(1, ("%d: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen))
         end
         if (mem_rsp_fire) begin
-            `TRACE(1, ("%d: MEM Rd Rsp: tag=0x%0h, data=0x%h\n", $time, mem_rsp_tag, mem_rsp_data));
+            `TRACE(1, ("%d: MEM Rd Rsp: tag=0x%0h, data=0x%h\n", $time, mem_rsp_tag, mem_rsp_data))
         end
     end
 `endif
