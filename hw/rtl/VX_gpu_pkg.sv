@@ -461,6 +461,21 @@ package VX_gpu_pkg;
                 endcase
             end
         end
+        `EX_SFU: begin
+            case (`INST_SFU_BITS'(op_type))
+                `INST_SFU_TMC:   `TRACE(level, ("TMC"));
+                `INST_SFU_WSPAWN:`TRACE(level, ("WSPAWN"));
+                `INST_SFU_SPLIT: begin if (op_args.wctl.is_neg) `TRACE(level, ("SPLIT.N")); else `TRACE(level, ("SPLIT")); end
+                `INST_SFU_JOIN:  `TRACE(level, ("JOIN"));
+                `INST_SFU_BAR:   `TRACE(level, ("BAR"));
+                `INST_SFU_PRED:  begin if (op_args.wctl.is_neg) `TRACE(level, ("PRED.N")); else `TRACE(level, ("PRED")); end
+                `INST_SFU_CSRRW: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRWI")); else `TRACE(level, ("CSRRW")); end
+                `INST_SFU_CSRRS: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRSI")); else `TRACE(level, ("CSRRS")); end
+                `INST_SFU_CSRRC: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRCI")); else `TRACE(level, ("CSRRC")); end
+                default:         `TRACE(level, ("?"));
+            endcase
+        end
+    `ifdef EXT_F_ENABLE
         `EX_FPU: begin
             case (`INST_FPU_BITS'(op_type))
                 `INST_FPU_ADD: begin
@@ -632,20 +647,7 @@ package VX_gpu_pkg;
                 default: `TRACE(level, ("?"));
             endcase
         end
-        `EX_SFU: begin
-            case (`INST_SFU_BITS'(op_type))
-                `INST_SFU_TMC:   `TRACE(level, ("TMC"));
-                `INST_SFU_WSPAWN:`TRACE(level, ("WSPAWN"));
-                `INST_SFU_SPLIT: begin if (op_args.wctl.is_neg) `TRACE(level, ("SPLIT.N")); else `TRACE(level, ("SPLIT")); end
-                `INST_SFU_JOIN:  `TRACE(level, ("JOIN"));
-                `INST_SFU_BAR:   `TRACE(level, ("BAR"));
-                `INST_SFU_PRED:  begin if (op_args.wctl.is_neg) `TRACE(level, ("PRED.N")); else `TRACE(level, ("PRED")); end
-                `INST_SFU_CSRRW: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRWI")); else `TRACE(level, ("CSRRW")); end
-                `INST_SFU_CSRRS: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRSI")); else `TRACE(level, ("CSRRS")); end
-                `INST_SFU_CSRRC: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRCI")); else `TRACE(level, ("CSRRC")); end
-                default:         `TRACE(level, ("?"));
-            endcase
-        end
+    `endif
         default: `TRACE(level, ("?"));
         endcase
     endtask

@@ -2,7 +2,7 @@
 #define _COMMON_H_
 
 #ifndef TYPE
-#define TYPE float
+#define TYPE int
 #endif
 
 typedef struct {
@@ -10,7 +10,7 @@ typedef struct {
   uint32_t task_size;
   uint64_t src0_addr;
   uint64_t src1_addr;
-  uint64_t dst_addr;  
+  uint64_t dst_addr;
 } kernel_arg_t;
 
 #endif
