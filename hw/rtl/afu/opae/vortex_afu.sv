@@ -64,6 +64,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     localparam AFU_ID_L           = 16'h0002;      // AFU ID Lower
     localparam AFU_ID_H           = 16'h0004;      // AFU ID Higher
 
+    localparam CMD_IDLE           = 0;
     localparam CMD_MEM_READ       = `AFU_IMAGE_CMD_MEM_READ;
     localparam CMD_MEM_WRITE      = `AFU_IMAGE_CMD_MEM_WRITE;
     localparam CMD_DCR_WRITE      = `AFU_IMAGE_CMD_DCR_WRITE;
@@ -139,14 +140,12 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     // MMIO controller ////////////////////////////////////////////////////////////
 
-    t_ccip_c0_ReqMmioHdr mmio_hdr;
-    assign mmio_hdr = t_ccip_c0_ReqMmioHdr'(cp2af_sRxPort.c0.hdr);
-    `UNUSED_VAR (mmio_hdr)
+    t_ccip_c0_ReqMmioHdr mmio_req_hdr;
+    assign mmio_req_hdr = t_ccip_c0_ReqMmioHdr'(cp2af_sRxPort.c0.hdr[$bits(t_ccip_c0_ReqMmioHdr)-1:0]);
+    `UNUSED_VAR (mmio_req_hdr)
 
-    `STATIC_ASSERT(($bits(t_ccip_c0_ReqMmioHdr)-$bits(mmio_hdr.address)) == 12, ("Oops!"))
-
-    t_if_ccip_c2_Tx mmio_tx;
-    assign af2cp_sTxPort.c2 = mmio_tx;
+    t_if_ccip_c2_Tx mmio_rsp;
+    assign af2cp_sTxPort.c2 = mmio_rsp;
 
 `ifdef SCOPE
 
@@ -178,7 +177,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             end
             scope_bus_in <= 0;
             if (cp2af_sRxPort.c0.mmioWrValid
-             && (MMIO_SCOPE_WRITE == mmio_hdr.address)) begin
+             && (MMIO_SCOPE_WRITE == mmio_req_hdr.address)) begin
                 cmd_scope_wdata   <= 64'(cp2af_sRxPort.c0.data);
                 cmd_scope_writing <= 1;
                 scope_bus_ctr     <= 63;
@@ -206,6 +205,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire [COUT_QUEUE_DATAW-1:0] cout_q_dout;
     wire cout_q_full, cout_q_empty;
 
+    wire [COUT_QUEUE_DATAW-1:0] cout_q_dout_s = cout_q_dout & {COUT_QUEUE_DATAW{!cout_q_empty}};
+
 `ifdef SIMULATION
 `ifndef VERILATOR
     // disable assertions until full reset
@@ -226,17 +227,79 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 `endif
 `endif
 
+    // MMIO controller ////////////////////////////////////////////////////////////
+
+    // Handle MMIO read requests
     always @(posedge clk) begin
         if (reset) begin
-            mmio_tx.mmioRdValid <= 0;
-            mmio_tx.hdr         <= '0;
+            mmio_rsp.mmioRdValid <= 0;
         end else begin
-            mmio_tx.mmioRdValid <= cp2af_sRxPort.c0.mmioRdValid;
-            mmio_tx.hdr.tid     <= mmio_hdr.tid;
+            mmio_rsp.mmioRdValid <= cp2af_sRxPort.c0.mmioRdValid;
         end
-        // serve MMIO write request
+
+        mmio_rsp.hdr.tid <= mmio_req_hdr.tid;
+
+        if (cp2af_sRxPort.c0.mmioRdValid) begin
+            case (mmio_req_hdr.address)
+            // AFU header
+            16'h0000: mmio_rsp.data <= {
+                4'b0001, // Feature type = AFU
+                8'b0,    // reserved
+                4'b0,    // afu minor revision = 0
+                7'b0,    // reserved
+                1'b1,    // end of DFH list = 1
+                24'b0,   // next DFH offset = 0
+                4'b0,    // afu major revision = 0
+                12'b0    // feature ID = 0
+            };
+            AFU_ID_L: mmio_rsp.data <= afu_id[63:0];   // afu id low
+            AFU_ID_H: mmio_rsp.data <= afu_id[127:64]; // afu id hi
+            16'h0006: mmio_rsp.data <= 64'h0; // next AFU
+            16'h0008: mmio_rsp.data <= 64'h0; // reserved
+            MMIO_STATUS: begin
+                mmio_rsp.data <= 64'({cout_q_dout_s, !cout_q_empty, 8'(state)});
+            `ifdef DBG_TRACE_AFU
+                if (state != STATE_WIDTH'(mmio_rsp.data)) begin
+                    `TRACE(2, ("%d: MMIO_STATUS: addr=0x%0h, state=%0d\n", $time, mmio_req_hdr.address, state));
+                end
+            `endif
+            end
+            `ifdef SCOPE
+            MMIO_SCOPE_READ: begin
+                mmio_rsp.data <= cmd_scope_rdata;
+            `ifdef DBG_TRACE_AFU
+                `TRACE(2, ("%d: MMIO_SCOPE_READ: data=0x%h\n", $time, cmd_scope_rdata));
+            `endif
+            end
+            `endif
+            MMIO_DEV_CAPS: begin
+                mmio_rsp.data <= dev_caps;
+            `ifdef DBG_TRACE_AFU
+                `TRACE(2, ("%d: MMIO_DEV_CAPS: data=0x%h\n", $time, dev_caps));
+            `endif
+            end
+            MMIO_ISA_CAPS: begin
+                mmio_rsp.data <= isa_caps;
+            `ifdef DBG_TRACE_AFU
+                if (state != STATE_WIDTH'(mmio_rsp.data)) begin
+                    `TRACE(2, ("%d: MMIO_ISA_CAPS: data=%0d\n", $time, isa_caps));
+                end
+            `endif
+            end
+            default: begin
+                mmio_rsp.data <= 64'h0;
+            `ifdef DBG_TRACE_AFU
+                `TRACE(2, ("%d: Unknown MMIO Rd: addr=0x%0h\n", $time, mmio_req_hdr.address));
+            `endif
+            end
+            endcase
+        end
+    end
+
+    // Handle MMIO write requests
+    always @(posedge clk) begin
         if (cp2af_sRxPort.c0.mmioWrValid) begin
-            case (mmio_hdr.address)
+            case (mmio_req_hdr.address)
             MMIO_CMD_ARG0: begin
                 cmd_args[0] <= 64'(cp2af_sRxPort.c0.data);
             `ifdef DBG_TRACE_AFU
@@ -269,65 +332,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             `endif
             default: begin
                 `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: Unknown MMIO Wr: addr=0x%0h, data=0x%h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data)));
+                `TRACE(2, ("%d: Unknown MMIO Wr: addr=0x%0h, data=0x%h\n", $time, mmio_req_hdr.address, 64'(cp2af_sRxPort.c0.data)));
                 `endif
-            end
-            endcase
-        end
-
-        // serve MMIO read requests
-        if (cp2af_sRxPort.c0.mmioRdValid) begin
-            case (mmio_hdr.address)
-            // AFU header
-            16'h0000: mmio_tx.data <= {
-                4'b0001, // Feature type = AFU
-                8'b0,    // reserved
-                4'b0,    // afu minor revision = 0
-                7'b0,    // reserved
-                1'b1,    // end of DFH list = 1
-                24'b0,   // next DFH offset = 0
-                4'b0,    // afu major revision = 0
-                12'b0    // feature ID = 0
-            };
-            AFU_ID_L: mmio_tx.data <= afu_id[63:0];   // afu id low
-            AFU_ID_H: mmio_tx.data <= afu_id[127:64]; // afu id hi
-            16'h0006: mmio_tx.data <= 64'h0; // next AFU
-            16'h0008: mmio_tx.data <= 64'h0; // reserved
-            MMIO_STATUS: begin
-                mmio_tx.data <= 64'({cout_q_dout, !cout_q_empty, 8'(state)});
-            `ifdef DBG_TRACE_AFU
-                if (state != STATE_WIDTH'(mmio_tx.data)) begin
-                    `TRACE(2, ("%d: MMIO_STATUS: addr=0x%0h, state=%0d\n", $time, mmio_hdr.address, state));
-                end
-            `endif
-            end
-            `ifdef SCOPE
-            MMIO_SCOPE_READ: begin
-                mmio_tx.data <= cmd_scope_rdata;
-            `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: MMIO_SCOPE_READ: data=0x%h\n", $time, cmd_scope_rdata));
-            `endif
-            end
-            `endif
-            MMIO_DEV_CAPS: begin
-                mmio_tx.data <= dev_caps;
-            `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: MMIO_DEV_CAPS: data=0x%h\n", $time, dev_caps));
-            `endif
-            end
-            MMIO_ISA_CAPS: begin
-                mmio_tx.data <= isa_caps;
-            `ifdef DBG_TRACE_AFU
-                if (state != STATE_WIDTH'(mmio_tx.data)) begin
-                    `TRACE(2, ("%d: MMIO_ISA_CAPS: data=%0d\n", $time, isa_caps));
-                end
-            `endif
-            end
-            default: begin
-                mmio_tx.data <= 64'h0;
-            `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: Unknown MMIO Rd: addr=0x%0h\n", $time, mmio_hdr.address));
-            `endif
             end
             endcase
         end
@@ -351,9 +357,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         end
     end
 
-    wire is_mmio_wr_cmd = cp2af_sRxPort.c0.mmioWrValid && (MMIO_CMD_TYPE == mmio_hdr.address);
+    wire is_mmio_wr_cmd = cp2af_sRxPort.c0.mmioWrValid && (MMIO_CMD_TYPE == mmio_req_hdr.address);
     wire [CMD_TYPE_WIDTH-1:0] cmd_type = is_mmio_wr_cmd ?
-        CMD_TYPE_WIDTH'(cp2af_sRxPort.c0.data) : CMD_TYPE_WIDTH'(0);
+        CMD_TYPE_WIDTH'(cp2af_sRxPort.c0.data) : CMD_TYPE_WIDTH'(CMD_IDLE);
 
     always @(posedge clk) begin
         if (reset) begin
@@ -978,7 +984,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire cout_q_push = vx_mem_req_valid && vx_mem_is_cout && ~cout_q_full;
 
     wire cout_q_pop = cp2af_sRxPort.c0.mmioRdValid
-                   && (mmio_hdr.address == MMIO_STATUS)
+                   && (mmio_req_hdr.address == MMIO_STATUS)
                    && ~cout_q_empty;
 
     VX_fifo_queue #(
@@ -1051,8 +1057,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .probes({
             cmd_type,
             state,
-            mmio_hdr.address,
-            mmio_hdr.length,
+            mmio_req_hdr.address,
+            mmio_req_hdr.length,
             cp2af_sRxPort.c0.hdr.mdata,
             af2cp_sTxPort.c0.hdr.address,
             af2cp_sTxPort.c0.hdr.mdata,
