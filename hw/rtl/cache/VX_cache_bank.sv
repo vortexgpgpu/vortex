@@ -623,7 +623,7 @@ module VX_cache_bank #(
     end else begin
         assign mreq_queue_rw = 0;
         assign mreq_queue_data = '0;
-        assign mreq_queue_byteen = '0;
+        assign mreq_queue_byteen = '1;
         `UNUSED_VAR (dirty_data_st1)
         `UNUSED_VAR (dirty_byteen_st1)
     end
