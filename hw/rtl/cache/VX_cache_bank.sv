@@ -617,9 +617,18 @@ module VX_cache_bank #(
     assign mreq_queue_flush = creq_flush_st1;
 
     if (WRITE_ENABLE) begin
-        assign mreq_queue_rw = WRITEBACK ? is_fill_or_flush_st1 : rw_st1;
-        assign mreq_queue_data = WRITEBACK ? dirty_data_st1 : write_data_st1;
-        assign mreq_queue_byteen = WRITEBACK ? dirty_byteen_st1 : write_byteen_st1;
+        if (WRITEBACK) begin
+            assign mreq_queue_rw = is_fill_or_flush_st1;
+            assign mreq_queue_data =  dirty_data_st1;
+            assign mreq_queue_byteen = is_fill_or_flush_st1 ? dirty_byteen_st1 : '1;
+        end else begin
+            assign mreq_queue_rw = rw_st1;
+            assign mreq_queue_data = write_data_st1;
+            assign mreq_queue_byteen = rw_st1 ? write_byteen_st1 : '1;
+            `UNUSED_VAR (is_fill_or_flush_st1)
+            `UNUSED_VAR (dirty_data_st1)
+            `UNUSED_VAR (dirty_byteen_st1)
+        end
     end else begin
         assign mreq_queue_rw = 0;
         assign mreq_queue_data = '0;
