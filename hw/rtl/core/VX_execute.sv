@@ -51,15 +51,11 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_fpu_csr_if fpu_csr_if[`NUM_FPU_BLOCKS]();
 `endif
 
-    `RESET_RELAY (alu_reset, reset);
-    `RESET_RELAY (lsu_reset, reset);
-    `RESET_RELAY (sfu_reset, reset);
-
     VX_alu_unit #(
         .INSTANCE_ID ($sformatf("%s-alu", INSTANCE_ID))
     ) alu_unit (
         .clk            (clk),
-        .reset          (alu_reset),
+        .reset          (reset),
         .dispatch_if    (dispatch_if[`EX_ALU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .commit_if      (commit_if[`EX_ALU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .branch_ctl_if  (branch_ctl_if)
@@ -72,20 +68,18 @@ module VX_execute import VX_gpu_pkg::*; #(
     ) lsu_unit (
         `SCOPE_IO_BIND  (0)
         .clk            (clk),
-        .reset          (lsu_reset),
+        .reset          (reset),
         .dispatch_if    (dispatch_if[`EX_LSU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .commit_if      (commit_if[`EX_LSU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .lsu_mem_if     (lsu_mem_if)
     );
 
 `ifdef EXT_F_ENABLE
-    `RESET_RELAY (fpu_reset, reset);
-
     VX_fpu_unit #(
         .INSTANCE_ID ($sformatf("%s-fpu", INSTANCE_ID))
     ) fpu_unit (
         .clk            (clk),
-        .reset          (fpu_reset),
+        .reset          (reset),
         .dispatch_if    (dispatch_if[`EX_FPU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .commit_if      (commit_if[`EX_FPU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .fpu_csr_if     (fpu_csr_if)
@@ -97,7 +91,7 @@ module VX_execute import VX_gpu_pkg::*; #(
         .CORE_ID (CORE_ID)
     ) sfu_unit (
         .clk            (clk),
-        .reset          (sfu_reset),
+        .reset          (reset),
     `ifdef PERF_ENABLE
         .mem_perf_if    (mem_perf_if),
         .pipeline_perf_if (pipeline_perf_if),

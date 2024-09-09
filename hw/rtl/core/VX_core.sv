@@ -75,13 +75,6 @@ module VX_core import VX_gpu_pkg::*; #(
     assign mem_perf_tmp_if.mem     = mem_perf_if.mem;
 `endif
 
-    `RESET_RELAY (schedule_reset, reset);
-    `RESET_RELAY (fetch_reset, reset);
-    `RESET_RELAY (decode_reset, reset);
-    `RESET_RELAY (issue_reset, reset);
-    `RESET_RELAY (execute_reset, reset);
-    `RESET_RELAY (commit_reset, reset);
-
     base_dcrs_t base_dcrs;
 
     VX_dcr_data dcr_data (
@@ -98,7 +91,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .CORE_ID (CORE_ID)
     ) schedule (
         .clk            (clk),
-        .reset          (schedule_reset),
+        .reset          (reset),
 
     `ifdef PERF_ENABLE
         .sched_perf     (pipeline_perf_if.sched),
@@ -126,7 +119,7 @@ module VX_core import VX_gpu_pkg::*; #(
     ) fetch (
         `SCOPE_IO_BIND  (0)
         .clk            (clk),
-        .reset          (fetch_reset),
+        .reset          (reset),
         .icache_bus_if  (icache_bus_if),
         .schedule_if    (schedule_if),
         .fetch_if       (fetch_if)
@@ -136,7 +129,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .INSTANCE_ID ($sformatf("%s-decode", INSTANCE_ID))
     ) decode (
         .clk            (clk),
-        .reset          (decode_reset),
+        .reset          (reset),
         .fetch_if       (fetch_if),
         .decode_if      (decode_if),
         .decode_sched_if(decode_sched_if)
@@ -148,7 +141,7 @@ module VX_core import VX_gpu_pkg::*; #(
         `SCOPE_IO_BIND  (1)
 
         .clk            (clk),
-        .reset          (issue_reset),
+        .reset          (reset),
 
     `ifdef PERF_ENABLE
         .issue_perf     (pipeline_perf_if.issue),
@@ -166,7 +159,7 @@ module VX_core import VX_gpu_pkg::*; #(
         `SCOPE_IO_BIND  (2)
 
         .clk            (clk),
-        .reset          (execute_reset),
+        .reset          (reset),
 
     `ifdef PERF_ENABLE
         .mem_perf_if    (mem_perf_tmp_if),
@@ -191,7 +184,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .INSTANCE_ID ($sformatf("%s-commit", INSTANCE_ID))
     ) commit (
         .clk            (clk),
-        .reset          (commit_reset),
+        .reset          (reset),
 
         .commit_if      (commit_if),
 
@@ -201,13 +194,11 @@ module VX_core import VX_gpu_pkg::*; #(
         .commit_sched_if(commit_sched_if)
     );
 
-    `RESET_RELAY (lmem_unit_reset, reset);
-
     VX_mem_unit #(
         .INSTANCE_ID (INSTANCE_ID)
     ) mem_unit (
         .clk           (clk),
-        .reset         (lmem_unit_reset),
+        .reset         (reset),
     `ifdef PERF_ENABLE
         .lmem_perf     (mem_perf_tmp_if.lmem),
     `endif
