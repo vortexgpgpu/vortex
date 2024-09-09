@@ -56,14 +56,12 @@ module VX_cluster import VX_gpu_pkg::*; #(
     VX_gbar_bus_if per_socket_gbar_bus_if[`NUM_SOCKETS]();
     VX_gbar_bus_if gbar_bus_if();
 
-    `RESET_RELAY (gbar_reset, reset);
-
     VX_gbar_arb #(
         .NUM_REQS (`NUM_SOCKETS),
         .OUT_BUF  ((`NUM_SOCKETS > 2) ? 1 : 0) // bgar_unit has no backpressure
     ) gbar_arb (
         .clk        (clk),
-        .reset      (gbar_reset),
+        .reset      (reset),
         .bus_in_if  (per_socket_gbar_bus_if),
         .bus_out_if (gbar_bus_if)
     );
@@ -72,7 +70,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .INSTANCE_ID ($sformatf("gbar%0d", CLUSTER_ID))
     ) gbar_unit (
         .clk         (clk),
-        .reset       (gbar_reset),
+        .reset       (reset),
         .gbar_bus_if (gbar_bus_if)
     );
 
