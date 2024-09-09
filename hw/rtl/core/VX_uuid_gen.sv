@@ -14,15 +14,16 @@
 `include "VX_define.vh"
 
 module VX_uuid_gen import VX_gpu_pkg::*; #(
-    parameter CORE_ID = 0
+    parameter CORE_ID = 0,
+    parameter UUID_WIDTH = 48
 ) (
     input wire clk,
     input wire reset,
     input wire incr,
     input wire [`NW_WIDTH-1:0] wid,
-    output wire [`UUID_WIDTH-1:0] uuid
+    output wire [UUID_WIDTH-1:0] uuid
 );
-    localparam GNW_WIDTH = `UUID_WIDTH - 32;
+    localparam GNW_WIDTH = UUID_WIDTH - 32;
     reg [31:0] uuid_cntrs [0:`NUM_WARPS-1];
     reg [`NUM_WARPS-1:0] has_uuid_cntrs;
 
