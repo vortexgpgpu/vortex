@@ -126,17 +126,16 @@ module VX_afu_wrap #(
 		if (reset || ap_reset) begin
 			state             <= STATE_IDLE;
 			vx_pending_writes <= '0;
-			vx_reset_ctr      <= (`RESET_DELAY-1);
 			vx_reset          <= 1;
 		end else begin
 			case (state)
 			STATE_IDLE: begin
 				if (ap_start) begin
 				`ifdef DBG_TRACE_AFU
-					`TRACE(2, ("%d: STATE RUN\n", $time))
+					`TRACE(2, ("%d: AFU: Goto STATE RUN\n", $time))
 				`endif
 					state <= STATE_RUN;
-					vx_reset_ctr <= 0;
+					vx_reset_ctr <= (`RESET_DELAY-1);
 					vx_reset <= 1;
 				end
 			end
@@ -161,6 +160,7 @@ module VX_afu_wrap #(
 						if (~vx_busy) begin
 						`ifdef DBG_TRACE_AFU
 							`TRACE(2, ("%d: AFU: End execution\n", $time))
+                            `TRACE(2, ("%d: AFU: Goto STATE IDLE\n", $time))
 						`endif
 							state <= STATE_IDLE;
 						end
@@ -170,7 +170,7 @@ module VX_afu_wrap #(
 			endcase
 
 			// ensure reset network initialization
-			if (vx_reset_ctr != 0) begin
+			if (vx_reset_ctr != '0) begin
 				vx_reset_ctr <= vx_reset_ctr - 1;
 			end
 
