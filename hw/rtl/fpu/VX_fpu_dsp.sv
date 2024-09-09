@@ -255,7 +255,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
         .TAG_WIDTH (TAG_WIDTH)
     ) fpu_sqrt (
         .clk        (clk),
-        .reset      (div_sqrt_reset),
+        .reset      (reset),
         .valid_in   (div_sqrt_valid_in[1]),
         .ready_in   (div_sqrt_ready_in[1]),
         .mask_in    (div_sqrt_mask_in[1]),
