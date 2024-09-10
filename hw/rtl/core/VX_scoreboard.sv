@@ -206,7 +206,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end else begin
                 if (staging_if[w].valid && ~staging_if[w].ready) begin
                 `ifdef DBG_TRACE_PIPELINE
-                    `TRACE(3, ("%d: *** %s-stall: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)\n",
+                    `TRACE(3, ("%t: *** %s-stall: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)\n",
                         $time, INSTANCE_ID, w, {staging_if[w].data.PC, 1'b0}, staging_if[w].data.tmask, timeout_ctr,
                         operands_busy, staging_if[w].data.uuid))
                 `endif
