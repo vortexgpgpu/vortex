@@ -132,7 +132,7 @@ module VX_afu_wrap #(
 			STATE_IDLE: begin
 				if (ap_start) begin
 				`ifdef DBG_TRACE_AFU
-					`TRACE(2, ("%d: AFU: Goto STATE RUN\n", $time))
+					`TRACE(2, ("%t: AFU: Goto STATE RUN\n", $time))
 				`endif
 					state <= STATE_RUN;
 					vx_reset_ctr <= (`RESET_DELAY-1);
@@ -144,7 +144,7 @@ module VX_afu_wrap #(
 					// wait until the reset network is ready
 					if (vx_reset_ctr == 0) begin
 					`ifdef DBG_TRACE_AFU
-						`TRACE(2, ("%d: AFU: Begin execution\n", $time))
+						`TRACE(2, ("%t: AFU: Begin execution\n", $time))
 					`endif
 						vx_busy_wait <= 1;
 						vx_reset <= 0;
@@ -159,8 +159,8 @@ module VX_afu_wrap #(
 						// wait until the processor is not busy
 						if (~vx_busy) begin
 						`ifdef DBG_TRACE_AFU
-							`TRACE(2, ("%d: AFU: End execution\n", $time))
-                            `TRACE(2, ("%d: AFU: Goto STATE IDLE\n", $time))
+							`TRACE(2, ("%t: AFU: End execution\n", $time))
+                            `TRACE(2, ("%t: AFU: Goto STATE IDLE\n", $time))
 						`endif
 							state <= STATE_IDLE;
 						end
@@ -365,16 +365,16 @@ module VX_afu_wrap #(
     always @(posedge ap_clk) begin
 		for (integer i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin
 			if (m_axi_mem_awvalid_a[i] && m_axi_mem_awready_a[i]) begin
-				`TRACE(2, ("%d: AFU Wr Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_awaddr_a[i], m_axi_mem_awid_a[i]))
+				`TRACE(2, ("%t: AFU Wr Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_awaddr_a[i], m_axi_mem_awid_a[i]))
 			end
 			if (m_axi_mem_wvalid_a[i] && m_axi_mem_wready_a[i]) begin
-				`TRACE(2, ("%d: AFU Wr Req [%0d]: data=0x%h\n", $time, i, m_axi_mem_wdata_a[i]))
+				`TRACE(2, ("%t: AFU Wr Req [%0d]: data=0x%h\n", $time, i, m_axi_mem_wdata_a[i]))
 			end
 			if (m_axi_mem_arvalid_a[i] && m_axi_mem_arready_a[i]) begin
-				`TRACE(2, ("%d: AFU Rd Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_araddr_a[i], m_axi_mem_arid_a[i]))
+				`TRACE(2, ("%t: AFU Rd Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_araddr_a[i], m_axi_mem_arid_a[i]))
 			end
 			if (m_axi_mem_rvalid_a[i] && m_axi_mem_rready_a[i]) begin
-				`TRACE(2, ("%d: AVS Rd Rsp [%0d]: data=0x%h, tag=0x%0h\n", $time, i, m_axi_mem_rdata_a[i], m_axi_mem_rid_a[i]))
+				`TRACE(2, ("%t: AVS Rd Rsp [%0d]: data=0x%h, tag=0x%0h\n", $time, i, m_axi_mem_rdata_a[i], m_axi_mem_rid_a[i]))
 			end
 		end
   	end
