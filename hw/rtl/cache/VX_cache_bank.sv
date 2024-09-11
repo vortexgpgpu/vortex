@@ -257,6 +257,7 @@ module VX_cache_bank #(
     if (UUID_WIDTH != 0) begin
         assign flush_tag = {flush_uuid, (TAG_WIDTH-UUID_WIDTH)'(1'b0)};
     end else begin
+        `UNUSED_VAR (flush_uuid)
         assign flush_tag = '0;
     end
 
