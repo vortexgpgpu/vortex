@@ -60,6 +60,7 @@ module VX_cache_bank #(
     parameter MEM_OUT_REG       = 0,
 
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE),
+    parameter MEM_TAG_WIDTH     = UUID_WIDTH + MSHR_ADDR_WIDTH,
     parameter REQ_SEL_WIDTH     = `UP(`CS_REQ_SEL_BITS),
     parameter WORD_SEL_WIDTH    = `UP(`CS_WORD_SEL_BITS)
 ) (
@@ -97,18 +98,19 @@ module VX_cache_bank #(
     output wire                         mem_req_rw,
     output wire [LINE_SIZE-1:0]         mem_req_byteen,
     output wire [`CS_LINE_WIDTH-1:0]    mem_req_data,
-    output wire [MSHR_ADDR_WIDTH-1:0]   mem_req_id,     // index of the head entry in the mshr
+    output wire [MEM_TAG_WIDTH-1:0]     mem_req_tag,
     output wire                         mem_req_flush,
     input  wire                         mem_req_ready,
 
     // Memory response
     input wire                          mem_rsp_valid,
     input wire [`CS_LINE_WIDTH-1:0]     mem_rsp_data,
-    input wire [MSHR_ADDR_WIDTH-1:0]    mem_rsp_id,
+    input wire [MEM_TAG_WIDTH-1:0]      mem_rsp_tag,
     output wire                         mem_rsp_ready,
 
     // flush
     input wire                          flush_begin,
+    input wire [`UP(UUID_WIDTH)-1:0]    flush_uuid,
     output wire                         flush_end
 );
 
@@ -241,12 +243,30 @@ module VX_cache_bank #(
     wire flush_fire = flush_valid && flush_ready;
     wire core_req_fire = core_req_valid && core_req_ready;
 
+    wire [MSHR_ADDR_WIDTH-1:0] mem_rsp_id = mem_rsp_tag[MSHR_ADDR_WIDTH-1:0];
+
+    wire [TAG_WIDTH-1:0] mem_rsp_tag_s;
+    if (TAG_WIDTH > MEM_TAG_WIDTH) begin
+        assign mem_rsp_tag_s = {mem_rsp_tag, (TAG_WIDTH-MEM_TAG_WIDTH)'(1'b0)};
+    end else begin
+        assign mem_rsp_tag_s = mem_rsp_tag[MEM_TAG_WIDTH-1 -: TAG_WIDTH];
+        `UNUSED_VAR (mem_rsp_tag)
+    end
+
+    wire [TAG_WIDTH-1:0] flush_tag;
+    if (UUID_WIDTH != 0) begin
+        assign flush_tag = {flush_uuid, (TAG_WIDTH-UUID_WIDTH)'(1'b0)};
+    end else begin
+        assign flush_tag = '0;
+    end
+
     assign valid_sel   = init_fire || replay_fire || mem_rsp_fire || flush_fire || core_req_fire;
     assign rw_sel      = replay_valid ? replay_rw : core_req_rw;
     assign byteen_sel  = replay_valid ? replay_byteen : core_req_byteen;
     assign wsel_sel    = replay_valid ? replay_wsel : core_req_wsel;
     assign req_idx_sel = replay_valid ? replay_idx : core_req_idx;
-    assign tag_sel     = replay_valid ? replay_tag : core_req_tag;
+    assign tag_sel     = (init_valid | flush_valid) ? (flush_valid ? flush_tag : '0) :
+                            (replay_valid ? replay_tag : (mem_rsp_valid ? mem_rsp_tag_s : core_req_tag));
     assign creq_flush_sel = core_req_valid && core_req_flush;
 
     assign addr_sel    = (init_valid | flush_valid) ? `CS_LINE_ADDR_WIDTH'(flush_sel) :
@@ -587,7 +607,7 @@ module VX_cache_bank #(
     wire [`CS_LINE_WIDTH-1:0] mreq_queue_data;
     wire [LINE_SIZE-1:0] mreq_queue_byteen;
     wire [`CS_LINE_ADDR_WIDTH-1:0] mreq_queue_addr;
-    wire [MSHR_ADDR_WIDTH-1:0] mreq_queue_id;
+    wire [MEM_TAG_WIDTH-1:0] mreq_queue_tag;
     wire mreq_queue_rw;
     wire mreq_queue_flush;
 
@@ -613,7 +633,6 @@ module VX_cache_bank #(
 
     assign mreq_queue_pop = mem_req_valid && mem_req_ready;
     assign mreq_queue_addr = addr_st1;
-    assign mreq_queue_id = mshr_id_st1;
     assign mreq_queue_flush = creq_flush_st1;
 
     if (WRITE_ENABLE) begin
@@ -637,8 +656,14 @@ module VX_cache_bank #(
         `UNUSED_VAR (dirty_byteen_st1)
     end
 
+    if (UUID_WIDTH != 0) begin
+        assign mreq_queue_tag = {req_uuid_st1, mshr_id_st1};
+    end else begin
+        assign mreq_queue_tag = mshr_id_st1;
+    end
+
     VX_fifo_queue #(
-        .DATAW    (1 + `CS_LINE_ADDR_WIDTH + MSHR_ADDR_WIDTH + LINE_SIZE + `CS_LINE_WIDTH + 1),
+        .DATAW    (1 + `CS_LINE_ADDR_WIDTH + LINE_SIZE + `CS_LINE_WIDTH + MEM_TAG_WIDTH + 1),
         .DEPTH    (MREQ_SIZE),
         .ALM_FULL (MREQ_SIZE-PIPELINE_STAGES),
         .OUT_REG  (MEM_OUT_REG)
@@ -647,8 +672,8 @@ module VX_cache_bank #(
         .reset      (reset),
         .push       (mreq_queue_push),
         .pop        (mreq_queue_pop),
-        .data_in    ({mreq_queue_rw, mreq_queue_addr, mreq_queue_id, mreq_queue_byteen, mreq_queue_data, mreq_queue_flush}),
-        .data_out   ({mem_req_rw, mem_req_addr, mem_req_id, mem_req_byteen, mem_req_data, mem_req_flush}),
+        .data_in    ({mreq_queue_rw, mreq_queue_addr, mreq_queue_byteen, mreq_queue_data, mreq_queue_tag, mreq_queue_flush}),
+        .data_out   ({mem_req_rw,    mem_req_addr,    mem_req_byteen,    mem_req_data,    mem_req_tag,    mem_req_flush}),
         .empty      (mreq_queue_empty),
         .alm_full   (mreq_queue_alm_full),
         `UNUSED_PIN (full),
@@ -675,7 +700,7 @@ module VX_cache_bank #(
             `TRACE(3, ("%t: *** %s stall: crsq=%b, mreq=%b, mshr=%b, rdw1=%b, rdw2=%b, rdw3=%b\n", $time, INSTANCE_ID, crsp_queue_stall, mreq_queue_alm_full, mshr_alm_full, rdw_hazard1_sel, rdw_hazard2_sel, rdw_hazard3_st1))
         end
         if (mem_rsp_fire) begin
-            `TRACE(2, ("%t: %s fill-rsp: addr=0x%0h, mshr_id=%0d, data=0x%h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_id, mem_rsp_data))
+            `TRACE(2, ("%t: %s fill-rsp: addr=0x%0h, mshr_id=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_id, mem_rsp_data, req_uuid_sel))
         end
         if (replay_fire) begin
             `TRACE(2, ("%t: %s mshr-pop: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(replay_addr, BANK_ID), replay_tag, replay_idx, req_uuid_sel))
@@ -694,9 +719,9 @@ module VX_cache_bank #(
             if (do_creq_wr_st1 && !WRITEBACK) begin
                 `TRACE(2, ("%t: %s writethrough: addr=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_byteen, mreq_queue_data, req_uuid_st1))
             end else if (do_writeback_st1) begin
-                `TRACE(2, ("%t: %s writeback: addr=0x%0h, byteen=0x%h, data=0x%h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_byteen, mreq_queue_data))
+                `TRACE(2, ("%t: %s writeback: addr=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_byteen, mreq_queue_data, req_uuid_st1))
             end else begin
-                `TRACE(2, ("%t: %s fill-req: addr=0x%0h, mshr_id=%0d (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_id, req_uuid_st1))
+                `TRACE(2, ("%t: %s fill-req: addr=0x%0h, mshr_id=%0d (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mshr_id_st1, req_uuid_st1))
             end
         end
     end

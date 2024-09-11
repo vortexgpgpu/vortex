@@ -196,16 +196,19 @@ module Vortex import VX_gpu_pkg::*; (
     end
 
 `ifdef DBG_TRACE_MEM
+    wire [`UUID_WIDTH-1:0] mem_req_uuid = mem_req_tag[`VX_MEM_TAG_WIDTH-1 -: `UUID_WIDTH];
+    wire [`UUID_WIDTH-1:0] mem_rsp_uuid = mem_rsp_tag[`VX_MEM_TAG_WIDTH-1 -: `UUID_WIDTH];
+
     always @(posedge clk) begin
         if (mem_req_fire) begin
             if (mem_req_rw) begin
-                `TRACE(1, ("%t: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%h data=0x%h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data))
+                `TRACE(1, ("%t: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%h data=0x%h (#%0d)\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data, mem_req_uuid))
             end else begin
-                `TRACE(1, ("%t: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen))
+                `TRACE(1, ("%t: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%h (#%0d)\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_uuid))
             end
         end
         if (mem_rsp_fire) begin
-            `TRACE(1, ("%t: MEM Rd Rsp: tag=0x%0h, data=0x%h\n", $time, mem_rsp_tag, mem_rsp_data))
+            `TRACE(1, ("%t: MEM Rd Rsp: tag=0x%0h, data=0x%h (#%0d)\n", $time, mem_rsp_tag, mem_rsp_data, mem_rsp_uuid))
         end
     end
 `endif
