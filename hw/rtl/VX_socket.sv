@@ -178,13 +178,13 @@ module VX_socket import VX_gpu_pkg::*; #(
     `ASSIGN_VX_MEM_BUS_IF_X (l1_mem_bus_if[1], dcache_mem_bus_if, L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
 
     VX_mem_arb #(
-        .NUM_INPUTS   (2),
-        .DATA_SIZE    (`L1_LINE_SIZE),
-        .TAG_WIDTH    (L1_MEM_TAG_WIDTH),
-        .TAG_SEL_IDX  (0),
-        .ARBITER      ("P"), // prioritize the icache
-        .REQ_OUT_BUF  (3),
-        .RSP_OUT_BUF  (3)
+        .NUM_INPUTS (2),
+        .DATA_SIZE  (`L1_LINE_SIZE),
+        .TAG_WIDTH  (L1_MEM_TAG_WIDTH),
+        .TAG_SEL_IDX(0),
+        .ARBITER    ("P"), // prioritize the icache
+        .REQ_OUT_BUF(3),
+        .RSP_OUT_BUF(3)
     ) mem_arb (
         .clk        (clk),
         .reset      (reset),
