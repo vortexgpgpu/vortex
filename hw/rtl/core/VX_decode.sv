@@ -152,7 +152,7 @@ module VX_decode import VX_gpu_pkg::*; #(
 
     always @(*) begin
 
-        ex_type   = '0;
+        ex_type   = 'x;
         op_type   = 'x;
         op_args   = 'x;
         rd_v      = '0;
