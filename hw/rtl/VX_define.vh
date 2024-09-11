@@ -264,14 +264,14 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define CACHE_MEM_TAG_WIDTH(mshr_size, num_banks) \
-        (`CLOG2(mshr_size) + `CLOG2(num_banks))
+`define CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, uuid_width) \
+        (uuid_width + `CLOG2(mshr_size) + `CLOG2(num_banks))
 
 `define CACHE_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width) \
         (`CLOG2(num_reqs) + `CLOG2(line_size / word_size) + tag_width)
 
-`define CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, tag_width) \
-        (`MAX(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks), `CACHE_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width)) + 1)
+`define CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, tag_width, uuid_width) \
+        (`MAX(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, uuid_width), `CACHE_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width)) + 1)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -281,14 +281,14 @@
 `define CACHE_CLUSTER_MEM_ARB_TAG(tag_width, num_caches) \
         (tag_width + `ARB_SEL_BITS(`UP(num_caches), 1))
 
-`define CACHE_CLUSTER_MEM_TAG_WIDTH(mshr_size, num_banks, num_caches) \
-        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks), num_caches)
+`define CACHE_CLUSTER_MEM_TAG_WIDTH(mshr_size, num_banks, num_caches, uuid_width) \
+        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, uuid_width), num_caches)
 
 `define CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(num_reqs, line_size, word_size, tag_width, num_inputs, num_caches) \
         `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches)), num_caches)
 
-`define CACHE_CLUSTER_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, tag_width, num_inputs, num_caches) \
-        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches)), num_caches)
+`define CACHE_CLUSTER_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, tag_width, num_inputs, num_caches, uuid_width) \
+        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches), uuid_width), num_caches)
 
 ///////////////////////////////////////////////////////////////////////////////
 

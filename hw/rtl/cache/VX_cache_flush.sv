@@ -18,6 +18,10 @@ module VX_cache_flush #(
     parameter NUM_REQS  = 4,
     // Number of banks
     parameter NUM_BANKS = 1,
+    // Request debug identifier
+    parameter UUID_WIDTH = 0,
+    // core request tag size
+    parameter TAG_WIDTH = UUID_WIDTH + 1,
     // Bank select latency
     parameter BANK_SEL_LATENCY = 1
 ) (
@@ -27,6 +31,7 @@ module VX_cache_flush #(
     VX_mem_bus_if.master    core_bus_out_if [NUM_REQS],
     input wire [NUM_BANKS-1:0] bank_req_fire,
     output wire [NUM_BANKS-1:0] flush_begin,
+    output wire [`UP(UUID_WIDTH)-1:0] flush_uuid,
     input wire [NUM_BANKS-1:0] flush_end
 );
     localparam STATE_IDLE  = 0;
@@ -88,6 +93,7 @@ module VX_cache_flush #(
     wire flush_req_enable = (| flush_req_mask);
 
     reg [NUM_REQS-1:0] lock_released, lock_released_n;
+    reg [`UP(UUID_WIDTH)-1:0] flush_uuid_r, flush_uuid_n;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         wire input_enable = ~flush_req_enable || lock_released[i];
@@ -102,8 +108,14 @@ module VX_cache_flush #(
         assign core_bus_out_if[i].rsp_ready = core_bus_in_if[i].rsp_ready;
     end
 
+    reg [NUM_REQS-1:0][`UP(UUID_WIDTH)-1:0] core_bus_out_uuid;
     wire [NUM_REQS-1:0] core_bus_out_ready;
     for (genvar i = 0; i < NUM_REQS; ++i) begin
+        if (UUID_WIDTH != 0) begin
+            assign core_bus_out_uuid[i] = core_bus_in_if[i].req_data.tag[TAG_WIDTH-1 -: UUID_WIDTH];
+        end else begin
+            assign core_bus_out_uuid[i] = 0;
+        end
         assign core_bus_out_ready[i] = core_bus_out_if[i].req_ready;
     end
 
@@ -111,10 +123,16 @@ module VX_cache_flush #(
         state_n = state;
         flush_done_n = flush_done;
         lock_released_n = lock_released;
+        flush_uuid_n = flush_uuid_r;
         case (state)
             STATE_IDLE: begin
                 if (flush_req_enable) begin
                     state_n = (BANK_SEL_LATENCY != 0) ? STATE_WAIT1 : STATE_FLUSH;
+                    for (integer i = NUM_REQS-1; i >= 0; --i) begin
+                        if (flush_req_mask[i]) begin
+                            flush_uuid_n = core_bus_out_uuid[i];
+                        end
+                    end
                 end
             end
             STATE_WAIT1: begin
@@ -158,8 +176,10 @@ module VX_cache_flush #(
             flush_done <= flush_done_n;
             lock_released <= lock_released_n;
         end
+        flush_uuid_r <= flush_uuid_n;
     end
 
     assign flush_begin = {NUM_BANKS{state == STATE_FLUSH}};
+    assign flush_uuid = flush_uuid_r;
 
 endmodule

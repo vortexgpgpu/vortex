@@ -227,12 +227,12 @@ module VX_afu_wrap #(
 		.dcr_wr_data	(dcr_wr_data)
 	);
 
-	wire [`MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_w [C_M_AXI_MEM_NUM_BANKS];
-	wire [`MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_w [C_M_AXI_MEM_NUM_BANKS];
+	wire [`MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_u [C_M_AXI_MEM_NUM_BANKS];
+	wire [`MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_u [C_M_AXI_MEM_NUM_BANKS];
 
 	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin
-		assign m_axi_mem_awaddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_awaddr_w[i]) + C_M_AXI_MEM_ADDR_WIDTH'(mem_base[i]);
-		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_w[i]) + C_M_AXI_MEM_ADDR_WIDTH'(mem_base[i]);
+		assign m_axi_mem_awaddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_awaddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(mem_base[i]);
+		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(mem_base[i]);
 	end
 
 	`SCOPE_IO_SWITCH (2)
@@ -250,7 +250,7 @@ module VX_afu_wrap #(
 
 		.m_axi_awvalid	(m_axi_mem_awvalid_a),
 		.m_axi_awready	(m_axi_mem_awready_a),
-		.m_axi_awaddr	(m_axi_mem_awaddr_w),
+		.m_axi_awaddr	(m_axi_mem_awaddr_u),
 		.m_axi_awid		(m_axi_mem_awid_a),
 		.m_axi_awlen    (m_axi_mem_awlen_a),
 		`UNUSED_PIN (m_axi_awsize),
@@ -274,7 +274,7 @@ module VX_afu_wrap #(
 
 		.m_axi_arvalid	(m_axi_mem_arvalid_a),
 		.m_axi_arready	(m_axi_mem_arready_a),
-		.m_axi_araddr	(m_axi_mem_araddr_w),
+		.m_axi_araddr	(m_axi_mem_araddr_u),
 		.m_axi_arid		(m_axi_mem_arid_a),
 		.m_axi_arlen	(m_axi_mem_arlen_a),
 		`UNUSED_PIN (m_axi_arsize),

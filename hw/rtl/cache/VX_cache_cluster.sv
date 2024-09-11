@@ -82,8 +82,8 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     localparam PASSTHRU   = (NUM_UNITS == 0);
     localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_CACHES);
     localparam MEM_TAG_WIDTH = PASSTHRU ? `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) :
-                                          (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) :
-                                                       `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS));
+                                          (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH, UUID_WIDTH) :
+                                                       `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, UUID_WIDTH));
 
     `STATIC_ASSERT(NUM_INPUTS >= NUM_CACHES, ("invalid parameter"))
 
