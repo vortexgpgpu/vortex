@@ -63,7 +63,7 @@ copy_files() {
                     filename_no_ext="${filename%.in}"
                     dest_file="$dest_dir/$filename_no_ext"
                     mkdir -p "$dest_dir"
-                    sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g; s|@INSTALLDIR@|$PREFIX|g" "$file" > "$dest_file"
+                    sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g; s|@INSTALLDIR@|$PREFIX|g; s|@VM_ENABLE@|$VM_ENABLE|g" "$file" > "$dest_file"
                     # apply permissions to bash scripts
                     read -r firstline < "$dest_file"
                     if [[ "$firstline" =~ ^#!.*bash ]]; then
@@ -114,6 +114,7 @@ default_xlen=32
 default_tooldir=$HOME/tools
 default_osversion=$(detect_osversion)
 default_prefix=$CURRENT_DIR
+default_vm=0
 
 # load default configuration parameters from existing config.mk
 if [ -f "config.mk" ]; then
@@ -126,6 +127,7 @@ if [ -f "config.mk" ]; then
             TOOLDIR\ ?*) default_tooldir=${value//\?=/} ;;
             OSVERSION\ ?*) default_osversion=${value//\?=/} ;;
             PREFIX\ ?*) default_prefix=${value//\?=/} ;;
+            VM_ENABLE\ ?*) default_vm=${value//\?=/} ;;
         esac
     done < config.mk
 fi
@@ -135,6 +137,7 @@ XLEN=${XLEN:=$default_xlen}
 TOOLDIR=${TOOLDIR:=$default_tooldir}
 OSVERSION=${OSVERSION:=$default_osversion}
 PREFIX=${PREFIX:=$default_prefix}
+VM_ENABLE=${VM_ENABLE:=$default_vm}
 
 # parse command line arguments
 usage() {
@@ -143,6 +146,7 @@ usage() {
     echo "  --tooldir=<path>     Set the TOOLDIR path (default: $HOME/tools)"
     echo "  --osversion=<version> Set the OS Version (default: $(detect_osversion))"
     echo "  --prefix=<path>      Set installation directory"
+    echo "  --vm_enable=<value>  Enable Virtual Memory support (default: 0)"
     exit 1
 }
 while [[ "$#" -gt 0 ]]; do
@@ -151,6 +155,7 @@ while [[ "$#" -gt 0 ]]; do
         --tooldir=*) TOOLDIR="${1#*=}" ;;
         --osversion=*) OSVERSION="${1#*=}" ;;
         --prefix=*) PREFIX="${1#*=}" ;;
+        --vm_enable=*) VM_ENABLE="${1#*=}" ;;
         -h|--help) usage ;;
         *) echo "Unknown parameter passed: $1"; usage ;;
     esac
