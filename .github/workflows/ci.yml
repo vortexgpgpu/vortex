@@ -21,13 +21,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: tools
           key: ${{ runner.os }}-toolchain-v0.1
@@ -36,7 +36,7 @@ jobs:
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: third_party
           key: ${{ runner.os }}-thirdparty-v0.1
@@ -175,7 +175,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Install Dependencies
         run: |
@@ -183,7 +183,7 @@ jobs:
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: tools
           key: ${{ runner.os }}-toolchain-v0.1
@@ -192,7 +192,7 @@ jobs:
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: third_party
           key: ${{ runner.os }}-thirdparty-v0.1
@@ -210,7 +210,7 @@ jobs:
           make tests -s > /dev/null
 
       - name: Upload Build Artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.xlen }}-vm
           path: build${{ matrix.xlen }}-vm
@@ -226,7 +226,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Install Dependencies
         run: |
@@ -234,7 +234,7 @@ jobs:
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: tools
           key: ${{ runner.os }}-toolchain-v0.1
@@ -243,7 +243,7 @@ jobs:
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: third_party
           key: ${{ runner.os }}-thirdparty-v0.1
@@ -251,7 +251,7 @@ jobs:
             ${{ runner.os }}-thirdparty-
 
       - name: Download Build Artifact
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: build-${{ matrix.xlen }}-vm
           path: build${{ matrix.xlen }}-vm
