@@ -39,6 +39,9 @@ public:
   void clear();
 
   void attach_ram(RAM* ram);
+#ifdef VM_ENABLE
+  void set_satp(uint64_t satp) ;
+#endif
 
   instr_trace_t* step();
 

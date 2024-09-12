@@ -106,6 +106,14 @@ void Cluster::attach_ram(RAM* ram) {
   }
 }
 
+#ifdef VM_ENABLE
+void Cluster::set_satp(uint64_t satp) {
+  for (auto& socket : sockets_) {
+    socket->set_satp(satp);
+  }
+}
+#endif
+
 bool Cluster::running() const {
   for (auto& socket : sockets_) {
     if (socket->running())

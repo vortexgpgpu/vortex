@@ -14,12 +14,17 @@
 #pragma once
 
 #include <stdint.h>
+#include <VX_config.h>
+#include <mem.h>
 
 namespace vortex {
 
 class Arch;
 class RAM;
 class ProcessorImpl;
+#ifdef VM_ENABLE
+class SATP_t;
+#endif
 
 class Processor {
 public:
@@ -31,9 +36,18 @@ public:
   void run();
 
   void dcr_write(uint32_t addr, uint32_t value);
+#ifdef VM_ENABLE
+  bool is_satp_unset();
+  uint8_t get_satp_mode();
+  uint64_t get_base_ppn();
+  int16_t set_satp_by_addr(uint64_t addr);
+#endif
 
 private:
   ProcessorImpl* impl_;
+#ifdef VM_ENABLE
+  SATP_t *satp_;
+#endif
 };
 
 }
