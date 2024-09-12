@@ -331,7 +331,7 @@ module VX_mem_coalescer #(
     always @(posedge clk) begin
         if (out_req_fire) begin
             if (out_req_rw) begin
-                `TRACE(1, ("%d: %s out-req-wr: valid=%b, addr=", $time, INSTANCE_ID, out_req_mask))
+                `TRACE(1, ("%t: %s out-req-wr: valid=%b, addr=", $time, INSTANCE_ID, out_req_mask))
                 `TRACE_ARRAY1D(1, "0x%h", out_req_addr, OUT_REQS)
                 `TRACE(1, (", flags="))
                 `TRACE_ARRAY1D(1, "%b", out_req_flags, OUT_REQS)
@@ -350,7 +350,7 @@ module VX_mem_coalescer #(
             `TRACE(1, (", pmask=%b, coalesced=%0d, tag=0x%0h (#%0d)\n", out_req_pmask, $countones(out_req_pmask), out_req_tag, out_req_uuid))
         end
         if (out_rsp_fire) begin
-            `TRACE(1, ("%d: %s out-rsp: valid=%b, data=", $time, INSTANCE_ID, out_rsp_mask))
+            `TRACE(1, ("%t: %s out-rsp: valid=%b, data=", $time, INSTANCE_ID, out_rsp_mask))
             `TRACE_ARRAY1D(1, "0x%0h", out_rsp_data, OUT_REQS)
             `TRACE(1, (", offset="))
             `TRACE_ARRAY1D(1, "%0d", ibuf_dout_offset, NUM_REQS)
