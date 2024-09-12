@@ -116,13 +116,13 @@ module VX_scope_tap #(
                         tap_state  <= TAP_STATE_RUN;
                         start_time <= timestamp;
                     `ifdef DBG_TRACE_SCOPE
-                        `TRACE(2, ("%d: *** scope #%0d: recording start - time=%0d\n", $time, SCOPE_ID, timestamp))
+                        `TRACE(2, ("%t: *** scope #%0d: recording start - time=%0d\n", $time, SCOPE_ID, timestamp))
                     `endif
                     end else begin
                         tap_state <= TAP_STATE_WAIT;
                         delay_cntr <= start_delay;
                     `ifdef DBG_TRACE_SCOPE
-                        `TRACE(2, ("%d: *** scope #%0d: delayed start - time=%0d\n", $time, SCOPE_ID, start_delay))
+                        `TRACE(2, ("%t: *** scope #%0d: delayed start - time=%0d\n", $time, SCOPE_ID, start_delay))
                     `endif
                     end
                 end
@@ -133,7 +133,7 @@ module VX_scope_tap #(
                     tap_state  <= TAP_STATE_RUN;
                     start_time <= timestamp;
                 `ifdef DBG_TRACE_SCOPE
-                    `TRACE(2, ("%d: *** scope #%0d: recording start - time=%0d\n", $time, SCOPE_ID, timestamp))
+                    `TRACE(2, ("%t: *** scope #%0d: recording start - time=%0d\n", $time, SCOPE_ID, timestamp))
                 `endif
                 end
             end
@@ -158,7 +158,7 @@ module VX_scope_tap #(
                 if (stop || (waddr >= waddr_end)) begin
                     waddr <= waddr;
                 `ifdef DBG_TRACE_SCOPE
-                    `TRACE(2, ("%d: *** scope #%0d: recording stop - waddr=(%0d, %0d)\n", $time, SCOPE_ID, waddr, waddr_end))
+                    `TRACE(2, ("%t: *** scope #%0d: recording stop - waddr=(%0d, %0d)\n", $time, SCOPE_ID, waddr, waddr_end))
                 `endif
                     tap_state <= TAP_STATE_IDLE;
                 end
@@ -258,7 +258,7 @@ module VX_scope_tap #(
                 default:;
                 endcase
             `ifdef DBG_TRACE_SCOPE
-                `TRACE(2, ("%d: *** scope #%0d: CMD: type=%0d\n", $time, SCOPE_ID, cmd_type))
+                `TRACE(2, ("%t: *** scope #%0d: CMD: type=%0d\n", $time, SCOPE_ID, cmd_type))
             `endif
             end
             CTRL_STATE_SEND: begin
@@ -268,7 +268,7 @@ module VX_scope_tap #(
                     bus_out_r <= 1'(DATAW >> ser_tx_ctr);
                 `ifdef DBG_TRACE_SCOPE
                     if (ser_tx_ctr == 0) begin
-                        `TRACE(2, ("%d: *** scope #%0d: SEND width=%0d\n", $time, SCOPE_ID, DATAW))
+                        `TRACE(2, ("%t: *** scope #%0d: SEND width=%0d\n", $time, SCOPE_ID, DATAW))
                     end
                 `endif
                 end
@@ -276,7 +276,7 @@ module VX_scope_tap #(
                     bus_out_r <= 1'(count >> ser_tx_ctr);
                 `ifdef DBG_TRACE_SCOPE
                     if (ser_tx_ctr == 0) begin
-                        `TRACE(2, ("%d: *** scope #%0d: SEND count=%0d\n", $time, SCOPE_ID, count))
+                        `TRACE(2, ("%t: *** scope #%0d: SEND count=%0d\n", $time, SCOPE_ID, count))
                     end
                 `endif
                 end
@@ -284,7 +284,7 @@ module VX_scope_tap #(
                     bus_out_r <= 1'(start_time >> ser_tx_ctr);
                 `ifdef DBG_TRACE_SCOPE
                     if (ser_tx_ctr == 0) begin
-                        `TRACE(2, ("%d: *** scope #%0d: SEND start=%0d\n", $time, SCOPE_ID, start_time))
+                        `TRACE(2, ("%t: *** scope #%0d: SEND start=%0d\n", $time, SCOPE_ID, start_time))
                     end
                 `endif
                 end
@@ -292,7 +292,7 @@ module VX_scope_tap #(
                     bus_out_r <= 1'(get_data >> ser_tx_ctr);
                 `ifdef DBG_TRACE_SCOPE
                     if (ser_tx_ctr == 0) begin
-                        `TRACE(2, ("%d: *** scope #%0d: SEND data=%0d\n", $time, SCOPE_ID, get_data))
+                        `TRACE(2, ("%t: *** scope #%0d: SEND data=%0d\n", $time, SCOPE_ID, get_data))
                     end
                 `endif
                 end
