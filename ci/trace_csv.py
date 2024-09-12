@@ -19,12 +19,32 @@ import csv
 import re
 import inspect
 
+configs = None
+
 def parse_args():
     parser = argparse.ArgumentParser(description='CPU trace log to CSV format converter.')
     parser.add_argument('-t', '--type', default='simx', help='log type (rtlsim or simx)')
     parser.add_argument('-o', '--csv', default='trace.csv', help='Output CSV file')
     parser.add_argument('log', help='Input log file')
     return parser.parse_args()
+
+def load_config(filename):
+    config_pattern = r"CONFIGS: num_threads=(\d+), num_warps=(\d+), num_cores=(\d+), num_clusters=(\d+), socket_size=(\d+), local_mem_base=0x([0-9a-fA-F]+), num_barriers=(\d+)"
+    with open(filename, 'r') as file:
+        for line in file:
+            config_match = re.search(config_pattern, line)
+            if config_match:
+                config = {
+                    'num_threads': int(config_match.group(1)),
+                    'num_warps': int(config_match.group(2)),
+                    'num_cores': int(config_match.group(3)),
+                    'num_clusters': int(config_match.group(4)),
+                    'socket_size': int(config_match.group(5)),
+                    'local_mem_base': int(config_match.group(6), 16),
+                    'num_barriers': int(config_match.group(7)),
+                }
+                return config
+    return None
 
 def parse_simx(log_lines):
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
@@ -46,10 +66,10 @@ def parse_simx(log_lines):
                 instr_data = {}
                 instr_data["lineno"] = lineno
                 instr_data["PC"] = re.search(pc_pattern, line).group(1)
-                instr_data["core_id"] = re.search(core_id_pattern, line).group(1)
-                instr_data["warp_id"] = re.search(warp_id_pattern, line).group(1)
+                instr_data["core_id"] = int(re.search(core_id_pattern, line).group(1))
+                instr_data["warp_id"] = int(re.search(warp_id_pattern, line).group(1))
                 instr_data["tmask"] = re.search(tmask_pattern, line).group(1)
-                instr_data["uuid"] = re.search(uuid_pattern, line).group(1)
+                instr_data["uuid"] = int(re.search(uuid_pattern, line).group(1))
             elif line.startswith("DEBUG Instr"):
                 instr_data["instr"] = re.search(instr_pattern, line).group(1)
                 instr_data["opcode"] = re.search(opcode_pattern, line).group(1)
@@ -60,6 +80,7 @@ def parse_simx(log_lines):
                 instr_data["destination"] = re.search(destination_pattern, line).group(1)
         except Exception as e:
             print("Error at line {}: {}".format(lineno, e))
+            instr_data = None
     if instr_data:
         entries.append(instr_data)
     return entries
@@ -95,7 +116,7 @@ def append_value(text, reg, value, tmask_arr, sep):
     return text, sep
 
 def parse_rtlsim(log_lines):
-    config_pattern = r"CONFIGS: num_threads=(\d+), num_warps=(\d+), num_cores=(\d+), num_clusters=(\d+), socket_size=(\d+), local_mem_base=(\d+), num_barriers=(\d+)"
+    global configs
     line_pattern = r"\d+: cluster(\d+)-socket(\d+)-core(\d+)-(decode|issue|commit)"
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
     instr_pattern = r"instr=(0x[0-9a-fA-F]+)"
@@ -117,36 +138,20 @@ def parse_rtlsim(log_lines):
     uuid_pattern = r"#(\d+)"
     entries = []
     instr_data = {}
-    num_threads = 0
-    num_warps = 0
-    num_cores = 0
-    num_clusters = 0
-    socket_size = 0
-    local_mem_base = 0
-    num_barriers = 0
-    num_sockets = 0
+    num_cores = configs['num_cores']
+    socket_size = configs['socket_size']
+    num_sockets = (num_cores + socket_size - 1) // socket_size
     for lineno, line in enumerate(log_lines, start=1):
         try:
-            config_match = re.search(config_pattern, line)
-            if config_match:
-                num_threads = int(config_match.group(1))
-                num_warps = int(config_match.group(2))
-                num_cores = int(config_match.group(3))
-                num_clusters = int(config_match.group(4))
-                socket_size = int(config_match.group(5))
-                local_mem_base = int(config_match.group(6))
-                num_barriers = int(config_match.group(7))
-                num_sockets = (num_cores + socket_size - 1) // socket_size
-                continue
             line_match = re.search(line_pattern, line)
             if line_match:
                 PC = re.search(pc_pattern, line).group(1)
-                warp_id = re.search(warp_id_pattern, line).group(1)
+                warp_id = int(re.search(warp_id_pattern, line).group(1))
                 tmask = re.search(tmask_pattern, line).group(1)
-                uuid = re.search(uuid_pattern, line).group(1)
-                cluster_id = line_match.group(1)
-                socket_id = line_match.group(2)
-                core_id = line_match.group(3)
+                uuid = int(re.search(uuid_pattern, line).group(1))
+                cluster_id = int(line_match.group(1))
+                socket_id = int(line_match.group(2))
+                core_id = int(line_match.group(3))
                 stage = line_match.group(4)
                 if stage == "decode":
                     trace = {}
@@ -273,7 +278,9 @@ def split_log_file(log_filename):
     return sublogs
 
 def main():
+    global configs
     args = parse_args()
+    configs = load_config(args.log)
     sublogs = split_log_file(args.log)
     write_csv(sublogs, args.csv, args.type)
 

@@ -87,16 +87,16 @@ module VX_mem_coalescer #(
     localparam STATE_SETUP = 0;
     localparam STATE_SEND  = 1;
 
-    reg state_r, state_n;
+    logic state_r, state_n;
 
-    reg out_req_valid_r, out_req_valid_n;
-    reg out_req_rw_r, out_req_rw_n;
-    reg [OUT_REQS-1:0] out_req_mask_r, out_req_mask_n;
-    reg [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] out_req_addr_r, out_req_addr_n;
-    reg [OUT_REQS-1:0][ATYPE_WIDTH-1:0] out_req_atype_r, out_req_atype_n;
-    reg [OUT_REQS-1:0][DATA_RATIO-1:0][DATA_IN_SIZE-1:0] out_req_byteen_r, out_req_byteen_n;
-    reg [OUT_REQS-1:0][DATA_RATIO-1:0][DATA_IN_WIDTH-1:0] out_req_data_r, out_req_data_n;
-    reg [OUT_TAG_WIDTH-1:0] out_req_tag_r, out_req_tag_n;
+    logic out_req_valid_r, out_req_valid_n;
+    logic out_req_rw_r, out_req_rw_n;
+    logic [OUT_REQS-1:0] out_req_mask_r, out_req_mask_n;
+    logic [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] out_req_addr_r, out_req_addr_n;
+    logic [OUT_REQS-1:0][ATYPE_WIDTH-1:0] out_req_atype_r, out_req_atype_n;
+    logic [OUT_REQS-1:0][DATA_RATIO-1:0][DATA_IN_SIZE-1:0] out_req_byteen_r, out_req_byteen_n;
+    logic [OUT_REQS-1:0][DATA_RATIO-1:0][DATA_IN_WIDTH-1:0] out_req_data_r, out_req_data_n;
+    logic [OUT_TAG_WIDTH-1:0] out_req_tag_r, out_req_tag_n;
 
     reg in_req_ready_n;
 
@@ -135,7 +135,11 @@ module VX_mem_coalescer #(
             `UNUSED_PIN (onehot),
             .valid_out (batch_valid_n[i])
         );
-        assign seed_idx[i] = NUM_REQS_W'(i * DATA_RATIO) + NUM_REQS_W'(batch_idx);
+        if (OUT_REQS > 1) begin
+            assign seed_idx[i] = {(NUM_REQS_W-DATA_RATIO_W)'(i), batch_idx};
+        end else begin
+            assign seed_idx[i] = batch_idx;
+        end
     end
 
     for (genvar i = 0; i < OUT_REQS; ++i) begin
@@ -146,29 +150,6 @@ module VX_mem_coalescer #(
     for (genvar i = 0; i < OUT_REQS; ++i) begin
         for (genvar j = 0; j < DATA_RATIO; ++j) begin
             assign addr_matches_n[i * DATA_RATIO + j] = (in_addr_base[i * DATA_RATIO + j] == seed_addr_n[i]);
-        end
-    end
-
-    always @(posedge clk) begin
-        if (reset) begin
-            state_r          <= STATE_SETUP;
-            processed_mask_r <= '0;
-            out_req_valid_r  <= 0;
-        end else begin
-            state_r          <= state_n;
-            batch_valid_r    <= batch_valid_n;
-            seed_addr_r      <= seed_addr_n;
-            seed_atype_r     <= seed_atype_n;
-            addr_matches_r   <= addr_matches_n;
-            out_req_valid_r  <= out_req_valid_n;
-            out_req_mask_r   <= out_req_mask_n;
-            out_req_rw_r     <= out_req_rw_n;
-            out_req_addr_r   <= out_req_addr_n;
-            out_req_atype_r  <= out_req_atype_n;
-            out_req_byteen_r <= out_req_byteen_n;
-            out_req_data_r   <= out_req_data_n;
-            out_req_tag_r    <= out_req_tag_n;
-            processed_mask_r <= processed_mask_n;
         end
     end
 
@@ -247,6 +228,17 @@ module VX_mem_coalescer #(
         end
         endcase
     end
+
+    VX_pipe_register #(
+        .DATAW  (1 + NUM_REQS + 1 + 1 + NUM_REQS + OUT_REQS * (1 + 1 + OUT_ADDR_WIDTH + ATYPE_WIDTH + OUT_ADDR_WIDTH + ATYPE_WIDTH + DATA_OUT_SIZE + DATA_OUT_WIDTH) + OUT_TAG_WIDTH),
+        .RESETW (1 + NUM_REQS + 1)
+    ) pipe_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  ({state_n, processed_mask_n, out_req_valid_n, out_req_rw_n, addr_matches_n, batch_valid_n, out_req_mask_n, seed_addr_n, seed_atype_n, out_req_addr_n, out_req_atype_n, out_req_byteen_n, out_req_data_n, out_req_tag_n}),
+        .data_out ({state_r, processed_mask_r, out_req_valid_r, out_req_rw_r, addr_matches_r, batch_valid_r, out_req_mask_r, seed_addr_r, seed_atype_r, out_req_addr_r, out_req_atype_r, out_req_byteen_r, out_req_data_r, out_req_tag_r})
+    );
 
     wire out_rsp_fire = out_rsp_valid && out_rsp_ready;
 

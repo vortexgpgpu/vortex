@@ -81,12 +81,15 @@ module VX_avs_adapter #(
         assign req_queue_push[i] = mem_req_valid && ~mem_req_rw && bank_req_ready[i] && (req_bank_sel == i);
     end
 
+    `RESET_RELAY_EX (bank_reset, reset, NUM_BANKS, 1);
+
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
+
         VX_pending_size #(
             .SIZE (RD_QUEUE_SIZE)
         ) pending_size (
             .clk   (clk),
-            .reset (reset),
+            .reset (bank_reset[i]),
             .incr  (req_queue_push[i]),
             .decr  (req_queue_pop[i]),
             `UNUSED_PIN (empty),
@@ -102,7 +105,7 @@ module VX_avs_adapter #(
             .DEPTH (RD_QUEUE_SIZE)
         ) rd_req_queue (
             .clk      (clk),
-            .reset    (reset),
+            .reset    (bank_reset[i]),
             .push     (req_queue_push[i]),
             .pop      (req_queue_pop[i]),
             .data_in  (mem_req_tag),
@@ -132,7 +135,7 @@ module VX_avs_adapter #(
             .OUT_REG  (`TO_OUT_BUF_REG(REQ_OUT_BUF))
         ) req_out_buf (
             .clk       (clk),
-            .reset     (reset),
+            .reset     (bank_reset[i]),
             .valid_in  (valid_out_w),
             .ready_in  (ready_out_w),
             .data_in   ({mem_req_rw, mem_req_byteen, req_bank_off, mem_req_data}),
@@ -168,12 +171,13 @@ module VX_avs_adapter #(
     wire [NUM_BANKS-1:0] rsp_queue_empty;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
+
         VX_fifo_queue #(
             .DATAW (DATA_WIDTH),
             .DEPTH (RD_QUEUE_SIZE)
         ) rd_rsp_queue (
             .clk      (clk),
-            .reset    (reset),
+            .reset    (bank_reset[i]),
             .push     (avs_readdatavalid[i]),
             .pop      (req_queue_pop[i]),
             .data_in  (avs_readdata[i]),
@@ -195,7 +199,7 @@ module VX_avs_adapter #(
     VX_stream_arb #(
         .NUM_INPUTS (NUM_BANKS),
         .DATAW      (DATA_WIDTH + TAG_WIDTH),
-        .ARBITER    ("R"),
+        .ARBITER    ("F"),
         .OUT_BUF    (RSP_OUT_BUF)
     ) rsp_arb (
         .clk       (clk),

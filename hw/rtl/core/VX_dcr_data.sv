@@ -52,7 +52,7 @@ module VX_dcr_data import VX_gpu_pkg::*, VX_trace_pkg::*; (
         if (dcr_bus_if.write_valid) begin
             `TRACE(1, ("%d: base-dcr: state=", $time));
             trace_base_dcr(1, dcr_bus_if.write_addr);
-            `TRACE(1, (", data=0x%0h\n", dcr_bus_if.write_data));
+            `TRACE(1, (", data=0x%h\n", dcr_bus_if.write_data));
         end
     end
 `endif

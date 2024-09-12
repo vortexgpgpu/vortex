@@ -76,8 +76,8 @@ Cluster::Cluster(const SimContext& ctx,
     2,                      // pipeline latency
   });
 
-  l2cache_->MemReqPort.bind(&this->mem_req_port);
-  this->mem_rsp_port.bind(&l2cache_->MemRspPort);
+  l2cache_->MemReqPorts.at(0).bind(&this->mem_req_port);
+  this->mem_rsp_port.bind(&l2cache_->MemRspPorts.at(0));
 
   icache_switch->ReqOut.at(0).bind(&l2cache_->CoreReqPorts.at(0));
   l2cache_->CoreRspPorts.at(0).bind(&icache_switch->RspOut.at(0));

@@ -102,7 +102,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       auto reg = instr.getRSrc(i);
       switch (type) {
       case RegType::Integer:
-        DPH(2, "Src" << std::dec << i << " Reg: " << type << std::dec << reg << "={");
+        DPH(2, "Src" << i << " Reg: " << type << reg << "={");
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!warp.tmask.test(t)) {
@@ -110,12 +110,12 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
             continue;
           }
           rsdata[t][i].u = warp.ireg_file.at(t)[reg];
-          DPN(2, "0x" << std::hex << rsdata[t][i].i);
+          DPN(2, "0x" << std::hex << rsdata[t][i].i << std::dec);
         }
         DPN(2, "}" << std::endl);
         break;
       case RegType::Float:
-        DPH(2, "Src" << std::dec << i << " Reg: " << type << std::dec << reg << "={");
+        DPH(2, "Src" << i << " Reg: " << type << reg << "={");
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!warp.tmask.test(t)) {
@@ -123,7 +123,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
             continue;
           }
           rsdata[t][i].u64 = warp.freg_file.at(t)[reg];
-          DPN(2, "0x" << std::hex << rsdata[t][i].f);
+          DPN(2, "0x" << std::hex << rsdata[t][i].f << std::dec);
         }
         DPN(2, "}" << std::endl);
         break;
@@ -633,7 +633,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         all_taken = curr_taken;
       } else {
         if (all_taken != curr_taken) {
-          std::cout << "divergent branch! PC=0x" << std::hex << warp.PC << " (#" << std::dec << trace->uuid << ")\n" << std::flush;
+          std::cout << "divergent branch! PC=0x" << std::hex << warp.PC << std::dec << " (#" << trace->uuid << ")\n" << std::flush;
           std::abort();
         }
       }
@@ -1338,7 +1338,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         bool is_divergent = then_tmask.any() && else_tmask.any();
         if (is_divergent) {
           if (stack_size == ipdom_size_) {
-            std::cout << "IPDOM stack is full! size=" << std::dec << stack_size << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << trace->uuid << ")\n" << std::flush;
+            std::cout << "IPDOM stack is full! size=" << stack_size << ", PC=0x" << std::hex << warp.PC << std::dec << " (#" << trace->uuid << ")\n" << std::flush;
             std::abort();
           }
           // set new thread mask to the larger set
@@ -1425,7 +1425,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     switch (type) {
     case RegType::Integer:
       if (rdest) {
-        DPH(2, "Dest Reg: " << type << std::dec << rdest << "={");
+        DPH(2, "Dest Reg: " << type << rdest << "={");
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!warp.tmask.test(t)) {
@@ -1433,7 +1433,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
             continue;
           }
           warp.ireg_file.at(t)[rdest] = rddata[t].i;
-          DPN(2, "0x" << std::hex << rddata[t].i);
+          DPN(2, "0x" << std::hex << rddata[t].i << std::dec);
         }
         DPN(2, "}" << std::endl);
         trace->dst_reg = {type, rdest};
@@ -1444,7 +1444,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       }
       break;
     case RegType::Float:
-      DPH(2, "Dest Reg: " << type << std::dec << rdest << "={");
+      DPH(2, "Dest Reg: " << type << rdest << "={");
       for (uint32_t t = 0; t < num_threads; ++t) {
         if (t) DPN(2, ", ");
         if (!warp.tmask.test(t)) {
@@ -1452,7 +1452,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           continue;
         }
         warp.freg_file.at(t)[rdest] = rddata[t].u64;
-        DPN(2, "0x" << std::hex << rddata[t].f);
+        DPN(2, "0x" << std::hex << rddata[t].f << std::dec);
       }
       DPN(2, "}" << std::endl);
       trace->dst_reg = {type, rdest};

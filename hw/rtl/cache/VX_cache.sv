@@ -45,6 +45,9 @@ module VX_cache import VX_gpu_pkg::*; #(
     // Enable cache writeback
     parameter WRITEBACK             = 0,
 
+    // Enable dirty bytes on writeback
+    parameter DIRTY_BYTES           = 0,
+
     // Request debug identifier
     parameter UUID_WIDTH            = 0,
 
@@ -69,8 +72,13 @@ module VX_cache import VX_gpu_pkg::*; #(
     VX_mem_bus_if.master    mem_bus_if
 );
 
-    `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter"))
-    `STATIC_ASSERT(WRITE_ENABLE || !WRITEBACK, ("invalid parameter"))
+    `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter: number of banks must be power of 2"))
+    `STATIC_ASSERT(WRITE_ENABLE || !WRITEBACK, ("invalid parameter: writeback requires write enable"))
+    `STATIC_ASSERT(WRITEBACK || !DIRTY_BYTES, ("invalid parameter: dirty bytes require writeback"))
+
+    // In writeback mode, memory fill response may issue a new memory request to handle evicted blocks.
+    // We need to ensure that the memory request queue never fills up to avoid deadlock.
+    `STATIC_ASSERT(!WRITEBACK || (MREQ_SIZE >= MSHR_SIZE), ("invalid parameter: writeback requires MREQ_SIZE >= MSHR_SIZE"))
 
     localparam REQ_SEL_WIDTH   = `UP(`CS_REQ_SEL_BITS);
     localparam WORD_SEL_WIDTH  = `UP(`CS_WORD_SEL_BITS);
@@ -101,13 +109,10 @@ module VX_cache import VX_gpu_pkg::*; #(
         .TAG_WIDTH (TAG_WIDTH)
     ) core_bus2_if[NUM_REQS]();
 
-    wire [NUM_BANKS-1:0] per_bank_flush_valid;
-    wire [NUM_BANKS-1:0] per_bank_flush_ready;
+    wire [NUM_BANKS-1:0] per_bank_flush_begin;
+    wire [NUM_BANKS-1:0] per_bank_flush_end;
 
     wire [NUM_BANKS-1:0] per_bank_core_req_fire;
-
-    // this reset relay is required to sync with bank initialization
-    `RESET_RELAY (flush_reset, reset);
 
     VX_cache_flush #(
         .NUM_REQS  (NUM_REQS),
@@ -115,12 +120,12 @@ module VX_cache import VX_gpu_pkg::*; #(
         .BANK_SEL_LATENCY (`TO_OUT_BUF_REG(REQ_XBAR_BUF)) // bank xbar latency
     ) flush_unit (
         .clk             (clk),
-        .reset           (flush_reset),
+        .reset           (reset),
         .core_bus_in_if  (core_bus_if),
         .core_bus_out_if (core_bus2_if),
         .bank_req_fire   (per_bank_core_req_fire),
-        .flush_valid     (per_bank_flush_valid),
-        .flush_ready     (per_bank_flush_ready)
+        .flush_begin     (per_bank_flush_begin),
+        .flush_end       (per_bank_flush_end)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -131,9 +136,9 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   core_rsp_tag_s;
     wire [NUM_REQS-1:0]                  core_rsp_ready_s;
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    `RESET_RELAY_EX (core_rsp_reset, reset, NUM_REQS, `MAX_FANOUT);
 
-        `RESET_RELAY (core_rsp_reset, reset);
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
 
         VX_elastic_buffer #(
             .DATAW   (`CS_WORD_WIDTH + TAG_WIDTH),
@@ -141,7 +146,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
         ) core_rsp_buf (
             .clk       (clk),
-            .reset     (core_rsp_reset),
+            .reset     (core_rsp_reset[i]),
             .valid_in  (core_rsp_valid_s[i]),
             .ready_in  (core_rsp_ready_s[i]),
             .data_in   ({core_rsp_data_s[i], core_rsp_tag_s[i]}),
@@ -165,15 +170,13 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     wire                             mem_bus_if_flush;
 
-    `RESET_RELAY (mem_req_reset, reset);
-
     VX_elastic_buffer #(
         .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_WIDTH + 1),
         .SIZE    (MEM_REQ_BUF_ENABLE ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
         .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
     ) mem_req_buf (
         .clk       (clk),
-        .reset     (mem_req_reset),
+        .reset     (reset),
         .valid_in  (mem_req_valid_s),
         .ready_in  (mem_req_ready_s),
         .data_in   ({mem_req_rw_s, mem_req_byteen_s, mem_req_addr_s, mem_req_data_s, mem_req_tag_s, mem_req_flush_s}),
@@ -192,15 +195,13 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [MEM_TAG_WIDTH-1:0]     mem_rsp_tag_s;
     wire                         mem_rsp_ready_s;
 
-    `RESET_RELAY (mem_rsp_reset, reset);
-
     VX_elastic_buffer #(
         .DATAW   (MEM_TAG_WIDTH + `CS_LINE_WIDTH),
         .SIZE    (MRSQ_SIZE),
         .OUT_REG (MRSQ_SIZE > 2)
     ) mem_rsp_queue (
         .clk        (clk),
-        .reset      (mem_rsp_reset),
+        .reset      (reset),
         .valid_in   (mem_bus_if.rsp_valid),
         .ready_in   (mem_bus_if.rsp_ready),
         .data_in    ({mem_bus_if.rsp_data.tag, mem_bus_if.rsp_data.data}),
@@ -316,6 +317,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (CORE_REQ_DATAW),
         .PERF_CTR_BITS (`PERF_CTR_BITS),
+        .ARBITER     ("F"),
         .OUT_BUF     (REQ_XBAR_BUF)
     ) req_xbar (
         .clk       (clk),
@@ -373,6 +375,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .MSHR_SIZE    (MSHR_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
             .WRITE_ENABLE (WRITE_ENABLE),
+            .DIRTY_BYTES  (DIRTY_BYTES),
             .WRITEBACK    (WRITEBACK),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (TAG_WIDTH),
@@ -423,8 +426,8 @@ module VX_cache import VX_gpu_pkg::*; #(
             .mem_rsp_id         (`CS_MEM_TAG_TO_REQ_ID(mem_rsp_tag_s)),
             .mem_rsp_ready      (per_bank_mem_rsp_ready[bank_id]),
 
-            .flush_valid        (per_bank_flush_valid[bank_id]),
-            .flush_ready        (per_bank_flush_ready[bank_id])
+            .flush_begin        (per_bank_flush_begin[bank_id]),
+            .flush_end          (per_bank_flush_end[bank_id])
         );
 
         if (NUM_BANKS == 1) begin
@@ -448,7 +451,8 @@ module VX_cache import VX_gpu_pkg::*; #(
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_BANKS),
         .NUM_OUTPUTS (NUM_REQS),
-        .DATAW       (CORE_RSP_DATAW)
+        .DATAW       (CORE_RSP_DATAW),
+        .ARBITER     ("F")
     ) rsp_xbar (
         .clk       (clk),
         .reset     (rsp_xbar_reset),
@@ -494,15 +498,13 @@ module VX_cache import VX_gpu_pkg::*; #(
         };
     end
 
-    `RESET_RELAY (mem_arb_reset, reset);
-
     VX_stream_arb #(
         .NUM_INPUTS (NUM_BANKS),
         .DATAW      (`CS_MEM_ADDR_WIDTH + 1  + LINE_SIZE + `CS_LINE_WIDTH + MSHR_ADDR_WIDTH + 1),
         .ARBITER    ("F")
     ) mem_req_arb (
         .clk       (clk),
-        .reset     (mem_arb_reset),
+        .reset     (reset),
         .valid_in  (per_bank_mem_req_valid),
         .ready_in  (per_bank_mem_req_ready),
         .data_in   (data_in),

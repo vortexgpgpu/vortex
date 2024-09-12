@@ -80,10 +80,11 @@ module Vortex import VX_gpu_pkg::*; (
         .CRSQ_SIZE      (`L3_CRSQ_SIZE),
         .MSHR_SIZE      (`L3_MSHR_SIZE),
         .MRSQ_SIZE      (`L3_MRSQ_SIZE),
-        .MREQ_SIZE      (`L3_MREQ_SIZE),
+        .MREQ_SIZE      (`L3_WRITEBACK ? `L3_MSHR_SIZE : `L3_MREQ_SIZE),
         .TAG_WIDTH      (L2_MEM_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`L3_WRITEBACK),
+        .DIRTY_BYTES    (`L3_WRITEBACK),
         .UUID_WIDTH     (`UUID_WIDTH),
         .CORE_OUT_BUF   (2),
         .MEM_OUT_BUF    (2),
@@ -192,12 +193,12 @@ module Vortex import VX_gpu_pkg::*; (
     always @(posedge clk) begin
         if (mem_req_fire) begin
             if (mem_req_rw)
-                `TRACE(1, ("%d: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%0h data=0x%0h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data));
+                `TRACE(1, ("%d: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%h data=0x%h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data));
             else
-                `TRACE(1, ("%d: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%0h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen));
+                `TRACE(1, ("%d: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen));
         end
         if (mem_rsp_fire) begin
-            `TRACE(1, ("%d: MEM Rsp: tag=0x%0h, data=0x%0h\n", $time, mem_rsp_tag, mem_rsp_data));
+            `TRACE(1, ("%d: MEM Rd Rsp: tag=0x%0h, data=0x%h\n", $time, mem_rsp_tag, mem_rsp_data));
         end
     end
 `endif

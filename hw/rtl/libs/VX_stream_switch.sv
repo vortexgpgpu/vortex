@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -33,7 +33,7 @@ module VX_stream_switch #(
     output wire [NUM_INPUTS-1:0]            ready_in,
 
     output wire [NUM_OUTPUTS-1:0]           valid_out,
-    output wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out,    
+    output wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out,
     input  wire [NUM_OUTPUTS-1:0]           ready_out
 );
     if (NUM_INPUTS > NUM_OUTPUTS) begin
@@ -52,7 +52,7 @@ module VX_stream_switch #(
                     assign data_in_r[i][j]  = '0;
                 end
             end
-        end        
+        end
 
         wire [NUM_OUTPUTS-1:0]            valid_out_r;
         wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out_r;
@@ -65,25 +65,24 @@ module VX_stream_switch #(
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             for (genvar j = 0; j < NUM_REQS; ++j) begin
-                localparam ii = i * NUM_REQS + j;                
-                if (ii < NUM_INPUTS) begin                    
+                localparam ii = i * NUM_REQS + j;
+                if (ii < NUM_INPUTS) begin
                     assign ready_in[ii] = ready_out_r[i] & (sel_in[i] == LOG_NUM_REQS'(j));
                 end
             end
         end
 
+        `RESET_RELAY_EX (out_buf_reset, reset, NUM_OUTPUTS, `MAX_FANOUT);
+
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-
-            `RESET_RELAY_EN (out_buf_reset, reset, (NUM_OUTPUTS > 1));
-
             VX_elastic_buffer #(
                 .DATAW   (DATAW),
                 .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
                 .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
             ) out_buf (
                 .clk       (clk),
-                .reset     (out_buf_reset),
-                .valid_in  (valid_out_r[i]),                    
+                .reset     (out_buf_reset[i]),
+                .valid_in  (valid_out_r[i]),
                 .ready_in  (ready_out_r[i]),
                 .data_in   (data_out_r[i]),
                 .data_out  (data_out[i]),
@@ -93,7 +92,7 @@ module VX_stream_switch #(
         end
 
     end else if (NUM_OUTPUTS > NUM_INPUTS) begin
-    
+
         wire [NUM_INPUTS-1:0][NUM_REQS-1:0] valid_out_r;
         wire [NUM_INPUTS-1:0][NUM_REQS-1:0] ready_out_r;
 
@@ -104,51 +103,50 @@ module VX_stream_switch #(
             assign ready_in[i] = ready_out_r[i][sel_in[i]];
         end
 
+        `RESET_RELAY_EX (out_buf_reset, reset, NUM_OUTPUTS, `MAX_FANOUT);
+
         for (genvar i = 0; i < NUM_INPUTS; ++i) begin
             for (genvar j = 0; j < NUM_REQS; ++j) begin
                 localparam ii = i * NUM_REQS + j;
                 if (ii < NUM_OUTPUTS) begin
-
-                    `RESET_RELAY (out_buf_reset, reset);
-
                     VX_elastic_buffer #(
                         .DATAW    (DATAW),
                         .SIZE     (`TO_OUT_BUF_SIZE(OUT_BUF)),
                         .OUT_REG  (`TO_OUT_BUF_REG(OUT_BUF))
                     ) out_buf (
                         .clk       (clk),
-                        .reset     (out_buf_reset),
+                        .reset     (out_buf_reset[ii]),
                         .valid_in  (valid_out_r[i][j]),
                         .ready_in  (ready_out_r[i][j]),
-                        .data_in   (data_in[i]),                                                     
+                        .data_in   (data_in[i]),
                         .data_out  (data_out[ii]),
                         .valid_out (valid_out[ii]),
                         .ready_out (ready_out[ii])
                     );
                 end else begin
+                    `UNUSED_VAR (out_buf_reset[ii])
                     `UNUSED_VAR (valid_out_r[i][j])
                     assign ready_out_r[i][j] = '0;
-                end                
+                end
             end
         end
-    
+
     end else begin
 
         // #Inputs == #Outputs
-    
+
         `UNUSED_VAR (sel_in)
 
+        `RESET_RELAY_EX (out_buf_reset, reset, NUM_OUTPUTS, `MAX_FANOUT);
+
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-
-            `RESET_RELAY_EN (out_buf_reset, reset, (NUM_OUTPUTS > 1));
-
             VX_elastic_buffer #(
                 .DATAW    (DATAW),
                 .SIZE     (`TO_OUT_BUF_SIZE(OUT_BUF)),
                 .OUT_REG  (`TO_OUT_BUF_REG(OUT_BUF))
             ) out_buf (
                 .clk       (clk),
-                .reset     (out_buf_reset),
+                .reset     (out_buf_reset[i]),
                 .valid_in  (valid_in[i]),
                 .ready_in  (ready_in[i]),
                 .data_in   (data_in[i]),
@@ -159,6 +157,6 @@ module VX_stream_switch #(
         end
 
     end
-    
+
 endmodule
 `TRACING_ON

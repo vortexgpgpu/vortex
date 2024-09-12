@@ -15,9 +15,10 @@
 
 `TRACING_OFF
 module VX_rr_arbiter #(
-    parameter NUM_REQS     = 1,
-    parameter MODEL        = 1,
-    parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS)
+    parameter NUM_REQS = 1,
+    parameter MODEL    = 1,
+    parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS),
+    parameter LUT_OPT  = 0
 ) (
     input  wire                     clk,
     input  wire                     reset,
@@ -37,7 +38,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = requests;
         assign grant_valid  = requests[0];
 
-    end else if (NUM_REQS == 2)  begin
+    end else if (LUT_OPT && NUM_REQS == 2)  begin
 
         reg [LOG_NUM_REQS-1:0]  grant_index_r;
         reg [NUM_REQS-1:0]      grant_onehot_r;
@@ -63,7 +64,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = grant_onehot_r;
         assign grant_valid  = (| requests);
 
-    end /*else if (NUM_REQS == 3)  begin
+    end else if (LUT_OPT && NUM_REQS == 3)  begin
 
         reg [LOG_NUM_REQS-1:0]  grant_index_r;
         reg [NUM_REQS-1:0]      grant_onehot_r;
@@ -93,7 +94,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = grant_onehot_r;
         assign grant_valid  = (| requests);
 
-    end */else if (NUM_REQS == 4)  begin
+    end else if (LUT_OPT && NUM_REQS == 4)  begin
 
         reg [LOG_NUM_REQS-1:0]  grant_index_r;
         reg [NUM_REQS-1:0]      grant_onehot_r;
@@ -129,7 +130,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = grant_onehot_r;
         assign grant_valid  = (| requests);
 
-    end /*else if (NUM_REQS == 5)  begin
+    end else if (LUT_OPT && NUM_REQS == 5)  begin
 
         reg [LOG_NUM_REQS-1:0]  grant_index_r;
         reg [NUM_REQS-1:0]      grant_onehot_r;
@@ -173,7 +174,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = grant_onehot_r;
         assign grant_valid  = (| requests);
 
-    end else if (NUM_REQS == 6)  begin
+    end else if (LUT_OPT && NUM_REQS == 6)  begin
 
         reg [LOG_NUM_REQS-1:0]  grant_index_r;
         reg [NUM_REQS-1:0]      grant_onehot_r;
@@ -227,7 +228,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = grant_onehot_r;
         assign grant_valid  = (| requests);
 
-    end else if (NUM_REQS == 7)  begin
+    end else if (LUT_OPT && NUM_REQS == 7)  begin
 
         reg [LOG_NUM_REQS-1:0]  grant_index_r;
         reg [NUM_REQS-1:0]      grant_onehot_r;
@@ -293,7 +294,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = grant_onehot_r;
         assign grant_valid  = (| requests);
 
-    end */else if (NUM_REQS == 8)  begin
+    end else if (LUT_OPT && NUM_REQS == 8)  begin
 
         reg [LOG_NUM_REQS-1:0]  grant_index_r;
         reg [NUM_REQS-1:0]      grant_onehot_r;

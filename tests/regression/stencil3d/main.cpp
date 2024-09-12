@@ -120,29 +120,19 @@ static void stencil_cpu(TYPE *out, const TYPE *in, uint32_t width, uint32_t heig
 
                             // Check bounds and replicate the boundary values
                             if (nx < 0)
-                            {
-                                nx = 0;
-                            }
+                            {nx = 0;}
                             else if (nx >= (int)width)
-                            {
-                                nx = width - 1;
-                            }
+                            {nx = width - 1;}
+
                             if (ny < 0)
-                            {
-                                ny = 0;
-                            }
+                            {ny = 0;}
                             else if (ny >= (int)height)
-                            {
-                                ny = height - 1;
-                            }
+                            {ny = height - 1;}
+                            
                             if (nz < 0)
-                            {
-                                nz = 0;
-                            }
+                            {nz = 0;}
                             else if (nz >= (int)depth)
-                            {
-                                nz = depth - 1;
-                            }
+                            {nz = depth - 1;}
 
                             // Sum up the values
                             sum += in[nz * width * height + ny * width + nx];
@@ -238,8 +228,8 @@ int main(int argc, char *argv[])
     uint32_t buf_size = size_cubed * sizeof(TYPE);
 
     std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
-    std::cout << "matrix size: " << size << "x" << size << std::endl;
-    std::cout << "block size: " << block_size << "x" << block_size << std::endl;
+    std::cout << "matrix size: " << size << "x" << size << "x" << size << std::endl;
+    std::cout << "block size: " << block_size << "x" << block_size << "x" << block_size << std::endl;
 
     kernel_arg.grid_dim[0] = size / block_size;
     kernel_arg.grid_dim[1] = size / block_size;

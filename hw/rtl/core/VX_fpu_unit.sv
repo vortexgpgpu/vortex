@@ -57,7 +57,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         `UNUSED_VAR (per_block_execute_if[block_idx].data.tid)
         `UNUSED_VAR (per_block_execute_if[block_idx].data.wb)
 
-        `RESET_RELAY (block_reset, reset);
+        `RESET_RELAY_EN (block_reset, reset, (BLOCK_SIZE > 1));
 
         // Store request info
         wire fpu_req_valid, fpu_req_ready;
@@ -84,14 +84,12 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         wire execute_fire = per_block_execute_if[block_idx].valid && per_block_execute_if[block_idx].ready;
         wire fpu_rsp_fire = fpu_rsp_valid && fpu_rsp_ready;
 
-        `RESET_RELAY (ibuf_reset, block_reset);
-
         VX_index_buffer #(
             .DATAW  (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + PID_WIDTH + 1 + 1),
             .SIZE   (`FPUQ_SIZE)
         ) tag_store (
             .clk          (clk),
-            .reset        (ibuf_reset),
+            .reset        (block_reset),
             .acquire_en   (execute_fire),
             .write_addr   (fpu_req_tag),
             .write_data   ({per_block_execute_if[block_idx].data.uuid, per_block_execute_if[block_idx].data.wid, per_block_execute_if[block_idx].data.tmask, per_block_execute_if[block_idx].data.PC, per_block_execute_if[block_idx].data.rd, per_block_execute_if[block_idx].data.pid, per_block_execute_if[block_idx].data.sop, per_block_execute_if[block_idx].data.eop}),
@@ -113,8 +111,6 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         assign fpu_req_valid = per_block_execute_if[block_idx].valid && ~mdata_full;
         assign per_block_execute_if[block_idx].ready = fpu_req_ready && ~mdata_full;
 
-        `RESET_RELAY (fpu_reset, block_reset);
-
     `ifdef FPU_DPI
 
         VX_fpu_dpi #(
@@ -123,7 +119,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) fpu_dpi (
             .clk        (clk),
-            .reset      (fpu_reset),
+            .reset      (block_reset),
 
             .valid_in   (fpu_req_valid),
             .mask_in    (per_block_execute_if[block_idx].data.tmask),
@@ -152,7 +148,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) fpu_fpnew (
             .clk        (clk),
-            .reset      (fpu_reset),
+            .reset      (block_reset),
 
             .valid_in   (fpu_req_valid),
             .mask_in    (per_block_execute_if[block_idx].data.tmask),
@@ -181,7 +177,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) fpu_dsp (
             .clk        (clk),
-            .reset      (fpu_reset),
+            .reset      (block_reset),
 
             .valid_in   (fpu_req_valid),
             .mask_in    (per_block_execute_if[block_idx].data.tmask),
@@ -228,14 +224,12 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
 
         // send response
 
-        `RESET_RELAY (rsp_reset, block_reset);
-
         VX_elastic_buffer #(
             .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1),
             .SIZE  (0)
         ) rsp_buf (
             .clk       (clk),
-            .reset     (rsp_reset),
+            .reset     (block_reset),
             .valid_in  (fpu_rsp_valid),
             .ready_in  (fpu_rsp_ready),
             .data_in   ({fpu_rsp_uuid, fpu_rsp_wid, fpu_rsp_tmask, fpu_rsp_PC, fpu_rsp_rd, fpu_rsp_result, fpu_rsp_pid, fpu_rsp_sop, fpu_rsp_eop}),
