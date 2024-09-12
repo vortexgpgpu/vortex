@@ -219,7 +219,9 @@ jobs:
     runs-on: ubuntu-20.04
     needs: build_vm
     strategy:
+      fail-fast: false
       matrix:
+        name: [regression, opencl, cache, config1, config2, debug, stress, vm]
         xlen: [32, 64]
 
     steps:

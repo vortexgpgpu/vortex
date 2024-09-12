@@ -49,7 +49,7 @@ endif
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
 RTL_INCLUDE += $(FPU_INCLUDE)
 
-# Debugigng
+# Debugging
 ifdef DEBUG
 	CFLAGS += $(DBG_TRACE_FLAGS)
 else

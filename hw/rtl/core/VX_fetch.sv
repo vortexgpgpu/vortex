@@ -56,9 +56,10 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .LUTRAM (1)
     ) tag_store (
         .clk   (clk),
+        .reset (reset),
         .read  (1'b1),
         .write (icache_req_fire),
-        `UNUSED_PIN (wren),
+        .wren  (1'b1),
         .waddr (req_tag),
         .wdata ({schedule_if.data.PC, schedule_if.data.tmask}),
         .raddr (rsp_tag),

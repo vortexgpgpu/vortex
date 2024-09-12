@@ -25,6 +25,7 @@ class ProcessorImpl {
 public:
   struct PerfStats {
     CacheSim::PerfStats l3cache;
+    MemSim::PerfStats memsim;
     uint64_t mem_reads;
     uint64_t mem_writes;
     uint64_t mem_latency;

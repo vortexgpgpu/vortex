@@ -1,5 +1,3 @@
-[![Build Status](https://travis-ci.com/vortexgpgpu/vortex.svg?branch=master)](https://travis-ci.com/vortexgpgpu/vortex)
-
 # Vortex GPGPU
 
 Vortex is a full-stack open-source RISC-V GPGPU.
@@ -47,20 +45,20 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
 - [Yosys](https://github.com/YosysHQ/yosys)
 - [Sv2v](https://github.com/zachjs/sv2v)
 ### Install development tools
-```
-    sudo apt-get install build-essential
-    sudo apt-get install binutils
-    sudo apt-get install python
-    sudo apt-get install uuid-dev
-    sudo apt-get install git
+```sh
+sudo apt-get install build-essential
+sudo apt-get install binutils
+sudo apt-get install python
+sudo apt-get install uuid-dev
+sudo apt-get install git
 ```
 ### Install Vortex codebase
+```sh
+	git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
+	cd vortex
 ```
-    git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git -b vortex_vm
-    cd vortex
-```
-
 ### Configure your build folder
+```sh
     # 
     # By default, the toolchain default install location is the /opt folder and can be overridden by setting --tooldir.
     # This is the example for volvo server
@@ -72,38 +70,45 @@ More detailed build instructions can be found [here](docs/install_vortex.md).
     ../configure --xlen=32 --tooldir=/software/vortex-toolchain-2024-2024-08-09 --prefix=$OUT_DIR
     # Run the following instead to enable virtual memory feature in compilation
     ../configure --xlen=32 --tooldir=/software/vortex-toolchain-2024-2024-08-09 --prefix=$OUT_DIR --vm_enable=1
-
+```
 ### Install prebuilt toolchain
     # We will use the precomipled tools in volvo toolchanin directory
 ### set environment variables
+```sh
     # should always run before using the toolchain!
     source ./ci/toolchain_env.sh
+```
 ### Building Vortex
-    make -s
+```sh
+make -s
+```
+
 ### Quick demo running vecadd OpenCL kernel on 2 cores
-    $ ./ci/blackbox.sh --cores=2 --app=vecadd
+```sh
+./ci/blackbox.sh --cores=2 --app=vecadd
+```
 
 ### Common Developer Tips
 - Installing Vortex kernel and runtime libraries to use with external tools requires passing --prefix=<install-path> to the configure script.
-    ```sh
-    $ ../configure --xlen=32 --tooldir=$HOME/tools --prefix=<install-path>
-    $ make -s
-    $ make install
-    ``````
+```sh
+../configure --xlen=32 --tooldir=$HOME/tools --prefix=<install-path>
+make -s
+make install
+```
 - Building Vortex 64-bit simply requires using --xlen=64 configure option.
-    ```sh
-    $ ../configure --xlen=32 --tooldir=$HOME/tools
-    ```
+```sh
+../configure --xlen=32 --tooldir=$HOME/tools
+```
 - Sourcing "./ci/toolchain_env.sh" is required everytime you start a new terminal. we recommend adding "source <build-path>/ci/toolchain_env.sh" to your ~/.bashrc file to automate the process at login.
-    ```sh
-    $ echo "source <build-path>/ci/toolchain_env.sh" >> ~/.bashrc
-    ```
+```sh
+echo "source <build-path>/ci/toolchain_env.sh" >> ~/.bashrc
+```
 - Making changes to Makefiles in your source tree or adding new folders will require executing the "configure" script again to get it propagated into your build folder.
-    ```sh
-    $ ../configure
-    ```
+```sh
+../configure
+```
 - To debug the GPU, you can generate a "run.log" trace. see /docs/debugging.md for more information.
-    ```sh
-    $ ./ci/blackbox.sh --app=demo --debug=3
-    ```
+```sh
+./ci/blackbox.sh --app=demo --debug=3
+```
 - For additional information, check out the /docs.

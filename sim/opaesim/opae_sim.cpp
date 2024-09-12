@@ -35,13 +35,13 @@
 #include <unordered_map>
 #include <util.h>
 
-#ifndef MEMORY_BANKS
+//#ifndef MEMORY_BANKS
   #ifdef PLATFORM_PARAM_LOCAL_MEMORY_BANKS
     #define MEMORY_BANKS PLATFORM_PARAM_LOCAL_MEMORY_BANKS
   #else
     #define MEMORY_BANKS 2
   #endif
-#endif
+//#endif
 
 #ifndef MEM_CLOCK_RATIO
 #define MEM_CLOCK_RATIO 1
@@ -380,7 +380,7 @@ private:
       device_->vcp2af_sRxPort_c0_hdr_resp_type = 0;
       memcpy(device_->vcp2af_sRxPort_c0_data, cci_rd_it->data.data(), CACHE_BLOCK_SIZE);
       device_->vcp2af_sRxPort_c0_hdr_mdata = cci_rd_it->mdata;
-      /*printf("%0ld: [sim] CCI Rd Rsp: addr=%ld, mdata=%d, data=", timestamp, cci_rd_it->addr, cci_rd_it->mdata);
+      /*printf("%0ld: [sim] CCI Rd Rsp: addr=0x%lx, mdata=0x%x, data=0x", timestamp, cci_rd_it->addr, cci_rd_it->mdata);
       for (int i = 0; i < CACHE_BLOCK_SIZE; ++i)
         printf("%02x", cci_rd_it->data[CACHE_BLOCK_SIZE-1-i]);
       printf("\n");*/
@@ -398,7 +398,7 @@ private:
       cci_req.mdata = device_->af2cp_sTxPort_c0_hdr_mdata;
       auto host_ptr = (uint64_t*)(device_->af2cp_sTxPort_c0_hdr_address * CACHE_BLOCK_SIZE);
       memcpy(cci_req.data.data(), host_ptr, CACHE_BLOCK_SIZE);
-      //printf("%0ld: [sim] CCI Rd Req: addr=%ld, mdata=%d\n", timestamp, device_->af2cp_sTxPort_c0_hdr_address, cci_req.mdata);
+      //printf("%0ld: [sim] CCI Rd Req: addr=0x%lx, mdata=0x%x\n", timestamp, device_->af2cp_sTxPort_c0_hdr_address, cci_req.mdata);
       cci_reads_.emplace_back(cci_req);
     }
 
@@ -453,7 +453,7 @@ private:
           }
         }
 
-        /*printf("%0ld: [sim] MEM Wr Req: bank=%d, addr=%x, data=", timestamp, b, byte_addr);
+        /*printf("%0ld: [sim] MEM Wr Req: bank=%d, 0x%x, data=0x", timestamp, b, byte_addr);
         for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
           printf("%02x", data[(MEM_BLOCK_SIZE-1)-i]);
         }

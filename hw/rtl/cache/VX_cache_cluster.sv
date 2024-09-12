@@ -49,6 +49,9 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     // Enable cache writeback
     parameter WRITEBACK             = 0,
 
+    // Enable dirty bytes on writeback
+    parameter DIRTY_BYTES           = 0,
+
     // Request debug identifier
     parameter UUID_WIDTH            = 0,
 
@@ -99,6 +102,8 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         .TAG_WIDTH (ARB_TAG_WIDTH)
     ) arb_core_bus_if[NUM_CACHES * NUM_REQS]();
 
+    `RESET_RELAY_EX (cache_arb_reset, reset, NUM_REQS, `MAX_FANOUT);
+
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_mem_bus_if #(
             .DATA_SIZE (WORD_SIZE),
@@ -114,8 +119,6 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             `ASSIGN_VX_MEM_BUS_IF (core_bus_tmp_if[j], core_bus_if[j * NUM_REQS + i]);
         end
 
-        `RESET_RELAY (arb_reset, reset);
-
         VX_mem_arb #(
             .NUM_INPUTS   (NUM_INPUTS),
             .NUM_OUTPUTS  (NUM_CACHES),
@@ -127,7 +130,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .RSP_OUT_BUF  ((NUM_INPUTS != NUM_CACHES) ? 2 : 0)
         ) cache_arb (
             .clk        (clk),
-            .reset      (arb_reset),
+            .reset      (cache_arb_reset[i]),
             .bus_in_if  (core_bus_tmp_if),
             .bus_out_if (arb_core_bus_tmp_if)
         );
@@ -155,6 +158,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .MREQ_SIZE    (MREQ_SIZE),
             .WRITE_ENABLE (WRITE_ENABLE),
             .WRITEBACK    (WRITEBACK),
+            .DIRTY_BYTES  (DIRTY_BYTES),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (ARB_TAG_WIDTH),
             .TAG_SEL_IDX  (TAG_SEL_IDX),

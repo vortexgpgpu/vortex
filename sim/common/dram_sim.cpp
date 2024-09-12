@@ -41,10 +41,10 @@ public:
 		dram_config["MemorySystem"]["DRAM"]["impl"] = "HBM2";
 		dram_config["MemorySystem"]["DRAM"]["org"]["preset"] = "HBM2_8Gb";
 		dram_config["MemorySystem"]["DRAM"]["org"]["density"] = 8192;
+		dram_config["MemorySystem"]["DRAM"]["org"]["channel"] = 8;
 		dram_config["MemorySystem"]["DRAM"]["timing"]["preset"] = "HBM2_2Gbps";
 		dram_config["MemorySystem"]["Controller"]["impl"] = "Generic";
 		dram_config["MemorySystem"]["Controller"]["Scheduler"]["impl"] = "FRFCFS";
-		dram_config["MemorySystem"]["Controller"]["RefreshManager"]["impl"] = "AllBank";
 		dram_config["MemorySystem"]["Controller"]["RefreshManager"]["impl"] = "AllBank";
 		dram_config["MemorySystem"]["Controller"]["RowPolicy"]["impl"] = "OpenRowPolicy";
 		{
@@ -66,7 +66,7 @@ public:
 		auto original_buf = std::cout.rdbuf();
 		std::cout.rdbuf(nullstream.rdbuf());
 		ramulator_frontend_->finalize();
-  	ramulator_memorysystem_->finalize();
+  		ramulator_memorysystem_->finalize();
 		std::cout.rdbuf(original_buf);
 	}
 

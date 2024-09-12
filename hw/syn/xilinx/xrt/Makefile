@@ -111,14 +111,14 @@ ifeq ($(TARGET), hw_emu)
 	CFLAGS += -DSIMULATION
 endif
 
-# Debugigng
+# Debugging
 ifdef DEBUG
 	VPP_FLAGS += -g --debug.protocol all
 	ifneq ($(TARGET), hw)
-		CFLAGS += -DNDEBUG
-	else
 		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
-		CFLAGS += $(DBG_TRACE_FLAGS)
+		CFLAGS += -DDEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
+	else
+		CFLAGS += -DNDEBUG
 	endif
 else
 	VPP_FLAGS += --optimize 3

@@ -232,9 +232,10 @@ module VX_cache_mshr #(
         .LUTRAM (1)
     ) entries (
         .clk   (clk),
+        .reset (reset),
         .read  (1'b1),
         .write (allocate_valid),
-        `UNUSED_PIN (wren),
+        .wren  (1'b1),
         .waddr (allocate_id_r),
         .wdata (allocate_data),
         .raddr (dequeue_id_r),

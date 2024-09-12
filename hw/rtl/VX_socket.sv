@@ -145,11 +145,12 @@ module VX_socket import VX_gpu_pkg::*; #(
         .CRSQ_SIZE      (`DCACHE_CRSQ_SIZE),
         .MSHR_SIZE      (`DCACHE_MSHR_SIZE),
         .MRSQ_SIZE      (`DCACHE_MRSQ_SIZE),
-        .MREQ_SIZE      (`DCACHE_MREQ_SIZE),
+        .MREQ_SIZE      (`DCACHE_WRITEBACK ? `DCACHE_MSHR_SIZE : `DCACHE_MREQ_SIZE),
         .TAG_WIDTH      (DCACHE_TAG_WIDTH),
         .UUID_WIDTH     (`UUID_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`DCACHE_WRITEBACK),
+        .DIRTY_BYTES    (`DCACHE_WRITEBACK),
         .NC_ENABLE      (1),
         .CORE_OUT_BUF   (2),
         .MEM_OUT_BUF    (2)
@@ -178,8 +179,6 @@ module VX_socket import VX_gpu_pkg::*; #(
     `ASSIGN_VX_MEM_BUS_IF_X (l1_mem_bus_if[0], icache_mem_bus_if, L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH);
     `ASSIGN_VX_MEM_BUS_IF_X (l1_mem_bus_if[1], dcache_mem_bus_if, L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
 
-    `RESET_RELAY (mem_arb_reset, reset);
-
     VX_mem_arb #(
         .NUM_INPUTS   (2),
         .DATA_SIZE    (`L1_LINE_SIZE),
@@ -190,7 +189,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .RSP_OUT_BUF  (2)
     ) mem_arb (
         .clk        (clk),
-        .reset      (mem_arb_reset),
+        .reset      (reset),
         .bus_in_if  (l1_mem_bus_if),
         .bus_out_if (l1_mem_arb_bus_if)
     );

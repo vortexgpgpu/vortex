@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <array>
 
 #define CACHE_BLOCK_SIZE  64
 

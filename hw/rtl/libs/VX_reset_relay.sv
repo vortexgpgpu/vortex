@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,8 +21,8 @@ module VX_reset_relay #(
     input wire          clk,
     input wire          reset,
     output wire [N-1:0] reset_o
-);    
-    if (MAX_FANOUT >= 0 && N > MAX_FANOUT) begin
+);
+    if (MAX_FANOUT >= 0 && N > (MAX_FANOUT + MAX_FANOUT/2)) begin
         localparam F = `UP(MAX_FANOUT);
         localparam R = N / F;
         `PRESERVE_NET reg [R-1:0] reset_r;
@@ -38,6 +38,6 @@ module VX_reset_relay #(
         `UNUSED_VAR (clk)
         assign reset_o = {N{reset}};
     end
-  
+
 endmodule
 `TRACING_ON

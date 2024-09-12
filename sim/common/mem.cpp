@@ -59,7 +59,7 @@ void RamMemDevice::read(void* data, uint64_t addr, uint64_t size) {
   if ((addr & (wordSize_-1))
    || (addr_end & (wordSize_-1))
    || (addr_end <= contents_.size())) {
-    std::cout << "lookup of 0x" << std::hex << (addr_end-1) << " failed.\n";
+    std::cout << "lookup of 0x" << std::hex << (addr_end-1) << std::dec << " failed.\n";
     throw BadAddress();
   }
 
@@ -74,7 +74,7 @@ void RamMemDevice::write(const void* data, uint64_t addr, uint64_t size) {
   if ((addr & (wordSize_-1))
    || (addr_end & (wordSize_-1))
    || (addr_end <= contents_.size())) {
-    std::cout << "lookup of 0x" << std::hex << (addr_end-1) << " failed.\n";
+    std::cout << "lookup of 0x" << std::hex << (addr_end-1) << std::dec << " failed.\n";
     throw BadAddress();
   }
 
@@ -115,8 +115,7 @@ void MemoryUnit::ADecoder::map(uint64_t start, uint64_t end, MemDevice &md) {
 void MemoryUnit::ADecoder::read(void* data, uint64_t addr, uint64_t size) {
   mem_accessor_t ma;
   if (!this->lookup(addr, size, &ma)) {
-    assert(0);
-    std::cout << "lookup of 0x" << std::hex << addr << " failed.\n";
+    std::cout << "lookup of 0x" << std::hex << addr << std::dec << " failed.\n";
     throw BadAddress();
   }
   ma.md->read(data, ma.addr, size);
@@ -125,8 +124,7 @@ void MemoryUnit::ADecoder::read(void* data, uint64_t addr, uint64_t size) {
 void MemoryUnit::ADecoder::write(const void* data, uint64_t addr, uint64_t size) {
   mem_accessor_t ma;
   if (!this->lookup(addr, size, &ma)) {
-    assert(0);
-    std::cout << "lookup of 0x" << std::hex << addr << " failed.\n";
+    std::cout << "lookup of 0x" << std::hex << addr << std::dec << " failed.\n";
     throw BadAddress();
   }
   ma.md->write(data, ma.addr, size);
@@ -408,7 +406,7 @@ bool ACLManager::check(uint64_t addr, uint64_t size, int flags) const {
   while (it != acl_map_.end() && it->first < end) {
     if (it->second.end > addr) {
       if ((it->second.flags & flags) != flags) {
-        std::cout << "Memory access violation from 0x" << std::hex << addr << " to 0x" << end << ", curent flags=" << it->second.flags << ", access flags=" << flags << std::endl;
+        std::cout << "Memory access violation from 0x" << std::hex << addr << " to 0x" << end << ", curent flags=" << it->second.flags << ", access flags=" << flags << std::dec << std::endl;
         return false; // Overlapping entry is missing at least one required flag bit
       }
       addr = it->second.end; // Move to the end of the current matching range

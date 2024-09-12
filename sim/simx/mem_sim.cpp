@@ -33,6 +33,7 @@ private:
 	struct DramCallbackArgs {
 		MemSim* simobject;
 		MemReq  request;
+		uint32_t i;
 	};
 
 public:
@@ -56,46 +57,49 @@ public:
 
 	void tick() {
 		dram_sim_.tick();
+		uint32_t counter = 0;
 
-		if (simobject_->MemReqPort.empty())
-			return;
+		for (uint32_t i = 0; i < NUM_MEM_PORTS; ++i) {
+			if (simobject_->MemReqPorts.at(i).empty())
+				continue;
 
-		auto& mem_req = simobject_->MemReqPort.front();
+			auto& mem_req = simobject_->MemReqPorts.at(i).front();
 
-		// try to enqueue the request to the memory system
-		auto req_args = new DramCallbackArgs{simobject_, mem_req};
-		auto enqueue_success = dram_sim_.send_request(
-			mem_req.write,
-			mem_req.addr,
-			0,
-			[](void* arg) {
-				auto rsp_args = reinterpret_cast<const DramCallbackArgs*>(arg);
-				// only send a response for read requests
-				if (!rsp_args->request.write) {
-					MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.cid, rsp_args->request.uuid};
-					rsp_args->simobject->MemRspPort.push(mem_rsp, 1);
-					DT(3, rsp_args->simobject->name() << " mem-rsp: " << mem_rsp);
-				}
-				delete rsp_args;
-			},
-			req_args
-		);
+			// try to enqueue the request to the memory system
+			auto req_args = new DramCallbackArgs{simobject_, mem_req, i};
+			auto enqueue_success = dram_sim_.send_request(
+				mem_req.write,
+				mem_req.addr,
+				0,
+				[](void* arg) {
+					auto rsp_args = reinterpret_cast<const DramCallbackArgs*>(arg);
+					// only send a response for read requests
+					if (!rsp_args->request.write) {
+						MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.cid, rsp_args->request.uuid};
+						rsp_args->simobject->MemRspPorts.at(rsp_args->i).push(mem_rsp, 1);
+						DT(3, rsp_args->simobject->name() << " mem-rsp: " << mem_rsp << " bank: " << rsp_args->i);
+					}
+					delete rsp_args;
+				},
+				req_args
+			);
 
-		// check if the request was enqueued successfully
-		if (!enqueue_success) {
-			delete req_args;
-			return;
+			// check if the request was enqueued successfully
+			if (!enqueue_success) {
+				delete req_args;
+				continue;
+			}
+
+			DT(3, simobject_->name() << " mem-req: " << mem_req << " bank: " << i);
+
+			simobject_->MemReqPorts.at(i).pop();
+			counter++;
 		}
 
-		if (mem_req.write) {
-			++perf_stats_.writes;
-		} else {
-			++perf_stats_.reads;
+		perf_stats_.counter += counter;
+		if (counter > 0) {
+			++perf_stats_.ticks;
 		}
-
-		DT(3, simobject_->name() << " mem-req: " << mem_req);
-
-		simobject_->MemReqPort.pop();
 	}
 };
 
@@ -103,8 +107,8 @@ public:
 
 MemSim::MemSim(const SimContext& ctx, const char* name, const Config& config)
 	: SimObject<MemSim>(ctx, name)
-	, MemReqPort(this)
-	, MemRspPort(this)
+	, MemReqPorts(NUM_MEM_PORTS, this)
+	, MemRspPorts(NUM_MEM_PORTS, this)
 	, impl_(new Impl(this, config))
 {}
 
@@ -118,4 +122,8 @@ void MemSim::reset() {
 
 void MemSim::tick() {
   impl_->tick();
+}
+
+const MemSim::PerfStats &MemSim::perf_stats() const {
+	return impl_->perf_stats();
 }

@@ -75,8 +75,8 @@ public:
 
 	std::vector<SimPort<MemReq>> CoreReqPorts;
 	std::vector<SimPort<MemRsp>> CoreRspPorts;
-	SimPort<MemReq>              MemReqPort;
-	SimPort<MemRsp>              MemRspPort;
+	std::vector<SimPort<MemReq>> MemReqPorts;
+	std::vector<SimPort<MemRsp>> MemRspPorts;
 
 	CacheSim(const SimContext& ctx, const char* name, const Config& config);
 	~CacheSim();
