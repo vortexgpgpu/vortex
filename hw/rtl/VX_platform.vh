@@ -29,13 +29,21 @@
 `endif
 
 `ifdef SYNTHESIS
+
 `define TRACING_ON
 `define TRACING_OFF
+
 `ifndef NDEBUG
     `define DEBUG_BLOCK(x) x
+    `define TRACE(level, args) \
+        if (level <= `DEBUG_LEVEL) begin \
+            $write args; \
+        end
 `else
     `define DEBUG_BLOCK(x)
+    `define TRACE(level, args)
 `endif
+
 `define IGNORE_UNOPTFLAT_BEGIN
 `define IGNORE_UNOPTFLAT_END
 `define IGNORE_UNUSED_BEGIN
@@ -47,11 +55,9 @@
 `define UNUSED_VAR(x)
 `define UNUSED_PIN(x) . x ()
 `define UNUSED_ARG(x) x
-`define TRACE(level, args) \
-    if (level <= `DEBUG_LEVEL) begin \
-        $write args; \
-    end
-`else
+
+`else // not SYNTHESIS
+
 `ifdef VERILATOR
 
 `ifndef TRACING_ALL
@@ -122,7 +128,7 @@
 `define UNUSED_ARG(x)   /* verilator lint_off UNUSED */ \
                         x \
                         /* verilator lint_on UNUSED */
-`endif
+`endif // not VERILATOR
 
 `ifdef SV_DPI
 `define TRACE(level, args) dpi_trace(level, $sformatf args);
@@ -151,7 +157,7 @@
         always @(posedge clk) begin       \
             assert(cond) else $error msg; \
         end
-`else
+`else // not SIMULATION
     `define STATIC_ASSERT(cond, msg)
     `define ERROR(msg)                  //
     `define ASSERT(cond, msg)           //
