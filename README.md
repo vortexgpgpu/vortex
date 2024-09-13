@@ -59,20 +59,17 @@ sudo apt-get install git
 ```
 ### Configure your build folder
 ```sh
-    # 
-    # By default, the toolchain default install location is the /opt folder and can be overridden by setting --tooldir.
-    # This is the example for volvo server
     mkdir build
-    mkdir out
-    export OUT_DIR=`pwd`/out
     cd build
-    # Run the following to disble virtual memory feature in compilation
-    ../configure --xlen=32 --tooldir=/software/vortex-toolchain-2024-2024-08-09 --prefix=$OUT_DIR
-    # Run the following instead to enable virtual memory feature in compilation
-    ../configure --xlen=32 --tooldir=/software/vortex-toolchain-2024-2024-08-09 --prefix=$OUT_DIR --vm_enable=1
+    # for 32bit
+    ../configure --xlen=32 --tooldir=$HOME/tools
+    # for 64bit
+    ../configure --xlen=64 --tooldir=$HOME/tools
 ```
 ### Install prebuilt toolchain
-    # We will use the precomipled tools in volvo toolchanin directory
+```sh
+   ./ci/toolchain_install.sh --all
+```
 ### set environment variables
 ```sh
     # should always run before using the toolchain!
@@ -82,7 +79,6 @@ sudo apt-get install git
 ```sh
 make -s
 ```
-
 ### Quick demo running vecadd OpenCL kernel on 2 cores
 ```sh
 ./ci/blackbox.sh --cores=2 --app=vecadd
