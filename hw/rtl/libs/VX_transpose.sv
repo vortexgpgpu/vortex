@@ -15,11 +15,12 @@
 
 `TRACING_OFF
 module VX_transpose #(
+    parameter DATAW = 1,
     parameter N = 1,
     parameter M = 1
 ) (
-    input wire [N-1:0][M-1:0] data_in,
-    output wire [M-1:0][N-1:0] data_out
+    input wire [N-1:0][M-1:0][DATAW-1:0] data_in,
+    output wire [M-1:0][N-1:0][DATAW-1:0] data_out
 );
     for (genvar i = 0; i < N; ++i) begin : g_i
         for (genvar j = 0; j < M; ++j) begin : g_j

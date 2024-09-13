@@ -310,7 +310,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     end
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req_bid
-        if (NUM_BANKS > 1) begin : g_multibank
+        if (NUM_BANKS > 1) begin : g_multibanks
             assign core_req_bid[i] = core_req_addr[i][WORD_SEL_BITS +: BANK_SEL_BITS];
         end else begin : g_singlebank
             assign core_req_bid[i] = '0;
@@ -448,7 +448,7 @@ module VX_cache import VX_gpu_pkg::*; #(
 
         if (NUM_BANKS == 1) begin : g_per_bank_mem_req_addr_multibanks
             assign per_bank_mem_req_addr[bank_id] = curr_bank_mem_req_addr;
-        end else begin : g_per_bank_mem_req_addr_one_bank
+        end else begin : g_per_bank_mem_req_addr_singlebank
             assign per_bank_mem_req_addr[bank_id] = `CS_LINE_TO_MEM_ADDR(curr_bank_mem_req_addr, bank_id);
         end
     end
@@ -521,7 +521,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     if (NUM_BANKS > 1) begin : g_mem_req_tag_multibanks
         wire [`CS_BANK_SEL_BITS-1:0] mem_req_bank_id = `CS_MEM_ADDR_TO_BANK_ID(mem_req_addr);
         assign mem_req_tag = MEM_TAG_WIDTH'({bank_mem_req_tag, mem_req_bank_id});
-    end else begin : g_mem_req_tag_one_bank
+    end else begin : g_mem_req_tag
         assign mem_req_tag = MEM_TAG_WIDTH'(bank_mem_req_tag);
     end
 

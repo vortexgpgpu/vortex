@@ -90,9 +90,9 @@ module VX_operands import VX_gpu_pkg::*; #(
     end
 
     for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_req_bank_idx
-        if (NUM_BANKS != 1) begin : g_banks
+        if (NUM_BANKS != 1) begin : g_multibanks
             assign req_bank_idx[i] = src_opds[i][BANK_SEL_BITS-1:0];
-        end else begin : g_1bank
+        end else begin : g_singlebank
             assign req_bank_idx[i] = '0;
         end
     end
@@ -250,10 +250,10 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_gpr_rams
         wire gpr_wr_enabled;
-        if (BANK_SEL_BITS != 0) begin : g_gpr_wr_enabled
+        if (BANK_SEL_BITS != 0) begin : g_gpr_wr_enabled_multibanks
             assign gpr_wr_enabled = writeback_if.valid
                                  && (gpr_wr_bank_idx == BANK_SEL_BITS'(b));
-        end else begin : g_gpr_wr_enabled_1bank
+        end else begin : g_gpr_wr_enabled
             assign gpr_wr_enabled = writeback_if.valid;
         end
 

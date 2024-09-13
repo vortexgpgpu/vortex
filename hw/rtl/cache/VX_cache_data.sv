@@ -76,13 +76,16 @@ module VX_cache_data #(
     wire [`LOG2UP(NUM_WAYS)-1:0] way_idx;
 
     if (WRITEBACK) begin : g_dirty_data
-        wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] flipped_rdata;
-        for (genvar i = 0; i < `CS_WORDS_PER_LINE; ++i) begin : g_flipped_rdata
-            for (genvar j = 0; j < NUM_WAYS; ++j) begin : g_j
-                assign flipped_rdata[j][i] = line_rdata[i][j];
-            end
-        end
-        assign dirty_data = flipped_rdata[way_idx];
+        wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] transposed_rdata;
+        VX_transpose #(
+            .DATAW (`CS_WORD_WIDTH),
+            .N (`CS_WORDS_PER_LINE),
+            .M (NUM_WAYS)
+        ) transpose (
+            .data_in  (line_rdata),
+            .data_out (transposed_rdata)
+        );
+        assign dirty_data = transposed_rdata[way_idx];
     end else begin : g_dirty_data_0
         assign dirty_data = '0;
     end
