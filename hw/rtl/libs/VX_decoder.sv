@@ -27,16 +27,16 @@ module VX_decoder #(
     input wire [M-1:0] valid_in,
     output wire [D-1:0][M-1:0] data_out
 );
+    logic [D-1:0][M-1:0] shift;
     if (MODEL == 1) begin : g_model1
-        reg [D-1:0][M-1:0] data_out_w;
         always @(*) begin
-            data_out_w = '0;
-            data_out_w[data_in] = valid_in;
+            shift = '0;
+            shift[data_in] = 1'b1;
         end
-        assign data_out = data_out_w;
     end else begin : g_model0
-        assign data_out = (D*M)'(valid_in) << (data_in * M);
+        assign shift = (D*M)'(1'b1) << (data_in * M);
     end
+    assign data_out = {D{valid_in}} & shift;
 
 endmodule
 `TRACING_ON
