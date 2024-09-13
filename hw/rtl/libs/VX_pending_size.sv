@@ -167,7 +167,15 @@ module VX_pending_size #(
                 end
             end
 
-            assign size = {full_r, used_r};
+            if (SIZE > 1) begin : g_sizeN
+                if (SIZEW > ADDRW) begin : g_not_log2
+                    assign size = {full_r, used_r};
+                end else begin : g_log2
+                    assign size = used_r;
+                end
+            end else begin : g_size1
+                assign size = full_r;
+            end
 
         end
 
