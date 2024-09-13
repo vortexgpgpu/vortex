@@ -35,7 +35,15 @@ module VX_bypass_buffer #(
     input  wire             ready_out,
     output wire             valid_out
 );
-    if (PASSTHRU == 0) begin : g_buffer
+    if (PASSTHRU != 0) begin : g_passthru
+
+        `UNUSED_VAR (clk)
+        `UNUSED_VAR (reset)
+        assign ready_in  = ready_out;
+        assign valid_out = valid_in;
+        assign data_out  = data_in;
+
+    end else begin : g_buffer
 
         reg [DATAW-1:0] buffer;
         reg has_data;
@@ -59,15 +67,7 @@ module VX_bypass_buffer #(
         assign data_out  = has_data ? buffer : data_in;
         assign valid_out = valid_in || has_data;
 
-    end else begin : g_passthru
-
-        `UNUSED_VAR (clk)
-        `UNUSED_VAR (reset)
-        assign ready_in  = ready_out;
-        assign valid_out = valid_in;
-        assign data_out  = data_in;
-
-    end else
+    end
 
 endmodule
 `TRACING_ON
