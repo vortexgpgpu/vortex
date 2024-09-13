@@ -36,18 +36,17 @@ module VX_stream_switch #(
     output wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out,
     input  wire [NUM_OUTPUTS-1:0]           ready_out
 );
-    if (NUM_INPUTS > NUM_OUTPUTS) begin
-
+    if (NUM_INPUTS > NUM_OUTPUTS) begin : g_more_inputs
         wire [NUM_OUTPUTS-1:0][NUM_REQS-1:0]             valid_in_w;
         wire [NUM_OUTPUTS-1:0][NUM_REQS-1:0][DATAW-1:0]  data_in_w;
 
-        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-            for (genvar j = 0; j < NUM_REQS; ++j) begin
+        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_data_in
+            for (genvar j = 0; j < NUM_REQS; ++j) begin : g_j
                 localparam ii = i * NUM_REQS + j;
-                if (ii < NUM_INPUTS) begin
+                if (ii < NUM_INPUTS) begin : g_valid
                     assign valid_in_w[i][j] = valid_in[ii];
                     assign data_in_w[i][j]  = data_in[ii];
-                end else begin
+                end else begin : g_extra
                     assign valid_in_w[i][j] = 0;
                     assign data_in_w[i][j]  = '0;
                 end
@@ -58,21 +57,21 @@ module VX_stream_switch #(
         wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out_w;
         wire [NUM_OUTPUTS-1:0]            ready_out_w;
 
-        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
+        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_data_out_w
             assign valid_out_w[i] = valid_in_w[i][sel_in[i]];
             assign data_out_w[i]  = data_in_w[i][sel_in[i]];
         end
 
-        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-            for (genvar j = 0; j < NUM_REQS; ++j) begin
+        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_ready_out_w
+            for (genvar j = 0; j < NUM_REQS; ++j) begin : g_j
                 localparam ii = i * NUM_REQS + j;
-                if (ii < NUM_INPUTS) begin
+                if (ii < NUM_INPUTS) begin : g_valid
                     assign ready_in[ii] = ready_out_w[i] && (sel_in[i] == LOG_NUM_REQS'(j));
                 end
             end
         end
 
-        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
+        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_out_buf
             VX_elastic_buffer #(
                 .DATAW   (DATAW),
                 .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
@@ -89,22 +88,25 @@ module VX_stream_switch #(
             );
         end
 
-    end else if (NUM_OUTPUTS > NUM_INPUTS) begin
+    end else if (NUM_OUTPUTS > NUM_INPUTS) begin : g_more_outputs
 
         wire [NUM_INPUTS-1:0][NUM_REQS-1:0] valid_out_w;
         wire [NUM_INPUTS-1:0][NUM_REQS-1:0] ready_out_w;
 
-        for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-            for (genvar j = 0; j < NUM_REQS; ++j) begin
+        for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_valid_out_w
+            for (genvar j = 0; j < NUM_REQS; ++j) begin : g_j
                 assign valid_out_w[i][j] = valid_in[i] && (sel_in[i] == LOG_NUM_REQS'(j));
             end
+        end
+
+        for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_ready_in
             assign ready_in[i] = ready_out_w[i][sel_in[i]];
         end
 
-        for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-            for (genvar j = 0; j < NUM_REQS; ++j) begin
+        for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_out_buf
+            for (genvar j = 0; j < NUM_REQS; ++j) begin : g_j
                 localparam ii = i * NUM_REQS + j;
-                if (ii < NUM_OUTPUTS) begin
+                if (ii < NUM_OUTPUTS) begin : g_valid
                     VX_elastic_buffer #(
                         .DATAW    (DATAW),
                         .SIZE     (`TO_OUT_BUF_SIZE(OUT_BUF)),
@@ -119,20 +121,20 @@ module VX_stream_switch #(
                         .valid_out (valid_out[ii]),
                         .ready_out (ready_out[ii])
                     );
-                end else begin
+                end else begin : g_extra
                     `UNUSED_VAR (valid_out_w[i][j])
                     assign ready_out_w[i][j] = '0;
                 end
             end
         end
 
-    end else begin
+    end else begin : g_passthru
 
         // #Inputs == #Outputs
 
         `UNUSED_VAR (sel_in)
 
-        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
+        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_out_buf
             VX_elastic_buffer #(
                 .DATAW    (DATAW),
                 .SIZE     (`TO_OUT_BUF_SIZE(OUT_BUF)),

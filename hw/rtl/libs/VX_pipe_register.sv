@@ -26,13 +26,13 @@ module VX_pipe_register #(
     input wire [DATAW-1:0]  data_in,
     output wire [DATAW-1:0] data_out
 );
-    if (DEPTH == 0) begin
+    if (DEPTH == 0) begin : g_passthru
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
         `UNUSED_VAR (enable)
         assign data_out = data_in;
-    end else if (DEPTH == 1) begin
-        if (RESETW == 0) begin
+    end else if (DEPTH == 1) begin : g_depth1
+        if (RESETW == 0) begin : g_no_reset
             `UNUSED_VAR (reset)
             reg [DATAW-1:0] value;
 
@@ -42,18 +42,7 @@ module VX_pipe_register #(
                 end
             end
             assign data_out = value;
-        end else if (RESETW == DATAW) begin
-            reg [DATAW-1:0] value;
-
-            always @(posedge clk) begin
-                if (reset) begin
-                    value <= INIT_VALUE;
-                end else if (enable) begin
-                    value <= data_in;
-                end
-            end
-            assign data_out = value;
-        end else begin
+        end else if (RESETW < DATAW) begin : g_partial_reset
             reg [DATAW-RESETW-1:0] value_d;
             reg [RESETW-1:0]       value_r;
 
@@ -71,12 +60,23 @@ module VX_pipe_register #(
                 end
             end
             assign data_out = {value_r, value_d};
+        end else begin : g_full_reset
+            reg [DATAW-1:0] value;
+
+            always @(posedge clk) begin
+                if (reset) begin
+                    value <= INIT_VALUE;
+                end else if (enable) begin
+                    value <= data_in;
+                end
+            end
+            assign data_out = value;
         end
-    end else begin
+    end else begin : g_recursive
         wire [DEPTH:0][DATAW-1:0] data_delayed;
         assign data_delayed[0] = data_in;
-        
-        for (genvar i = 1; i <= DEPTH; ++i) begin
+
+        for (genvar i = 1; i <= DEPTH; ++i) begin : g_pipe_reg
             VX_pipe_register #(
                 .DATAW  (DATAW),
                 .RESETW (RESETW),

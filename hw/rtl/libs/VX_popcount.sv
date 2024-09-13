@@ -100,11 +100,11 @@ module VX_popcount #(
 `elsif QUARTUS
     assign data_out = $countones(data_in);
 `else
-    if (N == 1) begin
+    if (N == 1) begin : g_passthru
 
         assign data_out = data_in;
 
-    end else if (N <= 3) begin
+    end else if (N <= 3) begin : g_popcount3
 
         reg [2:0] t_in;
         wire [1:0] t_out;
@@ -115,7 +115,7 @@ module VX_popcount #(
         VX_popcount32 pc32(t_in, t_out);
         assign data_out = t_out[M-1:0];
 
-    end else if (N <= 6) begin
+    end else if (N <= 6) begin : g_popcount6
 
         reg [5:0] t_in;
         wire [2:0] t_out;
@@ -126,7 +126,7 @@ module VX_popcount #(
         VX_popcount63 pc63(t_in, t_out);
         assign data_out = t_out[M-1:0];
 
-    end else if (N <= 9) begin
+    end else if (N <= 9) begin : g_popcount9
 
         reg [8:0] t_in;
         wire [4:0] t1_out;
@@ -140,7 +140,7 @@ module VX_popcount #(
         VX_sum33 sum33(t1_out[2:0], {1'b0, t1_out[4:3]}, t2_out);
         assign data_out = t2_out[M-1:0];
 
-    end else if (N <= 12) begin
+    end else if (N <= 12) begin : g_popcount12
 
         reg [11:0] t_in;
         wire [5:0] t1_out;
@@ -154,7 +154,7 @@ module VX_popcount #(
         VX_sum33 sum33(t1_out[2:0], t1_out[5:3], t2_out);
         assign data_out = t2_out[M-1:0];
 
-    end else if (N <= 18) begin
+    end else if (N <= 18) begin : g_popcount18
 
         reg [17:0] t_in;
         wire [8:0] t1_out;
@@ -171,7 +171,7 @@ module VX_popcount #(
         VX_popcount32 pc32c({t1_out[2], t1_out[5], t1_out[8]}, t2_out[5:4]);
         assign data_out = {2'b0,t2_out[1:0]} + {1'b0,t2_out[3:2],1'b0} + {t2_out[5:4],2'b0};
 
-    end else if (MODEL == 1) begin
+    end else if (MODEL == 1) begin : g_model1
 
         localparam PN = 1 << `CLOG2(N);
         localparam LOGPN = `CLOG2(PN);
@@ -204,7 +204,7 @@ module VX_popcount #(
 
         assign data_out = tmp[LOGPN-1][0];
 
-    end else begin
+    end else begin : g_model2
 
         reg [M-1:0] cnt_w;
 

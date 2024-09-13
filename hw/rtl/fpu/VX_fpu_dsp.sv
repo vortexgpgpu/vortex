@@ -83,7 +83,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     wire [NUM_LANES-1:0][31:0] datab_s;
     wire [NUM_LANES-1:0][31:0] datac_s;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data
         assign dataa_s[i] = dataa[i][31:0];
         assign datab_s[i] = datab[i][31:0];
         assign datac_s[i] = datac[i][31:0];
@@ -111,7 +111,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
         .ready_out (per_core_ready_in)
     );
 
-    for (genvar i = 0; i < NUM_FPCORES; ++i) begin
+    for (genvar i = 0; i < NUM_FPCORES; ++i) begin : g_per_core_data_in
         assign {
             per_core_mask_in[i],
             per_core_tag_in[i],
@@ -211,7 +211,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
         .ready_out (div_sqrt_ready_in)
     );
 
-    for (genvar i = 0; i < 2; ++i) begin
+    for (genvar i = 0; i < 2; ++i) begin : g_div_sqrt_data_in
         assign {
             div_sqrt_mask_in[i],
             div_sqrt_tag_in[i],
@@ -271,7 +271,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     );
 
     wire [1:0][RSP_DATAW-1:0] div_sqrt_arb_data_in;
-    for (genvar i = 0; i < 2; ++i) begin
+    for (genvar i = 0; i < 2; ++i) begin : g_div_sqrt_arb_data_in
         assign div_sqrt_arb_data_in[i] = {
             div_sqrt_result[i],
             div_sqrt_has_fflags[i],
@@ -403,7 +403,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
         `UNUSED_PIN (sel_out)
     );
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
     `ifdef FPU_RV64F
         reg [`XLEN-1:0] result_w;
         always @(*) begin

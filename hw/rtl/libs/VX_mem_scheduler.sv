@@ -160,9 +160,9 @@ module VX_mem_scheduler #(
     wire reqq_ready_in;
 
     wire [REQQ_TAG_WIDTH-1:0] reqq_tag_u;
-    if (UUID_WIDTH != 0) begin
+    if (UUID_WIDTH != 0) begin : g_reqq_tag_u_uuid
         assign reqq_tag_u = {core_req_tag[TAG_WIDTH-1 -: UUID_WIDTH], ibuf_waddr};
-    end else begin
+    end else begin : g_reqq_tag_u
         assign reqq_tag_u = ibuf_waddr;
     end
 
@@ -220,7 +220,7 @@ module VX_mem_scheduler #(
 
     // Handle memory coalescing ///////////////////////////////////////////////
 
-    if (COALESCE_ENABLE) begin
+    if (COALESCE_ENABLE) begin : g_coalescer
 
         VX_mem_coalescer #(
             .INSTANCE_ID    ($sformatf("%s-coalescer", INSTANCE_ID)),
@@ -273,8 +273,7 @@ module VX_mem_scheduler #(
             .out_rsp_ready  (mem_rsp_ready)
         );
 
-    end else begin
-
+    end else begin : g_no_coalescer
         assign reqq_valid_s = reqq_valid;
         assign reqq_mask_s  = reqq_mask;
         assign reqq_rw_s    = reqq_rw;
@@ -303,16 +302,16 @@ module VX_mem_scheduler #(
 
     wire [BATCH_SEL_WIDTH-1:0] req_batch_idx;
 
-    for (genvar i = 0; i < MEM_BATCHES; ++i) begin
-        for (genvar j = 0; j < MEM_CHANNELS; ++j) begin
+    for (genvar i = 0; i < MEM_BATCHES; ++i) begin : g_mem_req_data_b
+        for (genvar j = 0; j < MEM_CHANNELS; ++j) begin : g_j
             localparam r = i * MEM_CHANNELS + j;
-            if (r < MERGED_REQS) begin
+            if (r < MERGED_REQS) begin : g_valid
                 assign mem_req_mask_b[i][j]   = reqq_mask_s[r];
                 assign mem_req_byteen_b[i][j] = reqq_byteen_s[r];
                 assign mem_req_addr_b[i][j]   = reqq_addr_s[r];
                 assign mem_req_flags_b[i][j]  = reqq_flags_s[r];
                 assign mem_req_data_b[i][j]   = reqq_data_s[r];
-            end else begin
+            end else begin : g_extra
                 assign mem_req_mask_b[i][j]   = 0;
                 assign mem_req_byteen_b[i][j] = '0;
                 assign mem_req_addr_b[i][j]   = '0;
@@ -329,7 +328,7 @@ module VX_mem_scheduler #(
     assign mem_req_flags_s  = mem_req_flags_b[req_batch_idx];
     assign mem_req_data_s   = mem_req_data_b[req_batch_idx];
 
-    if (MEM_BATCHES != 1) begin
+    if (MEM_BATCHES != 1) begin : g_batch
         reg [MEM_BATCH_BITS-1:0] req_batch_idx_r;
 
         wire is_degenerate_batch = ~(| mem_req_mask_s);
@@ -354,7 +353,7 @@ module VX_mem_scheduler #(
         wire [MEM_BATCHES-1:0][MEM_BATCH_BITS-1:0] req_batch_idxs;
         wire [MEM_BATCH_BITS-1:0] req_batch_idx_last;
 
-        for (genvar i = 0; i < MEM_BATCHES; ++i) begin
+        for (genvar i = 0; i < MEM_BATCHES; ++i) begin : g_req_batch
             assign req_batch_valids[i] = (| mem_req_mask_b[i]);
             assign req_batch_idxs[i] = MEM_BATCH_BITS'(i);
         end
@@ -375,7 +374,7 @@ module VX_mem_scheduler #(
         assign req_sent_all  = mem_req_ready_b && (req_batch_idx_r == req_batch_idx_last);
         assign mem_req_tag_s = {reqq_tag_s, req_batch_idx};
 
-    end else begin
+    end else begin : g_no_batch
 
         assign mem_req_valid_s = reqq_valid_s;
         assign req_batch_idx = '0;
@@ -407,13 +406,13 @@ module VX_mem_scheduler #(
     wire [CORE_REQS-1:0] rsp_rem_mask_n, curr_mask;
     wire [BATCH_SEL_WIDTH-1:0] rsp_batch_idx;
 
-    if (CORE_BATCHES > 1) begin
+    if (CORE_BATCHES > 1) begin : g_rsp_batch_idx
         assign rsp_batch_idx = mem_rsp_tag_s[CORE_BATCH_BITS-1:0];
-    end else begin
+    end else begin : g_rsp_batch_idx_0
         assign rsp_batch_idx = '0;
     end
 
-    for (genvar r = 0; r < CORE_REQS; ++r) begin
+    for (genvar r = 0; r < CORE_REQS; ++r) begin : g_curr_mask
         localparam i = r / CORE_CHANNELS;
         localparam j = r % CORE_CHANNELS;
         assign curr_mask[r] = (BATCH_SEL_WIDTH'(i) == rsp_batch_idx) && mem_rsp_mask_s[j];
@@ -434,7 +433,7 @@ module VX_mem_scheduler #(
         end
     end
 
-    if (RSP_PARTIAL != 0) begin
+    if (RSP_PARTIAL != 0) begin : g_rsp_partial
 
         reg [CORE_QUEUE_SIZE-1:0] rsp_sop_r;
 
@@ -451,14 +450,14 @@ module VX_mem_scheduler #(
         assign crsp_mask  = curr_mask;
         assign crsp_sop   = rsp_sop_r[ibuf_raddr];
 
-        for (genvar r = 0; r < CORE_REQS; ++r) begin
+        for (genvar r = 0; r < CORE_REQS; ++r) begin : g_crsp_data
             localparam j = r % CORE_CHANNELS;
             assign crsp_data[r] = mem_rsp_data_s[j];
         end
 
         assign mem_rsp_ready_s = crsp_ready;
 
-    end else begin
+    end else begin : g_rsp_full
 
         reg [CORE_BATCHES*CORE_CHANNELS*WORD_WIDTH-1:0] rsp_store [CORE_QUEUE_SIZE-1:0];
         reg [CORE_BATCHES-1:00][CORE_CHANNELS-1:0][WORD_WIDTH-1:0] rsp_store_n;
@@ -486,7 +485,7 @@ module VX_mem_scheduler #(
         assign crsp_mask  = rsp_orig_mask[ibuf_raddr];
         assign crsp_sop   = 1'b1;
 
-        for (genvar r = 0; r < CORE_REQS; ++r) begin
+        for (genvar r = 0; r < CORE_REQS; ++r) begin : g_crsp_data
             localparam i = r / CORE_CHANNELS;
             localparam j = r % CORE_CHANNELS;
             assign crsp_data[r] = rsp_store_n[i][j];
@@ -496,9 +495,9 @@ module VX_mem_scheduler #(
 
     end
 
-    if (UUID_WIDTH != 0) begin
+    if (UUID_WIDTH != 0) begin : g_crsp_tag
         assign crsp_tag = {mem_rsp_tag_s[MEM_TAG_WIDTH-1 -: UUID_WIDTH], ibuf_dout};
-    end else begin
+    end else begin : g_crsp_tag_0
         assign crsp_tag = ibuf_dout;
     end
 
@@ -524,9 +523,9 @@ module VX_mem_scheduler #(
 `ifdef SIMULATION
     wire [`UP(UUID_WIDTH)-1:0] req_dbg_uuid;
 
-    if (UUID_WIDTH != 0) begin
+    if (UUID_WIDTH != 0) begin : g_req_dbg_uuid
         assign req_dbg_uuid = core_req_tag[TAG_WIDTH-1 -: UUID_WIDTH];
-    end else begin
+    end else begin : g_req_dbg_uuid_0
         assign req_dbg_uuid = '0;
     end
 
@@ -566,11 +565,11 @@ module VX_mem_scheduler #(
     wire [`UP(UUID_WIDTH)-1:0] mem_rsp_dbg_uuid;
     wire [`UP(UUID_WIDTH)-1:0] rsp_dbg_uuid;
 
-    if (UUID_WIDTH != 0) begin
+    if (UUID_WIDTH != 0) begin : g_dbg_uuid
         assign mem_req_dbg_uuid = mem_req_tag_s[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
         assign mem_rsp_dbg_uuid = mem_rsp_tag_s[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
         assign rsp_dbg_uuid     = core_rsp_tag[TAG_WIDTH-1 -: UUID_WIDTH];
-    end else begin
+    end else begin : g_dbg_uuid_0
         assign mem_req_dbg_uuid = '0;
         assign mem_rsp_dbg_uuid = '0;
         assign rsp_dbg_uuid     = '0;

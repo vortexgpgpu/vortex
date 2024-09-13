@@ -246,17 +246,17 @@ module VX_cache_bank #(
     wire [MSHR_ADDR_WIDTH-1:0] mem_rsp_id = mem_rsp_tag[MSHR_ADDR_WIDTH-1:0];
 
     wire [TAG_WIDTH-1:0] mem_rsp_tag_s;
-    if (TAG_WIDTH > MEM_TAG_WIDTH) begin
+    if (TAG_WIDTH > MEM_TAG_WIDTH) begin : g_mem_rsp_tag_s_pad
         assign mem_rsp_tag_s = {mem_rsp_tag, (TAG_WIDTH-MEM_TAG_WIDTH)'(1'b0)};
-    end else begin
+    end else begin : g_mem_rsp_tag_s_cut
         assign mem_rsp_tag_s = mem_rsp_tag[MEM_TAG_WIDTH-1 -: TAG_WIDTH];
         `UNUSED_VAR (mem_rsp_tag)
     end
 
     wire [TAG_WIDTH-1:0] flush_tag;
-    if (UUID_WIDTH != 0) begin
+    if (UUID_WIDTH != 0) begin : g_flush_tag_uuid
         assign flush_tag = {flush_uuid, (TAG_WIDTH-UUID_WIDTH)'(1'b0)};
-    end else begin
+    end else begin : g_flush_tag_0
         `UNUSED_VAR (flush_uuid)
         assign flush_tag = '0;
     end
@@ -273,20 +273,21 @@ module VX_cache_bank #(
     assign addr_sel    = (init_valid | flush_valid) ? `CS_LINE_ADDR_WIDTH'(flush_sel) :
                             (replay_valid ? replay_addr : (mem_rsp_valid ? mem_rsp_addr : core_req_addr));
 
-    if (WRITE_ENABLE) begin
+    if (WRITE_ENABLE) begin : g_data_sel
         assign data_sel[`CS_WORD_WIDTH-1:0] = replay_valid ? replay_data : (mem_rsp_valid ? mem_rsp_data[`CS_WORD_WIDTH-1:0] : core_req_data);
-    end else begin
+    end else begin : g_data_sel_ro
         assign data_sel[`CS_WORD_WIDTH-1:0] = mem_rsp_data[`CS_WORD_WIDTH-1:0];
         `UNUSED_VAR (core_req_data)
         `UNUSED_VAR (replay_data)
     end
-    for (genvar i = `CS_WORD_WIDTH; i < `CS_LINE_WIDTH; ++i) begin
+
+    for (genvar i = `CS_WORD_WIDTH; i < `CS_LINE_WIDTH; ++i) begin : g_data_sel
         assign data_sel[i] = mem_rsp_data[i]; // only the memory response fills the upper words of data_sel
     end
 
-    if (UUID_WIDTH != 0) begin
+    if (UUID_WIDTH != 0) begin : g_req_uuid_sel
         assign req_uuid_sel = tag_sel[TAG_WIDTH-1 -: UUID_WIDTH];
-    end else begin
+    end else begin : g_req_uuid_sel_0
         assign req_uuid_sel = '0;
     end
 
@@ -301,9 +302,9 @@ module VX_cache_bank #(
         .data_out ({valid_st0, is_init_st0, is_replay_st0, is_fill_st0, is_flush_st0, is_creq_st0, creq_flush_st0, flush_way_st0,  addr_st0, data_st0, rw_st0, byteen_st0, wsel_st0, req_idx_st0, tag_st0, replay_id_st0})
     );
 
-    if (UUID_WIDTH != 0) begin
+    if (UUID_WIDTH != 0) begin : g_req_uuid_st0
         assign req_uuid_st0 = tag_st0[TAG_WIDTH-1 -: UUID_WIDTH];
-    end else begin
+    end else begin : g_req_uuid_st0_0
         assign req_uuid_st0 = '0;
     end
 
@@ -383,9 +384,9 @@ module VX_cache_bank #(
     // we have a tag hit
     wire is_hit_st1 = (| way_sel_st1);
 
-    if (UUID_WIDTH != 0) begin
+    if (UUID_WIDTH != 0) begin : g_req_uuid_st1
         assign req_uuid_st1 = tag_st1[TAG_WIDTH-1 -: UUID_WIDTH];
-    end else begin
+    end else begin : g_req_uuid_st1_0
         assign req_uuid_st1 = '0;
     end
 
@@ -434,14 +435,14 @@ module VX_cache_bank #(
     wire [`CS_LINE_WIDTH-1:0] dirty_data_st1;
     wire [LINE_SIZE-1:0] dirty_byteen_st1;
 
-     if (`CS_WORDS_PER_LINE > 1) begin
+     if (`CS_WORDS_PER_LINE > 1) begin : g_write_byteen_st1_wsel
         reg [`CS_WORDS_PER_LINE-1:0][WORD_SIZE-1:0] write_byteen_w;
         always @(*) begin
             write_byteen_w = '0;
             write_byteen_w[wsel_st1] = byteen_st1;
         end
         assign write_byteen_st1 = write_byteen_w;
-    end else begin
+    end else begin : g_write_byteen_st1
         assign write_byteen_st1 = byteen_st1;
     end
 
@@ -489,9 +490,9 @@ module VX_cache_bank #(
 
     // release allocated mshr entry if we had a hit
     wire mshr_release_st1;
-    if (WRITEBACK) begin
+    if (WRITEBACK) begin : g_mshr_release_st1
         assign mshr_release_st1 = is_hit_st1;
-    end else begin
+    end else begin : g_mshr_release_st1_ro
         // we need to keep missed write requests in MSHR if there is already a pending entry to the same address
         // this ensures that missed write requests are replayed locally in case a pending fill arrives without the write content
         // this can happen when writes are sent late, when the fill was already in flight.
@@ -566,7 +567,7 @@ module VX_cache_bank #(
 
     // check if there are pending requests to same line in the MSHR
     wire [MSHR_SIZE-1:0] lookup_matches;
-    for (genvar i = 0; i < MSHR_SIZE; ++i) begin
+    for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_lookup_matches
         assign lookup_matches[i] = mshr_lookup_pending_st0[i]
                                 && (i != mshr_alloc_id_st0) // exclude current mshr id
                                 && (WRITEBACK || ~mshr_lookup_rw_st0[i]);  // exclude write requests if writethrough
@@ -616,8 +617,8 @@ module VX_cache_bank #(
     wire do_fill_or_flush_st1 = valid_st1 && is_fill_or_flush_st1;
     wire do_writeback_st1 = do_fill_or_flush_st1 && evict_dirty_st1;
 
-    if (WRITEBACK) begin
-        if (DIRTY_BYTES) begin
+    if (WRITEBACK) begin : g_mreq_queue_push
+        if (DIRTY_BYTES) begin : g_dirty_bytes
             // ensure dirty bytes match the tag info
             wire has_dirty_bytes = (| dirty_byteen_st1);
             `RUNTIME_ASSERT (~do_fill_or_flush_st1 || (evict_dirty_st1 == has_dirty_bytes), ("%t: missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", $time, evict_dirty_st1, has_dirty_bytes, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID)))
@@ -625,7 +626,7 @@ module VX_cache_bank #(
         assign mreq_queue_push = (((do_read_miss_st1 || do_write_miss_st1) && ~mshr_pending_st1)
                                || do_writeback_st1)
                               && ~rdw_hazard3_st1;
-    end else begin
+    end else begin : g_mreq_queue_push_ro
         `UNUSED_VAR (do_writeback_st1)
         assign mreq_queue_push = ((do_read_miss_st1 && ~mshr_pending_st1)
                                || do_creq_wr_st1)
@@ -636,12 +637,12 @@ module VX_cache_bank #(
     assign mreq_queue_addr = addr_st1;
     assign mreq_queue_flush = creq_flush_st1;
 
-    if (WRITE_ENABLE) begin
-        if (WRITEBACK) begin
+    if (WRITE_ENABLE) begin : g_mreq_queue
+        if (WRITEBACK) begin : g_writeback
             assign mreq_queue_rw = is_fill_or_flush_st1;
             assign mreq_queue_data =  dirty_data_st1;
             assign mreq_queue_byteen = is_fill_or_flush_st1 ? dirty_byteen_st1 : '1;
-        end else begin
+        end else begin : g_writethrough
             assign mreq_queue_rw = rw_st1;
             assign mreq_queue_data = write_data_st1;
             assign mreq_queue_byteen = rw_st1 ? write_byteen_st1 : '1;
@@ -649,7 +650,7 @@ module VX_cache_bank #(
             `UNUSED_VAR (dirty_data_st1)
             `UNUSED_VAR (dirty_byteen_st1)
         end
-    end else begin
+    end else begin : g_mreq_queue_ro
         assign mreq_queue_rw = 0;
         assign mreq_queue_data = '0;
         assign mreq_queue_byteen = '1;
@@ -657,9 +658,9 @@ module VX_cache_bank #(
         `UNUSED_VAR (dirty_byteen_st1)
     end
 
-    if (UUID_WIDTH != 0) begin
+    if (UUID_WIDTH != 0) begin : g_mreq_queue_tag_uuid
         assign mreq_queue_tag = {req_uuid_st1, mshr_id_st1};
-    end else begin
+    end else begin : g_mreq_queue_tag
         assign mreq_queue_tag = mshr_id_st1;
     end
 

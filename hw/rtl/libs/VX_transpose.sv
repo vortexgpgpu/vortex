@@ -21,8 +21,8 @@ module VX_transpose #(
     input wire [N-1:0][M-1:0] data_in,
     output wire [M-1:0][N-1:0] data_out
 );
-    for (genvar i = 0; i < N; ++i) begin
-        for (genvar j = 0; j < M; ++j) begin
+    for (genvar i = 0; i < N; ++i) begin : g_i
+        for (genvar j = 0; j < M; ++j) begin : g_j
             assign data_out[j][i] = data_in[i][j];
         end
     end

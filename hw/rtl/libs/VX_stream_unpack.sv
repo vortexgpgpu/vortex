@@ -36,7 +36,7 @@ module VX_stream_unpack #(
     output wire [NUM_REQS-1:0][TAG_WIDTH-1:0] tag_out,
     input wire  [NUM_REQS-1:0]          ready_out
 );
-    if (NUM_REQS > 1) begin
+    if (NUM_REQS > 1) begin : g_unpack
 
         reg [NUM_REQS-1:0] rem_mask_r;
         wire [NUM_REQS-1:0] ready_out_w;
@@ -56,7 +56,7 @@ module VX_stream_unpack #(
 
         assign ready_in = sent_all;
 
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_outbuf
             VX_elastic_buffer #(
                 .DATAW   (DATA_WIDTH + TAG_WIDTH),
                 .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
@@ -73,7 +73,7 @@ module VX_stream_unpack #(
             );
         end
 
-    end else begin
+    end else begin : g_passthru
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)

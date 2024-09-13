@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,9 +14,9 @@
 `include "VX_platform.vh"
 
 `TRACING_OFF
-module VX_scope_switch #(     
+module VX_scope_switch #(
     parameter N = 0
-) ( 
+) (
     input wire  clk,
     input wire  reset,
     input wire  req_in,
@@ -24,7 +24,7 @@ module VX_scope_switch #(
     input wire  rsp_in [N],
     output wire rsp_out
 );
-    if (N > 1) begin
+    if (N > 1) begin : g_switch
         reg req_out_r [N];
         reg rsp_out_r;
 
@@ -34,7 +34,7 @@ module VX_scope_switch #(
                     req_out_r[i] <= 0;
                 end
                 rsp_out_r <= 0;
-            end else begin            
+            end else begin
                 for (integer i = 0; i < N; ++i) begin
                     req_out_r[i] <= req_in;
                 end
@@ -48,8 +48,8 @@ module VX_scope_switch #(
 
         assign req_out = req_out_r;
         assign rsp_out = rsp_out_r;
-    
-    end else begin
+
+    end else begin : g_passthru
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)

@@ -27,14 +27,14 @@ module VX_decoder #(
     input wire [M-1:0] valid_in,
     output wire [D-1:0][M-1:0] data_out
 );
-    if (MODEL == 1) begin
+    if (MODEL == 1) begin : g_model1
         reg [D-1:0][M-1:0] data_out_w;
         always @(*) begin
             data_out_w = '0;
             data_out_w[data_in] = valid_in;
         end
         assign data_out = data_out_w;
-    end else begin
+    end else begin : g_model0
         assign data_out = (D*M)'(valid_in) << (data_in * M);
     end
 

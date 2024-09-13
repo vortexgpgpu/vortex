@@ -377,10 +377,13 @@
     assign dst.req_data.data = src.req_data.data; \
     assign dst.req_data.byteen = src.req_data.byteen; \
     assign dst.req_data.flags = src.req_data.flags; \
-    if (TD != TS) \
+    /* verilator lint_off GENUNNAMED */ \
+    if (TD != TS) begin \
         assign dst.req_data.tag = {src.req_data.tag, {(TD-TS){1'b0}}}; \
-    else \
+    end else begin \
         assign dst.req_data.tag = src.req_data.tag; \
+    end \
+    /* verilator lint_on GENUNNAMED */ \
     assign src.req_ready = dst.req_ready; \
     assign src.rsp_valid = dst.rsp_valid; \
     assign src.rsp_data.data = dst.rsp_data.data; \
@@ -388,6 +391,7 @@
     assign dst.rsp_ready = src.rsp_ready
 
 `define BUFFER_DCR_BUS_IF(dst, src, enable) \
+    /* verilator lint_off GENUNNAMED */ \
     if (enable) begin \
         reg [(1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH)-1:0] __dst; \
         always @(posedge clk) begin \
@@ -396,9 +400,11 @@
         assign {dst.write_valid, dst.write_addr, dst.write_data} = __dst; \
     end else begin \
         assign {dst.write_valid, dst.write_addr, dst.write_data} = {src.write_valid, src.write_addr, src.write_data}; \
-    end
+    end \
+    /* verilator lint_on GENUNNAMED */
 
 `define PERF_COUNTER_ADD(dst, src, field, width, count, reg_enable) \
+    /* verilator lint_off GENUNNAMED */ \
     if (count > 1) begin \
         wire [count-1:0][width-1:0] __reduce_add_i_field; \
         wire [width-1:0] __reduce_add_o_field; \
@@ -424,9 +430,11 @@
         end \
     end else begin \
         assign dst.``field = src[0].``field; \
-    end
+    end \
+    /* verilator lint_on GENUNNAMED */
 
 `define ASSIGN_BLOCKED_WID(dst, src, block_idx, block_size) \
+    /* verilator lint_off GENUNNAMED */ \
     if (block_size != 1) begin \
         if (block_size != `NUM_WARPS) begin \
             assign dst = {src[`NW_WIDTH-1:`CLOG2(block_size)], `CLOG2(block_size)'(block_idx)}; \
@@ -435,6 +443,7 @@
         end \
     end else begin \
         assign dst = src; \
-    end
+    end \
+    /* verilator lint_on GENUNNAMED */
 
 `endif // VX_DEFINE_VH

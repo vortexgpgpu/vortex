@@ -79,7 +79,7 @@ module VX_pe_serializer #(
 
     assign pe_enable = enable;
 
-    if (NUM_LANES != NUM_PES) begin
+    if (NUM_LANES != NUM_PES) begin : g_serialize
 
         localparam BATCH_SIZE = NUM_LANES / NUM_PES;
         localparam BATCH_SIZEW = `LOG2UP(BATCH_SIZE);
@@ -87,7 +87,7 @@ module VX_pe_serializer #(
         reg [BATCH_SIZEW-1:0] batch_in_idx, batch_out_idx;
         reg batch_in_done, batch_out_done;
 
-        for (genvar i = 0; i < NUM_PES; ++i) begin
+        for (genvar i = 0; i < NUM_PES; ++i) begin : g_pe_data_out_w
             assign pe_data_out_w[i] = data_in[batch_in_idx * NUM_PES + i];
         end
 
@@ -125,7 +125,7 @@ module VX_pe_serializer #(
         assign data_out_u  = data_out_n;
         assign tag_out_u   = pe_tag_in;
 
-    end else begin
+    end else begin : g_passthru
 
         assign pe_data_out_w = data_in;
 

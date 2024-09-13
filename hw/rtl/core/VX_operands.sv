@@ -81,20 +81,23 @@ module VX_operands import VX_gpu_pkg::*; #(
     wire [NUM_SRC_OPDS-1:0][`NR_BITS-1:0] src_opds;
     assign src_opds = {scoreboard_if.data.rs3, scoreboard_if.data.rs2, scoreboard_if.data.rs1};
 
-    for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin
-        if (ISSUE_WIS != 0) begin
+    for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_req_data_in
+        if (ISSUE_WIS != 0) begin : g_wis
             assign req_data_in[i] = {src_opds[i][`NR_BITS-1:BANK_SEL_BITS], scoreboard_if.data.wis};
-        end else begin
+        end else begin : g_no_wis
             assign req_data_in[i] = src_opds[i][`NR_BITS-1:BANK_SEL_BITS];
         end
-        if (NUM_BANKS != 1) begin
+    end
+
+    for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_req_bank_idx
+        if (NUM_BANKS != 1) begin : g_banks
             assign req_bank_idx[i] = src_opds[i][BANK_SEL_BITS-1:0];
-        end else begin
+        end else begin : g_1bank
             assign req_bank_idx[i] = '0;
         end
     end
 
-    for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin
+    for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_src_valid
         assign src_valid[i] = (src_opds[i] != 0) && ~data_fetched_st1[i];
     end
 
@@ -232,30 +235,30 @@ module VX_operands import VX_gpu_pkg::*; #(
     );
 
     wire [PER_BANK_ADDRW-1:0] gpr_wr_addr;
-    if (ISSUE_WIS != 0) begin
+    if (ISSUE_WIS != 0) begin : g_gpr_wr_addr
         assign gpr_wr_addr = {writeback_if.data.rd[`NR_BITS-1:BANK_SEL_BITS], writeback_if.data.wis};
-    end else begin
+    end else begin : g_gpr_wr_addr_no_wis
         assign gpr_wr_addr = writeback_if.data.rd[`NR_BITS-1:BANK_SEL_BITS];
     end
 
     wire [BANK_SEL_WIDTH-1:0] gpr_wr_bank_idx;
-    if (NUM_BANKS != 1) begin
+    if (NUM_BANKS != 1) begin : g_gpr_wr_bank_idx
         assign gpr_wr_bank_idx = writeback_if.data.rd[BANK_SEL_BITS-1:0];
-    end else begin
+    end else begin : g_gpr_wr_bank_idx_0
         assign gpr_wr_bank_idx = '0;
     end
 
-    for (genvar b = 0; b < NUM_BANKS; ++b) begin : gpr_rams
+    for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_gpr_rams
         wire gpr_wr_enabled;
-        if (BANK_SEL_BITS != 0) begin
+        if (BANK_SEL_BITS != 0) begin : g_gpr_wr_enabled
             assign gpr_wr_enabled = writeback_if.valid
                                  && (gpr_wr_bank_idx == BANK_SEL_BITS'(b));
-        end else begin
+        end else begin : g_gpr_wr_enabled_1bank
             assign gpr_wr_enabled = writeback_if.valid;
         end
 
         wire [BYTEENW-1:0] wren;
-        for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        for (genvar i = 0; i < `NUM_THREADS; ++i) begin : g_wren
             assign wren[i*XLEN_SIZE+:XLEN_SIZE] = {XLEN_SIZE{writeback_if.data.tmask[i]}};
         end
 

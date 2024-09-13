@@ -68,7 +68,7 @@ module VX_alu_muldiv #(
 
     wire mul_fire_in = mul_valid_in && mul_ready_in;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mul_result_tmp
         reg [`XLEN-1:0] mul_resultl, mul_resulth;
         wire [`XLEN-1:0] mul_in1 = is_alu_w ? (execute_if.data.rs1_data[i] & `XLEN'hFFFFFFFF) : execute_if.data.rs1_data[i];
         wire [`XLEN-1:0] mul_in2 = is_alu_w ? (execute_if.data.rs2_data[i] & `XLEN'hFFFFFFFF) : execute_if.data.rs2_data[i];
@@ -103,7 +103,7 @@ module VX_alu_muldiv #(
     wire [NUM_LANES-1:0][`XLEN:0] mul_in1;
     wire [NUM_LANES-1:0][`XLEN:0] mul_in2;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mul_in
         assign mul_in1[i] = is_alu_w ? {{(`XLEN-31){execute_if.data.rs1_data[i][31]}}, execute_if.data.rs1_data[i][31:0]} : {is_signed_mul_a && execute_if.data.rs1_data[i][`XLEN-1], execute_if.data.rs1_data[i]};
         assign mul_in2[i] = is_alu_w ? {{(`XLEN-31){execute_if.data.rs2_data[i][31]}}, execute_if.data.rs2_data[i][31:0]} : {is_signed_mul_b && execute_if.data.rs2_data[i][`XLEN-1], execute_if.data.rs2_data[i]};
     end
@@ -149,7 +149,7 @@ module VX_alu_muldiv #(
 
 `else
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_multiplier
         wire [`XLEN:0] mul_in1 = {is_signed_mul_a && execute_if.data.rs1_data[i][`XLEN-1], execute_if.data.rs1_data[i]};
         wire [`XLEN:0] mul_in2 = {is_signed_mul_b && execute_if.data.rs2_data[i][`XLEN-1], execute_if.data.rs2_data[i]};
 
@@ -184,7 +184,7 @@ module VX_alu_muldiv #(
 
 `endif
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mul_result_out
     `ifdef XLEN_64
         assign mul_result_out[i] = is_mulh_out ? mul_result_tmp[i][2*(`XLEN)-1:`XLEN] :
                                                  (is_mul_w_out ? `XLEN'($signed(mul_result_tmp[i][31:0])) :
@@ -219,7 +219,7 @@ module VX_alu_muldiv #(
     wire [NUM_LANES-1:0][`XLEN-1:0] div_in1;
     wire [NUM_LANES-1:0][`XLEN-1:0] div_in2;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_div_in
     `ifdef XLEN_64
         assign div_in1[i] = is_alu_w ? {{(`XLEN-32){is_signed_op && execute_if.data.rs1_data[i][31]}}, execute_if.data.rs1_data[i][31:0]}: execute_if.data.rs1_data[i];
         assign div_in2[i] = is_alu_w ? {{(`XLEN-32){is_signed_op && execute_if.data.rs2_data[i][31]}}, execute_if.data.rs2_data[i][31:0]}: execute_if.data.rs2_data[i];
@@ -234,7 +234,7 @@ module VX_alu_muldiv #(
     wire [NUM_LANES-1:0][`XLEN-1:0] div_result_in;
     wire div_fire_in = div_valid_in && div_ready_in;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_div_result_in
         reg [`XLEN-1:0] div_quotient, div_remainder;
         always @(*) begin
             dpi_idiv (div_fire_in, is_signed_op, div_in1[i], div_in2[i], div_quotient, div_remainder);
@@ -306,7 +306,7 @@ module VX_alu_muldiv #(
 
     assign {div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out, is_div_w_out, div_pid_out, div_sop_out, div_eop_out} = div_tag_r;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_div_result_out
     `ifdef XLEN_64
         assign div_result_out[i] = is_rem_op_out ? (is_div_w_out ? `XLEN'($signed(div_remainder[i][31:0])) : div_remainder[i]) :
                                                    (is_div_w_out ? `XLEN'($signed(div_quotient[i][31:0])) : div_quotient[i]);

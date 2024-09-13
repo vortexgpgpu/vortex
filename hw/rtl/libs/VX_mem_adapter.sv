@@ -76,7 +76,7 @@ module VX_mem_adapter #(
 
     `UNUSED_VAR (mem_rsp_tag_out)
 
-    if (DST_LDATAW > SRC_LDATAW) begin
+    if (DST_LDATAW > SRC_LDATAW) begin : g_wider_dst_data
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
@@ -88,12 +88,12 @@ module VX_mem_adapter #(
 
         wire [P-1:0][SRC_DATA_WIDTH-1:0] mem_rsp_data_out_w = mem_rsp_data_out;
 
-        if (DST_ADDR_WIDTH < (SRC_ADDR_WIDTH - D)) begin
+        if (DST_ADDR_WIDTH < (SRC_ADDR_WIDTH - D)) begin : g_mem_req_addr_out_w_src
             `UNUSED_VAR (mem_req_addr_in_qual)
             assign mem_req_addr_out_w = mem_req_addr_in_qual[DST_ADDR_WIDTH-1:0];
-        end else if (DST_ADDR_WIDTH > (SRC_ADDR_WIDTH - D)) begin
+        end else if (DST_ADDR_WIDTH > (SRC_ADDR_WIDTH - D)) begin : g_mem_req_addr_out_w_dst
             assign mem_req_addr_out_w = DST_ADDR_WIDTH'(mem_req_addr_in_qual);
-        end else begin
+        end else begin : g_mem_req_addr_out_w
             assign mem_req_addr_out_w = mem_req_addr_in_qual;
         end
 
@@ -125,7 +125,7 @@ module VX_mem_adapter #(
         assign mem_rsp_tag_in_w     = SRC_TAG_WIDTH'(mem_rsp_tag_out[SRC_TAG_WIDTH+D-1:D]);
         assign mem_rsp_ready_out    = mem_rsp_ready_in_w;
 
-    end else if (DST_LDATAW < SRC_LDATAW) begin
+    end else if (DST_LDATAW < SRC_LDATAW) begin : g_wider_src_data
 
         reg [D-1:0] req_ctr, rsp_ctr;
 
@@ -173,12 +173,12 @@ module VX_mem_adapter #(
 
         wire [SRC_ADDR_WIDTH+D-1:0] mem_req_addr_in_qual = {mem_req_addr_in, req_ctr};
 
-        if (DST_ADDR_WIDTH < (SRC_ADDR_WIDTH + D)) begin
+        if (DST_ADDR_WIDTH < (SRC_ADDR_WIDTH + D)) begin : g_mem_req_addr_out_w_src
             `UNUSED_VAR (mem_req_addr_in_qual)
             assign mem_req_addr_out_w = mem_req_addr_in_qual[DST_ADDR_WIDTH-1:0];
-        end else if (DST_ADDR_WIDTH > (SRC_ADDR_WIDTH + D)) begin
+        end else if (DST_ADDR_WIDTH > (SRC_ADDR_WIDTH + D)) begin : g_mem_req_addr_out_w_dst
             assign mem_req_addr_out_w = DST_ADDR_WIDTH'(mem_req_addr_in_qual);
-        end else begin
+        end else begin : g_mem_req_addr_out_w
             assign mem_req_addr_out_w = mem_req_addr_in_qual;
         end
 
@@ -194,17 +194,17 @@ module VX_mem_adapter #(
         assign mem_rsp_tag_in_w     = SRC_TAG_WIDTH'(mem_rsp_tag_out);
         assign mem_rsp_ready_out    = mem_rsp_ready_in_w;
 
-    end else begin
+    end else begin : g_passthru
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
 
-        if (DST_ADDR_WIDTH < SRC_ADDR_WIDTH) begin
+        if (DST_ADDR_WIDTH < SRC_ADDR_WIDTH) begin : g_mem_req_addr_out_w_src
             `UNUSED_VAR (mem_req_addr_in)
             assign mem_req_addr_out_w = mem_req_addr_in[DST_ADDR_WIDTH-1:0];
-        end else if (DST_ADDR_WIDTH > SRC_ADDR_WIDTH) begin
+        end else if (DST_ADDR_WIDTH > SRC_ADDR_WIDTH) begin : g_mem_req_addr_out_w_dst
             assign mem_req_addr_out_w = DST_ADDR_WIDTH'(mem_req_addr_in);
-        end else begin
+        end else begin : g_mem_req_addr_out_w
             assign mem_req_addr_out_w = mem_req_addr_in;
         end
 

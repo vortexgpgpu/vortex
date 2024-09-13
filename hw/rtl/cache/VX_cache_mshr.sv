@@ -135,7 +135,7 @@ module VX_cache_mshr #(
     wire dequeue_fire = dequeue_valid && dequeue_ready;
 
     wire [MSHR_SIZE-1:0] addr_matches;
-    for (genvar i = 0; i < MSHR_SIZE; ++i) begin
+    for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_addr_matches
         assign addr_matches[i] = valid_table[i] && (addr_table[i] == lookup_addr);
     end
 

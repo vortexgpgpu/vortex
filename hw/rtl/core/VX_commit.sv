@@ -41,13 +41,13 @@ module VX_commit import VX_gpu_pkg::*; #(
     wire [`ISSUE_WIDTH-1:0][`NUM_THREADS-1:0] per_issue_commit_tmask;
     wire [`ISSUE_WIDTH-1:0] per_issue_commit_eop;
 
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : commit_arbs
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_commit_arbs
 
         wire [`NUM_EX_UNITS-1:0]            valid_in;
         wire [`NUM_EX_UNITS-1:0][DATAW-1:0] data_in;
         wire [`NUM_EX_UNITS-1:0]            ready_in;
 
-        for (genvar j = 0; j < `NUM_EX_UNITS; ++j) begin
+        for (genvar j = 0; j < `NUM_EX_UNITS; ++j) begin : g_data_in
             assign valid_in[j] = commit_if[j * `ISSUE_WIDTH + i].valid;
             assign data_in[j]  = commit_if[j * `ISSUE_WIDTH + i].data;
             assign commit_if[j * `ISSUE_WIDTH + i].ready = ready_in[j];
@@ -84,7 +84,7 @@ module VX_commit import VX_gpu_pkg::*; #(
 
     assign commit_fire_any = (| per_issue_commit_fire);
 
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_commit_size
         wire [COMMIT_SIZEW-1:0] count;
         `POP_COUNT(count, per_issue_commit_tmask[i]);
         assign commit_size[i] = count;
@@ -160,7 +160,7 @@ module VX_commit import VX_gpu_pkg::*; #(
 
     // Writeback
 
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_writeback
         assign writeback_if[i].valid     = commit_arb_if[i].valid && commit_arb_if[i].data.wb;
         assign writeback_if[i].data.uuid = commit_arb_if[i].data.uuid;
         assign writeback_if[i].data.wis  = wid_to_wis(commit_arb_if[i].data.wid);
@@ -174,8 +174,8 @@ module VX_commit import VX_gpu_pkg::*; #(
     end
 
 `ifdef DBG_TRACE_PIPELINE
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        for (genvar j = 0; j < `NUM_EX_UNITS; ++j) begin
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_trace
+        for (genvar j = 0; j < `NUM_EX_UNITS; ++j) begin : g_j
             always @(posedge clk) begin
                 if (commit_if[j * `ISSUE_WIDTH + i].valid && commit_if[j * `ISSUE_WIDTH + i].ready) begin
                     `TRACE(1, ("%t: %s: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, commit_if[j * `ISSUE_WIDTH + i].data.wid, {commit_if[j * `ISSUE_WIDTH + i].data.PC, 1'b0}))

@@ -24,13 +24,13 @@ module VX_onehot_mux #(
     input wire [N-1:0]            sel_in,
     output wire [DATAW-1:0]       data_out
 );
-    if (N == 1) begin
+    if (N == 1) begin : g_passthru
         `UNUSED_VAR (sel_in)
         assign data_out = data_in;
-    end else if (LUT_OPT && N == 2) begin
+    end else if (LUT_OPT && N == 2) begin : g_lut2
         `UNUSED_VAR (sel_in)
         assign data_out = sel_in[0] ? data_in[0] : data_in[1];
-    end else if (LUT_OPT && N == 3) begin
+    end else if (LUT_OPT && N == 3) begin : g_lut3
         reg [DATAW-1:0] data_out_w;
         always @(*) begin
             case (sel_in)
@@ -41,7 +41,7 @@ module VX_onehot_mux #(
             endcase
         end
         assign data_out = data_out_w;
-    end else if (LUT_OPT && N == 4) begin
+    end else if (LUT_OPT && N == 4) begin : g_lut4
         reg [DATAW-1:0] data_out_w;
         always @(*) begin
             case (sel_in)
@@ -53,7 +53,7 @@ module VX_onehot_mux #(
             endcase
         end
         assign data_out = data_out_w;
-    end else if (LUT_OPT && N == 5) begin
+    end else if (LUT_OPT && N == 5) begin : g_lut5
         reg [DATAW-1:0] data_out_w;
         always @(*) begin
             case (sel_in)
@@ -66,7 +66,7 @@ module VX_onehot_mux #(
             endcase
         end
         assign data_out = data_out_w;
-    end else if (LUT_OPT && N == 6) begin
+    end else if (LUT_OPT && N == 6) begin : g_lut6
         reg [DATAW-1:0] data_out_w;
         always @(*) begin
             case (sel_in)
@@ -80,7 +80,7 @@ module VX_onehot_mux #(
             endcase
         end
         assign data_out = data_out_w;
-    end else if (LUT_OPT && N == 7) begin
+    end else if (LUT_OPT && N == 7) begin : g_lut7
         reg [DATAW-1:0] data_out_w;
         always @(*) begin
             case (sel_in)
@@ -95,7 +95,7 @@ module VX_onehot_mux #(
             endcase
         end
         assign data_out = data_out_w;
-    end else if (LUT_OPT && N == 8) begin
+    end else if (LUT_OPT && N == 8) begin : g_lut8
         reg [DATAW-1:0] data_out_w;
         always @(*) begin
             case (sel_in)
@@ -111,19 +111,19 @@ module VX_onehot_mux #(
             endcase
         end
         assign data_out = data_out_w;
-    end else if (MODEL == 1) begin
+    end else if (MODEL == 1) begin : g_model1
         wire [N-1:0][DATAW-1:0] mask;
-        for (genvar i = 0; i < N; ++i) begin
+        for (genvar i = 0; i < N; ++i) begin : g_mask
             assign mask[i] = {DATAW{sel_in[i]}} & data_in[i];
         end
-        for (genvar i = 0; i < DATAW; ++i) begin
+        for (genvar i = 0; i < DATAW; ++i) begin : g_data_out
             wire [N-1:0] gather;
-            for (genvar j = 0; j < N; ++j) begin
+            for (genvar j = 0; j < N; ++j) begin : g_gather
                 assign gather[j] = mask[j][i];
             end
             assign data_out[i] = (| gather);
         end
-    end else if (MODEL == 2) begin
+    end else if (MODEL == 2) begin : g_model2
         VX_find_first #(
             .N     (N),
             .DATAW (DATAW)
@@ -133,7 +133,7 @@ module VX_onehot_mux #(
             .data_out (data_out),
             `UNUSED_PIN (valid_out)
         );
-    end else if (MODEL == 3) begin
+    end else if (MODEL == 3) begin : g_model3
         reg [DATAW-1:0] data_out_w;
         always @(*) begin
             data_out_w = 'x;

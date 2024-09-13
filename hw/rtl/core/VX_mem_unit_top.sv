@@ -62,7 +62,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     ) lsu_mem_if[`NUM_LSU_BLOCKS]();
 
     // LSU memory request
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
+    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_lsu_mem_req
         assign lsu_mem_if[i].req_valid = lsu_req_valid[i];
         assign lsu_mem_if[i].req_data.rw = lsu_req_rw[i];
         assign lsu_mem_if[i].req_data.mask = lsu_req_mask[i];
@@ -75,7 +75,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     end
 
     // LSU memory response
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
+    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_lsu_rsp
         assign lsu_rsp_valid[i] = lsu_mem_if[i].rsp_valid;
         assign lsu_rsp_mask[i] = lsu_mem_if[i].rsp_data.mask;
         assign lsu_rsp_data[i] = lsu_mem_if[i].rsp_data.data;
@@ -89,7 +89,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     ) mem_bus_if[DCACHE_NUM_REQS]();
 
     // memory request
-    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_mem_req
         assign mem_req_valid[i] = mem_bus_if[i].req_valid;
         assign mem_req_rw[i] = mem_bus_if[i].req_data.rw;
         assign mem_req_byteen[i] = mem_bus_if[i].req_data.byteen;
@@ -101,7 +101,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     end
 
     // memory response
-    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_mem_bus_rsp
         assign mem_bus_if[i].rsp_valid = mem_rsp_valid[i];
         assign mem_bus_if[i].rsp_data.tag = mem_rsp_tag[i];
         assign mem_bus_if[i].rsp_data.data = mem_rsp_data[i];

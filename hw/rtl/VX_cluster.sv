@@ -128,7 +128,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
     `BUFFER_DCR_BUS_IF (socket_dcr_bus_if, socket_dcr_bus_tmp_if, (`NUM_SOCKETS > 1));
 
     // Generate all sockets
-    for (genvar socket_id = 0; socket_id < `NUM_SOCKETS; ++socket_id) begin : sockets
+    for (genvar socket_id = 0; socket_id < `NUM_SOCKETS; ++socket_id) begin : g_sockets
 
         `RESET_RELAY (socket_reset, reset);
 

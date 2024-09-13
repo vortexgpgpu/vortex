@@ -27,34 +27,34 @@ module VX_priority_encoder #(
 );
     wire [N-1:0] reversed;
 
-    if (REVERSE != 0) begin
-        for (genvar i = 0; i < N; ++i) begin
+    if (REVERSE != 0) begin : g_reverse
+        for (genvar i = 0; i < N; ++i) begin : g_i
             assign reversed[N-i-1] = data_in[i];
         end
-    end else begin
+    end else begin : g_no_reverse
         assign reversed = data_in;
     end
 
-    if (N == 1) begin
+    if (N == 1) begin : g_n1
 
         assign onehot_out = reversed;
         assign index_out  = '0;
         assign valid_out  = reversed;
 
-    end else if (N == 2) begin
+    end else if (N == 2) begin : g_n2
 
         assign onehot_out = {reversed[1] && ~reversed[0], reversed[0]};
         assign index_out  = ~reversed[0];
         assign valid_out  = (| reversed);
 
-    end else if (MODEL == 1) begin
+    end else if (MODEL == 1) begin : g_model1
 
     `IGNORE_UNOPTFLAT_BEGIN
         wire [N-1:0] higher_pri_regs;
     `IGNORE_UNOPTFLAT_END
 
         assign higher_pri_regs[0] = 1'b0;
-        for (genvar i = 1; i < N; ++i) begin
+        for (genvar i = 1; i < N; ++i) begin : g_higher_pri_regs
             assign higher_pri_regs[i] = higher_pri_regs[i-1] | reversed[i-1];
         end
         assign onehot_out[N-1:0] = reversed[N-1:0] & ~higher_pri_regs[N-1:0];
@@ -68,7 +68,7 @@ module VX_priority_encoder #(
             .valid_out (valid_out)
         );
 
-    end else if (MODEL == 2) begin
+    end else if (MODEL == 2) begin : g_model2
 
         wire [N-1:0] scan_lo;
 
@@ -91,7 +91,7 @@ module VX_priority_encoder #(
 
         assign onehot_out = scan_lo & {(~scan_lo[N-2:0]), 1'b1};
 
-    end else if (MODEL == 3) begin
+    end else if (MODEL == 3) begin : g_model3
 
         assign onehot_out = reversed & -reversed;
 
@@ -104,7 +104,7 @@ module VX_priority_encoder #(
             .valid_out (valid_out)
         );
 
-    end else begin
+    end else begin : g_model0
 
         reg [LN-1:0] index_w;
         reg [N-1:0]  onehot_w;

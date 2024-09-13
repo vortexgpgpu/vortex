@@ -55,7 +55,7 @@ module VX_alu_unit #(
         .execute_if (per_block_execute_if)
     );
 
-    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : alus
+    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_alus
 
         VX_execute_if #(
             .NUM_LANES (NUM_LANES)

@@ -41,17 +41,17 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
     wire [BLOCK_SIZE-1:0] commit_in_ready;
     wire [BLOCK_SIZE-1:0][ISSUE_ISW_W-1:0] commit_in_isw;
 
-    for (genvar i = 0; i < BLOCK_SIZE; ++i) begin
+    for (genvar i = 0; i < BLOCK_SIZE; ++i) begin : g_commit_in
         assign commit_in_valid[i] = commit_in_if[i].valid;
         assign commit_in_data[i] = commit_in_if[i].data;
         assign commit_in_if[i].ready = commit_in_ready[i];
-        if (BLOCK_SIZE != `ISSUE_WIDTH) begin
-            if (BLOCK_SIZE != 1) begin
+        if (BLOCK_SIZE != `ISSUE_WIDTH) begin : g_commit_in_isw_partial
+            if (BLOCK_SIZE != 1) begin : g_block
                 assign commit_in_isw[i] = {commit_in_data[i][DATA_WIS_OFF+BLOCK_SIZE_W +: (ISSUE_ISW_W-BLOCK_SIZE_W)], BLOCK_SIZE_W'(i)};
-            end else begin
+            end else begin : g_no_block
                 assign commit_in_isw[i] = commit_in_data[i][DATA_WIS_OFF +: ISSUE_ISW_W];
             end
-        end else begin
+        end else begin : g_commit_in_isw_full
             assign commit_in_isw[i] = BLOCK_SIZE_W'(i);
         end
     end
@@ -70,11 +70,12 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
             commit_out_data[commit_in_isw[i]] = commit_in_data[i];
         end
     end
-    for (genvar i = 0; i < BLOCK_SIZE; ++i) begin
+
+    for (genvar i = 0; i < BLOCK_SIZE; ++i) begin : g_commit_in_ready
         assign commit_in_ready[i] = commit_out_ready[commit_in_isw[i]];
     end
 
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin: out_bufs
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin: g_out_bufs
         VX_commit_if #(
             .NUM_LANES (NUM_LANES)
         ) commit_tmp_if();
@@ -96,7 +97,7 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
 
         logic [`NUM_THREADS-1:0] commit_tmask_w;
         logic [`NUM_THREADS-1:0][`XLEN-1:0] commit_data_w;
-        if (PID_BITS != 0) begin
+        if (PID_BITS != 0) begin : g_commit_data_with_pid
             always @(*) begin
                 commit_tmask_w = '0;
                 commit_data_w  = 'x;
@@ -105,7 +106,7 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
                     commit_data_w[commit_tmp_if.data.pid * NUM_LANES + j] = commit_tmp_if.data.data[j];
                 end
             end
-        end else begin
+        end else begin : g_commit_data_no_pid
             assign commit_tmask_w = commit_tmp_if.data.tmask;
             assign commit_data_w = commit_tmp_if.data.data;
         end

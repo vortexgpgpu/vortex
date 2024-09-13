@@ -22,8 +22,8 @@ module VX_onehot_shift #(
     input wire [M-1:0] data_in1,
     output wire [N*M-1:0] data_out
 );
-    for (genvar i = 0; i < M; ++i) begin
-        for (genvar j = 0; j < N; ++j) begin
+    for (genvar i = 0; i < M; ++i) begin : g_i
+        for (genvar j = 0; j < N; ++j) begin : g_j
             assign data_out[i*N + j] = data_in1[i] & data_in0[j];
         end
     end

@@ -26,7 +26,7 @@ module VX_cyclic_arbiter #(
     output wire                     grant_valid,
     input  wire                     grant_ready
 );
-    if (NUM_REQS == 1)  begin
+    if (NUM_REQS == 1) begin : g_passthru
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
@@ -36,7 +36,7 @@ module VX_cyclic_arbiter #(
         assign grant_onehot = requests;
         assign grant_valid  = requests[0];
 
-    end else begin
+    end else begin : g_arbiter
 
         localparam IS_POW2 = (1 << LOG_NUM_REQS) == NUM_REQS;
 

@@ -83,7 +83,7 @@ import VX_fpu_pkg::*;
     wire [`NUM_FPU_BLOCKS-1:0][`NW_WIDTH-1:0] fpu_write_wid;
     fflags_t [`NUM_FPU_BLOCKS-1:0]          fpu_write_fflags;
 
-    for (genvar i = 0; i < `NUM_FPU_BLOCKS; ++i) begin
+    for (genvar i = 0; i < `NUM_FPU_BLOCKS; ++i) begin : g_fpu_write
         assign fpu_write_enable[i] = fpu_csr_if[i].write_enable;
         assign fpu_write_wid[i]    = fpu_csr_if[i].write_wid;
         assign fpu_write_fflags[i] = fpu_csr_if[i].write_fflags;
@@ -107,7 +107,7 @@ import VX_fpu_pkg::*;
         end
     end
 
-    for (genvar i = 0; i < `NUM_FPU_BLOCKS; ++i) begin
+    for (genvar i = 0; i < `NUM_FPU_BLOCKS; ++i) begin : g_fpu_csr_read_frm
         assign fpu_csr_if[i].read_frm = fcsr[fpu_csr_if[i].read_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS];
     end
 

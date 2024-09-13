@@ -110,7 +110,7 @@ module Vortex_axi import VX_gpu_pkg::*; #(
     wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_bid_unqual [AXI_NUM_BANKS];
     wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_rid_unqual [AXI_NUM_BANKS];
 
-    for (genvar i = 0; i < AXI_NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < AXI_NUM_BANKS; ++i) begin : g_padding
         assign m_axi_awaddr[i] = `MEM_ADDR_WIDTH'(m_axi_awaddr_unqual[i]);
         assign m_axi_araddr[i] = `MEM_ADDR_WIDTH'(m_axi_araddr_unqual[i]);
 

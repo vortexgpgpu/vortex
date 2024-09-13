@@ -32,31 +32,31 @@ module VX_scan #(
 `IGNORE_UNOPTFLAT_END
 
     // reverses bits
-    if (REVERSE != 0) begin
+    if (REVERSE != 0) begin : g_data_in_reverse
         assign t[0] = data_in;
-    end else begin
+    end else begin : g_data_in_no_reverse
         assign t[0] = {<<{data_in}};
     end
 
     // optimize for the common case of small and-scans
-    if ((N == 2) && (OP == "&")) begin
+    if ((N == 2) && (OP == "&")) begin : g_scan_n2_and
 	    assign t[LOGN] = {t[0][1], &t[0][1:0]};
-    end else if ((N == 3) && (OP == "&")) begin
+    end else if ((N == 3) && (OP == "&")) begin : g_scan_n3_and
 	    assign t[LOGN] = {t[0][2], &t[0][2:1], &t[0][2:0]};
-    end else if ((N == 4) && (OP == "&")) begin
+    end else if ((N == 4) && (OP == "&")) begin : g_scan_n4_and
 	    assign t[LOGN] = {t[0][3], &t[0][3:2], &t[0][3:1], &t[0][3:0]};
-    end else begin
+    end else begin : g_scan
         // general case
         wire [N-1:0] fill;
-	    for (genvar i = 0; i < LOGN; ++i) begin
+	    for (genvar i = 0; i < LOGN; ++i) begin : g_i
             wire [N-1:0] shifted = N'({fill, t[i]} >> (1<<i));
-            if (OP == "^") begin
+            if (OP == "^") begin : g_xor
 		        assign fill = {N{1'b0}};
 		        assign t[i+1] = t[i] ^ shifted;
-            end else if (OP == "&") begin
+            end else if (OP == "&") begin : g_and
 		        assign fill = {N{1'b1}};
 		        assign t[i+1] = t[i] & shifted;
-            end else if (OP == "|") begin
+            end else if (OP == "|") begin : g_or
 		        assign fill = {N{1'b0}};
 		        assign t[i+1] = t[i] | shifted;
             end
@@ -64,10 +64,10 @@ module VX_scan #(
     end
 
     // reverse bits
-    if (REVERSE != 0) begin
+    if (REVERSE != 0) begin : g_data_out_reverse
         assign data_out = t[LOGN];
-    end else begin
-        for (genvar i = 0; i < N; ++i) begin
+    end else begin : g_data_out
+        for (genvar i = 0; i < N; ++i) begin : g_i
             assign data_out[i] = t[LOGN][N-1-i];
         end
     end
