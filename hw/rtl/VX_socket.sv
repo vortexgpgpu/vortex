@@ -204,7 +204,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         `RESET_RELAY (core_reset, reset);
 
         VX_dcr_bus_if core_dcr_bus_if();
-        `BUFFER_DCR_BUS_IF (core_dcr_bus_if, dcr_bus_if, 1'b1, (`SOCKET_SIZE > 1));
+        `BUFFER_DCR_BUS_IF (core_dcr_bus_if, dcr_bus_if, 1'b1, (`SOCKET_SIZE > 1))
 
         VX_core #(
             .CORE_ID  ((SOCKET_ID * `SOCKET_SIZE) + core_id),
