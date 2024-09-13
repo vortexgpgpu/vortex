@@ -229,8 +229,8 @@ module VX_core import VX_gpu_pkg::*; #(
     wire [LSU_NUM_REQS-1:0] perf_dcache_wr_req_fire, perf_dcache_wr_req_fire_r;
     wire [LSU_NUM_REQS-1:0] perf_dcache_rsp_fire;
 
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin
-        for (genvar j = 0; j < `NUM_LSU_LANES; ++j) begin
+    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_perf_dcache
+        for (genvar j = 0; j < `NUM_LSU_LANES; ++j) begin : g_j
             assign perf_dcache_rd_req_fire[i * `NUM_LSU_LANES + j] = lsu_mem_if[i].req_valid && lsu_mem_if[i].req_data.mask[j] && lsu_mem_if[i].req_ready && ~lsu_mem_if[i].req_data.rw;
             assign perf_dcache_wr_req_fire[i * `NUM_LSU_LANES + j] = lsu_mem_if[i].req_valid && lsu_mem_if[i].req_data.mask[j] && lsu_mem_if[i].req_ready && lsu_mem_if[i].req_data.rw;
             assign perf_dcache_rsp_fire[i * `NUM_LSU_LANES + j] = lsu_mem_if[i].rsp_valid && lsu_mem_if[i].rsp_data.mask[j] && lsu_mem_if[i].rsp_ready;

@@ -32,7 +32,7 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
     wire req_global_ready;
     wire req_local_ready;
 
-    for (genvar i = 0; i < `NUM_LSU_LANES; ++i) begin
+    for (genvar i = 0; i < `NUM_LSU_LANES; ++i) begin : g_is_addr_local_mask
         assign is_addr_local_mask[i] = lsu_in_if.req_data.flags[i][`MEM_REQ_FLAG_LOCAL];
     end
 

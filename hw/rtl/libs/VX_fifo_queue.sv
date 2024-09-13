@@ -58,7 +58,7 @@ module VX_fifo_queue #(
         .size  (size)
     );
 
-    if (DEPTH == 1) begin
+    if (DEPTH == 1) begin : g_depth_1
 
         reg [DATAW-1:0] head_r;
 
@@ -70,11 +70,11 @@ module VX_fifo_queue #(
 
         assign data_out = head_r;
 
-    end else begin
+    end else begin : g_depth_n
 
         localparam ADDRW = `CLOG2(DEPTH);
 
-        if (OUT_REG != 0) begin
+        if (OUT_REG != 0) begin : g_out_reg
 
             wire [DATAW-1:0] dout;
             reg [DATAW-1:0] dout_r;
@@ -128,7 +128,7 @@ module VX_fifo_queue #(
 
             assign data_out = dout_r;
 
-        end else begin
+        end else begin : g_no_out_reg
 
             reg [ADDRW-1:0] rd_ptr_r;
             reg [ADDRW-1:0] wr_ptr_r;

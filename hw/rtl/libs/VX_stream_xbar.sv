@@ -43,9 +43,9 @@ module VX_stream_xbar #(
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
 
-    if (NUM_INPUTS != 1) begin
+    if (NUM_INPUTS != 1) begin : g_multiple_inputs
 
-        if (NUM_OUTPUTS != 1) begin
+        if (NUM_OUTPUTS != 1) begin : g_multiple_outputs
 
             // (#inputs > 1) and (#outputs > 1)
 
@@ -63,7 +63,7 @@ module VX_stream_xbar #(
                 .data_out (per_output_ready_in_w)
             );
 
-            for (genvar i = 0; i < NUM_INPUTS; ++i) begin
+            for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_sel_in_decoders
                 VX_decoder #(
                     .N (OUT_WIDTH)
                 ) sel_in_decoder (
@@ -82,7 +82,7 @@ module VX_stream_xbar #(
                 .data_out (per_output_valid_in_w)
             );
 
-            for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
+            for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_xbar_arbs
                 VX_stream_arb #(
                     .NUM_INPUTS  (NUM_INPUTS),
                     .NUM_OUTPUTS (1),
@@ -103,7 +103,7 @@ module VX_stream_xbar #(
                 );
             end
 
-        end else begin
+        end else begin : g_one_output
 
             // (#inputs >= 1) and (#outputs == 1)
 
@@ -129,7 +129,7 @@ module VX_stream_xbar #(
             `UNUSED_VAR (sel_in)
         end
 
-    end else if (NUM_OUTPUTS != 1) begin
+    end else if (NUM_OUTPUTS != 1) begin : g_one_input
 
         // (#inputs == 1) and (#outputs > 1)
 
@@ -147,7 +147,7 @@ module VX_stream_xbar #(
         assign ready_in[0] = ready_out_w[sel_in[0]];
         assign data_out_w = {NUM_OUTPUTS{data_in[0]}};
 
-        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
+        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_out_buf
             VX_elastic_buffer #(
                 .DATAW   (DATAW),
                 .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
@@ -167,7 +167,7 @@ module VX_stream_xbar #(
 
         assign sel_out = 0;
 
-    end else begin
+    end else begin : g_passthru
 
         // (#inputs == 1) and (#outputs == 1)
 

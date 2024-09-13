@@ -58,7 +58,7 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
     wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
     wire [NUM_PES-1:0][(`FP_FLAGS_BITS+32)-1:0] pe_data_out;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data_in
         assign data_in[i][0  +: 32] = dataa[i];
         assign data_in[i][32 +: `INST_FRM_BITS] = frm;
         assign data_in[i][32 + `INST_FRM_BITS +: 1] = is_itof;
@@ -92,12 +92,12 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
 
     `UNUSED_VAR (pe_data_in)
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
         assign result[i] = data_out[i][0 +: 32];
         assign fflags_out[i] = data_out[i][32 +: `FP_FLAGS_BITS];
     end
 
-    for (genvar i = 0; i < NUM_PES; ++i) begin : fcvt_units
+    for (genvar i = 0; i < NUM_PES; ++i) begin : g_fcvt_units
         VX_fcvt_unit #(
             .LATENCY (`LATENCY_FCVT),
             .OUT_REG (1)

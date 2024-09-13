@@ -95,9 +95,9 @@ module VX_axi_adapter #(
 
     wire [BANK_ADDRW-1:0] req_bank_sel;
 
-    if (NUM_BANKS > 1) begin
+    if (NUM_BANKS > 1) begin : g_req_bank_sel
         assign req_bank_sel = mem_req_addr[BANK_ADDRW-1:0];
-    end else begin
+    end else begin : g_req_bank_sel_0
         assign req_bank_sel = '0;
     end
 
@@ -106,7 +106,7 @@ module VX_axi_adapter #(
     reg [NUM_BANKS-1:0] m_axi_aw_ack;
     reg [NUM_BANKS-1:0] m_axi_w_ack;
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_m_axi_w
         wire m_axi_aw_fire = m_axi_awvalid[i] && m_axi_awready[i];
         wire m_axi_w_fire = m_axi_wvalid[i] && m_axi_wready[i];
         always @(posedge clk) begin
@@ -129,20 +129,16 @@ module VX_axi_adapter #(
 
     wire axi_write_ready [NUM_BANKS];
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_write_ready
         assign axi_write_ready[i] = (m_axi_awready[i] || m_axi_aw_ack[i])
                                  && (m_axi_wready[i] || m_axi_w_ack[i]);
     end
 
-    // Vortex request ack
-    if (NUM_BANKS > 1) begin
-        assign mem_req_ready = mem_req_rw ? axi_write_ready[req_bank_sel] : m_axi_arready[req_bank_sel];
-    end else begin
-        assign mem_req_ready = mem_req_rw ? axi_write_ready[0] : m_axi_arready[0];
-    end
+    // request ack
+    assign mem_req_ready = mem_req_rw ? axi_write_ready[req_bank_sel] : m_axi_arready[req_bank_sel];
 
     // AXI write request address channel
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_write_addr
         assign m_axi_awvalid[i] = mem_req_valid && mem_req_rw && (req_bank_sel == i) && ~m_axi_aw_ack[i];
         assign m_axi_awaddr[i]  = (ADDR_WIDTH'(mem_req_addr) >> LOG2_NUM_BANKS) << AXSIZE;
         assign m_axi_awid[i]    = mem_req_tag;
@@ -157,7 +153,7 @@ module VX_axi_adapter #(
     end
 
     // AXI write request data channel
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_write_data
         assign m_axi_wvalid[i] = mem_req_valid && mem_req_rw && (req_bank_sel == i) && ~m_axi_w_ack[i];
         assign m_axi_wdata[i]  = mem_req_data;
         assign m_axi_wstrb[i]  = mem_req_byteen;
@@ -165,7 +161,7 @@ module VX_axi_adapter #(
     end
 
     // AXI write response channel (ignore)
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_write_rsp
         `UNUSED_VAR (m_axi_bvalid[i])
         `UNUSED_VAR (m_axi_bid[i])
         `UNUSED_VAR (m_axi_bresp[i])
@@ -174,7 +170,7 @@ module VX_axi_adapter #(
     end
 
     // AXI read request channel
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_read_req
         assign m_axi_arvalid[i] = mem_req_valid && ~mem_req_rw && (req_bank_sel == i);
         assign m_axi_araddr[i]  = (ADDR_WIDTH'(mem_req_addr) >> LOG2_NUM_BANKS) << AXSIZE;
         assign m_axi_arid[i]    = mem_req_tag;
@@ -196,7 +192,7 @@ module VX_axi_adapter #(
 
     `UNUSED_VAR (m_axi_rlast)
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_read_rsp
         assign rsp_arb_valid_in[i] = m_axi_rvalid[i];
         assign rsp_arb_data_in[i] = {m_axi_rdata[i], m_axi_rid[i]};
         assign m_axi_rready[i] = rsp_arb_ready_in[i];

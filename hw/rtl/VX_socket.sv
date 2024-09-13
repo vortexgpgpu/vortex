@@ -202,7 +202,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     `BUFFER_DCR_BUS_IF (core_dcr_bus_if, dcr_bus_if, (`SOCKET_SIZE > 1));
 
     // Generate all cores
-    for (genvar core_id = 0; core_id < `SOCKET_SIZE; ++core_id) begin : cores
+    for (genvar core_id = 0; core_id < `SOCKET_SIZE; ++core_id) begin : g_cores
 
         `RESET_RELAY (core_reset, reset);
 

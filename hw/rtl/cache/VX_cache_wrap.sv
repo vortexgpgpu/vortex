@@ -107,7 +107,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         .TAG_WIDTH (MEM_TAG_WIDTH)
     ) mem_bus_tmp_if();
 
-    if (NC_OR_BYPASS) begin : bypass_if
+    if (NC_OR_BYPASS) begin : g_bypass
 
         VX_cache_bypass #(
             .NUM_REQS          (NUM_REQS),
@@ -141,22 +141,22 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .mem_bus_out_if (mem_bus_tmp_if)
         );
 
-    end else begin
+    end else begin : g_no_bypass
 
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_cache_if
             `ASSIGN_VX_MEM_BUS_IF (core_bus_cache_if[i], core_bus_if[i]);
         end
 
         `ASSIGN_VX_MEM_BUS_IF (mem_bus_tmp_if, mem_bus_cache_if);
     end
 
-    if (WRITE_ENABLE) begin
+    if (WRITE_ENABLE) begin : g_mem_bus_if
         `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_tmp_if);
-    end else begin
+    end else begin : g_mem_bus_if_ro
         `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if, mem_bus_tmp_if);
     end
 
-    if (PASSTHRU == 0) begin : cache_if
+    if (PASSTHRU == 0) begin : g_cache
 
         VX_cache #(
             .INSTANCE_ID  (INSTANCE_ID),
@@ -187,9 +187,9 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .mem_bus_if     (mem_bus_cache_if)
         );
 
-    end else begin
+    end else begin : g_passthru
 
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_cache_if
             `UNUSED_VAR (core_bus_cache_if[i].req_valid)
             `UNUSED_VAR (core_bus_cache_if[i].req_data)
             assign core_bus_cache_if[i].req_ready = 0;
@@ -214,15 +214,14 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     end
 
 `ifdef DBG_TRACE_CACHE
-
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_trace
         wire [`UP(UUID_WIDTH)-1:0] core_req_uuid;
         wire [`UP(UUID_WIDTH)-1:0] core_rsp_uuid;
 
-        if (UUID_WIDTH != 0) begin
+        if (UUID_WIDTH != 0) begin : g_core_rsp_uuid
             assign core_req_uuid = core_bus_if[i].req_data.tag[TAG_WIDTH-1 -: UUID_WIDTH];
             assign core_rsp_uuid = core_bus_if[i].rsp_data.tag[TAG_WIDTH-1 -: UUID_WIDTH];
-        end else begin
+        end else begin : g_no_core_rsp_uuid
             assign core_req_uuid = 0;
             assign core_rsp_uuid = 0;
         end
@@ -247,10 +246,10 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     wire [`UP(UUID_WIDTH)-1:0] mem_req_uuid;
     wire [`UP(UUID_WIDTH)-1:0] mem_rsp_uuid;
 
-    if ((UUID_WIDTH != 0) && (NC_OR_BYPASS != 0)) begin
+    if ((UUID_WIDTH != 0) && (NC_OR_BYPASS != 0)) begin : g_mem_req_uuid
         assign mem_req_uuid = mem_bus_if.req_data.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
         assign mem_rsp_uuid = mem_bus_if.rsp_data.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
-    end else begin
+    end else begin : g_no_mem_req_uuid
         assign mem_req_uuid = 0;
         assign mem_rsp_uuid = 0;
     end

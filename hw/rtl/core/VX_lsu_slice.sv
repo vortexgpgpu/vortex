@@ -59,14 +59,14 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire req_is_fence, rsp_is_fence;
 
     wire [NUM_LANES-1:0][`XLEN-1:0] full_addr;
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_full_addr
         assign full_addr[i] = execute_if.data.rs1_data[i] + `SEXT(`XLEN, execute_if.data.op_args.lsu.offset);
     end
 
     // address type calculation
 
     wire [NUM_LANES-1:0][`MEM_REQ_FLAGS_WIDTH-1:0] mem_req_flags;
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_flags
         wire [MEM_ADDRW-1:0] block_addr = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
         // is I/O address
         wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`XLEN'(`IO_BASE_ADDR) >> MEM_ASHIFT);
@@ -151,13 +151,13 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     wire [NUM_LANES-1:0][REQ_ASHIFT-1:0] req_align;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_addr
         assign req_align[i] = full_addr[i][REQ_ASHIFT-1:0];
         assign mem_req_addr[i] = full_addr[i][`MEM_ADDR_WIDTH-1:REQ_ASHIFT];
     end
 
     // byte enable formatting
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_byteen_w
         reg [LSU_WORD_SIZE-1:0] mem_req_byteen_w;
         always @(*) begin
             mem_req_byteen_w = '0;
@@ -185,7 +185,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     end
 
     // memory misalignment not supported!
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_missalign
         wire lsu_req_fire = execute_if.valid && execute_if.ready;
         `RUNTIME_ASSERT((~lsu_req_fire || ~execute_if.data.tmask[i] || req_is_fence || (full_addr[i] % (1 << `INST_LSU_WSIZE(execute_if.data.op_type))) == 0),
             ("%t: misaligned memory access, wid=%0d, PC=0x%0h, addr=0x%0h, wsize=%0d! (#%0d)",
@@ -193,7 +193,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     end
 
     // store data formatting
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_data
         always @(*) begin
             mem_req_data[i] = execute_if.data.rs2_data[i];
             case (req_align[i])
@@ -215,7 +215,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     wire [LSUQ_SIZEW-1:0] pkt_waddr, pkt_raddr;
 
-    if (PID_BITS != 0) begin
+    if (PID_BITS != 0) begin : g_pids
         reg [`LSUQ_IN_SIZE-1:0][PID_BITS:0] pkt_ctr;
         reg [`LSUQ_IN_SIZE-1:0] pkt_sop, pkt_eop;
 
@@ -274,7 +274,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         `RUNTIME_ASSERT(~(mem_req_rd_fire && full), ("%t: allocator full!", $time))
         `RUNTIME_ASSERT(~mem_req_rd_sop_fire || 0 == pkt_ctr[pkt_waddr], ("%t: oops! broken sop request!", $time))
         `UNUSED_VAR (mem_rsp_sop)
-    end else begin
+    end else begin : g_no_pids
         assign pkt_waddr = 0;
         assign mem_rsp_sop_pkt = mem_rsp_sop;
         assign mem_rsp_eop_pkt = mem_rsp_eop;
@@ -424,7 +424,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 `endif
 `endif
 
-    for (genvar i = 0; i < NUM_LANES; i++) begin
+    for (genvar i = 0; i < NUM_LANES; i++) begin : g_rsp_data
     `ifdef XLEN_64
         wire [63:0] rsp_data64 = mem_rsp_data[i];
         wire [31:0] rsp_data32 = (rsp_align[i][2] ? mem_rsp_data[i][63:32] : mem_rsp_data[i][31:0]);
@@ -481,6 +481,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .valid_out (commit_no_rsp_if.valid),
         .ready_out (commit_no_rsp_if.ready)
     );
+
     assign commit_no_rsp_if.data.rd   = '0;
     assign commit_no_rsp_if.data.wb   = 1'b0;
     assign commit_no_rsp_if.data.data = commit_rsp_if.data.data; // arbiter MUX optimization

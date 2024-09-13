@@ -53,7 +53,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         .NUM_LANES (NUM_LANES)
     ) per_block_commit_if[BLOCK_SIZE]();
 
-    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : fpus
+    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_fpus
         `UNUSED_VAR (per_block_execute_if[block_idx].data.tid)
         `UNUSED_VAR (per_block_execute_if[block_idx].data.wb)
 
@@ -98,11 +98,11 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             `UNUSED_PIN (empty)
         );
 
-        if (PID_BITS != 0) begin
+        if (PID_BITS != 0) begin : g_fpu_rsp_pid
             assign fpu_rsp_pid = fpu_rsp_pid_u;
             assign fpu_rsp_sop = fpu_rsp_sop_u;
             assign fpu_rsp_eop = fpu_rsp_eop_u;
-        end else begin
+        end else begin : g_no_fpu_rsp_pid
             `UNUSED_VAR (fpu_rsp_pid_u)
             `UNUSED_VAR (fpu_rsp_sop_u)
             `UNUSED_VAR (fpu_rsp_eop_u)
@@ -214,7 +214,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         // handle CSR update
         fflags_t fpu_rsp_fflags_q;
 
-        if (PID_BITS != 0) begin
+        if (PID_BITS != 0) begin : g_pid
             fflags_t fpu_rsp_fflags_r;
             always @(posedge clk) begin
                 if (reset) begin
@@ -224,7 +224,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
                 end
             end
             assign fpu_rsp_fflags_q = fpu_rsp_fflags_r | fpu_rsp_fflags;
-        end else begin
+        end else begin : g_no_pid
             assign fpu_rsp_fflags_q = fpu_rsp_fflags;
         end
 

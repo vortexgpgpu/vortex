@@ -28,7 +28,7 @@ module VX_rr_arbiter #(
     output wire                     grant_valid,
     input  wire                     grant_ready
 );
-    if (NUM_REQS == 1)  begin
+    if (NUM_REQS == 1)  begin : g_passthru
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
@@ -38,7 +38,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = requests;
         assign grant_valid  = requests[0];
 
-    end else if (LUT_OPT && NUM_REQS == 2)  begin
+    end else if (LUT_OPT && NUM_REQS == 2)  begin : g_lut2
 
         reg [LOG_NUM_REQS-1:0] grant_index_w;
         reg [NUM_REQS-1:0] grant_onehot_w;
@@ -66,7 +66,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = grant_onehot_w;
         assign grant_valid  = (| requests);
 
-    end else if (LUT_OPT && NUM_REQS == 3)  begin
+    end else if (LUT_OPT && NUM_REQS == 3)  begin : g_lut3
 
         reg [LOG_NUM_REQS-1:0] grant_index_w;
         reg [NUM_REQS-1:0] grant_onehot_w;
@@ -99,7 +99,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = grant_onehot_w;
         assign grant_valid  = (| requests);
 
-    end else if (LUT_OPT && NUM_REQS == 4)  begin
+    end else if (LUT_OPT && NUM_REQS == 4)  begin : g_lut4
 
         reg [LOG_NUM_REQS-1:0] grant_index_w;
         reg [NUM_REQS-1:0] grant_onehot_w;
@@ -139,7 +139,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = grant_onehot_w;
         assign grant_valid  = (| requests);
 
-    end else if (LUT_OPT && NUM_REQS == 5)  begin
+    end else if (LUT_OPT && NUM_REQS == 5) begin : g_lut5
 
         reg [LOG_NUM_REQS-1:0] grant_index_w;
         reg [NUM_REQS-1:0] grant_onehot_w;
@@ -188,7 +188,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = grant_onehot_w;
         assign grant_valid  = (| requests);
 
-    end else if (LUT_OPT && NUM_REQS == 6)  begin
+    end else if (LUT_OPT && NUM_REQS == 6) begin : g_lut6
 
         reg [LOG_NUM_REQS-1:0] grant_index_w;
         reg [NUM_REQS-1:0] grant_onehot_w;
@@ -248,7 +248,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = grant_onehot_w;
         assign grant_valid  = (| requests);
 
-    end else if (LUT_OPT && NUM_REQS == 7)  begin
+    end else if (LUT_OPT && NUM_REQS == 7) begin : g_lut7
 
         reg [LOG_NUM_REQS-1:0] grant_index_w;
         reg [NUM_REQS-1:0] grant_onehot_w;
@@ -321,7 +321,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = grant_onehot_w;
         assign grant_valid  = (| requests);
 
-    end else if (LUT_OPT && NUM_REQS == 8)  begin
+    end else if (LUT_OPT && NUM_REQS == 8) begin : g_lut8
 
         reg [LOG_NUM_REQS-1:0] grant_index_w;
         reg [NUM_REQS-1:0] grant_onehot_w;
@@ -409,7 +409,7 @@ module VX_rr_arbiter #(
         assign grant_onehot = grant_onehot_w;
         assign grant_valid  = (| requests);
 
-    end else if (MODEL == 1) begin
+    end else if (MODEL == 1) begin : g_model1
 
     `IGNORE_UNOPTFLAT_BEGIN
         wire [NUM_REQS-1:0] masked_pri_reqs, unmasked_pri_reqs;
@@ -419,12 +419,12 @@ module VX_rr_arbiter #(
         wire [NUM_REQS-1:0] masked_reqs = requests & reqs_mask;
 
         assign masked_pri_reqs[0] = 1'b0;
-        for (genvar i = 1; i < NUM_REQS; ++i) begin
+        for (genvar i = 1; i < NUM_REQS; ++i) begin : g_masked_pri_reqs
             assign masked_pri_reqs[i] = masked_pri_reqs[i-1] | masked_reqs[i-1];
         end
 
         assign unmasked_pri_reqs[0] = 1'b0;
-        for (genvar i = 1; i < NUM_REQS; ++i) begin
+        for (genvar i = 1; i < NUM_REQS; ++i) begin : g_unmasked_pri_reqs
             assign unmasked_pri_reqs[i] = unmasked_pri_reqs[i-1] | requests[i-1];
         end
 
@@ -456,12 +456,12 @@ module VX_rr_arbiter #(
             .valid_out(grant_valid)
         );
 
-    end else if (MODEL == 2) begin
+    end else if (MODEL == 2) begin : g_model2
 
         reg [NUM_REQS-1:0][LOG_NUM_REQS-1:0] grant_table;
         reg [LOG_NUM_REQS-1:0] state;
 
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_grant_table
             always @(*) begin
                 grant_table[i] = 'x;
                 for (integer j = NUM_REQS-1; j >= 0; --j) begin

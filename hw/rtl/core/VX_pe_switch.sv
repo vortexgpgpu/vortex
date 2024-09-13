@@ -54,7 +54,7 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
         .ready_out (pe_req_ready)
     );
 
-    for (genvar i = 0; i < PE_COUNT; ++i) begin
+    for (genvar i = 0; i < PE_COUNT; ++i) begin : g_execute_out_if
         assign execute_out_if[i].valid = pe_req_valid[i];
         assign execute_out_if[i].data = pe_req_data[i];
         assign pe_req_ready[i] = execute_out_if[i].ready;
@@ -66,7 +66,7 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
     wire [PE_COUNT-1:0][RSP_DATAW-1:0] pe_rsp_data;
     wire [PE_COUNT-1:0] pe_rsp_ready;
 
-    for (genvar i = 0; i < PE_COUNT; ++i) begin
+    for (genvar i = 0; i < PE_COUNT; ++i) begin : g_commit_in_if
         assign pe_rsp_valid[i] = commit_in_if[i].valid;
         assign pe_rsp_data[i] = commit_in_if[i].data;
         assign commit_in_if[i].ready = pe_rsp_ready[i];

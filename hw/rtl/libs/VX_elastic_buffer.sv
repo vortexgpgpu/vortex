@@ -31,7 +31,7 @@ module VX_elastic_buffer #(
     input  wire             ready_out,
     output wire             valid_out
 );
-    if (SIZE == 0) begin
+    if (SIZE == 0) begin : g_passthru
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
@@ -40,7 +40,7 @@ module VX_elastic_buffer #(
         assign data_out  = data_in;
         assign ready_in  = ready_out;
 
-    end else if (SIZE == 1) begin
+    end else if (SIZE == 1) begin : g_eb1
 
         VX_pipe_buffer #(
             .DATAW (DATAW),
@@ -56,7 +56,7 @@ module VX_elastic_buffer #(
             .ready_out (ready_out)
         );
 
-    end else if (SIZE == 2 && LUTRAM == 0) begin
+    end else if (SIZE == 2 && LUTRAM == 0) begin : g_eb2
 
         wire valid_out_t;
         wire [DATAW-1:0] data_out_t;
@@ -90,7 +90,7 @@ module VX_elastic_buffer #(
             .ready_out (ready_out)
         );
 
-    end else begin
+    end else begin : g_ebN
 
         wire empty, full;
 

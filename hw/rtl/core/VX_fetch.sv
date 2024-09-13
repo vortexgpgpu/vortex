@@ -71,7 +71,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     // This resolves potential deadlock if ibuffer fills and the LSU stalls the execute stage due to pending dcache requests.
     // This issue is particularly prevalent when the icache and dcache are disabled and both requests share the same bus.
     wire [`NUM_WARPS-1:0] pending_ibuf_full;
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : pending_reads
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_pending_reads
         VX_pending_size #(
             .SIZE (`IBUF_SIZE)
         ) pending_reads (
@@ -164,13 +164,11 @@ module VX_fetch import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef DBG_TRACE_MEM
-    wire schedule_fire = schedule_if.valid && schedule_if.ready;
-    wire fetch_fire = fetch_if.valid && fetch_if.ready;
     always @(posedge clk) begin
-        if (schedule_fire) begin
+        if (schedule_if.valid && schedule_if.ready) begin
             `TRACE(1, ("%t: %s req: wid=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_if.data.wid, {schedule_if.data.PC, 1'b0}, schedule_if.data.tmask, schedule_if.data.uuid))
         end
-        if (fetch_fire) begin
+        if (fetch_if.valid && fetch_if.ready) begin
             `TRACE(1, ("%t: %s rsp: wid=%0d, PC=0x%0h, tmask=%b, instr=0x%0h (#%0d)\n", $time, INSTANCE_ID, fetch_if.data.wid, {fetch_if.data.PC, 1'b0}, fetch_if.data.tmask, fetch_if.data.instr, fetch_if.data.uuid))
         end
     end

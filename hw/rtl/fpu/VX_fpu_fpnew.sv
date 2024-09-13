@@ -162,7 +162,7 @@ module VX_fpu_fpnew
     end
 
     `UNUSED_VAR (mask_in)
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : fpnew_cores
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_fpnew_coreses
         wire [(TAG_WIDTH+1)-1:0] fpu_tag;
         wire fpu_valid_out_uq;
         wire fpu_ready_in_uq;
@@ -201,7 +201,7 @@ module VX_fpu_fpnew
             `UNUSED_PIN (busy_o)
         );
 
-        if (i == 0) begin
+        if (i == 0) begin : g_output_0
             assign {fpu_tag_out, fpu_has_fflags_out} = fpu_tag;
             assign fpu_valid_out = fpu_valid_out_uq;
             assign fpu_ready_in = fpu_ready_in_uq;

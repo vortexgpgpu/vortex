@@ -55,7 +55,7 @@ module VX_fpu_sqrt import VX_fpu_pkg::*; #(
     wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
     wire [NUM_PES-1:0][(`FP_FLAGS_BITS+32)-1:0] pe_data_out;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data_in
         assign data_in[i][0  +: 32] = dataa[i];
         assign data_in[i][32 +: `INST_FRM_BITS] = frm;
     end
@@ -87,7 +87,7 @@ module VX_fpu_sqrt import VX_fpu_pkg::*; #(
 
     `UNUSED_VAR (pe_data_in)
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
         assign result[i] = data_out[i][0 +: 32];
         assign fflags_out[i] = data_out[i][32 +: `FP_FLAGS_BITS];
     end
@@ -96,7 +96,7 @@ module VX_fpu_sqrt import VX_fpu_pkg::*; #(
 
 `ifdef QUARTUS
 
-    for (genvar i = 0; i < NUM_PES; ++i) begin : fsqrts
+    for (genvar i = 0; i < NUM_PES; ++i) begin : g_fsqrts
         acl_fsqrt fsqrt (
             .clk    (clk),
             .areset (1'b0),
@@ -113,7 +113,7 @@ module VX_fpu_sqrt import VX_fpu_pkg::*; #(
 
 `elsif VIVADO
 
-    for (genvar i = 0; i < NUM_PES; ++i) begin : fsqrts
+    for (genvar i = 0; i < NUM_PES; ++i) begin : g_fsqrts
         wire tuser;
 
         xil_fsqrt fsqrt (
@@ -134,7 +134,7 @@ module VX_fpu_sqrt import VX_fpu_pkg::*; #(
 
 `else
 
-    for (genvar i = 0; i < NUM_PES; ++i) begin : fsqrts
+    for (genvar i = 0; i < NUM_PES; ++i) begin : g_fsqrts
         reg [63:0] r;
         `UNUSED_VAR (r)
         fflags_t f;

@@ -78,7 +78,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     wire [`NUM_ALU_BLOCKS-1:0][`NW_WIDTH-1:0]   branch_wid;
     wire [`NUM_ALU_BLOCKS-1:0]                  branch_taken;
     wire [`NUM_ALU_BLOCKS-1:0][`PC_BITS-1:0]    branch_dest;
-    for (genvar i = 0; i < `NUM_ALU_BLOCKS; ++i) begin
+    for (genvar i = 0; i < `NUM_ALU_BLOCKS; ++i) begin : g_branch_init
         assign branch_valid[i] = branch_ctl_if[i].valid;
         assign branch_wid[i]   = branch_ctl_if[i].wid;
         assign branch_taken[i] = branch_ctl_if[i].taken;
@@ -322,7 +322,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     );
 
     wire [`NUM_WARPS-1:0][(`NUM_THREADS + `PC_BITS)-1:0] schedule_data;
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_schedule_data
         assign schedule_data[i] = {thread_masks[i], warp_pcs[i]};
     end
 
@@ -367,7 +367,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     wire [`NUM_WARPS-1:0] pending_warp_empty;
     wire [`NUM_WARPS-1:0] pending_warp_alm_empty;
 
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : pending_sizes
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_pending_sizes
         VX_pending_size #(
             .SIZE      (4096),
             .ALM_EMPTY (1)

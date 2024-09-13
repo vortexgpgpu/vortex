@@ -33,20 +33,20 @@ module VX_find_first #(
     wire [TN-1:0][DATAW-1:0] d_n;
 `IGNORE_WARNINGS_END
 
-    for (genvar i = 0; i < N; ++i) begin
+    for (genvar i = 0; i < N; ++i) begin : g_reverse
         assign s_n[TL+i] = REVERSE ? valid_in[N-1-i] : valid_in[i];
         assign d_n[TL+i] = REVERSE ? data_in[N-1-i] : data_in[i];
     end
 
-    if (TL < (TN-N)) begin
-        for (genvar i = TL+N; i < TN; ++i) begin
+    if (TL < (TN-N)) begin : g_fill
+        for (genvar i = TL+N; i < TN; ++i) begin : g_i
             assign s_n[i] = 0;
             assign d_n[i] = '0;
         end
     end
 
-    for (genvar j = 0; j < LOGN; ++j) begin
-        for (genvar i = 0; i < (2**j); ++i) begin
+    for (genvar j = 0; j < LOGN; ++j) begin : g_scan
+        for (genvar i = 0; i < (2**j); ++i) begin : g_i
             assign s_n[2**j-1+i] = s_n[2**(j+1)-1+i*2] | s_n[2**(j+1)-1+i*2+1];
             assign d_n[2**j-1+i] = s_n[2**(j+1)-1+i*2] ? d_n[2**(j+1)-1+i*2] : d_n[2**(j+1)-1+i*2+1];
         end

@@ -124,7 +124,7 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
     end
 
     generate
-    begin : fma
+    begin : g_fma
 
         reg [NUM_LANES-1:0][`XLEN-1:0] result_fma;
         reg [NUM_LANES-1:0][63:0] result_fadd;
@@ -200,7 +200,7 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
     endgenerate
 
     generate
-    begin : fdiv
+    begin : g_fdiv
 
         reg [NUM_LANES-1:0][`XLEN-1:0] result_fdiv_r;
         reg [NUM_LANES-1:0][63:0] result_fdiv;
@@ -239,7 +239,7 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
     endgenerate
 
     generate
-    begin : fsqrt
+    begin : g_fsqrt
 
         reg [NUM_LANES-1:0][`XLEN-1:0] result_fsqrt_r;
         reg [NUM_LANES-1:0][63:0] result_fsqrt;
@@ -278,7 +278,7 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
     endgenerate
 
     generate
-    begin : fcvt
+    begin : g_fcvt
 
         reg [NUM_LANES-1:0][`XLEN-1:0] result_fcvt;
         reg [NUM_LANES-1:0][63:0] result_itof;
@@ -342,7 +342,7 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
     endgenerate
 
     generate
-    begin : fncp
+    begin : g_fncp
 
         reg [NUM_LANES-1:0][`XLEN-1:0]  result_fncp;
         reg [NUM_LANES-1:0][63:0] result_fclss;
@@ -449,7 +449,7 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
 
     wire [NUM_FPC-1:0][RSP_DATAW-1:0] per_core_data_out;
 
-    for (genvar i = 0; i < NUM_FPC; ++i) begin
+    for (genvar i = 0; i < NUM_FPC; ++i) begin : g_per_core_data_out
         assign per_core_data_out[i] = {per_core_result[i], per_core_has_fflags[i], per_core_fflags[i], per_core_tag_out[i]};
     end
 

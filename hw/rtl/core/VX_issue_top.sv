@@ -80,7 +80,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     assign decode_if.data.rs3 = decode_rs3;
     assign decode_ready = decode_if.ready;
 
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_writeback_if
         assign writeback_if[i].valid = writeback_valid[i];
         assign writeback_if[i].data.uuid = writeback_uuid[i];
         assign writeback_if[i].data.wis = writeback_wis[i];
@@ -92,7 +92,7 @@ module VX_issue_top import VX_gpu_pkg::*; #(
         assign writeback_if[i].data.eop = writeback_eop[i];
     end
 
-    for (genvar i = 0; i < `NUM_EX_UNITS * `ISSUE_WIDTH; ++i) begin
+    for (genvar i = 0; i < `NUM_EX_UNITS * `ISSUE_WIDTH; ++i) begin : g_dispatch_if
         assign dispatch_valid[i] = dispatch_if[i].valid;
         assign dispatch_uuid[i] = dispatch_if[i].data.uuid;
         assign dispatch_wis[i] = dispatch_if[i].data.wis;

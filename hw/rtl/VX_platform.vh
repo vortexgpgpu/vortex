@@ -116,15 +116,18 @@
                          localparam `STRING __``x = x; \
                          /* verilator lint_on UNUSED */
 
-`define UNUSED_VAR(x)   if (1) begin \
+`define UNUSED_VAR(x)   /* verilator lint_off GENUNNAMED */ \
+                        if (1) begin \
                             /* verilator lint_off UNUSED */ \
                             wire [$bits(x)-1:0] __x = x; \
                             /* verilator lint_on UNUSED */ \
-                        end
+                        end \
+                        /* verilator lint_on GENUNNAMED */
 
 `define UNUSED_PIN(x)   /* verilator lint_off PINCONNECTEMPTY */ \
                         . x () \
                         /* verilator lint_on PINCONNECTEMPTY */
+
 `define UNUSED_ARG(x)   /* verilator lint_off UNUSED */ \
                         x \
                         /* verilator lint_on UNUSED */
@@ -143,8 +146,10 @@
 
 `ifdef SIMULATION
     `define STATIC_ASSERT(cond, msg) \
-    generate                     \
+    generate \
+        /* verilator lint_off GENUNNAMED */ \
         if (!(cond)) $error msg; \
+        /* verilator lint_on GENUNNAMED */ \
     endgenerate
 
     `define ERROR(msg) \

@@ -235,7 +235,7 @@ module VX_afu_ctrl #(
     assign s_axi_aw_fire = s_axi_awvalid && s_axi_awready;
     assign s_axi_w_fire  = s_axi_wvalid && s_axi_wready;
 
-    for (genvar i = 0; i < 4; ++i) begin
+    for (genvar i = 0; i < 4; ++i) begin : g_wmask
         assign wmask[8 * i +: 8] = {8{s_axi_wstrb[i]}};
     end
 

@@ -67,18 +67,18 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     // bank selection
 
     wire [NUM_REQS-1:0][BANK_SEL_WIDTH-1:0] req_bank_idx;
-    if (NUM_BANKS > 1) begin
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
+    if (NUM_BANKS > 1) begin : g_req_bank_idx
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_bank_idxs
             assign req_bank_idx[i] = mem_bus_if[i].req_data.addr[0 +: BANK_SEL_BITS];
         end
-    end else begin
+    end else begin : g_req_bank_idx_0
         assign req_bank_idx = 0;
     end
 
     // bank addressing
 
     wire [NUM_REQS-1:0][BANK_ADDR_WIDTH-1:0] req_bank_addr;
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_bank_addr
         assign req_bank_addr[i] = mem_bus_if[i].req_data.addr[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
         `UNUSED_VAR (mem_bus_if[i].req_data.flags)
     end
@@ -104,7 +104,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [`PERF_CTR_BITS-1:0] perf_collisions;
 `endif
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_data_in
         assign req_valid_in[i] = mem_bus_if[i].req_valid;
         assign req_data_in[i] = {
             mem_bus_if[i].req_data.rw,
@@ -141,7 +141,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .ready_out (per_bank_req_ready)
     );
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_req_data_soa
         assign {
             per_bank_req_rw[i],
             per_bank_req_addr[i],
@@ -159,7 +159,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0] per_bank_rsp_tag;
     wire [NUM_BANKS-1:0]                per_bank_rsp_ready;
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_data_store
         wire bank_rsp_valid, bank_rsp_ready;
 
         VX_sp_ram #(
@@ -216,7 +216,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     wire [NUM_BANKS-1:0][RSP_DATAW-1:0] per_bank_rsp_data_aos;
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_rsp_data_aos
         assign per_bank_rsp_data_aos[i] = {per_bank_rsp_data[i], per_bank_rsp_tag[i]};
     end
 
@@ -244,7 +244,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         `UNUSED_PIN (sel_out)
     );
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_mem_bus_if
         assign mem_bus_if[i].rsp_valid = rsp_valid_out[i];
         assign mem_bus_if[i].rsp_data = rsp_data_out[i];
         assign rsp_ready_out[i] = mem_bus_if[i].rsp_ready;
@@ -257,7 +257,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [`CLOG2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
 
     wire [NUM_REQS-1:0] req_rw;
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_rw
         assign req_rw[i] = mem_bus_if[i].req_data.rw;
     end
 
@@ -303,11 +303,11 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][`UP(UUID_WIDTH)-1:0] req_uuid;
     wire [NUM_REQS-1:0][`UP(UUID_WIDTH)-1:0] rsp_uuid;
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
-        if (UUID_WIDTH != 0) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_uuid
+        if (UUID_WIDTH != 0) begin : g_uuid
             assign req_uuid[i] = mem_bus_if[i].req_data.tag[TAG_WIDTH-1 -: UUID_WIDTH];
             assign rsp_uuid[i] = mem_bus_if[i].rsp_data.tag[TAG_WIDTH-1 -: UUID_WIDTH];
-        end else begin
+        end else begin : g_no_uuid
             assign req_uuid[i] = 0;
             assign rsp_uuid[i] = 0;
         end
@@ -316,17 +316,17 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][`UP(UUID_WIDTH)-1:0] per_bank_req_uuid;
     wire [NUM_BANKS-1:0][`UP(UUID_WIDTH)-1:0] per_bank_rsp_uuid;
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
-        if (UUID_WIDTH != 0) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_req_uuid
+        if (UUID_WIDTH != 0) begin : g_uuid
             assign per_bank_req_uuid[i] = per_bank_req_tag[i][TAG_WIDTH-1 -: UUID_WIDTH];
             assign per_bank_rsp_uuid[i] = per_bank_rsp_tag[i][TAG_WIDTH-1 -: UUID_WIDTH];
-        end else begin
+        end else begin : g_no_uuid
             assign per_bank_req_uuid[i] = 0;
             assign per_bank_rsp_uuid[i] = 0;
         end
     end
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_trace
         always @(posedge clk) begin
             if (mem_bus_if[i].req_valid && mem_bus_if[i].req_ready) begin
                 if (mem_bus_if[i].req_data.rw) begin
@@ -344,7 +344,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         end
     end
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_bank_trace
         always @(posedge clk) begin
             if (per_bank_req_valid[i] && per_bank_req_ready[i]) begin
                 if (per_bank_req_rw[i]) begin

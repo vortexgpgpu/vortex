@@ -129,7 +129,7 @@ module Vortex import VX_gpu_pkg::*; (
     wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
 
     // Generate all clusters
-    for (genvar cluster_id = 0; cluster_id < `NUM_CLUSTERS; ++cluster_id) begin : clusters
+    for (genvar cluster_id = 0; cluster_id < `NUM_CLUSTERS; ++cluster_id) begin : g_clusters
 
         `RESET_RELAY (cluster_reset, reset);
 

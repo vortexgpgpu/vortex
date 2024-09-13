@@ -37,14 +37,8 @@ module VX_stream_buffer #(
     input  wire             ready_out,
     output wire             valid_out
 );
-    if (PASSTHRU != 0) begin
-        `UNUSED_VAR (clk)
-        `UNUSED_VAR (reset)
-        assign ready_in  = ready_out;
-        assign valid_out = valid_in;
-        assign data_out  = data_in;
-    end else begin
-		if (OUT_REG != 0) begin
+    if (PASSTHRU == 0) begin : g_buffer
+		if (OUT_REG != 0) begin : g_with_reg
 
 			reg [DATAW-1:0] data_out_r;
 			reg [DATAW-1:0] buffer;
@@ -83,7 +77,7 @@ module VX_stream_buffer #(
 			assign valid_out = valid_out_r;
 			assign data_out  = data_out_r;
 
-		end else begin
+		end else begin : g_no_reg
 
 			reg [1:0][DATAW-1:0] shift_reg;
 			reg [1:0] fifo_state;
@@ -115,6 +109,12 @@ module VX_stream_buffer #(
 			assign data_out  = shift_reg[fifo_state[1]];
 
 		end
+	end else begin : g_passthru
+        `UNUSED_VAR (clk)
+        `UNUSED_VAR (reset)
+        assign ready_in  = ready_out;
+        assign valid_out = valid_in;
+        assign data_out  = data_in;
     end
 
 endmodule

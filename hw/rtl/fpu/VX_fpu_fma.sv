@@ -63,7 +63,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
 
     reg [NUM_LANES-1:0][31:0] a, b, c;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_select
         always @(*) begin
             if (is_madd) begin
                 // MADD / MSUB / NMADD / NMSUB
@@ -86,7 +86,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
         end
     end
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data_in
         assign data_in[i][0  +: 32] = a[i];
         assign data_in[i][32 +: 32] = b[i];
         assign data_in[i][64 +: 32] = c[i];
@@ -120,7 +120,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
 
     `UNUSED_VAR (pe_data_in)
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
         assign result[i] = data_out[i][0 +: 32];
         assign fflags_out[i] = data_out[i][32 +: `FP_FLAGS_BITS];
     end
@@ -129,7 +129,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
 
 `ifdef QUARTUS
 
-    for (genvar i = 0; i < NUM_PES; ++i) begin : fmas
+    for (genvar i = 0; i < NUM_PES; ++i) begin : g_fmas
         acl_fmadd fmadd (
             .clk (clk),
             .areset (1'b0),
@@ -147,7 +147,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
 
 `elsif VIVADO
 
-    for (genvar i = 0; i < NUM_PES; ++i) begin : fmas
+    for (genvar i = 0; i < NUM_PES; ++i) begin : g_fmas
         wire [2:0] tuser;
 
         xil_fma fma (
@@ -172,7 +172,7 @@ module VX_fpu_fma import VX_fpu_pkg::*; #(
 
 `else
 
-    for (genvar i = 0; i < NUM_PES; ++i) begin : fmas
+    for (genvar i = 0; i < NUM_PES; ++i) begin : g_fmas
         reg [63:0] r;
         `UNUSED_VAR (r)
         fflags_t f;

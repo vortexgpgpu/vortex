@@ -66,13 +66,13 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     `BUFFER_EX(perf_sfu_per_cycle_r, perf_sfu_per_cycle, 1'b1, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
 
     wire [PER_ISSUE_WARPS-1:0] stg_valid_in;
-    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_stg_valid_in
         assign stg_valid_in[w] = staging_if[w].valid;
     end
 
     wire perf_stall_per_cycle = (|stg_valid_in) && ~(|(stg_valid_in & operands_ready));
 
-    always @(posedge clk) begin
+    always @(posedge clk) begin : g_perf_stalls
         if (reset) begin
             perf_stalls <= '0;
         end else begin
@@ -80,7 +80,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         end
     end
 
-    for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin
+    for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin : g_perf_units_uses
         always @(posedge clk) begin
             if (reset) begin
                 perf_units_uses[i] <= '0;
@@ -90,7 +90,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         end
     end
 
-    for (genvar i = 0; i < `NUM_SFU_UNITS; ++i) begin
+    for (genvar i = 0; i < `NUM_SFU_UNITS; ++i) begin : g_perf_sfu_uses
         always @(posedge clk) begin
             if (reset) begin
                 perf_sfu_uses[i] <= '0;
@@ -101,7 +101,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     end
 `endif
 
-    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : stanging_bufs
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_stanging_bufs
         VX_pipe_buffer #(
             .DATAW (DATAW)
         ) stanging_buf (
@@ -116,7 +116,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         );
     end
 
-    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_scoreboard
         reg [`NUM_REGS-1:0] inuse_regs;
 
         reg [NUM_OPDS-1:0] operands_busy, operands_busy_n;
@@ -233,7 +233,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     wire [PER_ISSUE_WARPS-1:0][DATAW-1:0] arb_data_in;
     wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
-    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
         assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w];
         assign arb_data_in[w] = staging_if[w].data;
         assign staging_if[w].ready = arb_ready_in[w] && operands_ready[w];

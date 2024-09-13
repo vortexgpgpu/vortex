@@ -36,10 +36,10 @@ module VX_issue import VX_gpu_pkg::*; #(
     `PERF_COUNTER_ADD (issue_perf, per_issue_perf, ibf_stalls, `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
     `PERF_COUNTER_ADD (issue_perf, per_issue_perf, scb_stalls, `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
     `PERF_COUNTER_ADD (issue_perf, per_issue_perf, opd_stalls, `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
-    for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin
+    for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin : g_issue_perf_units_uses
         `PERF_COUNTER_ADD (issue_perf, per_issue_perf, units_uses[i], `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
     end
-    for (genvar i = 0; i < `NUM_SFU_UNITS; ++i) begin
+    for (genvar i = 0; i < `NUM_SFU_UNITS; ++i) begin : g_issue_perf_sfu_uses
         `PERF_COUNTER_ADD (issue_perf, per_issue_perf, sfu_uses[i], `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
     end
 `endif
@@ -52,7 +52,7 @@ module VX_issue import VX_gpu_pkg::*; #(
 
     `SCOPE_IO_SWITCH (`ISSUE_WIDTH)
 
-    for (genvar issue_id = 0; issue_id < `ISSUE_WIDTH; ++issue_id) begin : issue_slices
+    for (genvar issue_id = 0; issue_id < `ISSUE_WIDTH; ++issue_id) begin : g_issue_slices
         VX_decode_if #(
             .NUM_WARPS (PER_ISSUE_WARPS)
         ) per_issue_decode_if();
@@ -93,7 +93,7 @@ module VX_issue import VX_gpu_pkg::*; #(
         );
 
         // Assign transposed dispatch_if
-        for (genvar ex_id = 0; ex_id < `NUM_EX_UNITS; ++ex_id) begin
+        for (genvar ex_id = 0; ex_id < `NUM_EX_UNITS; ++ex_id) begin : g_dispatch_if
             `ASSIGN_VX_IF(dispatch_if[ex_id * `ISSUE_WIDTH + issue_id], per_issue_dispatch_if[ex_id]);
         end
      end

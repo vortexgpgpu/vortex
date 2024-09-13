@@ -41,7 +41,7 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][TAG_WIDTH-1:0] req_tag_out;
     wire [NUM_LANES-1:0] req_ready_out;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_req_data_in
         assign req_data_in[i] = {
             lsu_mem_if.req_data.rw,
             lsu_mem_if.req_data.addr[i],
@@ -49,19 +49,6 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
             lsu_mem_if.req_data.byteen[i],
             lsu_mem_if.req_data.flags[i]
         };
-    end
-
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign mem_bus_if[i].req_valid = req_valid_out[i];
-        assign {
-            mem_bus_if[i].req_data.rw,
-            mem_bus_if[i].req_data.addr,
-            mem_bus_if[i].req_data.data,
-            mem_bus_if[i].req_data.byteen,
-            mem_bus_if[i].req_data.flags
-         } = req_data_out[i];
-        assign mem_bus_if[i].req_data.tag = req_tag_out[i];
-        assign req_ready_out[i] = mem_bus_if[i].req_ready;
     end
 
     VX_stream_unpack #(
@@ -83,6 +70,19 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
         .ready_out  (req_ready_out)
     );
 
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_bus_req
+        assign mem_bus_if[i].req_valid = req_valid_out[i];
+        assign {
+            mem_bus_if[i].req_data.rw,
+            mem_bus_if[i].req_data.addr,
+            mem_bus_if[i].req_data.data,
+            mem_bus_if[i].req_data.byteen,
+            mem_bus_if[i].req_data.flags
+         } = req_data_out[i];
+        assign mem_bus_if[i].req_data.tag = req_tag_out[i];
+        assign req_ready_out[i] = mem_bus_if[i].req_ready;
+    end
+
     // handle response packing
 
     wire [NUM_LANES-1:0] rsp_valid_out;
@@ -90,7 +90,7 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][TAG_WIDTH-1:0] rsp_tag_out;
     wire [NUM_LANES-1:0] rsp_ready_out;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_bus_rsp
         assign rsp_valid_out[i] = mem_bus_if[i].rsp_valid;
         assign rsp_data_out[i] = mem_bus_if[i].rsp_data.data;
         assign rsp_tag_out[i] = mem_bus_if[i].rsp_data.tag;
