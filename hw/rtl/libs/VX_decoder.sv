@@ -31,10 +31,10 @@ module VX_decoder #(
     if (MODEL == 1) begin : g_model1
         always @(*) begin
             shift = '0;
-            shift[data_in] = 1'b1;
+            shift[data_in] = {M{1'b1}};
         end
     end else begin : g_model0
-        assign shift = (D*M)'(1'b1) << (data_in * M);
+        assign shift = ((D*M)'({M{1'b1}})) << (data_in * M);
     end
     assign data_out = {D{valid_in}} & shift;
 
