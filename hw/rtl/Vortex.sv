@@ -134,7 +134,7 @@ module Vortex import VX_gpu_pkg::*; (
         `RESET_RELAY (cluster_reset, reset);
 
         VX_dcr_bus_if cluster_dcr_bus_if();
-        `BUFFER_DCR_BUS_IF (cluster_dcr_bus_if, dcr_bus_if, 1'b1, (`NUM_CLUSTERS > 1));
+        `BUFFER_DCR_BUS_IF (cluster_dcr_bus_if, dcr_bus_if, 1'b1, (`NUM_CLUSTERS > 1))
 
         VX_cluster #(
             .CLUSTER_ID (cluster_id),
