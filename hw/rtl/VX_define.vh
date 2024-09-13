@@ -390,16 +390,22 @@
     assign src.rsp_data.tag = dst.rsp_data.tag[TD-1 -: TS]; \
     assign dst.rsp_ready = src.rsp_ready
 
-`define BUFFER_DCR_BUS_IF(dst, src, enable) \
+`define BUFFER_DCR_BUS_IF(dst, src, ena, latency) \
     /* verilator lint_off GENUNNAMED */ \
-    if (enable) begin \
-        reg [(1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH)-1:0] __dst; \
-        always @(posedge clk) begin \
-            __dst <= {src.write_valid, src.write_addr, src.write_data}; \
-        end \
-        assign {dst.write_valid, dst.write_addr, dst.write_data} = __dst; \
+    if (latency != 0) begin \
+        VX_pipe_register #( \
+            .DATAW  (1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH), \
+            .RESETW (1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH), \
+            .DEPTH  (latency) \
+        ) pipe_reg ( \
+            .clk      (clk), \
+            .reset    (reset), \
+            .enable   (1'b1), \
+            .data_in  ({src.write_valid && ena, src.write_addr, src.write_data}), \
+            .data_out ({dst.write_valid, dst.write_addr, dst.write_data}) \
+        ); \
     end else begin \
-        assign {dst.write_valid, dst.write_addr, dst.write_data} = {src.write_valid, src.write_addr, src.write_data}; \
+        assign {dst.write_valid, dst.write_addr, dst.write_data} = {src.write_valid && ena, src.write_addr, src.write_data}; \
     end \
     /* verilator lint_on GENUNNAMED */
 

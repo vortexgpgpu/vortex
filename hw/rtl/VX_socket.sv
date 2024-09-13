@@ -198,13 +198,13 @@ module VX_socket import VX_gpu_pkg::*; #(
 
     wire [`SOCKET_SIZE-1:0] per_core_busy;
 
-    VX_dcr_bus_if core_dcr_bus_if();
-    `BUFFER_DCR_BUS_IF (core_dcr_bus_if, dcr_bus_if, (`SOCKET_SIZE > 1));
-
     // Generate all cores
     for (genvar core_id = 0; core_id < `SOCKET_SIZE; ++core_id) begin : g_cores
 
         `RESET_RELAY (core_reset, reset);
+
+        VX_dcr_bus_if core_dcr_bus_if();
+        `BUFFER_DCR_BUS_IF (core_dcr_bus_if, dcr_bus_if, 1'b1, (`SOCKET_SIZE > 1));
 
         VX_core #(
             .CORE_ID  ((SOCKET_ID * `SOCKET_SIZE) + core_id),
