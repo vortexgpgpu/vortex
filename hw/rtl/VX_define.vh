@@ -395,11 +395,10 @@
     if (latency != 0) begin \
         VX_pipe_register #( \
             .DATAW  (1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH), \
-            .RESETW (1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH), \
             .DEPTH  (latency) \
         ) pipe_reg ( \
             .clk      (clk), \
-            .reset    (reset), \
+            .reset    (1'b0), \
             .enable   (1'b1), \
             .data_in  ({src.write_valid && ena, src.write_addr, src.write_data}), \
             .data_out ({dst.write_valid, dst.write_addr, dst.write_data}) \
