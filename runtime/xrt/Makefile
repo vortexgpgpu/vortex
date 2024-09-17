@@ -39,6 +39,11 @@ ifdef SCOPE
 	SRCS += $(COMMON_DIR)/scope.cpp
 endif
 
+# Enable ILA logic analyzer
+ifdef CHIPSCOPE
+	CXXFLAGS += -DCHIPSCOPE
+endif
+
 all: $(DESTDIR)/$(PROJECT)
 
 driver: $(DESTDIR)/libxrtsim.so

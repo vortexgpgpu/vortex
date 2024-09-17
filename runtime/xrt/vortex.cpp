@@ -125,13 +125,6 @@ static int get_platform_info(const std::string &device_name,
   return -1;
 }
 
-/*
-static void wait_for_enter(const std::string &msg) {
-  std::cout << msg << std::endl;
-  std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-}
-*/
-
 ///////////////////////////////////////////////////////////////////////////////
 
 class vx_device {
@@ -388,6 +381,11 @@ public:
         return ret;
       }
     }
+  #endif
+
+  #ifdef CHIPSCOPE
+    std::cout << "\nPress ENTER to continue after setting up ILA trigger..." << std::endl;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
   #endif
 
     return 0;
