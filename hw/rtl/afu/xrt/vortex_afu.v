@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,12 +18,12 @@ module vortex_afu #(
 	parameter C_S_AXI_CTRL_DATA_WIDTH = 32,
 	parameter C_M_AXI_MEM_ID_WIDTH 	  = `M_AXI_MEM_ID_WIDTH,
 	parameter C_M_AXI_MEM_ADDR_WIDTH  = 64,
-	parameter C_M_AXI_MEM_DATA_WIDTH  = `VX_MEM_DATA_WIDTH    
+	parameter C_M_AXI_MEM_DATA_WIDTH  = `VX_MEM_DATA_WIDTH
 ) (
 	// System signals
 	input wire 									ap_clk,
 	input wire 									ap_rst_n,
-	
+
 	// AXI4 master interface
 	`REPEAT (`M_AXI_MEM_NUM_BANKS, GEN_AXI_MEM, REPEAT_COMMA),
 
@@ -45,8 +45,8 @@ module vortex_afu #(
     output wire                                 s_axi_ctrl_bvalid,
     input  wire                                 s_axi_ctrl_bready,
     output wire [1:0]                           s_axi_ctrl_bresp,
-    
-    output wire                                 interrupt 
+
+    output wire                                 interrupt
 );
 
 	VX_afu_wrap #(
@@ -56,14 +56,14 @@ module vortex_afu #(
 		.C_M_AXI_MEM_ADDR_WIDTH  (C_M_AXI_MEM_ADDR_WIDTH),
 		.C_M_AXI_MEM_DATA_WIDTH  (C_M_AXI_MEM_DATA_WIDTH)
 	) afu_wrap (
-		.ap_clk             (ap_clk),
-		.ap_rst_n           (ap_rst_n),
+		.clk             	(ap_clk),
+		.reset           	(~ap_rst_n),
 
 		`REPEAT (`M_AXI_MEM_NUM_BANKS, AXI_MEM_ARGS, REPEAT_COMMA),
-		
+
 		.s_axi_ctrl_awvalid (s_axi_ctrl_awvalid),
 		.s_axi_ctrl_awready (s_axi_ctrl_awready),
-		.s_axi_ctrl_awaddr  (s_axi_ctrl_awaddr),		
+		.s_axi_ctrl_awaddr  (s_axi_ctrl_awaddr),
 		.s_axi_ctrl_wvalid  (s_axi_ctrl_wvalid),
 		.s_axi_ctrl_wready  (s_axi_ctrl_wready),
 		.s_axi_ctrl_wdata   (s_axi_ctrl_wdata),
@@ -81,5 +81,5 @@ module vortex_afu #(
 
 		.interrupt          (interrupt)
 	);
-	
+
 endmodule

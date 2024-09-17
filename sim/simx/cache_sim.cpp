@@ -514,6 +514,7 @@ public:
 				bank_req.type  = bank_req_t::Core;
 				bank_req.write = core_req.write;
 				pipeline_req   = bank_req;
+				DT(3, simobject_->name() << " core-req: " << core_req);
 			}
 
 			if (core_req.write)

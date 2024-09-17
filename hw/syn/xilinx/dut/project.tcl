@@ -14,9 +14,9 @@
 # Start time
 set start_time [clock seconds]
 
-if { $::argc != 6 } {
+if { $::argc != 5 } {
   puts "ERROR: Program \"$::argv0\" requires 5 arguments!\n"
-  puts "Usage: $::argv0 <top_module> <device_part> <vcs_file> <xdc_file> <tool_dir> <script_dir>\n"
+  puts "Usage: $::argv0 <top_module> <device_part> <vcs_file> <xdc_file> <tool_dir>\n"
   exit
 }
 
@@ -28,14 +28,12 @@ set device_part [lindex $::argv 1]
 set vcs_file [lindex $::argv 2]
 set xdc_file [lindex $::argv 3]
 set tool_dir [lindex $::argv 4]
-set script_dir [lindex $::argv 5]
 
 puts "Using top_module=$top_module"
 puts "Using device_part=$device_part"
 puts "Using vcs_file=$vcs_file"
 puts "Using xdc_file=$xdc_file"
 puts "Using tool_dir=$tool_dir"
-puts "Using script_dir=$script_dir"
 
 # Set the number of jobs based on MAX_JOBS environment variable
 if {[info exists ::env(MAX_JOBS)]} {
@@ -50,7 +48,7 @@ if {[info exists ::env(FPU_IP)]} {
   set ip_dir $::env(FPU_IP)
   set argv [list $ip_dir $device_part]
   set argc 2
-  source ${script_dir}/gen_ip.tcl
+  source ${tool_dir}/xilinx_ip_gen.tcl
 }
 
 source "${tool_dir}/parse_vcs_list.tcl"

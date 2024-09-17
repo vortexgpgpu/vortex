@@ -11,9 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Start time
-set start_time [clock seconds]
-
 if { $::argc != 3 } {
     puts "ERROR: Program \"$::argv0\" requires 3 arguments!\n"
     puts "Usage: $::argv0 <device_part> <vcs_file> <tool_dir>\n"
@@ -24,7 +21,7 @@ set device_part [lindex $::argv 0]
 set vcs_file [lindex $::argv 1]
 set tool_dir [lindex $::argv 2]
 
-uuts "Using device_part=$device_part"
+puts "Using device_part=$device_part"
 puts "Using vcs_file=$vcs_file"
 puts "Using tool_dir=$tool_dir"
 
@@ -37,398 +34,436 @@ if {[info exists ::env(MAX_JOBS)]} {
   set num_jobs 0
 }
 
-set origin_dir [file normalize "."]
+proc run_setup {} {
+  global device_part vcs_file tool_dir
 
-# Use origin directory path location variable, if specified in the tcl shell
-if { [info exists ::origin_dir_loc] } {
-  set origin_dir $::origin_dir_loc
-}
+  # Set the project name
+  set project_name "project_1"
 
-# Set the project name
-set project_name "project_1"
+  # Use project name variable, if specified in the tcl shell
+  if { [info exists ::user_project_name] } {
+    set project_name $::user_project_name
+  }
 
-# Use project name variable, if specified in the tcl shell
-if { [info exists ::user_project_name] } {
-  set project_name $::user_project_name
-}
+  source "${tool_dir}/parse_vcs_list.tcl"
+  set vlist [parse_vcs_list "${vcs_file}"]
 
-source "${tool_dir}/parse_vcs_list.tcl"
-set vlist [parse_vcs_list "${vcs_file}"]
+  set vsources_list  [lindex $vlist 0]
+  set vincludes_list [lindex $vlist 1]
+  set vdefines_list  [lindex $vlist 2]
 
-set vsources_list  [lindex $vlist 0]
-set vincludes_list [lindex $vlist 1]
-set vdefines_list  [lindex $vlist 2]
+  #puts ${vsources_list}
+  #puts ${vincludes_list}
+  #puts ${vdefines_list}
 
-#puts ${vsources_list}
-#puts ${vincludes_list}
-#puts ${vdefines_list}
+  # Create project
+  create_project $project_name $project_name -force -part $device_part
 
-# Create project
-create_project $project_name $project_name -force -part $device_part
+  # Set the directory path for the new project
+  set proj_dir [get_property directory [current_project]]
 
-# Set the directory path for the new project
-set proj_dir [get_property directory [current_project]]
+  # Create 'sources_1' fileset (if not found)
+  if {[string equal [get_filesets -quiet sources_1] ""]} {
+    create_fileset -srcset sources_1
+  }
 
-# Create 'sources_1' fileset (if not found)
-if {[string equal [get_filesets -quiet sources_1] ""]} {
-  create_fileset -srcset sources_1
-}
+  # add source files
+  set obj [get_filesets sources_1]
+  add_files -norecurse -verbose -fileset $obj ${vsources_list}
 
-# add source files
-set obj [get_filesets sources_1]
-add_files -norecurse -verbose -fileset $obj ${vsources_list}
+  # process defines
+  set obj [get_filesets sources_1]
+  foreach def $vdefines_list {
+    set_property -name "verilog_define" -value $def -objects $obj
+  }
 
-# process defines
-set obj [get_filesets sources_1]
-foreach def $vdefines_list {
-  set_property -name "verilog_define" -value $def -objects $obj
-}
+  # Set 'sources_1' fileset properties
+  set obj [get_filesets sources_1]
+  set_property -name "name" -value "sources_1" -objects $obj
+  set_property -name "top" -value "design_1_wrapper" -objects $obj
 
-# Set 'sources_1' fileset properties
-set obj [get_filesets sources_1]
-set_property -name "name" -value "sources_1" -objects $obj
-set_property -name "top" -value "design_1_wrapper" -objects $obj
+  # Create 'constrs_1' fileset (if not found)
+  if {[string equal [get_filesets -quiet constrs_1] ""]} {
+    create_fileset -constrset constrs_1
+  }
 
-# Create 'constrs_1' fileset (if not found)
-if {[string equal [get_filesets -quiet constrs_1] ""]} {
-  create_fileset -constrset constrs_1
-}
+  # Set 'constrs_1' fileset object
+  set obj [get_filesets constrs_1]
 
-# Set 'constrs_1' fileset object
-set obj [get_filesets constrs_1]
+  # Empty (no sources present)
 
-# Empty (no sources present)
+  # Set 'constrs_1' fileset properties
+  set obj [get_filesets constrs_1]
+  set_property -name "constrs_type" -value "XDC" -objects $obj
+  set_property -name "name" -value "constrs_1" -objects $obj
+  set_property -name "target_constrs_file" -value "" -objects $obj
 
-# Set 'constrs_1' fileset properties
-set obj [get_filesets constrs_1]
-set_property -name "constrs_type" -value "XDC" -objects $obj
-set_property -name "name" -value "constrs_1" -objects $obj
-set_property -name "target_constrs_file" -value "" -objects $obj
+  # Create 'sim_1' fileset (if not found)
+  if {[string equal [get_filesets -quiet sim_1] ""]} {
+    create_fileset -simset sim_1
+  }
 
-# Create 'sim_1' fileset (if not found)
-if {[string equal [get_filesets -quiet sim_1] ""]} {
-  create_fileset -simset sim_1
-}
+  set testbench_file ""
+  foreach file ${vsources_list} {
+    if {[string match "*testbench.v" $file]} {
+        set testbench_file [file normalize $file]
+        break
+    }
+  }
 
-# Set 'sim_1' fileset object
-set obj [get_filesets sim_1]
-# Import local files from the original project
-set files [list \
- [file normalize "testbench.v" ]\
-]
-set imported_files [import_files -fileset sim_1 $files]
+  # Set 'sim_1' fileset object
+  set obj [get_filesets sim_1]
+  # Import local files from the original project
+  set files [list $testbench_file]
+  set imported_files [import_files -fileset sim_1 $files]
 
-# Set 'sim_1' fileset file properties for remote files
-# None
+  # Set 'sim_1' fileset file properties for remote files
+  # None
 
-# Set 'sim_1' fileset file properties for local files
+  # Set 'sim_1' fileset file properties for local files
 set file "testbench.v"
 set file_obj [get_files -of_objects [get_filesets sim_1] [list "*$file"]]
-set_property -name "file_type" -value "Verilog" -objects $file_obj
-set_property -name "is_enabled" -value "1" -objects $file_obj
-set_property -name "is_global_include" -value "0" -objects $file_obj
-set_property -name "library" -value "xil_defaultlib" -objects $file_obj
-set_property -name "path_mode" -value "RelativeFirst" -objects $file_obj
-set_property -name "used_in" -value "synthesis implementation simulation" -objects $file_obj
-set_property -name "used_in_implementation" -value "1" -objects $file_obj
-set_property -name "used_in_simulation" -value "1" -objects $file_obj
-set_property -name "used_in_synthesis" -value "1" -objects $file_obj
+  set_property -name "file_type" -value "Verilog" -objects $file_obj
+  set_property -name "is_enabled" -value "1" -objects $file_obj
+  set_property -name "is_global_include" -value "0" -objects $file_obj
+  set_property -name "library" -value "xil_defaultlib" -objects $file_obj
+  set_property -name "path_mode" -value "RelativeFirst" -objects $file_obj
+  set_property -name "used_in" -value "synthesis implementation simulation" -objects $file_obj
+  set_property -name "used_in_implementation" -value "1" -objects $file_obj
+  set_property -name "used_in_simulation" -value "1" -objects $file_obj
+  set_property -name "used_in_synthesis" -value "1" -objects $file_obj
 
-# Set 'sim_1' fileset properties
-set obj [get_filesets sim_1]
-set_property -name "32bit" -value "0" -objects $obj
-set_property -name "force_compile_glbl" -value "0" -objects $obj
-set_property -name "generate_scripts_only" -value "0" -objects $obj
-set_property -name "generic" -value "" -objects $obj
-set_property -name "hbs.configure_design_for_hier_access" -value "1" -objects $obj
-set_property -name "include_dirs" -value "" -objects $obj
-set_property -name "incremental" -value "1" -objects $obj
-set_property -name "name" -value "sim_1" -objects $obj
-set_property -name "source_set" -value "sources_1" -objects $obj
-set_property -name "systemc_include_dirs" -value "" -objects $obj
-set_property -name "top" -value "testbench" -objects $obj
-set_property -name "top_auto_set" -value "0" -objects $obj
-set_property -name "top_lib" -value "xil_defaultlib" -objects $obj
-set_property -name "verilog_define" -value "" -objects $obj
-set_property -name "verilog_uppercase" -value "0" -objects $obj
+  # Set 'sim_1' fileset properties
+  set obj [get_filesets sim_1]
+  set_property -name "32bit" -value "0" -objects $obj
+  set_property -name "force_compile_glbl" -value "0" -objects $obj
+  set_property -name "generate_scripts_only" -value "0" -objects $obj
+  set_property -name "generic" -value "" -objects $obj
+  set_property -name "hbs.configure_design_for_hier_access" -value "1" -objects $obj
+  set_property -name "include_dirs" -value "" -objects $obj
+  set_property -name "incremental" -value "1" -objects $obj
+  set_property -name "name" -value "sim_1" -objects $obj
+  set_property -name "source_set" -value "sources_1" -objects $obj
+  set_property -name "systemc_include_dirs" -value "" -objects $obj
+  set_property -name "top" -value "testbench" -objects $obj
+  set_property -name "top_auto_set" -value "0" -objects $obj
+  set_property -name "top_lib" -value "xil_defaultlib" -objects $obj
+  set_property -name "verilog_define" -value "" -objects $obj
+  set_property -name "verilog_uppercase" -value "0" -objects $obj
 
-# Set 'utils_1' fileset object
-set obj [get_filesets utils_1]
-# Empty (no sources present)
+  # Set 'utils_1' fileset object
+  set obj [get_filesets utils_1]
+  # Empty (no sources present)
 
-# Set 'utils_1' fileset properties
-set obj [get_filesets utils_1]
-set_property -name "name" -value "utils_1" -objects $obj
+  # Set 'utils_1' fileset properties
+  set obj [get_filesets utils_1]
+  set_property -name "name" -value "utils_1" -objects $obj
 
-# Proc to create BD design_1
-proc cr_bd_design_1 { parentCell } {
-# The design that will be created by this Tcl proc contains the following
-# module references:
-# Vortex_top
+  # Proc to create BD design_1
+  proc cr_bd_design_1 { parentCell } {
+  # The design that will be created by this Tcl proc contains the following
+  # module references:
+  # Vortex_top
 
-# CHANGE DESIGN NAME HERE
-set design_name design_1
+  # CHANGE DESIGN NAME HERE
+  set design_name design_1
 
-common::send_gid_msg -ssname BD::TCL -id 2010 -severity "INFO" "Currently there is no design <$design_name> in project, so creating one..."
+  common::send_gid_msg -ssname BD::TCL -id 2010 -severity "INFO" "Currently there is no design <$design_name> in project, so creating one..."
 
-create_bd_design $design_name
+  create_bd_design $design_name
 
-set bCheckIPsPassed 1
-##################################################################
-# CHECK IPs
-##################################################################
-set bCheckIPs 1
-if { $bCheckIPs == 1 } {
-     set list_check_ips "\
-  xilinx.com:ip:axi_bram_ctrl:4.1\
-  xilinx.com:ip:blk_mem_gen:8.4\
-  "
+  set bCheckIPsPassed 1
+  ##################################################################
+  # CHECK IPs
+  ##################################################################
+  set bCheckIPs 1
+  if { $bCheckIPs == 1 } {
+      set list_check_ips "\
+    xilinx.com:ip:axi_bram_ctrl:4.1\
+    xilinx.com:ip:blk_mem_gen:8.4\
+    "
 
-   set list_ips_missing ""
-   common::send_gid_msg -ssname BD::TCL -id 2011 -severity "INFO" "Checking if the following IPs exist in the project's IP catalog: $list_check_ips ."
+    set list_ips_missing ""
+    common::send_gid_msg -ssname BD::TCL -id 2011 -severity "INFO" "Checking if the following IPs exist in the project's IP catalog: $list_check_ips ."
 
-   foreach ip_vlnv $list_check_ips {
-      set ip_obj [get_ipdefs -all $ip_vlnv]
-      if { $ip_obj eq "" } {
-         lappend list_ips_missing $ip_vlnv
-      }
-   }
+    foreach ip_vlnv $list_check_ips {
+        set ip_obj [get_ipdefs -all $ip_vlnv]
+        if { $ip_obj eq "" } {
+          lappend list_ips_missing $ip_vlnv
+        }
+    }
 
-   if { $list_ips_missing ne "" } {
-      catch {common::send_gid_msg -ssname BD::TCL -id 2012 -severity "ERROR" "The following IPs are not found in the IP Catalog:\n  $list_ips_missing\n\nResolution: Please add the repository containing the IP(s) to the project." }
-      set bCheckIPsPassed 0
-   }
+    if { $list_ips_missing ne "" } {
+        catch {common::send_gid_msg -ssname BD::TCL -id 2012 -severity "ERROR" "The following IPs are not found in the IP Catalog:\n  $list_ips_missing\n\nResolution: Please add the repository containing the IP(s) to the project." }
+        set bCheckIPsPassed 0
+    }
 
+    }
+
+    ##################################################################
+    # CHECK Modules
+    ##################################################################
+    set bCheckModules 1
+    if { $bCheckModules == 1 } {
+      set list_check_mods "\
+    Vortex_top\
+    "
+
+    set list_mods_missing ""
+    common::send_gid_msg -ssname BD::TCL -id 2020 -severity "INFO" "Checking if the following modules exist in the project's sources: $list_check_mods ."
+
+    foreach mod_vlnv $list_check_mods {
+        if { [can_resolve_reference $mod_vlnv] == 0 } {
+          lappend list_mods_missing $mod_vlnv
+        }
+    }
+
+    if { $list_mods_missing ne "" } {
+        catch {common::send_gid_msg -ssname BD::TCL -id 2021 -severity "ERROR" "The following module(s) are not found in the project: $list_mods_missing" }
+        common::send_gid_msg -ssname BD::TCL -id 2022 -severity "INFO" "Please add source files for the missing module(s) above."
+        set bCheckIPsPassed 0
+    }
   }
 
-  ##################################################################
-  # CHECK Modules
-  ##################################################################
-  set bCheckModules 1
-  if { $bCheckModules == 1 } {
-     set list_check_mods "\
-  Vortex_top\
-  "
-
-   set list_mods_missing ""
-   common::send_gid_msg -ssname BD::TCL -id 2020 -severity "INFO" "Checking if the following modules exist in the project's sources: $list_check_mods ."
-
-   foreach mod_vlnv $list_check_mods {
-      if { [can_resolve_reference $mod_vlnv] == 0 } {
-         lappend list_mods_missing $mod_vlnv
-      }
-   }
-
-   if { $list_mods_missing ne "" } {
-      catch {common::send_gid_msg -ssname BD::TCL -id 2021 -severity "ERROR" "The following module(s) are not found in the project: $list_mods_missing" }
-      common::send_gid_msg -ssname BD::TCL -id 2022 -severity "INFO" "Please add source files for the missing module(s) above."
-      set bCheckIPsPassed 0
-   }
-}
-
-if { $bCheckIPsPassed != 1 } {
-  common::send_gid_msg -ssname BD::TCL -id 2023 -severity "WARNING" "Will not continue with creation of design due to the error(s) above."
-  return 3
-}
-
-variable script_folder
-
-if { $parentCell eq "" } {
-    set parentCell [get_bd_cells /]
-}
-
-# Get object for parentCell
-set parentObj [get_bd_cells $parentCell]
-if { $parentObj == "" } {
-    catch {common::send_gid_msg -ssname BD::TCL -id 2090 -severity "ERROR" "Unable to find parent cell <$parentCell>!"}
-    return
-}
-
-# Make sure parentObj is hier blk
-set parentType [get_property TYPE $parentObj]
-if { $parentType ne "hier" } {
-    catch {common::send_gid_msg -ssname BD::TCL -id 2091 -severity "ERROR" "Parent <$parentObj> has TYPE = <$parentType>. Expected to be <hier>."}
-    return
-}
-
-# Save current instance; Restore later
-set oldCurInst [current_bd_instance .]
-
-# Set parent object as current
-current_bd_instance $parentObj
-
-
-# Create interface ports
-
-# Create ports
-set clk_100MHz [ create_bd_port -dir I -type clk -freq_hz 100000000 clk_100MHz ]
-set resetn [ create_bd_port -dir I -type rst resetn ]
-set_property -dict [ list \
-  CONFIG.POLARITY {ACTIVE_LOW} \
-] $resetn
-set vx_busy [ create_bd_port -dir O vx_busy ]
-set vx_reset [ create_bd_port -dir I -type rst vx_reset ]
-set_property -dict [ list \
-  CONFIG.POLARITY {ACTIVE_HIGH} \
-] $vx_reset
-
-set dcr_wr_valid [ create_bd_port -dir I dcr_wr_valid ]
-set dcr_wr_addr [ create_bd_port -dir I -from 11 -to 0 dcr_wr_addr ]
-set dcr_wr_data [ create_bd_port -dir I -from 31 -to 0 dcr_wr_data ]
-
-# Create instance: Vortex_top_0, and set properties
-set block_name Vortex_top
-set block_cell_name Vortex_top_0
-if { [catch {set Vortex_top_0 [create_bd_cell -type module -reference $block_name $block_cell_name] } errmsg] } {
-    catch {common::send_gid_msg -ssname BD::TCL -id 2095 -severity "ERROR" "Unable to add referenced block <$block_name>. Please add the files for ${block_name}'s definition into the project."}
-    return 1
-  } elseif { $Vortex_top_0 eq "" } {
-    catch {common::send_gid_msg -ssname BD::TCL -id 2096 -severity "ERROR" "Unable to referenced block <$block_name>. Please add the files for ${block_name}'s definition into the project."}
-    return 1
+  if { $bCheckIPsPassed != 1 } {
+    common::send_gid_msg -ssname BD::TCL -id 2023 -severity "WARNING" "Will not continue with creation of design due to the error(s) above."
+    return 3
   }
 
-# Create instance: axi_bram_ctrl_0, and set properties
-set axi_bram_ctrl_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_bram_ctrl:4.1 axi_bram_ctrl_0 ]
-set_property -dict [ list \
-  CONFIG.DATA_WIDTH {512} \
-  CONFIG.ECC_TYPE {0} \
-] $axi_bram_ctrl_0
+  variable script_folder
 
-# Create instance: axi_bram_ctrl_0_bram, and set properties
-set axi_bram_ctrl_0_bram [ create_bd_cell -type ip -vlnv xilinx.com:ip:blk_mem_gen:8.4 axi_bram_ctrl_0_bram ]
+  if { $parentCell eq "" } {
+      set parentCell [get_bd_cells /]
+  }
 
-set_property -dict [ list \
-  CONFIG.Assume_Synchronous_Clk {true} \
-  CONFIG.Byte_Size {8} \
-  CONFIG.Load_Init_File {true} \
-  CONFIG.Coe_File {@COE_FILE@} \
-  CONFIG.EN_SAFETY_CKT {true} \
-  CONFIG.Enable_32bit_Address {true} \
-  CONFIG.Fill_Remaining_Memory_Locations {false} \
-  CONFIG.Memory_Type {Simple_Dual_Port_RAM} \
-  CONFIG.Operating_Mode_A {NO_CHANGE} \
-  CONFIG.Operating_Mode_B {READ_FIRST} \
-  CONFIG.Port_B_Write_Rate {0} \
-  CONFIG.Read_Width_A {512} \
-  CONFIG.Read_Width_B {512} \
-  CONFIG.Register_PortA_Output_of_Memory_Primitives {false} \
-  CONFIG.Register_PortB_Output_of_Memory_Primitives {false} \
-  CONFIG.Remaining_Memory_Locations {0} \
-  CONFIG.Use_Byte_Write_Enable {true} \
-  CONFIG.Use_RSTA_Pin {false} \
-  CONFIG.Use_RSTB_Pin {true} \
-  CONFIG.Write_Width_A {512} \
-  CONFIG.Write_Depth_A {16384} \
-  CONFIG.use_bram_block {Stand_Alone} \
-] $axi_bram_ctrl_0_bram
+  # Get object for parentCell
+  set parentObj [get_bd_cells $parentCell]
+  if { $parentObj == "" } {
+      catch {common::send_gid_msg -ssname BD::TCL -id 2090 -severity "ERROR" "Unable to find parent cell <$parentCell>!"}
+      return
+  }
 
-# Create interface connections
-connect_bd_intf_net -intf_net Vortex_top_0_m_axi_mem [get_bd_intf_pins Vortex_top_0/m_axi_mem] [get_bd_intf_pins axi_bram_ctrl_0/S_AXI]
-connect_bd_intf_net -intf_net axi_bram_ctrl_0_BRAM_PORTA [get_bd_intf_pins axi_bram_ctrl_0/BRAM_PORTA] [get_bd_intf_pins axi_bram_ctrl_0_bram/BRAM_PORTA]
-connect_bd_intf_net -intf_net axi_bram_ctrl_0_BRAM_PORTB [get_bd_intf_pins axi_bram_ctrl_0/BRAM_PORTB] [get_bd_intf_pins axi_bram_ctrl_0_bram/BRAM_PORTB]
+  # Make sure parentObj is hier blk
+  set parentType [get_property TYPE $parentObj]
+  if { $parentType ne "hier" } {
+      catch {common::send_gid_msg -ssname BD::TCL -id 2091 -severity "ERROR" "Parent <$parentObj> has TYPE = <$parentType>. Expected to be <hier>."}
+      return
+  }
 
-# Create port connections
-connect_bd_net -net Vortex_top_0_busy [get_bd_ports vx_busy] [get_bd_pins Vortex_top_0/busy]
-connect_bd_net -net clk_wiz_clk_out1 [get_bd_ports clk_100MHz] [get_bd_pins Vortex_top_0/clk] [get_bd_pins axi_bram_ctrl_0/s_axi_aclk]
-connect_bd_net -net resetn_1 [get_bd_ports resetn] [get_bd_pins axi_bram_ctrl_0/s_axi_aresetn]
-connect_bd_net -net vx_reset_1 [get_bd_ports vx_reset] [get_bd_pins Vortex_top_0/reset]
-connect_bd_net -net dcr_wr_valid_1 [get_bd_ports dcr_wr_valid] [get_bd_pins Vortex_top_0/dcr_wr_valid]
-connect_bd_net -net dcr_wr_addr_1 [get_bd_ports dcr_wr_addr] [get_bd_pins Vortex_top_0/dcr_wr_addr]
-connect_bd_net -net dcr_wr_data_1 [get_bd_ports dcr_wr_data] [get_bd_pins Vortex_top_0/dcr_wr_data]
+  # Save current instance; Restore later
+  set oldCurInst [current_bd_instance .]
 
-# Create address segments
-assign_bd_address -offset 0x00000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces Vortex_top_0/m_axi_mem] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
+  # Set parent object as current
+  current_bd_instance $parentObj
 
-# Perform GUI Layout
-regenerate_bd_layout -layout_string {
-  "ActiveEmotionalView":"Default View",
-  "Default View_ScaleFactor":"1.0",
-  "Default View_TopLeft":"-195,-165",
-  "ExpandedHierarchyInLayout":"",
-  "guistr":"# # String gsaved with Nlview 7.0r4  2019-12-20 bk=1.5203 VDI=41 GEI=36 GUI=JA:10.0 TLS
-#  -string -flagsOSRD
-preplace port clk_100MHz -pg 1 -lvl 0 -x 0 -y 40 -defaultsOSRD
-preplace port resetn -pg 1 -lvl 0 -x 0 -y 20 -defaultsOSRD
-preplace port vx_busy -pg 1 -lvl 4 -x 950 -y 220 -defaultsOSRD
-preplace port vx_reset -pg 1 -lvl 0 -x 0 -y 110 -defaultsOSRD
-preplace port dcr_wr_valid -pg 1 -lvl 0 -x 0 -y 130 -defaultsOSRD
-preplace portBus dcr_wr_addr -pg 1 -lvl 0 -x 0 -y 150 -defaultsOSRD
-preplace portBus dcr_wr_data -pg 1 -lvl 0 -x 0 -y 170 -defaultsOSRD
-preplace inst Vortex_top_0 -pg 1 -lvl 1 -x 190 -y 130 -defaultsOSRD
-preplace inst axi_bram_ctrl_0 -pg 1 -lvl 2 -x 520 -y 140 -defaultsOSRD
-preplace inst axi_bram_ctrl_0_bram -pg 1 -lvl 3 -x 800 -y 140 -defaultsOSRD
-preplace netloc Vortex_top_0_busy 1 1 3 360J 220 NJ 220 NJ
-preplace netloc clk_wiz_clk_out1 1 0 2 20 30 370
-preplace netloc resetn_1 1 0 2 NJ 20 380J
-preplace netloc vx_reset_1 1 0 1 NJ 110
-preplace netloc dcr_wr_valid_1 1 0 1 NJ 130
-preplace netloc dcr_wr_addr_1 1 0 1 NJ 150
-preplace netloc dcr_wr_data_1 1 0 1 NJ 170
-preplace netloc axi_bram_ctrl_0_BRAM_PORTB 1 2 1 N 150
-preplace netloc axi_bram_ctrl_0_BRAM_PORTA 1 2 1 N 130
-preplace netloc Vortex_top_0_m_axi_mem 1 1 1 N 120
-levelinfo -pg 1 0 190 520 800 950
-pagesize -pg 1 -db -bbox -sgen -180 0 1060 240
-"
+
+  # Create interface ports
+
+  # Create ports
+  set clk_100MHz [ create_bd_port -dir I -type clk -freq_hz 100000000 clk_100MHz ]
+  set resetn [ create_bd_port -dir I -type rst resetn ]
+  set_property -dict [ list \
+    CONFIG.POLARITY {ACTIVE_LOW} \
+  ] $resetn
+  set vx_busy [ create_bd_port -dir O vx_busy ]
+  set vx_reset [ create_bd_port -dir I -type rst vx_reset ]
+  set_property -dict [ list \
+    CONFIG.POLARITY {ACTIVE_HIGH} \
+  ] $vx_reset
+
+  set dcr_wr_valid [ create_bd_port -dir I dcr_wr_valid ]
+  set dcr_wr_addr [ create_bd_port -dir I -from 11 -to 0 dcr_wr_addr ]
+  set dcr_wr_data [ create_bd_port -dir I -from 31 -to 0 dcr_wr_data ]
+
+  # Create instance: Vortex_top_0, and set properties
+  set block_name Vortex_top
+  set block_cell_name Vortex_top_0
+  if { [catch {set Vortex_top_0 [create_bd_cell -type module -reference $block_name $block_cell_name] } errmsg] } {
+      catch {common::send_gid_msg -ssname BD::TCL -id 2095 -severity "ERROR" "Unable to add referenced block <$block_name>. Please add the files for ${block_name}'s definition into the project."}
+      return 1
+    } elseif { $Vortex_top_0 eq "" } {
+      catch {common::send_gid_msg -ssname BD::TCL -id 2096 -severity "ERROR" "Unable to referenced block <$block_name>. Please add the files for ${block_name}'s definition into the project."}
+      return 1
+    }
+
+  # Create instance: axi_bram_ctrl_0, and set properties
+  set axi_bram_ctrl_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_bram_ctrl:4.1 axi_bram_ctrl_0 ]
+  set_property -dict [ list \
+    CONFIG.DATA_WIDTH {512} \
+    CONFIG.ECC_TYPE {0} \
+  ] $axi_bram_ctrl_0
+
+  # Create instance: axi_bram_ctrl_0_bram, and set properties
+  set axi_bram_ctrl_0_bram [ create_bd_cell -type ip -vlnv xilinx.com:ip:blk_mem_gen:8.4 axi_bram_ctrl_0_bram ]
+
+  set_property -dict [ list \
+    CONFIG.Assume_Synchronous_Clk {true} \
+    CONFIG.Byte_Size {8} \
+    CONFIG.Load_Init_File {true} \
+    CONFIG.Coe_File {@CURRENTDIR@/hw/syn/xilinx/sandbox/kernel.bin.coe} \
+    CONFIG.EN_SAFETY_CKT {true} \
+    CONFIG.Enable_32bit_Address {true} \
+    CONFIG.Fill_Remaining_Memory_Locations {false} \
+    CONFIG.Memory_Type {Simple_Dual_Port_RAM} \
+    CONFIG.Operating_Mode_A {NO_CHANGE} \
+    CONFIG.Operating_Mode_B {READ_FIRST} \
+    CONFIG.Port_B_Write_Rate {0} \
+    CONFIG.Read_Width_A {512} \
+    CONFIG.Read_Width_B {512} \
+    CONFIG.Register_PortA_Output_of_Memory_Primitives {false} \
+    CONFIG.Register_PortB_Output_of_Memory_Primitives {false} \
+    CONFIG.Remaining_Memory_Locations {0} \
+    CONFIG.Use_Byte_Write_Enable {true} \
+    CONFIG.Use_RSTA_Pin {false} \
+    CONFIG.Use_RSTB_Pin {true} \
+    CONFIG.Write_Width_A {512} \
+    CONFIG.Write_Depth_A {16384} \
+    CONFIG.use_bram_block {Stand_Alone} \
+  ] $axi_bram_ctrl_0_bram
+
+  # Create interface connections
+  connect_bd_intf_net -intf_net Vortex_top_0_m_axi_mem [get_bd_intf_pins Vortex_top_0/m_axi_mem] [get_bd_intf_pins axi_bram_ctrl_0/S_AXI]
+  connect_bd_intf_net -intf_net axi_bram_ctrl_0_BRAM_PORTA [get_bd_intf_pins axi_bram_ctrl_0/BRAM_PORTA] [get_bd_intf_pins axi_bram_ctrl_0_bram/BRAM_PORTA]
+  connect_bd_intf_net -intf_net axi_bram_ctrl_0_BRAM_PORTB [get_bd_intf_pins axi_bram_ctrl_0/BRAM_PORTB] [get_bd_intf_pins axi_bram_ctrl_0_bram/BRAM_PORTB]
+
+  # Create port connections
+  connect_bd_net -net Vortex_top_0_busy [get_bd_ports vx_busy] [get_bd_pins Vortex_top_0/busy]
+  connect_bd_net -net clk_wiz_clk_out1 [get_bd_ports clk_100MHz] [get_bd_pins Vortex_top_0/clk] [get_bd_pins axi_bram_ctrl_0/s_axi_aclk]
+  connect_bd_net -net resetn_1 [get_bd_ports resetn] [get_bd_pins axi_bram_ctrl_0/s_axi_aresetn]
+  connect_bd_net -net vx_reset_1 [get_bd_ports vx_reset] [get_bd_pins Vortex_top_0/reset]
+  connect_bd_net -net dcr_wr_valid_1 [get_bd_ports dcr_wr_valid] [get_bd_pins Vortex_top_0/dcr_wr_valid]
+  connect_bd_net -net dcr_wr_addr_1 [get_bd_ports dcr_wr_addr] [get_bd_pins Vortex_top_0/dcr_wr_addr]
+  connect_bd_net -net dcr_wr_data_1 [get_bd_ports dcr_wr_data] [get_bd_pins Vortex_top_0/dcr_wr_data]
+
+  # Create address segments
+  assign_bd_address -offset 0x00000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces Vortex_top_0/m_axi_mem] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
+
+  # Perform GUI Layout
+  regenerate_bd_layout -layout_string {
+    "ActiveEmotionalView":"Default View",
+    "Default View_ScaleFactor":"1.0",
+    "Default View_TopLeft":"-195,-165",
+    "ExpandedHierarchyInLayout":"",
+    "guistr":"# # String gsaved with Nlview 7.0r4  2019-12-20 bk=1.5203 VDI=41 GEI=36 GUI=JA:10.0 TLS
+  #  -string -flagsOSRD
+  preplace port clk_100MHz -pg 1 -lvl 0 -x 0 -y 40 -defaultsOSRD
+  preplace port resetn -pg 1 -lvl 0 -x 0 -y 20 -defaultsOSRD
+  preplace port vx_busy -pg 1 -lvl 4 -x 950 -y 220 -defaultsOSRD
+  preplace port vx_reset -pg 1 -lvl 0 -x 0 -y 110 -defaultsOSRD
+  preplace port dcr_wr_valid -pg 1 -lvl 0 -x 0 -y 130 -defaultsOSRD
+  preplace portBus dcr_wr_addr -pg 1 -lvl 0 -x 0 -y 150 -defaultsOSRD
+  preplace portBus dcr_wr_data -pg 1 -lvl 0 -x 0 -y 170 -defaultsOSRD
+  preplace inst Vortex_top_0 -pg 1 -lvl 1 -x 190 -y 130 -defaultsOSRD
+  preplace inst axi_bram_ctrl_0 -pg 1 -lvl 2 -x 520 -y 140 -defaultsOSRD
+  preplace inst axi_bram_ctrl_0_bram -pg 1 -lvl 3 -x 800 -y 140 -defaultsOSRD
+  preplace netloc Vortex_top_0_busy 1 1 3 360J 220 NJ 220 NJ
+  preplace netloc clk_wiz_clk_out1 1 0 2 20 30 370
+  preplace netloc resetn_1 1 0 2 NJ 20 380J
+  preplace netloc vx_reset_1 1 0 1 NJ 110
+  preplace netloc dcr_wr_valid_1 1 0 1 NJ 130
+  preplace netloc dcr_wr_addr_1 1 0 1 NJ 150
+  preplace netloc dcr_wr_data_1 1 0 1 NJ 170
+  preplace netloc axi_bram_ctrl_0_BRAM_PORTB 1 2 1 N 150
+  preplace netloc axi_bram_ctrl_0_BRAM_PORTA 1 2 1 N 130
+  preplace netloc Vortex_top_0_m_axi_mem 1 1 1 N 120
+  levelinfo -pg 1 0 190 520 800 950
+  pagesize -pg 1 -db -bbox -sgen -180 0 1060 240
+  "
+  }
+
+    # Restore current instance
+    current_bd_instance $oldCurInst
+
+    validate_bd_design
+    save_bd_design
+    close_bd_design $design_name
+  }
+  # End of cr_bd_design_1()
+  cr_bd_design_1 ""
+  set_property EXCLUDE_DEBUG_LOGIC "0" [get_files design_1.bd ]
+  set_property GENERATE_SYNTH_CHECKPOINT "1" [get_files design_1.bd ]
+  set_property IS_ENABLED "1" [get_files design_1.bd ]
+  set_property IS_GLOBAL_INCLUDE "0" [get_files design_1.bd ]
+  #set_property IS_LOCKED "0" [get_files design_1.bd ]
+  set_property LIBRARY "xil_defaultlib" [get_files design_1.bd ]
+  set_property PATH_MODE "RelativeFirst" [get_files design_1.bd ]
+  set_property PFM_NAME "" [get_files design_1.bd ]
+  set_property REGISTERED_WITH_MANAGER "1" [get_files design_1.bd ]
+  set_property SYNTH_CHECKPOINT_MODE "Hierarchical" [get_files design_1.bd ]
+  set_property USED_IN "synthesis implementation simulation" [get_files design_1.bd ]
+  set_property USED_IN_IMPLEMENTATION "1" [get_files design_1.bd ]
+  set_property USED_IN_SIMULATION "1" [get_files design_1.bd ]
+  set_property USED_IN_SYNTHESIS "1" [get_files design_1.bd ]
+
+  # Call make_wrapper to create wrapper files
+  set wrapper_path [make_wrapper -fileset sources_1 -files [ get_files -norecurse design_1.bd] -top]
+  add_files -norecurse -fileset sources_1 $wrapper_path
+
+  update_compile_order -fileset sources_1
 }
 
-  # Restore current instance
-  current_bd_instance $oldCurInst
+proc run_synthesis {} {
+  global num_jobs
+  # Synthesis
+  if {$num_jobs != 0} {
+    launch_runs synth_1 -jobs $num_jobs
+  } else {
+    launch_runs synth_1
+  }
+  wait_on_run synth_1
+  open_run synth_1
+  report_utilization -file utilization.rpt -hierarchical -hierarchical_percentages
 
-  validate_bd_design
-  save_bd_design
-  close_bd_design $design_name
+  write_checkpoint -force post_synth.dcp
 }
-# End of cr_bd_design_1()
-cr_bd_design_1 ""
-set_property EXCLUDE_DEBUG_LOGIC "0" [get_files design_1.bd ]
-set_property GENERATE_SYNTH_CHECKPOINT "1" [get_files design_1.bd ]
-set_property IS_ENABLED "1" [get_files design_1.bd ]
-set_property IS_GLOBAL_INCLUDE "0" [get_files design_1.bd ]
-#set_property IS_LOCKED "0" [get_files design_1.bd ]
-set_property LIBRARY "xil_defaultlib" [get_files design_1.bd ]
-set_property PATH_MODE "RelativeFirst" [get_files design_1.bd ]
-set_property PFM_NAME "" [get_files design_1.bd ]
-set_property REGISTERED_WITH_MANAGER "1" [get_files design_1.bd ]
-set_property SYNTH_CHECKPOINT_MODE "Hierarchical" [get_files design_1.bd ]
-set_property USED_IN "synthesis implementation simulation" [get_files design_1.bd ]
-set_property USED_IN_IMPLEMENTATION "1" [get_files design_1.bd ]
-set_property USED_IN_SIMULATION "1" [get_files design_1.bd ]
-set_property USED_IN_SYNTHESIS "1" [get_files design_1.bd ]
 
-# Call make_wrapper to create wrapper files
-set wrapper_path [make_wrapper -fileset sources_1 -files [ get_files -norecurse design_1.bd] -top]
-add_files -norecurse -fileset sources_1 $wrapper_path
+proc run_implementation {} {
+  global tool_dir num_jobs
+  source "${tool_dir}/ila_insert.tcl"
+  insert_ila 8192
 
-update_compile_order -fileset sources_1
+  # Implementation
+  if {$num_jobs != 0} {
+    launch_runs impl_1 -jobs $num_jobs
+  } else {
+    launch_runs impl_1
+  }
+  wait_on_run impl_1
+  open_run impl_1
+  report_place_status -file place.rpt
+  report_route_status -file route.rpt
+  write_checkpoint -force post_impl.dcp
+}
 
-# Synthesis
-if {$num_jobs != 0} {
-  launch_runs synth_1 -jobs $num_jobs
+proc run_report {} {
+  # Generate reports
+  report_timing_summary -file timing.rpt
+  report_power -file power.rpt
+  report_drc -file drc.rpt
+}
+
+###############################################################################
+
+# Start time
+set start_time [clock seconds]
+
+# Check if the post-implementation checkpoint exists
+if { [file exists post_impl.dcp] } {
+  puts "Resuming from post-implementation checkpoint: post_impl.dcp"
+  open_checkpoint post_impl.dcp
+  run_report
+} elseif { [file exists post_synth.dcp] } {
+  puts "Resuming from post-synthesis checkpoint: post_synth.dcp"
+  open_checkpoint post_synth.dcp
+  run_implementation
+  run_report
 } else {
-  launch_runs synth_1
+  # execute full pipeline
+  run_setup
+  run_synthesis
+  run_implementation
+  run_report
 }
-wait_on_run synth_1
-open_run synth_1
-write_checkpoint -force post_synth.dcp
-report_utilization -file utilization.rpt -hierarchical -hierarchical_percentages
-
-# Implementation
-if {$num_jobs != 0} {
-  launch_runs impl_1 -jobs $num_jobs
-} else {
-  launch_runs impl_1
-}
-wait_on_run impl_1
-open_run impl_1
-write_checkpoint -force post_impl.dcp
-
-# Generate reports
-report_place_status -file place.rpt
-report_route_status -file route.rpt
-report_timing_summary -file timing.rpt
-report_power -file power.rpt
-report_drc -file drc.rpt
 
 # End time and calculation
 set elapsed_time [expr {[clock seconds] - $start_time}]

@@ -122,7 +122,8 @@ ifdef DEBUG
 		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
 		CFLAGS += -DDEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
 	else
-		CFLAGS += -DNDEBUG
+		VPP_FLAGS += --debug.chipscope vortex_afu_1
+		CFLAGS += -DNDEBUG -DCHIPSCOPE $(DBG_SCOPE_FLAGS)
 	endif
 else
 	VPP_FLAGS += --optimize 3
@@ -167,7 +168,7 @@ $(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 
 gen-xo: $(XO_CONTAINER)
 $(XO_CONTAINER): $(BUILD_DIR)/sources.txt
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source $(SRC_DIR)/../scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt $(SCRIPT_DIR) ../$(BUILD_DIR)
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source $(SRC_DIR)/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt $(SCRIPT_DIR) ../$(BUILD_DIR)
 
 gen-bin: $(XCLBIN_CONTAINER)
 $(XCLBIN_CONTAINER): $(XO_CONTAINER) $(SCOPE_JSON)

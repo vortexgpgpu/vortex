@@ -31,9 +31,9 @@ project_1/sources.txt:
 build: $(PROJECT).xpr
 $(PROJECT).xpr: project_1/sources.txt
 ifdef FPU_IP
-	MAX_JOBS=$(JOBS) FPU_IP=project_1/ip $(VIVADO) -mode batch -source $(SRC_DIR)/project.tcl -tclargs $(TOP_LEVEL_ENTITY) $(DEVICE) project_1/sources.txt $(SRC_DIR)/project.xdc $(SCRIPT_DIR) $(SRC_DIR)/../scripts
+	MAX_JOBS=$(JOBS) FPU_IP=project_1/ip $(VIVADO) -mode batch -source $(SRC_DIR)/project.tcl -tclargs $(TOP_LEVEL_ENTITY) $(DEVICE) project_1/sources.txt $(SRC_DIR)/project.xdc $(SCRIPT_DIR)
 else
-	MAX_JOBS=$(JOBS) $(VIVADO) -mode batch -source $(SRC_DIR)/project.tcl -tclargs $(TOP_LEVEL_ENTITY) $(DEVICE) project_1/sources.txt $(SRC_DIR)/project.xdc $(SCRIPT_DIR) $(SRC_DIR)/../scripts
+	MAX_JOBS=$(JOBS) $(VIVADO) -mode batch -source $(SRC_DIR)/project.tcl -tclargs $(TOP_LEVEL_ENTITY) $(DEVICE) project_1/sources.txt $(SRC_DIR)/project.xdc $(SCRIPT_DIR)
 endif
 
 clean:
