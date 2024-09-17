@@ -21,8 +21,8 @@ module VX_afu_wrap #(
 	  parameter C_M_AXI_MEM_DATA_WIDTH  = `VX_MEM_DATA_WIDTH
 ) (
     // System signals
-    input wire ap_clk,
-    input wire ap_rst_n,
+    input wire clk,
+    input wire reset,
 
     // AXI4 master interface
 	`REPEAT (`M_AXI_MEM_NUM_BANKS, GEN_AXI_MEM, REPEAT_COMMA),
@@ -82,8 +82,6 @@ module VX_afu_wrap #(
 	// convert memory interface to array
 	`REPEAT (`M_AXI_MEM_NUM_BANKS, AXI_MEM_TO_ARRAY, REPEAT_SEMICOLON);
 
-	wire reset = ~ap_rst_n;
-
 	reg [`CLOG2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
 	reg [15:0] vx_pending_writes;
 	reg vx_busy_wait;
@@ -122,7 +120,7 @@ module VX_afu_wrap #(
 		end
 	end
 
-	always @(posedge ap_clk) begin
+	always @(posedge clk) begin
 		if (reset || ap_reset) begin
 			state             <= STATE_IDLE;
 			vx_pending_writes <= '0;
@@ -187,7 +185,7 @@ module VX_afu_wrap #(
 		.AXI_DATA_WIDTH (C_S_AXI_CTRL_DATA_WIDTH),
 		.AXI_NUM_BANKS  (C_M_AXI_MEM_NUM_BANKS)
 	) afu_ctrl (
-		.clk       		(ap_clk),
+		.clk       		(clk),
 		.reset     		(reset),
 
 		.s_axi_awvalid  (s_axi_ctrl_awvalid),
@@ -245,7 +243,7 @@ module VX_afu_wrap #(
 	) vortex_axi (
 		`SCOPE_IO_BIND  (1)
 
-		.clk			(ap_clk),
+		.clk			(clk),
 		.reset			(vx_reset),
 
 		.m_axi_awvalid	(m_axi_mem_awvalid_a),
@@ -301,9 +299,32 @@ module VX_afu_wrap #(
 
     // SCOPE //////////////////////////////////////////////////////////////////////
 
+`ifdef CHIPSCOPE
+    ila_afu ila_afu_inst (
+      	.clk (clk),
+		.probe0 ({
+			ap_reset,
+        	ap_start,
+        	ap_done,
+			ap_idle,
+			interrupt
+		}),
+		.probe1 ({
+        	vx_pending_writes,
+			vx_busy_wait,
+			vx_busy,
+			vx_reset,
+			dcr_wr_valid,
+			dcr_wr_addr,
+			dcr_wr_data
+		})
+    );
+`endif
+
 `ifdef DBG_SCOPE_AFU
 	`define TRIGGERS { \
 		reset, \
+		ap_reset, \
 		ap_start, \
 		ap_done, \
 		ap_idle, \
@@ -343,7 +364,7 @@ module VX_afu_wrap #(
 	initial begin
 		$assertoff(0, vortex_axi);
 	end
-	always @(posedge ap_clk) begin
+	always @(posedge clk) begin
 		if (reset) begin
 			assert_delay_ctr <= '0;
 			assert_enabled   <= 0;
@@ -362,7 +383,7 @@ module VX_afu_wrap #(
 `endif
 
 `ifdef DBG_TRACE_AFU
-    always @(posedge ap_clk) begin
+    always @(posedge clk) begin
 		for (integer i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin
 			if (m_axi_mem_awvalid_a[i] && m_axi_mem_awready_a[i]) begin
 				`TRACE(2, ("%t: AFU Wr Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_awaddr_a[i], m_axi_mem_awid_a[i]))

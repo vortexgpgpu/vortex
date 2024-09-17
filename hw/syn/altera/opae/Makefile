@@ -102,7 +102,7 @@ all: swconfig ip-gen setup build
 
 ip-gen: $(IP_CACHE_DIR)/ip-gen.log
 $(IP_CACHE_DIR)/ip-gen.log:
-	$(SCRIPT_DIR)/ip_gen.sh $(IP_CACHE_DIR)
+	$(SCRIPT_DIR)/altera_ip_gen.sh $(IP_CACHE_DIR)
 
 swconfig: vortex_afu.h
 vortex_afu.h: $(SRC_DIR)/vortex_afu.json

@@ -56,7 +56,24 @@
 `define UNUSED_PIN(x) . x ()
 `define UNUSED_ARG(x) x
 
+`define __SCOPE (* mark_debug="true" *)
+
+`define __SCOPE_X
+
+`define __SCOPE_ON  \
+    `undef __SCOPE_X \
+    `define __SCOPE_X `__SCOPE
+
+`define __SCOPE_OFF  \
+    `undef __SCOPE_X \
+    `define __SCOPE_X
+
 `else // not SYNTHESIS
+
+`define __SCOPE
+`define __SCOPE_X
+`define __SCOPE_ON
+`define __SCOPE_OFF
 
 `ifdef VERILATOR
 

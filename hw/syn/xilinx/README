@@ -5,7 +5,7 @@ platforminfo -l
 xbutil validate --device 0000:09:00.1 --verbose
 
 # generate FPU IPs
-vivado -mode batch -source scripts/gen_ip.tcl -tclargs ip/xilinx_u50_gen3x16_xdma_5_202210_1
+vivado -mode batch -source xilinx_ip_gen.tcl -tclargs ip/xilinx_u50_gen3x16_xdma_5_202210_1
 
 # build FPGA
 PREFIX=build_base_1c NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 make > build_u50_hw_emu_base_1c.log 2>&1 &

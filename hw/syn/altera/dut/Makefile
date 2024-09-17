@@ -13,7 +13,7 @@ IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
 
 ip-gen: $(IP_CACHE_DIR)/ip_gen.log
 $(IP_CACHE_DIR)/ip_gen.log:
-	$(SCRIPT_DIR)/ip_gen.sh $(IP_CACHE_DIR)
+	$(SCRIPT_DIR)/altera_ip_gen.sh $(IP_CACHE_DIR)
 
 unittest:
 	mkdir -p unittest/$(BUILD_DIR)
