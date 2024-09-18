@@ -95,6 +95,8 @@ module VX_cache_wrap_l3 import VX_gpu_pkg::*; #(
 
     localparam NC_OR_BYPASS = (NC_ENABLE || PASSTHRU);
 
+    localparam NUM_REQS_P = NUM_REQS / NUM_MEM_PORTS;
+
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
         .TAG_WIDTH (TAG_WIDTH)
@@ -108,9 +110,13 @@ module VX_cache_wrap_l3 import VX_gpu_pkg::*; #(
     if (NC_OR_BYPASS) begin
        
         `RESET_RELAY (nc_bypass_reset, reset);
-        for (genvar i = 0; i < NUM_MEM_PORTS; ++i) begin 
+        for (genvar i = 0; i < NUM_MEM_PORTS; ++i) begin
+
+            localparam SLICE_BEGIN = i * NUM_REQS_P;
+            localparam SLICE_END = SLICE_BEGIN + NUM_REQS_P;
+            
             VX_cache_bypass #(
-                .NUM_REQS          (NUM_REQS),
+                .NUM_REQS          (NUM_REQS_P),
                 .TAG_SEL_IDX       (TAG_SEL_IDX),
 
                 .PASSTHRU          (PASSTHRU),
@@ -134,13 +140,13 @@ module VX_cache_wrap_l3 import VX_gpu_pkg::*; #(
                 .clk            (clk),
                 .reset          (nc_bypass_reset),
 
-                .core_bus_in_if (core_bus_if),
-                .core_bus_out_if(core_bus_cache_if),
+                .core_bus_in_if (core_bus_if[SLICE_END-1:SLICE_BEGIN]),
+                .core_bus_out_if(core_bus_cache_if[SLICE_END-1:SLICE_BEGIN]),
 
                 .mem_bus_in_if  (mem_bus_cache_if[i]),
                 .mem_bus_out_if (mem_bus_if[i])
             );
-        end 
+        end
         
     end else begin
 
@@ -183,11 +189,12 @@ module VX_cache_wrap_l3 import VX_gpu_pkg::*; #(
 
         `RESET_RELAY (cache_reset, reset);
 
-        VX_cache #(
+        VX_cache_l3 #(
             .INSTANCE_ID  (INSTANCE_ID),
             .CACHE_SIZE   (CACHE_SIZE),
             .LINE_SIZE    (LINE_SIZE),
             .NUM_BANKS    (NUM_BANKS),
+            .NUM_MEM_PORTS (NUM_MEM_PORTS),
             .NUM_WAYS     (NUM_WAYS),
             .WORD_SIZE    (WORD_SIZE),
             .NUM_REQS     (NUM_REQS),
@@ -209,7 +216,7 @@ module VX_cache_wrap_l3 import VX_gpu_pkg::*; #(
             .cache_perf     (cache_perf),
         `endif
             .core_bus_if    (core_bus_cache_if),
-            .mem_bus_if     (mem_bus_cache_if[0])
+            .mem_bus_if     (mem_bus_cache_if)
         );       
         
     end

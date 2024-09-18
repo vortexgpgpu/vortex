@@ -209,12 +209,12 @@ module Vortex_hbm import VX_gpu_pkg::*; (
         for (int i = 0; i < `NUM_MEM_PORTS; ++i) begin
             if (mem_req_fire[i]) begin
                 if (mem_req_rw[i])
-                    `TRACE(1, ("%d: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%0h data=0x%0h\n", $time, `TO_FULL_ADDR(mem_req_addr[i]), mem_req_tag[i], mem_req_byteen[i], mem_req_data[i]));
+                    `TRACE(1, ("%d: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%0h data=0x%0h, bank=%d\n", $time, `TO_FULL_ADDR(mem_req_addr[i]), mem_req_tag[i], mem_req_byteen[i], mem_req_data[i], i));
                 else
-                    `TRACE(1, ("%d: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%0h\n", $time, `TO_FULL_ADDR(mem_req_addr[i]), mem_req_tag[i], mem_req_byteen[i]));
+                    `TRACE(1, ("%d: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%0h, bank=%d\n", $time, `TO_FULL_ADDR(mem_req_addr[i]), mem_req_tag[i], mem_req_byteen[i], i));
             end
             if (mem_rsp_fire[i]) begin
-                `TRACE(1, ("%d: MEM Rsp: tag=0x%0h, data=0x%0h\n", $time, mem_rsp_tag[i], mem_rsp_data[i]));
+                `TRACE(1, ("%d: MEM Rd Rsp: tag=0x%0h, data=0x%0h\n", $time, mem_rsp_tag[i], mem_rsp_data[i]));
             end
         end
     end
