@@ -53,6 +53,9 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_PIPELINE
 DBG_TRACE_FLAGS += -DDBG_TRACE_MEM
 DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE
 DBG_TRACE_FLAGS += -DDBG_TRACE_AFU
+DBG_TRACE_FLAGS += -DDBG_TRACE_TEX
+DBG_TRACE_FLAGS += -DDBG_TRACE_RASTER
+DBG_TRACE_FLAGS += -DDBG_TRACE_OM
 DBG_TRACE_FLAGS += -DDBG_TRACE_GBAR
 
 # Control logic analyzer monitors
@@ -60,6 +63,9 @@ DBG_SCOPE_FLAGS += -DDBG_SCOPE_AFU
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_ISSUE
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_FETCH
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
+DBG_SCOPE_FLAGS += -DDBG_SCOPE_TEX
+DBG_SCOPE_FLAGS += -DDBG_SCOPE_OM
+DBG_SCOPE_FLAGS += -DDBG_SCOPE_RASTER
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_MSCHED
 
 # cluster configuration
@@ -77,8 +83,11 @@ FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
 	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
+TEX_INCLUDE = -I$(RTL_DIR)/tex
+RASTER_INCLUDE = -I$(RTL_DIR)/raster
+OM_INCLUDE = -I$(RTL_DIR)/om
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR)
-RTL_INCLUDE += $(FPU_INCLUDE)
+RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(OM_INCLUDE)
 
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
@@ -179,17 +188,18 @@ $(BIN_DIR)/emconfig.json:
 	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); emconfigutil --platform $(PLATFORM) --od ../$(BIN_DIR)
 
 report: $(XCLBIN_CONTAINER)
-ifeq ($(TARGET),$(findstring $(TARGET), hw))
-	cp $(BUILD_DIR)/_x/logs/link/syn/ulp_vortex_afu_1_0_synth_1_runme.log $(BUILD_DIR)/bin/runme.log
+ifeq ($(TARGET), hw)
+	cp $(BUILD_DIR)/_x/logs/link/vivado.log $(BUILD_DIR)/bin/vivado.log
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_full_util_routed.rpt $(BUILD_DIR)/bin/synthesis.log
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt $(BUILD_DIR)/bin/timing.log
+	[ -f "$(BUILD_DIR)/_x/link/vivado/vpl/prj/prj.runs/impl_1/debug_nets.ltx" ] && cp $(BUILD_DIR)/_x/link/vivado/vpl/prj/prj.runs/impl_1/debug_nets.ltx $(BUILD_DIR)/bin/debug_nets.ltx
 endif
 
 hwserver:
 	debug_hw --xvc_pcie /dev/xfpga/xvc_pub.u2305.0 --hw_server &
 
 chipscope:
-	debug_hw --vivado --host localhost --ltx_file $(BUILD_DIR)/_x/link/vivado/vpl/prj/prj.runs/impl_1/debug_nets.ltx &
+	debug_hw --vivado --host localhost --ltx_file $(BUILD_DIR)/bin/debug_nets.ltx &
 
 clean:
 	$(RMDIR) $(BUILD_DIR)

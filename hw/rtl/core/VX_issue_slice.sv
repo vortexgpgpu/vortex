@@ -89,6 +89,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
 `ifdef DBG_SCOPE_ISSUE
+`ifdef SCOPE
     wire operands_if_fire = operands_if.valid && operands_if.ready;
     wire operands_if_not_ready = ~operands_if.ready;
     wire writeback_if_valid = writeback_if.valid;
@@ -130,6 +131,16 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 `else
     `SCOPE_IO_UNUSED()
+`endif
+`ifdef CHIPSCOPE
+    ila_issue ila_issue_inst (
+        .clk    (clk),
+        .probe0 ({decode_if.valid, decode_if.data, decode_if.ready}),
+        .probe1 ({scoreboard_if.valid, scoreboard_if.data, scoreboard_if.ready}),
+        .probe2 ({operands_if.valid, operands_if.data, operands_if.ready}),
+        .probe3 ({writeback_if.valid, writeback_if.data})
+    );
+`endif
 `endif
 
 `ifdef DBG_TRACE_PIPELINE

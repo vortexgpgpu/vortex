@@ -132,6 +132,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     assign icache_bus_if.rsp_ready = fetch_if.ready;
 
 `ifdef DBG_SCOPE_FETCH
+`ifdef SCOPE
     wire schedule_fire = schedule_if.valid && schedule_if.ready;
     wire icache_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
     VX_scope_tap #(
@@ -161,6 +162,15 @@ module VX_fetch import VX_gpu_pkg::*; #(
     );
 `else
     `SCOPE_IO_UNUSED()
+`endif
+`ifdef CHIPSCOPE
+    ila_fetch ila_fetch_inst (
+        .clk    (clk),
+        .probe0 ({schedule_if.valid, schedule_if.data, schedule_if.ready}),
+        .probe1 ({icache_bus_if.req_valid, icache_bus_if.req_data, icache_bus_if.req_ready}),
+        .probe2 ({icache_bus_if.rsp_valid, icache_bus_if.rsp_data, icache_bus_if.rsp_ready})
+    );
+`endif
 `endif
 
 `ifdef DBG_TRACE_MEM

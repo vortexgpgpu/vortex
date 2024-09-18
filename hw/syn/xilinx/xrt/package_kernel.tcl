@@ -89,9 +89,9 @@ if { $chipscope == 1 } {
                              CONFIG.C_EN_STRG_QUAL {1} \
                              CONFIG.C_DATA_DEPTH {8192} \
                              CONFIG.C_NUM_OF_PROBES {3} \
-                             CONFIG.C_PROBE0_WIDTH {128} \
-                             CONFIG.C_PROBE1_WIDTH {128} \
-                             CONFIG.C_PROBE2_WIDTH {128} \
+                             CONFIG.C_PROBE0_WIDTH {40} \
+                             CONFIG.C_PROBE1_WIDTH {80} \
+                             CONFIG.C_PROBE2_WIDTH {40} \
                              CONFIG.ALL_PROBE_SAME_MU {false} \
                              CONFIG.ALL_PROBE_SAME_MU_CNT {2} \
                         ] [get_ips ila_fetch]
@@ -102,9 +102,11 @@ if { $chipscope == 1 } {
     set_property -dict [list CONFIG.C_ADV_TRIGGER {true} \
                              CONFIG.C_EN_STRG_QUAL {1} \
                              CONFIG.C_DATA_DEPTH {8192} \
-                             CONFIG.C_NUM_OF_PROBES {2} \
-                             CONFIG.C_PROBE0_WIDTH {256} \
-                             CONFIG.C_PROBE1_WIDTH {128} \
+                             CONFIG.C_NUM_OF_PROBES {4} \
+                             CONFIG.C_PROBE0_WIDTH {112} \
+                             CONFIG.C_PROBE1_WIDTH {112} \
+                             CONFIG.C_PROBE2_WIDTH {280} \
+                             CONFIG.C_PROBE3_WIDTH {112} \
                              CONFIG.ALL_PROBE_SAME_MU {false} \
                              CONFIG.ALL_PROBE_SAME_MU_CNT {2} \
                         ] [get_ips ila_issue]
@@ -115,11 +117,10 @@ if { $chipscope == 1 } {
     set_property -dict [list CONFIG.C_ADV_TRIGGER {true} \
                              CONFIG.C_EN_STRG_QUAL {1} \
                              CONFIG.C_DATA_DEPTH {8192} \
-                             CONFIG.C_NUM_OF_PROBES {4} \
-                             CONFIG.C_PROBE0_WIDTH {256} \
-                             CONFIG.C_PROBE1_WIDTH {128} \
-                             CONFIG.C_PROBE2_WIDTH {288} \
-                             CONFIG.C_PROBE3_WIDTH {256} \
+                             CONFIG.C_NUM_OF_PROBES {3} \
+                             CONFIG.C_PROBE0_WIDTH {288} \
+                             CONFIG.C_PROBE1_WIDTH {152} \
+                             CONFIG.C_PROBE2_WIDTH {72} \
                              CONFIG.ALL_PROBE_SAME_MU {false} \
                              CONFIG.ALL_PROBE_SAME_MU_CNT {2} \
                         ] [get_ips ila_lsu]
