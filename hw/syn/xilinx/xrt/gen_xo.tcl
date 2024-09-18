@@ -31,7 +31,7 @@ if {[file exists "${xoname}"]} {
 
 set argv [list ${build_dir}/ip]
 set argc 1
-source ${script_path}/xilinx_ip_gen.tcl
+source ${tool_dir}/xilinx_ip_gen.tcl
 
 set argv [list ${krnl_name} ${vcs_file} ${tool_dir} ${build_dir}]
 set argc 4
