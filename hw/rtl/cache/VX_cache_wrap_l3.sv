@@ -108,8 +108,9 @@ module VX_cache_wrap_l3 import VX_gpu_pkg::*; #(
     ) mem_bus_cache_if[NUM_MEM_PORTS]();
 
     if (NC_OR_BYPASS) begin
-       
         `RESET_RELAY (nc_bypass_reset, reset);
+
+        // Slicing version
         for (genvar i = 0; i < NUM_MEM_PORTS; ++i) begin
 
             localparam SLICE_BEGIN = i * NUM_REQS_P;
@@ -147,6 +148,43 @@ module VX_cache_wrap_l3 import VX_gpu_pkg::*; #(
                 .mem_bus_out_if (mem_bus_if[i])
             );
         end
+        
+        // Connect everything
+        /*
+        for (genvar i = 0; i < NUM_MEM_PORTS; ++i) begin          
+            VX_cache_bypass #(
+                .NUM_REQS          (NUM_REQS),
+                .TAG_SEL_IDX       (TAG_SEL_IDX),
+
+                .PASSTHRU          (PASSTHRU),
+                .NC_ENABLE         (PASSTHRU ? 0 : NC_ENABLE),
+
+                .WORD_SIZE         (WORD_SIZE), 
+                .LINE_SIZE         (LINE_SIZE),
+
+                .CORE_ADDR_WIDTH   (`CS_WORD_ADDR_WIDTH),            
+                .CORE_TAG_WIDTH    (TAG_WIDTH),
+                    
+                .MEM_ADDR_WIDTH    (`CS_MEM_ADDR_WIDTH),            
+                .MEM_TAG_IN_WIDTH  (CACHE_MEM_TAG_WIDTH),
+                .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH),
+
+                .UUID_WIDTH        (UUID_WIDTH),
+
+                .CORE_OUT_BUF      (CORE_OUT_BUF),
+                .MEM_OUT_BUF       (MEM_OUT_BUF)
+            ) cache_bypass (
+                .clk            (clk),
+                .reset          (nc_bypass_reset),
+
+                .core_bus_in_if (core_bus_if),
+                .core_bus_out_if(core_bus_cache_if),
+
+                .mem_bus_in_if  (mem_bus_cache_if[i]),
+                .mem_bus_out_if (mem_bus_if[i])
+            );
+        end
+        */
         
     end else begin
 
