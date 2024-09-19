@@ -43,6 +43,10 @@ void AluUnit::tick() {
 		case AluType::IDIV:
 			output.push(trace, XLEN+1);
 			break;
+		case AluType::VOTE: 
+		case AluType::SHFL:
+			output.push(trace, 1);
+			break;
 		default:
 			std::abort();
 		}
@@ -279,9 +283,10 @@ void SfuUnit::tick() {
 				release_warp = core_->barrier(trace_data->arg1, trace_data->arg2, trace->wid);
 			}
 		} break;
-		case SfuType::VOTE: 
-		case SfuType::SHFL:
+		case SfuType::TILE:{
 			output.push(trace, 1);
+			release_warp = core_->tile(,trace->wid);
+			}
 			break;
 		default:
 			std::abort();
