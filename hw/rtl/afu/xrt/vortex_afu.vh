@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,7 +15,15 @@
 `define VORTEX_AFU_VH
 
 `ifndef M_AXI_MEM_NUM_BANKS
-`define M_AXI_MEM_NUM_BANKS 1
+`define M_AXI_MEM_NUM_BANKS 4
+`endif
+
+`ifndef M_AXI_MEM_ADDR_WIDTH
+`define M_AXI_MEM_ADDR_WIDTH 30
+`endif
+
+`ifndef M_AXI_MEM_DATA_WIDTH
+`define M_AXI_MEM_DATA_WIDTH 512
 `endif
 
 `ifndef M_AXI_MEM_ID_WIDTH

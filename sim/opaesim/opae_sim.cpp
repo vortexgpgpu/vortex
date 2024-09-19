@@ -110,6 +110,9 @@ public:
     for (auto& buffer : host_buffers_) {
       aligned_free(buffer.second.data);
     }
+    if (ram_) {
+      delete ram_;
+    }
   #ifdef VCD_OUTPUT
     if (tfp_) {
       tfp_->close();
@@ -118,9 +121,6 @@ public:
   #endif
     if (device_) {
       delete device_;
-    }
-    if (ram_) {
-      delete ram_;
     }
   }
 
@@ -142,10 +142,14 @@ public:
     tfp_->open("trace.vcd");
   #endif
 
+    // allocate RAM
     ram_ = new RAM(0, RAM_PAGE_SIZE);
-    
+
     // reset the device
     this->reset();
+
+    // Turn on assertion after reset
+    Verilated::assertOn(true);
 
     // launch execution thread
     future_ = std::async(std::launch::async, [&]{
@@ -156,6 +160,13 @@ public:
     });
 
     return 0;
+  }
+
+  void shutdown() {
+    stop_ = true;
+    if (future_.valid()) {
+      future_.wait();
+    }
   }
 
   int prepare_buffer(uint64_t len, void **buf_addr, uint64_t *wsid, int flags) {
@@ -256,9 +267,6 @@ private:
       device_->clk = 1;
       this->eval();
     }
-
-    // Turn on assertion after reset
-    Verilated::assertOn(true);
   }
 
   void tick() {
@@ -279,12 +287,12 @@ private:
       }
     }
 
+    dram_sim_.tick();
+
     device_->clk = 0;
     this->eval();
     device_->clk = 1;
     this->eval();
-
-    dram_sim_.tick();
 
   #ifndef NDEBUG
     fflush(stdout);
@@ -399,7 +407,6 @@ private:
 
   void avs_bus_reset() {
     for (int b = 0; b < PLATFORM_PARAM_LOCAL_MEMORY_BANKS; ++b) {
-      pending_mem_reqs_[b].clear();
       device_->avs_readdatavalid[b] = 0;
       device_->avs_waitrequest[b] = 0;
     }
@@ -422,7 +429,7 @@ private:
 
       // process memory requests
       assert(!device_->avs_read[b] || !device_->avs_write[b]);
-      unsigned byte_addr = (device_->avs_address[b] * PLATFORM_PARAM_LOCAL_MEMORY_BANKS + b) * PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE;
+      uint64_t byte_addr = (uint64_t(device_->avs_address[b]) * PLATFORM_PARAM_LOCAL_MEMORY_BANKS + b) * PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE;
       if (device_->avs_write[b]) {
         uint64_t byteen = device_->avs_byteenable[b];
         uint8_t* data = (uint8_t*)(device_->avs_writedata[b].data());
@@ -432,7 +439,7 @@ private:
           }
         }
 
-        /*printf("%0ld: [sim] MEM Wr Req: bank=%d, 0x%x, data=0x", timestamp, b, byte_addr);
+        /*printf("%0ld: [sim] MEM Wr Req: bank=%d, addr=0x%lx, data=0x", timestamp, b, byte_addr);
         for (int i = 0; i < PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE; i++) {
           printf("%02x", data[(PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE-1)-i]);
         }
@@ -456,7 +463,7 @@ private:
         mem_req->ready = false;
         pending_mem_reqs_[b].emplace_back(mem_req);
 
-        /*printf("%0ld: [sim] MEM Rd Req: bank=%d, addr=%x, pending={", timestamp, b, mem_req.addr * PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE);
+        /*printf("%0ld: [sim] MEM Rd Req: bank=%d, addr=0x%lx, pending={", timestamp, b, mem_req.addr * PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE);
         for (auto& req : pending_mem_reqs_[b]) {
           if (req.cycles_left != 0)
             printf(" !%0x", req.addr * PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE);
@@ -535,6 +542,10 @@ opae_sim::~opae_sim() {
 
 int opae_sim::init() {
   return impl_->init();
+}
+
+void opae_sim::shutdown() {
+  impl_->shutdown();
 }
 
 int opae_sim::prepare_buffer(uint64_t len, void **buf_addr, uint64_t *wsid, int flags) {

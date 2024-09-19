@@ -19,7 +19,7 @@
 #include <cstring>
 #include <unistd.h>
 #include <assert.h>
-#include "fpga.h"
+#include "xrt.h"
 #include "xrt_sim.h"
 #include <VX_config.h>
 #include <util.h>
@@ -29,6 +29,13 @@ using namespace vortex;
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef struct {
+  size_t   size;
+  xrt_sim* sim;
+  uint32_t bank;
+  uint64_t addr;
+} buffer_t;
 
 extern xrtDeviceHandle xrtDeviceOpen(unsigned int index) {
   if (index != 0)
@@ -45,6 +52,8 @@ extern xrtDeviceHandle xrtDeviceOpen(unsigned int index) {
 extern int xrtXclbinGetXSAName(xrtDeviceHandle /*dhdl*/, char* name, int size, int* ret_size) {
   static const char* deviceName = "vortex_xrtsim";
   if (name) {
+    if (size < strlen(deviceName) + 1)
+      return -1;
     memcpy(name, deviceName, size);
   }
   if (ret_size) {
@@ -54,7 +63,10 @@ extern int xrtXclbinGetXSAName(xrtDeviceHandle /*dhdl*/, char* name, int size, i
 }
 
 extern int xrtDeviceClose(xrtDeviceHandle dhdl) {
+  if (dhdl == nullptr)
+    return -1;
   auto sim = reinterpret_cast<xrt_sim*>(dhdl);
+  sim->shutdown();
   delete sim;
   return 0;
 }
@@ -64,19 +76,38 @@ extern int xrtKernelClose(xrtKernelHandle /*kernelHandle*/) {
 }
 
 extern xrtBufferHandle xrtBOAlloc(xrtDeviceHandle dhdl, size_t size, xrtBufferFlags flags, xrtMemoryGroup grp) {
-  return 0;
+  auto sim = reinterpret_cast<xrt_sim*>(dhdl);
+  uint64_t addr;
+  int err = sim->mem_alloc(size, grp, &addr);
+  if (err != 0)
+    return nullptr;
+  auto buffer   = new buffer_t();
+  buffer->size  = size;
+  buffer->bank  = grp;
+  buffer->sim   = sim;
+  buffer->addr  = addr;
+  return buffer;
 }
 
 extern int xrtBOFree(xrtBufferHandle bhdl) {
-  return 0;
+  if (bhdl == nullptr)
+    return -1;
+  auto buffer = reinterpret_cast<buffer_t*>(bhdl);
+  return buffer->sim->mem_free(buffer->bank, buffer->addr);
 }
 
-extern int xrtBOWrite(xrtBufferHandle bhdl, const void* src, size_t size, size_t seek) {
-  return 0;
+extern int xrtBOWrite(xrtBufferHandle bhdl, const void* src, size_t size, size_t offset) {
+  if (bhdl == nullptr)
+    return -1;
+  auto buffer = reinterpret_cast<buffer_t*>(bhdl);
+  return buffer->sim->mem_write(buffer->bank, buffer->addr + offset, size, src);
 }
 
-extern int xrtBORead(xrtBufferHandle bhdl, void* dst, size_t size, size_t skip) {
-  return 0;
+extern int xrtBORead(xrtBufferHandle bhdl, void* dst, size_t size, size_t offset) {
+  if (bhdl == nullptr)
+    return -1;
+  auto buffer = reinterpret_cast<buffer_t*>(bhdl);
+  return buffer->sim->mem_read(buffer->bank, buffer->addr + offset, size, dst);
 }
 
 extern int xrtBOSync(xrtBufferHandle bhdl, enum xclBOSyncDirection dir, size_t size, size_t offset) {
@@ -84,11 +115,17 @@ extern int xrtBOSync(xrtBufferHandle bhdl, enum xclBOSyncDirection dir, size_t s
 }
 
 extern int xrtKernelWriteRegister(xrtKernelHandle kernelHandle, uint32_t offset, uint32_t data) {
-  return 0;
+  if (kernelHandle == nullptr)
+    return -1;
+  auto sim = reinterpret_cast<xrt_sim*>(kernelHandle);
+  return sim->register_write(offset, data);
 }
 
-extern int xrtKernelReadRegister(xrtKernelHandle kernelHandle, uint32_t offset, uint32_t* datap) {
-  return 0;
+extern int xrtKernelReadRegister(xrtKernelHandle kernelHandle, uint32_t offset, uint32_t* data) {
+  if (kernelHandle == nullptr)
+    return -1;
+  auto sim = reinterpret_cast<xrt_sim*>(kernelHandle);
+  return sim->register_read(offset, data);
 }
 
 extern int xrtErrorGetString(xrtDeviceHandle, xrtErrorCode error, char* out, size_t len, size_t* out_len) {

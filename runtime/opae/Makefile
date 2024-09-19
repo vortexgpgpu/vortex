@@ -10,7 +10,7 @@ SYN_DIR := $(HW_DIR)/syn/altera/opae
 SRC_DIR := $(VORTEX_HOME)/runtime/opae
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -I$(INC_DIR) -I$(COMMON_DIR) -I$(ROOT_DIR)/hw -I$(DESTDIR)
+CXXFLAGS += -I$(INC_DIR) -I$(COMMON_DIR) -I$(ROOT_DIR)/hw -I$(DESTDIR) -I$(SIM_DIR)/common
 CXXFLAGS += -DXLEN_$(XLEN)
 
 # Position independent code

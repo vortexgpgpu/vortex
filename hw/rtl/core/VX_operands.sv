@@ -69,11 +69,9 @@ module VX_operands import VX_gpu_pkg::*; #(
     wire pipe_valid_st2, pipe_ready_st2;
     wire [META_DATAW-1:0] pipe_data, pipe_data_st1, pipe_data_st2;
 
-    reg [NUM_SRC_OPDS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data_m_st2;
-    wire [NUM_SRC_OPDS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data_st1, src_data_st2;
+    reg [NUM_SRC_OPDS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data_st2, src_data_m_st2;
 
-    reg [NUM_SRC_OPDS-1:0] data_fetched_n;
-    wire [NUM_SRC_OPDS-1:0] data_fetched_st1;
+    reg [NUM_SRC_OPDS-1:0] data_fetched_st1;
 
     reg has_collision_n;
     wire has_collision_st1;
@@ -139,15 +137,6 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     wire [NUM_SRC_OPDS-1:0] req_fire_in = req_valid_in & req_ready_in;
 
-    always @(*) begin
-        data_fetched_n = data_fetched_st1;
-         if (scoreboard_if.ready) begin
-            data_fetched_n = '0;
-        end else begin
-            data_fetched_n = data_fetched_st1 | req_fire_in;
-        end
-    end
-
     assign pipe_data = {
         scoreboard_if.data.wis,
         scoreboard_if.data.tmask,
@@ -166,33 +155,37 @@ module VX_operands import VX_gpu_pkg::*; #(
     wire pipe_fire_st2 = pipe_valid_st2 && pipe_ready_st2;
 
     VX_pipe_buffer #(
-        .DATAW  (NUM_SRC_OPDS + NUM_BANKS + META_DATAW + 1 + NUM_BANKS * (PER_BANK_ADDRW + REQ_SEL_WIDTH)),
-        .RESETW (NUM_SRC_OPDS)
+        .DATAW (NUM_BANKS + META_DATAW + 1 + NUM_BANKS * (PER_BANK_ADDRW + REQ_SEL_WIDTH))
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .valid_in (scoreboard_if.valid),
         .ready_in (pipe_ready_in),
-        .data_in  ({data_fetched_n,   gpr_rd_valid,     pipe_data,     has_collision_n,   gpr_rd_addr,     gpr_rd_req_idx}),
-        .data_out ({data_fetched_st1, gpr_rd_valid_st1, pipe_data_st1, has_collision_st1, gpr_rd_addr_st1, gpr_rd_req_idx_st1}),
+        .data_in  ({gpr_rd_valid,     pipe_data,     has_collision_n,   gpr_rd_addr,     gpr_rd_req_idx}),
+        .data_out ({gpr_rd_valid_st1, pipe_data_st1, has_collision_st1, gpr_rd_addr_st1, gpr_rd_req_idx_st1}),
         .valid_out(pipe_valid_st1),
         .ready_out(pipe_ready_st1)
     );
 
-    assign src_data_st1 = pipe_fire_st2 ? '0 : src_data_m_st2;
+    always @(posedge clk) begin
+        if (reset || scoreboard_if.ready) begin
+            data_fetched_st1 <= 0;
+        end else begin
+            data_fetched_st1 <= data_fetched_st1 | req_fire_in;
+        end
+    end
 
     wire pipe_valid2_st1 = pipe_valid_st1 && ~has_collision_st1;
 
     VX_pipe_buffer #(
-        .DATAW  (NUM_SRC_OPDS * REGS_DATAW + NUM_BANKS + META_DATAW + NUM_BANKS * REQ_SEL_WIDTH),
-        .RESETW (NUM_SRC_OPDS * REGS_DATAW)
+        .DATAW (NUM_BANKS + META_DATAW + NUM_BANKS * REQ_SEL_WIDTH)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),
         .valid_in (pipe_valid2_st1),
         .ready_in (pipe_ready_st1),
-        .data_in  ({src_data_st1, gpr_rd_valid_st1, pipe_data_st1, gpr_rd_req_idx_st1}),
-        .data_out ({src_data_st2, gpr_rd_valid_st2, pipe_data_st2, gpr_rd_req_idx_st2}),
+        .data_in  ({gpr_rd_valid_st1, pipe_data_st1, gpr_rd_req_idx_st1}),
+        .data_out ({gpr_rd_valid_st2, pipe_data_st2, gpr_rd_req_idx_st2}),
         .valid_out(pipe_valid_st2),
         .ready_out(pipe_ready_st2)
     );
@@ -203,6 +196,14 @@ module VX_operands import VX_gpu_pkg::*; #(
             if (gpr_rd_valid_st2[b]) begin
                 src_data_m_st2[gpr_rd_req_idx_st2[b]] = gpr_rd_data_st2[b];
             end
+        end
+    end
+
+    always @(posedge clk) begin
+        if (reset || pipe_fire_st2) begin
+            src_data_st2 <= 0;
+        end else begin
+            src_data_st2 <= src_data_m_st2;
         end
     end
 

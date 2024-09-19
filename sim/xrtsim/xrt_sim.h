@@ -25,6 +25,20 @@ public:
 
   int init();
 
+  void shutdown();
+
+  int mem_alloc(uint64_t size, uint32_t bank_id, uint64_t* addr);
+
+  int mem_free(uint32_t bank_id, uint64_t addr);
+
+  int mem_write(uint32_t bank_id, uint64_t addr, uint64_t size, const void* value);
+
+  int mem_read(uint32_t bank_id, uint64_t addr, uint64_t size, void* value);
+
+  int register_write(uint32_t offset, uint32_t value);
+
+  int register_read(uint32_t offset, uint32_t* value);
+
 private:
 
   class Impl;
