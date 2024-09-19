@@ -100,25 +100,32 @@ module VX_axi_adapter #(
         assign req_bank_sel = '0;
     end
 
-    wire [NUM_BANKS-1:0] axi_aw_ready, axi_write_ready;
+    wire [NUM_BANKS-1:0] axi_write_ready;
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_write_ready
-        assign axi_aw_ready[i] = m_axi_awready[i] || m_axi_aw_ack[i];
-        assign axi_write_ready[i] = m_axi_wready[i] && axi_aw_ready[i];
+        assign axi_write_ready[i] = (m_axi_awready[i] || m_axi_aw_ack[i])
+                                 && (m_axi_wready[i] || m_axi_w_ack[i]);
     end
 
     // request ack
     assign mem_req_ready = mem_req_rw ? axi_write_ready[req_bank_sel] : m_axi_arready[req_bank_sel];
 
-    reg [NUM_BANKS-1:0] m_axi_aw_ack;
+    wire mem_req_fire = mem_req_valid && mem_req_ready;
+
+    // AXi write request synchronization
+    reg [NUM_BANKS-1:0] m_axi_aw_ack, m_axi_w_ack;
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_m_axi_w
+        wire m_axi_aw_fire = m_axi_awvalid[i] && m_axi_awready[i];
+        wire m_axi_w_fire = m_axi_wvalid[i] && m_axi_wready[i];
         always @(posedge clk) begin
-            if (reset) begin
+            if (reset || (mem_req_fire && (req_bank_sel == i))) begin
                 m_axi_aw_ack[i] <= 0;
+                m_axi_w_ack[i]  <= 0;
             end else begin
-                if (m_axi_wvalid[i] && m_axi_wready[i]) begin
-                    m_axi_aw_ack[i] <= 0;
-                end else if (m_axi_awvalid[i] && m_axi_awready[i]) begin
+                if (m_axi_aw_fire) begin
                     m_axi_aw_ack[i] <= 1;
+                end
+                if (m_axi_w_fire) begin
+                    m_axi_w_ack[i] <= 1;
                 end
             end
         end
@@ -141,7 +148,7 @@ module VX_axi_adapter #(
 
     // AXI write request data channel
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_write_data
-        assign m_axi_wvalid[i] = mem_req_valid && mem_req_rw && (req_bank_sel == i) && axi_aw_ready[i];
+        assign m_axi_wvalid[i] = mem_req_valid && mem_req_rw && (req_bank_sel == i) && ~m_axi_w_ack[i];
         assign m_axi_wdata[i]  = mem_req_data;
         assign m_axi_wstrb[i]  = mem_req_byteen;
         assign m_axi_wlast[i]  = 1'b1;
