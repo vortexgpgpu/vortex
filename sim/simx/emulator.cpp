@@ -30,6 +30,9 @@
 
 using namespace vortex;
 
+// #define og
+#define coop
+
 Emulator::ipdom_entry_t::ipdom_entry_t(const ThreadMask &tmask, Word PC)
   : tmask(tmask)
   , PC(PC)
@@ -72,7 +75,12 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     : arch_(arch)
     , dcrs_(dcrs)
     , core_(core)
+#ifdef og
     , warps_(arch.num_warps(), arch)
+#endif
+#ifdef coop
+    , warps_(8, arch)
+#endif
     , barriers_(arch.num_barriers(), 0)
 {
   this->clear();
@@ -106,7 +114,7 @@ void Emulator::clear() {
   stalled_warps_.reset();
   active_warps_.reset();
 
-  // activate first warp and thread
+  //activate first warp and thread
   active_warps_.set(0);
   warps_[0].tmask.set(0);
   wspawn_.valid = false;
@@ -123,7 +131,8 @@ void Emulator::attach_ram(RAM* ram) {
 
 instr_trace_t* Emulator::step() {
   int scheduled_warp = -1;
-  // process pending wspawn
+#ifdef og
+  // ----- process pending wspawn
   if (wspawn_.valid && active_warps_.count() == 1) {
     DP(3, "*** Activate " << (wspawn_.num_warps-1) << " warps at PC: " << std::hex << wspawn_.nextPC);
     for (uint32_t i = 1; i < wspawn_.num_warps; ++i) {
@@ -135,69 +144,134 @@ instr_trace_t* Emulator::step() {
     wspawn_.valid = false;
     stalled_warps_.reset(0);
   }
+#endif
+#ifdef coop
+  auto& warp = warps_;
+  if (wspawn_.valid && active_warps_.count() == 1) {
+    DP(3, " warps at PC: " << std::hex << wspawn_.nextPC);
+    for (uint32_t i = 1; i < wspawn_.num_warps; i++) {
+      warp[i].PC = wspawn_.nextPC;
+      warp[i].tmask.set(0);
+      active_warps_.set(i);
+    }
+    wspawn_.valid = false;
+    stalled_warps_.reset(0);
+  }
+#endif
 
-  // find next ready warp
+  //----- find next ready warp
   for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {
     bool warp_active = active_warps_.test(wid);
     bool warp_stalled = stalled_warps_.test(wid);
     if (warp_active && !warp_stalled) {
-      scheduled_warp = wid;
+      scheduled_warp = wid;    
       break;
     }
   }
   if (scheduled_warp == -1)
     return nullptr;
 
-  // suspend warp until decode
+#ifdef og
+  //----- suspend warp until decode
   auto& warp = warps_.at(scheduled_warp);
   assert(warp.tmask.any());
+#endif
+
+#ifdef coop
+  //----- suspend warp until decode
+  assert(warp[scheduled_warp].tmask.any());
+#endif
 
 #ifndef NDEBUG
+#ifdef og
   uint32_t instr_uuid = warp.uuid++;
   uint32_t g_wid = core_->id() * arch_.num_warps() + scheduled_warp;
   uint64_t uuid = (uint64_t(g_wid) << 32) | instr_uuid;
+#endif
+#ifdef coop
+  uint32_t instr_uuid = warp[scheduled_warp].uuid++;
+  uint32_t g_wid = core_->id() * arch_.num_warps() + scheduled_warp;
+  uint64_t uuid = (uint64_t(g_wid) << 32) | instr_uuid;
+#endif
 #else
   uint64_t uuid = 0;
 #endif
 
+#ifdef og
   DPH(1, "Fetch: cid=" << core_->id() << ", wid=" << scheduled_warp << ", tmask=");
   for (uint32_t i = 0, n = arch_.num_threads(); i < n; ++i)
     DPN(1, warp.tmask.test(i));
   DPN(1, ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")" << std::endl);
-
-  // Fetch
+#endif
+#ifdef coop
+  DPH(1, "Fetch: cid=" << core_->id() << ", wid=" << scheduled_warp << ", tmask=");
+  for (uint32_t i = 0, n = arch_.num_threads(); i < n; ++i)
+    DPN(1, warp[scheduled_warp].tmask.test(i));
+  DPN(1, ", PC=0x" << std::hex << warp[scheduled_warp].PC << " (#" << std::dec << uuid << ")" << std::endl);
+#endif
+  //-----  Fetch
+#ifdef og
   uint32_t instr_code = 0;
   this->icache_read(&instr_code, warp.PC, sizeof(uint32_t));
-
-  // Decode
+#endif
+#ifdef coop
+  uint32_t instr_code = 0;
+  this->icache_read(&instr_code, warp[scheduled_warp].PC, sizeof(uint32_t));
+#endif
+  //-----  Decode
   auto instr = this->decode(instr_code);
   if (!instr) {
+#ifdef og
     std::cout << std::hex << "Error: invalid instruction 0x" << instr_code << ", at PC=0x" << warp.PC << " (#" << std::dec << uuid << ")" << std::endl;
     std::abort();
+#endif
+#ifdef coop
+    std::cout << std::hex << "Error: invalid instruction 0x" << instr_code << ", at PC=0x" << warp[scheduled_warp].PC << " (#" << std::dec << uuid << ")" << std::endl;
+    std::abort();
+#endif
   }
   DP(1, "Instr 0x" << std::hex << instr_code << ": " << *instr);
 
-  // Create trace
+  //-----  Create trace
   auto trace = new instr_trace_t(uuid, arch_);
-
-  // Execute
+  //-----  Execute
   this->execute(*instr, scheduled_warp, trace);
 
+#ifdef og
   DP(5, "Register state:");
   for (uint32_t i = 0; i < arch_.num_regs(); ++i) {
     DPN(5, "  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
-    // Integer register file
+    //-----  Integer register file
     for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
       DPN(5, ' ' << std::setfill('0') << std::setw(XLEN/4) << std::hex << warp.ireg_file.at(j).at(i) << std::setfill(' ') << ' ');
     }
     DPN(5, '|');
-    // Floating point register file
+    //-----  Floating point register file
     for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
       DPN(5, ' ' << std::setfill('0') << std::setw(16) << std::hex << warp.freg_file.at(j).at(i) << std::setfill(' ') << ' ');
     }
     DPN(5, std::endl);
   }
   return trace;
+#endif
+#ifdef coop
+  DP(5, "Register state:");
+  for (uint32_t i = 0; i < arch_.num_regs(); ++i) {
+    DPN(5, "  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
+    //-----  Integer register file
+    for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
+      DPN(5, ' ' << std::setfill('0') << std::setw(XLEN/4) << std::hex << warp[(int)(j/4)].ireg_file.at(j%4).at(i) << std::setfill(' ') << ' ');
+    }
+    DPN(5, '|');
+    //-----  Floating point register file
+    for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
+      DPN(5, ' ' << std::setfill('0') << std::setw(16) << std::hex << warp[(int)(j/4)].freg_file.at(j%4).at(i) << std::setfill(' ') << ' ');
+    }
+    DPN(5, std::endl);
+  }
+  return trace;
+#endif
+  
 }
 
 bool Emulator::running() const {
