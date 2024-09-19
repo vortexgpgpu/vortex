@@ -1924,6 +1924,12 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     trace->used_iregs.set(rsrc0);
     
   }break;
+  case Opcode::TILE:{
+    trace->fu_type = FUType::SFU;
+    trace->sfu_type = SfuType::TILE;
+    trace->fetch_stall = true;
+  }
+  break;
   default:
     std::abort();
   }
