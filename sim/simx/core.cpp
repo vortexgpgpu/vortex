@@ -393,6 +393,10 @@ bool Core::wspawn(uint32_t num_warps, Word nextPC) {
   return emulator_.wspawn(num_warps, nextPC);
 }
 
+bool Core::tile(uint32_t num_warps) {
+  return emulator_.tile(num_warps);
+}
+
 void Core::attach_ram(RAM* ram) {
   emulator_.attach_ram(ram);
 }
