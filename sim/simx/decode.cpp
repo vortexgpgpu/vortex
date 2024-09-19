@@ -610,6 +610,10 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
       instr->setDestReg(rd, RegType::Integer);
       instr->addSrcReg(rs1, RegType::Integer);
       auto imm = code >> shift_rs2;
+      uint32_t address = imm & 0x01f;
+      instr->addSrcReg(address, RegType::Integer);
+      uint32_t c_add = ((imm & 0xc00) >> 10) + address;
+      instr->addSrcReg(c_add, RegType::Integer);
       instr->setImm(sext(imm, width_i_imm));
       break;
     }
