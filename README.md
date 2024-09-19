@@ -54,23 +54,26 @@ sudo apt-get install git
 ```
 ### Install Vortex codebase
 ```sh
-git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
-cd vortex
+	git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
+	cd vortex
 ```
 ### Configure your build folder
 ```sh
-mkdir build
-cd build
-../configure --xlen=32 --tooldir=$HOME/tools
+    mkdir build
+    cd build
+    # for 32bit
+    ../configure --xlen=32 --tooldir=$HOME/tools
+    # for 64bit
+    ../configure --xlen=64 --tooldir=$HOME/tools
 ```
 ### Install prebuilt toolchain
 ```sh
-./ci/toolchain_install.sh --all
+   ./ci/toolchain_install.sh --all
 ```
-### Set environment variables
+### set environment variables
 ```sh
-# should always run before using the toolchain!
-source ./ci/toolchain_env.sh
+    # should always run before using the toolchain!
+    source ./ci/toolchain_env.sh
 ```
 ### Building Vortex
 ```sh
