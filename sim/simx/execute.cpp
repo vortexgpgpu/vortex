@@ -1445,10 +1445,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     func3 = func3%4;
     trace->fu_type = FUType::ALU;
     trace->alu_type = AluType::ARITH;
-    trace->used_iregs.set(rsrc0);
-    trace->fetch_stall = true;
     uint32_t address = immsrc & 0xfff;
     auto mask =  warp.ireg_file.at(0)[address];  // Same mask stored in all threads
+    trace->used_iregs.set(rsrc0);
+    trace->used_iregs.set(address);
     switch (func3) {
     case 0:{ //all
       check = true;
@@ -1545,7 +1545,6 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   case Opcode::SHFL:{
     trace->fu_type = FUType::ALU;
     trace->alu_type = AluType::ARITH;
-    trace->fetch_stall = true;
     uint32_t address = immsrc & 0x01f;
     auto mask =  warp.ireg_file.at(0)[address];  // Same mask stored in all threads
     uint32_t b = (immsrc & 0x3e0) >> 5;
@@ -1595,6 +1594,8 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       }
     }
     trace->used_iregs.set(rsrc0);
+    trace->used_iregs.set(address);
+    trace->used_iregs.set(c_add);
     
   }break;
   default:

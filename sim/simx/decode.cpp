@@ -53,6 +53,7 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   {Opcode::I_W,     InstType::I},
   {Opcode::VOTE,     InstType::I},
   {Opcode::SHFL,     InstType::I},
+  {Opcode::TILE,     InstType::I},
 };
 
 enum Constants {
@@ -408,6 +409,7 @@ static const char* op_string(const Instr &instr) {
     }
   case Opcode::VOTE:   return "VOTE";
   case Opcode::SHFL:   return "SHFL";
+  case Opcode::TILE:   return "TILE";
   default:
     std::abort();
   }
@@ -602,6 +604,8 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
       instr->setDestReg(rd, RegType::Integer);
       instr->addSrcReg(rs1, RegType::Integer);
       auto imm = code >> shift_rs2;
+      uint32_t address = imm & 0xfff;
+      instr->addSrcReg(address, RegType::Integer);
       instr->setImm(sext(imm, width_i_imm));
       break;
     }
@@ -609,6 +613,15 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
       instr->setFunc3(func3);
       instr->setDestReg(rd, RegType::Integer);
       instr->addSrcReg(rs1, RegType::Integer);
+      auto imm = code >> shift_rs2;
+      uint32_t address = imm & 0x01f;
+      instr->addSrcReg(address, RegType::Integer);
+      uint32_t c_add = ((imm & 0xc00) >> 10) + address;
+      instr->addSrcReg(c_add, RegType::Integer);
+      instr->setImm(sext(imm, width_i_imm));
+      break;
+    }
+    case Opcode::TILE:{
       auto imm = code >> shift_rs2;
       instr->setImm(sext(imm, width_i_imm));
       break;
