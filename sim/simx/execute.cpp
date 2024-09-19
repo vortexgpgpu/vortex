@@ -1697,7 +1697,6 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     func3 = func3%4;
     trace->fu_type = FUType::ALU;
     trace->alu_type = AluType::ARITH;
-    trace->used_iregs.set(rsrc0);
     uint32_t address = immsrc & 0xfff;
 #ifdef og
     auto mask =  warp.ireg_file.at(0)[address];  // Same mask stored in all threads
@@ -1705,6 +1704,8 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
 #ifdef coop
     auto mask =  warp[wid].ireg_file.at(0)[address];
 #endif
+    trace->used_iregs.set(rsrc0);
+    trace->used_iregs.set(address);
     switch (func3) {
     case 0:{ //all
       check = true;
@@ -1922,6 +1923,8 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       }
     }
     trace->used_iregs.set(rsrc0);
+    trace->used_iregs.set(address);
+    trace->used_iregs.set(c_add);
     
   }break;
   case Opcode::TILE:{
