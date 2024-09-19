@@ -25,7 +25,7 @@
 
 #define CACHE_BLOCK_SIZE  64
 
-#define RAM_PAGE_SIZE     4096
+#define RAM_PAGE_SIZE     4096 // Please use MEM_PAGE_SIZE in VX_config.h
 
 #define ALLOC_BASE_ADDR   USER_BASE_ADDR
 
