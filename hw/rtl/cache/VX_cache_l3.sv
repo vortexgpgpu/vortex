@@ -495,6 +495,7 @@ module VX_cache_l3 import VX_gpu_pkg::*; #(
     // Memory request arbitration
 
     wire [NUM_BANKS-1:0][(`CS_MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + LINE_SIZE + `CS_LINE_WIDTH + 1)-1:0] data_in;
+    wire [NUM_MEM_PORTS-1:0][(`CS_MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + LINE_SIZE + `CS_LINE_WIDTH + 1)-1:0] data_out;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         assign data_in[i] = {
@@ -518,11 +519,22 @@ module VX_cache_l3 import VX_gpu_pkg::*; #(
         .valid_in  (per_bank_mem_req_valid),
         .ready_in  (per_bank_mem_req_ready),
         .data_in   (data_in),
-        .data_out  ({mem_req_addr_p, mem_req_rw_p, mem_req_byteen_p, mem_req_data_p, mem_req_id_p, mem_req_flush_p}),
+        .data_out  (data_out),
         .valid_out (mem_req_valid_p),
         .ready_out (mem_req_ready_p),
         `UNUSED_PIN (sel_out)
     );
+
+    for (genvar i = 0; i < NUM_MEM_PORTS; ++i) begin
+        assign {
+            mem_req_addr_p[i],
+            mem_req_rw_p[i],
+            mem_req_byteen_p[i],
+            mem_req_data_p[i],
+            mem_req_id_p[i],
+            mem_req_flush_p[i]
+        } = data_out[i];
+    end
 
     if (NUM_BANKS > 1) begin
         for (genvar i = 0; i < NUM_MEM_PORTS; ++i) begin
