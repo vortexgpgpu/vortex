@@ -94,15 +94,15 @@ xrtBufferHandle xrtBOAlloc(xrtDeviceHandle dhdl, size_t size, xrtBufferFlags fla
 
 int xrtBOFree(xrtBufferHandle bhdl);
 
-int xrtBOWrite(xrtBufferHandle bhdl, const void* src, size_t size, size_t seek);
+int xrtBOWrite(xrtBufferHandle bhdl, const void* src, size_t size, size_t offset);
 
-int xrtBORead(xrtBufferHandle bhdl, void* dst, size_t size, size_t skip);
+int xrtBORead(xrtBufferHandle bhdl, void* dst, size_t size, size_t offset);
 
 int xrtBOSync(xrtBufferHandle bhdl, enum xclBOSyncDirection dir, size_t size, size_t offset);
 
 int xrtKernelWriteRegister(xrtKernelHandle kernelHandle, uint32_t offset, uint32_t data);
 
-int xrtKernelReadRegister(xrtKernelHandle kernelHandle, uint32_t offset, uint32_t* datap);
+int xrtKernelReadRegister(xrtKernelHandle kernelHandle, uint32_t offset, uint32_t* data);
 
 int xrtErrorGetString(xrtDeviceHandle, xrtErrorCode error, char* out, size_t len, size_t* out_len);
 

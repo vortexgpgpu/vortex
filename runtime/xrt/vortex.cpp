@@ -18,15 +18,15 @@
 #endif
 
 // XRT includes
-#ifndef XRTSIM
+#ifdef XRTSIM
+#include <xrt.h>
+#else
 #include "experimental/xrt_bo.h"
 #include "experimental/xrt_device.h"
 #include "experimental/xrt_error.h"
 #include "experimental/xrt_ip.h"
 #include "experimental/xrt_kernel.h"
 #include "experimental/xrt_xclbin.h"
-#else
-#include <fpga.h>
 #endif
 
 #include <limits>
@@ -66,7 +66,7 @@ struct platform_info_t {
 };
 
 static const platform_info_t g_platforms[] = {
-  {"vortex_xrtsim",  4, 16, 0x0}, // 16 x 64 KB = 1 MB
+  {"vortex_xrtsim",  0, 32, 0x0}, // 16 x 256 MB = 4 GB
   {"xilinx_u200",    2, 34, 0x0}, // 4 x 16 GB = 64 GB DDR4
   {"xilinx_u250",    2, 34, 0x0}, // 4 x 16 GB = 64 GB DDR4
   {"xilinx_u50",     5, 28, 0x0}, // 32 x 256 MB = 8 GB HBM2
@@ -258,7 +258,7 @@ public:
       return -1;
     });
   #else
-    xrtKernelHandle xrtKernel = nullptr;
+    xrtKernelHandle xrtKernel = xrtDevice;
   #endif
 
     // get device name
@@ -538,7 +538,6 @@ public:
       return err;
     });
   #endif
-    DBGPRINT("*** write_register: addr=0x%x, value=0x%x\n", addr, value);
     return 0;
   }
 
@@ -551,7 +550,6 @@ public:
       return err;
     });
   #endif
-    DBGPRINT("*** read_register: addr=0x%x, value=0x%x\n", addr, *value);
     return 0;
   }
 

@@ -25,6 +25,8 @@ public:
 
   int init();
 
+  void shutdown();
+
   int prepare_buffer(uint64_t len, void **buf_addr, uint64_t *wsid, int flags);
 
   void release_buffer(uint64_t wsid);

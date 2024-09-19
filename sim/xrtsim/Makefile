@@ -32,11 +32,22 @@ DBG_SCOPE_FLAGS += -DDBG_SCOPE_FETCH
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_MSCHED
 
+# AFU parameters
+ifeq (,$(findstring M_AXI_MEM_NUM_BANKS,$(CONFIGS)))
+	CONFIGS += -DM_AXI_MEM_NUM_BANKS=1
+endif
+ifeq (,$(findstring M_AXI_MEM_ADDR_WIDTH,$(CONFIGS)))
+	CONFIGS += -DM_AXI_MEM_ADDR_WIDTH=32
+endif
+ifeq (,$(findstring M_AXI_MEM_DATA_WIDTH,$(CONFIGS)))
+	CONFIGS += -DM_AXI_MEM_DATA_WIDTH=512
+endif
+
 DBG_FLAGS += -DDEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 
 SRCS = $(COMMON_DIR)/util.cpp $(COMMON_DIR)/mem.cpp $(COMMON_DIR)/rvfloats.cpp $(COMMON_DIR)/dram_sim.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
-SRCS += $(SRC_DIR)/fpga.cpp $(SRC_DIR)/xrt_sim.cpp
+SRCS += $(SRC_DIR)/xrt.cpp $(SRC_DIR)/xrt_sim.cpp
 
 RTL_PKGS += $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 

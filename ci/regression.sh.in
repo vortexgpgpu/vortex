@@ -92,10 +92,12 @@ regression()
     # test global barrier
     CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
     CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tgbar" --cores=2
+    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-n1 -tgbar" --cores=2
 
     # test local barrier
     ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
     ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tbar"
+    ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-n1 -tbar"
 
     # test temp driver mode for
     ./ci/blackbox.sh --driver=simx --app=vecadd --rebuild=3
@@ -230,15 +232,18 @@ config2()
     # test opaesim
     ./ci/blackbox.sh --driver=opae --app=printf
     ./ci/blackbox.sh --driver=opae --app=diverge
+    ./ci/blackbox.sh --driver=xrt --app=diverge
 
     # disable DPI
     if [ "$XLEN" == "64" ]; then
         # need to disable trig on 64-bit due to a bug inside fpnew's sqrt core.
         CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-xtrig -xbar -xgbar"
         CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-xtrig -xbar -xgbar"
+        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-xtrig -xbar -xgbar"
     else
         CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
         CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood
+        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=xrt --app=dogfood
     fi
 
     # custom program startup address
@@ -255,11 +260,9 @@ config2()
     # disabling ZICOND extension
     CONFIGS="-DEXT_ZICOND_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo
 
-    # test AXI bus
-    AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --app=mstress
-
     # test 128-bit MEM block
     CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=opae --app=mstress
+    CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=xrt --app=mstress
 
     # test XLEN-bit MEM block
     CONFIGS="-DMEM_BLOCK_SIZE=$XSIZE" ./ci/blackbox.sh --driver=opae --app=mstress
@@ -299,10 +302,11 @@ debug()
 
     test_csv_trace
 
-    CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
+    CONFIGS="-O0 -DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
+    CONFIGS="-O0 -DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=xrt --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
     CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
-    ./ci/blackbox.sh --driver=opae --cores=1 --scope --app=demo --args="-n1"
-
+    ./ci/blackbox.sh --driver=opae --scope --app=demo --args="-n1"
+    
     echo "debugging tests done!"
 }
 
@@ -312,7 +316,7 @@ stress()
 
     # test verilator reset values
     CONFIGS="-DVERILATOR_RESET_VALUE=1 -DSOCKET_SIZE=1 -DDCACHE_WRITEBACK=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
-    CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --args="-n128" --l2cache
+    CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=xrt --app=sgemmx --args="-n128" --l2cache
 
     echo "stress tests done!"
 }
