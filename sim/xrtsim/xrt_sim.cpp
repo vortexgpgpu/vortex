@@ -422,11 +422,9 @@ private:
   void axi_mem_bus_eval() {
     for (int i = 0; i < M_AXI_MEM_NUM_BANKS; ++i) {
       // handle read responses
-      if (m_axi_states_[i].read_rsp_pending
-       && (*m_axi_mem_[i].rready)) {
-          *m_axi_mem_[i].rvalid = 0;
-          m_axi_states_[i].read_rsp_pending = false;
-        }
+      if (m_axi_states_[i].read_rsp_pending && (*m_axi_mem_[i].rready)) {
+        *m_axi_mem_[i].rvalid = 0;
+        m_axi_states_[i].read_rsp_pending = false;
       }
       if (!m_axi_states_[i].read_rsp_pending) {
         if (!pending_mem_reqs_[i].empty()
@@ -446,11 +444,9 @@ private:
       }
 
       // handle write responses
-      if (m_axi_states_[i].write_rsp_pending) {
-        if (*m_axi_mem_[i].bready) {
-          *m_axi_mem_[i].bvalid = 0;
-          m_axi_states_[i].write_rsp_pending = false;
-        }
+      if (m_axi_states_[i].write_rsp_pending && *m_axi_mem_[i].bready) {
+        *m_axi_mem_[i].bvalid = 0;
+        m_axi_states_[i].write_rsp_pending = false;
       }
       if (!m_axi_states_[i].write_rsp_pending) {
         if (!pending_mem_reqs_[i].empty()
