@@ -621,11 +621,6 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
       instr->setImm(sext(imm, width_i_imm));
       break;
     }
-    case Opcode::TILE:{
-      auto imm = code >> shift_rs2;
-      instr->setImm(sext(imm, width_i_imm));
-      break;
-    }
     default:
       std::abort();
       break;
