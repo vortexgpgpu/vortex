@@ -602,6 +602,8 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
       instr->setDestReg(rd, RegType::Integer);
       instr->addSrcReg(rs1, RegType::Integer);
       auto imm = code >> shift_rs2;
+      uint32_t address = imm & 0xfff;
+      instr->addSrcReg(address, RegType::Integer);
       instr->setImm(sext(imm, width_i_imm));
       break;
     }
