@@ -16,8 +16,8 @@
 
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
 
-# export VERILATOR_ROOT=$TOOLDIR/verilator
-# export PATH=$VERILATOR_ROOT/bin:$PATH
+export VERILATOR_ROOT=$TOOLDIR/verilator
+export PATH=$VERILATOR_ROOT/bin:$PATH
 
 export SV2V_PATH=$TOOLDIR/sv2v
 export PATH=$SV2V_PATH/bin:$PATH

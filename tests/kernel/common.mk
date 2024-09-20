@@ -2,8 +2,10 @@ ROOT_DIR := $(realpath ../../..)
 
 ifeq ($(XLEN),64)
 CFLAGS += -march=rv64imafd -mabi=lp64d
+STARTUP_ADDR ?= 0x180000000
 else
 CFLAGS += -march=rv32imaf -mabi=ilp32f
+STARTUP_ADDR ?= 0x80000000
 endif
 
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
@@ -29,7 +31,7 @@ CFLAGS += -DXLEN_$(XLEN) -DNDEBUG
 LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc
 LIBC_LIB += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 
-LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000 $(ROOT_DIR)/kernel/libvortex.a $(LIBC_LIB)
+LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortex.a $(LIBC_LIB)
 
 all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
 

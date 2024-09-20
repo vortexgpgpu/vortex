@@ -56,7 +56,8 @@ public:
     {
         // attach memory module
         processor_.attach_ram(&ram_);
-#ifdef VM_ENABLE  
+#ifdef VM_ENABLE
+	//std::cout << "***VM ENABLED!!***"<< std::endl;
         CHECK_ERR(init_VM(), );
 #endif
     }
