@@ -757,7 +757,7 @@ private:
     if (pOff) {
       *pOff = offset;
     }
-    printf("get_bank_info(addr=0x%lx, bank=%d, offset=0x%lx\n", addr, index, offset);
+    //printf("get_bank_info(addr=0x%lx, bank=%d, offset=0x%lx\n", addr, index, offset);
     return 0;
   }
 
@@ -792,8 +792,7 @@ private:
     if (pOff) {
       *pOff = offset;
     }
-    printf("get_bank_info(addr=0x%lx, bank=%d, offset=0x%lx\n", addr, index,
-           offset);
+    //printf("get_bank_info(addr=0x%lx, bank=%d, offset=0x%lx\n", addr, index, offset);
     return 0;
   }
 

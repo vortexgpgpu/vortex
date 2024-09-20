@@ -19,7 +19,7 @@ module VX_scope_tap #(
     parameter SCOPE_IDW = 8,    // scope identifier width
     parameter TRIGGERW  = 0,    // trigger signals width
     parameter PROBEW    = 0,    // probe signal width
-    parameter SIZE      = 256,  // trace buffer size
+    parameter DEPTH     = 256,  // trace buffer depth
     parameter IDLE_CTRW = 16    // idle time between triggers counter width
 ) (
     input wire clk,
@@ -35,7 +35,7 @@ module VX_scope_tap #(
     localparam TX_DATA_BITS = `LOG2UP(TX_DATAW);
     localparam DATAW        = PROBEW + TRIGGERW;
     localparam DATA_BITS    = `LOG2UP(DATAW);
-    localparam ADDRW        = `CLOG2(SIZE);
+    localparam ADDRW        = `CLOG2(DEPTH);
     localparam TRIGGER_ENABLE = (TRIGGERW != 0);
     localparam MAX_IDLE_CTR = (2 ** IDLE_CTRW) - 1;
 
@@ -64,8 +64,8 @@ module VX_scope_tap #(
     localparam GET_TYPE_DATA  = 2'd3;
     localparam GET_TYPE_BITS  = 2;
 
-    `NO_RW_RAM_CHECK reg [DATAW-1:0] data_store [SIZE-1:0];
-    `NO_RW_RAM_CHECK reg [IDLE_CTRW-1:0] delta_store [SIZE-1:0];
+    `NO_RW_RAM_CHECK reg [DATAW-1:0] data_store [DEPTH-1:0];
+    `NO_RW_RAM_CHECK reg [IDLE_CTRW-1:0] delta_store [DEPTH-1:0];
 
     reg [TRIGGERW-1:0] prev_triggers;
     reg [IDLE_CTRW-1:0] delta;
@@ -216,7 +216,7 @@ module VX_scope_tap #(
             ctrl_state  <= CTRL_STATE_IDLE;
             cmd_start   <= 0;
             start_delay <= '0;
-            waddr_end   <= ADDRW'(SIZE-1);
+            waddr_end   <= ADDRW'(DEPTH-1);
             bus_out_r   <= 0;
         end else begin
             bus_out_r   <= 0;

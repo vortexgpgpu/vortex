@@ -1016,7 +1016,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     VX_scope_tap #(
         .SCOPE_ID (0),
         .TRIGGERW (24),
-        .PROBEW   (431)
+        .PROBEW   (431),
+        .DEPTH    (4096)
     ) scope_tap (
         .clk(clk),
         .reset(scope_reset_w[0]),

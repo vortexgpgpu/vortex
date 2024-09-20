@@ -41,7 +41,11 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire [`UUID_WIDTH-1:0] rsp_uuid;
     wire [`NW_WIDTH-1:0] req_tag, rsp_tag;
 
+    wire schedule_fire = schedule_if.valid && schedule_if.ready;
     wire icache_req_fire = icache_req_valid && icache_req_ready;
+    wire icache_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
+    `UNUSED_VAR (schedule_fire)
+    `UNUSED_VAR (icache_rsp_fire)
 
     assign req_tag = schedule_if.data.wid;
 
@@ -133,14 +137,13 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
 `ifdef DBG_SCOPE_FETCH
 `ifdef SCOPE
-    wire schedule_fire = schedule_if.valid && schedule_if.ready;
-    wire icache_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
     VX_scope_tap #(
         .SCOPE_ID (1),
         .TRIGGERW (4),
-        .PROBEW (`UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS +
+        .PROBEW   (`UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS +
             ICACHE_TAG_WIDTH + ICACHE_WORD_SIZE + ICACHE_ADDR_WIDTH +
-            (ICACHE_WORD_SIZE*8) + ICACHE_TAG_WIDTH)
+            (ICACHE_WORD_SIZE * 8) + ICACHE_TAG_WIDTH),
+        .DEPTH    (4096)
     ) scope_tap (
         .clk (clk),
         .reset (scope_reset),
