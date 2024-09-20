@@ -24,7 +24,7 @@ float *OpenClGaussianElimination(
 
 void printUsage();
 int parseCommandline(int argc, char *argv[], char* filename,
-                     int *q, int *t, int *p, int *d);
+                     int *q, int *t, int *p, int *d, int* s);
                      
 void InitPerRun(int size,float *m);
 void ForwardSub(cl_context context, float *a, float *b, float *m, int size,int timing);

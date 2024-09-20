@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -20,9 +20,9 @@ module VX_stream_xbar #(
     parameter DATAW         = 4,
     parameter IN_WIDTH      = `LOG2UP(NUM_INPUTS),
     parameter OUT_WIDTH     = `LOG2UP(NUM_OUTPUTS),
-    parameter ARBITER       = "P",
-    parameter LOCK_ENABLE   = 0,
-    parameter OUT_REG      = 0,
+    parameter ARBITER       = "R",
+    parameter OUT_BUF       = 0,
+    parameter LUTRAM        = 0,
     parameter MAX_FANOUT    = `MAX_FANOUT,
     parameter PERF_CTR_BITS = `CLOG2(NUM_INPUTS+1)
 ) (
@@ -37,7 +37,7 @@ module VX_stream_xbar #(
     output wire [NUM_INPUTS-1:0]            ready_in,
 
     output wire [NUM_OUTPUTS-1:0]           valid_out,
-    output wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out,  
+    output wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out,
     output wire [NUM_OUTPUTS-1:0][IN_WIDTH-1:0] sel_out,
     input  wire [NUM_OUTPUTS-1:0]           ready_out
 );
@@ -66,9 +66,9 @@ module VX_stream_xbar #(
                     .NUM_OUTPUTS (1),
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
-                    .LOCK_ENABLE (LOCK_ENABLE),
                     .MAX_FANOUT  (MAX_FANOUT),
-                    .OUT_REG     (OUT_REG)
+                    .OUT_BUF     (OUT_BUF),
+                    .LUTRAM      (LUTRAM)
                 ) xbar_arb (
                     .clk       (clk),
                     .reset     (slice_reset),
@@ -95,9 +95,9 @@ module VX_stream_xbar #(
                 .NUM_OUTPUTS (1),
                 .DATAW       (DATAW),
                 .ARBITER     (ARBITER),
-                .LOCK_ENABLE (LOCK_ENABLE),
                 .MAX_FANOUT  (MAX_FANOUT),
-                .OUT_REG     (OUT_REG)
+                .OUT_BUF     (OUT_BUF),
+                .LUTRAM      (LUTRAM)
             ) xbar_arb (
                 .clk       (clk),
                 .reset     (reset),
@@ -126,17 +126,17 @@ module VX_stream_xbar #(
         assign data_out_r = {NUM_OUTPUTS{data_in}};
         assign ready_in = ready_out_r[sel_in];
 
-        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-            
-            `RESET_RELAY (out_buf_reset, reset);
+        `RESET_RELAY_EX (out_buf_reset, reset, NUM_OUTPUTS, `MAX_FANOUT);
 
+        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             VX_elastic_buffer #(
                 .DATAW   (DATAW),
-                .SIZE    (`OUT_REG_TO_EB_SIZE(OUT_REG)),
-                .OUT_REG (`OUT_REG_TO_EB_REG(OUT_REG))
+                .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+                .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
+                .LUTRAM  (LUTRAM)
             ) out_buf (
                 .clk       (clk),
-                .reset     (out_buf_reset),
+                .reset     (out_buf_reset[i]),
                 .valid_in  (valid_out_r[i]),
                 .ready_in  (ready_out_r[i]),
                 .data_in   (data_out_r[i]),
@@ -154,8 +154,9 @@ module VX_stream_xbar #(
 
         VX_elastic_buffer #(
             .DATAW   (DATAW),
-            .SIZE    (`OUT_REG_TO_EB_SIZE(OUT_REG)),
-            .OUT_REG (`OUT_REG_TO_EB_REG(OUT_REG))
+            .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+            .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
+            .LUTRAM  (LUTRAM)
         ) out_buf (
             .clk       (clk),
             .reset     (reset),
@@ -175,23 +176,25 @@ module VX_stream_xbar #(
     // compute inputs collision
     // we have a collision when there exists a valid transfer with multiple input candicates
     // we count the unique duplicates each cycle.
-    
+
+    reg [NUM_INPUTS-1:0] per_cycle_collision, per_cycle_collision_r;
+    wire [`CLOG2(NUM_INPUTS+1)-1:0] collision_count;
     reg [PERF_CTR_BITS-1:0] collisions_r;
-    reg [NUM_INPUTS-1:0] per_cycle_collision;
 
     always @(*) begin
         per_cycle_collision = 0;
         for (integer i = 0; i < NUM_INPUTS; ++i) begin
             for (integer j = 1; j < (NUM_INPUTS-i); ++j) begin
-                if (valid_in[i] && valid_in[j+i] && sel_in[i] == sel_in[j+i]) begin
-                    per_cycle_collision[i] |= ready_in[i] | ready_in[j+i];
-                end
+                per_cycle_collision[i] |= valid_in[i]
+                                       && valid_in[j+i]
+                                       && (sel_in[i] == sel_in[j+i])
+                                       && (ready_in[i] | ready_in[j+i]);
             end
         end
     end
 
-    wire [`CLOG2(NUM_INPUTS+1)-1:0] collision_count;
-    `POP_COUNT(collision_count, per_cycle_collision);
+    `BUFFER(per_cycle_collision_r, per_cycle_collision);
+    `POP_COUNT(collision_count, per_cycle_collision_r);
 
     always @(posedge clk) begin
         if (reset) begin

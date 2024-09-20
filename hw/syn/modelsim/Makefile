@@ -1,4 +1,4 @@
-
+include ../common.mk
 
 ALL:sim
 

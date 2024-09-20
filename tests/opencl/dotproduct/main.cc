@@ -30,7 +30,7 @@
 
 // Name of the file with the source code for the computation kernel
 // *********************************************************************
-const char* cSourceFile = "kernel.pocl";
+const char* cSourceFile = "kernel.cl";
 
 // Host buffers for demo
 // *********************************************************************
@@ -73,16 +73,21 @@ char ***gp_argv = NULL;
 // *********************************************************************
 int main(int argc, char **argv)
 {
+    uint32_t size;
+    if(shrGetCmdLineArgumentu(argc, (const char**)argv, "size", &size)== shrTRUE) {
+        iNumElements = size;
+    }
+
     gp_argc = &argc;
     gp_argv = &argv;
 
     shrQAStart(argc, argv);
 
-    cl_uint uiNumComputeUnits; 
+    cl_uint uiNumComputeUnits;
 
     ciErrNum = clGetPlatformIDs(1, &cpPlatform, NULL);
     oclCheckErrorEX(ciErrNum, CL_SUCCESS, NULL);
-    
+
     cl_uint uiNumDevices = 1;
     cdDevices = (cl_device_id *)malloc(uiNumDevices * sizeof(cl_device_id));
     cl_uint uiTargetDevice = 0;
@@ -111,7 +116,7 @@ int main(int argc, char **argv)
     shrLog("%s Starting...\n\n# of float elements per Array \t= %u\n", argv[0], iNumElements);
 
     // set and log Global and Local work size dimensions
-    szLocalWorkSize = 16;
+    szLocalWorkSize = 1; // 16
     szGlobalWorkSize = shrRoundUp((int)szLocalWorkSize, iNumElements);  // rounded up to the nearest multiple of the LocalWorkSize
     shrLog("Global Work Size \t\t= %u\nLocal Work Size \t\t= %u\n# of Work Groups \t\t= %u\n\n",
            szGlobalWorkSize, szLocalWorkSize, (szGlobalWorkSize % szLocalWorkSize + szGlobalWorkSize/szLocalWorkSize));
@@ -161,15 +166,19 @@ int main(int argc, char **argv)
     // Create the program
     shrLog("clCreateProgramWithSource...\n");
     cl_int binary_status;
-    cl_program program =
-      clCreateProgramWithBinary(cxGPUContext, 1, cdDevices, &szKernelLength, (const uint8_t**)&cSourceCL, &binary_status, &ciErrNum);
+    cl_program program;
+
+    program = clCreateProgramWithSource(
+        cxGPUContext, 1, (const char**)&cSourceCL, &szKernelLength, &ciErrNum);
     oclCheckErrorEX(ciErrNum, CL_SUCCESS, pCleanup);
-        // Build the program with 'mad' Optimization option
+
+    /*// Build the program with 'mad' Optimization option
     #ifdef MAC
         char* flags = "-cl-fast-relaxed-math -DMAC";
     #else
         char* flags = "-cl-fast-relaxed-math";
     #endif
+    */
     shrLog("clBuildProgram...\n");
     ciErrNum = clBuildProgram(program, 0, NULL, NULL, NULL, NULL);
     if (ciErrNum != CL_SUCCESS)
@@ -219,9 +228,9 @@ int main(int argc, char **argv)
     shrBOOL bMatch = shrComparefet((const float*)Golden, (const float*)dst, (unsigned int)iNumElements, 0.0f, 0);
 
     // Cleanup and leave
-    Cleanup (EXIT_SUCCESS);
+    Cleanup((bMatch == shrTRUE) ? EXIT_SUCCESS : EXIT_FAILURE);
 
-    return (bMatch == shrTRUE) ? 0 : 1; 
+    return 0;
 }
 
 // "Golden" Host processing dot product function for comparison purposes
@@ -229,11 +238,9 @@ int main(int argc, char **argv)
 void DotProductHost(const float* pfData1, const float* pfData2, float* pfResult, int iNumElements)
 {
     int i, j, k;
-    for (i = 0, j = 0; i < iNumElements; i++)
-    {
+    for (i = 0, j = 0; i < iNumElements; i++) {
         pfResult[i] = 0.0f;
-        for (k = 0; k < 4; k++, j++)
-        {
+        for (k = 0; k < 4; k++, j++) {
             pfResult[i] += pfData1[j] * pfData2[j];
         }
     }

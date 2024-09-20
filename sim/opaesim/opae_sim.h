@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,15 +14,16 @@
 #pragma once
 
 #include <stdint.h>
-namespace vortex {
 
-class RAM;
+namespace vortex {
 
 class opae_sim {
 public:
-  
+
   opae_sim();
   virtual ~opae_sim();
+
+  int init();
 
   int prepare_buffer(uint64_t len, void **buf_addr, uint64_t *wsid, int flags);
 
@@ -34,10 +35,10 @@ public:
 
   void read_mmio64(uint32_t mmio_num, uint64_t offset, uint64_t *value);
 
-private: 
+private:
 
   class Impl;
-  Impl* impl_;  
+  Impl* impl_;
 };
 
 }

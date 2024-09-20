@@ -124,8 +124,8 @@ int setup(int argc, char **argv) {
   int max_nclusters = 5;   /* default value */
   int min_nclusters = 5;   /* default value */
   int best_nclusters = 0;
-  int nfeatures = 0;
-  int npoints = 0;
+  int nfeatures = 100;
+  int npoints = 100;
   float len;
 
   float **features;
@@ -140,7 +140,7 @@ int setup(int argc, char **argv) {
   // float	cluster_timing, io_timing;
 
   /* obtain command line arguments and change appropriate options */
-  while ((opt = getopt(argc, argv, "i:t:m:n:l:bro")) != EOF) {
+  while ((opt = getopt(argc, argv, "p:f:i:t:m:n:l:bro")) != EOF) {
     switch (opt) {
     case 'i':
       filename = optarg;
@@ -156,6 +156,12 @@ int setup(int argc, char **argv) {
       break;
     case 'n':
       min_nclusters = atoi(optarg);
+      break;
+    case 'f':
+      nfeatures = atoi(optarg);
+      break;
+    case 'p':
+      npoints = atoi(optarg);
       break;
     case 'r':
       isRMSE = 1;
@@ -179,73 +185,73 @@ int setup(int argc, char **argv) {
   /* get nfeatures and npoints */
   // io_timing = omp_get_wtime();
 
-  /*if (isBinaryFile) { // Binary file input
-    FILE *infile;
-    if ((infile = fopen("100", "r")) == NULL) {
-      fprintf(stderr, "Error: no such file (%s)\n", filename);
-      exit(1);
-    }
-    fread(&npoints, 1, sizeof(int), infile);
-    fread(&nfeatures, 1, sizeof(int), infile);
+  if (filename) {
+    if (isBinaryFile) { // Binary file input
+      FILE *infile;
+      if ((infile = fopen("100", "r")) == NULL) {
+        fprintf(stderr, "Error: no such file (%s)\n", filename);
+        exit(1);
+      }
+      fread(&npoints, 1, sizeof(int), infile);
+      fread(&nfeatures, 1, sizeof(int), infile);
 
-    // allocate space for features[][] and read attributes of all objects
+      // allocate space for features[][] and read attributes of all objects
+      buf = (float *)malloc(npoints * nfeatures * sizeof(float));
+      features = (float **)malloc(npoints * sizeof(float *));
+      features[0] = (float *)malloc(npoints * nfeatures * sizeof(float));
+      for (i = 1; i < npoints; i++) {
+        features[i] = features[i - 1] + nfeatures;
+      }
+      fread(buf, 1, npoints * nfeatures * sizeof(float), infile);
+      fclose(infile);
+    } else {
+      FILE *infile;
+      if ((infile = fopen("100", "r")) == NULL) {
+        fprintf(stderr, "Error: no such file (%s)\n", filename);
+        exit(1);
+      }
+      while (fgets(line, 1024, infile) != NULL)
+        if (strtok(line, " \t\n") != 0) {
+          npoints++;
+        }
+      rewind(infile);
+      while (fgets(line, 1024, infile) != NULL) {
+        if (strtok(line, " \t\n") != 0) {
+          // ignore the id (first attribute): nfeatures = 1;
+          while (strtok(NULL, " ,\t\n") != NULL)
+            nfeatures++;
+          break;
+        }
+      }
+
+      // allocate space for features[] and read attributes of all objects
+      buf = (float *)malloc(npoints * nfeatures * sizeof(float));
+      features = (float **)malloc(npoints * sizeof(float *));
+      features[0] = (float *)malloc(npoints * nfeatures * sizeof(float));
+      for (i = 1; i < npoints; i++)
+        features[i] = features[i - 1] + nfeatures;
+      rewind(infile);
+      i = 0;
+      while (fgets(line, 1024, infile) != NULL) {
+        if (strtok(line, " \t\n") == NULL)
+          continue;
+        for (j = 0; j < nfeatures; j++) {
+          buf[i] = atof(strtok(NULL, " ,\t\n"));
+          i++;
+        }
+      }
+      fclose(infile);
+    }
+  } else {
     buf = (float *)malloc(npoints * nfeatures * sizeof(float));
     features = (float **)malloc(npoints * sizeof(float *));
     features[0] = (float *)malloc(npoints * nfeatures * sizeof(float));
     for (i = 1; i < npoints; i++) {
       features[i] = features[i - 1] + nfeatures;
     }
-    fread(buf, 1, npoints * nfeatures * sizeof(float), infile);
-    fclose(infile);
-  } else {
-    FILE *infile;
-    if ((infile = fopen("100", "r")) == NULL) {
-      fprintf(stderr, "Error: no such file (%s)\n", filename);
-      exit(1);
+    for (i = 0; i < npoints * nfeatures; ++i) {   
+      buf[i] = (i % 64);
     }
-    while (fgets(line, 1024, infile) != NULL)
-      if (strtok(line, " \t\n") != 0) {
-        npoints++;
-      }
-    rewind(infile);
-    while (fgets(line, 1024, infile) != NULL) {
-      if (strtok(line, " \t\n") != 0) {
-        // ignore the id (first attribute): nfeatures = 1;
-        while (strtok(NULL, " ,\t\n") != NULL)
-          nfeatures++;
-        break;
-      }
-    }
-
-    // allocate space for features[] and read attributes of all objects
-    buf = (float *)malloc(npoints * nfeatures * sizeof(float));
-    features = (float **)malloc(npoints * sizeof(float *));
-    features[0] = (float *)malloc(npoints * nfeatures * sizeof(float));
-    for (i = 1; i < npoints; i++)
-      features[i] = features[i - 1] + nfeatures;
-    rewind(infile);
-    i = 0;
-    while (fgets(line, 1024, infile) != NULL) {
-      if (strtok(line, " \t\n") == NULL)
-        continue;
-      for (j = 0; j < nfeatures; j++) {
-        buf[i] = atof(strtok(NULL, " ,\t\n"));
-        i++;
-      }
-    }
-    fclose(infile);
-  }*/
-
-  npoints = 100;
-  nfeatures = 100;
-  buf = (float *)malloc(npoints * nfeatures * sizeof(float));
-  features = (float **)malloc(npoints * sizeof(float *));
-  features[0] = (float *)malloc(npoints * nfeatures * sizeof(float));
-  for (i = 1; i < npoints; i++) {
-    features[i] = features[i - 1] + nfeatures;
-  }
-  for (i = 0; i < npoints * nfeatures; ++i) {   
-    buf[i] = (i % 64);
   }
 
   // io_timing = omp_get_wtime() - io_timing;

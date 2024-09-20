@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,24 +16,15 @@
 `TRACING_OFF
 module VX_priority_arbiter #(
     parameter NUM_REQS     = 1,
-    parameter LOCK_ENABLE  = 0,
     parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS)
 ) (
-    input  wire                     clk,
-    input  wire                     reset,
-    input  wire [NUM_REQS-1:0]      requests,           
-    input  wire                     unlock,
+    input  wire [NUM_REQS-1:0]      requests,
     output wire [LOG_NUM_REQS-1:0]  grant_index,
-    output wire [NUM_REQS-1:0]      grant_onehot,   
+    output wire [NUM_REQS-1:0]      grant_onehot,
     output wire                     grant_valid
 );
-    `UNUSED_PARAM (LOCK_ENABLE)
-    `UNUSED_VAR (clk)
-    `UNUSED_VAR (reset)
-    `UNUSED_VAR (unlock)
+    if (NUM_REQS == 1)  begin
 
-    if (NUM_REQS == 1)  begin        
-        
         assign grant_index  = '0;
         assign grant_onehot = requests;
         assign grant_valid  = requests[0];
@@ -50,6 +41,6 @@ module VX_priority_arbiter #(
         );
 
     end
-    
+
 endmodule
 `TRACING_ON

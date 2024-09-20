@@ -20,36 +20,42 @@ namespace vortex {
 
 class MemSim : public SimObject<MemSim>{
 public:
-    struct Config {        
-        uint32_t channels;      
-        uint32_t num_cores;
-    };
+	struct Config {
+		uint32_t channels;
+		uint32_t num_cores;
+	};
 
-    struct PerfStats {
-        uint64_t reads;
-        uint64_t writes;
+	struct PerfStats {
+		uint64_t counter;
+		uint64_t ticks;
 
-        PerfStats() 
-            : reads(0)
-            , writes(0)
-        {}
-    };
+		PerfStats() 
+			: counter(0)
+			, ticks(0)
+		{}
 
-    SimPort<MemReq> MemReqPort;
-    SimPort<MemRsp> MemRspPort;
+		PerfStats& operator+=(const PerfStats& rhs) {
+			this->counter += rhs.counter;
+			this->ticks += rhs.ticks;
+			return *this;
+		}
+	};
 
-    MemSim(const SimContext& ctx, const char* name, const Config& config);
-    ~MemSim();
+	std::vector<SimPort<MemReq>> MemReqPorts;
+	std::vector<SimPort<MemRsp>> MemRspPorts;
 
-    void reset();
+	MemSim(const SimContext& ctx, const char* name, const Config& config);
+	~MemSim();
 
-    void tick();
+	void reset();
 
-    const PerfStats& perf_stats() const;
-    
+	void tick();
+
+	const PerfStats& perf_stats() const;
+	
 private:
-    class Impl;
-    Impl* impl_;
+	class Impl;
+	Impl* impl_;
 };
 
 };

@@ -17,8 +17,9 @@
 #include "dcrs.h"
 #include "arch.h"
 #include "cache_cluster.h"
-#include "shared_mem.h"
+#include "local_mem.h"
 #include "core.h"
+#include "socket.h"
 #include "constants.h"
 
 namespace vortex {
@@ -28,18 +29,7 @@ class ProcessorImpl;
 class Cluster : public SimObject<Cluster> {
 public:
   struct PerfStats {
-    CacheSim::PerfStats   icache;
-    CacheSim::PerfStats   dcache;
-    SharedMem::PerfStats  sharedmem;
-    CacheSim::PerfStats   l2cache;
-
-    PerfStats& operator+=(const PerfStats& rhs) {
-      this->icache      += rhs.icache;
-      this->dcache      += rhs.dcache;
-      this->sharedmem   += rhs.sharedmem;
-      this->l2cache     += rhs.l2cache;
-      return *this;
-    }
+    CacheSim::PerfStats l2cache;
   };
 
   SimPort<MemReq> mem_req_port;
@@ -53,34 +43,39 @@ public:
 
   ~Cluster();
 
+  uint32_t id() const {
+    return cluster_id_;
+  }
+
+  ProcessorImpl* processor() const {
+    return processor_;
+  }
+
   void reset();
 
   void tick();
 
   void attach_ram(RAM* ram);
 
+  #ifdef VM_ENABLE
+  void set_satp(uint64_t satp);
+  #endif
+
   bool running() const;
 
-  bool check_exit(Word* exitcode, bool riscv_test) const;  
+  int get_exitcode() const;  
 
   void barrier(uint32_t bar_id, uint32_t count, uint32_t core_id);
 
-  ProcessorImpl* processor() const;
-
-  Cluster::PerfStats perf_stats() const;
+  PerfStats perf_stats() const;
   
 private:
-  uint32_t                     cluster_id_;  
-  std::vector<Core::Ptr>       cores_;  
-  std::vector<CoreMask>        barriers_;
-  CacheSim::Ptr                l2cache_;
-  CacheCluster::Ptr            icaches_;
-  CacheCluster::Ptr            dcaches_;
-  std::vector<SharedMem::Ptr>  sharedmems_;
-  CacheCluster::Ptr            tcaches_;
-  CacheCluster::Ptr            ocaches_;
-  CacheCluster::Ptr            rcaches_;
-  ProcessorImpl*               processor_;
+  uint32_t                    cluster_id_;
+  ProcessorImpl*              processor_;
+  std::vector<Socket::Ptr>    sockets_;  
+  std::vector<CoreMask>       barriers_;
+  CacheSim::Ptr               l2cache_;
+  uint32_t                    cores_per_socket_;
 };
 
 } // namespace vortex

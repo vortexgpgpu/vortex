@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,26 +21,26 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
- 
+
 int _close(int file) { return -1; }
- 
+
 int _fstat(int file, struct stat *st) { return -1; }
- 
+
 int _isatty(int file) { return 0; }
- 
+
 int _lseek(int file, int ptr, int dir) { return 0; }
- 
+
 int _open(const char *name, int flags, int mode) { return -1; }
- 
+
 int _read(int file, char *ptr, int len) { return -1; }
- 
-caddr_t _sbrk(int incr) { 
+
+caddr_t _sbrk(int incr) {
   __asm__ __volatile__("ebreak");
-  return 0; 
+  return 0;
 }
- 
+
 int _write(int file, char *ptr, int len) {
-  int i; 
+  int i;
   for (i = 0; i < len; ++i) {
     vx_putchar(*ptr++);
   }
@@ -53,7 +53,7 @@ int _getpid() {
   return vx_hart_id();
 }
 
-void __init_tls(void) {  
+void __init_tls(void) {
   extern char __tdata_start[];
   extern char __tbss_offset[];
   extern char __tdata_size[];
@@ -67,7 +67,7 @@ void __init_tls(void) {
 
 #ifdef HAVE_INITFINI_ARRAY
 
-/* These magic symbols are provided by the linker.  */
+// These magic symbols are provided by the linker.
 extern void (*__preinit_array_start []) (void) __attribute__((weak));
 extern void (*__preinit_array_end []) (void) __attribute__((weak));
 extern void (*__init_array_start []) (void) __attribute__((weak));
@@ -77,7 +77,7 @@ extern void (*__init_array_end []) (void) __attribute__((weak));
 extern void _init (void);
 #endif
 
-/* Iterate over all the init routines.  */
+// Iterate over all the init routines.
 void __libc_init_array (void) {
   size_t count;
   size_t i;
@@ -108,7 +108,7 @@ extern void _fini (void);
 void __libc_fini_array (void) {
   size_t count;
   size_t i;
-  
+
   count = __fini_array_end - __fini_array_start;
   for (i = count; i > 0; i--)
     __fini_array_start[i-1] ();
@@ -118,6 +118,15 @@ void __libc_fini_array (void) {
 #endif
 }
 #endif
+
+// This function will be called by LIBC at program exit.
+// Since this platform only support statically linked programs,
+// it is not required to support LIBC's exit functions registration via atexit().
+void __funcs_on_exit (void) {
+#ifdef HAVE_INITFINI_ARRAY
+  __libc_fini_array();
+#endif
+}
 
 #ifdef __cplusplus
 }

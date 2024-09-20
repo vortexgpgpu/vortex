@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -13,9 +13,7 @@
 
 #include "opae_sim.h"
 
-#include <verilated.h>
 #include "Vvortex_afu_shim.h"
-#include "Vvortex_afu_shim__Syms.h"
 
 #ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
@@ -26,10 +24,7 @@
 #include <iomanip>
 #include <mem.h>
 
-#define RAMULATOR
-#include <ramulator/src/Gem5Wrapper.h>
-#include <ramulator/src/Request.h>
-#include <ramulator/src/Statistics.h>
+#include <dram_sim.h>
 
 #include <VX_config.h>
 #include <vortex_afu.h>
@@ -40,16 +35,16 @@
 #include <unordered_map>
 #include <util.h>
 
-#ifndef MEMORY_BANKS 
+//#ifndef MEMORY_BANKS
   #ifdef PLATFORM_PARAM_LOCAL_MEMORY_BANKS
     #define MEMORY_BANKS PLATFORM_PARAM_LOCAL_MEMORY_BANKS
   #else
     #define MEMORY_BANKS 2
   #endif
-#endif
+//#endif
 
-#ifndef MEM_CYCLE_RATIO
-#define MEM_CYCLE_RATIO -1
+#ifndef MEM_CLOCK_RATIO
+#define MEM_CLOCK_RATIO 1
 #endif
 
 #undef MEM_BLOCK_SIZE
@@ -82,7 +77,7 @@ using namespace vortex;
 
 static uint64_t timestamp = 0;
 
-double sc_time_stamp() { 
+double sc_time_stamp() {
   return timestamp;
 }
 
@@ -91,7 +86,7 @@ static uint64_t trace_start_time = TRACE_START_TIME;
 static uint64_t trace_stop_time = TRACE_STOP_TIME;
 
 bool sim_trace_enabled() {
-  if (timestamp >= trace_start_time 
+  if (timestamp >= trace_start_time
    && timestamp < trace_stop_time)
     return true;
   return trace_enabled;
@@ -106,9 +101,40 @@ void sim_trace_enable(bool enable) {
 class opae_sim::Impl {
 public:
   Impl()
-  : stop_(false)
-  , host_buffer_ids_(0) {
-    // force random values for unitialized signals  
+  : device_(nullptr)
+  , ram_(nullptr)
+  , dram_sim_(MEM_CLOCK_RATIO)
+  , stop_(false)
+  , host_buffer_ids_(0)
+#ifdef VCD_OUTPUT
+  , tfp_(nullptr)
+#endif
+  {}
+
+  ~Impl() {
+    stop_ = true;
+    if (future_.valid()) {
+      future_.wait();
+    }
+    for (auto& buffer : host_buffers_) {
+      aligned_free(buffer.second.data);
+    }
+  #ifdef VCD_OUTPUT
+    if (tfp_) {
+      tfp_->close();
+      delete tfp_;
+    }
+  #endif
+    if (device_) {
+      delete device_;
+    }
+    if (ram_) {
+      delete ram_;
+    }
+  }
+
+  int init() {
+    // force random values for unitialized signals
     Verilated::randReset(VERILATOR_RESET_VALUE);
     Verilated::randSeed(50);
 
@@ -120,58 +146,37 @@ public:
 
   #ifdef VCD_OUTPUT
     Verilated::traceEverOn(true);
-    trace_ = new VerilatedVcdC();
-    device_->trace(trace_, 99);
-    trace_->open("trace.vcd");
+    tfp_ = new VerilatedVcdC();
+    device_->trace(tfp_, 99);
+    tfp_->open("trace.vcd");
   #endif
 
-    ram_ = new RAM(RAM_PAGE_SIZE);
+    ram_ = new RAM(0, RAM_PAGE_SIZE);
 
-    // initialize dram simulator
-    ramulator::Config ram_config;
-    ram_config.add("standard", "DDR4");
-    ram_config.add("channels", std::to_string(MEMORY_BANKS));
-    ram_config.add("ranks", "1");
-    ram_config.add("speed", "DDR4_2400R");
-    ram_config.add("org", "DDR4_4Gb_x8");
-    ram_config.add("mapping", "defaultmapping");
-    ram_config.set_core_num(1);
-    dram_ = new ramulator::Gem5Wrapper(ram_config, MEM_BLOCK_SIZE);
-    Stats::statlist.output("ramulator.ddr4.log");
-
+  #ifndef NDEBUG
+    // dump device configuration
+    std::cout << "CONFIGS:"
+              << " num_threads=" << NUM_THREADS
+              << ", num_warps=" << NUM_WARPS
+              << ", num_cores=" << NUM_CORES
+              << ", num_clusters=" << NUM_CLUSTERS
+              << ", socket_size=" << SOCKET_SIZE
+              << ", local_mem_base=0x" << std::hex << LMEM_BASE_ADDR << std::dec
+              << ", num_barriers=" << NUM_BARRIERS
+              << std::endl;
+  #endif
     // reset the device
     this->reset();
 
     // launch execution thread
-    future_ = std::async(std::launch::async, [&]{                 
+    future_ = std::async(std::launch::async, [&]{
         while (!stop_) {
             std::lock_guard<std::mutex> guard(mutex_);
             this->tick();
         }
-    }); 
-  }
+    });
 
-  ~Impl() {  
-    stop_ = true;
-    if (future_.valid()) {
-      future_.wait();
-    } 
-    for (auto& buffer : host_buffers_) {
-      aligned_free(buffer.second.data);
-    }   
-  #ifdef VCD_OUTPUT
-    trace_->close();
-    delete trace_;
-  #endif
-    delete device_;
-    
-    delete ram_;
-
-    if (dram_) {
-      dram_->finish();
-      Stats::statlist.printall();
-      delete dram_;
-    }
+    return 0;
   }
 
   int prepare_buffer(uint64_t len, void **buf_addr, uint64_t *wsid, int flags) {
@@ -185,7 +190,7 @@ public:
     host_buffer_t buffer;
     buffer.data   = (uint64_t*)alloc;
     buffer.size   = len;
-    buffer.ioaddr = uintptr_t(alloc); 
+    buffer.ioaddr = uintptr_t(alloc);
     auto buffer_id = host_buffer_ids_++;
     host_buffers_.emplace(buffer_id, buffer);
     *buf_addr = alloc;
@@ -209,7 +214,7 @@ public:
     std::lock_guard<std::mutex> guard(mutex_);
 
     // simulate CPU-GPU latency
-    for (uint32_t i = 0; i < CPU_GPU_LATENCY; ++i) 
+    for (uint32_t i = 0; i < CPU_GPU_LATENCY; ++i)
       this->tick();
 
     // simulate mmio request
@@ -219,7 +224,7 @@ public:
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_tid = 0;
     this->tick();
     device_->vcp2af_sRxPort_c0_mmioRdValid = 0;
-    assert(device_->af2cp_sTxPort_c2_mmioRdValid);  
+    assert(device_->af2cp_sTxPort_c2_mmioRdValid);
     *value = device_->af2cp_sTxPort_c2_data;
   }
 
@@ -227,11 +232,11 @@ public:
     std::lock_guard<std::mutex> guard(mutex_);
 
     // simulate CPU-GPU latency
-    for (uint32_t i = 0; i < CPU_GPU_LATENCY; ++i) 
+    for (uint32_t i = 0; i < CPU_GPU_LATENCY; ++i)
       this->tick();
-    
+
     // simulate mmio request
-    device_->vcp2af_sRxPort_c0_mmioWrValid = 1;  
+    device_->vcp2af_sRxPort_c0_mmioWrValid = 1;
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_address = offset / 4;
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_length = 1;
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_tid = 0;
@@ -242,20 +247,17 @@ public:
 
 private:
 
-  void reset() {  
-    cci_reads_.clear();
-    cci_writes_.clear();
-    device_->vcp2af_sRxPort_c0_mmioRdValid = 0;
-    device_->vcp2af_sRxPort_c0_mmioWrValid = 0;
-    device_->vcp2af_sRxPort_c0_rspValid = 0;  
-    device_->vcp2af_sRxPort_c1_rspValid = 0;  
-    device_->vcp2af_sRxPort_c0_TxAlmFull = 0;
-    device_->vcp2af_sRxPort_c1_TxAlmFull = 0;
+  void reset() {
+    this->cci_bus_reset();
+    this->avs_bus_reset();
 
-    for (int b = 0; b < MEMORY_BANKS; ++b) {
-      pending_mem_reqs_[b].clear();
-      device_->avs_readdatavalid[b] = 0;  
-      device_->avs_waitrequest[b] = 0;
+    for (auto& reqs : pending_mem_reqs_) {
+      reqs.clear();
+    }
+
+    {
+      std::queue<mem_req_t*> empty;
+      std::swap(dram_queue_, empty);
     }
 
     device_->reset = 1;
@@ -265,9 +267,9 @@ private:
       this->eval();
       device_->clk = 1;
       this->eval();
-    } 
+    }
 
-    device_->reset = 0;    
+    device_->reset = 0;
 
     for (int i = 0; i < RESET_DELAY; ++i) {
       device_->clk = 0;
@@ -275,34 +277,35 @@ private:
       device_->clk = 1;
       this->eval();
     }
-    
+
     // Turn on assertion after reset
     Verilated::assertOn(true);
   }
 
   void tick() {
-    this->sRxPort_bus();
-    this->sTxPort_bus();
-    this->avs_bus();
+    this->cci_bus_eval();
+    this->avs_bus_eval();
 
     if (!dram_queue_.empty()) {
-      if (dram_->send(dram_queue_.front()))
+      auto mem_req = dram_queue_.front();
+      if (dram_sim_.send_request(mem_req->write, mem_req->addr, mem_req->bank_id, [](void* arg) {
+        auto orig_req = reinterpret_cast<mem_req_t*>(arg);
+        if (orig_req->ready) {
+          delete orig_req;
+        } else {
+          orig_req->ready = true;
+        }
+      }, mem_req)) {
         dram_queue_.pop();
+      }
     }
-        
+
     device_->clk = 0;
     this->eval();
     device_->clk = 1;
     this->eval();
 
-    if (MEM_CYCLE_RATIO > 0) { 
-      auto cycle = timestamp / 2;
-      if ((cycle % MEM_CYCLE_RATIO) == 0)
-        dram_->tick();
-    } else {
-      for (int i = MEM_CYCLE_RATIO; i <= 0; ++i)
-        dram_->tick();            
-    }
+    dram_sim_.tick();
 
   #ifndef NDEBUG
     fflush(stdout);
@@ -313,13 +316,29 @@ private:
     device_->eval();
   #ifdef VCD_OUTPUT
     if (sim_trace_enabled()) {
-      trace_->dump(timestamp);
+      tfp_->dump(timestamp);
     }
   #endif
     ++timestamp;
   }
 
-  void sRxPort_bus() {      
+  void cci_bus_reset() {
+    cci_reads_.clear();
+    cci_writes_.clear();
+    device_->vcp2af_sRxPort_c0_mmioRdValid = 0;
+    device_->vcp2af_sRxPort_c0_mmioWrValid = 0;
+    device_->vcp2af_sRxPort_c0_rspValid = 0;
+    device_->vcp2af_sRxPort_c1_rspValid = 0;
+    device_->vcp2af_sRxPort_c0_TxAlmFull = 0;
+    device_->vcp2af_sRxPort_c1_TxAlmFull = 0;
+  }
+
+  void cci_bus_eval() {
+    this->sRxPort_bus_eval();
+    this->sTxPort_bus_eval();
+  }
+
+  void sRxPort_bus_eval() {
     // check mmio request
     bool mmio_req_enabled = device_->vcp2af_sRxPort_c0_mmioRdValid
                         || device_->vcp2af_sRxPort_c0_mmioWrValid;
@@ -344,8 +363,8 @@ private:
       }
     }
 
-    // send CCI write response  
-    device_->vcp2af_sRxPort_c1_rspValid = 0;  
+    // send CCI write response
+    device_->vcp2af_sRxPort_c1_rspValid = 0;
     if (cci_wr_it != cci_writes_.end()) {
       device_->vcp2af_sRxPort_c1_rspValid = 1;
       device_->vcp2af_sRxPort_c1_hdr_resp_type = 0;
@@ -353,34 +372,34 @@ private:
       cci_writes_.erase(cci_wr_it);
     }
 
-    // send CCI read response (ensure mmio disabled) 
-    device_->vcp2af_sRxPort_c0_rspValid = 0;  
-    if (!mmio_req_enabled 
+    // send CCI read response (ensure mmio disabled)
+    device_->vcp2af_sRxPort_c0_rspValid = 0;
+    if (!mmio_req_enabled
     && (cci_rd_it != cci_reads_.end())) {
       device_->vcp2af_sRxPort_c0_rspValid = 1;
       device_->vcp2af_sRxPort_c0_hdr_resp_type = 0;
       memcpy(device_->vcp2af_sRxPort_c0_data, cci_rd_it->data.data(), CACHE_BLOCK_SIZE);
-      device_->vcp2af_sRxPort_c0_hdr_mdata = cci_rd_it->mdata;    
-      /*printf("%0ld: [sim] CCI Rd Rsp: addr=%ld, mdata=%d, data=", timestamp, cci_rd_it->addr, cci_rd_it->mdata);
+      device_->vcp2af_sRxPort_c0_hdr_mdata = cci_rd_it->mdata;
+      /*printf("%0ld: [sim] CCI Rd Rsp: addr=0x%lx, mdata=0x%x, data=0x", timestamp, cci_rd_it->addr, cci_rd_it->mdata);
       for (int i = 0; i < CACHE_BLOCK_SIZE; ++i)
         printf("%02x", cci_rd_it->data[CACHE_BLOCK_SIZE-1-i]);
       printf("\n");*/
       cci_reads_.erase(cci_rd_it);
     }
   }
-    
-  void sTxPort_bus() {
+
+  void sTxPort_bus_eval() {
     // process read requests
     if (device_->af2cp_sTxPort_c0_valid) {
       assert(!device_->vcp2af_sRxPort_c0_TxAlmFull);
       cci_rd_req_t cci_req;
-      cci_req.cycles_left = CCI_LATENCY + (timestamp % CCI_RAND_MOD);   
+      cci_req.cycles_left = CCI_LATENCY + (timestamp % CCI_RAND_MOD);
       cci_req.addr = device_->af2cp_sTxPort_c0_hdr_address;
       cci_req.mdata = device_->af2cp_sTxPort_c0_hdr_mdata;
       auto host_ptr = (uint64_t*)(device_->af2cp_sTxPort_c0_hdr_address * CACHE_BLOCK_SIZE);
       memcpy(cci_req.data.data(), host_ptr, CACHE_BLOCK_SIZE);
-      //printf("%0ld: [sim] CCI Rd Req: addr=%ld, mdata=%d\n", timestamp, device_->af2cp_sTxPort_c0_hdr_address, cci_req.mdata);
-      cci_reads_.emplace_back(cci_req);  
+      //printf("%0ld: [sim] CCI Rd Req: addr=0x%lx, mdata=0x%x\n", timestamp, device_->af2cp_sTxPort_c0_hdr_address, cci_req.mdata);
+      cci_reads_.emplace_back(cci_req);
     }
 
     // process write requests
@@ -392,18 +411,26 @@ private:
       auto host_ptr = (uint64_t*)(device_->af2cp_sTxPort_c1_hdr_address * CACHE_BLOCK_SIZE);
       memcpy(host_ptr, device_->af2cp_sTxPort_c1_data, CACHE_BLOCK_SIZE);
       cci_writes_.emplace_back(cci_req);
-    } 
+    }
 
     // check queues overflow
     device_->vcp2af_sRxPort_c0_TxAlmFull = (cci_reads_.size() >= (CCI_RQ_SIZE-1));
     device_->vcp2af_sRxPort_c1_TxAlmFull = (cci_writes_.size() >= (CCI_WQ_SIZE-1));
   }
-    
-  void avs_bus() {
+
+  void avs_bus_reset() {
+    for (int b = 0; b < MEMORY_BANKS; ++b) {
+      pending_mem_reqs_[b].clear();
+      device_->avs_readdatavalid[b] = 0;
+      device_->avs_waitrequest[b] = 0;
+    }
+  }
+
+  void avs_bus_eval() {
     for (int b = 0; b < MEMORY_BANKS; ++b) {
       // process memory responses
-      device_->avs_readdatavalid[b] = 0;  
-      if (!pending_mem_reqs_[b].empty() 
+      device_->avs_readdatavalid[b] = 0;
+      if (!pending_mem_reqs_[b].empty()
        && (*pending_mem_reqs_[b].begin())->ready) {
         auto mem_rd_it = pending_mem_reqs_[b].begin();
         auto mem_req = *mem_rd_it;
@@ -417,39 +444,42 @@ private:
       // process memory requests
       assert(!device_->avs_read[b] || !device_->avs_write[b]);
       unsigned byte_addr = (device_->avs_address[b] * MEMORY_BANKS + b) * MEM_BLOCK_SIZE;
-      if (device_->avs_write[b]) {           
-        uint64_t byteen = device_->avs_byteenable[b];        
+      if (device_->avs_write[b]) {
+        uint64_t byteen = device_->avs_byteenable[b];
         uint8_t* data = (uint8_t*)(device_->avs_writedata[b].data());
         for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
-          if ((byteen >> i) & 0x1) {            
+          if ((byteen >> i) & 0x1) {
             (*ram_)[byte_addr + i] = data[i];
           }
         }
 
-        /*printf("%0ld: [sim] MEM Wr Req: bank=%d, addr=%x, data=", timestamp, b, byte_addr);
+        /*printf("%0ld: [sim] MEM Wr Req: bank=%d, 0x%x, data=0x", timestamp, b, byte_addr);
         for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
           printf("%02x", data[(MEM_BLOCK_SIZE-1)-i]);
         }
         printf("\n");*/
 
         // send dram request
-        ramulator::Request dram_req( 
-          byte_addr,
-          ramulator::Request::Type::WRITE,
-          0
-        );
-        dram_queue_.push(dram_req);
+        auto mem_req = new mem_req_t();
+        mem_req->addr  = device_->avs_address[b];
+        mem_req->bank_id = b;
+        mem_req->write = true;
+        mem_req->ready = true;
+
+        dram_queue_.push(mem_req);
       } else
       if (device_->avs_read[b]) {
-        auto mem_req = new mem_rd_req_t();
+        auto mem_req = new mem_req_t();
         mem_req->addr = device_->avs_address[b];
-        ram_->read(mem_req->data.data(), byte_addr, MEM_BLOCK_SIZE);      
+        mem_req->bank_id = b;
+        ram_->read(mem_req->data.data(), byte_addr, MEM_BLOCK_SIZE);
+        mem_req->write = false;
         mem_req->ready = false;
         pending_mem_reqs_[b].emplace_back(mem_req);
 
         /*printf("%0ld: [sim] MEM Rd Req: bank=%d, addr=%x, pending={", timestamp, b, mem_req.addr * MEM_BLOCK_SIZE);
         for (auto& req : pending_mem_reqs_[b]) {
-          if (req.cycles_left != 0) 
+          if (req.cycles_left != 0)
             printf(" !%0x", req.addr * MEM_BLOCK_SIZE);
           else
             printf(" %0x", req.addr * MEM_BLOCK_SIZE);
@@ -457,15 +487,7 @@ private:
         printf("}\n");*/
 
         // send dram request
-        ramulator::Request dram_req( 
-          byte_addr,
-          ramulator::Request::Type::READ,
-          std::bind([](ramulator::Request& dram_req, mem_rd_req_t* mem_req) {
-              mem_req->ready = true;
-            }, placeholders::_1, mem_req),
-          0
-        );
-        dram_queue_.push(dram_req);
+        dram_queue_.push(mem_req);
       }
 
       device_->avs_waitrequest[b] = false;
@@ -473,28 +495,34 @@ private:
   }
 
   typedef struct {
-    bool ready;  
     std::array<uint8_t, MEM_BLOCK_SIZE> data;
     uint32_t addr;
-  } mem_rd_req_t;
+    uint32_t bank_id;
+    bool write;
+    bool ready;
+  } mem_req_t;
 
   typedef struct {
-    int cycles_left;  
+    int cycles_left;
     std::array<uint8_t, CACHE_BLOCK_SIZE> data;
     uint64_t addr;
     uint32_t mdata;
   } cci_rd_req_t;
 
   typedef struct {
-    int cycles_left;  
+    int cycles_left;
     uint32_t mdata;
   } cci_wr_req_t;
 
-  typedef struct {    
+  typedef struct {
     uint64_t* data;
     size_t    size;
-    uint64_t  ioaddr;  
+    uint64_t  ioaddr;
   } host_buffer_t;
+
+  Vvortex_afu_shim *device_;
+  RAM* ram_;
+  DramSim dram_sim_;
 
   std::future<void> future_;
   bool stop_;
@@ -502,34 +530,32 @@ private:
   std::unordered_map<int64_t, host_buffer_t> host_buffers_;
   int64_t host_buffer_ids_;
 
-  std::list<mem_rd_req_t*> pending_mem_reqs_[MEMORY_BANKS];
+  std::list<mem_req_t*> pending_mem_reqs_[MEMORY_BANKS];
 
   std::list<cci_rd_req_t> cci_reads_;
-
   std::list<cci_wr_req_t> cci_writes_;
 
   std::mutex mutex_;
 
-  RAM* ram_;
+  std::queue<mem_req_t*> dram_queue_;
 
-  ramulator::Gem5Wrapper* dram_;
-
-  std::queue<ramulator::Request> dram_queue_;
-
-  Vvortex_afu_shim *device_;
 #ifdef VCD_OUTPUT
-  VerilatedVcdC *trace_;
+  VerilatedVcdC *tfp_;
 #endif
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-opae_sim::opae_sim() 
+opae_sim::opae_sim()
   : impl_(new Impl())
 {}
 
 opae_sim::~opae_sim() {
   delete impl_;
+}
+
+int opae_sim::init() {
+  return impl_->init();
 }
 
 int opae_sim::prepare_buffer(uint64_t len, void **buf_addr, uint64_t *wsid, int flags) {

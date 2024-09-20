@@ -15,7 +15,7 @@
 
 module VX_gbar_arb #(
     parameter NUM_REQS = 1,
-    parameter OUT_REG  = 0,
+    parameter OUT_BUF  = 0,
     parameter `STRING ARBITER = "R"
 ) (
     input wire              clk,
@@ -44,7 +44,7 @@ module VX_gbar_arb #(
         .NUM_OUTPUTS (1),
         .DATAW       (REQ_DATAW),
         .ARBITER     (ARBITER),
-        .OUT_REG     (OUT_REG)
+        .OUT_BUF     (OUT_BUF)
     ) req_arb (
         .clk        (clk),
         .reset      (reset),
