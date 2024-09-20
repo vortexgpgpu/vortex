@@ -255,7 +255,7 @@ void vx_store(int val, int reg){
 void vx_vote() {
     __asm__ volatile (
         "addi a2, x0, 9\n\t"  // Load immediate value 6 into a2(x12) register (membermask)
-        ".insn r %0, 2, 0, x14, x13, 12" :: "i"(RISCV_VOTE));
+        ".insn i %0, 2, 0, x14, x13, 12" :: "i"(RISCV_VOTE));
         //".insn i opcode6, func3, func7, rd, rs1, simm12"
 }
 
