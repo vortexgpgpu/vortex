@@ -217,6 +217,8 @@ public:
   }
 
   int mem_write(uint32_t bank_id, uint64_t addr, uint64_t size, const void* data) {
+    std::lock_guard<std::mutex> guard(mutex_);
+
     if (bank_id >= M_AXI_MEM_NUM_BANKS)
       return -1;
     uint64_t base_addr = uint64_t(bank_id) * MEM_BANK_SIZE + addr;
@@ -230,6 +232,8 @@ public:
   }
 
   int mem_read(uint32_t bank_id, uint64_t addr, uint64_t size, void* data) {
+    std::lock_guard<std::mutex> guard(mutex_);
+
     if (bank_id >= M_AXI_MEM_NUM_BANKS)
       return -1;
     uint64_t base_addr = uint64_t(bank_id) * MEM_BANK_SIZE + addr;
@@ -246,56 +250,57 @@ public:
     std::lock_guard<std::mutex> guard(mutex_);
 
     // write address
+    //printf("%0ld: [sim] register_write: address=0x%x\n", timestamp, offset);
     device_->s_axi_ctrl_awvalid = 1;
     device_->s_axi_ctrl_awaddr = offset;
-    auto s_axi_ctrl_awready = device_->s_axi_ctrl_awready;
-    do {
+    while (!device_->s_axi_ctrl_awready)
       this->tick();
-    } while (!(s_axi_ctrl_awready || device_->s_axi_ctrl_awready));
+    this->tick();
     device_->s_axi_ctrl_awvalid = 0;
 
     // write data
+    //printf("%0ld: [sim] register_write: data=0x%x\n", timestamp, value);
     device_->s_axi_ctrl_wvalid = 1;
     device_->s_axi_ctrl_wdata = value;
     device_->s_axi_ctrl_wstrb = 0xf;
-    auto s_axi_ctrl_wready = device_->s_axi_ctrl_wready;
-    do {
+    while (!device_->s_axi_ctrl_wready)
       this->tick();
-    } while (!(s_axi_ctrl_wready || device_->s_axi_ctrl_wready));
+    this->tick();
     device_->s_axi_ctrl_wvalid = 0;
 
     // write response
-    device_->s_axi_ctrl_bready = 1;
-    auto s_axi_ctrl_bvalid = device_->s_axi_ctrl_bvalid;
+    //printf("%0ld: [sim] register_write: response\n", timestamp);
     do {
       this->tick();
-    } while (!(s_axi_ctrl_bvalid || device_->s_axi_ctrl_bvalid));
+    } while (!device_->s_axi_ctrl_bvalid);
+    device_->s_axi_ctrl_bready = 1;
+    this->tick();
     device_->s_axi_ctrl_bready = 0;
-
+    //printf("%0ld: [sim] register_write: done\n", timestamp);
     return 0;
   }
 
   int register_read(uint32_t offset, uint32_t* value) {
     std::lock_guard<std::mutex> guard(mutex_);
-
     // read address
+    //printf("%0ld: [sim] register_read: address=0x%x\n", timestamp, offset);
     device_->s_axi_ctrl_arvalid = 1;
     device_->s_axi_ctrl_araddr = offset;
-    auto s_axi_ctrl_arready = device_->s_axi_ctrl_arready;
-    do {
+    while (!device_->s_axi_ctrl_arready)
       this->tick();
-    } while (!(s_axi_ctrl_arready || device_->s_axi_ctrl_arready));
+    this->tick();
     device_->s_axi_ctrl_arvalid = 0;
 
-    // read data
-    device_->s_axi_ctrl_rready = 1;
-    auto s_axi_ctrl_rvalid = device_->s_axi_ctrl_rvalid;
+    // read response
+    //printf("%0ld: [sim] register_read: response\n", timestamp);
     do {
       this->tick();
-    } while (!(s_axi_ctrl_rvalid || device_->s_axi_ctrl_rvalid));
+    } while (!device_->s_axi_ctrl_rvalid);
     *value = device_->s_axi_ctrl_rdata;
+    device_->s_axi_ctrl_rready = 1;
+    this->tick();
     device_->s_axi_ctrl_rready = 0;
-
+    //printf("%0ld: [sim] register_read: done (value=0x%x)\n", timestamp, *value);
     return 0;
   }
 

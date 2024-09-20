@@ -194,11 +194,10 @@ public:
         return device->api_.fpgaReadMMIO64(device->fpga_, 0, MMIO_SCOPE_READ, value);
       };
 
-      int ret = vx_scope_start(&callback, this, 0, -1);
-      if (ret != 0) {
+      CHECK_ERR(vx_scope_start(&callback, this, 0, -1), {
         api_.fpgaClose(fpga_);
-        return ret;
-      }
+        return err;
+      });
     }
   #endif
     return 0;
