@@ -57,7 +57,7 @@ public:
         // attach memory module
         processor_.attach_ram(&ram_);
 #ifdef VM_ENABLE
-	//std::cout << "***VM ENABLED!!***"<< std::endl;
+	std::cout << "*** VM ENABLED!! ***"<< std::endl;
         CHECK_ERR(init_VM(), );
 #endif
     }
@@ -433,6 +433,12 @@ public:
     uint64_t pt_addr = 0;
     // Reserve space for PT
     DBGPRINT("[RT:init_VM] Initialize VM\n");
+    DBGPRINT("* VM_ADDR_MODE=0x%lx", VM_ADDR_MODE);
+    DBGPRINT("* PAGE_TABLE_BASE_ADDR=0x%lx", PAGE_TABLE_BASE_ADDR);
+    DBGPRINT("* PT_LEVEL=0x%lx", PT_LEVEL);
+    DBGPRINT("* PT_SIZE=0x%lx", PT_SIZE);
+    DBGPRINT("* PTE_SIZE=0x%lx", PTE_SIZE);
+    DBGPRINT("* TLB_SIZE=0x%lx", TLB_SIZE);
     CHECK_ERR(mem_reserve(PAGE_TABLE_BASE_ADDR, PT_SIZE_LIMIT, VX_MEM_READ_WRITE), {
       return err;
     });

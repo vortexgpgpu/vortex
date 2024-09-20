@@ -129,9 +129,13 @@ opencl()
 vm(){
     echo "begin vm tests..."
 
-    CONFIGS="-DVM_ENABLE" make -C sim/simx
-    CONFIGS="-DVM_ENABLE" make -C runtime/simx
-	
+    make -C sim/simx clean && CONFIGS="-DVM_ENABLE" make -C sim/simx
+    make -C runtime/simx clean && CONFIGS="-DVM_ENABLE" make -C runtime/simx
+    make -C tests/opencl run-simx
+    make -C tests/regression run-simx
+
+    make -C sim/simx clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sim/simx
+    make -C runtime/simx clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C runtime/simx
     make -C tests/opencl run-simx
     make -C tests/regression run-simx
 
