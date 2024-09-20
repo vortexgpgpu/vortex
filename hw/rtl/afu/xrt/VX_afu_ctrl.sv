@@ -132,13 +132,16 @@ module VX_afu_ctrl #(
         ADDR_BITS       = 8;
 
     localparam
-        WSTATE_IDLE     = 2'd0,
+        WSTATE_ADDR     = 2'd0,
         WSTATE_DATA     = 2'd1,
-        WSTATE_RESP     = 2'd2;
+        WSTATE_RESP     = 2'd2,
+        WSTATE_WIDTH    = 2;
 
     localparam
-        RSTATE_IDLE     = 2'd0,
-        RSTATE_DATA     = 2'd1;
+        RSTATE_ADDR     = 2'd0,
+        RSTATE_DATA     = 2'd1,
+        RSTATE_RESP     = 2'd2,
+        RSTATE_WIDTH    = 2;
 
     // device caps
     wire [63:0] dev_caps = {16'b0,
@@ -152,16 +155,18 @@ module VX_afu_ctrl #(
                             2'(`CLOG2(`XLEN)-4),
                             30'(`MISA_STD)};
 
-    reg [1:0]   wstate;
+    reg [WSTATE_WIDTH-1:0] wstate;
     reg [ADDR_BITS-1:0] waddr;
     wire [31:0] wmask;
     wire        s_axi_aw_fire;
     wire        s_axi_w_fire;
+    wire        s_axi_b_fire;
 
-    reg [1:0]   rstate;
+    logic [RSTATE_WIDTH-1:0] rstate;
     reg [31:0]  rdata;
-    wire [ADDR_BITS-1:0] raddr;
+    reg [ADDR_BITS-1:0] raddr;
     wire        s_axi_ar_fire;
+    wire        s_axi_r_fire;
 
     reg         ap_reset_r;
     reg         ap_start_r;
@@ -174,15 +179,19 @@ module VX_afu_ctrl #(
     reg [31:0]  dcrv_r;
     reg         dcr_wr_valid_r;
 
+    logic wready_stall;
+    logic rvalid_stall;
+
 `ifdef SCOPE
 
-    reg [63:0] scope_bus_wdata;
-    reg [63:0] scope_bus_rdata;
+    reg [63:0] scope_bus_wdata, scope_bus_rdata;
     reg [5:0] scope_bus_ctr;
 
-    reg cmd_scope_reading;
-    reg cmd_scope_writing;
+    reg cmd_scope_writing, cmd_scope_reading;
     reg scope_bus_out_r;
+    reg scope_rdata_valid;
+
+    reg is_scope_waddr, is_scope_raddr;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -190,18 +199,33 @@ module VX_afu_ctrl #(
             cmd_scope_writing <= 0;
             scope_bus_ctr <= '0;
             scope_bus_out_r <= 0;
+            is_scope_waddr <= 0;
+            is_scope_raddr <= 0;
+            scope_bus_rdata <= '0;
+            scope_rdata_valid <= 0;
         end else begin
+            if (s_axi_aw_fire) begin
+                is_scope_waddr <= (s_axi_awaddr[ADDR_BITS-1:0] == ADDR_SCP_0)
+                               || (s_axi_awaddr[ADDR_BITS-1:0] == ADDR_SCP_1);
+            end
+            if (s_axi_ar_fire) begin
+                is_scope_raddr <= (s_axi_araddr[ADDR_BITS-1:0] == ADDR_SCP_0)
+                               || (s_axi_araddr[ADDR_BITS-1:0] == ADDR_SCP_1);
+            end
             if (s_axi_w_fire && waddr == ADDR_SCP_0) begin
                 scope_bus_wdata[31:0] <= (s_axi_wdata & wmask) | (scope_bus_wdata[31:0] & ~wmask);
             end
             if (s_axi_w_fire && waddr == ADDR_SCP_1) begin
                 scope_bus_wdata[63:32] <= (s_axi_wdata & wmask) | (scope_bus_wdata[63:32] & ~wmask);
                 cmd_scope_writing <= 1;
+                scope_rdata_valid <= 0;
                 scope_bus_out_r   <= 1;
                 scope_bus_ctr     <= 63;
+
             end
             if (scope_bus_in) begin
                 cmd_scope_reading <= 1;
+                scope_bus_rdata   <= '0;
                 scope_bus_ctr     <= 63;
             end
             if (cmd_scope_reading) begin
@@ -209,6 +233,7 @@ module VX_afu_ctrl #(
                 scope_bus_ctr   <= scope_bus_ctr - 1;
                 if (scope_bus_ctr == 0) begin
                     cmd_scope_reading <= 0;
+                    scope_rdata_valid <= 1;
                 end
             end
             if (cmd_scope_writing) begin
@@ -216,6 +241,7 @@ module VX_afu_ctrl #(
                 scope_bus_ctr <= scope_bus_ctr - 1;
                 if (scope_bus_ctr == 0) begin
                     cmd_scope_writing <= 0;
+                    scope_bus_out_r   <= '0;
                 end
             end
         end
@@ -223,40 +249,51 @@ module VX_afu_ctrl #(
 
     assign scope_bus_out = scope_bus_out_r;
 
+    assign wready_stall = is_scope_waddr && cmd_scope_writing;
+    assign rvalid_stall = is_scope_raddr && ~scope_rdata_valid;
+
+`else
+
+    assign wready_stall = 0;
+    assign rvalid_stall = 0;
+
 `endif
 
-    // AXI Write
+    // AXI Write Request
+    assign s_axi_awready = (wstate == WSTATE_ADDR);
+    assign s_axi_wready  = (wstate == WSTATE_DATA) && ~wready_stall;
 
-    assign s_axi_awready = (wstate == WSTATE_IDLE);
-    assign s_axi_wready  = (wstate == WSTATE_DATA);
+    // AXI Write Response
     assign s_axi_bvalid  = (wstate == WSTATE_RESP);
     assign s_axi_bresp   = 2'b00;  // OKAY
-
-    assign s_axi_aw_fire = s_axi_awvalid && s_axi_awready;
-    assign s_axi_w_fire  = s_axi_wvalid && s_axi_wready;
 
     for (genvar i = 0; i < 4; ++i) begin : g_wmask
         assign wmask[8 * i +: 8] = {8{s_axi_wstrb[i]}};
     end
 
+    assign s_axi_aw_fire = s_axi_awvalid && s_axi_awready;
+    assign s_axi_w_fire  = s_axi_wvalid && s_axi_wready;
+    assign s_axi_b_fire  = s_axi_bvalid && s_axi_bready;
+
     // wstate
     always @(posedge clk) begin
         if (reset) begin
-            wstate <= WSTATE_IDLE;
+            wstate <= WSTATE_ADDR;
         end else begin
             case (wstate)
-            WSTATE_IDLE: wstate <= s_axi_awvalid ? WSTATE_DATA : WSTATE_IDLE;
-            WSTATE_DATA: wstate <= s_axi_wvalid ? WSTATE_RESP : WSTATE_DATA;
-            WSTATE_RESP: wstate <= s_axi_bready ? WSTATE_IDLE : WSTATE_RESP;
-            default:     wstate <= WSTATE_IDLE;
+            WSTATE_ADDR: wstate <= s_axi_aw_fire ? WSTATE_DATA : WSTATE_ADDR;
+            WSTATE_DATA: wstate <= s_axi_w_fire ? WSTATE_RESP : WSTATE_DATA;
+            WSTATE_RESP: wstate <= s_axi_b_fire ? WSTATE_ADDR : WSTATE_RESP;
+            default:     wstate <= WSTATE_ADDR;
             endcase
         end
     end
 
     // waddr
     always @(posedge clk) begin
-        if (s_axi_aw_fire)
+        if (s_axi_aw_fire) begin
             waddr <= s_axi_awaddr[ADDR_BITS-1:0];
+        end
     end
 
     // wdata
@@ -335,73 +372,80 @@ module VX_afu_ctrl #(
         end
     end
 
-    // AXI Read
+    // AXI Read Request
+    assign s_axi_arready = (rstate == RSTATE_ADDR);
 
-    assign s_axi_arready = (rstate == RSTATE_IDLE);
-    assign s_axi_rvalid  = (rstate == RSTATE_DATA);
+    // AXI Read Response
+    assign s_axi_rvalid  = (rstate == RSTATE_RESP);
     assign s_axi_rdata   = rdata;
     assign s_axi_rresp   = 2'b00;  // OKAY
 
     assign s_axi_ar_fire = s_axi_arvalid && s_axi_arready;
-    assign raddr = s_axi_araddr[ADDR_BITS-1:0];
+    assign s_axi_r_fire  = s_axi_rvalid && s_axi_rready;
 
     // rstate
     always @(posedge clk) begin
         if (reset) begin
-            rstate <= RSTATE_IDLE;
+            rstate <= RSTATE_ADDR;
         end else begin
             case (rstate)
-            RSTATE_IDLE: rstate <= s_axi_arvalid ? RSTATE_DATA : RSTATE_IDLE;
-            RSTATE_DATA: rstate <= (s_axi_rready & s_axi_rvalid) ? RSTATE_IDLE : RSTATE_DATA;
-            default:     rstate <= RSTATE_IDLE;
+            RSTATE_ADDR: rstate <= s_axi_ar_fire ? RSTATE_DATA : RSTATE_ADDR;
+            RSTATE_DATA: rstate <= (~rvalid_stall) ? RSTATE_RESP : RSTATE_DATA;
+            RSTATE_RESP: rstate <= s_axi_r_fire ? RSTATE_ADDR : RSTATE_RESP;
+            default:     rstate <= RSTATE_ADDR;
             endcase
+        end
+    end
+
+    // raddr
+    always @(posedge clk) begin
+        if (s_axi_ar_fire) begin
+            raddr <= s_axi_araddr[ADDR_BITS-1:0];
         end
     end
 
     // rdata
     always @(posedge clk) begin
-        if (s_axi_ar_fire) begin
-            rdata <= '0;
-            case (raddr)
-                ADDR_AP_CTRL: begin
-                    rdata[0] <= ap_start_r;
-                    rdata[1] <= ap_done;
-                    rdata[2] <= ap_idle;
-                    rdata[3] <= ap_ready;
-                    rdata[7] <= auto_restart_r;
-                end
-                ADDR_GIE: begin
-                    rdata <= 32'(gie_r);
-                end
-                ADDR_IER: begin
-                    rdata <= 32'(ier_r);
-                end
-                ADDR_ISR: begin
-                    rdata <= 32'(isr_r);
-                end
-                ADDR_DEV_0: begin
-                    rdata <= dev_caps[31:0];
-                end
-                ADDR_DEV_1: begin
-                    rdata <= dev_caps[63:32];
-                end
-                ADDR_ISA_0: begin
-                    rdata <= isa_caps[31:0];
-                end
-                ADDR_ISA_1: begin
-                    rdata <= isa_caps[63:32];
-                end
-            `ifdef SCOPE
-                ADDR_SCP_0: begin
-                    rdata <= scope_bus_rdata[31:0];
-                end
-                ADDR_SCP_1: begin
-                    rdata <= scope_bus_rdata[63:32];
-                end
-            `endif
-                default:;
-            endcase
-        end
+        rdata <= '0;
+        case (raddr)
+            ADDR_AP_CTRL: begin
+                rdata[0] <= ap_start_r;
+                rdata[1] <= ap_done;
+                rdata[2] <= ap_idle;
+                rdata[3] <= ap_ready;
+                rdata[7] <= auto_restart_r;
+            end
+            ADDR_GIE: begin
+                rdata <= 32'(gie_r);
+            end
+            ADDR_IER: begin
+                rdata <= 32'(ier_r);
+            end
+            ADDR_ISR: begin
+                rdata <= 32'(isr_r);
+            end
+            ADDR_DEV_0: begin
+                rdata <= dev_caps[31:0];
+            end
+            ADDR_DEV_1: begin
+                rdata <= dev_caps[63:32];
+            end
+            ADDR_ISA_0: begin
+                rdata <= isa_caps[31:0];
+            end
+            ADDR_ISA_1: begin
+                rdata <= isa_caps[63:32];
+            end
+        `ifdef SCOPE
+            ADDR_SCP_0: begin
+                rdata <= scope_bus_rdata[31:0];
+            end
+            ADDR_SCP_1: begin
+                rdata <= scope_bus_rdata[63:32];
+            end
+        `endif
+            default:;
+        endcase
     end
 
     assign ap_reset  = ap_reset_r;

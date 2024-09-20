@@ -175,7 +175,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                 cmd_scope_reading <= 1;
                 scope_bus_ctr     <= 63;
             end
-            scope_bus_in <= 0;
             if (cp2af_sRxPort.c0.mmioWrValid
              && (MMIO_SCOPE_WRITE == mmio_req_hdr.address)) begin
                 cmd_scope_wdata   <= 64'(cp2af_sRxPort.c0.data);
@@ -189,6 +188,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             scope_bus_ctr <= scope_bus_ctr - 1;
             if (scope_bus_ctr == 0) begin
                 cmd_scope_writing <= 0;
+                scope_bus_in <= 0;
             end
         end
         if (cmd_scope_reading) begin

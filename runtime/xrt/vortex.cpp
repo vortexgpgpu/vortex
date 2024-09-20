@@ -375,11 +375,9 @@ public:
         *value = (((uint64_t)value_hi) << 32) | value_lo;
         return 0;
       };
-      int ret = vx_scope_start(&callback, device, 0, -1);
-      if (ret != 0) {
-        delete device;
-        return ret;
-      }
+      CHECK_ERR(vx_scope_start(&callback, this, 0, -1), {
+        return err;
+      });
     }
   #endif
 

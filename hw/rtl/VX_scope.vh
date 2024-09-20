@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,7 +24,7 @@
 `define SCOPE_IO_SWITCH(__count) \
     wire scope_bus_in_w [__count]; \
     wire scope_bus_out_w [__count]; \
-    `RESET_RELAY_EX(scope_reset_w, scope_reset, __count, 4); \
+    `RESET_RELAY_EX(scope_reset_w, scope_reset, __count, `MAX_FANOUT); \
     VX_scope_switch #( \
         .N (__count) \
     ) scope_switch ( \
