@@ -310,15 +310,35 @@ module VX_afu_wrap #(
 		interrupt, \
 		vx_busy_wait, \
 		vx_busy, \
-		vx_reset \
+		vx_reset, \
+		m_axi_mem_awvalid_a, \
+		m_axi_mem_awready_a, \
+		m_axi_mem_wvalid_a, \
+		m_axi_mem_wready_a, \
+		m_axi_mem_bvalid_a, \
+		m_axi_mem_bready_a, \
+		m_axi_mem_arvalid_a, \
+		m_axi_mem_arready_a, \
+		m_axi_mem_rvalid_a, \
+		m_axi_mem_rready_a, \
+		dcr_wr_valid \
 	}
 	`define PROBES { \
-		vx_pending_writes \
+		vx_pending_writes, \
+		m_axi_mem_awaddr_u, \
+		m_axi_mem_awid_a, \
+		m_axi_mem_bid_a, \
+		m_axi_mem_araddr_u, \
+		m_axi_mem_arid_a, \
+		m_axi_mem_rid_a, \
+     	dcr_wr_addr, \
+		dcr_wr_data \
 	}
     VX_scope_tap #(
         .SCOPE_ID (0),
         .TRIGGERW ($bits(`TRIGGERS)),
-        .PROBEW ($bits(`PROBES))
+        .PROBEW   ($bits(`PROBES)),
+        .DEPTH    (4096)
     ) scope_tap (
         .clk (clk),
         .reset (scope_reset_w[0]),
