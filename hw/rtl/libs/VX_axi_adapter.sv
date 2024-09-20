@@ -100,15 +100,6 @@ module VX_axi_adapter #(
         assign req_bank_sel = '0;
     end
 
-    wire [NUM_BANKS-1:0] axi_write_ready;
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_write_ready
-        assign axi_write_ready[i] = (m_axi_awready[i] || m_axi_aw_ack[i])
-                                 && (m_axi_wready[i] || m_axi_w_ack[i]);
-    end
-
-    // request ack
-    assign mem_req_ready = mem_req_rw ? axi_write_ready[req_bank_sel] : m_axi_arready[req_bank_sel];
-
     wire mem_req_fire = mem_req_valid && mem_req_ready;
 
     // AXi write request synchronization
@@ -130,6 +121,15 @@ module VX_axi_adapter #(
             end
         end
     end
+
+    wire [NUM_BANKS-1:0] axi_write_ready;
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_write_ready
+        assign axi_write_ready[i] = (m_axi_awready[i] || m_axi_aw_ack[i])
+                                 && (m_axi_wready[i] || m_axi_w_ack[i]);
+    end
+
+    // request ack
+    assign mem_req_ready = mem_req_rw ? axi_write_ready[req_bank_sel] : m_axi_arready[req_bank_sel];
 
     // AXI write request address channel
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_write_addr

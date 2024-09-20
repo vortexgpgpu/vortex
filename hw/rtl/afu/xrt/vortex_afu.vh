@@ -15,11 +15,11 @@
 `define VORTEX_AFU_VH
 
 `ifndef M_AXI_MEM_NUM_BANKS
-`define M_AXI_MEM_NUM_BANKS 4
+`define M_AXI_MEM_NUM_BANKS 1
 `endif
 
 `ifndef M_AXI_MEM_ADDR_WIDTH
-`define M_AXI_MEM_ADDR_WIDTH 30
+`define M_AXI_MEM_ADDR_WIDTH 34
 `endif
 
 `ifndef M_AXI_MEM_DATA_WIDTH

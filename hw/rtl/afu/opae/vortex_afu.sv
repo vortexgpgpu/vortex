@@ -79,7 +79,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     localparam COUT_TID_WIDTH     = `CLOG2(`VX_MEM_BYTEEN_WIDTH);
     localparam COUT_QUEUE_DATAW   = COUT_TID_WIDTH + 8;
-    localparam COUT_QUEUE_SIZE    = 64;
+    localparam COUT_QUEUE_SIZE    = 1024;
 
     localparam MMIO_DEV_CAPS      = `AFU_IMAGE_MMIO_DEV_CAPS;
     localparam MMIO_ISA_CAPS      = `AFU_IMAGE_MMIO_ISA_CAPS;
