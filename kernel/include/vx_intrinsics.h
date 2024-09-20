@@ -254,8 +254,8 @@ void vx_store(int val, int reg){
 void vx_vote() {
     __asm__ volatile (
         "addi a2, x0, 9\n\t"  // Load immediate value 6 into a2(x12) register (membermask)
-        ".insn r %0, 2, 0, x14, x13, x12" :: "i"(RISCV_VOTE));
-        //"R type: .insn r opcode7, func3, func7, rd, rs1, rs2"
+        ".insn r %0, 2, 0, x14, x13, 12" :: "i"(RISCV_VOTE));
+        //".insn r opcode7, func3, func7, rd, rs1, simm12"
 }
 
 void vx_shfl() {
@@ -263,6 +263,12 @@ void vx_shfl() {
         "addi a1, x0, 15\n\t"  // Load immediate value 15 into a1(x11) register (membermask)
         "addi a2, x0, 15\n\t"  // Load immediate value 15 into a2(x12) register (c) 
         ".insn i %0, 3, x14, x13, 1067" :: "i"(RISCV_SHFL)); //(c(01)+b(00001)+membermask(address(01011)))
+       //".insn i opcode6, func3, rd, rs1, simm12"
+}
+
+void vx_tile(int val) {
+    __asm__ volatile (
+        ".insn i %0, 0, 0, 0, %1" :: "i"(RISCV_TILE),"r"(val));
        //".insn i opcode6, func3, rd, rs1, simm12"
 }
 
