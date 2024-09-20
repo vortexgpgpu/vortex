@@ -267,12 +267,6 @@ void vx_shfl() {
        //".insn i opcode6, func3, rd, rs1, simm12"
 }
 
-void vx_tile(int val) {
-    __asm__ volatile (
-        ".insn i %0, 0, 0, 0, %1" :: "i"(RISCV_TILE),"r"(val));
-       //".insn i opcode6, func3, rd, rs1, simm12"
-}
-
 #ifdef __cplusplus
 }
 #endif
