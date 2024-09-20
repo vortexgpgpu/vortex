@@ -129,23 +129,11 @@ opencl()
 vm(){
     echo "begin vm tests..."
 
-    make -C sim/simx
-    make -C runtime/simx
-
-    make -C tests/kernel run-simx
+    CONFIGS="-DVM_ENABLE" make -C sim/simx
+    CONFIGS="-DVM_ENABLE" make -C runtime/simx
 	
-    # Regression tests
-    make -C tests/regression run-simx
-
-    # test global barrier
-    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
-
-    # test local barrier
-    ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
-
-    # OpenCL tests
     make -C tests/opencl run-simx
-    ./ci/blackbox.sh --driver=simx --app=lbm --warps=8
+    make -C tests/regression run-simx
 
     echo "vm tests done!"
 }
@@ -415,6 +403,7 @@ while [ "$1" != "" ]; do
                 tests+=("regression")
                 tests+=("opencl")
                 tests+=("cache")
+                tests+=("vm")
                 tests+=("config1")
                 tests+=("config2")
                 tests+=("debug")
