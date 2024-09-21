@@ -581,14 +581,14 @@ public:
         return err;
       });
     #ifdef CPP_API
-      xrtBuffer.write(host_ptr, asize, bo_offset);
-      xrtBuffer.sync(XCL_BO_SYNC_BO_TO_DEVICE, asize, bo_offset);
+      xrtBuffer.write(host_ptr, size, bo_offset);
+      xrtBuffer.sync(XCL_BO_SYNC_BO_TO_DEVICE, size, bo_offset);
     #else
-      CHECK_ERR(xrtBOWrite(xrtBuffer, host_ptr, asize, bo_offset), {
+      CHECK_ERR(xrtBOWrite(xrtBuffer, host_ptr, size, bo_offset), {
         dump_xrt_error(xrtDevice_, err);
         return err;
       });
-      CHECK_ERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_TO_DEVICE, asize, bo_offset), {
+      CHECK_ERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_TO_DEVICE, size, bo_offset), {
         dump_xrt_error(xrtDevice_, err);
         return err;
       });
@@ -627,14 +627,14 @@ public:
         return err;
       });
     #ifdef CPP_API
-      xrtBuffer.sync(XCL_BO_SYNC_BO_FROM_DEVICE, asize, bo_offset);
-      xrtBuffer.read(host_ptr, asize, bo_offset);
+      xrtBuffer.sync(XCL_BO_SYNC_BO_FROM_DEVICE, size, bo_offset);
+      xrtBuffer.read(host_ptr, size, bo_offset);
     #else
-      CHECK_ERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_FROM_DEVICE, asize, bo_offset), {
+      CHECK_ERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_FROM_DEVICE, size, bo_offset), {
         dump_xrt_error(xrtDevice_, err);
         return err;
       });
-      CHECK_ERR(xrtBORead(xrtBuffer, host_ptr, asize, bo_offset), {
+      CHECK_ERR(xrtBORead(xrtBuffer, host_ptr, size, bo_offset), {
         dump_xrt_error(xrtDevice_, err);
         return err;
       });

@@ -170,8 +170,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         if (reset) begin
             cmd_scope_reading <= 0;
             cmd_scope_writing <= 0;
-            scope_bus_in <= 0;
+            scope_bus_in      <= 0;
         end else begin
+            scope_bus_in <= 0;
             if (scope_bus_out) begin
                 cmd_scope_reading <= 1;
                 scope_bus_ctr     <= 63;
@@ -183,20 +184,21 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                 scope_bus_ctr     <= 63;
                 scope_bus_in      <= 1;
             end
-        end
-        if (cmd_scope_writing) begin
-            scope_bus_in  <= 1'(cmd_scope_wdata >> scope_bus_ctr);
-            scope_bus_ctr <= scope_bus_ctr - 6'd1;
-            if (scope_bus_ctr == 0) begin
-                cmd_scope_writing <= 0;
-                scope_bus_in <= 0;
+            if (cmd_scope_writing) begin
+                scope_bus_in  <= 1'(cmd_scope_wdata >> scope_bus_ctr);
+                scope_bus_ctr <= scope_bus_ctr - 6'd1;
+                if (scope_bus_ctr == 0) begin
+                    cmd_scope_writing <= 0;
+                    scope_bus_ctr <= 0;
+                end
             end
-        end
-        if (cmd_scope_reading) begin
-            cmd_scope_rdata <= {cmd_scope_rdata[62:0], scope_bus_out};
-            scope_bus_ctr   <= scope_bus_ctr - 6'd1;
-            if (scope_bus_ctr == 0) begin
-                cmd_scope_reading <= 0;
+            if (cmd_scope_reading) begin
+                cmd_scope_rdata <= {cmd_scope_rdata[62:0], scope_bus_out};
+                scope_bus_ctr   <= scope_bus_ctr - 6'd1;
+                if (scope_bus_ctr == 0) begin
+                    cmd_scope_reading <= 0;
+                    scope_bus_ctr <= 0;
+                end
             end
         end
     end
@@ -327,7 +329,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             `ifdef SCOPE
             MMIO_SCOPE_WRITE: begin
             `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%t: AFU: MMIO_SCOPE_WRITE: data=0x%h\n", $time, cmd_scope_wdata))
+                `TRACE(2, ("%t: AFU: MMIO_SCOPE_WRITE: data=0x%h\n", $time, 64'(cp2af_sRxPort.c0.data)))
             `endif
             end
             `endif
@@ -918,7 +920,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     // Vortex ///////////////////////////////////////////////////////////////////
 
-    wire                          vx_dcr_wr_valid = (STATE_DCR_WRITE == state);
+    wire vx_dcr_wr_valid = (STATE_DCR_WRITE == state);
     wire [`VX_DCR_ADDR_WIDTH-1:0] vx_dcr_wr_addr  = cmd_dcr_addr;
     wire [`VX_DCR_DATA_WIDTH-1:0] vx_dcr_wr_data  = cmd_dcr_data;
 
@@ -1002,11 +1004,10 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     // SCOPE //////////////////////////////////////////////////////////////////////
 
 `ifdef DBG_SCOPE_AFU
-    wire mem_req_fire = mem_bus_if[0].req_valid && mem_bus_if[0].req_ready;
-    wire mem_rsp_fire = mem_bus_if[0].rsp_valid && mem_bus_if[0].rsp_ready;
-    wire avs_write_fire = avs_write[0] && ~avs_waitrequest[0];
-    wire avs_read_fire = avs_read[0] && ~avs_waitrequest[0];
-    wire [LMEM_ADDR_WIDTH-1:0] mem_bus_if_addr = mem_bus_if[0].req_data.addr;
+    wire avs_write_fire  = avs_write[0] && ~avs_waitrequest[0];
+    wire avs_read_fire   = avs_read[0] && ~avs_waitrequest[0];
+    wire vx_mem_req_fire = vx_mem_req_valid && vx_mem_req_ready;
+    wire vx_mem_rsp_fire = vx_mem_rsp_valid && vx_mem_rsp_ready;
 
     reg [STATE_WIDTH-1:0] state_prev;
     always @(posedge clk) begin
@@ -1016,9 +1017,12 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     `define AFU_TRIGGERS { \
         reset, \
+        vx_reset, \
+        vx_busy, \
+        vx_mem_req_fire, \
+        vx_mem_rsp_fire, \
+        vx_dcr_wr_valid, \
         state_changed, \
-        mem_req_fire, \
-        mem_rsp_fire, \
         avs_write_fire, \
         avs_read_fire, \
         avs_waitrequest[0], \
@@ -1044,6 +1048,15 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     `define AFU_PROBES { \
         cmd_type, \
         state, \
+        vx_mem_req_rw, \
+        vx_mem_req_byteen, \
+        vx_mem_req_addr, \
+        vx_mem_req_data, \
+        vx_mem_req_tag, \
+        vx_mem_rsp_data, \
+        vx_mem_rsp_tag, \
+     	vx_dcr_wr_addr, \
+		vx_dcr_wr_data, \
         mmio_req_hdr.address, \
         cp2af_sRxPort.c0.hdr.mdata, \
         af2cp_sTxPort.c0.hdr.address, \
@@ -1056,8 +1069,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         cci_mem_wr_req_ctr, \
         cci_rd_req_ctr, \
         cci_rd_rsp_ctr, \
-        cci_wr_req_ctr, \
-        mem_bus_if_addr \
+        cci_wr_req_ctr \
     }
 
     VX_scope_tap #(
@@ -1066,13 +1078,13 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .PROBEW   ($bits(`AFU_PROBES)),
         .DEPTH    (4096)
     ) scope_tap (
-        .clk(clk),
-        .reset(scope_reset_w[0]),
-        .start(1'b0),
-        .stop(1'b0),
+        .clk    (clk),
+        .reset  (scope_reset_w[0]),
+        .start  (1'b0),
+        .stop   (1'b0),
         .triggers(`AFU_TRIGGERS),
-        .probes(`AFU_PROBES),
-        .bus_in(scope_bus_in_w[0]),
+        .probes (`AFU_PROBES),
+        .bus_in (scope_bus_in_w[0]),
         .bus_out(scope_bus_out_w[0])
     );
 `else

@@ -534,8 +534,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     end
 `endif
 
-`ifdef DBG_SCOPE_LSU
 `ifdef SCOPE
+`ifdef DBG_SCOPE_LSU
     VX_scope_tap #(
         .SCOPE_ID (3),
         .TRIGGERW (2),
@@ -554,6 +554,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 `else
     `SCOPE_IO_UNUSED()
 `endif
+`endif
 `ifdef CHIPSCOPE
     ila_lsu ila_lsu_inst (
         .clk    (clk),
@@ -561,7 +562,6 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .probe1 ({lsu_mem_if.req_valid, lsu_mem_if.req_data, lsu_mem_if.req_ready}),
         .probe2 ({lsu_mem_if.rsp_valid, lsu_mem_if.rsp_data, lsu_mem_if.rsp_ready})
     );
-`endif
 `endif
 
 endmodule

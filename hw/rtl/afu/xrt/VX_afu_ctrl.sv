@@ -204,6 +204,7 @@ module VX_afu_ctrl #(
             scope_bus_rdata <= '0;
             scope_rdata_valid <= 0;
         end else begin
+            scope_bus_out_r <= 0;
             if (s_axi_aw_fire) begin
                 is_scope_waddr <= (s_axi_awaddr[ADDR_BITS-1:0] == ADDR_SCP_0)
                                || (s_axi_awaddr[ADDR_BITS-1:0] == ADDR_SCP_1);
@@ -221,7 +222,6 @@ module VX_afu_ctrl #(
                 scope_rdata_valid <= 0;
                 scope_bus_out_r   <= 1;
                 scope_bus_ctr     <= 63;
-
             end
             if (scope_bus_in) begin
                 cmd_scope_reading <= 1;
@@ -234,6 +234,7 @@ module VX_afu_ctrl #(
                 if (scope_bus_ctr == 0) begin
                     cmd_scope_reading <= 0;
                     scope_rdata_valid <= 1;
+                    scope_bus_ctr     <= 0;
                 end
             end
             if (cmd_scope_writing) begin
@@ -241,7 +242,7 @@ module VX_afu_ctrl #(
                 scope_bus_ctr <= scope_bus_ctr - 1;
                 if (scope_bus_ctr == 0) begin
                     cmd_scope_writing <= 0;
-                    scope_bus_out_r   <= '0;
+                    scope_bus_ctr <= 0;
                 end
             end
         end
