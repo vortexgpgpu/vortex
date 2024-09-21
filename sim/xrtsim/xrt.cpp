@@ -66,7 +66,6 @@ extern int xrtDeviceClose(xrtDeviceHandle dhdl) {
   if (dhdl == nullptr)
     return -1;
   auto sim = reinterpret_cast<xrt_sim*>(dhdl);
-  sim->shutdown();
   delete sim;
   return 0;
 }

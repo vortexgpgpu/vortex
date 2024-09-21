@@ -28,7 +28,7 @@
 #include <unordered_set>
 #include <sstream>
 
-#define FRAME_FLUSH_SIZE 100
+#define SAMPLE_FLUSH_SIZE 100
 
 #define MMIO_SCOPE_READ  (AFU_IMAGE_MMIO_SCOPE_READ * 4)
 #define MMIO_SCOPE_WRITE (AFU_IMAGE_MMIO_SCOPE_WRITE * 4)
@@ -58,8 +58,8 @@ struct tap_signal_t {
 struct tap_t {
   uint32_t id;
   uint32_t width;
-  uint32_t frames;
-  uint32_t cur_frame;
+  uint32_t samples;
+  uint32_t cur_sample;
   uint64_t cycle_time;
   std::string path;
   std::vector<tap_signal_t> signals;
@@ -135,22 +135,25 @@ static void dump_header(std::ofstream& ofs, std::vector<tap_t>& taps) {
   ofs << "enddefinitions $end" << std::endl;
 }
 
-static tap_t* find_nearest_tap(std::vector<tap_t>& taps) {
-  tap_t* nearest = nullptr;
+// return the earliest tap that has data to dump
+static tap_t* find_earliest_tap(std::vector<tap_t>& taps) {
+  tap_t* earliest = nullptr;
   for (auto& tap : taps) {
-    if (tap.cur_frame == tap.frames)
-      continue;
-    if (nearest != nullptr) {
-      if (tap.cycle_time < nearest->cycle_time)
-        nearest = &tap;
+    if (tap.samples == 0)
+      continue; // skip empty taps
+    if (tap.cur_sample == tap.samples)
+      continue; // skip finished taps
+    if (earliest != nullptr) {
+      if (tap.cycle_time < earliest->cycle_time)
+        earliest = &tap;
     } else {
-      nearest = &tap;
+      earliest = &tap;
     }
   }
-  return nearest;
+  return earliest;
 }
 
-static uint64_t advance_time(std::ofstream& ofs, uint64_t next_time, uint64_t cur_time) {
+static uint64_t advance_time(std::ofstream& ofs, uint64_t cur_time, uint64_t next_time) {
   while (cur_time < next_time) {
     ofs << '#' << (cur_time * 2 + 0) << std::endl;
     ofs << "b0 0" << std::endl;
@@ -163,7 +166,7 @@ static uint64_t advance_time(std::ofstream& ofs, uint64_t next_time, uint64_t cu
 
 static int dump_tap(std::ofstream& ofs, tap_t* tap, vx_device_h hdevice) {
   uint32_t signal_offset = 0;
-  uint32_t frame_offset = 0;
+  uint32_t sample_offset = 0;
   uint64_t word;
 
   std::vector<char> signal_data(tap->width);
@@ -176,24 +179,24 @@ static int dump_tap(std::ofstream& ofs, tap_t* tap, vx_device_h hdevice) {
     CHECK_ERR(g_callback.registerWrite(hdevice, cmd_data));
     CHECK_ERR(g_callback.registerRead(hdevice, &word));
     do {
-      uint32_t word_offset = frame_offset % 64;
+      uint32_t word_offset = sample_offset % 64;
       signal_data[signal_width - signal_offset - 1] = ((word >> word_offset) & 0x1) ? '1' : '0';
       ++signal_offset;
-      ++frame_offset;
+      ++sample_offset;
       if (signal_offset == signal_width) {
         signal_data[signal_width] = 0; // string null termination
         ofs << 'b' << signal_data.data() << ' ' << signal_it->id << std::endl;
-        if (frame_offset == tap->width) {
-          // end-of-frame
-          ++tap->cur_frame;
-          if (tap->cur_frame != tap->frames) {
+        if (sample_offset == tap->width) {
+          // end-of-sample
+          ++tap->cur_sample;
+          if (tap->cur_sample != tap->samples) {
             // read next delta
             CHECK_ERR(g_callback.registerWrite(hdevice, cmd_data));
             CHECK_ERR(g_callback.registerRead(hdevice, &word));
             tap->cycle_time += 1 + word;
-            if (0 == (tap->cur_frame % FRAME_FLUSH_SIZE)) {
+            if (0 == (tap->cur_sample % SAMPLE_FLUSH_SIZE)) {
               ofs << std::flush;
-              std::cout << std::dec << "[SCOPE] flush tap #" << tap->id << ": "<< tap->cur_frame << "/" << tap->frames << " frames, next_time=" << tap->cycle_time << std::endl;
+              std::cout << std::dec << "[SCOPE] flush tap #" << tap->id << ": "<< tap->cur_sample << "/" << tap->samples << " samples, next_time=" << tap->cycle_time << std::endl;
             }
           }
           break;
@@ -202,8 +205,8 @@ static int dump_tap(std::ofstream& ofs, tap_t* tap, vx_device_h hdevice) {
         ++signal_it;
         signal_width = signal_it->width;
       }
-    } while ((frame_offset % 64) != 0);
-  } while (frame_offset != tap->width);
+    } while ((sample_offset % 64) != 0);
+  } while (sample_offset != tap->width);
 
   return 0;
 }
@@ -285,8 +288,8 @@ int vx_scope_stop(vx_device_h hdevice) {
       _tap.width = tap["width"].get<uint32_t>();
       _tap.path  = tap["path"].get<std::string>();
       _tap.cycle_time = 0;
-      _tap.frames = 0;
-      _tap.cur_frame = 0;
+      _tap.samples = 0;
+      _tap.cur_sample = 0;
 
       for (auto& signal : tap["signals"]) {
         auto name  = signal[0].get<std::string>();
@@ -299,19 +302,15 @@ int vx_scope_stop(vx_device_h hdevice) {
     }
   }
 
-  // stop recording
+  std::cout << "[SCOPE] stop recording..." << std::endl;
+
   for (auto& tap : taps) {
     uint64_t cmd_stop = (0 << 11) | (tap.id << 3) | CMD_SET_STOP;
     CHECK_ERR(g_callback.registerWrite(hdevice, cmd_stop));
   }
 
-  std::cout << "[SCOPE] trace dump begin..." << std::endl;
+  std::cout << "[SCOPE] load trace info..." << std::endl;
 
-  std::ofstream ofs("scope.vcd");
-
-  dump_header(ofs, taps);
-
-  // load trace info
   for (auto& tap : taps) {
     uint64_t count, start, delta;
 
@@ -320,38 +319,52 @@ int vx_scope_stop(vx_device_h hdevice) {
     CHECK_ERR(g_callback.registerWrite(hdevice, cmd_count));
     CHECK_ERR(g_callback.registerRead(hdevice, &count));
 
+    if (count == 0)
+      continue;
+
     // get start
     uint64_t cmd_start = (tap.id << 3) | CMD_GET_START;
     CHECK_ERR(g_callback.registerWrite(hdevice, cmd_start));
     CHECK_ERR(g_callback.registerRead(hdevice, &start));
 
-    // get data
+    // get delta
     uint64_t cmd_data = (tap.id << 3) | CMD_GET_DATA;
     CHECK_ERR(g_callback.registerWrite(hdevice, cmd_data));
     CHECK_ERR(g_callback.registerRead(hdevice, &delta));
 
-    tap.frames = count;
+    tap.samples = count;
     tap.cycle_time = 1 + start + delta;
 
     std::cout << std::dec << "[SCOPE] tap #" << tap.id
               << ": width=" << tap.width
-              << ", num_frames=" << tap.frames
+              << ", num_samples=" << tap.samples
               << ", start_time=" << tap.cycle_time
               << ", path=" << tap.path << std::endl;
   }
+
+  std::cout << "[SCOPE] dump header..." << std::endl;
+
+  std::ofstream ofs("scope.vcd");
+
+  dump_header(ofs, taps);
+
+  std::cout << "[SCOPE] dump taps..." << std::endl;
 
   uint64_t cur_time = 0;
 
   while (true) {
     // find the nearest tap
-    auto tap = find_nearest_tap(taps);
+    auto tap = find_earliest_tap(taps);
     if (tap == nullptr)
       break;
     // advance clock
-    cur_time = advance_time(ofs, tap->cycle_time, cur_time);
+    cur_time = advance_time(ofs, cur_time, tap->cycle_time);
     // dump tap
     CHECK_ERR(dump_tap(ofs, tap, hdevice));
   };
+
+  // advance clock
+  advance_time(ofs, cur_time, cur_time + 1);
 
   std::cout << "[SCOPE] trace dump done! - " << (cur_time/2) << " cycles" << std::endl;
 

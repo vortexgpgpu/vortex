@@ -25,8 +25,6 @@ public:
 
   int init();
 
-  void shutdown();
-
   int mem_alloc(uint64_t size, uint32_t bank_id, uint64_t* addr);
 
   int mem_free(uint32_t bank_id, uint64_t addr);

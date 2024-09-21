@@ -31,9 +31,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     localparam BLOCK_SIZE = `NUM_LSU_BLOCKS;
     localparam NUM_LANES  = `NUM_LSU_LANES;
 
-`ifdef SCOPE
     `SCOPE_IO_SWITCH (BLOCK_SIZE);
-`endif
 
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)

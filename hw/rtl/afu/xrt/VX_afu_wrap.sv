@@ -299,8 +299,8 @@ module VX_afu_wrap #(
 
     // SCOPE //////////////////////////////////////////////////////////////////////
 
-`ifdef DBG_SCOPE_AFU
 `ifdef SCOPE
+`ifdef DBG_SCOPE_AFU
 	`define AFU_TRIGGERS { \
 		reset, \
 		ap_reset, \
@@ -308,9 +308,9 @@ module VX_afu_wrap #(
 		ap_done, \
 		ap_idle, \
 		interrupt, \
-		vx_busy_wait, \
-		vx_busy, \
 		vx_reset, \
+		vx_busy, \
+		dcr_wr_valid, \
 		m_axi_mem_awvalid_a[0], \
 		m_axi_mem_awready_a[0], \
 		m_axi_mem_wvalid_a[0], \
@@ -320,19 +320,18 @@ module VX_afu_wrap #(
 		m_axi_mem_arvalid_a[0], \
 		m_axi_mem_arready_a[0], \
 		m_axi_mem_rvalid_a[0], \
-		m_axi_mem_rready_a[0], \
-		dcr_wr_valid \
+		m_axi_mem_rready_a[0] \
 	}
 	`define AFU_PROBES { \
+     	dcr_wr_addr, \
+		dcr_wr_data, \
 		vx_pending_writes, \
 		m_axi_mem_awaddr_u[0], \
 		m_axi_mem_awid_a[0], \
 		m_axi_mem_bid_a[0], \
 		m_axi_mem_araddr_u[0], \
 		m_axi_mem_arid_a[0], \
-		m_axi_mem_rid_a[0], \
-     	dcr_wr_addr, \
-		dcr_wr_data \
+		m_axi_mem_rid_a[0] \
 	}
     VX_scope_tap #(
         .SCOPE_ID (0),
@@ -340,17 +339,18 @@ module VX_afu_wrap #(
         .PROBEW   ($bits(`AFU_PROBES)),
         .DEPTH    (4096)
     ) scope_tap (
-        .clk (clk),
-        .reset (scope_reset_w[0]),
-        .start (1'b0),
-        .stop (1'b0),
-        .triggers (`AFU_TRIGGERS),
+        .clk 	(clk),
+        .reset 	(scope_reset_w[0]),
+        .start 	(1'b0),
+        .stop  	(1'b0),
+        .triggers(`AFU_TRIGGERS),
         .probes (`AFU_PROBES),
         .bus_in (scope_bus_in_w[0]),
-        .bus_out (scope_bus_out_w[0])
+        .bus_out(scope_bus_out_w[0])
     );
 `else
     `SCOPE_IO_UNUSED_W(0)
+`endif
 `endif
 `ifdef CHIPSCOPE
     ila_afu ila_afu_inst (
@@ -372,7 +372,6 @@ module VX_afu_wrap #(
 			dcr_wr_data
 		})
     );
-`endif
 `endif
 
 `ifdef SIMULATION

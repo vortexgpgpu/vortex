@@ -197,13 +197,6 @@ public:
     return 0;
   }
 
-  void shutdown() {
-    stop_ = true;
-    if (future_.valid()) {
-      future_.wait();
-    }
-  }
-
   int mem_alloc(uint64_t size, uint32_t bank_id, uint64_t* addr) {
     if (bank_id >= M_AXI_MEM_NUM_BANKS)
       return -1;
@@ -613,10 +606,6 @@ xrt_sim::~xrt_sim() {
 
 int xrt_sim::init() {
   return impl_->init();
-}
-
-void xrt_sim::shutdown() {
-  impl_->shutdown();
 }
 
 int xrt_sim::mem_alloc(uint64_t size, uint32_t bank_id, uint64_t* addr) {
