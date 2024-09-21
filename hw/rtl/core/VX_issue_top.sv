@@ -113,6 +113,13 @@ module VX_issue_top import VX_gpu_pkg::*; #(
     issue_perf_t issue_perf = '0;
 `endif
 
+`ifdef SCOPE
+    wire [0:0] scope_reset_w = 1'b0;
+    wire [0:0] scope_bus_in_w = 1'b0;
+    wire [0:0] scope_bus_out_w;
+    `UNUSED_VAR (scope_bus_out_w)
+`endif
+
     VX_issue #(
         .INSTANCE_ID (INSTANCE_ID)
     ) issue (

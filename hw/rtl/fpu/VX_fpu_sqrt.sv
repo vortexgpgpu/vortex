@@ -101,7 +101,7 @@ module VX_fpu_sqrt import VX_fpu_pkg::*; #(
             .clk    (clk),
             .areset (1'b0),
             .en     (pe_enable),
-            .a      (pe_data_in[i]),
+            .a      (pe_data_in[i][0 +: 32]),
             .q      (pe_data_out[i][0 +: 32])
         );
         assign pe_data_out[i][32 +: `FP_FLAGS_BITS] = 'x;
@@ -120,7 +120,7 @@ module VX_fpu_sqrt import VX_fpu_pkg::*; #(
             .aclk                (clk),
             .aclken              (pe_enable),
             .s_axis_a_tvalid     (1'b1),
-            .s_axis_a_tdata      (pe_data_in[i]),
+            .s_axis_a_tdata      (pe_data_in[i][0 +: 32]),
             `UNUSED_PIN (m_axis_result_tvalid),
             .m_axis_result_tdata (pe_data_out[i][0 +: 32]),
             .m_axis_result_tuser (tuser)
@@ -143,8 +143,8 @@ module VX_fpu_sqrt import VX_fpu_pkg::*; #(
             dpi_fsqrt (
                 pe_enable,
                 int'(0),
-                {32'hffffffff, pe_data_in[i][0 +: 32]},       // a
-                pe_data_in[0][32 +: `INST_FRM_BITS], // frm
+                {32'hffffffff, pe_data_in[i][0 +: 32]}, // a
+                pe_data_in[0][32 +: `INST_FRM_BITS],    // frm
                 r,
                 f
             );

@@ -536,19 +536,6 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
 `ifdef DBG_SCOPE_LSU
 `ifdef SCOPE
-    `define TRIGGERS { \
-        mem_req_fire, \
-        mem_rsp_fire \
-    }
-    `define PROBES { \
-        mem_req_rw, \
-        full_addr, \
-        mem_req_byteen, \
-        mem_req_data, \
-        execute_if.data.uuid, \
-        rsp_data, \
-        rsp_uuid \
-    }
     VX_scope_tap #(
         .SCOPE_ID (3),
         .TRIGGERW (2),
@@ -559,8 +546,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .reset  (scope_reset),
         .start  (1'b0),
         .stop   (1'b0),
-        .triggers(`TRIGGERS),
-        .probes (`PROBES),
+        .triggers({mem_req_fire, mem_rsp_fire}),
+        .probes ({mem_req_rw, full_addr, mem_req_byteen, mem_req_data, execute_if.data.uuid, rsp_data, rsp_uuid}),
         .bus_in (scope_bus_in),
         .bus_out(scope_bus_out)
     );
