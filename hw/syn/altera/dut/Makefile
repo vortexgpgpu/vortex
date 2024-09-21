@@ -9,7 +9,7 @@ SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
 IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
 
-.PHONY: unittest pipeline mem_unit lmem cache fpu core issue vortex top
+.PHONY: unittest scope mem_unit lmem cache fpu core issue vortex top
 
 ip-gen: $(IP_CACHE_DIR)/ip_gen.log
 $(IP_CACHE_DIR)/ip_gen.log:
@@ -20,10 +20,10 @@ unittest:
 	cp unittest/Makefile unittest/$(BUILD_DIR)
 	$(MAKE) -C unittest/$(BUILD_DIR) clean && $(MAKE) -C unittest/$(BUILD_DIR) > unittest/$(BUILD_DIR)/build.log 2>&1 &
 
-pipeline:
-	mkdir -p pipeline/$(BUILD_DIR)
-	cp pipeline/Makefile pipeline/$(BUILD_DIR)
-	$(MAKE) -C pipeline/$(BUILD_DIR) clean && $(MAKE) -C pipeline/$(BUILD_DIR) > pipeline/$(BUILD_DIR)/build.log 2>&1 &
+scope:
+	mkdir -p scope/$(BUILD_DIR)
+	cp scope/Makefile scope/$(BUILD_DIR)
+	$(MAKE) -C scope/$(BUILD_DIR) clean && $(MAKE) -C scope/$(BUILD_DIR) > scope/$(BUILD_DIR)/build.log 2>&1 &
 
 mem_unit:
 	mkdir -p mem_unit/$(BUILD_DIR)

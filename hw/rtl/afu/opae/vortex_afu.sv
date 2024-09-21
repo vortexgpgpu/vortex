@@ -40,7 +40,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     output  t_local_mem_burst_cnt avs_burstcount [NUM_LOCAL_MEM_BANKS],
     input   wire                  avs_readdatavalid [NUM_LOCAL_MEM_BANKS]
 );
-
     localparam LMEM_DATA_WIDTH    = $bits(t_local_mem_data);
     localparam LMEM_DATA_SIZE     = LMEM_DATA_WIDTH / 8;
     localparam LMEM_ADDR_WIDTH    = $bits(t_local_mem_addr);
@@ -49,6 +48,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     localparam CCI_DATA_WIDTH     = $bits(t_ccip_clData);
     localparam CCI_DATA_SIZE      = CCI_DATA_WIDTH / 8;
     localparam CCI_ADDR_WIDTH     = $bits(t_ccip_clAddr);
+
+    localparam RESET_CTR_WIDTH    = `CLOG2(`RESET_DELAY+1);
 
     localparam AVS_RD_QUEUE_SIZE  = 32;
     localparam _VX_MEM_TAG_WIDTH  = `VX_MEM_TAG_WIDTH;
@@ -185,7 +186,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         end
         if (cmd_scope_writing) begin
             scope_bus_in  <= 1'(cmd_scope_wdata >> scope_bus_ctr);
-            scope_bus_ctr <= scope_bus_ctr - 1;
+            scope_bus_ctr <= scope_bus_ctr - 6'd1;
             if (scope_bus_ctr == 0) begin
                 cmd_scope_writing <= 0;
                 scope_bus_in <= 0;
@@ -193,7 +194,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         end
         if (cmd_scope_reading) begin
             cmd_scope_rdata <= {cmd_scope_rdata[62:0], scope_bus_out};
-            scope_bus_ctr   <= scope_bus_ctr - 1;
+            scope_bus_ctr   <= scope_bus_ctr - 6'd1;
             if (scope_bus_ctr == 0) begin
                 cmd_scope_reading <= 0;
             end
@@ -344,7 +345,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire cmd_mem_rd_done;
     reg  cmd_mem_wr_done;
 
-    reg [`CLOG2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
+    reg [RESET_CTR_WIDTH-1:0] vx_reset_ctr;
     reg  vx_busy_wait;
     reg  vx_reset = 1; // asserted at initialization
     wire vx_busy;
@@ -384,7 +385,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                     `TRACE(2, ("%t: AFU: Goto STATE RUN\n", $time))
                 `endif
                     state <= STATE_RUN;
-                    vx_reset_ctr <= (`RESET_DELAY-1);
+                    vx_reset_ctr <= RESET_CTR_WIDTH'(`RESET_DELAY-1);
 					vx_reset <= 1;
                 end
                 default: begin
@@ -414,7 +415,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             STATE_RUN: begin
                 if (vx_reset) begin
                     // wait until the reset network is ready
-					if (vx_reset_ctr == 0) begin
+					if (vx_reset_ctr == RESET_CTR_WIDTH'(0)) begin
 					`ifdef DBG_TRACE_AFU
 						`TRACE(2, ("%t: AFU: Begin execution\n", $time))
 					`endif
@@ -443,8 +444,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             endcase
 
             // ensure reset network initialization
-			if (vx_reset_ctr != '0) begin
-				vx_reset_ctr <= vx_reset_ctr - 1;
+			if (vx_reset_ctr != RESET_CTR_WIDTH'(0)) begin
+				vx_reset_ctr <= vx_reset_ctr - RESET_CTR_WIDTH'(1);
 			end
         end
     end
@@ -1013,61 +1014,64 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     end
     wire state_changed = (state != state_prev);
 
+    `define AFU_TRIGGERS { \
+        reset, \
+        state_changed, \
+        mem_req_fire, \
+        mem_rsp_fire, \
+        avs_write_fire, \
+        avs_read_fire, \
+        avs_waitrequest[0], \
+        avs_readdatavalid[0], \
+        cp2af_sRxPort.c0.mmioRdValid, \
+        cp2af_sRxPort.c0.mmioWrValid, \
+        cp2af_sRxPort.c0.rspValid, \
+        cp2af_sRxPort.c1.rspValid, \
+        af2cp_sTxPort.c0.valid, \
+        af2cp_sTxPort.c1.valid, \
+        cp2af_sRxPort.c0TxAlmFull, \
+        cp2af_sRxPort.c1TxAlmFull, \
+        af2cp_sTxPort.c2.mmioRdValid, \
+        cci_wr_req_fire, \
+        cci_wr_rsp_fire, \
+        cci_rd_req_fire, \
+        cci_rd_rsp_fire, \
+        cci_pending_reads_full, \
+        cci_pending_writes_empty, \
+        cci_pending_writes_full \
+    }
+
+    `define AFU_PROBES { \
+        cmd_type, \
+        state, \
+        mmio_req_hdr.address, \
+        cp2af_sRxPort.c0.hdr.mdata, \
+        af2cp_sTxPort.c0.hdr.address, \
+        af2cp_sTxPort.c0.hdr.mdata, \
+        af2cp_sTxPort.c1.hdr.address, \
+        avs_address[0], \
+        avs_byteenable[0], \
+        avs_burstcount[0], \
+        cci_mem_rd_req_ctr, \
+        cci_mem_wr_req_ctr, \
+        cci_rd_req_ctr, \
+        cci_rd_rsp_ctr, \
+        cci_wr_req_ctr, \
+        mem_bus_if_addr \
+    }
+
     VX_scope_tap #(
         .SCOPE_ID (0),
-        .TRIGGERW (24),
-        .PROBEW   (431),
+        .TRIGGERW ($bits(`AFU_TRIGGERS)),
+        .PROBEW   ($bits(`AFU_PROBES)),
         .DEPTH    (4096)
     ) scope_tap (
         .clk(clk),
         .reset(scope_reset_w[0]),
         .start(1'b0),
         .stop(1'b0),
-        .triggers({
-            reset,
-            state_changed,
-            mem_req_fire,
-            mem_rsp_fire,
-            avs_write_fire,
-            avs_read_fire,
-            avs_waitrequest[0],
-            avs_readdatavalid[0],
-            cp2af_sRxPort.c0.mmioRdValid,
-            cp2af_sRxPort.c0.mmioWrValid,
-            cp2af_sRxPort.c0.rspValid,
-            cp2af_sRxPort.c1.rspValid,
-            af2cp_sTxPort.c0.valid,
-            af2cp_sTxPort.c1.valid,
-            cp2af_sRxPort.c0TxAlmFull,
-            cp2af_sRxPort.c1TxAlmFull,
-            af2cp_sTxPort.c2.mmioRdValid,
-            cci_wr_req_fire,
-            cci_wr_rsp_fire,
-            cci_rd_req_fire,
-            cci_rd_rsp_fire,
-            cci_pending_reads_full,
-            cci_pending_writes_empty,
-            cci_pending_writes_full
-        }),
-        .probes({
-            cmd_type,
-            state,
-            mmio_req_hdr.address,
-            mmio_req_hdr.length,
-            cp2af_sRxPort.c0.hdr.mdata,
-            af2cp_sTxPort.c0.hdr.address,
-            af2cp_sTxPort.c0.hdr.mdata,
-            af2cp_sTxPort.c1.hdr.address,
-            avs_address[0],
-            avs_byteenable[0],
-            avs_burstcount[0],
-            cci_mem_rd_req_ctr,
-            cci_mem_wr_req_ctr,
-            cci_rd_req_ctr,
-            cci_rd_rsp_ctr,
-            cci_wr_req_ctr,
-            mem_bus_if_addr
-        }),
+        .triggers(`AFU_TRIGGERS),
+        .probes(`AFU_PROBES),
         .bus_in(scope_bus_in_w[0]),
         .bus_out(scope_bus_out_w[0])
     );

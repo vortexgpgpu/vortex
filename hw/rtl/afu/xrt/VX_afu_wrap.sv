@@ -301,7 +301,7 @@ module VX_afu_wrap #(
 
 `ifdef DBG_SCOPE_AFU
 `ifdef SCOPE
-	`define TRIGGERS { \
+	`define AFU_TRIGGERS { \
 		reset, \
 		ap_reset, \
 		ap_start, \
@@ -311,41 +311,41 @@ module VX_afu_wrap #(
 		vx_busy_wait, \
 		vx_busy, \
 		vx_reset, \
-		m_axi_mem_awvalid_a, \
-		m_axi_mem_awready_a, \
-		m_axi_mem_wvalid_a, \
-		m_axi_mem_wready_a, \
-		m_axi_mem_bvalid_a, \
-		m_axi_mem_bready_a, \
-		m_axi_mem_arvalid_a, \
-		m_axi_mem_arready_a, \
-		m_axi_mem_rvalid_a, \
-		m_axi_mem_rready_a, \
+		m_axi_mem_awvalid_a[0], \
+		m_axi_mem_awready_a[0], \
+		m_axi_mem_wvalid_a[0], \
+		m_axi_mem_wready_a[0], \
+		m_axi_mem_bvalid_a[0], \
+		m_axi_mem_bready_a[0], \
+		m_axi_mem_arvalid_a[0], \
+		m_axi_mem_arready_a[0], \
+		m_axi_mem_rvalid_a[0], \
+		m_axi_mem_rready_a[0], \
 		dcr_wr_valid \
 	}
-	`define PROBES { \
+	`define AFU_PROBES { \
 		vx_pending_writes, \
-		m_axi_mem_awaddr_u, \
-		m_axi_mem_awid_a, \
-		m_axi_mem_bid_a, \
-		m_axi_mem_araddr_u, \
-		m_axi_mem_arid_a, \
-		m_axi_mem_rid_a, \
+		m_axi_mem_awaddr_u[0], \
+		m_axi_mem_awid_a[0], \
+		m_axi_mem_bid_a[0], \
+		m_axi_mem_araddr_u[0], \
+		m_axi_mem_arid_a[0], \
+		m_axi_mem_rid_a[0], \
      	dcr_wr_addr, \
 		dcr_wr_data \
 	}
     VX_scope_tap #(
         .SCOPE_ID (0),
-        .TRIGGERW ($bits(`TRIGGERS)),
-        .PROBEW   ($bits(`PROBES)),
+        .TRIGGERW ($bits(`AFU_TRIGGERS)),
+        .PROBEW   ($bits(`AFU_PROBES)),
         .DEPTH    (4096)
     ) scope_tap (
         .clk (clk),
         .reset (scope_reset_w[0]),
         .start (1'b0),
         .stop (1'b0),
-        .triggers (`TRIGGERS),
-        .probes (`PROBES),
+        .triggers (`AFU_TRIGGERS),
+        .probes (`AFU_PROBES),
         .bus_in (scope_bus_in_w[0]),
         .bus_out (scope_bus_out_w[0])
     );

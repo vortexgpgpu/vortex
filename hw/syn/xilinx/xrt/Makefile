@@ -63,10 +63,6 @@ DBG_SCOPE_FLAGS += -DDBG_SCOPE_AFU
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_ISSUE
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_FETCH
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_TEX
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_OM
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_RASTER
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_MSCHED
 
 # cluster configuration
 CONFIGS_1c  := -DNUM_CLUSTERS=1 -DNUM_CORES=1
@@ -78,9 +74,11 @@ CONFIGS_32c := -DNUM_CLUSTERS=2 -DNUM_CORES=16
 CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16
 CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 
-# include paths
+# include sources
+RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
+	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
 	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
 TEX_INCLUDE = -I$(RTL_DIR)/tex
@@ -152,7 +150,7 @@ CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 
 # ast dump flags
-XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) -I$(DPI_DIR)
+XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) $(RTL_PKGS) -I$(DPI_DIR) -DSV_DPI
 
 # RTL Kernel only supports Hardware and Hardware Emulation.
 ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
@@ -192,14 +190,10 @@ ifeq ($(TARGET), hw)
 	cp $(BUILD_DIR)/_x/logs/link/vivado.log $(BUILD_DIR)/bin/vivado.log
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_full_util_routed.rpt $(BUILD_DIR)/bin/synthesis.log
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt $(BUILD_DIR)/bin/timing.log
-	[ -f "$(BUILD_DIR)/_x/link/vivado/vpl/prj/prj.runs/impl_1/debug_nets.ltx" ] && cp $(BUILD_DIR)/_x/link/vivado/vpl/prj/prj.runs/impl_1/debug_nets.ltx $(BUILD_DIR)/bin/debug_nets.ltx
 endif
 
-hwserver:
-	debug_hw --xvc_pcie /dev/xfpga/xvc_pub.u2305.0 --hw_server &
-
 chipscope:
-	debug_hw --vivado --host localhost --ltx_file $(BUILD_DIR)/bin/debug_nets.ltx &
+	debug_hw --vivado --host localhost --ltx_file $(BUILD_DIR)/bin/vortex_afu.ltx &
 
 clean:
 	$(RMDIR) $(BUILD_DIR)
