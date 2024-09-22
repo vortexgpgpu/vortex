@@ -163,11 +163,6 @@ public:
     });
 
     {
-      // retrieve FPGA global memory size
-      CHECK_FPGA_ERR(api_.fpgaPropertiesGetLocalMemorySize(filter, &global_mem_size_), {
-        global_mem_size_ = GLOBAL_MEM_SIZE;
-      });
-
       // Load ISA CAPS
       CHECK_FPGA_ERR(api_.fpgaReadMMIO64(fpga_, 0, MMIO_ISA_CAPS, &isa_caps_), {
         api_.fpgaClose(fpga_);
@@ -179,6 +174,12 @@ public:
         api_.fpgaClose(fpga_);
         return -1;
       });
+
+      // Determine global memory size
+      uint64_t num_banks, bank_size;
+      this->get_caps(VX_CAPS_NUM_MEM_BANKS, &num_banks);
+      this->get_caps(VX_CAPS_MEM_BANK_SIZE, &bank_size);
+      global_mem_size_ = num_banks * bank_size;
     }
 
   #ifdef SCOPE
@@ -231,7 +232,10 @@ public:
       _value = isa_caps_;
       break;
     case VX_CAPS_NUM_MEM_BANKS:
-      _value = MEMORY_BANKS;
+      _value = 1 << ((dev_caps_ >> 48) & 0x7);
+      break;
+    case VX_CAPS_MEM_BANK_SIZE:
+      _value = 1ull << (16 + ((dev_caps_ >> 51) & 0x1f));
       break;
     default:
       fprintf(stderr, "[VXDRV] Error: invalid caps id: %d\n", caps_id);

@@ -21,6 +21,8 @@ module VX_avs_adapter #(
     parameter NUM_BANKS     = 1,
     parameter TAG_WIDTH     = 1,
     parameter RD_QUEUE_SIZE = 1,
+    parameter BANK_INTERLEAVE= 0,
+    parameter AVS_ADDR_WIDTH = ADDR_WIDTH - `CLOG2(NUM_BANKS),
     parameter REQ_OUT_BUF   = 0,
     parameter RSP_OUT_BUF   = 0
 ) (
@@ -45,7 +47,7 @@ module VX_avs_adapter #(
     // AVS bus
     output wire [DATA_WIDTH-1:0]    avs_writedata [NUM_BANKS],
     input  wire [DATA_WIDTH-1:0]    avs_readdata [NUM_BANKS],
-    output wire [ADDR_WIDTH-1:0]    avs_address [NUM_BANKS],
+    output wire [AVS_ADDR_WIDTH-1:0] avs_address [NUM_BANKS],
     input  wire                     avs_waitrequest [NUM_BANKS],
     output wire                     avs_write [NUM_BANKS],
     output wire                     avs_read [NUM_BANKS],
@@ -53,27 +55,34 @@ module VX_avs_adapter #(
     output wire [BURST_WIDTH-1:0]   avs_burstcount [NUM_BANKS],
     input  wire                     avs_readdatavalid [NUM_BANKS]
 );
-    localparam DATA_SIZE = DATA_WIDTH/8;
-    localparam BANK_ADDRW = `LOG2UP(NUM_BANKS);
-    localparam LOG2_NUM_BANKS = `CLOG2(NUM_BANKS);
-    localparam BANK_OFFSETW = ADDR_WIDTH - LOG2_NUM_BANKS;
+    localparam DATA_SIZE      = DATA_WIDTH/8;
+    localparam BANK_SEL_BITS  = `CLOG2(NUM_BANKS);
+    localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
+    localparam BANK_OFFSETW   = ADDR_WIDTH - BANK_SEL_BITS;
+
+    `STATIC_ASSERT ((AVS_ADDR_WIDTH >= BANK_OFFSETW), ("invalid parameter"))
 
     // Requests handling //////////////////////////////////////////////////////
 
     wire [NUM_BANKS-1:0] req_queue_push, req_queue_pop;
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0] req_queue_tag_out;
     wire [NUM_BANKS-1:0] req_queue_going_full;
-    wire [BANK_ADDRW-1:0] req_bank_sel;
+    wire [BANK_SEL_WIDTH-1:0] req_bank_sel;
     wire [BANK_OFFSETW-1:0] req_bank_off;
     wire [NUM_BANKS-1:0] bank_req_ready;
 
     if (NUM_BANKS > 1) begin : g_bank_sel
-        assign req_bank_sel = mem_req_addr[BANK_ADDRW-1:0];
-    end else begin : g_bank_sel
+        if (BANK_INTERLEAVE) begin : g_interleave
+            assign req_bank_sel = mem_req_addr[BANK_SEL_BITS-1:0];
+            assign req_bank_off = mem_req_addr[BANK_SEL_BITS +: BANK_OFFSETW];
+        end else begin : g_no_interleave
+            assign req_bank_sel = mem_req_addr[BANK_OFFSETW +: BANK_SEL_BITS];
+            assign req_bank_off = mem_req_addr[BANK_OFFSETW-1:0];
+        end
+    end else begin : g_no_bank_sel
         assign req_bank_sel = '0;
+        assign req_bank_off = mem_req_addr;
     end
-
-    assign req_bank_off = mem_req_addr[ADDR_WIDTH-1:LOG2_NUM_BANKS];
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_req_queue_push
         assign req_queue_push[i] = mem_req_valid && ~mem_req_rw && bank_req_ready[i] && (req_bank_sel == i);
@@ -142,7 +151,7 @@ module VX_avs_adapter #(
 
         assign avs_read[i]       = valid_out && ~rw_out;
         assign avs_write[i]      = valid_out && rw_out;
-        assign avs_address[i]    = ADDR_WIDTH'(addr_out);
+        assign avs_address[i]    = AVS_ADDR_WIDTH'(addr_out);
         assign avs_byteenable[i] = byteen_out;
         assign avs_writedata[i]  = data_out;
         assign avs_burstcount[i] = BURST_WIDTH'(1);

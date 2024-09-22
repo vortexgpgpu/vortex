@@ -71,13 +71,14 @@ public:
 
     // Check if the reservation is within memory capacity bounds
     if (addr + size > capacity_) {
-      printf("error: address range out of bounds\n");
+      printf("error: address range out of bounds - requested=0x%lx, capacity=0x%lx\n", (addr + size), capacity_);
       return -1;
     }
 
     // Ensure the reservation does not overlap with existing pages
-    if (hasPageOverlap(addr, size)) {
-      printf("error: address range overlaps with existing allocation\n");
+    uint64_t overlapStart, overlapEnd;
+    if (hasPageOverlap(addr, size, &overlapStart, &overlapEnd)) {
+      printf("error: address range overlaps with existing allocation - requested=[0x%lx-0x%lx], existing=[0x%lx, 0x%lx]\n", addr, addr+size, overlapStart, overlapEnd);
       return -1;
     }
 
@@ -509,15 +510,15 @@ private:
     return false;
   }
 
-  bool hasPageOverlap(uint64_t start, uint64_t size) {
+  bool hasPageOverlap(uint64_t start, uint64_t size, uint64_t* overlapStart, uint64_t* overlapEnd) {
     page_t* current = pages_;
     while (current != nullptr) {
       uint64_t pageStart = current->addr;
       uint64_t pageEnd = pageStart + current->size;
-      uint64_t requestEnd = start + size;
-      if ((start >= pageStart && start < pageEnd) ||  // Start of request is inside the page
-          (requestEnd > pageStart && requestEnd <= pageEnd) ||  // End of request is inside the page
-          (start <= pageStart && requestEnd >= pageEnd)) {  // Request envelops the page
+      uint64_t end = start + size;
+      if ((start <= pageEnd) && (end >= pageStart)) {
+        *overlapStart = pageStart;
+        *overlapEnd = pageEnd;
         return true;
       }
       current = current->next;

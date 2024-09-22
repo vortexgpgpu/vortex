@@ -35,7 +35,7 @@
 #include <unordered_map>
 #include <util.h>
 
-#define PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE (PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH/8)
+#define PLATFORM_MEMORY_DATA_SIZE (PLATFORM_MEMORY_DATA_WIDTH/8)
 
 #ifndef MEM_CLOCK_RATIO
 #define MEM_CLOCK_RATIO 1
@@ -144,6 +144,9 @@ public:
 
     // allocate RAM
     ram_ = new RAM(0, RAM_PAGE_SIZE);
+
+    // calculate memory bank size
+    mem_bank_size_ = (1ull << PLATFORM_MEMORY_ADDR_WIDTH) * PLATFORM_MEMORY_DATA_SIZE;
 
     // reset the device
     this->reset();
@@ -406,14 +409,14 @@ private:
   }
 
   void avs_bus_reset() {
-    for (int b = 0; b < PLATFORM_PARAM_LOCAL_MEMORY_BANKS; ++b) {
+    for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
       device_->avs_readdatavalid[b] = 0;
       device_->avs_waitrequest[b] = 0;
     }
   }
 
   void avs_bus_eval() {
-    for (int b = 0; b < PLATFORM_PARAM_LOCAL_MEMORY_BANKS; ++b) {
+    for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
       // process memory responses
       device_->avs_readdatavalid[b] = 0;
       if (!pending_mem_reqs_[b].empty()
@@ -421,7 +424,7 @@ private:
         auto mem_rd_it = pending_mem_reqs_[b].begin();
         auto mem_req = *mem_rd_it;
         device_->avs_readdatavalid[b] = 1;
-        memcpy(device_->avs_readdata[b], mem_req->data.data(), PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE);
+        memcpy(device_->avs_readdata[b], mem_req->data.data(), PLATFORM_MEMORY_DATA_SIZE);
         uint32_t addr = mem_req->addr;
         pending_mem_reqs_[b].erase(mem_rd_it);
         delete mem_req;
@@ -429,19 +432,20 @@ private:
 
       // process memory requests
       assert(!device_->avs_read[b] || !device_->avs_write[b]);
-      uint64_t byte_addr = (uint64_t(device_->avs_address[b]) * PLATFORM_PARAM_LOCAL_MEMORY_BANKS + b) * PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE;
+      uint64_t byte_addr = b * mem_bank_size_ + uint64_t(device_->avs_address[b]) * PLATFORM_MEMORY_DATA_SIZE;
       if (device_->avs_write[b]) {
+        // process write request
         uint64_t byteen = device_->avs_byteenable[b];
         uint8_t* data = (uint8_t*)(device_->avs_writedata[b].data());
-        for (int i = 0; i < PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE; i++) {
+        for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; i++) {
           if ((byteen >> i) & 0x1) {
             (*ram_)[byte_addr + i] = data[i];
           }
         }
 
-        /*printf("%0ld: [sim] MEM Wr Req: bank=%d, addr=0x%lx, data=0x", timestamp, b, byte_addr);
-        for (int i = 0; i < PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE; i++) {
-          printf("%02x", data[(PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE-1)-i]);
+        /*printf("%0ld: [sim] MEM Wr Req: bank=%d, addr=0x%lx, byteen=0x%lx, data=0x", timestamp, b, byte_addr, byteen);
+        for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
+          printf("%02x", data[i]);
         }
         printf("\n");*/
 
@@ -455,22 +459,20 @@ private:
         dram_queue_.push(mem_req);
       } else
       if (device_->avs_read[b]) {
+        // process read request
         auto mem_req = new mem_req_t();
         mem_req->addr = device_->avs_address[b];
         mem_req->bank_id = b;
-        ram_->read(mem_req->data.data(), byte_addr, PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE);
+        ram_->read(mem_req->data.data(), byte_addr, PLATFORM_MEMORY_DATA_SIZE);
         mem_req->write = false;
         mem_req->ready = false;
         pending_mem_reqs_[b].emplace_back(mem_req);
 
-        /*printf("%0ld: [sim] MEM Rd Req: bank=%d, addr=0x%lx, pending={", timestamp, b, mem_req.addr * PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE);
-        for (auto& req : pending_mem_reqs_[b]) {
-          if (req.cycles_left != 0)
-            printf(" !%0x", req.addr * PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE);
-          else
-            printf(" %0x", req.addr * PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE);
+        /*printf("%0ld: [sim] MEM Rd Req: bank=%d, addr=0x%lx, pending={", timestamp, b, byte_addr);
+        for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
+          printf("%02x", mem_req->data[i]);
         }
-        printf("}\n");*/
+        printf("\n");*/
 
         // send dram request
         dram_queue_.push(mem_req);
@@ -481,7 +483,7 @@ private:
   }
 
   typedef struct {
-    std::array<uint8_t, PLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE> data;
+    std::array<uint8_t, PLATFORM_MEMORY_DATA_SIZE> data;
     uint32_t addr;
     uint32_t bank_id;
     bool write;
@@ -514,9 +516,10 @@ private:
   bool stop_;
 
   std::unordered_map<int64_t, host_buffer_t> host_buffers_;
-  int64_t host_buffer_ids_;
+  uint64_t host_buffer_ids_;
+  uint64_t mem_bank_size_;
 
-  std::list<mem_req_t*> pending_mem_reqs_[PLATFORM_PARAM_LOCAL_MEMORY_BANKS];
+  std::list<mem_req_t*> pending_mem_reqs_[PLATFORM_MEMORY_BANKS];
 
   std::list<cci_rd_req_t> cci_reads_;
   std::list<cci_wr_req_t> cci_writes_;

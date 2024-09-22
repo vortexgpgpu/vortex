@@ -15,7 +15,7 @@
 
 module Vortex_axi import VX_gpu_pkg::*; #(
     parameter AXI_DATA_WIDTH = `VX_MEM_DATA_WIDTH,
-    parameter AXI_ADDR_WIDTH = `MEM_ADDR_WIDTH,
+    parameter AXI_ADDR_WIDTH = `MEM_ADDR_WIDTH + (`VX_MEM_DATA_WIDTH/8),
     parameter AXI_TID_WIDTH  = `VX_MEM_TAG_WIDTH,
     parameter AXI_NUM_BANKS  = 1
 )(
@@ -82,11 +82,10 @@ module Vortex_axi import VX_gpu_pkg::*; #(
     // Status
     output wire                         busy
 );
-    localparam MIN_TAG_WIDTH = `VX_MEM_TAG_WIDTH - `UUID_WIDTH;
-
-    `STATIC_ASSERT((AXI_DATA_WIDTH == `VX_MEM_DATA_WIDTH), ("invalid memory data size: current=%0d, expected=%0d", AXI_DATA_WIDTH, `VX_MEM_DATA_WIDTH))
-    `STATIC_ASSERT((AXI_ADDR_WIDTH >= `MEM_ADDR_WIDTH), ("invalid memory address size: current=%0d, expected=%0d", AXI_ADDR_WIDTH, `VX_MEM_ADDR_WIDTH))
-    `STATIC_ASSERT((AXI_TID_WIDTH >= MIN_TAG_WIDTH), ("invalid memory tag size: current=%0d, expected=%0d", AXI_TID_WIDTH, MIN_TAG_WIDTH))
+    localparam MIN_TAG_WIDTH       = `VX_MEM_TAG_WIDTH - `UUID_WIDTH;
+    localparam VX_MEM_ADDR_A_WIDTH = `VX_MEM_ADDR_WIDTH + `CLOG2(`VX_MEM_DATA_WIDTH) - `CLOG2(AXI_DATA_WIDTH);
+    
+    `STATIC_ASSERT((AXI_TID_WIDTH >= MIN_TAG_WIDTH), ("invalid memory tag width: current=%0d, expected=%0d", AXI_TID_WIDTH, MIN_TAG_WIDTH))
 
     wire                            mem_req_valid;
     wire                            mem_req_rw;
@@ -100,94 +99,6 @@ module Vortex_axi import VX_gpu_pkg::*; #(
     wire [`VX_MEM_DATA_WIDTH-1:0]   mem_rsp_data;
     wire [`VX_MEM_TAG_WIDTH-1:0]    mem_rsp_tag;
     wire                            mem_rsp_ready;
-
-    wire [`MEM_ADDR_WIDTH-1:0] m_axi_awaddr_unqual [AXI_NUM_BANKS];
-    wire [`MEM_ADDR_WIDTH-1:0] m_axi_araddr_unqual [AXI_NUM_BANKS];
-
-    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_awid_unqual [AXI_NUM_BANKS];
-    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_arid_unqual [AXI_NUM_BANKS];
-
-    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_bid_unqual [AXI_NUM_BANKS];
-    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_rid_unqual [AXI_NUM_BANKS];
-
-    for (genvar i = 0; i < AXI_NUM_BANKS; ++i) begin : g_padding
-        assign m_axi_awaddr[i] = `MEM_ADDR_WIDTH'(m_axi_awaddr_unqual[i]);
-        assign m_axi_araddr[i] = `MEM_ADDR_WIDTH'(m_axi_araddr_unqual[i]);
-
-        assign m_axi_awid[i] = AXI_TID_WIDTH'(m_axi_awid_unqual[i]);
-        assign m_axi_arid[i] = AXI_TID_WIDTH'(m_axi_arid_unqual[i]);
-
-        assign m_axi_rid_unqual[i] = `VX_MEM_TAG_WIDTH'(m_axi_rid[i]);
-        assign m_axi_bid_unqual[i] = `VX_MEM_TAG_WIDTH'(m_axi_bid[i]);
-    end
-
-    VX_axi_adapter #(
-        .DATA_WIDTH (`VX_MEM_DATA_WIDTH),
-        .ADDR_WIDTH (`MEM_ADDR_WIDTH),
-        .TAG_WIDTH  (`VX_MEM_TAG_WIDTH),
-        .NUM_BANKS  (AXI_NUM_BANKS),
-        .RSP_OUT_BUF((AXI_NUM_BANKS > 1) ? 2 : 0)
-    ) axi_adapter (
-        .clk            (clk),
-        .reset          (reset),
-
-        .mem_req_valid  (mem_req_valid),
-        .mem_req_rw     (mem_req_rw),
-        .mem_req_byteen (mem_req_byteen),
-        .mem_req_addr   (mem_req_addr),
-        .mem_req_data   (mem_req_data),
-        .mem_req_tag    (mem_req_tag),
-        .mem_req_ready  (mem_req_ready),
-
-        .mem_rsp_valid  (mem_rsp_valid),
-        .mem_rsp_data   (mem_rsp_data),
-        .mem_rsp_tag    (mem_rsp_tag),
-        .mem_rsp_ready  (mem_rsp_ready),
-
-        .m_axi_awvalid  (m_axi_awvalid),
-        .m_axi_awready  (m_axi_awready),
-        .m_axi_awaddr   (m_axi_awaddr_unqual),
-        .m_axi_awid     (m_axi_awid_unqual),
-        .m_axi_awlen    (m_axi_awlen),
-        .m_axi_awsize   (m_axi_awsize),
-        .m_axi_awburst  (m_axi_awburst),
-        .m_axi_awlock   (m_axi_awlock),
-        .m_axi_awcache  (m_axi_awcache),
-        .m_axi_awprot   (m_axi_awprot),
-        .m_axi_awqos    (m_axi_awqos),
-        .m_axi_awregion (m_axi_awregion),
-
-        .m_axi_wvalid   (m_axi_wvalid),
-        .m_axi_wready   (m_axi_wready),
-        .m_axi_wdata    (m_axi_wdata),
-        .m_axi_wstrb    (m_axi_wstrb),
-        .m_axi_wlast    (m_axi_wlast),
-
-        .m_axi_bvalid   (m_axi_bvalid),
-        .m_axi_bready   (m_axi_bready),
-        .m_axi_bid      (m_axi_bid_unqual),
-        .m_axi_bresp    (m_axi_bresp),
-
-        .m_axi_arvalid  (m_axi_arvalid),
-        .m_axi_arready  (m_axi_arready),
-        .m_axi_araddr   (m_axi_araddr_unqual),
-        .m_axi_arid     (m_axi_arid_unqual),
-        .m_axi_arlen    (m_axi_arlen),
-        .m_axi_arsize   (m_axi_arsize),
-        .m_axi_arburst  (m_axi_arburst),
-        .m_axi_arlock   (m_axi_arlock),
-        .m_axi_arcache  (m_axi_arcache),
-        .m_axi_arprot   (m_axi_arprot),
-        .m_axi_arqos    (m_axi_arqos),
-        .m_axi_arregion (m_axi_arregion),
-
-        .m_axi_rvalid   (m_axi_rvalid),
-        .m_axi_rready   (m_axi_rready),
-        .m_axi_rdata    (m_axi_rdata),
-        .m_axi_rlast    (m_axi_rlast) ,
-        .m_axi_rid      (m_axi_rid_unqual),
-        .m_axi_rresp    (m_axi_rresp)
-    );
 
     `SCOPE_IO_SWITCH (1)
 
@@ -215,6 +126,129 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         .dcr_wr_data    (dcr_wr_data),
 
         .busy           (busy)
+    );
+
+    wire                            mem_req_valid_a;
+    wire                            mem_req_rw_a;
+    wire [(AXI_DATA_WIDTH/8)-1:0]   mem_req_byteen_a;
+    wire [VX_MEM_ADDR_A_WIDTH-1:0]  mem_req_addr_a;
+    wire [AXI_DATA_WIDTH-1:0]       mem_req_data_a;
+    wire [AXI_TID_WIDTH-1:0]        mem_req_tag_a;
+    wire                            mem_req_ready_a;
+
+    wire                            mem_rsp_valid_a;
+    wire [AXI_DATA_WIDTH-1:0]       mem_rsp_data_a;
+    wire [AXI_TID_WIDTH-1:0]        mem_rsp_tag_a;
+    wire                            mem_rsp_ready_a;
+
+    VX_mem_adapter #(
+        .SRC_DATA_WIDTH (`VX_MEM_DATA_WIDTH),
+        .DST_DATA_WIDTH (AXI_DATA_WIDTH),
+        .SRC_ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),
+        .DST_ADDR_WIDTH (VX_MEM_ADDR_A_WIDTH),
+        .SRC_TAG_WIDTH  (`VX_MEM_TAG_WIDTH),
+        .DST_TAG_WIDTH  (AXI_TID_WIDTH),
+        .REQ_OUT_BUF    (0),
+        .RSP_OUT_BUF    (0)
+    ) mem_adapter (
+        .clk                (clk),
+        .reset              (reset),
+
+        .mem_req_valid_in   (mem_req_valid),
+        .mem_req_addr_in    (mem_req_addr),
+        .mem_req_rw_in      (mem_req_rw),
+        .mem_req_byteen_in  (mem_req_byteen),
+        .mem_req_data_in    (mem_req_data),
+        .mem_req_tag_in     (mem_req_tag),
+        .mem_req_ready_in   (mem_req_ready),
+
+        .mem_rsp_valid_in   (mem_rsp_valid),
+        .mem_rsp_data_in    (mem_rsp_data),
+        .mem_rsp_tag_in     (mem_rsp_tag),
+        .mem_rsp_ready_in   (mem_rsp_ready),
+
+        .mem_req_valid_out  (mem_req_valid_a),
+        .mem_req_addr_out   (mem_req_addr_a),
+        .mem_req_rw_out     (mem_req_rw_a),
+        .mem_req_byteen_out (mem_req_byteen_a),
+        .mem_req_data_out   (mem_req_data_a),
+        .mem_req_tag_out    (mem_req_tag_a),
+        .mem_req_ready_out  (mem_req_ready_a),
+
+        .mem_rsp_valid_out  (mem_rsp_valid_a),
+        .mem_rsp_data_out   (mem_rsp_data_a),
+        .mem_rsp_tag_out    (mem_rsp_tag_a),
+        .mem_rsp_ready_out  (mem_rsp_ready_a)
+    );
+
+    VX_axi_adapter #(
+        .DATA_WIDTH (AXI_DATA_WIDTH),
+        .ADDR_WIDTH (VX_MEM_ADDR_A_WIDTH),
+        .TAG_WIDTH  (AXI_TID_WIDTH),
+        .NUM_BANKS  (AXI_NUM_BANKS),
+        .AXI_ADDR_WIDTH (AXI_ADDR_WIDTH),
+        .BANK_INTERLEAVE (0),
+        .RSP_OUT_BUF((AXI_NUM_BANKS > 1) ? 2 : 0)
+    ) axi_adapter (
+        .clk            (clk),
+        .reset          (reset),
+
+        .mem_req_valid  (mem_req_valid_a),
+        .mem_req_rw     (mem_req_rw_a),
+        .mem_req_byteen (mem_req_byteen_a),
+        .mem_req_addr   (mem_req_addr_a),
+        .mem_req_data   (mem_req_data_a),
+        .mem_req_tag    (mem_req_tag_a),
+        .mem_req_ready  (mem_req_ready_a),
+
+        .mem_rsp_valid  (mem_rsp_valid_a),
+        .mem_rsp_data   (mem_rsp_data_a),
+        .mem_rsp_tag    (mem_rsp_tag_a),
+        .mem_rsp_ready  (mem_rsp_ready_a),
+
+        .m_axi_awvalid  (m_axi_awvalid),
+        .m_axi_awready  (m_axi_awready),
+        .m_axi_awaddr   (m_axi_awaddr),
+        .m_axi_awid     (m_axi_awid),
+        .m_axi_awlen    (m_axi_awlen),
+        .m_axi_awsize   (m_axi_awsize),
+        .m_axi_awburst  (m_axi_awburst),
+        .m_axi_awlock   (m_axi_awlock),
+        .m_axi_awcache  (m_axi_awcache),
+        .m_axi_awprot   (m_axi_awprot),
+        .m_axi_awqos    (m_axi_awqos),
+        .m_axi_awregion (m_axi_awregion),
+
+        .m_axi_wvalid   (m_axi_wvalid),
+        .m_axi_wready   (m_axi_wready),
+        .m_axi_wdata    (m_axi_wdata),
+        .m_axi_wstrb    (m_axi_wstrb),
+        .m_axi_wlast    (m_axi_wlast),
+
+        .m_axi_bvalid   (m_axi_bvalid),
+        .m_axi_bready   (m_axi_bready),
+        .m_axi_bid      (m_axi_bid),
+        .m_axi_bresp    (m_axi_bresp),
+
+        .m_axi_arvalid  (m_axi_arvalid),
+        .m_axi_arready  (m_axi_arready),
+        .m_axi_araddr   (m_axi_araddr),
+        .m_axi_arid     (m_axi_arid),
+        .m_axi_arlen    (m_axi_arlen),
+        .m_axi_arsize   (m_axi_arsize),
+        .m_axi_arburst  (m_axi_arburst),
+        .m_axi_arlock   (m_axi_arlock),
+        .m_axi_arcache  (m_axi_arcache),
+        .m_axi_arprot   (m_axi_arprot),
+        .m_axi_arqos    (m_axi_arqos),
+        .m_axi_arregion (m_axi_arregion),
+
+        .m_axi_rvalid   (m_axi_rvalid),
+        .m_axi_rready   (m_axi_rready),
+        .m_axi_rdata    (m_axi_rdata),
+        .m_axi_rlast    (m_axi_rlast),
+        .m_axi_rid      (m_axi_rid),
+        .m_axi_rresp    (m_axi_rresp)
     );
 
 endmodule

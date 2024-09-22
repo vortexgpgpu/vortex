@@ -16,16 +16,17 @@
 module VX_afu_wrap #(
 	  parameter C_S_AXI_CTRL_ADDR_WIDTH = 8,
 	  parameter C_S_AXI_CTRL_DATA_WIDTH	= 32,
-	  parameter C_M_AXI_MEM_ID_WIDTH    = `M_AXI_MEM_ID_WIDTH,
-	  parameter C_M_AXI_MEM_ADDR_WIDTH  = `MEM_ADDR_WIDTH,
-	  parameter C_M_AXI_MEM_DATA_WIDTH  = `VX_MEM_DATA_WIDTH
+	  parameter C_M_AXI_MEM_ID_WIDTH    = 32,
+	  parameter C_M_AXI_MEM_ADDR_WIDTH  = 25,
+	  parameter C_M_AXI_MEM_DATA_WIDTH  = 512,
+      parameter C_M_AXI_MEM_NUM_BANKS   = 2
 ) (
     // System signals
     input wire clk,
     input wire reset,
 
     // AXI4 master interface
-	`REPEAT (`M_AXI_MEM_NUM_BANKS, GEN_AXI_MEM, REPEAT_COMMA),
+	`REPEAT (`PLATFORM_MEMORY_BANKS, GEN_AXI_MEM, REPEAT_COMMA),
 
     // AXI4-Lite slave interface
     input  wire                                 s_axi_ctrl_awvalid,
@@ -48,7 +49,6 @@ module VX_afu_wrap #(
 
     output wire                                 interrupt
 );
-	localparam C_M_AXI_MEM_NUM_BANKS = `M_AXI_MEM_NUM_BANKS;
 
 	localparam STATE_IDLE = 0;
     localparam STATE_RUN  = 1;
@@ -80,15 +80,13 @@ module VX_afu_wrap #(
     wire [1:0]                           m_axi_mem_rresp_a [C_M_AXI_MEM_NUM_BANKS];
 
 	// convert memory interface to array
-	`REPEAT (`M_AXI_MEM_NUM_BANKS, AXI_MEM_TO_ARRAY, REPEAT_SEMICOLON);
+	`REPEAT (`PLATFORM_MEMORY_BANKS, AXI_MEM_TO_ARRAY, REPEAT_SEMICOLON);
 
 	reg [`CLOG2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
 	reg [15:0] vx_pending_writes;
 	reg vx_busy_wait;
 	reg vx_reset = 1; // asserted at initialization
 	wire vx_busy;
-
-	wire [63:0] mem_base [C_M_AXI_MEM_NUM_BANKS];
 
 	wire                          dcr_wr_valid;
 	wire [`VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr;
@@ -181,9 +179,9 @@ module VX_afu_wrap #(
 	end
 
 	VX_afu_ctrl #(
-		.AXI_ADDR_WIDTH (C_S_AXI_CTRL_ADDR_WIDTH),
-		.AXI_DATA_WIDTH (C_S_AXI_CTRL_DATA_WIDTH),
-		.AXI_NUM_BANKS  (C_M_AXI_MEM_NUM_BANKS)
+		.S_AXI_ADDR_WIDTH (C_S_AXI_CTRL_ADDR_WIDTH),
+		.S_AXI_DATA_WIDTH (C_S_AXI_CTRL_DATA_WIDTH),
+		.M_AXI_ADDR_WIDTH (C_M_AXI_MEM_ADDR_WIDTH)
 	) afu_ctrl (
 		.clk       		(clk),
 		.reset     		(reset),
@@ -218,26 +216,24 @@ module VX_afu_wrap #(
 		.scope_bus_out  (scope_bus_in),
 	`endif
 
-		.mem_base       (mem_base),
-
 		.dcr_wr_valid	(dcr_wr_valid),
 		.dcr_wr_addr	(dcr_wr_addr),
 		.dcr_wr_data	(dcr_wr_data)
 	);
 
-	wire [`MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_u [C_M_AXI_MEM_NUM_BANKS];
-	wire [`MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_u [C_M_AXI_MEM_NUM_BANKS];
+	wire [C_M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_u [C_M_AXI_MEM_NUM_BANKS];
+	wire [C_M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_u [C_M_AXI_MEM_NUM_BANKS];
 
 	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_addressing
-		assign m_axi_mem_awaddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_awaddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(mem_base[i]);
-		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(mem_base[i]);
+		assign m_axi_mem_awaddr_a[i] = m_axi_mem_awaddr_u[i] + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
+		assign m_axi_mem_araddr_a[i] = m_axi_mem_araddr_u[i] + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
 	end
 
 	`SCOPE_IO_SWITCH (2)
 
 	Vortex_axi #(
 		.AXI_DATA_WIDTH (C_M_AXI_MEM_DATA_WIDTH),
-		.AXI_ADDR_WIDTH (`MEM_ADDR_WIDTH),
+		.AXI_ADDR_WIDTH (C_M_AXI_MEM_ADDR_WIDTH),
 		.AXI_TID_WIDTH  (C_M_AXI_MEM_ID_WIDTH),
 		.AXI_NUM_BANKS  (C_M_AXI_MEM_NUM_BANKS)
 	) vortex_axi (

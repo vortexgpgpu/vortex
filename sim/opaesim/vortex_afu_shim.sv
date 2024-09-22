@@ -78,22 +78,22 @@ module vortex_afu_shim import local_mem_cfg_pkg::*; import ccip_if_pkg::*; (
   output t_ccip_mmioData      af2cp_sTxPort_c2_data,
 
   // Avalon signals for local memory access
-  output  t_local_mem_data      avs_writedata [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
-  input   t_local_mem_data      avs_readdata [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
-  output  t_local_mem_addr      avs_address [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
-  input   logic                 avs_waitrequest [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
-  output  logic                 avs_write [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
-  output  logic                 avs_read [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
-  output  t_local_mem_byte_mask avs_byteenable [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
-  output  t_local_mem_burst_cnt avs_burstcount [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
-  input                         avs_readdatavalid [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS]
+  output t_local_mem_data     avs_writedata [`PLATFORM_MEMORY_BANKS],
+  input  t_local_mem_data     avs_readdata [`PLATFORM_MEMORY_BANKS],
+  output t_local_mem_addr     avs_address [`PLATFORM_MEMORY_BANKS],
+  input  logic                avs_waitrequest [`PLATFORM_MEMORY_BANKS],
+  output logic                avs_write [`PLATFORM_MEMORY_BANKS],
+  output logic                avs_read [`PLATFORM_MEMORY_BANKS],
+  output t_local_mem_byte_mask avs_byteenable [`PLATFORM_MEMORY_BANKS],
+  output t_local_mem_burst_cnt avs_burstcount [`PLATFORM_MEMORY_BANKS],
+  input                       avs_readdatavalid [`PLATFORM_MEMORY_BANKS]
 );
 
 t_if_ccip_Rx cp2af_sRxPort;
 t_if_ccip_Tx af2cp_sTxPort;
 
 vortex_afu #(
-  .NUM_LOCAL_MEM_BANKS(`PLATFORM_PARAM_LOCAL_MEMORY_BANKS)
+  .NUM_LOCAL_MEM_BANKS(`PLATFORM_MEMORY_BANKS)
 ) afu (
     .clk(clk),
     .reset(reset),

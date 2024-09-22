@@ -30,7 +30,17 @@
 
 //`include "platform_afu_top_config.vh"
 
-`ifdef PLATFORM_PROVIDES_LOCAL_MEMORY
+`ifndef PLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH
+`define PLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH `PLATFORM_MEMORY_ADDR_WIDTH
+`endif
+
+`ifndef PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH
+`define PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH `PLATFORM_MEMORY_DATA_WIDTH
+`endif
+
+`ifndef PLATFORM_PARAM_LOCAL_MEMORY_BURST_CNT_WIDTH
+`define PLATFORM_PARAM_LOCAL_MEMORY_BURST_CNT_WIDTH `PLATFORM_MEMORY_BURST_CNT_WIDTH
+`endif
 
 package local_mem_cfg_pkg;
 
@@ -57,5 +67,3 @@ package local_mem_cfg_pkg;
     typedef logic [LOCAL_MEM_DATA_N_BYTES-1:0] t_local_mem_byte_mask;
 
 endpackage // local_mem_cfg_pkg
-
-`endif // PLATFORM_PROVIDES_LOCAL_MEMORY

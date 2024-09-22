@@ -8,6 +8,7 @@ SRC_DIR := $(VORTEX_HOME)/runtime/xrt
 
 CXXFLAGS += -std=c++14 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -I$(INC_DIR) -I$(COMMON_DIR) -I$(ROOT_DIR)/hw -I$(XILINX_XRT)/include -I$(SIM_DIR)/common
+CXXFLAGS += -DXLEN_$(XLEN)
 CXXFLAGS += -fPIC
 
 LDFLAGS += -shared -pthread
