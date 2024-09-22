@@ -37,7 +37,7 @@
 
 #include <iostream>
 
-#define M_AXI_MEM_DATA_SIZE (M_AXI_MEM_DATA_WIDTH/8)
+#define PLATFORM_MEMORY_DATA_SIZE (PLATFORM_MEMORY_DATA_WIDTH/8)
 
 #ifndef MEM_CLOCK_RATIO
 #define MEM_CLOCK_RATIO 1
@@ -59,9 +59,23 @@
 
 #define RAM_PAGE_SIZE 4096
 
-#define MEM_BANK_SIZE (1ull << M_AXI_MEM_ADDR_WIDTH)
-
 #define CPU_GPU_LATENCY 200
+
+#if PLATFORM_MEMORY_ADDR_WIDTH > 32
+  typedef QData Vl_m_addr_t;
+#else
+  typedef IData Vl_m_addr_t;
+#endif
+
+#if PLATFORM_MEMORY_DATA_WIDTH > 64
+  typedef VlWide<(PLATFORM_MEMORY_DATA_WIDTH/32)> Vl_m_data_t;
+#else
+#if PLATFORM_MEMORY_DATA_WIDTH > 32
+  typedef QData Vl_m_data_t;
+#else
+  typedef IData Vl_m_data_t;
+#endif
+#endif
 
 using namespace vortex;
 
@@ -134,7 +148,7 @@ public:
     if (future_.valid()) {
       future_.wait();
     }
-    for (int i = 0; i < M_AXI_MEM_NUM_BANKS; ++i) {
+    for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
       delete mem_alloc_[i];
     }
     if (ram_) {
@@ -169,15 +183,18 @@ public:
     tfp_->open("trace.vcd");
   #endif
 
+    // calculate memory bank size
+    mem_bank_size_ = ((1ull << PLATFORM_MEMORY_ADDR_WIDTH) / PLATFORM_MEMORY_BANKS) * PLATFORM_MEMORY_DATA_SIZE;
+
     // allocate RAM
     ram_ = new RAM(0, RAM_PAGE_SIZE);
 
     // initialize AXI memory interfaces
-    MP_M_AXI_MEM(M_AXI_MEM_NUM_BANKS);
+    MP_M_AXI_MEM(PLATFORM_MEMORY_BANKS);
 
     // initialize memory allocator
-    for (int i = 0; i < M_AXI_MEM_NUM_BANKS; ++i) {
-      mem_alloc_[i] = new MemoryAllocator(0, MEM_BANK_SIZE, 4096, 64);
+    for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
+      mem_alloc_[i] = new MemoryAllocator(0, mem_bank_size_, 4096, 64);
     }
 
     // reset the device
@@ -198,13 +215,13 @@ public:
   }
 
   int mem_alloc(uint64_t size, uint32_t bank_id, uint64_t* addr) {
-    if (bank_id >= M_AXI_MEM_NUM_BANKS)
+    if (bank_id >= PLATFORM_MEMORY_BANKS)
       return -1;
     return mem_alloc_[bank_id]->allocate(size, addr);
   }
 
   int mem_free(uint32_t bank_id, uint64_t addr) {
-    if (bank_id >= M_AXI_MEM_NUM_BANKS)
+    if (bank_id >= PLATFORM_MEMORY_BANKS)
       return -1;
     return mem_alloc_[bank_id]->release(addr);
   }
@@ -212,11 +229,11 @@ public:
   int mem_write(uint32_t bank_id, uint64_t addr, uint64_t size, const void* data) {
     std::lock_guard<std::mutex> guard(mutex_);
 
-    if (bank_id >= M_AXI_MEM_NUM_BANKS)
+    if (bank_id >= PLATFORM_MEMORY_BANKS)
       return -1;
-    uint64_t base_addr = uint64_t(bank_id) * MEM_BANK_SIZE + addr;
+    uint64_t base_addr = bank_id * mem_bank_size_ + addr;
     ram_->write(data, base_addr, size);
-    /*printf("%0ld: [sim] xrt-mem-write: addr=0x%lx, size=%ld, data=0x", timestamp, base_addr, size);
+    /*printf("%0ld: [sim] xrt-mem-write: bank_id=%0d, addr=0x%lx, size=%ld, data=0x", timestamp, bank_id, base_addr, size);
     for (int i = size-1; i >= 0; --i) {
       printf("%02x", ((const uint8_t*)data)[i]);
     }
@@ -227,11 +244,11 @@ public:
   int mem_read(uint32_t bank_id, uint64_t addr, uint64_t size, void* data) {
     std::lock_guard<std::mutex> guard(mutex_);
 
-    if (bank_id >= M_AXI_MEM_NUM_BANKS)
+    if (bank_id >= PLATFORM_MEMORY_BANKS)
       return -1;
-    uint64_t base_addr = uint64_t(bank_id) * MEM_BANK_SIZE + addr;
+    uint64_t base_addr = bank_id * mem_bank_size_ + addr;
     ram_->read(data, base_addr, size);
-    /*printf("%0ld: [sim] xrt-mem-read: addr=0x%lx, size=%ld, data=0x", timestamp, base_addr, size);
+    /*printf("%0ld: [sim] xrt-mem-read: bank_id=%0d, addr=0x%lx, size=%ld, data=0x", timestamp, bank_id, base_addr, size);
     for (int i = size-1; i >= 0; --i) {
       printf("%02x", ((uint8_t*)data)[i]);
     }
@@ -307,7 +324,7 @@ private:
       reqs.clear();
     }
 
-    for (int i = 0; i < M_AXI_MEM_NUM_BANKS; ++i) {
+    for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
       std::queue<mem_req_t*> empty;
       std::swap(dram_queues_[i], empty);
     }
@@ -334,7 +351,7 @@ private:
   void tick() {
     this->axi_mem_bus_eval();
 
-    for (int i = 0; i < M_AXI_MEM_NUM_BANKS; ++i) {
+    for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
       if (!dram_queues_[i].empty()) {
         auto mem_req = dram_queues_[i].front();
         if (dram_sim_.send_request(mem_req->write, mem_req->addr, i, [](void* arg) {
@@ -394,7 +411,7 @@ private:
   }
 
   void axi_mem_bus_reset() {
-    for (int i = 0; i < M_AXI_MEM_NUM_BANKS; ++i) {
+    for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
       // address read request
       *m_axi_mem_[i].arready = 1;
 
@@ -418,7 +435,7 @@ private:
   }
 
   void axi_mem_bus_eval() {
-    for (int i = 0; i < M_AXI_MEM_NUM_BANKS; ++i) {
+    for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
       // handle read responses
       if (m_axi_states_[i].read_rsp_pending && (*m_axi_mem_[i].rready)) {
         *m_axi_mem_[i].rvalid = 0;
@@ -434,7 +451,7 @@ private:
           *m_axi_mem_[i].rid    = mem_rsp->tag;
           *m_axi_mem_[i].rresp  = 0;
           *m_axi_mem_[i].rlast  = 1;
-          memcpy(m_axi_mem_[i].rdata->data(), mem_rsp->data.data(), M_AXI_MEM_DATA_SIZE);
+          memcpy(m_axi_mem_[i].rdata->data(), mem_rsp->data.data(), PLATFORM_MEMORY_DATA_SIZE);
           pending_mem_reqs_[i].erase(mem_rsp_it);
           m_axi_states_[i].read_rsp_pending = true;
           delete mem_rsp;
@@ -465,14 +482,14 @@ private:
       if (*m_axi_mem_[i].arvalid && *m_axi_mem_[i].arready) {
         auto mem_req = new mem_req_t();
         mem_req->tag   = *m_axi_mem_[i].arid;
-        mem_req->addr  = uint64_t(*m_axi_mem_[i].araddr) * M_AXI_MEM_NUM_BANKS + i * M_AXI_MEM_DATA_SIZE;
-        ram_->read(mem_req->data.data(), mem_req->addr, M_AXI_MEM_DATA_SIZE);
+        mem_req->addr  = i * mem_bank_size_ + uint64_t(*m_axi_mem_[i].araddr) * PLATFORM_MEMORY_DATA_SIZE;
+        ram_->read(mem_req->data.data(), mem_req->addr, PLATFORM_MEMORY_DATA_SIZE);
         mem_req->write = false;
         mem_req->ready = false;
         pending_mem_reqs_[i].emplace_back(mem_req);
 
         /*printf("%0ld: [sim] axi-mem-read: bank=%d, addr=0x%lx, tag=0x%x, data=0x", timestamp, i, mem_req->addr, mem_req->tag);
-        for (int i = M_AXI_MEM_DATA_SIZE-1; i >= 0; --i) {
+        for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
           printf("%02x", mem_req->data[i]);
         }
         printf("\n");*/
@@ -494,9 +511,9 @@ private:
 
         auto byteen = *m_axi_mem_[i].wstrb;
         auto data = (uint8_t*)m_axi_mem_[i].wdata->data();
-        auto byte_addr = m_axi_states_[i].write_req_addr * M_AXI_MEM_NUM_BANKS + i * M_AXI_MEM_DATA_SIZE;
+        auto byte_addr = i * mem_bank_size_ + m_axi_states_[i].write_req_addr * PLATFORM_MEMORY_DATA_SIZE;
 
-        for (int i = 0; i < M_AXI_MEM_DATA_SIZE; i++) {
+        for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; i++) {
           if ((byteen >> i) & 0x1) {
             (*ram_)[byte_addr + i] = data[i];
           }
@@ -510,7 +527,7 @@ private:
         pending_mem_reqs_[i].emplace_back(mem_req);
 
         /*printf("%0ld: [sim] axi-mem-write: bank=%d, addr=0x%lx, byteen=0x%lx, tag=0x%x, data=0x", timestamp, i, mem_req->addr, byteen, mem_req->tag);
-        for (int i = M_AXI_MEM_DATA_SIZE-1; i >= 0; --i) {
+        for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
           printf("%02x", data[i]);
         }
         printf("\n");*/
@@ -535,7 +552,7 @@ private:
   } m_axi_state_t;
 
   typedef struct {
-    std::array<uint8_t, M_AXI_MEM_DATA_SIZE> data;
+    std::array<uint8_t, PLATFORM_MEMORY_DATA_SIZE> data;
     uint32_t tag;
     uint64_t addr;
     bool write;
@@ -545,22 +562,22 @@ private:
   typedef struct {
     CData* awvalid;
     CData* awready;
-    QData* awaddr;
+    Vl_m_addr_t* awaddr;
     IData* awid;
     CData* awlen;
     CData* wvalid;
     CData* wready;
-    VlWide<16>* wdata;
+    Vl_m_data_t* wdata;
     QData* wstrb;
     CData* wlast;
     CData* arvalid;
     CData* arready;
-    QData* araddr;
+    Vl_m_addr_t* araddr;
     IData* arid;
     CData* arlen;
     CData* rvalid;
     CData* rready;
-    VlWide<16>* rdata;
+    Vl_m_data_t* rdata;
     CData* rlast;
     IData* rid;
     CData* rresp;
@@ -573,21 +590,22 @@ private:
   Vvortex_afu_shim* device_;
   RAM* ram_;
   DramSim dram_sim_;
+  uint64_t mem_bank_size_;
 
   std::future<void> future_;
   bool stop_;
 
   std::mutex mutex_;
 
-  std::list<mem_req_t*> pending_mem_reqs_[M_AXI_MEM_NUM_BANKS];
+  std::list<mem_req_t*> pending_mem_reqs_[PLATFORM_MEMORY_BANKS];
 
-  m_axi_mem_t m_axi_mem_[M_AXI_MEM_NUM_BANKS];
+  m_axi_mem_t m_axi_mem_[PLATFORM_MEMORY_BANKS];
 
-  MemoryAllocator* mem_alloc_[M_AXI_MEM_NUM_BANKS];
+  MemoryAllocator* mem_alloc_[PLATFORM_MEMORY_BANKS];
 
-  m_axi_state_t m_axi_states_[M_AXI_MEM_NUM_BANKS];
+  m_axi_state_t m_axi_states_[PLATFORM_MEMORY_BANKS];
 
-  std::queue<mem_req_t*> dram_queues_[M_AXI_MEM_NUM_BANKS];
+  std::queue<mem_req_t*> dram_queues_[PLATFORM_MEMORY_BANKS];
 
 #ifdef VCD_OUTPUT
   VerilatedVcdC* tfp_;

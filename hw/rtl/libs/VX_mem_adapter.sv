@@ -53,8 +53,6 @@ module VX_mem_adapter #(
     input wire [DST_TAG_WIDTH-1:0]      mem_rsp_tag_out,
     output wire                         mem_rsp_ready_out
 );
-    `STATIC_ASSERT ((DST_TAG_WIDTH >= SRC_TAG_WIDTH), ("oops!"))
-
     localparam DST_DATA_SIZE = (DST_DATA_WIDTH / 8);
     localparam DST_LDATAW = `CLOG2(DST_DATA_WIDTH);
     localparam SRC_LDATAW = `CLOG2(SRC_DATA_WIDTH);
@@ -74,6 +72,7 @@ module VX_mem_adapter #(
     wire [SRC_TAG_WIDTH-1:0]     mem_rsp_tag_in_w;
     wire                         mem_rsp_ready_in_w;
 
+    `UNUSED_VAR (mem_req_tag_in)
     `UNUSED_VAR (mem_rsp_tag_out)
 
     if (DST_LDATAW > SRC_LDATAW) begin : g_wider_dst_data
@@ -122,7 +121,7 @@ module VX_mem_adapter #(
 
         assign mem_rsp_valid_in_w   = mem_rsp_valid_out;
         assign mem_rsp_data_in_w    = mem_rsp_data_out_w[rsp_idx];
-        assign mem_rsp_tag_in_w     = SRC_TAG_WIDTH'(mem_rsp_tag_out[SRC_TAG_WIDTH+D-1:D]);
+        assign mem_rsp_tag_in_w     = SRC_TAG_WIDTH'(mem_rsp_tag_out[DST_TAG_WIDTH-1:D]);
         assign mem_rsp_ready_out    = mem_rsp_ready_in_w;
 
     end else if (DST_LDATAW < SRC_LDATAW) begin : g_wider_src_data

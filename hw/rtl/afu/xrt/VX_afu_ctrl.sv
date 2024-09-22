@@ -14,21 +14,21 @@
 `include "vortex_afu.vh"
 
 module VX_afu_ctrl #(
-    parameter AXI_ADDR_WIDTH = 8,
-    parameter AXI_DATA_WIDTH = 32,
-    parameter AXI_NUM_BANKS  = 1
+    parameter S_AXI_ADDR_WIDTH = 8,
+    parameter S_AXI_DATA_WIDTH = 32,
+    parameter M_AXI_ADDR_WIDTH = 25
 ) (
     // axi4 lite slave signals
     input  wire                         clk,
     input  wire                         reset,
 
     input  wire                         s_axi_awvalid,
-    input  wire [AXI_ADDR_WIDTH-1:0]    s_axi_awaddr,
+    input  wire [S_AXI_ADDR_WIDTH-1:0]  s_axi_awaddr,
     output wire                         s_axi_awready,
 
     input  wire                         s_axi_wvalid,
-    input  wire [AXI_DATA_WIDTH-1:0]    s_axi_wdata,
-    input  wire [AXI_DATA_WIDTH/8-1:0]  s_axi_wstrb,
+    input  wire [S_AXI_DATA_WIDTH-1:0]  s_axi_wdata,
+    input  wire [S_AXI_DATA_WIDTH/8-1:0]s_axi_wstrb,
     output wire                         s_axi_wready,
 
     output wire                         s_axi_bvalid,
@@ -36,11 +36,11 @@ module VX_afu_ctrl #(
     input  wire                         s_axi_bready,
 
     input  wire                         s_axi_arvalid,
-    input  wire [AXI_ADDR_WIDTH-1:0]    s_axi_araddr,
+    input  wire [S_AXI_ADDR_WIDTH-1:0]  s_axi_araddr,
     output wire                         s_axi_arready,
 
     output wire                         s_axi_rvalid,
-    output wire [AXI_DATA_WIDTH-1:0]    s_axi_rdata,
+    output wire [S_AXI_DATA_WIDTH-1:0]  s_axi_rdata,
     output wire [1:0]                   s_axi_rresp,
     input  wire                         s_axi_rready,
 
@@ -55,8 +55,6 @@ module VX_afu_ctrl #(
     input wire                          scope_bus_in,
     output wire                         scope_bus_out,
 `endif
-
-    output wire [63:0]                  mem_base [AXI_NUM_BANKS],
 
     output wire                         dcr_wr_valid,
     output wire [`VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr,
@@ -125,10 +123,6 @@ module VX_afu_ctrl #(
         //ADDR_SCP_CTRL   = 8'h3C,
     `endif
 
-        ADDR_MEM_0      = 8'h40,
-        ADDR_MEM_1      = 8'h44,
-        //ADDR_MEM_CTRL   = 8'h48,
-
         ADDR_BITS       = 8;
 
     localparam
@@ -144,7 +138,9 @@ module VX_afu_ctrl #(
         RSTATE_WIDTH    = 2;
 
     // device caps
-    wire [63:0] dev_caps = {16'b0,
+    wire [63:0] dev_caps = {8'b0,
+                            5'(M_AXI_ADDR_WIDTH-16),
+                            3'(`CLOG2(`PLATFORM_MEMORY_BANKS)),
                             8'(`LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
                             16'(`NUM_CORES * `NUM_CLUSTERS),
                             8'(`NUM_WARPS),
@@ -174,7 +170,6 @@ module VX_afu_ctrl #(
     reg         gie_r;
     reg [1:0]   ier_r;
     reg [1:0]   isr_r;
-    reg [63:0]  mem_r [AXI_NUM_BANKS];
     reg [31:0]  dcra_r;
     reg [31:0]  dcrv_r;
     reg         dcr_wr_valid_r;
@@ -311,10 +306,6 @@ module VX_afu_ctrl #(
             dcra_r <= '0;
             dcrv_r <= '0;
             dcr_wr_valid_r <= 0;
-
-            for (integer i = 0; i < AXI_NUM_BANKS; ++i) begin
-                mem_r[i] <= '0;
-            end
         end else begin
             dcr_wr_valid_r <= 0;
             ap_reset_r <= 0;
@@ -353,16 +344,7 @@ module VX_afu_ctrl #(
                     dcrv_r <= (s_axi_wdata & wmask) | (dcrv_r & ~wmask);
                     dcr_wr_valid_r <= 1;
                 end
-                default: begin
-                    for (integer i = 0; i < AXI_NUM_BANKS; ++i) begin
-                        if (waddr == (ADDR_MEM_0 + 8'(i) * 8'd12)) begin
-                            mem_r[i][31:0] <= (s_axi_wdata & wmask) | (mem_r[i][31:0] & ~wmask);
-                        end
-                        if (waddr == (ADDR_MEM_1 + 8'(i) * 8'd12)) begin
-                            mem_r[i][63:32] <= (s_axi_wdata & wmask) | (mem_r[i][63:32] & ~wmask);
-                        end
-                    end
-                end
+                default:;
                 endcase
 
                 if (ier_r[0] & ap_done)
@@ -452,8 +434,6 @@ module VX_afu_ctrl #(
     assign ap_reset  = ap_reset_r;
     assign ap_start  = ap_start_r;
     assign interrupt = gie_r & (| isr_r);
-
-    assign mem_base  = mem_r;
 
     assign dcr_wr_valid = dcr_wr_valid_r;
     assign dcr_wr_addr  = `VX_DCR_ADDR_WIDTH'(dcra_r);
