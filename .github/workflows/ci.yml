@@ -117,7 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [regression, opencl, cache, config1, config2, debug, stress]
+        name: [regression, opencl, cache, config1, config2, debug, stress, synthesis]
         xlen: [32, 64]
 
     steps:
@@ -161,7 +161,6 @@ jobs:
             ./ci/regression.sh --unittest
             ./ci/regression.sh --isa
             ./ci/regression.sh --kernel
-            ./ci/regression.sh --synthesis
             ./ci/regression.sh --regression
           else
             ./ci/regression.sh --${{ matrix.name }}
