@@ -273,16 +273,18 @@ module VX_cache_bank #(
     assign addr_sel    = (init_valid | flush_valid) ? `CS_LINE_ADDR_WIDTH'(flush_sel) :
                             (replay_valid ? replay_addr : (mem_rsp_valid ? mem_rsp_addr : core_req_addr));
 
-    if (WRITE_ENABLE) begin : g_data_sel_lo
-        assign data_sel[`CS_WORD_WIDTH-1:0] = replay_valid ? replay_data : (mem_rsp_valid ? mem_rsp_data[`CS_WORD_WIDTH-1:0] : core_req_data);
-    end else begin : g_data_sel_lo_ro
-        assign data_sel[`CS_WORD_WIDTH-1:0] = mem_rsp_data[`CS_WORD_WIDTH-1:0];
+    if (WRITE_ENABLE) begin : g_data_sel
+        for (genvar i = 0; i < `CS_LINE_WIDTH; ++i) begin : g_i
+            if (i < `CS_WORD_WIDTH) begin : g_lo
+                assign data_sel[i] = replay_valid ? replay_data[i] : (mem_rsp_valid ? mem_rsp_data[i] : core_req_data[i]);
+            end else begin : g_hi
+                assign data_sel[i] = mem_rsp_data[i]; // only the memory response fills the upper words of data_sel
+            end
+        end
+    end else begin : g_data_sel_ro
+        assign data_sel = mem_rsp_data;
         `UNUSED_VAR (core_req_data)
         `UNUSED_VAR (replay_data)
-    end
-
-    for (genvar i = `CS_WORD_WIDTH; i < `CS_LINE_WIDTH; ++i) begin : g_data_sel_hi
-        assign data_sel[i] = mem_rsp_data[i]; // only the memory response fills the upper words of data_sel
     end
 
     if (UUID_WIDTH != 0) begin : g_req_uuid_sel
