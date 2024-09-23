@@ -46,9 +46,10 @@ using namespace vortex;
 
 #define MMIO_CTL_ADDR 0x00
 #define MMIO_DEV_ADDR 0x10
-#define MMIO_ISA_ADDR 0x1C
-#define MMIO_DCR_ADDR 0x28
-#define MMIO_SCP_ADDR 0x34
+#define MMIO_ISA_ADDR 0x18
+#define MMIO_DCR_ADDR 0x20
+#define MMIO_SCP_ADDR 0x28
+#define MMIO_MEM_ADDR 0x30
 
 #define CTL_AP_START (1 << 0)
 #define CTL_AP_DONE (1 << 1)
