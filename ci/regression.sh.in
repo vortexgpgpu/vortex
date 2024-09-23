@@ -285,6 +285,10 @@ config2()
     CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=opae --app=mstress
     CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=xrt --app=mstress
 
+    # test DRAM banks interleaving
+    CONFIGS="-DPLATFORM_MEMORY_INTERLEAVE=1" ./ci/blackbox.sh --driver=opae --app=mstress
+    CONFIGS="-DPLATFORM_MEMORY_INTERLEAVE=0" ./ci/blackbox.sh --driver=opae --app=mstress
+
     echo "configuration-2 tests done!"
 }
 

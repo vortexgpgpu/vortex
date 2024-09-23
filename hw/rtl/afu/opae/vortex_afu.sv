@@ -18,6 +18,10 @@
 `endif
 `include "VX_define.vh"
 
+`ifndef PLATFORM_MEMORY_INTERLEAVE
+`define PLATFORM_MEMORY_INTERLEAVE 1
+`endif
+
 module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_gpu_pkg::*; #(
     parameter NUM_LOCAL_MEM_BANKS = 2
 ) (
@@ -604,7 +608,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .TAG_WIDTH     (AVS_REQ_TAGW + 1),
         .RD_QUEUE_SIZE (AVS_RD_QUEUE_SIZE),
         .AVS_ADDR_WIDTH($bits(t_local_mem_addr)),
-        .BANK_INTERLEAVE (1),
+        .BANK_INTERLEAVE (`PLATFORM_MEMORY_INTERLEAVE),
         .REQ_OUT_BUF   (2),
         .RSP_OUT_BUF   (0)
     ) avs_adapter (
