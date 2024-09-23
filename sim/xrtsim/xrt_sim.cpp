@@ -184,7 +184,7 @@ public:
   #endif
 
     // calculate memory bank size
-    mem_bank_size_ = ((1ull << PLATFORM_MEMORY_ADDR_WIDTH) / PLATFORM_MEMORY_BANKS) * PLATFORM_MEMORY_DATA_SIZE;
+    mem_bank_size_ = 1ull << PLATFORM_MEMORY_ADDR_WIDTH;
 
     // allocate RAM
     ram_ = new RAM(0, RAM_PAGE_SIZE);

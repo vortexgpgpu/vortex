@@ -119,9 +119,6 @@ module VX_afu_ctrl #(
         ADDR_SCP_1      = 8'h2C,
     `endif
 
-        ADDR_MEM_0      = 8'h30,
-        ADDR_MEM_1      = 8'h34,
-
         ADDR_BITS       = 8;
 
     localparam

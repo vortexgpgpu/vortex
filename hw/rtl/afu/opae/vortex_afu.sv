@@ -96,12 +96,10 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     localparam STATE_DCR_WRITE    = 4;
     localparam STATE_WIDTH        = `CLOG2(STATE_DCR_WRITE+1);
 
-    localparam BANK_BYTE_ADDR_WIDTH = `PLATFORM_MEMORY_ADDR_WIDTH + `CLOG2(`PLATFORM_MEMORY_DATA_WIDTH/8);
-
     wire [127:0] afu_id = `AFU_ACCEL_UUID;
 
     wire [63:0] dev_caps = {8'b0,
-                            5'(BANK_BYTE_ADDR_WIDTH-16),
+                            5'(`PLATFORM_MEMORY_ADDR_WIDTH-16),
                             3'(`CLOG2(`PLATFORM_MEMORY_BANKS)),
                             8'(`LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
                             16'(`NUM_CORES * `NUM_CLUSTERS),

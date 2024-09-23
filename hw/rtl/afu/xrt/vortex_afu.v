@@ -22,7 +22,7 @@ module vortex_afu #(
 	parameter C_M_AXI_MEM_ADDR_WIDTH  = 64,
     parameter C_M_AXI_MEM_NUM_BANKS   = 1
 `else
-	parameter C_M_AXI_MEM_ADDR_WIDTH  = `PLATFORM_MEMORY_ADDR_WIDTH + $clog(`PLATFORM_MEMORY_DATA_WIDTH/8),
+	parameter C_M_AXI_MEM_ADDR_WIDTH  = `PLATFORM_MEMORY_ADDR_WIDTH,
     parameter C_M_AXI_MEM_NUM_BANKS   = `PLATFORM_MEMORY_BANKS
 `endif
 ) (
