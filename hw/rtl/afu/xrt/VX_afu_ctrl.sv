@@ -233,7 +233,7 @@ module VX_afu_ctrl #(
                 end
             end
             if (cmd_scope_writing) begin
-                scope_bus_out_r <= 1'(scope_bus_wdata >> scope_bus_ctr);
+                scope_bus_out_r <= scope_bus_wdata[scope_bus_ctr];
                 scope_bus_ctr <= scope_bus_ctr - 1;
                 if (scope_bus_ctr == 0) begin
                     cmd_scope_writing <= 0;
