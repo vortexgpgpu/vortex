@@ -35,7 +35,7 @@ module VX_pending_size #(
     `STATIC_ASSERT(INCRW <= SIZEW, ("invalid parameter: %d vs %d", INCRW, SIZEW))
     `STATIC_ASSERT(DECRW <= SIZEW, ("invalid parameter: %d vs %d", DECRW, SIZEW))
 
-    if (SIZE == 1) begin : g_size1
+    if (SIZE == 1) begin : g_size_eq1
 
         reg size_r;
 
@@ -59,7 +59,7 @@ module VX_pending_size #(
         assign alm_full  = 1'b1;
         assign size      = size_r;
 
-    end else begin : g_sizeN
+    end else begin : g_size_gt1
 
         reg empty_r, alm_empty_r;
         reg full_r, alm_full_r;
@@ -124,7 +124,7 @@ module VX_pending_size #(
                 end
             end
 
-            if (SIZE > 2) begin : g_sizeN
+            if (SIZE > 2) begin : g_size_gt2
 
                 wire is_empty_n = (used_r == ADDRW'(1));
                 wire is_full_n  = (used_r == ADDRW'(SIZE-1));
@@ -152,7 +152,7 @@ module VX_pending_size #(
                     end
                 end
 
-            end else begin : g_size2
+            end else begin : g_size_eq2
 
                 always @(posedge clk) begin
                     if (reset) begin
