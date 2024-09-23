@@ -17,8 +17,8 @@ module VX_afu_wrap #(
 	  parameter C_S_AXI_CTRL_ADDR_WIDTH = 8,
 	  parameter C_S_AXI_CTRL_DATA_WIDTH	= 32,
 	  parameter C_M_AXI_MEM_ID_WIDTH    = 32,
-	  parameter C_M_AXI_MEM_ADDR_WIDTH  = 25,
 	  parameter C_M_AXI_MEM_DATA_WIDTH  = 512,
+	  parameter C_M_AXI_MEM_ADDR_WIDTH  = 25,
       parameter C_M_AXI_MEM_NUM_BANKS   = 2
 ) (
     // System signals
@@ -52,6 +52,11 @@ module VX_afu_wrap #(
 
     output wire                                 interrupt
 );
+`ifdef PLATFORM_MERGED_MEMORY_INTERFACE
+	localparam M_AXI_MEM_ADDR_WIDTH = `PLATFORM_MEMORY_ADDR_WIDTH + $clog2(`PLATFORM_MEMORY_BANKS);
+`else
+	localparam M_AXI_MEM_ADDR_WIDTH = `PLATFORM_MEMORY_ADDR_WIDTH;
+`endif
 
 	localparam STATE_IDLE = 0;
     localparam STATE_RUN  = 1;
@@ -187,8 +192,7 @@ module VX_afu_wrap #(
 
 	VX_afu_ctrl #(
 		.S_AXI_ADDR_WIDTH (C_S_AXI_CTRL_ADDR_WIDTH),
-		.S_AXI_DATA_WIDTH (C_S_AXI_CTRL_DATA_WIDTH),
-		.M_AXI_ADDR_WIDTH (C_M_AXI_MEM_ADDR_WIDTH)
+		.S_AXI_DATA_WIDTH (C_S_AXI_CTRL_DATA_WIDTH)
 	) afu_ctrl (
 		.clk       		(clk),
 		.reset     		(reset),
@@ -228,19 +232,19 @@ module VX_afu_wrap #(
 		.dcr_wr_data	(dcr_wr_data)
 	);
 
-	wire [C_M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_u [C_M_AXI_MEM_NUM_BANKS];
-	wire [C_M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_u [C_M_AXI_MEM_NUM_BANKS];
+	wire [M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_u [C_M_AXI_MEM_NUM_BANKS];
+	wire [M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_u [C_M_AXI_MEM_NUM_BANKS];
 
 	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_addressing
-		assign m_axi_mem_awaddr_a[i] = m_axi_mem_awaddr_u[i] + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
-		assign m_axi_mem_araddr_a[i] = m_axi_mem_araddr_u[i] + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
+		assign m_axi_mem_awaddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_awaddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
+		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
 	end
 
 	`SCOPE_IO_SWITCH (2)
 
 	Vortex_axi #(
 		.AXI_DATA_WIDTH (C_M_AXI_MEM_DATA_WIDTH),
-		.AXI_ADDR_WIDTH (C_M_AXI_MEM_ADDR_WIDTH),
+		.AXI_ADDR_WIDTH (M_AXI_MEM_ADDR_WIDTH),
 		.AXI_TID_WIDTH  (C_M_AXI_MEM_ID_WIDTH),
 		.AXI_NUM_BANKS  (C_M_AXI_MEM_NUM_BANKS)
 	) vortex_axi (

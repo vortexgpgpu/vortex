@@ -17,8 +17,8 @@ module vortex_afu_shim #(
     parameter C_S_AXI_CTRL_ADDR_WIDTH = 8,
 	parameter C_S_AXI_CTRL_DATA_WIDTH = 32,
 	parameter C_M_AXI_MEM_ID_WIDTH 	  = `PLATFORM_MEMORY_ID_WIDTH,
-	parameter C_M_AXI_MEM_ADDR_WIDTH  = `PLATFORM_MEMORY_ADDR_WIDTH,
 	parameter C_M_AXI_MEM_DATA_WIDTH  = `PLATFORM_MEMORY_DATA_WIDTH,
+	parameter C_M_AXI_MEM_ADDR_WIDTH  = 64,
     parameter C_M_AXI_MEM_NUM_BANKS   = `PLATFORM_MEMORY_BANKS
 ) (
 	// System signals
@@ -54,8 +54,8 @@ module vortex_afu_shim #(
 		.C_S_AXI_CTRL_ADDR_WIDTH (C_S_AXI_CTRL_ADDR_WIDTH),
 		.C_S_AXI_CTRL_DATA_WIDTH (C_S_AXI_CTRL_DATA_WIDTH),
 		.C_M_AXI_MEM_ID_WIDTH    (C_M_AXI_MEM_ID_WIDTH),
-		.C_M_AXI_MEM_ADDR_WIDTH  (C_M_AXI_MEM_ADDR_WIDTH),
 		.C_M_AXI_MEM_DATA_WIDTH  (C_M_AXI_MEM_DATA_WIDTH),
+		.C_M_AXI_MEM_ADDR_WIDTH  (C_M_AXI_MEM_ADDR_WIDTH),
 		.C_M_AXI_MEM_NUM_BANKS   (C_M_AXI_MEM_NUM_BANKS)
 	) afu_wrap (
 		.clk             	(ap_clk),

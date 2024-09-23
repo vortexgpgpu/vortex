@@ -602,13 +602,13 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     VX_avs_adapter #(
         .DATA_WIDTH    (LMEM_DATA_WIDTH),
-        .ADDR_WIDTH    (LMEM_ADDR_WIDTH),
+        .ADDR_WIDTH_IN (LMEM_ADDR_WIDTH),
+        .ADDR_WIDTH_OUT($bits(t_local_mem_addr)),
         .BURST_WIDTH   (LMEM_BURST_CTRW),
         .NUM_BANKS     (NUM_LOCAL_MEM_BANKS),
         .TAG_WIDTH     (AVS_REQ_TAGW + 1),
         .RD_QUEUE_SIZE (AVS_RD_QUEUE_SIZE),
-        .AVS_ADDR_WIDTH($bits(t_local_mem_addr)),
-        .BANK_INTERLEAVE (`PLATFORM_MEMORY_INTERLEAVE),
+        .BANK_INTERLEAVE(`PLATFORM_MEMORY_INTERLEAVE),
         .REQ_OUT_BUF   (2),
         .RSP_OUT_BUF   (0)
     ) avs_adapter (

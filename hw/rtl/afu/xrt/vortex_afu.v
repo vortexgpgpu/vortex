@@ -18,11 +18,10 @@ module vortex_afu #(
 	parameter C_S_AXI_CTRL_DATA_WIDTH = 32,
 	parameter C_M_AXI_MEM_ID_WIDTH 	  = `PLATFORM_MEMORY_ID_WIDTH,
 	parameter C_M_AXI_MEM_DATA_WIDTH  = `PLATFORM_MEMORY_DATA_WIDTH,
-`ifdef SYNTHESIS
 	parameter C_M_AXI_MEM_ADDR_WIDTH  = 64,
+`ifdef PLATFORM_MERGED_MEMORY_INTERFACE
     parameter C_M_AXI_MEM_NUM_BANKS   = 1
 `else
-	parameter C_M_AXI_MEM_ADDR_WIDTH  = `PLATFORM_MEMORY_ADDR_WIDTH,
     parameter C_M_AXI_MEM_NUM_BANKS   = `PLATFORM_MEMORY_BANKS
 `endif
 ) (
