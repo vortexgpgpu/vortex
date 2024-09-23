@@ -189,7 +189,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                 scope_bus_in      <= 1;
             end
             if (cmd_scope_writing) begin
-                scope_bus_in  <= 1'(cmd_scope_wdata >> scope_bus_ctr);
+                scope_bus_in  <= cmd_scope_wdata[scope_bus_ctr];
                 scope_bus_ctr <= scope_bus_ctr - 6'd1;
                 if (scope_bus_ctr == 0) begin
                     cmd_scope_writing <= 0;

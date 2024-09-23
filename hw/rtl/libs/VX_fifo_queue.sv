@@ -40,7 +40,7 @@ module VX_fifo_queue #(
     `STATIC_ASSERT(ALM_FULL < DEPTH, ("alm_full must be smaller than size!"))
     `STATIC_ASSERT(ALM_EMPTY > 0, ("alm_empty must be greater than 0!"))
     `STATIC_ASSERT(ALM_EMPTY < DEPTH, ("alm_empty must be smaller than size!"))
-    `STATIC_ASSERT(`IS_POW2(DEPTH), ("size must be a power of 2!"))
+    `STATIC_ASSERT(`IS_POW2(DEPTH), ("depth must be a power of 2!"))
 
     VX_pending_size #(
         .SIZE      (DEPTH),

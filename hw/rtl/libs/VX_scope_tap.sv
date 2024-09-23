@@ -17,9 +17,9 @@
 module VX_scope_tap #(
     parameter SCOPE_ID  = 0,    // scope identifier
     parameter SCOPE_IDW = 8,    // scope identifier width
-    parameter TRIGGERW  = 16,   // trigger signals width
-    parameter PROBEW    = 256,  // probe signal width
-    parameter DEPTH     = 1024, // trace buffer depth
+    parameter TRIGGERW  = 32,   // trigger signals width
+    parameter PROBEW    = 4999, // probe signal width
+    parameter DEPTH     = 8192, // trace buffer depth
     parameter IDLE_CTRW = 32,   // idle time between triggers counter width
     parameter TX_DATAW  = 64    // transfer data width
 ) (
@@ -38,6 +38,7 @@ module VX_scope_tap #(
     localparam DATA_BITS        = `LOG2UP(DATAW);
     localparam ADDRW            = `CLOG2(DEPTH);
     localparam MAX_IDLE_CTR     = (2 ** IDLE_CTRW) - 1;
+    localparam TX_DATA_BLOCKS   = `CDIV(DATAW, TX_DATAW);
 
     localparam CTRL_STATE_IDLE  = 2'd0;
     localparam CTRL_STATE_RECV  = 2'd1;
@@ -65,6 +66,7 @@ module VX_scope_tap #(
     localparam GET_TYPE_BITS    = 2;
 
     `STATIC_ASSERT ((IDLE_CTRW <= TX_DATAW), ("invalid parameter"))
+    `STATIC_ASSERT(`IS_POW2(DEPTH), ("depth must be a power of 2!"))
 
     reg [TAP_STATE_BITS-1:0] tap_state;
     reg [CTRL_STATE_BITS-1:0] ctrl_state;
@@ -94,6 +96,8 @@ module VX_scope_tap #(
         VX_dp_ram #(
             .DATAW (IDLE_CTRW),
             .SIZE  (DEPTH),
+            .OUT_REG (1),
+            .READ_ENABLE (0),
             .NO_RWCHECK (1)
         ) delta_store (
             .clk    (clk),
@@ -115,6 +119,8 @@ module VX_scope_tap #(
     VX_dp_ram #(
         .DATAW (DATAW),
         .SIZE  (DEPTH),
+        .OUT_REG (1),
+        .READ_ENABLE (0),
         .NO_RWCHECK (1)
     ) data_store (
         .clk    (clk),
@@ -214,13 +220,11 @@ module VX_scope_tap #(
     reg [TX_DATA_BITS-1:0] ser_tx_ctr;
     reg [DATA_BITS-1:0] read_offset;
     reg is_read_data;
+    reg [1:0] read_en;
 
     wire [CMD_TYPE_BITS-1:0] cmd_type = ser_buf_in[CMD_TYPE_BITS-1:0];
     wire [SCOPE_IDW-1:0] cmd_scope_id = ser_buf_in_n[CMD_TYPE_BITS +: SCOPE_IDW];
     wire [TX_DATAW-CMD_TYPE_BITS-SCOPE_IDW-1:0] cmd_data = ser_buf_in[TX_DATAW-1:CMD_TYPE_BITS+SCOPE_IDW];
-
-    wire [TX_DATAW-1:0] data_chunk = TX_DATAW'(DATAW'(data_value >> read_offset));
-    wire [TX_DATAW-1:0] get_data = is_read_data ? data_chunk : TX_DATAW'(delta_value);
 
     wire [ADDRW-1:0] raddr_n = raddr + ADDRW'(1);
 
@@ -235,9 +239,11 @@ module VX_scope_tap #(
             raddr       <= '0;
             is_read_data<= 0;
             ser_tx_ctr  <= '0;
+            read_en     <= '0;
         end else begin
             bus_out_r   <= 0;
             cmd_start   <= 0;
+            read_en     <= '0;
             case (ctrl_state)
             CTRL_STATE_IDLE: begin
                 if (bus_in) begin
@@ -305,7 +311,7 @@ module VX_scope_tap #(
                 `endif
                 end
                 GET_TYPE_DATA: begin
-                    bus_out_r <= 1'(get_data >> ser_tx_ctr);
+                    read_en <= {is_read_data, 1'b1};
                     if (ser_tx_ctr == 0) begin
                         if (is_read_data) begin
                             if (DATAW > TX_DATAW) begin
@@ -349,7 +355,30 @@ module VX_scope_tap #(
         end
     end
 
-    assign bus_out = bus_out_r;
+    wire [TX_DATA_BLOCKS-1:0][TX_DATAW-1:0] data_blocks;
+    for (genvar i = 0; i < TX_DATA_BLOCKS; ++i) begin : g_data_blocks
+        for (genvar j = 0; j < TX_DATAW; ++j) begin : g_j
+            localparam k = i * TX_DATAW + j;
+            if (k < DATAW) begin : g_valid
+                assign data_blocks[i][j] = data_value[k];
+            end else begin : g_padding
+                assign data_blocks[i][j] = '0;
+            end
+        end
+    end
+
+    wire [TX_DATAW-1:0] get_data = read_en[1] ? data_blocks[read_offset] : TX_DATAW'(delta_value);
+    wire bus_out_w = read_en[0] ? get_data[ser_tx_ctr] : bus_out_r;
+
+    VX_pipe_register #(
+        .DATAW (1)
+    ) buf_out (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  (bus_out_w),
+        .data_out (bus_out)
+    );
 
 endmodule
 `TRACING_ON

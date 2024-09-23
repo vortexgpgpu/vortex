@@ -311,7 +311,7 @@ module VX_mem_scheduler #(
                 assign mem_req_addr_b[i][j]   = reqq_addr_s[r];
                 assign mem_req_flags_b[i][j]  = reqq_flags_s[r];
                 assign mem_req_data_b[i][j]   = reqq_data_s[r];
-            end else begin : g_extra
+            end else begin : g_padding
                 assign mem_req_mask_b[i][j]   = 0;
                 assign mem_req_byteen_b[i][j] = '0;
                 assign mem_req_addr_b[i][j]   = '0;
