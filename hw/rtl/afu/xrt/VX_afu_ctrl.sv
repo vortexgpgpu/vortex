@@ -107,21 +107,20 @@ module VX_afu_ctrl #(
 
         ADDR_DEV_0      = 8'h10,
         ADDR_DEV_1      = 8'h14,
-        //ADDR_DEV_CTRL   = 8'h18,
 
-        ADDR_ISA_0      = 8'h1C,
-        ADDR_ISA_1      = 8'h20,
-        //ADDR_ISA_CTRL   = 8'h24,
+        ADDR_ISA_0      = 8'h18,
+        ADDR_ISA_1      = 8'h1C,
 
-        ADDR_DCR_0      = 8'h28,
-        ADDR_DCR_1      = 8'h2C,
-        //ADDR_DCR_CTRL   = 8'h30,
+        ADDR_DCR_0      = 8'h20,
+        ADDR_DCR_1      = 8'h24,
 
     `ifdef SCOPE
-        ADDR_SCP_0      = 8'h34,
-        ADDR_SCP_1      = 8'h38,
-        //ADDR_SCP_CTRL   = 8'h3C,
+        ADDR_SCP_0      = 8'h28,
+        ADDR_SCP_1      = 8'h2C,
     `endif
+
+        ADDR_MEM_0      = 8'h30,
+        ADDR_MEM_1      = 8'h34,
 
         ADDR_BITS       = 8;
 
