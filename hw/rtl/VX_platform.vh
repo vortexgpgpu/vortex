@@ -22,60 +22,30 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifdef VIVADO
-`define STRING
-`else
-`define STRING string
-`endif
+`ifdef SIMULATION
 
-`ifdef SYNTHESIS
+`define STATIC_ASSERT(cond, msg) \
+generate \
+    /* verilator lint_off GENUNNAMED */ \
+    if (!(cond)) $error msg; \
+    /* verilator lint_on GENUNNAMED */ \
+endgenerate
 
-`define TRACING_ON
-`define TRACING_OFF
+`define ERROR(msg) \
+    $error msg
 
-`ifndef NDEBUG
-    `define DEBUG_BLOCK(x) x
-    `define TRACE(level, args) \
-        if (level <= `DEBUG_LEVEL) begin \
-            $write args; \
-        end
-`else
-    `define DEBUG_BLOCK(x)
-    `define TRACE(level, args)
-`endif
+`define ASSERT(cond, msg) \
+    assert(cond) else $error msg
 
-`define IGNORE_UNOPTFLAT_BEGIN
-`define IGNORE_UNOPTFLAT_END
-`define IGNORE_UNUSED_BEGIN
-`define IGNORE_UNUSED_END
-`define IGNORE_WARNINGS_BEGIN
-`define IGNORE_WARNINGS_END
-`define UNUSED_PARAM(x)
-`define UNUSED_SPARAM(x)
-`define UNUSED_VAR(x)
-`define UNUSED_PIN(x) . x ()
-`define UNUSED_ARG(x) x
-
-`define __SCOPE (* mark_debug="true" *)
-
-`define __SCOPE_X
-
-`define __SCOPE_ON  \
-    `undef __SCOPE_X \
-    `define __SCOPE_X `__SCOPE
-
-`define __SCOPE_OFF  \
-    `undef __SCOPE_X \
-    `define __SCOPE_X
-
-`else // not SYNTHESIS
+`define RUNTIME_ASSERT(cond, msg)     \
+    always @(posedge clk) begin       \
+        assert(cond) else $error msg; \
+    end
 
 `define __SCOPE
 `define __SCOPE_X
 `define __SCOPE_ON
 `define __SCOPE_OFF
-
-`ifdef VERILATOR
 
 `ifndef TRACING_ALL
 `define TRACING_ON      /* verilator tracing_on */
@@ -148,7 +118,6 @@
 `define UNUSED_ARG(x)   /* verilator lint_off UNUSED */ \
                         x \
                         /* verilator lint_on UNUSED */
-`endif // not VERILATOR
 
 `ifdef SV_DPI
 `define TRACE(level, args) dpi_trace(level, $sformatf args);
@@ -159,31 +128,43 @@
     end
 `endif
 
-`endif
+`else // SYNTHESIS
 
-`ifdef SIMULATION
-    `define STATIC_ASSERT(cond, msg) \
-    generate \
-        /* verilator lint_off GENUNNAMED */ \
-        if (!(cond)) $error msg; \
-        /* verilator lint_on GENUNNAMED */ \
-    endgenerate
+`define STATIC_ASSERT(cond, msg)
+`define ERROR(msg)                  //
+`define ASSERT(cond, msg)           //
+`define RUNTIME_ASSERT(cond, msg)
 
-    `define ERROR(msg) \
-        $error msg
+`define DEBUG_BLOCK(x)
+`define TRACE(level, args)
 
-    `define ASSERT(cond, msg) \
-        assert(cond) else $error msg
+`define TRACING_ON
+`define TRACING_OFF
 
-    `define RUNTIME_ASSERT(cond, msg)     \
-        always @(posedge clk) begin       \
-            assert(cond) else $error msg; \
-        end
-`else // not SIMULATION
-    `define STATIC_ASSERT(cond, msg)
-    `define ERROR(msg)                  //
-    `define ASSERT(cond, msg)           //
-    `define RUNTIME_ASSERT(cond, msg)
+`define IGNORE_UNOPTFLAT_BEGIN
+`define IGNORE_UNOPTFLAT_END
+`define IGNORE_UNUSED_BEGIN
+`define IGNORE_UNUSED_END
+`define IGNORE_WARNINGS_BEGIN
+`define IGNORE_WARNINGS_END
+`define UNUSED_PARAM(x)
+`define UNUSED_SPARAM(x)
+`define UNUSED_VAR(x)
+`define UNUSED_PIN(x) . x ()
+`define UNUSED_ARG(x) x
+
+`define __SCOPE (* mark_debug="true" *)
+
+`define __SCOPE_X
+
+`define __SCOPE_ON  \
+    `undef __SCOPE_X \
+    `define __SCOPE_X `__SCOPE
+
+`define __SCOPE_OFF  \
+    `undef __SCOPE_X \
+    `define __SCOPE_X
+
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -195,6 +176,7 @@
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
 `define DISABLE_BRAM    (* ramstyle = "logic" *)
 `define PRESERVE_NET    (* preserve *)
+`define STRING          string
 `elsif VIVADO
 `define MAX_FANOUT      8
 `define IF_DATA_SIZE(x) $bits(x.data)
@@ -202,6 +184,7 @@
 `define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
 `define DISABLE_BRAM    (* ram_style = "registers" *)
 `define PRESERVE_NET    (* keep = "true" *)
+`define STRING
 `else
 `define MAX_FANOUT      8
 `define IF_DATA_SIZE(x) x.DATA_WIDTH
@@ -209,6 +192,7 @@
 `define NO_RW_RAM_CHECK
 `define DISABLE_BRAM
 `define PRESERVE_NET
+`define STRING          string
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
