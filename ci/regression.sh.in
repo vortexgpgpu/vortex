@@ -313,8 +313,10 @@ debug()
 
     test_csv_trace
 
-    CONFIGS="-O0 -DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
-    CONFIGS="-O0 -DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=xrt --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
+    CONFIGS="-O0" ./ci/blackbox.sh --driver=opae --app=demo --args="-n1"
+    CONFIGS="-O0" ./ci/blackbox.sh --driver=xrt --app=demo --args="-n1"
+    CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
+    CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=xrt --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
     CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
     ./ci/blackbox.sh --driver=opae --scope --app=demo --args="-n1"
     ./ci/blackbox.sh --driver=xrt --scope --app=demo --args="-n1"

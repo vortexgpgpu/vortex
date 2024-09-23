@@ -191,8 +191,6 @@ public:
     xrtDevice_ = xrtDevice;
     xrtKernel_ = xrtKernel;
 
-    printf("info: device name=%s.\n", device_name.c_str());
-
     CHECK_ERR(this->write_register(MMIO_CTL_ADDR, CTL_AP_RESET), {
       return err;
     });
@@ -222,6 +220,8 @@ public:
     lg2_bank_size_ = log2ceil(bank_size);
 
     global_mem_size_ = num_banks * bank_size;
+
+    printf("info: device name=%s, memory_capacity=0x%lx bytes, memory_banks=%ld.\n", device_name.c_str(), global_mem_size_, num_banks);
 
   #ifdef BANK_INTERLEAVE
     xrtBuffers_.reserve(num_banks);
