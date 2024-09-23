@@ -61,12 +61,6 @@
 
 #define CPU_GPU_LATENCY 200
 
-#if PLATFORM_MEMORY_ADDR_WIDTH > 32
-  typedef QData Vl_m_addr_t;
-#else
-  typedef IData Vl_m_addr_t;
-#endif
-
 #if PLATFORM_MEMORY_DATA_WIDTH > 64
   typedef VlWide<(PLATFORM_MEMORY_DATA_WIDTH/32)> Vl_m_data_t;
 #else
@@ -482,7 +476,7 @@ private:
       if (*m_axi_mem_[i].arvalid && *m_axi_mem_[i].arready) {
         auto mem_req = new mem_req_t();
         mem_req->tag   = *m_axi_mem_[i].arid;
-        mem_req->addr  = i * mem_bank_size_ + uint64_t(*m_axi_mem_[i].araddr) * PLATFORM_MEMORY_DATA_SIZE;
+        mem_req->addr  = i * mem_bank_size_ + uint64_t(*m_axi_mem_[i].araddr);
         ram_->read(mem_req->data.data(), mem_req->addr, PLATFORM_MEMORY_DATA_SIZE);
         mem_req->write = false;
         mem_req->ready = false;
@@ -511,7 +505,7 @@ private:
 
         auto byteen = *m_axi_mem_[i].wstrb;
         auto data = (uint8_t*)m_axi_mem_[i].wdata->data();
-        auto byte_addr = i * mem_bank_size_ + m_axi_states_[i].write_req_addr * PLATFORM_MEMORY_DATA_SIZE;
+        auto byte_addr = i * mem_bank_size_ + m_axi_states_[i].write_req_addr;
 
         for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; i++) {
           if ((byteen >> i) & 0x1) {
@@ -562,7 +556,7 @@ private:
   typedef struct {
     CData* awvalid;
     CData* awready;
-    Vl_m_addr_t* awaddr;
+    QData* awaddr;
     IData* awid;
     CData* awlen;
     CData* wvalid;
@@ -572,7 +566,7 @@ private:
     CData* wlast;
     CData* arvalid;
     CData* arready;
-    Vl_m_addr_t* araddr;
+    QData* araddr;
     IData* arid;
     CData* arlen;
     CData* rvalid;

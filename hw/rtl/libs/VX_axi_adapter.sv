@@ -16,10 +16,10 @@
 `TRACING_OFF
 module VX_axi_adapter #(
     parameter DATA_WIDTH     = 512,
-    parameter ADDR_WIDTH     = 32,
+    parameter ADDR_WIDTH_IN  = 1,
+    parameter ADDR_WIDTH_OUT = 32,
     parameter TAG_WIDTH      = 8,
     parameter NUM_BANKS      = 1,
-    parameter AXI_ADDR_WIDTH = (ADDR_WIDTH - `CLOG2(DATA_WIDTH/8)),
     parameter BANK_INTERLEAVE= 0,
     parameter RSP_OUT_BUF    = 0
 ) (
@@ -30,7 +30,7 @@ module VX_axi_adapter #(
     input wire                      mem_req_valid,
     input wire                      mem_req_rw,
     input wire [DATA_WIDTH/8-1:0]   mem_req_byteen,
-    input wire [ADDR_WIDTH-1:0]     mem_req_addr,
+    input wire [ADDR_WIDTH_IN-1:0]  mem_req_addr,
     input wire [DATA_WIDTH-1:0]     mem_req_data,
     input wire [TAG_WIDTH-1:0]      mem_req_tag,
     output wire                     mem_req_ready,
@@ -44,7 +44,7 @@ module VX_axi_adapter #(
     // AXI write request address channel
     output wire                     m_axi_awvalid [NUM_BANKS],
     input wire                      m_axi_awready [NUM_BANKS],
-    output wire [AXI_ADDR_WIDTH-1:0] m_axi_awaddr [NUM_BANKS],
+    output wire [ADDR_WIDTH_OUT-1:0] m_axi_awaddr [NUM_BANKS],
     output wire [TAG_WIDTH-1:0]     m_axi_awid [NUM_BANKS],
     output wire [7:0]               m_axi_awlen [NUM_BANKS],
     output wire [2:0]               m_axi_awsize [NUM_BANKS],
@@ -71,7 +71,7 @@ module VX_axi_adapter #(
     // AXI read address channel
     output wire                     m_axi_arvalid [NUM_BANKS],
     input wire                      m_axi_arready [NUM_BANKS],
-    output wire [AXI_ADDR_WIDTH-1:0] m_axi_araddr [NUM_BANKS],
+    output wire [ADDR_WIDTH_OUT-1:0] m_axi_araddr [NUM_BANKS],
     output wire [TAG_WIDTH-1:0]     m_axi_arid [NUM_BANKS],
     output wire [7:0]               m_axi_arlen [NUM_BANKS],
     output wire [2:0]               m_axi_arsize [NUM_BANKS],
@@ -93,25 +93,27 @@ module VX_axi_adapter #(
     localparam DATA_SIZE      = `CLOG2(DATA_WIDTH/8);
     localparam BANK_SEL_BITS  = `CLOG2(NUM_BANKS);
     localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
-    localparam BANK_OFFSETW   = ADDR_WIDTH - BANK_SEL_BITS;
-    localparam DST_ADDR_WDITH = BANK_OFFSETW + `CLOG2(DATA_WIDTH/8);
+    localparam DST_ADDR_WDITH = ADDR_WIDTH_OUT + BANK_SEL_BITS - `CLOG2(DATA_WIDTH/8); // to input space
+    localparam BANK_OFFSETW   = DST_ADDR_WDITH - BANK_SEL_BITS;
 
-    `STATIC_ASSERT ((AXI_ADDR_WIDTH >= DST_ADDR_WDITH), ("invalid tag width: current=%0d, expected=%0d", AXI_ADDR_WIDTH, DST_ADDR_WDITH))
+    `STATIC_ASSERT ((DST_ADDR_WDITH >= ADDR_WIDTH_IN), ("invalid address width: current=%0d, expected=%0d", DST_ADDR_WDITH, ADDR_WIDTH_IN))
 
-    wire [BANK_SEL_WIDTH-1:0] req_bank_sel;
     wire [BANK_OFFSETW-1:0]   req_bank_off;
+    wire [BANK_SEL_WIDTH-1:0] req_bank_sel;
+
+    wire [DST_ADDR_WDITH-1:0] mem_req_addr_out = DST_ADDR_WDITH'(mem_req_addr);
 
     if (NUM_BANKS > 1) begin : g_bank_sel
         if (BANK_INTERLEAVE) begin : g_interleave
-            assign req_bank_sel = mem_req_addr[BANK_SEL_BITS-1:0];
-            assign req_bank_off = mem_req_addr[BANK_SEL_BITS +: BANK_OFFSETW];
+            assign req_bank_sel = mem_req_addr_out[BANK_SEL_BITS-1:0];
+            assign req_bank_off = mem_req_addr_out[BANK_SEL_BITS +: BANK_OFFSETW];
         end else begin : g_no_interleave
-            assign req_bank_sel = mem_req_addr[BANK_OFFSETW +: BANK_SEL_BITS];
-            assign req_bank_off = mem_req_addr[BANK_OFFSETW-1:0];
+            assign req_bank_sel = mem_req_addr_out[BANK_OFFSETW +: BANK_SEL_BITS];
+            assign req_bank_off = mem_req_addr_out[BANK_OFFSETW-1:0];
         end
     end else begin : g_no_bank_sel
         assign req_bank_sel = '0;
-        assign req_bank_off = mem_req_addr;
+        assign req_bank_off = mem_req_addr_out;
     end
 
     wire mem_req_fire = mem_req_valid && mem_req_ready;
@@ -148,7 +150,7 @@ module VX_axi_adapter #(
     // AXI write request address channel
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_write_addr
         assign m_axi_awvalid[i] = mem_req_valid && mem_req_rw && (req_bank_sel == i) && ~m_axi_aw_ack[i];
-        assign m_axi_awaddr[i]  = AXI_ADDR_WIDTH'(req_bank_off);
+        assign m_axi_awaddr[i]  = ADDR_WIDTH_OUT'(req_bank_off) << `CLOG2(DATA_WIDTH/8);
         assign m_axi_awid[i]    = mem_req_tag;
         assign m_axi_awlen[i]   = 8'b00000000;
         assign m_axi_awsize[i]  = 3'(DATA_SIZE);
@@ -180,7 +182,7 @@ module VX_axi_adapter #(
     // AXI read request channel
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_read_req
         assign m_axi_arvalid[i] = mem_req_valid && ~mem_req_rw && (req_bank_sel == i);
-        assign m_axi_araddr[i]  = AXI_ADDR_WIDTH'(req_bank_off);
+        assign m_axi_araddr[i]  = ADDR_WIDTH_OUT'(req_bank_off) << `CLOG2(DATA_WIDTH/8);
         assign m_axi_arid[i]    = mem_req_tag;
         assign m_axi_arlen[i]   = 8'b00000000;
         assign m_axi_arsize[i]  = 3'(DATA_SIZE);

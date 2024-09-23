@@ -15,8 +15,7 @@
 
 module VX_afu_ctrl #(
     parameter S_AXI_ADDR_WIDTH = 8,
-    parameter S_AXI_DATA_WIDTH = 32,
-    parameter M_AXI_ADDR_WIDTH = 25
+    parameter S_AXI_DATA_WIDTH = 32
 ) (
     // axi4 lite slave signals
     input  wire                         clk,
@@ -135,7 +134,7 @@ module VX_afu_ctrl #(
 
     // device caps
     wire [63:0] dev_caps = {8'b0,
-                            5'(M_AXI_ADDR_WIDTH-16),
+                            5'(`PLATFORM_MEMORY_ADDR_WIDTH-16),
                             3'(`CLOG2(`PLATFORM_MEMORY_BANKS)),
                             8'(`LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
                             16'(`NUM_CORES * `NUM_CLUSTERS),
