@@ -273,7 +273,13 @@ config2()
     CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=simx --app=mstress --threads=8
 
     # test single-bank DRAM
-    CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=${XLEN}" ./ci/blackbox.sh --driver=opae --app=mstress
+    if [ "$XLEN" == "64" ]; then
+        CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=48" ./ci/blackbox.sh --driver=opae --app=mstress
+        CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=48" ./ci/blackbox.sh --driver=xrt --app=mstress
+    else
+        CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=32" ./ci/blackbox.sh --driver=opae --app=mstress
+        CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=32" ./ci/blackbox.sh --driver=xrt --app=mstress
+    fi
 
     # test 33-bit DRAM address
     CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=opae --app=mstress
