@@ -37,4 +37,4 @@ set argv [list ${krnl_name} ${vcs_file} ${tool_dir} ${build_dir}]
 set argc 4
 source ${script_path}/package_kernel.tcl
 
-package_xo -xo_path ${xoname} -kernel_name ${krnl_name} -ip_directory "${build_dir}/xo/packaged_kernel"
+package_xo -xo_path ${xoname} -kernel_name ${krnl_name} -ip_directory "${build_dir}/xo/packaged_kernel" -kernel_xml ${build_dir}/kernel.xml

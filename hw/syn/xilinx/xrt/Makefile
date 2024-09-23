@@ -76,6 +76,7 @@ CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 
 # include sources
 RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
+RTL_PKGS += $(RTL_DIR)/tex/VX_tex_pkg.sv $(RTL_DIR)/raster/VX_raster_pkg.sv $(RTL_DIR)/om/VX_om_pkg.sv
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
@@ -91,18 +92,8 @@ RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(OM_INCLUDE)
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
 
-ifeq ($(DEV_ARCH), zynquplus)
-# ztnq
-else ifeq ($(DEV_ARCH), versal)
-# versal
-else
-# alveo
-ifneq ($(findstring xilinx_u55c,$(XSA)),)
-  VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem_0:HBM[0:31]
-else
-  VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem_0:HBM[0:15]
-endif
-endif
+# load platform settings
+include $(SRC_DIR)/platforms.mk
 
 VPP_FLAGS += --report_level 2
 VPP_FLAGS += --config $(SRC_DIR)/vitis.ini
@@ -173,8 +164,12 @@ scope-json: $(BUILD_DIR)/scope.json
 $(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/scope.py vortex.xml -o scope.json
 
+gen-xml:
+$(BUILD_DIR)/kernel.xml:
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SRC_DIR)/gen_xml.py -n $(M_AXI_NUM_BANKS) -d $(M_AXI_DATA_WIDTH) -a $(M_AXI_ADDRESS_WIDTH) -o kernel.xml
+
 gen-xo: $(XO_CONTAINER)
-$(XO_CONTAINER): $(BUILD_DIR)/sources.txt
+$(XO_CONTAINER): $(BUILD_DIR)/sources.txt $(BUILD_DIR)/kernel.xml
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source $(SRC_DIR)/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt $(SCRIPT_DIR) ../$(BUILD_DIR)
 
 gen-bin: $(XCLBIN_CONTAINER)

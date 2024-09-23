@@ -275,9 +275,9 @@ config2()
     # test single-bank DRAM
     CONFIGS="-DPLATFORM_MEMORY_BANKS=1" ./ci/blackbox.sh --driver=opae --app=mstress
 
-    # test 27-bit DRAM address
-    CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=opae --app=mstress
-    CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=xrt --app=mstress
+    # test 33-bit DRAM address
+    CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=opae --app=mstress
+    CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=xrt --app=mstress
 
     echo "configuration-2 tests done!"
 }
