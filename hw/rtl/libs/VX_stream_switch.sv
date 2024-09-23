@@ -46,7 +46,7 @@ module VX_stream_switch #(
                 if (ii < NUM_INPUTS) begin : g_valid
                     assign valid_in_w[i][j] = valid_in[ii];
                     assign data_in_w[i][j]  = data_in[ii];
-                end else begin : g_extra
+                end else begin : g_padding
                     assign valid_in_w[i][j] = 0;
                     assign data_in_w[i][j]  = '0;
                 end
@@ -121,7 +121,7 @@ module VX_stream_switch #(
                         .valid_out (valid_out[ii]),
                         .ready_out (ready_out[ii])
                     );
-                end else begin : g_extra
+                end else begin : g_padding
                     `UNUSED_VAR (valid_out_w[i][j])
                     assign ready_out_w[i][j] = '0;
                 end
