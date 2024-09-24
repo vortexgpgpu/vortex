@@ -32,10 +32,6 @@ CFLAGS += -O3 -mcmodel=medany -fno-exceptions -fdata-sections -ffunction-section
 CFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/hw
 CFLAGS += -DXLEN_$(XLEN)
 
-ifeq ($(VM_ENABLE), 1)
-CFLAGS += -DVM_ENABLE
-endif
-
 PROJECT := libvortex
 
 SRCS = $(SRC_DIR)/vx_start.S $(SRC_DIR)/vx_syscalls.c $(SRC_DIR)/vx_print.S $(SRC_DIR)/tinyprintf.c $(SRC_DIR)/vx_print.c $(SRC_DIR)/vx_spawn.c $(SRC_DIR)/vx_serial.S $(SRC_DIR)/vx_perf.c
