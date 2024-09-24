@@ -476,7 +476,7 @@ private:
       if (*m_axi_mem_[i].arvalid && *m_axi_mem_[i].arready) {
         auto mem_req = new mem_req_t();
         mem_req->tag   = *m_axi_mem_[i].arid;
-        mem_req->addr  = i * mem_bank_size_ + uint64_t(*m_axi_mem_[i].araddr);
+        mem_req->addr  = uint64_t(*m_axi_mem_[i].araddr);
         ram_->read(mem_req->data.data(), mem_req->addr, PLATFORM_MEMORY_DATA_SIZE);
         mem_req->write = false;
         mem_req->ready = false;
@@ -505,7 +505,7 @@ private:
 
         auto byteen = *m_axi_mem_[i].wstrb;
         auto data = (uint8_t*)m_axi_mem_[i].wdata->data();
-        auto byte_addr = i * mem_bank_size_ + m_axi_states_[i].write_req_addr;
+        auto byte_addr = m_axi_states_[i].write_req_addr;
 
         for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; i++) {
           if ((byteen >> i) & 0x1) {
