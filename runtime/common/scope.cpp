@@ -30,6 +30,8 @@
 
 #define SAMPLE_FLUSH_SIZE 100
 
+#define TIMEOUT_TIME (60*60)
+
 #define MMIO_SCOPE_READ  (AFU_IMAGE_MMIO_SCOPE_READ * 4)
 #define MMIO_SCOPE_WRITE (AFU_IMAGE_MMIO_SCOPE_WRITE * 4)
 
@@ -66,6 +68,10 @@ struct tap_t {
 };
 
 static scope_callback_t g_callback;
+
+static bool g_running = false;
+
+static std::mutex g_stop_mutex;
 
 using json = nlohmann::json;
 
@@ -264,12 +270,38 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
     }
   }
 
+  g_running = true;
+
+  // create auto-stop thread
+  uint32_t timeout_time = TIMEOUT_TIME;
+  const char* env_timeout = std::getenv("SCOPE_TIMEOUT");
+  if (env_timeout != nullptr) {
+    std::stringstream ss(env_timeout);
+    uint32_t env_value;
+    if (ss >> env_value) {
+      timeout_time = env_value;
+      std::cout << "[SCOPE] timeout time=" << env_value << std::endl;
+    }
+  }
+  std::thread([hdevice, timeout_time]() {
+    std::this_thread::sleep_for(std::chrono::seconds(timeout_time));
+    std::cout << "[SCOPE] auto-stop timeout!" << std::endl;
+    vx_scope_stop(hdevice);
+  }).detach();
+
   return 0;
 }
 
 int vx_scope_stop(vx_device_h hdevice) {
+  std::lock_guard<std::mutex> lock(g_stop_mutex);
+
   if (nullptr == hdevice)
     return -1;
+
+  if (!g_running)
+    return 0;
+
+  g_running = false;
 
   std::vector<tap_t> taps;
 
