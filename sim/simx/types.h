@@ -281,17 +281,18 @@ struct LsuReq {
 };
 
 inline std::ostream &operator<<(std::ostream &os, const LsuReq& req) {
-  os << "rw=" << req.write << ", mask=" << req.mask << ", ";
+  os << "rw=" << req.write << ", mask=" << req.mask << ", addr={";
+  bool first_addr = true;
   for (size_t i = 0; i < req.mask.size(); ++i) {
-    os << "addr" << i << "=";
+    if (!first_addr) os << ", ";
+    first_addr = false;
     if (req.mask.test(i)) {
       os << "0x" << std::hex << req.addrs.at(i) << std::dec;
     } else {
       os << "-";
     }
-    os << ", ";
   }
-  os << "tag=0x" << std::hex << req.tag << std::dec << ", cid=" << req.cid;
+  os << "}, tag=0x" << std::hex << req.tag << std::dec << ", cid=" << req.cid;
   os << " (#" << req.uuid << ")";
   return os;
 }

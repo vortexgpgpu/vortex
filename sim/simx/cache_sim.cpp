@@ -170,6 +170,25 @@ struct bank_req_t {
 	}
 };
 
+inline std::ostream &operator<<(std::ostream &os, const bank_req_t& req) {
+  os << "set=" << req.set_id << ", rw=" << req.write;
+  os << std::dec << ", type=" << req.type;
+  os << ", tag=0x" << std::hex << req.tag;
+	os << ", req_tags={";
+	bool first_port = true;
+	for (auto& port : req.ports) {
+		if (port.valid) {
+			if (!first_port) os << ", ";
+			first_port = false;
+			os << "["  << std::dec << port.req_id << "]=0x" << std::hex << port.req_tag;
+		}
+	}
+	os << "}";
+	os << std::dec << ", cid=" << req.cid;
+  os << " (#" << req.uuid << ")";
+  return os;
+}
+
 struct mshr_entry_t {
 	bank_req_t bank_req;
 	uint32_t   line_id;
@@ -542,7 +561,7 @@ private:
 		uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
 		MemRsp core_rsp{tag, mem_rsp.cid, mem_rsp.uuid};
 		simobject_->CoreRspPorts.at(req_id).push(core_rsp, config_.latency);
-		DT(3, simobject_->name() << " core-rsp: " << core_rsp);
+		DT(3, simobject_->name() << " bypass-core-rsp: " << core_rsp);
 	}
 
 	void processBypassRequest(const MemReq& core_req, uint32_t req_id) {
@@ -550,13 +569,13 @@ private:
 			MemReq mem_req(core_req);
 			mem_req.tag = (core_req.tag << params_.log2_num_inputs) + req_id;
 			bypass_switch_->ReqIn.at(1).push(mem_req, 1);
-			DT(3, simobject_->name() << " dram-req: " << mem_req);
+			DT(3, simobject_->name() << " bypass-dram-req: " << mem_req);
 		}
 
 		if (core_req.write && config_.write_reponse) {
 			MemRsp core_rsp{core_req.tag, core_req.cid, core_req.uuid};
 			simobject_->CoreRspPorts.at(req_id).push(core_rsp, 1);
-			DT(3, simobject_->name() << " core-rsp: " << core_rsp);
+			DT(3, simobject_->name() << " bypass-core-rsp: " << core_rsp);
 		}
 	}
 
@@ -694,6 +713,7 @@ private:
 
 						// allocate MSHR
 						auto mshr_id = bank.mshr.allocate(pipeline_req, (free_line_id != -1) ? free_line_id : repl_line_id);
+						DT(3, simobject_->name() << "-bank" << bank_id << " mshr-enqueue: " << pipeline_req);
 
 						// send fill request
 						if (!mshr_pending) {
