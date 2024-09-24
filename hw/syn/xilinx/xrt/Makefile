@@ -164,12 +164,8 @@ scope-json: $(BUILD_DIR)/scope.json
 $(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/scope.py vortex.xml -o scope.json
 
-gen-xml:
-$(BUILD_DIR)/kernel.xml:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SRC_DIR)/gen_xml.py -n $(M_AXI_NUM_BANKS) -d $(M_AXI_DATA_WIDTH) -a $(M_AXI_ADDRESS_WIDTH) -o kernel.xml
-
 gen-xo: $(XO_CONTAINER)
-$(XO_CONTAINER): $(BUILD_DIR)/sources.txt $(BUILD_DIR)/kernel.xml
+$(XO_CONTAINER): $(BUILD_DIR)/sources.txt
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source $(SRC_DIR)/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt $(SCRIPT_DIR) ../$(BUILD_DIR)
 
 gen-bin: $(XCLBIN_CONTAINER)
