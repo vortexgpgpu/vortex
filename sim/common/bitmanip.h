@@ -20,9 +20,9 @@ template <typename T>
 constexpr uint32_t count_leading_zeros(T value) {
   static_assert(std::is_integral<T>::value, "invalid data type");
   if constexpr (sizeof(T) > 4) {
-    return value ? __builtin_clzll(value) : 64;
+    return value ? __builtin_clzll(value) : (sizeof(T) * 8);
   } else {
-    return value ? __builtin_clz(value) : 32;
+    return value ? __builtin_clz(value) : (sizeof(T) * 8);
   }
 }
 
@@ -30,9 +30,9 @@ template <typename T>
 constexpr uint32_t count_trailing_zeros(T value) {
   static_assert(std::is_integral<T>::value, "invalid data type");
   if constexpr (sizeof(T) > 4) {
-    return value ? __builtin_ctzll(value) : 64;
+    return value ? __builtin_ctzll(value) : (sizeof(T) * 8);
   } else {
-    return value ? __builtin_ctz(value) : 32;
+    return value ? __builtin_ctz(value) : (sizeof(T) * 8);
   }
 }
 
@@ -45,7 +45,7 @@ constexpr bool ispow2(T value) {
 template <typename T>
 constexpr uint32_t log2ceil(T value) {
   static_assert(std::is_integral<T>::value, "invalid data type");
-    return (sizeof(T) * 8) - count_leading_zeros(value - 1);
+    return (sizeof(T) * 8) - count_leading_zeros<T>(value - 1);
 }
 
 template <typename T>
@@ -57,21 +57,13 @@ inline unsigned log2up(T value) {
 template <typename T>
 constexpr unsigned log2floor(T value) {
   static_assert(std::is_integral<T>::value, "invalid data type");
-  if constexpr (sizeof(T) > 4) {
-    return 63 - count_leading_zeros(value);
-  } else {
-    return 31 - count_leading_zeros(value);
-  }
+  return (sizeof(T) * 8 - 1) - count_leading_zeros<T>(value);
 }
 
 template <typename T>
 constexpr unsigned ceil2(T value) {
   static_assert(std::is_integral<T>::value, "invalid data type");
-  if constexpr (sizeof(T) > 4) {
-    return 64 - count_leading_zeros(value);
-  } else {
-    return 32 - count_leading_zeros(value);
-  }
+  return (sizeof(T) * 8) - count_leading_zeros<T>(value);
 }
 
 inline uint64_t bit_clr(uint64_t bits, uint32_t index) {
