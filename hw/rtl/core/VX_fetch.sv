@@ -137,34 +137,24 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_FETCH
-    VX_scope_tap #(
-        .SCOPE_ID (1),
-        .TRIGGERW (4),
-        .PROBEW   (`UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS +
-            ICACHE_TAG_WIDTH + ICACHE_WORD_SIZE + ICACHE_ADDR_WIDTH +
-            (ICACHE_WORD_SIZE * 8) + ICACHE_TAG_WIDTH),
-        .DEPTH    (4096)
-    ) scope_tap (
-        .clk (clk),
-        .reset (scope_reset),
-        .start (1'b0),
-        .stop (1'b0),
-        .triggers ({
-            reset,
+    `SCOPE_IO_SWITCH (1);
+    `NEG_EDGE (reset_negedge, reset);
+    `SCOPE_TAP_EX (0, 1, 3, (
+            `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS + ICACHE_TAG_WIDTH + ICACHE_WORD_SIZE +
+            ICACHE_ADDR_WIDTH + (ICACHE_WORD_SIZE * 8) + ICACHE_TAG_WIDTH
+        ), {
             schedule_fire,
             icache_req_fire,
             icache_rsp_fire
-        }),
-        .probes ({
+        }, {
             schedule_if.data.uuid, schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.PC,
             icache_bus_if.req_data.tag, icache_bus_if.req_data.byteen, icache_bus_if.req_data.addr,
             icache_bus_if.rsp_data.data, icache_bus_if.rsp_data.tag
-        }),
-        .bus_in (scope_bus_in),
-        .bus_out (scope_bus_out)
+        },
+        reset_negedge, 1'b0, 4096
     );
 `else
-    `SCOPE_IO_UNUSED()
+    `SCOPE_IO_UNUSED(0)
 `endif
 `endif
 `ifdef CHIPSCOPE

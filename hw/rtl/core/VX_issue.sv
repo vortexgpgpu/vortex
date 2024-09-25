@@ -50,7 +50,7 @@ module VX_issue import VX_gpu_pkg::*; #(
     wire [`ISSUE_WIDTH-1:0] decode_ready_in;
     assign decode_if.ready = decode_ready_in[decode_isw];
 
-    `SCOPE_IO_SWITCH (`ISSUE_WIDTH)
+    `SCOPE_IO_SWITCH (`ISSUE_WIDTH);
 
     for (genvar issue_id = 0; issue_id < `ISSUE_WIDTH; ++issue_id) begin : g_issue_slices
         VX_decode_if #(

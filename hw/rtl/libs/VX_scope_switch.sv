@@ -20,8 +20,8 @@ module VX_scope_switch #(
     input wire  clk,
     input wire  reset,
     input wire  req_in,
-    output wire req_out [N],
-    input wire  rsp_in [N],
+    output wire [N-1:0] req_out,
+    input wire  [N-1:0] rsp_in,
     output wire rsp_out
 );
     if (N > 1) begin : g_switch
@@ -46,7 +46,10 @@ module VX_scope_switch #(
             end
         end
 
-        assign req_out = req_out_r;
+        for (genvar i = 0; i < N; ++i) begin : g_req_out
+            assign req_out[i] = req_out_r[i];
+        end
+        
         assign rsp_out = rsp_out_r;
 
     end else begin : g_passthru

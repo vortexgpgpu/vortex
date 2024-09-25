@@ -61,7 +61,7 @@ module VX_execute import VX_gpu_pkg::*; #(
         .branch_ctl_if  (branch_ctl_if)
     );
 
-    `SCOPE_IO_SWITCH (1)
+    `SCOPE_IO_SWITCH (1);
 
     VX_lsu_unit #(
         .INSTANCE_ID ($sformatf("%s-lsu", INSTANCE_ID))

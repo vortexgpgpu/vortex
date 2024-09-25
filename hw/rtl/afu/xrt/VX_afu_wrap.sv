@@ -241,7 +241,7 @@ module VX_afu_wrap #(
 		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_u[i]) + BANK_OFFSET;
 	end
 
-	`SCOPE_IO_SWITCH (2)
+	`SCOPE_IO_SWITCH (2);
 
 	Vortex_axi #(
 		.AXI_DATA_WIDTH (C_M_AXI_MEM_DATA_WIDTH),
@@ -309,55 +309,41 @@ module VX_afu_wrap #(
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_AFU
-	`define AFU_TRIGGERS { \
-		reset, \
-		ap_reset, \
-		ap_start, \
-		ap_done, \
-		ap_idle, \
-		interrupt, \
-		vx_reset, \
-		vx_busy, \
-		dcr_wr_valid, \
-		m_axi_mem_awvalid_a[0], \
-		m_axi_mem_awready_a[0], \
-		m_axi_mem_wvalid_a[0], \
-		m_axi_mem_wready_a[0], \
-		m_axi_mem_bvalid_a[0], \
-		m_axi_mem_bready_a[0], \
-		m_axi_mem_arvalid_a[0], \
-		m_axi_mem_arready_a[0], \
-		m_axi_mem_rvalid_a[0], \
-		m_axi_mem_rready_a[0] \
-	}
-	`define AFU_PROBES { \
-     	dcr_wr_addr, \
-		dcr_wr_data, \
-		vx_pending_writes, \
-		m_axi_mem_awaddr_u[0], \
-		m_axi_mem_awid_a[0], \
-		m_axi_mem_bid_a[0], \
-		m_axi_mem_araddr_u[0], \
-		m_axi_mem_arid_a[0], \
-		m_axi_mem_rid_a[0] \
-	}
-    VX_scope_tap #(
-        .SCOPE_ID (0),
-        .TRIGGERW ($bits(`AFU_TRIGGERS)),
-        .PROBEW   ($bits(`AFU_PROBES)),
-        .DEPTH    (4096)
-    ) scope_tap (
-        .clk 	(clk),
-        .reset 	(scope_reset_w[0]),
-        .start 	(1'b0),
-        .stop  	(1'b0),
-        .triggers(`AFU_TRIGGERS),
-        .probes (`AFU_PROBES),
-        .bus_in (scope_bus_in_w[0]),
-        .bus_out(scope_bus_out_w[0])
-    );
+	`NEG_EDGE (reset_negedge, reset);
+	`SCOPE_TAP (0, 0, {
+			ap_reset,
+			ap_start,
+			ap_done,
+			ap_idle,
+			interrupt,
+			vx_reset,
+			vx_busy,
+			dcr_wr_valid,
+			m_axi_mem_awvalid_a[0],
+			m_axi_mem_awready_a[0],
+			m_axi_mem_wvalid_a[0],
+			m_axi_mem_wready_a[0],
+			m_axi_mem_bvalid_a[0],
+			m_axi_mem_bready_a[0],
+			m_axi_mem_arvalid_a[0],
+			m_axi_mem_arready_a[0],
+			m_axi_mem_rvalid_a[0],
+			m_axi_mem_rready_a[0]
+		}, {
+			dcr_wr_addr,
+			dcr_wr_data,
+			vx_pending_writes,
+			m_axi_mem_awaddr_u[0],
+			m_axi_mem_awid_a[0],
+			m_axi_mem_bid_a[0],
+			m_axi_mem_araddr_u[0],
+			m_axi_mem_arid_a[0],
+			m_axi_mem_rid_a[0]
+		},
+		reset_negedge, 1'b0, 4096
+	);
 `else
-    `SCOPE_IO_UNUSED_W(0)
+    `SCOPE_IO_UNUSED(0)
 `endif
 `endif
 `ifdef CHIPSCOPE
