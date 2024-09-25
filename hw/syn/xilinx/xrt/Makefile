@@ -131,7 +131,7 @@ endif
 # Enable scope analyzer
 ifdef SCOPE
 	CFLAGS += -DSCOPE $(DBG_SCOPE_FLAGS)
-	SCOPE_JSON += $(BUILD_DIR)/scope.json
+	SCOPE_JSON += $(BIN_DIR)/scope.json
 endif
 
 # compilation flags
