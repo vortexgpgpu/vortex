@@ -195,6 +195,10 @@ main() {
         mv -f $APP_PATH/trace.vcd .
     fi
 
+    if [ $SCOPE -eq 1 ] && [ -f "$APP_PATH/scope.vcd" ]; then
+        mv -f $APP_PATH/scope.vcd .
+    fi
+
     exit $status
 }
 

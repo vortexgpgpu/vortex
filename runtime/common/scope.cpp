@@ -159,7 +159,7 @@ static tap_t* find_earliest_tap(std::vector<tap_t>& taps) {
   return earliest;
 }
 
-static uint64_t advance_time(std::ofstream& ofs, uint64_t cur_time, uint64_t next_time) {
+static uint64_t advance_clock(std::ofstream& ofs, uint64_t cur_time, uint64_t next_time) {
   while (cur_time < next_time) {
     ofs << '#' << (cur_time * 2 + 0) << std::endl;
     ofs << "b0 0" << std::endl;
@@ -383,20 +383,20 @@ int vx_scope_stop(vx_device_h hdevice) {
   std::cout << "[SCOPE] dump taps..." << std::endl;
 
   uint64_t cur_time = 0;
-
-  while (true) {
-    // find the nearest tap
-    auto tap = find_earliest_tap(taps);
-    if (tap == nullptr)
-      break;
+  auto tap = find_earliest_tap(taps);
+  if (tap != nullptr) {
+    cur_time = (tap->cycle_time > 0) ? (tap->cycle_time-1) : 0;
+    do {
+      // advance clock
+      cur_time = advance_clock(ofs, cur_time, tap->cycle_time);
+      // dump tap
+      CHECK_ERR(dump_tap(ofs, tap, hdevice));
+      // find the nearest tap
+      tap = find_earliest_tap(taps);
+    } while (tap != nullptr);
     // advance clock
-    cur_time = advance_time(ofs, cur_time, tap->cycle_time);
-    // dump tap
-    CHECK_ERR(dump_tap(ofs, tap, hdevice));
-  };
-
-  // advance clock
-  advance_time(ofs, cur_time, cur_time + 1);
+    advance_clock(ofs, cur_time, cur_time + 1);
+  }
 
   std::cout << "[SCOPE] trace dump done! - " << (cur_time/2) << " cycles" << std::endl;
 
