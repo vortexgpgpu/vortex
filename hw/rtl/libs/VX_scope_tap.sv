@@ -33,12 +33,13 @@ module VX_scope_tap #(
     output wire bus_out
 );
     localparam CTR_WIDTH        = 64;
-    localparam DATA_IDX_WISTH   = `LOG2UP(TX_DATAW);
+    localparam SER_CTR_WIDTH    = `LOG2UP(TX_DATAW);
     localparam DATAW            = PROBEW + TRIGGERW;
     localparam ADDRW            = `CLOG2(DEPTH);
+    localparam SIZEW            = `CLOG2(DEPTH+1);
     localparam MAX_IDLE_CTR     = (2 ** IDLE_CTRW) - 1;
     localparam DATA_BLOCKS      = `CDIV(DATAW, TX_DATAW);
-    localparam BLOCK_IDX_WISTH  = `LOG2UP(DATA_BLOCKS);
+    localparam BLOCK_IDX_WIDTH  = `LOG2UP(DATA_BLOCKS);
 
     localparam CTRL_STATE_IDLE  = 2'd0;
     localparam CTRL_STATE_RECV  = 2'd1;
@@ -47,8 +48,8 @@ module VX_scope_tap #(
     localparam CTRL_STATE_BITS  = 2;
 
     localparam TAP_STATE_IDLE   = 2'd0;
-    localparam TAP_STATE_WAIT   = 2'd1;
-    localparam TAP_STATE_RUN    = 2'd2;
+    localparam TAP_STATE_RUN    = 2'd1;
+    localparam TAP_STATE_DONE   = 2'd2;
     localparam TAP_STATE_BITS   = 2;
 
     localparam CMD_GET_WIDTH    = 3'd0;
@@ -57,13 +58,14 @@ module VX_scope_tap #(
     localparam CMD_GET_DATA     = 3'd3;
     localparam CMD_SET_START    = 3'd4;
     localparam CMD_SET_STOP     = 3'd5;
+    localparam CMD_SET_DEPTH    = 3'd6;
     localparam CMD_TYPE_BITS    = 3;
 
-    localparam SEND_TYPE_WIDTH   = 2'd0;
-    localparam SEND_TYPE_COUNT   = 2'd1;
-    localparam SEND_TYPE_START   = 2'd2;
-    localparam SEND_TYPE_DATA    = 2'd3;
-    localparam SEND_TYPE_BITS    = 2;
+    localparam SEND_TYPE_WIDTH  = 2'd0;
+    localparam SEND_TYPE_COUNT  = 2'd1;
+    localparam SEND_TYPE_START  = 2'd2;
+    localparam SEND_TYPE_DATA   = 2'd3;
+    localparam SEND_TYPE_BITS   = 2;
 
     `STATIC_ASSERT ((IDLE_CTRW <= TX_DATAW), ("invalid parameter"))
     `STATIC_ASSERT(`IS_POW2(DEPTH), ("depth must be a power of 2!"))
@@ -73,12 +75,13 @@ module VX_scope_tap #(
     reg [SEND_TYPE_BITS-1:0] send_type;
 
     reg [CTR_WIDTH-1:0] timestamp, start_time;
-    reg [CTR_WIDTH-1:0] start_delay, delay_cntr;
+    reg [CTR_WIDTH-1:0] start_delay, stop_delay;
     reg [`UP(TRIGGERW)-1:0] prev_trig;
     reg [IDLE_CTRW-1:0] delta;
-    reg cmd_start, dflush;
+    reg cmd_start, cmd_stop;
+    reg dflush;
 
-    reg [ADDRW-1:0] waddr, waddr_end;
+    reg [SIZEW-1:0] waddr, waddr_end;
     wire [DATAW-1:0] data_in;
     wire write_en;
 
@@ -105,7 +108,7 @@ module VX_scope_tap #(
             .read   (1'b1),
             .wren   (1'b1),
             .write  (write_en),
-            .waddr  (waddr),
+            .waddr  (waddr[ADDRW-1:0]),
             .wdata  (delta),
             .raddr  (raddr),
             .rdata  (delta_value)
@@ -128,7 +131,7 @@ module VX_scope_tap #(
         .read   (1'b1),
         .wren   (1'b1),
         .write  (write_en),
-        .waddr  (waddr),
+        .waddr  (waddr[ADDRW-1:0]),
         .wdata  (data_in),
         .raddr  (raddr),
         .rdata  (data_value)
@@ -144,35 +147,16 @@ module VX_scope_tap #(
 
     always @(posedge clk) begin
         if (reset) begin
-            tap_state <= TAP_STATE_IDLE;
-            delta     <= '0;
-            dflush    <= 0;
-            prev_trig <= '0;
-            waddr     <= '0;
+            tap_state  <= TAP_STATE_IDLE;
+            delta      <= '0;
+            dflush     <= 0;
+            prev_trig  <= '0;
+            waddr      <= '0;
         end else begin
             case (tap_state)
             TAP_STATE_IDLE: begin
                 if (start || cmd_start) begin
-                    delta  <= '0;
-                    dflush <= 1;
-                    if (0 == start_delay) begin
-                        tap_state  <= TAP_STATE_RUN;
-                        start_time <= timestamp;
-                    `ifdef DBG_TRACE_SCOPE
-                        `TRACE(2, ("%t: scope_tap%0d: recording start - time=%0d\n", $time, SCOPE_ID, timestamp))
-                    `endif
-                    end else begin
-                        tap_state <= TAP_STATE_WAIT;
-                        delay_cntr <= start_delay;
-                    `ifdef DBG_TRACE_SCOPE
-                        `TRACE(2, ("%t: scope_tap%0d: delayed start - time=%0d\n", $time, SCOPE_ID, start_delay))
-                    `endif
-                    end
-                end
-            end
-            TAP_STATE_WAIT: begin
-                delay_cntr <= delay_cntr - CTR_WIDTH'(1);
-                if (1 == delay_cntr) begin
+                    dflush     <= 1;
                     tap_state  <= TAP_STATE_RUN;
                     start_time <= timestamp;
                 `ifdef DBG_TRACE_SCOPE
@@ -182,10 +166,10 @@ module VX_scope_tap #(
             end
             TAP_STATE_RUN: begin
                 dflush <= 0;
-                if (!stop && (waddr < waddr_end)) begin
+                if (!(stop || cmd_stop) && (waddr < waddr_end)) begin
                     if (TRIGGERW != 0) begin
                         if (dflush || (triggers != prev_trig)) begin
-                            waddr  <= waddr + ADDRW'(1);
+                            waddr  <= waddr + SIZEW'(1);
                             delta  <= '0;
                         end else begin
                             delta  <= delta + IDLE_CTRW'(1);
@@ -193,10 +177,10 @@ module VX_scope_tap #(
                         end
                         prev_trig <= triggers;
                     end else begin
-                        waddr <= waddr + ADDRW'(1);
+                        waddr <= waddr + SIZEW'(1);
                     end
                 end else begin
-                    tap_state <= TAP_STATE_IDLE;
+                    tap_state <= TAP_STATE_DONE;
                 `ifdef DBG_TRACE_SCOPE
                     `TRACE(2, ("%t: scope_tap%0d: recording stop - waddr=(%0d, %0d)\n", $time, SCOPE_ID, waddr, waddr_end))
                 `endif
@@ -218,8 +202,8 @@ module VX_scope_tap #(
     `UNUSED_VAR (ser_buf_in)
 
     wire [DATA_BLOCKS-1:0][TX_DATAW-1:0] data_blocks;
-    logic [BLOCK_IDX_WISTH-1:0] data_block_idx;
-    reg [DATA_IDX_WISTH-1:0] ser_tx_ctr;
+    logic [BLOCK_IDX_WIDTH-1:0] data_block_idx;
+    reg [SER_CTR_WIDTH-1:0] ser_tx_ctr;
     reg is_read_data;
     reg is_get_data;
 
@@ -246,8 +230,8 @@ module VX_scope_tap #(
                       && (send_type == SEND_TYPE_DATA)
                       && (ser_tx_ctr == 0)
                       && is_read_data) begin
-                if (data_block_idx < BLOCK_IDX_WISTH'(DATA_BLOCKS-1)) begin
-                    data_block_idx <= data_block_idx + BLOCK_IDX_WISTH'(1);
+                if (data_block_idx < BLOCK_IDX_WIDTH'(DATA_BLOCKS-1)) begin
+                    data_block_idx <= data_block_idx + BLOCK_IDX_WIDTH'(1);
                 end else begin
                     data_block_idx <= '0;
                 end
@@ -257,15 +241,15 @@ module VX_scope_tap #(
         assign data_block_idx = 0;
     end
 
-    wire [ADDRW-1:0] raddr_n = raddr + ADDRW'(1);
-
     always @(posedge clk) begin
         if (reset) begin
             ctrl_state  <= CTRL_STATE_IDLE;
             send_type   <= SEND_TYPE_BITS'(SEND_TYPE_WIDTH);
-            waddr_end   <= ADDRW'(DEPTH-1);
+            waddr_end   <= SIZEW'(DEPTH);
             cmd_start   <= 0;
+            cmd_stop    <= 0;
             start_delay <= '0;
+            stop_delay  <= '0;
             bus_out_r   <= 0;
             raddr       <= '0;
             is_read_data<= 0;
@@ -273,17 +257,28 @@ module VX_scope_tap #(
             is_get_data <= 0;
         end else begin
             bus_out_r   <= 0;
-            cmd_start   <= 0;
             is_get_data <= 0;
+
+            if (start_delay != 0) begin
+                start_delay <= start_delay - CTR_WIDTH'(1);
+            end
+
+            if (stop_delay != 0) begin
+                stop_delay <= stop_delay - CTR_WIDTH'(1);
+            end
+
+            cmd_start <= (start_delay == CTR_WIDTH'(1));
+            cmd_stop  <= (stop_delay == CTR_WIDTH'(1));
+
             case (ctrl_state)
             CTRL_STATE_IDLE: begin
                 if (bus_in) begin
-                    ser_tx_ctr <= DATA_IDX_WISTH'(TX_DATAW-1);
+                    ser_tx_ctr <= SER_CTR_WIDTH'(TX_DATAW-1);
                     ctrl_state <= CTRL_STATE_RECV;
                 end
             end
             CTRL_STATE_RECV: begin
-                ser_tx_ctr <= ser_tx_ctr - DATA_IDX_WISTH'(1);
+                ser_tx_ctr <= ser_tx_ctr - SER_CTR_WIDTH'(1);
                 ser_buf_in <= ser_buf_in_n;
                 if (ser_tx_ctr == 0) begin
                     // check if command is for this scope
@@ -294,18 +289,22 @@ module VX_scope_tap #(
                 ctrl_state <= CTRL_STATE_IDLE;
                 case (cmd_type)
                 CMD_SET_START: begin
-                    start_delay <= 64'(cmd_data);
-                    cmd_start   <= 1;
+                    start_delay <= CTR_WIDTH'(cmd_data);
+                    cmd_start   <= (cmd_data == 0);
                 end
                 CMD_SET_STOP: begin
-                    waddr_end <= ADDRW'(cmd_data);
+                    stop_delay <= CTR_WIDTH'(cmd_data);
+                    cmd_stop   <= (cmd_data == 0);
+                end
+                CMD_SET_DEPTH: begin
+                    waddr_end <= SIZEW'(cmd_data);
                 end
                 CMD_GET_WIDTH,
                 CMD_GET_START,
                 CMD_GET_COUNT,
                 CMD_GET_DATA: begin
-                    send_type   <= SEND_TYPE_BITS'(cmd_type);
-                    ser_tx_ctr <= DATA_IDX_WISTH'(TX_DATAW-1);
+                    send_type  <= SEND_TYPE_BITS'(cmd_type);
+                    ser_tx_ctr <= SER_CTR_WIDTH'(TX_DATAW-1);
                     ctrl_state <= CTRL_STATE_SEND;
                     bus_out_r  <= 1;
                 end
@@ -345,12 +344,9 @@ module VX_scope_tap #(
                     is_get_data <= 1;
                     if (ser_tx_ctr == 0) begin
                         if (is_read_data) begin
-                            if (data_block_idx == BLOCK_IDX_WISTH'(DATA_BLOCKS-1)) begin
-                                raddr <= raddr_n;
+                            if (data_block_idx == BLOCK_IDX_WIDTH'(DATA_BLOCKS-1)) begin
+                                raddr <= raddr + ADDRW'(1);
                                 is_read_data <= 0; // switch to delta mode
-                                if (raddr_n == waddr) begin
-                                    raddr <= 0; // end-of-samples reset
-                                end
                             end
                         end else begin
                             is_read_data <= 1; // switch to data mode
@@ -368,7 +364,7 @@ module VX_scope_tap #(
                 end
                 default:;
                 endcase
-                ser_tx_ctr <= ser_tx_ctr - DATA_IDX_WISTH'(1);
+                ser_tx_ctr <= ser_tx_ctr - SER_CTR_WIDTH'(1);
                 if (ser_tx_ctr == 0) begin
                     ctrl_state <= CTRL_STATE_IDLE;
                 end
@@ -378,12 +374,12 @@ module VX_scope_tap #(
         end
     end
 
-    wire [BLOCK_IDX_WISTH-1:0] data_block_idx_r;
-    wire [DATA_IDX_WISTH-1:0] ser_tx_ctr_r;
+    wire [BLOCK_IDX_WIDTH-1:0] data_block_idx_r;
+    wire [SER_CTR_WIDTH-1:0] ser_tx_ctr_r;
     wire is_read_data_r;
 
     VX_pipe_register #(
-        .DATAW (1 + DATA_IDX_WISTH + BLOCK_IDX_WISTH)
+        .DATAW (1 + SER_CTR_WIDTH + BLOCK_IDX_WIDTH)
     ) data_sel_buf (
         .clk      (clk),
         .reset    (reset),

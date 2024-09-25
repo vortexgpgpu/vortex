@@ -95,23 +95,16 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_ISSUE
-    VX_scope_tap #(
-        .SCOPE_ID (2),
-        .TRIGGERW (2),
-        .PROBEW   (`UUID_WIDTH + `NUM_THREADS + `EX_BITS + `INST_OP_BITS +
+    `SCOPE_IO_SWITCH (1);
+    `NEG_EDGE (reset_negedge, reset);
+    `SCOPE_TAP_EX (0, 2, 2, (
+            `UUID_WIDTH + `NUM_THREADS + `EX_BITS + `INST_OP_BITS +
             1 + `NR_BITS + (`NUM_THREADS * 3 * `XLEN) +
-            `UUID_WIDTH + `NUM_THREADS + `NR_BITS + (`NUM_THREADS*`XLEN) + 1),
-        .DEPTH    (4096)
-    ) scope_tap (
-        .clk (clk),
-        .reset (scope_reset),
-        .start (1'b0),
-        .stop (1'b0),
-        .triggers ({
+            `UUID_WIDTH + `NUM_THREADS + `NR_BITS + (`NUM_THREADS*`XLEN) + 1
+        ), {
             operands_if_fire,
             writeback_if_valid
-        }),
-        .probes ({
+        }, {
             operands_if.data.uuid,
             operands_if.data.tmask,
             operands_if.data.ex_type,
@@ -126,12 +119,11 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
             writeback_if.data.rd,
             writeback_if.data.data,
             writeback_if.data.eop
-        }),
-        .bus_in (scope_bus_in),
-        .bus_out (scope_bus_out)
+        },
+        reset_negedge, 1'b0, 4096
     );
 `else
-    `SCOPE_IO_UNUSED()
+    `SCOPE_IO_UNUSED(0)
 `endif
 `endif
 `ifdef CHIPSCOPE

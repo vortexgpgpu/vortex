@@ -932,7 +932,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire [`VX_DCR_ADDR_WIDTH-1:0] vx_dcr_wr_addr  = cmd_dcr_addr;
     wire [`VX_DCR_DATA_WIDTH-1:0] vx_dcr_wr_data  = cmd_dcr_data;
 
-    `SCOPE_IO_SWITCH (2)
+    `SCOPE_IO_SWITCH (2);
 
     Vortex vortex (
         `SCOPE_IO_BIND  (1)
@@ -1023,80 +1023,65 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     end
     wire state_changed = (state != state_prev);
 
-    `define AFU_TRIGGERS { \
-        reset, \
-        vx_reset, \
-        vx_busy, \
-        vx_mem_req_fire, \
-        vx_mem_rsp_fire, \
-        vx_dcr_wr_valid, \
-        state_changed, \
-        avs_write_fire, \
-        avs_read_fire, \
-        avs_waitrequest[0], \
-        avs_readdatavalid[0], \
-        cp2af_sRxPort.c0.mmioRdValid, \
-        cp2af_sRxPort.c0.mmioWrValid, \
-        cp2af_sRxPort.c0.rspValid, \
-        cp2af_sRxPort.c1.rspValid, \
-        af2cp_sTxPort.c0.valid, \
-        af2cp_sTxPort.c1.valid, \
-        cp2af_sRxPort.c0TxAlmFull, \
-        cp2af_sRxPort.c1TxAlmFull, \
-        af2cp_sTxPort.c2.mmioRdValid, \
-        cci_wr_req_fire, \
-        cci_wr_rsp_fire, \
-        cci_rd_req_fire, \
-        cci_rd_rsp_fire, \
-        cci_pending_reads_full, \
-        cci_pending_writes_empty, \
-        cci_pending_writes_full \
-    }
+    `NEG_EDGE (reset_negedge, reset);
 
-    `define AFU_PROBES { \
-        cmd_type, \
-        state, \
-        vx_mem_req_rw, \
-        vx_mem_req_byteen, \
-        vx_mem_req_addr, \
-        vx_mem_req_data, \
-        vx_mem_req_tag, \
-        vx_mem_rsp_data, \
-        vx_mem_rsp_tag, \
-     	vx_dcr_wr_addr, \
-		vx_dcr_wr_data, \
-        mmio_req_hdr.address, \
-        cp2af_sRxPort.c0.hdr.mdata, \
-        af2cp_sTxPort.c0.hdr.address, \
-        af2cp_sTxPort.c0.hdr.mdata, \
-        af2cp_sTxPort.c1.hdr.address, \
-        avs_address[0], \
-        avs_byteenable[0], \
-        avs_burstcount[0], \
-        cci_mem_rd_req_ctr, \
-        cci_mem_wr_req_ctr, \
-        cci_rd_req_ctr, \
-        cci_rd_rsp_ctr, \
-        cci_wr_req_ctr \
-    }
-
-    VX_scope_tap #(
-        .SCOPE_ID (0),
-        .TRIGGERW ($bits(`AFU_TRIGGERS)),
-        .PROBEW   ($bits(`AFU_PROBES)),
-        .DEPTH    (4096)
-    ) scope_tap (
-        .clk    (clk),
-        .reset  (scope_reset_w[0]),
-        .start  (1'b0),
-        .stop   (1'b0),
-        .triggers(`AFU_TRIGGERS),
-        .probes (`AFU_PROBES),
-        .bus_in (scope_bus_in_w[0]),
-        .bus_out(scope_bus_out_w[0])
-    );
+    `SCOPE_TAP (0, 0, {
+            vx_reset,
+            vx_busy,
+            vx_mem_req_fire,
+            vx_mem_rsp_fire,
+            vx_dcr_wr_valid,
+            state_changed,
+            avs_write_fire,
+            avs_read_fire,
+            avs_waitrequest[0],
+            avs_readdatavalid[0],
+            cp2af_sRxPort.c0.mmioRdValid,
+            cp2af_sRxPort.c0.mmioWrValid,
+            cp2af_sRxPort.c0.rspValid,
+            cp2af_sRxPort.c1.rspValid,
+            af2cp_sTxPort.c0.valid,
+            af2cp_sTxPort.c1.valid,
+            cp2af_sRxPort.c0TxAlmFull,
+            cp2af_sRxPort.c1TxAlmFull,
+            af2cp_sTxPort.c2.mmioRdValid,
+            cci_wr_req_fire,
+            cci_wr_rsp_fire,
+            cci_rd_req_fire,
+            cci_rd_rsp_fire,
+            cci_pending_reads_full,
+            cci_pending_writes_empty,
+            cci_pending_writes_full
+        },{
+            cmd_type,
+            state,
+            vx_mem_req_rw,
+            vx_mem_req_byteen,
+            vx_mem_req_addr,
+            vx_mem_req_data,
+            vx_mem_req_tag,
+            vx_mem_rsp_data,
+            vx_mem_rsp_tag,
+            vx_dcr_wr_addr,
+            vx_dcr_wr_data,
+            mmio_req_hdr.address,
+            cp2af_sRxPort.c0.hdr.mdata,
+            af2cp_sTxPort.c0.hdr.address,
+            af2cp_sTxPort.c0.hdr.mdata,
+            af2cp_sTxPort.c1.hdr.address,
+            avs_address[0],
+            avs_byteenable[0],
+            avs_burstcount[0],
+            cci_mem_rd_req_ctr,
+            cci_mem_wr_req_ctr,
+            cci_rd_req_ctr,
+            cci_rd_rsp_ctr,
+            cci_wr_req_ctr
+        },
+        reset_negedge, 1'b0, 4096
+	);
 `else
-    `SCOPE_IO_UNUSED_W(0)
+    `SCOPE_IO_UNUSED(0)
 `endif
 
     ///////////////////////////////////////////////////////////////////////////////

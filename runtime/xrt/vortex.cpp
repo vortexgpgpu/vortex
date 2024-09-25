@@ -265,7 +265,7 @@ public:
         *value = (((uint64_t)value_hi) << 32) | value_lo;
         return 0;
       };
-      CHECK_ERR(vx_scope_start(&callback, this, 0, -1), {
+      CHECK_ERR(vx_scope_start(&callback, this, -1, -1), {
         return err;
       });
     }

@@ -84,7 +84,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .base_dcrs  (base_dcrs)
     );
 
-    `SCOPE_IO_SWITCH (3)
+    `SCOPE_IO_SWITCH (3);
 
     VX_schedule #(
         .INSTANCE_ID ($sformatf("%s-schedule", INSTANCE_ID)),

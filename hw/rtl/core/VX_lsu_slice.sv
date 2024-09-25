@@ -536,23 +536,26 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_LSU
-    VX_scope_tap #(
-        .SCOPE_ID (3),
-        .TRIGGERW (2),
-        .PROBEW   (1 + NUM_LANES * (`XLEN + LSU_WORD_SIZE + LSU_WORD_SIZE * 8) + `UUID_WIDTH + NUM_LANES * LSU_WORD_SIZE * 8 + `UUID_WIDTH),
-        .DEPTH    (4096)
-    ) scope_tap (
-        .clk    (clk),
-        .reset  (scope_reset),
-        .start  (1'b0),
-        .stop   (1'b0),
-        .triggers({mem_req_fire, mem_rsp_fire}),
-        .probes ({mem_req_rw, full_addr, mem_req_byteen, mem_req_data, execute_if.data.uuid, rsp_data, rsp_uuid}),
-        .bus_in (scope_bus_in),
-        .bus_out(scope_bus_out)
+    `SCOPE_IO_SWITCH (1);
+    `NEG_EDGE (reset_negedge, reset);
+    `SCOPE_TAP_EX (0, 3, 2, (
+            1 + NUM_LANES * (`XLEN + LSU_WORD_SIZE + LSU_WORD_SIZE * 8) + `UUID_WIDTH + NUM_LANES * LSU_WORD_SIZE * 8 + `UUID_WIDTH
+        ), {
+            mem_req_fire,
+            mem_rsp_fire
+        }, {
+            mem_req_rw,
+            full_addr,
+            mem_req_byteen,
+            mem_req_data,
+            execute_if.data.uuid,
+            rsp_data,
+            rsp_uuid
+        },
+        reset_negedge, 1'b0,	4096
     );
 `else
-    `SCOPE_IO_UNUSED()
+    `SCOPE_IO_UNUSED(0)
 `endif
 `endif
 `ifdef CHIPSCOPE

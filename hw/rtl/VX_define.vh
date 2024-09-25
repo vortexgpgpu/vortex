@@ -317,6 +317,18 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+`define NEG_EDGE(dst, src) \
+    wire dst; \
+    VX_edge_trigger #( \
+        .POS  (0), \
+        .INIT (0) \
+    ) __``dst``__ ( \
+        .clk      (clk), \
+        .reset    (1'b0), \
+        .data_in  (src), \
+        .data_out (dst) \
+    )
+
 `define BUFFER_EX(dst, src, ena, latency) \
     VX_pipe_register #( \
         .DATAW  ($bits(dst)), \

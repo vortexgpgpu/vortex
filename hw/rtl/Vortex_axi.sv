@@ -100,7 +100,7 @@ module Vortex_axi import VX_gpu_pkg::*; #(
     wire [`VX_MEM_TAG_WIDTH-1:0]    mem_rsp_tag;
     wire                            mem_rsp_ready;
 
-    `SCOPE_IO_SWITCH (1)
+    `SCOPE_IO_SWITCH (1);
 
     Vortex vortex (
         `SCOPE_IO_BIND  (0)
