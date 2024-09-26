@@ -53,7 +53,6 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   {Opcode::I_W,     InstType::I},
   {Opcode::VOTE,     InstType::I},
   {Opcode::SHFL,     InstType::I},
-  {Opcode::TILE,     InstType::I},
 };
 
 enum Constants {
@@ -409,7 +408,6 @@ static const char* op_string(const Instr &instr) {
     }
   case Opcode::VOTE:   return "VOTE";
   case Opcode::SHFL:   return "SHFL";
-  case Opcode::TILE:   return "TILE";
   default:
     std::abort();
   }
