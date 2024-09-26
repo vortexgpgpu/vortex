@@ -38,6 +38,7 @@ extern "C" {
 #define RISCV_CUSTOM3   0x7B
 #define RISCV_VOTE      0x5A
 #define RISCV_SHFL      0x5C
+#define RISCV_TILE      0x5D
 
 #define csr_read(csr) ({                        \
 	size_t __r;	               		            \
@@ -254,8 +255,8 @@ void vx_store(int val, int reg){
 void vx_vote() {
     __asm__ volatile (
         "addi a2, x0, 9\n\t"  // Load immediate value 6 into a2(x12) register (membermask)
-        ".insn r %0, 2, 0, x14, x13, 12" :: "i"(RISCV_VOTE));
-        //".insn r opcode7, func3, func7, rd, rs1, simm12"
+        ".insn i %0, 2, 0, x14, x13, 12" :: "i"(RISCV_VOTE));
+        //".insn i opcode7, func3, func7, rd, rs1, simm12"
 }
 
 void vx_shfl() {
@@ -266,10 +267,10 @@ void vx_shfl() {
        //".insn i opcode6, func3, rd, rs1, simm12"
 }
 
-void vx_tile(int val) {
+void vx_tile(int num_threads, int warp_id) {
     __asm__ volatile (
-        ".insn i %0, 0, 0, 0, %1" :: "i"(RISCV_TILE),"r"(val));
-       //".insn i opcode6, func3, rd, rs1, simm12"
+        ".insn r %0, 0, 0, x0, %1, %2" :: "i"(RISCV_TILE),"r"(num_threads),"r"(warp_id));
+        //".insn r %0, 1, 0, x0, %1, 0" :: "i"(RISCV_TILE),"r"(tile_mask));
 }
 
 #ifdef __cplusplus
