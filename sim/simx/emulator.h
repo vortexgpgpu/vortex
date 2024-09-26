@@ -52,6 +52,10 @@ public:
 
   bool wspawn(uint32_t num_warps, Word nextPC);
 
+  bool tile(uint32_t final_wid, uint32_t issuing_wid, uint32_t set_numTiles, uint32_t prev_numTiles);
+
+  bool tileMask(uint32_t tile_mask);
+
   int get_exitcode() const;
 
 private:
@@ -76,12 +80,19 @@ private:
     std::stack<ipdom_entry_t>         ipdom_stack;
     Byte                              fcsr;
     uint32_t                          uuid;
+    uint32_t                          num_tThreads;
+    bool                              isActive;
   };
 
   struct wspawn_t {
     bool valid;
     uint32_t num_warps;
+    uint32_t issuing_wid;
+    uint32_t final_wid;
+    uint32_t set_numTiles;
+    uint32_t prev_numTiles;
     Word nextPC;
+    bool isTile;
   };
 
   std::shared_ptr<Instr> decode(uint32_t code) const;
