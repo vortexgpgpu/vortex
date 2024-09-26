@@ -283,11 +283,27 @@ void SfuUnit::tick() {
 				release_warp = core_->barrier(trace_data->arg1, trace_data->arg2, trace->wid);
 			}
 		} break;
-		case SfuType::TILE:{
+		case SfuType::TILE_PARTITION:{
 			output.push(trace, 1);
-			release_warp = core_->tile(,trace->wid);
+			if (trace->eop) {
+				auto trace_data = std::dynamic_pointer_cast<SFUTraceData>(trace->data);
+				uint32_t final_wid = (trace_data->arg1) >> 5;
+				uint32_t issuing_wid = (trace_data->arg2) >> 5;
+				uint32_t set_numTiles = (trace_data->arg1) & 63;
+				uint32_t prev_numTiles = (trace_data->arg2) & 63;
+				release_warp = core_->tile(final_wid, issuing_wid, set_numTiles, prev_numTiles);
 			}
-			break;
+		}
+		break;
+		case SfuType::TILE_MASK:{
+			output.push(trace, 1);
+			if (trace->eop) {
+				auto trace_data = std::dynamic_pointer_cast<SFUTraceData>(trace->data);
+				auto tile_mask = trace_data->arg1;
+				release_warp = core_->tileMask(tile_mask);
+			}
+		}
+		break;
 		default:
 			std::abort();
 		}
