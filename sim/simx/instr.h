@@ -49,7 +49,8 @@ enum class Opcode {
   EXT4      = 0x7b,
   // CUDA Vote Extension
   VOTE      = 0x5a,
-  SHFL      = 0x5c
+  SHFL      = 0x5c,
+  TILE      = 0x5d
 };
 
 enum class InstType {
