@@ -53,6 +53,12 @@ typedef std::bitset<MAX_NUM_REGS>    RegMask;
 typedef std::bitset<MAX_NUM_THREADS> ThreadMask;
 typedef std::bitset<MAX_NUM_WARPS>   WarpMask;
 
+// Cooperative Groups /////////////////////////////////////////////////////////
+
+#define THREAD_PER_TILE     4
+#define WARP_SIZE           32
+#define MAX_NUMBER_TILES    8
+
 ///////////////////////////////////////////////////////////////////////////////
 
 enum class RegType {
@@ -208,7 +214,8 @@ enum class SfuType {
   CSRRS,
   CSRRC,
   CMOV,
-  TILE
+  TILE_PARTITION,
+  TILE_MASK
 };
 
 inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
@@ -222,7 +229,8 @@ inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
   case SfuType::CSRRW:  os << "CSRRW"; break;
   case SfuType::CSRRS:  os << "CSRRS"; break;
   case SfuType::CSRRC:  os << "CSRRC"; break;
-  case SfuType::TILE:  os << "TILE"; break;
+  case SfuType::TILE_PARTITION:  os << "TILE PARTITION"; break;
+  case SfuType::TILE_MASK:  os << "TILE MASK"; break;
   default: assert(false);
   }
   return os;
