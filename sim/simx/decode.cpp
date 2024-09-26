@@ -53,6 +53,7 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   {Opcode::I_W,     InstType::I},
   {Opcode::VOTE,     InstType::I},
   {Opcode::SHFL,     InstType::I},
+  {Opcode::TILE,     InstType::R},
 };
 
 enum Constants {
@@ -408,6 +409,7 @@ static const char* op_string(const Instr &instr) {
     }
   case Opcode::VOTE:   return "VOTE";
   case Opcode::SHFL:   return "SHFL";
+  case Opcode::TILE:   return "TILE";
   default:
     std::abort();
   }
@@ -534,6 +536,11 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
         std::abort();
       }
       break;
+    case Opcode::TILE:{
+      instr->addSrcReg(rs1, RegType::Integer);
+      instr->addSrcReg(rs2, RegType::Integer);
+      break;
+    }
     default:
       instr->setDestReg(rd, RegType::Integer);
       instr->addSrcReg(rs1, RegType::Integer);
