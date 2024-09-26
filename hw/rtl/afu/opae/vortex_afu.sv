@@ -1032,7 +1032,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             avs_read[0],
             avs_write[0],
             avs_waitrequest[0],
-            avs_waitrequest[0],
             avs_readdatavalid[0],
             cp2af_sRxPort.c0.mmioRdValid,
             cp2af_sRxPort.c0.mmioWrValid,

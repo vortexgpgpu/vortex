@@ -38,12 +38,12 @@
     VX_scope_switch #( \
         .N (__count) \
     ) scope_switch ( \
-        .clk (clk), \
-        .reset (scope_reset), \
-        .req_in (scope_bus_in), \
+        .clk     (clk), \
+        .reset   (scope_reset), \
+        .req_in  (scope_bus_in), \
         .rsp_out (scope_bus_out), \
         .req_out (scope_bus_in_w), \
-        .rsp_in (scope_bus_out_w) \
+        .rsp_in  (scope_bus_out_w) \
     )
 
 `define SCOPE_TAP_EX(__idx, __id, __triggers_w, __probes_w, __triggers, __probes, __start, __stop, __depth) \
