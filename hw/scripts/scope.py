@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 # Copyright © 2019-2023
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 # http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,9 +19,9 @@ import xml.etree.ElementTree as ET
 import re
 import json
 
-vl_int_re = re.compile(r"\d+'s*h([\da-fA-F]+)") 
+vl_int_re = re.compile(r"\d+'s*h([\da-fA-F]+)")
 
-def parse_vl_int(text):              
+def parse_vl_int(text):
     str_hex = re.sub(vl_int_re, r'\1', text)
     return int(str_hex, 16)
 
@@ -34,15 +34,17 @@ def source_loc(xml_doc, xml_loc):
     end_col = loc[4]
     file = xml_doc.find(".//file/[@id='" + file_id + "']").get("filename")
     return file + " (" + start_line + ":" + start_col + "-" + end_line + ":" + end_col + ")"
-    
+
 def parse_dtype_width(xml_doc, dtype_id):
     xml_type = xml_doc.find(".//typetable/*[@id='" + dtype_id + "']")
-    if xml_type.tag == "packarraydtype" or xml_type.tag == "unpackarraydtype":
+    if xml_type.tag in ["packarraydtype", "unpackarraydtype"]:
         sub_dtype_id = xml_type.get("sub_dtype_id")
         base_width = parse_dtype_width(xml_doc, sub_dtype_id)
-        const = xml_type.iter("const")
-        left  = parse_vl_int(next(const).get("name"))
-        right = parse_vl_int(next(const).get("name"))
+        const_iter = xml_type.iter("const")
+        first_const = next(const_iter)
+        second_const = next(const_iter)
+        left  = parse_vl_int(first_const.get("name"))
+        right = parse_vl_int(second_const.get("name"))
         return base_width * (left - right + 1)
     elif xml_type.tag == "structdtype":
         width = 0
@@ -65,31 +67,74 @@ def parse_dtype_width(xml_doc, dtype_id):
         if left != None and right != None:
             return int(left) - int(right) + 1
         return 1
-        
+
 def parse_var_name(xml_doc, xml_node):
     if xml_node.tag == "varref":
         return xml_node.get("name")
     elif xml_node.tag == "varxref":
         name = xml_node.get("name")
         dotted = xml_node.get("dotted")
-        return dotted + '.' + name
+        return f"{dotted}.{name}"
     else:
         raise ET.ParseError("invalid probe entry" + source_loc(xml_doc, xml_node.get("loc")))
     return name
 
-def parse_sel_name(xml_doc, xml_node):
-    name = parse_var_name(xml_doc, xml_node.find("*"))
-    const = xml_node.iter("const")
-    offset = parse_vl_int(next(const).get("name"))
-    #size = parse_vl_int(next(const).get("name"))
-    return name + '_' + str(offset)
+def parse_sel_field(xml_doc, dtype_id, offset, width):
+    xml_type = xml_doc.find(".//typetable/*[@id='" + dtype_id + "']")
+    name = xml_type.get("name")
+    if xml_type.tag == "structdtype":
+        bit_offset = 0
+        members = list(xml_type.findall("memberdtype"))
+        members.reverse()
+        for member in members:
+            sub_dtype_id = member.get("sub_dtype_id")
+            member_name = member.get("name")
+            member_width = parse_dtype_width(xml_doc, sub_dtype_id)
+            if bit_offset <= offset < bit_offset + member_width:
+                if sub_dtype_id:
+                    sub_field = parse_sel_field(xml_doc, sub_dtype_id, offset - bit_offset, width)
+                    return f".{member_name}{sub_field}"
+                else:
+                    return f".{member_name}"
+            bit_offset += member_width
+        raise ET.ParseError("invalid probe entry: " + source_loc(xml_doc, xml_type.get("loc")))
+    elif xml_type.tag in ["packarraydtype", "unpackarraydtype"]:
+        sub_dtype_id = xml_type.get("sub_dtype_id")
+        base_width = parse_dtype_width(xml_doc, sub_dtype_id)
+        if width > base_width:
+            return ""
+        array_index = offset // base_width
+        sub_offset = offset % base_width
+        array_sel_name = f"[{array_index}]"
+        sub_field = parse_sel_field(xml_doc, sub_dtype_id, sub_offset, width)
+        return f"{array_sel_name}{sub_field}"
+    elif xml_type.tag == "basicdtype":
+        if (offset == 0):
+            return ""
+        return f"_{offset}"
+    else:
+        raise ET.ParseError("invalid probe entry: " + source_loc(xml_doc, xml_type.get("loc")))
+    return None
 
-def parse_array_name(xml_doc, xml_node):
+def parse_sel_name(xml_doc, xml_node):
+    first_child = xml_node.find("*")
+    name = parse_var_name(xml_doc, first_child)
+    dtype_id = first_child.get("dtype_id")
+    const_iter = xml_node.iter("const")
+    first_const = next(const_iter)
+    second_const = next(const_iter)
+    offset = parse_vl_int(first_const.get("name"))
+    width = parse_vl_int(second_const.get("name"))
+    return name + parse_sel_field(xml_doc, dtype_id, offset, width)
+
+def parse_arraysel_name(xml_doc, xml_node):
     if xml_node.tag == "arraysel":
-        name = parse_array_name(xml_doc, xml_node.find("*"))
-        xml_size = xml_node.find("const").get("name")
-        array_size = parse_vl_int(xml_size)
-        name = name + '_' + str(array_size)
+        first_child = xml_node.find("*")
+        name = parse_arraysel_name(xml_doc, first_child)
+        const_iter = xml_node.iter("const")
+        first_const = next(const_iter)
+        offset = parse_vl_int(first_const.get("name"))
+        name = f"{name}[{offset}]"
     else:
         name = parse_var_name(xml_doc, xml_node)
     return name
@@ -97,9 +142,10 @@ def parse_array_name(xml_doc, xml_node):
 def parse_vl_port(xml_doc, xml_node, signals):
     total_width = 0
     if xml_node.tag == "concat":
-        for xml_child in xml_node.findall("*"):
+        child_nodes = xml_node.findall("*")
+        for xml_child in child_nodes:
             total_width = total_width + parse_vl_port(xml_doc, xml_child, signals)
-    elif xml_node.tag == "varref" or xml_node.tag == "varxref":
+    elif xml_node.tag in ["varref", "varxref"]:
         name = parse_var_name(xml_doc, xml_node)
         dtype_id = xml_node.get("dtype_id")
         signal_width = parse_dtype_width(xml_doc, dtype_id)
@@ -112,20 +158,25 @@ def parse_vl_port(xml_doc, xml_node, signals):
         signals.append([name, signal_width])
         total_width = total_width + signal_width
     elif xml_node.tag == "arraysel":
-        name = parse_array_name(xml_doc, xml_node)
+        name = parse_arraysel_name(xml_doc, xml_node)
         dtype_id = xml_node.get("dtype_id")
         signal_width = parse_dtype_width(xml_doc, dtype_id)
         signals.append([name, signal_width])
         total_width = total_width + signal_width
     else:
         raise ET.ParseError("invalid probe entry: " + source_loc(xml_doc, xml_node.get("loc")))
+    # Check for duplicate signal names
+    signal_names = [signal[0] for signal in signals]
+    duplicates = set([name for name in signal_names if signal_names.count(name) > 1])
+    if len(duplicates) > 0:
+        raise ET.ParseError("duplicate signal names: " + ", ".join(duplicates))
     return total_width
 
 def parse_xml(filename, max_taps):
     xml_doc = ET.parse(filename)
     modules = {}
     xml_modules = xml_doc.findall(".//module/[@origName='VX_scope_tap']")
-    for xml_module in xml_modules:        
+    for xml_module in xml_modules:
         scope_id = parse_vl_int(xml_module.find(".//var/[@name='SCOPE_ID']/const").get("name"))
         triggerw = parse_vl_int(xml_module.find(".//var/[@name='TRIGGERW']/const").get("name"))
         probew = parse_vl_int(xml_module.find(".//var/[@name='PROBEW']/const").get("name"))
@@ -133,16 +184,16 @@ def parse_xml(filename, max_taps):
         modules[module_name] = [scope_id, triggerw, probew]
 
     taps = []
-    xml_instances = xml_doc.iter("instance")    
-    for xml_instance in xml_instances:      
+    xml_instances = xml_doc.iter("instance")
+    for xml_instance in xml_instances:
         if (max_taps != -1 and len(taps) >= max_taps):
-            break      
+            break
         defName = xml_instance.get("defName")
         module = modules.get(defName)
         if module is None:
             continue
         triggers = []
-        probes = []           
+        probes = []
         w = parse_vl_port(xml_doc, xml_instance.find(".//port/[@name='triggers']/*"), triggers)
         if w != module[1]:
             raise ET.ParseError("invalid triggers width: actual=" + str(w) + ", expected=" + str(module[1]))
@@ -157,19 +208,19 @@ def parse_xml(filename, max_taps):
         path = hier.rsplit(".", 1)[0]
         taps.append({"id":module[0],
                      "width":module[1] + module[2],
-                     "signals":signals, 
+                     "signals":signals,
                      "path":path})
 
     return {"version":"0.1.0", "taps":taps}
 
-def main():    
+def main():
     parser = argparse.ArgumentParser(description='Scope headers generator.')
     parser.add_argument('-o', nargs='?', default='scope.json', metavar='o', help='Output JSON manifest')
     parser.add_argument('-n', nargs='?', default=-1, metavar='n', type=int, help='Maximum number of taps to read')
     parser.add_argument('xml', help='Design XML descriptor file')
     args = parser.parse_args()
     #print("args=", args)
-    scope_taps = parse_xml(args.xml, args.n) 
+    scope_taps = parse_xml(args.xml, args.n)
     with open(args.o, "w") as f:
         json.dump(scope_taps, f, ensure_ascii=False, indent=4)
 
