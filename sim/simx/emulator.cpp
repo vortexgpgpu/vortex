@@ -55,6 +55,8 @@ void Emulator::warp_t::clear(uint64_t startup_addr) {
   this->tmask.reset();
   this->uuid = 0;
   this->fcsr = 0;
+  this->num_tThreads = 16;
+  this->isActive = false;
 
   for (auto& reg_file : this->ireg_file) {
     for (auto& reg : reg_file) {
@@ -79,7 +81,7 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     , warps_(arch.num_warps(), arch)
 #endif
 #ifdef coop
-    , warps_(8, arch)
+    , warps_(MAX_NUMBER_TILES, arch)
 #endif
     , barriers_(arch.num_barriers(), 0)
 {
@@ -117,6 +119,9 @@ void Emulator::clear() {
   //activate first warp and thread
   active_warps_.set(0);
   warps_[0].tmask.set(0);
+  warps_[4].tmask.set(0);
+  warps_[0].isActive = true;
+  warps_[4].isActive = true;
   wspawn_.valid = false;
 }
 
@@ -128,6 +133,7 @@ void Emulator::attach_ram(RAM* ram) {
   mmu_.attach(*ram, 0, 0xFFFFFFFF);
 #endif
 }
+
 
 instr_trace_t* Emulator::step() {
   int scheduled_warp = -1;
@@ -145,19 +151,48 @@ instr_trace_t* Emulator::step() {
     stalled_warps_.reset(0);
   }
 #endif
+
 #ifdef coop
-  auto& warp = warps_;
-  if (wspawn_.valid && active_warps_.count() == 1) {
-    DP(3, " warps at PC: " << std::hex << wspawn_.nextPC);
-    for (uint32_t i = 1; i < wspawn_.num_warps; i++) {
-      warp[i].PC = wspawn_.nextPC;
-      warp[i].tmask.set(0);
+  // ----- process pending wspawn
+  if (wspawn_.valid && wspawn_.isTile) {
+    DP(3, "*** Activate " << (wspawn_.num_warps-1) << " warps at PC: " << std::hex << wspawn_.nextPC);
+    if(wspawn_.prev_numTiles < wspawn_.set_numTiles){
+      for (uint32_t i = wspawn_.issuing_wid; i < wspawn_.final_wid; i+=(int)(MAX_NUMBER_TILES/wspawn_.set_numTiles)) {
+        auto& warp = warps_.at(i);
+        warp.PC = warps_.at(wspawn_.issuing_wid).PC;
+        warp.tmask = warps_.at(wspawn_.issuing_wid).tmask;
+        warp.num_tThreads = THREAD_PER_TILE*wspawn_.set_numTiles;
+        warp.isActive = true;
+      }
+    }
+    else{
+      for (uint32_t i = wspawn_.issuing_wid+1; i < wspawn_.final_wid; i++) {
+        auto& warp = warps_.at(i);
+        warp.PC = 0;
+        warp.tmask.reset();
+        warp.num_tThreads = THREAD_PER_TILE*wspawn_.set_numTiles;
+        warp.isActive = false;
+      }
+      for (uint32_t i = wspawn_.issuing_wid; i < wspawn_.final_wid; i+=(int)(MAX_NUMBER_TILES/wspawn_.set_numTiles)) {
+        auto& warp = warps_.at(i);
+        warp.PC = warps_.at(wspawn_.issuing_wid).PC;
+        warp.tmask = warps_.at(wspawn_.issuing_wid).tmask;
+        warp.isActive = true;
+      }
+    }
+    wspawn_.valid = false;
+  }
+  else if (wspawn_.valid && active_warps_.count() == 1) {
+    DP(3, "*** Activate " << (wspawn_.num_warps-1) << " warps at PC: " << std::hex << wspawn_.nextPC);
+    for (uint32_t i = 1; i < wspawn_.num_warps; ++i) {
+      auto& warp = warps_.at(i);
+      warp.PC = wspawn_.nextPC;
+      warp.tmask.set(0);
       active_warps_.set(i);
     }
     wspawn_.valid = false;
     stalled_warps_.reset(0);
   }
-#endif
 
   //----- find next ready warp
   for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {
@@ -170,72 +205,54 @@ instr_trace_t* Emulator::step() {
   }
   if (scheduled_warp == -1)
     return nullptr;
+#endif
 
-#ifdef og
   //----- suspend warp until decode
   auto& warp = warps_.at(scheduled_warp);
   assert(warp.tmask.any());
-#endif
-
-#ifdef coop
-  //----- suspend warp until decode
-  assert(warp[scheduled_warp].tmask.any());
-#endif
 
 #ifndef NDEBUG
-#ifdef og
   uint32_t instr_uuid = warp.uuid++;
   uint32_t g_wid = core_->id() * arch_.num_warps() + scheduled_warp;
   uint64_t uuid = (uint64_t(g_wid) << 32) | instr_uuid;
-#endif
-#ifdef coop
-  uint32_t instr_uuid = warp[scheduled_warp].uuid++;
-  uint32_t g_wid = core_->id() * arch_.num_warps() + scheduled_warp;
-  uint64_t uuid = (uint64_t(g_wid) << 32) | instr_uuid;
-#endif
 #else
   uint64_t uuid = 0;
 #endif
 
-#ifdef og
   DPH(1, "Fetch: cid=" << core_->id() << ", wid=" << scheduled_warp << ", tmask=");
   for (uint32_t i = 0, n = arch_.num_threads(); i < n; ++i)
     DPN(1, warp.tmask.test(i));
   DPN(1, ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")" << std::endl);
-#endif
-#ifdef coop
-  DPH(1, "Fetch: cid=" << core_->id() << ", wid=" << scheduled_warp << ", tmask=");
-  for (uint32_t i = 0, n = arch_.num_threads(); i < n; ++i)
-    DPN(1, warp[scheduled_warp].tmask.test(i));
-  DPN(1, ", PC=0x" << std::hex << warp[scheduled_warp].PC << " (#" << std::dec << uuid << ")" << std::endl);
-#endif
+  
   //-----  Fetch
-#ifdef og
+
   uint32_t instr_code = 0;
   this->icache_read(&instr_code, warp.PC, sizeof(uint32_t));
-#endif
-#ifdef coop
-  uint32_t instr_code = 0;
-  this->icache_read(&instr_code, warp[scheduled_warp].PC, sizeof(uint32_t));
-#endif
-  //-----  Decode
+
+//-----  Decode
   auto instr = this->decode(instr_code);
+
   if (!instr) {
-#ifdef og
     std::cout << std::hex << "Error: invalid instruction 0x" << instr_code << ", at PC=0x" << warp.PC << " (#" << std::dec << uuid << ")" << std::endl;
     std::abort();
-#endif
-#ifdef coop
-    std::cout << std::hex << "Error: invalid instruction 0x" << instr_code << ", at PC=0x" << warp[scheduled_warp].PC << " (#" << std::dec << uuid << ")" << std::endl;
-    std::abort();
-#endif
   }
+
   DP(1, "Instr 0x" << std::hex << instr_code << ": " << *instr);
 
   //-----  Create trace
   auto trace = new instr_trace_t(uuid, arch_);
   //-----  Execute
+#ifdef og
   this->execute(*instr, scheduled_warp, trace);
+#endif
+#ifdef coop 
+  for (size_t wid = 0, nw = 8; wid < nw; ++wid) {
+    if (warps_[wid].isActive) {
+      this->execute(*instr, wid, trace);
+      DP(5, "###########EXECUTING WID:"<<wid);
+    }
+  }
+#endif
 
 #ifdef og
   DP(5, "Register state:");
@@ -254,24 +271,24 @@ instr_trace_t* Emulator::step() {
   }
   return trace;
 #endif
+
 #ifdef coop
   DP(5, "Register state:");
   for (uint32_t i = 0; i < arch_.num_regs(); ++i) {
     DPN(5, "  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
     //-----  Integer register file
-    for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
-      DPN(5, ' ' << std::setfill('0') << std::setw(XLEN/4) << std::hex << warp[(int)(j/4)].ireg_file.at(j%4).at(i) << std::setfill(' ') << ' ');
+    for (uint32_t j = 0; j < WARP_SIZE; ++j) {
+      DPN(5, ' ' << std::setfill('0') << std::setw(XLEN/4) << std::hex << warps_[j/THREAD_PER_TILE].ireg_file.at(j%THREAD_PER_TILE).at(i) << std::setfill(' ') << ' ');
     }
     DPN(5, '|');
     //-----  Floating point register file
     for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
-      DPN(5, ' ' << std::setfill('0') << std::setw(16) << std::hex << warp[(int)(j/4)].freg_file.at(j%4).at(i) << std::setfill(' ') << ' ');
+      DPN(5, ' ' << std::setfill('0') << std::setw(16) << std::hex << warps_[j/THREAD_PER_TILE].freg_file.at(j%THREAD_PER_TILE).at(i) << std::setfill(' ') << ' ');
     }
     DPN(5, std::endl);
   }
   return trace;
 #endif
-  
 }
 
 bool Emulator::running() const {
@@ -303,7 +320,26 @@ bool Emulator::wspawn(uint32_t num_warps, Word nextPC) {
   wspawn_.valid = true;
   wspawn_.num_warps = num_warps;
   wspawn_.nextPC = nextPC;
+  wspawn_.isTile = false;
   return false;
+}
+
+bool Emulator::tile(uint32_t final_wid, uint32_t issuing_wid, uint32_t set_numTiles, uint32_t prev_numTiles){
+  wspawn_.issuing_wid = issuing_wid;
+  wspawn_.final_wid = final_wid;
+  wspawn_.set_numTiles = set_numTiles;
+  wspawn_.prev_numTiles = prev_numTiles;
+  wspawn_.valid = true;
+  wspawn_.isTile = true;
+  return false;
+}
+
+bool Emulator::tileMask(uint32_t tile_mask){
+  for(int i = 0; i < MAX_NUMBER_TILES; i++){
+    auto mask = (tile_mask >> i) & 0x01;
+    warps_[i].isActive = mask;
+  }
+  return true;
 }
 
 bool Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
