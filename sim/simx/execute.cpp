@@ -70,14 +70,14 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
 
   // initialize instruction trace
   trace->cid   = core_->id();
-  trace->wid   = wid;
+  trace->wid   = 0;
 #ifdef og
   trace->PC    = warp.PC;
   trace->tmask = warp.tmask;
 #endif
 #ifdef coop
   trace->PC    = warp[wid].PC;
-  trace->tmask = warp[wid].tmask;
+  trace->tmask = warp[0].tmask;
 #endif
   trace->rdest = instr.getRDest();
   trace->rdest_type = instr.getRDType();
@@ -87,7 +87,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
 #endif
 #ifdef coop
   auto next_pc = warp[wid].PC + 4;
-  auto next_tmask = warp[wid].tmask;
+  auto next_tmask = warp[0].tmask;
 #endif
   auto opcode = instr.getOpcode();
   auto func2  = instr.getFunc2();
@@ -99,9 +99,14 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   auto rsrc2  = instr.getRSrc(2);
   auto immsrc = sext((Word)instr.getImm(), 32);
 
+#ifdef og
   auto num_threads = arch_.num_threads();
-
   uint32_t thread_start = 0;
+#endif
+#ifdef coop
+  auto num_threads = warp[wid].num_tThreads;
+  uint32_t thread_start = 0;
+#endif
   for (; thread_start < num_threads; ++thread_start) {
 #ifdef og
       if (warp.tmask.test(thread_start))
@@ -153,7 +158,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           rsdata[t][i].u = warp.ireg_file.at(t)[reg];
 #endif
 #ifdef coop
-          rsdata[t][i].u = warp[(int)(t/4)].ireg_file.at(t%4)[reg];
+          rsdata[t][i].u = warp[wid + (int)(t/THREAD_PER_TILE)].ireg_file.at(t%THREAD_PER_TILE)[reg];
 #endif
           DPN(2, "0x" << std::hex << rsdata[t][i].i);
         }
@@ -179,7 +184,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           rsdata[t][i].u64 = warp.freg_file.at(t)[reg];
 #endif
 #ifdef coop
-          rsdata[t][i].u64 = warp[(int)(t/4)].freg_file.at(t%4)[reg];
+          rsdata[t][i].u64 = warp[wid + (int)(t/THREAD_PER_TILE)].freg_file.at(t%THREAD_PER_TILE)[reg];
 #endif
           DPN(2, "0x" << std::hex << rsdata[t][i].f);
         }
@@ -1530,9 +1535,9 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           else_tmask[t] = warp.tmask.test(t) && !cond;
 #endif
 #ifdef coop
-          auto cond = (warp[(int)(t/4)].ireg_file.at(t%4).at(rsrc0) & 0x1) ^ not_pred;
-          then_tmask[t] = warp[wid].tmask.test(t) && cond;
-          else_tmask[t] = warp[wid].tmask.test(t) && !cond;
+          auto cond = (warp[wid + t/THREAD_PER_TILE].ireg_file.at(t%THREAD_PER_TILE).at(rsrc0) & 0x1) ^ not_pred;
+          then_tmask[t] = warp[wid + t/THREAD_PER_TILE].tmask.test(t%THREAD_PER_TILE) && cond;
+          else_tmask[t] = warp[wid + t/THREAD_PER_TILE].tmask.test(t%THREAD_PER_TILE) && !cond;
 #endif
         }
 
@@ -1598,7 +1603,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         }
 #endif
 #ifdef coop
-        auto stack_ptr = warp[(int)(thread_last/4)].ireg_file.at(thread_last).at(rsrc0);
+        auto stack_ptr = warp[thread_last/THREAD_PER_TILE].ireg_file.at(thread_last%THREAD_PER_TILE).at(rsrc0);
         if (stack_ptr != warp[wid].ipdom_stack.size()) {
           if (warp[wid].ipdom_stack.empty()) {
             std::cout << "IPDOM stack is empty!\n" << std::flush;
@@ -1637,7 +1642,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           pred[t] = warp.tmask.test(t) && cond;
 #endif
 #ifdef coop
-          auto cond = (warp[(int)(t/4)].ireg_file.at(t%4).at(rsrc0) & 0x1) ^ not_pred;
+          auto cond = (warp[wid + t/THREAD_PER_TILE].ireg_file.at(t%THREAD_PER_TILE).at(rsrc0) & 0x1) ^ not_pred;
           pred[t] = warp[wid].tmask.test(t) && cond;
 #endif
         }
@@ -1648,7 +1653,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           next_tmask = warp.ireg_file.at(thread_last).at(rsrc1);
 #endif
 #ifdef coop
-          next_tmask = warp[(int)(thread_last/4)].ireg_file.at(thread_last%4).at(rsrc1);
+          next_tmask = warp[thread_last/THREAD_PER_TILE].ireg_file.at(thread_last%THREAD_PER_TILE).at(rsrc1);
 #endif
         }
       } break;
@@ -1872,7 +1877,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       auto val = warp.ireg_file.at(t)[c_add];
 #endif
 #ifdef coop
-      auto val = warp[(int)(t/4)].ireg_file.at(t%4)[c_add];
+      auto val = warp[wid + t/THREAD_PER_TILE].ireg_file.at(t%THREAD_PER_TILE)[c_add];
 #endif
       auto c = val & 0x0000001f;
       auto segmask = ((val >> 5) & 0x0000001f);
@@ -1927,12 +1932,38 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     trace->used_iregs.set(c_add);
     
   }break;
+#ifdef coop
   case Opcode::TILE:{
     trace->fu_type = FUType::SFU;
-    trace->sfu_type = SfuType::TILE;
+    trace->used_iregs.set(rsrc0);
+    trace->used_iregs.set(rsrc1);
     trace->fetch_stall = true;
+    switch (func3) {
+      case 0: {      //Tile partition
+        trace->sfu_type = SfuType::TILE_PARTITION;
+        if(wid == unsigned(rsdata.at(thread_last)[1].i)){
+          uint32_t final_wid = wid+(int)(num_threads/THREAD_PER_TILE); // 0-31 5bits
+          uint32_t issuing_wid = wid; // 0-31 5 bits
+          uint32_t set_numTiles = WARP_SIZE/rsdata.at(thread_last)[0].i; // 1-16 5 bits
+          uint32_t prev_numTiles = WARP_SIZE/num_threads; // 1-16 5 bits
+          uint32_t arg1 =  (final_wid << 5) + (set_numTiles);
+          uint32_t arg2 =  (issuing_wid << 5) + (prev_numTiles);
+          trace->data = std::make_shared<SFUTraceData>(arg1, arg2);
+        }
+      }break;
+      case 1:{   // Set tile mask
+        trace->sfu_type = SfuType::TILE_MASK;
+        auto tile_mask = rsdata.at(thread_last)[0].i;
+        trace->data = std::make_shared<SFUTraceData>(tile_mask, 0);
+      }break;
+      default:{
+        std::abort();
+      }break;
+    }
+    
   }
   break;
+#endif
   default:
     std::abort();
   }
@@ -1962,7 +1993,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           warp.ireg_file.at(t)[rdest] = rddata[t].i;
 #endif
 #ifdef coop
-          warp[(int)(t/4)].ireg_file.at(t%4)[rdest] = rddata[t].i;
+          warp[wid + t/THREAD_PER_TILE].ireg_file.at(t%THREAD_PER_TILE)[rdest] = rddata[t].i;
 #endif
           DPN(2, "0x" << std::hex << rddata[t].i);
         }
@@ -1994,7 +2025,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         warp.freg_file.at(t)[rdest] = rddata[t].u64;
 #endif
 #ifdef coop
-        warp[(int)(t/4)].freg_file.at(t%4)[rdest] = rddata[t].u64;
+        warp[wid + t/THREAD_PER_TILE].freg_file.at(t%THREAD_PER_TILE)[rdest] = rddata[t].u64;
 #endif
         DPN(2, "0x" << std::hex << rddata[t].f);
       }
