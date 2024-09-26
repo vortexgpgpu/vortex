@@ -36,11 +36,6 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     VX_scoreboard_if scoreboard_if();
     VX_operands_if operands_if();
 
-    wire operands_if_fire = operands_if.valid && operands_if.ready;
-    wire writeback_if_valid = writeback_if.valid;
-    `UNUSED_VAR (operands_if_fire)
-    `UNUSED_VAR (writeback_if_valid)
-
     VX_ibuffer #(
         .INSTANCE_ID ($sformatf("%s-ibuffer", INSTANCE_ID))
     ) ibuffer (
@@ -97,13 +92,14 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 `ifdef DBG_SCOPE_ISSUE
     `SCOPE_IO_SWITCH (1);
     `NEG_EDGE (reset_negedge, reset);
-    `SCOPE_TAP_EX (0, 2, 2, (
+    `SCOPE_TAP_EX (0, 2, 3, (
             `UUID_WIDTH + `NUM_THREADS + `EX_BITS + `INST_OP_BITS +
             1 + `NR_BITS + (`NUM_THREADS * 3 * `XLEN) +
             `UUID_WIDTH + `NUM_THREADS + `NR_BITS + (`NUM_THREADS*`XLEN) + 1
         ), {
-            operands_if_fire,
-            writeback_if_valid
+            operands_if.valid,
+            operands_if.ready,
+            writeback_if.valid
         }, {
             operands_if.data.uuid,
             operands_if.data.tmask,
@@ -138,7 +134,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
-        if (operands_if_fire) begin
+        if (operands_if.valid && operands_if.ready) begin
             `TRACE(1, ("%t: %s: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wis_to_wid(operands_if.data.wis, ISSUE_ID), {operands_if.data.PC, 1'b0}))
             trace_ex_type(1, operands_if.data.ex_type);
             `TRACE(1, (", op="))

@@ -1012,11 +1012,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     // SCOPE //////////////////////////////////////////////////////////////////////
 
 `ifdef DBG_SCOPE_AFU
-    wire avs_write_fire  = avs_write[0] && ~avs_waitrequest[0];
-    wire avs_read_fire   = avs_read[0] && ~avs_waitrequest[0];
-    wire vx_mem_req_fire = vx_mem_req_valid && vx_mem_req_ready;
-    wire vx_mem_rsp_fire = vx_mem_rsp_valid && vx_mem_rsp_ready;
-
     reg [STATE_WIDTH-1:0] state_prev;
     always @(posedge clk) begin
         state_prev <= state;
@@ -1028,12 +1023,15 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     `SCOPE_TAP (0, 0, {
             vx_reset,
             vx_busy,
-            vx_mem_req_fire,
-            vx_mem_rsp_fire,
+            vx_mem_req_valid,
+            vx_mem_req_ready,
+            vx_mem_rsp_valid,
+            vx_mem_rsp_ready,
             vx_dcr_wr_valid,
             state_changed,
-            avs_write_fire,
-            avs_read_fire,
+            avs_read[0],
+            avs_write[0],
+            avs_waitrequest[0],
             avs_waitrequest[0],
             avs_readdatavalid[0],
             cp2af_sRxPort.c0.mmioRdValid,
@@ -1044,14 +1042,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             af2cp_sTxPort.c1.valid,
             cp2af_sRxPort.c0TxAlmFull,
             cp2af_sRxPort.c1TxAlmFull,
-            af2cp_sTxPort.c2.mmioRdValid,
-            cci_wr_req_fire,
-            cci_wr_rsp_fire,
-            cci_rd_req_fire,
-            cci_rd_rsp_fire,
-            cci_pending_reads_full,
-            cci_pending_writes_empty,
-            cci_pending_writes_full
+            af2cp_sTxPort.c2.mmioRdValid
         },{
             cmd_type,
             state,
@@ -1081,7 +1072,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         reset_negedge, 1'b0, 4096
 	);
 `else
-    `SCOPE_IO_UNUSED(0)
+    `SCOPE_IO_UNUSED_W(0)
 `endif
 
     ///////////////////////////////////////////////////////////////////////////////

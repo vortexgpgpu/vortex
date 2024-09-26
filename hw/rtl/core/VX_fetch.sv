@@ -41,11 +41,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire [`UUID_WIDTH-1:0] rsp_uuid;
     wire [`NW_WIDTH-1:0] req_tag, rsp_tag;
 
-    wire schedule_fire = schedule_if.valid && schedule_if.ready;
     wire icache_req_fire = icache_req_valid && icache_req_ready;
-    wire icache_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
-    `UNUSED_VAR (schedule_fire)
-    `UNUSED_VAR (icache_rsp_fire)
 
     assign req_tag = schedule_if.data.wid;
 
@@ -139,13 +135,16 @@ module VX_fetch import VX_gpu_pkg::*; #(
 `ifdef DBG_SCOPE_FETCH
     `SCOPE_IO_SWITCH (1);
     `NEG_EDGE (reset_negedge, reset);
-    `SCOPE_TAP_EX (0, 1, 3, (
+    `SCOPE_TAP_EX (0, 1, 6, (
             `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS + ICACHE_TAG_WIDTH + ICACHE_WORD_SIZE +
             ICACHE_ADDR_WIDTH + (ICACHE_WORD_SIZE * 8) + ICACHE_TAG_WIDTH
         ), {
-            schedule_fire,
-            icache_req_fire,
-            icache_rsp_fire
+            schedule_if.valid,
+            schedule_if.ready,
+            icache_bus_if.req_valid,
+            icache_bus_if.req_ready,
+            icache_bus_if.rsp_valid,
+            icache_bus_if.rsp_ready
         }, {
             schedule_if.data.uuid, schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.PC,
             icache_bus_if.req_data.tag, icache_bus_if.req_data.byteen, icache_bus_if.req_data.addr,
