@@ -105,7 +105,7 @@ module VX_pe_serializer #(
             end
         end
 
-        reg [BATCH_SIZE-1:0][NUM_PES-1:0][DATA_OUT_WIDTH-1:0] data_out_r, data_out_n;
+        reg [BATCH_SIZE-1:0][(NUM_PES * DATA_OUT_WIDTH)-1:0] data_out_r, data_out_n;
 
         always @(*) begin
             data_out_n = data_out_r;

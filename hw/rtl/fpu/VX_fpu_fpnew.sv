@@ -90,7 +90,7 @@ module VX_fpu_fpnew
 
     reg [TAG_WIDTH-1:0] fpu_tag_in, fpu_tag_out;
 
-    reg [2:0][NUM_LANES-1:0][`XLEN-1:0] fpu_operands;
+    logic [2:0][NUM_LANES-1:0][`XLEN-1:0] fpu_operands;
 
     wire [NUM_LANES-1:0][`XLEN-1:0] fpu_result;
     fpnew_pkg::status_t fpu_status;

@@ -154,23 +154,27 @@ module VX_mem_coalescer #(
 
     wire [NUM_REQS-1:0] current_pmask = in_req_mask & addr_matches_r;
 
-    reg [OUT_REQS-1:0][DATA_RATIO-1:0][DATA_IN_SIZE-1:0] req_byteen_merged;
-    reg [OUT_REQS-1:0][DATA_RATIO-1:0][DATA_IN_WIDTH-1:0] req_data_merged;
+    wire [OUT_REQS-1:0][DATA_RATIO-1:0][DATA_IN_SIZE-1:0] req_byteen_merged;
+    wire [OUT_REQS-1:0][DATA_RATIO-1:0][DATA_IN_WIDTH-1:0] req_data_merged;
 
-    always @(*) begin
-        req_byteen_merged = '0;
-        req_data_merged = 'x;
-        for (integer i = 0; i < OUT_REQS; ++i) begin
+    for (genvar i = 0; i < OUT_REQS; ++i) begin : g_data_merged
+        reg [DATA_RATIO-1:0][DATA_IN_SIZE-1:0] byteen_merged;
+        reg [DATA_RATIO-1:0][DATA_IN_WIDTH-1:0] data_merged;
+        always @(*) begin
+            byteen_merged = '0;
+            data_merged = 'x;
             for (integer j = 0; j < DATA_RATIO; ++j) begin
                 for (integer k = 0; k < DATA_IN_SIZE; ++k) begin
                     // perform byte-level merge since each thread may have different bytes enabled
                     if (current_pmask[i * DATA_RATIO + j] && in_req_byteen[DATA_RATIO * i + j][k]) begin
-                        req_byteen_merged[i][in_addr_offset[DATA_RATIO * i + j]][k] = 1'b1;
-                        req_data_merged[i][in_addr_offset[DATA_RATIO * i + j]][k * 8 +: 8] = in_req_data[DATA_RATIO * i + j][k * 8 +: 8];
+                        byteen_merged[in_addr_offset[DATA_RATIO * i + j]][k] = 1'b1;
+                        data_merged[in_addr_offset[DATA_RATIO * i + j]][k * 8 +: 8] = in_req_data[DATA_RATIO * i + j][k * 8 +: 8];
                     end
                 end
             end
         end
+        assign req_byteen_merged[i] = byteen_merged;
+        assign req_data_merged[i]   = data_merged;
     end
 
     wire is_last_batch = ~(| (in_req_mask & ~addr_matches_r & req_rem_mask_r));
