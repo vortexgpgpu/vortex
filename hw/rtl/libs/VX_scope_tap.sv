@@ -34,6 +34,7 @@ module VX_scope_tap #(
     input wire bus_in,
     output wire bus_out
 );
+    localparam HAS_TRIGGERS     = XTRIGGERW != 0 || HTRIGGERW != 0;
     localparam CTR_WIDTH        = 64;
     localparam SER_CTR_WIDTH    = `LOG2UP(TX_DATAW);
     localparam DATAW            = PROBEW + XTRIGGERW + HTRIGGERW;
@@ -95,7 +96,9 @@ module VX_scope_tap #(
     // trace capture
     //
 
-    if (XTRIGGERW != 0 || HTRIGGERW != 0) begin : g_delta_store
+    wire do_capture;
+
+    if (HAS_TRIGGERS) begin : g_delta_store
         if (XTRIGGERW != 0 && HTRIGGERW != 0) begin : g_data_in_pxh
             assign data_in  = {probes, xtriggers, htriggers};
         end else if (XTRIGGERW != 0) begin : g_data_in_px
@@ -103,8 +106,9 @@ module VX_scope_tap #(
         end else begin : g_data_in_ph
             assign data_in  = {probes, htriggers};
         end
-        wire has_triggered = (xtriggers != prev_xtrig) || (htriggers != 0);
-        assign write_en = (tap_state == TAP_STATE_RUN) && (has_triggered || dflush);
+        wire has_triggered = (xtriggers != prev_xtrig) || (htriggers != '0);
+        assign do_capture = dflush || has_triggered;
+        assign write_en = (tap_state == TAP_STATE_RUN) && do_capture;
         VX_dp_ram #(
             .DATAW (IDLE_CTRW),
             .SIZE  (DEPTH),
@@ -112,20 +116,21 @@ module VX_scope_tap #(
             .READ_ENABLE (0),
             .NO_RWCHECK (1)
         ) delta_store (
-            .clk    (clk),
-            .reset  (reset),
-            .read   (1'b1),
-            .wren   (1'b1),
-            .write  (write_en),
-            .waddr  (waddr[ADDRW-1:0]),
-            .wdata  (delta),
-            .raddr  (raddr),
-            .rdata  (delta_value)
+            .clk   (clk),
+            .reset (reset),
+            .read  (1'b1),
+            .wren  (1'b1),
+            .write (write_en),
+            .waddr (waddr[ADDRW-1:0]),
+            .wdata (delta),
+            .raddr (raddr),
+            .rdata (delta_value)
         );
     end else begin : g_no_delta_store
-        assign data_in  = probes;
+        assign data_in = probes;
         assign write_en = (tap_state == TAP_STATE_RUN);
         assign delta_value = '0;
+        assign do_capture = 1;
     end
 
     VX_dp_ram #(
@@ -135,15 +140,15 @@ module VX_scope_tap #(
         .READ_ENABLE (0),
         .NO_RWCHECK (1)
     ) data_store (
-        .clk    (clk),
-        .reset  (reset),
-        .read   (1'b1),
-        .wren   (1'b1),
-        .write  (write_en),
-        .waddr  (waddr[ADDRW-1:0]),
-        .wdata  (data_in),
-        .raddr  (raddr),
-        .rdata  (data_value)
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .wren  (1'b1),
+        .write (write_en),
+        .waddr (waddr[ADDRW-1:0]),
+        .wdata (data_in),
+        .raddr (raddr),
+        .rdata (data_value)
     );
 
     always @(posedge clk) begin
@@ -159,7 +164,7 @@ module VX_scope_tap #(
             tap_state  <= TAP_STATE_IDLE;
             delta      <= '0;
             dflush     <= 0;
-            prev_xtrig  <= '0;
+            prev_xtrig <= '0;
             waddr      <= '0;
         end else begin
             case (tap_state)
@@ -176,17 +181,17 @@ module VX_scope_tap #(
             TAP_STATE_RUN: begin
                 dflush <= 0;
                 if (!(stop || cmd_stop) && (waddr < waddr_end)) begin
-                    if (XTRIGGERW != 0) begin
-                        if (dflush || (xtriggers != prev_xtrig)) begin
-                            waddr  <= waddr + SIZEW'(1);
+                    if (do_capture) begin
+                        waddr <= waddr + SIZEW'(1);
+                    end
+                    if (HAS_TRIGGERS) begin
+                        if (do_capture) begin
                             delta  <= '0;
                         end else begin
                             delta  <= delta + IDLE_CTRW'(1);
                             dflush <= (delta == IDLE_CTRW'(MAX_IDLE_CTR-1));
                         end
                         prev_xtrig <= xtriggers;
-                    end else begin
-                        waddr <= waddr + SIZEW'(1);
                     end
                 end else begin
                     tap_state <= TAP_STATE_DONE;
