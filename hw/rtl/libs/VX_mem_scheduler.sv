@@ -459,8 +459,8 @@ module VX_mem_scheduler #(
 
     end else begin : g_rsp_full
 
-        reg [CORE_BATCHES*CORE_CHANNELS*WORD_WIDTH-1:0] rsp_store [CORE_QUEUE_SIZE-1:0];
-        reg [CORE_BATCHES*CORE_CHANNELS*WORD_WIDTH-1:0] rsp_store_n; // use flattened array for BRAM synthesis compatibility
+        reg [(CORE_BATCHES * CORE_CHANNELS * WORD_WIDTH)-1:0] rsp_store [CORE_QUEUE_SIZE-1:0];
+        reg [(CORE_BATCHES * CORE_CHANNELS * WORD_WIDTH)-1:0] rsp_store_n; // use flattened array for BRAM synthesis compatibility
         reg [CORE_REQS-1:0] rsp_orig_mask [CORE_QUEUE_SIZE-1:0];
 
         always @(*) begin

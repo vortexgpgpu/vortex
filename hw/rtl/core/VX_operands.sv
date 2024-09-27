@@ -69,7 +69,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     wire pipe_valid_st2, pipe_ready_st2;
     wire [META_DATAW-1:0] pipe_data, pipe_data_st1, pipe_data_st2;
 
-    reg [NUM_SRC_OPDS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] src_data_st2, src_data_m_st2;
+    reg [NUM_SRC_OPDS-1:0][(`NUM_THREADS * `XLEN)-1:0] src_data_st2, src_data_m_st2;
 
     reg [NUM_SRC_OPDS-1:0] data_fetched_st1;
 
