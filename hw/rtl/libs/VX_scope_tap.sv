@@ -80,13 +80,13 @@ module VX_scope_tap #(
     reg [CTR_WIDTH-1:0] timestamp, start_time;
     reg [CTR_WIDTH-1:0] start_delay, stop_delay;
     reg [`UP(XTRIGGERW)-1:0] prev_xtrig;
+    reg [`UP(HTRIGGERW)-1:0] prev_htrig;
     reg [IDLE_CTRW-1:0] delta;
     reg cmd_start, cmd_stop;
     reg dflush;
 
     reg [SIZEW-1:0] waddr, waddr_end;
     wire [DATAW-1:0] data_in;
-    wire write_en;
 
     wire [DATAW-1:0] data_value;
     wire [IDLE_CTRW-1:0] delta_value;
@@ -98,6 +98,8 @@ module VX_scope_tap #(
 
     wire do_capture;
 
+    wire write_en = (tap_state == TAP_STATE_RUN) && do_capture;
+
     if (HAS_TRIGGERS) begin : g_delta_store
         if (XTRIGGERW != 0 && HTRIGGERW != 0) begin : g_data_in_pxh
             assign data_in  = {probes, xtriggers, htriggers};
@@ -106,9 +108,7 @@ module VX_scope_tap #(
         end else begin : g_data_in_ph
             assign data_in  = {probes, htriggers};
         end
-        wire has_triggered = (xtriggers != prev_xtrig) || (htriggers != '0);
-        assign do_capture = dflush || has_triggered;
-        assign write_en = (tap_state == TAP_STATE_RUN) && do_capture;
+        assign do_capture = dflush || (xtriggers != prev_xtrig) || (htriggers != prev_htrig) || (htriggers != '0);
         VX_dp_ram #(
             .DATAW (IDLE_CTRW),
             .SIZE  (DEPTH),
@@ -128,7 +128,6 @@ module VX_scope_tap #(
         );
     end else begin : g_no_delta_store
         assign data_in = probes;
-        assign write_en = (tap_state == TAP_STATE_RUN);
         assign delta_value = '0;
         assign do_capture = 1;
     end
@@ -165,6 +164,7 @@ module VX_scope_tap #(
             delta      <= '0;
             dflush     <= 0;
             prev_xtrig <= '0;
+            prev_htrig <= '0;
             waddr      <= '0;
         end else begin
             case (tap_state)
@@ -192,6 +192,7 @@ module VX_scope_tap #(
                             dflush <= (delta == IDLE_CTRW'(MAX_IDLE_CTR-1));
                         end
                         prev_xtrig <= xtriggers;
+                        prev_htrig <= htriggers;
                     end
                 end else begin
                     tap_state <= TAP_STATE_DONE;
