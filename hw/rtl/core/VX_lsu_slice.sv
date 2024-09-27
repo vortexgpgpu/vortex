@@ -536,13 +536,16 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 `ifdef DBG_SCOPE_LSU
     `SCOPE_IO_SWITCH (1);
     `NEG_EDGE (reset_negedge, reset);
-    `SCOPE_TAP_EX (0, 3, 4, (
+    `SCOPE_TAP_EX (0, 3, 4, 2, (
             1 + NUM_LANES * (`XLEN + LSU_WORD_SIZE + LSU_WORD_SIZE * 8) + `UUID_WIDTH + NUM_LANES * LSU_WORD_SIZE * 8 + `UUID_WIDTH
         ), {
             mem_req_valid,
             mem_req_ready,
             mem_rsp_valid,
             mem_rsp_ready
+        }, {
+            mem_req_fire,
+            mem_rsp_fire
         }, {
             mem_req_rw,
             full_addr,

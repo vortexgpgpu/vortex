@@ -181,10 +181,11 @@ def parse_xml(filename, max_taps):
     xml_modules = xml_doc.findall(".//module/[@origName='VX_scope_tap']")
     for xml_module in xml_modules:
         scope_id = parse_vl_int(xml_module.find(".//var/[@name='SCOPE_ID']/const").get("name"))
-        triggerw = parse_vl_int(xml_module.find(".//var/[@name='TRIGGERW']/const").get("name"))
+        xtriggerw = parse_vl_int(xml_module.find(".//var/[@name='XTRIGGERW']/const").get("name"))
+        htriggerw = parse_vl_int(xml_module.find(".//var/[@name='HTRIGGERW']/const").get("name"))
         probew = parse_vl_int(xml_module.find(".//var/[@name='PROBEW']/const").get("name"))
         module_name = xml_module.get("name")
-        modules[module_name] = [scope_id, triggerw, probew]
+        modules[module_name] = [scope_id, xtriggerw, htriggerw, probew]
 
     taps = []
     xml_instances = xml_doc.iter("instance")
@@ -195,22 +196,36 @@ def parse_xml(filename, max_taps):
         module = modules.get(defName)
         if module is None:
             continue
-        triggers = []
+
+        xtriggers = []
+        htriggers = []
         probes = []
-        w = parse_vl_port(xml_doc, xml_instance.find(".//port/[@name='triggers']/*"), triggers)
-        if w != module[1]:
-            raise ET.ParseError("invalid triggers width: actual=" + str(w) + ", expected=" + str(module[1]))
+
+        if module[1] > 0:
+            w = parse_vl_port(xml_doc, xml_instance.find(".//port/[@name='xtriggers']/*"), xtriggers)
+            if w != module[1]:
+                raise ET.ParseError("invalid xtriggers width: actual=" + str(w) + ", expected=" + str(module[1]))
+
+        if module[2] > 0:
+            w = parse_vl_port(xml_doc, xml_instance.find(".//port/[@name='htriggers']/*"), htriggers)
+            if w != module[2]:
+                raise ET.ParseError("invalid htriggers width: actual=" + str(w) + ", expected=" + str(module[2]))
+
         w = parse_vl_port(xml_doc, xml_instance.find(".//port/[@name='probes']/*"), probes)
-        if w != module[2]:
-            raise ET.ParseError("invalid probes width: actual=" + str(w) + ", expected=" + str(module[2]))
+        if w != module[3]:
+            raise ET.ParseError("invalid probes width: actual=" + str(w) + ", expected=" + str(module[3]))
+
         signals = probes
-        for trigger in triggers:
-            signals.append(trigger)
+        for xtrigger in xtriggers:
+            signals.append(xtrigger)
+        for htrigger in htriggers:
+            signals.append(htrigger)
+
         loc = xml_instance.get("loc")
         hier = xml_doc.find(".//cell/[@loc='" + loc + "']").get("hier")
         path = hier.rsplit(".", 1)[0]
         taps.append({"id":module[0],
-                     "width":module[1] + module[2],
+                     "width":module[1] + module[2] + module[3],
                      "signals":signals,
                      "path":path})
 

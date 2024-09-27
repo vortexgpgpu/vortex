@@ -309,6 +309,11 @@ module VX_afu_wrap #(
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_AFU
+	wire m_axi_mem_awfire_0 = m_axi_mem_awvalid_a[0] & m_axi_mem_awready_a[0];
+	wire m_axi_mem_arfire_0 = m_axi_mem_arvalid_a[0] & m_axi_mem_arready_a[0];
+	wire m_axi_mem_wfire_0 = m_axi_mem_wvalid_a[0]  & m_axi_mem_wready_a[0];
+	wire m_axi_mem_bfire_0  = m_axi_mem_bvalid_a[0]  & m_axi_mem_bready_a[0];
+
 	`NEG_EDGE (reset_negedge, reset);
 	`SCOPE_TAP (0, 0, {
 			ap_reset,
@@ -318,7 +323,6 @@ module VX_afu_wrap #(
 			interrupt,
 			vx_reset,
 			vx_busy,
-			dcr_wr_valid,
 			m_axi_mem_awvalid_a[0],
 			m_axi_mem_awready_a[0],
 			m_axi_mem_wvalid_a[0],
@@ -330,6 +334,12 @@ module VX_afu_wrap #(
 			m_axi_mem_rvalid_a[0],
 			m_axi_mem_rready_a[0]
 		}, {
+			dcr_wr_valid,
+			m_axi_mem_awfire_0,
+			m_axi_mem_arfire_0,
+			m_axi_mem_wfire_0,
+			m_axi_mem_bfire_0
+		},{
 			dcr_wr_addr,
 			dcr_wr_data,
 			vx_pending_writes,
