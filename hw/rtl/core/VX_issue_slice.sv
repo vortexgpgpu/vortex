@@ -91,15 +91,18 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 `ifdef SCOPE
 `ifdef DBG_SCOPE_ISSUE
     `SCOPE_IO_SWITCH (1);
+    wire operands_fire = operands_if.valid && operands_if.ready;
     `NEG_EDGE (reset_negedge, reset);
-    `SCOPE_TAP_EX (0, 2, 3, (
+    `SCOPE_TAP_EX (0, 2, 2, 2, (
             `UUID_WIDTH + `NUM_THREADS + `EX_BITS + `INST_OP_BITS +
             1 + `NR_BITS + (`NUM_THREADS * 3 * `XLEN) +
             `UUID_WIDTH + `NUM_THREADS + `NR_BITS + (`NUM_THREADS*`XLEN) + 1
         ), {
             operands_if.valid,
-            operands_if.ready,
-            writeback_if.valid
+            operands_if.ready
+        }, {
+            operands_fire,
+            writeback_if.valid // ack-free
         }, {
             operands_if.data.uuid,
             operands_if.data.tmask,

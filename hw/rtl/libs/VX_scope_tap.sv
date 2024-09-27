@@ -17,9 +17,10 @@
 module VX_scope_tap #(
     parameter SCOPE_ID  = 0,    // scope identifier
     parameter SCOPE_IDW = 8,    // scope identifier width
-    parameter TRIGGERW  = 32,   // trigger signals width
-    parameter PROBEW    = 4999, // probe signal width
-    parameter DEPTH     = 8192, // trace buffer depth
+    parameter XTRIGGERW = 0,    // changed trigger signals width
+    parameter HTRIGGERW = 0,    // high trigger signals width
+    parameter PROBEW    = 1,    // probe signal width
+    parameter DEPTH     = 256,  // trace buffer depth
     parameter IDLE_CTRW = 32,   // idle time between triggers counter width
     parameter TX_DATAW  = 64    // transfer data width
 ) (
@@ -27,14 +28,15 @@ module VX_scope_tap #(
     input wire reset,
     input wire start,
     input wire stop,
-    input wire [`UP(TRIGGERW)-1:0] triggers,
+    input wire [`UP(XTRIGGERW)-1:0] xtriggers,
+    input wire [`UP(HTRIGGERW)-1:0] htriggers,
     input wire [PROBEW-1:0] probes,
     input wire bus_in,
     output wire bus_out
 );
     localparam CTR_WIDTH        = 64;
     localparam SER_CTR_WIDTH    = `LOG2UP(TX_DATAW);
-    localparam DATAW            = PROBEW + TRIGGERW;
+    localparam DATAW            = PROBEW + XTRIGGERW + HTRIGGERW;
     localparam ADDRW            = `CLOG2(DEPTH);
     localparam SIZEW            = `CLOG2(DEPTH+1);
     localparam MAX_IDLE_CTR     = (2 ** IDLE_CTRW) - 1;
@@ -76,7 +78,7 @@ module VX_scope_tap #(
 
     reg [CTR_WIDTH-1:0] timestamp, start_time;
     reg [CTR_WIDTH-1:0] start_delay, stop_delay;
-    reg [`UP(TRIGGERW)-1:0] prev_trig;
+    reg [`UP(XTRIGGERW)-1:0] prev_xtrig;
     reg [IDLE_CTRW-1:0] delta;
     reg cmd_start, cmd_stop;
     reg dflush;
@@ -93,9 +95,16 @@ module VX_scope_tap #(
     // trace capture
     //
 
-    if (TRIGGERW != 0) begin : g_delta_store
-        assign data_in  = {probes, triggers};
-        assign write_en = (tap_state == TAP_STATE_RUN) && (dflush || (triggers != prev_trig));
+    if (XTRIGGERW != 0 || HTRIGGERW != 0) begin : g_delta_store
+        if (XTRIGGERW != 0 && HTRIGGERW != 0) begin : g_data_in_pxh
+            assign data_in  = {probes, xtriggers, htriggers};
+        end else if (XTRIGGERW != 0) begin : g_data_in_px
+            assign data_in  = {probes, xtriggers};
+        end else begin : g_data_in_ph
+            assign data_in  = {probes, htriggers};
+        end
+        wire has_triggered = (xtriggers != prev_xtrig) || (htriggers != 0);
+        assign write_en = (tap_state == TAP_STATE_RUN) && (has_triggered || dflush);
         VX_dp_ram #(
             .DATAW (IDLE_CTRW),
             .SIZE  (DEPTH),
@@ -150,7 +159,7 @@ module VX_scope_tap #(
             tap_state  <= TAP_STATE_IDLE;
             delta      <= '0;
             dflush     <= 0;
-            prev_trig  <= '0;
+            prev_xtrig  <= '0;
             waddr      <= '0;
         end else begin
             case (tap_state)
@@ -167,15 +176,15 @@ module VX_scope_tap #(
             TAP_STATE_RUN: begin
                 dflush <= 0;
                 if (!(stop || cmd_stop) && (waddr < waddr_end)) begin
-                    if (TRIGGERW != 0) begin
-                        if (dflush || (triggers != prev_trig)) begin
+                    if (XTRIGGERW != 0) begin
+                        if (dflush || (xtriggers != prev_xtrig)) begin
                             waddr  <= waddr + SIZEW'(1);
                             delta  <= '0;
                         end else begin
                             delta  <= delta + IDLE_CTRW'(1);
                             dflush <= (delta == IDLE_CTRW'(MAX_IDLE_CTR-1));
                         end
-                        prev_trig <= triggers;
+                        prev_xtrig <= xtriggers;
                     end else begin
                         waddr <= waddr + SIZEW'(1);
                     end

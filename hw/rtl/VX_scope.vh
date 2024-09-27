@@ -46,10 +46,11 @@
         .rsp_in  (scope_bus_out_w) \
     )
 
-`define SCOPE_TAP_EX(__idx, __id, __triggers_w, __probes_w, __triggers, __probes, __start, __stop, __depth) \
+`define SCOPE_TAP_EX(__idx, __id, __xtriggers_w, __htriggers_w, __probes_w, __xtriggers, __htriggers, __probes, __start, __stop, __depth) \
     VX_scope_tap #( \
         .SCOPE_ID (__id), \
-        .TRIGGERW (__triggers_w), \
+        .XTRIGGERW(__xtriggers_w), \
+        .HTRIGGERW(__htriggers_w), \
         .PROBEW   (__probes_w), \
         .DEPTH    (__depth) \
     ) scope_tap_``idx ( \
@@ -57,14 +58,15 @@
         .reset 	(scope_reset_w[__idx]), \
         .start 	(__start), \
         .stop  	(__stop), \
-        .triggers(__triggers), \
+        .xtriggers(__xtriggers), \
+        .htriggers(__htriggers), \
         .probes (__probes), \
         .bus_in (scope_bus_in_w[__idx]), \
         .bus_out(scope_bus_out_w[__idx]) \
     )
 
-`define SCOPE_TAP(__idx, __id, __triggers, __probes, __start, __stop, __depth) \
-    `SCOPE_TAP_EX(__idx, __id, $bits(__triggers), $bits(__probes), __triggers, __probes, __start, __stop, __depth)
+`define SCOPE_TAP(__idx, __id, __xtriggers, __htriggers, __probes, __start, __stop, __depth) \
+    `SCOPE_TAP_EX(__idx, __id, $bits(__xtriggers), $bits(__htriggers), $bits(__probes), __xtriggers, __htriggers, __probes, __start, __stop, __depth)
 
 `else
 
@@ -76,9 +78,9 @@
 
 `define SCOPE_IO_SWITCH(__count)
 
-`define SCOPE_TAP(__idx, __id, __triggers, __probes, __depth)
+`define SCOPE_TAP(__idx, __id, __xtriggers, __probes, __depth)
 
-`define SCOPE_TAP_EX(__idx, __id, __triggers_w, __probes_w, __triggers, __probes, __depth)
+`define SCOPE_TAP_EX(__idx, __id, __xtriggers_w, __probes_w, __xtriggers, __probes, __depth)
 
 `endif
 

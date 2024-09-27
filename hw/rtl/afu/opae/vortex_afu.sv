@@ -1016,10 +1016,12 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     always @(posedge clk) begin
         state_prev <= state;
     end
-    wire state_changed = (state != state_prev);
+    wire state_changed   = (state != state_prev);
+    wire vx_mem_req_fire = vx_mem_req_valid && vx_mem_req_ready;
+    wire vx_mem_rsp_fire = vx_mem_rsp_valid && vx_mem_rsp_ready;
+    wire avs_req_fire    = (avs_write[0] || avs_read[0]) && ~avs_waitrequest[0];
 
     `NEG_EDGE (reset_negedge, reset);
-
     `SCOPE_TAP (0, 0, {
             vx_reset,
             vx_busy,
@@ -1027,21 +1029,29 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             vx_mem_req_ready,
             vx_mem_rsp_valid,
             vx_mem_rsp_ready,
-            vx_dcr_wr_valid,
-            state_changed,
             avs_read[0],
             avs_write[0],
             avs_waitrequest[0],
-            avs_readdatavalid[0],
-            cp2af_sRxPort.c0.mmioRdValid,
-            cp2af_sRxPort.c0.mmioWrValid,
             cp2af_sRxPort.c0.rspValid,
             cp2af_sRxPort.c1.rspValid,
             af2cp_sTxPort.c0.valid,
             af2cp_sTxPort.c1.valid,
             cp2af_sRxPort.c0TxAlmFull,
-            cp2af_sRxPort.c1TxAlmFull,
-            af2cp_sTxPort.c2.mmioRdValid
+            cp2af_sRxPort.c1TxAlmFull
+        },{
+            state_changed,
+            vx_dcr_wr_valid, // ack-free
+            avs_readdatavalid[0], // ack-free
+            cp2af_sRxPort.c0.mmioRdValid, // ack-free
+            cp2af_sRxPort.c0.mmioWrValid, // ack-free
+            af2cp_sTxPort.c2.mmioRdValid, // ack-free
+            cp2af_sRxPort.c0.rspValid, // ack-free
+            cp2af_sRxPort.c1.rspValid, // ack-free
+            cci_rd_req_fire,
+            cci_wr_req_fire,
+            avs_req_fire,
+            vx_mem_req_fire,
+            vx_mem_rsp_fire
         },{
             cmd_type,
             state,
