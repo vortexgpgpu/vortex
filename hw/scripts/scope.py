@@ -33,7 +33,7 @@ def source_loc(xml_doc, xml_loc):
     end_line = loc[3]
     end_col = loc[4]
     file = xml_doc.find(".//file/[@id='" + file_id + "']").get("filename")
-    return file + " (" + start_line + ":" + start_col + "-" + end_line + ":" + end_col + ")"
+    return f"{file} ({start_line}:{start_col}-{end_line}:{end_col})"
 
 def parse_dtype_width(xml_doc, dtype_id):
     xml_type = xml_doc.find(".//typetable/*[@id='" + dtype_id + "']")
@@ -75,6 +75,8 @@ def parse_var_name(xml_doc, xml_node):
         name = xml_node.get("name")
         dotted = xml_node.get("dotted")
         return f"{dotted}.{name}"
+    elif xml_node.tag == "arraysel":
+        return parse_arraysel_name(xml_doc, xml_node)
     else:
         raise ET.ParseError("invalid probe entry" + source_loc(xml_doc, xml_node.get("loc")))
     return name
@@ -91,7 +93,7 @@ def parse_sel_field(xml_doc, dtype_id, offset, width):
             member_name = member.get("name")
             member_width = parse_dtype_width(xml_doc, sub_dtype_id)
             if bit_offset <= offset < bit_offset + member_width:
-                if sub_dtype_id:
+                if width != member_width and sub_dtype_id:
                     sub_field = parse_sel_field(xml_doc, sub_dtype_id, offset - bit_offset, width)
                     return f".{member_name}{sub_field}"
                 else:
@@ -105,13 +107,14 @@ def parse_sel_field(xml_doc, dtype_id, offset, width):
             return ""
         array_index = offset // base_width
         sub_offset = offset % base_width
-        array_sel_name = f"[{array_index}]"
+        array_sel_name = f"_{array_index}" # array indexing is not supported in VCD
         sub_field = parse_sel_field(xml_doc, sub_dtype_id, sub_offset, width)
         return f"{array_sel_name}{sub_field}"
     elif xml_type.tag == "basicdtype":
-        if (offset == 0):
-            return ""
-        return f"_{offset}"
+        if width == 1:
+            return F"[{offset}]"
+        end = width - 1 + offset
+        return F"[{end}:{offset}]"
     else:
         raise ET.ParseError("invalid probe entry: " + source_loc(xml_doc, xml_type.get("loc")))
     return None
@@ -134,7 +137,7 @@ def parse_arraysel_name(xml_doc, xml_node):
         const_iter = xml_node.iter("const")
         first_const = next(const_iter)
         offset = parse_vl_int(first_const.get("name"))
-        name = f"{name}[{offset}]"
+        name = f"{name}_{offset}" # array indexing is not supported in VCD
     else:
         name = parse_var_name(xml_doc, xml_node)
     return name
