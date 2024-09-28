@@ -1081,7 +1081,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         reset_negedge, 1'b0, 4096
 	);
 `else
-    `SCOPE_IO_UNUSED_W(0)
+    `SCOPE_IO_UNUSED(0)
 `endif
 
     ///////////////////////////////////////////////////////////////////////////////
