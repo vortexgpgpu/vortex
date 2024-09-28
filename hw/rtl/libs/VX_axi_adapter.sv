@@ -116,32 +116,21 @@ module VX_axi_adapter #(
         assign req_bank_off = mem_req_addr_out;
     end
 
-    wire mem_req_fire = mem_req_valid && mem_req_ready;
-
     // AXi write request synchronization
-    reg [NUM_BANKS-1:0] m_axi_aw_ack, m_axi_w_ack;
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_m_axi_w
-        wire m_axi_aw_fire = m_axi_awvalid[i] && m_axi_awready[i];
-        wire m_axi_w_fire = m_axi_wvalid[i] && m_axi_wready[i];
-        always @(posedge clk) begin
-            if (reset || (mem_req_fire && (req_bank_sel == i))) begin
-                m_axi_aw_ack[i] <= 0;
-                m_axi_w_ack[i]  <= 0;
-            end else begin
-                if (m_axi_aw_fire) begin
-                    m_axi_aw_ack[i] <= 1;
-                end
-                if (m_axi_w_fire) begin
-                    m_axi_w_ack[i] <= 1;
-                end
-            end
-        end
-    end
-
-    wire [NUM_BANKS-1:0] axi_write_ready;
+    reg [NUM_BANKS-1:0] m_axi_aw_ack, m_axi_w_ack, axi_write_ready;
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_write_ready
-        assign axi_write_ready[i] = (m_axi_awready[i] || m_axi_aw_ack[i])
-                                 && (m_axi_wready[i] || m_axi_w_ack[i]);
+        VX_axi_write_ack axi_write_ack (
+            .clk    (clk),
+            .reset  (reset),
+            .awvalid(m_axi_awvalid[i]),
+            .awready(m_axi_awready[i]),
+            .wvalid (m_axi_wvalid[i]),
+            .wready (m_axi_wready[i]),
+            .aw_ack (m_axi_aw_ack[i]),
+            .w_ack  (m_axi_w_ack[i]),
+            .tx_rdy (axi_write_ready[i]),
+            `UNUSED_PIN (tx_ack)
+        );
     end
 
     // request ack

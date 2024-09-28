@@ -61,6 +61,9 @@ module VX_afu_wrap #(
 	localparam STATE_IDLE = 0;
     localparam STATE_RUN  = 1;
 
+	localparam PENDING_SIZEW = 12; // max outstanding requests size
+	localparam C_M_AXI_MEM_NUM_BANKS_SW = `CLOG2(C_M_AXI_MEM_NUM_BANKS+1);
+
 	wire                                 m_axi_mem_awvalid_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_awready_a [C_M_AXI_MEM_NUM_BANKS];
     wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]    m_axi_mem_awaddr_a [C_M_AXI_MEM_NUM_BANKS];
@@ -95,7 +98,7 @@ module VX_afu_wrap #(
 `endif
 
 	reg [`CLOG2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
-	reg [15:0] vx_pending_writes;
+	reg [PENDING_SIZEW-1:0] vx_pending_writes;
 	reg vx_busy_wait;
 	reg vx_reset = 1; // asserted at initialization
 	wire vx_busy;
@@ -118,23 +121,10 @@ module VX_afu_wrap #(
   	wire scope_reset = reset;
 `endif
 
-	reg m_axi_mem_wfire;
-	reg m_axi_mem_bfire;
-
-	always @(*) begin
-		m_axi_mem_wfire = 0;
-		m_axi_mem_bfire = 0;
-		for (integer i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin
-			m_axi_mem_wfire |= m_axi_mem_wvalid_a[i] && m_axi_mem_wready_a[i];
-			m_axi_mem_bfire |= m_axi_mem_bvalid_a[i] && m_axi_mem_bready_a[i];
-		end
-	end
-
 	always @(posedge clk) begin
 		if (reset || ap_reset) begin
-			state             <= STATE_IDLE;
-			vx_pending_writes <= '0;
-			vx_reset          <= 1;
+			state    <= STATE_IDLE;
+			vx_reset <= 1;
 		end else begin
 			case (state)
 			STATE_IDLE: begin
@@ -181,12 +171,39 @@ module VX_afu_wrap #(
 			if (vx_reset_ctr != '0) begin
 				vx_reset_ctr <= vx_reset_ctr - 1;
 			end
+		end
+	end
 
-			// track pending writes
-			if (m_axi_mem_wfire && ~m_axi_mem_bfire)
-				vx_pending_writes <= vx_pending_writes + 1;
-			if (~m_axi_mem_wfire && m_axi_mem_bfire)
-				vx_pending_writes <= vx_pending_writes - 1;
+	wire [C_M_AXI_MEM_NUM_BANKS-1:0] m_axi_wr_req_fire, m_axi_wr_rsp_fire;
+	wire [C_M_AXI_MEM_NUM_BANKS_SW-1:0] cur_wr_reqs, cur_wr_rsps;
+
+	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_awfire
+		VX_axi_write_ack axi_write_ack (
+            .clk    (clk),
+            .reset  (reset),
+            .awvalid(m_axi_mem_awvalid_a[i]),
+            .awready(m_axi_mem_awready_a[i]),
+            .wvalid (m_axi_mem_wvalid_a[i]),
+            .wready (m_axi_mem_wready_a[i]),
+			.tx_ack (m_axi_wr_req_fire[i]),
+			`UNUSED_PIN (aw_ack),
+			`UNUSED_PIN (w_ack),
+			`UNUSED_PIN (tx_rdy)
+        );
+		assign m_axi_wr_rsp_fire[i] = m_axi_mem_bvalid_a[i] & m_axi_mem_bready_a[i];
+	end
+
+	`POP_COUNT(cur_wr_reqs, m_axi_wr_req_fire);
+	`POP_COUNT(cur_wr_rsps, m_axi_wr_rsp_fire);
+
+	wire signed [C_M_AXI_MEM_NUM_BANKS_SW:0] reqs_sub = (C_M_AXI_MEM_NUM_BANKS_SW+1)'(cur_wr_reqs) -
+	                                                     (C_M_AXI_MEM_NUM_BANKS_SW+1)'(cur_wr_rsps);
+
+	always @(posedge clk) begin
+		if (reset) begin
+			vx_pending_writes <= '0;
+		end else begin
+			vx_pending_writes <= vx_pending_writes + PENDING_SIZEW'(reqs_sub);
 		end
 	end
 
@@ -408,16 +425,16 @@ module VX_afu_wrap #(
     always @(posedge clk) begin
 		for (integer i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin
 			if (m_axi_mem_awvalid_a[i] && m_axi_mem_awready_a[i]) begin
-				`TRACE(2, ("%t: AFU Wr Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_awaddr_a[i], m_axi_mem_awid_a[i]))
+				`TRACE(2, ("%t: AXI Wr Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_awaddr_a[i], m_axi_mem_awid_a[i]))
 			end
 			if (m_axi_mem_wvalid_a[i] && m_axi_mem_wready_a[i]) begin
-				`TRACE(2, ("%t: AFU Wr Req [%0d]: data=0x%h\n", $time, i, m_axi_mem_wdata_a[i]))
+				`TRACE(2, ("%t: AXI Wr Req [%0d]: data=0x%h\n", $time, i, m_axi_mem_wdata_a[i]))
 			end
 			if (m_axi_mem_arvalid_a[i] && m_axi_mem_arready_a[i]) begin
-				`TRACE(2, ("%t: AFU Rd Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_araddr_a[i], m_axi_mem_arid_a[i]))
+				`TRACE(2, ("%t: AXI Rd Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_araddr_a[i], m_axi_mem_arid_a[i]))
 			end
 			if (m_axi_mem_rvalid_a[i] && m_axi_mem_rready_a[i]) begin
-				`TRACE(2, ("%t: AVS Rd Rsp [%0d]: data=0x%h, tag=0x%0h\n", $time, i, m_axi_mem_rdata_a[i], m_axi_mem_rid_a[i]))
+				`TRACE(2, ("%t: AXI Rd Rsp [%0d]: data=0x%h, tag=0x%0h\n", $time, i, m_axi_mem_rdata_a[i], m_axi_mem_rid_a[i]))
 			end
 		end
   	end

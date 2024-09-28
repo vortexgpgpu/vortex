@@ -333,12 +333,9 @@ private:
     }
 
     device_->ap_rst_n = 1;
-
-    for (int i = 0; i < RESET_DELAY; ++i) {
-      device_->ap_clk = 0;
-      this->eval();
-      device_->ap_clk = 1;
-      this->eval();
+    for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
+      *m_axi_mem_[i].arready = 1;
+      *m_axi_mem_[i].awready = 1;
     }
   }
 
@@ -407,10 +404,10 @@ private:
   void axi_mem_bus_reset() {
     for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
       // address read request
-      *m_axi_mem_[i].arready = 1;
+      *m_axi_mem_[i].arready = 0;
 
       // address write request
-      *m_axi_mem_[i].awready = 1;
+      *m_axi_mem_[i].awready = 0;
 
       // data write request
       *m_axi_mem_[i].wready = 0;
@@ -423,19 +420,16 @@ private:
 
       // states
       m_axi_states_[i].write_req_pending = false;
-      m_axi_states_[i].write_rsp_pending = false;
-      m_axi_states_[i].read_rsp_pending = false;
     }
   }
 
   void axi_mem_bus_eval() {
     for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
       // handle read responses
-      if (m_axi_states_[i].read_rsp_pending && (*m_axi_mem_[i].rready)) {
-        *m_axi_mem_[i].rvalid = 0;
-        m_axi_states_[i].read_rsp_pending = false;
+      if (*m_axi_mem_[i].rvalid && *m_axi_mem_[i].rready) {
+         *m_axi_mem_[i].rvalid = 0;
       }
-      if (!m_axi_states_[i].read_rsp_pending) {
+      if (!*m_axi_mem_[i].rvalid) {
         if (!pending_mem_reqs_[i].empty()
         && (*pending_mem_reqs_[i].begin())->ready
         && !(*pending_mem_reqs_[i].begin())->write) {
@@ -447,17 +441,15 @@ private:
           *m_axi_mem_[i].rlast  = 1;
           memcpy(m_axi_mem_[i].rdata->data(), mem_rsp->data.data(), PLATFORM_MEMORY_DATA_SIZE);
           pending_mem_reqs_[i].erase(mem_rsp_it);
-          m_axi_states_[i].read_rsp_pending = true;
           delete mem_rsp;
         }
       }
 
       // handle write responses
-      if (m_axi_states_[i].write_rsp_pending && *m_axi_mem_[i].bready) {
+      if (*m_axi_mem_[i].bvalid && *m_axi_mem_[i].bready) {
         *m_axi_mem_[i].bvalid = 0;
-        m_axi_states_[i].write_rsp_pending = false;
       }
-      if (!m_axi_states_[i].write_rsp_pending) {
+      if (!*m_axi_mem_[i].bvalid) {
         if (!pending_mem_reqs_[i].empty()
         && (*pending_mem_reqs_[i].begin())->ready
         && (*pending_mem_reqs_[i].begin())->write) {
@@ -467,7 +459,6 @@ private:
           *m_axi_mem_[i].bid    = mem_rsp->tag;
           *m_axi_mem_[i].bresp  = 0;
           pending_mem_reqs_[i].erase(mem_rsp_it);
-          m_axi_states_[i].write_rsp_pending = true;
           delete mem_rsp;
         }
       }
@@ -492,17 +483,21 @@ private:
         dram_queues_[i].push(mem_req);
       }
 
-      // handle address write requests
-      if (*m_axi_mem_[i].awvalid && *m_axi_mem_[i].awready && !m_axi_states_[i].write_req_pending) {
+      if (*m_axi_mem_[i].wready && !m_axi_states_[i].write_req_pending) {
+        *m_axi_mem_[i].wready = 0;
+      }
+
+      // handle address write requestsls 
+      if (*m_axi_mem_[i].awvalid && *m_axi_mem_[i].awready && !*m_axi_mem_[i].wready) {
         m_axi_states_[i].write_req_addr = *m_axi_mem_[i].awaddr;
         m_axi_states_[i].write_req_tag = *m_axi_mem_[i].awid;
-        m_axi_states_[i].write_req_pending = true;
+        // activate data channel
+        *m_axi_mem_[i].wready = 1;
+        m_axi_states_[i].write_req_pending = !*m_axi_mem_[i].wvalid;
       }
 
       // handle data write requests
-      *m_axi_mem_[i].wready = false;
-      if (*m_axi_mem_[i].wvalid && m_axi_states_[i].write_req_pending) {
-
+      if (*m_axi_mem_[i].wvalid && *m_axi_mem_[i].wready) {
         auto byteen = *m_axi_mem_[i].wstrb;
         auto data = (uint8_t*)m_axi_mem_[i].wdata->data();
         auto byte_addr = m_axi_states_[i].write_req_addr;
@@ -529,10 +524,11 @@ private:
         // send dram request
         dram_queues_[i].push(mem_req);
 
-        m_axi_states_[i].write_req_pending = false;
-
-        // acquire write data
-        *m_axi_mem_[i].wready = true;
+        // deactivate data channel
+        if (m_axi_states_[i].write_req_pending) {
+          *m_axi_mem_[i].wready = 0;
+          m_axi_states_[i].write_req_pending = false;
+        }
       }
     }
   }
@@ -541,8 +537,6 @@ private:
     uint64_t write_req_addr;
     uint32_t write_req_tag;
     bool write_req_pending;
-    bool read_rsp_pending;
-    bool write_rsp_pending;
   } m_axi_state_t;
 
   typedef struct {
