@@ -151,9 +151,6 @@ public:
     // reset device
     this->reset();
 
-    // start execution
-    running_ = true;
-
     // wait on device to go busy
     while (!device_->busy) {
       this->tick();
@@ -181,8 +178,6 @@ private:
     this->mem_bus_reset();
     this->dcr_bus_reset();
 
-    running_ = false;
-
     print_bufs_.clear();
 
     pending_mem_reqs_.clear();
@@ -191,8 +186,6 @@ private:
       std::queue<mem_req_t*> empty;
       std::swap(dram_queue_, empty);
     }
-
-    mem_rd_rsp_active_ = false;
 
     device_->reset = 1;
 
@@ -204,13 +197,7 @@ private:
     }
 
     device_->reset = 0;
-
-    for (int i = 0; i < RESET_DELAY; ++i) {
-      device_->clk = 0;
-      this->eval();
-      device_->clk = 1;
-      this->eval();
-    }
+    device_->mem_req_ready = 1;
   }
 
   void tick() {
@@ -261,11 +248,10 @@ private:
 
   void mem_bus_eval() {
     // process memory read responses
-    if (mem_rd_rsp_active_ && device_->mem_rsp_ready) {
+    if (device_->mem_rsp_valid && device_->mem_rsp_ready) {
       device_->mem_rsp_valid = 0;
-      mem_rd_rsp_active_ = false;
     }
-    if (!mem_rd_rsp_active_) {
+    if (!device_->mem_rsp_valid) {
       if (!pending_mem_reqs_.empty()
        && (*pending_mem_reqs_.begin())->ready) {
         auto mem_rsp_it = pending_mem_reqs_.begin();
@@ -280,7 +266,6 @@ private:
         memcpy(VDataCast<void*, MEM_BLOCK_SIZE>::get(device_->mem_rsp_data), mem_rsp->data.data(), MEM_BLOCK_SIZE);
         device_->mem_rsp_tag = mem_rsp->tag;
         pending_mem_reqs_.erase(mem_rsp_it);
-        mem_rd_rsp_active_ = true;
         delete mem_rsp;
       }
     }
@@ -291,7 +276,6 @@ private:
       if (device_->mem_req_rw) {
         auto byteen = device_->mem_req_byteen;
         auto data = VDataCast<uint8_t*, MEM_BLOCK_SIZE>::get(device_->mem_req_data);
-
         if (byte_addr >= uint64_t(IO_COUT_ADDR)
          && byte_addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
           // process console output
@@ -350,8 +334,6 @@ private:
         dram_queue_.push(mem_req);
       }
     }
-
-    device_->mem_req_ready = running_;
   }
 
   void dcr_bus_reset() {
@@ -390,10 +372,6 @@ private:
 #endif
 
   RAM* ram_;
-
-  bool mem_rd_rsp_active_;
-
-  bool running_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
