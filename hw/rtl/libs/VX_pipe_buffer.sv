@@ -46,7 +46,7 @@ module VX_pipe_buffer #(
     end else begin : g_register
         wire [DEPTH:0] valid;
     `IGNORE_UNOPTFLAT_BEGIN
-        wire [DEPTH:0] ready;
+        wire ready [DEPTH+1];
     `IGNORE_UNOPTFLAT_END
         wire [DEPTH:0][DATAW-1:0] data;
 
@@ -71,7 +71,6 @@ module VX_pipe_buffer #(
         assign valid_out = valid[DEPTH];
         assign data_out = data[DEPTH];
         assign ready[DEPTH] = ready_out;
-
     end
 
 endmodule
