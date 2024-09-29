@@ -260,11 +260,11 @@ config2()
     # disabling ZICOND extension
     CONFIGS="-DEXT_ZICOND_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo
 
-    # test 128-bit MEM block
+    # test 128-bit memory block
     CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=opae --app=mstress
     CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=xrt --app=mstress
 
-    # test XLEN-bit MEM block
+    # test XLEN-bit memory block
     CONFIGS="-DMEM_BLOCK_SIZE=$XSIZE" ./ci/blackbox.sh --driver=opae --app=mstress
     CONFIGS="-DMEM_BLOCK_SIZE=$XSIZE" ./ci/blackbox.sh --driver=simx --app=mstress
 
@@ -272,7 +272,7 @@ config2()
     CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=rtlsim --app=mstress --threads=8
     CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=simx --app=mstress --threads=8
 
-    # test single-bank DRAM
+    # test single-bank memory
     if [ "$XLEN" == "64" ]; then
         CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=48" ./ci/blackbox.sh --driver=opae --app=mstress
         CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=48" ./ci/blackbox.sh --driver=xrt --app=mstress
@@ -281,11 +281,16 @@ config2()
         CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=32" ./ci/blackbox.sh --driver=xrt --app=mstress
     fi
 
-    # test 33-bit DRAM address
-    CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=opae --app=mstress
-    CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=xrt --app=mstress
+    # test larger memory address
+    if [ "$XLEN" == "64" ]; then
+        CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=49" ./ci/blackbox.sh --driver=opae --app=mstress
+        CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=49" ./ci/blackbox.sh --driver=xrt --app=mstress
+    else
+        CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=opae --app=mstress
+        CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=xrt --app=mstress
+    fi
 
-    # test DRAM banks interleaving
+    # test memory banks interleaving
     CONFIGS="-DPLATFORM_MEMORY_INTERLEAVE=1" ./ci/blackbox.sh --driver=opae --app=mstress
     CONFIGS="-DPLATFORM_MEMORY_INTERLEAVE=0" ./ci/blackbox.sh --driver=opae --app=mstress
 
@@ -326,8 +331,8 @@ scope()
 {
     echo "begin scope tests..."
 
-    ./ci/blackbox.sh --driver=opae --scope --app=demo --args="-n1"
-    ./ci/blackbox.sh --driver=xrt --scope --app=demo --args="-n1"
+    SCOPE_DEPTH=1024 ./ci/blackbox.sh --driver=opae --app=demo --args="-n1" --scope
+    SCOPE_DEPTH=1024 ./ci/blackbox.sh --driver=xrt --app=demo --args="-n1" --scope
 
     echo "debugging scope done!"
 }

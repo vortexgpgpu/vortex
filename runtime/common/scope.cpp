@@ -261,6 +261,20 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
     }
   }
 
+  // setup capture size
+  const char* capture_size_env = std::getenv("SCOPE_DEPTH");
+  if (capture_size_env != nullptr) {
+    std::stringstream ss(capture_size_env);
+    uint32_t capture_size;
+    if (ss >> capture_size) {
+      for (auto& tap : json_obj["taps"]) {
+        auto id = tap["id"].get<uint32_t>();
+        uint64_t cmd_depth = (capture_size << 11) | (id << 3) | CMD_SET_DEPTH;
+        CHECK_ERR(g_callback.registerWrite(hdevice, cmd_depth));
+      }
+    }
+  }
+
   // set stop time
   if (stop_time != uint64_t(-1)) {
     std::cout << "[SCOPE] stop time: " << std::dec << stop_time << "s" << std::endl;

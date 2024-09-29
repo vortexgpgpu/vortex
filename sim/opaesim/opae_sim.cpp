@@ -78,8 +78,9 @@ static uint64_t trace_stop_time = TRACE_STOP_TIME;
 
 bool sim_trace_enabled() {
   if (timestamp >= trace_start_time
-   && timestamp < trace_stop_time)
+   && timestamp < trace_stop_time) {
     return true;
+   }
   return trace_enabled;
 }
 
@@ -156,10 +157,10 @@ public:
 
     // launch execution thread
     future_ = std::async(std::launch::async, [&]{
-        while (!stop_) {
-            std::lock_guard<std::mutex> guard(mutex_);
-            this->tick();
-        }
+      while (!stop_) {
+        std::lock_guard<std::mutex> guard(mutex_);
+        this->tick();
+      }
     });
 
     return 0;
@@ -178,7 +179,7 @@ public:
       return -1;
     // set uninitialized data to "baadf00d"
     for (uint32_t i = 0; i < len; ++i) {
-        ((uint8_t*)alloc)[i] = (0xbaadf00d >> ((i & 0x3) * 8)) & 0xff;
+      ((uint8_t*)alloc)[i] = (0xbaadf00d >> ((i & 0x3) * 8)) & 0xff;
     }
     host_buffer_t buffer;
     buffer.data   = (uint64_t*)alloc;
@@ -207,8 +208,9 @@ public:
     std::lock_guard<std::mutex> guard(mutex_);
 
     // simulate CPU-GPU latency
-    for (uint32_t i = 0; i < CPU_GPU_LATENCY; ++i)
+    for (uint32_t i = 0; i < CPU_GPU_LATENCY; ++i) {
       this->tick();
+    }
 
     // simulate mmio request
     device_->vcp2af_sRxPort_c0_mmioRdValid = 1;
@@ -225,8 +227,9 @@ public:
     std::lock_guard<std::mutex> guard(mutex_);
 
     // simulate CPU-GPU latency
-    for (uint32_t i = 0; i < CPU_GPU_LATENCY; ++i)
+    for (uint32_t i = 0; i < CPU_GPU_LATENCY; ++i) {
       this->tick();
+    }
 
     // simulate mmio request
     device_->vcp2af_sRxPort_c0_mmioWrValid = 1;
@@ -324,13 +327,14 @@ private:
   void sRxPort_bus_eval() {
     // check mmio request
     bool mmio_req_enabled = device_->vcp2af_sRxPort_c0_mmioRdValid
-                        || device_->vcp2af_sRxPort_c0_mmioWrValid;
+                         || device_->vcp2af_sRxPort_c0_mmioWrValid;
 
     // schedule CCI read responses
     std::list<cci_rd_req_t>::iterator cci_rd_it(cci_reads_.end());
     for (auto it = cci_reads_.begin(), ie = cci_reads_.end(); it != ie; ++it) {
-      if (it->cycles_left > 0)
+      if (it->cycles_left > 0) {
         it->cycles_left -= 1;
+      }
       if ((cci_rd_it == ie) && (it->cycles_left == 0)) {
         cci_rd_it = it;
       }
@@ -339,8 +343,9 @@ private:
     // schedule CCI write responses
     std::list<cci_wr_req_t>::iterator cci_wr_it(cci_writes_.end());
     for (auto it = cci_writes_.begin(), ie = cci_writes_.end(); it != ie; ++it) {
-      if (it->cycles_left > 0)
+      if (it->cycles_left > 0) {
         it->cycles_left -= 1;
+      }
       if ((cci_wr_it == ie) && (it->cycles_left == 0)) {
         cci_wr_it = it;
       }
@@ -358,7 +363,7 @@ private:
     // send CCI read response (ensure mmio disabled)
     device_->vcp2af_sRxPort_c0_rspValid = 0;
     if (!mmio_req_enabled
-    && (cci_rd_it != cci_reads_.end())) {
+     && (cci_rd_it != cci_reads_.end())) {
       device_->vcp2af_sRxPort_c0_rspValid = 1;
       device_->vcp2af_sRxPort_c0_hdr_resp_type = 0;
       memcpy(device_->vcp2af_sRxPort_c0_data, cci_rd_it->data.data(), CACHE_BLOCK_SIZE);
