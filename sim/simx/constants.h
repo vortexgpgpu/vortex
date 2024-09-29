@@ -13,6 +13,8 @@
 
 #pragma once
 
+#include <VX_config.h>
+
 #ifndef RAM_PAGE_SIZE
 #define RAM_PAGE_SIZE     4096
 #endif
