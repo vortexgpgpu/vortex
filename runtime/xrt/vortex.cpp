@@ -311,7 +311,7 @@ public:
       _value = 1 << ((dev_caps_ >> 48) & 0x7);
       break;
     case VX_CAPS_MEM_BANK_SIZE:
-      _value = 1ull << (16 + ((dev_caps_ >> 51) & 0x1f));
+      _value = 1ull << (20 + ((dev_caps_ >> 51) & 0x1f));
       break;
     default:
       fprintf(stderr, "[VXDRV] Error: invalid caps id: %d\n", caps_id);
