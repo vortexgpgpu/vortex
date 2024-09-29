@@ -20,9 +20,9 @@ template <typename T>
 constexpr uint32_t count_leading_zeros(T value) {
   static_assert(std::is_integral<T>::value, "invalid data type");
   if constexpr (sizeof(T) > 4) {
-    return value ? __builtin_clzll(value) : (sizeof(T) * 8);
+    return value ? __builtin_clzll(value) - (64 - sizeof(T) * 8) : sizeof(T) * 8;
   } else {
-    return value ? __builtin_clz(value) : (sizeof(T) * 8);
+    return value ? __builtin_clz(value) - (32 - sizeof(T) * 8) : sizeof(T) * 8;
   }
 }
 
