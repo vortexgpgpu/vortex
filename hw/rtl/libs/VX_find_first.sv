@@ -28,10 +28,10 @@ module VX_find_first #(
     localparam TL   = (1 << LOGN) - 1;
     localparam TN   = (1 << (LOGN+1)) - 1;
 
-`IGNORE_WARNINGS_BEGIN
-    wire [TN-1:0] s_n;
-    wire [TN-1:0][DATAW-1:0] d_n;
-`IGNORE_WARNINGS_END
+`IGNORE_UNOPTFLAT_BEGIN
+    wire s_n [TN];
+    wire [DATAW-1:0] d_n [TN];
+`IGNORE_UNOPTFLAT_END
 
     for (genvar i = 0; i < N; ++i) begin : g_reverse
         assign s_n[TL+i] = REVERSE ? valid_in[N-1-i] : valid_in[i];
@@ -46,9 +46,11 @@ module VX_find_first #(
     end
 
     for (genvar j = 0; j < LOGN; ++j) begin : g_scan
-        for (genvar i = 0; i < (2**j); ++i) begin : g_i
-            assign s_n[2**j-1+i] = s_n[2**(j+1)-1+i*2] | s_n[2**(j+1)-1+i*2+1];
-            assign d_n[2**j-1+i] = s_n[2**(j+1)-1+i*2] ? d_n[2**(j+1)-1+i*2] : d_n[2**(j+1)-1+i*2+1];
+        localparam I = 1 << j;
+        for (genvar i = 0; i < I; ++i) begin : g_i
+            localparam K = I+i-1;
+            assign s_n[K] = s_n[2*K+1] | s_n[2*K+2];
+            assign d_n[K] = s_n[2*K+1] ? d_n[2*K+1] : d_n[2*K+2];
         end
     end
 

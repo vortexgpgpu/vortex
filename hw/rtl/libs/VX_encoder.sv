@@ -40,8 +40,8 @@ module VX_encoder #(
     end else if (MODEL == 1) begin : g_model1
         localparam M = 1 << LN;
     `IGNORE_UNOPTFLAT_BEGIN
-        wire [LN-1:0][M-1:0] addr;
-        wire [LN:0][M-1:0] v;
+        wire [M-1:0] addr [LN];
+        wire [M-1:0] v [LN+1];
     `IGNORE_UNOPTFLAT_END
 
         // base case, also handle padding for non-power of two inputs
@@ -50,19 +50,17 @@ module VX_encoder #(
         for (genvar lvl = 1; lvl < (LN+1); ++lvl) begin : g_scan_l
             localparam SN = 1 << (LN - lvl);
             localparam SI = M / SN;
-            localparam SW = lvl;
-
             for (genvar s = 0; s < SN; ++s) begin : g_scan_s
             `IGNORE_UNOPTFLAT_BEGIN
                 wire [1:0] vs = {v[lvl-1][s*SI+(SI>>1)], v[lvl-1][s*SI]};
             `IGNORE_UNOPTFLAT_END
                 assign v[lvl][s*SI] = (| vs);
                 if (lvl == 1) begin : g_lvl_1
-                    assign addr[lvl-1][s*SI +: SW] = vs[!REVERSE];
+                    assign addr[lvl-1][s*SI +: lvl] = vs[!REVERSE];
                 end else begin : g_lvl_n
-                    assign addr[lvl-1][s*SI +: SW] = {
+                    assign addr[lvl-1][s*SI +: lvl] = {
                         vs[!REVERSE],
-                        addr[lvl-2][s*SI +: SW-1] | addr[lvl-2][s*SI+(SI>>1) +: SW-1]
+                        addr[lvl-2][s*SI +: lvl-1] | addr[lvl-2][s*SI+(SI>>1) +: lvl-1]
                     };
                 end
             end
