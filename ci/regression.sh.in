@@ -331,8 +331,8 @@ scope()
 {
     echo "begin scope tests..."
 
-    SCOPE_DEPTH=1024 ./ci/blackbox.sh --driver=opae --app=demo --args="-n1" --scope
-    SCOPE_DEPTH=1024 ./ci/blackbox.sh --driver=xrt --app=demo --args="-n1" --scope
+    SCOPE_DEPTH=256 ./ci/blackbox.sh --driver=opae --app=demo --args="-n1" --scope
+    SCOPE_DEPTH=256 ./ci/blackbox.sh --driver=xrt --app=demo --args="-n1" --scope
 
     echo "debugging scope done!"
 }
