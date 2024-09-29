@@ -143,13 +143,15 @@ public:
   }
 
   void run() {
-
   #ifndef NDEBUG
     std::cout << std::dec << timestamp << ": [sim] run()" << std::endl;
   #endif
 
     // reset device
     this->reset();
+
+    // start
+    device_->reset = 0;
 
     // wait on device to go busy
     while (!device_->busy) {
@@ -160,6 +162,9 @@ public:
     while (device_->busy) {
       this->tick();
     }
+
+    // stop
+    device_->reset = 1;
 
     this->cout_flush();
   }
@@ -196,7 +201,6 @@ private:
       this->eval();
     }
 
-    device_->reset = 0;
     device_->mem_req_ready = 1;
   }
 
