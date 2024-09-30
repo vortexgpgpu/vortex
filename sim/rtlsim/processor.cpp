@@ -152,6 +152,7 @@ public:
 
     // start
     device_->reset = 0;
+    device_->mem_req_ready = 1;
 
     // wait on device to go busy
     while (!device_->busy) {
@@ -175,6 +176,7 @@ public:
     device_->dcr_wr_data  = value;
     this->tick();
     device_->dcr_wr_valid = 0;
+    this->tick();
   }
 
 private:
@@ -184,7 +186,6 @@ private:
     this->dcr_bus_reset();
 
     print_bufs_.clear();
-
     pending_mem_reqs_.clear();
 
     {
@@ -200,12 +201,21 @@ private:
       device_->clk = 1;
       this->eval();
     }
-
-    device_->mem_req_ready = 1;
   }
 
   void tick() {
-    this->mem_bus_eval();
+
+    device_->clk = 0;
+    this->eval();
+
+    this->mem_bus_eval(0);
+
+    device_->clk = 1;
+    this->eval();
+
+    this->mem_bus_eval(1);
+
+    dram_sim_.tick();
 
     if (!dram_queue_.empty()) {
       auto mem_req = dram_queue_.front();
@@ -220,13 +230,6 @@ private:
         dram_queue_.pop();
       }
     }
-
-    dram_sim_.tick();
-
-    device_->clk = 0;
-    this->eval();
-    device_->clk = 1;
-    this->eval();
 
   #ifndef NDEBUG
     fflush(stdout);
@@ -250,9 +253,14 @@ private:
     device_->mem_rsp_valid = 0;
   }
 
-  void mem_bus_eval() {
+  void mem_bus_eval(bool clk) {
+    if (!clk) {
+      mem_rd_rsp_ready_ = device_->mem_rsp_ready;
+      return;
+    }
+
     // process memory read responses
-    if (device_->mem_rsp_valid && device_->mem_rsp_ready) {
+    if (device_->mem_rsp_valid && mem_rd_rsp_ready_) {
       device_->mem_rsp_valid = 0;
     }
     if (!device_->mem_rsp_valid) {
@@ -374,6 +382,8 @@ private:
 #ifdef VCD_OUTPUT
   VerilatedVcdC *tfp_;
 #endif
+
+  bool mem_rd_rsp_ready_;
 
   RAM* ram_;
 };
