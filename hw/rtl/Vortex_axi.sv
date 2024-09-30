@@ -82,10 +82,11 @@ module Vortex_axi import VX_gpu_pkg::*; #(
     // Status
     output wire                         busy
 );
-    localparam MIN_TAG_WIDTH       = `VX_MEM_TAG_WIDTH - `UUID_WIDTH;
-    localparam VX_MEM_ADDR_A_WIDTH = `VX_MEM_ADDR_WIDTH + `CLOG2(`VX_MEM_DATA_WIDTH) - `CLOG2(AXI_DATA_WIDTH);
-
-    `STATIC_ASSERT((AXI_TID_WIDTH >= MIN_TAG_WIDTH), ("invalid memory tag width: current=%0d, expected=%0d", AXI_TID_WIDTH, MIN_TAG_WIDTH))
+    localparam DST_LDATAW = `CLOG2(`VX_MEM_DATA_WIDTH);
+    localparam SRC_LDATAW = `CLOG2(AXI_DATA_WIDTH);
+    localparam SUB_LDATAW = DST_LDATAW - SRC_LDATAW;
+    localparam VX_MEM_TAG_A_WIDTH  = `VX_MEM_TAG_WIDTH + `MAX(SUB_LDATAW, 0);
+    localparam VX_MEM_ADDR_A_WIDTH = `VX_MEM_ADDR_WIDTH + SUB_LDATAW;
 
     wire                            mem_req_valid;
     wire                            mem_req_rw;
@@ -133,12 +134,12 @@ module Vortex_axi import VX_gpu_pkg::*; #(
     wire [(AXI_DATA_WIDTH/8)-1:0]   mem_req_byteen_a;
     wire [VX_MEM_ADDR_A_WIDTH-1:0]  mem_req_addr_a;
     wire [AXI_DATA_WIDTH-1:0]       mem_req_data_a;
-    wire [AXI_TID_WIDTH-1:0]        mem_req_tag_a;
+    wire [VX_MEM_TAG_A_WIDTH-1:0]   mem_req_tag_a;
     wire                            mem_req_ready_a;
 
     wire                            mem_rsp_valid_a;
     wire [AXI_DATA_WIDTH-1:0]       mem_rsp_data_a;
-    wire [AXI_TID_WIDTH-1:0]        mem_rsp_tag_a;
+    wire [VX_MEM_TAG_A_WIDTH-1:0]   mem_rsp_tag_a;
     wire                            mem_rsp_ready_a;
 
     VX_mem_adapter #(
@@ -147,7 +148,7 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         .SRC_ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),
         .DST_ADDR_WIDTH (VX_MEM_ADDR_A_WIDTH),
         .SRC_TAG_WIDTH  (`VX_MEM_TAG_WIDTH),
-        .DST_TAG_WIDTH  (AXI_TID_WIDTH),
+        .DST_TAG_WIDTH  (VX_MEM_TAG_A_WIDTH),
         .REQ_OUT_BUF    (0),
         .RSP_OUT_BUF    (0)
     ) mem_adapter (
@@ -185,7 +186,8 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         .DATA_WIDTH     (AXI_DATA_WIDTH),
         .ADDR_WIDTH_IN  (VX_MEM_ADDR_A_WIDTH),
         .ADDR_WIDTH_OUT (AXI_ADDR_WIDTH),
-        .TAG_WIDTH      (AXI_TID_WIDTH),
+        .TAG_WIDTH_IN   (VX_MEM_TAG_A_WIDTH),
+        .TAG_WIDTH_OUT  (AXI_TID_WIDTH),
         .NUM_BANKS      (AXI_NUM_BANKS),
         .BANK_INTERLEAVE(0),
         .RSP_OUT_BUF    ((AXI_NUM_BANKS > 1) ? 2 : 0)

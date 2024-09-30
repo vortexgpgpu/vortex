@@ -78,7 +78,7 @@ def parse_var_name(xml_doc, xml_node):
     elif xml_node.tag == "arraysel":
         return parse_arraysel_name(xml_doc, xml_node)
     else:
-        raise ET.ParseError("invalid probe entry" + source_loc(xml_doc, xml_node.get("loc")))
+        raise ET.ParseError("invalid probe entry: tag=" + xml_node.tag + ", " + source_loc(xml_doc, xml_node.get("loc")))
     return name
 
 def parse_sel_field(xml_doc, dtype_id, offset, width):
@@ -116,7 +116,7 @@ def parse_sel_field(xml_doc, dtype_id, offset, width):
         end = width - 1 + offset
         return F"[{end}:{offset}]"
     else:
-        raise ET.ParseError("invalid probe entry: " + source_loc(xml_doc, xml_type.get("loc")))
+        raise ET.ParseError("invalid probe entry: tag=" + xml_type.tag + ", " + source_loc(xml_doc, xml_type.get("loc")))
     return None
 
 def parse_sel_name(xml_doc, xml_node):
@@ -167,7 +167,7 @@ def parse_vl_port(xml_doc, xml_node, signals):
         signals.append([name, signal_width])
         total_width = total_width + signal_width
     else:
-        raise ET.ParseError("invalid probe entry: " + source_loc(xml_doc, xml_node.get("loc")))
+        raise ET.ParseError("invalid probe entry: tag=" + xml_node.tag + ", " + source_loc(xml_doc, xml_node.get("loc")))
     # Check for duplicate signal names
     signal_names = [signal[0] for signal in signals]
     duplicates = set([name for name in signal_names if signal_names.count(name) > 1])

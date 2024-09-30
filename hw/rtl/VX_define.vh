@@ -52,7 +52,11 @@
 `ifndef NDEBUG
 `define UUID_WIDTH      44
 `else
+`ifdef SCOPE
+`define UUID_WIDTH      44
+`else
 `define UUID_WIDTH      1
+`endif
 `endif
 
 `define PC_BITS         (`XLEN-1)
