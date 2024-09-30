@@ -72,7 +72,7 @@ void run_bfs_cpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
                  int *h_graph_edges, char *h_graph_mask,
                  char *h_updating_graph_mask, char *h_graph_visited,
-                 int *h_cost) throw(std::string) {
+                 int *h_cost) {
 
   // int number_elements = height*width;
   char h_over;

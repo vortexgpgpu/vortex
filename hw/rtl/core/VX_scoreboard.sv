@@ -14,39 +14,39 @@
 `include "VX_define.vh"
 
 module VX_scoreboard import VX_gpu_pkg::*; #(
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
     input wire              reset,
 
 `ifdef PERF_ENABLE
-    output reg [`PERF_CTR_BITS-1:0] perf_scb_stalls,
-    output reg [`PERF_CTR_BITS-1:0] perf_units_uses [`NUM_EX_UNITS],
-    output reg [`PERF_CTR_BITS-1:0] perf_sfu_uses [`NUM_SFU_UNITS],
+    output reg [`PERF_CTR_BITS-1:0] perf_stalls,
+    output reg [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_units_uses,
+    output reg [`NUM_SFU_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_sfu_uses,
 `endif
 
-    VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
-    VX_ibuffer_if.slave     ibuffer_if [`NUM_WARPS],
-    VX_scoreboard_if.master scoreboard_if [`ISSUE_WIDTH]
+    VX_writeback_if.slave   writeback_if,
+    VX_ibuffer_if.slave     ibuffer_if [PER_ISSUE_WARPS],
+    VX_scoreboard_if.master scoreboard_if
 );
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
+    localparam NUM_SRC_OPDS = 3;
+    localparam NUM_OPDS = NUM_SRC_OPDS + 1;
     localparam DATAW = `UUID_WIDTH + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + (`NR_BITS * 4) + 1;
 
+    VX_ibuffer_if staging_if [PER_ISSUE_WARPS]();
+    reg [PER_ISSUE_WARPS-1:0] operands_ready;
+
 `ifdef PERF_ENABLE
-    reg [`NUM_WARPS-1:0][`NUM_EX_UNITS-1:0] perf_inuse_units_per_cycle;
+    reg [PER_ISSUE_WARPS-1:0][`NUM_EX_UNITS-1:0] perf_inuse_units_per_cycle;
     wire [`NUM_EX_UNITS-1:0] perf_units_per_cycle, perf_units_per_cycle_r;
 
-    reg [`NUM_WARPS-1:0][`NUM_SFU_UNITS-1:0] perf_inuse_sfu_per_cycle;
+    reg [PER_ISSUE_WARPS-1:0][`NUM_SFU_UNITS-1:0] perf_inuse_sfu_per_cycle;
     wire [`NUM_SFU_UNITS-1:0] perf_sfu_per_cycle, perf_sfu_per_cycle_r;
-
-    wire [`NUM_WARPS-1:0] perf_issue_stalls_per_cycle;
-    wire [`CLOG2(`NUM_WARPS+1)-1:0] perf_stalls_per_cycle, perf_stalls_per_cycle_r;
-
-    `POP_COUNT(perf_stalls_per_cycle, perf_issue_stalls_per_cycle);
 
     VX_reduce #(
         .DATAW_IN (`NUM_EX_UNITS),
-        .N  (`NUM_WARPS),
+        .N  (PER_ISSUE_WARPS),
         .OP ("|")
     ) perf_units_reduce (
         .data_in  (perf_inuse_units_per_cycle),
@@ -55,26 +55,32 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     VX_reduce #(
         .DATAW_IN (`NUM_SFU_UNITS),
-        .N  (`NUM_WARPS),
+        .N  (PER_ISSUE_WARPS),
         .OP ("|")
     ) perf_sfu_reduce (
         .data_in  (perf_inuse_sfu_per_cycle),
         .data_out (perf_sfu_per_cycle)
     );
 
-    `BUFFER(perf_stalls_per_cycle_r, perf_stalls_per_cycle);
-    `BUFFER_EX(perf_units_per_cycle_r, perf_units_per_cycle, 1'b1, `CDIV(`NUM_WARPS, `MAX_FANOUT));
-    `BUFFER_EX(perf_sfu_per_cycle_r, perf_sfu_per_cycle, 1'b1, `CDIV(`NUM_WARPS, `MAX_FANOUT));
+    `BUFFER_EX(perf_units_per_cycle_r, perf_units_per_cycle, 1'b1, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
+    `BUFFER_EX(perf_sfu_per_cycle_r, perf_sfu_per_cycle, 1'b1, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
 
-    always @(posedge clk) begin
+    wire [PER_ISSUE_WARPS-1:0] stg_valid_in;
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_stg_valid_in
+        assign stg_valid_in[w] = staging_if[w].valid;
+    end
+
+    wire perf_stall_per_cycle = (|stg_valid_in) && ~(|(stg_valid_in & operands_ready));
+
+    always @(posedge clk) begin : g_perf_stalls
         if (reset) begin
-            perf_scb_stalls <= '0;
+            perf_stalls <= '0;
         end else begin
-            perf_scb_stalls <= perf_scb_stalls + `PERF_CTR_BITS'(perf_stalls_per_cycle_r);
+            perf_stalls <= perf_stalls + `PERF_CTR_BITS'(perf_stall_per_cycle);
         end
     end
 
-    for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin
+    for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin : g_perf_units_uses
         always @(posedge clk) begin
             if (reset) begin
                 perf_units_uses[i] <= '0;
@@ -84,7 +90,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         end
     end
 
-    for (genvar i = 0; i < `NUM_SFU_UNITS; ++i) begin
+    for (genvar i = 0; i < `NUM_SFU_UNITS; ++i) begin : g_perf_sfu_uses
         always @(posedge clk) begin
             if (reset) begin
                 perf_sfu_uses[i] <= '0;
@@ -95,139 +101,75 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     end
 `endif
 
-    VX_ibuffer_if staging_if [`NUM_WARPS]();
-    wire [`NUM_WARPS-1:0][3:0] staging_opds_busy;
-
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
-        VX_elastic_buffer #(
-            .DATAW (DATAW),
-            .SIZE  (1)
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_stanging_bufs
+        VX_pipe_buffer #(
+            .DATAW (DATAW)
         ) stanging_buf (
             .clk      (clk),
             .reset    (reset),
-            .valid_in (ibuffer_if[i].valid),
-            .data_in  (ibuffer_if[i].data),
-            .ready_in (ibuffer_if[i].ready),
-            .valid_out(staging_if[i].valid),
-            .data_out (staging_if[i].data),
-            .ready_out(staging_if[i].ready)
+            .valid_in (ibuffer_if[w].valid),
+            .data_in  (ibuffer_if[w].data),
+            .ready_in (ibuffer_if[w].ready),
+            .valid_out(staging_if[w].valid),
+            .data_out (staging_if[w].data),
+            .ready_out(staging_if[w].ready)
         );
     end
 
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_scoreboard
         reg [`NUM_REGS-1:0] inuse_regs;
 
-        reg [3:0] operands_busy_r, operands_busy_n;
+        reg [NUM_OPDS-1:0] operands_busy, operands_busy_n;
 
-        localparam iw = i % `ISSUE_WIDTH;
-        localparam wis = i / `ISSUE_WIDTH;
+        wire ibuffer_fire = ibuffer_if[w].valid && ibuffer_if[w].ready;
 
-        wire ibuffer_fire = ibuffer_if[i].valid && ibuffer_if[i].ready;
+        wire staging_fire = staging_if[w].valid && staging_if[w].ready;
 
-        wire staging_fire = staging_if[i].valid && staging_if[i].ready;
+        wire writeback_fire = writeback_if.valid
+                           && (writeback_if.data.wis == ISSUE_WIS_W'(w))
+                           && writeback_if.data.eop;
 
-        wire writeback_fire = writeback_if[iw].valid
-                           && (writeback_if[iw].data.wis == ISSUE_WIS_W'(wis))
-                           && writeback_if[iw].data.eop;
+        wire [NUM_OPDS-1:0][`NR_BITS-1:0] ibuf_opds, stg_opds;
+        assign ibuf_opds = {ibuffer_if[w].data.rs3, ibuffer_if[w].data.rs2, ibuffer_if[w].data.rs1, ibuffer_if[w].data.rd};
+        assign stg_opds = {staging_if[w].data.rs3, staging_if[w].data.rs2, staging_if[w].data.rs1, staging_if[w].data.rd};
 
     `ifdef PERF_ENABLE
         reg [`NUM_REGS-1:0][`EX_WIDTH-1:0] inuse_units;
         reg [`NUM_REGS-1:0][`SFU_WIDTH-1:0] inuse_sfu;
 
-        reg [`SFU_WIDTH-1:0] sfu_type;
         always @(*) begin
-            case (staging_if[i].data.op_type)
-            `INST_SFU_CSRRW,
-            `INST_SFU_CSRRS,
-            `INST_SFU_CSRRC: sfu_type = `SFU_CSRS;
-            default: sfu_type = `SFU_WCTL;
-            endcase
-        end
-
-        always @(*) begin
-            perf_inuse_units_per_cycle[i] = '0;
-            perf_inuse_sfu_per_cycle[i] = '0;
-            if (staging_if[i].valid) begin
-                if (operands_busy_r[0]) begin
-                    perf_inuse_units_per_cycle[i][inuse_units[staging_if[i].data.rd]] = 1;
-                    if (inuse_units[staging_if[i].data.rd] == `EX_SFU) begin
-                        perf_inuse_sfu_per_cycle[i][inuse_sfu[staging_if[i].data.rd]] = 1;
-                    end
-                end
-                if (operands_busy_r[1]) begin
-                    perf_inuse_units_per_cycle[i][inuse_units[staging_if[i].data.rs1]] = 1;
-                    if (inuse_units[staging_if[i].data.rs1] == `EX_SFU) begin
-                        perf_inuse_sfu_per_cycle[i][inuse_sfu[staging_if[i].data.rs1]] = 1;
-                    end
-                end
-                if (operands_busy_r[2]) begin
-                    perf_inuse_units_per_cycle[i][inuse_units[staging_if[i].data.rs2]] = 1;
-                    if (inuse_units[staging_if[i].data.rs2] == `EX_SFU) begin
-                        perf_inuse_sfu_per_cycle[i][inuse_sfu[staging_if[i].data.rs2]] = 1;
-                    end
-                end
-                if (operands_busy_r[3]) begin
-                    perf_inuse_units_per_cycle[i][inuse_units[staging_if[i].data.rs3]] = 1;
-                    if (inuse_units[staging_if[i].data.rs3] == `EX_SFU) begin
-                        perf_inuse_sfu_per_cycle[i][inuse_sfu[staging_if[i].data.rs3]] = 1;
+            perf_inuse_units_per_cycle[w] = '0;
+            perf_inuse_sfu_per_cycle[w] = '0;
+            for (integer i = 0; i < NUM_OPDS; ++i) begin
+                if (staging_if[w].valid && operands_busy[i]) begin
+                    perf_inuse_units_per_cycle[w][inuse_units[stg_opds[i]]] = 1;
+                    if (inuse_units[stg_opds[i]] == `EX_SFU) begin
+                        perf_inuse_sfu_per_cycle[w][inuse_sfu[stg_opds[i]]] = 1;
                     end
                 end
             end
         end
-        assign perf_issue_stalls_per_cycle[i] = staging_if[i].valid && ~staging_if[i].ready;
     `endif
 
         always @(*) begin
-            operands_busy_n = operands_busy_r;
-            if (ibuffer_fire) begin
-                operands_busy_n = {
-                    inuse_regs[ibuffer_if[i].data.rs3],
-                    inuse_regs[ibuffer_if[i].data.rs2],
-                    inuse_regs[ibuffer_if[i].data.rs1],
-                    inuse_regs[ibuffer_if[i].data.rd]
-                };
-            end
-            if (writeback_fire) begin
+            for (integer i = 0; i < NUM_OPDS; ++i) begin
+                operands_busy_n[i] = operands_busy[i];
                 if (ibuffer_fire) begin
-                    if (writeback_if[iw].data.rd == ibuffer_if[i].data.rd) begin
-                        operands_busy_n[0] = 0;
-                    end
-                    if (writeback_if[iw].data.rd == ibuffer_if[i].data.rs1) begin
-                        operands_busy_n[1] = 0;
-                    end
-                    if (writeback_if[iw].data.rd == ibuffer_if[i].data.rs2) begin
-                        operands_busy_n[2] = 0;
-                    end
-                    if (writeback_if[iw].data.rd == ibuffer_if[i].data.rs3) begin
-                        operands_busy_n[3] = 0;
-                    end
-                end else begin
-                    if (writeback_if[iw].data.rd == staging_if[i].data.rd) begin
-                        operands_busy_n[0] = 0;
-                    end
-                    if (writeback_if[iw].data.rd == staging_if[i].data.rs1) begin
-                        operands_busy_n[1] = 0;
-                    end
-                    if (writeback_if[iw].data.rd == staging_if[i].data.rs2) begin
-                        operands_busy_n[2] = 0;
-                    end
-                    if (writeback_if[iw].data.rd == staging_if[i].data.rs3) begin
-                        operands_busy_n[3] = 0;
+                    operands_busy_n[i] = inuse_regs[ibuf_opds[i]];
+                end
+                if (writeback_fire) begin
+                    if (ibuffer_fire) begin
+                        if (writeback_if.data.rd == ibuf_opds[i]) begin
+                            operands_busy_n[i] = 0;
+                        end
+                    end else begin
+                        if (writeback_if.data.rd == stg_opds[i]) begin
+                            operands_busy_n[i] = 0;
+                       end
                     end
                 end
-            end
-            if (staging_fire && staging_if[i].data.wb) begin
-                if (staging_if[i].data.rd == ibuffer_if[i].data.rd) begin
-                    operands_busy_n[0] = 1;
-                end
-                if (staging_if[i].data.rd == ibuffer_if[i].data.rs1) begin
-                    operands_busy_n[1] = 1;
-                end
-                if (staging_if[i].data.rd == ibuffer_if[i].data.rs2) begin
-                    operands_busy_n[2] = 1;
-                end
-                if (staging_if[i].data.rd == ibuffer_if[i].data.rs3) begin
-                    operands_busy_n[3] = 1;
+                if (staging_fire && staging_if[w].data.wb && staging_if[w].data.rd == ibuf_opds[i]) begin
+                    operands_busy_n[i] = 1;
                 end
             end
         end
@@ -237,24 +179,23 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 inuse_regs <= '0;
             end else begin
                 if (writeback_fire) begin
-                    inuse_regs[writeback_if[iw].data.rd] <= 0;
+                    inuse_regs[writeback_if.data.rd] <= 0;
                 end
-                if (staging_fire && staging_if[i].data.wb) begin
-                    inuse_regs[staging_if[i].data.rd] <= 1;
+                if (staging_fire && staging_if[w].data.wb) begin
+                    inuse_regs[staging_if[w].data.rd] <= 1;
                 end
             end
-            operands_busy_r <= operands_busy_n;
+            operands_busy <= operands_busy_n;
+            operands_ready[w] <= ~(| operands_busy_n);
         `ifdef PERF_ENABLE
-            if (staging_fire && staging_if[i].data.wb) begin
-                inuse_units[staging_if[i].data.rd] <= staging_if[i].data.ex_type;
-                if (staging_if[i].data.ex_type == `EX_SFU) begin
-                    inuse_sfu[staging_if[i].data.rd] <= sfu_type;
+            if (staging_fire && staging_if[w].data.wb) begin
+                inuse_units[staging_if[w].data.rd] <= staging_if[w].data.ex_type;
+                if (staging_if[w].data.ex_type == `EX_SFU) begin
+                    inuse_sfu[staging_if[w].data.rd] <= op_to_sfu_type(staging_if[w].data.op_type);
                 end
             end
         `endif
         end
-
-        assign staging_opds_busy[i] = operands_busy_r;
 
     `ifdef SIMULATION
         reg [31:0] timeout_ctr;
@@ -263,11 +204,11 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             if (reset) begin
                 timeout_ctr <= '0;
             end else begin
-                if (staging_if[i].valid && ~staging_if[i].ready) begin
+                if (staging_if[w].valid && ~staging_if[w].ready) begin
                 `ifdef DBG_TRACE_PIPELINE
-                    `TRACE(3, ("%d: *** core%0d-scoreboard-stall: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)\n",
-                        $time, CORE_ID, i, {staging_if[i].data.PC, 1'b0}, staging_if[i].data.tmask, timeout_ctr,
-                        operands_busy_r, staging_if[i].data.uuid));
+                    `TRACE(3, ("%t: *** %s-stall: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)\n",
+                        $time, INSTANCE_ID, w, {staging_if[w].data.PC, 1'b0}, staging_if[w].data.tmask, timeout_ctr,
+                        operands_busy, staging_if[w].data.uuid))
                 `endif
                     timeout_ctr <= timeout_ctr + 1;
                 end else if (ibuffer_fire) begin
@@ -277,59 +218,54 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         end
 
         `RUNTIME_ASSERT((timeout_ctr < `STALL_TIMEOUT),
-                        ("%t: *** core%0d-scoreboard-timeout: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)",
-                            $time, CORE_ID, i, {staging_if[i].data.PC, 1'b0}, staging_if[i].data.tmask, timeout_ctr,
-                            operands_busy_r, staging_if[i].data.uuid));
+                        ("%t: *** %s timeout: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)",
+                            $time, INSTANCE_ID, w, {staging_if[w].data.PC, 1'b0}, staging_if[w].data.tmask, timeout_ctr,
+                            operands_busy, staging_if[w].data.uuid))
 
-        `RUNTIME_ASSERT(~writeback_fire || inuse_regs[writeback_if[iw].data.rd] != 0,
-            ("%t: *** core%0d: invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
-                $time, CORE_ID, i, {writeback_if[iw].data.PC, 1'b0}, writeback_if[iw].data.tmask, writeback_if[iw].data.rd, writeback_if[iw].data.uuid));
+        `RUNTIME_ASSERT(~writeback_fire || inuse_regs[writeback_if.data.rd] != 0,
+            ("%t: *** %s invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
+                $time, INSTANCE_ID, w, {writeback_if.data.PC, 1'b0}, writeback_if.data.tmask, writeback_if.data.rd, writeback_if.data.uuid))
     `endif
 
     end
 
-    `RESET_RELAY (arb_reset, reset);
+    wire [PER_ISSUE_WARPS-1:0] arb_valid_in;
+    wire [PER_ISSUE_WARPS-1:0][DATAW-1:0] arb_data_in;
+    wire [PER_ISSUE_WARPS-1:0] arb_ready_in;
 
-    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        wire [ISSUE_RATIO-1:0] valid_in;
-        wire [ISSUE_RATIO-1:0][DATAW-1:0] data_in;
-        wire [ISSUE_RATIO-1:0] ready_in;
-
-        for (genvar j = 0; j < ISSUE_RATIO; ++j) begin
-            wire operands_ready = ~(| staging_opds_busy[j * `ISSUE_WIDTH + i]);
-            assign valid_in[j]  = staging_if[j * `ISSUE_WIDTH + i].valid && operands_ready;
-            assign data_in[j]   = staging_if[j * `ISSUE_WIDTH + i].data;
-            assign staging_if[j * `ISSUE_WIDTH + i].ready = ready_in[j] && operands_ready;
-        end
-
-        VX_stream_arb #(
-            .NUM_INPUTS (ISSUE_RATIO),
-            .DATAW      (DATAW),
-            .ARBITER    ("R"),
-            .OUT_BUF    (2)
-        ) out_arb (
-            .clk      (clk),
-            .reset    (arb_reset),
-            .valid_in (valid_in),
-            .ready_in (ready_in),
-            .data_in  (data_in),
-            .data_out ({
-                scoreboard_if[i].data.uuid,
-                scoreboard_if[i].data.tmask,
-                scoreboard_if[i].data.PC,
-                scoreboard_if[i].data.ex_type,
-                scoreboard_if[i].data.op_type,
-                scoreboard_if[i].data.op_args,
-                scoreboard_if[i].data.wb,
-                scoreboard_if[i].data.rd,
-                scoreboard_if[i].data.rs1,
-                scoreboard_if[i].data.rs2,
-                scoreboard_if[i].data.rs3
-            }),
-            .valid_out (scoreboard_if[i].valid),
-            .ready_out (scoreboard_if[i].ready),
-            .sel_out   (scoreboard_if[i].data.wis)
-        );
+    for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_arb_data_in
+        assign arb_valid_in[w] = staging_if[w].valid && operands_ready[w];
+        assign arb_data_in[w] = staging_if[w].data;
+        assign staging_if[w].ready = arb_ready_in[w] && operands_ready[w];
     end
+
+    VX_stream_arb #(
+        .NUM_INPUTS (PER_ISSUE_WARPS),
+        .DATAW      (DATAW),
+        .ARBITER    ("C"),
+        .OUT_BUF    (3)
+    ) out_arb (
+        .clk      (clk),
+        .reset    (reset),
+        .valid_in (arb_valid_in),
+        .ready_in (arb_ready_in),
+        .data_in  (arb_data_in),
+        .data_out ({
+            scoreboard_if.data.uuid,
+            scoreboard_if.data.tmask,
+            scoreboard_if.data.PC,
+            scoreboard_if.data.ex_type,
+            scoreboard_if.data.op_type,
+            scoreboard_if.data.op_args,
+            scoreboard_if.data.wb,
+            scoreboard_if.data.rd,
+            scoreboard_if.data.rs1,
+            scoreboard_if.data.rs2,
+            scoreboard_if.data.rs3
+        }),
+        .valid_out (scoreboard_if.valid),
+        .ready_out (scoreboard_if.ready),
+        .sel_out   (scoreboard_if.data.wis)
+    );
 
 endmodule

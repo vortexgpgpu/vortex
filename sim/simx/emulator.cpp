@@ -30,20 +30,9 @@
 
 using namespace vortex;
 
-Emulator::ipdom_entry_t::ipdom_entry_t(const ThreadMask &tmask, Word PC)
-  : tmask(tmask)
-  , PC(PC)
-  , fallthrough(false)
-{}
-
-Emulator::ipdom_entry_t::ipdom_entry_t(const ThreadMask &tmask)
-  : tmask(tmask)
-  , fallthrough(true)
-{}
-
 Emulator::warp_t::warp_t(const Arch& arch)
-  : ireg_file(arch.num_threads(), std::vector<Word>(arch.num_regs()))
-  , freg_file(arch.num_threads(), std::vector<uint64_t>(arch.num_regs()))
+  : ireg_file(arch.num_threads(), std::vector<Word>(MAX_NUM_REGS))
+  , freg_file(arch.num_threads(), std::vector<uint64_t>(MAX_NUM_REGS))
   , uuid(0)
 {}
 
@@ -53,15 +42,26 @@ void Emulator::warp_t::clear(uint64_t startup_addr) {
   this->uuid = 0;
   this->fcsr = 0;
 
+  std::srand(50);
+
   for (auto& reg_file : this->ireg_file) {
     for (auto& reg : reg_file) {
+    #ifndef NDEBUG
       reg = 0;
+    #else
+      reg = std::rand();
+    #endif
     }
+    reg_file.at(0) = 0; // r0 = 0
   }
 
   for (auto& reg_file : this->freg_file) {
     for (auto& reg : reg_file) {
+    #ifndef NDEBUG
       reg = 0;
+    #else
+      reg = std::rand();
+    #endif
     }
   }
 }
@@ -74,10 +74,11 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     , core_(core)
     , warps_(arch.num_warps(), arch)
     , barriers_(arch.num_barriers(), 0)
-    // Currently, tradeoff between scratchpad size & performance has not been evaluated. Scratchpad is
+    // [TBC] Currently, tradeoff between scratchpad size & performance has not been evaluated. Scratchpad is
     // considered to be big enough to hold input tiles for one output tile.
     // In future versions, scratchpad size should be fixed to an appropriate value.
-    , scratchpad(std::vector<Word>(32 * 32 * 32768)) 
+    , scratchpad(std::vector<Word>(32 * 32 * 32768))
+    , ipdom_size_(arch.num_threads()-1)
 {
   this->clear();
 }
@@ -135,7 +136,7 @@ instr_trace_t* Emulator::step() {
 
   // process pending wspawn
   if (wspawn_.valid && active_warps_.count() == 1) {
-    DP(3, "*** Activate " << (wspawn_.num_warps-1) << " warps at PC: " << std::hex << wspawn_.nextPC);
+    DP(3, "*** Activate " << (wspawn_.num_warps-1) << " warps at PC: " << std::hex << wspawn_.nextPC << std::dec);
     for (uint32_t i = 1; i < wspawn_.num_warps; ++i) {
       auto& warp = warps_.at(i);
       warp.PC = wspawn_.nextPC;
@@ -170,10 +171,8 @@ instr_trace_t* Emulator::step() {
   uint64_t uuid = 0;
 #endif
 
-  DPH(1, "Fetch: cid=" << core_->id() << ", wid=" << scheduled_warp << ", tmask=");
-  for (uint32_t i = 0, n = arch_.num_threads(); i < n; ++i)
-    DPN(1, warp.tmask.test(i));
-  DPN(1, ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")" << std::endl);
+  DP(1, "Fetch: cid=" << core_->id() << ", wid=" << scheduled_warp << ", tmask=" << ThreadMaskOS(warp.tmask, arch_.num_threads())
+         << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")");
 
   // Fetch
   uint32_t instr_code = 0;
@@ -182,11 +181,11 @@ instr_trace_t* Emulator::step() {
   // Decode
   auto instr = this->decode(instr_code);
   if (!instr) {
-    std::cout << std::hex << "Error: invalid instruction 0x" << instr_code << ", at PC=0x" << warp.PC << " (#" << std::dec << uuid << ")" << std::endl;
+    std::cout << "Error: invalid instruction 0x" << std::hex << instr_code << ", at PC=0x" << warp.PC << " (#" << std::dec << uuid << ")" << std::endl;
     std::abort();
   }
 
-  DP(1, "Instr 0x" << std::hex << instr_code << ": " << *instr);
+  DP(1, "Instr 0x" << std::hex << instr_code << ": " << std::dec << *instr);
 
   // Create trace
   auto trace = new instr_trace_t(uuid, arch_);
@@ -195,18 +194,18 @@ instr_trace_t* Emulator::step() {
   this->execute(*instr, scheduled_warp, trace);
 
   DP(5, "Register state:");
-  for (uint32_t i = 0; i < arch_.num_regs(); ++i) {
-    DPN(5, "  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
+  for (uint32_t i = 0; i < MAX_NUM_REGS; ++i) {
+    DPN(5, "  %r" << std::setfill('0') << std::setw(2) << i << ':' << std::hex);
     // Integer register file
     for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
-      DPN(5, ' ' << std::setfill('0') << std::setw(XLEN/4) << std::hex << warp.ireg_file.at(j).at(i) << std::setfill(' ') << ' ');
+      DPN(5, ' ' << std::setfill('0') << std::setw(XLEN/4) << warp.ireg_file.at(j).at(i) << std::setfill(' ') << ' ');
     }
     DPN(5, '|');
     // Floating point register file
     for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
-      DPN(5, ' ' << std::setfill('0') << std::setw(16) << std::hex << warp.freg_file.at(j).at(i) << std::setfill(' ') << ' ');
+      DPN(5, ' ' << std::setfill('0') << std::setw(16) << warp.freg_file.at(j).at(i) << std::setfill(' ') << ' ');
     }
-    DPN(5, std::endl);
+    DPN(5, std::dec << std::endl);
   }
 
   return trace;
@@ -289,7 +288,7 @@ void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
     mmu_.read(data, addr, size, 0);
   }
 
-  DPH(2, "Mem Read: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (size=" << size << ", type=" << type << ")" << std::endl);
+  DPH(2, "Mem Read: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << std::dec << " (size=" << size << ", type=" << type << ")" << std::endl);
 }
 
 void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
@@ -304,7 +303,7 @@ void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
       mmu_.write(data, addr, size, 0);
     }
   }
-  DPH(2, "Mem Write: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (size=" << size << ", type=" << type << ")" << std::endl);
+  DPH(2, "Mem Write: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << std::dec << " (size=" << size << ", type=" << type << ")" << std::endl);
 }
 
 void Emulator::dcache_amo_reserve(uint64_t addr) {
@@ -330,7 +329,7 @@ void Emulator::writeToStdOut(const void* data, uint64_t addr, uint32_t size) {
   char c = *(char*)data;
   ss_buf << c;
   if (c == '\n') {
-    std::cout << std::dec << "#" << tid << ": " << ss_buf.str() << std::flush;
+    std::cout << "#" << tid << ": " << ss_buf.str() << std::flush;
     ss_buf.str("");
   }
 }
@@ -419,12 +418,13 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         CSR_READ_64(VX_CSR_MPM_SCHED_ST, core_perf.sched_stalls);
         CSR_READ_64(VX_CSR_MPM_IBUF_ST, core_perf.ibuf_stalls);
         CSR_READ_64(VX_CSR_MPM_SCRB_ST, core_perf.scrb_stalls);
+        CSR_READ_64(VX_CSR_MPM_OPDS_ST, core_perf.opds_stalls);
         CSR_READ_64(VX_CSR_MPM_SCRB_ALU, core_perf.scrb_alu);
         CSR_READ_64(VX_CSR_MPM_SCRB_FPU, core_perf.scrb_fpu);
         CSR_READ_64(VX_CSR_MPM_SCRB_LSU, core_perf.scrb_lsu);
         CSR_READ_64(VX_CSR_MPM_SCRB_SFU, core_perf.scrb_sfu);
-        CSR_READ_64(VX_CSR_MPM_SCRB_WCTL, core_perf.scrb_wctl);
         CSR_READ_64(VX_CSR_MPM_SCRB_CSRS, core_perf.scrb_csrs);
+        CSR_READ_64(VX_CSR_MPM_SCRB_WCTL, core_perf.scrb_wctl);
         CSR_READ_64(VX_CSR_MPM_IFETCHES, core_perf.ifetches);
         CSR_READ_64(VX_CSR_MPM_LOADS, core_perf.loads);
         CSR_READ_64(VX_CSR_MPM_STORES, core_perf.stores);
@@ -466,6 +466,8 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         CSR_READ_64(VX_CSR_MPM_MEM_READS, proc_perf.mem_reads);
         CSR_READ_64(VX_CSR_MPM_MEM_WRITES, proc_perf.mem_writes);
         CSR_READ_64(VX_CSR_MPM_MEM_LT, proc_perf.mem_latency);
+        CSR_READ_64(VX_CSR_MPM_MEM_BANK_CNTR, proc_perf.memsim.counter);
+        CSR_READ_64(VX_CSR_MPM_MEM_BANK_TICK, proc_perf.memsim.ticks);
 
         CSR_READ_64(VX_CSR_MPM_LMEM_READS, lmem_perf.reads);
         CSR_READ_64(VX_CSR_MPM_LMEM_WRITES, lmem_perf.writes);
@@ -473,12 +475,12 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         }
       } break;
       default: {
-        std::cout << std::dec << "Error: invalid MPM CLASS: value=" << perf_class << std::endl;
+        std::cout << "Error: invalid MPM CLASS: value=" << perf_class << std::endl;
         std::abort();
       } break;
       }
     } else {
-      std::cout << std::hex << "Error: invalid CSR read addr=0x" << addr << std::endl;
+      std::cout << "Error: invalid CSR read addr=0x"<< std::hex << addr << std::dec << std::endl;
       std::abort();
     }
   }
@@ -523,7 +525,7 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t tid, uint32_t wid) {
     break;
   
   default: {
-      std::cout << std::hex << "Error: invalid CSR write addr=0x" << addr << ", value=0x" << value << std::endl;
+      std::cout << "Error: invalid CSR write addr=0x" << std::hex << addr << ", value=0x" << value << std::dec << std::endl;
       std::abort();
     }
   }

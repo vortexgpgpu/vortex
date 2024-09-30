@@ -9,7 +9,6 @@ NUM_CORES ?= 1
 
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
-THIRD_PARTY_DIR := $(VORTEX_HOME)/third_party
 
 CP = cp -rf
 RMDIR = rm -rf
@@ -30,7 +29,7 @@ DBG_SCOPE_FLAGS += -DDBG_SCOPE_AFU
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_ISSUE
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_FETCH
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_MSCHED
+
 
 # cluster configuration
 CONFIGS_1c  := -DNUM_CLUSTERS=1 -DNUM_CORES=1
@@ -45,22 +44,22 @@ CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 # include paths
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
-	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -J$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -J$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/fpnew/src
+	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
 RTL_INCLUDE += $(FPU_INCLUDE)
 
-# Debugigng
+# Debugging
 ifdef DEBUG
-	CFLAGS += -DNDEBUG -DSCOPE $(DBG_SCOPE_FLAGS)
-	SCOPE_JSON += $(BUILD_DIR)/scope.json
-else    
+	CFLAGS += $(DBG_TRACE_FLAGS)
+else
 	CFLAGS += -DNDEBUG
 endif
 
 # Enable scope analyzer
 ifdef SCOPE
-	CFLAGS += -DSCOPE
+	CFLAGS += -DSCOPE $(DBG_SCOPE_FLAGS)
+	SCOPE_JSON += $(BUILD_DIR)/scope.json
 endif
 
 # Enable perf counters
@@ -89,6 +88,9 @@ build: $(BUILD_DIR)/project.v
 
 elaborate: $(BUILD_DIR)/project.v
 	cd $(BUILD_DIR); $(SRC_DIR)/synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v -P="elaborate"
+
+synthesis: $(BUILD_DIR)/project.v
+	cd $(BUILD_DIR); $(SRC_DIR)/synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v -P="synthesis"
 
 clean:
 	$(RMDIR) $(BUILD_DIR)

@@ -4,7 +4,7 @@ include $(ROOT_DIR)/config.mk
 ifneq ($(findstring Makefile, $(MAKEFILE_LIST)), Makefile)
 help:
 	$(ECHO) "Makefile Usage:"
-	$(ECHO) "  make all TARGET=<sw_emu/hw_emu/hw> PLATFORM=<FPGA platform>"
+	$(ECHO) "  make all TARGET=<hw/hw_emu> PLATFORM=<FPGA platform>"
 	$(ECHO) "      Command to generate the design for specified Target and Device."
 	$(ECHO) ""
 	$(ECHO) "  make clean"
@@ -24,7 +24,6 @@ SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/xrt
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/xrt
-THIRD_PARTY_DIR := $(VORTEX_HOME)/third_party
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
 VIVADO := $(XILINX_VIVADO)/bin/vivado
@@ -34,7 +33,7 @@ CP = cp -rf
 RMDIR = rm -rf
 ECHO = @echo
 
-NCPUS := $(shell grep -c ^processor /proc/cpuinfo)
+NCPUS := $(shell lscpu | grep "^Core(s) per socket:" | awk '{print $$4}')
 JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
 
 PLATFORM_TO_XSA = $(strip $(patsubst %.xpfm, % , $(shell basename $(PLATFORM))))
@@ -54,6 +53,9 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_PIPELINE
 DBG_TRACE_FLAGS += -DDBG_TRACE_MEM
 DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE
 DBG_TRACE_FLAGS += -DDBG_TRACE_AFU
+DBG_TRACE_FLAGS += -DDBG_TRACE_TEX
+DBG_TRACE_FLAGS += -DDBG_TRACE_RASTER
+DBG_TRACE_FLAGS += -DDBG_TRACE_OM
 DBG_TRACE_FLAGS += -DDBG_TRACE_GBAR
 
 # Control logic analyzer monitors
@@ -61,7 +63,6 @@ DBG_SCOPE_FLAGS += -DDBG_SCOPE_AFU
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_ISSUE
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_FETCH
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_MSCHED
 
 # cluster configuration
 CONFIGS_1c  := -DNUM_CLUSTERS=1 -DNUM_CORES=1
@@ -73,26 +74,26 @@ CONFIGS_32c := -DNUM_CLUSTERS=2 -DNUM_CORES=16
 CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16
 CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 
-# include paths
+# include sources
+RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
+RTL_PKGS += $(RTL_DIR)/tex/VX_tex_pkg.sv $(RTL_DIR)/raster/VX_raster_pkg.sv $(RTL_DIR)/om/VX_om_pkg.sv
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
-	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src
+	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
+	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
+TEX_INCLUDE = -I$(RTL_DIR)/tex
+RASTER_INCLUDE = -I$(RTL_DIR)/raster
+OM_INCLUDE = -I$(RTL_DIR)/om
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR)
-RTL_INCLUDE += $(FPU_INCLUDE)
+RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(OM_INCLUDE)
 
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
 
-ifeq ($(DEV_ARCH), zynquplus)
-# ztnq
-else ifeq ($(DEV_ARCH), versal)
-# versal
-else
-# alveo
-VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem_0:HBM[0:15]
-endif
+# load platform settings
+include $(SRC_DIR)/platforms.mk
 
 VPP_FLAGS += --report_level 2
 VPP_FLAGS += --config $(SRC_DIR)/vitis.ini
@@ -112,21 +113,25 @@ ifeq ($(TARGET), hw_emu)
 	CFLAGS += -DSIMULATION
 endif
 
-# Debugigng
+# Debugging
 ifdef DEBUG
-	VPP_FLAGS += -g --debug.protocol all
-	ifeq ($(TARGET), hw)
-		CFLAGS += -DNDEBUG -DSCOPE $(DBG_SCOPE_FLAGS)
-		SCOPE_JSON += $(BUILD_DIR)/scope.json
-		#CFLAGS += -DNDEBUG -DCHIPSCOPE $(DBG_SCOPE_FLAGS)
-		#VPP_FLAGS += --debug.chipscope vortex_afu_1
-	else
+	VPP_FLAGS += -g --optimize 0 --debug.protocol all
+	ifneq ($(TARGET), hw)
 		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
-		CFLAGS += $(DBG_TRACE_FLAGS)
+		CFLAGS += -DDEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
+	else
+		VPP_FLAGS += --debug.chipscope vortex_afu_1
+		CFLAGS += -DNDEBUG -DCHIPSCOPE $(DBG_SCOPE_FLAGS)
 	endif
 else
 	VPP_FLAGS += --optimize 3
 	CFLAGS += -DNDEBUG
+endif
+
+# Enable scope analyzer
+ifdef SCOPE
+	CFLAGS += -DSCOPE $(DBG_SCOPE_FLAGS)
+	SCOPE_JSON += $(BIN_DIR)/scope.json
 endif
 
 # compilation flags
@@ -136,7 +141,7 @@ CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 
 # ast dump flags
-XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) -I$(DPI_DIR)
+XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) $(RTL_PKGS) -I$(DPI_DIR) -DSV_DPI
 
 # RTL Kernel only supports Hardware and Hardware Emulation.
 ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
@@ -155,13 +160,13 @@ gen-ast: $(BUILD_DIR)/vortex.xml
 $(BUILD_DIR)/vortex.xml:
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); verilator --xml-only -O0 $(XML_CFLAGS) vortex_afu.v --xml-output vortex.xml
 
-scope-json: $(BUILD_DIR)/scope.json
-$(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/scope.py vortex.xml -o scope.json
+scope-json: $(BIN_DIR)/scope.json
+$(BIN_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/scope.py vortex.xml -o bin/scope.json
 
 gen-xo: $(XO_CONTAINER)
 $(XO_CONTAINER): $(BUILD_DIR)/sources.txt
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source $(SRC_DIR)/scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt $(SCRIPT_DIR) ../$(BUILD_DIR)
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source $(SRC_DIR)/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt $(SCRIPT_DIR) ../$(BUILD_DIR)
 
 gen-bin: $(XCLBIN_CONTAINER)
 $(XCLBIN_CONTAINER): $(XO_CONTAINER) $(SCOPE_JSON)
@@ -172,17 +177,14 @@ $(BIN_DIR)/emconfig.json:
 	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); emconfigutil --platform $(PLATFORM) --od ../$(BIN_DIR)
 
 report: $(XCLBIN_CONTAINER)
-ifeq ($(TARGET),$(findstring $(TARGET), hw))
-	cp $(BUILD_DIR)/_x/logs/link/syn/ulp_vortex_afu_1_0_synth_1_runme.log $(BUILD_DIR)/bin/runme.log
-	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_full_util_routed.rpt $(BUILD_DIR)/bin/synthesis.log
-	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt $(BUILD_DIR)/bin/timing.log
+ifeq ($(TARGET), hw)
+	cp $(BUILD_DIR)/_x/logs/link/syn/ulp_vortex_afu_1_0_synth_1_runme.log $(BUILD_DIR)/bin
+	cp $(BUILD_DIR)/_x/reports/link/syn/ulp_vortex_afu_1_0_synth_1_ulp_vortex_afu_1_0_utilization_synth.rpt $(BUILD_DIR)/bin
+	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt $(BUILD_DIR)/bin
 endif
 
-hwserver:
-	debug_hw --xvc_pcie /dev/xfpga/xvc_pub.u2305.0 --hw_server &
-
 chipscope:
-	debug_hw --vivado --host localhost --ltx_file $(BUILD_DIR)/_x/link/vivado/vpl/prj/prj.runs/impl_1/debug_nets.ltx &
+	debug_hw --vivado --host localhost --ltx_file $(BUILD_DIR)/bin/vortex_afu.ltx &
 
 clean:
 	$(RMDIR) $(BUILD_DIR)

@@ -22,36 +22,39 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifdef VIVADO
-`define STRING
-`else
-`define STRING string
-`endif
+`ifdef SIMULATION
 
-`ifdef SYNTHESIS
-`define TRACING_ON
-`define TRACING_OFF
-`ifndef NDEBUG
-    `define DEBUG_BLOCK(x) x
-`else
-    `define DEBUG_BLOCK(x)
-`endif
-`define IGNORE_UNOPTFLAT_BEGIN
-`define IGNORE_UNOPTFLAT_END
-`define IGNORE_UNUSED_BEGIN
-`define IGNORE_UNUSED_END
-`define IGNORE_WARNINGS_BEGIN
-`define IGNORE_WARNINGS_END
-`define UNUSED_PARAM(x)
-`define UNUSED_SPARAM(x)
-`define UNUSED_VAR(x)
-`define UNUSED_PIN(x) . x ()
-`define UNUSED_ARG(x) x
-`define TRACE(level, args) $write args
-`else
-`ifdef VERILATOR
+`define STATIC_ASSERT(cond, msg) \
+generate \
+    /* verilator lint_off GENUNNAMED */ \
+    if (!(cond)) $error msg; \
+    /* verilator lint_on GENUNNAMED */ \
+endgenerate
+
+`define ERROR(msg) \
+    $error msg
+
+`define ASSERT(cond, msg) \
+    assert(cond) else $error msg
+
+`define RUNTIME_ASSERT(cond, msg)     \
+    always @(posedge clk) begin       \
+        assert(cond) else $error msg; \
+    end
+
+`define __SCOPE
+`define __SCOPE_X
+`define __SCOPE_ON
+`define __SCOPE_OFF
+
+`ifndef TRACING_ALL
 `define TRACING_ON      /* verilator tracing_on */
 `define TRACING_OFF     /* verilator tracing_off */
+`else
+`define TRACING_ON
+`define TRACING_OFF
+`endif
+
 `ifndef NDEBUG
     `define DEBUG_BLOCK(x) /* verilator lint_off UNUSED */ \
                            x \
@@ -100,43 +103,68 @@
                          localparam `STRING __``x = x; \
                          /* verilator lint_on UNUSED */
 
-`define UNUSED_VAR(x)   if (1) begin \
+`define UNUSED_VAR(x)   /* verilator lint_off GENUNNAMED */ \
+                        if (1) begin \
                             /* verilator lint_off UNUSED */ \
                             wire [$bits(x)-1:0] __x = x; \
                             /* verilator lint_on UNUSED */ \
-                        end
+                        end \
+                        /* verilator lint_on GENUNNAMED */
 
 `define UNUSED_PIN(x)   /* verilator lint_off PINCONNECTEMPTY */ \
                         . x () \
                         /* verilator lint_on PINCONNECTEMPTY */
+
 `define UNUSED_ARG(x)   /* verilator lint_off UNUSED */ \
                         x \
                         /* verilator lint_on UNUSED */
-`define TRACE(level, args) dpi_trace(level, $sformatf args)
-`endif
-`endif
 
-`ifdef SIMULATION
-    `define STATIC_ASSERT(cond, msg) \
-    generate                     \
-        if (!(cond)) $error msg; \
-    endgenerate
-
-    `define ERROR(msg) \
-        $error msg
-
-    `define ASSERT(cond, msg) \
-        assert(cond) else $error msg
-
-    `define RUNTIME_ASSERT(cond, msg)     \
-        always @(posedge clk) begin       \
-            assert(cond) else $error msg; \
-        end
+`ifdef SV_DPI
+`define TRACE(level, args) dpi_trace(level, $sformatf args);
 `else
-    `define STATIC_ASSERT(cond, msg)
-    `define ERROR(msg)                  //
-    `define ASSERT(cond, msg)           //
-    `define RUNTIME_ASSERT(cond, msg)
+`define TRACE(level, args) \
+    if (level <= `DEBUG_LEVEL) begin \
+        $write args; \
+    end
+`endif
+
+`else // SYNTHESIS
+
+`define STATIC_ASSERT(cond, msg)
+`define ERROR(msg)                  //
+`define ASSERT(cond, msg)           //
+`define RUNTIME_ASSERT(cond, msg)
+
+`define DEBUG_BLOCK(x)
+`define TRACE(level, args)
+
+`define TRACING_ON
+`define TRACING_OFF
+
+`define IGNORE_UNOPTFLAT_BEGIN
+`define IGNORE_UNOPTFLAT_END
+`define IGNORE_UNUSED_BEGIN
+`define IGNORE_UNUSED_END
+`define IGNORE_WARNINGS_BEGIN
+`define IGNORE_WARNINGS_END
+`define UNUSED_PARAM(x)
+`define UNUSED_SPARAM(x)
+`define UNUSED_VAR(x)
+`define UNUSED_PIN(x) . x ()
+`define UNUSED_ARG(x) x
+
+`define __SCOPE (* mark_debug="true" *)
+
+`define __SCOPE_X
+
+`define __SCOPE_ON  \
+    `undef __SCOPE_X \
+    `define __SCOPE_X `__SCOPE
+
+`define __SCOPE_OFF  \
+    `undef __SCOPE_X \
+    `define __SCOPE_X
+
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -148,6 +176,7 @@
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
 `define DISABLE_BRAM    (* ramstyle = "logic" *)
 `define PRESERVE_NET    (* preserve *)
+`define STRING          string
 `elsif VIVADO
 `define MAX_FANOUT      8
 `define IF_DATA_SIZE(x) $bits(x.data)
@@ -155,6 +184,7 @@
 `define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
 `define DISABLE_BRAM    (* ram_style = "registers" *)
 `define PRESERVE_NET    (* keep = "true" *)
+`define STRING
 `else
 `define MAX_FANOUT      8
 `define IF_DATA_SIZE(x) x.DATA_WIDTH
@@ -162,6 +192,7 @@
 `define NO_RW_RAM_CHECK
 `define DISABLE_BRAM
 `define PRESERVE_NET
+`define STRING          string
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -198,23 +229,23 @@
 `define SEXT(len, x) {{(len-$bits(x)+1){x[$bits(x)-1]}}, x[$bits(x)-2:0]}
 
 `define TRACE_ARRAY1D(lvl, fmt, arr, n)              \
-    `TRACE(lvl, ("{"));                         \
+    `TRACE(lvl, ("{"))                         \
     for (integer __i = (n-1); __i >= 0; --__i) begin  \
-        if (__i != (n-1)) `TRACE(lvl, (", "));    \
-        `TRACE(lvl, (fmt, arr[__i]));         \
+        if (__i != (n-1)) `TRACE(lvl, (", "))    \
+        `TRACE(lvl, (fmt, arr[__i]))         \
     end                                         \
-    `TRACE(lvl, ("}"));
+    `TRACE(lvl, ("}"))
 
 `define TRACE_ARRAY2D(lvl, fmt, arr, m, n)           \
-    `TRACE(lvl, ("{"));                         \
+    `TRACE(lvl, ("{"))                         \
     for (integer __i = n-1; __i >= 0; --__i) begin    \
-        if (__i != (n-1)) `TRACE(lvl, (", "));    \
-        `TRACE(lvl, ("{"));                     \
+        if (__i != (n-1)) `TRACE(lvl, (", "))    \
+        `TRACE(lvl, ("{"))                     \
         for (integer __j = (m-1); __j >= 0; --__j) begin \
-            if (__j != (m-1)) `TRACE(lvl, (", "));\
-            `TRACE(lvl, (fmt, arr[__i][__j]));  \
+            if (__j != (m-1)) `TRACE(lvl, (", "))\
+            `TRACE(lvl, (fmt, arr[__i][__j]))  \
         end                                     \
-        `TRACE(lvl, ("}"));                     \
+        `TRACE(lvl, ("}"))                     \
     end                                         \
     `TRACE(lvl, ("}"))
 
@@ -232,11 +263,14 @@
 `define RESET_RELAY(dst, src) \
     `RESET_RELAY_EX (dst, src, 1, 0)
 
-// size(x): 0 -> 0, 1 -> 1, 2 -> 2, 3 -> 2, 4-> 2
-`define TO_OUT_BUF_SIZE(out_reg)    `MIN(out_reg, 2)
+// size(x): 0 -> 0, 1 -> 1, 2 -> 2, 3 -> 2, 4-> 2, 5 -> 2
+`define TO_OUT_BUF_SIZE(s)    `MIN(s & 7, 2)
 
-// reg(x): 0 -> 0, 1 -> 1, 2 -> 0, 3 -> 1, 4 -> 2
-`define TO_OUT_BUF_REG(out_reg)     ((out_reg & 1) + ((out_reg >> 2) << 1))
+// reg(x): 0 -> 0, 1 -> 1, 2 -> 0, 3 -> 1, 4 -> 2, 5 > 3
+`define TO_OUT_BUF_REG(s)     (((s & 7) < 2) ? (s & 7) : ((s & 7) - 2))
+
+// lut(x): (x & 8) != 0
+`define TO_OUT_BUF_LUTRAM(s)  ((s & 8) != 0)
 
 `define REPEAT(n,f,s)   `_REPEAT_``n(f,s)
 `define _REPEAT_0(f,s)

@@ -104,7 +104,8 @@ module VX_cache_mshr #(
     // lookup
     input wire                          lookup_valid,
     input wire [`CS_LINE_ADDR_WIDTH-1:0] lookup_addr,
-    output wire [MSHR_SIZE-1:0]         lookup_matches,
+    output wire [MSHR_SIZE-1:0]         lookup_pending,
+    output wire [MSHR_SIZE-1:0]         lookup_rw,
 
     // finalize
     input wire                          finalize_valid,
@@ -134,7 +135,7 @@ module VX_cache_mshr #(
     wire dequeue_fire = dequeue_valid && dequeue_ready;
 
     wire [MSHR_SIZE-1:0] addr_matches;
-    for (genvar i = 0; i < MSHR_SIZE; ++i) begin
+    for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_addr_matches
         assign addr_matches[i] = valid_table[i] && (addr_table[i] == lookup_addr);
     end
 
@@ -147,7 +148,7 @@ module VX_cache_mshr #(
         .valid_out (allocate_rdy_n)
     );
 
-    VX_onehot_encoder #(
+    VX_encoder #(
         .N (MSHR_SIZE)
     ) prev_sel (
         .data_in (addr_matches & ~next_table_x),
@@ -216,13 +217,13 @@ module VX_cache_mshr #(
         next_table    <= next_table_n;
     end
 
-    `RUNTIME_ASSERT((~allocate_fire || ~valid_table[allocate_id_r]), ("%t: *** %s-bank%0d inuse allocation: addr=0x%0h, id=%0d (#%0d)", $time, INSTANCE_ID, BANK_ID,
+    `RUNTIME_ASSERT((~allocate_fire || ~valid_table[allocate_id_r]), ("%t: *** %s inuse allocation: addr=0x%0h, id=%0d (#%0d)", $time, INSTANCE_ID,
         `CS_LINE_TO_FULL_ADDR(allocate_addr, BANK_ID), allocate_id_r, lkp_req_uuid))
 
-    `RUNTIME_ASSERT((~finalize_valid || valid_table[finalize_id]), ("%t: *** %s-bank%0d invalid release: addr=0x%0h, id=%0d (#%0d)", $time, INSTANCE_ID, BANK_ID,
+    `RUNTIME_ASSERT((~finalize_valid || valid_table[finalize_id]), ("%t: *** %s invalid release: addr=0x%0h, id=%0d (#%0d)", $time, INSTANCE_ID,
         `CS_LINE_TO_FULL_ADDR(addr_table[finalize_id], BANK_ID), finalize_id, fin_req_uuid))
 
-    `RUNTIME_ASSERT((~fill_valid || valid_table[fill_id]), ("%t: *** %s-bank%0d invalid fill: addr=0x%0h, id=%0d", $time, INSTANCE_ID, BANK_ID,
+    `RUNTIME_ASSERT((~fill_valid || valid_table[fill_id]), ("%t: *** %s invalid fill: addr=0x%0h, id=%0d", $time, INSTANCE_ID,
         `CS_LINE_TO_FULL_ADDR(addr_table[fill_id], BANK_ID), fill_id))
 
     VX_dp_ram #(
@@ -231,9 +232,10 @@ module VX_cache_mshr #(
         .LUTRAM (1)
     ) entries (
         .clk   (clk),
+        .reset (reset),
         .read  (1'b1),
         .write (allocate_valid),
-        `UNUSED_PIN (wren),
+        .wren  (1'b1),
         .waddr (allocate_id_r),
         .wdata (allocate_data),
         .raddr (dequeue_id_r),
@@ -251,7 +253,9 @@ module VX_cache_mshr #(
     assign dequeue_rw     = write_table[dequeue_id_r];
     assign dequeue_id     = dequeue_id_r;
 
-    assign lookup_matches = addr_matches & ~write_table;
+    // return pending entries for the given cache line
+    assign lookup_pending = addr_matches;
+    assign lookup_rw = write_table;
 
     `UNUSED_VAR (lookup_valid)
 
@@ -263,35 +267,42 @@ module VX_cache_mshr #(
         end else begin
             show_table <= allocate_fire || lookup_valid || finalize_valid || fill_valid || dequeue_fire;
         end
-        if (allocate_fire)
-            `TRACE(3, ("%d: %s-bank%0d mshr-allocate: addr=0x%0h, prev=%0d, id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID,
-                `CS_LINE_TO_FULL_ADDR(allocate_addr, BANK_ID), allocate_prev, allocate_id, lkp_req_uuid));
-        if (lookup_valid)
-            `TRACE(3, ("%d: %s-bank%0d mshr-lookup: addr=0x%0h, matches=%b (#%0d)\n", $time, INSTANCE_ID, BANK_ID,
-                `CS_LINE_TO_FULL_ADDR(lookup_addr, BANK_ID), lookup_matches, lkp_req_uuid));
-        if (finalize_valid)
-            `TRACE(3, ("%d: %s-bank%0d mshr-finalize release=%b, pending=%b, prev=%0d, id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID,
-                finalize_release, finalize_pending, finalize_prev, finalize_id, fin_req_uuid));
-        if (fill_valid)
-            `TRACE(3, ("%d: %s-bank%0d mshr-fill: addr=0x%0h, addr=0x%0h, id=%0d\n", $time, INSTANCE_ID, BANK_ID,
-                `CS_LINE_TO_FULL_ADDR(addr_table[fill_id], BANK_ID), `CS_LINE_TO_FULL_ADDR(fill_addr, BANK_ID), fill_id));
-        if (dequeue_fire)
-            `TRACE(3, ("%d: %s-bank%0d mshr-dequeue: addr=0x%0h, id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID,
-                `CS_LINE_TO_FULL_ADDR(dequeue_addr, BANK_ID), dequeue_id_r, deq_req_uuid));
+        if (allocate_fire) begin
+            `TRACE(3, ("%t: %s allocate: addr=0x%0h, prev=%0d, id=%0d (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(allocate_addr, BANK_ID), allocate_prev, allocate_id, lkp_req_uuid))
+        end
+        if (lookup_valid) begin
+            `TRACE(3, ("%t: %s lookup: addr=0x%0h, matches=%b (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(lookup_addr, BANK_ID), lookup_pending, lkp_req_uuid))
+        end
+        if (finalize_valid) begin
+            `TRACE(3, ("%t: %s finalize release=%b, pending=%b, prev=%0d, id=%0d (#%0d)\n", $time, INSTANCE_ID,
+                finalize_release, finalize_pending, finalize_prev, finalize_id, fin_req_uuid))
+        end
+        if (fill_valid) begin
+            `TRACE(3, ("%t: %s fill: addr=0x%0h, addr=0x%0h, id=%0d\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(addr_table[fill_id], BANK_ID), `CS_LINE_TO_FULL_ADDR(fill_addr, BANK_ID), fill_id))
+        end
+        if (dequeue_fire) begin
+            `TRACE(3, ("%t: %s dequeue: addr=0x%0h, id=%0d (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(dequeue_addr, BANK_ID), dequeue_id_r, deq_req_uuid))
+        end
         if (show_table) begin
-            `TRACE(3, ("%d: %s-bank%0d mshr-table", $time, INSTANCE_ID, BANK_ID));
+            `TRACE(3, ("%t: %s table", $time, INSTANCE_ID))
             for (integer i = 0; i < MSHR_SIZE; ++i) begin
                 if (valid_table[i]) begin
-                    `TRACE(3, (" %0d=0x%0h", i, `CS_LINE_TO_FULL_ADDR(addr_table[i], BANK_ID)));
-                    if (write_table[i])
-                        `TRACE(3, ("(w)"));
-                    else
-                        `TRACE(3, ("(r)"));
-                    if (next_table[i])
-                        `TRACE(3, ("->%0d", next_index[i]));
+                    `TRACE(3, (" %0d=0x%0h", i, `CS_LINE_TO_FULL_ADDR(addr_table[i], BANK_ID)))
+                    if (write_table[i]) begin
+                        `TRACE(3, ("(w)"))
+                    end else begin
+                        `TRACE(3, ("(r)"))
+                    end
+                    if (next_table[i])  begin
+                        `TRACE(3, ("->%0d", next_index[i]))
+                    end
                 end
             end
-            `TRACE(3, ("\n"));
+            `TRACE(3, ("\n"))
         end
     end
 `endif

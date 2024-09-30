@@ -90,7 +90,7 @@ module VX_fpu_fpnew
 
     reg [TAG_WIDTH-1:0] fpu_tag_in, fpu_tag_out;
 
-    reg [2:0][NUM_LANES-1:0][`XLEN-1:0] fpu_operands;
+    logic [2:0][NUM_LANES-1:0][`XLEN-1:0] fpu_operands;
 
     wire [NUM_LANES-1:0][`XLEN-1:0] fpu_result;
     fpnew_pkg::status_t fpu_status;
@@ -105,7 +105,7 @@ module VX_fpu_fpnew
     `UNUSED_VAR (fmt)
 
     always @(*) begin
-        fpu_op          = 'x;
+        fpu_op          = fpnew_pkg::operation_e'('x);
         fpu_rnd         = frm;
         fpu_op_mod      = 0;
         fpu_has_fflags  = 1;
@@ -134,20 +134,13 @@ module VX_fpu_fpnew
                 fpu_op = fpnew_pkg::ADD;
                 fpu_operands[1] = dataa;
                 fpu_operands[2] = datab;
-            end
-            `INST_FPU_SUB: begin
-                fpu_op = fpnew_pkg::ADD;
-                fpu_operands[1] = dataa;
-                fpu_operands[2] = datab;
-                fpu_op_mod = 1;
+                fpu_op_mod = fmt[1]; // FADD or FSUB
             end
             `INST_FPU_MUL:   begin fpu_op = fpnew_pkg::MUL; end
+            `INST_FPU_MADD:  begin fpu_op = fpnew_pkg::FMADD; fpu_op_mod = fmt[1]; end
+            `INST_FPU_NMADD: begin fpu_op = fpnew_pkg::FNMSUB; fpu_op_mod = ~fmt[1]; end
             `INST_FPU_DIV:   begin fpu_op = fpnew_pkg::DIV; end
             `INST_FPU_SQRT:  begin fpu_op = fpnew_pkg::SQRT; end
-            `INST_FPU_MADD:  begin fpu_op = fpnew_pkg::FMADD; end
-            `INST_FPU_MSUB:  begin fpu_op = fpnew_pkg::FMADD; fpu_op_mod = 1; end
-            `INST_FPU_NMADD: begin fpu_op = fpnew_pkg::FNMSUB; fpu_op_mod = 1; end
-            `INST_FPU_NMSUB: begin fpu_op = fpnew_pkg::FNMSUB; end
         `ifdef FLEN_64
             `INST_FPU_F2F: begin fpu_op = fpnew_pkg::F2F; fpu_src_fmt = fmt[0] ? fpnew_pkg::FP32 : fpnew_pkg::FP64; end
         `endif
@@ -169,7 +162,7 @@ module VX_fpu_fpnew
     end
 
     `UNUSED_VAR (mask_in)
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_fpnew_coreses
         wire [(TAG_WIDTH+1)-1:0] fpu_tag;
         wire fpu_valid_out_uq;
         wire fpu_ready_in_uq;
@@ -183,8 +176,7 @@ module VX_fpu_fpnew
             .Features       (FPU_FEATURES),
             .Implementation (FPU_IMPLEMENTATION),
             .TagType        (logic[(TAG_WIDTH+1)-1:0]),
-            .TrueSIMDClass  (1),
-            .EnableSIMDMask (1)
+            .DivSqrtSel     (fpnew_pkg::PULP)
         ) fpnew_core (
             .clk_i          (clk),
             .rst_ni         (~reset),
@@ -196,11 +188,11 @@ module VX_fpu_fpnew
             .dst_fmt_i      (fpu_dst_fmt),
             .int_fmt_i      (fpu_int_fmt),
             .vectorial_op_i (1'b0),
-            .simd_mask_i    (mask_in[i]),
+            .simd_mask_i    (1'b1),
             .tag_i          ({fpu_tag_in, fpu_has_fflags}),
             .in_valid_i     (fpu_valid_in),
             .in_ready_o     (fpu_ready_in_uq),
-            .flush_i        (reset),
+            .flush_i        (1'b0),
             .result_o       (fpu_result[i]),
             .status_o       (fpu_status_uq),
             .tag_o          (fpu_tag),
@@ -209,7 +201,7 @@ module VX_fpu_fpnew
             `UNUSED_PIN (busy_o)
         );
 
-        if (i == 0) begin
+        if (i == 0) begin : g_output_0
             assign {fpu_tag_out, fpu_has_fflags_out} = fpu_tag;
             assign fpu_valid_out = fpu_valid_out_uq;
             assign fpu_ready_in = fpu_ready_in_uq;

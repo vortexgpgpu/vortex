@@ -52,12 +52,18 @@
 `ifndef NDEBUG
 `define UUID_WIDTH      44
 `else
+`ifdef SCOPE
+`define UUID_WIDTH      44
+`else
 `define UUID_WIDTH      1
+`endif
 `endif
 
 `define PC_BITS         (`XLEN-1)
 `define OFFSET_BITS     12
 `define IMM_BITS        `XLEN
+
+`define NUM_SOCKETS     `UP(`NUM_CORES / `SOCKET_SIZE)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -225,22 +231,19 @@
 `define INST_FENCE_D         1'h0
 `define INST_FENCE_I         1'h1
 
-`define INST_FPU_ADD         4'b0000
-`define INST_FPU_SUB         4'b0001
-`define INST_FPU_MUL         4'b0010
-`define INST_FPU_DIV         4'b0011
-`define INST_FPU_SQRT        4'b0100
-`define INST_FPU_CMP         4'b0101 // frm: LE=0, LT=1, EQ=2
-`define INST_FPU_F2F         4'b0110
-`define INST_FPU_MISC        4'b0111 // frm: SGNJ=0, SGNJN=1, SGNJX=2, CLASS=3, MVXW=4, MVWX=5, FMIN=6, FMAX=7
-`define INST_FPU_F2I         4'b1000
-`define INST_FPU_F2U         4'b1001
-`define INST_FPU_I2F         4'b1010
-`define INST_FPU_U2F         4'b1011
-`define INST_FPU_MADD        4'b1100
-`define INST_FPU_MSUB        4'b1101
-`define INST_FPU_NMSUB       4'b1110
-`define INST_FPU_NMADD       4'b1111
+`define INST_FPU_ADD         4'b0000 // SUB=fmt[1]
+`define INST_FPU_MUL         4'b0001
+`define INST_FPU_MADD        4'b0010 // SUB=fmt[1]
+`define INST_FPU_NMADD       4'b0011 // SUB=fmt[1]
+`define INST_FPU_DIV         4'b0100
+`define INST_FPU_SQRT        4'b0101
+`define INST_FPU_F2I         4'b1000 // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
+`define INST_FPU_F2U         4'b1001 // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
+`define INST_FPU_I2F         4'b1010 // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
+`define INST_FPU_U2F         4'b1011 // fmt[0]: F32=0, F64=1, fmt[1]: I32=0, I64=1
+`define INST_FPU_CMP         4'b1100 // frm: LE=0, LT=1, EQ=2
+`define INST_FPU_F2F         4'b1101 // fmt[0]: F32=0, F64=1
+`define INST_FPU_MISC        4'b1110 // frm: SGNJ=0, SGNJN=1, SGNJX=2, CLASS=3, MVXW=4, MVWX=5, FMIN=6, FMAX=7
 `define INST_FPU_BITS        4
 `define INST_FPU_IS_CLASS(op, frm) (op == `INST_FPU_MISC && frm == 3)
 `define INST_FPU_IS_MVXW(op, frm) (op == `INST_FPU_MISC && frm == 4)
@@ -265,14 +268,14 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define CACHE_MEM_TAG_WIDTH(mshr_size, num_banks) \
-        (`CLOG2(mshr_size) + `CLOG2(num_banks))
+`define CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, uuid_width) \
+        (uuid_width + `CLOG2(mshr_size) + `CLOG2(num_banks))
 
 `define CACHE_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width) \
         (`CLOG2(num_reqs) + `CLOG2(line_size / word_size) + tag_width)
 
-`define CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, tag_width) \
-        (`MAX(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks), `CACHE_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width)) + 1)
+`define CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, tag_width, uuid_width) \
+        (`MAX(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, uuid_width), `CACHE_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width)) + 1)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -282,28 +285,29 @@
 `define CACHE_CLUSTER_MEM_ARB_TAG(tag_width, num_caches) \
         (tag_width + `ARB_SEL_BITS(`UP(num_caches), 1))
 
-`define CACHE_CLUSTER_MEM_TAG_WIDTH(mshr_size, num_banks, num_caches) \
-        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks), num_caches)
+`define CACHE_CLUSTER_MEM_TAG_WIDTH(mshr_size, num_banks, num_caches, uuid_width) \
+        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, uuid_width), num_caches)
 
 `define CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(num_reqs, line_size, word_size, tag_width, num_inputs, num_caches) \
         `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches)), num_caches)
 
-`define CACHE_CLUSTER_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, tag_width, num_inputs, num_caches) \
-        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches)), num_caches)
+`define CACHE_CLUSTER_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, tag_width, num_inputs, num_caches, uuid_width) \
+        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches), uuid_width), num_caches)
 
 ///////////////////////////////////////////////////////////////////////////////
 
 `ifdef ICACHE_ENABLE
 `define L1_ENABLE
 `endif
+
 `ifdef DCACHE_ENABLE
 `define L1_ENABLE
 `endif
 
-`define ADDR_TYPE_FLUSH         0
-`define ADDR_TYPE_IO            1
-`define ADDR_TYPE_LOCAL         2 // shoud be last since optional
-`define ADDR_TYPE_WIDTH         (`ADDR_TYPE_LOCAL + `LMEM_ENABLED)
+`define MEM_REQ_FLAG_FLUSH      0
+`define MEM_REQ_FLAG_IO         1
+`define MEM_REQ_FLAG_LOCAL      2 // shoud be last since optional
+`define MEM_REQ_FLAGS_WIDTH     (`MEM_REQ_FLAG_LOCAL + `LMEM_ENABLED)
 
 `define VX_MEM_BYTEEN_WIDTH     `L3_LINE_SIZE
 `define VX_MEM_ADDR_WIDTH       (`MEM_ADDR_WIDTH - `CLOG2(`L3_LINE_SIZE))
@@ -317,12 +321,24 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+`define NEG_EDGE(dst, src) \
+    wire dst; \
+    VX_edge_trigger #( \
+        .POS  (0), \
+        .INIT (0) \
+    ) __``dst``__ ( \
+        .clk      (clk), \
+        .reset    (1'b0), \
+        .data_in  (src), \
+        .data_out (dst) \
+    )
+
 `define BUFFER_EX(dst, src, ena, latency) \
     VX_pipe_register #( \
         .DATAW  ($bits(dst)), \
         .RESETW ($bits(dst)), \
         .DEPTH  (latency) \
-    ) __``dst ( \
+    ) __``dst``__ ( \
         .clk      (clk), \
         .reset    (reset), \
         .enable   (ena), \
@@ -336,12 +352,17 @@
     VX_popcount #( \
         .N ($bits(in)), \
         .MODEL (model) \
-    ) __``out ( \
+    ) __``out``__ ( \
         .data_in  (in), \
         .data_out (out) \
     )
 
 `define POP_COUNT(out, in) `POP_COUNT_EX(out, in, 1)
+
+`define ASSIGN_VX_IF(dst, src) \
+    assign dst.valid = src.valid; \
+    assign dst.data  = src.data; \
+    assign src.ready = dst.ready
 
 `define ASSIGN_VX_MEM_BUS_IF(dst, src) \
     assign dst.req_valid  = src.req_valid; \
@@ -351,71 +372,90 @@
     assign src.rsp_data   = dst.rsp_data; \
     assign dst.rsp_ready  = src.rsp_ready
 
+`define ASSIGN_VX_MEM_BUS_RO_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data.rw = 0; \
+    assign dst.req_data.addr = src.req_data.addr; \
+    assign dst.req_data.data = '0; \
+    assign dst.req_data.byteen = '1; \
+    assign dst.req_data.flags = src.req_data.flags; \
+    assign dst.req_data.tag = src.req_data.tag; \
+    assign src.req_ready = dst.req_ready; \
+    assign src.rsp_valid = dst.rsp_valid; \
+    assign src.rsp_data.data = dst.rsp_data.data; \
+    assign src.rsp_data.tag = dst.rsp_data.tag; \
+    assign dst.rsp_ready = src.rsp_ready
+
 `define ASSIGN_VX_MEM_BUS_IF_X(dst, src, TD, TS) \
     assign dst.req_valid = src.req_valid; \
     assign dst.req_data.rw = src.req_data.rw; \
-    assign dst.req_data.byteen = src.req_data.byteen; \
     assign dst.req_data.addr = src.req_data.addr; \
-    assign dst.req_data.atype = src.req_data.atype; \
     assign dst.req_data.data = src.req_data.data; \
-    if (TD != TS) \
+    assign dst.req_data.byteen = src.req_data.byteen; \
+    assign dst.req_data.flags = src.req_data.flags; \
+    /* verilator lint_off GENUNNAMED */ \
+    if (TD != TS) begin \
         assign dst.req_data.tag = {src.req_data.tag, {(TD-TS){1'b0}}}; \
-    else \
+    end else begin \
         assign dst.req_data.tag = src.req_data.tag; \
+    end \
+    /* verilator lint_on GENUNNAMED */ \
     assign src.req_ready = dst.req_ready; \
     assign src.rsp_valid = dst.rsp_valid; \
     assign src.rsp_data.data = dst.rsp_data.data; \
     assign src.rsp_data.tag = dst.rsp_data.tag[TD-1 -: TS]; \
     assign dst.rsp_ready = src.rsp_ready
 
-`define ASSIGN_VX_LSU_MEM_IF(dst, src) \
-    assign dst.req_valid  = src.req_valid; \
-    assign dst.req_data   = src.req_data; \
-    assign src.req_ready  = dst.req_ready; \
-    assign src.rsp_valid  = dst.rsp_valid; \
-    assign src.rsp_data   = dst.rsp_data; \
-    assign dst.rsp_ready  = src.rsp_ready
-
-`define BUFFER_DCR_BUS_IF(dst, src, enable) \
-    logic [(1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH)-1:0] __``dst; \
-    if (enable) begin \
-        always @(posedge clk) begin \
-            __``dst <= {src.write_valid, src.write_addr, src.write_data}; \
-        end \
+`define BUFFER_DCR_BUS_IF(dst, src, ena, latency) \
+    /* verilator lint_off GENUNNAMED */ \
+    if (latency != 0) begin \
+        VX_pipe_register #( \
+            .DATAW  (1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH), \
+            .DEPTH  (latency) \
+        ) pipe_reg ( \
+            .clk      (clk), \
+            .reset    (1'b0), \
+            .enable   (1'b1), \
+            .data_in  ({src.write_valid && ena, src.write_addr, src.write_data}), \
+            .data_out ({dst.write_valid, dst.write_addr, dst.write_data}) \
+        ); \
     end else begin \
-        assign __``dst = {src.write_valid, src.write_addr, src.write_data}; \
+        assign {dst.write_valid, dst.write_addr, dst.write_data} = {src.write_valid && ena, src.write_addr, src.write_data}; \
     end \
-    VX_dcr_bus_if dst(); \
-    assign {dst.write_valid, dst.write_addr, dst.write_data} = __``dst
+    /* verilator lint_on GENUNNAMED */
 
-`define PERF_COUNTER_ADD(dst, src, field, width, dst_count, src_count, reg_enable) \
-    for (genvar __d = 0; __d < dst_count; ++__d) begin \
-        localparam __count = ((src_count > dst_count) ? `CDIV(src_count, dst_count) : 1); \
-        wire [__count-1:0][width-1:0] __reduce_add_i_``src``field; \
-        wire [width-1:0] __reduce_add_o_``dst``field; \
-        for (genvar __i = 0; __i < __count; ++__i) begin \
-            assign __reduce_add_i_``src``field[__i] = ``src[__d * __count + __i].``field; \
+`define PERF_COUNTER_ADD(dst, src, field, width, count, reg_enable) \
+    /* verilator lint_off GENUNNAMED */ \
+    if (count > 1) begin \
+        wire [count-1:0][width-1:0] __reduce_add_i_field; \
+        wire [width-1:0] __reduce_add_o_field; \
+        for (genvar __i = 0; __i < count; ++__i) begin \
+            assign __reduce_add_i_field[__i] = src[__i].``field; \
         end \
-        VX_reduce #(.DATAW_IN(width), .N(__count), .OP("+")) __reduce_add_``dst``field ( \
-            __reduce_add_i_``src``field, \
-            __reduce_add_o_``dst``field \
+        VX_reduce #(.DATAW_IN(width), .N(count), .OP("+")) __reduce_add_field ( \
+            __reduce_add_i_field, \
+            __reduce_add_o_field \
         ); \
         if (reg_enable) begin \
-            reg [width-1:0] __reduce_add_r_``dst``field; \
+            reg [width-1:0] __reduce_add_r_field; \
             always @(posedge clk) begin \
                 if (reset) begin \
-                    __reduce_add_r_``dst``field <= '0; \
+                    __reduce_add_r_field <= '0; \
                 end else begin \
-                    __reduce_add_r_``dst``field <= __reduce_add_o_``dst``field; \
+                    __reduce_add_r_field <= __reduce_add_o_field; \
                 end \
             end \
-            assign ``dst[__d].``field = __reduce_add_r_``dst``field; \
+            assign dst.``field = __reduce_add_r_field; \
         end else begin \
-            assign ``dst[__d].``field = __reduce_add_o_``dst``field; \
+            assign dst.``field = __reduce_add_o_field; \
         end \
-    end
+    end else begin \
+        assign dst.``field = src[0].``field; \
+    end \
+    /* verilator lint_on GENUNNAMED */
 
 `define ASSIGN_BLOCKED_WID(dst, src, block_idx, block_size) \
+    /* verilator lint_off GENUNNAMED */ \
     if (block_size != 1) begin \
         if (block_size != `NUM_WARPS) begin \
             assign dst = {src[`NW_WIDTH-1:`CLOG2(block_size)], `CLOG2(block_size)'(block_idx)}; \
@@ -424,22 +464,7 @@
         end \
     end else begin \
         assign dst = src; \
-    end
-
-`define TO_DISPATCH_DATA(data, tid) { \
-    data.uuid, \
-    data.wis, \
-    data.tmask, \
-    data.PC, \
-    data.op_type, \
-    data.op_args, \
-    data.wb, \
-    data.rd, \
-    tid, \
-    data.rs1_data, \
-    data.rs2_data, \
-    data.rs3_data}
-
-///////////////////////////////////////////////////////////////////////////////
+    end \
+    /* verilator lint_on GENUNNAMED */
 
 `endif // VX_DEFINE_VH

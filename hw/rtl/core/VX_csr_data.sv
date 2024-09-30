@@ -26,13 +26,13 @@
         addr+12'h80 : dst = 32'(src[$bits(src)-1:32])
 `endif
 
-
 module VX_csr_data
 import VX_gpu_pkg::*;
 `ifdef EXT_F_ENABLE
 import VX_fpu_pkg::*;
 `endif
 #(
+    parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0
 ) (
     input wire                          clk,
@@ -83,7 +83,7 @@ import VX_fpu_pkg::*;
     wire [`NUM_FPU_BLOCKS-1:0][`NW_WIDTH-1:0] fpu_write_wid;
     fflags_t [`NUM_FPU_BLOCKS-1:0]          fpu_write_fflags;
 
-    for (genvar i = 0; i < `NUM_FPU_BLOCKS; ++i) begin
+    for (genvar i = 0; i < `NUM_FPU_BLOCKS; ++i) begin : g_fpu_write
         assign fpu_write_enable[i] = fpu_csr_if[i].write_enable;
         assign fpu_write_wid[i]    = fpu_csr_if[i].write_wid;
         assign fpu_write_fflags[i] = fpu_csr_if[i].write_fflags;
@@ -107,7 +107,7 @@ import VX_fpu_pkg::*;
         end
     end
 
-    for (genvar i = 0; i < `NUM_FPU_BLOCKS; ++i) begin
+    for (genvar i = 0; i < `NUM_FPU_BLOCKS; ++i) begin : g_fpu_csr_read_frm
         assign fpu_csr_if[i].read_frm = fcsr[fpu_csr_if[i].read_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS];
     end
 
@@ -147,7 +147,7 @@ import VX_fpu_pkg::*;
                     mscratch <= write_data;
                 end
                 default: begin
-                    `ASSERT(0, ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
+                    `ASSERT(0, ("%t: *** %s invalid CSR write address: %0h (#%0d)", $time, INSTANCE_ID, write_addr, write_uuid));
                 end
             endcase
         end
@@ -155,41 +155,41 @@ import VX_fpu_pkg::*;
 
     // CSRs read //////////////////////////////////////////////////////////////
 
-    reg [`XLEN-1:0] read_data_ro_r;
-    reg [`XLEN-1:0] read_data_rw_r;
-    reg read_addr_valid_r;
+    reg [`XLEN-1:0] read_data_ro_w;
+    reg [`XLEN-1:0] read_data_rw_w;
+    reg read_addr_valid_w;
 
     always @(*) begin
-        read_data_ro_r    = '0;
-        read_data_rw_r    = '0;
-        read_addr_valid_r = 1;
+        read_data_ro_w    = '0;
+        read_data_rw_w    = '0;
+        read_addr_valid_w = 1;
         case (read_addr)
-            `VX_CSR_MVENDORID  : read_data_ro_r = `XLEN'(`VENDOR_ID);
-            `VX_CSR_MARCHID    : read_data_ro_r = `XLEN'(`ARCHITECTURE_ID);
-            `VX_CSR_MIMPID     : read_data_ro_r = `XLEN'(`IMPLEMENTATION_ID);
-            `VX_CSR_MISA       : read_data_ro_r = `XLEN'({2'(`CLOG2(`XLEN/16)), 30'(`MISA_STD)});
+            `VX_CSR_MVENDORID  : read_data_ro_w = `XLEN'(`VENDOR_ID);
+            `VX_CSR_MARCHID    : read_data_ro_w = `XLEN'(`ARCHITECTURE_ID);
+            `VX_CSR_MIMPID     : read_data_ro_w = `XLEN'(`IMPLEMENTATION_ID);
+            `VX_CSR_MISA       : read_data_ro_w = `XLEN'({2'(`CLOG2(`XLEN/16)), 30'(`MISA_STD)});
         `ifdef EXT_F_ENABLE
-            `VX_CSR_FFLAGS     : read_data_rw_r = `XLEN'(fcsr[read_wid][`FP_FLAGS_BITS-1:0]);
-            `VX_CSR_FRM        : read_data_rw_r = `XLEN'(fcsr[read_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS]);
-            `VX_CSR_FCSR       : read_data_rw_r = `XLEN'(fcsr[read_wid]);
+            `VX_CSR_FFLAGS     : read_data_rw_w = `XLEN'(fcsr[read_wid][`FP_FLAGS_BITS-1:0]);
+            `VX_CSR_FRM        : read_data_rw_w = `XLEN'(fcsr[read_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS]);
+            `VX_CSR_FCSR       : read_data_rw_w = `XLEN'(fcsr[read_wid]);
         `endif
-            `VX_CSR_MSCRATCH   : read_data_rw_r = mscratch;
+            `VX_CSR_MSCRATCH   : read_data_rw_w = mscratch;
 
-            `VX_CSR_WARP_ID    : read_data_ro_r = `XLEN'(read_wid);
-            `VX_CSR_CORE_ID    : read_data_ro_r = `XLEN'(CORE_ID);
-            `VX_CSR_ACTIVE_THREADS: read_data_ro_r = `XLEN'(thread_masks[read_wid]);
-            `VX_CSR_ACTIVE_WARPS: read_data_ro_r = `XLEN'(active_warps);
-            `VX_CSR_NUM_THREADS: read_data_ro_r = `XLEN'(`NUM_THREADS);
-            `VX_CSR_NUM_WARPS  : read_data_ro_r = `XLEN'(`NUM_WARPS);
-            `VX_CSR_NUM_CORES  : read_data_ro_r = `XLEN'(`NUM_CORES * `NUM_CLUSTERS);
-            `VX_CSR_LOCAL_MEM_BASE: read_data_ro_r = `XLEN'(`LMEM_BASE_ADDR);
+            `VX_CSR_WARP_ID    : read_data_ro_w = `XLEN'(read_wid);
+            `VX_CSR_CORE_ID    : read_data_ro_w = `XLEN'(CORE_ID);
+            `VX_CSR_ACTIVE_THREADS: read_data_ro_w = `XLEN'(thread_masks[read_wid]);
+            `VX_CSR_ACTIVE_WARPS: read_data_ro_w = `XLEN'(active_warps);
+            `VX_CSR_NUM_THREADS: read_data_ro_w = `XLEN'(`NUM_THREADS);
+            `VX_CSR_NUM_WARPS  : read_data_ro_w = `XLEN'(`NUM_WARPS);
+            `VX_CSR_NUM_CORES  : read_data_ro_w = `XLEN'(`NUM_CORES * `NUM_CLUSTERS);
+            `VX_CSR_LOCAL_MEM_BASE: read_data_ro_w = `XLEN'(`LMEM_BASE_ADDR);
 
-            `CSR_READ_64(`VX_CSR_MCYCLE, read_data_ro_r, cycles);
+            `CSR_READ_64(`VX_CSR_MCYCLE, read_data_ro_w, cycles);
 
-            `VX_CSR_MPM_RESERVED : read_data_ro_r = 'x;
-            `VX_CSR_MPM_RESERVED_H : read_data_ro_r = 'x;
+            `VX_CSR_MPM_RESERVED : read_data_ro_w = 'x;
+            `VX_CSR_MPM_RESERVED_H : read_data_ro_w = 'x;
 
-            `CSR_READ_64(`VX_CSR_MINSTRET, read_data_ro_r, commit_csr_if.instret);
+            `CSR_READ_64(`VX_CSR_MINSTRET, read_data_ro_w, commit_csr_if.instret);
 
             `VX_CSR_SATP,
             `VX_CSR_MSTATUS,
@@ -200,77 +200,77 @@ import VX_fpu_pkg::*;
             `VX_CSR_MTVEC,
             `VX_CSR_MEPC,
             `VX_CSR_PMPCFG0,
-            `VX_CSR_PMPADDR0 : read_data_ro_r = `XLEN'(0);
+            `VX_CSR_PMPADDR0 : read_data_ro_w = `XLEN'(0);
 
             default: begin
-                read_addr_valid_r = 0;
+                read_addr_valid_w = 0;
                 if ((read_addr >= `VX_CSR_MPM_USER   && read_addr < (`VX_CSR_MPM_USER + 32))
                  || (read_addr >= `VX_CSR_MPM_USER_H && read_addr < (`VX_CSR_MPM_USER_H + 32))) begin
-                    read_addr_valid_r = 1;
+                    read_addr_valid_w = 1;
                 `ifdef PERF_ENABLE
                     case (base_dcrs.mpm_class)
                     `VX_DCR_MPM_CLASS_CORE: begin
                         case (read_addr)
                         // PERF: pipeline
-                        `CSR_READ_64(`VX_CSR_MPM_SCHED_ID, read_data_ro_r, pipeline_perf_if.sched_idles);
-                        `CSR_READ_64(`VX_CSR_MPM_SCHED_ST, read_data_ro_r, pipeline_perf_if.sched_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_IBUF_ST, read_data_ro_r, pipeline_perf_if.ibf_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_ST, read_data_ro_r, pipeline_perf_if.scb_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_ALU, read_data_ro_r, pipeline_perf_if.units_uses[`EX_ALU]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCHED_ID, read_data_ro_w, pipeline_perf_if.sched.idles);
+                        `CSR_READ_64(`VX_CSR_MPM_SCHED_ST, read_data_ro_w, pipeline_perf_if.sched.stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_IBUF_ST, read_data_ro_w, pipeline_perf_if.issue.ibf_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_ST, read_data_ro_w, pipeline_perf_if.issue.scb_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_OPDS_ST, read_data_ro_w, pipeline_perf_if.issue.opd_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_ALU, read_data_ro_w, pipeline_perf_if.issue.units_uses[`EX_ALU]);
                     `ifdef EXT_F_ENABLE
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_FPU, read_data_ro_r, pipeline_perf_if.units_uses[`EX_FPU]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_FPU, read_data_ro_w, pipeline_perf_if.issue.units_uses[`EX_FPU]);
                     `else
-                        `VX_CSR_MPM_SCRB_FPU   : read_data_ro_r = '0;
-                        `VX_CSR_MPM_SCRB_FPU_H : read_data_ro_r = '0;
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_FPU, read_data_ro_w, `PERF_CTR_BITS'(0));
                     `endif
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_LSU, read_data_ro_r, pipeline_perf_if.units_uses[`EX_LSU]);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_SFU, read_data_ro_r, pipeline_perf_if.units_uses[`EX_SFU]);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_CSRS, read_data_ro_r, pipeline_perf_if.sfu_uses[`SFU_CSRS]);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_WCTL, read_data_ro_r, pipeline_perf_if.sfu_uses[`SFU_WCTL]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_LSU, read_data_ro_w, pipeline_perf_if.issue.units_uses[`EX_LSU]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_SFU, read_data_ro_w, pipeline_perf_if.issue.units_uses[`EX_SFU]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_CSRS, read_data_ro_w, pipeline_perf_if.issue.sfu_uses[`SFU_CSRS]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_WCTL, read_data_ro_w, pipeline_perf_if.issue.sfu_uses[`SFU_WCTL]);
                         // PERF: memory
-                        `CSR_READ_64(`VX_CSR_MPM_IFETCHES, read_data_ro_r, pipeline_perf_if.ifetches);
-                        `CSR_READ_64(`VX_CSR_MPM_LOADS, read_data_ro_r, pipeline_perf_if.loads);
-                        `CSR_READ_64(`VX_CSR_MPM_STORES, read_data_ro_r, pipeline_perf_if.stores);
-                        `CSR_READ_64(`VX_CSR_MPM_IFETCH_LT, read_data_ro_r, pipeline_perf_if.ifetch_latency);
-                        `CSR_READ_64(`VX_CSR_MPM_LOAD_LT, read_data_ro_r, pipeline_perf_if.load_latency);
+                        `CSR_READ_64(`VX_CSR_MPM_IFETCHES, read_data_ro_w, pipeline_perf_if.ifetches);
+                        `CSR_READ_64(`VX_CSR_MPM_LOADS, read_data_ro_w, pipeline_perf_if.loads);
+                        `CSR_READ_64(`VX_CSR_MPM_STORES, read_data_ro_w, pipeline_perf_if.stores);
+                        `CSR_READ_64(`VX_CSR_MPM_IFETCH_LT, read_data_ro_w, pipeline_perf_if.ifetch_latency);
+                        `CSR_READ_64(`VX_CSR_MPM_LOAD_LT, read_data_ro_w, pipeline_perf_if.load_latency);
                         default:;
                         endcase
                     end
                     `VX_DCR_MPM_CLASS_MEM: begin
                         case (read_addr)
                         // PERF: icache
-                        `CSR_READ_64(`VX_CSR_MPM_ICACHE_READS, read_data_ro_r, mem_perf_if.icache.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_ICACHE_MISS_R, read_data_ro_r, mem_perf_if.icache.read_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_ICACHE_MSHR_ST, read_data_ro_r, mem_perf_if.icache.mshr_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_ICACHE_READS, read_data_ro_w, mem_perf_if.icache.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_ICACHE_MISS_R, read_data_ro_w, mem_perf_if.icache.read_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_ICACHE_MSHR_ST, read_data_ro_w, mem_perf_if.icache.mshr_stalls);
                         // PERF: dcache
-                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_READS, read_data_ro_r, mem_perf_if.dcache.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_WRITES, read_data_ro_r, mem_perf_if.dcache.writes);
-                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_MISS_R, read_data_ro_r, mem_perf_if.dcache.read_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_MISS_W, read_data_ro_r, mem_perf_if.dcache.write_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_BANK_ST, read_data_ro_r, mem_perf_if.dcache.bank_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_MSHR_ST, read_data_ro_r, mem_perf_if.dcache.mshr_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_READS, read_data_ro_w, mem_perf_if.dcache.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_WRITES, read_data_ro_w, mem_perf_if.dcache.writes);
+                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_MISS_R, read_data_ro_w, mem_perf_if.dcache.read_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_MISS_W, read_data_ro_w, mem_perf_if.dcache.write_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_BANK_ST, read_data_ro_w, mem_perf_if.dcache.bank_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_DCACHE_MSHR_ST, read_data_ro_w, mem_perf_if.dcache.mshr_stalls);
                         // PERF: lmem
-                        `CSR_READ_64(`VX_CSR_MPM_LMEM_READS, read_data_ro_r, mem_perf_if.lmem.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_LMEM_WRITES, read_data_ro_r, mem_perf_if.lmem.writes);
-                        `CSR_READ_64(`VX_CSR_MPM_LMEM_BANK_ST, read_data_ro_r, mem_perf_if.lmem.bank_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_LMEM_READS, read_data_ro_w, mem_perf_if.lmem.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_LMEM_WRITES, read_data_ro_w, mem_perf_if.lmem.writes);
+                        `CSR_READ_64(`VX_CSR_MPM_LMEM_BANK_ST, read_data_ro_w, mem_perf_if.lmem.bank_stalls);
                         // PERF: l2cache
-                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_READS, read_data_ro_r, mem_perf_if.l2cache.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_WRITES, read_data_ro_r, mem_perf_if.l2cache.writes);
-                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MISS_R, read_data_ro_r, mem_perf_if.l2cache.read_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MISS_W, read_data_ro_r, mem_perf_if.l2cache.write_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_BANK_ST, read_data_ro_r, mem_perf_if.l2cache.bank_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MSHR_ST, read_data_ro_r, mem_perf_if.l2cache.mshr_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_READS, read_data_ro_w, mem_perf_if.l2cache.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_WRITES, read_data_ro_w, mem_perf_if.l2cache.writes);
+                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MISS_R, read_data_ro_w, mem_perf_if.l2cache.read_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MISS_W, read_data_ro_w, mem_perf_if.l2cache.write_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_BANK_ST, read_data_ro_w, mem_perf_if.l2cache.bank_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_L2CACHE_MSHR_ST, read_data_ro_w, mem_perf_if.l2cache.mshr_stalls);
                         // PERF: l3cache
-                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_READS, read_data_ro_r, mem_perf_if.l3cache.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_WRITES, read_data_ro_r, mem_perf_if.l3cache.writes);
-                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_MISS_R, read_data_ro_r, mem_perf_if.l3cache.read_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_MISS_W, read_data_ro_r, mem_perf_if.l3cache.write_misses);
-                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_BANK_ST, read_data_ro_r, mem_perf_if.l3cache.bank_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_MSHR_ST, read_data_ro_r, mem_perf_if.l3cache.mshr_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_READS, read_data_ro_w, mem_perf_if.l3cache.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_WRITES, read_data_ro_w, mem_perf_if.l3cache.writes);
+                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_MISS_R, read_data_ro_w, mem_perf_if.l3cache.read_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_MISS_W, read_data_ro_w, mem_perf_if.l3cache.write_misses);
+                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_BANK_ST, read_data_ro_w, mem_perf_if.l3cache.bank_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_L3CACHE_MSHR_ST, read_data_ro_w, mem_perf_if.l3cache.mshr_stalls);
                         // PERF: memory
-                        `CSR_READ_64(`VX_CSR_MPM_MEM_READS, read_data_ro_r, mem_perf_if.mem.reads);
-                        `CSR_READ_64(`VX_CSR_MPM_MEM_WRITES, read_data_ro_r, mem_perf_if.mem.writes);
-                        `CSR_READ_64(`VX_CSR_MPM_MEM_LT, read_data_ro_r, mem_perf_if.mem.latency);
+                        `CSR_READ_64(`VX_CSR_MPM_MEM_READS, read_data_ro_w, mem_perf_if.mem.reads);
+                        `CSR_READ_64(`VX_CSR_MPM_MEM_WRITES, read_data_ro_w, mem_perf_if.mem.writes);
+                        `CSR_READ_64(`VX_CSR_MPM_MEM_LT, read_data_ro_w, mem_perf_if.mem.latency);
                         default:;
                         endcase
                     end
@@ -282,12 +282,12 @@ import VX_fpu_pkg::*;
         endcase
     end
 
-    assign read_data_ro = read_data_ro_r;
-    assign read_data_rw = read_data_rw_r;
+    assign read_data_ro = read_data_ro_w;
+    assign read_data_rw = read_data_rw_w;
 
     `UNUSED_VAR (base_dcrs)
 
-    `RUNTIME_ASSERT(~read_enable || read_addr_valid_r, ("%t: *** invalid CSR read address: 0x%0h (#%0d)", $time, read_addr, read_uuid))
+    `RUNTIME_ASSERT(~read_enable || read_addr_valid_w, ("%t: *** invalid CSR read address: 0x%0h (#%0d)", $time, read_addr, read_uuid))
 
 `ifdef PERF_ENABLE
     `UNUSED_VAR (mem_perf_if.icache);

@@ -51,68 +51,39 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     localparam FPU_DIVSQRT = 1;
     localparam FPU_CVT     = 2;
     localparam FPU_NCP     = 3;
-    localparam NUM_FPC     = 4;
-    localparam FPC_BITS    = `LOG2UP(NUM_FPC);
+    localparam NUM_FPCORES = 4;
+    localparam FPCORES_BITS = `LOG2UP(NUM_FPCORES);
 
+    localparam REQ_DATAW = NUM_LANES + TAG_WIDTH + `INST_FPU_BITS + `INST_FMT_BITS + `INST_FRM_BITS + 3 * (NUM_LANES * 32);
     localparam RSP_DATAW = (NUM_LANES * 32) + 1 + $bits(fflags_t) + TAG_WIDTH;
 
     `UNUSED_VAR (fmt)
 
-    wire [NUM_FPC-1:0] per_core_ready_in;
-    wire [NUM_FPC-1:0][NUM_LANES-1:0][31:0] per_core_result;
-    wire [NUM_FPC-1:0][TAG_WIDTH-1:0] per_core_tag_out;
-    wire [NUM_FPC-1:0] per_core_ready_out;
-    wire [NUM_FPC-1:0] per_core_valid_out;
-    wire [NUM_FPC-1:0] per_core_has_fflags;
-    fflags_t [NUM_FPC-1:0] per_core_fflags;
+    wire [NUM_FPCORES-1:0] per_core_valid_in;
+    wire [NUM_FPCORES-1:0][REQ_DATAW-1:0] per_core_data_in;
+    wire [NUM_FPCORES-1:0] per_core_ready_in;
 
-    wire div_ready_in, sqrt_ready_in;
-    wire [NUM_LANES-1:0][31:0] div_result, sqrt_result;
-    wire [TAG_WIDTH-1:0] div_tag_out, sqrt_tag_out;
-    wire div_ready_out, sqrt_ready_out;
-    wire div_valid_out, sqrt_valid_out;
-    wire div_has_fflags, sqrt_has_fflags;
-    fflags_t div_fflags, sqrt_fflags;
+    wire [NUM_FPCORES-1:0][NUM_LANES-1:0] per_core_mask_in;
+    wire [NUM_FPCORES-1:0][TAG_WIDTH-1:0] per_core_tag_in;
+    wire [NUM_FPCORES-1:0][`INST_FPU_BITS-1:0] per_core_op_type;
+    wire [NUM_FPCORES-1:0][`INST_FMT_BITS-1:0] per_core_fmt;
+    wire [NUM_FPCORES-1:0][`INST_FRM_BITS-1:0] per_core_frm;
+    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_dataa;
+    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_datab;
+    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_datac;
 
-    reg [FPC_BITS-1:0] core_select;
-    reg is_madd, is_sub, is_neg, is_div, is_itof, is_signed;
-
-    always @(*) begin
-        is_madd   = 0;
-        is_sub    = 0;
-        is_neg    = 0;
-        is_div    = 0;
-        is_itof   = 0;
-        is_signed = 0;
-        case (op_type)
-            `INST_FPU_ADD:    begin core_select = FPU_FMA; end
-            `INST_FPU_SUB:    begin core_select = FPU_FMA; is_sub = 1; end
-            `INST_FPU_MUL:    begin core_select = FPU_FMA; is_neg = 1; end
-            `INST_FPU_MADD:   begin core_select = FPU_FMA; is_madd = 1; end
-            `INST_FPU_MSUB:   begin core_select = FPU_FMA; is_madd = 1; is_sub = 1; end
-            `INST_FPU_NMADD:  begin core_select = FPU_FMA; is_madd = 1; is_neg = 1; end
-            `INST_FPU_NMSUB:  begin core_select = FPU_FMA; is_madd = 1; is_sub = 1; is_neg = 1; end
-            `INST_FPU_DIV:    begin core_select = FPU_DIVSQRT; is_div = 1; end
-            `INST_FPU_SQRT:   begin core_select = FPU_DIVSQRT; end
-            `INST_FPU_F2I:    begin core_select = FPU_CVT; is_signed = 1; end
-            `INST_FPU_F2U:    begin core_select = FPU_CVT; end
-            `INST_FPU_I2F:    begin core_select = FPU_CVT; is_itof = 1; is_signed = 1; end
-            `INST_FPU_U2F:    begin core_select = FPU_CVT; is_itof = 1; end
-            default:          begin core_select = FPU_NCP; end
-        endcase
-    end
-
-    `RESET_RELAY (fma_reset, reset);
-    `RESET_RELAY (div_reset, reset);
-    `RESET_RELAY (sqrt_reset, reset);
-    `RESET_RELAY (cvt_reset, reset);
-    `RESET_RELAY (ncp_reset, reset);
+    wire [NUM_FPCORES-1:0] per_core_valid_out;
+    wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_result;
+    wire [NUM_FPCORES-1:0][TAG_WIDTH-1:0] per_core_tag_out;
+    wire [NUM_FPCORES-1:0] per_core_has_fflags;
+    fflags_t [NUM_FPCORES-1:0] per_core_fflags;
+    wire [NUM_FPCORES-1:0] per_core_ready_out;
 
     wire [NUM_LANES-1:0][31:0] dataa_s;
     wire [NUM_LANES-1:0][31:0] datab_s;
     wire [NUM_LANES-1:0][31:0] datac_s;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data
         assign dataa_s[i] = dataa[i][31:0];
         assign datab_s[i] = datab[i][31:0];
         assign datac_s[i] = datac[i][31:0];
@@ -122,23 +93,60 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     `UNUSED_VAR (datab)
     `UNUSED_VAR (datac)
 
+    // Decode fpu core type
+    wire [FPCORES_BITS-1:0] core_select = op_type[3:2];
+
+    VX_stream_switch #(
+        .DATAW       (REQ_DATAW),
+        .NUM_OUTPUTS (NUM_FPCORES)
+    ) req_switch (
+        .clk       (clk),
+        .reset     (reset),
+        .sel_in    (core_select),
+        .valid_in  (valid_in),
+        .ready_in  (ready_in),
+        .data_in   ({mask_in, tag_in, fmt, frm, dataa_s, datab_s, datac_s, op_type}),
+        .data_out  (per_core_data_in),
+        .valid_out (per_core_valid_in),
+        .ready_out (per_core_ready_in)
+    );
+
+    for (genvar i = 0; i < NUM_FPCORES; ++i) begin : g_per_core_data_in
+        assign {
+            per_core_mask_in[i],
+            per_core_tag_in[i],
+            per_core_fmt[i],
+            per_core_frm[i],
+            per_core_dataa[i],
+            per_core_datab[i],
+            per_core_datac[i],
+            per_core_op_type[i]
+        } = per_core_data_in[i];
+    end
+
+    // FMA core ///////////////////////////////////////////////////////////////
+
+    wire is_madd = per_core_op_type[FPU_FMA][1];
+    wire is_neg  = per_core_op_type[FPU_FMA][0];
+    wire is_sub  = per_core_fmt[FPU_FMA][1];
+
     VX_fpu_fma #(
         .NUM_LANES (NUM_LANES),
         .TAG_WIDTH (TAG_WIDTH)
     ) fpu_fma (
         .clk        (clk),
-        .reset      (fma_reset),
-        .valid_in   (valid_in && (core_select == FPU_FMA)),
+        .reset      (reset),
+        .valid_in   (per_core_valid_in[FPU_FMA]),
         .ready_in   (per_core_ready_in[FPU_FMA]),
-        .mask_in    (mask_in),
-        .tag_in     (tag_in),
-        .frm        (frm),
+        .mask_in    (per_core_mask_in[FPU_FMA]),
+        .tag_in     (per_core_tag_in[FPU_FMA]),
+        .frm        (per_core_frm[FPU_FMA]),
         .is_madd    (is_madd),
         .is_sub     (is_sub),
         .is_neg     (is_neg),
-        .dataa      (dataa_s),
-        .datab      (datab_s),
-        .datac      (datac_s),
+        .dataa      (per_core_dataa[FPU_FMA]),
+        .datab      (per_core_datab[FPU_FMA]),
+        .datac      (per_core_datac[FPU_FMA]),
         .has_fflags (per_core_has_fflags[FPU_FMA]),
         .fflags     (per_core_fflags[FPU_FMA]),
         .result     (per_core_result[FPU_FMA]),
@@ -147,25 +155,99 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
         .valid_out  (per_core_valid_out[FPU_FMA])
     );
 
+    // Div/Sqrt cores /////////////////////////////////////////////////////////
+
+    wire [1:0] div_sqrt_valid_in;
+    wire [1:0][REQ_DATAW-1:0] div_sqrt_data_in;
+    wire [1:0] div_sqrt_ready_in;
+
+    wire [1:0][NUM_LANES-1:0] div_sqrt_mask_in;
+    wire [1:0][TAG_WIDTH-1:0] div_sqrt_tag_in;
+    wire [1:0][`INST_FPU_BITS-1:0] div_sqrt_op_type;
+    wire [1:0][`INST_FMT_BITS-1:0] div_sqrt_fmt;
+    wire [1:0][`INST_FRM_BITS-1:0] div_sqrt_frm;
+    wire [1:0][NUM_LANES-1:0][31:0] div_sqrt_dataa;
+    wire [1:0][NUM_LANES-1:0][31:0] div_sqrt_datab;
+    wire [1:0][NUM_LANES-1:0][31:0] div_sqrt_datac;
+
+    wire [1:0] div_sqrt_valid_out;
+    wire [1:0][NUM_LANES-1:0][31:0] div_sqrt_result;
+    wire [1:0][TAG_WIDTH-1:0] div_sqrt_tag_out;
+    wire [1:0] div_sqrt_has_fflags;
+    fflags_t [1:0] div_sqrt_fflags;
+    wire [1:0] div_sqrt_ready_out;
+
+    wire div_sqrt_valid_tmp_in;
+    wire [REQ_DATAW-1:0] div_sqrt_data_tmp_in;
+    wire div_sqrt_ready_tmp_in;
+
+    VX_elastic_buffer #(
+        .DATAW (REQ_DATAW)
+    ) div_sqrt_req_buffer (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (per_core_valid_in[FPU_DIVSQRT]),
+        .ready_in  (per_core_ready_in[FPU_DIVSQRT]),
+        .data_in   (per_core_data_in[FPU_DIVSQRT]),
+        .data_out  (div_sqrt_data_tmp_in),
+        .valid_out (div_sqrt_valid_tmp_in),
+        .ready_out (div_sqrt_ready_tmp_in)
+    );
+
+    wire is_sqrt = div_sqrt_data_tmp_in[0]; // op_type[0]
+
+    VX_stream_switch #(
+        .DATAW       (REQ_DATAW),
+        .NUM_OUTPUTS (2)
+    ) div_sqrt_req_switch (
+        .clk       (clk),
+        .reset     (reset),
+        .sel_in    (is_sqrt),
+        .valid_in  (div_sqrt_valid_tmp_in),
+        .ready_in  (div_sqrt_ready_tmp_in),
+        .data_in   (div_sqrt_data_tmp_in),
+        .data_out  (div_sqrt_data_in),
+        .valid_out (div_sqrt_valid_in),
+        .ready_out (div_sqrt_ready_in)
+    );
+
+    for (genvar i = 0; i < 2; ++i) begin : g_div_sqrt_data_in
+        assign {
+            div_sqrt_mask_in[i],
+            div_sqrt_tag_in[i],
+            div_sqrt_fmt[i],
+            div_sqrt_frm[i],
+            div_sqrt_dataa[i],
+            div_sqrt_datab[i],
+            div_sqrt_datac[i],
+            div_sqrt_op_type[i]
+        } = div_sqrt_data_in[i];
+    end
+
+    `UNUSED_VAR (div_sqrt_op_type)
+    `UNUSED_VAR (div_sqrt_fmt)
+    `UNUSED_VAR (div_sqrt_datab)
+    `UNUSED_VAR (div_sqrt_datac)
+
     VX_fpu_div #(
         .NUM_LANES (NUM_LANES),
         .TAG_WIDTH (TAG_WIDTH)
     ) fpu_div (
         .clk        (clk),
-        .reset      (div_reset),
-        .valid_in   (valid_in && (core_select == FPU_DIVSQRT) && is_div),
-        .ready_in   (div_ready_in),
-        .mask_in    (mask_in),
-        .tag_in     (tag_in),
-        .frm        (frm),
-        .dataa      (dataa_s),
-        .datab      (datab_s),
-        .has_fflags (div_has_fflags),
-        .fflags     (div_fflags),
-        .result     (div_result),
-        .tag_out    (div_tag_out),
-        .valid_out  (div_valid_out),
-        .ready_out  (div_ready_out)
+        .reset      (reset),
+        .valid_in   (div_sqrt_valid_in[0]),
+        .ready_in   (div_sqrt_ready_in[0]),
+        .mask_in    (div_sqrt_mask_in[0]),
+        .tag_in     (div_sqrt_tag_in[0]),
+        .frm        (div_sqrt_frm[0]),
+        .dataa      (div_sqrt_dataa[0]),
+        .datab      (div_sqrt_datab[0]),
+        .has_fflags (div_sqrt_has_fflags[0]),
+        .fflags     (div_sqrt_fflags[0]),
+        .result     (div_sqrt_result[0]),
+        .tag_out    (div_sqrt_tag_out[0]),
+        .valid_out  (div_sqrt_valid_out[0]),
+        .ready_out  (div_sqrt_ready_out[0])
     );
 
     VX_fpu_sqrt #(
@@ -173,92 +255,42 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
         .TAG_WIDTH (TAG_WIDTH)
     ) fpu_sqrt (
         .clk        (clk),
-        .reset      (sqrt_reset),
-        .valid_in   (valid_in && (core_select == FPU_DIVSQRT) && ~is_div),
-        .ready_in   (sqrt_ready_in),
-        .mask_in    (mask_in),
-        .tag_in     (tag_in),
-        .frm        (frm),
-        .dataa      (dataa_s),
-        .has_fflags (sqrt_has_fflags),
-        .fflags     (sqrt_fflags),
-        .result     (sqrt_result),
-        .tag_out    (sqrt_tag_out),
-        .valid_out  (sqrt_valid_out),
-        .ready_out  (sqrt_ready_out)
+        .reset      (reset),
+        .valid_in   (div_sqrt_valid_in[1]),
+        .ready_in   (div_sqrt_ready_in[1]),
+        .mask_in    (div_sqrt_mask_in[1]),
+        .tag_in     (div_sqrt_tag_in[1]),
+        .frm        (div_sqrt_frm[1]),
+        .dataa      (div_sqrt_dataa[1]),
+        .has_fflags (div_sqrt_has_fflags[1]),
+        .fflags     (div_sqrt_fflags[1]),
+        .result     (div_sqrt_result[1]),
+        .tag_out    (div_sqrt_tag_out[1]),
+        .valid_out  (div_sqrt_valid_out[1]),
+        .ready_out  (div_sqrt_ready_out[1])
     );
 
-    wire cvt_ret_int_in = ~is_itof;
-    wire cvt_ret_int_out;
-
-    VX_fpu_cvt #(
-        .NUM_LANES (NUM_LANES),
-        .TAG_WIDTH (TAG_WIDTH+1)
-    ) fpu_cvt (
-        .clk        (clk),
-        .reset      (cvt_reset),
-        .valid_in   (valid_in && (core_select == FPU_CVT)),
-        .ready_in   (per_core_ready_in[FPU_CVT]),
-        .mask_in    (mask_in),
-        .tag_in     ({cvt_ret_int_in, tag_in}),
-        .frm        (frm),
-        .is_itof    (is_itof),
-        .is_signed  (is_signed),
-        .dataa      (dataa_s),
-        .has_fflags (per_core_has_fflags[FPU_CVT]),
-        .fflags     (per_core_fflags[FPU_CVT]),
-        .result     (per_core_result[FPU_CVT]),
-        .tag_out    ({cvt_ret_int_out, per_core_tag_out[FPU_CVT]}),
-        .valid_out  (per_core_valid_out[FPU_CVT]),
-        .ready_out  (per_core_ready_out[FPU_CVT])
-    );
-
-    wire ncp_ret_int_in = (op_type == `INST_FPU_CMP)
-                      || `INST_FPU_IS_CLASS(op_type, frm)
-                      || `INST_FPU_IS_MVXW(op_type, frm);
-    wire ncp_ret_int_out;
-
-    wire ncp_ret_sext_in = `INST_FPU_IS_MVXW(op_type, frm);
-    wire ncp_ret_sext_out;
-
-    VX_fpu_ncp #(
-        .NUM_LANES (NUM_LANES),
-        .TAG_WIDTH (TAG_WIDTH+2)
-    ) fpu_ncp (
-        .clk        (clk),
-        .reset      (ncp_reset),
-        .valid_in   (valid_in && (core_select == FPU_NCP)),
-        .ready_in   (per_core_ready_in[FPU_NCP]),
-        .mask_in    (mask_in),
-        .tag_in     ({ncp_ret_sext_in, ncp_ret_int_in, tag_in}),
-        .op_type    (op_type),
-        .frm        (frm),
-        .dataa      (dataa_s),
-        .datab      (datab_s),
-        .result     (per_core_result[FPU_NCP]),
-        .has_fflags (per_core_has_fflags[FPU_NCP]),
-        .fflags     (per_core_fflags[FPU_NCP]),
-        .tag_out    ({ncp_ret_sext_out, ncp_ret_int_out, per_core_tag_out[FPU_NCP]}),
-        .valid_out  (per_core_valid_out[FPU_NCP]),
-        .ready_out  (per_core_ready_out[FPU_NCP])
-    );
-
-    ///////////////////////////////////////////////////////////////////////////
-
-    assign per_core_ready_in[FPU_DIVSQRT] = is_div ? div_ready_in : sqrt_ready_in;
+    wire [1:0][RSP_DATAW-1:0] div_sqrt_arb_data_in;
+    for (genvar i = 0; i < 2; ++i) begin : g_div_sqrt_arb_data_in
+        assign div_sqrt_arb_data_in[i] = {
+            div_sqrt_result[i],
+            div_sqrt_has_fflags[i],
+            div_sqrt_fflags[i],
+            div_sqrt_tag_out[i]
+        };
+    end
 
     VX_stream_arb #(
         .NUM_INPUTS (2),
         .DATAW      (RSP_DATAW),
-        .ARBITER    ("R"),
+        .ARBITER    ("P"),
         .OUT_BUF    (0)
-    ) div_sqrt_arb (
+    ) div_sqrt_rsp_arb (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  ({sqrt_valid_out, div_valid_out}),
-        .ready_in  ({sqrt_ready_out, div_ready_out}),
-        .data_in   ({{sqrt_result, sqrt_has_fflags, sqrt_fflags, sqrt_tag_out},
-                     {div_result, div_has_fflags, div_fflags, div_tag_out}}),
+        .valid_in  (div_sqrt_valid_out),
+        .ready_in  (div_sqrt_ready_out),
+        .data_in   (div_sqrt_arb_data_in),
         .data_out  ({
             per_core_result[FPU_DIVSQRT],
             per_core_has_fflags[FPU_DIVSQRT],
@@ -270,12 +302,73 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
         `UNUSED_PIN (sel_out)
     );
 
+    // CVT core ///////////////////////////////////////////////////////////////
+
+    wire is_itof = per_core_op_type[FPU_CVT][1];
+    wire is_signed = ~per_core_op_type[FPU_CVT][0];
+    wire cvt_ret_int_in = ~is_itof;
+    wire cvt_ret_int_out;
+
+    VX_fpu_cvt #(
+        .NUM_LANES (NUM_LANES),
+        .TAG_WIDTH (1+TAG_WIDTH)
+    ) fpu_cvt (
+        .clk        (clk),
+        .reset      (reset),
+        .valid_in   (per_core_valid_in[FPU_CVT]),
+        .ready_in   (per_core_ready_in[FPU_CVT]),
+        .mask_in    (per_core_mask_in[FPU_CVT]),
+        .tag_in     ({cvt_ret_int_in, per_core_tag_in[FPU_CVT]}),
+        .frm        (per_core_frm[FPU_CVT]),
+        .is_itof    (is_itof),
+        .is_signed  (is_signed),
+        .dataa      (per_core_dataa[FPU_CVT]),
+        .has_fflags (per_core_has_fflags[FPU_CVT]),
+        .fflags     (per_core_fflags[FPU_CVT]),
+        .result     (per_core_result[FPU_CVT]),
+        .tag_out    ({cvt_ret_int_out, per_core_tag_out[FPU_CVT]}),
+        .valid_out  (per_core_valid_out[FPU_CVT]),
+        .ready_out  (per_core_ready_out[FPU_CVT])
+    );
+
+    // NCP core ///////////////////////////////////////////////////////////////
+
+    wire ncp_ret_int_in = (per_core_op_type[FPU_NCP] == `INST_FPU_CMP)
+                      || `INST_FPU_IS_CLASS(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP])
+                      || `INST_FPU_IS_MVXW(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP]);
+    wire ncp_ret_int_out;
+
+    wire ncp_ret_sext_in = `INST_FPU_IS_MVXW(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP]);
+    wire ncp_ret_sext_out;
+
+    VX_fpu_ncp #(
+        .NUM_LANES (NUM_LANES),
+        .TAG_WIDTH (TAG_WIDTH+2)
+    ) fpu_ncp (
+        .clk        (clk),
+        .reset      (reset),
+        .valid_in   (per_core_valid_in[FPU_NCP]),
+        .ready_in   (per_core_ready_in[FPU_NCP]),
+        .mask_in    (per_core_mask_in[FPU_NCP]),
+        .tag_in     ({ncp_ret_sext_in, ncp_ret_int_in, per_core_tag_in[FPU_NCP]}),
+        .op_type    (per_core_op_type[FPU_NCP]),
+        .frm        (per_core_frm[FPU_NCP]),
+        .dataa      (per_core_dataa[FPU_NCP]),
+        .datab      (per_core_datab[FPU_NCP]),
+        .result     (per_core_result[FPU_NCP]),
+        .has_fflags (per_core_has_fflags[FPU_NCP]),
+        .fflags     (per_core_fflags[FPU_NCP]),
+        .tag_out    ({ncp_ret_sext_out, ncp_ret_int_out, per_core_tag_out[FPU_NCP]}),
+        .valid_out  (per_core_valid_out[FPU_NCP]),
+        .ready_out  (per_core_ready_out[FPU_NCP])
+    );
+
     ///////////////////////////////////////////////////////////////////////////
 
-    reg [NUM_FPC-1:0][RSP_DATAW+2-1:0] per_core_data_out;
+    reg [NUM_FPCORES-1:0][RSP_DATAW+2-1:0] per_core_data_out;
 
     always @(*) begin
-        for (integer i = 0; i < NUM_FPC; ++i) begin
+        for (integer i = 0; i < NUM_FPCORES; ++i) begin
             per_core_data_out[i][RSP_DATAW+1:2] = {
                 per_core_result[i],
                 per_core_has_fflags[i],
@@ -289,12 +382,12 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     end
 
     wire [NUM_LANES-1:0][31:0] result_s;
-    
+
     wire [1:0] op_ret_int_out;
     `UNUSED_VAR (op_ret_int_out)
 
     VX_stream_arb #(
-        .NUM_INPUTS (NUM_FPC),
+        .NUM_INPUTS (NUM_FPCORES),
         .DATAW      (RSP_DATAW + 2),
         .ARBITER    ("R"),
         .OUT_BUF    (OUT_BUF)
@@ -310,24 +403,21 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
         `UNUSED_PIN (sel_out)
     );
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
     `ifdef FPU_RV64F
-        reg [`XLEN-1:0] result_r;
+        reg [`XLEN-1:0] result_w;
         always @(*) begin
             case (op_ret_int_out)
-            2'b11:   result_r = `XLEN'($signed(result_s[i]));
-            2'b01:   result_r = {32'h00000000, result_s[i]};
-            default: result_r = {32'hffffffff, result_s[i]};
+            2'b11:   result_w = `XLEN'($signed(result_s[i]));
+            2'b01:   result_w = {32'h00000000, result_s[i]};
+            default: result_w = {32'hffffffff, result_s[i]};
             endcase
         end
-        assign result[i] = result_r;
+        assign result[i] = result_w;
     `else
         assign result[i] = result_s[i];
     `endif
     end
-
-    // can accept new request?
-    assign ready_in = per_core_ready_in[core_select];
 
 endmodule
 

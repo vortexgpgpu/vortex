@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,7 +21,7 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
     parameter TAG_WIDTH = 1
 ) (
     input wire clk,
-    input wire reset, 
+    input wire reset,
 
     input wire  valid_in,
     output wire ready_in,
@@ -31,10 +31,10 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
     input wire [TAG_WIDTH-1:0] tag_in,
 
     input wire [`INST_FRM_BITS-1:0] frm,
-    
+
     input wire [NUM_LANES-1:0][31:0]  dataa,
     input wire [NUM_LANES-1:0][31:0]  datab,
-    output wire [NUM_LANES-1:0][31:0] result, 
+    output wire [NUM_LANES-1:0][31:0] result,
 
     output wire has_fflags,
     output wire [`FP_FLAGS_BITS-1:0] fflags,
@@ -44,30 +44,33 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
     output wire valid_out,
     input wire  ready_out
 );
-    `UNUSED_VAR (frm)
+    localparam DATAW = 2 * 32 + `INST_FRM_BITS;
 
-    wire [NUM_LANES-1:0][2*32-1:0] data_in;
-    wire [NUM_LANES-1:0] mask_out;    
+    wire [NUM_LANES-1:0][DATAW-1:0] data_in;
+
+    wire [NUM_LANES-1:0] mask_out;
     wire [NUM_LANES-1:0][(`FP_FLAGS_BITS+32)-1:0] data_out;
     wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags_out;
 
-    wire pe_enable;    
-    wire [NUM_PES-1:0][2*32-1:0] pe_data_in;
-    wire [NUM_PES-1:0][(`FP_FLAGS_BITS+32)-1:0] pe_data_out;    
+    wire pe_enable;
+    wire [NUM_PES-1:0][DATAW-1:0] pe_data_in;
+    wire [NUM_PES-1:0][(`FP_FLAGS_BITS+32)-1:0] pe_data_out;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data_in
         assign data_in[i][0  +: 32] = dataa[i];
         assign data_in[i][32 +: 32] = datab[i];
+        assign data_in[i][64 +: `INST_FRM_BITS] = frm;
     end
-    
+
     VX_pe_serializer #(
-        .NUM_LANES  (NUM_LANES), 
-        .NUM_PES    (NUM_PES), 
+        .NUM_LANES  (NUM_LANES),
+        .NUM_PES    (NUM_PES),
         .LATENCY    (`LATENCY_FDIV),
-        .DATA_IN_WIDTH(2*32),
-        .DATA_OUT_WIDTH(`FP_FLAGS_BITS + 32),
+        .DATA_IN_WIDTH (DATAW),
+        .DATA_OUT_WIDTH (`FP_FLAGS_BITS + 32),
         .TAG_WIDTH  (NUM_LANES + TAG_WIDTH),
-        .PE_REG     (0)
+        .PE_REG     (0),
+        .OUT_BUF    (2)
     ) pe_serializer (
         .clk        (clk),
         .reset      (reset),
@@ -76,15 +79,17 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
         .tag_in     ({mask_in, tag_in}),
         .ready_in   (ready_in),
         .pe_enable  (pe_enable),
-        .pe_data_in (pe_data_in),
-        .pe_data_out(pe_data_out),
+        .pe_data_out(pe_data_in),
+        .pe_data_in (pe_data_out),
         .valid_out  (valid_out),
         .data_out   (data_out),
         .tag_out    ({mask_out, tag_out}),
         .ready_out  (ready_out)
     );
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    `UNUSED_VAR (pe_data_in)
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
         assign result[i] = data_out[i][0 +: 32];
         assign fflags_out[i] = data_out[i][32 +: `FP_FLAGS_BITS];
     end
@@ -92,8 +97,8 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
     fflags_t [NUM_LANES-1:0] per_lane_fflags;
 
 `ifdef QUARTUS
-    
-    for (genvar i = 0; i < NUM_PES; ++i) begin
+
+    for (genvar i = 0; i < NUM_PES; ++i) begin : g_fdivs
         acl_fdiv fdiv (
             .clk    (clk),
             .areset (1'b0),
@@ -103,15 +108,15 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
             .q      (pe_data_out[i][0 +: 32])
         );
         assign pe_data_out[i][32 +: `FP_FLAGS_BITS] = 'x;
-    end    
-    
+    end
+
     assign has_fflags = 0;
     assign per_lane_fflags = 'x;
     `UNUSED_VAR (fflags_out)
 
 `elsif VIVADO
 
-    for (genvar i = 0; i < NUM_PES; ++i) begin
+    for (genvar i = 0; i < NUM_PES; ++i) begin : g_fdivs
         wire [3:0] tuser;
         xil_fdiv fdiv (
             .aclk                (clk),
@@ -131,21 +136,21 @@ module VX_fpu_div import VX_fpu_pkg::*; #(
     assign has_fflags = 1;
     assign per_lane_fflags = fflags_out;
 
-`else    
+`else
 
-    for (genvar i = 0; i < NUM_PES; ++i) begin
+    for (genvar i = 0; i < NUM_PES; ++i) begin : g_fdivs
         reg [63:0] r;
-        `UNUSED_VAR (r)        
+        `UNUSED_VAR (r)
         fflags_t f;
 
-        always @(*) begin        
+        always @(*) begin
             dpi_fdiv (
-                pe_enable, 
-                int'(0), 
-                {32'hffffffff, pe_data_in[i][0 +: 32]}, 
-                {32'hffffffff, pe_data_in[i][32 +: 32]}, 
-                frm, 
-                r, 
+                pe_enable,
+                int'(0),
+                {32'hffffffff, pe_data_in[i][0 +: 32]},  // a
+                {32'hffffffff, pe_data_in[i][32 +: 32]}, // b
+                pe_data_in[0][64 +: `INST_FRM_BITS],     // frm
+                r,
                 f
             );
         end

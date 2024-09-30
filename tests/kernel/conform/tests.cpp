@@ -46,13 +46,15 @@ int test_global_memory() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-int* lmem_addr = (int*)LMEM_BASE_ADDR;
+volatile int* lmem_addr = (int*)LMEM_BASE_ADDR;
 
 int lmem_buffer[8];
 
 void __attribute__((noinline)) do_lmem_wr() {
 	unsigned tid = vx_thread_id();
 	lmem_addr[tid] = 65 + tid;
+	int x = lmem_addr[tid];
+	lmem_addr[tid] = x;
 }
 
 void __attribute__((noinline)) do_lmem_rd() {

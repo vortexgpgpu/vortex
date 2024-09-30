@@ -22,13 +22,7 @@
 #include <vector>
 #include <sstream>
 
-#ifdef OPAESIM
-#define DEFAULT_OPAE_DRV_PATHS "libopae-c-sim.so"
-#elif ASESIM
-#define DEFAULT_OPAE_DRV_PATHS "libopae-c-ase.so"
-#else
 #define DEFAULT_OPAE_DRV_PATHS "libopae-c.so"
-#endif
 
 #define SET_API(func) \
 	opae_drv_funcs->func = (pfn_##func)dlsym(dl_handle, #func); \
@@ -64,7 +58,7 @@ int drv_init(opae_drv_api_t* opae_drv_funcs) {
     if (dl_handle)
       break;
   }
-  
+
   if (dl_handle == nullptr) {
       printf("dlopen failed: %s\n", dlerror());
       return -1;

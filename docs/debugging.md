@@ -53,9 +53,9 @@ A waveform trace `trace.vcd` will be generated in the current directory during t
 ## Analyzing Vortex trace log
 
 When debugging Vortex RTL or SimX Simulator, reading the trace run.log file can be overwhelming when the trace gets really large.
-We provide a trace sanitizer tool under ./hw/scripts/trace_csv.py that you can use to convert the large trace into a CSV file containing all the instructions that executed with their source and destination operands. To increase compatibility between traces you will need to initialize RTLSIM's GPRs to zero by defining GPR_RESET.
+We provide a trace sanitizer tool under ./hw/scripts/trace_csv.py that you can use to convert the large trace into a CSV file containing all the instructions that executed with their source and destination operands.
 
-    $ CONFIGS="-DGPR_RESET" ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=3 --log=run_rtlsim.log
+    $ ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=3 --log=run_rtlsim.log
     $ ./ci/trace_csv.py -trtlsim run_rtlsim.log -otrace_rtlsim.csv
 
     $ ./ci/blackbox.sh --driver=simx --app=demo --debug=3 --log=run_simx.log

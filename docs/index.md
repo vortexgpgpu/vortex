@@ -7,7 +7,8 @@
 - [Cache Subsystem](cache_subsystem.md)
 - [Software](software.md)
 - [Simulation](simulation.md)
-- [FPGA Setup Guide](fpga_setup.md)
+- [Altera FPGA Setup Guide](altera_fpga_guide.md)
+- [Xilinx FPGA Setup Guide](xilinx_fpga_guide.md)
 - [Debugging](debugging.md)
 - [Useful Links](references.md)
 
@@ -27,6 +28,6 @@ Running Vortex simulators with different configurations:
 
     $ ./ci/blackbox.sh --driver=opae --clusters=1 --cores=4 --warps=4 --threads=2 --app=demo
 
-- Run dogfood driver test with simx driver and Vortex config of 4 cluster, 4 cores, 8 warps, 6 threads 
+- Run dogfood driver test with simx driver and Vortex config of 4 cluster, 4 cores, 8 warps, 6 threads
 
     $ ./ci/blackbox.sh --driver=simx --clusters=4 --cores=4 --warps=8 --threads=6  --app=dogfood

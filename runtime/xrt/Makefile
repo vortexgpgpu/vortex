@@ -6,8 +6,9 @@ DESTDIR ?= $(CURDIR)/..
 
 SRC_DIR := $(VORTEX_HOME)/runtime/xrt
 
-CXXFLAGS += -std=c++14 -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -I$(INC_DIR) -I$(COMMON_DIR) -I$(ROOT_DIR)/hw -I$(XILINX_XRT)/include -I$(SIM_DIR)/common
+CXXFLAGS += -DXLEN_$(XLEN)
 CXXFLAGS += -fPIC
 
 LDFLAGS += -shared -pthread
@@ -26,7 +27,7 @@ endif
 
 PROJECT := libvortex-xrt.so
 
-# Debugigng
+# Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0
 else
@@ -37,6 +38,11 @@ endif
 ifdef SCOPE
 	CXXFLAGS += -DSCOPE
 	SRCS += $(COMMON_DIR)/scope.cpp
+endif
+
+# Enable ILA logic analyzer
+ifdef CHIPSCOPE
+	CXXFLAGS += -DCHIPSCOPE
 endif
 
 all: $(DESTDIR)/$(PROJECT)
