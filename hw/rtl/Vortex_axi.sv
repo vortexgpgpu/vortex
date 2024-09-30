@@ -82,11 +82,11 @@ module Vortex_axi import VX_gpu_pkg::*; #(
     // Status
     output wire                         busy
 );
-    localparam DST_LDATAW = `CLOG2(`VX_MEM_DATA_WIDTH);
-    localparam SRC_LDATAW = `CLOG2(AXI_DATA_WIDTH);
+    localparam DST_LDATAW = `CLOG2(AXI_DATA_WIDTH);
+    localparam SRC_LDATAW = `CLOG2(`VX_MEM_DATA_WIDTH);
     localparam SUB_LDATAW = DST_LDATAW - SRC_LDATAW;
     localparam VX_MEM_TAG_A_WIDTH  = `VX_MEM_TAG_WIDTH + `MAX(SUB_LDATAW, 0);
-    localparam VX_MEM_ADDR_A_WIDTH = `VX_MEM_ADDR_WIDTH + SUB_LDATAW;
+    localparam VX_MEM_ADDR_A_WIDTH = `VX_MEM_ADDR_WIDTH - SUB_LDATAW;
 
     wire                            mem_req_valid;
     wire                            mem_req_rw;
