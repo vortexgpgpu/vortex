@@ -77,6 +77,12 @@ public:
     case VX_CAPS_ISA_FLAGS:
       _value = ((uint64_t(MISA_EXT))<<32) | ((log2floor(XLEN)-4) << 30) | MISA_STD;
       break;
+    case VX_CAPS_NUM_MEM_BANKS:
+      _value = MEMORY_BANKS;
+      break;
+    case VX_CAPS_MEM_BANK_SIZE:
+      _value = 1ull << (MEM_ADDR_WIDTH / MEMORY_BANKS);
+      break;
     default:
       std::cout << "invalid caps id: " << caps_id << std::endl;
       std::abort();
@@ -118,6 +124,10 @@ public:
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
     if (dev_addr + asize > GLOBAL_MEM_SIZE)
       return -1;
+
+    if (flags | VX_MEM_WRITE) {
+      flags |= VX_MEM_READ; // ensure caches can handle fill requests
+    }
 
     ram_.set_acl(dev_addr, size, flags);
 

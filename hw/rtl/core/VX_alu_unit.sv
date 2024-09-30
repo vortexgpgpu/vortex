@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 module VX_alu_unit #(
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
     input wire              reset,
@@ -27,23 +27,27 @@ module VX_alu_unit #(
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS]
 );
 
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = `NUM_ALU_BLOCKS;
     localparam NUM_LANES    = `NUM_ALU_LANES;
-    localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
-    localparam PID_WIDTH    = `UP(PID_BITS);
-    localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
-    localparam RSP_ARB_SIZE = 1 + `EXT_M_ENABLED;
     localparam PARTIAL_BW   = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `NUM_THREADS);
+    localparam PE_COUNT     = 1 + `EXT_M_ENABLED;
+    localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
+    localparam PE_IDX_INT   = 0;
+    localparam PE_IDX_MDV   = PE_IDX_INT + `EXT_M_ENABLED;
 
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)
     ) per_block_execute_if[BLOCK_SIZE]();
 
+    VX_commit_if #(
+        .NUM_LANES (NUM_LANES)
+    ) per_block_commit_if[BLOCK_SIZE]();
+
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_BUF    (PARTIAL_BW ? 1 : 0)
+        .OUT_BUF    (PARTIAL_BW ? 3 : 0)
     ) dispatch_unit (
         .clk        (clk),
         .reset      (reset),
@@ -51,106 +55,62 @@ module VX_alu_unit #(
         .execute_if (per_block_execute_if)
     );
 
-    VX_commit_if #(
-        .NUM_LANES (NUM_LANES)
-    ) per_block_commit_if[BLOCK_SIZE]();
-
-    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin
-
-        `RESET_RELAY (block_reset, reset);
-
-        wire is_muldiv_op = `EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == `ALU_TYPE_MULDIV);
+    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_alus
 
         VX_execute_if #(
             .NUM_LANES (NUM_LANES)
-        ) int_execute_if();
+        ) pe_execute_if[PE_COUNT]();
 
-        VX_commit_if #(
+        VX_commit_if#(
             .NUM_LANES (NUM_LANES)
-        ) int_commit_if();
+        ) pe_commit_if[PE_COUNT]();
 
-        assign int_execute_if.valid = per_block_execute_if[block_idx].valid && ~is_muldiv_op;
-        assign int_execute_if.data = per_block_execute_if[block_idx].data;
+        reg [`UP(PE_SEL_BITS)-1:0] pe_select;
+        always @(*) begin
+            pe_select = PE_IDX_INT;
+            if (`EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == `ALU_TYPE_MULDIV))
+                pe_select = PE_IDX_MDV;
+        end
 
-        `RESET_RELAY (int_reset, block_reset);
+        VX_pe_switch #(
+            .PE_COUNT    (PE_COUNT),
+            .NUM_LANES   (NUM_LANES),
+            .ARBITER     ("R"),
+            .REQ_OUT_BUF (0),
+            .RSP_OUT_BUF (PARTIAL_BW ? 1 : 3)
+        ) pe_switch (
+            .clk            (clk),
+            .reset          (reset),
+            .pe_sel         (pe_select),
+            .execute_in_if  (per_block_execute_if[block_idx]),
+            .commit_out_if  (per_block_commit_if[block_idx]),
+            .execute_out_if (pe_execute_if),
+            .commit_in_if   (pe_commit_if)
+        );
 
         VX_alu_int #(
-            .CORE_ID   (CORE_ID),
+            .INSTANCE_ID ($sformatf("%s-int%0d", INSTANCE_ID, block_idx)),
             .BLOCK_IDX (block_idx),
             .NUM_LANES (NUM_LANES)
         ) alu_int (
             .clk        (clk),
-            .reset      (int_reset),
-            .execute_if (int_execute_if),
+            .reset      (reset),
+            .execute_if (pe_execute_if[PE_IDX_INT]),
             .branch_ctl_if (branch_ctl_if[block_idx]),
-            .commit_if  (int_commit_if)
+            .commit_if  (pe_commit_if[PE_IDX_INT])
         );
 
     `ifdef EXT_M_ENABLE
-
-        VX_execute_if #(
-            .NUM_LANES (NUM_LANES)
-        ) mdv_execute_if();
-
-        VX_commit_if #(
-            .NUM_LANES (NUM_LANES)
-        ) mdv_commit_if();
-
-        assign mdv_execute_if.valid = per_block_execute_if[block_idx].valid && is_muldiv_op;
-        assign mdv_execute_if.data = per_block_execute_if[block_idx].data;
-
-        `RESET_RELAY (mdv_reset, block_reset);
-
         VX_alu_muldiv #(
-            .CORE_ID   (CORE_ID),
+            .INSTANCE_ID ($sformatf("%s-muldiv%0d", INSTANCE_ID, block_idx)),
             .NUM_LANES (NUM_LANES)
-        ) mdv_unit (
+        ) muldiv_unit (
             .clk        (clk),
-            .reset      (mdv_reset),
-            .execute_if (mdv_execute_if),
-            .commit_if  (mdv_commit_if)
+            .reset      (reset),
+            .execute_if (pe_execute_if[PE_IDX_MDV]),
+            .commit_if  (pe_commit_if[PE_IDX_MDV])
         );
-
     `endif
-
-        assign per_block_execute_if[block_idx].ready =
-        `ifdef EXT_M_ENABLE
-            is_muldiv_op ? mdv_execute_if.ready :
-        `endif
-            int_execute_if.ready;
-
-        // send response
-
-        VX_stream_arb #(
-            .NUM_INPUTS (RSP_ARB_SIZE),
-            .DATAW      (RSP_ARB_DATAW),
-            .OUT_BUF    (PARTIAL_BW ? 1 : 3)
-        ) rsp_arb (
-            .clk       (clk),
-            .reset     (block_reset),
-            .valid_in  ({
-            `ifdef EXT_M_ENABLE
-                mdv_commit_if.valid,
-            `endif
-                int_commit_if.valid
-            }),
-            .ready_in  ({
-            `ifdef EXT_M_ENABLE
-                mdv_commit_if.ready,
-            `endif
-                int_commit_if.ready
-            }),
-            .data_in   ({
-            `ifdef EXT_M_ENABLE
-                mdv_commit_if.data,
-            `endif
-                int_commit_if.data
-            }),
-            .data_out  (per_block_commit_if[block_idx].data),
-            .valid_out (per_block_commit_if[block_idx].valid),
-            .ready_out (per_block_commit_if[block_idx].ready),
-            `UNUSED_PIN (sel_out)
-        );
     end
 
     VX_gather_unit #(

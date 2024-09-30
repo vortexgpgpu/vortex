@@ -44,6 +44,11 @@ module Vortex import VX_gpu_pkg::*; (
     output wire                             busy
 );
 
+`ifdef SCOPE
+    localparam scope_cluster = 0;
+    `SCOPE_IO_SWITCH (`NUM_CLUSTERS);
+`endif
+
 `ifdef PERF_ENABLE
     VX_mem_perf_if mem_perf_if();
     assign mem_perf_if.icache  = 'x;
@@ -75,12 +80,14 @@ module Vortex import VX_gpu_pkg::*; (
         .CRSQ_SIZE      (`L3_CRSQ_SIZE),
         .MSHR_SIZE      (`L3_MSHR_SIZE),
         .MRSQ_SIZE      (`L3_MRSQ_SIZE),
-        .MREQ_SIZE      (`L3_MREQ_SIZE),
+        .MREQ_SIZE      (`L3_WRITEBACK ? `L3_MSHR_SIZE : `L3_MREQ_SIZE),
         .TAG_WIDTH      (L2_MEM_TAG_WIDTH),
         .WRITE_ENABLE   (1),
+        .WRITEBACK      (`L3_WRITEBACK),
+        .DIRTY_BYTES    (`L3_WRITEBACK),
         .UUID_WIDTH     (`UUID_WIDTH),
-        .CORE_OUT_BUF   (2),
-        .MEM_OUT_BUF    (2),
+        .CORE_OUT_BUF   (3),
+        .MEM_OUT_BUF    (3),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L3_ENABLED)
     ) l3cache (
@@ -102,7 +109,7 @@ module Vortex import VX_gpu_pkg::*; (
     assign mem_req_data  = mem_bus_if.req_data.data;
     assign mem_req_tag   = mem_bus_if.req_data.tag;
     assign mem_bus_if.req_ready = mem_req_ready;
-    `UNUSED_VAR (mem_bus_if.req_data.atype)
+    `UNUSED_VAR (mem_bus_if.req_data.flags)
 
     assign mem_bus_if.rsp_valid = mem_rsp_valid;
     assign mem_bus_if.rsp_data.data  = mem_rsp_data;
@@ -121,19 +128,19 @@ module Vortex import VX_gpu_pkg::*; (
 
     wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
 
-    `SCOPE_IO_SWITCH (`NUM_CLUSTERS)
-
     // Generate all clusters
-    for (genvar i = 0; i < `NUM_CLUSTERS; ++i) begin
+    for (genvar cluster_id = 0; cluster_id < `NUM_CLUSTERS; ++cluster_id) begin : g_clusters
 
         `RESET_RELAY (cluster_reset, reset);
 
-        `BUFFER_DCR_BUS_IF (cluster_dcr_bus_if, dcr_bus_if, (`NUM_CLUSTERS > 1));
+        VX_dcr_bus_if cluster_dcr_bus_if();
+        `BUFFER_DCR_BUS_IF (cluster_dcr_bus_if, dcr_bus_if, 1'b1, (`NUM_CLUSTERS > 1))
 
         VX_cluster #(
-            .CLUSTER_ID (i)
+            .CLUSTER_ID (cluster_id),
+            .INSTANCE_ID ($sformatf("cluster%0d", cluster_id))
         ) cluster (
-            `SCOPE_IO_BIND (i)
+            `SCOPE_IO_BIND (scope_cluster + cluster_id)
 
             .clk                (clk),
             .reset              (cluster_reset),
@@ -144,9 +151,9 @@ module Vortex import VX_gpu_pkg::*; (
 
             .dcr_bus_if         (cluster_dcr_bus_if),
 
-            .mem_bus_if         (per_cluster_mem_bus_if[i]),
+            .mem_bus_if         (per_cluster_mem_bus_if[cluster_id]),
 
-            .busy               (per_cluster_busy[i])
+            .busy               (per_cluster_busy[cluster_id])
         );
     end
 
@@ -182,16 +189,26 @@ module Vortex import VX_gpu_pkg::*; (
 
 `endif
 
+    // dump device configuration
+    initial begin
+        `TRACE(0, ("CONFIGS: num_threads=%0d, num_warps=%0d, num_cores=%0d, num_clusters=%0d, socket_size=%0d, local_mem_base=0x%0h, num_barriers=%0d\n",
+                    `NUM_THREADS, `NUM_WARPS, `NUM_CORES, `NUM_CLUSTERS, `SOCKET_SIZE, `LMEM_BASE_ADDR, `NUM_BARRIERS))
+    end
+
 `ifdef DBG_TRACE_MEM
+    wire [`UUID_WIDTH-1:0] mem_req_uuid = mem_req_tag[`VX_MEM_TAG_WIDTH-1 -: `UUID_WIDTH];
+    wire [`UUID_WIDTH-1:0] mem_rsp_uuid = mem_rsp_tag[`VX_MEM_TAG_WIDTH-1 -: `UUID_WIDTH];
+
     always @(posedge clk) begin
         if (mem_req_fire) begin
-            if (mem_req_rw)
-                `TRACE(1, ("%d: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%0h data=0x%0h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data));
-            else
-                `TRACE(1, ("%d: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%0h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen));
+            if (mem_req_rw) begin
+                `TRACE(1, ("%t: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%h data=0x%h (#%0d)\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data, mem_req_uuid))
+            end else begin
+                `TRACE(1, ("%t: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%h (#%0d)\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_uuid))
+            end
         end
         if (mem_rsp_fire) begin
-            `TRACE(1, ("%d: MEM Rsp: tag=0x%0h, data=0x%0h\n", $time, mem_rsp_tag, mem_rsp_data));
+            `TRACE(1, ("%t: MEM Rd Rsp: tag=0x%0h, data=0x%h (#%0d)\n", $time, mem_rsp_tag, mem_rsp_data, mem_rsp_uuid))
         end
     end
 `endif

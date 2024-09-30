@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -23,24 +23,24 @@ module VX_priority_arbiter #(
     output wire [NUM_REQS-1:0]      grant_onehot,
     output wire                     grant_valid
 );
-    if (NUM_REQS == 1)  begin        
-        
+    if (NUM_REQS == 1) begin : g_passthru
+
         assign grant_index  = '0;
         assign grant_onehot = requests;
         assign grant_valid  = requests[0];
 
-    end else begin
+    end else begin : g_encoder
 
         VX_priority_encoder #(
             .N (NUM_REQS)
         ) priority_encoder (
-            .data_in   (requests),
-            .index     (grant_index),
-            .onehot    (grant_onehot),
-            .valid_out (grant_valid)
+            .data_in    (requests),
+            .index_out  (grant_index),
+            .onehot_out (grant_onehot),
+            .valid_out  (grant_valid)
         );
 
     end
-    
+
 endmodule
 `TRACING_ON

@@ -4,21 +4,23 @@ DESTDIR ?= $(CURDIR)
 
 SRC_DIR = $(VORTEX_HOME)/sim/simx
 
-CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I$(SRC_DIR) -I$(COMMON_DIR) -I$(ROOT_DIR)/hw
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
-CXXFLAGS += -I$(THIRD_PARTY_DIR)
+CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
+CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/yaml-cpp/include
+CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/src
 CXXFLAGS += -DXLEN_$(XLEN)
 CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
-LDFLAGS += -L$(THIRD_PARTY_DIR)/ramulator -lramulator
+LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator -L$(THIRD_PARTY_DIR)/ramulator -lramulator
 
-SRCS = $(COMMON_DIR)/util.cpp $(COMMON_DIR)/mem.cpp $(COMMON_DIR)/rvfloats.cpp
+SRCS = $(COMMON_DIR)/util.cpp $(COMMON_DIR)/mem.cpp $(COMMON_DIR)/rvfloats.cpp $(COMMON_DIR)/dram_sim.cpp
 SRCS += $(SRC_DIR)/processor.cpp $(SRC_DIR)/cluster.cpp $(SRC_DIR)/socket.cpp $(SRC_DIR)/core.cpp $(SRC_DIR)/emulator.cpp $(SRC_DIR)/decode.cpp $(SRC_DIR)/execute.cpp $(SRC_DIR)/func_unit.cpp $(SRC_DIR)/cache_sim.cpp $(SRC_DIR)/mem_sim.cpp $(SRC_DIR)/local_mem.cpp $(SRC_DIR)/mem_coalescer.cpp $(SRC_DIR)/dcrs.cpp $(SRC_DIR)/types.cpp
 
-# Debugigng
+# Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG)
 	#CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG) -fsanitize=address -fno-omit-frame-pointer

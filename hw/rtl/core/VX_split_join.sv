@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 module VX_split_join import VX_gpu_pkg::*; #(
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input  wire                     clk,
     input  wire                     reset,
@@ -31,7 +31,7 @@ module VX_split_join import VX_gpu_pkg::*; #(
     input  wire [`NW_WIDTH-1:0]     stack_wid,
     output wire [`DV_STACK_SIZEW-1:0] stack_ptr
 );
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
 
     wire [(`NUM_THREADS+`PC_BITS)-1:0] ipdom_data [`NUM_WARPS-1:0];
     wire [`DV_STACK_SIZEW-1:0] ipdom_q_ptr [`NUM_WARPS-1:0];
@@ -45,16 +45,14 @@ module VX_split_join import VX_gpu_pkg::*; #(
     wire ipdom_push = valid && split.valid && split.is_dvg;
     wire ipdom_pop = valid && sjoin.valid && sjoin_is_dvg;
 
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
-
-        `RESET_RELAY (ipdom_reset, reset);
-
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_ipdom_stacks
         VX_ipdom_stack #(
             .WIDTH (`NUM_THREADS+`PC_BITS),
-            .DEPTH (`DV_STACK_SIZE)
+            .DEPTH (`DV_STACK_SIZE),
+            .OUT_REG (0)
         ) ipdom_stack (
             .clk   (clk),
-            .reset (ipdom_reset),
+            .reset (reset),
             .q0    (ipdom_q0),
             .q1    (ipdom_q1),
             .d     (ipdom_data[i]),

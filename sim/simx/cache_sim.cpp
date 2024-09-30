@@ -19,6 +19,7 @@
 #include <vector>
 #include <list>
 #include <queue>
+#include <string.h>
 
 using namespace vortex;
 
@@ -169,6 +170,25 @@ struct bank_req_t {
 	}
 };
 
+inline std::ostream &operator<<(std::ostream &os, const bank_req_t& req) {
+  os << "set=" << req.set_id << ", rw=" << req.write;
+  os << std::dec << ", type=" << req.type;
+  os << ", tag=0x" << std::hex << req.tag;
+	os << ", req_tags={";
+	bool first_port = true;
+	for (auto& port : req.ports) {
+		if (port.valid) {
+			if (!first_port) os << ", ";
+			first_port = false;
+			os << "["  << std::dec << port.req_id << "]=0x" << std::hex << port.req_tag;
+		}
+	}
+	os << "}";
+	os << std::dec << ", cid=" << req.cid;
+  os << " (#" << req.uuid << ")";
+  return os;
+}
+
 struct mshr_entry_t {
 	bank_req_t bank_req;
 	uint32_t   line_id;
@@ -315,27 +335,75 @@ public:
 				simobject->CoreReqPorts.at(i).bind(&bypass_switch_->ReqIn.at(i));
 				bypass_switch_->RspIn.at(i).bind(&simobject->CoreRspPorts.at(i));
 			}
-			bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPort);
-			simobject->MemRspPort.bind(&bypass_switch_->RspOut.at(0));
+			bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPorts.at(0));
+			simobject->MemRspPorts.at(0).bind(&bypass_switch_->RspOut.at(0));
 			return;
 		}
 
-		bypass_switch_ = MemSwitch::Create(sname, ArbiterType::Priority, 2);
-		bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPort);
-		simobject->MemRspPort.bind(&bypass_switch_->RspOut.at(0));
+		if (strcmp(simobject->name().c_str(), "l3cache")) {
+			bypass_switch_ = MemSwitch::Create(sname, ArbiterType::Priority, 2);
+			bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPorts.at(0));
+			simobject->MemRspPorts.at(0).bind(&bypass_switch_->RspOut.at(0));
 
-		if (config.B != 0) {
-			snprintf(sname, 100, "%s-bank-arb", simobject->name().c_str());
-			bank_switch_ = MemSwitch::Create(sname, ArbiterType::RoundRobin, (1 << config.B));
-			for (uint32_t i = 0, n = (1 << config.B); i < n; ++i) {
-				mem_req_ports_.at(i).bind(&bank_switch_->ReqIn.at(i));
-				bank_switch_->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
+			if (config.B != 0) {
+				snprintf(sname, 100, "%s-bank-arb", simobject->name().c_str());
+				bank_switch_ = MemSwitch::Create(sname, ArbiterType::RoundRobin, (1 << config.B));
+				for (uint32_t i = 0, n = (1 << config.B); i < n; ++i) {
+					mem_req_ports_.at(i).bind(&bank_switch_->ReqIn.at(i));
+					bank_switch_->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
+				}
+				bank_switch_->ReqOut.at(0).bind(&bypass_switch_->ReqIn.at(0));
+				bypass_switch_->RspIn.at(0).bind(&bank_switch_->RspOut.at(0));
+			} else {
+				mem_req_ports_.at(0).bind(&bypass_switch_->ReqIn.at(0));
+				bypass_switch_->RspIn.at(0).bind(&mem_rsp_ports_.at(0));
 			}
-			bank_switch_->ReqOut.at(0).bind(&bypass_switch_->ReqIn.at(0));
-			bypass_switch_->RspIn.at(0).bind(&bank_switch_->RspOut.at(0));
 		} else {
-			mem_req_ports_.at(0).bind(&bypass_switch_->ReqIn.at(0));
-			bypass_switch_->RspIn.at(0).bind(&mem_rsp_ports_.at(0));
+			// TODO: Change this into a crossbar
+			uint32_t max = MAX(2, config_.num_inputs);
+			//printf("%s connecting\n", simobject_->name().c_str());
+			//3
+			if (config.B != 0) {
+				bypass_switch_ = MemSwitch::Create(sname, ArbiterType::Priority, max, max);
+				for (uint32_t i = 0; i < max; ++i) {
+					//printf("%s connecting input=%d to MemPorts\n", simobject_->name().c_str(), i);
+					bypass_switch_->ReqOut.at(i).bind(&simobject->MemReqPorts.at(i % (1 << config.B)));
+					simobject->MemRspPorts.at(i % (1 << config.B)).bind(&bypass_switch_->RspOut.at(i));
+				}
+			} else {
+				bypass_switch_ = MemSwitch::Create(sname, ArbiterType::Priority, 2);
+				bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPorts.at(0));
+				simobject->MemRspPorts.at(0).bind(&bypass_switch_->RspOut.at(0));
+			}
+
+			if (config.B != 0)
+			{
+				snprintf(sname, 100, "%s-bank-arb", simobject->name().c_str());
+				bank_switch_ = MemSwitch::Create(sname, ArbiterType::RoundRobin, (1 << config.B), (1 << config.B));
+				for (uint32_t i = 0, n = (1 << config.B); i < n; ++i)
+				{
+					//1
+					//printf("%s Connecting memory ports to bank=%d\n", simobject_->name().c_str(), i);
+					mem_req_ports_.at(i).bind(&bank_switch_->ReqIn.at(i));
+					bank_switch_->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
+				}
+				//2
+				if (config_.num_inputs > 1) {
+					for (uint32_t i = 0; i < max; ++i) {
+						//printf("%s connecting bank and bypass port=%d\n", simobject_->name().c_str(), i);
+						bank_switch_->ReqOut.at(i % (1 << config.B)).bind(&bypass_switch_->ReqIn.at(i));
+						bypass_switch_->RspIn.at(i).bind(&bank_switch_->RspOut.at(i % (1 << config.B)));
+					}
+				} else {
+					bank_switch_->ReqOut.at(0).bind(&bypass_switch_->ReqIn.at(0));
+					bypass_switch_->RspIn.at(0).bind(&bank_switch_->RspOut.at(0));
+				}
+			}
+			else
+			{
+				mem_req_ports_.at(0).bind(&bypass_switch_->ReqIn.at(0));
+				bypass_switch_->RspIn.at(0).bind(&mem_rsp_ports_.at(0));
+			}
 		}
 
 		// calculate cache initialization cycles
@@ -400,7 +468,7 @@ public:
 				continue;
 
 			auto& mem_rsp = mem_rsp_port.front();
-			DT(3, simobject_->name() << "-dram-" << mem_rsp);
+			DT(3, simobject_->name() << "-bank" << bank_id << " fill-rsp: " << mem_rsp);
 			pipeline_req.type = bank_req_t::Fill;
 			pipeline_req.tag = mem_rsp.tag;
 			mem_rsp_port.pop();
@@ -436,7 +504,7 @@ public:
 			auto port_id = req_id % config_.ports_per_bank;
 
 			// check MSHR capacity
-			if ((!core_req.write || !config_.write_through)
+			if ((!core_req.write || config_.write_back)
 		   && bank.mshr.full()) {
 				++perf_stats_.mshr_stalls;
 				continue;
@@ -465,6 +533,7 @@ public:
 				bank_req.type  = bank_req_t::Core;
 				bank_req.write = core_req.write;
 				pipeline_req   = bank_req;
+				DT(3, simobject_->name() << " core-req: " << core_req);
 			}
 
 			if (core_req.write)
@@ -473,7 +542,6 @@ public:
 				++perf_stats_.reads;
 
 			// remove request
-			DT(3, simobject_->name() << "-core-" << core_req);
 			auto time = core_req_port.pop();
 			perf_stats_.pipeline_stalls += (SimPlatform::instance().cycles() - time);
 		}
@@ -493,23 +561,21 @@ private:
 		uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
 		MemRsp core_rsp{tag, mem_rsp.cid, mem_rsp.uuid};
 		simobject_->CoreRspPorts.at(req_id).push(core_rsp, config_.latency);
-		DT(3, simobject_->name() << "-core-" << core_rsp);
+		DT(3, simobject_->name() << " bypass-core-rsp: " << core_rsp);
 	}
 
 	void processBypassRequest(const MemReq& core_req, uint32_t req_id) {
-		DT(3, simobject_->name() << "-core-" << core_req);
-
 		{
 			MemReq mem_req(core_req);
 			mem_req.tag = (core_req.tag << params_.log2_num_inputs) + req_id;
 			bypass_switch_->ReqIn.at(1).push(mem_req, 1);
-			DT(3, simobject_->name() << "-dram-" << mem_req);
+			DT(3, simobject_->name() << " bypass-dram-req: " << mem_req);
 		}
 
 		if (core_req.write && config_.write_reponse) {
 			MemRsp core_rsp{core_req.tag, core_req.cid, core_req.uuid};
 			simobject_->CoreRspPorts.at(req_id).push(core_rsp, 1);
-			DT(3, simobject_->name() << "-core-" << core_rsp);
+			DT(3, simobject_->name() << " bypass-core-rsp: " << core_rsp);
 		}
 	}
 
@@ -539,7 +605,7 @@ private:
 							continue;
 						MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
 						simobject_->CoreRspPorts.at(info.req_id).push(core_rsp, config_.latency);
-						DT(3, simobject_->name() << "-core-" << core_rsp);
+						DT(3, simobject_->name() << "-bank" << bank_id << " replay: " << core_rsp);
 					}
 				}
 			} break;
@@ -575,7 +641,7 @@ private:
 					if (pipeline_req.write) {
 						// handle write has_hit
 						auto& hit_line = set.lines.at(hit_line_id);
-						if (config_.write_through) {
+						if (!config_.write_back) {
 							// forward write request to memory
 							MemReq mem_req;
 							mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, pipeline_req.tag);
@@ -583,7 +649,7 @@ private:
 							mem_req.cid   = pipeline_req.cid;
 							mem_req.uuid  = pipeline_req.uuid;
 							mem_req_ports_.at(bank_id).push(mem_req, 1);
-							DT(3, simobject_->name() << "-dram-" << mem_req);
+							DT(3, simobject_->name() << "-bank" << bank_id << " writethrough: " << mem_req);
 						} else {
 							// mark line as dirty
 							hit_line.dirty = true;
@@ -596,7 +662,7 @@ private:
 								continue;
 							MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
 							simobject_->CoreRspPorts.at(info.req_id).push(core_rsp, config_.latency);
-							DT(3, simobject_->name() << "-core-" << core_rsp);
+							DT(3, simobject_->name() << "-bank" << bank_id << " core-rsp: " << core_rsp);
 						}
 					}
 				} else {
@@ -606,7 +672,7 @@ private:
 					else
 						++perf_stats_.read_misses;
 
-					if (free_line_id == -1 && !config_.write_through) {
+					if (free_line_id == -1 && config_.write_back) {
 						// write back dirty line
 						auto& repl_line = set.lines.at(repl_line_id);
 						if (repl_line.dirty) {
@@ -615,12 +681,12 @@ private:
 							mem_req.write = true;
 							mem_req.cid   = pipeline_req.cid;
 							mem_req_ports_.at(bank_id).push(mem_req, 1);
-							DT(3, simobject_->name() << "-dram-" << mem_req);
+							DT(3, simobject_->name() << "-bank" << bank_id << " writeback: " << mem_req);
 							++perf_stats_.evictions;
 						}
 					}
 
-					if (pipeline_req.write && config_.write_through) {
+					if (pipeline_req.write && !config_.write_back) {
 						// forward write request to memory
 						{
 							MemReq mem_req;
@@ -629,7 +695,7 @@ private:
 							mem_req.cid   = pipeline_req.cid;
 							mem_req.uuid  = pipeline_req.uuid;
 							mem_req_ports_.at(bank_id).push(mem_req, 1);
-							DT(3, simobject_->name() << "-dram-" << mem_req);
+							DT(3, simobject_->name() << "-bank" << bank_id << " writethrough: " << mem_req);
 						}
 						// send core response
 						if (config_.write_reponse) {
@@ -638,7 +704,7 @@ private:
 									continue;
 								MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
 								simobject_->CoreRspPorts.at(info.req_id).push(core_rsp, config_.latency);
-								DT(3, simobject_->name() << "-core-" << core_rsp);
+								DT(3, simobject_->name() << "-bank" << bank_id << " core-rsp: " << core_rsp);
 							}
 						}
 					} else {
@@ -647,6 +713,7 @@ private:
 
 						// allocate MSHR
 						auto mshr_id = bank.mshr.allocate(pipeline_req, (free_line_id != -1) ? free_line_id : repl_line_id);
+						DT(3, simobject_->name() << "-bank" << bank_id << " mshr-enqueue: " << pipeline_req);
 
 						// send fill request
 						if (!mshr_pending) {
@@ -657,7 +724,7 @@ private:
 							mem_req.cid   = pipeline_req.cid;
 							mem_req.uuid  = pipeline_req.uuid;
 							mem_req_ports_.at(bank_id).push(mem_req, 1);
-							DT(3, simobject_->name() << "-dram-" << mem_req);
+							DT(3, simobject_->name() << "-bank" << bank_id << " fill: " << mem_req);
 							++pending_fill_reqs_;
 						}
 					}
@@ -676,8 +743,8 @@ CacheSim::CacheSim(const SimContext& ctx, const char* name, const Config& config
 	: SimObject<CacheSim>(ctx, name)
 	, CoreReqPorts(config.num_inputs, this)
 	, CoreRspPorts(config.num_inputs, this)
-	, MemReqPort(this)
-	, MemRspPort(this)
+	, MemReqPorts(NUM_MEM_PORTS, this)
+	, MemRspPorts(NUM_MEM_PORTS, this)
 	, impl_(new Impl(this, config))
 {}
 

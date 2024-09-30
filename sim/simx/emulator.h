@@ -61,10 +61,15 @@ public:
 private:
 
   struct ipdom_entry_t {
-    ipdom_entry_t(const ThreadMask &tmask, Word PC);
-    ipdom_entry_t(const ThreadMask &tmask);
+    ipdom_entry_t(const ThreadMask &orig_tmask, const ThreadMask &else_tmask, Word PC)
+      : orig_tmask (orig_tmask)
+      , else_tmask (else_tmask)
+      , PC         (PC)
+      , fallthrough(false)
+    {}
 
-    ThreadMask  tmask;
+    ThreadMask  orig_tmask;
+    ThreadMask  else_tmask;
     Word        PC;
     bool        fallthrough;
   };
@@ -123,6 +128,7 @@ private:
   std::vector<WarpMask> barriers_;
   std::unordered_map<int, std::stringstream> print_bufs_;
   MemoryUnit  mmu_;
+  uint32_t    ipdom_size_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
   std::vector<Word> scratchpad;

@@ -109,7 +109,6 @@
 `ifndef SOCKET_SIZE
 `define SOCKET_SIZE `MIN(4, `NUM_CORES)
 `endif
-`define NUM_SOCKETS `UP(`NUM_CORES / `SOCKET_SIZE)
 
 // Size of Tensor Core
 `ifndef TC_SIZE
@@ -221,7 +220,7 @@
 `ifndef IO_COUT_ADDR
 `define IO_COUT_ADDR    `IO_BASE_ADDR
 `endif
-`define IO_COUT_SIZE    `MEM_BLOCK_SIZE
+`define IO_COUT_SIZE    64
 
 `ifndef IO_MPM_ADDR
 `define IO_MPM_ADDR     (`IO_COUT_ADDR + `IO_COUT_SIZE)
@@ -233,14 +232,16 @@
 `endif
 `define STACK_SIZE      (1 << `STACK_LOG2_SIZE)
 
-`define RESET_DELAY 8
+`define RESET_DELAY     8
 
 `ifndef STALL_TIMEOUT
 `define STALL_TIMEOUT   (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
 `endif
 
 `ifndef SV_DPI
+`ifndef DPI_DISABLE
 `define DPI_DISABLE
+`endif
 `endif
 
 `ifndef FPU_FPNEW
@@ -303,7 +304,7 @@
 
 // Number of SFU units
 `ifndef NUM_SFU_LANES
-`define NUM_SFU_LANES   `MIN(`NUM_THREADS, 4)
+`define NUM_SFU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_SFU_BLOCKS
 `define NUM_SFU_BLOCKS  1
@@ -427,22 +428,27 @@
 `define LATENCY_FCVT 5
 `endif
 
+// FMA Bandwidth ratio
 `ifndef FMA_PE_RATIO
 `define FMA_PE_RATIO 1
 `endif
 
+// FDIV Bandwidth ratio
 `ifndef FDIV_PE_RATIO
 `define FDIV_PE_RATIO 8
 `endif
 
+// FSQRT Bandwidth ratio
 `ifndef FSQRT_PE_RATIO
 `define FSQRT_PE_RATIO 8
 `endif
 
+// FCVT Bandwidth ratio
 `ifndef FCVT_PE_RATIO
 `define FCVT_PE_RATIO 8
 `endif
 
+// FNCP Bandwidth ratio
 `ifndef FNCP_PE_RATIO
 `define FNCP_PE_RATIO 2
 `endif
@@ -549,7 +555,12 @@
 `define DCACHE_NUM_WAYS 1
 `endif
 
-// SM Configurable Knobs //////////////////////////////////////////////////////
+// Enable Cache Writeback
+`ifndef DCACHE_WRITEBACK
+`define DCACHE_WRITEBACK 0
+`endif
+
+// LMEM Configurable Knobs ////////////////////////////////////////////////////
 
 `ifndef LMEM_DISABLE
 `define LMEM_ENABLE
@@ -608,6 +619,11 @@
 `define L2_NUM_WAYS 2
 `endif
 
+// Enable Cache Writeback
+`ifndef L2_WRITEBACK
+`define L2_WRITEBACK 0
+`endif
+
 // L3cache Configurable Knobs /////////////////////////////////////////////////
 
 // Cache Size
@@ -621,7 +637,7 @@
 
 // Number of Banks
 `ifndef L3_NUM_BANKS
-`define L3_NUM_BANKS `MIN(4, `NUM_CLUSTERS)
+`define L3_NUM_BANKS `MIN(8, `NUM_CLUSTERS)
 `endif
 
 // Core Response Queue Size
@@ -647,6 +663,20 @@
 // Number of Associative Ways
 `ifndef L3_NUM_WAYS
 `define L3_NUM_WAYS 4
+`endif
+
+// Enable Cache Writeback
+`ifndef L3_WRITEBACK
+`define L3_WRITEBACK 0
+`endif
+
+`ifndef MEMORY_BANKS
+`define MEMORY_BANKS 2
+`endif
+
+// Number of Memory Ports from LLC
+`ifndef NUM_MEM_PORTS
+`define NUM_MEM_PORTS `MIN(`MEMORY_BANKS, `L3_NUM_BANKS)
 `endif
 
 // ISA Extensions /////////////////////////////////////////////////////////////

@@ -12,9 +12,11 @@
 // limitations under the License.
 
 #include <common.h>
-#include <vortex_afu.h>
 
 #include "driver.h"
+
+#include <vortex_afu.h>
+
 #ifdef SCOPE
 #include "scope.h"
 #endif
@@ -161,11 +163,6 @@ public:
     });
 
     {
-      // retrieve FPGA global memory size
-      CHECK_FPGA_ERR(api_.fpgaPropertiesGetLocalMemorySize(filter, &global_mem_size_), {
-        global_mem_size_ = GLOBAL_MEM_SIZE;
-      });
-
       // Load ISA CAPS
       CHECK_FPGA_ERR(api_.fpgaReadMMIO64(fpga_, 0, MMIO_ISA_CAPS, &isa_caps_), {
         api_.fpgaClose(fpga_);
@@ -177,6 +174,12 @@ public:
         api_.fpgaClose(fpga_);
         return -1;
       });
+
+      // Determine global memory size
+      uint64_t num_banks, bank_size;
+      this->get_caps(VX_CAPS_NUM_MEM_BANKS, &num_banks);
+      this->get_caps(VX_CAPS_MEM_BANK_SIZE, &bank_size);
+      global_mem_size_ = num_banks * bank_size;
     }
 
   #ifdef SCOPE
@@ -192,11 +195,10 @@ public:
         return device->api_.fpgaReadMMIO64(device->fpga_, 0, MMIO_SCOPE_READ, value);
       };
 
-      int ret = vx_scope_start(&callback, this, 0, -1);
-      if (ret != 0) {
+      CHECK_ERR(vx_scope_start(&callback, this, -1, -1), {
         api_.fpgaClose(fpga_);
-        return ret;
-      }
+        return err;
+      });
     }
   #endif
     return 0;
@@ -204,7 +206,6 @@ public:
 
   int get_caps(uint32_t caps_id, uint64_t * value) {
     uint64_t _value;
-
     switch (caps_id) {
     case VX_CAPS_VERSION:
       _value = (dev_caps_ >> 0) & 0xff;
@@ -225,10 +226,16 @@ public:
       _value = global_mem_size_;
       break;
     case VX_CAPS_LOCAL_MEM_SIZE:
-      _value = 1ull << ((dev_caps_ >> 48) & 0xff);
+      _value = 1ull << ((dev_caps_ >> 40) & 0xff);
       break;
     case VX_CAPS_ISA_FLAGS:
       _value = isa_caps_;
+      break;
+    case VX_CAPS_NUM_MEM_BANKS:
+      _value = 1 << ((dev_caps_ >> 48) & 0x7);
+      break;
+    case VX_CAPS_MEM_BANK_SIZE:
+      _value = 1ull << (20 + ((dev_caps_ >> 51) & 0x1f));
       break;
     default:
       fprintf(stderr, "[VXDRV] Error: invalid caps id: %d\n", caps_id);

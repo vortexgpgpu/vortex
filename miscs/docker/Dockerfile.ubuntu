@@ -17,13 +17,11 @@ FROM ubuntu:20.04
 # Set non-interactive installation to avoid user input during build
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Update and install basic and necessary dependencies
+# Update and install necessary dependencies
 RUN apt-get update && apt-get install -y \
+    software-properties-common \
     build-essential \
-    binutils \
-    python \
     python3 \
-    uuid-dev \
     git \
     wget \
     curl \
@@ -39,9 +37,11 @@ RUN git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git /v
 # Set the initial working directory
 WORKDIR /vortex
 
+# install system dependencies
+RUN ./ci/install_dependencies.sh
+
 # Configure the build folder
-RUN mkdir build && cd build && \
-    ../configure --tooldir=$HOME/tools
+RUN mkdir build && cd build && ../configure
 
 # Install prebuilt toolchain
 RUN cd build && ./ci/toolchain_install.sh --all

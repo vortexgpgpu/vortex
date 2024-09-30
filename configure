@@ -26,6 +26,8 @@ detect_osversion() {
                 case "$VERSION_CODENAME" in
                     bionic) osversion="ubuntu/bionic";;
                     focal) osversion="ubuntu/focal";;
+                    jammy) osversion="ubuntu/focal";;
+                    noble) osversion="ubuntu/focal";;
                     # Add new versions as needed
                 esac
                 ;;
@@ -63,7 +65,7 @@ copy_files() {
                     filename_no_ext="${filename%.in}"
                     dest_file="$dest_dir/$filename_no_ext"
                     mkdir -p "$dest_dir"
-                    sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g; s|@PREFIX@|$PREFIX|g" "$file" > "$dest_file"
+                    sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g; s|@INSTALLDIR@|$PREFIX|g; s|@CURRENTDIR@|$CURRENT_DIR|g" "$file" > "$dest_file"
                     # apply permissions to bash scripts
                     read -r firstline < "$dest_file"
                     if [[ "$firstline" =~ ^#!.*bash ]]; then
@@ -111,7 +113,7 @@ copy_files() {
 
 # default configuration parameters
 default_xlen=32
-default_tooldir=/opt
+default_tooldir=$HOME/tools
 default_osversion=$(detect_osversion)
 default_prefix=$CURRENT_DIR
 
@@ -140,8 +142,8 @@ PREFIX=${PREFIX:=$default_prefix}
 usage() {
     echo "Usage: $0 [--xlen=<value>] [--tooldir=<path>] [--osversion=<version>]"
     echo "  --xlen=<value>       Set the XLEN value (default: 32)"
-    echo "  --tooldir=<path>     Set the TOOLDIR path (default: /opt)"
-    echo "  --osversion=<version> Set the OS Version (default: $(detect_os))"
+    echo "  --tooldir=<path>     Set the TOOLDIR path (default: $HOME/tools)"
+    echo "  --osversion=<version> Set the OS Version (default: $(detect_osversion))"
     echo "  --prefix=<path>      Set installation directory"
     exit 1
 }

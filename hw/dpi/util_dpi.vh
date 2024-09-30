@@ -14,8 +14,6 @@
 `ifndef UTIL_DPI_VH
 `define UTIL_DPI_VH
 
-`include "VX_config.vh"
-
 `ifdef XLEN_64
 `define INT_TYPE longint
 `else
@@ -31,7 +29,5 @@ import "DPI-C" function void dpi_assert(int inst, input logic cond, input int de
 import "DPI-C" function void dpi_trace(input int level, input string format /*verilator sformat*/);
 import "DPI-C" function void dpi_trace_start();
 import "DPI-C" function void dpi_trace_stop();
-
-import "DPI-C" function longint dpi_uuid_gen(input logic reset, input int wid);
 
 `endif

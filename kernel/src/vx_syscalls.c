@@ -119,70 +119,13 @@ void __libc_fini_array (void) {
 }
 #endif
 
-/*
-#define MAX_CORES 64
-volatile int g_cxa_locks[MAX_CORES] = {0};
-*/
-
-void __cxa_lock() {
-  /*int core_id = vx_core_id();
-  g_cxa_locks[core_id] = 1;
-  vx_fence();
-  for (int i = 1; i < MAX_CORES; ++i) {
-    int other = (core_id + i) % MAX_CORES;
-    while (g_cxa_locks[other]) {
-      vx_fence(); // cache coherence not supported, so we need to flush the caches
-    }
-  }*/
-}
-
-void __cxa_unlock() {
-  /*vx_fence();
-  int core_id = vx_core_id();
-  g_cxa_locks[core_id] = 0;*/
-}
-
-#define MAX_FEXITS 64
-
-typedef struct {
-	void (*f[MAX_FEXITS])(void*);
-	void *a[MAX_FEXITS];
-} fexit_list_t;
-
-static fexit_list_t g_fexit_list;
-static int g_num_fexits = 0;
-
-void __funcs_on_exit() {
-  void (*func)(void *), *arg;
-	fexit_list_t* fexit_list = &g_fexit_list;
-  for (int i = 0; i < g_num_fexits; ++i) {
-    func = fexit_list->f[i];
-    arg = fexit_list->a[i];
-    func(arg);
-  }
-}
-
-void __cxa_finalize(void *dso) {}
-
-int __cxa_atexit(void (*func)(void *), void *arg, void *dso) {
-  __cxa_lock();
-  int num_fexits = g_num_fexits;
-	if (num_fexits >= MAX_FEXITS)
-		return -1;
-  fexit_list_t* fexit_list = &g_fexit_list;
-	fexit_list->f[num_fexits] = func;
-	fexit_list->a[num_fexits] = arg;
-	g_num_fexits = num_fexits + 1;
-  __cxa_unlock();
-	return 0;
-}
-
-static void call(void *p) {
-	((void (*)(void))(uintptr_t)p)();
-}
-
-int atexit(void (*func)(void)) {
-	return __cxa_atexit(call, (void*)(uintptr_t)func, 0);
+// This function will be called by LIBC at program exit.
+// Since this platform only support statically linked programs,
+// it is not required to support LIBC's exit functions registration via atexit().
+void __funcs_on_exit (void) {
+#ifdef HAVE_INITFINI_ARRAY
+  __libc_fini_array();
+#endif
 }
 
 #ifdef __cplusplus

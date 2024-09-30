@@ -39,7 +39,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     XLEN,                     // address bits
     1,                        // number of ports
     uint8_t(arch.num_clusters()), // request size
-    true,                     // write-through
+    L3_WRITEBACK,             // write-back
     false,                    // write response
     L3_MSHR_SIZE,             // mshr size
     2,                        // pipeline latency
@@ -47,8 +47,10 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
   );
 
   // connect L3 memory ports
-  l3cache_->MemReqPort.bind(&memsim_->MemReqPort);
-  memsim_->MemRspPort.bind(&l3cache_->MemRspPort);
+  for (uint32_t i = 0; i < NUM_MEM_PORTS; ++i) {
+    l3cache_->MemReqPorts.at(i).bind(&memsim_->MemReqPorts.at(i));
+    memsim_->MemRspPorts.at(i).bind(&l3cache_->MemRspPorts.at(i));
+  }
 
   // create clusters
   for (uint32_t i = 0; i < arch.num_clusters(); ++i) {
@@ -59,17 +61,32 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
   }
 
   // set up memory profiling
-  memsim_->MemReqPort.tx_callback([&](const MemReq& req, uint64_t cycle){
-    __unused (cycle);
-    perf_mem_reads_   += !req.write;
-    perf_mem_writes_  += req.write;
-    perf_mem_pending_reads_ += !req.write;
-  });
-  memsim_->MemRspPort.tx_callback([&](const MemRsp&, uint64_t cycle){
-    __unused (cycle);
-    --perf_mem_pending_reads_;
-  });
+  for (uint32_t i = 0; i < NUM_MEM_PORTS; ++i) {
+    memsim_->MemReqPorts.at(i).tx_callback([&](const MemReq& req, uint64_t cycle){
+      __unused (cycle);
+      perf_mem_reads_   += !req.write;
+      perf_mem_writes_  += req.write;
+      perf_mem_pending_reads_ += !req.write;
+    });
+    memsim_->MemRspPorts.at(i).tx_callback([&](const MemRsp&, uint64_t cycle){
+      __unused (cycle);
+      --perf_mem_pending_reads_;
+    });
+  }
 
+#ifndef NDEBUG
+  // dump device configuration
+  std::cout << "CONFIGS:"
+            << " num_threads=" << arch.num_threads()
+            << ", num_warps=" << arch.num_warps()
+            << ", num_cores=" << arch.num_cores()
+            << ", num_clusters=" << arch.num_clusters()
+            << ", socket_size=" << arch.socket_size()
+            << ", local_mem_base=0x" << std::hex << arch.local_mem_base() << std::dec
+            << ", num_barriers=" << arch.num_barriers()
+            << std::endl;
+#endif
+  // reset the device
   this->reset();
 }
 
@@ -118,6 +135,7 @@ ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
   perf.mem_writes  = perf_mem_writes_;
   perf.mem_latency = perf_mem_latency_;
   perf.l3cache     = l3cache_->perf_stats();
+  perf.memsim      = memsim_->perf_stats();
   return perf;
 }
 

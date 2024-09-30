@@ -4,7 +4,7 @@ DESTDIR ?= $(CURDIR)/..
 
 SRC_DIR := $(VORTEX_HOME)/runtime/stub
 
-CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
 CXXFLAGS += -I$(INC_DIR) -I$(COMMON_DIR) -I$(ROOT_DIR)/hw -I$(SIM_DIR)/common
 CXXFLAGS += -fPIC
 
@@ -12,7 +12,7 @@ LDFLAGS += -shared -pthread -ldl
 
 SRCS := $(SRC_DIR)/vortex.cpp $(SRC_DIR)/utils.cpp
 
-# Debugigng
+# Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0
 else

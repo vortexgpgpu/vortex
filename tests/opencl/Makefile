@@ -8,6 +8,9 @@ all:
 	$(MAKE) -C psort
 	$(MAKE) -C saxpy
 	$(MAKE) -C sfilter
+	$(MAKE) -C sgemm2
+	$(MAKE) -C sgemm3
+	$(MAKE) -C psum
 	$(MAKE) -C oclprintf
 	$(MAKE) -C dotproduct
 	$(MAKE) -C transpose
@@ -19,9 +22,6 @@ all:
 	$(MAKE) -C kmeans
 	$(MAKE) -C blackscholes
 	$(MAKE) -C bfs
-	$(MAKE) -C sgemm2
-	$(MAKE) -C sgemm3
-	$(MAKE) -C psum
 
 run-simx:
 	$(MAKE) -C vecadd run-simx
@@ -30,6 +30,9 @@ run-simx:
 	$(MAKE) -C psort run-simx
 	$(MAKE) -C saxpy run-simx
 	$(MAKE) -C sfilter run-simx
+	$(MAKE) -C sgemm2 run-simx
+	$(MAKE) -C sgemm3 run-simx
+	$(MAKE) -C psum run-simx
 	$(MAKE) -C oclprintf run-simx
 	$(MAKE) -C dotproduct run-simx
 	$(MAKE) -C transpose run-simx
@@ -40,9 +43,6 @@ run-simx:
 	$(MAKE) -C kmeans run-simx
 	$(MAKE) -C blackscholes run-simx
 	$(MAKE) -C bfs run-simx
-	$(MAKE) -C sgemm2 run-simx
-	$(MAKE) -C sgemm3 run-simx
-	$(MAKE) -C psum run-simx
 
 run-rtlsim:
 	$(MAKE) -C vecadd run-rtlsim
@@ -51,6 +51,9 @@ run-rtlsim:
 	$(MAKE) -C psort run-rtlsim
 	$(MAKE) -C saxpy run-rtlsim
 	$(MAKE) -C sfilter run-rtlsim
+	$(MAKE) -C sgemm2 run-rtlsim
+	$(MAKE) -C sgemm3 run-rtlsim
+	$(MAKE) -C psum run-rtlsim
 	$(MAKE) -C oclprintf run-rtlsim
 	$(MAKE) -C dotproduct run-rtlsim
 	$(MAKE) -C transpose run-rtlsim
@@ -61,30 +64,6 @@ run-rtlsim:
 	$(MAKE) -C kmeans run-rtlsim
 	$(MAKE) -C blackscholes run-rtlsim
 	$(MAKE) -C bfs run-rtlsim
-	$(MAKE) -C sgemm2 run-rtlsim
-	$(MAKE) -C sgemm3 run-rtlsim
-	$(MAKE) -C psum run-rtlsim
-
-run-opae:
-	$(MAKE) -C vecadd run-opae
-	$(MAKE) -C sgemm run-opae
-	$(MAKE) -C conv3 run-opae
-	$(MAKE) -C psort run-opae
-	$(MAKE) -C saxpy run-opae
-	$(MAKE) -C sfilter run-opae
-	$(MAKE) -C oclprintf run-opae
-	$(MAKE) -C dotproduct run-opae
-	$(MAKE) -C transpose run-opae
-	$(MAKE) -C spmv run-opae
-	$(MAKE) -C stencil run-opae
-	$(MAKE) -C nearn run-opae
-	$(MAKE) -C guassian run-opae
-	$(MAKE) -C kmeans run-opae
-	$(MAKE) -C blackscholes run-opae
-	$(MAKE) -C bfs run-opae
-	$(MAKE) -C sgemm2 run-opae
-	$(MAKE) -C sgemm3 run-opae
-	$(MAKE) -C psum run-opae
 
 clean:
 	$(MAKE) -C vecadd clean
@@ -93,6 +72,9 @@ clean:
 	$(MAKE) -C psort clean
 	$(MAKE) -C saxpy clean
 	$(MAKE) -C sfilter clean
+	$(MAKE) -C sgemm2 clean
+	$(MAKE) -C sgemm3 clean
+	$(MAKE) -C psum clean
 	$(MAKE) -C oclprintf clean
 	$(MAKE) -C dotproduct clean
 	$(MAKE) -C transpose clean
@@ -104,6 +86,3 @@ clean:
 	$(MAKE) -C kmeans clean
 	$(MAKE) -C blackscholes clean
 	$(MAKE) -C bfs clean
-	$(MAKE) -C sgemm2 clean
-	$(MAKE) -C sgemm3 clean
-	$(MAKE) -C psum clean

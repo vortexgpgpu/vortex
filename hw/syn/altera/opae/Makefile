@@ -12,7 +12,6 @@ SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/opae
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/opae
-THIRD_PARTY_DIR := $(VORTEX_HOME)/third_party
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
 IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
@@ -37,7 +36,6 @@ DBG_SCOPE_FLAGS += -DDBG_SCOPE_AFU
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_ISSUE
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_FETCH
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_MSCHED
 
 ifeq ($(DEVICE_FAMILY), stratix10)
     CONFIGS += -DALTERA_S10
@@ -56,10 +54,13 @@ CONFIGS_32c := -DNUM_CLUSTERS=2 -DNUM_CORES=16
 CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16
 CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 
-# include paths
+# include sources
+RTL_PKGS = $(AFU_DIR)/local_mem_cfg_pkg.sv $(AFU_DIR)/ccip/ccip_if_pkg.sv
+RTL_PKGS += $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
-	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -J$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -J$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/fpnew/src
+	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
+	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
 RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_CACHE_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE)
@@ -74,21 +75,21 @@ ifneq ($(TARGET), fpga)
 	CFLAGS += -DSIMULATION
 endif
 
-# Debugigng
+# Debugging
 ifdef DEBUG
-	ifeq ($(TARGET), fpga)
-		CFLAGS += -DNDEBUG -DSCOPE $(DBG_SCOPE_FLAGS)
-		SCOPE_JSON += $(BUILD_DIR)/scope.json
+	ifneq ($(TARGET), fpga)
+		CFLAGS += -DDEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
 	else
-		CFLAGS += $(DBG_TRACE_FLAGS)
+		CFLAGS += -DNDEBUG
 	endif
-else    
+else
 	CFLAGS += -DNDEBUG
 endif
 
 # Enable scope analyzer
 ifdef SCOPE
-	CFLAGS += -DSCOPE
+	CFLAGS += -DSCOPE $(DBG_SCOPE_FLAGS)
+	SCOPE_JSON += $(BUILD_DIR)/scope.json
 endif
 
 # Enable perf counters
@@ -97,13 +98,13 @@ ifdef PERF
 endif
 
 # ast dump flags
-XML_CFLAGS = $(filter-out -DSYNTHESIS -DQUARTUS, $(CFLAGS)) -I$(AFU_DIR)/ccip -I$(DPI_DIR) -DNOPAE
+XML_CFLAGS = $(filter-out -DSYNTHESIS -DQUARTUS, $(CFLAGS)) $(RTL_PKGS) -I$(AFU_DIR)/ccip -I$(DPI_DIR) -DPLATFORM_PROVIDES_LOCAL_MEMORY -DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=32 -DPLATFORM_MEMORY_DATA_WIDTH=512 -DPLATFORM_MEMORY_BURST_CNT_WIDTH=4 -DNOPAE -DSV_DPI
 
 all: swconfig ip-gen setup build
 
 ip-gen: $(IP_CACHE_DIR)/ip-gen.log
 $(IP_CACHE_DIR)/ip-gen.log:
-	$(SCRIPT_DIR)/ip_gen.sh $(IP_CACHE_DIR)
+	$(SCRIPT_DIR)/altera_ip_gen.sh $(IP_CACHE_DIR)
 
 swconfig: vortex_afu.h
 vortex_afu.h: $(SRC_DIR)/vortex_afu.json
@@ -128,7 +129,7 @@ ifeq ($(TARGET), asesim)
 	afu_sim_setup -s $(BUILD_DIR)/setup.cfg $(BUILD_DIR)/synth
 else
 	afu_synth_setup -s $(BUILD_DIR)/setup.cfg $(BUILD_DIR)/synth
-endif	
+endif
 
 build: ip-gen setup $(SCOPE_JSON)
 ifeq ($(TARGET), asesim)
@@ -145,5 +146,5 @@ scope-json: $(BUILD_DIR)/scope.json
 $(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 	$(SCRIPT_DIR)/scope.py $(BUILD_DIR)/vortex.xml -o $(BUILD_DIR)/scope.json
 
-clean:  
+clean:
 	rm -rf vortex_afu.h $(BUILD_DIR)

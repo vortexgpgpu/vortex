@@ -12,10 +12,9 @@
 // limitations under the License.
 
 `include "VX_define.vh"
-`include "VX_trace.vh"
 
-module VX_issue #(
-    parameter CORE_ID = 0
+module VX_issue import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
 
@@ -23,137 +22,80 @@ module VX_issue #(
     input wire              reset,
 
 `ifdef PERF_ENABLE
-    VX_pipeline_perf_if.issue perf_issue_if,
+    output issue_perf_t     issue_perf,
 `endif
 
     VX_decode_if.slave      decode_if,
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
     VX_dispatch_if.master   dispatch_if [`NUM_EX_UNITS * `ISSUE_WIDTH]
 );
-    VX_ibuffer_if ibuffer_if [`NUM_WARPS]();
-    VX_scoreboard_if scoreboard_if [`ISSUE_WIDTH]();
-    VX_operands_if operands_if [`ISSUE_WIDTH]();
-
-    `RESET_RELAY (ibuf_reset, reset);
-    `RESET_RELAY (scoreboard_reset, reset);
-    `RESET_RELAY (operands_reset, reset);
-    `RESET_RELAY (dispatch_reset, reset);
-
-    VX_ibuffer #(
-        .CORE_ID (CORE_ID)
-    ) ibuffer (
-        .clk            (clk),
-        .reset          (ibuf_reset),
-        .decode_if      (decode_if),
-        .ibuffer_if     (ibuffer_if)
-    );
-
-    VX_scoreboard #(
-        .CORE_ID (CORE_ID)
-    ) scoreboard (
-        .clk            (clk),
-        .reset          (scoreboard_reset),
-    `ifdef PERF_ENABLE
-        .perf_scb_stalls(perf_issue_if.scb_stalls),
-        .perf_units_uses(perf_issue_if.units_uses),
-        .perf_sfu_uses  (perf_issue_if.sfu_uses),
-    `endif
-        .writeback_if   (writeback_if),
-        .ibuffer_if     (ibuffer_if),
-        .scoreboard_if  (scoreboard_if)
-    );
-
-    VX_operands #(
-        .CORE_ID (CORE_ID)
-    ) operands (
-        .clk            (clk),
-        .reset          (operands_reset),
-        .writeback_if   (writeback_if),
-        .scoreboard_if  (scoreboard_if),
-        .operands_if    (operands_if)
-    );
-
-    VX_dispatch #(
-        .CORE_ID (CORE_ID)
-    ) dispatch (
-        .clk            (clk),
-        .reset          (dispatch_reset),
-    `ifdef PERF_ENABLE
-        `UNUSED_PIN     (perf_stalls),
-    `endif
-        .operands_if    (operands_if),
-        .dispatch_if    (dispatch_if)
-    );
-
-`ifdef DBG_SCOPE_ISSUE
-    if (CORE_ID == 0) begin
-    `ifdef SCOPE
-        wire operands_if_fire = operands_if[0].valid && operands_if[0].ready;
-        wire operands_if_not_ready = ~operands_if[0].ready;
-        wire writeback_if_valid = writeback_if[0].valid;
-        VX_scope_tap #(
-            .SCOPE_ID (2),
-            .TRIGGERW (4),
-            .PROBEW   (`UUID_WIDTH + `NUM_THREADS + `EX_BITS + `INST_OP_BITS +
-                1 + `NR_BITS + (`NUM_THREADS * 3 * `XLEN) +
-                `UUID_WIDTH + `NUM_THREADS + `NR_BITS + (`NUM_THREADS*`XLEN) + 1)
-        ) scope_tap (
-            .clk(clk),
-            .reset(scope_reset),
-            .start(1'b0),
-            .stop(1'b0),
-            .triggers({
-                reset,
-                operands_if_fire,
-                operands_if_not_ready,
-                writeback_if_valid
-            }),
-            .probes({
-                operands_if[0].data.uuid,
-                operands_if[0].data.tmask,
-                operands_if[0].data.ex_type,
-                operands_if[0].data.op_type,
-                operands_if[0].data.wb,
-                operands_if[0].data.rd,
-                operands_if[0].data.rs1_data,
-                operands_if[0].data.rs2_data,
-                operands_if[0].data.rs3_data,
-                writeback_if[0].data.uuid,
-                writeback_if[0].data.tmask,
-                writeback_if[0].data.rd,
-                writeback_if[0].data.data,
-                writeback_if[0].data.eop
-            }),
-            .bus_in(scope_bus_in),
-            .bus_out(scope_bus_out)
-        );
-    `endif
-    `ifdef CHIPSCOPE
-        ila_issue ila_issue_inst (
-            .clk    (clk),
-            .probe0 ({operands_if.uuid, ibuffer.rs3, ibuffer.rs2, ibuffer.rs1, operands_if.PC, operands_if.tmask, operands_if.wid, operands_if.ex_type, operands_if.op_type, operands_if.ready, operands_if.valid}),
-            .probe1 ({writeback_if.uuid, writeback_if.data[0], writeback_if.PC, writeback_if.tmask, writeback_if.wid, writeback_if.eop, writeback_if.valid})
-        );
-    `endif
-    end
-`else
-    `SCOPE_IO_UNUSED()
-`endif
+    `STATIC_ASSERT ((`ISSUE_WIDTH <= `NUM_WARPS), ("invalid parameter"))
 
 `ifdef PERF_ENABLE
-    reg [`PERF_CTR_BITS-1:0] perf_ibf_stalls;
-
-    wire decode_stall = decode_if.valid && ~decode_if.ready;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            perf_ibf_stalls <= '0;
-        end else begin
-            perf_ibf_stalls <= perf_ibf_stalls + `PERF_CTR_BITS'(decode_stall);
-        end
+    issue_perf_t per_issue_perf [`ISSUE_WIDTH];
+    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, ibf_stalls, `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
+    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, scb_stalls, `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
+    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, opd_stalls, `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
+    for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin : g_issue_perf_units_uses
+        `PERF_COUNTER_ADD (issue_perf, per_issue_perf, units_uses[i], `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
     end
-
-    assign perf_issue_if.ibf_stalls = perf_ibf_stalls;
+    for (genvar i = 0; i < `NUM_SFU_UNITS; ++i) begin : g_issue_perf_sfu_uses
+        `PERF_COUNTER_ADD (issue_perf, per_issue_perf, sfu_uses[i], `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
+    end
 `endif
+
+    wire [ISSUE_ISW_W-1:0] decode_isw = wid_to_isw(decode_if.data.wid);
+    wire [ISSUE_WIS_W-1:0] decode_wis = wid_to_wis(decode_if.data.wid);
+
+    wire [`ISSUE_WIDTH-1:0] decode_ready_in;
+    assign decode_if.ready = decode_ready_in[decode_isw];
+
+    `SCOPE_IO_SWITCH (`ISSUE_WIDTH);
+
+    for (genvar issue_id = 0; issue_id < `ISSUE_WIDTH; ++issue_id) begin : g_issue_slices
+        VX_decode_if #(
+            .NUM_WARPS (PER_ISSUE_WARPS)
+        ) per_issue_decode_if();
+
+        VX_dispatch_if per_issue_dispatch_if[`NUM_EX_UNITS]();
+
+        assign per_issue_decode_if.valid = decode_if.valid && (decode_isw == ISSUE_ISW_W'(issue_id));
+        assign per_issue_decode_if.data.uuid = decode_if.data.uuid;
+        assign per_issue_decode_if.data.wid = decode_wis;
+        assign per_issue_decode_if.data.tmask = decode_if.data.tmask;
+        assign per_issue_decode_if.data.PC = decode_if.data.PC;
+        assign per_issue_decode_if.data.ex_type = decode_if.data.ex_type;
+        assign per_issue_decode_if.data.op_type = decode_if.data.op_type;
+        assign per_issue_decode_if.data.op_args = decode_if.data.op_args;
+        assign per_issue_decode_if.data.wb = decode_if.data.wb;
+        assign per_issue_decode_if.data.rd = decode_if.data.rd;
+        assign per_issue_decode_if.data.rs1 = decode_if.data.rs1;
+        assign per_issue_decode_if.data.rs2 = decode_if.data.rs2;
+        assign per_issue_decode_if.data.rs3 = decode_if.data.rs3;
+        assign decode_ready_in[issue_id] = per_issue_decode_if.ready;
+    `ifndef L1_ENABLE
+        assign decode_if.ibuf_pop[issue_id * PER_ISSUE_WARPS +: PER_ISSUE_WARPS] = per_issue_decode_if.ibuf_pop;
+    `endif
+
+        VX_issue_slice #(
+            .INSTANCE_ID ($sformatf("%s%0d", INSTANCE_ID, issue_id)),
+            .ISSUE_ID (issue_id)
+        ) issue_slice (
+            `SCOPE_IO_BIND(issue_id)
+            .clk          (clk),
+            .reset        (reset),
+        `ifdef PERF_ENABLE
+            .issue_perf   (per_issue_perf[issue_id]),
+        `endif
+            .decode_if    (per_issue_decode_if),
+            .writeback_if (writeback_if[issue_id]),
+            .dispatch_if  (per_issue_dispatch_if)
+        );
+
+        // Assign transposed dispatch_if
+        for (genvar ex_id = 0; ex_id < `NUM_EX_UNITS; ++ex_id) begin : g_dispatch_if
+            `ASSIGN_VX_IF(dispatch_if[ex_id * `ISSUE_WIDTH + issue_id], per_issue_dispatch_if[ex_id]);
+        end
+     end
 
 endmodule
