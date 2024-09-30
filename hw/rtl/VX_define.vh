@@ -50,9 +50,11 @@
 `define PERF_CTR_BITS   44
 
 `ifndef NDEBUG
+`define UUID_ENABLE
 `define UUID_WIDTH      44
 `else
 `ifdef SCOPE
+`define UUID_ENABLE
 `define UUID_WIDTH      44
 `else
 `define UUID_WIDTH      1
