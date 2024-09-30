@@ -332,7 +332,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     };
 
     wire [`UUID_WIDTH-1:0] instr_uuid;
-`ifndef NDEBUG
+`ifdef UUID_ENABLE
     VX_uuid_gen #(
         .CORE_ID    (CORE_ID),
         .UUID_WIDTH (`UUID_WIDTH)
