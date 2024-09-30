@@ -481,7 +481,8 @@ module VX_rr_arbiter #(
         end
 
         VX_decoder #(
-            .N (LOG_NUM_REQS)
+            .N (LOG_NUM_REQS),
+            .D (NUM_REQS)
         ) grant_decoder (
             .data_in  (grant_index),
             .valid_in (grant_valid),

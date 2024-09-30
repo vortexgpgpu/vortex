@@ -65,7 +65,8 @@ module VX_stream_xbar #(
 
             for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_sel_in_decoders
                 VX_decoder #(
-                    .N (OUT_WIDTH)
+                    .N (OUT_WIDTH),
+                    .D (NUM_OUTPUTS)
                 ) sel_in_decoder (
                     .data_in  (sel_in[i]),
                     .valid_in (valid_in[i]),
@@ -137,7 +138,8 @@ module VX_stream_xbar #(
         wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out_w;
 
         VX_decoder #(
-            .N (OUT_WIDTH)
+            .N (OUT_WIDTH),
+            .D (NUM_OUTPUTS)
         ) sel_in_decoder (
             .data_in  (sel_in[0]),
             .valid_in (valid_in[0]),
