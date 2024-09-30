@@ -115,7 +115,8 @@ module VX_bank_flush #(
 
     if (WRITEBACK && `CS_WAY_SEL_BITS > 0) begin : g_flush_way
         VX_decoder #(
-            .N (`CS_WAY_SEL_BITS)
+            .N (`CS_WAY_SEL_BITS),
+            .D (NUM_WAYS)
         ) ctr_decoder (
             .data_in  (counter_r[`CS_LINE_SEL_BITS +: `CS_WAY_SEL_BITS]),
             .valid_in (1'b1),
