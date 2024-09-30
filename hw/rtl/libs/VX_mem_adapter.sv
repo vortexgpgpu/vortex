@@ -59,6 +59,10 @@ module VX_mem_adapter #(
     localparam D = `ABS(DST_LDATAW - SRC_LDATAW);
     localparam P = 2**D;
 
+    localparam EXPECTED_TAG_WIDTH = SRC_TAG_WIDTH + ((DST_LDATAW > SRC_LDATAW) ? D : 0);
+
+    `STATIC_ASSERT(DST_TAG_WIDTH >= EXPECTED_TAG_WIDTH, ("invalid DST_TAG_WIDTH parameter, current=%0d, expected=%0d", DST_TAG_WIDTH, EXPECTED_TAG_WIDTH))
+
     wire                         mem_req_valid_out_w;
     wire [DST_ADDR_WIDTH-1:0]    mem_req_addr_out_w;
     wire                         mem_req_rw_out_w;

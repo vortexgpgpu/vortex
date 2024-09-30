@@ -137,10 +137,13 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire schedule_fire = schedule_if.valid && schedule_if.ready;
     wire icache_bus_req_fire = icache_bus_if.req_valid && icache_bus_if.req_ready;
     wire icache_bus_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
+    wire [`UUID_WIDTH-1:0] icache_bus_req_uuid = icache_bus_if.req_data.tag[ICACHE_TAG_WIDTH-1 -: `UUID_WIDTH];
+    wire [`UUID_WIDTH-1:0] icache_bus_rsp_uuid = icache_bus_if.rsp_data.tag[ICACHE_TAG_WIDTH-1 -: `UUID_WIDTH];
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 1, 6, 3, (
-            `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS + ICACHE_TAG_WIDTH + ICACHE_WORD_SIZE +
-            ICACHE_ADDR_WIDTH + (ICACHE_WORD_SIZE * 8) + ICACHE_TAG_WIDTH
+            `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS +
+            `UUID_WIDTH + ICACHE_WORD_SIZE + ICACHE_ADDR_WIDTH +
+            `UUID_WIDTH + (ICACHE_WORD_SIZE * 8)
         ), {
             schedule_if.valid,
             schedule_if.ready,
@@ -154,8 +157,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
             icache_bus_rsp_fire
         },{
             schedule_if.data.uuid, schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.PC,
-            icache_bus_if.req_data.tag, icache_bus_if.req_data.byteen, icache_bus_if.req_data.addr,
-            icache_bus_if.rsp_data.data, icache_bus_if.rsp_data.tag
+            icache_bus_req_uuid, icache_bus_if.req_data.byteen, icache_bus_if.req_data.addr,
+            icache_bus_rsp_uuid, icache_bus_if.rsp_data.data
         },
         reset_negedge, 1'b0, 4096
     );
