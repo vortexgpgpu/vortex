@@ -222,7 +222,10 @@ void LsuUnit::tick() {
 		input.pop();
 	}
 }
-///////// TENSOR code TBC ////////////////////////////////
+/*  TO BE FIXED:Tensor_core code
+    send_request is not used anymore. Need to be modified number of load
+*/
+/*
 int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
 	int count = 0;
 
@@ -275,6 +278,7 @@ int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
 	}
 	return count;
 }
+*/
 
 ///////////////////////////////////////////////////////////////////////////////
 

@@ -74,11 +74,11 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     , core_(core)
     , warps_(arch.num_warps(), arch)
     , barriers_(arch.num_barriers(), 0)
+    , ipdom_size_(arch.num_threads()-1)
     // [TBC] Currently, tradeoff between scratchpad size & performance has not been evaluated. Scratchpad is
     // considered to be big enough to hold input tiles for one output tile.
     // In future versions, scratchpad size should be fixed to an appropriate value.
     , scratchpad(std::vector<Word>(32 * 32 * 32768))
-    , ipdom_size_(arch.num_threads()-1)
 {
   this->clear();
 }

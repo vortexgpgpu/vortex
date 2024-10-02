@@ -1473,7 +1473,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->fu_type = FUType::LSU;
         trace->lsu_type = LsuType::TCU_LOAD;
         
-        trace->used_iregs.set(rsrc0);
+        trace->src_regs[0] = {RegType::Integer, rsrc0};
         auto trace_data = std::make_shared<LsuTraceData>(num_threads);
         trace->data = trace_data;
         
