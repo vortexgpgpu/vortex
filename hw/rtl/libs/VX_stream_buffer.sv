@@ -45,7 +45,7 @@ module VX_stream_buffer #(
         assign valid_out = valid_in;
         assign data_out  = data_in;
 
-	end else if (OUT_REG != 0) begin : g_with_reg
+	end else if (OUT_REG != 0) begin : g_out_reg
 
 		reg [DATAW-1:0] data_out_r;
 		reg [DATAW-1:0] buffer;
@@ -84,23 +84,27 @@ module VX_stream_buffer #(
 		assign valid_out = valid_out_r;
 		assign data_out  = data_out_r;
 
-	end else begin : g_no_reg
+	end else begin : g_no_out_reg
 
 		reg [1:0][DATAW-1:0] shift_reg;
-		reg [1:0] fifo_state;
+		reg [1:0] fifo_state, fifo_state_n;
 
-		wire fire_in  = valid_in && ready_in;
+		wire fire_in = valid_in && ready_in;
 		wire fire_out = valid_out && ready_out;
+
+		always @(*) begin
+			case ({fire_in, fire_out})
+			2'b10:	 fifo_state_n = {fifo_state[0], 1'b1}; // 00 -> 01, 01 -> 10
+			2'b01:	 fifo_state_n = {1'b0, fifo_state[1]}; // 10 -> 01, 01 -> 00
+			default: fifo_state_n = fifo_state;
+			endcase
+		end
 
 		always @(posedge clk) begin
 			if (reset) begin
 				fifo_state <= 2'b00;
 			end else begin
-				case ({fire_in, fire_out})
-				2'b10:	 fifo_state <= {fifo_state[0], 1'b1}; // 00 -> 01, 01 -> 10
-				2'b01:	 fifo_state <= {1'b0, fifo_state[1]}; // 10 -> 01, 01 -> 00
-				default: fifo_state <= fifo_state;
-				endcase
+				fifo_state <= fifo_state_n;
 			end
 		end
 
