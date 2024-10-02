@@ -8,9 +8,9 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	int32_t* src0_ptr = (int32_t*)arg->src0_addr;
 	int32_t* src1_ptr = (int32_t*)arg->src1_addr;
 	int32_t* dst_ptr  = (int32_t*)arg->dst_addr;
-	unsigned a_addr = reinterpret_cast<unsigned>(src0_ptr);
-	unsigned b_addr = reinterpret_cast<unsigned>(src1_ptr);
-	unsigned c_addr = reinterpret_cast<unsigned>(dst_ptr);
+	uint64_t a_addr = reinterpret_cast<uint64_t>(src0_ptr);
+	uint64_t b_addr = reinterpret_cast<uint64_t>(src1_ptr);
+	uint64_t c_addr = reinterpret_cast<uint64_t>(dst_ptr);
 
 	uint32_t tc_size = arg->tc_size;
 	uint32_t TC_per_warp = arg->TC_per_warp;
@@ -100,9 +100,9 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	//TODO :: change this for new task->thread distribution
 	if (((task_id%num_tasks_per_warp)/num_tasks_per_thread) < thread_limit)
 	{	
-		unsigned a_addr_base = a_addr + offset*arg->data_size;
-		unsigned b_addr_base = b_addr + offset*arg->data_size;
-		unsigned c_addr_base = c_addr + offset_c*arg->data_size;
+		uint64_t a_addr_base = a_addr + offset*arg->data_size;
+		uint64_t b_addr_base = b_addr + offset*arg->data_size;
+		uint64_t c_addr_base = c_addr + offset_c*arg->data_size;
 		csr_write(VX_MAT_MUL_SIZE,n_tiles);
 		csr_write(VX_TC_NUM,TC_per_warp);
 		csr_write(VX_TC_SIZE,tc_size);
