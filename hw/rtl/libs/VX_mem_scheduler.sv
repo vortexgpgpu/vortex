@@ -459,15 +459,15 @@ module VX_mem_scheduler #(
 
     end else begin : g_rsp_full
 
-        reg [(CORE_BATCHES * CORE_CHANNELS * WORD_WIDTH)-1:0] rsp_store [CORE_QUEUE_SIZE-1:0];
-        reg [CORE_BATCHES-1:0][CORE_CHANNELS-1:0][WORD_WIDTH-1:0] rsp_store_n;
+        reg [CORE_CHANNELS-1:0][CORE_BATCHES-1:0][WORD_WIDTH-1:0] rsp_store [CORE_QUEUE_SIZE-1:0];
+        reg [CORE_CHANNELS-1:0][CORE_BATCHES-1:0][WORD_WIDTH-1:0] rsp_store_n;
         reg [CORE_REQS-1:0] rsp_orig_mask [CORE_QUEUE_SIZE-1:0];
 
-        always @(*) begin
-            rsp_store_n = rsp_store[ibuf_raddr];
-            for (integer i = 0; i < CORE_CHANNELS; ++i) begin
+        for (genvar i = 0; i < CORE_CHANNELS; ++i) begin : g_rsp_store_n
+            always @(*) begin
+                rsp_store_n[i] = rsp_store[ibuf_raddr][i];
                 if ((CORE_CHANNELS == 1) || mem_rsp_mask_s[i]) begin
-                    rsp_store_n[rsp_batch_idx][i] = mem_rsp_data_s[i];
+                    rsp_store_n[i][rsp_batch_idx] = mem_rsp_data_s[i];
                 end
             end
         end
@@ -488,7 +488,7 @@ module VX_mem_scheduler #(
         for (genvar r = 0; r < CORE_REQS; ++r) begin : g_crsp_data
             localparam i = r / CORE_CHANNELS;
             localparam j = r % CORE_CHANNELS;
-            assign crsp_data[r] = rsp_store_n[i][j];
+            assign crsp_data[r] = rsp_store_n[j][i];
         end
 
         assign mem_rsp_ready_s = crsp_ready || ~rsp_complete;
