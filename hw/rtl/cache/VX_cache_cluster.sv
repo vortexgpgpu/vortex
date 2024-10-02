@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,20 +24,20 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter NUM_REQS              = 4,
 
     // Size of cache in bytes
-    parameter CACHE_SIZE            = 16384, 
+    parameter CACHE_SIZE            = 16384,
     // Size of line inside a bank in bytes
-    parameter LINE_SIZE             = 64, 
+    parameter LINE_SIZE             = 64,
     // Number of banks
     parameter NUM_BANKS             = 1,
     // Number of associative ways
     parameter NUM_WAYS              = 4,
     // Size of a word in bytes
-    parameter WORD_SIZE             = 4, 
+    parameter WORD_SIZE             = 4,
 
     // Core Response Queue Size
     parameter CRSQ_SIZE             = 2,
     // Miss Reserv Queue Knob
-    parameter MSHR_SIZE             = 8, 
+    parameter MSHR_SIZE             = 8,
     // Memory Response Queue Size
     parameter MRSQ_SIZE             = 0,
     // Memory Request Queue Size
@@ -45,6 +45,12 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 
     // Enable cache writeable
     parameter WRITE_ENABLE          = 1,
+
+    // Enable cache writeback
+    parameter WRITEBACK             = 0,
+
+    // Enable dirty bytes on writeback
+    parameter DIRTY_BYTES           = 0,
 
     // Request debug identifier
     parameter UUID_WIDTH            = 0,
@@ -60,7 +66,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 
     // Memory request output buffer
     parameter MEM_OUT_BUF           = 0
- ) (    
+ ) (
     input wire clk,
     input wire reset,
 
@@ -74,17 +80,16 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 );
     localparam NUM_CACHES = `UP(NUM_UNITS);
     localparam PASSTHRU   = (NUM_UNITS == 0);
-    localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_CACHES);    
-    localparam MEM_TAG_WIDTH = PASSTHRU ? `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) : 
+    localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_CACHES);
+    localparam MEM_TAG_WIDTH = PASSTHRU ? `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) :
                                           (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) :
                                                        `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS));
 
     `STATIC_ASSERT(NUM_INPUTS >= NUM_CACHES, ("invalid parameter"))
 
 `ifdef PERF_ENABLE
-    cache_perf_t perf_cache_tmp[1], perf_cache_unit[NUM_CACHES];
-    `PERF_CACHE_ADD (perf_cache_tmp, perf_cache_unit, 1, NUM_CACHES)
-    assign cache_perf = perf_cache_tmp[0];
+    cache_perf_t perf_cache_unit[NUM_CACHES];
+    `PERF_CACHE_ADD (cache_perf, perf_cache_unit, NUM_CACHES)
 `endif
 
     VX_mem_bus_if #(
@@ -97,7 +102,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         .TAG_WIDTH (ARB_TAG_WIDTH)
     ) arb_core_bus_if[NUM_CACHES * NUM_REQS]();
 
-    `RESET_RELAY (arb_reset, reset);
+    `RESET_RELAY_EX (cache_arb_reset, reset, NUM_REQS, `MAX_FANOUT);
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_mem_bus_if #(
@@ -125,7 +130,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .RSP_OUT_BUF  ((NUM_INPUTS != NUM_CACHES) ? 2 : 0)
         ) cache_arb (
             .clk        (clk),
-            .reset      (arb_reset),
+            .reset      (cache_arb_reset[i]),
             .bus_in_if  (core_bus_tmp_if),
             .bus_out_if (arb_core_bus_tmp_if)
         );
@@ -135,9 +140,9 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         end
     end
 
-    `RESET_RELAY (cache_reset, reset);
+     for (genvar i = 0; i < NUM_CACHES; ++i) begin : caches
 
-    for (genvar i = 0; i < NUM_CACHES; ++i) begin
+        `RESET_RELAY (cache_reset, reset);
 
         VX_cache_wrap #(
             .INSTANCE_ID  ($sformatf("%s%0d", INSTANCE_ID, i)),
@@ -152,6 +157,8 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
             .WRITE_ENABLE (WRITE_ENABLE),
+            .WRITEBACK    (WRITEBACK),
+            .DIRTY_BYTES  (DIRTY_BYTES),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (ARB_TAG_WIDTH),
             .TAG_SEL_IDX  (TAG_SEL_IDX),

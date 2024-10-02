@@ -26,6 +26,7 @@
 #include "dispatcher.h"
 #include "func_unit.h"
 #include "mem_coalescer.h"
+#include "VX_config.h"
 
 namespace vortex {
 
@@ -44,12 +45,13 @@ public:
     uint64_t sched_stalls;
     uint64_t ibuf_stalls;
     uint64_t scrb_stalls;
+    uint64_t opds_stalls;
     uint64_t scrb_alu;
     uint64_t scrb_fpu;
     uint64_t scrb_lsu;
     uint64_t scrb_sfu;
-    uint64_t scrb_wctl;
     uint64_t scrb_csrs;
+    uint64_t scrb_wctl;
     uint64_t ifetches;
     uint64_t loads;
     uint64_t stores;
@@ -63,12 +65,13 @@ public:
       , sched_stalls(0)
       , ibuf_stalls(0)
       , scrb_stalls(0)
+      , opds_stalls(0)
       , scrb_alu(0)
       , scrb_fpu(0)
       , scrb_lsu(0)
       , scrb_sfu(0)
-      , scrb_wctl(0)
       , scrb_csrs(0)
+      , scrb_wctl(0)
       , ifetches(0)
       , loads(0)
       , stores(0)
@@ -96,6 +99,9 @@ public:
   void tick();
 
   void attach_ram(RAM* ram);
+#ifdef VM_ENABLE
+  void set_satp(uint64_t satp);
+#endif
 
   bool running() const;
 
@@ -150,6 +156,8 @@ private:
   LocalMem::Ptr local_mem_;
   std::vector<LocalMemDemux::Ptr> lsu_demux_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;
+  std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter_;
+  std::vector<LsuMemAdapter::Ptr> lsu_lmem_adapter_;
 
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;

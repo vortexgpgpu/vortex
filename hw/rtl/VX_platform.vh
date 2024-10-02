@@ -47,7 +47,7 @@
 `define UNUSED_VAR(x)
 `define UNUSED_PIN(x) . x ()
 `define UNUSED_ARG(x) x
-`define TRACE(level, args) $write args
+`define TRACE(level, args) if (level <= `DEBUG_LEVEL) $write args
 `else
 `ifdef VERILATOR
 `define TRACING_ON      /* verilator tracing_on */
@@ -112,8 +112,14 @@
 `define UNUSED_ARG(x)   /* verilator lint_off UNUSED */ \
                         x \
                         /* verilator lint_on UNUSED */
-`define TRACE(level, args) dpi_trace(level, $sformatf args)
 `endif
+
+`ifdef SV_DPI
+`define TRACE(level, args) dpi_trace(level, $sformatf args)
+`else
+`define TRACE(level, args) if (level <= `DEBUG_LEVEL) $write args
+`endif
+
 `endif
 
 `ifdef SIMULATION
@@ -232,11 +238,11 @@
 `define RESET_RELAY(dst, src) \
     `RESET_RELAY_EX (dst, src, 1, 0)
 
-// size(x): 0 -> 0, 1 -> 1, 2 -> 2, 3 -> 2, 4-> 2
-`define TO_OUT_BUF_SIZE(out_reg)    `MIN(out_reg, 2)
+// size(x): 0 -> 0, 1 -> 1, 2 -> 2, 3 -> 2, 4-> 2, 5 -> 2
+`define TO_OUT_BUF_SIZE(s)    `MIN(s, 2)
 
-// reg(x): 0 -> 0, 1 -> 1, 2 -> 0, 3 -> 1, 4 -> 2
-`define TO_OUT_BUF_REG(out_reg)     ((out_reg & 1) + ((out_reg >> 2) << 1))
+// reg(x): 0 -> 0, 1 -> 1, 2 -> 0, 3 -> 1, 4 -> 2, 5 > 3
+`define TO_OUT_BUF_REG(s)     ((s < 2) ? s : (s - 2))
 
 `define REPEAT(n,f,s)   `_REPEAT_``n(f,s)
 `define _REPEAT_0(f,s)

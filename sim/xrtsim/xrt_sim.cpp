@@ -13,9 +13,7 @@
 
 #include "xrt_sim.h"
 
-#include <verilated.h>
 #include "Vvortex_afu_shim.h"
-#include "Vvortex_afu_shim__Syms.h"
 
 #ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
@@ -26,10 +24,7 @@
 #include <iomanip>
 #include <mem.h>
 
-#define RAMULATOR
-#include <ramulator/src/Gem5Wrapper.h>
-#include <ramulator/src/Request.h>
-#include <ramulator/src/Statistics.h>
+#include <dram_sim.h>
 
 #include <VX_config.h>
 #include <future>
@@ -46,8 +41,8 @@
   #endif
 #endif
 
-#ifndef MEM_CYCLE_RATIO
-#define MEM_CYCLE_RATIO -1
+#ifndef MEM_CLOCK_RATIO
+#define MEM_CLOCK_RATIO 1
 #endif
 
 #undef MEM_BLOCK_SIZE
@@ -101,10 +96,10 @@ public:
   Impl()
   : device_(nullptr)
   , ram_(nullptr)
-  , ramulator_(nullptr)
+  , dram_sim_(MEM_CLOCK_RATIO)
   , stop_(false)
 #ifdef VCD_OUTPUT
-  , trace_(nullptr)
+  , tfp_(nullptr)
 #endif
   {}
 
@@ -114,9 +109,9 @@ public:
       future_.wait();
     }
   #ifdef VCD_OUTPUT
-    if (trace_) {
-      trace_->close();
-      delete trace_;
+    if (tfp_) {
+      tfp_->close();
+      delete tfp_;
     }
   #endif
     if (device_) {
@@ -124,11 +119,6 @@ public:
     }
     if (ram_) {
       delete ram_;
-    }
-    if (ramulator_) {
-      ramulator_->finish();
-      Stats::statlist.printall();
-      delete ramulator_;
     }
   }
 
@@ -145,25 +135,25 @@ public:
 
   #ifdef VCD_OUTPUT
     Verilated::traceEverOn(true);
-    trace_ = new VerilatedVcdC();
-    device_->trace(trace_, 99);
-    trace_->open("trace.vcd");
+    tfp_ = new VerilatedVcdC();
+    device_->trace(tfp_, 99);
+    tfp_->open("trace.vcd");
   #endif
 
     ram_ = new RAM(0, RAM_PAGE_SIZE);
 
-    // initialize dram simulator
-    ramulator::Config ram_config;
-    ram_config.add("standard", "DDR4");
-    ram_config.add("channels", std::to_string(MEMORY_BANKS));
-    ram_config.add("ranks", "1");
-    ram_config.add("speed", "DDR4_2400R");
-    ram_config.add("org", "DDR4_4Gb_x8");
-    ram_config.add("mapping", "defaultmapping");
-    ram_config.set_core_num(1);
-    ramulator_ = new ramulator::Gem5Wrapper(ram_config, MEM_BLOCK_SIZE);
-    Stats::statlist.output("ramulator.ddr4.log");
-
+  #ifndef NDEBUG
+    // dump device configuration
+    std::cout << "CONFIGS:"
+              << " num_threads=" << NUM_THREADS
+              << ", num_warps=" << NUM_WARPS
+              << ", num_cores=" << NUM_CORES
+              << ", num_clusters=" << NUM_CLUSTERS
+              << ", socket_size=" << SOCKET_SIZE
+              << ", local_mem_base=0x" << std::hex << LMEM_BASE_ADDR << std::dec
+              << ", num_barriers=" << NUM_BARRIERS
+              << std::endl;
+  #endif
     // reset the device
     this->reset();
 
@@ -181,7 +171,17 @@ public:
 private:
 
   void reset() {
-    //--
+    this->axi_ctrl_bus_reset();
+    this->axi_mem_bus_reset();
+
+    for (auto& reqs : pending_mem_reqs_) {
+      reqs.clear();
+    }
+
+    {
+      std::queue<mem_req_t*> empty;
+      std::swap(dram_queue_, empty);
+    }
 
     device_->ap_rst_n = 0;
 
@@ -206,11 +206,21 @@ private:
   }
 
   void tick() {
-    //--
+    this->axi_ctrl_bus_eval();
+    this->axi_mem_bus_eval();
 
     if (!dram_queue_.empty()) {
-      if (ramulator_->send(dram_queue_.front()))
+      auto mem_req = dram_queue_.front();
+      if (dram_sim_.send_request(mem_req->write, mem_req->addr, 0, [](void* arg) {
+        auto orig_req = reinterpret_cast<mem_req_t*>(arg);
+        if (orig_req->ready) {
+          delete orig_req;
+        } else {
+          orig_req->ready = true;
+        }
+      }, mem_req)) {
         dram_queue_.pop();
+      }
     }
 
     device_->ap_clk = 0;
@@ -218,14 +228,7 @@ private:
     device_->ap_clk = 1;
     this->eval();
 
-    if (MEM_CYCLE_RATIO > 0) {
-      auto cycle = timestamp / 2;
-      if ((cycle % MEM_CYCLE_RATIO) == 0)
-        ramulator_->tick();
-    } else {
-      for (int i = MEM_CYCLE_RATIO; i <= 0; ++i)
-        ramulator_->tick();
-    }
+    dram_sim_.tick();
 
   #ifndef NDEBUG
     fflush(stdout);
@@ -236,25 +239,86 @@ private:
     device_->eval();
   #ifdef VCD_OUTPUT
     if (sim_trace_enabled()) {
-      trace_->dump(timestamp);
+      tfp_->dump(timestamp);
     }
   #endif
     ++timestamp;
   }
 
+  void axi_ctrl_bus_reset() {
+    // address write request
+    device_->s_axi_ctrl_awvalid = 0;
+    //device_->s_axi_ctrl_awaddr = 0;
+
+    // data write request
+    device_->s_axi_ctrl_wvalid = 0;
+    //device_->s_axi_ctrl_wdata = 0;
+    //device_->s_axi_ctrl_wstrb = 0;
+
+    // address read request
+    device_->s_axi_ctrl_arvalid = 0;
+    //device_->s_axi_ctrl_araddr = 0;
+
+    // data read response
+    device_->s_axi_ctrl_rready = 0;
+
+    // data write response
+    device_->s_axi_ctrl_bready = 0;
+  }
+
+  void axi_ctrl_bus_eval() {
+    //--
+  }
+
+  void axi_mem_bus_reset() {
+    // address write request
+    device_->m_axi_mem_0_awready = 0;
+
+    // data write request
+    device_->m_axi_mem_0_wready = 0;
+
+    // address read request
+    device_->m_axi_mem_0_arready = 0;
+
+    // data read response
+    device_->m_axi_mem_0_rvalid = 0;
+    //device_->m_axi_mem_0_rdata = 0;
+    //device_->m_axi_mem_0_rlast = 0;
+    //device_->m_axi_mem_0_rid = 0;
+    //device_->m_axi_mem_0_rresp = 0;
+
+    // data write response
+    device_->m_axi_mem_0_bvalid = 0;
+    //device_->m_axi_mem_0_bresp = 0;
+    //device_->m_axi_mem_0_bid = 0;
+  }
+
+  void axi_mem_bus_eval() {
+    //--
+  }
+
+  typedef struct {
+    std::array<uint8_t, MEM_BLOCK_SIZE> data;
+    uint32_t addr;
+    bool write;
+    bool ready;
+  } mem_req_t;
+
   Vvortex_afu_shim *device_;
   RAM* ram_;
-  ramulator::Gem5Wrapper* ramulator_;
+  DramSim dram_sim_;
 
   std::future<void> future_;
   bool stop_;
 
   std::mutex mutex_;
 
-  std::queue<ramulator::Request> dram_queue_;
+  std::list<mem_req_t*> pending_mem_reqs_[MEMORY_BANKS];
+
+  std::queue<mem_req_t*> dram_queue_;
 
 #ifdef VCD_OUTPUT
-  VerilatedVcdC *trace_;
+  VerilatedVcdC* tfp_;
 #endif
 };
 

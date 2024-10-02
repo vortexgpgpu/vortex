@@ -29,14 +29,13 @@
 using namespace vortex;
 
 static void show_usage() {
-   std::cout << "Usage: [-c <cores>] [-w <warps>] [-t <threads>] [-r: riscv-test] [-s: stats] [-h: help] <program>" << std::endl;
+   std::cout << "Usage: [-c <cores>] [-w <warps>] [-t <threads>] [-s: stats] [-h: help] <program>" << std::endl;
 }
 
 uint32_t num_threads = NUM_THREADS;
 uint32_t num_warps = NUM_WARPS;
 uint32_t num_cores = NUM_CORES;
 bool showStats = false;
-bool riscv_test = false;
 const char* program = nullptr;
 
 static void parse_args(int argc, char **argv) {
@@ -51,9 +50,6 @@ static void parse_args(int argc, char **argv) {
         break;
 		  case 'c':
         num_cores = atoi(optarg);
-        break;
-      case 'r':
-        riscv_test = true;
         break;
       case 's':
         showStats = true;
@@ -88,7 +84,7 @@ int main(int argc, char **argv) {
     Arch arch(num_threads, num_warps, num_cores);
 
     // create memory module
-    RAM ram(0, RAM_PAGE_SIZE);
+    RAM ram(0, MEM_PAGE_SIZE);
 
     // create processor
     Processor processor(arch);
@@ -116,16 +112,14 @@ int main(int argc, char **argv) {
         return -1;
       }
     }
-
+#ifndef NDEBUG
+    std::cout << "[VXDRV] START: program=" << program << std::endl;
+#endif
     // run simulation
-    exitcode = processor.run();
-    if (riscv_test) {
-      exitcode = (1 - exitcode);
-    }
-  }
+    processor.run();
 
-  if (exitcode != 0) {
-    std::cout << "*** error: exitcode=" << exitcode << std::endl;
+    // read exitcode from @MPM.1
+    ram.read(&exitcode, (IO_MPM_ADDR + 8), 4);
   }
 
   return exitcode;

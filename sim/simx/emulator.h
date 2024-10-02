@@ -109,6 +109,9 @@ public:
   void clear();
 
   void attach_ram(RAM* ram);
+#ifdef VM_ENABLE
+  void set_satp(uint64_t satp) ;
+#endif
 
   instr_trace_t* step();
 
@@ -150,7 +153,7 @@ private:
     std::vector<std::vector<Byte>>    vreg_file;
     std::stack<ipdom_entry_t>         ipdom_stack;
     Byte                              fcsr;
-    UUIDGenerator                     uui_gen;
+    uint32_t                          uuid;
 
     struct vtype vtype;
     uint32_t vl;
@@ -191,10 +194,6 @@ private:
 
   void update_fcrs(uint32_t fflags, uint32_t tid, uint32_t wid);
 
-  void trigger_ecall();
-
-  void trigger_ebreak();
-
   const Arch& arch_;
   const DCRS& dcrs_;
   Core*       core_;
@@ -204,6 +203,7 @@ private:
   std::vector<WarpMask> barriers_;
   std::unordered_map<int, std::stringstream> print_bufs_;
   MemoryUnit  mmu_;
+  uint32_t    ipdom_size_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
   std::vector<std::vector<std::unordered_map<uint32_t, uint32_t>>> csrs_;

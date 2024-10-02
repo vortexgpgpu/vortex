@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -28,12 +28,12 @@ static uint64_t trace_start_time = 0;
 static uint64_t trace_stop_time = -1ull;
 static uint64_t timestamp = 0;
 
-double sc_time_stamp() { 
+double sc_time_stamp() {
   	return timestamp;
 }
 
 bool sim_trace_enabled() {
-	if (timestamp >= trace_start_time 
+	if (timestamp >= trace_start_time
 	&& timestamp < trace_stop_time)
 			return true;
 	return trace_enabled;
@@ -61,22 +61,23 @@ int generate_rand_mask (int mask) {
 }
 
 MemSim::MemSim() {
-	msu_ = new VVX_mem_scheduler();
+  // force random values for uninitialized signals
+  Verilated::randReset(2);
 
-	// Enable tracing
-	Verilated::traceEverOn(true);
+	// create RTL module instance
+	msu_ = new VVX_mem_scheduler();
 
 #ifdef VCD_OUTPUT
   	Verilated::traceEverOn(true);
-  	trace_ = new VerilatedVcdC;
-  	cache_->trace(trace_, 99);
+  	tfp_ = new VerilatedVcdC;
+  	cache_->trace(tfp_, 99);
   	race_->open("trace.vcd");
 #endif
 }
 
 MemSim::~MemSim() {
 #ifdef VCD_OUTPUT
-	trace_->close();
+	tfp_->close();
 #endif
 	delete msu_;
 }
@@ -84,7 +85,7 @@ MemSim::~MemSim() {
 void MemSim::eval() {
 	msu_->eval();
 #ifdef VCD_OUTPUT
-	trace_->dump(timestamp++);
+	tfp_->dump(timestamp++);
 #endif
 }
 
@@ -158,7 +159,7 @@ int main (int argc, char** argv, char** env) {
     Verilated::commandArgs(argc, argv);
 
 	MemSim memsim;
-	RAM ram;	
+	RAM ram;
 
 	memsim.run(&ram);
 

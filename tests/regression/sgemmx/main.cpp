@@ -146,9 +146,9 @@ int main(int argc, char *argv[]) {
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "matrix size: " << size << "x" << size << std::endl;
 
-  kernel_arg.num_tasks = size_sq;
+  kernel_arg.grid_dim[0] = size;
+  kernel_arg.grid_dim[1] = size;
   kernel_arg.size = size;
-  kernel_arg.log2_size = log2(size);
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;

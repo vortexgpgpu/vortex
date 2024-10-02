@@ -311,7 +311,6 @@ module VX_afu_wrap #(
     // SCOPE //////////////////////////////////////////////////////////////////////
 
 `ifdef DBG_SCOPE_AFU
-`ifdef SCOPE
 	`define TRIGGERS { \
 		reset, \
 		ap_start, \
@@ -330,35 +329,17 @@ module VX_afu_wrap #(
     VX_scope_tap #(
         .SCOPE_ID (0),
         .TRIGGERW ($bits(`TRIGGERS)),
-        .PROBEW   ($bits(`PROBES))
+        .PROBEW ($bits(`PROBES))
     ) scope_tap (
-        .clk(clk),
-        .reset(scope_reset_w[0]),
-        .start(1'b0),
-        .stop(1'b0),
-        .triggers(`TRIGGERS),
-        .probes(`PROBES),
-        .bus_in(scope_bus_in_w[0]),
-        .bus_out(scope_bus_out_w[0])
+        .clk (clk),
+        .reset (scope_reset_w[0]),
+        .start (1'b0),
+        .stop (1'b0),
+        .triggers (`TRIGGERS),
+        .probes (`PROBES),
+        .bus_in (scope_bus_in_w[0]),
+        .bus_out (scope_bus_out_w[0])
     );
-`endif
-`ifdef CHIPSCOPE
-    ila_afu ila_afu_inst (
-      	.clk (ap_clk),
-		.probe0 ({
-        	ap_start,
-        	ap_done,
-			ap_idle,
-			interrupt
-		}),
-		.probe1 ({
-        	vx_pending_writes,
-			vx_busy_wait,
-			vx_busy,
-			vx_running
-		})
-    );
-`endif
 `else
     `SCOPE_IO_UNUSED_W(0)
 `endif
@@ -396,13 +377,13 @@ module VX_afu_wrap #(
 				`TRACE(2, ("%d: AFU Wr Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_awaddr_a[i], m_axi_mem_awid_a[i]));
 			end
 			if (m_axi_mem_wvalid_a[i] && m_axi_mem_wready_a[i]) begin
-				`TRACE(2, ("%d: AFU Wr Req [%0d]: data=0x%0h\n", $time, i, m_axi_mem_wdata_a[i]));
+				`TRACE(2, ("%d: AFU Wr Req [%0d]: data=0x%h\n", $time, i, m_axi_mem_wdata_a[i]));
 			end
 			if (m_axi_mem_arvalid_a[i] && m_axi_mem_arready_a[i]) begin
 				`TRACE(2, ("%d: AFU Rd Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_araddr_a[i], m_axi_mem_arid_a[i]));
 			end
 			if (m_axi_mem_rvalid_a[i] && m_axi_mem_rready_a[i]) begin
-				`TRACE(2, ("%d: AVS Rd Rsp [%0d]: data=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_rdata_a[i], m_axi_mem_rid_a[i]));
+				`TRACE(2, ("%d: AVS Rd Rsp [%0d]: data=0x%h, tag=0x%0h\n", $time, i, m_axi_mem_rdata_a[i], m_axi_mem_rid_a[i]));
 			end
 		end
   	end

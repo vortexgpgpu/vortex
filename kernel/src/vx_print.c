@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -41,14 +41,14 @@ typedef struct {
 	int precision;
 } putfloat_arg_t;
 
-static void __putint_cb(const putint_arg_t* arg) {	
+static void __putint_cb(const putint_arg_t* arg) {
 	char tmp[33];
 	float value = arg->value;
 	int base = arg->base;
 	itoa(value, tmp, base);
 	for (int i = 0; i < 33; ++i) {
 		int c = tmp[i];
-		if (!c) 
+		if (!c)
 			break;
 		vx_putchar(c);
 	}
@@ -58,13 +58,13 @@ static void __putfloat_cb(const putfloat_arg_t* arg) {
 	float value = arg->value;
 	int precision = arg->precision;
 	int ipart = (int)value;
-    vx_putint(ipart, 10);
-    if (precision != 0) {
-        vx_putchar('.');
+	vx_putint(ipart, 10);
+	if (precision != 0) {
+		vx_putchar('.');
 		float frac = value - (float)ipart;
-        float fscaled = frac * pow(10, precision);  
-        vx_putint((int)fscaled, 10);
-    }
+		float fscaled = frac * pow(10, precision);
+		vx_putint((int)fscaled, 10);
+	}
 }
 
 static void __vprintf_cb(printf_arg_t* arg) {
@@ -90,7 +90,7 @@ int vx_vprintf(const char* format, va_list va) {
 	arg.format = format;
 	arg.va = &va;
 	vx_serial((vx_serial_cb)__vprintf_cb, &arg);
-  	return arg.ret;
+  return arg.ret;
 }
 
 int vx_printf(const char * format, ...) {
@@ -98,8 +98,8 @@ int vx_printf(const char * format, ...) {
 	va_list va;
 	va_start(va, format);
 	ret = vx_vprintf(format, va);
-	va_end(va);		
-  	return ret;
+	va_end(va);
+  return ret;
 }
 
 #ifdef __cplusplus

@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 module VX_alu_unit #(
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
     input wire              reset,
@@ -27,7 +27,7 @@ module VX_alu_unit #(
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS]
 );
 
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = `NUM_ALU_BLOCKS;
     localparam NUM_LANES    = `NUM_ALU_LANES;
     localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
@@ -57,9 +57,9 @@ module VX_alu_unit #(
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin
 
-        `RESET_RELAY (block_reset, reset);
+        `RESET_RELAY_EN (block_reset, reset,(BLOCK_SIZE > 1));
 
-        wire is_muldiv_op = `EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_mod.alu.xtype == `ALU_TYPE_MULDIV);
+        wire is_muldiv_op = `EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == `ALU_TYPE_MULDIV);
 
         VX_execute_if #(
             .NUM_LANES (NUM_LANES)
@@ -72,15 +72,13 @@ module VX_alu_unit #(
         assign int_execute_if.valid = per_block_execute_if[block_idx].valid && ~is_muldiv_op;
         assign int_execute_if.data = per_block_execute_if[block_idx].data;
 
-        `RESET_RELAY (int_reset, block_reset);
-
         VX_alu_int #(
-            .CORE_ID   (CORE_ID),
+            .INSTANCE_ID ($sformatf("%s-int%0d", INSTANCE_ID, block_idx)),
             .BLOCK_IDX (block_idx),
             .NUM_LANES (NUM_LANES)
         ) alu_int (
             .clk        (clk),
-            .reset      (int_reset),
+            .reset      (block_reset),
             .execute_if (int_execute_if),
             .branch_ctl_if (branch_ctl_if[block_idx]),
             .commit_if  (int_commit_if)
@@ -90,32 +88,30 @@ module VX_alu_unit #(
 
         VX_execute_if #(
             .NUM_LANES (NUM_LANES)
-        ) mdv_execute_if();
+        ) muldiv_execute_if();
 
         VX_commit_if #(
             .NUM_LANES (NUM_LANES)
-        ) mdv_commit_if();
+        ) muldiv_commit_if();
 
-        assign mdv_execute_if.valid = per_block_execute_if[block_idx].valid && is_muldiv_op;
-        assign mdv_execute_if.data = per_block_execute_if[block_idx].data;
-
-        `RESET_RELAY (mdv_reset, block_reset);
+        assign muldiv_execute_if.valid = per_block_execute_if[block_idx].valid && is_muldiv_op;
+        assign muldiv_execute_if.data = per_block_execute_if[block_idx].data;
 
         VX_alu_muldiv #(
-            .CORE_ID   (CORE_ID),
+            .INSTANCE_ID ($sformatf("%s-muldiv%0d", INSTANCE_ID, block_idx)),
             .NUM_LANES (NUM_LANES)
-        ) mdv_unit (
+        ) muldiv_unit (
             .clk        (clk),
-            .reset      (mdv_reset),
-            .execute_if (mdv_execute_if),
-            .commit_if  (mdv_commit_if)
+            .reset      (block_reset),
+            .execute_if (muldiv_execute_if),
+            .commit_if  (muldiv_commit_if)
         );
 
     `endif
 
         assign per_block_execute_if[block_idx].ready =
         `ifdef EXT_M_ENABLE
-            is_muldiv_op ? mdv_execute_if.ready :
+            is_muldiv_op ? muldiv_execute_if.ready :
         `endif
             int_execute_if.ready;
 
@@ -124,25 +120,26 @@ module VX_alu_unit #(
         VX_stream_arb #(
             .NUM_INPUTS (RSP_ARB_SIZE),
             .DATAW      (RSP_ARB_DATAW),
-            .OUT_BUF    (PARTIAL_BW ? 1 : 3)
+            .OUT_BUF    (PARTIAL_BW ? 1 : 3),
+            .ARBITER    ("F")
         ) rsp_arb (
             .clk       (clk),
             .reset     (block_reset),
             .valid_in  ({
             `ifdef EXT_M_ENABLE
-                mdv_commit_if.valid,
+                muldiv_commit_if.valid,
             `endif
                 int_commit_if.valid
             }),
             .ready_in  ({
             `ifdef EXT_M_ENABLE
-                mdv_commit_if.ready,
+                muldiv_commit_if.ready,
             `endif
                 int_commit_if.ready
             }),
             .data_in   ({
             `ifdef EXT_M_ENABLE
-                mdv_commit_if.data,
+                muldiv_commit_if.data,
             `endif
                 int_commit_if.data
             }),

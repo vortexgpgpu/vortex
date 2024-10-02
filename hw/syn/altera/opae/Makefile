@@ -12,7 +12,6 @@ SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/opae
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/opae
-THIRD_PARTY_DIR := $(VORTEX_HOME)/third_party
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
 IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
@@ -74,21 +73,21 @@ ifneq ($(TARGET), fpga)
 	CFLAGS += -DSIMULATION
 endif
 
-# Debugigng
+# Debugging
 ifdef DEBUG
-	ifeq ($(TARGET), fpga)
-		CFLAGS += -DNDEBUG -DSCOPE $(DBG_SCOPE_FLAGS)
-		SCOPE_JSON += $(BUILD_DIR)/scope.json
+	ifneq ($(TARGET), fpga)
+		CFLAGS += -DDEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
 	else
-		CFLAGS += $(DBG_TRACE_FLAGS)
+		CFLAGS += -DNDEBUG
 	endif
-else    
+else
 	CFLAGS += -DNDEBUG
 endif
 
 # Enable scope analyzer
 ifdef SCOPE
-	CFLAGS += -DSCOPE
+	CFLAGS += -DSCOPE $(DBG_SCOPE_FLAGS)
+	SCOPE_JSON += $(BUILD_DIR)/scope.json
 endif
 
 # Enable perf counters
@@ -128,7 +127,7 @@ ifeq ($(TARGET), asesim)
 	afu_sim_setup -s $(BUILD_DIR)/setup.cfg $(BUILD_DIR)/synth
 else
 	afu_synth_setup -s $(BUILD_DIR)/setup.cfg $(BUILD_DIR)/synth
-endif	
+endif
 
 build: ip-gen setup $(SCOPE_JSON)
 ifeq ($(TARGET), asesim)
@@ -145,5 +144,5 @@ scope-json: $(BUILD_DIR)/scope.json
 $(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 	$(SCRIPT_DIR)/scope.py $(BUILD_DIR)/vortex.xml -o $(BUILD_DIR)/scope.json
 
-clean:  
+clean:
 	rm -rf vortex_afu.h $(BUILD_DIR)

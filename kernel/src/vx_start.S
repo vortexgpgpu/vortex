@@ -13,8 +13,8 @@
 
 #include <VX_config.h>
 #include <VX_types.h>
-
-#define RISCV_CUSTOM0   0x0B
+#include <newlib.h>
+#include "common.h"
 
 .section .init, "ax"
 .global _start
@@ -52,12 +52,10 @@ _start:
   # la t0, trap_entry
   # csrw mtvec, t0
 
-  # register global termination functions
-  la    a0, __libc_fini_array
-  call  atexit
-
+#ifdef HAVE_INITFINI_ARRAY
   # run global initialization functions
   call  __libc_init_array
+#endif
 
   # call main program routine
   call  main
@@ -70,9 +68,10 @@ _start:
 .type _Exit, @function
 .global _Exit
 _Exit:
-  mv    s0, a0
-  call  vx_perf_dump
-  mv    gp, s0
+  call vx_perf_dump
+  li t0, IO_MPM_EXITCODE
+  sw a0, 0(t0)
+  fence
   .insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0  # tmc x0
 
 .section .text
@@ -86,27 +85,17 @@ init_regs:
   .option pop
 
   # set stack pointer register
-#if (XLEN == 64)
-  li    t0, (STACK_BASE_ADDR >> 32)
-  slli  t0, t0, 32
-  li    sp, (STACK_BASE_ADDR & 0xffffffff)
-  or    sp, sp, t0
-#else
-  li    sp, STACK_BASE_ADDR
-#endif
+  LOAD_IMMEDIATE64(sp, STACK_BASE_ADDR)
   csrr  t0, VX_CSR_MHARTID
   sll   t1, t0, STACK_LOG2_SIZE
   sub   sp, sp, t1
 
   # set thread pointer register
   # use address space after BSS region
-  # ensure cache line alignment
-  la    t1, __tcb_aligned_size
+  la    t1, __tbss_size
   mul   t0, t0, t1
   la    tp, _end
-  addi  tp, tp, 63
   add   tp, tp, t0
-  and   tp, tp, -64
   ret
 
 .section .text

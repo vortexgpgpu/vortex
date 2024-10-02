@@ -14,6 +14,8 @@
 `ifndef VX_CONFIG_VH
 `define VX_CONFIG_VH
 
+
+
 `ifndef MIN
 `define MIN(x, y)   (((x) < (y)) ? (x) : (y))
 `endif
@@ -31,13 +33,20 @@
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
-
 `ifndef EXT_M_DISABLE
 `define EXT_M_ENABLE
 `endif
 
 `ifndef EXT_F_DISABLE
 `define EXT_F_ENABLE
+`endif
+
+`ifdef XLEN_64
+`ifndef FPU_DSP
+`ifndef EXT_D_DISABLE
+`define EXT_D_ENABLE
+`endif
+`endif
 `endif
 
 `ifndef EXT_ZICOND_DISABLE
@@ -105,7 +114,6 @@
 `ifndef SOCKET_SIZE
 `define SOCKET_SIZE `MIN(4, `NUM_CORES)
 `endif
-`define NUM_SOCKETS `UP(`NUM_CORES / `SOCKET_SIZE)
 
 `ifdef L2_ENABLE
     `define L2_ENABLED   1
@@ -150,57 +158,85 @@
 
 `ifdef XLEN_64
 
-`ifndef STARTUP_ADDR
-`define STARTUP_ADDR 64'h180000000
-`endif
-
 `ifndef STACK_BASE_ADDR
-`define STACK_BASE_ADDR 64'h1FF000000
+`define STACK_BASE_ADDR 64'h1FFFF0000
 `endif
-
-`else
 
 `ifndef STARTUP_ADDR
-`define STARTUP_ADDR 32'h80000000
+`define STARTUP_ADDR    64'h180000000
 `endif
+
+`ifndef USER_BASE_ADDR
+`define USER_BASE_ADDR  64'h000010000
+`endif
+
+`ifndef IO_BASE_ADDR
+`define IO_BASE_ADDR    64'h000000040
+`endif
+
+`ifdef VM_ENABLE
+`ifndef PAGE_TABLE_BASE_ADDR  
+`define PAGE_TABLE_BASE_ADDR 64'h1F0000000
+`endif
+
+`endif
+
+`else // XLEN_32
 
 `ifndef STACK_BASE_ADDR
-`define STACK_BASE_ADDR 32'hFF000000
+`define STACK_BASE_ADDR 32'hFFFF0000
+`endif
+
+`ifndef STARTUP_ADDR
+`define STARTUP_ADDR    32'h80000000
+`endif
+
+`ifndef USER_BASE_ADDR
+`define USER_BASE_ADDR  32'h00010000
+`endif
+
+`ifndef IO_BASE_ADDR
+`define IO_BASE_ADDR    32'h00000040
+`endif
+
+`ifdef VM_ENABLE
+`ifndef PAGE_TABLE_BASE_ADDR  
+`define PAGE_TABLE_BASE_ADDR 32'hF0000000
 `endif
 
 `endif
 
-`ifndef LMEM_BASE_ADDR
-`define LMEM_BASE_ADDR `STACK_BASE_ADDR
 `endif
+
+`define IO_END_ADDR     `USER_BASE_ADDR
 
 `ifndef LMEM_LOG_SIZE
 `define LMEM_LOG_SIZE   14
 `endif
 
-`ifndef IO_BASE_ADDR
-`define IO_BASE_ADDR (`LMEM_BASE_ADDR + (1 << `LMEM_LOG_SIZE))
+`ifndef LMEM_BASE_ADDR
+`define LMEM_BASE_ADDR  `STACK_BASE_ADDR
 `endif
 
 `ifndef IO_COUT_ADDR
-`define IO_COUT_ADDR `IO_BASE_ADDR
+`define IO_COUT_ADDR    `IO_BASE_ADDR
 `endif
-`define IO_COUT_SIZE `MEM_BLOCK_SIZE
+`define IO_COUT_SIZE    `MEM_BLOCK_SIZE
 
 `ifndef IO_MPM_ADDR
-`define IO_MPM_ADDR (`IO_COUT_ADDR + `IO_COUT_SIZE)
+`define IO_MPM_ADDR     (`IO_COUT_ADDR + `IO_COUT_SIZE)
 `endif
-`define IO_CSR_SIZE (4 * 64 * `NUM_CORES * `NUM_CLUSTERS)
+`define IO_MPM_SIZE     (8 * 32 * `NUM_CORES * `NUM_CLUSTERS)
 
 `ifndef STACK_LOG2_SIZE
 `define STACK_LOG2_SIZE 13
 `endif
-`define STACK_SIZE (1 << `STACK_LOG2_SIZE)
+`define STACK_SIZE      (1 << `STACK_LOG2_SIZE)
 
 `define RESET_DELAY 8
 
 `ifndef STALL_TIMEOUT
-`define STALL_TIMEOUT (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
+`define STALL_TIMEOUT   (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
 `endif
 
 `ifndef SV_DPI
@@ -234,11 +270,64 @@
 `define DEBUG_LEVEL 3
 `endif
 
+`ifndef MEM_PAGE_SIZE
+`define MEM_PAGE_SIZE (4096)
+`endif
+`ifndef MEM_PAGE_LOG2_SIZE
+`define MEM_PAGE_LOG2_SIZE (12)
+`endif
+
+// Virtual Memory Configuration ///////////////////////////////////////////////////////
+`ifdef VM_ENABLE
+    `ifdef XLEN_32
+        `ifndef VM_ADDR_MODE
+        `define VM_ADDR_MODE SV32  //or BARE
+        `endif
+        `ifndef PT_LEVEL 
+        `define PT_LEVEL (2)
+        `endif
+        `ifndef PTE_SIZE
+        `define PTE_SIZE (4)
+        `endif
+        `ifndef NUM_PTE_ENTRY 
+        `define NUM_PTE_ENTRY (1024)
+        `endif
+        `ifndef PT_SIZE_LIMIT
+        `define PT_SIZE_LIMIT (1<<23)
+        `endif
+    `else
+        `ifndef VM_ADDR_MODE
+        `define VM_ADDR_MODE SV39 //or BARE
+        `endif
+        `ifndef PT_LEVEL 
+        `define PT_LEVEL (3)
+        `endif
+        `ifndef PTE_SIZE
+        `define PTE_SIZE (8)
+        `endif
+        `ifndef NUM_PTE_ENTRY 
+        `define NUM_PTE_ENTRY (512)
+        `endif
+        `ifndef PT_SIZE_LIMIT
+        `define PT_SIZE_LIMIT (1<<25)
+        `endif
+    `endif
+
+    `ifndef PT_SIZE
+    `define PT_SIZE MEM_PAGE_SIZE
+    `endif
+
+    `ifndef TLB_SIZE
+    `define TLB_SIZE (32)
+    `endif
+
+`endif
+
 // Pipeline Configuration /////////////////////////////////////////////////////
 
 // Issue width
 `ifndef ISSUE_WIDTH
-`define ISSUE_WIDTH     1
+`define ISSUE_WIDTH     `UP(`NUM_WARPS / 8)
 `endif
 
 // Number of ALU units
@@ -267,7 +356,7 @@
 
 // Number of SFU units
 `ifndef NUM_SFU_LANES
-`define NUM_SFU_LANES   `MIN(`NUM_THREADS, 4)
+`define NUM_SFU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_SFU_BLOCKS
 `define NUM_SFU_BLOCKS  1
@@ -391,22 +480,27 @@
 `define LATENCY_FCVT 5
 `endif
 
+// FMA Bandwidth ratio
 `ifndef FMA_PE_RATIO
 `define FMA_PE_RATIO 1
 `endif
 
+// FDIV Bandwidth ratio
 `ifndef FDIV_PE_RATIO
 `define FDIV_PE_RATIO 8
 `endif
 
+// FSQRT Bandwidth ratio
 `ifndef FSQRT_PE_RATIO
 `define FSQRT_PE_RATIO 8
 `endif
 
+// FCVT Bandwidth ratio
 `ifndef FCVT_PE_RATIO
 `define FCVT_PE_RATIO 8
 `endif
 
+// FNCP Bandwidth ratio
 `ifndef FNCP_PE_RATIO
 `define FNCP_PE_RATIO 2
 `endif
@@ -513,7 +607,12 @@
 `define DCACHE_NUM_WAYS 1
 `endif
 
-// SM Configurable Knobs //////////////////////////////////////////////////////
+// Enable Cache Writeback
+`ifndef DCACHE_WRITEBACK
+`define DCACHE_WRITEBACK 0
+`endif
+
+// LMEM Configurable Knobs ////////////////////////////////////////////////////
 
 `ifndef LMEM_DISABLE
 `define LMEM_ENABLE
@@ -572,6 +671,11 @@
 `define L2_NUM_WAYS 2
 `endif
 
+// Enable Cache Writeback
+`ifndef L2_WRITEBACK
+`define L2_WRITEBACK 0
+`endif
+
 // L3cache Configurable Knobs /////////////////////////////////////////////////
 
 // Cache Size
@@ -585,7 +689,7 @@
 
 // Number of Banks
 `ifndef L3_NUM_BANKS
-`define L3_NUM_BANKS `MIN(4, `NUM_CLUSTERS)
+`define L3_NUM_BANKS `MIN(8, `NUM_CLUSTERS)
 `endif
 
 // Core Response Queue Size
@@ -611,6 +715,20 @@
 // Number of Associative Ways
 `ifndef L3_NUM_WAYS
 `define L3_NUM_WAYS 4
+`endif
+
+// Enable Cache Writeback
+`ifndef L3_WRITEBACK
+`define L3_WRITEBACK 0
+`endif
+
+`ifndef MEMORY_BANKS
+`define MEMORY_BANKS 8
+`endif
+
+// Number of Memory Ports from LLC
+`ifndef NUM_MEM_PORTS
+`define NUM_MEM_PORTS `MIN(`MEMORY_BANKS, `L3_NUM_BANKS)
 `endif
 
 // ISA Extensions /////////////////////////////////////////////////////////////

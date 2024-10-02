@@ -3,6 +3,8 @@ include $(ROOT_DIR)/config.mk
 
 all: stub rtlsim simx opae xrt
 
+vm: stub simx
+
 stub:
 	$(MAKE) -C stub
 
@@ -19,10 +21,10 @@ xrt:
 	$(MAKE) -C xrt
 
 clean:
-	$(MAKE) clean -C stub
-	$(MAKE) clean -C simx
-	$(MAKE) clean -C rtlsim
-	$(MAKE) clean -C opae
-	$(MAKE) clean -C xrt
+	$(MAKE) -C stub clean
+	$(MAKE) -C simx clean
+	$(MAKE) -C rtlsim clean
+	$(MAKE) -C opae clean
+	$(MAKE) -C xrt clean
 
 .PHONY: all stub simx rtlsim opae xrt clean

@@ -5,7 +5,7 @@ all: unittest kernel regression opencl riscv
 
 unittest:
 	$(MAKE) -C unittest
-	
+
 kernel:
 	$(MAKE) -C kernel
 
@@ -25,13 +25,6 @@ clean:
 	$(MAKE) -C kernel clean
 	$(MAKE) -C regression clean
 	$(MAKE) -C opencl clean
-	$(MAKE) -C riscv clean
-
-clean-all:
-	$(MAKE) -C unittest clean
-	$(MAKE) -C kernel clean
-	$(MAKE) -C regression clean-all
-	$(MAKE) -C opencl clean-all
 	$(MAKE) -C riscv clean
 
 .PHONY: all unittest kernel regression opencl riscv

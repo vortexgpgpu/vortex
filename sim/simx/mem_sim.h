@@ -26,17 +26,23 @@ public:
 	};
 
 	struct PerfStats {
-		uint64_t reads;
-		uint64_t writes;
+		uint64_t counter;
+		uint64_t ticks;
 
 		PerfStats() 
-			: reads(0)
-			, writes(0)
+			: counter(0)
+			, ticks(0)
 		{}
+
+		PerfStats& operator+=(const PerfStats& rhs) {
+			this->counter += rhs.counter;
+			this->ticks += rhs.ticks;
+			return *this;
+		}
 	};
 
-	SimPort<MemReq> MemReqPort;
-	SimPort<MemRsp> MemRspPort;
+	std::vector<SimPort<MemReq>> MemReqPorts;
+	std::vector<SimPort<MemRsp>> MemRspPorts;
 
 	MemSim(const SimContext& ctx, const char* name, const Config& config);
 	~MemSim();

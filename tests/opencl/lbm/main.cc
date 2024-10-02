@@ -25,7 +25,7 @@ static char* replaceFilenameExtension(const char* filename, const char* ext) {
   const char* dot = strrchr(filename, '.');
   int baseLen = dot ? (dot - filename) : strlen(filename);
   char* sz_out = (char*)malloc(baseLen + strlen(ext) + 1);
-  if (!sz_out) 
+  if (!sz_out)
     return NULL;
   strncpy(sz_out, filename, baseLen);
   strcpy(sz_out + baseLen, ext);
@@ -46,7 +46,7 @@ static float* read_output_file(const char* filename, int size) {
         return NULL;
     }
     // Read the float data
-    if (fread(floats, sizeof(float), size, file) != size) {
+    if (fread(floats, sizeof(float), size, file) != (size_t)size) {
         fclose(file);
         free(floats);
         perror("Error reading floats from file");
@@ -60,8 +60,8 @@ static float* read_output_file(const char* filename, int size) {
 static int compare_floats(const float* src, const float* gold, int count) {
   int num_errors = 0;
   float abstol = 0.0f;
-  float max_value = 0.0f;  
-  // Find the maximum magnitude in the gold array for absolute tolerance calculation  
+  float max_value = 0.0f;
+  // Find the maximum magnitude in the gold array for absolute tolerance calculation
   for (int i = 0; i < count; i++) {
     if (fabs(gold[i]) > max_value)
       max_value = fabs(gold[i]);
@@ -95,9 +95,9 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
 
   *data = (uint8_t*)malloc(fsize);
   *size = fread(*data, 1, fsize, fp);
-  
+
   fclose(fp);
-  
+
   return CL_SUCCESS;
 }
 
@@ -128,6 +128,7 @@ int main(int nArgs, char *arg[]) {
   MAIN_initialize(&param, &prm);
 
   for (t = 1; t <= param.nTimeSteps; t++) {
+    
     pb_SwitchToTimer(&timers, pb_TimerID_KERNEL);
     OpenCL_LBM_performStreamCollide(&prm, OpenCL_srcGrid, OpenCL_dstGrid);
     pb_SwitchToTimer(&timers, pb_TimerID_COMPUTE);
@@ -198,9 +199,9 @@ void MAIN_printInfo(const MAIN_Param *param) {
          "\tsimulation type: %s\n"
          "\tobstacle file  : %s\n\n",
          SIZE_X, SIZE_Y, SIZE_Z, 1e-6 * SIZE_X * SIZE_Y * SIZE_Z,
-         param->nTimeSteps, param->resultFilename, "store", "lid-driven cavity",
-         (param->obstacleFilename == NULL) ? "<none>"
-                                           : param->obstacleFilename);
+         param->nTimeSteps, ((param->resultFilename == NULL) ? "<none>" : param->resultFilename), "store", "lid-driven cavity",
+         ((param->obstacleFilename == NULL) ? "<none>" : param->obstacleFilename)
+  );
 }
 
 /*############################################################################*/
@@ -256,7 +257,7 @@ int MAIN_finalize(const MAIN_Param *param, const OpenCL_Param *prm) {
   pb_SwitchToTimer(&timers, pb_TimerID_COMPUTE);
   LBM_showGridStatistics(TEMP_srcGrid);
 
-  float* result_data;  
+  float* result_data;
   int dim = 3 * SIZE_X * SIZE_Y * SIZE_Z;
   if (param->resultFilename) {
     LBM_storeVelocityField(TEMP_srcGrid, param->resultFilename, TRUE);
@@ -316,26 +317,18 @@ void OpenCL_initialize(struct pb_Parameters *p, OpenCL_Param *prm) {
   // read kernel binary from file
   uint8_t *kernel_bin = NULL;
   size_t kernel_size;
-  cl_int binary_status = 0;
+  //cl_int binary_status = 0;
 
-#ifdef HOSTGPU
   clStatus = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
-  CHECK_ERROR("read_kernel_file")  
+  CHECK_ERROR("read_kernel_file")
 	prm->clProgram = clCreateProgramWithSource(
         prm->clContext, 1, (const char**)&kernel_bin, &kernel_size, &clStatus);
   CHECK_ERROR("clCreateProgramWithSource")
-#else
-  clStatus = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
-  CHECK_ERROR("read_kernel_file")  
-	prm->clProgram = clCreateProgramWithBinary(
-      prm->clContext, 1, &prm->clDevice, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &clStatus);
-  CHECK_ERROR("clCreateProgramWithBinary")
-#endif
 
   //char clOptions[100];
   //sprintf(clOptions, "-I src/opencl_base");
 	//clStatus = clBuildProgram(prm->clProgram, 1, &(prm->clDevice), clOptions, NULL, NULL);
-	clStatus = clBuildProgram(prm->clProgram, 1, &prm->clDevice, NULL, NULL, NULL);  
+	clStatus = clBuildProgram(prm->clProgram, 1, &prm->clDevice, NULL, NULL, NULL);
   CHECK_ERROR("clBuildProgram")
 
   prm->clKernel =

@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,11 +16,11 @@
 
 using namespace vortex;
 
-Socket::Socket(const SimContext& ctx, 
+Socket::Socket(const SimContext& ctx,
                 uint32_t socket_id,
-                Cluster* cluster, 
-                const Arch &arch, 
-                const DCRS &dcrs) 
+                Cluster* cluster,
+                const Arch &arch,
+                const DCRS &dcrs)
   : SimObject(ctx, "socket")
   , icache_mem_req_port(this)
   , icache_mem_rsp_port(this)
@@ -44,7 +44,7 @@ Socket::Socket(const SimContext& ctx,
     XLEN,                   // address bits
     1,                      // number of ports
     1,                      // number of inputs
-    false,                  // write-through
+    false,                  // write-back
     false,                  // write response
     (uint8_t)arch.num_warps(), // mshr size
     2,                      // pipeline latency
@@ -64,7 +64,7 @@ Socket::Socket(const SimContext& ctx,
     XLEN,                   // address bits
     1,                      // number of ports
     DCACHE_NUM_REQS,        // number of inputs
-    true,                   // write-through
+    DCACHE_WRITEBACK,       // write-back
     false,                  // write response
     DCACHE_MSHR_SIZE,       // mshr size
     2,                      // pipeline latency
@@ -106,6 +106,14 @@ void Socket::attach_ram(RAM* ram) {
     core->attach_ram(ram);
   }
 }
+
+#ifdef VM_ENABLE
+void Socket::set_satp(uint64_t satp) {
+  for (auto core : cores_) {
+    core->set_satp(satp);
+  }
+}
+#endif
 
 bool Socket::running() const {
   for (auto& core : cores_) {

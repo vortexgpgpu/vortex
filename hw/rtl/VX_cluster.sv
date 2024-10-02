@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,8 +14,9 @@
 `include "VX_define.vh"
 
 module VX_cluster import VX_gpu_pkg::*; #(
-    parameter CLUSTER_ID = 0
-) ( 
+    parameter CLUSTER_ID = 0,
+    parameter `STRING INSTANCE_ID = ""
+) (
     `SCOPE_IO_DECL
 
     // Clock
@@ -32,10 +33,6 @@ module VX_cluster import VX_gpu_pkg::*; #(
     // Memory
     VX_mem_bus_if.master        mem_bus_if,
 
-    // simulation helper signals
-    output wire                 sim_ebreak,
-    output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value,
-
     // Status
     output wire                 busy
 );
@@ -43,16 +40,16 @@ module VX_cluster import VX_gpu_pkg::*; #(
 `ifdef SCOPE
     localparam scope_socket = 0;
     `SCOPE_IO_SWITCH (`NUM_SOCKETS);
-`endif    
+`endif
 
 `ifdef PERF_ENABLE
-    VX_mem_perf_if mem_perf_tmp_if();    
+    VX_mem_perf_if mem_perf_tmp_if();
     assign mem_perf_tmp_if.icache  = 'x;
     assign mem_perf_tmp_if.dcache  = 'x;
     assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
     assign mem_perf_tmp_if.lmem    = 'x;
     assign mem_perf_tmp_if.mem     = mem_perf_if.mem;
-`endif    
+`endif
 
 `ifdef GBAR_ENABLE
 
@@ -89,7 +86,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
     `RESET_RELAY (l2_reset, reset);
 
     VX_cache_wrap #(
-        .INSTANCE_ID    ("l2cache"),
+        .INSTANCE_ID    ($sformatf("%s-l2cache", INSTANCE_ID)),
         .CACHE_SIZE     (`L2_CACHE_SIZE),
         .LINE_SIZE      (`L2_LINE_SIZE),
         .NUM_BANKS      (`L2_NUM_BANKS),
@@ -99,10 +96,12 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .CRSQ_SIZE      (`L2_CRSQ_SIZE),
         .MSHR_SIZE      (`L2_MSHR_SIZE),
         .MRSQ_SIZE      (`L2_MRSQ_SIZE),
-        .MREQ_SIZE      (`L2_MREQ_SIZE),
+        .MREQ_SIZE      (`L2_WRITEBACK ? `L2_MSHR_SIZE : `L2_MREQ_SIZE),
         .TAG_WIDTH      (L2_TAG_WIDTH),
         .WRITE_ENABLE   (1),
-        .UUID_WIDTH     (`UUID_WIDTH),  
+        .WRITEBACK      (`L2_WRITEBACK),
+        .DIRTY_BYTES    (`L2_WRITEBACK),
+        .UUID_WIDTH     (`UUID_WIDTH),
         .CORE_OUT_BUF   (2),
         .MEM_OUT_BUF    (2),
         .NC_ENABLE      (1),
@@ -119,13 +118,6 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [`NUM_SOCKETS-1:0] per_socket_sim_ebreak;
-    wire [`NUM_SOCKETS-1:0][`NUM_REGS-1:0][`XLEN-1:0] per_socket_sim_wb_value;
-    assign sim_ebreak = per_socket_sim_ebreak[0];
-    assign sim_wb_value = per_socket_sim_wb_value[0];
-    `UNUSED_VAR (per_socket_sim_ebreak)
-    `UNUSED_VAR (per_socket_sim_wb_value)
-
     VX_dcr_bus_if socket_dcr_bus_tmp_if();
     assign socket_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `VX_DCR_BASE_STATE_BEGIN && dcr_bus_if.write_addr < `VX_DCR_BASE_STATE_END);
     assign socket_dcr_bus_tmp_if.write_addr  = dcr_bus_if.write_addr;
@@ -133,17 +125,19 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
     wire [`NUM_SOCKETS-1:0] per_socket_busy;
 
+    VX_dcr_bus_if socket_dcr_bus_if();
     `BUFFER_DCR_BUS_IF (socket_dcr_bus_if, socket_dcr_bus_tmp_if, (`NUM_SOCKETS > 1));
 
     // Generate all sockets
-    for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
+    for (genvar socket_id = 0; socket_id < `NUM_SOCKETS; ++socket_id) begin : sockets
 
         `RESET_RELAY (socket_reset, reset);
 
         VX_socket #(
-            .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + i)
+            .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + socket_id),
+            .INSTANCE_ID ($sformatf("%s-socket%0d", INSTANCE_ID, socket_id))
         ) socket (
-            `SCOPE_IO_BIND  (scope_socket+i)
+            `SCOPE_IO_BIND  (scope_socket+socket_id)
 
             .clk            (clk),
             .reset          (socket_reset),
@@ -151,18 +145,16 @@ module VX_cluster import VX_gpu_pkg::*; #(
         `ifdef PERF_ENABLE
             .mem_perf_if    (mem_perf_tmp_if),
         `endif
-            
+
             .dcr_bus_if     (socket_dcr_bus_if),
 
-            .mem_bus_if     (per_socket_mem_bus_if[i]),
+            .mem_bus_if     (per_socket_mem_bus_if[socket_id]),
 
         `ifdef GBAR_ENABLE
-            .gbar_bus_if    (per_socket_gbar_bus_if[i]),
+            .gbar_bus_if    (per_socket_gbar_bus_if[socket_id]),
         `endif
 
-            .sim_ebreak     (per_socket_sim_ebreak[i]),
-            .sim_wb_value   (per_socket_sim_wb_value[i]),
-            .busy           (per_socket_busy[i])
+            .busy           (per_socket_busy[socket_id])
         );
     end
 

@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 module VX_alu_int #(
-    parameter CORE_ID   = 0,
+    parameter `STRING INSTANCE_ID = "",
     parameter BLOCK_IDX = 0,
     parameter NUM_LANES = 1
 ) (
@@ -29,7 +29,7 @@ module VX_alu_int #(
     VX_branch_ctl_if.master branch_ctl_if
 );
 
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam LANE_BITS      = `CLOG2(NUM_LANES);
     localparam LANE_WIDTH     = `UP(LANE_BITS);
     localparam PID_BITS       = `CLOG2(`NUM_THREADS / NUM_LANES);
@@ -52,16 +52,14 @@ module VX_alu_int #(
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_result_r;
 
 `ifdef XLEN_64
-    wire is_alu_w = execute_if.data.op_mod.alu.is_w;
+    wire is_alu_w = execute_if.data.op_args.alu.is_w;
 `else
     wire is_alu_w = 0;
 `endif
 
-    `UNUSED_VAR (execute_if.data.op_mod)
-
     wire [`INST_ALU_BITS-1:0] alu_op = `INST_ALU_BITS'(execute_if.data.op_type);
     wire [`INST_BR_BITS-1:0]   br_op = `INST_BR_BITS'(execute_if.data.op_type);
-    wire                    is_br_op = (execute_if.data.op_mod.alu.xtype == `ALU_TYPE_BRANCH);
+    wire                    is_br_op = (execute_if.data.op_args.alu.xtype == `ALU_TYPE_BRANCH);
     wire                   is_sub_op = `INST_ALU_IS_SUB(alu_op);
     wire                   is_signed = `INST_ALU_SIGNED(alu_op);
     wire [1:0]              op_class = is_br_op ? `INST_BR_CLASS(alu_op) : `INST_ALU_CLASS(alu_op);
@@ -69,9 +67,9 @@ module VX_alu_int #(
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1 = execute_if.data.rs1_data;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2 = execute_if.data.rs2_data;
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1_PC  = execute_if.data.op_mod.alu.use_PC ? {NUM_LANES{execute_if.data.PC, 1'd0}} : alu_in1;
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if.data.op_mod.alu.use_imm ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_mod.alu.imm)}} : alu_in2;
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_br  = (execute_if.data.op_mod.alu.use_imm && ~is_br_op) ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_mod.alu.imm)}} : alu_in2;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{execute_if.data.PC, 1'd0}} : alu_in1;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_br  = (execute_if.data.op_args.alu.use_imm && ~is_br_op) ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign add_result[i] = alu_in1_PC[i] + alu_in2_imm[i];
@@ -123,7 +121,7 @@ module VX_alu_int #(
             case ({is_alu_w, op_class})
                 3'b000: alu_result[i] = add_result[i];      // ADD, LUI, AUIPC
                 3'b001: alu_result[i] = sub_slt_br_result;  // SUB, SLTU, SLTI, BR*
-                3'b010: alu_result[i] = shr_zic_result[i]; // SRL, SRA, SRLI, SRAI, CZERO*
+                3'b010: alu_result[i] = shr_zic_result[i];  // SRL, SRA, SRLI, SRAI, CZERO*
                 3'b011: alu_result[i] = msc_result[i];      // AND, OR, XOR, SLL, SLLI
                 3'b100: alu_result[i] = add_result_w[i];    // ADDIW, ADDW
                 3'b101: alu_result[i] = sub_result_w[i];    // SUBW
@@ -183,7 +181,7 @@ module VX_alu_int #(
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({br_enable, br_wid, br_taken, br_dest}),
+        .data_in  ({br_enable,           br_wid,            br_taken,            br_dest}),
         .data_out ({branch_ctl_if.valid, branch_ctl_if.wid, branch_ctl_if.taken, branch_ctl_if.dest})
     );
 
@@ -195,9 +193,9 @@ module VX_alu_int #(
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
-        if (branch_ctl_if.valid) begin
-            `TRACE(1, ("%d: core%0d-branch: wid=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
-                $time, CORE_ID, branch_ctl_if.wid, {commit_if.data.PC, 1'b0}, branch_ctl_if.taken, {branch_ctl_if.dest, 1'b0}, commit_if.data.uuid));
+        if (br_enable) begin
+            `TRACE(1, ("%d: %s-branch: wid=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
+                $time, INSTANCE_ID, br_wid, {commit_if.data.PC, 1'b0}, br_taken, {br_dest, 1'b0}, commit_if.data.uuid));
         end
     end
 `endif

@@ -79,15 +79,13 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
             .NUM_LANES (NUM_LANES)
         ) commit_tmp_if();
 
-        `RESET_RELAY(commit_out_reset, reset);
-
         VX_elastic_buffer #(
             .DATAW   (DATAW),
             .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
             .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
         ) out_buf (
             .clk        (clk),
-            .reset      (commit_out_reset),
+            .reset      (reset),
             .valid_in   (commit_out_valid[i]),
             .ready_in   (commit_out_ready[i]),
             .data_in    (commit_out_data[i]),

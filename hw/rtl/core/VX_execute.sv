@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 
 module VX_execute import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0
 ) (
     `SCOPE_IO_DECL
@@ -43,10 +44,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_warp_ctl_if.master   warp_ctl_if,
 
     // commit interface
-    VX_commit_csr_if.slave  commit_csr_if,
-
-    // simulation helper signals
-    output wire             sim_ebreak
+    VX_commit_csr_if.slave  commit_csr_if
 );
 
 `ifdef EXT_F_ENABLE
@@ -58,7 +56,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     `RESET_RELAY (sfu_reset, reset);
 
     VX_alu_unit #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID ($sformatf("%s-alu", INSTANCE_ID))
     ) alu_unit (
         .clk            (clk),
         .reset          (alu_reset),
@@ -70,7 +68,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     `SCOPE_IO_SWITCH (1)
 
     VX_lsu_unit #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID ($sformatf("%s-lsu", INSTANCE_ID))
     ) lsu_unit (
         `SCOPE_IO_BIND  (0)
         .clk            (clk),
@@ -84,7 +82,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     `RESET_RELAY (fpu_reset, reset);
 
     VX_fpu_unit #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID ($sformatf("%s-fpu", INSTANCE_ID))
     ) fpu_unit (
         .clk            (clk),
         .reset          (fpu_reset),
@@ -95,6 +93,7 @@ module VX_execute import VX_gpu_pkg::*; #(
 `endif
 
     VX_sfu_unit #(
+        .INSTANCE_ID ($sformatf("%s-sfu", INSTANCE_ID)),
         .CORE_ID (CORE_ID)
     ) sfu_unit (
         .clk            (clk),
@@ -113,12 +112,5 @@ module VX_execute import VX_gpu_pkg::*; #(
         .sched_csr_if   (sched_csr_if),
         .warp_ctl_if    (warp_ctl_if)
     );
-
-    // simulation helper signal to get RISC-V tests Pass/Fail status
-    assign sim_ebreak = dispatch_if[0].valid && dispatch_if[0].ready
-                     && dispatch_if[0].data.wis == 0
-                     && (dispatch_if[0].data.op_mod.alu.xtype == `ALU_TYPE_BRANCH)
-                     && (`INST_BR_BITS'(dispatch_if[0].data.op_type) == `INST_BR_EBREAK
-                      || `INST_BR_BITS'(dispatch_if[0].data.op_type) == `INST_BR_ECALL);
 
 endmodule

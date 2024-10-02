@@ -21,8 +21,6 @@
 #include "svdpi.h"
 #include "verilated_vpi.h"
 
-#include "uuid_gen.h"
-
 #ifdef XLEN_64
 #define iword_t   int64_t
 #define uword_t   uint64_t
@@ -50,7 +48,7 @@ extern "C" {
   void dpi_trace_start();
   void dpi_trace_stop();
 
-  uint64_t dpi_uuid_gen(bool reset, int wid, uint64_t PC);
+  uint64_t dpi_uuid_gen(bool reset, int wid);
 }
 
 bool sim_trace_enabled();
@@ -209,22 +207,14 @@ void dpi_trace_stop() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-std::unordered_map<uint32_t, std::shared_ptr<vortex::UUIDGenerator>> g_uuid_gens;
+std::unordered_map<uint32_t, uint32_t> g_uuid_gens;
 
-uint64_t dpi_uuid_gen(bool reset, int wid, uint64_t PC) {
+uint64_t dpi_uuid_gen(bool reset, int wid) {
   if (reset) {
     g_uuid_gens.clear();
     return 0;
   }
-  std::shared_ptr<vortex::UUIDGenerator> uuid_gen;
-  auto it = g_uuid_gens.find(wid);
-  if (it == g_uuid_gens.end()) {
-    uuid_gen = std::make_shared<vortex::UUIDGenerator>();
-    g_uuid_gens.emplace(wid, uuid_gen);
-  } else {
-    uuid_gen = it->second;
-  }
-  uint32_t instr_uuid = uuid_gen->get_uuid(PC);
+  uint32_t instr_uuid = g_uuid_gens[wid]++;
   uint64_t uuid = (uint64_t(wid) << 32) | instr_uuid;
   return uuid;
 }
