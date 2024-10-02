@@ -530,30 +530,30 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
                         case (instr[31:30])
                             2'b10: begin // vsetvl
                                 op_type = `INST_OP_BITS'(`INST_VPU_VSETVL);
-                                op_mod.vpu.rs1 = rs1;
+                                op_args.vpu.rs1 = rs1;
                                 `USED_IREG(rs1);
                                 `USED_IREG(rs2);
                             end
                             2'b11: begin // vsetivli
                                 op_type = `INST_OP_BITS'(`INST_VPU_VSETIVLI);
-                                op_mod.csr.use_imm = 1;
-                                op_mod.vpu.uimm = instr[19:15];
-                                op_mod.vpu.vlmul = instr[22:20];
-                                op_mod.vpu.vsew = instr[25:23];
-                                op_mod.vpu.vta = instr[26];
-                                op_mod.vpu.vma = instr[27];
-                                op_mod.vpu.vill = instr[28]; // Unsure about vill
+                                op_args.csr.use_imm = 1;
+                                op_args.vpu.uimm = instr[19:15];
+                                op_args.vpu.vlmul = instr[22:20];
+                                op_args.vpu.vsew = instr[25:23];
+                                op_args.vpu.vta = instr[26];
+                                op_args.vpu.vma = instr[27];
+                                op_args.vpu.vill = instr[28]; // Unsure about vill
                                 `USED_IREG(rs1);
                             end
                             2'b00: begin // vsetvli
                                 op_type = `INST_OP_BITS'(`INST_VPU_VSETVLI);
-                                op_mod.csr.use_imm = 1;
-                                op_mod.vpu.vlmul = instr[22:20];
-                                op_mod.vpu.vsew = instr[25:23];
-                                op_mod.vpu.vta = instr[26];
-                                op_mod.vpu.vma = instr[27];
-                                op_mod.vpu.vill = instr[29]; // Unsure about vill
-                                op_mod.vpu.rs1 = rs1;
+                                op_args.csr.use_imm = 1;
+                                op_args.vpu.vlmul = instr[22:20];
+                                op_args.vpu.vsew = instr[25:23];
+                                op_args.vpu.vta = instr[26];
+                                op_args.vpu.vma = instr[27];
+                                op_args.vpu.vill = instr[29]; // Unsure about vill
+                                op_args.vpu.rs1 = rs1;
                                 `USED_IREG(rs1);
                             end
                             default:;
@@ -579,8 +579,8 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
                         `USED_IREG (rs2);
                     end
                     3'h3: begin
-                        op_mod.csr.use_imm = 1;
-                        op_mod.vpu.rs1 = rs1;
+                        op_args.csr.use_imm = 1;
+                        op_args.vpu.rs1 = rs1;
                         use_rd = 1;
                         `USED_IREG (rd);
                         `USED_IREG (rs2);
