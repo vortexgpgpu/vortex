@@ -44,7 +44,7 @@ Emulator::ipdom_entry_t::ipdom_entry_t(const ThreadMask &tmask)
 Emulator::warp_t::warp_t(const Arch& arch)
   : ireg_file(arch.num_threads(), std::vector<Word>(MAX_NUM_REGS))
   , freg_file(arch.num_threads(), std::vector<uint64_t>(MAX_NUM_REGS))
-  , vreg_file(arch.num_regs(), std::vector<Byte>(arch.vsize()))
+  , vreg_file(MAX_NUM_REGS, std::vector<Byte>(arch.vsize()))
   , uuid(0)
 {}
 
