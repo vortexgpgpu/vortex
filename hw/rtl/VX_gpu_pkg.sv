@@ -100,7 +100,7 @@ package VX_gpu_pkg;
         logic is_w;
         logic [`ALU_TYPE_BITS-1:0] xtype;
         logic [`IMM_BITS-1:0] imm;
-    } alu_args_t;
+    } ç;
 
     typedef struct packed {
         logic [($bits(alu_args_t)-`INST_FRM_BITS-`INST_FMT_BITS)-1:0] __padding;
@@ -123,7 +123,7 @@ package VX_gpu_pkg;
     } csr_args_t;
 
     typedef struct packed {
-        logic [($bits(alu_mod_t)-3-3-1-1-1-5-5)-1:0] __padding;
+        logic [($bits(alu_args_t)-3-3-1-1-1-5-5)-1:0] __padding;
         // Vtype
         logic [2:0] vlmul;
         logic [2:0] vsew;
