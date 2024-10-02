@@ -21,9 +21,6 @@ ramulator: ramulator/libramulator.so
 riscv-vector-tests:
 	PATH=${RISCV_TOOLCHAIN_PATH}/bin:$$PATH $(MAKE) -C riscv-vector-tests -e MARCH=rv${XLEN}imfv XLEN=${XLEN} RISCV_PREFIX=riscv${XLEN}-unknown-elf-
 
-riscv-vector-tests:
-	PATH=${RISCV_TOOLCHAIN_PATH}/bin:$$PATH $(MAKE) -C riscv-vector-tests -e MARCH=rv${XLEN}imfv XLEN=${XLEN} RISCV_PREFIX=riscv${XLEN}-unknown-elf-
-
 clean:
 	$(MAKE) -C softfloat/build/Linux-x86_64-GCC clean
 	rm -rf ramulator/build ramulator/libramulator.so
