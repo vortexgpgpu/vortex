@@ -373,14 +373,14 @@
         end
         `EX_SFU: begin
             if ((op_type == `INST_VPU_VSETVL) || (op_type == `INST_VPU_VSETIVLI) || (op_type == `INST_VPU_VSETVLI)) begin
-                `TRACE(level, (", lmul=%b, sew=%b, ta=%b, ma=%b, ill=%b", op_mod.vpu.vlmul, op_mod.vpu.vsew, op_mod.vpu.vta, op_mod.vpu.vma, op_mod.vpu.vill));
+                `TRACE(level, (", lmul=%b, sew=%b, ta=%b, ma=%b, ill=%b", op_args.vpu.vlmul, op_args.vpu.vsew, op_args.vpu.vta, op_args.vpu.vma, op_args.vpu.vill));
             end
             else if (`INST_SFU_IS_CSR(op_type)) begin
                 `TRACE(level, (", addr=0x%0h, use_imm=%b, imm=0x%0h", op_args.csr.addr, op_args.csr.use_imm, op_args.csr.imm));
             end
         end
         `EX_VPU: begin
-            `TRACE(level, (", lmul=%b, sew=%b, ta=%b, ma=%b, ill=%b", op_mod.vpu.vlmul, op_mod.vpu.vsew, op_mod.vpu.vta, op_mod.vpu.vma, op_mod.vpu.vill));
+            `TRACE(level, (", lmul=%b, sew=%b, ta=%b, ma=%b, ill=%b", op_args.vpu.vlmul, op_args.vpu.vsew, op_args.vpu.vta, op_args.vpu.vma, op_args.vpu.vill));
         end
         default:;
         endcase
