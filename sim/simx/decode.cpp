@@ -433,19 +433,19 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
   int sep = 0;
   if (instr.getRDType() != RegType::None) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
-    os << instr.getRDType() << std::dec << instr.getRDest();
+    os << instr.getRDType() << instr.getRDest();
   }
   for (uint32_t i = 0; i < instr.getNRSrc(); ++i) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     if (instr.getRSType(i) != RegType::None) {
-      os << instr.getRSType(i) << std::dec << instr.getRSrc(i);
+      os << instr.getRSType(i) << instr.getRSrc(i);
     } else {
-      os << "0x" << std::hex << instr.getRSrc(0);
+      os << "0x" << std::hex << instr.getRSrc(0) << std::dec;
     }
   }
   if (instr.hasImm()) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
-    os << "0x" << std::hex << instr.getImm();
+    os << "0x" << std::hex << instr.getImm() << std::dec;
   }
   if (instr.getOpcode() == Opcode::SYS && instr.getFunc3() >= 5) {
     // CSRs with immediate values
@@ -475,7 +475,7 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
 
   auto op_it = sc_instTable.find(op);
   if (op_it == sc_instTable.end()) {
-    std::cout << std::hex << "Error: invalid opcode: 0x" << static_cast<int>(op) << std::endl;
+    std::cout << "Error: invalid opcode: 0x" << std::hex << static_cast<int>(op) << std::dec << std::endl;
     return nullptr;
   }
 
@@ -654,7 +654,7 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
     instr->setDestReg(rd, RegType::Integer);
     auto imm = (code >> shift_func3) << shift_func3;
     instr->setImm(imm);
-  }  break;
+  } break;
 
   case InstType::J: {
     instr->setDestReg(rd, RegType::Integer);

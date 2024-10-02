@@ -14,6 +14,7 @@
 `include "VX_define.vh"
 
 module VX_csr_unit import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0,
     parameter NUM_LANES = 1
 ) (
@@ -36,7 +37,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     VX_execute_if.slave         execute_if,
     VX_commit_if.master         commit_if
 );
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
     localparam DATAW      = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
@@ -51,8 +52,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire                            csr_wr_enable;
     wire                            csr_req_ready;
 
-    wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.op_mod.csr.addr;
-    wire [`NRI_BITS-1:0] csr_imm = execute_if.data.op_mod.csr.imm;
+    wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.op_args.csr.addr;
+    wire [`NRI_BITS-1:0] csr_imm = execute_if.data.op_args.csr.imm;
 
     wire is_fpu_csr = (csr_addr <= `VX_CSR_FCSR);
 
@@ -75,7 +76,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
                               (execute_if.data.op_type  == `INST_VPU_VSETIVLI));
 
     VX_csr_data #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID (INSTANCE_ID),
+        .CORE_ID     (CORE_ID)
     ) csr_data (
         .clk            (clk),
         .reset          (reset),
@@ -139,7 +141,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     // CSR write
 
-    assign csr_req_data = execute_if.data.op_mod.csr.use_imm ? `XLEN'(csr_imm) : rs1_data[0];
+    assign csr_req_data = execute_if.data.op_args.csr.use_imm ? `XLEN'(csr_imm) : rs1_data[0];
     assign csr_wr_enable = (csr_write_enable || (| csr_req_data));
 
     reg [`NUM_WARPS-1:0][`XLEN-1:0] AVL;

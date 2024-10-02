@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 module VX_split_join import VX_gpu_pkg::*; #(
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input  wire                     clk,
     input  wire                     reset,
@@ -31,7 +31,7 @@ module VX_split_join import VX_gpu_pkg::*; #(
     input  wire [`NW_WIDTH-1:0]     stack_wid,
     output wire [`DV_STACK_SIZEW-1:0] stack_ptr
 );
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
 
     wire [(`NUM_THREADS+`PC_BITS)-1:0] ipdom_data [`NUM_WARPS-1:0];
     wire [`DV_STACK_SIZEW-1:0] ipdom_q_ptr [`NUM_WARPS-1:0];

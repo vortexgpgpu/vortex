@@ -1,3 +1,5 @@
 /build*
 /.vscode
+*.cache
+*.code-workspace
 *.DS_store

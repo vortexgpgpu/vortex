@@ -33,28 +33,31 @@ typedef void* vx_buffer_h;
 #define VX_CAPS_CACHE_LINE_SIZE     0x4
 #define VX_CAPS_GLOBAL_MEM_SIZE     0x5
 #define VX_CAPS_LOCAL_MEM_SIZE      0x6
-#define VX_CAPS_LOCAL_MEM_ADDR      0x7
-#define VX_CAPS_ISA_FLAGS           0x8
-#define VX_CAPS_NUM_BARRIERS        0x9
+#define VX_CAPS_ISA_FLAGS           0x7
+#define VX_CAPS_NUM_MEM_BANKS       0x8
 
 // device isa flags
-#define VX_ISA_STD_A                (1ull << 0)
-#define VX_ISA_STD_C                (1ull << 2)
-#define VX_ISA_STD_D                (1ull << 3)
-#define VX_ISA_STD_E                (1ull << 4)
-#define VX_ISA_STD_F                (1ull << 5)
-#define VX_ISA_STD_H                (1ull << 7)
-#define VX_ISA_STD_I                (1ull << 8)
-#define VX_ISA_STD_N                (1ull << 13)
-#define VX_ISA_STD_Q                (1ull << 16)
-#define VX_ISA_STD_S                (1ull << 18)
-#define VX_ISA_STD_U                (1ull << 20)
-#define VX_ISA_ARCH(flags)          (1 << (((flags >> 30) & 0x3) + 4))
-#define VX_ISA_EXT_ICACHE           (1ull << 32)
-#define VX_ISA_EXT_DCACHE           (1ull << 33)
-#define VX_ISA_EXT_L2CACHE          (1ull << 34)
-#define VX_ISA_EXT_L3CACHE          (1ull << 35)
-#define VX_ISA_EXT_LMEM             (1ull << 36)
+#define VX_ISA_STD_A                (1ull << ISA_STD_A)
+#define VX_ISA_STD_C                (1ull << ISA_STD_C)
+#define VX_ISA_STD_D                (1ull << ISA_STD_D)
+#define VX_ISA_STD_E                (1ull << ISA_STD_E)
+#define VX_ISA_STD_F                (1ull << ISA_STD_F)
+#define VX_ISA_STD_H                (1ull << ISA_STD_H)
+#define VX_ISA_STD_I                (1ull << ISA_STD_I)
+#define VX_ISA_STD_N                (1ull << ISA_STD_N)
+#define VX_ISA_STD_Q                (1ull << ISA_STD_Q)
+#define VX_ISA_STD_S                (1ull << ISA_STD_S)
+#define VX_ISA_STD_U                (1ull << ISA_STD_U)
+#define VX_ISA_ARCH(flags)          (1ull << (((flags >> 30) & 0x3) + 4))
+#define VX_ISA_EXT_ICACHE           (1ull << (32+ISA_EXT_ICACHE))
+#define VX_ISA_EXT_DCACHE           (1ull << (32+ISA_EXT_DCACHE))
+#define VX_ISA_EXT_L2CACHE          (1ull << (32+ISA_EXT_L2CACHE))
+#define VX_ISA_EXT_L3CACHE          (1ull << (32+ISA_EXT_L3CACHE))
+#define VX_ISA_EXT_LMEM             (1ull << (32+ISA_EXT_LMEM))
+#define VX_ISA_EXT_ZICOND           (1ull << (32+ISA_EXT_ZICOND))
+#define VX_ISA_EXT_TEX              (1ull << (32+ISA_EXT_TEX))
+#define VX_ISA_EXT_RASTER           (1ull << (32+ISA_EXT_RASTER))
+#define VX_ISA_EXT_OM               (1ull << (32+ISA_EXT_OM))
 
 // ready wait timeout
 #define VX_MAX_TIMEOUT              (24*60*60*1000)   // 24 Hr
@@ -63,6 +66,7 @@ typedef void* vx_buffer_h;
 #define VX_MEM_READ                 0x1
 #define VX_MEM_WRITE                0x2
 #define VX_MEM_READ_WRITE           0x3
+#define VX_MEM_PIN_MEMORY           0x4
 
 // open the device and connect to it
 int vx_dev_open(vx_device_h* hdevice);
@@ -127,7 +131,7 @@ int vx_upload_bytes(vx_device_h hdevice, const void* content, uint64_t size, vx_
 int vx_upload_file(vx_device_h hdevice, const char* filename, vx_buffer_h* hbuffer);
 
 // calculate cooperative threads array occupancy
-int vx_check_occupancy(vx_device_h hdevice, uint32_t group_size, uint32_t* max_barriers, uint32_t* max_localmem);
+int vx_check_occupancy(vx_device_h hdevice, uint32_t group_size, uint32_t* max_localmem);
 
 // performance counters
 int vx_dump_perf(vx_device_h hdevice, FILE* stream);

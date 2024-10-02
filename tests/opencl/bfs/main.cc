@@ -15,7 +15,7 @@
 #include "CLHelper.h"
 #include "util.h"
 
-#define MAX_THREADS_PER_BLOCK 256
+#define MAX_THREADS_PER_BLOCK 16
 
 // Structure to hold a node information
 struct Node {
@@ -137,7 +137,7 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
       _clInvokeKernel(kernel_id, no_of_nodes, work_group_size);
 
       _clMemcpyD2H(d_over, sizeof(char), &h_over);
-    } while (h_over);    
+    } while (h_over);
 
 #ifdef PROFILING
     kernel_timer.stop();
@@ -193,7 +193,7 @@ int main(int argc, char *argv[]) {
     printf("graph file missing!\n");
     return 0;
   }
-  
+
   try {
     char *input_f = argv[1];
     printf("Reading File\n");

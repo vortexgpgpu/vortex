@@ -59,6 +59,8 @@
 `define OFFSET_BITS     12
 `define IMM_BITS        `XLEN
 
+`define NUM_SOCKETS     `UP(`NUM_CORES / `SOCKET_SIZE)
+
 ///////////////////////////////////////////////////////////////////////////////
 
 `define EX_ALU          0
@@ -144,27 +146,27 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `define INST_OP_BITS    4
-`define INST_MOD_BITS   $bits(op_mod_t)
+`define INST_ARGS_BITS   $bits(op_args_t)
 `define INST_FMT_BITS   2
 
 ///////////////////////////////////////////////////////////////////////////////
 
 `define INST_ALU_ADD         4'b0000
+//`define INST_ALU_UNUSED    4'b0001
 `define INST_ALU_LUI         4'b0010
 `define INST_ALU_AUIPC       4'b0011
 `define INST_ALU_SLTU        4'b0100
 `define INST_ALU_SLT         4'b0101
+//`define INST_ALU_UNUSED    4'b0110
 `define INST_ALU_SUB         4'b0111
 `define INST_ALU_SRL         4'b1000
 `define INST_ALU_SRA         4'b1001
+`define INST_ALU_CZEQ        4'b1010
+`define INST_ALU_CZNE        4'b1011
 `define INST_ALU_AND         4'b1100
 `define INST_ALU_OR          4'b1101
 `define INST_ALU_XOR         4'b1110
 `define INST_ALU_SLL         4'b1111
-`define INST_ALU_CZEQ        4'b1010
-`define INST_ALU_CZNE        4'b1011
-//`define INST_ALU_UNUSED    4'b0001
-//`define INST_ALU_UNUSED    4'b0110
 
 
 `define ALU_TYPE_BITS        2
@@ -248,9 +250,9 @@
 `define INST_FPU_MUL         4'b0010
 `define INST_FPU_DIV         4'b0011
 `define INST_FPU_SQRT        4'b0100
-`define INST_FPU_CMP         4'b0101 // mod: LE=0, LT=1, EQ=2
+`define INST_FPU_CMP         4'b0101 // frm: LE=0, LT=1, EQ=2
 `define INST_FPU_F2F         4'b0110
-`define INST_FPU_MISC        4'b0111 // mod: SGNJ=0, SGNJN=1, SGNJX=2, CLASS=3, MVXW=4, MVWX=5, FMIN=6, FMAX=7
+`define INST_FPU_MISC        4'b0111 // frm: SGNJ=0, SGNJN=1, SGNJX=2, CLASS=3, MVXW=4, MVWX=5, FMIN=6, FMAX=7
 `define INST_FPU_F2I         4'b1000
 `define INST_FPU_F2U         4'b1001
 `define INST_FPU_I2F         4'b1010
@@ -316,13 +318,15 @@
 `ifdef ICACHE_ENABLE
 `define L1_ENABLE
 `endif
+
 `ifdef DCACHE_ENABLE
 `define L1_ENABLE
 `endif
 
-`define ADDR_TYPE_IO            0
-`define ADDR_TYPE_LOCAL         1
-`define ADDR_TYPE_WIDTH         (`LMEM_ENABLED + 1)
+`define ADDR_TYPE_FLUSH         0
+`define ADDR_TYPE_IO            1
+`define ADDR_TYPE_LOCAL         2 // shoud be last since optional
+`define ADDR_TYPE_WIDTH         (`ADDR_TYPE_LOCAL + `LMEM_ENABLED)
 
 `define VX_MEM_BYTEEN_WIDTH     `L3_LINE_SIZE
 `define VX_MEM_ADDR_WIDTH       (`MEM_ADDR_WIDTH - `CLOG2(`L3_LINE_SIZE))
@@ -341,7 +345,7 @@
         .DATAW  ($bits(dst)), \
         .RESETW ($bits(dst)), \
         .DEPTH  (latency) \
-    ) __``dst ( \
+    ) __``dst``__ ( \
         .clk      (clk), \
         .reset    (reset), \
         .enable   (ena), \
@@ -355,12 +359,17 @@
     VX_popcount #( \
         .N ($bits(in)), \
         .MODEL (model) \
-    ) __``out ( \
+    ) __``out``__ ( \
         .data_in  (in), \
         .data_out (out) \
     )
 
 `define POP_COUNT(out, in) `POP_COUNT_EX(out, in, 1)
+
+`define ASSIGN_VX_IF(dst, src) \
+    assign dst.valid = src.valid; \
+    assign dst.data  = src.data; \
+    assign src.ready = dst.ready
 
 `define ASSIGN_VX_MEM_BUS_IF(dst, src) \
     assign dst.req_valid  = src.req_valid; \
@@ -396,42 +405,42 @@
     assign dst.rsp_ready  = src.rsp_ready
 
 `define BUFFER_DCR_BUS_IF(dst, src, enable) \
-    logic [(1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH)-1:0] __``dst; \
     if (enable) begin \
+        reg [(1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH)-1:0] __dst; \
         always @(posedge clk) begin \
-            __``dst <= {src.write_valid, src.write_addr, src.write_data}; \
+            __dst <= {src.write_valid, src.write_addr, src.write_data}; \
         end \
+        assign {dst.write_valid, dst.write_addr, dst.write_data} = __dst; \
     end else begin \
-        assign __``dst = {src.write_valid, src.write_addr, src.write_data}; \
-    end \
-    VX_dcr_bus_if dst(); \
-    assign {dst.write_valid, dst.write_addr, dst.write_data} = __``dst
+        assign {dst.write_valid, dst.write_addr, dst.write_data} = {src.write_valid, src.write_addr, src.write_data}; \
+    end
 
-`define PERF_COUNTER_ADD(dst, src, field, width, dst_count, src_count, reg_enable) \
-    for (genvar __d = 0; __d < dst_count; ++__d) begin \
-        localparam __count = ((src_count > dst_count) ? `CDIV(src_count, dst_count) : 1); \
-        wire [__count-1:0][width-1:0] __reduce_add_i_``src``field; \
-        wire [width-1:0] __reduce_add_o_``dst``field; \
-        for (genvar __i = 0; __i < __count; ++__i) begin \
-            assign __reduce_add_i_``src``field[__i] = ``src[__d * __count + __i].``field; \
+`define PERF_COUNTER_ADD(dst, src, field, width, count, reg_enable) \
+    if (count > 1) begin \
+        wire [count-1:0][width-1:0] __reduce_add_i_field; \
+        wire [width-1:0] __reduce_add_o_field; \
+        for (genvar __i = 0; __i < count; ++__i) begin \
+            assign __reduce_add_i_field[__i] = src[__i].``field; \
         end \
-        VX_reduce #(.DATAW_IN(width), .N(__count), .OP("+")) __reduce_add_``dst``field ( \
-            __reduce_add_i_``src``field, \
-            __reduce_add_o_``dst``field \
+        VX_reduce #(.DATAW_IN(width), .N(count), .OP("+")) __reduce_add_field ( \
+            __reduce_add_i_field, \
+            __reduce_add_o_field \
         ); \
         if (reg_enable) begin \
-            reg [width-1:0] __reduce_add_r_``dst``field; \
+            reg [width-1:0] __reduce_add_r_field; \
             always @(posedge clk) begin \
                 if (reset) begin \
-                    __reduce_add_r_``dst``field <= '0; \
+                    __reduce_add_r_field <= '0; \
                 end else begin \
-                    __reduce_add_r_``dst``field <= __reduce_add_o_``dst``field; \
+                    __reduce_add_r_field <= __reduce_add_o_field; \
                 end \
             end \
-            assign ``dst[__d].``field = __reduce_add_r_``dst``field; \
+            assign dst.``field = __reduce_add_r_field; \
         end else begin \
-            assign ``dst[__d].``field = __reduce_add_o_``dst``field; \
+            assign dst.``field = __reduce_add_o_field; \
         end \
+    end else begin \
+        assign dst.``field = src[0].``field; \
     end
 
 `define ASSIGN_BLOCKED_WID(dst, src, block_idx, block_size) \
@@ -444,21 +453,5 @@
     end else begin \
         assign dst = src; \
     end
-
-`define TO_DISPATCH_DATA(data, tid) { \
-    data.uuid, \
-    data.wis, \
-    data.tmask, \
-    data.PC, \
-    data.op_type, \
-    data.op_mod, \
-    data.wb, \
-    data.rd, \
-    tid, \
-    data.rs1_data, \
-    data.rs2_data, \
-    data.rs3_data}
-
-///////////////////////////////////////////////////////////////////////////////
 
 `endif // VX_DEFINE_VH

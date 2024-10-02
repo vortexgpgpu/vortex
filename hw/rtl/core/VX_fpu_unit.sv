@@ -14,7 +14,7 @@
 `include "VX_fpu_define.vh"
 
 module VX_fpu_unit import VX_fpu_pkg::*; #(
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire clk,
     input wire reset,
@@ -26,7 +26,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
     VX_fpu_csr_if.master    fpu_csr_if[`NUM_FPU_BLOCKS]
 );
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE = `NUM_FPU_BLOCKS;
     localparam NUM_LANES  = `NUM_FPU_LANES;
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
@@ -57,7 +57,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         `UNUSED_VAR (per_block_execute_if[block_idx].data.tid)
         `UNUSED_VAR (per_block_execute_if[block_idx].data.wb)
 
-        `RESET_RELAY (block_reset, reset);
+        `RESET_RELAY_EN (block_reset, reset, (BLOCK_SIZE > 1));
 
         // Store request info
         wire fpu_req_valid, fpu_req_ready;
@@ -78,8 +78,8 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         wire [TAG_WIDTH-1:0] fpu_req_tag, fpu_rsp_tag;
         wire mdata_full;
 
-        wire [`INST_FMT_BITS-1:0] fpu_fmt = per_block_execute_if[block_idx].data.op_mod.fpu.fmt;
-        wire [`INST_FRM_BITS-1:0] fpu_frm = per_block_execute_if[block_idx].data.op_mod.fpu.frm;
+        wire [`INST_FMT_BITS-1:0] fpu_fmt = per_block_execute_if[block_idx].data.op_args.fpu.fmt;
+        wire [`INST_FRM_BITS-1:0] fpu_frm = per_block_execute_if[block_idx].data.op_args.fpu.frm;
 
         wire execute_fire = per_block_execute_if[block_idx].valid && per_block_execute_if[block_idx].ready;
         wire fpu_rsp_fire = fpu_rsp_valid && fpu_rsp_ready;
@@ -111,8 +111,6 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         assign fpu_req_valid = per_block_execute_if[block_idx].valid && ~mdata_full;
         assign per_block_execute_if[block_idx].ready = fpu_req_ready && ~mdata_full;
 
-        `RESET_RELAY (fpu_reset, block_reset);
-
     `ifdef FPU_DPI
 
         VX_fpu_dpi #(
@@ -121,7 +119,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) fpu_dpi (
             .clk        (clk),
-            .reset      (fpu_reset),
+            .reset      (block_reset),
 
             .valid_in   (fpu_req_valid),
             .mask_in    (per_block_execute_if[block_idx].data.tmask),
@@ -150,7 +148,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) fpu_fpnew (
             .clk        (clk),
-            .reset      (fpu_reset),
+            .reset      (block_reset),
 
             .valid_in   (fpu_req_valid),
             .mask_in    (per_block_execute_if[block_idx].data.tmask),
@@ -179,7 +177,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
             .OUT_BUF    (PARTIAL_BW ? 1 : 3)
         ) fpu_dsp (
             .clk        (clk),
-            .reset      (fpu_reset),
+            .reset      (block_reset),
 
             .valid_in   (fpu_req_valid),
             .mask_in    (per_block_execute_if[block_idx].data.tmask),

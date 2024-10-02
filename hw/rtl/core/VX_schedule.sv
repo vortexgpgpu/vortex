@@ -14,13 +14,14 @@
 `include "VX_define.vh"
 
 module VX_schedule import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0
 ) (
     input wire              clk,
     input wire              reset,
 
 `ifdef PERF_ENABLE
-    VX_pipeline_perf_if.schedule perf_schedule_if,
+    output sched_perf_t     sched_perf,
 `endif
 
     // configuration
@@ -42,6 +43,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     // status
     output wire             busy
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
 
     reg [`NUM_WARPS-1:0] active_warps, active_warps_n; // updated when a warp is activated or disabled
@@ -290,7 +292,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     `RESET_RELAY (split_join_reset, reset);
 
     VX_split_join #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID ($sformatf("%s-splitjoin", INSTANCE_ID))
     ) split_join (
         .clk        (clk),
         .reset      (split_join_reset),
@@ -338,9 +340,9 @@ module VX_schedule import VX_gpu_pkg::*; #(
 `ifdef SV_DPI
     always @(posedge clk) begin
         if (reset) begin
-            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(1, 0, 0));
+            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(1, 32'd0));
         end else if (schedule_fire) begin
-            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(0, 32'(g_wid), 64'(schedule_pc)));
+            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(0, 32'(g_wid)));
         end
     end
 `else
@@ -368,24 +370,42 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     assign schedule_if.data.uuid = instr_uuid;
 
-    `RESET_RELAY (pending_instr_reset, reset);
+    // Track pending instructions per warp
 
-    wire no_pending_instr;
-    VX_pending_instr #(
-        .CTR_WIDTH  (12),
-        .DECR_COUNT (`ISSUE_WIDTH),
-        .ALM_EMPTY  (1)
-    ) pending_instr(
-        .clk       (clk),
-        .reset     (pending_instr_reset),
-        .incr      (schedule_if_fire),
-        .incr_wid  (schedule_if.data.wid),
-        .decr      (commit_sched_if.committed),
-        .decr_wid  (commit_sched_if.committed_wid),
-        .alm_empty_wid (sched_csr_if.alm_empty_wid),
-        .alm_empty (sched_csr_if.alm_empty),
-        .empty     (no_pending_instr)
-    );
+    reg [`NUM_WARPS-1:0] per_warp_incr;
+    always @(*) begin
+        per_warp_incr = 0;
+        if (schedule_if_fire) begin
+            per_warp_incr[schedule_if.data.wid] = 1;
+        end
+    end
+
+    wire [`NUM_WARPS-1:0] pending_warp_empty;
+    wire [`NUM_WARPS-1:0] pending_warp_alm_empty;
+
+    `RESET_RELAY_EX (pending_instr_reset, reset, `NUM_WARPS, `MAX_FANOUT);
+
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
+
+        VX_pending_size #(
+            .SIZE      (4096),
+            .ALM_EMPTY (1)
+        ) counter (
+            .clk       (clk),
+            .reset     (pending_instr_reset[i]),
+            .incr      (per_warp_incr[i]),
+            .decr      (commit_sched_if.committed_warps[i]),
+            .empty     (pending_warp_empty[i]),
+            .alm_empty (pending_warp_alm_empty[i]),
+            `UNUSED_PIN (full),
+            `UNUSED_PIN (alm_full),
+            `UNUSED_PIN (size)
+        );
+	end
+
+    assign sched_csr_if.alm_empty = pending_warp_alm_empty[sched_csr_if.alm_empty_wid];
+
+    wire no_pending_instr = (& pending_warp_empty);
 
     `BUFFER_EX(busy, (active_warps != 0 || ~no_pending_instr), 1'b1, 1);
 
@@ -412,7 +432,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
             end
         end
     end
-    `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT, ("%t: *** core%0d-scheduler-timeout: stalled_warps=%b", $time, CORE_ID, stalled_warps))
+    `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT, ("%t: *** %s timeout: stalled_warps=%b", $time, INSTANCE_ID, stalled_warps))
 
 `ifdef PERF_ENABLE
     reg [`PERF_CTR_BITS-1:0] perf_sched_idles;
@@ -431,8 +451,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
         end
     end
 
-    assign perf_schedule_if.sched_idles = perf_sched_idles;
-    assign perf_schedule_if.sched_stalls = perf_sched_stalls;
+    assign sched_perf.idles = perf_sched_idles;
+    assign sched_perf.stalls = perf_sched_stalls;
 `endif
 
 endmodule

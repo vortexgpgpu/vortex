@@ -45,14 +45,14 @@ VX_LIBS += -L$(LIBC_VORTEX)/lib -lm -lc
 VX_LIBS += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 #VX_LIBS += -lgcc
 
-VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortexrt.a $(VX_LIBS)
+VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(ROOT_DIR)/kernel/libvortex.a $(VX_LIBS)
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 CXXFLAGS += -I$(VORTEX_RT_PATH)/include -I$(ROOT_DIR)/hw
 
-LDFLAGS += -L$(ROOT_DIR)/runtime/stub -lvortex
+LDFLAGS += -L$(ROOT_DIR)/runtime -lvortex
 
-# Debugigng
+# Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0
 else
@@ -86,29 +86,31 @@ $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 run-simx: $(PROJECT) kernel.vxbin
-	LD_LIBRARY_PATH=$(ROOT_DIR)/runtime/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
-
-run-opae: $(PROJECT) kernel.vxbin
-	SCOPE_JSON_PATH=$(ROOT_DIR)/runtime/opae/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(ROOT_DIR)/runtime/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	LD_LIBRARY_PATH=$(ROOT_DIR)/runtime:$(LD_LIBRARY_PATH) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)
 
 run-rtlsim: $(PROJECT) kernel.vxbin
-	LD_LIBRARY_PATH=$(ROOT_DIR)/runtime/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	LD_LIBRARY_PATH=$(ROOT_DIR)/runtime:$(LD_LIBRARY_PATH) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
+
+run-opae: $(PROJECT) kernel.vxbin
+	SCOPE_JSON_PATH=$(ROOT_DIR)/runtime/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(ROOT_DIR)/runtime:$(LD_LIBRARY_PATH) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
 
 run-xrt: $(PROJECT) kernel.vxbin
 ifeq ($(TARGET), hw)
-	XRT_INI_PATH=$(XRT_SYN_DIR)/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(ROOT_DIR)/runtime/xrt:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	XRT_INI_PATH=$(XRT_SYN_DIR)/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(ROOT_DIR)/runtime:$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 else
-	XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(XRT_SYN_DIR)/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(ROOT_DIR)/runtime/xrt:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(XRT_SYN_DIR)/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(ROOT_DIR)/runtime:$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 endif
 
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
-clean:
+clean-kernel:
+	rm -rf *.elf *.vxbin *.dump
+
+clean-host:
 	rm -rf $(PROJECT) *.o *.log .depend
 
-clean-all: clean
-	rm -rf *.elf *.vxbin *.dump
+clean: clean-kernel clean-host
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend

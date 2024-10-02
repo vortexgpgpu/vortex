@@ -1,25 +1,14 @@
-#include <stdint.h>
-#include <vx_intrinsics.h>
 #include <vx_spawn.h>
 #include "common.h"
 
-inline char is_log2(uint32_t x) {
-    return ((x & (x-1)) == 0);
-}
-
-void kernel_body(uint32_t task_id, kernel_arg_t* __UNIFORM__ arg) {
+void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
     auto I = reinterpret_cast<TYPE*>(arg->I_addr);
-    auto W = reinterpret_cast<TYPE*>((arg->lmem_addr != 0) ? arg->lmem_addr : arg->W_addr);
-	auto O = reinterpret_cast<TYPE*>(arg->O_addr); 
+    auto W = reinterpret_cast<TYPE*>(arg->use_lmem ? __local_mem(0) : (void*)arg->W_addr);
+	auto O = reinterpret_cast<TYPE*>(arg->O_addr);
     auto width = arg->width;
 
-    uint32_t row, col;
-    if (is_log2(width)) {
-        row = task_id >> arg->log2_width;
-        col = task_id & (width-1);
-    } else {
-        row = task_id / width;
-    }
+    int col = blockIdx.x;
+    int row = blockIdx.y;
 
      // Adjust for padded borders
     int paddedWidth = width + 2;
@@ -46,14 +35,13 @@ void kernel_body(uint32_t task_id, kernel_arg_t* __UNIFORM__ arg) {
 
 int main() {
     kernel_arg_t* arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);
-    if (arg->lmem_addr != 0) {
+    if (arg->use_lmem) {
         // populate local memory
         auto W = reinterpret_cast<TYPE*>(arg->W_addr);
-        auto L = reinterpret_cast<TYPE*>(arg->lmem_addr);
+        auto L = reinterpret_cast<TYPE*>(__local_mem(0));
         for (int i = 0; i < (3*3); ++i) {
             L[i] = W[i];
         }
-    }    
-    vx_spawn_tasks(arg->num_tasks, (vx_spawn_tasks_cb)kernel_body, arg);
-    return 0;
+    }
+    return vx_spawn_threads(2, arg->grid_dim, nullptr, (vx_kernel_func_cb)kernel_body, arg);
 }

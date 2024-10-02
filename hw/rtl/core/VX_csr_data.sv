@@ -26,13 +26,13 @@
         addr+12'h80 : dst = 32'(src[$bits(src)-1:32])
 `endif
 
-
 module VX_csr_data
 import VX_gpu_pkg::*;
 `ifdef EXT_F_ENABLE
 import VX_fpu_pkg::*;
 `endif
 #(
+    parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0
 ) (
     input wire                          clk,
@@ -169,7 +169,7 @@ import VX_fpu_pkg::*;
                 `VX_CSR_VLENB:    vx_csr_vlenb[write_wid][write_tid]    <= write_data;
             `endif
                 default: begin
-                    `ASSERT(0, ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
+                    `ASSERT(0, ("%t: *** %s invalid CSR write address: %0h (#%0d)", $time, INSTANCE_ID, write_addr, write_uuid));
                 end
             endcase
         end
@@ -204,7 +204,7 @@ import VX_fpu_pkg::*;
             `VX_CSR_NUM_THREADS: read_data_ro_r = `XLEN'(`NUM_THREADS);
             `VX_CSR_NUM_WARPS  : read_data_ro_r = `XLEN'(`NUM_WARPS);
             `VX_CSR_NUM_CORES  : read_data_ro_r = `XLEN'(`NUM_CORES * `NUM_CLUSTERS);
-            `VX_CSR_NUM_BARRIERS: read_data_ro_r = `XLEN'(`NUM_BARRIERS);
+            `VX_CSR_LOCAL_MEM_BASE: read_data_ro_r = `XLEN'(`LMEM_BASE_ADDR);
 
             `CSR_READ_64(`VX_CSR_MCYCLE, read_data_ro_r, cycles);
 
@@ -244,21 +244,21 @@ import VX_fpu_pkg::*;
                     `VX_DCR_MPM_CLASS_CORE: begin
                         case (read_addr)
                         // PERF: pipeline
-                        `CSR_READ_64(`VX_CSR_MPM_SCHED_ID, read_data_ro_r, pipeline_perf_if.sched_idles);
-                        `CSR_READ_64(`VX_CSR_MPM_SCHED_ST, read_data_ro_r, pipeline_perf_if.sched_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_IBUF_ST, read_data_ro_r, pipeline_perf_if.ibf_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_ST, read_data_ro_r, pipeline_perf_if.scb_stalls);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_ALU, read_data_ro_r, pipeline_perf_if.units_uses[`EX_ALU]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCHED_ID, read_data_ro_r, pipeline_perf_if.sched.idles);
+                        `CSR_READ_64(`VX_CSR_MPM_SCHED_ST, read_data_ro_r, pipeline_perf_if.sched.stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_IBUF_ST, read_data_ro_r, pipeline_perf_if.issue.ibf_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_ST, read_data_ro_r, pipeline_perf_if.issue.scb_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_OPDS_ST, read_data_ro_r, pipeline_perf_if.issue.opd_stalls);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_ALU, read_data_ro_r, pipeline_perf_if.issue.units_uses[`EX_ALU]);
                     `ifdef EXT_F_ENABLE
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_FPU, read_data_ro_r, pipeline_perf_if.units_uses[`EX_FPU]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_FPU, read_data_ro_r, pipeline_perf_if.issue.units_uses[`EX_FPU]);
                     `else
-                        `VX_CSR_MPM_SCRB_FPU   : read_data_ro_r = '0;
-                        `VX_CSR_MPM_SCRB_FPU_H : read_data_ro_r = '0;
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_FPU, read_data_ro_r, `PERF_CTR_BITS'(0));
                     `endif
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_LSU, read_data_ro_r, pipeline_perf_if.units_uses[`EX_LSU]);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_SFU, read_data_ro_r, pipeline_perf_if.units_uses[`EX_SFU]);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_CSRS, read_data_ro_r, pipeline_perf_if.sfu_uses[`SFU_CSRS]);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_WCTL, read_data_ro_r, pipeline_perf_if.sfu_uses[`SFU_WCTL]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_LSU, read_data_ro_r, pipeline_perf_if.issue.units_uses[`EX_LSU]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_SFU, read_data_ro_r, pipeline_perf_if.issue.units_uses[`EX_SFU]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_CSRS, read_data_ro_r, pipeline_perf_if.issue.sfu_uses[`SFU_CSRS]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_WCTL, read_data_ro_r, pipeline_perf_if.issue.sfu_uses[`SFU_WCTL]);
                         // PERF: memory
                         `CSR_READ_64(`VX_CSR_MPM_IFETCHES, read_data_ro_r, pipeline_perf_if.ifetches);
                         `CSR_READ_64(`VX_CSR_MPM_LOADS, read_data_ro_r, pipeline_perf_if.loads);

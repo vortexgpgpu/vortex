@@ -17,6 +17,9 @@ import sys
 import argparse
 import csv
 import re
+import inspect
+
+configs = None
 
 def parse_args():
     parser = argparse.ArgumentParser(description='CPU trace log to CSV format converter.')
@@ -25,7 +28,25 @@ def parse_args():
     parser.add_argument('log', help='Input log file')
     return parser.parse_args()
 
-def parse_simx(log_filename):
+def load_config(filename):
+    config_pattern = r"CONFIGS: num_threads=(\d+), num_warps=(\d+), num_cores=(\d+), num_clusters=(\d+), socket_size=(\d+), local_mem_base=0x([0-9a-fA-F]+), num_barriers=(\d+)"
+    with open(filename, 'r') as file:
+        for line in file:
+            config_match = re.search(config_pattern, line)
+            if config_match:
+                config = {
+                    'num_threads': int(config_match.group(1)),
+                    'num_warps': int(config_match.group(2)),
+                    'num_cores': int(config_match.group(3)),
+                    'num_clusters': int(config_match.group(4)),
+                    'socket_size': int(config_match.group(5)),
+                    'local_mem_base': int(config_match.group(6), 16),
+                    'num_barriers': int(config_match.group(7)),
+                }
+                return config
+    return None
+
+def parse_simx(log_lines):
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
     instr_pattern = r"Instr (0x[0-9a-fA-F]+):"
     opcode_pattern = r"Instr 0x[0-9a-fA-F]+: ([0-9a-zA-Z_\.]+)"
@@ -36,19 +57,19 @@ def parse_simx(log_filename):
     destination_pattern = r"Dest Reg: (.+)"
     uuid_pattern = r"#(\d+)"
     entries = []
-    with open(log_filename, 'r') as log_file:
-        instr_data = None
-        for lineno, line in enumerate(log_file, start=1):
+    instr_data = None
+    for lineno, line in enumerate(log_lines, start=1):
+        try:
             if line.startswith("DEBUG Fetch:"):
                 if instr_data:
                     entries.append(instr_data)
                 instr_data = {}
                 instr_data["lineno"] = lineno
                 instr_data["PC"] = re.search(pc_pattern, line).group(1)
-                instr_data["core_id"] = re.search(core_id_pattern, line).group(1)
-                instr_data["warp_id"] = re.search(warp_id_pattern, line).group(1)
+                instr_data["core_id"] = int(re.search(core_id_pattern, line).group(1))
+                instr_data["warp_id"] = int(re.search(warp_id_pattern, line).group(1))
                 instr_data["tmask"] = re.search(tmask_pattern, line).group(1)
-                instr_data["uuid"] = re.search(uuid_pattern, line).group(1)
+                instr_data["uuid"] = int(re.search(uuid_pattern, line).group(1))
             elif line.startswith("DEBUG Instr"):
                 instr_data["instr"] = re.search(instr_pattern, line).group(1)
                 instr_data["opcode"] = re.search(opcode_pattern, line).group(1)
@@ -57,8 +78,11 @@ def parse_simx(log_filename):
                 instr_data["operands"] = (instr_data["operands"] + ', ' + src_reg) if 'operands' in instr_data else src_reg
             elif line.startswith("DEBUG Dest"):
                 instr_data["destination"] = re.search(destination_pattern, line).group(1)
-        if instr_data:
-            entries.append(instr_data)
+        except Exception as e:
+            print("Error at line {}: {}".format(lineno, e))
+            instr_data = None
+    if instr_data:
+        entries.append(instr_data)
     return entries
 
 def reverse_binary(bin_str):
@@ -91,8 +115,9 @@ def append_value(text, reg, value, tmask_arr, sep):
     text += "}"
     return text, sep
 
-def parse_rtlsim(log_filename):
-    line_pattern = r"\d+: core(\d+)-(decode|issue|commit)"
+def parse_rtlsim(log_lines):
+    global configs
+    line_pattern = r"\d+: cluster(\d+)-socket(\d+)-core(\d+)-(decode|issue|commit)"
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
     instr_pattern = r"instr=(0x[0-9a-fA-F]+)"
     ex_pattern = r"ex=([a-zA-Z]+)"
@@ -112,22 +137,27 @@ def parse_rtlsim(log_filename):
     eop_pattern = r"eop=(\d)"
     uuid_pattern = r"#(\d+)"
     entries = []
-    with open(log_filename, 'r') as log_file:
-        instr_data = {}
-        for lineno, line in enumerate(log_file, start=1):
+    instr_data = {}
+    num_cores = configs['num_cores']
+    socket_size = configs['socket_size']
+    num_sockets = (num_cores + socket_size - 1) // socket_size
+    for lineno, line in enumerate(log_lines, start=1):
+        try:
             line_match = re.search(line_pattern, line)
             if line_match:
                 PC = re.search(pc_pattern, line).group(1)
-                warp_id = re.search(warp_id_pattern, line).group(1)
+                warp_id = int(re.search(warp_id_pattern, line).group(1))
                 tmask = re.search(tmask_pattern, line).group(1)
-                uuid = re.search(uuid_pattern, line).group(1)
-                core_id = line_match.group(1)
-                stage = line_match.group(2)
+                uuid = int(re.search(uuid_pattern, line).group(1))
+                cluster_id = int(line_match.group(1))
+                socket_id = int(line_match.group(2))
+                core_id = int(line_match.group(3))
+                stage = line_match.group(4)
                 if stage == "decode":
                     trace = {}
                     trace["uuid"] = uuid
                     trace["PC"] = PC
-                    trace["core_id"] = core_id
+                    trace["core_id"] = ((((cluster_id * num_sockets) + socket_id) * socket_size) + core_id)
                     trace["warp_id"] = warp_id
                     trace["tmask"] = reverse_binary(tmask)
                     trace["instr"] = re.search(instr_pattern, line).group(1)
@@ -197,36 +227,62 @@ def parse_rtlsim(log_filename):
                                 del trace["issued"]
                                 del instr_data[uuid]
                                 entries.append(trace)
+        except Exception as e:
+            print("Error at line {}: {}".format(lineno, e))
     return entries
 
-def write_csv(log_filename, csv_filename, log_type):
-    entries = None
-
-    # parse log file
-    if log_type == "rtlsim":
-        entries = parse_rtlsim(log_filename)
-    elif log_type == "simx":
-        entries = parse_simx(log_filename)
-    else:
-        print('Error: invalid log type')
-        sys.exit()
-
-    # sort entries by uuid
-    entries.sort(key=lambda x: (int(x['uuid'])))
-    for entry in entries:
-        del entry['lineno']
-
-    # write to CSV
+def write_csv(sublogs, csv_filename, log_type):
     with open(csv_filename, 'w', newline='') as csv_file:
-        fieldnames = ["uuid", "PC", "opcode", "instr", "core_id", "warp_id", "tmask", "operands", "destination"]
+        fieldnames = ["uuid", "PC", "opcode", "instr", "core_id", "warp_id", "tmask", "destination", "operands"]
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         writer.writeheader()
-        for entry in entries:
-            writer.writerow(entry)
+
+        for sublog in sublogs:
+            entries = None
+
+            # parse sublog
+            if log_type == "rtlsim":
+                entries = parse_rtlsim(sublog)
+            elif log_type == "simx":
+                entries = parse_simx(sublog)
+            else:
+                print('Error: invalid log type')
+                sys.exit()
+
+            # sort entries by uuid
+            entries.sort(key=lambda x: (int(x['uuid'])))
+            for entry in entries:
+                del entry['lineno']
+
+            for entry in entries:
+                writer.writerow(entry)
+
+def split_log_file(log_filename):
+    with open(log_filename, 'r') as log_file:
+        log_lines = log_file.readlines()
+
+    sublogs = []
+    current_sublog = None
+
+    for line in log_lines:
+        if line.startswith("[VXDRV] START"):
+            if current_sublog is not None:
+                sublogs.append(current_sublog)
+            current_sublog = [line]
+        elif current_sublog is not None:
+            current_sublog.append(line)
+
+    if current_sublog is not None:
+        sublogs.append(current_sublog)
+
+    return sublogs
 
 def main():
+    global configs
     args = parse_args()
-    write_csv(args.log, args.csv, args.type)
+    configs = load_config(args.log)
+    sublogs = split_log_file(args.log)
+    write_csv(sublogs, args.csv, args.type)
 
 if __name__ == "__main__":
     main()

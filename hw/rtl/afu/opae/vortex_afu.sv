@@ -96,9 +96,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     wire [127:0] afu_id = `AFU_ACCEL_UUID;
 
-    wire [63:0] dev_caps = {8'b0,
+    wire [63:0] dev_caps = {16'b0,
                             8'(`LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
-                            8'(`NUM_BARRIERS),
                             16'(`NUM_CORES * `NUM_CLUSTERS),
                             8'(`NUM_WARPS),
                             8'(`NUM_THREADS),
@@ -241,13 +240,13 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             MMIO_CMD_ARG0: begin
                 cmd_args[0] <= 64'(cp2af_sRxPort.c0.data);
             `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: MMIO_CMD_ARG0: data=0x%0h\n", $time, 64'(cp2af_sRxPort.c0.data)));
+                `TRACE(2, ("%d: MMIO_CMD_ARG0: data=0x%h\n", $time, 64'(cp2af_sRxPort.c0.data)));
             `endif
             end
             MMIO_CMD_ARG1: begin
                 cmd_args[1] <= 64'(cp2af_sRxPort.c0.data);
             `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: MMIO_CMD_ARG1: data=0x%0h\n", $time, 64'(cp2af_sRxPort.c0.data)));
+                `TRACE(2, ("%d: MMIO_CMD_ARG1: data=0x%h\n", $time, 64'(cp2af_sRxPort.c0.data)));
             `endif
             end
             MMIO_CMD_ARG2: begin
@@ -264,13 +263,13 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             `ifdef SCOPE
             MMIO_SCOPE_WRITE: begin
             `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: MMIO_SCOPE_WRITE: data=0x%0h\n", $time, cmd_scope_wdata));
+                `TRACE(2, ("%d: MMIO_SCOPE_WRITE: data=0x%h\n", $time, cmd_scope_wdata));
             `endif
             end
             `endif
             default: begin
                 `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: Unknown MMIO Wr: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data)));
+                `TRACE(2, ("%d: Unknown MMIO Wr: addr=0x%0h, data=0x%h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data)));
                 `endif
             end
             endcase
@@ -306,14 +305,14 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             MMIO_SCOPE_READ: begin
                 mmio_tx.data <= cmd_scope_rdata;
             `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: MMIO_SCOPE_READ: data=0x%0h\n", $time, cmd_scope_rdata));
+                `TRACE(2, ("%d: MMIO_SCOPE_READ: data=0x%h\n", $time, cmd_scope_rdata));
             `endif
             end
             `endif
             MMIO_DEV_CAPS: begin
                 mmio_tx.data <= dev_caps;
             `ifdef DBG_TRACE_AFU
-                `TRACE(2, ("%d: MMIO_DEV_CAPS: data=0x%0h\n", $time, dev_caps));
+                `TRACE(2, ("%d: MMIO_DEV_CAPS: data=0x%h\n", $time, dev_caps));
             `endif
             end
             MMIO_ISA_CAPS: begin
@@ -581,19 +580,17 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .TAG_WIDTH  (AVS_REQ_TAGW+1)
     ) mem_bus_if[1]();
 
-    `RESET_RELAY (mem_arb_reset, reset);
-
     VX_mem_arb #(
         .NUM_INPUTS  (2),
         .DATA_SIZE   (LMEM_DATA_SIZE),
         .ADDR_WIDTH  (LMEM_ADDR_WIDTH),
         .TAG_WIDTH   (AVS_REQ_TAGW),
-        .ARBITER     ("P"),
+        .ARBITER     ("P"), // prioritize VX requests
         .REQ_OUT_BUF (0),
         .RSP_OUT_BUF (0)
     ) mem_arb (
         .clk        (clk),
-        .reset      (mem_arb_reset),
+        .reset      (reset),
         .bus_in_if  (cci_vx_mem_bus_if),
         .bus_out_if (mem_bus_if)
     );
@@ -693,9 +690,11 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .reset (reset),
         .incr  (cci_rd_req_fire),
         .decr  (cci_rdq_pop),
+        `UNUSED_PIN (empty),
+        `UNUSED_PIN (alm_empty),
         .full  (cci_pending_reads_full),
-        .size  (cci_pending_reads),
-        `UNUSED_PIN (empty)
+        `UNUSED_PIN (alm_full),
+        .size  (cci_pending_reads)
     );
 
     `UNUSED_VAR (cci_pending_reads)
@@ -759,7 +758,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                 cci_mem_wr_req_addr_base <= cci_mem_wr_req_addr_base + CCI_ADDR_WIDTH'(CCI_RD_WINDOW_SIZE);
             end
         `ifdef DBG_TRACE_AFU
-            `TRACE(2, ("%d: CCI Rd Rsp: idx=%0d, ctr=%0d, data=0x%0h\n", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr, cp2af_sRxPort.c0.data));
+            `TRACE(2, ("%d: CCI Rd Rsp: idx=%0d, ctr=%0d, data=0x%h\n", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr, cp2af_sRxPort.c0.data));
         `endif
         end
 
@@ -777,14 +776,12 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         end
     end
 
-    `RESET_RELAY (cci_rdq_reset, reset);
-
     VX_fifo_queue #(
         .DATAW (CCI_RD_QUEUE_DATAW),
         .DEPTH (CCI_RD_QUEUE_SIZE)
     ) cci_rd_req_queue (
         .clk      (clk),
-        .reset    (cci_rdq_reset),
+        .reset    (reset),
         .push     (cci_rdq_push),
         .pop      (cci_rdq_pop),
         .data_in  (cci_rdq_din),
@@ -853,7 +850,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .incr  (cci_mem_rd_rsp_fire),
         .decr  (cci_wr_rsp_fire),
         .empty (cci_pending_writes_empty),
+        `UNUSED_PIN (alm_empty),
         .full  (cci_pending_writes_full),
+        `UNUSED_PIN (alm_full),
         .size  (cci_pending_writes)
     );
 
@@ -903,7 +902,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             cci_wr_req_done <= 1;
             end
         `ifdef DBG_TRACE_AFU
-            `TRACE(2, ("%d: CCI Wr Req: addr=0x%0h, rem=%0d, pending=%0d, data=0x%0h\n", $time, cci_wr_req_addr, (cci_wr_req_ctr - 1), cci_pending_writes, af2cp_sTxPort.c1.data));
+            `TRACE(2, ("%d: CCI Wr Req: addr=0x%0h, rem=%0d, pending=%0d, data=0x%h\n", $time, cci_wr_req_addr, (cci_wr_req_ctr - 1), cci_pending_writes, af2cp_sTxPort.c1.data));
         `endif
         end
 
@@ -1011,7 +1010,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     // SCOPE //////////////////////////////////////////////////////////////////////
 
 `ifdef DBG_SCOPE_AFU
-`ifdef SCOPE
     wire mem_req_fire = mem_bus_if[0].req_valid && mem_bus_if[0].req_ready;
     wire mem_rsp_fire = mem_bus_if[0].rsp_valid && mem_bus_if[0].rsp_ready;
     wire avs_write_fire = avs_write[0] && ~avs_waitrequest[0];
@@ -1081,7 +1079,6 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .bus_in(scope_bus_in_w[0]),
         .bus_out(scope_bus_out_w[0])
     );
-`endif
 `else
     `SCOPE_IO_UNUSED_W(0)
 `endif
@@ -1092,13 +1089,13 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     always @(posedge clk) begin
         for (integer i = 0; i < NUM_LOCAL_MEM_BANKS; ++i) begin
             if (avs_write[i] && ~avs_waitrequest[i]) begin
-                `TRACE(2, ("%d: AVS Wr Req [%0d]: addr=0x%0h, byteen=0x%0h, burst=0x%0h, data=0x%0h\n", $time, i, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i], avs_writedata[i]));
+                `TRACE(2, ("%d: AVS Wr Req [%0d]: addr=0x%0h, byteen=0x%0h, burst=0x%0h, data=0x%h\n", $time, i, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i], avs_writedata[i]));
             end
             if (avs_read[i] && ~avs_waitrequest[i]) begin
                 `TRACE(2, ("%d: AVS Rd Req [%0d]: addr=0x%0h, byteen=0x%0h,  burst=0x%0h\n", $time, i, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i]));
             end
             if (avs_readdatavalid[i]) begin
-                `TRACE(2, ("%d: AVS Rd Rsp [%0d]: data=0x%0h\n", $time, i, avs_readdata[i]));
+                `TRACE(2, ("%d: AVS Rd Rsp [%0d]: data=0x%h\n", $time, i, avs_readdata[i]));
             end
         end
     end

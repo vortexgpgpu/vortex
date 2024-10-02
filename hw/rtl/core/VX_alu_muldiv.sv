@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 module VX_alu_muldiv #(
-    parameter CORE_ID   = 0,
+    parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = 1
 ) (
     input wire          clk,
@@ -26,7 +26,7 @@ module VX_alu_muldiv #(
     // Outputs
     VX_commit_if.master commit_if
 );
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam PID_BITS  = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH = `UP(PID_BITS);
     localparam TAG_WIDTH = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + PID_WIDTH + 1 + 1;
@@ -38,7 +38,7 @@ module VX_alu_muldiv #(
     wire is_mulx_op = `INST_M_IS_MULX(muldiv_op);
     wire is_signed_op = `INST_M_SIGNED(muldiv_op);
 `ifdef XLEN_64
-    wire is_alu_w = execute_if.data.op_mod.alu.is_w;
+    wire is_alu_w = execute_if.data.op_args.alu.is_w;
 `else
     wire is_alu_w = 0;
 `endif
@@ -69,7 +69,7 @@ module VX_alu_muldiv #(
     wire mul_fire_in = mul_valid_in && mul_ready_in;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        wire [`XLEN-1:0] mul_resultl, mul_resulth;
+        reg [`XLEN-1:0] mul_resultl, mul_resulth;
         wire [`XLEN-1:0] mul_in1 = is_alu_w ? (execute_if.data.rs1_data[i] & `XLEN'hFFFFFFFF) : execute_if.data.rs1_data[i];
         wire [`XLEN-1:0] mul_in2 = is_alu_w ? (execute_if.data.rs2_data[i] & `XLEN'hFFFFFFFF) : execute_if.data.rs2_data[i];
         always @(*) begin
@@ -83,7 +83,7 @@ module VX_alu_muldiv #(
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) mul_shift_reg (
-        .clk(clk),
+        .clk      (clk),
         .reset    (reset),
         .enable   (mul_ready_in),
         .data_in  ({mul_valid_in, execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, mul_result_tmp}),
@@ -235,7 +235,7 @@ module VX_alu_muldiv #(
     wire div_fire_in = div_valid_in && div_ready_in;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        wire [`XLEN-1:0] div_quotient, div_remainder;
+        reg [`XLEN-1:0] div_quotient, div_remainder;
         always @(*) begin
             dpi_idiv (div_fire_in, is_signed_op, div_in1[i], div_in2[i], div_quotient, div_remainder);
         end
@@ -324,6 +324,7 @@ module VX_alu_muldiv #(
     VX_stream_arb #(
         .NUM_INPUTS (2),
         .DATAW (TAG_WIDTH + (NUM_LANES * `XLEN)),
+        .ARBITER ("F"),
         .OUT_BUF (1)
     ) rsp_buf (
         .clk       (clk),

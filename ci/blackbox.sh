@@ -193,7 +193,7 @@ then
 
     if [ $REBUILD -eq 1 ] || [ "$CONFIGS+$DEBUG+$SCOPE" != "$LAST_CONFIGS" ];
     then
-        make -C $DRIVER_PATH clean > /dev/null
+        make -C $DRIVER_PATH clean-driver > /dev/null
         echo "$CONFIGS+$DEBUG+$SCOPE" > $BLACKBOX_CACHE
     fi
 fi
@@ -232,11 +232,11 @@ then
         if [ $HAS_ARGS -eq 1 ]
         then
             echo "running: VORTEX_RT_PATH=$TEMPDIR OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1"
-            VORTEX_RT_PATH=$TEMPDIR OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
+            DEBUG=1 VORTEX_RT_PATH=$TEMPDIR OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
             status=$?
         else
             echo "running: VORTEX_RT_PATH=$TEMPDIR make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1"
-            VORTEX_RT_PATH=$TEMPDIR make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
+            DEBUG=1 VORTEX_RT_PATH=$TEMPDIR make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
             status=$?
         fi
 
@@ -257,11 +257,11 @@ then
         if [ $HAS_ARGS -eq 1 ]
         then
             echo "running: OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1"
-            OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
+            DEBUG=1 OPTS=$ARGS make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
             status=$?
         else
             echo "running: make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1"
-            make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
+            DEBUG=1 make -C $APP_PATH run-$DRIVER > $LOGFILE 2>&1
             status=$?
         fi
     fi

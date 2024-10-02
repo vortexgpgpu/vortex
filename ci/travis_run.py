@@ -64,6 +64,7 @@ def main(argv):
 
     # execute command
     exitcode = execute(argv)
+    print(" + exitcode="+str(exitcode))
 
     # terminate monitoring thread
     stop_event.set()

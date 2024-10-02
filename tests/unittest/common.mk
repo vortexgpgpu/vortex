@@ -2,10 +2,10 @@
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 CXXFLAGS += -I$(VORTEX_RT_PATH)/common
 
-# Debugigng
+# Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0
-else    
+else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
@@ -19,9 +19,6 @@ run:
 
 clean:
 	rm -rf $(PROJECT) *.o *.log .depend
-
-clean-all: clean
-	rm -rf *.elf *.bin *.dump
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend
