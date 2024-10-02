@@ -29,6 +29,7 @@ private:
   uint16_t num_cores_;
   uint16_t num_clusters_;
   uint16_t socket_size_;
+  uint16_t vsize_;
   uint16_t num_barriers_;
   uint64_t local_mem_base_;
 
@@ -72,6 +73,10 @@ public:
 
   uint16_t socket_size() const {
     return socket_size_;
+  }
+
+  uint16_t vsize() const {
+    return vsize_;
   }
 };
 
