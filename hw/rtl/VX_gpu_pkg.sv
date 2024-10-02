@@ -100,7 +100,7 @@ package VX_gpu_pkg;
         logic is_w;
         logic [`ALU_TYPE_BITS-1:0] xtype;
         logic [`IMM_BITS-1:0] imm;
-    } ç;
+    } alu_args_t;
 
     typedef struct packed {
         logic [($bits(alu_args_t)-`INST_FRM_BITS-`INST_FMT_BITS)-1:0] __padding;
