@@ -41,8 +41,6 @@ public:
     , num_clusters_(NUM_CLUSTERS)
     , socket_size_(SOCKET_SIZE)
     , vsize_(VLEN / 8)
-    , num_regs_(32)
-    , num_csrs_(4096)
     , num_barriers_(NUM_BARRIERS)
     , local_mem_base_(LMEM_BASE_ADDR)
   {}
