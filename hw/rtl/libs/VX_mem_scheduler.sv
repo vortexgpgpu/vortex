@@ -459,25 +459,27 @@ module VX_mem_scheduler #(
 
     end else begin : g_rsp_full
 
-        reg [CORE_CHANNELS-1:0][CORE_BATCHES-1:0][WORD_WIDTH-1:0] rsp_store [CORE_QUEUE_SIZE-1:0];
-        reg [CORE_CHANNELS-1:0][CORE_BATCHES-1:0][WORD_WIDTH-1:0] rsp_store_n;
+        wire [CORE_CHANNELS-1:0][CORE_BATCHES-1:0][WORD_WIDTH-1:0] rsp_store_n;
         reg [CORE_REQS-1:0] rsp_orig_mask [CORE_QUEUE_SIZE-1:0];
 
-        for (genvar i = 0; i < CORE_CHANNELS; ++i) begin : g_rsp_store_n
-            always @(*) begin
-                rsp_store_n[i] = rsp_store[ibuf_raddr][i];
-                if ((CORE_CHANNELS == 1) || mem_rsp_mask_s[i]) begin
-                    rsp_store_n[i][rsp_batch_idx] = mem_rsp_data_s[i];
+        for (genvar i = 0; i < CORE_CHANNELS; ++i) begin : g_rsp_store
+            for (genvar j = 0; j < CORE_BATCHES; ++j) begin : g_j
+                reg [WORD_WIDTH-1:0] rsp_store [CORE_QUEUE_SIZE-1:0];
+                wire rsp_wren = mem_rsp_fire_s
+                             && (BATCH_SEL_WIDTH'(j) == rsp_batch_idx)
+                             && ((CORE_CHANNELS == 1) || mem_rsp_mask_s[i]);
+                always @(posedge clk) begin
+                    if (rsp_wren) begin
+                        rsp_store[ibuf_raddr] <= mem_rsp_data_s[i];
+                    end
                 end
+                assign rsp_store_n[i][j] = rsp_wren ? mem_rsp_data_s[i] : rsp_store[ibuf_raddr];
             end
         end
 
         always @(posedge clk) begin
             if (ibuf_push) begin
                 rsp_orig_mask[ibuf_waddr] <= core_req_mask;
-            end
-            if (mem_rsp_valid_s) begin
-                rsp_store[ibuf_raddr] <= rsp_store_n;
             end
         end
 
