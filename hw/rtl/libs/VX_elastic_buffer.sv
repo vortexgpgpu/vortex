@@ -97,8 +97,10 @@ module VX_elastic_buffer #(
         wire [DATAW-1:0] data_out_t;
         wire ready_out_t;
 
+        wire valid_out_t = ~empty;
+
         wire push = valid_in && ready_in;
-        wire pop = ~empty && ready_out_t;
+        wire pop = valid_out_t && ready_out_t;
 
         VX_fifo_queue #(
             .DATAW   (DATAW),
@@ -127,7 +129,7 @@ module VX_elastic_buffer #(
         ) out_buf (
             .clk       (clk),
             .reset     (reset),
-            .valid_in  (~empty),
+            .valid_in  (valid_out_t),
             .data_in   (data_out_t),
             .ready_in  (ready_out_t),
             .valid_out (valid_out),

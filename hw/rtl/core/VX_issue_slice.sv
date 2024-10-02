@@ -91,29 +91,47 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 `ifdef SCOPE
 `ifdef DBG_SCOPE_ISSUE
     `SCOPE_IO_SWITCH (1);
+    wire decode_fire = decode_if.valid && decode_if.ready;
     wire operands_fire = operands_if.valid && operands_if.ready;
     `NEG_EDGE (reset_negedge, reset);
-    `SCOPE_TAP_EX (0, 2, 2, 2, (
-            `UUID_WIDTH + `NUM_THREADS + `EX_BITS + `INST_OP_BITS +
-            1 + `NR_BITS + (`NUM_THREADS * 3 * `XLEN) +
-            `UUID_WIDTH + `NUM_THREADS + `NR_BITS + (`NUM_THREADS*`XLEN) + 1
+    `SCOPE_TAP_EX (0, 2, 4, 3, (
+            `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + 1 + `NR_BITS * 4 +
+            `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + 1 + `NR_BITS + (3 * `XLEN) +
+            `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * `XLEN) + 1
         ), {
+            decode_if.valid,
+            decode_if.ready,
             operands_if.valid,
             operands_if.ready
         }, {
+            decode_fire,
             operands_fire,
             writeback_if.valid // ack-free
         }, {
+            decode_if.data.uuid,
+            decode_if.data.wid,
+            decode_if.data.tmask,
+            decode_if.data.PC,
+            decode_if.data.ex_type,
+            decode_if.data.op_type,
+            decode_if.data.wb,
+            decode_if.data.rd,
+            decode_if.data.rs1,
+            decode_if.data.rs2,
+            decode_if.data.rs3,
             operands_if.data.uuid,
+            operands_if.data.wis,
             operands_if.data.tmask,
+            operands_if.data.PC,
             operands_if.data.ex_type,
             operands_if.data.op_type,
             operands_if.data.wb,
             operands_if.data.rd,
-            operands_if.data.rs1_data,
-            operands_if.data.rs2_data,
-            operands_if.data.rs3_data,
+            operands_if.data.rs1_data[0],
+            operands_if.data.rs2_data[0],
+            operands_if.data.rs3_data[0],
             writeback_if.data.uuid,
+            writeback_if.data.wis,
             writeback_if.data.tmask,
             writeback_if.data.rd,
             writeback_if.data.data,

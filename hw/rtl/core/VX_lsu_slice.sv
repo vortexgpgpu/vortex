@@ -310,7 +310,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire                                    lsu_mem_rsp_ready;
 
     VX_mem_scheduler #(
-        .INSTANCE_ID ($sformatf("%s-scheduler", INSTANCE_ID)),
+        .INSTANCE_ID ($sformatf("%s-memsched", INSTANCE_ID)),
         .CORE_REQS   (NUM_LANES),
         .MEM_CHANNELS(NUM_LANES),
         .WORD_SIZE   (LSU_WORD_SIZE),
