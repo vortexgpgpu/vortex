@@ -160,23 +160,23 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         case (execute_if.data.op_type)
             `INST_VPU_VSETVL: begin
                 VTYPEI[execute_if.data.wid] = execute_if.data.rs2_data[0][8:0]; // Unsure if this is correct?
-                AVL[execute_if.data.wid] =  (execute_if.data.op_mod.vpu.rs1 != 0) ? rs1_data[0] : ( (execute_if.data.rd != 0) ?  ~(`XLEN'b0) : CSR_VL[execute_if.data.wid] );
+                AVL[execute_if.data.wid] =  (execute_if.data.op_args.vpu.rs1 != 0) ? rs1_data[0] : ( (execute_if.data.rd != 0) ?  ~(`XLEN'b0) : CSR_VL[execute_if.data.wid] );
             end
             `INST_VPU_VSETIVLI: begin
-                VTYPEI[execute_if.data.wid][2:0] = execute_if.data.op_mod.vpu.vlmul;
-                VTYPEI[execute_if.data.wid][5:3] = execute_if.data.op_mod.vpu.vsew;
-                VTYPEI[execute_if.data.wid][6] = execute_if.data.op_mod.vpu.vta;
-                VTYPEI[execute_if.data.wid][7] = execute_if.data.op_mod.vpu.vma;
-                VTYPEI[execute_if.data.wid][8] = execute_if.data.op_mod.vpu.vill;
-                AVL[execute_if.data.wid] =  `XLEN'(execute_if.data.op_mod.vpu.rs1);
+                VTYPEI[execute_if.data.wid][2:0] = execute_if.data.op_args.vpu.vlmul;
+                VTYPEI[execute_if.data.wid][5:3] = execute_if.data.op_args.vpu.vsew;
+                VTYPEI[execute_if.data.wid][6] = execute_if.data.op_args.vpu.vta;
+                VTYPEI[execute_if.data.wid][7] = execute_if.data.op_args.vpu.vma;
+                VTYPEI[execute_if.data.wid][8] = execute_if.data.op_args.vpu.vill;
+                AVL[execute_if.data.wid] =  `XLEN'(execute_if.data.op_args.vpu.rs1);
             end
             `INST_VPU_VSETVLI: begin
-                VTYPEI[execute_if.data.wid][2:0] = execute_if.data.op_mod.vpu.vlmul;
-                VTYPEI[execute_if.data.wid][5:3] = execute_if.data.op_mod.vpu.vsew;
-                VTYPEI[execute_if.data.wid][6] = execute_if.data.op_mod.vpu.vta;
-                VTYPEI[execute_if.data.wid][7] = execute_if.data.op_mod.vpu.vma;
-                VTYPEI[execute_if.data.wid][8] = execute_if.data.op_mod.vpu.vill;
-                AVL[execute_if.data.wid] = (execute_if.data.op_mod.vpu.rs1 != 0) ? rs1_data[0] : ( (execute_if.data.rd != 0) ?  ~(`XLEN'b0) : CSR_VL[execute_if.data.wid] );
+                VTYPEI[execute_if.data.wid][2:0] = execute_if.data.op_args.vpu.vlmul;
+                VTYPEI[execute_if.data.wid][5:3] = execute_if.data.op_args.vpu.vsew;
+                VTYPEI[execute_if.data.wid][6] = execute_if.data.op_args.vpu.vta;
+                VTYPEI[execute_if.data.wid][7] = execute_if.data.op_args.vpu.vma;
+                VTYPEI[execute_if.data.wid][8] = execute_if.data.op_args.vpu.vill;
+                AVL[execute_if.data.wid] = (execute_if.data.op_args.vpu.rs1 != 0) ? rs1_data[0] : ( (execute_if.data.rd != 0) ?  ~(`XLEN'b0) : CSR_VL[execute_if.data.wid] );
             end
             default:
                 begin
