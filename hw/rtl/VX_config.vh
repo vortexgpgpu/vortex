@@ -177,7 +177,7 @@
 `endif
 
 `ifndef STARTUP_ADDR
-`define STARTUP_ADDR    64'h180000000
+`define STARTUP_ADDR    64'h080000000
 `endif
 
 `ifndef USER_BASE_ADDR
@@ -190,7 +190,7 @@
 
 `ifdef VM_ENABLE
 `ifndef PAGE_TABLE_BASE_ADDR  
-`define PAGE_TABLE_BASE_ADDR 64'h1F0000000
+`define PAGE_TABLE_BASE_ADDR 64'h0F0000000
 `endif
 
 `endif
