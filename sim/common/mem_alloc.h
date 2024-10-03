@@ -39,6 +39,15 @@ public:
     page_t* currPage = pages_;
     while (currPage) {
       auto nextPage = currPage->next;
+      #ifdef VM_ENABLE
+      block_t* currblock = currPage->findfirstUsedBlock();
+      block_t* nextblock;
+      while (currblock) {
+        nextblock= currblock->nextUsed;
+        currPage->release(currblock);
+        currblock = nextblock;
+      }
+      #endif
       delete currPage;
       currPage = nextPage;
     }
@@ -70,8 +79,8 @@ public:
     size = alignSize(size, pageAlign_);
 
     // Check if the reservation is within memory capacity bounds
-    if (addr + size > capacity_) {
-      printf("error: address range out of bounds - requested=0x%lx, capacity=0x%lx\n", (addr + size), capacity_);
+    if (addr + size > baseAddress_ + capacity_) {
+      printf("error: address range out of bounds - requested=0x%lx, base+capacity=0x%lx\n", (addr + size), (baseAddress_ +capacity_));
       return -1;
     }
 
@@ -119,12 +128,12 @@ public:
       auto pageSize = alignSize(size, pageAlign_);
       uint64_t pageAddr;
       if (!this->findNextAddress(pageSize, &pageAddr)) {
-        printf("error: out of memory\n");
+        printf("error: out of memory (Can't find next address)\n");
         return -1;
       }
       currPage = this->createPage(pageAddr, pageSize);
       if (nullptr == currPage) {
-        printf("error: out of memory\n");
+        printf("error: out of memory (Can't create a page)\n");
         return -1;
       }
       freeBlock = currPage->findFreeBlock(size);
@@ -336,6 +345,11 @@ private:
       }
       return nullptr;
     }
+#ifdef VM_ENABLE 
+    block_t* findfirstUsedBlock() {
+      return usedList_;
+    }
+#endif
 
   private:
 
@@ -481,7 +495,7 @@ private:
 
   bool findNextAddress(uint64_t size, uint64_t* addr) {
     if (pages_ == nullptr) {
-      *addr = baseAddress_;
+      *addr = baseAddress_; 
       return true;
     }
 
@@ -499,10 +513,10 @@ private:
       endOfLastPage = current->addr + current->size;
       current = current->next;
     }
-
+    
     // If no suitable gap is found, place the new page at the end of the last page
     // Check if the allocator has enough capacity
-    if ((endOfLastPage + size) <= capacity_) {
+    if ((endOfLastPage + size) <= (baseAddress_ + capacity_)) {
       *addr = endOfLastPage;
       return true;
     }
