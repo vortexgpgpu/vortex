@@ -125,7 +125,7 @@ void Emulator::clear() {
 void Emulator::attach_ram(RAM* ram) {
   // bind RAM to memory unit
 #if (XLEN == 64)
-  mmu_.attach(*ram, 0, 0xFFFFFFFFFFFFFFFF);
+  mmu_.attach(*ram, 0, 0x7FFFFFFFFF); //39bit SV39
 #else
   mmu_.attach(*ram, 0, 0xFFFFFFFF);
 #endif
@@ -276,10 +276,54 @@ bool Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
   return false;
 }
 
+#ifdef VM_ENABLE
 void Emulator::icache_read(void *data, uint64_t addr, uint32_t size) {
-  mmu_.read(data, addr, size, 0);
-}
+  DP(3, "*** icache_read 0x" << std::hex << addr << ", size = 0x "  << size);
 
+  try  
+  {
+    mmu_.read(data, addr, size, ACCESS_TYPE::FETCH);
+  }
+  catch (Page_Fault_Exception& page_fault)  
+  {
+    std::cout<<page_fault.what()<<std::endl;
+    throw;
+  }  
+}
+#else
+void Emulator::icache_read(void *data, uint64_t addr, uint32_t size) {
+    mmu_.read(data, addr, size, 0);
+}
+#endif
+
+#ifdef VM_ENABLE
+void Emulator::set_satp(uint64_t satp) {
+  DPH(3, "set satp 0x" << std::hex << satp << " in emulator module\n");
+  set_csr(VX_CSR_SATP,satp,0,0); 
+}
+#endif
+
+
+#ifdef VM_ENABLE
+void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
+  DP(1, "*** dcache_read 0x" << std::hex << addr << ", size = 0x "  << size);
+  auto type = get_addr_type(addr);
+  if (type == AddrType::Shared) {
+    core_->local_mem()->read(data, addr, size);
+  } else {
+    try  
+    {
+      mmu_.read(data, addr, size, ACCESS_TYPE::LOAD);
+    }
+    catch (Page_Fault_Exception& page_fault)  
+    {
+      std::cout<<page_fault.what()<<std::endl;
+      throw;
+    }
+  }
+  DPH(2, "Mem Read: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (size=" << size << ", type=" << type << ")" << std::endl);
+}
+#else
 void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
   auto type = get_addr_type(addr);
   if (type == AddrType::Shared) {
@@ -290,7 +334,34 @@ void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
 
   DPH(2, "Mem Read: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << std::dec << " (size=" << size << ", type=" << type << ")" << std::endl);
 }
+#endif
 
+#ifdef VM_ENABLE
+void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
+  DP(1, "*** dcache_write 0x" << std::hex << addr << ", size = 0x "  << size);
+  auto type = get_addr_type(addr);
+  if (addr >= uint64_t(IO_COUT_ADDR)
+   && addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
+     this->writeToStdOut(data, addr, size);
+  } else {
+    if (type == AddrType::Shared) {
+      core_->local_mem()->write(data, addr, size);
+    } else {
+      try  
+      {
+        // mmu_.write(data, addr, size, 0);
+        mmu_.write(data, addr, size, ACCESS_TYPE::STORE);
+      }
+      catch (Page_Fault_Exception& page_fault)  
+      {
+        std::cout<<page_fault.what()<<std::endl;
+        throw;
+      }  
+    }
+  }
+  DPH(2, "Mem Write: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (size=" << size << ", type=" << type << ")" << std::endl);
+}
+#else
 void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
   auto type = get_addr_type(addr);
   if (addr >= uint64_t(IO_COUT_ADDR)
@@ -305,6 +376,7 @@ void Emulator::dcache_write(const void* data, uint64_t addr, uint32_t size) {
   }
   DPH(2, "Mem Write: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << std::dec << " (size=" << size << ", type=" << type << ")" << std::endl);
 }
+#endif
 
 void Emulator::dcache_amo_reserve(uint64_t addr) {
   auto type = get_addr_type(addr);
@@ -371,6 +443,10 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   auto core_perf = core_->perf_stats();
   switch (addr) {
   case VX_CSR_SATP:
+#ifdef VM_ENABLE
+    // return csrs_.at(wid).at(tid)[addr];
+    return mmu_.get_satp();
+#endif
   case VX_CSR_PMPCFG0:
   case VX_CSR_PMPADDR0:
   case VX_CSR_MSTATUS:
@@ -503,6 +579,12 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t tid, uint32_t wid) {
     csr_mscratch_ = value;
     break;
   case VX_CSR_SATP:
+  #ifdef VM_ENABLE
+    // warps_.at(wid).fcsr = (warps_.at(wid).fcsr & ~0x1F) | (value & 0x1F);
+    // csrs_.at(wid).at(tid)[addr] = value; //what is wid and tid?
+    mmu_.set_satp(value);
+    break;
+  #endif
   case VX_CSR_MSTATUS:
   case VX_CSR_MEDELEG:
   case VX_CSR_MIDELEG:
@@ -530,6 +612,8 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t tid, uint32_t wid) {
     }
   }
 }
+
+
 
 uint32_t Emulator::get_fpu_rm(uint32_t func3, uint32_t tid, uint32_t wid) {
   return (func3 == 0x7) ? this->get_csr(VX_CSR_FRM, tid, wid) : func3;

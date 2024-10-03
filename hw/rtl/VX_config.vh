@@ -14,6 +14,8 @@
 `ifndef VX_CONFIG_VH
 `define VX_CONFIG_VH
 
+
+
 `ifndef MIN
 `define MIN(x, y)   (((x) < (y)) ? (x) : (y))
 `endif
@@ -31,7 +33,6 @@
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
-
 `ifndef EXT_M_DISABLE
 `define EXT_M_ENABLE
 `endif
@@ -176,7 +177,7 @@
 `endif
 
 `ifndef STARTUP_ADDR
-`define STARTUP_ADDR    64'h080000000
+`define STARTUP_ADDR    64'h180000000
 `endif
 
 `ifndef USER_BASE_ADDR
@@ -187,7 +188,14 @@
 `define IO_BASE_ADDR    64'h000000040
 `endif
 
-`else
+`ifdef VM_ENABLE
+`ifndef PAGE_TABLE_BASE_ADDR  
+`define PAGE_TABLE_BASE_ADDR 64'h1F0000000
+`endif
+
+`endif
+
+`else // XLEN_32
 
 `ifndef STACK_BASE_ADDR
 `define STACK_BASE_ADDR 32'hFFFF0000
@@ -205,6 +213,13 @@
 `define IO_BASE_ADDR    32'h00000040
 `endif
 
+`ifdef VM_ENABLE
+`ifndef PAGE_TABLE_BASE_ADDR  
+`define PAGE_TABLE_BASE_ADDR 32'hF0000000
+`endif
+
+`endif
+
 `endif
 
 `define IO_END_ADDR     `USER_BASE_ADDR
@@ -220,7 +235,7 @@
 `ifndef IO_COUT_ADDR
 `define IO_COUT_ADDR    `IO_BASE_ADDR
 `endif
-`define IO_COUT_SIZE    64
+`define IO_COUT_SIZE    `MEM_BLOCK_SIZE
 
 `ifndef IO_MPM_ADDR
 `define IO_MPM_ADDR     (`IO_COUT_ADDR + `IO_COUT_SIZE)
@@ -269,6 +284,59 @@
 
 `ifndef DEBUG_LEVEL
 `define DEBUG_LEVEL 3
+`endif
+
+`ifndef MEM_PAGE_SIZE
+`define MEM_PAGE_SIZE (4096)
+`endif
+`ifndef MEM_PAGE_LOG2_SIZE
+`define MEM_PAGE_LOG2_SIZE (12)
+`endif
+
+// Virtual Memory Configuration ///////////////////////////////////////////////////////
+`ifdef VM_ENABLE
+    `ifdef XLEN_32
+        `ifndef VM_ADDR_MODE
+        `define VM_ADDR_MODE SV32  //or BARE
+        `endif
+        `ifndef PT_LEVEL 
+        `define PT_LEVEL (2)
+        `endif
+        `ifndef PTE_SIZE
+        `define PTE_SIZE (4)
+        `endif
+        `ifndef NUM_PTE_ENTRY 
+        `define NUM_PTE_ENTRY (1024)
+        `endif
+        `ifndef PT_SIZE_LIMIT
+        `define PT_SIZE_LIMIT (1<<23)
+        `endif
+    `else
+        `ifndef VM_ADDR_MODE
+        `define VM_ADDR_MODE SV39 //or BARE
+        `endif
+        `ifndef PT_LEVEL 
+        `define PT_LEVEL (3)
+        `endif
+        `ifndef PTE_SIZE
+        `define PTE_SIZE (8)
+        `endif
+        `ifndef NUM_PTE_ENTRY 
+        `define NUM_PTE_ENTRY (512)
+        `endif
+        `ifndef PT_SIZE_LIMIT
+        `define PT_SIZE_LIMIT (1<<25)
+        `endif
+    `endif
+
+    `ifndef PT_SIZE
+    `define PT_SIZE MEM_PAGE_SIZE
+    `endif
+
+    `ifndef TLB_SIZE
+    `define TLB_SIZE (32)
+    `endif
+
 `endif
 
 // Pipeline Configuration /////////////////////////////////////////////////////

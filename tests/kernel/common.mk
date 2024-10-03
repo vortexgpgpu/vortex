@@ -2,13 +2,13 @@ ROOT_DIR := $(realpath ../../..)
 
 ifeq ($(XLEN),64)
 CFLAGS += -march=rv64imafd -mabi=lp64d
+STARTUP_ADDR ?= 0x180000000
 else
 CFLAGS += -march=rv32imaf -mabi=ilp32f
+STARTUP_ADDR ?= 0x80000000
 endif
 
 VORTEX_KN_PATH ?= $(ROOT_DIR)/kernel
-
-STARTUP_ADDR ?= 0x80000000
 
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
