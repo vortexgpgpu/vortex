@@ -37,13 +37,13 @@ RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interface
 
 SRCS = $(COMMON_DIR)/util.cpp $(COMMON_DIR)/mem.cpp $(COMMON_DIR)/rvfloats.cpp $(COMMON_DIR)/dram_sim.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
-SRCS += $(SRC_DIR)/processor.cpp
+SRCS += $(SRC_DIR)/processor_hbm.cpp
 
 ifdef AXI_BUS
 	TOP = Vortex_axi
 	CXXFLAGS += -DAXI_BUS
 else
-	TOP = Vortex
+	TOP = Vortex_hbm
 endif
 
 VL_FLAGS = --exe
