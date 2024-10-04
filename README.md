@@ -1,6 +1,6 @@
 # Vortex GPGPU
 
-Vortex is a full-stack open-source RISC-V GPGPU.
+Vortex is a full-stack open-source RISC-V GPGPU. Vortex supports multiple *backend drivers*, including our C++ simulator (simx), an RTL simulator, and physical Xilinx and Altera FPGAs-- all controlled by a single driver script. The chosen driver determines the corresponding code invoked to run Vortex. Generally, developers will prototype their intended design in simx, before completing going forward with an RTL implementation. Alternatively, you can get up and running by selecting a driver of your choice and running a demo program.
 
 ## Specifications
 
@@ -29,12 +29,14 @@ Vortex is a full-stack open-source RISC-V GPGPU.
 - `ci`: Continuous integration scripts.
 - `miscs`: Miscellaneous resources.
 
-## Build Instructions
-More detailed build instructions can be found [here](docs/install_vortex.md).
+## Quick Start
+The following steps demonstrate how to run Vortex with the default driver: simx. If you are interested in a different backend, look [here](docs/simulation.md).
+
 ### Supported OS Platforms
 - Ubuntu 18.04, 20.04
 - Centos 7
 ### Toolchain Dependencies
+The following dependencies will be fetched prebuilt by `toolchain_install.sh`.
 - [POCL](http://portablecl.org/)
 - [LLVM](https://llvm.org/)
 - [RISCV-GNU-TOOLCHAIN](https://github.com/riscv-collab/riscv-gnu-toolchain)
@@ -107,4 +109,4 @@ echo "source <build-path>/ci/toolchain_env.sh" >> ~/.bashrc
 ```sh
 ./ci/blackbox.sh --app=demo --debug=3
 ```
-- For additional information, check out the /docs.
+- For additional information, check out the [documentation](docs/index.md)
