@@ -1,7 +1,7 @@
 # FPGA Startup and Configuration Guide
 
 ## Gaining Access to FPGA's with CRNCH
-If you are associated with Georgia Tech and need remote access to the FPGA's, you can utilize CRNCH's server.
+If you are associated with Georgia Tech (or related workshops) you can use CRNCH's server to gain remote access to FPGA's. Otherwise, you can skip to the Xilinx or Intel (Altera) synthesis steps below.
 
 ## What is CRNCH?
 
@@ -37,11 +37,10 @@ CRNCH resources do not require any VPN access for GT members so you can head to 
 
 Alternatively, you can `ssh` into rg with: `ssh <your-gt-acctname>@rg-login.crnch.gatech.edu`
 
-(`ssh usubramanya3@rg-login.crnch.gatech.edu`)
+(`ssh gburdell3@rg-login.crnch.gatech.edu`)
 
-Once you’ve logged in, you can use Slurm to request other nodes within the testbed. See more information on Slurm at [this page](https://gt-crnch-rg.readthedocs.io/en/main/general/using-slurm.html).
-
-Note that you can also use VSCode to log into the Rogues Gallery via its terminal functionality. See [this page for more details](https://gt-crnch-rg.readthedocs.io/en/main/general/visual-studio-code.html).
+## Synthesis for Xilinx Boards
+First, you need to get access to the server with the Xilinx FPGAs.
 
 ## **What Machines are Available in the Rogues Gallery?**
 
@@ -49,7 +48,7 @@ Complete list of machines can be found [here](https://gt-crnch-rg.readthedocs.io
 
 ## Which Machine do we Need from RG?
 
-There are three primary nodes you might use. The table below summarizes:
+There are three primary nodes you might use for Xilinx FPGAs. The table below summarizes:
 
 | Name | Device | Description |
 | --- | --- | --- |
@@ -62,58 +61,42 @@ There are three primary nodes you might use. The table below summarizes:
 
 ## How to Access flubber for Synthesis?
 
-Now that you have the files prepared and available on the FPGA node, you can start the synthesis.  To run on hardware we need a rg-xilinx-fpga-hw cluster which includes **flubber[1,4-5]**. First `ssh` into the rouges gallery:
+Now that you have the files prepared and available on the FPGA node, you can start the synthesis.  To run on hardware we need a rg-xilinx-fpga-hw cluster which includes **flubber[1,4-5]**. First `ssh` into the rouges gallery, if you have not already.
 
 ```bash
 ssh <username>[@rg-login.crnch.gatech.edu](mailto:usubramanya3@rg-login.crnch.gatech.edu)
 ```
 
-Then, to access the hardware node you need to `ssh` into flubber:
+Once you’ve logged in, you can use Slurm to request an interactive job. First, view the available Slurm Partitions here [here](https://gt-crnch-rg.readthedocs.io/en/main/general/using-slurm.html). Then, the example requests can be found [here](https://gt-crnch-rg.readthedocs.io/en/main/general/using-slurm-examples.html).
 
+In our case we might run:
 ```bash
-ssh flubber1
+salloc -p rg-fpga --nodes=1 --ntasks-per-node=1 --nodelist flubber1 --time=01:00:00
 ```
 
-## Synthesis for Xillinx Boards
+## Environment Setup
+Once you are logged in, you will need to complete some first time configurations.
 
-XRT Environment Setup
-----------------------
+### Clone Repo
 
-    $ source /opt/xilinx/Vitis/2023.1/settings64.sh
-    $ source /opt/xilinx/xrt/setup.sh
+### Source Configuration Scripts
+```
+$ source /opt/xilinx/xrt/setup.sh
+$ source /opt/xilinx/Vitis/2023.1/settings64.sh
+```
+
+### Check Installed FPGA Platforms
+`platforminfo -l`
 
 
-Check Installed FPGA Platforms
-------------------------------
-
-    $ platforminfo -l
-
-
-Build FPGA image
-----------------
-
-    $ cd hw/syn/xilinx/xrt
-    $ PREFIX=test1 PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 TARGET=hw NUM_CORES=4 make
-
-Will run the synthesis under new build directory: BUILD_DIR := "\<PREFIX>\_\<PLATFORM>\_\<TARGET>"
-
-The generated bitstream will be located under <BUILD_DIR>/bin/vortex_afu.xclbin
-
-Sample FPGA Run Test
---------------------
-
-Ensure you have the correct opae runtime for the FPGA target
-
-    $ make -C runtime/xrt clean
-    $ TARGET=hw make -C runtime/xrt
-
-Run the following from your Vortex build directory
-
-    $ TARGET=hw FPGA_BIN_DIR=<BUILD_DIR>/bin ./ci/blackbox.sh --driver=xrt --app=sgemm --args="-n128"
-
----
-
+### Build FPGA image
 The directory `hw/syn/xilinx/xrt` contains the makefile used to synthesize Vortex.
+```
+    $ cd hw/syn/xilinx/xrt
+    $ PREFIX=test1 PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 TARGET=hw NUM_CORES=4 make build_u50_hw_4c.log 2>&1 &
+```
+Will run the synthesis under new build directory: BUILD_DIR := "\<PREFIX>\_\<PLATFORM>\_\<TARGET>"
+The generated bitstream will be located under <BUILD_DIR>/bin/vortex_afu.xclbin
 
 For long-running jobs, invocation of this makefile can be made of the following form:
 
@@ -127,7 +110,7 @@ CONFIGS="-DL2_ENABLE -DDCACHE_SIZE=8192" PREFIX=build_4c_u280 NUM_CORES=4 TARGET
 
 The build is complete when the bitstream file `vortex_afu.xclbin` exists in `<prefix directory name><platform baseName>hw|hw_emu/bin`.
 
-## Running a Program on FPGA
+### Running a Program on Xilinx FPGA
 
 The blackbox.sh script in `ci` can be used to run a test with Vortex’s xrt driver using the following command:
 
@@ -135,9 +118,9 @@ The blackbox.sh script in `ci` can be used to run a test with Vortex’s xrt d
 
 For example:
 
-`FPGA_BIN_DIR=`realpath hw/syn/xilinx/xrt/build_4c_u280_xilinx_u280_gen3x16_xdma_1_202211_1_hw/bin` TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 ./ci/blackbox.sh --driver=xrt --app=demo`
+```FPGA_BIN_DIR=<realpath> hw/syn/xilinx/xrt/build_4c_u280_xilinx_u280_gen3x16_xdma_1_202211_1_hw/bin TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 ./ci/blackbox.sh --driver=xrt --app=demo```
 
-## Synthesis for Intel (Altera) Boards
+### Synthesis for Intel (Altera) Boards
 
 To set up the environment, source the XRT setup.sh and other Xilinx scripts. For example:
 
