@@ -250,9 +250,7 @@ module VX_cache_bypass #(
         end
     end
 
-    `IGNORE_UNUSED_BEGIN
     wire [(MEM_TAG_OUT_WIDTH - NC_ENABLE)-1:0] mem_rsp_tag_id_nc;
-    `IGNORE_UNUSED_END
 
     VX_bits_remove #(
         .N   (MEM_TAG_OUT_WIDTH),
