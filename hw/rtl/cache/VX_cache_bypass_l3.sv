@@ -13,8 +13,9 @@
 
 `include "VX_cache_define.vh"
 
-module VX_cache_bypass #(
+module VX_cache_bypass_l3 #(
     parameter NUM_REQS          = 1,
+    parameter NUM_OUTPUTS       = 1,
     parameter TAG_SEL_IDX       = 0,
 
     parameter PASSTHRU          = 0,
@@ -74,7 +75,7 @@ module VX_cache_bypass #(
     wire [NUM_REQS-1:0] core_req_nc_idxs;
     wire [`UP(REQ_SEL_BITS)-1:0] core_req_nc_idx;
     wire [NUM_REQS-1:0] core_req_nc_sel;
-    wire core_req_nc_ready;
+    wire [NUM_REQS-1:0] core_req_nc_ready;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         if (PASSTHRU != 0) begin
@@ -86,6 +87,8 @@ module VX_cache_bypass #(
         end
         assign core_req_nc_valids[i] = core_bus_in_if[i].req_valid && core_req_nc_idxs[i];
     end
+
+    /*
 
     VX_generic_arbiter #(
         .NUM_REQS    (NUM_REQS),
@@ -99,6 +102,7 @@ module VX_cache_bypass #(
         .grant_valid  (core_req_nc_valid),
         .grant_ready  (core_req_nc_ready)
     );
+    */
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         assign core_bus_out_if[i].req_valid = core_bus_in_if[i].req_valid && ~core_req_nc_idxs[i];
@@ -109,21 +113,21 @@ module VX_cache_bypass #(
 
     // handle memory requests /////////////////////////////////////////////////
 
-    wire                        mem_req_out_valid;
-    wire                        mem_req_out_rw;
-    wire [LINE_SIZE-1:0]        mem_req_out_byteen;
-    wire [`CS_MEM_ADDR_WIDTH-1:0] mem_req_out_addr;
-    wire [`ADDR_TYPE_WIDTH-1:0] mem_req_out_atype;
-    wire [`CS_LINE_WIDTH-1:0]   mem_req_out_data;
-    wire [MEM_TAG_OUT_WIDTH-1:0] mem_req_out_tag;
-    wire                        mem_req_out_ready;
+    wire [NUM_OUTPUTS-1:0]                         mem_req_out_valid;
+    wire [NUM_OUTPUTS-1:0]                         mem_req_out_rw;
+    wire [NUM_OUTPUTS-1:0][LINE_SIZE-1:0]          mem_req_out_byteen;
+    wire [NUM_OUTPUTS-1:0][`CS_MEM_ADDR_WIDTH-1:0] mem_req_out_addr;
+    wire [NUM_OUTPUTS-1:0][`ADDR_TYPE_WIDTH-1:0]   mem_req_out_atype;
+    wire [NUM_OUTPUTS-1:0][`CS_LINE_WIDTH-1:0]     mem_req_out_data;
+    wire [NUM_OUTPUTS-1:0][MEM_TAG_OUT_WIDTH-1:0]  mem_req_out_tag;
+    wire [NUM_OUTPUTS-1:0]                         mem_req_out_ready;
 
-    wire                        core_req_nc_sel_rw;
-    wire [WORD_SIZE-1:0]        core_req_nc_sel_byteen;
-    wire [CORE_ADDR_WIDTH-1:0]  core_req_nc_sel_addr;
-    wire [`ADDR_TYPE_WIDTH-1:0] core_req_nc_sel_atype;
-    wire [CORE_DATA_WIDTH-1:0]  core_req_nc_sel_data;
-    wire [CORE_TAG_WIDTH-1:0]   core_req_nc_sel_tag;
+    wire [NUM_REQS-1:0]                       core_req_nc_sel_rw;
+    wire [NUM_REQS-1:0][WORD_SIZE-1:0]        core_req_nc_sel_byteen;
+    wire [NUM_REQS-1:0][CORE_ADDR_WIDTH-1:0]  core_req_nc_sel_addr;
+    wire [NUM_REQS-1:0][`ADDR_TYPE_WIDTH-1:0] core_req_nc_sel_atype;
+    wire [NUM_REQS-1:0][CORE_DATA_WIDTH-1:0]  core_req_nc_sel_data;
+    wire [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0]   core_req_nc_sel_tag;
 
     wire [NUM_REQS-1:0][MUX_DATAW-1:0] core_req_nc_mux_in;
     for (genvar i = 0; i < NUM_REQS; ++i) begin
@@ -144,7 +148,7 @@ module VX_cache_bypass #(
         core_req_nc_sel_atype,
         core_req_nc_sel_data,
         core_req_nc_sel_tag
-    } = core_req_nc_mux_in[core_req_nc_idx];
+    } = core_req_nc_mux_in;
 
     assign core_req_nc_ready = ~mem_bus_in_if.req_valid && mem_req_out_ready;
 
@@ -179,8 +183,8 @@ module VX_cache_bypass #(
             assign mem_req_tag_id_bypass = MEM_TAG_ID_BITS'({req_wsel, core_req_in_id});
         end
     end else begin
-        assign mem_req_out_byteen = mem_bus_in_if.req_valid ? mem_bus_in_if.req_data.byteen : core_req_nc_sel_byteen;
-        assign mem_req_out_data = mem_bus_in_if.req_valid ? mem_bus_in_if.req_data.data : core_req_nc_sel_data;
+        assign mem_req_out_byteen = mem_bus_in_if[0].req_valid ? mem_bus_in_if[0].req_data.byteen : core_req_nc_sel_byteen;
+        assign mem_req_out_data = mem_bus_in_if[0].req_valid ? mem_bus_in_if[0].req_data.data : core_req_nc_sel_data;
         if (NUM_REQS > 1) begin
             assign mem_req_tag_id_bypass = MEM_TAG_ID_BITS'({core_req_nc_idx, core_req_in_id});
         end else begin
@@ -198,7 +202,7 @@ module VX_cache_bypass #(
 
     if (PASSTHRU != 0) begin
         assign mem_req_out_tag = mem_req_tag_bypass;
-        `UNUSED_VAR (mem_bus_in_if.req_data.tag)
+        `UNUSED_VAR (mem_bus_in_if[0].req_data.tag)
     end else begin
         if (NC_ENABLE) begin
             VX_bits_insert #(
@@ -206,16 +210,16 @@ module VX_cache_bypass #(
                 .S   (1),
                 .POS (TAG_SEL_IDX)
             ) mem_req_tag_in_nc_insert (
-                .data_in  (mem_bus_in_if.req_valid ? (MEM_TAG_OUT_WIDTH-1)'(mem_bus_in_if.req_data.tag) : (MEM_TAG_OUT_WIDTH-1)'(mem_req_tag_bypass)),
-                .ins_in   (~mem_bus_in_if.req_valid),
+                .data_in  (mem_bus_in_if[0].req_valid ? (MEM_TAG_OUT_WIDTH-1)'(mem_bus_in_if[0].req_data.tag) : (MEM_TAG_OUT_WIDTH-1)'(mem_req_tag_bypass)),
+                .ins_in   (~mem_bus_in_if[0].req_valid),
                 .data_out (mem_req_out_tag)
             );
         end else begin
-            assign mem_req_out_tag = mem_bus_in_if.req_data.tag;
+            assign mem_req_out_tag = mem_bus_in_if[0].req_data.tag;
         end
     end
 
-    assign mem_bus_in_if.req_ready = mem_req_out_ready;
+    assign mem_bus_in_if[0].req_ready = mem_req_out_ready;
 
     VX_elastic_buffer #(
         .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `ADDR_TYPE_WIDTH + `CS_LINE_WIDTH + MEM_TAG_OUT_WIDTH),
@@ -227,9 +231,9 @@ module VX_cache_bypass #(
         .valid_in  (mem_req_out_valid),
         .ready_in  (mem_req_out_ready),
         .data_in   ({mem_req_out_rw,             mem_req_out_byteen,             mem_req_out_addr,             mem_req_out_atype,             mem_req_out_data,             mem_req_out_tag}),
-        .data_out  ({mem_bus_out_if.req_data.rw, mem_bus_out_if.req_data.byteen, mem_bus_out_if.req_data.addr, mem_bus_out_if.req_data.atype, mem_bus_out_if.req_data.data, mem_bus_out_if.req_data.tag}),
-        .valid_out (mem_bus_out_if.req_valid),
-        .ready_out (mem_bus_out_if.req_ready)
+        .data_out  ({mem_bus_out_if[0].req_data.rw, mem_bus_out_if[0].req_data.byteen, mem_bus_out_if[0].req_data.addr, mem_bus_out_if[0].req_data.atype, mem_bus_out_if[0].req_data.data, mem_bus_out_if[0].req_data.tag}),
+        .valid_out (mem_bus_out_if[0].req_valid),
+        .ready_out (mem_bus_out_if[0].req_ready)
     );
 
     // handle core responses //////////////////////////////////////////////////
@@ -241,25 +245,23 @@ module VX_cache_bypass #(
 
     wire is_mem_rsp_nc;
     if (PASSTHRU != 0) begin
-        assign is_mem_rsp_nc = mem_bus_out_if.rsp_valid;
+        assign is_mem_rsp_nc = mem_bus_out_if[0].rsp_valid;
     end else begin
         if (NC_ENABLE) begin
-            assign is_mem_rsp_nc = mem_bus_out_if.rsp_valid && mem_bus_out_if.rsp_data.tag[TAG_SEL_IDX];
+            assign is_mem_rsp_nc = mem_bus_out_if[0].rsp_valid && mem_bus_out_if[0].rsp_data.tag[TAG_SEL_IDX];
         end else begin
             assign is_mem_rsp_nc = 1'b0;
         end
     end
 
-    `IGNORE_UNUSED_BEGIN
     wire [(MEM_TAG_OUT_WIDTH - NC_ENABLE)-1:0] mem_rsp_tag_id_nc;
-    `IGNORE_UNUSED_END
 
     VX_bits_remove #(
         .N   (MEM_TAG_OUT_WIDTH),
         .S   (NC_ENABLE),
         .POS (TAG_SEL_IDX)
     ) mem_rsp_tag_in_nc_remove (
-        .data_in  (mem_bus_out_if.rsp_data.tag),
+        .data_in  (mem_bus_out_if[0].rsp_data.tag),
         .data_out (mem_rsp_tag_id_nc)
     );
 
@@ -285,11 +287,11 @@ module VX_cache_bypass #(
         wire [WSEL_BITS-1:0] rsp_wsel = mem_rsp_tag_id_nc[CORE_TAG_ID_BITS +: WSEL_BITS];
         for (genvar i = 0; i < NUM_REQS; ++i) begin
             assign core_rsp_in_data[i] = core_bus_out_if[i].rsp_valid ?
-                core_bus_out_if[i].rsp_data.data : mem_bus_out_if.rsp_data.data[rsp_wsel * CORE_DATA_WIDTH +: CORE_DATA_WIDTH];
+                core_bus_out_if[i].rsp_data.data : mem_bus_out_if[0].rsp_data.data[rsp_wsel * CORE_DATA_WIDTH +: CORE_DATA_WIDTH];
         end
     end else begin
         for (genvar i = 0; i < NUM_REQS; ++i) begin
-            assign core_rsp_in_data[i] = core_bus_out_if[i].rsp_valid ? core_bus_out_if[i].rsp_data.data : mem_bus_out_if.rsp_data.data;
+            assign core_rsp_in_data[i] = core_bus_out_if[i].rsp_valid ? core_bus_out_if[i].rsp_data.data : mem_bus_out_if[0].rsp_data.data;
         end
     end
 
@@ -330,17 +332,17 @@ module VX_cache_bypass #(
     // handle memory responses ////////////////////////////////////////////////
 
     if (PASSTHRU != 0) begin
-        assign mem_bus_in_if.rsp_valid = 1'b0;
-        assign mem_bus_in_if.rsp_data.data = '0;
-        assign mem_bus_in_if.rsp_data.tag = '0;
+        assign mem_bus_in_if[0].rsp_valid = 1'b0;
+        assign mem_bus_in_if[0].rsp_data.data = '0;
+        assign mem_bus_in_if[0].rsp_data.tag = '0;
     end else if (NC_ENABLE) begin
-        assign mem_bus_in_if.rsp_valid = mem_bus_out_if.rsp_valid && ~mem_bus_out_if.rsp_data.tag[TAG_SEL_IDX];
-        assign mem_bus_in_if.rsp_data.data = mem_bus_out_if.rsp_data.data;
-        assign mem_bus_in_if.rsp_data.tag = mem_rsp_tag_id_nc[MEM_TAG_IN_WIDTH-1:0];
+        assign mem_bus_in_if[0].rsp_valid = mem_bus_out_if[0].rsp_valid && ~mem_bus_out_if[0].rsp_data.tag[TAG_SEL_IDX];
+        assign mem_bus_in_if[0].rsp_data.data = mem_bus_out_if[0].rsp_data.data;
+        assign mem_bus_in_if[0].rsp_data.tag = mem_rsp_tag_id_nc[MEM_TAG_IN_WIDTH-1:0];
     end else begin
-        assign mem_bus_in_if.rsp_valid = mem_bus_out_if.rsp_valid;
-        assign mem_bus_in_if.rsp_data.data = mem_bus_out_if.rsp_data.data;
-        assign mem_bus_in_if.rsp_data.tag = mem_rsp_tag_id_nc;
+        assign mem_bus_in_if[0].rsp_valid = mem_bus_out_if[0].rsp_valid;
+        assign mem_bus_in_if[0].rsp_data.data = mem_bus_out_if[0].rsp_data.data;
+        assign mem_bus_in_if[0].rsp_data.tag = mem_rsp_tag_id_nc;
     end
 
     wire [NUM_REQS-1:0] core_rsp_out_valid;
@@ -348,6 +350,6 @@ module VX_cache_bypass #(
         assign core_rsp_out_valid[i] = core_bus_out_if[i].rsp_valid;
     end
 
-    assign mem_bus_out_if.rsp_ready = is_mem_rsp_nc ? (~core_rsp_out_valid[rsp_idx] && core_rsp_in_ready[rsp_idx]) : mem_bus_in_if.rsp_ready;
+    assign mem_bus_out_if[0].rsp_ready = is_mem_rsp_nc ? (~core_rsp_out_valid[rsp_idx] && core_rsp_in_ready[rsp_idx]) : mem_bus_in_if[0].rsp_ready;
 
 endmodule
