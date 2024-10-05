@@ -25,6 +25,7 @@
 #include "emulator.h"
 #include "instr.h"
 #include "core.h"
+#include "VX_types.h"
 
 using namespace vortex;
 
@@ -1328,7 +1329,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         auto stack_size = warp.ipdom_stack.size();
 
         ThreadMask then_tmask, else_tmask;
-        auto not_pred = rsrc2 & 0x1;
+        auto not_pred = (rsrc1 != 0);
         for (uint32_t t = 0; t < num_threads; ++t) {
           auto cond = (warp.ireg_file.at(t).at(rsrc0) & 0x1) ^ not_pred;
           then_tmask[t] = warp.tmask.test(t) && cond;
@@ -1347,11 +1348,9 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           } else {
             next_tmask = else_tmask;
           }
-          // push reconvergence thread mask onto the stack
-          warp.ipdom_stack.emplace(warp.tmask);
-          // push not taken thread mask onto the stack
+          // push reconvergence and not-taken thread mask onto the stack
           auto ntaken_tmask = ~next_tmask & warp.tmask;
-          warp.ipdom_stack.emplace(ntaken_tmask, next_pc);
+          warp.ipdom_stack.emplace(warp.tmask, ntaken_tmask, next_pc);
         }
         // return divergent state
         for (uint32_t t = thread_start; t < num_threads; ++t) {
@@ -1372,11 +1371,14 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
             std::cout << "IPDOM stack is empty!\n" << std::flush;
             std::abort();
           }
-          next_tmask = warp.ipdom_stack.top().tmask;
-          if (!warp.ipdom_stack.top().fallthrough) {
+          if (warp.ipdom_stack.top().fallthrough) {
+            next_tmask = warp.ipdom_stack.top().orig_tmask;
+            warp.ipdom_stack.pop();
+          } else {
+            next_tmask = warp.ipdom_stack.top().else_tmask;
             next_pc = warp.ipdom_stack.top().PC;
+            warp.ipdom_stack.top().fallthrough = true;
           }
-          warp.ipdom_stack.pop();
         }
       } break;
       case 4: {
@@ -1413,6 +1415,171 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     } break;
     default:
       std::abort();
+    }
+  } break;
+  case Opcode::TCU: 
+  { //TODO - make it data-type flexible
+    uint32_t mem_bytes = 1;
+    DP(3, "mem_bytes=" << mem_bytes << std::endl);
+    uint16_t tc_size = this->get_csr(VX_TC_SIZE, 0, wid);
+    uint32_t TC_per_warp = this->get_csr(VX_TC_NUM, 0, wid);
+
+    DP(3, "tc_size=" << tc_size << std::endl);
+    DP(3, "TC_per_warp=" << TC_per_warp << std::endl);
+
+    //Number of loads - dependant on the thread config
+    uint32_t n_tiles = this->get_csr(VX_MAT_MUL_SIZE, 0, wid);  //CSR instruction before MLOAD will ensure that this csr has value
+    int num_data_per_thread;
+    int num_data_per_thread_st;
+    uint32_t num_threads_actv;
+    uint32_t num_threads_actv_st;
+    uint32_t data_bytes_load;
+    uint32_t data_bytes_store;
+    uint32_t num_threads_per_tc = MAX (1, num_threads/TC_per_warp);
+
+    //LOAD
+    if(num_threads > tc_size*tc_size*n_tiles*TC_per_warp)
+    { 
+      num_threads_actv = tc_size*tc_size*n_tiles*TC_per_warp;
+      num_data_per_thread = 1;
+    }
+    else
+    {
+      num_threads_actv = num_threads;
+      num_data_per_thread = (tc_size*tc_size*n_tiles)/num_threads_per_tc;
+    }
+    data_bytes_load = mem_bytes*num_data_per_thread;
+
+    //STORE
+    if(num_threads > tc_size*tc_size*TC_per_warp)
+    { 
+      num_threads_actv_st = tc_size*tc_size*TC_per_warp;
+      num_data_per_thread_st = 1;
+    }
+    else
+    {
+      num_threads_actv_st = num_threads;
+      num_data_per_thread_st = (tc_size*tc_size)/num_threads_per_tc;
+    }
+    data_bytes_store = mem_bytes*num_data_per_thread_st;
+    
+    DP(3, "Num Tiles=" << n_tiles << std::endl);
+    
+    switch (func3) {
+      case 0: 
+      { //Matrix Load  
+
+        DP (4, "TCU LOAD");
+        trace->fu_type = FUType::LSU;
+        trace->lsu_type = LsuType::TCU_LOAD;
+        
+        trace->src_regs[0] = {RegType::Integer, rsrc0};
+        auto trace_data = std::make_shared<LsuTraceData>(num_threads);
+        trace->data = trace_data;
+        
+        for (uint32_t t = thread_start; t < num_threads_actv; ++t) 
+        {
+          if (!warp.tmask.test(t))
+            continue;
+          DP(3, "Thread ID" << t); 
+
+          uint32_t base_addr = rsdata[t][0].i ;
+          trace_data->mem_addrs.at(t) = {base_addr, data_bytes_load};
+          
+          //Load A or B (depends on immsrc)
+          int loop_offset = 0;
+          DP(3, "n_tiles = " << n_tiles << "; num_data_per_thread = " << num_data_per_thread <<std::endl);
+            for (int n=0; n<num_data_per_thread; n++)
+            {
+              Word* temp_ref = &(warp.ireg_file.at(t).at(rsrc0));
+              this->dcache_read(temp_ref, (base_addr+(n*mem_bytes)+(loop_offset*mem_bytes)), mem_bytes);
+
+              scratchpad[loop_offset + (immsrc*(n_tiles)*tc_size*tc_size) + (t*num_data_per_thread) + n] = *temp_ref;
+              DP(3, "Scratchpad Index: " << loop_offset + (immsrc*(n_tiles)*tc_size*tc_size) + (t*num_data_per_thread) + n << ", Value: " << scratchpad[loop_offset + (immsrc*(n_tiles)*tc_size*tc_size) + (t*num_data_per_thread) + n]);
+            }
+        }
+        rd_write = true;  
+      } break;
+      case 1: 
+      { 
+        DP(4, "TCU STORE");
+        trace->fu_type = FUType::LSU;
+        trace->lsu_type = LsuType::TCU_STORE;
+
+        auto trace_data = std::make_shared<LsuTraceData>(num_threads);
+        trace->data = trace_data;
+
+        for (uint32_t t = thread_start; t < num_threads_actv_st; ++t) 
+        {
+          if (!warp.tmask.test(t))
+            continue;
+
+          DP(3, "Thread ID" << t); 
+          uint32_t base_addr = rsdata[t][0].i ;
+
+          trace_data->mem_addrs.at(t) = {base_addr, data_bytes_store};
+
+          //Store C
+          for (int n=0; n<num_data_per_thread_st; n++)
+          {
+            Word* temp_ref = &(warp.ireg_file.at(t).at(rsrc0));
+            *temp_ref = scratchpad[(n_tiles*tc_size*tc_size*2) + (t*num_data_per_thread_st) + n];
+
+            this->dcache_write(temp_ref, base_addr+(n*mem_bytes), mem_bytes);  
+          }
+        }
+        //Clear the scratchpad
+        for(long unsigned int i=0 ; i < scratchpad.size(); i++)
+        {
+          scratchpad[i] = 0;
+        }
+      }
+      break;
+      case 2: 
+      { //Matrix Multiply
+        DP(4, "TCU MULTIPLY MAT");
+        trace->fu_type = FUType::TCU;
+        trace->tcu_type = TCUType::TCU_MUL;
+        uint32_t threads_per_tc = MAX (1, num_threads/TC_per_warp);
+        for (uint32_t t = thread_start; t < num_threads_actv; ++t) 
+        {
+          if (!warp.tmask.test(t))
+            continue;
+         
+          DP(3, "Thread ID" << t); 
+          //TC operation [only 1 thread in 1 warp needs to do this]
+          if (t%threads_per_tc == 0)
+          {
+            /*
+            // TODO : Fix needed for functional correctness
+            // TODO : change to systolic array implementation
+            uint32_t thread_offset = t*(tc_size*tc_size);
+
+            int loop_offset = 0;
+            int offset_b = n_tiles*n_tiles*n_tiles*tc_size*tc_size;
+            uint32_t accu_offset = (n_tiles)*(n_tiles)*(n_tiles)*tc_size*tc_size*2;
+            for(int tiles = 0 ; tiles < n_tiles ; tiles++)  //What's the HW implication of this?? A counter implementation?
+            { 
+              for (int i = 0; i < tc_size; i++) { //ROW-1
+                for (int j = 0; j < tc_size; j++) { //COL-2
+                  int sum = 0;
+                  for (int k = 0; k < tc_size; k++)
+                  { //COL-1
+                    sum = sum + scratchpad[loop_offset + thread_offset*n_tiles + i * tc_size + k] *scratchpad[loop_offset + thread_offset*n_tiles + offset_b + (k * tc_size + j)];
+                  }
+                  scratchpad[accu_offset + thread_offset +(i * tc_size + j)] += sum; //[i * col2 + j] = sum
+                  DP(3, "Scratchpad Index: " << accu_offset + (i * tc_size + j) << " , Value=" << scratchpad[accu_offset + (i * tc_size + j)]);
+                }
+              }
+              loop_offset += tc_size*tc_size; //Move to the next tiled matmul fragment
+            }
+            */
+          }
+        }
+
+      }break;
+      default:
+        std::abort();
     }
   } break;
   default:
@@ -1471,10 +1638,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   }
 
   if (warp.tmask != next_tmask) {
-    DPH(3, "*** New Tmask=");
-    for (uint32_t i = 0; i < num_threads; ++i)
-      DPN(3, next_tmask.test(i));
-    DPN(3, std::endl);
+    DP(3, "*** New Tmask=" << ThreadMaskOS(next_tmask, num_threads));
     warp.tmask = next_tmask;
     if (!next_tmask.any()) {
       active_warps_.reset(wid);

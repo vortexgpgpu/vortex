@@ -27,7 +27,7 @@ module VX_generic_arbiter #(
     output wire                     grant_valid,
     input  wire                     grant_ready
 );
-    if (TYPE == "P") begin
+    if (TYPE == "P") begin : g_priority
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
@@ -42,7 +42,7 @@ module VX_generic_arbiter #(
             .grant_onehot (grant_onehot)
         );
 
-    end else if (TYPE == "R") begin
+    end else if (TYPE == "R") begin : g_round_robin
 
         VX_rr_arbiter #(
             .NUM_REQS (NUM_REQS)
@@ -56,21 +56,7 @@ module VX_generic_arbiter #(
             .grant_ready  (grant_ready)
         );
 
-    end else if (TYPE == "F") begin
-
-        VX_fair_arbiter #(
-            .NUM_REQS (NUM_REQS)
-        ) fair_arbiter (
-            .clk          (clk),
-            .reset        (reset),
-            .requests     (requests),
-            .grant_valid  (grant_valid),
-            .grant_index  (grant_index),
-            .grant_onehot (grant_onehot),
-            .grant_ready  (grant_ready)
-        );
-
-    end else if (TYPE == "M") begin
+    end else if (TYPE == "M") begin : g_matrix
 
         VX_matrix_arbiter #(
             .NUM_REQS (NUM_REQS)
@@ -84,7 +70,7 @@ module VX_generic_arbiter #(
             .grant_ready  (grant_ready)
         );
 
-    end else if (TYPE == "C") begin
+    end else if (TYPE == "C") begin : g_cyclic
 
         VX_cyclic_arbiter #(
             .NUM_REQS (NUM_REQS)
@@ -98,11 +84,13 @@ module VX_generic_arbiter #(
             .grant_ready  (grant_ready)
         );
 
-    end else begin
+    end else begin : g_invalid
 
         `ERROR(("invalid parameter"));
 
     end
+
+    `RUNTIME_ASSERT (((~(| requests) != 1) || (grant_valid && (requests[grant_index] != 0) && (grant_onehot == (NUM_REQS'(1) << grant_index)))), ("%t: invalid arbiter grant!", $time))
 
 endmodule
 `TRACING_ON

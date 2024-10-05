@@ -21,13 +21,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
         with:
           submodules: recursive
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: tools
           key: ${{ runner.os }}-toolchain-v0.1
@@ -36,7 +36,7 @@ jobs:
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: third_party
           key: ${{ runner.os }}-thirdparty-v0.1
@@ -46,7 +46,7 @@ jobs:
       - name: Install Dependencies
         if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
-          sudo bash ./ci/system_updates.sh
+          sudo bash ./ci/install_dependencies.sh
 
       - name: Setup Toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
@@ -71,15 +71,15 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
 
       - name: Install Dependencies
         run: |
-          sudo bash ./ci/system_updates.sh
+          sudo bash ./ci/install_dependencies.sh
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: tools
           key: ${{ runner.os }}-toolchain-v0.1
@@ -88,7 +88,7 @@ jobs:
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: third_party
           key: ${{ runner.os }}-thirdparty-v0.1
@@ -106,31 +106,31 @@ jobs:
           make tests -s > /dev/null
 
       - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: build-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
 
-  test:
+  tests:
     runs-on: ubuntu-20.04
     needs: build
     strategy:
       fail-fast: false
       matrix:
-        name: [regression, opencl, cache, config1, config2, debug, stress, vm]
+        name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm]
         xlen: [32, 64]
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
 
       - name: Install Dependencies
         run: |
-          sudo bash ./ci/system_updates.sh
+          sudo bash ./ci/install_dependencies.sh
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: tools
           key: ${{ runner.os }}-toolchain-v0.1
@@ -139,7 +139,7 @@ jobs:
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: third_party
           key: ${{ runner.os }}-thirdparty-v0.1
@@ -147,10 +147,11 @@ jobs:
             ${{ runner.os }}-thirdparty-
 
       - name: Download Build Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: build-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
+
       - name: Run tests
         run: |
           cd build${{ matrix.xlen }}
@@ -160,7 +161,6 @@ jobs:
             ./ci/regression.sh --unittest
             ./ci/regression.sh --isa
             ./ci/regression.sh --kernel
-            ./ci/regression.sh --synthesis
             ./ci/regression.sh --regression
           else
             ./ci/regression.sh --${{ matrix.name }}
@@ -168,7 +168,7 @@ jobs:
 
   complete:
     runs-on: ubuntu-20.04
-    needs: test
+    needs: tests
 
     steps:
       - name: Check Completion

@@ -26,7 +26,7 @@ module VX_matrix_arbiter #(
     output wire                     grant_valid,
     input  wire                     grant_ready
 );
-    if (NUM_REQS == 1)  begin
+    if (NUM_REQS == 1)  begin : g_passthru
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
@@ -36,59 +36,49 @@ module VX_matrix_arbiter #(
         assign grant_onehot = requests;
         assign grant_valid  = requests[0];
 
-    end else begin
+    end else begin : g_arbiter
 
-        reg [NUM_REQS-1:1]  state [NUM_REQS-1:0];
+        reg [NUM_REQS-1:1] state [NUM_REQS-1:0];
         wire [NUM_REQS-1:0] pri [NUM_REQS-1:0];
-        wire [NUM_REQS-1:0] grant_unqual;
+        wire [NUM_REQS-1:0] grant;
 
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
-            for (genvar j = 0; j < NUM_REQS; ++j) begin
-                if (j > i) begin
-                    assign pri[j][i] = requests[i] && state[i][j];
-                end
-                else if (j < i) begin
-                    assign pri[j][i] = requests[i] && !state[j][i];
-                end
-                else begin
-                    assign pri[j][i] = 0;
+        for (genvar r = 0; r < NUM_REQS; ++r) begin : g_pri_r
+            for (genvar c = 0; c < NUM_REQS; ++c) begin : g_pri_c
+                if (r > c) begin : g_row
+                    assign pri[r][c] = requests[c] && state[c][r];
+                end else if (r < c) begin : g_col
+                    assign pri[r][c] = requests[c] && !state[r][c];
+                end else begin : g_equal
+                    assign pri[r][c] = 0;
                 end
             end
-            assign grant_unqual[i] = requests[i] && !(| pri[i]);
         end
 
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
-            for (genvar j = i + 1; j < NUM_REQS; ++j) begin
+        for (genvar r = 0; r < NUM_REQS; ++r) begin : g_grant
+            assign grant[r] = requests[r] && ~(| pri[r]);
+        end
+
+        for (genvar r = 0; r < NUM_REQS; ++r) begin : g_state_r
+            for (genvar c = r + 1; c < NUM_REQS; ++c) begin : g_state_c
                 always @(posedge clk) begin
                     if (reset) begin
-                        state[i][j] <= '0;
-                    end else begin
-                        state[i][j] <= (state[i][j] || grant_unqual[j]) && !grant_unqual[i];
+                        state[r][c] <= '0;
+                    end else if (grant_ready) begin
+                        state[r][c] <= (state[r][c] || grant[c]) && ~grant[r];
                     end
                 end
             end
         end
 
-        reg [NUM_REQS-1:0] grant_unqual_prev;
-        always @(posedge clk) begin
-            if (reset) begin
-                grant_unqual_prev <= '0;
-            end else if (grant_ready) begin
-                grant_unqual_prev <= grant_unqual;
-            end
-        end
-        assign grant_onehot = grant_ready ? grant_unqual : grant_unqual_prev;
+        assign grant_onehot = grant;
 
-        VX_onehot_encoder #(
+        VX_encoder #(
             .N (NUM_REQS)
         ) encoder (
-            .data_in    (grant_unqual),
-            .data_out   (grant_index),
-            `UNUSED_PIN (valid_out)
+            .data_in   (grant_onehot),
+            .data_out  (grant_index),
+            .valid_out (grant_valid)
         );
-
-        assign grant_valid = (| requests);
-
     end
 
 endmodule

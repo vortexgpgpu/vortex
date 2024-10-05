@@ -75,45 +75,47 @@ module VX_cache_data #(
     wire [`CS_WORDS_PER_LINE-1:0][NUM_WAYS-1:0][`CS_WORD_WIDTH-1:0] line_rdata;
     wire [`LOG2UP(NUM_WAYS)-1:0] way_idx;
 
-    if (WRITEBACK) begin
-        if (DIRTY_BYTES) begin
-            wire [NUM_WAYS-1:0][LINE_SIZE-1:0] bs_rdata;
-            wire [NUM_WAYS-1:0][LINE_SIZE-1:0] bs_wdata;
-
-            for (genvar i = 0; i < NUM_WAYS; ++i) begin
-                wire [LINE_SIZE-1:0] wdata = write ? (bs_rdata[i] | write_byteen) : ((fill || flush) ? '0 : bs_rdata[i]);
-                assign bs_wdata[i] = init ? '0 : (way_sel[i] ? wdata : bs_rdata[i]);
-            end
-
-            VX_sp_ram #(
-                .DATAW (LINE_SIZE * NUM_WAYS),
-                .SIZE  (`CS_LINES_PER_BANK)
-            ) byteen_store (
-                .clk   (clk),
-                .reset (reset),
-                .read  (write || fill || flush),
-                .write (init || write || fill || flush),
-                .wren  (1'b1),
-                .addr  (line_sel),
-                .wdata (bs_wdata),
-                .rdata (bs_rdata)
-            );
-
-            assign dirty_byteen = bs_rdata[way_idx];
-        end else begin
-            assign dirty_byteen = {LINE_SIZE{1'b1}};
-        end
-
-        wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] flipped_rdata;
-        for (genvar i = 0; i < `CS_WORDS_PER_LINE; ++i) begin
-            for (genvar j = 0; j < NUM_WAYS; ++j) begin
-                assign flipped_rdata[j][i] = line_rdata[i][j];
-            end
-        end
-        assign dirty_data = flipped_rdata[way_idx];
-    end else begin
-        assign dirty_byteen = '0;
+    if (WRITEBACK) begin : g_dirty_data
+        wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] transposed_rdata;
+        VX_transpose #(
+            .DATAW (`CS_WORD_WIDTH),
+            .N (`CS_WORDS_PER_LINE),
+            .M (NUM_WAYS)
+        ) transpose (
+            .data_in  (line_rdata),
+            .data_out (transposed_rdata)
+        );
+        assign dirty_data = transposed_rdata[way_idx];
+    end else begin : g_dirty_data_0
         assign dirty_data = '0;
+    end
+
+    if (DIRTY_BYTES) begin : g_dirty_byteen
+        wire [NUM_WAYS-1:0][LINE_SIZE-1:0] bs_rdata;
+        wire [NUM_WAYS-1:0][LINE_SIZE-1:0] bs_wdata;
+
+        for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_bs_wdata
+            wire [LINE_SIZE-1:0] wdata = write ? (bs_rdata[i] | write_byteen) : ((fill || flush) ? '0 : bs_rdata[i]);
+            assign bs_wdata[i] = init ? '0 : (way_sel[i] ? wdata : bs_rdata[i]);
+        end
+
+        VX_sp_ram #(
+            .DATAW (LINE_SIZE * NUM_WAYS),
+            .SIZE  (`CS_LINES_PER_BANK)
+        ) byteen_store (
+            .clk   (clk),
+            .reset (reset),
+            .read  (write || fill || flush),
+            .write (init || write || fill || flush),
+            .wren  (1'b1),
+            .addr  (line_sel),
+            .wdata (bs_wdata),
+            .rdata (bs_rdata)
+        );
+
+        assign dirty_byteen = bs_rdata[way_idx];
+    end else begin : g_dirty_byteen_0
+        assign dirty_byteen = '1;
     end
 
     // order the data layout to perform ways multiplexing last.
@@ -122,17 +124,17 @@ module VX_cache_data #(
     wire [`CS_WORDS_PER_LINE-1:0][NUM_WAYS-1:0][`CS_WORD_WIDTH-1:0] line_wdata;
     wire [BYTEENW-1:0] line_wren;
 
-    if (WRITE_ENABLE != 0 || (NUM_WAYS > 1)) begin
+    if (WRITE_ENABLE != 0 || (NUM_WAYS > 1)) begin : g_line_wdata
         wire [`CS_WORDS_PER_LINE-1:0][NUM_WAYS-1:0][WORD_SIZE-1:0] wren_w;
-        for (genvar i = 0; i < `CS_WORDS_PER_LINE; ++i) begin
-            for (genvar j = 0; j < NUM_WAYS; ++j) begin
+        for (genvar i = 0; i < `CS_WORDS_PER_LINE; ++i) begin : g_i
+            for (genvar j = 0; j < NUM_WAYS; ++j) begin : g_j
                 assign line_wdata[i][j] = (fill || !WRITE_ENABLE) ? fill_data[i] : write_data[i];
                 assign wren_w[i][j] = ((fill || !WRITE_ENABLE) ? {WORD_SIZE{1'b1}} : write_byteen[i])
                                     & {WORD_SIZE{(way_sel[j] || (NUM_WAYS == 1))}};
             end
         end
         assign line_wren = wren_w;
-    end else begin
+    end else begin : g_line_wdata_ro
         `UNUSED_VAR (write)
         `UNUSED_VAR (write_byteen)
         `UNUSED_VAR (write_data)
@@ -140,7 +142,7 @@ module VX_cache_data #(
         assign line_wren  = fill;
     end
 
-    VX_onehot_encoder #(
+    VX_encoder #(
         .N (NUM_WAYS)
     ) way_enc (
         .data_in  (way_sel),
@@ -171,9 +173,9 @@ module VX_cache_data #(
     );
 
     wire [NUM_WAYS-1:0][`CS_WORD_WIDTH-1:0] per_way_rdata;
-    if (`CS_WORDS_PER_LINE > 1) begin
+    if (`CS_WORDS_PER_LINE > 1) begin : g_per_way_rdata_wsel
         assign per_way_rdata = line_rdata[wsel];
-    end else begin
+    end else begin : g_per_way_rdata
         `UNUSED_VAR (wsel)
         assign per_way_rdata = line_rdata;
     end
@@ -182,16 +184,16 @@ module VX_cache_data #(
 `ifdef DBG_TRACE_CACHE
     always @(posedge clk) begin
         if (fill && ~stall) begin
-            `TRACE(3, ("%d: %s fill: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, fill_data));
+            `TRACE(3, ("%t: %s fill: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, fill_data))
         end
         if (flush && ~stall) begin
-            `TRACE(3, ("%d: %s flush: addr=0x%0h, way=%b, blk_addr=%0d, byteen=%h, data=0x%h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, dirty_byteen, dirty_data));
+            `TRACE(3, ("%t: %s flush: addr=0x%0h, way=%b, blk_addr=%0d, byteen=0x%h, data=0x%h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, dirty_byteen, dirty_data))
         end
         if (read && ~stall) begin
-            `TRACE(3, ("%d: %s read: addr=0x%0h, way=%b, blk_addr=%0d, wsel=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, wsel, read_data, req_uuid));
+            `TRACE(3, ("%t: %s read: addr=0x%0h, way=%b, blk_addr=%0d, wsel=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, wsel, read_data, req_uuid))
         end
         if (write && ~stall) begin
-            `TRACE(3, ("%d: %s write: addr=0x%0h, way=%b, blk_addr=%0d, wsel=%0d, byteen=%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, wsel, write_byteen[wsel], write_data[wsel], req_uuid));
+            `TRACE(3, ("%t: %s write: addr=0x%0h, way=%b, blk_addr=%0d, wsel=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, wsel, write_byteen[wsel], write_data[wsel], req_uuid))
         end
     end
 `endif

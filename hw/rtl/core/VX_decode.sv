@@ -15,19 +15,19 @@
 
 `ifdef EXT_F_ENABLE
     `define USED_IREG(x) \
-        x``_r = {1'b0, ``x}; \
+        x``_v = {1'b0, ``x}; \
         use_``x = 1
 
     `define USED_FREG(x) \
-        x``_r = {1'b1, ``x}; \
+        x``_v = {1'b1, ``x}; \
         use_``x = 1
 `else
     `define USED_IREG(x) \
-        x``_r = ``x; \
+        x``_v = ``x; \
         use_``x = 1
 `endif
 
-module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
+module VX_decode import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
@@ -50,7 +50,7 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     reg [`EX_BITS-1:0] ex_type;
     reg [`INST_OP_BITS-1:0] op_type;
     op_args_t op_args;
-    reg [`NR_BITS-1:0] rd_r, rs1_r, rs2_r, rs3_r;
+    reg [`NR_BITS-1:0] rd_v, rs1_v, rs2_v, rs3_v;
     reg use_rd, use_rs1, use_rs2, use_rs3;
     reg is_wstall;
 
@@ -152,13 +152,13 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
 
     always @(*) begin
 
-        ex_type   = '0;
+        ex_type   = 'x;
         op_type   = 'x;
         op_args   = 'x;
-        rd_r      = '0;
-        rs1_r     = '0;
-        rs2_r     = '0;
-        rs3_r     = '0;
+        rd_v      = '0;
+        rs1_v     = '0;
+        rs2_v     = '0;
+        rs3_v     = '0;
         use_rd    = 0;
         use_rs1   = 0;
         use_rs2   = 0;
@@ -376,14 +376,16 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
                 `USED_IREG (rs2);
             end
         `ifdef EXT_F_ENABLE
-            `INST_FMADD,
-            `INST_FMSUB,
-            `INST_FNMSUB,
-            `INST_FNMADD: begin
+            `INST_FMADD,  // 7'b1000011
+            `INST_FMSUB,  // 7'b1000111
+            `INST_FNMSUB, // 7'b1001011
+            `INST_FNMADD: // 7'b1001111
+            begin
                 ex_type = `EX_FPU;
-                op_type = `INST_OP_BITS'({2'b11, opcode[3:2]});
+                op_type = `INST_OP_BITS'({2'b00, 1'b1, opcode[3]});
                 op_args.fpu.frm = func3;
                 op_args.fpu.fmt[0] = func2[0]; // float / double
+                op_args.fpu.fmt[1] = opcode[3] ^ opcode[2]; // SUB
                 use_rd  = 1;
                 `USED_FREG (rd);
                 `USED_FREG (rs1);
@@ -399,9 +401,10 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
                 case (func5)
                     5'b00000, // FADD
                     5'b00001, // FSUB
-                    5'b00010, // FMUL
-                    5'b00011: begin // FDIV
-                        op_type = `INST_OP_BITS'(func5[1:0]);
+                    5'b00010: // FMUL
+                    begin
+                        op_type = `INST_OP_BITS'({2'b00, 1'b0, func5[1]});
+                        op_args.fpu.fmt[1] = func5[0]; // SUB
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
@@ -430,6 +433,13 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
                         `USED_FREG (rs1);
                     end
                 `endif
+                    5'b00011: begin
+                        // FDIV
+                        op_type = `INST_OP_BITS'(`INST_FPU_DIV);
+                        `USED_FREG (rd);
+                        `USED_FREG (rs1);
+                        `USED_FREG (rs2);
+                    end
                     5'b01011: begin
                         // FSQRT
                         op_type = `INST_OP_BITS'(`INST_FPU_SQRT);
@@ -527,7 +537,7 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
     end
 
     // disable write to integer register r0
-    wire wb = use_rd && (rd_r != 0);
+    wire wb = use_rd && (rd_v != 0);
 
     VX_elastic_buffer #(
         .DATAW (DATAW),
@@ -537,7 +547,7 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
         .reset     (reset),
         .valid_in  (fetch_if.valid),
         .ready_in  (fetch_if.ready),
-        .data_in   ({fetch_if.data.uuid, fetch_if.data.wid, fetch_if.data.tmask, fetch_if.data.PC, ex_type, op_type, op_args, wb, rd_r, rs1_r, rs2_r, rs3_r}),
+        .data_in   ({fetch_if.data.uuid, fetch_if.data.wid, fetch_if.data.tmask, fetch_if.data.PC, ex_type, op_type, op_args, wb, rd_v, rs1_v, rs2_v, rs3_v}),
         .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
         .valid_out (decode_if.valid),
         .ready_out (decode_if.ready)
@@ -547,9 +557,10 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
 
     wire fetch_fire = fetch_if.valid && fetch_if.ready;
 
-    assign decode_sched_if.valid    = fetch_fire;
-    assign decode_sched_if.wid      = fetch_if.data.wid;
-    assign decode_sched_if.is_wstall = is_wstall;
+    assign decode_sched_if.valid  = fetch_fire;
+    assign decode_sched_if.wid    = fetch_if.data.wid;
+    assign decode_sched_if.unlock = ~is_wstall;
+
 `ifndef L1_ENABLE
     assign fetch_if.ibuf_pop = decode_if.ibuf_pop;
 `endif
@@ -557,14 +568,14 @@ module VX_decode import VX_gpu_pkg::*, VX_trace_pkg::*; #(
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (decode_if.valid && decode_if.ready) begin
-            `TRACE(1, ("%d: %s: wid=%0d, PC=0x%0h, instr=0x%0h, ex=", $time, INSTANCE_ID, decode_if.data.wid, {decode_if.data.PC, 1'd0}, instr));
+            `TRACE(1, ("%t: %s: wid=%0d, PC=0x%0h, instr=0x%0h, ex=", $time, INSTANCE_ID, decode_if.data.wid, {decode_if.data.PC, 1'd0}, instr))
             trace_ex_type(1, decode_if.data.ex_type);
-            `TRACE(1, (", op="));
+            `TRACE(1, (", op="))
             trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
             `TRACE(1, (", tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, opds=%b%b%b%b",
-                decode_if.data.tmask, decode_if.data.wb, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3, use_rd, use_rs1, use_rs2, use_rs3));
+                decode_if.data.tmask, decode_if.data.wb, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3, use_rd, use_rs1, use_rs2, use_rs3))
             trace_op_args(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
-            `TRACE(1, (" (#%0d)\n", decode_if.data.uuid));
+            `TRACE(1, (" (#%0d)\n", decode_if.data.uuid))
         end
     end
 `endif

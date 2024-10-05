@@ -34,7 +34,7 @@ The hardware configuration file `/hw/rtl/VX_config.vh` defines all the hardware 
 - `NUM_THREADS`: Number of threads per warps
 - `PERF_ENABLE`: enable the use of all profile counters
 
-You configure the syntesis build from the command line:
+You can configure the synthesis build from the command line:
 
     $ CONFIGS="-DPERF_ENABLE -DNUM_THREADS=8" make
 
@@ -43,7 +43,7 @@ OPAE Build Progress
 
 You could check the last 10 lines in the build log for possible errors until build completion.
 
-    $ tail -n 10 <build_dir>/build.log
+    $ tail -n 10 <build_dir>/synth/build.log
 
 Check if the build is still running by looking for quartus_sh, quartus_syn, or quartus_fit programs.
 
@@ -70,10 +70,23 @@ Sample FPGA Run Test
 
 Ensure you have the correct opae runtime for the FPGA target
 
-    $ make -C runtime/opae clean
     $ TARGET=FPGA make -C runtime/opae
 
 Run the following from your Vortex build directory
 
     $ TARGET=fpga ./ci/blackbox.sh --driver=opae --app=sgemm --args="-n128"
 
+Testing Vortex using OPAE with Intel ASE Simulation
+---------------------------------------------------
+
+Building ASE synthesis
+
+    $ TARGET=asesim make -C runtime/opae
+
+Building ASE runtime
+
+    $ TARGET=asesim make -C runtime/opae
+
+Running ASE simulation
+
+    $ ASE_LOG=0 ASE_WORKDIR=<build_dir>/synth/work TARGET=asesim ./ci/blackbox.sh --driver=opae --app=sgemm --args="-n16"

@@ -44,7 +44,8 @@ def load_config(filename):
                     'num_barriers': int(config_match.group(7)),
                 }
                 return config
-    return None
+    print("Error: missing CONFIGS: header")
+    sys.exit(1)
 
 def parse_simx(log_lines):
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
@@ -274,6 +275,8 @@ def split_log_file(log_filename):
 
     if current_sublog is not None:
         sublogs.append(current_sublog)
+    else:
+        sublogs.append(log_lines)
 
     return sublogs
 

@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_dcr_data import VX_gpu_pkg::*, VX_trace_pkg::*; (
+module VX_dcr_data import VX_gpu_pkg::*; (
     input wire              clk,
     input wire              reset,
 
@@ -50,9 +50,9 @@ module VX_dcr_data import VX_gpu_pkg::*, VX_trace_pkg::*; (
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (dcr_bus_if.write_valid) begin
-            `TRACE(1, ("%d: base-dcr: state=", $time));
+            `TRACE(1, ("%t: base-dcr: state=", $time))
             trace_base_dcr(1, dcr_bus_if.write_addr);
-            `TRACE(1, (", data=0x%h\n", dcr_bus_if.write_data));
+            `TRACE(1, (", data=0x%h\n", dcr_bus_if.write_data))
         end
     end
 `endif
