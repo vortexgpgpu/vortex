@@ -104,8 +104,8 @@ module VX_mem_adapter #(
             .N (D),
             .M (SRC_DATA_WIDTH/8)
         ) req_be_dec (
-            .data_in  (req_idx),
-            .valid_in (mem_req_byteen_in),
+            .sel_in   (req_idx),
+            .data_in  (mem_req_byteen_in),
             .data_out (mem_req_byteen_out_w)
         );
 
@@ -113,8 +113,8 @@ module VX_mem_adapter #(
             .N (D),
             .M (SRC_DATA_WIDTH)
         ) req_data_dec (
-            .data_in  (req_idx),
-            .valid_in (mem_req_data_in),
+            .sel_in   (req_idx),
+            .data_in  (mem_req_data_in),
             .data_out (mem_req_data_out_w)
         );
 

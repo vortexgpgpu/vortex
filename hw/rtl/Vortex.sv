@@ -86,6 +86,7 @@ module Vortex import VX_gpu_pkg::*; (
         .WRITEBACK      (`L3_WRITEBACK),
         .DIRTY_BYTES    (`L3_WRITEBACK),
         .UUID_WIDTH     (`UUID_WIDTH),
+        .FLAGS_WIDTH    (`MEM_REQ_FLAGS_WIDTH),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
         .NC_ENABLE      (1),

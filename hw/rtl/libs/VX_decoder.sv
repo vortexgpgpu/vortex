@@ -18,25 +18,30 @@
 
 `TRACING_OFF
 module VX_decoder #(
-    parameter N = 1,
+    parameter N = 0,
     parameter M = 1,
     parameter MODEL = 0,
     parameter D = 1 << N
 ) (
-    input wire [N-1:0] data_in,
-    input wire [M-1:0] valid_in,
+    input wire [`UP(N)-1:0] sel_in,
+    input wire [M-1:0] data_in,
     output wire [D-1:0][M-1:0] data_out
 );
-    logic [D-1:0][M-1:0] shift;
-    if (MODEL == 1) begin : g_model1
-        always @(*) begin
-            shift = '0;
-            shift[data_in] = {M{1'b1}};
+    if (N != 0) begin : g_decoder
+        logic [D-1:0][M-1:0] shift;
+        if (MODEL == 1) begin : g_model1
+            always @(*) begin
+                shift = '0;
+                shift[sel_in] = {M{1'b1}};
+            end
+        end else begin : g_model0
+            assign shift = ((D*M)'({M{1'b1}})) << (sel_in * M);
         end
-    end else begin : g_model0
-        assign shift = ((D*M)'({M{1'b1}})) << (data_in * M);
+        assign data_out = {D{data_in}} & shift;
+    end else begin : g_passthru
+        `UNUSED_VAR (sel_in)
+        assign data_out = data_in;
     end
-    assign data_out = {D{valid_in}} & shift;
 
 endmodule
 `TRACING_ON

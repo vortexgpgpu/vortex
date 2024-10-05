@@ -564,11 +564,7 @@
 
 // Cache Size
 `ifndef L2_CACHE_SIZE
-`ifdef ALTERA_S10
-`define L2_CACHE_SIZE 2097152
-`else
 `define L2_CACHE_SIZE 1048576
-`endif
 `endif
 
 // Number of Banks
@@ -610,11 +606,7 @@
 
 // Cache Size
 `ifndef L3_CACHE_SIZE
-`ifdef ALTERA_S10
 `define L3_CACHE_SIZE 2097152
-`else
-`define L3_CACHE_SIZE 1048576
-`endif
 `endif
 
 // Number of Banks

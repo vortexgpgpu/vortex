@@ -57,6 +57,9 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     // core request tag size
     parameter TAG_WIDTH             = UUID_WIDTH + 1,
 
+    // core request flags
+    parameter FLAGS_WIDTH           = 0,
+
     // enable bypass for non-cacheable addresses
     parameter NC_ENABLE             = 0,
 
@@ -175,6 +178,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .DIRTY_BYTES  (DIRTY_BYTES),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (TAG_WIDTH),
+            .FLAGS_WIDTH  (FLAGS_WIDTH),
             .CORE_OUT_BUF (NC_OR_BYPASS ? 1 : CORE_OUT_BUF),
             .MEM_OUT_BUF  (NC_OR_BYPASS ? 1 : MEM_OUT_BUF)
         ) cache (

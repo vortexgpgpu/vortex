@@ -18,7 +18,7 @@ module VX_mem_coalescer #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_REQS      = 1,
     parameter ADDR_WIDTH    = 32,
-    parameter FLAGS_WIDTH   = 1,
+    parameter FLAGS_WIDTH   = 0,
     parameter DATA_IN_SIZE  = 4,
     parameter DATA_OUT_SIZE = 64,
     parameter TAG_WIDTH     = 8,
@@ -43,7 +43,7 @@ module VX_mem_coalescer #(
     input wire [NUM_REQS-1:0]           in_req_mask,
     input wire [NUM_REQS-1:0][DATA_IN_SIZE-1:0] in_req_byteen,
     input wire [NUM_REQS-1:0][ADDR_WIDTH-1:0] in_req_addr,
-    input wire [NUM_REQS-1:0][FLAGS_WIDTH-1:0] in_req_flags,
+    input wire [NUM_REQS-1:0][`UP(FLAGS_WIDTH)-1:0] in_req_flags,
     input wire [NUM_REQS-1:0][DATA_IN_WIDTH-1:0] in_req_data,
     input wire [TAG_WIDTH-1:0]          in_req_tag,
     output wire                         in_req_ready,
@@ -61,7 +61,7 @@ module VX_mem_coalescer #(
     output wire [OUT_REQS-1:0]          out_req_mask,
     output wire [OUT_REQS-1:0][DATA_OUT_SIZE-1:0] out_req_byteen,
     output wire [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] out_req_addr,
-    output wire [OUT_REQS-1:0][FLAGS_WIDTH-1:0] out_req_flags,
+    output wire [OUT_REQS-1:0][`UP(FLAGS_WIDTH)-1:0] out_req_flags,
     output wire [OUT_REQS-1:0][DATA_OUT_WIDTH-1:0] out_req_data,
     output wire [OUT_TAG_WIDTH-1:0]     out_req_tag,
     input wire 	                        out_req_ready,
@@ -92,7 +92,7 @@ module VX_mem_coalescer #(
     logic out_req_rw_r, out_req_rw_n;
     logic [OUT_REQS-1:0] out_req_mask_r, out_req_mask_n;
     logic [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] out_req_addr_r, out_req_addr_n;
-    logic [OUT_REQS-1:0][FLAGS_WIDTH-1:0] out_req_flags_r, out_req_flags_n;
+    logic [OUT_REQS-1:0][`UP(FLAGS_WIDTH)-1:0] out_req_flags_r, out_req_flags_n;
     logic [OUT_REQS-1:0][DATA_RATIO-1:0][DATA_IN_SIZE-1:0] out_req_byteen_r, out_req_byteen_n;
     logic [OUT_REQS-1:0][DATA_RATIO-1:0][DATA_IN_WIDTH-1:0] out_req_data_r, out_req_data_n;
     logic [OUT_TAG_WIDTH-1:0] out_req_tag_r, out_req_tag_n;
@@ -110,7 +110,7 @@ module VX_mem_coalescer #(
 
     logic [OUT_REQS-1:0] batch_valid_r, batch_valid_n;
     logic [OUT_REQS-1:0][OUT_ADDR_WIDTH-1:0] seed_addr_r, seed_addr_n;
-    logic [OUT_REQS-1:0][FLAGS_WIDTH-1:0] seed_flags_r, seed_flags_n;
+    logic [OUT_REQS-1:0][`UP(FLAGS_WIDTH)-1:0] seed_flags_r, seed_flags_n;
     logic [NUM_REQS-1:0] addr_matches_r, addr_matches_n;
     logic [NUM_REQS-1:0] req_rem_mask_r, req_rem_mask_n;
 
@@ -139,7 +139,7 @@ module VX_mem_coalescer #(
             assign addr_base[j] = in_req_addr[DATA_RATIO * i + j][ADDR_WIDTH-1:DATA_RATIO_W];
         end
 
-        wire [DATA_RATIO-1:0][FLAGS_WIDTH-1:0] req_flags;
+        wire [DATA_RATIO-1:0][`UP(FLAGS_WIDTH)-1:0] req_flags;
         for (genvar j = 0; j < DATA_RATIO; ++j) begin : g_req_flags
             assign req_flags[j] = in_req_flags[DATA_RATIO * i + j];
         end
@@ -221,7 +221,7 @@ module VX_mem_coalescer #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_REQS + 1 + 1 + NUM_REQS + OUT_REQS * (1 + 1 + OUT_ADDR_WIDTH + FLAGS_WIDTH + OUT_ADDR_WIDTH + FLAGS_WIDTH + DATA_OUT_SIZE + DATA_OUT_WIDTH) + OUT_TAG_WIDTH),
+        .DATAW  (1 + NUM_REQS + 1 + 1 + NUM_REQS + OUT_REQS * (1 + 1 + OUT_ADDR_WIDTH + `UP(FLAGS_WIDTH) + OUT_ADDR_WIDTH + `UP(FLAGS_WIDTH) + DATA_OUT_SIZE + DATA_OUT_WIDTH) + OUT_TAG_WIDTH),
         .RESETW (1 + NUM_REQS + 1),
         .INIT_VALUE ({1'b0, {NUM_REQS{1'b1}}, 1'b0})
     ) pipe_reg (
@@ -270,7 +270,12 @@ module VX_mem_coalescer #(
     assign out_req_mask   = out_req_mask_r;
     assign out_req_byteen = out_req_byteen_r;
     assign out_req_addr   = out_req_addr_r;
-    assign out_req_flags  = out_req_flags_r;
+    if (FLAGS_WIDTH != 0) begin : g_out_req_flags
+        assign out_req_flags = out_req_flags_r;
+    end else begin : g_out_req_flags_0
+        `UNUSED_VAR (out_req_flags_r)
+        assign out_req_flags = '0;
+    end
     assign out_req_data   = out_req_data_r;
     assign out_req_tag    = out_req_tag_r;
 

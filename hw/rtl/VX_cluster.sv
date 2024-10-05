@@ -100,6 +100,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .WRITEBACK      (`L2_WRITEBACK),
         .DIRTY_BYTES    (`L2_WRITEBACK),
         .UUID_WIDTH     (`UUID_WIDTH),
+        .FLAGS_WIDTH    (`MEM_REQ_FLAGS_WIDTH),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
         .NC_ENABLE      (1),

@@ -69,8 +69,8 @@ module VX_cyclic_arbiter #(
             .N (LOG_NUM_REQS),
             .D (NUM_REQS)
         ) grant_decoder (
-            .data_in  (grant_index),
-            .valid_in (1'b1),
+            .sel_in   (grant_index),
+            .data_in  (1'b1),
             .data_out (grant_onehot_w)
         );
 
