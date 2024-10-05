@@ -1,5 +1,0 @@
-`verilator_config
-
-lint_off -rule BLKANDNBLK -file "*/fpnew/src/*"
-lint_off -rule UNOPTFLAT -file "*/fpnew/src/*"
-lint_off -file "*/fpnew/src/*"

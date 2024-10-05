@@ -94,6 +94,12 @@ public:
     case VX_CAPS_NUM_CORES:
       _value = NUM_CORES * NUM_CLUSTERS;
       break;
+    case VX_CAPS_TC_SIZE:
+      _value = TC_SIZE;
+      break;
+    case VX_CAPS_TC_NUM:
+      _value = TC_NUM;
+      break;
     case VX_CAPS_CACHE_LINE_SIZE:
       _value = CACHE_BLOCK_SIZE;
       break;
@@ -108,6 +114,9 @@ public:
       break;
     case VX_CAPS_NUM_MEM_BANKS:
       _value = MEMORY_BANKS;
+      break;
+    case VX_CAPS_MEM_BANK_SIZE:
+      _value = 1ull << (MEM_ADDR_WIDTH / MEMORY_BANKS);
       break;
     default:
       std::cout << "invalid caps id: " << caps_id << std::endl;

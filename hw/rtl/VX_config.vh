@@ -111,6 +111,24 @@
 `define SOCKET_SIZE `MIN(4, `NUM_CORES)
 `endif
 
+// Size of Tensor Core
+`ifndef TC_SIZE
+`define TC_SIZE 8
+`endif
+
+// Number of TCs per Warp
+`ifndef TC_NUM
+`define TC_NUM 4
+`endif
+
+`ifndef NUM_TCU_LANES
+`define NUM_TCU_LANES   `TC_NUM
+`endif
+
+`ifndef NUM_TCU_BLOCKS
+`define NUM_TCU_BLOCKS  `ISSUE_WIDTH
+`endif
+
 `ifdef L2_ENABLE
     `define L2_ENABLED   1
 `else
@@ -159,7 +177,7 @@
 `endif
 
 `ifndef STARTUP_ADDR
-`define STARTUP_ADDR    64'h180000000
+`define STARTUP_ADDR    64'h080000000
 `endif
 
 `ifndef USER_BASE_ADDR
@@ -172,7 +190,7 @@
 
 `ifdef VM_ENABLE
 `ifndef PAGE_TABLE_BASE_ADDR  
-`define PAGE_TABLE_BASE_ADDR 64'h1F0000000
+`define PAGE_TABLE_BASE_ADDR 64'h0F0000000
 `endif
 
 `endif
@@ -229,14 +247,16 @@
 `endif
 `define STACK_SIZE      (1 << `STACK_LOG2_SIZE)
 
-`define RESET_DELAY 8
+`define RESET_DELAY     8
 
 `ifndef STALL_TIMEOUT
 `define STALL_TIMEOUT   (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
 `endif
 
 `ifndef SV_DPI
+`ifndef DPI_DISABLE
 `define DPI_DISABLE
+`endif
 `endif
 
 `ifndef FPU_FPNEW
@@ -719,7 +739,7 @@
 `endif
 
 `ifndef MEMORY_BANKS
-`define MEMORY_BANKS 8
+`define MEMORY_BANKS 2
 `endif
 
 // Number of Memory Ports from LLC

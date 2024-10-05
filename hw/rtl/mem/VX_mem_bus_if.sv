@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,7 +15,7 @@
 
 interface VX_mem_bus_if #(
     parameter DATA_SIZE  = 1,
-    parameter ATYPE_WIDTH= `ADDR_TYPE_WIDTH,
+    parameter FLAGS_WIDTH= `MEM_REQ_FLAGS_WIDTH,
     parameter TAG_WIDTH  = 1,
     parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
     parameter ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE)
@@ -23,10 +23,10 @@ interface VX_mem_bus_if #(
 
     typedef struct packed {
         logic                   rw;
-        logic [DATA_SIZE-1:0]   byteen;
         logic [ADDR_WIDTH-1:0]  addr;
-        logic [ATYPE_WIDTH-1:0] atype;
         logic [DATA_SIZE*8-1:0] data;
+        logic [DATA_SIZE-1:0]   byteen;
+        logic [FLAGS_WIDTH-1:0] flags;
         logic [TAG_WIDTH-1:0]   tag;
     } req_data_t;
 

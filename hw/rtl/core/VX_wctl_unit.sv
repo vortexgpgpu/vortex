@@ -50,9 +50,9 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_bar    = (execute_if.data.op_type == `INST_SFU_BAR);
 
     wire [`UP(LANE_BITS)-1:0] tid;
-    if (LANE_BITS != 0) begin
+    if (LANE_BITS != 0) begin : g_tid
         assign tid = execute_if.data.tid[0 +: LANE_BITS];
-    end else begin
+    end else begin : g_no_tid
         assign tid = 0;
     end
 
@@ -63,7 +63,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire not_pred = execute_if.data.op_args.wctl.is_neg;
 
     wire [NUM_LANES-1:0] taken;
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_taken
         assign taken[i] = (execute_if.data.rs1_data[i][0] ^ not_pred);
     end
 
@@ -131,7 +131,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // wspawn
 
     wire [`NUM_WARPS-1:0] wspawn_wmask;
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_wspawn_wmask
         assign wspawn_wmask[i] = (i < rs1_data[`NW_BITS:0]) && (i != execute_if.data.wid);
     end
     assign wspawn.valid = is_wspawn;
@@ -162,7 +162,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign warp_ctl_if.sjoin   = sjoin_r;
     assign warp_ctl_if.barrier = barrier_r;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_commit_if
         assign commit_if.data.data[i] = `XLEN'(dvstack_ptr);
     end
 

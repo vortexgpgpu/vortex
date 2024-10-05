@@ -78,7 +78,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     wire [`NUM_ALU_BLOCKS-1:0][`NW_WIDTH-1:0]   branch_wid;
     wire [`NUM_ALU_BLOCKS-1:0]                  branch_taken;
     wire [`NUM_ALU_BLOCKS-1:0][`PC_BITS-1:0]    branch_dest;
-    for (genvar i = 0; i < `NUM_ALU_BLOCKS; ++i) begin
+    for (genvar i = 0; i < `NUM_ALU_BLOCKS; ++i) begin : g_branch_init
         assign branch_valid[i] = branch_ctl_if[i].valid;
         assign branch_wid[i]   = branch_ctl_if[i].wid;
         assign branch_taken[i] = branch_ctl_if[i].taken;
@@ -189,7 +189,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
         end
 
         // decode unlock
-        if (decode_sched_if.valid && ~decode_sched_if.is_wstall) begin
+        if (decode_sched_if.valid && decode_sched_if.unlock) begin
             stalled_warps_n[decode_sched_if.wid] = 0;
         end
 
@@ -289,13 +289,11 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     // split/join handling
 
-    `RESET_RELAY (split_join_reset, reset);
-
     VX_split_join #(
         .INSTANCE_ID ($sformatf("%s-splitjoin", INSTANCE_ID))
     ) split_join (
         .clk        (clk),
-        .reset      (split_join_reset),
+        .reset      (reset),
         .valid      (warp_ctl_if.valid),
         .wid        (warp_ctl_if.wid),
         .split      (warp_ctl_if.split),
@@ -324,7 +322,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     );
 
     wire [`NUM_WARPS-1:0][(`NUM_THREADS + `PC_BITS)-1:0] schedule_data;
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_schedule_data
         assign schedule_data[i] = {thread_masks[i], warp_pcs[i]};
     end
 
@@ -333,67 +331,50 @@ module VX_schedule import VX_gpu_pkg::*; #(
         schedule_data[schedule_wid][(`NUM_THREADS + `PC_BITS)-5:0]
     };
 
-`ifndef NDEBUG
-    localparam GNW_WIDTH = `LOG2UP(`NUM_CLUSTERS * `NUM_CORES * `NUM_WARPS);
-    reg [`UUID_WIDTH-1:0] instr_uuid;
-    wire [GNW_WIDTH-1:0] g_wid = (GNW_WIDTH'(CORE_ID) << `NW_BITS) + GNW_WIDTH'(schedule_wid);
-`ifdef SV_DPI
-    always @(posedge clk) begin
-        if (reset) begin
-            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(1, 32'd0));
-        end else if (schedule_fire) begin
-            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(0, 32'(g_wid)));
-        end
-    end
+    wire [`UUID_WIDTH-1:0] instr_uuid;
+`ifdef UUID_ENABLE
+    VX_uuid_gen #(
+        .CORE_ID    (CORE_ID),
+        .UUID_WIDTH (`UUID_WIDTH)
+    ) uuid_gen (
+        .clk   (clk),
+        .reset (reset),
+        .incr  (schedule_fire),
+        .wid   (schedule_wid),
+        .uuid  (instr_uuid)
+    );
 `else
-    wire [GNW_WIDTH+16-1:0] w_uuid = {g_wid, 16'(schedule_pc)};
-    always @(*) begin
-        instr_uuid = `UUID_WIDTH'(w_uuid);
-    end
-`endif
-`else
-    wire [`UUID_WIDTH-1:0] instr_uuid = '0;
+    assign instr_uuid = '0;
 `endif
 
     VX_elastic_buffer #(
-        .DATAW (`NUM_THREADS + `PC_BITS + `NW_WIDTH)
+        .DATAW (`NUM_THREADS + `PC_BITS + `NW_WIDTH + `UUID_WIDTH),
+        .SIZE  (2),  // need to buffer out ready_in
+        .OUT_REG (1) // should be registered for BRAM acces in fetch unit
     ) out_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (schedule_valid),
         .ready_in  (schedule_ready),
-        .data_in   ({schedule_tmask, schedule_pc, schedule_wid}),
-        .data_out  ({schedule_if.data.tmask, schedule_if.data.PC, schedule_if.data.wid}),
+        .data_in   ({schedule_tmask, schedule_pc, schedule_wid, instr_uuid}),
+        .data_out  ({schedule_if.data.tmask, schedule_if.data.PC, schedule_if.data.wid, schedule_if.data.uuid}),
         .valid_out (schedule_if.valid),
         .ready_out (schedule_if.ready)
     );
 
-    assign schedule_if.data.uuid = instr_uuid;
-
     // Track pending instructions per warp
-
-    reg [`NUM_WARPS-1:0] per_warp_incr;
-    always @(*) begin
-        per_warp_incr = 0;
-        if (schedule_if_fire) begin
-            per_warp_incr[schedule_if.data.wid] = 1;
-        end
-    end
 
     wire [`NUM_WARPS-1:0] pending_warp_empty;
     wire [`NUM_WARPS-1:0] pending_warp_alm_empty;
 
-    `RESET_RELAY_EX (pending_instr_reset, reset, `NUM_WARPS, `MAX_FANOUT);
-
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
-
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_pending_sizes
         VX_pending_size #(
             .SIZE      (4096),
             .ALM_EMPTY (1)
         ) counter (
             .clk       (clk),
-            .reset     (pending_instr_reset[i]),
-            .incr      (per_warp_incr[i]),
+            .reset     (reset),
+            .incr      (schedule_if_fire && (schedule_if.data.wid == `NW_WIDTH'(i))),
             .decr      (commit_sched_if.committed_warps[i]),
             .empty     (pending_warp_empty[i]),
             .alm_empty (pending_warp_alm_empty[i]),
@@ -422,7 +403,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
             timeout_ctr    <= '0;
             timeout_enable <= 0;
         end else begin
-            if (decode_sched_if.valid && ~decode_sched_if.is_wstall) begin
+            if (decode_sched_if.valid && decode_sched_if.unlock) begin
                 timeout_enable <= 1;
             end
             if (timeout_enable && active_warps !=0 && active_warps == stalled_warps) begin

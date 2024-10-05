@@ -56,14 +56,23 @@ public:
   bool wspawn(uint32_t num_warps, Word nextPC);
 
   int get_exitcode() const;
-
+  
+  Word get_tiles();
+  Word get_tc_size();
+  Word get_tc_num();
+  
 private:
 
   struct ipdom_entry_t {
-    ipdom_entry_t(const ThreadMask &tmask, Word PC);
-    ipdom_entry_t(const ThreadMask &tmask);
+    ipdom_entry_t(const ThreadMask &orig_tmask, const ThreadMask &else_tmask, Word PC)
+      : orig_tmask (orig_tmask)
+      , else_tmask (else_tmask)
+      , PC         (PC)
+      , fallthrough(false)
+    {}
 
-    ThreadMask  tmask;
+    ThreadMask  orig_tmask;
+    ThreadMask  else_tmask;
     Word        PC;
     bool        fallthrough;
   };
@@ -125,6 +134,10 @@ private:
   uint32_t    ipdom_size_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
+  std::vector<Word> scratchpad;
+  uint32_t mat_size;
+  uint32_t tc_size;
+  uint32_t tc_num;
 };
 
 }

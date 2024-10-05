@@ -23,21 +23,21 @@ module VX_priority_arbiter #(
     output wire [NUM_REQS-1:0]      grant_onehot,
     output wire                     grant_valid
 );
-    if (NUM_REQS == 1)  begin
+    if (NUM_REQS == 1) begin : g_passthru
 
         assign grant_index  = '0;
         assign grant_onehot = requests;
         assign grant_valid  = requests[0];
 
-    end else begin
+    end else begin : g_encoder
 
         VX_priority_encoder #(
             .N (NUM_REQS)
         ) priority_encoder (
-            .data_in   (requests),
-            .index     (grant_index),
-            .onehot    (grant_onehot),
-            .valid_out (grant_valid)
+            .data_in    (requests),
+            .index_out  (grant_index),
+            .onehot_out (grant_onehot),
+            .valid_out  (grant_valid)
         );
 
     end
