@@ -491,13 +491,15 @@ module VX_cache_bank #(
         assign mshr_release_st1 = is_hit_st1 || (rw_st1 && ~mshr_pending_st1);
     end
 
+    wire mshr_dequeue = mshr_finalize_st1 && mshr_release_st1 && ~pipe_stall;
+
     VX_pending_size #(
         .SIZE (MSHR_SIZE)
     ) mshr_pending_size (
         .clk   (clk),
         .reset (reset),
         .incr  (core_req_fire),
-        .decr  (replay_fire || (mshr_finalize_st1 && mshr_release_st1)),
+        .decr  (replay_fire || mshr_dequeue),
         .empty (mshr_empty),
         `UNUSED_PIN (alm_empty),
         .full  (mshr_alm_full),
