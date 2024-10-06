@@ -38,8 +38,6 @@ module VX_cache_tags #(
     input wire [`UP(UUID_WIDTH)-1:0]    req_uuid,
 `IGNORE_UNUSED_END
 
-    input wire                          stall,
-
     // init/fill/lookup
     input wire                          init,
     input wire                          flush,
@@ -75,7 +73,7 @@ module VX_cache_tags #(
         always @(posedge clk) begin
             if (reset) begin
                 evict_way_r <= 1;
-            end else if (~stall) begin // holding the value on stalls prevents filling different slots twice
+            end else if (lookup) begin
                 evict_way_r <= {evict_way_r[NUM_WAYS-2:0], evict_way_r[NUM_WAYS-1]};
             end
         end
@@ -91,22 +89,17 @@ module VX_cache_tags #(
             .data_out (evict_tag)
         );
     end else begin : g_evict_way_0
-        `UNUSED_VAR (stall)
         assign evict_way = 1'b1;
         assign evict_tag = read_tag;
     end
 
-    // fill and flush need to also read in writeback mode
-    wire fill_s = fill && (!WRITEBACK || ~stall);
-    wire flush_s = flush && (!WRITEBACK || ~stall);
-
     for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_tag_store
 
-        wire do_fill    = fill_s  && evict_way[i];
-        wire do_flush   = flush_s && (!WRITEBACK || way_idx[i]); // flush the whole line in writethrough mode
+        wire do_fill    = fill  && evict_way[i];
+        wire do_flush   = flush && (!WRITEBACK || way_idx[i]); // flush the whole line in writethrough mode
         wire do_write   = WRITEBACK && write && tag_matches[i];
 
-        wire line_read  = (WRITEBACK && (fill_s || flush_s));
+        wire line_read  = (WRITEBACK && (fill || flush));
         wire line_write = init || do_fill || do_flush || do_write;
         wire line_valid = ~(init || flush);
 
@@ -130,8 +123,8 @@ module VX_cache_tags #(
         ) tag_store (
             .clk   (clk),
             .reset (reset),
-            .read  (line_read && ~stall),
-            .write (line_write && ~stall),
+            .read  (line_read),
+            .write (line_write),
             .wren  (1'b1),
             .addr  (line_idx),
             .wdata (line_wdata),
@@ -148,16 +141,16 @@ module VX_cache_tags #(
 `ifdef DBG_TRACE_CACHE
     wire [`CS_LINE_ADDR_WIDTH-1:0] evict_line_addr = {evict_tag, line_idx};
     always @(posedge clk) begin
-        if (fill && ~stall) begin
+        if (fill) begin
             `TRACE(3, ("%t: %s fill: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h, dirty=%b, evict_addr=0x%0h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), evict_way, line_idx, line_tag, evict_dirty, `CS_LINE_TO_FULL_ADDR(evict_line_addr, BANK_ID)))
         end
         if (init) begin
             `TRACE(3, ("%t: %s init: addr=0x%0h, blk_addr=%0d\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_idx))
         end
-        if (flush && ~stall) begin
+        if (flush) begin
             `TRACE(3, ("%t: %s flush: addr=0x%0h, way=%b, blk_addr=%0d, dirty=%b\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(evict_line_addr, BANK_ID), way_idx, line_idx, evict_dirty))
         end
-        if (lookup && ~stall) begin
+        if (lookup) begin
             if (tag_matches != 0) begin
                 if (write) begin
                     `TRACE(3, ("%t: %s write-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_idx, line_tag, req_uuid))

@@ -351,14 +351,12 @@ module VX_cache_bank #(
 
         .req_uuid   (req_uuid_st0),
 
-        .stall      (pipe_stall),
-
         // init/flush/fill/write/lookup
         .init       (do_init_st0),
-        .flush      (do_flush_st0),
-        .fill       (do_fill_st0),
-        .write      (do_cache_wr_st0),
-        .lookup     (do_lookup_st0),
+        .flush      (do_flush_st0 && ~pipe_stall),
+        .fill       (do_fill_st0 && ~pipe_stall),
+        .write      (do_cache_wr_st0 && ~pipe_stall),
+        .lookup     (do_lookup_st0 && ~pipe_stall),
         .line_addr  (addr_st0),
         .way_idx    (flush_way_st0),
 
@@ -458,16 +456,12 @@ module VX_cache_bank #(
     ) cache_data (
         .clk        (clk),
         .reset      (reset),
-
         .req_uuid   (req_uuid_st1),
-
-        .stall      (pipe_stall),
-
         .init       (do_init_st1),
-        .read       (do_cache_rd_st1),
-        .fill       (do_fill_st1),
-        .flush      (do_flush_st1),
-        .write      (do_cache_wr_st1),
+        .fill       (do_fill_st1 && ~pipe_stall),
+        .flush      (do_flush_st1 && ~pipe_stall),
+        .write      (do_cache_wr_st1 && ~pipe_stall),
+        .read       (do_cache_rd_st1 && ~pipe_stall),
         .way_idx    (way_idx_st1),
         .line_addr  (addr_st1),
         .word_idx   (word_idx_st1),
@@ -481,10 +475,10 @@ module VX_cache_bank #(
 
     wire [MSHR_SIZE-1:0] mshr_lookup_pending_st0;
     wire [MSHR_SIZE-1:0] mshr_lookup_rw_st0;
-    wire mshr_allocate_st0 = valid_st0 && is_creq_st0 && ~pipe_stall;
+    wire mshr_allocate_st0 = valid_st0 && is_creq_st0;
     wire mshr_lookup_st0   = mshr_allocate_st0;
 
-    wire mshr_finalize_st1 = valid_st1 && is_creq_st1 && ~pipe_stall;
+    wire mshr_finalize_st1 = valid_st1 && is_creq_st1;
 
     // release allocated mshr entry if we had a hit
     wire mshr_release_st1;
@@ -541,7 +535,7 @@ module VX_cache_bank #(
         .dequeue_ready  (replay_ready),
 
         // allocate
-        .allocate_valid (mshr_allocate_st0),
+        .allocate_valid (mshr_allocate_st0 && ~pipe_stall),
         .allocate_addr  (addr_st0),
         .allocate_rw    (rw_st0),
         .allocate_data  ({word_idx_st0, byteen_st0, write_data_st0, tag_st0, req_idx_st0}),
@@ -550,13 +544,13 @@ module VX_cache_bank #(
         `UNUSED_PIN     (allocate_ready),
 
         // lookup
-        .lookup_valid   (mshr_lookup_st0),
+        .lookup_valid   (mshr_lookup_st0 && ~pipe_stall),
         .lookup_addr    (addr_st0),
         .lookup_pending (mshr_lookup_pending_st0),
         .lookup_rw      (mshr_lookup_rw_st0),
 
         // finalize
-        .finalize_valid (mshr_finalize_st1),
+        .finalize_valid (mshr_finalize_st1 && ~pipe_stall),
         .finalize_release(mshr_release_st1),
         .finalize_pending(mshr_pending_st1),
         .finalize_id    (mshr_id_st1),

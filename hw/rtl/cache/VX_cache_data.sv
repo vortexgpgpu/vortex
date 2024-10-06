@@ -42,13 +42,11 @@ module VX_cache_data #(
     input wire[`UP(UUID_WIDTH)-1:0]     req_uuid,
 `IGNORE_UNUSED_END
 
-    input wire                          stall,
-
     input wire                          init,
-    input wire                          read,
     input wire                          fill,
     input wire                          flush,
     input wire                          write,
+    input wire                          read,
     input wire [`CS_LINE_ADDR_WIDTH-1:0] line_addr,
     input wire [`UP(`CS_WORD_SEL_BITS)-1:0] word_idx,
     input wire [`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] fill_data,
@@ -62,7 +60,6 @@ module VX_cache_data #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (BANK_ID)
     `UNUSED_PARAM (WORD_SIZE)
-    `UNUSED_VAR (stall)
     `UNUSED_VAR (line_addr)
     `UNUSED_VAR (init)
     `UNUSED_VAR (read)
@@ -111,8 +108,8 @@ module VX_cache_data #(
         ) byteen_store (
             .clk   (clk),
             .reset (reset),
-            .read  (bs_read && ~stall),
-            .write (bs_write && ~stall),
+            .read  (bs_read),
+            .write (bs_write),
             .wren  (1'b1),
             .addr  (line_idx),
             .wdata (bs_wdata),
@@ -166,8 +163,8 @@ module VX_cache_data #(
         ) data_store (
             .clk   (clk),
             .reset (reset),
-            .read  (line_read && ~stall),
-            .write (line_write && ~stall),
+            .read  (line_read),
+            .write (line_write),
             .wren  (line_wren),
             .addr  (line_idx),
             .wdata (line_wdata),
@@ -195,16 +192,16 @@ module VX_cache_data #(
 
 `ifdef DBG_TRACE_CACHE
     always @(posedge clk) begin
-        if (fill && ~stall) begin
+        if (fill) begin
             `TRACE(3, ("%t: %s fill: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_idx, line_idx, fill_data))
         end
-        if (flush && ~stall) begin
+        if (flush) begin
             `TRACE(3, ("%t: %s flush: addr=0x%0h, way=%b, blk_addr=%0d, byteen=0x%h, data=0x%h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_idx, line_idx, dirty_byteen, dirty_data))
         end
-        if (read && ~stall) begin
+        if (read) begin
             `TRACE(3, ("%t: %s read: addr=0x%0h, way=%b, blk_addr=%0d, wsel=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_idx, line_idx, word_idx, read_data, req_uuid))
         end
-        if (write && ~stall) begin
+        if (write) begin
             `TRACE(3, ("%t: %s write: addr=0x%0h, way=%b, blk_addr=%0d, wsel=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_idx, line_idx, word_idx, write_byteen, write_data, req_uuid))
         end
     end
