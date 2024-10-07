@@ -55,7 +55,7 @@ void Emulator::warp_t::clear(uint64_t startup_addr) {
   this->tmask.reset();
   this->uuid = 0;
   this->fcsr = 0;
-  this->num_tThreads = 16;
+  this->num_tThreads = WARP_SIZE;
   this->isActive = false;
 
   for (auto& reg_file : this->ireg_file) {
@@ -119,9 +119,9 @@ void Emulator::clear() {
   //activate first warp and thread
   active_warps_.set(0);
   warps_[0].tmask.set(0);
-  warps_[4].tmask.set(0);
+  // warps_[4].tmask.set(0);
   warps_[0].isActive = true;
-  warps_[4].isActive = true;
+  // warps_[4].isActive = true;
   wspawn_.valid = false;
 }
 
@@ -137,52 +137,8 @@ void Emulator::attach_ram(RAM* ram) {
 
 instr_trace_t* Emulator::step() {
   int scheduled_warp = -1;
-#ifdef og
   // ----- process pending wspawn
   if (wspawn_.valid && active_warps_.count() == 1) {
-    DP(3, "*** Activate " << (wspawn_.num_warps-1) << " warps at PC: " << std::hex << wspawn_.nextPC);
-    for (uint32_t i = 1; i < wspawn_.num_warps; ++i) {
-      auto& warp = warps_.at(i);
-      warp.PC = wspawn_.nextPC;
-      warp.tmask.set(0);
-      active_warps_.set(i);
-    }
-    wspawn_.valid = false;
-    stalled_warps_.reset(0);
-  }
-#endif
-
-#ifdef coop
-  // ----- process pending wspawn
-  if (wspawn_.valid && wspawn_.isTile) {
-    DP(3, "*** Activate " << (wspawn_.num_warps-1) << " warps at PC: " << std::hex << wspawn_.nextPC);
-    if(wspawn_.prev_numTiles < wspawn_.set_numTiles){
-      for (uint32_t i = wspawn_.issuing_wid; i < wspawn_.final_wid; i+=(int)(MAX_NUMBER_TILES/wspawn_.set_numTiles)) {
-        auto& warp = warps_.at(i);
-        warp.PC = warps_.at(wspawn_.issuing_wid).PC;
-        warp.tmask = warps_.at(wspawn_.issuing_wid).tmask;
-        warp.num_tThreads = THREAD_PER_TILE*wspawn_.set_numTiles;
-        warp.isActive = true;
-      }
-    }
-    else{
-      for (uint32_t i = wspawn_.issuing_wid+1; i < wspawn_.final_wid; i++) {
-        auto& warp = warps_.at(i);
-        warp.PC = 0;
-        warp.tmask.reset();
-        warp.num_tThreads = THREAD_PER_TILE*wspawn_.set_numTiles;
-        warp.isActive = false;
-      }
-      for (uint32_t i = wspawn_.issuing_wid; i < wspawn_.final_wid; i+=(int)(MAX_NUMBER_TILES/wspawn_.set_numTiles)) {
-        auto& warp = warps_.at(i);
-        warp.PC = warps_.at(wspawn_.issuing_wid).PC;
-        warp.tmask = warps_.at(wspawn_.issuing_wid).tmask;
-        warp.isActive = true;
-      }
-    }
-    wspawn_.valid = false;
-  }
-  else if (wspawn_.valid && active_warps_.count() == 1) {
     DP(3, "*** Activate " << (wspawn_.num_warps-1) << " warps at PC: " << std::hex << wspawn_.nextPC);
     for (uint32_t i = 1; i < wspawn_.num_warps; ++i) {
       auto& warp = warps_.at(i);
@@ -205,7 +161,6 @@ instr_trace_t* Emulator::step() {
   }
   if (scheduled_warp == -1)
     return nullptr;
-#endif
 
   //----- suspend warp until decode
   auto& warp = warps_.at(scheduled_warp);
@@ -248,8 +203,8 @@ instr_trace_t* Emulator::step() {
 #ifdef coop 
   for (size_t wid = 0, nw = 8; wid < nw; ++wid) {
     if (warps_[wid].isActive) {
+      DP(5, "EXECUTING Group ID:"<<wid);
       this->execute(*instr, wid, trace);
-      DP(5, "###########EXECUTING WID:"<<wid);
     }
   }
 #endif
@@ -324,20 +279,23 @@ bool Emulator::wspawn(uint32_t num_warps, Word nextPC) {
   return false;
 }
 
-bool Emulator::tile(uint32_t final_wid, uint32_t issuing_wid, uint32_t set_numTiles, uint32_t prev_numTiles){
-  wspawn_.issuing_wid = issuing_wid;
-  wspawn_.final_wid = final_wid;
-  wspawn_.set_numTiles = set_numTiles;
-  wspawn_.prev_numTiles = prev_numTiles;
-  wspawn_.valid = true;
-  wspawn_.isTile = true;
-  return false;
-}
-
-bool Emulator::tileMask(uint32_t tile_mask){
-  for(int i = 0; i < MAX_NUMBER_TILES; i++){
+bool Emulator::tileMask(uint32_t tile_mask, uint32_t thread_count){
+  int wid = 0;
+  bool reset = (tile_mask >> 31);
+  for(int i = MAX_NUMBER_TILES - 1 ; i >= 0 ; i--){
     auto mask = (tile_mask >> i) & 0x01;
-    warps_[i].isActive = mask;
+    if(reset){
+      warps_[MAX_NUMBER_TILES - i -1].isActive = mask;
+    }
+    if(mask){
+      wid = MAX_NUMBER_TILES - i - 1;
+      if(!reset){
+        warps_[wid].isActive = mask;
+      }
+      warps_[wid].PC = warps_[0].PC;
+      warps_[wid].tmask.set();
+      warps_[wid].num_tThreads = thread_count;
+    }
   }
   return true;
 }
