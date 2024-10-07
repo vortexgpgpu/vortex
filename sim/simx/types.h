@@ -214,8 +214,7 @@ enum class SfuType {
   CSRRS,
   CSRRC,
   CMOV,
-  TILE_PARTITION,
-  TILE_MASK
+  TILE
 };
 
 inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
@@ -229,8 +228,7 @@ inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
   case SfuType::CSRRW:  os << "CSRRW"; break;
   case SfuType::CSRRS:  os << "CSRRS"; break;
   case SfuType::CSRRC:  os << "CSRRC"; break;
-  case SfuType::TILE_PARTITION:  os << "TILE PARTITION"; break;
-  case SfuType::TILE_MASK:  os << "TILE MASK"; break;
+  case SfuType::TILE:  os << "TILE"; break;
   default: assert(false);
   }
   return os;
