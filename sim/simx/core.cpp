@@ -393,12 +393,8 @@ bool Core::wspawn(uint32_t num_warps, Word nextPC) {
   return emulator_.wspawn(num_warps, nextPC);
 }
 
-bool Core::tile(uint32_t final_wid, uint32_t issuing_wid, uint32_t set_numTiles, uint32_t prev_numTiles){
-  return emulator_.tile(final_wid, issuing_wid, set_numTiles, prev_numTiles);
-}
-
-bool Core::tileMask(uint32_t tile_mask){
-  return emulator_.tileMask(tile_mask);
+bool Core::tileMask(uint32_t tile_mask, uint32_t thread_count){
+  return emulator_.tileMask(tile_mask, thread_count);
 }
 
 void Core::attach_ram(RAM* ram) {
