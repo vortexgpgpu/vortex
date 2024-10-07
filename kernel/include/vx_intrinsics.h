@@ -225,7 +225,7 @@ inline void vx_fence() {
     __asm__ volatile ("fence iorw, iorw");
 }
 
-void vx_store(int val, int reg){
+inline void vx_store(int val, int reg){
     switch (reg){
         case 0:
     __asm__ volatile (
@@ -252,14 +252,14 @@ void vx_store(int val, int reg){
     }
 }
 
-void vx_vote() {
+inline void vx_vote() {
     __asm__ volatile (
         "addi a2, x0, 9\n\t"  // Load immediate value 6 into a2(x12) register (membermask)
-        ".insn i %0, 2, 0, x14, x13, 12" :: "i"(RISCV_VOTE));
+        ".insn i %0, 2, x14, x13, 12" :: "i"(RISCV_VOTE));
         //".insn i opcode7, func3, func7, rd, rs1, simm12"
 }
 
-void vx_shfl() {
+inline void vx_shfl() {
     __asm__ volatile (
         "addi a1, x0, 15\n\t"  // Load immediate value 15 into a1(x11) register (membermask)
         "addi a2, x0, 15\n\t"  // Load immediate value 15 into a2(x12) register (c) 
@@ -267,10 +267,9 @@ void vx_shfl() {
        //".insn i opcode6, func3, rd, rs1, simm12"
 }
 
-void vx_tile(int num_threads, int warp_id) {
+inline void vx_tile(unsigned int tile_mask, int thread_count) {
     __asm__ volatile (
-        ".insn r %0, 0, 0, x0, %1, %2" :: "i"(RISCV_TILE),"r"(num_threads),"r"(warp_id));
-        //".insn r %0, 1, 0, x0, %1, 0" :: "i"(RISCV_TILE),"r"(tile_mask));
+        ".insn r %0, 1, 0, x0, %1, %2" :: "i"(RISCV_TILE),"r"(tile_mask),"r"(thread_count));
 }
 
 #ifdef __cplusplus
