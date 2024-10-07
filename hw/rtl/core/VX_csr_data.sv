@@ -225,13 +225,13 @@ import VX_fpu_pkg::*;
             `VX_CSR_PMPADDR0 : read_data_ro_w = `XLEN'(0);
 
         `ifdef VECTOR_ENABLE
-            `VX_CSR_VSTART     : read_data_ro_r = vx_csr_vstart[read_wid][read_tid];
-            `VX_CSR_VXSAT      : read_data_ro_r = vx_csr_vxsat[read_wid][read_tid];
-            `VX_CSR_VXRM       : read_data_ro_r = vx_csr_vxrm[read_wid][read_tid];
-            `VX_CSR_VCSR       : read_data_ro_r = vx_csr_vcsr[read_wid][read_tid];
-            `VX_CSR_VL         : read_data_ro_r = vx_csr_vl[read_wid][read_tid];
-            `VX_CSR_VTYPE      : read_data_ro_r = vx_csr_vtype[read_wid][read_tid];
-            `VX_CSR_VLENB      : read_data_ro_r = vx_csr_vlenb[read_wid][read_tid];
+            `VX_CSR_VSTART     : read_data_ro_w = vx_csr_vstart[read_wid][read_tid];
+            `VX_CSR_VXSAT      : read_data_ro_w = vx_csr_vxsat[read_wid][read_tid];
+            `VX_CSR_VXRM       : read_data_ro_w = vx_csr_vxrm[read_wid][read_tid];
+            `VX_CSR_VCSR       : read_data_ro_w = vx_csr_vcsr[read_wid][read_tid];
+            `VX_CSR_VL         : read_data_ro_w = vx_csr_vl[read_wid][read_tid];
+            `VX_CSR_VTYPE      : read_data_ro_w = vx_csr_vtype[read_wid][read_tid];
+            `VX_CSR_VLENB      : read_data_ro_w = vx_csr_vlenb[read_wid][read_tid];
         `endif
 
             default: begin
