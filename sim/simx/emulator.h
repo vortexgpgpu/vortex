@@ -215,11 +215,11 @@ private:
   uint32_t    ipdom_size_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
-  std::vector<std::vector<std::unordered_map<uint32_t, uint32_t>>> csrs_;
   std::vector<Word> scratchpad;
   uint32_t mat_size;
   uint32_t tc_size;
   uint32_t tc_num;
+  std::vector<std::vector<std::unordered_map<uint32_t, uint32_t>>> csrs_;
 };
 
 }
