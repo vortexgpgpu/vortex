@@ -77,7 +77,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
 #endif
 #ifdef coop
   trace->PC    = warp[wid].PC;
-  trace->tmask = warp[0].tmask;
+  trace->tmask = warp[wid].tmask;
 #endif
   trace->rdest = instr.getRDest();
   trace->rdest_type = instr.getRDType();
@@ -87,7 +87,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
 #endif
 #ifdef coop
   auto next_pc = warp[wid].PC + 4;
-  auto next_tmask = warp[0].tmask;
+  auto next_tmask = warp[wid].tmask;
 #endif
   auto opcode = instr.getOpcode();
   auto func2  = instr.getFunc2();
@@ -98,7 +98,6 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   auto rsrc1  = instr.getRSrc(1);
   auto rsrc2  = instr.getRSrc(2);
   auto immsrc = sext((Word)instr.getImm(), 32);
-
 #ifdef og
   auto num_threads = arch_.num_threads();
   uint32_t thread_start = 0;
@@ -197,7 +196,6 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   }
 
   bool rd_write = false;
-
   switch (opcode) {
   case Opcode::LUI: {
     // RV32I: LUI
@@ -1938,28 +1936,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
     trace->fetch_stall = true;
-    switch (func3) {
-      case 0: {      //Tile partition
-        trace->sfu_type = SfuType::TILE_PARTITION;
-        if(wid == unsigned(rsdata.at(thread_last)[1].i)){
-          uint32_t final_wid = wid+(int)(num_threads/THREAD_PER_TILE); // 0-31 5bits
-          uint32_t issuing_wid = wid; // 0-31 5 bits
-          uint32_t set_numTiles = WARP_SIZE/rsdata.at(thread_last)[0].i; // 1-16 5 bits
-          uint32_t prev_numTiles = WARP_SIZE/num_threads; // 1-16 5 bits
-          uint32_t arg1 =  (final_wid << 5) + (set_numTiles);
-          uint32_t arg2 =  (issuing_wid << 5) + (prev_numTiles);
-          trace->data = std::make_shared<SFUTraceData>(arg1, arg2);
-        }
-      }break;
-      case 1:{   // Set tile mask
-        trace->sfu_type = SfuType::TILE_MASK;
-        auto tile_mask = rsdata.at(thread_last)[0].i;
-        trace->data = std::make_shared<SFUTraceData>(tile_mask, 0);
-      }break;
-      default:{
-        std::abort();
-      }break;
-    }
+    trace->sfu_type = SfuType::TILE;
+    auto tile_mask = rsdata.at(thread_last)[0].i;
+    auto thread_count = rsdata.at(thread_last)[1].i;
+    trace->data = std::make_shared<SFUTraceData>(tile_mask, thread_count);
     
   }
   break;
@@ -2054,6 +2034,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     DP(3, "*** Next PC=0x" << std::hex << next_pc << std::dec);
     warp[wid].PC = next_pc;
   }
+  warp[0].PC = warp[wid].PC;
 #endif
 #ifdef og
   if (warp.tmask != next_tmask) {
