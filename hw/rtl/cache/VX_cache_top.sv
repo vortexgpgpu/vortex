@@ -75,7 +75,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     input  wire [NUM_REQS-1:0]                 core_req_rw,
     input  wire [NUM_REQS-1:0][WORD_SIZE-1:0]  core_req_byteen,
     input  wire [NUM_REQS-1:0][`CS_WORD_ADDR_WIDTH-1:0] core_req_addr,
-    input  wire [NUM_REQS-1:0][`ADDR_TYPE_WIDTH-1:0] core_req_atype,
+    input  wire [NUM_REQS-1:0][`MEM_REQ_FLAGS_WIDTH-1:0] core_req_flags,
     input  wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_req_data,
     input  wire [NUM_REQS-1:0][TAG_WIDTH-1:0]  core_req_tag,
     output wire [NUM_REQS-1:0]                 core_req_ready,
@@ -117,7 +117,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         assign core_bus_if[i].req_data.rw = core_req_rw[i];
         assign core_bus_if[i].req_data.byteen = core_req_byteen[i];
         assign core_bus_if[i].req_data.addr = core_req_addr[i];
-        assign core_bus_if[i].req_data.atype = core_req_atype[i];
+        assign core_bus_if[i].req_data.flags = core_req_flags[i];
         assign core_bus_if[i].req_data.data = core_req_data[i];
         assign core_bus_if[i].req_data.tag = core_req_tag[i];
         assign core_req_ready[i] = core_bus_if[i].req_ready;
@@ -139,7 +139,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     assign mem_req_data = mem_bus_if.req_data.data;
     assign mem_req_tag = mem_bus_if.req_data.tag;
     assign mem_bus_if.req_ready = mem_req_ready;
-    `UNUSED_VAR (mem_bus_if.req_data.atype)
+    `UNUSED_VAR (mem_bus_if.req_data.flags)
 
     // Memory response
     assign mem_bus_if.rsp_valid = mem_rsp_valid;

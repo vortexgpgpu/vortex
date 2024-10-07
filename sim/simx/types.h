@@ -25,6 +25,7 @@
 #include <simobject.h>
 #include <bitvector.h>
 #include "debug.h"
+#include <iostream>
 
 namespace vortex {
 
@@ -58,6 +59,27 @@ typedef std::bitset<MAX_NUM_WARPS>   WarpMask;
 
 ///////////////////////////////////////////////////////////////////////////////
 
+class ThreadMaskOS {
+public:
+  ThreadMaskOS(const ThreadMask& mask, int size)
+    : mask_(mask)
+    , size_(size)
+  {}
+
+  friend std::ostream& operator<<(std::ostream& os, const ThreadMaskOS& wrapper) {
+    for (int i = 0; i < wrapper.size_; ++i) {
+      os << wrapper.mask_[i];
+    }
+    return os;
+  }
+
+private:
+  const ThreadMask& mask_;
+  int size_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 enum class RegType {
   None,
   Integer,
@@ -84,6 +106,7 @@ enum class FUType {
   LSU,
   FPU,
   SFU,
+  TCU,
   Count
 };
 
@@ -93,6 +116,7 @@ inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
   case FUType::LSU: os << "LSU"; break;
   case FUType::FPU: os << "FPU"; break;
   case FUType::SFU: os << "SFU"; break;
+  case FUType::TCU: os << "TCU"; break;
   default: assert(false);
   }
   return os;
@@ -124,14 +148,30 @@ inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
 
 enum class LsuType {
   LOAD,
+  TCU_LOAD,
   STORE,
+  TCU_STORE,
   FENCE
 };
+
+enum class TCUType {
+  TCU_MUL
+};
+
+inline std::ostream &operator<<(std::ostream &os, const TCUType& type) {
+  switch (type) {
+  case TCUType::TCU_MUL: os << "TCU MUL"; break;
+  default: assert(false);
+  }
+  return os;
+}
 
 inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
   switch (type) {
   case LsuType::LOAD:  os << "LOAD"; break;
+  case LsuType::TCU_LOAD: os << "TCU_LOAD"; break;
   case LsuType::STORE: os << "STORE"; break;
+  case LsuType::TCU_STORE: os << "TCU_STORE"; break;
   case LsuType::FENCE: os << "FENCE"; break;
   default: assert(false);
   }
@@ -262,17 +302,18 @@ struct LsuReq {
 };
 
 inline std::ostream &operator<<(std::ostream &os, const LsuReq& req) {
-  os << "rw=" << req.write << ", mask=" << req.mask << ", ";
+  os << "rw=" << req.write << ", mask=" << req.mask << ", addr={";
+  bool first_addr = true;
   for (size_t i = 0; i < req.mask.size(); ++i) {
-    os << "addr" << i << "=";
+    if (!first_addr) os << ", ";
+    first_addr = false;
     if (req.mask.test(i)) {
       os << "0x" << std::hex << req.addrs.at(i) << std::dec;
     } else {
       os << "-";
     }
-    os << ", ";
   }
-  os << "tag=0x" << std::hex << req.tag << std::dec << ", cid=" << req.cid;
+  os << "}, tag=0x" << std::hex << req.tag << std::dec << ", cid=" << req.cid;
   os << " (#" << req.uuid << ")";
   return os;
 }
@@ -445,7 +486,7 @@ public:
     , type_(type)
     , delay_(delay)
     , cursors_(num_outputs, 0)
-    , num_reqs_(num_inputs / num_outputs)
+    , num_reqs_(log2ceil(num_inputs / num_outputs))
   {
     assert(delay != 0);
     assert(num_inputs <= 32);
@@ -469,7 +510,7 @@ public:
   void tick() {
     uint32_t I = Inputs.size();
     uint32_t O = Outputs.size();
-    uint32_t R = num_reqs_;
+    uint32_t R = 1 << num_reqs_;
 
     // skip bypass mode
     if (I == O)

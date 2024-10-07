@@ -13,6 +13,8 @@
 
 #pragma once
 
+#include <VX_config.h>
+
 #ifndef RAM_PAGE_SIZE
 #define RAM_PAGE_SIZE     4096
 #endif
@@ -21,14 +23,14 @@
 #define MEM_CLOCK_RATIO   1
 #endif
 
-#define LSU_WORD_SIZE     (XLEN / 8)
-#define LSU_CHANNELS      NUM_LSU_LANES
-#define LSU_NUM_REQS	    (NUM_LSU_BLOCKS * LSU_CHANNELS)
+inline constexpr int LSU_WORD_SIZE    = (XLEN / 8);
+inline constexpr int LSU_CHANNELS     = NUM_LSU_LANES;
+inline constexpr int LSU_NUM_REQS	    = (NUM_LSU_BLOCKS * LSU_CHANNELS);
 
-#define DCACHE_WORD_SIZE  LSU_LINE_SIZE
-#define DCACHE_CHANNELS 	UP((NUM_LSU_LANES * (XLEN / 8)) / DCACHE_WORD_SIZE)
-#define DCACHE_NUM_REQS	  (NUM_LSU_BLOCKS * DCACHE_CHANNELS)
+inline constexpr int DCACHE_WORD_SIZE = LSU_LINE_SIZE;
+inline constexpr int DCACHE_CHANNELS 	= UP((NUM_LSU_LANES * (XLEN / 8)) / DCACHE_WORD_SIZE);
+inline constexpr int DCACHE_NUM_REQS	=  (NUM_LSU_BLOCKS * DCACHE_CHANNELS);
 
-#define NUM_SOCKETS       UP(NUM_CORES / SOCKET_SIZE)
+inline constexpr int NUM_SOCKETS      = UP(NUM_CORES / SOCKET_SIZE);
 
-#define PER_ISSUE_WARPS   NUM_WARPS / ISSUE_WIDTH
+inline constexpr int PER_ISSUE_WARPS  = NUM_WARPS / ISSUE_WIDTH;

@@ -43,7 +43,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     // PERF
 `ifdef PERF_ENABLE
-    output cache_perf_t cache_perf,
+    output cache_perf_t lmem_perf,
 `endif
 
     VX_mem_bus_if.slave mem_bus_if [NUM_REQS]
@@ -67,20 +67,20 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     // bank selection
 
     wire [NUM_REQS-1:0][BANK_SEL_WIDTH-1:0] req_bank_idx;
-    if (NUM_BANKS > 1) begin
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
+    if (NUM_BANKS > 1) begin : g_req_bank_idx
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_bank_idxs
             assign req_bank_idx[i] = mem_bus_if[i].req_data.addr[0 +: BANK_SEL_BITS];
         end
-    end else begin
+    end else begin : g_req_bank_idx_0
         assign req_bank_idx = 0;
     end
 
     // bank addressing
 
     wire [NUM_REQS-1:0][BANK_ADDR_WIDTH-1:0] req_bank_addr;
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_bank_addr
         assign req_bank_addr[i] = mem_bus_if[i].req_data.addr[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
-        `UNUSED_VAR (mem_bus_if[i].req_data.atype)
+        `UNUSED_VAR (mem_bus_if[i].req_data.flags)
     end
 
     // bank requests dispatch
@@ -104,7 +104,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [`PERF_CTR_BITS-1:0] perf_collisions;
 `endif
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_data_in
         assign req_valid_in[i] = mem_bus_if[i].req_valid;
         assign req_data_in[i] = {
             mem_bus_if[i].req_data.rw,
@@ -121,7 +121,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (REQ_DATAW),
         .PERF_CTR_BITS (`PERF_CTR_BITS),
-        .ARBITER     ("F"),
+        .ARBITER     ("P"),
         .OUT_BUF     (3) // output should be registered for the data_store addressing
     ) req_xbar (
         .clk       (clk),
@@ -141,7 +141,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .ready_out (per_bank_req_ready)
     );
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_req_data_soa
         assign {
             per_bank_req_rw[i],
             per_bank_req_addr[i],
@@ -159,33 +159,32 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0] per_bank_rsp_tag;
     wire [NUM_BANKS-1:0]                per_bank_rsp_ready;
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_data_store
         wire bank_rsp_valid, bank_rsp_ready;
-        wire [WORD_WIDTH-1:0] bank_rsp_data;
-
-        `RESET_RELAY_EN (bram_reset, reset, (NUM_BANKS > 1));
 
         VX_sp_ram #(
             .DATAW (WORD_WIDTH),
             .SIZE  (WORDS_PER_BANK),
             .WRENW (WORD_SIZE),
+            .OUT_REG (1),
+            .READ_ENABLE (0),
             .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),
-            .reset (bram_reset),
+            .reset (reset),
             .read  (per_bank_req_valid[i] && per_bank_req_ready[i] && ~per_bank_req_rw[i]),
             .write (per_bank_req_valid[i] && per_bank_req_ready[i] && per_bank_req_rw[i]),
             .wren  (per_bank_req_byteen[i]),
             .addr  (per_bank_req_addr[i]),
             .wdata (per_bank_req_data[i]),
-            .rdata (bank_rsp_data)
+            .rdata (per_bank_rsp_data[i])
         );
 
         // read-during-write hazard detection
         reg [BANK_ADDR_WIDTH-1:0] last_wr_addr;
         reg last_wr_valid;
         always @(posedge clk) begin
-            if (bram_reset) begin
+            if (reset) begin
                 last_wr_valid <= 0;
             end else begin
                 last_wr_valid <= per_bank_req_valid[i] && per_bank_req_ready[i] && per_bank_req_rw[i];
@@ -194,20 +193,20 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         end
         wire is_rdw_hazard = last_wr_valid && ~per_bank_req_rw[i] && (per_bank_req_addr[i] == last_wr_addr);
 
-        // drop write response and stall on read-during-write hazard
+        // drop write response
         assign bank_rsp_valid = per_bank_req_valid[i] && ~per_bank_req_rw[i] && ~is_rdw_hazard;
         assign per_bank_req_ready[i] = (bank_rsp_ready || per_bank_req_rw[i]) && ~is_rdw_hazard;
 
         // register BRAM output
         VX_pipe_buffer #(
-            .DATAW (REQ_SEL_WIDTH + WORD_WIDTH + TAG_WIDTH)
+            .DATAW (REQ_SEL_WIDTH + TAG_WIDTH)
         ) bram_buf (
             .clk       (clk),
-            .reset     (bram_reset),
+            .reset     (reset),
             .valid_in  (bank_rsp_valid),
             .ready_in  (bank_rsp_ready),
-            .data_in   ({per_bank_req_idx[i], bank_rsp_data,        per_bank_req_tag[i]}),
-            .data_out  ({per_bank_rsp_idx[i], per_bank_rsp_data[i], per_bank_rsp_tag[i]}),
+            .data_in   ({per_bank_req_idx[i], per_bank_req_tag[i]}),
+            .data_out  ({per_bank_rsp_idx[i], per_bank_rsp_tag[i]}),
             .valid_out (per_bank_rsp_valid[i]),
             .ready_out (per_bank_rsp_ready[i])
         );
@@ -217,7 +216,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     wire [NUM_BANKS-1:0][RSP_DATAW-1:0] per_bank_rsp_data_aos;
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_rsp_data_aos
         assign per_bank_rsp_data_aos[i] = {per_bank_rsp_data[i], per_bank_rsp_tag[i]};
     end
 
@@ -245,7 +244,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         `UNUSED_PIN (sel_out)
     );
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_mem_bus_if
         assign mem_bus_if[i].rsp_valid = rsp_valid_out[i];
         assign mem_bus_if[i].rsp_data = rsp_data_out[i];
         assign rsp_ready_out[i] = mem_bus_if[i].rsp_ready;
@@ -258,7 +257,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [`CLOG2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
 
     wire [NUM_REQS-1:0] req_rw;
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_rw
         assign req_rw[i] = mem_bus_if[i].req_data.rw;
     end
 
@@ -288,14 +287,14 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         end
     end
 
-    assign cache_perf.reads        = perf_reads;
-    assign cache_perf.writes       = perf_writes;
-    assign cache_perf.read_misses  = '0;
-    assign cache_perf.write_misses = '0;
-    assign cache_perf.bank_stalls  = perf_collisions;
-    assign cache_perf.mshr_stalls  = '0;
-    assign cache_perf.mem_stalls   = '0;
-    assign cache_perf.crsp_stalls  = perf_crsp_stalls;
+    assign lmem_perf.reads        = perf_reads;
+    assign lmem_perf.writes       = perf_writes;
+    assign lmem_perf.read_misses  = '0;
+    assign lmem_perf.write_misses = '0;
+    assign lmem_perf.bank_stalls  = perf_collisions;
+    assign lmem_perf.mshr_stalls  = '0;
+    assign lmem_perf.mem_stalls   = '0;
+    assign lmem_perf.crsp_stalls  = perf_crsp_stalls;
 
 `endif
 
@@ -304,11 +303,11 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][`UP(UUID_WIDTH)-1:0] req_uuid;
     wire [NUM_REQS-1:0][`UP(UUID_WIDTH)-1:0] rsp_uuid;
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
-        if (UUID_WIDTH != 0) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_uuid
+        if (UUID_WIDTH != 0) begin : g_uuid
             assign req_uuid[i] = mem_bus_if[i].req_data.tag[TAG_WIDTH-1 -: UUID_WIDTH];
             assign rsp_uuid[i] = mem_bus_if[i].rsp_data.tag[TAG_WIDTH-1 -: UUID_WIDTH];
-        end else begin
+        end else begin : g_no_uuid
             assign req_uuid[i] = 0;
             assign rsp_uuid[i] = 0;
         end
@@ -317,48 +316,48 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][`UP(UUID_WIDTH)-1:0] per_bank_req_uuid;
     wire [NUM_BANKS-1:0][`UP(UUID_WIDTH)-1:0] per_bank_rsp_uuid;
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
-        if (UUID_WIDTH != 0) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_req_uuid
+        if (UUID_WIDTH != 0) begin : g_uuid
             assign per_bank_req_uuid[i] = per_bank_req_tag[i][TAG_WIDTH-1 -: UUID_WIDTH];
             assign per_bank_rsp_uuid[i] = per_bank_rsp_tag[i][TAG_WIDTH-1 -: UUID_WIDTH];
-        end else begin
+        end else begin : g_no_uuid
             assign per_bank_req_uuid[i] = 0;
             assign per_bank_rsp_uuid[i] = 0;
         end
     end
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_trace
         always @(posedge clk) begin
             if (mem_bus_if[i].req_valid && mem_bus_if[i].req_ready) begin
                 if (mem_bus_if[i].req_data.rw) begin
-                    `TRACE(1, ("%d: %s wr-req: req_idx=%0d, addr=0x%0h, tag=0x%0h, byteen=%h, data=0x%h (#%0d)\n",
-                        $time, INSTANCE_ID, i, mem_bus_if[i].req_data.addr, mem_bus_if[i].req_data.tag, mem_bus_if[i].req_data.byteen, mem_bus_if[i].req_data.data, req_uuid[i]));
+                    `TRACE(1, ("%t: %s wr-req: req_idx=%0d, addr=0x%0h, tag=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n",
+                        $time, INSTANCE_ID, i, mem_bus_if[i].req_data.addr, mem_bus_if[i].req_data.tag, mem_bus_if[i].req_data.byteen, mem_bus_if[i].req_data.data, req_uuid[i]))
                 end else begin
-                    `TRACE(1, ("%d: %s rd-req: req_idx=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n",
-                        $time, INSTANCE_ID, i, mem_bus_if[i].req_data.addr, mem_bus_if[i].req_data.tag, req_uuid[i]));
+                    `TRACE(1, ("%t: %s rd-req: req_idx=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n",
+                        $time, INSTANCE_ID, i, mem_bus_if[i].req_data.addr, mem_bus_if[i].req_data.tag, req_uuid[i]))
                 end
             end
             if (mem_bus_if[i].rsp_valid && mem_bus_if[i].rsp_ready) begin
-                `TRACE(1, ("%d: %s rd-rsp: req_idx=%0d, tag=0x%0h, data=0x%h (#%0d)\n",
-                    $time, INSTANCE_ID, i, mem_bus_if[i].rsp_data.tag, mem_bus_if[i].rsp_data.data[i], rsp_uuid[i]));
+                `TRACE(1, ("%t: %s rd-rsp: req_idx=%0d, tag=0x%0h, data=0x%h (#%0d)\n",
+                    $time, INSTANCE_ID, i, mem_bus_if[i].rsp_data.tag, mem_bus_if[i].rsp_data.data[i], rsp_uuid[i]))
             end
         end
     end
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_bank_trace
         always @(posedge clk) begin
             if (per_bank_req_valid[i] && per_bank_req_ready[i]) begin
                 if (per_bank_req_rw[i]) begin
-                    `TRACE(2, ("%d: %s-bank%0d wr-req: addr=0x%0h, tag=0x%0h, byteen=%h, data=0x%h (#%0d)\n",
-                        $time, INSTANCE_ID, i, per_bank_req_addr[i], per_bank_req_tag[i], per_bank_req_byteen[i], per_bank_req_data[i], per_bank_req_uuid[i]));
+                    `TRACE(2, ("%t: %s-bank%0d wr-req: addr=0x%0h, tag=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n",
+                        $time, INSTANCE_ID, i, per_bank_req_addr[i], per_bank_req_tag[i], per_bank_req_byteen[i], per_bank_req_data[i], per_bank_req_uuid[i]))
                 end else begin
-                    `TRACE(2, ("%d: %s-bank%0d rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n",
-                        $time, INSTANCE_ID, i, per_bank_req_addr[i], per_bank_req_tag[i], per_bank_req_uuid[i]));
+                    `TRACE(2, ("%t: %s-bank%0d rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n",
+                        $time, INSTANCE_ID, i, per_bank_req_addr[i], per_bank_req_tag[i], per_bank_req_uuid[i]))
                 end
             end
             if (per_bank_rsp_valid[i] && per_bank_rsp_ready[i]) begin
-                `TRACE(2, ("%d: %s-bank%0d rd-rsp: tag=0x%0h, data=0x%h (#%0d)\n",
-                    $time, INSTANCE_ID, i, per_bank_rsp_tag[i], per_bank_rsp_data[i], per_bank_rsp_uuid[i]));
+                `TRACE(2, ("%t: %s-bank%0d rd-rsp: tag=0x%0h, data=0x%h (#%0d)\n",
+                    $time, INSTANCE_ID, i, per_bank_rsp_tag[i], per_bank_rsp_data[i], per_bank_rsp_uuid[i]))
             end
         end
     end

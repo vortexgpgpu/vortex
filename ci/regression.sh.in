@@ -43,31 +43,23 @@ isa()
     make -C tests/riscv/isa run-simx
     make -C tests/riscv/isa run-rtlsim
 
-    make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null
-    make -C tests/riscv/isa run-rtlsim-32f
+    make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
 
-    make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null
-    make -C tests/riscv/isa run-rtlsim-32f
+    make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
 
-    make -C sim/rtlsim clean && CONFIGS="-DFPU_DSP" make -C sim/rtlsim > /dev/null
-    make -C tests/riscv/isa run-rtlsim-32f
+    make -C sim/rtlsim clean && CONFIGS="-DFPU_DSP" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
 
     if [ "$XLEN" == "64" ]
     then
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null
-        make -C tests/riscv/isa run-rtlsim-64d
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
 
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null
-        make -C tests/riscv/isa run-rtlsim-64d
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
 
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null
-        make -C tests/riscv/isa run-rtlsim-64f
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
 
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null
-        make -C tests/riscv/isa run-rtlsim-64f
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
 
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null
-        make -C tests/riscv/isa run-rtlsim-64fx
+        make -C sim/rtlsim clean && CONFIGS="-DFPU_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64fx
     fi
 
     # clean build
@@ -102,10 +94,18 @@ regression()
     # test global barrier
     CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
     CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tgbar" --cores=2
+    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-n1 -tgbar" --cores=2
 
     # test local barrier
     ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
     ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tbar"
+    ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-n1 -tbar"
+
+    # test temp driver mode for
+    ./ci/blackbox.sh --driver=simx --app=vecadd --rebuild=3
+
+    # test for matmul
+    CONFIGS="-DTC_NUM=4 -DTC_SIZE=8" ./ci/blackbox.sh --cores=4 --app=matmul --driver=simx --threads=32 --warps=32 --args="-n128 -d1" 
 
     echo "regression tests done!"
 }
@@ -253,37 +253,39 @@ config2()
     # test opaesim
     ./ci/blackbox.sh --driver=opae --app=printf
     ./ci/blackbox.sh --driver=opae --app=diverge
+    ./ci/blackbox.sh --driver=xrt --app=diverge
 
     # disable DPI
-    CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-    CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood
+    if [ "$XLEN" == "64" ]; then
+        # need to disable trig on 64-bit due to a bug inside fpnew's sqrt core.
+        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-xtrig -xbar -xgbar"
+        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-xtrig -xbar -xgbar"
+        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-xtrig -xbar -xgbar"
+    else
+        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
+        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood
+        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=xrt --app=dogfood
+    fi
 
     # custom program startup address
     make -C tests/regression/dogfood clean-kernel
-        if [ "$XLEN" == "64" ]; then
-    	STARTUP_ADDR=0x180000000 make -C tests/regression/dogfood
-    else
-    	STARTUP_ADDR=0x80000000 make -C tests/regression/dogfood
-    fi
+    STARTUP_ADDR=0x80000000 make -C tests/regression/dogfood
     ./ci/blackbox.sh --driver=simx --app=dogfood
     ./ci/blackbox.sh --driver=rtlsim --app=dogfood
     make -C tests/regression/dogfood clean-kernel
 
     # disabling M & F extensions
-    make -C sim/rtlsim clean && CONFIGS="-DEXT_M_DISABLE -DEXT_F_DISABLE" make -C sim/rtlsim > /dev/null
-    make -C tests/riscv/isa run-rtlsim-32i
+    make -C sim/rtlsim clean && CONFIGS="-DEXT_M_DISABLE -DEXT_F_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32i
     make -C sim/rtlsim clean
 
     # disabling ZICOND extension
     CONFIGS="-DEXT_ZICOND_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo
 
-    # test AXI bus
-    AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --app=mstress
-
-    # test 128-bit MEM block
+    # test 128-bit memory block
     CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=opae --app=mstress
+    CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=xrt --app=mstress
 
-    # test XLEN-bit MEM block
+    # test XLEN-bit memory block
     CONFIGS="-DMEM_BLOCK_SIZE=$XSIZE" ./ci/blackbox.sh --driver=opae --app=mstress
     CONFIGS="-DMEM_BLOCK_SIZE=$XSIZE" ./ci/blackbox.sh --driver=simx --app=mstress
 
@@ -291,11 +293,27 @@ config2()
     CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=rtlsim --app=mstress --threads=8
     CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=simx --app=mstress --threads=8
 
-    # test single-bank DRAM
-    CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1" ./ci/blackbox.sh --driver=opae --app=mstress
+    # test single-bank memory
+    if [ "$XLEN" == "64" ]; then
+        CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=48" ./ci/blackbox.sh --driver=opae --app=mstress
+        CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=48" ./ci/blackbox.sh --driver=xrt --app=mstress
+    else
+        CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=32" ./ci/blackbox.sh --driver=opae --app=mstress
+        CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=32" ./ci/blackbox.sh --driver=xrt --app=mstress
+    fi
 
-    # test 27-bit DRAM address
-    CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=opae --app=mstress
+    # test larger memory address
+    if [ "$XLEN" == "64" ]; then
+        CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=49" ./ci/blackbox.sh --driver=opae --app=mstress
+        CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=49" ./ci/blackbox.sh --driver=xrt --app=mstress
+    else
+        CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=opae --app=mstress
+        CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=xrt --app=mstress
+    fi
+
+    # test memory banks interleaving
+    CONFIGS="-DPLATFORM_MEMORY_INTERLEAVE=1" ./ci/blackbox.sh --driver=opae --app=mstress
+    CONFIGS="-DPLATFORM_MEMORY_INTERLEAVE=0" ./ci/blackbox.sh --driver=opae --app=mstress
 
     echo "configuration-2 tests done!"
 }
@@ -321,11 +339,23 @@ debug()
 
     test_csv_trace
 
+    CONFIGS="-O0" ./ci/blackbox.sh --driver=opae --app=demo --args="-n1"
+    CONFIGS="-O0" ./ci/blackbox.sh --driver=xrt --app=demo --args="-n1"
     CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
+    CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=xrt --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
     CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
-    ./ci/blackbox.sh --driver=opae --cores=1 --scope --app=demo --args="-n1"
 
     echo "debugging tests done!"
+}
+
+scope()
+{
+    echo "begin scope tests..."
+
+    SCOPE_DEPTH=256 ./ci/blackbox.sh --driver=opae --app=demo --args="-n1" --scope
+    SCOPE_DEPTH=256 ./ci/blackbox.sh --driver=xrt --app=demo --args="-n1" --scope
+
+    echo "debugging scope done!"
 }
 
 stress()
@@ -334,7 +364,7 @@ stress()
 
     # test verilator reset values
     CONFIGS="-DVERILATOR_RESET_VALUE=1 -DSOCKET_SIZE=1 -DDCACHE_WRITEBACK=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
-    CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --args="-n128" --l2cache
+    CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=xrt --app=sgemmx --args="-n128" --l2cache
 
     echo "stress tests done!"
 }
@@ -352,7 +382,7 @@ synthesis()
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cache] [--config1] [--config2] [--debug] [--stress] [--synthesis] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -393,6 +423,9 @@ while [ "$1" != "" ]; do
         --debug )
                 tests+=("debug")
                 ;;
+        --scope )
+                tests+=("scope")
+                ;;
         --stress )
                 tests+=("stress")
                 ;;
@@ -411,6 +444,7 @@ while [ "$1" != "" ]; do
                 tests+=("config1")
                 tests+=("config2")
                 tests+=("debug")
+                tests+=("scope")
                 tests+=("stress")
                 tests+=("synthesis")
                 ;;

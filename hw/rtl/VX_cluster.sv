@@ -56,14 +56,12 @@ module VX_cluster import VX_gpu_pkg::*; #(
     VX_gbar_bus_if per_socket_gbar_bus_if[`NUM_SOCKETS]();
     VX_gbar_bus_if gbar_bus_if();
 
-    `RESET_RELAY (gbar_reset, reset);
-
     VX_gbar_arb #(
         .NUM_REQS (`NUM_SOCKETS),
         .OUT_BUF  ((`NUM_SOCKETS > 2) ? 1 : 0) // bgar_unit has no backpressure
     ) gbar_arb (
         .clk        (clk),
-        .reset      (gbar_reset),
+        .reset      (reset),
         .bus_in_if  (per_socket_gbar_bus_if),
         .bus_out_if (gbar_bus_if)
     );
@@ -72,7 +70,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .INSTANCE_ID ($sformatf("gbar%0d", CLUSTER_ID))
     ) gbar_unit (
         .clk         (clk),
-        .reset       (gbar_reset),
+        .reset       (reset),
         .gbar_bus_if (gbar_bus_if)
     );
 
@@ -102,8 +100,8 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .WRITEBACK      (`L2_WRITEBACK),
         .DIRTY_BYTES    (`L2_WRITEBACK),
         .UUID_WIDTH     (`UUID_WIDTH),
-        .CORE_OUT_BUF   (2),
-        .MEM_OUT_BUF    (2),
+        .CORE_OUT_BUF   (3),
+        .MEM_OUT_BUF    (3),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L2_ENABLED)
     ) l2cache (
@@ -118,20 +116,16 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    VX_dcr_bus_if socket_dcr_bus_tmp_if();
-    assign socket_dcr_bus_tmp_if.write_valid = dcr_bus_if.write_valid && (dcr_bus_if.write_addr >= `VX_DCR_BASE_STATE_BEGIN && dcr_bus_if.write_addr < `VX_DCR_BASE_STATE_END);
-    assign socket_dcr_bus_tmp_if.write_addr  = dcr_bus_if.write_addr;
-    assign socket_dcr_bus_tmp_if.write_data  = dcr_bus_if.write_data;
-
     wire [`NUM_SOCKETS-1:0] per_socket_busy;
 
-    VX_dcr_bus_if socket_dcr_bus_if();
-    `BUFFER_DCR_BUS_IF (socket_dcr_bus_if, socket_dcr_bus_tmp_if, (`NUM_SOCKETS > 1));
-
     // Generate all sockets
-    for (genvar socket_id = 0; socket_id < `NUM_SOCKETS; ++socket_id) begin : sockets
+    for (genvar socket_id = 0; socket_id < `NUM_SOCKETS; ++socket_id) begin : g_sockets
 
         `RESET_RELAY (socket_reset, reset);
+
+        VX_dcr_bus_if socket_dcr_bus_if();
+        wire is_base_dcr_addr = (dcr_bus_if.write_addr >= `VX_DCR_BASE_STATE_BEGIN && dcr_bus_if.write_addr < `VX_DCR_BASE_STATE_END);
+        `BUFFER_DCR_BUS_IF (socket_dcr_bus_if, dcr_bus_if, is_base_dcr_addr, (`NUM_SOCKETS > 1))
 
         VX_socket #(
             .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + socket_id),

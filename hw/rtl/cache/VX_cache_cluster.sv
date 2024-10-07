@@ -82,8 +82,8 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     localparam PASSTHRU   = (NUM_UNITS == 0);
     localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_CACHES);
     localparam MEM_TAG_WIDTH = PASSTHRU ? `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) :
-                                          (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) :
-                                                       `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS));
+                                          (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH, UUID_WIDTH) :
+                                                       `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, UUID_WIDTH));
 
     `STATIC_ASSERT(NUM_INPUTS >= NUM_CACHES, ("invalid parameter"))
 
@@ -102,9 +102,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         .TAG_WIDTH (ARB_TAG_WIDTH)
     ) arb_core_bus_if[NUM_CACHES * NUM_REQS]();
 
-    `RESET_RELAY_EX (cache_arb_reset, reset, NUM_REQS, `MAX_FANOUT);
-
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_arb
         VX_mem_bus_if #(
             .DATA_SIZE (WORD_SIZE),
             .TAG_WIDTH (TAG_WIDTH)
@@ -115,7 +113,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .TAG_WIDTH (ARB_TAG_WIDTH)
         ) arb_core_bus_tmp_if[NUM_CACHES]();
 
-        for (genvar j = 0; j < NUM_INPUTS; ++j) begin
+        for (genvar j = 0; j < NUM_INPUTS; ++j) begin : g_core_bus_tmp_if
             `ASSIGN_VX_MEM_BUS_IF (core_bus_tmp_if[j], core_bus_if[j * NUM_REQS + i]);
         end
 
@@ -127,23 +125,20 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .TAG_SEL_IDX  (TAG_SEL_IDX),
             .ARBITER      ("R"),
             .REQ_OUT_BUF  ((NUM_INPUTS != NUM_CACHES) ? 2 : 0),
-            .RSP_OUT_BUF  ((NUM_INPUTS != NUM_CACHES) ? 2 : 0)
-        ) cache_arb (
+            .RSP_OUT_BUF  ((NUM_INPUTS != NUM_CACHES) ? CORE_OUT_BUF : 0)
+        ) core_arb (
             .clk        (clk),
-            .reset      (cache_arb_reset[i]),
+            .reset      (reset),
             .bus_in_if  (core_bus_tmp_if),
             .bus_out_if (arb_core_bus_tmp_if)
         );
 
-        for (genvar k = 0; k < NUM_CACHES; ++k) begin
+        for (genvar k = 0; k < NUM_CACHES; ++k) begin : g_arb_core_bus_if
             `ASSIGN_VX_MEM_BUS_IF (arb_core_bus_if[k * NUM_REQS + i], arb_core_bus_tmp_if[k]);
         end
     end
 
-     for (genvar i = 0; i < NUM_CACHES; ++i) begin : caches
-
-        `RESET_RELAY (cache_reset, reset);
-
+     for (genvar i = 0; i < NUM_CACHES; ++i) begin : g_cache_wrap
         VX_cache_wrap #(
             .INSTANCE_ID  ($sformatf("%s%0d", INSTANCE_ID, i)),
             .CACHE_SIZE   (CACHE_SIZE),
@@ -171,7 +166,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .cache_perf  (perf_cache_unit[i]),
         `endif
             .clk         (clk),
-            .reset       (cache_reset),
+            .reset       (reset),
             .core_bus_if (arb_core_bus_if[i * NUM_REQS +: NUM_REQS]),
             .mem_bus_if  (cache_mem_bus_if[i])
         );
@@ -188,7 +183,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         .TAG_WIDTH    (MEM_TAG_WIDTH),
         .TAG_SEL_IDX  (TAG_SEL_IDX),
         .ARBITER      ("R"),
-        .REQ_OUT_BUF ((NUM_CACHES > 1) ? 2 : 0),
+        .REQ_OUT_BUF ((NUM_CACHES > 1) ? MEM_OUT_BUF : 0),
         .RSP_OUT_BUF ((NUM_CACHES > 1) ? 2 : 0)
     ) mem_arb (
         .clk        (clk),
@@ -197,6 +192,10 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         .bus_out_if (mem_bus_tmp_if)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_tmp_if[0]);
+    if (WRITE_ENABLE) begin : g_mem_bus_if
+        `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_tmp_if[0]);
+    end else begin : g_mem_bus_if_ro
+        `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if, mem_bus_tmp_if[0]);
+    end
 
 endmodule

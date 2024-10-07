@@ -69,7 +69,7 @@ module VX_cache_tags #(
     wire [NUM_WAYS-1:0] read_valid;
     wire [NUM_WAYS-1:0] read_dirty;
 
-    if (NUM_WAYS > 1)  begin
+    if (NUM_WAYS > 1)  begin : g_evict_way
         reg [NUM_WAYS-1:0] evict_way_r;
         // cyclic assignment of replacement way
         always @(posedge clk) begin
@@ -90,7 +90,7 @@ module VX_cache_tags #(
             .sel_in   (evict_way),
             .data_out (evict_tag)
         );
-    end else begin
+    end else begin : g_evict_way_0
         `UNUSED_VAR (stall)
         assign evict_way = 1'b1;
         assign evict_tag = read_tag;
@@ -100,7 +100,7 @@ module VX_cache_tags #(
     wire fill_s = fill && (!WRITEBACK || ~stall);
     wire flush_s = flush && (!WRITEBACK || ~stall);
 
-    for (genvar i = 0; i < NUM_WAYS; ++i) begin
+    for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_tag_store
 
         wire do_fill    = fill_s  && evict_way[i];
         wire do_flush   = flush_s && (!WRITEBACK || way_sel[i]); // flush the whole line in writethrough mode
@@ -113,10 +113,10 @@ module VX_cache_tags #(
         wire [TAG_WIDTH-1:0] line_wdata;
         wire [TAG_WIDTH-1:0] line_rdata;
 
-        if (WRITEBACK) begin
+        if (WRITEBACK) begin : g_writeback
             assign line_wdata = {line_valid, write, line_tag};
             assign {read_valid[i], read_dirty[i], read_tag[i]} = line_rdata;
-        end else begin
+        end else begin : g_writethrough
             assign line_wdata = {line_valid, line_tag};
             assign {read_valid[i], read_tag[i]} = line_rdata;
             assign read_dirty[i] = 1'b0;
@@ -139,7 +139,7 @@ module VX_cache_tags #(
         );
     end
 
-    for (genvar i = 0; i < NUM_WAYS; ++i) begin
+    for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_tag_matches
         assign tag_matches[i] = read_valid[i] && (line_tag == read_tag[i]);
     end
 
@@ -149,25 +149,27 @@ module VX_cache_tags #(
     wire [`CS_LINE_ADDR_WIDTH-1:0] evict_line_addr = {evict_tag, line_sel};
     always @(posedge clk) begin
         if (fill && ~stall) begin
-            `TRACE(3, ("%d: %s fill: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h, dirty=%b, evict_addr=0x%0h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), evict_way, line_sel, line_tag, evict_dirty, `CS_LINE_TO_FULL_ADDR(evict_line_addr, BANK_ID)));
+            `TRACE(3, ("%t: %s fill: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h, dirty=%b, evict_addr=0x%0h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), evict_way, line_sel, line_tag, evict_dirty, `CS_LINE_TO_FULL_ADDR(evict_line_addr, BANK_ID)))
         end
         if (init) begin
-            `TRACE(3, ("%d: %s init: addr=0x%0h, blk_addr=%0d\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel));
+            `TRACE(3, ("%t: %s init: addr=0x%0h, blk_addr=%0d\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel))
         end
         if (flush && ~stall) begin
-            `TRACE(3, ("%d: %s flush: addr=0x%0h, way=%b, blk_addr=%0d, dirty=%b\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(evict_line_addr, BANK_ID), way_sel, line_sel, evict_dirty));
+            `TRACE(3, ("%t: %s flush: addr=0x%0h, way=%b, blk_addr=%0d, dirty=%b\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(evict_line_addr, BANK_ID), way_sel, line_sel, evict_dirty))
         end
         if (lookup && ~stall) begin
             if (tag_matches != 0) begin
-                if (write)
-                    `TRACE(3, ("%d: %s write-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid));
-                else
-                    `TRACE(3, ("%d: %s read-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid));
+                if (write) begin
+                    `TRACE(3, ("%t: %s write-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid))
+                end else begin
+                    `TRACE(3, ("%t: %s read-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_sel, line_tag, req_uuid))
+                end
             end else begin
-                if (write)
-                    `TRACE(3, ("%d: %s write-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel, line_tag, req_uuid));
-                else
-                    `TRACE(3, ("%d: %s read-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel, line_tag, req_uuid));
+                if (write) begin
+                    `TRACE(3, ("%t: %s write-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel, line_tag, req_uuid))
+                end else begin
+                    `TRACE(3, ("%t: %s read-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel, line_tag, req_uuid))
+                end
             end
         end
     end

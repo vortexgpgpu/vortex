@@ -1,3 +1,4 @@
+ROOT_DIR := $(realpath ../..)
 include ../common.mk
 
 TARGET ?= opaesim
@@ -8,8 +9,8 @@ SYN_DIR := $(HW_DIR)/syn/altera/opae
 
 SRC_DIR := $(VORTEX_HOME)/runtime/opae
 
-CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -I$(INC_DIR) -I$(COMMON_DIR) -I$(ROOT_DIR)/hw -I$(DESTDIR)
+CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -I$(INC_DIR) -I$(COMMON_DIR) -I$(ROOT_DIR)/hw -I$(DESTDIR) -I$(SIM_DIR)/common
 CXXFLAGS += -DXLEN_$(XLEN)
 
 # Position independent code
@@ -24,10 +25,11 @@ SRCS = $(SRC_DIR)/vortex.cpp $(SRC_DIR)/driver.cpp
 
 # set up target types
 ifeq ($(TARGET), opaesim)
-	OPAESIM = $(DESTDIR)/libopae-c-sim.so
-	CXXFLAGS += -I$(SIM_DIR)/opaesim
+	BUILD_DEPS = $(DESTDIR)/libopae-c-sim.so
+	CXXFLAGS += -DOPAESIM -I$(SIM_DIR)/opaesim
 else
-	CXXFLAGS += -I$(SYN_DIR)
+	BUILD_DEPS = $(ROOT_DIR)/hw/syn/altera/opae/vortex_afu.h
+	CXXFLAGS += -I$(SYN_DIR) -I$(ROOT_DIR)/hw/syn/altera/opae
 endif
 
 # Debugging
@@ -47,12 +49,15 @@ PROJECT := libvortex-opae.so
 
 all: $(DESTDIR)/$(PROJECT)
 
+$(ROOT_DIR)/hw/syn/altera/opae/vortex_afu.h:
+	$(MAKE) -C $(ROOT_DIR)/hw/syn/altera/opae swconfig
+
 driver: $(DESTDIR)/libopae-c-sim.so
 
 $(DESTDIR)/libopae-c-sim.so:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/opaesim $(DESTDIR)/libopae-c-sim.so
 
-$(DESTDIR)/$(PROJECT): $(SRCS) $(OPAESIM)
+$(DESTDIR)/$(PROJECT): $(SRCS) $(BUILD_DEPS)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
 clean-driver:

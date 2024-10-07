@@ -128,7 +128,7 @@ static void stencil_cpu(TYPE *out, const TYPE *in, uint32_t width, uint32_t heig
                             {ny = 0;}
                             else if (ny >= (int)height)
                             {ny = height - 1;}
-                            
+
                             if (nz < 0)
                             {nz = 0;}
                             else if (nz >= (int)depth)
@@ -168,7 +168,7 @@ static void show_usage()
 static void parse_args(int argc, char **argv)
 {
     int c;
-    while ((c = getopt(argc, argv, "n:t:k:h?")) != -1)
+    while ((c = getopt(argc, argv, "n:t:k:h")) != -1)
     {
         switch (c)
         {
@@ -182,12 +182,9 @@ static void parse_args(int argc, char **argv)
             kernel_file = optarg;
             break;
         case 'h':
-        case '?':
-        {
             show_usage();
             exit(0);
-        }
-        break;
+            break;
         default:
             show_usage();
             exit(-1);

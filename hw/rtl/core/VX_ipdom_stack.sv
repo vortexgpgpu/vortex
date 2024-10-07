@@ -48,9 +48,9 @@ module VX_ipdom_stack #(
             empty_r <= 1;
             full_r  <= 0;
         end else begin
-            `ASSERT(~push || ~full, ("runtime error: writing to a full stack!"));
-            `ASSERT(~pop || ~empty, ("runtime error: reading an empty stack!"));
-            `ASSERT(~push || ~pop,  ("runtime error: push and pop in same cycle not supported!"));
+            `ASSERT(~push || ~full, ("%t: runtime error: writing to a full stack!", $time));
+            `ASSERT(~pop || ~empty, ("%t: runtime error: reading an empty stack!", $time));
+            `ASSERT(~push || ~pop,  ("%t: runtime error: push and pop in same cycle not supported!", $time));
             if (push) begin
                 rd_ptr  <= wr_ptr;
                 wr_ptr  <= wr_ptr + ADDRW'(1);

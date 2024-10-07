@@ -71,7 +71,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     // This resolves potential deadlock if ibuffer fills and the LSU stalls the execute stage due to pending dcache requests.
     // This issue is particularly prevalent when the icache and dcache are disabled and both requests share the same bus.
     wire [`NUM_WARPS-1:0] pending_ibuf_full;
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_pending_reads
         VX_pending_size #(
             .SIZE (`IBUF_SIZE)
         ) pending_reads (
@@ -116,9 +116,9 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .ready_out (icache_bus_if.req_ready)
     );
 
-    assign icache_bus_if.req_data.atype  = '0;
+    assign icache_bus_if.req_data.flags  = '0;
     assign icache_bus_if.req_data.rw     = 0;
-    assign icache_bus_if.req_data.byteen = 4'b1111;
+    assign icache_bus_if.req_data.byteen = '1;
     assign icache_bus_if.req_data.data   = '0;
 
     // Icache Response
@@ -131,47 +131,57 @@ module VX_fetch import VX_gpu_pkg::*; #(
     assign fetch_if.data.uuid  = rsp_uuid;
     assign icache_bus_if.rsp_ready = fetch_if.ready;
 
+`ifdef SCOPE
 `ifdef DBG_SCOPE_FETCH
+    `SCOPE_IO_SWITCH (1);
     wire schedule_fire = schedule_if.valid && schedule_if.ready;
-    wire icache_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
-    VX_scope_tap #(
-        .SCOPE_ID (1),
-        .TRIGGERW (4),
-        .PROBEW (`UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS +
-            ICACHE_TAG_WIDTH + ICACHE_WORD_SIZE + ICACHE_ADDR_WIDTH +
-            (ICACHE_WORD_SIZE*8) + ICACHE_TAG_WIDTH)
-    ) scope_tap (
-        .clk (clk),
-        .reset (scope_reset),
-        .start (1'b0),
-        .stop (1'b0),
-        .triggers ({
-            reset,
+    wire icache_bus_req_fire = icache_bus_if.req_valid && icache_bus_if.req_ready;
+    wire icache_bus_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
+    wire [`UUID_WIDTH-1:0] icache_bus_req_uuid = icache_bus_if.req_data.tag[ICACHE_TAG_WIDTH-1 -: `UUID_WIDTH];
+    wire [`UUID_WIDTH-1:0] icache_bus_rsp_uuid = icache_bus_if.rsp_data.tag[ICACHE_TAG_WIDTH-1 -: `UUID_WIDTH];
+    `NEG_EDGE (reset_negedge, reset);
+    `SCOPE_TAP_EX (0, 1, 6, 3, (
+            `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS +
+            `UUID_WIDTH + ICACHE_WORD_SIZE + ICACHE_ADDR_WIDTH +
+            `UUID_WIDTH + (ICACHE_WORD_SIZE * 8)
+        ), {
+            schedule_if.valid,
+            schedule_if.ready,
+            icache_bus_if.req_valid,
+            icache_bus_if.req_ready,
+            icache_bus_if.rsp_valid,
+            icache_bus_if.rsp_ready
+        }, {
             schedule_fire,
-            icache_req_fire,
-            icache_rsp_fire
-        }),
-        .probes ({
+            icache_bus_req_fire,
+            icache_bus_rsp_fire
+        },{
             schedule_if.data.uuid, schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.PC,
-            icache_bus_if.req_data.tag, icache_bus_if.req_data.byteen, icache_bus_if.req_data.addr,
-            icache_bus_if.rsp_data.data, icache_bus_if.rsp_data.tag
-        }),
-        .bus_in (scope_bus_in),
-        .bus_out (scope_bus_out)
+            icache_bus_req_uuid, icache_bus_if.req_data.byteen, icache_bus_if.req_data.addr,
+            icache_bus_rsp_uuid, icache_bus_if.rsp_data.data
+        },
+        reset_negedge, 1'b0, 4096
     );
 `else
-    `SCOPE_IO_UNUSED()
+    `SCOPE_IO_UNUSED(0)
+`endif
+`endif
+`ifdef CHIPSCOPE
+    ila_fetch ila_fetch_inst (
+        .clk    (clk),
+        .probe0 ({schedule_if.valid, schedule_if.data, schedule_if.ready}),
+        .probe1 ({icache_bus_if.req_valid, icache_bus_if.req_data, icache_bus_if.req_ready}),
+        .probe2 ({icache_bus_if.rsp_valid, icache_bus_if.rsp_data, icache_bus_if.rsp_ready})
+    );
 `endif
 
 `ifdef DBG_TRACE_MEM
-    wire schedule_fire = schedule_if.valid && schedule_if.ready;
-    wire fetch_fire = fetch_if.valid && fetch_if.ready;
     always @(posedge clk) begin
-        if (schedule_fire) begin
-            `TRACE(1, ("%d: %s req: wid=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_if.data.wid, {schedule_if.data.PC, 1'b0}, schedule_if.data.tmask, schedule_if.data.uuid));
+        if (schedule_if.valid && schedule_if.ready) begin
+            `TRACE(1, ("%t: %s req: wid=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_if.data.wid, {schedule_if.data.PC, 1'b0}, schedule_if.data.tmask, schedule_if.data.uuid))
         end
-        if (fetch_fire) begin
-            `TRACE(1, ("%d: %s rsp: wid=%0d, PC=0x%0h, tmask=%b, instr=0x%0h (#%0d)\n", $time, INSTANCE_ID, fetch_if.data.wid, {fetch_if.data.PC, 1'b0}, fetch_if.data.tmask, fetch_if.data.instr, fetch_if.data.uuid));
+        if (fetch_if.valid && fetch_if.ready) begin
+            `TRACE(1, ("%t: %s rsp: wid=%0d, PC=0x%0h, tmask=%b, instr=0x%0h (#%0d)\n", $time, INSTANCE_ID, fetch_if.data.wid, {fetch_if.data.PC, 1'b0}, fetch_if.data.tmask, fetch_if.data.instr, fetch_if.data.uuid))
         end
     end
 `endif
