@@ -36,7 +36,6 @@ uint32_t num_threads = NUM_THREADS;
 uint32_t num_warps = NUM_WARPS;
 uint32_t num_cores = NUM_CORES;
 bool showStats = false;
-bool riscv_test = false;
 const char* program = nullptr;
 
 static void parse_args(int argc, char **argv) {
@@ -54,9 +53,6 @@ static void parse_args(int argc, char **argv) {
         break;
       case 's':
         showStats = true;
-        break;
-      case 'r':
-        riscv_test = true;
         break;
     	case 'h':
       	show_usage();
@@ -125,5 +121,5 @@ int main(int argc, char **argv) {
     ram.read(&exitcode, (IO_MPM_ADDR + 8), 4);
   }
 
-  return exitcode if not riscv_test else (1 - exitcode);
+  return exitcode;
 }
