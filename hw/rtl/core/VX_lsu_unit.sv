@@ -31,9 +31,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     localparam BLOCK_SIZE = `NUM_LSU_BLOCKS;
     localparam NUM_LANES  = `NUM_LSU_LANES;
 
-`ifdef SCOPE
     `SCOPE_IO_SWITCH (BLOCK_SIZE);
-`endif
 
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)
@@ -42,7 +40,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
-        .OUT_BUF    (1)
+        .OUT_BUF    (3)
     ) dispatch_unit (
         .clk        (clk),
         .reset      (reset),
@@ -54,16 +52,13 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .NUM_LANES (NUM_LANES)
     ) per_block_commit_if[BLOCK_SIZE]();
 
-    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : lsu_slices
-
-        `RESET_RELAY (slice_reset, reset);
-
+    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_lsus
         VX_lsu_slice #(
             .INSTANCE_ID ($sformatf("%s%0d", INSTANCE_ID, block_idx))
         ) lsu_slice(
             `SCOPE_IO_BIND  (block_idx)
             .clk        (clk),
-            .reset      (slice_reset),
+            .reset      (reset),
             .execute_if (per_block_execute_if[block_idx]),
             .commit_if  (per_block_commit_if[block_idx]),
             .lsu_mem_if (lsu_mem_if[block_idx])

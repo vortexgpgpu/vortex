@@ -98,6 +98,14 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+class TcuUnit : public FuncUnit {
+public:
+    TcuUnit(const SimContext& ctx, Core*);
+    void tick();
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 class SfuUnit : public FuncUnit {
 public:
 	SfuUnit(const SimContext& ctx, Core*);

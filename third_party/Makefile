@@ -7,9 +7,9 @@ else
 RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv-gnu-toolchain
 endif
 
-all: fpnew softfloat ramulator
+all: cvfpu softfloat ramulator
 
-fpnew:
+cvfpu:
 
 softfloat:
 	SPECIALIZE_TYPE=RISCV SOFTFLOAT_OPTS="-fPIC -DSOFTFLOAT_ROUND_ODD -DINLINE_LEVEL=5 -DSOFTFLOAT_FAST_DIV32TO16 -DSOFTFLOAT_FAST_DIV64TO32" $(MAKE) -C softfloat/build/Linux-x86_64-GCC
@@ -26,4 +26,4 @@ clean:
 	rm -rf ramulator/build ramulator/libramulator.so
 	$(MAKE) -C riscv-vector-tests clean
 
-.PHONY: all fpnew softfloat ramulator riscv-vector-tests
+.PHONY: all cvfpu softfloat ramulator riscv-vector-tests

@@ -66,7 +66,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     wire [NUM_LANES-1:0][`XLEN-1:0] rs1_data;
     `UNUSED_VAR (rs1_data)
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_rs1_data
         assign rs1_data[i] = execute_if.data.rs1_data[i];
     end
 
@@ -118,12 +118,15 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     wire [NUM_LANES-1:0][`XLEN-1:0] wtid, gtid;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
-        if (PID_BITS != 0) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_wtid
+        if (PID_BITS != 0) begin : g_pid
             assign wtid[i] = `XLEN'(execute_if.data.pid * NUM_LANES + i);
-        end else begin
+        end else begin : g_no_pid
             assign wtid[i] = `XLEN'(i);
         end
+    end
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_gtid
         assign gtid[i] = (`XLEN'(CORE_ID) << (`NW_BITS + `NT_BITS)) + (`XLEN'(execute_if.data.wid) << `NT_BITS) + wtid[i];
     end
 

@@ -10,10 +10,10 @@ cd build_fpga && qsub-synth
 # check last 10 lines in build log for possible errors
 tail -n 10 ./build_arria10_fpga_1c/build.log
 
-# Check if the job is submitted to the queue and running. Status should be R 
+# Check if the job is submitted to the queue and running. Status should be R
 qstat | grep <user>
 
-# Constantly monitoring the job submitted to the queue. Stop this using Ctrl+C 
+# Constantly monitoring the job submitted to the queue. Stop this using Ctrl+C
 watch ‘qstat | grep <user>’
 
 #
@@ -35,7 +35,7 @@ fpgaconf --bus 0xaf <build>/synth/vortex_afu.gbs
 # get portid
 fpgainfo port
 
-# Running the Test case 
+# Running the Test case
 cd /driver/tests/basic
 make run-fpga
 
@@ -54,13 +54,9 @@ TARGET=asesim make -C runtime/opae
 PREFIX=build_base CONFIGS="-DEXT_F_DISABLE -DL1_DISABLE -DSM_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" TARGET=asesim make
 
 # ASE test runs
-./run_ase.sh build_base_arria10_asesim_1c ../../../../tests/regression/basic/basic -n1 -t0
-./run_ase.sh build_base_arria10_asesim_1c ../../../../tests/regression/basic/basic -n1 -t1
-./run_ase.sh build_base_arria10_asesim_1c ../../../../tests/regression/basic/basic -n16
-./run_ase.sh build_base_arria10_asesim_1c ../../../../tests/regression/demo/demo -n16
-./run_ase.sh build_base_arria10_asesim_1c ../../../../tests/regression/dogfood/dogfood -n16
-./run_ase.sh build_base_arria10_asesim_1c ../../../../tests/opencl/vecadd/vecadd
-./run_ase.sh build_base_arria10_asesim_1c ../../../../tests/opencl/sgemm/sgemm -n4
+start_ase.sh <build_dir>
+ASE_LOG=0 ASE_WORKDIR=<build_dir>/synth/work TARGET=asesim ./ci/blackbox.sh --driver=opae --app=vecadd
+stop_ase.sh <build_dir>
 
 # modify "vsim_run.tcl" to dump VCD trace
 vcd file trace.vcd

@@ -52,6 +52,7 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   {Opcode::EXT2,    InstType::R4},
   {Opcode::R_W,     InstType::R},
   {Opcode::I_W,     InstType::I},
+  {Opcode::TCU,     InstType::I},
 };
 
 static const char* op_string(const Instr &instr) {
@@ -60,7 +61,7 @@ static const char* op_string(const Instr &instr) {
   auto func3  = instr.getFunc3();
   auto func7  = instr.getFunc7();
   auto rd     = instr.getRDest();
-  auto rs2    = instr.getRSrc(1);
+  auto rs1    = instr.getRSrc(1);
   auto imm    = instr.getImm();
 
   switch (opcode) {
@@ -326,7 +327,7 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     case 0x60:
-      switch (rs2) {
+      switch (rs1) {
       case 0: return "FCVT.W.S";
       case 1: return "FCVT.WU.S";
       case 2: return "FCVT.L.S";
@@ -335,7 +336,7 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     case 0x61:
-      switch (rs2) {
+      switch (rs1) {
       case 0: return "FCVT.W.D";
       case 1: return "FCVT.WU.D";
       case 2: return "FCVT.L.D";
@@ -344,7 +345,7 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     case 0x68:
-      switch (rs2) {
+      switch (rs1) {
       case 0: return "FCVT.S.W";
       case 1: return "FCVT.S.WU";
       case 2: return "FCVT.S.L";
@@ -353,7 +354,7 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     case 0x69:
-      switch (rs2) {
+      switch (rs1) {
       case 0: return "FCVT.D.W";
       case 1: return "FCVT.D.WU";
       case 2: return "FCVT.D.L";
@@ -379,7 +380,7 @@ static const char* op_string(const Instr &instr) {
       switch (func3) {
       case 0: return "TMC";
       case 1: return "WSPAWN";
-      case 2: return rs2 ? "SPLIT.N" : "SPLIT";
+      case 2: return rs1 ? "SPLIT.N" : "SPLIT";
       case 3: return "JOIN";
       case 4: return "BAR";
       case 5: return rd ? "PRED.N" : "PRED";
@@ -388,6 +389,16 @@ static const char* op_string(const Instr &instr) {
       }
     default:
       std::abort();
+    }
+  
+  case Opcode::TCU:
+    switch(func3)
+    {
+      case 0: return "ML";     // Matrix Load
+      case 1: return "MS";     // Matrix Store
+      case 2: return "MATMUL"; // Matrix Multiply
+      default:
+        std::abort();
     }
   default:
     std::abort();
@@ -491,6 +502,11 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
     switch (op) {
     case Opcode::FCI:
       switch (func7) {
+      case 0x20: // FCVT.S.D
+      case 0x21: // FCVT.D.S
+        instr->setDestReg(rd, RegType::Float);
+        instr->addSrcReg(rs1, RegType::Float);
+        break;
       case 0x2c: // FSQRT.S
       case 0x2d: // FSQRT.D
         instr->setDestReg(rd, RegType::Float);
@@ -574,6 +590,14 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
 
   case InstType::I: {
     switch (op) {
+    case Opcode::TCU: {
+      instr->setDestReg(rs1, RegType::Integer);
+      instr->addSrcReg(rs1, RegType::Integer);
+      instr->setFunc3(func3);
+      instr->setFunc7(func7);
+      auto imm = code >> shift_rs2;
+      instr->setImm(sext(imm, width_i_imm));
+    } break;
     case Opcode::I:
     case Opcode::I_W:
     case Opcode::JALR:
