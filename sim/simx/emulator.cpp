@@ -508,6 +508,12 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
     return csrs_.at(wid).at(tid)[VX_CSR_VTYPE];
   case VX_CSR_VLENB:
     return VLEN / 8;
+  case VX_CSR_VCYCLE:
+    return csrs_.at(wid).at(tid)[VX_CSR_VCYCLE];
+  case VX_CSR_VTIME:
+    return csrs_.at(wid).at(tid)[VX_CSR_VTIME];
+  case VX_CSR_VINSTRET:
+    return csrs_.at(wid).at(tid)[VX_CSR_VINSTRET];
 
   case VX_CSR_MHARTID:    return (core_->id() * arch_.num_warps() + wid) * arch_.num_threads() + tid;
   case VX_CSR_THREAD_ID:  return tid;
