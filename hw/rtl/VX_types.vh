@@ -197,6 +197,9 @@
 `define VX_CSR_VL                       12'hC20
 `define VX_CSR_VTYPE                    12'hC21
 `define VX_CSR_VLENB                    12'hC22
+`define VX_CSR_VCYCLE                   12'hC00
+`define VX_CSR_VTIME                    12'hC01
+`define VX_CSR_VINSTRET                 12'hC02
 
 // GPGU CSRs
 
