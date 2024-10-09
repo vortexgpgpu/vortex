@@ -448,7 +448,7 @@ module VX_rr_arbiter #(
 			end
 	    end
 
-        VX_encoder #(
+        VX_onehot_encoder #(
             .N (NUM_REQS)
         ) onehot_encoder (
             .data_in  (grant_onehot),

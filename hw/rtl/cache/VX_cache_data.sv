@@ -73,7 +73,7 @@ module VX_cache_data #(
 
     assign line_idx = line_addr[`CS_LINE_SEL_BITS-1:0];
 
-    VX_encoder #(
+    VX_onehot_encoder #(
         .N (NUM_WAYS)
     ) way_idx_enc (
         .data_in  (way_idx),

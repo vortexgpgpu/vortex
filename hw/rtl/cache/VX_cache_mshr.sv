@@ -148,11 +148,12 @@ module VX_cache_mshr #(
         .valid_out (allocate_rdy_n)
     );
 
-    VX_encoder #(
+    VX_priority_encoder #(
         .N (MSHR_SIZE)
     ) prev_sel (
         .data_in (addr_matches & ~next_table_x),
-        .data_out (prev_idx),
+        .index_out (prev_idx),
+        `UNUSED_PIN (onehot_out),
         `UNUSED_PIN (valid_out)
     );
 
