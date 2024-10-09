@@ -203,6 +203,10 @@ private:
 
   void update_fcrs(uint32_t fflags, uint32_t tid, uint32_t wid);
 
+  void trigger_ecall();
+
+  void trigger_ebreak();
+
   const Arch& arch_;
   const DCRS& dcrs_;
   Core*       core_;
