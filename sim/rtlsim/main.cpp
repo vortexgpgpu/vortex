@@ -100,8 +100,5 @@ int main(int argc, char **argv) {
 	// read exitcode from @MPM.1
 	ram.read(&exitcode, (IO_MPM_ADDR + 8), 4);
 
-	if (riscv_test) {
-		return (1 - exitcode);
-	}
-	return exitcode;
+	return (riscv_test ? 13 - exitcode : exitcode);
 }
