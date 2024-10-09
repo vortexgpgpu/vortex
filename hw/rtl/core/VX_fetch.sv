@@ -51,9 +51,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire [`NUM_THREADS-1:0] rsp_tmask;
 
     VX_dp_ram #(
-        .DATAW  (`PC_BITS + `NUM_THREADS),
-        .SIZE   (`NUM_WARPS),
-        .LUTRAM (1)
+        .DATAW (`PC_BITS + `NUM_THREADS),
+        .SIZE  (`NUM_WARPS)
     ) tag_store (
         .clk   (clk),
         .reset (reset),

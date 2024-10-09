@@ -48,8 +48,7 @@ module VX_split_join import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_ipdom_stacks
         VX_ipdom_stack #(
             .WIDTH (`NUM_THREADS+`PC_BITS),
-            .DEPTH (`DV_STACK_SIZE),
-            .OUT_REG (0)
+            .DEPTH (`DV_STACK_SIZE)
         ) ipdom_stack (
             .clk   (clk),
             .reset (reset),

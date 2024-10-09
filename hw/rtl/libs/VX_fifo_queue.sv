@@ -20,7 +20,7 @@ module VX_fifo_queue #(
     parameter ALM_FULL  = (DEPTH - 1),
     parameter ALM_EMPTY = 1,
     parameter OUT_REG   = 0,
-    parameter LUTRAM    = 1,
+    parameter LUTRAM    = 0,
     parameter SIZEW     = `CLOG2(DEPTH+1)
 ) (
     input  wire             clk,
@@ -80,30 +80,38 @@ module VX_fifo_queue #(
             reg [DATAW-1:0] dout_r;
             reg [ADDRW-1:0] wr_ptr_r;
             reg [ADDRW-1:0] rd_ptr_r;
-            reg [ADDRW-1:0] rd_ptr_n_r;
+            reg [ADDRW-1:0] rd_ptr_n_r, rd_ptr_n_n;
+
+            always @(*) begin
+                rd_ptr_n_n = rd_ptr_r;
+                if (pop) begin
+                    if (DEPTH > 2) begin
+                        rd_ptr_n_n = rd_ptr_r + ADDRW'(2);
+                    end else begin // (DEPTH == 2);
+                        rd_ptr_n_n = ~rd_ptr_n_r;
+                    end
+                end
+            end
 
             always @(posedge clk) begin
                 if (reset) begin
-                    wr_ptr_r   <= '0;
-                    rd_ptr_r   <= '0;
-                    rd_ptr_n_r <= 1;
+                    wr_ptr_r <= '0;
+                    rd_ptr_r <= '0;
+                    rd_ptr_n_r <= '0;
                 end else begin
                     wr_ptr_r <= wr_ptr_r + ADDRW'(push);
                     if (pop) begin
                         rd_ptr_r <= rd_ptr_n_r;
-                        if (DEPTH > 2) begin
-                            rd_ptr_n_r <= rd_ptr_r + ADDRW'(2);
-                        end else begin // (DEPTH == 2);
-                            rd_ptr_n_r <= ~rd_ptr_n_r;
-                        end
                     end
+                    rd_ptr_n_r <= rd_ptr_n_n;
                 end
             end
 
             VX_dp_ram #(
                 .DATAW  (DATAW),
                 .SIZE   (DEPTH),
-                .LUTRAM (LUTRAM)
+                .LUTRAM (LUTRAM),
+                .RADDR_REG (1)
             ) dp_ram (
                 .clk   (clk),
                 .reset (reset),
@@ -112,7 +120,7 @@ module VX_fifo_queue #(
                 .wren  (1'b1),
                 .waddr (wr_ptr_r),
                 .wdata (data_in),
-                .raddr (rd_ptr_n_r),
+                .raddr (rd_ptr_n_n),
                 .rdata (dout)
             );
 
@@ -130,23 +138,28 @@ module VX_fifo_queue #(
 
         end else begin : g_no_out_reg
 
-            reg [ADDRW-1:0] rd_ptr_r;
+            reg [ADDRW-1:0] rd_ptr_r, rd_ptr_n;
             reg [ADDRW-1:0] wr_ptr_r;
+
+            always @(*) begin
+                rd_ptr_n = rd_ptr_r + ADDRW'(pop);
+            end
 
             always @(posedge clk) begin
                 if (reset) begin
-                    rd_ptr_r <= '0;
                     wr_ptr_r <= '0;
+                    rd_ptr_r <= '0;
                 end else begin
                     wr_ptr_r <= wr_ptr_r + ADDRW'(push);
-                    rd_ptr_r <= rd_ptr_r + ADDRW'(pop);
+                    rd_ptr_r <= rd_ptr_n;
                 end
             end
 
             VX_dp_ram #(
                 .DATAW  (DATAW),
                 .SIZE   (DEPTH),
-                .LUTRAM (LUTRAM)
+                .LUTRAM (LUTRAM),
+                .RADDR_REG (1)
             ) dp_ram (
                 .clk   (clk),
                 .reset (reset),
@@ -155,7 +168,7 @@ module VX_fifo_queue #(
                 .wren  (1'b1),
                 .waddr (wr_ptr_r),
                 .wdata (data_in),
-                .raddr (rd_ptr_r),
+                .raddr (rd_ptr_n),
                 .rdata (data_out)
             );
 

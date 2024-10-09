@@ -167,7 +167,6 @@ module VX_cache_bank #(
     wire [NUM_WAYS-1:0]             way_idx_st0, way_idx_st1;
     wire [NUM_WAYS-1:0]             tag_matches_st0;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_alloc_id_st0;
-    wire [MSHR_ADDR_WIDTH-1:0]      mshr_prev_st0, mshr_prev_st1;
     wire                            mshr_pending_st0, mshr_pending_st1;
     wire                            mshr_empty;
 
@@ -380,14 +379,14 @@ module VX_cache_bank #(
     assign line_tag2_st0 = (is_fill_st0 || is_flush2_st0) ? evict_tag_st0 : line_tag_st0;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + `UP(FLAGS_WIDTH) + `CS_TAG_SEL_BITS + `CS_LINE_SEL_BITS + `CS_LINE_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + MSHR_ADDR_WIDTH + NUM_WAYS + 1 + 1),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + `UP(FLAGS_WIDTH) + `CS_TAG_SEL_BITS + `CS_LINE_SEL_BITS + `CS_LINE_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + NUM_WAYS + 1 + 1),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~pipe_stall),
-        .data_in  ({valid_st0, is_init_st0, is_replay_st0, is_fill_st0, is_flush2_st0, is_creq_st0, rw_st0, flags_st0, line_tag2_st0, line_idx_st0, data_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_prev_st0, way_idx_st0, evict_dirty_st0, mshr_pending_st0}),
-        .data_out ({valid_st1, is_init_st1, is_replay_st1, is_fill_st1, is_flush_st1,  is_creq_st1, rw_st1, flags_st1, line_tag_st1,  line_idx_st1, data_st1, byteen_st1, word_idx_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_prev_st1, way_idx_st1, evict_dirty_st1, mshr_pending_st1})
+        .data_in  ({valid_st0, is_init_st0, is_replay_st0, is_fill_st0, is_flush2_st0, is_creq_st0, rw_st0, flags_st0, line_tag2_st0, line_idx_st0, data_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, mshr_id_st0, way_idx_st0, evict_dirty_st0, mshr_pending_st0}),
+        .data_out ({valid_st1, is_init_st1, is_replay_st1, is_fill_st1, is_flush_st1,  is_creq_st1, rw_st1, flags_st1, line_tag_st1,  line_idx_st1, data_st1, byteen_st1, word_idx_st1, req_idx_st1, tag_st1, mshr_id_st1, way_idx_st1, evict_dirty_st1, mshr_pending_st1})
     );
 
     // we have a tag hit
@@ -473,25 +472,20 @@ module VX_cache_bank #(
         .dirty_byteen(dirty_byteen_st1)
     );
 
-    wire [MSHR_SIZE-1:0] mshr_lookup_pending_st0;
-    wire [MSHR_SIZE-1:0] mshr_lookup_rw_st0;
     wire mshr_allocate_st0 = valid_st0 && is_creq_st0;
-    wire mshr_lookup_st0   = mshr_allocate_st0;
-
-    wire mshr_finalize_st1 = valid_st1 && is_creq_st1;
 
     // release allocated mshr entry if we had a hit
     wire mshr_release_st1;
     if (WRITEBACK) begin : g_mshr_release
-        assign mshr_release_st1 = is_hit_st1;
+        assign mshr_release_st1 = valid_st1 && is_creq_st1 && is_hit_st1;
     end else begin : g_mshr_release_ro
         // we need to keep missed write requests in MSHR if there is already a pending entry to the same address
         // this ensures that missed write requests are replayed locally in case a pending fill arrives without the write content
         // this can happen when writes are sent late, when the fill was already in flight.
-        assign mshr_release_st1 = is_hit_st1 || (rw_st1 && ~mshr_pending_st1);
+        assign mshr_release_st1 = valid_st1 && is_creq_st1 && (is_hit_st1 || (rw_st1 && ~mshr_pending_st1));
     end
 
-    wire mshr_dequeue = mshr_finalize_st1 && mshr_release_st1 && ~pipe_stall;
+    wire mshr_dequeue = mshr_release_st1 && ~pipe_stall;
 
     VX_pending_size #(
         .SIZE (MSHR_SIZE)
@@ -513,6 +507,8 @@ module VX_cache_bank #(
         .LINE_SIZE   (LINE_SIZE),
         .NUM_BANKS   (NUM_BANKS),
         .MSHR_SIZE   (MSHR_SIZE),
+        .WRITEBACK   (WRITEBACK),
+        .RDW_STALL   (1),
         .UUID_WIDTH  (UUID_WIDTH),
         .DATA_WIDTH  (WORD_SEL_WIDTH + WORD_SIZE + `CS_WORD_WIDTH + TAG_WIDTH + REQ_SEL_WIDTH)
     ) cache_mshr (
@@ -520,8 +516,8 @@ module VX_cache_bank #(
         .reset          (reset),
 
         .deq_req_uuid   (req_uuid_sel),
-        .lkp_req_uuid   (req_uuid_st0),
-        .fin_req_uuid   (req_uuid_st1),
+        .alc_req_uuid   (req_uuid_st0),
+        .rel_req_uuid   (req_uuid_st1),
 
         // memory fill
         .fill_valid     (mem_rsp_fire),
@@ -542,31 +538,13 @@ module VX_cache_bank #(
         .allocate_rw    (rw_st0),
         .allocate_data  ({word_idx_st0, byteen_st0, write_data_st0, tag_st0, req_idx_st0}),
         .allocate_id    (mshr_alloc_id_st0),
-        .allocate_prev  (mshr_prev_st0),
+        .allocate_pending(mshr_pending_st0),
         `UNUSED_PIN     (allocate_ready),
 
-        // lookup
-        .lookup_valid   (mshr_lookup_st0 && ~pipe_stall),
-        .lookup_addr    (addr_st0),
-        .lookup_pending (mshr_lookup_pending_st0),
-        .lookup_rw      (mshr_lookup_rw_st0),
-
-        // finalize
-        .finalize_valid (mshr_finalize_st1 && ~pipe_stall),
-        .finalize_release(mshr_release_st1),
-        .finalize_pending(mshr_pending_st1),
-        .finalize_id    (mshr_id_st1),
-        .finalize_prev  (mshr_prev_st1)
+        // release
+        .release_valid (mshr_release_st1 && ~pipe_stall),
+        .release_id    (mshr_id_st1)
     );
-
-    // check if there are pending requests to same line in the MSHR
-    wire [MSHR_SIZE-1:0] lookup_matches;
-    for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_lookup_matches
-        assign lookup_matches[i] = mshr_lookup_pending_st0[i]
-                                && (i != mshr_id_st0) // exclude current mshr id
-                                && (WRITEBACK || ~mshr_lookup_rw_st0[i]);  // exclude write requests if writethrough
-    end
-    assign mshr_pending_st0 = (| lookup_matches);
 
     // schedule core response
 

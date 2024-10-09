@@ -193,16 +193,16 @@ module VX_cache_data #(
 `ifdef DBG_TRACE_CACHE
     always @(posedge clk) begin
         if (fill) begin
-            `TRACE(3, ("%t: %s fill: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_idx, line_idx, fill_data))
+            `TRACE(3, ("%t: %s fill: addr=0x%0h, way=%b, line=%0d, data=0x%h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_idx, line_idx, fill_data))
         end
         if (flush) begin
-            `TRACE(3, ("%t: %s flush: addr=0x%0h, way=%b, blk_addr=%0d, byteen=0x%h, data=0x%h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_idx, line_idx, dirty_byteen, dirty_data))
+            `TRACE(3, ("%t: %s flush: addr=0x%0h, way=%b, line=%0d, byteen=0x%h, data=0x%h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_idx, line_idx, dirty_byteen, dirty_data))
         end
         if (read) begin
-            `TRACE(3, ("%t: %s read: addr=0x%0h, way=%b, blk_addr=%0d, wsel=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_idx, line_idx, word_idx, read_data, req_uuid))
+            `TRACE(3, ("%t: %s read: addr=0x%0h, way=%b, line=%0d, wsel=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_idx, line_idx, word_idx, read_data, req_uuid))
         end
         if (write) begin
-            `TRACE(3, ("%t: %s write: addr=0x%0h, way=%b, blk_addr=%0d, wsel=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_idx, line_idx, word_idx, write_byteen, write_data, req_uuid))
+            `TRACE(3, ("%t: %s write: addr=0x%0h, way=%b, line=%0d, wsel=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_idx, line_idx, word_idx, write_byteen, write_data, req_uuid))
         end
     end
 `endif
