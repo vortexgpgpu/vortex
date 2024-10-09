@@ -833,7 +833,11 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->fetch_stall = true;
         switch (csr_addr) {
         case 0x000: // RV32I: ECALL
+          this->trigger_ecall();
+          break;
         case 0x001: // RV32I: EBREAK
+          this->trigger_ebreak();
+          break;
         case 0x002: // RV32I: URET
         case 0x102: // RV32I: SRET
         case 0x302: // RV32I: MRET

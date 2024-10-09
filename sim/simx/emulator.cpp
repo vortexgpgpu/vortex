@@ -703,3 +703,11 @@ void Emulator::update_fcrs(uint32_t fflags, uint32_t tid, uint32_t wid) {
     this->set_csr(VX_CSR_FFLAGS, this->get_csr(VX_CSR_FFLAGS, tid, wid) | fflags, tid, wid);
   }
 }
+
+void Emulator::trigger_ecall() {
+  active_warps_.reset();
+}
+
+void Emulator::trigger_ebreak() {
+  active_warps_.reset();
+}
