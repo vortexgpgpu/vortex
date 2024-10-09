@@ -125,8 +125,5 @@ int main(int argc, char **argv) {
     ram.read(&exitcode, (IO_MPM_ADDR + 8), 4);
   }
 
-  if (riscv_test) {
-    return (13 - exitcode); // temporary fix for riscv vector tests
-  }
-  return exitcode;
+  return (riscv_test ? 13 - exitcode : exitcode);
 }
