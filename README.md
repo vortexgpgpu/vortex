@@ -2,6 +2,9 @@
 
 Vortex is a full-stack open-source RISC-V GPGPU. Vortex supports multiple *backend drivers*, including our C++ simulator (simx), an RTL simulator, and physical Xilinx and Altera FPGAs-- all controlled by a single driver script. The chosen driver determines the corresponding code invoked to run Vortex. Generally, developers will prototype their intended design in simx, before completing going forward with an RTL implementation. Alternatively, you can get up and running by selecting a driver of your choice and running a demo program.
 
+## Website
+Vortex news can be found on its [website](https://vortex.cc.gatech.edu/)
+
 ## Specifications
 
 - Support RISC-V RV32IMAF and RV64IMAFD
@@ -30,7 +33,7 @@ Vortex is a full-stack open-source RISC-V GPGPU. Vortex supports multiple *backe
 - `miscs`: Miscellaneous resources.
 
 ## Quick Start
-The following steps demonstrate how to run Vortex with the default driver: simx. If you are interested in a different backend, look [here](docs/simulation.md).
+If you are interested in a stable release of Vortex, you can download the latest release [here](https://github.com/vortexgpgpu/vortex/releases/latest). Otherwise, you can pull the most recent, but (potentially) unstable version as shown below. The following steps demonstrate how to build and run Vortex with the default driver: SimX. If you are interested in a different backend, look [here](docs/simulation.md).
 
 ### Supported OS Platforms
 - Ubuntu 18.04, 20.04

@@ -14,8 +14,8 @@ In an effort to keep `vortex` organized, permissions to directly create branches
 However, contributions are strongly encouraged and keep the project moving forward! Here is the procedure for contributing:
 
 1. Create a fork of `vortex`
-2. In your fork, create a branch that briefly explains the work you are adding (ie: `develop-documentation`) branches from `develop` and adds some documentation
-3. Make your changes on your new branch in your fork. You may create as many commits as you need, which might be common if you are making multiple iterations
+2. In your fork, create a branch from `master` that briefly explains the work you are adding (ie: `develop-documentation`)
+3. Make your changes on the new branch in your fork. You may create as many commits as you need, which might be common if you are making multiple iterations
 4. Since you are the owner of your fork, you have full permissions to push commits to your fork
 4. When you are satisfied with the changes on your fork, you can open a PR from your fork using the online interface
 5. If you recently made a push, you will get automatically get a prompt on Github online to create a PR, which you can press
@@ -32,6 +32,6 @@ However, contributions are strongly encouraged and keep the project moving forwa
 15. When all merge conflicts are resolved, changes are made, and tests pass you can have an admin merge your PR
 
 ## What Makes a Good Contribution?
-- If you are contributing code changes, then review `testing.md` to ensure your tests are integrated into the CI pipeline
+- If you are contributing code changes, then review [testing.md](./testing.md) to ensure your tests are integrated into the [CI pipeline](continuous_integration.md)
 - During a PR, you should consider the advice you are provided by your reviewers. Remember you keep adding commits to an open PR!
 - If your change aims to fix an issue opened on Github, please tag that issue in the PR itself
