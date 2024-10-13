@@ -693,8 +693,8 @@ module VX_cache_bank #(
 ///////////////////////////////////////////////////////////////////////////////
 
 `ifdef PERF_ENABLE
-    assign perf_read_misses  = do_read_miss_st1;
-    assign perf_write_misses = do_write_miss_st1;
+    assign perf_read_misses  = do_read_st1 && ~is_hit_st1;
+    assign perf_write_misses = do_write_st1 && ~is_hit_st1;
     assign perf_mshr_stalls  = mshr_alm_full;
 `endif
 
