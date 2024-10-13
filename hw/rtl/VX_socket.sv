@@ -150,7 +150,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .FLAGS_WIDTH    (`MEM_REQ_FLAGS_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`DCACHE_WRITEBACK),
-        .DIRTY_BYTES    (`DCACHE_WRITEBACK),
+        .DIRTY_BYTES    (`DCACHE_DIRTYBYTES),
         .NC_ENABLE      (1),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (2)

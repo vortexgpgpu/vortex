@@ -98,7 +98,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .TAG_WIDTH      (L2_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`L2_WRITEBACK),
-        .DIRTY_BYTES    (`L2_WRITEBACK),
+        .DIRTY_BYTES    (`L2_DIRTYBYTES),
         .UUID_WIDTH     (`UUID_WIDTH),
         .FLAGS_WIDTH    (`MEM_REQ_FLAGS_WIDTH),
         .CORE_OUT_BUF   (3),

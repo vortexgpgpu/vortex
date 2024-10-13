@@ -14,8 +14,6 @@
 `include "VX_cache_define.vh"
 
 module VX_cache_tags #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter BANK_ID       = 0,
     // Size of cache in bytes
     parameter CACHE_SIZE    = 1024,
     // Size of line inside a bank in bytes
@@ -27,99 +25,86 @@ module VX_cache_tags #(
     // Size of a word in bytes
     parameter WORD_SIZE     = 1,
     // Enable cache writeback
-    parameter WRITEBACK     = 0,
-    // Request debug identifier
-    parameter UUID_WIDTH    = 0
+    parameter WRITEBACK     = 0
 ) (
     input wire                          clk,
     input wire                          reset,
+    input wire                          stall,
 
-`IGNORE_UNUSED_BEGIN
-    input wire [`UP(UUID_WIDTH)-1:0]    req_uuid,
-`IGNORE_UNUSED_END
-
-    // init/fill/lookup
+    // inputs
     input wire                          init,
     input wire                          flush,
     input wire                          fill,
-    input wire                          write,
     input wire                          lookup,
     input wire [`CS_LINE_ADDR_WIDTH-1:0] line_addr,
-    input wire [NUM_WAYS-1:0]           way_idx,
-    output wire [NUM_WAYS-1:0]          tag_matches,
+    input wire [NUM_WAYS-1:0]           flush_way,
 
-    // eviction
-    output wire                         evict_dirty,
+    // outputs
+    output wire [NUM_WAYS-1:0]          tag_matches_r,
+    output wire [`CS_TAG_SEL_BITS-1:0]  line_tag_r,
     output wire [NUM_WAYS-1:0]          evict_way,
-    output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag
+    output wire [NUM_WAYS-1:0]          evict_way_r,
+    output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag_r
 );
-    `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_PARAM (BANK_ID)
-    `UNUSED_VAR (lookup)
-
-    //                   valid,   dirty,           tag
-    localparam TAG_WIDTH = 1 +  WRITEBACK + `CS_TAG_SEL_BITS;
+    //                   valid,       tag
+    localparam TAG_WIDTH = 1 + `CS_TAG_SEL_BITS;
 
     wire [`CS_LINE_SEL_BITS-1:0] line_idx = line_addr[`CS_LINE_SEL_BITS-1:0];
     wire [`CS_TAG_SEL_BITS-1:0] line_tag = `CS_LINE_ADDR_TAG(line_addr);
 
     wire [NUM_WAYS-1:0][`CS_TAG_SEL_BITS-1:0] read_tag;
     wire [NUM_WAYS-1:0] read_valid;
-    wire [NUM_WAYS-1:0] read_dirty;
 
-    if (NUM_WAYS > 1)  begin : g_evict_way
-        reg [NUM_WAYS-1:0] evict_way_r;
+    if (NUM_WAYS > 1) begin : g_evict_way
+        reg [NUM_WAYS-1:0] victim_way;
         // cyclic assignment of replacement way
         always @(posedge clk) begin
             if (reset) begin
-                evict_way_r <= 1;
-            end else if (lookup) begin
-                evict_way_r <= {evict_way_r[NUM_WAYS-2:0], evict_way_r[NUM_WAYS-1]};
+                victim_way <= 1;
+            end else if (~stall) begin
+                victim_way <= {victim_way[NUM_WAYS-2:0], victim_way[NUM_WAYS-1]};
             end
         end
+        assign evict_way = fill ? victim_way : flush_way;
+        `BUFFER_EX(evict_way_r, evict_way, ~stall, 1);
+    end else begin : g_evict_way_0
+        `UNUSED_VAR (flush_way)
+        assign evict_way   = 1'b1;
+        assign evict_way_r = 1'b1;
+    end
 
-        assign evict_way = fill ? evict_way_r : way_idx;
-
+    if (WRITEBACK) begin : g_evict_tag_wb
         VX_onehot_mux #(
             .DATAW (`CS_TAG_SEL_BITS),
             .N     (NUM_WAYS)
         ) evict_tag_sel (
             .data_in  (read_tag),
-            .sel_in   (evict_way),
-            .data_out (evict_tag)
+            .sel_in   (evict_way_r),
+            .data_out (evict_tag_r)
         );
-    end else begin : g_evict_way_0
-        assign evict_way = 1'b1;
-        assign evict_tag = read_tag;
+    end else begin : g_evict_tag_wt
+        assign evict_tag_r = '0;
     end
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_tag_store
 
-        wire do_fill    = fill  && evict_way[i];
-        wire do_flush   = flush && (!WRITEBACK || way_idx[i]); // flush the whole line in writethrough mode
-        wire do_write   = WRITEBACK && write && tag_matches[i];
+        wire do_fill    = fill && evict_way[i];
+        wire do_flush   = flush && (!WRITEBACK || evict_way[i]); // flush the whole line in writethrough mode
 
-        wire line_read  = (WRITEBACK && (fill || flush));
-        wire line_write = init || do_fill || do_flush || do_write;
-        wire line_valid = ~(init || flush);
+        wire line_read  = lookup || (WRITEBACK && (fill || flush));
+        wire line_write = init || do_fill || do_flush;
+        wire line_valid = fill;
 
         wire [TAG_WIDTH-1:0] line_wdata;
         wire [TAG_WIDTH-1:0] line_rdata;
 
-        if (WRITEBACK) begin : g_writeback
-            assign line_wdata = {line_valid, write, line_tag};
-            assign {read_valid[i], read_dirty[i], read_tag[i]} = line_rdata;
-        end else begin : g_writethrough
-            assign line_wdata = {line_valid, line_tag};
-            assign {read_valid[i], read_tag[i]} = line_rdata;
-            assign read_dirty[i] = 1'b0;
-        end
+        assign line_wdata = {line_valid, line_tag};
+        assign {read_valid[i], read_tag[i]} = line_rdata;
 
         VX_sp_ram #(
             .DATAW (TAG_WIDTH),
             .SIZE  (`CS_LINES_PER_BANK),
-            .NO_RWCHECK (1),
-            .RW_ASSERT (1)
+            .OUT_REG (1)
         ) tag_store (
             .clk   (clk),
             .reset (reset),
@@ -132,40 +117,10 @@ module VX_cache_tags #(
         );
     end
 
+    `BUFFER_EX(line_tag_r, line_tag, ~stall, 1);
+
     for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_tag_matches
-        assign tag_matches[i] = read_valid[i] && (line_tag == read_tag[i]);
+        assign tag_matches_r[i] = read_valid[i] && (line_tag_r == read_tag[i]);
     end
-
-    assign evict_dirty = | (read_dirty & evict_way);
-
-`ifdef DBG_TRACE_CACHE
-    wire [`CS_LINE_ADDR_WIDTH-1:0] evict_line_addr = {evict_tag, line_idx};
-    always @(posedge clk) begin
-        if (fill) begin
-            `TRACE(3, ("%t: %s fill: addr=0x%0h, way=%b, line=%0d, tag_id=0x%0h, dirty=%b, evict_addr=0x%0h\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), evict_way, line_idx, line_tag, evict_dirty, `CS_LINE_TO_FULL_ADDR(evict_line_addr, BANK_ID)))
-        end
-        if (init) begin
-            `TRACE(3, ("%t: %s init: addr=0x%0h, line=%0d\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_idx))
-        end
-        if (flush) begin
-            `TRACE(3, ("%t: %s flush: addr=0x%0h, way=%b, line=%0d, dirty=%b\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(evict_line_addr, BANK_ID), way_idx, line_idx, evict_dirty))
-        end
-        if (lookup) begin
-            if (tag_matches != 0) begin
-                if (write) begin
-                    `TRACE(3, ("%t: %s write-hit: addr=0x%0h, way=%b, line=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_idx, line_tag, req_uuid))
-                end else begin
-                    `TRACE(3, ("%t: %s read-hit: addr=0x%0h, way=%b, line=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), tag_matches, line_idx, line_tag, req_uuid))
-                end
-            end else begin
-                if (write) begin
-                    `TRACE(3, ("%t: %s write-miss: addr=0x%0h, line=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_idx, line_tag, req_uuid))
-                end else begin
-                    `TRACE(3, ("%t: %s read-miss: addr=0x%0h, line=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_idx, line_tag, req_uuid))
-                end
-            end
-        end
-    end
-`endif
 
 endmodule
