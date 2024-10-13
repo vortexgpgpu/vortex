@@ -83,7 +83,7 @@ module VX_fifo_queue #(
             reg [ADDRW-1:0] rd_ptr_n_r, rd_ptr_n_n;
 
             always @(*) begin
-                rd_ptr_n_n = rd_ptr_r;
+                rd_ptr_n_n = rd_ptr_n_r;
                 if (pop) begin
                     if (DEPTH > 2) begin
                         rd_ptr_n_n = rd_ptr_r + ADDRW'(2);
@@ -97,7 +97,7 @@ module VX_fifo_queue #(
                 if (reset) begin
                     wr_ptr_r <= '0;
                     rd_ptr_r <= '0;
-                    rd_ptr_n_r <= '0;
+                    rd_ptr_n_r <= 1;
                 end else begin
                     wr_ptr_r <= wr_ptr_r + ADDRW'(push);
                     if (pop) begin
