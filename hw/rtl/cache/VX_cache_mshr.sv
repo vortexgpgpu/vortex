@@ -169,6 +169,9 @@ module VX_cache_mshr #(
             if (finalize_is_release) begin
                 valid_table_n[finalize_id] = 0;
             end
+            // warning: This code allows 'finalize_is_pending' to be asserted regardless of hit/miss
+            // to reduce the its propagation delay into the MSHR. this is safe because wrong updates
+            // to 'next_table_n' will be cleared during 'allocate_fire' below.
             if (finalize_is_pending) begin
                 next_table_x[finalize_previd] = 1;
             end
