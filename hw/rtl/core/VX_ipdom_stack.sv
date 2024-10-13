@@ -30,22 +30,20 @@ module VX_ipdom_stack #(
     output wire             empty,
     output wire             full
 );
-    reg slot_set [DEPTH-1:0];
-
     reg [ADDRW-1:0] rd_ptr, rd_ptr_n, wr_ptr;
 
     reg empty_r, full_r;
 
     wire [WIDTH-1:0] d0, d1;
 
-    wire d_set_n = slot_set[rd_ptr];
+    wire d_set_r;
 
     always @(*) begin
         rd_ptr_n = rd_ptr;
         if (push) begin
             rd_ptr_n = wr_ptr;
         end else if (pop) begin
-            rd_ptr_n = rd_ptr - ADDRW'(d_set_n);
+            rd_ptr_n = rd_ptr - ADDRW'(d_set_r);
         end
     end
 
@@ -64,49 +62,30 @@ module VX_ipdom_stack #(
                 empty_r <= 0;
                 full_r  <= (ADDRW'(DEPTH-1) == wr_ptr);
             end else if (pop) begin
-                wr_ptr  <= wr_ptr - ADDRW'(d_set_n);
-                empty_r <= (rd_ptr == 0) && (d_set_n == 1);
+                wr_ptr  <= wr_ptr - ADDRW'(d_set_r);
+                empty_r <= (rd_ptr == 0) && d_set_r;
                 full_r  <= 0;
             end
             rd_ptr <= rd_ptr_n;
         end
     end
 
+    wire [WIDTH * 2:0] qout = push ? {1'b0, q1, q0} : {1'b1, d1, d0};
+
     VX_dp_ram #(
-        .DATAW (WIDTH * 2),
+        .DATAW (1 + WIDTH * 2),
         .SIZE (DEPTH),
-        .RADDR_REG (1)
+        .OUT_REG (1)
     ) store (
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),
-        .write (push),
+        .write (push || pop),
         .wren  (1'b1),
-        .waddr (wr_ptr),
-        .wdata ({q1, q0}),
+        .waddr (push ? wr_ptr : rd_ptr),
+        .wdata (qout),
         .raddr (rd_ptr_n),
-        .rdata ({d1, d0})
-    );
-
-    always @(posedge clk) begin
-        if (push) begin
-            slot_set[wr_ptr] <= 0;
-        end else if (pop) begin
-            slot_set[rd_ptr] <= 1;
-        end
-    end
-
-    wire d_set_r;
-
-    VX_pipe_register #(
-        .DATAW (1),
-        .DEPTH (0)
-    ) pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (1'b1),
-        .data_in  (d_set_n),
-        .data_out (d_set_r)
+        .rdata ({d_set_r, d1, d0})
     );
 
     assign d     = d_set_r ? d0 : d1;

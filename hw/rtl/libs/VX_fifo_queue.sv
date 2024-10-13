@@ -110,8 +110,7 @@ module VX_fifo_queue #(
             VX_dp_ram #(
                 .DATAW  (DATAW),
                 .SIZE   (DEPTH),
-                .LUTRAM (LUTRAM),
-                .RADDR_REG (1)
+                .LUTRAM (LUTRAM)
             ) dp_ram (
                 .clk   (clk),
                 .reset (reset),
@@ -120,7 +119,7 @@ module VX_fifo_queue #(
                 .wren  (1'b1),
                 .waddr (wr_ptr_r),
                 .wdata (data_in),
-                .raddr (rd_ptr_n_n),
+                .raddr (rd_ptr_n_r),
                 .rdata (dout)
             );
 
@@ -158,8 +157,7 @@ module VX_fifo_queue #(
             VX_dp_ram #(
                 .DATAW  (DATAW),
                 .SIZE   (DEPTH),
-                .LUTRAM (LUTRAM),
-                .RADDR_REG (1)
+                .LUTRAM (LUTRAM)
             ) dp_ram (
                 .clk   (clk),
                 .reset (reset),
@@ -168,7 +166,7 @@ module VX_fifo_queue #(
                 .wren  (1'b1),
                 .waddr (wr_ptr_r),
                 .wdata (data_in),
-                .raddr (rd_ptr_n),
+                .raddr (rd_ptr_r),
                 .rdata (data_out)
             );
 
