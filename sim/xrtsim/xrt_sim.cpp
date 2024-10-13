@@ -333,6 +333,8 @@ private:
     }
 
     device_->ap_rst_n = 1;
+
+    // this AXI device is always ready to accept new requests
     for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
       *m_axi_mem_[i].arready = 1;
       *m_axi_mem_[i].awready = 1;
@@ -381,53 +383,56 @@ private:
   }
 
   void axi_ctrl_bus_reset() {
-    // address read request
+    // read request address
     device_->s_axi_ctrl_arvalid = 0;
     device_->s_axi_ctrl_araddr = 0;
 
-    // data read response
+    // read response
     device_->s_axi_ctrl_rready = 0;
 
-    // address write request
+    // write request address
     device_->s_axi_ctrl_awvalid = 0;
     device_->s_axi_ctrl_awaddr = 0;
 
-    // data write request
+    // write request data
     device_->s_axi_ctrl_wvalid = 0;
     device_->s_axi_ctrl_wdata = 0;
     device_->s_axi_ctrl_wstrb = 0;
 
-    // data write response
+    // write response
     device_->s_axi_ctrl_bready = 0;
   }
 
   void axi_mem_bus_reset() {
     for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
-      // address read request
+      // read request address
       *m_axi_mem_[i].arready = 0;
 
-      // address write request
+      // write request address
       *m_axi_mem_[i].awready = 0;
 
-      // data write request
+      // write request data
       *m_axi_mem_[i].wready = 0;
 
-      // data read response
+      // read response
       *m_axi_mem_[i].rvalid = 0;
 
-      // data write response
+      // write response
       *m_axi_mem_[i].bvalid = 0;
 
       // states
       m_axi_states_[i].write_req_pending = false;
+      m_axi_states_[i].write_rsp_pending = false;
+      m_axi_states_[i].read_rsp_pending = false;
     }
   }
 
   void axi_mem_bus_eval() {
     for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
       // handle read responses
-      if (*m_axi_mem_[i].rvalid && *m_axi_mem_[i].rready) {
-         *m_axi_mem_[i].rvalid = 0;
+      if (*m_axi_mem_[i].rvalid && (*m_axi_mem_[i].rready || ~m_axi_states_[i].read_rsp_pending)) {
+        *m_axi_mem_[i].rvalid = 0;
+        m_axi_states_[i].read_rsp_pending = false;
       }
       if (!*m_axi_mem_[i].rvalid) {
         if (!pending_mem_reqs_[i].empty()
@@ -441,13 +446,15 @@ private:
           *m_axi_mem_[i].rlast  = 1;
           memcpy(m_axi_mem_[i].rdata->data(), mem_rsp->data.data(), PLATFORM_MEMORY_DATA_SIZE);
           pending_mem_reqs_[i].erase(mem_rsp_it);
+          m_axi_states_[i].read_rsp_pending = !*m_axi_mem_[i].rready;
           delete mem_rsp;
         }
       }
 
       // handle write responses
-      if (*m_axi_mem_[i].bvalid && *m_axi_mem_[i].bready) {
+      if (*m_axi_mem_[i].bvalid && (*m_axi_mem_[i].bready || ~m_axi_states_[i].write_rsp_pending)) {
         *m_axi_mem_[i].bvalid = 0;
+        m_axi_states_[i].write_rsp_pending = false;
       }
       if (!*m_axi_mem_[i].bvalid) {
         if (!pending_mem_reqs_[i].empty()
@@ -459,6 +466,7 @@ private:
           *m_axi_mem_[i].bid    = mem_rsp->tag;
           *m_axi_mem_[i].bresp  = 0;
           pending_mem_reqs_[i].erase(mem_rsp_it);
+          m_axi_states_[i].write_rsp_pending = !*m_axi_mem_[i].bready;
           delete mem_rsp;
         }
       }
@@ -487,7 +495,7 @@ private:
         *m_axi_mem_[i].wready = 0;
       }
 
-      // handle address write requestsls 
+      // handle address write requestsls
       if (*m_axi_mem_[i].awvalid && *m_axi_mem_[i].awready && !*m_axi_mem_[i].wready) {
         m_axi_states_[i].write_req_addr = *m_axi_mem_[i].awaddr;
         m_axi_states_[i].write_req_tag = *m_axi_mem_[i].awid;
@@ -537,6 +545,8 @@ private:
     uint64_t write_req_addr;
     uint32_t write_req_tag;
     bool write_req_pending;
+    bool write_rsp_pending;
+    bool read_rsp_pending;
   } m_axi_state_t;
 
   typedef struct {

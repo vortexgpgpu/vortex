@@ -135,7 +135,7 @@ module VX_axi_adapter #(
         );
     end
 
-    wire tbuf_full;
+    wire mem_req_tag_ready;
     wire [TAG_WIDTH_OUT-1:0] mem_req_tag_out;
     wire [TAG_WIDTH_OUT-1:0] mem_rsp_tag_out;
 
@@ -143,13 +143,14 @@ module VX_axi_adapter #(
     if (TAG_WIDTH_IN > TAG_WIDTH_OUT) begin : g_tag_buf
         localparam TBUF_ADDRW = `CLOG2(TAG_BUFFER_SIZE);
         wire [TBUF_ADDRW-1:0] tbuf_waddr, tbuf_raddr;
+        wire tbuf_full;
         VX_index_buffer #(
             .DATAW (TAG_WIDTH_IN),
             .SIZE  (TAG_BUFFER_SIZE)
         ) tag_buf (
             .clk        (clk),
             .reset      (reset),
-            .acquire_en (mem_req_valid && !mem_req_rw && mem_req_ready),
+            .acquire_en (mem_req_valid && ~mem_req_rw && mem_req_ready),
             .write_addr (tbuf_waddr),
             .write_data (mem_req_tag),
             .read_data  (mem_rsp_tag),
@@ -158,22 +159,24 @@ module VX_axi_adapter #(
             .full       (tbuf_full),
             `UNUSED_PIN (empty)
         );
+        assign mem_req_tag_ready = mem_req_rw || ~tbuf_full;
         assign mem_req_tag_out = TAG_WIDTH_OUT'(tbuf_waddr);
         assign tbuf_raddr = mem_rsp_tag_out[TBUF_ADDRW-1:0];
         `UNUSED_VAR (mem_rsp_tag_out)
     end else begin : g_no_tag_buf
-        assign tbuf_full = 0;
+        assign mem_req_tag_ready = 1;
         assign mem_req_tag_out = TAG_WIDTH_OUT'(mem_req_tag);
         assign mem_rsp_tag = mem_rsp_tag_out[TAG_WIDTH_IN-1:0];
         `UNUSED_VAR (mem_rsp_tag_out)
     end
 
     // request ack
-    assign mem_req_ready = (mem_req_rw ? axi_write_ready[req_bank_sel] : m_axi_arready[req_bank_sel]) && ~tbuf_full;
+    assign mem_req_ready = mem_req_rw ? axi_write_ready[req_bank_sel] :
+                                        (m_axi_arready[req_bank_sel] && mem_req_tag_ready);
 
     // AXI write request address channel
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_write_addr
-        assign m_axi_awvalid[i] = mem_req_valid && mem_req_rw && (req_bank_sel == i) && ~tbuf_full && ~m_axi_aw_ack[i];
+        assign m_axi_awvalid[i] = mem_req_valid && mem_req_rw && (req_bank_sel == i) && ~m_axi_aw_ack[i];
         assign m_axi_awaddr[i]  = ADDR_WIDTH_OUT'(req_bank_off) << `CLOG2(DATA_WIDTH/8);
         assign m_axi_awid[i]    = mem_req_tag_out;
         assign m_axi_awlen[i]   = 8'b00000000;
@@ -188,7 +191,7 @@ module VX_axi_adapter #(
 
     // AXI write request data channel
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_write_data
-        assign m_axi_wvalid[i] = mem_req_valid && mem_req_rw && (req_bank_sel == i) && ~tbuf_full && ~m_axi_w_ack[i];
+        assign m_axi_wvalid[i] = mem_req_valid && mem_req_rw && (req_bank_sel == i) && ~m_axi_w_ack[i];
         assign m_axi_wdata[i]  = mem_req_data;
         assign m_axi_wstrb[i]  = mem_req_byteen;
         assign m_axi_wlast[i]  = 1'b1;
@@ -205,7 +208,7 @@ module VX_axi_adapter #(
 
     // AXI read request channel
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_axi_read_req
-        assign m_axi_arvalid[i] = mem_req_valid && ~mem_req_rw && (req_bank_sel == i) && ~tbuf_full;
+        assign m_axi_arvalid[i] = mem_req_valid && ~mem_req_rw && (req_bank_sel == i) && mem_req_tag_ready;
         assign m_axi_araddr[i]  = ADDR_WIDTH_OUT'(req_bank_off) << `CLOG2(DATA_WIDTH/8);
         assign m_axi_arid[i]    = mem_req_tag_out;
         assign m_axi_arlen[i]   = 8'b00000000;
@@ -228,9 +231,8 @@ module VX_axi_adapter #(
         assign rsp_arb_valid_in[i] = m_axi_rvalid[i];
         assign rsp_arb_data_in[i] = {m_axi_rdata[i], m_axi_rid[i]};
         assign m_axi_rready[i] = rsp_arb_ready_in[i];
-        `RUNTIME_ASSERT(~m_axi_rvalid[i] || m_axi_rlast[i] == 1, ("%t: *** AXI response error", $time))
-        `RUNTIME_ASSERT(~m_axi_rvalid[i] || m_axi_rresp[i] == 0, ("%t: *** AXI response error", $time))
-        `UNUSED_VAR (m_axi_rlast[i])
+        `RUNTIME_ASSERT(~(m_axi_rvalid[i] && m_axi_rlast[i] == 0), ("%t: *** AXI response error", $time))
+        `RUNTIME_ASSERT(~(m_axi_rvalid[i] && m_axi_rresp[i] != 0), ("%t: *** AXI response error", $time))
     end
 
     VX_stream_arb #(
