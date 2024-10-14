@@ -122,6 +122,10 @@ private:
 
   void update_fcrs(uint32_t fflags, uint32_t tid, uint32_t wid);
 
+  void trigger_ecall(); // Re-added for riscv-vector test functionality
+
+  void trigger_ebreak(); // Re-added for riscv-vector test functionality
+
   const Arch& arch_;
   const DCRS& dcrs_;
   Core*       core_;
