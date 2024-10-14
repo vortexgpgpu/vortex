@@ -70,7 +70,7 @@ for testcase in ${testcases[@]}; do
     ln -s "$f" "$f.elf";
     "$RISCV_TOOLCHAIN_PATH"/bin/riscv"$XLEN"-unknown-elf-objdump -D "$f.elf" > "$f.dump";
     "$RISCV_TOOLCHAIN_PATH"/bin/riscv"$XLEN"-unknown-elf-objcopy -O binary "$f.elf" "$f.bin";
-    $SCRIPT_DIR/../../../sim/simx/simx -r -c 1 "$f.bin" &> "$f.log";
+    $SCRIPT_DIR/../../../sim/simx/simx -c 1 "$f.bin" &> "$f.log";
     if [ $? -eq 13 ]; then
       echo "$f PASSED"
       let "passed++"
