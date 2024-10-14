@@ -1,3 +1,7 @@
+// This is a fork of https://github.com/troibe/vortex/tree/simx-v2-vector
+// The purpose of this fork is to make the simx-v2-vector up to date with master
+// Thanks to Troibe for his amazing work
+
 #include <iostream>
 #include <stdlib.h>
 #include <math.h>

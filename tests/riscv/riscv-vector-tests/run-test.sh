@@ -49,7 +49,9 @@ else
   testcases="${@}"
 fi
 
-cd "testcases/v"$VLEN"x"$XLEN
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+RESTORE_PREV_DIR=$(pwd)
+cd $SCRIPT_DIR/testcases/v$VLEN"x"$XLEN
 passed=0
 failed=0
 selected=0
@@ -57,7 +59,7 @@ selected=0
 rm *".ddr4.log"
 for testcase in ${testcases[@]}; do
   rm "$testcase"*.elf "$testcase"*.bin "$testcase"*.dump "$testcase"*.log
-  # cp -f ../../../../../third_party/riscv-vector-tests/out/v"$VLEN"x"$XLEN"machine/bin/stage2/"$testcase"* .
+  # cp -f $SCRIPT_DIR/../../../../../third_party/riscv-vector-tests/out/v"$VLEN"x"$XLEN"machine/bin/stage2/"$testcase"* .
 done
 
 # count all available testcases, exclude *.elf, *.bin, *.dump, *.log to prevent double counting
@@ -68,8 +70,8 @@ for testcase in ${testcases[@]}; do
     ln -s "$f" "$f.elf";
     "$RISCV_TOOLCHAIN_PATH"/bin/riscv"$XLEN"-unknown-elf-objdump -D "$f.elf" > "$f.dump";
     "$RISCV_TOOLCHAIN_PATH"/bin/riscv"$XLEN"-unknown-elf-objcopy -O binary "$f.elf" "$f.bin";
-    ../../../../../sim/simx/simx -r -c 1 "$f.bin" &> "$f.log";
-    if [ $? -eq 0 ]; then
+    $SCRIPT_DIR/../../../sim/simx/simx -r -c 1 "$f.bin" &> "$f.log";
+    if [ $? -eq 13 ]; then
       echo "$f PASSED"
       let "passed++"
     else
@@ -79,7 +81,7 @@ for testcase in ${testcases[@]}; do
     let "selected++"
   done
 done
-cd ../..
+cd $RESTORE_PREV_DIR
 echo "Passed $passed out of $selected selected vector tests."
 echo "Total available vector tests: $all"
 exit $failed
