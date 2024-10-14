@@ -35,6 +35,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <assert.h>
 #include <stdbool.h>
+#include <internals.h>
+#include <../RISCV/specialize.h>
 #include "softfloat_ext.h"
 
 static inline uint64_t extract64(uint64_t val, int pos, int len)
