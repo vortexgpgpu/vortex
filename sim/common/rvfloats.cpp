@@ -16,6 +16,7 @@
 
 extern "C" {
 #include <softfloat.h>
+#include "softfloat_ext.h"
 #include <internals.h>
 #include <../RISCV/specialize.h>
 }
