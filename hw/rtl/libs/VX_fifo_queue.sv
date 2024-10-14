@@ -42,6 +42,9 @@ module VX_fifo_queue #(
     `STATIC_ASSERT(ALM_EMPTY < DEPTH, ("alm_empty must be smaller than size!"))
     `STATIC_ASSERT(`IS_POW2(DEPTH), ("depth must be a power of 2!"))
 
+    `UNUSED_PARAM (OUT_REG)
+    `UNUSED_PARAM (LUTRAM)
+
     VX_pending_size #(
         .SIZE      (DEPTH),
         .ALM_EMPTY (ALM_EMPTY),
@@ -74,102 +77,89 @@ module VX_fifo_queue #(
 
         localparam ADDRW = `CLOG2(DEPTH);
 
+        wire [DATAW-1:0] data_out_w;
+        reg [ADDRW-1:0] rd_ptr_r, rd_ptr_n;
+        reg [ADDRW-1:0] wr_ptr_r;
+
+        always @(*) begin
+            rd_ptr_n = rd_ptr_r + ADDRW'(pop);
+        end
+
+        always @(posedge clk) begin
+            if (reset) begin
+                wr_ptr_r <= '0;
+                rd_ptr_r <= (OUT_REG != 0) ? 1 : 0;
+            end else begin
+                wr_ptr_r <= wr_ptr_r + ADDRW'(push);
+                rd_ptr_r <= rd_ptr_n;
+            end
+        end
+
+        wire [ADDRW-1:0] rd_ptr_w = LUTRAM ? rd_ptr_r : rd_ptr_n;
+
+        wire going_empty = (ALM_EMPTY == 1) ? alm_empty : (size[ADDRW-1:0] == ADDRW'(1));
+        wire bypass = push && (empty || (going_empty && pop));
+        wire read = ((OUT_REG != 0) || !LUTRAM) ? ~bypass : pop;
+
+        VX_dp_ram #(
+            .DATAW  (DATAW),
+            .SIZE   (DEPTH),
+            .LUTRAM (LUTRAM),
+            .OUT_REG(!LUTRAM)
+        ) dp_ram (
+            .clk   (clk),
+            .reset (reset),
+            .read  (read),
+            .write (push),
+            .wren  (1'b1),
+            .waddr (wr_ptr_r),
+            .wdata (data_in),
+            .raddr (rd_ptr_w),
+            .rdata (data_out_w)
+        );
+
         if (OUT_REG != 0) begin : g_out_reg
+            reg [DATAW-1:0] data_out_r, data_out_n;
 
-            wire [DATAW-1:0] dout;
-            reg [DATAW-1:0] dout_r;
-            reg [ADDRW-1:0] wr_ptr_r;
-            reg [ADDRW-1:0] rd_ptr_r;
-            reg [ADDRW-1:0] rd_ptr_n_r, rd_ptr_n_n;
-
-            always @(*) begin
-                rd_ptr_n_n = rd_ptr_n_r;
-                if (pop) begin
-                    if (DEPTH > 2) begin
-                        rd_ptr_n_n = rd_ptr_r + ADDRW'(2);
-                    end else begin // (DEPTH == 2);
-                        rd_ptr_n_n = ~rd_ptr_n_r;
+            if (LUTRAM) begin : g_lutram
+                assign data_out_n = data_out_w;
+            end else begin : g_no_lutram
+                reg [DATAW-1:0] data_out_p;
+                reg rdw_hazard_r;
+                wire rdw_hazard = push && (wr_ptr_r == rd_ptr_w);
+                always @(posedge clk) begin
+                    if (rdw_hazard) begin
+                        data_out_p <= data_in;
                     end
+                    rdw_hazard_r <= rdw_hazard;
                 end
+                assign data_out_n = rdw_hazard_r ? data_out_p : data_out_w;
             end
 
             always @(posedge clk) begin
-                if (reset) begin
-                    wr_ptr_r <= '0;
-                    rd_ptr_r <= '0;
-                    rd_ptr_n_r <= 1;
-                end else begin
-                    wr_ptr_r <= wr_ptr_r + ADDRW'(push);
-                    if (pop) begin
-                        rd_ptr_r <= rd_ptr_n_r;
-                    end
-                    rd_ptr_n_r <= rd_ptr_n_n;
-                end
-            end
-
-            VX_dp_ram #(
-                .DATAW  (DATAW),
-                .SIZE   (DEPTH),
-                .LUTRAM (LUTRAM)
-            ) dp_ram (
-                .clk   (clk),
-                .reset (reset),
-                .read  (1'b1),
-                .write (push),
-                .wren  (1'b1),
-                .waddr (wr_ptr_r),
-                .wdata (data_in),
-                .raddr (rd_ptr_n_r),
-                .rdata (dout)
-            );
-
-            wire going_empty = (ALM_EMPTY == 1) ? alm_empty : (size[ADDRW-1:0] == ADDRW'(1));
-
-            always @(posedge clk) begin
-                if (push && (empty || (going_empty && pop))) begin
-                    dout_r <= data_in;
+                if (bypass) begin
+                    data_out_r <= data_in;
                 end else if (pop) begin
-                    dout_r <= dout;
+                    data_out_r <= data_out_n;
                 end
             end
 
-            assign data_out = dout_r;
+            assign data_out = data_out_r;
 
         end else begin : g_no_out_reg
-
-            reg [ADDRW-1:0] rd_ptr_r, rd_ptr_n;
-            reg [ADDRW-1:0] wr_ptr_r;
-
-            always @(*) begin
-                rd_ptr_n = rd_ptr_r + ADDRW'(pop);
-            end
-
-            always @(posedge clk) begin
-                if (reset) begin
-                    wr_ptr_r <= '0;
-                    rd_ptr_r <= '0;
-                end else begin
-                    wr_ptr_r <= wr_ptr_r + ADDRW'(push);
-                    rd_ptr_r <= rd_ptr_n;
+            if (LUTRAM) begin : g_lutram
+                assign data_out = data_out_w;
+            end else begin : g_no_lutram
+                reg [DATAW-1:0] data_in_r;
+                reg bypass_r;
+                always @(posedge clk) begin
+                    if (bypass) begin
+                        data_in_r <= data_in;
+                    end
+                    bypass_r <= bypass;
                 end
+                assign data_out = bypass_r ? data_in_r : data_out_w;
             end
-
-            VX_dp_ram #(
-                .DATAW  (DATAW),
-                .SIZE   (DEPTH),
-                .LUTRAM (LUTRAM)
-            ) dp_ram (
-                .clk   (clk),
-                .reset (reset),
-                .read  (1'b1),
-                .write (push),
-                .wren  (1'b1),
-                .waddr (wr_ptr_r),
-                .wdata (data_in),
-                .raddr (rd_ptr_r),
-                .rdata (data_out)
-            );
-
         end
     end
 

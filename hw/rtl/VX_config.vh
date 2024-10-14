@@ -480,7 +480,7 @@
 
 // Number of Associative Ways
 `ifndef ICACHE_NUM_WAYS
-`define ICACHE_NUM_WAYS 1
+`define ICACHE_NUM_WAYS 4
 `endif
 
 // Dcache Configurable Knobs //////////////////////////////////////////////////
@@ -529,12 +529,12 @@
 
 // Memory Response Queue Size
 `ifndef DCACHE_MRSQ_SIZE
-`define DCACHE_MRSQ_SIZE 0
+`define DCACHE_MRSQ_SIZE 4
 `endif
 
 // Number of Associative Ways
 `ifndef DCACHE_NUM_WAYS
-`define DCACHE_NUM_WAYS 1
+`define DCACHE_NUM_WAYS 4
 `endif
 
 // Enable Cache Writeback
@@ -594,12 +594,12 @@
 
 // Memory Response Queue Size
 `ifndef L2_MRSQ_SIZE
-`define L2_MRSQ_SIZE 0
+`define L2_MRSQ_SIZE 4
 `endif
 
 // Number of Associative Ways
 `ifndef L2_NUM_WAYS
-`define L2_NUM_WAYS 2
+`define L2_NUM_WAYS 4
 `endif
 
 // Enable Cache Writeback
@@ -641,7 +641,7 @@
 
 // Memory Response Queue Size
 `ifndef L3_MRSQ_SIZE
-`define L3_MRSQ_SIZE 0
+`define L3_MRSQ_SIZE 4
 `endif
 
 // Number of Associative Ways

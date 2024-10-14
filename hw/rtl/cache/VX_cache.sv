@@ -402,8 +402,8 @@ module VX_cache import VX_gpu_pkg::*; #(
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (TAG_WIDTH),
             .FLAGS_WIDTH  (FLAGS_WIDTH),
-            .CORE_OUT_REG (CORE_RSP_REG_DISABLE ? 0 : `TO_OUT_BUF_REG(CORE_OUT_BUF)),
-            .MEM_OUT_REG  (MEM_REQ_REG_DISABLE ? 0 : `TO_OUT_BUF_REG(MEM_OUT_BUF))
+            .CORE_OUT_REG (CORE_RSP_REG_DISABLE ? 0 : 1),
+            .MEM_OUT_REG  (MEM_REQ_REG_DISABLE ? 0 : 1)
         ) bank (
             .clk                (clk),
             .reset              (reset),
