@@ -169,7 +169,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .OUT_REG (1),
             .READ_ENABLE (0),
             .NO_RWCHECK (1)
-        ) data_store (
+        ) lmem_store (
             .clk   (clk),
             .reset (reset),
             .read  (per_bank_req_valid[i] && per_bank_req_ready[i] && ~per_bank_req_rw[i]),

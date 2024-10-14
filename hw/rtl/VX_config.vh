@@ -544,7 +544,7 @@
 
 // Enable Cache Dirty bytes
 `ifndef DCACHE_DIRTYBYTES
-`define DCACHE_DIRTYBYTES 0
+`define DCACHE_DIRTYBYTES 1
 `endif
 
 // LMEM Configurable Knobs ////////////////////////////////////////////////////
@@ -609,7 +609,7 @@
 
 // Enable Cache Dirty bytes
 `ifndef L2_DIRTYBYTES
-`define L2_DIRTYBYTES 0
+`define L2_DIRTYBYTES 1
 `endif
 
 // L3cache Configurable Knobs /////////////////////////////////////////////////
@@ -656,7 +656,7 @@
 
 // Enable Cache Dirty bytes
 `ifndef L3_DIRTYBYTES
-`define L3_DIRTYBYTES 0
+`define L3_DIRTYBYTES 1
 `endif
 
 `ifndef MEMORY_BANKS

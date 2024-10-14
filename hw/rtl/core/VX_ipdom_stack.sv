@@ -76,7 +76,7 @@ module VX_ipdom_stack #(
         .DATAW (1 + WIDTH * 2),
         .SIZE (DEPTH),
         .OUT_REG (1)
-    ) store (
+    ) ipdom_store (
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),

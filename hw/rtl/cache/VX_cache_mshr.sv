@@ -222,7 +222,7 @@ module VX_cache_mshr #(
         .DATAW (DATA_WIDTH),
         .SIZE  (MSHR_SIZE),
         .OUT_REG (1)
-    ) entries (
+    ) mshr_store (
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),
