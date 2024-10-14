@@ -1,8 +1,5 @@
 #include <stdint.h>
-
-typedef struct { uint16_t v; } float16_t;
-typedef struct { uint32_t v; } float32_t;
-typedef struct { uint64_t v; } float64_t;
+#include <softfloat.h>
 
 float16_t f16_rsqrte7( float16_t );
 float16_t f16_recip7( float16_t );
