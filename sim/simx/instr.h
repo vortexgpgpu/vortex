@@ -44,13 +44,13 @@ enum class Opcode {
   I_W       = 0x1b,
   // Custom Extensions
   EXT1      = 0x0b,
-  EXT2      = 0x2b,
-  EXT3      = 0x5b,
-  EXT4      = 0x7b,
+  // EXT2      = 0x2b,
+  // EXT3      = 0x5b,
+  // EXT4      = 0x7b,
   // CUDA Vote Extension
-  VOTE      = 0x5a,
-  SHFL      = 0x5c,
-  TILE      = 0x5d
+  VOTE      = 0x2b,
+  SHFL      = 0x5b,
+  TILE      = 0x7b
 };
 
 enum class InstType {
