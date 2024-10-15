@@ -473,7 +473,7 @@ module VX_mem_scheduler #(
 
         for (genvar i = 0; i < CORE_CHANNELS; ++i) begin : g_rsp_store
             for (genvar j = 0; j < CORE_BATCHES; ++j) begin : g_j
-                reg [WORD_WIDTH-1:0] rsp_store [CORE_QUEUE_SIZE-1:0];
+                reg [WORD_WIDTH-1:0] rsp_store [0:CORE_QUEUE_SIZE-1];
                 wire rsp_wren = mem_rsp_fire_s
                              && (BATCH_SEL_WIDTH'(j) == rsp_batch_idx)
                              && ((CORE_CHANNELS == 1) || mem_rsp_mask_s[i]);

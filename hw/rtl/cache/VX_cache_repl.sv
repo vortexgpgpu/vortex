@@ -25,7 +25,7 @@ module plru_decoder #(
     input wire [`UP(NUM_WAYS-1)-1:0] lru_in,
     output wire [`UP(NUM_WAYS-1)-1:0] lru_out
 );
-    if (NUM_WAYS != 1) begin : g_plru_decoder
+    if (NUM_WAYS > 1) begin : g_dec
         wire [`UP(NUM_WAYS-1)-1:0] data;
     `IGNORE_UNOPTFLAT_BEGIN
         wire [`UP(NUM_WAYS-1)-1:0] mask;
@@ -41,7 +41,7 @@ module plru_decoder #(
             assign data[i] = ~way_idx[WAY_IDX_BITS-$clog2(i+2)];
         end
         assign lru_out = (data & mask) | (lru_in & ~mask);
-    end else begin : g_plru_decoder_1
+    end else begin : g_no_dec
         `UNUSED_VAR (way_idx)
         `UNUSED_VAR (lru_in)
         assign lru_out = '0;
@@ -57,17 +57,19 @@ module plru_encoder #(
     input wire [`UP(NUM_WAYS-1)-1:0] lru_in,
     output wire [WAY_IDX_WIDTH-1:0] way_idx
 );
-    if (NUM_WAYS != 1) begin : g_plru_encoder
-        wire [WAY_IDX_WIDTH-1:0] tmp;
-        for (genvar i = 0; i < WAY_IDX_WIDTH; ++i) begin : g_i
-            if (i == 0) begin : g_i_0
-                assign tmp[WAY_IDX_WIDTH-1] = lru_in[0];
-            end else begin : g_i_n
-                assign tmp[WAY_IDX_WIDTH-1-i] = lru_in[((2**i)-1)+:(1 << i)][tmp[WAY_IDX_WIDTH-1-:i]];
-            end
+    if (NUM_WAYS > 1) begin : g_enc
+        wire [WAY_IDX_BITS-1:0] tmp;
+        for (genvar i = 0; i < WAY_IDX_BITS; ++i) begin : g_i
+            VX_mux #(
+                .N (2**i)
+            ) mux (
+                .data_in  (lru_in[((2**i)-1)+:(2**i)]),
+                .sel_in   (tmp[WAY_IDX_BITS-1-:i]),
+                .data_out (tmp[WAY_IDX_BITS-1-i])
+            );
         end
         assign way_idx = tmp;
-    end else begin : g_plru_encoder_1
+    end else begin : g_no_enc
         `UNUSED_VAR (lru_in)
         assign way_idx = '0;
     end
@@ -105,7 +107,7 @@ module VX_cache_repl #(
         localparam LRU_WIDTH = NUM_WAYS-1;
         `UNUSED_VAR (repl_valid)
 
-        reg [`CS_LINES_PER_BANK-1:0][`UP(LRU_WIDTH)-1:0] plru_tree;
+        reg [`UP(LRU_WIDTH)-1:0] plru_tree [0:`CS_LINES_PER_BANK-1];
 
         wire [WAY_IDX_WIDTH-1:0] repl_way_idx;
         wire [WAY_IDX_WIDTH-1:0] hit_way_idx;
@@ -158,11 +160,9 @@ module VX_cache_repl #(
         `UNUSED_VAR (hit_valid)
         `UNUSED_VAR (hit_line)
         `UNUSED_VAR (hit_way)
-        reg [`CS_LINES_PER_BANK-1:0][`UP(CTR_WIDTH)-1:0] counters;
+        reg [`UP(CTR_WIDTH)-1:0] counters [0:`CS_LINES_PER_BANK-1];
         always @(posedge clk) begin
-            if (reset) begin
-                counters <= '0;
-            end else if (repl_valid) begin
+            if (repl_valid) begin
                 counters[repl_line] <= counters[repl_line] + 1;
             end
         end
@@ -180,7 +180,7 @@ module VX_cache_repl #(
         `UNUSED_VAR (hit_way)
         `UNUSED_VAR (repl_valid)
         `UNUSED_VAR (repl_line)
-        if (NUM_WAYS != 1) begin : g_repl_way
+        if (NUM_WAYS > 1) begin : g_repl_way
             reg [NUM_WAYS-1:0] victim_way;
             always @(posedge clk) begin
                 if (reset) begin
