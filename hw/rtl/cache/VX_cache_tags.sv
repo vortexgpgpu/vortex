@@ -37,12 +37,11 @@ module VX_cache_tags #(
     input wire                          fill,
     input wire                          lookup,
     input wire [`CS_LINE_ADDR_WIDTH-1:0] line_addr,
-    input wire [NUM_WAYS-1:0]           flush_way,
+    input wire [NUM_WAYS-1:0]           evict_way,
 
     // outputs
     output wire [NUM_WAYS-1:0]          tag_matches_r,
     output wire [`CS_TAG_SEL_BITS-1:0]  line_tag_r,
-    output wire [NUM_WAYS-1:0]          evict_way,
     output wire [NUM_WAYS-1:0]          evict_way_r,
     output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag_r
 );
@@ -56,20 +55,9 @@ module VX_cache_tags #(
     wire [NUM_WAYS-1:0] read_valid;
 
     if (NUM_WAYS > 1) begin : g_evict_way
-        reg [NUM_WAYS-1:0] victim_way;
-        // cyclic assignment of replacement way
-        always @(posedge clk) begin
-            if (reset) begin
-                victim_way <= 1;
-            end else if (~stall) begin
-                victim_way <= {victim_way[NUM_WAYS-2:0], victim_way[NUM_WAYS-1]};
-            end
-        end
-        assign evict_way = fill ? victim_way : flush_way;
         `BUFFER_EX(evict_way_r, evict_way, ~stall, 1);
     end else begin : g_evict_way_0
-        `UNUSED_VAR (flush_way)
-        assign evict_way   = 1'b1;
+        `UNUSED_VAR (evict_way)
         assign evict_way_r = 1'b1;
     end
 

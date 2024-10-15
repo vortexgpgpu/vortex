@@ -151,6 +151,10 @@
 `define L3_LINE_SIZE `MEM_BLOCK_SIZE
 `endif
 
+`ifndef MEMORY_BANKS
+`define MEMORY_BANKS 2
+`endif
+
 `ifdef XLEN_64
 
 `ifndef STACK_BASE_ADDR
@@ -483,6 +487,11 @@
 `define ICACHE_NUM_WAYS 4
 `endif
 
+// Replacement Policy
+`ifndef ICACHE_REPL_POLICY
+`define ICACHE_REPL_POLICY 1
+`endif
+
 // Dcache Configurable Knobs //////////////////////////////////////////////////
 
 // Cache Enable
@@ -545,6 +554,11 @@
 // Enable Cache Dirty bytes
 `ifndef DCACHE_DIRTYBYTES
 `define DCACHE_DIRTYBYTES `DCACHE_WRITEBACK
+`endif
+
+// Replacement Policy
+`ifndef DCACHE_REPL_POLICY
+`define DCACHE_REPL_POLICY 1
 `endif
 
 // LMEM Configurable Knobs ////////////////////////////////////////////////////
@@ -612,6 +626,11 @@
 `define L2_DIRTYBYTES `L2_WRITEBACK
 `endif
 
+// Replacement Policy
+`ifndef L2_REPL_POLICY
+`define L2_REPL_POLICY 1
+`endif
+
 // L3cache Configurable Knobs /////////////////////////////////////////////////
 
 // Cache Size
@@ -659,8 +678,9 @@
 `define L3_DIRTYBYTES `L3_WRITEBACK
 `endif
 
-`ifndef MEMORY_BANKS
-`define MEMORY_BANKS 2
+// Replacement Policy
+`ifndef L3_REPL_POLICY
+`define L3_REPL_POLICY 1
 `endif
 
 // Number of Memory Ports from LLC

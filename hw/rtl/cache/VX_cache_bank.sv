@@ -47,6 +47,9 @@ module VX_cache_bank #(
     // Enable dirty bytes on writeback
     parameter DIRTY_BYTES       = 0,
 
+    // Replacement policy
+    parameter REPL_POLICY = `CS_REPL_CYCLIC,
+
     // Request debug identifier
     parameter UUID_WIDTH        = 0,
 
@@ -324,6 +327,14 @@ module VX_cache_bank #(
     wire do_write_st0 = valid_st0 && is_write_st0;
     wire do_fill_st0  = valid_st0 && is_fill_st0;
 
+    wire is_read_st1  = is_creq_st1 && ~rw_st1;
+    wire is_write_st1 = is_creq_st1 && rw_st1;
+
+    wire do_read_st1  = valid_st1 && is_read_st1;
+    wire do_write_st1 = valid_st1 && is_write_st1;
+    wire do_fill_st1  = valid_st1 && is_fill_st1;
+    wire do_flush_st1 = valid_st1 && is_flush_st1 && WRITEBACK;
+
     assign write_data_st0 = data_st0[`CS_WORD_WIDTH-1:0];
 
     assign line_idx_st0 = addr_st0[`CS_LINE_SEL_BITS-1:0];
@@ -331,7 +342,31 @@ module VX_cache_bank #(
     wire [`CS_TAG_SEL_BITS-1:0] evict_tag_st1;
     wire [NUM_WAYS-1:0] tag_matches_st1;
 
+    wire is_hit_st1 = (| tag_matches_st1);
+
     wire do_lookup_st0 = do_read_st0 || do_write_st0;
+
+    reg [NUM_WAYS-1:0] victim_way_st0;
+
+    VX_cache_repl #(
+        .CACHE_SIZE  (CACHE_SIZE),
+        .LINE_SIZE   (LINE_SIZE),
+        .NUM_BANKS   (NUM_BANKS),
+        .NUM_WAYS    (NUM_WAYS),
+        .REPL_POLICY (REPL_POLICY)
+    ) cache_repl (
+        .clk        (clk),
+        .reset      (reset),
+        .stall      (pipe_stall),
+        .hit_valid  ((do_read_st1 || do_write_st1) && is_hit_st1),
+        .hit_line   (line_idx_st1),
+        .hit_way    (tag_matches_st1),
+        .repl_valid (do_fill_st0),
+        .repl_line  (line_idx_st0),
+        .repl_way   (victim_way_st0)
+    );
+
+    assign evict_way_st0 = is_fill_st0 ? victim_way_st0 : flush_way_st0;
 
     VX_cache_tags #(
         .CACHE_SIZE (CACHE_SIZE),
@@ -350,12 +385,11 @@ module VX_cache_bank #(
         .fill       (do_fill_st0 && ~pipe_stall),
         .lookup     (do_lookup_st0 && ~pipe_stall),
         .line_addr  (addr_st0),
-        .flush_way  (flush_way_st0),
+        .evict_way  (evict_way_st0),
         // outputs
         .tag_matches_r(tag_matches_st1),
         .line_tag_r (line_tag_st1),
         .evict_tag_r(evict_tag_st1),
-        .evict_way  (evict_way_st0),
         .evict_way_r(evict_way_st1)
     );
 
@@ -374,22 +408,11 @@ module VX_cache_bank #(
         .data_out ({valid_st1, is_fill_st1, is_flush_st1, is_creq_st1, is_replay_st1, rw_st1, flags_st1, line_idx_st1, data_st1, byteen_st1, word_idx_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_prev_id_st1, mshr_pending_st1})
     );
 
-    // we have a tag hit
-    wire is_hit_st1 = (| tag_matches_st1);
-
     if (UUID_WIDTH != 0) begin : g_req_uuid_st1
         assign req_uuid_st1 = tag_st1[TAG_WIDTH-1 -: UUID_WIDTH];
     end else begin : g_req_uuid_st1_0
         assign req_uuid_st1 = '0;
     end
-
-    wire is_read_st1  = is_creq_st1 && ~rw_st1;
-    wire is_write_st1 = is_creq_st1 && rw_st1;
-
-    wire do_read_st1  = valid_st1 && is_read_st1;
-    wire do_write_st1 = valid_st1 && is_write_st1;
-    wire do_fill_st1  = valid_st1 && is_fill_st1;
-    wire do_flush_st1 = valid_st1 && is_flush_st1 && WRITEBACK;
 
     assign addr_st1 = {line_tag_st1, line_idx_st1};
 

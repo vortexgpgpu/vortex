@@ -103,6 +103,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .FLAGS_WIDTH    (0),
         .UUID_WIDTH     (`UUID_WIDTH),
         .WRITE_ENABLE   (0),
+        .REPL_POLICY    (`ICACHE_REPL_POLICY),
         .NC_ENABLE      (0),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (2)
@@ -151,6 +152,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`DCACHE_WRITEBACK),
         .DIRTY_BYTES    (`DCACHE_DIRTYBYTES),
+        .REPL_POLICY    (`DCACHE_REPL_POLICY),
         .NC_ENABLE      (1),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (2)

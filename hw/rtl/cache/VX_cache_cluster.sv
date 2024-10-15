@@ -52,6 +52,9 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     // Enable dirty bytes on writeback
     parameter DIRTY_BYTES           = 0,
 
+    // Replacement policy
+    parameter REPL_POLICY = `CS_REPL_CYCLIC,
+
     // Request debug identifier
     parameter UUID_WIDTH            = 0,
 
@@ -150,13 +153,14 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .NUM_WAYS     (NUM_WAYS),
             .WORD_SIZE    (WORD_SIZE),
             .NUM_REQS     (NUM_REQS),
+            .WRITE_ENABLE (WRITE_ENABLE),
+            .WRITEBACK    (WRITEBACK),
+            .DIRTY_BYTES  (DIRTY_BYTES),
+            .REPL_POLICY  (REPL_POLICY),
             .CRSQ_SIZE    (CRSQ_SIZE),
             .MSHR_SIZE    (MSHR_SIZE),
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
-            .WRITE_ENABLE (WRITE_ENABLE),
-            .WRITEBACK    (WRITEBACK),
-            .DIRTY_BYTES  (DIRTY_BYTES),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (ARB_TAG_WIDTH),
             .FLAGS_WIDTH  (FLAGS_WIDTH),

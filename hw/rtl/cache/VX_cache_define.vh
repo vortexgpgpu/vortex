@@ -73,4 +73,10 @@
     `PERF_COUNTER_ADD (dst, src, mem_stalls, `PERF_CTR_BITS, count, (count > 1)) \
     `PERF_COUNTER_ADD (dst, src, crsp_stalls, `PERF_CTR_BITS, count, (count > 1))
 
+///////////////////////////////////////////////////////////////////////////////
+
+`define CS_REPL_RANDOM  0
+`define CS_REPL_CYCLIC  1
+`define CS_REPL_PLRU    2
+
 `endif // VX_CACHE_DEFINE_VH

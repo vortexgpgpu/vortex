@@ -222,7 +222,7 @@ endgenerate
 
 `define CLAMP(x, lo, hi)   (((x) > (hi)) ? (hi) : (((x) < (lo)) ? (lo) : (x)))
 
-`define UP(x)       (((x) != 0) ? (x) : 1)
+`define UP(x)       (((x) > 0) ? (x) : 1)
 
 `define CDIV(n,d)   ((n + d - 1) / (d))
 
