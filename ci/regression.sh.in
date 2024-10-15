@@ -153,6 +153,11 @@ cache()
     CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
     CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=sgemmx
 
+    # replacement policy
+    CONFIGS="-DDCACHE_REPL_POLICY=0" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DDCACHE_REPL_POLICY=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DDCACHE_REPL_POLICY=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+
     # test writeback
     CONFIGS="-DDCACHE_WRITEBACK=1 -DDCACHE_DIRTYBYTES=0 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=rtlsim --app=mstress
     CONFIGS="-DDCACHE_WRITEBACK=1 -DDCACHE_DIRTYBYTES=1 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=rtlsim --app=mstress
