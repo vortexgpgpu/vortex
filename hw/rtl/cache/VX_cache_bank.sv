@@ -224,25 +224,26 @@ module VX_cache_bank #(
     wire creq_enable = creq_grant && core_req_valid;
 
     assign replay_ready = replay_grant
+                       && ~(!WRITEBACK && replay_rw && mreq_queue_alm_full) // needed for writethrough
                        && ~pipe_stall;
 
     assign mem_rsp_ready = fill_grant
-                        && (!WRITEBACK || ~mreq_queue_alm_full) // needed for evictions
+                        && ~(WRITEBACK && mreq_queue_alm_full) // needed for writeback
                         && ~pipe_stall;
 
     assign flush_ready = flush_grant
-                      && (!WRITEBACK || ~mreq_queue_alm_full) // needed for evictions
+                      && ~(WRITEBACK && mreq_queue_alm_full) // needed for writeback
                       && ~pipe_stall;
 
     assign core_req_ready = creq_grant
-                         && ~mreq_queue_alm_full
-                         && ~mshr_alm_full
+                         && ~mreq_queue_alm_full // needed for fill requests
+                         && ~mshr_alm_full // needed for mshr allocation
                          && ~pipe_stall;
 
     wire init_fire     = init_valid;
     wire replay_fire   = replay_valid && replay_ready;
     wire mem_rsp_fire  = mem_rsp_valid && mem_rsp_ready;
-    wire flush_fire = flush_valid && flush_ready;
+    wire flush_fire    = flush_valid && flush_ready;
     wire core_req_fire = core_req_valid && core_req_ready;
 
     wire [MSHR_ADDR_WIDTH-1:0] mem_rsp_id = mem_rsp_tag[MSHR_ADDR_WIDTH-1:0];
@@ -266,14 +267,13 @@ module VX_cache_bank #(
     assign valid_sel   = init_fire || replay_fire || mem_rsp_fire || flush_fire || core_req_fire;
     assign rw_sel      = replay_valid ? replay_rw : core_req_rw;
     assign byteen_sel  = replay_valid ? replay_byteen : core_req_byteen;
+    assign addr_sel    = (init_valid | flush_valid) ? `CS_LINE_ADDR_WIDTH'(flush_sel) :
+                            (replay_valid ? replay_addr : (mem_rsp_valid ? mem_rsp_addr : core_req_addr));
     assign word_idx_sel= replay_valid ? replay_wsel : core_req_wsel;
     assign req_idx_sel = replay_valid ? replay_idx : core_req_idx;
     assign tag_sel     = (init_valid | flush_valid) ? (flush_valid ? flush_tag : '0) :
                             (replay_valid ? replay_tag : (mem_rsp_valid ? mem_rsp_tag_s : core_req_tag));
     assign flags_sel   = core_req_valid ? core_req_flags : '0;
-
-    assign addr_sel    = (init_valid | flush_valid) ? `CS_LINE_ADDR_WIDTH'(flush_sel) :
-                            (replay_valid ? replay_addr : (mem_rsp_valid ? mem_rsp_addr : core_req_addr));
 
     if (WRITE_ENABLE) begin : g_data_sel
         for (genvar i = 0; i < `CS_LINE_WIDTH; ++i) begin : g_i
@@ -417,7 +417,7 @@ module VX_cache_bank #(
     assign addr_st1 = {line_tag_st1, line_idx_st1};
 
     // ensure mshr replay always get a hit
-    `RUNTIME_ASSERT (~(valid_st1 && is_replay_st1) || is_hit_st1, ("%t: missed mshr replay", $time))
+    `RUNTIME_ASSERT (~(valid_st1 && is_replay_st1 && ~is_hit_st1), ("%t: missed mshr replay", $time))
 
     if (WRITE_ENABLE) begin : g_rdw_hazard
         // This implementation uses single-port BRAMs for the tags and data stores.
@@ -503,6 +503,7 @@ module VX_cache_bank #(
         .evict_byteen(evict_byteen_st1)
     );
 
+    // only allocate MSHR entries for non-replay core requests
     wire mshr_allocate_st0 = valid_st0 && is_creq_st0 && ~is_replay_st0;
     wire mshr_finalize_st1 = valid_st1 && is_creq_st1 && ~is_replay_st1;
 
@@ -636,6 +637,8 @@ module VX_cache_bank #(
                 wire has_dirty_bytes = (| evict_byteen_st1);
                 `RUNTIME_ASSERT (~do_fill_or_flush_st1 || (line_dirty_st1 == has_dirty_bytes), ("%t: missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", $time, line_dirty_st1, has_dirty_bytes, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID)))
             end
+            // issue a fill request on a read/write miss
+            // issue a writeback on a dirty line eviction
             assign mreq_queue_push = (((do_read_st1 || do_write_st1) && ~is_hit_st1 && ~mshr_pending_st1)
                                    || do_writeback_st1)
                                   && ~pipe_stall;
@@ -653,6 +656,8 @@ module VX_cache_bank #(
                 .data_in  (byteen_st1),
                 .data_out (line_byteen)
             );
+            // issue a fill request on a read miss
+            // issue a memory write on a write request
             assign mreq_queue_push = ((do_read_st1 && ~is_hit_st1 && ~mshr_pending_st1)
                                   || do_write_st1)
                                   && ~pipe_stall;
@@ -667,6 +672,7 @@ module VX_cache_bank #(
             `UNUSED_VAR (evict_byteen_st1)
         end
     end else begin : g_mreq_queue_ro
+        // issue a fill request on a read miss
         assign mreq_queue_push = (do_read_st1 && ~is_hit_st1 && ~mshr_pending_st1)
                               && ~pipe_stall;
         assign mreq_queue_addr = addr_st1;
