@@ -113,28 +113,28 @@ module VX_dp_ram #(
             `ifdef QUARTUS
                 if (LUTRAM != 0) begin : g_lutram
                     `USE_FAST_BRAM `RAM_WREN_BLOCK_ALTERA(write)
-                    `RAM_READ_BLOCK_OUT_REG(read || write)
+                    `RAM_READ_BLOCK_OUT_REG(read)
                 end else begin : g_no_lutram
                     `RAM_WREN_BLOCK_ALTERA(write)
-                    `RAM_READ_BLOCK_OUT_REG(read || write)
+                    `RAM_READ_BLOCK_OUT_REG(read)
                 end
             `else
                 // Not Quartus
                 if (LUTRAM != 0) begin : g_lutram
                     `USE_FAST_BRAM `RAM_WREN_BLOCK_XILINX(write)
-                    `RAM_READ_BLOCK_OUT_REG(read || write)
+                    `RAM_READ_BLOCK_OUT_REG(read)
                 end else begin : g_no_lutram
                     `RAM_WREN_BLOCK_XILINX(write)
-                    `RAM_READ_BLOCK_OUT_REG(read || write)
+                    `RAM_READ_BLOCK_OUT_REG(read)
                 end
             `endif
             end else begin : g_no_writeen
                 if (LUTRAM != 0) begin : g_lutram
                     `USE_FAST_BRAM `RAM_WRITE_BLOCK(write)
-                    `RAM_READ_BLOCK_OUT_REG(read || write)
+                    `RAM_READ_BLOCK_OUT_REG(read)
                 end else begin : g_no_lutram
                     `RAM_WRITE_BLOCK(write)
-                    `RAM_READ_BLOCK_OUT_REG(read || write)
+                    `RAM_READ_BLOCK_OUT_REG(read)
                 end
             end
         end else begin : g_no_readen
@@ -142,28 +142,28 @@ module VX_dp_ram #(
             `ifdef QUARTUS
                 if (LUTRAM != 0) begin : g_lutram
                     `USE_FAST_BRAM `RAM_WREN_BLOCK_ALTERA(write)
-                    `RAM_READ_BLOCK_OUT_REG(read)
+                    `RAM_READ_BLOCK_OUT_REG(read || write)
                 end else begin : g_no_lutram
                     `RAM_WREN_BLOCK_ALTERA(write)
-                    `RAM_READ_BLOCK_OUT_REG(read)
+                    `RAM_READ_BLOCK_OUT_REG(read || write)
                 end
             `else
                 // Not Quartus
                 if (LUTRAM != 0) begin : g_lutram
                     `USE_FAST_BRAM `RAM_WREN_BLOCK_XILINX(write)
-                    `RAM_READ_BLOCK_OUT_REG(read)
+                    `RAM_READ_BLOCK_OUT_REG(read || write)
                 end else begin : g_no_lutram
                     `RAM_WREN_BLOCK_XILINX(write)
-                    `RAM_READ_BLOCK_OUT_REG(read)
+                    `RAM_READ_BLOCK_OUT_REG(read || write)
                 end
             `endif
             end else begin : g_no_writeen
                 if (LUTRAM != 0) begin : g_lutram
                     `USE_FAST_BRAM `RAM_WRITE_BLOCK(write)
-                    `RAM_READ_BLOCK_OUT_REG(read)
+                    `RAM_READ_BLOCK_OUT_REG(read || write)
                 end else begin : g_no_lutram
                     `RAM_WRITE_BLOCK(write)
-                    `RAM_READ_BLOCK_OUT_REG(read)
+                    `RAM_READ_BLOCK_OUT_REG(read || write)
                 end
             end
         end
