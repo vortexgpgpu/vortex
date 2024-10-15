@@ -358,10 +358,10 @@ module VX_cache_bank #(
         .clk        (clk),
         .reset      (reset),
         .stall      (pipe_stall),
-        .hit_valid  ((do_read_st1 || do_write_st1) && is_hit_st1),
+        .hit_valid  ((do_read_st1 || do_write_st1) && is_hit_st1 && ~pipe_stall),
         .hit_line   (line_idx_st1),
         .hit_way    (tag_matches_st1),
-        .repl_valid (do_fill_st0),
+        .repl_valid (do_fill_st0 && ~pipe_stall),
         .repl_line  (line_idx_st0),
         .repl_way   (victim_way_st0)
     );
