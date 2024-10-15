@@ -26,7 +26,6 @@ module VX_sp_ram #(
     parameter RESET_OUT   = 0,
     parameter READ_ENABLE = 0,
     parameter INIT_ENABLE = 0,
-    parameter RADDR_REG  = 0,
     parameter INIT_FILE   = "",
     parameter [DATAW-1:0] INIT_VALUE = 0,
     parameter ADDRW       = `LOG2UP(SIZE)
@@ -45,7 +44,6 @@ module VX_sp_ram #(
         .SIZE       (SIZE),
         .WRENW      (WRENW),
         .OUT_REG    (OUT_REG),
-        .RADDR_REG  (RADDR_REG),
         .LUTRAM     (LUTRAM),
         .NO_RWCHECK (NO_RWCHECK),
         .RW_ASSERT  (RW_ASSERT),
