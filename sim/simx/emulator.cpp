@@ -30,8 +30,8 @@
 
 using namespace vortex;
 
-// #define og
-#define coop
+// #define DEFAULT
+#define GROUPS
 
 Emulator::ipdom_entry_t::ipdom_entry_t(const ThreadMask &tmask, Word PC)
   : tmask(tmask)
@@ -77,10 +77,10 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     : arch_(arch)
     , dcrs_(dcrs)
     , core_(core)
-#ifdef og
+#ifdef DEFAULT
     , warps_(arch.num_warps(), arch)
 #endif
-#ifdef coop
+#ifdef GROUPS
     , warps_(MAX_NUMBER_TILES, arch)
 #endif
     , barriers_(arch.num_barriers(), 0)
@@ -119,9 +119,7 @@ void Emulator::clear() {
   //activate first warp and thread
   active_warps_.set(0);
   warps_[0].tmask.set(0);
-  // warps_[4].tmask.set(0);
   warps_[0].isActive = true;
-  // warps_[4].isActive = true;
   wspawn_.valid = false;
 }
 
@@ -197,10 +195,10 @@ instr_trace_t* Emulator::step() {
   //-----  Create trace
   auto trace = new instr_trace_t(uuid, arch_);
   //-----  Execute
-#ifdef og
+#ifdef DEFAULT
   this->execute(*instr, scheduled_warp, trace);
 #endif
-#ifdef coop 
+#ifdef GROUPS 
   for (size_t wid = 0, nw = 8; wid < nw; ++wid) {
     if (warps_[wid].isActive) {
       DP(5, "EXECUTING Group ID:"<<wid);
@@ -209,7 +207,7 @@ instr_trace_t* Emulator::step() {
   }
 #endif
 
-#ifdef og
+#ifdef DEFAULT
   DP(5, "Register state:");
   for (uint32_t i = 0; i < arch_.num_regs(); ++i) {
     DPN(5, "  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
@@ -227,7 +225,7 @@ instr_trace_t* Emulator::step() {
   return trace;
 #endif
 
-#ifdef coop
+#ifdef GROUPS
   DP(5, "Register state:");
   for (uint32_t i = 0; i < arch_.num_regs(); ++i) {
     DPN(5, "  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
