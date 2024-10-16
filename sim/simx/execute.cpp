@@ -833,10 +833,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->fetch_stall = true;
         switch (csr_addr) {
         case 0x000: // RV32I: ECALL
-          this->trigger_ecall();
+          this->trigger_ecall(); // Re-added for riscv-vector test functionality
           break;
         case 0x001: // RV32I: EBREAK
-          this->trigger_ebreak();
+          this->trigger_ebreak(); // Re-added for riscv-vector test functionality
           break;
         case 0x002: // RV32I: URET
         case 0x102: // RV32I: SRET
