@@ -74,7 +74,7 @@
 `define EX_SFU          2
 `define EX_FPU          (`EX_SFU + `EXT_F_ENABLED)
 
-`define VECTOR_ENABLE   1
+`define VECTOR_ENABLE   0
 `define EX_VPU          (`EX_FPU + `VECTOR_ENABLE)
 
 `define NUM_EX_UNITS    (3 + `EXT_F_ENABLED + `VECTOR_ENABLE)

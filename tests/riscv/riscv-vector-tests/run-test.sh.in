@@ -1,7 +1,6 @@
 #!/bin/bash
 VLEN=${VLEN:-256}
 XLEN=${XLEN:-32}
-TOOLDIR=${TOOLDIR:-"/opt"}
 
 if [ $XLEN -eq 64 ]; then
   RISCV_TOOLCHAIN_PATH=${RISCV_TOOLCHAIN_PATH:-$TOOLDIR/riscv64-gnu-toolchain}
