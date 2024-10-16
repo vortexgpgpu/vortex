@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include <softfloat.h>
+#include <softfloat_types.h>
 
 uint_fast16_t f16_classify( float16_t );
 float16_t f16_rsqrte7( float16_t );

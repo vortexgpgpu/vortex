@@ -37,6 +37,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdbool.h>
 #include <internals.h>
 #include <../RISCV/specialize.h>
+#include <softfloat.h>
 #include "softfloat_ext.h"
 
 uint_fast16_t f16_classify( float16_t a )
