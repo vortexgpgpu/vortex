@@ -12,11 +12,11 @@
 // limitations under the License.
 
 #include "rvfloats.h"
+#include "softfloat_ext.h"
 #include <stdio.h>
 
 extern "C" {
 #include <softfloat.h>
-#include "softfloat_ext.h"
 #include <internals.h>
 #include <../RISCV/specialize.h>
 }
