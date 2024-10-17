@@ -101,8 +101,8 @@ module VX_cache_mshr #(
 );
     `UNUSED_PARAM (BANK_ID)
 
-    reg [`CS_LINE_ADDR_WIDTH-1:0] addr_table [MSHR_SIZE-1:0];
-    reg [MSHR_ADDR_WIDTH-1:0] next_index [MSHR_SIZE-1:0];
+    reg [`CS_LINE_ADDR_WIDTH-1:0] addr_table [0:MSHR_SIZE-1];
+    reg [MSHR_ADDR_WIDTH-1:0] next_index [0:MSHR_SIZE-1];
 
     reg [MSHR_SIZE-1:0] valid_table, valid_table_n;
     reg [MSHR_SIZE-1:0] next_table, next_table_x, next_table_n;

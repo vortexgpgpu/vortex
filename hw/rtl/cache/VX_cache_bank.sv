@@ -616,7 +616,9 @@ module VX_cache_bank #(
         .ready_out (core_rsp_ready)
     );
 
-    assign crsp_queue_stall = crsp_queue_valid && ~crsp_queue_ready;
+    // we use 'do_read_st1' instead 'crsp_queue_valid'
+    // to remove costly 'is_hit_st1' signal from critical paths.
+    assign crsp_queue_stall = do_read_st1 && ~crsp_queue_ready;
 
     // schedule memory request
 
