@@ -169,7 +169,7 @@ module VX_cache_bank #(
     wire                            is_replay_st0, is_replay_st1;
     wire [`UP(FLAGS_WIDTH)-1:0]     flags_sel, flags_st0, flags_st1;
     wire                            mshr_pending_st0, mshr_pending_st1;
-    wire [MSHR_ADDR_WIDTH-1:0]      mshr_prev_id_st0, mshr_prev_id_st1;
+    wire [MSHR_ADDR_WIDTH-1:0]      mshr_previd_st0, mshr_previd_st1;
     wire                            mshr_empty;
 
     wire flush_valid;
@@ -404,8 +404,8 @@ module VX_cache_bank #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~pipe_stall),
-        .data_in  ({valid_st0, is_fill_st0, is_flush_st0, is_creq_st0, is_replay_st0, rw_st0, flags_st0, line_idx_st0, data_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_prev_id_st0, mshr_pending_st0}),
-        .data_out ({valid_st1, is_fill_st1, is_flush_st1, is_creq_st1, is_replay_st1, rw_st1, flags_st1, line_idx_st1, data_st1, byteen_st1, word_idx_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_prev_id_st1, mshr_pending_st1})
+        .data_in  ({valid_st0, is_fill_st0, is_flush_st0, is_creq_st0, is_replay_st0, rw_st0, flags_st0, line_idx_st0, data_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_previd_st0, mshr_pending_st0}),
+        .data_out ({valid_st1, is_fill_st1, is_flush_st1, is_creq_st1, is_replay_st1, rw_st1, flags_st1, line_idx_st1, data_st1, byteen_st1, word_idx_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_previd_st1, mshr_pending_st1})
     );
 
     if (UUID_WIDTH != 0) begin : g_req_uuid_st1
@@ -426,10 +426,13 @@ module VX_cache_bank #(
         // Data fill/flush can perform read and write in the same stage, since way_idx is available in st0.
         // A data read should happen in st0 for its result to be available in st1.
         // A data write should happen in st1 when the tag hit status is available.
+        // The r/w hazard is needed for consecutive writes since they both wonly write in st1.
+        // The r/w hazard is also not needed for next writethrough fill/flush to the same line.
+        // For reads or writeback fill/flush to the same line, we sill need the hazard
+        // because the data writeen in st1 cannot be read at the same time in st0 without extra forwarding logic.
         wire [`CS_LINE_SEL_BITS-1:0] line_idx_sel = addr_sel[`CS_LINE_SEL_BITS-1:0];
-        wire is_read_sel  = is_creq_sel && !rw_sel;
         wire is_write_sel = is_creq_sel && rw_sel;
-        wire is_same_read_sel = is_read_sel && (line_idx_sel == line_idx_st0);
+        wire is_same_line = (line_idx_sel == line_idx_st0);
         always @(posedge clk) begin
             if (reset) begin
                 post_hazard <= 0;
@@ -437,7 +440,8 @@ module VX_cache_bank #(
             end else begin
                 if (!crsp_queue_stall) begin
                     post_hazard <= rdw_hazard;
-                    rdw_hazard <= do_write_st0 && valid_sel && !(is_write_sel || is_same_read_sel || (is_flush_sel && !WRITEBACK));
+                    rdw_hazard <= do_write_st0 && valid_sel
+                               && !(is_write_sel || (is_same_line && !WRITEBACK && (is_fill_sel || is_flush_sel)));
                 end
             end
         end
@@ -575,7 +579,7 @@ module VX_cache_bank #(
         .allocate_data  ({word_idx_st0, byteen_st0, write_data_st0, tag_st0, req_idx_st0}),
         .allocate_id    (mshr_alloc_id_st0),
         .allocate_pending(mshr_pending_st0),
-        .allocate_previd(mshr_prev_id_st0),
+        .allocate_previd(mshr_previd_st0),
         `UNUSED_PIN     (allocate_ready),
 
         // finalize
@@ -583,7 +587,7 @@ module VX_cache_bank #(
         .finalize_is_release(mshr_release_st1),
         .finalize_is_pending(mshr_pending_st1),
         .finalize_id    (mshr_id_st1),
-        .finalize_previd(mshr_prev_id_st1)
+        .finalize_previd(mshr_previd_st1)
     );
 
     // schedule core response

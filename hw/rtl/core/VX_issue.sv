@@ -52,7 +52,7 @@ module VX_issue import VX_gpu_pkg::*; #(
 
     `SCOPE_IO_SWITCH (`ISSUE_WIDTH);
 
-    for (genvar issue_id = 0; issue_id < `ISSUE_WIDTH; ++issue_id) begin : g_issue_slices
+    for (genvar issue_id = 0; issue_id < `ISSUE_WIDTH; ++issue_id) begin : g_slices
         VX_decode_if #(
             .NUM_WARPS (PER_ISSUE_WARPS)
         ) per_issue_decode_if();

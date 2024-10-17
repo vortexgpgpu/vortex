@@ -141,8 +141,9 @@ module VX_cache_data #(
             wire [`CS_WORDS_PER_LINE-1:0][WORD_SIZE-1:0] wren_w;
             for (genvar j = 0; j < `CS_WORDS_PER_LINE; ++j) begin : g_j
                 wire word_en = (WORD_SIZE == 1) || (word_idx == j);
-                assign line_wdata[j] = write ? write_data : fill_data[j];
-                assign wren_w[j] = write ? (write_byteen & {WORD_SIZE{word_en}}) : {WORD_SIZE{1'b1}};
+                // warning: should prioritize the fill over write to handle the case where both are asserted
+                assign line_wdata[j] = fill ? fill_data[j] : write_data;
+                assign wren_w[j] = fill ? {WORD_SIZE{1'b1}} : (write_byteen & {WORD_SIZE{word_en}});
             end
             assign line_wren  = wren_w;
             assign line_write = (fill && ((NUM_WAYS == 1) || evict_way[i]))
