@@ -440,7 +440,7 @@ module VX_cache_bank #(
             end else begin
                 if (~crsp_queue_stall) begin
                     post_hazard <= rdw_hazard;
-                    rdw_hazard <= do_write_st0 && valid_sel && ~(is_write_sel || (is_same_line && !WRITEBACK && (/*is_fill_sel ||*/is_flush_sel)));
+                    rdw_hazard <= do_write_st0 && valid_sel && ~(is_write_sel || (is_same_line && !WRITEBACK && (is_fill_sel || is_flush_sel)));
                 end
             end
         end
