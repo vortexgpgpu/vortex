@@ -44,7 +44,7 @@ module VX_cache_data #(
     input wire [NUM_WAYS-1:0]           evict_way,
     input wire [NUM_WAYS-1:0]           tag_matches,
     input wire [`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] fill_data,
-    input wire [`CS_WORD_WIDTH-1:0]     write_data,
+    input wire [`CS_WORD_WIDTH-1:0]     write_word,
     input wire [WORD_SIZE-1:0]          write_byteen,
     input wire [`UP(`CS_WORD_SEL_BITS)-1:0] word_idx,
     // outputs
@@ -79,26 +79,23 @@ module VX_cache_data #(
         wire [NUM_WAYS-1:0][BYTEEN_DATAW-1:0] byteen_wren;
 
         for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_byteen_wdata
+            wire evict_way_en = (NUM_WAYS == 1) || evict_way[i];
             wire dirty_data = write; // only asserted on writes
-            wire dirty_wren = init || (write ? tag_matches[i] : evict_way[i]);
-
+            wire dirty_wren = init || (write ? tag_matches[i] : evict_way_en);
             if (DIRTY_BYTES != 0) begin : g_dirty_bytes
                 wire [`CS_WORDS_PER_LINE-1:0][WORD_SIZE-1:0] bytes_data;
                 wire [`CS_WORDS_PER_LINE-1:0][WORD_SIZE-1:0] bytes_wren;
-                for (genvar j = 0; j < `CS_WORDS_PER_LINE; ++j) begin : g_j
-                    wire word_sel = tag_matches[i] && ((WORD_SIZE == 1) || (word_idx == j));
-                    wire [WORD_SIZE-1:0] word_en = write_byteen & {WORD_SIZE{word_sel}};
+                for (genvar j = 0; j < `CS_WORDS_PER_LINE; ++j) begin : g_words
+                    wire word_en = ((`CS_WORDS_PER_LINE == 1) || (word_idx == j));
+                    wire [WORD_SIZE-1:0] write_mask = write_byteen & {WORD_SIZE{word_en && tag_matches[i]}};
                     assign bytes_data[j] = {WORD_SIZE{write}}; // only asserted on writes
-                    assign bytes_wren[j] = {WORD_SIZE{init}} | (write ? word_en : {WORD_SIZE{evict_way[i]}});
+                    assign bytes_wren[j] = {WORD_SIZE{init}} | (write ? write_mask : {WORD_SIZE{evict_way_en}});
                 end
                 assign byteen_wdata[i] = {dirty_data, bytes_data};
                 assign byteen_wren[i] = {dirty_wren, bytes_wren};
-                assign {line_dirty, evict_byteen} = byteen_rdata[evict_way_idx_r];
             end else begin : g_no_dirty_bytes
                 assign byteen_wdata[i] = dirty_data;
                 assign byteen_wren[i] = dirty_wren;
-                assign line_dirty = byteen_rdata[evict_way_idx_r];
-                assign evict_byteen = '1;
             end
         end
 
@@ -121,6 +118,13 @@ module VX_cache_data #(
             .rdata (byteen_rdata)
         );
 
+        if (DIRTY_BYTES != 0) begin : g_line_dirty_and_byteen
+            assign {line_dirty, evict_byteen} = byteen_rdata[evict_way_idx_r];
+        end else begin : g_line_dirty
+            assign line_dirty = byteen_rdata[evict_way_idx_r];
+            assign evict_byteen = '1;
+        end
+
         assign evict_data = line_rdata[evict_way_idx_r];
 
     end else begin : g_no_writeback
@@ -141,21 +145,17 @@ module VX_cache_data #(
         for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_ways
             wire fill_way_en = (NUM_WAYS == 1) || evict_way[i];
             if (WRITE_ENABLE != 0) begin : g_we
-                wire [`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] word_wdata;
-                wire [`CS_WORDS_PER_LINE-1:0][WORD_SIZE-1:0] word_wren;
-                for (genvar j = 0; j < `CS_WORDS_PER_LINE; ++j) begin : g_words
-                    wire word_en = (WORD_SIZE == 1) || (word_idx == j);
-                    // warning: should prioritize the fill over write in case both are asserted
-                    assign word_wdata[j] = fill ? fill_data[j] : write_data;
-                    assign word_wren[j] = fill ? {WORD_SIZE{1'b1}} : (write_byteen & {WORD_SIZE{word_en}});
+                wire [`CS_WORDS_PER_LINE-1:0][WORD_SIZE-1:0] write_wren;
+                for (genvar j = 0; j < `CS_WORDS_PER_LINE; ++j) begin : g_write_wren
+                    wire word_en = (`CS_WORDS_PER_LINE == 1) || (word_idx == j);
+                    assign write_wren[j] = write_byteen & {WORD_SIZE{word_en}};
                 end
-                wire way_en = fill ? fill_way_en : tag_matches[i];
-                assign line_wdata[i] = word_wdata;
-                assign line_wren_w[i] = word_wren & {LINE_SIZE{way_en}};
+                assign line_wdata[i] = fill ? fill_data : {`CS_WORDS_PER_LINE{write_word}};
+                assign line_wren_w[i] = fill ? {LINE_SIZE{fill_way_en}} : (write_wren & {LINE_SIZE{tag_matches[i]}});
             end else begin : g_ro
                 `UNUSED_VAR (write)
                 `UNUSED_VAR (write_byteen)
-                `UNUSED_VAR (write_data)
+                `UNUSED_VAR (write_word)
                 `UNUSED_VAR (word_idx)
                 assign line_wdata[i] = fill_data;
                 assign line_wren_w[i] = {LINE_SIZE{fill_way_en}};
@@ -166,7 +166,7 @@ module VX_cache_data #(
         `UNUSED_VAR (write)
         `UNUSED_VAR (evict_way)
         `UNUSED_VAR (write_byteen)
-        `UNUSED_VAR (write_data)
+        `UNUSED_VAR (write_word)
         assign line_wdata = fill_data;
         assign line_wren = 1'b1;
     end

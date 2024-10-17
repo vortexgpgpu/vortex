@@ -60,11 +60,11 @@ module VX_gbar_unit #(
 `ifdef DBG_TRACE_GBAR
     always @(posedge clk) begin
         if (gbar_bus_if.req_valid && gbar_bus_if.req_ready) begin
-            `TRACE(1, ("%t: %s acquire: bar_id=%0d, size=%0d, core_id=%0d\n",
+            `TRACE(2, ("%t: %s acquire: bar_id=%0d, size=%0d, core_id=%0d\n",
                 $time, INSTANCE_ID, gbar_bus_if.req_id, gbar_bus_if.req_size_m1, gbar_bus_if.req_core_id))
         end
         if (gbar_bus_if.rsp_valid) begin
-            `TRACE(1, ("%t: %s release: bar_id=%0d\n", $time, INSTANCE_ID, gbar_bus_if.rsp_id))
+            `TRACE(2, ("%t: %s release: bar_id=%0d\n", $time, INSTANCE_ID, gbar_bus_if.rsp_id))
         end
     end
 `endif
