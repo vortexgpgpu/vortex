@@ -142,6 +142,7 @@ cache()
     CONFIGS="-DL1_LINE_SIZE=$XSIZE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=sgemmx
 
     # test cache ways
+    CONFIGS="-DICACHE_NUM_WAYS=1 -DDCACHE_NUM_WAYS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
     CONFIGS="-DICACHE_NUM_WAYS=4 -DDCACHE_NUM_WAYS=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
     CONFIGS="-DICACHE_NUM_WAYS=4 -DDCACHE_NUM_WAYS=8" ./ci/blackbox.sh --driver=simx --app=sgemmx
 

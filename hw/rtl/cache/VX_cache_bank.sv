@@ -393,7 +393,6 @@ module VX_cache_bank #(
         .evict_way_r(evict_way_st1)
     );
 
-
     wire [MSHR_ADDR_WIDTH-1:0] mshr_alloc_id_st0;
     assign mshr_id_st0 = is_replay_st0 ? replay_id_st0 : mshr_alloc_id_st0;
 
@@ -440,8 +439,7 @@ module VX_cache_bank #(
             end else begin
                 if (!crsp_queue_stall) begin
                     post_hazard <= rdw_hazard;
-                    rdw_hazard <= do_write_st0 && valid_sel
-                               && !(is_write_sel || (is_same_line && !WRITEBACK && (is_fill_sel || is_flush_sel)));
+                    rdw_hazard <= do_write_st0 && valid_sel && !(is_write_sel || (is_same_line && !WRITEBACK && (is_fill_sel || is_flush_sel)));
                 end
             end
         end
@@ -737,19 +735,24 @@ module VX_cache_bank #(
                    && ~(replay_fire || mem_rsp_fire || core_req_fire || flush_fire);
     always @(posedge clk) begin
         if (input_stall || pipe_stall) begin
-            `TRACE(3, ("%t: *** %s stall: crsq=%b, mreq=%b, mshr=%b, rdw=%b\n", $time, INSTANCE_ID, crsp_queue_stall, mreq_queue_alm_full, mshr_alm_full, rdw_hazard))
+            `TRACE(3, ("%t: *** %s stall: crsq=%b, mreq=%b, mshr=%b, rdw=%b\n", $time, INSTANCE_ID,
+                rsp_queue_stall, mreq_queue_alm_full, mshr_alm_full, rdw_hazard))
         end
         if (mem_rsp_fire) begin
-            `TRACE(2, ("%t: %s fill-rsp: addr=0x%0h, mshr_id=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_id, mem_rsp_data, req_uuid_sel))
+            `TRACE(2, ("%t: %s fill-rsp: addr=0x%0h, mshr_id=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_id, mem_rsp_data, req_uuid_sel))
         end
         if (replay_fire) begin
-            `TRACE(2, ("%t: %s mshr-pop: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(replay_addr, BANK_ID), replay_tag, replay_idx, req_uuid_sel))
+            `TRACE(2, ("%t: %s mshr-pop: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(replay_addr, BANK_ID), replay_tag, replay_idx, req_uuid_sel))
         end
         if (core_req_fire) begin
             if (core_req_rw) begin
-                `TRACE(2, ("%t: %s core-wr-req: addr=0x%0h, tag=0x%0h, req_idx=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(core_req_addr, BANK_ID), core_req_tag, core_req_idx, core_req_byteen, core_req_data, req_uuid_sel))
+                `TRACE(2, ("%t: %s core-wr-req: addr=0x%0h, tag=0x%0h, req_idx=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
+                    `CS_LINE_TO_FULL_ADDR(core_req_addr, BANK_ID), core_req_tag, core_req_idx, core_req_byteen, core_req_data, req_uuid_sel))
             end else begin
-                `TRACE(2, ("%t: %s core-rd-req: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(core_req_addr, BANK_ID), core_req_tag, core_req_idx, req_uuid_sel))
+                `TRACE(2, ("%t: %s core-rd-req: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID,
+                    `CS_LINE_TO_FULL_ADDR(core_req_addr, BANK_ID), core_req_tag, core_req_idx, req_uuid_sel))
             end
         end
         if (do_init_st0) begin
@@ -764,45 +767,43 @@ module VX_cache_bank #(
                 `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), evict_way_st0, line_idx_st0, req_uuid_st0))
         end
         if (do_read_st1 && ~pipe_stall) begin
-            if (is_hit_st1) begin
-                `TRACE(3, ("%t: %s tags-rd-hit: addr=0x%0h, way=%b, line=%0d, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID,
-                    `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), tag_matches_st1, line_idx_st1, line_tag_st1, req_uuid_st1))
-            end else begin
-                `TRACE(3, ("%t: %s tags-rd-miss: addr=0x%0h, line=%0d, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID,
-                    `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), line_idx_st1, line_tag_st1, req_uuid_st1))
-            end
+            `TRACE(3, ("%t: %s tags-read: addr=0x%0h, way=%b, line=%0d, tag=0x%0h, hit=%b (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), tag_matches_st1, line_idx_st1, line_tag_st1, is_hit_st1, req_uuid_st1))
         end
         if (do_write_st1 && ~pipe_stall) begin
-            if (is_hit_st1) begin
-                `TRACE(3, ("%t: %s tags-wr-hit: addr=0x%0h, way=%b, line=%0d, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID,
-                    `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), tag_matches_st1, line_idx_st1, line_tag_st1, req_uuid_st1))
-            end else begin
-                `TRACE(3, ("%t: %s tags-wr-miss: addr=0x%0h, line=%0d, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID,
-                    `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), line_idx_st1, line_tag_st1, req_uuid_st1))
-            end
+            `TRACE(3, ("%t: %s tags-write: addr=0x%0h, way=%b, line=%0d, tag=0x%0h, hit=%b (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), tag_matches_st1, line_idx_st1, line_tag_st1, is_hit_st1, req_uuid_st1))
         end
         if (do_fill_st0 && ~pipe_stall) begin
-            `TRACE(3, ("%t: %s data-fill: addr=0x%0h, way=%b, line=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), evict_way_st0, line_idx_st0, data_st0, req_uuid_st0))
+            `TRACE(3, ("%t: %s data-fill: addr=0x%0h, way=%b, line=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), evict_way_st0, line_idx_st0, data_st0, req_uuid_st0))
         end
         if (do_flush_st0 && ~pipe_stall) begin
-            `TRACE(3, ("%t: %s data-flush: addr=0x%0h, way=%b, line=%0d (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), evict_way_st0, line_idx_st0, req_uuid_st0))
+            `TRACE(3, ("%t: %s data-flush: addr=0x%0h, way=%b, line=%0d (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), evict_way_st0, line_idx_st0, req_uuid_st0))
         end
         if (do_read_st1 && is_hit_st1 && ~pipe_stall) begin
-            `TRACE(3, ("%t: %s data-read: addr=0x%0h, way=%b, line=%0d, wsel=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), tag_matches_st1, line_idx_st1, word_idx_st1, read_data_st1, req_uuid_st1))
+            `TRACE(3, ("%t: %s data-read: addr=0x%0h, way=%b, line=%0d, wsel=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), tag_matches_st1, line_idx_st1, word_idx_st1, read_data_st1, req_uuid_st1))
         end
         if (do_write_st1 && is_hit_st1 && ~pipe_stall) begin
-            `TRACE(3, ("%t: %s data-write: addr=0x%0h, way=%b, line=%0d, wsel=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), tag_matches_st1, line_idx_st1, word_idx_st1, byteen_st1, write_data_st1, req_uuid_st1))
+            `TRACE(3, ("%t: %s data-write: addr=0x%0h, way=%b, line=%0d, wsel=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), tag_matches_st1, line_idx_st1, word_idx_st1, byteen_st1, write_data_st1, req_uuid_st1))
         end
         if (crsp_queue_fire) begin
-            `TRACE(2, ("%t: %s core-rd-rsp: addr=0x%0h, tag=0x%0h, req_idx=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), crsp_queue_tag, crsp_queue_idx, crsp_queue_data, req_uuid_st1))
+            `TRACE(2, ("%t: %s core-rd-rsp: addr=0x%0h, tag=0x%0h, req_idx=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), crsp_queue_tag, crsp_queue_idx, crsp_queue_data, req_uuid_st1))
         end
         if (mreq_queue_push) begin
             if (!WRITEBACK && do_write_st1) begin
-                `TRACE(2, ("%t: %s writethrough: addr=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_byteen, mreq_queue_data, req_uuid_st1))
+                `TRACE(2, ("%t: %s writethrough: addr=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
+                    `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_byteen, mreq_queue_data, req_uuid_st1))
             end else if (WRITEBACK && do_writeback_st1) begin
-                `TRACE(2, ("%t: %s writeback: addr=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_byteen, mreq_queue_data, req_uuid_st1))
+                `TRACE(2, ("%t: %s writeback: addr=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
+                    `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_byteen, mreq_queue_data, req_uuid_st1))
             end else begin
-                `TRACE(2, ("%t: %s fill-req: addr=0x%0h, mshr_id=%0d (#%0d)\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mshr_id_st1, req_uuid_st1))
+                `TRACE(2, ("%t: %s fill-req: addr=0x%0h, mshr_id=%0d (#%0d)\n", $time, INSTANCE_ID,
+                    `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mshr_id_st1, req_uuid_st1))
             end
         end
     end
