@@ -59,7 +59,7 @@ import VX_fpu_pkg::*;
     input wire [`UUID_WIDTH-1:0]        read_uuid,
     input wire [`NW_WIDTH-1:0]          read_wid,
 `ifdef VECTOR_ENABLE
-    input wire [`UP(`NW_BITS)-1:0]      read_tid,
+    input wire [`NT_WIDTH-1:0]          read_tid,
 `endif
     input wire [`VX_CSR_ADDR_BITS-1:0]  read_addr,
     output wire [`XLEN-1:0]             read_data_ro,
@@ -69,7 +69,7 @@ import VX_fpu_pkg::*;
     input wire [`UUID_WIDTH-1:0]        write_uuid,
     input wire [`NW_WIDTH-1:0]          write_wid,
 `ifdef VECTOR_ENABLE
-    input wire [`UP(`NW_BITS)-1:0]      write_tid,
+    input wire [`NT_WIDTH-1:0]          write_tid,
 `endif
     input wire [`VX_CSR_ADDR_BITS-1:0]  write_addr,
     input wire [`XLEN-1:0]              write_data

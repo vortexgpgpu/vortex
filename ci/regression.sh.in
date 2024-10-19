@@ -383,10 +383,7 @@ vector()
 {
     echo "begin vector tests..."
 
-    ls @TOOLDIR@
-    ls @TOOLDIR@"/riscv-gnu-toolchain"
-    ls @TOOLDIR@"/riscv-gnu-toolchain/bin"
-    TOOLDIR=@TOOLDIR@ VLEN=256 ./tests/riscv/riscv-vector-tests/run-test.sh
+    TOOLDIR=@TOOLDIR@ XLEN=@XLEN@ VLEN=256 ./tests/riscv/riscv-vector-tests/run-test.sh
 
     echo "vector tests done!"
 }
