@@ -2,11 +2,7 @@ XLEN ?=32
 VLEN ?=256
 TOOLDIR ?= /opt
 
-ifeq ($(XLEN),64)
-RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv64-gnu-toolchain
-else
-RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv-gnu-toolchain
-endif
+RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv$(XLEN)-gnu-toolchain
 
 all:
 

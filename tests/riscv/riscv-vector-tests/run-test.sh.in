@@ -2,11 +2,7 @@
 VLEN=${VLEN:-256}
 XLEN=${XLEN:-32}
 
-if [ $XLEN -eq 64 ]; then
-  RISCV_TOOLCHAIN_PATH=${RISCV_TOOLCHAIN_PATH:-$TOOLDIR/riscv64-gnu-toolchain}
-else
-  RISCV_TOOLCHAIN_PATH=${RISCV_TOOLCHAIN_PATH:-$TOOLDIR/riscv-gnu-toolchain}
-fi
+RISCV_TOOLCHAIN_PATH=${RISCV_TOOLCHAIN_PATH:-$TOOLDIR"/riscv"$XLEN"-gnu-toolchain"}
 
 # get selected testcases from command line or run default testcases
 if [ "$#" == "0" ];
