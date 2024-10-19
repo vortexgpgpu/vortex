@@ -99,6 +99,7 @@ module VX_cache_repl #(
     input wire [`CS_LINE_SEL_BITS-1:0] hit_line,
     input wire [NUM_WAYS-1:0] hit_way,
     input wire repl_valid,
+    input wire [`CS_LINE_SEL_BITS-1:0] repl_line_n,
     input wire [`CS_LINE_SEL_BITS-1:0] repl_line,
     output wire [NUM_WAYS-1:0] repl_way
 );
@@ -110,6 +111,7 @@ module VX_cache_repl #(
     if (REPL_POLICY == `CS_REPL_PLRU) begin : g_plru
         // Pseudo Least Recently Used replacement policy
         localparam LRU_WIDTH = `UP(NUM_WAYS-1);
+        localparam FORCE_BRAM = (LRU_WIDTH * `CS_LINES_PER_BANK) >= 1024;
 
         wire [WAY_IDX_WIDTH-1:0] repl_way_idx;
         wire [WAY_IDX_WIDTH-1:0] hit_way_idx;
@@ -118,17 +120,18 @@ module VX_cache_repl #(
         wire [LRU_WIDTH-1:0] plru_wmask;
 
         VX_dp_ram #(
-            .DATAW  (LRU_WIDTH),
-            .SIZE   (`CS_LINES_PER_BANK),
-            .WRENW  (LRU_WIDTH)
+            .DATAW   (LRU_WIDTH),
+            .SIZE    (`CS_LINES_PER_BANK),
+            .WRENW   (LRU_WIDTH),
+            .OUT_REG (FORCE_BRAM)
         ) plru_store (
             .clk   (clk),
             .reset (reset),
-            .read  (repl_valid),
+            .read  (FORCE_BRAM ? ~stall : repl_valid),
             .write (hit_valid),
             .wren  (plru_wmask),
             .waddr (hit_line),
-            .raddr (repl_line),
+            .raddr (FORCE_BRAM ? repl_line_n : repl_line),
             .wdata (plru_wdata),
             .rdata (plru_rdata)
         );
@@ -167,23 +170,28 @@ module VX_cache_repl #(
     end else if (REPL_POLICY == `CS_REPL_CYCLIC) begin : g_cyclic
         // Cyclic replacement policy
         localparam CTR_WIDTH = $clog2(NUM_WAYS);
+        localparam FORCE_BRAM = (CTR_WIDTH * `CS_LINES_PER_BANK) >= 1024;
+
         `UNUSED_VAR (hit_valid)
         `UNUSED_VAR (hit_line)
         `UNUSED_VAR (hit_way)
+        `UNUSED_VAR (repl_valid)
 
         wire [`UP(CTR_WIDTH)-1:0] ctr_rdata;
         wire [`UP(CTR_WIDTH)-1:0] ctr_wdata = ctr_rdata + 1;
 
-        VX_sp_ram #(
-            .DATAW (`UP(CTR_WIDTH)),
-            .SIZE  (`CS_LINES_PER_BANK)
+        VX_dp_ram #(
+            .DATAW   (`UP(CTR_WIDTH)),
+            .SIZE    (`CS_LINES_PER_BANK),
+            .OUT_REG (FORCE_BRAM)
         ) ctr_store (
             .clk   (clk),
             .reset (reset),
-            .read  (repl_valid),
+            .read  (FORCE_BRAM ? ~stall : repl_valid),
             .write (repl_valid),
             .wren  (1'b1),
-            .addr  (repl_line),
+            .raddr (FORCE_BRAM ? repl_line_n : repl_line),
+            .waddr (repl_line),
             .wdata (ctr_wdata),
             .rdata (ctr_rdata)
         );
@@ -202,6 +210,7 @@ module VX_cache_repl #(
         `UNUSED_VAR (hit_way)
         `UNUSED_VAR (repl_valid)
         `UNUSED_VAR (repl_line)
+        `UNUSED_VAR (repl_line_n)
         if (NUM_WAYS > 1) begin : g_repl_way
             reg [NUM_WAYS-1:0] victim_way;
             always @(posedge clk) begin

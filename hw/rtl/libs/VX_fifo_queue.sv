@@ -16,11 +16,11 @@
 `TRACING_OFF
 module VX_fifo_queue #(
     parameter DATAW     = 1,
-    parameter DEPTH     = 2,
+    parameter DEPTH     = 1,
     parameter ALM_FULL  = (DEPTH - 1),
     parameter ALM_EMPTY = 1,
     parameter OUT_REG   = 0,
-    parameter LUTRAM    = 0,
+    parameter LUTRAM    = ((DATAW * DEPTH) < `MAX_LUTRAM),
     parameter SIZEW     = `CLOG2(DEPTH+1)
 ) (
     input  wire             clk,
@@ -105,7 +105,8 @@ module VX_fifo_queue #(
             .DATAW  (DATAW),
             .SIZE   (DEPTH),
             .LUTRAM (LUTRAM),
-            .OUT_REG(!LUTRAM)
+            .OUT_REG(!LUTRAM),
+            .WRITE_MODE("W")
         ) dp_ram (
             .clk   (clk),
             .reset (reset),
@@ -119,47 +120,17 @@ module VX_fifo_queue #(
         );
 
         if (OUT_REG != 0) begin : g_out_reg
-            reg [DATAW-1:0] data_out_r, data_out_n;
-
-            if (LUTRAM) begin : g_lutram
-                assign data_out_n = data_out_w;
-            end else begin : g_no_lutram
-                reg [DATAW-1:0] data_out_p;
-                reg rdw_hazard_r;
-                wire rdw_hazard = push && (wr_ptr_r == rd_ptr_w);
-                always @(posedge clk) begin
-                    if (rdw_hazard) begin
-                        data_out_p <= data_in;
-                    end
-                    rdw_hazard_r <= rdw_hazard;
-                end
-                assign data_out_n = rdw_hazard_r ? data_out_p : data_out_w;
-            end
-
+            reg [DATAW-1:0] data_out_r;
             always @(posedge clk) begin
                 if (bypass) begin
                     data_out_r <= data_in;
                 end else if (pop) begin
-                    data_out_r <= data_out_n;
+                    data_out_r <= data_out_w;
                 end
             end
-
             assign data_out = data_out_r;
-
         end else begin : g_no_out_reg
-            if (LUTRAM) begin : g_lutram
-                assign data_out = data_out_w;
-            end else begin : g_no_lutram
-                reg [DATAW-1:0] data_in_r;
-                reg bypass_r;
-                always @(posedge clk) begin
-                    if (bypass) begin
-                        data_in_r <= data_in;
-                    end
-                    bypass_r <= bypass;
-                end
-                assign data_out = bypass_r ? data_in_r : data_out_w;
-            end
+            assign data_out = data_out_w;
         end
     end
 

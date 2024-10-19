@@ -24,7 +24,7 @@ module VX_sp_ram #(
     parameter RW_ASSERT   = 0,
     parameter RESET_RAM   = 0,
     parameter RESET_OUT   = 0,
-    parameter READ_ENABLE = 0,
+    parameter `STRING WRITE_MODE = "R", // R: read-first, W: write-first, N: no-change, U: undefined
     parameter INIT_ENABLE = 0,
     parameter INIT_FILE   = "",
     parameter [DATAW-1:0] INIT_VALUE = 0,
@@ -49,7 +49,7 @@ module VX_sp_ram #(
         .RW_ASSERT  (RW_ASSERT),
         .RESET_RAM  (RESET_RAM),
         .RESET_OUT  (RESET_OUT),
-        .READ_ENABLE(READ_ENABLE),
+        .WRITE_MODE (WRITE_MODE),
         .INIT_ENABLE(INIT_ENABLE),
         .INIT_FILE  (INIT_FILE),
         .INIT_VALUE (INIT_VALUE),

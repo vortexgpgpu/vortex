@@ -295,6 +295,8 @@ module VX_cache_bank #(
         assign req_uuid_sel = '0;
     end
 
+    wire [`CS_LINE_SEL_BITS-1:0] line_idx_sel = addr_sel[`CS_LINE_SEL_BITS-1:0];
+
     wire is_init_sel   = init_valid;
     wire is_creq_sel   = creq_enable || replay_enable;
     wire is_fill_sel   = fill_enable;
@@ -364,6 +366,7 @@ module VX_cache_bank #(
         .hit_way    (tag_matches_st1),
         .repl_valid (do_fill_st0 && ~pipe_stall),
         .repl_line  (line_idx_st0),
+        .repl_line_n(line_idx_sel),
         .repl_way   (victim_way_st0)
     );
 
@@ -430,7 +433,6 @@ module VX_cache_bank #(
         // The r/w hazard is also not needed for next writethrough fill/flush to the same line.
         // For reads or writeback fill/flush to the same line, we sill need the hazard
         // because the data writeen in st1 cannot be read at the same time in st0 without extra forwarding logic.
-        wire [`CS_LINE_SEL_BITS-1:0] line_idx_sel = addr_sel[`CS_LINE_SEL_BITS-1:0];
         wire is_write_sel = is_creq_sel && rw_sel;
         wire is_same_line = (line_idx_sel == line_idx_st0);
         always @(posedge clk) begin

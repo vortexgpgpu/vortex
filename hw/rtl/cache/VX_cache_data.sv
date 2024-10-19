@@ -56,7 +56,7 @@ module VX_cache_data #(
     `UNUSED_PARAM (WORD_SIZE)
     `UNUSED_VAR (stall)
 
-    localparam BYTEENW = (WRITE_ENABLE != 0 || NUM_WAYS != 1) ? (LINE_SIZE * NUM_WAYS) : 1;
+    localparam BYTEENW = (WRITE_ENABLE != 0) ? LINE_SIZE : 1;
 
     wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] line_rdata;
 
@@ -137,61 +137,50 @@ module VX_cache_data #(
         assign evict_byteen = '0;
     end
 
-    wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] line_wdata;
-    wire [BYTEENW-1:0] line_wren;
-    wire line_write;
-    wire line_read;
+    for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_data_store
+        wire [`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] line_wdata;
+        wire [BYTEENW-1:0] line_wren;
 
-    if (BYTEENW != 1) begin : g_wdata
-        wire [NUM_WAYS-1:0][LINE_SIZE-1:0] line_wren_w;
-        for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_ways
-            wire fill_way_en = (NUM_WAYS == 1) || evict_way[i];
-            if (WRITE_ENABLE != 0) begin : g_we
-                wire [`CS_WORDS_PER_LINE-1:0][WORD_SIZE-1:0] write_mask;
-                for (genvar j = 0; j < `CS_WORDS_PER_LINE; ++j) begin : g_write_mask
-                    wire word_en = (`CS_WORDS_PER_LINE == 1) || (word_idx == j);
-                    assign write_mask[j] = write_byteen & {WORD_SIZE{word_en}};
-                end
-                assign line_wdata[i] = (fill && fill_way_en) ? fill_data : {`CS_WORDS_PER_LINE{write_word}};
-                assign line_wren_w[i] = {LINE_SIZE{fill && fill_way_en}}
-                                      | ({LINE_SIZE{write && tag_matches[i]}} & write_mask);
-            end else begin : g_ro
-                `UNUSED_VAR (write)
-                `UNUSED_VAR (write_byteen)
-                `UNUSED_VAR (write_word)
-                `UNUSED_VAR (word_idx)
-                assign line_wdata[i] = fill_data;
-                assign line_wren_w[i] = {LINE_SIZE{fill_way_en}};
+        wire fill_way_en = (NUM_WAYS == 1) || evict_way[i];
+
+        if (WRITE_ENABLE != 0) begin : g_wdata
+            wire [`CS_WORDS_PER_LINE-1:0][WORD_SIZE-1:0] write_mask;
+            for (genvar j = 0; j < `CS_WORDS_PER_LINE; ++j) begin : g_write_mask
+                wire word_en = (`CS_WORDS_PER_LINE == 1) || (word_idx == j);
+                assign write_mask[j] = write_byteen & {WORD_SIZE{word_en}};
             end
+            assign line_wdata = (fill && fill_way_en) ? fill_data : {`CS_WORDS_PER_LINE{write_word}};
+            assign line_wren = {LINE_SIZE{fill && fill_way_en}}
+                             | ({LINE_SIZE{write && tag_matches[i]}} & write_mask);
+
+        end else begin : g_ro_wdata
+            `UNUSED_VAR (write)
+            `UNUSED_VAR (write_byteen)
+            `UNUSED_VAR (write_word)
+            `UNUSED_VAR (word_idx)
+            assign line_wdata = fill_data;
+            assign line_wren  = fill_way_en;
         end
-        assign line_wren = line_wren_w;
-    end else begin : g_ro_1w_wdata
-        `UNUSED_VAR (write)
-        `UNUSED_VAR (evict_way)
-        `UNUSED_VAR (write_byteen)
-        `UNUSED_VAR (write_word)
-        assign line_wdata = fill_data;
-        assign line_wren = 1'b1;
+
+        wire line_write = fill || (write && WRITE_ENABLE);
+        wire line_read = read || ((fill || flush) && WRITEBACK);
+
+        VX_sp_ram #(
+            .DATAW (`CS_LINE_WIDTH),
+            .SIZE  (`CS_LINES_PER_BANK),
+            .WRENW (BYTEENW),
+            .OUT_REG (1)
+        ) data_store (
+            .clk   (clk),
+            .reset (reset),
+            .read  (line_read),
+            .write (line_write),
+            .wren  (line_wren),
+            .addr  (line_idx),
+            .wdata (line_wdata),
+            .rdata (line_rdata[i])
+        );
     end
-
-    assign line_write = fill || (write && WRITE_ENABLE);
-    assign line_read = read || ((fill || flush) && WRITEBACK);
-
-    VX_sp_ram #(
-        .DATAW (NUM_WAYS * `CS_LINE_WIDTH),
-        .SIZE  (`CS_LINES_PER_BANK),
-        .WRENW (BYTEENW),
-        .OUT_REG (1)
-    ) data_store (
-        .clk   (clk),
-        .reset (reset),
-        .read  (line_read),
-        .write (line_write),
-        .wren  (line_wren),
-        .addr  (line_idx),
-        .wdata (line_wdata),
-        .rdata (line_rdata)
-    );
 
     wire [`LOG2UP(NUM_WAYS)-1:0] hit_way_idx;
     VX_onehot_encoder #(

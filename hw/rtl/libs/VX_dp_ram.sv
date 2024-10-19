@@ -24,7 +24,7 @@ module VX_dp_ram #(
     parameter RW_ASSERT   = 0,
     parameter RESET_RAM   = 0,
     parameter RESET_OUT   = 0,
-    parameter READ_ENABLE = 0,
+    parameter `STRING WRITE_MODE = "R", // R: read-first, W: write-first, N: no-change, U: undefined
     parameter INIT_ENABLE = 0,
     parameter INIT_FILE   = "",
     parameter [DATAW-1:0] INIT_VALUE = 0,
@@ -41,7 +41,10 @@ module VX_dp_ram #(
     output wire [DATAW-1:0]  rdata
 );
     localparam WSELW = DATAW / WRENW;
+    localparam USE_BRAM = !LUTRAM && ((DATAW * SIZE) >= `MAX_LUTRAM);
+
     `STATIC_ASSERT((WRENW * WSELW == DATAW), ("invalid parameter"))
+    `UNUSED_PARAM (RW_ASSERT)
 
 `define RAM_INITIALIZATION \
     if (INIT_ENABLE != 0) begin : g_init \
@@ -56,187 +59,155 @@ module VX_dp_ram #(
         end \
     end
 
-`define RAM_WREN_BLOCK_ALTERA(__we__) \
-    reg [WRENW-1:0][WSELW-1:0] ram [0:SIZE-1]; \
-    `RAM_INITIALIZATION \
-    always @(posedge clk) begin \
-        if (__we__) begin \
-            for (integer i = 0; i < WRENW; ++i) begin \
-                if (wren[i]) begin \
-                    ram[waddr][i] <= wdata[i * WSELW +: WSELW]; \
-                end \
-            end \
-        end \
-    end
-
-`define RAM_WREN_BLOCK_XILINX(__we__) \
-    reg [DATAW-1:0] ram [0:SIZE-1]; \
-    `RAM_INITIALIZATION \
-    always @(posedge clk) begin \
-        if (__we__) begin \
-            for (integer i = 0; i < WRENW; ++i) begin \
-                if (wren[i]) begin \
-                    ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW]; \
-                end \
-            end \
-        end \
-    end
-
-`define RAM_WRITE_BLOCK(__we__) \
-    reg [DATAW-1:0] ram [0:SIZE-1]; \
-    `RAM_INITIALIZATION \
-    always @(posedge clk) begin \
-        if (__we__) begin \
-            ram[waddr] <= wdata; \
-        end \
-    end
-
-`define RAM_READ_BLOCK_OUT_REG(__re__) \
-    always @(posedge clk) begin \
-        if (__re__) begin \
-            if (RESET_OUT && reset) begin \
-                rdata_r <= INIT_VALUE; \
-            end else begin \
-                rdata_r <= ram[raddr]; \
-            end \
-        end \
-    end
-
-    `UNUSED_PARAM (RW_ASSERT)
-    `UNUSED_VAR (read)
-    `UNUSED_VAR (wren)
-
+`ifdef SYNTHESIS
+`ifdef QUARTUS
+    localparam `STRING RAM_STYLE_VALUE = USE_BRAM ? "block" : (LUTRAM ? "MLAB, no_rw_check" : "");
+    localparam `STRING RAM_NO_RWCHECK_VALUE = NO_RWCHECK ? "-name add_pass_through_logic_to_inferred_rams off" : "";
+    `define RAM_ARRAY (* ramstyle = RAM_STYLE_VALUE *) reg [WRENW-1:0][WSELW-1:0] ram [0:SIZE-1];
+    `define RAM_WRITE   for (integer i = 0; i < WRENW; ++i) begin \
+                            if (wren[i]) begin \
+                                ram[waddr][i] <= wdata[i * WSELW +: WSELW]; \
+                            end \
+                        end
+    `define RAM_NO_RWCHECK (* altera_attribute = RAM_NO_RWCHECK_VALUE *)
+`else
+    localparam `STRING RAM_STYLE_VALUE = USE_BRAM ? "block" : (LUTRAM ? "distributed" : "");
+    localparam `STRING RAM_NO_RWCHECK_VALUE = NO_RWCHECK ? "no" : "";
+    `define RAM_ARRAY (* ram_style = RAM_STYLE_VALUE *) reg [DATAW-1:0] ram [0:SIZE-1];
+    `define RAM_WRITE   for (integer i = 0; i < WRENW; ++i) begin \
+                            if (wren[i]) begin \
+                                ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW]; \
+                            end \
+                        end
+    `define RAM_NO_RWCHECK (* rw_addr_collision = RAM_NO_RWCHECK_VALUE *)
+`endif
     if (OUT_REG) begin : g_out_reg
         reg [DATAW-1:0] rdata_r;
-        if (READ_ENABLE) begin : g_readen
-            if (WRENW != 1) begin : g_writeen
-            `ifdef QUARTUS
-                if (LUTRAM != 0) begin : g_lutram
-                    `USE_FAST_BRAM `RAM_WREN_BLOCK_ALTERA(write)
-                    `RAM_READ_BLOCK_OUT_REG(read)
-                end else begin : g_no_lutram
-                    `RAM_WREN_BLOCK_ALTERA(write)
-                    `RAM_READ_BLOCK_OUT_REG(read)
+        if (WRITE_MODE == "R") begin : g_read_first
+            `RAM_ARRAY
+            `RAM_INITIALIZATION
+            always @(posedge clk) begin
+                if (write) begin
+                    `RAM_WRITE
                 end
-            `else
-                // Not Quartus
-                if (LUTRAM != 0) begin : g_lutram
-                    `USE_FAST_BRAM `RAM_WREN_BLOCK_XILINX(write)
-                    `RAM_READ_BLOCK_OUT_REG(read)
-                end else begin : g_no_lutram
-                    `RAM_WREN_BLOCK_XILINX(write)
-                    `RAM_READ_BLOCK_OUT_REG(read)
-                end
-            `endif
-            end else begin : g_no_writeen
-                if (LUTRAM != 0) begin : g_lutram
-                    `USE_FAST_BRAM `RAM_WRITE_BLOCK(write)
-                    `RAM_READ_BLOCK_OUT_REG(read)
-                end else begin : g_no_lutram
-                    `RAM_WRITE_BLOCK(write)
-                    `RAM_READ_BLOCK_OUT_REG(read)
+                if (RESET_OUT && reset) begin
+                    rdata_r <= INIT_VALUE;
+                end else if (read || write) begin
+                    rdata_r <= ram[raddr];
                 end
             end
-        end else begin : g_no_readen
-            if (WRENW != 1) begin : g_writeen
-            `ifdef QUARTUS
-                if (LUTRAM != 0) begin : g_lutram
-                    `USE_FAST_BRAM `RAM_WREN_BLOCK_ALTERA(write)
-                    `RAM_READ_BLOCK_OUT_REG(read || write)
-                end else begin : g_no_lutram
-                    `RAM_WREN_BLOCK_ALTERA(write)
-                    `RAM_READ_BLOCK_OUT_REG(read || write)
+        end else if (WRITE_MODE == "W") begin : g_write_first
+            `RAM_ARRAY
+            `RAM_INITIALIZATION
+            always @(posedge clk) begin
+                if (write) begin
+                    `RAM_WRITE
                 end
-            `else
-                // Not Quartus
-                if (LUTRAM != 0) begin : g_lutram
-                    `USE_FAST_BRAM `RAM_WREN_BLOCK_XILINX(write)
-                    `RAM_READ_BLOCK_OUT_REG(read || write)
-                end else begin : g_no_lutram
-                    `RAM_WREN_BLOCK_XILINX(write)
-                    `RAM_READ_BLOCK_OUT_REG(read || write)
+                if (RESET_OUT && reset) begin
+                    rdata_r <= INIT_VALUE;
+                end else if (read || write) begin
+                    rdata_r = ram[raddr];
                 end
-            `endif
-            end else begin : g_no_writeen
-                if (LUTRAM != 0) begin : g_lutram
-                    `USE_FAST_BRAM `RAM_WRITE_BLOCK(write)
-                    `RAM_READ_BLOCK_OUT_REG(read || write)
-                end else begin : g_no_lutram
-                    `RAM_WRITE_BLOCK(write)
-                    `RAM_READ_BLOCK_OUT_REG(read || write)
+            end
+        end else if (WRITE_MODE == "N") begin : g_no_change
+            `RAM_ARRAY
+            `RAM_INITIALIZATION
+            always @(posedge clk) begin
+                if (write) begin
+                    `RAM_WRITE
+                end
+                if (RESET_OUT && reset) begin
+                    rdata_r <= INIT_VALUE;
+                end else if (read && ~write) begin
+                    rdata_r <= ram[raddr];
+                end
+            end
+        end end else if (WRITE_MODE == "U") begin : g_undefined
+            `RAM_NO_RWCHECK `RAM_ARRAY
+            `RAM_INITIALIZATION
+            always @(posedge clk) begin
+                if (write) begin
+                    `RAM_WRITE
+                end
+                if (RESET_OUT && reset) begin
+                    rdata_r <= INIT_VALUE;
+                end else if (read) begin
+                    rdata_r <= ram[raddr];
+                end
+            end
+        end else begin
+            `STATIC_ASSERT(0, ("invalid write mode: %s", WRITE_MODE))
+        end
+    else begin : g_no_out_reg
+        `UNUSED_VAR (read)
+        `RAM_NO_RWCHECK `RAM_ARRAY
+        `RAM_INITIALIZATION
+        always @(posedge clk) begin
+            if (write) begin
+                `RAM_WRITE
+            end
+        end
+        assign rdata = ram[raddr];
+    end
+`else
+    // simulation
+    reg [DATAW-1:0] ram [0:SIZE-1];
+    `RAM_INITIALIZATION
+
+    wire [DATAW-1:0] ram_n;
+    for (genvar i = 0; i < WRENW; ++i) begin : g_ram_n
+        assign ram_n[i * WSELW +: WSELW] = wren[i] ? wdata[i * WSELW +: WSELW] : ram[waddr][i * WSELW +: WSELW];
+    end
+
+    always @(posedge clk) begin
+        if (RESET_RAM && reset) begin
+            for (integer i = 0; i < SIZE; ++i) begin
+                ram[i] <= DATAW'(INIT_VALUE);
+            end
+        end else begin
+            if (write) begin
+                ram[waddr] <= ram_n;
+            end
+        end
+    end
+
+    if (OUT_REG && WRITE_MODE == "R") begin : g_read_first
+        reg [DATAW-1:0] rdata_r;
+        always @(posedge clk) begin
+            if (RESET_OUT && reset) begin
+                rdata_r <= DATAW'(INIT_VALUE);
+            end else if (read || write) begin
+                rdata_r <= ram[raddr];
+            end
+        end
+        assign rdata = rdata_r;
+    end else if (OUT_REG && WRITE_MODE == "W") begin : g_read_first
+        reg [DATAW-1:0] rdata_r;
+        always @(posedge clk) begin
+            if (RESET_OUT && reset) begin
+                rdata_r <= DATAW'(INIT_VALUE);
+            end else if (read || write) begin
+                if (write && (raddr == waddr)) begin
+                    rdata_r <= ram_n;
+                end else begin
+                    rdata_r <= ram[raddr];
                 end
             end
         end
         assign rdata = rdata_r;
-    end else begin : g_no_out_reg
-    `ifdef SYNTHESIS
-        if (WRENW > 1) begin : g_writeen
-        `ifdef QUARTUS
-            if (LUTRAM != 0) begin : g_lutram
-                `USE_FAST_BRAM `RAM_WREN_BLOCK_ALTERA(write)
-                assign rdata = ram[raddr];
-            end else begin : g_no_lutram
-                if (NO_RWCHECK != 0) begin : g_no_rwcheck
-                    `NO_RW_RAM_CHECK `RAM_WREN_BLOCK_ALTERA(write)
-                    assign rdata = ram[raddr];
-                end else begin : g_rwcheck
-                    `RAM_WREN_BLOCK_ALTERA(write)
-                    assign rdata = ram[raddr];
-                end
-            end
-        `else
-            // default synthesis
-            if (LUTRAM != 0) begin : g_lutram
-                `USE_FAST_BRAM `RAM_WREN_BLOCK_XILINX(write)
-                assign rdata = ram[raddr];
-            end else begin : g_no_lutram
-                if (NO_RWCHECK != 0) begin : g_no_rwcheck
-                    `NO_RW_RAM_CHECK `RAM_WREN_BLOCK_XILINX(write)
-                    assign rdata = ram[raddr];
-                end else begin : g_rwcheck
-                    `RAM_WREN_BLOCK_XILINX(write)
-                    assign rdata = ram[raddr];
-                end
-            end
-        `endif
-        end else begin : g_no_writeen
-            // (WRENW == 1)
-            if (LUTRAM != 0) begin : g_lutram
-                `USE_FAST_BRAM `RAM_WRITE_BLOCK(write)
-                assign rdata = ram[raddr];
-            end else begin : g_no_lutram
-                if (NO_RWCHECK != 0) begin : g_no_rwcheck
-                    `NO_RW_RAM_CHECK `RAM_WRITE_BLOCK(write)
-                    assign rdata = ram[raddr];
-                end else begin : g_rwcheck
-                    `RAM_WRITE_BLOCK(write)
-                    assign rdata = ram[raddr];
-                end
-            end
-        end
-    `else
-        // simulation
-        reg [DATAW-1:0] ram [0:SIZE-1];
-        `RAM_INITIALIZATION
-
-        wire [DATAW-1:0] ram_n;
-        for (genvar i = 0; i < WRENW; ++i) begin : g_ram_n
-            assign ram_n[i * WSELW +: WSELW] = ((WRENW == 1) | wren[i]) ? wdata[i * WSELW +: WSELW] : ram[waddr][i * WSELW +: WSELW];
-        end
-
+    end else if (OUT_REG && WRITE_MODE == "N") begin : g_read_first
+        reg [DATAW-1:0] rdata_r;
         always @(posedge clk) begin
-            if (RESET_RAM && reset) begin
-                for (integer i = 0; i < SIZE; ++i) begin
-                    ram[i] <= DATAW'(INIT_VALUE);
-                end
-            end else begin
-                if (write) begin
-                    ram[waddr] <= ram_n;
-                end
+            if (RESET_OUT && reset) begin
+                rdata_r <= DATAW'(INIT_VALUE);
+            end else if (read && ~write) begin
+                rdata_r <= ram[raddr];
             end
         end
-
-        if (!LUTRAM && NO_RWCHECK) begin : g_rdata_no_bypass
+        assign rdata = rdata_r;
+    end else begin : g_async_or_undef
+        wire [DATAW-1:0] rdata_w;
+        if (USE_BRAM && NO_RWCHECK) begin : g_rdata_no_bypass
             reg [DATAW-1:0] prev_data;
             reg [ADDRW-1:0] prev_waddr;
             reg prev_write;
@@ -253,15 +224,29 @@ module VX_dp_ram #(
                 end
             end
 
-            assign rdata = (prev_write && (prev_waddr == raddr)) ? prev_data : ram[raddr];
-            if (RW_ASSERT) begin : g_rw_assert
-                `RUNTIME_ASSERT(~read || (rdata == ram[raddr]), ("%t: read after write hazard", $time))
+            assign rdata_w = (prev_write && (prev_waddr == raddr)) ? prev_data : ram[raddr];
+            if (RW_ASSERT) begin : g_rw_asert
+                `RUNTIME_ASSERT(~read || (rdata_w == ram[raddr]), ("%t: read after write hazard", $time))
             end
         end else begin : g_rdata_with_bypass
-            assign rdata = ram[raddr];
+            assign rdata_w = ram[raddr];
         end
-    `endif
+        if (OUT_REG) begin : g_out_reg
+            reg [DATAW-1:0] rdata_r;
+            always @(posedge clk) begin
+                if (RESET_OUT && reset) begin
+                    rdata_r <= DATAW'(INIT_VALUE);
+                end else if (read) begin
+                    rdata_r <= rdata_w;
+                end
+            end
+            assign rdata = rdata_r;
+        end else begin : g_no_out_reg
+            `UNUSED_VAR (read)
+            assign rdata = rdata_w;
+        end
     end
+`endif
 
 endmodule
 `TRACING_ON

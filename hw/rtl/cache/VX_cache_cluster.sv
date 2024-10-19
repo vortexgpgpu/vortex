@@ -24,22 +24,22 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter NUM_REQS              = 4,
 
     // Size of cache in bytes
-    parameter CACHE_SIZE            = 16384,
+    parameter CACHE_SIZE            = 32768,
     // Size of line inside a bank in bytes
     parameter LINE_SIZE             = 64,
     // Number of banks
-    parameter NUM_BANKS             = 1,
+    parameter NUM_BANKS             = 4,
     // Number of associative ways
     parameter NUM_WAYS              = 4,
     // Size of a word in bytes
-    parameter WORD_SIZE             = 4,
+    parameter WORD_SIZE             = 16,
 
     // Core Response Queue Size
-    parameter CRSQ_SIZE             = 2,
+    parameter CRSQ_SIZE             = 4,
     // Miss Reserv Queue Knob
-    parameter MSHR_SIZE             = 8,
+    parameter MSHR_SIZE             = 16,
     // Memory Response Queue Size
-    parameter MRSQ_SIZE             = 0,
+    parameter MRSQ_SIZE             = 4,
     // Memory Request Queue Size
     parameter MREQ_SIZE             = 4,
 
@@ -53,7 +53,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter DIRTY_BYTES           = 0,
 
     // Replacement policy
-    parameter REPL_POLICY = `CS_REPL_CYCLIC,
+    parameter REPL_POLICY           = `CS_REPL_CYCLIC,
 
     // Request debug identifier
     parameter UUID_WIDTH            = 0,
@@ -68,10 +68,10 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter NC_ENABLE             = 0,
 
     // Core response output buffer
-    parameter CORE_OUT_BUF          = 0,
+    parameter CORE_OUT_BUF          = 3,
 
     // Memory request output buffer
-    parameter MEM_OUT_BUF           = 0
+    parameter MEM_OUT_BUF           = 3
  ) (
     input wire clk,
     input wire reset,

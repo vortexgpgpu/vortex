@@ -112,9 +112,7 @@ module VX_scope_tap #(
         VX_dp_ram #(
             .DATAW (IDLE_CTRW),
             .SIZE  (DEPTH),
-            .OUT_REG (1),
-            .READ_ENABLE (0),
-            .NO_RWCHECK (1)
+            .OUT_REG (1)
         ) delta_store (
             .clk   (clk),
             .reset (reset),
@@ -135,9 +133,7 @@ module VX_scope_tap #(
     VX_dp_ram #(
         .DATAW (DATAW),
         .SIZE  (DEPTH),
-        .OUT_REG (1),
-        .READ_ENABLE (0),
-        .NO_RWCHECK (1)
+        .OUT_REG (1)
     ) data_store (
         .clk   (clk),
         .reset (reset),

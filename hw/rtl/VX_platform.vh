@@ -173,6 +173,7 @@ endgenerate
 
 `ifdef QUARTUS
 `define MAX_FANOUT      8
+`define MAX_LUTRAM      1024
 `define IF_DATA_SIZE(x) $bits(x.data)
 `define USE_BLOCK_BRAM  (* ramstyle = "block" *)
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
@@ -182,6 +183,7 @@ endgenerate
 `define STRING          string
 `elsif VIVADO
 `define MAX_FANOUT      8
+`define MAX_LUTRAM      1024
 `define IF_DATA_SIZE(x) $bits(x.data)
 `define USE_BLOCK_BRAM  (* ram_style = "block" *)
 `define USE_FAST_BRAM   (* ram_style = "distributed" *)
@@ -191,6 +193,7 @@ endgenerate
 `define STRING
 `else
 `define MAX_FANOUT      8
+`define MAX_LUTRAM      1024
 `define IF_DATA_SIZE(x) x.DATA_WIDTH
 `define USE_BLOCK_BRAM
 `define USE_FAST_BRAM
