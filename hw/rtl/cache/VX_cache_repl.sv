@@ -110,7 +110,6 @@ module VX_cache_repl #(
         if (REPL_POLICY == `CS_REPL_PLRU) begin : g_plru
             // Pseudo Least Recently Used replacement policy
             localparam LRU_WIDTH = `UP(NUM_WAYS-1);
-            localparam USE_BRAM = (LRU_WIDTH * `CS_LINES_PER_BANK) >= `MAX_LUTRAM;
 
             wire [LRU_WIDTH-1:0] plru_rdata;
             wire [LRU_WIDTH-1:0] plru_wdata;
@@ -120,15 +119,15 @@ module VX_cache_repl #(
                 .DATAW   (LRU_WIDTH),
                 .SIZE    (`CS_LINES_PER_BANK),
                 .WRENW   (LRU_WIDTH),
-                .OUT_REG (USE_BRAM)
+                .OUT_REG (1)
             ) plru_store (
                 .clk   (clk),
                 .reset (reset),
-                .read  (USE_BRAM ? ~stall : repl_valid),
+                .read  (~stall),
                 .write (hit_valid),
                 .wren  (plru_wmask),
                 .waddr (hit_line),
-                .raddr (USE_BRAM ? repl_line_n : repl_line),
+                .raddr (repl_line_n),
                 .wdata (plru_wdata),
                 .rdata (plru_rdata)
             );
@@ -150,8 +149,6 @@ module VX_cache_repl #(
 
         end else if (REPL_POLICY == `CS_REPL_CYCLIC) begin : g_cyclic
             // Cyclic replacement policy
-            localparam USE_BRAM = (WAY_SEL_WIDTH * `CS_LINES_PER_BANK) >= `MAX_LUTRAM;
-
             `UNUSED_VAR (hit_valid)
             `UNUSED_VAR (hit_line)
             `UNUSED_VAR (hit_way)
@@ -163,14 +160,14 @@ module VX_cache_repl #(
             VX_dp_ram #(
                 .DATAW   (WAY_SEL_WIDTH),
                 .SIZE    (`CS_LINES_PER_BANK),
-                .OUT_REG (USE_BRAM)
+                .OUT_REG (1)
             ) ctr_store (
                 .clk   (clk),
                 .reset (reset),
-                .read  (USE_BRAM ? ~stall : repl_valid),
+                .read  (~stall),
                 .write (repl_valid),
                 .wren  (1'b1),
-                .raddr (USE_BRAM ? repl_line_n : repl_line),
+                .raddr (repl_line_n),
                 .waddr (repl_line),
                 .wdata (ctr_wdata),
                 .rdata (ctr_rdata)

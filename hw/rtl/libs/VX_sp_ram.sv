@@ -141,18 +141,17 @@ module VX_sp_ram #(
     reg [DATAW-1:0] ram [0:SIZE-1];
     `RAM_INITIALIZATION
 
-    wire [DATAW-1:0] ram_n;
-    for (genvar i = 0; i < WRENW; ++i) begin : g_ram_n
-        assign ram_n[i * WSELW +: WSELW] = wren[i] ? wdata[i * WSELW +: WSELW] : ram[addr][i * WSELW +: WSELW];
-    end
-
     always @(posedge clk) begin
         if (RESET_RAM && reset) begin
             for (integer i = 0; i < SIZE; ++i) begin
                 ram[i] <= DATAW'(INIT_VALUE);
             end
         end else if (write) begin
-            ram[addr] <= ram_n;
+            for (integer i = 0; i < WRENW; ++i) begin
+                if (wren[i]) begin
+                    ram[addr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
+                end
+            end
         end
     end
 
