@@ -97,135 +97,114 @@ module VX_cache_repl #(
     input wire stall,
     input wire hit_valid,
     input wire [`CS_LINE_SEL_BITS-1:0] hit_line,
-    input wire [NUM_WAYS-1:0] hit_way,
+    input wire [`CS_WAY_SEL_WIDTH-1:0] hit_way,
     input wire repl_valid,
     input wire [`CS_LINE_SEL_BITS-1:0] repl_line_n,
     input wire [`CS_LINE_SEL_BITS-1:0] repl_line,
-    output wire [NUM_WAYS-1:0] repl_way
+    output wire [`CS_WAY_SEL_WIDTH-1:0] repl_way
 );
+    localparam WAY_SEL_WIDTH = `CS_WAY_SEL_WIDTH;
     `UNUSED_VAR (stall)
 
-    localparam WAY_IDX_BITS = $clog2(NUM_WAYS);
-    localparam WAY_IDX_WIDTH = `UP(WAY_IDX_BITS);
+    if (NUM_WAYS > 1) begin : g_enable
+        if (REPL_POLICY == `CS_REPL_PLRU) begin : g_plru
+            // Pseudo Least Recently Used replacement policy
+            localparam LRU_WIDTH = `UP(NUM_WAYS-1);
+            localparam USE_BRAM = (LRU_WIDTH * `CS_LINES_PER_BANK) >= `MAX_LUTRAM;
 
-    if (REPL_POLICY == `CS_REPL_PLRU) begin : g_plru
-        // Pseudo Least Recently Used replacement policy
-        localparam LRU_WIDTH = `UP(NUM_WAYS-1);
-        localparam FORCE_BRAM = (LRU_WIDTH * `CS_LINES_PER_BANK) >= 1024;
+            wire [LRU_WIDTH-1:0] plru_rdata;
+            wire [LRU_WIDTH-1:0] plru_wdata;
+            wire [LRU_WIDTH-1:0] plru_wmask;
 
-        wire [WAY_IDX_WIDTH-1:0] repl_way_idx;
-        wire [WAY_IDX_WIDTH-1:0] hit_way_idx;
-        wire [LRU_WIDTH-1:0] plru_rdata;
-        wire [LRU_WIDTH-1:0] plru_wdata;
-        wire [LRU_WIDTH-1:0] plru_wmask;
+            VX_dp_ram #(
+                .DATAW   (LRU_WIDTH),
+                .SIZE    (`CS_LINES_PER_BANK),
+                .WRENW   (LRU_WIDTH),
+                .OUT_REG (USE_BRAM)
+            ) plru_store (
+                .clk   (clk),
+                .reset (reset),
+                .read  (USE_BRAM ? ~stall : repl_valid),
+                .write (hit_valid),
+                .wren  (plru_wmask),
+                .waddr (hit_line),
+                .raddr (USE_BRAM ? repl_line_n : repl_line),
+                .wdata (plru_wdata),
+                .rdata (plru_rdata)
+            );
 
-        VX_dp_ram #(
-            .DATAW   (LRU_WIDTH),
-            .SIZE    (`CS_LINES_PER_BANK),
-            .WRENW   (LRU_WIDTH),
-            .OUT_REG (FORCE_BRAM)
-        ) plru_store (
-            .clk   (clk),
-            .reset (reset),
-            .read  (FORCE_BRAM ? ~stall : repl_valid),
-            .write (hit_valid),
-            .wren  (plru_wmask),
-            .waddr (hit_line),
-            .raddr (FORCE_BRAM ? repl_line_n : repl_line),
-            .wdata (plru_wdata),
-            .rdata (plru_rdata)
-        );
+            plru_decoder #(
+                .NUM_WAYS (NUM_WAYS)
+            ) plru_dec (
+                .way_idx  (hit_way),
+                .lru_data (plru_wdata),
+                .lru_mask (plru_wmask)
+            );
 
-        VX_onehot_encoder #(
-            .N (NUM_WAYS)
-        ) hit_way_enc (
-            .data_in  (hit_way),
-            .data_out (hit_way_idx),
-            `UNUSED_PIN (valid_out)
-        );
+            plru_encoder #(
+                .NUM_WAYS (NUM_WAYS)
+            ) plru_enc (
+                .lru_in  (plru_rdata),
+                .way_idx (repl_way)
+            );
 
-        plru_decoder #(
-            .NUM_WAYS (NUM_WAYS)
-        ) plru_dec (
-            .way_idx  (hit_way_idx),
-            .lru_data (plru_wdata),
-            .lru_mask (plru_wmask)
-        );
+        end else if (REPL_POLICY == `CS_REPL_CYCLIC) begin : g_cyclic
+            // Cyclic replacement policy
+            localparam USE_BRAM = (WAY_SEL_WIDTH * `CS_LINES_PER_BANK) >= `MAX_LUTRAM;
 
-        plru_encoder #(
-            .NUM_WAYS (NUM_WAYS)
-        ) plru_enc (
-            .lru_in  (plru_rdata),
-            .way_idx (repl_way_idx)
-        );
+            `UNUSED_VAR (hit_valid)
+            `UNUSED_VAR (hit_line)
+            `UNUSED_VAR (hit_way)
+            `UNUSED_VAR (repl_valid)
 
-        VX_decoder #(
-            .N (WAY_IDX_BITS)
-        ) repl_way_dec (
-            .sel_in   (repl_way_idx),
-            .data_in  (1'b1),
-            .data_out (repl_way)
-        );
+            wire [WAY_SEL_WIDTH-1:0] ctr_rdata;
+            wire [WAY_SEL_WIDTH-1:0] ctr_wdata = ctr_rdata + 1;
 
-    end else if (REPL_POLICY == `CS_REPL_CYCLIC) begin : g_cyclic
-        // Cyclic replacement policy
-        localparam CTR_WIDTH = $clog2(NUM_WAYS);
-        localparam FORCE_BRAM = (CTR_WIDTH * `CS_LINES_PER_BANK) >= 1024;
+            VX_dp_ram #(
+                .DATAW   (WAY_SEL_WIDTH),
+                .SIZE    (`CS_LINES_PER_BANK),
+                .OUT_REG (USE_BRAM)
+            ) ctr_store (
+                .clk   (clk),
+                .reset (reset),
+                .read  (USE_BRAM ? ~stall : repl_valid),
+                .write (repl_valid),
+                .wren  (1'b1),
+                .raddr (USE_BRAM ? repl_line_n : repl_line),
+                .waddr (repl_line),
+                .wdata (ctr_wdata),
+                .rdata (ctr_rdata)
+            );
 
-        `UNUSED_VAR (hit_valid)
-        `UNUSED_VAR (hit_line)
-        `UNUSED_VAR (hit_way)
-        `UNUSED_VAR (repl_valid)
-
-        wire [`UP(CTR_WIDTH)-1:0] ctr_rdata;
-        wire [`UP(CTR_WIDTH)-1:0] ctr_wdata = ctr_rdata + 1;
-
-        VX_dp_ram #(
-            .DATAW   (`UP(CTR_WIDTH)),
-            .SIZE    (`CS_LINES_PER_BANK),
-            .OUT_REG (FORCE_BRAM)
-        ) ctr_store (
-            .clk   (clk),
-            .reset (reset),
-            .read  (FORCE_BRAM ? ~stall : repl_valid),
-            .write (repl_valid),
-            .wren  (1'b1),
-            .raddr (FORCE_BRAM ? repl_line_n : repl_line),
-            .waddr (repl_line),
-            .wdata (ctr_wdata),
-            .rdata (ctr_rdata)
-        );
-
-        VX_decoder #(
-            .N (WAY_IDX_BITS)
-        ) ctr_decoder (
-            .sel_in   (ctr_rdata),
-            .data_in  (1'b1),
-            .data_out (repl_way)
-        );
-    end else begin : g_random
-        // Random replacement policy
+            assign repl_way = ctr_rdata;
+        end else begin : g_random
+            // Random replacement policy
+            `UNUSED_VAR (hit_valid)
+            `UNUSED_VAR (hit_line)
+            `UNUSED_VAR (hit_way)
+            `UNUSED_VAR (repl_valid)
+            `UNUSED_VAR (repl_line)
+            `UNUSED_VAR (repl_line_n)
+            reg [WAY_SEL_WIDTH-1:0] victim_idx;
+            always @(posedge clk) begin
+                if (reset) begin
+                    victim_idx <= 0;
+                end else if (~stall) begin
+                    victim_idx <= victim_idx + 1;
+                end
+            end
+            assign repl_way = victim_idx;
+        end
+    end else begin : g_disable
+        `UNUSED_VAR (clk)
+        `UNUSED_VAR (reset)
         `UNUSED_VAR (hit_valid)
         `UNUSED_VAR (hit_line)
         `UNUSED_VAR (hit_way)
         `UNUSED_VAR (repl_valid)
         `UNUSED_VAR (repl_line)
         `UNUSED_VAR (repl_line_n)
-        if (NUM_WAYS > 1) begin : g_repl_way
-            reg [NUM_WAYS-1:0] victim_way;
-            always @(posedge clk) begin
-                if (reset) begin
-                    victim_way <= 1;
-                end else if (~stall) begin
-                    victim_way <= {victim_way[NUM_WAYS-2:0], victim_way[NUM_WAYS-1]};
-                end
-            end
-            assign repl_way = victim_way;
-        end else begin : g_repl_way_1
-            `UNUSED_VAR (clk)
-            `UNUSED_VAR (reset)
-            assign repl_way = 1'b1;
-        end
+        assign repl_way = 1'b0;
     end
 
 endmodule

@@ -150,19 +150,19 @@ module VX_cache_bank #(
     wire                            is_creq_st0, is_creq_st1;
     wire                            is_fill_st0, is_fill_st1;
     wire                            is_flush_st0, is_flush_st1;
-    wire [NUM_WAYS-1:0]             flush_way_st0;
-    wire [NUM_WAYS-1:0]             evict_way_st0, evict_way_st1;
+    wire [`CS_WAY_SEL_WIDTH-1:0]    flush_way_st0, evict_way_st0;
+    wire [`CS_WAY_SEL_WIDTH-1:0]    way_idx_st1;
 
     wire [`CS_LINE_ADDR_WIDTH-1:0]  addr_sel, addr_st0, addr_st1;
-    wire [`CS_LINE_SEL_BITS-1:0]    line_idx_st0, line_idx_st1;
-    wire [`CS_TAG_SEL_BITS-1:0]     line_tag_st1;
+    wire [`CS_LINE_SEL_BITS-1:0]    line_idx_sel, line_idx_st0, line_idx_st1;
+    wire [`CS_TAG_SEL_BITS-1:0]     line_tag_st0, line_tag_st1;
+    wire [`CS_TAG_SEL_BITS-1:0]     evict_tag_st0, evict_tag_st1;
     wire                            rw_sel, rw_st0, rw_st1;
     wire [WORD_SEL_WIDTH-1:0]       word_idx_sel, word_idx_st0, word_idx_st1;
     wire [WORD_SIZE-1:0]            byteen_sel, byteen_st0, byteen_st1;
     wire [REQ_SEL_WIDTH-1:0]        req_idx_sel, req_idx_st0, req_idx_st1;
     wire [TAG_WIDTH-1:0]            tag_sel, tag_st0, tag_st1;
     wire [`CS_WORD_WIDTH-1:0]       write_word_st0, write_word_st1;
-    wire [`CS_WORD_WIDTH-1:0]       read_data_st1;
     wire [`CS_LINE_WIDTH-1:0]       data_sel, data_st0, data_st1;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_id_st0, mshr_id_st1;
     wire [MSHR_ADDR_WIDTH-1:0]      replay_id_st0;
@@ -170,18 +170,18 @@ module VX_cache_bank #(
     wire [`UP(FLAGS_WIDTH)-1:0]     flags_sel, flags_st0, flags_st1;
     wire                            mshr_pending_st0, mshr_pending_st1;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_previd_st0, mshr_previd_st1;
+    wire                            is_hit_st0, is_hit_st1;
     wire                            mshr_empty;
 
     wire flush_valid;
     wire init_valid;
     wire [`CS_LINE_SEL_BITS-1:0] flush_sel;
-    wire [NUM_WAYS-1:0] flush_way;
+    wire [`CS_WAY_SEL_WIDTH-1:0] flush_way;
     wire flush_ready;
 
     // ensure we have no pending memory request in the bank
     wire no_pending_req = ~valid_st0 && ~valid_st1 && mreq_queue_empty;
 
-    // flush unit
     VX_bank_flush #(
         .BANK_ID    (BANK_ID),
         .CACHE_SIZE (CACHE_SIZE),
@@ -203,9 +203,7 @@ module VX_cache_bank #(
         .bank_empty  (no_pending_req)
     );
 
-    logic rdw_hazard, post_hazard;
-
-    wire pipe_stall = crsp_queue_stall || rdw_hazard;
+    wire pipe_stall = crsp_queue_stall;
 
     // inputs arbitration:
     // mshr replay has highest priority to maximize utilization since there is no miss.
@@ -295,8 +293,6 @@ module VX_cache_bank #(
         assign req_uuid_sel = '0;
     end
 
-    wire [`CS_LINE_SEL_BITS-1:0] line_idx_sel = addr_sel[`CS_LINE_SEL_BITS-1:0];
-
     wire is_init_sel   = init_valid;
     wire is_creq_sel   = creq_enable || replay_enable;
     wire is_fill_sel   = fill_enable;
@@ -304,7 +300,7 @@ module VX_cache_bank #(
     wire is_replay_sel = replay_enable;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `UP(FLAGS_WIDTH) + NUM_WAYS + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + 1 + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `UP(FLAGS_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + 1 + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -334,22 +330,18 @@ module VX_cache_bank #(
 
     wire do_read_st1  = valid_st1 && is_read_st1;
     wire do_write_st1 = valid_st1 && is_write_st1;
-    wire do_fill_st1  = valid_st1 && is_fill_st1;
-    wire do_flush_st1 = valid_st1 && is_flush_st1 && WRITEBACK;
+
+    assign line_idx_sel = addr_sel[`CS_LINE_SEL_BITS-1:0];
+    assign line_idx_st0 = addr_st0[`CS_LINE_SEL_BITS-1:0];
+    assign line_tag_st0 = `CS_LINE_ADDR_TAG(addr_st0);
 
     assign write_word_st0 = data_st0[`CS_WORD_WIDTH-1:0];
-    assign line_idx_st0 = addr_st0[`CS_LINE_SEL_BITS-1:0];
-
-    wire [`CS_TAG_SEL_BITS-1:0] evict_tag_st1;
-    wire [NUM_WAYS-1:0] tag_matches_st1;
-
-    wire is_hit_st1 = (| tag_matches_st1);
 
     wire do_lookup_st0 = do_read_st0 || do_write_st0;
-
     wire do_lookup_st1 = do_read_st1 || do_write_st1;
 
-    reg [NUM_WAYS-1:0] victim_way_st0;
+    wire [`CS_WAY_SEL_WIDTH-1:0] victim_way_st0;
+    wire [NUM_WAYS-1:0] tag_matches_st0;
 
     VX_cache_repl #(
         .CACHE_SIZE  (CACHE_SIZE),
@@ -363,10 +355,10 @@ module VX_cache_bank #(
         .stall      (pipe_stall),
         .hit_valid  (do_lookup_st1 && is_hit_st1 && ~pipe_stall),
         .hit_line   (line_idx_st1),
-        .hit_way    (tag_matches_st1),
+        .hit_way    (way_idx_st1),
         .repl_valid (do_fill_st0 && ~pipe_stall),
-        .repl_line  (line_idx_st0),
         .repl_line_n(line_idx_sel),
+        .repl_line  (line_idx_st0),
         .repl_way   (victim_way_st0)
     );
 
@@ -388,27 +380,29 @@ module VX_cache_bank #(
         .flush      (do_flush_st0 && ~pipe_stall),
         .fill       (do_fill_st0 && ~pipe_stall),
         .lookup     (do_lookup_st0 && ~pipe_stall),
-        .line_addr  (addr_st0),
+        .line_idx_n (line_idx_sel),
+        .line_idx   (line_idx_st0),
+        .line_tag   (line_tag_st0),
         .evict_way  (evict_way_st0),
         // outputs
-        .tag_matches_r(tag_matches_st1),
-        .line_tag_r (line_tag_st1),
-        .evict_tag_r(evict_tag_st1),
-        .evict_way_r(evict_way_st1)
+        .tag_matches(tag_matches_st0),
+        .evict_tag  (evict_tag_st0)
     );
+
+    assign is_hit_st0 = (| tag_matches_st0);
 
     wire [MSHR_ADDR_WIDTH-1:0] mshr_alloc_id_st0;
     assign mshr_id_st0 = is_replay_st0 ? replay_id_st0 : mshr_alloc_id_st0;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `UP(FLAGS_WIDTH) + `CS_LINE_SEL_BITS + `CS_LINE_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + `UP(FLAGS_WIDTH) + `CS_TAG_SEL_BITS + `CS_TAG_SEL_BITS + `CS_LINE_SEL_BITS + `CS_LINE_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~pipe_stall),
-        .data_in  ({valid_st0, is_fill_st0, is_flush_st0, is_creq_st0, is_replay_st0, rw_st0, flags_st0, line_idx_st0, data_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_previd_st0, mshr_pending_st0}),
-        .data_out ({valid_st1, is_fill_st1, is_flush_st1, is_creq_st1, is_replay_st1, rw_st1, flags_st1, line_idx_st1, data_st1, byteen_st1, word_idx_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_previd_st1, mshr_pending_st1})
+        .data_in  ({valid_st0, is_fill_st0, is_flush_st0, is_creq_st0, is_replay_st0, is_hit_st0, rw_st0, flags_st0, evict_tag_st0, line_tag_st0, line_idx_st0, data_st0, byteen_st0, word_idx_st0, req_idx_st0, tag_st0, mshr_id_st0, mshr_previd_st0, mshr_pending_st0}),
+        .data_out ({valid_st1, is_fill_st1, is_flush_st1, is_creq_st1, is_replay_st1, is_hit_st1, rw_st1, flags_st1, evict_tag_st1, line_tag_st1, line_idx_st1, data_st1, byteen_st1, word_idx_st1, req_idx_st1, tag_st1, mshr_id_st1, mshr_previd_st1, mshr_pending_st1})
     );
 
     if (UUID_WIDTH != 0) begin : g_req_uuid_st1
@@ -422,58 +416,12 @@ module VX_cache_bank #(
     // ensure mshr replay always get a hit
     `RUNTIME_ASSERT (~(valid_st1 && is_replay_st1 && ~is_hit_st1), ("%t: missed mshr replay", $time))
 
-    if (WRITE_ENABLE) begin : g_rdw_hazard
-        // This implementation uses single-port BRAMs for the tags and data stores.
-        // Using different stages for read and write operations requires a pipeline stall in between due to address port sharing.
-        // Tags fill/flush can perform read and write in the same stage, since no dependency between.
-        // Data fill/flush can perform read and write in the same stage, since way_idx is available in st0.
-        // A data read should happen in st0 for its result to be available in st1.
-        // A data write should happen in st1 when the tag hit status is available.
-        // The r/w hazard is needed for consecutive writes since they both wonly write in st1.
-        // The r/w hazard is also not needed for next writethrough fill/flush to the same line.
-        // For reads or writeback fill/flush to the same line, we sill need the hazard
-        // because the data writeen in st1 cannot be read at the same time in st0 without extra forwarding logic.
-        wire is_write_sel = is_creq_sel && rw_sel;
-        wire is_same_line = (line_idx_sel == line_idx_st0);
-        always @(posedge clk) begin
-            if (reset) begin
-                post_hazard <= 0;
-                rdw_hazard <= 0;
-            end else begin
-                if (~crsp_queue_stall) begin
-                    post_hazard <= rdw_hazard;
-                    rdw_hazard <= do_write_st0 && valid_sel && ~(is_write_sel || (is_same_line && !WRITEBACK && (is_fill_sel || is_flush_sel)));
-                end
-            end
-        end
-    end else begin : g_rdw_hazard_ro
-        assign rdw_hazard = 0;
-        assign post_hazard = 0;
-    end
-
     assign write_word_st1 = data_st1[`CS_WORD_WIDTH-1:0];
     `UNUSED_VAR (data_st1)
 
-    wire [`CS_LINE_WIDTH-1:0] evict_data_st1;
+    wire[`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] read_data_st1;
     wire [LINE_SIZE-1:0] evict_byteen_st1;
-    wire line_dirty_st1;
-
-    wire data_write;
-    wire [`CS_LINE_SEL_BITS-1:0] data_line_idx;
-
-    if (WRITE_ENABLE) begin : g_data_ctrl
-        // by default all data accesses happen in sto and use line_idx_st0.
-        // data writes should happen in st1 when the tag hit is available,
-        // and use line_idx_st1 to ensure the correct line is updated.
-        // if a rdw hazard is active due to conflict, ensure we don't write twice.
-        assign data_write = do_write_st1 && ~post_hazard && ~crsp_queue_stall;
-        assign data_line_idx = data_write ? line_idx_st1 : line_idx_st0;
-    end else begin : g_data_ctrl_ro
-        `UNUSED_VAR (post_hazard)
-        `UNUSED_VAR (do_write_st1)
-        assign data_write = 0;
-        assign data_line_idx = line_idx_st0;
-    end
+    wire evict_dirty_st1;
 
     VX_cache_data #(
         .CACHE_SIZE   (CACHE_SIZE),
@@ -493,18 +441,18 @@ module VX_cache_bank #(
         .fill       (do_fill_st0 && ~pipe_stall),
         .flush      (do_flush_st0 && ~pipe_stall),
         .read       (do_read_st0 && ~pipe_stall),
-        .write      (data_write),
+        .write      (do_write_st0 && ~pipe_stall),
         .evict_way  (evict_way_st0),
-        .tag_matches(tag_matches_st1),
-        .line_idx   (data_line_idx),
+        .tag_matches(tag_matches_st0),
+        .line_idx   (line_idx_st0),
         .fill_data  (data_st0),
-        .write_word (write_word_st1),
-        .word_idx   (word_idx_st1),
-        .write_byteen(byteen_st1),
+        .write_word (write_word_st0),
+        .word_idx   (word_idx_st0),
+        .write_byteen(byteen_st0),
         // outputs
+        .way_idx    (way_idx_st1),
         .read_data  (read_data_st1),
-        .line_dirty (line_dirty_st1),
-        .evict_data (evict_data_st1),
+        .evict_dirty(evict_dirty_st1),
         .evict_byteen(evict_byteen_st1)
     );
 
@@ -600,7 +548,7 @@ module VX_cache_bank #(
 
     assign crsp_queue_valid = do_read_st1 && is_hit_st1;
     assign crsp_queue_idx   = req_idx_st1;
-    assign crsp_queue_data  = read_data_st1;
+    assign crsp_queue_data  = read_data_st1[word_idx_st1];
     assign crsp_queue_tag   = tag_st1;
 
     VX_elastic_buffer #(
@@ -610,7 +558,7 @@ module VX_cache_bank #(
     ) core_rsp_queue (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (crsp_queue_valid && ~rdw_hazard),
+        .valid_in  (crsp_queue_valid),
         .ready_in  (crsp_queue_ready),
         .data_in   ({crsp_queue_tag, crsp_queue_data, crsp_queue_idx}),
         .data_out  ({core_rsp_tag, core_rsp_data, core_rsp_idx}),
@@ -618,9 +566,7 @@ module VX_cache_bank #(
         .ready_out (core_rsp_ready)
     );
 
-    // we use 'do_read_st1' instead 'crsp_queue_valid'
-    // to remove costly 'is_hit_st1' signal from critical paths.
-    assign crsp_queue_stall = do_read_st1 && ~crsp_queue_ready;
+    assign crsp_queue_stall = crsp_queue_valid && ~crsp_queue_ready;
 
     // schedule memory request
 
@@ -634,7 +580,7 @@ module VX_cache_bank #(
 
     wire is_fill_or_flush_st1 = is_fill_st1 || (is_flush_st1 && WRITEBACK);
     wire do_fill_or_flush_st1 = valid_st1 && is_fill_or_flush_st1;
-    wire do_writeback_st1 = do_fill_or_flush_st1 && line_dirty_st1;
+    wire do_writeback_st1 = do_fill_or_flush_st1 && evict_dirty_st1;
     wire [`CS_LINE_ADDR_WIDTH-1:0] evict_addr_st1 = {evict_tag_st1, line_idx_st1};
 
     if (WRITE_ENABLE) begin : g_mreq_queue
@@ -642,7 +588,7 @@ module VX_cache_bank #(
             if (DIRTY_BYTES) begin : g_dirty_bytes
                 // ensure dirty bytes match the tag info
                 wire has_dirty_bytes = (| evict_byteen_st1);
-                `RUNTIME_ASSERT (~do_fill_or_flush_st1 || (line_dirty_st1 == has_dirty_bytes), ("%t: missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", $time, line_dirty_st1, has_dirty_bytes, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID)))
+                `RUNTIME_ASSERT (~do_fill_or_flush_st1 || (evict_dirty_st1 == has_dirty_bytes), ("%t: missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", $time, evict_dirty_st1, has_dirty_bytes, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID)))
             end
             // issue a fill request on a read/write miss
             // issue a writeback on a dirty line eviction
@@ -651,8 +597,10 @@ module VX_cache_bank #(
                                   && ~pipe_stall;
             assign mreq_queue_addr = is_fill_or_flush_st1 ? evict_addr_st1 : addr_st1;
             assign mreq_queue_rw = is_fill_or_flush_st1;
-            assign mreq_queue_data = evict_data_st1;
+            assign mreq_queue_data = read_data_st1;
             assign mreq_queue_byteen = is_fill_or_flush_st1 ? evict_byteen_st1 : '1;
+            `UNUSED_VAR (write_word_st1)
+            `UNUSED_VAR (byteen_st1)
         end else begin : g_wt
             wire [LINE_SIZE-1:0] line_byteen;
             VX_decoder #(
@@ -675,7 +623,6 @@ module VX_cache_bank #(
             `UNUSED_VAR (is_fill_or_flush_st1)
             `UNUSED_VAR (do_writeback_st1)
             `UNUSED_VAR (evict_addr_st1)
-            `UNUSED_VAR (evict_data_st1)
             `UNUSED_VAR (evict_byteen_st1)
         end
     end else begin : g_mreq_queue_ro
@@ -688,8 +635,9 @@ module VX_cache_bank #(
         assign mreq_queue_byteen = '1;
         `UNUSED_VAR (do_writeback_st1)
         `UNUSED_VAR (evict_addr_st1)
-        `UNUSED_VAR (evict_data_st1)
         `UNUSED_VAR (evict_byteen_st1)
+        `UNUSED_VAR (write_word_st1)
+        `UNUSED_VAR (byteen_st1)
     end
 
     if (UUID_WIDTH != 0) begin : g_mreq_queue_tag_uuid
@@ -722,10 +670,6 @@ module VX_cache_bank #(
 
     assign mem_req_valid = ~mreq_queue_empty;
 
-    `UNUSED_VAR (do_fill_st1)
-    `UNUSED_VAR (do_flush_st1)
-    `UNUSED_VAR (evict_way_st1)
-
 ///////////////////////////////////////////////////////////////////////////////
 
 `ifdef PERF_ENABLE
@@ -740,8 +684,8 @@ module VX_cache_bank #(
                    && ~(replay_fire || mem_rsp_fire || core_req_fire || flush_fire);
     always @(posedge clk) begin
         if (input_stall || pipe_stall) begin
-            `TRACE(4, ("%t: *** %s stall: crsq=%b, mreq=%b, mshr=%b, rdw=%b\n", $time, INSTANCE_ID,
-                crsp_queue_stall, mreq_queue_alm_full, mshr_alm_full, rdw_hazard))
+            `TRACE(4, ("%t: *** %s stall: crsq=%b, mreq=%b, mshr=%b\n", $time, INSTANCE_ID,
+                crsp_queue_stall, mreq_queue_alm_full, mshr_alm_full))
         end
         if (mem_rsp_fire) begin
             `TRACE(2, ("%t: %s fill-rsp: addr=0x%0h, mshr_id=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
@@ -764,32 +708,37 @@ module VX_cache_bank #(
             `TRACE(3, ("%t: %s tags-init: addr=0x%0h, line=%0d\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), line_idx_st0))
         end
         if (do_fill_st0 && ~pipe_stall) begin
-            `TRACE(3, ("%t: %s tags-fill: addr=0x%0h, way=%b, line=%0d (#%0d)\n", $time, INSTANCE_ID,
+            `TRACE(3, ("%t: %s tags-fill: addr=0x%0h, way=%0d, line=%0d (#%0d)\n", $time, INSTANCE_ID,
                 `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), evict_way_st0, line_idx_st0, req_uuid_st0))
         end
         if (do_flush_st0 && ~pipe_stall) begin
-            `TRACE(3, ("%t: %s tags-flush: addr=0x%0h, way=%b, line=%0d (#%0d)\n", $time, INSTANCE_ID,
+            `TRACE(3, ("%t: %s tags-flush: addr=0x%0h, way=%0d, line=%0d (#%0d)\n", $time, INSTANCE_ID,
                 `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), evict_way_st0, line_idx_st0, req_uuid_st0))
         end
         if (do_lookup_st1 && ~pipe_stall) begin
-            `TRACE(3, ("%t: %s tags-Lookup: addr=0x%0h, rw=%b, way=%b, line=%0d, tag=0x%0h, hit=%b (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), rw_st1, tag_matches_st1, line_idx_st1, line_tag_st1, is_hit_st1, req_uuid_st1))
+            if (is_hit_st1) begin
+                `TRACE(3, ("%t: %s tags-hit: addr=0x%0h, rw=%b, way=%0d, line=%0d, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID,
+                    `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), rw_st1, way_idx_st1, line_idx_st1, line_tag_st1, req_uuid_st1))
+            end else begin
+                `TRACE(3, ("%t: %s tags-miss: addr=0x%0h, rw=%b, way=%0d, line=%0d, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID,
+                    `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), rw_st1, way_idx_st1, line_idx_st1, line_tag_st1, req_uuid_st1))
+            end
         end
         if (do_fill_st0 && ~pipe_stall) begin
-            `TRACE(3, ("%t: %s data-fill: addr=0x%0h, way=%b, line=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
+            `TRACE(3, ("%t: %s data-fill: addr=0x%0h, way=%0d, line=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
                 `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), evict_way_st0, line_idx_st0, data_st0, req_uuid_st0))
         end
         if (do_flush_st0 && ~pipe_stall) begin
-            `TRACE(3, ("%t: %s data-flush: addr=0x%0h, way=%b, line=%0d (#%0d)\n", $time, INSTANCE_ID,
+            `TRACE(3, ("%t: %s data-flush: addr=0x%0h, way=%0d, line=%0d (#%0d)\n", $time, INSTANCE_ID,
                 `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), evict_way_st0, line_idx_st0, req_uuid_st0))
         end
         if (do_read_st1 && is_hit_st1 && ~pipe_stall) begin
-            `TRACE(3, ("%t: %s data-read: addr=0x%0h, way=%b, line=%0d, wsel=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), tag_matches_st1, line_idx_st1, word_idx_st1, read_data_st1, req_uuid_st1))
+            `TRACE(3, ("%t: %s data-read: addr=0x%0h, way=%0d, line=%0d, wsel=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), way_idx_st1, line_idx_st1, word_idx_st1, crsp_queue_data, req_uuid_st1))
         end
         if (do_write_st1 && is_hit_st1 && ~pipe_stall) begin
-            `TRACE(3, ("%t: %s data-write: addr=0x%0h, way=%b, line=%0d, wsel=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), tag_matches_st1, line_idx_st1, word_idx_st1, byteen_st1, write_word_st1, req_uuid_st1))
+            `TRACE(3, ("%t: %s data-write: addr=0x%0h, way=%0d, line=%0d, wsel=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), way_idx_st1, line_idx_st1, word_idx_st1, byteen_st1, write_word_st1, req_uuid_st1))
         end
         if (crsp_queue_fire) begin
             `TRACE(2, ("%t: %s core-rd-rsp: addr=0x%0h, tag=0x%0h, req_idx=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,

@@ -61,7 +61,7 @@ module VX_dp_ram #(
 
 `ifdef SYNTHESIS
 `ifdef QUARTUS
-    localparam `STRING RAM_STYLE_VALUE = USE_BRAM ? "block" : (LUTRAM ? "MLAB, no_rw_check" : "");
+    localparam `STRING RAM_STYLE_VALUE = USE_BRAM ? "block" : (LUTRAM ? "MLAB, no_rw_check" : "auto");
     localparam `STRING RAM_NO_RWCHECK_VALUE = NO_RWCHECK ? "-name add_pass_through_logic_to_inferred_rams off" : "";
     `define RAM_ARRAY (* ramstyle = RAM_STYLE_VALUE *) reg [WRENW-1:0][WSELW-1:0] ram [0:SIZE-1];
     `define RAM_WRITE   for (integer i = 0; i < WRENW; ++i) begin \
@@ -70,9 +70,9 @@ module VX_dp_ram #(
                             end \
                         end
     `define RAM_NO_RWCHECK (* altera_attribute = RAM_NO_RWCHECK_VALUE *)
-`else
-    localparam `STRING RAM_STYLE_VALUE = USE_BRAM ? "block" : (LUTRAM ? "distributed" : "");
-    localparam `STRING RAM_NO_RWCHECK_VALUE = NO_RWCHECK ? "no" : "";
+`elif VIVADO
+    localparam `STRING RAM_STYLE_VALUE = USE_BRAM ? "block" : (LUTRAM ? "distributed" : "auto");
+    localparam `STRING RAM_NO_RWCHECK_VALUE = NO_RWCHECK ? "no" : "auto";
     `define RAM_ARRAY (* ram_style = RAM_STYLE_VALUE *) reg [DATAW-1:0] ram [0:SIZE-1];
     `define RAM_WRITE   for (integer i = 0; i < WRENW; ++i) begin \
                             if (wren[i]) begin \
@@ -80,6 +80,14 @@ module VX_dp_ram #(
                             end \
                         end
     `define RAM_NO_RWCHECK (* rw_addr_collision = RAM_NO_RWCHECK_VALUE *)
+`else
+    `define RAM_ARRAY   reg [DATAW-1:0] ram [0:SIZE-1];
+    `define RAM_WRITE   for (integer i = 0; i < WRENW; ++i) begin \
+                            if (wren[i]) begin \
+                                ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW]; \
+                            end \
+                        end
+    `define RAM_NO_RWCHECK
 `endif
     if (OUT_REG) begin : g_out_reg
         reg [DATAW-1:0] rdata_r;
@@ -122,7 +130,7 @@ module VX_dp_ram #(
                     rdata_r <= ram[raddr];
                 end
             end
-        end end else if (WRITE_MODE == "U") begin : g_undefined
+        end else if (WRITE_MODE == "U") begin : g_undefined
             `RAM_NO_RWCHECK `RAM_ARRAY
             `RAM_INITIALIZATION
             always @(posedge clk) begin
@@ -138,7 +146,8 @@ module VX_dp_ram #(
         end else begin
             `STATIC_ASSERT(0, ("invalid write mode: %s", WRITE_MODE))
         end
-    else begin : g_no_out_reg
+        assign rdata = rdata_r;
+    end else begin : g_no_out_reg
         `UNUSED_VAR (read)
         `RAM_NO_RWCHECK `RAM_ARRAY
         `RAM_INITIALIZATION

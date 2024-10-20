@@ -20,7 +20,7 @@ module VX_fifo_queue #(
     parameter ALM_FULL  = (DEPTH - 1),
     parameter ALM_EMPTY = 1,
     parameter OUT_REG   = 0,
-    parameter LUTRAM    = ((DATAW * DEPTH) < `MAX_LUTRAM),
+    parameter LUTRAM    = 0,
     parameter SIZEW     = `CLOG2(DEPTH+1)
 ) (
     input  wire             clk,
@@ -42,9 +42,6 @@ module VX_fifo_queue #(
     `STATIC_ASSERT(ALM_EMPTY < DEPTH, ("alm_empty must be smaller than size!"))
     `STATIC_ASSERT(`IS_POW2(DEPTH), ("depth must be a power of 2!"))
 
-    `UNUSED_PARAM (OUT_REG)
-    `UNUSED_PARAM (LUTRAM)
-
     VX_pending_size #(
         .SIZE      (DEPTH),
         .ALM_EMPTY (ALM_EMPTY),
@@ -62,6 +59,8 @@ module VX_fifo_queue #(
     );
 
     if (DEPTH == 1) begin : g_depth_1
+        `UNUSED_PARAM (OUT_REG)
+        `UNUSED_PARAM (LUTRAM)
 
         reg [DATAW-1:0] head_r;
 
@@ -75,6 +74,7 @@ module VX_fifo_queue #(
 
     end else begin : g_depth_n
 
+        localparam USE_BRAM = !LUTRAM && ((DATAW * DEPTH) >= `MAX_LUTRAM);
         localparam ADDRW = `CLOG2(DEPTH);
 
         wire [DATAW-1:0] data_out_w;
@@ -95,17 +95,17 @@ module VX_fifo_queue #(
             end
         end
 
-        wire [ADDRW-1:0] rd_ptr_w = LUTRAM ? rd_ptr_r : rd_ptr_n;
+        wire [ADDRW-1:0] rd_ptr_w = USE_BRAM ? rd_ptr_n : rd_ptr_r;
 
         wire going_empty = (ALM_EMPTY == 1) ? alm_empty : (size[ADDRW-1:0] == ADDRW'(1));
         wire bypass = push && (empty || (going_empty && pop));
-        wire read = ((OUT_REG != 0) || !LUTRAM) ? ~bypass : pop;
+        wire read = ((OUT_REG != 0) || USE_BRAM) ? ~bypass : pop;
 
         VX_dp_ram #(
             .DATAW  (DATAW),
             .SIZE   (DEPTH),
-            .LUTRAM (LUTRAM),
-            .OUT_REG(!LUTRAM),
+            .LUTRAM (!USE_BRAM),
+            .OUT_REG(USE_BRAM),
             .WRITE_MODE("W")
         ) dp_ram (
             .clk   (clk),

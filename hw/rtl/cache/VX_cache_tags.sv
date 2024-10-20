@@ -36,50 +36,35 @@ module VX_cache_tags #(
     input wire                          flush,
     input wire                          fill,
     input wire                          lookup,
-    input wire [`CS_LINE_ADDR_WIDTH-1:0] line_addr,
-    input wire [NUM_WAYS-1:0]           evict_way,
+    input wire [`CS_LINE_SEL_BITS-1:0]  line_idx_n,
+    input wire [`CS_LINE_SEL_BITS-1:0]  line_idx,
+    input wire [`CS_TAG_SEL_BITS-1:0]   line_tag,
+    input wire [`CS_WAY_SEL_WIDTH-1:0]  evict_way,
 
     // outputs
-    output wire [NUM_WAYS-1:0]          tag_matches_r,
-    output wire [`CS_TAG_SEL_BITS-1:0]  line_tag_r,
-    output wire [NUM_WAYS-1:0]          evict_way_r,
-    output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag_r
+    output wire [NUM_WAYS-1:0]          tag_matches,
+    output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag
 );
     //                   valid,       tag
     localparam TAG_WIDTH = 1 + `CS_TAG_SEL_BITS;
 
-    wire [`CS_LINE_SEL_BITS-1:0] line_idx = line_addr[`CS_LINE_SEL_BITS-1:0];
-    wire [`CS_TAG_SEL_BITS-1:0] line_tag = `CS_LINE_ADDR_TAG(line_addr);
-
     wire [NUM_WAYS-1:0][`CS_TAG_SEL_BITS-1:0] read_tag;
     wire [NUM_WAYS-1:0] read_valid;
-
-    if (NUM_WAYS > 1) begin : g_evict_way
-        `BUFFER_EX(evict_way_r, evict_way, ~stall, 1);
-    end else begin : g_evict_way_0
-        `UNUSED_VAR (evict_way)
-        assign evict_way_r = 1'b1;
-    end
+    `UNUSED_VAR (lookup)
 
     if (WRITEBACK) begin : g_evict_tag_wb
-        VX_onehot_mux #(
-            .DATAW (`CS_TAG_SEL_BITS),
-            .N     (NUM_WAYS)
-        ) evict_tag_sel (
-            .data_in  (read_tag),
-            .sel_in   (evict_way_r),
-            .data_out (evict_tag_r)
-        );
+        assign evict_tag = read_tag[evict_way];
     end else begin : g_evict_tag_wt
-        assign evict_tag_r = '0;
+        assign evict_tag = '0;
     end
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_tag_store
 
-        wire do_fill    = fill && evict_way[i];
-        wire do_flush   = flush && (!WRITEBACK || evict_way[i]); // flush the whole line in writethrough mode
+        wire way_en = (NUM_WAYS == 1) || (evict_way == i);
+        wire do_fill = fill && way_en;
+        wire do_flush = flush && (!WRITEBACK || way_en); // flush the whole line in writethrough mode
 
-        wire line_read  = lookup || (WRITEBACK && (fill || flush));
+        //wire line_read  = lookup || (WRITEBACK && (fill || flush));
         wire line_write = init || do_fill || do_flush;
         wire line_valid = fill;
 
@@ -89,26 +74,26 @@ module VX_cache_tags #(
         assign line_wdata = {line_valid, line_tag};
         assign {read_valid[i], read_tag[i]} = line_rdata;
 
-        VX_sp_ram #(
+        VX_dp_ram #(
             .DATAW (TAG_WIDTH),
             .SIZE  (`CS_LINES_PER_BANK),
-            .OUT_REG (1)
+            .OUT_REG (1),
+            .WRITE_MODE ("W")
         ) tag_store (
             .clk   (clk),
             .reset (reset),
-            .read  (line_read),
+            .read  (~stall),
             .write (line_write),
             .wren  (1'b1),
-            .addr  (line_idx),
+            .waddr (line_idx),
+            .raddr (line_idx_n),
             .wdata (line_wdata),
             .rdata (line_rdata)
         );
     end
 
-    `BUFFER_EX(line_tag_r, line_tag, ~stall, 1);
-
     for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_tag_matches
-        assign tag_matches_r[i] = read_valid[i] && (line_tag_r == read_tag[i]);
+        assign tag_matches[i] = read_valid[i] && (line_tag == read_tag[i]);
     end
 
 endmodule

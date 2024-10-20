@@ -22,6 +22,7 @@
 `define CS_LINE_WIDTH           (8 * LINE_SIZE)
 `define CS_BANK_SIZE            (CACHE_SIZE / NUM_BANKS)
 `define CS_WAY_SEL_BITS         `CLOG2(NUM_WAYS)
+`define CS_WAY_SEL_WIDTH        `UP(`CS_WAY_SEL_BITS)
 
 `define CS_LINES_PER_BANK       (`CS_BANK_SIZE / (LINE_SIZE * NUM_WAYS))
 `define CS_WORDS_PER_LINE       (LINE_SIZE / WORD_SIZE)

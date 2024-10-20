@@ -41,38 +41,23 @@ module VX_cache_data #(
     input wire                          read,
     input wire                          write,
     input wire [`CS_LINE_SEL_BITS-1:0]  line_idx,
-    input wire [NUM_WAYS-1:0]           evict_way,
+    input wire [`CS_WAY_SEL_WIDTH-1:0]  evict_way,
     input wire [NUM_WAYS-1:0]           tag_matches,
     input wire [`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] fill_data,
     input wire [`CS_WORD_WIDTH-1:0]     write_word,
     input wire [WORD_SIZE-1:0]          write_byteen,
     input wire [`UP(`CS_WORD_SEL_BITS)-1:0] word_idx,
     // outputs
-    output wire [`CS_WORD_WIDTH-1:0]    read_data,
-    output wire                         line_dirty,
-    output wire [`CS_LINE_WIDTH-1:0]    evict_data,
+    output wire [`CS_WAY_SEL_WIDTH-1:0] way_idx,
+    output wire [`CS_LINE_WIDTH-1:0]    read_data,
+    output wire                         evict_dirty,
     output wire [LINE_SIZE-1:0]         evict_byteen
 );
     `UNUSED_PARAM (WORD_SIZE)
     `UNUSED_VAR (stall)
 
-    localparam BYTEENW = (WRITE_ENABLE != 0) ? LINE_SIZE : 1;
-
-    wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] line_rdata;
-
     if (WRITEBACK != 0) begin : g_writeback
         localparam BYTEEN_DATAW = 1 + ((DIRTY_BYTES != 0) ? LINE_SIZE : 0);
-        wire [`LOG2UP(NUM_WAYS)-1:0] evict_way_idx, evict_way_idx_r;
-
-        VX_onehot_encoder #(
-            .N (NUM_WAYS)
-        ) fill_way_enc (
-            .data_in  (evict_way),
-            .data_out (evict_way_idx),
-            `UNUSED_PIN (valid_out)
-        );
-
-        `BUFFER_EX(evict_way_idx_r, evict_way_idx, ~stall, 1);
 
         wire [NUM_WAYS-1:0][BYTEEN_DATAW-1:0] byteen_rdata;
         wire [NUM_WAYS-1:0][BYTEEN_DATAW-1:0] byteen_wdata;
@@ -80,7 +65,7 @@ module VX_cache_data #(
 
         for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_byteen_wdata
             wire evict = fill || flush;
-            wire evict_way_en = (NUM_WAYS == 1) || evict_way[i];
+            wire evict_way_en = (NUM_WAYS == 1) || (evict_way == i);
             wire dirty_data = write; // only asserted on writes
             wire dirty_wren = init || (evict && evict_way_en) || (write && tag_matches[i]);
             if (DIRTY_BYTES != 0) begin : g_dirty_bytes
@@ -121,54 +106,47 @@ module VX_cache_data #(
         );
 
         if (DIRTY_BYTES != 0) begin : g_line_dirty_and_byteen
-            assign {line_dirty, evict_byteen} = byteen_rdata[evict_way_idx_r];
+            assign {evict_dirty, evict_byteen} = byteen_rdata[way_idx];
         end else begin : g_line_dirty
-            assign line_dirty = byteen_rdata[evict_way_idx_r];
+            assign evict_dirty = byteen_rdata[way_idx];
             assign evict_byteen = '1;
         end
-
-        assign evict_data = line_rdata[evict_way_idx_r];
 
     end else begin : g_no_writeback
         `UNUSED_VAR (init)
         `UNUSED_VAR (flush)
-        assign line_dirty = 0;
-        assign evict_data = '0;
+        assign evict_dirty = 0;
         assign evict_byteen = '0;
     end
 
-    for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_data_store
-        wire [`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] line_wdata;
-        wire [BYTEENW-1:0] line_wren;
+    wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] line_rdata;
 
-        wire fill_way_en = (NUM_WAYS == 1) || evict_way[i];
+    if (WRITE_ENABLE) begin : g_data_store
+        // create a single write-enable block ram to reduce area overhead
+        wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] line_wdata;
+        wire [NUM_WAYS-1:0][LINE_SIZE-1:0] line_wren;
+        wire line_write;
+        wire line_read;
 
-        if (WRITE_ENABLE != 0) begin : g_wdata
+        for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_wdata
+            wire fill_way_en = (NUM_WAYS == 1) || (evict_way == i);
             wire [`CS_WORDS_PER_LINE-1:0][WORD_SIZE-1:0] write_mask;
             for (genvar j = 0; j < `CS_WORDS_PER_LINE; ++j) begin : g_write_mask
                 wire word_en = (`CS_WORDS_PER_LINE == 1) || (word_idx == j);
                 assign write_mask[j] = write_byteen & {WORD_SIZE{word_en}};
             end
-            assign line_wdata = (fill && fill_way_en) ? fill_data : {`CS_WORDS_PER_LINE{write_word}};
-            assign line_wren = {LINE_SIZE{fill && fill_way_en}}
-                             | ({LINE_SIZE{write && tag_matches[i]}} & write_mask);
-
-        end else begin : g_ro_wdata
-            `UNUSED_VAR (write)
-            `UNUSED_VAR (write_byteen)
-            `UNUSED_VAR (write_word)
-            `UNUSED_VAR (word_idx)
-            assign line_wdata = fill_data;
-            assign line_wren  = fill_way_en;
+            assign line_wdata[i] = fill ? fill_data : {`CS_WORDS_PER_LINE{write_word}};
+            assign line_wren[i] = {LINE_SIZE{fill && fill_way_en}}
+                                | ({LINE_SIZE{write && tag_matches[i]}} & write_mask);
         end
 
-        wire line_write = fill || (write && WRITE_ENABLE);
-        wire line_read = read || ((fill || flush) && WRITEBACK);
+        assign line_write = fill || (write && WRITE_ENABLE);
+        assign line_read = read || ((fill || flush) && WRITEBACK);
 
         VX_sp_ram #(
-            .DATAW (`CS_LINE_WIDTH),
+            .DATAW (NUM_WAYS * `CS_LINE_WIDTH),
             .SIZE  (`CS_LINES_PER_BANK),
-            .WRENW (BYTEENW),
+            .WRENW (NUM_WAYS * LINE_SIZE),
             .OUT_REG (1)
         ) data_store (
             .clk   (clk),
@@ -178,35 +156,46 @@ module VX_cache_data #(
             .wren  (line_wren),
             .addr  (line_idx),
             .wdata (line_wdata),
-            .rdata (line_rdata[i])
+            .rdata (line_rdata)
         );
+    end else begin : g_data_store
+        `UNUSED_VAR (write)
+        `UNUSED_VAR (write_byteen)
+        `UNUSED_VAR (write_word)
+        `UNUSED_VAR (word_idx)
+
+        // we don't merge the ways into a single block ram due to WREN overhead
+        for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_ways
+            wire fill_way_en = (NUM_WAYS == 1) || (evict_way == i);
+            VX_sp_ram #(
+                .DATAW (`CS_LINE_WIDTH),
+                .SIZE  (`CS_LINES_PER_BANK),
+                .OUT_REG (1)
+            ) data_store (
+                .clk   (clk),
+                .reset (reset),
+                .read  (read),
+                .write (fill && fill_way_en),
+                .wren  (1'b1),
+                .addr  (line_idx),
+                .wdata (fill_data),
+                .rdata (line_rdata[i])
+            );
+        end
     end
 
-    wire [`LOG2UP(NUM_WAYS)-1:0] hit_way_idx;
+    wire [`CS_WAY_SEL_WIDTH-1:0] hit_idx;
+
     VX_onehot_encoder #(
         .N (NUM_WAYS)
-    ) hit_idx_enc (
+    ) way_idx_enc (
         .data_in  (tag_matches),
-        .data_out (hit_way_idx),
+        .data_out (hit_idx),
         `UNUSED_PIN (valid_out)
     );
 
-    if (`CS_WORDS_PER_LINE > 1) begin : g_read_data
-        // order the data layout to perform ways multiplexing last.
-        // this allows converting way index to binary in parallel with BRAM read and word indexing.
-        wire [`CS_WORDS_PER_LINE-1:0][NUM_WAYS-1:0][`CS_WORD_WIDTH-1:0] transposed_rdata;
-        VX_transpose #(
-            .DATAW (`CS_WORD_WIDTH),
-            .N (NUM_WAYS),
-            .M (`CS_WORDS_PER_LINE)
-        ) transpose (
-            .data_in  (line_rdata),
-            .data_out (transposed_rdata)
-        );
-        assign read_data = transposed_rdata[word_idx][hit_way_idx];
-    end else begin : g_read_data_1w
-        `UNUSED_VAR (word_idx)
-        assign read_data = line_rdata[hit_way_idx];
-    end
+    `BUFFER_EX(way_idx, (read ? hit_idx : evict_way), ~stall, 1);
+
+    assign read_data = line_rdata[way_idx];
 
 endmodule
