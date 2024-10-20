@@ -35,7 +35,8 @@ module VX_cache_tags #(
     input wire                          init,
     input wire                          flush,
     input wire                          fill,
-    input wire                          lookup,
+    input wire                          read,
+    input wire                          write,
     input wire [`CS_LINE_SEL_BITS-1:0]  line_idx_n,
     input wire [`CS_LINE_SEL_BITS-1:0]  line_idx,
     input wire [`CS_TAG_SEL_BITS-1:0]   line_tag,
@@ -43,36 +44,47 @@ module VX_cache_tags #(
 
     // outputs
     output wire [NUM_WAYS-1:0]          tag_matches,
+    output wire                         evict_dirty,
     output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag
 );
-    //                   valid,       tag
-    localparam TAG_WIDTH = 1 + `CS_TAG_SEL_BITS;
+    //                   valid,   dirty,           tag
+    localparam TAG_WIDTH = 1 +  WRITEBACK + `CS_TAG_SEL_BITS;
 
     wire [NUM_WAYS-1:0][`CS_TAG_SEL_BITS-1:0] read_tag;
     wire [NUM_WAYS-1:0] read_valid;
-    `UNUSED_VAR (lookup)
+    wire [NUM_WAYS-1:0] read_dirty;
+    `UNUSED_VAR (read)
 
     if (WRITEBACK) begin : g_evict_tag_wb
+        assign evict_dirty = read_dirty[evict_way];
         assign evict_tag = read_tag[evict_way];
     end else begin : g_evict_tag_wt
+        `UNUSED_VAR (read_dirty)
+        assign evict_dirty = 1'b0;
         assign evict_tag = '0;
     end
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_tag_store
-
-        wire way_en = (NUM_WAYS == 1) || (evict_way == i);
-        wire do_fill = fill && way_en;
+        wire way_en   = (NUM_WAYS == 1) || (evict_way == i);
+        wire do_fill  = fill && way_en;
         wire do_flush = flush && (!WRITEBACK || way_en); // flush the whole line in writethrough mode
+        wire do_write = WRITEBACK && write && tag_matches[i]; // only write on hit
 
-        //wire line_read  = lookup || (WRITEBACK && (fill || flush));
-        wire line_write = init || do_fill || do_flush;
-        wire line_valid = fill;
+        //wire line_read = read || write || (WRITEBACK && (fill || flush));
+        wire line_write = init || do_fill || do_flush || do_write;
+        wire line_valid = fill || write;
 
         wire [TAG_WIDTH-1:0] line_wdata;
         wire [TAG_WIDTH-1:0] line_rdata;
 
-        assign line_wdata = {line_valid, line_tag};
-        assign {read_valid[i], read_tag[i]} = line_rdata;
+        if (WRITEBACK) begin : g_wdata
+            assign line_wdata = {line_valid, write, line_tag};
+            assign {read_valid[i], read_dirty[i], read_tag[i]} = line_rdata;
+        end else begin : g_wdata
+            assign line_wdata = {line_valid, line_tag};
+            assign {read_valid[i], read_tag[i]} = line_rdata;
+            assign read_dirty[i] = 1'b0;
+        end
 
         VX_dp_ram #(
             .DATAW (TAG_WIDTH),
