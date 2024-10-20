@@ -153,7 +153,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
 `ifdef VECTOR_ENABLE
     reg [`NUM_WARPS-1:0][`XLEN-1:0] AVL;
-    wire [`NUM_WARPS-1:0][8:0]      VTYPEI;
+    reg [`NUM_WARPS-1:0][8:0]       VTYPEI;
     reg [`NUM_WARPS-1:0][`XLEN-1:0] VLMAX;
     reg [`NUM_WARPS-1:0][`XLEN-1:0] CSR_VL;
 
@@ -186,11 +186,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
                 VTYPEI[execute_if.data.wid][8] = execute_if.data.op_args.vpu.vill;
                 AVL[execute_if.data.wid] = (execute_if.data.op_args.vpu.rs1 != 0) ? rs1_data[0] : ( (execute_if.data.rd != 0) ?  ~(`XLEN'b0) : CSR_VL[execute_if.data.wid] );
             end
-            default:
-                begin
-                    VTYPEI[execute_if.data.wid] = VTYPEI[execute_if.data.wid];
-                    AVL[execute_if.data.wid] = AVL[execute_if.data.wid];
-                end
+            default:;
         endcase
         if ((execute_if.data.op_type == `INST_VPU_VSETVL) || (execute_if.data.op_type == `INST_VPU_VSETIVLI) || (execute_if.data.op_type == `INST_VPU_VSETVLI))
             begin
