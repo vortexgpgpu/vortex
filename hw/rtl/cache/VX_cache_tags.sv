@@ -90,7 +90,7 @@ module VX_cache_tags #(
             .DATAW (TAG_WIDTH),
             .SIZE  (`CS_LINES_PER_BANK),
             .OUT_REG (1),
-            .WRITE_MODE ("W")
+            .NEW_DATA (1)
         ) tag_store (
             .clk   (clk),
             .reset (reset),

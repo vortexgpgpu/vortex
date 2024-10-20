@@ -267,12 +267,10 @@ module VX_operands import VX_gpu_pkg::*; #(
             .DATAW (REGS_DATAW),
             .SIZE  (PER_BANK_REGS * PER_ISSUE_WARPS),
             .WRENW (BYTEENW),
-            .OUT_REG (1),
-            .WRITE_MODE ("U"),
          `ifdef GPR_RESET
             .RESET_RAM (1),
          `endif
-            .NO_RWCHECK (1)
+            .OUT_REG (1)
         ) gpr_ram (
             .clk   (clk),
             .reset (reset),

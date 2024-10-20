@@ -102,11 +102,10 @@ module VX_fifo_queue #(
         wire read = ((OUT_REG != 0) || USE_BRAM) ? ~bypass : pop;
 
         VX_dp_ram #(
-            .DATAW  (DATAW),
-            .SIZE   (DEPTH),
-            .LUTRAM (!USE_BRAM),
-            .OUT_REG(USE_BRAM),
-            .WRITE_MODE("W")
+            .DATAW (DATAW),
+            .SIZE  (DEPTH),
+            .OUT_REG (USE_BRAM),
+            .NEW_DATA (1)
         ) dp_ram (
             .clk   (clk),
             .reset (reset),
