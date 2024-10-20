@@ -383,7 +383,7 @@ vector()
 {
     echo "begin vector tests..."
 
-    TOOLDIR=@TOOLDIR@ XLEN=@XLEN@ VLEN=256 ./tests/riscv/riscv-vector-tests/run-test.sh
+    TOOLDIR=@TOOLDIR@ XLEN=@XLEN@ VLEN=256 REG_TESTS=1 ./tests/riscv/riscv-vector-tests/run-test.sh
 
     echo "vector tests done!"
 }
@@ -481,6 +481,10 @@ fi
 start=$SECONDS
 
 for test in "${tests[@]}"; do
+    if [[ "$test" != "vector" ]]; then
+        # We need to remove vector tests to save space
+        rm -rf tests/riscv/riscv-vector-tests
+    fi
     $test
 done
 

@@ -73,6 +73,9 @@ for testcase in ${testcases[@]}; do
       echo "$f FAILED"
       let "failed++"
     fi
+    if [ $REG_TESTS -eq 1 ]; then
+      rm $f*
+    fi
     let "selected++"
   done
 done
