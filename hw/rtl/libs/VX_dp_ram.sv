@@ -70,7 +70,7 @@ module VX_dp_ram #(
                             end \
                         end
     `define RAM_NO_RWCHECK (* altera_attribute = RAM_NO_RWCHECK_VALUE *)
-`elif VIVADO
+`elsif VIVADO
     localparam `STRING RAM_STYLE_VALUE = USE_BRAM ? "block" : (LUTRAM ? "distributed" : "auto");
     localparam `STRING RAM_NO_RWCHECK_VALUE = NO_RWCHECK ? "no" : "auto";
     `define RAM_ARRAY (* ram_style = RAM_STYLE_VALUE *) reg [DATAW-1:0] ram [0:SIZE-1];

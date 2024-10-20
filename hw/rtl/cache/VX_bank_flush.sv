@@ -55,7 +55,8 @@ module VX_bank_flush #(
     always @(*) begin
         state_n = state;
         case (state)
-            STATE_IDLE: begin
+            //STATE_IDLE:
+            default : begin
                 if (flush_begin) begin
                     state_n = STATE_WAIT1;
                 end
