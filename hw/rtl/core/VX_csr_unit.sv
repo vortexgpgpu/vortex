@@ -153,7 +153,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
 `ifdef VECTOR_ENABLE
     reg [`NUM_WARPS-1:0][`XLEN-1:0] AVL;
-    reg [`NUM_WARPS-1:0][8:0]       VTYPEI;
+    wire [`NUM_WARPS-1:0][8:0]      VTYPEI;
     reg [`NUM_WARPS-1:0][`XLEN-1:0] VLMAX;
     reg [`NUM_WARPS-1:0][`XLEN-1:0] CSR_VL;
 
