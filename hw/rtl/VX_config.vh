@@ -613,7 +613,7 @@
 
 // Number of Associative Ways
 `ifndef L2_NUM_WAYS
-`define L2_NUM_WAYS 4
+`define L2_NUM_WAYS 8
 `endif
 
 // Enable Cache Writeback
@@ -665,7 +665,7 @@
 
 // Number of Associative Ways
 `ifndef L3_NUM_WAYS
-`define L3_NUM_WAYS 4
+`define L3_NUM_WAYS 8
 `endif
 
 // Enable Cache Writeback
