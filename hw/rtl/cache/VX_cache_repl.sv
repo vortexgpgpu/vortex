@@ -111,6 +111,7 @@ module VX_cache_repl #(
             // Pseudo Least Recently Used replacement policy
             localparam LRU_WIDTH = `UP(NUM_WAYS-1);
             `UNUSED_VAR (repl_valid)
+            `UNUSED_VAR (repl_line)
 
             wire [LRU_WIDTH-1:0] plru_rdata;
             wire [LRU_WIDTH-1:0] plru_wdata;
