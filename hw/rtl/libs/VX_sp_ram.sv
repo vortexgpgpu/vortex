@@ -196,7 +196,7 @@ module VX_sp_ram #(
     end else begin : g_async
         `UNUSED_VAR (read)
         if (FORCE_BRAM) begin : g_bram
-            if (RDW_MODE == "W") begin : g_new_data
+            if (RDW_MODE == "W") begin : g_write_first
                 `USE_BLOCK_BRAM `RAM_ARRAY
                 `RAM_INITIALIZATION
                 always @(posedge clk) begin
@@ -205,7 +205,7 @@ module VX_sp_ram #(
                     end
                 end
                 assign rdata = ram[addr];
-            end else begin : g_old_data
+            end else begin : g_read_first
                 `NO_RW_RAM_CHECK `USE_BLOCK_BRAM `RAM_ARRAY
                 `RAM_INITIALIZATION
                 always @(posedge clk) begin
@@ -216,7 +216,7 @@ module VX_sp_ram #(
                 assign rdata = ram[addr];
             end
         end else begin : g_auto
-            if (RDW_MODE == "W") begin : g_new_data
+            if (RDW_MODE == "W") begin : g_write_first
                 `RAM_ARRAY
                 `RAM_INITIALIZATION
                 always @(posedge clk) begin
@@ -225,7 +225,7 @@ module VX_sp_ram #(
                     end
                 end
                 assign rdata = ram[addr];
-            end else begin : g_old_data
+            end else begin : g_read_first
                 `NO_RW_RAM_CHECK `RAM_ARRAY
                 `RAM_INITIALIZATION
                 always @(posedge clk) begin
@@ -284,9 +284,9 @@ module VX_sp_ram #(
         end
     end else begin : g_async
         `UNUSED_VAR (read)
-        if (RDW_MODE == "W") begin : g_rwcheck
+        if (RDW_MODE == "W") begin : g_write_first
             assign rdata = ram[addr];
-        end else begin : g_no_rwcheck
+        end else begin : g_read_first
             reg [DATAW-1:0] prev_data;
             reg [ADDRW-1:0] prev_waddr;
             reg prev_write;

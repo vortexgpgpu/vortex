@@ -20,7 +20,7 @@ module VX_dp_ram #(
     parameter WRENW       = 1,
     parameter OUT_REG     = 0,
     parameter LUTRAM      = 0,
-    parameter `STRING RDW_MODE = "R", // R: read-first, W: write-first
+    parameter `STRING RDW_MODE = "R", // R: read-first, W: write-first, U: undefined
     parameter RDW_ASSERT  = 0,
     parameter RESET_RAM   = 0,
     parameter INIT_ENABLE = 0,
@@ -42,7 +42,7 @@ module VX_dp_ram #(
     `UNUSED_PARAM (LUTRAM)
 
     `STATIC_ASSERT(!(WRENW * WSELW != DATAW), ("invalid parameter"))
-    `STATIC_ASSERT((RDW_MODE == "R" || RDW_MODE == "W"), ("invalid parameter"))
+    `STATIC_ASSERT((RDW_MODE == "R" || RDW_MODE == "W" || RDW_MODE == "U"), ("invalid parameter"))
     `UNUSED_PARAM (RDW_ASSERT)
 
 `define RAM_INITIALIZATION \
@@ -76,15 +76,14 @@ module VX_dp_ram #(
                         end
 `endif
     if (OUT_REG) begin : g_sync
-        wire cs = read || write;
         if (FORCE_BRAM) begin : g_bram
-            if (RDW_MODE == "W") begin : g_new_data
+            if (RDW_MODE == "W") begin : g_write_first
                 (* rw_addr_collision = "yes" *) `USE_BLOCK_BRAM `RAM_ARRAY
                 `UNUSED_VAR (wren)
                 `RAM_INITIALIZATION
                 reg [ADDRW-1:0] addr_reg;
                 always @(posedge clk) begin
-                    if (cs) begin
+                    if (read || write) begin
                         if (write) begin
                             `RAM_WRITE
                         end
@@ -92,12 +91,12 @@ module VX_dp_ram #(
                     end
                 end
                 assign rdata = ram[addr_reg];
-            end else begin : g_old_data
+            end else if (RDW_MODE == "R") begin : g_read_first
                 `USE_BLOCK_BRAM `RAM_ARRAY
                 `RAM_INITIALIZATION
                 reg [DATAW-1:0] rdata_r;
                 always @(posedge clk) begin
-                    if (cs) begin
+                    if (read || write) begin
                         if (write) begin
                             `RAM_WRITE
                         end
@@ -105,15 +104,28 @@ module VX_dp_ram #(
                     end
                 end
                 assign rdata = rdata_r;
+            end else begin : g_undefined
+                `USE_BLOCK_BRAM `RAM_ARRAY
+                `RAM_INITIALIZATION
+                reg [DATAW-1:0] rdata_r;
+                always @(posedge clk) begin
+                    if (write) begin
+                        `RAM_WRITE
+                    end
+                    if (read) begin
+                        rdata_r <= ram[raddr];
+                    end
+                end
+                assign rdata = rdata_r;
             end
         end else begin : g_auto
-            if (RDW_MODE == "W") begin : g_new_data
+            if (RDW_MODE == "W") begin : g_write_first
                 (* rw_addr_collision = "yes" *) `RAM_ARRAY
                 `UNUSED_VAR (wren)
                 `RAM_INITIALIZATION
                 reg [ADDRW-1:0] addr_reg;
                 always @(posedge clk) begin
-                    if (cs) begin
+                    if (read || write) begin
                         if (write) begin
                             `RAM_WRITE
                         end
@@ -121,15 +133,28 @@ module VX_dp_ram #(
                     end
                 end
                 assign rdata = ram[addr_reg];
-            end else begin : g_old_data
+            end else if (RDW_MODE == "R") begin : g_read_first
                 `RAM_ARRAY
                 `RAM_INITIALIZATION
                 reg [DATAW-1:0] rdata_r;
                 always @(posedge clk) begin
-                    if (cs) begin
+                    if (read || write) begin
                         if (write) begin
                             `RAM_WRITE
                         end
+                        rdata_r <= ram[raddr];
+                    end
+                end
+                assign rdata = rdata_r;
+            end else begin
+                `RAM_ARRAY
+                `RAM_INITIALIZATION
+                reg [DATAW-1:0] rdata_r;
+                always @(posedge clk) begin
+                    if (write) begin
+                        `RAM_WRITE
+                    end
+                    if (read) begin
                         rdata_r <= ram[raddr];
                     end
                 end
@@ -139,7 +164,7 @@ module VX_dp_ram #(
     end else begin : g_async
         `UNUSED_VAR (read)
         if (FORCE_BRAM) begin : g_bram
-            if (RDW_MODE == "W") begin : g_new_data
+            if (RDW_MODE == "W") begin : g_write_first
                 `USE_BLOCK_BRAM `RAM_ARRAY
                 `RAM_INITIALIZATION
                 always @(posedge clk) begin
@@ -148,7 +173,7 @@ module VX_dp_ram #(
                     end
                 end
                 assign rdata = ram[raddr];
-            end else begin : g_old_data
+            end else begin : g_read_first
                 `NO_RW_RAM_CHECK `USE_BLOCK_BRAM `RAM_ARRAY
                 `RAM_INITIALIZATION
                 always @(posedge clk) begin
@@ -159,7 +184,7 @@ module VX_dp_ram #(
                 assign rdata = ram[raddr];
             end
         end else begin : g_auto
-            if (RDW_MODE == "W") begin : g_new_data
+            if (RDW_MODE == "W") begin : g_write_first
                 `RAM_ARRAY
                 `RAM_INITIALIZATION
                 always @(posedge clk) begin
@@ -168,7 +193,7 @@ module VX_dp_ram #(
                     end
                 end
                 assign rdata = ram[raddr];
-            end else begin : g_old_data
+            end else begin : g_read_first
                 `NO_RW_RAM_CHECK `RAM_ARRAY
                 `RAM_INITIALIZATION
                 always @(posedge clk) begin
@@ -200,19 +225,26 @@ module VX_dp_ram #(
     end
 
     if (OUT_REG) begin : g_sync
-        wire cs = read || write;
-        if (RDW_MODE == "W") begin : g_new_data
+        if (RDW_MODE == "W") begin : g_write_first
             reg [ADDRW-1:0] addr_reg;
             always @(posedge clk) begin
-                if (cs) begin
+                if (read || write) begin
                     addr_reg <= raddr;
                 end
             end
             assign rdata = ram[addr_reg];
-        end else begin : g_old_data
+        end else if (RDW_MODE == "R") begin : g_read_first
             reg [DATAW-1:0] rdata_r;
             always @(posedge clk) begin
-                if (cs) begin
+                if (read || write) begin
+                    rdata_r <= ram[raddr];
+                end
+            end
+            assign rdata = rdata_r;
+        end else begin : g_undefined
+            reg [DATAW-1:0] rdata_r;
+            always @(posedge clk) begin
+                if (read) begin
                     rdata_r <= ram[raddr];
                 end
             end
@@ -220,9 +252,9 @@ module VX_dp_ram #(
         end
     end else begin : g_async
         `UNUSED_VAR (read)
-        if (RDW_MODE == "W") begin : g_new_data
+        if (RDW_MODE == "W") begin : g_write_first
             assign rdata = ram[raddr];
-        end else begin : g_old_data
+        end else begin : g_read_first
             reg [DATAW-1:0] prev_data;
             reg [ADDRW-1:0] prev_waddr;
             reg prev_write;
