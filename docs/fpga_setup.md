@@ -59,11 +59,6 @@ Once you are logged in, you will need to complete some first time configurations
 ### Source Configuration Scripts
 ```
 $ source /opt/xilinx/xrt/setup.sh
-$ source /opt/xilinx/Vitis/2023.1/settings64.sh
-```
-
-```
-$ source /opt/xilinx/xrt/setup.sh
 $ source /tools/reconfig/xilinx/Vitis/2023.1/settings64.sh
 ```
 
