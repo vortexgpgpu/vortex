@@ -27,7 +27,7 @@ then
              vfadd vfredusum vfsub vfredosum vfredmin vfredmax vfsgnj vmf vfdiv vfrdiv vfmul vfrsub \
              vfmacc vfnmacc vfmsac vfnmsac vfmadd vfnmadd vfmsub vfnmsub \
              vredsum vredand vredor vredxor vredmin vredmax \
-             vwred vfwred \
+             vwred \
              vmand vmor vmxor vmnand vmnor vmxnor \
              vdiv vrem vmul vsmul \
              vmadd vnmsub vmacc vnmsac \
@@ -38,7 +38,7 @@ then
              vid)
   if [ $XLEN -eq 64 ]; then
     testcases+=(vle64 vse64 vlse64 vsse64 vfwcvt vfncvt \
-                vfwadd vfwsub vfwmul vfwmacc vfwnmacc vfwmsac vfwnmsac )
+                vfwadd vfwsub vfwmul vfwred vfwmacc vfwnmacc vfwmsac vfwnmsac )
   fi
 else
   testcases="${@}"
