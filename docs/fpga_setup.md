@@ -13,7 +13,7 @@ If you are associated with Georgia Tech (or related workshops) you can use CRNCH
 
 ## Why are the Rouges Important?
 
-By exposing students and researchers to this set of unique hardware, we hope to foster cross-cutting discussions about hardware designs that will drive future *performance improvements in computing long after the Moore’s Law era of “cheap transistors” ends*.
+By exposing students and researchers to this set of unique hardware, we hope to foster cross-cutting discussions about hardware designs that will drive future *performance improvements in computing long after the Moore’s Law era of “cheap transistors” ends*. Specifically, the Rouges Gallery contains FPGA's which can be synthesized into Vortex hardware.
 
 ## How is the Rouges Gallery Funded?
 
@@ -32,52 +32,29 @@ You can listen to a talk about RG [here](https://mediaspace.gatech.edu/media/Jef
 You should use [this form](https://crnch-rg.cc.gatech.edu/request-rogues-gallery-access/) to request access to RG’s reconfigurable computing (vortex fpga) resources. You should receive an email with your ticket item being created. Once it gets processed, you should get an email confirmed your access has been granted. It might take some time to get processed.
 
 ## How to Access Rouges Gallery?
+There are two methods of accessing CRNCH's Rouges Gallery
+1) Web-based GUI: [rg-ood.crnch.gatech.edu](http://rg-ood.crnch.gatech.edu/)
+2) SSH: `ssh <your-gt-username>@rg-login.crnch.gatech.edu`
 
-CRNCH resources do not require any VPN access for GT members so you can head to the web url for open on-demand: [rg-ood.crnch.gatech.edu](http://rg-ood.crnch.gatech.edu/)
 
-Alternatively, you can `ssh` into rg with: `ssh <your-gt-acctname>@rg-login.crnch.gatech.edu`
-
-(`ssh gburdell3@rg-login.crnch.gatech.edu`)
-
-## Synthesis for Xilinx Boards
-First, you need to get access to the server with the Xilinx FPGAs.
+## Where should I keep my files?
+The CRNCH servers have a folder called `USERSCRATCH` which can be found in your home directory: `echo $HOME`. You should keep all your files in this folder since it is available across all the Rouges Gallery Nodes.
 
 ## **What Machines are Available in the Rogues Gallery?**
 
-Complete list of machines can be found [here](https://gt-crnch-rg.readthedocs.io/en/main/general/rg-hardware.html). 
+Complete list of machines can be found [here](https://gt-crnch-rg.readthedocs.io/en/main/general/rg-hardware.html). Furthermore, you can find detailed information about the FPGA hardware [here](https://gt-crnch-rg.readthedocs.io/en/main/reconfig/xilinx/xilinx-getting-started.html).
 
-## Which Machine do we Need from RG?
-
-There are three primary nodes you might use for Xilinx FPGAs. The table below summarizes:
-
-| Name | Device | Description |
-| --- | --- | --- |
-| flubber1 | u50 | can synthesize vortex |
-| flubber4 | u250 | missing HBM |
-| flubber5 | u280 | can synthesize vortex |
+## Allocate an FPGA Node
+Once you’ve connected to the CRNCH login node, you can use the Slurm scheduler to request an interactive job using `salloc`. This [page](https://gt-crnch-rg.readthedocs.io/en/main/general/using-slurm.html) explains why we use Slurm to request resources. Documentation for `salloc` can be found [here](https://gt-crnch-rg.readthedocs.io/en/main/general/using-slurm-examples.html). And here.
 
 
-*Note*: The `USERSCRATCH` folder is synchronized between all RG nodes. That means you can upload your files to `rg-login` and have them available on `flubber[1,4-5`. Changes on one node will be reflected across all nodes.
-
-## How to Access flubber for Synthesis?
-
-Now that you have the files prepared and available on the FPGA node, you can start the synthesis.  To run on hardware we need a rg-xilinx-fpga-hw cluster which includes **flubber[1,4-5]**. First `ssh` into the rouges gallery, if you have not already.
-
+To request 16 cores and 64GB of RAM for 6 hours on flubber9, a fpga dev node:
 ```bash
-ssh <username>[@rg-login.crnch.gatech.edu](mailto:usubramanya3@rg-login.crnch.gatech.edu)
-```
-
-Once you’ve logged in, you can use Slurm to request an interactive job. First, view the available Slurm Partitions here [here](https://gt-crnch-rg.readthedocs.io/en/main/general/using-slurm.html). Then, the example requests can be found [here](https://gt-crnch-rg.readthedocs.io/en/main/general/using-slurm-examples.html).
-
-In our case we might run:
-```bash
-salloc -p rg-fpga --nodes=1 --ntasks-per-node=1 --nodelist flubber1 --time=01:00:00
+salloc -p rg-fpga --nodes=1 --ntasks-per-node=16 --mem=64G --nodelist flubber9 --time=06:00:00
 ```
 
 ## Environment Setup
 Once you are logged in, you will need to complete some first time configurations.
-
-### Clone Repo
 
 ### Source Configuration Scripts
 ```
@@ -85,15 +62,20 @@ $ source /opt/xilinx/xrt/setup.sh
 $ source /opt/xilinx/Vitis/2023.1/settings64.sh
 ```
 
+```
+$ source /opt/xilinx/xrt/setup.sh
+$ source /tools/reconfig/xilinx/Vitis/2023.1/settings64.sh
+```
+
 ### Check Installed FPGA Platforms
-`platforminfo -l`
+`platforminfo -l` which tells us the correct name of the platform installed on the current fpga node. It should be used for the `PLATFORM` variable below.
 
 
 ### Build FPGA image
 The directory `hw/syn/xilinx/xrt` contains the makefile used to synthesize Vortex.
 ```
     $ cd hw/syn/xilinx/xrt
-    $ PREFIX=test1 PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 TARGET=hw NUM_CORES=4 make build_u50_hw_4c.log 2>&1 &
+    $ PREFIX=test1 PLATFORM=xilinx_u250_gen3x16_xdma_4_1_202210_1 TARGET=hw NUM_CORES=1 make build_u250_hw_1c.log 2>&1 &
 ```
 Will run the synthesis under new build directory: BUILD_DIR := "\<PREFIX>\_\<PLATFORM>\_\<TARGET>"
 The generated bitstream will be located under <BUILD_DIR>/bin/vortex_afu.xclbin
@@ -105,7 +87,7 @@ For long-running jobs, invocation of this makefile can be made of the following 
 For example:
 
 ```bash
-CONFIGS="-DL2_ENABLE -DDCACHE_SIZE=8192" PREFIX=build_4c_u280 NUM_CORES=4 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 nohup make > build_u280_hw_4c.log 2>&1 &
+CONFIGS="-DL2_ENABLE -DDCACHE_SIZE=8192" PREFIX=build_4c_u280 NUM_CORES=4 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202310_1 nohup make > build_u250_hw_4c.log 2>&1 &
 ```
 
 The build is complete when the bitstream file `vortex_afu.xclbin` exists in `<prefix directory name><platform baseName>hw|hw_emu/bin`.
