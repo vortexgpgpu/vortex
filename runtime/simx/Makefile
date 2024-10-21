@@ -4,15 +4,11 @@ DESTDIR ?= $(CURDIR)/..
 
 SRC_DIR := $(VORTEX_HOME)/runtime/simx
 
-CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I$(INC_DIR) -I../common -I$(ROOT_DIR)/hw -I$(SIM_DIR)/simx -I$(COMMON_DIR) -I$(SIM_DIR)/common
 CXXFLAGS += $(CONFIGS)
 CXXFLAGS += -DXLEN_$(XLEN)
-
-ifeq ($(VM_ENABLE), 1)
-CXXFLAGS += -DVM_ENABLE
-endif
 
 LDFLAGS += -shared -pthread
 LDFLAGS += -L$(DESTDIR) -lsimx

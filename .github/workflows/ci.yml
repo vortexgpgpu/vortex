@@ -21,13 +21,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
         with:
           submodules: recursive
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: tools
           key: ${{ runner.os }}-toolchain-v0.1
@@ -36,7 +36,7 @@ jobs:
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: third_party
           key: ${{ runner.os }}-thirdparty-v0.1
@@ -46,7 +46,7 @@ jobs:
       - name: Install Dependencies
         if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
-          sudo bash ./ci/system_updates.sh
+          sudo bash ./ci/install_dependencies.sh
 
       - name: Setup Toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
@@ -62,111 +62,7 @@ jobs:
         run: |
           make -C third_party > /dev/null
 
-  # build:
-  #   runs-on: ubuntu-20.04
-  #   needs: setup
-  #   strategy:
-  #     matrix:
-  #       xlen: [32, 64]
-
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v2
-
-  #     - name: Install Dependencies
-  #       run: |
-  #         sudo bash ./ci/system_updates.sh
-
-  #     - name: Cache Toolchain Directory
-  #       id: cache-toolchain
-  #       uses: actions/cache@v2
-  #       with:
-  #         path: tools
-  #         key: ${{ runner.os }}-toolchain-v0.1
-  #         restore-keys: |
-  #           ${{ runner.os }}-toolchain-
-
-  #     - name: Cache Third Party Directory
-  #       id: cache-thirdparty
-  #       uses: actions/cache@v2
-  #       with:
-  #         path: third_party
-  #         key: ${{ runner.os }}-thirdparty-v0.1
-  #         restore-keys: |
-  #           ${{ runner.os }}-thirdparty-
-
-  #     - name: Run Build
-  #       run: |
-  #         TOOLDIR=$PWD/tools
-  #         mkdir -p build${{ matrix.xlen }}
-  #         cd build${{ matrix.xlen }}
-  #         ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
-  #         source ci/toolchain_env.sh
-  #         make software -s > /dev/null
-  #         make tests -s > /dev/null
-
-  #     - name: Upload Build Artifact
-  #       uses: actions/upload-artifact@v2
-  #       with:
-  #         name: build-${{ matrix.xlen }}
-  #         path: build${{ matrix.xlen }}
-
-  # tests:
-  #   runs-on: ubuntu-20.04
-  #   needs: build
-  #   strategy:
-  #     matrix:
-  #       name: [regression, opencl, config1, config2, debug, stress]
-  #       xlen: [32, 64]
-
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v2
-
-  #     - name: Install Dependencies
-  #       run: |
-  #         sudo bash ./ci/system_updates.sh
-
-  #     - name: Cache Toolchain Directory
-  #       id: cache-toolchain
-  #       uses: actions/cache@v2
-  #       with:
-  #         path: tools
-  #         key: ${{ runner.os }}-toolchain-v0.1
-  #         restore-keys: |
-  #           ${{ runner.os }}-toolchain-
-
-  #     - name: Cache Third Party Directory
-  #       id: cache-thirdparty
-  #       uses: actions/cache@v2
-  #       with:
-  #         path: third_party
-  #         key: ${{ runner.os }}-thirdparty-v0.1
-  #         restore-keys: |
-  #           ${{ runner.os }}-thirdparty-
-
-  #     - name: Download Build Artifact
-  #       uses: actions/download-artifact@v2
-  #       with:
-  #         name: build-${{ matrix.xlen }}
-  #         path: build${{ matrix.xlen }}
-
-  #     - name: Run tests
-  #       run: |
-  #         cd build${{ matrix.xlen }}
-  #         source ci/toolchain_env.sh
-  #         chmod -R +x . # Ensure all files have executable permissions
-  #         if [ "${{ matrix.name }}" == "regression" ]; then
-  #           ./ci/regression.sh --unittest
-  #           ./ci/regression.sh --isa
-  #           ./ci/regression.sh --kernel
-  #           ./ci/regression.sh --synthesis
-  #           ./ci/regression.sh --regression
-  #         else
-  #           ./ci/regression.sh --${{ matrix.name }}
-  #         fi
-
-  build_vm:
+  build:
     runs-on: ubuntu-20.04
     needs: setup
     strategy:
@@ -175,15 +71,15 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
 
       - name: Install Dependencies
         run: |
-          sudo bash ./ci/system_updates.sh
+          sudo bash ./ci/install_dependencies.sh
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: tools
           key: ${{ runner.os }}-toolchain-v0.1
@@ -192,7 +88,7 @@ jobs:
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: third_party
           key: ${{ runner.os }}-thirdparty-v0.1
@@ -202,39 +98,39 @@ jobs:
       - name: Run Build
         run: |
           TOOLDIR=$PWD/tools
-          mkdir -p build${{ matrix.xlen }}-vm
-          cd build${{ matrix.xlen }}-vm
-          ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }} --vm_enable=1
+          mkdir -p build${{ matrix.xlen }}
+          cd build${{ matrix.xlen }}
+          ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
           source ci/toolchain_env.sh
           make software -s > /dev/null
           make tests -s > /dev/null
 
       - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
-          name: build-${{ matrix.xlen }}-vm
-          path: build${{ matrix.xlen }}-vm
+          name: build-${{ matrix.xlen }}
+          path: build${{ matrix.xlen }}
 
-  test_vm:
+  tests:
     runs-on: ubuntu-20.04
-    needs: build_vm
+    needs: build
     strategy:
       fail-fast: false
       matrix:
-        name: [regression, opencl, cache, config1, config2, debug, stress, vm]
+        name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm]
         xlen: [32, 64]
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
 
       - name: Install Dependencies
         run: |
-          sudo bash ./ci/system_updates.sh
+          sudo bash ./ci/install_dependencies.sh
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: tools
           key: ${{ runner.os }}-toolchain-v0.1
@@ -243,7 +139,7 @@ jobs:
 
       - name: Cache Third Party Directory
         id: cache-thirdparty
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: third_party
           key: ${{ runner.os }}-thirdparty-v0.1
@@ -251,21 +147,28 @@ jobs:
             ${{ runner.os }}-thirdparty-
 
       - name: Download Build Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
-          name: build-${{ matrix.xlen }}-vm
-          path: build${{ matrix.xlen }}-vm
+          name: build-${{ matrix.xlen }}
+          path: build${{ matrix.xlen }}
 
       - name: Run tests
         run: |
-          cd build${{ matrix.xlen }}-vm
+          cd build${{ matrix.xlen }}
           source ci/toolchain_env.sh
           chmod -R +x . # Ensure all files have executable permissions
-          ./ci/regression.sh --vm
+          if [ "${{ matrix.name }}" == "regression" ]; then
+            ./ci/regression.sh --unittest
+            ./ci/regression.sh --isa
+            ./ci/regression.sh --kernel
+            ./ci/regression.sh --regression
+          else
+            ./ci/regression.sh --${{ matrix.name }}
+          fi
 
   complete:
     runs-on: ubuntu-20.04
-    needs: test_vm
+    needs: tests
 
     steps:
       - name: Check Completion

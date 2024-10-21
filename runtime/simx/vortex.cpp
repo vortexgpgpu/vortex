@@ -56,7 +56,8 @@ public:
     {
         // attach memory module
         processor_.attach_ram(&ram_);
-#ifdef VM_ENABLE  
+#ifdef VM_ENABLE
+	std::cout << "*** VM ENABLED!! ***"<< std::endl;
         CHECK_ERR(init_VM(), );
 #endif
     }
@@ -93,6 +94,12 @@ public:
     case VX_CAPS_NUM_CORES:
       _value = NUM_CORES * NUM_CLUSTERS;
       break;
+    case VX_CAPS_TC_SIZE:
+      _value = TC_SIZE;
+      break;
+    case VX_CAPS_TC_NUM:
+      _value = TC_NUM;
+      break;
     case VX_CAPS_CACHE_LINE_SIZE:
       _value = CACHE_BLOCK_SIZE;
       break;
@@ -107,6 +114,9 @@ public:
       break;
     case VX_CAPS_NUM_MEM_BANKS:
       _value = MEMORY_BANKS;
+      break;
+    case VX_CAPS_MEM_BANK_SIZE:
+      _value = 1ull << (MEM_ADDR_WIDTH / MEMORY_BANKS);
       break;
     default:
       std::cout << "invalid caps id: " << caps_id << std::endl;
@@ -432,6 +442,12 @@ public:
     uint64_t pt_addr = 0;
     // Reserve space for PT
     DBGPRINT("[RT:init_VM] Initialize VM\n");
+    DBGPRINT("* VM_ADDR_MODE=0x%lx", VM_ADDR_MODE);
+    DBGPRINT("* PAGE_TABLE_BASE_ADDR=0x%lx", PAGE_TABLE_BASE_ADDR);
+    DBGPRINT("* PT_LEVEL=0x%lx", PT_LEVEL);
+    DBGPRINT("* PT_SIZE=0x%lx", PT_SIZE);
+    DBGPRINT("* PTE_SIZE=0x%lx", PTE_SIZE);
+    DBGPRINT("* TLB_SIZE=0x%lx", TLB_SIZE);
     CHECK_ERR(mem_reserve(PAGE_TABLE_BASE_ADDR, PT_SIZE_LIMIT, VX_MEM_READ_WRITE), {
       return err;
     });

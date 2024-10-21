@@ -20,13 +20,15 @@
 # exit when any command fails
 set -e
 
+library=""
+sdc_file=""
 source=""
 top_level=""
 dir_list=()
 inc_args=""
 macro_args=""
 no_warnings=1
-process="elaborate,netlist,techmap,verilog"
+process="elaborate,netlist,techmap,verilog,link"
 
 declare -a excluded_warnings=("Resizing cell port")
 
@@ -66,8 +68,14 @@ checkErrors()
 
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 [ $# -eq 0 ] && usage
-while getopts "s:t:I:D:P:Wh" arg; do
+while getopts "c:l:s:t:I:D:P:Wh" arg; do
     case $arg in
+    l) # library
+        library=${OPTARG}
+        ;;
+    c) # SDC constraints
+        sdc_file=${OPTARG}
+        ;;
     s) # source
         source=${OPTARG}
         ;;
@@ -95,6 +103,16 @@ while getopts "s:t:I:D:P:Wh" arg; do
 done
 
 {
+    # read device library
+    if [ -n "$library" ]; then
+        echo "read_liberty $library"
+    fi
+
+    # read design constraints
+    if [ -n "$sdc_file" ]; then
+        echo "read_sdc $sdc_file"
+    fi
+
     # read design sources
     for dir in "${dir_list[@]}"
     do
@@ -115,6 +133,11 @@ done
     # synthesize design
     if echo "$process" | grep -q "synthesis"; then
         echo "synth -top $top_level"
+    fi
+
+    # link design
+    if echo "$process" | grep -q "link"; then
+        echo "link_design -top $top_level"
     fi
 
     # convert to netlist

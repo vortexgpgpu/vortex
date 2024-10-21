@@ -38,7 +38,8 @@ module VX_stream_pack #(
     output wire [TAG_WIDTH-1:0]         tag_out,
     input wire                          ready_out
 );
-    if (NUM_REQS > 1) begin
+    if (NUM_REQS > 1) begin : g_pack
+
         localparam LOG_NUM_REQS = `CLOG2(NUM_REQS);
 
         wire [LOG_NUM_REQS-1:0] grant_index;
@@ -62,11 +63,11 @@ module VX_stream_pack #(
 
         wire [NUM_REQS-1:0] tag_matches;
 
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_tag_matches
             assign tag_matches[i] = (tag_in[i][TAG_SEL_BITS-1:0] == tag_sel[TAG_SEL_BITS-1:0]);
         end
 
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_ready_in
             assign ready_in[i] = grant_ready & tag_matches[i];
         end
 
@@ -87,7 +88,7 @@ module VX_stream_pack #(
             .ready_out (ready_out)
         );
 
-    end else begin
+    end else begin : g_passthru
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)

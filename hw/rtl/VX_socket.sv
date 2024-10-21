@@ -49,14 +49,12 @@ module VX_socket import VX_gpu_pkg::*; #(
 `ifdef GBAR_ENABLE
     VX_gbar_bus_if per_core_gbar_bus_if[`SOCKET_SIZE]();
 
-    `RESET_RELAY (gbar_arb_reset, reset);
-
     VX_gbar_arb #(
         .NUM_REQS (`SOCKET_SIZE),
         .OUT_BUF  ((`SOCKET_SIZE > 1) ? 2 : 0)
     ) gbar_arb (
         .clk        (clk),
-        .reset      (gbar_arb_reset),
+        .reset      (reset),
         .bus_in_if  (per_core_gbar_bus_if),
         .bus_out_if (gbar_bus_if)
     );
@@ -105,7 +103,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .UUID_WIDTH     (`UUID_WIDTH),
         .WRITE_ENABLE   (0),
         .NC_ENABLE      (0),
-        .CORE_OUT_BUF   (2),
+        .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (2)
     ) icache (
     `ifdef PERF_ENABLE
@@ -152,7 +150,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .WRITEBACK      (`DCACHE_WRITEBACK),
         .DIRTY_BYTES    (`DCACHE_WRITEBACK),
         .NC_ENABLE      (1),
-        .CORE_OUT_BUF   (2),
+        .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (2)
     ) dcache (
     `ifdef PERF_ENABLE
@@ -180,13 +178,13 @@ module VX_socket import VX_gpu_pkg::*; #(
     `ASSIGN_VX_MEM_BUS_IF_X (l1_mem_bus_if[1], dcache_mem_bus_if, L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
 
     VX_mem_arb #(
-        .NUM_INPUTS   (2),
-        .DATA_SIZE    (`L1_LINE_SIZE),
-        .TAG_WIDTH    (L1_MEM_TAG_WIDTH),
-        .TAG_SEL_IDX  (0),
-        .ARBITER      ("R"),
-        .REQ_OUT_BUF  (2),
-        .RSP_OUT_BUF  (2)
+        .NUM_INPUTS (2),
+        .DATA_SIZE  (`L1_LINE_SIZE),
+        .TAG_WIDTH  (L1_MEM_TAG_WIDTH),
+        .TAG_SEL_IDX(0),
+        .ARBITER    ("P"), // prioritize the icache
+        .REQ_OUT_BUF(3),
+        .RSP_OUT_BUF(3)
     ) mem_arb (
         .clk        (clk),
         .reset      (reset),
@@ -200,13 +198,13 @@ module VX_socket import VX_gpu_pkg::*; #(
 
     wire [`SOCKET_SIZE-1:0] per_core_busy;
 
-    VX_dcr_bus_if core_dcr_bus_if();
-    `BUFFER_DCR_BUS_IF (core_dcr_bus_if, dcr_bus_if, (`SOCKET_SIZE > 1));
-
     // Generate all cores
-    for (genvar core_id = 0; core_id < `SOCKET_SIZE; ++core_id) begin : cores
+    for (genvar core_id = 0; core_id < `SOCKET_SIZE; ++core_id) begin : g_cores
 
         `RESET_RELAY (core_reset, reset);
+
+        VX_dcr_bus_if core_dcr_bus_if();
+        `BUFFER_DCR_BUS_IF (core_dcr_bus_if, dcr_bus_if, 1'b1, (`SOCKET_SIZE > 1))
 
         VX_core #(
             .CORE_ID  ((SOCKET_ID * `SOCKET_SIZE) + core_id),

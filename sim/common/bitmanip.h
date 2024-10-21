@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,32 +16,54 @@
 #include <cstdint>
 #include <assert.h>
 
-constexpr uint32_t count_leading_zeros(uint32_t value) {
-  return value ? __builtin_clz(value) : 32;
+template <typename T>
+constexpr uint32_t count_leading_zeros(T value) {
+  static_assert(std::is_integral<T>::value, "invalid data type");
+  if constexpr (sizeof(T) > 4) {
+    return value ? __builtin_clzll(value) - (64 - sizeof(T) * 8) : sizeof(T) * 8;
+  } else {
+    return value ? __builtin_clz(value) - (32 - sizeof(T) * 8) : sizeof(T) * 8;
+  }
 }
 
-constexpr uint32_t count_trailing_zeros(uint32_t value) {
-  return value ? __builtin_ctz(value) : 32;
+template <typename T>
+constexpr uint32_t count_trailing_zeros(T value) {
+  static_assert(std::is_integral<T>::value, "invalid data type");
+  if constexpr (sizeof(T) > 4) {
+    return value ? __builtin_ctzll(value) : (sizeof(T) * 8);
+  } else {
+    return value ? __builtin_ctz(value) : (sizeof(T) * 8);
+  }
 }
 
-constexpr bool ispow2(uint32_t value) {
+template <typename T>
+constexpr bool ispow2(T value) {
+  static_assert(std::is_integral<T>::value, "invalid data type");
   return value && !(value & (value - 1));
 }
 
-constexpr uint32_t log2ceil(uint32_t value) {
-  return 32 - count_leading_zeros(value - 1);
+template <typename T>
+constexpr uint32_t log2ceil(T value) {
+  static_assert(std::is_integral<T>::value, "invalid data type");
+    return (sizeof(T) * 8) - count_leading_zeros<T>(value - 1);
 }
 
-inline unsigned log2up(uint32_t value) {
+template <typename T>
+inline unsigned log2up(T value) {
+  static_assert(std::is_integral<T>::value, "invalid data type");
   return std::max<uint32_t>(1, log2ceil(value));
 }
 
-constexpr unsigned log2floor(uint32_t value) {
-  return 31 - count_leading_zeros(value);
+template <typename T>
+constexpr unsigned log2floor(T value) {
+  static_assert(std::is_integral<T>::value, "invalid data type");
+  return (sizeof(T) * 8 - 1) - count_leading_zeros<T>(value);
 }
 
-constexpr unsigned ceil2(uint32_t value) {
-  return 32 - count_leading_zeros(value);
+template <typename T>
+constexpr unsigned ceil2(T value) {
+  static_assert(std::is_integral<T>::value, "invalid data type");
+  return (sizeof(T) * 8) - count_leading_zeros<T>(value);
 }
 
 inline uint64_t bit_clr(uint64_t bits, uint32_t index) {
@@ -86,7 +108,7 @@ template <typename T = uint32_t>
 T sext(const T& word, uint32_t width) {
   assert(width > 1);
   assert(width <= (sizeof(T) * 8));
-  if (width == (sizeof(T) * 8)) 
+  if (width == (sizeof(T) * 8))
     return word;
   T mask((static_cast<T>(1) << width) - 1);
   return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : (word & mask);
@@ -96,7 +118,7 @@ template <typename T = uint32_t>
 T zext(const T& word, uint32_t width) {
   assert(width > 1);
   assert(width <= (sizeof(T) * 8));
-  if (width == (sizeof(T) * 8)) 
+  if (width == (sizeof(T) * 8))
     return word;
   T mask((static_cast<T>(1) << width) - 1);
   return word & mask;

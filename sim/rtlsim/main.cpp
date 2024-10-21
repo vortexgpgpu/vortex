@@ -33,13 +33,11 @@ const char* program = nullptr;
 
 static void parse_args(int argc, char **argv) {
   	int c;
-  	while ((c = getopt(argc, argv, "rh?")) != -1) {
+  	while ((c = getopt(argc, argv, "rh")) != -1) {
     	switch (c) {
     	case 'h':
-    	case '?':
-      		show_usage();
-      		exit(0);
-    		break;
+      	show_usage();
+      	exit(0);
     	default:
       		show_usage();
       		exit(-1);

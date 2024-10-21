@@ -30,6 +30,4 @@ import "DPI-C" function void dpi_trace(input int level, input string format /*ve
 import "DPI-C" function void dpi_trace_start();
 import "DPI-C" function void dpi_trace_stop();
 
-import "DPI-C" function longint dpi_uuid_gen(input logic reset, input int wid);
-
 `endif
