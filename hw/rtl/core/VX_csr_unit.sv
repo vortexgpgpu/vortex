@@ -151,6 +151,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     assign csr_req_data = execute_if.data.op_args.csr.use_imm ? `XLEN'(csr_imm) : rs1_data[0];
     assign csr_wr_enable = (csr_write_enable || (| csr_req_data));
 
+/*
 `ifdef VECTOR_ENABLE
     reg [`NUM_WARPS-1:0][`XLEN-1:0] AVL;
     reg [`NUM_WARPS-1:0][8:0]       VTYPEI;
@@ -212,6 +213,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
             end
     end
 `endif
+*/
 
     always @(*) begin
         case (execute_if.data.op_type)
