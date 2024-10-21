@@ -19,10 +19,9 @@ module VX_dp_ram #(
     parameter SIZE        = 1,
     parameter WRENW       = 1,
     parameter OUT_REG     = 0,
-    parameter NO_RWCHECK  = 0,
-    parameter RW_ASSERT   = 0,
+    parameter `STRING RDW_MODE = "R", // R: read-first, W: write-first
+    parameter RDW_ASSERT  = 0,
     parameter RESET_RAM   = 0,
-    parameter NEW_DATA    = 0,
     parameter INIT_ENABLE = 0,
     parameter INIT_FILE   = "",
     parameter [DATAW-1:0] INIT_VALUE = 0,
@@ -41,7 +40,8 @@ module VX_dp_ram #(
     localparam WSELW = DATAW / WRENW;
 
     `STATIC_ASSERT(!(WRENW * WSELW != DATAW), ("invalid parameter"))
-    `UNUSED_PARAM (RW_ASSERT)
+    `STATIC_ASSERT((RDW_MODE == "R" || RDW_MODE == "W"), ("invalid parameter"))
+    `UNUSED_PARAM (RDW_ASSERT)
 
 `define RAM_INITIALIZATION \
     if (INIT_ENABLE != 0) begin : g_init \
@@ -73,16 +73,17 @@ module VX_dp_ram #(
                         end
 `endif
     if (OUT_REG) begin : g_sync
-        if (NEW_DATA) begin : g_new_data
+        wire cs = read || write;
+        if (RDW_MODE == "W") begin : g_new_data
             (* rw_addr_collision = "yes" *) `RAM_ARRAY
             `UNUSED_VAR (wren)
             `RAM_INITIALIZATION
             reg [ADDRW-1:0] addr_reg;
             always @(posedge clk) begin
-                if (write) begin
-                    `RAM_WRITE
-                end
-                if (read) begin
+                if (cs) begin
+                    if (write) begin
+                        `RAM_WRITE
+                    end
                     addr_reg <= raddr;
                 end
             end
@@ -92,18 +93,19 @@ module VX_dp_ram #(
             `RAM_INITIALIZATION
             reg [DATAW-1:0] rdata_r;
             always @(posedge clk) begin
-                if (write) begin
-                    `RAM_WRITE
-                end
-                if (read) begin
+                if (cs) begin
+                    if (write) begin
+                        `RAM_WRITE
+                    end
                     rdata_r <= ram[raddr];
                 end
             end
             assign rdata = rdata_r;
         end
     end else begin : g_async
-        if (NO_RWCHECK) begin : g_no_rwcehck
-            `NO_RW_RAM_CHECK `RAM_ARRAY
+        `UNUSED_VAR (read)
+        if (RDW_MODE == "W") begin : g_new_data
+            `RAM_ARRAY
             `RAM_INITIALIZATION
             always @(posedge clk) begin
                 if (write) begin
@@ -111,8 +113,8 @@ module VX_dp_ram #(
                 end
             end
             assign rdata = ram[raddr];
-        end else begin : g_rwcheck
-            `RAM_ARRAY
+        end else begin : g_old_data
+            `NO_RW_RAM_CHECK `RAM_ARRAY
             `RAM_INITIALIZATION
             always @(posedge clk) begin
                 if (write) begin
@@ -142,10 +144,11 @@ module VX_dp_ram #(
     end
 
     if (OUT_REG) begin : g_sync
-        if (NEW_DATA) begin : g_new_data
+        wire cs = read || write;
+        if (RDW_MODE == "W") begin : g_new_data
             reg [ADDRW-1:0] addr_reg;
             always @(posedge clk) begin
-                if (read) begin
+                if (cs) begin
                     addr_reg <= raddr;
                 end
             end
@@ -153,14 +156,17 @@ module VX_dp_ram #(
         end else begin : g_old_data
             reg [DATAW-1:0] rdata_r;
             always @(posedge clk) begin
-                if (read) begin
+                if (cs) begin
                     rdata_r <= ram[raddr];
                 end
             end
             assign rdata = rdata_r;
         end
     end else begin : g_async
-        if (NO_RWCHECK) begin : g_no_rwcheck
+        `UNUSED_VAR (read)
+        if (RDW_MODE == "W") begin : g_new_data
+            assign rdata = ram[raddr];
+        end else begin : g_old_data
             reg [DATAW-1:0] prev_data;
             reg [ADDRW-1:0] prev_waddr;
             reg prev_write;
@@ -178,12 +184,9 @@ module VX_dp_ram #(
             end
 
             assign rdata = (prev_write && (prev_waddr == raddr)) ? prev_data : ram[raddr];
-            if (RW_ASSERT) begin : g_rw_asert
+            if (RDW_ASSERT) begin : g_rw_asert
                 `RUNTIME_ASSERT(~read || (rdata == ram[raddr]), ("%t: read after write hazard", $time))
             end
-        end else begin : g_rwcheck
-            `UNUSED_VAR (read)
-            assign rdata = ram[raddr];
         end
     end
 `endif

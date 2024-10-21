@@ -154,6 +154,6 @@ module VX_cluster import VX_gpu_pkg::*; #(
         );
     end
 
-    `BUFFER_EX(busy, (| per_socket_busy), 1'b1, (`NUM_SOCKETS > 1));
+    `BUFFER_EX(busy, (| per_socket_busy), 1'b1, 1, (`NUM_SOCKETS > 1));
 
 endmodule

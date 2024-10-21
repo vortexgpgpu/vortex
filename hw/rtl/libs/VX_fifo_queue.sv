@@ -105,7 +105,7 @@ module VX_fifo_queue #(
             .DATAW (DATAW),
             .SIZE  (DEPTH),
             .OUT_REG (USE_BRAM),
-            .NEW_DATA (1)
+            .RDW_MODE ("W")
         ) dp_ram (
             .clk   (clk),
             .reset (reset),

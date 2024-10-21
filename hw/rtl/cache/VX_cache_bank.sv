@@ -461,7 +461,7 @@ module VX_cache_bank #(
         .write_word (write_word_st0),
         .word_idx   (word_idx_st0),
         .write_byteen(byteen_st0),
-        .way_idx    (way_idx_st1),
+        .way_idx_r  (way_idx_st1),
         // outputs
         .read_data  (read_data_st1),
         .evict_byteen(evict_byteen_st1)

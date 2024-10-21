@@ -62,8 +62,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         .data_out (perf_sfu_per_cycle)
     );
 
-    `BUFFER_EX(perf_units_per_cycle_r, perf_units_per_cycle, 1'b1, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
-    `BUFFER_EX(perf_sfu_per_cycle_r, perf_sfu_per_cycle, 1'b1, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
+    `BUFFER_EX(perf_units_per_cycle_r, perf_units_per_cycle, 1'b1, 0, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
+    `BUFFER_EX(perf_sfu_per_cycle_r, perf_sfu_per_cycle, 1'b1, 0, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
 
     wire [PER_ISSUE_WARPS-1:0] stg_valid_in;
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_stg_valid_in

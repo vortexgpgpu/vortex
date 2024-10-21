@@ -66,12 +66,13 @@ module VX_cache_tags #(
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_tag_store
         wire way_en   = (NUM_WAYS == 1) || (evict_way == i);
+        wire do_init  = init; // init all ways
         wire do_fill  = fill && way_en;
         wire do_flush = flush && (!WRITEBACK || way_en); // flush the whole line in writethrough mode
-        wire do_write = WRITEBACK && write && tag_matches[i]; // only write on hit
+        wire do_write = WRITEBACK && write && tag_matches[i]; // only write on tag hit
 
         //wire line_read = read || write || (WRITEBACK && (fill || flush));
-        wire line_write = init || do_fill || do_flush || do_write;
+        wire line_write = do_init || do_fill || do_flush || do_write;
         wire line_valid = fill || write;
 
         wire [TAG_WIDTH-1:0] line_wdata;
@@ -90,7 +91,7 @@ module VX_cache_tags #(
             .DATAW (TAG_WIDTH),
             .SIZE  (`CS_LINES_PER_BANK),
             .OUT_REG (1),
-            .NEW_DATA (1)
+            .RDW_MODE ("W")
         ) tag_store (
             .clk   (clk),
             .reset (reset),

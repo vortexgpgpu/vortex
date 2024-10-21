@@ -47,7 +47,7 @@ module VX_cache_data #(
     input wire [`CS_WORD_WIDTH-1:0]     write_word,
     input wire [WORD_SIZE-1:0]          write_byteen,
     input wire [`UP(`CS_WORD_SEL_BITS)-1:0] word_idx,
-    input wire [`CS_WAY_SEL_WIDTH-1:0]  way_idx,
+    input wire [`CS_WAY_SEL_WIDTH-1:0]  way_idx_r,
     // outputs
     output wire [`CS_LINE_WIDTH-1:0]    read_data,
     output wire [LINE_SIZE-1:0]         evict_byteen
@@ -94,11 +94,11 @@ module VX_cache_data #(
             .rdata (byteen_rdata)
         );
 
-        assign evict_byteen = byteen_rdata[way_idx];
+        assign evict_byteen = byteen_rdata[way_idx_r];
     end else begin : g_no_dirty_bytes
         `UNUSED_VAR (init)
         `UNUSED_VAR (flush)
-        assign evict_byteen = '0;
+        assign evict_byteen = '1; // update whole line
     end
 
     wire [NUM_WAYS-1:0][`CS_WORDS_PER_LINE-1:0][`CS_WORD_WIDTH-1:0] line_rdata;
@@ -167,6 +167,6 @@ module VX_cache_data #(
         end
     end
 
-    assign read_data = line_rdata[way_idx];
+    assign read_data = line_rdata[way_idx_r];
 
 endmodule
