@@ -89,7 +89,7 @@ module VX_alu_unit #(
         );
 
         VX_alu_int #(
-            .INSTANCE_ID ($sformatf("%s-int%0d", INSTANCE_ID, block_idx)),
+            .INSTANCE_ID (`SFORMATF(("%s-int%0d", INSTANCE_ID, block_idx))),
             .BLOCK_IDX (block_idx),
             .NUM_LANES (NUM_LANES)
         ) alu_int (
@@ -102,7 +102,7 @@ module VX_alu_unit #(
 
     `ifdef EXT_M_ENABLE
         VX_alu_muldiv #(
-            .INSTANCE_ID ($sformatf("%s-muldiv%0d", INSTANCE_ID, block_idx)),
+            .INSTANCE_ID (`SFORMATF(("%s-muldiv%0d", INSTANCE_ID, block_idx))),
             .NUM_LANES (NUM_LANES)
         ) muldiv_unit (
             .clk        (clk),

@@ -389,7 +389,7 @@ module VX_cache import VX_gpu_pkg::*; #(
 
         VX_cache_bank #(
             .BANK_ID      (bank_id),
-            .INSTANCE_ID  ($sformatf("%s-bank%0d", INSTANCE_ID, bank_id)),
+            .INSTANCE_ID  (`SFORMATF(("%s-bank%0d", INSTANCE_ID, bank_id))),
             .CACHE_SIZE   (CACHE_SIZE),
             .LINE_SIZE    (LINE_SIZE),
             .NUM_BANKS    (NUM_BANKS),

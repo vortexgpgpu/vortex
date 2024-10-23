@@ -85,7 +85,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     `RESET_RELAY (icache_reset, reset);
 
     VX_cache_cluster #(
-        .INSTANCE_ID    ($sformatf("%s-icache", INSTANCE_ID)),
+        .INSTANCE_ID    (`SFORMATF(("%s-icache", INSTANCE_ID))),
         .NUM_UNITS      (`NUM_ICACHES),
         .NUM_INPUTS     (`SOCKET_SIZE),
         .TAG_SEL_IDX    (0),
@@ -132,7 +132,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     `RESET_RELAY (dcache_reset, reset);
 
     VX_cache_cluster #(
-        .INSTANCE_ID    ($sformatf("%s-dcache", INSTANCE_ID)),
+        .INSTANCE_ID    (`SFORMATF(("%s-dcache", INSTANCE_ID))),
         .NUM_UNITS      (`NUM_DCACHES),
         .NUM_INPUTS     (`SOCKET_SIZE),
         .TAG_SEL_IDX    (0),
@@ -212,7 +212,7 @@ module VX_socket import VX_gpu_pkg::*; #(
 
         VX_core #(
             .CORE_ID  ((SOCKET_ID * `SOCKET_SIZE) + core_id),
-            .INSTANCE_ID ($sformatf("%s-core%0d", INSTANCE_ID, core_id))
+            .INSTANCE_ID (`SFORMATF(("%s-core%0d", INSTANCE_ID, core_id)))
         ) core (
             `SCOPE_IO_BIND  (scope_core + core_id)
 

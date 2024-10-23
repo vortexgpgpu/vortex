@@ -223,7 +223,7 @@ module VX_mem_scheduler #(
     if (COALESCE_ENABLE) begin : g_coalescer
 
         VX_mem_coalescer #(
-            .INSTANCE_ID    ($sformatf("%s-coalescer", INSTANCE_ID)),
+            .INSTANCE_ID    (`SFORMATF(("%s-coalescer", INSTANCE_ID))),
             .NUM_REQS       (CORE_REQS),
             .DATA_IN_SIZE   (WORD_SIZE),
             .DATA_OUT_SIZE  (LINE_SIZE),

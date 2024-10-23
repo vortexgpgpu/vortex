@@ -67,7 +67,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
     );
 
     VX_gbar_unit #(
-        .INSTANCE_ID ($sformatf("gbar%0d", CLUSTER_ID))
+        .INSTANCE_ID (`SFORMATF(("gbar%0d", CLUSTER_ID)))
     ) gbar_unit (
         .clk         (clk),
         .reset       (reset),
@@ -84,7 +84,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
     `RESET_RELAY (l2_reset, reset);
 
     VX_cache_wrap #(
-        .INSTANCE_ID    ($sformatf("%s-l2cache", INSTANCE_ID)),
+        .INSTANCE_ID    (`SFORMATF(("%s-l2cache", INSTANCE_ID))),
         .CACHE_SIZE     (`L2_CACHE_SIZE),
         .LINE_SIZE      (`L2_LINE_SIZE),
         .NUM_BANKS      (`L2_NUM_BANKS),
@@ -131,7 +131,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
         VX_socket #(
             .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + socket_id),
-            .INSTANCE_ID ($sformatf("%s-socket%0d", INSTANCE_ID, socket_id))
+            .INSTANCE_ID (`SFORMATF(("%s-socket%0d", INSTANCE_ID, socket_id)))
         ) socket (
             `SCOPE_IO_BIND  (scope_socket+socket_id)
 

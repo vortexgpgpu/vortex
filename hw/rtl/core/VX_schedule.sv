@@ -290,7 +290,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     // split/join handling
 
     VX_split_join #(
-        .INSTANCE_ID ($sformatf("%s-splitjoin", INSTANCE_ID))
+        .INSTANCE_ID (`SFORMATF(("%s-splitjoin", INSTANCE_ID)))
     ) split_join (
         .clk        (clk),
         .reset      (reset),

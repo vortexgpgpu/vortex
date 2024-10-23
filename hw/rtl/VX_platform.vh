@@ -130,6 +130,8 @@ endgenerate
     end
 `endif
 
+`define SFORMATF(x) $sformatf x
+
 `else // SYNTHESIS
 
 `define STATIC_ASSERT(cond, msg)
@@ -139,6 +141,7 @@ endgenerate
 
 `define DEBUG_BLOCK(x)
 `define TRACE(level, args)
+`define SFORMATF(x)
 
 `define TRACING_ON
 `define TRACING_OFF

@@ -140,7 +140,7 @@ module Vortex import VX_gpu_pkg::*; (
 
         VX_cluster #(
             .CLUSTER_ID (cluster_id),
-            .INSTANCE_ID ($sformatf("cluster%0d", cluster_id))
+            .INSTANCE_ID (`SFORMATF(("cluster%0d", cluster_id)))
         ) cluster (
             `SCOPE_IO_BIND (scope_cluster + cluster_id)
 

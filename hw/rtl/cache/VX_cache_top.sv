@@ -20,7 +20,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     parameter NUM_REQS              = 4,
 
     // Size of cache in bytes
-    parameter CACHE_SIZE            = 32768,
+    parameter CACHE_SIZE            = 65536,
     // Size of line inside a bank in bytes
     parameter LINE_SIZE             = 64,
     // Number of banks

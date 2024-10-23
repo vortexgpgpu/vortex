@@ -503,7 +503,7 @@ module VX_cache_bank #(
     );
 
     VX_cache_mshr #(
-        .INSTANCE_ID ($sformatf("%s-mshr", INSTANCE_ID)),
+        .INSTANCE_ID (`SFORMATF(("%s-mshr", INSTANCE_ID))),
         .BANK_ID     (BANK_ID),
         .LINE_SIZE   (LINE_SIZE),
         .NUM_BANKS   (NUM_BANKS),

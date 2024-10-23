@@ -92,7 +92,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     end
 
     VX_local_mem #(
-        .INSTANCE_ID($sformatf("%s-lmem", INSTANCE_ID)),
+        .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
         .SIZE       (1 << `LMEM_LOG_SIZE),
         .NUM_REQS   (LSU_NUM_REQS),
         .NUM_BANKS  (`LMEM_NUM_BANKS),
@@ -131,7 +131,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
         for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_coalescers
             VX_mem_coalescer #(
-                .INSTANCE_ID    ($sformatf("%s-coalescer%0d", INSTANCE_ID, i)),
+                .INSTANCE_ID    (`SFORMATF(("%s-coalescer%0d", INSTANCE_ID, i))),
                 .NUM_REQS       (`NUM_LSU_LANES),
                 .DATA_IN_SIZE   (LSU_WORD_SIZE),
                 .DATA_OUT_SIZE  (DCACHE_WORD_SIZE),
