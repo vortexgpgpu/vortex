@@ -65,7 +65,7 @@ module VX_cyclic_arbiter #(
             .valid_out  (grant_valid)
         );
 
-        VX_decoder #(
+        VX_demux #(
             .N (LOG_NUM_REQS),
             .D (NUM_REQS)
         ) grant_decoder (

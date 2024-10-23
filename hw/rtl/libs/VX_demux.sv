@@ -17,7 +17,7 @@
 // Adapted from BaseJump STL: http://bjump.org/data_out.html
 
 `TRACING_OFF
-module VX_decoder #(
+module VX_demux #(
     parameter N = 0,
     parameter M = 1,
     parameter MODEL = 0,

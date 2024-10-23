@@ -614,10 +614,10 @@ module VX_cache_bank #(
             `UNUSED_VAR (byteen_st1)
         end else begin : g_wt
             wire [LINE_SIZE-1:0] line_byteen;
-            VX_decoder #(
+            VX_demux #(
                 .N (`CS_WORD_SEL_BITS),
                 .M (WORD_SIZE)
-            ) byteen_dec (
+            ) byteen_demux (
                 .sel_in   (word_idx_st1),
                 .data_in  (byteen_st1),
                 .data_out (line_byteen)

@@ -480,12 +480,12 @@ module VX_rr_arbiter #(
             end
         end
 
-        VX_decoder #(
+        VX_demux #(
             .N (LOG_NUM_REQS),
             .D (NUM_REQS)
         ) grant_decoder (
             .sel_in   (grant_index),
-            .data_in  (grant_valid),
+            .data_in  (1'b1),
             .data_out (grant_onehot)
         );
 
