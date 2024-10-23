@@ -637,7 +637,7 @@ module VX_mem_scheduler #(
             end
             `TRACE(2, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_waddr_s, req_batch_idx, mem_req_dbg_uuid))
         end
-        if (mem_rsp_fire_s) begin
+        if (mem_rsp_valid_s && mem_rsp_ready_s) begin
             `TRACE(2, ("%t: %s mem-rsp: valid=%b, data=", $time, INSTANCE_ID, mem_rsp_mask_s))
             `TRACE_ARRAY1D(2, "0x%0h", mem_rsp_data_s, CORE_CHANNELS)
             `TRACE(2, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_raddr, rsp_batch_idx, mem_rsp_dbg_uuid))
