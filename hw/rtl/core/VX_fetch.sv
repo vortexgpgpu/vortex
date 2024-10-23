@@ -166,13 +166,16 @@ module VX_fetch import VX_gpu_pkg::*; #(
     `SCOPE_IO_UNUSED(0)
 `endif
 `endif
+
 `ifdef CHIPSCOPE
+`ifdef DBG_SCOPE_FETCH
     ila_fetch ila_fetch_inst (
         .clk    (clk),
         .probe0 ({schedule_if.valid, schedule_if.data, schedule_if.ready}),
         .probe1 ({icache_bus_if.req_valid, icache_bus_if.req_data, icache_bus_if.req_ready}),
         .probe2 ({icache_bus_if.rsp_valid, icache_bus_if.rsp_data, icache_bus_if.rsp_ready})
     );
+`endif
 `endif
 
 `ifdef DBG_TRACE_MEM

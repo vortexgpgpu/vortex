@@ -561,13 +561,16 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     `SCOPE_IO_UNUSED(0)
 `endif
 `endif
+
 `ifdef CHIPSCOPE
+`ifdef DBG_SCOPE_LSU
     ila_lsu ila_lsu_inst (
         .clk    (clk),
         .probe0 ({execute_if.valid, execute_if.data, execute_if.ready}),
         .probe1 ({lsu_mem_if.req_valid, lsu_mem_if.req_data, lsu_mem_if.req_ready}),
         .probe2 ({lsu_mem_if.rsp_valid, lsu_mem_if.rsp_data, lsu_mem_if.rsp_ready})
     );
+`endif
 `endif
 
 endmodule

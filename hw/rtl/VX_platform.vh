@@ -44,11 +44,6 @@ endgenerate
         end                       \
     end
 
-`define __SCOPE
-`define __SCOPE_X
-`define __SCOPE_ON
-`define __SCOPE_OFF
-
 `ifndef TRACING_ALL
 `define TRACING_ON      /* verilator tracing_on */
 `define TRACING_OFF     /* verilator tracing_off */
@@ -157,18 +152,6 @@ endgenerate
 `define UNUSED_VAR(x)
 `define UNUSED_PIN(x) . x ()
 `define UNUSED_ARG(x) x
-
-`define __SCOPE (* mark_debug="true" *)
-
-`define __SCOPE_X
-
-`define __SCOPE_ON  \
-    `undef __SCOPE_X \
-    `define __SCOPE_X `__SCOPE
-
-`define __SCOPE_OFF  \
-    `undef __SCOPE_X \
-    `define __SCOPE_X
 
 `endif
 
