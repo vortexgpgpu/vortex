@@ -412,7 +412,15 @@ module VX_mem_scheduler #(
 
     // Handle memory responses ////////////////////////////////////////////////
 
+    wire [BATCH_SEL_WIDTH-1:0] rsp_batch_idx;
+    if (CORE_BATCHES > 1) begin : g_rsp_batch_idx
+        assign rsp_batch_idx = mem_rsp_tag_s[CORE_BATCH_BITS-1:0];
+    end else begin : g_rsp_batch_idx_0
+        assign rsp_batch_idx = '0;
+    end
+
     if (CORE_REQS == 1) begin : g_rsp_1
+        `UNUSED_VAR (rsp_batch_idx)
 
         assign crsp_valid = mem_rsp_valid_s;
         assign crsp_mask  = mem_rsp_mask_s;
@@ -426,13 +434,6 @@ module VX_mem_scheduler #(
 
         reg [CORE_QUEUE_SIZE-1:0][CORE_REQS-1:0] rsp_rem_mask;
         wire [CORE_REQS-1:0] rsp_rem_mask_n, curr_mask;
-        wire [BATCH_SEL_WIDTH-1:0] rsp_batch_idx;
-
-        if (CORE_BATCHES > 1) begin : g_rsp_batch_idx
-            assign rsp_batch_idx = mem_rsp_tag_s[CORE_BATCH_BITS-1:0];
-        end else begin : g_rsp_batch_idx_0
-            assign rsp_batch_idx = '0;
-        end
 
         for (genvar r = 0; r < CORE_REQS; ++r) begin : g_curr_mask
             localparam i = r / CORE_CHANNELS;
