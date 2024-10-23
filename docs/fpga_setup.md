@@ -52,9 +52,9 @@ To request 16 cores and 64GB of RAM for 6 hours on flubber9, a fpga dev node:
 ```bash
 salloc -p rg-fpga --nodes=1 --ntasks-per-node=16 --mem=64G --nodelist flubber9 --time=06:00:00
 ```
-
-## Environment Setup
-Once you are logged in, you will need to complete some first time configurations.
+Synthesis for Xilinx Boards
+----------------------
+Once you are logged in, you will need to complete some first time configurations. If you are interested in the Intel (Altera) synthesis steps, scroll down below.
 
 ### Source Configuration Scripts
 ```
@@ -89,7 +89,7 @@ The build is complete when the bitstream file `vortex_afu.xclbin` exists in `
 
 ### Running a Program on Xilinx FPGA
 
-The blackbox.sh script in `ci` can be used to run a test with Vortex’s xrt driver using the following command:
+The [blackbox.sh](./simulation.md) script within the build directory can be used to run a test with Vortex’s xrt driver using the following command:
 
 `FPGA_BIN_DIR=<path to bitstream directory> TARGET=hw|hw_emu PLATFORM=<platform baseName> ./ci/blackbox.sh --driver=xrt --app=<test name>`
 
@@ -97,19 +97,11 @@ For example:
 
 ```FPGA_BIN_DIR=<realpath> hw/syn/xilinx/xrt/build_4c_u280_xilinx_u280_gen3x16_xdma_1_202211_1_hw/bin TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 ./ci/blackbox.sh --driver=xrt --app=demo```
 
-### Synthesis for Intel (Altera) Boards
-
-To set up the environment, source the XRT setup.sh and other Xilinx scripts. For example:
-
-```
-source /opt/xilinx/xrt/setup.sh
-source /tools/reconfig/xilinx/Vivado/2022.1/settings64.sh
-source /tools/reconfig/xilinx/Vitis/2022.1/settings64.sh
-
-```
-
-OPAE Environment Setup
+Synthesis for Intel (Altera) Boards
 ----------------------
+
+### OPAE Environment Setup
+
 
     $ source /opt/inteldevstack/init_env_user.sh
     $ export OPAE_HOME=/opt/opae/1.1.2
@@ -118,8 +110,7 @@ OPAE Environment Setup
     $ export LIBRARY_PATH=$OPAE_HOME/lib:$LIBRARY_PATH
     $ export LD_LIBRARY_PATH=$OPAE_HOME/lib:$LD_LIBRARY_PATH
 
-OPAE Build
-------------------
+### OPAE Build
 
 The FPGA has to following configuration options:
 - DEVICE_FAMILY=arria10 | stratix10
@@ -134,8 +125,7 @@ A new folder (ex: `test1_xxx_4c`) will be created and the build will start and t
 Setting TARGET=ase will build the project for simulation using Intel ASE.
 
 
-OPAE Build Configuration
-------------------------
+### OPAE Build Configuration
 
 The hardware configuration file `/hw/rtl/VX_config.vh` defines all the hardware parameters that can be modified when build the processor.For example, have the following parameters that can be configured:
 - `NUM_WARPS`:   Number of warps per cores
@@ -146,8 +136,7 @@ You configure the syntesis build from the command line:
 
     $ CONFIGS="-DPERF_ENABLE -DNUM_THREADS=8" make
 
-OPAE Build Progress
--------------------
+### OPAE Build Progress
 
 You could check the last 10 lines in the build log for possible errors until build completion.
 
@@ -166,17 +155,40 @@ The file `vortex_afu.gbs` should exist when the build is done:
     $ ls -lsa <build_dir>/synth/vortex_afu.gbs
 
 
-Signing the bitstream and Programming the FPGA
-----------------------------------------------
+### Signing the bitstream and Programming the FPGA
 
     $ cd <build_dir>
     $ PACSign PR -t UPDATE -H openssl_manager -i vortex_afu.gbs -o vortex_afu_unsigned_ssl.gbs
     $ fpgasupdate vortex_afu_unsigned_ssl.gbs
 
-FPGA sample test running OpenCL sgemm kernel
---------------------------------------------
+### Sample FPGA Run Test
+Ensure you have the correct opae runtime for the FPGA target
 
-Run the following from the Vortex root directory
+```
+$ TARGET=FPGA make -C runtime/opae
+```
+
+Run the [blackbox.sh](./simulation.md) from your Vortex build directory
+
+```
+$ TARGET=fpga ./ci/blackbox.sh --driver=opae --app=sgemm --args="-n128"
+```
+
+### FPGA sample test running OpenCL sgemm kernel
+
+You can use the `blackbox.sh` script to run the following from your Vortex build directory
 
     $ TARGET=fpga ./ci/blackbox.sh --driver=opae --app=sgemm --args="-n128"
 
+### Testing Vortex using OPAE with Intel ASE Simulation
+Building ASE synthesis
+
+```$ TARGET=asesim make -C runtime/opae```
+
+Building ASE runtime
+
+```$ TARGET=asesim make -C runtime/opae```
+
+Running ASE simulation
+
+```$ ASE_LOG=0 ASE_WORKDIR=<build_dir>/synth/work TARGET=asesim ./ci/blackbox.sh --driver=opae --app=sgemm --args="-n16"```

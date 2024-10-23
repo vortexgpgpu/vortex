@@ -15,7 +15,7 @@ SimX is a C++ cycle-level in-house simulator developed for Vortex. The relevant 
 
 The guide to build the fpga with specific configurations is located [here.](fpga_setup.md) You can find instructions for both Xilinx and Altera based FPGAs.
 
-### How to Test
+### How to Test (using `blackbox.sh`)
 
 Running tests under specific drivers (rtlsim,simx,fpga) is done using the script named `blackbox.sh` located in the `ci` folder. Running command `./ci/blackbox.sh --help` from the Vortex root directory will display the following command line arguments for `blackbox.sh`:
 
@@ -54,7 +54,8 @@ PERF: instrs=363180, cycles=53108, IPC=6.838518
 
 ## Additional Quick Start Scenarios
 
-Running Vortex simulators with different configurations:
+Running Vortex simulators with different configurations and drivers is supported. For example:
+
 - Run basic driver test with rtlsim driver and Vortex config of 2 clusters, 2 cores, 2 warps, 4 threads
 
     $ ./ci/blackbox.sh --driver=rtlsim --clusters=2 --cores=2 --warps=2 --threads=4  --app=basic
