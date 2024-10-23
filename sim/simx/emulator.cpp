@@ -625,3 +625,15 @@ void Emulator::update_fcrs(uint32_t fflags, uint32_t tid, uint32_t wid) {
     this->set_csr(VX_CSR_FFLAGS, this->get_csr(VX_CSR_FFLAGS, tid, wid) | fflags, tid, wid);
   }
 }
+
+// For riscv-vector test functionality, ecall and ebreak must trap
+// These instructions are used in the vector tests to stop execution of the test
+// Therefore, without these instructions, undefined and incorrect behavior happens
+//
+// For now, we need these instructions to trap for testing the riscv-vector isa
+void Emulator::trigger_ecall() {
+  active_warps_.reset();
+}
+void Emulator::trigger_ebreak() {
+  active_warps_.reset();
+}
