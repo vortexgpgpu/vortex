@@ -141,7 +141,7 @@ endgenerate
 
 `define DEBUG_BLOCK(x)
 `define TRACE(level, args)
-`define SFORMATF(x)
+`define SFORMATF(x) ""
 
 `define TRACING_ON
 `define TRACING_OFF
