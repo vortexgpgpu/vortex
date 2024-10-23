@@ -127,7 +127,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .TAG_WIDTH (DCACHE_TAG_WIDTH)
     ) dcache_coalesced_if[`NUM_LSU_BLOCKS]();
 
-    if (LSU_WORD_SIZE != DCACHE_WORD_SIZE) begin : g_enabled
+    if ((`NUM_LSU_LANES > 1) && (LSU_WORD_SIZE != DCACHE_WORD_SIZE)) begin : g_enabled
 
         for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_coalescers
             VX_mem_coalescer #(

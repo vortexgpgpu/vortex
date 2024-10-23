@@ -32,7 +32,7 @@ module VX_mem_scheduler #(
 
     parameter WORD_WIDTH    = WORD_SIZE * 8,
     parameter LINE_WIDTH    = LINE_SIZE * 8,
-    parameter COALESCE_ENABLE = (LINE_SIZE != WORD_SIZE),
+    parameter COALESCE_ENABLE = (CORE_REQS > 1) && (LINE_SIZE != WORD_SIZE),
     parameter PER_LINE_REQS = LINE_SIZE / WORD_SIZE,
     parameter MERGED_REQS   = CORE_REQS / PER_LINE_REQS,
     parameter MEM_BATCHES   = `CDIV(MERGED_REQS, MEM_CHANNELS),
@@ -94,6 +94,7 @@ module VX_mem_scheduler #(
     localparam CORE_BATCHES    = COALESCE_ENABLE ? 1 : MEM_BATCHES;
     localparam CORE_BATCH_BITS = `CLOG2(CORE_BATCHES);
 
+    `STATIC_ASSERT ((MEM_CHANNELS <= CORE_REQS), ("invalid parameter"))
     `STATIC_ASSERT (`IS_DIVISBLE(CORE_REQS * WORD_SIZE, LINE_SIZE), ("invalid parameter"))
     `STATIC_ASSERT ((TAG_WIDTH >= UUID_WIDTH), ("invalid parameter"))
     `RUNTIME_ASSERT((~core_req_valid || core_req_mask != 0), ("%t: invalid request mask", $time))
@@ -411,99 +412,113 @@ module VX_mem_scheduler #(
 
     // Handle memory responses ////////////////////////////////////////////////
 
-    reg [CORE_QUEUE_SIZE-1:0][CORE_REQS-1:0] rsp_rem_mask;
-    wire [CORE_REQS-1:0] rsp_rem_mask_n, curr_mask;
-    wire [BATCH_SEL_WIDTH-1:0] rsp_batch_idx;
-
-    if (CORE_BATCHES > 1) begin : g_rsp_batch_idx
-        assign rsp_batch_idx = mem_rsp_tag_s[CORE_BATCH_BITS-1:0];
-    end else begin : g_rsp_batch_idx_0
-        assign rsp_batch_idx = '0;
-    end
-
-    for (genvar r = 0; r < CORE_REQS; ++r) begin : g_curr_mask
-        localparam i = r / CORE_CHANNELS;
-        localparam j = r % CORE_CHANNELS;
-        assign curr_mask[r] = (BATCH_SEL_WIDTH'(i) == rsp_batch_idx) && mem_rsp_mask_s[j];
-    end
-
-    assign rsp_rem_mask_n = rsp_rem_mask[ibuf_raddr] & ~curr_mask;
-
-    wire rsp_complete = ~(| rsp_rem_mask_n);
-
-    wire mem_rsp_fire_s = mem_rsp_valid_s && mem_rsp_ready_s;
-
-    always @(posedge clk) begin
-        if (ibuf_push) begin
-            rsp_rem_mask[ibuf_waddr] <= core_req_mask;
-        end
-        if (mem_rsp_fire_s) begin
-            rsp_rem_mask[ibuf_raddr] <= rsp_rem_mask_n;
-        end
-    end
-
-    if (RSP_PARTIAL != 0 || CORE_REQS == 1) begin : g_rsp_partial
-
-        reg [CORE_QUEUE_SIZE-1:0] rsp_sop_r;
-
-        always @(posedge clk) begin
-            if (ibuf_push) begin
-                rsp_sop_r[ibuf_waddr] <= 1;
-            end
-            if (mem_rsp_fire_s) begin
-                rsp_sop_r[ibuf_raddr] <= 0;
-            end
-        end
+    if (CORE_REQS == 1) begin : g_rsp_1
 
         assign crsp_valid = mem_rsp_valid_s;
-        assign crsp_mask  = curr_mask;
-        assign crsp_sop   = rsp_sop_r[ibuf_raddr];
-
-        for (genvar r = 0; r < CORE_REQS; ++r) begin : g_crsp_data
-            localparam j = r % CORE_CHANNELS;
-            assign crsp_data[r] = mem_rsp_data_s[j];
-        end
+        assign crsp_mask  = mem_rsp_mask_s;
+        assign crsp_sop   = 1'b1;
+        assign crsp_eop   = 1'b1;
+        assign crsp_data  = mem_rsp_data_s;
 
         assign mem_rsp_ready_s = crsp_ready;
 
-    end else begin : g_rsp_full
+    end else begin : g_rsp_N
 
-        wire [CORE_CHANNELS-1:0][CORE_BATCHES-1:0][WORD_WIDTH-1:0] rsp_store_n;
-        reg [CORE_REQS-1:0] rsp_orig_mask [CORE_QUEUE_SIZE-1:0];
+        reg [CORE_QUEUE_SIZE-1:0][CORE_REQS-1:0] rsp_rem_mask;
+        wire [CORE_REQS-1:0] rsp_rem_mask_n, curr_mask;
+        wire [BATCH_SEL_WIDTH-1:0] rsp_batch_idx;
 
-        for (genvar i = 0; i < CORE_CHANNELS; ++i) begin : g_rsp_store
-            for (genvar j = 0; j < CORE_BATCHES; ++j) begin : g_j
-                reg [WORD_WIDTH-1:0] rsp_store [0:CORE_QUEUE_SIZE-1];
-                wire rsp_wren = mem_rsp_fire_s
-                             && (BATCH_SEL_WIDTH'(j) == rsp_batch_idx)
-                             && ((CORE_CHANNELS == 1) || mem_rsp_mask_s[i]);
-                always @(posedge clk) begin
-                    if (rsp_wren) begin
-                        rsp_store[ibuf_raddr] <= mem_rsp_data_s[i];
-                    end
-                end
-                assign rsp_store_n[i][j] = rsp_wren ? mem_rsp_data_s[i] : rsp_store[ibuf_raddr];
-            end
+        if (CORE_BATCHES > 1) begin : g_rsp_batch_idx
+            assign rsp_batch_idx = mem_rsp_tag_s[CORE_BATCH_BITS-1:0];
+        end else begin : g_rsp_batch_idx_0
+            assign rsp_batch_idx = '0;
         end
+
+        for (genvar r = 0; r < CORE_REQS; ++r) begin : g_curr_mask
+            localparam i = r / CORE_CHANNELS;
+            localparam j = r % CORE_CHANNELS;
+            assign curr_mask[r] = (BATCH_SEL_WIDTH'(i) == rsp_batch_idx) && mem_rsp_mask_s[j];
+        end
+
+        assign rsp_rem_mask_n = rsp_rem_mask[ibuf_raddr] & ~curr_mask;
+
+        wire mem_rsp_fire_s = mem_rsp_valid_s && mem_rsp_ready_s;
 
         always @(posedge clk) begin
             if (ibuf_push) begin
-                rsp_orig_mask[ibuf_waddr] <= core_req_mask;
+                rsp_rem_mask[ibuf_waddr] <= core_req_mask;
+            end
+            if (mem_rsp_fire_s) begin
+                rsp_rem_mask[ibuf_raddr] <= rsp_rem_mask_n;
             end
         end
 
-        assign crsp_valid = mem_rsp_valid_s && rsp_complete;
-        assign crsp_mask  = rsp_orig_mask[ibuf_raddr];
-        assign crsp_sop   = 1'b1;
+        wire rsp_complete = ~(| rsp_rem_mask_n) || (CORE_REQS == 1);
 
-        for (genvar r = 0; r < CORE_REQS; ++r) begin : g_crsp_data
-            localparam i = r / CORE_CHANNELS;
-            localparam j = r % CORE_CHANNELS;
-            assign crsp_data[r] = rsp_store_n[j][i];
+        if (RSP_PARTIAL != 0) begin : g_rsp_partial
+
+            reg [CORE_QUEUE_SIZE-1:0] rsp_sop_r;
+
+            always @(posedge clk) begin
+                if (ibuf_push) begin
+                    rsp_sop_r[ibuf_waddr] <= 1;
+                end
+                if (mem_rsp_fire_s) begin
+                    rsp_sop_r[ibuf_raddr] <= 0;
+                end
+            end
+
+            assign crsp_valid = mem_rsp_valid_s;
+            assign crsp_mask  = curr_mask;
+            assign crsp_sop   = rsp_sop_r[ibuf_raddr];
+
+            for (genvar r = 0; r < CORE_REQS; ++r) begin : g_crsp_data
+                localparam j = r % CORE_CHANNELS;
+                assign crsp_data[r] = mem_rsp_data_s[j];
+            end
+
+            assign mem_rsp_ready_s = crsp_ready;
+
+        end else begin : g_rsp_full
+
+            wire [CORE_CHANNELS-1:0][CORE_BATCHES-1:0][WORD_WIDTH-1:0] rsp_store_n;
+            reg [CORE_REQS-1:0] rsp_orig_mask [CORE_QUEUE_SIZE-1:0];
+
+            for (genvar i = 0; i < CORE_CHANNELS; ++i) begin : g_rsp_store
+                for (genvar j = 0; j < CORE_BATCHES; ++j) begin : g_j
+                    reg [WORD_WIDTH-1:0] rsp_store [0:CORE_QUEUE_SIZE-1];
+                    wire rsp_wren = mem_rsp_fire_s
+                                && (BATCH_SEL_WIDTH'(j) == rsp_batch_idx)
+                                && ((CORE_CHANNELS == 1) || mem_rsp_mask_s[i]);
+                    always @(posedge clk) begin
+                        if (rsp_wren) begin
+                            rsp_store[ibuf_raddr] <= mem_rsp_data_s[i];
+                        end
+                    end
+                    assign rsp_store_n[i][j] = rsp_wren ? mem_rsp_data_s[i] : rsp_store[ibuf_raddr];
+                end
+            end
+
+            always @(posedge clk) begin
+                if (ibuf_push) begin
+                    rsp_orig_mask[ibuf_waddr] <= core_req_mask;
+                end
+            end
+
+            assign crsp_valid = mem_rsp_valid_s && rsp_complete;
+            assign crsp_mask  = rsp_orig_mask[ibuf_raddr];
+            assign crsp_sop   = 1'b1;
+
+            for (genvar r = 0; r < CORE_REQS; ++r) begin : g_crsp_data
+                localparam i = r / CORE_CHANNELS;
+                localparam j = r % CORE_CHANNELS;
+                assign crsp_data[r] = rsp_store_n[j][i];
+            end
+
+            assign mem_rsp_ready_s = crsp_ready || ~rsp_complete;
         end
 
-        assign mem_rsp_ready_s = crsp_ready || ~rsp_complete;
-
+        assign crsp_eop = rsp_complete;
     end
 
     if (UUID_WIDTH != 0) begin : g_crsp_tag
@@ -511,8 +526,6 @@ module VX_mem_scheduler #(
     end else begin : g_crsp_tag_0
         assign crsp_tag = ibuf_dout;
     end
-
-    assign crsp_eop = rsp_complete;
 
     // Send response to caller
 
@@ -525,7 +538,7 @@ module VX_mem_scheduler #(
         .reset     (reset),
         .valid_in  (crsp_valid),
         .ready_in  (crsp_ready),
-        .data_in   ({crsp_mask, crsp_sop, crsp_eop, crsp_data, crsp_tag}),
+        .data_in   ({crsp_mask,     crsp_sop,     crsp_eop,     crsp_data,     crsp_tag}),
         .data_out  ({core_rsp_mask, core_rsp_sop, core_rsp_eop, core_rsp_data, core_rsp_tag}),
         .valid_out (core_rsp_valid),
         .ready_out (core_rsp_ready)
