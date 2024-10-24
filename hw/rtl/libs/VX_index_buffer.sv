@@ -17,6 +17,7 @@
 module VX_index_buffer #(
     parameter DATAW = 1,
     parameter SIZE  = 1,
+    parameter LUTRAM = 1,
     parameter ADDRW = `LOG2UP(SIZE)
 ) (
     input  wire             clk,
@@ -50,7 +51,8 @@ module VX_index_buffer #(
     VX_dp_ram #(
         .DATAW (DATAW),
         .SIZE  (SIZE),
-        .RDW_MODE ("R")
+        .LUTRAM (LUTRAM),
+        .RDW_MODE ("W")
     ) data_table (
         .clk   (clk),
         .reset (reset),
@@ -62,6 +64,8 @@ module VX_index_buffer #(
         .raddr (read_addr),
         .rdata (read_data)
     );
+
+    `RUNTIME_ASSERT (~(acquire_en && write_addr == read_addr), ("%t: oops!", $time))
 
 endmodule
 `TRACING_ON
