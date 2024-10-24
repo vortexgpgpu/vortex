@@ -20,7 +20,7 @@ module VX_dp_ram #(
     parameter WRENW       = 1,
     parameter OUT_REG     = 0,
     parameter LUTRAM      = 0,
-    parameter `STRING RDW_MODE = "R", // R: read-first, W: write-first, U: undefined
+    parameter `STRING RDW_MODE = "W", // W: write-first, R: read-first, U: undefined
     parameter RDW_ASSERT  = 0,
     parameter RESET_RAM   = 0,
     parameter INIT_ENABLE = 0,

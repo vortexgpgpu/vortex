@@ -50,8 +50,7 @@ module VX_index_buffer #(
     VX_dp_ram #(
         .DATAW (DATAW),
         .SIZE  (SIZE),
-        .OUT_REG (0),
-        .RDW_MODE("W")
+        .RDW_MODE ("R")
     ) data_table (
         .clk   (clk),
         .reset (reset),

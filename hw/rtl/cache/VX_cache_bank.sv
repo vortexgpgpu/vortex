@@ -154,7 +154,7 @@ module VX_cache_bank #(
     wire [`CS_WAY_SEL_WIDTH-1:0]    way_idx_st0, way_idx_st1;
 
     wire [`CS_LINE_ADDR_WIDTH-1:0]  addr_sel, addr_st0, addr_st1;
-    wire [`CS_LINE_SEL_BITS-1:0]    line_idx_sel, line_idx_st0, line_idx_st1;
+    wire [`CS_LINE_SEL_BITS-1:0]    line_idx_st0, line_idx_st1;
     wire [`CS_TAG_SEL_BITS-1:0]     line_tag_st0, line_tag_st1;
     wire [`CS_TAG_SEL_BITS-1:0]     evict_tag_st0, evict_tag_st1;
     wire                            rw_sel, rw_st0, rw_st1;
@@ -332,7 +332,6 @@ module VX_cache_bank #(
     wire do_read_st1  = valid_st1 && is_read_st1;
     wire do_write_st1 = valid_st1 && is_write_st1;
 
-    assign line_idx_sel = addr_sel[`CS_LINE_SEL_BITS-1:0];
     assign line_idx_st0 = addr_st0[`CS_LINE_SEL_BITS-1:0];
     assign line_tag_st0 = `CS_LINE_ADDR_TAG(addr_st0);
 
@@ -358,7 +357,6 @@ module VX_cache_bank #(
         .hit_line   (line_idx_st1),
         .hit_way    (way_idx_st1),
         .repl_valid (do_fill_st0 && ~pipe_stall),
-        .repl_line_n(line_idx_sel),
         .repl_line  (line_idx_st0),
         .repl_way   (victim_way_st0)
     );
@@ -375,14 +373,12 @@ module VX_cache_bank #(
     ) cache_tags (
         .clk        (clk),
         .reset      (reset),
-        .stall      (pipe_stall),
         // inputs
         .init       (do_init_st0),
         .flush      (do_flush_st0 && ~pipe_stall),
         .fill       (do_fill_st0 && ~pipe_stall),
         .read       (do_read_st0 && ~pipe_stall),
         .write      (do_write_st0 && ~pipe_stall),
-        .line_idx_n (line_idx_sel),
         .line_idx   (line_idx_st0),
         .line_tag   (line_tag_st0),
         .evict_way  (evict_way_st0),

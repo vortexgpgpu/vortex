@@ -75,7 +75,8 @@ module VX_ipdom_stack #(
     VX_dp_ram #(
         .DATAW (1 + WIDTH * 2),
         .SIZE (DEPTH),
-        .OUT_REG (1)
+        .OUT_REG (1),
+        .RDW_MODE ("R")
     ) ipdom_store (
         .clk   (clk),
         .reset (reset),

@@ -29,7 +29,6 @@ module VX_cache_tags #(
 ) (
     input wire                          clk,
     input wire                          reset,
-    input wire                          stall,
 
     // inputs
     input wire                          init,
@@ -37,7 +36,6 @@ module VX_cache_tags #(
     input wire                          fill,
     input wire                          read,
     input wire                          write,
-    input wire [`CS_LINE_SEL_BITS-1:0]  line_idx_n,
     input wire [`CS_LINE_SEL_BITS-1:0]  line_idx,
     input wire [`CS_TAG_SEL_BITS-1:0]   line_tag,
     input wire [`CS_WAY_SEL_WIDTH-1:0]  evict_way,
@@ -71,7 +69,7 @@ module VX_cache_tags #(
         wire do_flush = flush && (!WRITEBACK || way_en); // flush the whole line in writethrough mode
         wire do_write = WRITEBACK && write && tag_matches[i]; // only write on tag hit
 
-        //wire line_read = read || write || (WRITEBACK && (fill || flush));
+        wire line_read  = read || write || (WRITEBACK && (fill || flush));
         wire line_write = do_init || do_fill || do_flush || do_write;
         wire line_valid = fill || write;
 
@@ -87,19 +85,17 @@ module VX_cache_tags #(
             assign read_dirty[i] = 1'b0;
         end
 
-        VX_dp_ram #(
+        VX_sp_ram #(
             .DATAW (TAG_WIDTH),
             .SIZE  (`CS_LINES_PER_BANK),
-            .OUT_REG (1),
             .RDW_MODE ("W")
         ) tag_store (
             .clk   (clk),
             .reset (reset),
-            .read  (~stall),
+            .read  (line_read),
             .write (line_write),
             .wren  (1'b1),
-            .waddr (line_idx),
-            .raddr (line_idx_n),
+            .addr  (line_idx),
             .wdata (line_wdata),
             .rdata (line_rdata)
         );

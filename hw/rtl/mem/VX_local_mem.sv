@@ -166,7 +166,8 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .DATAW (WORD_WIDTH),
             .SIZE  (WORDS_PER_BANK),
             .WRENW (WORD_SIZE),
-            .OUT_REG (1)
+            .OUT_REG (1),
+            .RDW_MODE ("R")
         ) lmem_store (
             .clk   (clk),
             .reset (reset),

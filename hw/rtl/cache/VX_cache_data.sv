@@ -82,7 +82,8 @@ module VX_cache_data #(
             .DATAW (LINE_SIZE * NUM_WAYS),
             .WRENW (LINE_SIZE * NUM_WAYS),
             .SIZE  (`CS_LINES_PER_BANK),
-            .OUT_REG (1)
+            .OUT_REG (1),
+            .RDW_MODE ("R")
         ) byteen_store (
             .clk   (clk),
             .reset (reset),
@@ -129,7 +130,8 @@ module VX_cache_data #(
             .DATAW (NUM_WAYS * `CS_LINE_WIDTH),
             .SIZE  (`CS_LINES_PER_BANK),
             .WRENW (NUM_WAYS * LINE_SIZE),
-            .OUT_REG (1)
+            .OUT_REG (1),
+            .RDW_MODE ("R")
         ) data_store (
             .clk   (clk),
             .reset (reset),
@@ -153,7 +155,8 @@ module VX_cache_data #(
             VX_sp_ram #(
                 .DATAW (`CS_LINE_WIDTH),
                 .SIZE  (`CS_LINES_PER_BANK),
-                .OUT_REG (1)
+                .OUT_REG (1),
+                .RDW_MODE ("R")
             ) data_store (
                 .clk   (clk),
                 .reset (reset),

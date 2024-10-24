@@ -53,7 +53,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     VX_dp_ram #(
         .DATAW (`PC_BITS + `NUM_THREADS),
         .SIZE  (`NUM_WARPS),
-        .OUT_REG (0)
+        .RDW_MODE ("R")
     ) tag_store (
         .clk   (clk),
         .reset (reset),

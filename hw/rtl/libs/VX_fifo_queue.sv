@@ -77,12 +77,8 @@ module VX_fifo_queue #(
         localparam ADDRW = `CLOG2(DEPTH);
 
         wire [DATAW-1:0] data_out_w;
-        reg [ADDRW-1:0] rd_ptr_r, rd_ptr_n;
+        reg [ADDRW-1:0] rd_ptr_r;
         reg [ADDRW-1:0] wr_ptr_r;
-
-        always @(*) begin
-            rd_ptr_n = rd_ptr_r + ADDRW'(pop);
-        end
 
         always @(posedge clk) begin
             if (reset) begin
@@ -90,7 +86,7 @@ module VX_fifo_queue #(
                 rd_ptr_r <= (OUT_REG != 0) ? 1 : 0;
             end else begin
                 wr_ptr_r <= wr_ptr_r + ADDRW'(push);
-                rd_ptr_r <= rd_ptr_n;
+                rd_ptr_r <= rd_ptr_r + ADDRW'(pop);
             end
         end
 
@@ -100,7 +96,6 @@ module VX_fifo_queue #(
         VX_dp_ram #(
             .DATAW (DATAW),
             .SIZE  (DEPTH),
-            .OUT_REG (1),
             .LUTRAM (LUTRAM),
             .RDW_MODE ("W")
         ) dp_ram (
@@ -109,9 +104,9 @@ module VX_fifo_queue #(
             .read  (~bypass),
             .write (push),
             .wren  (1'b1),
+            .raddr (rd_ptr_r),
             .waddr (wr_ptr_r),
             .wdata (data_in),
-            .raddr (rd_ptr_n),
             .rdata (data_out_w)
         );
 
