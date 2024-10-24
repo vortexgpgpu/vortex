@@ -8,11 +8,12 @@ XRT_DEVICE_INDEX ?= 0
 VORTEX_RT_PATH ?= $(ROOT_DIR)/runtime
 VORTEX_KN_PATH ?= $(ROOT_DIR)/kernel
 
-STARTUP_ADDR ?= 0x80000000
 ifeq ($(XLEN),64)
 VX_CFLAGS += -march=rv64imafd -mabi=lp64d
+STARTUP_ADDR ?= 0x180000000
 else
 VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
+STARTUP_ADDR ?= 0x80000000
 endif
 
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
