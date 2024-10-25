@@ -70,7 +70,7 @@ $ source /tools/reconfig/xilinx/Vitis/2023.1/settings64.sh
 The directory `hw/syn/xilinx/xrt` contains the makefile used to synthesize Vortex.
 ```
     $ cd hw/syn/xilinx/xrt
-    $ PREFIX=test1 PLATFORM=xilinx_u250_gen3x16_xdma_4_1_202210_1 TARGET=hw NUM_CORES=1 make build_u250_hw_1c.log 2>&1 &
+    $ PREFIX=test1 PLATFORM=xilinx_u250_gen3x16_xdma_4_1_202210_1 TARGET=hw NUM_CORES=1 make > build_u250_hw_1c.log 2>&1 &
 ```
 Will run the synthesis under new build directory: BUILD_DIR := "\<PREFIX>\_\<PLATFORM>\_\<TARGET>"
 The generated bitstream will be located under <BUILD_DIR>/bin/vortex_afu.xclbin
