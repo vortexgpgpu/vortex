@@ -22,6 +22,9 @@
 #include "constants.h"
 #include "cache_sim.h"
 
+// #define GROUPS
+#define DEFAULT
+
 using namespace vortex;
 
 AluUnit::AluUnit(const SimContext& ctx, Core* core) : FuncUnit(ctx, core, "ALU") {}
@@ -280,7 +283,15 @@ void SfuUnit::tick() {
 			output.push(trace, 1);
 			if (trace->eop) {
 				auto trace_data = std::dynamic_pointer_cast<SFUTraceData>(trace->data);
+#ifdef DEFAULT
 				release_warp = core_->barrier(trace_data->arg1, trace_data->arg2, trace->wid);
+#endif
+
+#ifdef GROUPS
+				for (size_t warp_id = 0, nw = MAX_NUMBER_TILES; warp_id < nw; ++warp_id) {
+					release_warp |= core_->barrier(trace_data->arg1, trace_data->arg2, warp_id);
+				}
+#endif
 			}
 		} break;
 		case SfuType::TILE:{

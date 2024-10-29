@@ -58,6 +58,7 @@ typedef std::bitset<MAX_NUM_WARPS>   WarpMask;
 #define THREAD_PER_TILE     4
 #define WARP_SIZE           32
 #define MAX_NUMBER_TILES    8
+#define BITS_MAX_TILES      3
 
 ///////////////////////////////////////////////////////////////////////////////
 

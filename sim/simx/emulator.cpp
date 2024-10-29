@@ -30,8 +30,8 @@
 
 using namespace vortex;
 
-// #define DEFAULT
-#define GROUPS
+#define DEFAULT
+// #define GROUPS
 
 Emulator::ipdom_entry_t::ipdom_entry_t(const ThreadMask &tmask, Word PC)
   : tmask(tmask)
@@ -199,7 +199,7 @@ instr_trace_t* Emulator::step() {
   this->execute(*instr, scheduled_warp, trace);
 #endif
 #ifdef GROUPS 
-  for (size_t wid = 0, nw = 8; wid < nw; ++wid) {
+  for (size_t wid = 0, nw = MAX_NUMBER_TILES; wid < nw; ++wid) {
     if (warps_[wid].isActive) {
       DP(5, "EXECUTING Group ID:"<<wid);
       this->execute(*instr, wid, trace);
@@ -254,11 +254,13 @@ int Emulator::get_exitcode() const {
 
 void Emulator::suspend(uint32_t wid) {
   assert(!stalled_warps_.test(wid));
+  DT(3, "STALLING WARP"<<wid);
   stalled_warps_.set(wid);
 }
 
 void Emulator::resume(uint32_t wid) {
   if (wid != 0xffffffff) {
+    DT(3, "RESUMING WARP"<<wid);
     assert(stalled_warps_.test(wid));
     stalled_warps_.reset(wid);
   } else {
@@ -273,7 +275,6 @@ bool Emulator::wspawn(uint32_t num_warps, Word nextPC) {
   wspawn_.valid = true;
   wspawn_.num_warps = num_warps;
   wspawn_.nextPC = nextPC;
-  wspawn_.isTile = false;
   return false;
 }
 
@@ -299,6 +300,7 @@ bool Emulator::tileMask(uint32_t tile_mask, uint32_t thread_count){
 }
 
 bool Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
+#ifdef DEFAULT
   if (count < 2)
     return true;
 
@@ -329,6 +331,38 @@ bool Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
     }
   }
   return false;
+#endif
+
+#ifdef GROUPS
+  // Here we require count to be a mask of groups to stall
+
+  if (count < 2)
+    return true;
+
+  int num_groups = 0;
+
+  uint32_t bar_idx = bar_id & 0x7fffffff;
+
+  auto& barrier = barriers_.at(bar_idx);
+  if (warps_[wid].isActive) {
+    barrier.set(wid);
+  }
+
+  DP(3, "*** Suspend core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_idx);
+
+  if (barrier.count() == (size_t)count) {
+    // resume suspended warps
+    for (uint32_t i = 0; i < MAX_NUMBER_TILES; ++i) {
+      if (barrier.test(i)) {
+        DP(3, "*** Resume core #" << core_->id() << ", warp #" << i << " at barrier #" << bar_idx);
+        warps_[i].isActive = true;
+      }
+    }
+    stalled_warps_.reset(0);
+    barrier.reset();
+  }
+  return false;
+#endif
 }
 
 void Emulator::icache_read(void *data, uint64_t addr, uint32_t size) {

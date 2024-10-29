@@ -27,8 +27,8 @@
 #include "instr.h"
 #include "core.h"
 
-// #define DEFAULT
-#define GROUPS
+#define DEFAULT
+// #define GROUPS
 
 using namespace vortex;
 
@@ -1663,37 +1663,37 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       std::abort();
     }
   } break;
-  case Opcode::EXT2: {
-    switch (func3) {
-    case 1:
-      switch (func2) {
-      case 0: { // CMOV
-        trace->fu_type = FUType::SFU;
-        trace->sfu_type = SfuType::CMOV;
-        trace->used_iregs.set(rsrc0);
-        trace->used_iregs.set(rsrc1);
-        trace->used_iregs.set(rsrc2);
-        for (uint32_t t = thread_start; t < num_threads; ++t) {
-#ifdef DEFAULT
-          if (!warp.tmask.test(t))
-            continue;
-  #endif
-#ifdef GROUPS        
-          if (!warp[wid].tmask.test(t))
-            continue;
-#endif
-          rddata[t].i = rsdata[t][0].i ? rsdata[t][1].i : rsdata[t][2].i;
-        }
-        rd_write = true;
-      } break;
-      default:
-        std::abort();
-      }
-      break;
-    default:
-      std::abort();
-    }
-  } break;
+//   case Opcode::EXT2: {
+//     switch (func3) {
+//     case 1:
+//       switch (func2) {
+//       case 0: { // CMOV
+//         trace->fu_type = FUType::SFU;
+//         trace->sfu_type = SfuType::CMOV;
+//         trace->used_iregs.set(rsrc0);
+//         trace->used_iregs.set(rsrc1);
+//         trace->used_iregs.set(rsrc2);
+//         for (uint32_t t = thread_start; t < num_threads; ++t) {
+// #ifdef DEFAULT
+//           if (!warp.tmask.test(t))
+//             continue;
+//   #endif
+// #ifdef GROUPS        
+//           if (!warp[wid].tmask.test(t))
+//             continue;
+// #endif
+//           rddata[t].i = rsdata[t][0].i ? rsdata[t][1].i : rsdata[t][2].i;
+//         }
+//         rd_write = true;
+//       } break;
+//       default:
+//         std::abort();
+//       }
+//       break;
+//     default:
+//       std::abort();
+//     }
+//   } break;
     case Opcode::VOTE: {
     bool check;
     bool is_neg = (func3 >= 4);

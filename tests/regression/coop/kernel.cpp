@@ -63,7 +63,8 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	// vx_tile(2147483776,32);
 
 	//CASE 3
-	
+	// vx_tile(2147483776,4);
+	vx_barrier(3,1);
 
 }                
           
