@@ -4,7 +4,7 @@ include $(ROOT_DIR)/config.mk
 all:
 
 run-simx:
-	$(MAKE) -C isa run-simx riscv-vector-tests
+	$(MAKE) -C isa run-simx
 	$(MAKE) -C benchmarks_${XLEN} run-simx
 
 run-rtlsim:

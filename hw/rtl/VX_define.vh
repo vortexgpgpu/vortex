@@ -74,10 +74,7 @@
 `define EX_SFU          2
 `define EX_FPU          (`EX_SFU + `EXT_F_ENABLED)
 
-`define VECTOR_ENABLE   0
-`define EX_VPU          (`EX_FPU + `VECTOR_ENABLE)
-
-`define NUM_EX_UNITS    (3 + `EXT_F_ENABLED + `VECTOR_ENABLE)
+`define NUM_EX_UNITS    (3 + `EXT_F_ENABLED)
 `define EX_BITS         `CLOG2(`NUM_EX_UNITS)
 `define EX_WIDTH        `UP(`EX_BITS)
 
@@ -123,21 +120,6 @@
 // Opcode extensions
 `define INST_R_F7_MUL   7'b0000001
 `define INST_R_F7_ZICOND 7'b0000111
-
-///////////////////////////////////////////////////////////////////////////////
-
-// Vector Extension Configuration and Arithemetic Instruction Opcodes
-`define INST_V              7'b1010111
-
-//Vector Configuration Instructions
-`define INST_VPU_VSETVL     4'h9
-`define INST_VPU_VSETVLI    4'hA
-`define INST_VPU_VSETIVLI   4'hB
-
-`define VLMAX_SEW08_LMUL1 `VLEN/8
-`define VLMAX_SEW16_LMUL1 `VLEN/16
-`define VLMAX_SEW32_LMUL1 `VLEN/32
-`define VLMAX_SEW64_LMUL1 `VLEN/64
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -281,8 +263,6 @@
 `define INST_SFU_CSR(f3)     (4'h6 + 4'(f3) - 4'h1)
 `define INST_SFU_IS_WCTL(op) (op <= 5)
 `define INST_SFU_IS_CSR(op)  (op >= 6 && op <= 8)
-// VPU CSR Instructions are opcodes 9-11, so maybe this should be <= 11 instead?
-// `define INST_SFU_IS_CSR(op)  (op >= 6 && op <= 11)
 
 ///////////////////////////////////////////////////////////////////////////////
 
