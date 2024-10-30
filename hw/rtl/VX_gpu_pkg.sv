@@ -122,21 +122,6 @@ package VX_gpu_pkg;
         logic [4:0] imm;
     } csr_args_t;
 
-`ifdef VECTOR_ENABLE
-    typedef struct packed {
-        logic [($bits(alu_args_t)-3-3-1-1-1-5-5)-1:0] __padding;
-        // Vtype
-        logic [2:0] vlmul;
-        logic [2:0] vsew;
-        logic vta;
-        logic vma;
-        logic vill;
-        // End Vtype
-        logic [4:0] rs1;
-        logic [4:0] uimm;
-    } vpu_args_t;
-`endif
-
     typedef struct packed {
         logic [($bits(alu_args_t)-1)-1:0] __padding;
         logic is_neg;
@@ -147,9 +132,6 @@ package VX_gpu_pkg;
         fpu_args_t  fpu;
         lsu_args_t  lsu;
         csr_args_t  csr;
-    `ifdef VECTOR_ENABLE
-        vpu_args_t  vpu;
-    `endif
         wctl_args_t wctl;
     } op_args_t;
 

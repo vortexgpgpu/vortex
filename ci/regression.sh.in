@@ -482,10 +482,6 @@ fi
 start=$SECONDS
 
 for test in "${tests[@]}"; do
-    if [[ "$test" != "vector" ]]; then
-        # We need to remove vector tests to save space
-        rm -rf tests/riscv/riscv-vector-tests
-    fi
     $test
 done
 

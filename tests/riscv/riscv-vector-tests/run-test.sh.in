@@ -73,6 +73,8 @@ for testcase in ${testcases[@]}; do
       echo "$f FAILED"
       let "failed++"
     fi
+    # REG_TESTS=1 informs the script to delete the previous binary after each vector test to save disk space
+    # Otherwise, the vector regression tests would run out of disk space eventually
     if [ $REG_TESTS -eq 1 ]; then
       cat $f.log
       rm $f.*

@@ -652,9 +652,6 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t tid, uint32_t wid) {
     csrs_.at(wid).at(tid)[VX_CSR_VTYPE] = value;
     break;
   case VX_CSR_VLENB: // read only, set to VLEN / 8
-  case VX_CSR_VCYCLE: // read only
-  case VX_CSR_VTIME: // read only
-  case VX_CSR_VINSTRET: // read only
 
   case VX_CSR_SATP:
   #ifdef VM_ENABLE

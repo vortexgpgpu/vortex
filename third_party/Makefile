@@ -1,8 +1,3 @@
-XLEN ?=32
-TOOLDIR ?= /opt
-
-RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv$(XLEN)-gnu-toolchain
-
 all: cvfpu softfloat ramulator
 
 cvfpu:
@@ -14,12 +9,8 @@ ramulator/libramulator.so:
 	cd ramulator && mkdir -p build && cd build && cmake .. && make -j4
 ramulator: ramulator/libramulator.so
 
-riscv-vector-tests:
-	PATH=${RISCV_TOOLCHAIN_PATH}/bin:$$PATH $(MAKE) -C riscv-vector-tests -e MARCH=rv${XLEN}imfv XLEN=${XLEN} RISCV_PREFIX=riscv${XLEN}-unknown-elf-
-
 clean:
 	$(MAKE) -C softfloat/build/Linux-x86_64-GCC clean
 	rm -rf ramulator/build ramulator/libramulator.so
-	$(MAKE) -C riscv-vector-tests clean
 
-.PHONY: all cvfpu softfloat ramulator riscv-vector-tests
+.PHONY: all cvfpu softfloat ramulator
