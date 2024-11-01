@@ -27,8 +27,8 @@
 #include "instr.h"
 #include "core.h"
 
-#define DEFAULT
-// #define GROUPS
+// #define DEFAULT
+#define GROUPS
 
 using namespace vortex;
 
@@ -70,12 +70,14 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
 
   // initialize instruction trace
   trace->cid   = core_->id();
-  trace->wid   = 0;
+  
 #ifdef DEFAULT
+  trace->wid   = wid;
   trace->PC    = warp.PC;
   trace->tmask = warp.tmask;
 #endif
 #ifdef GROUPS
+  trace->wid   = 0;
   trace->PC    = warp[wid].PC;
   trace->tmask = warp[wid].tmask;
 #endif
@@ -157,7 +159,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           rsdata[t][i].u = warp.ireg_file.at(t)[reg];
 #endif
 #ifdef GROUPS
-          rsdata[t][i].u = warp[wid + (int)(t/THREAD_PER_TILE)].ireg_file.at(t%THREAD_PER_TILE)[reg];
+          rsdata[t][i].u = warp[wid + t/THREAD_PER_TILE].ireg_file.at(t%THREAD_PER_TILE)[reg];
 #endif
           DPN(2, "0x" << std::hex << rsdata[t][i].i);
         }
@@ -183,7 +185,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           rsdata[t][i].u64 = warp.freg_file.at(t)[reg];
 #endif
 #ifdef GROUPS
-          rsdata[t][i].u64 = warp[wid + (int)(t/THREAD_PER_TILE)].freg_file.at(t%THREAD_PER_TILE)[reg];
+          rsdata[t][i].u64 = warp[wid + t/THREAD_PER_TILE].freg_file.at(t%THREAD_PER_TILE)[reg];
 #endif
           DPN(2, "0x" << std::hex << rsdata[t][i].f);
         }
@@ -1534,8 +1536,8 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
 #endif
 #ifdef GROUPS
           auto cond = (warp[wid + t/THREAD_PER_TILE].ireg_file.at(t%THREAD_PER_TILE).at(rsrc0) & 0x1) ^ not_pred;
-          then_tmask[t] = warp[wid + t/THREAD_PER_TILE].tmask.test(t%THREAD_PER_TILE) && cond;
-          else_tmask[t] = warp[wid + t/THREAD_PER_TILE].tmask.test(t%THREAD_PER_TILE) && !cond;
+          then_tmask[t] = warp[wid].tmask.test(t) && cond;
+          else_tmask[t] = warp[wid].tmask.test(t) && !cond;
 #endif
         }
 
@@ -1601,7 +1603,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         }
 #endif
 #ifdef GROUPS
-        auto stack_ptr = warp[thread_last/THREAD_PER_TILE].ireg_file.at(thread_last%THREAD_PER_TILE).at(rsrc0);
+        auto stack_ptr = warp[wid + thread_last/THREAD_PER_TILE].ireg_file.at(thread_last%THREAD_PER_TILE).at(rsrc0);
         if (stack_ptr != warp[wid].ipdom_stack.size()) {
           if (warp[wid].ipdom_stack.empty()) {
             std::cout << "IPDOM stack is empty!\n" << std::flush;
@@ -1651,7 +1653,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           next_tmask = warp.ireg_file.at(thread_last).at(rsrc1);
 #endif
 #ifdef GROUPS
-          next_tmask = warp[thread_last/THREAD_PER_TILE].ireg_file.at(thread_last%THREAD_PER_TILE).at(rsrc1);
+          next_tmask = warp[wid + thread_last/THREAD_PER_TILE].ireg_file.at(thread_last%THREAD_PER_TILE).at(rsrc1);
 #endif
         }
       } break;

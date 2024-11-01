@@ -22,8 +22,8 @@
 #include "constants.h"
 #include "cache_sim.h"
 
-// #define GROUPS
-#define DEFAULT
+#define GROUPS
+// #define DEFAULT
 
 using namespace vortex;
 
@@ -288,8 +288,12 @@ void SfuUnit::tick() {
 #endif
 
 #ifdef GROUPS
+				std::bitset<32> mask = trace_data->arg2;
+				int count = mask.count();
+DT(1, "MASK, COUNT" << mask << ", " << count<< "," <<MAX_NUMBER_TILES - 1 - 4);
 				for (size_t warp_id = 0, nw = MAX_NUMBER_TILES; warp_id < nw; ++warp_id) {
-					release_warp |= core_->barrier(trace_data->arg1, trace_data->arg2, warp_id);
+					if(mask.test(MAX_NUMBER_TILES - 1 - warp_id))
+						release_warp &= core_->barrier(trace_data->arg1, count, warp_id);
 				}
 #endif
 			}
@@ -310,6 +314,7 @@ void SfuUnit::tick() {
 
 		DT(3, "pipeline-execute: op=" << trace->sfu_type << ", " << *trace);
 		if (trace->eop && release_warp)  {
+			DT(3, "pipeline-ssfdsdssdsd: op=" << trace->sfu_type << ", " << *trace);
 			core_->resume(trace->wid);
 		}
 

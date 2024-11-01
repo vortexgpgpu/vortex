@@ -2,69 +2,249 @@
 #include "common.h"
 #include <vx_intrinsics.h> 
 
+
+
 void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
-	uint32_t count    = arg->task_size;
-	int32_t* src0_ptr = (int32_t*)arg->src0_addr;
-	int32_t* src1_ptr = (int32_t*)arg->src1_addr;
-	int32_t* dst_ptr  = (int32_t*)arg->dst_addr;
 
-	uint32_t offset = blockIdx.x * count; 
-	for (uint32_t i = 0; i < count; ++i) {
-		dst_ptr[offset+i] = src0_ptr[offset+i] + src1_ptr[offset+i];
-	}   
-	//CASE 1    
-	// vx_tile(2147483776,4);
-	// vx_tile(2147483656,8);
-	// vx_tmc(1);           
-	// int val = 14;
-	// vx_store(val,3);  
-	// vx_tmc(2);
-	// val = 5;
-	// vx_store(val,3);    
-	// vx_tmc(4); 
-	// val =45;      
-	// vx_store(val,3); 
-	// vx_tmc(8);
-	// val = 120; 
-	// vx_store(val,3);         
-	// vx_tmc(15); 
-	// vx_vote();
-	// vx_tile(2147483776,32);     
+	//CASE 0    
+    // int i = vx_thread_id();
+	// vx_printf("Thread %d launched\n", i);
+    // vx_barrier(0,0b10000000);
+    // vx_printf("Thread %d synchronized\n", i);
+    // vx_barrier(0,0b10000000);
+    // vx_printf("Thread %d synchronized again\n", i);
 
-	//CASE 2
-	// vx_store(1,1);
-	// vx_vote();
-	// vx_shfl();  
+	// //CASE 1
+    // int i = vx_thread_id();
+	// vx_printf("A (thread %d)\n", i);
+    // vx_tile(0b10001000,16);
+    // vx_printf("B (thread %d)\n", i);
+    // vx_barrier(0,0b10001000); //2 groups
+    // vx_printf("C (thread %d)\n", i);
+    // vx_barrier(0,0b10001000);
+    // vx_printf("D (thread %d)\n", i);
 
-	// vx_tile(136,16);
-	// vx_store(2,2);
-	// vx_vote();
-	// vx_shfl();   
+	// vx_tile(0b10000000,32); // default config
 
-	// vx_tile(2147483776,16);    
-	// vx_vote();
-	// vx_shfl(); 
+	// //CASE 2
+	// int i = vx_thread_id();
+	// vx_printf("A (thread %d)\n", i);
 
-	// vx_tile(136,16);
-	// vx_store(3,3);
-	// vx_vote();
-	// vx_shfl();
+	// vx_tile(0b10001000,16);
 
-	// vx_tile(10,8);
-	// vx_store(4,1);
-	// vx_vote();
-	// vx_shfl();
+    // vx_tile(0b00001000,16);
+    // {
+    //     vx_printf("B (thread %d)\n", i);
+    //     vx_barrier(0,0b00001000);
+    //     vx_printf("C (thread %d)\n", i);
+	// }
+    // vx_tile(0b10000000,16);
+    // {
+    //     vx_printf("D (thread %d)\n", i);
+	// }
+    
 
-	// vx_tile(240,4);
-	// vx_store(5,2);
-	// vx_vote();
-	// vx_shfl();
+    // vx_tile(0b10001000,16);
+    // if(i%16 == 0)
+    // {
+    //     vx_printf("E (thread %d)\n", i);
+	// }
 
-	// vx_tile(2147483776,32);
+	// vx_tile(0b10000000,32); //default config
 
-	//CASE 3
-	// vx_tile(2147483776,4);
-	vx_barrier(3,1);
+	// //CASE 3
+
+    // int i = vx_thread_id();
+    
+    // // Initial thread output
+    // vx_printf("A (thread %d)\n", i);
+
+	// vx_tile(0b11111111,4);
+
+    // vx_tile(0b11110000,4);{
+    //     vx_printf("B (thread %d)\n", i);
+    //     vx_tile(0b11000000,4); {
+    //         vx_barrier(0,0b11000000);
+    //         vx_printf("C (thread %d)\n", i);
+    //         vx_tile(0b10000000,4); {
+    //             vx_barrier(0,0b10000000);
+    //             vx_printf("D (thread %d)\n", i);
+    //         }
+    //     }
+        // vx_tile(0b00110000,4); {
+        //     vx_printf("F (thread %d)\n", i);
+        //     vx_barrier(0,0b00110000);
+        // }
+    // }
+
+	// vx_tile(0b10000000,32); //default config
+
+	// //CASE 4
+
+    // int i = vx_thread_id();
+	// int j = i + 1;
+
+    // vx_printf("A (thread %d)\n", i);
+
+    // vx_tile(0b10001000,16);
+    
+    // if (i % 2 == 1) 
+    // {
+    //     vx_printf("B (thread %d)\n", i * 2);
+    // }
+    // else
+    // {
+    //     vx_printf("B (thread %d)\n", i);
+    // }
+    // vx_barrier(0,0b10001000);
+    
+    // vx_printf("C (thread %d)\n", i + j);
+
+	// vx_tile(0b10000000,32); //default config
+
+	// //CASE 5
+
+    // int i = vx_thread_id();
+    // int j = i + 1;
+
+    // vx_printf("A (thread %d)\n", i);
+    // vx_tile(0b10000000,32);
+    // vx_printf("B (thread %d, i = %d, j = %d)\n", vx_thread_id(), i, j);
+    // vx_barrier(0,0b10000000);
+
+	// vx_tile(0b10000000,32); //default config
+
+	// //CASE 6
+
+	// vx_printf("A (thread %d)\n", threadIdx.x);
+    // vx_tile(0b10001000,16);
+    // for (int i = 0; i < 5; i++) {
+    //     vx_printf("C (thread %d): iteration %d\n", vx_thread_id(), i);
+    // }
+
+	// vx_tile(0b10000000,32); //default config
+
+	// //CASE 7
+
+    // int i = vx_thread_id();
+
+    // vx_printf("A (thread %d)\n", i);
+    // vx_tile(0b10001000,16);
+    // vx_tile(0b10000000,16); {
+    //     vx_printf("B (thread %d)\n", i);
+    //     vx_barrier(0,0b10000000);
+    //     vx_printf("C (thread %d)\n", i);
+    // }
+    // vx_tile(0b00001000,16);
+    // {
+    //     vx_printf("D (thread %d)\n", i);
+    // }
+    // vx_tile(0b10001000,16);
+    // if (vx_thread_id() < 4) {
+    //     vx_printf("E (thread %d)\n", i);
+    // }
+
+	// vx_tile(0b10000000,32); //default config
+
+	// //CASE 8
+
+	// int tid = vx_thread_id();
+
+    // vx_printf("A (thread %d)\n", tid);
+
+    // vx_tile(0b10101010,8);
+
+    // vx_printf("B (thread %d)\n", vx_thread_id());
+
+    // vx_barrier(0, 0b10101010);
+
+    // vx_printf("C (thread %d)\n", tid);
+
+	// vx_tile(0b10000000,32); //default config
+
+	// //CASE 9
+	
+	// vx_printf("A (thread %d)\n", vx_thread_id());
+
+    // vx_tile(0b10101010,8);
+
+    // vx_printf("B (thread %d)\n", vx_thread_id());
+
+    // vx_barrier(0,0b10101010);
+
+    // vx_printf("C (thread %d)\n", vx_thread_id());
+
+	// vx_tile(0b10000000,32); //default config
+
+	// //CASE 10
+
+    // int i = vx_thread_id();
+
+	// if (i % 16 == 0)
+    // {
+    //     vx_printf("A (group %d)\n", i / 16);
+    // }
+
+    // vx_barrier(0,0b10000000);
+
+    // vx_tile(0b10001000,16);
+
+    // int group = i / 16;
+
+    // vx_printf("B %d\n", i);
+    // vx_barrier(0,0b10001000);
+
+    // vx_barrier(0,0b10001000);
+    
+    // vx_printf("C %d\n", i);
+    // vx_barrier(0,0b10001000);
+
+	// vx_tile(0b10000000,32); //default config
+
+	// //CASE 11
+
+    // int k = vx_thread_id();
+	// vx_tile(0b11111111,4);
+
+    // for (int i = 0; i < 3; i++) {
+    //     vx_printf("A(threadIdx %d, loopIdx %d)\n", k, i);
+    //     vx_barrier(0, 0b11111111);
+    //     vx_printf("B(threadIdx %d, loopIdx %d)\n", k, i);
+    // }
+
+	// vx_tile(0b10000000,32); //default config
+
+	// //CASE 12
+
+	// int sum = 0;
+
+    // vx_tile(0b10001000,16);
+
+    // for (int i = 0; i < 10; i++) {
+    //     int k = i * vx_thread_id();
+    //     int j = i * i;
+    //     vx_barrier(0,0b10001000);
+    //     sum += vx_thread_id() / 16 + k + j;
+    // }
+
+    // vx_printf("(group %d, id %d) sum = %d\n", vx_thread_id() / 16, threadIdx.x % 16, sum);
+
+    // vx_tile(0b10000000,32); //default config
+
+    //CASE 13
+
+    // int sum = 0;
+    // int j = vx_thread_id();
+    // vx_tile(0b10001000,16);
+
+    // for (int i = 0; i < 10; i++) {
+    //     int k = vx_thread_id();
+    //     sum += k;
+    //     vx_barrier(0, 0b10001000);
+    // }
+
+    // vx_printf("(group %d, id %d) sum = %d\n", j / 16, j % 16, sum);
+    // vx_tile(0b10000000,32); //default config
 
 }                
           

@@ -85,12 +85,7 @@ private:
   struct wspawn_t {
     bool valid;
     uint32_t num_warps;
-    uint32_t issuing_wid;
-    uint32_t final_wid;
-    uint32_t set_numTiles;
-    uint32_t prev_numTiles;
     Word nextPC;
-    bool isTile;
   };
 
   std::shared_ptr<Instr> decode(uint32_t code) const;

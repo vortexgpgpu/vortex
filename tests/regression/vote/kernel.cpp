@@ -16,7 +16,7 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	int val = 14;
 	vx_store(val,3);  
 	vx_tmc(2);
-	val = 5;
+	val = 5; 
 	vx_store(val,3);    
 	vx_tmc(4); 
 	val =45;      

@@ -30,8 +30,8 @@
 
 using namespace vortex;
 
-#define DEFAULT
-// #define GROUPS
+// #define DEFAULT
+#define GROUPS
 
 Emulator::ipdom_entry_t::ipdom_entry_t(const ThreadMask &tmask, Word PC)
   : tmask(tmask)
@@ -254,13 +254,11 @@ int Emulator::get_exitcode() const {
 
 void Emulator::suspend(uint32_t wid) {
   assert(!stalled_warps_.test(wid));
-  DT(3, "STALLING WARP"<<wid);
   stalled_warps_.set(wid);
 }
 
 void Emulator::resume(uint32_t wid) {
   if (wid != 0xffffffff) {
-    DT(3, "RESUMING WARP"<<wid);
     assert(stalled_warps_.test(wid));
     stalled_warps_.reset(wid);
   } else {
@@ -280,7 +278,7 @@ bool Emulator::wspawn(uint32_t num_warps, Word nextPC) {
 
 bool Emulator::tileMask(uint32_t tile_mask, uint32_t thread_count){
   int wid = 0;
-  bool reset = (tile_mask >> 31);
+  bool reset = ~(tile_mask >> 31);
   for(int i = MAX_NUMBER_TILES - 1 ; i >= 0 ; i--){
     auto mask = (tile_mask >> i) & 0x01;
     if(reset){
@@ -292,7 +290,10 @@ bool Emulator::tileMask(uint32_t tile_mask, uint32_t thread_count){
         warps_[wid].isActive = mask;
       }
       warps_[wid].PC = warps_[0].PC;
-      warps_[wid].tmask.set();
+      warps_[wid].tmask.reset();
+      for (int j = 0; j < (int)thread_count; j++){
+        warps_[wid].tmask[j] = 1; 
+      }
       warps_[wid].num_tThreads = thread_count;
     }
   }
@@ -339,17 +340,15 @@ bool Emulator::barrier(uint32_t bar_id, uint32_t count, uint32_t wid) {
   if (count < 2)
     return true;
 
-  int num_groups = 0;
-
   uint32_t bar_idx = bar_id & 0x7fffffff;
 
   auto& barrier = barriers_.at(bar_idx);
   if (warps_[wid].isActive) {
     barrier.set(wid);
+    DP(3, "*** Suspend core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_idx);
   }
 
-  DP(3, "*** Suspend core #" << core_->id() << ", warp #" << wid << " at barrier #" << bar_idx);
-
+  
   if (barrier.count() == (size_t)count) {
     // resume suspended warps
     for (uint32_t i = 0; i < MAX_NUMBER_TILES; ++i) {

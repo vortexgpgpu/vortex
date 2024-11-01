@@ -105,13 +105,14 @@
 
 // Custom extension opcodes
 `define INST_EXT1       7'b0001011 // 0x0B
-`define INST_EXT2       7'b0101011 // 0x2B
-`define INST_EXT3       7'b1011011 // 0x5B
-`define INST_EXT4       7'b1111011 // 0x7B
+// `define INST_EXT2       7'b0101011 // 0x2B
+// `define INST_EXT3       7'b1011011 // 0x5B
+// `define INST_EXT4       7'b1111011 // 0x7B
 
 // CUDA Vote Extension
-`define INST_VOTE       7'b1011010 // 0x5a
-`define INST_SHFL       7'b1011100 // 0x5c
+`define INST_VOTE       7'b0101011 // 0x2B
+`define INST_SHFL       7'b1011011 // 0x5B
+`define INST_TILE       7'b1111011 // 0x7B
 
 `define VOTE_ALL        4'b0000
 `define VOTE_ANY        4'b0001
