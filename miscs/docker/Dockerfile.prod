@@ -18,40 +18,31 @@ FROM ubuntu:20.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Install necessary dependencies and upgrade installed components
-RUN apt-get update -y && \
-    apt-get install -y \
+# Update and install necessary dependencies
+RUN apt-get update && apt-get install -y \
     software-properties-common \
     build-essential \
     python3 \
     git \
     wget \
     curl \
-    ca-certificates \
-    valgrind \
-    libstdc++6 \
-    binutils \
-    uuid-dev \
-    ccache \
-    cmake && \
-    apt-get upgrade -y && \
-    gcc_version=$(gcc -dumpversion) && \
-    if dpkg --compare-versions "$gcc_version" lt 11; then \
-        echo "GCC version is less than 11. Installing GCC 11..." && \
-        add-apt-repository -y ppa:ubuntu-toolchain-r/test && \
-        apt-get update -y && \
-        apt-get install -y g++-11 gcc-11 && \
-        update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100 && \
-        update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100; \
-    else \
-        echo "GCC version is 11 or greater. No need to install GCC 11."; \
-    fi && \
+    ca-certificates && \
     rm -rf /var/lib/apt/lists/*
+
+# upgrade installed components
+RUN apt-get upgrade && apt-get update
+
+# temporary until remote dependency script gets updated
+RUN apt-get install -y cmake
 
 # Clone the Vortex repository
 RUN git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git /vortex
 
 # Set the initial working directory
 WORKDIR /vortex
+
+# install system dependencies
+RUN ./ci/install_dependencies.sh
 
 # Configure the build folder
 RUN mkdir build && cd build && ../configure
