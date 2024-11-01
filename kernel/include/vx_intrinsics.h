@@ -36,9 +36,6 @@ extern "C" {
 #define RISCV_CUSTOM1   0x2B
 #define RISCV_CUSTOM2   0x5B
 #define RISCV_CUSTOM3   0x7B
-#define RISCV_VOTE      0x5A
-#define RISCV_SHFL      0x5C
-#define RISCV_TILE      0x5D
 
 #define csr_read(csr) ({                        \
 	size_t __r;	               		            \
@@ -252,18 +249,18 @@ void vx_store(int val, int reg){
     }
 }
 
-void vx_vote() {
+inline void vx_vote() {
     __asm__ volatile (
         "addi a2, x0, 9\n\t"  // Load immediate value 6 into a2(x12) register (membermask)
-        ".insn i %0, 2, 0, x14, x13, 12" :: "i"(RISCV_VOTE));
-        //".insn i opcode6, func3, func7, rd, rs1, simm12"
+        ".insn i %0, 2, x14, x13, 12" :: "i"(RISCV_CUSTOM1));
+        //".insn i opcode7, func3, func7, rd, rs1, simm12"
 }
 
-void vx_shfl() {
+inline void vx_shfl() {
     __asm__ volatile (
         "addi a1, x0, 15\n\t"  // Load immediate value 15 into a1(x11) register (membermask)
         "addi a2, x0, 15\n\t"  // Load immediate value 15 into a2(x12) register (c) 
-        ".insn i %0, 3, x14, x13, 1067" :: "i"(RISCV_SHFL)); //(c(01)+b(00001)+membermask(address(01011)))
+        ".insn i %0, 3, x14, x13, 1067" :: "i"(RISCV_CUSTOM2)); //(c(01)+b(00001)+membermask(address(01011)))
        //".insn i opcode6, func3, rd, rs1, simm12"
 }
 

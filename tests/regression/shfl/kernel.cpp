@@ -26,7 +26,7 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	vx_store(val,3);                  
 	vx_tmc(15); 
 	vx_shfl();    
-}       
+}        
  
 int main() {
 	kernel_arg_t* arg = (kernel_arg_t*)csr_read(VX_CSR_MSCRATCH);

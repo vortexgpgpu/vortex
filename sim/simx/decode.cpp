@@ -48,7 +48,7 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   {Opcode::FMNMADD, InstType::R4},
   {Opcode::FMNMSUB, InstType::R4},
   {Opcode::EXT1,    InstType::R},
-  {Opcode::EXT2,    InstType::R4},
+  // {Opcode::EXT2,    InstType::R4},
   {Opcode::R_W,     InstType::R},
   {Opcode::I_W,     InstType::I},
   {Opcode::VOTE,     InstType::I},
