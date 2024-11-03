@@ -46,7 +46,11 @@ fi
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 RESTORE_PREV_DIR=$(pwd)
+if [ ! -d "$SCRIPT_DIR/testcases" ]; then
+  mkdir -p "$SCRIPT_DIR/testcases/v$VLEN"x"$XLEN"
+fi
 cd $SCRIPT_DIR/testcases/v$VLEN"x"$XLEN
+
 passed=0
 failed=0
 selected=0
@@ -54,7 +58,7 @@ selected=0
 rm *".ddr4.log"
 for testcase in ${testcases[@]}; do
   rm "$testcase"*.elf "$testcase"*.bin "$testcase"*.dump "$testcase"*.log
-  # cp -f $SCRIPT_DIR/../../../../../third_party/riscv-vector-tests/out/v"$VLEN"x"$XLEN"machine/bin/stage2/"$testcase"* .
+  cp -f $SCRIPT_DIR/../../../third_party/riscv-vector-tests/out/v"$VLEN"x"$XLEN"machine/bin/stage2/"$testcase"* .
 done
 
 # count all available testcases, exclude *.elf, *.bin, *.dump, *.log to prevent double counting
