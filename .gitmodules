@@ -7,6 +7,3 @@
 [submodule "third_party/cvfpu"]
 	path = third_party/cvfpu
 	url = https://github.com/openhwgroup/cvfpu.git
-[submodule "third_party/riscv-vector-tests"]
-	path = third_party/riscv-vector-tests
-	url = https://github.com/ksco/riscv-vector-tests.git
