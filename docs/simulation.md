@@ -6,13 +6,16 @@
 
 ### Cycle-Approximate Simulation
 
-SimX is a C++ cycle-level in-house simulator developed for Vortex. The relevant files are located in the `simX` folder.
+SimX is a C++ cycle-level in-house simulator developed for Vortex. The relevant files are located in the `simx` folder. The [readme](README.md) has the most detailed instructions for building and running simX.
+
+- To install on your own system, [follow this document](install_vortex.md).
+- For the different Georgia Tech environments Vortex supports, [read this document](environment_setup.md).
 
 ### FGPA Simulation
 
-The current target FPGA for simulation is the Arria10 Intel Accelerator Card v1.0. The guide to build the fpga with specific configurations is located [here.](fpga_setup.md)
+The guide to build the fpga with specific configurations is located [here.](fpga_setup.md) You can find instructions for both Xilinx and Altera based FPGAs.
 
-### How to Test
+### How to Test (using `blackbox.sh`)
 
 Running tests under specific drivers (rtlsim,simx,fpga) is done using the script named `blackbox.sh` located in the `ci` folder. Running command `./ci/blackbox.sh --help` from the Vortex root directory will display the following command line arguments for `blackbox.sh`:
 
@@ -48,3 +51,19 @@ PERF: core2: instrs=90849, cycles=53107, IPC=1.710678
 PERF: core3: instrs=90836, cycles=50347, IPC=1.804199
 PERF: instrs=363180, cycles=53108, IPC=6.838518
 ```
+
+## Additional Quick Start Scenarios
+
+Running Vortex simulators with different configurations and drivers is supported. For example:
+
+- Run basic driver test with rtlsim driver and Vortex config of 2 clusters, 2 cores, 2 warps, 4 threads
+
+    $ ./ci/blackbox.sh --driver=rtlsim --clusters=2 --cores=2 --warps=2 --threads=4  --app=basic
+
+- Run demo driver test with opae driver and Vortex config of 1 clusters, 4 cores, 4 warps, 2 threads
+
+    $ ./ci/blackbox.sh --driver=opae --clusters=1 --cores=4 --warps=4 --threads=2 --app=demo
+
+- Run dogfood driver test with simx driver and Vortex config of 4 cluster, 4 cores, 8 warps, 6 threads
+
+    $ ./ci/blackbox.sh --driver=simx --clusters=4 --cores=4 --warps=8 --threads=6  --app=dogfood
