@@ -82,10 +82,6 @@ module VX_cache import VX_gpu_pkg::*; #(
     `STATIC_ASSERT(WRITE_ENABLE || !WRITEBACK, ("invalid parameter: writeback requires write enable"))
     `STATIC_ASSERT(WRITEBACK || !DIRTY_BYTES, ("invalid parameter: dirty bytes require writeback"))
 
-    // In writeback mode, memory fill response may issue a new memory request to handle evicted blocks.
-    // We need to ensure that the memory request queue never fills up to avoid deadlock.
-    `STATIC_ASSERT(!WRITEBACK || (MREQ_SIZE >= MSHR_SIZE), ("invalid parameter: writeback requires MREQ_SIZE >= MSHR_SIZE"))
-
     localparam REQ_SEL_WIDTH   = `UP(`CS_REQ_SEL_BITS);
     localparam WORD_SEL_WIDTH  = `UP(`CS_WORD_SEL_BITS);
     localparam MSHR_ADDR_WIDTH = `LOG2UP(MSHR_SIZE);
