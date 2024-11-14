@@ -65,7 +65,7 @@ copy_files() {
                     filename_no_ext="${filename%.in}"
                     dest_file="$dest_dir/$filename_no_ext"
                     mkdir -p "$dest_dir"
-                    sed "s|@VORTEX_HOME@|$SCRIPT_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g; s|@INSTALLDIR@|$PREFIX|g; s|@CURRENTDIR@|$CURRENT_DIR|g" "$file" > "$dest_file"
+                    sed "s|@VORTEX_HOME@|$SOURCE_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g; s|@INSTALLDIR@|$PREFIX|g; s|@BUILDDIR@|$CURRENT_DIR|g" "$file" > "$dest_file"
                     # apply permissions to bash scripts
                     read -r firstline < "$dest_file"
                     if [[ "$firstline" =~ ^#!.*bash ]]; then
@@ -169,8 +169,8 @@ fi
 SUBDIRS=("." "!ci" "!perf" "hw*" "kernel*" "runtime*" "sim*" "tests*")
 
 # Get the directory of the script
-SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+SOURCE_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-THIRD_PARTY_DIR=$SCRIPT_DIR/third_party
+THIRD_PARTY_DIR=$SOURCE_DIR/third_party
 
-copy_files "$SCRIPT_DIR" "$CURRENT_DIR"
+copy_files "$SOURCE_DIR" "$CURRENT_DIR"

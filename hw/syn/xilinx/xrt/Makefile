@@ -88,6 +88,9 @@ RTL_INCLUDE += $(FPU_INCLUDE)
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
 
+# register compilation hooks
+VPP_FLAGS += --xp "vivado_prop:run.impl_1.STEPS.OPT_DESIGN.TCL.PRE={$(SCRIPT_DIR)/xilinx_async_bram_patch.tcl}"
+
 # load platform settings
 include $(SRC_DIR)/platforms.mk
 

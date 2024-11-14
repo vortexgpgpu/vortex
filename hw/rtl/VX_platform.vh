@@ -160,32 +160,32 @@ endgenerate
 `ifdef QUARTUS
 `define MAX_FANOUT      8
 `define MAX_LUTRAM      1024
-`define IF_DATA_SIZE(x) $bits(x.data)
 `define USE_BLOCK_BRAM  (* ramstyle = "block" *)
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
 `define DISABLE_BRAM    (* ramstyle = "logic" *)
 `define PRESERVE_NET    (* preserve *)
+`define BLACKBOX_CELL   (* black_box *)
 `define STRING          string
 `elsif VIVADO
 `define MAX_FANOUT      8
 `define MAX_LUTRAM      1024
-`define IF_DATA_SIZE(x) $bits(x.data)
 `define USE_BLOCK_BRAM  (* ram_style = "block" *)
 `define USE_FAST_BRAM   (* ram_style = "distributed" *)
 `define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
 `define DISABLE_BRAM    (* ram_style = "registers" *)
 `define PRESERVE_NET    (* keep = "true" *)
+`define BLACKBOX_CELL   (* black_box *)
 `define STRING
 `else
 `define MAX_FANOUT      8
 `define MAX_LUTRAM      1024
-`define IF_DATA_SIZE(x) x.DATA_WIDTH
 `define USE_BLOCK_BRAM
 `define USE_FAST_BRAM
 `define NO_RW_RAM_CHECK
 `define DISABLE_BRAM
 `define PRESERVE_NET
+`define BLACKBOX_CELL
 `define STRING          string
 `endif
 

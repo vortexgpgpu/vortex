@@ -31,28 +31,28 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     parameter WORD_SIZE             = 16,
 
     // Core Response Queue Size
-    parameter CRSQ_SIZE             = 4,
+    parameter CRSQ_SIZE             = 8,
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE             = 16,
     // Memory Response Queue Size
-    parameter MRSQ_SIZE             = 4,
+    parameter MRSQ_SIZE             = 8,
     // Memory Request Queue Size
-    parameter MREQ_SIZE             = 4,
+    parameter MREQ_SIZE             = 8,
 
     // Enable cache writeable
     parameter WRITE_ENABLE          = 1,
 
     // Enable cache writeback
-    parameter WRITEBACK             = 0,
+    parameter WRITEBACK             = 1,
 
     // Enable dirty bytes on writeback
-    parameter DIRTY_BYTES           = 0,
+    parameter DIRTY_BYTES           = 1,
 
     // Request debug identifier
     parameter UUID_WIDTH            = 0,
 
     // core request tag size
-    parameter TAG_WIDTH             = 16,
+    parameter TAG_WIDTH             = 32,
 
     // Core response output buffer
     parameter CORE_OUT_BUF          = 3,

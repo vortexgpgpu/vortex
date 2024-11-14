@@ -15,8 +15,8 @@
 
 `TRACING_OFF
 module VX_fifo_queue #(
-    parameter DATAW     = 1,
-    parameter DEPTH     = 1,
+    parameter DATAW     = 32,
+    parameter DEPTH     = 32,
     parameter ALM_FULL  = (DEPTH - 1),
     parameter ALM_EMPTY = 1,
     parameter OUT_REG   = 0,
