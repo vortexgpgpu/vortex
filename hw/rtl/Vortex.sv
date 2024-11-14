@@ -84,8 +84,10 @@ module Vortex import VX_gpu_pkg::*; (
         .TAG_WIDTH      (L2_MEM_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`L3_WRITEBACK),
-        .DIRTY_BYTES    (`L3_WRITEBACK),
+        .DIRTY_BYTES    (`L3_DIRTYBYTES),
+        .REPL_POLICY    (`L3_REPL_POLICY),
         .UUID_WIDTH     (`UUID_WIDTH),
+        .FLAGS_WIDTH    (`MEM_REQ_FLAGS_WIDTH),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
         .NC_ENABLE      (1),
@@ -138,7 +140,7 @@ module Vortex import VX_gpu_pkg::*; (
 
         VX_cluster #(
             .CLUSTER_ID (cluster_id),
-            .INSTANCE_ID ($sformatf("cluster%0d", cluster_id))
+            .INSTANCE_ID (`SFORMATF(("cluster%0d", cluster_id)))
         ) cluster (
             `SCOPE_IO_BIND (scope_cluster + cluster_id)
 
@@ -157,7 +159,7 @@ module Vortex import VX_gpu_pkg::*; (
         );
     end
 
-    `BUFFER_EX(busy, (| per_cluster_busy), 1'b1, (`NUM_CLUSTERS > 1));
+    `BUFFER_EX(busy, (| per_cluster_busy), 1'b1, 1, (`NUM_CLUSTERS > 1));
 
 `ifdef PERF_ENABLE
 
@@ -202,13 +204,13 @@ module Vortex import VX_gpu_pkg::*; (
     always @(posedge clk) begin
         if (mem_req_fire) begin
             if (mem_req_rw) begin
-                `TRACE(1, ("%t: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%h data=0x%h (#%0d)\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data, mem_req_uuid))
+                `TRACE(2, ("%t: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%h data=0x%h (#%0d)\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data, mem_req_uuid))
             end else begin
-                `TRACE(1, ("%t: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%h (#%0d)\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_uuid))
+                `TRACE(2, ("%t: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%h (#%0d)\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_uuid))
             end
         end
         if (mem_rsp_fire) begin
-            `TRACE(1, ("%t: MEM Rd Rsp: tag=0x%0h, data=0x%h (#%0d)\n", $time, mem_rsp_tag, mem_rsp_data, mem_rsp_uuid))
+            `TRACE(2, ("%t: MEM Rd Rsp: tag=0x%0h, data=0x%h (#%0d)\n", $time, mem_rsp_tag, mem_rsp_data, mem_rsp_uuid))
         end
     end
 `endif

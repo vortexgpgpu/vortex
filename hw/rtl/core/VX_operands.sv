@@ -178,14 +178,14 @@ module VX_operands import VX_gpu_pkg::*; #(
     wire pipe_valid2_st1 = pipe_valid_st1 && ~has_collision_st1;
 
     VX_pipe_buffer #(
-        .DATAW (NUM_BANKS + META_DATAW + NUM_BANKS * REQ_SEL_WIDTH)
+        .DATAW (NUM_BANKS * (1 + REQ_SEL_WIDTH) + META_DATAW)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),
         .valid_in (pipe_valid2_st1),
         .ready_in (pipe_ready_st1),
-        .data_in  ({gpr_rd_valid_st1, pipe_data_st1, gpr_rd_req_idx_st1}),
-        .data_out ({gpr_rd_valid_st2, pipe_data_st2, gpr_rd_req_idx_st2}),
+        .data_in  ({gpr_rd_valid_st1, gpr_rd_req_idx_st1, pipe_data_st1}),
+        .data_out ({gpr_rd_valid_st2, gpr_rd_req_idx_st2, pipe_data_st2}),
         .valid_out(pipe_valid_st2),
         .ready_out(pipe_ready_st2)
     );
@@ -266,13 +266,12 @@ module VX_operands import VX_gpu_pkg::*; #(
         VX_dp_ram #(
             .DATAW (REGS_DATAW),
             .SIZE  (PER_BANK_REGS * PER_ISSUE_WARPS),
-            .OUT_REG (1),
-            .READ_ENABLE (1),
             .WRENW (BYTEENW),
          `ifdef GPR_RESET
             .RESET_RAM (1),
          `endif
-            .NO_RWCHECK (1)
+            .OUT_REG (1),
+            .RDW_MODE ("U")
         ) gpr_ram (
             .clk   (clk),
             .reset (reset),

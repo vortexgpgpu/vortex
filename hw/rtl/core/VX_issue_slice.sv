@@ -37,7 +37,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     VX_operands_if operands_if();
 
     VX_ibuffer #(
-        .INSTANCE_ID ($sformatf("%s-ibuffer", INSTANCE_ID))
+        .INSTANCE_ID (`SFORMATF(("%s-ibuffer", INSTANCE_ID)))
     ) ibuffer (
         .clk            (clk),
         .reset          (reset),
@@ -49,7 +49,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
     VX_scoreboard #(
-        .INSTANCE_ID ($sformatf("%s-scoreboard", INSTANCE_ID))
+        .INSTANCE_ID (`SFORMATF(("%s-scoreboard", INSTANCE_ID)))
     ) scoreboard (
         .clk            (clk),
         .reset          (reset),
@@ -64,7 +64,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
     VX_operands #(
-        .INSTANCE_ID ($sformatf("%s-operands", INSTANCE_ID))
+        .INSTANCE_ID (`SFORMATF(("%s-operands", INSTANCE_ID)))
     ) operands (
         .clk            (clk),
         .reset          (reset),
@@ -77,7 +77,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
     VX_dispatch #(
-        .INSTANCE_ID ($sformatf("%s-dispatch", INSTANCE_ID))
+        .INSTANCE_ID (`SFORMATF(("%s-dispatch", INSTANCE_ID)))
     ) dispatch (
         .clk            (clk),
         .reset          (reset),
@@ -143,7 +143,9 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     `SCOPE_IO_UNUSED(0)
 `endif
 `endif
+
 `ifdef CHIPSCOPE
+`ifdef DBG_SCOPE_ISSUE
     ila_issue ila_issue_inst (
         .clk    (clk),
         .probe0 ({decode_if.valid, decode_if.data, decode_if.ready}),
@@ -151,6 +153,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .probe2 ({operands_if.valid, operands_if.data, operands_if.ready}),
         .probe3 ({writeback_if.valid, writeback_if.data})
     );
+`endif
 `endif
 
 `ifdef DBG_TRACE_PIPELINE

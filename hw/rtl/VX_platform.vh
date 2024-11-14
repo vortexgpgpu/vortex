@@ -37,15 +37,12 @@ endgenerate
 `define ASSERT(cond, msg) \
     assert(cond) else $error msg
 
-`define RUNTIME_ASSERT(cond, msg)     \
-    always @(posedge clk) begin       \
-        assert(cond) else $error msg; \
+`define RUNTIME_ASSERT(cond, msg) \
+    always @(posedge clk) begin   \
+        if (!reset) begin         \
+            `ASSERT(cond, msg);   \
+        end                       \
     end
-
-`define __SCOPE
-`define __SCOPE_X
-`define __SCOPE_ON
-`define __SCOPE_OFF
 
 `ifndef TRACING_ALL
 `define TRACING_ON      /* verilator tracing_on */
@@ -128,6 +125,8 @@ endgenerate
     end
 `endif
 
+`define SFORMATF(x) $sformatf x
+
 `else // SYNTHESIS
 
 `define STATIC_ASSERT(cond, msg)
@@ -137,6 +136,7 @@ endgenerate
 
 `define DEBUG_BLOCK(x)
 `define TRACE(level, args)
+`define SFORMATF(x) ""
 
 `define TRACING_ON
 `define TRACING_OFF
@@ -153,45 +153,39 @@ endgenerate
 `define UNUSED_PIN(x) . x ()
 `define UNUSED_ARG(x) x
 
-`define __SCOPE (* mark_debug="true" *)
-
-`define __SCOPE_X
-
-`define __SCOPE_ON  \
-    `undef __SCOPE_X \
-    `define __SCOPE_X `__SCOPE
-
-`define __SCOPE_OFF  \
-    `undef __SCOPE_X \
-    `define __SCOPE_X
-
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
 `ifdef QUARTUS
 `define MAX_FANOUT      8
-`define IF_DATA_SIZE(x) $bits(x.data)
+`define MAX_LUTRAM      1024
+`define USE_BLOCK_BRAM  (* ramstyle = "block" *)
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
 `define DISABLE_BRAM    (* ramstyle = "logic" *)
 `define PRESERVE_NET    (* preserve *)
+`define BLACKBOX_CELL   (* black_box *)
 `define STRING          string
 `elsif VIVADO
 `define MAX_FANOUT      8
-`define IF_DATA_SIZE(x) $bits(x.data)
+`define MAX_LUTRAM      1024
+`define USE_BLOCK_BRAM  (* ram_style = "block" *)
 `define USE_FAST_BRAM   (* ram_style = "distributed" *)
 `define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
 `define DISABLE_BRAM    (* ram_style = "registers" *)
 `define PRESERVE_NET    (* keep = "true" *)
+`define BLACKBOX_CELL   (* black_box *)
 `define STRING
 `else
 `define MAX_FANOUT      8
-`define IF_DATA_SIZE(x) x.DATA_WIDTH
+`define MAX_LUTRAM      1024
+`define USE_BLOCK_BRAM
 `define USE_FAST_BRAM
 `define NO_RW_RAM_CHECK
 `define DISABLE_BRAM
 `define PRESERVE_NET
+`define BLACKBOX_CELL
 `define STRING          string
 `endif
 
@@ -217,7 +211,7 @@ endgenerate
 
 `define CLAMP(x, lo, hi)   (((x) > (hi)) ? (hi) : (((x) < (lo)) ? (lo) : (x)))
 
-`define UP(x)       (((x) != 0) ? (x) : 1)
+`define UP(x)       (((x) > 0) ? (x) : 1)
 
 `define CDIV(n,d)   ((n + d - 1) / (d))
 

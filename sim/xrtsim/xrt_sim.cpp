@@ -333,14 +333,27 @@ private:
     }
 
     device_->ap_rst_n = 1;
+
+    // this AXI device is always ready to accept new requests
     for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
       *m_axi_mem_[i].arready = 1;
       *m_axi_mem_[i].awready = 1;
+      *m_axi_mem_[i].wready  = 1;
     }
   }
 
   void tick() {
-    this->axi_mem_bus_eval();
+    device_->ap_clk = 0;
+    this->eval();
+
+    this->axi_mem_bus_eval(0);
+
+    device_->ap_clk = 1;
+    this->eval();
+
+    this->axi_mem_bus_eval(1);
+
+    dram_sim_.tick();
 
     for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
       if (!dram_queues_[i].empty()) {
@@ -358,13 +371,6 @@ private:
       }
     }
 
-    dram_sim_.tick();
-
-    device_->ap_clk = 0;
-    this->eval();
-    device_->ap_clk = 1;
-    this->eval();
-
   #ifndef NDEBUG
     fflush(stdout);
   #endif
@@ -381,162 +387,175 @@ private:
   }
 
   void axi_ctrl_bus_reset() {
-    // address read request
+    // read request address
     device_->s_axi_ctrl_arvalid = 0;
     device_->s_axi_ctrl_araddr = 0;
 
-    // data read response
+    // read response
     device_->s_axi_ctrl_rready = 0;
 
-    // address write request
+    // write request address
     device_->s_axi_ctrl_awvalid = 0;
     device_->s_axi_ctrl_awaddr = 0;
 
-    // data write request
+    // write request data
     device_->s_axi_ctrl_wvalid = 0;
     device_->s_axi_ctrl_wdata = 0;
     device_->s_axi_ctrl_wstrb = 0;
 
-    // data write response
+    // write response
     device_->s_axi_ctrl_bready = 0;
   }
 
   void axi_mem_bus_reset() {
-    for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
-      // address read request
-      *m_axi_mem_[i].arready = 0;
+    for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
+      // read request address
+      *m_axi_mem_[b].arready = 0;
 
-      // address write request
-      *m_axi_mem_[i].awready = 0;
+      // write request address
+      *m_axi_mem_[b].awready = 0;
 
-      // data write request
-      *m_axi_mem_[i].wready = 0;
+      // write request data
+      *m_axi_mem_[b].wready = 0;
 
-      // data read response
-      *m_axi_mem_[i].rvalid = 0;
+      // read response
+      *m_axi_mem_[b].rvalid = 0;
 
-      // data write response
-      *m_axi_mem_[i].bvalid = 0;
+      // write response
+      *m_axi_mem_[b].bvalid = 0;
 
       // states
-      m_axi_states_[i].write_req_pending = false;
+      m_axi_states_[b].write_req_addr_ack = false;
+      m_axi_states_[b].write_req_data_ack = false;
     }
   }
 
-  void axi_mem_bus_eval() {
-    for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
-      // handle read responses
-      if (*m_axi_mem_[i].rvalid && *m_axi_mem_[i].rready) {
-         *m_axi_mem_[i].rvalid = 0;
+  void axi_mem_bus_eval(bool clk) {
+    if (!clk) {
+      for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
+        m_axi_states_[b].read_rsp_ready = *m_axi_mem_[b].rready;
+        m_axi_states_[b].write_rsp_ready = *m_axi_mem_[b].bready;
       }
-      if (!*m_axi_mem_[i].rvalid) {
-        if (!pending_mem_reqs_[i].empty()
-        && (*pending_mem_reqs_[i].begin())->ready
-        && !(*pending_mem_reqs_[i].begin())->write) {
-          auto mem_rsp_it = pending_mem_reqs_[i].begin();
+      return;
+    }
+
+    for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
+      // handle read responses
+      if (*m_axi_mem_[b].rvalid && m_axi_states_[b].read_rsp_ready) {
+        *m_axi_mem_[b].rvalid = 0;
+      }
+      if (!*m_axi_mem_[b].rvalid) {
+        if (!pending_mem_reqs_[b].empty()
+        && (*pending_mem_reqs_[b].begin())->ready
+        && !(*pending_mem_reqs_[b].begin())->write) {
+          auto mem_rsp_it = pending_mem_reqs_[b].begin();
           auto mem_rsp = *mem_rsp_it;
-          *m_axi_mem_[i].rvalid = 1;
-          *m_axi_mem_[i].rid    = mem_rsp->tag;
-          *m_axi_mem_[i].rresp  = 0;
-          *m_axi_mem_[i].rlast  = 1;
-          memcpy(m_axi_mem_[i].rdata->data(), mem_rsp->data.data(), PLATFORM_MEMORY_DATA_SIZE);
-          pending_mem_reqs_[i].erase(mem_rsp_it);
+          *m_axi_mem_[b].rvalid = 1;
+          *m_axi_mem_[b].rid    = mem_rsp->tag;
+          *m_axi_mem_[b].rresp  = 0;
+          *m_axi_mem_[b].rlast  = 1;
+          memcpy(m_axi_mem_[b].rdata->data(), mem_rsp->data.data(), PLATFORM_MEMORY_DATA_SIZE);
+          pending_mem_reqs_[b].erase(mem_rsp_it);
           delete mem_rsp;
         }
       }
 
       // handle write responses
-      if (*m_axi_mem_[i].bvalid && *m_axi_mem_[i].bready) {
-        *m_axi_mem_[i].bvalid = 0;
+      if (*m_axi_mem_[b].bvalid && m_axi_states_[b].write_rsp_ready) {
+        *m_axi_mem_[b].bvalid = 0;
       }
-      if (!*m_axi_mem_[i].bvalid) {
-        if (!pending_mem_reqs_[i].empty()
-        && (*pending_mem_reqs_[i].begin())->ready
-        && (*pending_mem_reqs_[i].begin())->write) {
-          auto mem_rsp_it = pending_mem_reqs_[i].begin();
+      if (!*m_axi_mem_[b].bvalid) {
+        if (!pending_mem_reqs_[b].empty()
+        && (*pending_mem_reqs_[b].begin())->ready
+        && (*pending_mem_reqs_[b].begin())->write) {
+          auto mem_rsp_it = pending_mem_reqs_[b].begin();
           auto mem_rsp = *mem_rsp_it;
-          *m_axi_mem_[i].bvalid = 1;
-          *m_axi_mem_[i].bid    = mem_rsp->tag;
-          *m_axi_mem_[i].bresp  = 0;
-          pending_mem_reqs_[i].erase(mem_rsp_it);
+          *m_axi_mem_[b].bvalid = 1;
+          *m_axi_mem_[b].bid    = mem_rsp->tag;
+          *m_axi_mem_[b].bresp  = 0;
+          pending_mem_reqs_[b].erase(mem_rsp_it);
           delete mem_rsp;
         }
       }
 
       // handle read requests
-      if (*m_axi_mem_[i].arvalid && *m_axi_mem_[i].arready) {
+      if (*m_axi_mem_[b].arvalid && *m_axi_mem_[b].arready) {
         auto mem_req = new mem_req_t();
-        mem_req->tag   = *m_axi_mem_[i].arid;
-        mem_req->addr  = uint64_t(*m_axi_mem_[i].araddr);
+        mem_req->tag   = *m_axi_mem_[b].arid;
+        mem_req->addr  = uint64_t(*m_axi_mem_[b].araddr);
         ram_->read(mem_req->data.data(), mem_req->addr, PLATFORM_MEMORY_DATA_SIZE);
         mem_req->write = false;
         mem_req->ready = false;
-        pending_mem_reqs_[i].emplace_back(mem_req);
+        pending_mem_reqs_[b].emplace_back(mem_req);
 
-        /*printf("%0ld: [sim] axi-mem-read: bank=%d, addr=0x%lx, tag=0x%x, data=0x", timestamp, i, mem_req->addr, mem_req->tag);
+        /*printf("%0ld: [sim] axi-mem-read: bank=%d, addr=0x%lx, tag=0x%x, data=0x", timestamp, b, mem_req->addr, mem_req->tag);
         for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-          printf("%02x", mem_req->data[i]);
+          printf("%02x", mem_req->data[b]);
         }
         printf("\n");*/
 
         // send dram request
-        dram_queues_[i].push(mem_req);
+        dram_queues_[b].push(mem_req);
       }
 
-      if (*m_axi_mem_[i].wready && !m_axi_states_[i].write_req_pending) {
-        *m_axi_mem_[i].wready = 0;
+      // handle write address requests
+      if (*m_axi_mem_[b].awvalid && *m_axi_mem_[b].awready && !m_axi_states_[b].write_req_addr_ack) {
+        m_axi_states_[b].write_req_addr = *m_axi_mem_[b].awaddr;
+        m_axi_states_[b].write_req_tag = *m_axi_mem_[b].awid;
+        m_axi_states_[b].write_req_addr_ack = true;
       }
 
-      // handle address write requestsls 
-      if (*m_axi_mem_[i].awvalid && *m_axi_mem_[i].awready && !*m_axi_mem_[i].wready) {
-        m_axi_states_[i].write_req_addr = *m_axi_mem_[i].awaddr;
-        m_axi_states_[i].write_req_tag = *m_axi_mem_[i].awid;
-        // activate data channel
-        *m_axi_mem_[i].wready = 1;
-        m_axi_states_[i].write_req_pending = !*m_axi_mem_[i].wvalid;
+      // handle write data requests
+      if (*m_axi_mem_[b].wvalid && *m_axi_mem_[b].wready && !m_axi_states_[b].write_req_data_ack) {
+        m_axi_states_[b].write_req_byteen = *m_axi_mem_[b].wstrb;
+        auto data = (const uint8_t*)m_axi_mem_[b].wdata->data();
+        for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; ++i) {
+          m_axi_states_[b].write_req_data[i] = data[i];
+        }
+        m_axi_states_[b].write_req_data_ack = true;
       }
 
-      // handle data write requests
-      if (*m_axi_mem_[i].wvalid && *m_axi_mem_[i].wready) {
-        auto byteen = *m_axi_mem_[i].wstrb;
-        auto data = (uint8_t*)m_axi_mem_[i].wdata->data();
-        auto byte_addr = m_axi_states_[i].write_req_addr;
-
-        for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; i++) {
+      // handle write requests
+      if (m_axi_states_[b].write_req_addr_ack && m_axi_states_[b].write_req_data_ack) {
+        auto byteen = m_axi_states_[b].write_req_byteen;
+        auto byte_addr = m_axi_states_[b].write_req_addr;
+        for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; ++i) {
           if ((byteen >> i) & 0x1) {
-            (*ram_)[byte_addr + i] = data[i];
+            (*ram_)[byte_addr + i] = m_axi_states_[b].write_req_data[i];
           }
         }
-
         auto mem_req = new mem_req_t();
-        mem_req->tag   = m_axi_states_[i].write_req_tag;
+        mem_req->tag   = m_axi_states_[b].write_req_tag;
         mem_req->addr  = byte_addr;
         mem_req->write = true;
         mem_req->ready = false;
-        pending_mem_reqs_[i].emplace_back(mem_req);
+        pending_mem_reqs_[b].emplace_back(mem_req);
 
-        /*printf("%0ld: [sim] axi-mem-write: bank=%d, addr=0x%lx, byteen=0x%lx, tag=0x%x, data=0x", timestamp, i, mem_req->addr, byteen, mem_req->tag);
+        /*printf("%0ld: [sim] axi-mem-write: bank=%d, addr=0x%lx, byteen=0x%lx, tag=0x%x, data=0x", timestamp, b, mem_req->addr, byteen, mem_req->tag);
         for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-          printf("%02x", data[i]);
+          printf("%02x", m_axi_states_[b].write_req_data[i]]);
         }
         printf("\n");*/
 
         // send dram request
-        dram_queues_[i].push(mem_req);
+        dram_queues_[b].push(mem_req);
 
-        // deactivate data channel
-        if (m_axi_states_[i].write_req_pending) {
-          *m_axi_mem_[i].wready = 0;
-          m_axi_states_[i].write_req_pending = false;
-        }
+        // clear acks
+        m_axi_states_[b].write_req_addr_ack = false;
+        m_axi_states_[b].write_req_data_ack = false;
       }
     }
   }
 
   typedef struct {
+    std::array<uint8_t, PLATFORM_MEMORY_DATA_SIZE> write_req_data;
+    uint64_t write_req_byteen;
     uint64_t write_req_addr;
     uint32_t write_req_tag;
-    bool write_req_pending;
+    bool read_rsp_ready;
+    bool write_rsp_ready;
+    bool write_req_addr_ack;
+    bool write_req_data_ack;
   } m_axi_state_t;
 
   typedef struct {

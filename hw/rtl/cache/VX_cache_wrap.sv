@@ -27,18 +27,18 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     // Size of line inside a bank in bytes
     parameter LINE_SIZE             = 64,
     // Number of banks
-    parameter NUM_BANKS             = 1,
+    parameter NUM_BANKS             = 4,
     // Number of associative ways
-    parameter NUM_WAYS              = 1,
+    parameter NUM_WAYS              = 4,
     // Size of a word in bytes
-    parameter WORD_SIZE             = 4,
+    parameter WORD_SIZE             = 16,
 
     // Core Response Queue Size
-    parameter CRSQ_SIZE             = 2,
+    parameter CRSQ_SIZE             = 4,
     // Miss Reserv Queue Knob
-    parameter MSHR_SIZE             = 8,
+    parameter MSHR_SIZE             = 16,
     // Memory Response Queue Size
-    parameter MRSQ_SIZE             = 0,
+    parameter MRSQ_SIZE             = 4,
     // Memory Request Queue Size
     parameter MREQ_SIZE             = 4,
 
@@ -51,11 +51,17 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     // Enable dirty bytes on writeback
     parameter DIRTY_BYTES           = 0,
 
+    // Replacement policy
+    parameter REPL_POLICY           = `CS_REPL_CYCLIC,
+
     // Request debug identifier
     parameter UUID_WIDTH            = 0,
 
     // core request tag size
     parameter TAG_WIDTH             = UUID_WIDTH + 1,
+
+    // core request flags
+    parameter FLAGS_WIDTH           = 0,
 
     // enable bypass for non-cacheable addresses
     parameter NC_ENABLE             = 0,
@@ -64,10 +70,10 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     parameter PASSTHRU              = 0,
 
     // Core response output buffer
-    parameter CORE_OUT_BUF          = 0,
+    parameter CORE_OUT_BUF          = 3,
 
     // Memory request output buffer
-    parameter MEM_OUT_BUF           = 0
+    parameter MEM_OUT_BUF           = 3
  ) (
 
     input wire clk,
@@ -166,15 +172,17 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .NUM_WAYS     (NUM_WAYS),
             .WORD_SIZE    (WORD_SIZE),
             .NUM_REQS     (NUM_REQS),
+            .WRITE_ENABLE (WRITE_ENABLE),
+            .WRITEBACK    (WRITEBACK),
+            .DIRTY_BYTES  (DIRTY_BYTES),
+            .REPL_POLICY  (REPL_POLICY),
             .CRSQ_SIZE    (CRSQ_SIZE),
             .MSHR_SIZE    (MSHR_SIZE),
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
-            .WRITE_ENABLE (WRITE_ENABLE),
-            .WRITEBACK    (WRITEBACK),
-            .DIRTY_BYTES  (DIRTY_BYTES),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (TAG_WIDTH),
+            .FLAGS_WIDTH  (FLAGS_WIDTH),
             .CORE_OUT_BUF (NC_OR_BYPASS ? 1 : CORE_OUT_BUF),
             .MEM_OUT_BUF  (NC_OR_BYPASS ? 1 : MEM_OUT_BUF)
         ) cache (
@@ -232,13 +240,13 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         always @(posedge clk) begin
             if (core_req_fire) begin
                 if (core_bus_if[i].req_data.rw) begin
-                    `TRACE(1, ("%t: %s core-wr-req: addr=0x%0h, tag=0x%0h, req_idx=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag, i, core_bus_if[i].req_data.byteen, core_bus_if[i].req_data.data, core_req_uuid))
+                    `TRACE(2, ("%t: %s core-wr-req: addr=0x%0h, tag=0x%0h, req_idx=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag, i, core_bus_if[i].req_data.byteen, core_bus_if[i].req_data.data, core_req_uuid))
                 end else begin
-                    `TRACE(1, ("%t: %s core-rd-req: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag, i, core_req_uuid))
+                    `TRACE(2, ("%t: %s core-rd-req: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag, i, core_req_uuid))
                 end
             end
             if (core_rsp_fire) begin
-                `TRACE(1, ("%t: %s core-rd-rsp: tag=0x%0h, req_idx=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, core_bus_if[i].rsp_data.tag, i, core_bus_if[i].rsp_data.data, core_rsp_uuid))
+                `TRACE(2, ("%t: %s core-rd-rsp: tag=0x%0h, req_idx=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, core_bus_if[i].rsp_data.tag, i, core_bus_if[i].rsp_data.data, core_rsp_uuid))
             end
         end
     end
@@ -260,15 +268,15 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     always @(posedge clk) begin
         if (mem_req_fire) begin
             if (mem_bus_if.req_data.rw) begin
-                `TRACE(1, ("%t: %s mem-wr-req: addr=0x%0h, tag=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n",
+                `TRACE(2, ("%t: %s mem-wr-req: addr=0x%0h, tag=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n",
                     $time, INSTANCE_ID, `TO_FULL_ADDR(mem_bus_if.req_data.addr), mem_bus_if.req_data.tag, mem_bus_if.req_data.byteen, mem_bus_if.req_data.data, mem_req_uuid))
             end else begin
-                `TRACE(1, ("%t: %s mem-rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n",
+                `TRACE(2, ("%t: %s mem-rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n",
                     $time, INSTANCE_ID, `TO_FULL_ADDR(mem_bus_if.req_data.addr), mem_bus_if.req_data.tag, mem_req_uuid))
             end
         end
         if (mem_rsp_fire) begin
-            `TRACE(1, ("%t: %s mem-rd-rsp: tag=0x%0h, data=0x%h (#%0d)\n",
+            `TRACE(2, ("%t: %s mem-rd-rsp: tag=0x%0h, data=0x%h (#%0d)\n",
                 $time, INSTANCE_ID, mem_bus_if.rsp_data.tag, mem_bus_if.rsp_data.data, mem_rsp_uuid))
         end
     end

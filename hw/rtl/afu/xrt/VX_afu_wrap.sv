@@ -373,7 +373,9 @@ module VX_afu_wrap #(
     `SCOPE_IO_UNUSED(0)
 `endif
 `endif
+
 `ifdef CHIPSCOPE
+`ifdef DBG_SCOPE_AFU
     ila_afu ila_afu_inst (
       	.clk (clk),
 		.probe0 ({
@@ -393,6 +395,7 @@ module VX_afu_wrap #(
 			dcr_wr_data
 		})
     );
+`endif
 `endif
 
 `ifdef SIMULATION

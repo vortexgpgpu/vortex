@@ -87,7 +87,7 @@ module VX_core import VX_gpu_pkg::*; #(
     `SCOPE_IO_SWITCH (3);
 
     VX_schedule #(
-        .INSTANCE_ID ($sformatf("%s-schedule", INSTANCE_ID)),
+        .INSTANCE_ID (`SFORMATF(("%s-schedule", INSTANCE_ID))),
         .CORE_ID (CORE_ID)
     ) schedule (
         .clk            (clk),
@@ -115,7 +115,7 @@ module VX_core import VX_gpu_pkg::*; #(
     );
 
     VX_fetch #(
-        .INSTANCE_ID ($sformatf("%s-fetch", INSTANCE_ID))
+        .INSTANCE_ID (`SFORMATF(("%s-fetch", INSTANCE_ID)))
     ) fetch (
         `SCOPE_IO_BIND  (0)
         .clk            (clk),
@@ -126,7 +126,7 @@ module VX_core import VX_gpu_pkg::*; #(
     );
 
     VX_decode #(
-        .INSTANCE_ID ($sformatf("%s-decode", INSTANCE_ID))
+        .INSTANCE_ID (`SFORMATF(("%s-decode", INSTANCE_ID)))
     ) decode (
         .clk            (clk),
         .reset          (reset),
@@ -136,7 +136,7 @@ module VX_core import VX_gpu_pkg::*; #(
     );
 
     VX_issue #(
-        .INSTANCE_ID ($sformatf("%s-issue", INSTANCE_ID))
+        .INSTANCE_ID (`SFORMATF(("%s-issue", INSTANCE_ID)))
     ) issue (
         `SCOPE_IO_BIND  (1)
 
@@ -153,7 +153,7 @@ module VX_core import VX_gpu_pkg::*; #(
     );
 
     VX_execute #(
-        .INSTANCE_ID ($sformatf("%s-execute", INSTANCE_ID)),
+        .INSTANCE_ID (`SFORMATF(("%s-execute", INSTANCE_ID))),
         .CORE_ID (CORE_ID)
     ) execute (
         `SCOPE_IO_BIND  (2)
@@ -181,7 +181,7 @@ module VX_core import VX_gpu_pkg::*; #(
     );
 
     VX_commit #(
-        .INSTANCE_ID ($sformatf("%s-commit", INSTANCE_ID))
+        .INSTANCE_ID (`SFORMATF(("%s-commit", INSTANCE_ID)))
     ) commit (
         .clk            (clk),
         .reset          (reset),

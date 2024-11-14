@@ -268,7 +268,7 @@ module VX_cache_bypass #(
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_rsp_in_valid
         assign core_rsp_in_valid[i] = core_bus_out_if[i].rsp_valid || (is_mem_rsp_nc && rsp_idx == REQ_SEL_WIDTH'(i));
     end
-    
+
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_rsp_in_ready
         assign core_bus_out_if[i].rsp_ready = core_rsp_in_ready[i];
     end

@@ -310,7 +310,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire                                    lsu_mem_rsp_ready;
 
     VX_mem_scheduler #(
-        .INSTANCE_ID ($sformatf("%s-memsched", INSTANCE_ID)),
+        .INSTANCE_ID (`SFORMATF(("%s-memsched", INSTANCE_ID))),
         .CORE_REQS   (NUM_LANES),
         .MEM_CHANNELS(NUM_LANES),
         .WORD_SIZE   (LSU_WORD_SIZE),
@@ -504,30 +504,30 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 `ifdef DBG_TRACE_MEM
     always @(posedge clk) begin
         if (execute_if.valid && fence_lock) begin
-            `TRACE(1, ("%t: *** %s fence wait\n", $time, INSTANCE_ID))
+            `TRACE(2, ("%t: *** %s fence wait\n", $time, INSTANCE_ID))
         end
         if (mem_req_fire) begin
             if (mem_req_rw) begin
-                `TRACE(1, ("%t: %s Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask))
-                `TRACE_ARRAY1D(1, "0x%h", full_addr, NUM_LANES)
-                `TRACE(1, (", flags="))
-                `TRACE_ARRAY1D(1, "%b", mem_req_flags, NUM_LANES)
-                `TRACE(1, (", byteen=0x%0h, data=", mem_req_byteen))
-                `TRACE_ARRAY1D(1, "0x%0h", mem_req_data, NUM_LANES)
-                `TRACE(1, (", sop=%b, eop=%b, tag=0x%0h (#%0d)\n", execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
+                `TRACE(2, ("%t: %s Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask))
+                `TRACE_ARRAY1D(2, "0x%h", full_addr, NUM_LANES)
+                `TRACE(2, (", flags="))
+                `TRACE_ARRAY1D(2, "%b", mem_req_flags, NUM_LANES)
+                `TRACE(2, (", byteen=0x%0h, data=", mem_req_byteen))
+                `TRACE_ARRAY1D(2, "0x%0h", mem_req_data, NUM_LANES)
+                `TRACE(2, (", sop=%b, eop=%b, tag=0x%0h (#%0d)\n", execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
             end else begin
-                `TRACE(1, ("%t: %s Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask))
-                `TRACE_ARRAY1D(1, "0x%h", full_addr, NUM_LANES)
-                `TRACE(1, (", flags="))
-                `TRACE_ARRAY1D(1, "%b", mem_req_flags, NUM_LANES)
-                `TRACE(1, (", byteen=0x%0h, rd=%0d, sop=%b, eop=%b, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if.data.rd, execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
+                `TRACE(2, ("%t: %s Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask))
+                `TRACE_ARRAY1D(2, "0x%h", full_addr, NUM_LANES)
+                `TRACE(2, (", flags="))
+                `TRACE_ARRAY1D(2, "%b", mem_req_flags, NUM_LANES)
+                `TRACE(2, (", byteen=0x%0h, rd=%0d, sop=%b, eop=%b, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if.data.rd, execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
             end
         end
         if (mem_rsp_fire) begin
-            `TRACE(1, ("%t: %s Rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, sop=%b, eop=%b, data=",
+            `TRACE(2, ("%t: %s Rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, sop=%b, eop=%b, data=",
                 $time, INSTANCE_ID, rsp_wid, {rsp_pc, 1'b0}, mem_rsp_mask, rsp_rd, mem_rsp_sop, mem_rsp_eop))
-            `TRACE_ARRAY1D(1, "0x%0h", mem_rsp_data, NUM_LANES)
-            `TRACE(1, (", tag=0x%0h (#%0d)\n", mem_rsp_tag, rsp_uuid))
+            `TRACE_ARRAY1D(2, "0x%0h", mem_rsp_data, NUM_LANES)
+            `TRACE(2, (", tag=0x%0h (#%0d)\n", mem_rsp_tag, rsp_uuid))
         end
     end
 `endif
@@ -561,13 +561,16 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     `SCOPE_IO_UNUSED(0)
 `endif
 `endif
+
 `ifdef CHIPSCOPE
+`ifdef DBG_SCOPE_LSU
     ila_lsu ila_lsu_inst (
         .clk    (clk),
         .probe0 ({execute_if.valid, execute_if.data, execute_if.ready}),
         .probe1 ({lsu_mem_if.req_valid, lsu_mem_if.req_data, lsu_mem_if.req_ready}),
         .probe2 ({lsu_mem_if.rsp_valid, lsu_mem_if.rsp_data, lsu_mem_if.rsp_ready})
     );
+`endif
 `endif
 
 endmodule

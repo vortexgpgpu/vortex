@@ -39,7 +39,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
         VX_elastic_buffer #(
             .DATAW   (DATAW),
             .SIZE    (`IBUF_SIZE),
-            .OUT_REG (2) // 2-cycle EB for area reduction
+            .OUT_REG (1)
         ) instr_buf (
             .clk      (clk),
             .reset    (reset),

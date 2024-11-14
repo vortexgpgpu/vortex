@@ -52,9 +52,9 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .NUM_LANES (NUM_LANES)
     ) per_block_commit_if[BLOCK_SIZE]();
 
-    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_lsus
+    for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_slices
         VX_lsu_slice #(
-            .INSTANCE_ID ($sformatf("%s%0d", INSTANCE_ID, block_idx))
+            .INSTANCE_ID (`SFORMATF(("%s%0d", INSTANCE_ID, block_idx)))
         ) lsu_slice(
             `SCOPE_IO_BIND  (block_idx)
             .clk        (clk),

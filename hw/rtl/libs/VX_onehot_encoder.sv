@@ -13,11 +13,11 @@
 
 `include "VX_platform.vh"
 
-// Fast encoder using parallel prefix computation
+// Fast one-hot encoder using parallel prefix computation
 // Adapted from BaseJump STL: http://bjump.org/data_out.html
 
 `TRACING_OFF
-module VX_encoder #(
+module VX_onehot_encoder #(
     parameter N       = 1,
     parameter REVERSE = 0,
     parameter MODEL   = 1,

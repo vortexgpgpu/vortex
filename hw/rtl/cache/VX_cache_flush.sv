@@ -128,7 +128,8 @@ module VX_cache_flush #(
         lock_released_n = lock_released;
         flush_uuid_n = flush_uuid_r;
         case (state)
-            STATE_IDLE: begin
+            //STATE_IDLE:
+            default: begin
                 if (flush_req_enable) begin
                     state_n = (BANK_SEL_LATENCY != 0) ? STATE_WAIT1 : STATE_FLUSH;
                     for (integer i = NUM_REQS-1; i >= 0; --i) begin

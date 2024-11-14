@@ -14,9 +14,9 @@
 # Start time
 set start_time [clock seconds]
 
-if { $::argc != 5 } {
-  puts "ERROR: Program \"$::argv0\" requires 5 arguments!\n"
-  puts "Usage: $::argv0 <top_module> <device_part> <vcs_file> <xdc_file> <tool_dir>\n"
+if { $::argc != 4 } {
+  puts "ERROR: Program \"$::argv0\" requires 4 arguments!\n"
+  puts "Usage: $::argv0 <top_module> <device_part> <vcs_file> <xdc_file>\n"
   exit
 }
 
@@ -27,13 +27,16 @@ set top_module [lindex $::argv 0]
 set device_part [lindex $::argv 1]
 set vcs_file [lindex $::argv 2]
 set xdc_file [lindex $::argv 3]
-set tool_dir [lindex $::argv 4]
+
+set script_dir $::env(SCRIPT_DIR)
+set source_dir [file dirname [info script]]
 
 puts "Using top_module=$top_module"
 puts "Using device_part=$device_part"
 puts "Using vcs_file=$vcs_file"
 puts "Using xdc_file=$xdc_file"
-puts "Using tool_dir=$tool_dir"
+puts "Using script_dir=$script_dir"
+puts "Using source_dir=$source_dir"
 
 # Set the number of jobs based on MAX_JOBS environment variable
 if {[info exists ::env(MAX_JOBS)]} {
@@ -48,10 +51,10 @@ if {[info exists ::env(FPU_IP)]} {
   set ip_dir $::env(FPU_IP)
   set argv [list $ip_dir $device_part]
   set argc 2
-  source ${tool_dir}/xilinx_ip_gen.tcl
+  source ${script_dir}/xilinx_ip_gen.tcl
 }
 
-source "${tool_dir}/parse_vcs_list.tcl"
+source "${script_dir}/parse_vcs_list.tcl"
 set vlist [parse_vcs_list "${vcs_file}"]
 
 set vsources_list  [lindex $vlist 0]
@@ -84,37 +87,52 @@ if {[info exists ::env(FPU_IP)]} {
 
 update_compile_order -fileset sources_1
 
+# Synthesis
 set_property top $top_module [current_fileset]
+
 set_property \
     -name {STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS} \
     -value {-mode out_of_context -flatten_hierarchy "rebuilt"} \
     -objects [get_runs synth_1]
 
-# Synthesis
+# register compilation hooks
+#set_property STEPS.SYNTH_DESIGN.TCL.PRE  ${source_dir}/pre_synth_hook.tcl  [get_runs synth_1]
+#set_property STEPS.SYNTH_DESIGN.TCL.POST ${source_dir}/post_synth_hook.tcl [get_runs synth_1]
+set_property STEPS.OPT_DESIGN.TCL.PRE    ${script_dir}/xilinx_async_bram_patch.tcl  [get_runs impl_1]
+#set_property STEPS.OPT_DESIGN.TCL.POST   ${source_dir}/post_opt_hook.tcl   [get_runs impl_1]
+#set_property STEPS.ROUTE_DESIGN.TCL.PRE  ${source_dir}/pre_route_hook.tcl  [get_runs impl_1]
+#set_property STEPS.ROUTE_DESIGN.TCL.POST ${source_dir}/post_route_hook.tcl [get_runs impl_1]
+
 if {$num_jobs != 0} {
-  launch_runs synth_1 -jobs $num_jobs
+  launch_runs synth_1 -verbose -jobs $num_jobs
 } else {
-  launch_runs synth_1
+  launch_runs synth_1 -verbose
 }
 wait_on_run synth_1
 open_run synth_1
 write_checkpoint -force post_synth.dcp
-report_utilization -file utilization.rpt -hierarchical -hierarchical_percentages
+report_utilization -file post_synth_util.rpt -hierarchical -hierarchical_percentages
 
 # Implementation
 if {$num_jobs != 0} {
-  launch_runs impl_1 -jobs $num_jobs
+  launch_runs impl_1 -verbose -jobs $num_jobs
 } else {
-  launch_runs impl_1
+  launch_runs impl_1 -verbose
 }
 wait_on_run impl_1
 open_run impl_1
 write_checkpoint -force post_impl.dcp
+report_utilization -file post_impl_util.rpt -hierarchical -hierarchical_percentages
 
 # Generate the synthesis report
 report_place_status -file place.rpt
 report_route_status -file route.rpt
 report_timing_summary -file timing.rpt
+
+# Generate timing report
+report_timing -nworst 10 -delay_type max -sort_by group -file timing.rpt
+
+# Generate power and drc reports
 report_power -file power.rpt
 report_drc -file drc.rpt
 

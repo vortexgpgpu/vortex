@@ -144,7 +144,7 @@ module VX_core_top import VX_gpu_pkg::*; #(
 `endif
 
     VX_core #(
-        .INSTANCE_ID ($sformatf("core")),
+        .INSTANCE_ID (`SFORMATF(("core"))),
         .CORE_ID (CORE_ID)
     ) core (
         `SCOPE_IO_BIND (0)

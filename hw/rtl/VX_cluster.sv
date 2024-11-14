@@ -67,7 +67,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
     );
 
     VX_gbar_unit #(
-        .INSTANCE_ID ($sformatf("gbar%0d", CLUSTER_ID))
+        .INSTANCE_ID (`SFORMATF(("gbar%0d", CLUSTER_ID)))
     ) gbar_unit (
         .clk         (clk),
         .reset       (reset),
@@ -84,7 +84,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
     `RESET_RELAY (l2_reset, reset);
 
     VX_cache_wrap #(
-        .INSTANCE_ID    ($sformatf("%s-l2cache", INSTANCE_ID)),
+        .INSTANCE_ID    (`SFORMATF(("%s-l2cache", INSTANCE_ID))),
         .CACHE_SIZE     (`L2_CACHE_SIZE),
         .LINE_SIZE      (`L2_LINE_SIZE),
         .NUM_BANKS      (`L2_NUM_BANKS),
@@ -98,8 +98,10 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .TAG_WIDTH      (L2_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`L2_WRITEBACK),
-        .DIRTY_BYTES    (`L2_WRITEBACK),
+        .DIRTY_BYTES    (`L2_DIRTYBYTES),
+        .REPL_POLICY    (`L2_REPL_POLICY),
         .UUID_WIDTH     (`UUID_WIDTH),
+        .FLAGS_WIDTH    (`MEM_REQ_FLAGS_WIDTH),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
         .NC_ENABLE      (1),
@@ -129,7 +131,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
         VX_socket #(
             .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + socket_id),
-            .INSTANCE_ID ($sformatf("%s-socket%0d", INSTANCE_ID, socket_id))
+            .INSTANCE_ID (`SFORMATF(("%s-socket%0d", INSTANCE_ID, socket_id)))
         ) socket (
             `SCOPE_IO_BIND  (scope_socket+socket_id)
 
@@ -152,6 +154,6 @@ module VX_cluster import VX_gpu_pkg::*; #(
         );
     end
 
-    `BUFFER_EX(busy, (| per_socket_busy), 1'b1, (`NUM_SOCKETS > 1));
+    `BUFFER_EX(busy, (| per_socket_busy), 1'b1, 1, (`NUM_SOCKETS > 1));
 
 endmodule

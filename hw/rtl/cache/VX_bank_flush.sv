@@ -33,7 +33,7 @@ module VX_bank_flush #(
     output wire flush_init,
     output wire flush_valid,
     output wire [`CS_LINE_SEL_BITS-1:0] flush_line,
-    output wire [NUM_WAYS-1:0] flush_way,
+    output wire [`CS_WAY_SEL_WIDTH-1:0] flush_way,
     input  wire flush_ready,
     input  wire mshr_empty,
     input  wire bank_empty
@@ -48,20 +48,21 @@ module VX_bank_flush #(
     localparam STATE_WAIT2 = 4;
     localparam STATE_DONE  = 5;
 
-    reg [2:0] state_r, state_n;
+    reg [2:0] state, state_n;
 
-    reg [CTR_WIDTH-1:0] counter_r;
+    reg [CTR_WIDTH-1:0] counter;
 
     always @(*) begin
-        state_n = state_r;
-        case (state_r)
-            STATE_IDLE: begin
+        state_n = state;
+        case (state)
+            //STATE_IDLE:
+            default : begin
                 if (flush_begin) begin
                     state_n = STATE_WAIT1;
                 end
             end
             STATE_INIT: begin
-                if (counter_r == ((2 ** `CS_LINE_SEL_BITS)-1)) begin
+                if (counter == ((2 ** `CS_LINE_SEL_BITS)-1)) begin
                     state_n = STATE_IDLE;
                 end
             end
@@ -72,7 +73,7 @@ module VX_bank_flush #(
                 end
             end
             STATE_FLUSH: begin
-                if (counter_r == ((2 ** CTR_WIDTH)-1) && flush_ready) begin
+                if (counter == ((2 ** CTR_WIDTH)-1) && flush_ready) begin
                     state_n = (BANK_ID == 0) ? STATE_DONE : STATE_WAIT2;
                 end
             end
@@ -93,37 +94,30 @@ module VX_bank_flush #(
 
     always @(posedge clk) begin
         if (reset) begin
-            state_r   <= STATE_INIT;
-            counter_r <= '0;
+            state   <= STATE_INIT;
+            counter <= '0;
         end else begin
-            state_r <= state_n;
-            if (state_r != STATE_IDLE) begin
-                if ((state_r == STATE_INIT)
-                || ((state_r == STATE_FLUSH) && flush_ready)) begin
-                    counter_r <= counter_r + CTR_WIDTH'(1);
+            state <= state_n;
+            if (state != STATE_IDLE) begin
+                if ((state == STATE_INIT)
+                || ((state == STATE_FLUSH) && flush_ready)) begin
+                    counter <= counter + CTR_WIDTH'(1);
                 end
             end else begin
-                counter_r <= '0;
+                counter <= '0;
             end
         end
     end
 
-    assign flush_end   = (state_r == STATE_DONE);
-    assign flush_init  = (state_r == STATE_INIT);
-    assign flush_valid = (state_r == STATE_FLUSH);
-    assign flush_line  = counter_r[`CS_LINE_SEL_BITS-1:0];
+    assign flush_end   = (state == STATE_DONE);
+    assign flush_init  = (state == STATE_INIT);
+    assign flush_valid = (state == STATE_FLUSH);
+    assign flush_line  = counter[`CS_LINE_SEL_BITS-1:0];
 
-    if (WRITEBACK && `CS_WAY_SEL_BITS > 0) begin : g_flush_way
-        VX_decoder #(
-            .N (`CS_WAY_SEL_BITS),
-            .D (NUM_WAYS)
-        ) ctr_decoder (
-            .data_in  (counter_r[`CS_LINE_SEL_BITS +: `CS_WAY_SEL_BITS]),
-            .valid_in (1'b1),
-            .data_out (flush_way)
-        );
+    if (WRITEBACK && (NUM_WAYS > 1)) begin : g_flush_way
+        assign flush_way = counter[`CS_LINE_SEL_BITS +: `CS_WAY_SEL_BITS];
     end else begin : g_flush_way_all
-        assign flush_way = {NUM_WAYS{1'b1}};
+        assign flush_way = '0;
     end
 
 endmodule
