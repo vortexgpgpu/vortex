@@ -121,8 +121,8 @@ proc run_setup {} {
   # None
 
   # Set 'sim_1' fileset file properties for local files
-set file "testbench.v"
-set file_obj [get_files -of_objects [get_filesets sim_1] [list "*$file"]]
+  set file "testbench.v"
+  set file_obj [get_files -of_objects [get_filesets sim_1] [list "*$file"]]
   set_property -name "file_type" -value "Verilog" -objects $file_obj
   set_property -name "is_enabled" -value "1" -objects $file_obj
   set_property -name "is_global_include" -value "0" -objects $file_obj
@@ -300,7 +300,7 @@ set file_obj [get_files -of_objects [get_filesets sim_1] [list "*$file"]]
     CONFIG.Assume_Synchronous_Clk {true} \
     CONFIG.Byte_Size {8} \
     CONFIG.Load_Init_File {true} \
-    CONFIG.Coe_File {@CURRENTDIR@/hw/syn/xilinx/sandbox/kernel.bin.coe} \
+    CONFIG.Coe_File {@BUILDDIR@/hw/syn/xilinx/sandbox/kernel.bin.coe} \
     CONFIG.EN_SAFETY_CKT {true} \
     CONFIG.Enable_32bit_Address {true} \
     CONFIG.Fill_Remaining_Memory_Locations {false} \

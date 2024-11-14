@@ -241,8 +241,6 @@ private:
   #ifdef VCD_OUTPUT
     if (sim_trace_enabled()) {
       tfp_->dump(timestamp);
-    } else {
-      exit(-1);
     }
   #endif
     ++timestamp;

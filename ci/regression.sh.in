@@ -163,8 +163,9 @@ cache()
     CONFIGS="-DL1_LINE_SIZE=$XSIZE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=sgemmx
 
     # test cache ways
-    CONFIGS="-DICACHE_NUM_WAYS=8 -DDCACHE_NUM_WAYS=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
-    CONFIGS="-DICACHE_NUM_WAYS=8 -DDCACHE_NUM_WAYS=8" ./ci/blackbox.sh --driver=simx --app=sgemmx
+    CONFIGS="-DICACHE_NUM_WAYS=1 -DDCACHE_NUM_WAYS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DICACHE_NUM_WAYS=4 -DDCACHE_NUM_WAYS=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DICACHE_NUM_WAYS=4 -DDCACHE_NUM_WAYS=8" ./ci/blackbox.sh --driver=simx --app=sgemmx
 
     # test cache banking
     CONFIGS="-DLMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
@@ -174,11 +175,17 @@ cache()
     CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
     CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=sgemmx
 
+    # replacement policy
+    CONFIGS="-DDCACHE_REPL_POLICY=0" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DDCACHE_REPL_POLICY=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DDCACHE_REPL_POLICY=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+
     # test writeback
-    CONFIGS="-DDCACHE_WRITEBACK=1" ./ci/blackbox.sh --driver=rtlsim --app=mstress
-    CONFIGS="-DDCACHE_WRITEBACK=1" ./ci/blackbox.sh --driver=simx --app=mstress
-    CONFIGS="-DSOCKET_SIZE=1 -DDCACHE_WRITEBACK=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1" ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l2cache --l3cache --app=mstress
-    CONFIGS="-DSOCKET_SIZE=1 -DDCACHE_WRITEBACK=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1" ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --l3cache --app=mstress
+    CONFIGS="-DDCACHE_WRITEBACK=1 -DDCACHE_DIRTYBYTES=0 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=rtlsim --app=mstress
+    CONFIGS="-DDCACHE_WRITEBACK=1 -DDCACHE_DIRTYBYTES=1 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=rtlsim --app=mstress
+    CONFIGS="-DDCACHE_WRITEBACK=1 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=simx --app=mstress
+    CONFIGS="-DSOCKET_SIZE=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1" ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l2cache --l3cache --app=mstress
+    CONFIGS="-DSOCKET_SIZE=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1" ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --l3cache --app=mstress
 
     # cache clustering
     CONFIGS="-DSOCKET_SIZE=4 -DNUM_DCACHES=4 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --cores=4 --warps=1 --threads=2

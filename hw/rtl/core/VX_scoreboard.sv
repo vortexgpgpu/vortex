@@ -62,8 +62,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         .data_out (perf_sfu_per_cycle)
     );
 
-    `BUFFER_EX(perf_units_per_cycle_r, perf_units_per_cycle, 1'b1, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
-    `BUFFER_EX(perf_sfu_per_cycle_r, perf_sfu_per_cycle, 1'b1, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
+    `BUFFER_EX(perf_units_per_cycle_r, perf_units_per_cycle, 1'b1, 0, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
+    `BUFFER_EX(perf_sfu_per_cycle_r, perf_sfu_per_cycle, 1'b1, 0, `CDIV(PER_ISSUE_WARPS, `MAX_FANOUT));
 
     wire [PER_ISSUE_WARPS-1:0] stg_valid_in;
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_stg_valid_in
@@ -206,7 +206,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end else begin
                 if (staging_if[w].valid && ~staging_if[w].ready) begin
                 `ifdef DBG_TRACE_PIPELINE
-                    `TRACE(3, ("%t: *** %s-stall: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)\n",
+                    `TRACE(4, ("%t: *** %s-stall: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)\n",
                         $time, INSTANCE_ID, w, {staging_if[w].data.PC, 1'b0}, staging_if[w].data.tmask, timeout_ctr,
                         operands_busy, staging_if[w].data.uuid))
                 `endif

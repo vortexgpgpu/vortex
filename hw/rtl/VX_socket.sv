@@ -85,7 +85,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     `RESET_RELAY (icache_reset, reset);
 
     VX_cache_cluster #(
-        .INSTANCE_ID    ($sformatf("%s-icache", INSTANCE_ID)),
+        .INSTANCE_ID    (`SFORMATF(("%s-icache", INSTANCE_ID))),
         .NUM_UNITS      (`NUM_ICACHES),
         .NUM_INPUTS     (`SOCKET_SIZE),
         .TAG_SEL_IDX    (0),
@@ -100,8 +100,10 @@ module VX_socket import VX_gpu_pkg::*; #(
         .MRSQ_SIZE      (`ICACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`ICACHE_MREQ_SIZE),
         .TAG_WIDTH      (ICACHE_TAG_WIDTH),
+        .FLAGS_WIDTH    (0),
         .UUID_WIDTH     (`UUID_WIDTH),
         .WRITE_ENABLE   (0),
+        .REPL_POLICY    (`ICACHE_REPL_POLICY),
         .NC_ENABLE      (0),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (2)
@@ -130,7 +132,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     `RESET_RELAY (dcache_reset, reset);
 
     VX_cache_cluster #(
-        .INSTANCE_ID    ($sformatf("%s-dcache", INSTANCE_ID)),
+        .INSTANCE_ID    (`SFORMATF(("%s-dcache", INSTANCE_ID))),
         .NUM_UNITS      (`NUM_DCACHES),
         .NUM_INPUTS     (`SOCKET_SIZE),
         .TAG_SEL_IDX    (0),
@@ -146,9 +148,11 @@ module VX_socket import VX_gpu_pkg::*; #(
         .MREQ_SIZE      (`DCACHE_WRITEBACK ? `DCACHE_MSHR_SIZE : `DCACHE_MREQ_SIZE),
         .TAG_WIDTH      (DCACHE_TAG_WIDTH),
         .UUID_WIDTH     (`UUID_WIDTH),
+        .FLAGS_WIDTH    (`MEM_REQ_FLAGS_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`DCACHE_WRITEBACK),
-        .DIRTY_BYTES    (`DCACHE_WRITEBACK),
+        .DIRTY_BYTES    (`DCACHE_DIRTYBYTES),
+        .REPL_POLICY    (`DCACHE_REPL_POLICY),
         .NC_ENABLE      (1),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (2)
@@ -208,7 +212,7 @@ module VX_socket import VX_gpu_pkg::*; #(
 
         VX_core #(
             .CORE_ID  ((SOCKET_ID * `SOCKET_SIZE) + core_id),
-            .INSTANCE_ID ($sformatf("%s-core%0d", INSTANCE_ID, core_id))
+            .INSTANCE_ID (`SFORMATF(("%s-core%0d", INSTANCE_ID, core_id)))
         ) core (
             `SCOPE_IO_BIND  (scope_core + core_id)
 
@@ -233,6 +237,6 @@ module VX_socket import VX_gpu_pkg::*; #(
         );
     end
 
-    `BUFFER_EX(busy, (| per_core_busy), 1'b1, (`SOCKET_SIZE > 1));
+    `BUFFER_EX(busy, (| per_core_busy), 1'b1, 1, (`SOCKET_SIZE > 1));
 
 endmodule

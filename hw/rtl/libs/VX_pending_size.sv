@@ -66,11 +66,13 @@ module VX_pending_size #(
 
         if (INCRW != 1 || DECRW != 1) begin : g_wide_step
 
-            localparam SUBW = `MIN(SIZEW, `MAX(INCRW, DECRW)+1);
+            localparam DELTAW = `MIN(SIZEW, `MAX(INCRW, DECRW)+1);
 
             logic [SIZEW-1:0] size_n, size_r;
 
-            assign size_n = $signed(size_r) + SIZEW'($signed(SUBW'(incr) - SUBW'(decr)));
+            wire [DELTAW-1:0] delta = DELTAW'(incr) - DELTAW'(decr);
+
+            assign size_n = $signed(size_r) + SIZEW'($signed(delta));
 
             always @(posedge clk) begin
                 if (reset) begin
@@ -80,8 +82,8 @@ module VX_pending_size #(
                     alm_full_r  <= 0;
                     size_r      <= '0;
                 end else begin
-                    `ASSERT((SIZEW'(incr) >= SIZEW'(decr)) || (size_n >= size_r), ("runtime error: counter overflow"));
-                    `ASSERT((SIZEW'(incr) <= SIZEW'(decr)) || (size_n <= size_r), ("runtime error: counter underflow"));
+                    `ASSERT((DELTAW'(incr) <= DELTAW'(decr)) || (size_n >= size_r), ("runtime error: counter overflow"));
+                    `ASSERT((DELTAW'(incr) >= DELTAW'(decr)) || (size_n <= size_r), ("runtime error: counter underflow"));
                     empty_r     <= (size_n == SIZEW'(0));
                     full_r      <= (size_n == SIZEW'(SIZE));
                     alm_empty_r <= (size_n <= SIZEW'(ALM_EMPTY));
@@ -129,7 +131,7 @@ module VX_pending_size #(
                 wire is_empty_n = (used_r == ADDRW'(1));
                 wire is_full_n  = (used_r == ADDRW'(SIZE-1));
 
-                wire [1:0] push_minus_pop = {~incr & decr, incr ^ decr};
+                wire [1:0] delta = {~incr & decr, incr ^ decr};
 
                 always @(posedge clk) begin
                     if (reset) begin
@@ -148,7 +150,7 @@ module VX_pending_size #(
                             if (is_empty_n)
                                 empty_r <= 1;
                         end
-                        used_r <= $signed(used_r) + ADDRW'($signed(push_minus_pop));
+                        used_r <= $signed(used_r) + ADDRW'($signed(delta));
                     end
                 end
 

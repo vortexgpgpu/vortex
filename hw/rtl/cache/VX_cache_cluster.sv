@@ -24,22 +24,22 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter NUM_REQS              = 4,
 
     // Size of cache in bytes
-    parameter CACHE_SIZE            = 16384,
+    parameter CACHE_SIZE            = 32768,
     // Size of line inside a bank in bytes
     parameter LINE_SIZE             = 64,
     // Number of banks
-    parameter NUM_BANKS             = 1,
+    parameter NUM_BANKS             = 4,
     // Number of associative ways
     parameter NUM_WAYS              = 4,
     // Size of a word in bytes
-    parameter WORD_SIZE             = 4,
+    parameter WORD_SIZE             = 16,
 
     // Core Response Queue Size
-    parameter CRSQ_SIZE             = 2,
+    parameter CRSQ_SIZE             = 4,
     // Miss Reserv Queue Knob
-    parameter MSHR_SIZE             = 8,
+    parameter MSHR_SIZE             = 16,
     // Memory Response Queue Size
-    parameter MRSQ_SIZE             = 0,
+    parameter MRSQ_SIZE             = 4,
     // Memory Request Queue Size
     parameter MREQ_SIZE             = 4,
 
@@ -52,20 +52,26 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     // Enable dirty bytes on writeback
     parameter DIRTY_BYTES           = 0,
 
+    // Replacement policy
+    parameter REPL_POLICY           = `CS_REPL_CYCLIC,
+
     // Request debug identifier
     parameter UUID_WIDTH            = 0,
 
     // core request tag size
     parameter TAG_WIDTH             = UUID_WIDTH + 1,
 
+    // core request flags
+    parameter FLAGS_WIDTH           = 0,
+
     // enable bypass for non-cacheable addresses
     parameter NC_ENABLE             = 0,
 
     // Core response output buffer
-    parameter CORE_OUT_BUF          = 0,
+    parameter CORE_OUT_BUF          = 3,
 
     // Memory request output buffer
-    parameter MEM_OUT_BUF           = 0
+    parameter MEM_OUT_BUF           = 3
  ) (
     input wire clk,
     input wire reset,
@@ -140,22 +146,24 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 
      for (genvar i = 0; i < NUM_CACHES; ++i) begin : g_cache_wrap
         VX_cache_wrap #(
-            .INSTANCE_ID  ($sformatf("%s%0d", INSTANCE_ID, i)),
+            .INSTANCE_ID  (`SFORMATF(("%s%0d", INSTANCE_ID, i))),
             .CACHE_SIZE   (CACHE_SIZE),
             .LINE_SIZE    (LINE_SIZE),
             .NUM_BANKS    (NUM_BANKS),
             .NUM_WAYS     (NUM_WAYS),
             .WORD_SIZE    (WORD_SIZE),
             .NUM_REQS     (NUM_REQS),
+            .WRITE_ENABLE (WRITE_ENABLE),
+            .WRITEBACK    (WRITEBACK),
+            .DIRTY_BYTES  (DIRTY_BYTES),
+            .REPL_POLICY  (REPL_POLICY),
             .CRSQ_SIZE    (CRSQ_SIZE),
             .MSHR_SIZE    (MSHR_SIZE),
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
-            .WRITE_ENABLE (WRITE_ENABLE),
-            .WRITEBACK    (WRITEBACK),
-            .DIRTY_BYTES  (DIRTY_BYTES),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (ARB_TAG_WIDTH),
+            .FLAGS_WIDTH  (FLAGS_WIDTH),
             .TAG_SEL_IDX  (TAG_SEL_IDX),
             .CORE_OUT_BUF ((NUM_INPUTS != NUM_CACHES) ? 2 : CORE_OUT_BUF),
             .MEM_OUT_BUF  ((NUM_CACHES > 1) ? 2 : MEM_OUT_BUF),

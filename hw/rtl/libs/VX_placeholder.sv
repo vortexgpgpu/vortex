@@ -13,30 +13,15 @@
 
 `include "VX_platform.vh"
 
-// Fast encoder using parallel prefix computation
-// Adapted from BaseJump STL: http://bjump.org/data_out.html
-
 `TRACING_OFF
-module VX_decoder #(
-    parameter N = 1,
-    parameter M = 1,
-    parameter MODEL = 0,
-    parameter D = 1 << N
+`BLACKBOX_CELL module VX_placeholder #(
+    parameter I = 0,
+    parameter O = 0
 ) (
-    input wire [N-1:0] data_in,
-    input wire [M-1:0] valid_in,
-    output wire [D-1:0][M-1:0] data_out
+    input wire [`UP(I)-1:0] in,
+    output wire [`UP(O)-1:0] out
 );
-    logic [D-1:0][M-1:0] shift;
-    if (MODEL == 1) begin : g_model1
-        always @(*) begin
-            shift = '0;
-            shift[data_in] = {M{1'b1}};
-        end
-    end else begin : g_model0
-        assign shift = ((D*M)'({M{1'b1}})) << (data_in * M);
-    end
-    assign data_out = {D{valid_in}} & shift;
+    // empty module
 
 endmodule
 `TRACING_ON

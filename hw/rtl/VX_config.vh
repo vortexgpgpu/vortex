@@ -170,6 +170,10 @@
 `define L3_LINE_SIZE `MEM_BLOCK_SIZE
 `endif
 
+`ifndef MEMORY_BANKS
+`define MEMORY_BANKS 2
+`endif
+
 `ifdef XLEN_64
 
 `ifndef STACK_BASE_ADDR
@@ -566,7 +570,12 @@
 
 // Number of Associative Ways
 `ifndef ICACHE_NUM_WAYS
-`define ICACHE_NUM_WAYS 1
+`define ICACHE_NUM_WAYS 4
+`endif
+
+// Replacement Policy
+`ifndef ICACHE_REPL_POLICY
+`define ICACHE_REPL_POLICY 1
 `endif
 
 // Dcache Configurable Knobs //////////////////////////////////////////////////
@@ -615,17 +624,27 @@
 
 // Memory Response Queue Size
 `ifndef DCACHE_MRSQ_SIZE
-`define DCACHE_MRSQ_SIZE 0
+`define DCACHE_MRSQ_SIZE 4
 `endif
 
 // Number of Associative Ways
 `ifndef DCACHE_NUM_WAYS
-`define DCACHE_NUM_WAYS 1
+`define DCACHE_NUM_WAYS 4
 `endif
 
 // Enable Cache Writeback
 `ifndef DCACHE_WRITEBACK
 `define DCACHE_WRITEBACK 0
+`endif
+
+// Enable Cache Dirty bytes
+`ifndef DCACHE_DIRTYBYTES
+`define DCACHE_DIRTYBYTES `DCACHE_WRITEBACK
+`endif
+
+// Replacement Policy
+`ifndef DCACHE_REPL_POLICY
+`define DCACHE_REPL_POLICY 1
 `endif
 
 // LMEM Configurable Knobs ////////////////////////////////////////////////////
@@ -650,11 +669,7 @@
 
 // Cache Size
 `ifndef L2_CACHE_SIZE
-`ifdef ALTERA_S10
-`define L2_CACHE_SIZE 2097152
-`else
 `define L2_CACHE_SIZE 1048576
-`endif
 `endif
 
 // Number of Banks
@@ -679,12 +694,12 @@
 
 // Memory Response Queue Size
 `ifndef L2_MRSQ_SIZE
-`define L2_MRSQ_SIZE 0
+`define L2_MRSQ_SIZE 4
 `endif
 
 // Number of Associative Ways
 `ifndef L2_NUM_WAYS
-`define L2_NUM_WAYS 2
+`define L2_NUM_WAYS 8
 `endif
 
 // Enable Cache Writeback
@@ -692,15 +707,21 @@
 `define L2_WRITEBACK 0
 `endif
 
+// Enable Cache Dirty bytes
+`ifndef L2_DIRTYBYTES
+`define L2_DIRTYBYTES `L2_WRITEBACK
+`endif
+
+// Replacement Policy
+`ifndef L2_REPL_POLICY
+`define L2_REPL_POLICY 1
+`endif
+
 // L3cache Configurable Knobs /////////////////////////////////////////////////
 
 // Cache Size
 `ifndef L3_CACHE_SIZE
-`ifdef ALTERA_S10
 `define L3_CACHE_SIZE 2097152
-`else
-`define L3_CACHE_SIZE 1048576
-`endif
 `endif
 
 // Number of Banks
@@ -725,12 +746,12 @@
 
 // Memory Response Queue Size
 `ifndef L3_MRSQ_SIZE
-`define L3_MRSQ_SIZE 0
+`define L3_MRSQ_SIZE 4
 `endif
 
 // Number of Associative Ways
 `ifndef L3_NUM_WAYS
-`define L3_NUM_WAYS 4
+`define L3_NUM_WAYS 8
 `endif
 
 // Enable Cache Writeback
@@ -738,8 +759,14 @@
 `define L3_WRITEBACK 0
 `endif
 
-`ifndef MEMORY_BANKS
-`define MEMORY_BANKS 2
+// Enable Cache Dirty bytes
+`ifndef L3_DIRTYBYTES
+`define L3_DIRTYBYTES `L3_WRITEBACK
+`endif
+
+// Replacement Policy
+`ifndef L3_REPL_POLICY
+`define L3_REPL_POLICY 1
 `endif
 
 // Number of Memory Ports from LLC

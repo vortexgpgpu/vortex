@@ -20,7 +20,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     parameter NUM_REQS              = 4,
 
     // Size of cache in bytes
-    parameter CACHE_SIZE            = 16384,
+    parameter CACHE_SIZE            = 65536,
     // Size of line inside a bank in bytes
     parameter LINE_SIZE             = 64,
     // Number of banks
@@ -28,37 +28,37 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Number of associative ways
     parameter NUM_WAYS              = 4,
     // Size of a word in bytes
-    parameter WORD_SIZE             = 4,
+    parameter WORD_SIZE             = 16,
 
     // Core Response Queue Size
-    parameter CRSQ_SIZE             = 2,
+    parameter CRSQ_SIZE             = 8,
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE             = 16,
     // Memory Response Queue Size
-    parameter MRSQ_SIZE             = 0,
+    parameter MRSQ_SIZE             = 8,
     // Memory Request Queue Size
-    parameter MREQ_SIZE             = 4,
+    parameter MREQ_SIZE             = 8,
 
     // Enable cache writeable
     parameter WRITE_ENABLE          = 1,
 
     // Enable cache writeback
-    parameter WRITEBACK             = 0,
+    parameter WRITEBACK             = 1,
 
     // Enable dirty bytes on writeback
-    parameter DIRTY_BYTES           = 0,
+    parameter DIRTY_BYTES           = 1,
 
     // Request debug identifier
     parameter UUID_WIDTH            = 0,
 
     // core request tag size
-    parameter TAG_WIDTH             = 16,
+    parameter TAG_WIDTH             = 32,
 
     // Core response output buffer
-    parameter CORE_OUT_BUF          = 2,
+    parameter CORE_OUT_BUF          = 3,
 
     // Memory request output buffer
-    parameter MEM_OUT_BUF           = 2,
+    parameter MEM_OUT_BUF           = 3,
 
     parameter MEM_TAG_WIDTH = `CLOG2(MSHR_SIZE) + `CLOG2(NUM_BANKS)
  ) (

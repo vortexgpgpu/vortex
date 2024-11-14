@@ -335,10 +335,10 @@
         .data_out (dst) \
     )
 
-`define BUFFER_EX(dst, src, ena, latency) \
+`define BUFFER_EX(dst, src, ena, RSTW, latency) \
     VX_pipe_register #( \
         .DATAW  ($bits(dst)), \
-        .RESETW ($bits(dst)), \
+        .RESETW (RSTW), \
         .DEPTH  (latency) \
     ) __``dst``__ ( \
         .clk      (clk), \
@@ -348,7 +348,7 @@
         .data_out (dst) \
     )
 
-`define BUFFER(dst, src) `BUFFER_EX(dst, src, 1'b1, 1)
+`define BUFFER(dst, src) `BUFFER_EX(dst, src, 1'b1, 0, 1)
 
 `define POP_COUNT_EX(out, in, model) \
     VX_popcount #( \

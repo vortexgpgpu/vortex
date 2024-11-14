@@ -16,7 +16,7 @@
 `TRACING_OFF
 module VX_generic_arbiter #(
     parameter NUM_REQS     = 1,
-    parameter `STRING TYPE = "P",
+    parameter `STRING TYPE = "P", // P: priority, R: round-robin, M: matrix, C: cyclic
     parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS)
 ) (
     input  wire                     clk,
@@ -27,6 +27,8 @@ module VX_generic_arbiter #(
     output wire                     grant_valid,
     input  wire                     grant_ready
 );
+    `STATIC_ASSERT((TYPE == "P" || TYPE == "R" || TYPE == "M" || TYPE == "C"), ("invalid parameter"))
+
     if (TYPE == "P") begin : g_priority
 
         `UNUSED_VAR (clk)
@@ -83,10 +85,6 @@ module VX_generic_arbiter #(
             .grant_onehot (grant_onehot),
             .grant_ready  (grant_ready)
         );
-
-    end else begin : g_invalid
-
-        `ERROR(("invalid parameter"));
 
     end
 

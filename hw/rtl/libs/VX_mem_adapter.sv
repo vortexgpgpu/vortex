@@ -100,21 +100,21 @@ module VX_mem_adapter #(
             assign mem_req_addr_out_w = mem_req_addr_in_qual;
         end
 
-        VX_decoder #(
+        VX_demux #(
             .N (D),
             .M (SRC_DATA_WIDTH/8)
-        ) req_be_dec (
-            .data_in  (req_idx),
-            .valid_in (mem_req_byteen_in),
+        ) req_be_demux (
+            .sel_in   (req_idx),
+            .data_in  (mem_req_byteen_in),
             .data_out (mem_req_byteen_out_w)
         );
 
-        VX_decoder #(
+        VX_demux #(
             .N (D),
             .M (SRC_DATA_WIDTH)
-        ) req_data_dec (
-            .data_in  (req_idx),
-            .valid_in (mem_req_data_in),
+        ) req_data_demux (
+            .sel_in   (req_idx),
+            .data_in  (mem_req_data_in),
             .data_out (mem_req_data_out_w)
         );
 

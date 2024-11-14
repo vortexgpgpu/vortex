@@ -24,35 +24,22 @@
 // arrival and are dequeued in the same order.
 // Each entry has a next pointer to the next entry pending for the same cache line.
 //
-// During the fill operation, the MSHR will release the MSHR entry at fill_id
+// During the fill request, the MSHR will dequue the MSHR entry at the fill_id location
 // which represents the first request in the pending list that initiated the memory fill.
 //
-// The dequeue operation directly follows the fill operation and will release
+// The dequeue response directly follows the fill request and will release
 // all the subsequent entries linked to fill_id (pending the same cache line).
 //
-// During the allocation operation, the MSHR will allocate the next free slot
+// During the allocation request, the MSHR will allocate the next free slot
 // for the incoming core request. We return the allocated slot id as well as
 // the slot id of the previous entry for the same cache line. This is used to
-// link the new entry to the pending list during finalization.
+// link the new entry to the pending list.
 //
-// The lookup operation is used to find all pending entries for a given cache line.
-// This is used to by the cache bank to determine if a cache miss is already pending
-// and therefore avoid issuing a memory fill request.
-//
-// The finalize operation is used to release the allocated MSHR entry if we had a hit.
-// If we had a miss and finalize_pending is true, we link the allocated entry to
-// its corresponding pending list (via finalize_prev).
+// The finalize request is used to persit or release the currently allocated MSHR entry
+// if we had a cache miss or a hit, respectively.
 //
 // Warning: This MSHR implementation is strongly coupled with the bank pipeline
 // and as such changes to either module requires careful evaluation.
-//
-// This architecture implements three pipeline stages:
-// - Arbitration: cache bank arbitration before entering pipeline.
-//   fill and dequeue operations are executed at this stage.
-// - stage 0: cache bank tag access stage.
-//   allocate and lookup operations are executed at this stage.
-// - stage 1: cache bank tdatag access stage.
-//   finalize operation is executed at this stage.
 //
 
 module VX_cache_mshr #(
@@ -68,6 +55,9 @@ module VX_cache_mshr #(
     parameter UUID_WIDTH        = 0,
     // MSHR parameters
     parameter DATA_WIDTH        = 1,
+    // Enable cache writeback
+    parameter WRITEBACK         = 0,
+
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE)
 ) (
     input wire clk,
@@ -75,7 +65,7 @@ module VX_cache_mshr #(
 
 `IGNORE_UNUSED_BEGIN
     input wire[`UP(UUID_WIDTH)-1:0]     deq_req_uuid,
-    input wire[`UP(UUID_WIDTH)-1:0]     lkp_req_uuid,
+    input wire[`UP(UUID_WIDTH)-1:0]     alc_req_uuid,
     input wire[`UP(UUID_WIDTH)-1:0]     fin_req_uuid,
 `IGNORE_UNUSED_END
 
@@ -98,26 +88,21 @@ module VX_cache_mshr #(
     input wire                          allocate_rw,
     input wire [DATA_WIDTH-1:0]         allocate_data,
     output wire [MSHR_ADDR_WIDTH-1:0]   allocate_id,
-    output wire [MSHR_ADDR_WIDTH-1:0]   allocate_prev,
+    output wire                         allocate_pending,
+    output wire [MSHR_ADDR_WIDTH-1:0]   allocate_previd,
     output wire                         allocate_ready,
-
-    // lookup
-    input wire                          lookup_valid,
-    input wire [`CS_LINE_ADDR_WIDTH-1:0] lookup_addr,
-    output wire [MSHR_SIZE-1:0]         lookup_pending,
-    output wire [MSHR_SIZE-1:0]         lookup_rw,
 
     // finalize
     input wire                          finalize_valid,
-    input wire                          finalize_release,
-    input wire                          finalize_pending,
-    input wire [MSHR_ADDR_WIDTH-1:0]    finalize_id,
-    input wire [MSHR_ADDR_WIDTH-1:0]    finalize_prev
+    input wire                          finalize_is_release,
+    input wire                          finalize_is_pending,
+    input wire [MSHR_ADDR_WIDTH-1:0]    finalize_previd,
+    input wire [MSHR_ADDR_WIDTH-1:0]    finalize_id
 );
     `UNUSED_PARAM (BANK_ID)
 
-    reg [`CS_LINE_ADDR_WIDTH-1:0] addr_table [MSHR_SIZE-1:0];
-    reg [MSHR_ADDR_WIDTH-1:0] next_index [MSHR_SIZE-1:0];
+    reg [`CS_LINE_ADDR_WIDTH-1:0] addr_table [0:MSHR_SIZE-1];
+    reg [MSHR_ADDR_WIDTH-1:0] next_index [0:MSHR_SIZE-1];
 
     reg [MSHR_SIZE-1:0] valid_table, valid_table_n;
     reg [MSHR_SIZE-1:0] next_table, next_table_x, next_table_n;
@@ -136,7 +121,7 @@ module VX_cache_mshr #(
 
     wire [MSHR_SIZE-1:0] addr_matches;
     for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_addr_matches
-        assign addr_matches[i] = valid_table[i] && (addr_table[i] == lookup_addr);
+        assign addr_matches[i] = valid_table[i] && (addr_table[i] == allocate_addr);
     end
 
     VX_lzc #(
@@ -148,11 +133,13 @@ module VX_cache_mshr #(
         .valid_out (allocate_rdy_n)
     );
 
-    VX_encoder #(
+    // find matching tail-entry
+    VX_priority_encoder #(
         .N (MSHR_SIZE)
     ) prev_sel (
         .data_in (addr_matches & ~next_table_x),
-        .data_out (prev_idx),
+        .index_out (prev_idx),
+        `UNUSED_PIN (onehot_out),
         `UNUSED_PIN (valid_out)
     );
 
@@ -171,17 +158,22 @@ module VX_cache_mshr #(
             valid_table_n[dequeue_id] = 0;
             if (next_table[dequeue_id]) begin
                 dequeue_id_n = next_index[dequeue_id];
+            end else if (finalize_valid && finalize_is_pending && (finalize_previd == dequeue_id)) begin
+                dequeue_id_n = finalize_id;
             end else begin
                 dequeue_val_n = 0;
             end
         end
 
         if (finalize_valid) begin
-            if (finalize_release) begin
+            if (finalize_is_release) begin
                 valid_table_n[finalize_id] = 0;
             end
-            if (finalize_pending) begin
-                next_table_x[finalize_prev] = 1;
+            // warning: This code allows 'finalize_is_pending' to be asserted regardless of hit/miss
+            // to reduce the its propagation delay into the MSHR. this is safe because wrong updates
+            // to 'next_table_n' will be cleared during 'allocate_fire' below.
+            if (finalize_is_pending) begin
+                next_table_x[finalize_previd] = 1;
             end
         end
 
@@ -204,12 +196,12 @@ module VX_cache_mshr #(
         end
 
         if (allocate_fire) begin
-            addr_table[allocate_id]  <= allocate_addr;
+            addr_table[allocate_id] <= allocate_addr;
             write_table[allocate_id] <= allocate_rw;
         end
 
-        if (finalize_valid && finalize_pending) begin
-            next_index[finalize_prev] <= finalize_id;
+        if (finalize_valid && finalize_is_pending) begin
+            next_index[finalize_previd] <= finalize_id;
         end
 
         dequeue_id_r  <= dequeue_id_n;
@@ -217,20 +209,20 @@ module VX_cache_mshr #(
         next_table    <= next_table_n;
     end
 
-    `RUNTIME_ASSERT((~allocate_fire || ~valid_table[allocate_id_r]), ("%t: *** %s inuse allocation: addr=0x%0h, id=%0d (#%0d)", $time, INSTANCE_ID,
-        `CS_LINE_TO_FULL_ADDR(allocate_addr, BANK_ID), allocate_id_r, lkp_req_uuid))
+    `RUNTIME_ASSERT(~(allocate_fire && valid_table[allocate_id_r]), ("%t: *** %s inuse allocation: addr=0x%0h, id=%0d (#%0d)", $time, INSTANCE_ID,
+        `CS_LINE_TO_FULL_ADDR(allocate_addr, BANK_ID), allocate_id_r, alc_req_uuid))
 
-    `RUNTIME_ASSERT((~finalize_valid || valid_table[finalize_id]), ("%t: *** %s invalid release: addr=0x%0h, id=%0d (#%0d)", $time, INSTANCE_ID,
+    `RUNTIME_ASSERT(~(finalize_valid && ~valid_table[finalize_id]), ("%t: *** %s invalid release: addr=0x%0h, id=%0d (#%0d)", $time, INSTANCE_ID,
         `CS_LINE_TO_FULL_ADDR(addr_table[finalize_id], BANK_ID), finalize_id, fin_req_uuid))
 
-    `RUNTIME_ASSERT((~fill_valid || valid_table[fill_id]), ("%t: *** %s invalid fill: addr=0x%0h, id=%0d", $time, INSTANCE_ID,
+    `RUNTIME_ASSERT(~(fill_valid && ~valid_table[fill_id]), ("%t: *** %s invalid fill: addr=0x%0h, id=%0d", $time, INSTANCE_ID,
         `CS_LINE_TO_FULL_ADDR(addr_table[fill_id], BANK_ID), fill_id))
 
     VX_dp_ram #(
-        .DATAW  (DATA_WIDTH),
-        .SIZE   (MSHR_SIZE),
-        .LUTRAM (1)
-    ) entries (
+        .DATAW (DATA_WIDTH),
+        .SIZE  (MSHR_SIZE),
+        .RDW_MODE ("R")
+    ) mshr_store (
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),
@@ -245,19 +237,20 @@ module VX_cache_mshr #(
     assign fill_addr = addr_table[fill_id];
 
     assign allocate_ready = allocate_rdy;
-    assign allocate_id    = allocate_id_r;
-    assign allocate_prev  = prev_idx;
+    assign allocate_id = allocate_id_r;
+    assign allocate_previd = prev_idx;
 
-    assign dequeue_valid  = dequeue_val;
-    assign dequeue_addr   = addr_table[dequeue_id_r];
-    assign dequeue_rw     = write_table[dequeue_id_r];
-    assign dequeue_id     = dequeue_id_r;
+    if (WRITEBACK) begin : g_pending_wb
+        assign allocate_pending = |addr_matches;
+    end else begin : g_pending_wt
+        // exclude write requests if writethrough
+        assign allocate_pending = |(addr_matches & ~write_table);
+    end
 
-    // return pending entries for the given cache line
-    assign lookup_pending = addr_matches;
-    assign lookup_rw = write_table;
-
-    `UNUSED_VAR (lookup_valid)
+    assign dequeue_valid = dequeue_val;
+    assign dequeue_addr  = addr_table[dequeue_id_r];
+    assign dequeue_rw    = write_table[dequeue_id_r];
+    assign dequeue_id    = dequeue_id_r;
 
 `ifdef DBG_TRACE_CACHE
     reg show_table;
@@ -265,23 +258,21 @@ module VX_cache_mshr #(
         if (reset) begin
             show_table <= 0;
         end else begin
-            show_table <= allocate_fire || lookup_valid || finalize_valid || fill_valid || dequeue_fire;
+            show_table <= allocate_fire || finalize_valid || fill_valid || dequeue_fire;
         end
         if (allocate_fire) begin
-            `TRACE(3, ("%t: %s allocate: addr=0x%0h, prev=%0d, id=%0d (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(allocate_addr, BANK_ID), allocate_prev, allocate_id, lkp_req_uuid))
+            `TRACE(3, ("%t: %s allocate: addr=0x%0h, id=%0d, pending=%b, prev=%0d (#%0d)\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(allocate_addr, BANK_ID), allocate_id, allocate_pending, prev_idx, alc_req_uuid))
         end
-        if (lookup_valid) begin
-            `TRACE(3, ("%t: %s lookup: addr=0x%0h, matches=%b (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(lookup_addr, BANK_ID), lookup_pending, lkp_req_uuid))
+        if (finalize_valid && finalize_is_release) begin
+            `TRACE(3, ("%t: %s release: id=%0d (#%0d)\n", $time, INSTANCE_ID, finalize_id, fin_req_uuid))
         end
-        if (finalize_valid) begin
-            `TRACE(3, ("%t: %s finalize release=%b, pending=%b, prev=%0d, id=%0d (#%0d)\n", $time, INSTANCE_ID,
-                finalize_release, finalize_pending, finalize_prev, finalize_id, fin_req_uuid))
+        if (finalize_valid && finalize_is_pending) begin
+            `TRACE(3, ("%t: %s finalize: id=%0d (#%0d)\n", $time, INSTANCE_ID, finalize_id, fin_req_uuid))
         end
         if (fill_valid) begin
-            `TRACE(3, ("%t: %s fill: addr=0x%0h, addr=0x%0h, id=%0d\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(addr_table[fill_id], BANK_ID), `CS_LINE_TO_FULL_ADDR(fill_addr, BANK_ID), fill_id))
+            `TRACE(3, ("%t: %s fill: addr=0x%0h, id=%0d\n", $time, INSTANCE_ID,
+                `CS_LINE_TO_FULL_ADDR(fill_addr, BANK_ID), fill_id))
         end
         if (dequeue_fire) begin
             `TRACE(3, ("%t: %s dequeue: addr=0x%0h, id=%0d (#%0d)\n", $time, INSTANCE_ID,

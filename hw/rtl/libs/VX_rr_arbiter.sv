@@ -448,7 +448,7 @@ module VX_rr_arbiter #(
 			end
 	    end
 
-        VX_encoder #(
+        VX_onehot_encoder #(
             .N (NUM_REQS)
         ) onehot_encoder (
             .data_in  (grant_onehot),
@@ -480,12 +480,12 @@ module VX_rr_arbiter #(
             end
         end
 
-        VX_decoder #(
+        VX_demux #(
             .N (LOG_NUM_REQS),
             .D (NUM_REQS)
         ) grant_decoder (
-            .data_in  (grant_index),
-            .valid_in (grant_valid),
+            .sel_in   (grant_index),
+            .data_in  (1'b1),
             .data_out (grant_onehot)
         );
 
