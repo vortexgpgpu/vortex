@@ -28,7 +28,7 @@ dir_list=()
 inc_args=""
 macro_args=""
 no_warnings=1
-process="elaborate,netlist,techmap,verilog,link"
+process="elaborate,netlist,techmap,verilog"
 
 declare -a excluded_warnings=("Resizing cell port")
 
@@ -133,11 +133,6 @@ done
     # synthesize design
     if echo "$process" | grep -q "synthesis"; then
         echo "synth -top $top_level"
-    fi
-
-    # link design
-    if echo "$process" | grep -q "link"; then
-        echo "link_design -top $top_level"
     fi
 
     # convert to netlist
