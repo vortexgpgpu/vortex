@@ -46,7 +46,11 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 );
     localparam LMEM_DATA_WIDTH    = $bits(t_local_mem_data);
     localparam LMEM_DATA_SIZE     = LMEM_DATA_WIDTH / 8;
-    localparam LMEM_ADDR_WIDTH    = `VX_MEM_ADDR_WIDTH + ($clog2(`VX_MEM_DATA_WIDTH) - $clog2(LMEM_DATA_WIDTH));
+    localparam LMEM_ADDR_WIDTH    = $bits(t_local_mem_addr);
+
+    localparam LMEM_BYTE_ADDR_WIDTH = LMEM_ADDR_WIDTH + $clog2(LMEM_DATA_SIZE);
+    localparam CCI_VX_ADDR_WIDTH  = `VX_MEM_ADDR_WIDTH + ($clog2(`VX_MEM_DATA_WIDTH) - $clog2(LMEM_DATA_WIDTH));
+
     localparam LMEM_BURST_CTRW    = $bits(t_local_mem_burst_cnt);
 
     localparam CCI_DATA_WIDTH     = $bits(t_ccip_clData);
@@ -103,8 +107,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire [127:0] afu_id = `AFU_ACCEL_UUID;
 
     wire [63:0] dev_caps = {8'b0,
-                            5'(`PLATFORM_MEMORY_ADDR_WIDTH-20),
-                            3'(`CLOG2(`PLATFORM_MEMORY_BANKS)),
+                            5'(LMEM_BYTE_ADDR_WIDTH-20),
+                            3'(`CLOG2(NUM_LOCAL_MEM_BANKS)),
                             8'(`LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
                             16'(`NUM_CORES * `NUM_CLUSTERS),
                             8'(`NUM_WARPS),
@@ -480,7 +484,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     VX_mem_bus_if #(
         .DATA_SIZE  (LMEM_DATA_SIZE),
-        .ADDR_WIDTH (LMEM_ADDR_WIDTH),
+        .ADDR_WIDTH (CCI_VX_ADDR_WIDTH),
         .TAG_WIDTH  (AVS_REQ_TAGW)
     ) cci_vx_mem_bus_if[2]();
 
@@ -488,7 +492,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .SRC_DATA_WIDTH (CCI_DATA_WIDTH),
         .DST_DATA_WIDTH (LMEM_DATA_WIDTH),
         .SRC_ADDR_WIDTH (CCI_ADDR_WIDTH),
-        .DST_ADDR_WIDTH (LMEM_ADDR_WIDTH),
+        .DST_ADDR_WIDTH (CCI_VX_ADDR_WIDTH),
         .SRC_TAG_WIDTH  (CCI_ADDR_WIDTH),
         .DST_TAG_WIDTH  (AVS_REQ_TAGW),
         .REQ_OUT_BUF    (0),
@@ -538,7 +542,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .SRC_DATA_WIDTH (`VX_MEM_DATA_WIDTH),
         .DST_DATA_WIDTH (LMEM_DATA_WIDTH),
         .SRC_ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),
-        .DST_ADDR_WIDTH (LMEM_ADDR_WIDTH),
+        .DST_ADDR_WIDTH (CCI_VX_ADDR_WIDTH),
         .SRC_TAG_WIDTH  (`VX_MEM_TAG_WIDTH),
         .DST_TAG_WIDTH  (AVS_REQ_TAGW),
         .REQ_OUT_BUF    (0),
@@ -579,14 +583,14 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     //--
     VX_mem_bus_if #(
         .DATA_SIZE  (LMEM_DATA_SIZE),
-        .ADDR_WIDTH (LMEM_ADDR_WIDTH),
+        .ADDR_WIDTH (CCI_VX_ADDR_WIDTH),
         .TAG_WIDTH  (AVS_REQ_TAGW+1)
     ) mem_bus_if[1]();
 
     VX_mem_arb #(
         .NUM_INPUTS  (2),
         .DATA_SIZE   (LMEM_DATA_SIZE),
-        .ADDR_WIDTH  (LMEM_ADDR_WIDTH),
+        .ADDR_WIDTH  (CCI_VX_ADDR_WIDTH),
         .TAG_WIDTH   (AVS_REQ_TAGW),
         .ARBITER     ("P"), // prioritize VX requests
         .REQ_OUT_BUF (0),
@@ -602,8 +606,8 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     VX_avs_adapter #(
         .DATA_WIDTH    (LMEM_DATA_WIDTH),
-        .ADDR_WIDTH_IN (LMEM_ADDR_WIDTH),
-        .ADDR_WIDTH_OUT($bits(t_local_mem_addr)),
+        .ADDR_WIDTH_IN (CCI_VX_ADDR_WIDTH),
+        .ADDR_WIDTH_OUT(LMEM_ADDR_WIDTH),
         .BURST_WIDTH   (LMEM_BURST_CTRW),
         .NUM_BANKS     (NUM_LOCAL_MEM_BANKS),
         .TAG_WIDTH     (AVS_REQ_TAGW + 1),
