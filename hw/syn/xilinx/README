@@ -47,6 +47,9 @@ TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 make chipscope
 # analyze build report
 vitis_analyzer build_xilinx_u50_gen3x16_xdma_5_202210_1_hw_4c/bin/vortex_afu.xclbin.link_summary
 
+# resuming build for routing
+TARGET=hw PLATFORM=xilinx_u55c_gen3x16_xdma_3_202210_1 VPP_FLAGS="--from_step vpl.impl.route_design" make > build.log 2>&1 &
+
 # running test
 FPGA_BIN_DIR=<bin_dir> TARGET=hw_emu ./ci/blackbox.sh --driver=xrt --app=demo
 FPGA_BIN_DIR=<bin_dir> TARGET=hw ./ci/blackbox.sh --driver=xrt --app=demo
