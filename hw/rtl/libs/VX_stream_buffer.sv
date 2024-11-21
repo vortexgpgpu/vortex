@@ -86,38 +86,47 @@ module VX_stream_buffer #(
 
 	end else begin : g_no_out_reg
 
-		reg [1:0][DATAW-1:0] shift_reg;
-		reg [1:0] fifo_state, fifo_state_n;
+		reg [DATAW-1:0] data_out_r, buffer;
+		reg valid_in_r, valid_out_r;
 
 		wire fire_in = valid_in && ready_in;
 		wire fire_out = valid_out && ready_out;
 
-		always @(*) begin
-			case ({fire_in, fire_out})
-			2'b10:	 fifo_state_n = {fifo_state[0], 1'b1}; // 00 -> 01, 01 -> 10
-			2'b01:	 fifo_state_n = {1'b0, fifo_state[1]}; // 10 -> 01, 01 -> 00
-			default: fifo_state_n = fifo_state;
-			endcase
+		always @(posedge clk) begin
+			if (reset) begin
+				valid_in_r  <= 1'b1;
+			end else begin
+				if (fire_in ^ fire_out) begin
+					valid_in_r  <= valid_out_r ^ fire_in;
+				end
+			end
 		end
 
 		always @(posedge clk) begin
 			if (reset) begin
-				fifo_state <= 2'b00;
+				valid_out_r <= 1'b0;
 			end else begin
-				fifo_state <= fifo_state_n;
+				if (fire_in ^ fire_out) begin
+					valid_out_r <= valid_in_r ^ fire_out;
+				end
 			end
 		end
 
 		always @(posedge clk) begin
 			if (fire_in) begin
-				shift_reg[1] <= shift_reg[0];
-				shift_reg[0] <= data_in;
+				data_out_r <= data_in;
 			end
 		end
 
-		assign ready_in  = ~fifo_state[1];
-		assign valid_out = fifo_state[0];
-		assign data_out  = shift_reg[fifo_state[1]];
+		always @(posedge clk) begin
+			if (fire_in) begin
+				buffer <= data_out_r;
+			end
+		end
+
+		assign ready_in  = valid_in_r;
+		assign valid_out = valid_out_r;
+		assign data_out  = valid_in_r ? data_out_r : buffer;
 
 	end
 
