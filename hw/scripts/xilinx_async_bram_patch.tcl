@@ -597,6 +597,11 @@ proc resolve_async_bram {inst} {
     # Connect vcc_pin to all input pins attached to is_raddr_reg_net
     puts "INFO: Connecting pin '$vcc_pin' to '$is_raddr_reg_net's pins."
     replace_net_source $is_raddr_reg_net $vcc_pin
+
+    # Remove all async_ram cells
+    foreach cell [find_nested_cells $inst "g_async_ram.*" 0] {
+      remove_cell_from_netlist $cell
+    }
   } else {
     puts "WARNING: Not all read addresses are registered!"
 
@@ -606,11 +611,17 @@ proc resolve_async_bram {inst} {
     # Connect gnd_pin to all input pins attached to is_raddr_reg_net
     puts "INFO: Connecting pin '$gnd_pin' to '$is_raddr_reg_net's pins."
     replace_net_source $is_raddr_reg_net $gnd_pin
+
+    # Remove all sync_ram cells
+    foreach cell [find_nested_cells $inst "g_sync_ram.*" 0] {
+      remove_cell_from_netlist $cell
+    }
   }
 
   # Remove placeholder cell
-  set placeholder [get_cells "${inst}${hier_sep}placeholder"]
-  remove_cell_from_netlist $placeholder
+  foreach cell [find_nested_cells $inst "placeholder$"] {
+    remove_cell_from_netlist $cell
+  }
 }
 
 proc resolve_async_brams {} {
@@ -628,7 +639,26 @@ proc resolve_async_brams {} {
   }
 }
 
+proc dump_async_bram_cells {} {
+  set bram_patch_cells [get_cells -hierarchical -filter {REF_NAME =~ "*VX_async_ram_patch*"}]
+  if {[llength $bram_patch_cells] != 0} {
+    foreach cell $bram_patch_cells {
+      puts "INFO: Found async BRAM patch cell: '$cell'."
+      set child_cells [find_cell_descendants $cell]
+      foreach child $child_cells {
+        set type [get_property REF_NAME $child]
+        puts "INFO:   child cell: '$child', type: '$type'"
+      }
+    }
+  } else {
+    puts "INFO: No async BRAM patch cells found in the design."
+  }
+}
+
 }
 
 # Invoke the procedure to resolve async BRAM
 vortex::resolve_async_brams
+
+# dump async bram cells
+#vortex::dump_async_bram_cells
