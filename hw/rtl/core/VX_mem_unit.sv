@@ -47,7 +47,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_lmem_switches
         VX_lmem_switch #(
-            .REQ0_OUT_BUF (3),
+            .REQ0_OUT_BUF (1),
             .REQ1_OUT_BUF (0),
             .RSP_OUT_BUF  (1),
             .ARBITER      ("P")
@@ -78,7 +78,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .TAG_SEL_BITS (LSU_TAG_WIDTH - `UUID_WIDTH),
             .ARBITER      ("P"),
             .REQ_OUT_BUF  (3),
-            .RSP_OUT_BUF  (0)
+            .RSP_OUT_BUF  (2)
         ) lmem_adapter (
             .clk        (clk),
             .reset      (reset),
