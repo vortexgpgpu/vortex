@@ -4,6 +4,24 @@ XLEN=${XLEN:-32}
 
 RISCV_TOOLCHAIN_PATH=${RISCV_TOOLCHAIN_PATH:-$TOOLDIR"/riscv"$XLEN"-gnu-toolchain"}
 
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+RESTORE_PREV_DIR=$(pwd)
+
+REPOSITORY=https://github.com/MichaelJSr/testcases/raw/main
+VECTOR_TESTS_BASE_NAME=vector-tests.tar.bz2
+
+vector_tests()
+{
+    parts=$(eval echo {a..l})
+    for x in $parts
+    do
+        wget $REPOSITORY/$VECTOR_TESTS_BASE_NAME.parta$x
+    done
+    cat $VECTOR_TESTS_BASE_NAME.part* > $VECTOR_TESTS_BASE_NAME
+    tar -xvf $VECTOR_TESTS_BASE_NAME
+    rm -f $VECTOR_TESTS_BASE_NAME*
+}
+
 # get selected testcases from command line or run default testcases
 if [ "$#" == "0" ];
 then
@@ -44,10 +62,9 @@ else
   testcases="${@}"
 fi
 
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-RESTORE_PREV_DIR=$(pwd)
 if [ ! -d "$SCRIPT_DIR/testcases" ]; then
-  mkdir -p "$SCRIPT_DIR/testcases/v$VLEN"x"$XLEN"
+  # Fallback #3: Download testcases
+  vector_tests
 fi
 cd $SCRIPT_DIR/testcases/v$VLEN"x"$XLEN
 
