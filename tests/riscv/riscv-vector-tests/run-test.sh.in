@@ -66,6 +66,8 @@ cd $SCRIPT_DIR
 
 # Fallback #2: If testcases directory exists, we will use existing testcases
 if [ ! -d "$SCRIPT_DIR/testcases" ]; then
+  mkdir testcases
+  cd testcases
   # Fallback #3: Otherwise, download testcases
   vector_tests
 fi
