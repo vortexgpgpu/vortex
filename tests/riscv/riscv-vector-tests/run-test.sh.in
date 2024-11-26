@@ -7,7 +7,7 @@ RISCV_TOOLCHAIN_PATH=${RISCV_TOOLCHAIN_PATH:-$TOOLDIR"/riscv"$XLEN"-gnu-toolchai
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 RESTORE_PREV_DIR=$(pwd)
 
-REPOSITORY=https://github.com/MichaelJSr/testcases/raw/main
+VECTOR_TESTS_REPOSITORY=https://github.com/MichaelJSr/testcases/raw/main
 VECTOR_TESTS_BASE_NAME=vector-tests.tar.bz2
 
 vector_tests()
@@ -15,7 +15,7 @@ vector_tests()
     parts=$(eval echo {a..l})
     for x in $parts
     do
-        wget $REPOSITORY/$VECTOR_TESTS_BASE_NAME.parta$x
+        wget $VECTOR_TESTS_REPOSITORY/$VECTOR_TESTS_BASE_NAME.parta$x
     done
     cat $VECTOR_TESTS_BASE_NAME.part* > $VECTOR_TESTS_BASE_NAME
     tar -xvf $VECTOR_TESTS_BASE_NAME
@@ -62,21 +62,26 @@ else
   testcases="${@}"
 fi
 
+cd $SCRIPT_DIR
+
+# Fallback #2: If testcases directory exists, we will use existing testcases
 if [ ! -d "$SCRIPT_DIR/testcases" ]; then
-  # Fallback #3: Download testcases
+  # Fallback #3: Otherwise, download testcases
   vector_tests
 fi
+
 cd $SCRIPT_DIR/testcases/v$VLEN"x"$XLEN
 
-passed=0
-failed=0
-selected=0
-
+# Fallback #1: Copy locally generated testcases (assuming they exist)
 rm *".ddr4.log"
 for testcase in ${testcases[@]}; do
   rm "$testcase"*.elf "$testcase"*.bin "$testcase"*.dump "$testcase"*.log
   cp -f $SCRIPT_DIR/../../../third_party/riscv-vector-tests/out/v"$VLEN"x"$XLEN"machine/bin/stage2/"$testcase"* .
 done
+
+passed=0
+failed=0
+selected=0
 
 # count all available testcases, exclude *.elf, *.bin, *.dump, *.log to prevent double counting
 all=$(($(ls | wc -l) - $(ls -d *.elf | wc -l) - $(ls -d *.bin | wc -l) - $(ls -d *.dump | wc -l) - $(ls -d *.log | wc -l)))
