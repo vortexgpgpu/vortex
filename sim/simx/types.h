@@ -84,7 +84,8 @@ enum class RegType {
   None,
   Integer,
   Float,
-  Count
+  Count,
+  Vector
 };
 
 inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
@@ -92,6 +93,7 @@ inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
   case RegType::None: break;
   case RegType::Integer: os << "x"; break;
   case RegType::Float:   os << "f"; break;
+  case RegType::Vector:  os << "v"; break;
   default: assert(false);
   }
   return os;

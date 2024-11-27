@@ -188,6 +188,19 @@
 `define VX_CSR_MIMPID                   12'hF13
 `define VX_CSR_MHARTID                  12'hF14
 
+// Vector CSRs
+
+`define VX_CSR_VSTART                   12'h008
+`define VX_CSR_VXSAT                    12'h009
+`define VX_CSR_VXRM                     12'h00A
+`define VX_CSR_VCSR                     12'h00F
+`define VX_CSR_VL                       12'hC20
+`define VX_CSR_VTYPE                    12'hC21
+`define VX_CSR_VLENB                    12'hC22
+`define VX_CSR_VCYCLE                   12'hC00
+`define VX_CSR_VTIME                    12'hC01
+`define VX_CSR_VINSTRET                 12'hC02
+
 // GPGU CSRs
 
 `define VX_CSR_THREAD_ID                12'hCC0

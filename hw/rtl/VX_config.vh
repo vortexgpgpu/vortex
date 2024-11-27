@@ -87,6 +87,10 @@
 `endif
 `endif
 
+`ifndef VLEN
+`define VLEN 256
+`endif
+
 `ifndef NUM_CLUSTERS
 `define NUM_CLUSTERS 1
 `endif

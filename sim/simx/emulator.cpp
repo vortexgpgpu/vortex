@@ -33,6 +33,7 @@ using namespace vortex;
 Emulator::warp_t::warp_t(const Arch& arch)
   : ireg_file(arch.num_threads(), std::vector<Word>(MAX_NUM_REGS))
   , freg_file(arch.num_threads(), std::vector<uint64_t>(MAX_NUM_REGS))
+  , vreg_file(MAX_NUM_REGS, std::vector<Byte>(arch.vsize()))
   , uuid(0)
 {}
 
@@ -64,6 +65,26 @@ void Emulator::warp_t::clear(uint64_t startup_addr) {
     #endif
     }
   }
+
+  for (auto& reg_file : this->vreg_file) {
+    for (auto& reg : reg_file) {
+    #ifndef NDEBUG
+      reg = 0;
+    #else
+      reg = std::rand();
+    #endif
+    }
+  }
+
+  for (auto& reg_file : this->vreg_file) {
+    for (auto& reg : reg_file) {
+    #ifndef NDEBUG
+      reg = 0;
+    #else
+      reg = std::rand();
+    #endif
+    }
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -79,7 +100,12 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     // considered to be big enough to hold input tiles for one output tile.
     // In future versions, scratchpad size should be fixed to an appropriate value.
     , scratchpad(std::vector<Word>(32 * 32 * 32768))
+    , csrs_(arch.num_warps())
 {
+  for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
+    csrs_.at(i).resize(arch.num_threads());
+  }
+
   this->clear();
 }
 
@@ -463,6 +489,32 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   case VX_CSR_FFLAGS:     return warps_.at(wid).fcsr & 0x1F;
   case VX_CSR_FRM:        return (warps_.at(wid).fcsr >> 5);
   case VX_CSR_FCSR:       return warps_.at(wid).fcsr;
+
+  // Vector CRSs
+  case VX_CSR_VSTART:
+    return csrs_.at(wid).at(tid)[VX_CSR_VSTART];
+  case VX_CSR_VXSAT:
+    return csrs_.at(wid).at(tid)[VX_CSR_VXSAT];
+  case VX_CSR_VXRM:
+    return csrs_.at(wid).at(tid)[VX_CSR_VXRM];
+  case VX_CSR_VCSR: {
+    Word vxsat = csrs_.at(wid).at(tid)[VX_CSR_VXSAT];
+    Word vxrm = csrs_.at(wid).at(tid)[VX_CSR_VXRM];
+    return (vxrm << 1) | vxsat;
+  }
+  case VX_CSR_VL:
+    return csrs_.at(wid).at(tid)[VX_CSR_VL];
+  case VX_CSR_VTYPE:
+    return csrs_.at(wid).at(tid)[VX_CSR_VTYPE];
+  case VX_CSR_VLENB:
+    return VLEN / 8;
+  case VX_CSR_VCYCLE:
+    return csrs_.at(wid).at(tid)[VX_CSR_VCYCLE];
+  case VX_CSR_VTIME:
+    return csrs_.at(wid).at(tid)[VX_CSR_VTIME];
+  case VX_CSR_VINSTRET:
+    return csrs_.at(wid).at(tid)[VX_CSR_VINSTRET];
+
   case VX_CSR_MHARTID:    return (core_->id() * arch_.num_warps() + wid) * arch_.num_threads() + tid;
   case VX_CSR_THREAD_ID:  return tid;
   case VX_CSR_WARP_ID:    return wid;
@@ -578,6 +630,29 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t tid, uint32_t wid) {
   case VX_CSR_MSCRATCH:
     csr_mscratch_ = value;
     break;
+
+  // Vector CRSs
+  case VX_CSR_VSTART:
+    csrs_.at(wid).at(tid)[VX_CSR_VSTART] = value;
+    break;
+  case VX_CSR_VXSAT:
+    csrs_.at(wid).at(tid)[VX_CSR_VXSAT] = value & 0b1;
+    break;
+  case VX_CSR_VXRM:
+    csrs_.at(wid).at(tid)[VX_CSR_VXRM] = value & 0b11;
+    break;
+  case VX_CSR_VCSR:
+    csrs_.at(wid).at(tid)[VX_CSR_VXSAT] = value & 0b1;
+    csrs_.at(wid).at(tid)[VX_CSR_VXRM] = (value >> 1) & 0b11;
+    break;
+  case VX_CSR_VL: // read only, written by vset(i)vl(i)
+    csrs_.at(wid).at(tid)[VX_CSR_VL] = value;
+    break;
+  case VX_CSR_VTYPE: // read only, written by vset(i)vl(i)
+    csrs_.at(wid).at(tid)[VX_CSR_VTYPE] = value;
+    break;
+  case VX_CSR_VLENB: // read only, set to VLEN / 8
+
   case VX_CSR_SATP:
   #ifdef VM_ENABLE
     // warps_.at(wid).fcsr = (warps_.at(wid).fcsr & ~0x1F) | (value & 0x1F);
