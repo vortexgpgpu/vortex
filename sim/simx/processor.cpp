@@ -107,11 +107,12 @@ void ProcessorImpl::set_satp(uint64_t satp) {
 }
 #endif
 
-void ProcessorImpl::run() {
+int ProcessorImpl::run() {
   SimPlatform::instance().reset();
   this->reset();
 
   bool done;
+  int exitcode = 0;
   do {
     SimPlatform::instance().tick();
     done = true;
@@ -120,9 +121,12 @@ void ProcessorImpl::run() {
         done = false;
         continue;
       }
+      exitcode |= cluster->get_exitcode();
     }
     perf_mem_latency_ += perf_mem_pending_reads_;
   } while (!done);
+
+  return exitcode;
 }
 
 void ProcessorImpl::reset() {
@@ -168,8 +172,8 @@ void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-void Processor::run() {
-  impl_->run();
+int Processor::run() {
+  return impl_->run();
 }
 
 void Processor::dcr_write(uint32_t addr, uint32_t value) {

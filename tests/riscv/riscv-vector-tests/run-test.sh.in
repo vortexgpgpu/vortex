@@ -93,8 +93,8 @@ for testcase in ${testcases[@]}; do
     ln -s "$f" "$f.elf";
     "$RISCV_TOOLCHAIN_PATH"/bin/riscv"$XLEN"-unknown-elf-objdump -D "$f.elf" > "$f.dump";
     "$RISCV_TOOLCHAIN_PATH"/bin/riscv"$XLEN"-unknown-elf-objcopy -O binary "$f.elf" "$f.bin";
-    $SCRIPT_DIR/../../../sim/simx/simx -c 1 "$f.bin" &> "$f.log";
-    if [ $? -eq 13 ]; then
+    $SCRIPT_DIR/../../../sim/simx/simx -v -c 1 "$f.bin" &> "$f.log";
+    if [ $? -eq 1 ]; then
       echo "$f PASSED"
       let "passed++"
     else
@@ -103,7 +103,7 @@ for testcase in ${testcases[@]}; do
     fi
     # REG_TESTS=1 informs the script to delete the previous binary after each vector test to save disk space
     # Otherwise, the vector regression tests would run out of disk space eventually
-    if [ $REG_TESTS -eq 1 ]; then
+    if [ -n "$REG_TESTS" ] && [ $REG_TESTS -eq 1 ]; then
       cat $f.log
       rm $f.*
       rm $f
