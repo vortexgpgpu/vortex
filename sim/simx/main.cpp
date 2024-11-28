@@ -41,7 +41,7 @@ const char* program = nullptr;
 
 static void parse_args(int argc, char **argv) {
   	int c;
-  	while ((c = getopt(argc, argv, "t:w:c:rsh")) != -1) {
+  	while ((c = getopt(argc, argv, "t:w:c:vsh")) != -1) {
     	switch (c) {
       case 't':
         num_threads = atoi(optarg);
