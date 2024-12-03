@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -32,16 +32,13 @@ public:
     CacheSim::PerfStats dcache;
   };
 
-  SimPort<MemReq> icache_mem_req_port;
-  SimPort<MemRsp> icache_mem_rsp_port;
+  std::vector<SimPort<MemReq>> mem_req_ports;
+  std::vector<SimPort<MemRsp>> mem_rsp_ports;
 
-  SimPort<MemReq> dcache_mem_req_port;
-  SimPort<MemRsp> dcache_mem_rsp_port;
-
-  Socket(const SimContext& ctx, 
+  Socket(const SimContext& ctx,
          uint32_t socket_id,
-         Cluster* cluster, 
-         const Arch &arch, 
+         Cluster* cluster,
+         const Arch &arch,
          const DCRS &dcrs);
 
   ~Socket();
@@ -66,14 +63,14 @@ public:
 
   bool running() const;
 
-  int get_exitcode() const;  
+  int get_exitcode() const;
 
   void barrier(uint32_t bar_id, uint32_t count, uint32_t core_id);
 
   void resume(uint32_t core_id);
 
   PerfStats perf_stats() const;
-  
+
 private:
   uint32_t                socket_id_;
   Cluster*                cluster_;

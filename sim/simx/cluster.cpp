@@ -21,8 +21,8 @@ Cluster::Cluster(const SimContext& ctx,
                  const Arch &arch,
                  const DCRS &dcrs)
   : SimObject(ctx, "cluster")
-  , mem_req_port(this)
-  , mem_rsp_port(this)
+  , mem_req_ports(L2_MEM_PORTS, this)
+  , mem_rsp_ports(L2_MEM_PORTS, this)
   , cluster_id_(cluster_id)
   , processor_(processor)
   , sockets_(NUM_SOCKETS)
@@ -35,26 +35,9 @@ Cluster::Cluster(const SimContext& ctx,
 
   // create sockets
 
-  snprintf(sname, 100, "cluster%d-icache-arb", cluster_id);
-  auto icache_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, sockets_per_cluster);
-
-  snprintf(sname, 100, "cluster%d-dcache-arb", cluster_id);
-  auto dcache_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, sockets_per_cluster);
-
   for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
     uint32_t socket_id = cluster_id * sockets_per_cluster + i;
-    auto socket = Socket::Create(socket_id,
-                                 this,
-                                 arch,
-                                 dcrs);
-
-    socket->icache_mem_req_port.bind(&icache_arb->ReqIn.at(i));
-    icache_arb->RspIn.at(i).bind(&socket->icache_mem_rsp_port);
-
-    socket->dcache_mem_req_port.bind(&dcache_arb->ReqIn.at(i));
-    dcache_arb->RspIn.at(i).bind(&socket->dcache_mem_rsp_port);
-
-    sockets_.at(i) = socket;
+    sockets_.at(i) = Socket::Create(socket_id, this, arch, dcrs);
   }
 
   // Create l2cache
@@ -77,14 +60,19 @@ Cluster::Cluster(const SimContext& ctx,
     2,                      // pipeline latency
   });
 
-  l2cache_->MemReqPorts.at(0).bind(&this->mem_req_port);
-  this->mem_rsp_port.bind(&l2cache_->MemRspPorts.at(0));
+  // connect l2cache core interfaces
+  for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
+    for (uint32_t j = 0; j < L1_MEM_PORTS; ++j) {
+      sockets_.at(i)->mem_req_ports.at(j).bind(&l2cache_->CoreReqPorts.at(i * L1_MEM_PORTS + j));
+      l2cache_->CoreRspPorts.at(i * L1_MEM_PORTS + j).bind(&sockets_.at(i)->mem_rsp_ports.at(j));
+    }
+  }
 
-  icache_arb->ReqOut.at(0).bind(&l2cache_->CoreReqPorts.at(0));
-  l2cache_->CoreRspPorts.at(0).bind(&icache_arb->RspOut.at(0));
-
-  dcache_arb->ReqOut.at(0).bind(&l2cache_->CoreReqPorts.at(1));
-  l2cache_->CoreRspPorts.at(1).bind(&dcache_arb->RspOut.at(0));
+  // connect l2cache memory interfaces
+  for (uint32_t i = 0; i < L2_MEM_PORTS; ++i) {
+    l2cache_->MemReqPorts.at(i).bind(&this->mem_req_ports.at(i));
+    this->mem_rsp_ports.at(i).bind(&l2cache_->MemRspPorts.at(i));
+  }
 }
 
 Cluster::~Cluster() {
