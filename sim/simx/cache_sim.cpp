@@ -305,8 +305,8 @@ private:
 	Config config_;
 	params_t params_;
 	std::vector<bank_t> banks_;
-	MemSwitch::Ptr bank_switch_;
-	MemSwitch::Ptr bypass_switch_;
+	MemArbiter::Ptr bank_arb_;
+	MemArbiter::Ptr bypass_arb_;
 	std::vector<SimPort<MemReq>> mem_req_ports_;
 	std::vector<SimPort<MemRsp>> mem_rsp_ports_;
 	std::vector<bank_req_t> pipeline_reqs_;
@@ -330,33 +330,33 @@ public:
 		snprintf(sname, 100, "%s-bypass-arb", simobject->name().c_str());
 
 		if (config_.bypass) {
-			bypass_switch_ = MemSwitch::Create(sname, ArbiterType::RoundRobin, config_.num_inputs);
+			bypass_arb_ = MemArbiter::Create(sname, ArbiterType::RoundRobin, config_.num_inputs);
 			for (uint32_t i = 0; i < config_.num_inputs; ++i) {
-				simobject->CoreReqPorts.at(i).bind(&bypass_switch_->ReqIn.at(i));
-				bypass_switch_->RspIn.at(i).bind(&simobject->CoreRspPorts.at(i));
+				simobject->CoreReqPorts.at(i).bind(&bypass_arb_->ReqIn.at(i));
+				bypass_arb_->RspIn.at(i).bind(&simobject->CoreRspPorts.at(i));
 			}
-			bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPorts.at(0));
-			simobject->MemRspPorts.at(0).bind(&bypass_switch_->RspOut.at(0));
+			bypass_arb_->ReqOut.at(0).bind(&simobject->MemReqPorts.at(0));
+			simobject->MemRspPorts.at(0).bind(&bypass_arb_->RspOut.at(0));
 			return;
 		}
 
 		if (strcmp(simobject->name().c_str(), "l3cache")) {
-			bypass_switch_ = MemSwitch::Create(sname, ArbiterType::Priority, 2);
-			bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPorts.at(0));
-			simobject->MemRspPorts.at(0).bind(&bypass_switch_->RspOut.at(0));
+			bypass_arb_ = MemArbiter::Create(sname, ArbiterType::Priority, 2);
+			bypass_arb_->ReqOut.at(0).bind(&simobject->MemReqPorts.at(0));
+			simobject->MemRspPorts.at(0).bind(&bypass_arb_->RspOut.at(0));
 
 			if (config.B != 0) {
 				snprintf(sname, 100, "%s-bank-arb", simobject->name().c_str());
-				bank_switch_ = MemSwitch::Create(sname, ArbiterType::RoundRobin, (1 << config.B));
+				bank_arb_ = MemArbiter::Create(sname, ArbiterType::RoundRobin, (1 << config.B));
 				for (uint32_t i = 0, n = (1 << config.B); i < n; ++i) {
-					mem_req_ports_.at(i).bind(&bank_switch_->ReqIn.at(i));
-					bank_switch_->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
+					mem_req_ports_.at(i).bind(&bank_arb_->ReqIn.at(i));
+					bank_arb_->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
 				}
-				bank_switch_->ReqOut.at(0).bind(&bypass_switch_->ReqIn.at(0));
-				bypass_switch_->RspIn.at(0).bind(&bank_switch_->RspOut.at(0));
+				bank_arb_->ReqOut.at(0).bind(&bypass_arb_->ReqIn.at(0));
+				bypass_arb_->RspIn.at(0).bind(&bank_arb_->RspOut.at(0));
 			} else {
-				mem_req_ports_.at(0).bind(&bypass_switch_->ReqIn.at(0));
-				bypass_switch_->RspIn.at(0).bind(&mem_rsp_ports_.at(0));
+				mem_req_ports_.at(0).bind(&bypass_arb_->ReqIn.at(0));
+				bypass_arb_->RspIn.at(0).bind(&mem_rsp_ports_.at(0));
 			}
 		} else {
 			// TODO: Change this into a crossbar
@@ -364,45 +364,45 @@ public:
 			//printf("%s connecting\n", simobject_->name().c_str());
 			//3
 			if (config.B != 0) {
-				bypass_switch_ = MemSwitch::Create(sname, ArbiterType::Priority, max, max);
+				bypass_arb_ = MemArbiter::Create(sname, ArbiterType::Priority, max, max);
 				for (uint32_t i = 0; i < max; ++i) {
 					//printf("%s connecting input=%d to MemPorts\n", simobject_->name().c_str(), i);
-					bypass_switch_->ReqOut.at(i).bind(&simobject->MemReqPorts.at(i % (1 << config.B)));
-					simobject->MemRspPorts.at(i % (1 << config.B)).bind(&bypass_switch_->RspOut.at(i));
+					bypass_arb_->ReqOut.at(i).bind(&simobject->MemReqPorts.at(i % (1 << config.B)));
+					simobject->MemRspPorts.at(i % (1 << config.B)).bind(&bypass_arb_->RspOut.at(i));
 				}
 			} else {
-				bypass_switch_ = MemSwitch::Create(sname, ArbiterType::Priority, 2);
-				bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPorts.at(0));
-				simobject->MemRspPorts.at(0).bind(&bypass_switch_->RspOut.at(0));
+				bypass_arb_ = MemArbiter::Create(sname, ArbiterType::Priority, 2);
+				bypass_arb_->ReqOut.at(0).bind(&simobject->MemReqPorts.at(0));
+				simobject->MemRspPorts.at(0).bind(&bypass_arb_->RspOut.at(0));
 			}
 
 			if (config.B != 0)
 			{
 				snprintf(sname, 100, "%s-bank-arb", simobject->name().c_str());
-				bank_switch_ = MemSwitch::Create(sname, ArbiterType::RoundRobin, (1 << config.B), (1 << config.B));
+				bank_arb_ = MemArbiter::Create(sname, ArbiterType::RoundRobin, (1 << config.B), (1 << config.B));
 				for (uint32_t i = 0, n = (1 << config.B); i < n; ++i)
 				{
 					//1
 					//printf("%s Connecting memory ports to bank=%d\n", simobject_->name().c_str(), i);
-					mem_req_ports_.at(i).bind(&bank_switch_->ReqIn.at(i));
-					bank_switch_->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
+					mem_req_ports_.at(i).bind(&bank_arb_->ReqIn.at(i));
+					bank_arb_->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
 				}
 				//2
 				if (config_.num_inputs > 1) {
 					for (uint32_t i = 0; i < max; ++i) {
 						//printf("%s connecting bank and bypass port=%d\n", simobject_->name().c_str(), i);
-						bank_switch_->ReqOut.at(i % (1 << config.B)).bind(&bypass_switch_->ReqIn.at(i));
-						bypass_switch_->RspIn.at(i).bind(&bank_switch_->RspOut.at(i % (1 << config.B)));
+						bank_arb_->ReqOut.at(i % (1 << config.B)).bind(&bypass_arb_->ReqIn.at(i));
+						bypass_arb_->RspIn.at(i).bind(&bank_arb_->RspOut.at(i % (1 << config.B)));
 					}
 				} else {
-					bank_switch_->ReqOut.at(0).bind(&bypass_switch_->ReqIn.at(0));
-					bypass_switch_->RspIn.at(0).bind(&bank_switch_->RspOut.at(0));
+					bank_arb_->ReqOut.at(0).bind(&bypass_arb_->ReqIn.at(0));
+					bypass_arb_->RspIn.at(0).bind(&bank_arb_->RspOut.at(0));
 				}
 			}
 			else
 			{
-				mem_req_ports_.at(0).bind(&bypass_switch_->ReqIn.at(0));
-				bypass_switch_->RspIn.at(0).bind(&mem_rsp_ports_.at(0));
+				mem_req_ports_.at(0).bind(&bypass_arb_->ReqIn.at(0));
+				bypass_arb_->RspIn.at(0).bind(&mem_rsp_ports_.at(0));
 			}
 		}
 
@@ -435,7 +435,7 @@ public:
 
 		// handle cache bypasss responses
 		{
-			auto& bypass_port = bypass_switch_->RspIn.at(1);
+			auto& bypass_port = bypass_arb_->RspIn.at(1);
 			if (!bypass_port.empty()) {
 				auto& mem_rsp = bypass_port.front();
 				this->processBypassResponse(mem_rsp);
@@ -568,7 +568,7 @@ private:
 		{
 			MemReq mem_req(core_req);
 			mem_req.tag = (core_req.tag << params_.log2_num_inputs) + req_id;
-			bypass_switch_->ReqIn.at(1).push(mem_req, 1);
+			bypass_arb_->ReqIn.at(1).push(mem_req, 1);
 			DT(3, simobject_->name() << " bypass-dram-req: " << mem_req);
 		}
 
@@ -743,8 +743,8 @@ CacheSim::CacheSim(const SimContext& ctx, const char* name, const Config& config
 	: SimObject<CacheSim>(ctx, name)
 	, CoreReqPorts(config.num_inputs, this)
 	, CoreRspPorts(config.num_inputs, this)
-	, MemReqPorts(NUM_MEM_PORTS, this)
-	, MemRspPorts(NUM_MEM_PORTS, this)
+	, MemReqPorts(config.mem_ports, this)
+	, MemRspPorts(config.mem_ports, this)
 	, impl_(new Impl(this, config))
 {}
 

@@ -466,19 +466,19 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Type>
-class Mux : public SimObject<Mux<Type>> {
+class Arbiter : public SimObject<Arbiter<Type>> {
 public:
   std::vector<SimPort<Type>> Inputs;
   std::vector<SimPort<Type>> Outputs;
 
-  Mux(
+  Arbiter(
     const SimContext& ctx,
     const char* name,
     ArbiterType type,
     uint32_t num_inputs,
     uint32_t num_outputs = 1,
     uint32_t delay = 1
-  ) : SimObject<Mux<Type>>(ctx, name)
+  ) : SimObject<Arbiter<Type>>(ctx, name)
     , Inputs(num_inputs, this)
     , Outputs(num_outputs, this)
     , type_(type)
@@ -551,7 +551,7 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Req, typename Rsp>
-class Switch : public SimObject<Switch<Req, Rsp>> {
+class TxArbiter : public SimObject<TxArbiter<Req, Rsp>> {
 public:
   std::vector<SimPort<Req>>  ReqIn;
   std::vector<SimPort<Rsp>>  RspIn;
@@ -559,7 +559,7 @@ public:
   std::vector<SimPort<Req>>  ReqOut;
   std::vector<SimPort<Rsp>>  RspOut;
 
-  Switch(
+  TxArbiter(
     const SimContext& ctx,
     const char* name,
     ArbiterType type,
@@ -567,7 +567,7 @@ public:
     uint32_t num_outputs = 1,
     uint32_t delay = 1
   )
-    : SimObject<Switch<Req, Rsp>>(ctx, name)
+    : SimObject<TxArbiter<Req, Rsp>>(ctx, name)
     , ReqIn(num_inputs, this)
     , RspIn(num_inputs, this)
     , ReqOut(num_outputs, this)
@@ -657,11 +657,11 @@ private:
   uint32_t lg_num_reqs_;
 };
 
-using MemSwitch = Switch<MemReq, MemRsp>;
+using MemArbiter = TxArbiter<MemReq, MemRsp>;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class LocalMemDemux : public SimObject<LocalMemDemux> {
+class LocalMemSwitch : public SimObject<LocalMemSwitch> {
 public:
   SimPort<LsuReq> ReqIn;
   SimPort<LsuRsp> RspIn;
@@ -672,7 +672,7 @@ public:
   SimPort<LsuReq> ReqDC;
   SimPort<LsuRsp> RspDC;
 
-  LocalMemDemux(
+  LocalMemSwitch(
     const SimContext& ctx,
     const char* name,
     uint32_t delay

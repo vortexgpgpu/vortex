@@ -24,7 +24,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
 
   // create memory simulator
   memsim_ = MemSim::Create("dram", MemSim::Config{
-    MEMORY_BANKS,
+    PLATFORM_MEMORY_BANKS,
     uint32_t(arch.num_cores()) * arch.num_clusters()
   });
 
@@ -38,7 +38,8 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     log2ceil(L3_NUM_BANKS),   // B
     XLEN,                     // address bits
     1,                        // number of ports
-    uint8_t(arch.num_clusters()), // request size
+    L3_NUM_REQS,              // request size
+    L3_MEM_PORTS,             // memory ports
     L3_WRITEBACK,             // write-back
     false,                    // write response
     L3_MSHR_SIZE,             // mshr size
@@ -47,7 +48,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
   );
 
   // connect L3 memory ports
-  for (uint32_t i = 0; i < NUM_MEM_PORTS; ++i) {
+  for (uint32_t i = 0; i < L3_MEM_PORTS; ++i) {
     l3cache_->MemReqPorts.at(i).bind(&memsim_->MemReqPorts.at(i));
     memsim_->MemRspPorts.at(i).bind(&l3cache_->MemRspPorts.at(i));
   }
@@ -61,11 +62,11 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
   }
 
   // set up memory profiling
-  for (uint32_t i = 0; i < NUM_MEM_PORTS; ++i) {
+  for (uint32_t i = 0; i < L3_MEM_PORTS; ++i) {
     memsim_->MemReqPorts.at(i).tx_callback([&](const MemReq& req, uint64_t cycle){
       __unused (cycle);
-      perf_mem_reads_   += !req.write;
-      perf_mem_writes_  += req.write;
+      perf_mem_reads_  += !req.write;
+      perf_mem_writes_ += req.write;
       perf_mem_pending_reads_ += !req.write;
     });
     memsim_->MemRspPorts.at(i).tx_callback([&](const MemRsp&, uint64_t cycle){

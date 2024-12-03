@@ -78,10 +78,10 @@ public:
       _value = ((uint64_t(MISA_EXT))<<32) | ((log2floor(XLEN)-4) << 30) | MISA_STD;
       break;
     case VX_CAPS_NUM_MEM_BANKS:
-      _value = MEMORY_BANKS;
+      _value = PLATFORM_MEMORY_BANKS;
       break;
     case VX_CAPS_MEM_BANK_SIZE:
-      _value = 1ull << (MEM_ADDR_WIDTH / MEMORY_BANKS);
+      _value = 1ull << (MEM_ADDR_WIDTH / PLATFORM_MEMORY_BANKS);
       break;
     default:
       std::cout << "invalid caps id: " << caps_id << std::endl;

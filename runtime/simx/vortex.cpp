@@ -65,7 +65,7 @@ public:
   ~vx_device() {
 #ifdef VM_ENABLE
   global_mem_.release(PAGE_TABLE_BASE_ADDR);
-  // for (auto i = addr_mapping.begin(); i != addr_mapping.end(); i++) 
+  // for (auto i = addr_mapping.begin(); i != addr_mapping.end(); i++)
   //   page_table_mem_->release(i->second << MEM_PAGE_SIZE);
   delete virtual_mem_;
   delete page_table_mem_;
@@ -113,10 +113,10 @@ public:
       _value = ((uint64_t(MISA_EXT))<<32) | ((log2floor(XLEN)-4) << 30) | MISA_STD;
       break;
     case VX_CAPS_NUM_MEM_BANKS:
-      _value = MEMORY_BANKS;
+      _value = PLATFORM_MEMORY_BANKS;
       break;
     case VX_CAPS_MEM_BANK_SIZE:
-      _value = 1ull << (MEM_ADDR_WIDTH / MEMORY_BANKS);
+      _value = 1ull << (MEM_ADDR_WIDTH / PLATFORM_MEMORY_BANKS);
       break;
     default:
       std::cout << "invalid caps id: " << caps_id << std::endl;
@@ -164,7 +164,7 @@ public:
     if ((STARTUP_ADDR <= dev_pAddr) && (dev_pAddr <= (STARTUP_ADDR + 0x40000)))
       return 0;
 
-    // Now all conditions are not met. Return true because the address needs translation 
+    // Now all conditions are not met. Return true because the address needs translation
     return 1;
   }
 
@@ -277,7 +277,7 @@ public:
 #ifdef VM_ENABLE
     uint64_t pAddr = page_table_walk(dest_addr);
     // uint64_t pAddr;
-    // try { 
+    // try {
     //   pAddr = page_table_walk(dest_addr);
     // } catch ( Page_Fault_Exception ) {
     //   // HW: place holder
@@ -466,18 +466,18 @@ public:
     CHECK_ERR(virtual_mem_reserve(STARTUP_ADDR, 0x40000, VX_MEM_READ_WRITE), {
       return err;
     });
-    
+
     if (virtual_mem_ == nullptr) {
       // virtual_mem_ does not intefere with physical mem, so no need to free space
-      
+
       return 1;
     }
-    
+
     if (VM_ADDR_MODE == BARE)
       DBGPRINT("[RT:init_VM] VA_MODE = BARE MODE(addr= 0x0)");
     else
       CHECK_ERR(alloc_page_table(&pt_addr),{return err;});
-    
+
     CHECK_ERR(processor_.set_satp_by_addr(pt_addr),{return err;});
     return 0;
   }
@@ -604,7 +604,7 @@ public:
       }
       else
       {
-        // Leaf node found. 
+        // Leaf node found.
         // Check RWX permissions according to access type.
         if (pte.r == 0)
         {

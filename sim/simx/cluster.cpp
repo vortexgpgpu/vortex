@@ -36,10 +36,10 @@ Cluster::Cluster(const SimContext& ctx,
   // create sockets
 
   snprintf(sname, 100, "cluster%d-icache-arb", cluster_id);
-  auto icache_switch = MemSwitch::Create(sname, ArbiterType::RoundRobin, sockets_per_cluster);
+  auto icache_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, sockets_per_cluster);
 
   snprintf(sname, 100, "cluster%d-dcache-arb", cluster_id);
-  auto dcache_switch = MemSwitch::Create(sname, ArbiterType::RoundRobin, sockets_per_cluster);
+  auto dcache_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, sockets_per_cluster);
 
   for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
     uint32_t socket_id = cluster_id * sockets_per_cluster + i;
@@ -48,11 +48,11 @@ Cluster::Cluster(const SimContext& ctx,
                                  arch,
                                  dcrs);
 
-    socket->icache_mem_req_port.bind(&icache_switch->ReqIn.at(i));
-    icache_switch->RspIn.at(i).bind(&socket->icache_mem_rsp_port);
+    socket->icache_mem_req_port.bind(&icache_arb->ReqIn.at(i));
+    icache_arb->RspIn.at(i).bind(&socket->icache_mem_rsp_port);
 
-    socket->dcache_mem_req_port.bind(&dcache_switch->ReqIn.at(i));
-    dcache_switch->RspIn.at(i).bind(&socket->dcache_mem_rsp_port);
+    socket->dcache_mem_req_port.bind(&dcache_arb->ReqIn.at(i));
+    dcache_arb->RspIn.at(i).bind(&socket->dcache_mem_rsp_port);
 
     sockets_.at(i) = socket;
   }
@@ -69,7 +69,8 @@ Cluster::Cluster(const SimContext& ctx,
     log2ceil(L2_NUM_BANKS), // B
     XLEN,                   // address bits
     1,                      // number of ports
-    2,                      // request size
+    L2_NUM_REQS,            // request size
+    L2_MEM_PORTS,           // memory ports
     L2_WRITEBACK,           // write-back
     false,                  // write response
     L2_MSHR_SIZE,           // mshr size
@@ -79,11 +80,11 @@ Cluster::Cluster(const SimContext& ctx,
   l2cache_->MemReqPorts.at(0).bind(&this->mem_req_port);
   this->mem_rsp_port.bind(&l2cache_->MemRspPorts.at(0));
 
-  icache_switch->ReqOut.at(0).bind(&l2cache_->CoreReqPorts.at(0));
-  l2cache_->CoreRspPorts.at(0).bind(&icache_switch->RspOut.at(0));
+  icache_arb->ReqOut.at(0).bind(&l2cache_->CoreReqPorts.at(0));
+  l2cache_->CoreRspPorts.at(0).bind(&icache_arb->RspOut.at(0));
 
-  dcache_switch->ReqOut.at(0).bind(&l2cache_->CoreReqPorts.at(1));
-  l2cache_->CoreRspPorts.at(1).bind(&dcache_switch->RspOut.at(0));
+  dcache_arb->ReqOut.at(0).bind(&l2cache_->CoreReqPorts.at(1));
+  l2cache_->CoreRspPorts.at(1).bind(&dcache_arb->RspOut.at(0));
 }
 
 Cluster::~Cluster() {

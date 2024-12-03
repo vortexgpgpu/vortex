@@ -59,7 +59,7 @@ public:
 		dram_sim_.tick();
 		uint32_t counter = 0;
 
-		for (uint32_t i = 0; i < NUM_MEM_PORTS; ++i) {
+		for (uint32_t i = 0; i < config_.channels; ++i) {
 			if (simobject_->MemReqPorts.at(i).empty())
 				continue;
 
@@ -107,8 +107,8 @@ public:
 
 MemSim::MemSim(const SimContext& ctx, const char* name, const Config& config)
 	: SimObject<MemSim>(ctx, name)
-	, MemReqPorts(NUM_MEM_PORTS, this)
-	, MemRspPorts(NUM_MEM_PORTS, this)
+	, MemReqPorts(config.channels, this)
+	, MemRspPorts(config.channels, this)
 	, impl_(new Impl(this, config))
 {}
 

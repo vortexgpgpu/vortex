@@ -15,11 +15,11 @@
 
 using namespace vortex;
 
-LocalMemDemux::LocalMemDemux(
+LocalMemSwitch::LocalMemSwitch(
   const SimContext& ctx,
   const char* name,
   uint32_t delay
-) : SimObject<LocalMemDemux>(ctx, name)
+) : SimObject<LocalMemSwitch>(ctx, name)
   , ReqIn(this)
   , RspIn(this)
   , ReqLmem(this)
@@ -29,9 +29,9 @@ LocalMemDemux::LocalMemDemux(
   , delay_(delay)
 {}
 
-void LocalMemDemux::reset() {}
+void LocalMemSwitch::reset() {}
 
-void LocalMemDemux::tick() {
+void LocalMemSwitch::tick() {
   // process incoming responses
   if (!RspLmem.empty()) {
     auto& out_rsp = RspLmem.front();

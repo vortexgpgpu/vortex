@@ -76,7 +76,7 @@ Core::Core(const SimContext& ctx,
   // create lsu demux
   for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
     snprintf(sname, 100, "core%d-lsu_demux%d", core_id, i);
-    lsu_demux_.at(i) = LocalMemDemux::Create(sname, 1);
+    lsu_demux_.at(i) = LocalMemSwitch::Create(sname, 1);
   }
 
   // create lsu dcache adapter
@@ -130,7 +130,7 @@ Core::Core(const SimContext& ctx,
   dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_LSU_BLOCKS, NUM_LSU_LANES);
   dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_SFU_BLOCKS, NUM_SFU_LANES);
   dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(arch, 2, NUM_TCU_BLOCKS, NUM_TCU_LANES);
-  
+
   // initialize execute units
   func_units_.at((int)FUType::ALU) = SimPlatform::instance().create_object<AluUnit>(this);
   func_units_.at((int)FUType::FPU) = SimPlatform::instance().create_object<FpuUnit>(this);
@@ -141,7 +141,7 @@ Core::Core(const SimContext& ctx,
   // bind commit arbiters
   for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
     snprintf(sname, 100, "core%d-commit-arb%d", core_id, i);
-    auto arbiter = TraceSwitch::Create(sname, ArbiterType::RoundRobin, (uint32_t)FUType::Count, 1);
+    auto arbiter = TraceArbiter::Create(sname, ArbiterType::RoundRobin, (uint32_t)FUType::Count, 1);
     for (uint32_t j = 0; j < (uint32_t)FUType::Count; ++j) {
       func_units_.at(j)->Outputs.at(i).bind(&arbiter->Inputs.at(j));
     }

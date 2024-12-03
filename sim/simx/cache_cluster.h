@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,12 +24,12 @@ public:
 	SimPort<MemReq> MemReqPort;
 	SimPort<MemRsp> MemRspPort;
 
-	CacheCluster(const SimContext& ctx, 
-							const char* name, 
-							uint32_t num_inputs, 
-							uint32_t num_caches, 
+	CacheCluster(const SimContext& ctx,
+							const char* name,
+							uint32_t num_inputs,
+							uint32_t num_caches,
 							uint32_t num_requests,
-							const CacheSim::Config& cache_config) 
+							const CacheSim::Config& cache_config)
 		: SimObject(ctx, name)
 		, CoreReqPorts(num_inputs, std::vector<SimPort<MemReq>>(num_requests, this))
 		, CoreRspPorts(num_inputs, std::vector<SimPort<MemRsp>>(num_requests, this))
@@ -44,21 +44,21 @@ public:
 		}
 
 		char sname[100];
-		
-		std::vector<MemSwitch::Ptr> input_arbs(num_inputs);
+
+		std::vector<MemArbiter::Ptr> input_arbs(num_inputs);
 		for (uint32_t j = 0; j < num_inputs; ++j) {
 			snprintf(sname, 100, "%s-input-arb%d", name, j);
-			input_arbs.at(j) = MemSwitch::Create(sname, ArbiterType::RoundRobin, num_requests, cache_config.num_inputs);
+			input_arbs.at(j) = MemArbiter::Create(sname, ArbiterType::RoundRobin, num_requests, cache_config.num_inputs);
 			for (uint32_t i = 0; i < num_requests; ++i) {
 				this->CoreReqPorts.at(j).at(i).bind(&input_arbs.at(j)->ReqIn.at(i));
 				input_arbs.at(j)->RspIn.at(i).bind(&this->CoreRspPorts.at(j).at(i));
 			}
 		}
 
-		std::vector<MemSwitch::Ptr> mem_arbs(cache_config.num_inputs);
+		std::vector<MemArbiter::Ptr> mem_arbs(cache_config.num_inputs);
 		for (uint32_t i = 0; i < cache_config.num_inputs; ++i) {
 			snprintf(sname, 100, "%s-mem-arb%d", name, i);
-			mem_arbs.at(i) = MemSwitch::Create(sname, ArbiterType::RoundRobin, num_inputs, num_caches);
+			mem_arbs.at(i) = MemArbiter::Create(sname, ArbiterType::RoundRobin, num_inputs, num_caches);
 			for (uint32_t j = 0; j < num_inputs; ++j) {
 				input_arbs.at(j)->ReqOut.at(i).bind(&mem_arbs.at(i)->ReqIn.at(j));
 				mem_arbs.at(i)->RspIn.at(j).bind(&input_arbs.at(j)->RspOut.at(i));
@@ -66,7 +66,7 @@ public:
 		}
 
 		snprintf(sname, 100, "%s-cache-arb", name);
-		auto cache_arb = MemSwitch::Create(sname, ArbiterType::RoundRobin, num_caches, 1);
+		auto cache_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, num_caches, 1);
 
 		for (uint32_t i = 0; i < num_caches; ++i) {
 			snprintf(sname, 100, "%s-cache%d", name, i);
@@ -88,14 +88,14 @@ public:
 	~CacheCluster() {}
 
 	void reset() {}
-	
+
 	void tick() {}
 
 	CacheSim::PerfStats perf_stats() const {
 		CacheSim::PerfStats perf;
 		for (auto cache : caches_) {
 			perf += cache->perf_stats();
-		} 
+		}
 		return perf;
 	}
 

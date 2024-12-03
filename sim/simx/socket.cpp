@@ -44,6 +44,7 @@ Socket::Socket(const SimContext& ctx,
     XLEN,                   // address bits
     1,                      // number of ports
     1,                      // number of inputs
+    1,                      // memory ports
     false,                  // write-back
     false,                  // write response
     (uint8_t)arch.num_warps(), // mshr size
@@ -64,6 +65,7 @@ Socket::Socket(const SimContext& ctx,
     XLEN,                   // address bits
     1,                      // number of ports
     DCACHE_NUM_REQS,        // number of inputs
+    L1_MEM_PORTS,           // memory ports
     DCACHE_WRITEBACK,       // write-back
     false,                  // write response
     DCACHE_MSHR_SIZE,       // mshr size

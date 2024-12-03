@@ -142,8 +142,8 @@ public:
     if (future_.valid()) {
       future_.wait();
     }
-    for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
-      delete mem_alloc_[i];
+    for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
+      delete mem_alloc_[b];
     }
     if (ram_) {
       delete ram_;
@@ -187,8 +187,8 @@ public:
     MP_M_AXI_MEM(PLATFORM_MEMORY_BANKS);
 
     // initialize memory allocator
-    for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
-      mem_alloc_[i] = new MemoryAllocator(0, mem_bank_size_, 4096, 64);
+    for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
+      mem_alloc_[b] = new MemoryAllocator(0, mem_bank_size_, 4096, 64);
     }
 
     // reset the device
@@ -257,8 +257,9 @@ public:
     //printf("%0ld: [sim] register_write: address=0x%x\n", timestamp, offset);
     device_->s_axi_ctrl_awvalid = 1;
     device_->s_axi_ctrl_awaddr = offset;
-    while (!device_->s_axi_ctrl_awready)
+    while (!device_->s_axi_ctrl_awready) {
       this->tick();
+    }
     this->tick();
     device_->s_axi_ctrl_awvalid = 0;
 
@@ -267,8 +268,9 @@ public:
     device_->s_axi_ctrl_wvalid = 1;
     device_->s_axi_ctrl_wdata = value;
     device_->s_axi_ctrl_wstrb = 0xf;
-    while (!device_->s_axi_ctrl_wready)
+    while (!device_->s_axi_ctrl_wready) {
       this->tick();
+    }
     this->tick();
     device_->s_axi_ctrl_wvalid = 0;
 
@@ -290,8 +292,9 @@ public:
     //printf("%0ld: [sim] register_read: address=0x%x\n", timestamp, offset);
     device_->s_axi_ctrl_arvalid = 1;
     device_->s_axi_ctrl_araddr = offset;
-    while (!device_->s_axi_ctrl_arready)
+    while (!device_->s_axi_ctrl_arready) {
       this->tick();
+    }
     this->tick();
     device_->s_axi_ctrl_arvalid = 0;
 
@@ -318,9 +321,9 @@ private:
       reqs.clear();
     }
 
-    for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
+    for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
       std::queue<mem_req_t*> empty;
-      std::swap(dram_queues_[i], empty);
+      std::swap(dram_queues_[b], empty);
     }
 
     device_->ap_rst_n = 0;
@@ -335,10 +338,10 @@ private:
     device_->ap_rst_n = 1;
 
     // this AXI device is always ready to accept new requests
-    for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
-      *m_axi_mem_[i].arready = 1;
-      *m_axi_mem_[i].awready = 1;
-      *m_axi_mem_[i].wready  = 1;
+    for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
+      *m_axi_mem_[b].arready = 1;
+      *m_axi_mem_[b].awready = 1;
+      *m_axi_mem_[b].wready  = 1;
     }
   }
 
@@ -355,10 +358,10 @@ private:
 
     dram_sim_.tick();
 
-    for (int i = 0; i < PLATFORM_MEMORY_BANKS; ++i) {
-      if (!dram_queues_[i].empty()) {
-        auto mem_req = dram_queues_[i].front();
-        if (dram_sim_.send_request(mem_req->write, mem_req->addr, i, [](void* arg) {
+    for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
+      if (!dram_queues_[b].empty()) {
+        auto mem_req = dram_queues_[b].front();
+        if (dram_sim_.send_request(mem_req->write, mem_req->addr, b, [](void* arg) {
           auto orig_req = reinterpret_cast<mem_req_t*>(arg);
           if (orig_req->ready) {
             delete orig_req;
@@ -366,7 +369,7 @@ private:
             orig_req->ready = true;
           }
         }, mem_req)) {
-          dram_queues_[i].pop();
+          dram_queues_[b].pop();
         }
       }
     }
