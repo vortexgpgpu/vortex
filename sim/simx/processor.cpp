@@ -25,7 +25,7 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
   // create memory simulator
   memsim_ = MemSim::Create("dram", MemSim::Config{
     PLATFORM_MEMORY_BANKS,
-    uint32_t(arch.num_cores()) * arch.num_clusters()
+    L3_MEM_PORTS
   });
 
   // create clusters

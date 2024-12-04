@@ -20,7 +20,7 @@ Cluster::Cluster(const SimContext& ctx,
                  ProcessorImpl* processor,
                  const Arch &arch,
                  const DCRS &dcrs)
-  : SimObject(ctx, "cluster")
+  : SimObject(ctx, StrFormat("cluster%d", cluster_id))
   , mem_req_ports(L2_MEM_PORTS, this)
   , mem_rsp_ports(L2_MEM_PORTS, this)
   , cluster_id_(cluster_id)
@@ -42,7 +42,7 @@ Cluster::Cluster(const SimContext& ctx,
 
   // Create l2cache
 
-  snprintf(sname, 100, "cluster%d-l2cache", cluster_id);
+  snprintf(sname, 100, "%s-l2cache", this->name().c_str());
   l2cache_ = CacheSim::Create(sname, CacheSim::Config{
     !L2_ENABLED,
     log2ceil(L2_CACHE_SIZE),// C

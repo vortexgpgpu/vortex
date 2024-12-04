@@ -24,8 +24,7 @@ protected:
 	LocalMem* simobject_;
 	Config    config_;
 	RAM       ram_;
-	int32_t   bank_sel_addr_start_;
-  int32_t   bank_sel_addr_end_;
+	MemCrossBar::Ptr mem_xbar_;
 	PerfStats perf_stats_;
 
 	uint64_t to_local_addr(uint64_t addr) {
@@ -40,9 +39,15 @@ public:
 		: simobject_(simobject)
 		, config_(config)
 		, ram_(config.capacity)
-		, bank_sel_addr_start_(0)
-		, bank_sel_addr_end_(config.B-1)
-	{}
+	{
+		char sname[100];
+		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
+		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config.num_reqs, (1 << config.B));
+		for (uint32_t i = 0; i < config.num_reqs; ++i) {
+			simobject->Inputs.at(i).bind(&mem_xbar_->ReqIn.at(i));
+			mem_xbar_->RspIn.at(i).bind(&simobject->Outputs.at(i));
+		}
+	}
 
 	virtual ~Impl() {}
 
@@ -82,7 +87,7 @@ public:
 				continue;
 			}
 
-			DT(4, simobject_->name() << " mem-req" << req_id << ": "<< core_req);
+			DT(4, simobject_->name() << "-mem-req" << req_id << ": "<< core_req);
 
 			in_used_banks.at(bank_id) = true;
 

@@ -21,7 +21,7 @@ Socket::Socket(const SimContext& ctx,
                 Cluster* cluster,
                 const Arch &arch,
                 const DCRS &dcrs)
-  : SimObject(ctx, "socket")
+  : SimObject(ctx, StrFormat("socket%d", socket_id))
   , mem_req_ports(L1_MEM_PORTS, this)
   , mem_rsp_ports(L1_MEM_PORTS, this)
   , socket_id_(socket_id)
@@ -31,7 +31,7 @@ Socket::Socket(const SimContext& ctx,
   auto cores_per_socket = cores_.size();
 
   char sname[100];
-  snprintf(sname, 100, "socket%d-icaches", socket_id);
+  snprintf(sname, 100, "%s-icaches", this->name().c_str());
   icaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_ICACHES, CacheSim::Config{
     !ICACHE_ENABLED,
     log2ceil(ICACHE_SIZE),  // C
@@ -49,7 +49,7 @@ Socket::Socket(const SimContext& ctx,
     2,                      // pipeline latency
   });
 
-  snprintf(sname, 100, "socket%d-dcaches", socket_id);
+  snprintf(sname, 100, "%s-dcaches", this->name().c_str());
   dcaches_ = CacheCluster::Create(sname, cores_per_socket, NUM_DCACHES, CacheSim::Config{
     !DCACHE_ENABLED,
     log2ceil(DCACHE_SIZE),  // C
@@ -70,7 +70,7 @@ Socket::Socket(const SimContext& ctx,
   // connect l1 caches to outgoing memory interfaces
   for (uint32_t i = 0; i < L1_MEM_PORTS; ++i) {
     if (i == 0) {
-      snprintf(sname, 100, "socket%d-l1_arb%d", socket_id, i);
+      snprintf(sname, 100, "%s-l1_arb%d", this->name().c_str(), i);
       auto l1_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, 2, 1);
 
       icaches_->MemReqPorts.at(0).bind(&l1_arb->ReqIn.at(1));
@@ -82,8 +82,8 @@ Socket::Socket(const SimContext& ctx,
       l1_arb->ReqOut.at(0).bind(&this->mem_req_ports.at(0));
       this->mem_rsp_ports.at(0).bind(&l1_arb->RspOut.at(0));
     } else {
-      this->mem_req_ports.at(i).bind(&dcaches_->MemReqPorts.at(i));
-      dcaches_->MemRspPorts.at(i).bind(&this->mem_rsp_ports.at(i));
+      dcaches_->MemReqPorts.at(i).bind(&this->mem_req_ports.at(i));
+      this->mem_rsp_ports.at(i).bind(&dcaches_->MemRspPorts.at(i));
     }
   }
 

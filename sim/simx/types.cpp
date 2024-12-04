@@ -32,16 +32,16 @@ LocalMemSwitch::LocalMemSwitch(
 void LocalMemSwitch::reset() {}
 
 void LocalMemSwitch::tick() {
-  // process incoming responses
+  // process outgoing responses
   if (!RspLmem.empty()) {
     auto& out_rsp = RspLmem.front();
-    DT(4, this->name() << " lmem-rsp: " << out_rsp);
+    DT(4, this->name() << "-lmem-rsp: " << out_rsp);
     RspIn.push(out_rsp, 1);
     RspLmem.pop();
   }
   if (!RspDC.empty()) {
     auto& out_rsp = RspDC.front();
-    DT(4, this->name() << " dc-rsp: " << out_rsp);
+    DT(4, this->name() << "-dc-rsp: " << out_rsp);
     RspIn.push(out_rsp, 1);
     RspDC.pop();
   }
@@ -73,12 +73,12 @@ void LocalMemSwitch::tick() {
 
     if (!out_dc_req.mask.none()) {
       ReqDC.push(out_dc_req, delay_);
-      DT(4, this->name() << " dc-req: " << out_dc_req);
+      DT(4, this->name() << "-dc-req: " << out_dc_req);
     }
 
     if (!out_lmem_req.mask.none()) {
       ReqLmem.push(out_lmem_req, delay_);
-      DT(4, this->name() << " lmem-req: " << out_lmem_req);
+      DT(4, this->name() << "-lmem-req: " << out_lmem_req);
     }
     ReqIn.pop();
   }
@@ -104,12 +104,12 @@ void LsuMemAdapter::reset() {}
 void LsuMemAdapter::tick() {
   uint32_t input_size = ReqOut.size();
 
-  // process incoming responses
+  // process outgoing responses
   for (uint32_t i = 0; i < input_size; ++i) {
     if (RspOut.at(i).empty())
       continue;
     auto& out_rsp = RspOut.at(i).front();
-    DT(4, this->name() << " rsp" << i << ": " << out_rsp);
+    DT(4, this->name() << "-rsp" << i << ": " << out_rsp);
 
     // build memory response
     LsuRsp in_rsp(input_size);
@@ -155,7 +155,7 @@ void LsuMemAdapter::tick() {
 
         // send memory request
         ReqOut.at(i).push(out_req, delay_);
-        DT(4, this->name() << " req" << i << ": " << out_req);
+        DT(4, this->name() << "-req" << i << ": " << out_req);
       }
     }
     ReqIn.pop();

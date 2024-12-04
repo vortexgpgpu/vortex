@@ -30,7 +30,7 @@ Core::Core(const SimContext& ctx,
            Socket* socket,
            const Arch &arch,
            const DCRS &dcrs)
-  : SimObject(ctx, "core")
+  : SimObject(ctx, StrFormat("core%d", core_id))
   , icache_req_ports(1, this)
   , icache_rsp_ports(1, this)
   , dcache_req_ports(DCACHE_NUM_REQS, this)
@@ -59,12 +59,12 @@ Core::Core(const SimContext& ctx,
 
   // create the memory coalescer
   for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
-    snprintf(sname, 100, "core%d-coalescer%d", core_id, i);
+    snprintf(sname, 100, "%s-coalescer%d", this->name().c_str(), i);
     mem_coalescers_.at(i) = MemCoalescer::Create(sname, LSU_CHANNELS, DCACHE_CHANNELS, DCACHE_WORD_SIZE, LSUQ_OUT_SIZE, 1);
   }
 
   // create local memory
-  snprintf(sname, 100, "core%d-local_mem", core_id);
+  snprintf(sname, 100, "%s-local_mem", this->name().c_str());
   local_mem_ = LocalMem::Create(sname, LocalMem::Config{
     (1 << LMEM_LOG_SIZE),
     LSU_WORD_SIZE,
@@ -75,19 +75,19 @@ Core::Core(const SimContext& ctx,
 
   // create lsu demux
   for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
-    snprintf(sname, 100, "core%d-lsu_demux%d", core_id, i);
+    snprintf(sname, 100, "%s-lsu_demux%d", this->name().c_str(), i);
     lsu_demux_.at(i) = LocalMemSwitch::Create(sname, 1);
   }
 
   // create lsu dcache adapter
   for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
-    snprintf(sname, 100, "core%d-lsu_dcache_adapter%d", core_id, i);
+    snprintf(sname, 100, "%s-lsu_dcache_adapter%d", this->name().c_str(), i);
     lsu_dcache_adapter_.at(i) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
   }
 
   // create lsu lmem adapter
   for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
-    snprintf(sname, 100, "core%d-lsu_lmem_adapter%d", core_id, i);
+    snprintf(sname, 100, "%s-lsu_lmem_adapter%d", this->name().c_str(), i);
     lsu_lmem_adapter_.at(i) = LsuMemAdapter::Create(sname, LSU_CHANNELS, 1);
   }
 
@@ -140,7 +140,7 @@ Core::Core(const SimContext& ctx,
 
   // bind commit arbiters
   for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
-    snprintf(sname, 100, "core%d-commit-arb%d", core_id, i);
+    snprintf(sname, 100, "%s-commit-arb%d", this->name().c_str(), i);
     auto arbiter = TraceArbiter::Create(sname, ArbiterType::RoundRobin, (uint32_t)FUType::Count, 1);
     for (uint32_t j = 0; j < (uint32_t)FUType::Count; ++j) {
       func_units_.at(j)->Outputs.at(i).bind(&arbiter->Inputs.at(j));
