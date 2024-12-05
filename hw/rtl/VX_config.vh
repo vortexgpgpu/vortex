@@ -830,6 +830,12 @@
     `define EXT_M_ENABLED   0
 `endif
 
+`ifdef EXT_V_ENABLE
+    `define EXT_V_ENABLED   1
+`else
+    `define EXT_V_ENABLED   0
+`endif
+
 `ifdef EXT_ZICOND_ENABLE
     `define EXT_ZICOND_ENABLED 1
 `else
@@ -846,7 +852,7 @@
 `define ISA_STD_N           13
 `define ISA_STD_Q           16
 `define ISA_STD_S           18
-`define ISA_STD_U           20
+`define ISA_STD_V           21
 
 `define ISA_EXT_ICACHE      0
 `define ISA_EXT_DCACHE      1
@@ -883,7 +889,7 @@
                 | (0 << 18) /* S - Supervisor mode implemented */ \
                 | (0 << 19) /* T - Tentatively reserved for Transactional Memory extension */ \
                 | (1 << 20) /* U - User mode implemented */ \
-                | (0 << 21) /* V - Tentatively reserved for Vector extension */ \
+                | (`EXT_V_ENABLED << 21) /* V - Tentatively reserved for Vector extension */ \
                 | (0 << 22) /* W - Reserved */ \
                 | (1 << 23) /* X - Non-standard extensions present */ \
                 | (0 << 24) /* Y - Reserved */ \

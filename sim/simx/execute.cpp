@@ -677,7 +677,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       for (uint32_t t = thread_start; t < num_threads; ++t) {
         if (!warp.tmask.test(t))
           continue;
-        uint64_t mem_addr = rsdata[t][0].i + immsrc;         
+        uint64_t mem_addr = rsdata[t][0].i + immsrc;
         uint64_t read_data = 0;
         this->dcache_read(&read_data, mem_addr, data_bytes);
         trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
@@ -703,12 +703,14 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           rddata[t].u64 = read_data;
           break;
         default:
-          std::abort();      
+          std::abort();
         }
       }
       rd_write = true;
     } else {
-      loadVector(instr, wid, rsdata);
+    #ifdef EXT_V_ENABLE
+      this->loadVector(instr, wid, rsdata);
+    #endif
     }
     break;
   }
@@ -736,14 +738,16 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         case 1:
         case 2:
         case 3:
-          this->dcache_write(&write_data, mem_addr, data_bytes);  
+          this->dcache_write(&write_data, mem_addr, data_bytes);
           break;
         default:
           std::abort();
         }
       }
     } else {
-      storeVector(instr, wid, rsdata);
+    #ifdef EXT_V_ENABLE
+      this->storeVector(instr, wid, rsdata);
+    #endif
     }
     break;
   }
@@ -1595,6 +1599,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         std::abort();
     }
   } break;
+#ifdef EXT_V_ENABLE
   case Opcode::VSET: {
     auto func6 = instr.getFunc6();
     if ((func3 == 0x7) || (func3 == 0x2 && func6 == 16) || (func3 == 0x1 && func6 == 16)) {
@@ -1602,6 +1607,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     }
     executeVector(instr, wid, rsdata, rddata);
   } break;
+#endif
   default:
     std::abort();
   }

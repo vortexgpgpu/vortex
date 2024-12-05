@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -12,11 +12,11 @@
 // limitations under the License.
 
 #include "rvfloats.h"
-#include "softfloat_ext.h"
 #include <stdio.h>
 
 extern "C" {
 #include <softfloat.h>
+#include "softfloat_ext.h"
 #include <internals.h>
 #include <../RISCV/specialize.h>
 }
@@ -344,7 +344,7 @@ bool rv_fle_d(uint64_t a, uint64_t b, uint32_t* fflags) {
 bool rv_feq_s(uint32_t a, uint32_t b, uint32_t* fflags) {
   rv_init(0);
   auto r = f32_eq(to_float32_t(a), to_float32_t(b));
-  if (fflags) { *fflags = softfloat_exceptionFlags; }  
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
   return r;
 }
 
@@ -355,11 +355,11 @@ bool rv_feq_d(uint64_t a, uint64_t b, uint32_t* fflags) {
   return r;
 }
 
-uint32_t rv_fmin_s(uint32_t a, uint32_t b, uint32_t* fflags) {  
+uint32_t rv_fmin_s(uint32_t a, uint32_t b, uint32_t* fflags) {
   uint32_t r;
   rv_init(0);
   if (isNaNF32UI(a) && isNaNF32UI(b)) {
-    r = defaultNaNF32UI;   
+    r = defaultNaNF32UI;
   } else {
     auto fa = to_float32_t(a);
     auto fb = to_float32_t(b);
@@ -374,11 +374,11 @@ uint32_t rv_fmin_s(uint32_t a, uint32_t b, uint32_t* fflags) {
   return r;
 }
 
-uint64_t rv_fmin_d(uint64_t a, uint64_t b, uint32_t* fflags) {  
+uint64_t rv_fmin_d(uint64_t a, uint64_t b, uint32_t* fflags) {
   uint64_t r;
   rv_init(0);
   if (isNaNF64UI(a) && isNaNF64UI(b)) {
-    r = defaultNaNF64UI;   
+    r = defaultNaNF64UI;
   } else {
     auto fa = to_float64_t(a);
     auto fb = to_float64_t(b);
@@ -397,7 +397,7 @@ uint32_t rv_fmax_s(uint32_t a, uint32_t b, uint32_t* fflags) {
   uint32_t r;
   rv_init(0);
   if (isNaNF32UI(a) && isNaNF32UI(b)) {
-    r = defaultNaNF32UI;   
+    r = defaultNaNF32UI;
   } else {
     auto fa = to_float32_t(a);
     auto fb = to_float32_t(b);
@@ -416,7 +416,7 @@ uint64_t rv_fmax_d(uint64_t a, uint64_t b, uint32_t* fflags) {
   uint64_t r;
   rv_init(0);
   if (isNaNF64UI(a) && isNaNF64UI(b)) {
-    r = defaultNaNF64UI;   
+    r = defaultNaNF64UI;
   } else {
     auto fa = to_float64_t(a);
     auto fb = to_float64_t(b);
@@ -449,8 +449,8 @@ uint32_t rv_fclss_s(uint32_t a) {
       ( !sign && subnormOrZero && !fracZero )  << 5 |
       ( !sign && subnormOrZero && fracZero )   << 4 |
       ( isNaN &&  isSNaN )                     << 8 |
-      ( isNaN && !isSNaN )                     << 9;  
-  
+      ( isNaN && !isSNaN )                     << 9;
+
   return r;
 }
 
@@ -472,8 +472,8 @@ uint32_t rv_fclss_d(uint64_t a) {
       ( !sign && subnormOrZero && !fracZero )  << 5 |
       ( !sign && subnormOrZero && fracZero )   << 4 |
       ( isNaN &&  isSNaN )                     << 8 |
-      ( isNaN && !isSNaN )                     << 9;  
-  
+      ( isNaN && !isSNaN )                     << 9;
+
   return r;
 }
 
@@ -483,7 +483,7 @@ uint32_t rv_fsgnj_s(uint32_t a, uint32_t b) {
   return r;
 }
 
-uint64_t rv_fsgnj_d(uint64_t a, uint64_t b) {  
+uint64_t rv_fsgnj_d(uint64_t a, uint64_t b) {
   auto sign = b & F64_SIGN;
   auto r = sign | (a & ~F64_SIGN);
   return r;
@@ -495,7 +495,7 @@ uint32_t rv_fsgnjn_s(uint32_t a, uint32_t b) {
   return r;
 }
 
-uint64_t rv_fsgnjn_d(uint64_t a, uint64_t b) {  
+uint64_t rv_fsgnjn_d(uint64_t a, uint64_t b) {
   auto sign = ~b & F64_SIGN;
   auto r = sign | (a & ~F64_SIGN);
   return r;
@@ -508,7 +508,7 @@ uint32_t rv_fsgnjx_s(uint32_t a, uint32_t b) {
   return r;
 }
 
-uint64_t rv_fsgnjx_d(uint64_t a, uint64_t b) {  
+uint64_t rv_fsgnjx_d(uint64_t a, uint64_t b) {
   auto sign1 = a & F64_SIGN;
   auto sign2 = b & F64_SIGN;
   auto r = (sign1 ^ sign2) | (a & ~F64_SIGN);

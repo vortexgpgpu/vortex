@@ -390,7 +390,7 @@ static const char* op_string(const Instr &instr) {
     default:
       std::abort();
     }
-  
+
   case Opcode::TCU:
     switch(func3)
     {
@@ -405,36 +405,31 @@ static const char* op_string(const Instr &instr) {
   }
 }
 
-inline void vec_log(std::ostream &os, const Instr &instr) {
-  if (instr.getVUseMask() & set_func3)
-    os << ", func3:" << instr.getFunc3();
-  if (instr.getVUseMask() & set_func6)
-    os << ", func6:" << instr.getFunc6();
-  if (instr.getVUseMask() & set_imm)
-    os << ", imm:" << instr.getImm();
-  if (instr.getVUseMask() & set_vlswidth)
+inline void print_vec_attr(std::ostream &os, const Instr &instr) {
+  uint32_t mask = instr.getVattrMask();
+  if (mask & vattr_vlswidth)
     os << ", width:" << instr.getVlsWidth();
-  if (instr.getVUseMask() & set_vmop)
+  if (mask & vattr_vmop)
     os << ", mop:" << instr.getVmop();
-  if (instr.getVUseMask() & set_vumop)
+  if (mask & vattr_vumop)
     os << ", umop:" << instr.getVumop();
-  if (instr.getVUseMask() & set_vnf)
+  if (mask & vattr_vnf)
     os << ", nf:" << instr.getVnf();
-  if (instr.getVUseMask() & set_vmask)
+  if (mask & vattr_vmask)
     os << ", vmask:" << instr.getVmask();
-  if (instr.getVUseMask() & set_vs3)
+  if (mask & vattr_vs3)
     os << ", vs3:" << instr.getVs3();
-  if (instr.getVUseMask() & set_zimm)
+  if (mask & vattr_zimm)
     os << ", zimm:" << ((instr.hasZimm()) ? "true" : "false");
-  if (instr.getVUseMask() & set_vlmul)
+  if (mask & vattr_vlmul)
     os << ", lmul:" << instr.getVlmul();
-  if (instr.getVUseMask() & set_vsew)
+  if (mask & vattr_vsew)
     os << ", sew:" << instr.getVsew();
-  if (instr.getVUseMask() & set_vta)
+  if (mask & vattr_vta)
     os << ", ta:" << instr.getVta();
-  if (instr.getVUseMask() & set_vma)
+  if (mask & vattr_vma)
     os << ", ma:" << instr.getVma();
-  if (instr.getVUseMask() & set_vediv)
+  if (mask & vattr_vediv)
     os << ", ediv:" << instr.getVediv();
 }
 
@@ -463,8 +458,10 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << "0x" << std::hex << instr.getRSrc(0);
   }
-  // Log vector-specific vtype and vreg info
-  if (instr.isVec()) vec_log(os, instr);
+  // Log vector-specific attributes
+  if (instr.getVattrMask() != 0) {
+    print_vec_attr(os, instr);
+  }
   return os;
 }
 }
@@ -478,6 +475,7 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
   auto func3 = (code >> shift_func3) & mask_func3;
   auto func6 = (code >> shift_func6) & mask_func6;
   auto func7 = (code >> shift_func7) & mask_func7;
+  __unused(func6);
 
   auto rd  = (code >> shift_rd)  & mask_reg;
   auto rs1 = (code >> shift_rs1) & mask_reg;
@@ -690,9 +688,18 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
     auto imm = (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
     instr->setImm(sext(imm, width_j_imm+1));
   } break;
-    
+
+  case InstType::R4: {
+    instr->setDestReg(rd, RegType::Float);
+    instr->addSrcReg(rs1, RegType::Float);
+    instr->addSrcReg(rs2, RegType::Float);
+    instr->addSrcReg(rs3, RegType::Float);
+    instr->setFunc2(func2);
+    instr->setFunc3(func3);
+  } break;
+
+#ifdef EXT_V_ENABLE
   case InstType::V:
-    instr->setVec(true);
     switch (op) {
     case Opcode::VSET: {
       instr->setDestReg(rd, RegType::Integer);
@@ -738,7 +745,6 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
         }
       }
     } break;
-
     case Opcode::FL:
       instr->addSrcReg(rs1, RegType::Integer);
       instr->setVmop((code >> shift_vmop) & 0b11);
@@ -788,14 +794,7 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
       std::abort();
     }
     break;
-  case InstType::R4:
-    instr->setDestReg(rd, RegType::Float);
-    instr->addSrcReg(rs1, RegType::Float);
-    instr->addSrcReg(rs2, RegType::Float);
-    instr->addSrcReg(rs3, RegType::Float);
-    instr->setFunc2(func2);
-    instr->setFunc3(func3);
-    break;
+  #endif
 
   default:
     std::abort();

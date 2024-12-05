@@ -1132,7 +1132,7 @@ bool isMasked(std::vector<std::vector<Byte>> &vreg_file, uint32_t maskVreg, uint
   auto& mask = vreg_file.at(maskVreg);
   uint8_t emask = *(uint8_t *)(mask.data() + byteI / 8);
   uint8_t value = (emask >> (byteI % 8)) & 0x1;
-  DP(1, "Masking enabled: " << +!vmask << " mask element: " << +value);
+  DP(4, "Masking enabled: " << +!vmask << " mask element: " << +value);
   return !vmask && value == 0;
 }
 
@@ -1164,14 +1164,14 @@ void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emula
   }
   for (uint32_t i = 0; i < vl * nfields; i++) {
     if (isMasked(vreg_file, 0, i / nfields, vmask)) continue;
-    
+
     uint32_t nfields_strided = strided ? nfields : 1;
     Word mem_addr = ((rsdata[0][0].i) & 0xFFFFFFFC) + (i / nfields_strided) * stride + (i % nfields_strided) * sizeof(DT);
     Word mem_data = 0;
     emul_->dcache_read(&mem_data, mem_addr, vsew / 8);
-    DP(1, "Loading data " << mem_data << " from: " << mem_addr << " to vec reg: " << getVreg<DT>(rdest + (i % nfields) * emul, i / nfields) << " i: " << i / nfields);
+    DP(4, "Loading data " << mem_data << " from: " << mem_addr << " to vec reg: " << getVreg<DT>(rdest + (i % nfields) * emul, i / nfields) << " i: " << i / nfields);
     DT &result = getVregData<DT>(vreg_file, rdest + (i % nfields) * emul, i / nfields);
-    DP(1, "Previous data: " << +result);
+    DP(4, "Previous data: " << +result);
     result = (DT) mem_data;
   }
 }
@@ -1225,13 +1225,13 @@ void vector_op_vv_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulat
         std::cout << "Unsupported iSew: " << iSew << std::endl;
         std::abort();
     }
-    
+
     Word mem_addr = ((rsdata[0][0].i) & 0xFFFFFFFC) + offset + (i % nfields) * sizeof(DT);
     Word mem_data = 0;
     emul_->dcache_read(&mem_data, mem_addr, vsew / 8);
-    DP(1, "VLUX/VLOX - Loading data " << mem_data << " from: " << mem_addr << " with offset: " << std::dec << offset << " to vec reg: " << getVreg<DT>(rdest + (i % nfields) * emul, i / nfields) << " i: " << i / nfields);
+    DP(4, "VLUX/VLOX - Loading data " << mem_data << " from: " << mem_addr << " with offset: " << std::dec << offset << " to vec reg: " << getVreg<DT>(rdest + (i % nfields) * emul, i / nfields) << " i: " << i / nfields);
     DT &result = getVregData<DT>(vreg_file, rdest + (i % nfields) * emul, i / nfields);
-    DP(1, "Previous data: " << +result);
+    DP(4, "Previous data: " << +result);
     result = (DT) mem_data;
   }
 }
@@ -1256,104 +1256,6 @@ void vector_op_vv_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulat
   }
 }
 
-void Emulator::loadVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata) {
-  auto &warp = warps_.at(wid);
-  auto vmask  = instr.getVmask();
-  auto rdest  = instr.getRDest();
-  auto mop = instr.getVmop();
-  switch (mop) {
-    case 0b00: { // unit-stride
-      auto lumop  = instr.getVumop();
-      switch (lumop) {
-        case 0b10000: // vle8ff.v, vle16ff.v, vle32ff.v, vle64ff.v - we do not support exceptions -> treat like regular unit stride
-                       // vlseg2e8ff.v, vlseg2e16ff.v, vlseg2e32ff.v, vlseg2e64ff.v
-                       // vlseg3e8ff.v, vlseg3e16ff.v, vlseg3e32ff.v, vlseg3e64ff.v
-                       // vlseg4e8ff.v, vlseg4e16ff.v, vlseg4e32ff.v, vlseg4e64ff.v
-                       // vlseg5e8ff.v, vlseg5e16ff.v, vlseg5e32ff.v, vlseg5e64ff.v
-                       // vlseg6e8ff.v, vlseg6e16ff.v, vlseg6e32ff.v, vlseg6e64ff.v
-                       // vlseg7e8ff.v, vlseg7e16ff.v, vlseg7e32ff.v, vlseg7e64ff.v
-                       // vlseg8e8ff.v, vlseg8e16ff.v, vlseg8e32ff.v, vlseg8e64ff.v
-        case 0b0000: { // vle8.v, vle16.v, vle32.v, vle64.v
-                       // vlseg2e8.v, vlseg2e16.v, vlseg2e32.v, vlseg2e64.v
-                       // vlseg3e8.v, vlseg3e16.v, vlseg3e32.v, vlseg3e64.v
-                       // vlseg4e8.v, vlseg4e16.v, vlseg4e32.v, vlseg4e64.v
-                       // vlseg5e8.v, vlseg5e16.v, vlseg5e32.v, vlseg5e64.v
-                       // vlseg6e8.v, vlseg6e16.v, vlseg6e32.v, vlseg6e64.v
-                       // vlseg7e8.v, vlseg7e16.v, vlseg7e32.v, vlseg7e64.v
-                       // vlseg8e8.v, vlseg8e16.v, vlseg8e32.v, vlseg8e64.v
-          WordI stride = warp.vtype.vsew / 8;
-          uint32_t nfields = instr.getVnf() + 1;
-          vector_op_vix_load(warp.vreg_file, this, rsdata, rdest, warp.vtype.vsew, warp.vl, false, stride, nfields, warp.vtype.vlmul, vmask);
-          break;
-        }
-        case 0b1000: { // vl1r.v, vl2r.v, vl4r.v, vl8r.v
-          uint32_t nreg = instr.getVnf() + 1;
-          if (nreg != 1 && nreg != 2 && nreg != 4 && nreg != 8) {
-            std::cout << "Whole vector register load - reserved value for nreg: " << nreg << std::endl;
-            std::abort();
-          }
-          DP(1, "Whole vector register load with nreg: " << nreg);
-          uint32_t vl = nreg * VLEN / instr.getVsew();
-          WordI stride = instr.getVsew() / 8;
-          vector_op_vix_load(warp.vreg_file, this, rsdata, rdest, instr.getVsew(), vl, false, stride, 1, 0, vmask);
-          break;
-        }
-        case 0b1011: { // vlm.v
-          if (warp.vtype.vsew != 8) {
-            std::cout << "vlm.v only supports EEW=8, but EEW was: " << warp.vtype.vsew << std::endl;
-            std::abort();
-          }
-          WordI stride = warp.vtype.vsew / 8;
-          vector_op_vix_load(warp.vreg_file, this, rsdata, rdest, warp.vtype.vsew, (warp.vl + 7) / 8, false, stride, 1, 0, true);
-          break;
-        }
-        default:
-          std::cout << "Load vector - unsupported lumop: " << lumop << std::endl;
-          std::abort();
-      }
-      break;
-    }
-    case 0b10: { // strided: vlse8.v, vlse16.v, vlse32.v, vlse64.v
-                 // vlsseg2e8.v, vlsseg2e16.v, vlsseg2e32.v, vlsseg2e64.v
-                 // vlsseg3e8.v, vlsseg3e16.v, vlsseg3e32.v, vlsseg3e64.v
-                 // vlsseg4e8.v, vlsseg4e16.v, vlsseg4e32.v, vlsseg4e64.v
-                 // vlsseg5e8.v, vlsseg5e16.v, vlsseg5e32.v, vlsseg5e64.v
-                 // vlsseg6e8.v, vlsseg6e16.v, vlsseg6e32.v, vlsseg6e64.v
-                 // vlsseg7e8.v, vlsseg7e16.v, vlsseg7e32.v, vlsseg7e64.v
-                 // vlsseg8e8.v, vlsseg8e16.v, vlsseg8e32.v, vlsseg8e64.v
-      auto rsrc1  = instr.getRSrc(1);
-      auto rdest  = instr.getRDest();
-      WordI stride = warp.ireg_file.at(0).at(rsrc1);
-      uint32_t nfields = instr.getVnf() + 1;
-      vector_op_vix_load(warp.vreg_file, this, rsdata, rdest, warp.vtype.vsew, warp.vl, true, stride, nfields, warp.vtype.vlmul, vmask);
-      break;
-    }
-    case 0b01: // indexed - unordered, vluxei8.v, vluxei16.v, vluxei32.v, vluxei64.v
-               // vluxseg2e8.v, vluxseg2e16.v, vluxseg2e32.v, vluxseg2e64.v
-               // vluxseg3e8.v, vluxseg3e16.v, vluxseg3e32.v, vluxseg3e64.v
-               // vluxseg4e8.v, vluxseg4e16.v, vluxseg4e32.v, vluxseg4e64.v
-               // vluxseg5e8.v, vluxseg5e16.v, vluxseg5e32.v, vluxseg5e64.v
-               // vluxseg6e8.v, vluxseg6e16.v, vluxseg6e32.v, vluxseg6e64.v
-               // vluxseg7e8.v, vluxseg7e16.v, vluxseg7e32.v, vluxseg7e64.v
-               // vluxseg8e8.v, vluxseg8e16.v, vluxseg8e32.v, vluxseg8e64.v
-    case 0b11: { // indexed - ordered, vloxei8.v, vloxei16.v, vloxei32.v, vloxei64.v
-                 // vloxseg2e8.v, vloxseg2e16.v, vloxseg2e32.v, vloxseg2e64.v
-                 // vloxseg3e8.v, vloxseg3e16.v, vloxseg3e32.v, vloxseg3e64.v
-                 // vloxseg4e8.v, vloxseg4e16.v, vloxseg4e32.v, vloxseg4e64.v
-                 // vloxseg5e8.v, vloxseg5e16.v, vloxseg5e32.v, vloxseg5e64.v
-                 // vloxseg6e8.v, vloxseg6e16.v, vloxseg6e32.v, vloxseg6e64.v
-                 // vloxseg7e8.v, vloxseg7e16.v, vloxseg7e32.v, vloxseg7e64.v
-                 // vloxseg8e8.v, vloxseg8e16.v, vloxseg8e32.v, vloxseg8e64.v
-      uint32_t nfields = instr.getVnf() + 1;
-      vector_op_vv_load(warp.vreg_file, this, rsdata, instr.getRSrc(1), rdest, warp.vtype.vsew, instr.getVsew(), warp.vl, nfields, warp.vtype.vlmul, vmask);
-      break;
-    }
-    default:
-      std::cout << "Load vector - unsupported mop: " << mop << std::endl;
-      std::abort();
-  }
-}
-
 template <typename DT>
 void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, std::vector<reg_data_t[3]> &rsdata, uint32_t rsrc3, uint32_t vl, bool strided, WordI stride, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
@@ -1364,7 +1266,7 @@ void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emul
     uint32_t nfields_strided = strided ? nfields : 1;
     Word mem_addr = rsdata[0][0].i + (i / nfields_strided) * stride + (i % nfields_strided) * sizeof(DT);
     Word mem_data = getVregData<DT>(vreg_file, rsrc3 + (i % nfields) * emul, i / nfields);
-    DP(1, "Storing: " << std::hex << mem_data << " at: " << mem_addr << " from vec reg: " << getVreg<DT>(rsrc3 + (i % nfields) * emul, i / nfields) << " i: " << i / nfields);
+    DP(4, "Storing: " << std::hex << mem_data << " at: " << mem_addr << " from vec reg: " << getVreg<DT>(rsrc3 + (i % nfields) * emul, i / nfields) << " i: " << i / nfields);
     emul_->dcache_write(&mem_data, mem_addr, vsew / 8);
   }
 }
@@ -1417,7 +1319,7 @@ void vector_op_vv_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emula
 
     Word mem_addr = rsdata[0][0].i + offset + (i % nfields) * sizeof(DT);
     Word mem_data = getVregData<DT>(vreg_file, rsrc3 + (i % nfields) * emul, i / nfields);
-    DP(1, "VSUX/VSOX - Storing: " << std::hex << mem_data << " at: " << mem_addr << " with offset: " << std::dec << offset << " from vec reg: " << getVreg<DT>(rsrc3 + (i % nfields) * emul, i / nfields) << " i: " << i / nfields);
+    DP(4, "VSUX/VSOX - Storing: " << std::hex << mem_data << " at: " << mem_addr << " with offset: " << std::dec << offset << " from vec reg: " << getVreg<DT>(rsrc3 + (i % nfields) * emul, i / nfields) << " i: " << i / nfields);
     emul_->dcache_write(&mem_data, mem_addr, vsew / 8);
   }
 }
@@ -1442,97 +1344,16 @@ void vector_op_vv_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emula
   }
 }
 
-void Emulator::storeVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata) {
-  auto &warp = warps_.at(wid);
-  auto vmask  = instr.getVmask();
-  auto mop = instr.getVmop();
-  switch (mop) {
-    case 0b00: { // unit-stride
-      auto vs3  = instr.getRSrc(1);
-      auto sumop  = instr.getVumop();
-      WordI stride = warp.vtype.vsew / 8;
-      switch (sumop) {
-        case 0b0000: { // vse8.v, vse16.v, vse32.v, vse64.v
-          uint32_t nfields = instr.getVnf() + 1;
-          vector_op_vix_store(warp.vreg_file, this, rsdata, vs3, warp.vtype.vsew, warp.vl, false, stride, nfields, warp.vtype.vlmul, vmask);
-          break;
-        }
-        case 0b1000: { // vs1r.v, vs2r.v, vs4r.v, vs8r.v
-          uint32_t nreg = instr.getVnf() + 1;
-          if (nreg != 1 && nreg != 2 && nreg != 4 && nreg != 8) {
-            std::cout << "Whole vector register store - reserved value for nreg: " << nreg << std::endl;
-            std::abort();
-          }
-          DP(1, "Whole vector register store with nreg: " << nreg);
-          uint32_t vl = nreg * VLEN / 8;
-          vector_op_vix_store<uint8_t>(warp.vreg_file, this, rsdata, vs3, vl, false, stride, 1, 0, vmask);
-          break;
-        }
-        case 0b1011: { // vsm.v
-          if (warp.vtype.vsew != 8) {
-            std::cout << "vsm.v only supports EEW=8, but EEW was: " << warp.vtype.vsew << std::endl;
-            std::abort();
-          }
-          vector_op_vix_store(warp.vreg_file, this, rsdata, vs3, warp.vtype.vsew, (warp.vl + 7) / 8, false, stride, 1, 0, true);
-          break;
-        }
-        default:
-          std::cout << "Store vector - unsupported sumop: " << sumop << std::endl;
-          std::abort();
-      }
-      break;
-    }
-    case 0b10: { // strided: vsse8.v, vsse16.v, vsse32.v, vsse64.v
-                 // vssseg2e8.v, vssseg2e16.v, vssseg2e32.v, vssseg2e64.v
-                 // vssseg3e8.v, vssseg3e16.v, vssseg3e32.v, vssseg3e64.v
-                 // vssseg4e8.v, vssseg4e16.v, vssseg4e32.v, vssseg4e64.v
-                 // vssseg5e8.v, vssseg5e16.v, vssseg5e32.v, vssseg5e64.v
-                 // vssseg6e8.v, vssseg6e16.v, vssseg6e32.v, vssseg6e64.v
-                 // vssseg7e8.v, vssseg7e16.v, vssseg7e32.v, vssseg7e64.v
-                 // vssseg8e8.v, vssseg8e16.v, vssseg8e32.v, vssseg8e64.v
-      auto rsrc1  = instr.getRSrc(1);
-      auto vs3  = instr.getRSrc(2);
-      WordI stride = warp.ireg_file.at(0).at(rsrc1);
-      uint32_t nfields = instr.getVnf() + 1;
-      vector_op_vix_store(warp.vreg_file, this, rsdata, vs3, warp.vtype.vsew, warp.vl, true, stride, nfields, warp.vtype.vlmul, vmask);
-      break;
-    }
-    case 0b01: // indexed - unordered, vsuxei8.v, vsuxei16.v, vsuxei32.v, vsuxei64.v
-               // vsuxseg2ei8.v, vsuxseg2ei16.v, vsuxseg2ei32.v, vsuxseg2ei64.v
-               // vsuxseg3ei8.v, vsuxseg3ei16.v, vsuxseg3ei32.v, vsuxseg3ei64.v
-               // vsuxseg4ei8.v, vsuxseg4ei16.v, vsuxseg4ei32.v, vsuxseg4ei64.v
-               // vsuxseg5ei8.v, vsuxseg5ei16.v, vsuxseg5ei32.v, vsuxseg5ei64.v
-               // vsuxseg6ei8.v, vsuxseg6ei16.v, vsuxseg6ei32.v, vsuxseg6ei64.v
-               // vsuxseg7ei8.v, vsuxseg7ei16.v, vsuxseg7ei32.v, vsuxseg7ei64.v
-               // vsuxseg8ei8.v, vsuxseg8ei16.v, vsuxseg8ei32.v, vsuxseg8ei64.v
-    case 0b11: { // indexed - ordered, vsoxei8.v, vsoxei16.v, vsoxei32.v, vsoxei64.v
-                 // vsoxseg2ei8.v, vsoxseg2ei16.v, vsoxseg2ei32.v, vsoxseg2ei64.v
-                 // vsoxseg3ei8.v, vsoxseg3ei16.v, vsoxseg3ei32.v, vsoxseg3ei64.v
-                 // vsoxseg4ei8.v, vsoxseg4ei16.v, vsoxseg4ei32.v, vsoxseg4ei64.v
-                 // vsoxseg5ei8.v, vsoxseg5ei16.v, vsoxseg5ei32.v, vsoxseg5ei64.v
-                 // vsoxseg6ei8.v, vsoxseg6ei16.v, vsoxseg6ei32.v, vsoxseg6ei64.v
-                 // vsoxseg7ei8.v, vsoxseg7ei16.v, vsoxseg7ei32.v, vsoxseg7ei64.v
-                 // vsoxseg8ei8.v, vsoxseg8ei16.v, vsoxseg8ei32.v, vsoxseg8ei64.v
-      uint32_t nfields = instr.getVnf() + 1;
-      vector_op_vv_store(warp.vreg_file, this, rsdata, instr.getRSrc(1), instr.getRSrc(2), warp.vtype.vsew, instr.getVsew(), warp.vl, nfields, warp.vtype.vlmul, vmask);
-      break;
-    }
-    default:
-      std::cout << "Store vector - unsupported mop: " << mop << std::endl;
-      std::abort();      
-  }
-}
-
 template <template <typename DT1, typename DT2> class OP, typename DT>
 void vector_op_vix(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
   for (uint32_t i = 0; i < vl; i++) {
     if (isMasked(vreg_file, 0, i, vmask)) continue;
-    
+
     DT second = getVregData<DT>(vreg_file, rsrc0, i);
     DT third = getVregData<DT>(vreg_file, rdest, i);
     DT result = OP<DT, DT>::apply(first, second, third);
-    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    DP(4, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     getVregData<DT>(vreg_file, rdest, i) = result;
   }
 }
@@ -1557,11 +1378,11 @@ void vector_op_vix(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_
 template <template <typename DT1, typename DT2> class OP, typename DT>
 void vector_op_vix_carry(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl)
 {
-  for (uint32_t i = 0; i < vl; i++) {    
+  for (uint32_t i = 0; i < vl; i++) {
     DT second = getVregData<DT>(vreg_file, rsrc0, i);
     bool third = !isMasked(vreg_file, 0, i, false);
     DT result = OP<DT, DT>::apply(first, second, third);
-    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    DP(4, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     getVregData<DT>(vreg_file, rdest, i) = result;
   }
 }
@@ -1586,11 +1407,11 @@ void vector_op_vix_carry(Word src1, std::vector<std::vector<Byte>> &vreg_file, u
 template <template <typename DT1, typename DT2> class OP, typename DT, typename DTR>
 void vector_op_vix_carry_out(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vl, uint32_t vmask)
 {
-  for (uint32_t i = 0; i < vl; i++) {    
+  for (uint32_t i = 0; i < vl; i++) {
     DT second = getVregData<DT>(vreg_file, rsrc0, i);
     bool third = !vmask && !isMasked(vreg_file, 0, i, vmask);
     bool result = OP<DT, DTR>::apply(first, second, third);
-    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    DP(4, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     if (result) {
       getVregData<uint8_t>(vreg_file, rdest, i / 8) |= 1 << (i % 8);
     } else {
@@ -1621,7 +1442,7 @@ void vector_op_vix_merge(DT first, std::vector<std::vector<Byte>> &vreg_file, ui
 {
   for (uint32_t i = 0; i < vl; i++) {
     DT result = isMasked(vreg_file, 0, i, vmask) ? getVregData<DT>(vreg_file, rsrc0, i) : first;
-    DP(1, "Merge - Choosing result: " << +result);
+    DP(4, "Merge - Choosing result: " << +result);
     getVregData<DT>(vreg_file, rdest, i) = result;
   }
 }
@@ -1673,7 +1494,7 @@ void vector_op_vix_w(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32
     DT second = getVregData<DT>(vreg_file, rsrc0, i);
     DTR third = getVregData<DTR>(vreg_file, rdest, i);
     DTR result = OP<DT, DTR>::apply(first, second, third);
-    DP(1, "Widening " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    DP(4, "Widening " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     getVregData<DTR>(vreg_file, rdest, i) = result;
   }
 }
@@ -1716,7 +1537,7 @@ void vector_op_vix_n(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32
 
     DT second = getVregData<DT>(vreg_file, rsrc0, i);
     DTR result = OP<DT, DTR>::apply(first, second, vxrm, vxsat);
-    DP(1, "Narrowing " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    DP(4, "Narrowing " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
     getVregData<DTR>(vreg_file, rdest, i) = result;
   }
 }
@@ -1744,7 +1565,7 @@ void vector_op_vix_sat(DTR first, std::vector<std::vector<Byte>> &vreg_file, uin
 
     DT second = getVregData<DTR>(vreg_file, rsrc0, i);
     DTR result = OP<DT, DTR>::apply(first, second, vxrm, vxsat);
-    DP(1, "Saturating " << (OP<DT, DTR>::name()) << "(" << +(DTR)first << ", " << +(DTR)second << ")" << " = " << +(DTR)result);
+    DP(4, "Saturating " << (OP<DT, DTR>::name()) << "(" << +(DTR)first << ", " << +(DTR)second << ")" << " = " << +(DTR)result);
     getVregData<DTR>(vreg_file, rdest, i) = result;
   }
 }
@@ -1854,7 +1675,7 @@ void vector_op_vix_mask(DT first, std::vector<std::vector<Byte>> &vreg_file, uin
 
     DT second = getVregData<DT>(vreg_file, rsrc0, i);
     bool result = OP<DT, bool>::apply(first, second, 0);
-    DP(1, "Integer/float compare mask " << (OP<DT, bool>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    DP(4, "Integer/float compare mask " << (OP<DT, bool>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
     if (result) {
       getVregData<uint8_t>(vreg_file, rdest, i / 8) |= 1 << (i % 8);
     } else {
@@ -1889,7 +1710,7 @@ void vector_op_vix_slide(Word first, std::vector<std::vector<Byte>> &vreg_file, 
   // If scalar set is set this means we have a v(f)slide1up or v(f)slide1down instruction,
   // so first is our scalar value and we need to overwrite it with 1 for later computations
   if (scalar && vl && !isMasked(vreg_file, 0, scalarPos, vmask)) {
-    DP(1, "Slide - Moving scalar value " << +first << " to position " << +scalarPos);
+    DP(4, "Slide - Moving scalar value " << +first << " to position " << +scalarPos);
     getVregData<DT>(vreg_file, rdest, scalarPos) = first;
   }
   first = scalar ? 1 : first;
@@ -1899,7 +1720,7 @@ void vector_op_vix_slide(Word first, std::vector<std::vector<Byte>> &vreg_file, 
 
     __uint128_t iSrc = slideDown ? (__uint128_t)i + (__uint128_t)first : (__uint128_t)i - (__uint128_t)first; // prevent overflows/underflows
     DT value = (!slideDown || iSrc < VLMAX) ? getVregData<DT>(vreg_file, rsrc0, iSrc) : 0;
-    DP(1, "Slide - Moving value " << +value << " from position " << (uint64_t)iSrc << " to position " << +i);
+    DP(4, "Slide - Moving value " << +value << " from position " << (uint64_t)iSrc << " to position " << +i);
     getVregData<DT>(vreg_file, rdest, i) = value;
   }
 }
@@ -1928,7 +1749,7 @@ void vector_op_vix_gather(Word first, std::vector<std::vector<Byte>> &vreg_file,
     if (isMasked(vreg_file, 0, i, vmask)) continue;
 
     DT value = first < VLMAX ? getVregData<DT>(vreg_file, rsrc0, first) : 0;
-    DP(1, "Register gather - Moving value " << +value << " from position " << +first << " to position " << +i);
+    DP(4, "Register gather - Moving value " << +value << " from position " << +first << " to position " << +i);
     getVregData<DT>(vreg_file, rdest, i) = value;
   }
 }
@@ -1960,7 +1781,7 @@ void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uin
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
     DT third = getVregData<DT>(vreg_file, rdest, i);
     DT result = OP<DT, DT>::apply(first, second, third);
-    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    DP(4, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     getVregData<DT>(vreg_file, rdest, i) = result;
   }
 }
@@ -1990,7 +1811,7 @@ void vector_op_vv_carry(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
     bool third = !isMasked(vreg_file, 0, i, false);
     DT result = OP<DT, DT>::apply(first, second, third);
-    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    DP(4, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     getVregData<DT>(vreg_file, rdest, i) = result;
   }
 }
@@ -2020,7 +1841,7 @@ void vector_op_vv_carry_out(std::vector<std::vector<Byte>> &vreg_file, uint32_t 
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
     bool third = !vmask && !isMasked(vreg_file, 0, i, vmask);
     bool result = OP<DT, DTR>::apply(first, second, third);
-    DP(1, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    DP(4, (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     if (result) {
       getVregData<uint8_t>(vreg_file, rdest, i / 8) |= 1 << (i % 8);
     } else {
@@ -2052,7 +1873,7 @@ void vector_op_vv_merge(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc
   for (uint32_t i = 0; i < vl; i++) {
     uint32_t rsrc = isMasked(vreg_file, 0, i, vmask) ? rsrc1 : rsrc0;
     DT result = getVregData<DT>(vreg_file, rsrc, i);
-    DP(1, "Merge - Choosing result: " << +result);
+    DP(4, "Merge - Choosing result: " << +result);
     getVregData<DT>(vreg_file, rdest, i) = result;
   }
 }
@@ -2082,7 +1903,7 @@ void vector_op_vv_gather(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsr
 
     uint32_t first = ei16 ? getVregData<uint16_t>(vreg_file, rsrc0, i) : getVregData<DT>(vreg_file, rsrc0, i);
     DT value = first < VLMAX ? getVregData<DT>(vreg_file, rsrc1, first) : 0;
-    DP(1, "Register gather - Moving value " << +value << " from position " << +first << " to position " << +i);
+    DP(4, "Register gather - Moving value " << +value << " from position " << +first << " to position " << +i);
     getVregData<DT>(vreg_file, rdest, i) = value;
   }
 }
@@ -2114,7 +1935,7 @@ void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, u
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
     DTR third = getVregData<DTR>(vreg_file, rdest, i);
     DTR result = OP<DT, DTR>::apply(first, second, third);
-    DP(1, "Widening " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    DP(4, "Widening " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     getVregData<DTR>(vreg_file, rdest, i) = result;
   }
 }
@@ -2144,7 +1965,7 @@ void vector_op_vv_wv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, 
     DTR second = getVregData<DTR>(vreg_file, rsrc1, i);
     DTR third = getVregData<DTR>(vreg_file, rdest, i);
     DTR result = OP<DTR, DTR>::apply(first, second, third);
-    DP(1, "Widening wv " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    DP(4, "Widening wv " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     getVregData<DTR>(vreg_file, rdest, i) = result;
   }
 }
@@ -2174,7 +1995,7 @@ void vector_op_vv_wfv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0,
     DTR second = getVregData<DTR>(vreg_file, rsrc1, i);
     DTR third = getVregData<DTR>(vreg_file, rdest, i);
     DTR result = OP<DTR, DTR>::apply(rv_ftod(first), second, third);
-    DP(1, "Widening wfv " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
+    DP(4, "Widening wfv " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     getVregData<DTR>(vreg_file, rdest, i) = result;
   }
 }
@@ -2199,7 +2020,7 @@ void vector_op_vv_n(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, u
     DTR first = getVregData<DTR>(vreg_file, rsrc0, i);
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
     DTR result = OP<DT, DTR>::apply(first, second, vxrm, vxsat);
-    DP(1, "Narrowing " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    DP(4, "Narrowing " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
     getVregData<DTR>(vreg_file, rdest, i) = result;
   }
 }
@@ -2228,7 +2049,7 @@ void vector_op_vv_sat(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0,
     DT first = getVregData<DTR>(vreg_file, rsrc0, i);
     DT second = getVregData<DTR>(vreg_file, rsrc1, i);
     DTR result = OP<DT, DTR>::apply(first, second, vxrm, vxsat);
-    DP(1, "Saturating " << (OP<DT, DTR>::name()) << "(" << +(DTR)first << ", " << +(DTR)second << ")" << " = " << +(DTR)result);
+    DP(4, "Saturating " << (OP<DT, DTR>::name()) << "(" << +(DTR)first << ", " << +(DTR)second << ")" << " = " << +(DTR)result);
     getVregData<DTR>(vreg_file, rdest, i) = result;
   }
 }
@@ -2280,9 +2101,9 @@ void vector_op_vv_red(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0,
     DT first = getVregData<DT>(vreg_file, rdest, 0);
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
     DT result = OP<DT, DT>::apply(first, second, 0);
-    DP(1, "Reduction " << (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    DP(4, "Reduction " << (OP<DT, DT>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
     getVregData<DT>(vreg_file, rdest, 0) = result;
-  } 
+  }
 }
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
@@ -2316,9 +2137,9 @@ void vector_op_vv_red_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
     DTR second_w = std::is_signed<DT>() ? sext((DTR) second, sizeof(DT) * 8) : zext((DTR) second, sizeof(DT) * 8);
     DTR result = OP<DTR, DTR>::apply(first, second_w, 0);
-    DP(1, "Widening reduction " << (OP<DTR, DTR>::name()) << "(" << +first << ", " << +second_w << ")" << " = " << +result);
+    DP(4, "Widening reduction " << (OP<DTR, DTR>::name()) << "(" << +first << ", " << +second_w << ")" << " = " << +result);
     getVregData<DTR>(vreg_file, rdest, 0) = result;
-  } 
+  }
 }
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
@@ -2350,9 +2171,9 @@ void vector_op_vv_red_wf(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsr
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
     DTR second_w = rv_ftod(second);
     DTR result = OP<DTR, DTR>::apply(first, second_w, 0);
-    DP(1, "Float widening reduction " << (OP<DTR, DTR>::name()) << "(" << +first << ", " << +second_w << ")" << " = " << +result);
+    DP(4, "Float widening reduction " << (OP<DTR, DTR>::name()) << "(" << +first << ", " << +second_w << ")" << " = " << +result);
     getVregData<DTR>(vreg_file, rdest, 0) = result;
-  } 
+  }
 }
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
@@ -2372,9 +2193,9 @@ void vector_op_vid(std::vector<std::vector<Byte>> &vreg_file, uint32_t rdest, ui
   for (uint32_t i = 0; i < vl; i++) {
     if (isMasked(vreg_file, 0, i, vmask)) continue;
 
-    DP(1, "Element Index = " << +i);
+    DP(4, "Element Index = " << +i);
     getVregData<DT>(vreg_file, rdest, i) = i;
-  } 
+  }
 }
 
 void vector_op_vid(std::vector<std::vector<Byte>> &vreg_file, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask)
@@ -2402,7 +2223,7 @@ void vector_op_vv_mask(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0
     DT first = getVregData<DT>(vreg_file, rsrc0, i);
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
     bool result = OP<DT, bool>::apply(first, second, 0);
-    DP(1, "Integer/float compare mask " << (OP<DT, bool>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    DP(4, "Integer/float compare mask " << (OP<DT, bool>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
     if (result) {
       getVregData<uint8_t>(vreg_file, rdest, i / 8) |= 1 << (i % 8);
     } else {
@@ -2437,7 +2258,7 @@ void vector_op_vv_mask(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0
     uint8_t secondMask = getVregData<uint8_t>(vreg_file, rsrc1, i / 8);
     bool second = (secondMask >> (i % 8)) & 0x1;
     bool result = OP<uint8_t, uint8_t>::apply(first, second, 0) & 0x1;
-    DP(1, "Compare mask bits " << (OP<uint8_t, uint8_t>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
+    DP(4, "Compare mask bits " << (OP<uint8_t, uint8_t>::name()) << "(" << +first << ", " << +second << ")" << " = " << +result);
     if (result) {
       getVregData<uint8_t>(vreg_file, rdest, i / 8) |= 1 << (i % 8);
     } else {
@@ -2456,7 +2277,7 @@ void vector_op_vv_compress(std::vector<std::vector<Byte>> &vreg_file, uint32_t r
     if (isMasked(vreg_file, rsrc0, i, 0)) continue;
 
     DT value = getVregData<DT>(vreg_file, rsrc1, i);
-    DP(1, "Compression - Moving value " << +value << " from position " << i << " to position " << currPos);
+    DP(4, "Compression - Moving value " << +value << " from position " << i << " to position " << currPos);
     getVregData<DT>(vreg_file, rdest, currPos) = value;
     currPos++;
   }
@@ -2479,6 +2300,185 @@ void vector_op_vv_compress(std::vector<std::vector<Byte>> &vreg_file, uint32_t r
   }
 }
 
+void Emulator::loadVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata) {
+  auto &warp = warps_.at(wid);
+  auto vmask  = instr.getVmask();
+  auto rdest  = instr.getRDest();
+  auto mop = instr.getVmop();
+  switch (mop) {
+    case 0b00: { // unit-stride
+      auto lumop  = instr.getVumop();
+      switch (lumop) {
+        case 0b10000: // vle8ff.v, vle16ff.v, vle32ff.v, vle64ff.v - we do not support exceptions -> treat like regular unit stride
+                       // vlseg2e8ff.v, vlseg2e16ff.v, vlseg2e32ff.v, vlseg2e64ff.v
+                       // vlseg3e8ff.v, vlseg3e16ff.v, vlseg3e32ff.v, vlseg3e64ff.v
+                       // vlseg4e8ff.v, vlseg4e16ff.v, vlseg4e32ff.v, vlseg4e64ff.v
+                       // vlseg5e8ff.v, vlseg5e16ff.v, vlseg5e32ff.v, vlseg5e64ff.v
+                       // vlseg6e8ff.v, vlseg6e16ff.v, vlseg6e32ff.v, vlseg6e64ff.v
+                       // vlseg7e8ff.v, vlseg7e16ff.v, vlseg7e32ff.v, vlseg7e64ff.v
+                       // vlseg8e8ff.v, vlseg8e16ff.v, vlseg8e32ff.v, vlseg8e64ff.v
+        case 0b0000: { // vle8.v, vle16.v, vle32.v, vle64.v
+                       // vlseg2e8.v, vlseg2e16.v, vlseg2e32.v, vlseg2e64.v
+                       // vlseg3e8.v, vlseg3e16.v, vlseg3e32.v, vlseg3e64.v
+                       // vlseg4e8.v, vlseg4e16.v, vlseg4e32.v, vlseg4e64.v
+                       // vlseg5e8.v, vlseg5e16.v, vlseg5e32.v, vlseg5e64.v
+                       // vlseg6e8.v, vlseg6e16.v, vlseg6e32.v, vlseg6e64.v
+                       // vlseg7e8.v, vlseg7e16.v, vlseg7e32.v, vlseg7e64.v
+                       // vlseg8e8.v, vlseg8e16.v, vlseg8e32.v, vlseg8e64.v
+          WordI stride = warp.vtype.vsew / 8;
+          uint32_t nfields = instr.getVnf() + 1;
+          vector_op_vix_load(warp.vreg_file, this, rsdata, rdest, warp.vtype.vsew, warp.vl, false, stride, nfields, warp.vtype.vlmul, vmask);
+          break;
+        }
+        case 0b1000: { // vl1r.v, vl2r.v, vl4r.v, vl8r.v
+          uint32_t nreg = instr.getVnf() + 1;
+          if (nreg != 1 && nreg != 2 && nreg != 4 && nreg != 8) {
+            std::cout << "Whole vector register load - reserved value for nreg: " << nreg << std::endl;
+            std::abort();
+          }
+          DP(4, "Whole vector register load with nreg: " << nreg);
+          uint32_t vl = nreg * VLEN / instr.getVsew();
+          WordI stride = instr.getVsew() / 8;
+          vector_op_vix_load(warp.vreg_file, this, rsdata, rdest, instr.getVsew(), vl, false, stride, 1, 0, vmask);
+          break;
+        }
+        case 0b1011: { // vlm.v
+          if (warp.vtype.vsew != 8) {
+            std::cout << "vlm.v only supports EEW=8, but EEW was: " << warp.vtype.vsew << std::endl;
+            std::abort();
+          }
+          WordI stride = warp.vtype.vsew / 8;
+          vector_op_vix_load(warp.vreg_file, this, rsdata, rdest, warp.vtype.vsew, (warp.vl + 7) / 8, false, stride, 1, 0, true);
+          break;
+        }
+        default:
+          std::cout << "Load vector - unsupported lumop: " << lumop << std::endl;
+          std::abort();
+      }
+      break;
+    }
+    case 0b10: { // strided: vlse8.v, vlse16.v, vlse32.v, vlse64.v
+                 // vlsseg2e8.v, vlsseg2e16.v, vlsseg2e32.v, vlsseg2e64.v
+                 // vlsseg3e8.v, vlsseg3e16.v, vlsseg3e32.v, vlsseg3e64.v
+                 // vlsseg4e8.v, vlsseg4e16.v, vlsseg4e32.v, vlsseg4e64.v
+                 // vlsseg5e8.v, vlsseg5e16.v, vlsseg5e32.v, vlsseg5e64.v
+                 // vlsseg6e8.v, vlsseg6e16.v, vlsseg6e32.v, vlsseg6e64.v
+                 // vlsseg7e8.v, vlsseg7e16.v, vlsseg7e32.v, vlsseg7e64.v
+                 // vlsseg8e8.v, vlsseg8e16.v, vlsseg8e32.v, vlsseg8e64.v
+      auto rsrc1  = instr.getRSrc(1);
+      auto rdest  = instr.getRDest();
+      WordI stride = warp.ireg_file.at(0).at(rsrc1);
+      uint32_t nfields = instr.getVnf() + 1;
+      vector_op_vix_load(warp.vreg_file, this, rsdata, rdest, warp.vtype.vsew, warp.vl, true, stride, nfields, warp.vtype.vlmul, vmask);
+      break;
+    }
+    case 0b01: // indexed - unordered, vluxei8.v, vluxei16.v, vluxei32.v, vluxei64.v
+               // vluxseg2e8.v, vluxseg2e16.v, vluxseg2e32.v, vluxseg2e64.v
+               // vluxseg3e8.v, vluxseg3e16.v, vluxseg3e32.v, vluxseg3e64.v
+               // vluxseg4e8.v, vluxseg4e16.v, vluxseg4e32.v, vluxseg4e64.v
+               // vluxseg5e8.v, vluxseg5e16.v, vluxseg5e32.v, vluxseg5e64.v
+               // vluxseg6e8.v, vluxseg6e16.v, vluxseg6e32.v, vluxseg6e64.v
+               // vluxseg7e8.v, vluxseg7e16.v, vluxseg7e32.v, vluxseg7e64.v
+               // vluxseg8e8.v, vluxseg8e16.v, vluxseg8e32.v, vluxseg8e64.v
+    case 0b11: { // indexed - ordered, vloxei8.v, vloxei16.v, vloxei32.v, vloxei64.v
+                 // vloxseg2e8.v, vloxseg2e16.v, vloxseg2e32.v, vloxseg2e64.v
+                 // vloxseg3e8.v, vloxseg3e16.v, vloxseg3e32.v, vloxseg3e64.v
+                 // vloxseg4e8.v, vloxseg4e16.v, vloxseg4e32.v, vloxseg4e64.v
+                 // vloxseg5e8.v, vloxseg5e16.v, vloxseg5e32.v, vloxseg5e64.v
+                 // vloxseg6e8.v, vloxseg6e16.v, vloxseg6e32.v, vloxseg6e64.v
+                 // vloxseg7e8.v, vloxseg7e16.v, vloxseg7e32.v, vloxseg7e64.v
+                 // vloxseg8e8.v, vloxseg8e16.v, vloxseg8e32.v, vloxseg8e64.v
+      uint32_t nfields = instr.getVnf() + 1;
+      vector_op_vv_load(warp.vreg_file, this, rsdata, instr.getRSrc(1), rdest, warp.vtype.vsew, instr.getVsew(), warp.vl, nfields, warp.vtype.vlmul, vmask);
+      break;
+    }
+    default:
+      std::cout << "Load vector - unsupported mop: " << mop << std::endl;
+      std::abort();
+  }
+}
+
+void Emulator::storeVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata) {
+  auto &warp = warps_.at(wid);
+  auto vmask  = instr.getVmask();
+  auto mop = instr.getVmop();
+  switch (mop) {
+    case 0b00: { // unit-stride
+      auto vs3  = instr.getRSrc(1);
+      auto sumop  = instr.getVumop();
+      WordI stride = warp.vtype.vsew / 8;
+      switch (sumop) {
+        case 0b0000: { // vse8.v, vse16.v, vse32.v, vse64.v
+          uint32_t nfields = instr.getVnf() + 1;
+          vector_op_vix_store(warp.vreg_file, this, rsdata, vs3, warp.vtype.vsew, warp.vl, false, stride, nfields, warp.vtype.vlmul, vmask);
+          break;
+        }
+        case 0b1000: { // vs1r.v, vs2r.v, vs4r.v, vs8r.v
+          uint32_t nreg = instr.getVnf() + 1;
+          if (nreg != 1 && nreg != 2 && nreg != 4 && nreg != 8) {
+            std::cout << "Whole vector register store - reserved value for nreg: " << nreg << std::endl;
+            std::abort();
+          }
+          DP(4, "Whole vector register store with nreg: " << nreg);
+          uint32_t vl = nreg * VLEN / 8;
+          vector_op_vix_store<uint8_t>(warp.vreg_file, this, rsdata, vs3, vl, false, stride, 1, 0, vmask);
+          break;
+        }
+        case 0b1011: { // vsm.v
+          if (warp.vtype.vsew != 8) {
+            std::cout << "vsm.v only supports EEW=8, but EEW was: " << warp.vtype.vsew << std::endl;
+            std::abort();
+          }
+          vector_op_vix_store(warp.vreg_file, this, rsdata, vs3, warp.vtype.vsew, (warp.vl + 7) / 8, false, stride, 1, 0, true);
+          break;
+        }
+        default:
+          std::cout << "Store vector - unsupported sumop: " << sumop << std::endl;
+          std::abort();
+      }
+      break;
+    }
+    case 0b10: { // strided: vsse8.v, vsse16.v, vsse32.v, vsse64.v
+                 // vssseg2e8.v, vssseg2e16.v, vssseg2e32.v, vssseg2e64.v
+                 // vssseg3e8.v, vssseg3e16.v, vssseg3e32.v, vssseg3e64.v
+                 // vssseg4e8.v, vssseg4e16.v, vssseg4e32.v, vssseg4e64.v
+                 // vssseg5e8.v, vssseg5e16.v, vssseg5e32.v, vssseg5e64.v
+                 // vssseg6e8.v, vssseg6e16.v, vssseg6e32.v, vssseg6e64.v
+                 // vssseg7e8.v, vssseg7e16.v, vssseg7e32.v, vssseg7e64.v
+                 // vssseg8e8.v, vssseg8e16.v, vssseg8e32.v, vssseg8e64.v
+      auto rsrc1  = instr.getRSrc(1);
+      auto vs3  = instr.getRSrc(2);
+      WordI stride = warp.ireg_file.at(0).at(rsrc1);
+      uint32_t nfields = instr.getVnf() + 1;
+      vector_op_vix_store(warp.vreg_file, this, rsdata, vs3, warp.vtype.vsew, warp.vl, true, stride, nfields, warp.vtype.vlmul, vmask);
+      break;
+    }
+    case 0b01: // indexed - unordered, vsuxei8.v, vsuxei16.v, vsuxei32.v, vsuxei64.v
+               // vsuxseg2ei8.v, vsuxseg2ei16.v, vsuxseg2ei32.v, vsuxseg2ei64.v
+               // vsuxseg3ei8.v, vsuxseg3ei16.v, vsuxseg3ei32.v, vsuxseg3ei64.v
+               // vsuxseg4ei8.v, vsuxseg4ei16.v, vsuxseg4ei32.v, vsuxseg4ei64.v
+               // vsuxseg5ei8.v, vsuxseg5ei16.v, vsuxseg5ei32.v, vsuxseg5ei64.v
+               // vsuxseg6ei8.v, vsuxseg6ei16.v, vsuxseg6ei32.v, vsuxseg6ei64.v
+               // vsuxseg7ei8.v, vsuxseg7ei16.v, vsuxseg7ei32.v, vsuxseg7ei64.v
+               // vsuxseg8ei8.v, vsuxseg8ei16.v, vsuxseg8ei32.v, vsuxseg8ei64.v
+    case 0b11: { // indexed - ordered, vsoxei8.v, vsoxei16.v, vsoxei32.v, vsoxei64.v
+                 // vsoxseg2ei8.v, vsoxseg2ei16.v, vsoxseg2ei32.v, vsoxseg2ei64.v
+                 // vsoxseg3ei8.v, vsoxseg3ei16.v, vsoxseg3ei32.v, vsoxseg3ei64.v
+                 // vsoxseg4ei8.v, vsoxseg4ei16.v, vsoxseg4ei32.v, vsoxseg4ei64.v
+                 // vsoxseg5ei8.v, vsoxseg5ei16.v, vsoxseg5ei32.v, vsoxseg5ei64.v
+                 // vsoxseg6ei8.v, vsoxseg6ei16.v, vsoxseg6ei32.v, vsoxseg6ei64.v
+                 // vsoxseg7ei8.v, vsoxseg7ei16.v, vsoxseg7ei32.v, vsoxseg7ei64.v
+                 // vsoxseg8ei8.v, vsoxseg8ei16.v, vsoxseg8ei32.v, vsoxseg8ei64.v
+      uint32_t nfields = instr.getVnf() + 1;
+      vector_op_vv_store(warp.vreg_file, this, rsdata, instr.getRSrc(1), instr.getRSrc(2), warp.vtype.vsew, instr.getVsew(), warp.vl, nfields, warp.vtype.vlmul, vmask);
+      break;
+    }
+    default:
+      std::cout << "Store vector - unsupported mop: " << mop << std::endl;
+      std::abort();
+  }
+}
+
 void Emulator::executeVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata) {
   auto &warp = warps_.at(wid);
   auto func3  = instr.getFunc3();
@@ -2491,10 +2491,10 @@ void Emulator::executeVector(const Instr &instr, uint32_t wid, std::vector<reg_d
   auto uimmsrc = (Word)instr.getImm();
   auto vmask  = instr.getVmask();
   auto num_threads = arch_.num_threads();
-  
+
     switch (func3) {
     case 0: { // vector - vector
-        switch (func6) { 
+        switch (func6) {
           case 0: { // vadd.vv
             for (uint32_t t = 0; t < num_threads; ++t) {
               if (!warp.tmask.test(t)) continue;
@@ -2769,7 +2769,7 @@ void Emulator::executeVector(const Instr &instr, uint32_t wid, std::vector<reg_d
           default:
             std::cout << "Unrecognised vector - vector instruction func3: " << func3 << " func6: " << func6 << std::endl;
             std::abort();
-        } 
+        }
       } break;
     case 1: { // float vector - vector
         switch (func6) {
@@ -2839,7 +2839,7 @@ void Emulator::executeVector(const Instr &instr, uint32_t wid, std::vector<reg_d
               if (!warp.tmask.test(t)) continue;
               auto &dest = rddata[t].u64;
               vector_op_scalar(dest, warp.vreg_file, rsrc0, rsrc1, warp.vtype.vsew);
-              DP(1, "Moved " << +dest << " from: " << +rsrc1 << " to: " << +rdest);
+              DP(4, "Moved " << +dest << " from: " << +rsrc1 << " to: " << +rdest);
             }
           } break;
           case 18: {
@@ -3107,7 +3107,7 @@ void Emulator::executeVector(const Instr &instr, uint32_t wid, std::vector<reg_d
             if (!warp.tmask.test(t)) continue;
             auto &dest = rddata[t].i;
             vector_op_scalar(dest, warp.vreg_file, rsrc0, rsrc1, warp.vtype.vsew);
-            DP(1, "Moved " << +dest << " from: " << +rsrc1 << " to: " << +rdest);
+            DP(4, "Moved " << +dest << " from: " << +rsrc1 << " to: " << +rdest);
           }
         } break;
         case 18: { // vzext.vf8, vsext.vf8, vzext.vf4, vsext.vf4, vzext.vf2, vsext.vf2
@@ -4438,7 +4438,7 @@ void Emulator::executeVector(const Instr &instr, uint32_t wid, std::vector<reg_d
       uint32_t vsew = instr.getVsew();
       uint32_t vlmul = instr.getVlmul();
 
-      if(!instr.hasZimm()){ // vsetvl
+      if (!instr.hasZimm()) { // vsetvl
         uint32_t zimm = rsdata[0][1].u;
         vlmul = zimm & mask_v_lmul;
         vsewO = (zimm >> shift_v_sew) & mask_v_sew;
@@ -4459,7 +4459,7 @@ void Emulator::executeVector(const Instr &instr, uint32_t wid, std::vector<reg_d
         s0 = rsdata[0][0].u;
       }
 
-      DP(1, "Vset(i)vl(i) - vill: " << +warp.vtype.vill << " vma: " << vma << " vta: " << vta << " lmul: " << vlmul << " sew: " << vsew << " s0: " << s0 << " VLMAX: " << warp.VLMAX);
+      DP(4, "Vset(i)vl(i) - vill: " << +warp.vtype.vill << " vma: " << vma << " vta: " << vta << " lmul: " << vlmul << " sew: " << vsew << " s0: " << s0 << " VLMAX: " << warp.VLMAX);
       warp.vl = std::min(s0, warp.VLMAX);
 
       if (warp.vtype.vill) {
