@@ -103,7 +103,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       auto reg = instr.getRSrc(i);
       switch (type) {
       case RegType::Integer:
-        DPH(2, "Src" << i << "-Reg: " << type << reg << "={");
+        DPH(2, "Src" << i << " Reg: " << type << reg << "={");
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!warp.tmask.test(t)) {
@@ -116,7 +116,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         DPN(2, "}" << std::endl);
         break;
       case RegType::Float:
-        DPH(2, "Src" << i << "-Reg: " << type << reg << "={");
+        DPH(2, "Src" << i << " Reg: " << type << reg << "={");
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!warp.tmask.test(t)) {
