@@ -29,18 +29,19 @@
 using namespace vortex;
 
 static void show_usage() {
-   std::cout << "Usage: [-c <cores>] [-w <warps>] [-t <threads>] [-s: stats] [-h: help] <program>" << std::endl;
+   std::cout << "Usage: [-c <cores>] [-w <warps>] [-t <threads>] [-v: vector-test] [-s: stats] [-h: help] <program>" << std::endl;
 }
 
 uint32_t num_threads = NUM_THREADS;
 uint32_t num_warps = NUM_WARPS;
 uint32_t num_cores = NUM_CORES;
 bool showStats = false;
+bool vector_test = false;
 const char* program = nullptr;
 
 static void parse_args(int argc, char **argv) {
   	int c;
-  	while ((c = getopt(argc, argv, "t:w:c:rsh")) != -1) {
+  	while ((c = getopt(argc, argv, "t:w:c:vsh")) != -1) {
     	switch (c) {
       case 't':
         num_threads = atoi(optarg);
@@ -50,6 +51,9 @@ static void parse_args(int argc, char **argv) {
         break;
 		  case 'c':
         num_cores = atoi(optarg);
+        break;
+      case 'v':
+        vector_test = true;
         break;
       case 's':
         showStats = true;
@@ -115,6 +119,9 @@ int main(int argc, char **argv) {
     std::cout << "[VXDRV] START: program=" << program << std::endl;
 #endif
     // run simulation
+    // vector test exitcode is a special case
+    if (vector_test) return processor.run();
+    // else continue as normal
     processor.run();
 
     // read exitcode from @MPM.1

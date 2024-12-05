@@ -390,10 +390,20 @@ synthesis()
     echo "synthesis tests done!"
 }
 
+vector()
+{
+    echo "begin vector tests..."
+
+    make -C sim/simx
+    TOOLDIR=@TOOLDIR@ XLEN=@XLEN@ VLEN=256 REG_TESTS=1 ./tests/riscv/riscv-vector-tests/run-test.sh
+
+    echo "vector tests done!"
+}
+
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -443,6 +453,9 @@ while [ "$1" != "" ]; do
         --synthesis )
                 tests+=("synthesis")
                 ;;
+        --vector )
+                tests+=("vector")
+                ;;
         --all )
                 tests=()
                 tests+=("unittest")
@@ -458,6 +471,7 @@ while [ "$1" != "" ]; do
                 tests+=("scope")
                 tests+=("stress")
                 tests+=("synthesis")
+                tests+=("vector")
                 ;;
         -h | --help )
                 show_usage

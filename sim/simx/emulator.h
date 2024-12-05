@@ -28,6 +28,76 @@ class Core;
 class Instr;
 class instr_trace_t;
 
+enum Constants {
+  width_opcode= 7,
+  width_reg   = 5,
+  width_func2 = 2,
+  width_func3 = 3,
+  width_func6 = 6,
+  width_func7 = 7,
+  width_mop   = 3,
+  width_vmask = 1,
+  width_i_imm = 12,
+  width_j_imm = 20,
+  width_v_zimm = 11,
+  width_v_ma = 1,
+  width_v_ta = 1,
+  width_v_sew = 3,
+  width_v_lmul = 3,
+  width_aq    = 1,
+  width_rl    = 1,
+
+  shift_opcode= 0,
+  shift_rd    = width_opcode,
+  shift_func3 = shift_rd + width_reg,
+  shift_rs1   = shift_func3 + width_func3,
+  shift_rs2   = shift_rs1 + width_reg,
+  shift_func2 = shift_rs2 + width_reg,
+  shift_func7 = shift_rs2 + width_reg,
+  shift_rs3   = shift_func7 + width_func2,
+  shift_vmop  = shift_func7 + width_vmask,
+  shift_vnf   = shift_vmop + width_mop,
+  shift_func6 = shift_func7 + width_vmask,
+  shift_vset  = shift_func7 + width_func6,
+  shift_v_sew = width_v_lmul,
+  shift_v_ta  = shift_v_sew + width_v_sew,
+  shift_v_ma  = shift_v_ta + width_v_ta,
+
+  mask_opcode = (1 << width_opcode) - 1,
+  mask_reg    = (1 << width_reg)   - 1,
+  mask_func2  = (1 << width_func2) - 1,
+  mask_func3  = (1 << width_func3) - 1,
+  mask_func6  = (1 << width_func6) - 1,
+  mask_func7  = (1 << width_func7) - 1,
+  mask_i_imm  = (1 << width_i_imm) - 1,
+  mask_j_imm  = (1 << width_j_imm) - 1,
+  mask_v_zimm = (1 << width_v_zimm) - 1,
+  mask_v_ma   = (1 << width_v_ma) - 1,
+  mask_v_ta   = (1 << width_v_ta) - 1,
+  mask_v_sew  = (1 << width_v_sew) - 1,
+  mask_v_lmul  = (1 << width_v_lmul) - 1,
+};
+
+struct vtype {
+  uint32_t vill;
+  uint32_t vma;
+  uint32_t vta;
+  uint32_t vsew;
+  uint32_t vlmul;
+};
+
+union reg_data_t {
+  Word     u;
+  WordI    i;
+  WordF    f;
+  float    f32;
+  double   f64;
+  uint32_t u32;
+  uint64_t u64;
+  int32_t  i32;
+  int64_t  i64;
+};
+
 class Emulator {
 public:
   Emulator(const Arch &arch,
@@ -61,6 +131,10 @@ public:
   Word get_tc_size();
   Word get_tc_num();
   
+  void dcache_read(void* data, uint64_t addr, uint32_t size);
+
+  void dcache_write(const void* data, uint64_t addr, uint32_t size);
+
 private:
 
   struct ipdom_entry_t {
@@ -85,9 +159,14 @@ private:
     ThreadMask                        tmask;
     std::vector<std::vector<Word>>    ireg_file;
     std::vector<std::vector<uint64_t>>freg_file;
+    std::vector<std::vector<Byte>>    vreg_file;
     std::stack<ipdom_entry_t>         ipdom_stack;
     Byte                              fcsr;
     uint32_t                          uuid;
+
+    struct vtype vtype;
+    uint32_t vl;
+    Word VLMAX;
   };
 
   struct wspawn_t {
@@ -100,11 +179,13 @@ private:
 
   void execute(const Instr &instr, uint32_t wid, instr_trace_t *trace);
 
+  void executeVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata);
+
+  void loadVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata);
+
+  void storeVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata);
+
   void icache_read(void* data, uint64_t addr, uint32_t size);
-
-  void dcache_read(void* data, uint64_t addr, uint32_t size);
-
-  void dcache_write(const void* data, uint64_t addr, uint32_t size);
 
   void dcache_amo_reserve(uint64_t addr);
 
@@ -142,6 +223,7 @@ private:
   uint32_t mat_size;
   uint32_t tc_size;
   uint32_t tc_num;
+  std::vector<std::vector<std::unordered_map<uint32_t, uint32_t>>> csrs_;
 };
 
 }
