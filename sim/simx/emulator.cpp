@@ -45,7 +45,7 @@ void Emulator::warp_t::clear(uint64_t startup_addr) {
 
   this->vtype = {0, 0, 0, 0, 0};
   this->vl = 0;
-  this->VLMAX = 0;
+  this->vlmax = 0;
 
   for (auto& reg_file : this->ireg_file) {
     for (auto& reg : reg_file) {

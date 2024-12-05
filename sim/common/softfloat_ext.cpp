@@ -148,9 +148,10 @@ static inline uint64_t rsqrte7(uint64_t val, int e, int s, bool sub) {
       59,  58,  57,  56,  56,  55,  54,  53};
 
   if (sub) {
-    while (extract64(sig, s - 1, 1) == 0)
-      exp--, sig <<= 1;
-
+    while (extract64(sig, s - 1, 1) == 0) {
+      exp--;
+      sig <<= 1;
+    }
     sig = (sig << 1) & make_mask64(0, s);
   }
 
@@ -165,7 +166,8 @@ float16_t f16_rsqrte7(float16_t in) {
   union ui16_f16 uA;
 
   uA.f = in;
-  unsigned bool sub = false;
+  unsigned int ret = f16_classify(in);
+  bool sub = false;
   switch (ret) {
   case 0x001: // -inf
   case 0x002: // -normal

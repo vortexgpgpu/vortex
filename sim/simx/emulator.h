@@ -114,7 +114,7 @@ private:
     Byte                              fcsr;
     vtype_t                           vtype;
     uint32_t                          vl;
-    Word                              VLMAX;
+    Word                              vlmax;
     uint32_t                          uuid;
   };
 

@@ -226,8 +226,7 @@ public:
   uint32_t getVs3() const { return vs3_; }
   bool     hasZimm() const { return has_zimm_; }
   uint32_t getVlmul() const { return vlmul_; }
-  uint32_t getVsew() const { return 1 << (3 + vsew_); }
-  uint32_t getVsewO() const { return vsew_; }
+  uint32_t getVsew() const { return vsew_; }
   uint32_t getVta() const { return vta_; }
   uint32_t getVma() const { return vma_; }
   uint32_t getVediv() const { return vediv_; }
