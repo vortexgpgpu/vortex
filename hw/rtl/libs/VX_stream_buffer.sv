@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A stream elastic buffer operates at full-bandwidth where fire_in and fire_out can happen simultaneously
+// A stream elastic buffer_r operates at full-bandwidth where fire_in and fire_out can happen simultaneously
 // It has the following benefits:
 // + full-bandwidth throughput
 // + ready_in and ready_out are decoupled
@@ -45,79 +45,66 @@ module VX_stream_buffer #(
         assign valid_out = valid_in;
         assign data_out  = data_in;
 
-	end else if (OUT_REG != 0) begin : g_out_reg
+	end else begin : g_buffer
 
-		reg [DATAW-1:0] data_out_r;
-		reg [DATAW-1:0] buffer;
-		reg             valid_out_r;
-		reg             no_buffer;
+		reg [DATAW-1:0] data_out_r, buffer_r;
+		reg valid_out_r, valid_in_r;
 
 		wire fire_in = valid_in && ready_in;
 		wire flow_out = ready_out || ~valid_out;
 
 		always @(posedge clk) begin
 			if (reset) begin
-				valid_out_r <= 0;
-				no_buffer  <= 1;
-			end else begin
-				if (flow_out) begin
-					no_buffer <= 1;
-				end else if (valid_in) begin
-					no_buffer <= 0;
-				end
-				if (flow_out) begin
-					valid_out_r <= valid_in || ~no_buffer;
-				end
+				valid_in_r <= 1'b1;
+			end else if (valid_in || flow_out) begin
+				valid_in_r <= flow_out;
 			end
-		end
-
-		always @(posedge clk) begin
-			if (fire_in) begin
-				buffer <= data_in;
-			end
-			if (flow_out) begin
-				data_out_r <= no_buffer ? data_in : buffer;
-			end
-		end
-
-		assign ready_in  = no_buffer;
-		assign valid_out = valid_out_r;
-		assign data_out  = data_out_r;
-
-	end else begin : g_no_out_reg
-
-		reg [1:0][DATAW-1:0] shift_reg;
-		reg [1:0] fifo_state, fifo_state_n;
-
-		wire fire_in = valid_in && ready_in;
-		wire fire_out = valid_out && ready_out;
-
-		always @(*) begin
-			case ({fire_in, fire_out})
-			2'b10:	 fifo_state_n = {fifo_state[0], 1'b1}; // 00 -> 01, 01 -> 10
-			2'b01:	 fifo_state_n = {1'b0, fifo_state[1]}; // 10 -> 01, 01 -> 00
-			default: fifo_state_n = fifo_state;
-			endcase
 		end
 
 		always @(posedge clk) begin
 			if (reset) begin
-				fifo_state <= 2'b00;
-			end else begin
-				fifo_state <= fifo_state_n;
+				valid_out_r <= 1'b0;
+			end else if (flow_out) begin
+				valid_out_r <= valid_in || ~valid_in_r;
 			end
 		end
 
-		always @(posedge clk) begin
-			if (fire_in) begin
-				shift_reg[1] <= shift_reg[0];
-				shift_reg[0] <= data_in;
+		if (OUT_REG != 0) begin : g_out_reg
+
+			always @(posedge clk) begin
+				if (fire_in) begin
+					buffer_r <= data_in;
+				end
 			end
+
+			always @(posedge clk) begin
+				if (flow_out) begin
+					data_out_r <= valid_in_r ? data_in : buffer_r;
+				end
+			end
+
+			assign data_out = data_out_r;
+
+		end else begin : g_no_out_reg
+
+			always @(posedge clk) begin
+				if (fire_in) begin
+					data_out_r <= data_in;
+				end
+			end
+
+			always @(posedge clk) begin
+				if (fire_in) begin
+					buffer_r <= data_out_r;
+				end
+			end
+
+			assign data_out  = valid_in_r ? data_out_r : buffer_r;
+
 		end
 
-		assign ready_in  = ~fifo_state[1];
-		assign valid_out = fifo_state[0];
-		assign data_out  = shift_reg[fifo_state[1]];
+		assign valid_out = valid_out_r;
+		assign ready_in  = valid_in_r;
 
 	end
 

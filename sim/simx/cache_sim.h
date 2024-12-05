@@ -30,6 +30,7 @@ public:
 		uint8_t addr_width;     // word address bits
 		uint8_t ports_per_bank; // number of ports per bank
 		uint8_t num_inputs;     // number of inputs
+		uint8_t mem_ports;      // memory ports
 		bool    write_back;     // is write-back
 		bool    write_reponse;  // enable write response
 		uint16_t mshr_size;     // MSHR buffer size

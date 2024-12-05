@@ -1,3 +1,16 @@
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 namespace eval vortex {
 
 variable debug 0
@@ -17,6 +30,25 @@ proc str_replace {str match repl} {
   return $result
 }
 
+proc regex_escape {str} {
+  return [string map {
+    \\ \\\\
+    ^ \\^
+    . \\.
+    \[ \\\[
+    \] \\\]
+    \$ \\\$
+    \( \\\(
+    \) \\\)
+    | \\|
+    * \\*
+    + \\+
+    ? \\?
+    \{ \\\{
+    \} \\\}
+  } $str]
+}
+
 proc unique_cell_name {name} {
   if {[get_cells -quiet $name] == {}} { return $name }
   set index 0
@@ -31,29 +63,58 @@ proc unique_net_name {name} {
   return ${name}_${index}
 }
 
-proc find_nested_cells {parent name_match {should_exist 1}} {
+proc build_parent_child_map {all_cells} {
+  set parent_child_map {}
+  foreach cell $all_cells {
+    set parent [get_property PARENT $cell]
+    if {$parent ne ""} {
+      if {[dict exists $parent_child_map $parent]} {
+        dict lappend parent_child_map $parent $cell
+      } else {
+        dict set parent_child_map $parent [list $cell]
+      }
+    }
+  }
+  return $parent_child_map
+}
+
+proc find_cell_descendants_recursive {parent_cell parent_child_map} {
+  set descendants {}
+  if {[dict exists $parent_child_map $parent_cell]} {
+    set children [dict get $parent_child_map $parent_cell]
+    foreach child $children {
+      # Add the child to the list
+      lappend descendants $child
+      # Recursively add its descendants
+      set sub_descendants [find_cell_descendants_recursive $child $parent_child_map]
+      lappend descendants {*}$sub_descendants
+    }
+  }
+  return $descendants
+}
+
+proc find_cell_descendants {parent_cell} {
+  set all_cells [get_cells -hierarchical]
+  set parent_child_map [build_parent_child_map $all_cells]
+  return [find_cell_descendants_recursive $parent_cell $parent_child_map]
+}
+
+proc find_nested_cells {parent_cell name_match {should_exist 1}} {
+  set hier_sep [get_hierarchy_separator]
   set matching_cells {}
-  foreach cell [get_cells -hierarchical -include_replicated_objects -filter "PARENT == $parent"] {
-    set name [get_property NAME $cell]
-    if {[regexp $name_match $name]} {
+  foreach cell [find_cell_descendants $parent_cell] {
+    set parent_name [get_property PARENT $cell]
+    set cell_name [get_property NAME $cell]
+    set name_prefix [regex_escape "${parent_name}${hier_sep}"]
+    set pattern "${name_prefix}${name_match}"
+    if {[regexp $pattern $cell_name]} {
       lappend matching_cells $cell
     }
   }
   if {[llength $matching_cells] == 0} {
-    print_error "No matching cell found for '$parent' matching '$name_match'." $should_exist
+    print_error "No matching cell found for '$parent_cell' matching '$name_match'." $should_exist
   }
   return $matching_cells
-}
-
-proc find_nested_cell {parent name_match} {
-  foreach cell [get_cells -hierarchical -filter "PARENT == $parent"] {
-    set name [get_property NAME $cell]
-    if {$name == $name_match} {
-      return $cell
-    }
-  }
-  puts "ERROR: No matching cell found for '$parent' matching '$name_match'."
-  exit -1
 }
 
 proc find_cell_nets {cell name_match {should_exist 1}} {
@@ -70,22 +131,23 @@ proc find_cell_nets {cell name_match {should_exist 1}} {
   return $matching_nets
 }
 
-proc get_cell_net {cell name_match} {
-  foreach net [get_nets -hierarchical -filter "PARENT_CELL == $cell"] {
-    set name [get_property NAME $net]
-    if {$name == $name_match} {
-      return $net
-    }
+proc get_cell_net {cell name} {
+  set net [get_nets -hierarchical -filter "PARENT_CELL == $cell && NAME == $name"]
+  if {[llength $net] == 0} {
+    puts "ERROR: No matching net found for '$cell' matching '$name'."
+    exit -1
   }
-  puts "ERROR: No matching net found for '$cell' matching '$name_match'."
-  exit -1
+  return $net;
 }
 
 proc find_cell_pins {cell name_match {should_exist 1}} {
+  set hier_sep [get_hierarchy_separator]
   set matching_pins {}
   foreach pin [get_pins -of_objects $cell] {
     set name [get_property NAME $pin]
-    if {[regexp $name_match $name]} {
+    set name_prefix [regex_escape "${cell}${hier_sep}"]
+    set pattern "${name_prefix}${name_match}"
+    if {[regexp $pattern $name]} {
       lappend matching_pins $pin
     }
   }
@@ -95,15 +157,31 @@ proc find_cell_pins {cell name_match {should_exist 1}} {
   return $matching_pins
 }
 
-proc get_cell_pin {cell name_match} {
-  foreach pin [get_pins -of_objects $cell] {
-    set name [get_property NAME $pin]
-    if {$name == $name_match} {
-      return $pin
-    }
+proc get_cell_pin {cell name} {
+  set pin [get_pins -of_objects $cell -filter "NAME == $name"]
+  if {[llength $pin] == 0} {
+    puts "ERROR: No matching pin found for '$cell' matching '$name'."
+    exit -1
   }
-  puts "ERROR: No matching pin found for '$cell' matching '$name_match'."
-  exit -1
+  return $pin
+}
+
+proc remove_cell_from_netlist {cell} {
+  variable debug
+
+  puts "INFO: Removing cell '$cell' from the netlist."
+
+  # Disconnect all pins of the cell
+  #foreach pin [get_pins -quiet -of_objects $cell] {
+  #  foreach net [get_nets -quiet -of_objects $pin] {
+  #    disconnect_net -net $net -objects $pin
+  #    if {$debug} {puts "DEBUG: Disconnected net '$net' from pin '$pin'."}
+  #  }
+  #}
+
+  # Remove the cell
+  remove_cell $cell
+  if {$debug} {puts "DEBUG: Cell '$cell' was removed successfully."}
 }
 
 proc replace_pin_source {pin source_pin} {
@@ -141,10 +219,42 @@ proc replace_pin_source {pin source_pin} {
   if {$debug} {puts "DEBUG: Connected net '$source_net' to pin '$pin'."}
 }
 
-proc create_register_next {reg_cell prefix_name} {
+proc find_net_driver {input_net {should_exist 1}} {
+  set driverPins [get_pins -quiet -leaf -of_objects $input_net -filter {DIRECTION == "OUT"}]
+  if {[llength $driverPins] == 0} {
+    set driverPorts [get_ports -quiet -of_objects $input_net -filter {DIRECTION == "IN"}]
+    if {[llength $driverPorts] == 0} {
+      print_error "No driver found for '$input_net'." $should_exist
+    } elseif {[llength $driverPorts] > 1} {
+      puts "WARNING: Multiple driver ports found for '$input_net'."
+      return [lindex $driverPorts 0]
+    }
+    return $driverPorts
+  } elseif {[llength $driverPins] > 1} {
+    puts "WARNING: Multiple driver pins found for '$input_net'."
+    return [lindex $driverPins 0]
+  }
+  return $driverPins
+}
+
+proc find_pin_driver {input_pin {should_exist 1}} {
+  set net [get_nets -quiet -of_objects $input_pin]
+  if {[llength $net] == 0} {
+    print_error "No net connected to pin '$input_pin'." $should_exist
+    return ""
+  } elseif {[llength $net] > 1} {
+    puts "ERROR: Multiple nets connected to pin '$input_pin'."
+    exit -1
+  }
+  return [find_net_driver $net]
+}
+
+proc create_register_next {parent reg_cell} {
   variable debug
 
-  set reg_d_pin [get_pins -of_objects $reg_cell -filter {NAME =~ "*/D"}]
+  set hier_sep [get_hierarchy_separator]
+
+  set reg_d_pin [get_pins "${reg_cell}${hier_sep}D"]
   if {[llength $reg_d_pin] == 0} {
     puts "ERROR: No D pin found on register cell '$reg_cell'."
     exit -1
@@ -167,7 +277,7 @@ proc create_register_next {reg_cell prefix_name} {
 
   set register_type [get_property REF_NAME $reg_cell]
   if {$register_type == "FDRE"} {
-    set reg_r_pin [get_pins -of_objects $reg_cell -filter {NAME =~ "*/R"}]
+    set reg_r_pin [get_pins "${reg_cell}${hier_sep}R"]
     if {[llength $reg_r_pin] == 0} {
       puts "ERROR: No R pin found on FDRE cell '$reg_cell'."
       exit -1
@@ -184,7 +294,7 @@ proc create_register_next {reg_cell prefix_name} {
       exit -1
     }
   } elseif {$register_type == "FDSE"} {
-    set reg_s_pin [get_pins -of_objects $reg_cell -filter {NAME =~ "*/S"}]
+    set reg_s_pin [get_pins "${reg_cell}${hier_sep}S"]
     if {[llength $reg_s_pin] == 0} {
       puts "ERROR: No S pin found on FDSE cell '$reg_cell'."
       exit -1
@@ -229,7 +339,7 @@ proc create_register_next {reg_cell prefix_name} {
   # Use a 2x1 LUT to describe the logic:
   # FDRE: O = I1 ? 0 : I0; where I0=D, I1=R
   # FDSE: O = I1 ? 1 : I0; where I0=D, I1=S
-  set lut_name [unique_cell_name $prefix_name]
+  set lut_name [unique_cell_name "${parent}${hier_sep}raddr_next"]
   set lut_cell [create_cell -reference LUT2 $lut_name]
   puts "INFO: Created lut cell: '$lut_cell'"
 
@@ -242,7 +352,7 @@ proc create_register_next {reg_cell prefix_name} {
     exit 1
   }
 
-  set lut_i0_pin [get_pins -of_objects $lut_cell -filter {NAME =~ "*/I0"}]
+  set lut_i0_pin [get_pins "${lut_cell}${hier_sep}I0"]
   if {[llength $lut_i0_pin] == 0} {
     puts "ERROR: No I0 pin found on FDSE cell '$lut_cell'."
     exit -1
@@ -251,7 +361,7 @@ proc create_register_next {reg_cell prefix_name} {
     exit -1
   }
 
-  set lut_i1_pin [get_pins -of_objects $lut_cell -filter {NAME =~ "*/I1"}]
+  set lut_i1_pin [get_pins "${lut_cell}${hier_sep}I1"]
   if {[llength $lut_i1_pin] == 0} {
     puts "ERROR: No I1 pin found on FDSE cell '$lut_cell'."
     exit -1
@@ -260,7 +370,7 @@ proc create_register_next {reg_cell prefix_name} {
     exit -1
   }
 
-  set lut_o_pin [get_pins -of_objects $lut_cell -filter {NAME =~ "*/O"}]
+  set lut_o_pin [get_pins "${lut_cell}${hier_sep}O"]
   if {[llength $lut_o_pin] == 0} {
     puts "ERROR: No O pin found on FDSE cell '$lut_cell'."
     exit -1
@@ -278,19 +388,22 @@ proc create_register_next {reg_cell prefix_name} {
   return $lut_o_pin
 }
 
-proc getOrCreateVCCPin {prefix_name} {
+proc getOrCreateVCCPin {parent} {
   variable debug
 
-  set vcc_cell ""
-  set vcc_cells [get_cells -quiet -filter {REF_NAME == VCC}]
-  if {[llength $vcc_cells] == 0} {
-    set cell_name [unique_cell_name $prefix_name]
+  set hier_sep [get_hierarchy_separator]
+  set cell_name "${parent}${hier_sep}VCC"
+
+  set vcc_cell [get_cells -quiet $cell_name]
+  if {[llength $vcc_cell] == 0} {
     set vcc_cell [create_cell -reference VCC $cell_name]
     puts "INFO: Created VCC cell: '$vcc_cell'"
-  } else {
-    set vcc_cell [lindex $vcc_cells 0]
+  } elseif {[llength $vcc_cell] > 1} {
+    puts "ERROR: Multiple VCC cells found with name '$cell_name'."
+    exit -1
   }
-  set vcc_pin [get_pins -of_objects $vcc_cell -filter {NAME =~ "*/P"}]
+
+  set vcc_pin [get_pins "${vcc_cell}${hier_sep}P"]
   if {[llength $vcc_pin] == 0} {
     puts "ERROR: No VCC pin found on VCC cell '$vcc_cell'."
     exit -1
@@ -298,22 +411,26 @@ proc getOrCreateVCCPin {prefix_name} {
     puts "ERROR: Multiple VCC pins found on VCC cell '$vcc_cell'."
     exit -1
   }
+
   return $vcc_pin
 }
 
-proc getOrCreateGNDPin {prefix_name} {
+proc getOrCreateGNDPin {parent} {
   variable debug
 
-  set gnd_cell ""
-  set gnd_cells [get_cells -quiet -filter {REF_NAME == GND}]
-  if {[llength $gnd_cells] == 0} {
-    set cell_name [unique_cell_name $prefix_name]
+  set hier_sep [get_hierarchy_separator]
+  set cell_name "${parent}${hier_sep}GND"
+
+  set gnd_cell [get_cells -quiet $cell_name]
+  if {[llength $gnd_cell] == 0} {
     set gnd_cell [create_cell -reference GND $cell_name]
     puts "INFO: Created GND cell: '$gnd_cell'"
-  } else {
-    set gnd_cell [lindex $gnd_cells 0]
+  } elseif {[llength $gnd_cell] > 1} {
+    puts "ERROR: Multiple GND cells found with name '$cell_name'."
+    exit -1
   }
-  set gnd_pin [get_pins -of_objects $gnd_cell -filter {NAME =~ "*/G"}]
+
+  set gnd_pin [get_pins "${gnd_cell}${hier_sep}G"]
   if {[llength $gnd_pin] == 0} {
     puts "ERROR: No GND pin found on GND cell '$gnd_cell'."
     exit -1
@@ -321,6 +438,7 @@ proc getOrCreateGNDPin {prefix_name} {
     puts "ERROR: Multiple GND pins found on GND cell '$gnd_cell'."
     exit -1
   }
+
   return $gnd_pin
 }
 
@@ -336,35 +454,6 @@ proc find_net_sinks {input_net {should_exist 1}} {
     print_error "No sink found for '$input_net'." $should_exist
   }
   return $sink_pins
-}
-
-proc find_net_driver {input_net {should_exist 1}} {
-  set driverPins [get_pins -quiet -leaf -of_objects $input_net -filter {DIRECTION == "OUT"}]
-  if {[llength $driverPins] == 0} {
-    set driverPorts [get_ports -quiet -of_objects $input_net -filter {DIRECTION == "IN"}]
-    if {[llength $driverPorts] == 0} {
-      print_error "No driver found for '$input_net'." $should_exist
-    } elseif {[llength $driverPorts] > 1} {
-      puts "WARNING: Multiple driver ports found for '$input_net'."
-      return [lindex $driverPorts 0]
-    }
-    return $driverPorts
-  } elseif {[llength $driverPins] > 1} {
-    puts "WARNING: Multiple driver pins found for '$input_net'."
-    return [lindex $driverPins 0]
-  }
-  return $driverPins
-}
-
-proc find_pin_driver {input_pin {should_exist 1}} {
-  set net [get_nets -quiet -of_objects $input_pin]
-  if {[llength $net] == 0} {
-    print_error "No net connected to pin '$input_pin'." $should_exist
-  } elseif {[llength $net] > 1} {
-    puts "ERROR: Multiple nets connected to pin '$input_pin'."
-    exit -1
-  }
-  return [find_net_driver $net]
 }
 
 proc find_matching_nets {cell nets match repl} {
@@ -386,6 +475,25 @@ proc find_matching_nets {cell nets match repl} {
   return $matching_nets
 }
 
+proc find_matching_pins {cell pins match repl} {
+  set matching_pins {}
+  foreach pin $pins {
+    set pin_name [str_replace $pin $match $repl]
+    set matching_pin [get_cell_pin $cell $pin_name]
+    if {$matching_pin != ""} {
+      lappend matching_pins $matching_pin
+    }
+  }
+  if {[llength $matching_pins] == 0} {
+    puts "ERROR: No matching pins found for '$pins'."
+    exit -1
+  } elseif {[llength $matching_pins] != [llength $pins]} {
+    puts "ERROR: Mismatch in number of matching pins."
+    exit -1
+  }
+  return $matching_pins
+}
+
 proc replace_net_source {net source_pin} {
   foreach pin [find_net_sinks $net 0] {
     replace_pin_source $pin $source_pin
@@ -396,6 +504,8 @@ proc resolve_async_bram {inst} {
   variable debug
 
   puts "INFO: Resolving asynchronous BRAM patch: '$inst'."
+
+  set hier_sep [get_hierarchy_separator]
 
   set raddr_w_nets [find_cell_nets $inst "raddr_w(\\\[\\d+\\\])?$"]
   set read_s_net [find_cell_nets $inst "read_s$"]
@@ -433,7 +543,7 @@ proc resolve_async_bram {inst} {
     }
 
     # Create register next cell and return output pin
-    set reg_next_pin [create_register_next $raddr_src_cell "$inst/raddr_next"]
+    set reg_next_pin [create_register_next $inst $raddr_src_cell]
     if {$reg_next_pin == ""} {
       puts "ERROR: failed to create register next value for '$raddr_src_cell'."
       exit -1
@@ -444,7 +554,7 @@ proc resolve_async_bram {inst} {
 
     # Find the CE pin on raddr_src_cell
     if {$reg_ce_src_pin == ""} {
-      set reg_ce_pin [get_pins -of_objects $raddr_src_cell -filter {NAME =~ "*/CE"}]
+      set reg_ce_pin [get_pins "${raddr_src_cell}${hier_sep}CE"]
       if {[llength $reg_ce_pin] == 0} {
         puts "ERROR: No CE pin found on register cell '$raddr_src_cell'."
         exit -1
@@ -466,9 +576,10 @@ proc resolve_async_bram {inst} {
   # do we have a fully registered read address?
   if {[llength $reg_next_pins] == [llength $raddr_w_nets]} {
     puts "INFO: Fully registered read address detected."
+
+    # Connect all reg_next_pins to all input pins attached to raddr_s_nets
     set addr_width [llength $raddr_w_nets]
     for {set addr_idx 0} {$addr_idx < $addr_width} {incr addr_idx} {
-      set raddr_w_net [lindex $raddr_w_nets $addr_idx]
       set raddr_s_net [lindex $raddr_s_nets $addr_idx]
       set reg_next_pin [lindex $reg_next_pins $addr_idx]
       puts "INFO: Connecting pin '$reg_next_pin' to '$raddr_s_net's pins."
@@ -481,26 +592,35 @@ proc resolve_async_bram {inst} {
     replace_net_source $read_s_net $reg_ce_src_pin
 
     # Create Const<1>'s pin
-    set vcc_pin [getOrCreateVCCPin "$inst/VCC"]
+    set vcc_pin [getOrCreateVCCPin $inst]
 
     # Connect vcc_pin to all input pins attached to is_raddr_reg_net
     puts "INFO: Connecting pin '$vcc_pin' to '$is_raddr_reg_net's pins."
     replace_net_source $is_raddr_reg_net $vcc_pin
+
+    # Remove all async_ram cells
+    foreach cell [find_nested_cells $inst "g_async_ram.*" 0] {
+      remove_cell_from_netlist $cell
+    }
   } else {
     puts "WARNING: Not all read addresses are registered!"
 
     # Create  Const<0>'s pin
-    set gnd_pin [getOrCreateGNDPin "$inst/GND"]
+    set gnd_pin [getOrCreateGNDPin $inst]
 
     # Connect gnd_pin to all input pins attached to is_raddr_reg_net
     puts "INFO: Connecting pin '$gnd_pin' to '$is_raddr_reg_net's pins."
     replace_net_source $is_raddr_reg_net $gnd_pin
+
+    # Remove all sync_ram cells
+    foreach cell [find_nested_cells $inst "g_sync_ram.*" 0] {
+      remove_cell_from_netlist $cell
+    }
   }
 
-  # Remove all placeholder cells
+  # Remove placeholder cell
   foreach cell [find_nested_cells $inst "placeholder$"] {
-    remove_cell $cell
-    if {$debug} {puts "DEBUG: Cell '$cell' was removed successfully."}
+    remove_cell_from_netlist $cell
   }
 }
 
@@ -519,7 +639,26 @@ proc resolve_async_brams {} {
   }
 }
 
+proc dump_async_bram_cells {} {
+  set bram_patch_cells [get_cells -hierarchical -filter {REF_NAME =~ "*VX_async_ram_patch*"}]
+  if {[llength $bram_patch_cells] != 0} {
+    foreach cell $bram_patch_cells {
+      puts "INFO: Found async BRAM patch cell: '$cell'."
+      set child_cells [find_cell_descendants $cell]
+      foreach child $child_cells {
+        set type [get_property REF_NAME $child]
+        puts "INFO:   child cell: '$child', type: '$type'"
+      }
+    }
+  } else {
+    puts "INFO: No async BRAM patch cells found in the design."
+  }
+}
+
 }
 
 # Invoke the procedure to resolve async BRAM
 vortex::resolve_async_brams
+
+# dump async bram cells
+#vortex::dump_async_bram_cells

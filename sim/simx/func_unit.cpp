@@ -116,12 +116,12 @@ void LsuUnit::tick() {
 
 	// handle memory responses
 	for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-		auto& lsu_rsp_port = core_->lsu_demux_.at(b)->RspIn;
+		auto& lsu_rsp_port = core_->lmem_switch_.at(b)->RspIn;
 		if (lsu_rsp_port.empty())
 			continue;
 		auto& state = states_.at(b);
 		auto& lsu_rsp = lsu_rsp_port.front();
-		DT(3, this->name() << " mem-rsp: " << lsu_rsp);
+		DT(3, this->name() << "-mem-rsp: " << lsu_rsp);
 		auto& entry = state.pending_rd_reqs.at(lsu_rsp.tag);
 		auto trace = entry.trace;
 		assert(!entry.mask.none());
@@ -146,7 +146,7 @@ void LsuUnit::tick() {
 				continue;
 			Outputs.at(iw).push(state.fence_trace, 1);
 			state.fence_lock = false;
-			DT(3, this->name() << " fence-unlock: " << state.fence_trace);
+			DT(3, this->name() << "-fence-unlock: " << state.fence_trace);
 		}
 
 		// check input queue
@@ -160,7 +160,7 @@ void LsuUnit::tick() {
 			// schedule fence lock
 			state.fence_trace = trace;
 			state.fence_lock = true;
-			DT(3, this->name() << " fence-lock: " << *trace);
+			DT(3, this->name() << "-fence-lock: " << *trace);
 			// remove input
 			input.pop();
 			continue;
@@ -171,7 +171,7 @@ void LsuUnit::tick() {
 		// check pending queue capacity
 		if (!is_write && state.pending_rd_reqs.full()) {
 			if (!trace->log_once(true)) {
-				DT(4, "*** " << this->name() << " queue-full: " << *trace);
+				DT(4, "*** " << this->name() << "-queue-full: " << *trace);
 			}
 			continue;
 		} else {
@@ -201,8 +201,8 @@ void LsuUnit::tick() {
 		lsu_req.uuid = trace->uuid;
 
 		// send memory request
-		core_->lsu_demux_.at(block_idx)->ReqIn.push(lsu_req);
-		DT(3, this->name() << " mem-req: " << lsu_req);
+		core_->lmem_switch_.at(block_idx)->ReqIn.push(lsu_req);
+		DT(3, this->name() << "-mem-req: " << lsu_req);
 
 		// update stats
 		auto num_addrs = lsu_req.mask.count();
@@ -237,7 +237,7 @@ int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
 	{
  		req_per_thread= (1>(trace_data->mem_addrs.at(0).size)/4)? 1: ((trace_data->mem_addrs.at(0).size)/4);
 	}
-	
+
 	auto t0 = trace->pid * NUM_LSU_LANES;
 
 	for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
@@ -246,11 +246,11 @@ int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
 			continue;
 
 		int req_idx = block_idx * LSU_CHANNELS + (i % LSU_CHANNELS);
-		auto& dcache_req_port = core_->lsu_demux_.at(req_idx)->ReqIn;
+		auto& dcache_req_port = core_->lmem_switch_.at(req_idx)->ReqIn;
 
 		auto mem_addr = trace_data->mem_addrs.at(t);
 		auto type = get_addr_type(mem_addr.addr);
-		// DT(3, "addr_type = " << type << ", " << *trace);		
+		// DT(3, "addr_type = " << type << ", " << *trace);
 		uint32_t mem_bytes = 1;
 		for (int i = 0; i < req_per_thread; i++)
 		{
@@ -261,7 +261,7 @@ int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
 			mem_req.tag   = tag;
 			mem_req.cid   = trace->cid;
 			mem_req.uuid  = trace->uuid;
-		
+
 			dcache_req_port.push(mem_req, 1);
 			DT(3, "mem-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << tag
 				<< ", lsu_type=" << trace->lsu_type << ", rid=" << req_idx << ", addr_type=" << mem_req.type << ", " << *trace);
@@ -272,7 +272,7 @@ int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
 				++core_->perf_stats_.loads;
 				++pending_loads_;
 			}
-		
+
 			++count;
 		}
 	}
@@ -282,7 +282,7 @@ int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-TcuUnit::TcuUnit(const SimContext& ctx, Core* core) 
+TcuUnit::TcuUnit(const SimContext& ctx, Core* core)
     : FuncUnit(ctx, core, "TCU")
     {}
 
@@ -290,7 +290,7 @@ void TcuUnit::tick() {
 
 	for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
         auto& input = Inputs.at(i);
-        if (input.empty()) 
+        if (input.empty())
             continue;
         auto& output = Outputs.at(i);
         auto trace = input.front();
@@ -307,7 +307,7 @@ void TcuUnit::tick() {
             }
             default:
                 std::abort();
-        }    
+        }
         DT(3, "pipeline-execute: op=" << trace->tcu_type << ", " << *trace);
         input.pop();
     }

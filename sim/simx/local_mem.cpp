@@ -24,9 +24,8 @@ protected:
 	LocalMem* simobject_;
 	Config    config_;
 	RAM       ram_;
-	int32_t   bank_sel_addr_start_;
-  int32_t   bank_sel_addr_end_;
-	PerfStats perf_stats_;
+	MemCrossBar::Ptr mem_xbar_;
+	mutable PerfStats perf_stats_;
 
 	uint64_t to_local_addr(uint64_t addr) {
 		uint32_t total_lines = config_.capacity / config_.line_size;
@@ -40,9 +39,15 @@ public:
 		: simobject_(simobject)
 		, config_(config)
 		, ram_(config.capacity)
-		, bank_sel_addr_start_(0)
-		, bank_sel_addr_end_(config.B-1)
-	{}
+	{
+		char sname[100];
+		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
+		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config.num_reqs, (1 << config.B));
+		for (uint32_t i = 0; i < config.num_reqs; ++i) {
+			simobject->Inputs.at(i).bind(&mem_xbar_->ReqIn.at(i));
+			mem_xbar_->RspIn.at(i).bind(&simobject->Outputs.at(i));
+		}
+	}
 
 	virtual ~Impl() {}
 
@@ -63,45 +68,33 @@ public:
 	}
 
 	void tick() {
-		std::vector<bool> in_used_banks(1 << config_.B);
-		for (uint32_t req_id = 0; req_id < config_.num_reqs; ++req_id) {
-			auto& core_req_port = simobject_->Inputs.at(req_id);
-			if (core_req_port.empty())
+		// process bank requets from xbar
+		uint32_t num_banks = (1 << config_.B);
+		for (uint32_t i = 0; i < num_banks; ++i) {
+			auto& xbar_req_out = mem_xbar_->ReqOut.at(i);
+			if (xbar_req_out.empty())
 				continue;
 
-			auto& core_req = core_req_port.front();
+			auto& bank_req = xbar_req_out.front();
+			DT(4, simobject_->name() << "-bank" << i << "-req : " << bank_req);
 
-			uint32_t bank_id = 0;
-			if (bank_sel_addr_end_ >= bank_sel_addr_start_) {
-				bank_id = (uint32_t)bit_getw(core_req.addr, bank_sel_addr_start_, bank_sel_addr_end_);
-			}
-
-			// bank conflict check
-			if (in_used_banks.at(bank_id)) {
-				++perf_stats_.bank_stalls;
-				continue;
-			}
-
-			DT(4, simobject_->name() << " mem-req" << req_id << ": "<< core_req);
-
-			in_used_banks.at(bank_id) = true;
-
-			if (!core_req.write || config_.write_reponse) {
-				// send response
-				MemRsp core_rsp{core_req.tag, core_req.cid, core_req.uuid};
-				simobject_->Outputs.at(req_id).push(core_rsp, 1);
+			if (!bank_req.write || config_.write_reponse) {
+				// send xbar response
+				MemRsp bank_rsp{bank_req.tag, bank_req.cid, bank_req.uuid};
+				mem_xbar_->RspOut.at(i).push(bank_rsp, 1);
 			}
 
 			// update perf counters
-			perf_stats_.reads += !core_req.write;
-			perf_stats_.writes += core_req.write;
+			perf_stats_.reads += !bank_req.write;
+			perf_stats_.writes += bank_req.write;
 
 			// remove input
-			core_req_port.pop();
+			xbar_req_out.pop();
 		}
 	}
 
 	const PerfStats& perf_stats() const {
+		perf_stats_.bank_stalls = mem_xbar_->collisions();
 		return perf_stats_;
 	}
 };
