@@ -141,7 +141,6 @@ void LsuMemAdapter::tick() {
   if (!ReqIn.empty()) {
     auto& in_req = ReqIn.front();
     assert(in_req.mask.size() == input_size);
-
     for (uint32_t i = 0; i < input_size; ++i) {
       if (in_req.mask.test(i)) {
         // build memory request
@@ -152,7 +151,6 @@ void LsuMemAdapter::tick() {
         out_req.tag   = in_req.tag;
         out_req.cid   = in_req.cid;
         out_req.uuid  = in_req.uuid;
-
         // send memory request
         ReqOut.at(i).push(out_req, delay_);
         DT(4, this->name() << "-req" << i << ": " << out_req);

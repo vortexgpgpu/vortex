@@ -44,7 +44,7 @@ Core::Core(const SimContext& ctx,
   , operands_(ISSUE_WIDTH)
   , dispatchers_((uint32_t)FUType::Count)
   , func_units_((uint32_t)FUType::Count)
-  , lsu_demux_(NUM_LSU_BLOCKS)
+  , lmem_switch_(NUM_LSU_BLOCKS)
   , mem_coalescers_(NUM_LSU_BLOCKS)
   , lsu_dcache_adapter_(NUM_LSU_BLOCKS)
   , lsu_lmem_adapter_(NUM_LSU_BLOCKS)
@@ -73,10 +73,10 @@ Core::Core(const SimContext& ctx,
     false
   });
 
-  // create lsu demux
+  // create lmem switch
   for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
-    snprintf(sname, 100, "%s-lsu_demux%d", this->name().c_str(), i);
-    lsu_demux_.at(i) = LocalMemSwitch::Create(sname, 1);
+    snprintf(sname, 100, "%s-lmem_switch%d", this->name().c_str(), i);
+    lmem_switch_.at(i) = LocalMemSwitch::Create(sname, 1);
   }
 
   // create lsu dcache adapter
@@ -93,11 +93,11 @@ Core::Core(const SimContext& ctx,
 
   // connect lsu demux
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-    lsu_demux_.at(b)->ReqDC.bind(&mem_coalescers_.at(b)->ReqIn);
-    mem_coalescers_.at(b)->RspIn.bind(&lsu_demux_.at(b)->RspDC);
+    lmem_switch_.at(b)->ReqDC.bind(&mem_coalescers_.at(b)->ReqIn);
+    mem_coalescers_.at(b)->RspIn.bind(&lmem_switch_.at(b)->RspDC);
 
-    lsu_demux_.at(b)->ReqLmem.bind(&lsu_lmem_adapter_.at(b)->ReqIn);
-    lsu_lmem_adapter_.at(b)->RspIn.bind(&lsu_demux_.at(b)->RspLmem);
+    lmem_switch_.at(b)->ReqLmem.bind(&lsu_lmem_adapter_.at(b)->ReqIn);
+    lsu_lmem_adapter_.at(b)->RspIn.bind(&lmem_switch_.at(b)->RspLmem);
   }
 
   // connect coalescer-adapter

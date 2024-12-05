@@ -116,7 +116,7 @@ void LsuUnit::tick() {
 
 	// handle memory responses
 	for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-		auto& lsu_rsp_port = core_->lsu_demux_.at(b)->RspIn;
+		auto& lsu_rsp_port = core_->lmem_switch_.at(b)->RspIn;
 		if (lsu_rsp_port.empty())
 			continue;
 		auto& state = states_.at(b);
@@ -201,7 +201,7 @@ void LsuUnit::tick() {
 		lsu_req.uuid = trace->uuid;
 
 		// send memory request
-		core_->lsu_demux_.at(block_idx)->ReqIn.push(lsu_req);
+		core_->lmem_switch_.at(block_idx)->ReqIn.push(lsu_req);
 		DT(3, this->name() << "-mem-req: " << lsu_req);
 
 		// update stats
@@ -246,7 +246,7 @@ int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
 			continue;
 
 		int req_idx = block_idx * LSU_CHANNELS + (i % LSU_CHANNELS);
-		auto& dcache_req_port = core_->lsu_demux_.at(req_idx)->ReqIn;
+		auto& dcache_req_port = core_->lmem_switch_.at(req_idx)->ReqIn;
 
 		auto mem_addr = trace_data->mem_addrs.at(t);
 		auto type = get_addr_type(mem_addr.addr);

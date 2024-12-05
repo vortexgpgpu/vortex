@@ -484,7 +484,7 @@ public:
     , type_(type)
     , delay_(delay)
     , grants_(num_outputs, 0)
-    , num_reqs_(log2ceil(num_inputs / num_outputs))
+    , lg2_num_reqs_(log2ceil(num_inputs / num_outputs))
   {
     assert(delay != 0);
     assert(num_inputs <= 64);
@@ -508,7 +508,7 @@ public:
   void tick() {
     uint32_t I = Inputs.size();
     uint32_t O = Outputs.size();
-    uint32_t R = 1 << num_reqs_;
+    uint32_t R = 1 << lg2_num_reqs_;
 
     // skip bypass mode
     if (I == O)
@@ -545,7 +545,7 @@ protected:
   ArbiterType type_;
   uint32_t delay_;
   std::vector<uint32_t> grants_;
-  uint32_t num_reqs_;
+  uint32_t lg2_num_reqs_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -571,9 +571,9 @@ public:
     , type_(type)
     , delay_(delay)
     , grants_(num_outputs, 0)
-    , lg_num_reqs_(log2ceil(num_inputs))
+    , lg2_inputs_(log2ceil(num_inputs))
+    , lg2_outputs_(log2ceil(num_outputs))
     , addr_start_(addr_start)
-    , addr_end_(num_outputs-1)
     , collisions_(0) {
     assert(delay != 0);
     assert(num_inputs <= 64);
@@ -590,7 +590,7 @@ public:
   void tick() {
     uint32_t I = Inputs.size();
     uint32_t O = Outputs.size();
-    uint32_t R = 1 << lg_num_reqs_;
+    uint32_t R = 1 << lg2_inputs_;
 
     // process incoming requests
     for (uint32_t o = 0; o < O; ++o) {
@@ -602,10 +602,10 @@ public:
         auto& req_in = Inputs.at(i);
         if (!req_in.empty()) {
           auto& req = req_in.front();
-          // skip if input is not going to this output
+          // skip if input is not going to current output
           uint32_t output_idx = 0;
           if (O != 1) {
-            output_idx = (uint32_t)bit_getw(req.addr, addr_start_, addr_end_);
+            output_idx = (uint32_t)bit_getw(req.addr, addr_start_, lg2_outputs_-1);
           }
           if (output_idx != o)
             continue;
@@ -619,8 +619,8 @@ public:
       if (input_idx != -1) {
         auto& req_in = Inputs.at(input_idx);
         auto& req = req_in.front();
-        if (lg_num_reqs_ != 0) {
-          req.tag = (req.tag << lg_num_reqs_) | input_idx;
+        if (lg2_inputs_ != 0) {
+          req.tag = (req.tag << lg2_inputs_) | input_idx;
         }
         DT(4, this->name() << "-req" << input_idx << ": " << req);
         Outputs.at(o).push(req, delay_);
@@ -645,9 +645,9 @@ protected:
   ArbiterType type_;
   uint32_t delay_;
   std::vector<uint32_t> grants_;
-  uint32_t lg_num_reqs_;
+  uint32_t lg2_inputs_;
+  uint32_t lg2_outputs_;
   uint32_t addr_start_;
-  uint32_t addr_end_;
   uint64_t collisions_;
 };
 
@@ -678,7 +678,7 @@ public:
     , type_(type)
     , delay_(delay)
     , grants_(num_outputs, 0)
-    , lg_num_reqs_(log2ceil(num_inputs / num_outputs))
+    , lg2_num_reqs_(log2ceil(num_inputs / num_outputs))
   {
     assert(delay != 0);
     assert(num_inputs <= 64);
@@ -703,7 +703,7 @@ public:
   void tick() {
     uint32_t I = ReqIn.size();
     uint32_t O = ReqOut.size();
-    uint32_t R = 1 << lg_num_reqs_;
+    uint32_t R = 1 << lg2_num_reqs_;
 
     // skip bypass mode
     if (I == O)
@@ -715,9 +715,9 @@ public:
       if (!rsp_out.empty()) {
         auto& rsp = rsp_out.front();
         uint32_t g = 0;
-        if (lg_num_reqs_ != 0) {
+        if (lg2_num_reqs_ != 0) {
           g = rsp.tag & (R-1);
-          rsp.tag >>= lg_num_reqs_;
+          rsp.tag >>= lg2_num_reqs_;
         }
         DT(4, this->name() << "-rsp" << o << ": " << rsp);
         uint32_t j = o * R + g;
@@ -737,8 +737,8 @@ public:
         auto& req_in = ReqIn.at(j);
         if (!req_in.empty()) {
           auto& req = req_in.front();
-          if (lg_num_reqs_ != 0) {
-            req.tag = (req.tag << lg_num_reqs_) | g;
+          if (lg2_num_reqs_ != 0) {
+            req.tag = (req.tag << lg2_num_reqs_) | g;
           }
           DT(4, this->name() << "-req" << j << ": " << req);
           ReqOut.at(o).push(req, delay_);
@@ -761,7 +761,7 @@ protected:
   ArbiterType type_;
   uint32_t delay_;
   std::vector<uint32_t> grants_;
-  uint32_t lg_num_reqs_;
+  uint32_t lg2_num_reqs_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -793,10 +793,9 @@ public:
     , delay_(delay)
     , req_grants_(num_outputs, 0)
     , rsp_grants_(num_inputs, 0)
-    , lg_num_reqs_(log2ceil(num_inputs))
-    , lg_num_rsps_(log2ceil(num_outputs))
+    , lg2_inputs_(log2ceil(num_inputs))
+    , lg2_outputs_(log2ceil(num_outputs))
     , addr_start_(addr_start)
-    , addr_end_(num_outputs-1)
     , collisions_(0) {
     assert(delay != 0);
     assert(num_inputs <= 64);
@@ -817,8 +816,8 @@ public:
   void tick() {
     uint32_t I = ReqIn.size();
     uint32_t O = ReqOut.size();
-    uint32_t R = 1 << lg_num_reqs_;
-    uint32_t T = 1 << lg_num_rsps_;
+    uint32_t R = 1 << lg2_inputs_;
+    uint32_t T = 1 << lg2_outputs_;
 
     // process outgoing responses
     for (uint32_t i = 0; i < I; ++i) {
@@ -832,7 +831,7 @@ public:
           auto& rsp = rsp_out.front();
           // skip if response is not going to current input
           uint32_t input_idx = 0;
-          if (lg_num_reqs_ != 0) {
+          if (lg2_inputs_ != 0) {
             input_idx = rsp.tag & (R-1);
           }
           if (input_idx != i)
@@ -848,9 +847,9 @@ public:
         auto& rsp_out = RspOut.at(output_idx);
         auto& rsp = rsp_out.front();
         uint32_t input_idx = 0;
-        if (lg_num_reqs_ != 0) {
+        if (lg2_inputs_ != 0) {
           input_idx = rsp.tag & (R-1);
-          rsp.tag >>= lg_num_reqs_;
+          rsp.tag >>= lg2_inputs_;
         }
         DT(4, this->name() << "-rsp" << output_idx << ": " << rsp);
         RspIn.at(input_idx).push(rsp, 1);
@@ -872,7 +871,7 @@ public:
           // skip if request is not going to current output
           uint32_t output_idx = 0;
           if (O != 1) {
-            output_idx = (uint32_t)bit_getw(req.addr, addr_start_, addr_end_);
+            output_idx = (uint32_t)bit_getw(req.addr, addr_start_, lg2_outputs_-1);
           }
           if (output_idx != o)
             continue;
@@ -886,8 +885,8 @@ public:
       if (input_idx != -1) {
         auto& req_in = ReqIn.at(input_idx);
         auto& req = req_in.front();
-        if (lg_num_reqs_ != 0) {
-          req.tag = (req.tag << lg_num_reqs_) | input_idx;
+        if (lg2_inputs_ != 0) {
+          req.tag = (req.tag << lg2_inputs_) | input_idx;
         }
         DT(4, this->name() << "-req" << input_idx << ": " << req);
         ReqOut.at(o).push(req, delay_);
@@ -919,10 +918,9 @@ protected:
   uint32_t delay_;
   std::vector<uint32_t> req_grants_;
   std::vector<uint32_t> rsp_grants_;
-  uint32_t lg_num_reqs_;
-  uint32_t lg_num_rsps_;
+  uint32_t lg2_inputs_;
+  uint32_t lg2_outputs_;
   uint32_t addr_start_;
-  uint32_t addr_end_;
   uint64_t collisions_;
 };
 
@@ -980,4 +978,5 @@ private:
 
 using MemArbiter = TxArbiter<MemReq, MemRsp>;
 using MemCrossBar = TxCrossBar<MemReq, MemRsp>;
+
 }
