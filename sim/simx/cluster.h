@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -32,13 +32,13 @@ public:
     CacheSim::PerfStats l2cache;
   };
 
-  SimPort<MemReq> mem_req_port;
-  SimPort<MemRsp> mem_rsp_port;
+  std::vector<SimPort<MemReq>> mem_req_ports;
+  std::vector<SimPort<MemRsp>> mem_rsp_ports;
 
-  Cluster(const SimContext& ctx, 
+  Cluster(const SimContext& ctx,
           uint32_t cluster_id,
-          ProcessorImpl* processor, 
-          const Arch &arch, 
+          ProcessorImpl* processor,
+          const Arch &arch,
           const DCRS &dcrs);
 
   ~Cluster();
@@ -63,16 +63,16 @@ public:
 
   bool running() const;
 
-  int get_exitcode() const;  
+  int get_exitcode() const;
 
   void barrier(uint32_t bar_id, uint32_t count, uint32_t core_id);
 
   PerfStats perf_stats() const;
-  
+
 private:
   uint32_t                    cluster_id_;
   ProcessorImpl*              processor_;
-  std::vector<Socket::Ptr>    sockets_;  
+  std::vector<Socket::Ptr>    sockets_;
   std::vector<CoreMask>       barriers_;
   CacheSim::Ptr               l2cache_;
   uint32_t                    cores_per_socket_;

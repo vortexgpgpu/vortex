@@ -485,7 +485,7 @@ module VX_rr_arbiter #(
             .D (NUM_REQS)
         ) grant_decoder (
             .sel_in   (grant_index),
-            .data_in  (1'b1),
+            .data_in  (grant_valid),
             .data_out (grant_onehot)
         );
 

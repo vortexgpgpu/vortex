@@ -1430,7 +1430,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       std::abort();
     }
   } break;
-  case Opcode::TCU: 
+  case Opcode::TCU:
   { //TODO - make it data-type flexible
     uint32_t mem_bytes = 1;
     DP(3, "mem_bytes=" << mem_bytes << std::endl);
@@ -1452,7 +1452,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
 
     //LOAD
     if(num_threads > tc_size*tc_size*n_tiles*TC_per_warp)
-    { 
+    {
       num_threads_actv = tc_size*tc_size*n_tiles*TC_per_warp;
       num_data_per_thread = 1;
     }
@@ -1465,7 +1465,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
 
     //STORE
     if(num_threads > tc_size*tc_size*TC_per_warp)
-    { 
+    {
       num_threads_actv_st = tc_size*tc_size*TC_per_warp;
       num_data_per_thread_st = 1;
     }
@@ -1475,30 +1475,30 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       num_data_per_thread_st = (tc_size*tc_size)/num_threads_per_tc;
     }
     data_bytes_store = mem_bytes*num_data_per_thread_st;
-    
+
     DP(3, "Num Tiles=" << n_tiles << std::endl);
-    
+
     switch (func3) {
-      case 0: 
-      { //Matrix Load  
+      case 0:
+      { //Matrix Load
 
         DP (4, "TCU LOAD");
         trace->fu_type = FUType::LSU;
         trace->lsu_type = LsuType::TCU_LOAD;
-        
+
         trace->src_regs[0] = {RegType::Integer, rsrc0};
         auto trace_data = std::make_shared<LsuTraceData>(num_threads);
         trace->data = trace_data;
-        
-        for (uint32_t t = thread_start; t < num_threads_actv; ++t) 
+
+        for (uint32_t t = thread_start; t < num_threads_actv; ++t)
         {
           if (!warp.tmask.test(t))
             continue;
-          DP(3, "Thread ID" << t); 
+          DP(3, "Thread ID" << t);
 
           uint32_t base_addr = rsdata[t][0].i ;
           trace_data->mem_addrs.at(t) = {base_addr, data_bytes_load};
-          
+
           //Load A or B (depends on immsrc)
           int loop_offset = 0;
           DP(3, "n_tiles = " << n_tiles << "; num_data_per_thread = " << num_data_per_thread <<std::endl);
@@ -1511,10 +1511,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
               DP(3, "Scratchpad Index: " << loop_offset + (immsrc*(n_tiles)*tc_size*tc_size) + (t*num_data_per_thread) + n << ", Value: " << scratchpad[loop_offset + (immsrc*(n_tiles)*tc_size*tc_size) + (t*num_data_per_thread) + n]);
             }
         }
-        rd_write = true;  
+        rd_write = true;
       } break;
-      case 1: 
-      { 
+      case 1:
+      {
         DP(4, "TCU STORE");
         trace->fu_type = FUType::LSU;
         trace->lsu_type = LsuType::TCU_STORE;
@@ -1522,12 +1522,12 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         auto trace_data = std::make_shared<LsuTraceData>(num_threads);
         trace->data = trace_data;
 
-        for (uint32_t t = thread_start; t < num_threads_actv_st; ++t) 
+        for (uint32_t t = thread_start; t < num_threads_actv_st; ++t)
         {
           if (!warp.tmask.test(t))
             continue;
 
-          DP(3, "Thread ID" << t); 
+          DP(3, "Thread ID" << t);
           uint32_t base_addr = rsdata[t][0].i ;
 
           trace_data->mem_addrs.at(t) = {base_addr, data_bytes_store};
@@ -1538,7 +1538,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
             Word* temp_ref = &(warp.ireg_file.at(t).at(rsrc0));
             *temp_ref = scratchpad[(n_tiles*tc_size*tc_size*2) + (t*num_data_per_thread_st) + n];
 
-            this->dcache_write(temp_ref, base_addr+(n*mem_bytes), mem_bytes);  
+            this->dcache_write(temp_ref, base_addr+(n*mem_bytes), mem_bytes);
           }
         }
         //Clear the scratchpad
@@ -1548,18 +1548,18 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         }
       }
       break;
-      case 2: 
+      case 2:
       { //Matrix Multiply
         DP(4, "TCU MULTIPLY MAT");
         trace->fu_type = FUType::TCU;
         trace->tcu_type = TCUType::TCU_MUL;
         uint32_t threads_per_tc = MAX (1, num_threads/TC_per_warp);
-        for (uint32_t t = thread_start; t < num_threads_actv; ++t) 
+        for (uint32_t t = thread_start; t < num_threads_actv; ++t)
         {
           if (!warp.tmask.test(t))
             continue;
-         
-          DP(3, "Thread ID" << t); 
+
+          DP(3, "Thread ID" << t);
           //TC operation [only 1 thread in 1 warp needs to do this]
           if (t%threads_per_tc == 0)
           {
@@ -1572,7 +1572,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
             int offset_b = n_tiles*n_tiles*n_tiles*tc_size*tc_size;
             uint32_t accu_offset = (n_tiles)*(n_tiles)*(n_tiles)*tc_size*tc_size*2;
             for(int tiles = 0 ; tiles < n_tiles ; tiles++)  //What's the HW implication of this?? A counter implementation?
-            { 
+            {
               for (int i = 0; i < tc_size; i++) { //ROW-1
                 for (int j = 0; j < tc_size; j++) { //COL-2
                   int sum = 0;

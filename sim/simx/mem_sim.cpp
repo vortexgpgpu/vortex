@@ -27,13 +27,14 @@ class MemSim::Impl {
 private:
 	MemSim*   simobject_;
 	Config    config_;
+	MemCrossBar::Ptr mem_xbar_;
 	DramSim   dram_sim_;
 	PerfStats perf_stats_;
 
 	struct DramCallbackArgs {
-		MemSim* simobject;
-		MemReq  request;
-		uint32_t i;
+		MemSim::Impl* memsim;
+		MemReq request;
+		uint32_t bank_id;
 	};
 
 public:
@@ -41,7 +42,15 @@ public:
 		: simobject_(simobject)
 		, config_(config)
 		, dram_sim_(MEM_CLOCK_RATIO)
-	{}
+	{
+		char sname[100];
+		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
+		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config.num_ports, config.num_banks);
+		for (uint32_t i = 0; i < config.num_ports; ++i) {
+			simobject->MemReqPorts.at(i).bind(&mem_xbar_->ReqIn.at(i));
+			mem_xbar_->RspIn.at(i).bind(&simobject->MemRspPorts.at(i));
+		}
+	}
 
 	~Impl() {
 		//--
@@ -59,14 +68,14 @@ public:
 		dram_sim_.tick();
 		uint32_t counter = 0;
 
-		for (uint32_t i = 0; i < NUM_MEM_PORTS; ++i) {
-			if (simobject_->MemReqPorts.at(i).empty())
+		for (uint32_t i = 0; i < config_.num_banks; ++i) {
+			if (mem_xbar_->ReqOut.at(i).empty())
 				continue;
 
-			auto& mem_req = simobject_->MemReqPorts.at(i).front();
+			auto& mem_req = mem_xbar_->ReqOut.at(i).front();
 
 			// try to enqueue the request to the memory system
-			auto req_args = new DramCallbackArgs{simobject_, mem_req, i};
+			auto req_args = new DramCallbackArgs{this, mem_req, i};
 			auto enqueue_success = dram_sim_.send_request(
 				mem_req.write,
 				mem_req.addr,
@@ -76,8 +85,8 @@ public:
 					// only send a response for read requests
 					if (!rsp_args->request.write) {
 						MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.cid, rsp_args->request.uuid};
-						rsp_args->simobject->MemRspPorts.at(rsp_args->i).push(mem_rsp, 1);
-						DT(3, rsp_args->simobject->name() << " mem-rsp: bank=" << rsp_args->i << ", " << mem_rsp);
+						rsp_args->memsim->mem_xbar_->RspOut.at(rsp_args->bank_id).push(mem_rsp, 1);
+						DT(3, rsp_args->memsim->simobject_->name() << "-mem-rsp: bank=" << rsp_args->bank_id << ", " << mem_rsp);
 					}
 					delete rsp_args;
 				},
@@ -90,9 +99,9 @@ public:
 				continue;
 			}
 
-			DT(3, simobject_->name() << " mem-req: bank=" << i << ", " << mem_req);
+			DT(3, simobject_->name() << "-mem-req: bank=" << i << ", " << mem_req);
 
-			simobject_->MemReqPorts.at(i).pop();
+			mem_xbar_->ReqOut.at(i).pop();
 			counter++;
 		}
 
@@ -107,8 +116,8 @@ public:
 
 MemSim::MemSim(const SimContext& ctx, const char* name, const Config& config)
 	: SimObject<MemSim>(ctx, name)
-	, MemReqPorts(NUM_MEM_PORTS, this)
-	, MemRspPorts(NUM_MEM_PORTS, this)
+	, MemReqPorts(config.num_ports, this)
+	, MemRspPorts(config.num_ports, this)
 	, impl_(new Impl(this, config))
 {}
 
