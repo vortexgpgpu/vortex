@@ -44,7 +44,7 @@ template <typename T, typename R>
 class Madc {
 public:
   static R apply(T first, T second, R third) {
-    return (R)first + (R)second + third > (R)std::numeric_limits<T>::max();
+    return ((R)first + (R)second + third) > (R)std::numeric_limits<T>::max();
   }
   static std::string name() { return "Madc"; }
 };
@@ -62,7 +62,7 @@ template <typename T, typename R>
 class Msbc {
 public:
   static R apply(T first, T second, R third) {
-    return (R)second < (R)first + third;
+    return (R)second < ((R)first + third);
   }
   static std::string name() { return "Msbc"; }
 };
@@ -1128,6 +1128,8 @@ public:
   static std::string name() { return "Smul"; }
 };
 
+///////////////////////////////////////////////////////////////////////////////
+
 bool isMasked(std::vector<std::vector<Byte>> &vreg_file, uint32_t maskVreg, uint32_t byteI, bool vmask) {
   auto &mask = vreg_file.at(maskVreg);
   uint8_t emask = *(uint8_t *)(mask.data() + byteI / 8);
@@ -1155,7 +1157,7 @@ DT &getVregData(std::vector<std::vector<vortex::Byte>> &vreg_file, uint32_t base
 }
 
 template <typename DT>
-void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, Word base_addr, uint32_t rdest, uint32_t vl, bool strided, WordI stride, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
+void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, WordI base_addr, uint32_t rdest, uint32_t vl, bool strided, WordI stride, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
   uint32_t emul = lmul >> 2 ? 1 : 1 << (lmul & 0b11);
   if (nfields * emul > 8) {
@@ -1177,7 +1179,7 @@ void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emula
   }
 }
 
-void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, Word base_addr, uint32_t rdest, uint32_t vsew, uint32_t vl, bool strided, WordI stride, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
+void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, WordI base_addr, uint32_t rdest, uint32_t vsew, uint32_t vl, bool strided, WordI stride, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
   switch (vsew) {
   case 8:
     vector_op_vix_load<uint8_t>(vreg_file, emul_, base_addr, rdest, vl, strided, stride, nfields, lmul, vmask);
@@ -1198,7 +1200,7 @@ void vector_op_vix_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emula
 }
 
 template <typename DT>
-void vector_op_vv_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, Word base_addr, uint32_t rsrc1, uint32_t rdest, uint32_t iSew, uint32_t vl, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
+void vector_op_vv_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, WordI base_addr, uint32_t rsrc1, uint32_t rdest, uint32_t iSew, uint32_t vl, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
   uint32_t emul = lmul >> 2 ? 1 : 1 << (lmul & 0b11);
   if (nfields * emul > 8) {
@@ -1238,7 +1240,7 @@ void vector_op_vv_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulat
   }
 }
 
-void vector_op_vv_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, Word base_addr, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t iSew, uint32_t vl, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
+void vector_op_vv_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, WordI base_addr, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t iSew, uint32_t vl, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
   switch (vsew) {
   case 8:
     vector_op_vv_load<uint8_t>(vreg_file, emul_, base_addr, rsrc1, rdest, iSew, vl, nfields, lmul, vmask);
@@ -1259,7 +1261,7 @@ void vector_op_vv_load(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulat
 }
 
 template <typename DT>
-void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, Word base_addr, uint32_t rsrc3, uint32_t vl, bool strided, WordI stride, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
+void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, WordI base_addr, uint32_t rsrc3, uint32_t vl, bool strided, WordI stride, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
   uint32_t emul = lmul >> 2 ? 1 : 1 << (lmul & 0b11);
   for (uint32_t i = 0; i < vl * nfields; i++) {
@@ -1274,7 +1276,7 @@ void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emul
   }
 }
 
-void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, Word base_addr, uint32_t rsrc3, uint32_t vsew, uint32_t vl, bool strided, WordI stride, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
+void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, WordI base_addr, uint32_t rsrc3, uint32_t vsew, uint32_t vl, bool strided, WordI stride, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
   switch (vsew) {
   case 8:
     vector_op_vix_store<uint8_t>(vreg_file, emul_, base_addr, rsrc3, vl, strided, stride, nfields, lmul, vmask);
@@ -1295,7 +1297,7 @@ void vector_op_vix_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emul
 }
 
 template <typename DT>
-void vector_op_vv_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, Word base_addr, uint32_t rsrc1, uint32_t rsrc3, uint32_t iSew, uint32_t vl, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
+void vector_op_vv_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, WordI base_addr, uint32_t rsrc1, uint32_t rsrc3, uint32_t iSew, uint32_t vl, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
   uint32_t vsew = sizeof(DT) * 8;
   uint32_t emul = lmul >> 2 ? 1 : 1 << (lmul & 0b11);
   for (uint32_t i = 0; i < vl * nfields; i++) {
@@ -1328,7 +1330,7 @@ void vector_op_vv_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emula
   }
 }
 
-void vector_op_vv_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, Word base_addr, uint32_t rsrc1, uint32_t rsrc3, uint32_t vsew, uint32_t iSew, uint32_t vl, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
+void vector_op_vv_store(std::vector<std::vector<Byte>> &vreg_file, vortex::Emulator *emul_, WordI base_addr, uint32_t rsrc1, uint32_t rsrc3, uint32_t vsew, uint32_t iSew, uint32_t vl, uint32_t nfields, uint32_t lmul, uint32_t vmask) {
   switch (vsew) {
   case 8:
     vector_op_vv_store<uint8_t>(vreg_file, emul_, base_addr, rsrc1, rsrc3, iSew, vl, nfields, lmul, vmask);
@@ -1364,15 +1366,20 @@ void vector_op_vix(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32_t
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vix(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vix<OP, DT8>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vix<OP, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vix<OP, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vix<OP, DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VI/VX for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1391,15 +1398,20 @@ void vector_op_vix_carry(DT first, std::vector<std::vector<Byte>> &vreg_file, ui
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vix_carry(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vix_carry<OP, DT8>(src1, vreg_file, rsrc0, rdest, vl);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vix_carry<OP, DT16>(src1, vreg_file, rsrc0, rdest, vl);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vix_carry<OP, DT32>(src1, vreg_file, rsrc0, rdest, vl);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vix_carry<OP, DT64>(src1, vreg_file, rsrc0, rdest, vl);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VI/VX carry for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1422,15 +1434,20 @@ void vector_op_vix_carry_out(DT first, std::vector<std::vector<Byte>> &vreg_file
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64, typename DT128>
 void vector_op_vix_carry_out(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vix_carry_out<OP, DT8, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vix_carry_out<OP, DT16, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vix_carry_out<OP, DT32, DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vix_carry_out<OP, DT64, DT128>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VI/VX carry out for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1447,15 +1464,20 @@ void vector_op_vix_merge(DT first, std::vector<std::vector<Byte>> &vreg_file, ui
 
 template <typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vix_merge(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vix_merge<DT8>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vix_merge<DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vix_merge<DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vix_merge<DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VI/VX for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1467,15 +1489,20 @@ void vector_op_scalar(DT &dest, std::vector<std::vector<Byte>> &vreg_file, uint3
     std::cout << "Vwxunary0/Vwfunary0 has unsupported value for vs2: " << rsrc0 << std::endl;
     std::abort();
   }
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     dest = getVregData<uint8_t>(vreg_file, rsrc1, 0);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     dest = getVregData<uint16_t>(vreg_file, rsrc1, 0);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     dest = getVregData<uint32_t>(vreg_file, rsrc1, 0);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     dest = getVregData<uint64_t>(vreg_file, rsrc1, 0);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute vmv.x.s/vfmv.f.s for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1497,13 +1524,17 @@ void vector_op_vix_w(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vix_w(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vix_w<OP, DT8, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vix_w<OP, DT16, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vix_w<OP, DT32, DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VI/VX widening for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1511,13 +1542,17 @@ void vector_op_vix_w(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint3
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vix_wx(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vix<OP, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vix<OP, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vix<OP, DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VI/VX widening wx for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1538,13 +1573,17 @@ void vector_op_vix_n(DT first, std::vector<std::vector<Byte>> &vreg_file, uint32
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vix_n(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vix_n<OP, DT16, DT8>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vix_n<OP, DT32, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vix_n<OP, DT64, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VI/VX narrowing for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1565,15 +1604,20 @@ void vector_op_vix_sat(DTR first, std::vector<std::vector<Byte>> &vreg_file, uin
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64, typename DT128>
 void vector_op_vix_sat(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vix_sat<OP, DT16, DT8>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vix_sat<OP, DT32, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vix_sat<OP, DT64, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vix_sat<OP, DT128, DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VI/VX saturating for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1581,15 +1625,20 @@ void vector_op_vix_sat(Word src1, std::vector<std::vector<Byte>> &vreg_file, uin
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vix_scale(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vix_sat<OP, DT8, DT8>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vix_sat<OP, DT16, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vix_sat<OP, DT32, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vix_sat<OP, DT64, DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask, vxrm, vxsat);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VI/VX scale for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1676,15 +1725,20 @@ void vector_op_vix_mask(DT first, std::vector<std::vector<Byte>> &vreg_file, uin
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vix_mask(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vix_mask<OP, DT8>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vix_mask<OP, DT16>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vix_mask<OP, DT32>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vix_mask<OP, DT64>(src1, vreg_file, rsrc0, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VI/VX integer/float compare mask for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1716,15 +1770,20 @@ void vector_op_vix_slide(Word first, std::vector<std::vector<Byte>> &vreg_file, 
 
 template <typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vix_slide(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, Word vlmax, uint32_t vmask, bool scalar) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vix_slide<DT8>(src1, vreg_file, rsrc0, rdest, vl, vlmax, vmask, scalar);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vix_slide<DT16>(src1, vreg_file, rsrc0, rdest, vl, vlmax, vmask, scalar);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vix_slide<DT32>(src1, vreg_file, rsrc0, rdest, vl, vlmax, vmask, scalar);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vix_slide<DT64>(src1, vreg_file, rsrc0, rdest, vl, vlmax, vmask, scalar);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VI/VX slide for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1744,15 +1803,20 @@ void vector_op_vix_gather(Word first, std::vector<std::vector<Byte>> &vreg_file,
 
 template <typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vix_gather(Word src1, std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rdest, uint32_t vsew, uint32_t vl, Word vlmax, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vix_gather<DT8>(src1, vreg_file, rsrc0, rdest, vl, vlmax, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vix_gather<DT16>(src1, vreg_file, rsrc0, rdest, vl, vlmax, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vix_gather<DT32>(src1, vreg_file, rsrc0, rdest, vl, vlmax, vmask);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vix_gather<DT64>(src1, vreg_file, rsrc0, rdest, vl, vlmax, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VI/VX register gather for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1775,15 +1839,20 @@ void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uin
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vv<OP, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vv<OP, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vv<OP, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vv<OP, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VV for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1803,15 +1872,20 @@ void vector_op_vv_carry(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vv_carry(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vv_carry<OP, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vv_carry<OP, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vv_carry<OP, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vv_carry<OP, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VV carry for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1835,15 +1909,20 @@ void vector_op_vv_carry_out(std::vector<std::vector<Byte>> &vreg_file, uint32_t 
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64, typename DT128>
 void vector_op_vv_carry_out(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vv_carry_out<OP, DT8, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vv_carry_out<OP, DT16, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vv_carry_out<OP, DT32, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vv_carry_out<OP, DT64, DT128>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VV carry out for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1861,15 +1940,20 @@ void vector_op_vv_merge(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc
 
 template <typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vv_merge(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vv_merge<DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vv_merge<DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vv_merge<DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vv_merge<DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VV for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1890,15 +1974,20 @@ void vector_op_vv_gather(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsr
 
 template <typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vv_gather(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, bool ei16, uint32_t vlmax, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vv_gather<DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, ei16, vlmax, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vv_gather<DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, ei16, vlmax, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vv_gather<DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, ei16, vlmax, vmask);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vv_gather<DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, ei16, vlmax, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VV register gather for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1921,13 +2010,17 @@ void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, u
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vv_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vv_w<OP, DT8, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vv_w<OP, DT16, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vv_w<OP, DT32, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VV widening for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -1950,13 +2043,17 @@ void vector_op_vv_wv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, 
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vv_wv(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vv_wv<OP, DT8, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vv_wv<OP, DT16, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vv_wv<OP, DT32, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VV widening wv for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -2003,13 +2100,17 @@ void vector_op_vv_n(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, u
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vv_n(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vv_n<OP, DT16, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vv_n<OP, DT32, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vv_n<OP, DT64, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VV narrowing for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -2031,15 +2132,20 @@ void vector_op_vv_sat(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0,
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64, typename DT128>
 void vector_op_vv_sat(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vv_sat<OP, DT16, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vv_sat<OP, DT32, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vv_sat<OP, DT64, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vv_sat<OP, DT128, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VV saturating for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -2047,15 +2153,20 @@ void vector_op_vv_sat(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0,
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vv_scale(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask, uint32_t vxrm, uint32_t &vxsat) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vv_sat<OP, DT8, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vv_sat<OP, DT16, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vv_sat<OP, DT32, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vv_sat<OP, DT64, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask, vxrm, vxsat);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VV scale for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -2081,15 +2192,20 @@ void vector_op_vv_red(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0,
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vv_red(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vv_red<OP, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vv_red<OP, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vv_red<OP, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vv_red<OP, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VV reduction for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -2116,13 +2232,17 @@ void vector_op_vv_red_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vv_red_w(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vv_red_w<OP, DT8, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vv_red_w<OP, DT16, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vv_red_w<OP, DT32, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VV widening reduction for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -2169,15 +2289,20 @@ void vector_op_vid(std::vector<std::vector<Byte>> &vreg_file, uint32_t rdest, ui
 }
 
 void vector_op_vid(std::vector<std::vector<Byte>> &vreg_file, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vid<uint8_t>(vreg_file, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vid<uint16_t>(vreg_file, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vid<uint32_t>(vreg_file, rdest, vl, vmask);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vid<uint64_t>(vreg_file, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute vector element index for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -2203,15 +2328,20 @@ void vector_op_vv_mask(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0
 
 template <template <typename DT1, typename DT2> class OP, typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vv_mask(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl, uint32_t vmask) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vv_mask<OP, DT8>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vv_mask<OP, DT16>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vv_mask<OP, DT32>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vv_mask<OP, DT64>(vreg_file, rsrc0, rsrc1, rdest, vl, vmask);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VV integer/float compare mask for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -2252,15 +2382,20 @@ void vector_op_vv_compress(std::vector<std::vector<Byte>> &vreg_file, uint32_t r
 
 template <typename DT8, typename DT16, typename DT32, typename DT64>
 void vector_op_vv_compress(std::vector<std::vector<Byte>> &vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t rdest, uint32_t vsew, uint32_t vl) {
-  if (vsew == 8) {
+  switch (vsew) {
+  case 8:
     vector_op_vv_compress<DT8>(vreg_file, rsrc0, rsrc1, rdest, vl);
-  } else if (vsew == 16) {
+    break;
+  case 16:
     vector_op_vv_compress<DT16>(vreg_file, rsrc0, rsrc1, rdest, vl);
-  } else if (vsew == 32) {
+    break;
+  case 32:
     vector_op_vv_compress<DT32>(vreg_file, rsrc0, rsrc1, rdest, vl);
-  } else if (vsew == 64) {
+    break;
+  case 64:
     vector_op_vv_compress<DT64>(vreg_file, rsrc0, rsrc1, rdest, vl);
-  } else {
+    break;
+  default:
     std::cout << "Failed to execute VV compression for vsew: " << vsew << std::endl;
     std::abort();
   }
@@ -2303,7 +2438,7 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, std::vector<reg_data
         std::abort();
       }
       DP(4, "Whole vector register load with nreg: " << nreg);
-      uint32_t vsew_bits = 1 << (3 * instr.getVsew());
+      uint32_t vsew_bits = 1 << (3 + instr.getVsew());
       uint32_t vl = nreg * VLEN / vsew_bits;
       WordI stride = instr.getVsew();
       vector_op_vix_load(warp.vreg_file, this, rsdata[0][0].i, rdest, vsew_bits, vl, false, stride, 1, 0, vmask);
@@ -2356,7 +2491,7 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, std::vector<reg_data
                // vloxseg7e8.v, vloxseg7e16.v, vloxseg7e32.v, vloxseg7e64.v
                // vloxseg8e8.v, vloxseg8e16.v, vloxseg8e32.v, vloxseg8e64.v
     uint32_t nfields = instr.getVnf() + 1;
-    uint32_t vsew_bits = 1 << (3 * instr.getVsew());
+    uint32_t vsew_bits = 1 << (3 + instr.getVsew());
     vector_op_vv_load(warp.vreg_file, this, rsdata[0][0].i, instr.getRSrc(1), rdest, warp.vtype.vsew, vsew_bits, warp.vl, nfields, warp.vtype.vlmul, vmask);
     break;
   }
@@ -2438,7 +2573,7 @@ void Emulator::storeVector(const Instr &instr, uint32_t wid, std::vector<reg_dat
                // vsoxseg7ei8.v, vsoxseg7ei16.v, vsoxseg7ei32.v, vsoxseg7ei64.v
                // vsoxseg8ei8.v, vsoxseg8ei16.v, vsoxseg8ei32.v, vsoxseg8ei64.v
     uint32_t nfields = instr.getVnf() + 1;
-    uint32_t vsew_bits = 1 << (3 * instr.getVsew());
+    uint32_t vsew_bits = 1 << (3 + instr.getVsew());
     vector_op_vv_store(warp.vreg_file, this, rsdata[0][0].i, instr.getRSrc(1), instr.getRSrc(2), warp.vtype.vsew, vsew_bits, warp.vl, nfields, warp.vtype.vlmul, vmask);
     break;
   }

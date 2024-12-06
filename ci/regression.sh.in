@@ -363,8 +363,8 @@ scope()
 {
     echo "begin scope tests..."
 
-    SCOPE_DEPTH=256 ./ci/blackbox.sh --driver=opae --app=demo --args="-n1" --scope
-    SCOPE_DEPTH=256 ./ci/blackbox.sh --driver=xrt --app=demo --args="-n1" --scope
+    SCOPE_DEPTH=128 ./ci/blackbox.sh --driver=opae --app=demo --args="-n1" --scope
+    SCOPE_DEPTH=128 ./ci/blackbox.sh --driver=xrt --app=demo --args="-n1" --scope
 
     echo "debugging scope done!"
 }
@@ -385,7 +385,7 @@ synthesis()
     echo "begin synthesis tests..."
 
     PREFIX=build_base make -C hw/syn/yosys clean
-    PREFIX=build_base CONFIGS="-DDPI_DISABLE -DEXT_F_DISABLE" make -C hw/syn/yosys synthesis
+    PREFIX=build_base CONFIGS="-DDPI_DISABLE -DEXT_F_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" make -C hw/syn/yosys synthesis
 
     echo "synthesis tests done!"
 }

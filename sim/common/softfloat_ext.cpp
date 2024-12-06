@@ -148,10 +148,9 @@ static inline uint64_t rsqrte7(uint64_t val, int e, int s, bool sub) {
       59,  58,  57,  56,  56,  55,  54,  53};
 
   if (sub) {
-    while (extract64(sig, s - 1, 1) == 0) {
-      exp--;
-      sig <<= 1;
-    }
+    while (extract64(sig, s - 1, 1) == 0)
+      exp--, sig <<= 1;
+      
     sig = (sig << 1) & make_mask64(0, s);
   }
 
@@ -358,9 +357,9 @@ float16_t f16_recip7(float16_t in) {
     [[fallthrough]];
   default: // +- normal
     uA.ui = recip7(uA.ui, 5, 10, softfloat_roundingMode, sub, &round_abnormal);
-    if (round_abnormal)
-      softfloat_exceptionFlags |=
-          softfloat_flag_inexact | softfloat_flag_overflow;
+    if (round_abnormal) {
+      softfloat_exceptionFlags |= softfloat_flag_inexact | softfloat_flag_overflow;
+    }
     break;
   }
 
@@ -401,9 +400,9 @@ float32_t f32_recip7(float32_t in) {
     [[fallthrough]];
   default: // +- normal
     uA.ui = recip7(uA.ui, 8, 23, softfloat_roundingMode, sub, &round_abnormal);
-    if (round_abnormal)
-      softfloat_exceptionFlags |=
-          softfloat_flag_inexact | softfloat_flag_overflow;
+    if (round_abnormal) {
+      softfloat_exceptionFlags |= softfloat_flag_inexact | softfloat_flag_overflow;
+    }
     break;
   }
 
@@ -444,9 +443,9 @@ float64_t f64_recip7(float64_t in) {
     [[fallthrough]];
   default: // +- normal
     uA.ui = recip7(uA.ui, 11, 52, softfloat_roundingMode, sub, &round_abnormal);
-    if (round_abnormal)
-      softfloat_exceptionFlags |=
-          softfloat_flag_inexact | softfloat_flag_overflow;
+    if (round_abnormal) {
+      softfloat_exceptionFlags |= softfloat_flag_inexact | softfloat_flag_overflow;
+    }
     break;
   }
 
