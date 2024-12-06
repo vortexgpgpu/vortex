@@ -41,6 +41,9 @@ public:
         , ram_(0, MEM_PAGE_SIZE)
         , processor_(arch_)
         , global_mem_(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE)
+#ifdef VM_ENABLE
+        , vm_manager(processor_, global_mem_, ram_)
+#endif
     {
         // attach memory module
         processor_.attach_ram(&ram_);
@@ -305,7 +308,7 @@ private:
   std::future<void> future_;
   std::unordered_map<uint32_t, std::array<uint64_t, 32>> mpm_cache_;
 #ifdef VM_ENABLE
-  VMManager vm_manager(processor_, global_mem_, ram_);
+  VMManager vm_manager;
 #endif
 };
 

@@ -21,11 +21,20 @@
 #include <future>
 #include <chrono>
 
+#ifndef VM_ENABLE
+#define VM_ENABLE
+#endif
+
+using namespace vortex;
+
 // VMManager class to encapsulate VM-related functionality
 class VMManager {
 public:
     VMManager(Processor& processor, MemoryAllocator& global_mem, RAM& ram)
-        : processor_(processor), global_mem_(global_mem), ram_(ram) {
+        : processor_(processor)
+        , global_mem_(global_mem)
+        , ram_(ram)
+    {
         page_table_mem_ = nullptr;
         virtual_mem_ = nullptr;
     }
