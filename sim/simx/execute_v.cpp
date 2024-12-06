@@ -2438,9 +2438,9 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, std::vector<reg_data
         std::abort();
       }
       DP(4, "Whole vector register load with nreg: " << nreg);
-      uint32_t vsew_bits = 1 << (3 + instr.getVsew());
+      uint32_t stride = 1 << instr.getVsew();
+      uint32_t vsew_bits = stride * 8;
       uint32_t vl = nreg * VLEN / vsew_bits;
-      WordI stride = instr.getVsew();
       vector_op_vix_load(warp.vreg_file, this, rsdata[0][0].i, rdest, vsew_bits, vl, false, stride, 1, 0, vmask);
       break;
     }
