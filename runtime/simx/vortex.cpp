@@ -29,7 +29,7 @@
 
 #include <VX_config.h>
 #ifdef VM_ENABLE
-#include "mem_manager.cpp"
+#include <mem_manager.cpp>
 #endif
 
 using namespace vortex;

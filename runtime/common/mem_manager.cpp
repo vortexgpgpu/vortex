@@ -27,7 +27,6 @@
 
 using namespace vortex;
 
-// VMManager class to encapsulate VM-related functionality
 class VMManager {
 public:
     VMManager(Processor& processor, MemoryAllocator& global_mem, RAM& ram)
