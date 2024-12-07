@@ -11,8 +11,6 @@
 #include <cmath>
 
 #include <util.h>
-#include <arch.h>
-#include <constants.h>
 #include <vortex.h>
 
 #include <stdio.h>

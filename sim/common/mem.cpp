@@ -701,6 +701,7 @@ std::pair<uint64_t, uint8_t> MemoryUnit::page_table_walk(uint64_t vAddr_bits, AC
     // Read PTE.
     pte_addr = get_pte_address(cur_base_ppn, vaddr.vpn[i]);
     decoder_.read(&pte_bytes, pte_addr, PTE_SIZE);
+    std::cout << "Value of pte_bytes: " << std::bitset<64>(pte_bytes) << std::endl;
     PTE_t pte(pte_bytes);
     DBGPRINT("  [MMU:PTW] Level[%u] pte_addr=0x%lx, pte_bytes =0x%lx, pte.ppn= 0x%lx, pte.flags = %u)\n", i, pte_addr, pte_bytes, pte.ppn, pte.flags);
 
