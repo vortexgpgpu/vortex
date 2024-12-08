@@ -42,7 +42,7 @@ public:
         , processor_(arch_)
         , global_mem_(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE)
 #ifdef VM_ENABLE
-        , vm_manager(processor_, global_mem_, ram_)
+        , vm_manager(processor_, ram_)
 #endif
     {
         // attach memory module
@@ -50,7 +50,14 @@ public:
 #ifdef VM_ENABLE
 	std::cout << "*** VM ENABLED!! ***"<< std::endl;
         // CHECK_ERR(init_VM(), );
-        vm_manager.init_VM();
+        vm_manager.init_VM(
+          [this](uint64_t addr, uint64_t size, int flags) {
+            return mem_reserve(addr, size, flags);
+          },
+          [this](uint64_t addr) {
+            return mem_free(addr);
+          }
+        );
 #endif
     }
 
@@ -152,6 +159,7 @@ public:
   int mem_free(uint64_t dev_addr)
   {
 #ifdef VM_ENABLE
+    // CS259 TODO: .get()
     uint64_t paddr = vm_manager.page_table_walk(dev_addr);
     return global_mem_.release(paddr);
 #else

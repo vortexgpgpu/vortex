@@ -57,6 +57,9 @@ _start:
   call  __libc_init_array
 #endif
 
+  la t1, *hardcoded number with ppn, modes, etc.*
+  csrw t1, VX_CSR_SATP
+
   # call main program routine
   call  main
 

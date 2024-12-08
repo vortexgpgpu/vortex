@@ -18,7 +18,7 @@
 #include <assert.h>
 #include "util.h"
 #include <VX_config.h>
-#include <bitset>
+#include <iomanip>
 
 using namespace vortex;
 
@@ -700,9 +700,31 @@ std::pair<uint64_t, uint8_t> MemoryUnit::page_table_walk(uint64_t vAddr_bits, AC
   {
     // Read PTE.
     pte_addr = get_pte_address(cur_base_ppn, vaddr.vpn[i]);
+    std::cout << "PTE ADDR 0x" 
+              << std::hex << std::setfill('0') << std::setw(16) 
+              << pte_addr 
+              << std::dec << std::endl;
+    std::cout << "PPN 0x" 
+              << std::hex << std::setfill('0') << std::setw(16) 
+              << cur_base_ppn 
+              << std::dec << std::endl;
+    std::cout << "VPN 0x" 
+              << std::hex << std::setfill('0') << std::setw(16) 
+              << vaddr.vpn[i] 
+              << std::dec << std::endl;
+
     decoder_.read(&pte_bytes, pte_addr, PTE_SIZE);
-    std::cout << "Value of pte_bytes: " << std::bitset<64>(pte_bytes) << std::endl;
+    std::cout << "PTE_BYTES" << std::endl;
+    std::cout << "0x" 
+              << std::hex << std::setfill('0') << std::setw(16) 
+              << pte_bytes 
+              << std::dec << std::endl;
+
     PTE_t pte(pte_bytes);
+    std::cout << "0x" 
+              << std::hex << std::setfill('0') << std::setw(16) 
+              << pte.pte_bytes 
+              << std::dec << std::endl;
     DBGPRINT("  [MMU:PTW] Level[%u] pte_addr=0x%lx, pte_bytes =0x%lx, pte.ppn= 0x%lx, pte.flags = %u)\n", i, pte_addr, pte_bytes, pte.ppn, pte.flags);
 
     assert(((pte.pte_bytes & 0xFFFFFFFF) != 0xbaadf00d) && "ERROR: uninitialzed PTE\n" );

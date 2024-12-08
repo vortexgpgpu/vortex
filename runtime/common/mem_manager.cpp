@@ -18,6 +18,7 @@
 #include <assert.h>
 #include <future>
 #include <chrono>
+#include <functional>
 
 #ifndef VM_ENABLE
 #define VM_ENABLE
@@ -25,11 +26,13 @@
 
 using namespace vortex;
 
+typedef int (*MemReserveFunc) (uint64_t, uint64_t, int);
+typedef int (*MemFreeFunc) (uint64_t); 
+
 class VMManager {
 public:
-    VMManager(Processor& processor, MemoryAllocator& global_mem, RAM& ram)
+    VMManager(Processor& processor, RAM& ram)
         : processor_(processor)
-        , global_mem_(global_mem)
         , ram_(ram)
     {
         page_table_mem_ = nullptr;
@@ -41,14 +44,14 @@ public:
         if (virtual_mem_) delete virtual_mem_;
     }
 
-    int16_t init_VM() {
+    int16_t init_VM(std::function<int(uint64_t, uint64_t, int)> mem_reserve, std::function<int(uint64_t)> mem_free) {
         uint64_t pt_addr = 0;
 
         // Reserve space for Page Table
         std::cout << "[VMManager:init_VM] Initializing VM\n";
         std::cout << "* PAGE_TABLE_BASE_ADDR=" << std::hex << PAGE_TABLE_BASE_ADDR << "\n";
 
-        if (global_mem_.reserve(PAGE_TABLE_BASE_ADDR, PT_SIZE_LIMIT) != 0) {
+        if (mem_reserve(PAGE_TABLE_BASE_ADDR, PT_SIZE_LIMIT, VX_MEM_READ_WRITE) != 0) {
             std::cerr << "Failed to reserve space for Page Table\n";
             return 1;
         }
@@ -56,13 +59,25 @@ public:
         page_table_mem_ = new MemoryAllocator(PAGE_TABLE_BASE_ADDR, PT_SIZE_LIMIT, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
         if (!page_table_mem_) {
             std::cerr << "Failed to initialize page_table_mem_\n";
-            global_mem_.release(PAGE_TABLE_BASE_ADDR);
+            mem_free(PAGE_TABLE_BASE_ADDR);
             return 1;
         }
 
         virtual_mem_ = new MemoryAllocator(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
+        if (virtual_mem_reserve(PAGE_TABLE_BASE_ADDR, (GLOBAL_MEM_SIZE - PAGE_TABLE_BASE_ADDR)) != 0) {
+            std::cerr << "Failed to reserve virtual mem\n";
+        }
+        if (virtual_mem_reserve(STARTUP_ADDR, 0x40000) != 0) { 
+            std::cerr << "Failed to reserve virtual mem\n";
+        }
+        
         if (!virtual_mem_) {
             std::cerr << "Failed to initialize virtual_mem_\n";
+            return 1;
+        }
+        
+        if (VM_ADDR_MODE != BARE && alloc_page_table(&pt_addr) != 0) {
+            std::cerr << "Failed to allocate page table\n";
             return 1;
         }
 
@@ -96,7 +111,7 @@ public:
         return !(STARTUP_ADDR <= dev_pAddr && dev_pAddr <= (STARTUP_ADDR + 0x40000));
     }
 
-    uint64_t phy_to_virt_map(uint64_t size, uint64_t* dev_pAddr, uint32_t flags) {
+    uint64_t phy_to_virt_map(uint64_t* dev_vAddr, uint64_t size, const uint64_t* dev_pAddr, uint32_t flags) {
         if (!need_trans(*dev_pAddr)) return 0;
 
         uint64_t init_pAddr = *dev_pAddr;
@@ -109,7 +124,8 @@ public:
             map_p2v(ppn, flags);
         }
 
-        *dev_pAddr = init_vAddr;
+        *dev_vAddr = init_vAddr;
+        // CS259 TODO: hash table to store this mapping in VM_ENABLE -> addr_mapping
         return 0;
     }
 
@@ -139,24 +155,59 @@ public:
         return 0;
     }
 
-    uint64_t page_table_walk(uint64_t vAddr) {
-        if (!need_trans(vAddr)) return vAddr;
+    uint64_t page_table_walk(uint64_t vAddr_bits) {
+        if (!need_trans(vAddr_bits)) return vAddr_bits;
 
+        vAddr_t vaddr(vAddr_bits);
         uint64_t cur_base_ppn = get_base_ppn();
+        uint64_t pte_addr = 0, pte_bytes = 0;
         int i = PT_LEVEL - 1;
 
         while (true) {
-            uint64_t pte_addr = get_pte_address(cur_base_ppn, vAddr >> (i * MEM_PAGE_LOG2_SIZE));
-            uint64_t pte = read_pte(pte_addr);
+            pte_addr = get_pte_address(cur_base_ppn, vaddr.vpn[i]);
+            pte_bytes = read_pte(pte_addr);
+            PTE_t pte(pte_bytes);
 
-            if (pte & 1) {
-                if (i == 0) return (pte >> MEM_PAGE_LOG2_SIZE) | (vAddr & (MEM_PAGE_SIZE - 1));
-                cur_base_ppn = pte >> MEM_PAGE_LOG2_SIZE;
+            assert(((pte.pte_bytes & 0xFFFFFFFF) != 0xbaadf00d) && "ERROR: uninitialzed PTE\n" );
+            // Check if it has invalid flag bits.
+            if ((pte.v == 0) | ((pte.r == 0) & (pte.w == 1)))
+            {
+                std::string msg = "  [RT:PTW] Page Fault : Attempted to access invalid entry.";
+                throw Page_Fault_Exception(msg);
+            }
+
+            if ((pte.r == 0) & (pte.w == 0) & (pte.x == 0))
+            {
                 i--;
-            } else {
-                throw std::runtime_error("Page fault during page table walk");
+                // Not a leaf node as rwx == 000
+                if (i < 0)
+                {
+                    throw Page_Fault_Exception("  [RT:PTW] Page Fault : No leaf node found.");
+                }
+                else
+                {
+                    // Continue on to next level.
+                    cur_base_ppn = pte.ppn;
+                    std::cout << "  [RT:PTW] next base_ppn: 0x" << cur_base_ppn << std::endl;
+                    continue;
+                }
+            }
+            else
+            {
+                // Leaf node found. 
+                // Check RWX permissions according to access type.
+                if (pte.r == 0)
+                {
+                    throw Page_Fault_Exception("  [RT:PTW] Page Fault : TYPE LOAD, Incorrect permissions.");
+                }
+                cur_base_ppn = pte.ppn;
+                std::cout << "  [RT:PTW] Found PT_Base_Address(0x" << cur_base_ppn << ") on Level " << i << std::endl;
+                break;
             }
         }
+
+        uint64_t paddr = (cur_base_ppn << MEM_PAGE_LOG2_SIZE) + vaddr.pgoff;
+        return paddr;
     }
 
 private:
@@ -165,34 +216,63 @@ private:
     }
 
     uint64_t get_pte_address(uint64_t base_ppn, uint64_t vpn) {
-        return (base_ppn << MEM_PAGE_LOG2_SIZE) + (vpn * sizeof(uint64_t));
+        return (base_ppn * PT_SIZE) + (vpn * PTE_SIZE);
     }
 
     uint64_t read_pte(uint64_t addr) {
         uint64_t value = 0;
+        // CS259 TODO: replace with our own buffer
+        // flush buffer on vx_start using upload
         ram_.read(reinterpret_cast<uint8_t*>(&value), addr, sizeof(uint64_t));
         return value;
     }
 
     void write_pte(uint64_t addr, uint64_t value) {
+        // should also be our buffer
+        ram_.enable_acl(false);
         ram_.write(reinterpret_cast<const uint8_t*>(&value), addr, sizeof(uint64_t));
+        ram_.enable_acl(true);
+    }
+
+    // Initialize to zero the target page table area. 32bit 4K, 64bit 8K
+    uint16_t init_page_table(uint64_t addr, uint64_t size)
+    {
+        uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
+        uint8_t *src = new uint8_t[asize];
+        if (src == nullptr)
+            return 1;
+
+        for (uint64_t i = 0; i < asize; ++i)
+        {
+            src[i] = 0;
+        }
+        ram_.enable_acl(false);
+        ram_.write(reinterpret_cast<const uint8_t*>(src), addr, asize);
+        ram_.enable_acl(true);
+        return 0;
     }
 
     int alloc_page_table(uint64_t* pt_addr) {
         if (page_table_mem_->allocate(PT_SIZE, pt_addr) != 0) return 1;
-        uint8_t zero[PT_SIZE] = {0};
-        ram_.write(zero, *pt_addr, PT_SIZE);
+        if (init_page_table(*pt_addr, PT_SIZE) != 0) return 1;
+        return 0;
+    }
+
+    int virtual_mem_reserve(uint64_t dev_addr, uint64_t size)
+    {
+        if (virtual_mem_->reserve(dev_addr, size) != 0) return 1;
         return 0;
     }
 
     uint8_t get_mode() {
+        // TODO: just use default mode for now
         return processor_.get_satp_mode();
     }
 
 private:
     Processor& processor_;
-    RAM& ram_;
-    MemoryAllocator& global_mem_;
+    vx_device_h _hdevice; // for upload to upload pt on vx_start
+    std::vector<int> ram_;
     MemoryAllocator* page_table_mem_;
     MemoryAllocator* virtual_mem_;
     std::unordered_map<uint64_t, uint64_t> addr_mapping;
