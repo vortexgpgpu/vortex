@@ -23,6 +23,9 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     // Number of requests per cycle
     parameter NUM_REQS              = 4,
 
+    // Number of memory ports
+    parameter MEM_PORTS             = 1,
+
     // Size of cache in bytes
     parameter CACHE_SIZE            = 32768,
     // Size of line inside a bank in bytes
@@ -82,14 +85,16 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 `endif
 
     VX_mem_bus_if.slave     core_bus_if [NUM_INPUTS * NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if
+    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
 );
     localparam NUM_CACHES = `UP(NUM_UNITS);
     localparam PASSTHRU   = (NUM_UNITS == 0);
     localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_CACHES);
-    localparam MEM_TAG_WIDTH = PASSTHRU ? `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) :
-                                          (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH, UUID_WIDTH) :
-                                                       `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, UUID_WIDTH));
+
+    localparam CACHE_MEM_TAG_WIDTH = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
+    localparam BYPASS_TAG_WIDTH = `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, MEM_PORTS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH);
+    localparam NC_TAG_WIDTH = `MAX(CACHE_MEM_TAG_WIDTH, BYPASS_TAG_WIDTH) + 1;
+    localparam MEM_TAG_WIDTH = PASSTHRU ? BYPASS_TAG_WIDTH : (NC_ENABLE ? NC_TAG_WIDTH : CACHE_MEM_TAG_WIDTH);
 
     `STATIC_ASSERT(NUM_INPUTS >= NUM_CACHES, ("invalid parameter"))
 
@@ -101,7 +106,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE (LINE_SIZE),
         .TAG_WIDTH (MEM_TAG_WIDTH)
-    ) cache_mem_bus_if[NUM_CACHES]();
+    ) cache_mem_bus_if[NUM_CACHES * MEM_PORTS]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
@@ -153,6 +158,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .NUM_WAYS     (NUM_WAYS),
             .WORD_SIZE    (WORD_SIZE),
             .NUM_REQS     (NUM_REQS),
+            .MEM_PORTS    (MEM_PORTS),
             .WRITE_ENABLE (WRITE_ENABLE),
             .WRITEBACK    (WRITEBACK),
             .DIRTY_BYTES  (DIRTY_BYTES),
@@ -176,34 +182,46 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .clk         (clk),
             .reset       (reset),
             .core_bus_if (arb_core_bus_if[i * NUM_REQS +: NUM_REQS]),
-            .mem_bus_if  (cache_mem_bus_if[i])
+            .mem_bus_if  (cache_mem_bus_if[i * MEM_PORTS +: MEM_PORTS])
         );
     end
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (LINE_SIZE),
-        .TAG_WIDTH (MEM_TAG_WIDTH + `ARB_SEL_BITS(NUM_CACHES, 1))
-    ) mem_bus_tmp_if[1]();
+    for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_if
+        VX_mem_bus_if #(
+            .DATA_SIZE (LINE_SIZE),
+            .TAG_WIDTH (MEM_TAG_WIDTH)
+        ) arb_core_bus_tmp_if[NUM_CACHES]();
 
-    VX_mem_arb #(
-        .NUM_INPUTS   (NUM_CACHES),
-        .DATA_SIZE    (LINE_SIZE),
-        .TAG_WIDTH    (MEM_TAG_WIDTH),
-        .TAG_SEL_IDX  (TAG_SEL_IDX),
-        .ARBITER      ("R"),
-        .REQ_OUT_BUF ((NUM_CACHES > 1) ? MEM_OUT_BUF : 0),
-        .RSP_OUT_BUF ((NUM_CACHES > 1) ? 2 : 0)
-    ) mem_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .bus_in_if  (cache_mem_bus_if),
-        .bus_out_if (mem_bus_tmp_if)
-    );
+        VX_mem_bus_if #(
+            .DATA_SIZE (LINE_SIZE),
+            .TAG_WIDTH (MEM_TAG_WIDTH + `ARB_SEL_BITS(NUM_CACHES, 1))
+        ) mem_bus_tmp_if[1]();
 
-    if (WRITE_ENABLE) begin : g_mem_bus_if
-        `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_tmp_if[0]);
-    end else begin : g_mem_bus_if_ro
-        `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if, mem_bus_tmp_if[0]);
+        for (genvar j = 0; j < NUM_CACHES; ++j) begin : g_arb_core_bus_tmp_if
+            `ASSIGN_VX_MEM_BUS_IF (arb_core_bus_tmp_if[j], cache_mem_bus_if[j * MEM_PORTS + i]);
+        end
+
+        VX_mem_arb #(
+            .NUM_INPUTS  (NUM_CACHES),
+            .NUM_OUTPUTS (1),
+            .DATA_SIZE   (LINE_SIZE),
+            .TAG_WIDTH   (MEM_TAG_WIDTH),
+            .TAG_SEL_IDX (TAG_SEL_IDX),
+            .ARBITER     ("R"),
+            .REQ_OUT_BUF ((NUM_CACHES > 1) ? MEM_OUT_BUF : 0),
+            .RSP_OUT_BUF ((NUM_CACHES > 1) ? 2 : 0)
+        ) mem_arb (
+            .clk        (clk),
+            .reset      (reset),
+            .bus_in_if  (arb_core_bus_tmp_if),
+            .bus_out_if (mem_bus_tmp_if)
+        );
+
+        if (WRITE_ENABLE) begin : g_we
+            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], mem_bus_tmp_if[0]);
+        end else begin : g_ro
+            `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if[i], mem_bus_tmp_if[0]);
+        end
     end
 
 endmodule

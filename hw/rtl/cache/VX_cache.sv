@@ -19,6 +19,9 @@ module VX_cache import VX_gpu_pkg::*; #(
     // Number of Word requests per cycle
     parameter NUM_REQS              = 4,
 
+    // Number of memory ports
+    parameter MEM_PORTS             = 1,
+
     // Size of cache in bytes
     parameter CACHE_SIZE            = 32768,
     // Size of line inside a bank in bytes
@@ -75,17 +78,18 @@ module VX_cache import VX_gpu_pkg::*; #(
     input wire reset,
 
     VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if
+    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
 );
 
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter: number of banks must be power of 2"))
     `STATIC_ASSERT(WRITE_ENABLE || !WRITEBACK, ("invalid parameter: writeback requires write enable"))
     `STATIC_ASSERT(WRITEBACK || !DIRTY_BYTES, ("invalid parameter: dirty bytes require writeback"))
+    `STATIC_ASSERT(NUM_BANKS >= MEM_PORTS, ("invalid parameter: number of banks must be greater or equal to number of memory ports"))
 
     localparam REQ_SEL_WIDTH   = `UP(`CS_REQ_SEL_BITS);
     localparam WORD_SEL_WIDTH  = `UP(`CS_WORD_SEL_BITS);
     localparam MSHR_ADDR_WIDTH = `LOG2UP(MSHR_SIZE);
-    localparam MEM_TAG_WIDTH   = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, UUID_WIDTH);
+    localparam MEM_TAG_WIDTH   = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
     localparam WORDS_PER_LINE  = LINE_SIZE / WORD_SIZE;
     localparam WORD_WIDTH      = WORD_SIZE * 8;
     localparam WORD_SEL_BITS   = `CLOG2(WORDS_PER_LINE);
@@ -95,6 +99,11 @@ module VX_cache import VX_gpu_pkg::*; #(
     localparam CORE_REQ_DATAW  = LINE_ADDR_WIDTH + 1 + WORD_SEL_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + `UP(FLAGS_WIDTH);
     localparam CORE_RSP_DATAW  = WORD_WIDTH + TAG_WIDTH;
     localparam BANK_MEM_TAG_WIDTH = UUID_WIDTH + MSHR_ADDR_WIDTH;
+    localparam MEM_REQ_DATAW   = (`CS_LINE_ADDR_WIDTH + 1 + LINE_SIZE + `CS_LINE_WIDTH + BANK_MEM_TAG_WIDTH + `UP(FLAGS_WIDTH));
+    localparam MEM_RSP_DATAW   = `CS_LINE_WIDTH + MEM_TAG_WIDTH;
+    localparam MEM_PORTS_SEL_BITS = `CLOG2(MEM_PORTS);
+    localparam MEM_ARB_SEL_BITS = `CLOG2(`CDIV(NUM_BANKS, MEM_PORTS));
+    localparam MEM_ARB_SEL_WIDTH = `UP(MEM_ARB_SEL_BITS);
 
     localparam CORE_RSP_REG_DISABLE = (NUM_BANKS != 1) || (NUM_REQS != 1);
     localparam MEM_REQ_REG_DISABLE  = (NUM_BANKS != 1);
@@ -135,113 +144,97 @@ module VX_cache import VX_gpu_pkg::*; #(
         .flush_end       (per_bank_flush_end)
     );
 
-    ///////////////////////////////////////////////////////////////////////////
-
-    // Core response buffering
-    wire [NUM_REQS-1:0]                  core_rsp_valid_s;
-    wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_rsp_data_s;
-    wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   core_rsp_tag_s;
-    wire [NUM_REQS-1:0]                  core_rsp_ready_s;
-
-    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_rsp_buf
-        VX_elastic_buffer #(
-            .DATAW   (`CS_WORD_WIDTH + TAG_WIDTH),
-            .SIZE    (CORE_RSP_REG_DISABLE ? `TO_OUT_BUF_SIZE(CORE_OUT_BUF) : 0),
-            .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
-        ) core_rsp_buf (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (core_rsp_valid_s[i]),
-            .ready_in  (core_rsp_ready_s[i]),
-            .data_in   ({core_rsp_data_s[i], core_rsp_tag_s[i]}),
-            .data_out  ({core_bus2_if[i].rsp_data.data, core_bus2_if[i].rsp_data.tag}),
-            .valid_out (core_bus2_if[i].rsp_valid),
-            .ready_out (core_bus2_if[i].rsp_ready)
-        );
-    end
-
-    ///////////////////////////////////////////////////////////////////////////
+    // Memory response gather /////////////////////////////////////////////////
 
     VX_mem_bus_if #(
         .DATA_SIZE (LINE_SIZE),
         .TAG_WIDTH (MEM_TAG_WIDTH)
-    ) mem_bus_tmp_if();
+    ) mem_bus_tmp_if[MEM_PORTS]();
 
-    // Memory response buffering
+    wire [MEM_PORTS-1:0]                    mem_rsp_queue_valid;
+    wire [MEM_PORTS-1:0][MEM_RSP_DATAW-1:0] mem_rsp_queue_data;
+    wire [MEM_PORTS-1:0]                    mem_rsp_queue_ready;
 
-    wire                         mem_rsp_valid_s;
-    wire [`CS_LINE_WIDTH-1:0]    mem_rsp_data_s;
-    wire [MEM_TAG_WIDTH-1:0]     mem_rsp_tag_s;
-    wire                         mem_rsp_ready_s;
-
-    VX_elastic_buffer #(
-        .DATAW   (MEM_TAG_WIDTH + `CS_LINE_WIDTH),
-        .SIZE    (MRSQ_SIZE),
-        .OUT_REG (MRSQ_SIZE > 2)
-    ) mem_rsp_queue (
-        .clk        (clk),
-        .reset      (reset),
-        .valid_in   (mem_bus_tmp_if.rsp_valid),
-        .ready_in   (mem_bus_tmp_if.rsp_ready),
-        .data_in    ({mem_bus_tmp_if.rsp_data.tag, mem_bus_tmp_if.rsp_data.data}),
-        .data_out   ({mem_rsp_tag_s, mem_rsp_data_s}),
-        .valid_out  (mem_rsp_valid_s),
-        .ready_out  (mem_rsp_ready_s)
-    );
-
-    wire [BANK_MEM_TAG_WIDTH-1:0] bank_mem_rsp_tag;
-    wire [`UP(`CS_BANK_SEL_BITS)-1:0] mem_rsp_bank_id;
-
-    if (NUM_BANKS > 1) begin : g_mem_rsp_tag_s_with_banks
-        assign bank_mem_rsp_tag = mem_rsp_tag_s[MEM_TAG_WIDTH-1:`CS_BANK_SEL_BITS];
-        assign mem_rsp_bank_id = mem_rsp_tag_s[`CS_BANK_SEL_BITS-1:0];
-    end else begin : g_mem_rsp_tag_s_no_bank
-        assign bank_mem_rsp_tag = mem_rsp_tag_s;
-        assign mem_rsp_bank_id = 0;
+    for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_rsp_queue
+        VX_elastic_buffer #(
+            .DATAW   (MEM_RSP_DATAW),
+            .SIZE    (MRSQ_SIZE),
+            .OUT_REG (MRSQ_SIZE > 2)
+        ) mem_rsp_queue (
+            .clk        (clk),
+            .reset      (reset),
+            .valid_in   (mem_bus_tmp_if[i].rsp_valid),
+            .data_in    (mem_bus_tmp_if[i].rsp_data),
+            .ready_in   (mem_bus_tmp_if[i].rsp_ready),
+            .valid_out  (mem_rsp_queue_valid[i]),
+            .data_out   (mem_rsp_queue_data[i]),
+            .ready_out  (mem_rsp_queue_ready[i])
+        );
     end
 
-    // Memory request buffering
+    wire [MEM_PORTS-1:0][MEM_RSP_DATAW-MEM_ARB_SEL_BITS-1:0] mem_rsp_queue_data_s;
+    wire [MEM_PORTS-1:0][BANK_SEL_WIDTH-1:0] mem_rsp_queue_sel;
 
-    wire                        mem_req_valid;
-    wire [`CS_MEM_ADDR_WIDTH-1:0] mem_req_addr;
-    wire                        mem_req_rw;
-    wire [LINE_SIZE-1:0]        mem_req_byteen;
-    wire [`CS_LINE_WIDTH-1:0]   mem_req_data;
-    wire [MEM_TAG_WIDTH-1:0]    mem_req_tag;
-    wire [`UP(FLAGS_WIDTH)-1:0] mem_req_flags;
-    wire                        mem_req_ready;
+    for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_rsp_queue_data_s
+        wire [BANK_MEM_TAG_WIDTH-1:0] mem_rsp_tag_s = mem_rsp_queue_data[i][MEM_TAG_WIDTH-1:MEM_ARB_SEL_BITS];
+        wire [`CS_LINE_WIDTH-1:0] mem_rsp_data_s = mem_rsp_queue_data[i][MEM_RSP_DATAW-1:MEM_TAG_WIDTH];
+        assign mem_rsp_queue_data_s[i] = {mem_rsp_data_s, mem_rsp_tag_s};
+    end
 
-    wire [`UP(FLAGS_WIDTH)-1:0] mem_req_flush_b;
+    for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_rsp_queue_sel
+        if (NUM_BANKS > 1) begin : g_multibanks
+            if (MEM_ARB_SEL_BITS != 0) begin : g_arb_sel
+                VX_bits_concat #(
+                    .L (MEM_ARB_SEL_BITS),
+                    .R (MEM_PORTS_SEL_BITS)
+                ) mem_rsp_sel_concat (
+                    .left_in  (mem_rsp_queue_data[i][MEM_ARB_SEL_BITS-1:0]),
+                    .right_in (MEM_PORTS_SEL_BITS'(i)),
+                    .data_out (mem_rsp_queue_sel[i])
+                );
+            end else begin : g_no_arb_sel
+                assign mem_rsp_queue_sel[i] = MEM_PORTS_SEL_BITS'(i);
+            end
+        end else begin : g_singlebank
+            assign mem_rsp_queue_sel[i] = 0;
+        end
+    end
 
-    VX_elastic_buffer #(
-        .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_WIDTH + `UP(FLAGS_WIDTH)),
-        .SIZE    (MEM_REQ_REG_DISABLE ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
-        .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
-    ) mem_req_buf (
+    wire [NUM_BANKS-1:0] per_bank_mem_rsp_valid;
+    wire [NUM_BANKS-1:0][MEM_RSP_DATAW-MEM_ARB_SEL_BITS-1:0] per_bank_mem_rsp_pdata;
+    wire [NUM_BANKS-1:0] per_bank_mem_rsp_ready;
+
+    VX_stream_omega #(
+        .NUM_INPUTS  (MEM_PORTS),
+        .NUM_OUTPUTS (NUM_BANKS),
+        .DATAW       (MEM_RSP_DATAW-MEM_ARB_SEL_BITS),
+        .ARBITER     ("R"),
+        .OUT_BUF     (3)
+    ) mem_rsp_xbar (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (mem_req_valid),
-        .ready_in  (mem_req_ready),
-        .data_in   ({mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_data, mem_req_tag, mem_req_flags}),
-        .data_out  ({mem_bus_tmp_if.req_data.rw, mem_bus_tmp_if.req_data.byteen, mem_bus_tmp_if.req_data.addr, mem_bus_tmp_if.req_data.data, mem_bus_tmp_if.req_data.tag, mem_req_flush_b}),
-        .valid_out (mem_bus_tmp_if.req_valid),
-        .ready_out (mem_bus_tmp_if.req_ready)
+        .valid_in  (mem_rsp_queue_valid),
+        .data_in   (mem_rsp_queue_data_s),
+        .sel_in    (mem_rsp_queue_sel),
+        .ready_in  (mem_rsp_queue_ready),
+        .valid_out (per_bank_mem_rsp_valid),
+        .data_out  (per_bank_mem_rsp_pdata),
+        `UNUSED_PIN (sel_out),
+        .ready_out (per_bank_mem_rsp_ready),
+        `UNUSED_PIN (collisions)
     );
 
-    if (FLAGS_WIDTH != 0) begin : g_mem_req_flags
-        assign mem_bus_tmp_if.req_data.flags = mem_req_flush_b;
-    end else begin : g_no_mem_req_flags
-        assign mem_bus_tmp_if.req_data.flags = '0;
-        `UNUSED_VAR (mem_req_flush_b)
+    wire [NUM_BANKS-1:0][`CS_LINE_WIDTH-1:0] per_bank_mem_rsp_data;
+    wire [NUM_BANKS-1:0][BANK_MEM_TAG_WIDTH-1:0] per_bank_mem_rsp_tag;
+
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_mem_rsp_data
+        assign {
+            per_bank_mem_rsp_data[i],
+            per_bank_mem_rsp_tag[i]
+        } = per_bank_mem_rsp_pdata[i];
     end
 
-    if (WRITE_ENABLE) begin : g_mem_bus_if
-        `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_tmp_if);
-    end else begin : g_mem_bus_if_ro
-        `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if, mem_bus_tmp_if);
-    end
-
-    ///////////////////////////////////////////////////////////////////////////
+    // Core requests dispatch /////////////////////////////////////////////////
 
     wire [NUM_BANKS-1:0]                        per_bank_core_req_valid;
     wire [NUM_BANKS-1:0][`CS_LINE_ADDR_WIDTH-1:0] per_bank_core_req_addr;
@@ -261,21 +254,13 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_ready;
 
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_valid;
-    wire [NUM_BANKS-1:0][`CS_MEM_ADDR_WIDTH-1:0] per_bank_mem_req_addr;
+    wire [NUM_BANKS-1:0][`CS_LINE_ADDR_WIDTH-1:0] per_bank_mem_req_addr;
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_rw;
     wire [NUM_BANKS-1:0][LINE_SIZE-1:0]         per_bank_mem_req_byteen;
     wire [NUM_BANKS-1:0][`CS_LINE_WIDTH-1:0]    per_bank_mem_req_data;
     wire [NUM_BANKS-1:0][BANK_MEM_TAG_WIDTH-1:0] per_bank_mem_req_tag;
     wire [NUM_BANKS-1:0][`UP(FLAGS_WIDTH)-1:0]  per_bank_mem_req_flags;
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_ready;
-
-    wire [NUM_BANKS-1:0]                        per_bank_mem_rsp_ready;
-
-    assign per_bank_core_req_fire = per_bank_core_req_valid & per_bank_mem_req_ready;
-
-    assign mem_rsp_ready_s = per_bank_mem_rsp_ready[mem_rsp_bank_id];
-
-    // Bank requests dispatch
 
     wire [NUM_REQS-1:0]                      core_req_valid;
     wire [NUM_REQS-1:0][`CS_WORD_ADDR_WIDTH-1:0] core_req_addr;
@@ -336,6 +321,8 @@ module VX_cache import VX_gpu_pkg::*; #(
         };
     end
 
+    assign per_bank_core_req_fire = per_bank_core_req_valid & per_bank_mem_req_ready;
+
 `ifdef PERF_ENABLE
     wire [`PERF_CTR_BITS-1:0] perf_collisions;
 `endif
@@ -377,12 +364,9 @@ module VX_cache import VX_gpu_pkg::*; #(
         } = core_req_data_out[i];
     end
 
-    // Banks access
+    // Banks access ///////////////////////////////////////////////////////////
+
     for (genvar bank_id = 0; bank_id < NUM_BANKS; ++bank_id) begin : g_banks
-        wire [`CS_LINE_ADDR_WIDTH-1:0] curr_bank_mem_req_addr;
-
-        wire curr_bank_mem_rsp_valid = mem_rsp_valid_s && (mem_rsp_bank_id == bank_id);
-
         VX_cache_bank #(
             .BANK_ID      (bank_id),
             .INSTANCE_ID  (`SFORMATF(("%s-bank%0d", INSTANCE_ID, bank_id))),
@@ -409,9 +393,9 @@ module VX_cache import VX_gpu_pkg::*; #(
             .reset              (reset),
 
         `ifdef PERF_ENABLE
-            .perf_read_misses   (perf_read_miss_per_bank[bank_id]),
-            .perf_write_misses  (perf_write_miss_per_bank[bank_id]),
-            .perf_mshr_stalls   (perf_mshr_stall_per_bank[bank_id]),
+            .perf_read_miss    (perf_read_miss_per_bank[bank_id]),
+            .perf_write_miss   (perf_write_miss_per_bank[bank_id]),
+            .perf_mshr_stall   (perf_mshr_stall_per_bank[bank_id]),
         `endif
 
             // Core request
@@ -435,7 +419,7 @@ module VX_cache import VX_gpu_pkg::*; #(
 
             // Memory request
             .mem_req_valid      (per_bank_mem_req_valid[bank_id]),
-            .mem_req_addr       (curr_bank_mem_req_addr),
+            .mem_req_addr       (per_bank_mem_req_addr[bank_id]),
             .mem_req_rw         (per_bank_mem_req_rw[bank_id]),
             .mem_req_byteen     (per_bank_mem_req_byteen[bank_id]),
             .mem_req_data       (per_bank_mem_req_data[bank_id]),
@@ -444,9 +428,9 @@ module VX_cache import VX_gpu_pkg::*; #(
             .mem_req_ready      (per_bank_mem_req_ready[bank_id]),
 
             // Memory response
-            .mem_rsp_valid      (curr_bank_mem_rsp_valid),
-            .mem_rsp_data       (mem_rsp_data_s),
-            .mem_rsp_tag        (bank_mem_rsp_tag),
+            .mem_rsp_valid      (per_bank_mem_rsp_valid[bank_id]),
+            .mem_rsp_data       (per_bank_mem_rsp_data[bank_id]),
+            .mem_rsp_tag        (per_bank_mem_rsp_tag[bank_id]),
             .mem_rsp_ready      (per_bank_mem_rsp_ready[bank_id]),
 
             // Flush request
@@ -454,18 +438,17 @@ module VX_cache import VX_gpu_pkg::*; #(
             .flush_uuid         (flush_uuid),
             .flush_end          (per_bank_flush_end[bank_id])
         );
-
-        if (NUM_BANKS == 1) begin : g_per_bank_mem_req_addr_multibanks
-            assign per_bank_mem_req_addr[bank_id] = curr_bank_mem_req_addr;
-        end else begin : g_per_bank_mem_req_addr_singlebank
-            assign per_bank_mem_req_addr[bank_id] = `CS_LINE_TO_MEM_ADDR(curr_bank_mem_req_addr, bank_id);
-        end
     end
 
-    // Bank responses gather
+    // Core responses gather //////////////////////////////////////////////////
 
     wire [NUM_BANKS-1:0][CORE_RSP_DATAW-1:0] core_rsp_data_in;
     wire [NUM_REQS-1:0][CORE_RSP_DATAW-1:0]  core_rsp_data_out;
+
+    wire [NUM_REQS-1:0]                  core_rsp_valid_s;
+    wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_rsp_data_s;
+    wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   core_rsp_tag_s;
+    wire [NUM_REQS-1:0]                  core_rsp_ready_s;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_core_rsp_data_in
         assign core_rsp_data_in[i] = {per_bank_core_rsp_data[i], per_bank_core_rsp_tag[i]};
@@ -494,77 +477,166 @@ module VX_cache import VX_gpu_pkg::*; #(
         assign {core_rsp_data_s[i], core_rsp_tag_s[i]} = core_rsp_data_out[i];
     end
 
-    // Memory request arbitration
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_rsp_buf
+        VX_elastic_buffer #(
+            .DATAW   (`CS_WORD_WIDTH + TAG_WIDTH),
+            .SIZE    (CORE_RSP_REG_DISABLE ? `TO_OUT_BUF_SIZE(CORE_OUT_BUF) : 0),
+            .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
+        ) core_rsp_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (core_rsp_valid_s[i]),
+            .ready_in  (core_rsp_ready_s[i]),
+            .data_in   ({core_rsp_data_s[i], core_rsp_tag_s[i]}),
+            .data_out  ({core_bus2_if[i].rsp_data.data, core_bus2_if[i].rsp_data.tag}),
+            .valid_out (core_bus2_if[i].rsp_valid),
+            .ready_out (core_bus2_if[i].rsp_ready)
+        );
+    end
 
-    wire [NUM_BANKS-1:0][(`CS_MEM_ADDR_WIDTH + 1 + LINE_SIZE + `CS_LINE_WIDTH + BANK_MEM_TAG_WIDTH + `UP(FLAGS_WIDTH))-1:0] data_in;
+    // Memory request arbitration /////////////////////////////////////////////
 
-    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_data_in
-        assign data_in[i] = {
-            per_bank_mem_req_addr[i],
+    wire [NUM_BANKS-1:0][MEM_REQ_DATAW-1:0] per_bank_mem_req_pdata;
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_mem_req_pdata
+        assign per_bank_mem_req_pdata[i] = {
             per_bank_mem_req_rw[i],
-            per_bank_mem_req_byteen[i],
+            per_bank_mem_req_addr[i],
             per_bank_mem_req_data[i],
-            per_bank_mem_req_tag[i],
-            per_bank_mem_req_flags[i]
+            per_bank_mem_req_byteen[i],
+            per_bank_mem_req_flags[i],
+            per_bank_mem_req_tag[i]
         };
     end
 
-    wire [BANK_MEM_TAG_WIDTH-1:0] bank_mem_req_tag;
+    wire [MEM_PORTS-1:0] mem_req_valid;
+    wire [MEM_PORTS-1:0][MEM_REQ_DATAW-1:0] mem_req_pdata;
+    wire [MEM_PORTS-1:0] mem_req_ready;
+    wire [MEM_PORTS-1:0][MEM_ARB_SEL_WIDTH-1:0] mem_req_sel_out;
 
     VX_stream_arb #(
         .NUM_INPUTS (NUM_BANKS),
-        .DATAW      (`CS_MEM_ADDR_WIDTH + 1  + LINE_SIZE + `CS_LINE_WIDTH + BANK_MEM_TAG_WIDTH + `UP(FLAGS_WIDTH)),
+        .NUM_OUTPUTS(MEM_PORTS),
+        .DATAW      (MEM_REQ_DATAW),
         .ARBITER    ("R")
     ) mem_req_arb (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (per_bank_mem_req_valid),
+        .data_in   (per_bank_mem_req_pdata),
         .ready_in  (per_bank_mem_req_ready),
-        .data_in   (data_in),
-        .data_out  ({mem_req_addr, mem_req_rw, mem_req_byteen, mem_req_data, bank_mem_req_tag, mem_req_flags}),
         .valid_out (mem_req_valid),
+        .data_out  (mem_req_pdata),
         .ready_out (mem_req_ready),
-        `UNUSED_PIN (sel_out)
+        .sel_out   (mem_req_sel_out)
     );
 
-    if (NUM_BANKS > 1) begin : g_mem_req_tag_multibanks
-        wire [`CS_BANK_SEL_BITS-1:0] mem_req_bank_id = `CS_MEM_ADDR_TO_BANK_ID(mem_req_addr);
-        assign mem_req_tag = MEM_TAG_WIDTH'({bank_mem_req_tag, mem_req_bank_id});
-    end else begin : g_mem_req_tag
-        assign mem_req_tag = MEM_TAG_WIDTH'(bank_mem_req_tag);
+    for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_req_buf
+        wire                          mem_req_rw;
+        wire [`CS_LINE_ADDR_WIDTH-1:0] mem_req_addr;
+        wire [`CS_LINE_WIDTH-1:0]     mem_req_data;
+        wire [LINE_SIZE-1:0]          mem_req_byteen;
+        wire [`UP(FLAGS_WIDTH)-1:0]   mem_req_flags;
+        wire [BANK_MEM_TAG_WIDTH-1:0] mem_req_tag;
+
+        assign {
+            mem_req_rw,
+            mem_req_addr,
+            mem_req_data,
+            mem_req_byteen,
+            mem_req_flags,
+            mem_req_tag
+        } = mem_req_pdata[i];
+
+        wire [`CS_MEM_ADDR_WIDTH-1:0] mem_req_addr_w;
+        wire [MEM_TAG_WIDTH-1:0] mem_req_tag_w;
+        wire [`UP(FLAGS_WIDTH)-1:0] mem_req_flags_w;
+
+        if (NUM_BANKS > 1) begin : g_mem_req_tag_multibanks
+            if (MEM_ARB_SEL_BITS != 0) begin : g_arb_sel
+                wire [`CS_BANK_SEL_BITS-1:0] mem_req_bank_id;
+                VX_bits_concat #(
+                    .L (MEM_ARB_SEL_BITS),
+                    .R (MEM_PORTS_SEL_BITS)
+                ) bank_id_concat (
+                    .left_in  (mem_req_sel_out[i]),
+                    .right_in (MEM_PORTS_SEL_BITS'(i)),
+                    .data_out (mem_req_bank_id)
+                );
+                assign mem_req_addr_w = `CS_MEM_ADDR_WIDTH'({mem_req_addr, mem_req_bank_id});
+                assign mem_req_tag_w = {mem_req_tag, mem_req_sel_out[i]};
+            end else begin : g_no_arb_sel
+                `UNUSED_VAR (mem_req_sel_out)
+                assign mem_req_addr_w = `CS_MEM_ADDR_WIDTH'({mem_req_addr, MEM_PORTS_SEL_BITS'(i)});
+                assign mem_req_tag_w = MEM_TAG_WIDTH'(mem_req_tag);
+            end
+        end else begin : g_mem_req_tag
+            `UNUSED_VAR (mem_req_sel_out)
+            assign mem_req_addr_w = `CS_MEM_ADDR_WIDTH'(mem_req_addr);
+            assign mem_req_tag_w = MEM_TAG_WIDTH'(mem_req_tag);
+        end
+
+        VX_elastic_buffer #(
+            .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_WIDTH + `UP(FLAGS_WIDTH)),
+            .SIZE    (MEM_REQ_REG_DISABLE ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
+            .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
+        ) mem_req_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (mem_req_valid[i]),
+            .ready_in  (mem_req_ready[i]),
+            .data_in   ({mem_req_rw,                    mem_req_byteen,                    mem_req_addr_w,                  mem_req_data,                    mem_req_tag_w,                  mem_req_flags}),
+            .data_out  ({mem_bus_tmp_if[i].req_data.rw, mem_bus_tmp_if[i].req_data.byteen, mem_bus_tmp_if[i].req_data.addr, mem_bus_tmp_if[i].req_data.data, mem_bus_tmp_if[i].req_data.tag, mem_req_flags_w}),
+            .valid_out (mem_bus_tmp_if[i].req_valid),
+            .ready_out (mem_bus_tmp_if[i].req_ready)
+        );
+
+        if (FLAGS_WIDTH != 0) begin : g_mem_req_flags
+            assign mem_bus_tmp_if[i].req_data.flags = mem_req_flags_w;
+        end else begin : g_no_mem_req_flags
+            assign mem_bus_tmp_if[i].req_data.flags = '0;
+            `UNUSED_VAR (mem_req_flags_w)
+        end
+
+        if (WRITE_ENABLE) begin : g_mem_bus_if
+            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], mem_bus_tmp_if[i]);
+        end else begin : g_mem_bus_if_ro
+            `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if[i], mem_bus_tmp_if[i]);
+        end
     end
 
 `ifdef PERF_ENABLE
-    // per cycle: core_reads, core_writes
-    wire [`CLOG2(NUM_REQS+1)-1:0] perf_core_reads_per_cycle;
-    wire [`CLOG2(NUM_REQS+1)-1:0] perf_core_writes_per_cycle;
-
-    wire [NUM_REQS-1:0] perf_core_reads_per_req;
-    wire [NUM_REQS-1:0] perf_core_writes_per_req;
-
-    // per cycle: read misses, write misses, msrq stalls, pipeline stalls
-    wire [`CLOG2(NUM_BANKS+1)-1:0] perf_read_miss_per_cycle;
-    wire [`CLOG2(NUM_BANKS+1)-1:0] perf_write_miss_per_cycle;
-    wire [`CLOG2(NUM_BANKS+1)-1:0] perf_mshr_stall_per_cycle;
-    wire [`CLOG2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
+    wire [NUM_REQS-1:0]  perf_core_reads_per_req;
+    wire [NUM_REQS-1:0]  perf_core_writes_per_req;
+    wire [NUM_REQS-1:0]  perf_crsp_stall_per_req;
+    wire [MEM_PORTS-1:0] perf_mem_stall_per_port;
 
     `BUFFER(perf_core_reads_per_req, core_req_valid & core_req_ready & ~core_req_rw);
     `BUFFER(perf_core_writes_per_req, core_req_valid & core_req_ready & core_req_rw);
+
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_perf_crsp_stall_per_req
+        assign perf_crsp_stall_per_req[i] = core_bus_if[i].rsp_valid && ~core_bus_if[i].rsp_ready;
+    end
+
+    for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_perf_mem_stall_per_port
+        assign perf_mem_stall_per_port[i] = mem_bus_if[i].req_valid && ~mem_bus_if[i].req_ready;
+    end
+
+    // per cycle: read misses, write misses, msrq stalls, pipeline stalls
+    wire [`CLOG2(NUM_REQS+1)-1:0]  perf_core_reads_per_cycle;
+    wire [`CLOG2(NUM_REQS+1)-1:0]  perf_core_writes_per_cycle;
+    wire [`CLOG2(NUM_REQS+1)-1:0]  perf_crsp_stall_per_cycle;
+    wire [`CLOG2(NUM_BANKS+1)-1:0] perf_read_miss_per_cycle;
+    wire [`CLOG2(NUM_BANKS+1)-1:0] perf_write_miss_per_cycle;
+    wire [`CLOG2(NUM_BANKS+1)-1:0] perf_mshr_stall_per_cycle;
+    wire [`CLOG2(MEM_PORTS+1)-1:0] perf_mem_stall_per_cycle;
 
     `POP_COUNT(perf_core_reads_per_cycle, perf_core_reads_per_req);
     `POP_COUNT(perf_core_writes_per_cycle, perf_core_writes_per_req);
     `POP_COUNT(perf_read_miss_per_cycle, perf_read_miss_per_bank);
     `POP_COUNT(perf_write_miss_per_cycle, perf_write_miss_per_bank);
     `POP_COUNT(perf_mshr_stall_per_cycle, perf_mshr_stall_per_bank);
-
-    wire [NUM_REQS-1:0] perf_crsp_stall_per_req;
-    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_perf_crsp_stall_per_req
-        assign perf_crsp_stall_per_req[i] = core_bus2_if[i].rsp_valid && ~core_bus2_if[i].rsp_ready;
-    end
-
     `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_req);
-
-    wire perf_mem_stall_per_cycle = mem_bus_if.req_valid && ~mem_bus_if.req_ready;
+    `POP_COUNT(perf_mem_stall_per_cycle, perf_mem_stall_per_port);
 
     reg [`PERF_CTR_BITS-1:0] perf_core_reads;
     reg [`PERF_CTR_BITS-1:0] perf_core_writes;

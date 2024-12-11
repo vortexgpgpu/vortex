@@ -16,26 +16,32 @@
 interface VX_lsu_mem_if #(
     parameter NUM_LANES  = 1,
     parameter DATA_SIZE  = 1,
-    parameter FLAGS_WIDTH= `MEM_REQ_FLAGS_WIDTH,
     parameter TAG_WIDTH  = 1,
+    parameter FLAGS_WIDTH= `MEM_REQ_FLAGS_WIDTH,
     parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
-    parameter ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE)
+    parameter ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE),
+    parameter UUID_WIDTH = `UUID_WIDTH
 ) ();
 
     typedef struct packed {
-        logic                   rw;
-        logic [NUM_LANES-1:0]   mask;
+        logic [`UP(UUID_WIDTH)-1:0]           uuid;
+        logic [TAG_WIDTH-`UP(UUID_WIDTH)-1:0] value;
+    } tag_t;
+
+    typedef struct packed {
+        logic [NUM_LANES-1:0]                  mask;
+        logic                                  rw;
         logic [NUM_LANES-1:0][ADDR_WIDTH-1:0]  addr;
         logic [NUM_LANES-1:0][DATA_SIZE*8-1:0] data;
         logic [NUM_LANES-1:0][DATA_SIZE-1:0]   byteen;
         logic [NUM_LANES-1:0][FLAGS_WIDTH-1:0] flags;
-        logic [TAG_WIDTH-1:0]   tag;
+        tag_t                                  tag;
     } req_data_t;
 
     typedef struct packed {
-        logic [NUM_LANES-1:0]   mask;
+        logic [NUM_LANES-1:0]                  mask;
         logic [NUM_LANES-1:0][DATA_SIZE*8-1:0] data;
-        logic [TAG_WIDTH-1:0]   tag;
+        tag_t                                  tag;
     } rsp_data_t;
 
     logic  req_valid;

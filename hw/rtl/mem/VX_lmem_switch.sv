@@ -61,15 +61,7 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
         }),
         .ready_in  (req_global_ready),
         .valid_out (global_out_if.req_valid),
-        .data_out  ({
-            global_out_if.req_data.mask,
-            global_out_if.req_data.rw,
-            global_out_if.req_data.addr,
-            global_out_if.req_data.data,
-            global_out_if.req_data.byteen,
-            global_out_if.req_data.flags,
-            global_out_if.req_data.tag
-        }),
+        .data_out  (global_out_if.req_data),
         .ready_out (global_out_if.req_ready)
     );
 
@@ -92,15 +84,7 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
         }),
         .ready_in  (req_local_ready),
         .valid_out (local_out_if.req_valid),
-        .data_out  ({
-            local_out_if.req_data.mask,
-            local_out_if.req_data.rw,
-            local_out_if.req_data.addr,
-            local_out_if.req_data.data,
-            local_out_if.req_data.byteen,
-            local_out_if.req_data.flags,
-            local_out_if.req_data.tag
-        }),
+        .data_out  (local_out_if.req_data),
         .ready_out (local_out_if.req_ready)
     );
 

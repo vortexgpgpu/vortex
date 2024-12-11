@@ -18,8 +18,14 @@ interface VX_mem_bus_if #(
     parameter FLAGS_WIDTH= `MEM_REQ_FLAGS_WIDTH,
     parameter TAG_WIDTH  = 1,
     parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
-    parameter ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE)
+    parameter ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE),
+    parameter UUID_WIDTH = `UUID_WIDTH
 ) ();
+
+    typedef struct packed {
+        logic [`UP(UUID_WIDTH)-1:0]           uuid;
+        logic [TAG_WIDTH-`UP(UUID_WIDTH)-1:0] value;
+    } tag_t;
 
     typedef struct packed {
         logic                   rw;
@@ -27,12 +33,12 @@ interface VX_mem_bus_if #(
         logic [DATA_SIZE*8-1:0] data;
         logic [DATA_SIZE-1:0]   byteen;
         logic [FLAGS_WIDTH-1:0] flags;
-        logic [TAG_WIDTH-1:0]   tag;
+        tag_t                   tag;
     } req_data_t;
 
     typedef struct packed {
         logic [DATA_SIZE*8-1:0] data;
-        logic [TAG_WIDTH-1:0]   tag;
+        tag_t                   tag;
     } rsp_data_t;
 
     logic  req_valid;

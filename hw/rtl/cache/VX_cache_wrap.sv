@@ -21,6 +21,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     // Number of Word requests per cycle
     parameter NUM_REQS              = 4,
 
+    // Number of memory ports
+    parameter MEM_PORTS             = 1,
 
     // Size of cache in bytes
     parameter CACHE_SIZE            = 4096,
@@ -85,16 +87,15 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 `endif
 
     VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if
+    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
 );
 
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter"))
 
-    localparam CACHE_MEM_TAG_WIDTH = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, UUID_WIDTH);
-
-    localparam MEM_TAG_WIDTH = PASSTHRU ? `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH) :
-                                          (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH, UUID_WIDTH) :
-                                                       CACHE_MEM_TAG_WIDTH);
+    localparam CACHE_MEM_TAG_WIDTH = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
+    localparam BYPASS_TAG_WIDTH = `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, MEM_PORTS, LINE_SIZE, WORD_SIZE, TAG_WIDTH);
+    localparam NC_TAG_WIDTH = `MAX(CACHE_MEM_TAG_WIDTH, BYPASS_TAG_WIDTH) + 1;
+    localparam MEM_TAG_WIDTH = PASSTHRU ? BYPASS_TAG_WIDTH : (NC_ENABLE ? NC_TAG_WIDTH : CACHE_MEM_TAG_WIDTH);
 
     localparam NC_OR_BYPASS = (NC_ENABLE || PASSTHRU);
 
@@ -106,17 +107,18 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE (LINE_SIZE),
         .TAG_WIDTH (CACHE_MEM_TAG_WIDTH)
-    ) mem_bus_cache_if();
+    ) mem_bus_cache_if[MEM_PORTS]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (LINE_SIZE),
         .TAG_WIDTH (MEM_TAG_WIDTH)
-    ) mem_bus_tmp_if();
+    ) mem_bus_tmp_if[MEM_PORTS]();
 
     if (NC_OR_BYPASS) begin : g_bypass
 
         VX_cache_bypass #(
             .NUM_REQS          (NUM_REQS),
+            .MEM_PORTS         (MEM_PORTS),
             .TAG_SEL_IDX       (TAG_SEL_IDX),
 
             .PASSTHRU          (PASSTHRU),
@@ -130,7 +132,6 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
             .MEM_ADDR_WIDTH    (`CS_MEM_ADDR_WIDTH),
             .MEM_TAG_IN_WIDTH  (CACHE_MEM_TAG_WIDTH),
-            .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH),
 
             .UUID_WIDTH        (UUID_WIDTH),
 
@@ -153,13 +154,17 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             `ASSIGN_VX_MEM_BUS_IF (core_bus_cache_if[i], core_bus_if[i]);
         end
 
-        `ASSIGN_VX_MEM_BUS_IF (mem_bus_tmp_if, mem_bus_cache_if);
+        for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_tmp_if
+            `ASSIGN_VX_MEM_BUS_IF (mem_bus_tmp_if[i], mem_bus_cache_if[i]);
+        end
     end
 
-    if (WRITE_ENABLE) begin : g_mem_bus_if
-        `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, mem_bus_tmp_if);
-    end else begin : g_mem_bus_if_ro
-        `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if, mem_bus_tmp_if);
+    for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_if
+        if (WRITE_ENABLE) begin : g_we
+            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], mem_bus_tmp_if[i]);
+        end else begin : g_ro
+            `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if[i], mem_bus_tmp_if[i]);
+        end
     end
 
     if (PASSTHRU == 0) begin : g_cache
@@ -172,6 +177,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .NUM_WAYS     (NUM_WAYS),
             .WORD_SIZE    (WORD_SIZE),
             .NUM_REQS     (NUM_REQS),
+            .MEM_PORTS    (MEM_PORTS),
             .WRITE_ENABLE (WRITE_ENABLE),
             .WRITEBACK    (WRITEBACK),
             .DIRTY_BYTES  (DIRTY_BYTES),
@@ -207,13 +213,15 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             `UNUSED_VAR (core_bus_cache_if[i].rsp_ready)
         end
 
-        assign mem_bus_cache_if.req_valid = 0;
-        assign mem_bus_cache_if.req_data = '0;
-        `UNUSED_VAR (mem_bus_cache_if.req_ready)
+        for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_cache_if
+            assign mem_bus_cache_if[i].req_valid = 0;
+            assign mem_bus_cache_if[i].req_data = '0;
+            `UNUSED_VAR (mem_bus_cache_if[i].req_ready)
 
-        `UNUSED_VAR (mem_bus_cache_if.rsp_valid)
-        `UNUSED_VAR (mem_bus_cache_if.rsp_data)
-        assign mem_bus_cache_if.rsp_ready = 0;
+            `UNUSED_VAR (mem_bus_cache_if[i].rsp_valid)
+            `UNUSED_VAR (mem_bus_cache_if[i].rsp_data)
+            assign mem_bus_cache_if[i].rsp_ready = 0;
+        end
 
     `ifdef PERF_ENABLE
         assign cache_perf = '0;
@@ -222,62 +230,36 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     end
 
 `ifdef DBG_TRACE_CACHE
-    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_trace
-        wire [`UP(UUID_WIDTH)-1:0] core_req_uuid;
-        wire [`UP(UUID_WIDTH)-1:0] core_rsp_uuid;
-
-        if (UUID_WIDTH != 0) begin : g_core_rsp_uuid
-            assign core_req_uuid = core_bus_if[i].req_data.tag[TAG_WIDTH-1 -: UUID_WIDTH];
-            assign core_rsp_uuid = core_bus_if[i].rsp_data.tag[TAG_WIDTH-1 -: UUID_WIDTH];
-        end else begin : g_no_core_rsp_uuid
-            assign core_req_uuid = 0;
-            assign core_rsp_uuid = 0;
-        end
-
-        wire core_req_fire = core_bus_if[i].req_valid && core_bus_if[i].req_ready;
-        wire core_rsp_fire = core_bus_if[i].rsp_valid && core_bus_if[i].rsp_ready;
-
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_trace_core
         always @(posedge clk) begin
-            if (core_req_fire) begin
+            if (core_bus_if[i].req_valid && core_bus_if[i].req_ready) begin
                 if (core_bus_if[i].req_data.rw) begin
-                    `TRACE(2, ("%t: %s core-wr-req: addr=0x%0h, tag=0x%0h, req_idx=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag, i, core_bus_if[i].req_data.byteen, core_bus_if[i].req_data.data, core_req_uuid))
+                    `TRACE(2, ("%t: %s core-wr-req: addr=0x%0h, tag=0x%0h, req_idx=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag.value, i, core_bus_if[i].req_data.byteen, core_bus_if[i].req_data.data, core_bus_if[i].req_data.tag.uuid))
                 end else begin
-                    `TRACE(2, ("%t: %s core-rd-req: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag, i, core_req_uuid))
+                    `TRACE(2, ("%t: %s core-rd-req: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag.value, i, core_bus_if[i].req_data.tag.uuid))
                 end
             end
-            if (core_rsp_fire) begin
-                `TRACE(2, ("%t: %s core-rd-rsp: tag=0x%0h, req_idx=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, core_bus_if[i].rsp_data.tag, i, core_bus_if[i].rsp_data.data, core_rsp_uuid))
+            if (core_bus_if[i].rsp_valid && core_bus_if[i].rsp_ready) begin
+                `TRACE(2, ("%t: %s core-rd-rsp: tag=0x%0h, req_idx=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, core_bus_if[i].rsp_data.tag.value, i, core_bus_if[i].rsp_data.data, core_bus_if[i].rsp_data.tag.uuid))
             end
         end
     end
 
-    wire [`UP(UUID_WIDTH)-1:0] mem_req_uuid;
-    wire [`UP(UUID_WIDTH)-1:0] mem_rsp_uuid;
-
-    if ((UUID_WIDTH != 0) && (NC_OR_BYPASS != 0)) begin : g_mem_req_uuid
-        assign mem_req_uuid = mem_bus_if.req_data.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
-        assign mem_rsp_uuid = mem_bus_if.rsp_data.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
-    end else begin : g_no_mem_req_uuid
-        assign mem_req_uuid = 0;
-        assign mem_rsp_uuid = 0;
-    end
-
-    wire mem_req_fire = mem_bus_if.req_valid && mem_bus_if.req_ready;
-    wire mem_rsp_fire = mem_bus_if.rsp_valid && mem_bus_if.rsp_ready;
-
-    always @(posedge clk) begin
-        if (mem_req_fire) begin
-            if (mem_bus_if.req_data.rw) begin
-                `TRACE(2, ("%t: %s mem-wr-req: addr=0x%0h, tag=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n",
-                    $time, INSTANCE_ID, `TO_FULL_ADDR(mem_bus_if.req_data.addr), mem_bus_if.req_data.tag, mem_bus_if.req_data.byteen, mem_bus_if.req_data.data, mem_req_uuid))
-            end else begin
-                `TRACE(2, ("%t: %s mem-rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n",
-                    $time, INSTANCE_ID, `TO_FULL_ADDR(mem_bus_if.req_data.addr), mem_bus_if.req_data.tag, mem_req_uuid))
+    for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_trace_mem
+        always @(posedge clk) begin
+            if (mem_bus_if[i].req_valid && mem_bus_if[i].req_ready) begin
+                if (mem_bus_if[i].req_data.rw) begin
+                    `TRACE(2, ("%t: %s mem-wr-req: addr=0x%0h, tag=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n",
+                        $time, INSTANCE_ID, `TO_FULL_ADDR(mem_bus_if[i].req_data.addr), mem_bus_if[i].req_data.tag.value, mem_bus_if[i].req_data.byteen, mem_bus_if[i].req_data.data, mem_bus_if[i].req_data.tag.uuid))
+                end else begin
+                    `TRACE(2, ("%t: %s mem-rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n",
+                        $time, INSTANCE_ID, `TO_FULL_ADDR(mem_bus_if[i].req_data.addr), mem_bus_if[i].req_data.tag.value, mem_bus_if[i].req_data.tag.uuid))
+                end
             end
-        end
-        if (mem_rsp_fire) begin
-            `TRACE(2, ("%t: %s mem-rd-rsp: tag=0x%0h, data=0x%h (#%0d)\n",
-                $time, INSTANCE_ID, mem_bus_if.rsp_data.tag, mem_bus_if.rsp_data.data, mem_rsp_uuid))
+            if (mem_bus_if[i].rsp_valid && mem_bus_if[i].rsp_ready) begin
+                `TRACE(2, ("%t: %s mem-rd-rsp: data=0x%h, tag=0x%0h (#%0d)\n",
+                    $time, INSTANCE_ID, mem_bus_if[i].rsp_data.data[i], mem_bus_if[i].rsp_data.tag.value, mem_bus_if[i].rsp_data.tag.uuid))
+            end
         end
     end
 `endif

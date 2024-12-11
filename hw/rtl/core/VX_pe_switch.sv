@@ -40,6 +40,7 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
 
     VX_stream_switch #(
         .DATAW       (REQ_DATAW),
+        .NUM_INPUTS  (1),
         .NUM_OUTPUTS (PE_COUNT),
         .OUT_BUF     (REQ_OUT_BUF)
     ) req_switch (

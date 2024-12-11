@@ -20,17 +20,22 @@ module VX_bits_remove #(
     parameter POS = 0
 ) (
     input wire [N-1:0]    data_in,
+    output wire [`UP(S)-1:0] sel_out,
     output wire [N-S-1:0] data_out
 );
     `STATIC_ASSERT (((0 == S) || ((POS + S) <= N)), ("invalid parameter"))
 
     if (S == 0) begin : g_passthru
+        assign sel_out = 0;
         assign data_out = data_in;
     end else if (POS == 0) begin : g_pos_0
+        assign sel_out = data_in[0 +: S];
         assign data_out = data_in[N-1:S];
     end else if ((POS + S) == N) begin : g_pos_N
+        assign sel_out = data_in[POS +: S];
         assign data_out = data_in[POS-1:0];
     end else begin : g_pos
+        assign sel_out = data_in[POS +: S];
         assign data_out = {data_in[N-1:(POS+S)], data_in[POS-1:0]};
     end
 

@@ -18,17 +18,15 @@ module VX_stream_xbar #(
     parameter NUM_INPUTS    = 4,
     parameter NUM_OUTPUTS   = 4,
     parameter DATAW         = 4,
-    parameter IN_WIDTH      = `LOG2UP(NUM_INPUTS),
-    parameter OUT_WIDTH     = `LOG2UP(NUM_OUTPUTS),
     parameter ARBITER       = "R",
     parameter OUT_BUF       = 0,
     parameter MAX_FANOUT    = `MAX_FANOUT,
-    parameter PERF_CTR_BITS = `CLOG2(NUM_INPUTS+1)
+    parameter PERF_CTR_BITS = `CLOG2(NUM_INPUTS+1),
+    parameter IN_WIDTH      = `LOG2UP(NUM_INPUTS),
+    parameter OUT_WIDTH     = `LOG2UP(NUM_OUTPUTS)
 ) (
     input wire                              clk,
     input wire                              reset,
-
-    output wire [PERF_CTR_BITS-1:0]         collisions,
 
     input wire [NUM_INPUTS-1:0]             valid_in,
     input wire [NUM_INPUTS-1:0][DATAW-1:0]  data_in,
@@ -38,12 +36,14 @@ module VX_stream_xbar #(
     output wire [NUM_OUTPUTS-1:0]           valid_out,
     output wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out,
     output wire [NUM_OUTPUTS-1:0][IN_WIDTH-1:0] sel_out,
-    input  wire [NUM_OUTPUTS-1:0]           ready_out
+    input  wire [NUM_OUTPUTS-1:0]           ready_out,
+
+    output wire [PERF_CTR_BITS-1:0]         collisions
 );
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
 
-    if (NUM_INPUTS != 1) begin : g_multiple_inputs
+    if (NUM_INPUTS != 1) begin : g_multi_inputs
 
         if (NUM_OUTPUTS != 1) begin : g_multiple_outputs
 
@@ -130,7 +130,7 @@ module VX_stream_xbar #(
             `UNUSED_VAR (sel_in)
         end
 
-    end else if (NUM_OUTPUTS != 1) begin : g_one_input
+    end else if (NUM_OUTPUTS != 1) begin : g_single_input
 
         // (#inputs == 1) and (#outputs > 1)
 

@@ -21,19 +21,19 @@ module Vortex import VX_gpu_pkg::*; (
     input  wire                             reset,
 
     // Memory request
-    output wire                             mem_req_valid,
-    output wire                             mem_req_rw,
-    output wire [`VX_MEM_BYTEEN_WIDTH-1:0]  mem_req_byteen,
-    output wire [`VX_MEM_ADDR_WIDTH-1:0]    mem_req_addr,
-    output wire [`VX_MEM_DATA_WIDTH-1:0]    mem_req_data,
-    output wire [`VX_MEM_TAG_WIDTH-1:0]     mem_req_tag,
-    input  wire                             mem_req_ready,
+    output wire                             mem_req_valid [`VX_MEM_PORTS-1:0],
+    output wire                             mem_req_rw [`VX_MEM_PORTS],
+    output wire [`VX_MEM_BYTEEN_WIDTH-1:0]  mem_req_byteen [`VX_MEM_PORTS],
+    output wire [`VX_MEM_ADDR_WIDTH-1:0]    mem_req_addr [`VX_MEM_PORTS],
+    output wire [`VX_MEM_DATA_WIDTH-1:0]    mem_req_data [`VX_MEM_PORTS],
+    output wire [`VX_MEM_TAG_WIDTH-1:0]     mem_req_tag [`VX_MEM_PORTS],
+    input  wire                             mem_req_ready [`VX_MEM_PORTS],
 
     // Memory response
-    input wire                              mem_rsp_valid,
-    input wire [`VX_MEM_DATA_WIDTH-1:0]     mem_rsp_data,
-    input wire [`VX_MEM_TAG_WIDTH-1:0]      mem_rsp_tag,
-    output wire                             mem_rsp_ready,
+    input wire                              mem_rsp_valid [`VX_MEM_PORTS],
+    input wire [`VX_MEM_DATA_WIDTH-1:0]     mem_rsp_data [`VX_MEM_PORTS],
+    input wire [`VX_MEM_TAG_WIDTH-1:0]      mem_rsp_tag [`VX_MEM_PORTS],
+    output wire                             mem_rsp_ready [`VX_MEM_PORTS],
 
     // DCR write request
     input  wire                             dcr_wr_valid,
@@ -60,12 +60,12 @@ module Vortex import VX_gpu_pkg::*; (
     VX_mem_bus_if #(
         .DATA_SIZE (`L2_LINE_SIZE),
         .TAG_WIDTH (L2_MEM_TAG_WIDTH)
-    ) per_cluster_mem_bus_if[`NUM_CLUSTERS]();
+    ) per_cluster_mem_bus_if[`NUM_CLUSTERS * `L2_MEM_PORTS]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (`L3_LINE_SIZE),
         .TAG_WIDTH (L3_MEM_TAG_WIDTH)
-    ) mem_bus_if();
+    ) mem_bus_if[`L3_MEM_PORTS]();
 
     `RESET_RELAY (l3_reset, reset);
 
@@ -77,6 +77,7 @@ module Vortex import VX_gpu_pkg::*; (
         .NUM_WAYS       (`L3_NUM_WAYS),
         .WORD_SIZE      (L3_WORD_SIZE),
         .NUM_REQS       (L3_NUM_REQS),
+        .MEM_PORTS      (`L3_MEM_PORTS),
         .CRSQ_SIZE      (`L3_CRSQ_SIZE),
         .MSHR_SIZE      (`L3_MSHR_SIZE),
         .MRSQ_SIZE      (`L3_MRSQ_SIZE),
@@ -104,24 +105,21 @@ module Vortex import VX_gpu_pkg::*; (
         .mem_bus_if     (mem_bus_if)
     );
 
-    assign mem_req_valid = mem_bus_if.req_valid;
-    assign mem_req_rw    = mem_bus_if.req_data.rw;
-    assign mem_req_byteen= mem_bus_if.req_data.byteen;
-    assign mem_req_addr  = mem_bus_if.req_data.addr;
-    assign mem_req_data  = mem_bus_if.req_data.data;
-    assign mem_req_tag   = mem_bus_if.req_data.tag;
-    assign mem_bus_if.req_ready = mem_req_ready;
-    `UNUSED_VAR (mem_bus_if.req_data.flags)
+    for (genvar i = 0; i < `L3_MEM_PORTS; ++i) begin : g_mem_bus_if
+        assign mem_req_valid[i] = mem_bus_if[i].req_valid;
+        assign mem_req_rw[i]    = mem_bus_if[i].req_data.rw;
+        assign mem_req_byteen[i]= mem_bus_if[i].req_data.byteen;
+        assign mem_req_addr[i]  = mem_bus_if[i].req_data.addr;
+        assign mem_req_data[i]  = mem_bus_if[i].req_data.data;
+        assign mem_req_tag[i]   = mem_bus_if[i].req_data.tag;
+        `UNUSED_VAR (mem_bus_if[i].req_data.flags)
+        assign mem_bus_if[i].req_ready = mem_req_ready[i];
 
-    assign mem_bus_if.rsp_valid = mem_rsp_valid;
-    assign mem_bus_if.rsp_data.data  = mem_rsp_data;
-    assign mem_bus_if.rsp_data.tag   = mem_rsp_tag;
-    assign mem_rsp_ready = mem_bus_if.rsp_ready;
-
-    wire mem_req_fire = mem_req_valid && mem_req_ready;
-    wire mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
-    `UNUSED_VAR (mem_req_fire)
-    `UNUSED_VAR (mem_rsp_fire)
+        assign mem_bus_if[i].rsp_valid     = mem_rsp_valid[i];
+        assign mem_bus_if[i].rsp_data.data = mem_rsp_data[i];
+        assign mem_bus_if[i].rsp_data.tag  = mem_rsp_tag[i];
+        assign mem_rsp_ready[i] = mem_bus_if[i].rsp_ready;
+    end
 
     VX_dcr_bus_if dcr_bus_if();
     assign dcr_bus_if.write_valid = dcr_wr_valid;
@@ -153,7 +151,7 @@ module Vortex import VX_gpu_pkg::*; (
 
             .dcr_bus_if         (cluster_dcr_bus_if),
 
-            .mem_bus_if         (per_cluster_mem_bus_if[cluster_id]),
+            .mem_bus_if         (per_cluster_mem_bus_if[cluster_id * `L2_MEM_PORTS +: `L2_MEM_PORTS]),
 
             .busy               (per_cluster_busy[cluster_id])
         );
@@ -163,6 +161,26 @@ module Vortex import VX_gpu_pkg::*; (
 
 `ifdef PERF_ENABLE
 
+    localparam MEM_PORTS_CTR_W = `CLOG2(`VX_MEM_PORTS+1);
+
+    wire [`VX_MEM_PORTS-1:0] mem_req_fire, mem_rsp_fire;
+    wire [`VX_MEM_PORTS-1:0] mem_rd_req_fire, mem_wr_req_fire;
+
+    for (genvar i = 0; i < `VX_MEM_PORTS; ++i) begin : g_perf_ctrs
+        assign mem_req_fire[i] = mem_req_valid[i] & mem_req_ready[i];
+        assign mem_rsp_fire[i] = mem_rsp_valid[i] & mem_rsp_ready[i];
+        assign mem_rd_req_fire[i] = mem_req_fire[i] & ~mem_req_rw[i];
+        assign mem_wr_req_fire[i] = mem_req_fire[i] & mem_req_rw[i];
+    end
+
+    wire [MEM_PORTS_CTR_W-1:0] perf_mem_reads_per_cycle;
+    wire [MEM_PORTS_CTR_W-1:0] perf_mem_writes_per_cycle;
+    wire [MEM_PORTS_CTR_W-1:0] perf_mem_rsps_per_cycle;
+
+    `POP_COUNT(perf_mem_reads_per_cycle, mem_rd_req_fire);
+    `POP_COUNT(perf_mem_writes_per_cycle, mem_wr_req_fire);
+    `POP_COUNT(perf_mem_rsps_per_cycle, mem_rsp_fire);
+
     reg [`PERF_CTR_BITS-1:0] perf_mem_pending_reads;
     mem_perf_t mem_perf;
 
@@ -171,19 +189,16 @@ module Vortex import VX_gpu_pkg::*; (
             perf_mem_pending_reads <= '0;
         end else begin
             perf_mem_pending_reads <= $signed(perf_mem_pending_reads) +
-                `PERF_CTR_BITS'($signed(2'(mem_req_fire && ~mem_bus_if.req_data.rw) - 2'(mem_rsp_fire)));
+                `PERF_CTR_BITS'($signed((MEM_PORTS_CTR_W+1)'(perf_mem_reads_per_cycle) - (MEM_PORTS_CTR_W+1)'(perf_mem_rsps_per_cycle)));
         end
     end
-
-    wire mem_rd_req_fire = mem_req_fire && ~mem_bus_if.req_data.rw;
-    wire mem_wr_req_fire = mem_req_fire && mem_bus_if.req_data.rw;
 
     always @(posedge clk) begin
         if (reset) begin
             mem_perf <= '0;
         end else begin
-            mem_perf.reads <= mem_perf.reads + `PERF_CTR_BITS'(mem_rd_req_fire);
-            mem_perf.writes <= mem_perf.writes + `PERF_CTR_BITS'(mem_wr_req_fire);
+            mem_perf.reads <= mem_perf.reads + `PERF_CTR_BITS'(perf_mem_reads_per_cycle);
+            mem_perf.writes <= mem_perf.writes + `PERF_CTR_BITS'(perf_mem_writes_per_cycle);
             mem_perf.latency <= mem_perf.latency + perf_mem_pending_reads;
         end
     end
@@ -198,19 +213,18 @@ module Vortex import VX_gpu_pkg::*; (
     end
 
 `ifdef DBG_TRACE_MEM
-    wire [`UUID_WIDTH-1:0] mem_req_uuid = mem_req_tag[`VX_MEM_TAG_WIDTH-1 -: `UUID_WIDTH];
-    wire [`UUID_WIDTH-1:0] mem_rsp_uuid = mem_rsp_tag[`VX_MEM_TAG_WIDTH-1 -: `UUID_WIDTH];
-
-    always @(posedge clk) begin
-        if (mem_req_fire) begin
-            if (mem_req_rw) begin
-                `TRACE(2, ("%t: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%h data=0x%h (#%0d)\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data, mem_req_uuid))
-            end else begin
-                `TRACE(2, ("%t: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%h (#%0d)\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_uuid))
+    for (genvar i = 0; i < `VX_MEM_PORTS; ++i) begin : g_trace
+        always @(posedge clk) begin
+            if (mem_bus_if[i].req_valid && mem_bus_if[i].req_ready) begin
+                if (mem_bus_if[i].req_data.rw) begin
+                    `TRACE(2, ("%t: MEM Wr Req[%0d]: addr=0x%0h, byteen=0x%h data=0x%h, tag=0x%0h (#%0d)\n", $time, i, `TO_FULL_ADDR(mem_bus_if[i].req_data.addr), mem_bus_if[i].req_data.byteen, mem_bus_if[i].req_data.data, mem_bus_if[i].req_data.tag.value, mem_bus_if[i].req_data.tag.uuid))
+                end else begin
+                    `TRACE(2, ("%t: MEM Rd Req[%0d]: addr=0x%0h, byteen=0x%h, tag=0x%0h (#%0d)\n", $time, i, `TO_FULL_ADDR(mem_bus_if[i].req_data.addr), mem_bus_if[i].req_data.byteen, mem_bus_if[i].req_data.tag.value, mem_bus_if[i].req_data.tag.uuid))
+                end
             end
-        end
-        if (mem_rsp_fire) begin
-            `TRACE(2, ("%t: MEM Rd Rsp: tag=0x%0h, data=0x%h (#%0d)\n", $time, mem_rsp_tag, mem_rsp_data, mem_rsp_uuid))
+            if (mem_bus_if[i].rsp_valid && mem_bus_if[i].rsp_ready) begin
+                `TRACE(2, ("%t: MEM Rd Rsp[%0d]: data=0x%h, tag=0x%0h (#%0d)\n", $time, i, mem_bus_if[i].rsp_data.data, mem_bus_if[i].rsp_data.tag.value, mem_bus_if[i].rsp_data.tag.uuid))
+            end
         end
     end
 `endif

@@ -45,8 +45,8 @@ module VX_cache_tags #(
     output wire                         evict_dirty,
     output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag
 );
-    //                   valid,   dirty,           tag
-    localparam TAG_WIDTH = 1 +  WRITEBACK + `CS_TAG_SEL_BITS;
+    //                   valid,  dirty,          tag
+    localparam TAG_WIDTH = 1 + WRITEBACK + `CS_TAG_SEL_BITS;
 
     wire [NUM_WAYS-1:0][`CS_TAG_SEL_BITS-1:0] read_tag;
     wire [NUM_WAYS-1:0] read_valid;

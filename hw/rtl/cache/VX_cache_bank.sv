@@ -74,9 +74,9 @@ module VX_cache_bank #(
     input wire reset,
 
 `ifdef PERF_ENABLE
-    output wire perf_read_misses,
-    output wire perf_write_misses,
-    output wire perf_mshr_stalls,
+    output wire perf_read_miss,
+    output wire perf_write_miss,
+    output wire perf_mshr_stall,
 `endif
 
     // Core Request
@@ -682,9 +682,9 @@ module VX_cache_bank #(
 ///////////////////////////////////////////////////////////////////////////////
 
 `ifdef PERF_ENABLE
-    assign perf_read_misses  = do_read_st1 && ~is_hit_st1;
-    assign perf_write_misses = do_write_st1 && ~is_hit_st1;
-    assign perf_mshr_stalls  = mshr_alm_full;
+    assign perf_read_miss  = do_read_st1 && ~is_hit_st1;
+    assign perf_write_miss = do_write_st1 && ~is_hit_st1;
+    assign perf_mshr_stall = mshr_alm_full;
 `endif
 
 `ifdef DBG_TRACE_CACHE

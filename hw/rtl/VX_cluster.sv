@@ -31,7 +31,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
     VX_dcr_bus_if.slave         dcr_bus_if,
 
     // Memory
-    VX_mem_bus_if.master        mem_bus_if,
+    VX_mem_bus_if.master        mem_bus_if [`L2_MEM_PORTS],
 
     // Status
     output wire                 busy
@@ -79,7 +79,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE (`L1_LINE_SIZE),
         .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
-    ) per_socket_mem_bus_if[`NUM_SOCKETS]();
+    ) per_socket_mem_bus_if[`NUM_SOCKETS * `L1_MEM_PORTS]();
 
     `RESET_RELAY (l2_reset, reset);
 
@@ -91,6 +91,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
         .NUM_WAYS       (`L2_NUM_WAYS),
         .WORD_SIZE      (L2_WORD_SIZE),
         .NUM_REQS       (L2_NUM_REQS),
+        .MEM_PORTS      (`L2_MEM_PORTS),
         .CRSQ_SIZE      (`L2_CRSQ_SIZE),
         .MSHR_SIZE      (`L2_MSHR_SIZE),
         .MRSQ_SIZE      (`L2_MRSQ_SIZE),
@@ -144,7 +145,7 @@ module VX_cluster import VX_gpu_pkg::*; #(
 
             .dcr_bus_if     (socket_dcr_bus_if),
 
-            .mem_bus_if     (per_socket_mem_bus_if[socket_id]),
+            .mem_bus_if     (per_socket_mem_bus_if[socket_id * `L1_MEM_PORTS +: `L1_MEM_PORTS]),
 
         `ifdef GBAR_ENABLE
             .gbar_bus_if    (per_socket_gbar_bus_if[socket_id]),

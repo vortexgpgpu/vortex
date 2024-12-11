@@ -31,7 +31,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     VX_dcr_bus_if.slave     dcr_bus_if,
 
     // Memory
-    VX_mem_bus_if.master    mem_bus_if,
+    VX_mem_bus_if.master    mem_bus_if [`L1_MEM_PORTS],
 
 `ifdef GBAR_ENABLE
     // Barrier
@@ -80,7 +80,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE (ICACHE_LINE_SIZE),
         .TAG_WIDTH (ICACHE_MEM_TAG_WIDTH)
-    ) icache_mem_bus_if();
+    ) icache_mem_bus_if[1]();
 
     `RESET_RELAY (icache_reset, reset);
 
@@ -95,6 +95,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .NUM_WAYS       (`ICACHE_NUM_WAYS),
         .WORD_SIZE      (ICACHE_WORD_SIZE),
         .NUM_REQS       (1),
+        .MEM_PORTS      (1),
         .CRSQ_SIZE      (`ICACHE_CRSQ_SIZE),
         .MSHR_SIZE      (`ICACHE_MSHR_SIZE),
         .MRSQ_SIZE      (`ICACHE_MRSQ_SIZE),
@@ -127,7 +128,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_LINE_SIZE),
         .TAG_WIDTH (DCACHE_MEM_TAG_WIDTH)
-    ) dcache_mem_bus_if();
+    ) dcache_mem_bus_if[`L1_MEM_PORTS]();
 
     `RESET_RELAY (dcache_reset, reset);
 
@@ -142,6 +143,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .NUM_WAYS       (`DCACHE_NUM_WAYS),
         .WORD_SIZE      (DCACHE_WORD_SIZE),
         .NUM_REQS       (DCACHE_NUM_REQS),
+        .MEM_PORTS      (`L1_MEM_PORTS),
         .CRSQ_SIZE      (`DCACHE_CRSQ_SIZE),
         .MSHR_SIZE      (`DCACHE_MSHR_SIZE),
         .MRSQ_SIZE      (`DCACHE_MRSQ_SIZE),
@@ -168,35 +170,47 @@ module VX_socket import VX_gpu_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (`L1_LINE_SIZE),
-        .TAG_WIDTH (L1_MEM_TAG_WIDTH)
-    ) l1_mem_bus_if[2]();
+    for (genvar i = 0; i < `L1_MEM_PORTS; ++i) begin : g_mem_bus_if
+        if (i == 0) begin : g_i0
+            VX_mem_bus_if #(
+                .DATA_SIZE (`L1_LINE_SIZE),
+                .TAG_WIDTH (L1_MEM_TAG_WIDTH)
+            ) l1_mem_bus_if[2]();
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (`L1_LINE_SIZE),
-        .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
-    ) l1_mem_arb_bus_if[1]();
+            VX_mem_bus_if #(
+                .DATA_SIZE (`L1_LINE_SIZE),
+                .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
+            ) l1_mem_arb_bus_if[1]();
 
-    `ASSIGN_VX_MEM_BUS_IF_X (l1_mem_bus_if[0], icache_mem_bus_if, L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH);
-    `ASSIGN_VX_MEM_BUS_IF_X (l1_mem_bus_if[1], dcache_mem_bus_if, L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
+            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[0], icache_mem_bus_if[0], L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH, `UUID_WIDTH);
+            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[1], dcache_mem_bus_if[0], L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, `UUID_WIDTH);
 
-    VX_mem_arb #(
-        .NUM_INPUTS (2),
-        .DATA_SIZE  (`L1_LINE_SIZE),
-        .TAG_WIDTH  (L1_MEM_TAG_WIDTH),
-        .TAG_SEL_IDX(0),
-        .ARBITER    ("P"), // prioritize the icache
-        .REQ_OUT_BUF(3),
-        .RSP_OUT_BUF(3)
-    ) mem_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .bus_in_if  (l1_mem_bus_if),
-        .bus_out_if (l1_mem_arb_bus_if)
-    );
+            VX_mem_arb #(
+                .NUM_INPUTS (2),
+                .DATA_SIZE  (`L1_LINE_SIZE),
+                .TAG_WIDTH  (L1_MEM_TAG_WIDTH),
+                .TAG_SEL_IDX(0),
+                .ARBITER    ("P"), // prioritize the icache
+                .REQ_OUT_BUF(3),
+                .RSP_OUT_BUF(3)
+            ) mem_arb (
+                .clk        (clk),
+                .reset      (reset),
+                .bus_in_if  (l1_mem_bus_if),
+                .bus_out_if (l1_mem_arb_bus_if)
+            );
 
-    `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, l1_mem_arb_bus_if[0]);
+            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[0], l1_mem_arb_bus_if[0]);
+        end else begin : g_i
+            VX_mem_bus_if #(
+                .DATA_SIZE (`L1_LINE_SIZE),
+                .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
+            ) l1_mem_arb_bus_if();
+
+            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_arb_bus_if, dcache_mem_bus_if[i], L1_MEM_ARB_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, `UUID_WIDTH);
+            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], l1_mem_arb_bus_if);
+        end
+    end
 
     ///////////////////////////////////////////////////////////////////////////
 

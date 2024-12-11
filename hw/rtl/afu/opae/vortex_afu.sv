@@ -16,6 +16,7 @@
 `else
 `include "vortex_afu.vh"
 `endif
+
 `include "VX_define.vh"
 
 `ifndef PLATFORM_MEMORY_INTERLEAVE

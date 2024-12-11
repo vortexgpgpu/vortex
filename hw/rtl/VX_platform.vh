@@ -25,11 +25,9 @@
 `ifdef SIMULATION
 
 `define STATIC_ASSERT(cond, msg) \
-generate \
     /* verilator lint_off GENUNNAMED */ \
     if (!(cond)) $error msg; \
     /* verilator lint_on GENUNNAMED */ \
-endgenerate
 
 `define ERROR(msg) \
     $error msg
@@ -103,7 +101,7 @@ endgenerate
 `define UNUSED_VAR(x)   /* verilator lint_off GENUNNAMED */ \
                         if (1) begin \
                             /* verilator lint_off UNUSED */ \
-                            wire [$bits(x)-1:0] __x = x; \
+                            wire [$bits(x)-1:0] __unused = x; \
                             /* verilator lint_on UNUSED */ \
                         end \
                         /* verilator lint_on GENUNNAMED */

@@ -92,8 +92,8 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_bus_rsp
         assign rsp_valid_out[i] = mem_bus_if[i].rsp_valid;
-        assign rsp_data_out[i] = mem_bus_if[i].rsp_data.data;
-        assign rsp_tag_out[i] = mem_bus_if[i].rsp_data.tag;
+        assign rsp_data_out[i]  = mem_bus_if[i].rsp_data.data;
+        assign rsp_tag_out[i]   = mem_bus_if[i].rsp_data.tag;
         assign mem_bus_if[i].rsp_ready = rsp_ready_out[i];
     end
 

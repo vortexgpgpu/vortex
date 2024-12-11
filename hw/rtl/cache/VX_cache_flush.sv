@@ -34,6 +34,8 @@ module VX_cache_flush #(
     output wire [`UP(UUID_WIDTH)-1:0] flush_uuid,
     input wire [NUM_BANKS-1:0] flush_end
 );
+    `UNUSED_PARAM (TAG_WIDTH)
+
     localparam STATE_IDLE  = 0;
     localparam STATE_WAIT1 = 1;
     localparam STATE_FLUSH = 2;
@@ -112,7 +114,7 @@ module VX_cache_flush #(
     wire [NUM_REQS-1:0] core_bus_out_ready;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_out_uuid
         if (UUID_WIDTH != 0) begin : g_uuid
-            assign core_bus_out_uuid[i] = core_bus_in_if[i].req_data.tag[TAG_WIDTH-1 -: UUID_WIDTH];
+            assign core_bus_out_uuid[i] = core_bus_in_if[i].req_data.tag.uuid;
         end else begin : g_no_uuid
             assign core_bus_out_uuid[i] = 0;
         end

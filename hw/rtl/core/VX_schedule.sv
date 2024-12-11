@@ -171,9 +171,9 @@ module VX_schedule import VX_gpu_pkg::*; #(
             end
         end
     `ifdef GBAR_ENABLE
-        if (gbar_bus_if.rsp_valid && (gbar_req_id == gbar_bus_if.rsp_id)) begin
+        if (gbar_bus_if.rsp_valid && (gbar_req_id == gbar_bus_if.rsp_data.id)) begin
             barrier_ctrs_n[warp_ctl_if.barrier.id] = '0; // reset barrier counter
-            barrier_masks_n[gbar_bus_if.rsp_id] = '0; // reset barrier mask
+            barrier_masks_n[gbar_bus_if.rsp_data.id] = '0; // reset barrier mask
             stalled_warps_n = '0; // unlock all warps
         end
     `endif
@@ -281,10 +281,10 @@ module VX_schedule import VX_gpu_pkg::*; #(
     // barrier handling
 
 `ifdef GBAR_ENABLE
-    assign gbar_bus_if.req_valid   = gbar_req_valid;
-    assign gbar_bus_if.req_id      = gbar_req_id;
-    assign gbar_bus_if.req_size_m1 = gbar_req_size_m1;
-    assign gbar_bus_if.req_core_id = `NC_WIDTH'(CORE_ID % `NUM_CORES);
+    assign gbar_bus_if.req_valid        = gbar_req_valid;
+    assign gbar_bus_if.req_data.id      = gbar_req_id;
+    assign gbar_bus_if.req_data.size_m1 = gbar_req_size_m1;
+    assign gbar_bus_if.req_data.core_id = `NC_WIDTH'(CORE_ID % `NUM_CORES);
 `endif
 
     // split/join handling

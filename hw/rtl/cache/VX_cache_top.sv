@@ -19,6 +19,9 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Number of Word requests per cycle
     parameter NUM_REQS              = 4,
 
+    // Number of memory ports
+    parameter MEM_PORTS             = 1,
+
     // Size of cache in bytes
     parameter CACHE_SIZE            = 65536,
     // Size of line inside a bank in bytes
@@ -60,7 +63,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Memory request output buffer
     parameter MEM_OUT_BUF           = 3,
 
-    parameter MEM_TAG_WIDTH = `CLOG2(MSHR_SIZE) + `CLOG2(NUM_BANKS)
+    parameter MEM_TAG_WIDTH         = `CLOG2(MSHR_SIZE) + `CLOG2(NUM_BANKS / MEM_PORTS)
  ) (
     input wire clk,
     input wire reset,
@@ -155,6 +158,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .NUM_WAYS       (NUM_WAYS),
         .WORD_SIZE      (WORD_SIZE),
         .NUM_REQS       (NUM_REQS),
+        .MEM_PORTS      (MEM_PORTS),
         .CRSQ_SIZE      (CRSQ_SIZE),
         .MSHR_SIZE      (MSHR_SIZE),
         .MRSQ_SIZE      (MRSQ_SIZE),

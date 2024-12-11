@@ -13,9 +13,10 @@
 
 `include "VX_define.vh"
 
-module VX_mem_arb #(
+module VX_lsu_mem_arb #(
     parameter NUM_INPUTS     = 1,
     parameter NUM_OUTPUTS    = 1,
+    parameter NUM_LANES      = 1,
     parameter DATA_SIZE      = 1,
     parameter TAG_WIDTH      = 1,
     parameter TAG_SEL_IDX    = 0,
@@ -29,13 +30,13 @@ module VX_mem_arb #(
     input wire              clk,
     input wire              reset,
 
-    VX_mem_bus_if.slave     bus_in_if [NUM_INPUTS],
-    VX_mem_bus_if.master    bus_out_if [NUM_OUTPUTS]
+    VX_lsu_mem_if.slave     bus_in_if [NUM_INPUTS],
+    VX_lsu_mem_if.master    bus_out_if [NUM_OUTPUTS]
 );
     localparam DATA_WIDTH   = (8 * DATA_SIZE);
     localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
-    localparam REQ_DATAW    = 1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + FLAGS_WIDTH + TAG_WIDTH;
-    localparam RSP_DATAW    = DATA_WIDTH + TAG_WIDTH;
+    localparam REQ_DATAW    = 1 + NUM_LANES * (1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + FLAGS_WIDTH) + TAG_WIDTH;
+    localparam RSP_DATAW    = NUM_LANES * (1 + DATA_WIDTH) + TAG_WIDTH;
 
     `STATIC_ASSERT ((NUM_INPUTS >= NUM_OUTPUTS), ("invalid parameter: NUM_INPUTS=%0d, NUM_OUTPUTS=%0d", NUM_INPUTS, NUM_OUTPUTS));
 
@@ -85,6 +86,7 @@ module VX_mem_arb #(
         );
         assign bus_out_if[i].req_valid = req_valid_out[i];
         assign {
+            bus_out_if[i].req_data.mask,
             bus_out_if[i].req_data.rw,
             bus_out_if[i].req_data.addr,
             bus_out_if[i].req_data.data,
@@ -121,7 +123,11 @@ module VX_mem_arb #(
                 .data_out (rsp_tag_out)
             );
             assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;
-            assign rsp_data_in[i]  = {bus_out_if[i].rsp_data.data, rsp_tag_out};
+            assign rsp_data_in[i]  = {
+                bus_out_if[i].rsp_data.mask,
+                bus_out_if[i].rsp_data.data,
+                rsp_tag_out
+            };
             assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
         end
 

@@ -270,14 +270,14 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, uuid_width) \
-        (uuid_width + `CLOG2(mshr_size) + `CLOG2(num_banks))
+`define CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, mem_ports, uuid_width) \
+        (uuid_width + `CLOG2(mshr_size) + `CLOG2(num_banks / mem_ports))
 
-`define CACHE_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width) \
-        (`CLOG2(num_reqs) + `CLOG2(line_size / word_size) + tag_width)
+`define CACHE_BYPASS_TAG_WIDTH(num_reqs, mem_ports, line_size, word_size, tag_width) \
+        (`CLOG2(`CDIV(num_reqs, mem_ports)) + `CLOG2(line_size / word_size) + tag_width)
 
-`define CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, tag_width, uuid_width) \
-        (`MAX(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, uuid_width), `CACHE_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width)) + 1)
+`define CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, mem_ports, line_size, word_size, tag_width, uuid_width) \
+        (`MAX(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, mem_ports, uuid_width), `CACHE_BYPASS_TAG_WIDTH(num_reqs, mem_ports, line_size, word_size, tag_width)) + 1)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -287,14 +287,14 @@
 `define CACHE_CLUSTER_MEM_ARB_TAG(tag_width, num_caches) \
         (tag_width + `ARB_SEL_BITS(`UP(num_caches), 1))
 
-`define CACHE_CLUSTER_MEM_TAG_WIDTH(mshr_size, num_banks, num_caches, uuid_width) \
-        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, uuid_width), num_caches)
+`define CACHE_CLUSTER_MEM_TAG_WIDTH(mshr_size, num_banks, mem_ports, num_caches, uuid_width) \
+        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, mem_ports, uuid_width), num_caches)
 
-`define CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(num_reqs, line_size, word_size, tag_width, num_inputs, num_caches) \
-        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches)), num_caches)
+`define CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(num_reqs, mem_ports, line_size, word_size, tag_width, num_inputs, num_caches) \
+        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_BYPASS_TAG_WIDTH(num_reqs, mem_ports, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches)), num_caches)
 
-`define CACHE_CLUSTER_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, tag_width, num_inputs, num_caches, uuid_width) \
-        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches), uuid_width), num_caches)
+`define CACHE_CLUSTER_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, mem_ports, line_size, word_size, tag_width, num_inputs, num_caches, uuid_width) \
+        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, mem_ports, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches), uuid_width), num_caches)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -311,6 +311,7 @@
 `define MEM_REQ_FLAG_LOCAL      2 // shoud be last since optional
 `define MEM_REQ_FLAGS_WIDTH     (`MEM_REQ_FLAG_LOCAL + `LMEM_ENABLED)
 
+`define VX_MEM_PORTS            `L3_MEM_PORTS
 `define VX_MEM_BYTEEN_WIDTH     `L3_LINE_SIZE
 `define VX_MEM_ADDR_WIDTH       (`MEM_ADDR_WIDTH - `CLOG2(`L3_LINE_SIZE))
 `define VX_MEM_DATA_WIDTH       (`L3_LINE_SIZE * 8)
@@ -388,7 +389,7 @@
     assign src.rsp_data.tag = dst.rsp_data.tag; \
     assign dst.rsp_ready = src.rsp_ready
 
-`define ASSIGN_VX_MEM_BUS_IF_X(dst, src, TD, TS) \
+`define ASSIGN_VX_MEM_BUS_IF_EX(dst, src, TD, TS, UUID) \
     assign dst.req_valid = src.req_valid; \
     assign dst.req_data.rw = src.req_data.rw; \
     assign dst.req_data.addr = src.req_data.addr; \
@@ -397,7 +398,19 @@
     assign dst.req_data.flags = src.req_data.flags; \
     /* verilator lint_off GENUNNAMED */ \
     if (TD != TS) begin \
-        assign dst.req_data.tag = {src.req_data.tag, {(TD-TS){1'b0}}}; \
+        if (UUID != 0) begin \
+            if (TD > TS) begin \
+                assign dst.req_data.tag = {src.req_data.tag.uuid, {(TD-TS){1'b0}}, src.req_data.tag.value}; \
+            end else begin \
+                assign dst.req_data.tag = {src.req_data.tag.uuid, src.req_data.tag.value[TD-UUID-1:0]}; \
+            end \
+        end else begin \
+            if (TD > TS) begin \
+                assign dst.req_data.tag = {{(TD-TS){1'b0}}, src.req_data.tag}; \
+            end else begin \
+                assign dst.req_data.tag = src.req_data.tag[TD-1:0]; \
+            end \
+        end \
     end else begin \
         assign dst.req_data.tag = src.req_data.tag; \
     end \
@@ -405,7 +418,25 @@
     assign src.req_ready = dst.req_ready; \
     assign src.rsp_valid = dst.rsp_valid; \
     assign src.rsp_data.data = dst.rsp_data.data; \
-    assign src.rsp_data.tag = dst.rsp_data.tag[TD-1 -: TS]; \
+    /* verilator lint_off GENUNNAMED */ \
+    if (TD != TS) begin \
+        if (UUID != 0) begin \
+            if (TD > TS) begin \
+                assign src.rsp_data.tag = {dst.rsp_data.tag.uuid, dst.rsp_data.tag.value[TS-UUID-1:0]}; \
+            end else begin \
+                assign src.rsp_data.tag = {dst.rsp_data.tag.uuid, {(TS-TD){1'b0}}, dst.rsp_data.tag.value}; \
+            end \
+        end else begin \
+            if (TD > TS) begin \
+                assign src.rsp_data.tag = dst.rsp_data.tag[TS-1:0]; \
+            end else begin \
+                assign src.rsp_data.tag = {{(TS-TD){1'b0}}, dst.rsp_data.tag}; \
+            end \
+        end \
+    end else begin \
+        assign src.rsp_data.tag = dst.rsp_data.tag; \
+    end \
+    /* verilator lint_on GENUNNAMED */ \
     assign dst.rsp_ready = src.rsp_ready
 
 `define BUFFER_DCR_BUS_IF(dst, src, ena, latency) \
