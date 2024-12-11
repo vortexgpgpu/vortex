@@ -63,7 +63,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Memory request output buffer
     parameter MEM_OUT_BUF           = 3,
 
-    parameter MEM_TAG_WIDTH         = `CLOG2(MSHR_SIZE) + `CLOG2(NUM_BANKS / MEM_PORTS)
+    parameter MEM_TAG_WIDTH         = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH)
  ) (
     input wire clk,
     input wire reset,
@@ -74,35 +74,35 @@ module VX_cache_top import VX_gpu_pkg::*; #(
 `endif
 
     // Core request
-    input  wire [NUM_REQS-1:0]                 core_req_valid,
-    input  wire [NUM_REQS-1:0]                 core_req_rw,
-    input  wire [NUM_REQS-1:0][WORD_SIZE-1:0]  core_req_byteen,
-    input  wire [NUM_REQS-1:0][`CS_WORD_ADDR_WIDTH-1:0] core_req_addr,
-    input  wire [NUM_REQS-1:0][`MEM_REQ_FLAGS_WIDTH-1:0] core_req_flags,
-    input  wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_req_data,
-    input  wire [NUM_REQS-1:0][TAG_WIDTH-1:0]  core_req_tag,
-    output wire [NUM_REQS-1:0]                 core_req_ready,
+    input  wire                     core_req_valid [NUM_REQS],
+    input  wire                     core_req_rw [NUM_REQS],
+    input  wire[WORD_SIZE-1:0]      core_req_byteen [NUM_REQS],
+    input  wire[`CS_WORD_ADDR_WIDTH-1:0] core_req_addr [NUM_REQS],
+    input  wire[`MEM_REQ_FLAGS_WIDTH-1:0] core_req_flags [NUM_REQS],
+    input  wire[`CS_WORD_WIDTH-1:0] core_req_data [NUM_REQS],
+    input  wire[TAG_WIDTH-1:0]      core_req_tag [NUM_REQS],
+    output wire                     core_req_ready [NUM_REQS],
 
     // Core response
-    output wire [NUM_REQS-1:0]                 core_rsp_valid,
-    output wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0] core_rsp_data,
-    output wire [NUM_REQS-1:0][TAG_WIDTH-1:0]  core_rsp_tag,
-    input  wire [NUM_REQS-1:0]                 core_rsp_ready,
+    output wire                     core_rsp_valid [NUM_REQS],
+    output wire[`CS_WORD_WIDTH-1:0] core_rsp_data [NUM_REQS],
+    output wire[TAG_WIDTH-1:0]      core_rsp_tag [NUM_REQS],
+    input  wire                     core_rsp_ready [NUM_REQS],
 
     // Memory request
-    output wire                    mem_req_valid,
-    output wire                    mem_req_rw,
-    output wire [LINE_SIZE-1:0]    mem_req_byteen,
-    output wire [`CS_MEM_ADDR_WIDTH-1:0] mem_req_addr,
-    output wire [`CS_LINE_WIDTH-1:0] mem_req_data,
-    output wire [MEM_TAG_WIDTH-1:0] mem_req_tag,
-    input  wire                    mem_req_ready,
+    output wire                     mem_req_valid [MEM_PORTS],
+    output wire                     mem_req_rw [MEM_PORTS],
+    output wire [LINE_SIZE-1:0]     mem_req_byteen [MEM_PORTS],
+    output wire [`CS_MEM_ADDR_WIDTH-1:0] mem_req_addr [MEM_PORTS],
+    output wire [`CS_LINE_WIDTH-1:0] mem_req_data [MEM_PORTS],
+    output wire [MEM_TAG_WIDTH-1:0] mem_req_tag [MEM_PORTS],
+    input  wire                     mem_req_ready [MEM_PORTS],
 
     // Memory response
-    input  wire                    mem_rsp_valid,
-    input  wire [`CS_LINE_WIDTH-1:0] mem_rsp_data,
-    input  wire [MEM_TAG_WIDTH-1:0] mem_rsp_tag,
-    output wire                    mem_rsp_ready
+    input  wire                     mem_rsp_valid [MEM_PORTS],
+    input  wire [`CS_LINE_WIDTH-1:0] mem_rsp_data [MEM_PORTS],
+    input  wire [MEM_TAG_WIDTH-1:0] mem_rsp_tag [MEM_PORTS],
+    output wire                     mem_rsp_ready [MEM_PORTS]
 );
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
@@ -112,7 +112,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE (LINE_SIZE),
         .TAG_WIDTH (MEM_TAG_WIDTH)
-    ) mem_bus_if();
+    ) mem_bus_if[MEM_PORTS]();
 
     // Core request
     for (genvar i = 0; i < NUM_REQS; ++i) begin
@@ -128,27 +128,30 @@ module VX_cache_top import VX_gpu_pkg::*; #(
 
     // Core response
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign core_rsp_valid[i] = core_bus_if[i].rsp_valid;
+        assign core_rsp_valid[i]= core_bus_if[i].rsp_valid;
         assign core_rsp_data[i] = core_bus_if[i].rsp_data.data;
-        assign core_rsp_tag[i] = core_bus_if[i].rsp_data.tag;
+        assign core_rsp_tag[i]  = core_bus_if[i].rsp_data.tag;
         assign core_bus_if[i].rsp_ready = core_rsp_ready[i];
     end
 
     // Memory request
-    assign mem_req_valid = mem_bus_if.req_valid;
-    assign mem_req_rw = mem_bus_if.req_data.rw;
-    assign mem_req_byteen = mem_bus_if.req_data.byteen;
-    assign mem_req_addr = mem_bus_if.req_data.addr;
-    assign mem_req_data = mem_bus_if.req_data.data;
-    assign mem_req_tag = mem_bus_if.req_data.tag;
-    assign mem_bus_if.req_ready = mem_req_ready;
-    `UNUSED_VAR (mem_bus_if.req_data.flags)
+    for (genvar i = 0; i < MEM_PORTS; ++i) begin
+        assign mem_req_valid[i] = mem_bus_if[i].req_valid;
+        assign mem_req_rw[i]  = mem_bus_if[i].req_data.rw;
+        assign mem_req_byteen[i]= mem_bus_if[i].req_data.byteen;
+        assign mem_req_addr[i] = mem_bus_if[i].req_data.addr;
+        assign mem_req_data[i] = mem_bus_if[i].req_data.data;
+        assign mem_req_tag[i] = mem_bus_if[i].req_data.tag;
+        assign mem_bus_if[i].req_ready = mem_req_ready[i];
+    end
 
     // Memory response
-    assign mem_bus_if.rsp_valid = mem_rsp_valid;
-    assign mem_bus_if.rsp_data.data = mem_rsp_data;
-    assign mem_bus_if.rsp_data.tag = mem_rsp_tag;
-    assign mem_rsp_ready = mem_bus_if.rsp_ready;
+    for (genvar i = 0; i < MEM_PORTS; ++i) begin
+        assign mem_bus_if[i].rsp_valid = mem_rsp_valid[i];
+        assign mem_bus_if[i].rsp_data.data = mem_rsp_data[i];
+        assign mem_bus_if[i].rsp_data.tag = mem_rsp_tag[i];
+        assign mem_rsp_ready[i] = mem_bus_if[i].rsp_ready;
+    end
 
     VX_cache #(
         .INSTANCE_ID    (INSTANCE_ID),

@@ -102,6 +102,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     localparam MEM_REQ_DATAW   = (`CS_LINE_ADDR_WIDTH + 1 + LINE_SIZE + `CS_LINE_WIDTH + BANK_MEM_TAG_WIDTH + `UP(FLAGS_WIDTH));
     localparam MEM_RSP_DATAW   = `CS_LINE_WIDTH + MEM_TAG_WIDTH;
     localparam MEM_PORTS_SEL_BITS = `CLOG2(MEM_PORTS);
+    localparam MEM_PORTS_SEL_WIDTH = `UP(MEM_PORTS_SEL_BITS);
     localparam MEM_ARB_SEL_BITS = `CLOG2(`CDIV(NUM_BANKS, MEM_PORTS));
     localparam MEM_ARB_SEL_WIDTH = `UP(MEM_ARB_SEL_BITS);
 
@@ -183,17 +184,17 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_rsp_queue_sel
         if (NUM_BANKS > 1) begin : g_multibanks
-            if (MEM_ARB_SEL_BITS != 0) begin : g_arb_sel
+            if (NUM_BANKS != MEM_PORTS) begin : g_arb_sel
                 VX_bits_concat #(
                     .L (MEM_ARB_SEL_BITS),
                     .R (MEM_PORTS_SEL_BITS)
                 ) mem_rsp_sel_concat (
                     .left_in  (mem_rsp_queue_data[i][MEM_ARB_SEL_BITS-1:0]),
-                    .right_in (MEM_PORTS_SEL_BITS'(i)),
+                    .right_in (MEM_PORTS_SEL_WIDTH'(i)),
                     .data_out (mem_rsp_queue_sel[i])
                 );
             end else begin : g_no_arb_sel
-                assign mem_rsp_queue_sel[i] = MEM_PORTS_SEL_BITS'(i);
+                assign mem_rsp_queue_sel[i] = MEM_PORTS_SEL_WIDTH'(i);
             end
         end else begin : g_singlebank
             assign mem_rsp_queue_sel[i] = 0;
@@ -552,21 +553,21 @@ module VX_cache import VX_gpu_pkg::*; #(
         wire [`UP(FLAGS_WIDTH)-1:0] mem_req_flags_w;
 
         if (NUM_BANKS > 1) begin : g_mem_req_tag_multibanks
-            if (MEM_ARB_SEL_BITS != 0) begin : g_arb_sel
+            if (NUM_BANKS != MEM_PORTS) begin : g_arb_sel
                 wire [`CS_BANK_SEL_BITS-1:0] mem_req_bank_id;
                 VX_bits_concat #(
                     .L (MEM_ARB_SEL_BITS),
                     .R (MEM_PORTS_SEL_BITS)
                 ) bank_id_concat (
                     .left_in  (mem_req_sel_out[i]),
-                    .right_in (MEM_PORTS_SEL_BITS'(i)),
+                    .right_in (MEM_PORTS_SEL_WIDTH'(i)),
                     .data_out (mem_req_bank_id)
                 );
                 assign mem_req_addr_w = `CS_MEM_ADDR_WIDTH'({mem_req_addr, mem_req_bank_id});
                 assign mem_req_tag_w = {mem_req_tag, mem_req_sel_out[i]};
             end else begin : g_no_arb_sel
                 `UNUSED_VAR (mem_req_sel_out)
-                assign mem_req_addr_w = `CS_MEM_ADDR_WIDTH'({mem_req_addr, MEM_PORTS_SEL_BITS'(i)});
+                assign mem_req_addr_w = `CS_MEM_ADDR_WIDTH'({mem_req_addr, MEM_PORTS_SEL_WIDTH'(i)});
                 assign mem_req_tag_w = MEM_TAG_WIDTH'(mem_req_tag);
             end
         end else begin : g_mem_req_tag
