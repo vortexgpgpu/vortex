@@ -324,9 +324,11 @@ config2()
 
     # test memory ports
     CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_BANKS=2" ./ci/blackbox.sh --driver=simx --app=sgemmx
-    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_BANKS=4" ./ci/blackbox.sh --driver=simx --app=sgemmx --threads=16
+    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_BANKS=2" ./ci/blackbox.sh --driver=simx --app=sgemmx --threads=8
     CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
-    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_BANKS=4" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --threads=16
+    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --threads=8
+    CONFIGS="-DMEM_BLOCK_SIZE=8" ./ci/blackbox.sh --driver=opae --app=sgemmx --threads=8
+    CONFIGS="-DMEM_BLOCK_SIZE=8" ./ci/blackbox.sh --driver=xrt --app=sgemmx --threads=8
 
     echo "configuration-2 tests done!"
 }

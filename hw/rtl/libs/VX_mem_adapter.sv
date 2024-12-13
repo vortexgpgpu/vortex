@@ -101,8 +101,8 @@ module VX_mem_adapter #(
         end
 
         VX_demux #(
-            .N (D),
-            .M (SRC_DATA_WIDTH/8)
+            .DATAW (SRC_DATA_WIDTH/8),
+            .N (P)
         ) req_be_demux (
             .sel_in   (req_idx),
             .data_in  (mem_req_byteen_in),
@@ -110,8 +110,8 @@ module VX_mem_adapter #(
         );
 
         VX_demux #(
-            .N (D),
-            .M (SRC_DATA_WIDTH)
+            .DATAW (SRC_DATA_WIDTH),
+            .N (P)
         ) req_data_demux (
             .sel_in   (req_idx),
             .data_in  (mem_req_data_in),

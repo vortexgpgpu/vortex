@@ -21,7 +21,7 @@ module Vortex import VX_gpu_pkg::*; (
     input  wire                             reset,
 
     // Memory request
-    output wire                             mem_req_valid [`VX_MEM_PORTS-1:0],
+    output wire                             mem_req_valid [`VX_MEM_PORTS],
     output wire                             mem_req_rw [`VX_MEM_PORTS],
     output wire [`VX_MEM_BYTEEN_WIDTH-1:0]  mem_req_byteen [`VX_MEM_PORTS],
     output wire [`VX_MEM_ADDR_WIDTH-1:0]    mem_req_addr [`VX_MEM_PORTS],

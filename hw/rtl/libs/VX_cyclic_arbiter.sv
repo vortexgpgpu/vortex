@@ -66,8 +66,8 @@ module VX_cyclic_arbiter #(
         );
 
         VX_demux #(
-            .N (LOG_NUM_REQS),
-            .D (NUM_REQS)
+            .DATAW (1),
+            .N (NUM_REQS)
         ) grant_decoder (
             .sel_in   (grant_index),
             .data_in  (1'b1),

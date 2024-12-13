@@ -611,8 +611,8 @@ module VX_cache_bank #(
         end else begin : g_wt
             wire [LINE_SIZE-1:0] line_byteen;
             VX_demux #(
-                .N (`CS_WORD_SEL_BITS),
-                .M (WORD_SIZE)
+                .DATAW (WORD_SIZE),
+                .N (`CS_WORDS_PER_LINE)
             ) byteen_demux (
                 .sel_in   (word_idx_st1),
                 .data_in  (byteen_st1),
