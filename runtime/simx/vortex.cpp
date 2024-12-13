@@ -307,6 +307,21 @@ public:
     return 0;
   }
 
+  #ifdef VM_ENABLE
+  int16_t set_satp(uint64_t addr) {
+    return processor_.set_satp_by_addr(addr);
+  }
+  bool is_satp_unset() {
+    return processor_.is_satp_unset();
+  }
+  uint8_t get_satp_mode() {
+    return processor_.get_satp_mode();
+  }
+  uint64_t get_base_ppn() {
+    return processor_.get_base_ppn();
+  }
+  #endif
+
 private:
   Arch arch_;
   RAM ram_;

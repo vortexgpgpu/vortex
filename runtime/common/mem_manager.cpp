@@ -55,7 +55,7 @@ public:
         page_table_mem_ = new MemoryAllocator(PAGE_TABLE_BASE_ADDR, PT_SIZE_LIMIT, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
         if (!page_table_mem_) {
             std::cerr << "Failed to initialize page_table_mem_\n";
-            device->mem_free(PAGE_TABLE_BASE_ADDR);
+            device_->mem_free(PAGE_TABLE_BASE_ADDR);
             return 1;
         }
 
@@ -72,7 +72,7 @@ public:
             return 1;
         }
 
-        if (processor_.set_satp_by_addr(pt_addr) != 0) {
+        if (device_->set_satp(pt_addr) != 0) {
             std::cerr << "Failed to set SATP register\n";
             return 1;
         }
@@ -96,7 +96,7 @@ public:
     }
 
     bool need_trans(uint64_t dev_pAddr) {
-        if (processor_.is_satp_unset() || get_mode() == BARE) return false;
+        if (device_->is_satp_unset() || get_mode() == BARE) return false;
         if (PAGE_TABLE_BASE_ADDR <= dev_pAddr) return false;
         if (dev_pAddr < USER_BASE_ADDR) return false;
         return !(STARTUP_ADDR <= dev_pAddr && dev_pAddr <= (STARTUP_ADDR + 0x40000));
@@ -150,64 +150,64 @@ public:
         return 0;
     }
 
-    uint64_t page_table_walk(uint64_t vAddr_bits) {
-        if (!need_trans(vAddr_bits)) return vAddr_bits;
+    // uint64_t page_table_walk(uint64_t vAddr_bits) {
+    //     if (!need_trans(vAddr_bits)) return vAddr_bits;
 
-        vAddr_t vaddr(vAddr_bits);
-        uint64_t cur_base_ppn = get_base_ppn();
-        uint64_t pte_addr = 0, pte_bytes = 0;
-        int i = PT_LEVEL - 1;
+    //     vAddr_t vaddr(vAddr_bits);
+    //     uint64_t cur_base_ppn = get_base_ppn();
+    //     uint64_t pte_addr = 0, pte_bytes = 0;
+    //     int i = PT_LEVEL - 1;
 
-        while (true) {
-            pte_addr = get_pte_address(cur_base_ppn, vaddr.vpn[i]);
-            pte_bytes = read_pte(pte_addr);
-            PTE_t pte(pte_bytes);
+    //     while (true) {
+    //         pte_addr = get_pte_address(cur_base_ppn, vaddr.vpn[i]);
+    //         pte_bytes = read_pte(pte_addr);
+    //         PTE_t pte(pte_bytes);
 
-            assert(((pte.pte_bytes & 0xFFFFFFFF) != 0xbaadf00d) && "ERROR: uninitialzed PTE\n" );
-            // Check if it has invalid flag bits.
-            if ((pte.v == 0) | ((pte.r == 0) & (pte.w == 1)))
-            {
-                std::string msg = "  [RT:PTW] Page Fault : Attempted to access invalid entry.";
-                throw Page_Fault_Exception(msg);
-            }
+    //         assert(((pte.pte_bytes & 0xFFFFFFFF) != 0xbaadf00d) && "ERROR: uninitialzed PTE\n" );
+    //         // Check if it has invalid flag bits.
+    //         if ((pte.v == 0) | ((pte.r == 0) & (pte.w == 1)))
+    //         {
+    //             std::string msg = "  [RT:PTW] Page Fault : Attempted to access invalid entry.";
+    //             throw Page_Fault_Exception(msg);
+    //         }
 
-            if ((pte.r == 0) & (pte.w == 0) & (pte.x == 0))
-            {
-                i--;
-                // Not a leaf node as rwx == 000
-                if (i < 0)
-                {
-                    throw Page_Fault_Exception("  [RT:PTW] Page Fault : No leaf node found.");
-                }
-                else
-                {
-                    // Continue on to next level.
-                    cur_base_ppn = pte.ppn;
-                    std::cout << "  [RT:PTW] next base_ppn: 0x" << cur_base_ppn << std::endl;
-                    continue;
-                }
-            }
-            else
-            {
-                // Leaf node found. 
-                // Check RWX permissions according to access type.
-                if (pte.r == 0)
-                {
-                    throw Page_Fault_Exception("  [RT:PTW] Page Fault : TYPE LOAD, Incorrect permissions.");
-                }
-                cur_base_ppn = pte.ppn;
-                std::cout << "  [RT:PTW] Found PT_Base_Address(0x" << cur_base_ppn << ") on Level " << i << std::endl;
-                break;
-            }
-        }
+    //         if ((pte.r == 0) & (pte.w == 0) & (pte.x == 0))
+    //         {
+    //             i--;
+    //             // Not a leaf node as rwx == 000
+    //             if (i < 0)
+    //             {
+    //                 throw Page_Fault_Exception("  [RT:PTW] Page Fault : No leaf node found.");
+    //             }
+    //             else
+    //             {
+    //                 // Continue on to next level.
+    //                 cur_base_ppn = pte.ppn;
+    //                 std::cout << "  [RT:PTW] next base_ppn: 0x" << cur_base_ppn << std::endl;
+    //                 continue;
+    //             }
+    //         }
+    //         else
+    //         {
+    //             // Leaf node found. 
+    //             // Check RWX permissions according to access type.
+    //             if (pte.r == 0)
+    //             {
+    //                 throw Page_Fault_Exception("  [RT:PTW] Page Fault : TYPE LOAD, Incorrect permissions.");
+    //             }
+    //             cur_base_ppn = pte.ppn;
+    //             std::cout << "  [RT:PTW] Found PT_Base_Address(0x" << cur_base_ppn << ") on Level " << i << std::endl;
+    //             break;
+    //         }
+    //     }
 
-        uint64_t paddr = (cur_base_ppn << MEM_PAGE_LOG2_SIZE) + vaddr.pgoff;
-        return paddr;
-    }
+    //     uint64_t paddr = (cur_base_ppn << MEM_PAGE_LOG2_SIZE) + vaddr.pgoff;
+    //     return paddr;
+    // }
 
 private:
     uint64_t get_base_ppn() {
-        return processor_.get_base_ppn();
+        return device_->get_base_ppn();
     }
 
     uint64_t get_pte_address(uint64_t base_ppn, uint64_t vpn) {
@@ -216,12 +216,12 @@ private:
 
     uint64_t read_pte(uint64_t addr) {
         uint64_t value = 0;
-        device->download(&value, addr, sizeof(uint64_t));
+        device_->download(&value, addr, sizeof(uint64_t));
         return value;
     }
 
     void write_pte(uint64_t addr, uint64_t value) {
-        device->upload(&value, addr, sizeof(uint64_t));
+        device_->upload(&value, addr, sizeof(uint64_t));
     }
 
     // Initialize to zero the target page table area. 32bit 4K, 64bit 8K
@@ -236,7 +236,7 @@ private:
         {
             src[i] = 0;
         }
-        device->upload(src, addr, asize);
+        device_->upload(src, addr, asize);
         return 0;
     }
 
@@ -253,8 +253,7 @@ private:
     }
 
     uint8_t get_mode() {
-        // TODO: just use default mode for now
-        return processor_.get_satp_mode();
+        return device_->get_satp_mode();
     }
 
 private:
