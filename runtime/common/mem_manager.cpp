@@ -28,15 +28,16 @@ using namespace vortex;
 
 class VMManager {
 public:
-    VMManager(vx_device* device, Processor& processor)
-        : device_(device),
-          processor_(processor)
+    VMManager(vx_device* device)
+        : device_(device)
     {
         page_table_mem_ = nullptr;
+        virtual_mem_ = nullptr;
     }
 
     ~VMManager() {
         if (page_table_mem_) delete page_table_mem_;
+        if (virtual_mem_) delete virtual_mem_;
     }
 
     int16_t init_VM() {
@@ -54,7 +55,7 @@ public:
         page_table_mem_ = new MemoryAllocator(PAGE_TABLE_BASE_ADDR, PT_SIZE_LIMIT, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
         if (!page_table_mem_) {
             std::cerr << "Failed to initialize page_table_mem_\n";
-            mem_free(PAGE_TABLE_BASE_ADDR);
+            device->mem_free(PAGE_TABLE_BASE_ADDR);
             return 1;
         }
 
@@ -80,7 +81,7 @@ public:
     }
 
     uint64_t map_p2v(uint64_t ppn, uint32_t flags) {
-        if (addr_mapping.find(ppn) != addr_mapping.end()) return addr_mapping[ppn];
+        if (ppn2vpn.find(ppn) != ppn2vpn.end()) return ppn2vpn[ppn];
 
         uint64_t vpn;
         virtual_mem_->allocate(MEM_PAGE_SIZE, &vpn);
@@ -90,7 +91,7 @@ public:
             throw std::runtime_error("Failed to update page table");
         }
 
-        addr_mapping[ppn] = vpn;
+        ppn2vpn[ppn] = vpn;
         return vpn;
     }
 
@@ -101,7 +102,11 @@ public:
         return !(STARTUP_ADDR <= dev_pAddr && dev_pAddr <= (STARTUP_ADDR + 0x40000));
     }
 
-    uint64_t phy_to_virt_map(uint64_t* dev_vAddr, uint64_t size, const uint64_t* dev_pAddr, uint32_t flags) {
+    uint64_t virt_to_phys_map(uint64_t vAddr) {
+        return va2pa[vAddr];
+    }
+
+    uint64_t phys_to_virt_map(uint64_t* dev_vAddr, uint64_t size, const uint64_t* dev_pAddr, uint32_t flags) {
         if (!need_trans(*dev_pAddr)) return 0;
 
         uint64_t init_pAddr = *dev_pAddr;
@@ -115,6 +120,7 @@ public:
         }
 
         *dev_vAddr = init_vAddr;
+        va2pa[init_vAddr] = init_pAddr;
         return 0;
     }
 
@@ -210,17 +216,12 @@ private:
 
     uint64_t read_pte(uint64_t addr) {
         uint64_t value = 0;
-        // CS259 TODO: replace with our own buffer
-        // flush buffer on vx_start using upload
-        ram_.read(reinterpret_cast<uint8_t*>(&value), addr, sizeof(uint64_t));
+        device->download(&value, addr, sizeof(uint64_t));
         return value;
     }
 
     void write_pte(uint64_t addr, uint64_t value) {
-        // should also be our buffer
-        ram_.enable_acl(false);
-        ram_.write(reinterpret_cast<const uint8_t*>(&value), addr, sizeof(uint64_t));
-        ram_.enable_acl(true);
+        device->upload(&value, addr, sizeof(uint64_t));
     }
 
     // Initialize to zero the target page table area. 32bit 4K, 64bit 8K
@@ -235,10 +236,7 @@ private:
         {
             src[i] = 0;
         }
-        // TOOD: this should call upload instead?
-        ram_.enable_acl(false);
-        ram_.write(reinterpret_cast<const uint8_t*>(src), addr, asize);
-        ram_.enable_acl(true);
+        device->upload(src, addr, asize);
         return 0;
     }
 
@@ -260,9 +258,9 @@ private:
     }
 
 private:
-    vx_device* device_;                           // to set SATP, write ptes
-    MemoryAllocator* page_table_mem_;             // allocate PT memory
-    MemoryAllocator* virtual_mem_;                // allocate virtual memory
-    std::unordered_map<uint64_t, uint64_t> p2v;   // ppn to vpn mapping
-    std::unordered_map<uint64_t, uint64_t> v2p;   // vpn to ppn
+    vx_device* device_;                               // to set SATP, write ptes
+    MemoryAllocator* page_table_mem_;                 // allocate PT memory
+    MemoryAllocator* virtual_mem_;                    // allocate virtual memory
+    std::unordered_map<uint64_t, uint64_t> ppn2vpn;   // ppn to vpn mapping
+    std::unordered_map<uint64_t, uint64_t> va2pa;     // vAddr to pAddr mapping
 };
