@@ -26,32 +26,27 @@
 
 using namespace vortex;
 
-typedef int (*MemReserveFunc) (uint64_t, uint64_t, int);
-typedef int (*MemFreeFunc) (uint64_t); 
-
 class VMManager {
 public:
-    VMManager(Processor& processor, RAM& ram)
-        : processor_(processor)
-        , ram_(ram)
+    VMManager(vx_device* device, Processor& processor)
+        : device_(device),
+          processor_(processor)
     {
         page_table_mem_ = nullptr;
-        virtual_mem_ = nullptr;
     }
 
     ~VMManager() {
         if (page_table_mem_) delete page_table_mem_;
-        if (virtual_mem_) delete virtual_mem_;
     }
 
-    int16_t init_VM(std::function<int(uint64_t, uint64_t, int)> mem_reserve, std::function<int(uint64_t)> mem_free) {
+    int16_t init_VM() {
         uint64_t pt_addr = 0;
 
         // Reserve space for Page Table
         std::cout << "[VMManager:init_VM] Initializing VM\n";
         std::cout << "* PAGE_TABLE_BASE_ADDR=" << std::hex << PAGE_TABLE_BASE_ADDR << "\n";
 
-        if (mem_reserve(PAGE_TABLE_BASE_ADDR, PT_SIZE_LIMIT, VX_MEM_READ_WRITE) != 0) {
+        if (device_->mem_reserve(PAGE_TABLE_BASE_ADDR, PT_SIZE_LIMIT, VX_MEM_READ_WRITE) != 0) {
             std::cerr << "Failed to reserve space for Page Table\n";
             return 1;
         }
@@ -63,18 +58,13 @@ public:
             return 1;
         }
 
-        virtual_mem_ = new MemoryAllocator(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
-        if (virtual_mem_reserve(PAGE_TABLE_BASE_ADDR, (GLOBAL_MEM_SIZE - PAGE_TABLE_BASE_ADDR)) != 0) {
-            std::cerr << "Failed to reserve virtual mem\n";
-        }
-        if (virtual_mem_reserve(STARTUP_ADDR, 0x40000) != 0) { 
-            std::cerr << "Failed to reserve virtual mem\n";
-        }
-        
-        if (!virtual_mem_) {
-            std::cerr << "Failed to initialize virtual_mem_\n";
-            return 1;
-        }
+        virtual_mem_ = new MemoryAllocator(ALLOC_BASE_ADDR, (GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR), MEM_PAGE_SIZE, CACHE_BLOCK_SIZE);
+        CHECK_ERR(virtual_mem_reserve(PAGE_TABLE_BASE_ADDR, (GLOBAL_MEM_SIZE - PAGE_TABLE_BASE_ADDR), VX_MEM_READ_WRITE), {
+            return err;
+        });
+        CHECK_ERR(virtual_mem_reserve(STARTUP_ADDR, 0x40000, VX_MEM_READ_WRITE), {
+            return err;
+        });
         
         if (VM_ADDR_MODE != BARE && alloc_page_table(&pt_addr) != 0) {
             std::cerr << "Failed to allocate page table\n";
@@ -125,7 +115,6 @@ public:
         }
 
         *dev_vAddr = init_vAddr;
-        // CS259 TODO: hash table to store this mapping in VM_ENABLE -> addr_mapping
         return 0;
     }
 
@@ -246,6 +235,7 @@ private:
         {
             src[i] = 0;
         }
+        // TOOD: this should call upload instead?
         ram_.enable_acl(false);
         ram_.write(reinterpret_cast<const uint8_t*>(src), addr, asize);
         ram_.enable_acl(true);
@@ -270,10 +260,9 @@ private:
     }
 
 private:
-    Processor& processor_;
-    vx_device_h _hdevice; // for upload to upload pt on vx_start
-    std::vector<int> ram_;
-    MemoryAllocator* page_table_mem_;
-    MemoryAllocator* virtual_mem_;
-    std::unordered_map<uint64_t, uint64_t> addr_mapping;
+    vx_device* device_;                           // to set SATP, write ptes
+    MemoryAllocator* page_table_mem_;             // allocate PT memory
+    MemoryAllocator* virtual_mem_;                // allocate virtual memory
+    std::unordered_map<uint64_t, uint64_t> p2v;   // ppn to vpn mapping
+    std::unordered_map<uint64_t, uint64_t> v2p;   // vpn to ppn
 };

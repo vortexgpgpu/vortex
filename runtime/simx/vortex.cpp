@@ -42,7 +42,7 @@ public:
         , processor_(arch_)
         , global_mem_(ALLOC_BASE_ADDR, GLOBAL_MEM_SIZE - ALLOC_BASE_ADDR, MEM_PAGE_SIZE, CACHE_BLOCK_SIZE)
 #ifdef VM_ENABLE
-        , vm_manager(processor_, ram_)
+        , vm_manager(this, processor_)
 #endif
     {
         // attach memory module
@@ -50,14 +50,7 @@ public:
 #ifdef VM_ENABLE
 	std::cout << "*** VM ENABLED!! ***"<< std::endl;
         // CHECK_ERR(init_VM(), );
-        vm_manager.init_VM(
-          [this](uint64_t addr, uint64_t size, int flags) {
-            return mem_reserve(addr, size, flags);
-          },
-          [this](uint64_t addr) {
-            return mem_free(addr);
-          }
-        );
+        vm_manager.init_VM();)
 #endif
     }
 
@@ -137,13 +130,14 @@ public:
 #ifdef VM_ENABLE
     // VM address translation
     // phy_to_virt_map(asize, dev_addr, flags);
-    vm_manager.phy_to_virt_map(asize, dev_addr, flags);
+    vm_manager.phy_to_virt_map(dev_addr, asize, &addr, flags);
 #endif
     return 0;
   }
 
   int mem_reserve(uint64_t dev_addr, uint64_t size, int flags)
   {
+    // CS259 TODO: needs physical address translation as well here? or a virtual_mem_ call?
     uint64_t asize = aligned_size(size, MEM_PAGE_SIZE);
     CHECK_ERR(global_mem_.reserve(dev_addr, asize), {
       return err;
@@ -159,9 +153,8 @@ public:
   int mem_free(uint64_t dev_addr)
   {
 #ifdef VM_ENABLE
-    // CS259 TODO: .get()
-    uint64_t paddr = vm_manager.page_table_walk(dev_addr);
-    return global_mem_.release(paddr);
+    uint64_t pAddr = vm_manager.virt_to_phys_map(dev_addr);
+    return global_mem_.release(pAddr);
 #else
     return global_mem_.release(dev_addr);
 #endif
@@ -169,6 +162,7 @@ public:
 
   int mem_access(uint64_t dev_addr, uint64_t size, int flags)
   {
+    // TODO: this needs a physical address translation right?
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
     if (dev_addr + asize > GLOBAL_MEM_SIZE)
       return -1;
@@ -192,7 +186,7 @@ public:
     if (dest_addr + asize > GLOBAL_MEM_SIZE)
       return -1;
 #ifdef VM_ENABLE
-    uint64_t pAddr = vm_manager.page_table_walk(dest_addr);
+    uint64_t pAddr = vm_manager.virt_to_phys_map(dest_addr);
     DBGPRINT("  [RT:upload] Upload data to vAddr = 0x%lx (pAddr=0x%lx)\n", dest_addr, pAddr);
     dest_addr = pAddr; //Overwirte
 #endif
@@ -216,7 +210,7 @@ public:
     if (src_addr + asize > GLOBAL_MEM_SIZE)
       return -1;
 #ifdef VM_ENABLE
-    uint64_t pAddr = vm_manager.page_table_walk(src_addr);
+    uint64_t pAddr = vm_manager.virt_to_phys_map(src_addr);
     DBGPRINT("  [RT:download] Download data to vAddr = 0x%lx (pAddr=0x%lx)\n", src_addr, pAddr);
     src_addr = pAddr; //Overwirte
 #endif
@@ -291,6 +285,7 @@ public:
     return dcrs_.read(addr, value);
   }
 
+// CS259 TODO: do we need address translation here?
   int mpm_query(uint32_t addr, uint32_t core_id, uint64_t *value)
   {
     uint32_t offset = addr - VX_CSR_MPM_BASE;
