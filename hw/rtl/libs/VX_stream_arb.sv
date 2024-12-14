@@ -162,8 +162,8 @@ module VX_stream_arb #(
                         assign data_in_w[r]  = '0;
                     end
                 end
-                assign valid_out_w[o] = ((NUM_OUTPUTS == 1) || (| valid_in_w)) && arb_valid;
-                assign data_out_w[o] = data_in_w[arb_index];
+                assign valid_out_w[o] = (NUM_OUTPUTS == 1) ? arb_valid : (| (valid_in_w & arb_onehot));
+                assign data_out_w[o]  = data_in_w[arb_index];
             end
 
             for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_ready_in
@@ -309,7 +309,7 @@ module VX_stream_arb #(
                     localparam o = r * NUM_INPUTS + i;
                     assign ready_out_s[r] = ready_out_w[o];
                 end
-                assign ready_in[i] = ((NUM_INPUTS == 1) || (| ready_out_s)) && arb_valid;
+                assign ready_in[i] = (NUM_INPUTS == 1) ? arb_valid : (| (ready_out_s & arb_onehot));
             end
 
             assign arb_ready = (| valid_in);
