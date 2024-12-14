@@ -54,6 +54,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     localparam LMEM_BURST_CTRW    = $bits(t_local_mem_burst_cnt);
 
+    localparam MEM_PORTS_BITS     = `CLOG2(`VX_MEM_PORTS);
+    localparam MEM_PORTS_WIDTH    = `UP(MEM_PORTS_BITS);
+
     localparam CCI_DATA_WIDTH     = $bits(t_ccip_clData);
     localparam CCI_DATA_SIZE      = CCI_DATA_WIDTH / 8;
     localparam CCI_ADDR_WIDTH     = $bits(t_ccip_clAddr);
@@ -61,12 +64,12 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     localparam RESET_CTR_WIDTH    = `CLOG2(`RESET_DELAY+1);
 
     localparam AVS_RD_QUEUE_SIZE  = 32;
-    localparam _VX_MEM_TAG_WIDTH  = `VX_MEM_TAG_WIDTH;
-    localparam _AVS_REQ_TAGW_VX   = _VX_MEM_TAG_WIDTH + `CLOG2(LMEM_DATA_WIDTH) - `CLOG2(`VX_MEM_DATA_WIDTH);
-    localparam _AVS_REQ_TAGW_VX2  = `MAX(_VX_MEM_TAG_WIDTH, _AVS_REQ_TAGW_VX);
-    localparam _AVS_REQ_TAGW_CCI  = CCI_ADDR_WIDTH + `CLOG2(LMEM_DATA_WIDTH) - `CLOG2(CCI_DATA_WIDTH);
-    localparam _AVS_REQ_TAGW_CCI2 = `MAX(CCI_ADDR_WIDTH, _AVS_REQ_TAGW_CCI);
-    localparam AVS_REQ_TAGW       = `MAX(_AVS_REQ_TAGW_VX2, _AVS_REQ_TAGW_CCI2);
+    localparam VX_AVS_REQ_TAGW    = `VX_MEM_TAG_WIDTH + `CLOG2(LMEM_DATA_WIDTH) - `CLOG2(`VX_MEM_DATA_WIDTH);
+    localparam CCI_AVS_REQ_TAGW   = CCI_ADDR_WIDTH + `CLOG2(LMEM_DATA_WIDTH) - `CLOG2(CCI_DATA_WIDTH);
+    localparam VX_AVS_REQ_TAGW2   = `MAX(`VX_MEM_TAG_WIDTH, VX_AVS_REQ_TAGW);
+    localparam CCI_AVS_REQ_TAGW2  = `MAX(CCI_ADDR_WIDTH, CCI_AVS_REQ_TAGW);
+    localparam CCI_VX_TAG_WIDTH   = `MAX(VX_AVS_REQ_TAGW2, CCI_AVS_REQ_TAGW2);
+    localparam AVS_TAG_WIDTH      = CCI_VX_TAG_WIDTH + 1; // adding the arbiter bit
 
     localparam CCI_RD_WINDOW_SIZE = 8;
     localparam CCI_RW_PENDING_SIZE= 256;
@@ -122,22 +125,22 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     reg [STATE_WIDTH-1:0] state;
 
-    // Vortex ports ///////////////////////////////////////////////////////////////
+    // Vortex ports ///////////////////////////////////////////////////////////
 
-    wire vx_mem_req_valid;
-    wire vx_mem_req_rw;
-    wire [`VX_MEM_BYTEEN_WIDTH-1:0] vx_mem_req_byteen;
-    wire [`VX_MEM_ADDR_WIDTH-1:0]   vx_mem_req_addr;
-    wire [`VX_MEM_DATA_WIDTH-1:0]   vx_mem_req_data;
-    wire [`VX_MEM_TAG_WIDTH-1:0]    vx_mem_req_tag;
-    wire vx_mem_req_ready;
+    wire                            vx_mem_req_valid [`VX_MEM_PORTS];
+    wire                            vx_mem_req_rw [`VX_MEM_PORTS];
+    wire [`VX_MEM_BYTEEN_WIDTH-1:0] vx_mem_req_byteen [`VX_MEM_PORTS];
+    wire [`VX_MEM_ADDR_WIDTH-1:0]   vx_mem_req_addr [`VX_MEM_PORTS];
+    wire [`VX_MEM_DATA_WIDTH-1:0]   vx_mem_req_data [`VX_MEM_PORTS];
+    wire [`VX_MEM_TAG_WIDTH-1:0]    vx_mem_req_tag [`VX_MEM_PORTS];
+    wire                            vx_mem_req_ready [`VX_MEM_PORTS];
 
-    wire vx_mem_rsp_valid;
-    wire [`VX_MEM_DATA_WIDTH-1:0] vx_mem_rsp_data;
-    wire [`VX_MEM_TAG_WIDTH-1:0]  vx_mem_rsp_tag;
-    wire vx_mem_rsp_ready;
+    wire                            vx_mem_rsp_valid [`VX_MEM_PORTS];
+    wire [`VX_MEM_DATA_WIDTH-1:0]   vx_mem_rsp_data [`VX_MEM_PORTS];
+    wire [`VX_MEM_TAG_WIDTH-1:0]    vx_mem_rsp_tag [`VX_MEM_PORTS];
+    wire                            vx_mem_rsp_ready [`VX_MEM_PORTS];
 
-    // CMD variables //////////////////////////////////////////////////////////////
+    // CMD variables //////////////////////////////////////////////////////////
 
     reg [2:0][63:0] cmd_args;
 
@@ -150,7 +153,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire [`VX_DCR_ADDR_WIDTH-1:0] cmd_dcr_addr = `VX_DCR_ADDR_WIDTH'(cmd_args[0]);
     wire [`VX_DCR_DATA_WIDTH-1:0] cmd_dcr_data = `VX_DCR_DATA_WIDTH'(cmd_args[1]);
 
-    // MMIO controller ////////////////////////////////////////////////////////////
+    // MMIO controller ////////////////////////////////////////////////////////
 
     t_ccip_c0_ReqMmioHdr mmio_req_hdr;
     assign mmio_req_hdr = t_ccip_c0_ReqMmioHdr'(cp2af_sRxPort.c0.hdr[$bits(t_ccip_c0_ReqMmioHdr)-1:0]);
@@ -216,10 +219,31 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
 `endif
 
-    wire [COUT_QUEUE_DATAW-1:0] cout_q_dout;
-    wire cout_q_full, cout_q_empty;
+    // Console output queue read //////////////////////////////////////////////
 
-    wire [COUT_QUEUE_DATAW-1:0] cout_q_dout_s = cout_q_dout & {COUT_QUEUE_DATAW{!cout_q_empty}};
+    wire [`VX_MEM_PORTS-1:0][COUT_QUEUE_DATAW-1:0] cout_q_dout;
+    wire [`VX_MEM_PORTS-1:0] cout_q_full, cout_q_empty, cout_q_pop;
+
+    reg [MEM_PORTS_WIDTH-1:0] cout_q_id;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            cout_q_id <= 0;
+        end else begin
+            if (cp2af_sRxPort.c0.mmioRdValid && mmio_req_hdr.address == MMIO_STATUS) begin
+                cout_q_id <= cout_q_id + 1;
+            end
+        end
+    end
+
+    for (genvar i = 0; i < `VX_MEM_PORTS; ++i) begin : g_cout_q_pop
+        assign cout_q_pop[i] = (cp2af_sRxPort.c0.mmioRdValid && mmio_req_hdr.address == MMIO_STATUS)
+                            && (cout_q_id == i)
+                            && ~cout_q_empty[i];
+    end
+
+    wire [COUT_QUEUE_DATAW-1:0] cout_q_dout_s = cout_q_dout[cout_q_id] & {COUT_QUEUE_DATAW{!cout_q_empty[cout_q_id]}};
+    wire cout_q_empty_all = & cout_q_empty;
 
 `ifdef SIMULATION
 `ifndef VERILATOR
@@ -241,12 +265,13 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 `endif
 `endif
 
-    // MMIO controller ////////////////////////////////////////////////////////////
+    // MMIO controller ////////////////////////////////////////////////////////
 
     // Handle MMIO read requests
     always @(posedge clk) begin
         if (reset) begin
             mmio_rsp.mmioRdValid <= 0;
+            cout_q_id <= 0;
         end else begin
             mmio_rsp.mmioRdValid <= cp2af_sRxPort.c0.mmioRdValid;
         end
@@ -271,7 +296,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             16'h0006: mmio_rsp.data <= 64'h0; // next AFU
             16'h0008: mmio_rsp.data <= 64'h0; // reserved
             MMIO_STATUS: begin
-                mmio_rsp.data <= 64'({cout_q_dout_s, !cout_q_empty, 8'(state)});
+                mmio_rsp.data <= 64'({cout_q_dout_s, ~cout_q_empty_all, 8'(state)});
             `ifdef DBG_TRACE_AFU
                 if (state != STATE_WIDTH'(mmio_rsp.data)) begin
                     `TRACE(2, ("%t: AFU: MMIO_STATUS: addr=0x%0h, state=%0d\n", $time, mmio_req_hdr.address, state))
@@ -353,7 +378,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         end
     end
 
-    // COMMAND FSM ////////////////////////////////////////////////////////////////
+    // COMMAND FSM ////////////////////////////////////////////////////////////
 
     wire cmd_mem_rd_done;
     reg  cmd_mem_wr_done;
@@ -364,8 +389,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire vx_busy;
 
     wire is_mmio_wr_cmd = cp2af_sRxPort.c0.mmioWrValid && (MMIO_CMD_TYPE == mmio_req_hdr.address);
-    wire [CMD_TYPE_WIDTH-1:0] cmd_type = is_mmio_wr_cmd ?
-        CMD_TYPE_WIDTH'(cp2af_sRxPort.c0.data) : CMD_TYPE_WIDTH'(CMD_IDLE);
+    wire [CMD_TYPE_WIDTH-1:0] cmd_type = is_mmio_wr_cmd ? CMD_TYPE_WIDTH'(cp2af_sRxPort.c0.data) : CMD_TYPE_WIDTH'(CMD_IDLE);
 
     always @(posedge clk) begin
         if (reset) begin
@@ -463,7 +487,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         end
     end
 
-    // AVS Controller /////////////////////////////////////////////////////////////
+    // AVS Controller /////////////////////////////////////////////////////////
 
     wire cci_mem_rd_req_valid;
     wire cci_mem_wr_req_valid;
@@ -481,13 +505,67 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire [CCI_ADDR_WIDTH-1:0] cci_mem_rsp_tag;
     wire cci_mem_rsp_ready;
 
-    //--
+    // adjust VX mnemory interface to be compatible with CCI
 
     VX_mem_bus_if #(
         .DATA_SIZE  (LMEM_DATA_SIZE),
         .ADDR_WIDTH (CCI_VX_ADDR_WIDTH),
-        .TAG_WIDTH  (AVS_REQ_TAGW)
-    ) cci_vx_mem_bus_if[2]();
+        .TAG_WIDTH  (CCI_VX_TAG_WIDTH)
+    ) vx_mem_bus_if[`VX_MEM_PORTS]();
+
+    wire [`VX_MEM_PORTS-1:0] vx_mem_req_valid_qual;
+    wire [`VX_MEM_PORTS-1:0] vx_mem_req_ready_qual;
+
+    for (genvar i = 0; i < `VX_MEM_PORTS; ++i) begin : g_vx_mem_adapter
+        VX_mem_adapter #(
+            .SRC_DATA_WIDTH (`VX_MEM_DATA_WIDTH),
+            .DST_DATA_WIDTH (LMEM_DATA_WIDTH),
+            .SRC_ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),
+            .DST_ADDR_WIDTH (CCI_VX_ADDR_WIDTH),
+            .SRC_TAG_WIDTH  (`VX_MEM_TAG_WIDTH),
+            .DST_TAG_WIDTH  (CCI_VX_TAG_WIDTH),
+            .REQ_OUT_BUF    (0),
+            .RSP_OUT_BUF    (2)
+        ) vx_mem_adapter (
+            .clk                (clk),
+            .reset              (reset),
+
+            .mem_req_valid_in   (vx_mem_req_valid_qual[i]),
+            .mem_req_addr_in    (vx_mem_req_addr[i]),
+            .mem_req_rw_in      (vx_mem_req_rw[i]),
+            .mem_req_byteen_in  (vx_mem_req_byteen[i]),
+            .mem_req_data_in    (vx_mem_req_data[i]),
+            .mem_req_tag_in     (vx_mem_req_tag[i]),
+            .mem_req_ready_in   (vx_mem_req_ready_qual[i]),
+
+            .mem_rsp_valid_in   (vx_mem_rsp_valid[i]),
+            .mem_rsp_data_in    (vx_mem_rsp_data[i]),
+            .mem_rsp_tag_in     (vx_mem_rsp_tag[i]),
+            .mem_rsp_ready_in   (vx_mem_rsp_ready[i]),
+
+            .mem_req_valid_out  (vx_mem_bus_if[i].req_valid),
+            .mem_req_addr_out   (vx_mem_bus_if[i].req_data.addr),
+            .mem_req_rw_out     (vx_mem_bus_if[i].req_data.rw),
+            .mem_req_byteen_out (vx_mem_bus_if[i].req_data.byteen),
+            .mem_req_data_out   (vx_mem_bus_if[i].req_data.data),
+            .mem_req_tag_out    (vx_mem_bus_if[i].req_data.tag),
+            .mem_req_ready_out  (vx_mem_bus_if[i].req_ready),
+
+            .mem_rsp_valid_out  (vx_mem_bus_if[i].rsp_valid),
+            .mem_rsp_data_out   (vx_mem_bus_if[i].rsp_data.data),
+            .mem_rsp_tag_out    (vx_mem_bus_if[i].rsp_data.tag),
+            .mem_rsp_ready_out  (vx_mem_bus_if[i].rsp_ready)
+        );
+        assign vx_mem_bus_if[i].req_data.flags = '0;
+    end
+
+    // adjust CCI mnemory interface to be compatible with VX
+
+    VX_mem_bus_if #(
+        .DATA_SIZE  (LMEM_DATA_SIZE),
+        .ADDR_WIDTH (CCI_VX_ADDR_WIDTH),
+        .TAG_WIDTH  (CCI_VX_TAG_WIDTH)
+    ) cci_vx_mem_arb_in_if[2]();
 
     VX_mem_adapter #(
         .SRC_DATA_WIDTH (CCI_DATA_WIDTH),
@@ -495,7 +573,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .SRC_ADDR_WIDTH (CCI_ADDR_WIDTH),
         .DST_ADDR_WIDTH (CCI_VX_ADDR_WIDTH),
         .SRC_TAG_WIDTH  (CCI_ADDR_WIDTH),
-        .DST_TAG_WIDTH  (AVS_REQ_TAGW),
+        .DST_TAG_WIDTH  (CCI_VX_TAG_WIDTH),
         .REQ_OUT_BUF    (0),
         .RSP_OUT_BUF    (0)
     ) cci_mem_adapter (
@@ -515,125 +593,122 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .mem_rsp_tag_in     (cci_mem_rsp_tag),
         .mem_rsp_ready_in   (cci_mem_rsp_ready),
 
-        .mem_req_valid_out  (cci_vx_mem_bus_if[1].req_valid),
-        .mem_req_addr_out   (cci_vx_mem_bus_if[1].req_data.addr),
-        .mem_req_rw_out     (cci_vx_mem_bus_if[1].req_data.rw),
-        .mem_req_byteen_out (cci_vx_mem_bus_if[1].req_data.byteen),
-        .mem_req_data_out   (cci_vx_mem_bus_if[1].req_data.data),
-        .mem_req_tag_out    (cci_vx_mem_bus_if[1].req_data.tag),
-        .mem_req_ready_out  (cci_vx_mem_bus_if[1].req_ready),
+        .mem_req_valid_out  (cci_vx_mem_arb_in_if[1].req_valid),
+        .mem_req_addr_out   (cci_vx_mem_arb_in_if[1].req_data.addr),
+        .mem_req_rw_out     (cci_vx_mem_arb_in_if[1].req_data.rw),
+        .mem_req_byteen_out (cci_vx_mem_arb_in_if[1].req_data.byteen),
+        .mem_req_data_out   (cci_vx_mem_arb_in_if[1].req_data.data),
+        .mem_req_tag_out    (cci_vx_mem_arb_in_if[1].req_data.tag),
+        .mem_req_ready_out  (cci_vx_mem_arb_in_if[1].req_ready),
 
-        .mem_rsp_valid_out  (cci_vx_mem_bus_if[1].rsp_valid),
-        .mem_rsp_data_out   (cci_vx_mem_bus_if[1].rsp_data.data),
-        .mem_rsp_tag_out    (cci_vx_mem_bus_if[1].rsp_data.tag),
-        .mem_rsp_ready_out  (cci_vx_mem_bus_if[1].rsp_ready)
+        .mem_rsp_valid_out  (cci_vx_mem_arb_in_if[1].rsp_valid),
+        .mem_rsp_data_out   (cci_vx_mem_arb_in_if[1].rsp_data.data),
+        .mem_rsp_tag_out    (cci_vx_mem_arb_in_if[1].rsp_data.tag),
+        .mem_rsp_ready_out  (cci_vx_mem_arb_in_if[1].rsp_ready)
     );
+    assign cci_vx_mem_arb_in_if[1].req_data.flags = '0;
 
-    assign cci_vx_mem_bus_if[1].req_data.flags = '0;
+    // arbitrate between CCI and VX memory interfaces
 
-    //--
+    `ASSIGN_VX_MEM_BUS_IF(cci_vx_mem_arb_in_if[0], vx_mem_bus_if[0]);
 
-    wire vx_mem_is_cout;
-    wire vx_mem_req_valid_qual;
-    wire vx_mem_req_ready_qual;
-
-    assign vx_mem_req_valid_qual = vx_mem_req_valid && ~vx_mem_is_cout;
-
-    VX_mem_adapter #(
-        .SRC_DATA_WIDTH (`VX_MEM_DATA_WIDTH),
-        .DST_DATA_WIDTH (LMEM_DATA_WIDTH),
-        .SRC_ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),
-        .DST_ADDR_WIDTH (CCI_VX_ADDR_WIDTH),
-        .SRC_TAG_WIDTH  (`VX_MEM_TAG_WIDTH),
-        .DST_TAG_WIDTH  (AVS_REQ_TAGW),
-        .REQ_OUT_BUF    (0),
-        .RSP_OUT_BUF    (2)
-    ) vx_mem_adapter (
-        .clk                (clk),
-        .reset              (reset),
-
-        .mem_req_valid_in   (vx_mem_req_valid_qual),
-        .mem_req_addr_in    (vx_mem_req_addr),
-        .mem_req_rw_in      (vx_mem_req_rw),
-        .mem_req_byteen_in  (vx_mem_req_byteen),
-        .mem_req_data_in    (vx_mem_req_data),
-        .mem_req_tag_in     (vx_mem_req_tag),
-        .mem_req_ready_in   (vx_mem_req_ready_qual),
-
-        .mem_rsp_valid_in   (vx_mem_rsp_valid),
-        .mem_rsp_data_in    (vx_mem_rsp_data),
-        .mem_rsp_tag_in     (vx_mem_rsp_tag),
-        .mem_rsp_ready_in   (vx_mem_rsp_ready),
-
-        .mem_req_valid_out  (cci_vx_mem_bus_if[0].req_valid),
-        .mem_req_addr_out   (cci_vx_mem_bus_if[0].req_data.addr),
-        .mem_req_rw_out     (cci_vx_mem_bus_if[0].req_data.rw),
-        .mem_req_byteen_out (cci_vx_mem_bus_if[0].req_data.byteen),
-        .mem_req_data_out   (cci_vx_mem_bus_if[0].req_data.data),
-        .mem_req_tag_out    (cci_vx_mem_bus_if[0].req_data.tag),
-        .mem_req_ready_out  (cci_vx_mem_bus_if[0].req_ready),
-
-        .mem_rsp_valid_out  (cci_vx_mem_bus_if[0].rsp_valid),
-        .mem_rsp_data_out   (cci_vx_mem_bus_if[0].rsp_data.data),
-        .mem_rsp_tag_out    (cci_vx_mem_bus_if[0].rsp_data.tag),
-        .mem_rsp_ready_out  (cci_vx_mem_bus_if[0].rsp_ready)
-    );
-
-    assign cci_vx_mem_bus_if[0].req_data.flags = '0;
-
-    //--
     VX_mem_bus_if #(
         .DATA_SIZE  (LMEM_DATA_SIZE),
         .ADDR_WIDTH (CCI_VX_ADDR_WIDTH),
-        .TAG_WIDTH  (AVS_REQ_TAGW+1)
-    ) mem_bus_if[1]();
+        .TAG_WIDTH  (AVS_TAG_WIDTH)
+    ) cci_vx_mem_arb_out_if[1]();
 
     VX_mem_arb #(
         .NUM_INPUTS  (2),
         .DATA_SIZE   (LMEM_DATA_SIZE),
         .ADDR_WIDTH  (CCI_VX_ADDR_WIDTH),
-        .TAG_WIDTH   (AVS_REQ_TAGW),
+        .TAG_WIDTH   (CCI_VX_TAG_WIDTH),
         .ARBITER     ("P"), // prioritize VX requests
         .REQ_OUT_BUF (0),
         .RSP_OUT_BUF (0)
     ) mem_arb (
         .clk        (clk),
         .reset      (reset),
-        .bus_in_if  (cci_vx_mem_bus_if),
-        .bus_out_if (mem_bus_if)
+        .bus_in_if  (cci_vx_mem_arb_in_if),
+        .bus_out_if (cci_vx_mem_arb_out_if)
     );
 
-    //--
+    // final merged memory interface
+    wire                         mem_req_valid [`VX_MEM_PORTS];
+    wire                         mem_req_rw [`VX_MEM_PORTS];
+    wire [CCI_VX_ADDR_WIDTH-1:0] mem_req_addr [`VX_MEM_PORTS];
+    wire [LMEM_DATA_SIZE-1:0]    mem_req_byteen [`VX_MEM_PORTS];
+    wire [LMEM_DATA_WIDTH-1:0]   mem_req_data [`VX_MEM_PORTS];
+    wire [AVS_TAG_WIDTH-1:0]     mem_req_tag [`VX_MEM_PORTS];
+    wire                         mem_req_ready [`VX_MEM_PORTS];
 
+    wire                         mem_rsp_valid [`VX_MEM_PORTS];
+    wire [LMEM_DATA_WIDTH-1:0]   mem_rsp_data [`VX_MEM_PORTS];
+    wire [AVS_TAG_WIDTH-1:0]     mem_rsp_tag [`VX_MEM_PORTS];
+    wire                         mem_rsp_ready [`VX_MEM_PORTS];
+
+    // assign port0 to CCI/VX arbiter
+    assign mem_req_valid[0] = cci_vx_mem_arb_out_if[0].req_valid;
+    assign mem_req_rw[0]    = cci_vx_mem_arb_out_if[0].req_data.rw;
+    assign mem_req_addr[0]  = cci_vx_mem_arb_out_if[0].req_data.addr;
+    assign mem_req_byteen[0]= cci_vx_mem_arb_out_if[0].req_data.byteen;
+    assign mem_req_data[0]  = cci_vx_mem_arb_out_if[0].req_data.data;
+    assign mem_req_tag[0]   = cci_vx_mem_arb_out_if[0].req_data.tag;
+    assign cci_vx_mem_arb_out_if[0].req_ready = mem_req_ready[0];
+
+    assign cci_vx_mem_arb_out_if[0].rsp_valid     = mem_rsp_valid[0];
+    assign cci_vx_mem_arb_out_if[0].rsp_data.data = mem_rsp_data[0];
+    assign cci_vx_mem_arb_out_if[0].rsp_data.tag  = mem_rsp_tag[0];
+    assign mem_rsp_ready[0] = cci_vx_mem_arb_out_if[0].rsp_ready;
+    `UNUSED_VAR (cci_vx_mem_arb_out_if[0].req_data.flags)
+
+    // assign other ports to VX memory bus
+    for (genvar i = 1; i < `VX_MEM_PORTS; ++i) begin : g_mem_bus_if
+        assign mem_req_valid[i] = vx_mem_bus_if[i].req_valid;
+        assign mem_req_rw[i]    = vx_mem_bus_if[i].req_data.rw;
+        assign mem_req_addr[i]  = vx_mem_bus_if[i].req_data.addr;
+        assign mem_req_byteen[i]= vx_mem_bus_if[i].req_data.byteen;
+        assign mem_req_data[i]  = vx_mem_bus_if[i].req_data.data;
+        assign mem_req_tag[i]   = AVS_TAG_WIDTH'(vx_mem_bus_if[i].req_data.tag);
+        assign vx_mem_bus_if[i].req_ready = mem_req_ready[i];
+
+        assign vx_mem_bus_if[i].rsp_valid     = mem_rsp_valid[i];
+        assign vx_mem_bus_if[i].rsp_data.data = mem_rsp_data[i];
+        assign vx_mem_bus_if[i].rsp_data.tag  = CCI_VX_TAG_WIDTH'(mem_rsp_tag[i]);
+        assign mem_rsp_ready[i] = vx_mem_bus_if[i].rsp_ready;
+    end
+
+    // convert merged memory interface to AVS
     VX_avs_adapter #(
         .DATA_WIDTH    (LMEM_DATA_WIDTH),
         .ADDR_WIDTH_IN (CCI_VX_ADDR_WIDTH),
         .ADDR_WIDTH_OUT(LMEM_ADDR_WIDTH),
         .BURST_WIDTH   (LMEM_BURST_CTRW),
-        .NUM_BANKS     (NUM_LOCAL_MEM_BANKS),
-        .TAG_WIDTH     (AVS_REQ_TAGW + 1),
+        .NUM_PORTS_IN  (`VX_MEM_PORTS),
+        .NUM_PORTS_OUT (NUM_LOCAL_MEM_BANKS),
+        .TAG_WIDTH     (AVS_TAG_WIDTH),
         .RD_QUEUE_SIZE (AVS_RD_QUEUE_SIZE),
-        .BANK_INTERLEAVE(`PLATFORM_MEMORY_INTERLEAVE),
-        .REQ_OUT_BUF   (2),
-        .RSP_OUT_BUF   (0)
+        .INTERLEAVE    (`PLATFORM_MEMORY_INTERLEAVE),
+        .REQ_OUT_BUF   (2), // always needed due to CCI/VX arbiter
+        .RSP_OUT_BUF   ((`VX_MEM_PORTS > 1 || NUM_LOCAL_MEM_BANKS > 1) ? 2 : 0)
     ) avs_adapter (
         .clk              (clk),
         .reset            (reset),
 
         // Memory request
-        .mem_req_valid    (mem_bus_if[0].req_valid),
-        .mem_req_rw       (mem_bus_if[0].req_data.rw),
-        .mem_req_byteen   (mem_bus_if[0].req_data.byteen),
-        .mem_req_addr     (mem_bus_if[0].req_data.addr),
-        .mem_req_data     (mem_bus_if[0].req_data.data),
-        .mem_req_tag      (mem_bus_if[0].req_data.tag),
-        .mem_req_ready    (mem_bus_if[0].req_ready),
+        .mem_req_valid    (mem_req_valid),
+        .mem_req_rw       (mem_req_rw),
+        .mem_req_byteen   (mem_req_byteen),
+        .mem_req_addr     (mem_req_addr),
+        .mem_req_data     (mem_req_data),
+        .mem_req_tag      (mem_req_tag),
+        .mem_req_ready    (mem_req_ready),
 
         // Memory response
-        .mem_rsp_valid    (mem_bus_if[0].rsp_valid),
-        .mem_rsp_data     (mem_bus_if[0].rsp_data.data),
-        .mem_rsp_tag      (mem_bus_if[0].rsp_data.tag),
-        .mem_rsp_ready    (mem_bus_if[0].rsp_ready),
+        .mem_rsp_valid    (mem_rsp_valid),
+        .mem_rsp_data     (mem_rsp_data),
+        .mem_rsp_tag      (mem_rsp_tag),
+        .mem_rsp_ready    (mem_rsp_ready),
 
         // AVS bus
         .avs_writedata    (avs_writedata),
@@ -647,9 +722,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .avs_readdatavalid(avs_readdatavalid)
     );
 
-    `UNUSED_VAR (mem_bus_if[0].req_data.flags)
-
-    // CCI-P Read Request ///////////////////////////////////////////////////////////
+    // CCI-P Read Request /////////////////////////////////////////////////////
 
     reg [CCI_ADDR_WIDTH-1:0] cci_mem_wr_req_ctr;
     wire [CCI_ADDR_WIDTH-1:0] cci_mem_wr_req_addr;
@@ -818,7 +891,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     end
 )
 
-    // CCI-P Write Request //////////////////////////////////////////////////////////
+    // CCI-P Write Request ////////////////////////////////////////////////////
 
     reg [CCI_ADDR_WIDTH-1:0] cci_mem_rd_req_ctr;
     reg [CCI_ADDR_WIDTH-1:0] cci_mem_rd_req_addr;
@@ -865,14 +938,11 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     `UNUSED_VAR (cci_pending_writes)
 
-    assign cci_mem_rd_req_valid = (STATE_MEM_READ == state)
-                               && ~cci_mem_rd_req_done;
+    assign cci_mem_rd_req_valid = (STATE_MEM_READ == state) && ~cci_mem_rd_req_done;
 
-    assign cci_mem_rsp_ready = ~cp2af_sRxPort.c1TxAlmFull
-                            && ~cci_pending_writes_full;
+    assign cci_mem_rsp_ready = ~cp2af_sRxPort.c1TxAlmFull && ~cci_pending_writes_full;
 
-    assign cmd_mem_rd_done = cci_wr_req_done
-                          && cci_pending_writes_empty;
+    assign cmd_mem_rd_done = cci_wr_req_done && cci_pending_writes_empty;
 
     // Send write requests to CCI
     always @(posedge clk) begin
@@ -931,11 +1001,11 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     assign cci_mem_req_data  = cci_rdq_dout[CCI_RD_QUEUE_DATAW-1:CCI_ADDR_WIDTH];
     assign cci_mem_req_tag   = cci_mem_req_rw ? cci_mem_wr_req_ctr : cci_mem_rd_req_ctr;
 
-    // Vortex ///////////////////////////////////////////////////////////////////
+    // Vortex /////////////////////////////////////////////////////////////////
 
     wire vx_dcr_wr_valid = (STATE_DCR_WRITE == state);
-    wire [`VX_DCR_ADDR_WIDTH-1:0] vx_dcr_wr_addr  = cmd_dcr_addr;
-    wire [`VX_DCR_DATA_WIDTH-1:0] vx_dcr_wr_data  = cmd_dcr_data;
+    wire [`VX_DCR_ADDR_WIDTH-1:0] vx_dcr_wr_addr = cmd_dcr_addr;
+    wire [`VX_DCR_DATA_WIDTH-1:0] vx_dcr_wr_data = cmd_dcr_data;
 
     `SCOPE_IO_SWITCH (2);
 
@@ -969,52 +1039,52 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .busy           (vx_busy)
     );
 
-    // COUT HANDLING //////////////////////////////////////////////////////////////
+    // COUT HANDLING //////////////////////////////////////////////////////////
 
-    wire [COUT_TID_WIDTH-1:0] cout_tid;
+    for (genvar i = 0; i < `VX_MEM_PORTS; ++i) begin : g_cout
 
-    VX_onehot_encoder #(
-        .N (`VX_MEM_BYTEEN_WIDTH)
-    ) cout_tid_enc (
-        .data_in  (vx_mem_req_byteen),
-        .data_out (cout_tid),
-        `UNUSED_PIN (valid_out)
-    );
+        wire [COUT_TID_WIDTH-1:0] cout_tid;
 
-    wire [`VX_MEM_ADDR_WIDTH-1:0] io_cout_addr_b = `VX_MEM_ADDR_WIDTH'(`IO_COUT_ADDR >> `CLOG2(`MEM_BLOCK_SIZE));
+        VX_onehot_encoder #(
+            .N (`VX_MEM_BYTEEN_WIDTH)
+        ) cout_tid_enc (
+            .data_in  (vx_mem_req_byteen[i]),
+            .data_out (cout_tid),
+            `UNUSED_PIN (valid_out)
+        );
 
-    assign vx_mem_is_cout = (vx_mem_req_addr == io_cout_addr_b);
+        wire [`VX_MEM_BYTEEN_WIDTH-1:0][7:0] vx_mem_req_data_m = vx_mem_req_data[i];
 
-    assign vx_mem_req_ready = vx_mem_is_cout ? ~cout_q_full : vx_mem_req_ready_qual;
+        wire [7:0] cout_char = vx_mem_req_data_m[cout_tid];
 
-    wire [`VX_MEM_BYTEEN_WIDTH-1:0][7:0] vx_mem_req_data_m = vx_mem_req_data;
+        wire [`VX_MEM_ADDR_WIDTH-1:0] io_cout_addr_b = `VX_MEM_ADDR_WIDTH'(`IO_COUT_ADDR >> `CLOG2(`MEM_BLOCK_SIZE));
 
-    wire [7:0] cout_char = vx_mem_req_data_m[cout_tid];
+        wire vx_mem_is_cout = (vx_mem_req_addr[i] == io_cout_addr_b);
 
-    wire cout_q_push = vx_mem_req_valid && vx_mem_is_cout && ~cout_q_full;
+        assign vx_mem_req_valid_qual[i] = vx_mem_req_valid[i] && ~vx_mem_is_cout;
+        assign vx_mem_req_ready[i] = vx_mem_is_cout ? ~cout_q_full[i] : vx_mem_req_ready_qual[i];
 
-    wire cout_q_pop = cp2af_sRxPort.c0.mmioRdValid
-                   && (mmio_req_hdr.address == MMIO_STATUS)
-                   && ~cout_q_empty;
+        wire cout_q_push = vx_mem_req_valid[i] && vx_mem_is_cout && ~cout_q_full[i];
 
-    VX_fifo_queue #(
-        .DATAW (COUT_QUEUE_DATAW),
-        .DEPTH (COUT_QUEUE_SIZE)
-    ) cout_queue (
-        .clk      (clk),
-        .reset    (reset),
-        .push     (cout_q_push),
-        .pop      (cout_q_pop),
-        .data_in  ({cout_tid, cout_char}),
-        .data_out (cout_q_dout),
-        .empty    (cout_q_empty),
-        .full     (cout_q_full),
-        `UNUSED_PIN (alm_empty),
-        `UNUSED_PIN (alm_full),
-        `UNUSED_PIN (size)
-    );
+        VX_fifo_queue #(
+            .DATAW (COUT_QUEUE_DATAW),
+            .DEPTH (COUT_QUEUE_SIZE)
+        ) cout_queue (
+            .clk      (clk),
+            .reset    (reset),
+            .push     (cout_q_push),
+            .pop      (cout_q_pop[i]),
+            .data_in  ({cout_tid, cout_char}),
+            .data_out (cout_q_dout[i]),
+            .empty    (cout_q_empty[i]),
+            .full     (cout_q_full[i]),
+            `UNUSED_PIN (alm_empty),
+            `UNUSED_PIN (alm_full),
+            `UNUSED_PIN (size)
+        );
+    end
 
-    // SCOPE //////////////////////////////////////////////////////////////////////
+    // SCOPE //////////////////////////////////////////////////////////////////
 
 `ifdef DBG_SCOPE_AFU
     reg [STATE_WIDTH-1:0] state_prev;
@@ -1022,18 +1092,18 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         state_prev <= state;
     end
     wire state_changed   = (state != state_prev);
-    wire vx_mem_req_fire = vx_mem_req_valid && vx_mem_req_ready;
-    wire vx_mem_rsp_fire = vx_mem_rsp_valid && vx_mem_rsp_ready;
+    wire vx_mem_req_fire = vx_mem_req_valid[0] && vx_mem_req_ready[0];
+    wire vx_mem_rsp_fire = vx_mem_rsp_valid[0] && vx_mem_rsp_ready[0];
     wire avs_req_fire    = (avs_write[0] || avs_read[0]) && ~avs_waitrequest[0];
 
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP (0, 0, {
             vx_reset,
             vx_busy,
-            vx_mem_req_valid,
-            vx_mem_req_ready,
-            vx_mem_rsp_valid,
-            vx_mem_rsp_ready,
+            vx_mem_req_valid[0],
+            vx_mem_req_ready[0],
+            vx_mem_rsp_valid[0],
+            vx_mem_rsp_ready[0],
             avs_read[0],
             avs_write[0],
             avs_waitrequest[0],
@@ -1060,13 +1130,13 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         },{
             cmd_type,
             state,
-            vx_mem_req_rw,
-            vx_mem_req_byteen,
-            vx_mem_req_addr,
-            vx_mem_req_data,
-            vx_mem_req_tag,
-            vx_mem_rsp_data,
-            vx_mem_rsp_tag,
+            vx_mem_req_rw[0],
+            vx_mem_req_byteen[0],
+            vx_mem_req_addr[0],
+            vx_mem_req_data[0],
+            vx_mem_req_tag[0],
+            vx_mem_rsp_data[0],
+            vx_mem_rsp_tag[0],
             vx_dcr_wr_addr,
             vx_dcr_wr_data,
             mmio_req_hdr.address,
@@ -1089,19 +1159,19 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     `SCOPE_IO_UNUSED(0)
 `endif
 
-    ///////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
 
 `ifdef DBG_TRACE_AFU
     always @(posedge clk) begin
         for (integer i = 0; i < NUM_LOCAL_MEM_BANKS; ++i) begin
             if (avs_write[i] && ~avs_waitrequest[i]) begin
-                `TRACE(2, ("%t: AVS Wr Req [%0d]: addr=0x%0h, byteen=0x%0h, burst=0x%0h, data=0x%h\n", $time, i, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i], avs_writedata[i]))
+                `TRACE(2, ("%t: AVS Wr Req[%0d]: addr=0x%0h, byteen=0x%0h, burst=0x%0h, data=0x%h\n", $time, i, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i], avs_writedata[i]))
             end
             if (avs_read[i] && ~avs_waitrequest[i]) begin
-                `TRACE(2, ("%t: AVS Rd Req [%0d]: addr=0x%0h, byteen=0x%0h,  burst=0x%0h\n", $time, i, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i]))
+                `TRACE(2, ("%t: AVS Rd Req[%0d]: addr=0x%0h, byteen=0x%0h,  burst=0x%0h\n", $time, i, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i]))
             end
             if (avs_readdatavalid[i]) begin
-                `TRACE(2, ("%t: AVS Rd Rsp [%0d]: data=0x%h\n", $time, i, avs_readdata[i]))
+                `TRACE(2, ("%t: AVS Rd Rsp[%0d]: data=0x%h\n", $time, i, avs_readdata[i]))
             end
         end
     end

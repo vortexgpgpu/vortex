@@ -55,7 +55,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define CS_LINE_TO_FULL_ADDR(x, i) {x, (`XLEN-$bits(x))'(i << (`XLEN-$bits(x)-`CS_BANK_SEL_BITS))}
+`define CS_BANK_TO_FULL_ADDR(x, b) {x, (`XLEN-$bits(x))'(b << (`XLEN-$bits(x)-`CS_BANK_SEL_BITS))}
 `define CS_MEM_TO_FULL_ADDR(x)     {x, (`XLEN-$bits(x))'(0)}
 
 ///////////////////////////////////////////////////////////////////////////////

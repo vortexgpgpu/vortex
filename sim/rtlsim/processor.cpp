@@ -301,7 +301,7 @@ private:
           if (byte_addr >= uint64_t(IO_COUT_ADDR)
           && byte_addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
             // process console output
-            for (int i = 0; i < IO_COUT_SIZE; i++) {
+            for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
               if ((byteen >> i) & 0x1) {
                 auto& ss_buf = print_bufs_[i];
                 char c = data[i];

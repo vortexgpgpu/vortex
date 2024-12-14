@@ -189,7 +189,7 @@ module VX_cache_bypass #(
                 VX_bits_insert #(
                     .N   (MEM_TAG_NC1_WIDTH),
                     .S   (WSEL_BITS),
-                    .POS (MEM_TAG_ID_WIDTH)
+                    .POS (TAG_SEL_IDX)
                 ) wsel_insert (
                     .data_in  (core_req_nc_arb_tag),
                     .ins_in   (req_wsel),
@@ -198,7 +198,7 @@ module VX_cache_bypass #(
                 VX_bits_remove #(
                     .N   (MEM_TAG_NC2_WIDTH),
                     .S   (WSEL_BITS),
-                    .POS (MEM_TAG_ID_WIDTH)
+                    .POS (TAG_SEL_IDX)
                 ) wsel_remove (
                     .data_in  (mem_bus_out_nc_if[i].rsp_data.tag),
                     .sel_out  (rsp_wsel),

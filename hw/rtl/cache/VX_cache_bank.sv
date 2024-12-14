@@ -595,7 +595,7 @@ module VX_cache_bank #(
             if (DIRTY_BYTES) begin : g_dirty_bytes
                 // ensure dirty bytes match the tag info
                 wire has_dirty_bytes = (| evict_byteen_st1);
-                `RUNTIME_ASSERT (~do_fill_or_flush_st1 || (is_dirty_st1 == has_dirty_bytes), ("%t: missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", $time, is_dirty_st1, has_dirty_bytes, `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID)))
+                `RUNTIME_ASSERT (~do_fill_or_flush_st1 || (is_dirty_st1 == has_dirty_bytes), ("%t: missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", $time, is_dirty_st1, has_dirty_bytes, `CS_BANK_TO_FULL_ADDR(addr_st1, BANK_ID)))
             end
             // issue a fill request on a read/write miss
             // issue a writeback on a dirty line eviction
@@ -691,6 +691,14 @@ module VX_cache_bank #(
     wire crsp_queue_fire = crsp_queue_valid && crsp_queue_ready;
     wire input_stall = (replay_valid || mem_rsp_valid || core_req_valid || flush_valid)
                    && ~(replay_fire || mem_rsp_fire || core_req_fire || flush_fire);
+
+    wire [`XLEN-1:0] mem_rsp_full_addr = `CS_BANK_TO_FULL_ADDR(mem_rsp_addr, BANK_ID);
+    wire [`XLEN-1:0] replay_full_addr = `CS_BANK_TO_FULL_ADDR(replay_addr, BANK_ID);
+    wire [`XLEN-1:0] core_req_full_addr = `CS_BANK_TO_FULL_ADDR(core_req_addr, BANK_ID);
+    wire [`XLEN-1:0] full_addr_st0 = `CS_BANK_TO_FULL_ADDR(addr_st0, BANK_ID);
+    wire [`XLEN-1:0] full_addr_st1 = `CS_BANK_TO_FULL_ADDR(addr_st1, BANK_ID);
+    wire [`XLEN-1:0] mreq_queue_full_addr = `CS_BANK_TO_FULL_ADDR(mreq_queue_addr, BANK_ID);
+
     always @(posedge clk) begin
         if (input_stall || pipe_stall) begin
             `TRACE(4, ("%t: *** %s stall: crsq=%b, mreq=%b, mshr=%b\n", $time, INSTANCE_ID,
@@ -698,71 +706,71 @@ module VX_cache_bank #(
         end
         if (mem_rsp_fire) begin
             `TRACE(2, ("%t: %s fill-rsp: addr=0x%0h, mshr_id=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_id, mem_rsp_data, req_uuid_sel))
+                mem_rsp_full_addr, mem_rsp_id, mem_rsp_data, req_uuid_sel))
         end
         if (replay_fire) begin
             `TRACE(2, ("%t: %s mshr-pop: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(replay_addr, BANK_ID), replay_tag, replay_idx, req_uuid_sel))
+                replay_full_addr, replay_tag, replay_idx, req_uuid_sel))
         end
         if (core_req_fire) begin
             if (core_req_rw) begin
                 `TRACE(2, ("%t: %s core-wr-req: addr=0x%0h, tag=0x%0h, req_idx=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
-                    `CS_LINE_TO_FULL_ADDR(core_req_addr, BANK_ID), core_req_tag, core_req_idx, core_req_byteen, core_req_data, req_uuid_sel))
+                    core_req_full_addr, core_req_tag, core_req_idx, core_req_byteen, core_req_data, req_uuid_sel))
             end else begin
                 `TRACE(2, ("%t: %s core-rd-req: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID,
-                    `CS_LINE_TO_FULL_ADDR(core_req_addr, BANK_ID), core_req_tag, core_req_idx, req_uuid_sel))
+                    core_req_full_addr, core_req_tag, core_req_idx, req_uuid_sel))
             end
         end
         if (do_init_st0) begin
-            `TRACE(3, ("%t: %s tags-init: addr=0x%0h, line=%0d\n", $time, INSTANCE_ID, `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), line_idx_st0))
+            `TRACE(3, ("%t: %s tags-init: addr=0x%0h, line=%0d\n", $time, INSTANCE_ID, full_addr_st0, line_idx_st0))
         end
         if (do_fill_st0 && ~pipe_stall) begin
             `TRACE(3, ("%t: %s tags-fill: addr=0x%0h, way=%0d, line=%0d, dirty=%b (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), evict_way_st0, line_idx_st0, is_dirty_st0, req_uuid_st0))
+                full_addr_st0, evict_way_st0, line_idx_st0, is_dirty_st0, req_uuid_st0))
         end
         if (do_flush_st0 && ~pipe_stall) begin
             `TRACE(3, ("%t: %s tags-flush: addr=0x%0h, way=%0d, line=%0d, dirty=%b (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), evict_way_st0, line_idx_st0, is_dirty_st0, req_uuid_st0))
+                full_addr_st0, evict_way_st0, line_idx_st0, is_dirty_st0, req_uuid_st0))
         end
         if (do_lookup_st0 && ~pipe_stall) begin
             if (is_hit_st0) begin
                 `TRACE(3, ("%t: %s tags-hit: addr=0x%0h, rw=%b, way=%0d, line=%0d, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID,
-                    `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), rw_st0, way_idx_st0, line_idx_st0, line_tag_st0, req_uuid_st0))
+                    full_addr_st0, rw_st0, way_idx_st0, line_idx_st0, line_tag_st0, req_uuid_st0))
             end else begin
                 `TRACE(3, ("%t: %s tags-miss: addr=0x%0h, rw=%b, way=%0d, line=%0d, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID,
-                    `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), rw_st0, way_idx_st0, line_idx_st0, line_tag_st0, req_uuid_st0))
+                    full_addr_st0, rw_st0, way_idx_st0, line_idx_st0, line_tag_st0, req_uuid_st0))
             end
         end
         if (do_fill_st0 && ~pipe_stall) begin
             `TRACE(3, ("%t: %s data-fill: addr=0x%0h, way=%0d, line=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), way_idx_st0, line_idx_st0, data_st0, req_uuid_st0))
+                full_addr_st0, way_idx_st0, line_idx_st0, data_st0, req_uuid_st0))
         end
         if (do_flush_st0 && ~pipe_stall) begin
             `TRACE(3, ("%t: %s data-flush: addr=0x%0h, way=%0d, line=%0d (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(addr_st0, BANK_ID), way_idx_st0, line_idx_st0, req_uuid_st0))
+                full_addr_st0, way_idx_st0, line_idx_st0, req_uuid_st0))
         end
         if (do_read_st1 && is_hit_st1 && ~pipe_stall) begin
             `TRACE(3, ("%t: %s data-read: addr=0x%0h, way=%0d, line=%0d, wsel=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), way_idx_st1, line_idx_st1, word_idx_st1, crsp_queue_data, req_uuid_st1))
+                full_addr_st1, way_idx_st1, line_idx_st1, word_idx_st1, crsp_queue_data, req_uuid_st1))
         end
         if (do_write_st1 && is_hit_st1 && ~pipe_stall) begin
             `TRACE(3, ("%t: %s data-write: addr=0x%0h, way=%0d, line=%0d, wsel=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), way_idx_st1, line_idx_st1, word_idx_st1, byteen_st1, write_word_st1, req_uuid_st1))
+                full_addr_st1, way_idx_st1, line_idx_st1, word_idx_st1, byteen_st1, write_word_st1, req_uuid_st1))
         end
         if (crsp_queue_fire) begin
             `TRACE(2, ("%t: %s core-rd-rsp: addr=0x%0h, tag=0x%0h, req_idx=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
-                `CS_LINE_TO_FULL_ADDR(addr_st1, BANK_ID), crsp_queue_tag, crsp_queue_idx, crsp_queue_data, req_uuid_st1))
+                full_addr_st1, crsp_queue_tag, crsp_queue_idx, crsp_queue_data, req_uuid_st1))
         end
         if (mreq_queue_push) begin
             if (!WRITEBACK && do_write_st1) begin
                 `TRACE(2, ("%t: %s writethrough: addr=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
-                    `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_byteen, mreq_queue_data, req_uuid_st1))
+                    mreq_queue_full_addr, mreq_queue_byteen, mreq_queue_data, req_uuid_st1))
             end else if (WRITEBACK && do_writeback_st1) begin
                 `TRACE(2, ("%t: %s writeback: addr=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID,
-                    `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mreq_queue_byteen, mreq_queue_data, req_uuid_st1))
+                    mreq_queue_full_addr, mreq_queue_byteen, mreq_queue_data, req_uuid_st1))
             end else begin
                 `TRACE(2, ("%t: %s fill-req: addr=0x%0h, mshr_id=%0d (#%0d)\n", $time, INSTANCE_ID,
-                    `CS_LINE_TO_FULL_ADDR(mreq_queue_addr, BANK_ID), mshr_id_st1, req_uuid_st1))
+                    mreq_queue_full_addr, mshr_id_st1, req_uuid_st1))
             end
         end
     end

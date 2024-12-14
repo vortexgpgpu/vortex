@@ -105,21 +105,24 @@ module VX_axi_adapter #(
     localparam NUM_PORTS_IN_WIDTH = `UP(NUM_PORTS_IN_BITS);
     localparam TAG_BUFFER_ADDRW = `CLOG2(TAG_BUFFER_SIZE);
     localparam NEEDED_TAG_WIDTH = TAG_WIDTH_IN + NUM_PORTS_IN_BITS;
-    localparam RD_TAG_WIDTH   = (NEEDED_TAG_WIDTH > TAG_WIDTH_OUT) ? TAG_BUFFER_ADDRW : TAG_WIDTH_IN;
-    localparam RD_FULL_TAG_WIDTH = RD_TAG_WIDTH + PORT_SEL_BITS;
-    localparam DST_TAG_WIDTH  = `MAX(RD_FULL_TAG_WIDTH, TAG_WIDTH_IN);
+    localparam READ_TAG_WIDTH = (NEEDED_TAG_WIDTH > TAG_WIDTH_OUT) ? TAG_BUFFER_ADDRW : TAG_WIDTH_IN;
+    localparam READ_FULL_TAG_WIDTH = READ_TAG_WIDTH + PORT_SEL_BITS;
+    localparam WRITE_TAG_WIDTH = `MIN(TAG_WIDTH_IN, TAG_WIDTH_OUT);
+    localparam DST_TAG_WIDTH  = `MAX(READ_FULL_TAG_WIDTH, WRITE_TAG_WIDTH);
+    localparam ARB_TAG_WIDTH  = `MAX(READ_TAG_WIDTH, WRITE_TAG_WIDTH);
+    localparam ARB_DATAW      = 1 + PORT_OFFSETW + DATA_SIZE + DATA_WIDTH + ARB_TAG_WIDTH;
 
     `STATIC_ASSERT ((DST_ADDR_WDITH >= ADDR_WIDTH_IN), ("invalid address width: current=%0d, expected=%0d", DST_ADDR_WDITH, ADDR_WIDTH_IN))
     `STATIC_ASSERT ((TAG_WIDTH_OUT >= DST_TAG_WIDTH), ("invalid output tag width: current=%0d, expected=%0d", TAG_WIDTH_OUT, DST_TAG_WIDTH))
 
-    // PORT selection
+    // Ports selection
     wire [NUM_PORTS_IN-1:0][PORT_SEL_WIDTH-1:0] req_port_out_sel;
     wire [NUM_PORTS_IN-1:0][PORT_OFFSETW-1:0] req_port_out_off;
 
     if (NUM_PORTS_OUT > 1) begin : g_port_sel
         for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_i
             wire [DST_ADDR_WDITH-1:0] mem_req_addr_out = DST_ADDR_WDITH'(mem_req_addr[i]);
-            if (PORT_INTERLEAVE) begin : g_interleave
+            if (INTERLEAVE) begin : g_interleave
                 assign req_port_out_sel[i] = mem_req_addr_out[PORT_SEL_BITS-1:0];
                 assign req_port_out_off[i] = mem_req_addr_out[PORT_SEL_BITS +: PORT_OFFSETW];
             end else begin : g_no_interleave
@@ -136,8 +139,8 @@ module VX_axi_adapter #(
 
     // Tag handling logic
     wire [NUM_PORTS_IN-1:0] mem_rd_req_tag_ready;
-    wire [NUM_PORTS_IN-1:0][RD_TAG_WIDTH-1:0] mem_rd_req_tag;
-    wire [NUM_PORTS_IN-1:0][RD_TAG_WIDTH-1:0] mem_rd_rsp_tag;
+    wire [NUM_PORTS_IN-1:0][READ_TAG_WIDTH-1:0] mem_rd_req_tag;
+    wire [NUM_PORTS_IN-1:0][READ_TAG_WIDTH-1:0] mem_rd_rsp_tag;
 
     for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_tag_buf
         if (NEEDED_TAG_WIDTH > TAG_WIDTH_OUT) begin : g_enabled
@@ -209,13 +212,10 @@ module VX_axi_adapter #(
 
     for (genvar i = 0; i < NUM_PORTS_OUT; ++i) begin : g_axi_write_req
 
-        localparam ARB_TAG_WIDTH = `MAX(RD_TAG_WIDTH, TAG_WIDTH_IN);
-        localparam ARB_DATAW = 1 + PORT_OFFSETW + DATA_SIZE + DATA_WIDTH + ARB_TAG_WIDTH;
-
         wire [PORT_OFFSETW-1:0] arb_addr_out, buf_addr_r_out, buf_addr_w_out;
         wire [ARB_TAG_WIDTH-1:0] arb_tag_out;
-        wire [TAG_WIDTH_IN-1:0] buf_tag_w_out;
-        wire [RD_TAG_WIDTH-1:0] buf_tag_r_out;
+        wire [WRITE_TAG_WIDTH-1:0] buf_tag_w_out;
+        wire [READ_TAG_WIDTH-1:0] buf_tag_r_out;
         wire [NUM_PORTS_IN_WIDTH-1:0] arb_sel_out, buf_sel_out;
         wire [DATA_WIDTH-1:0] arb_data_out;
         wire [DATA_SIZE-1:0] arb_byteen_out;
@@ -261,7 +261,7 @@ module VX_axi_adapter #(
         assign m_axi_awvalid_w[i] = arb_valid_out && arb_rw_out && ~m_axi_aw_ack[i];
 
         VX_elastic_buffer #(
-            .DATAW   (PORT_OFFSETW + TAG_WIDTH_IN),
+            .DATAW   (PORT_OFFSETW + WRITE_TAG_WIDTH),
             .SIZE    (`TO_OUT_BUF_SIZE(REQ_OUT_BUF)),
             .OUT_REG (`TO_OUT_BUF_REG(REQ_OUT_BUF)),
             .LUTRAM  (`TO_OUT_BUF_LUTRAM(REQ_OUT_BUF))
@@ -270,7 +270,7 @@ module VX_axi_adapter #(
             .reset     (reset),
             .valid_in  (m_axi_awvalid_w[i]),
             .ready_in  (m_axi_awready_w[i]),
-            .data_in   ({arb_addr_out, TAG_WIDTH_IN'(arb_tag_out)}),
+            .data_in   ({arb_addr_out, WRITE_TAG_WIDTH'(arb_tag_out)}),
             .data_out  ({buf_addr_w_out, buf_tag_w_out}),
             .valid_out (m_axi_awvalid[i]),
             .ready_out (m_axi_awready[i])
@@ -312,7 +312,7 @@ module VX_axi_adapter #(
         // AXI read address channel
 
         VX_elastic_buffer #(
-            .DATAW   (PORT_OFFSETW + RD_TAG_WIDTH + NUM_PORTS_IN_WIDTH),
+            .DATAW   (PORT_OFFSETW + READ_TAG_WIDTH + NUM_PORTS_IN_WIDTH),
             .SIZE    (`TO_OUT_BUF_SIZE(REQ_OUT_BUF)),
             .OUT_REG (`TO_OUT_BUF_REG(REQ_OUT_BUF)),
             .LUTRAM  (`TO_OUT_BUF_LUTRAM(REQ_OUT_BUF))
@@ -321,7 +321,7 @@ module VX_axi_adapter #(
             .reset     (reset),
             .valid_in  (arb_valid_out && ~arb_rw_out),
             .ready_in  (m_axi_arready_w),
-            .data_in   ({arb_addr_out, RD_TAG_WIDTH'(arb_tag_out), arb_sel_out}),
+            .data_in   ({arb_addr_out, READ_TAG_WIDTH'(arb_tag_out), arb_sel_out}),
             .data_out  ({buf_addr_r_out, buf_tag_r_out, buf_sel_out}),
             .valid_out (m_axi_arvalid[i]),
             .ready_out (m_axi_arready[i])
@@ -359,13 +359,13 @@ module VX_axi_adapter #(
     // AXI read response channel
 
     wire [NUM_PORTS_OUT-1:0] rd_rsp_valid_in;
-    wire [NUM_PORTS_OUT-1:0][DATA_WIDTH+RD_TAG_WIDTH-1:0] rd_rsp_data_in;
-    wire [NUM_PORTS_OUT-1:0] rd_rsp_ready_in;
+    wire [NUM_PORTS_OUT-1:0][DATA_WIDTH+READ_TAG_WIDTH-1:0] rd_rsp_data_in;
     wire [NUM_PORTS_OUT-1:0][NUM_PORTS_IN_WIDTH-1:0] rd_rsp_sel_in;
+    wire [NUM_PORTS_OUT-1:0] rd_rsp_ready_in;
 
     for (genvar i = 0; i < NUM_PORTS_OUT; ++i) begin : g_rd_rsp_data_in
         assign rd_rsp_valid_in[i] = m_axi_rvalid[i];
-        assign rd_rsp_data_in[i] = {m_axi_rdata[i], m_axi_rid[i][NUM_PORTS_IN_BITS +: RD_TAG_WIDTH]};
+        assign rd_rsp_data_in[i] = {m_axi_rdata[i], m_axi_rid[i][NUM_PORTS_IN_BITS +: READ_TAG_WIDTH]};
         if (NUM_PORTS_IN > 1) begin : g_input_sel
             assign rd_rsp_sel_in[i] = m_axi_rid[i][0 +: NUM_PORTS_IN_BITS];
         end else begin : g_no_input_sel
@@ -377,13 +377,13 @@ module VX_axi_adapter #(
     end
 
     wire [NUM_PORTS_IN-1:0] rd_rsp_valid_out;
-    wire [NUM_PORTS_IN-1:0][DATA_WIDTH+RD_TAG_WIDTH-1:0] rd_rsp_data_out;
+    wire [NUM_PORTS_IN-1:0][DATA_WIDTH+READ_TAG_WIDTH-1:0] rd_rsp_data_out;
     wire [NUM_PORTS_IN-1:0] rd_rsp_ready_out;
 
     VX_stream_xbar #(
         .NUM_INPUTS (NUM_PORTS_OUT),
         .NUM_OUTPUTS(NUM_PORTS_IN),
-        .DATAW      (DATA_WIDTH + RD_TAG_WIDTH),
+        .DATAW      (DATA_WIDTH + READ_TAG_WIDTH),
         .ARBITER    (ARBITER),
         .OUT_BUF    (RSP_OUT_BUF)
     ) rd_rsp_xbar (

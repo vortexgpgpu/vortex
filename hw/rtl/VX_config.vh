@@ -173,7 +173,7 @@
 `endif
 
 `ifndef PLATFORM_MEMORY_BANKS
-`define PLATFORM_MEMORY_BANKS 1
+`define PLATFORM_MEMORY_BANKS 2
 `endif
 
 `ifdef XLEN_64
@@ -241,7 +241,7 @@
 `ifndef IO_COUT_ADDR
 `define IO_COUT_ADDR    `IO_BASE_ADDR
 `endif
-`define IO_COUT_SIZE    `MEM_BLOCK_SIZE
+`define IO_COUT_SIZE    64
 
 `ifndef IO_MPM_ADDR
 `define IO_MPM_ADDR     (`IO_COUT_ADDR + `IO_COUT_SIZE)

@@ -191,11 +191,11 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         .ADDR_WIDTH_OUT (AXI_ADDR_WIDTH),
         .TAG_WIDTH_IN   (VX_MEM_TAG_A_WIDTH),
         .TAG_WIDTH_OUT  (AXI_TID_WIDTH),
-        .NUM_BANKS_IN   (`VX_MEM_PORTS),
-        .NUM_BANKS_OUT  (AXI_NUM_BANKS),
-        .BANK_INTERLEAVE(0),
+        .NUM_PORTS_IN   (`VX_MEM_PORTS),
+        .NUM_PORTS_OUT  (AXI_NUM_BANKS),
+        .INTERLEAVE     (0),
         .REQ_OUT_BUF    ((`VX_MEM_PORTS > 1) ? 2 : 0),
-        .RSP_OUT_BUF    ((AXI_NUM_BANKS > 1) ? 2 : 0)
+        .RSP_OUT_BUF    ((`VX_MEM_PORTS > 1 || AXI_NUM_BANKS > 1) ? 2 : 0)
     ) axi_adapter (
         .clk            (clk),
         .reset          (reset),
