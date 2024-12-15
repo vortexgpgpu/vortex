@@ -580,6 +580,10 @@
 `define ICACHE_REPL_POLICY 1
 `endif
 
+`ifndef ICACHE_MEM_PORTS
+`define ICACHE_MEM_PORTS 1
+`endif
+
 // Dcache Configurable Knobs //////////////////////////////////////////////////
 
 // Cache Enable

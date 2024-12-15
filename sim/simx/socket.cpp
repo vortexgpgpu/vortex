@@ -42,7 +42,7 @@ Socket::Socket(const SimContext& ctx,
     XLEN,                   // address bits
     1,                      // number of ports
     1,                      // number of inputs
-    1,                      // memory ports
+    ICACHE_MEM_PORTS,       // memory ports
     false,                  // write-back
     false,                  // write response
     (uint8_t)arch.num_warps(), // mshr size
@@ -67,23 +67,33 @@ Socket::Socket(const SimContext& ctx,
     2,                      // pipeline latency
   });
 
+  // find overlap
+  uint32_t overlap = MIN(ICACHE_MEM_PORTS, L1_MEM_PORTS);
+
   // connect l1 caches to outgoing memory interfaces
   for (uint32_t i = 0; i < L1_MEM_PORTS; ++i) {
-    if (i == 0) {
-      snprintf(sname, 100, "%s-l1_arb%d", this->name().c_str(), i);
-      auto l1_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, 2, 1);
+    snprintf(sname, 100, "%s-l1_arb%d", this->name().c_str(), i);
+    auto l1_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, 2 * overlap, overlap);
 
-      icaches_->MemReqPorts.at(0).bind(&l1_arb->ReqIn.at(1));
-      l1_arb->RspIn.at(1).bind(&icaches_->MemRspPorts.at(0));
+    if (i < overlap) {
+      icaches_->MemReqPorts.at(i).bind(&l1_arb->ReqIn.at(i));
+      l1_arb->RspIn.at(i).bind(&icaches_->MemRspPorts.at(i));
 
-      dcaches_->MemReqPorts.at(0).bind(&l1_arb->ReqIn.at(0));
-      l1_arb->RspIn.at(0).bind(&dcaches_->MemRspPorts.at(0));
+      dcaches_->MemReqPorts.at(i).bind(&l1_arb->ReqIn.at(overlap + i));
+      l1_arb->RspIn.at(overlap + i).bind(&dcaches_->MemRspPorts.at(i));
 
-      l1_arb->ReqOut.at(0).bind(&this->mem_req_ports.at(0));
-      this->mem_rsp_ports.at(0).bind(&l1_arb->RspOut.at(0));
+      l1_arb->ReqOut.at(i).bind(&this->mem_req_ports.at(i));
+      this->mem_rsp_ports.at(i).bind(&l1_arb->RspOut.at(i));
     } else {
-      dcaches_->MemReqPorts.at(i).bind(&this->mem_req_ports.at(i));
-      this->mem_rsp_ports.at(i).bind(&dcaches_->MemRspPorts.at(i));
+      if (L1_MEM_PORTS > ICACHE_MEM_PORTS) {
+        // if more dcache ports
+        dcaches_->MemReqPorts.at(i).bind(&this->mem_req_ports.at(i));
+        this->mem_rsp_ports.at(i).bind(&dcaches_->MemRspPorts.at(i));
+      } else {
+        // if more icache ports
+        icaches_->MemReqPorts.at(i).bind(&this->mem_req_ports.at(i));
+        this->mem_rsp_ports.at(i).bind(&icaches_->MemRspPorts.at(i));
+      }
     }
   }
 
