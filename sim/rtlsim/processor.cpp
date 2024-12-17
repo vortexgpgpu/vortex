@@ -13,7 +13,7 @@
 
 #include "processor.h"
 
-#include "VVortex.h"
+#include "Vrtlsim_shim.h"
 
 #ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
@@ -34,6 +34,8 @@
 
 #include <dram_sim.h>
 #include <util.h>
+
+#define PLATFORM_MEMORY_DATA_SIZE (PLATFORM_MEMORY_DATA_WIDTH/8)
 
 #ifndef MEM_CLOCK_RATIO
 #define MEM_CLOCK_RATIO 1
@@ -100,7 +102,7 @@ public:
     Verilated::assertOn(false);
 
     // create RTL module instance
-    device_ = new VVortex();
+    device_ = new Vrtlsim_shim();
 
   #ifdef VCD_OUTPUT
     Verilated::traceEverOn(true);
@@ -226,13 +228,11 @@ private:
       if (!dram_queue_[b].empty()) {
         auto mem_req = dram_queue_[b].front();
         if (dram_sim_.send_request(mem_req->write, mem_req->addr, b, [](void* arg) {
+          // mark completed request as ready
           auto orig_req = reinterpret_cast<mem_req_t*>(arg);
-          if (orig_req->ready) {
-            delete orig_req;
-          } else {
-            orig_req->ready = true;
-          }
+          orig_req->ready = true;
         }, mem_req)) {
+          // was successfully sent to dram, remove from queue
           dram_queue_[b].pop();
         }
       }
@@ -269,39 +269,39 @@ private:
     }
 
     for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
-      // process memory read responses
+      // process memory responses
       if (device_->mem_rsp_valid[b] && mem_rd_rsp_ready_[b]) {
         device_->mem_rsp_valid[b] = 0;
       }
-      if (!device_->mem_rsp_valid[b]) {
-        if (!pending_mem_reqs_[b].empty()
-        && (*pending_mem_reqs_[b].begin())->ready) {
+      if (device_->mem_rsp_valid[b] == 0) {
+        if (!pending_mem_reqs_[b].empty()) {
           auto mem_rsp_it = pending_mem_reqs_[b].begin();
           auto mem_rsp = *mem_rsp_it;
-          /*printf("%0ld: [sim] MEM Rd Rsp: tag=0x%0lx, addr=0x%0lx, data=0x", timestamp, mem_rsp->tag, mem_rsp->addr);
-          for (int i = MEM_BLOCK_SIZE-1; i >= 0; --i) {
-            printf("%02x", mem_rsp->data[i]);
+          if (mem_rsp->ready) {
+            if (!mem_rsp->write) {
+              // return read responses
+              device_->mem_rsp_valid[b] = 1;
+              memcpy(VDataCast<void*, PLATFORM_MEMORY_DATA_SIZE>::get(device_->mem_rsp_data[b]), mem_rsp->data.data(), PLATFORM_MEMORY_DATA_SIZE);
+              device_->mem_rsp_tag[b] = mem_rsp->tag;
+            }
+            // delete the request
+            pending_mem_reqs_[b].erase(mem_rsp_it);
+            delete mem_rsp;
           }
-          printf("\n");
-          */
-          device_->mem_rsp_valid[b] = 1;
-          memcpy(VDataCast<void*, MEM_BLOCK_SIZE>::get(device_->mem_rsp_data[b]), mem_rsp->data.data(), MEM_BLOCK_SIZE);
-          device_->mem_rsp_tag[b] = mem_rsp->tag;
-          pending_mem_reqs_[b].erase(mem_rsp_it);
-          delete mem_rsp;
         }
       }
 
       // process memory requests
       if (device_->mem_req_valid[b] && device_->mem_req_ready[b]) {
-        uint64_t byte_addr = (device_->mem_req_addr[b] * MEM_BLOCK_SIZE);
+        uint64_t byte_addr = (device_->mem_req_addr[b] * PLATFORM_MEMORY_DATA_SIZE);
         if (device_->mem_req_rw[b]) {
           auto byteen = device_->mem_req_byteen[b];
-          auto data = VDataCast<uint8_t*, MEM_BLOCK_SIZE>::get(device_->mem_req_data[b]);
+          auto data = VDataCast<uint8_t*, PLATFORM_MEMORY_DATA_SIZE>::get(device_->mem_req_data[b]);
+          // check address range
           if (byte_addr >= uint64_t(IO_COUT_ADDR)
-          && byte_addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
+           && byte_addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
             // process console output
-            for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
+            for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; i++) {
               if ((byteen >> i) & 0x1) {
                 auto& ss_buf = print_bufs_[i];
                 char c = data[i];
@@ -314,31 +314,31 @@ private:
             }
           } else {
             // process writes
-            /*
-            printf("%0ld: [sim] MEM Wr Req: tag=0x%0lx, addr=0x%0lx, byteen=0x", timestamp, device_->mem_req_tag, byte_addr);
-            for (int i = (MEM_BLOCK_SIZE/4)-1; i >= 0; --i) {
+            /*printf("%0ld: [sim] MEM Wr Req[%d]: addr=0x%0lx, tag=0x%0lx, byteen=0x", timestamp, b, byte_addr, device_->mem_req_tag[b]);
+            for (int i = (PLATFORM_MEMORY_DATA_SIZE/4)-1; i >= 0; --i) {
               printf("%x", (int)((byteen >> (4 * i)) & 0xf));
             }
             printf(", data=0x");
-            for (int i = MEM_BLOCK_SIZE-1; i >= 0; --i) {
+            for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
               printf("%d=%02x,", i, data[i]);
             }
-            printf("\n");
-            */
-            for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
+            printf("\n");*/
+            for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; i++) {
               if ((byteen >> i) & 0x1) {
                 (*ram_)[byte_addr + i] = data[i];
               }
             }
-
             auto mem_req = new mem_req_t();
             mem_req->tag   = device_->mem_req_tag[b];
             mem_req->addr  = byte_addr;
             mem_req->write = true;
-            mem_req->ready = true;
+            mem_req->ready = false;
 
-            // send dram request
+            // enqueue dram request
             dram_queue_[b].push(mem_req);
+
+            // add to pending list
+            pending_mem_reqs_[b].emplace_back(mem_req);
           }
         } else {
           // process reads
@@ -347,13 +347,19 @@ private:
           mem_req->addr  = byte_addr;
           mem_req->write = false;
           mem_req->ready = false;
-          ram_->read(mem_req->data.data(), byte_addr, MEM_BLOCK_SIZE);
-          pending_mem_reqs_[b].emplace_back(mem_req);
+          ram_->read(mem_req->data.data(), byte_addr, PLATFORM_MEMORY_DATA_SIZE);
 
-          //printf("%0ld: [sim] MEM Rd Req: addr=0x%0lx, tag=0x%0lx\n", timestamp, byte_addr, device_->mem_req_tag);
+          /*printf("%0ld: [sim] MEM Rd Req[%d]: addr=0x%0lx, tag=0x%0lx, data=0x", timestamp, b, byte_addr, device_->mem_req_tag[b]);
+          for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
+            printf("%02x", mem_req->data[i]);
+          }
+          printf("\n");*/
 
-          // send dram request
+          // enqueue dram request
           dram_queue_[b].push(mem_req);
+
+          // add to pending list
+          pending_mem_reqs_[b].emplace_back(mem_req);
         }
       }
     }
@@ -372,8 +378,8 @@ private:
 private:
 
   typedef struct {
-    VVortex* device;
-    std::array<uint8_t, MEM_BLOCK_SIZE> data;
+    Vrtlsim_shim* device;
+    std::array<uint8_t, PLATFORM_MEMORY_DATA_SIZE> data;
     uint64_t addr;
     uint64_t tag;
     bool write;
@@ -390,7 +396,7 @@ private:
 
   DramSim dram_sim_;
 
-  VVortex* device_;
+  Vrtlsim_shim* device_;
 
   RAM* ram_;
 

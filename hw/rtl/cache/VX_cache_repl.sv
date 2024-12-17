@@ -118,7 +118,8 @@ module VX_cache_repl #(
                 .DATAW (LRU_WIDTH),
                 .SIZE  (`CS_LINES_PER_BANK),
                 .WRENW (LRU_WIDTH),
-                .RDW_MODE ("R")
+                .RDW_MODE ("R"),
+                .RADDR_REG (1)
             ) plru_store (
                 .clk   (clk),
                 .reset (reset),
@@ -158,7 +159,8 @@ module VX_cache_repl #(
             VX_sp_ram #(
                 .DATAW (WAY_SEL_WIDTH),
                 .SIZE  (`CS_LINES_PER_BANK),
-                .RDW_MODE ("R")
+                .RDW_MODE ("R"),
+                .RADDR_REG (1)
             ) ctr_store (
                 .clk   (clk),
                 .reset (reset),

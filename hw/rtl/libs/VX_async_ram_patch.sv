@@ -121,6 +121,7 @@ module VX_async_ram_patch #(
     parameter WRENW       = 1,
     parameter DUAL_PORT   = 0,
     parameter FORCE_BRAM  = 0,
+    parameter RADDR_REG   = 0, // read address registered hint
     parameter WRITE_FIRST = 0,
     parameter INIT_ENABLE = 0,
     parameter INIT_FILE   = "",
@@ -154,7 +155,7 @@ module VX_async_ram_patch #(
         .out ({raddr_s, read_s, is_raddr_reg})
     );
 
-    wire [DATAW-1:0] rdata_s, rdata_a;
+    wire [DATAW-1:0] rdata_s;
 
     if (1) begin : g_sync_ram
         if (WRENW != 1) begin : g_wren
@@ -204,8 +205,12 @@ module VX_async_ram_patch #(
         end
     end
 
-    if (1) begin : g_async_ram
-        if (DUAL_PORT != 0) begin : g_dp
+    if (RADDR_REG) begin : g_raddr_reg
+        `UNUSED_VAR (is_raddr_reg)
+        assign rdata = rdata_s;
+    end else begin : g_async_ram
+        wire [DATAW-1:0] rdata_a;
+        if (DUAL_PORT) begin : g_dp
             if (WRENW != 1) begin : g_wren
                 if (WRITE_FIRST) begin : g_write_first
                     `define RAM_ATTRIBUTES `RW_RAM_CHECK
@@ -250,9 +255,8 @@ module VX_async_ram_patch #(
                 end
             end
         end
+        assign rdata = is_raddr_reg ? rdata_s : rdata_a;
     end
-
-    assign rdata = is_raddr_reg ? rdata_s : rdata_a;
 
 endmodule
 `TRACING_ON

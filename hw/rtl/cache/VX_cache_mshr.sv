@@ -221,7 +221,8 @@ module VX_cache_mshr #(
     VX_dp_ram #(
         .DATAW (DATA_WIDTH),
         .SIZE  (MSHR_SIZE),
-        .RDW_MODE ("R")
+        .RDW_MODE ("R"),
+        .RADDR_REG (1)
     ) mshr_store (
         .clk   (clk),
         .reset (reset),

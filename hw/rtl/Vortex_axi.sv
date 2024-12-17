@@ -144,7 +144,7 @@ module Vortex_axi import VX_gpu_pkg::*; #(
 
     // Adjust memory data width to match AXI interface
     for (genvar i = 0; i < `VX_MEM_PORTS; i++) begin : g_mem_adapter
-        VX_mem_adapter #(
+        VX_mem_data_adapter #(
             .SRC_DATA_WIDTH (`VX_MEM_DATA_WIDTH),
             .DST_DATA_WIDTH (AXI_DATA_WIDTH),
             .SRC_ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),
@@ -153,7 +153,7 @@ module Vortex_axi import VX_gpu_pkg::*; #(
             .DST_TAG_WIDTH  (VX_MEM_TAG_A_WIDTH),
             .REQ_OUT_BUF    (0),
             .RSP_OUT_BUF    (0)
-        ) mem_adapter (
+        ) mem_data_adapter (
             .clk                (clk),
             .reset              (reset),
 
@@ -192,7 +192,7 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         .TAG_WIDTH_IN   (VX_MEM_TAG_A_WIDTH),
         .TAG_WIDTH_OUT  (AXI_TID_WIDTH),
         .NUM_PORTS_IN   (`VX_MEM_PORTS),
-        .NUM_PORTS_OUT  (AXI_NUM_BANKS),
+        .NUM_BANKS_OUT  (AXI_NUM_BANKS),
         .INTERLEAVE     (0),
         .REQ_OUT_BUF    ((`VX_MEM_PORTS > 1) ? 2 : 0),
         .RSP_OUT_BUF    ((`VX_MEM_PORTS > 1 || AXI_NUM_BANKS > 1) ? 2 : 0)

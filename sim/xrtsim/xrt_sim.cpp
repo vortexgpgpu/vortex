@@ -227,7 +227,7 @@ public:
       return -1;
     uint64_t base_addr = bank_id * mem_bank_size_ + addr;
     ram_->write(data, base_addr, size);
-    /*printf("%0ld: [sim] xrt-mem-write: bank_id=%0d, addr=0x%lx, size=%ld, data=0x", timestamp, bank_id, base_addr, size);
+    /*printf("%0ld: [sim] xrt-mem-write[%d]: addr=0x%lx, size=%ld, data=0x", timestamp, bank_id, base_addr, size);
     for (int i = size-1; i >= 0; --i) {
       printf("%02x", ((const uint8_t*)data)[i]);
     }
@@ -242,7 +242,7 @@ public:
       return -1;
     uint64_t base_addr = bank_id * mem_bank_size_ + addr;
     ram_->read(data, base_addr, size);
-    /*printf("%0ld: [sim] xrt-mem-read: bank_id=%0d, addr=0x%lx, size=%ld, data=0x", timestamp, bank_id, base_addr, size);
+    /*printf("%0ld: [sim] xrt-mem-read[%d]: addr=0x%lx, size=%ld, data=0x", timestamp, bank_id, base_addr, size);
     for (int i = size-1; i >= 0; --i) {
       printf("%02x", ((uint8_t*)data)[i]);
     }
@@ -491,7 +491,7 @@ private:
         mem_req->ready = false;
         pending_mem_reqs_[b].emplace_back(mem_req);
 
-        /*printf("%0ld: [sim] axi-mem-read: bank=%d, addr=0x%lx, tag=0x%x, data=0x", timestamp, b, mem_req->addr, mem_req->tag);
+        /*printf("%0ld: [sim] axi-mem-read[%d]: addr=0x%lx, tag=0x%x, data=0x", timestamp, b, mem_req->addr, mem_req->tag);
         for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
           printf("%02x", mem_req->data[b]);
         }
@@ -534,7 +534,7 @@ private:
         mem_req->ready = false;
         pending_mem_reqs_[b].emplace_back(mem_req);
 
-        /*printf("%0ld: [sim] axi-mem-write: bank=%d, addr=0x%lx, byteen=0x%lx, tag=0x%x, data=0x", timestamp, b, mem_req->addr, byteen, mem_req->tag);
+        /*printf("%0ld: [sim] axi-mem-write[%d]: addr=0x%lx, byteen=0x%lx, tag=0x%x, data=0x", timestamp, b, mem_req->addr, byteen, mem_req->tag);
         for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
           printf("%02x", m_axi_states_[b].write_req_data[i]]);
         }

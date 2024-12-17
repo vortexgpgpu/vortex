@@ -86,7 +86,7 @@ public:
 					if (!rsp_args->request.write) {
 						MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.cid, rsp_args->request.uuid};
 						rsp_args->memsim->mem_xbar_->RspOut.at(rsp_args->bank_id).push(mem_rsp, 1);
-						DT(3, rsp_args->memsim->simobject_->name() << "-mem-rsp: bank=" << rsp_args->bank_id << ", " << mem_rsp);
+						DT(3, rsp_args->memsim->simobject_->name() << "-mem-rsp[" << rsp_args->bank_id << "]: " << mem_rsp);
 					}
 					delete rsp_args;
 				},
@@ -99,7 +99,7 @@ public:
 				continue;
 			}
 
-			DT(3, simobject_->name() << "-mem-req: bank=" << i << ", " << mem_req);
+			DT(3, simobject_->name() << "-mem-req[" << i << "]: " << mem_req);
 
 			mem_xbar_->ReqOut.at(i).pop();
 			counter++;

@@ -13,6 +13,7 @@
 
 namespace eval vortex {
 
+variable info 0
 variable debug 0
 
 proc print_error {msg {do_exit 1}} {
@@ -167,21 +168,19 @@ proc get_cell_pin {cell name} {
 }
 
 proc remove_cell_from_netlist {cell} {
-  variable debug
-
-  puts "INFO: Removing cell '$cell' from the netlist."
+  variable info
 
   # Disconnect all pins of the cell
-  #foreach pin [get_pins -quiet -of_objects $cell] {
-  #  foreach net [get_nets -quiet -of_objects $pin] {
-  #    disconnect_net -net $net -objects $pin
-  #    if {$debug} {puts "DEBUG: Disconnected net '$net' from pin '$pin'."}
-  #  }
-  #}
+  foreach pin [get_pins -quiet -of_objects $cell] {
+    foreach net [get_nets -quiet -of_objects $pin] {
+      disconnect_net -net $net -objects $pin
+      if {$info} {puts "INFO: Disconnected net '$net' from pin '$pin'."}
+    }
+  }
 
   # Remove the cell
   remove_cell $cell
-  if {$debug} {puts "DEBUG: Cell '$cell' was removed successfully."}
+  if {$info} {puts "INFO: Cell '$cell' was removed successfully."}
 }
 
 proc replace_pin_source {pin source_pin} {
@@ -250,6 +249,7 @@ proc find_pin_driver {input_pin {should_exist 1}} {
 }
 
 proc create_register_next {parent reg_cell} {
+  variable info
   variable debug
 
   set hier_sep [get_hierarchy_separator]
@@ -341,7 +341,7 @@ proc create_register_next {parent reg_cell} {
   # FDSE: O = I1 ? 1 : I0; where I0=D, I1=S
   set lut_name [unique_cell_name "${parent}${hier_sep}raddr_next"]
   set lut_cell [create_cell -reference LUT2 $lut_name]
-  puts "INFO: Created lut cell: '$lut_cell'"
+  if {$info} {puts "INFO: Created lut cell: '$lut_cell'"}
 
   if {$register_type == "FDRE"} {
     set_property INIT 4'b0010 $lut_cell
@@ -389,6 +389,7 @@ proc create_register_next {parent reg_cell} {
 }
 
 proc getOrCreateVCCPin {parent} {
+  variable info
   variable debug
 
   set hier_sep [get_hierarchy_separator]
@@ -397,7 +398,7 @@ proc getOrCreateVCCPin {parent} {
   set vcc_cell [get_cells -quiet $cell_name]
   if {[llength $vcc_cell] == 0} {
     set vcc_cell [create_cell -reference VCC $cell_name]
-    puts "INFO: Created VCC cell: '$vcc_cell'"
+    if {$info} {puts "INFO: Created VCC cell: '$vcc_cell'"}
   } elseif {[llength $vcc_cell] > 1} {
     puts "ERROR: Multiple VCC cells found with name '$cell_name'."
     exit -1
@@ -416,6 +417,7 @@ proc getOrCreateVCCPin {parent} {
 }
 
 proc getOrCreateGNDPin {parent} {
+  variable info
   variable debug
 
   set hier_sep [get_hierarchy_separator]
@@ -424,7 +426,7 @@ proc getOrCreateGNDPin {parent} {
   set gnd_cell [get_cells -quiet $cell_name]
   if {[llength $gnd_cell] == 0} {
     set gnd_cell [create_cell -reference GND $cell_name]
-    puts "INFO: Created GND cell: '$gnd_cell'"
+    if {$info} {puts "INFO: Created GND cell: '$gnd_cell'"}
   } elseif {[llength $gnd_cell] > 1} {
     puts "ERROR: Multiple GND cells found with name '$cell_name'."
     exit -1
@@ -501,6 +503,7 @@ proc replace_net_source {net source_pin} {
 }
 
 proc resolve_async_bram {inst} {
+  variable info
   variable debug
 
   puts "INFO: Resolving asynchronous BRAM patch: '$inst'."
@@ -575,27 +578,27 @@ proc resolve_async_bram {inst} {
 
   # do we have a fully registered read address?
   if {[llength $reg_next_pins] == [llength $raddr_w_nets]} {
-    puts "INFO: Fully registered read address detected."
+    if {$info} {puts "INFO: Fully registered read address detected."}
 
     # Connect all reg_next_pins to all input pins attached to raddr_s_nets
     set addr_width [llength $raddr_w_nets]
     for {set addr_idx 0} {$addr_idx < $addr_width} {incr addr_idx} {
       set raddr_s_net [lindex $raddr_s_nets $addr_idx]
       set reg_next_pin [lindex $reg_next_pins $addr_idx]
-      puts "INFO: Connecting pin '$reg_next_pin' to '$raddr_s_net's pins."
+      if {$info} {puts "INFO: Connecting pin '$reg_next_pin' to '$raddr_s_net's pins."}
       # Connect reg_next_pin to all input pins attached to raddr_s_net
       replace_net_source $raddr_s_net $reg_next_pin
     }
 
     # Connect reg_ce_src_pin to all input pins attached to read_s_net
-    puts "INFO: Connecting pin '$reg_ce_src_pin' to '$read_s_net's pins."
+    if {$info} {puts "INFO: Connecting pin '$reg_ce_src_pin' to '$read_s_net's pins."}
     replace_net_source $read_s_net $reg_ce_src_pin
 
     # Create Const<1>'s pin
     set vcc_pin [getOrCreateVCCPin $inst]
 
     # Connect vcc_pin to all input pins attached to is_raddr_reg_net
-    puts "INFO: Connecting pin '$vcc_pin' to '$is_raddr_reg_net's pins."
+    if {$info} {puts "INFO: Connecting pin '$vcc_pin' to '$is_raddr_reg_net's pins."}
     replace_net_source $is_raddr_reg_net $vcc_pin
 
     # Remove all async_ram cells
@@ -609,7 +612,7 @@ proc resolve_async_bram {inst} {
     set gnd_pin [getOrCreateGNDPin $inst]
 
     # Connect gnd_pin to all input pins attached to is_raddr_reg_net
-    puts "INFO: Connecting pin '$gnd_pin' to '$is_raddr_reg_net's pins."
+    if {$info} {puts "INFO: Connecting pin '$gnd_pin' to '$is_raddr_reg_net's pins."}
     replace_net_source $is_raddr_reg_net $gnd_pin
 
     # Remove all sync_ram cells

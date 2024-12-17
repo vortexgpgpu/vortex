@@ -50,6 +50,7 @@ module VX_sp_ram #(
     parameter OUT_REG     = 0,
     parameter LUTRAM      = 0,
     parameter `STRING RDW_MODE = "W", // W: write-first, R: read-first, N: no-change, U: undefined
+    parameter RADDR_REG   = 0, // read address registered hint
     parameter RDW_ASSERT  = 0,
     parameter RESET_RAM   = 0,
     parameter INIT_ENABLE = 0,
@@ -68,9 +69,10 @@ module VX_sp_ram #(
 );
     localparam WSELW = DATAW / WRENW;
     `UNUSED_PARAM (LUTRAM)
+    `UNUSED_PARAM (RADDR_REG)
 
     `STATIC_ASSERT(!(WRENW * WSELW != DATAW), ("invalid parameter"))
-    `STATIC_ASSERT((RDW_MODE == "R" || RDW_MODE == "W" || RDW_MODE == "N"), ("invalid parameter"))
+    `STATIC_ASSERT((RDW_MODE == "R" || RDW_MODE == "W" || RDW_MODE == "N" || RDW_MODE == "U"), ("invalid parameter"))
     `UNUSED_PARAM (RDW_ASSERT)
 
 `ifdef SYNTHESIS
@@ -323,6 +325,7 @@ module VX_sp_ram #(
                 .WRENW      (WRENW),
                 .DUAL_PORT  (0),
                 .FORCE_BRAM (FORCE_BRAM),
+                .RADDR_REG  (RADDR_REG),
                 .WRITE_FIRST(RDW_MODE == "W"),
                 .INIT_ENABLE(INIT_ENABLE),
                 .INIT_FILE  (INIT_FILE),

@@ -24,6 +24,21 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_AFU
 DBG_TRACE_FLAGS += -DDBG_TRACE_SCOPE
 DBG_TRACE_FLAGS += -DDBG_TRACE_GBAR
 
+# Platform parameters
+ifeq (,$(findstring PLATFORM_MEMORY_BANKS,$(CONFIGS)))
+	CONFIGS += -DPLATFORM_MEMORY_BANKS=2
+endif
+ifeq (,$(findstring PLATFORM_MEMORY_ADDR_WIDTH,$(CONFIGS)))
+	ifeq ($(XLEN),64)
+		CONFIGS += -DPLATFORM_MEMORY_ADDR_WIDTH=47
+	else
+		CONFIGS += -DPLATFORM_MEMORY_ADDR_WIDTH=31
+	endif
+endif
+ifeq (,$(findstring PLATFORM_MEMORY_DATA_WIDTH,$(CONFIGS)))
+	CONFIGS += -DPLATFORM_MEMORY_DATA_WIDTH=512
+endif
+
 DBG_FLAGS += -DDEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 
 RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
@@ -33,11 +48,13 @@ ifneq (,$(findstring FPU_FPNEW,$(CONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
 	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -I$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/cvfpu/src
 endif
-RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
+RTL_INCLUDE = -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 
 SRCS = $(COMMON_DIR)/util.cpp $(COMMON_DIR)/mem.cpp $(COMMON_DIR)/softfloat_ext.cpp $(COMMON_DIR)/rvfloats.cpp $(COMMON_DIR)/dram_sim.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
 SRCS += $(SRC_DIR)/processor.cpp
+
+TOP = rtlsim_shim
 
 VL_FLAGS = --exe
 VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic
@@ -49,7 +66,7 @@ VL_FLAGS += -DXLEN_$(XLEN)
 VL_FLAGS += $(CONFIGS)
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(RTL_PKGS)
-VL_FLAGS += --cc Vortex --top-module Vortex
+VL_FLAGS += --cc $(TOP) --top-module $(TOP)
 
 CXXFLAGS += $(CONFIGS)
 

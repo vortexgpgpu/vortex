@@ -88,7 +88,8 @@ module VX_cache_tags #(
         VX_sp_ram #(
             .DATAW (TAG_WIDTH),
             .SIZE  (`CS_LINES_PER_BANK),
-            .RDW_MODE ("W")
+            .RDW_MODE ("W"),
+            .RADDR_REG (1)
         ) tag_store (
             .clk   (clk),
             .reset (reset),

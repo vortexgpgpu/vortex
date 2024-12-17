@@ -14,7 +14,7 @@
 `include "VX_platform.vh"
 
 `TRACING_OFF
-module VX_mem_adapter #(
+module VX_mem_data_adapter #(
     parameter SRC_DATA_WIDTH = 1,
     parameter SRC_ADDR_WIDTH = 1,
     parameter DST_DATA_WIDTH = 1,

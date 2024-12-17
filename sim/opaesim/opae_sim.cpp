@@ -441,7 +441,7 @@ private:
           }
         }
 
-        /*printf("%0ld: [sim] MEM Wr Req: bank=%d, addr=0x%lx, byteen=0x%lx, data=0x", timestamp, b, byte_addr, byteen);
+        /*printf("%0ld: [sim] MEM Wr Req[%d]: addr=0x%lx, byteen=0x%lx, data=0x", timestamp, b, byte_addr, byteen);
         for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
           printf("%02x", data[i]);
         }
@@ -466,7 +466,7 @@ private:
         mem_req->ready = false;
         pending_mem_reqs_[b].emplace_back(mem_req);
 
-        /*printf("%0ld: [sim] MEM Rd Req: bank=%d, addr=0x%lx, pending={", timestamp, b, byte_addr);
+        /*printf("%0ld: [sim] MEM Rd Req[%d]: addr=0x%lx, pending={", timestamp, b, byte_addr);
         for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
           printf("%02x", mem_req->data[i]);
         }

@@ -78,12 +78,12 @@ public:
 		ramulator_memorysystem_->tick();
 	}
 
-  bool send_request(bool is_write, uint64_t addr, int source_id, ResponseCallback callback, void* arg) {
+  bool send_request(bool is_write, uint64_t addr, int source_id, ResponseCallback response_cb, void* arg) {
     if (!ramulator_frontend_->receive_external_requests(
 			is_write ? Ramulator::Request::Type::Write : Ramulator::Request::Type::Read,
 			addr,
 			source_id,
-			[callback_ = std::move(callback), arg_ = std::move(arg)](Ramulator::Request& /*dram_req*/) {
+			[callback_ = std::move(response_cb), arg_ = std::move(arg)](Ramulator::Request& /*dram_req*/) {
 				callback_(arg_);
 			}
 		)) {
@@ -91,7 +91,7 @@ public:
 		}
 		if (is_write) {
 			// Ramulator does not handle write responses, so we call the callback ourselves
-			callback(arg);
+			response_cb(arg);
 		}
 		return true;
   }

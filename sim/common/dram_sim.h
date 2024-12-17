@@ -26,7 +26,7 @@ public:
 
   void tick();
 
-  bool send_request(bool is_write, uint64_t addr, int source_id, ResponseCallback callback, void* arg);
+  bool send_request(bool is_write, uint64_t addr, int source_id, ResponseCallback response_cb, void* arg);
 
 private:
 	class Impl;

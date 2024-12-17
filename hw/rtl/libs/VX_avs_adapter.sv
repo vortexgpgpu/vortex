@@ -20,7 +20,7 @@ module VX_avs_adapter #(
     parameter ADDR_WIDTH_OUT= 32,
     parameter BURST_WIDTH   = 1,
     parameter NUM_PORTS_IN  = 1,
-    parameter NUM_PORTS_OUT = 1,
+    parameter NUM_BANKS_OUT = 1,
     parameter TAG_WIDTH     = 1,
     parameter RD_QUEUE_SIZE = 1,
     parameter INTERLEAVE    = 0,
@@ -47,59 +47,59 @@ module VX_avs_adapter #(
     input  wire                     mem_rsp_ready [NUM_PORTS_IN],
 
     // AVS bus
-    output wire [DATA_WIDTH-1:0]    avs_writedata [NUM_PORTS_OUT],
-    input  wire [DATA_WIDTH-1:0]    avs_readdata [NUM_PORTS_OUT],
-    output wire [ADDR_WIDTH_OUT-1:0] avs_address [NUM_PORTS_OUT],
-    input  wire                     avs_waitrequest [NUM_PORTS_OUT],
-    output wire                     avs_write [NUM_PORTS_OUT],
-    output wire                     avs_read [NUM_PORTS_OUT],
-    output wire [DATA_WIDTH/8-1:0]  avs_byteenable [NUM_PORTS_OUT],
-    output wire [BURST_WIDTH-1:0]   avs_burstcount [NUM_PORTS_OUT],
-    input  wire                     avs_readdatavalid [NUM_PORTS_OUT]
+    output wire [DATA_WIDTH-1:0]    avs_writedata [NUM_BANKS_OUT],
+    input  wire [DATA_WIDTH-1:0]    avs_readdata [NUM_BANKS_OUT],
+    output wire [ADDR_WIDTH_OUT-1:0] avs_address [NUM_BANKS_OUT],
+    input  wire                     avs_waitrequest [NUM_BANKS_OUT],
+    output wire                     avs_write [NUM_BANKS_OUT],
+    output wire                     avs_read [NUM_BANKS_OUT],
+    output wire [DATA_WIDTH/8-1:0]  avs_byteenable [NUM_BANKS_OUT],
+    output wire [BURST_WIDTH-1:0]   avs_burstcount [NUM_BANKS_OUT],
+    input  wire                     avs_readdatavalid [NUM_BANKS_OUT]
 );
     localparam DATA_SIZE      = DATA_WIDTH/8;
-    localparam PORT_SEL_BITS  = `CLOG2(NUM_PORTS_OUT);
-    localparam PORT_SEL_WIDTH = `UP(PORT_SEL_BITS);
-    localparam DST_ADDR_WDITH = ADDR_WIDTH_OUT + PORT_SEL_BITS; // to input space
-    localparam PORT_OFFSETW   = DST_ADDR_WDITH - PORT_SEL_BITS;
+    localparam BANK_SEL_BITS  = `CLOG2(NUM_BANKS_OUT);
+    localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
+    localparam DST_ADDR_WDITH = ADDR_WIDTH_OUT + BANK_SEL_BITS; // convert output addresss to input space
+    localparam BANK_ADDR_WIDTH = DST_ADDR_WDITH - BANK_SEL_BITS;
     localparam NUM_PORTS_IN_BITS = `CLOG2(NUM_PORTS_IN);
     localparam NUM_PORTS_IN_WIDTH = `UP(NUM_PORTS_IN_BITS);
     localparam REQ_QUEUE_DATAW = TAG_WIDTH + NUM_PORTS_IN_BITS;
-    localparam ARB_DATAW = 1 + PORT_OFFSETW + DATA_WIDTH + DATA_SIZE + TAG_WIDTH;
-    localparam RSP_DATAW = DATA_WIDTH + TAG_WIDTH;
+    localparam ARB_DATAW      = 1 + BANK_ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + TAG_WIDTH;
+    localparam RSP_XBAR_DATAW = DATA_WIDTH + TAG_WIDTH;
 
     `STATIC_ASSERT ((DST_ADDR_WDITH >= ADDR_WIDTH_IN), ("invalid address width: current=%0d, expected=%0d", DST_ADDR_WDITH, ADDR_WIDTH_IN))
 
-    // Ports selection
+    // Banks selection
 
-    wire [NUM_PORTS_IN-1:0][PORT_SEL_WIDTH-1:0] req_port_out_sel;
-    wire [NUM_PORTS_IN-1:0][PORT_OFFSETW-1:0] req_port_out_off;
+    wire [NUM_PORTS_IN-1:0][BANK_SEL_WIDTH-1:0] req_bank_sel;
+    wire [NUM_PORTS_IN-1:0][BANK_ADDR_WIDTH-1:0] req_bank_addr;
 
-    if (NUM_PORTS_OUT > 1) begin : g_port_sel
+    if (NUM_BANKS_OUT > 1) begin : g_port_sel
         for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_i
-            wire [DST_ADDR_WDITH-1:0] mem_req_addr_out = DST_ADDR_WDITH'(mem_req_addr[i]);
+            wire [DST_ADDR_WDITH-1:0] mem_req_addr_dst = DST_ADDR_WDITH'(mem_req_addr[i]);
             if (INTERLEAVE) begin : g_interleave
-                assign req_port_out_sel[i] = mem_req_addr_out[PORT_SEL_BITS-1:0];
-                assign req_port_out_off[i] = mem_req_addr_out[PORT_SEL_BITS +: PORT_OFFSETW];
+                assign req_bank_sel[i] = mem_req_addr_dst[BANK_SEL_BITS-1:0];
+                assign req_bank_addr[i] = mem_req_addr_dst[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
             end else begin : g_no_interleave
-                assign req_port_out_sel[i] = mem_req_addr_out[PORT_OFFSETW +: PORT_SEL_BITS];
-                assign req_port_out_off[i] = mem_req_addr_out[PORT_OFFSETW-1:0];
+                assign req_bank_sel[i] = mem_req_addr_dst[BANK_ADDR_WIDTH +: BANK_SEL_BITS];
+                assign req_bank_addr[i] = mem_req_addr_dst[BANK_ADDR_WIDTH-1:0];
             end
         end
     end else begin : g_no_port_sel
         for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_i
-            assign req_port_out_sel[i] = '0;
-            assign req_port_out_off[i] = DST_ADDR_WDITH'(mem_req_addr[i]);
+            assign req_bank_sel[i] = '0;
+            assign req_bank_addr[i] = DST_ADDR_WDITH'(mem_req_addr[i]);
         end
     end
 
     // Request ack
 
-    wire [NUM_PORTS_OUT-1:0][NUM_PORTS_IN-1:0] arb_ready_in;
-    wire [NUM_PORTS_IN-1:0][NUM_PORTS_OUT-1:0] arb_ready_in_w;
+    wire [NUM_BANKS_OUT-1:0][NUM_PORTS_IN-1:0] arb_ready_in;
+    wire [NUM_PORTS_IN-1:0][NUM_BANKS_OUT-1:0] arb_ready_in_w;
 
     VX_transpose #(
-        .N (NUM_PORTS_OUT),
+        .N (NUM_BANKS_OUT),
         .M (NUM_PORTS_IN)
     ) rdy_in_transpose (
         .data_in  (arb_ready_in),
@@ -112,12 +112,12 @@ module VX_avs_adapter #(
 
     // Request handling ///////////////////////////////////////////////////////
 
-    wire [NUM_PORTS_OUT-1:0][REQ_QUEUE_DATAW-1:0] rd_req_queue_data_out;
-    wire [NUM_PORTS_OUT-1:0] rd_req_queue_pop;
+    wire [NUM_BANKS_OUT-1:0][REQ_QUEUE_DATAW-1:0] rd_req_queue_data_out;
+    wire [NUM_BANKS_OUT-1:0] rd_req_queue_pop;
 
-    for (genvar i = 0; i < NUM_PORTS_OUT; ++i) begin : g_requests
+    for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_requests
 
-        wire [PORT_OFFSETW-1:0] arb_addr_out;
+        wire [BANK_ADDR_WIDTH-1:0] arb_addr_out;
         wire [TAG_WIDTH-1:0] arb_tag_out;
         wire [NUM_PORTS_IN_WIDTH-1:0] arb_sel_out;
         wire [DATA_WIDTH-1:0] arb_data_out;
@@ -129,11 +129,11 @@ module VX_avs_adapter #(
         wire [NUM_PORTS_IN-1:0] arb_valid_in;
 
         for (genvar j = 0; j < NUM_PORTS_IN; ++j) begin : g_valid_in
-            assign arb_valid_in[j] = mem_req_valid[j] && (req_port_out_sel[j] == i);
+            assign arb_valid_in[j] = mem_req_valid[j] && (req_bank_sel[j] == i);
         end
 
         for (genvar j = 0; j < NUM_PORTS_IN; ++j) begin : g_data_in
-            assign arb_data_in[j] = {mem_req_rw[j], req_port_out_off[j], mem_req_byteen[j], mem_req_data[j], mem_req_tag[j]};
+            assign arb_data_in[j] = {mem_req_rw[j], req_bank_addr[j], mem_req_byteen[j], mem_req_data[j], mem_req_tag[j]};
         end
 
         VX_stream_arb #(
@@ -200,7 +200,7 @@ module VX_avs_adapter #(
         wire                  buf_valid_out;
         wire                  buf_rw_out;
         wire [DATA_SIZE-1:0]  buf_byteen_out;
-        wire [PORT_OFFSETW-1:0] buf_addr_out;
+        wire [BANK_ADDR_WIDTH-1:0] buf_addr_out;
         wire [DATA_WIDTH-1:0] buf_data_out;
         wire                  buf_ready_out;
 
@@ -211,7 +211,7 @@ module VX_avs_adapter #(
         assign arb_ready_out = arb_ready_out_w && rd_req_queue_ready;
 
         VX_elastic_buffer #(
-            .DATAW    (1 + DATA_SIZE + PORT_OFFSETW + DATA_WIDTH),
+            .DATAW    (1 + DATA_SIZE + BANK_ADDR_WIDTH + DATA_WIDTH),
             .SIZE     (`TO_OUT_BUF_SIZE(REQ_OUT_BUF)),
             .OUT_REG  (`TO_OUT_BUF_REG(REQ_OUT_BUF))
         ) req_buf (
@@ -236,71 +236,71 @@ module VX_avs_adapter #(
 
     // Responses handling /////////////////////////////////////////////////////
 
-    wire [NUM_PORTS_OUT-1:0] rd_rsp_valid_in;
-    wire [NUM_PORTS_OUT-1:0][RSP_DATAW-1:0] rd_rsp_data_in;
-    wire [NUM_PORTS_OUT-1:0][NUM_PORTS_IN_WIDTH-1:0] rd_rsp_sel_in;
-    wire [NUM_PORTS_OUT-1:0] rd_rsp_ready_in;
+    wire [NUM_BANKS_OUT-1:0] rsp_xbar_valid_in;
+    wire [NUM_BANKS_OUT-1:0][RSP_XBAR_DATAW-1:0] rsp_xbar_data_in;
+    wire [NUM_BANKS_OUT-1:0][NUM_PORTS_IN_WIDTH-1:0] rsp_xbar_sel_in;
+    wire [NUM_BANKS_OUT-1:0] rsp_xbar_ready_in;
 
-    wire [NUM_PORTS_IN-1:0] rd_rsp_valid_out;
-    wire [NUM_PORTS_IN-1:0][RSP_DATAW-1:0] rd_rsp_data_out;
-    wire [NUM_PORTS_IN-1:0] rd_rsp_ready_out;
+    wire [NUM_PORTS_IN-1:0] rsp_xbar_valid_out;
+    wire [NUM_PORTS_IN-1:0][RSP_XBAR_DATAW-1:0] rsp_xbar_data_out;
+    wire [NUM_PORTS_IN-1:0] rsp_xbar_ready_out;
 
-    for (genvar i = 0; i < NUM_PORTS_OUT; ++i) begin : g_rd_rsp_queues
+    for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_rsp_queues
 
-        wire [DATA_WIDTH-1:0] rd_rsp_queue_data_out;
-        wire rd_rsp_queue_empty;
+        wire [DATA_WIDTH-1:0] rsp_queue_data_out;
+        wire rsp_queue_empty;
 
         VX_fifo_queue #(
             .DATAW (DATA_WIDTH),
             .DEPTH (RD_QUEUE_SIZE)
-        ) rd_rsp_queue (
+        ) rsp_queue (
             .clk      (clk),
             .reset    (reset),
             .push     (avs_readdatavalid[i]),
             .pop      (rd_req_queue_pop[i]),
             .data_in  (avs_readdata[i]),
-            .data_out (rd_rsp_queue_data_out),
-            .empty    (rd_rsp_queue_empty),
+            .data_out (rsp_queue_data_out),
+            .empty    (rsp_queue_empty),
             `UNUSED_PIN (full),
             `UNUSED_PIN (alm_empty),
             `UNUSED_PIN (alm_full),
             `UNUSED_PIN (size)
         );
 
-        assign rd_rsp_valid_in[i] = ~rd_rsp_queue_empty;
-        assign rd_rsp_data_in[i] = {rd_rsp_queue_data_out, rd_req_queue_data_out[i][NUM_PORTS_IN_BITS +: TAG_WIDTH]};
+        assign rsp_xbar_valid_in[i] = ~rsp_queue_empty;
+        assign rsp_xbar_data_in[i] = {rsp_queue_data_out, rd_req_queue_data_out[i][NUM_PORTS_IN_BITS +: TAG_WIDTH]};
         if (NUM_PORTS_IN > 1) begin : g_input_sel
-            assign rd_rsp_sel_in[i] = rd_req_queue_data_out[i][0 +: NUM_PORTS_IN_BITS];
+            assign rsp_xbar_sel_in[i] = rd_req_queue_data_out[i][0 +: NUM_PORTS_IN_BITS];
         end else begin : g_no_input_sel
-            assign rd_rsp_sel_in[i] = 0;
+            assign rsp_xbar_sel_in[i] = 0;
         end
-        assign rd_req_queue_pop[i] = rd_rsp_valid_in[i] && rd_rsp_ready_in[i];
+        assign rd_req_queue_pop[i] = rsp_xbar_valid_in[i] && rsp_xbar_ready_in[i];
     end
 
     VX_stream_xbar #(
-        .NUM_INPUTS (NUM_PORTS_OUT),
+        .NUM_INPUTS (NUM_BANKS_OUT),
         .NUM_OUTPUTS(NUM_PORTS_IN),
-        .DATAW      (RSP_DATAW),
+        .DATAW      (RSP_XBAR_DATAW),
         .ARBITER    (ARBITER),
         .OUT_BUF    (RSP_OUT_BUF)
-    ) rd_rsp_xbar (
+    ) rsp_xbar (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (rd_rsp_valid_in),
-        .data_in   (rd_rsp_data_in),
-        .ready_in  (rd_rsp_ready_in),
-        .sel_in    (rd_rsp_sel_in),
-        .data_out  (rd_rsp_data_out),
-        .valid_out (rd_rsp_valid_out),
-        .ready_out (rd_rsp_ready_out),
+        .valid_in  (rsp_xbar_valid_in),
+        .data_in   (rsp_xbar_data_in),
+        .ready_in  (rsp_xbar_ready_in),
+        .sel_in    (rsp_xbar_sel_in),
+        .data_out  (rsp_xbar_data_out),
+        .valid_out (rsp_xbar_valid_out),
+        .ready_out (rsp_xbar_ready_out),
         `UNUSED_PIN (collisions),
         `UNUSED_PIN (sel_out)
     );
 
-    for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_rd_rsp_data_out
-        assign mem_rsp_valid[i] = rd_rsp_valid_out[i];
-        assign {mem_rsp_data[i], mem_rsp_tag[i]} = rd_rsp_data_out[i];
-        assign rd_rsp_ready_out[i] = mem_rsp_ready[i];
+    for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_rsp_xbar_data_out
+        assign mem_rsp_valid[i] = rsp_xbar_valid_out[i];
+        assign {mem_rsp_data[i], mem_rsp_tag[i]} = rsp_xbar_data_out[i];
+        assign rsp_xbar_ready_out[i] = mem_rsp_ready[i];
     end
 
 endmodule

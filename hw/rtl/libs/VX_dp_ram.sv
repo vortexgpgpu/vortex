@@ -50,6 +50,7 @@ module VX_dp_ram #(
     parameter OUT_REG     = 0,
     parameter LUTRAM      = 0,
     parameter `STRING RDW_MODE = "W", // W: write-first, R: read-first, U: undefined
+    parameter RADDR_REG   = 0, // read address registered hint
     parameter RDW_ASSERT  = 0,
     parameter RESET_RAM   = 0,
     parameter INIT_ENABLE = 0,
@@ -69,6 +70,7 @@ module VX_dp_ram #(
 );
     localparam WSELW = DATAW / WRENW;
     `UNUSED_PARAM (LUTRAM)
+    `UNUSED_PARAM (RADDR_REG)
 
     `STATIC_ASSERT(!(WRENW * WSELW != DATAW), ("invalid parameter"))
     `STATIC_ASSERT((RDW_MODE == "R" || RDW_MODE == "W" || RDW_MODE == "U"), ("invalid parameter"))
@@ -134,7 +136,7 @@ module VX_dp_ram #(
                     end
                     assign rdata = rdata_r;
                 end
-            end else begin : g_undefined
+            end else if (RDW_MODE == "U") begin : g_undefined
                 if (WRENW != 1) begin : g_wren
                     `USE_BLOCK_BRAM `RAM_ARRAY_WREN
                     `RAM_INITIALIZATION
@@ -220,7 +222,7 @@ module VX_dp_ram #(
                     end
                     assign rdata = rdata_r;
                 end
-            end else begin : g_undefined
+            end else if (RDW_MODE == "U") begin : g_undefined
                 if (WRENW != 1) begin : g_wren
                     `RAM_ARRAY_WREN
                     `RAM_INITIALIZATION
@@ -260,6 +262,7 @@ module VX_dp_ram #(
                 .WRENW      (WRENW),
                 .DUAL_PORT  (1),
                 .FORCE_BRAM (FORCE_BRAM),
+                .RADDR_REG  (RADDR_REG),
                 .WRITE_FIRST(RDW_MODE == "W"),
                 .INIT_ENABLE(INIT_ENABLE),
                 .INIT_FILE  (INIT_FILE),
