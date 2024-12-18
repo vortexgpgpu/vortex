@@ -158,6 +158,7 @@ cache()
 
     # reduce l1 line size
     CONFIGS="-DL1_LINE_SIZE=$XSIZE" ./ci/blackbox.sh --driver=rtlsim --app=io_addr
+    CONFIGS="-DL1_LINE_SIZE=$XSIZE -DDISABLE_L1" ./ci/blackbox.sh --driver=rtlsim --app=io_addr
     CONFIGS="-DL1_LINE_SIZE=$XSIZE" ./ci/blackbox.sh --driver=simx --app=io_addr
     CONFIGS="-DL1_LINE_SIZE=$XSIZE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
     CONFIGS="-DL1_LINE_SIZE=$XSIZE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=sgemmx

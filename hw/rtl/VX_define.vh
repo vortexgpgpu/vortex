@@ -271,7 +271,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `define CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, mem_ports, uuid_width) \
-        (uuid_width + `CLOG2(mshr_size) + `CLOG2(num_banks / mem_ports))
+        (uuid_width + `CLOG2(mshr_size) + `CLOG2(`CDIV(num_banks, mem_ports)))
 
 `define CACHE_BYPASS_TAG_WIDTH(num_reqs, mem_ports, line_size, word_size, tag_width) \
         (`CLOG2(`CDIV(num_reqs, mem_ports)) + `CLOG2(line_size / word_size) + tag_width)
@@ -438,6 +438,23 @@
     end \
     /* verilator lint_on GENUNNAMED */ \
     assign dst.rsp_ready = src.rsp_ready
+
+`define INIT_VX_MEM_BUS_IF(itf) \
+    assign itf.req_valid = 0; \
+    assign itf.req_data = '0; \
+    `UNUSED_VAR (itf.req_ready) \
+    `UNUSED_VAR (itf.rsp_valid) \
+    `UNUSED_VAR (itf.rsp_data) \
+    assign itf.rsp_ready = 0;
+
+`define UNUSED_VX_MEM_BUS_IF(itf) \
+    `UNUSED_VAR (itf.req_valid) \
+    `UNUSED_VAR (itf.req_data) \
+    assign itf.req_ready = 0; \
+    assign itf.rsp_valid = 0; \
+    assign itf.rsp_data  = '0; \
+    `UNUSED_VAR (itf.rsp_ready)
+
 
 `define BUFFER_DCR_BUS_IF(dst, src, ena, latency) \
     /* verilator lint_off GENUNNAMED */ \

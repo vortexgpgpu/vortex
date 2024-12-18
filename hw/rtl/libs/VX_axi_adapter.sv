@@ -120,20 +120,20 @@ module VX_axi_adapter #(
     wire [NUM_PORTS_IN-1:0][BANK_SEL_WIDTH-1:0] req_bank_sel;
     wire [NUM_PORTS_IN-1:0][BANK_ADDR_WIDTH-1:0] req_bank_addr;
 
-    if (NUM_BANKS_OUT > 1) begin : g_port_sel
+    if (NUM_BANKS_OUT > 1) begin : g_bank_sel
         for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_i
-            wire [DST_ADDR_WDITH-1:0] mem_req_addr_out = DST_ADDR_WDITH'(mem_req_addr[i]);
+            wire [DST_ADDR_WDITH-1:0] mem_req_addr_dst = DST_ADDR_WDITH'(mem_req_addr[i]);
             if (INTERLEAVE) begin : g_interleave
-                assign req_bank_sel[i] = mem_req_addr_out[BANK_SEL_BITS-1:0];
-                assign req_bank_addr[i] = mem_req_addr_out[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
+                assign req_bank_sel[i]  = mem_req_addr_dst[BANK_SEL_BITS-1:0];
+                assign req_bank_addr[i] = mem_req_addr_dst[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
             end else begin : g_no_interleave
-                assign req_bank_sel[i] = mem_req_addr_out[BANK_ADDR_WIDTH +: BANK_SEL_BITS];
-                assign req_bank_addr[i] = mem_req_addr_out[BANK_ADDR_WIDTH-1:0];
+                assign req_bank_sel[i]  = mem_req_addr_dst[BANK_ADDR_WIDTH +: BANK_SEL_BITS];
+                assign req_bank_addr[i] = mem_req_addr_dst[BANK_ADDR_WIDTH-1:0];
             end
         end
-    end else begin : g_no_port_sel
+    end else begin : g_no_bank_sel
         for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_i
-            assign req_bank_sel[i] = '0;
+            assign req_bank_sel[i]  = '0;
             assign req_bank_addr[i] = DST_ADDR_WDITH'(mem_req_addr[i]);
         end
     end

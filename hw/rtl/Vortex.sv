@@ -106,12 +106,12 @@ module Vortex import VX_gpu_pkg::*; (
     );
 
     for (genvar i = 0; i < `L3_MEM_PORTS; ++i) begin : g_mem_bus_if
-        assign mem_req_valid[i] = mem_bus_if[i].req_valid;
-        assign mem_req_rw[i]    = mem_bus_if[i].req_data.rw;
-        assign mem_req_byteen[i]= mem_bus_if[i].req_data.byteen;
-        assign mem_req_addr[i]  = mem_bus_if[i].req_data.addr;
-        assign mem_req_data[i]  = mem_bus_if[i].req_data.data;
-        assign mem_req_tag[i]   = mem_bus_if[i].req_data.tag;
+        assign mem_req_valid[i]  = mem_bus_if[i].req_valid;
+        assign mem_req_rw[i]     = mem_bus_if[i].req_data.rw;
+        assign mem_req_byteen[i] = mem_bus_if[i].req_data.byteen;
+        assign mem_req_addr[i]   = mem_bus_if[i].req_data.addr;
+        assign mem_req_data[i]   = mem_bus_if[i].req_data.data;
+        assign mem_req_tag[i]    = mem_bus_if[i].req_data.tag;
         `UNUSED_VAR (mem_bus_if[i].req_data.flags)
         assign mem_bus_if[i].req_ready = mem_req_ready[i];
 

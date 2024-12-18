@@ -18,8 +18,7 @@ module VX_cache_bypass #(
     parameter MEM_PORTS         = 1,
     parameter TAG_SEL_IDX       = 0,
 
-    parameter PASSTHRU          = 0,
-    parameter NC_ENABLE         = 0,
+    parameter CACHE_ENABLE      = 0,
 
     parameter WORD_SIZE         = 1,
     parameter LINE_SIZE         = 1,
@@ -51,16 +50,16 @@ module VX_cache_bypass #(
     // Memory request out
     VX_mem_bus_if.master    mem_bus_out_if [MEM_PORTS]
 );
-    localparam DIRECT_PASSTHRU   = PASSTHRU && (`CS_WORD_SEL_BITS == 0) && (NUM_REQS == 1);
+    localparam DIRECT_PASSTHRU   = !CACHE_ENABLE && (`CS_WORD_SEL_BITS == 0) && (NUM_REQS == MEM_PORTS);
     localparam CORE_DATA_WIDTH   = WORD_SIZE * 8;
     localparam WORDS_PER_LINE    = LINE_SIZE / WORD_SIZE;
     localparam WSEL_BITS         = `CLOG2(WORDS_PER_LINE);
 
     localparam CORE_TAG_ID_WIDTH = CORE_TAG_WIDTH - UUID_WIDTH;
-    localparam MEM_TAG_ID_WIDTH  = `CLOG2(NUM_REQS / MEM_PORTS) + CORE_TAG_ID_WIDTH;
+    localparam MEM_TAG_ID_WIDTH  = `CLOG2(`CDIV(NUM_REQS, MEM_PORTS)) + CORE_TAG_ID_WIDTH;
     localparam MEM_TAG_NC1_WIDTH = UUID_WIDTH + MEM_TAG_ID_WIDTH;
-    localparam MEM_TAG_NC2_WIDTH = WSEL_BITS + MEM_TAG_NC1_WIDTH;
-    localparam MEM_TAG_OUT_WIDTH = `MAX(MEM_TAG_IN_WIDTH, MEM_TAG_NC2_WIDTH);
+    localparam MEM_TAG_NC2_WIDTH = MEM_TAG_NC1_WIDTH + WSEL_BITS;
+    localparam MEM_TAG_OUT_WIDTH = CACHE_ENABLE ? `MAX(MEM_TAG_IN_WIDTH, MEM_TAG_NC2_WIDTH) : MEM_TAG_NC2_WIDTH;
 
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % `MEM_BLOCK_SIZE), ("invalid parameter"))
 
@@ -69,23 +68,21 @@ module VX_cache_bypass #(
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
         .TAG_WIDTH (CORE_TAG_WIDTH)
-    ) core_bus_nc_switch_if[2 * NUM_REQS]();
+    ) core_bus_nc_switch_if[(CACHE_ENABLE ? 2 : 1) * NUM_REQS]();
 
     wire [NUM_REQS-1:0] core_req_nc_sel;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req_is_nc
-        if (PASSTHRU) begin : g_passthru
-            assign core_req_nc_sel[i] = 1'b1;
-        end else if (NC_ENABLE) begin : g_nc
-            assign core_req_nc_sel[i] = core_bus_in_if[i].req_data.flags[`MEM_REQ_FLAG_IO];
-        end else begin : g_no_nc
+        if (CACHE_ENABLE) begin : g_cache
+            assign core_req_nc_sel[i] = ~core_bus_in_if[i].req_data.flags[`MEM_REQ_FLAG_IO];
+        end else begin : g_no_cache
             assign core_req_nc_sel[i] = 1'b0;
         end
     end
 
     VX_mem_switch #(
         .NUM_INPUTS  (NUM_REQS),
-        .NUM_OUTPUTS (2 * NUM_REQS),
+        .NUM_OUTPUTS ((CACHE_ENABLE ? 2 : 1) * NUM_REQS),
         .DATA_SIZE   (WORD_SIZE),
         .TAG_WIDTH   (CORE_TAG_WIDTH),
         .ARBITER     ("R"),
@@ -104,24 +101,27 @@ module VX_cache_bypass #(
         .TAG_WIDTH (CORE_TAG_WIDTH)
     ) core_bus_in_nc_if[NUM_REQS]();
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_in_cs
-        assign core_bus_out_if[i].req_valid = core_bus_nc_switch_if[0 * NUM_REQS + i].req_valid;
-        assign core_bus_out_if[i].req_data  = core_bus_nc_switch_if[0 * NUM_REQS + i].req_data;
-        assign core_bus_nc_switch_if[0 * NUM_REQS + i].req_ready = core_bus_out_if[i].req_ready;
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_nc_switch_if
 
-        assign core_bus_nc_switch_if[0 * NUM_REQS + i].rsp_valid = core_bus_out_if[i].rsp_valid;
-        assign core_bus_nc_switch_if[0 * NUM_REQS + i].rsp_data  = core_bus_out_if[i].rsp_data;
-        assign core_bus_out_if[i].rsp_ready = core_bus_nc_switch_if[0 * NUM_REQS + i].rsp_ready;
-    end
+        assign core_bus_in_nc_if[i].req_valid = core_bus_nc_switch_if[0 * NUM_REQS + i].req_valid;
+        assign core_bus_in_nc_if[i].req_data  = core_bus_nc_switch_if[0 * NUM_REQS + i].req_data;
+        assign core_bus_nc_switch_if[0 * NUM_REQS + i].req_ready = core_bus_in_nc_if[i].req_ready;
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_in_nc
-        assign core_bus_in_nc_if[i].req_valid = core_bus_nc_switch_if[1 * NUM_REQS + i].req_valid;
-        assign core_bus_in_nc_if[i].req_data  = core_bus_nc_switch_if[1 * NUM_REQS + i].req_data;
-        assign core_bus_nc_switch_if[1 * NUM_REQS + i].req_ready = core_bus_in_nc_if[i].req_ready;
+        assign core_bus_nc_switch_if[0 * NUM_REQS + i].rsp_valid = core_bus_in_nc_if[i].rsp_valid;
+        assign core_bus_nc_switch_if[0 * NUM_REQS + i].rsp_data  = core_bus_in_nc_if[i].rsp_data;
+        assign core_bus_in_nc_if[i].rsp_ready = core_bus_nc_switch_if[0 * NUM_REQS + i].rsp_ready;
 
-        assign core_bus_nc_switch_if[1 * NUM_REQS + i].rsp_valid = core_bus_in_nc_if[i].rsp_valid;
-        assign core_bus_nc_switch_if[1 * NUM_REQS + i].rsp_data  = core_bus_in_nc_if[i].rsp_data;
-        assign core_bus_in_nc_if[i].rsp_ready = core_bus_nc_switch_if[1 * NUM_REQS + i].rsp_ready;
+        if (CACHE_ENABLE) begin : g_cache
+            assign core_bus_out_if[i].req_valid = core_bus_nc_switch_if[1 * NUM_REQS + i].req_valid;
+            assign core_bus_out_if[i].req_data  = core_bus_nc_switch_if[1 * NUM_REQS + i].req_data;
+            assign core_bus_nc_switch_if[1 * NUM_REQS + i].req_ready = core_bus_out_if[i].req_ready;
+
+            assign core_bus_nc_switch_if[1 * NUM_REQS + i].rsp_valid = core_bus_out_if[i].rsp_valid;
+            assign core_bus_nc_switch_if[1 * NUM_REQS + i].rsp_data  = core_bus_out_if[i].rsp_data;
+            assign core_bus_out_if[i].rsp_ready = core_bus_nc_switch_if[1 * NUM_REQS + i].rsp_ready;
+        end else begin : g_no_cache
+            `INIT_VX_MEM_BUS_IF (core_bus_out_if[i])
+        end
     end
 
     // handle memory requests /////////////////////////////////////////////////
@@ -137,7 +137,7 @@ module VX_cache_bypass #(
         .DATA_SIZE  (WORD_SIZE),
         .TAG_WIDTH  (CORE_TAG_WIDTH),
         .TAG_SEL_IDX(TAG_SEL_IDX),
-        .ARBITER    (PASSTHRU ? "R" : "P"),
+        .ARBITER    (CACHE_ENABLE ? "P" : "R"),
         .REQ_OUT_BUF(0),
         .RSP_OUT_BUF(0)
     ) core_bus_nc_arb (
@@ -176,47 +176,43 @@ module VX_cache_bypass #(
         wire [MEM_TAG_NC2_WIDTH-1:0] core_req_nc_arb_tag_w;
         wire [MEM_TAG_NC1_WIDTH-1:0] core_rsp_nc_arb_tag_w;
 
-        if (PASSTHRU || NC_ENABLE) begin : g_mem_req_out_tag_nc
-            if (WORDS_PER_LINE > 1) begin : g_multi_word_line
-                wire [WSEL_BITS-1:0] rsp_wsel;
-                wire [WSEL_BITS-1:0] req_wsel = core_req_nc_arb_addr[WSEL_BITS-1:0];
-                always @(*) begin
-                    core_req_nc_arb_byteen_w = '0;
-                    core_req_nc_arb_byteen_w[req_wsel] = core_req_nc_arb_byteen;
-                    core_req_nc_arb_data_w = 'x;
-                    core_req_nc_arb_data_w[req_wsel] = core_req_nc_arb_data;
-                end
-                VX_bits_insert #(
-                    .N   (MEM_TAG_NC1_WIDTH),
-                    .S   (WSEL_BITS),
-                    .POS (TAG_SEL_IDX)
-                ) wsel_insert (
-                    .data_in  (core_req_nc_arb_tag),
-                    .ins_in   (req_wsel),
-                    .data_out (core_req_nc_arb_tag_w)
-                );
-                VX_bits_remove #(
-                    .N   (MEM_TAG_NC2_WIDTH),
-                    .S   (WSEL_BITS),
-                    .POS (TAG_SEL_IDX)
-                ) wsel_remove (
-                    .data_in  (mem_bus_out_nc_if[i].rsp_data.tag),
-                    .sel_out  (rsp_wsel),
-                    .data_out (core_rsp_nc_arb_tag_w)
-                );
-                assign core_req_nc_arb_addr_w   = core_req_nc_arb_addr[WSEL_BITS +: MEM_ADDR_WIDTH];
-                assign core_rsp_nc_arb_data_w   = mem_bus_out_nc_if[i].rsp_data.data[rsp_wsel * CORE_DATA_WIDTH +: CORE_DATA_WIDTH];
-            end else begin : g_single_word_line
-                assign core_req_nc_arb_addr_w   = core_req_nc_arb_addr;
-                assign core_req_nc_arb_byteen_w = core_req_nc_arb_byteen;
-                assign core_req_nc_arb_data_w   = core_req_nc_arb_data;
-                assign core_req_nc_arb_tag_w    = MEM_TAG_NC2_WIDTH'(core_req_nc_arb_tag);
-
-                assign core_rsp_nc_arb_data_w   = mem_bus_out_nc_if[i].rsp_data.data;
-                assign core_rsp_nc_arb_tag_w    = MEM_TAG_NC1_WIDTH'(mem_bus_out_nc_if[i].rsp_data.tag);
+        if (WORDS_PER_LINE > 1) begin : g_multi_word_line
+            wire [WSEL_BITS-1:0] rsp_wsel;
+            wire [WSEL_BITS-1:0] req_wsel = core_req_nc_arb_addr[WSEL_BITS-1:0];
+            always @(*) begin
+                core_req_nc_arb_byteen_w = '0;
+                core_req_nc_arb_byteen_w[req_wsel] = core_req_nc_arb_byteen;
+                core_req_nc_arb_data_w = 'x;
+                core_req_nc_arb_data_w[req_wsel] = core_req_nc_arb_data;
             end
-        end else begin : g_mem_req_out_tag
-            assign core_req_nc_arb_tag_w = core_req_nc_arb_tag;
+            VX_bits_insert #(
+                .N   (MEM_TAG_NC1_WIDTH),
+                .S   (WSEL_BITS),
+                .POS (TAG_SEL_IDX)
+            ) wsel_insert (
+                .data_in  (core_req_nc_arb_tag),
+                .ins_in   (req_wsel),
+                .data_out (core_req_nc_arb_tag_w)
+            );
+            VX_bits_remove #(
+                .N   (MEM_TAG_NC2_WIDTH),
+                .S   (WSEL_BITS),
+                .POS (TAG_SEL_IDX)
+            ) wsel_remove (
+                .data_in  (mem_bus_out_nc_if[i].rsp_data.tag),
+                .sel_out  (rsp_wsel),
+                .data_out (core_rsp_nc_arb_tag_w)
+            );
+            assign core_req_nc_arb_addr_w   = core_req_nc_arb_addr[WSEL_BITS +: MEM_ADDR_WIDTH];
+            assign core_rsp_nc_arb_data_w   = mem_bus_out_nc_if[i].rsp_data.data[rsp_wsel * CORE_DATA_WIDTH +: CORE_DATA_WIDTH];
+        end else begin : g_single_word_line
+            assign core_req_nc_arb_addr_w   = core_req_nc_arb_addr;
+            assign core_req_nc_arb_byteen_w = core_req_nc_arb_byteen;
+            assign core_req_nc_arb_data_w   = core_req_nc_arb_data;
+            assign core_req_nc_arb_tag_w    = MEM_TAG_NC2_WIDTH'(core_req_nc_arb_tag);
+
+            assign core_rsp_nc_arb_data_w   = mem_bus_out_nc_if[i].rsp_data.data;
+            assign core_rsp_nc_arb_tag_w    = MEM_TAG_NC1_WIDTH'(mem_bus_out_nc_if[i].rsp_data.tag);
         end
 
         assign mem_bus_out_nc_if[i].req_valid = core_bus_nc_arb_if[i].req_valid;
@@ -241,17 +237,19 @@ module VX_cache_bypass #(
     VX_mem_bus_if #(
         .DATA_SIZE (LINE_SIZE),
         .TAG_WIDTH (MEM_TAG_OUT_WIDTH)
-    ) mem_bus_out_src_if[(PASSTHRU ? 1 : 2) * MEM_PORTS]();
+    ) mem_bus_out_src_if[(CACHE_ENABLE ? 2 : 1) * MEM_PORTS]();
 
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_out_src
         `ASSIGN_VX_MEM_BUS_IF_EX(mem_bus_out_src_if[0 * MEM_PORTS + i], mem_bus_out_nc_if[i], MEM_TAG_OUT_WIDTH, MEM_TAG_NC2_WIDTH, UUID_WIDTH);
-        if (!PASSTHRU) begin : g_not_passthru
+        if (CACHE_ENABLE) begin : g_cache
             `ASSIGN_VX_MEM_BUS_IF_EX(mem_bus_out_src_if[1 * MEM_PORTS + i], mem_bus_in_if[i], MEM_TAG_OUT_WIDTH, MEM_TAG_IN_WIDTH, UUID_WIDTH);
+        end else begin : g_no_cache
+            `UNUSED_VX_MEM_BUS_IF(mem_bus_in_if[i])
         end
     end
 
     VX_mem_arb #(
-        .NUM_INPUTS ((PASSTHRU ? 1 : 2) * MEM_PORTS),
+        .NUM_INPUTS ((CACHE_ENABLE ? 2 : 1) * MEM_PORTS),
         .NUM_OUTPUTS(MEM_PORTS),
         .DATA_SIZE  (LINE_SIZE),
         .TAG_WIDTH  (MEM_TAG_OUT_WIDTH),

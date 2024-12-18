@@ -96,8 +96,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     localparam BYPASS_TAG_WIDTH = `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, MEM_PORTS, LINE_SIZE, WORD_SIZE, TAG_WIDTH);
     localparam NC_TAG_WIDTH = `MAX(CACHE_MEM_TAG_WIDTH, BYPASS_TAG_WIDTH) + 1;
     localparam MEM_TAG_WIDTH = PASSTHRU ? BYPASS_TAG_WIDTH : (NC_ENABLE ? NC_TAG_WIDTH : CACHE_MEM_TAG_WIDTH);
-
-    localparam NC_OR_BYPASS = (NC_ENABLE || PASSTHRU);
+    localparam BYPASS_ENABLE = (NC_ENABLE || PASSTHRU);
 
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
@@ -114,15 +113,14 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         .TAG_WIDTH (MEM_TAG_WIDTH)
     ) mem_bus_tmp_if[MEM_PORTS]();
 
-    if (NC_OR_BYPASS) begin : g_bypass
+    if (BYPASS_ENABLE) begin : g_bypass
 
         VX_cache_bypass #(
             .NUM_REQS          (NUM_REQS),
             .MEM_PORTS         (MEM_PORTS),
             .TAG_SEL_IDX       (TAG_SEL_IDX),
 
-            .PASSTHRU          (PASSTHRU),
-            .NC_ENABLE         (PASSTHRU ? 0 : NC_ENABLE),
+            .CACHE_ENABLE      (!PASSTHRU),
 
             .WORD_SIZE         (WORD_SIZE),
             .LINE_SIZE         (LINE_SIZE),
@@ -189,8 +187,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (TAG_WIDTH),
             .FLAGS_WIDTH  (FLAGS_WIDTH),
-            .CORE_OUT_BUF (NC_OR_BYPASS ? 1 : CORE_OUT_BUF),
-            .MEM_OUT_BUF  (NC_OR_BYPASS ? 1 : MEM_OUT_BUF)
+            .CORE_OUT_BUF (BYPASS_ENABLE ? 1 : CORE_OUT_BUF),
+            .MEM_OUT_BUF  (BYPASS_ENABLE ? 1 : MEM_OUT_BUF)
         ) cache (
             .clk            (clk),
             .reset          (reset),
@@ -204,23 +202,11 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     end else begin : g_passthru
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_cache_if
-            `UNUSED_VAR (core_bus_cache_if[i].req_valid)
-            `UNUSED_VAR (core_bus_cache_if[i].req_data)
-            assign core_bus_cache_if[i].req_ready = 0;
-
-            assign core_bus_cache_if[i].rsp_valid = 0;
-            assign core_bus_cache_if[i].rsp_data  = '0;
-            `UNUSED_VAR (core_bus_cache_if[i].rsp_ready)
+            `UNUSED_VX_MEM_BUS_IF (core_bus_cache_if[i])
         end
 
         for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_cache_if
-            assign mem_bus_cache_if[i].req_valid = 0;
-            assign mem_bus_cache_if[i].req_data = '0;
-            `UNUSED_VAR (mem_bus_cache_if[i].req_ready)
-
-            `UNUSED_VAR (mem_bus_cache_if[i].rsp_valid)
-            `UNUSED_VAR (mem_bus_cache_if[i].rsp_data)
-            assign mem_bus_cache_if[i].rsp_ready = 0;
+            `INIT_VX_MEM_BUS_IF (mem_bus_cache_if[i])
         end
 
     `ifdef PERF_ENABLE
