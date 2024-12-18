@@ -169,12 +169,10 @@ cache()
     CONFIGS="-DICACHE_NUM_WAYS=4 -DDCACHE_NUM_WAYS=8" ./ci/blackbox.sh --driver=simx --app=sgemmx
 
     # test cache banking
-    CONFIGS="-DLMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
-    CONFIGS="-DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
-    CONFIGS="-DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=sgemmx
-    CONFIGS="-DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
-    CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
-    CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=sgemmx
+    CONFIGS="-DMEM_BLOCK_SIZE=8 -DLMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
+    CONFIGS="-DMEM_BLOCK_SIZE=8 -DLMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=simx --app=sgemmx
+    CONFIGS="-DMEM_BLOCK_SIZE=8 -DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=4" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx --threads=8
+    CONFIGS="-DMEM_BLOCK_SIZE=8 -DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=4" ./ci/blackbox.sh --driver=simx --app=sgemmx --threads=8
 
     # replacement policy
     CONFIGS="-DDCACHE_REPL_POLICY=0" ./ci/blackbox.sh --driver=rtlsim --app=sgemmx
