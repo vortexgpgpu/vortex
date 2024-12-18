@@ -65,12 +65,12 @@ module VX_avs_adapter #(
     localparam NUM_PORTS_IN_BITS = `CLOG2(NUM_PORTS_IN);
     localparam NUM_PORTS_IN_WIDTH = `UP(NUM_PORTS_IN_BITS);
     localparam REQ_QUEUE_DATAW = TAG_WIDTH + NUM_PORTS_IN_BITS;
-    localparam ARB_DATAW      = 1 + BANK_ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + TAG_WIDTH;
+    localparam REQ_XBAR_DATAW = 1 + BANK_ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + TAG_WIDTH;
     localparam RSP_XBAR_DATAW = DATA_WIDTH + TAG_WIDTH;
 
     `STATIC_ASSERT ((DST_ADDR_WDITH >= ADDR_WIDTH_IN), ("invalid address width: current=%0d, expected=%0d", DST_ADDR_WDITH, ADDR_WIDTH_IN))
 
-    // Banks selection
+    // Bank selection
 
     wire [NUM_PORTS_IN-1:0][BANK_SEL_WIDTH-1:0] req_bank_sel;
     wire [NUM_PORTS_IN-1:0][BANK_ADDR_WIDTH-1:0] req_bank_addr;
@@ -93,70 +93,66 @@ module VX_avs_adapter #(
         end
     end
 
-    // Request ack
+    // Requests handling
 
-    wire [NUM_BANKS_OUT-1:0][NUM_PORTS_IN-1:0] arb_ready_in;
-    wire [NUM_PORTS_IN-1:0][NUM_BANKS_OUT-1:0] arb_ready_in_w;
+    wire [NUM_PORTS_IN-1:0] req_xbar_valid_in;
+    wire [NUM_PORTS_IN-1:0][REQ_XBAR_DATAW-1:0] req_xbar_data_in;
+    wire [NUM_PORTS_IN-1:0] req_xbar_ready_in;
 
-    VX_transpose #(
-        .N (NUM_BANKS_OUT),
-        .M (NUM_PORTS_IN)
-    ) rdy_in_transpose (
-        .data_in  (arb_ready_in),
-        .data_out (arb_ready_in_w)
-    );
+    wire [NUM_BANKS_OUT-1:0] req_xbar_valid_out;
+    wire [NUM_BANKS_OUT-1:0][REQ_XBAR_DATAW-1:0] req_xbar_data_out;
+    wire [NUM_BANKS_OUT-1:0][NUM_PORTS_IN_WIDTH-1:0] req_xbar_sel_out;
+    wire [NUM_BANKS_OUT-1:0] req_xbar_ready_out;
 
-    for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_ready_in
-        assign mem_req_ready[i] = | arb_ready_in_w[i];
+    for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_req_xbar_data_in
+        assign req_xbar_valid_in[i] = mem_req_valid[i];
+        assign req_xbar_data_in[i]  = {mem_req_rw[i], req_bank_addr[i], mem_req_byteen[i], mem_req_data[i], mem_req_tag[i]};
+        assign mem_req_ready[i] = req_xbar_ready_in[i];
     end
 
-    // Request handling ///////////////////////////////////////////////////////
+    VX_stream_xbar #(
+        .NUM_INPUTS (NUM_PORTS_IN),
+        .NUM_OUTPUTS(NUM_BANKS_OUT),
+        .DATAW      (REQ_XBAR_DATAW),
+        .ARBITER    (ARBITER),
+        .OUT_BUF    (REQ_OUT_BUF)
+    ) req_xbar (
+        .clk       (clk),
+        .reset     (reset),
+        .sel_in    (req_bank_sel),
+        .valid_in  (req_xbar_valid_in),
+        .data_in   (req_xbar_data_in),
+        .ready_in  (req_xbar_ready_in),
+        .valid_out (req_xbar_valid_out),
+        .data_out  (req_xbar_data_out),
+        .ready_out (req_xbar_ready_out),
+        .sel_out   (req_xbar_sel_out),
+        `UNUSED_PIN (collisions)
+    );
 
     wire [NUM_BANKS_OUT-1:0][REQ_QUEUE_DATAW-1:0] rd_req_queue_data_out;
     wire [NUM_BANKS_OUT-1:0] rd_req_queue_pop;
 
-    for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_requests
+    for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_req_xbar_data_out
 
-        wire [BANK_ADDR_WIDTH-1:0] arb_addr_out;
-        wire [TAG_WIDTH-1:0] arb_tag_out;
-        wire [NUM_PORTS_IN_WIDTH-1:0] arb_sel_out;
-        wire [DATA_WIDTH-1:0] arb_data_out;
-        wire [DATA_SIZE-1:0] arb_byteen_out;
-        wire arb_valid_out, arb_ready_out;
-        wire arb_rw_out;
+        wire ready_out;
+        wire rw_out;
+        wire [BANK_ADDR_WIDTH-1:0] addr_out;
+        wire [TAG_WIDTH-1:0] tag_out;
+        wire [DATA_WIDTH-1:0] data_out;
+        wire [DATA_SIZE-1:0] byteen_out;
+        wire valid_out;
 
-        wire [NUM_PORTS_IN-1:0][ARB_DATAW-1:0] arb_data_in;
-        wire [NUM_PORTS_IN-1:0] arb_valid_in;
-
-        for (genvar j = 0; j < NUM_PORTS_IN; ++j) begin : g_valid_in
-            assign arb_valid_in[j] = mem_req_valid[j] && (req_bank_sel[j] == i);
-        end
-
-        for (genvar j = 0; j < NUM_PORTS_IN; ++j) begin : g_data_in
-            assign arb_data_in[j] = {mem_req_rw[j], req_bank_addr[j], mem_req_byteen[j], mem_req_data[j], mem_req_tag[j]};
-        end
-
-        VX_stream_arb #(
-            .NUM_INPUTS (NUM_PORTS_IN),
-            .NUM_OUTPUTS(1),
-            .DATAW      (ARB_DATAW),
-            .ARBITER    (ARBITER)
-        ) req_arb (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (arb_valid_in),
-            .ready_in  (arb_ready_in[i]),
-            .data_in   (arb_data_in),
-            .data_out  ({arb_rw_out, arb_addr_out, arb_byteen_out, arb_data_out, arb_tag_out}),
-            .valid_out (arb_valid_out),
-            .ready_out (arb_ready_out),
-            .sel_out   (arb_sel_out)
-        );
+        assign {rw_out, addr_out, byteen_out, data_out, tag_out} = req_xbar_data_out[i];
 
         wire rd_req_queue_going_full;
         wire rd_req_queue_push;
 
-        assign rd_req_queue_push = arb_valid_out && arb_ready_out && ~arb_rw_out;
+        // stall pipeline if the request queue is needed and going full
+        wire rd_req_queue_ready = rw_out || ~rd_req_queue_going_full;
+        assign valid_out = req_xbar_valid_out[i] && rd_req_queue_ready;
+        assign ready_out = ~avs_waitrequest[i] && rd_req_queue_ready;
+        assign rd_req_queue_push = valid_out && ready_out && ~rw_out;
 
         VX_pending_size #(
             .SIZE (RD_QUEUE_SIZE)
@@ -174,10 +170,10 @@ module VX_avs_adapter #(
 
         wire [REQ_QUEUE_DATAW-1:0] rd_req_queue_data_in;
         if (NUM_PORTS_IN > 1) begin : g_input_sel
-            assign rd_req_queue_data_in = {arb_tag_out, arb_sel_out};
+            assign rd_req_queue_data_in = {tag_out, req_xbar_sel_out[i]};
         end else begin : g_no_input_sel
-            `UNUSED_VAR (arb_sel_out)
-            assign rd_req_queue_data_in = arb_tag_out;
+            `UNUSED_VAR (req_xbar_sel_out[i])
+            assign rd_req_queue_data_in = tag_out;
         end
 
         VX_fifo_queue #(
@@ -197,44 +193,16 @@ module VX_avs_adapter #(
             `UNUSED_PIN (size)
         );
 
-        wire                  buf_valid_out;
-        wire                  buf_rw_out;
-        wire [DATA_SIZE-1:0]  buf_byteen_out;
-        wire [BANK_ADDR_WIDTH-1:0] buf_addr_out;
-        wire [DATA_WIDTH-1:0] buf_data_out;
-        wire                  buf_ready_out;
-
-        // stall pipeline if the request queue is needed and going full
-        wire arb_valid_out_w, arb_ready_out_w;
-        wire rd_req_queue_ready = arb_rw_out || ~rd_req_queue_going_full;
-        assign arb_valid_out_w = arb_valid_out && rd_req_queue_ready;
-        assign arb_ready_out = arb_ready_out_w && rd_req_queue_ready;
-
-        VX_elastic_buffer #(
-            .DATAW    (1 + DATA_SIZE + BANK_ADDR_WIDTH + DATA_WIDTH),
-            .SIZE     (`TO_OUT_BUF_SIZE(REQ_OUT_BUF)),
-            .OUT_REG  (`TO_OUT_BUF_REG(REQ_OUT_BUF))
-        ) req_buf (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (arb_valid_out_w),
-            .ready_in  (arb_ready_out_w),
-            .data_in   ({arb_rw_out, arb_byteen_out, arb_addr_out, arb_data_out}),
-            .data_out  ({buf_rw_out, buf_byteen_out, buf_addr_out, buf_data_out}),
-            .valid_out (buf_valid_out),
-            .ready_out (buf_ready_out)
-        );
-
-        assign avs_read[i]       = buf_valid_out && ~buf_rw_out;
-        assign avs_write[i]      = buf_valid_out && buf_rw_out;
-        assign avs_address[i]    = ADDR_WIDTH_OUT'(buf_addr_out);
-        assign avs_byteenable[i] = buf_byteen_out;
-        assign avs_writedata[i]  = buf_data_out;
+        assign avs_read[i]       = valid_out && ~rw_out;
+        assign avs_write[i]      = valid_out && rw_out;
+        assign avs_address[i]    = ADDR_WIDTH_OUT'(addr_out);
+        assign avs_byteenable[i] = byteen_out;
+        assign avs_writedata[i]  = data_out;
         assign avs_burstcount[i] = BURST_WIDTH'(1);
-        assign buf_ready_out     = ~avs_waitrequest[i];
+        assign req_xbar_ready_out[i] = ready_out;
     end
 
-    // Responses handling /////////////////////////////////////////////////////
+    // Responses handling
 
     wire [NUM_BANKS_OUT-1:0] rsp_xbar_valid_in;
     wire [NUM_BANKS_OUT-1:0][RSP_XBAR_DATAW-1:0] rsp_xbar_data_in;
@@ -245,7 +213,7 @@ module VX_avs_adapter #(
     wire [NUM_PORTS_IN-1:0][RSP_XBAR_DATAW-1:0] rsp_xbar_data_out;
     wire [NUM_PORTS_IN-1:0] rsp_xbar_ready_out;
 
-    for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_rsp_queues
+    for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_rsp_xbar_data_in
 
         wire [DATA_WIDTH-1:0] rsp_queue_data_out;
         wire rsp_queue_empty;

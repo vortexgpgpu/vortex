@@ -116,7 +116,8 @@ module VX_axi_adapter #(
     `STATIC_ASSERT ((DST_ADDR_WDITH >= ADDR_WIDTH_IN), ("invalid address width: current=%0d, expected=%0d", DST_ADDR_WDITH, ADDR_WIDTH_IN))
     `STATIC_ASSERT ((TAG_WIDTH_OUT >= DST_TAG_WIDTH), ("invalid output tag width: current=%0d, expected=%0d", TAG_WIDTH_OUT, DST_TAG_WIDTH))
 
-    // Banks selection
+    // Bank selection
+
     wire [NUM_PORTS_IN-1:0][BANK_SEL_WIDTH-1:0] req_bank_sel;
     wire [NUM_PORTS_IN-1:0][BANK_ADDR_WIDTH-1:0] req_bank_addr;
 
@@ -139,6 +140,7 @@ module VX_axi_adapter #(
     end
 
     // Tag handling logic
+
     wire [NUM_PORTS_IN-1:0] mem_rd_req_tag_ready;
     wire [NUM_PORTS_IN-1:0][READ_TAG_WIDTH-1:0] mem_rd_req_tag;
     wire [NUM_PORTS_IN-1:0][READ_TAG_WIDTH-1:0] mem_rd_rsp_tag;
@@ -172,7 +174,28 @@ module VX_axi_adapter #(
         end
     end
 
+    // Request ack
+
+    wire [NUM_BANKS_OUT-1:0][NUM_PORTS_IN-1:0] arb_ready_in;
+
+    if (NUM_PORTS_IN > 1) begin : g_multi_inputs
+        wire [NUM_PORTS_IN-1:0][NUM_BANKS_OUT-1:0] arb_ready_in_w;
+        VX_transpose #(
+            .N (NUM_BANKS_OUT),
+            .M (NUM_PORTS_IN)
+        ) rdy_in_transpose (
+            .data_in  (arb_ready_in),
+            .data_out (arb_ready_in_w)
+        );
+        for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_ready_in
+            assign mem_req_ready[i] = | arb_ready_in_w[i];
+        end
+    end else begin : g_single_input
+        assign mem_req_ready[0] = arb_ready_in[req_bank_sel[0]][0];
+    end
+
     // AXi write request synchronization
+
     wire [NUM_BANKS_OUT-1:0] m_axi_awvalid_w, m_axi_wvalid_w;
     wire [NUM_BANKS_OUT-1:0] m_axi_awready_w, m_axi_wready_w;
     reg [NUM_BANKS_OUT-1:0] m_axi_aw_ack, m_axi_w_ack, axi_write_ready;
@@ -190,23 +213,6 @@ module VX_axi_adapter #(
             .tx_rdy (axi_write_ready[i]),
             `UNUSED_PIN (tx_ack)
         );
-    end
-
-    // Request ack
-
-    wire [NUM_BANKS_OUT-1:0][NUM_PORTS_IN-1:0] arb_ready_in;
-    wire [NUM_PORTS_IN-1:0][NUM_BANKS_OUT-1:0] arb_ready_in_w;
-
-    VX_transpose #(
-        .N (NUM_BANKS_OUT),
-        .M (NUM_PORTS_IN)
-    ) rdy_in_transpose (
-        .data_in  (arb_ready_in),
-        .data_out (arb_ready_in_w)
-    );
-
-    for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_ready_in
-        assign mem_req_ready[i] = | arb_ready_in_w[i];
     end
 
     // AXI request handling

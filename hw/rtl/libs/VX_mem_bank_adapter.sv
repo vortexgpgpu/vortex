@@ -71,18 +71,17 @@ module VX_mem_bank_adapter #(
     localparam TAG_BUFFER_ADDRW = `CLOG2(TAG_BUFFER_SIZE);
     localparam NEEDED_TAG_WIDTH = TAG_WIDTH_IN + NUM_PORTS_IN_BITS;
     localparam READ_TAG_WIDTH = (NEEDED_TAG_WIDTH > TAG_WIDTH_OUT) ? TAG_BUFFER_ADDRW : TAG_WIDTH_IN;
-    localparam READ_FULL_TAG_WIDTH = READ_TAG_WIDTH + NUM_PORTS_IN_BITS;
-    localparam WRITE_TAG_WIDTH = `MIN(TAG_WIDTH_IN, TAG_WIDTH_OUT);
-    localparam DST_TAG_WIDTH  = `MAX(READ_FULL_TAG_WIDTH, WRITE_TAG_WIDTH);
-    localparam ARB_TAG_WIDTH  = `MAX(READ_TAG_WIDTH, WRITE_TAG_WIDTH);
-    localparam ARB_DATAW      = 1 + BANK_ADDR_WIDTH + DATA_SIZE + DATA_WIDTH + ARB_TAG_WIDTH;
-    localparam REQ_BUF_DATAW  = 1 + BANK_ADDR_WIDTH + DATA_SIZE + DATA_WIDTH + DST_TAG_WIDTH;
+    localparam WRITE_TAG_WIDTH = TAG_WIDTH_IN;
+    localparam XBAR_TAG_WIDTH = `MAX(READ_TAG_WIDTH, WRITE_TAG_WIDTH);
+    localparam DST_TAG_WIDTH  = XBAR_TAG_WIDTH + NUM_PORTS_IN_BITS;
+    localparam REQ_XBAR_DATAW = 1 + BANK_ADDR_WIDTH + DATA_SIZE + DATA_WIDTH + XBAR_TAG_WIDTH;
     localparam RSP_XBAR_DATAW = DATA_WIDTH + READ_TAG_WIDTH;
 
     `STATIC_ASSERT ((DST_ADDR_WDITH >= ADDR_WIDTH_IN), ("invalid address width: current=%0d, expected=%0d", DST_ADDR_WDITH, ADDR_WIDTH_IN))
     `STATIC_ASSERT ((TAG_WIDTH_OUT >= DST_TAG_WIDTH), ("invalid output tag width: current=%0d, expected=%0d", TAG_WIDTH_OUT, DST_TAG_WIDTH))
 
-    // Banks selection
+    // Bank selection
+
     wire [NUM_PORTS_IN-1:0][BANK_SEL_WIDTH-1:0] req_bank_sel;
     wire [NUM_PORTS_IN-1:0][BANK_ADDR_WIDTH-1:0] req_bank_addr;
 
@@ -105,6 +104,7 @@ module VX_mem_bank_adapter #(
     end
 
     // Tag handling logic
+
     wire [NUM_PORTS_IN-1:0] mem_rd_req_tag_in_ready;
     wire [NUM_PORTS_IN-1:0][READ_TAG_WIDTH-1:0] mem_rd_req_tag_in;
     wire [NUM_PORTS_IN-1:0][READ_TAG_WIDTH-1:0] mem_rd_rsp_tag_in;
@@ -138,100 +138,72 @@ module VX_mem_bank_adapter #(
         end
     end
 
-    // Request ack
+    // Requests handling
 
-    wire [NUM_BANKS_OUT-1:0][NUM_PORTS_IN-1:0] arb_ready_in;
-    wire [NUM_PORTS_IN-1:0][NUM_BANKS_OUT-1:0] arb_ready_in_w;
+    wire [NUM_PORTS_IN-1:0] req_xbar_valid_in;
+    wire [NUM_PORTS_IN-1:0][REQ_XBAR_DATAW-1:0] req_xbar_data_in;
+    wire [NUM_PORTS_IN-1:0] req_xbar_ready_in;
 
-    VX_transpose #(
-        .N (NUM_BANKS_OUT),
-        .M (NUM_PORTS_IN)
-    ) rdy_in_transpose (
-        .data_in  (arb_ready_in),
-        .data_out (arb_ready_in_w)
+    wire [NUM_BANKS_OUT-1:0] req_xbar_valid_out;
+    wire [NUM_BANKS_OUT-1:0][REQ_XBAR_DATAW-1:0] req_xbar_data_out;
+    wire [NUM_BANKS_OUT-1:0][NUM_PORTS_IN_WIDTH-1:0] req_xbar_sel_out;
+    wire [NUM_BANKS_OUT-1:0] req_xbar_ready_out;
+
+    for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_req_xbar_data_in
+        wire tag_ready = mem_req_rw_in[i] || mem_rd_req_tag_in_ready[i];
+        wire [XBAR_TAG_WIDTH-1:0] tag_value = mem_req_rw_in[i] ? XBAR_TAG_WIDTH'(mem_req_tag_in[i]) : XBAR_TAG_WIDTH'(mem_rd_req_tag_in[i]);
+        assign req_xbar_valid_in[i] = mem_req_valid_in[i] && tag_ready;
+        assign req_xbar_data_in[i]  = {mem_req_rw_in[i], req_bank_addr[i], mem_req_byteen_in[i], mem_req_data_in[i], tag_value};
+        assign mem_req_ready_in[i] = req_xbar_ready_in[i] && tag_ready;
+    end
+
+    VX_stream_xbar #(
+        .NUM_INPUTS (NUM_PORTS_IN),
+        .NUM_OUTPUTS(NUM_BANKS_OUT),
+        .DATAW      (REQ_XBAR_DATAW),
+        .ARBITER    (ARBITER),
+        .OUT_BUF    (REQ_OUT_BUF)
+    ) req_xbar (
+        .clk       (clk),
+        .reset     (reset),
+        .sel_in    (req_bank_sel),
+        .valid_in  (req_xbar_valid_in),
+        .data_in   (req_xbar_data_in),
+        .ready_in  (req_xbar_ready_in),
+        .valid_out (req_xbar_valid_out),
+        .data_out  (req_xbar_data_out),
+        .ready_out (req_xbar_ready_out),
+        .sel_out   (req_xbar_sel_out),
+        `UNUSED_PIN (collisions)
     );
 
-    for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_ready_in
-        assign mem_req_ready_in[i] = | arb_ready_in_w[i];
-    end
+    for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_req_xbar_data_out
 
-    // Request handling
+        wire rw_out;
+        wire [BANK_ADDR_WIDTH-1:0] addr_out;
+        wire [XBAR_TAG_WIDTH-1:0] tag_out;
+        wire [DATA_WIDTH-1:0] data_out;
+        wire [DATA_SIZE-1:0] byteen_out;
 
-    for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_requests
+        assign {rw_out, addr_out, byteen_out, data_out, tag_out} = req_xbar_data_out[i];
 
-        wire [BANK_ADDR_WIDTH-1:0] arb_addr_out, buf_addr_out;
-        wire [ARB_TAG_WIDTH-1:0] arb_tag_out;
-        wire [DST_TAG_WIDTH-1:0] arb_tag_s_out, buf_tag_out;
-        wire [NUM_PORTS_IN_WIDTH-1:0] arb_sel_out;
-        wire [DATA_WIDTH-1:0] arb_data_out, buf_data_out;
-        wire [DATA_SIZE-1:0] arb_byteen_out, buf_byteen_out;
-        wire arb_valid_out, buf_valid_out;
-        wire arb_ready_out, buf_ready_out;
-        wire arb_rw_out, buf_rw_out;
-
-        wire [NUM_PORTS_IN-1:0][ARB_DATAW-1:0] arb_data_in;
-        wire [NUM_PORTS_IN-1:0] arb_valid_in;
-
-        for (genvar j = 0; j < NUM_PORTS_IN; ++j) begin : g_valid_in
-            wire tag_ready = mem_req_rw_in[j] || mem_rd_req_tag_in_ready[j];
-            assign arb_valid_in[j] = mem_req_valid_in[j] && tag_ready && (req_bank_sel[j] == i);
-        end
-
-        for (genvar j = 0; j < NUM_PORTS_IN; ++j) begin : g_data_in
-            wire [ARB_TAG_WIDTH-1:0] tag_value = mem_req_rw_in[j] ? ARB_TAG_WIDTH'(mem_req_tag_in[j]) : ARB_TAG_WIDTH'(mem_rd_req_tag_in[j]);
-            assign arb_data_in[j] = {mem_req_rw_in[j], req_bank_addr[j], mem_req_byteen_in[j], mem_req_data_in[j], tag_value};
-        end
-
-        VX_stream_arb #(
-            .NUM_INPUTS (NUM_PORTS_IN),
-            .NUM_OUTPUTS(1),
-            .DATAW      (ARB_DATAW),
-            .ARBITER    (ARBITER)
-        ) req_arb (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (arb_valid_in),
-            .ready_in  (arb_ready_in[i]),
-            .data_in   (arb_data_in),
-            .data_out  ({arb_rw_out, arb_addr_out, arb_byteen_out, arb_data_out, arb_tag_out}),
-            .valid_out (arb_valid_out),
-            .ready_out (arb_ready_out),
-            .sel_out   (arb_sel_out)
-        );
+        assign mem_req_valid_out[i]  = req_xbar_valid_out[i];
+        assign mem_req_rw_out[i]     = rw_out;
+        assign mem_req_addr_out[i]   = ADDR_WIDTH_OUT'(addr_out);
+        assign mem_req_byteen_out[i] = byteen_out;
+        assign mem_req_data_out[i]   = data_out;
 
         if (NUM_PORTS_IN > 1) begin : g_input_sel
-            assign arb_tag_s_out = DST_TAG_WIDTH'({arb_tag_out, arb_sel_out});
+            assign mem_req_tag_out[i] = TAG_WIDTH_OUT'({tag_out, req_xbar_sel_out[i]});
         end else begin : g_no_input_sel
-            `UNUSED_VAR (arb_sel_out)
-            assign arb_tag_s_out = DST_TAG_WIDTH'(arb_tag_out);
+            `UNUSED_VAR (req_xbar_sel_out[i])
+            assign mem_req_tag_out[i] = TAG_WIDTH_OUT'(tag_out);
         end
 
-        VX_elastic_buffer #(
-            .DATAW   (REQ_BUF_DATAW),
-            .SIZE    (`TO_OUT_BUF_SIZE(REQ_OUT_BUF)),
-            .OUT_REG (`TO_OUT_BUF_REG(REQ_OUT_BUF)),
-            .LUTRAM  (`TO_OUT_BUF_LUTRAM(REQ_OUT_BUF))
-        ) req_buf (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (arb_valid_out),
-            .ready_in  (arb_ready_out),
-            .data_in   ({arb_rw_out, arb_addr_out, arb_byteen_out, arb_data_out, arb_tag_s_out}),
-            .data_out  ({buf_rw_out, buf_addr_out, buf_byteen_out, buf_data_out, buf_tag_out}),
-            .valid_out (buf_valid_out),
-            .ready_out (buf_ready_out)
-        );
-
-        assign mem_req_valid_out[i]  = buf_valid_out;
-        assign mem_req_rw_out[i]     = buf_rw_out;
-        assign mem_req_addr_out[i]   = ADDR_WIDTH_OUT'(buf_addr_out);
-        assign mem_req_byteen_out[i] = buf_byteen_out;
-        assign mem_req_data_out[i]   = buf_data_out;
-        assign mem_req_tag_out[i]    = TAG_WIDTH_OUT'(buf_tag_out);
-        assign buf_ready_out = mem_req_ready_out[i];
+        assign req_xbar_ready_out[i] = mem_req_ready_out[i];
     end
 
-    // Response channel
+    // Responses handling
 
     wire [NUM_BANKS_OUT-1:0] rsp_xbar_valid_in;
     wire [NUM_BANKS_OUT-1:0][RSP_XBAR_DATAW-1:0] rsp_xbar_data_in;
