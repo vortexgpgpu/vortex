@@ -26,17 +26,14 @@ public:
 	};
 
 	struct PerfStats {
-		uint64_t counter;
-		uint64_t ticks;
+		uint64_t bank_stalls;
 
 		PerfStats()
-			: counter(0)
-			, ticks(0)
+			: bank_stalls(0)
 		{}
 
 		PerfStats& operator+=(const PerfStats& rhs) {
-			this->counter += rhs.counter;
-			this->ticks += rhs.ticks;
+			this->bank_stalls += rhs.bank_stalls;
 			return *this;
 		}
 	};

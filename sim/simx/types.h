@@ -850,9 +850,7 @@ public:
       if (output_idx != -1) {
         auto& rsp_out = RspOut.at(output_idx);
         auto& rsp = rsp_out.front();
-        uint32_t input_idx = 0;
         if (lg2_inputs_ != 0) {
-          input_idx = rsp.tag & (R-1);
           rsp.tag >>= lg2_inputs_;
         }
         DT(4, this->name() << "-rsp" << i << ": " << rsp);

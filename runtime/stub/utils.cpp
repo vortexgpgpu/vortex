@@ -211,8 +211,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t mem_reads = 0;
   uint64_t mem_writes = 0;
   uint64_t mem_lat = 0;
-  uint64_t mem_req_counter = 0;
-  uint64_t mem_ticks = 0;
+  uint64_t mem_bank_stalls = 0;
 
   uint64_t num_cores;
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_CORES, &num_cores), {
@@ -480,7 +479,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
 
       // PERF: coalescer
       uint64_t coalescer_misses;
-      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_COALESCER_ST, core_id, &coalescer_misses), {
+      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_COALESCER_MISS, core_id, &coalescer_misses), {
         return err;
       });
       int coalescer_utilization = calcAvgPercent(dcache_requests_per_core - coalescer_misses, dcache_requests_per_core);
@@ -551,10 +550,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_LT, core_id, &mem_lat), {
           return err;
         });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_BANK_CNTR, core_id, &mem_req_counter), {
-          return err;
-        });
-        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_BANK_TICK, core_id, &mem_ticks), {
+        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_MEM_BANK_ST, core_id, &mem_bank_stalls), {
           return err;
         });
       }
@@ -632,11 +628,14 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       fprintf(stream, "PERF: l3cache mshr stalls=%ld (utilization=%d%%)\n", l3cache_mshr_stalls, mshr_utilization);
     }
 
-    int mem_avg_lat = caclAverage(mem_lat, mem_reads);
-    int memory_bank_port_utilization = calcAvgPercent(mem_req_counter, (mem_ticks * num_mem_bank_ports));
-    fprintf(stream, "PERF: memory requests=%ld (reads=%ld, writes=%ld)\n", (mem_reads + mem_writes), mem_reads, mem_writes);
-    fprintf(stream, "PERF: memory latency=%d cycles\n", mem_avg_lat);
-    fprintf(stream, "PERF: memory bank port utilization=%d%%\n", memory_bank_port_utilization);
+    {
+      uint64_t mem_requests = mem_reads + mem_writes;
+      int mem_avg_lat = caclAverage(mem_lat, mem_reads);
+      int mem_bank_utilization = calcAvgPercent(mem_requests, mem_requests + mem_bank_stalls);
+      fprintf(stream, "PERF: memory requests=%ld (reads=%ld, writes=%ld)\n", mem_requests, mem_reads, mem_writes);
+      fprintf(stream, "PERF: memory latency=%d cycles\n", mem_avg_lat);
+      fprintf(stream, "PERF: memory bank stalls=%ld (utilization=%d%%)\n", mem_bank_stalls, mem_bank_utilization);
+    }
   } break;
   default:
     break;
