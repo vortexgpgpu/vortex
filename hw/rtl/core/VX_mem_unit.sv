@@ -176,6 +176,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
             `ifdef PERF_ENABLE
                 .misses         (per_block_coalescer_misses[i]),
+            `else
+                `UNUSED_PIN (misses),
             `endif
 
                 // Input request
