@@ -174,7 +174,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .clk            (clk),
                 .reset          (reset),
 
-            `ifdef LMEM_ENABLE
+            `ifdef PERF_ENABLE
                 .misses         (per_block_coalescer_misses[i]),
             `endif
 
@@ -220,7 +220,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
         for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_dcache_coalesced_if
             `ASSIGN_VX_MEM_BUS_IF (dcache_coalesced_if[i], lsu_dcache_if[i]);
-        `ifdef LMEM_ENABLE
+        `ifdef PERF_ENABLE
             assign per_block_coalescer_misses[i] = '0;
         `endif
         end
