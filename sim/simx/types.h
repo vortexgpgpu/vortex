@@ -527,6 +527,7 @@ public:
         auto& req_in = Inputs.at(j);
         if (!req_in.empty()) {
           auto& req = req_in.front();
+          DT(4, this->name() << "-req" << o << ": " << req);
           Outputs.at(o).push(req, delay_);
           req_in.pop();
           this->update_grant(o, g);
@@ -597,37 +598,36 @@ public:
     // process incoming requests
     for (uint32_t o = 0; o < O; ++o) {
       int32_t input_idx = -1;
+      bool has_collision = false;
       for (uint32_t r = 0; r < R; ++r) {
         uint32_t i = (grants_.at(o) + r) & (R-1);
         if (i >= I)
           continue;
         auto& req_in = Inputs.at(i);
-        if (!req_in.empty()) {
-          auto& req = req_in.front();
+        if (req_in.empty())
+          continue;
+        auto& req = req_in.front();
+        uint32_t output_idx = 0;
+        if (lg2_outputs_ != 0) {
+          output_idx = (uint32_t)bit_getw(req.addr, addr_start_, addr_start_ + (lg2_outputs_-1));
           // skip if input is not going to current output
-          uint32_t output_idx = 0;
-          if (O != 1) {
-            output_idx = (uint32_t)bit_getw(req.addr, addr_start_, lg2_outputs_-1);
-          }
           if (output_idx != o)
             continue;
-          if (input_idx != -1) {
-            ++collisions_;
-            continue;
-          }
-          input_idx = i;
         }
+        if (input_idx != -1) {
+          has_collision = true;
+          continue;
+        }
+        input_idx = i;
       }
       if (input_idx != -1) {
         auto& req_in = Inputs.at(input_idx);
         auto& req = req_in.front();
-        if (lg2_inputs_ != 0) {
-          req.tag = (req.tag << lg2_inputs_) | input_idx;
-        }
-        DT(4, this->name() << "-req" << input_idx << ": " << req);
+        DT(4, this->name() << "-req" << o << ": " << req);
         Outputs.at(o).push(req, delay_);
         req_in.pop();
         this->update_grant(o, input_idx);
+        collisions_ += has_collision;
       }
     }
   }
@@ -721,8 +721,8 @@ public:
           g = rsp.tag & (R-1);
           rsp.tag >>= lg2_num_reqs_;
         }
-        DT(4, this->name() << "-rsp" << o << ": " << rsp);
         uint32_t j = o * R + g;
+        DT(4, this->name() << "-rsp" << j << ": " << rsp);
         RspIn.at(j).push(rsp, 1);
         rsp_out.pop();
       }
@@ -742,7 +742,7 @@ public:
           if (lg2_num_reqs_ != 0) {
             req.tag = (req.tag << lg2_num_reqs_) | g;
           }
-          DT(4, this->name() << "-req" << j << ": " << req);
+          DT(4, this->name() << "-req" << o << ": " << req);
           ReqOut.at(o).push(req, delay_);
           req_in.pop();
           this->update_grant(o, g);
@@ -798,7 +798,8 @@ public:
     , lg2_inputs_(log2ceil(num_inputs))
     , lg2_outputs_(log2ceil(num_outputs))
     , addr_start_(addr_start)
-    , collisions_(0) {
+    , req_collisions_(0)
+    , rsp_collisions_(0) {
     assert(delay != 0);
     assert(num_inputs <= 64);
     assert(num_outputs <= 64);
@@ -824,26 +825,27 @@ public:
     // process outgoing responses
     for (uint32_t i = 0; i < I; ++i) {
       int32_t output_idx = -1;
+      bool has_collision = false;
       for (uint32_t t = 0; t < T; ++t) {
         uint32_t o = (rsp_grants_.at(i) + t) & (T-1);
         if (o >= O)
           continue;
         auto& rsp_out = RspOut.at(o);
-        if (!rsp_out.empty()) {
-          auto& rsp = rsp_out.front();
+        if (rsp_out.empty())
+          continue;
+        auto& rsp = rsp_out.front();
+        uint32_t input_idx = 0;
+        if (lg2_inputs_ != 0) {
+          input_idx = rsp.tag & (R-1);
           // skip if response is not going to current input
-          uint32_t input_idx = 0;
-          if (lg2_inputs_ != 0) {
-            input_idx = rsp.tag & (R-1);
-          }
           if (input_idx != i)
             continue;
-          if (output_idx != -1) {
-            ++collisions_;
-            continue;
-          }
-          output_idx = o;
         }
+        if (output_idx != -1) {
+          has_collision = true;
+          continue;
+        }
+        output_idx = o;
       }
       if (output_idx != -1) {
         auto& rsp_out = RspOut.at(output_idx);
@@ -853,36 +855,38 @@ public:
           input_idx = rsp.tag & (R-1);
           rsp.tag >>= lg2_inputs_;
         }
-        DT(4, this->name() << "-rsp" << output_idx << ": " << rsp);
-        RspIn.at(input_idx).push(rsp, 1);
+        DT(4, this->name() << "-rsp" << i << ": " << rsp);
+        RspIn.at(i).push(rsp, 1);
         rsp_out.pop();
         this->update_rsp_grant(i, output_idx);
+        rsp_collisions_ += has_collision;
       }
     }
 
     // process incoming requests
     for (uint32_t o = 0; o < O; ++o) {
       int32_t input_idx = -1;
+      bool has_collision = false;
       for (uint32_t r = 0; r < R; ++r) {
         uint32_t i = (req_grants_.at(o) + r) & (R-1);
         if (i >= I)
           continue;
         auto& req_in = ReqIn.at(i);
-        if (!req_in.empty()) {
-          auto& req = req_in.front();
+        if (req_in.empty())
+          continue;
+        auto& req = req_in.front();
+        uint32_t output_idx = 0;
+        if (lg2_outputs_ != 0) {
+          output_idx = (uint32_t)bit_getw(req.addr, addr_start_, addr_start_ + (lg2_outputs_-1));
           // skip if request is not going to current output
-          uint32_t output_idx = 0;
-          if (O != 1) {
-            output_idx = (uint32_t)bit_getw(req.addr, addr_start_, lg2_outputs_-1);
-          }
           if (output_idx != o)
             continue;
-          if (input_idx != -1) {
-            ++collisions_;
-            continue;
-          }
-          input_idx = i;
         }
+        if (input_idx != -1) {
+          has_collision = true;
+          continue;
+        }
+        input_idx = i;
       }
       if (input_idx != -1) {
         auto& req_in = ReqIn.at(input_idx);
@@ -890,16 +894,21 @@ public:
         if (lg2_inputs_ != 0) {
           req.tag = (req.tag << lg2_inputs_) | input_idx;
         }
-        DT(4, this->name() << "-req" << input_idx << ": " << req);
+        DT(4, this->name() << "-req" << o << ": " << req);
         ReqOut.at(o).push(req, delay_);
         req_in.pop();
         this->update_req_grant(o, input_idx);
+        req_collisions_ += has_collision;
       }
     }
   }
 
-  uint64_t collisions() const {
-    return collisions_;
+  uint64_t req_collisions() const {
+    return req_collisions_;
+  }
+
+  uint64_t rsp_collisions() const {
+    return rsp_collisions_;
   }
 
 protected:
@@ -923,7 +932,8 @@ protected:
   uint32_t lg2_inputs_;
   uint32_t lg2_outputs_;
   uint32_t addr_start_;
-  uint64_t collisions_;
+  uint64_t req_collisions_;
+  uint64_t rsp_collisions_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -978,7 +988,8 @@ private:
   uint32_t delay_;
 };
 
-using MemArbiter = TxArbiter<MemReq, MemRsp>;
+using LsuArbiter  = TxArbiter<LsuReq, LsuRsp>;
+using MemArbiter  = TxArbiter<MemReq, MemRsp>;
 using MemCrossBar = TxCrossBar<MemReq, MemRsp>;
 
 }

@@ -104,6 +104,27 @@ inline uint64_t bit_getw(uint64_t bits, uint32_t start, uint32_t end) {
     return (bits << shift) >> (shift + start);
 }
 
+inline uint64_t bit_reverse(uint64_t bits) {
+  bits = ((bits & 0xAAAAAAAAAAAAAAAA) >>  1) | ((bits & 0x5555555555555555) <<  1);
+  bits = ((bits & 0xCCCCCCCCCCCCCCCC) >>  2) | ((bits & 0x3333333333333333) <<  2);
+  bits = ((bits & 0xF0F0F0F0F0F0F0F0) >>  4) | ((bits & 0x0F0F0F0F0F0F0F0F) <<  4);
+  bits = ((bits & 0xFF00FF00FF00FF00) >>  8) | ((bits & 0x00FF00FF00FF00FF) <<  8);
+  bits = ((bits & 0xFFFF0000FFFF0000) >> 16) | ((bits & 0x0000FFFF0000FFFF) << 16);
+  bits = (bits >> 32) | (bits << 32);
+  return bits;
+}
+
+inline uint64_t bit_reverse(uint64_t bits, uint32_t width) {
+  assert(width <= 64);
+  uint64_t reversed(0);
+  for (uint32_t i = 0; i < width; ++i) {
+    if (bits & (1ULL << i)) {
+      reversed |= (1ULL << (width - 1 - i));
+    }
+  }
+  return reversed;
+}
+
 template <typename T = uint32_t>
 T sext(const T& word, uint32_t width) {
   assert(width > 1);

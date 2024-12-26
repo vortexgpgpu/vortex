@@ -24,8 +24,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     input base_dcrs_t           base_dcrs,
 
 `ifdef PERF_ENABLE
-    VX_mem_perf_if.slave        mem_perf_if,
-    VX_pipeline_perf_if.slave   pipeline_perf_if,
+    input sysmem_perf_t         sysmem_perf,
+    input pipeline_perf_t       pipeline_perf,
 `endif
 
 `ifdef EXT_F_ENABLE
@@ -82,8 +82,8 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .base_dcrs      (base_dcrs),
 
     `ifdef PERF_ENABLE
-        .mem_perf_if    (mem_perf_if),
-        .pipeline_perf_if(pipeline_perf_if),
+        .sysmem_perf    (sysmem_perf),
+        .pipeline_perf  (pipeline_perf),
     `endif
 
         .commit_csr_if  (commit_csr_if),

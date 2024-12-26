@@ -535,6 +535,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 `ifdef SCOPE
 `ifdef DBG_SCOPE_LSU
     `SCOPE_IO_SWITCH (1);
+    wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 3, 4, 2, (
             1 + NUM_LANES * (`XLEN + LSU_WORD_SIZE + LSU_WORD_SIZE * 8) + `UUID_WIDTH + NUM_LANES * LSU_WORD_SIZE * 8 + `UUID_WIDTH

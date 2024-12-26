@@ -127,6 +127,10 @@ public:
     return local_mem_;
   }
 
+  const MemCoalescer::Ptr& mem_coalescer(uint32_t idx) const {
+    return mem_coalescers_.at(idx);
+  }
+
   const PerfStats& perf_stats() const {
     return perf_stats_;
   }
@@ -156,8 +160,6 @@ private:
   LocalMem::Ptr local_mem_;
   std::vector<LocalMemSwitch::Ptr> lmem_switch_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;
-  std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter_;
-  std::vector<LsuMemAdapter::Ptr> lsu_lmem_adapter_;
 
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;

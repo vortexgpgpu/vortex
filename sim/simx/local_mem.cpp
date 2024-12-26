@@ -24,14 +24,12 @@ protected:
 	LocalMem* simobject_;
 	Config    config_;
 	RAM       ram_;
+	uint32_t 	line_bits_;
 	MemCrossBar::Ptr mem_xbar_;
 	mutable PerfStats perf_stats_;
 
 	uint64_t to_local_addr(uint64_t addr) {
-		uint32_t total_lines = config_.capacity / config_.line_size;
-		uint32_t line_bits = log2ceil(total_lines);
-		uint32_t offset = bit_getw(addr, 0, line_bits-1);
-		return offset;
+		return bit_getw(addr, 0, line_bits_-1);
 	}
 
 public:
@@ -40,9 +38,13 @@ public:
 		, config_(config)
 		, ram_(config.capacity)
 	{
+		uint32_t total_lines = config.capacity / config.line_size;
+		line_bits_ = log2ceil(total_lines);
+
 		char sname[100];
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
-		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config.num_reqs, (1 << config.B));
+		uint32_t wsel_bits = log2ceil(config_.line_size);
+		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::Priority, config.num_reqs, (1 << config.B), wsel_bits);
 		for (uint32_t i = 0; i < config.num_reqs; ++i) {
 			simobject->Inputs.at(i).bind(&mem_xbar_->ReqIn.at(i));
 			mem_xbar_->RspIn.at(i).bind(&simobject->Outputs.at(i));
@@ -56,15 +58,15 @@ public:
 	}
 
 	void read(void* data, uint64_t addr, uint32_t size) {
-		auto s_addr = to_local_addr(addr);
-		DPH(3, "Local Mem addr=0x" << std::hex << s_addr << std::dec << std::endl);
-		ram_.read(data, s_addr, size);
+		auto l_addr = to_local_addr(addr);
+		DPH(3, "Local Mem addr=0x" << std::hex << l_addr << std::dec << std::endl);
+		ram_.read(data, l_addr, size);
 	}
 
 	void write(const void* data, uint64_t addr, uint32_t size) {
-		auto s_addr = to_local_addr(addr);
-		DPH(3, "Local Mem addr=0x" << std::hex << s_addr << std::dec << std::endl);
-		ram_.write(data, s_addr, size);
+		auto l_addr = to_local_addr(addr);
+		DPH(3, "Local Mem addr=0x" << std::hex << l_addr << std::dec << std::endl);
+		ram_.write(data, l_addr, size);
 	}
 
 	void tick() {
@@ -94,7 +96,7 @@ public:
 	}
 
 	const PerfStats& perf_stats() const {
-		perf_stats_.bank_stalls = mem_xbar_->collisions();
+		perf_stats_.bank_stalls = mem_xbar_->req_collisions();
 		return perf_stats_;
 	}
 };

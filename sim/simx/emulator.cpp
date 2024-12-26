@@ -360,7 +360,6 @@ void Emulator::dcache_read(void *data, uint64_t addr, uint32_t size) {
   } else {
     mmu_.read(data, addr, size, 0);
   }
-
   DPH(2, "Mem Read: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << std::dec << " (size=" << size << ", type=" << type << ")" << std::endl);
 }
 #endif
@@ -565,6 +564,12 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         auto cluster_perf = core_->socket()->cluster()->perf_stats();
         auto socket_perf = core_->socket()->perf_stats();
         auto lmem_perf = core_->local_mem()->perf_stats();
+
+        uint64_t coalescer_misses = 0;
+        for (uint i = 0; i < NUM_LSU_BLOCKS; ++i) {
+          coalescer_misses += core_->mem_coalescer(i)->perf_stats().misses;
+        }
+
         switch (addr) {
         CSR_READ_64(VX_CSR_MPM_ICACHE_READS, socket_perf.icache.reads);
         CSR_READ_64(VX_CSR_MPM_ICACHE_MISS_R, socket_perf.icache.read_misses);

@@ -206,13 +206,13 @@ module VX_stream_xbar #(
     reg [PERF_CTR_BITS-1:0] collisions_r;
 
     always @(*) begin
-        per_cycle_collision = 0;
+        per_cycle_collision = '0;
         for (integer i = 0; i < NUM_INPUTS; ++i) begin
-            for (integer j = 1; j < (NUM_INPUTS-i); ++j) begin
+            for (integer j = i + 1; j < NUM_INPUTS; ++j) begin
                 per_cycle_collision[i] |= valid_in[i]
-                                       && valid_in[j+i]
-                                       && (sel_in[i] == sel_in[j+i])
-                                       && (ready_in[i] | ready_in[j+i]);
+                                       && valid_in[j]
+                                       && (sel_in[i] == sel_in[j])
+                                       && (ready_in[i] | ready_in[j]);
             end
         end
     end

@@ -44,7 +44,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     reg [PER_ISSUE_WARPS-1:0][`NUM_SFU_UNITS-1:0] perf_inuse_sfu_per_cycle;
     wire [`NUM_SFU_UNITS-1:0] perf_sfu_per_cycle, perf_sfu_per_cycle_r;
 
-    VX_reduce #(
+    VX_reduce_tree #(
         .DATAW_IN (`NUM_EX_UNITS),
         .N  (PER_ISSUE_WARPS),
         .OP ("|")
@@ -53,7 +53,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         .data_out (perf_units_per_cycle)
     );
 
-    VX_reduce #(
+    VX_reduce_tree #(
         .DATAW_IN (`NUM_SFU_UNITS),
         .N  (PER_ISSUE_WARPS),
         .OP ("|")

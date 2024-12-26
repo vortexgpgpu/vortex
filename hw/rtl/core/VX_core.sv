@@ -28,7 +28,7 @@ module VX_core import VX_gpu_pkg::*; #(
     input wire              reset,
 
 `ifdef PERF_ENABLE
-    VX_mem_perf_if.slave    mem_perf_if,
+    input sysmem_perf_t     sysmem_perf,
 `endif
 
     VX_dcr_bus_if.slave     dcr_bus_if,
@@ -65,14 +65,15 @@ module VX_core import VX_gpu_pkg::*; #(
     ) lsu_mem_if[`NUM_LSU_BLOCKS]();
 
 `ifdef PERF_ENABLE
-    VX_mem_perf_if mem_perf_tmp_if();
-    VX_pipeline_perf_if pipeline_perf_if();
-
-    assign mem_perf_tmp_if.icache  = mem_perf_if.icache;
-    assign mem_perf_tmp_if.dcache  = mem_perf_if.dcache;
-    assign mem_perf_tmp_if.l2cache = mem_perf_if.l2cache;
-    assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
-    assign mem_perf_tmp_if.mem     = mem_perf_if.mem;
+    lmem_perf_t lmem_perf;
+    coalescer_perf_t coalescer_perf;
+    pipeline_perf_t pipeline_perf;
+    sysmem_perf_t sysmem_perf_tmp;
+    always @(*) begin
+        sysmem_perf_tmp = sysmem_perf;
+        sysmem_perf_tmp.lmem = lmem_perf;
+        sysmem_perf_tmp.coalescer = coalescer_perf;
+    end
 `endif
 
     base_dcrs_t base_dcrs;
@@ -94,7 +95,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .reset          (reset),
 
     `ifdef PERF_ENABLE
-        .sched_perf     (pipeline_perf_if.sched),
+        .sched_perf     (pipeline_perf.sched),
     `endif
 
         .base_dcrs      (base_dcrs),
@@ -144,7 +145,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .reset          (reset),
 
     `ifdef PERF_ENABLE
-        .issue_perf     (pipeline_perf_if.issue),
+        .issue_perf     (pipeline_perf.issue),
     `endif
 
         .decode_if      (decode_if),
@@ -162,8 +163,8 @@ module VX_core import VX_gpu_pkg::*; #(
         .reset          (reset),
 
     `ifdef PERF_ENABLE
-        .mem_perf_if    (mem_perf_tmp_if),
-        .pipeline_perf_if(pipeline_perf_if),
+        .sysmem_perf    (sysmem_perf_tmp),
+        .pipeline_perf  (pipeline_perf),
     `endif
 
         .base_dcrs      (base_dcrs),
@@ -200,7 +201,8 @@ module VX_core import VX_gpu_pkg::*; #(
         .clk           (clk),
         .reset         (reset),
     `ifdef PERF_ENABLE
-        .lmem_perf     (mem_perf_tmp_if.lmem),
+        .lmem_perf     (lmem_perf),
+        .coalescer_perf(coalescer_perf),
     `endif
         .lsu_mem_if    (lsu_mem_if),
         .dcache_bus_if (dcache_bus_if)
@@ -276,12 +278,11 @@ module VX_core import VX_gpu_pkg::*; #(
         end
     end
 
-    assign pipeline_perf_if.ifetches = perf_ifetches;
-    assign pipeline_perf_if.loads = perf_loads;
-    assign pipeline_perf_if.stores = perf_stores;
-    assign pipeline_perf_if.load_latency = perf_dcache_lat;
-    assign pipeline_perf_if.ifetch_latency = perf_icache_lat;
-    assign pipeline_perf_if.load_latency = perf_dcache_lat;
+    assign pipeline_perf.ifetches = perf_ifetches;
+    assign pipeline_perf.loads = perf_loads;
+    assign pipeline_perf.stores = perf_stores;
+    assign pipeline_perf.ifetch_latency = perf_icache_lat;
+    assign pipeline_perf.load_latency = perf_dcache_lat;
 
 `endif
 

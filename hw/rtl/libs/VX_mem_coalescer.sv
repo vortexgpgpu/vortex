@@ -24,6 +24,7 @@ module VX_mem_coalescer #(
     parameter TAG_WIDTH     = 8,
     parameter UUID_WIDTH    = 0, // upper section of the request tag contains the UUID
     parameter QUEUE_SIZE    = 8,
+    parameter PERF_CTR_BITS = `CLOG2(NUM_REQS+1),
 
     parameter DATA_IN_WIDTH = DATA_IN_SIZE * 8,
     parameter DATA_OUT_WIDTH= DATA_OUT_SIZE * 8,
@@ -36,6 +37,8 @@ module VX_mem_coalescer #(
 ) (
     input wire clk,
     input wire reset,
+
+    output wire [PERF_CTR_BITS-1:0]     misses,
 
     // Input request
     input wire                          in_req_valid,
@@ -322,6 +325,23 @@ module VX_mem_coalescer #(
     assign in_rsp_data   = in_rsp_data_n;
     assign in_rsp_tag    = {out_rsp_tag[OUT_TAG_WIDTH-1 -: UUID_WIDTH], ibuf_dout_tag};
     assign out_rsp_ready = in_rsp_ready;
+
+    // compute coalescing misses
+    // misses are partial transfers (not fuly coalesced)
+
+    reg [PERF_CTR_BITS-1:0] misses_r;
+
+    wire partial_transfer = (out_req_fire && req_rem_mask_r != '1);
+
+    always @(posedge clk) begin
+        if (reset) begin
+            misses_r <= '0;
+        end else begin
+            misses_r <= misses_r + PERF_CTR_BITS'(partial_transfer);
+        end
+    end
+
+    assign misses = misses_r;
 
 `ifdef DBG_TRACE_MEM
     wire [`UP(UUID_WIDTH)-1:0] out_req_uuid;

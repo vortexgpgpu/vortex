@@ -24,7 +24,7 @@ module VX_socket import VX_gpu_pkg::*; #(
     input wire              reset,
 
 `ifdef PERF_ENABLE
-    VX_mem_perf_if.slave    mem_perf_if,
+    input sysmem_perf_t     sysmem_perf,
 `endif
 
     // DCRs
@@ -63,11 +63,13 @@ module VX_socket import VX_gpu_pkg::*; #(
     ///////////////////////////////////////////////////////////////////////////
 
 `ifdef PERF_ENABLE
-    VX_mem_perf_if mem_perf_tmp_if();
-    assign mem_perf_tmp_if.l2cache = mem_perf_if.l2cache;
-    assign mem_perf_tmp_if.l3cache = mem_perf_if.l3cache;
-    assign mem_perf_tmp_if.lmem = 'x;
-    assign mem_perf_tmp_if.mem = mem_perf_if.mem;
+    cache_perf_t icache_perf, dcache_perf;
+    sysmem_perf_t sysmem_perf_tmp;
+    always @(*) begin
+        sysmem_perf_tmp = sysmem_perf;
+        sysmem_perf_tmp.icache = icache_perf;
+        sysmem_perf_tmp.dcache = dcache_perf;
+    end
 `endif
 
     ///////////////////////////////////////////////////////////////////////////
@@ -110,7 +112,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .MEM_OUT_BUF    (2)
     ) icache (
     `ifdef PERF_ENABLE
-        .cache_perf     (mem_perf_tmp_if.icache),
+        .cache_perf     (icache_perf),
     `endif
         .clk            (clk),
         .reset          (icache_reset),
@@ -160,7 +162,7 @@ module VX_socket import VX_gpu_pkg::*; #(
         .MEM_OUT_BUF    (2)
     ) dcache (
     `ifdef PERF_ENABLE
-        .cache_perf     (mem_perf_tmp_if.dcache),
+        .cache_perf     (dcache_perf),
     `endif
         .clk            (clk),
         .reset          (dcache_reset),
@@ -187,6 +189,7 @@ module VX_socket import VX_gpu_pkg::*; #(
 
             VX_mem_arb #(
                 .NUM_INPUTS (2),
+                .NUM_OUTPUTS(1),
                 .DATA_SIZE  (`L1_LINE_SIZE),
                 .TAG_WIDTH  (L1_MEM_TAG_WIDTH),
                 .TAG_SEL_IDX(0),
@@ -234,7 +237,7 @@ module VX_socket import VX_gpu_pkg::*; #(
             .reset          (core_reset),
 
         `ifdef PERF_ENABLE
-            .mem_perf_if    (mem_perf_tmp_if),
+            .sysmem_perf    (sysmem_perf_tmp),
         `endif
 
             .dcr_bus_if     (core_dcr_bus_if),

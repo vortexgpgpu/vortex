@@ -328,9 +328,9 @@ module VX_afu_wrap #(
 `ifdef DBG_SCOPE_AFU
 	wire m_axi_mem_awfire_0 = m_axi_mem_awvalid_a[0] & m_axi_mem_awready_a[0];
 	wire m_axi_mem_arfire_0 = m_axi_mem_arvalid_a[0] & m_axi_mem_arready_a[0];
-	wire m_axi_mem_wfire_0 = m_axi_mem_wvalid_a[0]  & m_axi_mem_wready_a[0];
+	wire m_axi_mem_wfire_0  = m_axi_mem_wvalid_a[0]  & m_axi_mem_wready_a[0];
 	wire m_axi_mem_bfire_0  = m_axi_mem_bvalid_a[0]  & m_axi_mem_bready_a[0];
-
+	wire reset_negedge;
 	`NEG_EDGE (reset_negedge, reset);
 	`SCOPE_TAP (0, 0, {
 			ap_reset,

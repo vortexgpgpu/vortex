@@ -177,6 +177,9 @@
 `define VX_CSR_MPM_LMEM_WRITES_H        12'hB9C
 `define VX_CSR_MPM_LMEM_BANK_ST         12'hB1D     // bank conflicts
 `define VX_CSR_MPM_LMEM_BANK_ST_H       12'hB9D
+// PERF: coalescer
+`define VX_CSR_MPM_COALESCE_MISS        12'hB1E     // coalescer misses
+`define VX_CSR_MPM_COALESCE_MISS_H      12'hB9E
 
 // Machine Performance-monitoring memory counters (class 3) ///////////////////
 // <Add your own counters: use addresses hB03..B1F, hB83..hB9F>

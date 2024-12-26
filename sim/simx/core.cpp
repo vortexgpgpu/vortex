@@ -46,8 +46,6 @@ Core::Core(const SimContext& ctx,
   , func_units_((uint32_t)FUType::Count)
   , lmem_switch_(NUM_LSU_BLOCKS)
   , mem_coalescers_(NUM_LSU_BLOCKS)
-  , lsu_dcache_adapter_(NUM_LSU_BLOCKS)
-  , lsu_lmem_adapter_(NUM_LSU_BLOCKS)
   , pending_icache_(arch_.num_warps())
   , commit_arbs_(ISSUE_WIDTH)
 {
@@ -64,11 +62,11 @@ Core::Core(const SimContext& ctx,
   }
 
   // create local memory
-  snprintf(sname, 100, "%s-local_mem", this->name().c_str());
+  snprintf(sname, 100, "%s-lmem", this->name().c_str());
   local_mem_ = LocalMem::Create(sname, LocalMem::Config{
     (1 << LMEM_LOG_SIZE),
     LSU_WORD_SIZE,
-    LSU_NUM_REQS,
+    LSU_CHANNELS,
     log2ceil(LMEM_NUM_BANKS),
     false
   });
@@ -79,48 +77,52 @@ Core::Core(const SimContext& ctx,
     lmem_switch_.at(i) = LocalMemSwitch::Create(sname, 1);
   }
 
-  // create lsu dcache adapter
+  // create dcache adapter
+  std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter(NUM_LSU_BLOCKS);
   for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
     snprintf(sname, 100, "%s-lsu_dcache_adapter%d", this->name().c_str(), i);
-    lsu_dcache_adapter_.at(i) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
+    lsu_dcache_adapter.at(i) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
   }
 
-  // create lsu lmem adapter
-  for (uint32_t i = 0; i < NUM_LSU_BLOCKS; ++i) {
-    snprintf(sname, 100, "%s-lsu_lmem_adapter%d", this->name().c_str(), i);
-    lsu_lmem_adapter_.at(i) = LsuMemAdapter::Create(sname, LSU_CHANNELS, 1);
-  }
+  // create lmem arbiter
+  snprintf(sname, 100, "%s-lmem_arb", this->name().c_str());
+  auto lmem_arb = LsuArbiter::Create(sname, ArbiterType::RoundRobin, NUM_LSU_BLOCKS, 1);
 
-  // connect lsu demux
+  // create lmem adapter
+  snprintf(sname, 100, "%s-lsu_lmem_adapter", this->name().c_str());
+  auto lsu_lmem_adapter = LsuMemAdapter::Create(sname, LSU_CHANNELS, 1);
+
+  // connect lmem switch
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
     lmem_switch_.at(b)->ReqDC.bind(&mem_coalescers_.at(b)->ReqIn);
+    lmem_switch_.at(b)->ReqLmem.bind(&lmem_arb->ReqIn.at(b));
+
     mem_coalescers_.at(b)->RspIn.bind(&lmem_switch_.at(b)->RspDC);
-
-    lmem_switch_.at(b)->ReqLmem.bind(&lsu_lmem_adapter_.at(b)->ReqIn);
-    lsu_lmem_adapter_.at(b)->RspIn.bind(&lmem_switch_.at(b)->RspLmem);
+    lmem_arb->RspIn.at(b).bind(&lmem_switch_.at(b)->RspLmem);
   }
 
-  // connect coalescer-adapter
+  // connect lmem arbiter
+  lmem_arb->ReqOut.at(0).bind(&lsu_lmem_adapter->ReqIn);
+  lsu_lmem_adapter->RspIn.bind(&lmem_arb->RspOut.at(0));
+
+  // connect lmem adapter
+  for (uint32_t c = 0; c < LSU_CHANNELS; ++c) {
+    lsu_lmem_adapter->ReqOut.at(c).bind(&local_mem_->Inputs.at(c));
+    local_mem_->Outputs.at(c).bind(&lsu_lmem_adapter->RspOut.at(c));
+  }
+
+  // connect dcache coalescer
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-    mem_coalescers_.at(b)->ReqOut.bind(&lsu_dcache_adapter_.at(b)->ReqIn);
-    lsu_dcache_adapter_.at(b)->RspIn.bind(&mem_coalescers_.at(b)->RspOut);
+    mem_coalescers_.at(b)->ReqOut.bind(&lsu_dcache_adapter.at(b)->ReqIn);
+    lsu_dcache_adapter.at(b)->RspIn.bind(&mem_coalescers_.at(b)->RspOut);
   }
 
-  // connect adapter-dcache
+  // connect dcache adapter
   for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
     for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
       uint32_t i = b * DCACHE_CHANNELS + c;
-      lsu_dcache_adapter_.at(b)->ReqOut.at(c).bind(&dcache_req_ports.at(i));
-      dcache_rsp_ports.at(i).bind(&lsu_dcache_adapter_.at(b)->RspOut.at(c));
-    }
-  }
-
-  // connect adapter-lmem
-  for (uint32_t b = 0; b < NUM_LSU_BLOCKS; ++b) {
-    for (uint32_t c = 0; c < LSU_CHANNELS; ++c) {
-      uint32_t i = b * LSU_CHANNELS + c;
-      lsu_lmem_adapter_.at(b)->ReqOut.at(c).bind(&local_mem_->Inputs.at(i));
-      local_mem_->Outputs.at(i).bind(&lsu_lmem_adapter_.at(b)->RspOut.at(c));
+      lsu_dcache_adapter.at(b)->ReqOut.at(c).bind(&dcache_req_ports.at(i));
+      dcache_rsp_ports.at(i).bind(&lsu_dcache_adapter.at(b)->RspOut.at(c));
     }
   }
 
