@@ -21,6 +21,7 @@ module VX_alu_unit #(
 
     // Inputs
     VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
+    VX_sched_csr_if.slave   sched_csr_if,
 
     // Outputs
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
@@ -83,7 +84,8 @@ module VX_alu_unit #(
             .reset      (int_reset),
             .execute_if (int_execute_if),
             .branch_ctl_if (branch_ctl_if[block_idx]),
-            .commit_if  (int_commit_if)
+            .commit_if  (int_commit_if),
+            .sched_csr_if (sched_csr_if)
         );
 
     `ifdef EXT_M_ENABLE

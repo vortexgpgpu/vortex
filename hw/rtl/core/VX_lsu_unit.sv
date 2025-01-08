@@ -23,6 +23,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     // Inputs
     VX_dispatch_if.slave    dispatch_if [`ISSUE_WIDTH],
+    VX_sched_csr_if.slave   sched_csr_if,
 
     // Outputs    
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],

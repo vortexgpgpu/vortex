@@ -22,6 +22,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     split_t     split;
     join_t      sjoin;
     barrier_t   barrier;
+    tile_t      tile;
 
     wire [`NW_WIDTH-1:0] dvstack_wid;
     wire [`DV_STACK_SIZEW-1:0] dvstack_ptr;
@@ -34,6 +35,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         output split,
         output sjoin,
         output barrier,
+        output tile,
 
         output dvstack_wid,
         input  dvstack_ptr
@@ -47,6 +49,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         input split,
         input sjoin,
         input barrier,
+        input tile,
 
         input dvstack_wid,
         output dvstack_ptr

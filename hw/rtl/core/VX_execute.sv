@@ -61,7 +61,8 @@ module VX_execute import VX_gpu_pkg::*; #(
         .reset          (alu_reset),
         .dispatch_if    (dispatch_if[`EX_ALU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .commit_if      (commit_if[`EX_ALU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
-        .branch_ctl_if  (branch_ctl_if)
+        .branch_ctl_if  (branch_ctl_if),
+        .sched_csr_if   (sched_csr_if)
     );
 
     `SCOPE_IO_SWITCH (1)
@@ -74,7 +75,8 @@ module VX_execute import VX_gpu_pkg::*; #(
         .reset          (lsu_reset),
         .dispatch_if    (dispatch_if[`EX_LSU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .commit_if      (commit_if[`EX_LSU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
-        .lsu_mem_if     (lsu_mem_if)
+        .lsu_mem_if     (lsu_mem_if),
+        .sched_csr_if   (sched_csr_if)
     );
 
 `ifdef EXT_F_ENABLE
@@ -87,7 +89,8 @@ module VX_execute import VX_gpu_pkg::*; #(
         .reset          (fpu_reset),
         .dispatch_if    (dispatch_if[`EX_FPU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
         .commit_if      (commit_if[`EX_FPU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
-        .fpu_csr_if     (fpu_csr_if)
+        .fpu_csr_if     (fpu_csr_if),
+        .sched_csr_if   (sched_csr_if)
     );
 `endif
 

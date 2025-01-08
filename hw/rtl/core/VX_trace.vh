@@ -355,6 +355,7 @@
                 `INST_SFU_CSRRW: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRWI")); else `TRACE(level, ("CSRRW")); end
                 `INST_SFU_CSRRS: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRSI")); else `TRACE(level, ("CSRRS")); end
                 `INST_SFU_CSRRC: begin if (op_args.csr.use_imm) `TRACE(level, ("CSRRCI")); else `TRACE(level, ("CSRRC")); end
+                `INST_SFU_TILE:   `TRACE(level, ("TILE"));
                 default:         `TRACE(level, ("?"));
             endcase
         end

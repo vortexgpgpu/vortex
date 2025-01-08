@@ -576,6 +576,13 @@ module VX_decode import VX_gpu_pkg::*; #(
                     default:;
                 endcase
             end
+            `INST_TILE: begin
+                ex_type = `EX_SFU;
+                op_type = `INST_OP_BITS'(`INST_SFU_TILE);
+                `USED_IREG (rs1);
+                `USED_IREG (rs2);
+                is_wstall = 1;
+            end
             default:;
         endcase
     end

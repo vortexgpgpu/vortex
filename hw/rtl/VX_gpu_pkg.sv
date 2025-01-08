@@ -55,6 +55,12 @@ package VX_gpu_pkg;
     } barrier_t;
 
     typedef struct packed {
+        logic                   valid;
+        logic [7:0]             wmask;
+        logic [7:0][7:0]        numThreads;
+    } tile_t;
+
+    typedef struct packed {
         logic [`XLEN-1:0]       startup_addr;
         logic [`XLEN-1:0]       startup_arg;
         logic [7:0]             mpm_class;

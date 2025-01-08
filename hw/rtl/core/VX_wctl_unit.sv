@@ -31,7 +31,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     localparam LANE_BITS  = `CLOG2(NUM_LANES);
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
-    localparam WCTL_WIDTH = $bits(tmc_t) + $bits(wspawn_t) + $bits(split_t) + $bits(join_t) + $bits(barrier_t);
+    localparam WCTL_WIDTH = $bits(tmc_t) + $bits(wspawn_t) + $bits(split_t) + $bits(join_t) + $bits(barrier_t) + $bits(tile_t);
     localparam DATAW = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + WCTL_WIDTH + PID_WIDTH + 1 + 1 + `DV_STACK_SIZEW;
 
     `UNUSED_VAR (execute_if.data.rs3_data)
@@ -41,6 +41,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     split_t     split, split_r;
     join_t      sjoin, sjoin_r;
     barrier_t   barrier, barrier_r;
+    tile_t      tile,tile_r;
 
     wire is_wspawn = (execute_if.data.op_type == `INST_SFU_WSPAWN);
     wire is_tmc    = (execute_if.data.op_type == `INST_SFU_TMC);
@@ -48,6 +49,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_split  = (execute_if.data.op_type == `INST_SFU_SPLIT);
     wire is_join   = (execute_if.data.op_type == `INST_SFU_JOIN);
     wire is_bar    = (execute_if.data.op_type == `INST_SFU_BAR);
+    wire is_tile    = (execute_if.data.op_type == `INST_SFU_TILE);
 
     wire [`UP(LANE_BITS)-1:0] tid;
     if (LANE_BITS != 0) begin
@@ -138,6 +140,37 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign wspawn.wmask = wspawn_wmask;
     assign wspawn.pc    = rs2_data[1 +: `PC_BITS];
 
+    //TILE
+    integer k;
+    reg [7:0] tile_mask_r, tile_mask_n; 
+    reg [`NUM_WARPS-1:0][7:0] thread_count_r, thread_count_n; 
+    wire tile_reset = execute_if.data.rs1_data[0][31];
+    always @(*) begin
+        tile_mask_n = tile_mask_r;
+        thread_count_n = thread_count_r;
+        if(tile_reset) begin
+            tile_mask_n = execute_if.data.rs1_data[0][7:0];  //all threads carry same tile mask
+        end
+        else begin
+            tile_mask_n = tile_mask_r | execute_if.data.rs1_data[0][7:0];
+        end
+        for(k = 0; k<8; k=k+1) begin
+            if(tile_mask_r[k]) begin
+                thread_count_n[k] = execute_if.data.rs2_data[0][7:0]; //all threads carry same thread count
+            end
+        end
+    end
+
+    always @(posedge clk) begin
+        thread_count_r <= thread_count_n;
+        tile_mask_r <= tile_mask_n;
+    end
+
+    assign tile.valid = is_tile;
+    assign tile.wmask = tile_mask_n;
+    assign tile.numThreads = thread_count_n;
+
+
     // response
 
     VX_elastic_buffer #(
@@ -148,8 +181,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (execute_if.valid),
         .ready_in  (execute_if.ready),
-        .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, {tmc, wspawn, split, sjoin, barrier}, warp_ctl_if.dvstack_ptr}),
-        .data_out  ({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.PC, commit_if.data.rd, commit_if.data.wb, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop, {tmc_r, wspawn_r, split_r, sjoin_r, barrier_r}, dvstack_ptr}),
+        .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, {tmc, wspawn, split, sjoin, barrier,tile}, warp_ctl_if.dvstack_ptr}),
+        .data_out  ({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.PC, commit_if.data.rd, commit_if.data.wb, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop, {tmc_r, wspawn_r, split_r, sjoin_r, barrier_r,tile_r}, dvstack_ptr}),
         .valid_out (commit_if.valid),
         .ready_out (commit_if.ready)
     );
@@ -161,6 +194,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign warp_ctl_if.split   = split_r;
     assign warp_ctl_if.sjoin   = sjoin_r;
     assign warp_ctl_if.barrier = barrier_r;
+    assign warp_ctl_if.tile    = tile_r;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign commit_if.data.data[i] = `XLEN'(dvstack_ptr);

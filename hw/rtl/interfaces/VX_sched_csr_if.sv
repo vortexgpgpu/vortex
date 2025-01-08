@@ -22,6 +22,7 @@ interface VX_sched_csr_if ();
     wire [`NW_WIDTH-1:0] alm_empty_wid;
     wire unlock_warp;
     wire [`NW_WIDTH-1:0] unlock_wid;
+    wire [`NUM_WARPS-1:0][7:0] numThreads;
 
     modport master (
         output cycles,
@@ -30,7 +31,8 @@ interface VX_sched_csr_if ();
         input  alm_empty_wid,
         output alm_empty,
         input  unlock_wid,        
-        input  unlock_warp
+        input  unlock_warp,
+        output numThreads
     );
 
     modport slave (
@@ -40,7 +42,8 @@ interface VX_sched_csr_if ();
         output alm_empty_wid,
         input  alm_empty,
         output unlock_wid,
-        output unlock_warp
+        output unlock_warp,
+        input numThreads
     );
 
 endinterface

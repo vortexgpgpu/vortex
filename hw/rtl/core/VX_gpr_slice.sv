@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+`define COOP
+// `define DEFAULT
 `include "VX_define.vh"
 
 module VX_gpr_slice import VX_gpu_pkg::*; #(
@@ -90,7 +92,12 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
                 if (is_rs3_zero || (CACHE_ENABLE != 0 &&
                                     scoreboard_if.data.rs3 == cache_reg[scoreboard_if.data.wis] &&
                                     (scoreboard_if.data.tmask & cache_tmask[scoreboard_if.data.wis]) == scoreboard_if.data.tmask)) begin
+                    `ifdef DEFAULT
                     rs3_data_n   = (is_rs3_zero || CACHE_ENABLE == 0) ? '0 : cache_data[scoreboard_if.data.wis];
+                    `endif 
+                    `ifdef COOP
+                    rs3_data_n   = (is_rs3_zero || CACHE_ENABLE == 0) ? '0 : {cache_data[0][3:0],cache_data[1][3:0],cache_data[2][3:0],cache_data[3][3:0],cache_data[4][3:0],cache_data[5][3:0],cache_data[6][3:0],cache_data[7][3:0]};
+                    `endif
                     rs3_ready_n  = 1;
                 end else begin
                     rs3_ready_n  = 0;
@@ -101,7 +108,12 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
                 if (is_rs2_zero || (CACHE_ENABLE != 0 &&
                                     scoreboard_if.data.rs2 == cache_reg[scoreboard_if.data.wis] &&
                                     (scoreboard_if.data.tmask & cache_tmask[scoreboard_if.data.wis]) == scoreboard_if.data.tmask)) begin
+                    `ifdef DEFAULT
                     rs2_data_n   = (is_rs2_zero || CACHE_ENABLE == 0) ? '0 : cache_data[scoreboard_if.data.wis];
+                    `endif 
+                    `ifdef COOP
+                    rs2_data_n   = (is_rs2_zero || CACHE_ENABLE == 0) ? '0 : {cache_data[0][3:0],cache_data[1][3:0],cache_data[2][3:0],cache_data[3][3:0],cache_data[4][3:0],cache_data[5][3:0],cache_data[6][3:0],cache_data[7][3:0]};
+                    `endif
                     rs2_ready_n  = 1;
                 end else begin
                     rs2_ready_n  = 0;
@@ -112,7 +124,12 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
                 if (is_rs1_zero || (CACHE_ENABLE != 0 &&
                                     scoreboard_if.data.rs1 == cache_reg[scoreboard_if.data.wis] &&
                                     (scoreboard_if.data.tmask & cache_tmask[scoreboard_if.data.wis]) == scoreboard_if.data.tmask)) begin
+                    `ifdef DEFAULT
                     rs1_data_n   = (is_rs1_zero || CACHE_ENABLE == 0) ? '0 : cache_data[scoreboard_if.data.wis];
+                    `endif 
+                    `ifdef COOP
+                    rs1_data_n   = (is_rs1_zero || CACHE_ENABLE == 0) ? '0 : {cache_data[0][3:0],cache_data[1][3:0],cache_data[2][3:0],cache_data[3][3:0],cache_data[4][3:0],cache_data[5][3:0],cache_data[6][3:0],cache_data[7][3:0]};
+                    `endif
                 end else begin
                     gpr_rd_rid_n = scoreboard_if.data.rs1;
                     data_ready_n = 0;
@@ -235,12 +252,12 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
 
     // GPR banks
 
-    reg [RAM_ADDRW-1:0] gpr_rd_addr;
-    wire [RAM_ADDRW-1:0] gpr_wr_addr;
+    reg [RAM_ADDRW-4:0] gpr_rd_addr;
+    wire [RAM_ADDRW-4:0] gpr_wr_addr;
     if (ISSUE_WIS != 0) begin
-        assign gpr_wr_addr = {writeback_if.data.wis, writeback_if.data.rd};
+        assign gpr_wr_addr = writeback_if.data.rd;
         always @(posedge clk) begin
-            gpr_rd_addr <= {gpr_rd_wis_n, gpr_rd_rid_n};
+            gpr_rd_addr <= gpr_rd_rid_n;
         end
     end else begin
         assign gpr_wr_addr = writeback_if.data.rd;
@@ -258,29 +275,31 @@ module VX_gpr_slice import VX_gpu_pkg::*; #(
     end
 `endif
 
-    for (genvar j = 0; j < `NUM_THREADS; ++j) begin
-        VX_dp_ram #(
-            .DATAW (`XLEN),
-            .SIZE (`NUM_REGS * ISSUE_RATIO),
-        `ifdef GPR_RESET
-            .INIT_ENABLE (1),
-            .INIT_VALUE (0),
-        `endif
-            .NO_RWCHECK (1)
-        ) gpr_ram (
-            .clk   (clk),
-            .read  (1'b1),
-            `UNUSED_PIN (wren),
-        `ifdef GPR_RESET
-            .write (wr_enabled && writeback_if.valid && writeback_if.data.tmask[j]),
-        `else
-            .write (writeback_if.valid && writeback_if.data.tmask[j]),
-        `endif
-            .waddr (gpr_wr_addr),
-            .wdata (writeback_if.data.data[j]),
-            .raddr (gpr_rd_addr),
-            .rdata (gpr_rd_data[j])
-        );
+    for (genvar j = 0; j < 4; ++j) begin
+        for (genvar k = 0; k < ISSUE_RATIO; ++k) begin
+            VX_dp_ram #(
+                .DATAW (`XLEN),
+                .SIZE (`NUM_REGS),
+            `ifdef GPR_RESET
+                .INIT_ENABLE (1),
+                .INIT_VALUE (0),
+            `endif
+                .NO_RWCHECK (1)
+            ) gpr_ram (
+                .clk   (clk),
+                .read  (1'b1),
+                `UNUSED_PIN (wren),
+            `ifdef GPR_RESET
+                .write (wr_enabled && writeback_if.valid && writeback_if.data.tmask[k*4+j]),
+            `else
+                .write (writeback_if.valid && writeback_if.data.tmask[k*4+j]), //&& (k==writeback_if.data.wis)),
+            `endif
+                .waddr (gpr_wr_addr),
+                .wdata (writeback_if.data.data[k*4+j]),
+                .raddr (gpr_rd_addr),
+                .rdata (gpr_rd_data[k*4+j])
+            );
+        end
     end
 
 endmodule

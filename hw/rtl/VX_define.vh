@@ -273,6 +273,7 @@
 `define INST_SFU_CSRRW       4'h6
 `define INST_SFU_CSRRS       4'h7
 `define INST_SFU_CSRRC       4'h8
+`define INST_SFU_TILE        4'h9
 `define INST_SFU_BITS        4
 `define INST_SFU_CSR(f3)     (4'h6 + 4'(f3) - 4'h1)
 `define INST_SFU_IS_WCTL(op) (op <= 5)
