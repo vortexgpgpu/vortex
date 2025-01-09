@@ -222,7 +222,7 @@ inline void vx_fence() {
     __asm__ volatile ("fence iorw, iorw");
 }
 
-void vx_store(int val, int reg){
+inline void vx_store(int val, int reg){
     switch (reg){
         case 0:
     __asm__ volatile (
