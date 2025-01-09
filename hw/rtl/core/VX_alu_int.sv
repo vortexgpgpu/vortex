@@ -253,24 +253,24 @@ module VX_alu_int #(
         always @(*) begin
             case (alu_op)
                 `SHFL_BFLY: begin
-                    assign lane[i] = `XLEN'(i) - b[i]; 
-                    assign p[i] = (lane[i] >= maxLane[i]);
+                    lane[i] = `XLEN'(i) - b[i]; 
+                    p[i] = (lane[i] >= maxLane[i]);
                 end
                 `SHFL_UP: begin
-                    assign lane[i] = `XLEN'(i) + b[i]; 
-                    assign p[i] = (lane[i] <= maxLane[i]);
+                    lane[i] = `XLEN'(i) + b[i]; 
+                    p[i] = (lane[i] <= maxLane[i]);
                 end
                 `SHFL_DOWN: begin
-                    assign lane[i] = `XLEN'(i) ^ b[i]; 
-                    assign p[i] = (lane[i] <= maxLane[i]);
+                    lane[i] = `XLEN'(i) ^ b[i]; 
+                    p[i] = (lane[i] <= maxLane[i]);
                 end
                 `SHFL_IDX: begin
-                    assign lane[i] = minLane[i] | (b[i] & ~(segmask[i])); 
-                    assign p[i] = (lane[i] <= maxLane[i]);
+                    lane[i] = minLane[i] | (b[i] & ~(segmask[i])); 
+                    p[i] = (lane[i] <= maxLane[i]);
                 end
                 default: begin
-                    assign lane[i] = ~(`XLEN'(1'b0)); 
-                    assign p[i] = ~(1'b0);
+                    lane[i] = ~(`XLEN'(1'b0)); 
+                    p[i] = ~(1'b0);
                 end
             endcase
             if(p[i] == 1'b0) begin
