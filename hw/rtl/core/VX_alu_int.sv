@@ -142,80 +142,80 @@ module VX_alu_int #(
 
         16: begin
             if(wid == 0) begin
-                vote_all = (is_neg) ? (vote_in[31:16] == 16'(1'b0)) : (vote_in[31:16] == active_t[31:16]);
-                vote_any = (is_neg) ? (vote_in[31:16] != active_t[31:16]) : (vote_in[31:16] > 16'(1'b0));
-                vote_uni = ((vote_in[31:16] == active_t[31:16]) || (vote_in[31:16] == 16'(1'b0)));
+                vote_all = (is_neg) ? ((vote_in & (32'hFFFF0000)) == 32'(1'b0)) : ((vote_in & (32'hFFFF0000)) == (active_t & (32'hFFFF0000)));
+                vote_any = (is_neg) ? ((vote_in & (32'hFFFF0000)) != (active_t & (32'hFFFF0000))) : ((vote_in & (32'hFFFF0000)) > 32'(1'b0));
+                vote_uni = (((vote_in & (32'hFFFF0000))== (active_t & (32'hFFFF0000))) || ((vote_in & (32'hFFFF0000)) == 32'(1'b0)));
             end
             else if(wid == 4) begin
-                vote_all = (is_neg) ? (vote_in[15:0] == 16'(1'b0)) : (vote_in[15:0] == active_t[15:0]);
-                vote_any = (is_neg) ? (vote_in[15:0] != active_t[15:0]) : (vote_in[15:0] > 16'(1'b0));
-                vote_uni = ((vote_in[15:0] == active_t[15:0]) || (vote_in[15:0] == 16'(1'b0)));
+                vote_all = (is_neg) ? ((vote_in & (32'hFFFF)) == 32'(1'b0)) : ((vote_in & (32'hFFFF)) == (active_t & (32'hFFFF)));
+                vote_any = (is_neg) ? ((vote_in & (32'hFFFF)) != (active_t & (32'hFFFF))) : ((vote_in & (32'hFFFF)) > 32'(1'b0));
+                vote_uni = (((vote_in & (32'hFFFF)) == (active_t & (32'hFFFF))) || ((vote_in & (32'hFFFF)) == 32'(1'b0)));
             end
         end
 
         8: begin
             if(wid == 0) begin
-                vote_all = (is_neg) ? (vote_in[31:24] == 8'(1'b0)) : (vote_in[31:24] == active_t[31:24]);
-                vote_any = (is_neg) ? (vote_in[31:24] != active_t[31:24]) : (vote_in[31:24] > 8'(1'b0));
-                vote_uni = ((vote_in[31:24] == active_t[31:24]) || (vote_in[31:24] == 8'(1'b0)));
+                vote_all = (is_neg) ? ((vote_in & 32'hFF000000) == 32'(1'b0)) : ((vote_in & 32'hFF000000) == (active_t & 32'hFF000000));
+                vote_any = (is_neg) ? ((vote_in & 32'hFF000000) != (active_t & 32'hFF000000)) : ((vote_in & 32'hFF000000) > 32'(1'b0));
+                vote_uni = (((vote_in & 32'hFF000000) == (active_t & 32'hFF000000)) || ((vote_in & 32'hFF000000) == 32'(1'b0)));
             end
             else if(wid == 2) begin
-                vote_all = (is_neg) ? (vote_in[23:16] == 8'(1'b0)) : (vote_in[23:16] == active_t[23:16]);
-                vote_any = (is_neg) ? (vote_in[23:16] != active_t[23:16]) : (vote_in[23:16] > 8'(1'b0));
-                vote_uni = ((vote_in[23:16] == active_t[23:16]) || (vote_in[23:16] == 8'(1'b0)));
+                vote_all = (is_neg) ? ((vote_in & 32'h00FF0000) == 32'(1'b0)) : ((vote_in & 32'h00FF0000) == (active_t & 32'h00FF0000));
+                vote_any = (is_neg) ? ((vote_in & 32'h00FF0000) != (active_t & 32'h00FF0000)) : ((vote_in & 32'h00FF0000) > 32'(1'b0));
+                vote_uni = (((vote_in & 32'h00FF0000) == (active_t & 32'h00FF0000)) || ((vote_in & 32'h00FF0000) == 32'(1'b0)));
             end
             else if(wid == 4) begin
-                vote_all = (is_neg) ? (vote_in[15:8] == 8'(1'b0)) : (vote_in[15:8] == active_t[15:8]);
-                vote_any = (is_neg) ? (vote_in[15:8] != active_t[15:8]) : (vote_in[15:8] > 8'(1'b0));
-                vote_uni = ((vote_in[15:8] == active_t[15:8]) || (vote_in[15:8] == 8'(1'b0)));
+                vote_all = (is_neg) ? ((vote_in & 32'h0000FF00) == 32'(1'b0)) : ((vote_in & 32'h0000FF00) == (active_t & 32'h0000FF00));
+                vote_any = (is_neg) ? ((vote_in & 32'h0000FF00) != (active_t & 32'h0000FF00)) : ((vote_in & 32'h0000FF00) > 32'(1'b0));
+                vote_uni = (((vote_in & 32'h0000FF00) == (active_t & 32'h0000FF00)) || ((vote_in & 32'h0000FF00) == 32'(1'b0)));
             end
             else if(wid == 6) begin
-                vote_all = (is_neg) ? (vote_in[7:0] == 8'(1'b0)) : (vote_in[7:0] == active_t[7:0]);
-                vote_any = (is_neg) ? (vote_in[7:0] != active_t[7:0]) : (vote_in[7:0] > 8'(1'b0));
-                vote_uni = ((vote_in[7:0] == active_t[7:0]) || (vote_in[7:0] == 8'(1'b0)));
+                vote_all = (is_neg) ? ((vote_in & 32'hFF) == 32'(1'b0)) : ((vote_in & 32'hFF) == (active_t & 32'hFF));
+                vote_any = (is_neg) ? ((vote_in & 32'hFF) != (active_t & 32'hFF)) : ((vote_in & 32'hFF) > 32'(1'b0));
+                vote_uni = (((vote_in & 32'hFF) == (active_t & 32'hFF)) || ((vote_in & 32'hFF) == 32'(1'b0)));
             end
         end
 
         4: begin
             if(wid == 0) begin
-                vote_all = (is_neg) ? (vote_in[31:28] == 4'(1'b0)) : (vote_in[31:28] == active_t[31:28]);
-                vote_any = (is_neg) ? (vote_in[31:28] != active_t[31:28]) : (vote_in[31:28] > 4'(1'b0));
-                vote_uni = ((vote_in[31:28] == active_t[31:28]) || (vote_in[31:28] == 4'(1'b0)));
+                vote_all = (is_neg) ? ((vote_in & 32'hF0000000)== 32'(1'b0)) : ((vote_in & 32'hF0000000)== (active_t & 32'hF0000000));
+                vote_any = (is_neg) ? ((vote_in & 32'hF0000000)!= (active_t & 32'hF0000000)) : ((vote_in & 32'hF0000000)> 32'(1'b0));
+                vote_uni = (((vote_in & 32'hF0000000)== (active_t & 32'hF0000000)) || ((vote_in & 32'hF0000000)== 32'(1'b0)));
             end
             else if(wid == 1) begin
-                vote_all = (is_neg) ? (vote_in[27:24] == 4'(1'b0)) : (vote_in[27:24] == active_t[27:24]);
-                vote_any = (is_neg) ? (vote_in[27:24] != active_t[27:24]) : (vote_in[27:24] > 4'(1'b0));
-                vote_uni = ((vote_in[27:24] == active_t[27:24]) || (vote_in[27:24] == 4'(1'b0)));
+                vote_all = (is_neg) ? ((vote_in & 32'h0F000000) == 32'(1'b0)) : ((vote_in & 32'h0F000000) == (active_t & 32'h0F000000));
+                vote_any = (is_neg) ? ((vote_in & 32'h0F000000) != (active_t & 32'h0F000000)) : ((vote_in & 32'h0F000000) > 32'(1'b0));
+                vote_uni = (((vote_in & 32'h0F000000) == (active_t & 32'h0F000000)) || ((vote_in & 32'h0F000000) == 32'(1'b0)));
             end
             else if(wid == 2) begin
-                vote_all = (is_neg) ? (vote_in[23:20] == 4'(1'b0)) : (vote_in[23:20] == active_t[23:20]);
-                vote_any = (is_neg) ? (vote_in[23:20] != active_t[23:20]) : (vote_in[23:20] > 4'(1'b0));
-                vote_uni = ((vote_in[23:20] == active_t[23:20]) || (vote_in[23:20] == 4'(1'b0)));
+                vote_all = (is_neg) ? ((vote_in & 32'h00F00000) == 32'(1'b0)) : ((vote_in & 32'h00F00000) == (active_t & 32'h00F00000));
+                vote_any = (is_neg) ? ((vote_in & 32'h00F00000) != (active_t & 32'h00F00000)) : ((vote_in & 32'h00F00000) > 32'(1'b0));
+                vote_uni = (((vote_in & 32'h00F00000) == (active_t & 32'h00F00000)) || ((vote_in & 32'h00F00000) == 32'(1'b0)));
             end
             else if(wid == 3) begin
-                vote_all = (is_neg) ? (vote_in[19:16] == 4'(1'b0)) : (vote_in[19:16] == active_t[19:16]);
-                vote_any = (is_neg) ? (vote_in[19:16] != active_t[19:16]) : (vote_in[19:16] > 4'(1'b0));
-                vote_uni = ((vote_in[19:16] == active_t[19:16]) || (vote_in[19:16] == 4'(1'b0)));
+                vote_all = (is_neg) ? ((vote_in & 32'h000F0000) == 32'(1'b0)) : ((vote_in & 32'h000F0000) == (active_t & 32'h000F0000));
+                vote_any = (is_neg) ? ((vote_in & 32'h000F0000) != (active_t & 32'h000F0000)) : ((vote_in & 32'h000F0000) > 32'(1'b0));
+                vote_uni = (((vote_in & 32'h000F0000) == (active_t & 32'h000F0000)) || ((vote_in & 32'h000F0000) == 32'(1'b0)));
             end
             else if(wid == 4) begin
-                vote_all = (is_neg) ? (vote_in[15:12] == 4'(1'b0)) : (vote_in[15:12] == active_t[15:12]);
-                vote_any = (is_neg) ? (vote_in[15:12] != active_t[15:12]) : (vote_in[15:12] > 4'(1'b0));
-                vote_uni = ((vote_in[15:12] == active_t[15:12]) || (vote_in[15:12] == 4'(1'b0)));
+                vote_all = (is_neg) ? ((vote_in & 32'h0000F000) == 32'(1'b0)) : ((vote_in & 32'h0000F000) == (active_t & 32'h0000F000));
+                vote_any = (is_neg) ? ((vote_in & 32'h0000F000) != (active_t & 32'h0000F000)) : ((vote_in & 32'h0000F000) > 32'(1'b0));
+                vote_uni = (((vote_in & 32'h0000F000) == (active_t & 32'h0000F000)) || ((vote_in & 32'h0000F000) == 32'(1'b0)));
             end
             else if(wid == 5) begin
-                vote_all = (is_neg) ? (vote_in[11:8] == 4'(1'b0)) : (vote_in[11:8] == active_t[11:8]);
-                vote_any = (is_neg) ? (vote_in[11:8] != active_t[11:8]) : (vote_in[11:8] > 4'(1'b0));
-                vote_uni = ((vote_in[11:8] == active_t[11:8]) || (vote_in[11:8] == 4'(1'b0)));
+                vote_all = (is_neg) ? ((vote_in & 32'h00000F00) == 32'(1'b0)) : ((vote_in & 32'h00000F00) == (active_t & 32'h00000F00));
+                vote_any = (is_neg) ? ((vote_in & 32'h00000F00) != (active_t & 32'h00000F00)) : ((vote_in & 32'h00000F00) > 32'(1'b0));
+                vote_uni = (((vote_in & 32'h00000F00) == (active_t & 32'h00000F00)) || ((vote_in & 32'h00000F00) == 32'(1'b0)));
             end
             else if(wid == 6) begin
-                vote_all = (is_neg) ? (vote_in[7:4] == 4'(1'b0)) : (vote_in[7:4] == active_t[7:4]);
-                vote_any = (is_neg) ? (vote_in[7:4] != active_t[7:4]) : (vote_in[7:4] > 4'(1'b0));
-                vote_uni = ((vote_in[7:4] == active_t[7:4]) || (vote_in[7:4] == 4'(1'b0)));
+                vote_all = (is_neg) ? ((vote_in & 32'h000000F0) == 32'(1'b0)) : ((vote_in & 32'h000000F0) == (active_t & 32'h000000F0));
+                vote_any = (is_neg) ? ((vote_in & 32'h000000F0) != (active_t & 32'h000000F0)) : ((vote_in & 32'h000000F0) > 32'(1'b0));
+                vote_uni = (((vote_in & 32'h000000F0) == (active_t & 32'h000000F0)) || ((vote_in & 32'h000000F0) == 32'(1'b0)));
             end
             else if(wid == 7) begin
-                vote_all = (is_neg) ? (vote_in[3:0] == 4'(1'b0)) : (vote_in[3:0] == active_t[3:0]);
-                vote_any = (is_neg) ? (vote_in[3:0] != active_t[3:0]) : (vote_in[3:0] > 4'(1'b0));
-                vote_uni = ((vote_in[3:0] == active_t[3:0]) || (vote_in[3:0] == 4'(1'b0)));
+                vote_all = (is_neg) ? ((vote_in & 32'h0000000F) == 32'(1'b0)) : ((vote_in & 32'h0000000F) == (active_t & 32'h0000000F));
+                vote_any = (is_neg) ? ((vote_in & 32'h0000000F) != (active_t & 32'h0000000F)) : ((vote_in & 32'h0000000F) > 32'(1'b0));
+                vote_uni = (((vote_in & 32'h0000000F) == (active_t & 32'h0000000F)) || ((vote_in & 32'h0000000F) == 32'(1'b0)));
             end
         end
         default: ;
