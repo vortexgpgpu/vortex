@@ -146,7 +146,7 @@ module VX_alu_int #(
     wire [NUM_LANES-1:0][`XLEN-1:0] maxLane, minLane;
     reg [NUM_LANES-1:0][`XLEN-1:0] lane;
     reg [NUM_LANES-1:0] p;
-    wire [NUM_LANES-1:0] active_l;
+    reg [NUM_LANES-1:0] active_l;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign b[i] = (alu_in2_imm[i]>>5)&(`XLEN'(5'b11111));
