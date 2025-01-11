@@ -270,7 +270,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             .RESET_RAM (1),
          `endif
             .OUT_REG (1),
-            .RDW_MODE ("U")
+            .RDW_MODE ("R")
         ) gpr_ram (
             .clk   (clk),
             .reset (reset),
