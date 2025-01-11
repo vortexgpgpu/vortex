@@ -458,7 +458,7 @@ if { [file exists post_impl.dcp] } {
   run_implementation
   run_report
 } else {
-  # execute full pipeline
+  # Execute full pipeline
   run_setup
   run_synthesis
   run_implementation

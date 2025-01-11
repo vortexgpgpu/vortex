@@ -153,7 +153,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         assign mem_rsp_ready[i] = mem_bus_if[i].rsp_ready;
     end
 
-    VX_cache #(
+    VX_cache_wrap #(
         .INSTANCE_ID    (INSTANCE_ID),
         .CACHE_SIZE     (CACHE_SIZE),
         .LINE_SIZE      (LINE_SIZE),
