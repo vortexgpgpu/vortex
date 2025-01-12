@@ -31,10 +31,10 @@
     `RAM_INITIALIZATION \
     reg [ADDRW-1:0] raddr_r; \
     always @(posedge clk) begin \
-        if (__re || __we) begin \
-            if (__we) begin \
-                ram[__wa] <= wdata; \
-            end \
+        if (__we) begin \
+            ram[__wa] <= wdata; \
+        end \
+        if (__re) begin \
             raddr_r <= __ra; \
         end \
     end \
@@ -45,14 +45,14 @@
     `RAM_INITIALIZATION \
     reg [ADDRW-1:0] raddr_r; \
     always @(posedge clk) begin \
-        if (__re || __we) begin \
-            if (__we) begin \
-                for (integer i = 0; i < WRENW; ++i) begin \
-                    if (wren[i]) begin \
-                        ram[__wa][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW]; \
-                    end \
+        if (__we) begin \
+            for (integer i = 0; i < WRENW; ++i) begin \
+                if (wren[i]) begin \
+                    ram[__wa][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW]; \
                 end \
             end \
+        end \
+        if (__re) begin \
             raddr_r <= __ra; \
         end \
     end \
@@ -63,10 +63,10 @@
     `RAM_INITIALIZATION \
     reg [DATAW-1:0] rdata_r; \
     always @(posedge clk) begin \
-        if (__re || __we) begin \
-            if (__we) begin \
-                ram[__wa] <= wdata; \
-            end \
+        if (__we) begin \
+            ram[__wa] <= wdata; \
+        end \
+        if (__re) begin \
             rdata_r <= ram[__ra]; \
         end \
     end \
@@ -77,14 +77,14 @@
     `RAM_INITIALIZATION \
     reg [DATAW-1:0] rdata_r; \
     always @(posedge clk) begin \
-        if (__re || __we) begin \
-            if (__we) begin \
-                for (integer i = 0; i < WRENW; ++i) begin \
-                    if (wren[i]) begin \
-                        ram[__wa][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW]; \
-                    end \
+        if (__we) begin \
+            for (integer i = 0; i < WRENW; ++i) begin \
+                if (wren[i]) begin \
+                    ram[__wa][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW]; \
                 end \
             end \
+        end \
+        if (__re) begin \
             rdata_r <= ram[__ra]; \
         end \
     end \
@@ -122,6 +122,7 @@ module VX_async_ram_patch #(
     parameter DUAL_PORT   = 0,
     parameter FORCE_BRAM  = 0,
     parameter RADDR_REG   = 0, // read address registered hint
+    parameter RADDR_RESET = 0, // read address has reset
     parameter WRITE_FIRST = 0,
     parameter INIT_ENABLE = 0,
     parameter INIT_FILE   = "",
@@ -143,16 +144,24 @@ module VX_async_ram_patch #(
     `UNUSED_VAR (reset)
 
     (* keep = "true" *) wire [ADDRW-1:0] raddr_w, raddr_s;
-    (* keep = "true" *) wire read_s, is_raddr_reg;
-
+    (* keep = "true" *) wire read_s;
     assign raddr_w = raddr;
 
+   wire raddr_reset_w;
+    if (RADDR_RESET) begin : g_raddr_reset
+        (* keep = "true" *) wire raddr_reset;
+        assign raddr_reset = 0;
+        assign raddr_reset_w = raddr_reset;
+    end else begin : g_no_raddr_reset
+        assign raddr_reset_w = 0;
+    end
+
     VX_placeholder #(
-        .I (ADDRW),
-        .O (ADDRW + 1 + 1)
-    ) placeholder (
-        .in  (raddr_w),
-        .out ({raddr_s, read_s, is_raddr_reg})
+        .I (ADDRW + 1),
+        .O (ADDRW + 1)
+    ) placeholder1 (
+        .in  ({raddr_w, raddr_reset_w}),
+        .out ({raddr_s, read_s})
     );
 
     wire [DATAW-1:0] rdata_s;
@@ -206,9 +215,15 @@ module VX_async_ram_patch #(
     end
 
     if (RADDR_REG) begin : g_raddr_reg
-        `UNUSED_VAR (is_raddr_reg)
         assign rdata = rdata_s;
     end else begin : g_async_ram
+        (* keep = "true" *) wire is_raddr_reg;
+        VX_placeholder #(
+            .O (1)
+        ) placeholder2 (
+            .in  (),
+            .out (is_raddr_reg)
+        );
         wire [DATAW-1:0] rdata_a;
         if (DUAL_PORT) begin : g_dp
             if (WRENW != 1) begin : g_wren
