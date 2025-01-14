@@ -11,7 +11,7 @@ XLEN=64 ./run-test.sh
 
 ## Adding a new testcase
 
-The source code for the vector extension can be found in `sim/simx/execute_vector.cpp`.
+The source code for the vector extension can be found in `sim/simx/vpu.cpp`.
 If you add support for a new vector instruction please go to `run-test.sh` and it to the default testcases.
 This will ensure your instruction is included in the regression test suite.
 

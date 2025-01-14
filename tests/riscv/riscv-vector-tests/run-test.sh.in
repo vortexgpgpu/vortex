@@ -1,7 +1,4 @@
 #!/bin/bash
-VLEN=${VLEN:-256}
-XLEN=${XLEN:-32}
-
 RISCV_TOOLCHAIN_PATH=${RISCV_TOOLCHAIN_PATH:-$TOOLDIR"/riscv"$XLEN"-gnu-toolchain"}
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )

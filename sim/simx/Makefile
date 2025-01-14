@@ -22,7 +22,7 @@ SRCS += $(SRC_DIR)/processor.cpp $(SRC_DIR)/cluster.cpp $(SRC_DIR)/socket.cpp $(
 
 # Add V extension sources
 ifneq ($(findstring -DEXT_V_ENABLE, $(CONFIGS)),)
-  SRCS += $(SRC_DIR)/execute_v.cpp
+  SRCS += $(SRC_DIR)/vpu.cpp
 endif
 
 # Debugging
