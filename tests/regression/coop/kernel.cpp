@@ -27,30 +27,30 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	// vx_tile(0b10000000,32); // default config
 
 	// //CASE 2
-	// int i = vx_thread_id();
-	// vx_printf("A (thread %d)\n", i);
+	int i = vx_thread_id();
+	vx_printf("A (thread %d)\n", i);
 
-	// vx_tile(0b10001000,16);
+	vx_tile(0b10001000,16);
 
-    // vx_tile(0b00001000,16);
-    // {
-    //     vx_printf("B (thread %d)\n", i);
-    //     vx_barrier(0,0b00001000);
-    //     vx_printf("C (thread %d)\n", i);
-	// }
-    // vx_tile(0b10000000,16);
-    // {
-    //     vx_printf("D (thread %d)\n", i);
-	// }
+    vx_tile(0b00001000,16);
+    {
+        vx_printf("B (thread %d)\n", i);
+        vx_barrier(0,0b00001000);
+        vx_printf("C (thread %d)\n", i);
+	}
+    vx_tile(0b10000000,16);
+    {
+        vx_printf("D (thread %d)\n", i);
+	}
     
 
-    // vx_tile(0b10001000,16);
-    // if(i%16 == 0)
-    // {
-    //     vx_printf("E (thread %d)\n", i);
-	// }
+    vx_tile(0b10001000,16);
+    if(i%16 == 0)
+    {
+        vx_printf("E (thread %d)\n", i);
+	}
 
-	// vx_tile(0b10000000,32); //default config
+	vx_tile(0b10000000,32); //default config
 
 	// //CASE 3
 
@@ -164,17 +164,17 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 
 	// //CASE 9
 	
-	// vx_printf("A (thread %d)\n", vx_thread_id());
+	vx_printf("A (thread %d)\n", vx_thread_id());
 
-    // vx_tile(0b10101010,8);
+    vx_tile(0b10101010,8);
 
-    // vx_printf("B (thread %d)\n", vx_thread_id());
+    vx_printf("B (thread %d)\n", vx_thread_id());
 
-    // vx_barrier(0,0b10101010);
+    vx_barrier(0,0b10101010);
 
-    // vx_printf("C (thread %d)\n", vx_thread_id());
+    vx_printf("C (thread %d)\n", vx_thread_id());
 
-	// vx_tile(0b10000000,32); //default config
+	vx_tile(0b10000000,32); //default config
 
 	// //CASE 10
 

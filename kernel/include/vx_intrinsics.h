@@ -263,11 +263,71 @@ inline void vx_shfl() {
         ".insn i %0, 3, x14, x13, 1067" :: "i"(RISCV_CUSTOM2)); //(c(01)+b(00001)+membermask(address(01011)))
        //".insn i opcode6, func3, rd, rs1, simm12"
 }
-
+ 
 inline void vx_tile(unsigned int tile_mask, int thread_count) {
     __asm__ volatile (
         ".insn r %0, 1, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM3),"r"(tile_mask),"r"(thread_count));
 }
+
+// mode: 0:ALL, 1:ANY, 2:UNI, 3:BALLOT
+inline int vx_vote_sync(int pred,
+                             int neg,
+                             int mode,
+                             int threadMask)
+{
+    int func3 = ((neg & 0x1) << 2) | (mode & 0x3);
+
+    int rs1 = pred;
+
+    int rd;
+
+    __asm__ volatile (
+        "addi a2, %[tm], 0\n\t"                    
+        ".insn i %[opcode], %[f3], %[rd], %[rs1], 12\n\t"
+        : [rd] "=r" (rd)
+        : [tm] "r" (threadMask),
+          [opcode] "i" (RISCV_CUSTOM1),
+          [f3] "i" (func3),
+          [rs1] "r" (rs1) 
+        : "a2"
+    );
+
+    return rd;
+}
+
+
+inline int vx_shfl_sync(int offset, int mode, int val, int threadMask)
+{
+    int func3 = mode & 0x3;
+
+    int rs1 = val;
+
+    int rd;
+
+    int imm12 = (11) | ((offset & 0x1F) << 5) | (1 << 10);
+
+    int c = -1;
+   
+    __asm__ volatile (
+        "addi a1, %[tm], 0\n\t"  // Load immediate value 15 into a1(x11) register (membermask)
+        "addi a2, %[c], 0\n\t"  // Load immediate value 15 into a2(x12) register (c) 
+        ".insn i %[opcode], %[f3], %[rd], %[rs], %[imm]\n\t"
+        : "=r"(rd)
+        : [tm] "r"(threadMask),
+        [c] "r"(c),
+        [opcode] "i"(RISCV_CUSTOM2),
+        [f3] "i"(func3),
+        [rd] "r"(rd),
+        [rs] "r"(rs1),
+        [imm] "i"(imm12)
+        : 
+        "a1", "a2"
+    );
+
+    return rd;
+}
+
+
 
 #ifdef __cplusplus
 }
