@@ -238,12 +238,12 @@ module VX_axi_adapter #(
             .sel_out   (arb_sel_out)
         );
 
-        // AXi write request handshake
+        // AXi request handshake
 
         wire m_axi_arvalid_w, m_axi_arready_w;
         wire m_axi_awvalid_w, m_axi_awready_w;
         wire m_axi_wvalid_w,  m_axi_wready_w;
-        reg  m_axi_aw_ack, m_axi_w_ack, axi_write_ready;
+        wire  m_axi_aw_ack, m_axi_w_ack, axi_write_ready;
 
         VX_axi_write_ack axi_write_ack (
             .clk    (clk),
@@ -261,7 +261,7 @@ module VX_axi_adapter #(
         assign m_axi_arvalid_w = arb_valid_out && ~arb_rw_out;
         assign m_axi_awvalid_w = arb_valid_out && arb_rw_out && ~m_axi_aw_ack;
         assign m_axi_wvalid_w  = arb_valid_out && arb_rw_out && ~m_axi_w_ack;
-        assign arb_ready_out = axi_write_ready || m_axi_arready_w;
+        assign arb_ready_out = arb_rw_out ? axi_write_ready : m_axi_arready_w;
 
         // AXI write address channel
 
