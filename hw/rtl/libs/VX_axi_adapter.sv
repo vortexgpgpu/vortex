@@ -23,10 +23,10 @@ module VX_axi_adapter #(
     parameter NUM_PORTS_IN   = 1,
     parameter NUM_BANKS_OUT  = 1,
     parameter INTERLEAVE     = 0,
-    parameter TAG_BUFFER_SIZE= 32,
+    parameter TAG_BUFFER_SIZE= 16,
     parameter ARBITER        = "R",
-    parameter REQ_OUT_BUF    = 1,
-    parameter RSP_OUT_BUF    = 1,
+    parameter REQ_OUT_BUF    = 0,
+    parameter RSP_OUT_BUF    = 0,
     parameter DATA_SIZE      = DATA_WIDTH/8
  ) (
     input  wire                     clk,
@@ -194,27 +194,6 @@ module VX_axi_adapter #(
         assign mem_req_ready[0] = arb_ready_in[req_bank_sel[0]][0];
     end
 
-    // AXi write request synchronization
-
-    wire [NUM_BANKS_OUT-1:0] m_axi_awvalid_w, m_axi_wvalid_w;
-    wire [NUM_BANKS_OUT-1:0] m_axi_awready_w, m_axi_wready_w;
-    reg [NUM_BANKS_OUT-1:0] m_axi_aw_ack, m_axi_w_ack, axi_write_ready;
-
-    for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_axi_write_ready
-        VX_axi_write_ack axi_write_ack (
-            .clk    (clk),
-            .reset  (reset),
-            .awvalid(m_axi_awvalid_w[i]),
-            .awready(m_axi_awready_w[i]),
-            .wvalid (m_axi_wvalid_w[i]),
-            .wready (m_axi_wready_w[i]),
-            .aw_ack (m_axi_aw_ack[i]),
-            .w_ack  (m_axi_w_ack[i]),
-            .tx_rdy (axi_write_ready[i]),
-            `UNUSED_PIN (tx_ack)
-        );
-    end
-
     // AXI request handling
 
     for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_axi_write_req
@@ -259,13 +238,32 @@ module VX_axi_adapter #(
             .sel_out   (arb_sel_out)
         );
 
-        wire m_axi_arready_w;
+        // AXi write request handshake
 
-        assign arb_ready_out = axi_write_ready[i] || m_axi_arready_w;
+        wire m_axi_arvalid_w, m_axi_arready_w;
+        wire m_axi_awvalid_w, m_axi_awready_w;
+        wire m_axi_wvalid_w,  m_axi_wready_w;
+        reg  m_axi_aw_ack, m_axi_w_ack, axi_write_ready;
+
+        VX_axi_write_ack axi_write_ack (
+            .clk    (clk),
+            .reset  (reset),
+            .awvalid(m_axi_awvalid_w),
+            .awready(m_axi_awready_w),
+            .wvalid (m_axi_wvalid_w),
+            .wready (m_axi_wready_w),
+            .aw_ack (m_axi_aw_ack),
+            .w_ack  (m_axi_w_ack),
+            .tx_rdy (axi_write_ready),
+            `UNUSED_PIN (tx_ack)
+        );
+
+        assign m_axi_arvalid_w = arb_valid_out && ~arb_rw_out;
+        assign m_axi_awvalid_w = arb_valid_out && arb_rw_out && ~m_axi_aw_ack;
+        assign m_axi_wvalid_w  = arb_valid_out && arb_rw_out && ~m_axi_w_ack;
+        assign arb_ready_out = axi_write_ready || m_axi_arready_w;
 
         // AXI write address channel
-
-        assign m_axi_awvalid_w[i] = arb_valid_out && arb_rw_out && ~m_axi_aw_ack[i];
 
         VX_elastic_buffer #(
             .DATAW   (BANK_ADDR_WIDTH + WRITE_TAG_WIDTH),
@@ -275,8 +273,8 @@ module VX_axi_adapter #(
         ) aw_buf (
             .clk       (clk),
             .reset     (reset),
-            .valid_in  (m_axi_awvalid_w[i]),
-            .ready_in  (m_axi_awready_w[i]),
+            .valid_in  (m_axi_awvalid_w),
+            .ready_in  (m_axi_awready_w),
             .data_in   ({arb_addr_out, WRITE_TAG_WIDTH'(arb_tag_out)}),
             .data_out  ({buf_addr_w_out, buf_tag_w_out}),
             .valid_out (m_axi_awvalid[i]),
@@ -296,8 +294,6 @@ module VX_axi_adapter #(
 
         // AXI write data channel
 
-        assign m_axi_wvalid_w[i] = arb_valid_out && arb_rw_out && ~m_axi_w_ack[i];
-
         VX_elastic_buffer #(
             .DATAW   (DATA_SIZE + DATA_WIDTH),
             .SIZE    (`TO_OUT_BUF_SIZE(REQ_OUT_BUF)),
@@ -306,8 +302,8 @@ module VX_axi_adapter #(
         ) w_buf (
             .clk       (clk),
             .reset     (reset),
-            .valid_in  (m_axi_wvalid_w[i]),
-            .ready_in  (m_axi_wready_w[i]),
+            .valid_in  (m_axi_wvalid_w),
+            .ready_in  (m_axi_wready_w),
             .data_in   ({arb_byteen_out, arb_data_out}),
             .data_out  ({m_axi_wstrb[i], m_axi_wdata[i]}),
             .valid_out (m_axi_wvalid[i]),
@@ -333,7 +329,7 @@ module VX_axi_adapter #(
         ) ar_buf (
             .clk       (clk),
             .reset     (reset),
-            .valid_in  (arb_valid_out && ~arb_rw_out),
+            .valid_in  (m_axi_arvalid_w),
             .ready_in  (m_axi_arready_w),
             .data_in   ({arb_addr_out,   arb_tag_r_out}),
             .data_out  ({buf_addr_r_out, buf_tag_r_out}),

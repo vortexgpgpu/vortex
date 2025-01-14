@@ -341,7 +341,7 @@ private:
     for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
       *m_axi_mem_[b].arready = 1;
       *m_axi_mem_[b].awready = 1;
-      *m_axi_mem_[b].wready  = 1;
+      *m_axi_mem_[b].wready  = 0;
     }
   }
 
@@ -426,10 +426,6 @@ private:
 
       // write response
       *m_axi_mem_[b].bvalid = 0;
-
-      // states
-      m_axi_states_[b].write_req_addr_ack = false;
-      m_axi_states_[b].write_req_data_ack = false;
     }
   }
 
@@ -483,6 +479,7 @@ private:
 
       // handle read requests
       if (*m_axi_mem_[b].arvalid && *m_axi_mem_[b].arready) {
+        // create read request
         auto mem_req = new mem_req_t();
         mem_req->tag   = *m_axi_mem_[b].arid;
         mem_req->addr  = uint64_t(*m_axi_mem_[b].araddr);
@@ -501,32 +498,21 @@ private:
         dram_queues_[b].push(mem_req);
       }
 
-      // handle write address requests
-      if (*m_axi_mem_[b].awvalid && *m_axi_mem_[b].awready && !m_axi_states_[b].write_req_addr_ack) {
-        m_axi_states_[b].write_req_addr = *m_axi_mem_[b].awaddr;
-        m_axi_states_[b].write_req_tag = *m_axi_mem_[b].awid;
-        m_axi_states_[b].write_req_addr_ack = true;
-      }
-
       // handle write data requests
-      if (*m_axi_mem_[b].wvalid && *m_axi_mem_[b].wready && !m_axi_states_[b].write_req_data_ack) {
-        m_axi_states_[b].write_req_byteen = *m_axi_mem_[b].wstrb;
-        auto data = (const uint8_t*)m_axi_mem_[b].wdata->data();
-        for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; ++i) {
-          m_axi_states_[b].write_req_data[i] = data[i];
-        }
-        m_axi_states_[b].write_req_data_ack = true;
-      }
+      if (*m_axi_mem_[b].wvalid && *m_axi_mem_[b].wready) {
+        // ensure write address channel is not active
+        assert(!*m_axi_mem_[b].awvalid);
 
-      // handle write requests
-      if (m_axi_states_[b].write_req_addr_ack && m_axi_states_[b].write_req_data_ack) {
-        auto byteen = m_axi_states_[b].write_req_byteen;
+        // capture write data
         auto byte_addr = m_axi_states_[b].write_req_addr;
+        auto data = (const uint8_t*)m_axi_mem_[b].wdata->data();
+        auto byteen = *m_axi_mem_[b].wstrb;
         for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; ++i) {
           if ((byteen >> i) & 0x1) {
-            (*ram_)[byte_addr + i] = m_axi_states_[b].write_req_data[i];
+            (*ram_)[byte_addr + i] = data[i];
           }
         }
+        // create write request
         auto mem_req = new mem_req_t();
         mem_req->tag   = m_axi_states_[b].write_req_tag;
         mem_req->addr  = byte_addr;
@@ -536,29 +522,35 @@ private:
 
         /*printf("%0ld: [sim] axi-mem-write[%d]: addr=0x%lx, byteen=0x%lx, tag=0x%x, data=0x", timestamp, b, mem_req->addr, byteen, mem_req->tag);
         for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-          printf("%02x", m_axi_states_[b].write_req_data[i]]);
+          printf("%02x", data[i]]);
         }
         printf("\n");*/
 
         // send dram request
         dram_queues_[b].push(mem_req);
 
-        // clear acks
-        m_axi_states_[b].write_req_addr_ack = false;
-        m_axi_states_[b].write_req_data_ack = false;
+        // reset write request handshake
+        *m_axi_mem_[b].wready = 0;
+        *m_axi_mem_[b].awready = 1;
+      }
+
+      // handle write address requests
+      if (*m_axi_mem_[b].awvalid && *m_axi_mem_[b].awready) {
+        // capture write request address
+        m_axi_states_[b].write_req_addr = *m_axi_mem_[b].awaddr;
+        m_axi_states_[b].write_req_tag = *m_axi_mem_[b].awid;
+        // enable write data handshake
+        *m_axi_mem_[b].awready = 0;
+        *m_axi_mem_[b].wready = 1;
       }
     }
   }
 
   typedef struct {
-    std::array<uint8_t, PLATFORM_MEMORY_DATA_SIZE> write_req_data;
-    uint64_t write_req_byteen;
     uint64_t write_req_addr;
     uint32_t write_req_tag;
     bool read_rsp_ready;
     bool write_rsp_ready;
-    bool write_req_addr_ack;
-    bool write_req_data_ack;
   } m_axi_state_t;
 
   typedef struct {

@@ -177,6 +177,9 @@
 `define PRESERVE_NET    (* keep = "true" *)
 `define BLACKBOX_CELL   (* black_box *)
 `define STRING
+`ifndef SIMULATION
+    `define ASYNC_BRAM_PATCH
+`endif
 `else
 `define MAX_FANOUT      8
 `define FORCE_BRAM(d,w) (d >= 16 || w >= 128 || (d * w) >= 256)

@@ -35,17 +35,21 @@ module VX_afu_wrap #(
     input  wire                                 s_axi_ctrl_awvalid,
     output wire                                 s_axi_ctrl_awready,
     input  wire [C_S_AXI_CTRL_ADDR_WIDTH-1:0]   s_axi_ctrl_awaddr,
+
     input  wire                                 s_axi_ctrl_wvalid,
     output wire                                 s_axi_ctrl_wready,
     input  wire [C_S_AXI_CTRL_DATA_WIDTH-1:0]   s_axi_ctrl_wdata,
     input  wire [C_S_AXI_CTRL_DATA_WIDTH/8-1:0] s_axi_ctrl_wstrb,
+
     input  wire                                 s_axi_ctrl_arvalid,
     output wire                                 s_axi_ctrl_arready,
     input  wire [C_S_AXI_CTRL_ADDR_WIDTH-1:0]   s_axi_ctrl_araddr,
+
     output wire                                 s_axi_ctrl_rvalid,
     input  wire                                 s_axi_ctrl_rready,
     output wire [C_S_AXI_CTRL_DATA_WIDTH-1:0]   s_axi_ctrl_rdata,
     output wire [1:0]                           s_axi_ctrl_rresp,
+
     output wire                                 s_axi_ctrl_bvalid,
     input  wire                                 s_axi_ctrl_bready,
     output wire [1:0]                           s_axi_ctrl_bresp,
@@ -69,20 +73,24 @@ module VX_afu_wrap #(
     wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]    m_axi_mem_awaddr_a [C_M_AXI_MEM_NUM_BANKS];
     wire [C_M_AXI_MEM_ID_WIDTH-1:0]      m_axi_mem_awid_a [C_M_AXI_MEM_NUM_BANKS];
     wire [7:0]                           m_axi_mem_awlen_a [C_M_AXI_MEM_NUM_BANKS];
+
     wire                                 m_axi_mem_wvalid_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_wready_a [C_M_AXI_MEM_NUM_BANKS];
     wire [C_M_AXI_MEM_DATA_WIDTH-1:0]    m_axi_mem_wdata_a [C_M_AXI_MEM_NUM_BANKS];
     wire [C_M_AXI_MEM_DATA_WIDTH/8-1:0]  m_axi_mem_wstrb_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_wlast_a [C_M_AXI_MEM_NUM_BANKS];
+
     wire                                 m_axi_mem_bvalid_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_bready_a [C_M_AXI_MEM_NUM_BANKS];
     wire [C_M_AXI_MEM_ID_WIDTH-1:0]      m_axi_mem_bid_a [C_M_AXI_MEM_NUM_BANKS];
     wire [1:0]                           m_axi_mem_bresp_a [C_M_AXI_MEM_NUM_BANKS];
+
     wire                                 m_axi_mem_arvalid_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_arready_a [C_M_AXI_MEM_NUM_BANKS];
     wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]    m_axi_mem_araddr_a [C_M_AXI_MEM_NUM_BANKS];
     wire [C_M_AXI_MEM_ID_WIDTH-1:0]      m_axi_mem_arid_a [C_M_AXI_MEM_NUM_BANKS];
     wire [7:0]                           m_axi_mem_arlen_a [C_M_AXI_MEM_NUM_BANKS];
+
     wire                                 m_axi_mem_rvalid_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_rready_a [C_M_AXI_MEM_NUM_BANKS];
     wire [C_M_AXI_MEM_DATA_WIDTH-1:0]    m_axi_mem_rdata_a [C_M_AXI_MEM_NUM_BANKS];
@@ -217,17 +225,21 @@ module VX_afu_wrap #(
 		.s_axi_awvalid  (s_axi_ctrl_awvalid),
 		.s_axi_awready  (s_axi_ctrl_awready),
 		.s_axi_awaddr   (s_axi_ctrl_awaddr),
+
 		.s_axi_wvalid   (s_axi_ctrl_wvalid),
 		.s_axi_wready   (s_axi_ctrl_wready),
 		.s_axi_wdata    (s_axi_ctrl_wdata),
 		.s_axi_wstrb    (s_axi_ctrl_wstrb),
+
 		.s_axi_arvalid  (s_axi_ctrl_arvalid),
 		.s_axi_arready  (s_axi_ctrl_arready),
 		.s_axi_araddr   (s_axi_ctrl_araddr),
+
 		.s_axi_rvalid   (s_axi_ctrl_rvalid),
 		.s_axi_rready   (s_axi_ctrl_rready),
 		.s_axi_rdata    (s_axi_ctrl_rdata),
 		.s_axi_rresp    (s_axi_ctrl_rresp),
+
 		.s_axi_bvalid   (s_axi_ctrl_bvalid),
 		.s_axi_bready   (s_axi_ctrl_bready),
 		.s_axi_bresp    (s_axi_ctrl_bresp),
@@ -428,16 +440,16 @@ module VX_afu_wrap #(
     always @(posedge clk) begin
 		for (integer i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin
 			if (m_axi_mem_awvalid_a[i] && m_axi_mem_awready_a[i]) begin
-				`TRACE(2, ("%t: AXI Wr Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_awaddr_a[i], m_axi_mem_awid_a[i]))
+				`TRACE(2, ("%t: AXI Wr Req [%0d]: addr=0x%0h, id=0x%0h\n", $time, i, m_axi_mem_awaddr_a[i], m_axi_mem_awid_a[i]))
 			end
 			if (m_axi_mem_wvalid_a[i] && m_axi_mem_wready_a[i]) begin
-				`TRACE(2, ("%t: AXI Wr Req [%0d]: data=0x%h\n", $time, i, m_axi_mem_wdata_a[i]))
+				`TRACE(2, ("%t: AXI Wr Req [%0d]: strb=0x%h, data=0x%h\n", $time, i, m_axi_mem_wstrb_a[i], m_axi_mem_wdata_a[i]))
 			end
 			if (m_axi_mem_arvalid_a[i] && m_axi_mem_arready_a[i]) begin
-				`TRACE(2, ("%t: AXI Rd Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_araddr_a[i], m_axi_mem_arid_a[i]))
+				`TRACE(2, ("%t: AXI Rd Req [%0d]: addr=0x%0h, id=0x%0h\n", $time, i, m_axi_mem_araddr_a[i], m_axi_mem_arid_a[i]))
 			end
 			if (m_axi_mem_rvalid_a[i] && m_axi_mem_rready_a[i]) begin
-				`TRACE(2, ("%t: AXI Rd Rsp [%0d]: data=0x%h, tag=0x%0h\n", $time, i, m_axi_mem_rdata_a[i], m_axi_mem_rid_a[i]))
+				`TRACE(2, ("%t: AXI Rd Rsp [%0d]: data=0x%h, id=0x%0h\n", $time, i, m_axi_mem_rdata_a[i], m_axi_mem_rid_a[i]))
 			end
 		end
   	end

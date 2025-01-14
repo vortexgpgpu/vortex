@@ -26,35 +26,35 @@ module VX_axi_write_ack (
     output wire tx_ack,
     output wire tx_rdy
 );
-    reg awfired;
-    reg wfired;
+    reg aw_fired;
+    reg w_fired;
 
-    wire awfire = awvalid && awready;
-    wire wfire = wvalid && wready;
+    wire aw_fire = awvalid && awready;
+    wire w_fire = wvalid && wready;
 
     always @(posedge clk) begin
         if (reset) begin
-            awfired <= 0;
-            wfired <= 0;
+            aw_fired <= 0;
+            w_fired <= 0;
         end else begin
-            if (awfire) begin
-                awfired <= 1;
+            if (aw_fire) begin
+                aw_fired <= 1;
             end
-            if (wfire) begin
-                wfired <= 1;
+            if (w_fire) begin
+                w_fired <= 1;
             end
             if (tx_ack) begin
-                awfired <= 0;
-                wfired <= 0;
+                aw_fired <= 0;
+                w_fired <= 0;
             end
         end
     end
 
-    assign aw_ack = awfired;
-    assign w_ack = wfired;
+    assign aw_ack = aw_fired;
+    assign w_ack = w_fired;
 
-    assign tx_ack = (awfire || awfired) && (wfire || wfired);
-    assign tx_rdy = (awready || awfired) && (wready || wfired);
+    assign tx_ack = (aw_fire || aw_fired) && (w_fire || w_fired);
+    assign tx_rdy = (awready || aw_fired) && (wready || w_fired);
 
 endmodule
 `TRACING_ON

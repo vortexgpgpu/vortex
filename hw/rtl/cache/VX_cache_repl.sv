@@ -119,6 +119,9 @@ module VX_cache_repl #(
                 .SIZE  (`CS_LINES_PER_BANK),
                 .WRENW (LRU_WIDTH),
                 .RDW_MODE ("R"),
+            `ifdef SIMULATION
+                .RESET_RAM (1),
+            `endif
                 .RADDR_REG (1)
             ) plru_store (
                 .clk   (clk),
@@ -160,6 +163,9 @@ module VX_cache_repl #(
                 .DATAW (WAY_SEL_WIDTH),
                 .SIZE  (`CS_LINES_PER_BANK),
                 .RDW_MODE ("R"),
+            `ifdef SIMULATION
+                .RESET_RAM (1),
+            `endif
                 .RADDR_REG (1)
             ) ctr_store (
                 .clk   (clk),
