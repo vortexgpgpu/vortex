@@ -1,3 +1,4 @@
+#ifdef EXT_V_ENABLE
 #pragma once
 
 using namespace vortex;
@@ -2389,3 +2390,4 @@ void vector_op_vv_compress(std::vector<std::vector<Byte>> &vreg_file, uint32_t r
     std::abort();
   }
 }
+#endif

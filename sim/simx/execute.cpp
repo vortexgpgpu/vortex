@@ -25,7 +25,9 @@
 #include "emulator.h"
 #include "instr.h"
 #include "core.h"
+#ifdef EXT_V_ENABLE
 #include "processor_impl.h"
+#endif
 #include "VX_types.h"
 
 using namespace vortex;
@@ -117,8 +119,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         }
         DPN(2, "}" << std::endl);
         break;
+    #ifdef EXT_V_ENABLE
       case RegType::Vector:
         break;
+    #endif
       default:
         break;
       }
@@ -707,11 +711,12 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         }
       }
       rd_write = true;
-    } else {
-    #ifdef EXT_V_ENABLE
-      this->loadVector(instr, wid, rsdata);
-    #endif
     }
+  #ifdef EXT_V_ENABLE
+    else {
+      this->loadVector(instr, wid, rsdata);
+    }
+  #endif
     break;
   }
   case Opcode::S:
@@ -744,11 +749,12 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           std::abort();
         }
       }
-    } else {
-    #ifdef EXT_V_ENABLE
-      this->storeVector(instr, wid, rsdata);
-    #endif
     }
+  #ifdef EXT_V_ENABLE
+    else {
+      this->storeVector(instr, wid, rsdata);
+    }
+  #endif
     break;
   }
   case Opcode::AMO: {

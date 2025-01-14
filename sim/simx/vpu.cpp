@@ -2,6 +2,7 @@
 // The purpose of this fork is to make simx-v2-vector up to date with master
 // Thanks to Troibe for his amazing work
 
+#ifdef EXT_V_ENABLE
 #include "emulator.h"
 #include "instr.h"
 #include "processor_impl.h"
@@ -2477,3 +2478,4 @@ void Emulator::executeVector(const Instr &instr, uint32_t wid, std::vector<reg_d
     std::abort();
   }
 }
+#endif

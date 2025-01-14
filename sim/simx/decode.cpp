@@ -47,7 +47,9 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   {Opcode::FMSUB,   InstType::R4},
   {Opcode::FMNMADD, InstType::R4},
   {Opcode::FMNMSUB, InstType::R4},
+#ifdef EXT_V_ENABLE
   {Opcode::VSET,    InstType::V},
+#endif
   {Opcode::EXT1,    InstType::R},
   {Opcode::EXT2,    InstType::R4},
   {Opcode::R_W,     InstType::R},
@@ -373,7 +375,9 @@ static const char* op_string(const Instr &instr) {
   case Opcode::FMSUB:   return func2 ? "FMSUB.D" : "FMSUB.S";
   case Opcode::FMNMADD: return func2 ? "FNMADD.D" : "FNMADD.S";
   case Opcode::FMNMSUB: return func2 ? "FNMSUB.D" : "FNMSUB.S";
+#ifdef EXT_V_ENABLE
   case Opcode::VSET:    return "VSET";
+#endif
   case Opcode::EXT1:
     switch (func7) {
     case 0:
@@ -405,6 +409,7 @@ static const char* op_string(const Instr &instr) {
   }
 }
 
+#ifdef EXT_V_ENABLE
 inline void print_vec_attr(std::ostream &os, const Instr &instr) {
   uint32_t mask = instr.getVattrMask();
   if (mask & vattr_vlswidth)
@@ -432,6 +437,7 @@ inline void print_vec_attr(std::ostream &os, const Instr &instr) {
   if (mask & vattr_vediv)
     os << ", ediv:" << instr.getVediv();
 }
+#endif
 
 namespace vortex {
 std::ostream &operator<<(std::ostream &os, const Instr &instr) {
@@ -453,6 +459,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << "0x" << std::hex << instr.getImm() << std::dec;
   }
+#ifdef EXT_V_ENABLE
   if (instr.getOpcode() == Opcode::SYS && instr.getFunc3() >= 5) {
     // CSRs with immediate values
     if (sep++ != 0) { os << ", "; } else { os << " "; }
@@ -462,6 +469,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
   if (instr.getVattrMask() != 0) {
     print_vec_attr(os, instr);
   }
+#endif
   return os;
 }
 }
@@ -473,9 +481,11 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
 
   auto func2 = (code >> shift_func2) & mask_func2;
   auto func3 = (code >> shift_func3) & mask_func3;
-  auto func6 = (code >> shift_func6) & mask_func6;
   auto func7 = (code >> shift_func7) & mask_func7;
+#ifdef EXT_V_ENABLE
+  auto func6 = (code >> shift_func6) & mask_func6;
   __unused(func6);
+#endif
 
   auto rd  = (code >> shift_rd)  & mask_reg;
   auto rs1 = (code >> shift_rs1) & mask_reg;
@@ -489,11 +499,13 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
   }
 
   auto iType = op_it->second;
+#ifdef EXT_V_ENABLE
   if (op == Opcode::FL || op == Opcode::FS) {
     if (func3 != 0x2 && func3 != 0x3) {
       iType = InstType::V;
     }
   }
+#endif
 
   switch (iType) {
   case InstType::R:
@@ -582,7 +594,9 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
       instr->addSrcReg(rs2, RegType::Integer);
       break;
     }
+  #ifdef EXT_V_ENABLE
     instr->setFunc3(func3);
+  #endif
     instr->setFunc7(func7);
     break;
 
@@ -591,7 +605,9 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
     case Opcode::TCU: {
       instr->setDestReg(rs1, RegType::Integer);
       instr->addSrcReg(rs1, RegType::Integer);
+    #ifdef EXT_V_ENABLE
       instr->setFunc3(func3);
+    #endif
       instr->setFunc7(func7);
       auto imm = code >> shift_rs2;
       instr->setImm(sext(imm, width_i_imm));
@@ -601,7 +617,9 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
     case Opcode::JALR:
       instr->setDestReg(rd, RegType::Integer);
       instr->addSrcReg(rs1, RegType::Integer);
+    #ifdef EXT_V_ENABLE
       instr->setFunc3(func3);
+    #endif
       if (func3 == 0x1 || func3 == 0x5) {
         // Shift instructions
         auto shamt = rs2; // uint5
@@ -622,19 +640,25 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
     case Opcode::FL: {
       instr->setDestReg(rd, (op == Opcode::FL) ? RegType::Float : RegType::Integer);
       instr->addSrcReg(rs1, RegType::Integer);
+    #ifdef EXT_V_ENABLE
       instr->setFunc3(func3);
+    #endif
       auto imm = code >> shift_rs2;
       instr->setImm(sext(imm, width_i_imm));
     } break;
     case Opcode::FENCE:
+    #ifdef EXT_V_ENABLE
       instr->setFunc3(func3);
+    #endif
       instr->setImm(code >> shift_rs2);
       break;
     case Opcode::SYS:
       if (func3 != 0) {
         // CSR instructions
         instr->setDestReg(rd, RegType::Integer);
+      #ifdef EXT_V_ENABLE
         instr->setFunc3(func3);
+      #endif
         if (func3 < 5) {
           instr->addSrcReg(rs1, RegType::Integer);
         } else {
@@ -655,7 +679,9 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
   case InstType::S: {
     instr->addSrcReg(rs1, RegType::Integer);
     instr->addSrcReg(rs2, (op == Opcode::FS) ? RegType::Float : RegType::Integer);
+  #ifdef EXT_V_ENABLE
     instr->setFunc3(func3);
+  #endif
     auto imm = (func7 << width_reg) | rd;
     instr->setImm(sext(imm, width_i_imm));
   } break;
@@ -663,7 +689,9 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
   case InstType::B: {
     instr->addSrcReg(rs1, RegType::Integer);
     instr->addSrcReg(rs2, RegType::Integer);
+  #ifdef EXT_V_ENABLE
     instr->setFunc3(func3);
+  #endif
     auto bit_11   = rd & 0x1;
     auto bits_4_1 = rd >> 1;
     auto bit_10_5 = func7 & 0x3f;
@@ -695,7 +723,9 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
     instr->addSrcReg(rs2, RegType::Float);
     instr->addSrcReg(rs3, RegType::Float);
     instr->setFunc2(func2);
+  #ifdef EXT_V_ENABLE
     instr->setFunc3(func3);
+  #endif
   } break;
 
 #ifdef EXT_V_ENABLE
