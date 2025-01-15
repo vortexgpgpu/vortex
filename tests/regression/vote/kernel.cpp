@@ -12,20 +12,18 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		dst_ptr[offset+i] = src0_ptr[offset+i] + src1_ptr[offset+i];
 	}        
-	vx_tmc(1);           
-	int val = 14;
-	vx_store(val,3);  
-	vx_tmc(2);
-	val = 5;
-	vx_store(val,3);    
-	vx_tmc(4); 
-	val =45;      
-	vx_store(val,3); 
-	vx_tmc(8);
-	val = 120; 
-	vx_store(val,3);         
-	vx_tmc(15);  
-	vx_vote();     
+	int32_t val = 0;
+    if (vx_thread_id() % 2 == 0) {
+        vx_store(1,3);
+		// val = 1;
+    }
+	else{
+		vx_store(0,3);
+	}
+    
+    // int vote_all = vx_vote_sync(0, 0, -1, val);   
+	vx_vote();
+
 }                
           
 int main() {
