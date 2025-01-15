@@ -231,17 +231,17 @@ inline void vx_store(int val, int reg){
 
         case 1:
     __asm__ volatile (
-        "mv a1, %0" :: "r"(val) : "a1");  // Load immediate value 3 into a0(x10) register (rs1 = a)
+        "mv a1, %0" :: "r"(val) : "a1");  // Load immediate value 3 into a1(x11) register (rs1 = a)
         break;
         
         case 2:
     __asm__ volatile (
-        "mv a2, %0" :: "r"(val) : "a2");  // Load immediate value 3 into a0(x10) register (rs1 = a)
+        "mv a2, %0" :: "r"(val) : "a2");  // Load immediate value 3 into a2(x12) register (rs1 = a)
         break;
         
         case 3:
     __asm__ volatile (
-        "mv a3, %0" :: "r"(val) : "a3");  // Load immediate value 3 into a0(x10) register (rs1 = a)
+        "mv a3, %0" :: "r"(val) : "a3");  // Load immediate value 3 into a3(x13) register (rs1 = a)
         break;
         
         default:
@@ -251,9 +251,9 @@ inline void vx_store(int val, int reg){
 
 inline void vx_vote() {
     __asm__ volatile (
-        "addi a2, x0, 9\n\t"  // Load immediate value 6 into a2(x12) register (membermask)
-        ".insn i %0, 2, x14, x13, 12" :: "i"(RISCV_CUSTOM1));
-        //".insn i opcode7, func3, func7, rd, rs1, simm12"
+        "addi a2, x0, -1\n\t"  // Load immediate value 6 into a2(x12) register (membermask)
+        ".insn i %0, 3, x14, x13, 12" :: "i"(RISCV_CUSTOM1));
+        //".insn i opcode6, func3, rd, rs1, simm12"
 }
 
 inline void vx_shfl() {
@@ -262,6 +262,28 @@ inline void vx_shfl() {
         "addi a2, x0, 15\n\t"  // Load immediate value 15 into a2(x12) register (c) 
         ".insn i %0, 3, x14, x13, 1067" :: "i"(RISCV_CUSTOM2)); //(c(01)+b(00001)+membermask(address(01011)))
        //".insn i opcode6, func3, rd, rs1, simm12"
+}
+
+inline int vx_vote_sync(int mode, int neg, int threadMask, int pred)
+{
+    int func3 = ((neg & 0x1) << 2) | (mode & 0x3);
+
+    int rs1 = pred;
+
+    int rd;
+
+    __asm__ volatile (
+        "addi a2, %[tm], 0\n\t"                    
+        ".insn i %[opcode], %[f3], %[rd], %[rs1], 12\n\t"
+        : [rd] "=r" (rd)
+        : [tm] "r" (threadMask),
+          [opcode] "i" (RISCV_CUSTOM1),
+          [f3] "i" (func3),
+          [rs1] "r" (rs1) 
+        : "a2"
+    );
+
+    return rd;
 }
 
 #ifdef __cplusplus
