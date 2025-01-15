@@ -127,7 +127,7 @@ module VX_alu_int #(
     wire [NUM_LANES-1:0] vote_in = (is_pred & active_t);
     wire is_neg = alu_op[2];
 
-    wire [NUM_LANES-1:0] vote_ballot = vote_in;
+    wire [NUM_LANES-1:0] vote_ballot;
 
     reg vote_all, vote_any, vote_uni;
 
@@ -224,12 +224,13 @@ module VX_alu_int #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign is_pred[i] = alu_in1[i][0] & alu_in2[0][i];
+        assign vote_ballot[i] = alu_in1[NUM_LANES - 1 - i][0] & alu_in2[0][NUM_LANES - 1 -i];
         always @(*) begin
             case (alu_op[1:0])
                 2'b00: vote_result[i] = `XLEN'(vote_all);       // ALL, NONE
                 2'b01: vote_result[i] = `XLEN'(vote_any);       // ANY, NOT_ALL
                 2'b10: vote_result[i] = `XLEN'(vote_uni);       // UNI
-                2'b11: vote_result[i] = `XLEN'(vote_ballot[i]); // BALLOT
+                2'b11: vote_result[i] = `XLEN'(vote_ballot); // BALLOT
             endcase
         end
     end
