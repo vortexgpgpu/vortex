@@ -42,10 +42,8 @@ enum class Opcode {
   // RV64 Standard Extension
   R_W       = 0x3b,
   I_W       = 0x1b,
-#ifdef EXT_V_ENABLE
   // Vector Extension
   VSET      = 0x57,
-#endif
   // Custom Extensions
   EXT1      = 0x0b,
   EXT2      = 0x2b,
@@ -60,9 +58,7 @@ enum class InstType {
   B,
   U,
   J,
-#ifdef EXT_V_ENABLE
   V,
-#endif
   R4
 };
 
@@ -142,7 +138,6 @@ public:
     , rdest_(0)
     , func2_(0)
     , func3_(0)
-  #ifdef EXT_V_ENABLE
     , func6_(0)
     , func7_(0)
     , vmask_(0)
@@ -157,9 +152,8 @@ public:
     , vta_(0)
     , vma_(0)
     , vediv_(0)
-    , vattr_mask_(0)
-    #endif
-    { for (uint32_t i = 0; i < MAX_REG_SOURCES; ++i) {
+    , vattr_mask_(0) {
+    for (uint32_t i = 0; i < MAX_REG_SOURCES; ++i) {
        rsrc_type_[i] = RegType::None;
        rsrc_[i] = 0;
     }
@@ -189,11 +183,9 @@ public:
   void setImm(uint32_t imm) { has_imm_ = true; imm_ = imm; }
 
   void setFunc2(uint32_t func2) { func2_ = func2; }
-  void setFunc7(uint32_t func7) { func7_ = func7; }
-
-#ifdef EXT_V_ENABLE
   void setFunc3(uint32_t func3) { func3_ = func3; }
   void setFunc6(uint32_t func6) { func6_ = func6; }
+  void setFunc7(uint32_t func7) { func7_ = func7; }
 
   // Attributes for Vector instructions
   void setVlsWidth(uint32_t width) { vlsWidth_ = width; vattr_mask_ |= vattr_vlswidth; }
@@ -208,7 +200,6 @@ public:
   void setVta(uint32_t vta) { vta_ = vta; vattr_mask_ |= vattr_vta; }
   void setVma(uint32_t vma) { vma_ = vma; vattr_mask_ |= vattr_vma; }
   void setVediv(uint32_t ediv) { vediv_ = 1 << ediv; vattr_mask_ |= vattr_vediv; }
-#endif
 
   Opcode   getOpcode() const { return opcode_; }
 
@@ -224,10 +215,8 @@ public:
 
   uint32_t getFunc2() const { return func2_; }
   uint32_t getFunc3() const { return func3_; }
-  uint32_t getFunc7() const { return func7_; }
-
-#ifdef EXT_V_ENABLE
   uint32_t getFunc6() const { return func6_; }
+  uint32_t getFunc7() const { return func7_; }
 
   uint32_t getVlsWidth() const { return vlsWidth_; }
   uint32_t getVmop() const { return vMop_; }
@@ -242,7 +231,6 @@ public:
   uint32_t getVma() const { return vma_; }
   uint32_t getVediv() const { return vediv_; }
   uint32_t getVattrMask() const { return vattr_mask_; }
-#endif
 
 private:
 
@@ -260,10 +248,8 @@ private:
   uint32_t rdest_;
   uint32_t func2_;
   uint32_t func3_;
-  uint32_t func7_;
-
-#ifdef EXT_V_ENABLE
   uint32_t func6_;
+  uint32_t func7_;
 
   // Vector
   uint32_t vmask_;
@@ -279,7 +265,6 @@ private:
   uint32_t vma_;
   uint32_t vediv_;
   uint32_t vattr_mask_;
-#endif
 
   friend std::ostream &operator<<(std::ostream &, const Instr&);
 };

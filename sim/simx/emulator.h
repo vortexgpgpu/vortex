@@ -81,7 +81,6 @@ private:
     bool        fallthrough;
   };
 
-#ifdef EXT_V_ENABLE
   struct vtype_t {
     uint32_t vill;
     uint32_t vma;
@@ -89,7 +88,6 @@ private:
     uint32_t vsew;
     uint32_t vlmul;
   };
-#endif
 
   union reg_data_t {
     Word     u;
@@ -111,14 +109,12 @@ private:
     ThreadMask                        tmask;
     std::vector<std::vector<Word>>    ireg_file;
     std::vector<std::vector<uint64_t>>freg_file;
+    std::vector<std::vector<Byte>>    vreg_file;
     std::stack<ipdom_entry_t>         ipdom_stack;
     Byte                              fcsr;
-  #ifdef EXT_V_ENABLE
-    std::vector<std::vector<Byte>>    vreg_file;
     vtype_t                           vtype;
     uint32_t                          vl;
     Word                              vlmax;
-  #endif
     uint32_t                          uuid;
   };
 
@@ -177,9 +173,7 @@ private:
   uint32_t mat_size;
   uint32_t tc_size;
   uint32_t tc_num;
-#ifdef EXT_V_ENABLE
   std::vector<std::vector<std::unordered_map<uint32_t, uint32_t>>> csrs_;
-#endif
 };
 
 }
