@@ -10,6 +10,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+// Reference: https://www.xilinx.com/developer/articles/porting-rtl-designs-to-vitis-rtl-kernels.html
 
 `include "vortex_afu.vh"
 
@@ -62,8 +64,12 @@ module VX_afu_wrap #(
 	localparam M_AXI_MEM_ADDR_WIDTH = `PLATFORM_MEMORY_ADDR_WIDTH;
 `endif
 
-	localparam STATE_IDLE = 0;
-    localparam STATE_RUN  = 1;
+	typedef enum logic [1:0] {
+		STATE_IDLE = 0,
+		STATE_INIT = 1,
+    	STATE_RUN  = 2,
+		STATE_DONE = 3
+	} state_e;
 
 	localparam PENDING_SIZEW = 12; // max outstanding requests size
 	localparam C_M_AXI_MEM_NUM_BANKS_SW = `CLOG2(C_M_AXI_MEM_NUM_BANKS+1);
@@ -107,7 +113,6 @@ module VX_afu_wrap #(
 
 	reg [`CLOG2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
 	reg [PENDING_SIZEW-1:0] vx_pending_writes;
-	reg vx_busy_wait;
 	reg vx_reset = 1; // asserted at initialization
 	wire vx_busy;
 
@@ -115,13 +120,16 @@ module VX_afu_wrap #(
 	wire [`VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr;
 	wire [`VX_DCR_DATA_WIDTH-1:0] dcr_wr_data;
 
-	reg state;
+	state_e state;
 
 	wire ap_reset;
 	wire ap_start;
-	wire ap_idle  = vx_reset;
-	wire ap_done  = (state == STATE_IDLE) && (vx_pending_writes == '0);
-	wire ap_ready = 1'b1;
+	wire ap_ctrl_read;
+	wire ap_idle  = (state == STATE_IDLE);
+	wire ap_done  = (state == STATE_DONE) && (vx_pending_writes == '0);
+	wire ap_ready = ap_done;
+
+	wire ap_done_ack = ap_done && ap_ctrl_read;
 
 `ifdef SCOPE
 	wire scope_bus_in;
@@ -138,39 +146,48 @@ module VX_afu_wrap #(
 			STATE_IDLE: begin
 				if (ap_start) begin
 				`ifdef DBG_TRACE_AFU
-					`TRACE(2, ("%t: AFU: Goto STATE RUN\n", $time))
+					`TRACE(2, ("%t: AFU: Begin initialization\n", $time))
 				`endif
-					state <= STATE_RUN;
+					state <= STATE_INIT;
 					vx_reset_ctr <= (`RESET_DELAY-1);
 					vx_reset <= 1;
 				end
 			end
-			STATE_RUN: begin
+			STATE_INIT: begin
 				if (vx_reset) begin
-					// wait until the reset network is ready
+					// wait for reset to complete
 					if (vx_reset_ctr == 0) begin
 					`ifdef DBG_TRACE_AFU
-						`TRACE(2, ("%t: AFU: Begin execution\n", $time))
+						`TRACE(2, ("%t: AFU: Initialization completed\n", $time))
 					`endif
-						vx_busy_wait <= 1;
 						vx_reset <= 0;
 					end
 				end else begin
-					if (vx_busy_wait) begin
-						// wait until processor goes busy
-						if (vx_busy) begin
-							vx_busy_wait <= 0;
-						end
-					end else begin
-						// wait until the processor is not busy
-						if (~vx_busy) begin
-						`ifdef DBG_TRACE_AFU
-							`TRACE(2, ("%t: AFU: End execution\n", $time))
-                            `TRACE(2, ("%t: AFU: Goto STATE IDLE\n", $time))
-						`endif
-							state <= STATE_IDLE;
-						end
+					// wait until processor goes busy
+					if (vx_busy) begin
+					`ifdef DBG_TRACE_AFU
+						`TRACE(2, ("%t: AFU: Begin execution\n", $time))
+					`endif
+						state <= STATE_RUN;
 					end
+				end
+			end
+			STATE_RUN: begin
+				// wait until the processor is not busy
+				if (~vx_busy) begin
+				`ifdef DBG_TRACE_AFU
+					`TRACE(2, ("%t: AFU: Execution completed\n", $time))
+				`endif
+					state <= STATE_DONE;
+				end
+			end
+			STATE_DONE: begin
+				// wait for host's done acknowledgement
+				if (ap_done_ack) begin
+				`ifdef DBG_TRACE_AFU
+					`TRACE(2, ("%t: AFU: Processor idle\n", $time))
+				`endif
+					state <= STATE_IDLE;
 				end
 			end
 			endcase
@@ -185,7 +202,7 @@ module VX_afu_wrap #(
 	wire [C_M_AXI_MEM_NUM_BANKS-1:0] m_axi_wr_req_fire, m_axi_wr_rsp_fire;
 	wire [C_M_AXI_MEM_NUM_BANKS_SW-1:0] cur_wr_reqs, cur_wr_rsps;
 
-	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_awfire
+	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_m_axi_wr_req_fire
 		VX_axi_write_ack axi_write_ack (
             .clk    (clk),
             .reset  (reset),
@@ -198,6 +215,9 @@ module VX_afu_wrap #(
 			`UNUSED_PIN (w_ack),
 			`UNUSED_PIN (tx_rdy)
         );
+	end
+
+	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_m_axi_wr_rsp_fire
 		assign m_axi_wr_rsp_fire[i] = m_axi_mem_bvalid_a[i] & m_axi_mem_bready_a[i];
 	end
 
@@ -250,6 +270,8 @@ module VX_afu_wrap #(
 		.ap_ready       (ap_ready),
 		.ap_idle     	(ap_idle),
 		.interrupt 		(interrupt),
+		
+		.ap_ctrl_read   (ap_ctrl_read),
 
 	`ifdef SCOPE
 		.scope_bus_in   (scope_bus_out),
@@ -352,6 +374,7 @@ module VX_afu_wrap #(
 			interrupt,
 			vx_reset,
 			vx_busy,
+			state,
 			m_axi_mem_awvalid_a[0],
 			m_axi_mem_awready_a[0],
 			m_axi_mem_wvalid_a[0],
@@ -368,7 +391,7 @@ module VX_afu_wrap #(
 			m_axi_mem_arfire_0,
 			m_axi_mem_wfire_0,
 			m_axi_mem_bfire_0
-		},{
+		}, {
 			dcr_wr_addr,
 			dcr_wr_data,
 			vx_pending_writes,
@@ -395,11 +418,11 @@ module VX_afu_wrap #(
         	ap_start,
         	ap_done,
 			ap_idle,
+			state,
 			interrupt
 		}),
 		.probe1 ({
         	vx_pending_writes,
-			vx_busy_wait,
 			vx_busy,
 			vx_reset,
 			dcr_wr_valid,
