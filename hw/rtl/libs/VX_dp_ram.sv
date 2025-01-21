@@ -32,7 +32,7 @@
                                     ram[i] <= DATAW'(INIT_VALUE); \
                                 end \
                             end else
-`endif
+`else
     `define RAM_RESET_BLOCK
 `endif
 
