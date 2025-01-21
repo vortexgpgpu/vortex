@@ -508,7 +508,7 @@ proc replace_net_source {net source_pin} {
       exit -1
     }
 
-    set external_net [get_nets -of_objects $pin]
+    set external_net [get_nets -quiet -of_objects $pin]
     if {[llength $external_net] == 0} {
       # Connect pin to source net
       connect_net -net $source_net -objects $pin -hierarchical

@@ -92,7 +92,7 @@ proc run_setup {} {
   set_property top $top_module [current_fileset]
   set_property \
       -name {STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS} \
-      -value {-mode out_of_context -flatten_hierarchy "rebuilt"} \
+      -value {-mode out_of_context} \
       -objects [get_runs synth_1]
 
   # register compilation hooks

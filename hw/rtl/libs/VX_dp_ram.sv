@@ -26,21 +26,25 @@
         end \
     end
 
-`define RAM_WRITE_ALL   if (RESET_RAM && reset) begin \
-                            for (integer i = 0; i < SIZE; ++i) begin \
-                                ram[i] <= DATAW'(INIT_VALUE); \
-                            end \
-                        end else if (write) begin \
+`ifdef SIMULATION
+    `define RAM_RESET_BLOCK if (RESET_RAM && reset) begin \
+                                for (integer i = 0; i < SIZE; ++i) begin \
+                                    ram[i] <= DATAW'(INIT_VALUE); \
+                                end \
+                            end else
+`endif
+    `define RAM_RESET_BLOCK
+`endif
+
+`define RAM_WRITE_ALL   `RAM_RESET_BLOCK \
+                        if (write) begin \
                             ram[waddr] <= wdata; \
                         end
 
 `ifdef QUARTUS
     `define RAM_ARRAY_WREN  reg [WRENW-1:0][WSELW-1:0] ram [0:SIZE-1];
-    `define RAM_WRITE_WREN  if (RESET_RAM && reset) begin \
-                                for (integer i = 0; i < SIZE; ++i) begin \
-                                    ram[i] <= DATAW'(INIT_VALUE); \
-                                end \
-                            end else if (write) begin \
+    `define RAM_WRITE_WREN   `RAM_RESET_BLOCK \
+                            if (write) begin \
                                 for (integer i = 0; i < WRENW; ++i) begin \
                                     if (wren[i]) begin \
                                         ram[waddr][i] <= wdata[i * WSELW +: WSELW]; \
@@ -49,11 +53,8 @@
                             end
 `else
     `define RAM_ARRAY_WREN  reg [DATAW-1:0] ram [0:SIZE-1];
-    `define RAM_WRITE_WREN  if (RESET_RAM && reset) begin \
-                                for (integer i = 0; i < SIZE; ++i) begin \
-                                    ram[i] <= DATAW'(INIT_VALUE); \
-                                end \
-                            end else if (write) begin \
+    `define RAM_WRITE_WREN  `RAM_RESET_BLOCK \
+                            if (write) begin \
                                 for (integer i = 0; i < WRENW; ++i) begin \
                                     if (wren[i]) begin \
                                         ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW]; \
