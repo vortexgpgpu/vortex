@@ -52,7 +52,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     parameter DIRTY_BYTES           = 0,
 
     // Replacement policy
-    parameter REPL_POLICY           = `CS_REPL_CYCLIC,
+    parameter REPL_POLICY           = `CS_REPL_FIFO,
 
     // Request debug identifier
     parameter UUID_WIDTH            = 0,

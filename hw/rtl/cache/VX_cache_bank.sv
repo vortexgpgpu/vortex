@@ -48,7 +48,7 @@ module VX_cache_bank #(
     parameter DIRTY_BYTES       = 0,
 
     // Replacement policy
-    parameter REPL_POLICY = `CS_REPL_CYCLIC,
+    parameter REPL_POLICY       = `CS_REPL_FIFO,
 
     // Request debug identifier
     parameter UUID_WIDTH        = 0,
@@ -353,9 +353,11 @@ module VX_cache_bank #(
         .clk        (clk),
         .reset      (reset),
         .stall      (pipe_stall),
-        .hit_valid  (do_lookup_st1 && is_hit_st1 && ~pipe_stall),
-        .hit_line   (line_idx_st1),
-        .hit_way    (way_idx_st1),
+        .init       (do_init_st0),
+        .lookup_valid(do_lookup_st1 && ~pipe_stall),
+        .lookup_hit (is_hit_st1),
+        .lookup_line(line_idx_st1),
+        .lookup_way (way_idx_st1),
         .repl_valid (do_fill_st0 && ~pipe_stall),
         .repl_line  (line_idx_st0),
         .repl_way   (victim_way_st0)
@@ -443,7 +445,6 @@ module VX_cache_bank #(
     ) cache_data (
         .clk        (clk),
         .reset      (reset),
-        .stall      (pipe_stall),
         // inputs
         .init       (do_init_st0),
         .fill       (do_fill_st0 && ~pipe_stall),

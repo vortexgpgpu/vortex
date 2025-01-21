@@ -33,7 +33,6 @@ module VX_cache_data #(
 ) (
     input wire                          clk,
     input wire                          reset,
-    input wire                          stall,
     // inputs
     input wire                          init,
     input wire                          fill,
@@ -53,7 +52,6 @@ module VX_cache_data #(
     output wire [LINE_SIZE-1:0]         evict_byteen
 );
     `UNUSED_PARAM (WORD_SIZE)
-    `UNUSED_VAR (stall)
 
     wire [`CS_WORDS_PER_LINE-1:0][WORD_SIZE-1:0] write_mask;
     for (genvar i = 0; i < `CS_WORDS_PER_LINE; ++i) begin : g_write_mask

@@ -138,7 +138,6 @@ proc run_report {} {
   # Generate the synthesis report
   report_place_status -file place.rpt
   report_route_status -file route.rpt
-  report_timing_summary -file timing.rpt
 
   # Generate timing report
   report_timing -nworst 100 -delay_type max -sort_by group -file timing.rpt
