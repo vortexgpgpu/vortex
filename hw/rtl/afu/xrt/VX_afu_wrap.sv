@@ -218,7 +218,7 @@ module VX_afu_wrap #(
 	end
 
 	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_m_axi_wr_rsp_fire
-		assign m_axi_wr_rsp_fire[i] = m_axi_mem_bvalid_a[i] & m_axi_mem_bready_a[i];
+		assign m_axi_wr_rsp_fire[i] = m_axi_mem_bvalid_a[i] && m_axi_mem_bready_a[i];
 	end
 
 	`POP_COUNT(cur_wr_reqs, m_axi_wr_req_fire);
@@ -467,6 +467,9 @@ module VX_afu_wrap #(
 			end
 			if (m_axi_mem_wvalid_a[i] && m_axi_mem_wready_a[i]) begin
 				`TRACE(2, ("%t: AXI Wr Req [%0d]: strb=0x%h, data=0x%h\n", $time, i, m_axi_mem_wstrb_a[i], m_axi_mem_wdata_a[i]))
+			end
+			if (m_axi_mem_bvalid_a[i] && m_axi_mem_bready_a[i]) begin
+				`TRACE(2, ("%t: AXI Wr Rsp [%0d]: id=0x%0h\n", $time, i, m_axi_mem_bid_a[i]))
 			end
 			if (m_axi_mem_arvalid_a[i] && m_axi_mem_arready_a[i]) begin
 				`TRACE(2, ("%t: AXI Rd Req [%0d]: addr=0x%0h, id=0x%0h\n", $time, i, m_axi_mem_araddr_a[i], m_axi_mem_arid_a[i]))
