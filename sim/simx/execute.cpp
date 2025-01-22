@@ -25,7 +25,9 @@
 #include "emulator.h"
 #include "instr.h"
 #include "core.h"
+#ifdef EXT_V_ENABLE
 #include "processor_impl.h"
+#endif
 #include "VX_types.h"
 
 using namespace vortex;
@@ -117,8 +119,10 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         }
         DPN(2, "}" << std::endl);
         break;
+    #ifdef EXT_V_ENABLE
       case RegType::Vector:
         break;
+    #endif
       default:
         break;
       }
@@ -707,11 +711,12 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         }
       }
       rd_write = true;
-    } else {
-    #ifdef EXT_V_ENABLE
-      this->loadVector(instr, wid, rsdata);
-    #endif
     }
+  #ifdef EXT_V_ENABLE
+    else {
+      this->loadVector(instr, wid, rsdata);
+    }
+  #endif
     break;
   }
   case Opcode::S:
@@ -744,11 +749,12 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
           std::abort();
         }
       }
-    } else {
-    #ifdef EXT_V_ENABLE
-      this->storeVector(instr, wid, rsdata);
-    #endif
     }
+  #ifdef EXT_V_ENABLE
+    else {
+      this->storeVector(instr, wid, rsdata);
+    }
+  #endif
     break;
   }
   case Opcode::AMO: {
@@ -932,7 +938,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!warp.tmask.test(t))
         continue;
-      uint32_t frm = (func3 == 0x7) ? this->get_csr(VX_CSR_FRM, t, wid) : func3;
+      uint32_t frm = this->get_fpu_rm(func3, t, wid);
       uint32_t fflags = 0;
       switch (func7) {
       case 0x00: { // RV32F: FADD.S
@@ -1247,10 +1253,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         break;
       }
       }
-      if (fflags) {
-        this->set_csr(VX_CSR_FCSR, this->get_csr(VX_CSR_FCSR, t, wid) | fflags, t, wid);
-        this->set_csr(VX_CSR_FFLAGS, this->get_csr(VX_CSR_FFLAGS, t, wid) | fflags, t, wid);
-      }
+      this->update_fcrs(fflags, t, wid);
     }
     rd_write = true;
     break;
@@ -1304,10 +1307,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       default:
         break;
       }
-      if (fflags) {
-        this->set_csr(VX_CSR_FCSR, this->get_csr(VX_CSR_FCSR, t, wid) | fflags, t, wid);
-        this->set_csr(VX_CSR_FFLAGS, this->get_csr(VX_CSR_FFLAGS, t, wid) | fflags, t, wid);
-      }
+      this->update_fcrs(fflags, t, wid);
     }
     rd_write = true;
     break;

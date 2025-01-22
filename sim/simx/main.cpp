@@ -120,7 +120,9 @@ int main(int argc, char **argv) {
 #endif
     // run simulation
     // vector test exitcode is a special case
+  #ifdef EXT_V_ENABLE
     if (vector_test) return processor.run();
+  #endif
     // else continue as normal
     processor.run();
 

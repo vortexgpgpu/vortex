@@ -29,7 +29,6 @@ private:
   uint16_t num_cores_;
   uint16_t num_clusters_;
   uint16_t socket_size_;
-  uint16_t vsize_;
   uint16_t num_barriers_;
   uint64_t local_mem_base_;
 
@@ -40,7 +39,6 @@ public:
     , num_cores_(num_cores)
     , num_clusters_(NUM_CLUSTERS)
     , socket_size_(SOCKET_SIZE)
-    , vsize_(VLEN / 8)
     , num_barriers_(NUM_BARRIERS)
     , local_mem_base_(LMEM_BASE_ADDR)
   {}
@@ -71,10 +69,6 @@ public:
 
   uint16_t socket_size() const {
     return socket_size_;
-  }
-
-  uint16_t vsize() const {
-    return vsize_;
   }
 
 };

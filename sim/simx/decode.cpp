@@ -453,6 +453,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << "0x" << std::hex << instr.getImm() << std::dec;
   }
+#ifdef EXT_V_ENABLE
   if (instr.getOpcode() == Opcode::SYS && instr.getFunc3() >= 5) {
     // CSRs with immediate values
     if (sep++ != 0) { os << ", "; } else { os << " "; }
@@ -462,6 +463,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
   if (instr.getVattrMask() != 0) {
     print_vec_attr(os, instr);
   }
+#endif
   return os;
 }
 }
