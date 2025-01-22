@@ -405,6 +405,7 @@ static const char* op_string(const Instr &instr) {
   }
 }
 
+#ifdef EXT_V_ENABLE
 inline void print_vec_attr(std::ostream &os, const Instr &instr) {
   uint32_t mask = instr.getVattrMask();
   if (mask & vattr_vlswidth)
@@ -432,6 +433,7 @@ inline void print_vec_attr(std::ostream &os, const Instr &instr) {
   if (mask & vattr_vediv)
     os << ", ediv:" << instr.getVediv();
 }
+#endif
 
 namespace vortex {
 std::ostream &operator<<(std::ostream &os, const Instr &instr) {

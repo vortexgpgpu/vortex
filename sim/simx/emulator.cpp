@@ -45,12 +45,6 @@ void Emulator::warp_t::clear(uint64_t startup_addr) {
   this->uuid = 0;
   this->fcsr = 0;
 
-#ifdef EXT_V_ENABLE
-  this->vtype = {0, 0, 0, 0, 0};
-  this->vl = 0;
-  this->vlmax = 0;
-#endif
-
   for (auto& reg_file : this->ireg_file) {
     for (auto& reg : reg_file) {
     #ifndef NDEBUG
@@ -82,6 +76,9 @@ void Emulator::warp_t::clear(uint64_t startup_addr) {
     #endif
     }
   }
+  this->vtype = {0, 0, 0, 0, 0};
+  this->vl = 0;
+  this->vlmax = 0;
 #endif
 }
 

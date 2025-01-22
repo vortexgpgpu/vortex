@@ -109,12 +109,14 @@ private:
     ThreadMask                        tmask;
     std::vector<std::vector<Word>>    ireg_file;
     std::vector<std::vector<uint64_t>>freg_file;
-    std::vector<std::vector<Byte>>    vreg_file;
     std::stack<ipdom_entry_t>         ipdom_stack;
     Byte                              fcsr;
+#ifdef EXT_V_ENABLE
+    std::vector<std::vector<Byte>>    vreg_file;
     vtype_t                           vtype;
     uint32_t                          vl;
     Word                              vlmax;
+#endif
     uint32_t                          uuid;
   };
 

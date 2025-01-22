@@ -113,18 +113,18 @@ enum DecodeConstants {
 };
 
 enum VectorAttrMask {
-  vattr_vlswidth = (1 << 3),
-  vattr_vmop     = (1 << 4),
-  vattr_vumop    = (1 << 5),
-  vattr_vnf      = (1 << 6),
-  vattr_vmask    = (1 << 7),
-  vattr_vs3      = (1 << 8),
-  vattr_zimm     = (1 << 9),
-  vattr_vlmul    = (1 << 10),
-  vattr_vsew     = (1 << 11),
-  vattr_vta      = (1 << 12),
-  vattr_vma      = (1 << 13),
-  vattr_vediv    = (1 << 14)
+  vattr_vlswidth = (1 << 0),
+  vattr_vmop     = (1 << 1),
+  vattr_vumop    = (1 << 2),
+  vattr_vnf      = (1 << 3),
+  vattr_vmask    = (1 << 4),
+  vattr_vs3      = (1 << 5),
+  vattr_zimm     = (1 << 6),
+  vattr_vlmul    = (1 << 7),
+  vattr_vsew     = (1 << 8),
+  vattr_vta      = (1 << 9),
+  vattr_vma      = (1 << 10),
+  vattr_vediv    = (1 << 11)
 };
 
 class Instr {
