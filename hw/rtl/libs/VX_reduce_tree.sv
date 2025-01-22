@@ -14,7 +14,7 @@
 `include "VX_platform.vh"
 
 `TRACING_OFF
-module VX_reduce #(
+module VX_reduce_tree #(
     parameter DATAW_IN   = 1,
     parameter DATAW_OUT  = DATAW_IN,
     parameter N          = 1,
@@ -41,7 +41,7 @@ module VX_reduce #(
             assign in_B[i] = data_in[N_A + i];
         end
 
-        VX_reduce #(
+        VX_reduce_tree #(
             .DATAW_IN  (DATAW_IN),
             .DATAW_OUT (DATAW_OUT),
             .N  (N_A),
@@ -51,7 +51,7 @@ module VX_reduce #(
             .data_out (out_A)
         );
 
-        VX_reduce #(
+        VX_reduce_tree #(
             .DATAW_IN  (DATAW_IN),
             .DATAW_OUT (DATAW_OUT),
             .N  (N_B),

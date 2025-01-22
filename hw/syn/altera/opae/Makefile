@@ -5,7 +5,6 @@ DEVICE_FAMILY ?= arria10
 
 PREFIX ?= build$(XLEN)
 TARGET ?= fpga
-NUM_CORES ?= 1
 
 SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/opae
 
@@ -44,6 +43,7 @@ ifeq ($(DEVICE_FAMILY), arria10)
     CONFIGS += -DALTERA_A10
 endif
 
+ifdef NUM_CORES
 # cluster configuration
 CONFIGS_1c  := -DNUM_CLUSTERS=1 -DNUM_CORES=1
 CONFIGS_2c  := -DNUM_CLUSTERS=1 -DNUM_CORES=2
@@ -53,6 +53,7 @@ CONFIGS_16c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=16
 CONFIGS_32c := -DNUM_CLUSTERS=2 -DNUM_CORES=16
 CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16
 CONFIGS += $(CONFIGS_$(NUM_CORES)c)
+endif
 
 # include sources
 RTL_PKGS = $(AFU_DIR)/local_mem_cfg_pkg.sv $(AFU_DIR)/ccip/ccip_if_pkg.sv

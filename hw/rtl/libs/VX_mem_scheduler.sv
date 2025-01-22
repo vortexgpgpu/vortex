@@ -237,6 +237,8 @@ module VX_mem_scheduler #(
             .clk            (clk),
             .reset          (reset),
 
+            `UNUSED_PIN (misses),
+
             // Input request
             .in_req_valid   (reqq_valid),
             .in_req_mask    (reqq_mask),

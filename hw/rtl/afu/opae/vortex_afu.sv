@@ -620,6 +620,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 
     VX_mem_arb #(
         .NUM_INPUTS  (2),
+        .NUM_OUTPUTS (1),
         .DATA_SIZE   (LMEM_DATA_SIZE),
         .ADDR_WIDTH  (CCI_VX_ADDR_WIDTH),
         .TAG_WIDTH   (CCI_VX_TAG_WIDTH),
@@ -1097,7 +1098,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire vx_mem_req_fire = vx_mem_req_valid[0] && vx_mem_req_ready[0];
     wire vx_mem_rsp_fire = vx_mem_rsp_valid[0] && vx_mem_rsp_ready[0];
     wire avs_req_fire    = (avs_write[0] || avs_read[0]) && ~avs_waitrequest[0];
-
+    wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP (0, 0, {
             vx_reset,

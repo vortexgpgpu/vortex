@@ -68,8 +68,6 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     reg [`PERF_CTR_BITS-1:0] cycles;
 
-    reg [`NUM_WARPS-1:0][`UUID_WIDTH-1:0] issued_instrs;
-
     wire schedule_fire = schedule_valid && schedule_ready;
     wire schedule_if_fire = schedule_if.valid && schedule_if.ready;
 
@@ -112,6 +110,16 @@ module VX_schedule import VX_gpu_pkg::*; #(
         barrier_ctrs_n  = barrier_ctrs;
         barrier_stalls_n= barrier_stalls;
         warp_pcs_n      = warp_pcs;
+
+        // decode unlock
+        if (decode_sched_if.valid && decode_sched_if.unlock) begin
+            stalled_warps_n[decode_sched_if.wid] = 0;
+        end
+
+        // CSR unlock
+        if (sched_csr_if.unlock_warp) begin
+            stalled_warps_n[sched_csr_if.unlock_wid] = 0;
+        end
 
         // wspawn handling
         if (wspawn.valid && is_single_warp) begin
@@ -170,6 +178,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
                 stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
             end
         end
+
     `ifdef GBAR_ENABLE
         if (gbar_bus_if.rsp_valid && (gbar_req_id == gbar_bus_if.rsp_data.id)) begin
             barrier_ctrs_n[warp_ctl_if.barrier.id] = '0; // reset barrier counter
@@ -186,16 +195,6 @@ module VX_schedule import VX_gpu_pkg::*; #(
                 end
                 stalled_warps_n[branch_wid[i]] = 0; // unlock warp
             end
-        end
-
-        // decode unlock
-        if (decode_sched_if.valid && decode_sched_if.unlock) begin
-            stalled_warps_n[decode_sched_if.wid] = 0;
-        end
-
-        // CSR unlock
-        if (sched_csr_if.unlock_warp) begin
-            stalled_warps_n[sched_csr_if.unlock_wid] = 0;
         end
 
         // stall the warp until decode stage
@@ -223,7 +222,6 @@ module VX_schedule import VX_gpu_pkg::*; #(
             active_warps    <= '0;
             thread_masks    <= '0;
             barrier_stalls  <= '0;
-            issued_instrs   <= '0;
             cycles          <= '0;
             wspawn.valid    <=  0;
 
@@ -267,10 +265,6 @@ module VX_schedule import VX_gpu_pkg::*; #(
                 gbar_req_valid <= 0;
             end
         `endif
-
-            if (schedule_if_fire) begin
-                issued_instrs[schedule_if.data.wid] <= issued_instrs[schedule_if.data.wid] + `UUID_WIDTH'(1);
-            end
 
             if (busy) begin
                 cycles <= cycles + 1;

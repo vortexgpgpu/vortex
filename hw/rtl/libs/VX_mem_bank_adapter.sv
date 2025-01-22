@@ -179,25 +179,31 @@ module VX_mem_bank_adapter #(
 
     for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_req_xbar_data_out
 
-        wire rw_out;
-        wire [BANK_ADDR_WIDTH-1:0] addr_out;
-        wire [XBAR_TAG_WIDTH-1:0] tag_out;
-        wire [DATA_WIDTH-1:0] data_out;
-        wire [DATA_SIZE-1:0] byteen_out;
+        wire xbar_rw_out;
+        wire [BANK_ADDR_WIDTH-1:0] xbar_addr_out;
+        wire [XBAR_TAG_WIDTH-1:0] xbar_tag_out;
+        wire [DATA_WIDTH-1:0] xbar_data_out;
+        wire [DATA_SIZE-1:0] xbar_byteen_out;
 
-        assign {rw_out, addr_out, byteen_out, data_out, tag_out} = req_xbar_data_out[i];
+        assign {
+            xbar_rw_out,
+            xbar_addr_out,
+            xbar_byteen_out,
+            xbar_data_out,
+            xbar_tag_out
+        } = req_xbar_data_out[i];
 
         assign mem_req_valid_out[i]  = req_xbar_valid_out[i];
-        assign mem_req_rw_out[i]     = rw_out;
-        assign mem_req_addr_out[i]   = ADDR_WIDTH_OUT'(addr_out);
-        assign mem_req_byteen_out[i] = byteen_out;
-        assign mem_req_data_out[i]   = data_out;
+        assign mem_req_rw_out[i]     = xbar_rw_out;
+        assign mem_req_addr_out[i]   = ADDR_WIDTH_OUT'(xbar_addr_out);
+        assign mem_req_byteen_out[i] = xbar_byteen_out;
+        assign mem_req_data_out[i]   = xbar_data_out;
 
         if (NUM_PORTS_IN > 1) begin : g_input_sel
-            assign mem_req_tag_out[i] = TAG_WIDTH_OUT'({tag_out, req_xbar_sel_out[i]});
+            assign mem_req_tag_out[i] = TAG_WIDTH_OUT'({xbar_tag_out, req_xbar_sel_out[i]});
         end else begin : g_no_input_sel
             `UNUSED_VAR (req_xbar_sel_out[i])
-            assign mem_req_tag_out[i] = TAG_WIDTH_OUT'(tag_out);
+            assign mem_req_tag_out[i] = TAG_WIDTH_OUT'(xbar_tag_out);
         end
 
         assign req_xbar_ready_out[i] = mem_req_ready_out[i];

@@ -15,7 +15,6 @@ endif
 TARGET ?= hw
 PLATFORM ?=
 
-NUM_CORES ?= 1
 PREFIX ?= build$(XLEN)
 MAX_JOBS ?= 8
 
@@ -64,6 +63,7 @@ DBG_SCOPE_FLAGS += -DDBG_SCOPE_ISSUE
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_FETCH
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
 
+ifdef NUM_CORES
 # cluster configuration
 CONFIGS_1c  := -DNUM_CLUSTERS=1 -DNUM_CORES=1
 CONFIGS_2c  := -DNUM_CLUSTERS=1 -DNUM_CORES=2
@@ -73,6 +73,7 @@ CONFIGS_16c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=16
 CONFIGS_32c := -DNUM_CLUSTERS=2 -DNUM_CORES=16
 CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16
 CONFIGS += $(CONFIGS_$(NUM_CORES)c)
+endif
 
 # include sources
 RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
@@ -115,12 +116,12 @@ endif
 # Debugging
 ifdef DEBUG
 	VPP_FLAGS += -g --optimize 0 --debug.protocol all
-	ifneq ($(TARGET), hw)
-		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
-		CFLAGS += -DDEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
-	else
+	ifeq ($(TARGET), hw)
 		VPP_FLAGS += --debug.chipscope vortex_afu_1
 		CFLAGS += -DNDEBUG -DCHIPSCOPE $(DBG_SCOPE_FLAGS)
+	else
+		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
+		CFLAGS += -DDEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
 	endif
 else
 	VPP_FLAGS += --optimize 3

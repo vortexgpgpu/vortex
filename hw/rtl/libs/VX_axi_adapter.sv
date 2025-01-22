@@ -23,10 +23,10 @@ module VX_axi_adapter #(
     parameter NUM_PORTS_IN   = 1,
     parameter NUM_BANKS_OUT  = 1,
     parameter INTERLEAVE     = 0,
-    parameter TAG_BUFFER_SIZE= 32,
+    parameter TAG_BUFFER_SIZE= 16,
     parameter ARBITER        = "R",
-    parameter REQ_OUT_BUF    = 1,
-    parameter RSP_OUT_BUF    = 1,
+    parameter REQ_OUT_BUF    = 0,
+    parameter RSP_OUT_BUF    = 0,
     parameter DATA_SIZE      = DATA_WIDTH/8
  ) (
     input  wire                     clk,
@@ -99,7 +99,7 @@ module VX_axi_adapter #(
     localparam LOG2_DATA_SIZE = `CLOG2(DATA_SIZE);
     localparam BANK_SEL_BITS  = `CLOG2(NUM_BANKS_OUT);
     localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
-    localparam DST_ADDR_WDITH = (ADDR_WIDTH_OUT - LOG2_DATA_SIZE) + BANK_SEL_BITS; // convert output addresss to byte-addressable input space
+    localparam DST_ADDR_WDITH = (ADDR_WIDTH_OUT - LOG2_DATA_SIZE) + BANK_SEL_BITS; // convert byte-addressable output addresss to block-addressable input space
     localparam BANK_ADDR_WIDTH = DST_ADDR_WDITH - BANK_SEL_BITS;
     localparam NUM_PORTS_IN_BITS = `CLOG2(NUM_PORTS_IN);
     localparam NUM_PORTS_IN_WIDTH = `UP(NUM_PORTS_IN_BITS);
@@ -109,8 +109,8 @@ module VX_axi_adapter #(
     localparam READ_FULL_TAG_WIDTH = READ_TAG_WIDTH + NUM_PORTS_IN_BITS;
     localparam WRITE_TAG_WIDTH = `MIN(TAG_WIDTH_IN, TAG_WIDTH_OUT);
     localparam DST_TAG_WIDTH  = `MAX(READ_FULL_TAG_WIDTH, WRITE_TAG_WIDTH);
-    localparam ARB_TAG_WIDTH  = `MAX(READ_TAG_WIDTH, WRITE_TAG_WIDTH);
-    localparam ARB_DATAW      = 1 + BANK_ADDR_WIDTH + DATA_SIZE + DATA_WIDTH + ARB_TAG_WIDTH;
+    localparam XBAR_TAG_WIDTH = `MAX(READ_TAG_WIDTH, WRITE_TAG_WIDTH);
+    localparam REQ_XBAR_DATAW = 1 + BANK_ADDR_WIDTH + DATA_SIZE + DATA_WIDTH + XBAR_TAG_WIDTH;
     localparam RSP_XBAR_DATAW = DATA_WIDTH + READ_TAG_WIDTH;
 
     `STATIC_ASSERT ((DST_ADDR_WDITH >= ADDR_WIDTH_IN), ("invalid address width: current=%0d, expected=%0d", DST_ADDR_WDITH, ADDR_WIDTH_IN))
@@ -174,117 +174,85 @@ module VX_axi_adapter #(
         end
     end
 
-    // Request ack
+    // AXI request handling
 
-    wire [NUM_BANKS_OUT-1:0][NUM_PORTS_IN-1:0] arb_ready_in;
+    wire [NUM_PORTS_IN-1:0] req_xbar_valid_in;
+    wire [NUM_PORTS_IN-1:0][REQ_XBAR_DATAW-1:0] req_xbar_data_in;
+    wire [NUM_PORTS_IN-1:0] req_xbar_ready_in;
 
-    if (NUM_PORTS_IN > 1) begin : g_multi_inputs
-        wire [NUM_PORTS_IN-1:0][NUM_BANKS_OUT-1:0] arb_ready_in_w;
-        VX_transpose #(
-            .N (NUM_BANKS_OUT),
-            .M (NUM_PORTS_IN)
-        ) rdy_in_transpose (
-            .data_in  (arb_ready_in),
-            .data_out (arb_ready_in_w)
-        );
-        for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_ready_in
-            assign mem_req_ready[i] = | arb_ready_in_w[i];
-        end
-    end else begin : g_single_input
-        assign mem_req_ready[0] = arb_ready_in[req_bank_sel[0]][0];
+    wire [NUM_BANKS_OUT-1:0] req_xbar_valid_out;
+    wire [NUM_BANKS_OUT-1:0][REQ_XBAR_DATAW-1:0] req_xbar_data_out;
+    wire [NUM_BANKS_OUT-1:0][NUM_PORTS_IN_WIDTH-1:0] req_xbar_sel_out;
+    wire [NUM_BANKS_OUT-1:0] req_xbar_ready_out;
+
+    for (genvar i = 0; i < NUM_PORTS_IN; ++i) begin : g_req_xbar_data_in
+        wire tag_ready = mem_req_rw[i] || mem_rd_req_tag_ready[i];
+        wire [XBAR_TAG_WIDTH-1:0] tag_value = mem_req_rw[i] ? XBAR_TAG_WIDTH'(mem_req_tag[i]) : XBAR_TAG_WIDTH'(mem_rd_req_tag[i]);
+        assign req_xbar_valid_in[i] = mem_req_valid[i] && tag_ready;
+        assign req_xbar_data_in[i]  = {mem_req_rw[i], req_bank_addr[i], mem_req_byteen[i], mem_req_data[i], tag_value};
+        assign mem_req_ready[i]  = req_xbar_ready_in[i] && tag_ready;
     end
 
-    // AXi write request synchronization
+    VX_stream_xbar #(
+        .NUM_INPUTS (NUM_PORTS_IN),
+        .NUM_OUTPUTS(NUM_BANKS_OUT),
+        .DATAW      (REQ_XBAR_DATAW),
+        .ARBITER    (ARBITER),
+        .OUT_BUF    (REQ_OUT_BUF)
+    ) req_xbar (
+        .clk       (clk),
+        .reset     (reset),
+        .sel_in    (req_bank_sel),
+        .valid_in  (req_xbar_valid_in),
+        .data_in   (req_xbar_data_in),
+        .ready_in  (req_xbar_ready_in),
+        .valid_out (req_xbar_valid_out),
+        .data_out  (req_xbar_data_out),
+        .ready_out (req_xbar_ready_out),
+        .sel_out   (req_xbar_sel_out),
+        `UNUSED_PIN (collisions)
+    );
 
-    wire [NUM_BANKS_OUT-1:0] m_axi_awvalid_w, m_axi_wvalid_w;
-    wire [NUM_BANKS_OUT-1:0] m_axi_awready_w, m_axi_wready_w;
-    reg [NUM_BANKS_OUT-1:0] m_axi_aw_ack, m_axi_w_ack, axi_write_ready;
+    for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_axi_reqs
 
-    for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_axi_write_ready
+        wire xbar_rw_out;
+        wire [BANK_ADDR_WIDTH-1:0] xbar_addr_out;
+        wire [XBAR_TAG_WIDTH-1:0] xbar_tag_out;
+        wire [DATA_WIDTH-1:0] xbar_data_out;
+        wire [DATA_SIZE-1:0] xbar_byteen_out;
+
+        assign {
+            xbar_rw_out,
+            xbar_addr_out,
+            xbar_byteen_out,
+            xbar_data_out,
+            xbar_tag_out
+        } = req_xbar_data_out[i];
+
+        // AXi request handshake
+
+        wire m_axi_aw_ack, m_axi_w_ack, axi_write_ready;
+
         VX_axi_write_ack axi_write_ack (
             .clk    (clk),
             .reset  (reset),
-            .awvalid(m_axi_awvalid_w[i]),
-            .awready(m_axi_awready_w[i]),
-            .wvalid (m_axi_wvalid_w[i]),
-            .wready (m_axi_wready_w[i]),
-            .aw_ack (m_axi_aw_ack[i]),
-            .w_ack  (m_axi_w_ack[i]),
-            .tx_rdy (axi_write_ready[i]),
+            .awvalid(m_axi_awvalid[i]),
+            .awready(m_axi_awready[i]),
+            .wvalid (m_axi_wvalid[i]),
+            .wready (m_axi_wready[i]),
+            .aw_ack (m_axi_aw_ack),
+            .w_ack  (m_axi_w_ack),
+            .tx_rdy (axi_write_ready),
             `UNUSED_PIN (tx_ack)
         );
-    end
 
-    // AXI request handling
-
-    for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_axi_write_req
-
-        wire [BANK_ADDR_WIDTH-1:0] arb_addr_out, buf_addr_r_out, buf_addr_w_out;
-        wire [ARB_TAG_WIDTH-1:0] arb_tag_out;
-        wire [WRITE_TAG_WIDTH-1:0] buf_tag_w_out;
-        wire [READ_FULL_TAG_WIDTH-1:0] arb_tag_r_out, buf_tag_r_out;
-        wire [NUM_PORTS_IN_WIDTH-1:0] arb_sel_out;
-        wire [DATA_WIDTH-1:0] arb_data_out;
-        wire [DATA_SIZE-1:0] arb_byteen_out;
-        wire arb_valid_out, arb_ready_out;
-        wire arb_rw_out;
-
-        wire [NUM_PORTS_IN-1:0][ARB_DATAW-1:0] arb_data_in;
-        wire [NUM_PORTS_IN-1:0] arb_valid_in;
-
-        for (genvar j = 0; j < NUM_PORTS_IN; ++j) begin : g_valid_in
-            wire tag_ready = mem_req_rw[j] || mem_rd_req_tag_ready[j];
-            assign arb_valid_in[j] = mem_req_valid[j] && tag_ready && (req_bank_sel[j] == i);
-        end
-
-        for (genvar j = 0; j < NUM_PORTS_IN; ++j) begin : g_data_in
-            wire [ARB_TAG_WIDTH-1:0] tag_value = mem_req_rw[j] ? ARB_TAG_WIDTH'(mem_req_tag[j]) : ARB_TAG_WIDTH'(mem_rd_req_tag[j]);
-            assign arb_data_in[j] = {mem_req_rw[j], req_bank_addr[j], mem_req_byteen[j], mem_req_data[j], tag_value};
-        end
-
-        VX_stream_arb #(
-            .NUM_INPUTS (NUM_PORTS_IN),
-            .NUM_OUTPUTS(1),
-            .DATAW      (ARB_DATAW),
-            .ARBITER    (ARBITER)
-        ) aw_arb (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (arb_valid_in),
-            .ready_in  (arb_ready_in[i]),
-            .data_in   (arb_data_in),
-            .data_out  ({arb_rw_out, arb_addr_out, arb_byteen_out, arb_data_out, arb_tag_out}),
-            .valid_out (arb_valid_out),
-            .ready_out (arb_ready_out),
-            .sel_out   (arb_sel_out)
-        );
-
-        wire m_axi_arready_w;
-
-        assign arb_ready_out = axi_write_ready[i] || m_axi_arready_w;
+        assign req_xbar_ready_out[i] = xbar_rw_out ? axi_write_ready : m_axi_arready[i];
 
         // AXI write address channel
 
-        assign m_axi_awvalid_w[i] = arb_valid_out && arb_rw_out && ~m_axi_aw_ack[i];
-
-        VX_elastic_buffer #(
-            .DATAW   (BANK_ADDR_WIDTH + WRITE_TAG_WIDTH),
-            .SIZE    (`TO_OUT_BUF_SIZE(REQ_OUT_BUF)),
-            .OUT_REG (`TO_OUT_BUF_REG(REQ_OUT_BUF)),
-            .LUTRAM  (`TO_OUT_BUF_LUTRAM(REQ_OUT_BUF))
-        ) aw_buf (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (m_axi_awvalid_w[i]),
-            .ready_in  (m_axi_awready_w[i]),
-            .data_in   ({arb_addr_out, WRITE_TAG_WIDTH'(arb_tag_out)}),
-            .data_out  ({buf_addr_w_out, buf_tag_w_out}),
-            .valid_out (m_axi_awvalid[i]),
-            .ready_out (m_axi_awready[i])
-        );
-
-        assign m_axi_awaddr[i]  = ADDR_WIDTH_OUT'(buf_addr_w_out) << LOG2_DATA_SIZE;
-        assign m_axi_awid[i]    = TAG_WIDTH_OUT'(buf_tag_w_out);
+        assign m_axi_awvalid[i] = req_xbar_valid_out[i] && xbar_rw_out && ~m_axi_aw_ack;
+        assign m_axi_awaddr[i]  = ADDR_WIDTH_OUT'(xbar_addr_out) << LOG2_DATA_SIZE;
+        assign m_axi_awid[i]    = TAG_WIDTH_OUT'(xbar_tag_out);
         assign m_axi_awlen[i]   = 8'b00000000;
         assign m_axi_awsize[i]  = 3'(LOG2_DATA_SIZE);
         assign m_axi_awburst[i] = 2'b00;
@@ -296,53 +264,24 @@ module VX_axi_adapter #(
 
         // AXI write data channel
 
-        assign m_axi_wvalid_w[i] = arb_valid_out && arb_rw_out && ~m_axi_w_ack[i];
-
-        VX_elastic_buffer #(
-            .DATAW   (DATA_SIZE + DATA_WIDTH),
-            .SIZE    (`TO_OUT_BUF_SIZE(REQ_OUT_BUF)),
-            .OUT_REG (`TO_OUT_BUF_REG(REQ_OUT_BUF)),
-            .LUTRAM  (`TO_OUT_BUF_LUTRAM(REQ_OUT_BUF))
-        ) w_buf (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (m_axi_wvalid_w[i]),
-            .ready_in  (m_axi_wready_w[i]),
-            .data_in   ({arb_byteen_out, arb_data_out}),
-            .data_out  ({m_axi_wstrb[i], m_axi_wdata[i]}),
-            .valid_out (m_axi_wvalid[i]),
-            .ready_out (m_axi_wready[i])
-        );
-
-        assign m_axi_wlast[i] = 1'b1;
+        assign m_axi_wvalid[i]  = req_xbar_valid_out[i] && xbar_rw_out && ~m_axi_w_ack;
+        assign m_axi_wstrb[i]   = xbar_byteen_out;
+        assign m_axi_wdata[i]   = xbar_data_out;
+        assign m_axi_wlast[i]   = 1'b1;
 
         // AXI read address channel
 
-        if (NUM_PORTS_IN > 1) begin : g_input_sel
-            assign arb_tag_r_out = READ_FULL_TAG_WIDTH'({arb_tag_out, arb_sel_out});
+        wire [READ_FULL_TAG_WIDTH-1:0] xbar_tag_r_out;
+        if (NUM_PORTS_IN > 1) begin : g_xbar_tag_r_out
+            assign xbar_tag_r_out = READ_FULL_TAG_WIDTH'({xbar_tag_out, req_xbar_sel_out[i]});
         end else begin : g_no_input_sel
-            `UNUSED_VAR (arb_sel_out)
-            assign arb_tag_r_out = READ_TAG_WIDTH'(arb_tag_out);
+            `UNUSED_VAR (req_xbar_sel_out)
+            assign xbar_tag_r_out = READ_TAG_WIDTH'(xbar_tag_out);
         end
 
-        VX_elastic_buffer #(
-            .DATAW   (BANK_ADDR_WIDTH + READ_FULL_TAG_WIDTH),
-            .SIZE    (`TO_OUT_BUF_SIZE(REQ_OUT_BUF)),
-            .OUT_REG (`TO_OUT_BUF_REG(REQ_OUT_BUF)),
-            .LUTRAM  (`TO_OUT_BUF_LUTRAM(REQ_OUT_BUF))
-        ) ar_buf (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (arb_valid_out && ~arb_rw_out),
-            .ready_in  (m_axi_arready_w),
-            .data_in   ({arb_addr_out,   arb_tag_r_out}),
-            .data_out  ({buf_addr_r_out, buf_tag_r_out}),
-            .valid_out (m_axi_arvalid[i]),
-            .ready_out (m_axi_arready[i])
-        );
-
-        assign m_axi_araddr[i]  = ADDR_WIDTH_OUT'(buf_addr_r_out) << LOG2_DATA_SIZE;
-        assign m_axi_arid[i]    = TAG_WIDTH_OUT'(buf_tag_r_out);
+        assign m_axi_arvalid[i] = req_xbar_valid_out[i] && ~xbar_rw_out;
+        assign m_axi_araddr[i]  = ADDR_WIDTH_OUT'(xbar_addr_out) << LOG2_DATA_SIZE;
+        assign m_axi_arid[i]    = TAG_WIDTH_OUT'(xbar_tag_r_out);
         assign m_axi_arlen[i]   = 8'b00000000;
         assign m_axi_arsize[i]  = 3'(LOG2_DATA_SIZE);
         assign m_axi_arburst[i] = 2'b00;

@@ -166,10 +166,8 @@
 `define VX_CSR_MPM_MEM_WRITES_H         12'hB99
 `define VX_CSR_MPM_MEM_LT               12'hB1A     // memory latency
 `define VX_CSR_MPM_MEM_LT_H             12'hB9A
-`define VX_CSR_MPM_MEM_BANK_CNTR        12'hB1E     // memory bank requests
-`define VX_CSR_MPM_MEM_BANK_CNTR_H      12'hB9E
-`define VX_CSR_MPM_MEM_BANK_TICK        12'hB1F     // memory ticks
-`define VX_CSR_MPM_MEM_BANK_TICK_H      12'hB9F
+`define VX_CSR_MPM_MEM_BANK_ST          12'hB1E     // bank conflicts
+`define VX_CSR_MPM_MEM_BANK_ST_H        12'hB9E
 // PERF: lmem
 `define VX_CSR_MPM_LMEM_READS           12'hB1B     // memory reads
 `define VX_CSR_MPM_LMEM_READS_H         12'hB9B
@@ -177,6 +175,9 @@
 `define VX_CSR_MPM_LMEM_WRITES_H        12'hB9C
 `define VX_CSR_MPM_LMEM_BANK_ST         12'hB1D     // bank conflicts
 `define VX_CSR_MPM_LMEM_BANK_ST_H       12'hB9D
+// PERF: coalescer
+`define VX_CSR_MPM_COALESCER_MISS       12'hB1F     // coalescer misses
+`define VX_CSR_MPM_COALESCER_MISS_H     12'hB9F
 
 // Machine Performance-monitoring memory counters (class 3) ///////////////////
 // <Add your own counters: use addresses hB03..B1F, hB83..hB9F>

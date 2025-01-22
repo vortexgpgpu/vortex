@@ -106,7 +106,6 @@ module VX_operands import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (PER_BANK_ADDRW),
         .ARBITER     ("P"), // use priority arbiter
-        .PERF_CTR_BITS(`PERF_CTR_BITS),
         .OUT_BUF     (0) // no output buffering
     ) req_xbar (
         .clk       (clk),
@@ -271,7 +270,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             .RESET_RAM (1),
          `endif
             .OUT_REG (1),
-            .RDW_MODE ("U")
+            .RDW_MODE ("R")
         ) gpr_ram (
             .clk   (clk),
             .reset (reset),

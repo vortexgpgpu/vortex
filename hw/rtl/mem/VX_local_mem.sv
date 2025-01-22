@@ -43,7 +43,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     // PERF
 `ifdef PERF_ENABLE
-    output cache_perf_t lmem_perf,
+    output lmem_perf_t lmem_perf,
 `endif
 
     VX_mem_bus_if.slave mem_bus_if [NUM_REQS]
@@ -286,14 +286,10 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         end
     end
 
-    assign lmem_perf.reads        = perf_reads;
-    assign lmem_perf.writes       = perf_writes;
-    assign lmem_perf.read_misses  = '0;
-    assign lmem_perf.write_misses = '0;
-    assign lmem_perf.bank_stalls  = perf_collisions;
-    assign lmem_perf.mshr_stalls  = '0;
-    assign lmem_perf.mem_stalls   = '0;
-    assign lmem_perf.crsp_stalls  = perf_crsp_stalls;
+    assign lmem_perf.reads       = perf_reads;
+    assign lmem_perf.writes      = perf_writes;
+    assign lmem_perf.bank_stalls = perf_collisions;
+    assign lmem_perf.crsp_stalls = perf_crsp_stalls;
 
 `endif
 
@@ -321,15 +317,15 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         always @(posedge clk) begin
             if (mem_bus_if[i].req_valid && mem_bus_if[i].req_ready) begin
                 if (mem_bus_if[i].req_data.rw) begin
-                    `TRACE(2, ("%t: %s wr-req: req_idx=%0d, addr=0x%0h, byteen=0x%h, data=0x%h, tag=0x%0h (#%0d)\n",
+                    `TRACE(2, ("%t: %s core-wr-req[%0d]: addr=0x%0h, byteen=0x%h, data=0x%h, tag=0x%0h (#%0d)\n",
                         $time, INSTANCE_ID, i, mem_bus_if[i].req_data.addr, mem_bus_if[i].req_data.byteen, mem_bus_if[i].req_data.data, mem_bus_if[i].req_data.tag.value, mem_bus_if[i].req_data.tag.uuid))
                 end else begin
-                    `TRACE(2, ("%t: %s rd-req: req_idx=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n",
+                    `TRACE(2, ("%t: %s core-rd-req[%0d]: addr=0x%0h, tag=0x%0h (#%0d)\n",
                         $time, INSTANCE_ID, i, mem_bus_if[i].req_data.addr, mem_bus_if[i].req_data.tag.value, mem_bus_if[i].req_data.tag.uuid))
                 end
             end
             if (mem_bus_if[i].rsp_valid && mem_bus_if[i].rsp_ready) begin
-                `TRACE(2, ("%t: %s rd-rsp: req_idx=%0d, data=0x%h, tag=0x%0h (#%0d)\n",
+                `TRACE(2, ("%t: %s core-rd-rsp[%0d]: data=0x%h, tag=0x%0h (#%0d)\n",
                     $time, INSTANCE_ID, i, mem_bus_if[i].rsp_data.data, mem_bus_if[i].rsp_data.tag.value, mem_bus_if[i].rsp_data.tag.uuid))
             end
         end
@@ -339,15 +335,15 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         always @(posedge clk) begin
             if (per_bank_req_valid[i] && per_bank_req_ready[i]) begin
                 if (per_bank_req_rw[i]) begin
-                    `TRACE(2, ("%t: %s-bank%0d wr-req: addr=0x%0h, byteen=0x%h, data=0x%h, tag=0x%0h (#%0d)\n",
+                    `TRACE(2, ("%t: %s bank-wr-req[%0d]: addr=0x%0h, byteen=0x%h, data=0x%h, tag=0x%0h (#%0d)\n",
                         $time, INSTANCE_ID, i, per_bank_req_addr[i], per_bank_req_byteen[i], per_bank_req_data[i], per_bank_req_tag_value[i], per_bank_req_uuid[i]))
                 end else begin
-                    `TRACE(2, ("%t: %s-bank%0d rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n",
+                    `TRACE(2, ("%t: %s bank-rd-req[%0d]: addr=0x%0h, tag=0x%0h (#%0d)\n",
                         $time, INSTANCE_ID, i, per_bank_req_addr[i], per_bank_req_tag_value[i], per_bank_req_uuid[i]))
                 end
             end
             if (per_bank_rsp_valid[i] && per_bank_rsp_ready[i]) begin
-                `TRACE(2, ("%t: %s-bank%0d rd-rsp: data=0x%h, tag=0x%0h (#%0d)\n",
+                `TRACE(2, ("%t: %s bank-rd-rsp[%0d]: data=0x%h, tag=0x%0h (#%0d)\n",
                     $time, INSTANCE_ID, i, per_bank_rsp_data[i], per_bank_rsp_tag_value[i], per_bank_rsp_uuid[i]))
             end
         end

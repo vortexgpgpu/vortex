@@ -52,7 +52,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     parameter DIRTY_BYTES           = 0,
 
     // Replacement policy
-    parameter REPL_POLICY           = `CS_REPL_CYCLIC,
+    parameter REPL_POLICY           = `CS_REPL_FIFO,
 
     // Request debug identifier
     parameter UUID_WIDTH            = 0,
@@ -106,10 +106,9 @@ module VX_cache import VX_gpu_pkg::*; #(
     localparam MEM_ARB_SEL_BITS = `CLOG2(`CDIV(NUM_BANKS, MEM_PORTS));
     localparam MEM_ARB_SEL_WIDTH = `UP(MEM_ARB_SEL_BITS);
 
-    localparam CORE_RSP_REG_DISABLE = (NUM_BANKS != 1) || (NUM_REQS != 1);
-    localparam MEM_REQ_REG_DISABLE  = (NUM_BANKS != 1);
-
-    localparam REQ_XBAR_BUF = (NUM_REQS > 4) ? 2 : 0;
+    localparam REQ_XBAR_BUF    = (NUM_REQS > 2) ? 2 : 0;
+    localparam CORE_RSP_BUF_ENABLE = (NUM_BANKS != 1) || (NUM_REQS != 1);
+    localparam MEM_REQ_BUF_ENABLE = (NUM_BANKS != 1);
 
 `ifdef PERF_ENABLE
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
@@ -133,7 +132,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .NUM_BANKS (NUM_BANKS),
         .UUID_WIDTH(UUID_WIDTH),
         .TAG_WIDTH (TAG_WIDTH),
-        .BANK_SEL_LATENCY (`TO_OUT_BUF_REG(REQ_XBAR_BUF)) // bank xbar latency
+        .BANK_SEL_LATENCY (`TO_OUT_BUF_REG(REQ_XBAR_BUF)) // request xbar latency
     ) flush_unit (
         .clk             (clk),
         .reset           (reset),
@@ -387,8 +386,8 @@ module VX_cache import VX_gpu_pkg::*; #(
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (TAG_WIDTH),
             .FLAGS_WIDTH  (FLAGS_WIDTH),
-            .CORE_OUT_REG (CORE_RSP_REG_DISABLE ? 0 : 1),
-            .MEM_OUT_REG  (MEM_REQ_REG_DISABLE ? 0 : 1)
+            .CORE_OUT_REG (CORE_RSP_BUF_ENABLE ? 0 : `TO_OUT_BUF_REG(CORE_OUT_BUF)),
+            .MEM_OUT_REG  (MEM_REQ_BUF_ENABLE ? 0 : `TO_OUT_BUF_REG(MEM_OUT_BUF))
         ) bank (
             .clk                (clk),
             .reset              (reset),
@@ -481,7 +480,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_rsp_buf
         VX_elastic_buffer #(
             .DATAW   (`CS_WORD_WIDTH + TAG_WIDTH),
-            .SIZE    (CORE_RSP_REG_DISABLE ? `TO_OUT_BUF_SIZE(CORE_OUT_BUF) : 0),
+            .SIZE    (CORE_RSP_BUF_ENABLE ? `TO_OUT_BUF_SIZE(CORE_OUT_BUF) : 0),
             .OUT_REG (`TO_OUT_BUF_REG(CORE_OUT_BUF))
         ) core_rsp_buf (
             .clk       (clk),
@@ -578,7 +577,7 @@ module VX_cache import VX_gpu_pkg::*; #(
 
         VX_elastic_buffer #(
             .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_WIDTH + `UP(FLAGS_WIDTH)),
-            .SIZE    (MEM_REQ_REG_DISABLE ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
+            .SIZE    (MEM_REQ_BUF_ENABLE ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
             .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
         ) mem_req_buf (
             .clk       (clk),

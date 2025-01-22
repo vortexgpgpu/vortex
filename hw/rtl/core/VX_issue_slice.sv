@@ -93,6 +93,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     `SCOPE_IO_SWITCH (1);
     wire decode_fire = decode_if.valid && decode_if.ready;
     wire operands_fire = operands_if.valid && operands_if.ready;
+    wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 2, 4, 3, (
             `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + 1 + `NR_BITS * 4 +

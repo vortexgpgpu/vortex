@@ -53,25 +53,25 @@ public:
 
   SimPort(SimObjectBase* module)
     : SimPortBase(module)
-    , peer_(nullptr)
+    , sink_(nullptr)
     , tx_cb_(nullptr)
   {}
 
-  void bind(SimPort<Pkt>* peer) {
-    assert(peer_ == nullptr);
-    peer_ = peer;
+  void bind(SimPort<Pkt>* sink) {
+    assert(sink_ == nullptr);
+    sink_ = sink;
   }
 
   void unbind() {
-    peer_ = nullptr;
+    sink_ = nullptr;
   }
 
   bool connected() const {
-    return (peer_ != nullptr);
+    return (sink_ != nullptr);
   }
 
-  SimPort* peer() const {
-    return peer_;
+  SimPort* sink() const {
+    return sink_;
   }
 
   bool empty() const {
@@ -111,15 +111,15 @@ protected:
   };
 
   std::queue<timed_pkt_t> queue_;
-  SimPort*   peer_;
+  SimPort*   sink_;
   TxCallback tx_cb_;
 
   void transfer(const Pkt& data, uint64_t cycles) {
     if (tx_cb_) {
       tx_cb_(data, cycles);
     }
-    if (peer_) {
-      peer_->transfer(data, cycles);
+    if (sink_) {
+      sink_->transfer(data, cycles);
     } else {
       queue_.push({data, cycles});
     }
@@ -402,8 +402,8 @@ typename SimObject<Impl>::Ptr SimObject<Impl>::Create(Args&&... args) {
 
 template <typename Pkt>
 void SimPort<Pkt>::push(const Pkt& pkt, uint64_t delay) const {
-  if (peer_ && !tx_cb_) {
-    reinterpret_cast<const SimPort<Pkt>*>(peer_)->push(pkt, delay);
+  if (sink_ && !tx_cb_) {
+    reinterpret_cast<const SimPort<Pkt>*>(sink_)->push(pkt, delay);
   } else {
     SimPlatform::instance().schedule(this, pkt, delay);
   }

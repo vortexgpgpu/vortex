@@ -50,6 +50,8 @@ module VX_afu_ctrl #(
     input  wire                         ap_idle,
     output wire                         interrupt,
 
+    output wire                         ap_ctrl_read,
+
 `ifdef SCOPE
     input wire                          scope_bus_in,
     output wire                         scope_bus_out,
@@ -368,7 +370,7 @@ module VX_afu_ctrl #(
         end else begin
             case (rstate)
             RSTATE_ADDR: rstate <= s_axi_ar_fire ? RSTATE_DATA : RSTATE_ADDR;
-            RSTATE_DATA: rstate <= (~rvalid_stall) ? RSTATE_RESP : RSTATE_DATA;
+            RSTATE_DATA: rstate <= rvalid_stall ? RSTATE_DATA : RSTATE_RESP;
             RSTATE_RESP: rstate <= s_axi_r_fire ? RSTATE_ADDR : RSTATE_RESP;
             default:     rstate <= RSTATE_ADDR;
             endcase
@@ -429,6 +431,8 @@ module VX_afu_ctrl #(
     assign ap_reset  = ap_reset_r;
     assign ap_start  = ap_start_r;
     assign interrupt = gie_r & (| isr_r);
+
+    assign ap_ctrl_read = s_axi_r_fire && (raddr == ADDR_AP_CTRL);
 
     assign dcr_wr_valid = dcr_wr_valid_r;
     assign dcr_wr_addr  = `VX_DCR_ADDR_WIDTH'(dcra_r);

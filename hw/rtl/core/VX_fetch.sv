@@ -53,7 +53,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
     VX_dp_ram #(
         .DATAW (`PC_BITS + `NUM_THREADS),
         .SIZE  (`NUM_WARPS),
-        .RDW_MODE ("R")
+        .RDW_MODE ("R"),
+        .LUTRAM (1)
     ) tag_store (
         .clk   (clk),
         .reset (reset),
@@ -137,6 +138,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire schedule_fire = schedule_if.valid && schedule_if.ready;
     wire icache_bus_req_fire = icache_bus_if.req_valid && icache_bus_if.req_ready;
     wire icache_bus_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
+    wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 1, 6, 3, (
             `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS +

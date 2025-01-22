@@ -44,7 +44,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     reg [PER_ISSUE_WARPS-1:0][`NUM_SFU_UNITS-1:0] perf_inuse_sfu_per_cycle;
     wire [`NUM_SFU_UNITS-1:0] perf_sfu_per_cycle, perf_sfu_per_cycle_r;
 
-    VX_reduce #(
+    VX_reduce_tree #(
         .DATAW_IN (`NUM_EX_UNITS),
         .N  (PER_ISSUE_WARPS),
         .OP ("|")
@@ -53,7 +53,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         .data_out (perf_units_per_cycle)
     );
 
-    VX_reduce #(
+    VX_reduce_tree #(
         .DATAW_IN (`NUM_SFU_UNITS),
         .N  (PER_ISSUE_WARPS),
         .OP ("|")
@@ -151,11 +151,14 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         end
     `endif
 
-        always @(*) begin
-            for (integer i = 0; i < NUM_OPDS; ++i) begin
+        for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_operands_busy_n
+            always @(*) begin
                 operands_busy_n[i] = operands_busy[i];
                 if (ibuffer_fire) begin
                     operands_busy_n[i] = inuse_regs[ibuf_opds[i]];
+                    if (staging_fire && staging_if[w].data.wb && staging_if[w].data.rd == ibuf_opds[i]) begin
+                        operands_busy_n[i] = 1;
+                    end
                 end
                 if (writeback_fire) begin
                     if (ibuffer_fire) begin
@@ -167,9 +170,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                             operands_busy_n[i] = 0;
                        end
                     end
-                end
-                if (staging_fire && staging_if[w].data.wb && staging_if[w].data.rd == ibuf_opds[i]) begin
-                    operands_busy_n[i] = 1;
                 end
             end
         end
@@ -185,8 +185,10 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                     inuse_regs[staging_if[w].data.rd] <= 1;
                 end
             end
+
             operands_busy <= operands_busy_n;
             operands_ready[w] <= ~(| operands_busy_n);
+
         `ifdef PERF_ENABLE
             if (staging_fire && staging_if[w].data.wb) begin
                 inuse_units[staging_if[w].data.rd] <= staging_if[w].data.ex_type;

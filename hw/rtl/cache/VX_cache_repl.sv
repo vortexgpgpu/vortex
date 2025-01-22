@@ -90,19 +90,23 @@ module VX_cache_repl #(
     // Number of associative ways
     parameter NUM_WAYS   = 1,
     // replacement policy
-    parameter REPL_POLICY = `CS_REPL_CYCLIC
+    parameter REPL_POLICY = `CS_REPL_FIFO
 ) (
     input wire clk,
     input wire reset,
     input wire stall,
-    input wire hit_valid,
-    input wire [`CS_LINE_SEL_BITS-1:0] hit_line,
-    input wire [`CS_WAY_SEL_WIDTH-1:0] hit_way,
+    input wire init,
+    input wire lookup_valid,
+    input wire lookup_hit,
+    input wire [`CS_LINE_SEL_BITS-1:0] lookup_line,
+    input wire [`CS_WAY_SEL_WIDTH-1:0] lookup_way,
     input wire repl_valid,
     input wire [`CS_LINE_SEL_BITS-1:0] repl_line,
     output wire [`CS_WAY_SEL_WIDTH-1:0] repl_way
 );
     localparam WAY_SEL_WIDTH = `CS_WAY_SEL_WIDTH;
+    `UNUSED_VAR (reset)
+    `UNUSED_VAR (init)
     `UNUSED_VAR (stall)
 
     if (NUM_WAYS > 1) begin : g_enable
@@ -122,20 +126,20 @@ module VX_cache_repl #(
                 .RADDR_REG (1)
             ) plru_store (
                 .clk   (clk),
-                .reset (reset),
+                .reset (1'b0),
                 .read  (repl_valid),
-                .write (hit_valid),
-                .wren  (plru_wmask),
-                .waddr (hit_line),
+                .write (init || (lookup_valid && lookup_hit)),
+                .wren  (init ? '1 : plru_wmask),
+                .waddr (lookup_line),
                 .raddr (repl_line),
-                .wdata (plru_wdata),
+                .wdata (init ? '0 : plru_wdata),
                 .rdata (plru_rdata)
             );
 
             plru_decoder #(
                 .NUM_WAYS (NUM_WAYS)
             ) plru_dec (
-                .way_idx  (hit_way),
+                .way_idx  (lookup_way),
                 .lru_data (plru_wdata),
                 .lru_mask (plru_wmask)
             );
@@ -147,37 +151,39 @@ module VX_cache_repl #(
                 .way_idx (repl_way)
             );
 
-        end else if (REPL_POLICY == `CS_REPL_CYCLIC) begin : g_cyclic
-            // Cyclic replacement policy
-            `UNUSED_VAR (hit_valid)
-            `UNUSED_VAR (hit_line)
-            `UNUSED_VAR (hit_way)
+        end else if (REPL_POLICY == `CS_REPL_FIFO) begin : g_fifo
+            // Fifo replacement policy
+            `UNUSED_VAR (lookup_valid)
+            `UNUSED_VAR (lookup_hit)
+            `UNUSED_VAR (lookup_line)
+            `UNUSED_VAR (lookup_way)
 
-            wire [WAY_SEL_WIDTH-1:0] ctr_rdata;
-            wire [WAY_SEL_WIDTH-1:0] ctr_wdata = ctr_rdata + 1;
+            wire [WAY_SEL_WIDTH-1:0] fifo_rdata;
+            wire [WAY_SEL_WIDTH-1:0] fifo_wdata = fifo_rdata + 1;
 
             VX_sp_ram #(
                 .DATAW (WAY_SEL_WIDTH),
                 .SIZE  (`CS_LINES_PER_BANK),
                 .RDW_MODE ("R"),
                 .RADDR_REG (1)
-            ) ctr_store (
+            ) fifo_store (
                 .clk   (clk),
-                .reset (reset),
+                .reset (1'b0),
                 .read  (repl_valid),
-                .write (repl_valid),
+                .write (init || repl_valid),
                 .wren  (1'b1),
                 .addr  (repl_line),
-                .wdata (ctr_wdata),
-                .rdata (ctr_rdata)
+                .wdata (init ? '0 : fifo_wdata),
+                .rdata (fifo_rdata)
             );
 
-            assign repl_way = ctr_rdata;
+            assign repl_way = fifo_rdata;
         end else begin : g_random
             // Random replacement policy
-            `UNUSED_VAR (hit_valid)
-            `UNUSED_VAR (hit_line)
-            `UNUSED_VAR (hit_way)
+            `UNUSED_VAR (lookup_valid)
+            `UNUSED_VAR (lookup_hit)
+            `UNUSED_VAR (lookup_line)
+            `UNUSED_VAR (lookup_way)
             `UNUSED_VAR (repl_valid)
             `UNUSED_VAR (repl_line)
             reg [WAY_SEL_WIDTH-1:0] victim_idx;
@@ -192,10 +198,10 @@ module VX_cache_repl #(
         end
     end else begin : g_disable
         `UNUSED_VAR (clk)
-        `UNUSED_VAR (reset)
-        `UNUSED_VAR (hit_valid)
-        `UNUSED_VAR (hit_line)
-        `UNUSED_VAR (hit_way)
+        `UNUSED_VAR (lookup_valid)
+        `UNUSED_VAR (lookup_hit)
+        `UNUSED_VAR (lookup_line)
+        `UNUSED_VAR (lookup_way)
         `UNUSED_VAR (repl_valid)
         `UNUSED_VAR (repl_line)
         assign repl_way = 1'b0;

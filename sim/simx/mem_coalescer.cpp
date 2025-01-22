@@ -147,10 +147,17 @@ void MemCoalescer::tick() {
   ReqOut.push(out_req, delay_);
   DT(4, this->name() << "-mem-req: coalesced=" << cur_mask.count() << ", " << out_req);
 
+  // track partial responses
+  perf_stats_.misses += (cur_mask.count() != in_req.mask.count());
+
   // update sent mask
   sent_mask_ |= cur_mask;
   if (sent_mask_ == in_req.mask) {
     ReqIn.pop();
     sent_mask_.reset();
   }
+}
+
+const MemCoalescer::PerfStats& MemCoalescer::perf_stats() const {
+  return perf_stats_;
 }

@@ -50,11 +50,14 @@ module Vortex import VX_gpu_pkg::*; (
 `endif
 
 `ifdef PERF_ENABLE
-    VX_mem_perf_if mem_perf_if();
-    assign mem_perf_if.icache  = 'x;
-    assign mem_perf_if.dcache  = 'x;
-    assign mem_perf_if.l2cache = 'x;
-    assign mem_perf_if.lmem    = 'x;
+    cache_perf_t l3_perf;
+    mem_perf_t mem_perf;
+    sysmem_perf_t sysmem_perf;
+    always @(*) begin
+        sysmem_perf = '0;
+        sysmem_perf.l3cache = l3_perf;
+        sysmem_perf.mem = mem_perf;
+    end
 `endif
 
     VX_mem_bus_if #(
@@ -98,7 +101,7 @@ module Vortex import VX_gpu_pkg::*; (
         .reset          (l3_reset),
 
     `ifdef PERF_ENABLE
-        .cache_perf     (mem_perf_if.l3cache),
+        .cache_perf     (l3_perf),
     `endif
 
         .core_bus_if    (per_cluster_mem_bus_if),
@@ -146,7 +149,7 @@ module Vortex import VX_gpu_pkg::*; (
             .reset              (cluster_reset),
 
         `ifdef PERF_ENABLE
-            .mem_perf_if        (mem_perf_if),
+            .sysmem_perf        (sysmem_perf),
         `endif
 
             .dcr_bus_if         (cluster_dcr_bus_if),
@@ -182,7 +185,6 @@ module Vortex import VX_gpu_pkg::*; (
     `POP_COUNT(perf_mem_rsps_per_cycle, mem_rsp_fire);
 
     reg [`PERF_CTR_BITS-1:0] perf_mem_pending_reads;
-    mem_perf_t mem_perf;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -202,7 +204,6 @@ module Vortex import VX_gpu_pkg::*; (
             mem_perf.latency <= mem_perf.latency + perf_mem_pending_reads;
         end
     end
-    assign mem_perf_if.mem = mem_perf;
 
 `endif
 

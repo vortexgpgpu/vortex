@@ -325,23 +325,22 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `define NEG_EDGE(dst, src) \
-    wire dst; \
     VX_edge_trigger #( \
         .POS  (0), \
         .INIT (0) \
-    ) __``dst``__ ( \
+    ) __neg_edge`__LINE__ ( \
         .clk      (clk), \
         .reset    (1'b0), \
         .data_in  (src), \
         .data_out (dst) \
     )
 
-`define BUFFER_EX(dst, src, ena, RSTW, latency) \
+`define BUFFER_EX(dst, src, ena, resetw, latency) \
     VX_pipe_register #( \
         .DATAW  ($bits(dst)), \
-        .RESETW (RSTW), \
+        .RESETW (resetw), \
         .DEPTH  (latency) \
-    ) __``dst``__ ( \
+    ) __buffer_ex`__LINE__ ( \
         .clk      (clk), \
         .reset    (reset), \
         .enable   (ena), \
@@ -349,13 +348,13 @@
         .data_out (dst) \
     )
 
-`define BUFFER(dst, src) `BUFFER_EX(dst, src, 1'b1, 0, 1)
+`define BUFFER(dst, src) `BUFFER_EX(dst, src, 1'b1, $bits(dst), 1)
 
 `define POP_COUNT_EX(out, in, model) \
     VX_popcount #( \
         .N ($bits(in)), \
         .MODEL (model) \
-    ) __``out``__ ( \
+    ) __pop_count_ex`__LINE__ ( \
         .data_in  (in), \
         .data_out (out) \
     )
@@ -482,7 +481,7 @@
         for (genvar __i = 0; __i < count; ++__i) begin \
             assign __reduce_add_i_field[__i] = src[__i].``field; \
         end \
-        VX_reduce #(.DATAW_IN(width), .N(count), .OP("+")) __reduce_add_field ( \
+        VX_reduce_tree #(.DATAW_IN(width), .N(count), .OP("+")) __reduce_add_field ( \
             __reduce_add_i_field, \
             __reduce_add_o_field \
         ); \

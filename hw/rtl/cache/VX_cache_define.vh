@@ -73,7 +73,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `define CS_REPL_RANDOM  0
-`define CS_REPL_CYCLIC  1
+`define CS_REPL_FIFO    1
 `define CS_REPL_PLRU    2
 
 `endif // VX_CACHE_DEFINE_VH

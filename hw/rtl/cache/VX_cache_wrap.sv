@@ -54,7 +54,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     parameter DIRTY_BYTES           = 0,
 
     // Replacement policy
-    parameter REPL_POLICY           = `CS_REPL_CYCLIC,
+    parameter REPL_POLICY           = `CS_REPL_FIFO,
 
     // Request debug identifier
     parameter UUID_WIDTH            = 0,
@@ -210,7 +210,59 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         end
 
     `ifdef PERF_ENABLE
-        assign cache_perf = '0;
+        wire [NUM_REQS-1:0]  perf_core_reads_per_req;
+        wire [NUM_REQS-1:0]  perf_core_writes_per_req;
+        wire [NUM_REQS-1:0]  perf_crsp_stall_per_req;
+        wire [MEM_PORTS-1:0] perf_mem_stall_per_port;
+
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_perf_crsp_stall_per_req
+            assign perf_core_reads_per_req[i] = core_bus_if[i].req_valid && core_bus_if[i].req_ready && ~core_bus_if[i].req_data.rw;
+            assign perf_core_writes_per_req[i] = core_bus_if[i].req_valid && core_bus_if[i].req_ready && core_bus_if[i].req_data.rw;
+            assign perf_crsp_stall_per_req[i] = core_bus_if[i].rsp_valid && ~core_bus_if[i].rsp_ready;
+        end
+
+        for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_perf_mem_stall_per_port
+            assign perf_mem_stall_per_port[i] = mem_bus_if[i].req_valid && ~mem_bus_if[i].req_ready;
+        end
+
+        // per cycle: read misses, write misses, msrq stalls, pipeline stalls
+        wire [`CLOG2(NUM_REQS+1)-1:0]  perf_core_reads_per_cycle;
+        wire [`CLOG2(NUM_REQS+1)-1:0]  perf_core_writes_per_cycle;
+        wire [`CLOG2(NUM_REQS+1)-1:0]  perf_crsp_stall_per_cycle;
+        wire [`CLOG2(MEM_PORTS+1)-1:0] perf_mem_stall_per_cycle;
+
+        `POP_COUNT(perf_core_reads_per_cycle, perf_core_reads_per_req);
+        `POP_COUNT(perf_core_writes_per_cycle, perf_core_writes_per_req);
+        `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_req);
+        `POP_COUNT(perf_mem_stall_per_cycle, perf_mem_stall_per_port);
+
+        reg [`PERF_CTR_BITS-1:0] perf_core_reads;
+        reg [`PERF_CTR_BITS-1:0] perf_core_writes;
+        reg [`PERF_CTR_BITS-1:0] perf_mem_stalls;
+        reg [`PERF_CTR_BITS-1:0] perf_crsp_stalls;
+
+        always @(posedge clk) begin
+            if (reset) begin
+                perf_core_reads   <= '0;
+                perf_core_writes  <= '0;
+                perf_mem_stalls   <= '0;
+                perf_crsp_stalls  <= '0;
+            end else begin
+                perf_core_reads   <= perf_core_reads   + `PERF_CTR_BITS'(perf_core_reads_per_cycle);
+                perf_core_writes  <= perf_core_writes  + `PERF_CTR_BITS'(perf_core_writes_per_cycle);
+                perf_mem_stalls   <= perf_mem_stalls   + `PERF_CTR_BITS'(perf_mem_stall_per_cycle);
+                perf_crsp_stalls  <= perf_crsp_stalls  + `PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
+            end
+        end
+
+        assign cache_perf.reads        = perf_core_reads;
+        assign cache_perf.writes       = perf_core_writes;
+        assign cache_perf.read_misses  = '0;
+        assign cache_perf.write_misses = '0;
+        assign cache_perf.bank_stalls  = '0;
+        assign cache_perf.mshr_stalls  = '0;
+        assign cache_perf.mem_stalls   = perf_mem_stalls;
+        assign cache_perf.crsp_stalls  = perf_crsp_stalls;
     `endif
 
     end
@@ -220,13 +272,13 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         always @(posedge clk) begin
             if (core_bus_if[i].req_valid && core_bus_if[i].req_ready) begin
                 if (core_bus_if[i].req_data.rw) begin
-                    `TRACE(2, ("%t: %s core-wr-req[%0d]: addr=0x%0h, tag=0x%0h, req_idx=%0d, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, i, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag.value, i, core_bus_if[i].req_data.byteen, core_bus_if[i].req_data.data, core_bus_if[i].req_data.tag.uuid))
+                    `TRACE(2, ("%t: %s core-wr-req[%0d]: addr=0x%0h, tag=0x%0h, byteen=0x%h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, i, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag.value, core_bus_if[i].req_data.byteen, core_bus_if[i].req_data.data, core_bus_if[i].req_data.tag.uuid))
                 end else begin
-                    `TRACE(2, ("%t: %s core-rd-req[%0d]: addr=0x%0h, tag=0x%0h, req_idx=%0d (#%0d)\n", $time, INSTANCE_ID, i, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag.value, i, core_bus_if[i].req_data.tag.uuid))
+                    `TRACE(2, ("%t: %s core-rd-req[%0d]: addr=0x%0h, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID, i, `TO_FULL_ADDR(core_bus_if[i].req_data.addr), core_bus_if[i].req_data.tag.value, core_bus_if[i].req_data.tag.uuid))
                 end
             end
             if (core_bus_if[i].rsp_valid && core_bus_if[i].rsp_ready) begin
-                `TRACE(2, ("%t: %s core-rd-rsp[%0d]: tag=0x%0h, req_idx=%0d, data=0x%h (#%0d)\n", $time, INSTANCE_ID, i, core_bus_if[i].rsp_data.tag.value, i, core_bus_if[i].rsp_data.data, core_bus_if[i].rsp_data.tag.uuid))
+                `TRACE(2, ("%t: %s core-rd-rsp[%0d]: tag=0x%0h, data=0x%h (#%0d)\n", $time, INSTANCE_ID, i, core_bus_if[i].rsp_data.tag.value, core_bus_if[i].rsp_data.data, core_bus_if[i].rsp_data.tag.uuid))
             end
         end
     end

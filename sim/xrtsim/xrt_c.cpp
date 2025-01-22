@@ -19,7 +19,7 @@
 #include <cstring>
 #include <unistd.h>
 #include <assert.h>
-#include "xrt.h"
+#include "xrt_c.h"
 #include "xrt_sim.h"
 #include <VX_config.h>
 #include <util.h>

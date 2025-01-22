@@ -76,6 +76,17 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [`PERF_CTR_BITS-1:0] reads;
         logic [`PERF_CTR_BITS-1:0] writes;
+        logic [`PERF_CTR_BITS-1:0] bank_stalls;
+        logic [`PERF_CTR_BITS-1:0] crsp_stalls;
+    } lmem_perf_t;
+
+    typedef struct packed {
+        logic [`PERF_CTR_BITS-1:0] misses;
+    } coalescer_perf_t;
+
+    typedef struct packed {
+        logic [`PERF_CTR_BITS-1:0] reads;
+        logic [`PERF_CTR_BITS-1:0] writes;
         logic [`PERF_CTR_BITS-1:0] latency;
     } mem_perf_t;
 
@@ -91,6 +102,26 @@ package VX_gpu_pkg;
         logic [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] units_uses;
         logic [`NUM_SFU_UNITS-1:0][`PERF_CTR_BITS-1:0] sfu_uses;
     } issue_perf_t;
+
+    typedef struct packed {
+        cache_perf_t icache;
+        cache_perf_t dcache;
+        cache_perf_t l2cache;
+        cache_perf_t l3cache;
+        lmem_perf_t  lmem;
+        coalescer_perf_t coalescer;
+        mem_perf_t   mem;
+    } sysmem_perf_t;
+
+    typedef struct packed {
+        sched_perf_t               sched;
+        issue_perf_t               issue;
+        logic [`PERF_CTR_BITS-1:0] ifetches;
+        logic [`PERF_CTR_BITS-1:0] loads;
+        logic [`PERF_CTR_BITS-1:0] stores;
+        logic [`PERF_CTR_BITS-1:0] ifetch_latency;
+        logic [`PERF_CTR_BITS-1:0] load_latency;
+   } pipeline_perf_t;
 
     //////////////////////// instruction arguments ////////////////////////////
 
@@ -145,6 +176,7 @@ package VX_gpu_pkg;
     localparam LSU_TAG_ID_BITS      = (`CLOG2(`LSUQ_IN_SIZE) + `CLOG2(LSU_MEM_BATCHES));
     localparam LSU_TAG_WIDTH        = (`UUID_WIDTH + LSU_TAG_ID_BITS);
     localparam LSU_NUM_REQS	        = `NUM_LSU_BLOCKS * `NUM_LSU_LANES;
+    localparam LMEM_TAG_WIDTH       = LSU_TAG_WIDTH + `CLOG2(`NUM_LSU_BLOCKS);
 
     ////////////////////////// Icache Parameters //////////////////////////////
 

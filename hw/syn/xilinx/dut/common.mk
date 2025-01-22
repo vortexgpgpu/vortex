@@ -37,10 +37,15 @@ else
 endif
 
 clean:
+ifndef RESUME
 	rm -rf project_1
 	rm -rf .Xil
 	rm -f *.rpt
-	rm -f vivado*.log
-	rm -f vivado*.jou
+	rm -f *.log
+	rm -f *.jou
+	rm -f *.dcp
+else
+	@echo "RESUME is defined, skipping clean."
+endif
 
 .PHONY: all gen-sources build clean

@@ -19,7 +19,7 @@
 
 // XRT includes
 #ifdef XRTSIM
-#include <xrt.h>
+#include <xrt_c.h>
 #else
 #include "experimental/xrt_bo.h"
 #include "experimental/xrt_device.h"

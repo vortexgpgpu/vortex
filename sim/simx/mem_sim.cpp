@@ -29,7 +29,7 @@ private:
 	Config    config_;
 	MemCrossBar::Ptr mem_xbar_;
 	DramSim   dram_sim_;
-	PerfStats perf_stats_;
+	mutable PerfStats perf_stats_;
 
 	struct DramCallbackArgs {
 		MemSim::Impl* memsim;
@@ -57,6 +57,7 @@ public:
 	}
 
 	const PerfStats& perf_stats() const {
+		perf_stats_.bank_stalls = mem_xbar_->req_collisions();
 		return perf_stats_;
 	}
 
@@ -66,7 +67,6 @@ public:
 
 	void tick() {
 		dram_sim_.tick();
-		uint32_t counter = 0;
 
 		for (uint32_t i = 0; i < config_.num_banks; ++i) {
 			if (mem_xbar_->ReqOut.at(i).empty())
@@ -102,12 +102,6 @@ public:
 			DT(3, simobject_->name() << "-mem-req[" << i << "]: " << mem_req);
 
 			mem_xbar_->ReqOut.at(i).pop();
-			counter++;
-		}
-
-		perf_stats_.counter += counter;
-		if (counter > 0) {
-			++perf_stats_.ticks;
 		}
 	}
 };

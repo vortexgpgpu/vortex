@@ -26,18 +26,39 @@
         end \
     end
 
+`ifdef SIMULATION
+    `define RAM_RESET_BLOCK if (RESET_RAM && reset) begin \
+                                for (integer i = 0; i < SIZE; ++i) begin \
+                                    ram[i] <= DATAW'(INIT_VALUE); \
+                                end \
+                            end else
+`else
+    `define RAM_RESET_BLOCK
+`endif
+
+`define RAM_WRITE_ALL   `RAM_RESET_BLOCK \
+                        if (write) begin \
+                            ram[addr] <= wdata; \
+                        end
+
 `ifdef QUARTUS
     `define RAM_ARRAY_WREN  reg [WRENW-1:0][WSELW-1:0] ram [0:SIZE-1];
-    `define RAM_WRITE_WREN  for (integer i = 0; i < WRENW; ++i) begin \
-                                if (wren[i]) begin \
-                                    ram[addr][i] <= wdata[i * WSELW +: WSELW]; \
+    `define RAM_WRITE_WREN  `RAM_RESET_BLOCK \
+                            if (write) begin \
+                                for (integer i = 0; i < WRENW; ++i) begin \
+                                    if (wren[i]) begin \
+                                        ram[addr][i] <= wdata[i * WSELW +: WSELW]; \
+                                    end \
                                 end \
                             end
 `else
     `define RAM_ARRAY_WREN  reg [DATAW-1:0] ram [0:SIZE-1];
-    `define RAM_WRITE_WREN  for (integer i = 0; i < WRENW; ++i) begin \
-                                if (wren[i]) begin \
-                                    ram[addr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW]; \
+    `define RAM_WRITE_WREN  `RAM_RESET_BLOCK \
+                            if (write) begin \
+                                for (integer i = 0; i < WRENW; ++i) begin \
+                                    if (wren[i]) begin \
+                                        ram[addr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW]; \
+                                    end \
                                 end \
                             end
 `endif
@@ -49,8 +70,9 @@ module VX_sp_ram #(
     parameter WRENW       = 1,
     parameter OUT_REG     = 0,
     parameter LUTRAM      = 0,
-    parameter `STRING RDW_MODE = "W", // W: write-first, R: read-first, N: no-change, U: undefined
+    parameter `STRING RDW_MODE = "W", // W: write-first, R: read-first, N: no-change
     parameter RADDR_REG   = 0, // read address registered hint
+    parameter RADDR_RESET = 0, // read address has reset
     parameter RDW_ASSERT  = 0,
     parameter RESET_RAM   = 0,
     parameter INIT_ENABLE = 0,
@@ -70,13 +92,14 @@ module VX_sp_ram #(
     localparam WSELW = DATAW / WRENW;
     `UNUSED_PARAM (LUTRAM)
     `UNUSED_PARAM (RADDR_REG)
+    `UNUSED_PARAM (RADDR_RESET)
 
     `STATIC_ASSERT(!(WRENW * WSELW != DATAW), ("invalid parameter"))
-    `STATIC_ASSERT((RDW_MODE == "R" || RDW_MODE == "W" || RDW_MODE == "N" || RDW_MODE == "U"), ("invalid parameter"))
+    `STATIC_ASSERT((RDW_MODE == "R" || RDW_MODE == "W" || RDW_MODE == "N"), ("invalid parameter"))
     `UNUSED_PARAM (RDW_ASSERT)
 
 `ifdef SYNTHESIS
-    localparam FORCE_BRAM = !LUTRAM && (SIZE * DATAW >= `MAX_LUTRAM);
+    localparam FORCE_BRAM = !LUTRAM && `FORCE_BRAM(SIZE, DATAW);
     if (OUT_REG) begin : g_sync
         if (FORCE_BRAM) begin : g_bram
             if (RDW_MODE == "W") begin : g_write_first
@@ -85,10 +108,8 @@ module VX_sp_ram #(
                     `RAM_INITIALIZATION
                     reg [ADDRW-1:0] addr_r;
                     always @(posedge clk) begin
-                        if (read || write) begin
-                            if (write) begin
-                                `RAM_WRITE_WREN
-                            end
+                        `RAM_WRITE_WREN
+                        if (read) begin
                             addr_r <= addr;
                         end
                     end
@@ -98,9 +119,9 @@ module VX_sp_ram #(
                     `RAM_INITIALIZATION
                     reg [DATAW-1:0] rdata_r;
                     always @(posedge clk) begin
-                        if (read || write) begin
+                        `RAM_WRITE_ALL
+                        if (read) begin
                             if (write) begin
-                                ram[addr] <= wdata;
                                 rdata_r <= wdata;
                             end else begin
                                 rdata_r <= ram[addr];
@@ -115,10 +136,8 @@ module VX_sp_ram #(
                     `RAM_INITIALIZATION
                     reg [DATAW-1:0] rdata_r;
                     always @(posedge clk) begin
-                        if (read || write) begin
-                            if (write) begin
-                                `RAM_WRITE_WREN
-                            end
+                        `RAM_WRITE_WREN
+                        if (read) begin
                             rdata_r <= ram[addr];
                         end
                     end
@@ -128,10 +147,8 @@ module VX_sp_ram #(
                     `RAM_INITIALIZATION
                     reg [DATAW-1:0] rdata_r;
                     always @(posedge clk) begin
-                        if (read || write) begin
-                            if (write) begin
-                                ram[addr] <= wdata;
-                            end
+                        `RAM_WRITE_ALL
+                        if (read) begin
                             rdata_r <= ram[addr];
                         end
                     end
@@ -143,40 +160,8 @@ module VX_sp_ram #(
                     `RAM_INITIALIZATION
                     reg [DATAW-1:0] rdata_r;
                     always @(posedge clk) begin
-                        if (read || write) begin
-                            if (write) begin
-                                `RAM_WRITE_WREN
-                            end else begin
-                                rdata_r <= ram[addr];
-                            end
-                        end
-                    end
-                    assign rdata = rdata_r;
-                end else begin : g_no_wren
-                    `USE_BLOCK_BRAM reg [DATAW-1:0] ram [0:SIZE-1];
-                    `RAM_INITIALIZATION
-                    reg [DATAW-1:0] rdata_r;
-                    always @(posedge clk) begin
-                        if (read || write) begin
-                            if (write) begin
-                                ram[addr] <= wdata;
-                            end else begin
-                                rdata_r <= ram[addr];
-                            end
-                        end
-                    end
-                    assign rdata = rdata_r;
-                end
-            end else if (RDW_MODE == "U") begin : g_undefined
-                if (WRENW != 1) begin : g_wren
-                    `USE_BLOCK_BRAM `RAM_ARRAY_WREN
-                    `RAM_INITIALIZATION
-                    reg [DATAW-1:0] rdata_r;
-                    always @(posedge clk) begin
-                        if (write) begin
-                            `RAM_WRITE_WREN
-                        end
-                        if (read) begin
+                        `RAM_WRITE_WREN
+                        else if (read) begin
                             rdata_r <= ram[addr];
                         end
                     end
@@ -186,10 +171,8 @@ module VX_sp_ram #(
                     `RAM_INITIALIZATION
                     reg [DATAW-1:0] rdata_r;
                     always @(posedge clk) begin
-                        if (write) begin
-                            ram[addr] <= wdata;
-                        end
-                        if (read) begin
+                        `RAM_WRITE_ALL
+                        else if (read) begin
                             rdata_r <= ram[addr];
                         end
                     end
@@ -203,10 +186,8 @@ module VX_sp_ram #(
                     `RAM_INITIALIZATION
                     reg [ADDRW-1:0] addr_r;
                     always @(posedge clk) begin
-                        if (read || write) begin
-                            if (write) begin
-                                `RAM_WRITE_WREN
-                            end
+                        `RAM_WRITE_WREN
+                        if (read) begin
                             addr_r <= addr;
                         end
                     end
@@ -216,9 +197,9 @@ module VX_sp_ram #(
                     `RAM_INITIALIZATION
                     reg [DATAW-1:0] rdata_r;
                     always @(posedge clk) begin
-                        if (read || write) begin
+                        `RAM_WRITE_ALL
+                        if (read) begin
                             if (write) begin
-                                ram[addr] <= wdata;
                                 rdata_r <= wdata;
                             end else begin
                                 rdata_r <= ram[addr];
@@ -233,10 +214,8 @@ module VX_sp_ram #(
                     `RAM_INITIALIZATION
                     reg [DATAW-1:0] rdata_r;
                     always @(posedge clk) begin
-                        if (read || write) begin
-                            if (write) begin
-                                `RAM_WRITE_WREN
-                            end
+                        `RAM_WRITE_WREN
+                        if (read) begin
                             rdata_r <= ram[addr];
                         end
                     end
@@ -246,10 +225,8 @@ module VX_sp_ram #(
                     `RAM_INITIALIZATION
                     reg [DATAW-1:0] rdata_r;
                     always @(posedge clk) begin
-                        if (read || write) begin
-                            if (write) begin
-                                ram[addr] <= wdata;
-                            end
+                        `RAM_WRITE_ALL
+                        if (read) begin
                             rdata_r <= ram[addr];
                         end
                     end
@@ -261,40 +238,8 @@ module VX_sp_ram #(
                     `RAM_INITIALIZATION
                     reg [DATAW-1:0] rdata_r;
                     always @(posedge clk) begin
-                        if (read || write) begin
-                            if (write) begin
-                                `RAM_WRITE_WREN
-                            end else begin
-                                rdata_r <= ram[addr];
-                            end
-                        end
-                    end
-                    assign rdata = rdata_r;
-                end else begin : g_no_wren
-                    reg [DATAW-1:0] ram [0:SIZE-1];
-                    `RAM_INITIALIZATION
-                    reg [DATAW-1:0] rdata_r;
-                    always @(posedge clk) begin
-                        if (read || write) begin
-                            if (write) begin
-                                ram[addr] <= wdata;
-                            end else begin
-                                rdata_r <= ram[addr];
-                            end
-                        end
-                    end
-                    assign rdata = rdata_r;
-                end
-            end else if (RDW_MODE == "U") begin : g_undefined
-                if (WRENW != 1) begin : g_wren
-                    `RAM_ARRAY_WREN
-                    `RAM_INITIALIZATION
-                    reg [DATAW-1:0] rdata_r;
-                    always @(posedge clk) begin
-                        if (write) begin
-                            `RAM_WRITE_WREN
-                        end
-                        if (read) begin
+                        `RAM_WRITE_WREN
+                        else if (read) begin
                             rdata_r <= ram[addr];
                         end
                     end
@@ -304,10 +249,8 @@ module VX_sp_ram #(
                     `RAM_INITIALIZATION
                     reg [DATAW-1:0] rdata_r;
                     always @(posedge clk) begin
-                        if (write) begin
-                            ram[addr] <= wdata;
-                        end
-                        if (read) begin
+                        `RAM_WRITE_ALL
+                        else if (read) begin
                             rdata_r <= ram[addr];
                         end
                     end
@@ -318,7 +261,7 @@ module VX_sp_ram #(
     end else begin : g_async
         `UNUSED_VAR (read)
         if (FORCE_BRAM) begin : g_bram
-        `ifdef VIVADO
+        `ifdef ASYNC_BRAM_PATCH
             VX_async_ram_patch #(
                 .DATAW      (DATAW),
                 .SIZE       (SIZE),
@@ -326,6 +269,7 @@ module VX_sp_ram #(
                 .DUAL_PORT  (0),
                 .FORCE_BRAM (FORCE_BRAM),
                 .RADDR_REG  (RADDR_REG),
+                .RADDR_RESET(RADDR_RESET),
                 .WRITE_FIRST(RDW_MODE == "W"),
                 .INIT_ENABLE(INIT_ENABLE),
                 .INIT_FILE  (INIT_FILE),
@@ -347,18 +291,14 @@ module VX_sp_ram #(
                     `RW_RAM_CHECK `USE_BLOCK_BRAM `RAM_ARRAY_WREN
                     `RAM_INITIALIZATION
                     always @(posedge clk) begin
-                        if (write) begin
-                            `RAM_WRITE_WREN
-                        end
+                        `RAM_WRITE_WREN
                     end
                     assign rdata = ram[addr];
                 end else begin : g_no_wren
                     `RW_RAM_CHECK `USE_BLOCK_BRAM reg [DATAW-1:0] ram [0:SIZE-1];
                     `RAM_INITIALIZATION
                     always @(posedge clk) begin
-                        if (write) begin
-                            ram[addr] <= wdata;
-                        end
+                        `RAM_WRITE_ALL
                     end
                     assign rdata = ram[addr];
                 end
@@ -367,18 +307,14 @@ module VX_sp_ram #(
                     `NO_RW_RAM_CHECK `USE_BLOCK_BRAM `RAM_ARRAY_WREN
                     `RAM_INITIALIZATION
                     always @(posedge clk) begin
-                        if (write) begin
-                            `RAM_WRITE_WREN
-                        end
+                        `RAM_WRITE_WREN
                     end
                     assign rdata = ram[addr];
                 end else begin : g_no_wren
                     `NO_RW_RAM_CHECK `USE_BLOCK_BRAM reg [DATAW-1:0] ram [0:SIZE-1];
                     `RAM_INITIALIZATION
                     always @(posedge clk) begin
-                        if (write) begin
-                            ram[addr] <= wdata;
-                        end
+                        `RAM_WRITE_ALL
                     end
                     assign rdata = ram[addr];
                 end
@@ -390,18 +326,14 @@ module VX_sp_ram #(
                     `RW_RAM_CHECK `RAM_ARRAY_WREN
                     `RAM_INITIALIZATION
                     always @(posedge clk) begin
-                        if (write) begin
-                            `RAM_WRITE_WREN
-                        end
+                        `RAM_WRITE_WREN
                     end
                     assign rdata = ram[addr];
                 end else begin : g_no_wren
                     `RW_RAM_CHECK reg [DATAW-1:0] ram [0:SIZE-1];
                     `RAM_INITIALIZATION
                     always @(posedge clk) begin
-                        if (write) begin
-                            ram[addr] <= wdata;
-                        end
+                        `RAM_WRITE_ALL
                     end
                     assign rdata = ram[addr];
                 end
@@ -410,18 +342,14 @@ module VX_sp_ram #(
                     `NO_RW_RAM_CHECK `RAM_ARRAY_WREN
                     `RAM_INITIALIZATION
                     always @(posedge clk) begin
-                        if (write) begin
-                            `RAM_WRITE_WREN
-                        end
+                        `RAM_WRITE_WREN
                     end
                     assign rdata = ram[addr];
                 end else begin : g_no_wren
                     `NO_RW_RAM_CHECK reg [DATAW-1:0] ram [0:SIZE-1];
                     `RAM_INITIALIZATION
                     always @(posedge clk) begin
-                        if (write) begin
-                            ram[addr] <= wdata;
-                        end
+                        `RAM_WRITE_ALL
                     end
                     assign rdata = ram[addr];
                 end
@@ -434,24 +362,14 @@ module VX_sp_ram #(
     `RAM_INITIALIZATION
 
     always @(posedge clk) begin
-        if (RESET_RAM && reset) begin
-            for (integer i = 0; i < SIZE; ++i) begin
-                ram[i] <= DATAW'(INIT_VALUE);
-            end
-        end else if (write) begin
-            for (integer i = 0; i < WRENW; ++i) begin
-                if (wren[i]) begin
-                    ram[addr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
-                end
-            end
-        end
+        `RAM_WRITE_WREN
     end
 
     if (OUT_REG) begin : g_sync
         if (RDW_MODE == "W") begin : g_write_first
             reg [ADDRW-1:0] addr_r;
             always @(posedge clk) begin
-                if (read || write) begin
+                if (read) begin
                     addr_r <= addr;
                 end
             end
@@ -459,7 +377,7 @@ module VX_sp_ram #(
         end else if (RDW_MODE == "R") begin : g_read_first
             reg [DATAW-1:0] rdata_r;
             always @(posedge clk) begin
-                if (read || write) begin
+                if (read) begin
                     rdata_r <= ram[addr];
                 end
             end
@@ -468,14 +386,6 @@ module VX_sp_ram #(
             reg [DATAW-1:0] rdata_r;
             always @(posedge clk) begin
                 if (read && ~write) begin
-                    rdata_r <= ram[addr];
-                end
-            end
-            assign rdata = rdata_r;
-        end else if (RDW_MODE == "U") begin : g_unknown
-            reg [DATAW-1:0] rdata_r;
-            always @(posedge clk) begin
-                if (read) begin
                     rdata_r <= ram[addr];
                 end
             end
