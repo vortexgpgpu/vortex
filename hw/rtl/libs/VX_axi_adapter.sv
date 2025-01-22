@@ -99,7 +99,7 @@ module VX_axi_adapter #(
     localparam LOG2_DATA_SIZE = `CLOG2(DATA_SIZE);
     localparam BANK_SEL_BITS  = `CLOG2(NUM_BANKS_OUT);
     localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
-    localparam DST_ADDR_WDITH = (ADDR_WIDTH_OUT - LOG2_DATA_SIZE) + BANK_SEL_BITS; // convert output addresss to byte-addressable input space
+    localparam DST_ADDR_WDITH = (ADDR_WIDTH_OUT - LOG2_DATA_SIZE) + BANK_SEL_BITS; // convert byte-addressable output addresss to block-addressable input space
     localparam BANK_ADDR_WIDTH = DST_ADDR_WDITH - BANK_SEL_BITS;
     localparam NUM_PORTS_IN_BITS = `CLOG2(NUM_PORTS_IN);
     localparam NUM_PORTS_IN_WIDTH = `UP(NUM_PORTS_IN_BITS);
@@ -213,7 +213,7 @@ module VX_axi_adapter #(
         `UNUSED_PIN (collisions)
     );
 
-    for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_axi_write_req
+    for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_axi_reqs
 
         wire xbar_rw_out;
         wire [BANK_ADDR_WIDTH-1:0] xbar_addr_out;
@@ -273,7 +273,7 @@ module VX_axi_adapter #(
 
         wire [READ_FULL_TAG_WIDTH-1:0] xbar_tag_r_out;
         if (NUM_PORTS_IN > 1) begin : g_xbar_tag_r_out
-            assign xbar_tag_r_out = READ_FULL_TAG_WIDTH'({xbar_tag_out, req_xbar_sel_out});
+            assign xbar_tag_r_out = READ_FULL_TAG_WIDTH'({xbar_tag_out, req_xbar_sel_out[i]});
         end else begin : g_no_input_sel
             `UNUSED_VAR (req_xbar_sel_out)
             assign xbar_tag_r_out = READ_TAG_WIDTH'(xbar_tag_out);
