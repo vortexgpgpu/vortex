@@ -30,7 +30,6 @@ private:
 	MemCrossBar::Ptr mem_xbar_;
 	DramSim   dram_sim_;
 	mutable PerfStats perf_stats_;
-
 	struct DramCallbackArgs {
 		MemSim::Impl* memsim;
 		MemReq request;
@@ -41,11 +40,15 @@ public:
 	Impl(MemSim* simobject, const Config& config)
 		: simobject_(simobject)
 		, config_(config)
-		, dram_sim_(MEM_CLOCK_RATIO)
+		, dram_sim_(config.num_banks, config.block_size, config.clock_ratio)
 	{
 		char sname[100];
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
-		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config.num_ports, config.num_banks);
+		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config.num_ports, config.num_banks, 1,
+			[lg2_block_size = log2ceil(config.block_size), num_banks = config.num_banks](const MemCrossBar::ReqType& req) {
+    	// Custom logic to calculate the output index using bank interleaving
+			return (uint32_t)((req.addr >> lg2_block_size) & (num_banks-1));
+		});
 		for (uint32_t i = 0; i < config.num_ports; ++i) {
 			simobject->MemReqPorts.at(i).bind(&mem_xbar_->ReqIn.at(i));
 			mem_xbar_->RspIn.at(i).bind(&simobject->MemRspPorts.at(i));
@@ -74,16 +77,15 @@ public:
 
 			auto& mem_req = mem_xbar_->ReqOut.at(i).front();
 
-			// try to enqueue the request to the memory system
+			// enqueue the request to the memory system
 			auto req_args = new DramCallbackArgs{this, mem_req, i};
-			auto enqueue_success = dram_sim_.send_request(
-				mem_req.write,
+			dram_sim_.send_request(
 				mem_req.addr,
-				0,
+				mem_req.write,
 				[](void* arg) {
 					auto rsp_args = reinterpret_cast<const DramCallbackArgs*>(arg);
-					// only send a response for read requests
 					if (!rsp_args->request.write) {
+						// only send a response for read requests
 						MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.cid, rsp_args->request.uuid};
 						rsp_args->memsim->mem_xbar_->RspOut.at(rsp_args->bank_id).push(mem_rsp, 1);
 						DT(3, rsp_args->memsim->simobject_->name() << "-mem-rsp[" << rsp_args->bank_id << "]: " << mem_rsp);
@@ -93,14 +95,7 @@ public:
 				req_args
 			);
 
-			// check if the request was enqueued successfully
-			if (!enqueue_success) {
-				delete req_args;
-				continue;
-			}
-
 			DT(3, simobject_->name() << "-mem-req[" << i << "]: " << mem_req);
-
 			mem_xbar_->ReqOut.at(i).pop();
 		}
 	}

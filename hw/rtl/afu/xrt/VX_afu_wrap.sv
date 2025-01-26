@@ -31,7 +31,7 @@ module VX_afu_wrap #(
 `ifdef PLATFORM_MERGED_MEMORY_INTERFACE
 	`REPEAT (1, GEN_AXI_MEM, REPEAT_COMMA),
 `else
-	`REPEAT (`PLATFORM_MEMORY_BANKS, GEN_AXI_MEM, REPEAT_COMMA),
+	`REPEAT (`PLATFORM_MEMORY_NUM_BANKS, GEN_AXI_MEM, REPEAT_COMMA),
 `endif
     // AXI4-Lite slave interface
     input  wire                                 s_axi_ctrl_awvalid,
@@ -58,11 +58,7 @@ module VX_afu_wrap #(
 
     output wire                                 interrupt
 );
-`ifdef PLATFORM_MERGED_MEMORY_INTERFACE
-	localparam M_AXI_MEM_ADDR_WIDTH = `PLATFORM_MEMORY_ADDR_WIDTH + $clog2(`PLATFORM_MEMORY_BANKS);
-`else
-	localparam M_AXI_MEM_ADDR_WIDTH = `PLATFORM_MEMORY_ADDR_WIDTH;
-`endif
+	localparam M_AXI_MEM_ADDR_WIDTH = `PLATFORM_MEMORY_ADDR_WIDTH - $clog2(C_M_AXI_MEM_NUM_BANKS);
 
 	typedef enum logic [1:0] {
 		STATE_IDLE = 0,
@@ -71,8 +67,8 @@ module VX_afu_wrap #(
 		STATE_DONE = 3
 	} state_e;
 
-	localparam PENDING_SIZEW = 12; // max outstanding requests size
-	localparam C_M_AXI_MEM_NUM_BANKS_SW = `CLOG2(C_M_AXI_MEM_NUM_BANKS+1);
+	localparam PENDING_WR_SIZEW    = 12; // max outstanding requests size
+	localparam NUM_MEM_BANKS_SIZEW = `CLOG2(C_M_AXI_MEM_NUM_BANKS+1);
 
 	wire                                 m_axi_mem_awvalid_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_awready_a [C_M_AXI_MEM_NUM_BANKS];
@@ -108,11 +104,11 @@ module VX_afu_wrap #(
 `ifdef PLATFORM_MERGED_MEMORY_INTERFACE
 	`REPEAT (1, AXI_MEM_TO_ARRAY, REPEAT_SEMICOLON);
 `else
-	`REPEAT (`PLATFORM_MEMORY_BANKS, AXI_MEM_TO_ARRAY, REPEAT_SEMICOLON);
+	`REPEAT (`PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_TO_ARRAY, REPEAT_SEMICOLON);
 `endif
 
 	reg [`CLOG2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
-	reg [PENDING_SIZEW-1:0] vx_pending_writes;
+	reg [PENDING_WR_SIZEW-1:0] vx_pending_writes;
 	reg vx_reset = 1; // asserted at initialization
 	wire vx_busy;
 
@@ -200,7 +196,7 @@ module VX_afu_wrap #(
 	end
 
 	wire [C_M_AXI_MEM_NUM_BANKS-1:0] m_axi_wr_req_fire, m_axi_wr_rsp_fire;
-	wire [C_M_AXI_MEM_NUM_BANKS_SW-1:0] cur_wr_reqs, cur_wr_rsps;
+	wire [NUM_MEM_BANKS_SIZEW-1:0] cur_wr_reqs, cur_wr_rsps;
 
 	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_m_axi_wr_req_fire
 		VX_axi_write_ack axi_write_ack (
@@ -224,14 +220,14 @@ module VX_afu_wrap #(
 	`POP_COUNT(cur_wr_reqs, m_axi_wr_req_fire);
 	`POP_COUNT(cur_wr_rsps, m_axi_wr_rsp_fire);
 
-	wire signed [C_M_AXI_MEM_NUM_BANKS_SW:0] reqs_sub = (C_M_AXI_MEM_NUM_BANKS_SW+1)'(cur_wr_reqs) -
-	                                                     (C_M_AXI_MEM_NUM_BANKS_SW+1)'(cur_wr_rsps);
+	wire signed [NUM_MEM_BANKS_SIZEW:0] reqs_sub = (NUM_MEM_BANKS_SIZEW+1)'(cur_wr_reqs) -
+	                                                     (NUM_MEM_BANKS_SIZEW+1)'(cur_wr_rsps);
 
 	always @(posedge clk) begin
 		if (reset) begin
 			vx_pending_writes <= '0;
 		end else begin
-			vx_pending_writes <= vx_pending_writes + PENDING_SIZEW'(reqs_sub);
+			vx_pending_writes <= vx_pending_writes + PENDING_WR_SIZEW'(reqs_sub);
 		end
 	end
 
@@ -270,7 +266,7 @@ module VX_afu_wrap #(
 		.ap_ready       (ap_ready),
 		.ap_idle     	(ap_idle),
 		.interrupt 		(interrupt),
-		
+
 		.ap_ctrl_read   (ap_ctrl_read),
 
 	`ifdef SCOPE
