@@ -328,6 +328,8 @@ public:
 	{
 		char sname[100];
 
+		//std::cout << "*** " << simobject->name() << ": banks=" << (int)(1 << config.B) << ", mem_ports=" << (int)config_.mem_ports << std::endl;
+
 		if (config_.bypass) {
 			snprintf(sname, 100, "%s-bypass-arb", simobject->name().c_str());
 			auto bypass_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, config_.num_inputs, config_.mem_ports);
@@ -355,17 +357,58 @@ public:
 		}
 
 		// Create bank's memory arbiter
-		snprintf(sname, 100, "%s-bank-arb", simobject->name().c_str());
-		auto bank_mem_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, (1 << config.B), config_.mem_ports);
-		for (uint32_t i = 0, n = (1 << config.B); i < n; ++i) {
-			mem_req_ports_.at(i).bind(&bank_mem_arb->ReqIn.at(i));
-			bank_mem_arb->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
+		int mem_arb_type = 1;
+	#ifdef L3_ARB_TYPE
+		bool is_l3cache = simobject->name().find("l3cache") != std::string::npos;
+		if (is_l3cache) {
+			mem_arb_type = L3_ARB_TYPE;
 		}
-
-		// Connect bank's memory arbiter to non-cacheable arbiter's input 0
-		for (uint32_t i = 0; i < config_.mem_ports; ++i) {
-			bank_mem_arb->ReqOut.at(i).bind(&nc_arbs_.at(i)->ReqIn.at(0));
-			nc_arbs_.at(i)->RspIn.at(0).bind(&bank_mem_arb->RspOut.at(i));
+	#endif
+		snprintf(sname, 100, "%s-bank-arb", simobject->name().c_str());
+		switch (mem_arb_type) {
+		case 0: {
+			auto mem_xbar = MemCrossBar::Create(sname, ArbiterType::Priority, (1 << config.B), config_.mem_ports, 1,
+			[lg2_block_size = log2ceil(MEM_BLOCK_SIZE), mem_ports=config_.mem_ports](const MemCrossBar::ReqType& req) {
+				// Custom logic to calculate the output index using bank interleaving
+				return (uint32_t)((req.addr >> lg2_block_size) & (mem_ports-1));
+			});
+			for (uint32_t i = 0, n = (1 << config.B); i < n; ++i) {
+				mem_req_ports_.at(i).bind(&mem_xbar->ReqIn.at(i));
+				mem_xbar->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
+			}
+			// Connect bank's memory xbar to non-cacheable arbiter's input 0
+			for (uint32_t i = 0; i < config_.mem_ports; ++i) {
+				mem_xbar->ReqOut.at(i).bind(&nc_arbs_.at(i)->ReqIn.at(0));
+				nc_arbs_.at(i)->RspIn.at(0).bind(&mem_xbar->RspOut.at(i));
+			}
+		} break;
+		case 1: {
+			auto bank_mem_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, (1 << config.B), config_.mem_ports);
+			for (uint32_t i = 0, n = (1 << config.B); i < n; ++i) {
+				mem_req_ports_.at(i).bind(&bank_mem_arb->ReqIn.at(i));
+				bank_mem_arb->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
+			}
+			// Connect bank's memory arbiter to non-cacheable arbiter's input 0
+			for (uint32_t i = 0; i < config_.mem_ports; ++i) {
+				bank_mem_arb->ReqOut.at(i).bind(&nc_arbs_.at(i)->ReqIn.at(0));
+				nc_arbs_.at(i)->RspIn.at(0).bind(&bank_mem_arb->RspOut.at(i));
+			}
+		} break;
+		case 2: {
+			uint32_t k = (1 << config.B) / config_.mem_ports;
+			assert(k > 1);
+			auto bank_mem_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, (1 << config.B), config_.mem_ports);
+			for (uint32_t i = 0, n = (1 << config.B); i < n; ++i) {
+				uint32_t j = (i % config_.mem_ports) * k + (i / config_.mem_ports);
+				mem_req_ports_.at(j).bind(&bank_mem_arb->ReqIn.at(i));
+				bank_mem_arb->RspIn.at(i).bind(&mem_rsp_ports_.at(j));
+			}
+			// Connect bank's memory arbiter to non-cacheable arbiter's input 0
+			for (uint32_t i = 0; i < config_.mem_ports; ++i) {
+				bank_mem_arb->ReqOut.at(i).bind(&nc_arbs_.at(i)->ReqIn.at(0));
+				nc_arbs_.at(i)->RspIn.at(0).bind(&bank_mem_arb->RspOut.at(i));
+			}
+		} break;
 		}
 
 		// calculate cache initialization cycles
