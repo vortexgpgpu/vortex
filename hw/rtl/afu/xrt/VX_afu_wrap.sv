@@ -16,12 +16,16 @@
 `include "vortex_afu.vh"
 
 module VX_afu_wrap #(
-	  parameter C_S_AXI_CTRL_ADDR_WIDTH = 8,
-	  parameter C_S_AXI_CTRL_DATA_WIDTH	= 32,
-	  parameter C_M_AXI_MEM_ID_WIDTH    = 32,
-	  parameter C_M_AXI_MEM_DATA_WIDTH  = 512,
-	  parameter C_M_AXI_MEM_ADDR_WIDTH  = 25,
-      parameter C_M_AXI_MEM_NUM_BANKS   = 2
+	parameter C_S_AXI_CTRL_ADDR_WIDTH = 8,
+	parameter C_S_AXI_CTRL_DATA_WIDTH = 32,
+	parameter C_M_AXI_MEM_ID_WIDTH    = `PLATFORM_MEMORY_ID_WIDTH,
+	parameter C_M_AXI_MEM_DATA_WIDTH  = `PLATFORM_MEMORY_DATA_SIZE * 8,
+	parameter C_M_AXI_MEM_ADDR_WIDTH  = 64,
+`ifdef PLATFORM_MERGED_MEMORY_INTERFACE
+	parameter C_M_AXI_MEM_NUM_BANKS   = 1
+`else
+	parameter C_M_AXI_MEM_NUM_BANKS   = `PLATFORM_MEMORY_NUM_BANKS
+`endif
 ) (
     // System signals
     input wire clk,
@@ -58,7 +62,7 @@ module VX_afu_wrap #(
 
     output wire                                 interrupt
 );
-	localparam M_AXI_MEM_ADDR_WIDTH = `PLATFORM_MEMORY_ADDR_WIDTH - $clog2(C_M_AXI_MEM_NUM_BANKS);
+	localparam M_AXI_MEM_ADDR_WIDTH = `PLATFORM_MEMORY_ADDR_WIDTH;
 
 	typedef enum logic [1:0] {
 		STATE_IDLE = 0,
@@ -283,9 +287,8 @@ module VX_afu_wrap #(
 	wire [M_AXI_MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_u [C_M_AXI_MEM_NUM_BANKS];
 
 	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_addressing
-		localparam [C_M_AXI_MEM_ADDR_WIDTH-1:0] BANK_OFFSET = C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET) + C_M_AXI_MEM_ADDR_WIDTH'(i) << M_AXI_MEM_ADDR_WIDTH;
-		assign m_axi_mem_awaddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_awaddr_u[i]) + BANK_OFFSET;
-		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_u[i]) + BANK_OFFSET;
+		assign m_axi_mem_awaddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_awaddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
+		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_u[i]) + C_M_AXI_MEM_ADDR_WIDTH'(`PLATFORM_MEMORY_OFFSET);
 	end
 
 	`SCOPE_IO_SWITCH (2);

@@ -490,7 +490,7 @@ private:
 
         /*printf("%0ld: [sim] axi-mem-read[%d]: addr=0x%lx, tag=0x%x, data=0x", timestamp, b, mem_req->addr, mem_req->tag);
         for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-          printf("%02x", mem_req->data[b]);
+          printf("%02x", mem_req->data[i]);
         }
         printf("\n");*/
 
@@ -533,7 +533,7 @@ private:
 
         /*printf("%0ld: [sim] axi-mem-write[%d]: addr=0x%lx, byteen=0x%lx, tag=0x%x, data=0x", timestamp, b, mem_req->addr, byteen, mem_req->tag);
         for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-          printf("%02x", m_axi_states_[b].write_req_data[i]]);
+          printf("%02x", m_axi_states_[b].write_req_data[i]);
         }
         printf("\n");*/
 

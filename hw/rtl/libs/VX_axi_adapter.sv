@@ -251,7 +251,13 @@ module VX_axi_adapter #(
         // AXI write address channel
 
         assign m_axi_awvalid[i] = req_xbar_valid_out[i] && xbar_rw_out && ~m_axi_aw_ack;
-        assign m_axi_awaddr[i]  = ADDR_WIDTH_OUT'(xbar_addr_out) << LOG2_DATA_SIZE;
+
+    if (INTERLEAVE) begin : g_m_axi_awaddr_i
+        assign m_axi_awaddr[i]  = (ADDR_WIDTH_OUT'(xbar_addr_out) << (BANK_SEL_BITS + LOG2_DATA_SIZE)) | (ADDR_WIDTH_OUT'(i) << LOG2_DATA_SIZE);
+    end else begin : g_m_axi_awaddr_ni
+        assign m_axi_awaddr[i]  = (ADDR_WIDTH_OUT'(xbar_addr_out) << LOG2_DATA_SIZE) | (ADDR_WIDTH_OUT'(i) << (BANK_ADDR_WIDTH + LOG2_DATA_SIZE));
+    end
+
         assign m_axi_awid[i]    = TAG_WIDTH_OUT'(xbar_tag_out);
         assign m_axi_awlen[i]   = 8'b00000000;
         assign m_axi_awsize[i]  = 3'(LOG2_DATA_SIZE);
