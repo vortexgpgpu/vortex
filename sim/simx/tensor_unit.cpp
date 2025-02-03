@@ -39,6 +39,7 @@ inline uint32_t read_element(const std::vector<reg_data_t>& reg_data, int index,
     return reg_data.at(index / 2).u >> (index % 2);
   }
   default: assert(false);
+    return 0;
   }
 }
 
@@ -172,7 +173,7 @@ private:
 class TensorUnit::Impl {
 public:
 
-  Impl(const SimContext& ctx, TensorUnit* simobject, uint32_t tile_size)
+  Impl(TensorUnit* simobject, uint32_t tile_size)
     : simobject_(simobject)
     , tensor_cores_(NUM_TENSOR_CORES)
     , tc_sel_(0)
@@ -180,7 +181,7 @@ public:
     char sname[100];
     for (uint32_t i = 0; i < NUM_TENSOR_CORES; i++) {
       snprintf(sname, 100, "%s-core%d", simobject->name().c_str(), i);
-      tensor_cores_[i] = TensorCore::Create(ctx, sname, tile_size);
+      tensor_cores_[i] = TensorCore::Create(sname, tile_size);
     }
 
     this->reset();
@@ -233,7 +234,7 @@ TensorUnit::TensorUnit(const SimContext& ctx, const char* name, uint32_t tile_si
   : SimObject<TensorUnit>(ctx, name)
   , Input(this)
   , Output(this)
-  , impl_(new Impl(ctx, this, tile_size))
+  , impl_(new Impl(this, tile_size))
 {}
 
 TensorUnit::~TensorUnit() {
