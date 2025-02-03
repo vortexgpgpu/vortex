@@ -25,6 +25,11 @@ ifneq ($(findstring -DEXT_V_ENABLE, $(CONFIGS)),)
   SRCS += $(SRC_DIR)/vpu.cpp
 endif
 
+# Add TPU extension sources
+ifneq ($(findstring -DEXT_TPU_ENABLE, $(CONFIGS)),)
+  SRCS += $(SRC_DIR)/tensor_unit.cpp
+endif
+
 # Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG)

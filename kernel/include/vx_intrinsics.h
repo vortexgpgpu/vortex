@@ -221,22 +221,28 @@ inline void vx_fence() {
     __asm__ volatile ("fence iorw, iorw");
 }
 
-//Matrix load
-inline void vx_matrix_load(unsigned dest, unsigned  addr) 
-{
-    asm volatile (".insn i 0x7b, 0, x0, %0(%1)" :: "i"(dest), "r"(addr));
+inline unsigned vx_u4_mmadd(unsigned a, unsigned b, unsigned c) {
+    unsigned ret;
+    asm volatile (".insn r4 %1, 0, %2, %0, %3, %4, %5" : "=r"(ret) : "i"(RISCV_CUSTOM1), "i"(0), "r"(a), "r"(b), "r"(c));
+    return ret;
 }
 
-//Matrix Store
-inline void vx_matrix_store(unsigned  addr) 
-{
-    asm volatile (".insn i 0x7b, 1, x0, 0(%0)" :: "r"(addr));
+inline unsigned vx_u8_mmadd(unsigned a, unsigned b, unsigned c) {
+    unsigned ret;
+    asm volatile (".insn r4 %1, 0, %2, %0, %3, %4, %5" : "=r"(ret) : "i"(RISCV_CUSTOM1), "i"(1), "r"(a), "r"(b), "r"(c));
+    return ret;
 }
 
-//Matrix Mul
-inline void vx_matrix_mul() 
-{
-    asm volatile (".insn i 0x7b, 2, x0, 0(x0)");
+inline unsigned vx_f16_mmadd(unsigned a, unsigned b, unsigned c) {
+    unsigned ret;
+    asm volatile (".insn r4 %1, 0, %2, %0, %3, %4, %5" : "=r"(ret) : "i"(RISCV_CUSTOM1), "i"(2), "r"(a), "r"(b), "r"(c));
+    return ret;
+}
+
+inline unsigned vx_bf16_mmadd(unsigned a, unsigned b, unsigned c) {
+    unsigned ret;
+    asm volatile (".insn r4 %1, 0, %2, %0, %3, %4, %5" : "=r"(ret) : "i"(RISCV_CUSTOM1), "i"(3), "r"(a), "r"(b), "r"(c));
+    return ret;
 }
 
 #ifdef __cplusplus

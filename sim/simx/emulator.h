@@ -19,6 +19,7 @@
 #include <stack>
 #include <mem.h>
 #include "types.h"
+#include "tensor_unit.h"
 
 namespace vortex {
 
@@ -28,11 +29,78 @@ class Core;
 class Instr;
 class instr_trace_t;
 
+struct ipdom_entry_t {
+  ipdom_entry_t(const ThreadMask &orig_tmask, const ThreadMask &else_tmask, Word PC)
+    : orig_tmask (orig_tmask)
+    , else_tmask (else_tmask)
+    , PC         (PC)
+    , fallthrough(false)
+  {}
+
+  ThreadMask  orig_tmask;
+  ThreadMask  else_tmask;
+  Word        PC;
+  bool        fallthrough;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+struct vtype_t {
+  uint32_t vill;
+  uint32_t vma;
+  uint32_t vta;
+  uint32_t vsew;
+  uint32_t vlmul;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+struct vcsrs_t {
+  uint32_t vstart;
+  uint32_t vxsat;
+  uint32_t vxrm;
+  uint32_t vcsr;
+  uint32_t vl;
+  uint32_t vtype;
+  uint32_t vlenb;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+struct warp_t {
+  warp_t(uint32_t num_threads);
+  void clear(uint64_t startup_addr);
+
+  Word                              PC;
+  ThreadMask                        tmask;
+  std::vector<std::vector<Word>>    ireg_file;
+  std::vector<std::vector<uint64_t>>freg_file;
+  std::stack<ipdom_entry_t>         ipdom_stack;
+  Byte                              fcsr;
+#ifdef EXT_V_ENABLE
+  std::vector<std::vector<std::vector<Byte>>> vreg_file;
+  std::vector<vcsrs_t>              vcsrs;
+  vtype_t                           vtype;
+  uint32_t                          vl;
+  uint32_t                          vlmax;
+
+#endif
+  uint32_t                          uuid;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+struct wspawn_t {
+  bool      valid;
+  uint32_t  num_warps;
+  Word      nextPC;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 class Emulator {
 public:
-  Emulator(const Arch &arch,
-           const DCRS &dcrs,
-           Core* core);
+  Emulator(const Arch &arch, const DCRS &dcrs, Core* core);
 
   ~Emulator();
 
@@ -57,83 +125,20 @@ public:
 
   int get_exitcode() const;
 
-  Word get_tiles();
-  Word get_tc_size();
-  Word get_tc_num();
-
   void dcache_read(void* data, uint64_t addr, uint32_t size);
 
   void dcache_write(const void* data, uint64_t addr, uint32_t size);
 
 private:
 
-  struct ipdom_entry_t {
-    ipdom_entry_t(const ThreadMask &orig_tmask, const ThreadMask &else_tmask, Word PC)
-      : orig_tmask (orig_tmask)
-      , else_tmask (else_tmask)
-      , PC         (PC)
-      , fallthrough(false)
-    {}
-
-    ThreadMask  orig_tmask;
-    ThreadMask  else_tmask;
-    Word        PC;
-    bool        fallthrough;
-  };
-
-  struct vtype_t {
-    uint32_t vill;
-    uint32_t vma;
-    uint32_t vta;
-    uint32_t vsew;
-    uint32_t vlmul;
-  };
-
-  union reg_data_t {
-    Word     u;
-    WordI    i;
-    WordF    f;
-    float    f32;
-    double   f64;
-    uint32_t u32;
-    uint64_t u64;
-    int32_t  i32;
-    int64_t  i64;
-  };
-
-  struct warp_t {
-    warp_t(const Arch& arch);
-    void clear(uint64_t startup_addr);
-
-    Word                              PC;
-    ThreadMask                        tmask;
-    std::vector<std::vector<Word>>    ireg_file;
-    std::vector<std::vector<uint64_t>>freg_file;
-    std::stack<ipdom_entry_t>         ipdom_stack;
-    Byte                              fcsr;
-#ifdef EXT_V_ENABLE
-    std::vector<std::vector<Byte>>    vreg_file;
-    vtype_t                           vtype;
-    uint32_t                          vl;
-    Word                              vlmax;
-#endif
-    uint32_t                          uuid;
-  };
-
-  struct wspawn_t {
-    bool valid;
-    uint32_t num_warps;
-    Word nextPC;
-  };
-
   std::shared_ptr<Instr> decode(uint32_t code) const;
 
   void execute(const Instr &instr, uint32_t wid, instr_trace_t *trace);
 
 #ifdef EXT_V_ENABLE
-  void loadVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata);
-  void storeVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata);
-  void executeVector(const Instr &instr, uint32_t wid, std::vector<reg_data_t[3]> &rsdata, std::vector<reg_data_t> &rddata);
+  void loadVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI rs1_data, WordI rs2_data);
+  void storeVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI rs1_data, WordI rs2_data);
+  bool executeVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI rs1_data, WordI rs2_data, WordI* rd_data);
 #endif
 
   void icache_read(void* data, uint64_t addr, uint32_t size);
@@ -171,11 +176,6 @@ private:
   uint32_t    ipdom_size_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
-  std::vector<Word> scratchpad;
-  uint32_t mat_size;
-  uint32_t tc_size;
-  uint32_t tc_num;
-  std::vector<std::vector<std::unordered_map<uint32_t, uint32_t>>> csrs_;
 };
 
 }

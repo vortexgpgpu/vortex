@@ -150,6 +150,10 @@ private:
   Socket* socket_;
   const Arch& arch_;
 
+#ifdef EXT_TPU_ENABLE
+  TensorUnit::Ptr tensor_unit_;
+#endif
+
   Emulator emulator_;
 
   std::vector<IBuffer> ibuffers_;
@@ -180,7 +184,6 @@ private:
   friend class AluUnit;
   friend class FpuUnit;
   friend class SfuUnit;
-  friend class TcuUnit;
 };
 
 } // namespace vortex

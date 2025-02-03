@@ -48,7 +48,7 @@ enum class Opcode {
   EXT1      = 0x0b,
   EXT2      = 0x2b,
   EXT3      = 0x5b,
-  TCU       = 0x7b
+  EXT4      = 0x7b
 };
 
 enum class InstType {
@@ -73,11 +73,11 @@ enum DecodeConstants {
   width_vmask = 1,
   width_i_imm = 12,
   width_j_imm = 20,
-  width_v_zimm = 11,
-  width_v_ma = 1,
-  width_v_ta = 1,
+  width_v_zimm= 11,
+  width_v_ma  = 1,
+  width_v_ta  = 1,
   width_v_sew = 3,
-  width_v_lmul = 3,
+  width_v_lmul= 3,
   width_aq    = 1,
   width_rl    = 1,
 
@@ -142,9 +142,9 @@ public:
     , func7_(0)
     , vmask_(0)
     , vlsWidth_(0)
-    , vMop_(0)
-    , vUmop_(0)
-    , vNf_(0)
+    , vmop_(0)
+    , vumop_(0)
+    , vnf_(0)
     , vs3_(0)
     , has_zimm_(false)
     , vlmul_(0)
@@ -189,10 +189,10 @@ public:
 
   // Attributes for Vector instructions
   void setVlsWidth(uint32_t width) { vlsWidth_ = width; vattr_mask_ |= vattr_vlswidth; }
-  void setVmop(uint32_t mop) { vMop_ = mop; vattr_mask_ |= vattr_vmop; }
-  void setVumop(uint32_t umop) { vUmop_ = umop; vattr_mask_ |= vattr_vumop; }
-  void setVnf(uint32_t nf) { vNf_ = nf; vattr_mask_ |= vattr_vnf; }
-  void setVmask(uint32_t mask) { vmask_ = mask; vattr_mask_ |= vattr_vmask; }
+  void setVmop(uint32_t mop) { vmop_ = mop; vattr_mask_ |= vattr_vmop; }
+  void setVumop(uint32_t umop) { vumop_ = umop; vattr_mask_ |= vattr_vumop; }
+  void setVnf(uint32_t nf) { vnf_ = nf; vattr_mask_ |= vattr_vnf; }
+  void setVmask(uint32_t vmask) { vmask_ = vmask; vattr_mask_ |= vattr_vmask; }
   void setVs3(uint32_t vs) { vs3_ = vs; vattr_mask_ |= vattr_vs3; }
   void setZimm(bool has_zimm) { has_zimm_ = has_zimm; vattr_mask_ |= vattr_zimm; }
   void setVlmul(uint32_t lmul) { vlmul_ = lmul; vattr_mask_ |= vattr_vlmul; }
@@ -218,10 +218,11 @@ public:
   uint32_t getFunc6() const { return func6_; }
   uint32_t getFunc7() const { return func7_; }
 
+  // Vector
   uint32_t getVlsWidth() const { return vlsWidth_; }
-  uint32_t getVmop() const { return vMop_; }
-  uint32_t getVumop() const { return vUmop_; }
-  uint32_t getVnf() const { return vNf_; }
+  uint32_t getVmop() const { return vmop_; }
+  uint32_t getVumop() const { return vumop_; }
+  uint32_t getVnf() const { return vnf_; }
   uint32_t getVmask() const { return vmask_; }
   uint32_t getVs3() const { return vs3_; }
   bool     hasZimm() const { return has_zimm_; }
@@ -254,9 +255,9 @@ private:
   // Vector
   uint32_t vmask_;
   uint32_t vlsWidth_;
-  uint32_t vMop_;
-  uint32_t vUmop_;
-  uint32_t vNf_;
+  uint32_t vmop_;
+  uint32_t vumop_;
+  uint32_t vnf_;
   uint32_t vs3_;
   bool     has_zimm_;
   uint32_t vlmul_;

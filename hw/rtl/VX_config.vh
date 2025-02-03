@@ -31,6 +31,7 @@
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
+
 `ifndef EXT_M_DISABLE
 `define EXT_M_ENABLE
 `endif
@@ -111,24 +112,6 @@
 
 `ifndef SOCKET_SIZE
 `define SOCKET_SIZE `MIN(4, `NUM_CORES)
-`endif
-
-// Size of Tensor Core
-`ifndef TC_SIZE
-`define TC_SIZE 8
-`endif
-
-// Number of TCs per Warp
-`ifndef TC_NUM
-`define TC_NUM 4
-`endif
-
-`ifndef NUM_TCU_LANES
-`define NUM_TCU_LANES   `TC_NUM
-`endif
-
-`ifndef NUM_TCU_BLOCKS
-`define NUM_TCU_BLOCKS  `ISSUE_WIDTH
 `endif
 
 `ifdef L2_ENABLE
@@ -317,7 +300,8 @@
 `define MEM_PAGE_LOG2_SIZE (12)
 `endif
 
-// Virtual Memory Configuration ///////////////////////////////////////////////////////
+// Virtual Memory Configuration ///////////////////////////////////////////////
+
 `ifdef VM_ENABLE
     `ifdef XLEN_32
         `ifndef VM_ADDR_MODE
@@ -543,6 +527,12 @@
 // FNCP Bandwidth ratio
 `ifndef FNCP_PE_RATIO
 `define FNCP_PE_RATIO 2
+`endif
+
+// Tensore Units //////////////////////////////////////////////////////////////
+
+`ifndef NUM_TENSOR_CORES
+`define NUM_TENSOR_CORES `ISSUE_WIDTH
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
@@ -862,6 +852,12 @@
     `define EXT_ZICOND_ENABLED 1
 `else
     `define EXT_ZICOND_ENABLED 0
+`endif
+
+`ifdef EXT_TPU_ENABLE
+    `define EXT_TPU_ENABLED 1
+`else
+    `define EXT_TPU_ENABLED 0
 `endif
 
 `define ISA_STD_A           0

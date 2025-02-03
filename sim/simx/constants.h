@@ -23,6 +23,8 @@
 #define MEM_CLOCK_RATIO   1
 #endif
 
+inline constexpr int VLENB            = (VLEN / 8);
+
 inline constexpr int LSU_WORD_SIZE    = (XLEN / 8);
 inline constexpr int LSU_CHANNELS     = NUM_LSU_LANES;
 inline constexpr int LSU_NUM_REQS	    = (NUM_LSU_BLOCKS * LSU_CHANNELS);

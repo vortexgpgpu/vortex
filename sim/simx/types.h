@@ -24,8 +24,9 @@
 #include <VX_types.h>
 #include <simobject.h>
 #include <bitvector.h>
-#include "debug.h"
 #include <iostream>
+#include "debug.h"
+#include "constants.h"
 
 namespace vortex {
 
@@ -35,13 +36,11 @@ typedef uint32_t Word;
 typedef int32_t  WordI;
 typedef uint64_t DWord;
 typedef int64_t  DWordI;
-typedef uint32_t WordF;
 #elif (XLEN == 64)
 typedef uint64_t Word;
 typedef int64_t  WordI;
 typedef __uint128_t DWord;
 typedef __int128_t DWordI;
-typedef uint64_t WordF;
 #else
 #error unsupported XLEN
 #endif
@@ -56,6 +55,21 @@ typedef std::bitset<MAX_NUM_CORES>   CoreMask;
 typedef std::bitset<MAX_NUM_REGS>    RegMask;
 typedef std::bitset<MAX_NUM_THREADS> ThreadMask;
 typedef std::bitset<MAX_NUM_WARPS>   WarpMask;
+
+///////////////////////////////////////////////////////////////////////////////
+
+union reg_data_t {
+  uint8_t  u8;
+  uint16_t u16;
+  Word     u;
+  WordI    i;
+  float    f32;
+  double   f64;
+  uint32_t u32;
+  uint64_t u64;
+  int32_t  i32;
+  int64_t  i64;
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -106,7 +120,6 @@ enum class FUType {
   LSU,
   FPU,
   SFU,
-  TCU,
   Count
 };
 
@@ -116,7 +129,6 @@ inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
   case FUType::LSU: os << "LSU"; break;
   case FUType::FPU: os << "FPU"; break;
   case FUType::SFU: os << "SFU"; break;
-  case FUType::TCU: os << "TCU"; break;
   default: assert(false);
   }
   return os;
@@ -148,30 +160,14 @@ inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
 
 enum class LsuType {
   LOAD,
-  TCU_LOAD,
   STORE,
-  TCU_STORE,
   FENCE
 };
-
-enum class TCUType {
-  TCU_MUL
-};
-
-inline std::ostream &operator<<(std::ostream &os, const TCUType& type) {
-  switch (type) {
-  case TCUType::TCU_MUL: os << "TCU MUL"; break;
-  default: assert(false);
-  }
-  return os;
-}
 
 inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
   switch (type) {
   case LsuType::LOAD:  os << "LOAD"; break;
-  case LsuType::TCU_LOAD: os << "TCU_LOAD"; break;
   case LsuType::STORE: os << "STORE"; break;
-  case LsuType::TCU_STORE: os << "TCU_STORE"; break;
   case LsuType::FENCE: os << "FENCE"; break;
   default: assert(false);
   }
@@ -248,7 +244,11 @@ enum class SfuType {
   PRED,
   CSRRW,
   CSRRS,
-  CSRRC
+  CSRRC,
+  MMADD_U4,
+  MMADD_U8,
+  MMADD_F16,
+  MMADD_BF16
 };
 
 inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
@@ -262,6 +262,12 @@ inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
   case SfuType::CSRRW:  os << "CSRRW"; break;
   case SfuType::CSRRS:  os << "CSRRS"; break;
   case SfuType::CSRRC:  os << "CSRRC"; break;
+#ifdef EXT_TPU_ENABLE
+  case SfuType::MMADD_U4: os << "MMADD_U4"; break;
+  case SfuType::MMADD_U8: os << "MMADD_U8"; break;
+  case SfuType::MMADD_F16: os << "MMADD_F16"; break;
+  case SfuType::MMADD_BF16: os << "MMADD_BF16"; break;
+#endif
   default: assert(false);
   }
   return os;

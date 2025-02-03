@@ -51,8 +51,7 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   {Opcode::EXT1,    InstType::R},
   {Opcode::EXT2,    InstType::R4},
   {Opcode::R_W,     InstType::R},
-  {Opcode::I_W,     InstType::I},
-  {Opcode::TCU,     InstType::I},
+  {Opcode::I_W,     InstType::I}
 };
 
 static const char* op_string(const Instr &instr) {
@@ -390,15 +389,22 @@ static const char* op_string(const Instr &instr) {
     default:
       std::abort();
     }
-
-  case Opcode::TCU:
-    switch(func3)
-    {
-      case 0: return "ML";     // Matrix Load
-      case 1: return "MS";     // Matrix Store
-      case 2: return "MATMUL"; // Matrix Multiply
+  case Opcode::EXT2:
+    switch(func3) {
+    case 0: // reserved
+    case 1: // reserved
+      std::abort();
+    case 2:
+      switch (func2) {
+      case 0: return "MMADD.u4_i32";
+      case 1: return "MMADD.u8_i32";
+      case 2: return "MMADD.f16_f32";
+      case 3: return "MMADD.bf16_f32";
       default:
         std::abort();
+      }
+    default:
+      std::abort();
     }
   default:
     std::abort();
@@ -455,12 +461,12 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << "0x" << std::hex << instr.getImm() << std::dec;
   }
-#ifdef EXT_V_ENABLE
   if (instr.getOpcode() == Opcode::SYS && instr.getFunc3() >= 5) {
     // CSRs with immediate values
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << "0x" << std::hex << instr.getRSrc(0);
   }
+#ifdef EXT_V_ENABLE
   // Log vector-specific attributes
   if (instr.getVattrMask() != 0) {
     print_vec_attr(os, instr);
@@ -592,14 +598,6 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
 
   case InstType::I: {
     switch (op) {
-    case Opcode::TCU: {
-      instr->setDestReg(rs1, RegType::Integer);
-      instr->addSrcReg(rs1, RegType::Integer);
-      instr->setFunc3(func3);
-      instr->setFunc7(func7);
-      auto imm = code >> shift_rs2;
-      instr->setImm(sext(imm, width_i_imm));
-    } break;
     case Opcode::I:
     case Opcode::I_W:
     case Opcode::JALR:
