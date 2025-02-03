@@ -131,6 +131,12 @@ public:
     return mem_coalescers_.at(idx);
   }
 
+#ifdef EXT_TPU_ENABLE
+  TensorUnit::Ptr& tensor_unit() {
+    return tensor_unit_;
+  }
+#endif
+
   const PerfStats& perf_stats() const {
     return perf_stats_;
   }

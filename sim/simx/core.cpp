@@ -54,7 +54,7 @@ Core::Core(const SimContext& ctx,
 #ifdef EXT_TPU_ENABLE
   {
     snprintf(sname, 100, "%s-tpu", this->name().c_str());
-    tensor_unit_ = TensorUnit::Create(sname);
+    tensor_unit_ = TensorUnit::Create(sname, TENSOR_TILE_SIZE);
   }
 #endif
 

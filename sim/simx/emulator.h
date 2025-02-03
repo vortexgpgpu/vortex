@@ -167,6 +167,11 @@ private:
   const Arch& arch_;
   const DCRS& dcrs_;
   Core*       core_;
+
+#ifdef EXT_TPU_ENABLE
+  TensorUnit::Ptr tensor_unit_;
+#endif
+
   std::vector<warp_t> warps_;
   WarpMask    active_warps_;
   WarpMask    stalled_warps_;

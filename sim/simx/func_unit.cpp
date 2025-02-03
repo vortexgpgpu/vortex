@@ -265,10 +265,7 @@ void SfuUnit::tick() {
 			}
 		} break;
 	#ifdef EXT_TPU_ENABLE
-		case SfuType::MMADD_U4:
-		case SfuType::MMADD_U8:
-		case SfuType::MMADD_F16:
-		case SfuType::MMADD_BF16:	{
+		case SfuType::MMADD:	{
 			if (trace->eop) {
 				auto trace_data = std::dynamic_pointer_cast<TensorUnit::TraceData>(trace->data);
 				output.push(trace, trace_data->latency + delay);

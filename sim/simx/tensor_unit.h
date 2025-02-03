@@ -18,38 +18,57 @@
 
 namespace vortex {
 
+enum class TensorFormat : int {
+  Int4  = 0,
+  Int8  = 1,
+  Int16 = 2,
+  Int32 = 3,
+  Int64 = 4,
+  FP16  = 5,
+  FP32  = 6,
+  FP64  = 7,
+  BF16  = 8,
+  _MAX  = 9
+};
+
 class TensorUnit : public SimObject<TensorUnit> {
 public:
   struct TraceData : public ITraceData {
     using Ptr = std::shared_ptr<TraceData>;
+    uint32_t tc_idx;
     uint32_t latency;
   };
 
   struct PerfStats {
     uint64_t latency;
-    uint64_t stalls;
 
     PerfStats()
       : latency(0)
-      , stalls(0)
     {}
+
+    PerfStats& operator+=(const PerfStats& rhs) {
+      this->latency += rhs.latency;
+      return *this;
+    }
   };
 
   SimPort<instr_trace_t*> Input;
   SimPort<instr_trace_t*> Output;
 
-  TensorUnit(const SimContext& ctx, const char* name);
+  TensorUnit(const SimContext& ctx, const char* name, uint32_t tile_size);
   ~TensorUnit();
 
   void reset();
 
   void tick();
 
-  void mmadd(const std::vector<reg_data_t>& rs1_data,
+  void mmadd(TensorFormat from_format,
+             TensorFormat to_format,
+             const std::vector<reg_data_t>& rs1_data,
              const std::vector<reg_data_t>& rs2_data,
              const std::vector<reg_data_t>& rs3_data,
              std::vector<reg_data_t>& rd_data,
-             TensorUnit::TraceData::Ptr& trace_data);
+             TensorUnit::TraceData::Ptr trace_data);
 
   const PerfStats& perf_stats() const;
 

@@ -24,9 +24,13 @@ extern "C" {
 #define F32_SIGN 0x80000000
 #define F64_SIGN 0x8000000000000000
 
+inline float16_t to_float16_t(uint16_t x) { return float16_t{x}; }
+inline bfloat16_t to_bfloat16_t(uint16_t x) { return bfloat16_t{x}; }
 inline float32_t to_float32_t(uint32_t x) { return float32_t{x}; }
 inline float64_t to_float64_t(uint64_t x) { return float64_t{x}; }
 
+inline uint16_t from_float16_t(float16_t x) { return uint16_t(x.v); }
+inline uint16_t from_bfloat16_t(bfloat16_t x) { return uint16_t(x.v); }
 inline uint32_t from_float32_t(float32_t x) { return uint32_t(x.v); }
 inline uint64_t from_float64_t(float64_t x) { return uint64_t(x.v); }
 
@@ -528,6 +532,34 @@ uint32_t rv_dtof(uint64_t a) {
 uint64_t rv_ftod(uint32_t a) {
   auto r = f32_to_f64(to_float32_t(a));
   return from_float64_t(r);
+}
+
+uint32_t rv_htof_s(uint16_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f16_to_f32(to_float16_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint16_t rv_ftoh_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_to_f16(to_float32_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float16_t(r);
+}
+
+uint32_t rv_btof_s(uint16_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = bf16_to_f32(to_bfloat16_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_float32_t(r);
+}
+
+uint16_t rv_ftob_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  auto r = f32_to_bf16(to_float32_t(a));
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return from_bfloat16_t(r);
 }
 
 #ifdef __cplusplus

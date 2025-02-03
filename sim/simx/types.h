@@ -245,10 +245,9 @@ enum class SfuType {
   CSRRW,
   CSRRS,
   CSRRC,
-  MMADD_U4,
-  MMADD_U8,
-  MMADD_F16,
-  MMADD_BF16
+#ifdef EXT_TPU_ENABLE
+  MMADD,
+#endif
 };
 
 inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
@@ -263,10 +262,7 @@ inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
   case SfuType::CSRRS:  os << "CSRRS"; break;
   case SfuType::CSRRC:  os << "CSRRC"; break;
 #ifdef EXT_TPU_ENABLE
-  case SfuType::MMADD_U4: os << "MMADD_U4"; break;
-  case SfuType::MMADD_U8: os << "MMADD_U8"; break;
-  case SfuType::MMADD_F16: os << "MMADD_F16"; break;
-  case SfuType::MMADD_BF16: os << "MMADD_BF16"; break;
+  case SfuType::MMADD:  os << "MMADD"; break;
 #endif
   default: assert(false);
   }

@@ -104,6 +104,9 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     : arch_(arch)
     , dcrs_(dcrs)
     , core_(core)
+  #ifdef EXT_TPU_ENABLE
+    , tensor_unit_(core->tensor_unit())
+  #endif
     , warps_(arch.num_warps(), arch.num_threads())
     , barriers_(arch.num_barriers(), 0)
     , ipdom_size_(arch.num_threads()-1)

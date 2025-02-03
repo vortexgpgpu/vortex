@@ -1485,8 +1485,39 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     case 0: // reserved
     case 1: // reserved
       std::abort();
-    case 2:
+    case 2: {
+      trace->fu_type = FUType::SFU;
+      trace->sfu_type = SfuType::MMADD;
+      trace->src_regs[0] = {RegType::Integer, rsrc0};
+      trace->src_regs[1] = {RegType::Integer, rsrc1};
+      trace->src_regs[2] = {RegType::Integer, rsrc2};
+      auto trace_data = std::make_shared<TensorUnit::TraceData>();
+      trace->data = trace_data;
 
+      TensorFormat from, to;
+      switch (func2) {
+      case 0: // INT8
+        from = TensorFormat::Int4;
+        to = TensorFormat::Int32;
+        break;
+      case 1: // INT16
+        from = TensorFormat::Int8;
+        to = TensorFormat::Int32;
+        break;
+      case 2: // FP16
+        from = TensorFormat::FP16;
+        to = TensorFormat::FP32;
+        break;
+      case 3: // BF16
+        from = TensorFormat::BF16;
+        to = TensorFormat::FP32;
+        break;
+      default:
+        std::abort();
+      }
+      tensor_unit_->mmadd(from, to, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
+      rd_write = true;
+    } break;
     default:
       std::abort();
     }
