@@ -1482,9 +1482,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   } break;
   case Opcode::EXT2: {
     switch(func3) {
-    case 0: // reserved
-    case 1: // reserved
-      std::abort();
+  #ifdef EXT_TPU_ENABLE
     case 2: {
       trace->fu_type = FUType::SFU;
       trace->sfu_type = SfuType::MMADD;
@@ -1518,6 +1516,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       tensor_unit_->mmadd(from, to, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
       rd_write = true;
     } break;
+  #endif
     default:
       std::abort();
     }
