@@ -141,22 +141,9 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   std::vector<reg_data_t> rs3_data;
 
   // reading source registers
-  switch (instr.getNRSrc()) {
-  case 0:
-    // no source register
-    break;
-  case 3:
-    read_register(rs3_data, 2, instr, warp);
-    [[fallthrough]];
-  case 2:
-    read_register(rs2_data, 1, instr, warp);
-    [[fallthrough]];
-  case 1:
-    read_register(rs1_data, 0, instr, warp);
-    break;
-  default:
-    std::abort();
-  }
+  if (instr.getRSType(0) != RegType::None) read_register(rs1_data, 0, instr, warp);
+  if (instr.getRSType(1) != RegType::None) read_register(rs2_data, 1, instr, warp);
+  if (instr.getRSType(2) != RegType::None) read_register(rs3_data, 2, instr, warp);
 
   bool rd_write = false;
 
