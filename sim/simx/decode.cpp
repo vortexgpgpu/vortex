@@ -713,7 +713,13 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
           instr->setVmask((code >> shift_func7) & 0x1);
           instr->setFunc6(func6);
         } break;
-        case 1:   // OPFVV
+        case 1: { // OPFVV
+          instr->setDestReg(rd, (func6 == 16) ? RegType::Float : RegType::Vector);
+          instr->addSrcReg(rs1, RegType::Vector);
+          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setVmask((code >> shift_func7) & 0x1);
+          instr->setFunc6(func6);
+        } break;
         case 2: { // OPMVV
           instr->setDestReg(rd, (func6 == 16) ? RegType::Integer : RegType::Vector);
           instr->addSrcReg(rs1, RegType::Vector);
