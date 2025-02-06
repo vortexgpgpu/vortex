@@ -728,10 +728,16 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
           instr->setVmask((code >> shift_func7) & 0x1);
           instr->setFunc6(func6);
         } break;
-        case 4:   // OPIVX
-        case 5: { // OPFVF
+        case 4: { // OPIVX
           instr->setDestReg(rd, RegType::Vector);
           instr->addSrcReg(rs1, RegType::Integer);
+          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setVmask((code >> shift_func7) & 0x1);
+          instr->setFunc6(func6);
+        } break;
+        case 5: { // OPFVF
+          instr->setDestReg(rd, RegType::Vector);
+          instr->addSrcReg(rs1, RegType::Float);
           instr->addSrcReg(rs2, RegType::Vector);
           instr->setVmask((code >> shift_func7) & 0x1);
           instr->setFunc6(func6);
