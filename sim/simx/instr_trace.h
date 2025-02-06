@@ -166,4 +166,9 @@ inline std::ostream &operator<<(std::ostream &os, const instr_trace_t& trace) {
   return os;
 }
 
+inline std::ostream &operator<<(std::ostream &os, instr_trace_t* trace) {
+  os << *trace;
+  return os;
+}
+
 }

@@ -49,15 +49,14 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, const 
         std::cout << "NFIELDS * EMUL = " << nfields * warp.vtype.vlmul << " but it should be <= 8" << std::endl;
         std::abort();
       }
-      for (uint32_t f = 0; f < nfields; f++) {
-        uint32_t vreg = vd + f * emul;
-        for (uint32_t i = 0; i < warp.vl; i++) {
-          if (isMasked(vreg_file, 0, i, vmask))
-            continue;
-          uint64_t mem_addr = base_addr + (f * warp.vl + i) * vsewb;
+      for (uint32_t i = 0; i < warp.vl; i++) {
+        if (isMasked(vreg_file, 0, i, vmask))
+          continue;
+        for (uint32_t f = 0; f < nfields; f++) {
+          uint64_t mem_addr = base_addr + (i * nfields + f) * vsewb;
           uint64_t mem_data = 0;
           this->dcache_read(&mem_data, mem_addr, vsewb);
-          setVregData(warp.vtype.vsew, vreg_file, vreg, i, mem_data);
+          setVregData(warp.vtype.vsew, vreg_file, vd + f * emul, i, mem_data);
         }
       }
       break;
@@ -70,15 +69,14 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, const 
       }
 
       uint32_t vl = VLENB / vsewb;
-      for (uint32_t f = 0; f < nreg; f++) {
-        uint32_t vreg = vd + f;
-        for (uint32_t i = 0; i < vl; i++) {
-          if (isMasked(vreg_file, 0, i, vmask))
-            continue;
-          uint64_t mem_addr = base_addr + (f * vl + i) * vsewb;
+      for (uint32_t i = 0; i < vl; i++) {
+        if (isMasked(vreg_file, 0, i, vmask))
+          continue;
+        for (uint32_t f = 0; f < nreg; f++) {
+          uint64_t mem_addr = base_addr + (i * nreg + f) * vsewb;
           uint64_t mem_data = 0;
           this->dcache_read(&mem_data, mem_addr, vsewb);
-          setVregData(warp.vtype.vsew, vreg_file, vreg, i, mem_data);
+          setVregData(warp.vtype.vsew, vreg_file, vd + f, i, mem_data);
         }
       }
       break;
@@ -88,7 +86,7 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, const 
         std::cout << "vlm.v only supports SEW=8, but SEW was: " << warp.vtype.vsew << std::endl;
         std::abort();
       }
-      
+
       uint32_t vl = (warp.vl + 7) / 8;
       for (uint32_t i = 0; i < vl; i++) {
         if (isMasked(vreg_file, 0, i, 1))
@@ -117,15 +115,14 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, const 
     WordI stride = rs2_data.at(tid).i;
     uint32_t nfields = instr.getVnf() + 1;
 
-    for (uint32_t f = 0; f < nfields; f++) {
-      uint32_t vreg = vd + f;
-      for (uint32_t i = 0; i < warp.vl; i++) {
-        if (isMasked(vreg_file, 0, i, vmask))
-          continue;
+    for (uint32_t i = 0; i < warp.vl; i++) {
+      if (isMasked(vreg_file, 0, i, vmask))
+        continue;
+      for (uint32_t f = 0; f < nfields; f++) {
         uint64_t mem_addr = base_addr + i * stride + f * vsewb;
         uint64_t mem_data = 0;
         this->dcache_read(&mem_data, mem_addr, vsewb);
-        setVregData(warp.vtype.vsew, vreg_file, vreg, i, mem_data);
+        setVregData(warp.vtype.vsew, vreg_file, vd + f, i, mem_data);
       }
     }
     break;
@@ -156,16 +153,15 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, const 
       std::abort();
     }
 
-    for (uint32_t f = 0; f < nfields; f++) {
-      uint32_t vreg = vd + f * emul;
-      for (uint32_t i = 0; i < warp.vl; i++) {
-        if (isMasked(vreg_file, 0, i, vmask))
-          continue;
+    for (uint32_t i = 0; i < warp.vl; i++) {
+      if (isMasked(vreg_file, 0, i, vmask))
+        continue;
+      for (uint32_t f = 0; f < nfields; f++) {
         uint64_t offset = getVregData(vsew_bits, vreg_file, vs2, i);
         uint64_t mem_addr = base_addr + offset + f * vsewb;
         uint64_t mem_data = 0;
         this->dcache_read(&mem_data, mem_addr, vsewb);
-        setVregData(warp.vtype.vsew, vreg_file, vreg, i, mem_data);
+        setVregData(warp.vtype.vsew, vreg_file, vd + f * emul, i, mem_data);
       }
     }
     break;
@@ -179,7 +175,6 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, const 
 void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, const std::vector<reg_data_t>& rs2_data) {
   auto& warp = warps_.at(wid);
   auto vmask = instr.getVmask();
-  auto vs3 = instr.getRDest();
   auto mop = instr.getVmop();
   auto vsewb = warp.vtype.vsew / 8;
   auto& vreg_file = warp.vreg_file.at(tid);
@@ -190,16 +185,16 @@ void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, const
     uint32_t sumop = instr.getVumop();
     switch (sumop) {
     case 0b0000: { // vse8.v, vse16.v, vse32.v, vse64.v
+      uint32_t vs3 = instr.getRSrc(1);
       uint32_t nfields = instr.getVnf() + 1;
       uint32_t emul = warp.vtype.vlmul >> 2 ? 1 : 1 << (warp.vtype.vlmul & 0b11);
 
-      for (uint32_t f = 0; f < nfields; f++) {
-        uint32_t vreg = vs3 + f * emul;
-        for (uint32_t i = 0; i < warp.vl; i++) {
-          if (isMasked(vreg_file, 0, i, vmask))
-            continue;
-          uint64_t mem_addr = base_addr + (f * warp.vl + i) * vsewb;
-          uint64_t value = getVregData(warp.vtype.vsew, vreg_file, vreg, i);
+      for (uint32_t i = 0; i < warp.vl; i++) {
+        if (isMasked(vreg_file, 0, i, vmask))
+          continue;
+        for (uint32_t f = 0; f < nfields; f++) {
+          uint64_t mem_addr = base_addr + (i * nfields + f) * vsewb;
+          uint64_t value = getVregData(warp.vtype.vsew, vreg_file, vs3 + f * emul, i);
           this->dcache_write(&value, mem_addr, vsewb);
         }
       }
@@ -211,15 +206,15 @@ void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, const
         std::cout << "Whole vector register store - reserved value for nreg: " << nreg << std::endl;
         std::abort();
       }
+      uint32_t vs3 = instr.getRSrc(1);
       uint32_t vl = VLENB / vsewb;
 
-      for (uint32_t f = 0; f < nreg; f++) {
-        uint32_t vreg = vs3 + f;
-        for (uint32_t i = 0; i < vl; i++) {
-          if (isMasked(vreg_file, 0, i, vmask))
-            continue;
-          uint64_t mem_addr = base_addr + (f * vl + i) * vsewb;
-          uint64_t value = getVregData(warp.vtype.vsew, vreg_file, vreg, i);
+      for (uint32_t i = 0; i < vl; i++) {
+        if (isMasked(vreg_file, 0, i, vmask))
+          continue;
+        for (uint32_t f = 0; f < nreg; f++) {
+          uint64_t mem_addr = base_addr + (i * nreg + f) * vsewb;
+          uint64_t value = getVregData(warp.vtype.vsew, vreg_file, vs3 + f, i);
           this->dcache_write(&value, mem_addr, vsewb);
         }
       }
@@ -231,6 +226,7 @@ void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, const
         std::abort();
       }
 
+      uint32_t vs3 = instr.getRSrc(1);
       uint32_t vl = (warp.vl + 7) / 8;
 
       for (uint32_t i = 0; i < vl; i++) {
@@ -257,15 +253,15 @@ void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, const
                // vssseg7e8.v, vssseg7e16.v, vssseg7e32.v, vssseg7e64.v
                // vssseg8e8.v, vssseg8e16.v, vssseg8e32.v, vssseg8e64.v
     WordI stride = rs2_data.at(tid).i;
+    uint32_t vs3 = instr.getRSrc(2);
     uint32_t nfields = instr.getVnf() + 1;
 
-    for (uint32_t f = 0; f < nfields; f++) {
-      uint32_t vreg = vs3 + f;
-      for (uint32_t i = 0; i < warp.vl; i++) {
-        if (isMasked(vreg_file, 0, i, vmask))
-          continue;
+    for (uint32_t i = 0; i < warp.vl; i++) {
+      if (isMasked(vreg_file, 0, i, vmask))
+        continue;
+      for (uint32_t f = 0; f < nfields; f++) {
         uint64_t mem_addr = base_addr + i * stride + f * vsewb;
-        uint64_t value = getVregData(warp.vtype.vsew, vreg_file, vreg, i);
+        uint64_t value = getVregData(warp.vtype.vsew, vreg_file, vs3 + f, i);
         this->dcache_write(&value, mem_addr, vsewb);
       }
     }
@@ -288,17 +284,17 @@ void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, const
                // vsoxseg7ei8.v, vsoxseg7ei16.v, vsoxseg7ei32.v, vsoxseg7ei64.v
                // vsoxseg8ei8.v, vsoxseg8ei16.v, vsoxseg8ei32.v, vsoxseg8ei64.v
     uint32_t vs2 = instr.getRSrc(1);
+    uint32_t vs3 = instr.getRSrc(2);
     uint32_t nfields = instr.getVnf() + 1;
     uint32_t vsew_bits = 1 << (3 + instr.getVsew());
 
-    for (uint32_t f = 0; f < nfields; f++) {
-      uint32_t vreg = vs3 + f;
-      for (uint32_t i = 0; i < warp.vl; i++) {
-        if (isMasked(vreg_file, 0, i, vmask))
-          continue;
+    for (uint32_t i = 0; i < warp.vl; i++) {
+      if (isMasked(vreg_file, 0, i, vmask))
+        continue;
+      for (uint32_t f = 0; f < nfields; f++) {
         uint64_t offset = getVregData(vsew_bits, vreg_file, vs2, i);
         uint64_t mem_addr = base_addr + offset + f * vsewb;
-        uint64_t value = getVregData(warp.vtype.vsew, vreg_file, vreg, i);
+        uint64_t value = getVregData(warp.vtype.vsew, vreg_file, vs3 + f, i);
         this->dcache_write(&value, mem_addr, vsewb);
       }
     }

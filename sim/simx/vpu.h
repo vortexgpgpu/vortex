@@ -1144,16 +1144,13 @@ bool isMasked(const std::vector<std::vector<Byte>> &vreg_file, uint32_t maskVreg
 template <typename DT>
 DT getVregData(const std::vector<Byte>& reg_data, uint32_t eltIndex) {
   assert(eltIndex < (VLENB / sizeof(DT)));
-  DT value = *reinterpret_cast<const DT*>(reg_data.data() + eltIndex * sizeof(DT));
-  DP(4, "VRF Read: v[" << eltIndex * sizeof(DT) << "]=0x" << std::hex << +value << std::dec);
-  return value;
+  return *reinterpret_cast<const DT*>(reg_data.data() + eltIndex * sizeof(DT));
 }
 
 template <typename DT>
 void setVregData(std::vector<Byte>& reg_data, uint32_t eltIndex, DT value) {
   assert(eltIndex < (VLENB / sizeof(DT)));
   *reinterpret_cast<DT*>(reg_data.data() + eltIndex * sizeof(DT)) = value;
-  DP(4, "VRF Write: v[" << eltIndex * sizeof(DT) << "]=0x" << std::hex << +value << std::dec);
 }
 
 template <typename DT>
@@ -1174,13 +1171,16 @@ template <typename DT>
 DT getVregData(const std::vector<std::vector<Byte>> &vreg_file, uint32_t baseVreg, uint32_t eltIndex) {
   uint32_t reg_no  = getVregNo<DT>(baseVreg, eltIndex);
   uint32_t reg_elt = getVregElt<DT>(eltIndex);
-  return getVregData<DT>(vreg_file.at(reg_no), reg_elt);
+  auto value = getVregData<DT>(vreg_file.at(reg_no), reg_elt);
+  DP(4, "VRF Read: v[" << reg_no << "][" << reg_elt * sizeof(DT) << "]=0x" << std::hex << +value << std::dec);
+  return value;
 }
 
 template <typename DT>
 void setVregData(std::vector<std::vector<Byte>> &vreg_file, uint32_t baseVreg, uint32_t eltIndex, DT value) {
   uint32_t reg_no  = getVregNo<DT>(baseVreg, eltIndex);
   uint32_t reg_elt = getVregElt<DT>(eltIndex);
+  DP(4, "VRF Write: v[" << reg_no << "][" << reg_elt * sizeof(DT) << "]=0x" << std::hex << +value << std::dec);
   setVregData<DT>(vreg_file.at(reg_no), reg_elt, value);
 }
 

@@ -778,10 +778,10 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
       }
     } break;
     case Opcode::FL:
-    case Opcode::FS:
-      instr->setDestReg(rd, RegType::Vector);
+    case Opcode::FS: {
       instr->addSrcReg(rs1, RegType::Integer);
-      switch (instr->getVmop()) {
+      uint32_t vmop = (code >> shift_vmop) & 0b11;
+      switch (vmop) {
         case 0b00:
           instr->setVumop(rs2);
           break;
@@ -793,12 +793,17 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
           instr->addSrcReg(rs2, RegType::Vector);
           break;
       }
+      if (op == Opcode::FL) {
+        instr->setDestReg(rd, RegType::Vector);
+      } else {
+        instr->addSrcReg(rd, RegType::Vector);
+      }
       instr->setVlsWidth(func3);
       instr->setVmask((code >> shift_func7) & 0x1);
-      instr->setVmop((code >> shift_vmop) & 0b11);
+      instr->setVmop(vmop);
       instr->setVsew(func3 & 0x3);
       instr->setVnf((code >> shift_vnf) & mask_func3);
-      break;
+    } break;
     default:
       std::abort();
     }
