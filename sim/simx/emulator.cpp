@@ -226,12 +226,12 @@ instr_trace_t* Emulator::step() {
     DPN(5, "  %r" << std::setfill('0') << std::setw(2) << i << ':' << std::hex);
     // Integer register file
     for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
-      DPN(5, ' ' << std::setfill('0') << std::setw(XLEN/4) << warp.ireg_file.at(j).at(i) << std::setfill(' ') << ' ');
+      DPN(5, ' ' << std::setfill('0') << std::setw(XLEN/4) << warp.ireg_file.at(i).at(j) << std::setfill(' ') << ' ');
     }
     DPN(5, '|');
     // Floating point register file
     for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
-      DPN(5, ' ' << std::setfill('0') << std::setw(16) << warp.freg_file.at(j).at(i) << std::setfill(' ') << ' ');
+      DPN(5, ' ' << std::setfill('0') << std::setw(16) << warp.freg_file.at(i).at(j) << std::setfill(' ') << ' ');
     }
     DPN(5, std::dec << std::endl);
   }
@@ -244,7 +244,7 @@ bool Emulator::running() const {
 }
 
 int Emulator::get_exitcode() const {
-  return warps_.at(0).ireg_file.at(0).at(3);
+  return warps_.at(0).ireg_file.at(3).at(0);
 }
 
 void Emulator::suspend(uint32_t wid) {

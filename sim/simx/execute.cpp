@@ -733,7 +733,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       for (uint32_t t = thread_start; t < num_threads; ++t) {
         if (!warp.tmask.test(t))
           continue;
-        this->loadVector(instr, wid, t, rs1_data.at(t).i, rs2_data.at(t).i);
+        this->loadVector(instr, wid, t, rs1_data, rs2_data);
       }
     }
   #endif
@@ -775,7 +775,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       for (uint32_t t = thread_start; t < num_threads; ++t) {
         if (!warp.tmask.test(t))
           continue;
-        this->storeVector(instr, wid, t, rs1_data.at(t).i, rs2_data.at(t).i);
+        this->storeVector(instr, wid, t, rs1_data, rs2_data);
       }
     }
   #endif
@@ -1341,7 +1341,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     for (uint32_t t = thread_start; t < num_threads; ++t) {
       if (!warp.tmask.test(t))
         continue;
-      rd_write |= executeVector(instr, wid, t, rs1_data.at(t).i, rs2_data.at(t).i, &rd_data.at(t).i);
+      rd_write |= executeVector(instr, wid, t, rs1_data, rs2_data, rd_data);
     }
     break;
 #endif

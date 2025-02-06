@@ -14,14 +14,14 @@
 
 using namespace vortex;
 
-void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI rs1_data, WordI rs2_data) {
+void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, const std::vector<reg_data_t>& rs2_data) {
   auto& warp = warps_.at(wid);
   auto vmask = instr.getVmask();
-  auto rdest = instr.getRDest();
+  auto vd = instr.getRDest();
   auto mop = instr.getVmop();
   auto vsewb = warp.vtype.vsew / 8;
   auto& vreg_file = warp.vreg_file.at(tid);
-  auto base_addr = rs1_data & 0xFFFFFFFC;
+  auto base_addr = rs1_data.at(tid).i & 0xFFFFFFFC;
 
   switch (mop) {
   case 0b00: { // unit-stride
@@ -49,17 +49,15 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI 
         std::cout << "NFIELDS * EMUL = " << nfields * warp.vtype.vlmul << " but it should be <= 8" << std::endl;
         std::abort();
       }
-
-      for (uint32_t i = 0; i < nfields; i++) {
-        uint32_t vreg = rdest + i * emul;
-        for (uint32_t j = 0; j < warp.vl; j++) {
-          if (isMasked(vreg_file, 0, j, vmask))
+      for (uint32_t f = 0; f < nfields; f++) {
+        uint32_t vreg = vd + f * emul;
+        for (uint32_t i = 0; i < warp.vl; i++) {
+          if (isMasked(vreg_file, 0, i, vmask))
             continue;
-          uint64_t mem_addr = base_addr + i * j * vsewb;
-          this->dcache_read(vreg_file.at(vreg).data() + j * vsewb, mem_addr, vsewb);
+          uint64_t mem_addr = base_addr + (f * warp.vl + i) * vsewb;
           uint64_t mem_data = 0;
-          memcpy(&mem_data, vreg_file.at(vreg).data() + j * vsewb, vsewb);
-          DP(4, "Loaded data 0x" << mem_data << " from: 0x" << mem_addr << " to vec reg: " << vreg << "[" << j << "]");
+          this->dcache_read(&mem_data, mem_addr, vsewb);
+          setVregData(warp.vtype.vsew, vreg_file, vreg, i, mem_data);
         }
       }
       break;
@@ -70,19 +68,17 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI 
         std::cout << "Whole vector register load - reserved value for nreg: " << nreg << std::endl;
         std::abort();
       }
-      DP(4, "Whole vector register load with nreg: " << nreg);
-      uint32_t vl = VLENB / vsewb;
 
-      for (uint32_t i = 0; i < nreg; i++) {
-        uint32_t vreg = rdest + i;
-        for (uint32_t j = 0; j < vl; j++) {
-          if (isMasked(vreg_file, 0, j, vmask))
+      uint32_t vl = VLENB / vsewb;
+      for (uint32_t f = 0; f < nreg; f++) {
+        uint32_t vreg = vd + f;
+        for (uint32_t i = 0; i < vl; i++) {
+          if (isMasked(vreg_file, 0, i, vmask))
             continue;
-          uint64_t mem_addr = base_addr + i * j * vsewb;
-          this->dcache_read(vreg_file.at(vreg).data() + j * vsewb, mem_addr, vsewb);
+          uint64_t mem_addr = base_addr + (f * vl + i) * vsewb;
           uint64_t mem_data = 0;
-          memcpy(&mem_data, vreg_file.at(vreg).data() + j * vsewb, vsewb);
-          DP(4, "Loaded data 0x" << mem_data << " from: 0x" << mem_addr << " to vec reg: " << vreg << "[" << j << "]");
+          this->dcache_read(&mem_data, mem_addr, vsewb);
+          setVregData(warp.vtype.vsew, vreg_file, vreg, i, mem_data);
         }
       }
       break;
@@ -92,16 +88,15 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI 
         std::cout << "vlm.v only supports SEW=8, but SEW was: " << warp.vtype.vsew << std::endl;
         std::abort();
       }
+      
       uint32_t vl = (warp.vl + 7) / 8;
-
       for (uint32_t i = 0; i < vl; i++) {
         if (isMasked(vreg_file, 0, i, 1))
           continue;
         uint64_t mem_addr = base_addr + i * vsewb;
-        this->dcache_read(vreg_file.at(rdest).data() + i * vsewb, mem_addr, vsewb);
         uint64_t mem_data = 0;
-        memcpy(&mem_data, vreg_file.at(rdest).data() + i * vsewb, vsewb);
-        DP(4, "Loaded data 0x" << mem_data << " from: 0x" << mem_addr << " to vec reg: " << rdest << "[" << i << "]");
+        this->dcache_read(&mem_data, mem_addr, vsewb);
+        setVregData(warp.vtype.vsew, vreg_file, vd, i, mem_data);
       }
       break;
     }
@@ -119,20 +114,18 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI 
                // vlsseg6e8.v, vlsseg6e16.v, vlsseg6e32.v, vlsseg6e64.v
                // vlsseg7e8.v, vlsseg7e16.v, vlsseg7e32.v, vlsseg7e64.v
                // vlsseg8e8.v, vlsseg8e16.v, vlsseg8e32.v, vlsseg8e64.v
-    auto rdest = instr.getRDest();
-    WordI stride = rs2_data;
+    WordI stride = rs2_data.at(tid).i;
     uint32_t nfields = instr.getVnf() + 1;
 
-    for (uint32_t i = 0; i < nfields; i++) {
-      uint32_t vreg = rdest + i;
-      for (uint32_t j = 0; j < warp.vl; j++) {
-        if (isMasked(vreg_file, 0, j, vmask))
+    for (uint32_t f = 0; f < nfields; f++) {
+      uint32_t vreg = vd + f;
+      for (uint32_t i = 0; i < warp.vl; i++) {
+        if (isMasked(vreg_file, 0, i, vmask))
           continue;
-        uint64_t mem_addr = base_addr + j * stride + i * vsewb;
-        this->dcache_read(vreg_file.at(vreg).data() + j * vsewb, mem_addr, vsewb);
+        uint64_t mem_addr = base_addr + i * stride + f * vsewb;
         uint64_t mem_data = 0;
-        memcpy(&mem_data, vreg_file.at(vreg).data() + j * vsewb, vsewb);
-        DP(4, "Loaded data 0x" << mem_data << " from: 0x" << mem_addr << " to vec reg: " << vreg << "[" << j << "]");
+        this->dcache_read(&mem_data, mem_addr, vsewb);
+        setVregData(warp.vtype.vsew, vreg_file, vreg, i, mem_data);
       }
     }
     break;
@@ -153,7 +146,7 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI 
                // vloxseg6e8.v, vloxseg6e16.v, vloxseg6e32.v, vloxseg6e64.v
                // vloxseg7e8.v, vloxseg7e16.v, vloxseg7e32.v, vloxseg7e64.v
                // vloxseg8e8.v, vloxseg8e16.v, vloxseg8e32.v, vloxseg8e64.v
-    uint32_t rsrc1 = instr.getRSrc(1);
+    uint32_t vs2 = instr.getRSrc(1);
     uint32_t nfields = instr.getVnf() + 1;
     uint32_t vsew_bits = 1 << (3 + instr.getVsew());
 
@@ -163,36 +156,16 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI 
       std::abort();
     }
 
-    auto& vs1_data = vreg_file.at(rsrc1);
-
-    for (uint32_t i = 0; i < nfields; i++) {
-      uint32_t vreg = rdest + i * emul;
-      for (uint32_t j = 0; j < warp.vl; j++) {
-        if (isMasked(vreg_file, 0, j, vmask))
+    for (uint32_t f = 0; f < nfields; f++) {
+      uint32_t vreg = vd + f * emul;
+      for (uint32_t i = 0; i < warp.vl; i++) {
+        if (isMasked(vreg_file, 0, i, vmask))
           continue;
-        Word offset = 0;
-        switch (vsew_bits) {
-        case 8:
-          offset = getVregData<uint8_t>(vs1_data, j);
-          break;
-        case 16:
-          offset = getVregData<uint16_t>(vs1_data, j);
-          break;
-        case 32:
-          offset = getVregData<uint32_t>(vs1_data, j);
-          break;
-        case 64:
-          offset = getVregData<uint64_t>(vs1_data, j);
-          break;
-        default:
-          std::cout << "Unsupported iSew: " << vsew_bits << std::endl;
-          std::abort();
-        }
-        uint64_t mem_addr = base_addr + offset + i * vsewb;
-        this->dcache_read(vreg_file.at(vreg).data() + j * vsewb, mem_addr, vsewb);
+        uint64_t offset = getVregData(vsew_bits, vreg_file, vs2, i);
+        uint64_t mem_addr = base_addr + offset + f * vsewb;
         uint64_t mem_data = 0;
-        memcpy(&mem_data, vreg_file.at(vreg).data() + j * vsewb, vsewb);
-        DP(4, "Loaded data 0x" << mem_data << " from: 0x" << mem_addr << " to vec reg: " << vreg << "[" << j << "]");
+        this->dcache_read(&mem_data, mem_addr, vsewb);
+        setVregData(warp.vtype.vsew, vreg_file, vreg, i, mem_data);
       }
     }
     break;
@@ -203,33 +176,31 @@ void Emulator::loadVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI 
   }
 }
 
-void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI rs1_data, WordI rs2_data) {
+void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, const std::vector<reg_data_t>& rs2_data) {
   auto& warp = warps_.at(wid);
   auto vmask = instr.getVmask();
+  auto vs3 = instr.getRDest();
   auto mop = instr.getVmop();
   auto vsewb = warp.vtype.vsew / 8;
   auto& vreg_file = warp.vreg_file.at(tid);
-  auto base_addr = rs1_data;
+  auto base_addr = rs1_data.at(tid).i & 0xFFFFFFFC;
 
   switch (mop) {
   case 0b00: { // unit-stride
-    uint32_t vs3 = instr.getRSrc(1);
     uint32_t sumop = instr.getVumop();
     switch (sumop) {
     case 0b0000: { // vse8.v, vse16.v, vse32.v, vse64.v
       uint32_t nfields = instr.getVnf() + 1;
       uint32_t emul = warp.vtype.vlmul >> 2 ? 1 : 1 << (warp.vtype.vlmul & 0b11);
 
-      for (uint32_t i = 0; i < nfields; i++) {
-        uint32_t vreg = vs3 + i * emul;
-        for (uint32_t j = 0; j < warp.vl; j++) {
-          if (isMasked(vreg_file, 0, j, vmask))
+      for (uint32_t f = 0; f < nfields; f++) {
+        uint32_t vreg = vs3 + f * emul;
+        for (uint32_t i = 0; i < warp.vl; i++) {
+          if (isMasked(vreg_file, 0, i, vmask))
             continue;
-          uint64_t mem_addr = base_addr + i * j * vsewb;
-          this->dcache_write(vreg_file.at(vreg).data() + j * vsewb, mem_addr, vsewb);
-          uint64_t mem_data = 0;
-          memcpy(&mem_data, vreg_file.at(vreg).data() + j * vsewb, vsewb);
-          DP(4, "Stored data 0x" << mem_data << " to: 0x" << mem_addr << " from vec reg: " << vreg << "[" << j << "]");
+          uint64_t mem_addr = base_addr + (f * warp.vl + i) * vsewb;
+          uint64_t value = getVregData(warp.vtype.vsew, vreg_file, vreg, i);
+          this->dcache_write(&value, mem_addr, vsewb);
         }
       }
       break;
@@ -240,19 +211,16 @@ void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI
         std::cout << "Whole vector register store - reserved value for nreg: " << nreg << std::endl;
         std::abort();
       }
-      DP(4, "Whole vector register store with nreg: " << nreg);
       uint32_t vl = VLENB / vsewb;
 
-      for (uint32_t i = 0; i < nreg; i++) {
-        uint32_t vreg = vs3 + i;
-        for (uint32_t j = 0; j < vl; j++) {
-          if (isMasked(vreg_file, 0, j, vmask))
+      for (uint32_t f = 0; f < nreg; f++) {
+        uint32_t vreg = vs3 + f;
+        for (uint32_t i = 0; i < vl; i++) {
+          if (isMasked(vreg_file, 0, i, vmask))
             continue;
-          uint64_t mem_addr = base_addr + i * j * vsewb;
-          this->dcache_write(vreg_file.at(vreg).data() + j * vsewb, mem_addr, vsewb);
-          uint64_t mem_data = 0;
-          memcpy(&mem_data, vreg_file.at(vreg).data() + j * vsewb, vsewb);
-          DP(4, "Stored data 0x" << mem_data << " to: 0x" << mem_addr << " from vec reg: " << vreg << "[" << j << "]");
+          uint64_t mem_addr = base_addr + (f * vl + i) * vsewb;
+          uint64_t value = getVregData(warp.vtype.vsew, vreg_file, vreg, i);
+          this->dcache_write(&value, mem_addr, vsewb);
         }
       }
       break;
@@ -262,16 +230,15 @@ void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI
         std::cout << "vsm.v only supports EEW=8, but EEW was: " << warp.vtype.vsew << std::endl;
         std::abort();
       }
+
       uint32_t vl = (warp.vl + 7) / 8;
 
       for (uint32_t i = 0; i < vl; i++) {
         if (isMasked(vreg_file, 0, i, 1))
           continue;
         uint64_t mem_addr = base_addr + i * vsewb;
-        this->dcache_write(vreg_file.at(vs3).data() + i * vsewb, mem_addr, vsewb);
-        uint64_t mem_data = 0;
-        memcpy(&mem_data, vreg_file.at(vs3).data() + i * vsewb, vsewb);
-        DP(4, "Stored data 0x" << mem_data << " to: 0x" << mem_addr << " from vec reg: " << vs3 << "[" << i << "]");
+        uint64_t value = getVregData(warp.vtype.vsew, vreg_file, vs3, i);
+        this->dcache_write(&value, mem_addr, vsewb);
       }
       break;
     }
@@ -289,25 +256,19 @@ void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI
                // vssseg6e8.v, vssseg6e16.v, vssseg6e32.v, vssseg6e64.v
                // vssseg7e8.v, vssseg7e16.v, vssseg7e32.v, vssseg7e64.v
                // vssseg8e8.v, vssseg8e16.v, vssseg8e32.v, vssseg8e64.v
-    auto vs3 = instr.getRSrc(2);
-    WordI stride = rs2_data;
+    WordI stride = rs2_data.at(tid).i;
     uint32_t nfields = instr.getVnf() + 1;
 
-    for (uint32_t i = 0; i < nfields; i++) {
-      uint32_t vreg = vs3 + i;
-      for (uint32_t j = 0; j < warp.vl; j++) {
-        if (isMasked(vreg_file, 0, j, vmask))
+    for (uint32_t f = 0; f < nfields; f++) {
+      uint32_t vreg = vs3 + f;
+      for (uint32_t i = 0; i < warp.vl; i++) {
+        if (isMasked(vreg_file, 0, i, vmask))
           continue;
-        uint64_t mem_addr = base_addr + j * stride + i * vsewb;
-        this->dcache_write(vreg_file.at(vreg).data() + j * vsewb, mem_addr, vsewb);
-        uint64_t mem_data = 0;
-        memcpy(&mem_data, vreg_file.at(vreg).data() + j * vsewb, vsewb);
-        DP(4, "Stored data 0x" << mem_data << " to: 0x" << mem_addr << " from vec reg: " << vreg << "[" << j << "]");
+        uint64_t mem_addr = base_addr + i * stride + f * vsewb;
+        uint64_t value = getVregData(warp.vtype.vsew, vreg_file, vreg, i);
+        this->dcache_write(&value, mem_addr, vsewb);
       }
     }
-
-    //vector_op_vix_store(vreg_file, this, base_addr, vs3, warp.vtype.vsew, warp.vl, true, stride, nfields, warp.vtype.vlmul, vmask);
-
     break;
   }
   case 0b01:   // indexed - unordered, vsuxei8.v, vsuxei16.v, vsuxei32.v, vsuxei64.v
@@ -326,42 +287,21 @@ void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI
                // vsoxseg6ei8.v, vsoxseg6ei16.v, vsoxseg6ei32.v, vsoxseg6ei64.v
                // vsoxseg7ei8.v, vsoxseg7ei16.v, vsoxseg7ei32.v, vsoxseg7ei64.v
                // vsoxseg8ei8.v, vsoxseg8ei16.v, vsoxseg8ei32.v, vsoxseg8ei64.v
+    uint32_t vs2 = instr.getRSrc(1);
     uint32_t nfields = instr.getVnf() + 1;
     uint32_t vsew_bits = 1 << (3 + instr.getVsew());
 
-    for (uint32_t i = 0; i < nfields; i++) {
-      uint32_t vreg = instr.getRSrc(1) + i;
-      for (uint32_t j = 0; j < warp.vl; j++) {
-        if (isMasked(vreg_file, 0, j, vmask))
+    for (uint32_t f = 0; f < nfields; f++) {
+      uint32_t vreg = vs3 + f;
+      for (uint32_t i = 0; i < warp.vl; i++) {
+        if (isMasked(vreg_file, 0, i, vmask))
           continue;
-        Word offset = 0;
-        switch (vsew_bits) {
-        case 8:
-          offset = getVregData<uint8_t>(vreg_file.at(vreg), j);
-          break;
-        case 16:
-          offset = getVregData<uint16_t>(vreg_file.at(vreg), j);
-          break;
-        case 32:
-          offset = getVregData<uint32_t>(vreg_file.at(vreg), j);
-          break;
-        case 64:
-          offset = getVregData<uint64_t>(vreg_file.at(vreg), j);
-          break;
-        default:
-          std::cout << "Unsupported iSew: " << vsew_bits << std::endl;
-          std::abort();
-        }
-        uint64_t mem_addr = base_addr + offset + i * vsewb;
-        this->dcache_write(vreg_file.at(vreg).data() + j * vsewb, mem_addr, vsewb);
-        uint64_t mem_data = 0;
-        memcpy(&mem_data, vreg_file.at(vreg).data() + j * vsewb, vsewb);
-        DP(4, "Stored data 0x" << mem_data << " to: 0x" << mem_addr << " from vec reg: " << vreg << "[" << j << "]");
+        uint64_t offset = getVregData(vsew_bits, vreg_file, vs2, i);
+        uint64_t mem_addr = base_addr + offset + f * vsewb;
+        uint64_t value = getVregData(warp.vtype.vsew, vreg_file, vreg, i);
+        this->dcache_write(&value, mem_addr, vsewb);
       }
     }
-
-    //vector_op_vv_store(vreg_file, this, base_addr, instr.getRSrc(1), instr.getRSrc(2), warp.vtype.vsew, vsew_bits, warp.vl, nfields, warp.vtype.vlmul, vmask);
-
     break;
   }
   default:
@@ -370,7 +310,7 @@ void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI
   }
 }
 
-bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI rs1_data, WordI rs2_data, WordI* rd_data) {
+bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, const std::vector<reg_data_t>& rs2_data, std::vector<reg_data_t>& rd_data) {
   auto& warp = warps_.at(wid);
   auto func3 = instr.getFunc3();
   auto func6 = instr.getFunc6();
@@ -564,8 +504,10 @@ bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, Wor
       vector_op_vv<Fsgnjx, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file, rsrc0, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 16: { // vfmv.f.s
-      vector_op_scalar(*rd_data, vreg_file, rsrc0, rsrc1, warp.vtype.vsew);
-      DP(4, "Moved " << *rd_data << " from: " << +rsrc1 << " to: " << +rdest);
+      WordI result = 0;
+      vector_op_scalar(&result, vreg_file, rsrc0, rsrc1, warp.vtype.vsew);
+      DP(4, "Moved " << result << " from: " << +rsrc1 << " to: " << +rdest);
+      rd_data.at(tid).i = result;
     } break;
     case 18: {
       switch (rsrc0 >> 3) {
@@ -709,8 +651,10 @@ bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, Wor
       vector_op_vv_sat<Asub, int8_t, int16_t, int32_t, int64_t, __int128_t>(vreg_file, rsrc0, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vxsat);
     } break;
     case 16: { // vmv.x.s
-      vector_op_scalar(*rd_data, vreg_file, rsrc0, rsrc1, warp.vtype.vsew);
-      DP(4, "Moved " << *rd_data << " from: " << +rsrc1 << " to: " << +rdest);
+      WordI result = 0;
+      vector_op_scalar(&result, vreg_file, rsrc0, rsrc1, warp.vtype.vsew);
+      DP(4, "Moved " << result << " from: " << +rsrc1 << " to: " << +rdest);
+      rd_data.at(tid).i = result;
     } break;
     case 18: { // vzext.vf8, vsext.vf8, vzext.vf4, vsext.vf4, vzext.vf2, vsext.vf2
       bool negativeLmul = warp.vtype.vlmul >> 2;
@@ -952,57 +896,58 @@ bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, Wor
     }
   } break;
   case 4: {
+    auto rs1_value = rs1_data.at(tid).i;
     switch (func6) {
     case 0: { // vadd.vx
-      vector_op_vix<Add, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Add, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 2: { // vsub.vx
-      vector_op_vix<Sub, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Sub, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 3: { // vrsub.vx
-      vector_op_vix<Rsub, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Rsub, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 4: { // vminu.vx
-      vector_op_vix<Min, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Min, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 5: { // vmin.vx
-      vector_op_vix<Min, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Min, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 6: { // vmaxu.vx
-      vector_op_vix<Max, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Max, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 7: { // vmax.vx
-      vector_op_vix<Max, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Max, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 9: { // vand.vx
-      vector_op_vix<And, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<And, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 10: { // vor.vx
-      vector_op_vix<Or, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Or, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 11: { // vxor.vx
-      vector_op_vix<Xor, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Xor, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 12: { // vrgather.vx
-      vector_op_vix_gather<uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, warp.vlmax, vmask);
+      vector_op_vix_gather<uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, warp.vlmax, vmask);
     } break;
     case 14: { // vslideup.vx
-      vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, 0, vmask, false);
+      vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, 0, vmask, false);
     } break;
     case 15: { // vslidedown.vx
-      vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, warp.vlmax, vmask, false);
+      vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, warp.vlmax, vmask, false);
     } break;
     case 16: { // vadc.vxm
-      vector_op_vix_carry<Adc, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl);
+      vector_op_vix_carry<Adc, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl);
     } break;
     case 17: { // vmadc.vx, vmadc.vxm
-      vector_op_vix_carry_out<Madc, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_carry_out<Madc, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 18: { // vsbc.vxm
-      vector_op_vix_carry<Sbc, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl);
+      vector_op_vix_carry<Sbc, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl);
     } break;
     case 19: { // vmsbc.vx, vmsbc.vxm
-      vector_op_vix_carry_out<Msbc, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_carry_out<Msbc, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 23: {
       if (vmask) { // vmv.v.x
@@ -1010,80 +955,80 @@ bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, Wor
           std::cout << "For vmv.v.x vs2 must contain v0." << std::endl;
           std::abort();
         }
-        vector_op_vix<Mv, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+        vector_op_vix<Mv, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
       } else { // vmerge.vxm
-        vector_op_vix_merge<int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+        vector_op_vix_merge<int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
       }
     } break;
     case 24: { // vmseq.vx
-      vector_op_vix_mask<Eq, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_mask<Eq, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 25: { // vmsne.vx
-      vector_op_vix_mask<Ne, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_mask<Ne, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 26: { // vmsltu.vx
-      vector_op_vix_mask<Lt, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_mask<Lt, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 27: { // vmslt.vx
-      vector_op_vix_mask<Lt, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_mask<Lt, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 28: { // vmsleu.vx
-      vector_op_vix_mask<Le, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_mask<Le, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 29: { // vmsle.vx
-      vector_op_vix_mask<Le, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_mask<Le, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 30: { // vmsgtu.vx
-      vector_op_vix_mask<Gt, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_mask<Gt, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 31: { // vmsgt.vx
-      vector_op_vix_mask<Gt, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_mask<Gt, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 32: { // vsaddu.vx
-      vector_op_vix_sat<Sadd, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, 2, vcsrs.vxsat);
+      vector_op_vix_sat<Sadd, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, 2, vcsrs.vxsat);
     } break;
     case 33: { // vsadd.vx
-      vector_op_vix_sat<Sadd, int8_t, int16_t, int32_t, int64_t, __int128_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, 2, vcsrs.vxsat);
+      vector_op_vix_sat<Sadd, int8_t, int16_t, int32_t, int64_t, __int128_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, 2, vcsrs.vxsat);
     } break;
     case 34: { // vssubu.vx
-      vector_op_vix_sat<Ssubu, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, 2, vcsrs.vxsat);
+      vector_op_vix_sat<Ssubu, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, 2, vcsrs.vxsat);
     } break;
     case 35: { // vssub.vx
-      vector_op_vix_sat<Ssub, int8_t, int16_t, int32_t, int64_t, __int128_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, 2, vcsrs.vxsat);
+      vector_op_vix_sat<Ssub, int8_t, int16_t, int32_t, int64_t, __int128_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, 2, vcsrs.vxsat);
     } break;
     case 37: { // vsll.vx
-      vector_op_vix<Sll, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Sll, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 39: { // vsmul.vx
-      vector_op_vix_sat<Smul, int8_t, int16_t, int32_t, int64_t, __int128_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vcsrs.vxsat);
+      vector_op_vix_sat<Smul, int8_t, int16_t, int32_t, int64_t, __int128_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vcsrs.vxsat);
     } break;
     case 40: { // vsrl.vx
-      vector_op_vix<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 41: { // vsra.vx
-      vector_op_vix<SrlSra, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<SrlSra, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 42: { // vssrl.vx
       uint32_t vxsat = 0; // saturation is not relevant for this operation
-      vector_op_vix_scale<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vxsat);
+      vector_op_vix_scale<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vxsat);
     } break;
     case 43: { // vssra.vx
       uint32_t vxsat = 0; // saturation is not relevant for this operation
-      vector_op_vix_scale<SrlSra, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vxsat);
+      vector_op_vix_scale<SrlSra, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vxsat);
     } break;
     case 44: { // vnsrl.wx
       uint32_t vxsat = 0; // saturation is not relevant for this operation
-      vector_op_vix_n<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, 2, vxsat);
+      vector_op_vix_n<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, 2, vxsat);
     } break;
     case 45: { // vnsra.wx
       uint32_t vxsat = 0; // saturation is not relevant for this operation
-      vector_op_vix_n<SrlSra, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, 2, vxsat);
+      vector_op_vix_n<SrlSra, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, 2, vxsat);
     } break;
     case 46: { // vnclipu.wx
-      vector_op_vix_n<Clip, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vcsrs.vxsat);
+      vector_op_vix_n<Clip, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vcsrs.vxsat);
     } break;
     case 47: { // vnclip.wx
-      vector_op_vix_n<Clip, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vcsrs.vxsat);
+      vector_op_vix_n<Clip, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vcsrs.vxsat);
     } break;
     default:
       std::cout << "Unrecognised vector - scalar instruction func3: " << func3 << " func6: " << func6 << std::endl;
@@ -1091,43 +1036,44 @@ bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, Wor
     }
   } break;
   case 5: { // float vector - scalar
+    auto rs1_value = rs1_data.at(tid).i;
     switch (func6) {
     case 0: { // vfadd.vf
-      vector_op_vix<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 2: { // vfsub.vf
-      vector_op_vix<Fsub, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fsub, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 4: { // vfmin.vf
-      vector_op_vix<Fmin, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fmin, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 6: { // vfmax.vf
-      vector_op_vix<Fmax, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fmax, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 8: { // vfsgnj.vf
-      vector_op_vix<Fsgnj, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fsgnj, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 9: { // vfsgnjn.vf
-      vector_op_vix<Fsgnjn, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fsgnjn, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 10: { // vfsgnjx.vf
-      vector_op_vix<Fsgnjx, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fsgnjx, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 14: { // vfslide1up.vf
-      vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, 0, vmask, true);
+      vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, 0, vmask, true);
     } break;
     case 15: { // vfslide1down.vf
-      vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, warp.vlmax, vmask, true);
+      vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, warp.vlmax, vmask, true);
     } break;
     case 16: { // vfmv.s.f
       if (rsrc1 != 0) {
         std::cout << "For vfmv.s.f vs2 must contain v0." << std::endl;
         std::abort();
       }
-      vector_op_vix<Mv, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, std::min(warp.vl, (uint32_t)1), vmask);
+      vector_op_vix<Mv, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, std::min(warp.vl, (uint32_t)1), vmask);
     } break;
     case 24: { // vmfeq.vf
-      vector_op_vix_mask<Feq, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_mask<Feq, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 23: {
       if (vmask) { // vfmv.v.f
@@ -1135,90 +1081,90 @@ bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, Wor
           std::cout << "For vfmv.v.f vs2 must contain v0." << std::endl;
           std::abort();
         }
-        vector_op_vix<Mv, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+        vector_op_vix<Mv, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
       } else { // vfmerge.vfm
-        vector_op_vix_merge<int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+        vector_op_vix_merge<int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
       }
     } break;
     case 25: { // vmfle.vf
-      vector_op_vix_mask<Fle, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_mask<Fle, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 27: { // vmflt.vf
-      vector_op_vix_mask<Flt, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_mask<Flt, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 28: { // vmfne.vf
-      vector_op_vix_mask<Fne, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_mask<Fne, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 29: { // vmfgt.vf
-      vector_op_vix_mask<Fgt, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_mask<Fgt, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 31: { // vmfge.vf
-      vector_op_vix_mask<Fge, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_mask<Fge, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 32: { // vfdiv.vf
-      vector_op_vix<Fdiv, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fdiv, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 33: { // vfrdiv.vf
-      vector_op_vix<Frdiv, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Frdiv, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 36: { // vfmul.vf
-      vector_op_vix<Fmul, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fmul, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 39: { // vfrsub.vf
-      vector_op_vix<Frsub, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Frsub, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 40: { // vfmadd.vf
-      vector_op_vix<Fmadd, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fmadd, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 41: { // vfnmadd.vf
-      vector_op_vix<Fnmadd, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fnmadd, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 42: { // vfmsub.vf
-      vector_op_vix<Fmsub, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fmsub, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 43: { // vfnmsub.vf
-      vector_op_vix<Fnmsub, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fnmsub, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 44: { // vfmacc.vf
-      vector_op_vix<Fmacc, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fmacc, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 45: { // vfnmacc.vf
-      vector_op_vix<Fnmacc, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fnmacc, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 46: { // vfmsac.vf
-      vector_op_vix<Fmsac, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fmsac, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 47: { // vfnmsac.vf
-      vector_op_vix<Fnmsac, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Fnmsac, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 48: { // vfwadd.vf
-      vector_op_vix_w<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 50: { // vfwsub.vf
-      vector_op_vix_w<Fsub, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Fsub, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 52: { // vfwadd.wf
-      uint64_t src1_d = rv_ftod(rs1_data);
+      uint64_t src1_d = rv_ftod(rs1_value);
       vector_op_vix_wx<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(src1_d, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 54: { // vfwsub.wf
-      uint64_t src1_d = rv_ftod(rs1_data);
+      uint64_t src1_d = rv_ftod(rs1_value);
       vector_op_vix_wx<Fsub, uint8_t, uint16_t, uint32_t, uint64_t>(src1_d, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 56: { // vfwmul.vf
-      vector_op_vix_w<Fmul, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Fmul, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 60: { // vfwmacc.vf
-      vector_op_vix_w<Fmacc, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Fmacc, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 61: { // vfwnmacc.vf
-      vector_op_vix_w<Fnmacc, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Fnmacc, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 62: { // vfwmsac.vf
-      vector_op_vix_w<Fmsac, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Fmsac, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 63: { // vfwnmsac.vf
-      vector_op_vix_w<Fnmsac, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Fnmsac, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     default:
       std::cout << "Unrecognised float vector - scalar instruction func3: " << func3 << " func6: " << func6 << std::endl;
@@ -1226,118 +1172,119 @@ bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, Wor
     }
   } break;
   case 6: {
+    auto rs1_value = rs1_data.at(tid).i;
     switch (func6) {
     case 8: { // vaaddu.vx
       uint32_t vxsat = 0; // saturation is not relevant for this operation
-      vector_op_vix_sat<Aadd, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vxsat);
+      vector_op_vix_sat<Aadd, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vxsat);
     } break;
     case 9: { // vaadd.vx
       uint32_t vxsat = 0; // saturation is not relevant for this operation
-      vector_op_vix_sat<Aadd, int8_t, int16_t, int32_t, int64_t, __int128_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vxsat);
+      vector_op_vix_sat<Aadd, int8_t, int16_t, int32_t, int64_t, __int128_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vxsat);
     } break;
     case 10: { // vasubu.vx
       uint32_t vxsat = 0; // saturation is not relevant for this operation
-      vector_op_vix_sat<Asub, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vxsat);
+      vector_op_vix_sat<Asub, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vxsat);
     } break;
     case 11: { // vasub.vx
       uint32_t vxsat = 0; // saturation is not relevant for this operation
-      vector_op_vix_sat<Asub, int8_t, int16_t, int32_t, int64_t, __int128_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vxsat);
+      vector_op_vix_sat<Asub, int8_t, int16_t, int32_t, int64_t, __int128_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask, vcsrs.vxrm, vxsat);
     } break;
     case 14: { // vslide1up.vx
-      vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, 0, vmask, true);
+      vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, 0, vmask, true);
     } break;
     case 15: { // vslide1down.vx
-      vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, warp.vlmax, vmask, true);
+      vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, warp.vlmax, vmask, true);
     } break;
     case 16: { // vmv.s.x
       if (rsrc1 != 0) {
         std::cout << "For vmv.s.x vs2 must contain v0." << std::endl;
         std::abort();
       }
-      vector_op_vix<Mv, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, std::min(warp.vl, (uint32_t)1), vmask);
+      vector_op_vix<Mv, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, std::min(warp.vl, (uint32_t)1), vmask);
     } break;
     case 32: { // vdivu.vx
-      vector_op_vix<Div, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Div, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 33: { // vdiv.vx
-      vector_op_vix<Div, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Div, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 34: { // vremu.vx
-      vector_op_vix<Rem, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Rem, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 35: { // vrem.vx
-      vector_op_vix<Rem, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Rem, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 36: { // vmulhu.vx
-      vector_op_vix<Mulhu, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Mulhu, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 37: { // vmul.vx
-      vector_op_vix<Mul, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Mul, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 38: { // vmulhsu.vx
-      vector_op_vix<Mulhsu, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Mulhsu, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 39: { // vmulh.vx
-      vector_op_vix<Mulh, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Mulh, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 41: { // vmadd.vx
-      vector_op_vix<Madd, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Madd, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 43: { // vnmsub.vx
-      vector_op_vix<Nmsub, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Nmsub, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 45: { // vmacc.vx
-      vector_op_vix<Macc, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Macc, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 47: { // vnmsac.vx
-      vector_op_vix<Nmsac, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix<Nmsac, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 48: { // vwaddu.vx
-      vector_op_vix_w<Add, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Add, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 49: { // vwadd.vx
-      vector_op_vix_w<Add, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Add, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 50: { // vwsubu.vx
-      vector_op_vix_w<Sub, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Sub, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 51: { // vwsub.vx
-      vector_op_vix_w<Sub, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Sub, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 52: { // vwaddu.wx
-      vector_op_vix_wx<Add, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_wx<Add, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 53: { // vwadd.wx
-      Word src1_ext = sext(rs1_data, warp.vtype.vsew);
+      Word src1_ext = sext(rs1_value, warp.vtype.vsew);
       vector_op_vix_wx<Add, int8_t, int16_t, int32_t, int64_t>(src1_ext, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 54: { // vwsubu.wx
-      vector_op_vix_wx<Sub, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_wx<Sub, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 55: { // vwsub.wx
-      Word src1_ext = sext(rs1_data, warp.vtype.vsew);
+      Word src1_ext = sext(rs1_value, warp.vtype.vsew);
       vector_op_vix_wx<Sub, int8_t, int16_t, int32_t, int64_t>(src1_ext, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 56: { // vwmulu.vx
-      vector_op_vix_w<Mul, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Mul, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 58: { // vwmulsu.vx
-      vector_op_vix_w<Mulsu, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Mulsu, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 59: { // vwmul.vx
-      vector_op_vix_w<Mul, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Mul, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 60: { // vwmaccu.vx
-      vector_op_vix_w<Macc, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Macc, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 61: { // vwmacc.vx
-      vector_op_vix_w<Macc, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Macc, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 62: { // vwmaccus.vx
-      vector_op_vix_w<Maccus, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Maccus, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     case 63: { // vwmaccsu.vx
-      vector_op_vix_w<Maccsu, int8_t, int16_t, int32_t, int64_t>(rs1_data, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
+      vector_op_vix_w<Maccsu, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, warp.vtype.vsew, warp.vl, vmask);
     } break;
     default:
       std::cout << "Unrecognised vector - scalar instruction func3: " << func3 << " func6: " << func6 << std::endl;
@@ -1345,13 +1292,15 @@ bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, Wor
     }
   } break;
   case 7: {
-    uint32_t vma = instr.getVma();
-    uint32_t vta = instr.getVta();
-    uint32_t vsew = instr.getVsew();
-    uint32_t vlmul = instr.getVlmul();
-
-    if (!instr.hasZimm()) { // vsetvl
-      uint32_t zimm = rs2_data;
+    uint32_t vma, vta, vsew, vlmul;
+    if (instr.hasZimm()) {
+      vma = instr.getVma();
+      vta = instr.getVta();
+      vsew = instr.getVsew();
+      vlmul = instr.getVlmul();
+    } else {
+      // vsetvl
+      uint32_t zimm = rs2_data.at(tid).i;
       vlmul = zimm & mask_v_lmul;
       vsew = (zimm >> shift_v_sew) & mask_v_sew;
       vta = (zimm >> shift_v_ta) & mask_v_ta;
@@ -1366,9 +1315,13 @@ bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, Wor
     warp.vlmax = vlenTimesLmul / vsew_bits;
     warp.vtype.vill = (vsew_bits > XLEN) || (warp.vlmax < (VLEN / XLEN));
 
-    Word s0 = instr.getImm(); // vsetivli
-    if (!instr.hasImm()) {    // vsetvli/vsetvl
-      s0 = rs1_data;
+    Word s0;
+    if (instr.hasImm()) {
+      // vsetivli
+      s0 = instr.getImm();
+    } else {
+      // vsetvli/vsetvl
+      s0 = rs1_data.at(tid).i;
     }
 
     DP(4, "Vset(i)vl(i) - vill: " << +warp.vtype.vill << " vma: " << vma << " vta: " << vta << " lmul: " << vlmul << " sew: " << vsew << " s0: " << s0 << " vlmax: " << warp.vlmax);
@@ -1381,7 +1334,7 @@ bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, Wor
       warp.vtype.vsew = 0;
       warp.vtype.vlmul = 0;
       this->set_csr(VX_CSR_VL, 0, 0, wid);
-      *rd_data = warp.vl;
+      rd_data.at(tid).i = warp.vl;
     } else {
       warp.vtype.vma = vma;
       warp.vtype.vta = vta;
@@ -1393,7 +1346,7 @@ bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, Wor
       vtype_ |= vma << shift_v_ma;
       this->set_csr(VX_CSR_VTYPE, vtype_, 0, wid);
       this->set_csr(VX_CSR_VL, warp.vl, 0, wid);
-      *rd_data = warp.vl;
+      rd_data.at(tid).i = warp.vl;
     }
     this->set_csr(VX_CSR_VSTART, 0, 0, wid);
   } break;

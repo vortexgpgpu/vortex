@@ -136,9 +136,9 @@ private:
   void execute(const Instr &instr, uint32_t wid, instr_trace_t *trace);
 
 #ifdef EXT_V_ENABLE
-  void loadVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI rs1_data, WordI rs2_data);
-  void storeVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI rs1_data, WordI rs2_data);
-  bool executeVector(const Instr &instr, uint32_t wid, uint32_t tid, WordI rs1_data, WordI rs2_data, WordI* rd_data);
+  void loadVector(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, const std::vector<reg_data_t>& rs2_data);
+  void storeVector(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, const std::vector<reg_data_t>& rs2_data);
+  bool executeVector(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, const std::vector<reg_data_t>& rs2_data, std::vector<reg_data_t>& rd_data);
 #endif
 
   void icache_read(void* data, uint64_t addr, uint32_t size);
