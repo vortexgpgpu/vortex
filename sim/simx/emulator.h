@@ -83,7 +83,6 @@ struct warp_t {
   vtype_t                           vtype;
   uint32_t                          vl;
   uint32_t                          vlmax;
-
 #endif
   uint32_t                          uuid;
 };

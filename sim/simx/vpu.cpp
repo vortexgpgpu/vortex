@@ -208,7 +208,7 @@ void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, const
         std::abort();
       }
       uint32_t vs3 = instr.getRSrc(1);
-      WordI stride = vsewb;
+      uint32_t stride = vsewb;
       uint32_t vl = nreg * (VLENB / vsewb);
       for (uint32_t i = 0; i < vl; i++) {
         if (isMasked(vreg_file, 0, i, vmask))
@@ -229,7 +229,7 @@ void Emulator::storeVector(const Instr &instr, uint32_t wid, uint32_t tid, const
 
       uint32_t vs3 = instr.getRSrc(1);
       uint32_t vl = (warp.vl + 7) / 8;
-      WordI stride = vsewb;
+      uint32_t stride = vsewb;
 
       for (uint32_t i = 0; i < vl; i++) {
         if (isMasked(vreg_file, 0, i, 1))
@@ -322,7 +322,7 @@ bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, con
   auto rdest = instr.getRDest();
   auto rsrc0 = instr.getRSrc(0);
   auto rsrc1 = instr.getRSrc(1);
-  auto immsrc = sext((Word)instr.getImm(), width_reg);
+  auto immsrc = sext<Word>(instr.getImm(), width_reg);
   auto uimmsrc = (Word)instr.getImm();
   auto vmask = instr.getVmask();
 
@@ -1319,7 +1319,7 @@ bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, con
     warp.vlmax = vlenTimesLmul / vsew_bits;
     warp.vtype.vill = (vsew_bits > XLEN) || (warp.vlmax < (VLEN / XLEN));
 
-    Word s0;
+    uint32_t s0;
     if (instr.hasImm()) {
       // vsetivli
       s0 = instr.getImm();
@@ -1344,7 +1344,7 @@ bool Emulator::executeVector(const Instr &instr, uint32_t wid, uint32_t tid, con
       warp.vtype.vta = vta;
       warp.vtype.vsew = vsew_bits;
       warp.vtype.vlmul = vlmul;
-      Word vtype_ = vlmul;
+      uint32_t vtype_ = vlmul;
       vtype_ |= vsew << shift_v_sew;
       vtype_ |= vta << shift_v_ta;
       vtype_ |= vma << shift_v_ma;
