@@ -269,6 +269,48 @@ inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+enum class VpuType {
+  VSET,     // Set vector length
+  VL,       // Vector load
+  VS,       // Vector store
+
+  // ALU OPERATIONS
+  ARITHVV,  // Vector-vector
+  MULVV,
+  DIVVV,
+
+  ARITHVX,  // Vector-scalar
+  MULVX,
+  DIVVX,
+
+  ARITHVI,  // Vector-immediate
+  MULVI,
+  DIVVI,
+
+  // FPU OPERATIONS
+  ARITHFVV,  // Vector-vector
+  MULFVV,
+  DIVFVV,
+
+  ARITHFVX,  // Vector-scalar
+  MULFVX,
+  DIVFVX,
+
+  ARITHFVI,  // Vector-immediate
+  MULFVI,
+  DIVFVI
+};
+
+inline std::ostream &operator<<(std::ostream &os, const VpuType& type) {
+  switch (type) {
+  case VpuType::VSET:   os << "VSET"; break;
+  default: assert(false);
+  }
+  return os;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 enum class ArbiterType {
   Priority,
   RoundRobin

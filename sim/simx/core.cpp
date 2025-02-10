@@ -29,7 +29,8 @@ Core::Core(const SimContext& ctx,
            uint32_t core_id,
            Socket* socket,
            const Arch &arch,
-           const DCRS &dcrs)
+           const DCRS &dcrs
+           )
   : SimObject(ctx, StrFormat("core%d", core_id))
   , icache_req_ports(1, this)
   , icache_rsp_ports(1, this)
@@ -38,6 +39,9 @@ Core::Core(const SimContext& ctx,
   , core_id_(core_id)
   , socket_(socket)
   , arch_(arch)
+#ifdef EXT_V_ENABLE
+  , vec_unit_(VecUnit::Create("vpu", arch))
+#endif
   , emulator_(arch, dcrs, this)
   , ibuffers_(arch.num_warps(), IBUF_SIZE)
   , scoreboard_(arch_)

@@ -113,4 +113,39 @@ public:
 	void tick();
 };
 
+///////////////////////////////////////////////////////////////////////////////
+
+class VpuUnit : public FuncUnit {
+public:
+	VpuUnit(const SimContext& ctx, Core*);
+
+	void tick();
+};
+
+// Simulate clock cycles depending on instruction type and element width and #lanes
+// VSET = 1 cycle
+// Vector instructions take the same amount of time as ALU instructions.
+// In general there should be less overall instructions (hence the SIMD vector speedup).
+// But, each vector instruction is bigger, and # of lanes greatly effects execution speed.
+
+// Whenever we change VL using imm/VSET, we need to keep track of the new VL and SEW.
+// By default, VL is set to MAXVL.
+// After determining VL, we use VL and #lanes in order to determine overall cycle time.
+// For example, for a vector add with VL=4 and #lanes=2, we will probably take 2 cycles,
+// since we can only operate on two elements of the vector each cycle (limited by #lanes).
+// SEW (element width) likely affects the cycle time, we can probably observe
+// ALU operation cycle time in relation to element width to determine this though.
+
+// The RTL implementation has an unroll and accumulate stage.
+// The unroll stage sends vector elements to the appropriate functional unit up to VL,
+// limited by the # lanes available.
+// The accumulate stage deals with combining the results from the functional units,
+// into the destination vector register.
+// Which exact pipeline stage does the VPU unroll the vector (decode or execute)?
+// Which exact pipeline stage does the VPU accumulate results?
+
+// How do vector loads and stores interact with the cache?
+// How about loading and storing scalars in vector registers?
+// How does striding affect loads and stores?
+
 }

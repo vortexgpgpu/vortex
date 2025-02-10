@@ -366,3 +366,52 @@ void SfuUnit::tick() {
 		input.pop();
 	}
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+#ifdef EXT_V_ENABLE
+VpuUnit::VpuUnit(const SimContext& ctx, Core* core)
+	: FuncUnit(ctx, core, "vpu-unit")
+{}
+
+void VpuUnit::tick() {
+  for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
+		auto& input = Inputs.at(iw);
+		if (input.empty())
+			continue;
+		//auto& output = Outputs.at(iw);
+		auto trace = input.front();
+		//int delay = 2;
+		switch (trace->vpu_type) {
+		case VpuType::VSET:
+		case VpuType::VL:
+		case VpuType::VS:
+		case VpuType::ARITHVV:
+		case VpuType::MULVV:
+		case VpuType::DIVVV:
+		case VpuType::ARITHVX:
+		case VpuType::MULVX:
+		case VpuType::DIVVX:
+		case VpuType::ARITHVI:
+		case VpuType::MULVI:
+		case VpuType::DIVVI:
+		case VpuType::ARITHFVV:
+		case VpuType::MULFVV:
+		case VpuType::DIVFVV:
+		case VpuType::ARITHFVX:
+		case VpuType::MULFVX:
+		case VpuType::DIVFVX:
+		case VpuType::ARITHFVI:
+		case VpuType::MULFVI:
+		case VpuType::DIVFVI:
+		default:
+			std::abort();
+		}
+		DT(3, this->name() << ": op=" << trace->vpu_type << ", " << *trace);
+		if (trace->eop && trace->fetch_stall) {
+			core_->resume(trace->wid);
+		}
+		input.pop();
+	}
+}
+#endif

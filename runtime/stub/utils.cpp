@@ -188,6 +188,9 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t scrb_lsu = 0;
   uint64_t scrb_csrs = 0;
   uint64_t scrb_wctl = 0;
+#ifdef EXT_V_ENABLE
+  uint64_t scrb_vpu = 0;
+#endif
   uint64_t ifetches = 0;
   uint64_t loads = 0;
   uint64_t stores = 0;
@@ -212,6 +215,13 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t mem_writes = 0;
   uint64_t mem_lat = 0;
   uint64_t mem_bank_stalls = 0;
+#ifdef EXT_V_ENABLE
+  // PERF: vecunit
+  uint64_t vec_mem_reads = 0;
+  uint64_t vec_mem_writes = 0;
+  uint64_t vec_mem_lat = 0;
+  uint64_t vec_stall_cycles = 0;
+#endif
 
   uint64_t num_cores;
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_CORES, &num_cores), {
@@ -312,13 +322,25 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_SCRB_WCTL, core_id, &scrb_wctl_per_core), {
           return err;
         });
+      #ifdef EXT_V_ENABLE
+        uint64_t scrb_vpu_per_core;
+        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_SCRB_VPU, core_id, &scrb_vpu_per_core), {
+          return err;
+        });
+      #endif
         scrb_alu += scrb_alu_per_core;
         scrb_fpu += scrb_fpu_per_core;
         scrb_lsu += scrb_lsu_per_core;
         scrb_csrs += scrb_csrs_per_core;
         scrb_wctl += scrb_wctl_per_core;
+      #ifdef EXT_V_ENABLE
+        scrb_vpu += scrb_vpu_per_core;
+      #endif
         if (num_cores > 1) {
           uint64_t scrb_total = scrb_alu_per_core + scrb_fpu_per_core + scrb_lsu_per_core + scrb_csrs_per_core + scrb_wctl_per_core;
+        #ifdef EXT_V_ENABLE
+          scrb_total += scrb_vpu_per_core;
+        #endif
           int scrb_percent_per_core = calcAvgPercent(scrb_stalls_per_core, cycles_per_core);
           fprintf(stream, "PERF: core%d: scoreboard stalls=%ld (%d%%) (alu=%d%%, fpu=%d%%, lsu=%d%%, csrs=%d%%, wctl=%d%%)\n"
           , core_id
@@ -329,6 +351,9 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
           , calcAvgPercent(scrb_lsu_per_core, scrb_total)
           , calcAvgPercent(scrb_csrs_per_core, scrb_total)
           , calcAvgPercent(scrb_wctl_per_core, scrb_total)
+        #ifdef EXT_V_ENABLE
+          , calcAvgPercent(scrb_vpu_per_core, scrb_total)
+        #endif
           );
         }
         scrb_stalls += scrb_stalls_per_core;
@@ -555,6 +580,19 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         });
       }
     } break;
+  #ifdef EXT_V_ENABLE
+    case VX_DCR_MPM_CLASS_VEC: {
+      uint64_t tmp;
+      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_VEC_READS, core_id, &tmp), { return err; });
+			vec_mem_reads += tmp;
+      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_VEC_WRITES, core_id, &tmp), { return err; });
+			vec_mem_writes += tmp;
+      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_VEC_LAT, core_id, &tmp), { return err; });
+			vec_mem_lat += tmp;
+      CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_VEC_ST, core_id, &tmp), { return err; });
+			vec_stall_cycles += tmp;
+    } break;
+  #endif
     default:
       break;
     }
@@ -576,6 +614,9 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     int ifetch_avg_lat = caclAverage(ifetch_lat, ifetches);
     int load_avg_lat = caclAverage(load_lat, loads);
     uint64_t scrb_total = scrb_alu + scrb_fpu + scrb_lsu + scrb_csrs + scrb_wctl;
+  #ifdef EXT_V_ENABLE
+    scrb_total += scrb_vpu;
+  #endif
     fprintf(stream, "PERF: scheduler idle=%ld (%d%%)\n", sched_idles, sched_idles_percent);
     fprintf(stream, "PERF: scheduler stalls=%ld (%d%%)\n", sched_stalls, sched_stalls_percent);
     fprintf(stream, "PERF: ibuffer stalls=%ld (%d%%)\n", ibuffer_stalls, ibuffer_percent);
@@ -587,6 +628,9 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       , calcAvgPercent(scrb_lsu, scrb_total)
       , calcAvgPercent(scrb_csrs, scrb_total)
       , calcAvgPercent(scrb_wctl, scrb_total)
+    #ifdef EXT_V_ENABLE
+      , calcAvgPercent(scrb_vpu, scrb_total)
+    #endif
     );
     fprintf(stream, "PERF: operands stalls=%ld (%d%%)\n", opds_stalls, opds_percent);
     fprintf(stream, "PERF: ifetches=%ld\n", ifetches);
@@ -637,6 +681,20 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       fprintf(stream, "PERF: memory bank stalls=%ld (utilization=%d%%)\n", mem_bank_stalls, mem_bank_utilization);
     }
   } break;
+#ifdef EXT_V_ENABLE
+  case VX_DCR_MPM_CLASS_VEC: {
+    vec_mem_reads /= num_cores;
+    vec_mem_writes /= num_cores;
+    vec_mem_lat /= num_cores;
+    vec_stall_cycles /= num_cores;
+    int vec_avg_lat = caclAverage(vec_mem_lat, vec_mem_reads);
+    int vec_stall_cycles_ratio = calcRatio(vec_stall_cycles, total_cycles);
+    fprintf(stream, "PERF: vec memory reads=%ld\n", vec_mem_reads);
+    fprintf(stream, "PERF: vec memory writes=%ld\n", vec_mem_writes);
+    fprintf(stream, "PERF: vec memory latency=%d cycles\n", vec_avg_lat);
+    fprintf(stream, "PERF: vec stalls=%ld (%d%%)\n", vec_stall_cycles, vec_stall_cycles_ratio);
+  } break;
+#endif
   default:
     break;
   }
