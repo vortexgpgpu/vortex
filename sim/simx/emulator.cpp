@@ -34,7 +34,7 @@ warp_t::warp_t(uint32_t num_threads)
   : ireg_file(MAX_NUM_REGS, std::vector<Word>(num_threads))
   , freg_file(MAX_NUM_REGS, std::vector<uint64_t>(num_threads))
 #ifdef EXT_V_ENABLE
-  , vreg_file(num_threads, std::vector(MAX_NUM_REGS, std::vector<Byte>(VLEN / 8)))
+  , vreg_file(num_threads, std::vector(MAX_NUM_REGS, std::vector<Byte>(VLENB)))
   , vcsrs(num_threads)
 #endif
   , uuid(0)

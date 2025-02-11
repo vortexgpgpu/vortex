@@ -1,6 +1,7 @@
 #ifdef EXT_V_ENABLE
 
 #include "vec_unit.h"
+#include "emulator.h"
 
 using namespace vortex;
 
