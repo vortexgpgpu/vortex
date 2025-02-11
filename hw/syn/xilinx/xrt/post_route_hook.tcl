@@ -1,0 +1,1 @@
+report_utilization -file hier_utilization.rpt -hierarchical -hierarchical_percentages
