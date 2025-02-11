@@ -31,6 +31,7 @@
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
+
 `ifndef EXT_M_DISABLE
 `define EXT_M_ENABLE
 `endif
@@ -113,24 +114,6 @@
 `define SOCKET_SIZE `MIN(4, `NUM_CORES)
 `endif
 
-// Size of Tensor Core
-`ifndef TC_SIZE
-`define TC_SIZE 8
-`endif
-
-// Number of TCs per Warp
-`ifndef TC_NUM
-`define TC_NUM 4
-`endif
-
-`ifndef NUM_TCU_LANES
-`define NUM_TCU_LANES   `TC_NUM
-`endif
-
-`ifndef NUM_TCU_BLOCKS
-`define NUM_TCU_BLOCKS  `ISSUE_WIDTH
-`endif
-
 `ifdef L2_ENABLE
     `define L2_ENABLED   1
 `else
@@ -172,8 +155,26 @@
 `define L3_LINE_SIZE `MEM_BLOCK_SIZE
 `endif
 
-`ifndef PLATFORM_MEMORY_BANKS
-`define PLATFORM_MEMORY_BANKS 2
+// Platform memory parameters
+
+`ifndef PLATFORM_MEMORY_NUM_BANKS
+`define PLATFORM_MEMORY_NUM_BANKS 2
+`endif
+
+`ifndef PLATFORM_MEMORY_ADDR_WIDTH
+`ifdef XLEN_64
+    `define PLATFORM_MEMORY_ADDR_WIDTH 48
+`else
+    `define PLATFORM_MEMORY_ADDR_WIDTH 32
+`endif
+`endif
+
+`ifndef PLATFORM_MEMORY_DATA_SIZE
+`define PLATFORM_MEMORY_DATA_SIZE 64
+`endif
+
+`ifndef PLATFORM_MEMORY_INTERLEAVE
+`define PLATFORM_MEMORY_INTERLEAVE 1
 `endif
 
 `ifdef XLEN_64
@@ -299,7 +300,8 @@
 `define MEM_PAGE_LOG2_SIZE (12)
 `endif
 
-// Virtual Memory Configuration ///////////////////////////////////////////////////////
+// Virtual Memory Configuration ///////////////////////////////////////////////
+
 `ifdef VM_ENABLE
     `ifdef XLEN_32
         `ifndef VM_ADDR_MODE
@@ -527,6 +529,12 @@
 `define FNCP_PE_RATIO 2
 `endif
 
+// Tensore Units //////////////////////////////////////////////////////////////
+
+`ifndef NUM_TENSOR_CORES
+`define NUM_TENSOR_CORES `ISSUE_WIDTH
+`endif
+
 // Icache Configurable Knobs //////////////////////////////////////////////////
 
 // Cache Enable
@@ -656,9 +664,9 @@
 // Number of Memory Ports
 `ifndef L1_MEM_PORTS
 `ifdef L1_DISABLE
-`define L1_MEM_PORTS `MIN(DCACHE_NUM_REQS, `PLATFORM_MEMORY_BANKS)
+`define L1_MEM_PORTS `MIN(DCACHE_NUM_REQS, `PLATFORM_MEMORY_NUM_BANKS)
 `else
-`define L1_MEM_PORTS `MIN(`DCACHE_NUM_BANKS, `PLATFORM_MEMORY_BANKS)
+`define L1_MEM_PORTS `MIN(`DCACHE_NUM_BANKS, `PLATFORM_MEMORY_NUM_BANKS)
 `endif
 `endif
 
@@ -735,9 +743,9 @@
 // Number of Memory Ports
 `ifndef L2_MEM_PORTS
 `ifdef L2_ENABLE
-`define L2_MEM_PORTS `MIN(`L2_NUM_BANKS, `PLATFORM_MEMORY_BANKS)
+`define L2_MEM_PORTS `MIN(`L2_NUM_BANKS, `PLATFORM_MEMORY_NUM_BANKS)
 `else
-`define L2_MEM_PORTS `MIN(L2_NUM_REQS, `PLATFORM_MEMORY_BANKS)
+`define L2_MEM_PORTS `MIN(L2_NUM_REQS, `PLATFORM_MEMORY_NUM_BANKS)
 `endif
 `endif
 
@@ -796,9 +804,9 @@
 // Number of Memory Ports
 `ifndef L3_MEM_PORTS
 `ifdef L3_ENABLE
-`define L3_MEM_PORTS `MIN(`L3_NUM_BANKS, `PLATFORM_MEMORY_BANKS)
+`define L3_MEM_PORTS `MIN(`L3_NUM_BANKS, `PLATFORM_MEMORY_NUM_BANKS)
 `else
-`define L3_MEM_PORTS `MIN(L3_NUM_REQS, `PLATFORM_MEMORY_BANKS)
+`define L3_MEM_PORTS `MIN(L3_NUM_REQS, `PLATFORM_MEMORY_NUM_BANKS)
 `endif
 `endif
 
@@ -844,6 +852,12 @@
     `define EXT_ZICOND_ENABLED 1
 `else
     `define EXT_ZICOND_ENABLED 0
+`endif
+
+`ifdef EXT_TPU_ENABLE
+    `define EXT_TPU_ENABLED 1
+`else
+    `define EXT_TPU_ENABLED 0
 `endif
 
 `define ISA_STD_A           0

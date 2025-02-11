@@ -30,16 +30,17 @@
 
 using namespace vortex;
 
-Emulator::warp_t::warp_t(const Arch& arch)
-  : ireg_file(arch.num_threads(), std::vector<Word>(MAX_NUM_REGS))
-  , freg_file(arch.num_threads(), std::vector<uint64_t>(MAX_NUM_REGS))
+warp_t::warp_t(uint32_t num_threads)
+  : ireg_file(MAX_NUM_REGS, std::vector<Word>(num_threads))
+  , freg_file(MAX_NUM_REGS, std::vector<uint64_t>(num_threads))
 #ifdef EXT_V_ENABLE
-  , vreg_file(MAX_NUM_REGS, std::vector<Byte>(VLEN / 8))
+  , vreg_file(num_threads, std::vector(MAX_NUM_REGS, std::vector<Byte>(VLEN / 8)))
+  , vcsrs(num_threads)
 #endif
   , uuid(0)
 {}
 
-void Emulator::warp_t::clear(uint64_t startup_addr) {
+void warp_t::clear(uint64_t startup_addr) {
   this->PC = startup_addr;
   this->tmask.reset();
   this->uuid = 0;
@@ -53,7 +54,11 @@ void Emulator::warp_t::clear(uint64_t startup_addr) {
       reg = std::rand();
     #endif
     }
-    reg_file.at(0) = 0; // r0 = 0
+  }
+
+  // set x0 to zero
+  for (auto& reg : this->ireg_file.at(0)) {
+    reg = 0;
   }
 
   for (auto& reg_file : this->freg_file) {
@@ -69,12 +74,23 @@ void Emulator::warp_t::clear(uint64_t startup_addr) {
 #ifdef EXT_V_ENABLE
   for (auto& reg_file : this->vreg_file) {
     for (auto& reg : reg_file) {
-    #ifndef NDEBUG
-      reg = 0;
-    #else
-      reg = std::rand();
-    #endif
+      for (auto& elm : reg) {
+      #ifndef NDEBUG
+        elm = 0;
+      #else
+        elm = std::rand();
+      #endif
+      }
     }
+  }
+  for (auto& vcsrs : this->vcsrs) {
+    vcsrs.vstart = 0;
+    vcsrs.vxsat = 0;
+    vcsrs.vxrm = 0;
+    vcsrs.vcsr = 0;
+    vcsrs.vlenb = 0;
+    vcsrs.vtype = 0;
+    vcsrs.vl = 0;
   }
   this->vtype = {0, 0, 0, 0, 0};
   this->vl = 0;
@@ -88,26 +104,17 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     : arch_(arch)
     , dcrs_(dcrs)
     , core_(core)
-    , warps_(arch.num_warps(), arch)
+  #ifdef EXT_TPU_ENABLE
+    , tensor_unit_(core->tensor_unit())
+  #endif
+    , warps_(arch.num_warps(), arch.num_threads())
     , barriers_(arch.num_barriers(), 0)
     , ipdom_size_(arch.num_threads()-1)
-    // [TBC] Currently, tradeoff between scratchpad size & performance has not been evaluated. Scratchpad is
-    // considered to be big enough to hold input tiles for one output tile.
-    // In future versions, scratchpad size should be fixed to an appropriate value.
-    , scratchpad(std::vector<Word>(32 * 32 * 32768))
   #ifdef EXT_V_ENABLE
     , vec_unit_(core->vec_unit())
-    , csrs_(arch.num_warps())
   #endif
 {
   std::srand(50);
-
-#ifdef EXT_V_ENABLE
-  for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
-    csrs_.at(i).resize(arch.num_threads());
-  }
-#endif
-
   this->clear();
 }
 
@@ -147,10 +154,6 @@ void Emulator::clear() {
   active_warps_.set(0);
   warps_[0].tmask.set(0);
   wspawn_.valid = false;
-
-  for (auto& reg : scratchpad) {
-    reg = 0;
-  }
 }
 
 void Emulator::attach_ram(RAM* ram) {
@@ -230,12 +233,12 @@ instr_trace_t* Emulator::step() {
     DPN(5, "  %r" << std::setfill('0') << std::setw(2) << i << ':' << std::hex);
     // Integer register file
     for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
-      DPN(5, ' ' << std::setfill('0') << std::setw(XLEN/4) << warp.ireg_file.at(j).at(i) << std::setfill(' ') << ' ');
+      DPN(5, ' ' << std::setfill('0') << std::setw(XLEN/4) << warp.ireg_file.at(i).at(j) << std::setfill(' ') << ' ');
     }
     DPN(5, '|');
     // Floating point register file
     for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
-      DPN(5, ' ' << std::setfill('0') << std::setw(16) << warp.freg_file.at(j).at(i) << std::setfill(' ') << ' ');
+      DPN(5, ' ' << std::setfill('0') << std::setw(16) << warp.freg_file.at(i).at(j) << std::setfill(' ') << ' ');
     }
     DPN(5, std::dec << std::endl);
   }
@@ -248,7 +251,7 @@ bool Emulator::running() const {
 }
 
 int Emulator::get_exitcode() const {
-  return warps_.at(0).ireg_file.at(0).at(3);
+  return warps_.at(0).ireg_file.at(3).at(0);
 }
 
 void Emulator::suspend(uint32_t wid) {
@@ -454,18 +457,6 @@ void Emulator::cout_flush() {
     case (addr + (VX_CSR_MPM_BASE_H-VX_CSR_MPM_BASE)) : return ((value >> 32) & 0xFFFFFFFF)
 #endif
 
-Word Emulator::get_tiles() {
-  return mat_size;
-}
-
-Word Emulator::get_tc_size() {
-  return tc_size;
-}
-
-Word Emulator::get_tc_num() {
-  return tc_num;
-}
-
 Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   auto core_perf = core_->perf_stats();
   switch (addr) {
@@ -487,35 +478,26 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   case VX_CSR_MCAUSE:
     return 0;
 
-  case VX_CSR_FFLAGS:     return warps_.at(wid).fcsr & 0x1F;
-  case VX_CSR_FRM:        return (warps_.at(wid).fcsr >> 5);
-  case VX_CSR_FCSR:       return warps_.at(wid).fcsr;
+  case VX_CSR_FFLAGS: return warps_.at(wid).fcsr & 0x1F;
+  case VX_CSR_FRM:    return (warps_.at(wid).fcsr >> 5);
+  case VX_CSR_FCSR:   return warps_.at(wid).fcsr;
 
 #ifdef EXT_V_ENABLE
   // Vector CRSs
   case VX_CSR_VSTART:
-    return csrs_.at(wid).at(tid)[VX_CSR_VSTART];
+    return  warps_.at(wid).vcsrs.at(tid).vstart;
   case VX_CSR_VXSAT:
-    return csrs_.at(wid).at(tid)[VX_CSR_VXSAT];
+    return  warps_.at(wid).vcsrs.at(tid).vxsat;
   case VX_CSR_VXRM:
-    return csrs_.at(wid).at(tid)[VX_CSR_VXRM];
-  case VX_CSR_VCSR: {
-    Word vxsat = csrs_.at(wid).at(tid)[VX_CSR_VXSAT];
-    Word vxrm = csrs_.at(wid).at(tid)[VX_CSR_VXRM];
-    return (vxrm << 1) | vxsat;
-  }
+    return  warps_.at(wid).vcsrs.at(tid).vxrm;
+  case VX_CSR_VCSR:
+    return ( warps_.at(wid).vcsrs.at(tid).vxrm << 1) |  warps_.at(wid).vcsrs.at(tid).vxsat;
   case VX_CSR_VL:
-    return csrs_.at(wid).at(tid)[VX_CSR_VL];
+    return  warps_.at(wid).vcsrs.at(tid).vl;
   case VX_CSR_VTYPE:
-    return csrs_.at(wid).at(tid)[VX_CSR_VTYPE];
+    return  warps_.at(wid).vcsrs.at(tid).vtype;
   case VX_CSR_VLENB:
-    return VLEN / 8;
-  case VX_CSR_VCYCLE:
-    return csrs_.at(wid).at(tid)[VX_CSR_VCYCLE];
-  case VX_CSR_VTIME:
-    return csrs_.at(wid).at(tid)[VX_CSR_VTIME];
-  case VX_CSR_VINSTRET:
-    return csrs_.at(wid).at(tid)[VX_CSR_VINSTRET];
+    return VLENB;
 #endif
 
   case VX_CSR_MHARTID:    return (core_->id() * arch_.num_warps() + wid) * arch_.num_threads() + tid;
@@ -529,9 +511,6 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   case VX_CSR_NUM_CORES:  return uint32_t(arch_.num_cores()) * arch_.num_clusters();
   case VX_CSR_LOCAL_MEM_BASE: return arch_.local_mem_base();
   case VX_CSR_MSCRATCH:   return csr_mscratch_;
-  case VX_MAT_MUL_SIZE:   return mat_size;
-  case VX_TC_NUM:         return tc_num;
-  case VX_TC_SIZE:        return tc_size;
 
   CSR_READ_64(VX_CSR_MCYCLE, core_perf.cycles);
   CSR_READ_64(VX_CSR_MINSTRET, core_perf.instrs);
@@ -656,34 +635,34 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t tid, uint32_t wid) {
 #ifdef EXT_V_ENABLE
   // Vector CRSs
   case VX_CSR_VSTART:
-    csrs_.at(wid).at(tid)[VX_CSR_VSTART] = value;
+     warps_.at(wid).vcsrs.at(tid).vstart = value;
     break;
   case VX_CSR_VXSAT:
-    csrs_.at(wid).at(tid)[VX_CSR_VXSAT] = value & 0b1;
+     warps_.at(wid).vcsrs.at(tid).vxsat = value & 0b1;
     break;
   case VX_CSR_VXRM:
-    csrs_.at(wid).at(tid)[VX_CSR_VXRM] = value & 0b11;
+     warps_.at(wid).vcsrs.at(tid).vxrm = value & 0b11;
     break;
   case VX_CSR_VCSR:
-    csrs_.at(wid).at(tid)[VX_CSR_VXSAT] = value & 0b1;
-    csrs_.at(wid).at(tid)[VX_CSR_VXRM] = (value >> 1) & 0b11;
+     warps_.at(wid).vcsrs.at(tid).vxsat = value & 0b1;
+     warps_.at(wid).vcsrs.at(tid).vxrm = (value >> 1) & 0b11;
     break;
-  case VX_CSR_VL: // read only, written by vset(i)vl(i)
-    csrs_.at(wid).at(tid)[VX_CSR_VL] = value;
+  case VX_CSR_VL:
+     warps_.at(wid).vcsrs.at(tid).vl = value;
     break;
-  case VX_CSR_VTYPE: // read only, written by vset(i)vl(i)
-    csrs_.at(wid).at(tid)[VX_CSR_VTYPE] = value;
+  case VX_CSR_VTYPE:
+     warps_.at(wid).vcsrs.at(tid).vtype = value;
     break;
-  case VX_CSR_VLENB: // read only, set to VLEN / 8
+  case VX_CSR_VLENB: // read only
+    std::abort();
+    break;
 #endif
 
   case VX_CSR_SATP:
   #ifdef VM_ENABLE
-    // warps_.at(wid).fcsr = (warps_.at(wid).fcsr & ~0x1F) | (value & 0x1F);
-    // csrs_.at(wid).at(tid)[addr] = value; //what is wid and tid?
     mmu_.set_satp(value);
-    break;
   #endif
+    break;
   case VX_CSR_MSTATUS:
   case VX_CSR_MEDELEG:
   case VX_CSR_MIDELEG:
@@ -695,18 +674,10 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t tid, uint32_t wid) {
   case VX_CSR_MNSTATUS:
   case VX_CSR_MCAUSE:
     break;
-  case VX_MAT_MUL_SIZE:
-    mat_size = value;
-    break;
-  case VX_TC_NUM:
-    tc_num = value;
-    break;
-  case VX_TC_SIZE:
-    tc_size = value;
-    break;
 
   default: {
       std::cout << "Error: invalid CSR write addr=0x" << std::hex << addr << ", value=0x" << value << std::dec << std::endl;
+      std::flush(std::cout);
       std::abort();
     }
   }

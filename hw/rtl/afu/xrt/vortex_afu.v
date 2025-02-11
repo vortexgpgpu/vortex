@@ -17,12 +17,12 @@ module vortex_afu #(
 	parameter C_S_AXI_CTRL_ADDR_WIDTH = 8,
 	parameter C_S_AXI_CTRL_DATA_WIDTH = 32,
 	parameter C_M_AXI_MEM_ID_WIDTH 	  = `PLATFORM_MEMORY_ID_WIDTH,
-	parameter C_M_AXI_MEM_DATA_WIDTH  = `PLATFORM_MEMORY_DATA_WIDTH,
+	parameter C_M_AXI_MEM_DATA_WIDTH  = (`PLATFORM_MEMORY_DATA_SIZE * 8),
 	parameter C_M_AXI_MEM_ADDR_WIDTH  = 64,
 `ifdef PLATFORM_MERGED_MEMORY_INTERFACE
     parameter C_M_AXI_MEM_NUM_BANKS   = 1
 `else
-    parameter C_M_AXI_MEM_NUM_BANKS   = `PLATFORM_MEMORY_BANKS
+    parameter C_M_AXI_MEM_NUM_BANKS   = `PLATFORM_MEMORY_NUM_BANKS
 `endif
 ) (
 	// System signals
@@ -33,7 +33,7 @@ module vortex_afu #(
 `ifdef PLATFORM_MERGED_MEMORY_INTERFACE
 	`REPEAT (1, GEN_AXI_MEM, REPEAT_COMMA),
 `else
-	`REPEAT (`PLATFORM_MEMORY_BANKS, GEN_AXI_MEM, REPEAT_COMMA),
+	`REPEAT (`PLATFORM_MEMORY_NUM_BANKS, GEN_AXI_MEM, REPEAT_COMMA),
 `endif
 
     // AXI4-Lite slave interface
@@ -75,7 +75,7 @@ module vortex_afu #(
 	`ifdef PLATFORM_MERGED_MEMORY_INTERFACE
 		`REPEAT (1, AXI_MEM_ARGS, REPEAT_COMMA),
 	`else
-		`REPEAT (`PLATFORM_MEMORY_BANKS, AXI_MEM_ARGS, REPEAT_COMMA),
+		`REPEAT (`PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_ARGS, REPEAT_COMMA),
 	`endif
 		.s_axi_ctrl_awvalid (s_axi_ctrl_awvalid),
 		.s_axi_ctrl_awready (s_axi_ctrl_awready),
@@ -94,7 +94,7 @@ module vortex_afu #(
 		.s_axi_ctrl_rready  (s_axi_ctrl_rready),
 		.s_axi_ctrl_rdata   (s_axi_ctrl_rdata),
 		.s_axi_ctrl_rresp   (s_axi_ctrl_rresp),
-		
+
 		.s_axi_ctrl_bvalid  (s_axi_ctrl_bvalid),
 		.s_axi_ctrl_bready  (s_axi_ctrl_bready),
 		.s_axi_ctrl_bresp   (s_axi_ctrl_bresp),

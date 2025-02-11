@@ -51,8 +51,7 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   {Opcode::EXT1,    InstType::R},
   {Opcode::EXT2,    InstType::R4},
   {Opcode::R_W,     InstType::R},
-  {Opcode::I_W,     InstType::I},
-  {Opcode::TCU,     InstType::I},
+  {Opcode::I_W,     InstType::I}
 };
 
 static const char* op_string(const Instr &instr) {
@@ -390,15 +389,22 @@ static const char* op_string(const Instr &instr) {
     default:
       std::abort();
     }
-
-  case Opcode::TCU:
-    switch(func3)
-    {
-      case 0: return "ML";     // Matrix Load
-      case 1: return "MS";     // Matrix Store
-      case 2: return "MATMUL"; // Matrix Multiply
+  case Opcode::EXT2:
+    switch(func3) {
+    case 0: // reserved
+    case 1: // reserved
+      std::abort();
+    case 2:
+      switch (func2) {
+      case 0: return "MMADD.u4_i32";
+      case 1: return "MMADD.u8_i32";
+      case 2: return "MMADD.f16_f32";
+      case 3: return "MMADD.bf16_f32";
       default:
         std::abort();
+      }
+    default:
+      std::abort();
     }
   default:
     std::abort();
@@ -455,12 +461,12 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << "0x" << std::hex << instr.getImm() << std::dec;
   }
-#ifdef EXT_V_ENABLE
   if (instr.getOpcode() == Opcode::SYS && instr.getFunc3() >= 5) {
     // CSRs with immediate values
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << "0x" << std::hex << instr.getRSrc(0);
   }
+#ifdef EXT_V_ENABLE
   // Log vector-specific attributes
   if (instr.getVattrMask() != 0) {
     print_vec_attr(os, instr);
@@ -592,14 +598,6 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
 
   case InstType::I: {
     switch (op) {
-    case Opcode::TCU: {
-      instr->setDestReg(rs1, RegType::Integer);
-      instr->addSrcReg(rs1, RegType::Integer);
-      instr->setFunc3(func3);
-      instr->setFunc7(func7);
-      auto imm = code >> shift_rs2;
-      instr->setImm(sext(imm, width_i_imm));
-    } break;
     case Opcode::I:
     case Opcode::I_W:
     case Opcode::JALR:
@@ -706,10 +704,59 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
   case InstType::V:
     switch (op) {
     case Opcode::VSET: {
-      instr->setDestReg(rd, RegType::Integer);
       instr->setFunc3(func3);
       switch (func3) {
+        case 0: { // OPIVV
+          instr->setDestReg(rd, RegType::Vector);
+          instr->addSrcReg(rs1, RegType::Vector);
+          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setVmask((code >> shift_func7) & 0x1);
+          instr->setFunc6(func6);
+        } break;
+        case 1: { // OPFVV
+          instr->setDestReg(rd, (func6 == 16) ? RegType::Float : RegType::Vector);
+          instr->addSrcReg(rs1, RegType::Vector);
+          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setVmask((code >> shift_func7) & 0x1);
+          instr->setFunc6(func6);
+        } break;
+        case 2: { // OPMVV
+          instr->setDestReg(rd, (func6 == 16) ? RegType::Integer : RegType::Vector);
+          instr->addSrcReg(rs1, RegType::Vector);
+          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setVmask((code >> shift_func7) & 0x1);
+          instr->setFunc6(func6);
+        } break;
+        case 3: { // OPIVI
+          instr->setDestReg(rd, RegType::Vector);
+          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setImm(rs1);
+          instr->setVmask((code >> shift_func7) & 0x1);
+          instr->setFunc6(func6);
+        } break;
+        case 4: { // OPIVX
+          instr->setDestReg(rd, RegType::Vector);
+          instr->addSrcReg(rs1, RegType::Integer);
+          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setVmask((code >> shift_func7) & 0x1);
+          instr->setFunc6(func6);
+        } break;
+        case 5: { // OPFVF
+          instr->setDestReg(rd, RegType::Vector);
+          instr->addSrcReg(rs1, RegType::Float);
+          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setVmask((code >> shift_func7) & 0x1);
+          instr->setFunc6(func6);
+        } break;
+        case 6: { // POMVX
+          instr->setDestReg(rd, (func6 == 16) ? RegType::Integer : RegType::Vector);
+          instr->addSrcReg(rs1, RegType::Integer);
+          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setVmask((code >> shift_func7) & 0x1);
+          instr->setFunc6(func6);
+        } break;
         case 7: {
+          instr->setDestReg(rd, RegType::Integer);
           if (code >> (shift_vset - 1) == 0b10) { // vsetvl
             instr->addSrcReg(rs1, RegType::Integer);
             instr->addSrcReg(rs2, RegType::Integer);
@@ -727,13 +774,6 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
             }
           }
         } break;
-        case 3: { // Vector - immediate arithmetic instructions
-          instr->setDestReg(rd, RegType::Vector);
-          instr->addSrcReg(rs2, RegType::Vector);
-          instr->setImm(rs1);
-          instr->setVmask((code >> shift_func7) & 0x1);
-          instr->setFunc6(func6);
-        } break;
         default: { // Vector - vector/scalar arithmetic instructions
           if (func3 == 1 && func6 == 16) {
             instr->setDestReg(rd, RegType::Float);
@@ -750,9 +790,10 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
       }
     } break;
     case Opcode::FL:
+    case Opcode::FS: {
       instr->addSrcReg(rs1, RegType::Integer);
-      instr->setVmop((code >> shift_vmop) & 0b11);
-      switch (instr->getVmop()) {
+      uint32_t vmop = (code >> shift_vmop) & 0b11;
+      switch (vmop) {
         case 0b00:
           instr->setVumop(rs2);
           break;
@@ -764,36 +805,17 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
           instr->addSrcReg(rs2, RegType::Vector);
           break;
       }
-      instr->setVsew(func3 & 0x3);
-      instr->setDestReg(rd, RegType::Vector);
-      instr->setVlsWidth(func3);
-      instr->setVmask((code >> shift_func7) & 0x1);
-      instr->setVnf((code >> shift_vnf) & mask_func3);
-      break;
-
-    case Opcode::FS:
-      instr->addSrcReg(rs1, RegType::Integer);
-      instr->setVmop((code >> shift_vmop) & 0b11);
-      switch (instr->getVmop()) {
-        case 0b00:
-          instr->setVumop(rs2);
-          break;
-        case 0b10:
-          instr->addSrcReg(rs2, RegType::Integer);
-          break;
-        case 0b01:
-        case 0b11:
-          instr->addSrcReg(rs2, RegType::Vector);
-          break;
+      if (op == Opcode::FL) {
+        instr->setDestReg(rd, RegType::Vector);
+      } else {
+        instr->addSrcReg(rd, RegType::Vector);
       }
-      instr->setVsew(func3 & 0x3);
-      instr->addSrcReg(rd, RegType::Vector);
       instr->setVlsWidth(func3);
       instr->setVmask((code >> shift_func7) & 0x1);
-      instr->setVmop((code >> shift_vmop) & 0b11);
+      instr->setVmop(vmop);
+      instr->setVsew(func3 & 0x3);
       instr->setVnf((code >> shift_vnf) & mask_func3);
-      break;
-
+    } break;
     default:
       std::abort();
     }

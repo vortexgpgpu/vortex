@@ -43,8 +43,13 @@ public:
 
 		char sname[100];
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
-		uint32_t wsel_bits = log2ceil(config_.line_size);
-		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::Priority, config.num_reqs, (1 << config.B), wsel_bits);
+		uint32_t lg2_line_size = log2ceil(config_.line_size);
+		uint32_t num_banks = 1 << config.B;
+		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::Priority, config.num_reqs, num_banks, 1,
+		 [lg2_line_size, num_banks](const MemCrossBar::ReqType& req) {
+    	// Custom logic to calculate the output index using bank interleaving
+			return (uint32_t)((req.addr >> lg2_line_size) & (num_banks-1));
+		});
 		for (uint32_t i = 0; i < config.num_reqs; ++i) {
 			simobject->Inputs.at(i).bind(&mem_xbar_->ReqIn.at(i));
 			mem_xbar_->RspIn.at(i).bind(&simobject->Outputs.at(i));
