@@ -53,6 +53,9 @@ kernel.bin.coe: $(KERNEL).bin
 pre_opt_hook.tcl: $(SRC_DIR)/pre_opt_hook.tcl
 	cp $< $@
 
+simulate.tcl: $(SRC_DIR)/simulate.tcl
+	cp $< $@
+
 gen-sources: project_1/sources.txt
 project_1/sources.txt:
 	mkdir -p project_1
@@ -63,7 +66,10 @@ done.dcp: project_1/sources.txt kernel.bin.coe project.tcl pre_opt_hook.tcl
 	MAX_JOBS=$(JOBS) TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source project.tcl -tclargs $(DEVICE) project_1/sources.txt
 	echo done > done.dcp
 
-run: project_1/project_1.xpr
+run: simulate.tcl done.dcp
+	MAX_JOBS=$(JOBS) TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source simulate.tcl -tclargs project_1/project_1.xpr 50000ns
+
+open: done.dcp
 	$(VIVADO) project_1/project_1.xpr &
 
 clean:
