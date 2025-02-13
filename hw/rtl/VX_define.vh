@@ -44,6 +44,9 @@
 
 `define NR_BITS         `CLOG2(`NUM_REGS)
 
+`define ELE_PER_VREG    (VLEN / 8)
+`define ELE_PER_VREG_BITS `CLOG2(`ELE_PER_VREG)
+
 `define DV_STACK_SIZE   `UP(`NUM_THREADS-1)
 `define DV_STACK_SIZEW  `UP(`CLOG2(`DV_STACK_SIZE))
 
