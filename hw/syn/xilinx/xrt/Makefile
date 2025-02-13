@@ -90,7 +90,7 @@ VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
 
 # register compilation hooks
-VPP_FLAGS += --xp "vivado_prop:run.impl_1.STEPS.OPT_DESIGN.TCL.PRE={$(SCRIPT_DIR)/xilinx_async_bram_patch.tcl}"
+VPP_FLAGS += --xp "vivado_prop:run.impl_1.STEPS.OPT_DESIGN.TCL.PRE=${SRC_DIR}/pre_opt_hook.tcl"
 
 # load platform settings
 include $(SRC_DIR)/platforms.mk
@@ -166,11 +166,11 @@ $(BIN_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 
 gen-xo: $(XO_CONTAINER)
 $(XO_CONTAINER): $(BUILD_DIR)/sources.txt
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source $(SRC_DIR)/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt $(SCRIPT_DIR) ../$(BUILD_DIR)
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source $(SRC_DIR)/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt ../$(BUILD_DIR)
 
 gen-bin: $(XCLBIN_CONTAINER)
 $(XCLBIN_CONTAINER): $(XO_CONTAINER) $(SCOPE_JSON)
-	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); $(VPP) $(VPP_FLAGS) -o ../$(XCLBIN_CONTAINER) ../$(XO_CONTAINER)
+	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); TOOL_DIR=$(SCRIPT_DIR) $(VPP) $(VPP_FLAGS) -o ../$(XCLBIN_CONTAINER) ../$(XO_CONTAINER)
 
 emconfig: $(BIN_DIR)/emconfig.json
 $(BIN_DIR)/emconfig.json:
@@ -183,6 +183,7 @@ ifeq ($(TARGET), hw)
 	cp $(BUILD_DIR)/_x/reports/link/syn/ulp_vortex_afu_1_0_synth_1_ulp_vortex_afu_1_0_utilization_synth.rpt $(BUILD_DIR)/bin
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_utilization_placed.rpt $(BUILD_DIR)/bin
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt $(BUILD_DIR)/bin
+	cp $(BUILD_DIR)/_x/link/vivado/vpl/prj/prj.runs/impl_1/hier_utilization.rpt $(BUILD_DIR)/bin
 endif
 
 chipscope:
