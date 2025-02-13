@@ -11,19 +11,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if { $::argc != 3 } {
-    puts "ERROR: Program \"$::argv0\" requires 3 arguments!\n"
-    puts "Usage: $::argv0 <device_part> <vcs_file> <tool_dir>\n"
+if { $::argc != 2 } {
+    puts "ERROR: Program \"$::argv0\" requires 2 arguments!\n"
+    puts "Usage: $::argv0 <device_part> <vcs_file>\n"
     exit
 }
 
 set device_part [lindex $::argv 0]
 set vcs_file [lindex $::argv 1]
-set tool_dir [lindex $::argv 2]
+
+set tool_dir $::env(TOOL_DIR)
+set script_dir [ file dirname [ file normalize [ info script ] ] ]
 
 puts "Using device_part=$device_part"
 puts "Using vcs_file=$vcs_file"
 puts "Using tool_dir=$tool_dir"
+puts "Using script_dir=$script_dir"
 
 # Set the number of jobs based on MAX_JOBS environment variable
 if {[info exists ::env(MAX_JOBS)]} {
@@ -35,7 +38,8 @@ if {[info exists ::env(MAX_JOBS)]} {
 }
 
 proc run_setup {} {
-  global device_part vcs_file tool_dir
+  global device_part vcs_file
+  global tool_dir script_dir
 
   # Set the project name
   set project_name "project_1"
@@ -399,6 +403,24 @@ proc run_setup {} {
   set wrapper_path [make_wrapper -fileset sources_1 -files [ get_files -norecurse design_1.bd] -top]
   add_files -norecurse -fileset sources_1 $wrapper_path
 
+  # register compilation hooks
+  #set_property STEPS.SYNTH_DESIGN.TCL.PRE  ${script_dir}/pre_synth_hook.tcl  [get_runs synth_1]
+  #set_property STEPS.SYNTH_DESIGN.TCL.POST ${script_dir}/post_synth_hook.tcl [get_runs synth_1]
+  set_property STEPS.OPT_DESIGN.TCL.PRE ${script_dir}/pre_opt_hook.tcl [get_runs impl_1]
+  #set_property STEPS.OPT_DESIGN.TCL.POST ${script_dir}/post_opt_hook.tcl   [get_runs impl_1]
+  #set_property STEPS.POWER_OPT_DESIGN.TCL.PRE  ${script_dir}/pre_power_opt_hook.tcl  [get_runs impl_1]
+  #set_property STEPS.POWER_OPT_DESIGN.TCL.POST ${script_dir}/post_power_opt_hook.tcl [get_runs impl_1]
+  #set_property STEPS.PLACE_DESIGN.TCL.PRE  ${script_dir}/pre_place_hook.tcl  [get_runs impl_1]
+  #set_property STEPS.PLACE_DESIGN.TCL.POST ${script_dir}/post_place_hook.tcl [get_runs impl_1]
+  #set_property STEPS.POST_PLACE_POWER_OPT_DESIGN.TCL.PRE ${script_dir}/pre_place_power_opt_hook.tcl  [get_runs impl_1]
+  #set_property STEPS.POST_PLACE_POWER_OPT_DESIGN.TCL.POST  ${script_dir}/post_place_power_opt_hook.tcl [get_runs impl_1]
+  #set_property STEPS.PHYS_OPT_DESIGN.TCL.PRE ${script_dir}/pre_phys_opt_hook.tcl  [get_runs impl_1]
+  #set_property STEPS.PHYS_OPT_DESIGN.TCL.POST  ${script_dir}/post_phys_opt_hook.tcl [get_runs impl_1]
+  #set_property STEPS.ROUTE_DESIGN.TCL.PRE  ${script_dir}/pre_route_hook.tcl  [get_runs impl_1]
+  #set_property STEPS.ROUTE_DESIGN.TCL.POST ${script_dir}/post_route_hook.tcl [get_runs impl_1]
+  #set_property STEPS.WRITE_BITSTREAM.TCL.PRE ${script_dir}/pre_bitstream_hook.tcl  [get_runs impl_1]
+  #set_property STEPS.WRITE_BITSTREAM.TCL.POST  ${script_dir}/post_bitstream_hook.tcl [get_runs impl_1]
+
   update_compile_order -fileset sources_1
 }
 
@@ -419,8 +441,6 @@ proc run_synthesis {} {
 
 proc run_implementation {} {
   global tool_dir num_jobs
-  source "${tool_dir}/ila_insert.tcl"
-  insert_ila 8192
 
   # Implementation
   if {$num_jobs != 0} {

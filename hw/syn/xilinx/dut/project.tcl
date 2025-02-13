@@ -25,15 +25,15 @@ set device_part [lindex $::argv 1]
 set vcs_file [lindex $::argv 2]
 set xdc_file [lindex $::argv 3]
 
-set script_dir $::env(SCRIPT_DIR)
-set source_dir [file dirname [info script]]
+set tool_dir $::env(TOOL_DIR)
+set script_dir [ file dirname [ file normalize [ info script ] ] ]
 
 puts "Using top_module=$top_module"
 puts "Using device_part=$device_part"
 puts "Using vcs_file=$vcs_file"
 puts "Using xdc_file=$xdc_file"
+puts "Using tool_dir=$tool_dir"
 puts "Using script_dir=$script_dir"
-puts "Using source_dir=$source_dir"
 
 # Set the number of jobs based on MAX_JOBS environment variable
 if {[info exists ::env(MAX_JOBS)]} {
@@ -46,7 +46,7 @@ if {[info exists ::env(MAX_JOBS)]} {
 proc run_setup {} {
   global project_name
   global top_module device_part vcs_file xdc_file
-  global script_dir source_dir
+  global script_dir tool_dir
   global num_jobs
   global argv argc ;# Using global system variables: argv and argc
 
@@ -55,10 +55,10 @@ proc run_setup {} {
     set ip_dir $::env(FPU_IP)
     set argv [list $ip_dir $device_part]
     set argc 2
-    source ${script_dir}/xilinx_ip_gen.tcl
+    source ${tool_dir}/xilinx_ip_gen.tcl
   }
 
-  source "${script_dir}/parse_vcs_list.tcl"
+  source "${tool_dir}/parse_vcs_list.tcl"
   set vlist [parse_vcs_list "${vcs_file}"]
 
   set vsources_list  [lindex $vlist 0]
@@ -96,12 +96,22 @@ proc run_setup {} {
       -objects [get_runs synth_1]
 
   # register compilation hooks
-  #set_property STEPS.SYNTH_DESIGN.TCL.PRE  ${source_dir}/pre_synth_hook.tcl  [get_runs synth_1]
-  #set_property STEPS.SYNTH_DESIGN.TCL.POST ${source_dir}/post_synth_hook.tcl [get_runs synth_1]
-  set_property STEPS.OPT_DESIGN.TCL.PRE    ${script_dir}/xilinx_async_bram_patch.tcl  [get_runs impl_1]
-  #set_property STEPS.OPT_DESIGN.TCL.POST   ${source_dir}/post_opt_hook.tcl   [get_runs impl_1]
-  #set_property STEPS.ROUTE_DESIGN.TCL.PRE  ${source_dir}/pre_route_hook.tcl  [get_runs impl_1]
-  #set_property STEPS.ROUTE_DESIGN.TCL.POST ${source_dir}/post_route_hook.tcl [get_runs impl_1]
+  #set_property STEPS.SYNTH_DESIGN.TCL.PRE  ${script_dir}/pre_synth_hook.tcl  [get_runs synth_1]
+  #set_property STEPS.SYNTH_DESIGN.TCL.POST ${script_dir}/post_synth_hook.tcl [get_runs synth_1]
+  set_property STEPS.OPT_DESIGN.TCL.PRE ${script_dir}/pre_opt_hook.tcl [get_runs impl_1]
+  #set_property STEPS.OPT_DESIGN.TCL.POST ${script_dir}/post_opt_hook.tcl   [get_runs impl_1]
+  #set_property STEPS.POWER_OPT_DESIGN.TCL.PRE  ${script_dir}/pre_power_opt_hook.tcl  [get_runs impl_1]
+  #set_property STEPS.POWER_OPT_DESIGN.TCL.POST ${script_dir}/post_power_opt_hook.tcl [get_runs impl_1]
+  #set_property STEPS.PLACE_DESIGN.TCL.PRE  ${script_dir}/pre_place_hook.tcl  [get_runs impl_1]
+  #set_property STEPS.PLACE_DESIGN.TCL.POST ${script_dir}/post_place_hook.tcl [get_runs impl_1]
+  #set_property STEPS.POST_PLACE_POWER_OPT_DESIGN.TCL.PRE ${script_dir}/pre_place_power_opt_hook.tcl  [get_runs impl_1]
+  #set_property STEPS.POST_PLACE_POWER_OPT_DESIGN.TCL.POST  ${script_dir}/post_place_power_opt_hook.tcl [get_runs impl_1]
+  #set_property STEPS.PHYS_OPT_DESIGN.TCL.PRE ${script_dir}/pre_phys_opt_hook.tcl  [get_runs impl_1]
+  #set_property STEPS.PHYS_OPT_DESIGN.TCL.POST  ${script_dir}/post_phys_opt_hook.tcl [get_runs impl_1]
+  #set_property STEPS.ROUTE_DESIGN.TCL.PRE  ${script_dir}/pre_route_hook.tcl  [get_runs impl_1]
+  #set_property STEPS.ROUTE_DESIGN.TCL.POST ${script_dir}/post_route_hook.tcl [get_runs impl_1]
+  #set_property STEPS.WRITE_BITSTREAM.TCL.PRE ${script_dir}/pre_bitstream_hook.tcl  [get_runs impl_1]
+  #set_property STEPS.WRITE_BITSTREAM.TCL.POST  ${script_dir}/post_bitstream_hook.tcl [get_runs impl_1]
 
   update_compile_order -fileset sources_1
 }
