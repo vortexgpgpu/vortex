@@ -14,6 +14,7 @@
 #pragma once
 
 #include <VX_config.h>
+#include <bitmanip.h>
 
 #ifndef RAM_PAGE_SIZE
 #define RAM_PAGE_SIZE     4096
@@ -22,6 +23,8 @@
 #ifndef MEM_CLOCK_RATIO
 #define MEM_CLOCK_RATIO   1
 #endif
+
+inline constexpr int VLENB            = (VLEN / 8);
 
 inline constexpr int LSU_WORD_SIZE    = (XLEN / 8);
 inline constexpr int LSU_CHANNELS     = NUM_LSU_LANES;
@@ -39,3 +42,5 @@ inline constexpr int L2_NUM_REQS      = NUM_SOCKETS * L1_MEM_PORTS;
 inline constexpr int L3_NUM_REQS      = NUM_CLUSTERS * L2_MEM_PORTS;
 
 inline constexpr int PER_ISSUE_WARPS  = NUM_WARPS / ISSUE_WIDTH;
+
+inline constexpr int TENSOR_TILE_SIZE = pow2_sqrt(NUM_THREADS);

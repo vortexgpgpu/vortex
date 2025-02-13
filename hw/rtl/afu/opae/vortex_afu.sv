@@ -11,16 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+`include "VX_define.vh"
+
 `ifndef NOPAE
 `include "afu_json_info.vh"
 `else
 `include "vortex_afu.vh"
-`endif
-
-`include "VX_define.vh"
-
-`ifndef PLATFORM_MEMORY_INTERLEAVE
-`define PLATFORM_MEMORY_INTERLEAVE 1
 `endif
 
 module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_gpu_pkg::*; #(

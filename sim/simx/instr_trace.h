@@ -87,7 +87,6 @@ public:
   #ifdef EXT_V_ENABLE
     VpuType  vpu_type;
   #endif
-    TCUType  tcu_type;
   };
 
   ITraceData::Ptr data;
@@ -174,6 +173,11 @@ inline std::ostream &operator<<(std::ostream &os, const instr_trace_t& trace) {
     os << ", eop=" << trace.eop;
   }
   os << " (#" << trace.uuid << ")";
+  return os;
+}
+
+inline std::ostream &operator<<(std::ostream &os, instr_trace_t* trace) {
+  os << *trace;
   return os;
 }
 

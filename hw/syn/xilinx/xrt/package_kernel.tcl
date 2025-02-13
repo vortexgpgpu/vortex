@@ -52,7 +52,7 @@ foreach def $vdefines_list {
     if { $name == "CHIPSCOPE" } {
         set chipscope 1
     }
-    if { $name == "PLATFORM_MEMORY_BANKS" } {
+    if { $name == "PLATFORM_MEMORY_NUM_BANKS" } {
         set num_banks [lindex $fields 1]
     }
     if { $name == "PLATFORM_MERGED_MEMORY_INTERFACE" } {
