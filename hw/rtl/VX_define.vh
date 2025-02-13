@@ -20,16 +20,14 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define NW_BITS         `CLOG2(`NUM_WARPS)
-`define NC_WIDTH        `UP(`NC_BITS)
-
-`define NT_BITS         `CLOG2(`NUM_THREADS)
-`define NW_WIDTH        `UP(`NW_BITS)
-
 `define NC_BITS         `CLOG2(`NUM_CORES)
-`define NT_WIDTH        `UP(`NT_BITS)
-
+`define NW_BITS         `CLOG2(`NUM_WARPS)
+`define NT_BITS         `CLOG2(`NUM_THREADS)
 `define NB_BITS         `CLOG2(`NUM_BARRIERS)
+
+`define NC_WIDTH        `UP(`NC_BITS)
+`define NW_WIDTH        `UP(`NW_BITS)
+`define NT_WIDTH        `UP(`NT_BITS)
 `define NB_WIDTH        `UP(`NB_BITS)
 
 `define NUM_IREGS       32
@@ -37,12 +35,25 @@
 `define NRI_BITS        `CLOG2(`NUM_IREGS)
 
 `ifdef EXT_F_ENABLE
-`define NUM_REGS        (2 * `NUM_IREGS)
+`define REG_TYPES       2
 `else
-`define NUM_REGS        `NUM_IREGS
+`define REG_TYPES       1
 `endif
 
+`define REG_TYPE_BITS   `CLOG2(`REG_TYPES)
+`define REG_TYPE_WIDTH  `UP(`REG_TYPE_BITS)
+
+`define NUM_REGS        (`REG_TYPES * `NUM_IREGS)
+
 `define NR_BITS         `CLOG2(`NUM_REGS)
+
+`define REG_EXT_VAL(ext, type) 32'h1
+    //32'((1 << ((type == 1) ? ext[2:0] : ext[1:0]))-1)
+
+`define IREG_EXT_BITS   2
+`define FREG_EXT_BITS   3
+`define VREG_EXT_BITS   3
+`define REG_EXT_BITS    `MAX(`MAX(`IREG_EXT_BITS, `FREG_EXT_BITS), `VREG_EXT_BITS)
 
 `define DV_STACK_SIZE   `UP(`NUM_THREADS-1)
 `define DV_STACK_SIZEW  `UP(`CLOG2(`DV_STACK_SIZE))
@@ -155,7 +166,6 @@
 `define INST_ALU_OR          4'b1101
 `define INST_ALU_XOR         4'b1110
 `define INST_ALU_SLL         4'b1111
-
 
 `define ALU_TYPE_BITS        2
 `define ALU_TYPE_ARITH       0

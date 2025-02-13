@@ -29,10 +29,10 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     VX_ibuffer_if.slave     ibuffer_if [PER_ISSUE_WARPS],
     VX_scoreboard_if.master scoreboard_if
 );
-    `UNUSED_SPARAM (INSTANCE_ID)
-    localparam NUM_SRC_OPDS = 3;
-    localparam NUM_OPDS = NUM_SRC_OPDS + 1;
-    localparam DATAW = `UUID_WIDTH + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + (`NR_BITS * 4) + 1;
+    //`UNUSED_SPARAM (INSTANCE_ID)
+    //localparam NUM_SRC_OPDS = 3;
+    //localparam NUM_OPDS = NUM_SRC_OPDS + 1;
+    localparam DATAW = `UUID_WIDTH + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + (`NR_BITS * 4) + (`REG_EXT_BITS * 4) + 1;
 
     VX_ibuffer_if staging_if [PER_ISSUE_WARPS]();
     reg [PER_ISSUE_WARPS-1:0] operands_ready;
@@ -117,21 +117,55 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     end
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_scoreboard
-        reg [`NUM_REGS-1:0] inuse_regs;
-
-        reg [NUM_OPDS-1:0] operands_busy, operands_busy_n;
+        reg [`NUM_REGS-1:0] inuse_regs, inuse_regs_n;
+        reg [`REG_TYPES-1:0] operands_busy, operands_busy_n;
 
         wire ibuffer_fire = ibuffer_if[w].valid && ibuffer_if[w].ready;
-
         wire staging_fire = staging_if[w].valid && staging_if[w].ready;
 
         wire writeback_fire = writeback_if.valid
                            && (writeback_if.data.wis == ISSUE_WIS_W'(w))
                            && writeback_if.data.eop;
 
-        wire [NUM_OPDS-1:0][`NR_BITS-1:0] ibuf_opds, stg_opds;
-        assign ibuf_opds = {ibuffer_if[w].data.rs3, ibuffer_if[w].data.rs2, ibuffer_if[w].data.rs1, ibuffer_if[w].data.rd};
-        assign stg_opds = {staging_if[w].data.rs3, staging_if[w].data.rs2, staging_if[w].data.rs1, staging_if[w].data.rd};
+        wire [`REG_TYPE_WIDTH-1:0] ibf_rs1_type, ibf_rs2_type, ibf_rs3_type, ibf_rd_type;
+        wire [`REG_TYPES-1:0][31:0] ibf_rs1_mask, ibf_rs2_mask, ibf_rs3_mask, ibf_rd_mask;
+
+        wire [`REG_TYPE_WIDTH-1:0] stg_rs1_type, stg_rs2_type, stg_rs3_type, stg_rd_type;
+        wire [`REG_TYPES-1:0][31:0] stg_rs1_mask, stg_rs2_mask, stg_rs3_mask, stg_rd_mask;
+
+    `ifdef EXT_F_ENABLE
+        assign ibf_rs1_type = ibuffer_if[w].data.rs1[5];
+        assign ibf_rs2_type = ibuffer_if[w].data.rs2[5];
+        assign ibf_rs3_type = ibuffer_if[w].data.rs3[5];
+        assign ibf_rd_type  = ibuffer_if[w].data.rd[5];
+
+        assign stg_rs1_type = staging_if[w].data.rs1[5];
+        assign stg_rs2_type = staging_if[w].data.rs2[5];
+        assign stg_rs3_type = staging_if[w].data.rs3[5];
+        assign stg_rd_type  = staging_if[w].data.rd[5];
+    `else
+        assign ibf_rs1_type = 0;
+        assign ibf_rs2_type = 0;
+        assign ibf_rs3_type = 0;
+        assign ibf_rd_type  = 0;
+
+        assign stg_rs1_type = 0;
+        assign stg_rs2_type = 0;
+        assign stg_rs3_type = 0;
+        assign stg_rd_type  = 0;
+    `endif
+
+        for (genvar i = 0; i < `REG_TYPES; ++i) begin : g_opd_masks
+            assign ibf_rs1_mask[i] = (`REG_EXT_VAL(ibuffer_if[w].data.rs1_ext, i) << ibuffer_if[w].data.rs1[4:0]) & {32{ibf_rs1_type == i}};
+            assign ibf_rs2_mask[i] = (`REG_EXT_VAL(ibuffer_if[w].data.rs2_ext, i) << ibuffer_if[w].data.rs2[4:0]) & {32{ibf_rs2_type == i}};
+            assign ibf_rs3_mask[i] = (`REG_EXT_VAL(ibuffer_if[w].data.rs3_ext, i) << ibuffer_if[w].data.rs3[4:0]) & {32{ibf_rs3_type == i}};
+            assign ibf_rd_mask[i]  = (`REG_EXT_VAL(ibuffer_if[w].data.rd_ext, i)  << ibuffer_if[w].data.rd[4:0])  & {32{ibf_rd_type == i}};
+
+            assign stg_rs1_mask[i] = (`REG_EXT_VAL(staging_if[w].data.rs1_ext, i) << staging_if[w].data.rs1[4:0]) & {32{stg_rs1_type == i}};
+            assign stg_rs2_mask[i] = (`REG_EXT_VAL(staging_if[w].data.rs2_ext, i) << staging_if[w].data.rs2[4:0]) & {32{stg_rs2_type == i}};
+            assign stg_rs3_mask[i] = (`REG_EXT_VAL(staging_if[w].data.rs3_ext, i) << staging_if[w].data.rs3[4:0]) & {32{stg_rs3_type == i}};
+            assign stg_rd_mask[i]  = (`REG_EXT_VAL(staging_if[w].data.rd_ext, i)  << staging_if[w].data.rd[4:0])  & {32{stg_rd_type == i}};
+        end
 
     `ifdef PERF_ENABLE
         reg [`NUM_REGS-1:0][`EX_WIDTH-1:0] inuse_units;
@@ -151,14 +185,14 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         end
     `endif
 
-        for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_operands_busy_n
+        /*or (genvar i = 0; i < `REG_TYPES; ++i) begin : g_operands_busy_n
+            wire [31:0] ibf_reg_mask = ibf_rs1_mask[i] | ibf_rs2_mask[i] | ibf_rs3_mask[i] | ibf_rd_mask[i];
+            wire in_use_check = (inuse_regs_n[i * 32 +: 32] & ibf_reg_mask) != 0;;
+            wire in_stg_check = staging_fire && staging_if[w].data.wb && ((ibf_reg_mask & stg_rd_mask[i]) != 0);
             always @(*) begin
                 operands_busy_n[i] = operands_busy[i];
                 if (ibuffer_fire) begin
-                    operands_busy_n[i] = inuse_regs[ibuf_opds[i]];
-                    if (staging_fire && staging_if[w].data.wb && staging_if[w].data.rd == ibuf_opds[i]) begin
-                        operands_busy_n[i] = 1;
-                    end
+                    operands_busy_n[i] = in_use_check | in_stg_check;
                 end
                 if (writeback_fire) begin
                     if (ibuffer_fire) begin
@@ -168,36 +202,51 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                     end else begin
                         if (writeback_if.data.rd == stg_opds[i]) begin
                             operands_busy_n[i] = 0;
-                       end
+                        end
                     end
                 end
             end
+        end*/
+
+        always @(*) begin
+            inuse_regs_n = inuse_regs;
+            if (writeback_fire) begin
+                inuse_regs_n[writeback_if.data.rd] = 0;
+            end
+            if (staging_fire && staging_if[w].data.wb) begin
+                inuse_regs_n |= stg_rd_mask;
+            end
+        end
+
+        for (genvar i = 0; i < `REG_TYPES; ++i) begin : g_operands_busy_n
+            wire [31:0] ibf_reg_mask = ibf_rs1_mask[i] | ibf_rs2_mask[i] | ibf_rs3_mask[i] | ibf_rd_mask[i];
+            wire [31:0] stg_reg_mask = stg_rs1_mask[i] | stg_rs2_mask[i] | stg_rs3_mask[i] | stg_rd_mask[i];
+            wire [31:0] reg_mask = ibuffer_fire ? ibf_reg_mask : stg_reg_mask;
+            assign operands_busy_n[i] = (inuse_regs_n[i * 32 +: 32] & reg_mask) != 0;
         end
 
         always @(posedge clk) begin
             if (reset) begin
                 inuse_regs <= '0;
+                operands_busy <= '0;
             end else begin
-                if (writeback_fire) begin
-                    inuse_regs[writeback_if.data.rd] <= 0;
-                end
-                if (staging_fire && staging_if[w].data.wb) begin
-                    inuse_regs[staging_if[w].data.rd] <= 1;
-                end
+                inuse_regs <= inuse_regs_n;
+                operands_busy <= operands_busy_n;
             end
+        end
 
-            operands_busy <= operands_busy_n;
-            operands_ready[w] <= ~(| operands_busy_n);
+        assign operands_ready[w] = ~(| operands_busy);
 
-        `ifdef PERF_ENABLE
+    `ifdef PERF_ENABLE
+        always @(posedge clk) begin
             if (staging_fire && staging_if[w].data.wb) begin
                 inuse_units[staging_if[w].data.rd] <= staging_if[w].data.ex_type;
                 if (staging_if[w].data.ex_type == `EX_SFU) begin
                     inuse_sfu[staging_if[w].data.rd] <= op_to_sfu_type(staging_if[w].data.op_type);
                 end
             end
-        `endif
         end
+    `endif
 
     `ifdef SIMULATION
         reg [31:0] timeout_ctr;
@@ -263,7 +312,11 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             scoreboard_if.data.rd,
             scoreboard_if.data.rs1,
             scoreboard_if.data.rs2,
-            scoreboard_if.data.rs3
+            scoreboard_if.data.rs3,
+            scoreboard_if.data.rd_ext,
+            scoreboard_if.data.rs1_ext,
+            scoreboard_if.data.rs2_ext,
+            scoreboard_if.data.rs3_ext
         }),
         .valid_out (scoreboard_if.valid),
         .ready_out (scoreboard_if.ready),

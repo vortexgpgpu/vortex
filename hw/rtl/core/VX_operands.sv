@@ -101,6 +101,11 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     assign req_valid_in = {NUM_SRC_OPDS{scoreboard_if.valid}} & src_valid;
 
+    `UNUSED_VAR (scoreboard_if.data.rd_ext)
+    `UNUSED_VAR (scoreboard_if.data.rs1_ext)
+    `UNUSED_VAR (scoreboard_if.data.rs2_ext)
+    `UNUSED_VAR (scoreboard_if.data.rs3_ext)
+
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_SRC_OPDS),
         .NUM_OUTPUTS (NUM_BANKS),

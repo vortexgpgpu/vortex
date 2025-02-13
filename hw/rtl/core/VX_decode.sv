@@ -16,14 +16,17 @@
 `ifdef EXT_F_ENABLE
     `define USED_IREG(x) \
         x``_v = {1'b0, ``x}; \
+        x``_ext = 1; \
         use_``x = 1
 
     `define USED_FREG(x) \
         x``_v = {1'b1, ``x}; \
+        x``_ext = 1; \
         use_``x = 1
 `else
     `define USED_IREG(x) \
         x``_v = ``x; \
+        x``_ext = 1; \
         use_``x = 1
 `endif
 
@@ -41,7 +44,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     VX_decode_sched_if.master decode_sched_if
 );
 
-    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + 1 + (`NR_BITS * 4);
+    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + 1 + (`NR_BITS * 4) + (`REG_EXT_BITS * 4);
 
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (clk)
@@ -53,6 +56,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     reg [`NR_BITS-1:0] rd_v, rs1_v, rs2_v, rs3_v;
     reg use_rd, use_rs1, use_rs2, use_rs3;
     reg is_wstall;
+    reg [`REG_EXT_BITS-1:0] rd_ext, rs1_ext, rs2_ext, rs3_ext;
 
     wire [31:0] instr = fetch_if.data.instr;
     wire [6:0] opcode = instr[6:0];
@@ -155,6 +159,10 @@ module VX_decode import VX_gpu_pkg::*; #(
         ex_type   = 'x;
         op_type   = 'x;
         op_args   = 'x;
+        rd_ext    = 'x;
+        rs1_ext   = 'x;
+        rs2_ext   = 'x;
+        rs3_ext   = 'x;
         rd_v      = '0;
         rs1_v     = '0;
         rs2_v     = '0;
@@ -547,8 +555,8 @@ module VX_decode import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (fetch_if.valid),
         .ready_in  (fetch_if.ready),
-        .data_in   ({fetch_if.data.uuid, fetch_if.data.wid, fetch_if.data.tmask, fetch_if.data.PC, ex_type, op_type, op_args, wb, rd_v, rs1_v, rs2_v, rs3_v}),
-        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
+        .data_in   ({fetch_if.data.uuid, fetch_if.data.wid, fetch_if.data.tmask, fetch_if.data.PC, ex_type, op_type, op_args, wb, rd_v, rs1_v, rs2_v, rs3_v, rd_ext, rs1_ext, rs2_ext, rs3_ext}),
+        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3, decode_if.data.rd_ext, decode_if.data.rs1_ext, decode_if.data.rs2_ext, decode_if.data.rs3_ext}),
         .valid_out (decode_if.valid),
         .ready_out (decode_if.ready)
     );

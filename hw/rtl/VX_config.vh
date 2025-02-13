@@ -349,6 +349,10 @@
 
 // Pipeline Configuration /////////////////////////////////////////////////////
 
+`ifndef SIMD_WIDTH
+`define SIMD_WIDTH `MAX(`NUM_THREADS, 16)
+`endif
+
 // Issue width
 `ifndef ISSUE_WIDTH
 `define ISSUE_WIDTH     `UP(`NUM_WARPS / 8)

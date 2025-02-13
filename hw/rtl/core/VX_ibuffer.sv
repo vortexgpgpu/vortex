@@ -30,7 +30,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     VX_ibuffer_if.master ibuffer_if [PER_ISSUE_WARPS]
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam DATAW = `UUID_WIDTH + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + (`NR_BITS * 4);
+    localparam DATAW = `UUID_WIDTH + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + (`NR_BITS * 4) + (`REG_EXT_BITS * 4);
 
     wire [PER_ISSUE_WARPS-1:0] ibuf_ready_in;
     assign decode_if.ready = ibuf_ready_in[decode_if.data.wid];
@@ -55,7 +55,11 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 decode_if.data.rd,
                 decode_if.data.rs1,
                 decode_if.data.rs2,
-                decode_if.data.rs3
+                decode_if.data.rs3,
+                decode_if.data.rd_ext,
+                decode_if.data.rs1_ext,
+                decode_if.data.rs2_ext,
+                decode_if.data.rs3_ext
             }),
             .ready_in (ibuf_ready_in[w]),
             .valid_out(ibuffer_if[w].valid),
