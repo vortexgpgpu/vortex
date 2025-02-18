@@ -50,15 +50,15 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
     localparam PER_BANK_REG_BITS = NR_BITS - BANKID_REG_BITS;
     localparam PER_BANK_WIS_WIDTH = `UP(PER_BANK_WIS_BITS);
     localparam PER_BANK_REG_WIDTH = `UP(PER_BANK_REG_BITS);
-    localparam OPC_REQ_DATAW = 2 + SIMD_IDX_W + PER_BANK_WIS_BITS + PER_BANK_REG_BITS;
-    localparam OPC_RSP_DATAW = 2 + `SIMD_WIDTH * `XLEN;
+    localparam OPC_REQ_DATAW = SRC_OPD_WIDTH + SIMD_IDX_W + PER_BANK_WIS_BITS + PER_BANK_REG_BITS;
+    localparam OPC_RSP_DATAW = SRC_OPD_WIDTH + `SIMD_WIDTH * `XLEN;
     localparam BYTEENW = `SIMD_WIDTH * XLENB;
 
     wire [NUM_REQS-1:0] opc_req_valid, opc_req_ready;
     wire [NUM_REQS-1:0][OPC_REQ_DATAW-1:0] opc_req_data;
     wire [NUM_REQS-1:0][BANK_SEL_WIDTH-1:0] opc_req_bank_idx;
 
-    wire [NUM_BANKS-1:0] gpr_req_valid, gpr_req_ready;
+    wire [NUM_BANKS-1:0] gpr_req_valid;
     wire [NUM_BANKS-1:0][OPC_REQ_DATAW-1:0] gpr_req_data;
     wire [NUM_BANKS-1:0][1:0] gpr_req_opd_id;
     wire [NUM_BANKS-1:0][SIMD_IDX_W-1:0] gpr_req_sid;
@@ -71,6 +71,7 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0] gpr_rsp_valid;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] gpr_rsp_idx;
     wire [NUM_BANKS-1:0][1:0] gpr_rsp_opd_id;
+    wire [NUM_BANKS-1:0][OPC_RSP_DATAW-1:0] gpr_rsp_data;
 
 `ifdef PERF_ENABLE
     wire [PERF_CTR_BITS-1:0] collisions;
@@ -186,9 +187,9 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
             .data_out ({gpr_rsp_idx[b], gpr_rsp_opd_id[b]}),
             `UNUSED_PIN (ready_out)
         );
-    end
 
-    wire [NUM_BANKS-1:0][OPC_RSP_DATAW-1:0] gpr_rsp_data;
+        assign gpr_rsp_data[b] = {gpr_rsp_opd_id[b], gpr_rd_data[b]};
+    end
 
     `AOS_TO_ITF_RSP_V (opc, opc_if, NUM_REQS, OPC_RSP_DATAW)
 

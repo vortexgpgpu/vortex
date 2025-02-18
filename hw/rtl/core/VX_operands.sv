@@ -42,7 +42,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     VX_opc_if opc_if[`NUM_OPCS]();
     VX_scoreboard_if per_opc_scoreboard_if[`NUM_OPCS]();
     wire [ISSUE_WIS_W-1:0] per_opc_wis[`NUM_OPCS];
-    wire [NUM_REGS-1:0] per_opc_pending_regs_n[`NUM_OPCS];
+    wire [SIMD_IDX_W-1:0] per_opc_sid[`NUM_OPCS];
+    wire [NUM_REGS-1:0] per_opc_pending_regs[`NUM_OPCS];
 
     `AOS_TO_ITF (per_opc_scoreboard, per_opc_scoreboard_if, `NUM_OPCS, SB_DATAW)
 
@@ -68,13 +69,30 @@ module VX_operands import VX_gpu_pkg::*; #(
         ) opc_unit (
             .clk          (clk),
             .reset        (reset),
+            .sid          (per_opc_sid[i]),
             .wis          (per_opc_wis[i]),
-            .pending_regs_n(per_opc_pending_regs_n[i]),
+            .pending_regs (per_opc_pending_regs[i]),
             .scoreboard_if(per_opc_scoreboard_if[i]),
             .opc_if       (opc_if[i]),
             .operands_if  (operands_if[i])
         );
     end
+
+    reg [NUM_REGS-1:0] opc_pending_regs;
+    always @(*) begin
+        opc_pending_regs = 0;
+        for (int i = 0; i < `NUM_OPCS; ++i) begin
+            opc_pending_regs |= (per_opc_pending_regs[i] & {NUM_REGS{(per_opc_sid[i] == writeback_if.data.sid)
+                                                                  && (per_opc_wis[i] == writeback_if.data.wis)}});
+        end
+    end
+    wire war_dp_check = (opc_pending_regs[writeback_if.data.rd] == 0);
+
+    VX_writeback_if writeback_if_s();
+    assign writeback_if_s.valid = writeback_if.valid && war_dp_check;
+    assign writeback_if_s.data = writeback_if.data;
+    `UNUSED_VAR (writeback_if_s.ready)
+    assign writeback_if.ready = war_dp_check;
 
     VX_gpr_unit #(
         .INSTANCE_ID (INSTANCE_ID),
@@ -86,7 +104,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .perf_stalls  (perf_stalls),
     `endif
-        .writeback_if (writeback_if),
+        .writeback_if (writeback_if_s),
         .opc_if       (opc_if)
     );
 

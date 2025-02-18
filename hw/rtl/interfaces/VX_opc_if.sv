@@ -16,7 +16,7 @@
 interface VX_opc_if import VX_gpu_pkg::*; ();
 
     typedef struct packed {
-        logic [1:0] opd_id;
+        logic [SRC_OPD_WIDTH-1:0] opd_id;
         logic [SIMD_IDX_W-1:0] sid;
         logic [ISSUE_WIS_W-1:0] wis;
         logic [NR_BITS-1:0] reg_id;

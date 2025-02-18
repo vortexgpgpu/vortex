@@ -16,6 +16,8 @@
 
 `include "VX_define.vh"
 
+`IGNORE_UNUSED_BEGIN
+
 package VX_gpu_pkg;
 
 	localparam NC_BITS = `CLOG2(`NUM_CORES);
@@ -75,6 +77,8 @@ package VX_gpu_pkg;
 	localparam OFFSET_BITS = 12;
 
     localparam NUM_SRC_OPDS = 3;
+    localparam SRC_OPD_BITS = `CLOG2(NUM_SRC_OPDS);
+    localparam SRC_OPD_WIDTH = `UP(SRC_OPD_BITS);
 
 	localparam NUM_SOCKETS = `UP(`NUM_CORES / `SOCKET_SIZE);
 
@@ -694,6 +698,14 @@ package VX_gpu_pkg;
         endcase
     endfunction
 
+    function automatic logic [NR_BITS-1:0] to_reg_number(input reg_idx_t reg_idx);
+    `ifdef EXT_F_ENABLE
+        return {reg_idx.rtype[0], reg_idx.id};
+    `else
+        return reg_idx.id;
+    `endif
+    endfunction
+
     ////////////////////////////////// Tracing ////////////////////////////////
 
 `ifdef SIMULATION
@@ -1119,5 +1131,7 @@ package VX_gpu_pkg;
 `endif
 
 endpackage
+
+`IGNORE_UNUSED_END
 
 `endif // VX_GPU_PKG_VH
