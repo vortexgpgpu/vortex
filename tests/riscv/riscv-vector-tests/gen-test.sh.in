@@ -1,0 +1,30 @@
+#!/bin/bash
+
+PREV_DIR=$(pwd)
+
+sudo apt-get install device-tree-compiler
+wget -O- -q https://go.dev/dl/go1.24.0.linux-amd64.tar.gz | tar -xzf -
+
+git clone https://github.com/chipsalliance/riscv-vector-tests.git
+cd riscv-vector-tests
+wget -O- -q https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2024.04.12/riscv64-elf-ubuntu-22.04-gcc-nightly-2024.04.12-nightly.tar.gz | tar -xzf -
+export RISCV=$PREV_DIR/riscv-vector-tests/riscv
+export PATH=$PATH:$PREV_DIR/go/bin:$PREV_DIR/riscv-vector-tests/riscv/bin
+
+git clone https://github.com/riscv-software-src/riscv-isa-sim.git
+cd riscv-isa-sim
+git reset --hard 91793ed7d964aa0031c5a9a31fa05ec3d11b3b0f
+mkdir build && cd build
+../configure --prefix=$RISCV
+make -j$(nproc) && sudo make install
+cd ../..
+
+cd env
+git clone https://github.com/riscv/riscv-test-env.git
+cd ..
+
+make generate-stage1 --environment-overrides VLEN=$VLEN XLEN=$XLEN MODE=machine && make all -j$(nproc) --environment-overrides VLEN=$VLEN XLEN=$XLEN MODE=machine
+mv out/v"$VLEN"x"$XLEN"machine/bin/stage2 $PREV_DIR/v"$VLEN"x"$XLEN"
+
+cd $PREV_DIR
+sudo rm -rf riscv-vector-tests

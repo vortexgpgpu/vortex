@@ -117,7 +117,62 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector]
+        name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm]
+        xlen: [32, 64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install Dependencies
+        run: |
+          sudo bash ./ci/install_dependencies.sh
+
+      - name: Cache Toolchain Directory
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: tools
+          key: ${{ runner.os }}-toolchain-v0.1
+          restore-keys: |
+            ${{ runner.os }}-toolchain-
+
+      - name: Cache Third Party Directory
+        id: cache-thirdparty
+        uses: actions/cache@v4
+        with:
+          path: third_party
+          key: ${{ runner.os }}-thirdparty-v0.1
+          restore-keys: |
+            ${{ runner.os }}-thirdparty-
+
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ matrix.xlen }}
+          path: build${{ matrix.xlen }}
+
+      - name: Run tests
+        run: |
+          cd build${{ matrix.xlen }}
+          source ci/toolchain_env.sh
+          chmod -R +x . # Ensure all files have executable permissions
+          if [ "${{ matrix.name }}" == "regression" ]; then
+            ./ci/regression.sh --unittest
+            ./ci/regression.sh --isa
+            ./ci/regression.sh --kernel
+            ./ci/regression.sh --regression
+          else
+            ./ci/regression.sh --${{ matrix.name }}
+          fi
+
+  vector-tests:
+    runs-on: ubuntu-22.04
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [vector]
         xlen: [32, 64]
 
     steps:

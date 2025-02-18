@@ -64,21 +64,24 @@ fi
 
 cd $SCRIPT_DIR
 
-# Fallback #2: If testcases directory exists, we will use existing testcases
+# Fallback #1: If testcases directory exists, use the existing testcases
 if [ ! -d "$SCRIPT_DIR/testcases" ]; then
   mkdir testcases
   cd testcases
-  # Fallback #3: Otherwise, download testcases
-  vector_tests
+  # Fallback #2: Generate testcases
+  if [ -n "$GEN_TESTS" ] && [ $GEN_TESTS -eq 1 ]; then
+    /bin/bash ../gen-test.sh
+  # Fallback #3: Download testcases
+  else
+    vector_tests
+  fi
 fi
 
 cd $SCRIPT_DIR/testcases/v$VLEN"x"$XLEN
 
-# Fallback #1: Copy locally generated testcases (assuming they exist)
 rm *".ddr4.log"
 for testcase in ${testcases[@]}; do
   rm "$testcase"*.elf "$testcase"*.bin "$testcase"*.dump "$testcase"*.log
-  cp -f $SCRIPT_DIR/../../../third_party/riscv-vector-tests/out/v"$VLEN"x"$XLEN"machine/bin/stage2/"$testcase"* .
 done
 
 passed=0
