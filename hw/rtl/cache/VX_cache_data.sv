@@ -13,7 +13,7 @@
 
 `include "VX_cache_define.vh"
 
-module VX_cache_data #(
+module VX_cache_data import VX_gpu_pkg::*; #(
     // Size of cache in bytes
     parameter CACHE_SIZE        = 1024,
     // Size of line inside a bank in bytes

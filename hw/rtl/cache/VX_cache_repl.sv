@@ -16,7 +16,7 @@
 // Fast PLRU encoder and decoder utility
 // Adapted from BaseJump STL: http://bjump.org/data_out.html
 
-module plru_decoder #(
+module plru_decoder import VX_gpu_pkg::*; #(
     parameter NUM_WAYS      = 1,
     parameter WAY_IDX_BITS  = $clog2(NUM_WAYS),
     parameter WAY_IDX_WIDTH = `UP(WAY_IDX_BITS)

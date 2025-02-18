@@ -93,7 +93,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .NUM_LANES    (`NUM_LSU_LANES),
         .DATA_SIZE    (LSU_WORD_SIZE),
         .TAG_WIDTH    (LMEM_TAG_WIDTH),
-        .TAG_SEL_BITS (LMEM_TAG_WIDTH - `UUID_WIDTH),
+        .TAG_SEL_BITS (LMEM_TAG_WIDTH - UUID_WIDTH),
         .ARBITER      ("P"),
         .REQ_OUT_BUF  (3),
         .RSP_OUT_BUF  (0)
@@ -111,7 +111,6 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .NUM_BANKS  (`LMEM_NUM_BANKS),
         .WORD_SIZE  (LSU_WORD_SIZE),
         .ADDR_WIDTH (LMEM_ADDR_WIDTH),
-        .UUID_WIDTH (`UUID_WIDTH),
         .TAG_WIDTH  (LMEM_TAG_WIDTH),
         .OUT_BUF    (3)
     ) local_mem (
@@ -142,11 +141,11 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     ) dcache_coalesced_if[`NUM_LSU_BLOCKS]();
 
 `ifdef PERF_ENABLE
-    wire [`NUM_LSU_BLOCKS-1:0][`PERF_CTR_BITS-1:0] per_block_coalescer_misses;
-    wire [`PERF_CTR_BITS-1:0] coalescer_misses;
+    wire [`NUM_LSU_BLOCKS-1:0][PERF_CTR_BITS-1:0] per_block_coalescer_misses;
+    wire [PERF_CTR_BITS-1:0] coalescer_misses;
     VX_reduce_tree #(
-        .DATAW_IN (`PERF_CTR_BITS),
-        .DATAW_OUT (`PERF_CTR_BITS),
+        .DATAW_IN (PERF_CTR_BITS),
+        .DATAW_OUT (PERF_CTR_BITS),
         .N  (`NUM_LSU_BLOCKS),
         .OP ("+")
     ) coalescer_reduce (
@@ -165,11 +164,11 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .DATA_IN_SIZE   (LSU_WORD_SIZE),
                 .DATA_OUT_SIZE  (DCACHE_WORD_SIZE),
                 .ADDR_WIDTH     (LSU_ADDR_WIDTH),
-                .FLAGS_WIDTH    (`MEM_REQ_FLAGS_WIDTH),
+                .FLAGS_WIDTH    (MEM_FLAGS_WIDTH),
                 .TAG_WIDTH      (LSU_TAG_WIDTH),
-                .UUID_WIDTH     (`UUID_WIDTH),
+                .UUID_WIDTH     (UUID_WIDTH),
                 .QUEUE_SIZE     (`LSUQ_OUT_SIZE),
-                .PERF_CTR_BITS  (`PERF_CTR_BITS)
+                .PERF_CTR_BITS  (PERF_CTR_BITS)
             ) mem_coalescer (
                 .clk            (clk),
                 .reset          (reset),
@@ -240,7 +239,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .NUM_LANES    (DCACHE_CHANNELS),
             .DATA_SIZE    (DCACHE_WORD_SIZE),
             .TAG_WIDTH    (DCACHE_TAG_WIDTH),
-            .TAG_SEL_BITS (DCACHE_TAG_WIDTH - `UUID_WIDTH),
+            .TAG_SEL_BITS (DCACHE_TAG_WIDTH - UUID_WIDTH),
             .ARBITER      ("P"),
             .REQ_OUT_BUF  (0),
             .RSP_OUT_BUF  (0)

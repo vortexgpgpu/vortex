@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_mem_arb #(
+module VX_mem_arb import VX_gpu_pkg::*; #(
     parameter NUM_INPUTS     = 1,
     parameter NUM_OUTPUTS    = 1,
     parameter DATA_SIZE      = 1,
@@ -24,7 +24,7 @@ module VX_mem_arb #(
     parameter `STRING ARBITER = "R",
     parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
     parameter ADDR_WIDTH     = (MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE)),
-    parameter FLAGS_WIDTH    = `MEM_REQ_FLAGS_WIDTH
+    parameter FLAGS_WIDTH    = MEM_FLAGS_WIDTH
 ) (
     input wire              clk,
     input wire              reset,

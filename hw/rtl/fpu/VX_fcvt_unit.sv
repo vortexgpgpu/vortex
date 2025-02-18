@@ -30,7 +30,7 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
 
     input wire enable,
 
-    input wire [`INST_FRM_BITS-1:0] frm,
+    input wire [INST_FRM_BITS-1:0] frm,
 
     input wire is_itof,
     input wire is_signed,
@@ -92,7 +92,7 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
     wire [S_MAN_WIDTH-1:0] encoded_mant_s0;
 
     VX_pipe_register #(
-        .DATAW (1 + `INST_FRM_BITS + 1 + $bits(fclass_t) + 1 + S_EXP_WIDTH + S_MAN_WIDTH),
+        .DATAW (1 + INST_FRM_BITS + 1 + $bits(fclass_t) + 1 + S_EXP_WIDTH + S_MAN_WIDTH),
         .DEPTH (LATENCY > 1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -140,7 +140,7 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
     wire [S_EXP_WIDTH-1:0] input_exp_s1;
 
     VX_pipe_register #(
-        .DATAW (1 + `INST_FRM_BITS + 1 + $bits(fclass_t) + 1 + 1 + S_MAN_WIDTH + S_EXP_WIDTH),
+        .DATAW (1 + INST_FRM_BITS + 1 + $bits(fclass_t) + 1 + 1 + S_MAN_WIDTH + S_EXP_WIDTH),
         .DEPTH (LATENCY > 2)
     ) pipe_reg1 (
         .clk      (clk),
@@ -182,7 +182,7 @@ module VX_fcvt_unit import VX_fpu_pkg::*; #(
     wire                   of_before_round_s2;
 
     VX_pipe_register #(
-        .DATAW (1 + 1 + `INST_FRM_BITS + $bits(fclass_t) + 1 + 1 + (2*S_MAN_WIDTH+1) + EXP_BITS + 1),
+        .DATAW (1 + 1 + INST_FRM_BITS + $bits(fclass_t) + 1 + 1 + (2*S_MAN_WIDTH+1) + EXP_BITS + 1),
         .DEPTH (LATENCY > 0)
     ) pipe_reg2 (
         .clk      (clk),

@@ -27,7 +27,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0] lsu_req_mask,
     input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0][LSU_WORD_SIZE-1:0] lsu_req_byteen,
     input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0][LSU_ADDR_WIDTH-1:0] lsu_req_addr,
-    input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0][`MEM_REQ_FLAGS_WIDTH-1:0] lsu_req_flags,
+    input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0][MEM_FLAGS_WIDTH-1:0] lsu_req_flags,
     input  wire [`NUM_LSU_BLOCKS-1:0][`NUM_LSU_LANES-1:0][LSU_WORD_WIDTH-1:0] lsu_req_data,
     input  wire [`NUM_LSU_BLOCKS-1:0][LSU_TAG_WIDTH-1:0] lsu_req_tag,
     output wire [`NUM_LSU_BLOCKS-1:0]                   lsu_req_ready,
@@ -44,7 +44,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     output wire [DCACHE_NUM_REQS-1:0]                   mem_req_rw,
     output wire [DCACHE_NUM_REQS-1:0][DCACHE_WORD_SIZE-1:0] mem_req_byteen,
     output wire [DCACHE_NUM_REQS-1:0][DCACHE_ADDR_WIDTH-1:0] mem_req_addr,
-    output wire [DCACHE_NUM_REQS-1:0][`MEM_REQ_FLAGS_WIDTH-1:0] mem_req_flags,
+    output wire [DCACHE_NUM_REQS-1:0][MEM_FLAGS_WIDTH-1:0] mem_req_flags,
     output wire [DCACHE_NUM_REQS-1:0][DCACHE_WORD_SIZE*8-1:0] mem_req_data,
     output wire [DCACHE_NUM_REQS-1:0][DCACHE_TAG_WIDTH-1:0] mem_req_tag,
     input  wire [DCACHE_NUM_REQS-1:0]                   mem_req_ready,
@@ -109,7 +109,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
     end
 
 `ifdef PERF_ENABLE
-    cache_perf_t lmem_perf = '0;
+    VX_cache_pkg::cache_perf_t lmem_perf = '0;
 `endif
 
     VX_mem_unit #(

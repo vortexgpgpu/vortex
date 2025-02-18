@@ -29,10 +29,10 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
     VX_execute_if.master execute_out_if[PE_COUNT],
     VX_commit_if .slave commit_in_if[PE_COUNT]
 );
-    localparam PID_BITS    = `CLOG2(`NUM_THREADS / NUM_LANES);
+    localparam PID_BITS    = `CLOG2(`SIMD_WIDTH / NUM_LANES);
     localparam PID_WIDTH   = `UP(PID_BITS);
-    localparam REQ_DATAW   = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `INST_ALU_BITS + $bits(op_args_t) + 1 + `NR_BITS + `NT_WIDTH + (3 * NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1;
-    localparam RSP_DATAW   = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
+    localparam REQ_DATAW   = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + INST_ALU_BITS + $bits(op_args_t) + 1 + NR_BITS + NT_WIDTH + (3 * NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1;
+    localparam RSP_DATAW   = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
 
     wire [PE_COUNT-1:0] pe_req_valid;
     wire [PE_COUNT-1:0][REQ_DATAW-1:0] pe_req_data;

@@ -16,6 +16,7 @@
 `ifdef FPU_FPNEW
 
 module VX_fpu_fpnew
+    import VX_gpu_pkg::*;
     import VX_fpu_pkg::*;
     import fpnew_pkg::*;
     import cf_math_pkg::*;

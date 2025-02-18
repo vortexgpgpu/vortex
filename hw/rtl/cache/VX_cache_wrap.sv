@@ -56,14 +56,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     // Replacement policy
     parameter REPL_POLICY           = `CS_REPL_FIFO,
 
-    // Request debug identifier
-    parameter UUID_WIDTH            = 0,
-
     // core request tag size
     parameter TAG_WIDTH             = UUID_WIDTH + 1,
-
-    // core request flags
-    parameter FLAGS_WIDTH           = 0,
 
     // enable bypass for non-cacheable addresses
     parameter NC_ENABLE             = 0,
@@ -131,8 +125,6 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .MEM_ADDR_WIDTH    (`CS_MEM_ADDR_WIDTH),
             .MEM_TAG_IN_WIDTH  (CACHE_MEM_TAG_WIDTH),
 
-            .UUID_WIDTH        (UUID_WIDTH),
-
             .CORE_OUT_BUF      (CORE_OUT_BUF),
             .MEM_OUT_BUF       (MEM_OUT_BUF)
         ) cache_bypass (
@@ -184,9 +176,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .MSHR_SIZE    (MSHR_SIZE),
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
-            .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (TAG_WIDTH),
-            .FLAGS_WIDTH  (FLAGS_WIDTH),
             .CORE_OUT_BUF (BYPASS_ENABLE ? 1 : CORE_OUT_BUF),
             .MEM_OUT_BUF  (BYPASS_ENABLE ? 1 : MEM_OUT_BUF)
         ) cache (
@@ -236,10 +226,10 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_req);
         `POP_COUNT(perf_mem_stall_per_cycle, perf_mem_stall_per_port);
 
-        reg [`PERF_CTR_BITS-1:0] perf_core_reads;
-        reg [`PERF_CTR_BITS-1:0] perf_core_writes;
-        reg [`PERF_CTR_BITS-1:0] perf_mem_stalls;
-        reg [`PERF_CTR_BITS-1:0] perf_crsp_stalls;
+        reg [PERF_CTR_BITS-1:0] perf_core_reads;
+        reg [PERF_CTR_BITS-1:0] perf_core_writes;
+        reg [PERF_CTR_BITS-1:0] perf_mem_stalls;
+        reg [PERF_CTR_BITS-1:0] perf_crsp_stalls;
 
         always @(posedge clk) begin
             if (reset) begin
@@ -248,10 +238,10 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
                 perf_mem_stalls   <= '0;
                 perf_crsp_stalls  <= '0;
             end else begin
-                perf_core_reads   <= perf_core_reads   + `PERF_CTR_BITS'(perf_core_reads_per_cycle);
-                perf_core_writes  <= perf_core_writes  + `PERF_CTR_BITS'(perf_core_writes_per_cycle);
-                perf_mem_stalls   <= perf_mem_stalls   + `PERF_CTR_BITS'(perf_mem_stall_per_cycle);
-                perf_crsp_stalls  <= perf_crsp_stalls  + `PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
+                perf_core_reads   <= perf_core_reads   + PERF_CTR_BITS'(perf_core_reads_per_cycle);
+                perf_core_writes  <= perf_core_writes  + PERF_CTR_BITS'(perf_core_writes_per_cycle);
+                perf_mem_stalls   <= perf_mem_stalls   + PERF_CTR_BITS'(perf_mem_stall_per_cycle);
+                perf_crsp_stalls  <= perf_crsp_stalls  + PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
             end
         end
 

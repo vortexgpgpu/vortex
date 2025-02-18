@@ -16,15 +16,15 @@
 interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
 
     wire        valid;
-    wire [`NW_WIDTH-1:0] wid;
+    wire [NW_WIDTH-1:0] wid;
     tmc_t       tmc;
     wspawn_t    wspawn;
     split_t     split;
     join_t      sjoin;
     barrier_t   barrier;
 
-    wire [`NW_WIDTH-1:0] dvstack_wid;
-    wire [`DV_STACK_SIZEW-1:0] dvstack_ptr;
+    wire [NW_WIDTH-1:0] dvstack_wid;
+    wire [DV_STACK_SIZEW-1:0] dvstack_ptr;
 
     modport master (
         output valid,

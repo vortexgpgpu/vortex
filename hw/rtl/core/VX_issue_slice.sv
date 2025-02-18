@@ -28,13 +28,13 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 
     VX_decode_if.slave      decode_if,
     VX_writeback_if.slave   writeback_if,
-    VX_dispatch_if.master   dispatch_if [`NUM_EX_UNITS]
+    VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS]
 );
     `UNUSED_PARAM (ISSUE_ID)
 
     VX_ibuffer_if ibuffer_if [PER_ISSUE_WARPS]();
     VX_scoreboard_if scoreboard_if();
-    VX_operands_if operands_if();
+    VX_operands_if operands_if[`NUM_OPCS]();
 
     VX_ibuffer #(
         .INSTANCE_ID (`SFORMATF(("%s-ibuffer", INSTANCE_ID)))
@@ -96,9 +96,9 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 2, 4, 3, (
-            `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + 1 + `NR_BITS * 4 +
-            `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + 1 + `NR_BITS + (3 * `XLEN) +
-            `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * `XLEN) + 1
+            UUID_WIDTH + NW_WIDTH + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NR_BITS * 4 +
+            UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NR_BITS + (3 * `XLEN) +
+            UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + NR_BITS + (`NUM_THREADS * `XLEN) + 1
         ), {
             decode_if.valid,
             decode_if.ready,

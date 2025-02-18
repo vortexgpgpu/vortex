@@ -15,7 +15,7 @@
 
 `include "vortex_afu.vh"
 
-module VX_afu_wrap #(
+module VX_afu_wrap import VX_gpu_pkg::*; #(
 	parameter C_S_AXI_CTRL_ADDR_WIDTH = 8,
 	parameter C_S_AXI_CTRL_DATA_WIDTH = 32,
 	parameter C_M_AXI_MEM_ID_WIDTH    = `PLATFORM_MEMORY_ID_WIDTH,
@@ -111,14 +111,14 @@ module VX_afu_wrap #(
 	`REPEAT (`PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_TO_ARRAY, REPEAT_SEMICOLON);
 `endif
 
-	reg [`CLOG2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
+	reg [`CLOG2(RESET_DELAY+1)-1:0] vx_reset_ctr;
 	reg [PENDING_WR_SIZEW-1:0] vx_pending_writes;
 	reg vx_reset = 1; // asserted at initialization
 	wire vx_busy;
 
 	wire                          dcr_wr_valid;
-	wire [`VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr;
-	wire [`VX_DCR_DATA_WIDTH-1:0] dcr_wr_data;
+	wire [VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr;
+	wire [VX_DCR_DATA_WIDTH-1:0] dcr_wr_data;
 
 	state_e state;
 
@@ -149,7 +149,7 @@ module VX_afu_wrap #(
 					`TRACE(2, ("%t: AFU: Begin initialization\n", $time))
 				`endif
 					state <= STATE_INIT;
-					vx_reset_ctr <= (`RESET_DELAY-1);
+					vx_reset_ctr <= (RESET_DELAY-1);
 					vx_reset <= 1;
 				end
 			end
@@ -435,7 +435,7 @@ module VX_afu_wrap #(
 `ifdef SIMULATION
 `ifndef VERILATOR
 	// disable assertions until full reset
-	reg [`CLOG2(`RESET_DELAY+1)-1:0] assert_delay_ctr;
+	reg [`CLOG2(RESET_DELAY+1)-1:0] assert_delay_ctr;
 	reg assert_enabled;
 	initial begin
 		$assertoff(0, vortex_axi);
@@ -446,7 +446,7 @@ module VX_afu_wrap #(
 			assert_enabled   <= 0;
 		end else begin
 			if (~assert_enabled) begin
-				if (assert_delay_ctr == (`RESET_DELAY-1)) begin
+				if (assert_delay_ctr == (RESET_DELAY-1)) begin
 					assert_enabled <= 1;
 					$asserton(0, vortex_axi); // enable assertions
 				end else begin

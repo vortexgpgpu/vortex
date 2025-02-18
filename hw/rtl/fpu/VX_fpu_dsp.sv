@@ -15,7 +15,7 @@
 
 `ifdef FPU_DSP
 
-module VX_fpu_dsp import VX_fpu_pkg::*; #(
+module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter NUM_LANES = 4,
     parameter TAG_WIDTH = 4,
     parameter OUT_BUF   = 0
@@ -30,9 +30,9 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
 
     input wire [TAG_WIDTH-1:0] tag_in,
 
-    input wire [`INST_FPU_BITS-1:0] op_type,
-    input wire [`INST_FMT_BITS-1:0] fmt,
-    input wire [`INST_FRM_BITS-1:0] frm,
+    input wire [INST_FPU_BITS-1:0] op_type,
+    input wire [INST_FMT_BITS-1:0] fmt,
+    input wire [INST_FRM_BITS-1:0] frm,
 
     input wire [NUM_LANES-1:0][`XLEN-1:0]  dataa,
     input wire [NUM_LANES-1:0][`XLEN-1:0]  datab,
@@ -54,7 +54,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
     localparam NUM_FPCORES = 4;
     localparam FPCORES_BITS = `LOG2UP(NUM_FPCORES);
 
-    localparam REQ_DATAW = NUM_LANES + TAG_WIDTH + `INST_FPU_BITS + `INST_FMT_BITS + `INST_FRM_BITS + 3 * (NUM_LANES * 32);
+    localparam REQ_DATAW = NUM_LANES + TAG_WIDTH + INST_FPU_BITS + INST_FMT_BITS + INST_FRM_BITS + 3 * (NUM_LANES * 32);
     localparam RSP_DATAW = (NUM_LANES * 32) + 1 + $bits(fflags_t) + TAG_WIDTH;
 
     `UNUSED_VAR (fmt)
@@ -65,9 +65,9 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
 
     wire [NUM_FPCORES-1:0][NUM_LANES-1:0] per_core_mask_in;
     wire [NUM_FPCORES-1:0][TAG_WIDTH-1:0] per_core_tag_in;
-    wire [NUM_FPCORES-1:0][`INST_FPU_BITS-1:0] per_core_op_type;
-    wire [NUM_FPCORES-1:0][`INST_FMT_BITS-1:0] per_core_fmt;
-    wire [NUM_FPCORES-1:0][`INST_FRM_BITS-1:0] per_core_frm;
+    wire [NUM_FPCORES-1:0][INST_FPU_BITS-1:0] per_core_op_type;
+    wire [NUM_FPCORES-1:0][INST_FMT_BITS-1:0] per_core_fmt;
+    wire [NUM_FPCORES-1:0][INST_FRM_BITS-1:0] per_core_frm;
     wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_dataa;
     wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_datab;
     wire [NUM_FPCORES-1:0][NUM_LANES-1:0][31:0] per_core_datac;
@@ -98,6 +98,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
 
     VX_stream_switch #(
         .DATAW       (REQ_DATAW),
+        .NUM_INPUTS  (1),
         .NUM_OUTPUTS (NUM_FPCORES)
     ) req_switch (
         .clk       (clk),
@@ -163,9 +164,9 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
 
     wire [1:0][NUM_LANES-1:0] div_sqrt_mask_in;
     wire [1:0][TAG_WIDTH-1:0] div_sqrt_tag_in;
-    wire [1:0][`INST_FPU_BITS-1:0] div_sqrt_op_type;
-    wire [1:0][`INST_FMT_BITS-1:0] div_sqrt_fmt;
-    wire [1:0][`INST_FRM_BITS-1:0] div_sqrt_frm;
+    wire [1:0][INST_FPU_BITS-1:0] div_sqrt_op_type;
+    wire [1:0][INST_FMT_BITS-1:0] div_sqrt_fmt;
+    wire [1:0][INST_FRM_BITS-1:0] div_sqrt_frm;
     wire [1:0][NUM_LANES-1:0][31:0] div_sqrt_dataa;
     wire [1:0][NUM_LANES-1:0][31:0] div_sqrt_datab;
     wire [1:0][NUM_LANES-1:0][31:0] div_sqrt_datac;
@@ -198,6 +199,7 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
 
     VX_stream_switch #(
         .DATAW       (REQ_DATAW),
+        .NUM_INPUTS  (1),
         .NUM_OUTPUTS (2)
     ) div_sqrt_req_switch (
         .clk       (clk),
@@ -333,12 +335,12 @@ module VX_fpu_dsp import VX_fpu_pkg::*; #(
 
     // NCP core ///////////////////////////////////////////////////////////////
 
-    wire ncp_ret_int_in = (per_core_op_type[FPU_NCP] == `INST_FPU_CMP)
-                      || `INST_FPU_IS_CLASS(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP])
-                      || `INST_FPU_IS_MVXW(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP]);
+    wire ncp_ret_int_in = (per_core_op_type[FPU_NCP] == INST_FPU_CMP)
+                      || inst_fpu_is_class(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP])
+                      || inst_fpu_is_mvxw(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP]);
     wire ncp_ret_int_out;
 
-    wire ncp_ret_sext_in = `INST_FPU_IS_MVXW(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP]);
+    wire ncp_ret_sext_in = inst_fpu_is_mvxw(per_core_op_type[FPU_NCP], per_core_frm[FPU_NCP]);
     wire ncp_ret_sext_out;
 
     VX_fpu_ncp #(

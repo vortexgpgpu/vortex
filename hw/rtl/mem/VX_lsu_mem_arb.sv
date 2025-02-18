@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_lsu_mem_arb #(
+module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
     parameter NUM_INPUTS     = 1,
     parameter NUM_OUTPUTS    = 1,
     parameter NUM_LANES      = 1,
@@ -25,7 +25,7 @@ module VX_lsu_mem_arb #(
     parameter `STRING ARBITER = "R",
     parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
     parameter ADDR_WIDTH     = (MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE)),
-    parameter FLAGS_WIDTH    = `MEM_REQ_FLAGS_WIDTH
+    parameter FLAGS_WIDTH    = MEM_FLAGS_WIDTH
 ) (
     input wire              clk,
     input wire              reset,
@@ -40,14 +40,14 @@ module VX_lsu_mem_arb #(
 
     `STATIC_ASSERT ((NUM_INPUTS >= NUM_OUTPUTS), ("invalid parameter: NUM_INPUTS=%0d, NUM_OUTPUTS=%0d", NUM_INPUTS, NUM_OUTPUTS));
 
+    wire [NUM_OUTPUTS-1:0]                req_valid_out;
+    wire [NUM_OUTPUTS-1:0][REQ_DATAW-1:0] req_data_out;
+    wire [NUM_OUTPUTS-1:0]                req_ready_out;
+    wire [NUM_OUTPUTS-1:0][`UP(LOG_NUM_REQS)-1:0] req_sel_out;
+
     wire [NUM_INPUTS-1:0]                 req_valid_in;
     wire [NUM_INPUTS-1:0][REQ_DATAW-1:0]  req_data_in;
     wire [NUM_INPUTS-1:0]                 req_ready_in;
-
-    wire [NUM_OUTPUTS-1:0]                req_valid_out;
-    wire [NUM_OUTPUTS-1:0][REQ_DATAW-1:0] req_data_out;
-    wire [NUM_OUTPUTS-1:0][`UP(LOG_NUM_REQS)-1:0] req_sel_out;
-    wire [NUM_OUTPUTS-1:0]                req_ready_out;
 
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_req_data_in
         assign req_valid_in[i] = bus_in_if[i].req_valid;

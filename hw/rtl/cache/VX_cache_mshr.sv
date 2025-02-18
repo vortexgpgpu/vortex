@@ -42,7 +42,7 @@
 // and as such changes to either module requires careful evaluation.
 //
 
-module VX_cache_mshr #(
+module VX_cache_mshr import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID= "",
     parameter BANK_ID           = 0,
     // Size of line inside a bank in bytes
@@ -51,8 +51,6 @@ module VX_cache_mshr #(
     parameter NUM_BANKS         = 1,
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE         = 4,
-    // Request debug identifier
-    parameter UUID_WIDTH        = 0,
     // MSHR parameters
     parameter DATA_WIDTH        = 1,
     // Enable cache writeback

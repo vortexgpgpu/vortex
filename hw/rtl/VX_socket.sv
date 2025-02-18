@@ -103,8 +103,6 @@ module VX_socket import VX_gpu_pkg::*; #(
         .MRSQ_SIZE      (`ICACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`ICACHE_MREQ_SIZE),
         .TAG_WIDTH      (ICACHE_TAG_WIDTH),
-        .FLAGS_WIDTH    (0),
-        .UUID_WIDTH     (`UUID_WIDTH),
         .WRITE_ENABLE   (0),
         .REPL_POLICY    (`ICACHE_REPL_POLICY),
         .NC_ENABLE      (0),
@@ -151,8 +149,6 @@ module VX_socket import VX_gpu_pkg::*; #(
         .MRSQ_SIZE      (`DCACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`DCACHE_WRITEBACK ? `DCACHE_MSHR_SIZE : `DCACHE_MREQ_SIZE),
         .TAG_WIDTH      (DCACHE_TAG_WIDTH),
-        .UUID_WIDTH     (`UUID_WIDTH),
-        .FLAGS_WIDTH    (`MEM_REQ_FLAGS_WIDTH),
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`DCACHE_WRITEBACK),
         .DIRTY_BYTES    (`DCACHE_DIRTYBYTES),
@@ -184,8 +180,8 @@ module VX_socket import VX_gpu_pkg::*; #(
                 .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
             ) l1_mem_arb_bus_if[1]();
 
-            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[0], icache_mem_bus_if[0], L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH, `UUID_WIDTH);
-            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[1], dcache_mem_bus_if[0], L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, `UUID_WIDTH);
+            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[0], icache_mem_bus_if[0], L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[1], dcache_mem_bus_if[0], L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
 
             VX_mem_arb #(
                 .NUM_INPUTS (2),
@@ -210,7 +206,7 @@ module VX_socket import VX_gpu_pkg::*; #(
                 .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
             ) l1_mem_arb_bus_if();
 
-            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_arb_bus_if, dcache_mem_bus_if[i], L1_MEM_ARB_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, `UUID_WIDTH);
+            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_arb_bus_if, dcache_mem_bus_if[i], L1_MEM_ARB_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
             `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], l1_mem_arb_bus_if);
         end
     end

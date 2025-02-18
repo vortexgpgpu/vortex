@@ -20,7 +20,7 @@ module VX_commit import VX_gpu_pkg::*; #(
     input wire              reset,
 
     // inputs
-    VX_commit_if.slave      commit_if [`NUM_EX_UNITS * `ISSUE_WIDTH],
+    VX_commit_if.slave      commit_if [NUM_EX_UNITS * `ISSUE_WIDTH],
 
     // outputs
     VX_writeback_if.master  writeback_if  [`ISSUE_WIDTH],
@@ -28,8 +28,8 @@ module VX_commit import VX_gpu_pkg::*; #(
     VX_commit_sched_if.master commit_sched_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS + 1 + `NR_BITS + `NUM_THREADS * `XLEN + 1 + 1 + 1;
-    localparam COMMIT_SIZEW = `CLOG2(`NUM_THREADS + 1);
+    localparam DATAW = UUID_WIDTH + NW_WIDTH + `SIMD_WIDTH + PC_BITS + 1 + NR_BITS + `SIMD_WIDTH * `XLEN + 1 + 1 + 1;
+    localparam COMMIT_SIZEW = `CLOG2(`SIMD_WIDTH + 1);
     localparam COMMIT_ALL_SIZEW = COMMIT_SIZEW + `ISSUE_WIDTH - 1;
 
     // commit arbitration
@@ -37,24 +37,24 @@ module VX_commit import VX_gpu_pkg::*; #(
     VX_commit_if commit_arb_if[`ISSUE_WIDTH]();
 
     wire [`ISSUE_WIDTH-1:0] per_issue_commit_fire;
-    wire [`ISSUE_WIDTH-1:0][`NW_WIDTH-1:0] per_issue_commit_wid;
-    wire [`ISSUE_WIDTH-1:0][`NUM_THREADS-1:0] per_issue_commit_tmask;
+    wire [`ISSUE_WIDTH-1:0][NW_WIDTH-1:0] per_issue_commit_wid;
+    wire [`ISSUE_WIDTH-1:0][`SIMD_WIDTH-1:0] per_issue_commit_tmask;
     wire [`ISSUE_WIDTH-1:0] per_issue_commit_eop;
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_commit_arbs
 
-        wire [`NUM_EX_UNITS-1:0]            valid_in;
-        wire [`NUM_EX_UNITS-1:0][DATAW-1:0] data_in;
-        wire [`NUM_EX_UNITS-1:0]            ready_in;
+        wire [NUM_EX_UNITS-1:0]            valid_in;
+        wire [NUM_EX_UNITS-1:0][DATAW-1:0] data_in;
+        wire [NUM_EX_UNITS-1:0]            ready_in;
 
-        for (genvar j = 0; j < `NUM_EX_UNITS; ++j) begin : g_data_in
+        for (genvar j = 0; j < NUM_EX_UNITS; ++j) begin : g_data_in
             assign valid_in[j] = commit_if[j * `ISSUE_WIDTH + i].valid;
             assign data_in[j]  = commit_if[j * `ISSUE_WIDTH + i].data;
             assign commit_if[j * `ISSUE_WIDTH + i].ready = ready_in[j];
         end
 
         VX_stream_arb #(
-            .NUM_INPUTS (`NUM_EX_UNITS),
+            .NUM_INPUTS (NUM_EX_UNITS),
             .DATAW      (DATAW),
             .ARBITER    ("P"),
             .OUT_BUF    (1)
@@ -71,7 +71,7 @@ module VX_commit import VX_gpu_pkg::*; #(
         );
 
         assign per_issue_commit_fire[i] = commit_arb_if[i].valid && commit_arb_if[i].ready;
-        assign per_issue_commit_tmask[i]= {`NUM_THREADS{per_issue_commit_fire[i]}} & commit_arb_if[i].data.tmask;
+        assign per_issue_commit_tmask[i]= {`SIMD_WIDTH{per_issue_commit_fire[i]}} & commit_arb_if[i].data.tmask;
         assign per_issue_commit_wid[i]  = commit_arb_if[i].data.wid;
         assign per_issue_commit_eop[i]  = commit_arb_if[i].data.eop;
     end
@@ -122,13 +122,13 @@ module VX_commit import VX_gpu_pkg::*; #(
         .data_out ({commit_fire_any_rr, commit_size_all_rr})
     );
 
-    reg [`PERF_CTR_BITS-1:0] instret;
+    reg [PERF_CTR_BITS-1:0] instret;
     always @(posedge clk) begin
        if (reset) begin
             instret <= '0;
         end else begin
             if (commit_fire_any_rr) begin
-                instret <= instret + `PERF_CTR_BITS'(commit_size_all_rr);
+                instret <= instret + PERF_CTR_BITS'(commit_size_all_rr);
             end
         end
     end
@@ -175,13 +175,13 @@ module VX_commit import VX_gpu_pkg::*; #(
 
 `ifdef DBG_TRACE_PIPELINE
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin : g_trace
-        for (genvar j = 0; j < `NUM_EX_UNITS; ++j) begin : g_j
+        for (genvar j = 0; j < NUM_EX_UNITS; ++j) begin : g_j
             always @(posedge clk) begin
                 if (commit_if[j * `ISSUE_WIDTH + i].valid && commit_if[j * `ISSUE_WIDTH + i].ready) begin
                     `TRACE(1, ("%t: %s: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, commit_if[j * `ISSUE_WIDTH + i].data.wid, {commit_if[j * `ISSUE_WIDTH + i].data.PC, 1'b0}))
                     trace_ex_type(1, j);
                     `TRACE(1, (", tmask=%b, wb=%0d, rd=%0d, sop=%b, eop=%b, data=", commit_if[j * `ISSUE_WIDTH + i].data.tmask, commit_if[j * `ISSUE_WIDTH + i].data.wb, commit_if[j * `ISSUE_WIDTH + i].data.rd, commit_if[j * `ISSUE_WIDTH + i].data.sop, commit_if[j * `ISSUE_WIDTH + i].data.eop))
-                    `TRACE_ARRAY1D(1, "0x%0h", commit_if[j * `ISSUE_WIDTH + i].data.data, `NUM_THREADS)
+                    `TRACE_ARRAY1D(1, "0x%0h", commit_if[j * `ISSUE_WIDTH + i].data.data, `SIMD_WIDTH)
                     `TRACE(1, (" (#%0d)\n", commit_if[j * `ISSUE_WIDTH + i].data.uuid))
                 end
             end

@@ -21,24 +21,24 @@ module Vortex import VX_gpu_pkg::*; (
     input  wire                             reset,
 
     // Memory request
-    output wire                             mem_req_valid [`VX_MEM_PORTS],
-    output wire                             mem_req_rw [`VX_MEM_PORTS],
-    output wire [`VX_MEM_BYTEEN_WIDTH-1:0]  mem_req_byteen [`VX_MEM_PORTS],
-    output wire [`VX_MEM_ADDR_WIDTH-1:0]    mem_req_addr [`VX_MEM_PORTS],
-    output wire [`VX_MEM_DATA_WIDTH-1:0]    mem_req_data [`VX_MEM_PORTS],
-    output wire [`VX_MEM_TAG_WIDTH-1:0]     mem_req_tag [`VX_MEM_PORTS],
-    input  wire                             mem_req_ready [`VX_MEM_PORTS],
+    output wire                             mem_req_valid [VX_MEM_PORTS],
+    output wire                             mem_req_rw [VX_MEM_PORTS],
+    output wire [VX_MEM_BYTEEN_WIDTH-1:0]   mem_req_byteen [VX_MEM_PORTS],
+    output wire [VX_MEM_ADDR_WIDTH-1:0]     mem_req_addr [VX_MEM_PORTS],
+    output wire [VX_MEM_DATA_WIDTH-1:0]     mem_req_data [VX_MEM_PORTS],
+    output wire [VX_MEM_TAG_WIDTH-1:0]      mem_req_tag [VX_MEM_PORTS],
+    input  wire                             mem_req_ready [VX_MEM_PORTS],
 
     // Memory response
-    input wire                              mem_rsp_valid [`VX_MEM_PORTS],
-    input wire [`VX_MEM_DATA_WIDTH-1:0]     mem_rsp_data [`VX_MEM_PORTS],
-    input wire [`VX_MEM_TAG_WIDTH-1:0]      mem_rsp_tag [`VX_MEM_PORTS],
-    output wire                             mem_rsp_ready [`VX_MEM_PORTS],
+    input wire                              mem_rsp_valid [VX_MEM_PORTS],
+    input wire [VX_MEM_DATA_WIDTH-1:0]      mem_rsp_data [VX_MEM_PORTS],
+    input wire [VX_MEM_TAG_WIDTH-1:0]       mem_rsp_tag [VX_MEM_PORTS],
+    output wire                             mem_rsp_ready [VX_MEM_PORTS],
 
     // DCR write request
     input  wire                             dcr_wr_valid,
-    input  wire [`VX_DCR_ADDR_WIDTH-1:0]    dcr_wr_addr,
-    input  wire [`VX_DCR_DATA_WIDTH-1:0]    dcr_wr_data,
+    input  wire [VX_DCR_ADDR_WIDTH-1:0]     dcr_wr_addr,
+    input  wire [VX_DCR_DATA_WIDTH-1:0]     dcr_wr_data,
 
     // Status
     output wire                             busy
@@ -90,8 +90,6 @@ module Vortex import VX_gpu_pkg::*; (
         .WRITEBACK      (`L3_WRITEBACK),
         .DIRTY_BYTES    (`L3_DIRTYBYTES),
         .REPL_POLICY    (`L3_REPL_POLICY),
-        .UUID_WIDTH     (`UUID_WIDTH),
-        .FLAGS_WIDTH    (`MEM_REQ_FLAGS_WIDTH),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
         .NC_ENABLE      (1),
@@ -164,12 +162,12 @@ module Vortex import VX_gpu_pkg::*; (
 
 `ifdef PERF_ENABLE
 
-    localparam MEM_PORTS_CTR_W = `CLOG2(`VX_MEM_PORTS+1);
+    localparam MEM_PORTS_CTR_W = `CLOG2(VX_MEM_PORTS+1);
 
-    wire [`VX_MEM_PORTS-1:0] mem_req_fire, mem_rsp_fire;
-    wire [`VX_MEM_PORTS-1:0] mem_rd_req_fire, mem_wr_req_fire;
+    wire [VX_MEM_PORTS-1:0] mem_req_fire, mem_rsp_fire;
+    wire [VX_MEM_PORTS-1:0] mem_rd_req_fire, mem_wr_req_fire;
 
-    for (genvar i = 0; i < `VX_MEM_PORTS; ++i) begin : g_perf_ctrs
+    for (genvar i = 0; i < VX_MEM_PORTS; ++i) begin : g_perf_ctrs
         assign mem_req_fire[i] = mem_req_valid[i] & mem_req_ready[i];
         assign mem_rsp_fire[i] = mem_rsp_valid[i] & mem_rsp_ready[i];
         assign mem_rd_req_fire[i] = mem_req_fire[i] & ~mem_req_rw[i];
@@ -184,14 +182,14 @@ module Vortex import VX_gpu_pkg::*; (
     `POP_COUNT(perf_mem_writes_per_cycle, mem_wr_req_fire);
     `POP_COUNT(perf_mem_rsps_per_cycle, mem_rsp_fire);
 
-    reg [`PERF_CTR_BITS-1:0] perf_mem_pending_reads;
+    reg [PERF_CTR_BITS-1:0] perf_mem_pending_reads;
 
     always @(posedge clk) begin
         if (reset) begin
             perf_mem_pending_reads <= '0;
         end else begin
             perf_mem_pending_reads <= $signed(perf_mem_pending_reads) +
-                `PERF_CTR_BITS'($signed((MEM_PORTS_CTR_W+1)'(perf_mem_reads_per_cycle) - (MEM_PORTS_CTR_W+1)'(perf_mem_rsps_per_cycle)));
+                PERF_CTR_BITS'($signed((MEM_PORTS_CTR_W+1)'(perf_mem_reads_per_cycle) - (MEM_PORTS_CTR_W+1)'(perf_mem_rsps_per_cycle)));
         end
     end
 
@@ -199,8 +197,8 @@ module Vortex import VX_gpu_pkg::*; (
         if (reset) begin
             mem_perf <= '0;
         end else begin
-            mem_perf.reads <= mem_perf.reads + `PERF_CTR_BITS'(perf_mem_reads_per_cycle);
-            mem_perf.writes <= mem_perf.writes + `PERF_CTR_BITS'(perf_mem_writes_per_cycle);
+            mem_perf.reads <= mem_perf.reads + PERF_CTR_BITS'(perf_mem_reads_per_cycle);
+            mem_perf.writes <= mem_perf.writes + PERF_CTR_BITS'(perf_mem_writes_per_cycle);
             mem_perf.latency <= mem_perf.latency + perf_mem_pending_reads;
         end
     end
@@ -214,7 +212,7 @@ module Vortex import VX_gpu_pkg::*; (
     end
 
 `ifdef DBG_TRACE_MEM
-    for (genvar i = 0; i < `VX_MEM_PORTS; ++i) begin : g_trace
+    for (genvar i = 0; i < VX_MEM_PORTS; ++i) begin : g_trace
         always @(posedge clk) begin
             if (mem_bus_if[i].req_valid && mem_bus_if[i].req_ready) begin
                 if (mem_bus_if[i].req_data.rw) begin

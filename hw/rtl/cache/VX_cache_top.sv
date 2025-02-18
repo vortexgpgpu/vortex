@@ -51,9 +51,6 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Enable dirty bytes on writeback
     parameter DIRTY_BYTES           = 1,
 
-    // Request debug identifier
-    parameter UUID_WIDTH            = 0,
-
     // core request tag size
     parameter TAG_WIDTH             = 32,
 
@@ -78,7 +75,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     input  wire                     core_req_rw [NUM_REQS],
     input  wire[WORD_SIZE-1:0]      core_req_byteen [NUM_REQS],
     input  wire[`CS_WORD_ADDR_WIDTH-1:0] core_req_addr [NUM_REQS],
-    input  wire[`MEM_REQ_FLAGS_WIDTH-1:0] core_req_flags [NUM_REQS],
+    input  wire[MEM_FLAGS_WIDTH-1:0] core_req_flags [NUM_REQS],
     input  wire[`CS_WORD_WIDTH-1:0] core_req_data [NUM_REQS],
     input  wire[TAG_WIDTH-1:0]      core_req_tag [NUM_REQS],
     output wire                     core_req_ready [NUM_REQS],
@@ -167,7 +164,6 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .MRSQ_SIZE      (MRSQ_SIZE),
         .MREQ_SIZE      (MREQ_SIZE),
         .TAG_WIDTH      (TAG_WIDTH),
-        .UUID_WIDTH     (UUID_WIDTH),
         .WRITE_ENABLE   (WRITE_ENABLE),
         .WRITEBACK      (WRITEBACK),
         .DIRTY_BYTES    (DIRTY_BYTES),

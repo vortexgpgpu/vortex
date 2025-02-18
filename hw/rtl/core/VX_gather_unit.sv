@@ -29,12 +29,12 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
 
 );
     `STATIC_ASSERT (`IS_DIVISBLE(`ISSUE_WIDTH, BLOCK_SIZE), ("invalid parameter"))
-    `STATIC_ASSERT (`IS_DIVISBLE(`NUM_THREADS, NUM_LANES), ("invalid parameter"))
+    `STATIC_ASSERT (`IS_DIVISBLE(`SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
     localparam BLOCK_SIZE_W = `LOG2UP(BLOCK_SIZE);
-    localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
+    localparam PID_BITS     = `CLOG2(`SIMD_WIDTH / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
-    localparam DATAW        = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + 1 + `NR_BITS + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
-    localparam DATA_WIS_OFF = DATAW - (`UUID_WIDTH + `NW_WIDTH);
+    localparam DATAW        = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + 1 + NR_BITS + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
+    localparam DATA_WIS_OFF = DATAW - (UUID_WIDTH + NW_WIDTH);
 
     wire [BLOCK_SIZE-1:0] commit_in_valid;
     wire [BLOCK_SIZE-1:0][DATAW-1:0] commit_in_data;
@@ -95,8 +95,8 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
             .ready_out  (commit_tmp_if.ready)
         );
 
-        logic [`NUM_THREADS-1:0] commit_tmask_w;
-        logic [`NUM_THREADS-1:0][`XLEN-1:0] commit_data_w;
+        logic [`SIMD_WIDTH-1:0] commit_tmask_w;
+        logic [`SIMD_WIDTH-1:0][`XLEN-1:0] commit_data_w;
         if (PID_BITS != 0) begin : g_commit_data_with_pid
             always @(*) begin
                 commit_tmask_w = '0;

@@ -14,9 +14,9 @@
 `include "VX_define.vh"
 
 module Vortex_axi import VX_gpu_pkg::*; #(
-    parameter AXI_DATA_WIDTH = `VX_MEM_DATA_WIDTH,
+    parameter AXI_DATA_WIDTH = VX_MEM_DATA_WIDTH,
     parameter AXI_ADDR_WIDTH = `MEM_ADDR_WIDTH,
-    parameter AXI_TID_WIDTH  = `VX_MEM_TAG_WIDTH,
+    parameter AXI_TID_WIDTH  = VX_MEM_TAG_WIDTH,
     parameter AXI_NUM_BANKS  = 1
 )(
     `SCOPE_IO_DECL
@@ -76,30 +76,30 @@ module Vortex_axi import VX_gpu_pkg::*; #(
 
     // DCR write request
     input  wire                         dcr_wr_valid,
-    input  wire [`VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr,
-    input  wire [`VX_DCR_DATA_WIDTH-1:0] dcr_wr_data,
+    input  wire [VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr,
+    input  wire [VX_DCR_DATA_WIDTH-1:0] dcr_wr_data,
 
     // Status
     output wire                         busy
 );
     localparam DST_LDATAW = `CLOG2(AXI_DATA_WIDTH);
-    localparam SRC_LDATAW = `CLOG2(`VX_MEM_DATA_WIDTH);
+    localparam SRC_LDATAW = `CLOG2(VX_MEM_DATA_WIDTH);
     localparam SUB_LDATAW = DST_LDATAW - SRC_LDATAW;
-    localparam VX_MEM_TAG_A_WIDTH  = `VX_MEM_TAG_WIDTH + `MAX(SUB_LDATAW, 0);
-    localparam VX_MEM_ADDR_A_WIDTH = `VX_MEM_ADDR_WIDTH - SUB_LDATAW;
+    localparam VX_MEM_TAG_A_WIDTH  = VX_MEM_TAG_WIDTH + `MAX(SUB_LDATAW, 0);
+    localparam VX_MEM_ADDR_A_WIDTH = VX_MEM_ADDR_WIDTH - SUB_LDATAW;
 
-    wire                            mem_req_valid [`VX_MEM_PORTS];
-    wire                            mem_req_rw [`VX_MEM_PORTS];
-    wire [`VX_MEM_BYTEEN_WIDTH-1:0] mem_req_byteen [`VX_MEM_PORTS];
-    wire [`VX_MEM_ADDR_WIDTH-1:0]   mem_req_addr [`VX_MEM_PORTS];
-    wire [`VX_MEM_DATA_WIDTH-1:0]   mem_req_data [`VX_MEM_PORTS];
-    wire [`VX_MEM_TAG_WIDTH-1:0]    mem_req_tag [`VX_MEM_PORTS];
-    wire                            mem_req_ready [`VX_MEM_PORTS];
+    wire                            mem_req_valid [VX_MEM_PORTS];
+    wire                            mem_req_rw [VX_MEM_PORTS];
+    wire [VX_MEM_BYTEEN_WIDTH-1:0]  mem_req_byteen [VX_MEM_PORTS];
+    wire [VX_MEM_ADDR_WIDTH-1:0]    mem_req_addr [VX_MEM_PORTS];
+    wire [VX_MEM_DATA_WIDTH-1:0]    mem_req_data [VX_MEM_PORTS];
+    wire [VX_MEM_TAG_WIDTH-1:0]     mem_req_tag [VX_MEM_PORTS];
+    wire                            mem_req_ready [VX_MEM_PORTS];
 
-    wire                            mem_rsp_valid [`VX_MEM_PORTS];
-    wire [`VX_MEM_DATA_WIDTH-1:0]   mem_rsp_data [`VX_MEM_PORTS];
-    wire [`VX_MEM_TAG_WIDTH-1:0]    mem_rsp_tag [`VX_MEM_PORTS];
-    wire                            mem_rsp_ready [`VX_MEM_PORTS];
+    wire                            mem_rsp_valid [VX_MEM_PORTS];
+    wire [VX_MEM_DATA_WIDTH-1:0]    mem_rsp_data [VX_MEM_PORTS];
+    wire [VX_MEM_TAG_WIDTH-1:0]     mem_rsp_tag [VX_MEM_PORTS];
+    wire                            mem_rsp_ready [VX_MEM_PORTS];
 
     `SCOPE_IO_SWITCH (1);
 
@@ -129,27 +129,27 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         .busy           (busy)
     );
 
-    wire                            mem_req_valid_a [`VX_MEM_PORTS];
-    wire                            mem_req_rw_a [`VX_MEM_PORTS];
-    wire [(AXI_DATA_WIDTH/8)-1:0]   mem_req_byteen_a [`VX_MEM_PORTS];
-    wire [VX_MEM_ADDR_A_WIDTH-1:0]  mem_req_addr_a [`VX_MEM_PORTS];
-    wire [AXI_DATA_WIDTH-1:0]       mem_req_data_a [`VX_MEM_PORTS];
-    wire [VX_MEM_TAG_A_WIDTH-1:0]   mem_req_tag_a [`VX_MEM_PORTS];
-    wire                            mem_req_ready_a [`VX_MEM_PORTS];
+    wire                            mem_req_valid_a [VX_MEM_PORTS];
+    wire                            mem_req_rw_a [VX_MEM_PORTS];
+    wire [(AXI_DATA_WIDTH/8)-1:0]   mem_req_byteen_a [VX_MEM_PORTS];
+    wire [VX_MEM_ADDR_A_WIDTH-1:0]  mem_req_addr_a [VX_MEM_PORTS];
+    wire [AXI_DATA_WIDTH-1:0]       mem_req_data_a [VX_MEM_PORTS];
+    wire [VX_MEM_TAG_A_WIDTH-1:0]   mem_req_tag_a [VX_MEM_PORTS];
+    wire                            mem_req_ready_a [VX_MEM_PORTS];
 
-    wire                            mem_rsp_valid_a [`VX_MEM_PORTS];
-    wire [AXI_DATA_WIDTH-1:0]       mem_rsp_data_a [`VX_MEM_PORTS];
-    wire [VX_MEM_TAG_A_WIDTH-1:0]   mem_rsp_tag_a [`VX_MEM_PORTS];
-    wire                            mem_rsp_ready_a [`VX_MEM_PORTS];
+    wire                            mem_rsp_valid_a [VX_MEM_PORTS];
+    wire [AXI_DATA_WIDTH-1:0]       mem_rsp_data_a [VX_MEM_PORTS];
+    wire [VX_MEM_TAG_A_WIDTH-1:0]   mem_rsp_tag_a [VX_MEM_PORTS];
+    wire                            mem_rsp_ready_a [VX_MEM_PORTS];
 
     // Adjust memory data width to match AXI interface
-    for (genvar i = 0; i < `VX_MEM_PORTS; i++) begin : g_mem_adapter
+    for (genvar i = 0; i < VX_MEM_PORTS; i++) begin : g_mem_adapter
         VX_mem_data_adapter #(
-            .SRC_DATA_WIDTH (`VX_MEM_DATA_WIDTH),
+            .SRC_DATA_WIDTH (VX_MEM_DATA_WIDTH),
             .DST_DATA_WIDTH (AXI_DATA_WIDTH),
-            .SRC_ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),
+            .SRC_ADDR_WIDTH (VX_MEM_ADDR_WIDTH),
             .DST_ADDR_WIDTH (VX_MEM_ADDR_A_WIDTH),
-            .SRC_TAG_WIDTH  (`VX_MEM_TAG_WIDTH),
+            .SRC_TAG_WIDTH  (VX_MEM_TAG_WIDTH),
             .DST_TAG_WIDTH  (VX_MEM_TAG_A_WIDTH),
             .REQ_OUT_BUF    (0),
             .RSP_OUT_BUF    (0)
@@ -191,11 +191,11 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         .ADDR_WIDTH_OUT (AXI_ADDR_WIDTH),
         .TAG_WIDTH_IN   (VX_MEM_TAG_A_WIDTH),
         .TAG_WIDTH_OUT  (AXI_TID_WIDTH),
-        .NUM_PORTS_IN   (`VX_MEM_PORTS),
+        .NUM_PORTS_IN   (VX_MEM_PORTS),
         .NUM_BANKS_OUT  (AXI_NUM_BANKS),
         .INTERLEAVE     (`PLATFORM_MEMORY_INTERLEAVE),
-        .REQ_OUT_BUF    ((`VX_MEM_PORTS > 1) ? 2 : 0),
-        .RSP_OUT_BUF    ((`VX_MEM_PORTS > 1 || AXI_NUM_BANKS > 1) ? 2 : 0)
+        .REQ_OUT_BUF    ((VX_MEM_PORTS > 1) ? 2 : 0),
+        .RSP_OUT_BUF    ((VX_MEM_PORTS > 1 || AXI_NUM_BANKS > 1) ? 2 : 0)
     ) axi_adapter (
         .clk            (clk),
         .reset          (reset),

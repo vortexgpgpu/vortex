@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_alu_int #(
+module VX_alu_int import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter BLOCK_IDX = 0,
     parameter NUM_LANES = 1
@@ -32,7 +32,7 @@ module VX_alu_int #(
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam LANE_BITS      = `CLOG2(NUM_LANES);
     localparam LANE_WIDTH     = `UP(LANE_BITS);
-    localparam PID_BITS       = `CLOG2(`NUM_THREADS / NUM_LANES);
+    localparam PID_BITS       = `CLOG2(`SIMD_WIDTH / NUM_LANES);
     localparam PID_WIDTH      = `UP(PID_BITS);
     localparam SHIFT_IMM_BITS = `CLOG2(`XLEN);
 
@@ -57,12 +57,12 @@ module VX_alu_int #(
     wire is_alu_w = 0;
 `endif
 
-    wire [`INST_ALU_BITS-1:0] alu_op = `INST_ALU_BITS'(execute_if.data.op_type);
-    wire [`INST_BR_BITS-1:0]   br_op = `INST_BR_BITS'(execute_if.data.op_type);
-    wire                    is_br_op = (execute_if.data.op_args.alu.xtype == `ALU_TYPE_BRANCH);
-    wire                   is_sub_op = `INST_ALU_IS_SUB(alu_op);
-    wire                   is_signed = `INST_ALU_SIGNED(alu_op);
-    wire [1:0]              op_class = is_br_op ? `INST_BR_CLASS(alu_op) : `INST_ALU_CLASS(alu_op);
+    wire [INST_ALU_BITS-1:0] alu_op = INST_ALU_BITS'(execute_if.data.op_type);
+    wire [INST_BR_BITS-1:0]   br_op = INST_BR_BITS'(execute_if.data.op_type);
+    wire                    is_br_op = (execute_if.data.op_args.alu.xtype == ALU_TYPE_BRANCH);
+    wire                   is_sub_op = inst_alu_is_sub(alu_op);
+    wire                   is_signed = inst_alu_signed(alu_op);
+    wire [1:0]              op_class = is_br_op ? inst_br_class(alu_op) : inst_alu_class(alu_op);
 
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1 = execute_if.data.rs1_data;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2 = execute_if.data.rs2_data;
@@ -133,13 +133,13 @@ module VX_alu_int #(
 
     // branch
 
-    wire [`PC_BITS-1:0] PC_r;
-    wire [`INST_BR_BITS-1:0] br_op_r;
-    wire [`PC_BITS-1:0] cbr_dest, cbr_dest_r;
+    wire [PC_BITS-1:0] PC_r;
+    wire [INST_BR_BITS-1:0] br_op_r;
+    wire [PC_BITS-1:0] cbr_dest, cbr_dest_r;
     wire [LANE_WIDTH-1:0] tid, tid_r;
     wire is_br_op_r;
 
-    assign cbr_dest = add_result[0][1 +: `PC_BITS];
+    assign cbr_dest = add_result[0][1 +: PC_BITS];
 
     if (LANE_BITS != 0) begin : g_tid
         assign tid = execute_if.data.tid[0 +: LANE_BITS];
@@ -148,7 +148,7 @@ module VX_alu_int #(
     end
 
     VX_elastic_buffer #(
-        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `NR_BITS + 1 + PID_WIDTH + 1 + 1 + (NUM_LANES * `XLEN) + `PC_BITS + `PC_BITS + 1 + `INST_BR_BITS + LANE_WIDTH)
+        .DATAW (UUID_WIDTH + NW_WIDTH + NUM_LANES + NR_BITS + 1 + PID_WIDTH + 1 + 1 + (NUM_LANES * `XLEN) + PC_BITS + PC_BITS + 1 + INST_BR_BITS + LANE_WIDTH)
     ) rsp_buf (
         .clk      (clk),
         .reset    (reset),
@@ -161,9 +161,9 @@ module VX_alu_int #(
     );
 
     `UNUSED_VAR (br_op_r)
-    wire is_br_neg  = `INST_BR_IS_NEG(br_op_r);
-    wire is_br_less = `INST_BR_IS_LESS(br_op_r);
-    wire is_br_static = `INST_BR_IS_STATIC(br_op_r);
+    wire is_br_neg  = inst_br_is_neg(br_op_r);
+    wire is_br_less = inst_br_is_less(br_op_r);
+    wire is_br_static = inst_br_is_static(br_op_r);
 
     wire [`XLEN-1:0] br_result = alu_result_r[tid_r];
     wire is_less  = br_result[0];
@@ -171,12 +171,12 @@ module VX_alu_int #(
 
     wire br_enable = is_br_op_r && commit_if.valid && commit_if.ready && commit_if.data.eop;
     wire br_taken = ((is_br_less ? is_less : is_equal) ^ is_br_neg) | is_br_static;
-    wire [`PC_BITS-1:0] br_dest = is_br_static ? br_result[1 +: `PC_BITS] : cbr_dest_r;
-    wire [`NW_WIDTH-1:0] br_wid;
+    wire [PC_BITS-1:0] br_dest = is_br_static ? br_result[1 +: PC_BITS] : cbr_dest_r;
+    wire [NW_WIDTH-1:0] br_wid;
     `ASSIGN_BLOCKED_WID (br_wid, commit_if.data.wid, BLOCK_IDX, `NUM_ALU_BLOCKS)
 
     VX_pipe_register #(
-        .DATAW (1 + `NW_WIDTH + 1 + `PC_BITS)
+        .DATAW (1 + NW_WIDTH + 1 + PC_BITS)
     ) branch_reg (
         .clk      (clk),
         .reset    (reset),
@@ -186,7 +186,7 @@ module VX_alu_int #(
     );
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_commit
-        assign commit_if.data.data[i] = (is_br_op_r && is_br_static) ? {(PC_r + `PC_BITS'(2)), 1'd0} : alu_result_r[i];
+        assign commit_if.data.data[i] = (is_br_op_r && is_br_static) ? {(PC_r + PC_BITS'(2)), 1'd0} : alu_result_r[i];
     end
 
     assign commit_if.data.PC = PC_r;

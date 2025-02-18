@@ -13,7 +13,7 @@
 
 `include "VX_fpu_define.vh"
 
-module VX_fpu_unit import VX_fpu_pkg::*; #(
+module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
     input wire clk,
@@ -29,10 +29,10 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE = `NUM_FPU_BLOCKS;
     localparam NUM_LANES  = `NUM_FPU_LANES;
-    localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
+    localparam PID_BITS   = `CLOG2(`SIMD_WIDTH / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
     localparam TAG_WIDTH  = `LOG2UP(`FPUQ_SIZE);
-    localparam PARTIAL_BW = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `NUM_THREADS);
+    localparam PARTIAL_BW = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `SIMD_WIDTH);
 
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)
@@ -64,11 +64,11 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         fflags_t fpu_rsp_fflags;
         wire fpu_rsp_has_fflags;
 
-        wire [`UUID_WIDTH-1:0]  fpu_rsp_uuid;
-        wire [`NW_WIDTH-1:0]    fpu_rsp_wid;
+        wire [UUID_WIDTH-1:0]  fpu_rsp_uuid;
+        wire [NW_WIDTH-1:0]    fpu_rsp_wid;
         wire [NUM_LANES-1:0]    fpu_rsp_tmask;
-        wire [`PC_BITS-1:0]     fpu_rsp_PC;
-        wire [`NR_BITS-1:0]     fpu_rsp_rd;
+        wire [PC_BITS-1:0]     fpu_rsp_PC;
+        wire [NR_BITS-1:0]     fpu_rsp_rd;
         wire [PID_WIDTH-1:0]    fpu_rsp_pid, fpu_rsp_pid_u;
         wire                    fpu_rsp_sop, fpu_rsp_sop_u;
         wire                    fpu_rsp_eop, fpu_rsp_eop_u;
@@ -76,14 +76,14 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         wire [TAG_WIDTH-1:0] fpu_req_tag, fpu_rsp_tag;
         wire mdata_full;
 
-        wire [`INST_FMT_BITS-1:0] fpu_fmt = per_block_execute_if[block_idx].data.op_args.fpu.fmt;
-        wire [`INST_FRM_BITS-1:0] fpu_frm = per_block_execute_if[block_idx].data.op_args.fpu.frm;
+        wire [INST_FMT_BITS-1:0] fpu_fmt = per_block_execute_if[block_idx].data.op_args.fpu.fmt;
+        wire [INST_FRM_BITS-1:0] fpu_frm = per_block_execute_if[block_idx].data.op_args.fpu.frm;
 
         wire execute_fire = per_block_execute_if[block_idx].valid && per_block_execute_if[block_idx].ready;
         wire fpu_rsp_fire = fpu_rsp_valid && fpu_rsp_ready;
 
         VX_index_buffer #(
-            .DATAW  (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + PID_WIDTH + 1 + 1),
+            .DATAW  (UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NR_BITS + PID_WIDTH + 1 + 1),
             .SIZE   (`FPUQ_SIZE)
         ) tag_store (
             .clk          (clk),
@@ -112,10 +112,10 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         end
 
         // resolve dynamic FRM from CSR
-        wire [`INST_FRM_BITS-1:0] fpu_req_frm;
+        wire [INST_FRM_BITS-1:0] fpu_req_frm;
         `ASSIGN_BLOCKED_WID (fpu_csr_if[block_idx].read_wid, per_block_execute_if[block_idx].data.wid, block_idx, `NUM_FPU_BLOCKS)
-        assign fpu_req_frm = (per_block_execute_if[block_idx].data.op_type != `INST_FPU_MISC
-                           && fpu_frm == `INST_FRM_DYN) ? fpu_csr_if[block_idx].read_frm : fpu_frm;
+        assign fpu_req_frm = (per_block_execute_if[block_idx].data.op_type != INST_FPU_MISC
+                           && fpu_frm == INST_FRM_DYN) ? fpu_csr_if[block_idx].read_frm : fpu_frm;
 
         // submit FPU request
 
@@ -234,7 +234,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         assign fpu_csr_tmp_if.write_fflags = fpu_rsp_fflags_q;
 
          VX_pipe_register #(
-            .DATAW  (1 + `NW_WIDTH + $bits(fflags_t)),
+            .DATAW  (1 + NW_WIDTH + $bits(fflags_t)),
             .RESETW (1)
         ) fpu_csr_reg (
             .clk      (clk),
@@ -247,7 +247,7 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         // send response
 
         VX_elastic_buffer #(
-            .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1),
+            .DATAW (UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NR_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1),
             .SIZE  (0)
         ) rsp_buf (
             .clk       (clk),

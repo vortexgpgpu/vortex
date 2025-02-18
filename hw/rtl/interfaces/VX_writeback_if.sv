@@ -16,12 +16,13 @@
 interface VX_writeback_if import VX_gpu_pkg::*; ();
 
     typedef struct packed {
-        logic [`UUID_WIDTH-1:0]         uuid;
+        logic [UUID_WIDTH-1:0]          uuid;
         logic [ISSUE_WIS_W-1:0]         wis;
-        logic [`NUM_THREADS-1:0]        tmask;
-        logic [`PC_BITS-1:0]            PC;
-        logic [`NR_BITS-1:0]            rd;
-        logic [`NUM_THREADS-1:0][`XLEN-1:0] data;
+        logic [SIMD_IDX_W-1:0]          sid;
+        logic [`SIMD_WIDTH-1:0]         tmask;
+        logic [PC_BITS-1:0]             PC;
+        logic [NR_BITS-1:0]             rd;
+        logic [`SIMD_WIDTH-1:0][`XLEN-1:0] data;
         logic                           sop;
         logic                           eop;
     } data_t;

@@ -27,20 +27,20 @@ module VX_issue import VX_gpu_pkg::*; #(
 
     VX_decode_if.slave      decode_if,
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
-    VX_dispatch_if.master   dispatch_if [`NUM_EX_UNITS * `ISSUE_WIDTH]
+    VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS * `ISSUE_WIDTH]
 );
     `STATIC_ASSERT ((`ISSUE_WIDTH <= `NUM_WARPS), ("invalid parameter"))
 
 `ifdef PERF_ENABLE
     issue_perf_t per_issue_perf [`ISSUE_WIDTH];
-    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, ibf_stalls, `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
-    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, scb_stalls, `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
-    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, opd_stalls, `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
-    for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin : g_issue_perf_units_uses
-        `PERF_COUNTER_ADD (issue_perf, per_issue_perf, units_uses[i], `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
+    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, ibf_stalls, PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
+    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, scb_stalls, PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
+    `PERF_COUNTER_ADD (issue_perf, per_issue_perf, opd_stalls, PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
+    for (genvar i = 0; i < NUM_EX_UNITS; ++i) begin : g_issue_perf_units_uses
+        `PERF_COUNTER_ADD (issue_perf, per_issue_perf, units_uses[i], PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
     end
-    for (genvar i = 0; i < `NUM_SFU_UNITS; ++i) begin : g_issue_perf_sfu_uses
-        `PERF_COUNTER_ADD (issue_perf, per_issue_perf, sfu_uses[i], `PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
+    for (genvar i = 0; i < NUM_SFU_UNITS; ++i) begin : g_issue_perf_sfu_uses
+        `PERF_COUNTER_ADD (issue_perf, per_issue_perf, sfu_uses[i], PERF_CTR_BITS, `ISSUE_WIDTH, (`ISSUE_WIDTH > 2))
     end
 `endif
 
@@ -57,7 +57,7 @@ module VX_issue import VX_gpu_pkg::*; #(
             .NUM_WARPS (PER_ISSUE_WARPS)
         ) per_issue_decode_if();
 
-        VX_dispatch_if per_issue_dispatch_if[`NUM_EX_UNITS]();
+        VX_dispatch_if per_issue_dispatch_if[NUM_EX_UNITS]();
 
         assign per_issue_decode_if.valid = decode_if.valid && (decode_isw == ISSUE_ISW_W'(issue_id));
         assign per_issue_decode_if.data.uuid = decode_if.data.uuid;
@@ -93,7 +93,7 @@ module VX_issue import VX_gpu_pkg::*; #(
         );
 
         // Assign transposed dispatch_if
-        for (genvar ex_id = 0; ex_id < `NUM_EX_UNITS; ++ex_id) begin : g_dispatch_if
+        for (genvar ex_id = 0; ex_id < NUM_EX_UNITS; ++ex_id) begin : g_dispatch_if
             `ASSIGN_VX_IF(dispatch_if[ex_id * `ISSUE_WIDTH + issue_id], per_issue_dispatch_if[ex_id]);
         end
      end

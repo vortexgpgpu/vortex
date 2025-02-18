@@ -47,7 +47,7 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
     input  wire [NUM_REQS-1:0]                 mem_req_rw,
     input  wire [NUM_REQS-1:0][WORD_SIZE-1:0]  mem_req_byteen,
     input  wire [NUM_REQS-1:0][ADDR_WIDTH-1:0] mem_req_addr,
-    input  wire [NUM_REQS-1:0][`MEM_REQ_FLAGS_WIDTH-1:0] mem_req_flags,
+    input  wire [NUM_REQS-1:0][MEM_FLAGS_WIDTH-1:0] mem_req_flags,
     input  wire [NUM_REQS-1:0][WORD_SIZE*8-1:0] mem_req_data,
     input  wire [NUM_REQS-1:0][TAG_WIDTH-1:0]  mem_req_tag,
     output wire [NUM_REQS-1:0]                 mem_req_ready,

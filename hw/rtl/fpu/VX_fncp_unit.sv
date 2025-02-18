@@ -29,8 +29,8 @@ module VX_fncp_unit import VX_fpu_pkg::*; #(
 
     input wire enable,
 
-    input wire [`INST_FPU_BITS-1:0] op_type,
-    input wire [`INST_FRM_BITS-1:0] frm,
+    input wire [INST_FPU_BITS-1:0] op_type,
+    input wire [INST_FRM_BITS-1:0] frm,
 
     input wire [31:0]  dataa,
     input wire [31:0]  datab,
@@ -98,7 +98,7 @@ module VX_fncp_unit import VX_fpu_pkg::*; #(
 
     `UNUSED_VAR (b_fclass_s0)
 
-    wire [3:0] op_mod = {(op_type == `INST_FPU_CMP), frm};
+    wire [3:0] op_mod = {(op_type == INST_FPU_CMP), frm};
 
     VX_pipe_register #(
         .DATAW (4 + 2 * 32 + 1 + 1 + 8 + 23 + 2 * $bits(fclass_t) + 1 + 1),

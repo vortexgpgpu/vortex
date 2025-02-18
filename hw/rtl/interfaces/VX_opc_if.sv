@@ -13,40 +13,26 @@
 
 `include "VX_define.vh"
 
-interface VX_mem_bus_if import VX_gpu_pkg::*; #(
-    parameter DATA_SIZE  = 1,
-    parameter FLAGS_WIDTH = MEM_FLAGS_WIDTH,
-    parameter TAG_WIDTH  = 1,
-    parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
-    parameter ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE)
-) ();
+interface VX_opc_if import VX_gpu_pkg::*; ();
 
     typedef struct packed {
-        logic [`UP(UUID_WIDTH)-1:0]           uuid;
-        logic [TAG_WIDTH-`UP(UUID_WIDTH)-1:0] value;
-    } tag_t;
-
-    typedef struct packed {
-        logic                   rw;
-        logic [ADDR_WIDTH-1:0]  addr;
-        logic [DATA_SIZE*8-1:0] data;
-        logic [DATA_SIZE-1:0]   byteen;
-        logic [FLAGS_WIDTH-1:0] flags;
-        tag_t                   tag;
+        logic [1:0] opd_id;
+        logic [SIMD_IDX_W-1:0] sid;
+        logic [ISSUE_WIS_W-1:0] wis;
+        logic [NR_BITS-1:0] reg_id;
     } req_data_t;
 
     typedef struct packed {
-        logic [DATA_SIZE*8-1:0] data;
-        tag_t                   tag;
+        logic [1:0] opd_id;
+        logic [`SIMD_WIDTH-1:0][`XLEN-1:0] value;
     } rsp_data_t;
 
-    logic  req_valid;
+    logic req_valid;
     req_data_t req_data;
-    logic  req_ready;
+    logic req_ready;
 
-    logic  rsp_valid;
+    logic rsp_valid;
     rsp_data_t rsp_data;
-    logic  rsp_ready;
 
     modport master (
         output req_valid,
@@ -54,8 +40,7 @@ interface VX_mem_bus_if import VX_gpu_pkg::*; #(
         input  req_ready,
 
         input  rsp_valid,
-        input  rsp_data,
-        output rsp_ready
+        input  rsp_data
     );
 
     modport slave (
@@ -64,8 +49,7 @@ interface VX_mem_bus_if import VX_gpu_pkg::*; #(
         output req_ready,
 
         output rsp_valid,
-        output rsp_data,
-        input  rsp_ready
+        output rsp_data
     );
 
 endinterface

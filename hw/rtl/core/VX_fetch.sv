@@ -38,8 +38,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire [ICACHE_TAG_WIDTH-1:0] icache_req_tag;
     wire icache_req_ready;
 
-    wire [`UUID_WIDTH-1:0] rsp_uuid;
-    wire [`NW_WIDTH-1:0] req_tag, rsp_tag;
+    wire [UUID_WIDTH-1:0] rsp_uuid;
+    wire [NW_WIDTH-1:0] req_tag, rsp_tag;
 
     wire icache_req_fire = icache_req_valid && icache_req_ready;
 
@@ -47,11 +47,11 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     assign {rsp_uuid, rsp_tag} = icache_bus_if.rsp_data.tag;
 
-    wire [`PC_BITS-1:0] rsp_PC;
+    wire [PC_BITS-1:0] rsp_PC;
     wire [`NUM_THREADS-1:0] rsp_tmask;
 
     VX_dp_ram #(
-        .DATAW (`PC_BITS + `NUM_THREADS),
+        .DATAW (PC_BITS + `NUM_THREADS),
         .SIZE  (`NUM_WARPS),
         .RDW_MODE ("R"),
         .LUTRAM (1)
@@ -141,9 +141,9 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 1, 6, 3, (
-            `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS +
-            `UUID_WIDTH + ICACHE_WORD_SIZE + ICACHE_ADDR_WIDTH +
-            `UUID_WIDTH + (ICACHE_WORD_SIZE * 8)
+            UUID_WIDTH + NW_WIDTH + `NUM_THREADS + PC_BITS +
+            UUID_WIDTH + ICACHE_WORD_SIZE + ICACHE_ADDR_WIDTH +
+            UUID_WIDTH + (ICACHE_WORD_SIZE * 8)
         ), {
             schedule_if.valid,
             schedule_if.ready,

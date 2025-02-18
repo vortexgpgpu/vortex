@@ -38,9 +38,9 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     VX_commit_if.master         commit_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
+    localparam PID_BITS   = `CLOG2(`SIMD_WIDTH / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
-    localparam DATAW      = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
+    localparam DATAW      = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
 
     `UNUSED_VAR (execute_if.data.rs3_data)
 
@@ -53,7 +53,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire                            csr_req_ready;
 
     wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.op_args.csr.addr;
-    wire [`NRI_BITS-1:0] csr_imm = execute_if.data.op_args.csr.imm;
+    wire [RV_REGS_BITS-1:0] csr_imm = execute_if.data.op_args.csr.imm;
 
     wire is_fpu_csr = (csr_addr <= `VX_CSR_FCSR);
 
@@ -70,7 +70,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         assign rs1_data[i] = execute_if.data.rs1_data[i];
     end
 
-    wire csr_write_enable = (execute_if.data.op_type == `INST_SFU_CSRRW);
+    wire csr_write_enable = (execute_if.data.op_type == INST_SFU_CSRRW);
 
     VX_csr_data #(
         .INSTANCE_ID (INSTANCE_ID),
@@ -122,7 +122,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_gtid
-        assign gtid[i] = (`XLEN'(CORE_ID) << (`NW_BITS + `NT_BITS)) + (`XLEN'(execute_if.data.wid) << `NT_BITS) + wtid[i];
+        assign gtid[i] = (`XLEN'(CORE_ID) << (NW_BITS + NT_BITS)) + (`XLEN'(execute_if.data.wid) << NT_BITS) + wtid[i];
     end
 
     always @(*) begin
@@ -144,13 +144,13 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     always @(*) begin
         case (execute_if.data.op_type)
-            `INST_SFU_CSRRW: begin
+            INST_SFU_CSRRW: begin
                 csr_write_data = csr_req_data;
             end
-            `INST_SFU_CSRRS: begin
+            INST_SFU_CSRRS: begin
                 csr_write_data = csr_read_data_rw | csr_req_data;
             end
-            //`INST_SFU_CSRRC
+            //INST_SFU_CSRRC
             default: begin
                 csr_write_data = csr_read_data_rw & ~csr_req_data;
             end

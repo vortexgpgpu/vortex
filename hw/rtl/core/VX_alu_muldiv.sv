@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_alu_muldiv #(
+module VX_alu_muldiv import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = 1
 ) (
@@ -27,16 +27,16 @@ module VX_alu_muldiv #(
     VX_commit_if.master commit_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam PID_BITS  = `CLOG2(`NUM_THREADS / NUM_LANES);
+    localparam PID_BITS  = `CLOG2(`SIMD_WIDTH / NUM_LANES);
     localparam PID_WIDTH = `UP(PID_BITS);
-    localparam TAG_WIDTH = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + PID_WIDTH + 1 + 1;
+    localparam TAG_WIDTH = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NR_BITS + 1 + PID_WIDTH + 1 + 1;
 
     `UNUSED_VAR (execute_if.data.rs3_data)
 
-    wire [`INST_M_BITS-1:0] muldiv_op = `INST_M_BITS'(execute_if.data.op_type);
+    wire [INST_M_BITS-1:0] muldiv_op = INST_M_BITS'(execute_if.data.op_type);
 
-    wire is_mulx_op = `INST_M_IS_MULX(muldiv_op);
-    wire is_signed_op = `INST_M_SIGNED(muldiv_op);
+    wire is_mulx_op = inst_m_is_mulx(muldiv_op);
+    wire is_signed_op = inst_m_signed(muldiv_op);
 `ifdef XLEN_64
     wire is_alu_w = execute_if.data.op_args.alu.is_w;
 `else
@@ -44,11 +44,11 @@ module VX_alu_muldiv #(
 `endif
 
     wire [NUM_LANES-1:0][`XLEN-1:0] mul_result_out;
-    wire [`UUID_WIDTH-1:0] mul_uuid_out;
-    wire [`NW_WIDTH-1:0] mul_wid_out;
+    wire [UUID_WIDTH-1:0] mul_uuid_out;
+    wire [NW_WIDTH-1:0] mul_wid_out;
     wire [NUM_LANES-1:0] mul_tmask_out;
-    wire [`PC_BITS-1:0] mul_PC_out;
-    wire [`NR_BITS-1:0] mul_rd_out;
+    wire [PC_BITS-1:0] mul_PC_out;
+    wire [NR_BITS-1:0] mul_rd_out;
     wire mul_wb_out;
     wire [PID_WIDTH-1:0] mul_pid_out;
     wire mul_sop_out, mul_eop_out;
@@ -58,8 +58,8 @@ module VX_alu_muldiv #(
     wire mul_valid_out;
     wire mul_ready_out;
 
-    wire is_mulh_in      = `INST_M_IS_MULH(muldiv_op);
-    wire is_signed_mul_a = `INST_M_SIGNED_A(muldiv_op);
+    wire is_mulh_in      = inst_m_is_mulh(muldiv_op);
+    wire is_signed_mul_a = inst_m_signed_a(muldiv_op);
     wire is_signed_mul_b = is_signed_op;
 
 `ifdef IMUL_DPI
@@ -200,16 +200,16 @@ module VX_alu_muldiv #(
     ///////////////////////////////////////////////////////////////////////////
 
     wire [NUM_LANES-1:0][`XLEN-1:0] div_result_out;
-    wire [`UUID_WIDTH-1:0] div_uuid_out;
-    wire [`NW_WIDTH-1:0] div_wid_out;
+    wire [UUID_WIDTH-1:0] div_uuid_out;
+    wire [NW_WIDTH-1:0] div_wid_out;
     wire [NUM_LANES-1:0] div_tmask_out;
-    wire [`PC_BITS-1:0] div_PC_out;
-    wire [`NR_BITS-1:0] div_rd_out;
+    wire [PC_BITS-1:0] div_PC_out;
+    wire [NR_BITS-1:0] div_rd_out;
     wire div_wb_out;
     wire [PID_WIDTH-1:0] div_pid_out;
     wire div_sop_out, div_eop_out;
 
-    wire is_rem_op = `INST_M_IS_REM(muldiv_op);
+    wire is_rem_op = inst_m_is_rem(muldiv_op);
 
     wire div_valid_in = execute_if.valid && ~is_mulx_op;
     wire div_ready_in;

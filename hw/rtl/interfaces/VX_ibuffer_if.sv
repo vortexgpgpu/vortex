@@ -16,21 +16,18 @@
 interface VX_ibuffer_if import VX_gpu_pkg::*; ();
 
     typedef struct packed {
-        logic [`UUID_WIDTH-1:0]     uuid;
+        logic [UUID_WIDTH-1:0]      uuid;
         logic [`NUM_THREADS-1:0]    tmask;
-        logic [`PC_BITS-1:0]        PC;
-        logic [`EX_BITS-1:0]        ex_type;
-        logic [`INST_OP_BITS-1:0]   op_type;
+        logic [PC_BITS-1:0]         PC;
+        logic [EX_BITS-1:0]         ex_type;
+        logic [INST_OP_BITS-1:0]    op_type;
         op_args_t                   op_args;
         logic                       wb;
-        logic [`NR_BITS-1:0]        rd;
-        logic [`NR_BITS-1:0]        rs1;
-        logic [`NR_BITS-1:0]        rs2;
-        logic [`NR_BITS-1:0]        rs3;
-        logic [`REG_EXT_BITS-1:0]   rd_ext;
-        logic [`REG_EXT_BITS-1:0]   rs1_ext;
-        logic [`REG_EXT_BITS-1:0]   rs2_ext;
-        logic [`REG_EXT_BITS-1:0]   rs3_ext;
+        logic [NUM_SRC_OPDS-1:0]    used_rs;
+        reg_idx_t                   rd;
+        reg_idx_t                   rs1;
+        reg_idx_t                   rs2;
+        reg_idx_t                   rs3;
     } data_t;
 
     logic  valid;

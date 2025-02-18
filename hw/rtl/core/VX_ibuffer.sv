@@ -20,7 +20,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     input wire          reset,
 
 `ifdef PERF_ENABLE
-    output wire [`PERF_CTR_BITS-1:0] perf_stalls,
+    output wire [PERF_CTR_BITS-1:0] perf_stalls,
 `endif
 
     // inputs
@@ -30,7 +30,9 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     VX_ibuffer_if.master ibuffer_if [PER_ISSUE_WARPS]
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam DATAW = `UUID_WIDTH + `NUM_THREADS + `PC_BITS + 1 + `EX_BITS + `INST_OP_BITS + `INST_ARGS_BITS + (`NR_BITS * 4) + (`REG_EXT_BITS * 4);
+
+    localparam NUM_OPDS = NUM_SRC_OPDS + 1;
+    localparam DATAW = UUID_WIDTH + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + NUM_OPDS + (REG_IDX_BITS * NUM_OPDS);
 
     wire [PER_ISSUE_WARPS-1:0] ibuf_ready_in;
     assign decode_if.ready = ibuf_ready_in[decode_if.data.wid];
@@ -52,14 +54,11 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 decode_if.data.op_type,
                 decode_if.data.op_args,
                 decode_if.data.wb,
+                decode_if.data.used_rs,
                 decode_if.data.rd,
                 decode_if.data.rs1,
                 decode_if.data.rs2,
-                decode_if.data.rs3,
-                decode_if.data.rd_ext,
-                decode_if.data.rs1_ext,
-                decode_if.data.rs2_ext,
-                decode_if.data.rs3_ext
+                decode_if.data.rs3
             }),
             .ready_in (ibuf_ready_in[w]),
             .valid_out(ibuffer_if[w].valid),
@@ -72,7 +71,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     end
 
 `ifdef PERF_ENABLE
-    reg [`PERF_CTR_BITS-1:0] perf_ibf_stalls;
+    reg [PERF_CTR_BITS-1:0] perf_ibf_stalls;
 
     wire decode_if_stall = decode_if.valid && ~decode_if.ready;
 
@@ -80,7 +79,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
         if (reset) begin
             perf_ibf_stalls <= '0;
         end else begin
-            perf_ibf_stalls <= perf_ibf_stalls + `PERF_CTR_BITS'(decode_if_stall);
+            perf_ibf_stalls <= perf_ibf_stalls + PERF_CTR_BITS'(decode_if_stall);
         end
     end
 

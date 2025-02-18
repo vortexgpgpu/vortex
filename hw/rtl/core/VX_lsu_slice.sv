@@ -29,19 +29,19 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     VX_lsu_mem_if.master    lsu_mem_if
 );
     localparam NUM_LANES    = `NUM_LSU_LANES;
-    localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
+    localparam PID_BITS     = `CLOG2(`SIMD_WIDTH / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
-    localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
+    localparam RSP_ARB_DATAW= UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
     localparam LSUQ_SIZEW   = `LOG2UP(`LSUQ_IN_SIZE);
     localparam REQ_ASHIFT   = `CLOG2(LSU_WORD_SIZE);
     localparam MEM_ASHIFT   = `CLOG2(`MEM_BLOCK_SIZE);
     localparam MEM_ADDRW    = `MEM_ADDR_WIDTH - MEM_ASHIFT;
 
     // tag_id = wid + PC + wb + rd + op_type + align + pid + pkt_addr + fence
-    localparam TAG_ID_WIDTH = `NW_WIDTH + `PC_BITS + 1 + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * REQ_ASHIFT) + PID_WIDTH + LSUQ_SIZEW + 1;
+    localparam TAG_ID_WIDTH = NW_WIDTH + PC_BITS + 1 + NR_BITS + INST_LSU_BITS + (NUM_LANES * REQ_ASHIFT) + PID_WIDTH + LSUQ_SIZEW + 1;
 
     // tag = uuid + tag_id
-    localparam TAG_WIDTH = `UUID_WIDTH + TAG_ID_WIDTH;
+    localparam TAG_WIDTH = UUID_WIDTH + TAG_ID_WIDTH;
 
     VX_commit_if #(
         .NUM_LANES (NUM_LANES)
@@ -65,19 +65,19 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     // address type calculation
 
-    wire [NUM_LANES-1:0][`MEM_REQ_FLAGS_WIDTH-1:0] mem_req_flags;
+    wire [NUM_LANES-1:0][MEM_FLAGS_WIDTH-1:0] mem_req_flags;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_flags
         wire [MEM_ADDRW-1:0] block_addr = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
         // is I/O address
         wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`XLEN'(`IO_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(`XLEN'(`IO_END_ADDR) >> MEM_ASHIFT);
-        assign mem_req_flags[i][`MEM_REQ_FLAG_FLUSH] = req_is_fence;
-        assign mem_req_flags[i][`MEM_REQ_FLAG_IO] = (block_addr >= io_addr_start) && (block_addr < io_addr_end);
+        assign mem_req_flags[i][MEM_REQ_FLAG_FLUSH] = req_is_fence;
+        assign mem_req_flags[i][MEM_REQ_FLAG_IO] = (block_addr >= io_addr_start) && (block_addr < io_addr_end);
     `ifdef LMEM_ENABLE
         // is local memory address
         wire [MEM_ADDRW-1:0] lmem_addr_start = MEM_ADDRW'(`XLEN'(`LMEM_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] lmem_addr_end = MEM_ADDRW'((`XLEN'(`LMEM_BASE_ADDR) + `XLEN'(1 << `LMEM_LOG_SIZE)) >> MEM_ASHIFT);
-        assign mem_req_flags[i][`MEM_REQ_FLAG_LOCAL] = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);
+        assign mem_req_flags[i][MEM_REQ_FLAG_LOCAL] = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);
     `endif
     end
 
@@ -110,7 +110,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     reg fence_lock;
 
-    assign req_is_fence = `INST_LSU_IS_FENCE(execute_if.data.op_type);
+    assign req_is_fence = inst_lsu_is_fence(execute_if.data.op_type);
 
     always @(posedge clk) begin
         if (reset) begin
@@ -159,7 +159,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         reg [LSU_WORD_SIZE-1:0] mem_req_byteen_w;
         always @(*) begin
             mem_req_byteen_w = '0;
-            case (`INST_LSU_WSIZE(execute_if.data.op_type))
+            case (inst_lsu_wsize(execute_if.data.op_type))
                 0: begin // 8-bit
                     mem_req_byteen_w[req_align[i]] = 1'b1;
                 end
@@ -185,9 +185,9 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // memory misalignment not supported!
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_missalign
         wire lsu_req_fire = execute_if.valid && execute_if.ready;
-        `RUNTIME_ASSERT((~lsu_req_fire || ~execute_if.data.tmask[i] || req_is_fence || (full_addr[i] % (1 << `INST_LSU_WSIZE(execute_if.data.op_type))) == 0),
+        `RUNTIME_ASSERT((~lsu_req_fire || ~execute_if.data.tmask[i] || req_is_fence || (full_addr[i] % (1 << inst_lsu_wsize(execute_if.data.op_type))) == 0),
             ("%t: misaligned memory access, wid=%0d, PC=0x%0h, addr=0x%0h, wsize=%0d! (#%0d)",
-                $time, execute_if.data.wid, {execute_if.data.PC, 1'b0}, full_addr[i], `INST_LSU_WSIZE(execute_if.data.op_type), execute_if.data.uuid))
+                $time, execute_if.data.wid, {execute_if.data.PC, 1'b0}, full_addr[i], inst_lsu_wsize(execute_if.data.op_type), execute_if.data.uuid))
     end
 
     // store data formatting
@@ -298,7 +298,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0]                    lsu_mem_req_mask;
     wire [NUM_LANES-1:0][LSU_WORD_SIZE-1:0] lsu_mem_req_byteen;
     wire [NUM_LANES-1:0][LSU_ADDR_WIDTH-1:0] lsu_mem_req_addr;
-    wire [NUM_LANES-1:0][`MEM_REQ_FLAGS_WIDTH-1:0] lsu_mem_req_flags;
+    wire [NUM_LANES-1:0][MEM_FLAGS_WIDTH-1:0] lsu_mem_req_flags;
     wire [NUM_LANES-1:0][(LSU_WORD_SIZE*8)-1:0] lsu_mem_req_data;
     wire [LSU_TAG_WIDTH-1:0]                lsu_mem_req_tag;
     wire                                    lsu_mem_req_ready;
@@ -316,11 +316,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .WORD_SIZE   (LSU_WORD_SIZE),
         .LINE_SIZE   (LSU_WORD_SIZE),
         .ADDR_WIDTH  (LSU_ADDR_WIDTH),
-        .FLAGS_WIDTH (`MEM_REQ_FLAGS_WIDTH),
+        .FLAGS_WIDTH (MEM_FLAGS_WIDTH),
         .TAG_WIDTH   (TAG_WIDTH),
         .CORE_QUEUE_SIZE (`LSUQ_IN_SIZE),
         .MEM_QUEUE_SIZE (`LSUQ_OUT_SIZE),
-        .UUID_WIDTH  (`UUID_WIDTH),
+        .UUID_WIDTH  (UUID_WIDTH),
         .RSP_PARTIAL (1),
         .MEM_OUT_BUF (0),
         .CORE_OUT_BUF(0)
@@ -385,12 +385,12 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     assign lsu_mem_rsp_tag = lsu_mem_if.rsp_data.tag;
     assign lsu_mem_if.rsp_ready = lsu_mem_rsp_ready;
 
-    wire [`UUID_WIDTH-1:0] rsp_uuid;
-    wire [`NW_WIDTH-1:0] rsp_wid;
-    wire [`PC_BITS-1:0] rsp_pc;
+    wire [UUID_WIDTH-1:0] rsp_uuid;
+    wire [NW_WIDTH-1:0] rsp_wid;
+    wire [PC_BITS-1:0] rsp_pc;
     wire rsp_wb;
-    wire [`NR_BITS-1:0] rsp_rd;
-    wire [`INST_LSU_BITS-1:0] rsp_op_type;
+    wire [NR_BITS-1:0] rsp_rd;
+    wire [INST_LSU_BITS-1:0] rsp_op_type;
     wire [NUM_LANES-1:0][REQ_ASHIFT-1:0] rsp_align;
     wire [PID_WIDTH-1:0] rsp_pid;
     `UNUSED_VAR (rsp_op_type)
@@ -433,17 +433,17 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         wire [7:0]  rsp_data8  = rsp_align[i][0] ? rsp_data16[15:8] : rsp_data16[7:0];
 
         always @(*) begin
-            case (`INST_LSU_FMT(rsp_op_type))
-            `INST_FMT_B:  rsp_data[i] = `XLEN'(signed'(rsp_data8));
-            `INST_FMT_H:  rsp_data[i] = `XLEN'(signed'(rsp_data16));
-            `INST_FMT_BU: rsp_data[i] = `XLEN'(unsigned'(rsp_data8));
-            `INST_FMT_HU: rsp_data[i] = `XLEN'(unsigned'(rsp_data16));
+            case (inst_lsu_fmt(rsp_op_type))
+            LSU_FMT_B:  rsp_data[i] = `XLEN'(signed'(rsp_data8));
+            LSU_FMT_H:  rsp_data[i] = `XLEN'(signed'(rsp_data16));
+            LSU_FMT_BU: rsp_data[i] = `XLEN'(unsigned'(rsp_data8));
+            LSU_FMT_HU: rsp_data[i] = `XLEN'(unsigned'(rsp_data16));
         `ifdef XLEN_64
-            `INST_FMT_W:  rsp_data[i] = rsp_is_float ? (`XLEN'(rsp_data32) | 64'hffffffff00000000) : `XLEN'(signed'(rsp_data32));
-            `INST_FMT_WU: rsp_data[i] = `XLEN'(unsigned'(rsp_data32));
-            `INST_FMT_D:  rsp_data[i] = `XLEN'(signed'(rsp_data64));
+            LSU_FMT_W:  rsp_data[i] = rsp_is_float ? (`XLEN'(rsp_data32) | 64'hffffffff00000000) : `XLEN'(signed'(rsp_data32));
+            LSU_FMT_WU: rsp_data[i] = `XLEN'(unsigned'(rsp_data32));
+            LSU_FMT_D:  rsp_data[i] = `XLEN'(signed'(rsp_data64));
         `else
-            `INST_FMT_W:  rsp_data[i] = `XLEN'(signed'(rsp_data32));
+            LSU_FMT_W:  rsp_data[i] = `XLEN'(signed'(rsp_data32));
         `endif
             default: rsp_data[i] = 'x;
             endcase
@@ -453,7 +453,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // commit
 
     VX_elastic_buffer #(
-        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + 1 + `NR_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1),
+        .DATAW (UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + 1 + NR_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),
@@ -467,7 +467,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     );
 
     VX_elastic_buffer #(
-        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + PID_WIDTH + 1 + 1),
+        .DATAW (UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + PID_WIDTH + 1 + 1),
         .SIZE  (2)
     ) no_rsp_buf (
         .clk       (clk),
@@ -538,7 +538,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 3, 4, 2, (
-            1 + NUM_LANES * (`XLEN + LSU_WORD_SIZE + LSU_WORD_SIZE * 8) + `UUID_WIDTH + NUM_LANES * LSU_WORD_SIZE * 8 + `UUID_WIDTH
+            1 + NUM_LANES * (`XLEN + LSU_WORD_SIZE + LSU_WORD_SIZE * 8) + UUID_WIDTH + NUM_LANES * LSU_WORD_SIZE * 8 + UUID_WIDTH
         ), {
             mem_req_valid,
             mem_req_ready,

@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_alu_unit #(
+module VX_alu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
@@ -30,7 +30,7 @@ module VX_alu_unit #(
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = `NUM_ALU_BLOCKS;
     localparam NUM_LANES    = `NUM_ALU_LANES;
-    localparam PARTIAL_BW   = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `NUM_THREADS);
+    localparam PARTIAL_BW   = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `SIMD_WIDTH);
     localparam PE_COUNT     = 1 + `EXT_M_ENABLED;
     localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
     localparam PE_IDX_INT   = 0;
@@ -68,7 +68,7 @@ module VX_alu_unit #(
         reg [`UP(PE_SEL_BITS)-1:0] pe_select;
         always @(*) begin
             pe_select = PE_IDX_INT;
-            if (`EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == `ALU_TYPE_MULDIV))
+            if (`EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == ALU_TYPE_MULDIV))
                 pe_select = PE_IDX_MDV;
         end
 

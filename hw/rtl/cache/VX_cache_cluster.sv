@@ -58,14 +58,8 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     // Replacement policy
     parameter REPL_POLICY           = `CS_REPL_FIFO,
 
-    // Request debug identifier
-    parameter UUID_WIDTH            = 0,
-
     // core request tag size
     parameter TAG_WIDTH             = UUID_WIDTH + 1,
-
-    // core request flags
-    parameter FLAGS_WIDTH           = 0,
 
     // enable bypass for non-cacheable addresses
     parameter NC_ENABLE             = 0,
@@ -167,9 +161,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .MSHR_SIZE    (MSHR_SIZE),
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
-            .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (ARB_TAG_WIDTH),
-            .FLAGS_WIDTH  (FLAGS_WIDTH),
             .TAG_SEL_IDX  (TAG_SEL_IDX),
             .CORE_OUT_BUF ((NUM_INPUTS != NUM_CACHES) ? 2 : CORE_OUT_BUF),
             .MEM_OUT_BUF  ((NUM_CACHES > 1) ? 2 : MEM_OUT_BUF),

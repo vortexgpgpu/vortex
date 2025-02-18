@@ -32,7 +32,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
     localparam WCTL_WIDTH = $bits(tmc_t) + $bits(wspawn_t) + $bits(split_t) + $bits(join_t) + $bits(barrier_t);
-    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + WCTL_WIDTH + PID_WIDTH + 1 + 1 + `DV_STACK_SIZEW;
+    localparam DATAW = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NR_BITS + 1 + WCTL_WIDTH + PID_WIDTH + 1 + 1 + DV_STACK_SIZEW;
 
     `UNUSED_VAR (execute_if.data.rs3_data)
 
@@ -42,12 +42,12 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     join_t      sjoin, sjoin_r;
     barrier_t   barrier, barrier_r;
 
-    wire is_wspawn = (execute_if.data.op_type == `INST_SFU_WSPAWN);
-    wire is_tmc    = (execute_if.data.op_type == `INST_SFU_TMC);
-    wire is_pred   = (execute_if.data.op_type == `INST_SFU_PRED);
-    wire is_split  = (execute_if.data.op_type == `INST_SFU_SPLIT);
-    wire is_join   = (execute_if.data.op_type == `INST_SFU_JOIN);
-    wire is_bar    = (execute_if.data.op_type == `INST_SFU_BAR);
+    wire is_wspawn = (execute_if.data.op_type == INST_SFU_WSPAWN);
+    wire is_tmc    = (execute_if.data.op_type == INST_SFU_TMC);
+    wire is_pred   = (execute_if.data.op_type == INST_SFU_PRED);
+    wire is_split  = (execute_if.data.op_type == INST_SFU_SPLIT);
+    wire is_join   = (execute_if.data.op_type == INST_SFU_JOIN);
+    wire is_bar    = (execute_if.data.op_type == INST_SFU_BAR);
 
     wire [`UP(LANE_BITS)-1:0] tid;
     if (LANE_BITS != 0) begin : g_tid
@@ -107,19 +107,19 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign split.is_dvg     = has_then && has_else;
     assign split.then_tmask = taken_tmask;
     assign split.else_tmask = ntaken_tmask;
-    assign split.next_pc    = execute_if.data.PC + `PC_BITS'(2);
+    assign split.next_pc    = execute_if.data.PC + PC_BITS'(2);
 
     assign warp_ctl_if.dvstack_wid = execute_if.data.wid;
-    wire [`DV_STACK_SIZEW-1:0] dvstack_ptr;
+    wire [DV_STACK_SIZEW-1:0] dvstack_ptr;
 
     // join
 
     assign sjoin.valid      = is_join;
-    assign sjoin.stack_ptr  = rs1_data[`DV_STACK_SIZEW-1:0];
+    assign sjoin.stack_ptr  = rs1_data[DV_STACK_SIZEW-1:0];
 
     // barrier
     assign barrier.valid    = is_bar;
-    assign barrier.id       = rs1_data[`NB_WIDTH-1:0];
+    assign barrier.id       = rs1_data[NB_WIDTH-1:0];
 `ifdef GBAR_ENABLE
     assign barrier.is_global = rs1_data[31];
 `else
@@ -132,11 +132,11 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     wire [`NUM_WARPS-1:0] wspawn_wmask;
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_wspawn_wmask
-        assign wspawn_wmask[i] = (i < rs1_data[`NW_BITS:0]) && (i != execute_if.data.wid);
+        assign wspawn_wmask[i] = (i < rs1_data[NW_BITS:0]) && (i != execute_if.data.wid);
     end
     assign wspawn.valid = is_wspawn;
     assign wspawn.wmask = wspawn_wmask;
-    assign wspawn.pc    = rs2_data[1 +: `PC_BITS];
+    assign wspawn.pc    = rs2_data[1 +: PC_BITS];
 
     // response
 

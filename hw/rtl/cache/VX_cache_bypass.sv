@@ -13,7 +13,7 @@
 
 `include "VX_cache_define.vh"
 
-module VX_cache_bypass #(
+module VX_cache_bypass import VX_gpu_pkg::*; #(
     parameter NUM_REQS          = 1,
     parameter MEM_PORTS         = 1,
     parameter TAG_SEL_IDX       = 0,
@@ -29,8 +29,6 @@ module VX_cache_bypass #(
 
     parameter MEM_ADDR_WIDTH    = 1,
     parameter MEM_TAG_IN_WIDTH  = 1,
-
-    parameter UUID_WIDTH        = 0,
 
     parameter CORE_OUT_BUF      = 0,
     parameter MEM_OUT_BUF       = 0
@@ -74,7 +72,7 @@ module VX_cache_bypass #(
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req_is_nc
         if (CACHE_ENABLE) begin : g_cache
-            assign core_req_nc_sel[i] = ~core_bus_in_if[i].req_data.flags[`MEM_REQ_FLAG_IO];
+            assign core_req_nc_sel[i] = ~core_bus_in_if[i].req_data.flags[MEM_REQ_FLAG_IO];
         end else begin : g_no_cache
             assign core_req_nc_sel[i] = 1'b0;
         end
@@ -156,7 +154,7 @@ module VX_cache_bypass #(
         wire                        core_req_nc_arb_rw;
         wire [WORD_SIZE-1:0]        core_req_nc_arb_byteen;
         wire [CORE_ADDR_WIDTH-1:0]  core_req_nc_arb_addr;
-        wire [`MEM_REQ_FLAGS_WIDTH-1:0] core_req_nc_arb_flags;
+        wire [MEM_FLAGS_WIDTH-1:0] core_req_nc_arb_flags;
         wire [CORE_DATA_WIDTH-1:0]  core_req_nc_arb_data;
         wire [MEM_TAG_NC1_WIDTH-1:0] core_req_nc_arb_tag;
 

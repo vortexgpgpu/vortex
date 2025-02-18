@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_gbar_unit #(
+module VX_gbar_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
     input wire clk,
@@ -23,7 +23,7 @@ module VX_gbar_unit #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    reg [`NB_WIDTH-1:0][`NUM_CORES-1:0] barrier_masks;
+    reg [NB_WIDTH-1:0][`NUM_CORES-1:0] barrier_masks;
     wire [`CLOG2(`NUM_CORES+1)-1:0] active_barrier_count;
     wire [`NUM_CORES-1:0] curr_barrier_mask = barrier_masks[gbar_bus_if.req_data.id];
 
@@ -31,7 +31,7 @@ module VX_gbar_unit #(
     `UNUSED_VAR (active_barrier_count)
 
     reg rsp_valid;
-    reg [`NB_WIDTH-1:0] rsp_bar_id;
+    reg [NB_WIDTH-1:0] rsp_bar_id;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -42,7 +42,7 @@ module VX_gbar_unit #(
                 rsp_valid <= 0;
             end
             if (gbar_bus_if.req_valid) begin
-                if (active_barrier_count[`NC_WIDTH-1:0] == gbar_bus_if.req_data.size_m1) begin
+                if (active_barrier_count[NC_WIDTH-1:0] == gbar_bus_if.req_data.size_m1) begin
                     barrier_masks[gbar_bus_if.req_data.id] <= '0;
                     rsp_bar_id <= gbar_bus_if.req_data.id;
                     rsp_valid  <= 1;
