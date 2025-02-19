@@ -157,41 +157,41 @@
     assign dst.req_data.data = src.req_data.data; \
     assign dst.req_data.byteen = src.req_data.byteen; \
     assign dst.req_data.flags = src.req_data.flags; \
-    if (TD != TS) begin : g_`__LINE__ \
-        if (UUID != 0) begin : g_`__LINE__ \
-            if (TD > TS) begin : g_`__LINE__ \
+    if (TD != TS) begin : g_reg_tag_ne`__LINE__ \
+        if (UUID != 0) begin : g_uuid`__LINE__ \
+            if (TD > TS) begin : g_td`__LINE__ \
                 assign dst.req_data.tag = {src.req_data.tag.uuid, {(TD-TS){1'b0}}, src.req_data.tag.value}; \
-            end else begin : g_`__LINE__ \
+            end else begin : g_ts`__LINE__ \
                 assign dst.req_data.tag = {src.req_data.tag.uuid, src.req_data.tag.value[TD-UUID-1:0]}; \
             end \
-        end else begin : g_`__LINE__ \
-            if (TD > TS) begin : g_`__LINE__ \
+        end else begin : g_no_uuid`__LINE__ \
+            if (TD > TS) begin : g_td`__LINE__ \
                 assign dst.req_data.tag = {{(TD-TS){1'b0}}, src.req_data.tag}; \
-            end else begin : g_`__LINE__ \
+            end else begin : g_ts`__LINE__ \
                 assign dst.req_data.tag = src.req_data.tag[TD-1:0]; \
             end \
         end \
-    end else begin : g_`__LINE__ \
+    end else begin : g_req_tag_eq`__LINE__ \
         assign dst.req_data.tag = src.req_data.tag; \
     end \
     assign src.req_ready = dst.req_ready; \
     assign src.rsp_valid = dst.rsp_valid; \
     assign src.rsp_data.data = dst.rsp_data.data; \
-    if (TD != TS) begin : g_`__LINE__ \
-        if (UUID != 0) begin : g_`__LINE__ \
-            if (TD > TS) begin : g_`__LINE__ \
+    if (TD != TS) begin : g_rsp_tag_ne`__LINE__ \
+        if (UUID != 0) begin : g_uuid`__LINE__ \
+            if (TD > TS) begin : g_td`__LINE__ \
                 assign src.rsp_data.tag = {dst.rsp_data.tag.uuid, dst.rsp_data.tag.value[TS-UUID-1:0]}; \
-            end else begin : g_`__LINE__ \
+            end else begin : g_ts`__LINE__ \
                 assign src.rsp_data.tag = {dst.rsp_data.tag.uuid, {(TS-TD){1'b0}}, dst.rsp_data.tag.value}; \
             end \
-        end else begin : g_`__LINE__ \
-            if (TD > TS) begin : g_`__LINE__ \
+        end else begin : g_no_uuid`__LINE__ \
+            if (TD > TS) begin : g_td`__LINE__ \
                 assign src.rsp_data.tag = dst.rsp_data.tag[TS-1:0]; \
-            end else begin : g_`__LINE__ \
+            end else begin : g_ts`__LINE__ \
                 assign src.rsp_data.tag = {{(TS-TD){1'b0}}, dst.rsp_data.tag}; \
             end \
         end \
-    end else begin : g_`__LINE__ \
+    end else begin : g_rsp_tag_eq`__LINE__ \
         assign src.rsp_data.tag = dst.rsp_data.tag; \
     end \
     assign dst.rsp_ready = src.rsp_ready
@@ -213,7 +213,7 @@
     `UNUSED_VAR (itf.rsp_ready)
 
 `define BUFFER_DCR_BUS_IF(dst, src, ena, latency) \
-    if (latency != 0) begin : g_`__LINE__ \
+    if (latency != 0) begin : g_on_`__LINE__ \
         VX_pipe_register #( \
             .DATAW (1 + VX_DCR_ADDR_WIDTH + VX_DCR_DATA_WIDTH), \
             .DEPTH (latency) \
@@ -224,22 +224,22 @@
             .data_in  ({src.write_valid && ena, src.write_addr, src.write_data}), \
             .data_out ({dst.write_valid, dst.write_addr, dst.write_data}) \
         ); \
-    end else begin : g_`__LINE__ \
+    end else begin : g_off`__LINE__ \
         assign {dst.write_valid, dst.write_addr, dst.write_data} = {src.write_valid && ena, src.write_addr, src.write_data}; \
     end
 
 `define PERF_COUNTER_ADD(dst, src, field, width, count, reg_enable) \
-    if (count > 1) begin : g_`__LINE__ \
+    if (count > 1) begin : g_on`__LINE__ \
         wire [count-1:0][width-1:0] __reduce_add_i_field; \
         wire [width-1:0] __reduce_add_o_field; \
-        for (genvar __i = 0; __i < count; ++__i) begin : g_`__LINE__ \
+        for (genvar __i = 0; __i < count; ++__i) begin : g_i`__LINE__ \
             assign __reduce_add_i_field[__i] = src[__i].``field; \
         end \
         VX_reduce_tree #(.DATAW_IN(width), .N(count), .OP("+")) __reduce_add_field ( \
             __reduce_add_i_field, \
             __reduce_add_o_field \
         ); \
-        if (reg_enable) begin : g_`__LINE__ \
+        if (reg_enable) begin : g_reg`__LINE__ \
             reg [width-1:0] __reduce_add_r_field; \
             always @(posedge clk) begin \
                 if (reset) begin \
@@ -249,21 +249,21 @@
                 end \
             end \
             assign dst.``field = __reduce_add_r_field; \
-        end else begin : g_`__LINE__ \
+        end else begin : g_no_reg`__LINE__ \
             assign dst.``field = __reduce_add_o_field; \
         end \
-    end else begin : g_`__LINE__ \
+    end else begin : g_off`__LINE__ \
         assign dst.``field = src[0].``field; \
     end
 
 `define ASSIGN_BLOCKED_WID(dst, src, block_idx, block_size) \
-    if (block_size != 1) begin : g_`__LINE__ \
-        if (block_size != `NUM_WARPS) begin : g_`__LINE__ \
+    if (block_size != 1) begin : g_on`__LINE__ \
+        if (block_size != `NUM_WARPS) begin : g_eq`__LINE__ \
             assign dst = {src[NW_WIDTH-1:`CLOG2(block_size)], `CLOG2(block_size)'(block_idx)}; \
-        end else begin : g_`__LINE__ \
+        end else begin : g_ne`__LINE__ \
             assign dst = NW_WIDTH'(block_idx); \
         end \
-    end else begin : g_`__LINE__ \
+    end else begin : g_off`__LINE__ \
         assign dst = src; \
     end
 
@@ -271,7 +271,7 @@
     wire [count-1:0]            prefix``_valid; \
     wire [count-1:0][dataw-1:0] prefix``_data; \
     wire [count-1:0]            prefix``_ready; \
-    for (genvar i = 0; i < count; ++i) begin : g_`__LINE__ \
+    for (genvar i = 0; i < count; ++i) begin : g_i`__LINE__ \
         assign prefix``_valid[i] = itf[i].valid; \
         assign prefix``_data[i]  = itf[i].data; \
         assign itf[i].ready = prefix``_ready[i]; \
@@ -281,7 +281,7 @@
     wire [count-1:0]            prefix``_valid; \
     wire [count-1:0][dataw-1:0] prefix``_data; \
     wire [count-1:0]            prefix``_ready; \
-    for (genvar i = 0; i < count; ++i) begin : g_`__LINE__ \
+    for (genvar i = 0; i < count; ++i) begin : g_i`__LINE__ \
         assign itf[i].valid = prefix``_valid[i]; \
         assign itf[i].data  = prefix``_data[i]; \
         assign prefix``_ready[i] = itf[i].ready; \
@@ -290,7 +290,7 @@
 `define ITF_TO_AOS_V(itf, prefix, count, dataw) \
     wire [count-1:0]            prefix``_valid; \
     wire [count-1:0][dataw-1:0] prefix``_data; \
-    for (genvar i = 0; i < count; ++i) begin : g_`__LINE__ \
+    for (genvar i = 0; i < count; ++i) begin : g_i`__LINE__ \
         assign prefix``_valid[i] = itf[i].valid; \
         assign prefix``_data[i]  = itf[i].data; \
     end
@@ -298,7 +298,7 @@
 `define AOS_TO_ITF_V(prefix, itf, count, dataw) \
     wire [count-1:0]            prefix``_valid; \
     wire [count-1:0][dataw-1:0] prefix``_data; \
-    for (genvar i = 0; i < count; ++i) begin : g_`__LINE__ \
+    for (genvar i = 0; i < count; ++i) begin : g_i`__LINE__ \
         assign itf[i].valid = prefix``_valid[i]; \
         assign itf[i].data  = prefix``_data[i]; \
     end
@@ -307,7 +307,7 @@
     wire [count-1:0]            prefix``_req_valid; \
     wire [count-1:0][dataw-1:0] prefix``_req_data; \
     wire [count-1:0]            prefix``_req_ready; \
-    for (genvar i = 0; i < count; ++i) begin : g_`__LINE__ \
+    for (genvar i = 0; i < count; ++i) begin : g_i`__LINE__ \
         assign prefix``_req_valid[i] = itf[i].req_valid; \
         assign prefix``_req_data[i]  = itf[i].req_data; \
         assign itf[i].req_ready = prefix``_req_ready[i]; \
@@ -317,7 +317,7 @@
     wire [count-1:0]            prefix``_req_valid; \
     wire [count-1:0][dataw-1:0] prefix``_req_data; \
     wire [count-1:0]            prefix``_req_ready; \
-    for (genvar i = 0; i < count; ++i) begin : g_`__LINE__ \
+    for (genvar i = 0; i < count; ++i) begin : g_i`__LINE__ \
         assign itf[i].req_valid = prefix``_req_valid[i]; \
         assign itf[i].req_data  = prefix``_req_data[i]; \
         assign prefix``_req_ready[i] = itf[i].req_ready; \
@@ -326,7 +326,7 @@
 `define ITF_TO_AOS_REQ_V(itf, prefix, count, dataw) \
     wire [count-1:0]            prefix``_req_valid; \
     wire [count-1:0][dataw-1:0] prefix``_req_data; \
-    for (genvar i = 0; i < count; ++i) begin : g_`__LINE__ \
+    for (genvar i = 0; i < count; ++i) begin : g_i`__LINE__ \
         assign prefix``_req_valid[i] = itf[i].req_valid; \
         assign prefix``_req_data[i]  = itf[i].req_data; \
     end
@@ -334,7 +334,7 @@
 `define AOS_TO_ITF_REQ_V(prefix, itf, count, dataw) \
     wire [count-1:0]            prefix``_req_valid; \
     wire [count-1:0][dataw-1:0] prefix``_req_data; \
-    for (genvar i = 0; i < count; ++i) begin : g_`__LINE__ \
+    for (genvar i = 0; i < count; ++i) begin : g_i`__LINE__ \
         assign itf[i].req_valid = prefix``_req_valid[i]; \
         assign itf[i].req_data  = prefix``_req_data[i]; \
     end
@@ -343,7 +343,7 @@
     wire [count-1:0]            prefix``_rsp_valid; \
     wire [count-1:0][dataw-1:0] prefix``_rsp_data; \
     wire [count-1:0]            prefix``_rsp_ready; \
-    for (genvar i = 0; i < count; ++i) begin : g_`__LINE__ \
+    for (genvar i = 0; i < count; ++i) begin : g_i`__LINE__ \
         assign prefix``_rsp_valid[i] = itf[i].rsp_valid; \
         assign prefix``_rsp_data[i]  = itf[i].rsp_data; \
         assign itf[i].rsp_ready = prefix``_rsp_ready[i]; \
@@ -353,7 +353,7 @@
     wire [count-1:0]            prefix``_rsp_valid; \
     wire [count-1:0][dataw-1:0] prefix``_rsp_data; \
     wire [count-1:0]            prefix``_vready; \
-    for (genvar i = 0; i < count; ++i) begin : g_`__LINE__ \
+    for (genvar i = 0; i < count; ++i) begin : g_i`__LINE__ \
         assign itf[i].rsp_valid = prefix``_rsp_valid[i]; \
         assign itf[i].rsp_data  = prefix``_rsp_data[i]; \
         assign prefix``_rsp_ready[i] = itf[i].rsp_ready; \
@@ -362,7 +362,7 @@
 `define ITF_TO_AOS_RSP_V(itf, prefix, count, dataw) \
     wire [count-1:0]            prefix``_rsp_valid; \
     wire [count-1:0][dataw-1:0] prefix``_rsp_data; \
-    for (genvar i = 0; i < count; ++i) begin : g_`__LINE__ \
+    for (genvar i = 0; i < count; ++i) begin : g_i`__LINE__ \
         assign prefix``_rsp_valid[i] = itf[i].rsp_valid; \
         assign prefix``_rsp_data[i]  = itf[i].rsp_data; \
     end
@@ -370,7 +370,7 @@
 `define AOS_TO_ITF_RSP_V(prefix, itf, count, dataw) \
     wire [count-1:0]            prefix``_rsp_valid; \
     wire [count-1:0][dataw-1:0] prefix``_rsp_data; \
-    for (genvar i = 0; i < count; ++i) begin : g_`__LINE__ \
+    for (genvar i = 0; i < count; ++i) begin : g_i`__LINE__ \
         assign itf[i].rsp_valid = prefix``_rsp_valid[i]; \
         assign itf[i].rsp_data  = prefix``_rsp_data[i]; \
     end

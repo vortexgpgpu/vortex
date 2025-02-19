@@ -106,7 +106,7 @@ module testbench;
                     end
                 end
             end else begin
-                if (vx_reset_wait && vx_reset_ctr == (RESET_DELAY-1)) begin
+                if (vx_reset_wait && vx_reset_ctr == (`RESET_DELAY-1)) begin
                     $display("start!");
                     vx_reset_wait <= 0;
                     vx_running    <= 1;

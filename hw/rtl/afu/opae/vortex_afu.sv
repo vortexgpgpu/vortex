@@ -57,7 +57,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     localparam CCI_DATA_SIZE      = CCI_DATA_WIDTH / 8;
     localparam CCI_ADDR_WIDTH     = $bits(t_ccip_clAddr);
 
-    localparam RESET_CTR_WIDTH    = `CLOG2(RESET_DELAY+1);
+    localparam RESET_CTR_WIDTH    = `CLOG2(`RESET_DELAY+1);
 
     localparam AVS_RD_QUEUE_SIZE  = 32;
     localparam VX_AVS_REQ_TAGW    = VX_MEM_TAG_WIDTH + `CLOG2(LMEM_DATA_WIDTH) - `CLOG2(VX_MEM_DATA_WIDTH);
@@ -244,7 +244,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
 `ifdef SIMULATION
 `ifndef VERILATOR
     // disable assertions until full reset
-    reg [`CLOG2(RESET_DELAY+1)-1:0] assert_delay_ctr;
+    reg [`CLOG2(`RESET_DELAY+1)-1:0] assert_delay_ctr;
     initial begin
         $assertoff;
     end
@@ -253,7 +253,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             assert_delay_ctr <= '0;
         end else begin
             assert_delay_ctr <= assert_delay_ctr + $bits(assert_delay_ctr)'(1);
-            if (assert_delay_ctr == (RESET_DELAY-1)) begin
+            if (assert_delay_ctr == (`RESET_DELAY-1)) begin
                 $asserton; // enable assertions
             end
         end
@@ -418,7 +418,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                     `TRACE(2, ("%t: AFU: Goto STATE RUN\n", $time))
                 `endif
                     state <= STATE_RUN;
-                    vx_reset_ctr <= RESET_CTR_WIDTH'(RESET_DELAY-1);
+                    vx_reset_ctr <= RESET_CTR_WIDTH'(`RESET_DELAY-1);
 					vx_reset <= 1;
                 end
                 default: begin

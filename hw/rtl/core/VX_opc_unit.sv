@@ -156,7 +156,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     reg [NUM_SRC_OPDS-1:0][`SIMD_WIDTH-1:0][`XLEN-1:0] opd_values;
     always @(posedge clk) begin
         if (col_rsp_fire) begin
-            opd_values[opc_if.rsp_data.opd_id] = opc_if.rsp_data.value;
+            opd_values[opc_if.rsp_data.opd_id] <= opc_if.rsp_data.value;
         end
     end
 

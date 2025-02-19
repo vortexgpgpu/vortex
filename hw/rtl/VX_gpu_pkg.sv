@@ -82,8 +82,6 @@ package VX_gpu_pkg;
 
 	localparam NUM_SOCKETS = `UP(`NUM_CORES / `SOCKET_SIZE);
 
-    localparam RESET_DELAY = 8;
-
     localparam MEM_REQ_FLAG_FLUSH =  0;
     localparam MEM_REQ_FLAG_IO =     1;
     localparam MEM_REQ_FLAG_LOCAL =  2; // shoud be last since optional
