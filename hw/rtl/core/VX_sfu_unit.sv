@@ -52,9 +52,9 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .NUM_LANES (NUM_LANES)
     ) per_block_execute_if[BLOCK_SIZE]();
 
-    VX_commit_if #(
+    VX_result_if #(
         .NUM_LANES (NUM_LANES)
-    ) per_block_commit_if[BLOCK_SIZE]();
+    ) per_block_result_if[BLOCK_SIZE]();
 
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
@@ -71,9 +71,9 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .NUM_LANES (NUM_LANES)
     ) pe_execute_if[PE_COUNT]();
 
-    VX_commit_if#(
+    VX_result_if#(
         .NUM_LANES (NUM_LANES)
-    ) pe_commit_if[PE_COUNT]();
+    ) pe_result_if[PE_COUNT]();
 
     reg [PE_SEL_BITS-1:0] pe_select;
     always @(*) begin
@@ -94,9 +94,9 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .reset      (reset),
         .pe_sel     (pe_select),
         .execute_in_if (per_block_execute_if[0]),
-        .commit_out_if (per_block_commit_if[0]),
+        .result_out_if (per_block_result_if[0]),
         .execute_out_if (pe_execute_if),
-        .commit_in_if (pe_commit_if)
+        .result_in_if (pe_result_if)
     );
 
     VX_wctl_unit #(
@@ -107,7 +107,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .reset      (reset),
         .execute_if (pe_execute_if[PE_IDX_WCTL]),
         .warp_ctl_if(warp_ctl_if),
-        .commit_if  (pe_commit_if[PE_IDX_WCTL])
+        .result_if  (pe_result_if[PE_IDX_WCTL])
     );
 
     VX_csr_unit #(
@@ -132,7 +132,7 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 
         .sched_csr_if   (sched_csr_if),
         .commit_csr_if  (commit_csr_if),
-        .commit_if      (pe_commit_if[PE_IDX_CSRS])
+        .result_if      (pe_result_if[PE_IDX_CSRS])
     );
 
     VX_gather_unit #(
@@ -140,10 +140,10 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .NUM_LANES  (NUM_LANES),
         .OUT_BUF    (3)
     ) gather_unit (
-        .clk        (clk),
-        .reset      (reset),
-        .commit_in_if (per_block_commit_if),
-        .commit_out_if (commit_if)
+        .clk       (clk),
+        .reset     (reset),
+        .result_if (per_block_result_if),
+        .commit_if (commit_if)
     );
 
 endmodule

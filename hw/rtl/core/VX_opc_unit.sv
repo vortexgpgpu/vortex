@@ -38,7 +38,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 
     localparam NUM_OPDS = NUM_SRC_OPDS + 1;
     localparam SCB_DATAW = UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + NUM_OPDS + (NUM_OPDS * REG_IDX_BITS);
-    localparam OUT_DATAW = UUID_WIDTH + ISSUE_WIS_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NR_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN);
+    localparam OUT_DATAW = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NR_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN);
 
     localparam STATE_IDLE  = 0;
     localparam STATE_FETCH = 1;
@@ -69,7 +69,10 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     );
 
     wire output_ready;
-    assign staging_if.ready = (state == STATE_DISPATCH) && output_ready;
+    wire dispatched = (state == STATE_DISPATCH) && output_ready;
+    wire is_last_simd = (simd_index == SIMD_IDX_W'(SIMD_COUNT-1));
+
+    assign staging_if.ready = dispatched && is_last_simd;
 
     wire [NR_BITS-1:0] rs1 = to_reg_number(staging_if.data.rs1);
     wire [NR_BITS-1:0] rs2 = to_reg_number(staging_if.data.rs2);
@@ -106,13 +109,13 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         end
         STATE_DISPATCH: begin
             if (output_ready) begin
-                if (simd_index != SIMD_IDX_W'(SIMD_COUNT-1)) begin
+                if (is_last_simd) begin
+                    state_n = STATE_IDLE;
+                end else begin
                     opds_needed_n = staging_if.data.used_rs;
                     opds_busy_n = staging_if.data.used_rs;
                     simd_index_n = simd_index + 1;
                     state_n = STATE_FETCH;
-                end else begin
-                    state_n = STATE_IDLE;
                 end
             end
         end
@@ -155,8 +158,14 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     // operands fetch response
     reg [NUM_SRC_OPDS-1:0][`SIMD_WIDTH-1:0][`XLEN-1:0] opd_values;
     always @(posedge clk) begin
-        if (col_rsp_fire) begin
-            opd_values[opc_if.rsp_data.opd_id] <= opc_if.rsp_data.value;
+        if (reset || dispatched) begin
+            for (integer i = 0; i < NUM_SRC_OPDS; ++i) begin
+                opd_values[i] <= '0;
+            end
+        end else begin
+            if (col_rsp_fire) begin
+                opd_values[opc_if.rsp_data.opd_id] <= opc_if.rsp_data.value;
+            end
         end
     end
 
@@ -184,6 +193,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         .data_in  ({
             staging_if.data.uuid,
             staging_if.data.wis,
+            simd_index,
             staging_if.data.tmask[simd_index * `SIMD_WIDTH +: `SIMD_WIDTH],
             staging_if.data.PC,
             staging_if.data.ex_type,

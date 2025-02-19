@@ -25,7 +25,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // Outputs
     VX_warp_ctl_if.master   warp_ctl_if,
-    VX_commit_if.master     commit_if
+    VX_result_if.master     result_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam LANE_BITS  = `CLOG2(NUM_LANES);
@@ -149,21 +149,21 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         .valid_in  (execute_if.valid),
         .ready_in  (execute_if.ready),
         .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, {tmc, wspawn, split, sjoin, barrier}, warp_ctl_if.dvstack_ptr}),
-        .data_out  ({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.PC, commit_if.data.rd, commit_if.data.wb, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop, {tmc_r, wspawn_r, split_r, sjoin_r, barrier_r}, dvstack_ptr}),
-        .valid_out (commit_if.valid),
-        .ready_out (commit_if.ready)
+        .data_out  ({result_if.data.uuid, result_if.data.wid, result_if.data.tmask, result_if.data.PC, result_if.data.rd, result_if.data.wb, result_if.data.pid, result_if.data.sop, result_if.data.eop, {tmc_r, wspawn_r, split_r, sjoin_r, barrier_r}, dvstack_ptr}),
+        .valid_out (result_if.valid),
+        .ready_out (result_if.ready)
     );
 
-    assign warp_ctl_if.valid   = commit_if.valid && commit_if.ready && commit_if.data.eop;
-    assign warp_ctl_if.wid     = commit_if.data.wid;
+    assign warp_ctl_if.valid   = result_if.valid && result_if.ready && result_if.data.eop;
+    assign warp_ctl_if.wid     = result_if.data.wid;
     assign warp_ctl_if.tmc     = tmc_r;
     assign warp_ctl_if.wspawn  = wspawn_r;
     assign warp_ctl_if.split   = split_r;
     assign warp_ctl_if.sjoin   = sjoin_r;
     assign warp_ctl_if.barrier = barrier_r;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_commit_if
-        assign commit_if.data.data[i] = `XLEN'(dvstack_ptr);
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result_if
+        assign result_if.data.data[i] = `XLEN'(dvstack_ptr);
     end
 
 endmodule

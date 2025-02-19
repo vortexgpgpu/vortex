@@ -25,7 +25,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     VX_execute_if.slave     execute_if,
 
     // Outputs
-    VX_commit_if.master     commit_if,
+    VX_result_if.master     result_if,
     VX_branch_ctl_if.master branch_ctl_if
 );
 
@@ -155,9 +155,9 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         .valid_in (execute_if.valid),
         .ready_in (execute_if.ready),
         .data_in  ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, alu_result, execute_if.data.PC, cbr_dest, is_br_op, br_op, tid}),
-        .data_out ({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.rd, commit_if.data.wb, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop, alu_result_r, PC_r, cbr_dest_r, is_br_op_r, br_op_r, tid_r}),
-        .valid_out (commit_if.valid),
-        .ready_out (commit_if.ready)
+        .data_out ({result_if.data.uuid, result_if.data.wid, result_if.data.tmask, result_if.data.rd, result_if.data.wb, result_if.data.pid, result_if.data.sop, result_if.data.eop, alu_result_r, PC_r, cbr_dest_r, is_br_op_r, br_op_r, tid_r}),
+        .valid_out (result_if.valid),
+        .ready_out (result_if.ready)
     );
 
     `UNUSED_VAR (br_op_r)
@@ -169,11 +169,11 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire is_less  = br_result[0];
     wire is_equal = br_result[1];
 
-    wire br_enable = is_br_op_r && commit_if.valid && commit_if.ready && commit_if.data.eop;
+    wire br_enable = is_br_op_r && result_if.valid && result_if.ready && result_if.data.eop;
     wire br_taken = ((is_br_less ? is_less : is_equal) ^ is_br_neg) | is_br_static;
     wire [PC_BITS-1:0] br_dest = is_br_static ? br_result[1 +: PC_BITS] : cbr_dest_r;
     wire [NW_WIDTH-1:0] br_wid;
-    `ASSIGN_BLOCKED_WID (br_wid, commit_if.data.wid, BLOCK_IDX, `NUM_ALU_BLOCKS)
+    `ASSIGN_BLOCKED_WID (br_wid, result_if.data.wid, BLOCK_IDX, `NUM_ALU_BLOCKS)
 
     VX_pipe_register #(
         .DATAW (1 + NW_WIDTH + 1 + PC_BITS)
@@ -185,17 +185,17 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         .data_out ({branch_ctl_if.valid, branch_ctl_if.wid, branch_ctl_if.taken, branch_ctl_if.dest})
     );
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_commit
-        assign commit_if.data.data[i] = (is_br_op_r && is_br_static) ? {(PC_r + PC_BITS'(2)), 1'd0} : alu_result_r[i];
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
+        assign result_if.data.data[i] = (is_br_op_r && is_br_static) ? {(PC_r + PC_BITS'(2)), 1'd0} : alu_result_r[i];
     end
 
-    assign commit_if.data.PC = PC_r;
+    assign result_if.data.PC = PC_r;
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (br_enable) begin
             `TRACE(2, ("%t: %s branch: wid=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
-                $time, INSTANCE_ID, br_wid, {commit_if.data.PC, 1'b0}, br_taken, {br_dest, 1'b0}, commit_if.data.uuid))
+                $time, INSTANCE_ID, br_wid, {result_if.data.PC, 1'b0}, br_taken, {br_dest, 1'b0}, result_if.data.uuid))
         end
     end
 `endif

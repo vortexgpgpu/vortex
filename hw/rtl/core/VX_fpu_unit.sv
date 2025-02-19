@@ -32,6 +32,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     localparam PID_BITS   = `CLOG2(`SIMD_WIDTH / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
     localparam TAG_WIDTH  = `LOG2UP(`FPUQ_SIZE);
+    localparam IBUF_DATAW = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NR_BITS + PID_WIDTH + 1 + 1;
     localparam PARTIAL_BW = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `SIMD_WIDTH);
 
     VX_execute_if #(
@@ -49,9 +50,9 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .execute_if (per_block_execute_if)
     );
 
-    VX_commit_if #(
+    VX_result_if #(
         .NUM_LANES (NUM_LANES)
-    ) per_block_commit_if[BLOCK_SIZE]();
+    ) per_block_result_if[BLOCK_SIZE]();
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_fpus
         `UNUSED_VAR (per_block_execute_if[block_idx].data.tid)
@@ -64,11 +65,11 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t fpu_rsp_fflags;
         wire fpu_rsp_has_fflags;
 
-        wire [UUID_WIDTH-1:0]  fpu_rsp_uuid;
-        wire [NW_WIDTH-1:0]    fpu_rsp_wid;
+        wire [UUID_WIDTH-1:0]   fpu_rsp_uuid;
+        wire [NW_WIDTH-1:0]     fpu_rsp_wid;
         wire [NUM_LANES-1:0]    fpu_rsp_tmask;
-        wire [PC_BITS-1:0]     fpu_rsp_PC;
-        wire [NR_BITS-1:0]     fpu_rsp_rd;
+        wire [PC_BITS-1:0]      fpu_rsp_PC;
+        wire [NR_BITS-1:0]      fpu_rsp_rd;
         wire [PID_WIDTH-1:0]    fpu_rsp_pid, fpu_rsp_pid_u;
         wire                    fpu_rsp_sop, fpu_rsp_sop_u;
         wire                    fpu_rsp_eop, fpu_rsp_eop_u;
@@ -83,7 +84,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire fpu_rsp_fire = fpu_rsp_valid && fpu_rsp_ready;
 
         VX_index_buffer #(
-            .DATAW  (UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NR_BITS + PID_WIDTH + 1 + 1),
+            .DATAW  (IBUF_DATAW),
             .SIZE   (`FPUQ_SIZE)
         ) tag_store (
             .clk          (clk),
@@ -247,19 +248,19 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         // send response
 
         VX_elastic_buffer #(
-            .DATAW (UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NR_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1),
+            .DATAW (IBUF_DATAW + (NUM_LANES * `XLEN)),
             .SIZE  (0)
         ) rsp_buf (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (fpu_rsp_valid),
             .ready_in  (fpu_rsp_ready),
-            .data_in   ({fpu_rsp_uuid, fpu_rsp_wid, fpu_rsp_tmask, fpu_rsp_PC, fpu_rsp_rd, fpu_rsp_result, fpu_rsp_pid, fpu_rsp_sop, fpu_rsp_eop}),
-            .data_out  ({per_block_commit_if[block_idx].data.uuid, per_block_commit_if[block_idx].data.wid, per_block_commit_if[block_idx].data.tmask, per_block_commit_if[block_idx].data.PC, per_block_commit_if[block_idx].data.rd, per_block_commit_if[block_idx].data.data, per_block_commit_if[block_idx].data.pid, per_block_commit_if[block_idx].data.sop, per_block_commit_if[block_idx].data.eop}),
-            .valid_out (per_block_commit_if[block_idx].valid),
-            .ready_out (per_block_commit_if[block_idx].ready)
+            .data_in   ({fpu_rsp_uuid, fpu_rsp_wid, fpu_rsp_tmask, fpu_rsp_PC, fpu_rsp_rd, fpu_rsp_pid, fpu_rsp_sop, fpu_rsp_eop, fpu_rsp_result}),
+            .data_out  ({per_block_result_if[block_idx].data.uuid, per_block_result_if[block_idx].data.wid, per_block_result_if[block_idx].data.tmask, per_block_result_if[block_idx].data.PC, per_block_result_if[block_idx].data.pid, per_block_result_if[block_idx].data.sop, per_block_result_if[block_idx].data.eop, per_block_result_if[block_idx].data.rd, per_block_result_if[block_idx].data.data}),
+            .valid_out (per_block_result_if[block_idx].valid),
+            .ready_out (per_block_result_if[block_idx].ready)
         );
-        assign per_block_commit_if[block_idx].data.wb = 1'b1;
+        assign per_block_result_if[block_idx].data.wb = 1'b1;
     end
 
     VX_gather_unit #(
@@ -267,10 +268,10 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         .NUM_LANES  (NUM_LANES),
         .OUT_BUF    (PARTIAL_BW ? 3 : 0)
     ) gather_unit (
-        .clk           (clk),
-        .reset         (reset),
-        .commit_in_if  (per_block_commit_if),
-        .commit_out_if (commit_if)
+        .clk       (clk),
+        .reset     (reset),
+        .result_if (per_block_result_if),
+        .commit_if (commit_if)
     );
 
 endmodule

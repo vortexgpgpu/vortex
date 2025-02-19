@@ -37,8 +37,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
 
     localparam NUM_OPDS = NUM_SRC_OPDS + 1;
-    localparam SB_DATAW = UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + NUM_OPDS + (REG_IDX_BITS * NUM_OPDS);
-    localparam OPD_DATAW = UUID_WIDTH + ISSUE_WIS_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NR_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN);
+    localparam SCB_DATAW = UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + NUM_OPDS + (REG_IDX_BITS * NUM_OPDS);
+    localparam OPD_DATAW = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NR_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN);
 
     VX_opc_if opc_if[`NUM_OPCS]();
     VX_scoreboard_if per_opc_scoreboard_if[`NUM_OPCS]();
@@ -48,12 +48,12 @@ module VX_operands import VX_gpu_pkg::*; #(
     wire [SIMD_IDX_W-1:0] per_opc_sid[`NUM_OPCS];
     wire [NUM_REGS-1:0] per_opc_pending_regs[`NUM_OPCS];
 
-    `AOS_TO_ITF (per_opc_scoreboard, per_opc_scoreboard_if, `NUM_OPCS, SB_DATAW)
+    `AOS_TO_ITF (per_opc_scoreboard, per_opc_scoreboard_if, `NUM_OPCS, SCB_DATAW)
 
     VX_stream_arb #(
         .NUM_INPUTS  (1),
         .NUM_OUTPUTS (`NUM_OPCS),
-        .DATAW       (SB_DATAW)
+        .DATAW       (SCB_DATAW)
     ) scboard_arb (
         .clk        (clk),
         .reset      (reset),
@@ -81,21 +81,29 @@ module VX_operands import VX_gpu_pkg::*; #(
         );
     end
 
-    reg [NUM_REGS-1:0] opc_pending_regs;
-    always @(*) begin
-        opc_pending_regs = 0;
-        for (int i = 0; i < `NUM_OPCS; ++i) begin
-            opc_pending_regs |= (per_opc_pending_regs[i] & {NUM_REGS{(per_opc_sid[i] == writeback_if.data.sid)
-                                                                  && (per_opc_wis[i] == writeback_if.data.wis)}});
-        end
+    reg [`NUM_OPCS-1:0][NUM_REGS-1:0] per_opc_pending_regs_sel;
+    for (genvar i = 0; i < `NUM_OPCS; ++i) begin : g_per_opc_pending_regs_sel
+        wire opc_match = (per_opc_sid[i] == writeback_if.data.sid) && (per_opc_wis[i] == writeback_if.data.wis);
+        assign per_opc_pending_regs_sel[i] = per_opc_pending_regs[i] & {NUM_REGS{opc_match}};
     end
+
+    reg [NUM_REGS-1:0] opc_pending_regs;
+    VX_reduce_tree #(
+        .DATAW_IN  (NUM_REGS),
+        .N         (`NUM_OPCS),
+        .OP        ("|")
+    ) reduce_opc_pending_regs (
+        .data_in  (per_opc_pending_regs_sel),
+        .data_out (opc_pending_regs)
+    );
+
     wire war_dp_check = (opc_pending_regs[writeback_if.data.rd] == 0);
 
     VX_writeback_if writeback_if_s();
     assign writeback_if_s.valid = writeback_if.valid && war_dp_check;
     assign writeback_if_s.data = writeback_if.data;
-    `UNUSED_VAR (writeback_if_s.ready)
     assign writeback_if.ready = war_dp_check;
+    `UNUSED_VAR (writeback_if_s.ready)
 
     VX_gpr_unit #(
         .INSTANCE_ID (INSTANCE_ID),

@@ -16,11 +16,11 @@
 interface VX_fetch_if import VX_gpu_pkg::*; ();
 
     typedef struct packed {
-        logic [UUID_WIDTH-1:0]     uuid;
-        logic [NW_WIDTH-1:0]       wid;
-        logic [`NUM_THREADS-1:0]    tmask;
-        logic [PC_BITS-1:0]        PC;
-        logic [31:0]                instr;
+        logic [UUID_WIDTH-1:0]  uuid;
+        logic [NW_WIDTH-1:0]    wid;
+        logic [`NUM_THREADS-1:0] tmask;
+        logic [PC_BITS-1:0]     PC;
+        logic [31:0]            instr;
     } data_t;
 
     logic  valid;

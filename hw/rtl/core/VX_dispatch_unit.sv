@@ -27,22 +27,23 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
 
     // outputs
     VX_execute_if.master    execute_if [BLOCK_SIZE]
-
 );
     `STATIC_ASSERT (`IS_DIVISBLE(`ISSUE_WIDTH, BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT (`IS_DIVISBLE(`SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
     localparam BLOCK_SIZE_W = `LOG2UP(BLOCK_SIZE);
     localparam NUM_PACKETS  = `SIMD_WIDTH / NUM_LANES;
-    localparam PID_BITS     = `CLOG2(NUM_PACKETS);
+    localparam LPID_BITS    = `CLOG2(NUM_PACKETS);
+    localparam LPID_WIDTH   = `UP(LPID_BITS);
+    localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
     localparam BATCH_COUNT  = `ISSUE_WIDTH / BLOCK_SIZE;
     localparam BATCH_COUNT_W= `LOG2UP(BATCH_COUNT);
     localparam ISSUE_W      = `LOG2UP(`ISSUE_WIDTH);
-    localparam IN_DATAW     = UUID_WIDTH + ISSUE_WIS_W + `SIMD_WIDTH + INST_OP_BITS + INST_ARGS_BITS + 1 + PC_BITS + NR_BITS + NT_WIDTH + (3 * `SIMD_WIDTH * `XLEN);
+    localparam IN_DATAW     = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + INST_OP_BITS + INST_ARGS_BITS + 1 + PC_BITS + NR_BITS + NT_WIDTH + (3 * `SIMD_WIDTH * `XLEN);
     localparam OUT_DATAW    = UUID_WIDTH + NW_WIDTH + NUM_LANES + INST_OP_BITS + INST_ARGS_BITS + 1 + PC_BITS + NR_BITS + NT_WIDTH + (3 * NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1;
     localparam FANOUT_ENABLE= (`SIMD_WIDTH > (MAX_FANOUT + MAX_FANOUT /2));
 
-    localparam DATA_TMASK_OFF = IN_DATAW - (UUID_WIDTH + ISSUE_WIS_W + `SIMD_WIDTH);
+    localparam DATA_TMASK_OFF = IN_DATAW - (UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH);
     localparam DATA_REGS_OFF = 0;
 
     wire [`ISSUE_WIDTH-1:0] dispatch_valid;
@@ -108,20 +109,20 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
 
+        wire [SIMD_IDX_W-1:0] dispatch_sid = dispatch_data[issue_idx][DATA_TMASK_OFF + `SIMD_WIDTH +: SIMD_IDX_W];
+
         wire [ISSUE_W-1:0] issue_idx = issue_indices[block_idx];
         wire valid_p, ready_p;
 
-        if (`SIMD_WIDTH > NUM_LANES) begin : g_partial_threads
+        if (`SIMD_WIDTH > NUM_LANES) begin : g_partial_simd
             reg [NUM_PACKETS-1:0] sent_mask_p;
-            wire [PID_WIDTH-1:0] start_p_n, start_p, end_p;
+            wire [LPID_WIDTH-1:0] start_p_n, start_p, end_p;
             wire dispatch_valid_r;
             reg is_first_p;
 
-            wire fire_p = valid_p && ready_p;
-
+            wire fire_p    = valid_p && ready_p;
             wire is_last_p = (start_p == end_p);
-
-            wire fire_eop = fire_p && is_last_p;
+            wire fire_eop  = fire_p && is_last_p;
 
             always @(posedge clk) begin
                 if (reset) begin
@@ -161,14 +162,14 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
                 assign packet_valids[i] = (| per_packet_tmask[i]);
             end
 
-            wire [NUM_PACKETS-1:0][PID_WIDTH-1:0] packet_ids;
+            wire [NUM_PACKETS-1:0][LPID_WIDTH-1:0] packet_ids;
             for (genvar i = 0; i < NUM_PACKETS; ++i) begin : g_packet_ids
-                assign packet_ids[i] = PID_WIDTH'(i);
+                assign packet_ids[i] = LPID_WIDTH'(i);
             end
 
             VX_find_first #(
                 .N       (NUM_PACKETS),
-                .DATAW   (PID_WIDTH),
+                .DATAW   (LPID_WIDTH),
                 .REVERSE (0)
             ) find_first (
                 .valid_in  (packet_valids & ~sent_mask_p),
@@ -179,7 +180,7 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
 
             VX_find_first #(
                 .N       (NUM_PACKETS),
-                .DATAW   (PID_WIDTH),
+                .DATAW   (LPID_WIDTH),
                 .REVERSE (1)
             ) find_last (
                 .valid_in  (packet_valids),
@@ -189,7 +190,7 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
             );
 
             VX_pipe_register #(
-                .DATAW  (1 + PID_WIDTH),
+                .DATAW  (1 + LPID_WIDTH),
                 .RESETW (1),
                 .DEPTH  (FANOUT_ENABLE ? 1 : 0)
             ) pipe_reg (
@@ -208,24 +209,24 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
             assign valid_p = dispatch_valid_r && block_enable;
             assign block_tmask[block_idx] = tmask_p;
             assign block_regs[block_idx]  = regs_p;
-            assign block_pid[block_idx]   = start_p;
-            assign block_sop[block_idx]   = is_first_p;
-            assign block_eop[block_idx]   = is_last_p;
+            assign block_pid[block_idx]   = PID_WIDTH'(dispatch_sid * NUM_PACKETS + start_p);
+            assign block_sop[block_idx]   = is_first_p && (dispatch_sid == 0);
+            assign block_eop[block_idx]   = is_last_p && (dispatch_sid == SIMD_IDX_W'(SIMD_COUNT-1));
             if (FANOUT_ENABLE) begin : g_block_ready_fanout
                 assign block_ready[block_idx] = dispatch_valid_r && ready_p && block_enable;
             end else begin : g_block_ready
                 assign block_ready[block_idx] = ready_p && block_enable;
             end
             assign block_done[block_idx] = fire_eop || ~dispatch_valid[issue_idx];
-        end else begin : g_full_threads
+        end else begin : g_full_simd
             assign valid_p = dispatch_valid[issue_idx];
             assign block_tmask[block_idx] = dispatch_data[issue_idx][DATA_TMASK_OFF +: `SIMD_WIDTH];
             assign block_regs[block_idx][0] = dispatch_data[issue_idx][DATA_REGS_OFF + 2 * `SIMD_WIDTH * `XLEN +: `SIMD_WIDTH * `XLEN];
             assign block_regs[block_idx][1] = dispatch_data[issue_idx][DATA_REGS_OFF + 1 * `SIMD_WIDTH * `XLEN +: `SIMD_WIDTH * `XLEN];
             assign block_regs[block_idx][2] = dispatch_data[issue_idx][DATA_REGS_OFF + 0 * `SIMD_WIDTH * `XLEN +: `SIMD_WIDTH * `XLEN];
-            assign block_pid[block_idx]   = '0;
-            assign block_sop[block_idx]   = 1'b1;
-            assign block_eop[block_idx]   = 1'b1;
+            assign block_pid[block_idx]   = PID_WIDTH'(dispatch_sid * NUM_PACKETS);
+            assign block_sop[block_idx]   = (dispatch_sid == 0);
+            assign block_eop[block_idx]   = (dispatch_sid == SIMD_IDX_W'(SIMD_COUNT-1));
             assign block_ready[block_idx] = ready_p;
             assign block_done[block_idx]  = ready_p || ~valid_p;
         end
@@ -255,7 +256,7 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
             .valid_in  (valid_p),
             .ready_in  (ready_p),
             .data_in   ({
-                dispatch_data[issue_idx][IN_DATAW-1 : DATA_TMASK_OFF+`SIMD_WIDTH+ISSUE_WIS_W],
+                dispatch_data[issue_idx][IN_DATAW-1 -: UUID_WIDTH],
                 block_wid,
                 block_tmask[block_idx],
                 dispatch_data[issue_idx][DATA_TMASK_OFF-1 : DATA_REGS_OFF + 3 * `SIMD_WIDTH * `XLEN],

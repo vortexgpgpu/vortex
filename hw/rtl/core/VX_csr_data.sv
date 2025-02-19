@@ -51,20 +51,20 @@ import VX_fpu_pkg::*;
     VX_fpu_csr_if.slave                 fpu_csr_if [`NUM_FPU_BLOCKS],
 `endif
 
-    input wire [PERF_CTR_BITS-1:0]     cycles,
+    input wire [PERF_CTR_BITS-1:0]      cycles,
     input wire [`NUM_WARPS-1:0]         active_warps,
     input wire [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks,
 
     input wire                          read_enable,
-    input wire [UUID_WIDTH-1:0]        read_uuid,
-    input wire [NW_WIDTH-1:0]          read_wid,
+    input wire [UUID_WIDTH-1:0]         read_uuid,
+    input wire [NW_WIDTH-1:0]           read_wid,
     input wire [`VX_CSR_ADDR_BITS-1:0]  read_addr,
     output wire [`XLEN-1:0]             read_data_ro,
     output wire [`XLEN-1:0]             read_data_rw,
 
     input wire                          write_enable,
-    input wire [UUID_WIDTH-1:0]        write_uuid,
-    input wire [NW_WIDTH-1:0]          write_wid,
+    input wire [UUID_WIDTH-1:0]         write_uuid,
+    input wire [NW_WIDTH-1:0]           write_wid,
     input wire [`VX_CSR_ADDR_BITS-1:0]  write_addr,
     input wire [`XLEN-1:0]              write_data
 );

@@ -24,7 +24,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     VX_execute_if.slave execute_if,
 
     // Outputs
-    VX_commit_if.master commit_if
+    VX_result_if.master result_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam PID_BITS  = `CLOG2(`SIMD_WIDTH / NUM_LANES);
@@ -333,9 +333,9 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
         .ready_in  ({div_ready_out, mul_ready_out}),
         .data_in   ({{div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, div_pid_out, div_sop_out, div_eop_out, div_result_out},
                      {mul_uuid_out, mul_wid_out, mul_tmask_out, mul_PC_out, mul_rd_out, mul_wb_out, mul_pid_out, mul_sop_out, mul_eop_out, mul_result_out}}),
-        .data_out  ({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.PC, commit_if.data.rd, commit_if.data.wb, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop, commit_if.data.data}),
-        .valid_out (commit_if.valid),
-        .ready_out (commit_if.ready),
+        .data_out  ({result_if.data.uuid, result_if.data.wid, result_if.data.tmask, result_if.data.PC, result_if.data.rd, result_if.data.wb, result_if.data.pid, result_if.data.sop, result_if.data.eop, result_if.data.data}),
+        .valid_out (result_if.valid),
+        .ready_out (result_if.ready),
         `UNUSED_PIN (sel_out)
     );
 

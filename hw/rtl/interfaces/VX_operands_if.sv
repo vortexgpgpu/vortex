@@ -18,6 +18,7 @@ interface VX_operands_if import VX_gpu_pkg::*; ();
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [ISSUE_WIS_W-1:0]             wis;
+        logic [SIMD_IDX_W-1:0]              sid;
         logic [`SIMD_WIDTH-1:0]             tmask;
         logic [PC_BITS-1:0]                 PC;
         logic [EX_BITS-1:0]                 ex_type;

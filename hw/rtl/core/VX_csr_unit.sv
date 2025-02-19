@@ -35,7 +35,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     VX_commit_csr_if.slave      commit_csr_if,
     VX_sched_csr_if.slave       sched_csr_if,
     VX_execute_if.slave         execute_if,
-    VX_commit_if.master         commit_if
+    VX_result_if.master         result_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam PID_BITS   = `CLOG2(`SIMD_WIDTH / NUM_LANES);
@@ -170,9 +170,9 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .valid_in  (csr_req_valid),
         .ready_in  (csr_req_ready),
         .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, csr_read_data,       execute_if.data.pid, execute_if.data.sop, execute_if.data.eop}),
-        .data_out  ({commit_if.data.uuid,  commit_if.data.wid,  commit_if.data.tmask,  commit_if.data.PC,  commit_if.data.rd,  commit_if.data.wb,  commit_if.data.data, commit_if.data.pid,  commit_if.data.sop,  commit_if.data.eop}),
-        .valid_out (commit_if.valid),
-        .ready_out (commit_if.ready)
+        .data_out  ({result_if.data.uuid,  result_if.data.wid,  result_if.data.tmask,  result_if.data.PC,  result_if.data.rd,  result_if.data.wb,  result_if.data.data, result_if.data.pid,  result_if.data.sop,  result_if.data.eop}),
+        .valid_out (result_if.valid),
+        .ready_out (result_if.ready)
     );
 
 endmodule
