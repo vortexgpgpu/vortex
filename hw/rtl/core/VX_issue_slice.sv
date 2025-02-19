@@ -34,7 +34,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 
     VX_ibuffer_if ibuffer_if [PER_ISSUE_WARPS]();
     VX_scoreboard_if scoreboard_if();
-    VX_operands_if operands_if[`NUM_OPCS]();
+    VX_operands_if operands_if();
 
     VX_ibuffer #(
         .INSTANCE_ID (`SFORMATF(("%s-ibuffer", INSTANCE_ID)))

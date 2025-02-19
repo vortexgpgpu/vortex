@@ -32,15 +32,18 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     VX_writeback_if.slave   writeback_if,
     VX_scoreboard_if.slave  scoreboard_if,
-    VX_operands_if.master   operands_if [`NUM_OPCS]
+    VX_operands_if.master   operands_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
     localparam NUM_OPDS = NUM_SRC_OPDS + 1;
     localparam SB_DATAW = UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + NUM_OPDS + (REG_IDX_BITS * NUM_OPDS);
+    localparam OPD_DATAW = UUID_WIDTH + ISSUE_WIS_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NR_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN);
 
     VX_opc_if opc_if[`NUM_OPCS]();
     VX_scoreboard_if per_opc_scoreboard_if[`NUM_OPCS]();
+    VX_operands_if per_opc_operands_if[`NUM_OPCS]();
+
     wire [ISSUE_WIS_W-1:0] per_opc_wis[`NUM_OPCS];
     wire [SIMD_IDX_W-1:0] per_opc_sid[`NUM_OPCS];
     wire [NUM_REGS-1:0] per_opc_pending_regs[`NUM_OPCS];
@@ -74,7 +77,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             .pending_regs (per_opc_pending_regs[i]),
             .scoreboard_if(per_opc_scoreboard_if[i]),
             .opc_if       (opc_if[i]),
-            .operands_if  (operands_if[i])
+            .operands_if  (per_opc_operands_if[i])
         );
     end
 
@@ -106,6 +109,24 @@ module VX_operands import VX_gpu_pkg::*; #(
     `endif
         .writeback_if (writeback_if_s),
         .opc_if       (opc_if)
+    );
+
+    `ITF_TO_AOS (per_opc_operands_if, per_opc_operands, `NUM_OPCS, OPD_DATAW)
+
+    VX_stream_arb #(
+        .NUM_INPUTS  (`NUM_OPCS),
+        .NUM_OUTPUTS (1),
+        .DATAW       (OPD_DATAW)
+    ) operands_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .valid_in   (per_opc_operands_valid),
+        .data_in    (per_opc_operands_data),
+        .ready_in   (per_opc_operands_ready),
+        .valid_out  (operands_if.valid),
+        .data_out   (operands_if.data),
+        .ready_out  (operands_if.ready),
+        `UNUSED_PIN(sel_out)
     );
 
 endmodule

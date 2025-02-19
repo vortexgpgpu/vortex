@@ -23,7 +23,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     output wire [PERF_CTR_BITS-1:0] perf_stalls [NUM_EX_UNITS],
 `endif
     // inputs
-    VX_operands_if.slave    operands_if [`NUM_OPCS],
+    VX_operands_if.slave    operands_if,
 
     // outputs
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS]
