@@ -32,10 +32,10 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
     localparam BLOCK_SIZE_W = `LOG2UP(BLOCK_SIZE);
     localparam NUM_PACKETS  = `SIMD_WIDTH / NUM_LANES;
     localparam LPID_BITS    = `CLOG2(NUM_PACKETS);
-    localparam LPID_WIDTH   = `UP(PID_BITS);
-    localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
-    localparam PID_WIDTH    = `UP(PID_BITS);
-    localparam DATAW        = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + 1 + NR_BITS + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
+    localparam LPID_WIDTH   = `UP(LPID_BITS);
+    localparam GPID_BITS    = `CLOG2(`NUM_THREADS / NUM_LANES);
+    localparam GPID_WIDTH   = `UP(GPID_BITS);
+    localparam DATAW        = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + 1 + NR_BITS + NUM_LANES * `XLEN + GPID_WIDTH + 1 + 1;
     localparam DATA_WIS_OFF = DATAW - (UUID_WIDTH + NW_WIDTH);
 
     wire [BLOCK_SIZE-1:0] result_in_valid;

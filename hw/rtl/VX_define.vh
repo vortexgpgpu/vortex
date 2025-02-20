@@ -114,10 +114,8 @@
 
 `define CONCAT(out, left_in, right_in, L, R) \
     if (L == 0) begin : g_right`__LINE__ \
-        `UNUSED_VAR (left_in) \
         assign out = right_in; \
     end else if (R == 0) begin : g_left`__LINE__ \
-        `UNUSED_VAR (right_in) \
         assign out = left_in; \
     end else begin : g_concat`__LINE__ \
         assign out = {left_in, right_in}; \

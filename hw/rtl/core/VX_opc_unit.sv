@@ -82,8 +82,8 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     always @(*) begin
         state_n = state;
         opds_needed_n = opds_needed;
-        opds_busy_n = opds_busy;
-        simd_index_n = simd_index;
+        opds_busy_n   = opds_busy;
+        simd_index_n  = simd_index;
         case (state)
         STATE_IDLE: begin
             if (scboard_fire) begin

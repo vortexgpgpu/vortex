@@ -68,6 +68,7 @@ module VX_issue import VX_gpu_pkg::*; #(
         assign per_issue_decode_if.data.op_type = decode_if.data.op_type;
         assign per_issue_decode_if.data.op_args = decode_if.data.op_args;
         assign per_issue_decode_if.data.wb = decode_if.data.wb;
+        assign per_issue_decode_if.data.used_rs = decode_if.data.used_rs;
         assign per_issue_decode_if.data.rd = decode_if.data.rd;
         assign per_issue_decode_if.data.rs1 = decode_if.data.rs1;
         assign per_issue_decode_if.data.rs2 = decode_if.data.rs2;
