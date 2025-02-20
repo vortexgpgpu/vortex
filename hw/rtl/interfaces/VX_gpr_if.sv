@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-interface VX_opc_if import VX_gpu_pkg::*; ();
+interface VX_gpr_if import VX_gpu_pkg::*; ();
 
     typedef struct packed {
         logic [SRC_OPD_WIDTH-1:0]   opd_id;

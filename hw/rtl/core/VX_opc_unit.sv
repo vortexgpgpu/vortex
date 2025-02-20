@@ -26,12 +26,12 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     input wire              clk,
     input wire              reset,
 
-    output wire [SIMD_IDX_W-1:0] sid,
-    output wire [ISSUE_WIS_W-1:0] wis,
+    output wire [SIMD_IDX_W-1:0] pending_sid,
+    output wire [ISSUE_WIS_W-1:0] pending_wis,
     output reg [NUM_REGS-1:0] pending_regs,
 
     VX_scoreboard_if.slave  scoreboard_if,
-    VX_opc_if.master        opc_if,
+    VX_gpr_if.master        gpr_if,
     VX_operands_if.master   operands_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -52,8 +52,8 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     reg [SIMD_IDX_W-1:0] simd_index, simd_index_n;
 
     wire scboard_fire = scoreboard_if.valid && scoreboard_if.ready;
-    wire col_req_fire = opc_if.req_valid && opc_if.req_ready;
-    wire col_rsp_fire = opc_if.rsp_valid;
+    wire gpr_req_fire = gpr_if.req_valid && gpr_if.req_ready;
+    wire gpr_rsp_fire = gpr_if.rsp_valid;
 
     VX_pipe_buffer #(
         .DATAW (SCB_DATAW)
@@ -97,11 +97,11 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             end
         end
         STATE_FETCH: begin
-            if (col_req_fire) begin
-                opds_needed_n[opc_if.req_data.opd_id] = 0;
+            if (gpr_req_fire) begin
+                opds_needed_n[gpr_if.req_data.opd_id] = 0;
             end
-            if (col_rsp_fire) begin
-                opds_busy_n[opc_if.rsp_data.opd_id] = 0;
+            if (gpr_rsp_fire) begin
+                opds_busy_n[gpr_if.rsp_data.opd_id] = 0;
             end
             if (opds_busy_n == 0) begin
                 state_n = STATE_DISPATCH;
@@ -149,11 +149,11 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     );
 
     // operands fetch request
-    assign opc_if.req_valid = opd_fetch_valid;
-    assign opc_if.req_data.opd_id = opd_id;
-    assign opc_if.req_data.sid = simd_index;
-    assign opc_if.req_data.wis = staging_if.data.wis;
-    assign opc_if.req_data.reg_id = src_regs[opd_id];
+    assign gpr_if.req_valid = opd_fetch_valid;
+    assign gpr_if.req_data.opd_id = opd_id;
+    assign gpr_if.req_data.sid = simd_index;
+    assign gpr_if.req_data.wis = staging_if.data.wis;
+    assign gpr_if.req_data.reg_id = src_regs[opd_id];
 
     // operands fetch response
     reg [NUM_SRC_OPDS-1:0][`SIMD_WIDTH-1:0][`XLEN-1:0] opd_values;
@@ -163,15 +163,15 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
                 opd_values[i] <= '0;
             end
         end else begin
-            if (col_rsp_fire) begin
-                opd_values[opc_if.rsp_data.opd_id] <= opc_if.rsp_data.value;
+            if (gpr_rsp_fire) begin
+                opd_values[gpr_if.rsp_data.opd_id] <= gpr_if.rsp_data.value;
             end
         end
     end
 
     // output scheduler info
-    assign sid = simd_index;
-    assign wis = staging_if.data.wis;
+    assign pending_sid = simd_index;
+    assign pending_wis = staging_if.data.wis;
     always @(*) begin
         pending_regs = '0;
         for (integer i = 0; i < NUM_SRC_OPDS; ++i) begin

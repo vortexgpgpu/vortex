@@ -36,11 +36,11 @@ module VX_operands import VX_gpu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    localparam NUM_OPDS = NUM_SRC_OPDS + 1;
+    localparam NUM_OPDS  = NUM_SRC_OPDS + 1;
     localparam SCB_DATAW = UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + NUM_OPDS + (REG_IDX_BITS * NUM_OPDS);
     localparam OPD_DATAW = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NR_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN);
 
-    VX_opc_if opc_if[`NUM_OPCS]();
+    VX_gpr_if per_opc_gpr_if[`NUM_OPCS]();
     VX_scoreboard_if per_opc_scoreboard_if[`NUM_OPCS]();
     VX_operands_if per_opc_operands_if[`NUM_OPCS]();
 
@@ -72,11 +72,11 @@ module VX_operands import VX_gpu_pkg::*; #(
         ) opc_unit (
             .clk          (clk),
             .reset        (reset),
-            .sid          (per_opc_sid[i]),
-            .wis          (per_opc_wis[i]),
+            .pending_sid  (per_opc_sid[i]),
+            .pending_wis  (per_opc_wis[i]),
             .pending_regs (per_opc_pending_regs[i]),
             .scoreboard_if(per_opc_scoreboard_if[i]),
-            .opc_if       (opc_if[i]),
+            .gpr_if       (per_opc_gpr_if[i]),
             .operands_if  (per_opc_operands_if[i])
         );
     end
@@ -116,7 +116,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         .perf_stalls  (perf_stalls),
     `endif
         .writeback_if (writeback_if_s),
-        .opc_if       (opc_if)
+        .gpr_if       (per_opc_gpr_if)
     );
 
     `ITF_TO_AOS (per_opc_operands_if, per_opc_operands, `NUM_OPCS, OPD_DATAW)
