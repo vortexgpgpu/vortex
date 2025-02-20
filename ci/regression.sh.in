@@ -395,7 +395,7 @@ vector()
     echo "begin vector tests..."
 
     make -C sim/simx clean && CONFIGS="-DEXT_V_ENABLE" make -C sim/simx
-    TOOLDIR=@TOOLDIR@ XLEN=@XLEN@ VLEN=256 REG_TESTS=1 ./tests/riscv/riscv-vector-tests/run-test.sh
+    TOOLDIR=@TOOLDIR@ XLEN=@XLEN@ VLEN=256 REG_TESTS=1 GEN_TESTS=0 ./tests/riscv/riscv-vector-tests/run-test.sh
 
     echo "vector tests done!"
 }
