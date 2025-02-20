@@ -284,6 +284,7 @@ inline int vx_vote_sync(int mode, int neg, int threadMask, int pred)
     );
 
     return rd;
+}
 //Matrix load
 inline void vx_matrix_load(unsigned dest, unsigned  addr) 
 {
