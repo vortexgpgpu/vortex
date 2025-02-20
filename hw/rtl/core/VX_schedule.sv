@@ -14,13 +14,14 @@
 `include "VX_define.vh"
 
 module VX_schedule import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
     parameter CORE_ID = 0
 ) (
     input wire              clk,
     input wire              reset,
 
 `ifdef PERF_ENABLE
-    VX_pipeline_perf_if.schedule perf_schedule_if,
+    output sched_perf_t     sched_perf,
 `endif
 
     // configuration
@@ -42,6 +43,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     // status
     output wire             busy
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
 
     reg [`NUM_WARPS-1:0] active_warps, active_warps_n; // updated when a warp is activated or disabled
@@ -66,8 +68,6 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     reg [`PERF_CTR_BITS-1:0] cycles;
 
-    reg [`NUM_WARPS-1:0][`UUID_WIDTH-1:0] issued_instrs;
-
     wire schedule_fire = schedule_valid && schedule_ready;
     wire schedule_if_fire = schedule_if.valid && schedule_if.ready;
 
@@ -76,7 +76,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     wire [`NUM_ALU_BLOCKS-1:0][`NW_WIDTH-1:0]   branch_wid;
     wire [`NUM_ALU_BLOCKS-1:0]                  branch_taken;
     wire [`NUM_ALU_BLOCKS-1:0][`PC_BITS-1:0]    branch_dest;
-    for (genvar i = 0; i < `NUM_ALU_BLOCKS; ++i) begin
+    for (genvar i = 0; i < `NUM_ALU_BLOCKS; ++i) begin : g_branch_init
         assign branch_valid[i] = branch_ctl_if[i].valid;
         assign branch_wid[i]   = branch_ctl_if[i].wid;
         assign branch_taken[i] = branch_ctl_if[i].taken;
@@ -110,6 +110,16 @@ module VX_schedule import VX_gpu_pkg::*; #(
         barrier_ctrs_n  = barrier_ctrs;
         barrier_stalls_n= barrier_stalls;
         warp_pcs_n      = warp_pcs;
+
+        // decode unlock
+        if (decode_sched_if.valid && decode_sched_if.unlock) begin
+            stalled_warps_n[decode_sched_if.wid] = 0;
+        end
+
+        // CSR unlock
+        if (sched_csr_if.unlock_warp) begin
+            stalled_warps_n[sched_csr_if.unlock_wid] = 0;
+        end
 
         // wspawn handling
         if (wspawn.valid && is_single_warp) begin
@@ -168,10 +178,11 @@ module VX_schedule import VX_gpu_pkg::*; #(
                 stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
             end
         end
+
     `ifdef GBAR_ENABLE
-        if (gbar_bus_if.rsp_valid && (gbar_req_id == gbar_bus_if.rsp_id)) begin
+        if (gbar_bus_if.rsp_valid && (gbar_req_id == gbar_bus_if.rsp_data.id)) begin
             barrier_ctrs_n[warp_ctl_if.barrier.id] = '0; // reset barrier counter
-            barrier_masks_n[gbar_bus_if.rsp_id] = '0; // reset barrier mask
+            barrier_masks_n[gbar_bus_if.rsp_data.id] = '0; // reset barrier mask
             stalled_warps_n = '0; // unlock all warps
         end
     `endif
@@ -184,16 +195,6 @@ module VX_schedule import VX_gpu_pkg::*; #(
                 end
                 stalled_warps_n[branch_wid[i]] = 0; // unlock warp
             end
-        end
-
-        // decode unlock
-        if (decode_sched_if.valid && ~decode_sched_if.is_wstall) begin
-            stalled_warps_n[decode_sched_if.wid] = 0;
-        end
-
-        // CSR unlock
-        if (sched_csr_if.unlock_warp) begin
-            stalled_warps_n[sched_csr_if.unlock_wid] = 0;
         end
 
         // stall the warp until decode stage
@@ -221,7 +222,6 @@ module VX_schedule import VX_gpu_pkg::*; #(
             active_warps    <= '0;
             thread_masks    <= '0;
             barrier_stalls  <= '0;
-            issued_instrs   <= '0;
             cycles          <= '0;
             wspawn.valid    <=  0;
 
@@ -266,10 +266,6 @@ module VX_schedule import VX_gpu_pkg::*; #(
             end
         `endif
 
-            if (schedule_if_fire) begin
-                issued_instrs[schedule_if.data.wid] <= issued_instrs[schedule_if.data.wid] + `UUID_WIDTH'(1);
-            end
-
             if (busy) begin
                 cycles <= cycles + 1;
             end
@@ -279,21 +275,19 @@ module VX_schedule import VX_gpu_pkg::*; #(
     // barrier handling
 
 `ifdef GBAR_ENABLE
-    assign gbar_bus_if.req_valid   = gbar_req_valid;
-    assign gbar_bus_if.req_id      = gbar_req_id;
-    assign gbar_bus_if.req_size_m1 = gbar_req_size_m1;
-    assign gbar_bus_if.req_core_id = `NC_WIDTH'(CORE_ID % `NUM_CORES);
+    assign gbar_bus_if.req_valid        = gbar_req_valid;
+    assign gbar_bus_if.req_data.id      = gbar_req_id;
+    assign gbar_bus_if.req_data.size_m1 = gbar_req_size_m1;
+    assign gbar_bus_if.req_data.core_id = `NC_WIDTH'(CORE_ID % `NUM_CORES);
 `endif
 
     // split/join handling
 
-    `RESET_RELAY (split_join_reset, reset);
-
     VX_split_join #(
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID (`SFORMATF(("%s-splitjoin", INSTANCE_ID)))
     ) split_join (
         .clk        (clk),
-        .reset      (split_join_reset),
+        .reset      (reset),
         .valid      (warp_ctl_if.valid),
         .wid        (warp_ctl_if.wid),
         .split      (warp_ctl_if.split),
@@ -322,7 +316,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     );
 
     wire [`NUM_WARPS-1:0][(`NUM_THREADS + `PC_BITS)-1:0] schedule_data;
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_schedule_data
         assign schedule_data[i] = {thread_masks[i], warp_pcs[i]};
     end
 
@@ -331,63 +325,64 @@ module VX_schedule import VX_gpu_pkg::*; #(
         schedule_data[schedule_wid][(`NUM_THREADS + `PC_BITS)-5:0]
     };
 
-`ifndef NDEBUG
-    localparam GNW_WIDTH = `LOG2UP(`NUM_CLUSTERS * `NUM_CORES * `NUM_WARPS);
-    reg [`UUID_WIDTH-1:0] instr_uuid;
-    wire [GNW_WIDTH-1:0] g_wid = (GNW_WIDTH'(CORE_ID) << `NW_BITS) + GNW_WIDTH'(schedule_wid);
-`ifdef SV_DPI
-    always @(posedge clk) begin
-        if (reset) begin
-            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(1, 32'd0));
-        end else if (schedule_fire) begin
-            instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(0, 32'(g_wid)));
-        end
-    end
+    wire [`UUID_WIDTH-1:0] instr_uuid;
+`ifdef UUID_ENABLE
+    VX_uuid_gen #(
+        .CORE_ID    (CORE_ID),
+        .UUID_WIDTH (`UUID_WIDTH)
+    ) uuid_gen (
+        .clk   (clk),
+        .reset (reset),
+        .incr  (schedule_fire),
+        .wid   (schedule_wid),
+        .uuid  (instr_uuid)
+    );
 `else
-    wire [GNW_WIDTH+16-1:0] w_uuid = {g_wid, 16'(schedule_pc)};
-    always @(*) begin
-        instr_uuid = `UUID_WIDTH'(w_uuid);
-    end
-`endif
-`else
-    wire [`UUID_WIDTH-1:0] instr_uuid = '0;
+    assign instr_uuid = '0;
 `endif
 
     VX_elastic_buffer #(
-        .DATAW (`NUM_THREADS + `PC_BITS + `NW_WIDTH)
+        .DATAW (`NUM_THREADS + `PC_BITS + `NW_WIDTH + `UUID_WIDTH),
+        .SIZE  (2),  // need to buffer out ready_in
+        .OUT_REG (1) // should be registered for BRAM acces in fetch unit
     ) out_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (schedule_valid),
         .ready_in  (schedule_ready),
-        .data_in   ({schedule_tmask, schedule_pc, schedule_wid}),
-        .data_out  ({schedule_if.data.tmask, schedule_if.data.PC, schedule_if.data.wid}),
+        .data_in   ({schedule_tmask, schedule_pc, schedule_wid, instr_uuid}),
+        .data_out  ({schedule_if.data.tmask, schedule_if.data.PC, schedule_if.data.wid, schedule_if.data.uuid}),
         .valid_out (schedule_if.valid),
         .ready_out (schedule_if.ready)
     );
 
-    assign schedule_if.data.uuid = instr_uuid;
+    // Track pending instructions per warp
 
-    `RESET_RELAY (pending_instr_reset, reset);
+    wire [`NUM_WARPS-1:0] pending_warp_empty;
+    wire [`NUM_WARPS-1:0] pending_warp_alm_empty;
 
-    wire no_pending_instr;
-    VX_pending_instr #(
-        .CTR_WIDTH  (12),
-        .DECR_COUNT (`ISSUE_WIDTH),
-        .ALM_EMPTY  (1)
-    ) pending_instr(
-        .clk       (clk),
-        .reset     (pending_instr_reset),
-        .incr      (schedule_if_fire),
-        .incr_wid  (schedule_if.data.wid),
-        .decr      (commit_sched_if.committed),
-        .decr_wid  (commit_sched_if.committed_wid),
-        .alm_empty_wid (sched_csr_if.alm_empty_wid),
-        .alm_empty (sched_csr_if.alm_empty),
-        .empty     (no_pending_instr)
-    );
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_pending_sizes
+        VX_pending_size #(
+            .SIZE      (4096),
+            .ALM_EMPTY (1)
+        ) counter (
+            .clk       (clk),
+            .reset     (reset),
+            .incr      (schedule_if_fire && (schedule_if.data.wid == `NW_WIDTH'(i))),
+            .decr      (commit_sched_if.committed_warps[i]),
+            .empty     (pending_warp_empty[i]),
+            .alm_empty (pending_warp_alm_empty[i]),
+            `UNUSED_PIN (full),
+            `UNUSED_PIN (alm_full),
+            `UNUSED_PIN (size)
+        );
+	end
 
-    `BUFFER_EX(busy, (active_warps != 0 || ~no_pending_instr), 1'b1, 1);
+    assign sched_csr_if.alm_empty = pending_warp_alm_empty[sched_csr_if.alm_empty_wid];
+
+    wire no_pending_instr = (& pending_warp_empty);
+
+    `BUFFER_EX(busy, (active_warps != 0 || ~no_pending_instr), 1'b1, 1, 1);
 
     // export CSRs
     assign sched_csr_if.cycles = cycles;
@@ -402,7 +397,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
             timeout_ctr    <= '0;
             timeout_enable <= 0;
         end else begin
-            if (decode_sched_if.valid && ~decode_sched_if.is_wstall) begin
+            if (decode_sched_if.valid && decode_sched_if.unlock) begin
                 timeout_enable <= 1;
             end
             if (timeout_enable && active_warps !=0 && active_warps == stalled_warps) begin
@@ -412,7 +407,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
             end
         end
     end
-    `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT, ("%t: *** core%0d-scheduler-timeout: stalled_warps=%b", $time, CORE_ID, stalled_warps))
+    `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT, ("%t: *** %s timeout: stalled_warps=%b", $time, INSTANCE_ID, stalled_warps))
 
 `ifdef PERF_ENABLE
     reg [`PERF_CTR_BITS-1:0] perf_sched_idles;
@@ -431,8 +426,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
         end
     end
 
-    assign perf_schedule_if.sched_idles = perf_sched_idles;
-    assign perf_schedule_if.sched_stalls = perf_sched_stalls;
+    assign sched_perf.idles = perf_sched_idles;
+    assign sched_perf.stalls = perf_sched_stalls;
 `endif
 
 endmodule

@@ -3,6 +3,8 @@ include $(ROOT_DIR)/config.mk
 
 all: stub rtlsim simx opae xrt
 
+vm: stub simx
+
 stub:
 	$(MAKE) -C stub
 

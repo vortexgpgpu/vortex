@@ -124,16 +124,15 @@ int size = 16;
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:h?")) != -1) {
+  while ((c = getopt(argc, argv, "n:h")) != -1) {
     switch (c) {
     case 'n':
       size = atoi(optarg);
       break;
     case 'h':
-    case '?': {
       show_usage();
       exit(0);
-    } break;
+      break;
     default:
       show_usage();
       exit(-1);

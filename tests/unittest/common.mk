@@ -1,8 +1,10 @@
 
-CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -I$(VORTEX_RT_PATH)/common
+ROOT_DIR := $(realpath ../../..)
 
-# Debugigng
+CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -I$(VORTEX_HOME)/sim/common
+
+# Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0
 else

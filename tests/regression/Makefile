@@ -17,6 +17,7 @@ all:
 	$(MAKE) -C sgemm2x
 	$(MAKE) -C vote
 	$(MAKE) -C shfl
+	$(MAKE) -C stencil3d
 
 run-simx:
 	$(MAKE) -C basic run-simx
@@ -34,6 +35,7 @@ run-simx:
 	$(MAKE) -C sgemm2x run-simx
 	$(MAKE) -C vote run-simx
 	$(MAKE) -C shfl run-simx
+	$(MAKE) -C stencil3d run-simx
 
 run-rtlsim:
 	$(MAKE) -C basic run-rtlsim
@@ -68,6 +70,7 @@ run-opae:
 	$(MAKE) -C sgemm2x run-opae
 	$(MAKE) -C vote run-opae
 	$(MAKE) -C shfl run-opae
+	$(MAKE) -C stencil3d run-rtlsim
 
 clean:
 	$(MAKE) -C basic clean
@@ -85,3 +88,4 @@ clean:
 	$(MAKE) -C sgemm2x clean
 	$(MAKE) -C vote clean
 	$(MAKE) -C shfl clean
+	$(MAKE) -C stencil3d clean

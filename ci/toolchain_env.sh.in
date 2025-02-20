@@ -15,9 +15,7 @@
 # limitations under the License.
 
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
-
-export VERILATOR_ROOT=$TOOLDIR/verilator
-export PATH=$VERILATOR_ROOT/bin:$PATH
+export PATH=$TOOLDIR/verilator/bin:$PATH
 
 export SV2V_PATH=$TOOLDIR/sv2v
 export PATH=$SV2V_PATH/bin:$PATH

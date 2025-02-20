@@ -17,8 +17,19 @@
 #include <fstream>
 #include <assert.h>
 #include "util.h"
+#include <VX_config.h>
+#include <bitset>
 
 using namespace vortex;
+
+#ifdef VM_ENABLE
+// #ifndef NDEBUG
+// #define DBGPRINT(format, ...) do { printf("[VXDRV] " format "", ##__VA_ARGS__); } while (0)
+// #else
+#define DBGPRINT(format, ...) ((void)0)
+// #endif
+#endif
+
 
 RamMemDevice::RamMemDevice(const char *filename, uint32_t wordSize)
   : wordSize_(wordSize) {
@@ -48,7 +59,7 @@ void RamMemDevice::read(void* data, uint64_t addr, uint64_t size) {
   if ((addr & (wordSize_-1))
    || (addr_end & (wordSize_-1))
    || (addr_end <= contents_.size())) {
-    std::cout << "lookup of 0x" << std::hex << (addr_end-1) << " failed.\n";
+    std::cout << "lookup of 0x" << std::hex << (addr_end-1) << std::dec << " failed.\n";
     throw BadAddress();
   }
 
@@ -63,7 +74,7 @@ void RamMemDevice::write(const void* data, uint64_t addr, uint64_t size) {
   if ((addr & (wordSize_-1))
    || (addr_end & (wordSize_-1))
    || (addr_end <= contents_.size())) {
-    std::cout << "lookup of 0x" << std::hex << (addr_end-1) << " failed.\n";
+    std::cout << "lookup of 0x" << std::hex << (addr_end-1) << std::dec << " failed.\n";
     throw BadAddress();
   }
 
@@ -104,7 +115,7 @@ void MemoryUnit::ADecoder::map(uint64_t start, uint64_t end, MemDevice &md) {
 void MemoryUnit::ADecoder::read(void* data, uint64_t addr, uint64_t size) {
   mem_accessor_t ma;
   if (!this->lookup(addr, size, &ma)) {
-    std::cout << "lookup of 0x" << std::hex << addr << " failed.\n";
+    std::cout << "lookup of 0x" << std::hex << addr << std::dec << " failed.\n";
     throw BadAddress();
   }
   ma.md->read(data, ma.addr, size);
@@ -113,7 +124,7 @@ void MemoryUnit::ADecoder::read(void* data, uint64_t addr, uint64_t size) {
 void MemoryUnit::ADecoder::write(const void* data, uint64_t addr, uint64_t size) {
   mem_accessor_t ma;
   if (!this->lookup(addr, size, &ma)) {
-    std::cout << "lookup of 0x" << std::hex << addr << " failed.\n";
+    std::cout << "lookup of 0x" << std::hex << addr << std::dec << " failed.\n";
     throw BadAddress();
   }
   ma.md->write(data, ma.addr, size);
@@ -123,17 +134,95 @@ void MemoryUnit::ADecoder::write(const void* data, uint64_t addr, uint64_t size)
 
 MemoryUnit::MemoryUnit(uint64_t pageSize)
   : pageSize_(pageSize)
+#ifndef VM_ENABLE
   , enableVM_(pageSize != 0)
-  , amo_reservation_({0x0, false}) {
-  if (pageSize != 0) {
-    tlb_[0] = TLBEntry(0, 077);
+#endif
+  , amo_reservation_({0x0, false}) 
+#ifdef VM_ENABLE
+  , TLB_HIT(0)
+  , TLB_MISS(0)
+  , TLB_EVICT(0)
+  , PTW(0)
+  , satp_(NULL) {};
+#else
+  {
+    if (pageSize != 0)
+    {
+      tlb_[0] = TLBEntry(0, 077);
+    }
   }
-}
+#endif
 
 void MemoryUnit::attach(MemDevice &m, uint64_t start, uint64_t end) {
   decoder_.map(start, end, m);
 }
 
+
+#ifdef VM_ENABLE
+std::pair<bool, uint64_t> MemoryUnit::tlbLookup(uint64_t vAddr, ACCESS_TYPE type, uint64_t* size_bits) {
+  
+  //Find entry while accounting for different sizes.
+  for (auto entry : tlb_)
+  {
+    if(entry.first == vAddr >> entry.second.size_bits)
+    {
+        *size_bits = entry.second.size_bits;
+        vAddr = vAddr >> (*size_bits);
+    }
+  }
+
+  
+  auto iter = tlb_.find(vAddr);
+  if (iter != tlb_.end()) {
+    TLBEntry e = iter->second;
+
+    //Set mru bit if it is a hit.
+    iter->second.mru_bit = true;
+
+    //If at full capacity and no other unset bits.
+    // Clear all bits except the one we just looked up.
+    if (tlb_.size() == TLB_SIZE)
+    {
+      // bool no_cleared = true;
+      // for (auto& entry : tlb_)
+      // {
+      //   no_cleared = no_cleared & entry.second.mru_bit;
+      // }
+
+      // if(no_cleared)
+      // {
+        for (auto& entry : tlb_)
+        {
+          entry.second.mru_bit = false;
+        }
+        iter->second.mru_bit = true;
+      //}
+      
+    }
+    //Check access permissions.
+    if ( (type == ACCESS_TYPE::FETCH) & ((e.r == 0) | (e.x == 0)) )
+    {
+      throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
+    }
+    else if ( (type == ACCESS_TYPE::LOAD) & (e.r == 0) )
+    {
+      throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
+    }
+    else if ( (type == ACCESS_TYPE::STORE) & (e.w == 0) )
+    {
+      throw Page_Fault_Exception("Page Fault : Incorrect permissions.");
+    }
+    else
+    {
+      //TLB Hit
+      return std::make_pair(true, iter->second.pfn);
+    }
+  } else {
+    //TLB Miss
+    return std::make_pair(false, 0);
+  }
+}
+#else
 MemoryUnit::TLBEntry MemoryUnit::tlbLookup(uint64_t vAddr, uint32_t flagMask) {
   auto iter = tlb_.find(vAddr / pageSize_);
   if (iter != tlb_.end()) {
@@ -157,31 +246,96 @@ uint64_t MemoryUnit::toPhyAddr(uint64_t addr, uint32_t flagMask) {
   }
   return pAddr;
 }
+#endif
 
-void MemoryUnit::read(void* data, uint64_t addr, uint64_t size, bool sup) {
+#ifdef VM_ENABLE
+void MemoryUnit::read(void* data, uint64_t addr, uint32_t size, ACCESS_TYPE type) {
+  DBGPRINT("  [MMU:read] 0x%lx, 0x%x, %u\n",addr,size,type);
+  uint64_t pAddr;
+  pAddr = vAddr_to_pAddr(addr, type);
+  return decoder_.read(data, pAddr, size);
+}
+#else
+void MemoryUnit::read(void* data, uint64_t addr, uint32_t size, bool sup) {
   uint64_t pAddr = this->toPhyAddr(addr, sup ? 8 : 1);
   return decoder_.read(data, pAddr, size);
 }
-
-void MemoryUnit::write(const void* data, uint64_t addr, uint64_t size, bool sup) {
+#endif
+#ifdef VM_ENABLE
+void MemoryUnit::write(const void* data, uint64_t addr, uint32_t size, ACCESS_TYPE type) {
+  DBGPRINT("  [MMU:Write] 0x%lx, 0x%x, %u\n",addr,size,type);
+  uint64_t pAddr;
+  pAddr = vAddr_to_pAddr(addr, type);
+  decoder_.write(data, pAddr, size);
+  amo_reservation_.valid = false;
+}
+#else
+void MemoryUnit::write(const void* data, uint64_t addr, uint32_t size, bool sup) {
   uint64_t pAddr = this->toPhyAddr(addr, sup ? 16 : 1);
   decoder_.write(data, pAddr, size);
   amo_reservation_.valid = false;
 }
+#endif
 
+#ifdef VM_ENABLE
+void MemoryUnit::amo_reserve(uint64_t addr) {
+  DBGPRINT("  [MMU:amo_reserve] 0x%lx\n",addr);
+  uint64_t pAddr = this->vAddr_to_pAddr(addr,ACCESS_TYPE::LOAD);
+  amo_reservation_.addr = pAddr;
+  amo_reservation_.valid = true;
+}
+#else
 void MemoryUnit::amo_reserve(uint64_t addr) {
   uint64_t pAddr = this->toPhyAddr(addr, 1);
   amo_reservation_.addr = pAddr;
   amo_reservation_.valid = true;
 }
+#endif
 
+#ifdef VM_ENABLE
+bool MemoryUnit::amo_check(uint64_t addr) {
+  DBGPRINT("  [MMU:amo_check] 0x%lx\n",addr);
+  uint64_t pAddr = this->vAddr_to_pAddr(addr, ACCESS_TYPE::LOAD);
+  return amo_reservation_.valid && (amo_reservation_.addr == pAddr);
+}
+#else
 bool MemoryUnit::amo_check(uint64_t addr) {
   uint64_t pAddr = this->toPhyAddr(addr, 1);
   return amo_reservation_.valid && (amo_reservation_.addr == pAddr);
 }
+#endif
+
+
+#ifdef VM_ENABLE
+
+void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags, uint64_t size_bits) {
+  // HW: evict TLB by Most Recently Used
+  if (tlb_.size() == TLB_SIZE - 1) {
+    for (auto& entry : tlb_)
+    {
+      entry.second.mru_bit = false;
+    }
+    
+  } else if (tlb_.size() == TLB_SIZE) {
+    uint64_t del;
+    for (auto entry : tlb_) {
+      if (!entry.second.mru_bit)
+      {
+        del = entry.first;
+        break;
+      }
+    }
+    tlb_.erase(tlb_.find(del));
+    TLB_EVICT++;
+  }
+  tlb_[virt / pageSize_] = TLBEntry(phys / pageSize_, flags, size_bits);
+}
+#else
+
 void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags) {
   tlb_[virt / pageSize_] = TLBEntry(phys / pageSize_, flags);
 }
+#endif
 
 void MemoryUnit::tlbRm(uint64_t va) {
   if (tlb_.find(va / pageSize_) != tlb_.end())
@@ -252,7 +406,7 @@ bool ACLManager::check(uint64_t addr, uint64_t size, int flags) const {
   while (it != acl_map_.end() && it->first < end) {
     if (it->second.end > addr) {
       if ((it->second.flags & flags) != flags) {
-        std::cout << "Memory access violation from 0x" << std::hex << addr << " to 0x" << end << ", curent flags=" << it->second.flags << ", access flags=" << flags << std::endl;
+        std::cout << "Memory access violation from 0x" << std::hex << addr << " to 0x" << end << ", curent flags=" << it->second.flags << ", access flags=" << flags << std::dec << std::endl;
         return false; // Overlapping entry is missing at least one required flag bit
       }
       addr = it->second.end; // Move to the end of the current matching range
@@ -325,6 +479,7 @@ uint8_t *RAM::get(uint64_t address) const {
 }
 
 void RAM::read(void* data, uint64_t addr, uint64_t size) {
+  // printf("====%s (addr= 0x%lx, size= 0x%lx) ====\n", __PRETTY_FUNCTION__,addr,size);
   if (check_acl_ && acl_mngr_.check(addr, size, 0x1) == false) {
     throw BadAddress();
   }
@@ -435,3 +590,171 @@ void RAM::loadHexImage(const char* filename) {
     --size;
   }
 }
+
+#ifdef VM_ENABLE
+
+uint64_t MemoryUnit::get_base_ppn()
+{
+  assert(satp_!= NULL);
+  return satp_->get_base_ppn();
+}  
+
+uint64_t MemoryUnit::get_satp()
+{
+  if (is_satp_unset())
+    return 0;
+  else
+    return satp_->get_satp();
+}  
+
+uint8_t MemoryUnit::is_satp_unset()
+{
+  return (satp_==NULL);
+}  
+
+uint8_t MemoryUnit::get_mode()
+{
+  assert(satp_!= NULL);
+  return satp_->get_mode();
+}  
+void MemoryUnit::set_satp(uint64_t satp)
+{
+  // uint16_t asid = 0; // set asid for different process
+  satp_ = new SATP_t (satp );
+}
+
+bool MemoryUnit::need_trans(uint64_t dev_pAddr)
+  {
+    // Check if the satp is set and BARE mode
+    if ( is_satp_unset() || (get_mode() == BARE))
+      return 0;
+
+    // Check if the address is reserved for system usage
+    // bool isReserved = (PAGE_TABLE_BASE_ADDR <= dev_pAddr && dev_pAddr < PAGE_TABLE_BASE_ADDR + PT_SIZE_LIMIT);
+    if (PAGE_TABLE_BASE_ADDR <= dev_pAddr)
+      return 0;
+
+    // Check if the address is reserved for IO usage
+    if (dev_pAddr < USER_BASE_ADDR)
+      return 0;
+    // Check if the address falls within the startup address range
+    if ((STARTUP_ADDR <= dev_pAddr) && (dev_pAddr <= (STARTUP_ADDR + 0x40000)))
+      return 0;
+
+    // Now all conditions are not met. Return true because the address needs translation 
+    return 1;
+  }
+
+uint64_t MemoryUnit::vAddr_to_pAddr(uint64_t vAddr, ACCESS_TYPE type)
+{
+    uint64_t pfn;
+    uint64_t size_bits;
+    DBGPRINT("  [MMU: V2P] vaddr = 0x%lx, type = 0x%u\n",vAddr,type);
+    if (!need_trans(vAddr))
+    {
+        DBGPRINT("  [MMU: V2P] Translation is not needed.\n");
+        return vAddr;
+    }
+
+    //First lookup TLB.
+    std::pair<bool, uint64_t> tlb_access = tlbLookup(vAddr, type,  &size_bits);
+    if (tlb_access.first)
+    {
+
+        pfn = tlb_access.second;
+        TLB_HIT++;
+    }
+    else //Else walk the PT.
+    {
+        std::pair<uint64_t, uint8_t> ptw_access = page_table_walk(vAddr, type, &size_bits);
+        tlbAdd(vAddr>>size_bits, ptw_access.first, ptw_access.second,size_bits);
+        pfn = ptw_access.first; TLB_MISS++; PTW++;
+        unique_translations.insert(vAddr>>size_bits);
+        PERF_UNIQUE_PTW = unique_translations.size();
+
+    }
+
+    //Construct final address using pfn and offset.
+    DBGPRINT("  [MMU: V2P] translated vAddr: 0x%lx to pAddr 0x%lx\n",vAddr,((pfn << size_bits) + (vAddr & ((1 << size_bits) - 1))));
+    return (pfn << size_bits) + (vAddr & ((1 << size_bits) - 1));
+}
+
+uint64_t MemoryUnit::get_pte_address(uint64_t base_ppn, uint64_t vpn)
+{
+  return (base_ppn * PT_SIZE) + (vpn * PTE_SIZE);
+}
+
+std::pair<uint64_t, uint8_t> MemoryUnit::page_table_walk(uint64_t vAddr_bits, ACCESS_TYPE type, uint64_t *size_bits)
+{
+  DBGPRINT("  [MMU:PTW] Start: vaddr = 0x%lx, type = %u.\n", vAddr_bits, type);
+  uint8_t level = PT_LEVEL;
+  int i = level-1;
+  vAddr_t vaddr(vAddr_bits);
+  uint32_t flags =0;
+  uint64_t pte_addr = 0, pte_bytes = 0;
+  uint64_t cur_base_ppn = get_base_ppn();
+  // Need to fix for super page
+  *size_bits = 12; 
+
+  while (true)
+  {
+    // Read PTE.
+    pte_addr = get_pte_address(cur_base_ppn, vaddr.vpn[i]);
+    decoder_.read(&pte_bytes, pte_addr, PTE_SIZE);
+    PTE_t pte(pte_bytes);
+    DBGPRINT("  [MMU:PTW] Level[%u] pte_addr=0x%lx, pte_bytes =0x%lx, pte.ppn= 0x%lx, pte.flags = %u)\n", i, pte_addr, pte_bytes, pte.ppn, pte.flags);
+
+    assert(((pte.pte_bytes & 0xFFFFFFFF) != 0xbaadf00d) && "ERROR: uninitialzed PTE\n" );
+
+    // Check if it has invalid flag bits.
+    if ((pte.v == 0) | ((pte.r == 0) & (pte.w == 1)))
+    {
+       assert(0);
+      throw Page_Fault_Exception("  [MMU:PTW] Page Fault : Attempted to access invalid entry.");
+    }
+
+    if ((pte.r == 0) & (pte.w == 0) & (pte.x == 0))
+    {
+      // Not a leaf node as rwx == 000
+      i--;
+      if (i < 0)
+      {
+        assert(0);
+        throw Page_Fault_Exception("  [MMU:PTW] Page Fault : No leaf node found.");
+      }
+      else
+      {
+        // Continue on to next level.
+        cur_base_ppn= pte.ppn;
+        DBGPRINT("  [MMU:PTW] next base_ppn: 0x%lx\n", cur_base_ppn);
+        continue;
+      }
+    }
+    else
+    {
+      // Leaf node found, finished walking.
+      // Check RWX permissions according to access type.
+      if ((type == ACCESS_TYPE::FETCH) & ((pte.r == 0) | (pte.x == 0)))
+      {
+        assert(0);
+        throw Page_Fault_Exception("  [MMU:PTW] Page Fault : TYPE FETCH, Incorrect permissions.");
+      }
+      else if ((type == ACCESS_TYPE::LOAD) & (pte.r == 0))
+      {
+        assert(0);
+        throw Page_Fault_Exception("  [MMU:PTW] Page Fault : TYPE LOAD, Incorrect permissions.");
+      }
+      else if ((type == ACCESS_TYPE::STORE) & (pte.w == 0))
+      {
+        assert(0);
+        throw Page_Fault_Exception("  [MMU:PTW] Page Fault : TYPE STORE, Incorrect permissions.");
+      }
+      cur_base_ppn = pte.ppn;
+      flags = pte.flags;
+      break;
+    }
+  }
+  return std::make_pair(cur_base_ppn, flags);
+}
+
+#endif

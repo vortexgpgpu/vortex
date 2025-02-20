@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,103 +14,96 @@
 `include "VX_cache_define.vh"
 
 module VX_cache_tags #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter BANK_ID       = 0,
     // Size of cache in bytes
-    parameter CACHE_SIZE    = 1024, 
+    parameter CACHE_SIZE    = 1024,
     // Size of line inside a bank in bytes
-    parameter LINE_SIZE     = 16, 
+    parameter LINE_SIZE     = 16,
     // Number of banks
-    parameter NUM_BANKS     = 1, 
+    parameter NUM_BANKS     = 1,
     // Number of associative ways
-    parameter NUM_WAYS      = 1, 
+    parameter NUM_WAYS      = 1,
     // Size of a word in bytes
-    parameter WORD_SIZE     = 1, 
-    // Request debug identifier
-    parameter UUID_WIDTH    = 0
+    parameter WORD_SIZE     = 1,
+    // Enable cache writeback
+    parameter WRITEBACK     = 0
 ) (
     input wire                          clk,
     input wire                          reset,
 
-`IGNORE_UNUSED_BEGIN
-    input wire [`UP(UUID_WIDTH)-1:0]    req_uuid,
-`IGNORE_UNUSED_END
-
-    input wire                          stall,
-
-    // read/fill
-    input wire                          lookup,
-    input wire [`CS_LINE_ADDR_WIDTH-1:0] line_addr,
-    input wire                          fill,    
+    // inputs
     input wire                          init,
-    output wire [NUM_WAYS-1:0]          way_sel,
-    output wire [NUM_WAYS-1:0]          tag_matches
+    input wire                          flush,
+    input wire                          fill,
+    input wire                          read,
+    input wire                          write,
+    input wire [`CS_LINE_SEL_BITS-1:0]  line_idx,
+    input wire [`CS_TAG_SEL_BITS-1:0]   line_tag,
+    input wire [`CS_WAY_SEL_WIDTH-1:0]  evict_way,
+
+    // outputs
+    output wire [NUM_WAYS-1:0]          tag_matches,
+    output wire                         evict_dirty,
+    output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag
 );
-    `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_PARAM (BANK_ID)
-    `UNUSED_VAR (reset)
-    `UNUSED_VAR (lookup)
+    //                   valid,  dirty,          tag
+    localparam TAG_WIDTH = 1 + WRITEBACK + `CS_TAG_SEL_BITS;
 
-    localparam TAG_WIDTH = 1 + `CS_TAG_SEL_BITS;
+    wire [NUM_WAYS-1:0][`CS_TAG_SEL_BITS-1:0] read_tag;
+    wire [NUM_WAYS-1:0] read_valid;
+    wire [NUM_WAYS-1:0] read_dirty;
+    `UNUSED_VAR (read)
 
-    wire [`CS_LINE_SEL_BITS-1:0] line_sel = line_addr[`CS_LINE_SEL_BITS-1:0];
-    wire [`CS_TAG_SEL_BITS-1:0] line_tag = `CS_LINE_TAG_ADDR(line_addr);
-
-    if (NUM_WAYS > 1)  begin
-        reg [NUM_WAYS-1:0] repl_way;
-        // cyclic assignment of replacement way
-        always @(posedge clk) begin
-            if (reset) begin
-                repl_way <= 1;
-            end else if (~stall) begin // hold the value on stalls prevent filling different slots twice
-                repl_way <= {repl_way[NUM_WAYS-2:0], repl_way[NUM_WAYS-1]};
-            end
-        end        
-        for (genvar i = 0; i < NUM_WAYS; ++i) begin
-            assign way_sel[i] = fill && repl_way[i];
-        end
-    end else begin
-        `UNUSED_VAR (stall)
-        assign way_sel = fill;
+    if (WRITEBACK) begin : g_evict_tag_wb
+        assign evict_dirty = read_dirty[evict_way];
+        assign evict_tag = read_tag[evict_way];
+    end else begin : g_evict_tag_wt
+        `UNUSED_VAR (read_dirty)
+        assign evict_dirty = 1'b0;
+        assign evict_tag = '0;
     end
 
-    for (genvar i = 0; i < NUM_WAYS; ++i) begin
-        wire [`CS_TAG_SEL_BITS-1:0] read_tag;
-        wire read_valid;
+    for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_tag_store
+        wire way_en   = (NUM_WAYS == 1) || (evict_way == i);
+        wire do_init  = init; // init all ways
+        wire do_fill  = fill && way_en;
+        wire do_flush = flush && (!WRITEBACK || way_en); // flush the whole line in writethrough mode
+        wire do_write = WRITEBACK && write && tag_matches[i]; // only write on tag hit
+
+        wire line_read  = read || write || (WRITEBACK && (fill || flush));
+        wire line_write = do_init || do_fill || do_flush || do_write;
+        wire line_valid = fill || write;
+
+        wire [TAG_WIDTH-1:0] line_wdata;
+        wire [TAG_WIDTH-1:0] line_rdata;
+
+        if (WRITEBACK) begin : g_wdata
+            assign line_wdata = {line_valid, write, line_tag};
+            assign {read_valid[i], read_dirty[i], read_tag[i]} = line_rdata;
+        end else begin : g_wdata
+            assign line_wdata = {line_valid, line_tag};
+            assign {read_valid[i], read_tag[i]} = line_rdata;
+            assign read_dirty[i] = 1'b0;
+        end
 
         VX_sp_ram #(
             .DATAW (TAG_WIDTH),
             .SIZE  (`CS_LINES_PER_BANK),
-            .NO_RWCHECK (1)
+            .RDW_MODE ("W"),
+            .RADDR_REG (1)
         ) tag_store (
             .clk   (clk),
-            .read  (1'b1),
-            .write (way_sel[i] || init),
-            `UNUSED_PIN (wren),                
-            .addr  (line_sel),
-            .wdata ({~init, line_tag}), 
-            .rdata ({read_valid, read_tag})
+            .reset (reset),
+            .read  (line_read),
+            .write (line_write),
+            .wren  (1'b1),
+            .addr  (line_idx),
+            .wdata (line_wdata),
+            .rdata (line_rdata)
         );
-        
-        assign tag_matches[i] = read_valid && (line_tag == read_tag);
     end
-    
-`ifdef DBG_TRACE_CACHE
-    always @(posedge clk) begin
-        if (fill && ~stall) begin
-            `TRACE(3, ("%d: %s-bank%0d tag-fill: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, line_tag));
-        end
-        if (init) begin
-            `TRACE(3, ("%d: %s-bank%0d tag-init: addr=0x%0h, blk_addr=%0d\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel));
-        end
-        if (lookup && ~stall) begin
-            if (tag_matches != 0) begin
-                `TRACE(3, ("%d: %s-bank%0d tag-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, line_tag, req_uuid));
-            end else begin
-                `TRACE(3, ("%d: %s-bank%0d tag-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel, line_tag, req_uuid));
-            end
-        end          
-    end    
-`endif
+
+    for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_tag_matches
+        assign tag_matches[i] = read_valid[i] && (line_tag == read_tag[i]);
+    end
 
 endmodule

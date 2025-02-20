@@ -29,39 +29,19 @@ private:
   uint16_t num_cores_;
   uint16_t num_clusters_;
   uint16_t socket_size_;
-  uint16_t vsize_;
-  uint16_t num_regs_;
-  uint16_t num_csrs_;
   uint16_t num_barriers_;
-  uint16_t ipdom_size_;
   uint64_t local_mem_base_;
 
 public:
-  Arch(uint16_t num_threads, uint16_t num_warps, uint16_t num_cores)
+  Arch(uint16_t num_threads, uint16_t num_warps, uint16_t num_cores)   
     : num_threads_(num_threads)
     , num_warps_(num_warps)
     , num_cores_(num_cores)
     , num_clusters_(NUM_CLUSTERS)
     , socket_size_(SOCKET_SIZE)
-    , vsize_(16)
-    , num_regs_(32)
-    , num_csrs_(4096)
     , num_barriers_(NUM_BARRIERS)
-    , ipdom_size_((num_threads-1) * 2)
     , local_mem_base_(LMEM_BASE_ADDR)
   {}
-
-  uint16_t vsize() const {
-    return vsize_;
-  }
-
-  uint16_t num_regs() const {
-    return num_regs_;
-  }
-
-  uint16_t num_csrs() const {
-    return num_csrs_;
-  }
 
   uint16_t num_barriers() const {
     return num_barriers_;
@@ -69,10 +49,6 @@ public:
 
   uint64_t local_mem_base() const {
     return local_mem_base_;
-  }
-
-  uint16_t ipdom_size() const {
-    return ipdom_size_;
   }
 
   uint16_t num_threads() const {
@@ -94,6 +70,7 @@ public:
   uint16_t socket_size() const {
     return socket_size_;
   }
+
 };
 
 }

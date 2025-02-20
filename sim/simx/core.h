@@ -26,6 +26,7 @@
 #include "dispatcher.h"
 #include "func_unit.h"
 #include "mem_coalescer.h"
+#include "VX_config.h"
 
 namespace vortex {
 
@@ -33,7 +34,7 @@ class Socket;
 class Arch;
 class DCRS;
 
-using TraceSwitch = Mux<instr_trace_t*>;
+using TraceArbiter = Arbiter<instr_trace_t*>;
 
 class Core : public SimObject<Core> {
 public:
@@ -44,12 +45,13 @@ public:
     uint64_t sched_stalls;
     uint64_t ibuf_stalls;
     uint64_t scrb_stalls;
+    uint64_t opds_stalls;
     uint64_t scrb_alu;
     uint64_t scrb_fpu;
     uint64_t scrb_lsu;
     uint64_t scrb_sfu;
-    uint64_t scrb_wctl;
     uint64_t scrb_csrs;
+    uint64_t scrb_wctl;
     uint64_t ifetches;
     uint64_t loads;
     uint64_t stores;
@@ -63,12 +65,13 @@ public:
       , sched_stalls(0)
       , ibuf_stalls(0)
       , scrb_stalls(0)
+      , opds_stalls(0)
       , scrb_alu(0)
       , scrb_fpu(0)
       , scrb_lsu(0)
       , scrb_sfu(0)
-      , scrb_wctl(0)
       , scrb_csrs(0)
+      , scrb_wctl(0)
       , ifetches(0)
       , loads(0)
       , stores(0)
@@ -96,6 +99,9 @@ public:
   void tick();
 
   void attach_ram(RAM* ram);
+#ifdef VM_ENABLE
+  void set_satp(uint64_t satp);
+#endif
 
   bool running() const;
 
@@ -119,6 +125,10 @@ public:
 
   const LocalMem::Ptr& local_mem() const {
     return local_mem_;
+  }
+
+  const MemCoalescer::Ptr& mem_coalescer(uint32_t idx) const {
+    return mem_coalescers_.at(idx);
   }
 
   const PerfStats& perf_stats() const {
@@ -148,7 +158,7 @@ private:
   std::vector<Dispatcher::Ptr> dispatchers_;
   std::vector<FuncUnit::Ptr> func_units_;
   LocalMem::Ptr local_mem_;
-  std::vector<LocalMemDemux::Ptr> lsu_demux_;
+  std::vector<LocalMemSwitch::Ptr> lmem_switch_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;
 
   PipelineLatch fetch_latch_;
@@ -161,7 +171,7 @@ private:
 
   PerfStats perf_stats_;
 
-  std::vector<TraceSwitch::Ptr> commit_arbs_;
+  std::vector<TraceArbiter::Ptr> commit_arbs_;
 
   uint32_t commit_exe_;
   uint32_t ibuffer_idx_;
@@ -170,6 +180,7 @@ private:
   friend class AluUnit;
   friend class FpuUnit;
   friend class SfuUnit;
+  friend class TcuUnit;
 };
 
 } // namespace vortex
