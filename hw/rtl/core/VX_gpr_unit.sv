@@ -41,7 +41,7 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
     localparam REQ_SEL_WIDTH = `UP(REQ_SEL_BITS);
     localparam BANK_SEL_BITS = `CLOG2(NUM_BANKS);
     localparam BANK_SEL_WIDTH = `UP(BANK_SEL_BITS);
-    localparam GPR_BANK_DATAW = `XLEN * `SIMD_WIDTH;
+    localparam GPR_BANK_DATAW = `SIMD_WIDTH * `XLEN;
     localparam GPR_BANK_SIZE = (PER_ISSUE_WARPS * NUM_REGS * SIMD_COUNT) / NUM_BANKS;
     localparam GPR_BANK_ADDRW = `CLOG2(GPR_BANK_SIZE);
     localparam BANKID_WIS_BITS = (BANK_SEL_BITS > 1 && ISSUE_WIS_BITS != 0) ? 1 : 0;
@@ -52,7 +52,7 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
     localparam PER_BANK_REG_WIDTH = `UP(PER_BANK_REG_BITS);
     localparam GPR_REQ_DATAW = SRC_OPD_WIDTH + SIMD_IDX_W + PER_BANK_WIS_WIDTH + PER_BANK_REG_BITS;
     localparam GPR_RSP_DATAW = SRC_OPD_WIDTH + `SIMD_WIDTH * `XLEN;
-    localparam BYTEENW = `SIMD_WIDTH * XLENB;
+    localparam BYTEENW = GPR_BANK_DATAW / 8;
 
     wire [NUM_REQS-1:0] gpr_req_valid, gpr_req_ready;
     wire [NUM_REQS-1:0][GPR_REQ_DATAW-1:0] gpr_req_data;
@@ -133,7 +133,7 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
 
     wire [BYTEENW-1:0] bank_wr_byteen;
     for (genvar i = 0; i < `SIMD_WIDTH; ++i) begin : g_bank_wr_byteen
-        assign bank_wr_byteen[i*XLENB+:XLENB] = {XLENB{writeback_if.data.tmask[i]}};
+        assign bank_wr_byteen[i*XLENB +: XLENB] = {XLENB{writeback_if.data.tmask[i]}};
     end
 
     for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_bank_req_data
@@ -180,7 +180,7 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
 
         VX_pipe_buffer #(
             .DATAW (REQ_SEL_WIDTH + 2)
-        ) pipe_reg1 (
+        ) pipe_reg (
             .clk      (clk),
             .reset    (reset),
             .valid_in (bank_req_valid[b]),

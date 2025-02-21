@@ -14,7 +14,8 @@
 `include "VX_define.vh"
 
 module VX_dispatch import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = ""
+    parameter `STRING INSTANCE_ID = "",
+    parameter ISSUE_ID = 0
 ) (
     input wire              clk,
     input wire              reset,
@@ -29,6 +30,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS]
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_PARAM (ISSUE_ID)
 
     localparam DATAW = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + PC_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NR_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN) + NT_WIDTH;
 

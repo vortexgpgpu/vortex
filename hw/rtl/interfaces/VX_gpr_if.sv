@@ -24,7 +24,7 @@ interface VX_gpr_if import VX_gpu_pkg::*; ();
 
     typedef struct packed {
         logic [1:0] opd_id;
-        logic [`SIMD_WIDTH-1:0][`XLEN-1:0] value;
+        logic [`SIMD_WIDTH-1:0][`XLEN-1:0] data;
     } rsp_data_t;
 
     logic req_valid;

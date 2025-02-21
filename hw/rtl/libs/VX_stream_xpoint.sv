@@ -62,8 +62,10 @@ module VX_stream_xpoint #(
             valid_out_w = '0;
             data_out_w = 'x;
             for (integer i = 0; i < NUM_INPUTS; ++i) begin
-                valid_out_w[sel_in[i]] = valid_in[i];
-                data_out_w[sel_in[i]] = data_in[i];
+                if (valid_in[i]) begin
+                    valid_out_w[sel_in[i]] = 1;
+                    data_out_w[sel_in[i]] = data_in[i];
+                end
             end
         end
 

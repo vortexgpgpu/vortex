@@ -46,7 +46,6 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     VX_mem_bus_if.slave mem_bus_if [NUM_REQS]
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_PARAM (UUID_WIDTH)
 
     localparam REQ_SEL_BITS    = `CLOG2(NUM_REQS);
     localparam REQ_SEL_WIDTH   = `UP(REQ_SEL_BITS);

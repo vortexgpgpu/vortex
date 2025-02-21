@@ -43,7 +43,7 @@
 
 `ifdef QUARTUS
     `define RAM_ARRAY_WREN  reg [WRENW-1:0][WSELW-1:0] ram [0:SIZE-1];
-    `define RAM_WRITE_WREN   `RAM_RESET_BLOCK \
+    `define RAM_WRITE_WREN  `RAM_RESET_BLOCK \
                             if (write) begin \
                                 for (integer i = 0; i < WRENW; ++i) begin \
                                     if (wren[i]) begin \
@@ -305,9 +305,22 @@ module VX_dp_ram #(
     // simulation
     reg [DATAW-1:0] ram [0:SIZE-1];
     `RAM_INITIALIZATION
+    
+    reg [DATAW-1:0] wdata_n;
+    always @* begin
+        wdata_n = ram[waddr];
+        for (integer i = 0; i < WRENW; ++i) begin
+            if (wren[i]) begin
+                wdata_n[i * WSELW +: WSELW] = wdata[i * WSELW +: WSELW];
+            end
+        end
+    end
 
     always @(posedge clk) begin
-        `RAM_WRITE_WREN
+        `RAM_RESET_BLOCK
+        if (write) begin
+            ram[waddr] <= wdata_n;
+        end
     end
 
     if (OUT_REG) begin : g_sync

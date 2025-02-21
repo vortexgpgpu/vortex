@@ -21,7 +21,8 @@
 `endif
 
 module VX_operands import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = ""
+    parameter `STRING INSTANCE_ID = "",
+    parameter ISSUE_ID = 0
 ) (
     input wire              clk,
     input wire              reset,
@@ -34,8 +35,6 @@ module VX_operands import VX_gpu_pkg::*; #(
     VX_scoreboard_if.slave  scoreboard_if,
     VX_operands_if.master   operands_if
 );
-    `UNUSED_SPARAM (INSTANCE_ID)
-
     localparam NUM_OPDS  = NUM_SRC_OPDS + 1;
     localparam SCB_DATAW = UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + NUM_OPDS + (REG_IDX_BITS * NUM_OPDS);
     localparam OPD_DATAW = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NR_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN);
@@ -66,9 +65,10 @@ module VX_operands import VX_gpu_pkg::*; #(
         `UNUSED_PIN(sel_out)
     );
 
-    for (genvar i = 0; i < `NUM_OPCS; ++i) begin : g_opc_units
+    for (genvar i = 0; i < `NUM_OPCS; ++i) begin : g_collectors
         VX_opc_unit #(
-            .INSTANCE_ID (INSTANCE_ID)
+            .INSTANCE_ID (`SFORMATF(("%s-collector%0d", INSTANCE_ID, i))),
+            .ISSUE_ID (ISSUE_ID)
         ) opc_unit (
             .clk          (clk),
             .reset        (reset),
@@ -101,12 +101,12 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     VX_writeback_if writeback_if_s();
     assign writeback_if_s.valid = writeback_if.valid && war_dp_check;
-    assign writeback_if_s.data = writeback_if.data;
-    assign writeback_if.ready = war_dp_check;
+    assign writeback_if_s.data  = writeback_if.data;
+    assign writeback_if.ready   = war_dp_check;
     `UNUSED_VAR (writeback_if_s.ready)
 
     VX_gpr_unit #(
-        .INSTANCE_ID (INSTANCE_ID),
+        .INSTANCE_ID (`SFORMATF(("%s-gpr", INSTANCE_ID))),
         .NUM_REQS    (`NUM_OPCS),
         .NUM_BANKS   (`NUM_GPR_BANKS)
     ) gpr_unit (

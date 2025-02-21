@@ -21,7 +21,8 @@
 `endif
 
 module VX_opc_unit import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = ""
+    parameter `STRING INSTANCE_ID = "",
+    parameter ISSUE_ID = 0
 ) (
     input wire              clk,
     input wire              reset,
@@ -77,7 +78,9 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire [NR_BITS-1:0] rs1 = to_reg_number(staging_if.data.rs1);
     wire [NR_BITS-1:0] rs2 = to_reg_number(staging_if.data.rs2);
     wire [NR_BITS-1:0] rs3 = to_reg_number(staging_if.data.rs3);
-    wire [NUM_SRC_OPDS-1:0][NR_BITS-1:0] src_regs = {rs3, rs2, rs1};
+
+    wire [NUM_SRC_OPDS-1:0][NR_BITS-1:0] src_regs;
+    assign src_regs = {rs3, rs2, rs1};
 
     always @(*) begin
         state_n = state;
@@ -164,7 +167,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             end
         end else begin
             if (gpr_rsp_fire) begin
-                opd_values[gpr_if.rsp_data.opd_id] <= gpr_if.rsp_data.value;
+                opd_values[gpr_if.rsp_data.opd_id] <= gpr_if.rsp_data.data;
             end
         end
     end
@@ -210,5 +213,39 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         .data_out (operands_if.data),
         .ready_out(operands_if.ready)
     );
+
+    `ifdef DBG_TRACE_PIPELINE
+    always @(posedge clk) begin
+        if (scoreboard_if.valid && scoreboard_if.ready) begin
+            `TRACE(1, ("%t: %s-input: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wis_to_wid(scoreboard_if.data.wis, ISSUE_ID), {operands_if.data.PC, 1'b0}))
+            trace_ex_type(1, scoreboard_if.data.ex_type);
+            `TRACE(1, (", op="))
+            trace_ex_op(1, scoreboard_if.data.ex_type, scoreboard_if.data.op_type, scoreboard_if.data.op_args);
+            `TRACE(1, (", tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d (#%0d)\n", scoreboard_if.data.tmask, scoreboard_if.data.wb, scoreboard_if.data.rd, scoreboard_if.data.rs1, scoreboard_if.data.rs2, scoreboard_if.data.rs3, scoreboard_if.data.uuid))
+        end
+        if (gpr_if.req_valid && gpr_if.req_ready) begin
+            `TRACE(1, ("%t: %s-gpr-req: opd=%0d, wis=%0d, sid=%0d, reg=%0d\n", $time, INSTANCE_ID, gpr_if.req_data.opd_id, wis_to_wid(gpr_if.req_data.wis, ISSUE_ID), gpr_if.req_data.sid, gpr_if.req_data.reg_id))
+        end
+        if (gpr_if.rsp_valid) begin
+            `TRACE(1, ("%t: %s-gpr-rsp: opd=%0d, data=", $time, INSTANCE_ID, gpr_if.rsp_data.opd_id))
+            `TRACE_ARRAY1D(1, "0x%0h", gpr_if.rsp_data.data, `SIMD_WIDTH)
+            `TRACE(1, ("\n"))
+        end
+        if (operands_if.valid && operands_if.ready) begin
+            `TRACE(1, ("%t: %s-output: wid=%0d, sid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wis_to_wid(operands_if.data.wis, ISSUE_ID), operands_if.data.sid, {operands_if.data.PC, 1'b0}))
+            trace_ex_type(1, operands_if.data.ex_type);
+            `TRACE(1, (", op="))
+            trace_ex_op(1, operands_if.data.ex_type, operands_if.data.op_type, operands_if.data.op_args);
+            `TRACE(1, (", tmask=%b, wb=%b, rd=%0d, rs1_data=", operands_if.data.tmask, operands_if.data.wb, operands_if.data.rd))
+            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs1_data, `SIMD_WIDTH)
+            `TRACE(1, (", rs2_data="))
+            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs2_data, `SIMD_WIDTH)
+            `TRACE(1, (", rs3_data="))
+            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs3_data, `SIMD_WIDTH)
+            trace_op_args(1, operands_if.data.ex_type, operands_if.data.op_type, operands_if.data.op_args);
+            `TRACE(1, (" (#%0d)\n", operands_if.data.uuid))
+        end
+    end
+`endif
 
 endmodule

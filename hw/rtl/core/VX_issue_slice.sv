@@ -15,7 +15,7 @@
 
 module VX_issue_slice import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter ISSUE_ID = 0
+    parameter ISSUE_ID
 ) (
     `SCOPE_IO_DECL
 
@@ -37,7 +37,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     VX_operands_if operands_if();
 
     VX_ibuffer #(
-        .INSTANCE_ID (`SFORMATF(("%s-ibuffer", INSTANCE_ID)))
+        .INSTANCE_ID (`SFORMATF(("%s-ibuffer", INSTANCE_ID))),
+        .ISSUE_ID (ISSUE_ID)
     ) ibuffer (
         .clk            (clk),
         .reset          (reset),
@@ -49,7 +50,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
     VX_scoreboard #(
-        .INSTANCE_ID (`SFORMATF(("%s-scoreboard", INSTANCE_ID)))
+        .INSTANCE_ID (`SFORMATF(("%s-scoreboard", INSTANCE_ID))),
+        .ISSUE_ID (ISSUE_ID)
     ) scoreboard (
         .clk            (clk),
         .reset          (reset),
@@ -64,7 +66,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
     VX_operands #(
-        .INSTANCE_ID (`SFORMATF(("%s-operands", INSTANCE_ID)))
+        .INSTANCE_ID (`SFORMATF(("%s-operands", INSTANCE_ID))),
+        .ISSUE_ID (ISSUE_ID)
     ) operands (
         .clk            (clk),
         .reset          (reset),
@@ -77,7 +80,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
     VX_dispatch #(
-        .INSTANCE_ID (`SFORMATF(("%s-dispatch", INSTANCE_ID)))
+        .INSTANCE_ID (`SFORMATF(("%s-dispatch", INSTANCE_ID))),
+        .ISSUE_ID (ISSUE_ID)
     ) dispatch (
         .clk            (clk),
         .reset          (reset),
@@ -97,8 +101,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 2, 4, 3, (
             UUID_WIDTH + NW_WIDTH + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NR_BITS * 4 +
-            UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NR_BITS + (3 * `XLEN) +
-            UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + NR_BITS + (`NUM_THREADS * `XLEN) + 1
+            UUID_WIDTH + ISSUE_WIS_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NR_BITS + (3 * `XLEN) +
+            UUID_WIDTH + ISSUE_WIS_W + `SIMD_WIDTH + NR_BITS + (`SIMD_WIDTH * `XLEN) + 1
         ), {
             decode_if.valid,
             decode_if.ready,
@@ -165,11 +169,11 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
             `TRACE(1, (", op="))
             trace_ex_op(1, operands_if.data.ex_type, operands_if.data.op_type, operands_if.data.op_args);
             `TRACE(1, (", tmask=%b, wb=%b, rd=%0d, rs1_data=", operands_if.data.tmask, operands_if.data.wb, operands_if.data.rd))
-            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs1_data, `NUM_THREADS)
+            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs1_data, `SIMD_WIDTH)
             `TRACE(1, (", rs2_data="))
-            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs2_data, `NUM_THREADS)
+            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs2_data, `SIMD_WIDTH)
             `TRACE(1, (", rs3_data="))
-            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs3_data, `NUM_THREADS)
+            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs3_data, `SIMD_WIDTH)
             trace_op_args(1, operands_if.data.ex_type, operands_if.data.op_type, operands_if.data.op_args);
             `TRACE(1, (" (#%0d)\n", operands_if.data.uuid))
         end

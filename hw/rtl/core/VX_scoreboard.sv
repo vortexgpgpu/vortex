@@ -14,7 +14,8 @@
 `include "VX_define.vh"
 
 module VX_scoreboard import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = ""
+    parameter `STRING INSTANCE_ID = "",
+    parameter ISSUE_ID = 0
 ) (
     input wire              clk,
     input wire              reset,
@@ -30,6 +31,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     VX_scoreboard_if.master scoreboard_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_PARAM (ISSUE_ID)
     `UNUSED_VAR (writeback_if.data.sop)
 
     localparam NUM_OPDS = NUM_SRC_OPDS + 1;
@@ -128,36 +130,34 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                            && (writeback_if.data.wis == ISSUE_WIS_W'(w))
                            && writeback_if.data.eop;
 
-        wire [REG_TYPES-1:0][31:0] ibf_rs1_mask, ibf_rs2_mask, ibf_rs3_mask, ibf_rd_mask;
-        wire [REG_TYPES-1:0][31:0] stg_rs1_mask, stg_rs2_mask, stg_rs3_mask, stg_rd_mask;
+        reg_idx_t [NUM_OPDS-1:0] ibf_opds, stg_opds;
+        assign ibf_opds = {ibuffer_if[w].data.rs3, ibuffer_if[w].data.rs2, ibuffer_if[w].data.rs1, ibuffer_if[w].data.rd};
+        assign stg_opds = {staging_if[w].data.rs3, staging_if[w].data.rs2, staging_if[w].data.rs1, staging_if[w].data.rd};
 
-        for (genvar i = 0; i < REG_TYPES; ++i) begin : g_opd_masks
-            assign ibf_rd_mask[i]  = (`REG_EXT_VAL(ibuffer_if[w].data.rd.ext, i)  << ibuffer_if[w].data.rd.id)  & {32{ibuffer_if[w].data.wb && ibuffer_if[w].data.rd.rtype == i}};
-            assign ibf_rs1_mask[i] = (`REG_EXT_VAL(ibuffer_if[w].data.rs1.ext, i) << ibuffer_if[w].data.rs1.id) & {32{ibuffer_if[w].data.used_rs[0] && ibuffer_if[w].data.rs1.rtype == i}};
-            assign ibf_rs2_mask[i] = (`REG_EXT_VAL(ibuffer_if[w].data.rs2.ext, i) << ibuffer_if[w].data.rs2.id) & {32{ibuffer_if[w].data.used_rs[1] && ibuffer_if[w].data.rs2.rtype == i}};
-            assign ibf_rs3_mask[i] = (`REG_EXT_VAL(ibuffer_if[w].data.rs3.ext, i) << ibuffer_if[w].data.rs3.id) & {32{ibuffer_if[w].data.used_rs[2] && ibuffer_if[w].data.rs3.rtype == i}};
+        wire [NUM_OPDS-1:0] ibf_used_rs = {ibuffer_if[w].data.used_rs, ibuffer_if[w].data.wb};
+        wire [NUM_OPDS-1:0] stg_used_rs = {staging_if[w].data.used_rs, staging_if[w].data.wb};
 
-            assign stg_rd_mask[i]  = (`REG_EXT_VAL(staging_if[w].data.rd.ext, i)  << staging_if[w].data.rd.id)  & {32{staging_if[w].data.wb && staging_if[w].data.rd.rtype == i}};
-            assign stg_rs1_mask[i] = (`REG_EXT_VAL(staging_if[w].data.rs1.ext, i) << staging_if[w].data.rs1.id) & {32{staging_if[w].data.used_rs[0] && staging_if[w].data.rs1.rtype == i}};
-            assign stg_rs2_mask[i] = (`REG_EXT_VAL(staging_if[w].data.rs2.ext, i) << staging_if[w].data.rs2.id) & {32{staging_if[w].data.used_rs[1] && staging_if[w].data.rs2.rtype == i}};
-            assign stg_rs3_mask[i] = (`REG_EXT_VAL(staging_if[w].data.rs3.ext, i) << staging_if[w].data.rs3.id) & {32{staging_if[w].data.used_rs[2] && staging_if[w].data.rs3.rtype == i}};
+        wire [NUM_OPDS-1:0][REG_TYPES-1:0][31:0] ibf_opd_mask, stg_opd_mask;
+
+        for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd_masks
+            for (genvar j = 0; j < REG_TYPES; ++j) begin : g_j
+                assign ibf_opd_mask[i][j] = (`REG_EXT_VAL(ibf_opds[i].ext, j) << ibf_opds[i].id) & {32{ibf_used_rs[i] && ibf_opds[i].rtype == j}};
+                assign stg_opd_mask[i][j] = (`REG_EXT_VAL(stg_opds[i].ext, j) << stg_opds[i].id) & {32{stg_used_rs[i] && stg_opds[i].rtype == j}};
+            end
         end
 
     `ifdef PERF_ENABLE
         reg [NUM_REGS-1:0][EX_WIDTH-1:0] inuse_units;
         reg [NUM_REGS-1:0][SFU_WIDTH-1:0] inuse_sfu;
 
-        reg_idx_t [NUM_OPDS-1:0] stg_opds;
-        assign stg_opds = {staging_if[w].data.rs3, staging_if[w].data.rs2, staging_if[w].data.rs1, staging_if[w].data.rd};
-
         always @(*) begin
             perf_inuse_units_per_cycle[w] = '0;
             perf_inuse_sfu_per_cycle[w] = '0;
             for (integer i = 0; i < NUM_OPDS; ++i) begin
                 if (staging_if[w].valid && operands_busy[i]) begin
-                    perf_inuse_units_per_cycle[w][inuse_units[stg_opds[i]]] = 1;
-                    if (inuse_units[stg_opds[i]] == EX_SFU) begin
-                        perf_inuse_sfu_per_cycle[w][inuse_sfu[stg_opds[i]]] = 1;
+                    perf_inuse_units_per_cycle[w][inuse_units[stg_opds[i].id]] = 1;
+                    if (inuse_units[stg_opds[i].id] == EX_SFU) begin
+                        perf_inuse_sfu_per_cycle[w][inuse_sfu[stg_opds[i].id]] = 1;
                     end
                 end
             end
@@ -170,14 +170,14 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 inuse_regs_n[writeback_if.data.rd] = 0;
             end
             if (staging_fire && staging_if[w].data.wb) begin
-                inuse_regs_n |= stg_rd_mask;
+                inuse_regs_n |= stg_opd_mask[0];
             end
         end
 
         wire [REG_TYPES-1:0][31:0] in_use_mask;
         for (genvar i = 0; i < REG_TYPES; ++i) begin : g_in_use_mask
-            wire [31:0] ibf_reg_mask = ibf_rs1_mask[i] | ibf_rs2_mask[i] | ibf_rs3_mask[i] | ibf_rd_mask[i];
-            wire [31:0] stg_reg_mask = stg_rs1_mask[i] | stg_rs2_mask[i] | stg_rs3_mask[i] | stg_rd_mask[i];
+            wire [31:0] ibf_reg_mask = ibf_opd_mask[0][i] | ibf_opd_mask[1][i] | ibf_opd_mask[2][i] | ibf_opd_mask[3][i];
+            wire [31:0] stg_reg_mask = stg_opd_mask[0][i] | stg_opd_mask[1][i] | stg_opd_mask[2][i] | stg_opd_mask[3][i];
             wire [31:0] regs_mask = ibuffer_fire ? ibf_reg_mask : stg_reg_mask;
             assign in_use_mask[i] = inuse_regs_n[i * 32 +: 32] & regs_mask;
         end
@@ -187,11 +187,10 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             assign regs_busy[i] = (in_use_mask[i] != 0);
         end
 
-        // per operand busy
-        assign operands_busy[0] = (in_use_mask[staging_if[w].data.rd.rtype]  & stg_rd_mask[staging_if[w].data.rd.rtype]) != 0;
-        assign operands_busy[1] = (in_use_mask[staging_if[w].data.rs1.rtype] & stg_rs1_mask[staging_if[w].data.rs1.rtype]) != 0;
-        assign operands_busy[2] = (in_use_mask[staging_if[w].data.rs2.rtype] & stg_rs2_mask[staging_if[w].data.rs2.rtype]) != 0;
-        assign operands_busy[3] = (in_use_mask[staging_if[w].data.rs3.rtype] & stg_rs3_mask[staging_if[w].data.rs3.rtype]) != 0;
+        for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_operands_busy
+            wire [REG_TYPE_BITS-1:0] rtype = stg_opds[i].rtype;
+            assign operands_busy[i] = (in_use_mask[rtype] & stg_opd_mask[i][rtype]) != 0;
+        end
 
         always @(posedge clk) begin
             if (reset) begin

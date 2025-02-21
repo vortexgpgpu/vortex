@@ -16,7 +16,6 @@
 interface VX_decode_if import VX_gpu_pkg::*; #(
     parameter NUM_WARPS = `NUM_WARPS
 );
-
     typedef struct packed {
         logic [UUID_WIDTH-1:0]      uuid;
         logic [`LOG2UP(NUM_WARPS)-1:0] wid;
