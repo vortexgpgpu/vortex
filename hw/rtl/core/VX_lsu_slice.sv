@@ -105,6 +105,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire mem_rsp_sop_pkt, mem_rsp_eop_pkt;
     wire no_rsp_buf_valid, no_rsp_buf_ready;
 
+    wire [LSUQ_SIZEW-1:0] pkt_waddr, pkt_raddr;
+
     // fence handling
 
     reg fence_lock;
@@ -208,54 +210,33 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         end
     end
 
-    // track SOP/EOP for out-of-order memory responses
-
-    wire [LSUQ_SIZEW-1:0] pkt_waddr, pkt_raddr;
+    // multi-packet load responses could return out-of-order.
+    // we should track and return eop packet response last.
 
     if (PID_BITS != 0) begin : g_pids
         reg [`LSUQ_IN_SIZE-1:0][PID_BITS:0] pkt_ctr;
-        reg [`LSUQ_IN_SIZE-1:0] pkt_sop, pkt_eop;
+        reg [`LSUQ_IN_SIZE-1:0] pkt_sop;
+        reg [`LSUQ_IN_SIZE-1:0] pkt_eop;
 
-        wire mem_req_rd_fire     = mem_req_fire && ~mem_req_rw;
-        wire mem_req_rd_sop_fire = mem_req_rd_fire && execute_if.data.sop;
+        wire mem_req_rd_fire = mem_req_fire && ~mem_req_rw;
         wire mem_req_rd_eop_fire = mem_req_rd_fire && execute_if.data.eop;
-        wire mem_rsp_eop_fire    = mem_rsp_fire && mem_rsp_eop;
-        wire full;
+        wire mem_rsp_eop_fire = mem_rsp_fire && mem_rsp_eop;
 
-        VX_allocator #(
-            .SIZE (`LSUQ_IN_SIZE)
-        ) pkt_allocator (
-            .clk        (clk),
-            .reset      (reset),
-            .acquire_en (mem_req_rd_eop_fire),
-            .acquire_addr(pkt_waddr),
-            .release_en (mem_rsp_eop_pkt),
-            .release_addr(pkt_raddr),
-            `UNUSED_PIN (empty),
-            .full       (full)
-        );
-
-        wire rd_during_wr = mem_req_rd_fire && mem_rsp_eop_fire && (pkt_raddr == pkt_waddr);
+        assign mem_rsp_sop_pkt = pkt_sop[pkt_raddr];
+        assign mem_rsp_eop_pkt = mem_rsp_eop && pkt_eop[pkt_raddr] && (pkt_ctr[pkt_raddr] == 1);
 
         always @(posedge clk) begin
             if (reset) begin
-                pkt_ctr <= '0;
-                pkt_sop <= '0;
-                pkt_eop <= '0;
-            end else begin
-                if (mem_req_rd_sop_fire) begin
-                    pkt_sop[pkt_waddr] <= 1;
+                for (integer i = 0; i < `LSUQ_IN_SIZE; ++i) begin
+                    pkt_ctr[i] <= '0;
+                    pkt_sop[i] <= 1;
+                    pkt_eop[i] <= 0;
                 end
+            end else begin
                 if (mem_req_rd_eop_fire) begin
                     pkt_eop[pkt_waddr] <= 1;
                 end
-                if (mem_rsp_fire) begin
-                    pkt_sop[pkt_raddr] <= 0;
-                end
-                if (mem_rsp_eop_pkt) begin
-                    pkt_eop[pkt_raddr] <= 0;
-                end
-                if (~rd_during_wr) begin
+                if (~(mem_req_rd_fire && mem_rsp_eop_fire && (pkt_raddr == pkt_waddr))) begin
                     if (mem_req_rd_fire) begin
                         pkt_ctr[pkt_waddr] <= pkt_ctr[pkt_waddr] + PID_BITS'(1);
                     end
@@ -263,16 +244,19 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                         pkt_ctr[pkt_raddr] <= pkt_ctr[pkt_raddr] - PID_BITS'(1);
                     end
                 end
+                if (mem_rsp_fire) begin
+                    pkt_sop[pkt_raddr] <= 0;
+                end
+                if (mem_rsp_eop_fire && mem_rsp_eop_pkt) begin
+                    pkt_sop[pkt_raddr] <= 1;
+                    pkt_eop[pkt_raddr] <= 0;
+                end
             end
         end
-
-        assign mem_rsp_sop_pkt = pkt_sop[pkt_raddr];
-        assign mem_rsp_eop_pkt = mem_rsp_eop_fire && pkt_eop[pkt_raddr] && (pkt_ctr[pkt_raddr] == 1);
-        `RUNTIME_ASSERT(~(mem_req_rd_fire && full), ("%t: allocator full!", $time))
-        `RUNTIME_ASSERT(~mem_req_rd_sop_fire || 0 == pkt_ctr[pkt_waddr], ("%t: oops! broken sop request!", $time))
-        `UNUSED_VAR (mem_rsp_sop)
+        `RUNTIME_ASSERT(~(mem_req_rd_fire && pkt_eop[pkt_waddr]), ("%t: oops! broken eop request! (#%0d)", $time, execute_if.data.uuid))
+        `RUNTIME_ASSERT(~(mem_req_rd_fire && (2**PID_BITS-1) == pkt_ctr[pkt_waddr]), ("%t: oops! broken ctr request! (#%0d)", $time, execute_if.data.uuid))
+        `RUNTIME_ASSERT(~(mem_rsp_fire && 0 == pkt_ctr[pkt_raddr]), ("%t: oops! broken ctr response! (#%0d)", $time, rsp_uuid))
     end else begin : g_no_pids
-        assign pkt_waddr = 0;
         assign mem_rsp_sop_pkt = mem_rsp_sop;
         assign mem_rsp_eop_pkt = mem_rsp_eop;
         `UNUSED_VAR (pkt_raddr)
@@ -337,8 +321,12 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .core_req_data  (mem_req_data),
         .core_req_tag   (mem_req_tag),
         .core_req_ready (mem_req_ready),
-        `UNUSED_PIN (core_req_empty),
-        `UNUSED_PIN (core_req_wr_notify),
+        .core_req_queue_id (pkt_waddr),
+
+        // request queue info
+        `UNUSED_PIN (req_queue_empty),
+        `UNUSED_PIN (req_queue_pop),
+        `UNUSED_PIN (req_queue_id),
 
         // Output response
         .core_rsp_valid (mem_rsp_valid),
