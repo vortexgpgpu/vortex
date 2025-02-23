@@ -29,7 +29,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE = `NUM_FPU_BLOCKS;
     localparam NUM_LANES  = `NUM_FPU_LANES;
-    localparam PID_BITS   = `CLOG2(`SIMD_WIDTH / NUM_LANES);
+    localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH  = `UP(PID_BITS);
     localparam TAG_WIDTH  = `LOG2UP(`FPUQ_SIZE);
     localparam IBUF_DATAW = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NR_BITS + PID_WIDTH + 1 + 1;

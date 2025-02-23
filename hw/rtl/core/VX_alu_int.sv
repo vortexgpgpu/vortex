@@ -32,7 +32,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam LANE_BITS      = `CLOG2(NUM_LANES);
     localparam LANE_WIDTH     = `UP(LANE_BITS);
-    localparam PID_BITS       = `CLOG2(`SIMD_WIDTH / NUM_LANES);
+    localparam PID_BITS       = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH      = `UP(PID_BITS);
     localparam SHIFT_IMM_BITS = `CLOG2(`XLEN);
 

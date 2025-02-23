@@ -29,7 +29,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     VX_lsu_mem_if.master    lsu_mem_if
 );
     localparam NUM_LANES    = `NUM_LSU_LANES;
-    localparam PID_BITS     = `CLOG2(`SIMD_WIDTH / NUM_LANES);
+    localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
     localparam RSP_ARB_DATAW= UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
     localparam LSUQ_SIZEW   = `LOG2UP(`LSUQ_IN_SIZE);

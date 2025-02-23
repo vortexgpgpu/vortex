@@ -27,7 +27,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     VX_result_if.master result_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam PID_BITS  = `CLOG2(`SIMD_WIDTH / NUM_LANES);
+    localparam PID_BITS  = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH = `UP(PID_BITS);
     localparam TAG_WIDTH = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NR_BITS + 1 + PID_WIDTH + 1 + 1;
 
