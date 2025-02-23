@@ -32,25 +32,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (ISSUE_ID)
 
-    localparam DATAW = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + PC_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NR_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN) + NT_WIDTH;
-
-    wire [`SIMD_WIDTH-1:0][NT_WIDTH-1:0] tids;
-    for (genvar i = 0; i < `SIMD_WIDTH; ++i) begin : g_tids
-        assign tids[i] = NT_WIDTH'(i);
-    end
-
-    wire [NT_WIDTH-1:0] last_active_tid;
-
-    VX_find_first #(
-        .N (`SIMD_WIDTH),
-        .DATAW (NT_WIDTH),
-        .REVERSE (1)
-    ) last_tid_select (
-        .valid_in (operands_if.data.tmask),
-        .data_in  (tids),
-        .data_out (last_active_tid),
-        `UNUSED_PIN (valid_out)
-    );
+    localparam DATAW = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + PC_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NR_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN) + 1 + 1;
 
     wire [NUM_EX_UNITS-1:0] operands_ready_in;
     assign operands_if.ready = operands_ready_in[operands_if.data.ex_type];
@@ -75,10 +57,11 @@ module VX_dispatch import VX_gpu_pkg::*; #(
                 operands_if.data.op_args,
                 operands_if.data.wb,
                 operands_if.data.rd,
-                last_active_tid,
                 operands_if.data.rs1_data,
                 operands_if.data.rs2_data,
-                operands_if.data.rs3_data
+                operands_if.data.rs3_data,
+                operands_if.data.sop,
+                operands_if.data.eop
             }),
             .data_out   (dispatch_if[i].data),
             .valid_out  (dispatch_if[i].valid),

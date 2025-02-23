@@ -26,7 +26,6 @@ interface VX_execute_if import VX_gpu_pkg::*; #(
         op_args_t                       op_args;
         logic                           wb;
         logic [NR_BITS-1:0]             rd;
-        logic [NT_WIDTH-1:0]            tid;
         logic [NUM_LANES-1:0][`XLEN-1:0] rs1_data;
         logic [NUM_LANES-1:0][`XLEN-1:0] rs2_data;
         logic [NUM_LANES-1:0][`XLEN-1:0] rs3_data;

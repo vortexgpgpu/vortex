@@ -49,15 +49,23 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_join   = (execute_if.data.op_type == INST_SFU_JOIN);
     wire is_bar    = (execute_if.data.op_type == INST_SFU_BAR);
 
-    wire [`UP(LANE_BITS)-1:0] tid;
-    if (LANE_BITS != 0) begin : g_tid
-        assign tid = execute_if.data.tid[0 +: LANE_BITS];
+    wire [`UP(LANE_BITS)-1:0] last_tid;
+    if (LANE_BITS != 0) begin : g_last_tid
+        VX_priority_encoder #(
+            .N (NUM_LANES),
+            .REVERSE (1)
+        ) last_tid_select (
+            .data_in (execute_if.data.tmask),
+            .index_out (last_tid),
+            `UNUSED_PIN (onehot_out),
+            `UNUSED_PIN (valid_out)
+        );
     end else begin : g_no_tid
-        assign tid = 0;
+        assign last_tid = 0;
     end
 
-    wire [`XLEN-1:0] rs1_data = execute_if.data.rs1_data[tid];
-    wire [`XLEN-1:0] rs2_data = execute_if.data.rs2_data[tid];
+    wire [`XLEN-1:0] rs1_data = execute_if.data.rs1_data[last_tid];
+    wire [`XLEN-1:0] rs2_data = execute_if.data.rs2_data[last_tid];
     `UNUSED_VAR (rs1_data)
 
     wire not_pred = execute_if.data.op_args.wctl.is_neg;

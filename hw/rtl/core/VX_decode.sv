@@ -573,8 +573,8 @@ module VX_decode import VX_gpu_pkg::*; #(
             trace_ex_type(1, decode_if.data.ex_type);
             `TRACE(1, (", op="))
             trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
-            `TRACE(1, (", tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, opds=%b%b%b%b",
-                decode_if.data.tmask, decode_if.data.wb, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3, use_rd, use_rs1, use_rs2, use_rs3))
+            `TRACE(1, (", tmask=%b, wb=%b, used_rs=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d",
+                decode_if.data.tmask, decode_if.data.wb, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3))
             trace_op_args(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
             `TRACE(1, (" (#%0d)\n", decode_if.data.uuid))
         end

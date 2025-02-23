@@ -25,10 +25,11 @@ interface VX_dispatch_if import VX_gpu_pkg::*; ();
         op_args_t                           op_args;
         logic                               wb;
         logic [NR_BITS-1:0]                 rd;
-        logic [NT_WIDTH-1:0]                tid;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs1_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs2_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs3_data;
+        logic                               sop;
+        logic                               eop;
     } data_t;
 
     logic  valid;

@@ -33,7 +33,7 @@ module VX_priority_arbiter #(
 
         VX_priority_encoder #(
             .N (NUM_REQS)
-        ) priority_encoder (
+        ) grant_sel (
             .data_in    (requests),
             .index_out  (grant_index),
             .onehot_out (grant_onehot),

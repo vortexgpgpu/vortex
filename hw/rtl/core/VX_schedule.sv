@@ -306,13 +306,13 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     wire [`NUM_WARPS-1:0] ready_warps = active_warps & ~stalled_warps;
 
-    VX_lzc #(
-        .N (`NUM_WARPS),
-        .REVERSE (1)
+    VX_priority_encoder #(
+        .N (`NUM_WARPS)
     ) wid_select (
         .data_in   (ready_warps),
-        .data_out  (schedule_wid),
-        .valid_out (schedule_valid)
+        .index_out (schedule_wid),
+        .valid_out (schedule_valid),
+        `UNUSED_PIN (onehot_out)
     );
 
     wire [`NUM_WARPS-1:0][(`NUM_THREADS + PC_BITS)-1:0] schedule_data;

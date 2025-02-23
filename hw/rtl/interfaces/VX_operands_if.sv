@@ -29,6 +29,8 @@ interface VX_operands_if import VX_gpu_pkg::*; ();
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs1_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs2_data;
         logic [`SIMD_WIDTH-1:0][`XLEN-1:0]  rs3_data;
+        logic                               sop;
+        logic                               eop;
     } data_t;
 
     logic  valid;

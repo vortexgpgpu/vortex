@@ -37,7 +37,7 @@ module VX_operands import VX_gpu_pkg::*; #(
 );
     localparam NUM_OPDS  = NUM_SRC_OPDS + 1;
     localparam SCB_DATAW = UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + NUM_OPDS + (REG_IDX_BITS * NUM_OPDS);
-    localparam OPD_DATAW = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NR_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN);
+    localparam OPD_DATAW = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NR_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN) + 1 + 1;
 
     VX_gpr_if per_opc_gpr_if[`NUM_OPCS]();
     VX_scoreboard_if per_opc_scoreboard_if[`NUM_OPCS]();
@@ -52,7 +52,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     VX_stream_arb #(
         .NUM_INPUTS  (1),
         .NUM_OUTPUTS (`NUM_OPCS),
-        .DATAW       (SCB_DATAW)
+        .DATAW       (SCB_DATAW),
+        .OUT_BUF     (0)
     ) scboard_arb (
         .clk        (clk),
         .reset      (reset),
@@ -124,7 +125,8 @@ module VX_operands import VX_gpu_pkg::*; #(
     VX_stream_arb #(
         .NUM_INPUTS  (`NUM_OPCS),
         .NUM_OUTPUTS (1),
-        .DATAW       (OPD_DATAW)
+        .DATAW       (OPD_DATAW),
+        .OUT_BUF     (3)
     ) operands_arb (
         .clk        (clk),
         .reset      (reset),

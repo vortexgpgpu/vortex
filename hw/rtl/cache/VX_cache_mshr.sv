@@ -122,13 +122,13 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         assign addr_matches[i] = valid_table[i] && (addr_table[i] == allocate_addr);
     end
 
-    VX_lzc #(
-        .N (MSHR_SIZE),
-        .REVERSE (1)
+    VX_priority_encoder #(
+        .N (MSHR_SIZE)
     ) allocate_sel (
         .data_in   (~valid_table_n),
-        .data_out  (allocate_id_n),
-        .valid_out (allocate_rdy_n)
+        .index_out (allocate_id_n),
+        .valid_out (allocate_rdy_n),
+        `UNUSED_PIN (onehot_out)
     );
 
     // find matching tail-entry
@@ -137,8 +137,8 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     ) prev_sel (
         .data_in (addr_matches & ~next_table_x),
         .index_out (prev_idx),
-        `UNUSED_PIN (onehot_out),
-        `UNUSED_PIN (valid_out)
+        `UNUSED_PIN (valid_out),
+        `UNUSED_PIN (onehot_out)
     );
 
     always @(*) begin

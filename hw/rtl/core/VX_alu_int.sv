@@ -136,15 +136,23 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [PC_BITS-1:0] PC_r;
     wire [INST_BR_BITS-1:0] br_op_r;
     wire [PC_BITS-1:0] cbr_dest, cbr_dest_r;
-    wire [LANE_WIDTH-1:0] tid, tid_r;
+    wire [LANE_WIDTH-1:0] last_tid, last_tid_r;
     wire is_br_op_r;
 
     assign cbr_dest = add_result[0][1 +: PC_BITS];
 
-    if (LANE_BITS != 0) begin : g_tid
-        assign tid = execute_if.data.tid[0 +: LANE_BITS];
+    if (LANE_BITS != 0) begin : g_last_tid
+        VX_priority_encoder #(
+            .N (NUM_LANES),
+            .REVERSE (1)
+        ) last_tid_sel (
+            .data_in (execute_if.data.tmask),
+            .index_out (last_tid),
+            `UNUSED_PIN (onehot_out),
+            `UNUSED_PIN (valid_out)
+        );
     end else begin : g_tid_0
-        assign tid = 0;
+        assign last_tid = 0;
     end
 
     VX_elastic_buffer #(
@@ -154,8 +162,8 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         .reset    (reset),
         .valid_in (execute_if.valid),
         .ready_in (execute_if.ready),
-        .data_in  ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, alu_result, execute_if.data.PC, cbr_dest, is_br_op, br_op, tid}),
-        .data_out ({result_if.data.uuid, result_if.data.wid, result_if.data.tmask, result_if.data.rd, result_if.data.wb, result_if.data.pid, result_if.data.sop, result_if.data.eop, alu_result_r, PC_r, cbr_dest_r, is_br_op_r, br_op_r, tid_r}),
+        .data_in  ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, alu_result, execute_if.data.PC, cbr_dest, is_br_op, br_op, last_tid}),
+        .data_out ({result_if.data.uuid, result_if.data.wid, result_if.data.tmask, result_if.data.rd, result_if.data.wb, result_if.data.pid, result_if.data.sop, result_if.data.eop, alu_result_r, PC_r, cbr_dest_r, is_br_op_r, br_op_r, last_tid_r}),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
     );
@@ -165,7 +173,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire is_br_less = inst_br_is_less(br_op_r);
     wire is_br_static = inst_br_is_static(br_op_r);
 
-    wire [`XLEN-1:0] br_result = alu_result_r[tid_r];
+    wire [`XLEN-1:0] br_result = alu_result_r[last_tid_r];
     wire is_less  = br_result[0];
     wire is_equal = br_result[1];
 

@@ -80,7 +80,7 @@ def parse_simx(log_lines):
             elif line.startswith("DEBUG Dest"):
                 instr_data["destination"] = re.search(destination_pattern, line).group(1)
         except Exception as e:
-            print("Error at line {}: {}".format(lineno, e))
+            print("Error: {}; {}".format(e, line))
             instr_data = None
     if instr_data:
         entries.append(instr_data)
@@ -116,9 +116,28 @@ def append_value(text, reg, value, tmask_arr, sep):
     text += "}"
     return text, sep
 
+def simd_data(sub_array, index, count, default=0):
+    size = len(sub_array)
+    total_subsets = count // size
+    new_array = [default] * count
+    start_index = index * size
+    if start_index + size <= count:
+        new_array[start_index:start_index + size] = sub_array
+    return new_array
+
+def merge_data(trace, key, new_data,  mask):
+    if key in trace:
+        merged_data = trace[key]
+        for i in range(len(mask)):
+            if mask[i] == 1:
+                merged_data[i] = new_data[i]
+        trace[key] = merged_data
+    else:
+        trace[key] = new_data
+
 def parse_rtlsim(log_lines):
     global configs
-    line_pattern = r"\d+: cluster(\d+)-socket(\d+)-core(\d+)-(decode|issue|commit)"
+    line_pattern = r"\d+: cluster(\d+)-socket(\d+)-core(\d+)-(decode|issue\d+|commit):"
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
     instr_pattern = r"instr=(0x[0-9a-fA-F]+)"
     ex_pattern = r"ex=([a-zA-Z]+)"
@@ -126,7 +145,8 @@ def parse_rtlsim(log_lines):
     warp_id_pattern = r"wid=(\d+)"
     tmask_pattern = r"tmask=(\d+)"
     wb_pattern = r"wb=(\d)"
-    opds_pattern = r"opds=(\d+)"
+    used_rs_pattern = r"used_rs=(\d+)"
+    sid_pattern = r"sid=(\d+)"
     rd_pattern = r"rd=(\d+)"
     rs1_pattern = r"rs1=(\d+)"
     rs2_pattern = r"rs2=(\d+)"
@@ -141,6 +161,7 @@ def parse_rtlsim(log_lines):
     instr_data = {}
     num_cores = configs['num_cores']
     socket_size = configs['socket_size']
+    num_threads = configs['num_threads']
     num_sockets = (num_cores + socket_size - 1) // socket_size
     for lineno, line in enumerate(log_lines, start=1):
         try:
@@ -163,42 +184,37 @@ def parse_rtlsim(log_lines):
                     trace["tmask"] = reverse_binary(tmask)
                     trace["instr"] = re.search(instr_pattern, line).group(1)
                     trace["opcode"] = re.search(op_pattern, line).group(1)
-                    trace["opds"] = bin_to_array(re.search(opds_pattern, line).group(1))
+                    trace["used_rs"] = bin_to_array(reverse_binary(re.search(used_rs_pattern, line).group(1)))
                     trace["rd"] = re.search(rd_pattern, line).group(1)
                     trace["rs1"] = re.search(rs1_pattern, line).group(1)
                     trace["rs2"] = re.search(rs2_pattern, line).group(1)
                     trace["rs3"] = re.search(rs3_pattern, line).group(1)
                     instr_data[uuid] = trace
-                elif stage == "issue":
+                elif re.match(r"issue\d+", stage):
                     if uuid in instr_data:
                         trace = instr_data[uuid]
+                        sid = int(re.search(sid_pattern, line).group(1))
+                        src_tmask_arr = simd_data(bin_to_array(tmask)[::-1], sid, num_threads, 0)
                         trace["lineno"] = lineno
-                        opds = trace["opds"]
-                        if opds[1]:
-                            trace["rs1_data"] = re.search(rs1_data_pattern, line).group(1).split(', ')[::-1]
-                        if opds[2]:
-                            trace["rs2_data"] = re.search(rs2_data_pattern, line).group(1).split(', ')[::-1]
-                        if opds[3]:
-                            trace["rs3_data"] = re.search(rs3_data_pattern, line).group(1).split(', ')[::-1]
+                        used_rs = trace["used_rs"]
+                        if used_rs[0]:
+                            merge_data(trace, 'rs1_data', simd_data(re.search(rs1_data_pattern, line).group(1).split(', ')[::-1], sid, num_threads, '0x0'), src_tmask_arr)
+                        if used_rs[1]:
+                            merge_data(trace, 'rs2_data', simd_data(re.search(rs2_data_pattern, line).group(1).split(', ')[::-1], sid, num_threads, '0x0'), src_tmask_arr)
+                        if used_rs[2]:
+                            merge_data(trace, 'rs3_data', simd_data(re.search(rs3_data_pattern, line).group(1).split(', ')[::-1], sid, num_threads, '0x0'), src_tmask_arr)
                         trace["issued"] = True
                         instr_data[uuid] = trace
                 elif stage == "commit":
                     if uuid in instr_data:
                         trace = instr_data[uuid]
                         if "issued" in trace:
-                            opds = trace["opds"]
-                            dst_tmask_arr = bin_to_array(tmask)[::-1]
+                            sid = int(re.search(sid_pattern, line).group(1))
+                            used_rs = trace["used_rs"]
+                            dst_tmask_arr = simd_data(bin_to_array(tmask)[::-1], sid, num_threads, 0)
                             wb = re.search(wb_pattern, line).group(1) == "1"
                             if wb:
-                                rd_data = re.search(rd_data_pattern, line).group(1).split(', ')[::-1]
-                                if 'rd_data' in trace:
-                                    merged_rd_data = trace['rd_data']
-                                    for i in range(len(dst_tmask_arr)):
-                                        if dst_tmask_arr[i] == 1:
-                                            merged_rd_data[i] = rd_data[i]
-                                    trace['rd_data'] = merged_rd_data
-                                else:
-                                    trace['rd_data'] = rd_data
+                                merge_data(trace, 'rd_data', simd_data(re.search(rd_data_pattern, line).group(1).split(', ')[::-1], sid, num_threads, '0x0'), dst_tmask_arr)
                             instr_data[uuid] = trace
                             eop = re.search(eop_pattern, line).group(1) == "1"
                             if eop:
@@ -210,17 +226,17 @@ def parse_rtlsim(log_lines):
                                 trace["destination"] = destination
                                 operands = ''
                                 sep = False
-                                if opds[1]:
+                                if used_rs[0]:
                                     operands, sep = append_value(operands, trace["rs1"], trace["rs1_data"], tmask_arr, sep)
                                     del trace["rs1_data"]
-                                if opds[2]:
+                                if used_rs[1]:
                                     operands, sep = append_value(operands, trace["rs2"], trace["rs2_data"], tmask_arr, sep)
                                     del trace["rs2_data"]
-                                if opds[3]:
+                                if used_rs[2]:
                                     operands, sep = append_value(operands, trace["rs3"], trace["rs3_data"], tmask_arr, sep)
                                     del trace["rs3_data"]
                                 trace["operands"] = operands
-                                del trace["opds"]
+                                del trace["used_rs"]
                                 del trace["rd"]
                                 del trace["rs1"]
                                 del trace["rs2"]
@@ -229,7 +245,7 @@ def parse_rtlsim(log_lines):
                                 del instr_data[uuid]
                                 entries.append(trace)
         except Exception as e:
-            print("Error at line {}: {}".format(lineno, e))
+            print("Error: {}; {}".format(e, line))
     return entries
 
 def write_csv(sublogs, csv_filename, log_type):

@@ -39,12 +39,12 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
     localparam BATCH_COUNT  = `ISSUE_WIDTH / BLOCK_SIZE;
     localparam BATCH_COUNT_W= `LOG2UP(BATCH_COUNT);
     localparam ISSUE_W      = `LOG2UP(`ISSUE_WIDTH);
-    localparam IN_DATAW     = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + INST_OP_BITS + INST_ARGS_BITS + 1 + PC_BITS + NR_BITS + NT_WIDTH + (3 * `SIMD_WIDTH * `XLEN);
-    localparam OUT_DATAW    = UUID_WIDTH + NW_WIDTH + NUM_LANES + INST_OP_BITS + INST_ARGS_BITS + 1 + PC_BITS + NR_BITS + NT_WIDTH + (3 * NUM_LANES * `XLEN) + GPID_WIDTH + 1 + 1;
+    localparam IN_DATAW     = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + INST_OP_BITS + INST_ARGS_BITS + 1 + PC_BITS + NR_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN) + 1 + 1;
+    localparam OUT_DATAW    = UUID_WIDTH + NW_WIDTH + NUM_LANES + INST_OP_BITS + INST_ARGS_BITS + 1 + PC_BITS + NR_BITS + (NUM_SRC_OPDS * NUM_LANES * `XLEN) + GPID_WIDTH + 1 + 1;
     localparam FANOUT_ENABLE= (`SIMD_WIDTH > (MAX_FANOUT + MAX_FANOUT /2));
 
     localparam DATA_TMASK_OFF = IN_DATAW - (UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH);
-    localparam DATA_REGS_OFF = 0;
+    localparam DATA_REGS_OFF = 1 + 1;
 
     wire [`ISSUE_WIDTH-1:0] dispatch_valid;
     wire [`ISSUE_WIDTH-1:0][IN_DATAW-1:0] dispatch_data;
@@ -112,6 +112,8 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
         wire [ISSUE_W-1:0] issue_idx = issue_indices[block_idx];
         wire [ISSUE_WIS_W-1:0] dispatch_wis = dispatch_data[issue_idx][DATA_TMASK_OFF + `SIMD_WIDTH + SIMD_IDX_W +: ISSUE_WIS_W];
         wire [SIMD_IDX_W-1:0] dispatch_sid = dispatch_data[issue_idx][DATA_TMASK_OFF + `SIMD_WIDTH +: SIMD_IDX_W];
+        wire dispatch_sop = dispatch_data[issue_idx][1];
+        wire dispatch_eop = dispatch_data[issue_idx][0];
 
         wire [`SIMD_WIDTH-1:0] dispatch_tmask = dispatch_data[issue_idx][DATA_TMASK_OFF +: `SIMD_WIDTH];
         wire [`SIMD_WIDTH-1:0][`XLEN-1:0] dispatch_rs1_data = dispatch_data[issue_idx][DATA_REGS_OFF + 2 * `SIMD_WIDTH * `XLEN +: `SIMD_WIDTH * `XLEN];
@@ -245,8 +247,8 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
 
         wire [NW_WIDTH-1:0] block_wid = wis_to_wid(dispatch_wis, isw);
         wire [GPID_WIDTH-1:0] warp_pid = GPID_WIDTH'(block_pid[block_idx]) + GPID_WIDTH'(dispatch_sid * NUM_PACKETS);
-        wire warp_sop = block_sop[block_idx] && (dispatch_sid == 0);
-        wire warp_eop = block_eop[block_idx] && (dispatch_sid == SIMD_IDX_W'(SIMD_COUNT-1));
+        wire warp_sop = block_sop[block_idx] && dispatch_sop;
+        wire warp_eop = block_eop[block_idx] && dispatch_eop;
 
         VX_elastic_buffer #(
             .DATAW   (OUT_DATAW),
@@ -261,7 +263,7 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
                 dispatch_data[issue_idx][IN_DATAW-1 -: UUID_WIDTH],
                 block_wid,
                 block_tmask[block_idx],
-                dispatch_data[issue_idx][DATA_TMASK_OFF-1 : DATA_REGS_OFF + 3 * `SIMD_WIDTH * `XLEN],
+                dispatch_data[issue_idx][DATA_TMASK_OFF-1 : (DATA_REGS_OFF + NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN)],
                 block_regs[block_idx][0],
                 block_regs[block_idx][1],
                 block_regs[block_idx][2],
