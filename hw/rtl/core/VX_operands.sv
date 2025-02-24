@@ -55,10 +55,19 @@ module VX_operands import VX_gpu_pkg::*; #(
     always @(*) begin
         ready_opcs = per_opc_scoreboard_ready;
         if (`NUM_OPCS > 1 && SIMD_COUNT > 1) begin
-            // SFU cannot handle multiple inflight WCTL instructions, always assign them to collector 0
+            // SFU cannot handle multiple inflight WCTL instructions, always assign them same collector
+            // LD/ST instructions should also be ordered via the same collector
             if (scoreboard_if.data.ex_type == EX_SFU
              && inst_sfu_is_wctl(scoreboard_if.data.op_type)) begin
-                ready_opcs[`NUM_OPCS-1:1] = '0; // clear non-zero opcs
+                // select collector 0
+                for (int i = 0; i < `NUM_OPCS; ++i) begin
+                    if (i != 0) ready_opcs[i] = 0;
+                end
+            end else if (scoreboard_if.data.ex_type == EX_LSU) begin
+                // select collector 1
+                for (int i = 0; i < `NUM_OPCS; ++i) begin
+                    if (i != 1) ready_opcs[i] = 0;
+                end
             end
         end
     end
