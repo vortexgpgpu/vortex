@@ -105,7 +105,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire mem_rsp_sop_pkt, mem_rsp_eop_pkt;
     wire no_rsp_buf_valid, no_rsp_buf_ready;
 
-    wire [LSUQ_SIZEW-1:0] pkt_waddr, pkt_raddr;
+    wire [LSUQ_SIZEW-1:0] reqq_waddr, reqq_raddr;
 
     // fence handling
 
@@ -211,7 +211,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     end
 
     // multi-packet load responses could return out-of-order.
-    // we should track and return eop packet response last.
+    // we should track and flag SOP and EOP responses.
 
     if (PID_BITS != 0) begin : g_pids
         reg [`LSUQ_IN_SIZE-1:0][PID_BITS:0] pkt_ctr;
@@ -220,10 +220,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
         wire mem_req_rd_fire = mem_req_fire && ~mem_req_rw;
         wire mem_req_rd_eop_fire = mem_req_rd_fire && execute_if.data.eop;
+        wire mem_rsp_sop_fire = mem_rsp_fire && mem_rsp_sop;
         wire mem_rsp_eop_fire = mem_rsp_fire && mem_rsp_eop;
 
-        assign mem_rsp_sop_pkt = pkt_sop[pkt_raddr];
-        assign mem_rsp_eop_pkt = mem_rsp_eop && pkt_eop[pkt_raddr] && (pkt_ctr[pkt_raddr] == 1);
+        assign mem_rsp_sop_pkt = pkt_sop[reqq_raddr];
+        assign mem_rsp_eop_pkt = mem_rsp_eop && pkt_eop[reqq_raddr] && (pkt_ctr[reqq_raddr] == 1);
 
         always @(posedge clk) begin
             if (reset) begin
@@ -234,32 +235,32 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                 end
             end else begin
                 if (mem_req_rd_eop_fire) begin
-                    pkt_eop[pkt_waddr] <= 1;
+                    pkt_eop[reqq_waddr] <= 1;
                 end
-                if (~(mem_req_rd_fire && mem_rsp_eop_fire && (pkt_raddr == pkt_waddr))) begin
+                if (~(mem_req_rd_fire && mem_rsp_eop_fire && (reqq_raddr == reqq_waddr))) begin
                     if (mem_req_rd_fire) begin
-                        pkt_ctr[pkt_waddr] <= pkt_ctr[pkt_waddr] + PID_BITS'(1);
+                        pkt_ctr[reqq_waddr] <= pkt_ctr[reqq_waddr] + PID_BITS'(1);
                     end
                     if (mem_rsp_eop_fire) begin
-                        pkt_ctr[pkt_raddr] <= pkt_ctr[pkt_raddr] - PID_BITS'(1);
+                        pkt_ctr[reqq_raddr] <= pkt_ctr[reqq_raddr] - PID_BITS'(1);
                     end
                 end
-                if (mem_rsp_fire) begin
-                    pkt_sop[pkt_raddr] <= 0;
+                if (mem_rsp_sop_fire) begin
+                    pkt_sop[reqq_raddr] <= 0;
                 end
                 if (mem_rsp_eop_fire && mem_rsp_eop_pkt) begin
-                    pkt_sop[pkt_raddr] <= 1;
-                    pkt_eop[pkt_raddr] <= 0;
+                    pkt_sop[reqq_raddr] <= 1;
+                    pkt_eop[reqq_raddr] <= 0;
                 end
             end
         end
-        `RUNTIME_ASSERT(~(mem_req_rd_fire && pkt_eop[pkt_waddr]), ("%t: oops! broken eop request! (#%0d)", $time, execute_if.data.uuid))
-        `RUNTIME_ASSERT(~(mem_req_rd_fire && (2**PID_BITS-1) == pkt_ctr[pkt_waddr]), ("%t: oops! broken ctr request! (#%0d)", $time, execute_if.data.uuid))
-        `RUNTIME_ASSERT(~(mem_rsp_fire && 0 == pkt_ctr[pkt_raddr]), ("%t: oops! broken ctr response! (#%0d)", $time, rsp_uuid))
+        `RUNTIME_ASSERT(~(mem_req_rd_fire && pkt_eop[reqq_waddr]), ("%t: oops! broken eop request! (#%0d)", $time, execute_if.data.uuid))
+        `RUNTIME_ASSERT(~(mem_req_rd_fire && (2**PID_BITS-1) == pkt_ctr[reqq_waddr]), ("%t: oops! broken ctr request! (#%0d)", $time, execute_if.data.uuid))
+        `RUNTIME_ASSERT(~(mem_rsp_fire && 0 == pkt_ctr[reqq_raddr]), ("%t: oops! broken ctr response! (#%0d)", $time, rsp_uuid))
     end else begin : g_no_pids
         assign mem_rsp_sop_pkt = mem_rsp_sop;
         assign mem_rsp_eop_pkt = mem_rsp_eop;
-        `UNUSED_VAR (pkt_raddr)
+        `UNUSED_VAR (reqq_raddr)
     end
 
     // pack memory request tag
@@ -272,7 +273,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         execute_if.data.op_type,
         req_align,
         execute_if.data.pid,
-        pkt_waddr,
+        reqq_waddr,
         req_is_fence
     };
 
@@ -321,7 +322,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .core_req_data  (mem_req_data),
         .core_req_tag   (mem_req_tag),
         .core_req_ready (mem_req_ready),
-        .core_req_queue_id (pkt_waddr),
+        .core_req_queue_id (reqq_waddr),
 
         // request queue info
         `UNUSED_PIN (req_queue_empty),
@@ -392,7 +393,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         rsp_op_type,
         rsp_align,
         rsp_pid,
-        pkt_raddr,
+        reqq_raddr,
         rsp_is_fence
     } = mem_rsp_tag;
 
@@ -501,18 +502,18 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                 `TRACE_ARRAY1D(2, "%b", mem_req_flags, NUM_LANES)
                 `TRACE(2, (", byteen=0x%0h, data=", mem_req_byteen))
                 `TRACE_ARRAY1D(2, "0x%0h", mem_req_data, NUM_LANES)
-                `TRACE(2, (", sop=%b, eop=%b, tag=0x%0h (#%0d)\n", execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
+                `TRACE(2, (", sop=%b, pid=%0d, eop=%b, tag=0x%0h (#%0d)\n", execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
             end else begin
                 `TRACE(2, ("%t: %s Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask))
                 `TRACE_ARRAY1D(2, "0x%h", full_addr, NUM_LANES)
                 `TRACE(2, (", flags="))
                 `TRACE_ARRAY1D(2, "%b", mem_req_flags, NUM_LANES)
-                `TRACE(2, (", byteen=0x%0h, rd=%0d, sop=%b, eop=%b, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if.data.rd, execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
+                `TRACE(2, (", byteen=0x%0h, rd=%0d, pid=%0d, sop=%b, eop=%b, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if.data.rd, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
             end
         end
         if (mem_rsp_fire) begin
-            `TRACE(2, ("%t: %s Rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, sop=%b, eop=%b, data=",
-                $time, INSTANCE_ID, rsp_wid, {rsp_pc, 1'b0}, mem_rsp_mask, rsp_rd, mem_rsp_sop, mem_rsp_eop))
+            `TRACE(2, ("%t: %s Rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, pid=%0d, sop=%b, eop=%b, data=",
+                $time, INSTANCE_ID, rsp_wid, {rsp_pc, 1'b0}, mem_rsp_mask, rsp_rd, rsp_pid, mem_rsp_sop, mem_rsp_eop))
             `TRACE_ARRAY1D(2, "0x%0h", mem_rsp_data, NUM_LANES)
             `TRACE(2, (", tag=0x%0h (#%0d)\n", mem_rsp_tag, rsp_uuid))
         end

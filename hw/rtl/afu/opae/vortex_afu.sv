@@ -109,7 +109,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire [63:0] dev_caps = {8'b0,
                             5'(LMEM_BYTE_ADDR_WIDTH-20),
                             3'(`CLOG2(NUM_LOCAL_MEM_BANKS)),
-                            8'(LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
+                            8'(`LMEM_ENABLED ? `LMEM_LOG_SIZE : 0),
                             16'(`NUM_CORES * `NUM_CLUSTERS),
                             8'(`NUM_WARPS),
                             8'(`NUM_THREADS),

@@ -104,6 +104,8 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
         .reset     (reset),
     `ifdef PERF_ENABLE
         .collisions(collisions),
+    `else
+        `UNUSED_PIN (collisions),
     `endif
         .valid_in  (gpr_req_valid),
         .data_in   (gpr_req_data),

@@ -696,12 +696,8 @@ package VX_gpu_pkg;
         endcase
     endfunction
 
-    function automatic logic [NR_BITS-1:0] to_reg_number(input reg_idx_t reg_idx);
-    `ifdef EXT_F_ENABLE
-        return {reg_idx.rtype[0], reg_idx.id};
-    `else
-        return reg_idx.id;
-    `endif
+    function logic [NR_BITS-1:0] to_reg_number(input reg_idx_t reg_idx);
+        return NR_BITS'(reg_idx.rtype * RV_REGS) + NR_BITS'(reg_idx.id);
     endfunction
 
     ////////////////////////////////// Tracing ////////////////////////////////
@@ -711,6 +707,16 @@ package VX_gpu_pkg;
 `ifdef SV_DPI
     import "DPI-C" function void dpi_trace(input int level, input string format /*verilator sformat*/);
 `endif
+
+    task trace_reg_idx(input reg_idx_t reg_id);
+        automatic  logic [NR_BITS-1:0] reg_base = to_reg_number(reg_id);
+        if (reg_id.ext != 0) begin
+            automatic logic [NR_BITS-1:0] reg_ext = reg_base + (1 << reg_id.ext) - 1;
+            `TRACE(0, ("%0d..%0d", reg_base, reg_ext));
+        end else begin
+            `TRACE(0, ("%0d", reg_base));
+        end
+    endtask
 
     task trace_ex_type(input int level, input [EX_BITS-1:0] ex_type);
         case (ex_type)
@@ -1096,19 +1102,19 @@ package VX_gpu_pkg;
     );
         case (ex_type)
         EX_ALU: begin
-            `TRACE(level, (", use_PC=%b, use_imm=%b, imm=0x%0h", op_args.alu.use_PC, op_args.alu.use_imm, op_args.alu.imm))
+            `TRACE(level, ("use_PC=%b, use_imm=%b, imm=0x%0h", op_args.alu.use_PC, op_args.alu.use_imm, op_args.alu.imm))
         end
         EX_LSU: begin
-            `TRACE(level, (", offset=0x%0h", op_args.lsu.offset))
+            `TRACE(level, ("offset=0x%0h", op_args.lsu.offset))
         end
         EX_SFU: begin
             if (inst_sfu_is_csr(op_type)) begin
-                `TRACE(level, (", addr=0x%0h, use_imm=%b, imm=0x%0h", op_args.csr.addr, op_args.csr.use_imm, op_args.csr.imm))
+                `TRACE(level, ("addr=0x%0h, use_imm=%b, imm=0x%0h", op_args.csr.addr, op_args.csr.use_imm, op_args.csr.imm))
             end
         end
     `ifdef EXT_F_ENABLE
         EX_FPU: begin
-            `TRACE(level, (", fmt=0x%0h, frm=0x%0h", op_args.fpu.fmt, op_args.fpu.frm))
+            `TRACE(level, ("fmt=0x%0h, frm=0x%0h", op_args.fpu.fmt, op_args.fpu.frm))
         end
     `endif
         default:;

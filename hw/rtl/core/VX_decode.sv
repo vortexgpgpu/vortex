@@ -173,7 +173,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
                 op_args.alu.imm = `SEXT(`XLEN, i_imm);
-                use_rd = 1;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
             end
@@ -182,7 +181,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 0;
-                use_rd = 1;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
@@ -217,7 +215,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
                 op_args.alu.imm = `SEXT(`XLEN, iw_imm);
-                use_rd  = 1;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
             end
@@ -226,7 +223,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.is_w = 1;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 0;
-                use_rd = 1;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
@@ -254,7 +250,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
                 op_args.alu.imm = {{`XLEN-31{ui_imm[19]}}, ui_imm[18:0], 12'(0)};
-                use_rd  = 1;
                 `USED_IREG (rd);
             end
             INST_AUIPC: begin
@@ -265,7 +260,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.use_PC = 1;
                 op_args.alu.use_imm = 1;
                 op_args.alu.imm = {{`XLEN-31{ui_imm[19]}}, ui_imm[18:0], 12'(0)};
-                use_rd = 1;
                 `USED_IREG (rd);
             end
             INST_JAL: begin
@@ -276,7 +270,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.use_PC = 1;
                 op_args.alu.use_imm = 1;
                 op_args.alu.imm = `SEXT(`XLEN, jal_imm);
-                use_rd  = 1;
                 is_wstall = 1;
                 `USED_IREG (rd);
             end
@@ -288,7 +281,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
                 op_args.alu.imm = `SEXT(`XLEN, u_12);
-                use_rd  = 1;
                 is_wstall = 1;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
@@ -318,7 +310,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                     op_type = INST_OP_BITS'(inst_sfu_csr(func3));
                     op_args.csr.addr = u_12;
                     op_args.csr.use_imm = func3[2];
-                    use_rd  = 1;
                     is_wstall = is_fpu_csr; // only stall for FPU CSRs
                     `USED_IREG (rd);
                     if (func3[2]) begin
@@ -334,7 +325,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                     op_args.alu.use_imm = 1;
                     op_args.alu.use_PC  = 1;
                     op_args.alu.imm = `XLEN'd4;
-                    use_rd  = 1;
                     is_wstall = 1;
                     `USED_IREG (rd);
                 end
@@ -348,14 +338,11 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.lsu.is_store = 0;
                 op_args.lsu.is_float = opcode[2];
                 op_args.lsu.offset = u_12;
-                use_rd  = 1;
-            `ifdef EXT_F_ENABLE
-                if (opcode[2]) begin
-                    `USED_FREG (rd);
-                end else
-            `endif
-                `USED_IREG (rd);
                 `USED_IREG (rs1);
+                `USED_IREG (rd);
+            `ifdef EXT_F_ENABLE
+                rd_v.rtype = opcode[2];
+            `endif
             end
         `ifdef EXT_F_ENABLE
             INST_FS,
@@ -367,12 +354,10 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.lsu.is_float = opcode[2];
                 op_args.lsu.offset = s_imm;
                 `USED_IREG (rs1);
-            `ifdef EXT_F_ENABLE
-                if (opcode[2]) begin
-                    `USED_FREG (rs2);
-                end else
-            `endif
                 `USED_IREG (rs2);
+            `ifdef EXT_F_ENABLE
+                rs2_v.rtype = opcode[2];
+            `endif
             end
         `ifdef EXT_F_ENABLE
             INST_FMADD,  // 7'b1000011
@@ -385,7 +370,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.fpu.frm = func3;
                 op_args.fpu.fmt[0] = func2[0]; // float / double
                 op_args.fpu.fmt[1] = opcode[3] ^ opcode[2]; // SUB
-                use_rd  = 1;
                 `USED_FREG (rd);
                 `USED_FREG (rs1);
                 `USED_FREG (rs2);
@@ -396,7 +380,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.fpu.frm = func3;
                 op_args.fpu.fmt[0] = func2[0]; // float / double
                 op_args.fpu.fmt[1] = rs2[1];   // int32 / int64
-                use_rd  = 1;
                 case (func5)
                     5'b00000, // FADD
                     5'b00001, // FSUB
@@ -505,7 +488,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                             end
                             3'h2: begin // SPLIT
                                 op_type = INST_OP_BITS'(INST_SFU_SPLIT);
-                                use_rd    = 1;
                                 op_args.wctl.is_neg = rs2[0];
                                 `USED_IREG (rs1);
                                 `USED_IREG (rd);
@@ -573,8 +555,15 @@ module VX_decode import VX_gpu_pkg::*; #(
             trace_ex_type(1, decode_if.data.ex_type);
             `TRACE(1, (", op="))
             trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
-            `TRACE(1, (", tmask=%b, wb=%b, used_rs=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d",
-                decode_if.data.tmask, decode_if.data.wb, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3))
+            `TRACE(1, (", tmask=%b, wb=%b, used_rs=%b, rd=", decode_if.data.tmask, decode_if.data.wb, decode_if.data.used_rs))
+            trace_reg_idx(decode_if.data.rd);
+            `TRACE(1, (", rs1="))
+            trace_reg_idx(decode_if.data.rs1);
+            `TRACE(1, (", rs2="))
+            trace_reg_idx(decode_if.data.rs2);
+            `TRACE(1, (", rs3="))
+            trace_reg_idx(decode_if.data.rs3);
+            `TRACE(1, (", "))
             trace_op_args(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
             `TRACE(1, (" (#%0d)\n", decode_if.data.uuid))
         end
