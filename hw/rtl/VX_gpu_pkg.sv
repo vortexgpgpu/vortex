@@ -58,6 +58,9 @@ package VX_gpu_pkg;
     localparam SIMD_IDX_BITS = `CLOG2(SIMD_COUNT);
     localparam SIMD_IDX_W = `UP(SIMD_IDX_BITS);
 
+    localparam OPC_BITS   = `CLOG2(`NUM_OPCS);
+    localparam OPC_WIDTH  = `UP(OPC_BITS);
+
 `ifndef NDEBUG
 	localparam UUID_WIDTH = 44;
 `else

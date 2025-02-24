@@ -49,22 +49,37 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     `AOS_TO_ITF (per_opc_scoreboard, per_opc_scoreboard_if, `NUM_OPCS, SCB_DATAW)
 
-    VX_stream_arb #(
-        .NUM_INPUTS  (1),
-        .NUM_OUTPUTS (`NUM_OPCS),
-        .DATAW       (SCB_DATAW),
-        .OUT_BUF     (0)
-    ) scboard_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .valid_in   (scoreboard_if.valid),
-        .data_in    (scoreboard_if.data),
-        .ready_in   (scoreboard_if.ready),
-        .valid_out  (per_opc_scoreboard_valid),
-        .data_out   (per_opc_scoreboard_data),
-        .ready_out  (per_opc_scoreboard_ready),
-        `UNUSED_PIN(sel_out)
+    // collector selection
+
+    reg [`NUM_OPCS-1:0] ready_opcs;
+    always @(*) begin
+        ready_opcs = per_opc_scoreboard_ready;
+        if (`NUM_OPCS > 1 && SIMD_COUNT > 1) begin
+            // SFU cannot handle multiple inflight WCTL instructions, always assign them to collector 0
+            if (scoreboard_if.data.ex_type == EX_SFU
+             && inst_sfu_is_wctl(scoreboard_if.data.op_type)) begin
+                ready_opcs[`NUM_OPCS-1:1] = '0; // clear non-zero opcs
+            end
+        end
+    end
+
+    wire opc_sel_valid;
+    wire [`NUM_OPCS-1:0] opc_sel_mask;
+
+    VX_priority_encoder #(
+        .N (`NUM_OPCS)
+    ) opc_sel (
+        .data_in   (ready_opcs),
+        .valid_out (opc_sel_valid),
+        .onehot_out(opc_sel_mask),
+        `UNUSED_PIN (index_out)
     );
+
+    for (genvar i = 0; i < `NUM_OPCS; ++i) begin : g_opc_sel
+        assign per_opc_scoreboard_valid[i] = scoreboard_if.valid && opc_sel_mask[i];
+        assign per_opc_scoreboard_data[i] = scoreboard_if.data;
+        assign scoreboard_if.ready = opc_sel_valid;
+    end
 
     for (genvar i = 0; i < `NUM_OPCS; ++i) begin : g_collectors
         VX_opc_unit #(
@@ -138,5 +153,29 @@ module VX_operands import VX_gpu_pkg::*; #(
         .ready_out  (operands_if.ready),
         `UNUSED_PIN(sel_out)
     );
+
+`ifdef SIMULATION
+    reg [31:0] timeout_ctr;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            timeout_ctr <= '0;
+        end else begin
+            if (writeback_if.valid && ~writeback_if.ready) begin
+            `ifdef DBG_TRACE_PIPELINE
+                `TRACE(4, ("%t: *** %s-stall: wid=%0d, sid=%0d, tmask=%b, PC=0x%0h, cycles=%0d (#%0d)\n",
+                    $time, INSTANCE_ID, wis_to_wid(writeback_if.data.wis, ISSUE_ID), writeback_if.data.sid, writeback_if.data.tmask, {writeback_if.data.PC, 1'b0}, timeout_ctr, writeback_if.data.uuid))
+            `endif
+                timeout_ctr <= timeout_ctr + 1;
+            end else if (writeback_if.valid && writeback_if.ready) begin
+                timeout_ctr <= '0;
+            end
+        end
+    end
+
+    `RUNTIME_ASSERT((timeout_ctr < STALL_TIMEOUT),
+        ("%t: *** %s timeout: wid=%0d, sid=%0d, tmask=%b, PC=0x%0h, cycles=%0d (#%0d)",
+            $time, INSTANCE_ID, wis_to_wid(writeback_if.data.wis, ISSUE_ID), writeback_if.data.sid, writeback_if.data.tmask, {writeback_if.data.PC, 1'b0}, timeout_ctr, writeback_if.data.uuid))
+`endif
 
 endmodule

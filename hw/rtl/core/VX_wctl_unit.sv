@@ -75,41 +75,48 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         assign taken[i] = (execute_if.data.rs1_data[i][0] ^ not_pred);
     end
 
-    reg [`NUM_THREADS-1:0] then_tmask_r, then_tmask_n;
-    reg [`NUM_THREADS-1:0] else_tmask_r, else_tmask_n;
-    always @(*) begin
-        then_tmask_n = then_tmask_r;
-        else_tmask_n = else_tmask_r;
-        if (execute_if.data.sop) begin
-            then_tmask_n = '0;
-            else_tmask_n = '0;
+    logic [`NUM_THREADS-1:0] then_tmask;
+    logic [`NUM_THREADS-1:0] else_tmask;
+
+    if (PID_BITS != 0) begin : g_pid
+        reg [`NUM_THREADS-1:0] then_tmask_r;
+        reg [`NUM_THREADS-1:0] else_tmask_r;
+
+        always @(*) begin
+            then_tmask = execute_if.data.sop ? '0 : then_tmask_r;
+            else_tmask = execute_if.data.sop ? '0 : else_tmask_r;
+            then_tmask[execute_if.data.pid * NUM_LANES +: NUM_LANES] = taken & execute_if.data.tmask;
+            else_tmask[execute_if.data.pid * NUM_LANES +: NUM_LANES] = ~taken & execute_if.data.tmask;
         end
-        then_tmask_n[execute_if.data.pid * NUM_LANES +: NUM_LANES] = taken & execute_if.data.tmask;
-        else_tmask_n[execute_if.data.pid * NUM_LANES +: NUM_LANES] = ~taken & execute_if.data.tmask;
-    end
-    always @(posedge clk) begin
-        if (execute_if.valid) begin
-            then_tmask_r <= then_tmask_n;
-            else_tmask_r <= else_tmask_n;
+
+        always @(posedge clk) begin
+            if (execute_if.valid) begin
+                then_tmask_r <= then_tmask;
+                else_tmask_r <= else_tmask;
+            end
         end
+    end else begin : g_no_pid
+        assign then_tmask = taken & execute_if.data.tmask;
+        assign else_tmask = ~taken & execute_if.data.tmask;
     end
-    wire has_then = (then_tmask_n != 0);
-    wire has_else = (else_tmask_n != 0);
+
+    wire has_then = (then_tmask != 0);
+    wire has_else = (else_tmask != 0);
 
     // tmc / pred
 
-    wire [`NUM_THREADS-1:0] pred_mask = has_then ? then_tmask_n : rs2_data[`NUM_THREADS-1:0];
+    wire [`NUM_THREADS-1:0] pred_mask = has_then ? then_tmask : rs2_data[`NUM_THREADS-1:0];
     assign tmc.valid = (is_tmc || is_pred);
     assign tmc.tmask = is_pred ? pred_mask : rs1_data[`NUM_THREADS-1:0];
 
     // split
 
     wire [`CLOG2(`NUM_THREADS+1)-1:0] then_tmask_cnt, else_tmask_cnt;
-    `POP_COUNT(then_tmask_cnt, then_tmask_n);
-    `POP_COUNT(else_tmask_cnt, else_tmask_n);
+    `POP_COUNT(then_tmask_cnt, then_tmask);
+    `POP_COUNT(else_tmask_cnt, else_tmask);
     wire then_first = (then_tmask_cnt >= else_tmask_cnt);
-    wire [`NUM_THREADS-1:0] taken_tmask = then_first ? then_tmask_n : else_tmask_n;
-    wire [`NUM_THREADS-1:0] ntaken_tmask = then_first ? else_tmask_n : then_tmask_n;
+    wire [`NUM_THREADS-1:0] taken_tmask = then_first ? then_tmask : else_tmask;
+    wire [`NUM_THREADS-1:0] ntaken_tmask = then_first ? else_tmask : then_tmask;
 
     assign split.valid      = is_split;
     assign split.is_dvg     = has_then && has_else;
@@ -126,12 +133,13 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign sjoin.stack_ptr  = rs1_data[DV_STACK_SIZEW-1:0];
 
     // barrier
+
     assign barrier.valid    = is_bar;
     assign barrier.id       = rs1_data[NB_WIDTH-1:0];
 `ifdef GBAR_ENABLE
-    assign barrier.is_global = rs1_data[31];
+    assign barrier.is_global= rs1_data[31];
 `else
-    assign barrier.is_global = 1'b0;
+    assign barrier.is_global= 1'b0;
 `endif
     assign barrier.size_m1  = rs2_data[$bits(barrier.size_m1)-1:0] - $bits(barrier.size_m1)'(1);
     assign barrier.is_noop  = (rs2_data[$bits(barrier.size_m1)-1:0] == $bits(barrier.size_m1)'(1));

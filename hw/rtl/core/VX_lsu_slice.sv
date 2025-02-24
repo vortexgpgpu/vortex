@@ -213,7 +213,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // multi-packet load responses could return out-of-order.
     // we should track and flag SOP and EOP responses.
 
-    if (PID_BITS != 0) begin : g_pids
+    if (PID_BITS != 0) begin : g_pid
         reg [`LSUQ_IN_SIZE-1:0][PID_BITS:0] pkt_ctr;
         reg [`LSUQ_IN_SIZE-1:0] pkt_sop;
         reg [`LSUQ_IN_SIZE-1:0] pkt_eop;
@@ -257,7 +257,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         `RUNTIME_ASSERT(~(mem_req_rd_fire && pkt_eop[reqq_waddr]), ("%t: oops! broken eop request! (#%0d)", $time, execute_if.data.uuid))
         `RUNTIME_ASSERT(~(mem_req_rd_fire && (2**PID_BITS-1) == pkt_ctr[reqq_waddr]), ("%t: oops! broken ctr request! (#%0d)", $time, execute_if.data.uuid))
         `RUNTIME_ASSERT(~(mem_rsp_fire && 0 == pkt_ctr[reqq_raddr]), ("%t: oops! broken ctr response! (#%0d)", $time, rsp_uuid))
-    end else begin : g_no_pids
+    end else begin : g_no_pid
         assign mem_rsp_sop_pkt = mem_rsp_sop;
         assign mem_rsp_eop_pkt = mem_rsp_eop;
         `UNUSED_VAR (reqq_raddr)

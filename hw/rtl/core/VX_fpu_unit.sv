@@ -102,7 +102,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             assign fpu_rsp_pid = fpu_rsp_pid_u;
             assign fpu_rsp_sop = fpu_rsp_sop_u;
             assign fpu_rsp_eop = fpu_rsp_eop_u;
-        end else begin : g_no_fpu_rsp_pid
+        end else begin : g_fpu_rsp_no_pid
             `UNUSED_VAR (fpu_rsp_pid_u)
             `UNUSED_VAR (fpu_rsp_sop_u)
             `UNUSED_VAR (fpu_rsp_eop_u)
@@ -214,7 +214,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         // handle CSR update
         fflags_t fpu_rsp_fflags_q;
 
-        if (PID_BITS != 0) begin : g_pid
+        if (PID_BITS != 0) begin : g_fflags_pid
             fflags_t fpu_rsp_fflags_r;
             always @(posedge clk) begin
                 if (reset) begin
@@ -224,7 +224,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 end
             end
             assign fpu_rsp_fflags_q = fpu_rsp_fflags_r | fpu_rsp_fflags;
-        end else begin : g_no_pid
+        end else begin : g_fflags_no_pid
             assign fpu_rsp_fflags_q = fpu_rsp_fflags;
         end
 
