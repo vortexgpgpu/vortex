@@ -556,13 +556,13 @@ module VX_decode import VX_gpu_pkg::*; #(
             `TRACE(1, (", op="))
             trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
             `TRACE(1, (", tmask=%b, wb=%b, used_rs=%b, rd=", decode_if.data.tmask, decode_if.data.wb, decode_if.data.used_rs))
-            trace_reg_idx(decode_if.data.rd);
+            trace_reg_idx(1, decode_if.data.rd);
             `TRACE(1, (", rs1="))
-            trace_reg_idx(decode_if.data.rs1);
+            trace_reg_idx(1, decode_if.data.rs1);
             `TRACE(1, (", rs2="))
-            trace_reg_idx(decode_if.data.rs2);
+            trace_reg_idx(1, decode_if.data.rs2);
             `TRACE(1, (", rs3="))
-            trace_reg_idx(decode_if.data.rs3);
+            trace_reg_idx(1, decode_if.data.rs3);
             `TRACE(1, (", "))
             trace_op_args(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
             `TRACE(1, (" (#%0d)\n", decode_if.data.uuid))

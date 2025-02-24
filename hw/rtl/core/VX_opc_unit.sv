@@ -42,8 +42,8 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     localparam SCB_DATAW = UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + NUM_OPDS + (NUM_OPDS * REG_IDX_BITS);
     localparam OUT_DATAW = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + INST_ARGS_BITS + 1 + NR_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN) + 1 + 1;
 
-    localparam STATE_IDLE  = 0;
-    localparam STATE_FETCH = 1;
+    localparam STATE_IDLE     = 0;
+    localparam STATE_FETCH    = 1;
     localparam STATE_DISPATCH = 2;
 
     VX_scoreboard_if staging_if();
@@ -85,16 +85,22 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire [NUM_SRC_OPDS-1:0][NR_BITS-1:0] src_regs;
     assign src_regs = {rs3, rs2, rs1};
 
+    wire [NUM_SRC_OPDS-1:0] opds_to_fetch;
+    for (genvar i = 0; i < NUM_SRC_OPDS; ++i) begin : g_opds_to_fetch
+        assign opds_to_fetch[i] = staging_if.data.used_rs[i] && (src_regs[i] != 0);
+    end
+
+    // control state machine
     always @(*) begin
         state_n = state;
         opds_needed_n = opds_needed;
-        opds_busy_n   = opds_busy;
+        opds_busy_n = opds_busy;
         case (state)
         STATE_IDLE: begin
             if (staging_if.valid) begin
-                opds_needed_n = staging_if.data.used_rs;
-                opds_busy_n   = staging_if.data.used_rs;
-                if (staging_if.data.used_rs == 0) begin
+                opds_needed_n = opds_to_fetch;
+                opds_busy_n = opds_to_fetch;
+                if (opds_to_fetch == 0) begin
                     state_n = STATE_DISPATCH;
                 end else begin
                     state_n = STATE_FETCH;
@@ -116,26 +122,14 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             if (output_ready) begin
                 if (simd_eop) begin
                     state_n = STATE_IDLE;
-                end else if (staging_if.data.used_rs != 0) begin
-                    opds_needed_n = staging_if.data.used_rs;
-                    opds_busy_n = staging_if.data.used_rs;
+                end else if (opds_to_fetch != 0) begin
+                    opds_needed_n = opds_to_fetch;
+                    opds_busy_n = opds_to_fetch;
                     state_n = STATE_FETCH;
                 end
             end
         end
         endcase
-    end
-
-    always @(posedge clk) begin
-        if (reset) begin
-            state <= STATE_IDLE;
-            opds_needed <= '0;
-            opds_busy <= '0;
-        end else begin
-            state <= state_n;
-            opds_needed <= opds_needed_n;
-            opds_busy <= opds_busy_n;
-        end
     end
 
     wire [SRC_OPD_WIDTH-1:0] opd_id;
@@ -168,6 +162,19 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             if (gpr_rsp_fire) begin
                 opd_values[gpr_if.rsp_data.opd_id] <= gpr_if.rsp_data.data;
             end
+        end
+    end
+
+    // state machine update
+    always @(posedge clk) begin
+        if (reset) begin
+            state <= STATE_IDLE;
+            opds_needed <= '0;
+            opds_busy <= '0;
+        end else begin
+            state <= state_n;
+            opds_needed <= opds_needed_n;
+            opds_busy <= opds_busy_n;
         end
     end
 

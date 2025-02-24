@@ -15,7 +15,7 @@
 
 `ifdef FPU_DSP
 
-module VX_fpu_cvt import VX_fpu_pkg::*; #(
+module VX_fpu_cvt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter NUM_LANES = 5,
     parameter NUM_PES   = `UP(NUM_LANES / `FCVT_PE_RATIO),
     parameter TAG_WIDTH = 1

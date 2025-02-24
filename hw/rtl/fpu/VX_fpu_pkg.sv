@@ -18,23 +18,23 @@
 
 package VX_fpu_pkg;
 
-typedef struct packed {
-    logic is_normal;
-    logic is_zero;
-    logic is_subnormal;
-    logic is_inf;
-    logic is_nan;
-    logic is_quiet;
-    logic is_signaling;
-} fclass_t;
+    typedef struct packed {
+        logic is_normal;
+        logic is_zero;
+        logic is_subnormal;
+        logic is_inf;
+        logic is_nan;
+        logic is_quiet;
+        logic is_signaling;
+    } fclass_t;
 
-typedef struct packed {
-    logic NV; // 4-Invalid
-    logic DZ; // 3-Divide by zero
-    logic OF; // 2-Overflow
-    logic UF; // 1-Underflow
-    logic NX; // 0-Inexact
-} fflags_t;
+    typedef struct packed {
+        logic NV; // 4-Invalid
+        logic DZ; // 3-Divide by zero
+        logic OF; // 2-Overflow
+        logic UF; // 1-Underflow
+        logic NX; // 0-Inexact
+    } fflags_t;
 
 endpackage
 

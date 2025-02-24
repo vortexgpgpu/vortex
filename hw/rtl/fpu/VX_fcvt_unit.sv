@@ -18,7 +18,7 @@
 
 `ifdef FPU_DSP
 
-module VX_fcvt_unit import VX_fpu_pkg::*; #(
+module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter LATENCY   = 1,
     parameter INT_WIDTH = 32,
     parameter MAN_BITS  = 23,

@@ -18,7 +18,7 @@
 
 `ifdef FPU_DSP
 
-module VX_fp_rounding #(
+module VX_fp_rounding import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter DAT_WIDTH = 2 // Width of the abolute value, without sign bit
 ) (
     // inputs

@@ -140,7 +140,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     // CSR write
 
     assign csr_req_data = execute_if.data.op_args.csr.use_imm ? `XLEN'(csr_imm) : rs1_data[0];
-    assign csr_wr_enable = (csr_write_enable || (| csr_req_data));
+    assign csr_wr_enable = csr_write_enable || (| csr_req_data);
 
     always @(*) begin
         case (execute_if.data.op_type)

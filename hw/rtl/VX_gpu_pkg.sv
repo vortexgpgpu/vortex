@@ -708,13 +708,13 @@ package VX_gpu_pkg;
     import "DPI-C" function void dpi_trace(input int level, input string format /*verilator sformat*/);
 `endif
 
-    task trace_reg_idx(input reg_idx_t reg_id);
+    task trace_reg_idx(input int level, input reg_idx_t reg_id);
         automatic  logic [NR_BITS-1:0] reg_base = to_reg_number(reg_id);
         if (reg_id.ext != 0) begin
             automatic logic [NR_BITS-1:0] reg_ext = reg_base + (1 << reg_id.ext) - 1;
-            `TRACE(0, ("%0d..%0d", reg_base, reg_ext));
+            `TRACE(level, ("%0d..%0d", reg_base, reg_ext));
         end else begin
-            `TRACE(0, ("%0d", reg_base));
+            `TRACE(level, ("%0d", reg_base));
         end
     endtask
 

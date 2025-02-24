@@ -126,7 +126,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         wire ibuffer_fire = ibuffer_if[w].valid && ibuffer_if[w].ready;
         wire staging_fire = staging_if[w].valid && staging_if[w].ready;
 
-        wire writeback_fire = writeback_if.valid
+        wire writeback_fire = writeback_if.valid && writeback_if.ready
                            && (writeback_if.data.wis == ISSUE_WIS_W'(w))
                            && writeback_if.data.eop;
 

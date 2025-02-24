@@ -97,6 +97,11 @@ module VX_nz_iterator #(
 
     end else begin : g_passthru
 
+        `UNUSED_VAR (clk)
+        `UNUSED_VAR (reset)
+        `UNUSED_VAR (next)
+
+        assign valid_out = valid_in;
         assign data_out = data_in[0];
         assign pid = 0;
         assign sop = 1;
