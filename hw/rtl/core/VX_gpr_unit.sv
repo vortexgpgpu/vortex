@@ -50,7 +50,7 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
     localparam PER_BANK_REG_BITS = NR_BITS - BANKID_REG_BITS;
     localparam PER_BANK_WIS_WIDTH = `UP(PER_BANK_WIS_BITS);
     localparam PER_BANK_REG_WIDTH = `UP(PER_BANK_REG_BITS);
-    localparam GPR_REQ_DATAW = SRC_OPD_WIDTH + SIMD_IDX_W + PER_BANK_WIS_WIDTH + PER_BANK_REG_BITS;
+    localparam GPR_REQ_DATAW = SRC_OPD_WIDTH + SIMD_IDX_BITS + PER_BANK_WIS_BITS + PER_BANK_REG_BITS;
     localparam GPR_RSP_DATAW = SRC_OPD_WIDTH + `SIMD_WIDTH * `XLEN;
     localparam BYTEENW = GPR_BANK_DATAW / 8;
 
@@ -60,7 +60,7 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
 
     wire [NUM_BANKS-1:0] bank_req_valid;
     wire [NUM_BANKS-1:0][GPR_REQ_DATAW-1:0] bank_req_data;
-    wire [NUM_BANKS-1:0][1:0] bank_req_opd_id;
+    wire [NUM_BANKS-1:0][SRC_OPD_WIDTH-1:0] bank_req_opd_id;
     wire [NUM_BANKS-1:0][SIMD_IDX_W-1:0] bank_req_sid;
     wire [NUM_BANKS-1:0][PER_BANK_WIS_WIDTH-1:0] bank_req_wis;
     wire [NUM_BANKS-1:0][PER_BANK_REG_WIDTH-1:0] bank_req_id;
@@ -70,7 +70,7 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
 
     wire [NUM_BANKS-1:0] bank_rsp_valid;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] bank_rsp_idx;
-    wire [NUM_BANKS-1:0][1:0] bank_rsp_opd_id;
+    wire [NUM_BANKS-1:0][SRC_OPD_WIDTH-1:0] bank_rsp_opd_id;
     wire [NUM_BANKS-1:0][GPR_RSP_DATAW-1:0] bank_rsp_data;
 
 `ifdef PERF_ENABLE
@@ -82,13 +82,16 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_gpr_req
         assign gpr_req_valid[i] = gpr_if[i].req_valid;
-        assign gpr_req_data[i] = {
-            gpr_if[i].req_data.opd_id,
-            gpr_if[i].req_data.sid,
-            gpr_if[i].req_data.wis[ISSUE_WIS_W-1:BANKID_WIS_BITS],
-            gpr_if[i].req_data.reg_id[NR_BITS-1:BANKID_REG_BITS]
-        };
+        if (SIMD_IDX_BITS != 0 || PER_BANK_WIS_BITS != 0) begin : g_simd_wis
+            wire [SIMD_IDX_BITS + PER_BANK_WIS_BITS-1:0] tmp;
+            `CONCAT(tmp, gpr_if[i].req_data.sid, gpr_if[i].req_data.wis[ISSUE_WIS_W-1:BANKID_WIS_BITS], SIMD_IDX_BITS, PER_BANK_WIS_BITS);
+            assign gpr_req_data[i] = {gpr_if[i].req_data.opd_id, tmp, gpr_if[i].req_data.reg_id[NR_BITS-1:BANKID_REG_BITS]};
+        end else begin : g_no_simd_wis
+            assign gpr_req_data[i] = {gpr_if[i].req_data.opd_id, gpr_if[i].req_data.reg_id[NR_BITS-1:BANKID_REG_BITS]};
+        end
         `CONCAT(gpr_req_bank_idx[i], gpr_if[i].req_data.wis[BANKID_WIS_BITS-1:0], gpr_if[i].req_data.reg_id[BANKID_REG_BITS-1:0], BANKID_WIS_BITS, BANKID_REG_BITS)
+        `UNUSED_VAR (gpr_if[i].req_data.sid)
+        `UNUSED_VAR (gpr_if[i].req_data.wis)
         assign gpr_if[i].req_ready = gpr_req_ready[i];
     end
 
@@ -139,7 +142,18 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
     end
 
     for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_bank_req_data
-        assign {bank_req_opd_id[b], bank_req_sid[b], bank_req_wis[b], bank_req_id[b]} = bank_req_data[b];
+        assign bank_req_opd_id[b] = bank_req_data[b][GPR_REQ_DATAW-1 -: SRC_OPD_WIDTH];
+        if (SIMD_IDX_BITS != 0) begin : g_simd
+            assign bank_req_sid[b] = bank_req_data[b][GPR_REQ_DATAW-SRC_OPD_WIDTH-1 -: SIMD_IDX_BITS];
+        end else begin : g_no_simd
+            assign bank_req_sid[b] = '0;
+        end
+        if (PER_BANK_WIS_BITS != 0) begin : g_wis
+            assign bank_req_wis[b] = bank_req_data[b][GPR_REQ_DATAW-SRC_OPD_WIDTH-SIMD_IDX_BITS-1 -: PER_BANK_WIS_BITS];
+        end else begin : g_no_wis
+            assign bank_req_wis[b] = '0;
+        end
+        assign bank_req_id[b] = bank_req_data[b][PER_BANK_REG_WIDTH-1:0];
     end
 
     for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_banks
@@ -181,7 +195,7 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
         );
 
         VX_pipe_buffer #(
-            .DATAW (REQ_SEL_WIDTH + 2)
+            .DATAW (REQ_SEL_WIDTH + SRC_OPD_WIDTH)
         ) pipe_reg (
             .clk      (clk),
             .reset    (reset),

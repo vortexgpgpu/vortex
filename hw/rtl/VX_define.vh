@@ -208,11 +208,11 @@
 
 `define CONCAT(out, left_in, right_in, L, R) \
     /* verilator lint_off GENUNNAMED */ \
-    if (L == 0) begin \
-        assign out = right_in; \
-    end else if (R == 0) begin \
+    if ((L) != 0 && (R) == 0) begin \
         assign out = left_in; \
-    end else begin \
+    end else if ((L) == 0 && (R) != 0) begin \
+        assign out = right_in; \
+    end else if ((L) != 0 && (R) != 0) begin \
         assign out = {left_in, right_in}; \
     end \
     /* verilator lint_off GENUNNAMED */
