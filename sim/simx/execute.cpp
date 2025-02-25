@@ -1434,7 +1434,6 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       std::abort();
     }
   } break;
-<<<<<<< HEAD
   // case Opcode::EXT2: {
   //   switch (func3) {
   //   case 1:
@@ -1460,7 +1459,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   //     std::abort();
   //   }
   // } break;
-    case Opcode::VOTE: {
+    case Opcode::EXT2: {      //Vote
     bool check;
     bool is_neg = (func3 >= 4);
     func3 = func3%4;
@@ -1468,8 +1467,8 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     trace->alu_type = AluType::ARITH;
     uint32_t address = immsrc & 0xfff;
     auto mask =  warp.ireg_file.at(0)[address];  // Same mask stored in all threads
-    trace->used_iregs.set(rsrc0);
-    trace->used_iregs.set(address);
+    trace->src_regs[0] = {RegType::Integer, rsrc0};
+    trace->src_regs[1] = {RegType::Integer, address};
     switch (func3) {
     case 0:{ //all
       check = true;
@@ -1563,7 +1562,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     } break;
     }
   }break;
-  case Opcode::SHFL:{
+  case Opcode::EXT3:{     //Shfl
     trace->fu_type = FUType::ALU;
     trace->alu_type = AluType::ARITH;
     uint32_t address = immsrc & 0x01f;
@@ -1614,12 +1613,11 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         rd_write = true;
       }
     }
-    trace->used_iregs.set(rsrc0);
-    trace->used_iregs.set(address);
-    trace->used_iregs.set(c_add);
+    trace->src_regs[0] = {RegType::Integer, rsrc0};
+    trace->src_regs[1] = {RegType::Integer, address};
+    trace->src_regs[2] = {RegType::Integer, c_add};
     
   }break;
-=======
   case Opcode::TCU:
   { //TODO - make it data-type flexible
     uint32_t mem_bytes = 1;
@@ -1794,7 +1792,6 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
     executeVector(instr, wid, rsdata, rddata);
   } break;
 #endif
->>>>>>> master
   default:
     std::abort();
   }

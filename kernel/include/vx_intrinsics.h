@@ -222,7 +222,6 @@ inline void vx_fence() {
     __asm__ volatile ("fence iorw, iorw");
 }
 
-<<<<<<< HEAD
 inline void vx_store(int val, int reg){
     switch (reg){
         case 0:
@@ -285,7 +284,7 @@ inline int vx_vote_sync(int mode, int neg, int threadMask, int pred)
     );
 
     return rd;
-=======
+}
 //Matrix load
 inline void vx_matrix_load(unsigned dest, unsigned  addr) 
 {
@@ -302,7 +301,6 @@ inline void vx_matrix_store(unsigned  addr)
 inline void vx_matrix_mul() 
 {
     asm volatile (".insn i 0x7b, 2, x0, 0(x0)");
->>>>>>> master
 }
 
 #ifdef __cplusplus

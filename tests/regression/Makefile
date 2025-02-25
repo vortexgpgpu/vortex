@@ -15,12 +15,9 @@ all:
 	$(MAKE) -C sgemmx
 	$(MAKE) -C conv3x
 	$(MAKE) -C sgemm2x
-<<<<<<< HEAD
 	$(MAKE) -C vote
 	$(MAKE) -C shfl
-=======
 	$(MAKE) -C stencil3d
->>>>>>> master
 
 run-simx:
 	$(MAKE) -C basic run-simx
@@ -36,12 +33,9 @@ run-simx:
 	$(MAKE) -C sgemmx run-simx
 	$(MAKE) -C conv3x run-simx
 	$(MAKE) -C sgemm2x run-simx
-<<<<<<< HEAD
 	$(MAKE) -C vote run-simx
 	$(MAKE) -C shfl run-simx
-=======
 	$(MAKE) -C stencil3d run-simx
->>>>>>> master
 
 run-rtlsim:
 	$(MAKE) -C basic run-rtlsim
@@ -57,29 +51,9 @@ run-rtlsim:
 	$(MAKE) -C sgemmx run-rtlsim
 	$(MAKE) -C conv3x run-rtlsim
 	$(MAKE) -C sgemm2x run-rtlsim
-<<<<<<< HEAD
 	$(MAKE) -C vote run-rtlsim
 	$(MAKE) -C shfl run-rtlsim
-
-run-opae:
-	$(MAKE) -C basic run-opae
-	$(MAKE) -C demo run-opae
-	$(MAKE) -C dogfood run-opae
-	$(MAKE) -C mstress run-opae
-	$(MAKE) -C io_addr run-opae
-	$(MAKE) -C printf run-opae
-	$(MAKE) -C diverge run-opae
-	$(MAKE) -C sort run-opae
-	$(MAKE) -C fence run-opae
-	$(MAKE) -C vecaddx run-opae
-	$(MAKE) -C sgemmx run-opae
-	$(MAKE) -C conv3x run-opae
-	$(MAKE) -C sgemm2x run-opae
-	$(MAKE) -C vote run-opae
-	$(MAKE) -C shfl run-opae
-=======
 	$(MAKE) -C stencil3d run-rtlsim
->>>>>>> master
 
 clean:
 	$(MAKE) -C basic clean
@@ -95,9 +69,6 @@ clean:
 	$(MAKE) -C sgemmx clean
 	$(MAKE) -C conv3x clean
 	$(MAKE) -C sgemm2x clean
-<<<<<<< HEAD
 	$(MAKE) -C vote clean
 	$(MAKE) -C shfl clean
-=======
 	$(MAKE) -C stencil3d clean
->>>>>>> master

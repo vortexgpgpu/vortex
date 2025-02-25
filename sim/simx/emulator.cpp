@@ -210,12 +210,8 @@ instr_trace_t* Emulator::step() {
     std::cout << "Error: invalid instruction 0x" << std::hex << instr_code << ", at PC=0x" << warp.PC << " (#" << std::dec << uuid << ")" << std::endl;
     std::abort();
   }
-<<<<<<< HEAD
-  DP(1, "Instr 0x" << std::hex << instr_code << ": " << *instr);
-=======
 
   DP(1, "Instr 0x" << std::hex << instr_code << ": " << std::dec << *instr);
->>>>>>> master
 
   // Create trace
   auto trace = new instr_trace_t(uuid, arch_);

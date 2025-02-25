@@ -127,7 +127,7 @@ module VX_alu_int #(
     wire vote_any = (is_neg) ? (vote_in != active_t) : (vote_in > NUM_LANES'(1'b0));
     wire vote_uni = ((vote_in == active_t) || (vote_in == NUM_LANES'(1'b0)));
     wire [NUM_LANES-1:0] vote_ballot;
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : vote_result_update
         assign is_pred[i] = alu_in1[i][0] & alu_in2[0][i];
         assign vote_ballot[i] = vote_in[NUM_LANES - 1 -i];
         always @(*) begin
@@ -149,7 +149,7 @@ module VX_alu_int #(
     reg [NUM_LANES-1:0] p;
     reg [NUM_LANES-1:0] active_l;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : shfl_result_update
         assign b[i] = (alu_in2_imm[i]>>5)&(`XLEN'(5'b11111));
         assign segmask[i] = ((alu_in3[i]>>5)&(`XLEN'(5'b11111)));
         assign c[i] = (alu_in3[i] & `XLEN'(5'b11111));
@@ -186,7 +186,7 @@ module VX_alu_int #(
         end
     end
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : Final_results
         wire [`XLEN-1:0] slt_br_result = `XLEN'({is_br_op && ~(| sub_result[i][`XLEN-1:0]), sub_result[i][`XLEN]});
         wire [`XLEN-1:0] sub_slt_br_result = (is_sub_op && ~is_br_op) ? sub_result[i][`XLEN-1:0] : slt_br_result;
         always @(*) begin
