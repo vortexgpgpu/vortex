@@ -45,6 +45,11 @@ struct SFUTraceData : public ITraceData {
 
 struct instr_trace_t {
 public:
+  struct reg_t {
+    RegType  type;
+    uint32_t idx;
+  };
+
   //--
   const uint64_t uuid;
   const Arch&    arch;
@@ -54,16 +59,13 @@ public:
   uint32_t    wid;
   ThreadMask  tmask;
   Word        PC;
-
-  //--
-  uint32_t    rdest;
-  RegType     rdest_type;
   bool        wb;
 
   //--
-  RegMask     used_iregs;
-  RegMask     used_fregs;
-  RegMask     used_vregs;
+  reg_t       dst_reg;
+
+  //--
+  std::vector<reg_t> src_regs;
 
   //-
   FUType     fu_type;
@@ -75,11 +77,12 @@ public:
     AluType  alu_type;
     FpuType  fpu_type;
     SfuType  sfu_type;
+    TCUType  tcu_type; 
   };
 
   ITraceData::Ptr data;
 
-  int pid;
+  int  pid;
   bool sop;
   bool eop;
 
@@ -92,12 +95,9 @@ public:
     , wid(0)
     , tmask(0)
     , PC(0)
-    , rdest(0)
-    , rdest_type(RegType::None)
     , wb(false)
-    , used_iregs(0)
-    , used_fregs(0)
-    , used_vregs(0)
+    , dst_reg({RegType::None, 0})
+    , src_regs(NUM_SRC_REGS, {RegType::None, 0})
     , fu_type(FUType::ALU)
     , unit_type(0)
     , data(nullptr)
@@ -115,12 +115,9 @@ public:
     , wid(rhs.wid)
     , tmask(rhs.tmask)
     , PC(rhs.PC)
-    , rdest(rhs.rdest)
-    , rdest_type(rhs.rdest_type)
     , wb(rhs.wb)
-    , used_iregs(rhs.used_iregs)
-    , used_fregs(rhs.used_fregs)
-    , used_vregs(rhs.used_vregs)
+    , dst_reg(rhs.dst_reg)
+    , src_regs(rhs.src_regs)
     , fu_type(rhs.fu_type)
     , unit_type(rhs.unit_type)
     , data(rhs.data)
@@ -150,10 +147,15 @@ inline std::ostream &operator<<(std::ostream &os, const instr_trace_t& trace) {
   for (uint32_t i = 0, n = trace.arch.num_threads(); i < n; ++i) {
       os << trace.tmask.test(i);
   }
-  os << ", PC=0x" << std::hex << trace.PC;
+  os << ", PC=0x" << std::hex << trace.PC << std::dec;
   os << ", wb=" << trace.wb;
-  if (trace.wb) {
-     os << ", rd=" << trace.rdest_type << std::dec << trace.rdest;
+  if (trace.dst_reg.type != RegType::None) {
+     os << ", rd=" << trace.dst_reg.type << trace.dst_reg.idx;
+  }
+  for (uint32_t i = 0; i < trace.src_regs.size(); ++i) {
+    if (trace.src_regs[i].type != RegType::None) {
+      os << ", rs" << i << "=" << trace.src_regs[i].type << trace.src_regs[i].idx;
+    }
   }
   os << ", ex=" << trace.fu_type;
   if (trace.pid != -1) {
@@ -161,7 +163,7 @@ inline std::ostream &operator<<(std::ostream &os, const instr_trace_t& trace) {
     os << ", sop=" << trace.sop;
     os << ", eop=" << trace.eop;
   }
-  os << " (#" << std::dec << trace.uuid << ")";
+  os << " (#" << trace.uuid << ")";
   return os;
 }
 

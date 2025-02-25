@@ -33,7 +33,13 @@ The recommended method to enable debugging is to pass the `--debug` flag to `bla
     // Running demo program on rtlsim in debug mode
     $ ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=1
 
-A debug trace `run.log` is generated in the current directory during the program execution. The trace includes important states of the simulated processor (memory, caches, pipeline, stalls, etc..). A waveform trace `trace.vcd` is also generated in the current directory during the program execution. You can visualize the waveform trace using any tool that can open VCD files (Modelsim, Quartus, Vivado, etc..). [GTKwave] (http://gtkwave.sourceforge.net) is a great open-source scope analyzer that also works with VCD files.
+A debug trace `run.log` is generated in the current directory during the program execution. The trace includes important states of the simulated processor (memory, caches, pipeline, stalls, etc..). A waveform trace `trace.vcd` is also generated in the current directory during the program execution.
+By default all library modules unde the /libs/ folder are excluded from the trace to reduce the waveform file size, you can chnage that behavoir by either explicitly commenting out `TRACING_OFF`/`TRACING_ON` inside a lib module source (e.g. VX_stream_buffer.sv) or simply enabling a full trace using the following command.
+
+    // Debugging the demo program with rtlsim in full tracing mode
+    $ CONFIGS="-DTRACING_ALL" ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=1
+
+You can visualize the waveform trace using any tool that can open VCD files (Modelsim, Quartus, Vivado, etc..). [GTKwave] (http://gtkwave.sourceforge.net) is a great open-source scope analyzer that also works with VCD files.
 
 ## FPGA Debugging
 
@@ -53,9 +59,9 @@ A waveform trace `trace.vcd` will be generated in the current directory during t
 ## Analyzing Vortex trace log
 
 When debugging Vortex RTL or SimX Simulator, reading the trace run.log file can be overwhelming when the trace gets really large.
-We provide a trace sanitizer tool under ./hw/scripts/trace_csv.py that you can use to convert the large trace into a CSV file containing all the instructions that executed with their source and destination operands. To increase compatibility between traces you will need to initialize RTLSIM's GPRs to zero by defining GPR_RESET.
+We provide a trace sanitizer tool under ./hw/scripts/trace_csv.py that you can use to convert the large trace into a CSV file containing all the instructions that executed with their source and destination operands.
 
-    $ CONFIGS="-DGPR_RESET" ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=3 --log=run_rtlsim.log
+    $ ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=3 --log=run_rtlsim.log
     $ ./ci/trace_csv.py -trtlsim run_rtlsim.log -otrace_rtlsim.csv
 
     $ ./ci/blackbox.sh --driver=simx --app=demo --debug=3 --log=run_simx.log

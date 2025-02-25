@@ -25,6 +25,7 @@ class ProcessorImpl {
 public:
   struct PerfStats {
     CacheSim::PerfStats l3cache;
+    MemSim::PerfStats memsim;
     uint64_t mem_reads;
     uint64_t mem_writes;
     uint64_t mem_latency;
@@ -35,9 +36,13 @@ public:
 
   void attach_ram(RAM* mem);
 
-  void run();
+  int run();
 
   void dcr_write(uint32_t addr, uint32_t value);
+
+#ifdef VM_ENABLE
+  void set_satp(uint64_t satp);
+#endif
 
   PerfStats perf_stats() const;
 

@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,10 +18,11 @@ module VX_stream_arb #(
     parameter NUM_INPUTS    = 1,
     parameter NUM_OUTPUTS   = 1,
     parameter DATAW         = 1,
-    parameter `STRING ARBITER = "P",
+    parameter `STRING ARBITER = "R",
     parameter MAX_FANOUT    = `MAX_FANOUT,
-    parameter OUT_BUF       = 0 ,
-    parameter NUM_REQS      = `CDIV(NUM_INPUTS, NUM_OUTPUTS),
+    parameter OUT_BUF       = 0,
+    parameter NUM_REQS      = (NUM_INPUTS > NUM_OUTPUTS) ? `CDIV(NUM_INPUTS, NUM_OUTPUTS) : `CDIV(NUM_OUTPUTS, NUM_INPUTS),
+    parameter SEL_COUNT     = `MIN(NUM_INPUTS, NUM_OUTPUTS),
     parameter LOG_NUM_REQS  = `CLOG2(NUM_REQS),
     parameter NUM_REQS_W    = `UP(LOG_NUM_REQS)
 ) (
@@ -34,97 +35,66 @@ module VX_stream_arb #(
 
     output wire [NUM_OUTPUTS-1:0]            valid_out,
     output wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out,
-    output wire [NUM_OUTPUTS-1:0][NUM_REQS_W-1:0] sel_out,
-    input  wire [NUM_OUTPUTS-1:0]            ready_out
+    input  wire [NUM_OUTPUTS-1:0]            ready_out,
+
+    output wire [SEL_COUNT-1:0][NUM_REQS_W-1:0] sel_out
 );
-    if (NUM_INPUTS > NUM_OUTPUTS) begin
+    if (NUM_INPUTS > NUM_OUTPUTS) begin : g_input_select
 
-        if (NUM_OUTPUTS > 1) begin
+        // #Inputs > #Outputs
 
-            // (#inputs > #outputs) and (#outputs > 1)
-            
-            for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
+        if (MAX_FANOUT != 0 && (NUM_REQS > (MAX_FANOUT + MAX_FANOUT /2))) begin : g_fanout
 
-                localparam BATCH_BEGIN = i * NUM_REQS;
-                localparam BATCH_END   = `MIN(BATCH_BEGIN + NUM_REQS, NUM_INPUTS);
-                localparam BATCH_SIZE  = BATCH_END - BATCH_BEGIN;
+            localparam NUM_SLICES    = `CDIV(NUM_REQS, MAX_FANOUT);
+            localparam LOG_NUM_REQS2 = `CLOG2(MAX_FANOUT);
+            localparam LOG_NUM_REQS3 = `CLOG2(NUM_SLICES);
+            localparam DATAW2 = DATAW + LOG_NUM_REQS2;
 
-                `RESET_RELAY (slice_reset, reset);
+            wire [NUM_SLICES-1:0][NUM_OUTPUTS-1:0] valid_tmp;
+            wire [NUM_SLICES-1:0][NUM_OUTPUTS-1:0][DATAW2-1:0] data_tmp;
+            wire [NUM_SLICES-1:0][NUM_OUTPUTS-1:0] ready_tmp;
+
+            for (genvar s = 0; s < NUM_SLICES; ++s) begin : g_slice_arbs
+
+                localparam SLICE_STRIDE= MAX_FANOUT * NUM_OUTPUTS;
+                localparam SLICE_BEGIN = s * SLICE_STRIDE;
+                localparam SLICE_END   = `MIN(SLICE_BEGIN + SLICE_STRIDE, NUM_INPUTS);
+                localparam SLICE_SIZE  = SLICE_END - SLICE_BEGIN;
+
+                wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_tmp_u;
+                wire [NUM_OUTPUTS-1:0][LOG_NUM_REQS2-1:0] sel_tmp_u;
 
                 VX_stream_arb #(
-                    .NUM_INPUTS  (BATCH_SIZE),
-                    .NUM_OUTPUTS (1),
+                    .NUM_INPUTS  (SLICE_SIZE),
+                    .NUM_OUTPUTS (NUM_OUTPUTS),
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
                     .MAX_FANOUT  (MAX_FANOUT),
-                    .OUT_BUF     (OUT_BUF)
-                ) arb_slice (
+                    .OUT_BUF     (3)
+                ) fanout_slice_arb (
                     .clk       (clk),
-                    .reset     (slice_reset),
-                    .valid_in  (valid_in[BATCH_END-1: BATCH_BEGIN]),
-                    .ready_in  (ready_in[BATCH_END-1: BATCH_BEGIN]),
-                    .data_in   (data_in[BATCH_END-1: BATCH_BEGIN]),
-                    .data_out  (data_out[i]),
-                    .sel_out   (sel_out[i]),
-                    .valid_out (valid_out[i]),
-                    .ready_out (ready_out[i])
+                    .reset     (reset),
+                    .valid_in  (valid_in[SLICE_END-1: SLICE_BEGIN]),
+                    .data_in   (data_in[SLICE_END-1: SLICE_BEGIN]),
+                    .ready_in  (ready_in[SLICE_END-1: SLICE_BEGIN]),
+                    .valid_out (valid_tmp[s]),
+                    .data_out  (data_tmp_u),
+                    .ready_out (ready_tmp[s]),
+                    .sel_out   (sel_tmp_u)
                 );
-            end
 
-        end else if (MAX_FANOUT != 0 && (NUM_INPUTS > MAX_FANOUT)) begin
-
-            // (#inputs > max_fanout) and (#outputs == 1)
-
-            localparam NUM_BATCHES = `CDIV(NUM_INPUTS, MAX_FANOUT);
-            localparam LOG_NUM_REQS2 = `CLOG2(MAX_FANOUT);
-            localparam LOG_NUM_REQS3 = `CLOG2(NUM_BATCHES);
-
-            wire [NUM_BATCHES-1:0]                  valid_tmp;
-            wire [NUM_BATCHES-1:0][DATAW+LOG_NUM_REQS2-1:0] data_tmp;
-            wire [NUM_BATCHES-1:0]                  ready_tmp;            
-                        
-            for (genvar i = 0; i < NUM_BATCHES; ++i) begin
-
-                localparam BATCH_BEGIN = i * MAX_FANOUT;
-                localparam BATCH_END   = `MIN(BATCH_BEGIN + MAX_FANOUT, NUM_INPUTS);
-                localparam BATCH_SIZE  = BATCH_END - BATCH_BEGIN;
-
-                wire [DATAW-1:0] data_tmp_u;
-                wire [`LOG2UP(BATCH_SIZE)-1:0] sel_tmp_u;
-
-                `RESET_RELAY (slice_reset, reset);
-
-                if (MAX_FANOUT != 1) begin
-                    VX_stream_arb #(
-                        .NUM_INPUTS  (BATCH_SIZE),
-                        .NUM_OUTPUTS (1),   
-                        .DATAW       (DATAW),
-                        .ARBITER     (ARBITER),
-                        .MAX_FANOUT  (MAX_FANOUT),
-                        .OUT_BUF     (OUT_BUF)
-                    ) fanout_slice_arb (
-                        .clk       (clk),
-                        .reset     (slice_reset),
-                        .valid_in  (valid_in[BATCH_END-1: BATCH_BEGIN]),
-                        .data_in   (data_in[BATCH_END-1: BATCH_BEGIN]),
-                        .ready_in  (ready_in[BATCH_END-1: BATCH_BEGIN]),   
-                        .valid_out (valid_tmp[i]),   
-                        .data_out  (data_tmp_u),
-                        .sel_out   (sel_tmp_u),
-                        .ready_out (ready_tmp[i])
-                    );
+                for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_data_tmp
+                    assign data_tmp[s][o] = {data_tmp_u[o], sel_tmp_u[o]};
                 end
-
-                assign data_tmp[i] = {data_tmp_u, LOG_NUM_REQS2'(sel_tmp_u)};
             end
 
-            wire [DATAW+LOG_NUM_REQS2-1:0] data_out_u;
-            wire [LOG_NUM_REQS3-1:0] sel_out_u;
+            wire [NUM_OUTPUTS-1:0][DATAW2-1:0] data_out_u;
+            wire [NUM_OUTPUTS-1:0][LOG_NUM_REQS3-1:0] sel_out_u;
 
             VX_stream_arb #(
-                .NUM_INPUTS  (NUM_BATCHES),
-                .NUM_OUTPUTS (1),   
-                .DATAW       (DATAW + LOG_NUM_REQS2),
+                .NUM_INPUTS  (NUM_SLICES * NUM_OUTPUTS),
+                .NUM_OUTPUTS (NUM_OUTPUTS),
+                .DATAW       (DATAW2),
                 .ARBITER     (ARBITER),
                 .MAX_FANOUT  (MAX_FANOUT),
                 .OUT_BUF     (OUT_BUF)
@@ -140,229 +110,256 @@ module VX_stream_arb #(
                 .ready_out (ready_out)
             );
 
-            assign data_out = data_out_u[LOG_NUM_REQS2 +: DATAW];
-            assign sel_out = {sel_out_u, data_out_u[0 +: LOG_NUM_REQS2]};
+            for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_data_out
+                assign sel_out[o]  = {sel_out_u[o], data_out_u[o][LOG_NUM_REQS2-1:0]};
+                assign data_out[o] = data_out_u[o][DATAW2-1:LOG_NUM_REQS2];
+            end
 
-        end else begin
+        end else begin : g_arbiter
 
-            // (#inputs <= max_fanout) and (#outputs == 1)
-
-            wire                    valid_in_r;
-            wire [DATAW-1:0]        data_in_r;
-            wire                    ready_in_r;
-        
+            wire [NUM_REQS-1:0]     arb_requests;
             wire                    arb_valid;
             wire [NUM_REQS_W-1:0]   arb_index;
             wire [NUM_REQS-1:0]     arb_onehot;
             wire                    arb_ready;
 
+            for (genvar r = 0; r < NUM_REQS; ++r) begin : g_requests
+                wire [NUM_OUTPUTS-1:0] requests;
+                for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_o
+                    localparam i = r * NUM_OUTPUTS + o;
+                    assign requests[o] = valid_in[i];
+                end
+                assign arb_requests[r] = (| requests);
+            end
+
             VX_generic_arbiter #(
-                .NUM_REQS    (NUM_REQS),
-                .LOCK_ENABLE (1),
-                .TYPE        (ARBITER)
+                .NUM_REQS (NUM_REQS),
+                .TYPE     (ARBITER)
             ) arbiter (
                 .clk          (clk),
                 .reset        (reset),
-                .requests     (valid_in),
+                .requests     (arb_requests),
                 .grant_valid  (arb_valid),
                 .grant_index  (arb_index),
                 .grant_onehot (arb_onehot),
-                .grant_unlock (arb_ready)
+                .grant_ready  (arb_ready)
             );
 
-            assign valid_in_r = arb_valid;
-            assign data_in_r  = data_in[arb_index];
-            assign arb_ready  = ready_in_r;
+            wire [NUM_OUTPUTS-1:0] valid_out_w;
+            wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out_w;
+            wire [NUM_OUTPUTS-1:0] ready_out_w;
 
-            for (genvar i = 0; i < NUM_REQS; ++i) begin
-                assign ready_in[i] = ready_in_r & arb_onehot[i];
+            for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_data_out_w
+                wire [NUM_REQS-1:0] valid_in_w;
+                wire [NUM_REQS-1:0][DATAW-1:0] data_in_w;
+                for (genvar r = 0; r < NUM_REQS; ++r) begin : g_r
+                    localparam i = r * NUM_OUTPUTS + o;
+                    if (r < NUM_INPUTS) begin : g_valid
+                        assign valid_in_w[r] = valid_in[i];
+                        assign data_in_w[r]  = data_in[i];
+                    end else begin : g_padding
+                        assign valid_in_w[r] = 0;
+                        assign data_in_w[r]  = '0;
+                    end
+                end
+                assign valid_out_w[o] = (NUM_OUTPUTS == 1) ? arb_valid : (| (valid_in_w & arb_onehot));
+                assign data_out_w[o]  = data_in_w[arb_index];
             end
 
-            VX_elastic_buffer #(
-                .DATAW   (LOG_NUM_REQS + DATAW),
-                .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
-                .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
-            ) out_buf (
-                .clk       (clk),
-                .reset     (reset),
-                .valid_in  (valid_in_r),
-                .ready_in  (ready_in_r),
-                .data_in   ({arb_index, data_in_r}),
-                .data_out  ({sel_out, data_out}),
-                .valid_out (valid_out),
-                .ready_out (ready_out)
-            );
+            for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_ready_in
+                localparam o = i % NUM_OUTPUTS;
+                localparam r = i / NUM_OUTPUTS;
+                assign ready_in[i] = ready_out_w[o] && arb_onehot[r];
+            end
+
+            assign arb_ready = (| ready_out_w);
+
+            for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_out_buf
+                VX_elastic_buffer #(
+                    .DATAW   (LOG_NUM_REQS + DATAW),
+                    .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+                    .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
+                    .LUTRAM  (`TO_OUT_BUF_LUTRAM(OUT_BUF))
+                ) out_buf (
+                    .clk       (clk),
+                    .reset     (reset),
+                    .valid_in  (valid_out_w[o]),
+                    .ready_in  (ready_out_w[o]),
+                    .data_in   ({arb_index, data_out_w[o]}),
+                    .data_out  ({sel_out[o], data_out[o]}),
+                    .valid_out (valid_out[o]),
+                    .ready_out (ready_out[o])
+                );
+            end
         end
 
-    end else if (NUM_OUTPUTS > NUM_INPUTS) begin
+    end else if (NUM_INPUTS < NUM_OUTPUTS) begin : g_output_select
 
-        if (NUM_INPUTS > 1) begin
+        // #Inputs < #Outputs
 
-            // (#inputs > 1) and (#outputs > #inputs)
+        if (MAX_FANOUT != 0 && (NUM_REQS > (MAX_FANOUT + MAX_FANOUT /2))) begin : g_fanout
 
-            for (genvar i = 0; i < NUM_INPUTS; ++i) begin
+            localparam NUM_SLICES    = `CDIV(NUM_REQS, MAX_FANOUT);
+            localparam LOG_NUM_REQS2 = `CLOG2(MAX_FANOUT);
+            localparam LOG_NUM_REQS3 = `CLOG2(NUM_SLICES);
 
-                localparam BATCH_BEGIN = i * NUM_REQS;
-                localparam BATCH_END   = `MIN(BATCH_BEGIN + NUM_REQS, NUM_OUTPUTS);
-                localparam BATCH_SIZE  = BATCH_END - BATCH_BEGIN;
-
-                `RESET_RELAY (slice_reset, reset);
-
-                VX_stream_arb #(
-                    .NUM_INPUTS  (1),
-                    .NUM_OUTPUTS (BATCH_SIZE),
-                    .DATAW       (DATAW),
-                    .ARBITER     (ARBITER),
-                    .MAX_FANOUT  (MAX_FANOUT),
-                    .OUT_BUF     (OUT_BUF)
-                ) arb_slice (
-                    .clk       (clk),
-                    .reset     (slice_reset),
-                    .valid_in  (valid_in[i]),
-                    .ready_in  (ready_in[i]),
-                    .data_in   (data_in[i]),
-                    .data_out  (data_out[BATCH_END-1: BATCH_BEGIN]),
-                    .valid_out (valid_out[BATCH_END-1: BATCH_BEGIN]),
-                    .ready_out (ready_out[BATCH_END-1: BATCH_BEGIN]),
-                    `UNUSED_PIN (sel_out)
-                );
-
-                for (genvar j = BATCH_BEGIN; j < BATCH_END; ++j) begin
-                    assign sel_out[j] = i;
-                end
-            end
-
-        end else if (MAX_FANOUT != 0 && (NUM_OUTPUTS > MAX_FANOUT)) begin
-
-            // (#inputs == 1) and (#outputs > max_fanout)
-
-            localparam NUM_BATCHES = `CDIV(NUM_OUTPUTS, MAX_FANOUT);
-
-            wire [NUM_BATCHES-1:0]            valid_tmp;
-            wire [NUM_BATCHES-1:0][DATAW-1:0] data_tmp;
-            wire [NUM_BATCHES-1:0]            ready_tmp;
+            wire [NUM_SLICES-1:0][NUM_INPUTS-1:0] valid_tmp;
+            wire [NUM_SLICES-1:0][NUM_INPUTS-1:0][DATAW-1:0] data_tmp;
+            wire [NUM_SLICES-1:0][NUM_INPUTS-1:0] ready_tmp;
+            wire [NUM_INPUTS-1:0][LOG_NUM_REQS3-1:0] sel_tmp;
 
             VX_stream_arb #(
-                .NUM_INPUTS  (1),
-                .NUM_OUTPUTS (NUM_BATCHES),
+                .NUM_INPUTS  (NUM_INPUTS),
+                .NUM_OUTPUTS (NUM_SLICES * NUM_INPUTS),
                 .DATAW       (DATAW),
                 .ARBITER     (ARBITER),
                 .MAX_FANOUT  (MAX_FANOUT),
-                .OUT_BUF     (OUT_BUF)
+                .OUT_BUF     (3)
             ) fanout_fork_arb (
                 .clk       (clk),
                 .reset     (reset),
                 .valid_in  (valid_in),
                 .ready_in  (ready_in),
-                .data_in   (data_in),               
+                .data_in   (data_in),
                 .data_out  (data_tmp),
                 .valid_out (valid_tmp),
                 .ready_out (ready_tmp),
-                `UNUSED_PIN (sel_out)
+                .sel_out   (sel_tmp)
             );
-            
-            for (genvar i = 0; i < NUM_BATCHES; ++i) begin
 
-                localparam BATCH_BEGIN = i * MAX_FANOUT;
-                localparam BATCH_END   = `MIN(BATCH_BEGIN + MAX_FANOUT, NUM_OUTPUTS);
-                localparam BATCH_SIZE  = BATCH_END - BATCH_BEGIN;
+            wire [NUM_SLICES-1:0][NUM_INPUTS-1:0][LOG_NUM_REQS2-1:0] sel_out_w;
 
-                `RESET_RELAY (slice_reset, reset);
+            for (genvar s = 0; s < NUM_SLICES; ++s) begin : g_slice_arbs
+
+                localparam SLICE_STRIDE= MAX_FANOUT * NUM_INPUTS;
+                localparam SLICE_BEGIN = s * SLICE_STRIDE;
+                localparam SLICE_END   = `MIN(SLICE_BEGIN + SLICE_STRIDE, NUM_OUTPUTS);
+                localparam SLICE_SIZE  = SLICE_END - SLICE_BEGIN;
+
+                wire [NUM_INPUTS-1:0][LOG_NUM_REQS2-1:0] sel_out_u;
 
                 VX_stream_arb #(
-                    .NUM_INPUTS  (1),
-                    .NUM_OUTPUTS (BATCH_SIZE), 
+                    .NUM_INPUTS  (NUM_INPUTS),
+                    .NUM_OUTPUTS (SLICE_SIZE),
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
                     .MAX_FANOUT  (MAX_FANOUT),
                     .OUT_BUF     (OUT_BUF)
                 ) fanout_slice_arb (
                     .clk       (clk),
-                    .reset     (slice_reset),
-                    .valid_in  (valid_tmp[i]),
-                    .ready_in  (ready_tmp[i]),
-                    .data_in   (data_tmp[i]),
-                    .data_out  (data_out[BATCH_END-1: BATCH_BEGIN]),
-                    .valid_out (valid_out[BATCH_END-1: BATCH_BEGIN]),
-                    .ready_out (ready_out[BATCH_END-1: BATCH_BEGIN]),
-                    `UNUSED_PIN (sel_out)
+                    .reset     (reset),
+                    .valid_in  (valid_tmp[s]),
+                    .ready_in  (ready_tmp[s]),
+                    .data_in   (data_tmp[s]),
+                    .data_out  (data_out[SLICE_END-1: SLICE_BEGIN]),
+                    .valid_out (valid_out[SLICE_END-1: SLICE_BEGIN]),
+                    .ready_out (ready_out[SLICE_END-1: SLICE_BEGIN]),
+                    .sel_out   (sel_out_w[s])
                 );
             end
 
-        end else begin
+            for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_sel_out
+                assign sel_out[i] = {sel_tmp[i], sel_out_w[sel_tmp[i]][i]};
+            end
 
-            // (#inputs == 1) and (#outputs <= max_fanout)
+        end else begin : g_arbiter
 
-            wire [NUM_OUTPUTS-1:0]  ready_in_r;        
-        
-            wire [NUM_OUTPUTS-1:0]  arb_requests;
+            wire [NUM_REQS-1:0]     arb_requests;
             wire                    arb_valid;
-            wire [NUM_OUTPUTS-1:0]  arb_onehot;
+            wire [NUM_REQS_W-1:0]   arb_index;
+            wire [NUM_REQS-1:0]     arb_onehot;
             wire                    arb_ready;
 
+            for (genvar r = 0; r < NUM_REQS; ++r) begin : g_requests
+                wire [NUM_INPUTS-1:0] requests;
+                for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_i
+                    localparam o = r * NUM_INPUTS + i;
+                    assign requests[i] = ready_out[o];
+                end
+                assign arb_requests[r] = (| requests);
+            end
+
             VX_generic_arbiter #(
-                .NUM_REQS    (NUM_OUTPUTS),
-                .LOCK_ENABLE (1),
-                .TYPE        (ARBITER)
+                .NUM_REQS (NUM_REQS),
+                .TYPE     (ARBITER)
             ) arbiter (
                 .clk          (clk),
                 .reset        (reset),
                 .requests     (arb_requests),
                 .grant_valid  (arb_valid),
-                `UNUSED_PIN (grant_index),
+                .grant_index  (arb_index),
                 .grant_onehot (arb_onehot),
-                .grant_unlock (arb_ready)
+                .grant_ready  (arb_ready)
             );
 
-            assign arb_requests = ready_in_r;
-            assign arb_ready    = valid_in[0];
-            assign ready_in     = arb_valid;
+            wire [NUM_OUTPUTS-1:0] valid_out_w;
+            wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out_w;
+            wire [NUM_OUTPUTS-1:0] ready_out_w;
 
-            for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
+            for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_data_out_w
+                localparam i = o % NUM_INPUTS;
+                localparam r = o / NUM_INPUTS;
+                assign valid_out_w[o] = valid_in[i] && arb_onehot[r];
+                assign data_out_w[o]  = data_in[i];
+            end
+
+            for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_ready_in
+                wire [NUM_REQS-1:0] ready_out_s;
+                for (genvar r = 0; r < NUM_REQS; ++r) begin : g_r
+                    localparam o = r * NUM_INPUTS + i;
+                    assign ready_out_s[r] = ready_out_w[o];
+                end
+                assign ready_in[i] = (NUM_INPUTS == 1) ? arb_valid : (| (ready_out_s & arb_onehot));
+            end
+
+            assign arb_ready = (| valid_in);
+
+            for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_out_buf
                 VX_elastic_buffer #(
-                    .DATAW    (DATAW),
-                    .SIZE     (`TO_OUT_BUF_SIZE(OUT_BUF)),
-                    .OUT_REG  (`TO_OUT_BUF_REG(OUT_BUF))
+                    .DATAW   (DATAW),
+                    .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+                    .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
+                    .LUTRAM  (`TO_OUT_BUF_LUTRAM(OUT_BUF))
                 ) out_buf (
                     .clk       (clk),
                     .reset     (reset),
-                    .valid_in  (valid_in && arb_onehot[i]),
-                    .ready_in  (ready_in_r[i]),
-                    .data_in   (data_in),
-                    .data_out  (data_out[i]),
-                    .valid_out (valid_out[i]),
-                    .ready_out (ready_out[i])
+                    .valid_in  (valid_out_w[o]),
+                    .ready_in  (ready_out_w[o]),
+                    .data_in   (data_out_w[o]),
+                    .data_out  (data_out[o]),
+                    .valid_out (valid_out[o]),
+                    .ready_out (ready_out[o])
                 );
+            end
+
+            for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_sel_out
+                assign sel_out[i] = arb_index;
             end
         end
 
-        assign sel_out = 0;
-    
-    end else begin
+    end else begin : g_passthru
 
         // #Inputs == #Outputs
 
-        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-
-            `RESET_RELAY_EN (out_buf_reset, reset, (NUM_OUTPUTS > 1));
-
+        for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_out_buf
             VX_elastic_buffer #(
                 .DATAW   (DATAW),
                 .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
-                .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
+                .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF)),
+                .LUTRAM  (`TO_OUT_BUF_LUTRAM(OUT_BUF))
             ) out_buf (
                 .clk       (clk),
-                .reset     (out_buf_reset),
-                .valid_in  (valid_in[i]),
-                .ready_in  (ready_in[i]),
-                .data_in   (data_in[i]),
-                .data_out  (data_out[i]),
-                .valid_out (valid_out[i]),
-                .ready_out (ready_out[i])
+                .reset     (reset),
+                .valid_in  (valid_in[o]),
+                .ready_in  (ready_in[o]),
+                .data_in   (data_in[o]),
+                .data_out  (data_out[o]),
+                .valid_out (valid_out[o]),
+                .ready_out (ready_out[o])
             );
-            assign sel_out[i] = NUM_REQS_W'(i);
+            assign sel_out[o] = NUM_REQS_W'(0);
         end
     end
-    
+
 endmodule
 `TRACING_ON

@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,43 +18,61 @@
 namespace vortex {
 
 class Operand : public SimObject<Operand> {
+private:
+		static constexpr uint32_t NUM_BANKS = 4;
+		uint32_t total_stalls_ = 0;
+
 public:
     SimPort<instr_trace_t*> Input;
     SimPort<instr_trace_t*> Output;
 
-    Operand(const SimContext& ctx) 
-			: SimObject<Operand>(ctx, "Operand") 
+    Operand(const SimContext& ctx)
+			: SimObject<Operand>(ctx, "Operand")
 			, Input(this)
 			, Output(this)
-    {}
+    {
+			total_stalls_ = 0;
+		}
 
     virtual ~Operand() {}
 
-    virtual void reset() {}
+    virtual void reset() {
+			total_stalls_ = 0;
+		}
 
     virtual void tick() {
 			if (Input.empty())
 				return;
 			auto trace = Input.front();
 
-			int delay = 1;
-			for (int i = 0; i < MAX_NUM_REGS; ++i) {
-				bool is_iregs = trace->used_iregs.test(i);
-				bool is_fregs = trace->used_fregs.test(i);
-				bool is_vregs = trace->used_vregs.test(i);
-				if (is_iregs || is_fregs || is_vregs) {
-					if (is_iregs && i == 0)
-						continue;
-					++delay;
+			uint32_t stalls = 0;
+
+			for (int i = 0; i < NUM_SRC_REGS; ++i) {
+				for (int j = i + 1; j < NUM_SRC_REGS; ++j) {
+					int bank_i = trace->src_regs[i].idx % NUM_BANKS;
+					int bank_j = trace->src_regs[j].idx % NUM_BANKS;
+					if ((trace->src_regs[i].type != RegType::None)
+					 && (trace->src_regs[j].type != RegType::None)
+					 && (trace->src_regs[i].idx != 0)
+					 && (trace->src_regs[j].idx != 0)
+					 && bank_i == bank_j) {
+						++stalls;
+					}
 				}
 			}
 
-			Output.push(trace, delay);
-			
+			total_stalls_ += stalls;
+
+			Output.push(trace, 2 + stalls);
+
 			DT(3, "pipeline-operands: " << *trace);
 
 			Input.pop();
     };
+
+		uint32_t total_stalls() const {
+			return total_stalls_;
+		}
 };
 
 }

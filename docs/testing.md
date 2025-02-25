@@ -2,7 +2,7 @@
 
 ## Running a Vortex application
 
-The framework provides a utility script: blackbox.sh under the /ci/ folder for executing applications in the tests tree.
+The framework provides a utility script: blackbox.sh under the /ci/ folder for executing applications in the tests tree. It gets copied into the `build` directory with all the environment variables resolved, so you should run it from the `build` directory as follows:
 You can query the commandline options of the tool using:
 
     $ ./ci/blackbox.sh --help
@@ -49,4 +49,4 @@ Compile your test: `$ make -C tests/regression/<test-name>`
 Run your test: `$ ./ci/blackbox.sh --driver=simx --app=<test-name> --debug`
 
 ## Adding Your Tests to the CI Pipeline
-See `continuous_integration.md`
+If you are a contributor, then you will need to add tests that integrate into the continuous integration pipeline. Remember, Pull Requests cannot be merged unless new code has tests and existing tests do not regress. Furthermore, if you are contributing a new feature, it is recommended that you add the ability to enable / disable the new feature that you are adding. See more at [contributing.md](contributing.md) and [continuous_integration.md](continuous_integration.md).

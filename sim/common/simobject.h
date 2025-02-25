@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -27,9 +27,9 @@ class SimObjectBase;
 ///////////////////////////////////////////////////////////////////////////////
 
 class SimPortBase {
-public:  
+public:
   virtual ~SimPortBase() {}
-  
+
   SimObjectBase* module() const {
     return module_;
   }
@@ -53,25 +53,25 @@ public:
 
   SimPort(SimObjectBase* module)
     : SimPortBase(module)
-    , peer_(nullptr)
+    , sink_(nullptr)
     , tx_cb_(nullptr)
   {}
 
-  void bind(SimPort<Pkt>* peer) {
-    assert(peer_ == nullptr);
-    peer_ = peer;
+  void bind(SimPort<Pkt>* sink) {
+    assert(sink_ == nullptr);
+    sink_ = sink;
   }
 
   void unbind() {
-    peer_ = nullptr;
+    sink_ = nullptr;
   }
 
   bool connected() const {
-    return (peer_ != nullptr);
+    return (sink_ != nullptr);
   }
 
-  SimPort* peer() const {
-    return peer_;
+  SimPort* sink() const {
+    return sink_;
   }
 
   bool empty() const {
@@ -92,7 +92,7 @@ public:
     auto cycles = queue_.front().cycles;
     queue_.pop();
     return cycles;
-  }  
+  }
 
   void tx_callback(const TxCallback& callback) {
     tx_cb_ = callback;
@@ -111,15 +111,15 @@ protected:
   };
 
   std::queue<timed_pkt_t> queue_;
-  SimPort*   peer_;
+  SimPort*   sink_;
   TxCallback tx_cb_;
 
   void transfer(const Pkt& data, uint64_t cycles) {
     if (tx_cb_) {
       tx_cb_(data, cycles);
     }
-    if (peer_) {
-      peer_->transfer(data, cycles);
+    if (sink_) {
+      sink_->transfer(data, cycles);
     } else {
       queue_.push({data, cycles});
     }
@@ -137,7 +137,7 @@ public:
   typedef std::shared_ptr<SimEventBase> Ptr;
 
   virtual ~SimEventBase() {}
-  
+
   virtual void fire() const = 0;
 
   uint64_t cycles() const {
@@ -161,29 +161,29 @@ public:
 
   typedef std::function<void (const Pkt&)> Func;
 
-  SimCallEvent(const Func& func, const Pkt& pkt, uint64_t cycles) 
+  SimCallEvent(const Func& func, const Pkt& pkt, uint64_t cycles)
     : SimEventBase(cycles)
     , func_(func)
     , pkt_(pkt)
   {}
 
   void* operator new(size_t /*size*/) {
-    return allocator().allocate();
+    return allocator_.allocate();
   }
 
   void operator delete(void* ptr) {
-    allocator().deallocate(ptr);
+    allocator_.deallocate(ptr);
   }
 
 protected:
   Func func_;
   Pkt  pkt_;
 
-  static MemoryPool<SimCallEvent<Pkt>>& allocator() {
-    static MemoryPool<SimCallEvent<Pkt>> instance(64);
-    return instance;
-  }
+  static MemoryPool<SimCallEvent<Pkt>> allocator_;
 };
+
+template <typename Pkt>
+MemoryPool<SimCallEvent<Pkt>> SimCallEvent<Pkt>::allocator_(64);
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -194,29 +194,29 @@ public:
     const_cast<SimPort<Pkt>*>(port_)->transfer(pkt_, cycles_);
   }
 
-  SimPortEvent(const SimPort<Pkt>* port, const Pkt& pkt, uint64_t cycles) 
-    : SimEventBase(cycles) 
+  SimPortEvent(const SimPort<Pkt>* port, const Pkt& pkt, uint64_t cycles)
+    : SimEventBase(cycles)
     , port_(port)
     , pkt_(pkt)
   {}
 
   void* operator new(size_t /*size*/) {
-    return allocator().allocate();
+    return allocator_.allocate();
   }
 
   void operator delete(void* ptr) {
-    allocator().deallocate(ptr);
+    allocator_.deallocate(ptr);
   }
 
 protected:
-  const SimPort<Pkt>* port_; 
+  const SimPort<Pkt>* port_;
   Pkt pkt_;
 
-  static MemoryPool<SimPortEvent<Pkt>>& allocator() {
-    static MemoryPool<SimPortEvent<Pkt>> instance(64);
-    return instance;
-  }
+  static MemoryPool<SimPortEvent<Pkt>> allocator_;
 };
+
+template <typename Pkt>
+MemoryPool<SimPortEvent<Pkt>> SimPortEvent<Pkt>::allocator_(64);
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -230,11 +230,11 @@ public:
 
   const std::string& name() const {
     return name_;
-  } 
+  }
 
 protected:
 
-  SimObjectBase(const SimContext& ctx, const char* name); 
+  SimObjectBase(const SimContext& ctx, const std::string& name);
 
 private:
 
@@ -259,8 +259,8 @@ public:
 
 protected:
 
-  SimObject(const SimContext& ctx, const char* name) 
-    : SimObjectBase(ctx, name) 
+  SimObject(const SimContext& ctx, const std::string& name)
+    : SimObjectBase(ctx, name)
   {}
 
 private:
@@ -283,9 +283,9 @@ private:
 };
 
 class SimContext {
-private:    
+private:
   SimContext() {}
-  
+
   friend class SimPlatform;
 };
 
@@ -320,10 +320,10 @@ public:
 
   template <typename Pkt>
   void schedule(const typename SimCallEvent<Pkt>::Func& callback,
-                const Pkt& pkt, 
-                uint64_t delay) {    
+                const Pkt& pkt,
+                uint64_t delay) {
     assert(delay != 0);
-    auto evt = std::make_shared<SimCallEvent<Pkt>>(callback, pkt, cycles_ + delay);    
+    auto evt = std::make_shared<SimCallEvent<Pkt>>(callback, pkt, cycles_ + delay);
     events_.emplace_back(evt);
   }
 
@@ -341,10 +341,10 @@ public:
     auto evt_it_end = events_.end();
     while (evt_it != evt_it_end) {
       auto& event = *evt_it;
-      if (cycles_ >= event->cycles()) {        
+      if (cycles_ >= event->cycles()) {
         event->fire();
         evt_it = events_.erase(evt_it);
-      } else {        
+      } else {
         ++evt_it;
       }
     }
@@ -352,7 +352,7 @@ public:
     for (auto& object : objects_) {
       object->do_tick();
     }
-    // advance clock    
+    // advance clock
     ++cycles_;
   }
 
@@ -390,8 +390,8 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-inline SimObjectBase::SimObjectBase(const SimContext&, const char* name) 
-  : name_(name) 
+inline SimObjectBase::SimObjectBase(const SimContext&, const std::string& name)
+  : name_(name)
 {}
 
 template <typename Impl>
@@ -402,9 +402,9 @@ typename SimObject<Impl>::Ptr SimObject<Impl>::Create(Args&&... args) {
 
 template <typename Pkt>
 void SimPort<Pkt>::push(const Pkt& pkt, uint64_t delay) const {
-  if (peer_ && !tx_cb_) {
-    reinterpret_cast<const SimPort<Pkt>*>(peer_)->push(pkt, delay);    
+  if (sink_ && !tx_cb_) {
+    reinterpret_cast<const SimPort<Pkt>*>(sink_)->push(pkt, delay);
   } else {
     SimPlatform::instance().schedule(this, pkt, delay);
-  } 
+  }
 }

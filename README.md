@@ -1,12 +1,35 @@
-[![Build Status](https://travis-ci.com/vortexgpgpu/vortex.svg?branch=master)](https://travis-ci.com/vortexgpgpu/vortex)
-
 # Vortex GPGPU
 
-Vortex is a full-stack open-source RISC-V GPGPU.
+Vortex is a full-stack open-source RISC-V GPGPU. Vortex supports multiple **backend drivers**, including our C++ simulator (simx), an RTL simulator, and physical Xilinx and Altera FPGAs-- all controlled by a single driver script. The chosen driver determines the corresponding code invoked to run Vortex. Generally, developers will prototype their intended design in simx, before completing going forward with an RTL implementation. Alternatively, you can get up and running by selecting a driver of your choice and running a demo program.
+
+## Website
+Vortex news can be found on its [website](https://vortex.cc.gatech.edu/)
+
+## Citation
+```
+@inproceedings{10.1145/3466752.3480128,
+	author = {Tine, Blaise and Yalamarthy, Krishna Praveen and Elsabbagh, Fares and Hyesoon, Kim},
+	title = {Vortex: Extending the RISC-V ISA for GPGPU and 3D-Graphics},
+	year = {2021},
+	isbn = {9781450385572},
+	publisher = {Association for Computing Machinery},
+	address = {New York, NY, USA},
+	url = {https://doi.org/10.1145/3466752.3480128},
+	doi = {10.1145/3466752.3480128},
+	abstract = {The importance of open-source hardware and software has been increasing. However, despite GPUs being one of the more popular accelerators across various applications, there is very little open-source GPU infrastructure in the public domain. We argue that one of the reasons for the lack of open-source infrastructure for GPUs is rooted in the complexity of their ISA and software stacks. In this work, we first propose an ISA extension to RISC-V that supports GPGPUs and graphics. The main goal of the ISA extension proposal is to minimize the ISA changes so that the corresponding changes to the open-source ecosystem are also minimal, which makes for a sustainable development ecosystem. To demonstrate the feasibility of the minimally extended RISC-V ISA, we implemented the complete software and hardware stacks of Vortex on FPGA. Vortex is a PCIe-based soft GPU that supports OpenCL and OpenGL. Vortex can be used in a variety of applications, including machine learning, graph analytics, and graphics rendering. Vortex can scale up to 32 cores on an Altera Stratix 10 FPGA, delivering a peak performance of 25.6 GFlops at 200 Mhz.},
+	booktitle = {MICRO-54: 54th Annual IEEE/ACM International Symposium on Microarchitecture},
+	pages = {754–766},
+	numpages = {13},
+	keywords = {reconfigurable computing, memory systems., computer graphics},
+	location = {Virtual Event, Greece},
+	series = {MICRO '21}
+}
+```
 
 ## Specifications
 
 - Support RISC-V RV32IMAF and RV64IMAFD
+
 - Microarchitecture:
     - configurable number of cores, warps, and threads.
     - configurable number of ALU, FPU, LSU, and SFU units per core.
@@ -31,66 +54,81 @@ Vortex is a full-stack open-source RISC-V GPGPU.
 - `ci`: Continuous integration scripts.
 - `miscs`: Miscellaneous resources.
 
-## Build Instructions
-More detailed build instructions can be found [here](docs/install_vortex.md).
+## Quick Start
+If you are interested in a stable release of Vortex, you can download the latest release [here](https://github.com/vortexgpgpu/vortex/releases/latest). Otherwise, you can pull the most recent, but (potentially) unstable version as shown below. The following steps demonstrate how to build and run Vortex with the default driver: SimX. If you are interested in a different backend, look [here](docs/simulation.md).
+
 ### Supported OS Platforms
-- Ubuntu 18.04, 20.04
+- Ubuntu 18.04, 20.04, 22.04, 24.04
 - Centos 7
 ### Toolchain Dependencies
+The following dependencies will be fetched prebuilt by `toolchain_install.sh`.
 - [POCL](http://portablecl.org/)
 - [LLVM](https://llvm.org/)
 - [RISCV-GNU-TOOLCHAIN](https://github.com/riscv-collab/riscv-gnu-toolchain)
 - [Verilator](https://www.veripool.org/verilator)
-- [FpNew](https://github.com/pulp-platform/fpnew.git)
+- [cvfpu](https://github.com/openhwgroup/cvfpu.git)
 - [SoftFloat](https://github.com/ucb-bar/berkeley-softfloat-3.git)
 - [Ramulator](https://github.com/CMU-SAFARI/ramulator.git)
 - [Yosys](https://github.com/YosysHQ/yosys)
 - [Sv2v](https://github.com/zachjs/sv2v)
-### Install development tools
-    $ sudo apt-get install build-essential
-    $ sudo apt-get install binutils
-    $ sudo apt-get install python
-    $ sudo apt-get install uuid-dev
-    $ sudo apt-get install git
 ### Install Vortex codebase
-    $ git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
-    $ cd Vortex
+```sh
+	git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
+	cd vortex
+```
+### Install system dependencies
+```sh
+# ensure dependent libraries are present
+sudo ./ci/install_dependencies.sh
+```
 ### Configure your build folder
-    # By default, the toolchain default install location is the /opt folder and can be overridden by setting --tooldir.
-    $ mkdir build
-    $ cd build
-    $ ../configure --xlen=32 --tooldir=$HOME/tools
+```sh
+    mkdir build
+    cd build
+    # for 32bit
+    ../configure --xlen=32 --tooldir=$HOME/tools
+    # for 64bit
+    ../configure --xlen=64 --tooldir=$HOME/tools
+```
 ### Install prebuilt toolchain
-    $ ./ci/toolchain_install.sh --all
+```sh
+   ./ci/toolchain_install.sh --all
+```
 ### set environment variables
+```sh
     # should always run before using the toolchain!
-    $ source ./ci/toolchain_env.sh
+    source ./ci/toolchain_env.sh
+```
 ### Building Vortex
-    $ make -s
+```sh
+make -s
+```
 ### Quick demo running vecadd OpenCL kernel on 2 cores
-    $ ./ci/blackbox.sh --cores=2 --app=vecadd
+```sh
+./ci/blackbox.sh --cores=2 --app=vecadd
+```
 
 ### Common Developer Tips
 - Installing Vortex kernel and runtime libraries to use with external tools requires passing --prefix=<install-path> to the configure script.
-    ```sh
-    $ ../configure --xlen=32 --tooldir=$HOME/tools --prefix=<install-path>
-    $ make -s
-    $ make install
-    ``````
-- Building Vortex 64-bit simply requires using --xlen=64 configure option.
-    ```sh
-    $ ../configure --xlen=32 --tooldir=$HOME/tools
-    ```
+```sh
+../configure --xlen=32 --tooldir=$HOME/tools --prefix=<install-path>
+make -s
+make install
+```
+- Building Vortex 64-bit requires setting --xlen=64 configure option.
+```sh
+../configure --xlen=64 --tooldir=$HOME/tools
+```
 - Sourcing "./ci/toolchain_env.sh" is required everytime you start a new terminal. we recommend adding "source <build-path>/ci/toolchain_env.sh" to your ~/.bashrc file to automate the process at login.
-    ```sh
-    $ echo "source <build-path>/ci/toolchain_env.sh" >> ~/.bashrc
-    ```
-- Making changes to Makefiles in your source tree or adding new folders will require executing the "configure" script again to get it propagated into your build folder.
-    ```sh
-    $ ../configure
-    ```
-- To debug the GPU, you can generate a "run.log" trace. see /docs/debugging.md for more information.
-    ```sh
-    $ ./ci/blackbox.sh --app=demo --debug=3
-    ```
-- For additional information, check out the /docs.
+```sh
+echo "source <build-path>/ci/toolchain_env.sh" >> ~/.bashrc
+```
+- Making changes to Makefiles in your source tree or adding new folders will require executing the "configure" script again without any options to get changes propagated to your build folder.
+```sh
+../configure
+```
+- To debug the GPU, the simulation can generate a runtime trace for analysis. See /docs/debugging.md for more information.
+```sh
+./ci/blackbox.sh --app=demo --debug=3
+```
+- For additional information, check out the [documentation](docs/index.md)

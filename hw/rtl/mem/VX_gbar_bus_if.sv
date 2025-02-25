@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,35 +15,39 @@
 
 interface VX_gbar_bus_if ();
 
-    wire                    req_valid;
-    wire [`NB_WIDTH-1:0]    req_id;
-    wire [`NC_WIDTH-1:0]    req_size_m1;
-    wire [`NC_WIDTH-1:0]    req_core_id;
-    wire                    req_ready;
+    typedef struct packed {
+        logic [`NB_WIDTH-1:0] id;
+        logic [`NC_WIDTH-1:0] size_m1;
+        logic [`NC_WIDTH-1:0] core_id;
+    } req_data_t;
 
-    wire                    rsp_valid;
-    wire [`NB_WIDTH-1:0]    rsp_id;
+    typedef struct packed {
+        logic [`NB_WIDTH-1:0] id;
+    } rsp_data_t;
+
+    logic  req_valid;
+    req_data_t req_data;
+    logic  req_ready;
+
+    logic  rsp_valid;
+    rsp_data_t rsp_data;
 
     modport master (
-        output  req_valid,
-        output  req_id,
-        output  req_size_m1,    
-        output  req_core_id,
-        input   req_ready,
+        output req_valid,
+        output req_data,
+        input  req_ready,
 
-        input   rsp_valid,
-        input   rsp_id
+        input  rsp_valid,
+        input  rsp_data
     );
 
     modport slave (
-        input   req_valid,
-        input   req_id,
-        input   req_size_m1,
-        input   req_core_id,
-        output  req_ready,
-        
-        output  rsp_valid,
-        output  rsp_id
+        input  req_valid,
+        input  req_data,
+        output req_ready,
+
+        output rsp_valid,
+        output rsp_data
     );
 
 endinterface

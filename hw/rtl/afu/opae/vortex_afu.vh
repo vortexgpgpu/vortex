@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,9 +17,9 @@
 `define AFU_ACCEL_NAME "vortex_afu"
 `define AFU_ACCEL_UUID 128'h35F9452B_25C2_434C_93D5_6F8C60DB361C
 
-`define AFU_IMAGE_CMD_MEM_READ 1
+`define AFU_IMAGE_CMD_MEM_READ  1
 `define AFU_IMAGE_CMD_MEM_WRITE 2
-`define AFU_IMAGE_CMD_RUN 3
+`define AFU_IMAGE_CMD_RUN       3
 `define AFU_IMAGE_CMD_DCR_WRITE 4
 `define AFU_IMAGE_CMD_MAX_VALUE 4
 

@@ -1,5 +1,7 @@
 include config.mk
 
+.PHONY: build software tests
+
 all:
 	$(MAKE) -C $(VORTEX_HOME)/third_party
 	$(MAKE) -C hw
@@ -15,18 +17,29 @@ build:
 	$(MAKE) -C runtime
 	$(MAKE) -C tests
 
-clean:
+software:
+	$(MAKE) -C hw
+	$(MAKE) -C kernel
+	$(MAKE) -C runtime/stub
+
+tests:
+	$(MAKE) -C tests
+
+clean-build:
 	$(MAKE) -C hw clean
 	$(MAKE) -C sim clean
 	$(MAKE) -C kernel clean
 	$(MAKE) -C runtime clean
 	$(MAKE) -C tests clean
 
+clean: clean-build
+	$(MAKE) -C $(VORTEX_HOME)/third_party clean
+
 # Install setup
-KERNEL_INC_DST = $(PREFIX)/kernel/include
-KERNEL_LIB_DST = $(PREFIX)/kernel/lib$(XLEN)
-RUNTIME_INC_DST = $(PREFIX)/runtime/include
-RUNTIME_LIB_DST = $(PREFIX)/runtime/lib
+KERNEL_INC_DST = $(INSTALLDIR)/kernel/include
+KERNEL_LIB_DST = $(INSTALLDIR)/kernel/lib$(XLEN)
+RUNTIME_INC_DST = $(INSTALLDIR)/runtime/include
+RUNTIME_LIB_DST = $(INSTALLDIR)/runtime/lib
 
 KERNEL_HEADERS = $(wildcard $(VORTEX_HOME)/kernel/include/*.h)
 KERNEL_LIBS = $(wildcard kernel/*.a)

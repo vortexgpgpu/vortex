@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,19 +19,19 @@ module VX_elastic_buffer #(
     parameter SIZE    = 1,
     parameter OUT_REG = 0,
     parameter LUTRAM  = 0
-) ( 
+) (
     input  wire             clk,
     input  wire             reset,
 
     input  wire             valid_in,
-    output wire             ready_in,        
+    output wire             ready_in,
     input  wire [DATAW-1:0] data_in,
-    
+
     output wire [DATAW-1:0] data_out,
     input  wire             ready_out,
     output wire             valid_out
 );
-    if (SIZE == 0) begin
+    if (SIZE == 0) begin : g_passthru
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
@@ -40,10 +40,11 @@ module VX_elastic_buffer #(
         assign data_out  = data_in;
         assign ready_in  = ready_out;
 
-    end else if (SIZE == 1) begin
+    end else if (SIZE == 1) begin : g_eb1
 
         VX_pipe_buffer #(
-            .DATAW (DATAW)
+            .DATAW (DATAW),
+            .DEPTH (`MAX(OUT_REG, 1))
         ) pipe_buffer (
             .clk       (clk),
             .reset     (reset),
@@ -55,32 +56,51 @@ module VX_elastic_buffer #(
             .ready_out (ready_out)
         );
 
-    end else if (SIZE == 2) begin
+    end else if (SIZE == 2 && LUTRAM == 0) begin : g_eb2
 
-        VX_skid_buffer #(
+        wire valid_out_t;
+        wire [DATAW-1:0] data_out_t;
+        wire ready_out_t;
+
+        VX_stream_buffer #(
             .DATAW   (DATAW),
-            .HALF_BW (OUT_REG == 2),
-            .OUT_REG (OUT_REG)
-        ) skid_buffer (
+            .OUT_REG (OUT_REG == 1)
+        ) stream_buffer (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (valid_in),
             .data_in   (data_in),
             .ready_in  (ready_in),
+            .valid_out (valid_out_t),
+            .data_out  (data_out_t),
+            .ready_out (ready_out_t)
+        );
+
+        VX_pipe_buffer #(
+            .DATAW (DATAW),
+            .DEPTH ((OUT_REG > 1) ? (OUT_REG-1) : 0)
+        ) out_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (valid_out_t),
+            .data_in   (data_out_t),
+            .ready_in  (ready_out_t),
             .valid_out (valid_out),
             .data_out  (data_out),
             .ready_out (ready_out)
         );
-    
-    end else begin
-        
+
+    end else begin : g_ebN
+
         wire empty, full;
 
         wire [DATAW-1:0] data_out_t;
         wire ready_out_t;
 
+        wire valid_out_t = ~empty;
+
         wire push = valid_in && ready_in;
-        wire pop = ~empty && ready_out_t;
+        wire pop = valid_out_t && ready_out_t;
 
         VX_fifo_queue #(
             .DATAW   (DATAW),
@@ -93,7 +113,7 @@ module VX_elastic_buffer #(
             .push   (push),
             .pop    (pop),
             .data_in(data_in),
-            .data_out(data_out_t),    
+            .data_out(data_out_t),
             .empty  (empty),
             .full   (full),
             `UNUSED_PIN (alm_empty),
@@ -103,17 +123,17 @@ module VX_elastic_buffer #(
 
         assign ready_in = ~full;
 
-        VX_elastic_buffer #(
+        VX_pipe_buffer #(
             .DATAW (DATAW),
-            .SIZE  (OUT_REG == 2)
+            .DEPTH ((OUT_REG > 1) ? (OUT_REG-1) : 0)
         ) out_buf (
             .clk       (clk),
             .reset     (reset),
-            .valid_in  (~empty),
+            .valid_in  (valid_out_t),
             .data_in   (data_out_t),
-            .ready_in  (ready_out_t),            
+            .ready_in  (ready_out_t),
             .valid_out (valid_out),
-            .data_out  (data_out),            
+            .data_out  (data_out),
             .ready_out (ready_out)
         );
 

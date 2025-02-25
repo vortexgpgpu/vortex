@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 module VX_alu_int #(
-    parameter CORE_ID   = 0,
+    parameter `STRING INSTANCE_ID = "",
     parameter BLOCK_IDX = 0,
     parameter NUM_LANES = 1
 ) (
@@ -29,7 +29,7 @@ module VX_alu_int #(
     VX_branch_ctl_if.master branch_ctl_if
 );
 
-    `UNUSED_PARAM (CORE_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
     localparam LANE_BITS      = `CLOG2(NUM_LANES);
     localparam LANE_WIDTH     = `UP(LANE_BITS);
     localparam PID_BITS       = `CLOG2(`NUM_THREADS / NUM_LANES);
@@ -74,19 +74,19 @@ module VX_alu_int #(
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_br  = (execute_if.data.op_args.alu.use_imm && ~is_br_op) ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_add_result
         assign add_result[i] = alu_in1_PC[i] + alu_in2_imm[i];
         assign add_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] + alu_in2_imm[i][31:0]));
     end
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_sub_result
         wire [`XLEN:0] sub_in1 = {is_signed & alu_in1[i][`XLEN-1], alu_in1[i]};
         wire [`XLEN:0] sub_in2 = {is_signed & alu_in2_br[i][`XLEN-1], alu_in2_br[i]};
         assign sub_result[i] = sub_in1 - sub_in2;
         assign sub_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] - alu_in2_imm[i][31:0]));
     end
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_shr_result
         wire [`XLEN:0] shr_in1 = {is_signed && alu_in1[i][`XLEN-1], alu_in1[i]};
         always @(*) begin
             case (alu_op[1:0])
@@ -105,7 +105,7 @@ module VX_alu_int #(
         assign shr_result_w[i] = `XLEN'($signed(shr_res_w));
     end
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_msc_result
         always @(*) begin
             case (alu_op[1:0])
                 2'b00: msc_result[i] = alu_in1[i] & alu_in2_imm[i]; // AND
@@ -222,9 +222,9 @@ module VX_alu_int #(
 
     assign cbr_dest = add_result[0][1 +: `PC_BITS];
 
-    if (LANE_BITS != 0) begin
+    if (LANE_BITS != 0) begin : g_tid
         assign tid = execute_if.data.tid[0 +: LANE_BITS];
-    end else begin
+    end else begin : g_tid_0
         assign tid = 0;
     end
 
@@ -262,11 +262,11 @@ module VX_alu_int #(
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({br_enable, br_wid, br_taken, br_dest}),
+        .data_in  ({br_enable,           br_wid,            br_taken,            br_dest}),
         .data_out ({branch_ctl_if.valid, branch_ctl_if.wid, branch_ctl_if.taken, branch_ctl_if.dest})
     );
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_commit
         assign commit_if.data.data[i] = (is_br_op_r && is_br_static) ? {(PC_r + `PC_BITS'(2)), 1'd0} : alu_result_r[i];
     end
 
@@ -274,9 +274,9 @@ module VX_alu_int #(
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
-        if (branch_ctl_if.valid) begin
-            `TRACE(1, ("%d: core%0d-branch: wid=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
-                $time, CORE_ID, branch_ctl_if.wid, {commit_if.data.PC, 1'b0}, branch_ctl_if.taken, {branch_ctl_if.dest, 1'b0}, commit_if.data.uuid));
+        if (br_enable) begin
+            `TRACE(2, ("%t: %s branch: wid=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
+                $time, INSTANCE_ID, br_wid, {commit_if.data.PC, 1'b0}, br_taken, {br_dest, 1'b0}, commit_if.data.uuid))
         end
     end
 `endif
