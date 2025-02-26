@@ -181,7 +181,7 @@ module VX_alu_int #(
             if(p[i] == 1'b0) begin
                 lane[i] = `XLEN'(i);
             end
-            active_l[i] = (lane[i] < NUM_LANES) ? alu_in2[0][$signed(lane[i])] : alu_in2[0][i];
+            active_l[i] = (lane[i] < NUM_LANES) ? alu_in2[0][$signed(lane[i][SHIFT_IMM_BITS-1:0])] : alu_in2[0][i];
             shfl_result[i] = (active_t[i] && active_l[i]) ? ( (lane[i] < NUM_LANES) ? alu_in1[$signed(lane[i])] : alu_in1[i]) : `XLEN'(1'b0);
         end
     end
