@@ -14,8 +14,8 @@
 #ifndef __VX_SPAWN_H__
 #define __VX_SPAWN_H__
 
-#include <vx_intrinsics.h>
 #include <stdint.h>
+#include <vx_intrinsics.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,20 +43,20 @@ typedef void (*vx_kernel_func_cb)(void *arg);
 typedef void (*vx_serial_cb)(void *arg);
 
 #define __local_mem(size) \
-  (void*)((int8_t*)csr_read(VX_CSR_LOCAL_MEM_BASE) + __local_group_id * size)
+  (void *)((int8_t *)csr_read(VX_CSR_LOCAL_MEM_BASE) + __local_group_id * size)
 
 #define __syncthreads() \
   vx_barrier(__local_group_id, __warps_per_group)
 
 // launch a kernel function with a grid of blocks and block of threads
 int vx_spawn_threads(uint32_t dimension,
-                     const uint32_t* grid_dim,
-                     const uint32_t* block_dim,
+                     const uint32_t *grid_dim,
+                     const uint32_t *block_dim,
                      vx_kernel_func_cb kernel_func,
-                     const void* arg);
+                     const void *arg);
 
 // function call serialization
-void vx_serial(vx_serial_cb callback, const void * arg);
+void vx_serial(vx_serial_cb callback, const void *arg);
 
 #ifdef __cplusplus
 }

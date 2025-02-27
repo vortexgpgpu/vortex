@@ -7,6 +7,15 @@ OUTPUT_FORMAT("elf32-littleriscv", "elf32-littleriscv",
 	      "elf32-littleriscv")
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
+
+MEMORY {
+  DRAM0    (rwx): ORIGIN = 0x80000000, LENGTH = 512M
+  DRAMARG  (rwx): ORIGIN = 0x9fff0000, LENGTH = 8K
+  DRAM1    (rwx): ORIGIN = 0xa0000000, LENGTH = 16M
+  DRAM2    (rwx): ORIGIN = 0xa1000000, LENGTH = 16M
+  DRAM3    (rwx): ORIGIN = 0xa2000000, LENGTH = 16M
+}
+
 SECTIONS
 {
   . = STARTUP_ADDR;
@@ -249,5 +258,29 @@ SECTIONS
   .debug_addr     0 : { *(.debug_addr) }
   .gnu.attributes 0 : { KEEP (*(.gnu.attributes)) }
   /DISCARD/ : { *(.note.GNU-stack) *(.gnu_debuglink) *(.gnu.lto_*) }
+
+  .args : {
+    *(.args)
+    FILL(0x00);
+    . = ALIGN(8K);
+  }> DRAMARG
+
+  .operand.a : {
+    *(.operand.a)
+    FILL(0x00);
+    . = ALIGN(32K);
+  }> DRAM1
+
+  .operand.b : {
+    *(.operand.b)
+    FILL(0x00);
+    . = ALIGN(32K);
+  }> DRAM2
+
+  .operand.c : {
+    *(.operand.c)
+    FILL(0x00);
+    . = ALIGN(32K);
+  }> DRAM3
 
 }

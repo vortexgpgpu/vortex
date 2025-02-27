@@ -25,6 +25,11 @@ AR  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar
 DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
+VX_CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
+VX_CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
+VX_DP  = $(LLVM_VORTEX)/bin/llvm-objdump
+VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
+
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 CFLAGS += -I$(VORTEX_HOME)/kernel/include -I$(ROOT_DIR)/hw
 CFLAGS += -DXLEN_$(XLEN) -DNDEBUG
@@ -37,13 +42,13 @@ LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/kernel/scripts/link$(XLE
 all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
 
 $(PROJECT).dump: $(PROJECT).elf
-	$(DP) -D $< > $@
+	$(VX_DP) -D $< > $@
 
 $(PROJECT).bin: $(PROJECT).elf
-	$(CP) -O binary $< $@
+	$(VX_CP) -O binary $< $@
 
 $(PROJECT).elf: $(SRCS)
-	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
+	$(VX_CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
 run-rtlsim: $(PROJECT).bin
 	$(ROOT_DIR)/sim/rtlsim/rtlsim $(PROJECT).bin
@@ -52,7 +57,7 @@ run-simx: $(PROJECT).bin
 	$(ROOT_DIR)/sim/simx/simx $(PROJECT).bin
 
 .depend: $(SRCS)
-	$(CC) $(CFLAGS) -MM $^ > .depend;
+	$(VX_CC) $(CFLAGS) -MM $^ > .depend;
 
 clean:
 	rm -rf *.elf *.bin *.dump *.log .depend

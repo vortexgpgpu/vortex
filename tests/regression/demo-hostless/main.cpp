@@ -85,7 +85,7 @@ vx_buffer_h src1_buffer = nullptr;
 vx_buffer_h dst_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
-kernel_arg_t kernel_arg = {};
+kernel_arg_t kernel_arg = {}; // zero initialize fields of kernel args struct
 
 static void show_usage() {
   std::cout << "Vortex Test." << std::endl;
@@ -115,11 +115,11 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(src0_buffer);
-    vx_mem_free(src1_buffer);
-    vx_mem_free(dst_buffer);
-    vx_mem_free(krnl_buffer);
-    vx_mem_free(args_buffer);
+    // vx_mem_free(src0_buffer);
+    // vx_mem_free(src1_buffer);
+    // vx_mem_free(dst_buffer);
+    // vx_mem_free(krnl_buffer);
+    // vx_mem_free(args_buffer);
     vx_dev_close(device);
   }
 }
@@ -140,7 +140,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
 
   uint32_t total_threads = num_cores * num_warps * num_threads;
-  uint32_t num_points = count * total_threads;
+  uint32_t num_points = count * 1; // for now just do 16 points so it matches our predefined binary size
   uint32_t buf_size = num_points * sizeof(TYPE);
 
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
@@ -150,50 +150,67 @@ int main(int argc, char *argv[]) {
   kernel_arg.num_tasks = total_threads;
   kernel_arg.task_size = count;
 
-  // allocate device memory
+  // no longer allocate device memory, rather point to pre-allocated regions of elf
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &src0_buffer));
-  RT_CHECK(vx_mem_address(src0_buffer, &kernel_arg.src0_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &src1_buffer));
-  RT_CHECK(vx_mem_address(src1_buffer, &kernel_arg.src1_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &dst_buffer));
-  RT_CHECK(vx_mem_address(dst_buffer, &kernel_arg.dst_addr));
+  // RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &src0_buffer));
+  // RT_CHECK(vx_mem_address(src0_buffer, &kernel_arg.src0_addr));
+  // RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &src1_buffer));
+  // RT_CHECK(vx_mem_address(src1_buffer, &kernel_arg.src1_addr));
+  // RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &dst_buffer));
+  // RT_CHECK(vx_mem_address(dst_buffer, &kernel_arg.dst_addr));
+  kernel_arg.src0_addr = 0xa0000000UL;
+  kernel_arg.src1_addr = 0xa1000000UL;
+  kernel_arg.dst_addr = 0xc0000000UL;
+  krnl_buffer = (void *)0x80000094;
 
   std::cout << "dev_src0=0x" << std::hex << kernel_arg.src0_addr << std::endl;
   std::cout << "dev_src1=0x" << std::hex << kernel_arg.src1_addr << std::endl;
   std::cout << "dev_dst=0x" << std::hex << kernel_arg.dst_addr << std::endl;
 
-  // allocate host buffers
+  // allocate host buffers for testing
+  // primarily used for comparing results
+  // secondarily used to generate the .bin files on the fly
   std::cout << "allocate host buffers" << std::endl;
   std::vector<TYPE> h_src0(num_points);
   std::vector<TYPE> h_src1(num_points);
   std::vector<TYPE> h_dst(num_points);
 
   // generate source data
-  for (uint32_t i = 0; i < num_points; ++i) {
-    h_src0[i] = Comparator<TYPE>::generate();
-    h_src1[i] = Comparator<TYPE>::generate();
+  for (uint32_t i = 0; i < num_points * 2; ++i) {
+    // h_src0[i] = Comparator<TYPE>::generate();
+    // h_src1[i] = Comparator<TYPE>::generate();
+    if (i % 2 == 0) {
+      h_src0[i] = static_cast<float>(i);
+    } else {
+      h_src1[i] = static_cast<float>(i);
+    }
   }
 
   // upload source buffer0
-  std::cout << "upload source buffer0" << std::endl;
-  RT_CHECK(vx_copy_to_dev(src0_buffer, h_src0.data(), 0, buf_size));
+  // std::cout << "upload source buffer0" << std::endl;
+  // RT_CHECK(vx_copy_to_dev(src0_buffer, h_src0.data(), 0, buf_size));
 
   // upload source buffer1
-  std::cout << "upload source buffer1" << std::endl;
-  RT_CHECK(vx_copy_to_dev(src1_buffer, h_src1.data(), 0, buf_size));
+  // std::cout << "upload source buffer1" << std::endl;
+  // RT_CHECK(vx_copy_to_dev(src1_buffer, h_src1.data(), 0, buf_size));
 
   // upload program
-  std::cout << "upload program" << std::endl;
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
+  // std::cout << "upload program" << std::endl;
+  // RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
+
+  // clear destination buffer
+  std::cout << "clear destination buffer" << std::endl;
+  // memset(h_dst.data(), 0, num_points * sizeof(TYPE));
+  // RT_CHECK(vx_copy_to_dev(dst_buffer, h_dst.data(), 0, buf_size)); // buf_size = num_points * sizeof(TYPE)
 
   // upload kernel argument
-  std::cout << "upload kernel argument" << std::endl;
-  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
+  // std::cout << "upload kernel argument" << std::endl;
+  // RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
 
   // start device
   std::cout << "start device" << std::endl;
   RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+  std::cout << "start device completed?" << std::endl;
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;

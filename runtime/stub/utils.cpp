@@ -13,14 +13,14 @@
 
 #include <common.h>
 
-#include <iostream>
-#include <fstream>
-#include <list>
-#include <cstring>
-#include <vector>
-#include <unordered_map>
-#include <vortex.h>
 #include <assert.h>
+#include <cstring>
+#include <fstream>
+#include <iostream>
+#include <list>
+#include <unordered_map>
+#include <vector>
+#include <vortex.h>
 
 class ProfilingMode {
 public:
@@ -46,11 +46,12 @@ int get_profiling_mode() {
   return gProfilingMode.perf_class();
 }
 
-extern int vx_upload_kernel_bytes(vx_device_h hdevice, const void* content, uint64_t size, vx_buffer_h* hbuffer) {
+extern int vx_upload_kernel_bytes(vx_device_h hdevice, const void *content, uint64_t size, vx_buffer_h *hbuffer) {
+
   if (nullptr == hdevice || nullptr == content || size <= 8 || nullptr == hbuffer)
     return -1;
 
-  auto bytes = reinterpret_cast<const uint64_t*>(content);
+  auto bytes = reinterpret_cast<const uint64_t *>(content);
 
   auto min_vma = *bytes++;
   auto max_vma = *bytes++;
@@ -84,9 +85,11 @@ extern int vx_upload_kernel_bytes(vx_device_h hdevice, const void* content, uint
   return 0;
 }
 
-extern int vx_upload_kernel_file(vx_device_h hdevice, const char* filename, vx_buffer_h* hbuffer) {
-  if (nullptr == hdevice || nullptr == filename || nullptr == hbuffer)
+extern int vx_upload_kernel_file(vx_device_h hdevice, const char *filename, vx_buffer_h *hbuffer) {
+  std::cout << "[UDIT] hbuffer: " << hbuffer << std::endl;
+  if (nullptr == hdevice || nullptr == filename || nullptr == hbuffer) {
     return -1;
+  }
 
   std::ifstream ifs(filename);
   if (!ifs) {
@@ -102,6 +105,8 @@ extern int vx_upload_kernel_file(vx_device_h hdevice, const char* filename, vx_b
   ifs.read(content.data(), size);
 
   // upload buffer
+  std::cout << "size of kernel we are uploading: " << size << std::endl;
+  // todo: what addr are we at? i dont think this is going ot be put at x800000 so what is there? where does this go?
   CHECK_ERR(vx_upload_kernel_bytes(hdevice, content.data(), size, hbuffer), {
     return err;
   });
@@ -109,7 +114,7 @@ extern int vx_upload_kernel_file(vx_device_h hdevice, const char* filename, vx_b
   return 0;
 }
 
-extern int vx_upload_bytes(vx_device_h hdevice, const void* content, uint64_t size, vx_buffer_h* hbuffer) {
+extern int vx_upload_bytes(vx_device_h hdevice, const void *content, uint64_t size, vx_buffer_h *hbuffer) {
   if (nullptr == hdevice || nullptr == content || 0 == size || nullptr == hbuffer)
     return -1;
 
@@ -129,7 +134,7 @@ extern int vx_upload_bytes(vx_device_h hdevice, const void* content, uint64_t si
   return 0;
 }
 
-extern int vx_upload_file(vx_device_h hdevice, const char* filename, vx_buffer_h* hbuffer) {
+extern int vx_upload_file(vx_device_h hdevice, const char *filename, vx_buffer_h *hbuffer) {
   if (nullptr == hdevice || nullptr == filename || nullptr == hbuffer)
     return -1;
 
@@ -156,24 +161,24 @@ extern int vx_upload_file(vx_device_h hdevice, const char* filename, vx_buffer_h
 
 ///////////////////////////////////////////////////////////////////////////////
 
-extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
+extern int vx_dump_perf(vx_device_h hdevice, FILE *stream) {
   uint64_t total_instrs = 0;
   uint64_t total_cycles = 0;
   uint64_t max_cycles = 0;
 
-  auto calcRatio = [&](uint64_t part, uint64_t total)->int {
+  auto calcRatio = [&](uint64_t part, uint64_t total) -> int {
     if (total == 0)
       return 0;
     return int((1.0 - (double(part) / double(total))) * 100);
   };
 
-  auto caclAverage = [&](uint64_t part, uint64_t total)->double {
+  auto caclAverage = [&](uint64_t part, uint64_t total) -> double {
     if (total == 0)
       return 0;
     return double(part) / double(total);
   };
 
-  auto calcAvgPercent = [&](uint64_t part, uint64_t total)->int {
+  auto calcAvgPercent = [&](uint64_t part, uint64_t total) -> int {
     return int(caclAverage(part, total) * 100);
   };
 
@@ -192,7 +197,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t loads = 0;
   uint64_t stores = 0;
   uint64_t ifetch_lat = 0;
-  uint64_t load_lat   = 0;
+  uint64_t load_lat = 0;
   // PERF: l2cache
   uint64_t l2cache_reads = 0;
   uint64_t l2cache_writes = 0;
@@ -228,11 +233,11 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     return err;
   });
 
-  bool icache_enable  = isa_flags & VX_ISA_EXT_ICACHE;
-  bool dcache_enable  = isa_flags & VX_ISA_EXT_DCACHE;
+  bool icache_enable = isa_flags & VX_ISA_EXT_ICACHE;
+  bool dcache_enable = isa_flags & VX_ISA_EXT_DCACHE;
   bool l2cache_enable = isa_flags & VX_ISA_EXT_L2CACHE;
   bool l3cache_enable = isa_flags & VX_ISA_EXT_L3CACHE;
-  bool lmem_enable    = isa_flags & VX_ISA_EXT_LMEM;
+  bool lmem_enable = isa_flags & VX_ISA_EXT_LMEM;
 
   auto perf_class = get_profiling_mode();
 
@@ -320,16 +325,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         if (num_cores > 1) {
           uint64_t scrb_total = scrb_alu_per_core + scrb_fpu_per_core + scrb_lsu_per_core + scrb_csrs_per_core + scrb_wctl_per_core;
           int scrb_percent_per_core = calcAvgPercent(scrb_stalls_per_core, cycles_per_core);
-          fprintf(stream, "PERF: core%d: scoreboard stalls=%ld (%d%%) (alu=%d%%, fpu=%d%%, lsu=%d%%, csrs=%d%%, wctl=%d%%)\n"
-          , core_id
-          , scrb_stalls_per_core
-          , scrb_percent_per_core
-          , calcAvgPercent(scrb_alu_per_core, scrb_total)
-          , calcAvgPercent(scrb_fpu_per_core, scrb_total)
-          , calcAvgPercent(scrb_lsu_per_core, scrb_total)
-          , calcAvgPercent(scrb_csrs_per_core, scrb_total)
-          , calcAvgPercent(scrb_wctl_per_core, scrb_total)
-          );
+          fprintf(stream, "PERF: core%d: scoreboard stalls=%ld (%d%%) (alu=%d%%, fpu=%d%%, lsu=%d%%, csrs=%d%%, wctl=%d%%)\n", core_id, scrb_stalls_per_core, scrb_percent_per_core, calcAvgPercent(scrb_alu_per_core, scrb_total), calcAvgPercent(scrb_fpu_per_core, scrb_total), calcAvgPercent(scrb_lsu_per_core, scrb_total), calcAvgPercent(scrb_csrs_per_core, scrb_total), calcAvgPercent(scrb_wctl_per_core, scrb_total));
         }
         scrb_stalls += scrb_stalls_per_core;
       }
@@ -352,7 +348,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_IFETCHES, core_id, &ifetches_per_core), {
           return err;
         });
-        if (num_cores > 1) fprintf(stream, "PERF: core%d: ifetches=%ld\n", core_id, ifetches_per_core);
+        if (num_cores > 1)
+          fprintf(stream, "PERF: core%d: ifetches=%ld\n", core_id, ifetches_per_core);
         ifetches += ifetches_per_core;
 
         uint64_t ifetch_lat_per_core;
@@ -371,7 +368,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_LOADS, core_id, &loads_per_core), {
           return err;
         });
-        if (num_cores > 1) fprintf(stream, "PERF: core%d: loads=%ld\n", core_id, loads_per_core);
+        if (num_cores > 1)
+          fprintf(stream, "PERF: core%d: loads=%ld\n", core_id, loads_per_core);
         loads += loads_per_core;
 
         uint64_t load_lat_per_core;
@@ -390,7 +388,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_STORES, core_id, &stores_per_core), {
           return err;
         });
-        if (num_cores > 1) fprintf(stream, "PERF: core%d: stores=%ld\n", core_id, stores_per_core);
+        if (num_cores > 1)
+          fprintf(stream, "PERF: core%d: stores=%ld\n", core_id, stores_per_core);
         stores += stores_per_core;
       }
     } break;
@@ -560,7 +559,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     }
 
     float IPC = caclAverage(instrs_per_core, cycles_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs_per_core, cycles_per_core, IPC);
+    if (num_cores > 1)
+      fprintf(stream, "PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs_per_core, cycles_per_core, IPC);
     total_instrs += instrs_per_core;
     total_cycles += cycles_per_core;
     max_cycles = std::max<uint64_t>(cycles_per_core, max_cycles);
@@ -579,15 +579,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     fprintf(stream, "PERF: scheduler idle=%ld (%d%%)\n", sched_idles, sched_idles_percent);
     fprintf(stream, "PERF: scheduler stalls=%ld (%d%%)\n", sched_stalls, sched_stalls_percent);
     fprintf(stream, "PERF: ibuffer stalls=%ld (%d%%)\n", ibuffer_stalls, ibuffer_percent);
-    fprintf(stream, "PERF: scoreboard stalls=%ld (%d%%) (alu=%d%%, fpu=%d%%, lsu=%d%%, csrs=%d%%, wctl=%d%%)\n"
-      , scrb_stalls
-      , scrb_percent
-      , calcAvgPercent(scrb_alu, scrb_total)
-      , calcAvgPercent(scrb_fpu, scrb_total)
-      , calcAvgPercent(scrb_lsu, scrb_total)
-      , calcAvgPercent(scrb_csrs, scrb_total)
-      , calcAvgPercent(scrb_wctl, scrb_total)
-    );
+    fprintf(stream, "PERF: scoreboard stalls=%ld (%d%%) (alu=%d%%, fpu=%d%%, lsu=%d%%, csrs=%d%%, wctl=%d%%)\n", scrb_stalls, scrb_percent, calcAvgPercent(scrb_alu, scrb_total), calcAvgPercent(scrb_fpu, scrb_total), calcAvgPercent(scrb_lsu, scrb_total), calcAvgPercent(scrb_csrs, scrb_total), calcAvgPercent(scrb_wctl, scrb_total));
     fprintf(stream, "PERF: operands stalls=%ld (%d%%)\n", opds_stalls, opds_percent);
     fprintf(stream, "PERF: ifetches=%ld\n", ifetches);
     fprintf(stream, "PERF: loads=%ld\n", loads);
@@ -649,8 +641,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   return 0;
 }
 
-int vx_check_occupancy(vx_device_h hdevice, uint32_t group_size, uint32_t* max_localmem) {
-   // check group size
+int vx_check_occupancy(vx_device_h hdevice, uint32_t group_size, uint32_t *max_localmem) {
+  // check group size
   uint64_t warps_per_core, threads_per_warp;
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_WARPS, &warps_per_core), {
     return err;
@@ -665,7 +657,7 @@ int vx_check_occupancy(vx_device_h hdevice, uint32_t group_size, uint32_t* max_l
   }
 
   // calculate groups occupancy
-  int warps_per_group = (group_size + threads_per_warp-1) / threads_per_warp;
+  int warps_per_group = (group_size + threads_per_warp - 1) / threads_per_warp;
   int groups_per_core = warps_per_core / warps_per_group;
 
   // check local memory capacity
