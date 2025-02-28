@@ -79,6 +79,8 @@ module VX_gpr_unit import VX_gpu_pkg::*; #(
 
     `UNUSED_VAR (bank_req_sid)
     `UNUSED_VAR (bank_req_wis)
+    `UNUSED_VAR (writeback_if.data.sid)
+    `UNUSED_VAR (writeback_if.data.wis)
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_gpr_req
         assign gpr_req_valid[i] = gpr_if[i].req_valid;

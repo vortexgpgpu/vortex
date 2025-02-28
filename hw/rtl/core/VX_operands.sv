@@ -43,8 +43,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     VX_scoreboard_if per_opc_scoreboard_if[`NUM_OPCS]();
     VX_operands_if per_opc_operands_if[`NUM_OPCS]();
 
-    wire [ISSUE_WIS_W-1:0] per_opc_wis[`NUM_OPCS];
-    wire [SIMD_IDX_W-1:0] per_opc_sid[`NUM_OPCS];
+    wire [ISSUE_WIS_W-1:0] per_opc_pending_wis[`NUM_OPCS];
     wire [NUM_REGS-1:0] per_opc_pending_regs[`NUM_OPCS];
 
     `AOS_TO_ITF (per_opc_scoreboard, per_opc_scoreboard_if, `NUM_OPCS, SCB_DATAW)
@@ -93,40 +92,30 @@ module VX_operands import VX_gpu_pkg::*; #(
     end
 
     for (genvar i = 0; i < `NUM_OPCS; ++i) begin : g_collectors
+        wire [`UP(`NUM_OPCS-1)-1:0][ISSUE_WIS_W-1:0] pending_wis_in;
+        wire [`UP(`NUM_OPCS-1)-1:0][NUM_REGS-1:0] pending_regs_in;
+
+        for (genvar j = 1; j < `NUM_OPCS; ++j) begin : g_pending_wis_in
+            localparam k = (i + j) % `NUM_OPCS;
+            assign pending_wis_in[j-1] = per_opc_pending_wis[k];
+            assign pending_regs_in[j-1] = per_opc_pending_regs[k];
+        end
+
         VX_opc_unit #(
             .INSTANCE_ID (`SFORMATF(("%s-collector%0d", INSTANCE_ID, i))),
             .ISSUE_ID (ISSUE_ID)
         ) opc_unit (
             .clk          (clk),
             .reset        (reset),
-            .pending_sid  (per_opc_sid[i]),
-            .pending_wis  (per_opc_wis[i]),
+            .pending_wis_in(pending_wis_in),
+            .pending_regs_in(pending_regs_in),
+            .pending_wis  (per_opc_pending_wis[i]),
             .pending_regs (per_opc_pending_regs[i]),
             .scoreboard_if(per_opc_scoreboard_if[i]),
             .gpr_if       (per_opc_gpr_if[i]),
             .operands_if  (per_opc_operands_if[i])
         );
     end
-
-    reg [`NUM_OPCS-1:0][NUM_REGS-1:0] per_opc_pending_regs_sel;
-    for (genvar i = 0; i < `NUM_OPCS; ++i) begin : g_per_opc_pending_regs_sel
-        wire opc_match = (per_opc_sid[i] == writeback_if.data.sid) && (per_opc_wis[i] == writeback_if.data.wis);
-        assign per_opc_pending_regs_sel[i] = per_opc_pending_regs[i] & {NUM_REGS{opc_match}};
-    end
-
-    reg [NUM_REGS-1:0] opc_pending_regs;
-    
-    VX_reduce_tree #(
-        .DATAW_IN  (NUM_REGS),
-        .N         (`NUM_OPCS),
-        .OP        ("|")
-    ) reduce_opc_pending_regs (
-        .data_in  (per_opc_pending_regs_sel),
-        .data_out (opc_pending_regs)
-    );
-
-    wire war_dp_check = (opc_pending_regs[writeback_if.data.rd] == 0);
-    `UNUSED_VAR (war_dp_check)
 
     VX_gpr_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-gpr", INSTANCE_ID))),

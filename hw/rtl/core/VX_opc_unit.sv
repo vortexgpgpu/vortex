@@ -27,7 +27,9 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     input wire              clk,
     input wire              reset,
 
-    output wire [SIMD_IDX_W-1:0] pending_sid,
+    input wire [`UP(`NUM_OPCS-1)-1:0][ISSUE_WIS_W-1:0] pending_wis_in,
+    input reg [`UP(`NUM_OPCS-1)-1:0][NUM_REGS-1:0] pending_regs_in,
+
     output wire [ISSUE_WIS_W-1:0] pending_wis,
     output reg [NUM_REGS-1:0] pending_regs,
 
@@ -57,8 +59,10 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire [SIMD_IDX_W-1:0] simd_pid;
     wire simd_sop, simd_eop;
 
-    VX_pipe_buffer #(
-        .DATAW (SCB_DATAW)
+    VX_elastic_buffer #(
+        .DATAW   (SCB_DATAW),
+        .SIZE    (2),
+        .OUT_REG (1)
     ) stanging_buf (
         .clk      (clk),
         .reset    (reset),
@@ -78,6 +82,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire gpr_req_fire = gpr_if.req_valid && gpr_if.req_ready;
     wire gpr_rsp_fire = gpr_if.rsp_valid;
 
+    wire [NR_BITS-1:0] rd  = to_reg_number(staging_if.data.rd);
     wire [NR_BITS-1:0] rs1 = to_reg_number(staging_if.data.rs1);
     wire [NR_BITS-1:0] rs2 = to_reg_number(staging_if.data.rs2);
     wire [NR_BITS-1:0] rs3 = to_reg_number(staging_if.data.rs3);
@@ -179,7 +184,6 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     end
 
     // output pending info
-    assign pending_sid = simd_pid;
     assign pending_wis = staging_if.data.wis;
     always @(*) begin
         pending_regs = '0;
@@ -189,6 +193,20 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             end
         end
     end
+
+    reg [NUM_REGS-1:0] opc_pending_regs;
+    always @(*) begin
+        opc_pending_regs = '0;
+        for (integer i = 0; i < `NUM_OPCS-1; ++i) begin
+            opc_pending_regs |= pending_regs_in[i] & {NUM_REGS{pending_wis_in[i] == staging_if.data.wis}};
+        end
+    end
+
+    wire war_dp_check = (opc_pending_regs[rd] == 0);
+
+    wire output_ready_w;
+    assign output_ready = output_ready_w && war_dp_check;
+    wire output_valid = (state == STATE_DISPATCH) && war_dp_check;
 
     // simd iterator
     VX_nz_iterator #(
@@ -216,7 +234,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     ) out_buf (
         .clk      (clk),
         .reset    (reset),
-        .valid_in (state == STATE_DISPATCH),
+        .valid_in (output_valid),
         .data_in  ({
             staging_if.data.uuid,
             staging_if.data.wis,
@@ -234,7 +252,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             simd_sop,
             simd_eop
         }),
-        .ready_in (output_ready),
+        .ready_in (output_ready_w),
         .valid_out(operands_if.valid),
         .data_out (operands_if.data),
         .ready_out(operands_if.ready)

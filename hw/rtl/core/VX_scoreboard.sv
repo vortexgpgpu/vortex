@@ -27,7 +27,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 `endif
 
     VX_writeback_if.slave   writeback_if,
-    VX_operands_if.slave    operands_if,
     VX_ibuffer_if.slave     ibuffer_if [PER_ISSUE_WARPS],
     VX_scoreboard_if.master scoreboard_if
 );
@@ -123,7 +122,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_scoreboard
         reg [NUM_REGS-1:0] inuse_regs, inuse_regs_n;
         wire [NUM_OPDS-1:0] operands_busy;
-        reg in_use_warp, in_use_warp_n;
 
         wire ibuffer_fire = ibuffer_if[w].valid && ibuffer_if[w].ready;
         wire staging_fire = staging_if[w].valid && staging_if[w].ready;
@@ -131,10 +129,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         wire writeback_fire = writeback_if.valid
                            && (writeback_if.data.wis == ISSUE_WIS_W'(w))
                            && writeback_if.data.eop;
-
-        wire operands_fire = operands_if.valid && operands_if.ready
-                          && (operands_if.data.wis == ISSUE_WIS_W'(w))
-                          && operands_if.data.eop;
 
         reg_idx_t [NUM_OPDS-1:0] ibf_opds, stg_opds;
         assign ibf_opds = {ibuffer_if[w].data.rs3, ibuffer_if[w].data.rs2, ibuffer_if[w].data.rs1, ibuffer_if[w].data.rd};
@@ -180,15 +174,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         end
 
-        always @(*) begin
-            in_use_warp_n = in_use_warp;
-            if (operands_fire) begin
-                in_use_warp_n = 0;
-            end else if (staging_fire) begin
-                in_use_warp_n = 1;
-            end
-        end
-
         wire [REG_TYPES-1:0][31:0] in_use_mask;
         for (genvar i = 0; i < REG_TYPES; ++i) begin : g_in_use_mask
             wire [31:0] ibf_reg_mask = ibf_opd_mask[0][i] | ibf_opd_mask[1][i] | ibf_opd_mask[2][i] | ibf_opd_mask[3][i];
@@ -212,15 +197,13 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         always @(posedge clk) begin
             if (reset) begin
                 inuse_regs <= '0;
-                in_use_warp <= 0;
             end else begin
                 inuse_regs <= inuse_regs_n;
-                in_use_warp <= in_use_warp_n;
             end
             operands_ready_r <= ~(| regs_busy);
         end
 
-        assign operands_ready[w] = operands_ready_r && ~in_use_warp;
+        assign operands_ready[w] = operands_ready_r;
 
     `ifdef PERF_ENABLE
         always @(posedge clk) begin
