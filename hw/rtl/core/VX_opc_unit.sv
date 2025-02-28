@@ -183,7 +183,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         end
     end
 
-    // output pending info
+    // output pending reqs
     assign pending_wis = staging_if.data.wis;
     always @(*) begin
         pending_regs = '0;
@@ -194,6 +194,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         end
     end
 
+    // WAR dependency check
     reg [NUM_REGS-1:0] opc_pending_regs;
     always @(*) begin
         opc_pending_regs = '0;
@@ -201,7 +202,6 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             opc_pending_regs |= pending_regs_in[i] & {NUM_REGS{pending_wis_in[i] == staging_if.data.wis}};
         end
     end
-
     wire war_dp_check = (opc_pending_regs[rd] == 0);
 
     wire output_ready_w;

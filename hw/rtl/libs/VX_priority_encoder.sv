@@ -41,7 +41,10 @@ module VX_priority_encoder #(
 
         end else if (MODEL != 0) begin : g_model1
 
+        `IGNORE_UNOPTFLAT_BEGIN
             wire [N-1:0] higher_pri_regs;
+        `IGNORE_UNOPTFLAT_END
+
             assign higher_pri_regs[N-1] = 1'b0;
             for (genvar i = N-2; i >= 0; --i) begin : g_higher_pri_regs
                 assign higher_pri_regs[i] = higher_pri_regs[i+1] | data_in[i+1];
