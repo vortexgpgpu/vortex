@@ -332,7 +332,7 @@
 // Pipeline Configuration /////////////////////////////////////////////////////
 
 `ifndef SIMD_WIDTH
-`define SIMD_WIDTH      `MIN(`NUM_THREADS, 2)
+`define SIMD_WIDTH      `MIN(`NUM_THREADS, 16)
 `endif
 
 // Issue width

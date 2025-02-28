@@ -221,6 +221,12 @@ config1()
     CONFIGS="-DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=simx --app=diverge
     CONFIGS="-DISSUE_WIDTH=4" ./ci/blackbox.sh --driver=simx --app=diverge
 
+    # simd width
+    CONFIGS="-DSIMD_WIDTH=1" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-ttrig"
+    CONFIGS="-DSIMD_WIDTH=2" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-ttrig"
+    CONFIGS="-DSIMD_WIDTH=1" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-ttrig"
+    CONFIGS="-DSIMD_WIDTH=2" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-ttrig"
+
     # ALU scaling
     CONFIGS="-DISSUE_WIDTH=2 -DNUM_ALU_BLOCK=1 -DNUM_ALU_LANES=2" ./ci/blackbox.sh --driver=rtlsim --app=diverge
     CONFIGS="-DISSUE_WIDTH=4 -DNUM_ALU_BLOCK=4 -DNUM_ALU_LANES=4" ./ci/blackbox.sh --driver=rtlsim --app=diverge

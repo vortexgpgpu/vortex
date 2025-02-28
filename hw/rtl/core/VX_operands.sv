@@ -115,6 +115,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     end
 
     reg [NUM_REGS-1:0] opc_pending_regs;
+    
     VX_reduce_tree #(
         .DATAW_IN  (NUM_REGS),
         .N         (`NUM_OPCS),
