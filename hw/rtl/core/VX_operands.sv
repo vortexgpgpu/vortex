@@ -160,28 +160,4 @@ module VX_operands import VX_gpu_pkg::*; #(
         `UNUSED_PIN(sel_out)
     );
 
-`ifdef SIMULATION
-    reg [31:0] timeout_ctr;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            timeout_ctr <= '0;
-        end else begin
-            if (writeback_if.valid) begin
-            `ifdef DBG_TRACE_PIPELINE
-                `TRACE(4, ("%t: *** %s-stall: wid=%0d, sid=%0d, tmask=%b, PC=0x%0h, cycles=%0d (#%0d)\n",
-                    $time, INSTANCE_ID, wis_to_wid(writeback_if.data.wis, ISSUE_ID), writeback_if.data.sid, writeback_if.data.tmask, {writeback_if.data.PC, 1'b0}, timeout_ctr, writeback_if.data.uuid))
-            `endif
-                timeout_ctr <= timeout_ctr + 1;
-            end else if (writeback_if.valid) begin
-                timeout_ctr <= '0;
-            end
-        end
-    end
-
-    `RUNTIME_ASSERT((timeout_ctr < STALL_TIMEOUT),
-        ("%t: *** %s timeout: wid=%0d, sid=%0d, tmask=%b, PC=0x%0h, cycles=%0d (#%0d)",
-            $time, INSTANCE_ID, wis_to_wid(writeback_if.data.wis, ISSUE_ID), writeback_if.data.sid, writeback_if.data.tmask, {writeback_if.data.PC, 1'b0}, timeout_ctr, writeback_if.data.uuid))
-`endif
-
 endmodule
