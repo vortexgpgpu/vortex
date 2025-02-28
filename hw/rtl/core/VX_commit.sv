@@ -171,7 +171,7 @@ module VX_commit import VX_gpu_pkg::*; #(
         assign writeback_if[i].data.data = commit_arb_if[i].data.data;
         assign writeback_if[i].data.sop  = commit_arb_if[i].data.sop;
         assign writeback_if[i].data.eop  = commit_arb_if[i].data.eop;
-        assign commit_arb_if[i].ready = writeback_if[i].ready;
+        assign commit_arb_if[i].ready = 1;
     end
 
 `ifdef DBG_TRACE_PIPELINE

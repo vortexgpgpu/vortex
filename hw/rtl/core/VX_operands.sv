@@ -51,9 +51,9 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     // collector selection
 
-    reg [`NUM_OPCS-1:0] ready_opcs;
+    reg [`NUM_OPCS-1:0] select_opcs;
     always @(*) begin
-        ready_opcs = per_opc_scoreboard_ready;
+        select_opcs = '1;
         if (`NUM_OPCS > 1 && SIMD_COUNT > 1) begin
             // SFU cannot handle multiple inflight WCTL instructions, always assign them same collector
             // LD/ST instructions should also be ordered via the same collector
@@ -61,12 +61,12 @@ module VX_operands import VX_gpu_pkg::*; #(
              && inst_sfu_is_wctl(scoreboard_if.data.op_type)) begin
                 // select collector 0
                 for (int i = 0; i < `NUM_OPCS; ++i) begin
-                    if (i != 0) ready_opcs[i] = 0;
+                    if (i != 0) select_opcs[i] = 0;
                 end
             end else if (scoreboard_if.data.ex_type == EX_LSU) begin
                 // select collector 1
                 for (int i = 0; i < `NUM_OPCS; ++i) begin
-                    if (i != 1) ready_opcs[i] = 0;
+                    if (i != 1) select_opcs[i] = 0;
                 end
             end
         end
@@ -74,6 +74,8 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     wire opc_sel_valid;
     wire [`NUM_OPCS-1:0] opc_sel_mask;
+
+    wire  [`NUM_OPCS-1:0] ready_opcs = select_opcs & per_opc_scoreboard_ready;
 
     VX_priority_encoder #(
         .N (`NUM_OPCS)
@@ -123,12 +125,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     );
 
     wire war_dp_check = (opc_pending_regs[writeback_if.data.rd] == 0);
-
-    VX_writeback_if writeback_if_s();
-    assign writeback_if_s.valid = writeback_if.valid && war_dp_check;
-    assign writeback_if_s.data  = writeback_if.data;
-    assign writeback_if.ready   = war_dp_check;
-    `UNUSED_VAR (writeback_if_s.ready)
+    `UNUSED_VAR (war_dp_check)
 
     VX_gpr_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-gpr", INSTANCE_ID))),
@@ -140,7 +137,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .perf_stalls  (perf_stalls),
     `endif
-        .writeback_if (writeback_if_s),
+        .writeback_if (writeback_if),
         .gpr_if       (per_opc_gpr_if)
     );
 
@@ -170,13 +167,13 @@ module VX_operands import VX_gpu_pkg::*; #(
         if (reset) begin
             timeout_ctr <= '0;
         end else begin
-            if (writeback_if.valid && ~writeback_if.ready) begin
+            if (writeback_if.valid) begin
             `ifdef DBG_TRACE_PIPELINE
                 `TRACE(4, ("%t: *** %s-stall: wid=%0d, sid=%0d, tmask=%b, PC=0x%0h, cycles=%0d (#%0d)\n",
                     $time, INSTANCE_ID, wis_to_wid(writeback_if.data.wis, ISSUE_ID), writeback_if.data.sid, writeback_if.data.tmask, {writeback_if.data.PC, 1'b0}, timeout_ctr, writeback_if.data.uuid))
             `endif
                 timeout_ctr <= timeout_ctr + 1;
-            end else if (writeback_if.valid && writeback_if.ready) begin
+            end else if (writeback_if.valid) begin
                 timeout_ctr <= '0;
             end
         end

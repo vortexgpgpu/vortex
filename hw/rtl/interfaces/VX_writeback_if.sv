@@ -29,18 +29,15 @@ interface VX_writeback_if import VX_gpu_pkg::*; ();
 
     logic  valid;
     data_t data;
-    logic  ready;
 
     modport master (
         output valid,
-        output data,
-        input ready
+        output data
     );
 
     modport slave (
         input valid,
-        input data,
-        output ready
+        input data
     );
 
 endinterface

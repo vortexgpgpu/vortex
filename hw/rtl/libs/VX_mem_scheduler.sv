@@ -55,12 +55,10 @@ module VX_mem_scheduler #(
     input wire [CORE_REQS-1:0][WORD_WIDTH-1:0] core_req_data,
     input wire [TAG_WIDTH-1:0]              core_req_tag,
     output wire                             core_req_ready,
-    output wire [CORE_QUEUE_ADDRW-1:0]      core_req_queue_id,
 
     // Core request queue
     output wire                             req_queue_empty,
-    output wire                             req_queue_pop,
-    output wire [CORE_QUEUE_ADDRW-1:0]      req_queue_id,
+    output wire                             req_queue_rw_notify,
 
     // Core response
     output wire                             core_rsp_valid,
@@ -189,13 +187,9 @@ module VX_mem_scheduler #(
     // can accept another request?
     assign core_req_ready = reqq_ready_in && ibuf_ready;
 
-    // return core queue id
-    assign core_req_queue_id = ibuf_waddr;
-
     // request qeueue info
-    assign req_queue_pop   = reqq_valid && reqq_ready;
+    assign req_queue_rw_notify = reqq_valid && reqq_ready && reqq_rw;
     assign req_queue_empty = !reqq_valid && ibuf_empty;
-    assign req_queue_id    = reqq_tag[CORE_QUEUE_ADDRW-1:0];
 
     // Index buffer ///////////////////////////////////////////////////////////
 

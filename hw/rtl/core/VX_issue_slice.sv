@@ -61,6 +61,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .perf_sfu_uses  (issue_perf.sfu_uses),
     `endif
         .writeback_if   (writeback_if),
+        .operands_if    (operands_if),
         .ibuffer_if     (ibuffer_if),
         .scoreboard_if  (scoreboard_if)
     );

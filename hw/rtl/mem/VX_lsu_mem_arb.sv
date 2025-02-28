@@ -107,7 +107,7 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
     wire [NUM_OUTPUTS-1:0][RSP_DATAW-1:0] rsp_data_in;
     wire [NUM_OUTPUTS-1:0]                rsp_ready_in;
 
-    if (NUM_INPUTS > NUM_OUTPUTS) begin : g_rsp_enabled
+    if (NUM_INPUTS > NUM_OUTPUTS) begin : g_rsp_select
 
         wire [NUM_OUTPUTS-1:0][LOG_NUM_REQS-1:0] rsp_sel_in;
 
@@ -148,7 +148,7 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
             .ready_out (rsp_ready_out)
         );
 
-    end else begin : g_passthru
+    end else begin : g_rsp_arb
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_rsp_data_in
             assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;
