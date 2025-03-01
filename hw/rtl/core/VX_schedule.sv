@@ -52,9 +52,9 @@ module VX_schedule import VX_gpu_pkg::*; #(
     reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks, thread_masks_n;
     reg [`NUM_WARPS-1:0][PC_BITS-1:0] warp_pcs, warp_pcs_n;
 
-    wire [NW_WIDTH-1:0]    schedule_wid;
+    wire [NW_WIDTH-1:0]     schedule_wid;
     wire [`NUM_THREADS-1:0] schedule_tmask;
-    wire [PC_BITS-1:0]     schedule_pc;
+    wire [PC_BITS-1:0]      schedule_pc;
     wire                    schedule_valid;
     wire                    schedule_ready;
 
@@ -62,9 +62,9 @@ module VX_schedule import VX_gpu_pkg::*; #(
     wire                    join_valid;
     wire                    join_is_dvg;
     wire                    join_is_else;
-    wire [NW_WIDTH-1:0]    join_wid;
+    wire [NW_WIDTH-1:0]     join_wid;
     wire [`NUM_THREADS-1:0] join_tmask;
-    wire [PC_BITS-1:0]     join_pc;
+    wire [PC_BITS-1:0]      join_pc;
 
     reg [PERF_CTR_BITS-1:0] cycles;
 
