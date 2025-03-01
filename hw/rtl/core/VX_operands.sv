@@ -46,8 +46,6 @@ module VX_operands import VX_gpu_pkg::*; #(
     wire [ISSUE_WIS_W-1:0] per_opc_pending_wis[`NUM_OPCS];
     wire [NUM_REGS-1:0] per_opc_pending_regs[`NUM_OPCS];
 
-    `AOS_TO_ITF (per_opc_scoreboard, per_opc_scoreboard_if, `NUM_OPCS, SCB_DATAW)
-
     // collector selection
 
     reg [`NUM_OPCS-1:0] select_opcs;
@@ -72,25 +70,27 @@ module VX_operands import VX_gpu_pkg::*; #(
         end
     end
 
-    wire opc_sel_valid;
-    wire [`NUM_OPCS-1:0] opc_sel_mask;
+`IGNORE_UNOPTFLAT_BEGIN
+    `AOS_TO_ITF (per_opc_scoreboard, per_opc_scoreboard_if, `NUM_OPCS, SCB_DATAW)
+`IGNORE_UNOPTFLAT_END
 
-    wire  [`NUM_OPCS-1:0] ready_opcs = select_opcs & per_opc_scoreboard_ready;
-
-    VX_priority_encoder #(
-        .N (`NUM_OPCS)
-    ) opc_sel (
-        .data_in   (ready_opcs),
-        .valid_out (opc_sel_valid),
-        .onehot_out(opc_sel_mask),
-        `UNUSED_PIN (index_out)
+    VX_stream_arb #(
+        .NUM_INPUTS  (1),
+        .NUM_OUTPUTS (`NUM_OPCS),
+        .DATAW       (SCB_DATAW),
+        .ARBITER     ("P"),
+        .OUT_BUF     (0)
+    ) input_arb (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (scoreboard_if.valid),
+        .data_in   (scoreboard_if.data),
+        .ready_in  (scoreboard_if.ready),
+        .valid_out (per_opc_scoreboard_valid),
+        .data_out  (per_opc_scoreboard_data),
+        .ready_out (per_opc_scoreboard_ready & select_opcs),
+        `UNUSED_PIN(sel_out)
     );
-
-    for (genvar i = 0; i < `NUM_OPCS; ++i) begin : g_opc_sel
-        assign per_opc_scoreboard_valid[i] = scoreboard_if.valid && opc_sel_mask[i];
-        assign per_opc_scoreboard_data[i] = scoreboard_if.data;
-        assign scoreboard_if.ready = opc_sel_valid;
-    end
 
     for (genvar i = 0; i < `NUM_OPCS; ++i) begin : g_collectors
         wire [`UP(`NUM_OPCS-1)-1:0][ISSUE_WIS_W-1:0] pending_wis_in;
@@ -138,16 +138,17 @@ module VX_operands import VX_gpu_pkg::*; #(
         .NUM_INPUTS  (`NUM_OPCS),
         .NUM_OUTPUTS (1),
         .DATAW       (OPD_DATAW),
+        .ARBITER     ("R"),
         .OUT_BUF     (3)
-    ) operands_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .valid_in   (per_opc_operands_valid),
-        .data_in    (per_opc_operands_data),
-        .ready_in   (per_opc_operands_ready),
-        .valid_out  (operands_if.valid),
-        .data_out   (operands_if.data),
-        .ready_out  (operands_if.ready),
+    ) output_arb (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (per_opc_operands_valid),
+        .data_in   (per_opc_operands_data),
+        .ready_in  (per_opc_operands_ready),
+        .valid_out (operands_if.valid),
+        .data_out  (operands_if.data),
+        .ready_out (operands_if.ready),
         `UNUSED_PIN(sel_out)
     );
 
