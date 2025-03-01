@@ -53,20 +53,21 @@ module VX_operands import VX_gpu_pkg::*; #(
     reg [`NUM_OPCS-1:0] select_opcs;
     always @(*) begin
         select_opcs = '1;
-        if (`NUM_OPCS > 1 && SIMD_COUNT > 1) begin
-            // SFU cannot handle multiple inflight WCTL instructions, always assign them same collector
-            // LD/ST instructions should also be ordered via the same collector
-            if (scoreboard_if.data.ex_type == EX_SFU
-             && inst_sfu_is_wctl(scoreboard_if.data.op_type)) begin
-                // select collector 0
-                for (int i = 0; i < `NUM_OPCS; ++i) begin
-                    if (i != 0) select_opcs[i] = 0;
-                end
-            end else if (scoreboard_if.data.ex_type == EX_LSU) begin
-                // select collector 1
-                for (int i = 0; i < `NUM_OPCS; ++i) begin
-                    if (i != 1) select_opcs[i] = 0;
-                end
+        // SFU cannot handle multiple inflight WCTL instructions, should use same collector
+        if (`NUM_OPCS > 1 && SIMD_COUNT > 1
+         && scoreboard_if.data.ex_type == EX_SFU
+         && inst_sfu_is_wctl(scoreboard_if.data.op_type)) begin
+            // select collector 0
+            for (int i = 0; i < `NUM_OPCS; ++i) begin
+                if (i != 0) select_opcs[i] = 0;
+            end
+        end
+        // LSU cannot handle out of order LD/ST instructions, should use same collector
+        if (`NUM_OPCS > 1
+         && scoreboard_if.data.ex_type == EX_LSU) begin
+            // select collector 1
+            for (int i = 0; i < `NUM_OPCS; ++i) begin
+                if (i != 1) select_opcs[i] = 0;
             end
         end
     end

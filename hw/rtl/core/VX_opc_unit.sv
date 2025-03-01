@@ -199,7 +199,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     always @(*) begin
         other_pending_regs = '0;
         for (integer i = 0; i < `NUM_OPCS-1; ++i) begin
-            other_pending_regs = other_pending_regs | pending_regs_in[i] & {NUM_REGS{staging_if.data.wis == pending_wis_in[i]}};
+            other_pending_regs |= pending_regs_in[i] & {NUM_REGS{staging_if.data.wis == pending_wis_in[i]}};
         end
     end
     wire war_dp_check = staging_if.data.wb && (other_pending_regs[rd] != 0);
