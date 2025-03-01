@@ -31,7 +31,7 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     input reg [`UP(`NUM_OPCS-1)-1:0][NUM_REGS-1:0] pending_regs_in,
 
     output wire [ISSUE_WIS_W-1:0] pending_wis,
-    output reg [NUM_REGS-1:0] pending_regs,
+    output wire [NUM_REGS-1:0] pending_regs,
 
     VX_scoreboard_if.slave  scoreboard_if,
     VX_gpr_if.master        gpr_if,
@@ -59,10 +59,8 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire [SIMD_IDX_W-1:0] simd_pid;
     wire simd_sop, simd_eop;
 
-    VX_elastic_buffer #(
-        .DATAW   (SCB_DATAW),
-        .SIZE    (2),
-        .OUT_REG (1)
+    VX_pipe_buffer #(
+        .DATAW (SCB_DATAW)
     ) stanging_buf (
         .clk      (clk),
         .reset    (reset),
@@ -185,28 +183,30 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
 
     // output pending reqs
     assign pending_wis = staging_if.data.wis;
+    reg [NUM_REGS-1:0] pending_regs_r;
     always @(*) begin
-        pending_regs = '0;
+        pending_regs_r = '0;
         for (integer i = 0; i < NUM_SRC_OPDS; ++i) begin
-            if (opds_busy[i]) begin
-                pending_regs[src_regs[i]] = 1;
+            if (staging_if.data.used_rs[i]) begin
+                pending_regs_r[src_regs[i]] = staging_if.valid;
             end
         end
     end
+    assign pending_regs = pending_regs_r;
 
     // WAR dependency check
-    reg [NUM_REGS-1:0] opc_pending_regs;
+    reg [NUM_REGS-1:0] other_pending_regs;
     always @(*) begin
-        opc_pending_regs = '0;
+        other_pending_regs = '0;
         for (integer i = 0; i < `NUM_OPCS-1; ++i) begin
-            opc_pending_regs |= pending_regs_in[i] & {NUM_REGS{pending_wis_in[i] == staging_if.data.wis}};
+            other_pending_regs = other_pending_regs | pending_regs_in[i] & {NUM_REGS{staging_if.data.wis == pending_wis_in[i]}};
         end
     end
-    wire war_dp_check = (opc_pending_regs[rd] == 0);
+    wire war_dp_check = staging_if.data.wb && (other_pending_regs[rd] != 0);
 
     wire output_ready_w;
-    assign output_ready = output_ready_w && war_dp_check;
-    wire output_valid = (state == STATE_DISPATCH) && war_dp_check;
+    assign output_ready = output_ready_w && ~war_dp_check;
+    wire output_valid = (state == STATE_DISPATCH) && ~war_dp_check;
 
     // simd iterator
     VX_nz_iterator #(
