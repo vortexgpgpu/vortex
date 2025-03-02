@@ -65,7 +65,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     wire [4:0] rd  = instr[11:7];
     wire [4:0] rs1 = instr[19:15];
     wire [4:0] rs2 = instr[24:20];
-    wire [4:0] rs3 = (opcode == `INST_SHFL)? {3'b000,instr[31:30]} + instr[24:20] : instr[31:27];
+    wire [4:0] rs3 = (opcode == `INST_EXT4)? {3'b000,instr[31:30]} + instr[24:20] : instr[31:27];
 
     `UNUSED_VAR (func2)
     `UNUSED_VAR (func5)
@@ -532,7 +532,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     default:;
                 endcase
             end
-            `INST_VOTE: begin
+            `INST_EXT2: begin
                 ex_type = `EX_ALU;
                 op_args.alu.use_imm = 1;
                 op_args.alu.imm = `SEXT(`IMM_BITS, u_12);
@@ -564,7 +564,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     default:;
                 endcase
             end
-            `INST_SHFL: begin
+            `INST_EXT3: begin
                 ex_type = `EX_ALU;
                 op_args.alu.use_imm = 1;
                 op_args.alu.imm = `SEXT(`IMM_BITS, u_12);

@@ -52,36 +52,10 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
   // {Opcode::EXT2,    InstType::R4},
   {Opcode::R_W,     InstType::R},
   {Opcode::I_W,     InstType::I},
+  {Opcode::TCU,     InstType::I},
   {Opcode::EXT2,     InstType::I},
   {Opcode::EXT3,     InstType::I},
 };
-
-// enum Constants {
-//   width_opcode= 7,
-//   width_reg   = 5,
-//   width_func2 = 2,
-//   width_func3 = 3,
-//   width_func7 = 7,
-//   width_i_imm = 12,
-//   width_j_imm = 20,
-
-//   shift_opcode= 0,
-//   shift_rd    = width_opcode,
-//   shift_func3 = shift_rd + width_reg,
-//   shift_rs1   = shift_func3 + width_func3,
-//   shift_rs2   = shift_rs1 + width_reg,
-//   shift_func2 = shift_rs2 + width_reg,
-//   shift_func7 = shift_rs2 + width_reg,
-//   shift_rs3   = shift_func7 + width_func2,
-
-//   mask_opcode = (1 << width_opcode) - 1,
-//   mask_reg    = (1 << width_reg)   - 1,
-//   mask_func2  = (1 << width_func2) - 1,
-//   mask_func3  = (1 << width_func3) - 1,
-//   mask_func7  = (1 << width_func7) - 1,
-//   mask_i_imm  = (1 << width_i_imm) - 1,
-//   mask_j_imm  = (1 << width_j_imm) - 1,
-// };
 
 static const char* op_string(const Instr &instr) {
   auto opcode = instr.getOpcode();
