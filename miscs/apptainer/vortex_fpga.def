@@ -1,0 +1,91 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%post
+    echo "Setting up the environment..."
+
+
+    touch /var/log/apt/term.log
+    if [ -f /var/log/apt/term.log ]; then
+        chown root:adm /var/log/apt/term.log || true
+    fi
+
+
+    # Set environment variable to avoid interactive prompts during installation
+    export DEBIAN_FRONTEND=noninteractive
+    echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/no-sandbox
+    mkdir -p /netscratch
+
+    # Update and install base dependencies
+    apt-get update
+    apt-get install -y libc6 fakeroot
+
+    # Fix dependency issues
+    apt-get install -f -y || true
+    dpkg --configure -a || true
+
+    # Reinstall problematic packages
+    apt-get remove --purge -y dbus fontconfig-config || true
+    apt-get install -y dbus fontconfig-config || true
+
+    rm -f /var/lib/dpkg/lock-frontend
+    rm -f /var/lib/dpkg/lock
+    rm -f /var/cache/apt/archives/lock
+
+    # mount -o remount,rw /usr
+    # mount -o remount,rw /var
+    chown -R root:root /usr/lib/dbus-1.0/dbus-daemon-launch-helper || true
+
+
+    # Install necessary packages
+    apt-get install -y fontconfig libfontconfig1 libpangoft2-1.0-0 libbluray2 \
+                       libpangocairo-1.0-0 libavformat58 libpango-1.0-0 \
+                       openjdk-11-jre-headless libcairo2 librsvg2-2 librsvg2-common \
+                       openjdk-11-jre-zero libtheora0 libavcodec58 libcairo-gobject2 \
+                       ca-certificates-java libchromaprint1 software-properties-common perl-modules bzip2 || true
+
+    apt-get install -y usbutils gawk bison gcc make wget tar python3.9 locales
+    ln -s /usr/bin/python3 /usr/bin/python
+    locale-gen en_US.UTF-8
+    update-locale LANG=en_US.UTF-8 LANGUAGE=en_US.UTF-8 LC_ALL=en_US.UTF-8
+    # Run dpkg to ensure everything is properly configured
+    dpkg --configure -a || true
+
+    # Clean up apt cache
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+
+    # Change to your target directory and install dependencies
+    # cd /netscratch/
+    # cd rn84/vortex
+    # ./ci/install_dependencies.sh
+
+    # Go to build directory and configure
+    # cd /netscratch/rn84/vortex/build
+    # ../configure --xlen=32 --tooldir=/netscratch/rn84/tools
+
+    # Source the environment for toolchain
+    # source ./ci/toolchain_env.sh
+
+    # rm -f /dev/null
+    # mknod -m 666 /dev/null c 1 3
+    # chown root:root /dev/null
+
+%environment
+    export LANG=en_US.UTF-8
+    export LANGUAGE=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+    export HOME=/home/developer
+
+%runscript
+    exec /bin/bash
+
+%labels
+    Author YourName
+    Version 1.0
+
+%test
+    echo "Container test successful!"
+    locale
+    lsusb || echo "lsusb not available"
+    ls -l /dev/null
