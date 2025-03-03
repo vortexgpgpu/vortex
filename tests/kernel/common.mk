@@ -13,22 +13,11 @@ LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex -mllvm -vortex-branch-divergence=0
 
-#CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
-#CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
-#AR  = $(LLVM_VORTEX)/bin/llvm-ar
-#DP  = $(LLVM_VORTEX)/bin/llvm-objdump
-#CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
-
-CC  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
-CXX = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-g++
-AR  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar
-DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
-CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
-
-VX_CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
-VX_CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
-VX_DP  = $(LLVM_VORTEX)/bin/llvm-objdump
-VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
+CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
+CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
+AR  = $(LLVM_VORTEX)/bin/llvm-ar
+DP  = $(LLVM_VORTEX)/bin/llvm-objdump
+CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 CFLAGS += -I$(VORTEX_HOME)/kernel/include -I$(ROOT_DIR)/hw
@@ -42,13 +31,13 @@ LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/kernel/scripts/link$(XLE
 all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
 
 $(PROJECT).dump: $(PROJECT).elf
-	$(VX_DP) -D $< > $@
+	$(DP) -D $< > $@
 
 $(PROJECT).bin: $(PROJECT).elf
-	$(VX_CP) -O binary $< $@
+	$(CP) -O binary $< $@
 
 $(PROJECT).elf: $(SRCS)
-	$(VX_CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
+	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
 run-rtlsim: $(PROJECT).bin
 	$(ROOT_DIR)/sim/rtlsim/rtlsim $(PROJECT).bin
@@ -57,7 +46,7 @@ run-simx: $(PROJECT).bin
 	$(ROOT_DIR)/sim/simx/simx $(PROJECT).bin
 
 .depend: $(SRCS)
-	$(VX_CC) $(CFLAGS) -MM $^ > .depend;
+	$(CC) $(CFLAGS) -MM $^ > .depend;
 
 clean:
 	rm -rf *.elf *.bin *.dump *.log .depend
