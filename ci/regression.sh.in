@@ -301,11 +301,11 @@ config2()
 
     # test single-bank memory
     if [ "$XLEN" == "64" ]; then
-        CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=48" ./ci/blackbox.sh --driver=opae --app=mstress
-        CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=48" ./ci/blackbox.sh --driver=xrt --app=mstress
+        CONFIGS="-DPLATFORM_MEMORY_NUM_BANKS=1" ./ci/blackbox.sh --driver=opae --app=mstress
+        CONFIGS="-DPLATFORM_MEMORY_NUM_BANKS=1" ./ci/blackbox.sh --driver=xrt --app=mstress
     else
-        CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=32" ./ci/blackbox.sh --driver=opae --app=mstress
-        CONFIGS="-DPLATFORM_MEMORY_BANKS=1 -DPLATFORM_MEMORY_ADDR_WIDTH=32" ./ci/blackbox.sh --driver=xrt --app=mstress
+        CONFIGS="-DPLATFORM_MEMORY_NUM_BANKS=1" ./ci/blackbox.sh --driver=opae --app=mstress
+        CONFIGS="-DPLATFORM_MEMORY_NUM_BANKS=1" ./ci/blackbox.sh --driver=xrt --app=mstress
     fi
 
     # test larger memory address
@@ -322,10 +322,10 @@ config2()
     CONFIGS="-DPLATFORM_MEMORY_INTERLEAVE=0" ./ci/blackbox.sh --driver=opae --app=mstress
 
     # test memory ports
-    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_BANKS=2" ./ci/blackbox.sh --driver=simx --app=mstress
-    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_BANKS=2" ./ci/blackbox.sh --driver=simx --app=mstress --threads=8
-    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=mstress
-    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=mstress --threads=8
+    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=mstress
+    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=mstress --threads=8
+    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=mstress
+    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=mstress --threads=8
     CONFIGS="-DMEM_BLOCK_SIZE=8" ./ci/blackbox.sh --driver=opae --app=mstress --threads=8
     CONFIGS="-DMEM_BLOCK_SIZE=8" ./ci/blackbox.sh --driver=xrt --app=mstress --threads=8
 

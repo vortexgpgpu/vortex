@@ -29,19 +29,54 @@ using namespace vortex;
 
 class DramSim::Impl {
 private:
+	struct mem_req_t {
+		uint64_t addr;
+		bool is_write;
+		ResponseCallback callback;
+		void* arg;
+	};
+
 	Ramulator::IFrontEnd* ramulator_frontend_;
 	Ramulator::IMemorySystem* ramulator_memorysystem_;
+	uint32_t cpu_channel_size_;
+	uint64_t cpu_cycles_;
+	uint32_t scaled_dram_cycles_;
+	static const uint32_t tick_cycles_ = 1000;
+	static const uint32_t dram_channel_size_ = 16; // 128 bits
+	std::queue<mem_req_t> pending_reqs_;
+
+	void handle_pending_requests() {
+		if (pending_reqs_.empty())
+			return;
+		auto& req = pending_reqs_.front();
+		auto req_type = req.is_write ? Ramulator::Request::Type::Write : Ramulator::Request::Type::Read;
+		std::function<void(Ramulator::Request&)> callback = nullptr;
+		if (req.callback) {
+			callback = [req_callback = std::move(req.callback), req_arg = std::move(req.arg)](Ramulator::Request& /*dram_req*/) {
+				req_callback(req_arg);
+			};
+		}
+		if (ramulator_frontend_->receive_external_requests(req_type, req.addr, 0, callback)) {
+			if (req.is_write) {
+				// Ramulator does not handle write responses, so we fire the callback ourselves.
+				if (req.callback) {
+					req.callback(req.arg);
+				}
+			}
+			pending_reqs_.pop();
+		}
+	}
 
 public:
-	Impl(int clock_ratio) {
+	Impl(uint32_t num_channels, uint32_t channel_size, float clock_ratio) {
 		YAML::Node dram_config;
 		dram_config["Frontend"]["impl"] = "GEM5";
 		dram_config["MemorySystem"]["impl"] = "GenericDRAM";
-		dram_config["MemorySystem"]["clock_ratio"] = clock_ratio;
+		dram_config["MemorySystem"]["clock_ratio"] = 1;
 		dram_config["MemorySystem"]["DRAM"]["impl"] = "HBM2";
 		dram_config["MemorySystem"]["DRAM"]["org"]["preset"] = "HBM2_8Gb";
 		dram_config["MemorySystem"]["DRAM"]["org"]["density"] = 8192;
-		dram_config["MemorySystem"]["DRAM"]["org"]["channel"] = 8;
+		dram_config["MemorySystem"]["DRAM"]["org"]["channel"] = num_channels;
 		dram_config["MemorySystem"]["DRAM"]["timing"]["preset"] = "HBM2_2Gbps";
 		dram_config["MemorySystem"]["Controller"]["impl"] = "Generic";
 		dram_config["MemorySystem"]["Controller"]["Scheduler"]["impl"] = "FRFCFS";
@@ -59,6 +94,10 @@ public:
 		ramulator_memorysystem_ = Ramulator::Factory::create_memory_system(dram_config);
 		ramulator_frontend_->connect_memory_system(ramulator_memorysystem_);
 		ramulator_memorysystem_->connect_frontend(ramulator_frontend_);
+
+		cpu_channel_size_ = channel_size;
+		scaled_dram_cycles_ = static_cast<uint64_t>(clock_ratio * tick_cycles_);
+		this->reset();
 	}
 
 	~Impl() {
@@ -66,41 +105,49 @@ public:
 		auto original_buf = std::cout.rdbuf();
 		std::cout.rdbuf(nullstream.rdbuf());
 		ramulator_frontend_->finalize();
-  		ramulator_memorysystem_->finalize();
+  	ramulator_memorysystem_->finalize();
 		std::cout.rdbuf(original_buf);
 	}
 
 	void reset() {
-		//--
+		cpu_cycles_ = 0;
 	}
 
 	void tick() {
-		ramulator_memorysystem_->tick();
+		cpu_cycles_ += tick_cycles_;
+		while (cpu_cycles_ >= scaled_dram_cycles_) {
+			this->handle_pending_requests();
+			ramulator_memorysystem_->tick();
+			cpu_cycles_ -= scaled_dram_cycles_;
+		}
 	}
 
-  bool send_request(bool is_write, uint64_t addr, int source_id, ResponseCallback response_cb, void* arg) {
-    if (!ramulator_frontend_->receive_external_requests(
-			is_write ? Ramulator::Request::Type::Write : Ramulator::Request::Type::Read,
-			addr,
-			source_id,
-			[callback_ = std::move(response_cb), arg_ = std::move(arg)](Ramulator::Request& /*dram_req*/) {
-				callback_(arg_);
+	void send_request(uint64_t addr, bool is_write, ResponseCallback response_cb, void* arg) {
+		// enqueue the request
+		if (cpu_channel_size_ > dram_channel_size_) {
+			uint32_t n = cpu_channel_size_ / dram_channel_size_;
+			for (uint32_t i = 0; i < n; ++i) {
+				uint64_t dram_byte_addr = (addr / cpu_channel_size_) * dram_channel_size_ + (i * dram_channel_size_);
+				if (i == 0) {
+					pending_reqs_.push({dram_byte_addr, is_write, response_cb, arg});
+				} else {
+					pending_reqs_.push({dram_byte_addr, is_write, nullptr, nullptr});
+				}
 			}
-		)) {
-			return false;
+		} else if (cpu_channel_size_ < dram_channel_size_) {
+			uint64_t dram_byte_addr = (addr / cpu_channel_size_) * dram_channel_size_;
+			pending_reqs_.push({dram_byte_addr, is_write, response_cb, arg});
+		} else {
+			uint64_t dram_byte_addr = addr;
+			pending_reqs_.push({dram_byte_addr, is_write, response_cb, arg});
 		}
-		if (is_write) {
-			// Ramulator does not handle write responses, so we call the callback ourselves
-			response_cb(arg);
-		}
-		return true;
-  }
+	}
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-DramSim::DramSim(int clock_ratio)
-	: impl_(new Impl(clock_ratio))
+DramSim::DramSim(uint32_t num_channels, uint32_t channel_size, float clock_ratio)
+	: impl_(new Impl(num_channels, channel_size, clock_ratio))
 {}
 
 DramSim::~DramSim() {
@@ -115,6 +162,6 @@ void DramSim::tick() {
   impl_->tick();
 }
 
-bool DramSim::send_request(bool is_write, uint64_t addr, int source_id, ResponseCallback callback, void* arg) {
-  return impl_->send_request(is_write, addr, source_id, callback, arg);
+void DramSim::send_request(uint64_t addr, bool is_write, ResponseCallback callback, void* arg) {
+  impl_->send_request(addr, is_write, callback, arg);
 }

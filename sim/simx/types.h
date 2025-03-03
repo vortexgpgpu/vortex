@@ -398,6 +398,8 @@ inline std::ostream &operator<<(std::ostream &os, const MemRsp& rsp) {
 template <typename T>
 class HashTable {
 public:
+  typedef T DataType;
+
   HashTable(uint32_t capacity)
     : entries_(capacity)
     , size_(0)
@@ -470,6 +472,8 @@ private:
 template <typename Type>
 class Arbiter : public SimObject<Arbiter<Type>> {
 public:
+  typedef Type ReqType;
+
   std::vector<SimPort<Type>> Inputs;
   std::vector<SimPort<Type>> Outputs;
 
@@ -556,6 +560,8 @@ protected:
 template <typename Type>
 class CrossBar : public SimObject<CrossBar<Type>> {
 public:
+  typedef Type ReqType;
+
   std::vector<SimPort<Type>> Inputs;
   std::vector<SimPort<Type>> Outputs;
 
@@ -565,8 +571,8 @@ public:
     ArbiterType type,
     uint32_t num_inputs,
     uint32_t num_outputs = 1,
-    uint32_t addr_start = 0,
-    uint32_t delay = 1
+    uint32_t delay = 1,
+    std::function<uint32_t(const Type& req)> output_sel = nullptr
   )
     : SimObject<CrossBar<Type>>(ctx, name)
     , Inputs(num_inputs, this)
@@ -576,12 +582,18 @@ public:
     , grants_(num_outputs, 0)
     , lg2_inputs_(log2ceil(num_inputs))
     , lg2_outputs_(log2ceil(num_outputs))
-    , addr_start_(addr_start)
     , collisions_(0) {
     assert(delay != 0);
     assert(num_inputs <= 64);
     assert(num_outputs <= 64);
     assert(ispow2(num_outputs));
+    if (output_sel != nullptr) {
+      output_sel_ = output_sel;
+    } else {
+      output_sel_ = [this](const Type& req) {
+        return (uint32_t)bit_getw(req.addr, 0, (lg2_outputs_-1));
+      };
+    }
   }
 
   void reset() {
@@ -609,7 +621,8 @@ public:
         auto& req = req_in.front();
         uint32_t output_idx = 0;
         if (lg2_outputs_ != 0) {
-          output_idx = (uint32_t)bit_getw(req.addr, addr_start_, addr_start_ + (lg2_outputs_-1));
+          // select output index
+          output_idx = output_sel_(req);
           // skip if input is not going to current output
           if (output_idx != o)
             continue;
@@ -649,7 +662,7 @@ protected:
   std::vector<uint32_t> grants_;
   uint32_t lg2_inputs_;
   uint32_t lg2_outputs_;
-  uint32_t addr_start_;
+  std::function<uint32_t(const Type& req)> output_sel_;
   uint64_t collisions_;
 };
 
@@ -658,6 +671,9 @@ protected:
 template <typename Req, typename Rsp>
 class TxArbiter : public SimObject<TxArbiter<Req, Rsp>> {
 public:
+  typedef Req ReqType;
+  typedef Rsp RspType;
+
   std::vector<SimPort<Req>>  ReqIn;
   std::vector<SimPort<Rsp>>  RspIn;
 
@@ -771,6 +787,9 @@ protected:
 template <typename Req, typename Rsp>
 class TxCrossBar : public SimObject<TxCrossBar<Req, Rsp>> {
 public:
+  typedef Req ReqType;
+  typedef Rsp RspType;
+
   std::vector<SimPort<Req>> ReqIn;
   std::vector<SimPort<Rsp>> RspIn;
 
@@ -783,8 +802,8 @@ public:
     ArbiterType type,
     uint32_t num_inputs,
     uint32_t num_outputs = 1,
-    uint32_t addr_start = 0,
-    uint32_t delay = 1
+    uint32_t delay = 1,
+    std::function<uint32_t(const Req& req)> output_sel = nullptr
   )
     : SimObject<TxCrossBar<Req, Rsp>>(ctx, name)
     , ReqIn(num_inputs, this)
@@ -797,7 +816,6 @@ public:
     , rsp_grants_(num_inputs, 0)
     , lg2_inputs_(log2ceil(num_inputs))
     , lg2_outputs_(log2ceil(num_outputs))
-    , addr_start_(addr_start)
     , req_collisions_(0)
     , rsp_collisions_(0) {
     assert(delay != 0);
@@ -805,6 +823,13 @@ public:
     assert(num_outputs <= 64);
     assert(ispow2(num_inputs));
     assert(ispow2(num_outputs));
+    if (output_sel != nullptr) {
+      output_sel_ = output_sel;
+    } else {
+      output_sel_ = [this](const Req& req) {
+        return (uint32_t)bit_getw(req.addr, 0, (lg2_outputs_-1));
+      };
+    }
   }
 
   void reset() {
@@ -875,7 +900,8 @@ public:
         auto& req = req_in.front();
         uint32_t output_idx = 0;
         if (lg2_outputs_ != 0) {
-          output_idx = (uint32_t)bit_getw(req.addr, addr_start_, addr_start_ + (lg2_outputs_-1));
+          // select output index
+          output_idx = output_sel_(req);
           // skip if request is not going to current output
           if (output_idx != o)
             continue;
@@ -929,7 +955,7 @@ protected:
   std::vector<uint32_t> rsp_grants_;
   uint32_t lg2_inputs_;
   uint32_t lg2_outputs_;
-  uint32_t addr_start_;
+  std::function<uint32_t(const Req& req)> output_sel_;
   uint64_t req_collisions_;
   uint64_t rsp_collisions_;
 };

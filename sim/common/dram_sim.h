@@ -19,14 +19,15 @@ class DramSim {
 public:
   typedef void (*ResponseCallback)(void *arg);
 
-  DramSim(int clock_ratio);
+  DramSim(uint32_t num_channels, uint32_t channel_size, float clock_ratio);
   ~DramSim();
 
   void reset();
 
   void tick();
 
-  bool send_request(bool is_write, uint64_t addr, int source_id, ResponseCallback response_cb, void* arg);
+  // addr: per-channel block address
+  void send_request(uint64_t addr, bool is_write, ResponseCallback response_cb, void* arg);
 
 private:
 	class Impl;

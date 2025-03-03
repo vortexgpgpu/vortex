@@ -22,10 +22,14 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
 {
   SimPlatform::instance().initialize();
 
+	assert(PLATFORM_MEMORY_DATA_SIZE == MEM_BLOCK_SIZE);
+
   // create memory simulator
   memsim_ = MemSim::Create("dram", MemSim::Config{
-    PLATFORM_MEMORY_BANKS,
-    L3_MEM_PORTS
+    PLATFORM_MEMORY_NUM_BANKS,
+    L3_MEM_PORTS,
+    MEM_BLOCK_SIZE,
+    MEM_CLOCK_RATIO
   });
 
   // create clusters

@@ -14,9 +14,9 @@
 `include "VX_define.vh"
 
 module rtlsim_shim import VX_gpu_pkg::*; #(
-    parameter MEM_DATA_WIDTH = `PLATFORM_MEMORY_DATA_WIDTH,
-    parameter MEM_ADDR_WIDTH = `PLATFORM_MEMORY_ADDR_WIDTH,
-    parameter MEM_NUM_BANKS  = `PLATFORM_MEMORY_BANKS,
+    parameter MEM_DATA_WIDTH = (`PLATFORM_MEMORY_DATA_SIZE * 8),
+    parameter MEM_ADDR_WIDTH = `PLATFORM_MEMORY_ADDR_WIDTH - $clog2(`PLATFORM_MEMORY_NUM_BANKS),
+    parameter MEM_NUM_BANKS  = `PLATFORM_MEMORY_NUM_BANKS,
     parameter MEM_TAG_WIDTH  = 64
 ) (
     `SCOPE_IO_DECL
@@ -159,7 +159,7 @@ module rtlsim_shim import VX_gpu_pkg::*; #(
         .TAG_WIDTH_OUT  (MEM_TAG_WIDTH),
         .NUM_PORTS_IN   (`VX_MEM_PORTS),
         .NUM_BANKS_OUT  (MEM_NUM_BANKS),
-        .INTERLEAVE     (0),
+        .INTERLEAVE     (`PLATFORM_MEMORY_INTERLEAVE),
         .REQ_OUT_BUF    ((`VX_MEM_PORTS > 1) ? 2 : 0),
         .RSP_OUT_BUF    ((`VX_MEM_PORTS > 1 || MEM_NUM_BANKS > 1) ? 2 : 0)
     ) mem_bank_adapter (

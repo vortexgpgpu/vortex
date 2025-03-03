@@ -35,8 +35,6 @@
 #include <dram_sim.h>
 #include <util.h>
 
-#define PLATFORM_MEMORY_DATA_SIZE (PLATFORM_MEMORY_DATA_WIDTH/8)
-
 #ifndef MEM_CLOCK_RATIO
 #define MEM_CLOCK_RATIO 1
 #endif
@@ -66,6 +64,8 @@ typedef uint64_t Word;
 
 using namespace vortex;
 
+static uint32_t g_mem_bank_addr_width = (PLATFORM_MEMORY_ADDR_WIDTH - log2ceil(PLATFORM_MEMORY_NUM_BANKS));
+
 static uint64_t timestamp = 0;
 
 double sc_time_stamp() {
@@ -93,7 +93,7 @@ void sim_trace_enable(bool enable) {
 
 class Processor::Impl {
 public:
-  Impl() : dram_sim_(MEM_CLOCK_RATIO) {
+  Impl() : dram_sim_(PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO) {
     // force random values for uninitialized signals
     Verilated::randReset(VERILATOR_RESET_VALUE);
     Verilated::randSeed(50);
@@ -154,7 +154,7 @@ public:
 
     // start
     device_->reset = 0;
-    for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
+    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
       device_->mem_req_ready[b] = 1;
     }
 
@@ -195,7 +195,7 @@ private:
       reqs.clear();
     }
 
-    for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
+    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
       std::queue<mem_req_t*> empty;
       std::swap(dram_queue_[b], empty);
     }
@@ -224,17 +224,15 @@ private:
 
     dram_sim_.tick();
 
-    for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
+    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
       if (!dram_queue_[b].empty()) {
         auto mem_req = dram_queue_[b].front();
-        if (dram_sim_.send_request(mem_req->write, mem_req->addr, b, [](void* arg) {
+        dram_sim_.send_request(mem_req->addr, mem_req->write, [](void* arg) {
           // mark completed request as ready
           auto orig_req = reinterpret_cast<mem_req_t*>(arg);
           orig_req->ready = true;
-        }, mem_req)) {
-          // was successfully sent to dram, remove from queue
-          dram_queue_[b].pop();
-        }
+        }, mem_req);
+        dram_queue_[b].pop();
       }
     }
 
@@ -254,7 +252,7 @@ private:
   }
 
   void mem_bus_reset() {
-    for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
+    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
       device_->mem_req_ready[b] = 0;
       device_->mem_rsp_valid[b] = 0;
     }
@@ -262,13 +260,13 @@ private:
 
   void mem_bus_eval(bool clk) {
     if (!clk) {
-      for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
+      for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
         mem_rd_rsp_ready_[b] = device_->mem_rsp_ready[b];
       }
       return;
     }
 
-    for (int b = 0; b < PLATFORM_MEMORY_BANKS; ++b) {
+    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
       // process memory responses
       if (device_->mem_rsp_valid[b] && mem_rd_rsp_ready_[b]) {
         device_->mem_rsp_valid[b] = 0;
@@ -293,11 +291,16 @@ private:
 
       // process memory requests
       if (device_->mem_req_valid[b] && device_->mem_req_ready[b]) {
-        uint64_t byte_addr = (device_->mem_req_addr[b] * PLATFORM_MEMORY_DATA_SIZE);
+      #if PLATFORM_MEMORY_INTERLEAVE == 1
+        uint64_t byte_addr = (uint64_t(device_->mem_req_addr[b]) * PLATFORM_MEMORY_NUM_BANKS + b) * PLATFORM_MEMORY_DATA_SIZE;
+      #else
+        uint64_t byte_addr = (uint64_t(device_->mem_req_addr[b]) + (b << g_mem_bank_addr_width)) * PLATFORM_MEMORY_DATA_SIZE;
+      #endif
+        // check read/write
         if (device_->mem_req_rw[b]) {
           auto byteen = device_->mem_req_byteen[b];
           auto data = VDataCast<uint8_t*, PLATFORM_MEMORY_DATA_SIZE>::get(device_->mem_req_data[b]);
-          // check address range
+          // check if console output address
           if (byte_addr >= uint64_t(IO_COUT_ADDR)
            && byte_addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
             // process console output
@@ -313,21 +316,23 @@ private:
               }
             }
           } else {
-            // process writes
+            // process memory writes
             /*printf("%0ld: [sim] MEM Wr Req[%d]: addr=0x%0lx, tag=0x%0lx, byteen=0x", timestamp, b, byte_addr, device_->mem_req_tag[b]);
             for (int i = (PLATFORM_MEMORY_DATA_SIZE/4)-1; i >= 0; --i) {
               printf("%x", (int)((byteen >> (4 * i)) & 0xf));
             }
             printf(", data=0x");
             for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-              printf("%d=%02x,", i, data[i]);
+              printf("%02x", data[i]);
             }
             printf("\n");*/
+
             for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; i++) {
               if ((byteen >> i) & 0x1) {
                 (*ram_)[byte_addr + i] = data[i];
               }
             }
+
             auto mem_req = new mem_req_t();
             mem_req->tag   = device_->mem_req_tag[b];
             mem_req->addr  = byte_addr;
@@ -341,7 +346,7 @@ private:
             pending_mem_reqs_[b].emplace_back(mem_req);
           }
         } else {
-          // process reads
+          // process memory reads
           auto mem_req = new mem_req_t();
           mem_req->tag   = device_->mem_req_tag[b];
           mem_req->addr  = byte_addr;
@@ -388,11 +393,11 @@ private:
 
   std::unordered_map<int, std::stringstream> print_bufs_;
 
-  std::list<mem_req_t*> pending_mem_reqs_[PLATFORM_MEMORY_BANKS];
+  std::list<mem_req_t*> pending_mem_reqs_[PLATFORM_MEMORY_NUM_BANKS];
 
-  std::queue<mem_req_t*> dram_queue_[PLATFORM_MEMORY_BANKS];
+  std::queue<mem_req_t*> dram_queue_[PLATFORM_MEMORY_NUM_BANKS];
 
-  std::array<bool, PLATFORM_MEMORY_BANKS> mem_rd_rsp_ready_;
+  std::array<bool, PLATFORM_MEMORY_NUM_BANKS> mem_rd_rsp_ready_;
 
   DramSim dram_sim_;
 

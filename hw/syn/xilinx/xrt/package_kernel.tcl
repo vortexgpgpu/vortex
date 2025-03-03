@@ -11,21 +11,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if { $::argc != 4 } {
-    puts "ERROR: Program \"$::argv0\" requires 4 arguments!\n"
-    puts "Usage: $::argv0 <krnl_name> <vcs_file> <tool_dir> <build_dir>\n"
+if { $::argc != 3 } {
+    puts "ERROR: Program \"$::argv0\" requires 3 arguments!\n"
+    puts "Usage: $::argv0 <krnl_name> <vcs_file> <build_dir>\n"
     exit
 }
 
 set krnl_name [lindex $::argv 0]
 set vcs_file  [lindex $::argv 1]
-set tool_dir  [lindex $::argv 2]
-set build_dir [lindex $::argv 3]
+set build_dir [lindex $::argv 2]
+
+set tool_dir $::env(TOOL_DIR)
+set script_dir [ file dirname [ file normalize [ info script ] ] ]
 
 puts "Using krnl_name=$krnl_name"
 puts "Using vcs_file=$vcs_file"
 puts "Using tool_dir=$tool_dir"
 puts "Using build_dir=$build_dir"
+puts "Using script_dir=$script_dir"
 
 set path_to_packaged "${build_dir}/xo/packaged_kernel"
 set path_to_tmp_project "${build_dir}/xo/project"
@@ -52,7 +55,7 @@ foreach def $vdefines_list {
     if { $name == "CHIPSCOPE" } {
         set chipscope 1
     }
-    if { $name == "PLATFORM_MEMORY_BANKS" } {
+    if { $name == "PLATFORM_MEMORY_NUM_BANKS" } {
         set num_banks [lindex $fields 1]
     }
     if { $name == "PLATFORM_MERGED_MEMORY_INTERFACE" } {
