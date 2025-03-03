@@ -27,7 +27,7 @@ jobs:
 
       - name: Cache Toolchain Directory
         id: cache-toolchain
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: tools
           key: ${{ runner.os }}-toolchain-v0.1
