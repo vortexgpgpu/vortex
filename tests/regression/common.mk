@@ -83,7 +83,7 @@ kernel.vxbin: kernel.elf
 	OBJCOPY=$(VX_CP) $(VORTEX_HOME)/kernel/scripts/vxbin.py $< $@
 
 kernel.elf: $(VX_SRCS)
-	$(VX_CXX) $(VX_CFLAGS) $^ $(VX_LDFLAGS) -o $@
+	$(VX_CXX) $(VX_CFLAGS) $^ $(VX_LDFLAGS) -o kernel.elf
 
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
