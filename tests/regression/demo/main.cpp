@@ -1,21 +1,21 @@
-#include "common.h"
 #include <iostream>
-#include <string.h>
 #include <unistd.h>
+#include <string.h>
 #include <vector>
 #include <vortex.h>
+#include "common.h"
 
 #define FLOAT_ULP 6
 
-#define RT_CHECK(_expr)                                      \
-  do {                                                       \
-    int _ret = _expr;                                        \
-    if (0 == _ret)                                           \
-      break;                                                 \
-    printf("Error: '%s' returned %d!\n", #_expr, (int)_ret); \
-    cleanup();                                               \
-    exit(-1);                                                \
-  } while (false)
+#define RT_CHECK(_expr)                                         \
+   do {                                                         \
+     int _ret = _expr;                                          \
+     if (0 == _ret)                                             \
+       break;                                                   \
+     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);   \
+	 cleanup();			                                              \
+     exit(-1);                                                  \
+   } while (false)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -25,7 +25,7 @@ class Comparator {};
 template <>
 class Comparator<int> {
 public:
-  static const char *type_str() {
+  static const char* type_str() {
     return "integer";
   }
   static int generate() {
@@ -34,7 +34,7 @@ public:
   static bool compare(int a, int b, int index, int errors) {
     if (a != b) {
       if (errors < 100) {
-        printf("*** error: [%d] expected=%d, actxual=%d\n", index, b, a);
+        printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
       }
       return false;
     }
@@ -45,23 +45,16 @@ public:
 template <>
 class Comparator<float> {
 private:
-  union Float_t {
-    float f;
-    int i;
-  };
-
+  union Float_t { float f; int i; };
 public:
-  static const char *type_str() {
+  static const char* type_str() {
     return "float";
   }
   static int generate() {
     return static_cast<float>(rand()) / RAND_MAX;
   }
   static bool compare(float a, float b, int index, int errors) {
-    union fi_t {
-      float f;
-      int32_t i;
-    };
+    union fi_t { float f; int32_t i; };
     fi_t fa, fb;
     fa.f = a;
     fb.f = b;
@@ -76,7 +69,7 @@ public:
   }
 };
 
-const char *kernel_file = "kernel.vxbin";
+const char* kernel_file = "kernel.vxbin";
 uint32_t count = 16;
 
 vx_device_h device = nullptr;
@@ -88,8 +81,8 @@ vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
-  std::cout << "Vortex Test." << std::endl;
-  std::cout << "Usage: [-k: kernel] [-n words] [-h: help]" << std::endl;
+   std::cout << "Vortex Test." << std::endl;
+   std::cout << "Usage: [-k: kernel] [-n words] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
@@ -102,7 +95,7 @@ static void parse_args(int argc, char **argv) {
     case 'k':
       kernel_file = optarg;
       break;
-    case 'h': {
+    case 'h':{
       show_usage();
       exit(0);
     } break;
