@@ -13,14 +13,12 @@
 
 #include <common.h>
 
+#include <unistd.h>
+#include <string.h>
+#include <string>
 #include <cstdlib>
 #include <dlfcn.h>
 #include <iostream>
-#include <string.h>
-#include <string>
-#include <unistd.h>
-
-// #define HOSTLESS 1
 
 int get_profiling_mode();
 
@@ -53,13 +51,13 @@ static int dcr_initialize(vx_device_h hdevice) {
 ///////////////////////////////////////////////////////////////////////////////
 
 static callbacks_t g_callbacks;
-static void *g_drv_handle = nullptr;
+static void* g_drv_handle = nullptr;
 
-typedef int (*vx_dev_init_t)(callbacks_t *);
+typedef int (*vx_dev_init_t)(callbacks_t*);
 
-extern int vx_dev_open(vx_device_h *hdevice) {
+extern int vx_dev_open(vx_device_h* hdevice) {
   {
-    const char *driverName = getenv("VORTEX_DRIVER");
+    const char* driverName = getenv("VORTEX_DRIVER");
     if (driverName == nullptr) {
       driverName = "simx";
     }
@@ -105,15 +103,15 @@ extern int vx_dev_close(vx_device_h hdevice) {
   return ret;
 }
 
-extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
+extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t* value) {
   return (g_callbacks.dev_caps)(hdevice, caps_id, value);
 }
 
-extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, int flags, vx_buffer_h *hbuffer) {
+extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, int flags, vx_buffer_h* hbuffer) {
   return (g_callbacks.mem_alloc)(hdevice, size, flags, hbuffer);
 }
 
-extern int vx_mem_reserve(vx_device_h hdevice, uint64_t address, uint64_t size, int flags, vx_buffer_h *hbuffer) {
+extern int vx_mem_reserve(vx_device_h hdevice, uint64_t address, uint64_t size, int flags, vx_buffer_h* hbuffer) {
   return (g_callbacks.mem_reserve)(hdevice, address, size, flags, hbuffer);
 }
 
@@ -125,41 +123,29 @@ extern int vx_mem_access(vx_buffer_h hbuffer, uint64_t offset, uint64_t size, in
   return (g_callbacks.mem_access)(hbuffer, offset, size, flags);
 }
 
-extern int vx_mem_address(vx_buffer_h hbuffer, uint64_t *address) {
+extern int vx_mem_address(vx_buffer_h hbuffer, uint64_t* address) {
   return (g_callbacks.mem_address)(hbuffer, address);
 }
 
-extern int vx_mem_info(vx_device_h hdevice, uint64_t *mem_free, uint64_t *mem_used) {
+extern int vx_mem_info(vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_used) {
   return (g_callbacks.mem_info)(hdevice, mem_free, mem_used);
 }
 
-#ifdef HOSTLESS
-extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t src_offset) {
-  // return (g_callbacks.copy_to_dev)(hbuffer, host_ptr, dst_offset, size);
-  return (g_callbacks.copy_to_dev)(hbuffer, dev_maddr, size, src_offset);
-}
-
-#else
-extern int vx_copy_to_dev(vx_buffer_h hbuffer, const void *host_ptr, uint64_t dst_offset, uint64_t size) {
+extern int vx_copy_to_dev(vx_buffer_h hbuffer, const void* host_ptr, uint64_t dst_offset, uint64_t size) {
   return (g_callbacks.copy_to_dev)(hbuffer, host_ptr, dst_offset, size);
 }
-#endif
 
-extern int vx_copy_from_dev(void *host_ptr, vx_buffer_h hbuffer, uint64_t src_offset, uint64_t size) {
+extern int vx_copy_from_dev(void* host_ptr, vx_buffer_h hbuffer, uint64_t src_offset, uint64_t size) {
   return (g_callbacks.copy_from_dev)(host_ptr, hbuffer, src_offset, size);
 }
 
 extern int vx_start(vx_device_h hdevice, vx_buffer_h hkernel, vx_buffer_h harguments) {
-  std::cout << "[UDIT] vx_start simx stub 1" << std::endl;
   int profiling_mode = get_profiling_mode();
   if (profiling_mode != 0) {
     CHECK_ERR(vx_dcr_write(hdevice, VX_DCR_BASE_MPM_CLASS, profiling_mode), {
       return err;
     });
   }
-  std::cout << "[UDIT] vx_start simx stub 2" << std::endl;
-  std::cout << "[UDIT] callbacks ret " << (g_callbacks.start)(hdevice, hkernel, harguments) << std::endl;
-  // print value and type of args (compare demo and hostless)
   return (g_callbacks.start)(hdevice, hkernel, harguments);
 }
 
@@ -167,7 +153,7 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
   return (g_callbacks.ready_wait)(hdevice, timeout);
 }
 
-extern int vx_dcr_read(vx_device_h hdevice, uint32_t addr, uint32_t *value) {
+extern int vx_dcr_read(vx_device_h hdevice, uint32_t addr, uint32_t* value) {
   return (g_callbacks.dcr_read)(hdevice, addr, value);
 }
 
@@ -175,7 +161,7 @@ extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint32_t value) {
   return (g_callbacks.dcr_write)(hdevice, addr, value);
 }
 
-extern int vx_mpm_query(vx_device_h hdevice, uint32_t addr, uint32_t core_id, uint64_t *value) {
+extern int vx_mpm_query(vx_device_h hdevice, uint32_t addr, uint32_t core_id, uint64_t* value) {
   if (core_id == 0xffffffff) {
     uint64_t num_cores;
     CHECK_ERR((g_callbacks.dev_caps)(hdevice, VX_CAPS_NUM_CORES, &num_cores), {

@@ -1,7 +1,7 @@
 ROOT_DIR := $(realpath ..)
 include $(ROOT_DIR)/config.mk
 
-all: regression
+all: unittest kernel regression opencl riscv
 
 unittest:
 	$(MAKE) -C unittest

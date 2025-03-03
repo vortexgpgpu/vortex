@@ -55,9 +55,6 @@ CXXFLAGS += -I$(VORTEX_HOME)/runtime/include -I$(ROOT_DIR)/hw
 
 LDFLAGS += -L$(VORTEX_RT_PATH) -lvortex
 
-OBJCOPY_FLAGS ?= LOAD,ALLOC,DATA,CONTENTS
-BINFILES :=  args.bin input.a.bin input.b.bin input.c.bin
-
 # Debugging
 ifdef DEBUG
 	CXXFLAGS += -g -O0
@@ -77,43 +74,16 @@ endif
 endif
 endif
 
-ifdef HOSTLESS
-all: $(PROJECT) kernel.bin kernel.dump
-	$(info Building for HOSTLESS mode: Generating kernel.bin)
-else
 all: $(PROJECT) kernel.vxbin kernel.dump
-	$(info Building for HOST mode: Generating kernel.vxbin)
-endif
 
 kernel.dump: kernel.elf
 	$(VX_DP) -D $< > $@
 
-
-ifdef HOSTLESS
-kernel.bin: kernel.elf
-	$(info Generating kernel.bin because HOSTLESS is defined)
-	$(VX_CP) -O binary $< $@
-
-kernel.elf: $(VX_SRCS) $(BINFILES)
-	$(info VX_HOSTLESS)
-	$(VX_CXX) $(VX_CFLAGS) -o $@ $(VX_SRCS) $(VX_LDFLAGS)
-	$(VX_CP) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) $@
-	$(VX_CP) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) $@
-	$(VX_CP) --set-section-flags .operand.c=$(OBJCOPY_FLAGS) $@
-	$(VX_CP) --set-section-flags .args=$(OBJCOPY_FLAGS) $@
-	$(VX_CP) --update-section .operand.a=input.a.bin $@ || true
-	$(VX_CP) --update-section .operand.b=input.b.bin $@ || true
-	$(VX_CP) --update-section .operand.c=input.c.bin $@ || true
-	$(VX_CP) --update-section .args=args.bin $@ || true
-else
 kernel.vxbin: kernel.elf
-	$(info Generating kernel.vxbin because HOSTLESS is NOT defined)
 	OBJCOPY=$(VX_CP) $(VORTEX_HOME)/kernel/scripts/vxbin.py $< $@
 
 kernel.elf: $(VX_SRCS)
-	$(info VX_HOST)
 	$(VX_CXX) $(VX_CFLAGS) $^ $(VX_LDFLAGS) -o $@
-endif
 
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@

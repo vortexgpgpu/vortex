@@ -12,19 +12,18 @@
 // limitations under the License.
 
 struct vx_buffer {
-  vx_device *device;
+  vx_device* device;
   uint64_t addr;
   uint64_t size;
 };
 
-extern int vx_dev_init(callbacks_t *callbacks) {
-  // #define HOSTLESS 1
+extern int vx_dev_init(callbacks_t* callbacks) {
   if (nullptr == callbacks)
     return -1;
 
-  callbacks->dev_open = [](vx_device_h *hdevice) -> int {
+  callbacks->dev_open = [](vx_device_h* hdevice)->int {
     if (nullptr == hdevice)
-      return -1;
+      return  -1;
     auto device = new vx_device();
     if (device == nullptr)
       return -1;
@@ -32,24 +31,24 @@ extern int vx_dev_init(callbacks_t *callbacks) {
       delete device;
       return err;
     });
-    DBGPRINT("DEV_OPEN: hdevice=%p\n", (void *)device);
+    DBGPRINT("DEV_OPEN: hdevice=%p\n", (void*)device);
     *hdevice = device;
     return 0;
   };
 
-  callbacks->dev_close = [](vx_device_h hdevice) -> int {
+  callbacks->dev_close = [](vx_device_h hdevice)->int {
     if (nullptr == hdevice)
       return -1;
     DBGPRINT("DEV_CLOSE: hdevice=%p\n", hdevice);
-    auto device = ((vx_device *)hdevice);
+    auto device = ((vx_device*)hdevice);
     delete device;
     return 0;
   };
 
-  callbacks->dev_caps = [](vx_device_h hdevice, uint32_t caps_id, uint64_t *value) -> int {
+  callbacks->dev_caps = [](vx_device_h hdevice, uint32_t caps_id, uint64_t *value)->int {
     if (nullptr == hdevice)
       return -1;
-    vx_device *device = ((vx_device *)hdevice);
+    vx_device *device = ((vx_device*)hdevice);
     uint64_t _value;
     CHECK_ERR(device->get_caps(caps_id, &_value), {
       return err;
@@ -59,10 +58,12 @@ extern int vx_dev_init(callbacks_t *callbacks) {
     return 0;
   };
 
-  callbacks->mem_alloc = [](vx_device_h hdevice, uint64_t size, int flags, vx_buffer_h *hbuffer) -> int {
-    if (nullptr == hdevice || nullptr == hbuffer || 0 == size)
+  callbacks->mem_alloc = [](vx_device_h hdevice, uint64_t size, int flags, vx_buffer_h* hbuffer)->int {
+    if (nullptr == hdevice
+     || nullptr == hbuffer
+     || 0 == size)
       return -1;
-    auto device = ((vx_device *)hdevice);
+    auto device = ((vx_device*)hdevice);
     uint64_t dev_addr;
     CHECK_ERR(device->mem_alloc(size, flags, &dev_addr), {
       return err;
@@ -72,15 +73,17 @@ extern int vx_dev_init(callbacks_t *callbacks) {
       device->mem_free(dev_addr);
       return -1;
     }
-    DBGPRINT("MEM_ALLOC: hdevice=%p, size=%ld, flags=0x%d, hbuffer=%p\n", hdevice, size, flags, (void *)buffer);
+    DBGPRINT("MEM_ALLOC: hdevice=%p, size=%ld, flags=0x%d, hbuffer=%p\n", hdevice, size, flags, (void*)buffer);
     *hbuffer = buffer;
     return 0;
   };
 
-  callbacks->mem_reserve = [](vx_device_h hdevice, uint64_t address, uint64_t size, int flags, vx_buffer_h *hbuffer) {
-    if (nullptr == hdevice || nullptr == hbuffer || 0 == size)
+  callbacks->mem_reserve = [](vx_device_h hdevice, uint64_t address, uint64_t size, int flags, vx_buffer_h* hbuffer) {
+    if (nullptr == hdevice
+     || nullptr == hbuffer
+     || 0 == size)
       return -1;
-    auto device = ((vx_device *)hdevice);
+    auto device = ((vx_device*)hdevice);
     CHECK_ERR(device->mem_reserve(address, size, flags), {
       return err;
     });
@@ -89,7 +92,7 @@ extern int vx_dev_init(callbacks_t *callbacks) {
       device->mem_free(address);
       return -1;
     }
-    DBGPRINT("MEM_RESERVE: hdevice=%p, address=0x%lx, size=%ld, flags=0x%d, hbuffer=%p\n", hdevice, address, size, flags, (void *)buffer);
+    DBGPRINT("MEM_RESERVE: hdevice=%p, address=0x%lx, size=%ld, flags=0x%d, hbuffer=%p\n", hdevice, address, size, flags, (void*)buffer);
     *hbuffer = buffer;
     return 0;
   };
@@ -98,8 +101,8 @@ extern int vx_dev_init(callbacks_t *callbacks) {
     if (nullptr == hbuffer)
       return 0;
     DBGPRINT("MEM_FREE: hbuffer=%p\n", hbuffer);
-    auto buffer = ((vx_buffer *)hbuffer);
-    auto device = ((vx_device *)buffer->device);
+    auto buffer = ((vx_buffer*)hbuffer);
+    auto device = ((vx_device*)buffer->device);
     device->mem_access(buffer->addr, buffer->size, 0);
     int err = device->mem_free(buffer->addr);
     delete buffer;
@@ -109,27 +112,27 @@ extern int vx_dev_init(callbacks_t *callbacks) {
   callbacks->mem_access = [](vx_buffer_h hbuffer, uint64_t offset, uint64_t size, int flags) {
     if (nullptr == hbuffer)
       return -1;
-    auto buffer = ((vx_buffer *)hbuffer);
-    auto device = ((vx_device *)buffer->device);
+    auto buffer = ((vx_buffer*)hbuffer);
+    auto device = ((vx_device*)buffer->device);
     if ((offset + size) > buffer->size)
       return -1;
     DBGPRINT("MEM_ACCESS: hbuffer=%p, offset=%ld, size=%ld, flags=%d\n", hbuffer, offset, size, flags);
     return device->mem_access(buffer->addr + offset, size, flags);
   };
 
-  callbacks->mem_address = [](vx_buffer_h hbuffer, uint64_t *address) {
+  callbacks->mem_address = [](vx_buffer_h hbuffer, uint64_t* address) {
     if (nullptr == hbuffer)
       return -1;
-    auto buffer = ((vx_buffer *)hbuffer);
+    auto buffer = ((vx_buffer*)hbuffer);
     DBGPRINT("MEM_ADDRESS: hbuffer=%p, address=0x%lx\n", hbuffer, buffer->addr);
     *address = buffer->addr;
     return 0;
   };
 
-  callbacks->mem_info = [](vx_device_h hdevice, uint64_t *mem_free, uint64_t *mem_used) {
+  callbacks->mem_info = [](vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_used) {
     if (nullptr == hdevice)
       return -1;
-    auto device = ((vx_device *)hdevice);
+    auto device = ((vx_device*)hdevice);
     uint64_t _mem_free, _mem_used;
     CHECK_ERR(device->mem_info(&_mem_free, &_mem_used), {
       return err;
@@ -144,22 +147,22 @@ extern int vx_dev_init(callbacks_t *callbacks) {
     return 0;
   };
 
-  callbacks->copy_to_dev = [](vx_buffer_h hbuffer, const void *host_ptr, uint64_t dst_offset, uint64_t size) {
+  callbacks->copy_to_dev = [](vx_buffer_h hbuffer, const void* host_ptr, uint64_t dst_offset, uint64_t size) {
     if (nullptr == hbuffer || nullptr == host_ptr)
       return -1;
-    auto buffer = ((vx_buffer *)hbuffer);
-    auto device = ((vx_device *)buffer->device);
+    auto buffer = ((vx_buffer*)hbuffer);
+    auto device = ((vx_device*)buffer->device);
     if ((dst_offset + size) > buffer->size)
       return -1;
     DBGPRINT("COPY_TO_DEV: hbuffer=%p, host_addr=%p, dst_offset=%ld, size=%ld\n", hbuffer, host_ptr, dst_offset, size);
     return device->upload(buffer->addr + dst_offset, host_ptr, size);
   };
 
-  callbacks->copy_from_dev = [](void *host_ptr, vx_buffer_h hbuffer, uint64_t src_offset, uint64_t size) {
+  callbacks->copy_from_dev = [](void* host_ptr, vx_buffer_h hbuffer, uint64_t src_offset, uint64_t size) {
     if (nullptr == hbuffer || nullptr == host_ptr)
       return -1;
-    auto buffer = ((vx_buffer *)hbuffer);
-    auto device = ((vx_device *)buffer->device);
+    auto buffer = ((vx_buffer*)hbuffer);
+    auto device = ((vx_device*)buffer->device);
     if ((src_offset + size) > buffer->size)
       return -1;
     DBGPRINT("COPY_FROM_DEV: hbuffer=%p, host_addr=%p, src_offset=%ld, size=%ld\n", hbuffer, host_ptr, src_offset, size);
@@ -170,9 +173,9 @@ extern int vx_dev_init(callbacks_t *callbacks) {
     if (nullptr == hdevice || nullptr == hkernel || nullptr == harguments)
       return -1;
     DBGPRINT("START: hdevice=%p, hkernel=%p, harguments=%p\n", hdevice, hkernel, harguments);
-    auto device = ((vx_device *)hdevice);
-    auto kernel = ((vx_buffer *)hkernel);
-    auto arguments = ((vx_buffer *)harguments);
+    auto device = ((vx_device*)hdevice);
+    auto kernel = ((vx_buffer*)hkernel);
+    auto arguments = ((vx_buffer*)harguments);
     return device->start(kernel->addr, arguments->addr);
   };
 
@@ -180,14 +183,14 @@ extern int vx_dev_init(callbacks_t *callbacks) {
     if (nullptr == hdevice)
       return -1;
     DBGPRINT("READY_WAIT: hdevice=%p, timeout=%ld\n", hdevice, timeout);
-    auto device = ((vx_device *)hdevice);
+    auto device = ((vx_device*)hdevice);
     return device->ready_wait(timeout);
   };
 
-  callbacks->dcr_read = [](vx_device_h hdevice, uint32_t addr, uint32_t *value) {
+  callbacks->dcr_read = [](vx_device_h hdevice, uint32_t addr, uint32_t* value) {
     if (nullptr == hdevice || NULL == value)
       return -1;
-    auto device = ((vx_device *)hdevice);
+    auto device = ((vx_device*)hdevice);
     uint32_t _value;
     CHECK_ERR(device->dcr_read(addr, &_value), {
       return err;
@@ -201,14 +204,14 @@ extern int vx_dev_init(callbacks_t *callbacks) {
     if (nullptr == hdevice)
       return -1;
     DBGPRINT("DCR_WRITE: hdevice=%p, addr=0x%x, value=0x%x\n", hdevice, addr, value);
-    auto device = ((vx_device *)hdevice);
+    auto device = ((vx_device*)hdevice);
     return device->dcr_write(addr, value);
   };
 
-  callbacks->mpm_query = [](vx_device_h hdevice, uint32_t addr, uint32_t core_id, uint64_t *value) {
+  callbacks->mpm_query = [](vx_device_h hdevice, uint32_t addr, uint32_t core_id, uint64_t* value) {
     if (nullptr == hdevice)
       return -1;
-    auto device = ((vx_device *)hdevice);
+    auto device = ((vx_device*)hdevice);
     uint64_t _value;
     CHECK_ERR(device->mpm_query(addr, core_id, &_value), {
       return err;
