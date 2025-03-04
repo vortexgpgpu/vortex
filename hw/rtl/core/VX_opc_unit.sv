@@ -202,11 +202,12 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
             other_pending_regs |= pending_regs_in[i] & {NUM_REGS{staging_if.data.wis == pending_wis_in[i]}};
         end
     end
-    wire war_dp_check = staging_if.data.wb && (other_pending_regs[rd] != 0);
+    wire war_dep_check;
+    `BUFFER(war_dep_check, staging_if.data.wb && (other_pending_regs[rd] != 0));
 
     wire output_ready_w;
-    assign output_ready = output_ready_w && ~war_dp_check;
-    wire output_valid = (state == STATE_DISPATCH) && ~war_dp_check;
+    assign output_ready = output_ready_w && ~war_dep_check;
+    wire output_valid = (state == STATE_DISPATCH) && ~war_dep_check;
 
     // simd iterator
     VX_nz_iterator #(
