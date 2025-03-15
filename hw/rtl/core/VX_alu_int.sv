@@ -36,7 +36,7 @@ module VX_alu_int #(
     localparam PID_WIDTH      = `UP(PID_BITS);
     localparam SHIFT_IMM_BITS = `CLOG2(`XLEN);
 
-    `UNUSED_VAR (execute_if.data.rs3_data)
+    //`UNUSED_VAR (execute_if.data.rs3_data)
 
     wire [NUM_LANES-1:0][`XLEN-1:0] add_result;
     wire [NUM_LANES-1:0][`XLEN:0]   sub_result; // +1 bit for branch compare
@@ -47,6 +47,8 @@ module VX_alu_int #(
     wire [NUM_LANES-1:0][`XLEN-1:0] sub_result_w;
     wire [NUM_LANES-1:0][`XLEN-1:0] shr_result_w;
     reg  [NUM_LANES-1:0][`XLEN-1:0] msc_result_w;
+    reg  [NUM_LANES-1:0][`XLEN-1:0] vote_result;
+    reg  [NUM_LANES-1:0][`XLEN-1:0] shfl_result;
 
     reg [NUM_LANES-1:0][`XLEN-1:0] alu_result;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_result_r;
@@ -66,6 +68,7 @@ module VX_alu_int #(
 
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1 = execute_if.data.rs1_data;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2 = execute_if.data.rs2_data;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in3 = execute_if.data.rs3_data;
 
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{execute_if.data.PC, 1'd0}} : alu_in1;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
@@ -114,20 +117,98 @@ module VX_alu_int #(
         assign msc_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] << alu_in2_imm[i][4:0])); // SLLW
     end
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_alu_result
+    // VOTE 
+    wire [NUM_LANES-1:0] active_t = (alu_in2[0][NUM_LANES-1:0] & (execute_if.data.tmask));
+    wire [NUM_LANES-1:0] is_pred;
+    wire [NUM_LANES-1:0] vote_in = (is_pred & active_t);
+    wire is_neg = alu_op[2];
+    
+    wire vote_all = (is_neg) ? (vote_in == NUM_LANES'(1'b0)) : (vote_in == active_t);
+    wire vote_any = (is_neg) ? (vote_in != active_t) : (vote_in > NUM_LANES'(1'b0));
+    wire vote_uni = ((vote_in == active_t) || (vote_in == NUM_LANES'(1'b0)));
+    wire [NUM_LANES-1:0] vote_ballot;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : vote_result_update
+        assign is_pred[i] = alu_in1[i][0] & alu_in2[0][i];
+        assign vote_ballot[i] = vote_in[NUM_LANES - 1 -i];
+        always @(*) begin
+            case (alu_op[1:0])
+                2'b00: vote_result[i] = `XLEN'(vote_all);       // ALL, NONE
+                2'b01: vote_result[i] = `XLEN'(vote_any);       // ANY, NOT_ALL
+                2'b10: vote_result[i] = `XLEN'(vote_uni);       // UNI
+                2'b11: vote_result[i] = `XLEN'(vote_ballot); // BALLOT
+            endcase
+        end
+    end
+
+    // SHFL
+    wire [NUM_LANES-1:0][`XLEN-1:0] b; 
+    wire [NUM_LANES-1:0][`XLEN-1:0] segmask;
+    wire [NUM_LANES-1:0][`XLEN-1:0] c;
+    wire [NUM_LANES-1:0][`XLEN-1:0] maxLane, minLane;
+    reg [NUM_LANES-1:0][`XLEN-1:0] lane;
+    reg [NUM_LANES-1:0] p;
+    reg [NUM_LANES-1:0] active_l;
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : shfl_result_update
+        assign b[i] = (alu_in2_imm[i]>>5)&(`XLEN'(5'b11111));
+        assign segmask[i] = ((alu_in3[i]>>5)&(`XLEN'(5'b11111)));
+        assign c[i] = (alu_in3[i] & `XLEN'(5'b11111));
+        assign maxLane[i] = ((`XLEN'(i) & segmask[i]) | (c[i] & ~(segmask[i])));
+        assign minLane[i] = (`XLEN'(i) & segmask[i]);
+        always @(*) begin
+            case (alu_op)
+                `SHFL_BFLY: begin
+                    lane[i] = `XLEN'(i) - b[i]; 
+                    p[i] = (lane[i] >= maxLane[i]);
+                end
+                `SHFL_UP: begin
+                    lane[i] = `XLEN'(i) + b[i]; 
+                    p[i] = (lane[i] <= maxLane[i]);
+                end
+                `SHFL_DOWN: begin
+                    lane[i] = `XLEN'(i) ^ b[i]; 
+                    p[i] = (lane[i] <= maxLane[i]);
+                end
+                `SHFL_IDX: begin
+                    lane[i] = minLane[i] | (b[i] & ~(segmask[i])); 
+                    p[i] = (lane[i] <= maxLane[i]);
+                end
+                default: begin
+                    lane[i] = ~(`XLEN'(1'b0)); 
+                    p[i] = ~(1'b0);
+                end
+            endcase
+            if(p[i] == 1'b0) begin
+                lane[i] = `XLEN'(i);
+            end
+            active_l[i] = (lane[i] < NUM_LANES) ? alu_in2[0][$signed(lane[i][SHIFT_IMM_BITS-1:0])] : alu_in2[0][i];
+            shfl_result[i] = (active_t[i] && active_l[i]) ? ( (lane[i] < NUM_LANES) ? alu_in1[$signed(lane[i][SHIFT_IMM_BITS-1:0])] : alu_in1[i]) : `XLEN'(1'b0);
+        end
+    end
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : Final_results
         wire [`XLEN-1:0] slt_br_result = `XLEN'({is_br_op && ~(| sub_result[i][`XLEN-1:0]), sub_result[i][`XLEN]});
         wire [`XLEN-1:0] sub_slt_br_result = (is_sub_op && ~is_br_op) ? sub_result[i][`XLEN-1:0] : slt_br_result;
         always @(*) begin
-            case ({is_alu_w, op_class})
-                3'b000: alu_result[i] = add_result[i];      // ADD, LUI, AUIPC
-                3'b001: alu_result[i] = sub_slt_br_result;  // SUB, SLTU, SLTI, BR*
-                3'b010: alu_result[i] = shr_zic_result[i];  // SRL, SRA, SRLI, SRAI, CZERO*
-                3'b011: alu_result[i] = msc_result[i];      // AND, OR, XOR, SLL, SLLI
-                3'b100: alu_result[i] = add_result_w[i];    // ADDIW, ADDW
-                3'b101: alu_result[i] = sub_result_w[i];    // SUBW
-                3'b110: alu_result[i] = shr_result_w[i];    // SRLW, SRAW, SRLIW, SRAIW
-                3'b111: alu_result[i] = msc_result_w[i];    // SLLW
-            endcase
+            if (execute_if.data.op_args.alu.xtype == `ALU_TYPE_OTHER) begin
+                case (alu_op[2])
+                    1'b0: alu_result[i] = vote_result[i];
+                    1'b1: alu_result[i] = shfl_result[i];
+                    default:;
+                endcase
+            end
+            else begin
+                case ({is_alu_w, op_class})
+                    3'b000: alu_result[i] = add_result[i];      // ADD, LUI, AUIPC
+                    3'b001: alu_result[i] = sub_slt_br_result;  // SUB, SLTU, SLTI, BR*
+                    3'b010: alu_result[i] = shr_zic_result[i]; // SRL, SRA, SRLI, SRAI, CZERO*
+                    3'b011: alu_result[i] = msc_result[i];      // AND, OR, XOR, SLL, SLLI
+                    3'b100: alu_result[i] = add_result_w[i];    // ADDIW, ADDW
+                    3'b101: alu_result[i] = sub_result_w[i];    // SUBW
+                    3'b110: alu_result[i] = shr_result_w[i];    // SRLW, SRAW, SRLIW, SRAIW
+                    3'b111: alu_result[i] = msc_result_w[i];    // SLLW
+                endcase
+            end
         end
     end
 
