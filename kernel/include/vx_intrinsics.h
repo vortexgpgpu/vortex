@@ -17,10 +17,9 @@
 #ifndef __VX_INTRINSICS_H__
 #define __VX_INTRINSICS_H__
 
+#include <stddef.h>
 #include <stdint.h>
 #include <VX_types.h>
-
-typedef __SIZE_TYPE__ word_t;
 
 #if defined(__clang__)
 #define __UNIFORM__   __attribute__((annotate("vortex.uniform")))
@@ -38,13 +37,13 @@ extern "C" {
 #define RISCV_CUSTOM3   0x7B
 
 #define csr_read(csr) ({                        \
-	word_t __r;	               		            \
+	size_t __r;	               		            \
 	__asm__ __volatile__ ("csrr %0, %1" : "=r" (__r) : "i" (csr) : "memory"); \
 	__r;							            \
 })
 
 #define csr_write(csr, val)	({                  \
-	word_t __v = (word_t)(val);                 \
+	size_t __v = (size_t)(val);                 \
 	if (__builtin_constant_p(val) && __v < 32)  \
         __asm__ __volatile__ ("csrw %0, %1" :: "i" (csr), "i" (__v) : "memory");  \
     else                                        \
@@ -52,8 +51,8 @@ extern "C" {
 })
 
 #define csr_swap(csr, val) ({                   \
-    word_t __r;                                 \
-	word_t __v = (word_t)(val);	                \
+    size_t __r;                                 \
+	size_t __v = (size_t)(val);	                \
 	if (__builtin_constant_p(val) && __v < 32)  \
         __asm__ __volatile__ ("csrrw %0, %1, %2" : "=r" (__r) : "i" (csr), "i" (__v) : "memory"); \
     else                                        \
@@ -62,8 +61,8 @@ extern "C" {
 })
 
 #define csr_read_set(csr, val) ({               \
-	word_t __r;                                 \
-	word_t __v = (word_t)(val);	                \
+	size_t __r;                                 \
+	size_t __v = (size_t)(val);	                \
     if (__builtin_constant_p(val) && __v < 32)  \
 	    __asm__ __volatile__ ("csrrs %0, %1, %2" : "=r" (__r) : "i" (csr), "i" (__v) : "memory"); \
     else                                        \
@@ -72,7 +71,7 @@ extern "C" {
 })
 
 #define csr_set(csr, val) ({                    \
-	word_t __v = (word_t)(val);	                \
+	size_t __v = (size_t)(val);	                \
     if (__builtin_constant_p(val) && __v < 32)  \
 	    __asm__ __volatile__ ("csrs %0, %1"	:: "i" (csr), "i" (__v) : "memory");  \
     else                                        \
@@ -80,8 +79,8 @@ extern "C" {
 })
 
 #define csr_read_clear(csr, val) ({             \
-	word_t __r;                                 \
-	word_t __v = (word_t)(val);	                \
+	size_t __r;                                 \
+	size_t __v = (size_t)(val);	                \
     if (__builtin_constant_p(val) && __v < 32)  \
 	    __asm__ __volatile__ ("csrrc %0, %1, %2" : "=r" (__r) : "i" (csr), "i" (__v) : "memory"); \
     else                                        \
@@ -90,7 +89,7 @@ extern "C" {
 })
 
 #define csr_clear(csr, val)	({                  \
-	word_t __v = (word_t)(val);                 \
+	size_t __v = (size_t)(val);                 \
 	if (__builtin_constant_p(val) && __v < 32)  \
         __asm__ __volatile__ ("csrc %0, %1" :: "i" (csr), "i" (__v) : "memory"); \
     else                                        \
