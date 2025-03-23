@@ -101,6 +101,10 @@
 `define NUM_WARPS 4
 `endif
 
+`ifndef SCHEDULING_POLICY
+`define SCHEDULING_POLICY 0
+`endif
+
 `ifndef NUM_THREADS
 `define NUM_THREADS 4
 `endif

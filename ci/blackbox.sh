@@ -52,6 +52,7 @@ DEFAULTS() {
     REBUILD=2
     TEMPBUILD=0
     LOGFILE=run.log
+    SCHEDULING_POLICY=0
 }
 
 parse_args() {
@@ -63,6 +64,7 @@ parse_args() {
             --clusters=*) CONFIGS=$(add_option "$CONFIGS" "-DNUM_CLUSTERS=${i#*=}") ;;
             --cores=*)  CONFIGS=$(add_option "$CONFIGS" "-DNUM_CORES=${i#*=}") ;;
             --warps=*)  CONFIGS=$(add_option "$CONFIGS" "-DNUM_WARPS=${i#*=}") ;;
+            --policy=*) CONFIGS=$(add_option "$CONFIGS" "-DSCHEDULING_POLICY=${i#*=}") ;;
             --threads=*) CONFIGS=$(add_option "$CONFIGS" "-DNUM_THREADS=${i#*=}") ;;
             --l2cache)  CONFIGS=$(add_option "$CONFIGS" "-DL2_ENABLE") ;;
             --l3cache)  CONFIGS=$(add_option "$CONFIGS" "-DL3_ENABLE") ;;
@@ -111,11 +113,11 @@ build_driver() {
     [ -n "$CONFIGS" ] && cmd_opts=$(add_option "$cmd_opts" "CONFIGS=\"$CONFIGS\"")
 
     if [ -n "$cmd_opts" ]; then
-        echo "Running: $cmd_opts make -C $DRIVER_PATH > /dev/null"
-        eval "$cmd_opts make -C $DRIVER_PATH > /dev/null"
+        echo "Running: $cmd_opts make -C $DRIVER_PATH"
+        eval "$cmd_opts make -C $DRIVER_PATH"
     else
-        echo "Running: make -C $DRIVER_PATH > /dev/null"
-        make -C $DRIVER_PATH > /dev/null
+        echo "Running: make -C $DRIVER_PATH"
+        make -C $DRIVER_PATH
     fi
 }
 
