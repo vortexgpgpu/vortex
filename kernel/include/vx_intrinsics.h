@@ -20,6 +20,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <VX_types.h>
+#include <vx_print.h>
 
 #if defined(__clang__)
 #define __UNIFORM__   __attribute__((annotate("vortex.uniform")))
@@ -221,6 +222,69 @@ inline void vx_fence() {
     __asm__ volatile ("fence iorw, iorw");
 }
 
+inline void vx_store(int val, int reg){
+    switch (reg){
+        case 0:
+    __asm__ volatile (
+        "mv a0, %0" :: "r"(val) : "a0");  // Load immediate value 3 into a0(x10) register (rs1 = a)
+        break;
+
+        case 1:
+    __asm__ volatile (
+        "mv a1, %0" :: "r"(val) : "a1");  // Load immediate value 3 into a1(x11) register (rs1 = a)
+        break;
+        
+        case 2:
+    __asm__ volatile (
+        "mv a2, %0" :: "r"(val) : "a2");  // Load immediate value 3 into a2(x12) register (rs1 = a)
+        break;
+        
+        case 3:
+    __asm__ volatile (
+        "mv a3, %0" :: "r"(val) : "a3");  // Load immediate value 3 into a3(x13) register (rs1 = a)
+        break;
+        
+        default:
+        break;
+    }
+}
+
+inline void vx_vote() {
+    __asm__ volatile (
+        "addi a2, x0, -1\n\t"  // Load immediate value 6 into a2(x12) register (membermask)
+        ".insn i %0, 3, x14, x13, 12" :: "i"(RISCV_CUSTOM1));
+        //".insn i opcode6, func3, rd, rs1, simm12"
+}
+
+inline void vx_shfl() {
+    __asm__ volatile (
+        "addi a1, x0, 15\n\t"  // Load immediate value 15 into a1(x11) register (membermask)
+        "addi a2, x0, 15\n\t"  // Load immediate value 15 into a2(x12) register (c) 
+        ".insn i %0, 3, x14, x13, 1067" :: "i"(RISCV_CUSTOM2)); //(c(01)+b(00001)+membermask(address(01011)))
+       //".insn i opcode6, func3, rd, rs1, simm12"
+}
+
+inline int vx_vote_sync(int mode, int neg, int threadMask, int pred)
+{
+    int func3 = ((neg & 0x1) << 2) | (mode & 0x3);
+
+    int rs1 = pred;
+
+    int rd;
+
+    __asm__ volatile (
+        "addi a2, %[tm], 0\n\t"                    
+        ".insn i %[opcode], %[f3], %[rd], %[rs1], 12\n\t"
+        : [rd] "=r" (rd)
+        : [tm] "r" (threadMask),
+          [opcode] "i" (RISCV_CUSTOM1),
+          [f3] "i" (func3),
+          [rs1] "r" (rs1) 
+        : "a2"
+    );
+
+    return rd;
+}
 //Matrix load
 inline void vx_matrix_load(unsigned dest, unsigned  addr)
 {
