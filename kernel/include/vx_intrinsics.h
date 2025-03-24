@@ -222,21 +222,21 @@ inline void vx_fence() {
 }
 
 //Matrix load
-inline void vx_matrix_load(unsigned dest, unsigned  addr) 
+inline void vx_matrix_load(unsigned dest, unsigned  addr)
 {
-    asm volatile (".insn i 0x7b, 0, x0, %0(%1)" :: "i"(dest), "r"(addr));
+    __asm__ volatile (".insn i 0x7b, 0, x0, %0(%1)" :: "i"(dest), "r"(addr));
 }
 
 //Matrix Store
-inline void vx_matrix_store(unsigned  addr) 
+inline void vx_matrix_store(unsigned  addr)
 {
-    asm volatile (".insn i 0x7b, 1, x0, 0(%0)" :: "r"(addr));
+    __asm__ volatile (".insn i 0x7b, 1, x0, 0(%0)" :: "r"(addr));
 }
 
 //Matrix Mul
-inline void vx_matrix_mul() 
+inline void vx_matrix_mul()
 {
-    asm volatile (".insn i 0x7b, 2, x0, 0(x0)");
+    __asm__ volatile (".insn i 0x7b, 2, x0, 0(x0)");
 }
 
 #ifdef __cplusplus
