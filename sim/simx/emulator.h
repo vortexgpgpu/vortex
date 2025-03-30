@@ -45,6 +45,8 @@ public:
 
   instr_trace_t* step();
 
+  int schedule_warp(SchedulerPolicy policy);
+
   bool running() const;
 
   void suspend(uint32_t wid);
@@ -66,6 +68,13 @@ public:
   void dcache_write(const void* data, uint64_t addr, uint32_t size);
 
 private:
+
+  int schedule_RR();
+  int schedule_RR_RR();
+  int schedule_RR_GTO();
+  int schedule_GTO_GTO();
+  int schedule_GTO_RR();
+  int schedule_GTO();
 
   struct ipdom_entry_t {
     ipdom_entry_t(const ThreadMask &orig_tmask, const ThreadMask &else_tmask, Word PC)

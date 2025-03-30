@@ -1016,4 +1016,15 @@ using LsuArbiter  = TxArbiter<LsuReq, LsuRsp>;
 using MemArbiter  = TxArbiter<MemReq, MemRsp>;
 using MemCrossBar = TxCrossBar<MemReq, MemRsp>;
 
+///////////////////////////////////////////////////////////////////////////////
+
+enum class SchedulerPolicy {
+    ROUND_ROBIN = 0,
+    ROUND_ROBIN_ROUND_ROBIN = 1,
+    ROUND_ROBIN_GREEDY_THEN_OLDEST = 2,
+    GREEDY_THEN_OLDEST_GREEDY_THEN_OLDEST = 3,
+    GREEDY_THEN_OLDEST_ROUND_ROBIN = 4,
+    GREEDY_THEN_OLDEST = 5
+};
+
 }
