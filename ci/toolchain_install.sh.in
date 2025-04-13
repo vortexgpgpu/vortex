@@ -187,7 +187,6 @@ while [ "$1" != "" ]; do
                 riscv32
                 riscv64
                 sv2v
-                yosys
                 ;;
         -h | --help ) show_usage
                 exit
