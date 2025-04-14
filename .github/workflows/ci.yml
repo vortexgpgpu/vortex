@@ -17,7 +17,7 @@ on: [push, pull_request]
 
 jobs:
   setup:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout code
@@ -63,7 +63,7 @@ jobs:
           make -C third_party > /dev/null
 
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: setup
     strategy:
       matrix:
@@ -112,7 +112,7 @@ jobs:
           path: build${{ matrix.xlen }}
 
   tests:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: build
     strategy:
       fail-fast: false
@@ -167,7 +167,7 @@ jobs:
           fi
 
   complete:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: tests
 
     steps:
