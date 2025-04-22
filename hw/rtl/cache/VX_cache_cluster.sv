@@ -143,6 +143,31 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         end
     end
 
+    //needs to be finalised
+    `ifdef VM_ENABLE
+        for (genvavr i = 0; i< NUM_CACHES; i++) begin : g_tlb_wrap
+            VX_tlb_wrap #(
+                .INSTANCE_ID  (`SFORMATF(("%s%0d", INSTANCE_ID, i))),
+                // .NUM_INPUTS   (NUM_INPUTS),
+                // .NUM_REQS     (NUM_REQS),
+                // .MEM_PORTS    (MEM_PORTS),
+                // .LINE_SIZE    (LINE_SIZE),
+                // .WORD_SIZE    (WORD_SIZE),
+                // .UUID_WIDTH   (UUID_WIDTH),
+                // .TAG_WIDTH    (ARB_TAG_WIDTH),
+                // .FLAGS_WIDTH  (FLAGS_WIDTH)
+            ) tlb_wrap (
+                `ifdef PERF_ENABLE
+                    .tlb_perf  (perf_cache_unit[i]),
+                `endif
+                .clk         (clk),
+                .reset       (reset),
+                .core_bus_if (arb_core_bus_if[i * NUM_REQS +: NUM_REQS]),
+                .mem_bus_if  (tlb_core_bus_if[i * MEM_PORTS +: MEM_PORTS])
+            );
+        end
+    `endif 
+
      for (genvar i = 0; i < NUM_CACHES; ++i) begin : g_cache_wrap
         VX_cache_wrap #(
             .INSTANCE_ID  (`SFORMATF(("%s%0d", INSTANCE_ID, i))),
@@ -173,10 +198,14 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         `endif
             .clk         (clk),
             .reset       (reset),
+        `ifdef VM_ENABLE
+            .core_bus_if (tlb_core_bus_if[i * NUM_REQS +: NUM_REQS]),
+        `else 
             .core_bus_if (arb_core_bus_if[i * NUM_REQS +: NUM_REQS]),
+        `endif
             .mem_bus_if  (cache_mem_bus_if[i * MEM_PORTS +: MEM_PORTS])
         );
-    end
+  end
 
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_if
         VX_mem_bus_if #(
