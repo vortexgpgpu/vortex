@@ -27,7 +27,6 @@
 #include "cluster.h"
 #include "processor_impl.h"
 #include "local_mem.h"
-#include "warp_scheduler.cpp"
 
 using namespace vortex;
 
@@ -184,7 +183,7 @@ instr_trace_t* Emulator::step() {
     
   #endif
 
-  scheduled_warp = schedule_warp((SchedulerPolicy) scheduling_policy);
+  scheduled_warp = this->schedule_warp((SchedulerPolicy) scheduling_policy);
   if (scheduled_warp == -1)
     return nullptr;
 
