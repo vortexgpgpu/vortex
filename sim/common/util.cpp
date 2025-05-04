@@ -12,6 +12,8 @@
 // limitations under the License.
 
 #include "util.h"
+#include <fstream>
+#include <sstream>
 #include <string.h>
 
 // return file extension
@@ -36,4 +38,21 @@ void aligned_free(void *ptr) {
   // retreive the stored unaligned address and use it to free the allocation
   void* unaligned_addr = ((void**)ptr)[-1];
   free(unaligned_addr);
+}
+
+std::string vortex::resolve_file_path(const std::string& filename, const std::string& searchPaths) {
+  std::ifstream ifs(filename);
+  if (!ifs) {
+    std::stringstream ss(searchPaths);
+    std::string path;
+    while (std::getline(ss, path, ',')) {
+      if (!path.empty()) {
+        std::string filePath = path + "/" + filename;
+        std::ifstream ifs(filePath);
+        if (ifs)
+          return filePath;
+      }
+    }
+  }
+  return filename;
 }

@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <assert.h>
 #include <bitmanip.h>
+#include <string>
 
 template <typename... Args>
 void unused(Args&&...) {}
@@ -93,5 +94,7 @@ public:
     return reinterpret_cast<R>(&obj);
   }
 };
+
+std::string resolve_file_path(const std::string& filename, const std::string& searchPaths);
 
 }
