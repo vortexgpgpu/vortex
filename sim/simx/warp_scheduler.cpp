@@ -59,6 +59,9 @@ int Emulator::schedule_warp(SchedulerPolicy policy) {
 
   case SchedulerPolicy::GREEDY_THEN_OLDEST:
     return Emulator::schedule_GTO();
+  
+  case SchedulerPolicy::TMASK:
+    return Emulator::schedule_TMASK();
 
   default:
     return Emulator::schedule_RR();
@@ -123,4 +126,22 @@ int Emulator::schedule_GTO(){
         warps_.at(oldest_warp_).age = 0;
     }
     return oldest_warp_;
+}
+
+int Emulator::schedule_TMASK(){
+    uint32_t tmask_count = 0;
+    int selected_warp = -1;
+
+    for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {
+        bool warp_active = active_warps_.test(wid);
+        bool warp_stalled = stalled_warps_.test(wid);
+        if (warp_active && !warp_stalled) {
+            if (warps_.at(wid).tmask.count() >= tmask_count) {
+                selected_warp = wid;
+                tmask_count = warps_.at(selected_warp).tmask.count();
+            }
+        }
+    }
+    
+    return selected_warp;
 }

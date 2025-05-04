@@ -75,6 +75,8 @@ private:
   int schedule_GTO_GTO();
   int schedule_GTO_RR();
   int schedule_GTO();
+  int schedule_TMASK();
+
 
   struct ipdom_entry_t {
     ipdom_entry_t(const ThreadMask &orig_tmask, const ThreadMask &else_tmask, Word PC)
