@@ -13,7 +13,7 @@ ARGS=""
 # Listas de combinações
 CORES_LIST=(2 4 8)
 WARPS_LIST=(4 8 16)
-THREADS_LIST=(8 16 24 32)
+THREADS_LIST=(8 16 32)
 POLICY_LIST=(0 5)
 
 # Parsing dos argumentos
