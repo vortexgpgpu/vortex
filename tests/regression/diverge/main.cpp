@@ -78,6 +78,14 @@ void gen_ref_data(std::vector<int>& ref_data, const std::vector<int>& src_data, 
   for (int i = 0; i < (int)size; ++i) {
     int value = src_data.at(i);
 
+    key_t key;
+    uint32_t samples = size;
+    while (samples--) {
+      if ((i & 0x1) == 0) {
+        value += 1;
+      }
+    }
+
     // none taken
     if (i >= 0x7fffffff) {
       value = 0;
