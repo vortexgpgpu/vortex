@@ -120,6 +120,7 @@ private:
     std::vector<std::vector<uint64_t>>freg_file;
     std::stack<ipdom_entry_t>         ipdom_stack;
     Byte                              fcsr;
+    uint32_t                          age = 0;
 #ifdef EXT_V_ENABLE
     std::vector<std::vector<Byte>>    vreg_file;
     vtype_t                           vtype;
@@ -174,6 +175,9 @@ private:
   std::vector<warp_t> warps_;
   WarpMask    active_warps_;
   WarpMask    stalled_warps_;
+  WarpMask    visible_warps_;
+  uint32_t    visible_warps_index_;
+  int         oldest_warp_ = -1;
   std::vector<WarpMask> barriers_;
   std::unordered_map<int, std::stringstream> print_bufs_;
   MemoryUnit  mmu_;

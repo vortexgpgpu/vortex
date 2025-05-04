@@ -95,5 +95,32 @@ int Emulator::schedule_GTO_RR(){
 }
 
 int Emulator::schedule_GTO(){
-    return schedule_RR(); //Temporary
+    uint32_t oldest_warp_age = 0;
+
+    if(oldest_warp_ != -1) {
+        bool warp_active = active_warps_.test(oldest_warp_);
+        bool warp_stalled = stalled_warps_.test(oldest_warp_);
+        if (warp_active && !warp_stalled) {
+            return oldest_warp_;
+        }
+        oldest_warp_ = -1;
+    }
+
+    for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {
+        bool warp_active = active_warps_.test(wid);
+        bool warp_stalled = stalled_warps_.test(wid);
+        if (warp_active && !warp_stalled) {
+            warps_.at(wid).age++;
+            if (warps_.at(wid).age >= oldest_warp_age) {
+                oldest_warp_ = wid;
+                oldest_warp_age = warps_.at(wid).age;
+                continue;
+            }
+        }
+    }
+    
+    if (oldest_warp_ != -1) {
+        warps_.at(oldest_warp_).age = 0;
+    }
+    return oldest_warp_;
 }
