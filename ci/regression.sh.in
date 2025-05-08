@@ -403,6 +403,48 @@ vector()
     echo "vector tests done!"
 }
 
+cupbop() {
+
+    echo "begin cupbop tests..."
+
+    if [ "$XLEN" == "32" ]; then
+        echo "cupbop tests skipped for 32-bit"
+        return
+    fi
+
+
+    echo "downloading cupbop binaries..."
+    CUPBOP_URL="https://www.dropbox.com/scl/fi/qxiofb0ejfxoog9m7tmae/cupbop.zip?rlkey=kcboy03c08xcn6yizd4nv8h88&st=7yuqftef&dl=1"
+    
+    wget -O cupbop.zip "${CUPBOP_URL}" || curl -L -o cupbop.zip "${CUPBOP_URL}"
+    unzip -o cupbop.zip -d tests/
+    rm cupbop.zip
+
+    echo "building simx runtime..."
+    make -C runtime/simx
+
+    PERF_CLASS=2
+    VORTEX_RUNTIME_DIR="runtime"
+    CUPBOP_RUNTIME_DIR="tests/cupbop/runtime"
+
+    tests=("bfs" "nn")
+    tests_args=("./graph20.txt" "./filelist.txt -r 10 -lat 30 -lng 90")
+
+    for i in "${!tests[@]}"; do
+        test="${tests[$i]}"
+        args="${tests_args[$i]}"
+        echo "running test: $test"
+        (
+            cd "tests/cupbop/$test" || exit
+            chmod +x "./host_${XLEN}.out"
+            LD_LIBRARY_PATH="../../../${CUPBOP_RUNTIME_DIR}:../../../${VORTEX_RUNTIME_DIR}/simx:../../../${VORTEX_RUNTIME_DIR}:${LD_LIBRARY_PATH}" \
+            ./host_${XLEN}.out ${args}
+        )
+    done
+
+    echo "cupbop tests done!"
+}
+
 show_usage()
 {
     echo "Vortex Regression Test"
@@ -459,6 +501,9 @@ while [ "$1" != "" ]; do
         --vector )
                 tests+=("vector")
                 ;;
+        --cupbop )
+                tests+=("cupbop")
+                ;;
         --all )
                 tests=()
                 tests+=("unittest")
@@ -475,6 +520,7 @@ while [ "$1" != "" ]; do
                 tests+=("stress")
                 tests+=("synthesis")
                 tests+=("vector")
+                tests+=("cupbop")
                 ;;
         -h | --help )
                 show_usage
