@@ -63,6 +63,12 @@ $ source /opt/xilinx/xrt/setup.sh
 $ source /tools/reconfig/xilinx/Vitis/2023.1/settings64.sh
 ```
 
+If you are using an apptainer,
+```
+$ export LD_LIBRARY_PATH=/opt/boost-1.66/lib/:/opt/openssl-1.1/lib/:$LD_LIBRARY_PATH
+```
+
+
 ### Check Installed FPGA Platforms
 `platforminfo -l` which tells us the correct name of the platform installed on the current fpga node. It should be used for the `PLATFORM` variable below. Otherwise, if there is an error then there was an issue with the previous two commands.
 
