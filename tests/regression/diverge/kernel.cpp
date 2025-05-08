@@ -5,6 +5,14 @@
 
 // Parallel Selection sort
 
+struct key_t {
+	uint32_t user = 0;
+};
+
+static __attribute__((noinline)) void hacker(key_t* key, uint32_t task_id) {
+	key->user = task_id;
+}
+
 void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	int32_t* src_ptr = (int32_t*)arg->src_addr;
 	int32_t* dst_ptr = (int32_t*)arg->dst_addr;
@@ -12,6 +20,15 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t task_id = blockIdx.x;
 
 	int value = src_ptr[task_id];
+
+	key_t key;
+	uint32_t samples = arg->num_points;
+  while (samples--) {
+		hacker(&key, task_id);
+		if ((key.user & 0x1) == 0) {
+			value += 1;
+		}
+	}
 
 	// none taken
 	if (task_id >= 0x7fffffff) {
