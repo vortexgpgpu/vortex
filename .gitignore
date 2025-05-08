@@ -2,4 +2,4 @@
 /.vscode
 *.cache
 *.code-workspace
-miscs/apptainer/vortex_fpga.sif
+miscs/apptainer/vortex.sif

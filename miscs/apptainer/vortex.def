@@ -1,7 +1,6 @@
 Bootstrap: docker
 From: ubuntu:22.04
 
-
 %files
     install_boost_openssl.sh .
     openssl-package.deb .
@@ -10,21 +9,19 @@ From: ubuntu:22.04
 %post
     echo "Setting up the environment..."
 
-
     touch /var/log/apt/term.log
     if [ -f /var/log/apt/term.log ]; then
         chown root:adm /var/log/apt/term.log || true
     fi
-
 
     # Set environment variable to avoid interactive prompts during installation
     export DEBIAN_FRONTEND=noninteractive
     echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/no-sandbox
     mkdir -p /netscratch
 
-    # Update and install base dependencies
+    # Update and install base dependencies (including wget here)
     apt-get update
-    apt-get install -y libc6 fakeroot
+    apt-get install -y libc6 fakeroot wget git vim
 
     # Fix dependency issues
     apt-get install -f -y || true
@@ -38,10 +35,8 @@ From: ubuntu:22.04
     rm -f /var/lib/dpkg/lock
     rm -f /var/cache/apt/archives/lock
 
-    # mount -o remount,rw /usr
-    # mount -o remount,rw /var
+    # Adjust permissions for dbus helper
     chown -R root:root /usr/lib/dbus-1.0/dbus-daemon-launch-helper || true
-
 
     # Install necessary packages
     apt-get install -y fontconfig libfontconfig1 libpangoft2-1.0-0 libbluray2 \
@@ -49,14 +44,14 @@ From: ubuntu:22.04
                        openjdk-11-jre-headless libcairo2 librsvg2-2 librsvg2-common \
                        openjdk-11-jre-zero libtheora0 libavcodec58 libcairo-gobject2 \
                        ca-certificates-java libchromaprint1 software-properties-common perl-modules bzip2 \
-                       unzip zlib1g-dev libtinfo5 g++ usbutils gawk bison gcc make wget tar python3.9 locales zstd uuid-dev git || true
+                       unzip zlib1g-dev libtinfo5 g++ usbutils gawk bison gcc make tar python3.9 locales zstd uuid-dev ccache || true
 
     ln -s /usr/bin/python3 /usr/bin/python
 
     locale-gen en_US.UTF-8
     update-locale LANG=en_US.UTF-8 LANGUAGE=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
-    # Run dpkg to ensure everything is properly configured
+    # Run dpkg to ensure configuration is complete
     dpkg --configure -a || true
 
     # Clean up apt cache
@@ -65,10 +60,19 @@ From: ubuntu:22.04
 
     echo "Setting up the environment..."
 
-    # Copy the installation script into the container
+    # Install CMake 3.26
+    echo "Installing CMake 3.26..."
+    wget https://github.com/Kitware/CMake/releases/download/v3.26.0/cmake-3.26.0-linux-x86_64.sh -O /tmp/cmake.sh
+    chmod +x /tmp/cmake.sh
+    mkdir -p /opt/cmake
+    /tmp/cmake.sh --skip-license --prefix=/opt/cmake
+    ln -sf /opt/cmake/bin/cmake /usr/local/bin/cmake
+    rm -f /tmp/cmake.sh
+
+    # Copy the boost and openssl installation script into the container
     cp install_boost_openssl.sh /tmp/
 
-    # Execute the script
+    # Execute the installation script
     chmod +x /tmp/install_boost_openssl.sh
     /tmp/install_boost_openssl.sh
 
@@ -79,19 +83,18 @@ From: ubuntu:22.04
     export LANG=en_US.UTF-8
     export LANGUAGE=en_US.UTF-8
     export LC_ALL=en_US.UTF-8
-    export HOME=/home/developer
-
-
+    export HOME=/home
+    export LD_LIBRARY_PATH=/opt/boost-1.66/lib:/opt/openssl-1.1/lib:$LD_LIBRARY_PATH
 
 %runscript
     exec /bin/bash
 
 %labels
-    Author Rahul
-    Version 1.0
+    Author Rahul, Udit
+    Version 2.0
 
 %test
-    echo "Container test successful!"
     locale
     lsusb || echo "lsusb not available"
     ls -l /dev/null
+    echo "Container test successful!"
