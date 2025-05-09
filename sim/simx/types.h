@@ -129,7 +129,9 @@ enum class AluType {
   BRANCH,
   SYSCALL,
   IMUL,
-  IDIV
+  IDIV,
+  VOTE,
+  SHFL
 };
 
 inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
@@ -139,6 +141,8 @@ inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
   case AluType::SYSCALL: os << "SYSCALL"; break;
   case AluType::IMUL:    os << "IMUL"; break;
   case AluType::IDIV:    os << "IDIV"; break;
+  case AluType::VOTE:    os << "VOTE"; break;
+  case AluType::SHFL:    os << "SHFL"; break;
   default: assert(false);
   }
   return os;
@@ -248,7 +252,8 @@ enum class SfuType {
   PRED,
   CSRRW,
   CSRRS,
-  CSRRC
+  CSRRC,
+  CMOV
 };
 
 inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {

@@ -209,7 +209,7 @@ int main(int argc, char *argv[]) {
       //traverse through tiles for one output tile
         for(uint32_t j=0; j< n_tiles; j++)
         {
-          for(int t=0; t < tc_size*tc_size; t++)
+          for(uint32_t t=0; t < tc_size*tc_size; t++)
           { 
             variables.A_mat[n_tiles*n_tiles*tc_size_f*k + n_tiles*tc_size_f*i+tc_size_f*j + t]   = variables.src_A[k*tc_size*matrix_size+ tc_size*j +(t/tc_size)*matrix_size + t%tc_size];
           }
@@ -226,7 +226,7 @@ int main(int argc, char *argv[]) {
       //traverse through tiles for one output tile
       for(uint32_t j=0; j< n_tiles; j++)
       {
-        for(int t=0; t < tc_size*tc_size; t++)
+        for(uint32_t t=0; t < tc_size*tc_size; t++)
         {
           variables.B_mat[n_tiles*n_tiles*tc_size_f*k + n_tiles*tc_size_f*i+tc_size_f*j + t]   = variables.src_B[i*tc_size+ tc_size*matrix_size*j +(t/tc_size)*matrix_size + t%tc_size];
         }
