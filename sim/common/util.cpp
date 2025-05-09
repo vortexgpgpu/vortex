@@ -16,15 +16,17 @@
 #include <sstream>
 #include <string.h>
 
+using namespace vortex;
+
 // return file extension
-const char* fileExtension(const char* filepath) {
+const char* vortex::fileExtension(const char* filepath) {
   const char *ext = strrchr(filepath, '.');
   if (ext == NULL || ext == filepath)
     return "";
   return ext + 1;
 }
 
-void* aligned_malloc(size_t size, size_t alignment) {
+void* vortex::aligned_malloc(size_t size, size_t alignment) {
   // reserve margin for alignment and storing of unaligned address
   assert((alignment & (alignment - 1)) == 0);   // Power of 2 alignment.
   size_t margin = (alignment-1) + sizeof(void*);
@@ -34,7 +36,7 @@ void* aligned_malloc(size_t size, size_t alignment) {
   return aligned_addr;
 }
 
-void aligned_free(void *ptr) {
+void vortex::aligned_free(void *ptr) {
   // retreive the stored unaligned address and use it to free the allocation
   void* unaligned_addr = ((void**)ptr)[-1];
   free(unaligned_addr);

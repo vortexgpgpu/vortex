@@ -15,14 +15,26 @@
 
 #include <cstdint>
 #include <algorithm>
+#include <array>
+#include <utility>
 #include <assert.h>
 #include <bitmanip.h>
-#include <string>
+
+namespace vortex {
 
 template <typename... Args>
 void unused(Args&&...) {}
 
 #define __unused(...) unused(__VA_ARGS__)
+
+#define __assert(cond, msg) \
+  if (!(cond)) { \
+    std::cerr << "Assertion failed: " << msg << "\n"; \
+    std::cerr << "File: " << __FILE__ << "\n"; \
+    std::cerr << "Line: " << __LINE__ << "\n"; \
+    std::cerr << "Function: " << __func__ << "\n"; \
+    std::abort(); \
+  }
 
 // return file extension
 const char* fileExtension(const char* filepath);
@@ -73,8 +85,6 @@ const char* fileExtension(const char* filepath);
 void *aligned_malloc(size_t size, size_t alignment);
 void aligned_free(void *ptr);
 
-namespace vortex {
-
 // Verilator data type casting
 template <typename R, size_t W, typename Enable = void>
 class VDataCast;
@@ -94,6 +104,16 @@ public:
     return reinterpret_cast<R>(&obj);
   }
 };
+
+template <typename T, std::size_t N, typename... Args, std::size_t... Is>
+constexpr std::array<T, N> make_array_impl(std::index_sequence<Is...>, Args&&... args) {
+  return { { (static_cast<void>(Is), T(std::forward<Args>(args)...))... } };
+}
+
+template <typename T, std::size_t N, typename... Args>
+constexpr std::array<T, N> make_array(Args&&... args) {
+  return make_array_impl<T, N>(std::make_index_sequence<N>{}, std::forward<Args>(args)...);
+}
 
 std::string resolve_file_path(const std::string& filename, const std::string& searchPaths);
 
