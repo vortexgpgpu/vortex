@@ -16,6 +16,8 @@
 #include <cstdint>
 #include <assert.h>
 
+namespace vortex {
+
 template <typename T>
 constexpr uint32_t count_leading_zeros(T value) {
   static_assert(std::is_integral<T>::value, "invalid data type");
@@ -66,22 +68,22 @@ constexpr unsigned ceil2(T value) {
   return (sizeof(T) * 8) - count_leading_zeros<T>(value);
 }
 
-inline uint64_t bit_clr(uint64_t bits, uint32_t index) {
+constexpr uint64_t bit_clr(uint64_t bits, uint32_t index) {
     assert(index <= 63);
     return bits & ~(1ull << index);
 }
 
-inline uint64_t bit_set(uint64_t bits, uint32_t index) {
+constexpr uint64_t bit_set(uint64_t bits, uint32_t index) {
     assert(index <= 63);
     return bits | (1ull << index);
 }
 
-inline bool bit_get(uint64_t bits, uint32_t index) {
+constexpr bool bit_get(uint64_t bits, uint32_t index) {
     assert(index <= 63);
     return (bits >> index) & 0x1;
 }
 
-inline uint64_t bit_clrw(uint64_t bits, uint32_t start, uint32_t end) {
+constexpr uint64_t bit_clrw(uint64_t bits, uint32_t start, uint32_t end) {
     assert(end >= start);
     assert(end <= 63);
     uint32_t shift = 63 - end;
@@ -89,7 +91,7 @@ inline uint64_t bit_clrw(uint64_t bits, uint32_t start, uint32_t end) {
     return bits & ~mask;
 }
 
-inline uint64_t bit_setw(uint64_t bits, uint32_t start, uint32_t end, uint64_t value) {
+constexpr uint64_t bit_setw(uint64_t bits, uint32_t start, uint32_t end, uint64_t value) {
     assert(end >= start);
     assert(end <= 63);
     uint32_t shift = 63 - end;
@@ -97,14 +99,14 @@ inline uint64_t bit_setw(uint64_t bits, uint32_t start, uint32_t end, uint64_t v
     return bit_clrw(bits, start, end) | dirty;
 }
 
-inline uint64_t bit_getw(uint64_t bits, uint32_t start, uint32_t end) {
+constexpr uint64_t bit_getw(uint64_t bits, uint32_t start, uint32_t end) {
     assert(end >= start);
     assert(end <= 63);
     uint32_t shift = 63 - end;
     return (bits << shift) >> (shift + start);
 }
 
-inline uint64_t bit_reverse(uint64_t bits) {
+constexpr uint64_t bit_reverse(uint64_t bits) {
   bits = ((bits & 0xAAAAAAAAAAAAAAAA) >>  1) | ((bits & 0x5555555555555555) <<  1);
   bits = ((bits & 0xCCCCCCCCCCCCCCCC) >>  2) | ((bits & 0x3333333333333333) <<  2);
   bits = ((bits & 0xF0F0F0F0F0F0F0F0) >>  4) | ((bits & 0x0F0F0F0F0F0F0F0F) <<  4);
@@ -114,8 +116,10 @@ inline uint64_t bit_reverse(uint64_t bits) {
   return bits;
 }
 
-inline uint64_t bit_reverse(uint64_t bits, uint32_t width) {
+constexpr uint64_t bit_reverse(uint64_t bits, uint32_t width) {
   assert(width <= 64);
+  if (width == 64)
+    return bit_reverse(bits);
   uint64_t reversed(0);
   for (uint32_t i = 0; i < width; ++i) {
     if (bits & (1ULL << i)) {
@@ -126,7 +130,7 @@ inline uint64_t bit_reverse(uint64_t bits, uint32_t width) {
 }
 
 template <typename T = uint32_t>
-T sext(const T& word, uint32_t width) {
+constexpr T sext(const T& word, uint32_t width) {
   assert(width > 1);
   assert(width <= (sizeof(T) * 8));
   if (width == (sizeof(T) * 8))
@@ -136,11 +140,18 @@ T sext(const T& word, uint32_t width) {
 }
 
 template <typename T = uint32_t>
-T zext(const T& word, uint32_t width) {
+constexpr T zext(const T& word, uint32_t width) {
   assert(width > 1);
   assert(width <= (sizeof(T) * 8));
   if (width == (sizeof(T) * 8))
     return word;
   T mask((static_cast<T>(1) << width) - 1);
   return word & mask;
+}
+
+constexpr int pow2_sqrt(int x) {
+  assert(ispow2(x));
+  return 1 << (count_trailing_zeros(x) / 2);
+}
+
 }
