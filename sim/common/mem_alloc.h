@@ -71,7 +71,7 @@ public:
 
   int reserve(uint64_t addr, uint64_t size) {
     if (size == 0) {
-      printf("error: invalid arguments\n");
+      printf("Error: invalid arguments\n");
       return -1;
     }
 
@@ -80,14 +80,14 @@ public:
 
     // Check if the reservation is within memory capacity bounds
     if (addr + size > baseAddress_ + capacity_) {
-      printf("error: address range out of bounds - requested=0x%lx, base+capacity=0x%lx\n", (addr + size), (baseAddress_ +capacity_));
+      printf("Error: address range out of bounds - requested=0x%lx, base+capacity=0x%lx\n", (addr + size), (baseAddress_ +capacity_));
       return -1;
     }
 
     // Ensure the reservation does not overlap with existing pages
     uint64_t overlapStart, overlapEnd;
     if (hasPageOverlap(addr, size, &overlapStart, &overlapEnd)) {
-      printf("error: address range overlaps with existing allocation - requested=[0x%lx-0x%lx], existing=[0x%lx, 0x%lx]\n", addr, addr+size, overlapStart, overlapEnd);
+      printf("Error: address range overlaps with existing allocation - requested=[0x%lx-0x%lx], existing=[0x%lx, 0x%lx]\n", addr, addr+size, overlapStart, overlapEnd);
       return -1;
     }
 
@@ -106,7 +106,7 @@ public:
 
   int allocate(uint64_t size, uint64_t* addr) {
     if (size == 0 || addr == nullptr) {
-      printf("error: invalid arguments\n");
+      printf("Error: invalid arguments\n");
       return -1;
     }
 
@@ -128,12 +128,12 @@ public:
       auto pageSize = alignSize(size, pageAlign_);
       uint64_t pageAddr;
       if (!this->findNextAddress(pageSize, &pageAddr)) {
-        printf("error: out of memory (Can't find next address)\n");
+        printf("Error: out of memory (Can't find next address)\n");
         return -1;
       }
       currPage = this->createPage(pageAddr, pageSize);
       if (nullptr == currPage) {
-        printf("error: out of memory (Can't create a page)\n");
+        printf("Error: out of memory (Can't create a page)\n");
         return -1;
       }
       freeBlock = currPage->findFreeBlock(size);
@@ -345,7 +345,7 @@ private:
       }
       return nullptr;
     }
-#ifdef VM_ENABLE 
+#ifdef VM_ENABLE
     block_t* findfirstUsedBlock() {
       return usedList_;
     }
@@ -495,7 +495,7 @@ private:
 
   bool findNextAddress(uint64_t size, uint64_t* addr) {
     if (pages_ == nullptr) {
-      *addr = baseAddress_; 
+      *addr = baseAddress_;
       return true;
     }
 
@@ -513,7 +513,7 @@ private:
       endOfLastPage = current->addr + current->size;
       current = current->next;
     }
-    
+
     // If no suitable gap is found, place the new page at the end of the last page
     // Check if the allocator has enough capacity
     if ((endOfLastPage + size) <= (baseAddress_ + capacity_)) {
