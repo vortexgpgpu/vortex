@@ -16,6 +16,8 @@
 #include <iostream>
 #include  <iomanip>
 
+namespace vortex {
+
 class ByteStream : public std::istream {
 public:
   ByteStream(const void *buf, std::size_t size) : buf_(buf), size_(size) {}
@@ -86,4 +88,6 @@ std::string StrFormat(const std::string& fmt, Args... args) {
   std::vector<char> buf(size);
   std::snprintf(buf.data(), size, fmt.c_str(), args...);
   return std::string(buf.data(), buf.data() + size - 1);
+}
+
 }
