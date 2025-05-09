@@ -1,7 +1,7 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-PROJECT := conv3x
+PROJECT := dotproduct
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
 
@@ -9,6 +9,6 @@ SRCS := $(SRC_DIR)/main.cpp
 
 VX_SRCS := $(SRC_DIR)/kernel.cpp
 
-OPTS ?= -n64
+OPTS ?= -n32
 
 include ../common.mk

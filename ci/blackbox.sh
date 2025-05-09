@@ -97,10 +97,12 @@ set_app_path() {
         APP_PATH="$APP"
     elif [ -d "$ROOT_DIR/tests/$APP" ]; then
         APP_PATH="$ROOT_DIR/tests/$APP"
-    elif [ -d "$ROOT_DIR/tests/opencl/$APP" ]; then
-        APP_PATH="$ROOT_DIR/tests/opencl/$APP"
     elif [ -d "$ROOT_DIR/tests/regression/$APP" ]; then
         APP_PATH="$ROOT_DIR/tests/regression/$APP"
+    elif [ -d "$ROOT_DIR/tests/opencl/$APP" ]; then
+        APP_PATH="$ROOT_DIR/tests/opencl/$APP"
+    elif [ -d "$ROOT_DIR/tests/hip/$APP" ]; then
+        APP_PATH="$ROOT_DIR/tests/hip/$APP"
     else
         echo "Application folder not found: $APP"
         exit 1

@@ -9,11 +9,19 @@ VORTEX_RT_PATH ?= $(ROOT_DIR)/runtime
 VORTEX_KN_PATH ?= $(ROOT_DIR)/kernel
 
 ifeq ($(XLEN),64)
-VX_CFLAGS += -march=rv64imafd -mabi=lp64d
-STARTUP_ADDR ?= 0x180000000
+	ifeq ($(EXT_V_ENABLE),1)
+		VX_CFLAGS += -march=rv64imafdv_zve64d -mabi=lp64d # vector extension
+	else
+		VX_CFLAGS += -march=rv64imafd -mabi=lp64d
+	endif
+	STARTUP_ADDR ?= 0x180000000
 else
-VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
-STARTUP_ADDR ?= 0x80000000
+	ifeq ($(EXT_V_ENABLE),1)
+		VX_CFLAGS += -march=rv32imafv_zve32f -mabi=ilp32f # vector extension
+	else
+		VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
+	endif
+	STARTUP_ADDR ?= 0x80000000
 endif
 
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)

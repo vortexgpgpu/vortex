@@ -6,12 +6,21 @@ XRT_SYN_DIR ?= $(VORTEX_HOME)/hw/syn/xilinx/xrt
 XRT_DEVICE_INDEX ?= 0
 
 STARTUP_ADDR ?= 0x80000000
+
 ifeq ($(XLEN),64)
-VX_CFLAGS += -march=rv64imafd -mabi=lp64d
-POCL_CC_FLAGS += POCL_VORTEX_XLEN=64
+	ifeq ($(EXT_V_ENABLE),1)
+		VX_CFLAGS += -march=rv64imafdv_zve64d -mabi=lp64d # vector extension
+	else
+		VX_CFLAGS += -march=rv64imafd -mabi=lp64d
+	endif
+	POCL_CC_FLAGS += POCL_VORTEX_XLEN=64
 else
-VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
-POCL_CC_FLAGS += POCL_VORTEX_XLEN=32
+	ifeq ($(EXT_V_ENABLE),1)
+		VX_CFLAGS += -march=rv32imafv_zve32f -mabi=ilp32f # vector extension
+	else
+		VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
+	endif
+	POCL_CC_FLAGS += POCL_VORTEX_XLEN=32
 endif
 
 VORTEX_RT_PATH ?= $(ROOT_DIR)/runtime
