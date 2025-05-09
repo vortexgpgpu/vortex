@@ -137,7 +137,7 @@ MemoryUnit::MemoryUnit(uint64_t pageSize)
 #ifndef VM_ENABLE
   , enableVM_(pageSize != 0)
 #endif
-  , amo_reservation_({0x0, false}) 
+  , amo_reservation_({0x0, false})
 #ifdef VM_ENABLE
   , TLB_HIT(0)
   , TLB_MISS(0)
@@ -160,7 +160,7 @@ void MemoryUnit::attach(MemDevice &m, uint64_t start, uint64_t end) {
 
 #ifdef VM_ENABLE
 std::pair<bool, uint64_t> MemoryUnit::tlbLookup(uint64_t vAddr, ACCESS_TYPE type, uint64_t* size_bits) {
-  
+
   //Find entry while accounting for different sizes.
   for (auto entry : tlb_)
   {
@@ -171,7 +171,7 @@ std::pair<bool, uint64_t> MemoryUnit::tlbLookup(uint64_t vAddr, ACCESS_TYPE type
     }
   }
 
-  
+
   auto iter = tlb_.find(vAddr);
   if (iter != tlb_.end()) {
     TLBEntry e = iter->second;
@@ -197,7 +197,7 @@ std::pair<bool, uint64_t> MemoryUnit::tlbLookup(uint64_t vAddr, ACCESS_TYPE type
         }
         iter->second.mru_bit = true;
       //}
-      
+
     }
     //Check access permissions.
     if ( (type == ACCESS_TYPE::FETCH) & ((e.r == 0) | (e.x == 0)) )
@@ -315,7 +315,7 @@ void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags, uint64_t s
     {
       entry.second.mru_bit = false;
     }
-    
+
   } else if (tlb_.size() == TLB_SIZE) {
     uint64_t del;
     for (auto entry : tlb_) {
@@ -509,7 +509,7 @@ void RAM::set_acl(uint64_t addr, uint64_t size, int flags) {
 void RAM::loadBinImage(const char* filename, uint64_t destination) {
   std::ifstream ifs(filename);
   if (!ifs) {
-    std::cout << "error: " << filename << " not found" << std::endl;
+    std::cerr << "Error: " << filename << " not found" << std::endl;
     std::abort();
   }
 
@@ -542,7 +542,7 @@ void RAM::loadHexImage(const char* filename) {
 
   std::ifstream ifs(filename);
   if (!ifs) {
-    std::cout << "error: " << filename << " not found" << std::endl;
+    std::cerr << "Error: " << filename << " not found" << std::endl;
     std::abort();
   }
 
@@ -597,7 +597,7 @@ uint64_t MemoryUnit::get_base_ppn()
 {
   assert(satp_!= NULL);
   return satp_->get_base_ppn();
-}  
+}
 
 uint64_t MemoryUnit::get_satp()
 {
@@ -605,18 +605,18 @@ uint64_t MemoryUnit::get_satp()
     return 0;
   else
     return satp_->get_satp();
-}  
+}
 
 uint8_t MemoryUnit::is_satp_unset()
 {
   return (satp_==NULL);
-}  
+}
 
 uint8_t MemoryUnit::get_mode()
 {
   assert(satp_!= NULL);
   return satp_->get_mode();
-}  
+}
 void MemoryUnit::set_satp(uint64_t satp)
 {
   // uint16_t asid = 0; // set asid for different process
@@ -641,7 +641,7 @@ bool MemoryUnit::need_trans(uint64_t dev_pAddr)
     if ((STARTUP_ADDR <= dev_pAddr) && (dev_pAddr <= (STARTUP_ADDR + 0x40000)))
       return 0;
 
-    // Now all conditions are not met. Return true because the address needs translation 
+    // Now all conditions are not met. Return true because the address needs translation
     return 1;
   }
 
@@ -694,7 +694,7 @@ std::pair<uint64_t, uint8_t> MemoryUnit::page_table_walk(uint64_t vAddr_bits, AC
   uint64_t pte_addr = 0, pte_bytes = 0;
   uint64_t cur_base_ppn = get_base_ppn();
   // Need to fix for super page
-  *size_bits = 12; 
+  *size_bits = 12;
 
   while (true)
   {
