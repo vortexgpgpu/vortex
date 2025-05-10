@@ -16,14 +16,13 @@
 
 using namespace vortex;
 
-Operands::Operands(const SimContext &ctx, Core* core)
+Operands::Operands(const SimContext &ctx, Core* /*core*/)
     : SimObject<Operands>(ctx, "operands")
     , Input(this)
     , Output(this)
     , opc_units_(NUM_OPCS)
     , gpr_unit_(GPR::Create())
-    , out_arb_(ArbiterType::RoundRobin, NUM_OPCS)
-    , core_(core) {
+    , out_arb_(ArbiterType::RoundRobin, NUM_OPCS) {
   // create OPC units
   for (uint32_t i = 0; i < NUM_OPCS; i++) {
     opc_units_.at(i) = OpcUnit::Create(core);
