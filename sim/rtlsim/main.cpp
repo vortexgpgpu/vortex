@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
 		} else if (program_ext == "hex") {
 			ram.loadHexImage(program);
 		} else {
-			std::cout << "*** error: only *.bin or *.hex images supported." << std::endl;
+			std::cerr << "Error: only *.bin or *.hex images supported." << std::endl;
 			return -1;
 		}
 	}
