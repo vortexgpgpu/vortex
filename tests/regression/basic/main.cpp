@@ -137,8 +137,8 @@ int run_kernel_test(const kernel_arg_t& kernel_arg) {
     h_src[i] = shuffle(i, NONCE);
   }
 
-  // upload program
-  std::cout << "upload program" << std::endl;
+  // Upload kernel binary
+  std::cout << "Upload kernel binary" << std::endl;
   RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
 
   // upload kernel argument

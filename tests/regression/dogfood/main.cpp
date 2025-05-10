@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
     testid_e = (testSuite->size() - 1);
   }
 
-  // upload program
+  // Upload kernel binary
   std::cout << "upload kernel" << std::endl;
   RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
 

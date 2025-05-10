@@ -19,6 +19,7 @@ all:
 	$(MAKE) -C relu
 	$(MAKE) -C sgemv
 	$(MAKE) -C sgemm2
+	$(MAKE) -C madmax
 	$(MAKE) -C stencil3d
 
 run-simx:
@@ -39,6 +40,7 @@ run-simx:
 	$(MAKE) -C relu run-simx
 	$(MAKE) -C sgemv run-simx
 	$(MAKE) -C sgemm2 run-simx
+	$(MAKE) -C madmax run-simx
 	$(MAKE) -C stencil3d run-simx
 
 run-rtlsim:
@@ -59,6 +61,7 @@ run-rtlsim:
 	$(MAKE) -C relu run-rtlsim
 	$(MAKE) -C sgemv run-rtlsim
 	$(MAKE) -C sgemm2 run-rtlsim
+	$(MAKE) -C madmax run-rtlsim
 	$(MAKE) -C stencil3d run-rtlsim
 
 clean:
@@ -79,4 +82,5 @@ clean:
 	$(MAKE) -C relu clean
 	$(MAKE) -C sgemv clean
 	$(MAKE) -C sgemm2 clean
+	$(MAKE) -C madmax clean
 	$(MAKE) -C stencil3d clean

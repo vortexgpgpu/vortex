@@ -196,8 +196,8 @@ int main(int argc, char *argv[]) {
   std::cout << "upload source buffer" << std::endl;
   RT_CHECK(vx_copy_to_dev(src1_buffer, h_src.data(), 0, src_buf_size));
 
-  // upload program
-  std::cout << "upload program" << std::endl;
+  // Upload kernel binary
+  std::cout << "Upload kernel binary" << std::endl;
   RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
 
   // upload kernel argument
