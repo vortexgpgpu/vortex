@@ -27,11 +27,7 @@
 #include "voperands.h"
 #include "vec_unit.h"
 #else
-#ifdef DISABLE_OPC
-#include "operands_old.h"
-#else
 #include "operands.h"
-#endif
 #endif
 
 #include "dispatcher.h"

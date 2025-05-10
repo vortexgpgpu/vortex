@@ -26,13 +26,11 @@ SRCS += $(SRC_DIR)/dcrs.cpp $(SRC_DIR)/types.cpp
 
 # Add V extension sources
 ifneq ($(findstring -DEXT_V_ENABLE, $(CONFIGS)),)
-  SRCS += $(SRC_DIR)/voperands.cpp
-  SRCS += $(SRC_DIR)/vopc_unit.cpp
-  SRCS += $(SRC_DIR)/vec_unit.cpp
+  	SRCS += $(SRC_DIR)/voperands.cpp
+  	SRCS += $(SRC_DIR)/vopc_unit.cpp
+  	SRCS += $(SRC_DIR)/vec_unit.cpp
 else
-	ifeq ($(findstring -DDISABLE_OPC, $(CONFIGS)),)
-  		SRCS += $(SRC_DIR)/operands.cpp
-	endif
+	SRCS += $(SRC_DIR)/operands.cpp
 endif
 
 # Debugging

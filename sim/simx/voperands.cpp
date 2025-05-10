@@ -28,7 +28,7 @@ Operands::Operands(const SimContext &ctx, Core* core)
     , core_(core) {
   // create OPC units
   for (uint32_t i = 0; i < NUM_OPCS; i++) {
-    sopc_units_.at(i) = OpcUnit::Create(core);
+    sopc_units_.at(i) = OpcUnit::Create();
   }
 
   // create VOPC units
