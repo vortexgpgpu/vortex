@@ -23,6 +23,8 @@
 #include "verilated_vpi.h"
 #include "VX_config.h"
 
+using namespace vortex;
+
 extern "C" {
   void dpi_fadd(bool enable, int dst_fmt, int64_t a, int64_t b, const svBitVecVal* frm, int64_t* result, svBitVecVal* fflags);
   void dpi_fsub(bool enable, int dst_fmt, int64_t a, int64_t b, const svBitVecVal* frm, int64_t* result, svBitVecVal* fflags);

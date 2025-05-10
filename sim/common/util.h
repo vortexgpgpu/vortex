@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <array>
 #include <utility>
+#include <string>
 #include <assert.h>
 #include <bitmanip.h>
 
