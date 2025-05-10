@@ -45,7 +45,7 @@ public:
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
 		uint32_t lg2_line_size = log2ceil(config_.line_size);
 		uint32_t num_banks = 1 << config.B;
-		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::Priority, config.num_reqs, num_banks, 1,
+		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::Priority, config.num_reqs, num_banks,
 		 [lg2_line_size, num_banks](const MemCrossBar::ReqType& req) {
     	// Custom logic to calculate the output index using bank interleaving
 			return (uint32_t)((req.addr >> lg2_line_size) & (num_banks-1));
@@ -88,7 +88,7 @@ public:
 			if (!bank_req.write || config_.write_reponse) {
 				// send xbar response
 				MemRsp bank_rsp{bank_req.tag, bank_req.cid, bank_req.uuid};
-				mem_xbar_->RspOut.at(i).push(bank_rsp, 1);
+				mem_xbar_->RspOut.at(i).push(bank_rsp);
 			}
 
 			// update perf counters
@@ -101,7 +101,7 @@ public:
 	}
 
 	const PerfStats& perf_stats() const {
-		perf_stats_.bank_stalls = mem_xbar_->req_collisions();
+		perf_stats_.bank_stalls = mem_xbar_->collisions();
 		return perf_stats_;
 	}
 };

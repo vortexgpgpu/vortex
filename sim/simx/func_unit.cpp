@@ -106,9 +106,10 @@ LsuUnit::~LsuUnit()
 
 void LsuUnit::reset() {
 	for (auto& state : states_) {
-		state.clear();
+		state.reset();
 	}
 	pending_loads_ = 0;
+	remain_addrs_ = 0;
 }
 
 void LsuUnit::tick() {
@@ -124,13 +125,16 @@ void LsuUnit::tick() {
 		DT(3, this->name() << "-mem-rsp: " << lsu_rsp);
 		auto& entry = state.pending_rd_reqs.at(lsu_rsp.tag);
 		auto trace = entry.trace;
-		assert(!entry.mask.none());
-		entry.mask &= ~lsu_rsp.mask; // track remaining
-		if (entry.mask.none()) {
-			// whole response received, release trace
-			int iw = trace->wid % ISSUE_WIDTH;
-			Outputs.at(iw).push(trace, 1);
+		assert(entry.count != 0);
+		entry.count -= lsu_rsp.mask.count(); // track remaining
+		if (entry.count == 0) {
+			// full response batch received
 			state.pending_rd_reqs.release(lsu_rsp.tag);
+			// is last batch?
+			if (entry.eop) {
+				int iw = trace->wid % ISSUE_WIDTH;
+				Outputs.at(iw).push(trace, 1);
+			}
 		}
 		pending_loads_ -= lsu_rsp.mask.count();
 		lsu_rsp_port.pop();
@@ -166,7 +170,11 @@ void LsuUnit::tick() {
 			continue;
 		}
 
-		bool is_write = ((trace->lsu_type == LsuType::STORE) || (trace->lsu_type == LsuType::TCU_STORE));
+		bool is_write = (trace->lsu_type == LsuType::STORE)
+		#ifdef EXT_V_ENABLE
+	               || (trace->lsu_type == LsuType::VSTORE)
+		#endif
+		;
 
 		// check pending queue capacity
 		if (!is_write && state.pending_rd_reqs.full()) {
@@ -178,139 +186,79 @@ void LsuUnit::tick() {
 			trace->log_once(false);
 		}
 
-		// build memory request
-		LsuReq lsu_req(NUM_LSU_LANES);
-		lsu_req.write = is_write;
-		{
-			auto trace_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
-			auto t0 = trace->pid * NUM_LSU_LANES;
-			for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
-				if (trace->tmask.test(t0 + i)) {
-					lsu_req.mask.set(i);
-					lsu_req.addrs.at(i) = trace_data->mem_addrs.at(t0 + i).addr;
+		if (remain_addrs_ == 0) {
+			pending_addrs_.clear();
+			if (trace->data) {
+			#ifdef EXT_V_ENABLE
+				if (trace->lsu_type == LsuType::VLOAD || trace->lsu_type == LsuType::VSTORE) {
+					auto trace_data = std::dynamic_pointer_cast<VecUnit::MemTraceData>(trace->data);
+					for (uint32_t t = 0; t < trace_data->mem_addrs.size(); ++t) {
+						if (!trace->tmask.test(t))
+							continue;
+						for (auto addr : trace_data->mem_addrs.at(t)) {
+							pending_addrs_.push_back(addr);
+						}
+					}
+				} else
+			#endif
+				{
+					auto trace_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
+					for (uint32_t t = 0; t < trace_data->mem_addrs.size(); ++t) {
+						if (!trace->tmask.test(t))
+							continue;
+						pending_addrs_.push_back(trace_data->mem_addrs.at(t));
+					}
 				}
+				remain_addrs_ = pending_addrs_.size();
 			}
 		}
-		uint32_t tag = 0;
 
-		if (!is_write) {
-			tag = state.pending_rd_reqs.allocate({trace, lsu_req.mask});
-		}
-		lsu_req.tag  = tag;
-		lsu_req.cid  = trace->cid;
-		lsu_req.uuid = trace->uuid;
+		if (remain_addrs_ != 0) {
+			// setup memory request
+			LsuReq lsu_req(NUM_LSU_LANES);
+			lsu_req.write = is_write;
+			uint32_t t0 = pending_addrs_.size() - remain_addrs_;
+			for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
+				lsu_req.mask.set(i);
+				lsu_req.addrs.at(i) = pending_addrs_.at(t0 + i).addr;
+				--remain_addrs_;
+				if (remain_addrs_ == 0)
+					break;
+			}
 
-		// send memory request
-		core_->lmem_switch_.at(block_idx)->ReqIn.push(lsu_req);
-		DT(3, this->name() << "-mem-req: " << lsu_req);
+			uint32_t count = lsu_req.mask.count();
+			bool is_eop = (remain_addrs_ == 0);
 
-		// update stats
-		auto num_addrs = lsu_req.mask.count();
-		if (is_write) {
-			core_->perf_stats_.stores += num_addrs;
-		} else {
-			core_->perf_stats_.loads += num_addrs;
-			pending_loads_ += num_addrs;
-		}
+			uint32_t tag = 0;
+			if (!is_write) {
+				tag = state.pending_rd_reqs.allocate({trace, count, is_eop});
+			}
+			lsu_req.tag  = tag;
+			lsu_req.cid  = trace->cid;
+			lsu_req.uuid = trace->uuid;
 
-		// do not wait on writes
-		if (is_write) {
-			Outputs.at(iw).push(trace, 1);
-		}
+			// send memory request
+			core_->lmem_switch_.at(block_idx)->ReqIn.push(lsu_req);
+			DT(3, this->name() << "-mem-req: " << lsu_req);
 
-		// remove input
-		input.pop();
-	}
-}
-/*  TO BE FIXED:Tensor_core code
-    send_request is not used anymore. Need to be modified number of load
-*/
-/*
-int LsuUnit::send_requests(instr_trace_t* trace, int block_idx, int tag) {
-	int count = 0;
-
-	auto trace_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
-	bool is_write = ((trace->lsu_type == LsuType::STORE) || (trace->lsu_type == LsuType::TCU_STORE));
-
-	uint16_t req_per_thread = 1;
-	if ((trace->lsu_type == LsuType::TCU_LOAD) || (trace->lsu_type == LsuType::TCU_STORE))
-	{
- 		req_per_thread= (1>(trace_data->mem_addrs.at(0).size)/4)? 1: ((trace_data->mem_addrs.at(0).size)/4);
-	}
-
-	auto t0 = trace->pid * NUM_LSU_LANES;
-
-	for (uint32_t i = 0; i < NUM_LSU_LANES; ++i) {
-		uint32_t t = t0 + i;
-		if (!trace->tmask.test(t))
-			continue;
-
-		int req_idx = block_idx * LSU_CHANNELS + (i % LSU_CHANNELS);
-		auto& dcache_req_port = core_->lmem_switch_.at(req_idx)->ReqIn;
-
-		auto mem_addr = trace_data->mem_addrs.at(t);
-		auto type = get_addr_type(mem_addr.addr);
-		// DT(3, "addr_type = " << type << ", " << *trace);
-		uint32_t mem_bytes = 1;
-		for (int i = 0; i < req_per_thread; i++)
-		{
-			MemReq mem_req;
-			mem_req.addr  = mem_addr.addr + (i*mem_bytes);
-			mem_req.write = is_write;
-			mem_req.type  = type;
-			mem_req.tag   = tag;
-			mem_req.cid   = trace->cid;
-			mem_req.uuid  = trace->uuid;
-
-			dcache_req_port.push(mem_req, 1);
-			DT(3, "mem-req: addr=0x" << std::hex << mem_req.addr << ", tag=" << tag
-				<< ", lsu_type=" << trace->lsu_type << ", rid=" << req_idx << ", addr_type=" << mem_req.type << ", " << *trace);
-
+			// update stats
 			if (is_write) {
-				++core_->perf_stats_.stores;
+				core_->perf_stats_.stores += count;
 			} else {
-				++core_->perf_stats_.loads;
-				++pending_loads_;
+				core_->perf_stats_.loads += count;
+				pending_loads_ += count;
 			}
+		}
 
-			++count;
+		if (remain_addrs_ == 0) {
+			// do not wait on writes
+			if (is_write || 0 == pending_addrs_.size()) {
+				Outputs.at(iw).push(trace, 1);
+			}
+			// remove input
+			input.pop();
 		}
 	}
-	return count;
-}
-*/
-
-///////////////////////////////////////////////////////////////////////////////
-
-TcuUnit::TcuUnit(const SimContext& ctx, Core* core)
-    : FuncUnit(ctx, core, "TCU")
-    {}
-
-void TcuUnit::tick() {
-
-	for (uint32_t i = 0; i < ISSUE_WIDTH; ++i) {
-        auto& input = Inputs.at(i);
-        if (input.empty())
-            continue;
-        auto& output = Outputs.at(i);
-        auto trace = input.front();
-        uint32_t n_tiles = core_->emulator_.get_tiles();
-		uint32_t tc_size = core_->emulator_.get_tc_size();
-
-        switch (trace->tcu_type) {
-            case TCUType::TCU_MUL:
-            {    //mat size = n_tiles * tc_size
-                int matmul_latency = (n_tiles * tc_size) + tc_size + tc_size;
-                output.push(trace, matmul_latency);
-				DT(3, "matmul_latency = " << matmul_latency << ", " << *trace);
-                break;
-            }
-            default:
-                std::abort();
-        }
-        DT(3, "pipeline-execute: op=" << trace->tcu_type << ", " << *trace);
-        input.pop();
-    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -334,7 +282,7 @@ void SfuUnit::tick() {
 		case SfuType::WSPAWN:
 			output.push(trace, 2+delay);
 			if (trace->eop) {
-				auto trace_data = std::dynamic_pointer_cast<SFUTraceData>(trace->data);
+				auto trace_data = std::dynamic_pointer_cast<SfuTraceData>(trace->data);
 				release_warp = core_->wspawn(trace_data->arg1, trace_data->arg2);
 			}
 			break;
@@ -350,7 +298,7 @@ void SfuUnit::tick() {
 		case SfuType::BAR: {
 			output.push(trace, 2+delay);
 			if (trace->eop) {
-				auto trace_data = std::dynamic_pointer_cast<SFUTraceData>(trace->data);
+				auto trace_data = std::dynamic_pointer_cast<SfuTraceData>(trace->data);
 				release_warp = core_->barrier(trace_data->arg1, trace_data->arg2, trace->wid);
 			}
 		} break;
@@ -366,3 +314,22 @@ void SfuUnit::tick() {
 		input.pop();
 	}
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+#ifdef EXT_V_ENABLE
+
+VpuUnit::VpuUnit(const SimContext& ctx, Core* core)
+	: FuncUnit(ctx, core, "vpu-unit")
+{
+	// bind vector unit
+	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
+		this->Inputs.at(iw).bind(&core_->vec_unit()->Inputs.at(iw));
+		core_->vec_unit()->Outputs.at(iw).bind(&this->Outputs.at(iw));
+	}
+}
+
+void VpuUnit::tick() {
+	// use vec_unit
+}
+#endif

@@ -35,6 +35,7 @@
 `define VX_DCR_MPM_CLASS_NONE           0
 `define VX_DCR_MPM_CLASS_CORE           1
 `define VX_DCR_MPM_CLASS_MEM            2
+`define VX_DCR_MPM_CLASS_VEC            3
 
 // User Floating-Point CSRs ///////////////////////////////////////////////////
 
@@ -99,6 +100,8 @@
 `define VX_CSR_MPM_SCRB_CSRS_H          12'hB8C
 `define VX_CSR_MPM_SCRB_WCTL            12'hB0D
 `define VX_CSR_MPM_SCRB_WCTL_H          12'hB8D
+`define VX_CSR_MPM_SCRB_VEC             12'hB13
+`define VX_CSR_MPM_SCRB_VEC_H           12'hB93
 // PERF: memory
 `define VX_CSR_MPM_IFETCHES             12'hB0E
 `define VX_CSR_MPM_IFETCHES_H           12'hB8E
@@ -179,7 +182,17 @@
 `define VX_CSR_MPM_COALESCER_MISS       12'hB1F     // coalescer misses
 `define VX_CSR_MPM_COALESCER_MISS_H     12'hB9F
 
-// Machine Performance-monitoring memory counters (class 3) ///////////////////
+// Machine Performance-monitoring VPU counters (class 3) //////////////////////
+// PERF: vector unit
+`define VX_CSR_MPM_VEC_READS            12'hB03     // vector reads
+`define VX_CSR_MPM_VEC_READS_H          12'hB83
+`define VX_CSR_MPM_VEC_WRITES           12'hB04     // vector writes
+`define VX_CSR_MPM_VEC_WRITES_H         12'hB84
+`define VX_CSR_MPM_VEC_LAT              12'hB05     // vector latency
+`define VX_CSR_MPM_VEC_LAT_H            12'hB85
+`define VX_CSR_MPM_VEC_ST               12'hB06     // vector stalls
+`define VX_CSR_MPM_VEC_ST_H             12'hB86
+
 // <Add your own counters: use addresses hB03..B1F, hB83..hB9F>
 
 // Machine Information Registers //////////////////////////////////////////////
@@ -198,9 +211,6 @@
 `define VX_CSR_VL                       12'hC20
 `define VX_CSR_VTYPE                    12'hC21
 `define VX_CSR_VLENB                    12'hC22
-`define VX_CSR_VCYCLE                   12'hC00
-`define VX_CSR_VTIME                    12'hC01
-`define VX_CSR_VINSTRET                 12'hC02
 
 // GPGU CSRs
 
@@ -214,11 +224,5 @@
 `define VX_CSR_NUM_WARPS                12'hFC1
 `define VX_CSR_NUM_CORES                12'hFC2
 `define VX_CSR_LOCAL_MEM_BASE           12'hFC3
-
-`define VX_MAT_MUL_SIZE                 12'hFC4     // VX_MAT_MUL_SIZE = Matrix Size / TC Size
-`define VX_TC_NUM                       12'hFC5
-`define VX_TC_SIZE                      12'hFC6
-
-
 
 `endif // VX_TYPES_VH

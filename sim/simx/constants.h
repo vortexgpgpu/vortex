@@ -14,6 +14,7 @@
 #pragma once
 
 #include <VX_config.h>
+#include <bitmanip.h>
 
 #ifndef RAM_PAGE_SIZE
 #define RAM_PAGE_SIZE     4096
@@ -23,19 +24,32 @@
 #define MEM_CLOCK_RATIO   1
 #endif
 
-inline constexpr int LSU_WORD_SIZE    = (XLEN / 8);
-inline constexpr int LSU_CHANNELS     = NUM_LSU_LANES;
-inline constexpr int LSU_NUM_REQS	    = (NUM_LSU_BLOCKS * LSU_CHANNELS);
+namespace vortex {
+
+inline constexpr uint32_t XLENB           = (XLEN / 8);
+inline constexpr uint32_t VLENB           = (VLEN / 8);
+
+inline constexpr uint32_t MAX_NUM_CORES   = 1024;
+inline constexpr uint32_t MAX_NUM_WARPS   = 64;
+inline constexpr uint32_t MAX_NUM_REGS    = 32;
+inline constexpr uint32_t LOG_NUM_REGS    = 5;
+inline constexpr uint32_t NUM_SRC_REGS    = 3;
+
+inline constexpr uint32_t LSU_WORD_SIZE   = (XLEN / 8);
+inline constexpr uint32_t LSU_CHANNELS    = NUM_LSU_LANES;
+inline constexpr uint32_t LSU_NUM_REQS	  = (NUM_LSU_BLOCKS * LSU_CHANNELS);
 
 // The dcache uses coalesced memory blocks
-inline constexpr int DCACHE_WORD_SIZE = LSU_LINE_SIZE;
-inline constexpr int DCACHE_CHANNELS 	= UP((NUM_LSU_LANES * (XLEN / 8)) / DCACHE_WORD_SIZE);
-inline constexpr int DCACHE_NUM_REQS	= (NUM_LSU_BLOCKS * DCACHE_CHANNELS);
+inline constexpr uint32_t DCACHE_WORD_SIZE= LSU_LINE_SIZE;
+inline constexpr uint32_t DCACHE_CHANNELS = UP((NUM_LSU_LANES * XLENB) / DCACHE_WORD_SIZE);
+inline constexpr uint32_t DCACHE_NUM_REQS	= (NUM_LSU_BLOCKS * DCACHE_CHANNELS);
 
-inline constexpr int NUM_SOCKETS      = UP(NUM_CORES / SOCKET_SIZE);
+inline constexpr uint32_t NUM_SOCKETS     = UP(NUM_CORES / SOCKET_SIZE);
 
-inline constexpr int L2_NUM_REQS      = NUM_SOCKETS * L1_MEM_PORTS;
+inline constexpr uint32_t L2_NUM_REQS     = NUM_SOCKETS * L1_MEM_PORTS;
+inline constexpr uint32_t L3_NUM_REQS     = NUM_CLUSTERS * L2_MEM_PORTS;
 
-inline constexpr int L3_NUM_REQS      = NUM_CLUSTERS * L2_MEM_PORTS;
+inline constexpr uint32_t PER_ISSUE_WARPS = NUM_WARPS / ISSUE_WIDTH;
+inline constexpr uint32_t ISSUE_WIS_BITS  = log2ceil(PER_ISSUE_WARPS);
 
-inline constexpr int PER_ISSUE_WARPS  = NUM_WARPS / ISSUE_WIDTH;
+} // namespace vortex

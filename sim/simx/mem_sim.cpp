@@ -44,7 +44,7 @@ public:
 	{
 		char sname[100];
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
-		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config.num_ports, config.num_banks, 1,
+		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config.num_ports, config.num_banks,
 			[lg2_block_size = log2ceil(config.block_size), num_banks = config.num_banks](const MemCrossBar::ReqType& req) {
     	// Custom logic to calculate the output index using bank interleaving
 			return (uint32_t)((req.addr >> lg2_block_size) & (num_banks-1));
@@ -60,7 +60,7 @@ public:
 	}
 
 	const PerfStats& perf_stats() const {
-		perf_stats_.bank_stalls = mem_xbar_->req_collisions();
+		perf_stats_.bank_stalls = mem_xbar_->collisions();
 		return perf_stats_;
 	}
 
@@ -88,14 +88,14 @@ public:
 						// only send a response for read requests
 						MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.cid, rsp_args->request.uuid};
 						rsp_args->memsim->mem_xbar_->RspOut.at(rsp_args->bank_id).push(mem_rsp, 1);
-						DT(3, rsp_args->memsim->simobject_->name() << "-mem-rsp[" << rsp_args->bank_id << "]: " << mem_rsp);
+						DT(3, rsp_args->memsim->simobject_->name() << "-mem-rsp" << rsp_args->bank_id << ": " << mem_rsp);
 					}
 					delete rsp_args;
 				},
 				req_args
 			);
 
-			DT(3, simobject_->name() << "-mem-req[" << i << "]: " << mem_req);
+			DT(3, simobject_->name() << "-mem-req" << i << ": " << mem_req);
 			mem_xbar_->ReqOut.at(i).pop();
 		}
 	}

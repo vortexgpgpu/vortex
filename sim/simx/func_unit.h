@@ -49,7 +49,7 @@ class AluUnit : public FuncUnit {
 public:
   AluUnit(const SimContext& ctx, Core*);
 
-  void tick();
+  void tick() override;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -58,7 +58,7 @@ class FpuUnit : public FuncUnit {
 public:
   FpuUnit(const SimContext& ctx, Core*);
 
-  void tick();
+  void tick() override;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -68,14 +68,15 @@ public:
 	LsuUnit(const SimContext& ctx, Core*);
 	~LsuUnit();
 
-	void reset();
-	void tick();
+	void reset() override;
+	void tick() override;
 
 private:
 
  	struct pending_req_t {
 		instr_trace_t* trace;
-		BitVector<> mask;
+		uint32_t count;
+		bool eop;
 	};
 
 	struct lsu_state_t {
@@ -85,7 +86,7 @@ private:
 
 		lsu_state_t() : pending_rd_reqs(LSUQ_IN_SIZE) {}
 
-		void clear() {
+		void reset() {
 			this->pending_rd_reqs.clear();
 			this->fence_trace = nullptr;
 			this->fence_lock = false;
@@ -94,14 +95,8 @@ private:
 
 	std::array<lsu_state_t, NUM_LSU_BLOCKS> states_;
 	uint64_t pending_loads_;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-class TcuUnit : public FuncUnit {
-public:
-    TcuUnit(const SimContext& ctx, Core*);
-    void tick();
+	std::vector<mem_addr_size_t> pending_addrs_;
+	uint32_t remain_addrs_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -110,7 +105,20 @@ class SfuUnit : public FuncUnit {
 public:
 	SfuUnit(const SimContext& ctx, Core*);
 
-	void tick();
+	void tick() override;
 };
+
+///////////////////////////////////////////////////////////////////////////////
+
+#ifdef EXT_V_ENABLE
+
+class VpuUnit : public FuncUnit {
+public:
+	VpuUnit(const SimContext& ctx, Core*);
+
+	void tick() override;
+};
+
+#endif
 
 }

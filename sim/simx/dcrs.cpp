@@ -23,6 +23,6 @@ void DCRS::write(uint32_t addr, uint32_t value) {
       return;
   }
 
-  std::cout << "Error: invalid global DCR addr=0x" << std::hex << addr << std::dec << std::endl;
+  std::cerr << "Error: invalid global DCR addr=0x" << std::hex << addr << std::dec << std::endl;
   std::abort();
 }

@@ -31,6 +31,7 @@
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
+
 `ifndef EXT_M_DISABLE
 `define EXT_M_ENABLE
 `endif
@@ -85,8 +86,12 @@
 `endif
 `endif
 
+`ifdef EXT_V_ENABLE
 `ifndef VLEN
-`define VLEN 256
+`define VLEN (4 * `XLEN)
+`endif
+`else
+`define VLEN `XLEN
 `endif
 
 `ifndef NUM_CLUSTERS
@@ -131,17 +136,6 @@
 `define NUM_TCU_BLOCKS  `ISSUE_WIDTH
 `endif
 
-`ifdef L2_ENABLE
-    `define L2_ENABLED   1
-`else
-    `define L2_ENABLED   0
-`endif
-
-`ifdef L3_ENABLE
-    `define L3_ENABLED   1
-`else
-    `define L3_ENABLED   0
-`endif
 
 `ifdef L1_DISABLE
     `define ICACHE_DISABLE
@@ -264,12 +258,10 @@
 `ifndef IO_MPM_ADDR
 `define IO_MPM_ADDR     (`IO_COUT_ADDR + `IO_COUT_SIZE)
 `endif
-`define IO_MPM_SIZE     (8 * 32 * `NUM_CORES * `NUM_CLUSTERS)
 
 `ifndef STACK_LOG2_SIZE
 `define STACK_LOG2_SIZE 13
 `endif
-`define STACK_SIZE      (1 << `STACK_LOG2_SIZE)
 
 `define RESET_DELAY     8
 
@@ -313,6 +305,7 @@
 `ifndef MEM_PAGE_SIZE
 `define MEM_PAGE_SIZE (4096)
 `endif
+
 `ifndef MEM_PAGE_LOG2_SIZE
 `define MEM_PAGE_LOG2_SIZE (12)
 `endif
@@ -365,14 +358,34 @@
 
 // Pipeline Configuration /////////////////////////////////////////////////////
 
+`ifndef SIMD_WIDTH
+`define SIMD_WIDTH      `MIN(`NUM_THREADS, 16)
+`endif
+
 // Issue width
 `ifndef ISSUE_WIDTH
-`define ISSUE_WIDTH     `UP(`NUM_WARPS / 8)
+`define ISSUE_WIDTH     `UP(`NUM_WARPS / 16)
+`endif
+
+// Operand collectors
+`ifndef NUM_OPCS
+`define NUM_OPCS        4
+`endif
+`ifndef NUM_VOPCS
+`define NUM_VOPCS       1
+`endif
+
+// Register File Banks
+`ifndef NUM_GPR_BANKS
+`define NUM_GPR_BANKS   `MIN(`NUM_OPCS, 16)
+`endif
+`ifndef NUM_VGPR_BANKS
+`define NUM_VGPR_BANKS  `MIN(`NUM_VOPCS, 16)
 `endif
 
 // Number of ALU units
 `ifndef NUM_ALU_LANES
-`define NUM_ALU_LANES   `NUM_THREADS
+`define NUM_ALU_LANES   `SIMD_WIDTH
 `endif
 `ifndef NUM_ALU_BLOCKS
 `define NUM_ALU_BLOCKS  `ISSUE_WIDTH
@@ -380,7 +393,7 @@
 
 // Number of FPU units
 `ifndef NUM_FPU_LANES
-`define NUM_FPU_LANES   `NUM_THREADS
+`define NUM_FPU_LANES   `SIMD_WIDTH
 `endif
 `ifndef NUM_FPU_BLOCKS
 `define NUM_FPU_BLOCKS  `ISSUE_WIDTH
@@ -388,7 +401,7 @@
 
 // Number of LSU units
 `ifndef NUM_LSU_LANES
-`define NUM_LSU_LANES   `NUM_THREADS
+`define NUM_LSU_LANES   `SIMD_WIDTH
 `endif
 `ifndef NUM_LSU_BLOCKS
 `define NUM_LSU_BLOCKS  1
@@ -396,10 +409,16 @@
 
 // Number of SFU units
 `ifndef NUM_SFU_LANES
-`define NUM_SFU_LANES   `NUM_THREADS
+`define NUM_SFU_LANES   `SIMD_WIDTH
 `endif
-`ifndef NUM_SFU_BLOCKS
 `define NUM_SFU_BLOCKS  1
+
+// Number of VPU units
+`ifndef NUM_VPU_LANES
+`define NUM_VPU_LANES   `SIMD_WIDTH
+`endif
+`ifndef NUM_VPU_BLOCKS
+`define NUM_VPU_BLOCKS  `ISSUE_WIDTH
 `endif
 
 // Size of Instruction Buffer
@@ -414,18 +433,12 @@
 
 // Size of LSU Core Request Queue
 `ifndef LSUQ_IN_SIZE
-`define LSUQ_IN_SIZE    (2 * (`NUM_THREADS / `NUM_LSU_LANES))
+`define LSUQ_IN_SIZE    (2 * (`SIMD_WIDTH / `NUM_LSU_LANES))
 `endif
 
 // Size of LSU Memory Request Queue
 `ifndef LSUQ_OUT_SIZE
 `define LSUQ_OUT_SIZE   `MAX(`LSUQ_IN_SIZE, `LSU_LINE_SIZE / (`XLEN / 8))
-`endif
-
-`ifdef GBAR_ENABLE
-`define GBAR_ENABLED 1
-`else
-`define GBAR_ENABLED 0
 `endif
 
 `ifndef LATENCY_IMUL
@@ -444,7 +457,7 @@
 
 // Size of FPU Request Queue
 `ifndef FPUQ_SIZE
-`define FPUQ_SIZE (2 * (`NUM_THREADS / `NUM_FPU_LANES))
+`define FPUQ_SIZE (2 * (`SIMD_WIDTH / `NUM_FPU_LANES))
 `endif
 
 // FNCP Latency
@@ -551,10 +564,8 @@
 `ifndef ICACHE_DISABLE
 `define ICACHE_ENABLE
 `endif
-`ifdef ICACHE_ENABLE
-    `define ICACHE_ENABLED 1
-`else
-    `define ICACHE_ENABLED 0
+
+`ifndef ICACHE_ENABLE
     `define NUM_ICACHES 0
 `endif
 
@@ -608,10 +619,8 @@
 `ifndef DCACHE_DISABLE
 `define DCACHE_ENABLE
 `endif
-`ifdef DCACHE_ENABLE
-    `define DCACHE_ENABLED 1
-`else
-    `define DCACHE_ENABLED 0
+
+`ifndef DCACHE_ENABLE
     `define NUM_DCACHES 0
     `define DCACHE_NUM_BANKS 1
 `endif
@@ -686,10 +695,7 @@
 `define LMEM_ENABLE
 `endif
 
-`ifdef LMEM_ENABLE
-    `define LMEM_ENABLED   1
-`else
-    `define LMEM_ENABLED   0
+`ifndef LMEM_ENABLE
     `define LMEM_NUM_BANKS 1
 `endif
 
@@ -821,6 +827,42 @@
 `endif
 
 // ISA Extensions /////////////////////////////////////////////////////////////
+
+`ifdef ICACHE_ENABLE
+    `define ICACHE_ENABLED 1
+`else
+    `define ICACHE_ENABLED 0
+`endif
+
+`ifdef DCACHE_ENABLE
+    `define DCACHE_ENABLED 1
+`else
+    `define DCACHE_ENABLED 0
+`endif
+
+`ifdef LMEM_ENABLE
+    `define LMEM_ENABLED 1
+`else
+    `define LMEM_ENABLED 0
+`endif
+
+`ifdef GBAR_ENABLE
+    `define GBAR_ENABLED 1
+`else
+    `define GBAR_ENABLED 0
+`endif
+
+`ifdef L2_ENABLE
+    `define L2_ENABLED 1
+`else
+    `define L2_ENABLED 0
+`endif
+
+`ifdef L3_ENABLE
+    `define L3_ENABLED 1
+`else
+    `define L3_ENABLED 0
+`endif
 
 `ifdef EXT_A_ENABLE
     `define EXT_A_ENABLED   1

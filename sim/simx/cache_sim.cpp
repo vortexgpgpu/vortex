@@ -110,7 +110,7 @@ struct line_t {
 	bool     valid;
 	bool     dirty;
 
-	void clear() {
+	void reset() {
 		valid = false;
 		dirty = false;
 	}
@@ -123,9 +123,9 @@ struct set_t {
 		: lines(num_ways)
 	{}
 
-	void clear() {
+	void reset() {
 		for (auto& line : lines) {
-			line.clear();
+			line.reset();
 		}
 	}
 };
@@ -135,7 +135,7 @@ struct bank_req_port_t {
 	uint64_t req_tag;
 	bool     valid;
 
-	void clear() {
+	void reset() {
 		valid = false;
 	}
 };
@@ -161,32 +161,32 @@ struct bank_req_t {
 		: ports(num_ports)
 	{}
 
-	void clear() {
+	void reset() {
 		for (auto& port : ports) {
-			port.clear();
+			port.reset();
 		}
 		type = ReqType::None;
 	}
-};
 
-inline std::ostream &operator<<(std::ostream &os, const bank_req_t& req) {
-  os << "set=" << req.set_id << ", rw=" << req.write;
-  os << std::dec << ", type=" << req.type;
-  os << ", tag=0x" << std::hex << req.tag;
-	os << ", req_tags={";
-	bool first_port = true;
-	for (auto& port : req.ports) {
-		if (port.valid) {
-			if (!first_port) os << ", ";
-			first_port = false;
-			os << "["  << std::dec << port.req_id << "]=0x" << std::hex << port.req_tag;
+	friend std::ostream &operator<<(std::ostream &os, const bank_req_t& req) {
+		os << "set=" << req.set_id << ", rw=" << req.write;
+		os << std::dec << ", type=" << req.type;
+		os << ", tag=0x" << std::hex << req.tag;
+		os << ", req_tags={";
+		bool first_port = true;
+		for (auto& port : req.ports) {
+			if (port.valid) {
+				if (!first_port) os << ", ";
+				first_port = false;
+				os << "["  << std::dec << port.req_id << "]=0x" << std::hex << port.req_tag;
+			}
 		}
+		os << "}";
+		os << std::dec << ", cid=" << req.cid;
+		os << " (#" << req.uuid << ")";
+		return os;
 	}
-	os << "}";
-	os << std::dec << ", cid=" << req.cid;
-  os << " (#" << req.uuid << ")";
-  return os;
-}
+};
 
 struct mshr_entry_t {
 	bank_req_t bank_req;
@@ -196,8 +196,8 @@ struct mshr_entry_t {
 		: bank_req(num_ports)
 	{}
 
-	void clear() {
-		bank_req.clear();
+	void reset() {
+		bank_req.reset();
 	}
 };
 
@@ -232,6 +232,7 @@ public:
 	}
 
 	int allocate(const bank_req_t& bank_req, uint32_t line_id) {
+		assert(bank_req.type == bank_req_t::Core);
 		for (uint32_t i = 0, n = entries_.size(); i < n; ++i) {
 			auto& entry = entries_.at(i);
 			if (entry.bank_req.type == bank_req_t::None) {
@@ -270,9 +271,9 @@ public:
 		return false;
 	}
 
-	void clear() {
+	void reset() {
 		for (auto& entry : entries_) {
-			entry.clear();
+			entry.reset();
 		}
 		size_ = 0;
 	}
@@ -288,11 +289,11 @@ struct bank_t {
 		, mshr(config.mshr_size, config.ports_per_bank)
 	{}
 
-	void clear() {
+	void reset() {
 		for (auto& set : sets) {
-			set.clear();
+			set.reset();
 		}
-		mshr.clear();
+		mshr.reset();
 	}
 };
 
@@ -377,7 +378,7 @@ public:
 			return;
 
 		for (auto& bank : banks_) {
-			bank.clear();
+			bank.reset();
 		}
 		perf_stats_ = PerfStats();
 		pending_read_reqs_  = 0;
@@ -407,7 +408,7 @@ public:
 
 		// initialize pipeline request
 		for (auto& pipeline_req : pipeline_reqs_) {
-			pipeline_req.clear();
+			pipeline_req.reset();
 		}
 
 		// first: schedule MSHR replay (flush MSHR queue)
@@ -495,7 +496,7 @@ public:
 				bank_req.type  = bank_req_t::Core;
 				bank_req.write = core_req.write;
 				pipeline_req   = bank_req;
-				DT(3, simobject_->name() << "-core-req: " << core_req);
+				DT(3, simobject_->name() << "-bank" << bank_id << "-core-req:" << core_req);
 			}
 
 			if (core_req.write)
@@ -563,11 +564,11 @@ private:
 			case bank_req_t::Replay: {
 				// send core response
 				if (!pipeline_req.write || config_.write_reponse) {
-					for (auto& info : pipeline_req.ports) {
-						if (!info.valid)
+					for (auto& port : pipeline_req.ports) {
+						if (!port.valid)
 							continue;
-						MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
-						simobject_->CoreRspPorts.at(info.req_id).push(core_rsp, config_.latency);
+						MemRsp core_rsp{port.req_tag, pipeline_req.cid, pipeline_req.uuid};
+						simobject_->CoreRspPorts.at(port.req_id).push(core_rsp, config_.latency);
 						DT(3, simobject_->name() << "-bank" << bank_id << "-replay: " << core_rsp);
 					}
 				}
@@ -620,11 +621,11 @@ private:
 					}
 					// send core response
 					if (!pipeline_req.write || config_.write_reponse) {
-						for (auto& info : pipeline_req.ports) {
-							if (!info.valid)
+						for (auto& port : pipeline_req.ports) {
+							if (!port.valid)
 								continue;
-							MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
-							simobject_->CoreRspPorts.at(info.req_id).push(core_rsp, config_.latency);
+							MemRsp core_rsp{port.req_tag, pipeline_req.cid, pipeline_req.uuid};
+							simobject_->CoreRspPorts.at(port.req_id).push(core_rsp, config_.latency);
 							DT(3, simobject_->name() << "-bank" << bank_id << "-core-rsp: " << core_rsp);
 						}
 					}
@@ -662,11 +663,11 @@ private:
 						}
 						// send core response
 						if (config_.write_reponse) {
-							for (auto& info : pipeline_req.ports) {
-								if (!info.valid)
+							for (auto& port : pipeline_req.ports) {
+								if (!port.valid)
 									continue;
-								MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
-								simobject_->CoreRspPorts.at(info.req_id).push(core_rsp, config_.latency);
+								MemRsp core_rsp{port.req_tag, pipeline_req.cid, pipeline_req.uuid};
+								simobject_->CoreRspPorts.at(port.req_id).push(core_rsp, config_.latency);
 								DT(3, simobject_->name() << "-bank" << bank_id << "-core-rsp: " << core_rsp);
 							}
 						}
@@ -687,7 +688,7 @@ private:
 							mem_req.cid   = pipeline_req.cid;
 							mem_req.uuid  = pipeline_req.uuid;
 							mem_req_ports_.at(bank_id).push(mem_req, 1);
-							DT(3, simobject_->name() << "-bank" << bank_id << "-fill: " << mem_req);
+							DT(3, simobject_->name() << "-bank" << bank_id << "-fill-req: " << mem_req);
 							++pending_fill_reqs_;
 						}
 					}

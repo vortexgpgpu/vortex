@@ -17,7 +17,7 @@
 
 namespace vortex {
 
-class Operand : public SimObject<Operand> {
+class Operands : public SimObject<Operands> {
 private:
 		static constexpr uint32_t NUM_BANKS = 4;
 		uint32_t total_stalls_ = 0;
@@ -26,15 +26,15 @@ public:
     SimPort<instr_trace_t*> Input;
     SimPort<instr_trace_t*> Output;
 
-    Operand(const SimContext& ctx)
-			: SimObject<Operand>(ctx, "Operand")
+    Operands(const SimContext& ctx, Core* /*core*/)
+			: SimObject<Operands>(ctx, "operands")
 			, Input(this)
 			, Output(this)
     {
 			total_stalls_ = 0;
 		}
 
-    virtual ~Operand() {}
+    virtual ~Operands() {}
 
     virtual void reset() {
 			total_stalls_ = 0;
@@ -47,15 +47,17 @@ public:
 
 			uint32_t stalls = 0;
 
-			for (int i = 0; i < NUM_SRC_REGS; ++i) {
-				for (int j = i + 1; j < NUM_SRC_REGS; ++j) {
-					int bank_i = trace->src_regs[i].idx % NUM_BANKS;
-					int bank_j = trace->src_regs[j].idx % NUM_BANKS;
-					if ((trace->src_regs[i].type != RegType::None)
-					 && (trace->src_regs[j].type != RegType::None)
-					 && (trace->src_regs[i].idx != 0)
-					 && (trace->src_regs[j].idx != 0)
-					 && bank_i == bank_j) {
+			for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
+				uint32_t x_rid = trace->src_regs[i].id();
+				if (x_rid == 0)
+					continue; // skip x0 or empty
+				for (uint32_t j = i + 1; j < NUM_SRC_REGS; ++j) {
+					uint32_t y_rid = trace->src_regs[j].id();
+					if (y_rid == 0)
+						continue; // skip x0 or empty
+					uint32_t bank_x = x_rid % NUM_BANKS;
+					uint32_t bank_y = y_rid % NUM_BANKS;
+					if (bank_x == bank_y) {
 						++stalls;
 					}
 				}
@@ -69,6 +71,11 @@ public:
 
 			Input.pop();
     };
+
+		bool writeback(instr_trace_t* trace) {
+			__unused(trace);
+			return true;
+		}
 
 		uint32_t total_stalls() const {
 			return total_stalls_;

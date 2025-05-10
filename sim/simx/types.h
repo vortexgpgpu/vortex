@@ -24,8 +24,9 @@
 #include <VX_types.h>
 #include <simobject.h>
 #include <bitvector.h>
-#include "debug.h"
 #include <iostream>
+#include "debug.h"
+#include "constants.h"
 
 namespace vortex {
 
@@ -35,47 +36,33 @@ typedef uint32_t Word;
 typedef int32_t  WordI;
 typedef uint64_t DWord;
 typedef int64_t  DWordI;
-typedef uint32_t WordF;
 #elif (XLEN == 64)
 typedef uint64_t Word;
 typedef int64_t  WordI;
 typedef __uint128_t DWord;
 typedef __int128_t DWordI;
-typedef uint64_t WordF;
 #else
 #error unsupported XLEN
 #endif
 
-#define MAX_NUM_CORES   1024
-#define MAX_NUM_THREADS 32
-#define MAX_NUM_WARPS   32
-#define MAX_NUM_REGS    32
-#define NUM_SRC_REGS    3
-
 typedef std::bitset<MAX_NUM_CORES>   CoreMask;
 typedef std::bitset<MAX_NUM_REGS>    RegMask;
-typedef std::bitset<MAX_NUM_THREADS> ThreadMask;
+typedef BitVector<Word>              ThreadMask;
 typedef std::bitset<MAX_NUM_WARPS>   WarpMask;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class ThreadMaskOS {
-public:
-  ThreadMaskOS(const ThreadMask& mask, int size)
-    : mask_(mask)
-    , size_(size)
-  {}
-
-  friend std::ostream& operator<<(std::ostream& os, const ThreadMaskOS& wrapper) {
-    for (int i = 0; i < wrapper.size_; ++i) {
-      os << wrapper.mask_[i];
-    }
-    return os;
-  }
-
-private:
-  const ThreadMask& mask_;
-  int size_;
+union reg_data_t {
+  uint8_t  u8;
+  uint16_t u16;
+  Word     u;
+  WordI    i;
+  float    f32;
+  double   f64;
+  uint32_t u32;
+  uint64_t u64;
+  int32_t  i32;
+  int64_t  i64;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -84,8 +71,10 @@ enum class RegType {
   None,
   Integer,
   Float,
-  Count,
-  Vector
+#ifdef EXT_V_ENABLE
+  Vector,
+#endif
+  Count
 };
 
 inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
@@ -93,11 +82,43 @@ inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
   case RegType::None: break;
   case RegType::Integer: os << "x"; break;
   case RegType::Float:   os << "f"; break;
+#ifdef EXT_V_ENABLE
   case RegType::Vector:  os << "v"; break;
+#endif
   default: assert(false);
   }
   return os;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+struct RegOpd {
+  RegType type = RegType::None;
+  uint32_t idx = 0;
+  uint32_t ext = 0; // register group extend
+
+  uint32_t id() const {
+    if (type == RegType::None)
+      return 0;
+    // unique register id embedding the type
+    return (((int)(type)-1) << LOG_NUM_REGS) | idx;
+  }
+
+  uint32_t group_size() const {
+    return (1 << ext);
+  }
+
+  friend std::ostream &operator<<(std::ostream &os, const RegOpd& reg) {
+    if (reg.ext != 0) {
+      os << reg.type << reg.idx << "..." << (reg.idx + ((1 << reg.ext)-1));
+    } else {
+      os << reg.type << reg.idx;
+    }
+    return os;
+  }
+
+  constexpr static uint32_t ID_BITS = log2ceil((int)RegType::Count) + LOG_NUM_REGS;
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -106,7 +127,9 @@ enum class FUType {
   LSU,
   FPU,
   SFU,
-  TCU,
+#ifdef EXT_V_ENABLE
+  VPU,
+#endif
   Count
 };
 
@@ -116,7 +139,9 @@ inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
   case FUType::LSU: os << "LSU"; break;
   case FUType::FPU: os << "FPU"; break;
   case FUType::SFU: os << "SFU"; break;
-  case FUType::TCU: os << "TCU"; break;
+#ifdef EXT_V_ENABLE
+  case FUType::VPU: os << "VPU"; break;
+#endif
   default: assert(false);
   }
   return os;
@@ -148,30 +173,22 @@ inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
 
 enum class LsuType {
   LOAD,
-  TCU_LOAD,
   STORE,
-  TCU_STORE,
+#ifdef EXT_V_ENABLE
+  VLOAD,
+  VSTORE,
+#endif
   FENCE
 };
-
-enum class TCUType {
-  TCU_MUL
-};
-
-inline std::ostream &operator<<(std::ostream &os, const TCUType& type) {
-  switch (type) {
-  case TCUType::TCU_MUL: os << "TCU MUL"; break;
-  default: assert(false);
-  }
-  return os;
-}
 
 inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
   switch (type) {
   case LsuType::LOAD:  os << "LOAD"; break;
-  case LsuType::TCU_LOAD: os << "TCU_LOAD"; break;
   case LsuType::STORE: os << "STORE"; break;
-  case LsuType::TCU_STORE: os << "TCU_STORE"; break;
+#ifdef EXT_V_ENABLE
+  case LsuType::VLOAD: os << "VLOAD"; break;
+  case LsuType::VSTORE:os << "VSTORE"; break;
+#endif
   case LsuType::FENCE: os << "FENCE"; break;
   default: assert(false);
   }
@@ -269,19 +286,207 @@ inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+enum class VpuType {
+  VSET    = 0,
+
+  ARITH   = 1,
+  IMUL    = 2,
+  IDIV    = 3,
+
+  FMA     = 4,
+  FDIV    = 5,
+  FSQRT   = 6,
+  FCVT    = 7,
+  FNCP    = 8,
+
+  // reduction
+  ARITH_R = 9,
+  FMA_R   = 10,
+  FNCP_R  = 11
+};
+
+inline std::ostream &operator<<(std::ostream &os, const VpuType& type) {
+  switch (type) {
+  case VpuType::VSET:   os << "VSET"; break;
+  case VpuType::ARITH:  os << "ARITH"; break;
+  case VpuType::IMUL:   os << "IMUL"; break;
+  case VpuType::IDIV:   os << "IDIV"; break;
+  case VpuType::FMA:    os << "FMA"; break;
+  case VpuType::FDIV:   os << "FDIV"; break;
+  case VpuType::FSQRT:  os << "FSQRT"; break;
+  case VpuType::FCVT:   os << "FCVT"; break;
+  case VpuType::FNCP:   os << "FNCP"; break;
+  case VpuType::ARITH_R:os << "ARITH_R"; break;
+  case VpuType::FMA_R:  os << "FMA_R"; break;
+  case VpuType::FNCP_R: os << "FNCP_R"; break;
+  default: assert(false);
+  }
+  return os;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 enum class ArbiterType {
   Priority,
-  RoundRobin
+  RoundRobin,
+  Matrix
 };
 
 inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
   switch (type) {
   case ArbiterType::Priority:   os << "Priority"; break;
   case ArbiterType::RoundRobin: os << "RoundRobin"; break;
+  case ArbiterType::Matrix:     os << "Matrix"; break;
   default: assert(false);
   }
   return os;
-}///////////////////////////////////////////////////////////////////////////////
+}
+
+class IArbiterImpl {
+public:
+  IArbiterImpl() {}
+  virtual ~IArbiterImpl() {}
+  virtual uint32_t grant(const BitVector<>& requests) = 0;
+  virtual void reset() = 0;
+};
+
+class PriorityArbiter : public IArbiterImpl {
+public:
+  PriorityArbiter(uint32_t size) : size_(size) {
+    this->reset();
+  }
+
+  uint32_t grant(const BitVector<>& requests) override {
+    assert(requests.size() == size_);
+    for (uint32_t i = 0; i < size_; ++i) {
+      if (requests.test(i)) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  void reset() override {
+    //--
+  }
+private:
+  uint32_t size_;
+};
+
+class RoundRobinArbiter : public IArbiterImpl {
+public:
+  RoundRobinArbiter(uint32_t size) : size_(size) {
+    this->reset();
+  }
+
+  uint32_t grant(const BitVector<>& requests) override {
+    assert(requests.size() == size_);
+    uint32_t start = (last_grant_ + 1) % size_;
+    for (uint32_t i = 0; i < size_; ++i) {
+      uint32_t idx = (start + i) % size_;
+      if (requests.test(idx)) {
+        last_grant_ = idx;
+        return idx;
+      }
+    }
+    return -1;
+  }
+
+  void reset() override {
+    last_grant_ = 0;
+  }
+
+private:
+  uint32_t size_;
+  uint32_t last_grant_;
+};
+
+class MatrixArbiter : public IArbiterImpl {
+public:
+  MatrixArbiter(uint32_t size)
+    : size_(size)
+    , priority_matrix_(size, std::vector<bool>(size)) {
+    this->reset();
+  }
+
+  uint32_t grant(const BitVector<>& requests) override {
+    assert(requests.size() == size_);
+    for (uint32_t i = 0; i < size_; ++i) {
+      if (requests[i]) {
+        // Check if this request has the highest priority by comparing it
+        bool highest_priority = true;
+        for (uint32_t j = 0; j < size_; ++j) {
+          if (requests[j] && priority_matrix_[i][j]) {
+            // If there is any active request with higher priority, this is not the highest
+            highest_priority = false;
+            break;
+          }
+        }
+
+        if (highest_priority) {
+          // Update the priority matrix: clear the row and set the column
+          for (uint32_t j = 0; j < size_; ++j) {
+            if (i != j) {
+              priority_matrix_[i][j] = false;
+              priority_matrix_[j][i] = true;
+            }
+          }
+          return i; // Return the granted request index
+        }
+      }
+    }
+    return -1;
+  }
+
+  void reset() override {
+    // Initialize the priority matrix
+    for (uint32_t i = 0; i < size_; ++i) {
+      priority_matrix_[i].resize(size_);
+      // Initialize only the upper triangle to true
+      for (uint32_t j = i + 1; j < size_; ++j) {
+        priority_matrix_[i][j] = true;
+      }
+    }
+  }
+
+private:
+  uint32_t size_;
+  std::vector<std::vector<bool>> priority_matrix_;
+};
+
+class Arbiter {
+public:
+  Arbiter(ArbiterType type = ArbiterType::Priority, uint32_t size = 0) {
+    switch (type) {
+    case ArbiterType::Priority:
+      impl_ = std::make_shared<PriorityArbiter>(size);
+      break;
+    case ArbiterType::RoundRobin:
+      impl_ = std::make_shared<RoundRobinArbiter>(size);
+      break;
+    case ArbiterType::Matrix:
+      impl_ = std::make_shared<MatrixArbiter>(size);
+      break;
+    default:
+      assert(false); // Should never reach here
+    }
+  }
+
+  virtual ~Arbiter() {}
+
+  uint32_t grant(const BitVector<>& requests) {
+    return impl_->grant(requests);
+  }
+
+  void reset() {
+    impl_->reset();
+  }
+
+private:
+  std::shared_ptr<IArbiterImpl> impl_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
 
 struct LsuReq {
   BitVector<> mask;
@@ -299,24 +504,24 @@ struct LsuReq {
     , cid(0)
     , uuid(0)
   {}
-};
 
-inline std::ostream &operator<<(std::ostream &os, const LsuReq& req) {
-  os << "rw=" << req.write << ", mask=" << req.mask << ", addr={";
-  bool first_addr = true;
-  for (size_t i = 0; i < req.mask.size(); ++i) {
-    if (!first_addr) os << ", ";
-    first_addr = false;
-    if (req.mask.test(i)) {
-      os << "0x" << std::hex << req.addrs.at(i) << std::dec;
-    } else {
-      os << "-";
+  friend std::ostream &operator<<(std::ostream &os, const LsuReq& req) {
+    os << "rw=" << req.write << ", mask=" << req.mask << ", addr={";
+    bool first_addr = true;
+    for (size_t i = 0; i < req.mask.size(); ++i) {
+      if (!first_addr) os << ", ";
+      first_addr = false;
+      if (req.mask.test(i)) {
+        os << "0x" << std::hex << req.addrs.at(i) << std::dec;
+      } else {
+        os << "-";
+      }
     }
+    os << "}, tag=0x" << std::hex << req.tag << std::dec << ", cid=" << req.cid;
+    os << " (#" << req.uuid << ")";
+    return os;
   }
-  os << "}, tag=0x" << std::hex << req.tag << std::dec << ", cid=" << req.cid;
-  os << " (#" << req.uuid << ")";
-  return os;
-}
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -332,13 +537,13 @@ struct LsuRsp {
     , cid(0)
     , uuid(0)
   {}
-};
 
-inline std::ostream &operator<<(std::ostream &os, const LsuRsp& rsp) {
-  os << "mask=" << rsp.mask << ", tag=0x" << std::hex << rsp.tag << std::dec << ", cid=" << rsp.cid;
-  os << " (#" << rsp.uuid << ")";
-  return os;
-}
+  friend std::ostream &operator<<(std::ostream &os, const LsuRsp& rsp) {
+    os << "mask=" << rsp.mask << ", tag=0x" << std::hex << rsp.tag << std::dec << ", cid=" << rsp.cid;
+    os << " (#" << rsp.uuid << ")";
+    return os;
+  }
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -363,15 +568,15 @@ struct MemReq {
     , cid(_cid)
     , uuid(_uuid)
   {}
-};
 
-inline std::ostream &operator<<(std::ostream &os, const MemReq& req) {
-  os << "rw=" << req.write << ", ";
-  os << "addr=0x" << std::hex << req.addr << std::dec << ", type=" << req.type;
-  os << ", tag=0x" << std::hex << req.tag << std::dec << ", cid=" << req.cid;
-  os << " (#" << req.uuid << ")";
-  return os;
-}
+  friend std::ostream &operator<<(std::ostream &os, const MemReq& req) {
+    os << "rw=" << req.write << ", ";
+    os << "addr=0x" << std::hex << req.addr << std::dec << ", type=" << req.type;
+    os << ", tag=0x" << std::hex << req.tag << std::dec << ", cid=" << req.cid;
+    os << " (#" << req.uuid << ")";
+    return os;
+  }
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -385,13 +590,13 @@ struct MemRsp {
     , cid(_cid)
     , uuid(_uuid)
   {}
-};
 
-inline std::ostream &operator<<(std::ostream &os, const MemRsp& rsp) {
-  os << "tag=0x" << std::hex << rsp.tag << std::dec << ", cid=" << rsp.cid;
-  os << " (#" << rsp.uuid << ")";
-  return os;
-}
+  friend std::ostream &operator<<(std::ostream &os, const MemRsp& rsp) {
+    os << "tag=0x" << std::hex << rsp.tag << std::dec << ", cid=" << rsp.cid;
+    os << " (#" << rsp.uuid << ")";
+    return os;
+  }
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -470,27 +675,40 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Type>
-class Arbiter : public SimObject<Arbiter<Type>> {
+class TxArbiter : public SimObject<TxArbiter<Type>> {
 public:
   typedef Type ReqType;
 
-  std::vector<SimPort<Type>> Inputs;
-  std::vector<SimPort<Type>> Outputs;
+  struct RspType {
+    Type     data;
+    uint32_t input;
 
-  Arbiter(
+    RspType(const Type& _data, uint32_t _input = 0)
+      : data(_data)
+      , input(_input)
+    {}
+
+    operator Type() const {
+      return data;
+    }
+  };
+
+  std::vector<SimPort<ReqType>> Inputs;
+  std::vector<SimPort<RspType>> Outputs;
+
+  TxArbiter(
     const SimContext& ctx,
     const char* name,
     ArbiterType type,
     uint32_t num_inputs,
     uint32_t num_outputs = 1,
     uint32_t delay = 1
-  ) : SimObject<Arbiter<Type>>(ctx, name)
+  ) : SimObject<TxArbiter<Type>>(ctx, name)
     , Inputs(num_inputs, this)
     , Outputs(num_outputs, this)
-    , type_(type)
     , delay_(delay)
-    , grants_(num_outputs, 0)
     , lg2_num_reqs_(log2ceil(num_inputs / num_outputs))
+    , arbiters_(num_outputs, {type, 1u << lg2_num_reqs_})
   {
     assert(delay != 0);
     assert(num_inputs <= 64);
@@ -506,8 +724,8 @@ public:
   }
 
   void reset() {
-    for (auto& grant : grants_) {
-      grant = 0;
+    for (auto& arb : arbiters_) {
+      arb.reset();
     }
   }
 
@@ -522,99 +740,99 @@ public:
 
     // process inputs
     for (uint32_t o = 0; o < O; ++o) {
+      BitVector<> requests(R);
       for (uint32_t r = 0; r < R; ++r) {
-        uint32_t g = (grants_.at(o) + r) & (R-1);
-        uint32_t j = o * R + g;
-        if (j >= I)
+        uint32_t i = o * R + r;
+        if (i >= I)
           continue;
-
-        auto& req_in = Inputs.at(j);
-        if (!req_in.empty()) {
-          auto& req = req_in.front();
-          DT(4, this->name() << "-req" << o << ": " << req);
-          Outputs.at(o).push(req, delay_);
-          req_in.pop();
-          this->update_grant(o, g);
-          break;
-        }
+        requests.set(r, !Inputs.at(i).empty());
+      }
+      if (requests.any()) {
+        uint32_t g = arbiters_.at(o).grant(requests);
+        uint32_t i = o * R + g;
+        auto& req_in = Inputs.at(i);
+        auto& req = req_in.front();
+        DT(4, this->name() << "-req" << i << "_" << o << ": " << req);
+        Outputs.at(o).push(RspType(req, i), delay_);
+        req_in.pop();
       }
     }
   }
 
 protected:
 
-  void update_grant(uint32_t index, uint32_t grant) {
-    if (type_ == ArbiterType::RoundRobin) {
-      grants_.at(index) = grant + 1;
-    }
-  }
-
-  ArbiterType type_;
   uint32_t delay_;
-  std::vector<uint32_t> grants_;
   uint32_t lg2_num_reqs_;
+  std::vector<Arbiter> arbiters_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Type>
-class CrossBar : public SimObject<CrossBar<Type>> {
+class TxCrossBar : public SimObject<TxCrossBar<Type>> {
 public:
   typedef Type ReqType;
 
-  std::vector<SimPort<Type>> Inputs;
-  std::vector<SimPort<Type>> Outputs;
+  struct RspType {
+    Type     data;
+    uint32_t input;
 
-  CrossBar(
+    RspType(const Type& _data, uint32_t _input= 0)
+      : data(_data)
+      , input(_input)
+    {}
+
+    operator Type() const {
+      return data;
+    }
+  };
+
+  std::vector<SimPort<ReqType>> Inputs;
+  std::vector<SimPort<RspType>> Outputs;
+
+  TxCrossBar(
     const SimContext& ctx,
     const char* name,
-    ArbiterType type,
     uint32_t num_inputs,
-    uint32_t num_outputs = 1,
-    uint32_t delay = 1,
-    std::function<uint32_t(const Type& req)> output_sel = nullptr
+    uint32_t num_outputs,
+    std::function<uint32_t(const Type& req)> output_sel,
+    uint32_t delay = 1
   )
-    : SimObject<CrossBar<Type>>(ctx, name)
+    : SimObject<TxCrossBar<Type>>(ctx, name)
     , Inputs(num_inputs, this)
     , Outputs(num_outputs, this)
-    , type_(type)
     , delay_(delay)
-    , grants_(num_outputs, 0)
     , lg2_inputs_(log2ceil(num_inputs))
     , lg2_outputs_(log2ceil(num_outputs))
+    , output_sel_(output_sel)
     , collisions_(0) {
     assert(delay != 0);
     assert(num_inputs <= 64);
     assert(num_outputs <= 64);
     assert(ispow2(num_outputs));
-    if (output_sel != nullptr) {
-      output_sel_ = output_sel;
-    } else {
-      output_sel_ = [this](const Type& req) {
-        return (uint32_t)bit_getw(req.addr, 0, (lg2_outputs_-1));
-      };
+    assert(output_sel != nullptr);
+
+    // bypass mode
+    if (num_inputs == 1 && num_outputs == 1) {
+      Inputs.at(0).bind(&Outputs.at(0));
     }
   }
 
   void reset() {
-    for (auto& grant : grants_) {
-      grant = 0;
-    }
+    //--
   }
 
   void tick() {
     uint32_t I = Inputs.size();
     uint32_t O = Outputs.size();
-    uint32_t R = 1 << lg2_inputs_;
+    if (I == 1 && O == 1)
+      return;
 
     // process incoming requests
     for (uint32_t o = 0; o < O; ++o) {
       int32_t input_idx = -1;
       bool has_collision = false;
-      for (uint32_t r = 0; r < R; ++r) {
-        uint32_t i = (grants_.at(o) + r) & (R-1);
-        if (i >= I)
-          continue;
+      for (uint32_t i = 0; i < I; ++i) {
         auto& req_in = Inputs.at(i);
         if (req_in.empty())
           continue;
@@ -629,17 +847,16 @@ public:
         }
         if (input_idx != -1) {
           has_collision = true;
-          continue;
+          break;
         }
         input_idx = i;
       }
       if (input_idx != -1) {
         auto& req_in = Inputs.at(input_idx);
         auto& req = req_in.front();
-        DT(4, this->name() << "-req" << o << ": " << req);
-        Outputs.at(o).push(req, delay_);
+        DT(4, this->name() << "-req" << input_idx << "_" << o << ": " << req);
+        Outputs.at(o).push(RspType(req, input_idx), delay_);
         req_in.pop();
-        this->update_grant(o, input_idx);
         collisions_ += has_collision;
       }
     }
@@ -651,15 +868,7 @@ public:
 
 protected:
 
-  void update_grant(uint32_t index, uint32_t grant) {
-    if (type_ == ArbiterType::RoundRobin) {
-      grants_.at(index) = grant + 1;
-    }
-  }
-
-  ArbiterType type_;
   uint32_t delay_;
-  std::vector<uint32_t> grants_;
   uint32_t lg2_inputs_;
   uint32_t lg2_outputs_;
   std::function<uint32_t(const Type& req)> output_sel_;
@@ -669,7 +878,7 @@ protected:
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Req, typename Rsp>
-class TxArbiter : public SimObject<TxArbiter<Req, Rsp>> {
+class TxRxArbiter : public SimObject<TxRxArbiter<Req, Rsp>> {
 public:
   typedef Req ReqType;
   typedef Rsp RspType;
@@ -680,7 +889,7 @@ public:
   std::vector<SimPort<Req>>  ReqOut;
   std::vector<SimPort<Rsp>>  RspOut;
 
-  TxArbiter(
+  TxRxArbiter(
     const SimContext& ctx,
     const char* name,
     ArbiterType type,
@@ -688,23 +897,34 @@ public:
     uint32_t num_outputs = 1,
     uint32_t delay = 1
   )
-    : SimObject<TxArbiter<Req, Rsp>>(ctx, name)
+    : SimObject<TxRxArbiter<Req, Rsp>>(ctx, name)
     , ReqIn(num_inputs, this)
     , RspIn(num_inputs, this)
     , ReqOut(num_outputs, this)
     , RspOut(num_outputs, this)
-    , type_(type)
-    , delay_(delay)
-    , grants_(num_outputs, 0)
+    , arbiter_(nullptr)
     , lg2_num_reqs_(log2ceil(num_inputs / num_outputs))
   {
-    assert(delay != 0);
-    assert(num_inputs <= 64);
-    assert(num_outputs <= 64);
-    assert(num_inputs >= num_outputs);
-
-    // bypass mode
-    if (num_inputs == num_outputs) {
+    if (num_inputs != num_outputs) {
+      // allocate arbiter
+      arbiter_ = ReqArb::Create(name, type, num_inputs, num_outputs, delay);
+      // bind arbiter inputs and outputs
+      for (uint32_t i = 0; i < num_inputs; ++i) {
+        ReqIn.at(i).bind(&arbiter_->Inputs.at(i));
+      }
+      for (uint32_t o = 0; o < num_outputs; ++o) {
+        arbiter_->Outputs.at(o).bind(&ReqOut.at(o),
+          [lg2_num_reqs = lg2_num_reqs_](const typename ReqArb::RspType& arb_rsp) {
+            Req req(arb_rsp.data);
+            if (lg2_num_reqs != 0) {
+              uint32_t r = arb_rsp.input & ((1 << lg2_num_reqs) - 1);
+              req.tag = (req.tag << lg2_num_reqs) | r;
+            }
+            return req;
+          });
+      }
+    } else {
+      // bypass mode
       for (uint32_t i = 0; i < num_inputs; ++i) {
         ReqIn.at(i).bind(&ReqOut.at(i));
         RspOut.at(i).bind(&RspIn.at(i));
@@ -713,79 +933,46 @@ public:
   }
 
   void reset() {
-    for (auto& grant : grants_) {
-      grant = 0;
-    }
+    //--
   }
 
   void tick() {
-    uint32_t I = ReqIn.size();
+    if (!arbiter_)
+      return;
+
     uint32_t O = ReqOut.size();
     uint32_t R = 1 << lg2_num_reqs_;
-
-    // skip bypass mode
-    if (I == O)
-      return;
 
     // process outgoing responses
     for (uint32_t o = 0; o < O; ++o) {
       auto& rsp_out = RspOut.at(o);
       if (!rsp_out.empty()) {
         auto& rsp = rsp_out.front();
-        uint32_t g = 0;
+        uint32_t r = 0;
+        Rsp in_rsp(rsp);
         if (lg2_num_reqs_ != 0) {
-          g = rsp.tag & (R-1);
-          rsp.tag >>= lg2_num_reqs_;
+          r = rsp.tag & (R-1);
+          in_rsp.tag = rsp.tag >> lg2_num_reqs_;
         }
-        uint32_t j = o * R + g;
-        DT(4, this->name() << "-rsp" << j << ": " << rsp);
-        RspIn.at(j).push(rsp, 1);
+        uint32_t i = o * R + r;
+        DT(4, this->name() << "-rsp" << o << "_" << i << ": " << in_rsp);
+        RspIn.at(i).push(in_rsp, 1);
         rsp_out.pop();
-      }
-    }
-
-    // process incoming requests
-    for (uint32_t o = 0; o < O; ++o) {
-      for (uint32_t r = 0; r < R; ++r) {
-        uint32_t g = (grants_.at(o) + r) & (R-1);
-        uint32_t j = o * R + g;
-        if (j >= I)
-          continue;
-
-        auto& req_in = ReqIn.at(j);
-        if (!req_in.empty()) {
-          auto& req = req_in.front();
-          if (lg2_num_reqs_ != 0) {
-            req.tag = (req.tag << lg2_num_reqs_) | g;
-          }
-          DT(4, this->name() << "-req" << o << ": " << req);
-          ReqOut.at(o).push(req, delay_);
-          req_in.pop();
-          this->update_grant(o, g);
-          break;
-        }
       }
     }
   }
 
 protected:
+  typedef TxArbiter<Req> ReqArb;
 
-  void update_grant(uint32_t index, uint32_t grant) {
-    if (type_ == ArbiterType::RoundRobin) {
-      grants_.at(index) = grant + 1;
-    }
-  }
-
-  ArbiterType type_;
-  uint32_t delay_;
-  std::vector<uint32_t> grants_;
+  typename ReqArb::Ptr arbiter_;
   uint32_t lg2_num_reqs_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Req, typename Rsp>
-class TxCrossBar : public SimObject<TxCrossBar<Req, Rsp>> {
+class TxRxCrossBar : public SimObject<TxRxCrossBar<Req, Rsp>> {
 public:
   typedef Req ReqType;
   typedef Rsp RspType;
@@ -796,168 +983,101 @@ public:
   std::vector<SimPort<Req>> ReqOut;
   std::vector<SimPort<Rsp>> RspOut;
 
-  TxCrossBar(
+  TxRxCrossBar(
     const SimContext& ctx,
     const char* name,
     ArbiterType type,
     uint32_t num_inputs,
-    uint32_t num_outputs = 1,
-    uint32_t delay = 1,
-    std::function<uint32_t(const Req& req)> output_sel = nullptr
+    uint32_t num_outputs,
+    std::function<uint32_t(const Req& req)> output_sel,
+    uint32_t delay = 1
   )
-    : SimObject<TxCrossBar<Req, Rsp>>(ctx, name)
+    : SimObject<TxRxCrossBar<Req, Rsp>>(ctx, name)
     , ReqIn(num_inputs, this)
     , RspIn(num_inputs, this)
     , ReqOut(num_outputs, this)
     , RspOut(num_outputs, this)
-    , type_(type)
-    , delay_(delay)
-    , req_grants_(num_outputs, 0)
-    , rsp_grants_(num_inputs, 0)
-    , lg2_inputs_(log2ceil(num_inputs))
-    , lg2_outputs_(log2ceil(num_outputs))
-    , req_collisions_(0)
-    , rsp_collisions_(0) {
-    assert(delay != 0);
-    assert(num_inputs <= 64);
-    assert(num_outputs <= 64);
-    assert(ispow2(num_inputs));
-    assert(ispow2(num_outputs));
-    if (output_sel != nullptr) {
-      output_sel_ = output_sel;
+    , crossbar_(nullptr)
+    , arbiter_(type, num_outputs)
+    , lg2_inputs_(log2ceil(num_inputs)) {
+
+    if (num_inputs != 1 || num_outputs != 1) {
+      // allocate crossbar
+      crossbar_ = ReqXbar::Create(name, num_inputs, num_outputs, output_sel, delay);
+      // bind crossbar inputs and outputs
+      for (uint32_t i = 0; i < num_inputs; ++i) {
+        ReqIn.at(i).bind(&crossbar_->Inputs.at(i));
+      }
+      for (uint32_t o = 0; o < num_outputs; ++o) {
+        crossbar_->Outputs.at(o).bind(&ReqOut.at(o),
+          [lg2_inputs = lg2_inputs_](const typename ReqXbar::RspType& xbar_rsp) {
+            Req req(xbar_rsp.data);
+            if (lg2_inputs != 0) {
+              req.tag = (req.tag << lg2_inputs) | xbar_rsp.input;
+            }
+            return req;
+          });
+      }
     } else {
-      output_sel_ = [this](const Req& req) {
-        return (uint32_t)bit_getw(req.addr, 0, (lg2_outputs_-1));
-      };
+      // bypass mode
+      ReqIn.at(0).bind(&ReqOut.at(0));
+      RspOut.at(0).bind(&RspIn.at(0));
     }
   }
 
   void reset() {
-    for (auto& grant : req_grants_) {
-      grant = 0;
-    }
-    for (auto& grant : rsp_grants_) {
-      grant = 0;
-    }
+    arbiter_.reset();
   }
 
   void tick() {
+    if (!crossbar_)
+      return;
+
     uint32_t I = ReqIn.size();
     uint32_t O = ReqOut.size();
     uint32_t R = 1 << lg2_inputs_;
-    uint32_t T = 1 << lg2_outputs_;
 
     // process outgoing responses
     for (uint32_t i = 0; i < I; ++i) {
-      int32_t output_idx = -1;
-      bool has_collision = false;
-      for (uint32_t t = 0; t < T; ++t) {
-        uint32_t o = (rsp_grants_.at(i) + t) & (T-1);
-        if (o >= O)
-          continue;
+      BitVector<> requests(O);
+      for (uint32_t o = 0; o < O; ++o) {
         auto& rsp_out = RspOut.at(o);
         if (rsp_out.empty())
           continue;
         auto& rsp = rsp_out.front();
-        uint32_t input_idx = 0;
+        // skip if response is not going to current input
         if (lg2_inputs_ != 0) {
-          input_idx = rsp.tag & (R-1);
-          // skip if response is not going to current input
+          uint32_t input_idx = rsp.tag & (R-1);
           if (input_idx != i)
             continue;
         }
-        if (output_idx != -1) {
-          has_collision = true;
-          continue;
-        }
-        output_idx = o;
+        requests.set(o);
       }
-      if (output_idx != -1) {
-        auto& rsp_out = RspOut.at(output_idx);
+      if (requests.any()) {
+        uint32_t g = arbiter_.grant(requests);
+        auto& rsp_out = RspOut.at(g);
         auto& rsp = rsp_out.front();
+        Rsp in_rsp(rsp);
         if (lg2_inputs_ != 0) {
-          rsp.tag >>= lg2_inputs_;
+          in_rsp.tag = rsp.tag >> lg2_inputs_;
         }
-        DT(4, this->name() << "-rsp" << i << ": " << rsp);
-        RspIn.at(i).push(rsp, 1);
+        DT(4, this->name() << "-rsp" << g << "_" << i << ": " << in_rsp);
+        RspIn.at(i).push(in_rsp, 1);
         rsp_out.pop();
-        this->update_rsp_grant(i, output_idx);
-        rsp_collisions_ += has_collision;
-      }
-    }
-
-    // process incoming requests
-    for (uint32_t o = 0; o < O; ++o) {
-      int32_t input_idx = -1;
-      bool has_collision = false;
-      for (uint32_t r = 0; r < R; ++r) {
-        uint32_t i = (req_grants_.at(o) + r) & (R-1);
-        if (i >= I)
-          continue;
-        auto& req_in = ReqIn.at(i);
-        if (req_in.empty())
-          continue;
-        auto& req = req_in.front();
-        uint32_t output_idx = 0;
-        if (lg2_outputs_ != 0) {
-          // select output index
-          output_idx = output_sel_(req);
-          // skip if request is not going to current output
-          if (output_idx != o)
-            continue;
-        }
-        if (input_idx != -1) {
-          has_collision = true;
-          continue;
-        }
-        input_idx = i;
-      }
-      if (input_idx != -1) {
-        auto& req_in = ReqIn.at(input_idx);
-        auto& req = req_in.front();
-        if (lg2_inputs_ != 0) {
-          req.tag = (req.tag << lg2_inputs_) | input_idx;
-        }
-        DT(4, this->name() << "-req" << o << ": " << req);
-        ReqOut.at(o).push(req, delay_);
-        req_in.pop();
-        this->update_req_grant(o, input_idx);
-        req_collisions_ += has_collision;
       }
     }
   }
 
-  uint64_t req_collisions() const {
-    return req_collisions_;
-  }
-
-  uint64_t rsp_collisions() const {
-    return rsp_collisions_;
+  uint64_t collisions() const {
+    return crossbar_->collisions();
   }
 
 protected:
+  typedef TxCrossBar<Req> ReqXbar;
 
-  void update_req_grant(uint32_t index, uint32_t grant) {
-    if (type_ == ArbiterType::RoundRobin) {
-      req_grants_.at(index) = grant + 1;
-    }
-  }
-
-  void update_rsp_grant(uint32_t index, uint32_t grant) {
-    if (type_ == ArbiterType::RoundRobin) {
-      rsp_grants_.at(index) = grant + 1;
-    }
-  }
-
-  ArbiterType type_;
-  uint32_t delay_;
-  std::vector<uint32_t> req_grants_;
-  std::vector<uint32_t> rsp_grants_;
+  typename ReqXbar::Ptr crossbar_;
+  Arbiter arbiter_;
   uint32_t lg2_inputs_;
-  uint32_t lg2_outputs_;
-  std::function<uint32_t(const Req& req)> output_sel_;
-  uint64_t req_collisions_;
-  uint64_t rsp_collisions_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1012,8 +1132,8 @@ private:
   uint32_t delay_;
 };
 
-using LsuArbiter  = TxArbiter<LsuReq, LsuRsp>;
-using MemArbiter  = TxArbiter<MemReq, MemRsp>;
-using MemCrossBar = TxCrossBar<MemReq, MemRsp>;
+using LsuArbiter  = TxRxArbiter<LsuReq, LsuRsp>;
+using MemArbiter  = TxRxArbiter<MemReq, MemRsp>;
+using MemCrossBar = TxRxCrossBar<MemReq, MemRsp>;
 
 }

@@ -22,7 +22,18 @@
 #include "local_mem.h"
 #include "ibuffer.h"
 #include "scoreboard.h"
-#include "operand.h"
+
+#ifdef EXT_V_ENABLE
+#include "voperands.h"
+#include "vec_unit.h"
+#else
+#ifdef DISABLE_OPC
+#include "operands_old.h"
+#else
+#include "operands.h"
+#endif
+#endif
+
 #include "dispatcher.h"
 #include "func_unit.h"
 #include "mem_coalescer.h"
@@ -34,7 +45,7 @@ class Socket;
 class Arch;
 class DCRS;
 
-using TraceArbiter = Arbiter<instr_trace_t*>;
+using TraceArbiter = TxArbiter<instr_trace_t*>;
 
 class Core : public SimObject<Core> {
 public:
@@ -52,6 +63,10 @@ public:
     uint64_t scrb_sfu;
     uint64_t scrb_csrs;
     uint64_t scrb_wctl;
+  #ifdef EXT_V_ENABLE
+    uint64_t vinstrs;
+    uint64_t scrb_vpu;
+  #endif
     uint64_t ifetches;
     uint64_t loads;
     uint64_t stores;
@@ -72,6 +87,10 @@ public:
       , scrb_sfu(0)
       , scrb_csrs(0)
       , scrb_wctl(0)
+    #ifdef EXT_V_ENABLE
+      , vinstrs(0)
+      , scrb_vpu(0)
+    #endif
       , ifetches(0)
       , loads(0)
       , stores(0)
@@ -90,7 +109,8 @@ public:
        uint32_t core_id,
        Socket* socket,
        const Arch &arch,
-       const DCRS &dcrs);
+       const DCRS &dcrs
+  );
 
   ~Core();
 
@@ -131,9 +151,25 @@ public:
     return mem_coalescers_.at(idx);
   }
 
-  const PerfStats& perf_stats() const {
-    return perf_stats_;
+  void dcache_read(void* data, uint64_t addr, uint32_t size) {
+    return emulator_.dcache_read(data, addr, size);
   }
+
+  void dcache_write(const void* data, uint64_t addr, uint32_t size) {
+    return emulator_.dcache_write(data, addr, size);
+  }
+
+#ifdef EXT_V_ENABLE
+  VecUnit::Ptr& vec_unit() {
+    return vec_unit_;
+  }
+#endif
+
+  auto& trace_pool() {
+    return trace_pool_;
+  }
+
+  const PerfStats& perf_stats() const;
 
   int get_exitcode() const;
 
@@ -150,11 +186,15 @@ private:
   Socket* socket_;
   const Arch& arch_;
 
+#ifdef EXT_V_ENABLE
+  VecUnit::Ptr vec_unit_;
+#endif
+
   Emulator emulator_;
 
   std::vector<IBuffer> ibuffers_;
   Scoreboard scoreboard_;
-  std::vector<Operand::Ptr> operands_;
+  std::vector<Operands::Ptr> operands_;
   std::vector<Dispatcher::Ptr> dispatchers_;
   std::vector<FuncUnit::Ptr> func_units_;
   LocalMem::Ptr local_mem_;
@@ -165,22 +205,23 @@ private:
   PipelineLatch decode_latch_;
 
   HashTable<instr_trace_t*> pending_icache_;
-  uint64_t pending_instrs_;
+  std::list<instr_trace_t*, PoolAllocator<instr_trace_t*, 64>> pending_instrs_;
 
   uint64_t pending_ifetches_;
 
-  PerfStats perf_stats_;
+  mutable PerfStats perf_stats_;
 
   std::vector<TraceArbiter::Ptr> commit_arbs_;
 
   uint32_t commit_exe_;
-  uint32_t ibuffer_idx_;
+  std::vector<Arbiter> ibuffer_arbs_;
+
+  PoolAllocator<instr_trace_t, 64> trace_pool_;
 
   friend class LsuUnit;
   friend class AluUnit;
   friend class FpuUnit;
   friend class SfuUnit;
-  friend class TcuUnit;
 };
 
 } // namespace vortex

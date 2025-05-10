@@ -14,44 +14,38 @@
 #pragma once
 
 #include "instr_trace.h"
-#include <queue>
+#include "gpr_unit.h"
 
 namespace vortex {
 
-class IBuffer {
+class Core;
+
+class OpcUnit : public SimObject<OpcUnit> {
 public:
-	IBuffer(uint32_t size)
-		: capacity_(size)
-	{}
+  SimPort<instr_trace_t *> Input;
+  SimPort<instr_trace_t *> Output;
 
-	bool empty() const {
-		return entries_.empty();
-	}
+  SimPort<GprReq> gpr_req_ports;
+  SimPort<GprRsp> gpr_rsp_ports;
 
-	bool full() const {
-		return (entries_.size() == capacity_);
-	}
+  OpcUnit(const SimContext &ctx, Core* core);
+  virtual ~OpcUnit();
 
-	instr_trace_t* top() const {
-		return entries_.front();
-	}
+  virtual void reset();
 
-	void push(instr_trace_t* trace) {
-		entries_.emplace(trace);
-	}
+  virtual void tick();
 
-	void pop() {
-		return entries_.pop();
-	}
+  void writeback(instr_trace_t* trace);
 
-	void reset() {
-		std::queue<instr_trace_t*> empty;
-		std::swap(entries_, empty );
-	}
+  uint32_t total_stalls() const {
+    return total_stalls_;
+  }
 
 private:
-	std::queue<instr_trace_t*> entries_;
-	uint32_t capacity_;
+  uint32_t pending_rsps_ = 0;
+  bool     instr_pending_ = false;
+  uint32_t total_stalls_ = 0;
+  Core*    core_;
 };
 
-}
+} // namespace vortex
