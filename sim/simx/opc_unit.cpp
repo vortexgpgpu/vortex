@@ -16,13 +16,12 @@
 
 using namespace vortex;
 
-OpcUnit::OpcUnit(const SimContext &ctx, Core* core)
+OpcUnit::OpcUnit(const SimContext &ctx)
   : SimObject<OpcUnit>(ctx, "opc-unit")
   , Input(this, 1)
   , Output(this)
   , gpr_req_ports(this)
-  , gpr_rsp_ports(this)
-  , core_(core) {
+  , gpr_rsp_ports(this) {
   this->reset();
 }
 

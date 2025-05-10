@@ -25,7 +25,7 @@ Operands::Operands(const SimContext &ctx, Core* /*core*/)
     , out_arb_(ArbiterType::RoundRobin, NUM_OPCS) {
   // create OPC units
   for (uint32_t i = 0; i < NUM_OPCS; i++) {
-    opc_units_.at(i) = OpcUnit::Create(core);
+    opc_units_.at(i) = OpcUnit::Create();
   }
   // connect OPC to GPR
   for (uint32_t i = 0; i < NUM_OPCS; i++) {

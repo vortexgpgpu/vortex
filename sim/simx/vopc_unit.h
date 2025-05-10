@@ -55,7 +55,7 @@ private:
 
   void lsu_flush(instr_trace_t* trace);
 
-  Core* core_;
+  Core*    core_;
   std::bitset<NUM_SRC_REGS> vopd_to_fetch_ = 0;
   uint32_t pending_s_rsps_ = 0;
   uint32_t pending_v_rsps_ = 0;
