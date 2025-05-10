@@ -58,24 +58,27 @@ static void __attribute__ ((noinline)) process_threads() {
   uint32_t warp_id = vx_warp_id();
   uint32_t thread_id = vx_thread_id();
 
-  uint32_t start_warp = (warp_id * targs->warp_batches) + MIN(warp_id, targs->remaining_warps);
-  uint32_t iterations = targs->warp_batches + (warp_id < targs->remaining_warps);
+  uint32_t remaining_warps = targs->remaining_warps;
+  uint32_t warp_batches = targs->warp_batches;
+
+  uint32_t start_warp_add = (warp_id < remaining_warps) ? warp_id : remaining_warps;
+  uint32_t start_warp = (warp_id * warp_batches) + start_warp_add;
+  uint32_t iterations = warp_batches + (warp_id < remaining_warps);
 
   uint32_t start_task_id = targs->all_tasks_offset + (start_warp * threads_per_warp) + thread_id;
   uint32_t end_task_id = start_task_id + iterations * threads_per_warp;
 
-  __local_group_id = 0;
-  threadIdx.x = 0;
-  threadIdx.y = 0;
-  threadIdx.z = 0;
+  uint32_t gridDim_x = gridDim.x;
+  uint32_t gridDim_y = gridDim.y;
+  uint32_t gridDim_xy = gridDim_x * gridDim_y;
 
   vx_kernel_func_cb callback = targs->callback;
   const void* arg = targs->arg;
 
   for (uint32_t task_id = start_task_id; task_id < end_task_id; task_id += threads_per_warp) {
-    blockIdx.x = task_id % gridDim.x;
-    blockIdx.y = (task_id / gridDim.x) % gridDim.y;
-    blockIdx.z = task_id / (gridDim.x * gridDim.y);
+    blockIdx.x = task_id % gridDim_x;
+    blockIdx.y = (task_id / gridDim_x) % gridDim_y;
+    blockIdx.z = task_id / (gridDim_x * gridDim_y);
     callback((void*)arg);
   }
 }
@@ -100,38 +103,48 @@ static void __attribute__ ((noinline)) process_threads_stub() {
   vx_tmc_zero();
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 static void __attribute__ ((noinline)) process_thread_groups() {
   wspawn_groups_args_t* targs = (wspawn_groups_args_t*)csr_read(VX_CSR_MSCRATCH);
 
   uint32_t threads_per_warp = vx_num_threads();
   uint32_t warp_id = vx_warp_id();
   uint32_t thread_id = vx_thread_id();
-
   uint32_t warps_per_group = targs->warps_per_group;
   uint32_t groups_per_core = targs->groups_per_core;
+  uint32_t remaining_warps = targs->remaining_warps;
+  uint32_t warp_batches = targs->warp_batches;
 
-  uint32_t iterations = targs->warp_batches + (warp_id < targs->remaining_warps);
+  uint32_t blockDim_x = blockDim.x;
+  uint32_t blockDim_y = blockDim.y;
+  uint32_t blockDim_xy = blockDim_x * blockDim_y;
+  uint32_t gridDim_x = gridDim.x;
+  uint32_t gridDim_y = gridDim.y;
+  uint32_t gridDim_xy = gridDim_x * gridDim_y;
+
+  uint32_t iterations = warp_batches + (warp_id < remaining_warps);
 
   uint32_t local_group_id = warp_id / warps_per_group;
   uint32_t group_warp_id = warp_id - local_group_id * warps_per_group;
   uint32_t local_task_id = group_warp_id * threads_per_warp + thread_id;
 
-  uint32_t start_group = targs->group_offset + local_group_id;
-  uint32_t end_group = start_group + iterations * groups_per_core;
-
   __local_group_id = local_group_id;
+  threadIdx.x = local_task_id % blockDim_x;
+  threadIdx.y = (local_task_id / blockDim_x) % blockDim_y;
+  threadIdx.z = local_task_id / blockDim_xy;
 
-  threadIdx.x = local_task_id % blockDim.x;
-  threadIdx.y = (local_task_id / blockDim.x) % blockDim.y;
-  threadIdx.z = local_task_id / (blockDim.x * blockDim.y);
+  uint32_t start_group = targs->group_offset + local_group_id;
+  uint32_t group_stride = groups_per_core;
+  uint32_t end_group = start_group + iterations * group_stride;
 
   vx_kernel_func_cb callback = targs->callback;
   const void* arg = targs->arg;
 
-  for (uint32_t group_id = start_group; group_id < end_group; group_id += groups_per_core) {
-    blockIdx.x = group_id % gridDim.x;
-    blockIdx.y = (group_id / gridDim.x) % gridDim.y;
-    blockIdx.z = group_id / (gridDim.x * gridDim.y);
+  for (uint32_t group_id = start_group; group_id < end_group; group_id += group_stride) {
+    blockIdx.x = group_id % gridDim_x;
+    blockIdx.y = (group_id / gridDim_x) % gridDim_y;
+    blockIdx.z = group_id / (gridDim_x * gridDim_y);
     callback((void*)arg);
   }
 }
@@ -153,6 +166,8 @@ static void __attribute__ ((noinline)) process_thread_groups_stub() {
   // disable all warps except warp0
   vx_tmc(0 == vx_warp_id());
 }
+
+///////////////////////////////////////////////////////////////////////////////
 
 int vx_spawn_threads(uint32_t dimension,
                      const uint32_t* grid_dim,
@@ -245,8 +260,14 @@ int vx_spawn_threads(uint32_t dimension,
     // execute callback on warp0
     process_thread_groups_stub();
   } else {
-    uint32_t num_tasks = num_groups;
+    // set constant workitem attributes
     __warps_per_group = 0;
+    __local_group_id = 0;
+    threadIdx.x = 0;
+    threadIdx.y = 0;
+    threadIdx.z = 0;
+
+    uint32_t num_tasks = num_groups;
 
     // calculate necessary active cores
     uint32_t needed_cores = (num_tasks + threads_per_core - 1) / threads_per_core;
