@@ -405,8 +405,7 @@ module VX_scope_tap #(
     wire bus_out_w = is_get_data ? get_data[ser_tx_ctr_r] : bus_out_r;
 
     VX_pipe_register #(
-        .DATAW (1),
-        .DEPTH (1)
+        .DATAW (1)
     ) buf_out (
         .clk      (clk),
         .reset    (reset),

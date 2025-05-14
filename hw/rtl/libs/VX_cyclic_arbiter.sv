@@ -58,7 +58,7 @@ module VX_cyclic_arbiter #(
 
         VX_priority_encoder #(
             .N (NUM_REQS)
-        ) priority_encoder (
+        ) grant_sel (
             .data_in    (requests),
             .onehot_out (grant_onehot_um),
             .index_out  (grant_index_um),

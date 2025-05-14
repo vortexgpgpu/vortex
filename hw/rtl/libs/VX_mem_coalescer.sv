@@ -131,11 +131,11 @@ module VX_mem_coalescer #(
 
         VX_priority_encoder #(
             .N (DATA_RATIO)
-        ) priority_encoder (
+        ) batch_sel (
             .data_in    (batch_mask),
             .index_out  (batch_idx),
-            `UNUSED_PIN (onehot_out),
-            .valid_out  (batch_valid_n[i])
+            .valid_out  (batch_valid_n[i]),
+            `UNUSED_PIN (onehot_out)
         );
 
         wire [DATA_RATIO-1:0][OUT_ADDR_WIDTH-1:0] addr_base;

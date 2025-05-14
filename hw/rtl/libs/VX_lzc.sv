@@ -33,7 +33,6 @@ module VX_lzc #(
     end else begin : g_lzc
 
         wire [N-1:0][LOGN-1:0] indices;
-
         for (genvar i = 0; i < N; ++i) begin : g_indices
             assign indices[i] = REVERSE ? LOGN'(i) : LOGN'(N-1-i);
         end
@@ -43,8 +42,8 @@ module VX_lzc #(
             .DATAW   (LOGN),
             .REVERSE (!REVERSE)
         ) find_first (
-            .data_in   (indices),
             .valid_in  (data_in),
+            .data_in   (indices),
             .data_out  (data_out),
             .valid_out (valid_out)
         );

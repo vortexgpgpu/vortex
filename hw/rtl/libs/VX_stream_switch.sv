@@ -36,13 +36,17 @@ module VX_stream_switch #(
     output wire [NUM_OUTPUTS-1:0][DATAW-1:0] data_out,
     input  wire [NUM_OUTPUTS-1:0]           ready_out
 );
+    logic [NUM_OUTPUTS-1:0]            valid_out_w;
+    logic [NUM_OUTPUTS-1:0][DATAW-1:0] data_out_w;
+    logic [NUM_OUTPUTS-1:0]            ready_out_w;
+
     if (NUM_INPUTS > NUM_OUTPUTS) begin : g_input_select
 
         for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_out_buf
 
-            wire [NUM_REQS-1:0] valid_in_w;
-            wire [NUM_REQS-1:0][DATAW-1:0] data_in_w;
-            wire [NUM_REQS-1:0] ready_in_w;
+            logic [NUM_REQS-1:0] valid_in_w;
+            logic [NUM_REQS-1:0][DATAW-1:0] data_in_w;
+            logic [NUM_REQS-1:0] ready_in_w;
 
             for (genvar r = 0; r < NUM_REQS; ++r) begin : g_r
                 localparam i = r * NUM_OUTPUTS + o;
@@ -57,20 +61,15 @@ module VX_stream_switch #(
                 end
             end
 
-            VX_elastic_buffer #(
-                .DATAW   (DATAW),
-                .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
-                .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
-            ) out_buf (
-                .clk       (clk),
-                .reset     (reset),
-                .valid_in  (valid_in_w[sel_in[o]]),
-                .ready_in  (ready_in_w[sel_in[o]]),
-                .data_in   (data_in_w[sel_in[o]]),
-                .data_out  (data_out[o]),
-                .valid_out (valid_out[o]),
-                .ready_out (ready_out[o])
-            );
+            assign valid_out_w[o] = valid_in_w[sel_in[o]];
+            assign data_out_w[o] = data_in_w[sel_in[o]];
+
+            always @(*) begin
+                ready_in_w = '0;
+                for (integer o = 0; o < NUM_OUTPUTS; ++o) begin
+                    ready_in_w[sel_in[o]] = ready_out_w[o];
+                end
+            end
         end
 
     end else if (NUM_OUTPUTS > NUM_INPUTS) begin : g_output_select
@@ -79,32 +78,20 @@ module VX_stream_switch #(
 
         for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_out_buf
 
-            wire [NUM_REQS-1:0] ready_out_w;
+            logic [NUM_REQS-1:0] ready_out_s;
 
             for (genvar r = 0; r < NUM_REQS; ++r) begin : g_r
                 localparam o = r * NUM_INPUTS + i;
                 if (o < NUM_OUTPUTS) begin : g_valid
-                    wire valid_out_w  = valid_in[i] && (sel_in[i] == LOG_NUM_REQS'(r));
-                    VX_elastic_buffer #(
-                        .DATAW    (DATAW),
-                        .SIZE     (`TO_OUT_BUF_SIZE(OUT_BUF)),
-                        .OUT_REG  (`TO_OUT_BUF_REG(OUT_BUF))
-                    ) out_buf (
-                        .clk       (clk),
-                        .reset     (reset),
-                        .valid_in  (valid_out_w),
-                        .ready_in  (ready_out_w[r]),
-                        .data_in   (data_in[i]),
-                        .data_out  (data_out[o]),
-                        .valid_out (valid_out[o]),
-                        .ready_out (ready_out[o])
-                    );
+                    assign valid_out_w[o] = valid_in[i] && (sel_in[i] == LOG_NUM_REQS'(r));
+                    assign data_out_w[o] = data_in[i];
+                    assign ready_out_s[r] = ready_out_w[o];
                 end else begin : g_padding
-                    assign ready_out_w[r] = '0;
+                    assign ready_out_s[r] = '0;
                 end
             end
 
-            assign ready_in[i] = ready_out_w[sel_in[i]];
+            assign ready_in[i] = ready_out_s[sel_in[i]];
         end
 
     end else begin : g_passthru
@@ -114,21 +101,27 @@ module VX_stream_switch #(
         `UNUSED_VAR (sel_in)
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_out_buf
-            VX_elastic_buffer #(
-                .DATAW    (DATAW),
-                .SIZE     (`TO_OUT_BUF_SIZE(OUT_BUF)),
-                .OUT_REG  (`TO_OUT_BUF_REG(OUT_BUF))
-            ) out_buf (
-                .clk       (clk),
-                .reset     (reset),
-                .valid_in  (valid_in[i]),
-                .ready_in  (ready_in[i]),
-                .data_in   (data_in[i]),
-                .data_out  (data_out[i]),
-                .valid_out (valid_out[i]),
-                .ready_out (ready_out[i])
-            );
+            assign valid_out_w[i] = valid_in[i];
+            assign data_out_w[i]  = data_in[i];
+            assign ready_in[i]    = ready_out_w[i];
         end
+    end
+
+    for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_out_buf
+        VX_elastic_buffer #(
+            .DATAW   (DATAW),
+            .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
+            .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
+        ) out_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (valid_out_w[o]),
+            .data_in   (data_out_w[o]),
+            .ready_in  (ready_out_w[o]),
+            .valid_out (valid_out[o]),
+            .data_out  (data_out[o]),
+            .ready_out (ready_out[o])
+        );
     end
 
 endmodule

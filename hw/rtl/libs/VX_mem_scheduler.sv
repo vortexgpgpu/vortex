@@ -39,7 +39,8 @@ module VX_mem_scheduler #(
     parameter MEM_BATCH_BITS= `CLOG2(MEM_BATCHES),
     parameter MEM_QUEUE_ADDRW= `CLOG2(COALESCE_ENABLE ? MEM_QUEUE_SIZE : CORE_QUEUE_SIZE),
     parameter MEM_ADDR_WIDTH= ADDR_WIDTH - `CLOG2(PER_LINE_REQS),
-    parameter MEM_TAG_WIDTH = UUID_WIDTH + MEM_QUEUE_ADDRW + MEM_BATCH_BITS
+    parameter MEM_TAG_WIDTH = UUID_WIDTH + MEM_QUEUE_ADDRW + MEM_BATCH_BITS,
+    parameter CORE_QUEUE_ADDRW = `CLOG2(CORE_QUEUE_SIZE)
 ) (
     input wire clk,
     input wire reset,
@@ -54,8 +55,10 @@ module VX_mem_scheduler #(
     input wire [CORE_REQS-1:0][WORD_WIDTH-1:0] core_req_data,
     input wire [TAG_WIDTH-1:0]              core_req_tag,
     output wire                             core_req_ready,
-    output wire                             core_req_empty,
-    output wire                             core_req_wr_notify,
+
+    // Core request queue
+    output wire                             req_queue_empty,
+    output wire                             req_queue_rw_notify,
 
     // Core response
     output wire                             core_rsp_valid,
@@ -86,7 +89,6 @@ module VX_mem_scheduler #(
 );
     localparam BATCH_SEL_WIDTH = `UP(MEM_BATCH_BITS);
     localparam STALL_TIMEOUT   = 10000000;
-    localparam CORE_QUEUE_ADDRW= `CLOG2(CORE_QUEUE_SIZE);
     localparam TAG_ID_WIDTH    = TAG_WIDTH - UUID_WIDTH;
     localparam REQQ_TAG_WIDTH  = UUID_WIDTH + CORE_QUEUE_ADDRW;
     localparam MERGED_TAG_WIDTH= UUID_WIDTH + MEM_QUEUE_ADDRW;
@@ -185,11 +187,9 @@ module VX_mem_scheduler #(
     // can accept another request?
     assign core_req_ready = reqq_ready_in && ibuf_ready;
 
-    // no pending requests
-    assign core_req_empty = !reqq_valid && ibuf_empty;
-
-    // notify write request submisison
-    assign core_req_wr_notify = reqq_valid && reqq_ready && reqq_rw;
+    // request queue status
+    assign req_queue_rw_notify = reqq_valid && reqq_ready && reqq_rw;
+    assign req_queue_empty = !reqq_valid && ibuf_empty;
 
     // Index buffer ///////////////////////////////////////////////////////////
 
