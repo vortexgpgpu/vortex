@@ -62,8 +62,8 @@ module Vortex_top #(
 	input  wire [C_M_AXI_GMEM_ID_WIDTH - 1:0]	m_axi_mem_bid,
 
 	input  wire                         		dcr_wr_valid,
-    input  wire [`VX_DCR_ADDR_WIDTH-1:0]		dcr_wr_addr,
-    input  wire [`VX_DCR_DATA_WIDTH-1:0] 		dcr_wr_data,
+    input  wire [VX_DCR_ADDR_WIDTH-1:0]		    dcr_wr_addr,
+    input  wire [VX_DCR_DATA_WIDTH-1:0] 		dcr_wr_data,
 
 	output wire                                 busy
 );

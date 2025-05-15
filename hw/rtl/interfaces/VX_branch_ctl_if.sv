@@ -13,12 +13,12 @@
 
 `include "VX_define.vh"
 
-interface VX_branch_ctl_if ();
+interface VX_branch_ctl_if import VX_gpu_pkg::*; ();
 
-    wire                    valid;
-    wire [`NW_WIDTH-1:0]    wid;
-    wire                    taken;
-    wire [`PC_BITS-1:0]     dest;
+    wire                valid;
+    wire [NW_WIDTH-1:0] wid;
+    wire                taken;
+    wire [PC_BITS-1:0]  dest;
 
     modport master (
         output valid,

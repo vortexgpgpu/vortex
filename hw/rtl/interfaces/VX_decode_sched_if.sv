@@ -13,11 +13,11 @@
 
 `include "VX_define.vh"
 
-interface VX_decode_sched_if ();
+interface VX_decode_sched_if import VX_gpu_pkg::*; ();
 
-    wire                    valid;
-    wire                    unlock;
-    wire [`NW_WIDTH-1:0]    wid;
+    wire                valid;
+    wire                unlock;
+    wire [NW_WIDTH-1:0] wid;
 
     modport master (
         output valid,

@@ -54,8 +54,8 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_branch_ctl_if    branch_ctl_if[`NUM_ALU_BLOCKS]();
     VX_warp_ctl_if      warp_ctl_if();
 
-    VX_dispatch_if      dispatch_if[`NUM_EX_UNITS * `ISSUE_WIDTH]();
-    VX_commit_if        commit_if[`NUM_EX_UNITS * `ISSUE_WIDTH]();
+    VX_dispatch_if      dispatch_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
+    VX_commit_if        commit_if[NUM_EX_UNITS * `ISSUE_WIDTH]();
     VX_writeback_if     writeback_if[`ISSUE_WIDTH]();
 
     VX_lsu_mem_if #(
@@ -217,12 +217,12 @@ module VX_core import VX_gpu_pkg::*; #(
     wire [1:0] perf_icache_pending_read_cycle;
     wire [`CLOG2(LSU_NUM_REQS+1)+1-1:0] perf_dcache_pending_read_cycle;
 
-    reg [`PERF_CTR_BITS-1:0] perf_icache_pending_reads;
-    reg [`PERF_CTR_BITS-1:0] perf_dcache_pending_reads;
+    reg [PERF_CTR_BITS-1:0] perf_icache_pending_reads;
+    reg [PERF_CTR_BITS-1:0] perf_dcache_pending_reads;
 
-    reg [`PERF_CTR_BITS-1:0] perf_ifetches;
-    reg [`PERF_CTR_BITS-1:0] perf_loads;
-    reg [`PERF_CTR_BITS-1:0] perf_stores;
+    reg [PERF_CTR_BITS-1:0] perf_ifetches;
+    reg [PERF_CTR_BITS-1:0] perf_loads;
+    reg [PERF_CTR_BITS-1:0] perf_stores;
 
     wire perf_icache_req_fire = icache_bus_if.req_valid && icache_bus_if.req_ready;
     wire perf_icache_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
@@ -254,13 +254,13 @@ module VX_core import VX_gpu_pkg::*; #(
             perf_icache_pending_reads <= '0;
             perf_dcache_pending_reads <= '0;
         end else begin
-            perf_icache_pending_reads <= $signed(perf_icache_pending_reads) + `PERF_CTR_BITS'($signed(perf_icache_pending_read_cycle));
-            perf_dcache_pending_reads <= $signed(perf_dcache_pending_reads) + `PERF_CTR_BITS'($signed(perf_dcache_pending_read_cycle));
+            perf_icache_pending_reads <= $signed(perf_icache_pending_reads) + PERF_CTR_BITS'($signed(perf_icache_pending_read_cycle));
+            perf_dcache_pending_reads <= $signed(perf_dcache_pending_reads) + PERF_CTR_BITS'($signed(perf_dcache_pending_read_cycle));
         end
     end
 
-    reg [`PERF_CTR_BITS-1:0] perf_icache_lat;
-    reg [`PERF_CTR_BITS-1:0] perf_dcache_lat;
+    reg [PERF_CTR_BITS-1:0] perf_icache_lat;
+    reg [PERF_CTR_BITS-1:0] perf_dcache_lat;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -270,9 +270,9 @@ module VX_core import VX_gpu_pkg::*; #(
             perf_icache_lat <= '0;
             perf_dcache_lat <= '0;
         end else begin
-            perf_ifetches   <= perf_ifetches   + `PERF_CTR_BITS'(perf_icache_req_fire);
-            perf_loads      <= perf_loads      + `PERF_CTR_BITS'(perf_dcache_rd_req_per_cycle);
-            perf_stores     <= perf_stores     + `PERF_CTR_BITS'(perf_dcache_wr_req_per_cycle);
+            perf_ifetches   <= perf_ifetches   + PERF_CTR_BITS'(perf_icache_req_fire);
+            perf_loads      <= perf_loads      + PERF_CTR_BITS'(perf_dcache_rd_req_per_cycle);
+            perf_stores     <= perf_stores     + PERF_CTR_BITS'(perf_dcache_wr_req_per_cycle);
             perf_icache_lat <= perf_icache_lat + perf_icache_pending_reads;
             perf_dcache_lat <= perf_dcache_lat + perf_dcache_pending_reads;
         end
