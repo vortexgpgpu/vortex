@@ -42,7 +42,7 @@
 // and as such changes to either module requires careful evaluation.
 //
 
-module VX_cache_mshr #(
+module VX_cache_mshr import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID= "",
     parameter BANK_ID           = 0,
     // Size of line inside a bank in bytes
@@ -51,8 +51,6 @@ module VX_cache_mshr #(
     parameter NUM_BANKS         = 1,
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE         = 4,
-    // Request debug identifier
-    parameter UUID_WIDTH        = 0,
     // MSHR parameters
     parameter DATA_WIDTH        = 1,
     // Enable cache writeback
@@ -124,13 +122,13 @@ module VX_cache_mshr #(
         assign addr_matches[i] = valid_table[i] && (addr_table[i] == allocate_addr);
     end
 
-    VX_lzc #(
-        .N (MSHR_SIZE),
-        .REVERSE (1)
+    VX_priority_encoder #(
+        .N (MSHR_SIZE)
     ) allocate_sel (
         .data_in   (~valid_table_n),
-        .data_out  (allocate_id_n),
-        .valid_out (allocate_rdy_n)
+        .index_out (allocate_id_n),
+        .valid_out (allocate_rdy_n),
+        `UNUSED_PIN (onehot_out)
     );
 
     // find matching tail-entry
@@ -139,8 +137,8 @@ module VX_cache_mshr #(
     ) prev_sel (
         .data_in (addr_matches & ~next_table_x),
         .index_out (prev_idx),
-        `UNUSED_PIN (onehot_out),
-        `UNUSED_PIN (valid_out)
+        `UNUSED_PIN (valid_out),
+        `UNUSED_PIN (onehot_out)
     );
 
     always @(*) begin

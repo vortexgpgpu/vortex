@@ -54,14 +54,8 @@ module VX_cache import VX_gpu_pkg::*; #(
     // Replacement policy
     parameter REPL_POLICY           = `CS_REPL_FIFO,
 
-    // Request debug identifier
-    parameter UUID_WIDTH            = 0,
-
     // core request tag size
     parameter TAG_WIDTH             = UUID_WIDTH + 1,
-
-    // core request flags
-    parameter FLAGS_WIDTH           = 0,
 
     // Core response output register
     parameter CORE_OUT_BUF          = 3,
@@ -96,10 +90,10 @@ module VX_cache import VX_gpu_pkg::*; #(
     localparam BANK_SEL_BITS   = `CLOG2(NUM_BANKS);
     localparam BANK_SEL_WIDTH  = `UP(BANK_SEL_BITS);
     localparam LINE_ADDR_WIDTH = (`CS_WORD_ADDR_WIDTH - BANK_SEL_BITS - WORD_SEL_BITS);
-    localparam CORE_REQ_DATAW  = LINE_ADDR_WIDTH + 1 + WORD_SEL_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + `UP(FLAGS_WIDTH);
+    localparam CORE_REQ_DATAW  = LINE_ADDR_WIDTH + 1 + WORD_SEL_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + `UP(MEM_FLAGS_WIDTH);
     localparam CORE_RSP_DATAW  = WORD_WIDTH + TAG_WIDTH;
     localparam BANK_MEM_TAG_WIDTH = UUID_WIDTH + MSHR_ADDR_WIDTH;
-    localparam MEM_REQ_DATAW   = (`CS_LINE_ADDR_WIDTH + 1 + LINE_SIZE + `CS_LINE_WIDTH + BANK_MEM_TAG_WIDTH + `UP(FLAGS_WIDTH));
+    localparam MEM_REQ_DATAW   = (`CS_LINE_ADDR_WIDTH + 1 + LINE_SIZE + `CS_LINE_WIDTH + BANK_MEM_TAG_WIDTH + `UP(MEM_FLAGS_WIDTH));
     localparam MEM_RSP_DATAW   = `CS_LINE_WIDTH + MEM_TAG_WIDTH;
     localparam MEM_PORTS_SEL_BITS = `CLOG2(MEM_PORTS);
     localparam MEM_PORTS_SEL_WIDTH = `UP(MEM_PORTS_SEL_BITS);
@@ -130,7 +124,6 @@ module VX_cache import VX_gpu_pkg::*; #(
     VX_cache_flush #(
         .NUM_REQS  (NUM_REQS),
         .NUM_BANKS (NUM_BANKS),
-        .UUID_WIDTH(UUID_WIDTH),
         .TAG_WIDTH (TAG_WIDTH),
         .BANK_SEL_LATENCY (`TO_OUT_BUF_REG(REQ_XBAR_BUF)) // request xbar latency
     ) flush_unit (
@@ -244,7 +237,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][`CS_WORD_WIDTH-1:0]    per_bank_core_req_data;
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]         per_bank_core_req_tag;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0]     per_bank_core_req_idx;
-    wire [NUM_BANKS-1:0][`UP(FLAGS_WIDTH)-1:0]  per_bank_core_req_flags;
+    wire [NUM_BANKS-1:0][`UP(MEM_FLAGS_WIDTH)-1:0]  per_bank_core_req_flags;
     wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;
 
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_valid;
@@ -259,7 +252,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][LINE_SIZE-1:0]         per_bank_mem_req_byteen;
     wire [NUM_BANKS-1:0][`CS_LINE_WIDTH-1:0]    per_bank_mem_req_data;
     wire [NUM_BANKS-1:0][BANK_MEM_TAG_WIDTH-1:0] per_bank_mem_req_tag;
-    wire [NUM_BANKS-1:0][`UP(FLAGS_WIDTH)-1:0]  per_bank_mem_req_flags;
+    wire [NUM_BANKS-1:0][`UP(MEM_FLAGS_WIDTH)-1:0]  per_bank_mem_req_flags;
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_ready;
 
     wire [NUM_REQS-1:0]                      core_req_valid;
@@ -268,7 +261,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][WORD_SIZE-1:0]       core_req_byteen;
     wire [NUM_REQS-1:0][`CS_WORD_WIDTH-1:0]  core_req_data;
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0]       core_req_tag;
-    wire [NUM_REQS-1:0][`UP(FLAGS_WIDTH)-1:0] core_req_flags;
+    wire [NUM_REQS-1:0][`UP(MEM_FLAGS_WIDTH)-1:0] core_req_flags;
     wire [NUM_REQS-1:0]                      core_req_ready;
 
     wire [NUM_REQS-1:0][LINE_ADDR_WIDTH-1:0] core_req_line_addr;
@@ -285,7 +278,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         assign core_req_addr[i]   = core_bus2_if[i].req_data.addr;
         assign core_req_data[i]   = core_bus2_if[i].req_data.data;
         assign core_req_tag[i]    = core_bus2_if[i].req_data.tag;
-        assign core_req_flags[i]  = `UP(FLAGS_WIDTH)'(core_bus2_if[i].req_data.flags);
+        assign core_req_flags[i]  = `UP(MEM_FLAGS_WIDTH)'(core_bus2_if[i].req_data.flags);
         assign core_bus2_if[i].req_ready = core_req_ready[i];
     end
 
@@ -324,14 +317,14 @@ module VX_cache import VX_gpu_pkg::*; #(
     assign per_bank_core_req_fire = per_bank_core_req_valid & per_bank_mem_req_ready;
 
 `ifdef PERF_ENABLE
-    wire [`PERF_CTR_BITS-1:0] perf_collisions;
+    wire [PERF_CTR_BITS-1:0] perf_collisions;
 `endif
 
     VX_stream_xbar #(
         .NUM_INPUTS  (NUM_REQS),
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (CORE_REQ_DATAW),
-        .PERF_CTR_BITS (`PERF_CTR_BITS),
+        .PERF_CTR_BITS (PERF_CTR_BITS),
         .ARBITER     ("R"),
         .OUT_BUF     (REQ_XBAR_BUF)
     ) req_xbar (
@@ -383,9 +376,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .CRSQ_SIZE    (CRSQ_SIZE),
             .MSHR_SIZE    (MSHR_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
-            .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (TAG_WIDTH),
-            .FLAGS_WIDTH  (FLAGS_WIDTH),
             .CORE_OUT_REG (CORE_RSP_BUF_ENABLE ? 0 : `TO_OUT_BUF_REG(CORE_OUT_BUF)),
             .MEM_OUT_REG  (MEM_REQ_BUF_ENABLE ? 0 : `TO_OUT_BUF_REG(MEM_OUT_BUF))
         ) bank (
@@ -535,7 +526,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         wire [`CS_LINE_ADDR_WIDTH-1:0] mem_req_addr;
         wire [`CS_LINE_WIDTH-1:0]     mem_req_data;
         wire [LINE_SIZE-1:0]          mem_req_byteen;
-        wire [`UP(FLAGS_WIDTH)-1:0]   mem_req_flags;
+        wire [`UP(MEM_FLAGS_WIDTH)-1:0]   mem_req_flags;
         wire [BANK_MEM_TAG_WIDTH-1:0] mem_req_tag;
 
         assign {
@@ -549,7 +540,7 @@ module VX_cache import VX_gpu_pkg::*; #(
 
         wire [`CS_MEM_ADDR_WIDTH-1:0] mem_req_addr_w;
         wire [MEM_TAG_WIDTH-1:0] mem_req_tag_w;
-        wire [`UP(FLAGS_WIDTH)-1:0] mem_req_flags_w;
+        wire [`UP(MEM_FLAGS_WIDTH)-1:0] mem_req_flags_w;
 
         if (NUM_BANKS > 1) begin : g_mem_req_tag_multibanks
             if (NUM_BANKS != MEM_PORTS) begin : g_arb_sel
@@ -576,7 +567,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         end
 
         VX_elastic_buffer #(
-            .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_WIDTH + `UP(FLAGS_WIDTH)),
+            .DATAW   (1 + LINE_SIZE + `CS_MEM_ADDR_WIDTH + `CS_LINE_WIDTH + MEM_TAG_WIDTH + `UP(MEM_FLAGS_WIDTH)),
             .SIZE    (MEM_REQ_BUF_ENABLE ? `TO_OUT_BUF_SIZE(MEM_OUT_BUF) : 0),
             .OUT_REG (`TO_OUT_BUF_REG(MEM_OUT_BUF))
         ) mem_req_buf (
@@ -590,7 +581,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .ready_out (mem_bus_tmp_if[i].req_ready)
         );
 
-        if (FLAGS_WIDTH != 0) begin : g_mem_req_flags
+        if (MEM_FLAGS_WIDTH != 0) begin : g_mem_req_flags
             assign mem_bus_tmp_if[i].req_data.flags = mem_req_flags_w;
         end else begin : g_no_mem_req_flags
             assign mem_bus_tmp_if[i].req_data.flags = '0;
@@ -638,13 +629,13 @@ module VX_cache import VX_gpu_pkg::*; #(
     `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_req);
     `POP_COUNT(perf_mem_stall_per_cycle, perf_mem_stall_per_port);
 
-    reg [`PERF_CTR_BITS-1:0] perf_core_reads;
-    reg [`PERF_CTR_BITS-1:0] perf_core_writes;
-    reg [`PERF_CTR_BITS-1:0] perf_read_misses;
-    reg [`PERF_CTR_BITS-1:0] perf_write_misses;
-    reg [`PERF_CTR_BITS-1:0] perf_mshr_stalls;
-    reg [`PERF_CTR_BITS-1:0] perf_mem_stalls;
-    reg [`PERF_CTR_BITS-1:0] perf_crsp_stalls;
+    reg [PERF_CTR_BITS-1:0] perf_core_reads;
+    reg [PERF_CTR_BITS-1:0] perf_core_writes;
+    reg [PERF_CTR_BITS-1:0] perf_read_misses;
+    reg [PERF_CTR_BITS-1:0] perf_write_misses;
+    reg [PERF_CTR_BITS-1:0] perf_mshr_stalls;
+    reg [PERF_CTR_BITS-1:0] perf_mem_stalls;
+    reg [PERF_CTR_BITS-1:0] perf_crsp_stalls;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -656,13 +647,13 @@ module VX_cache import VX_gpu_pkg::*; #(
             perf_mem_stalls   <= '0;
             perf_crsp_stalls  <= '0;
         end else begin
-            perf_core_reads   <= perf_core_reads   + `PERF_CTR_BITS'(perf_core_reads_per_cycle);
-            perf_core_writes  <= perf_core_writes  + `PERF_CTR_BITS'(perf_core_writes_per_cycle);
-            perf_read_misses  <= perf_read_misses  + `PERF_CTR_BITS'(perf_read_miss_per_cycle);
-            perf_write_misses <= perf_write_misses + `PERF_CTR_BITS'(perf_write_miss_per_cycle);
-            perf_mshr_stalls  <= perf_mshr_stalls  + `PERF_CTR_BITS'(perf_mshr_stall_per_cycle);
-            perf_mem_stalls   <= perf_mem_stalls   + `PERF_CTR_BITS'(perf_mem_stall_per_cycle);
-            perf_crsp_stalls  <= perf_crsp_stalls  + `PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
+            perf_core_reads   <= perf_core_reads   + PERF_CTR_BITS'(perf_core_reads_per_cycle);
+            perf_core_writes  <= perf_core_writes  + PERF_CTR_BITS'(perf_core_writes_per_cycle);
+            perf_read_misses  <= perf_read_misses  + PERF_CTR_BITS'(perf_read_miss_per_cycle);
+            perf_write_misses <= perf_write_misses + PERF_CTR_BITS'(perf_write_miss_per_cycle);
+            perf_mshr_stalls  <= perf_mshr_stalls  + PERF_CTR_BITS'(perf_mshr_stall_per_cycle);
+            perf_mem_stalls   <= perf_mem_stalls   + PERF_CTR_BITS'(perf_mem_stall_per_cycle);
+            perf_crsp_stalls  <= perf_crsp_stalls  + PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
         end
     end
 
