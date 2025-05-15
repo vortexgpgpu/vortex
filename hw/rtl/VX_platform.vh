@@ -157,7 +157,7 @@
 
 `ifdef QUARTUS
 `define MAX_FANOUT      8
-`define FORCE_BRAM(d,w) (d >= 16 || w >= 128 || (d * w) >= 256)
+`define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
 `define USE_BLOCK_BRAM  (* ramstyle = "block" *)
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
@@ -168,7 +168,7 @@
 `define STRING          string
 `elsif VIVADO
 `define MAX_FANOUT      8
-`define FORCE_BRAM(d,w) (d >= 16 || w >= 128 || (d * w) >= 256)
+`define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
 `define USE_BLOCK_BRAM  (* ram_style = "block" *)
 `define USE_FAST_BRAM   (* ram_style = "distributed" *)
 `define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
@@ -182,7 +182,7 @@
 `endif
 `else
 `define MAX_FANOUT      8
-`define FORCE_BRAM(d,w) (d >= 16 || w >= 128 || (d * w) >= 256)
+`define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
 `define USE_BLOCK_BRAM
 `define USE_FAST_BRAM
 `define NO_RW_RAM_CHECK
