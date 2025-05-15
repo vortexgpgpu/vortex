@@ -25,34 +25,33 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     VX_execute_if.slave     execute_if,
 
     // Outputs
-    VX_commit_if.master     commit_if,
+    VX_result_if.master     result_if,
     VX_lsu_mem_if.master    lsu_mem_if
 );
     localparam NUM_LANES    = `NUM_LSU_LANES;
     localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
-    localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
+    localparam RSP_ARB_DATAW= UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + 1 + NUM_REGS_BITS + NUM_LANES * `XLEN + PID_WIDTH +  1 + 1;
     localparam LSUQ_SIZEW   = `LOG2UP(`LSUQ_IN_SIZE);
     localparam REQ_ASHIFT   = `CLOG2(LSU_WORD_SIZE);
     localparam MEM_ASHIFT   = `CLOG2(`MEM_BLOCK_SIZE);
     localparam MEM_ADDRW    = `MEM_ADDR_WIDTH - MEM_ASHIFT;
 
     // tag_id = wid + PC + wb + rd + op_type + align + pid + pkt_addr + fence
-    localparam TAG_ID_WIDTH = `NW_WIDTH + `PC_BITS + 1 + `NR_BITS + `INST_LSU_BITS + (NUM_LANES * REQ_ASHIFT) + PID_WIDTH + LSUQ_SIZEW + 1;
+    localparam TAG_ID_WIDTH = NW_WIDTH + PC_BITS + 1 + NUM_REGS_BITS + INST_LSU_BITS + (NUM_LANES * REQ_ASHIFT) + PID_WIDTH + LSUQ_SIZEW + 1;
 
     // tag = uuid + tag_id
-    localparam TAG_WIDTH = `UUID_WIDTH + TAG_ID_WIDTH;
+    localparam TAG_WIDTH = UUID_WIDTH + TAG_ID_WIDTH;
 
-    VX_commit_if #(
+    VX_result_if #(
         .NUM_LANES (NUM_LANES)
-    ) commit_rsp_if();
+    ) result_rsp_if();
 
-    VX_commit_if #(
+    VX_result_if #(
         .NUM_LANES (NUM_LANES)
-    ) commit_no_rsp_if();
+    ) result_no_rsp_if();
 
     `UNUSED_VAR (execute_if.data.rs3_data)
-    `UNUSED_VAR (execute_if.data.tid)
 
     // full address calculation
 
@@ -65,19 +64,19 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     // address type calculation
 
-    wire [NUM_LANES-1:0][`MEM_REQ_FLAGS_WIDTH-1:0] mem_req_flags;
+    wire [NUM_LANES-1:0][MEM_FLAGS_WIDTH-1:0] mem_req_flags;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_req_flags
         wire [MEM_ADDRW-1:0] block_addr = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
         // is I/O address
         wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`XLEN'(`IO_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(`XLEN'(`IO_END_ADDR) >> MEM_ASHIFT);
-        assign mem_req_flags[i][`MEM_REQ_FLAG_FLUSH] = req_is_fence;
-        assign mem_req_flags[i][`MEM_REQ_FLAG_IO] = (block_addr >= io_addr_start) && (block_addr < io_addr_end);
+        assign mem_req_flags[i][MEM_REQ_FLAG_FLUSH] = req_is_fence;
+        assign mem_req_flags[i][MEM_REQ_FLAG_IO] = (block_addr >= io_addr_start) && (block_addr < io_addr_end);
     `ifdef LMEM_ENABLE
         // is local memory address
         wire [MEM_ADDRW-1:0] lmem_addr_start = MEM_ADDRW'(`XLEN'(`LMEM_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] lmem_addr_end = MEM_ADDRW'((`XLEN'(`LMEM_BASE_ADDR) + `XLEN'(1 << `LMEM_LOG_SIZE)) >> MEM_ASHIFT);
-        assign mem_req_flags[i][`MEM_REQ_FLAG_LOCAL] = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);
+        assign mem_req_flags[i][MEM_REQ_FLAG_LOCAL] = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);
     `endif
     end
 
@@ -106,11 +105,13 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire mem_rsp_sop_pkt, mem_rsp_eop_pkt;
     wire no_rsp_buf_valid, no_rsp_buf_ready;
 
+    wire [LSUQ_SIZEW-1:0] pkt_waddr, pkt_raddr;
+
     // fence handling
 
     reg fence_lock;
 
-    assign req_is_fence = `INST_LSU_IS_FENCE(execute_if.data.op_type);
+    assign req_is_fence = inst_lsu_is_fence(execute_if.data.op_type);
 
     always @(posedge clk) begin
         if (reset) begin
@@ -159,7 +160,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         reg [LSU_WORD_SIZE-1:0] mem_req_byteen_w;
         always @(*) begin
             mem_req_byteen_w = '0;
-            case (`INST_LSU_WSIZE(execute_if.data.op_type))
+            case (inst_lsu_wsize(execute_if.data.op_type))
                 0: begin // 8-bit
                     mem_req_byteen_w[req_align[i]] = 1'b1;
                 end
@@ -185,9 +186,9 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // memory misalignment not supported!
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_missalign
         wire lsu_req_fire = execute_if.valid && execute_if.ready;
-        `RUNTIME_ASSERT((~lsu_req_fire || ~execute_if.data.tmask[i] || req_is_fence || (full_addr[i] % (1 << `INST_LSU_WSIZE(execute_if.data.op_type))) == 0),
+        `RUNTIME_ASSERT((~lsu_req_fire || ~execute_if.data.tmask[i] || req_is_fence || (full_addr[i] % (1 << inst_lsu_wsize(execute_if.data.op_type))) == 0),
             ("%t: misaligned memory access, wid=%0d, PC=0x%0h, addr=0x%0h, wsize=%0d! (#%0d)",
-                $time, execute_if.data.wid, {execute_if.data.PC, 1'b0}, full_addr[i], `INST_LSU_WSIZE(execute_if.data.op_type), execute_if.data.uuid))
+                $time, execute_if.data.wid, {execute_if.data.PC, 1'b0}, full_addr[i], inst_lsu_wsize(execute_if.data.op_type), execute_if.data.uuid))
     end
 
     // store data formatting
@@ -209,11 +210,10 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         end
     end
 
-    // track SOP/EOP for out-of-order memory responses
+    // multi-packet load responses could return out-of-order.
+    // we should track and flag SOP and EOP responses.
 
-    wire [LSUQ_SIZEW-1:0] pkt_waddr, pkt_raddr;
-
-    if (PID_BITS != 0) begin : g_pids
+    if (PID_BITS != 0) begin : g_pid
         reg [`LSUQ_IN_SIZE-1:0][PID_BITS:0] pkt_ctr;
         reg [`LSUQ_IN_SIZE-1:0] pkt_sop, pkt_eop;
 
@@ -221,6 +221,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         wire mem_req_rd_sop_fire = mem_req_rd_fire && execute_if.data.sop;
         wire mem_req_rd_eop_fire = mem_req_rd_fire && execute_if.data.eop;
         wire mem_rsp_eop_fire    = mem_rsp_fire && mem_rsp_eop;
+        wire mem_rsp_eop_pkt_fire= mem_rsp_fire && mem_rsp_eop_pkt;
         wire full;
 
         VX_allocator #(
@@ -230,13 +231,13 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
             .reset      (reset),
             .acquire_en (mem_req_rd_eop_fire),
             .acquire_addr(pkt_waddr),
-            .release_en (mem_rsp_eop_pkt),
+            .release_en (mem_rsp_eop_pkt_fire),
             .release_addr(pkt_raddr),
             `UNUSED_PIN (empty),
             .full       (full)
         );
 
-        wire rd_during_wr = mem_req_rd_fire && mem_rsp_eop_fire && (pkt_raddr == pkt_waddr);
+        wire rw_collision = mem_req_rd_fire && mem_rsp_eop_fire && (pkt_raddr == pkt_waddr);
 
         always @(posedge clk) begin
             if (reset) begin
@@ -253,10 +254,10 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                 if (mem_rsp_fire) begin
                     pkt_sop[pkt_raddr] <= 0;
                 end
-                if (mem_rsp_eop_pkt) begin
+                if (mem_rsp_eop_pkt_fire) begin
                     pkt_eop[pkt_raddr] <= 0;
                 end
-                if (~rd_during_wr) begin
+                if (~rw_collision) begin
                     if (mem_req_rd_fire) begin
                         pkt_ctr[pkt_waddr] <= pkt_ctr[pkt_waddr] + PID_BITS'(1);
                     end
@@ -268,11 +269,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         end
 
         assign mem_rsp_sop_pkt = pkt_sop[pkt_raddr];
-        assign mem_rsp_eop_pkt = mem_rsp_eop_fire && pkt_eop[pkt_raddr] && (pkt_ctr[pkt_raddr] == 1);
+        assign mem_rsp_eop_pkt = mem_rsp_eop && pkt_eop[pkt_raddr] && (pkt_ctr[pkt_raddr] == 1);
         `RUNTIME_ASSERT(~(mem_req_rd_fire && full), ("%t: allocator full!", $time))
-        `RUNTIME_ASSERT(~mem_req_rd_sop_fire || 0 == pkt_ctr[pkt_waddr], ("%t: oops! broken sop request!", $time))
+        `RUNTIME_ASSERT(~(mem_req_rd_sop_fire && pkt_ctr[pkt_waddr] != 0), ("%t: oops! broken sop request!", $time))
         `UNUSED_VAR (mem_rsp_sop)
-    end else begin : g_no_pids
+    end else begin : g_no_pid
         assign pkt_waddr = 0;
         assign mem_rsp_sop_pkt = mem_rsp_sop;
         assign mem_rsp_eop_pkt = mem_rsp_eop;
@@ -298,7 +299,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0]                    lsu_mem_req_mask;
     wire [NUM_LANES-1:0][LSU_WORD_SIZE-1:0] lsu_mem_req_byteen;
     wire [NUM_LANES-1:0][LSU_ADDR_WIDTH-1:0] lsu_mem_req_addr;
-    wire [NUM_LANES-1:0][`MEM_REQ_FLAGS_WIDTH-1:0] lsu_mem_req_flags;
+    wire [NUM_LANES-1:0][MEM_FLAGS_WIDTH-1:0] lsu_mem_req_flags;
     wire [NUM_LANES-1:0][(LSU_WORD_SIZE*8)-1:0] lsu_mem_req_data;
     wire [LSU_TAG_WIDTH-1:0]                lsu_mem_req_tag;
     wire                                    lsu_mem_req_ready;
@@ -316,11 +317,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .WORD_SIZE   (LSU_WORD_SIZE),
         .LINE_SIZE   (LSU_WORD_SIZE),
         .ADDR_WIDTH  (LSU_ADDR_WIDTH),
-        .FLAGS_WIDTH (`MEM_REQ_FLAGS_WIDTH),
+        .FLAGS_WIDTH (MEM_FLAGS_WIDTH),
         .TAG_WIDTH   (TAG_WIDTH),
         .CORE_QUEUE_SIZE (`LSUQ_IN_SIZE),
         .MEM_QUEUE_SIZE (`LSUQ_OUT_SIZE),
-        .UUID_WIDTH  (`UUID_WIDTH),
+        .UUID_WIDTH  (UUID_WIDTH),
         .RSP_PARTIAL (1),
         .MEM_OUT_BUF (0),
         .CORE_OUT_BUF(0)
@@ -338,8 +339,10 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .core_req_data  (mem_req_data),
         .core_req_tag   (mem_req_tag),
         .core_req_ready (mem_req_ready),
-        `UNUSED_PIN (core_req_empty),
-        `UNUSED_PIN (core_req_wr_notify),
+
+        // request queue info
+        `UNUSED_PIN (req_queue_empty),
+        `UNUSED_PIN (req_queue_rw_notify),
 
         // Output response
         .core_rsp_valid (mem_rsp_valid),
@@ -385,12 +388,12 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     assign lsu_mem_rsp_tag = lsu_mem_if.rsp_data.tag;
     assign lsu_mem_if.rsp_ready = lsu_mem_rsp_ready;
 
-    wire [`UUID_WIDTH-1:0] rsp_uuid;
-    wire [`NW_WIDTH-1:0] rsp_wid;
-    wire [`PC_BITS-1:0] rsp_pc;
+    wire [UUID_WIDTH-1:0] rsp_uuid;
+    wire [NW_WIDTH-1:0] rsp_wid;
+    wire [PC_BITS-1:0] rsp_pc;
     wire rsp_wb;
-    wire [`NR_BITS-1:0] rsp_rd;
-    wire [`INST_LSU_BITS-1:0] rsp_op_type;
+    wire [NUM_REGS_BITS-1:0] rsp_rd;
+    wire [INST_LSU_BITS-1:0] rsp_op_type;
     wire [NUM_LANES-1:0][REQ_ASHIFT-1:0] rsp_align;
     wire [PID_WIDTH-1:0] rsp_pid;
     `UNUSED_VAR (rsp_op_type)
@@ -433,71 +436,71 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         wire [7:0]  rsp_data8  = rsp_align[i][0] ? rsp_data16[15:8] : rsp_data16[7:0];
 
         always @(*) begin
-            case (`INST_LSU_FMT(rsp_op_type))
-            `INST_FMT_B:  rsp_data[i] = `XLEN'(signed'(rsp_data8));
-            `INST_FMT_H:  rsp_data[i] = `XLEN'(signed'(rsp_data16));
-            `INST_FMT_BU: rsp_data[i] = `XLEN'(unsigned'(rsp_data8));
-            `INST_FMT_HU: rsp_data[i] = `XLEN'(unsigned'(rsp_data16));
+            case (inst_lsu_fmt(rsp_op_type))
+            LSU_FMT_B:  rsp_data[i] = `XLEN'(signed'(rsp_data8));
+            LSU_FMT_H:  rsp_data[i] = `XLEN'(signed'(rsp_data16));
+            LSU_FMT_BU: rsp_data[i] = `XLEN'(unsigned'(rsp_data8));
+            LSU_FMT_HU: rsp_data[i] = `XLEN'(unsigned'(rsp_data16));
         `ifdef XLEN_64
-            `INST_FMT_W:  rsp_data[i] = rsp_is_float ? (`XLEN'(rsp_data32) | 64'hffffffff00000000) : `XLEN'(signed'(rsp_data32));
-            `INST_FMT_WU: rsp_data[i] = `XLEN'(unsigned'(rsp_data32));
-            `INST_FMT_D:  rsp_data[i] = `XLEN'(signed'(rsp_data64));
+            LSU_FMT_W:  rsp_data[i] = rsp_is_float ? (`XLEN'(rsp_data32) | 64'hffffffff00000000) : `XLEN'(signed'(rsp_data32));
+            LSU_FMT_WU: rsp_data[i] = `XLEN'(unsigned'(rsp_data32));
+            LSU_FMT_D:  rsp_data[i] = `XLEN'(signed'(rsp_data64));
         `else
-            `INST_FMT_W:  rsp_data[i] = `XLEN'(signed'(rsp_data32));
+            LSU_FMT_W:  rsp_data[i] = `XLEN'(signed'(rsp_data32));
         `endif
             default: rsp_data[i] = 'x;
             endcase
         end
     end
 
-    // commit
+    // result
 
     VX_elastic_buffer #(
-        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + 1 + `NR_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1),
+        .DATAW (UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + 1 + NUM_REGS_BITS + (NUM_LANES * `XLEN) + PID_WIDTH + 1 + 1),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (mem_rsp_valid),
         .ready_in  (mem_rsp_ready),
-        .data_in   ({rsp_uuid, rsp_wid, mem_rsp_mask, rsp_pc, rsp_wb, rsp_rd, rsp_data, rsp_pid, mem_rsp_sop_pkt, mem_rsp_eop_pkt}),
-        .data_out  ({commit_rsp_if.data.uuid, commit_rsp_if.data.wid, commit_rsp_if.data.tmask, commit_rsp_if.data.PC, commit_rsp_if.data.wb, commit_rsp_if.data.rd, commit_rsp_if.data.data, commit_rsp_if.data.pid, commit_rsp_if.data.sop, commit_rsp_if.data.eop}),
-        .valid_out (commit_rsp_if.valid),
-        .ready_out (commit_rsp_if.ready)
+        .data_in   ({rsp_uuid,                rsp_wid,                mem_rsp_mask,             rsp_pc,                rsp_wb,                rsp_rd,                rsp_data,                rsp_pid,                mem_rsp_sop_pkt,        mem_rsp_eop_pkt}),
+        .data_out  ({result_rsp_if.data.uuid, result_rsp_if.data.wid, result_rsp_if.data.tmask, result_rsp_if.data.PC, result_rsp_if.data.wb, result_rsp_if.data.rd, result_rsp_if.data.data, result_rsp_if.data.pid, result_rsp_if.data.sop, result_rsp_if.data.eop}),
+        .valid_out (result_rsp_if.valid),
+        .ready_out (result_rsp_if.ready)
     );
 
     VX_elastic_buffer #(
-        .DATAW (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + PID_WIDTH + 1 + 1),
+        .DATAW (UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + PID_WIDTH + 1 + 1),
         .SIZE  (2)
     ) no_rsp_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (no_rsp_buf_valid),
         .ready_in  (no_rsp_buf_ready),
-        .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop}),
-        .data_out  ({commit_no_rsp_if.data.uuid, commit_no_rsp_if.data.wid, commit_no_rsp_if.data.tmask, commit_no_rsp_if.data.PC, commit_no_rsp_if.data.pid, commit_no_rsp_if.data.sop, commit_no_rsp_if.data.eop}),
-        .valid_out (commit_no_rsp_if.valid),
-        .ready_out (commit_no_rsp_if.ready)
+        .data_in   ({execute_if.data.uuid,       execute_if.data.wid,       execute_if.data.tmask,       execute_if.data.PC,       execute_if.data.pid,       execute_if.data.sop,       execute_if.data.eop}),
+        .data_out  ({result_no_rsp_if.data.uuid, result_no_rsp_if.data.wid, result_no_rsp_if.data.tmask, result_no_rsp_if.data.PC, result_no_rsp_if.data.pid, result_no_rsp_if.data.sop, result_no_rsp_if.data.eop}),
+        .valid_out (result_no_rsp_if.valid),
+        .ready_out (result_no_rsp_if.ready)
     );
 
-    assign commit_no_rsp_if.data.rd   = '0;
-    assign commit_no_rsp_if.data.wb   = 1'b0;
-    assign commit_no_rsp_if.data.data = commit_rsp_if.data.data; // arbiter MUX optimization
+    assign result_no_rsp_if.data.rd   = '0;
+    assign result_no_rsp_if.data.wb   = 1'b0;
+    assign result_no_rsp_if.data.data = result_rsp_if.data.data; // arbiter MUX optimization
 
     VX_stream_arb #(
         .NUM_INPUTS (2),
         .DATAW      (RSP_ARB_DATAW),
-        .ARBITER    ("P"), // prioritize commit_rsp_if
+        .ARBITER    ("P"), // prioritize result_rsp_if
         .OUT_BUF    (3)
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  ({commit_no_rsp_if.valid, commit_rsp_if.valid}),
-        .ready_in  ({commit_no_rsp_if.ready, commit_rsp_if.ready}),
-        .data_in   ({commit_no_rsp_if.data, commit_rsp_if.data}),
-        .data_out  (commit_if.data),
-        .valid_out (commit_if.valid),
-        .ready_out (commit_if.ready),
+        .valid_in  ({result_no_rsp_if.valid, result_rsp_if.valid}),
+        .ready_in  ({result_no_rsp_if.ready, result_rsp_if.ready}),
+        .data_in   ({result_no_rsp_if.data, result_rsp_if.data}),
+        .data_out  (result_if.data),
+        .valid_out (result_if.valid),
+        .ready_out (result_if.ready),
         `UNUSED_PIN (sel_out)
     );
 
@@ -514,18 +517,18 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                 `TRACE_ARRAY1D(2, "%b", mem_req_flags, NUM_LANES)
                 `TRACE(2, (", byteen=0x%0h, data=", mem_req_byteen))
                 `TRACE_ARRAY1D(2, "0x%0h", mem_req_data, NUM_LANES)
-                `TRACE(2, (", sop=%b, eop=%b, tag=0x%0h (#%0d)\n", execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
+                `TRACE(2, (", sop=%b, pid=%0d, eop=%b, tag=0x%0h (#%0d)\n", execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
             end else begin
                 `TRACE(2, ("%t: %s Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask))
                 `TRACE_ARRAY1D(2, "0x%h", full_addr, NUM_LANES)
                 `TRACE(2, (", flags="))
                 `TRACE_ARRAY1D(2, "%b", mem_req_flags, NUM_LANES)
-                `TRACE(2, (", byteen=0x%0h, rd=%0d, sop=%b, eop=%b, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if.data.rd, execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
+                `TRACE(2, (", byteen=0x%0h, rd=%0d, pid=%0d, sop=%b, eop=%b, tag=0x%0h (#%0d)\n", mem_req_byteen, execute_if.data.rd, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
             end
         end
         if (mem_rsp_fire) begin
-            `TRACE(2, ("%t: %s Rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, sop=%b, eop=%b, data=",
-                $time, INSTANCE_ID, rsp_wid, {rsp_pc, 1'b0}, mem_rsp_mask, rsp_rd, mem_rsp_sop, mem_rsp_eop))
+            `TRACE(2, ("%t: %s Rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, pid=%0d, sop=%b, eop=%b, data=",
+                $time, INSTANCE_ID, rsp_wid, {rsp_pc, 1'b0}, mem_rsp_mask, rsp_rd, rsp_pid, mem_rsp_sop_pkt, mem_rsp_eop_pkt))
             `TRACE_ARRAY1D(2, "0x%0h", mem_rsp_data, NUM_LANES)
             `TRACE(2, (", tag=0x%0h (#%0d)\n", mem_rsp_tag, rsp_uuid))
         end
@@ -538,7 +541,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 3, 4, 2, (
-            1 + NUM_LANES * (`XLEN + LSU_WORD_SIZE + LSU_WORD_SIZE * 8) + `UUID_WIDTH + NUM_LANES * LSU_WORD_SIZE * 8 + `UUID_WIDTH
+            1 + NUM_LANES * (`XLEN + LSU_WORD_SIZE + LSU_WORD_SIZE * 8) + UUID_WIDTH + NUM_LANES * LSU_WORD_SIZE * 8 + UUID_WIDTH
         ), {
             mem_req_valid,
             mem_req_ready,

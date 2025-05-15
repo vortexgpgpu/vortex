@@ -22,63 +22,65 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
     input  wire         reset,
 
     // inputs
-    VX_commit_if.slave  commit_in_if [BLOCK_SIZE],
+    VX_result_if.slave  result_if [BLOCK_SIZE],
 
     // outputs
-    VX_commit_if.master commit_out_if [`ISSUE_WIDTH]
-
+    VX_commit_if.master commit_if [`ISSUE_WIDTH]
 );
     `STATIC_ASSERT (`IS_DIVISBLE(`ISSUE_WIDTH, BLOCK_SIZE), ("invalid parameter"))
-    `STATIC_ASSERT (`IS_DIVISBLE(`NUM_THREADS, NUM_LANES), ("invalid parameter"))
+    `STATIC_ASSERT (`IS_DIVISBLE(`SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
     localparam BLOCK_SIZE_W = `LOG2UP(BLOCK_SIZE);
-    localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
-    localparam PID_WIDTH    = `UP(PID_BITS);
-    localparam DATAW        = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + 1 + `NR_BITS + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
-    localparam DATA_WIS_OFF = DATAW - (`UUID_WIDTH + `NW_WIDTH);
+    localparam NUM_PACKETS  = `SIMD_WIDTH / NUM_LANES;
+    localparam LPID_BITS    = `CLOG2(NUM_PACKETS);
+    localparam LPID_WIDTH   = `UP(LPID_BITS);
+    localparam GPID_BITS    = `CLOG2(`NUM_THREADS / NUM_LANES);
+    localparam GPID_WIDTH   = `UP(GPID_BITS);
+    localparam DATAW        = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + 1 + NUM_REGS_BITS + NUM_LANES * `XLEN + GPID_WIDTH + 1 + 1;
+    localparam DATA_WIS_OFF = DATAW - (UUID_WIDTH + NW_WIDTH);
 
-    wire [BLOCK_SIZE-1:0] commit_in_valid;
-    wire [BLOCK_SIZE-1:0][DATAW-1:0] commit_in_data;
-    wire [BLOCK_SIZE-1:0] commit_in_ready;
-    wire [BLOCK_SIZE-1:0][ISSUE_ISW_W-1:0] commit_in_isw;
+    wire [BLOCK_SIZE-1:0] result_in_valid;
+    wire [BLOCK_SIZE-1:0][DATAW-1:0] result_in_data;
+    wire [BLOCK_SIZE-1:0] result_in_ready;
+    wire [BLOCK_SIZE-1:0][ISSUE_ISW_W-1:0] result_in_isw;
 
     for (genvar i = 0; i < BLOCK_SIZE; ++i) begin : g_commit_in
-        assign commit_in_valid[i] = commit_in_if[i].valid;
-        assign commit_in_data[i] = commit_in_if[i].data;
-        assign commit_in_if[i].ready = commit_in_ready[i];
-        if (BLOCK_SIZE != `ISSUE_WIDTH) begin : g_commit_in_isw_partial
+        assign result_in_valid[i] = result_if[i].valid;
+        assign result_in_data[i]  = result_if[i].data;
+        assign result_if[i].ready = result_in_ready[i];
+        if (BLOCK_SIZE != `ISSUE_WIDTH) begin : g_result_in_isw_partial
             if (BLOCK_SIZE != 1) begin : g_block
-                assign commit_in_isw[i] = {commit_in_data[i][DATA_WIS_OFF+BLOCK_SIZE_W +: (ISSUE_ISW_W-BLOCK_SIZE_W)], BLOCK_SIZE_W'(i)};
+                assign result_in_isw[i] = {result_in_data[i][DATA_WIS_OFF+BLOCK_SIZE_W +: (ISSUE_ISW_W-BLOCK_SIZE_W)], BLOCK_SIZE_W'(i)};
             end else begin : g_no_block
-                assign commit_in_isw[i] = commit_in_data[i][DATA_WIS_OFF +: ISSUE_ISW_W];
+                assign result_in_isw[i] = result_in_data[i][DATA_WIS_OFF +: ISSUE_ISW_W];
             end
-        end else begin : g_commit_in_isw_full
-            assign commit_in_isw[i] = BLOCK_SIZE_W'(i);
+        end else begin : g_result_in_isw_full
+            assign result_in_isw[i] = BLOCK_SIZE_W'(i);
         end
     end
 
-    reg [`ISSUE_WIDTH-1:0] commit_out_valid;
-    reg [`ISSUE_WIDTH-1:0][DATAW-1:0] commit_out_data;
-    wire [`ISSUE_WIDTH-1:0] commit_out_ready;
+    reg [`ISSUE_WIDTH-1:0] result_out_valid;
+    reg [`ISSUE_WIDTH-1:0][DATAW-1:0] result_out_data;
+    wire [`ISSUE_WIDTH-1:0] result_out_ready;
 
     always @(*) begin
-        commit_out_valid = '0;
+        result_out_valid = '0;
         for (integer i = 0; i < `ISSUE_WIDTH; ++i) begin
-            commit_out_data[i] = 'x;
+            result_out_data[i] = 'x;
         end
         for (integer i = 0; i < BLOCK_SIZE; ++i) begin
-            commit_out_valid[commit_in_isw[i]] = commit_in_valid[i];
-            commit_out_data[commit_in_isw[i]] = commit_in_data[i];
+            result_out_valid[result_in_isw[i]] = result_in_valid[i];
+            result_out_data[result_in_isw[i]] = result_in_data[i];
         end
     end
 
-    for (genvar i = 0; i < BLOCK_SIZE; ++i) begin : g_commit_in_ready
-        assign commit_in_ready[i] = commit_out_ready[commit_in_isw[i]];
+    for (genvar i = 0; i < BLOCK_SIZE; ++i) begin : g_result_in_ready
+        assign result_in_ready[i] = result_out_ready[result_in_isw[i]];
     end
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin: g_out_bufs
-        VX_commit_if #(
+        VX_result_if #(
             .NUM_LANES (NUM_LANES)
-        ) commit_tmp_if();
+        ) result_tmp_if();
 
         VX_elastic_buffer #(
             .DATAW   (DATAW),
@@ -87,44 +89,54 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
         ) out_buf (
             .clk        (clk),
             .reset      (reset),
-            .valid_in   (commit_out_valid[i]),
-            .ready_in   (commit_out_ready[i]),
-            .data_in    (commit_out_data[i]),
-            .data_out   (commit_tmp_if.data),
-            .valid_out  (commit_tmp_if.valid),
-            .ready_out  (commit_tmp_if.ready)
+            .valid_in   (result_out_valid[i]),
+            .ready_in   (result_out_ready[i]),
+            .data_in    (result_out_data[i]),
+            .data_out   (result_tmp_if.data),
+            .valid_out  (result_tmp_if.valid),
+            .ready_out  (result_tmp_if.ready)
         );
 
-        logic [`NUM_THREADS-1:0] commit_tmask_w;
-        logic [`NUM_THREADS-1:0][`XLEN-1:0] commit_data_w;
-        if (PID_BITS != 0) begin : g_commit_data_with_pid
+        logic [SIMD_IDX_W-1:0] commit_sid_w;
+        logic [`SIMD_WIDTH-1:0] commit_tmask_w;
+        logic [`SIMD_WIDTH-1:0][`XLEN-1:0] commit_data_w;
+
+        if (LPID_BITS != 0) begin : g_lpid
+            logic [LPID_WIDTH-1:0] lpid;
+            if (SIMD_COUNT != 1) begin : g_simd
+                assign {commit_sid_w, lpid} = result_tmp_if.data.pid;
+            end else begin : g_no_simd
+                assign commit_sid_w = 0;
+                assign lpid = result_tmp_if.data.pid;
+            end
             always @(*) begin
                 commit_tmask_w = '0;
                 commit_data_w  = 'x;
                 for (integer j = 0; j < NUM_LANES; ++j) begin
-                    commit_tmask_w[commit_tmp_if.data.pid * NUM_LANES + j] = commit_tmp_if.data.tmask[j];
-                    commit_data_w[commit_tmp_if.data.pid * NUM_LANES + j] = commit_tmp_if.data.data[j];
+                    commit_tmask_w[lpid * NUM_LANES + j] = result_tmp_if.data.tmask[j];
+                    commit_data_w[lpid * NUM_LANES + j] = result_tmp_if.data.data[j];
                 end
             end
-        end else begin : g_commit_data_no_pid
-            assign commit_tmask_w = commit_tmp_if.data.tmask;
-            assign commit_data_w = commit_tmp_if.data.data;
+        end else begin : g_no_lpid
+            assign commit_sid_w   = result_tmp_if.data.pid;
+            assign commit_tmask_w = result_tmp_if.data.tmask;
+            assign commit_data_w  = result_tmp_if.data.data;
         end
 
-        assign commit_out_if[i].valid = commit_tmp_if.valid;
-        assign commit_out_if[i].data = {
-            commit_tmp_if.data.uuid,
-            commit_tmp_if.data.wid,
+        assign commit_if[i].valid = result_tmp_if.valid;
+        assign commit_if[i].data = {
+            result_tmp_if.data.uuid,
+            result_tmp_if.data.wid,
+            commit_sid_w,
             commit_tmask_w,
-            commit_tmp_if.data.PC,
-            commit_tmp_if.data.wb,
-            commit_tmp_if.data.rd,
+            result_tmp_if.data.PC,
+            result_tmp_if.data.wb,
+            result_tmp_if.data.rd,
             commit_data_w,
-            1'b0, // PID
-            commit_tmp_if.data.sop,
-            commit_tmp_if.data.eop
+            result_tmp_if.data.sop,
+            result_tmp_if.data.eop
         };
-        assign commit_tmp_if.ready = commit_out_if[i].ready;
+        assign result_tmp_if.ready = commit_if[i].ready;
     end
 
 endmodule

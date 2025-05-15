@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_alu_muldiv #(
+module VX_alu_muldiv import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = 1
 ) (
@@ -24,19 +24,19 @@ module VX_alu_muldiv #(
     VX_execute_if.slave execute_if,
 
     // Outputs
-    VX_commit_if.master commit_if
+    VX_result_if.master result_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam PID_BITS  = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH = `UP(PID_BITS);
-    localparam TAG_WIDTH = `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `PC_BITS + `NR_BITS + 1 + PID_WIDTH + 1 + 1;
+    localparam TAG_WIDTH = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NUM_REGS_BITS + 1 + PID_WIDTH + 1 + 1;
 
     `UNUSED_VAR (execute_if.data.rs3_data)
 
-    wire [`INST_M_BITS-1:0] muldiv_op = `INST_M_BITS'(execute_if.data.op_type);
+    wire [INST_M_BITS-1:0] muldiv_op = INST_M_BITS'(execute_if.data.op_type);
 
-    wire is_mulx_op = `INST_M_IS_MULX(muldiv_op);
-    wire is_signed_op = `INST_M_SIGNED(muldiv_op);
+    wire is_mulx_op = inst_m_is_mulx(muldiv_op);
+    wire is_signed_op = inst_m_signed(muldiv_op);
 `ifdef XLEN_64
     wire is_alu_w = execute_if.data.op_args.alu.is_w;
 `else
@@ -44,11 +44,11 @@ module VX_alu_muldiv #(
 `endif
 
     wire [NUM_LANES-1:0][`XLEN-1:0] mul_result_out;
-    wire [`UUID_WIDTH-1:0] mul_uuid_out;
-    wire [`NW_WIDTH-1:0] mul_wid_out;
+    wire [UUID_WIDTH-1:0] mul_uuid_out;
+    wire [NW_WIDTH-1:0] mul_wid_out;
     wire [NUM_LANES-1:0] mul_tmask_out;
-    wire [`PC_BITS-1:0] mul_PC_out;
-    wire [`NR_BITS-1:0] mul_rd_out;
+    wire [PC_BITS-1:0] mul_PC_out;
+    wire [NUM_REGS_BITS-1:0] mul_rd_out;
     wire mul_wb_out;
     wire [PID_WIDTH-1:0] mul_pid_out;
     wire mul_sop_out, mul_eop_out;
@@ -58,8 +58,8 @@ module VX_alu_muldiv #(
     wire mul_valid_out;
     wire mul_ready_out;
 
-    wire is_mulh_in      = `INST_M_IS_MULH(muldiv_op);
-    wire is_signed_mul_a = `INST_M_SIGNED_A(muldiv_op);
+    wire is_mulh_in      = inst_m_is_mulh(muldiv_op);
+    wire is_signed_mul_a = inst_m_signed_a(muldiv_op);
     wire is_signed_mul_b = is_signed_op;
 
 `ifdef IMUL_DPI
@@ -86,8 +86,8 @@ module VX_alu_muldiv #(
         .clk      (clk),
         .reset    (reset),
         .enable   (mul_ready_in),
-        .data_in  ({mul_valid_in, execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, mul_result_tmp}),
-        .data_out ({mul_valid_out, mul_uuid_out, mul_wid_out, mul_tmask_out, mul_PC_out, mul_rd_out, mul_wb_out, mul_pid_out, mul_sop_out, mul_eop_out, mul_result_out})
+        .data_in  ({mul_valid_in,  execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, mul_result_tmp}),
+        .data_out ({mul_valid_out, mul_uuid_out,         mul_wid_out,         mul_tmask_out,         mul_PC_out,         mul_rd_out,         mul_wb_out,         mul_pid_out,         mul_sop_out,         mul_eop_out,         mul_result_out})
     );
 
     assign mul_ready_in = mul_ready_out || ~mul_valid_out;
@@ -176,8 +176,8 @@ module VX_alu_muldiv #(
         .clk(clk),
         .reset    (reset),
         .enable   (mul_ready_in),
-        .data_in  ({mul_valid_in, execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, is_mulh_in, is_alu_w}),
-        .data_out ({mul_valid_out, mul_uuid_out, mul_wid_out, mul_tmask_out, mul_PC_out, mul_rd_out, mul_wb_out, mul_pid_out, mul_sop_out, mul_eop_out, is_mulh_out, is_mul_w_out})
+        .data_in  ({mul_valid_in,  execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, is_mulh_in,  is_alu_w}),
+        .data_out ({mul_valid_out, mul_uuid_out,         mul_wid_out,         mul_tmask_out,         mul_PC_out,         mul_rd_out,         mul_wb_out,         mul_pid_out,         mul_sop_out,         mul_eop_out,         is_mulh_out, is_mul_w_out})
     );
 
     assign mul_ready_in = mul_ready_out || ~mul_valid_out;
@@ -200,16 +200,16 @@ module VX_alu_muldiv #(
     ///////////////////////////////////////////////////////////////////////////
 
     wire [NUM_LANES-1:0][`XLEN-1:0] div_result_out;
-    wire [`UUID_WIDTH-1:0] div_uuid_out;
-    wire [`NW_WIDTH-1:0] div_wid_out;
+    wire [UUID_WIDTH-1:0] div_uuid_out;
+    wire [NW_WIDTH-1:0] div_wid_out;
     wire [NUM_LANES-1:0] div_tmask_out;
-    wire [`PC_BITS-1:0] div_PC_out;
-    wire [`NR_BITS-1:0] div_rd_out;
+    wire [PC_BITS-1:0] div_PC_out;
+    wire [NUM_REGS_BITS-1:0] div_rd_out;
     wire div_wb_out;
     wire [PID_WIDTH-1:0] div_pid_out;
     wire div_sop_out, div_eop_out;
 
-    wire is_rem_op = `INST_M_IS_REM(muldiv_op);
+    wire is_rem_op = inst_m_is_rem(muldiv_op);
 
     wire div_valid_in = execute_if.valid && ~is_mulx_op;
     wire div_ready_in;
@@ -251,8 +251,8 @@ module VX_alu_muldiv #(
         .clk(clk),
         .reset    (reset),
         .enable   (div_ready_in),
-        .data_in  ({div_valid_in, execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, div_result_in}),
-        .data_out ({div_valid_out, div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, div_pid_out, div_sop_out, div_eop_out, div_result_out})
+        .data_in  ({div_valid_in,  execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, div_result_in}),
+        .data_out ({div_valid_out, div_uuid_out,         div_wid_out,         div_tmask_out,         div_PC_out,         div_rd_out,         div_wb_out,         div_pid_out,         div_sop_out,         div_eop_out,         div_result_out})
     );
 
     assign div_ready_in = div_ready_out || ~div_valid_out;
@@ -333,9 +333,9 @@ module VX_alu_muldiv #(
         .ready_in  ({div_ready_out, mul_ready_out}),
         .data_in   ({{div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, div_pid_out, div_sop_out, div_eop_out, div_result_out},
                      {mul_uuid_out, mul_wid_out, mul_tmask_out, mul_PC_out, mul_rd_out, mul_wb_out, mul_pid_out, mul_sop_out, mul_eop_out, mul_result_out}}),
-        .data_out  ({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.PC, commit_if.data.rd, commit_if.data.wb, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop, commit_if.data.data}),
-        .valid_out (commit_if.valid),
-        .ready_out (commit_if.ready),
+        .data_out  ({result_if.data.uuid, result_if.data.wid, result_if.data.tmask, result_if.data.PC, result_if.data.rd, result_if.data.wb, result_if.data.pid, result_if.data.sop, result_if.data.eop, result_if.data.data}),
+        .valid_out (result_if.valid),
+        .ready_out (result_if.ready),
         `UNUSED_PIN (sel_out)
     );
 

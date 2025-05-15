@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_alu_unit #(
+module VX_alu_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
@@ -30,7 +30,7 @@ module VX_alu_unit #(
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = `NUM_ALU_BLOCKS;
     localparam NUM_LANES    = `NUM_ALU_LANES;
-    localparam PARTIAL_BW   = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `NUM_THREADS);
+    localparam PARTIAL_BW   = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `SIMD_WIDTH);
     localparam PE_COUNT     = 1 + `EXT_M_ENABLED;
     localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
     localparam PE_IDX_INT   = 0;
@@ -40,9 +40,9 @@ module VX_alu_unit #(
         .NUM_LANES (NUM_LANES)
     ) per_block_execute_if[BLOCK_SIZE]();
 
-    VX_commit_if #(
+    VX_result_if #(
         .NUM_LANES (NUM_LANES)
-    ) per_block_commit_if[BLOCK_SIZE]();
+    ) per_block_result_if[BLOCK_SIZE]();
 
     VX_dispatch_unit #(
         .BLOCK_SIZE (BLOCK_SIZE),
@@ -61,14 +61,14 @@ module VX_alu_unit #(
             .NUM_LANES (NUM_LANES)
         ) pe_execute_if[PE_COUNT]();
 
-        VX_commit_if#(
+        VX_result_if#(
             .NUM_LANES (NUM_LANES)
-        ) pe_commit_if[PE_COUNT]();
+        ) pe_result_if[PE_COUNT]();
 
         reg [`UP(PE_SEL_BITS)-1:0] pe_select;
         always @(*) begin
             pe_select = PE_IDX_INT;
-            if (`EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == `ALU_TYPE_MULDIV))
+            if (`EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == ALU_TYPE_MULDIV))
                 pe_select = PE_IDX_MDV;
         end
 
@@ -83,9 +83,9 @@ module VX_alu_unit #(
             .reset          (reset),
             .pe_sel         (pe_select),
             .execute_in_if  (per_block_execute_if[block_idx]),
-            .commit_out_if  (per_block_commit_if[block_idx]),
+            .result_out_if  (per_block_result_if[block_idx]),
             .execute_out_if (pe_execute_if),
-            .commit_in_if   (pe_commit_if)
+            .result_in_if   (pe_result_if)
         );
 
         VX_alu_int #(
@@ -97,7 +97,7 @@ module VX_alu_unit #(
             .reset      (reset),
             .execute_if (pe_execute_if[PE_IDX_INT]),
             .branch_ctl_if (branch_ctl_if[block_idx]),
-            .commit_if  (pe_commit_if[PE_IDX_INT])
+            .result_if  (pe_result_if[PE_IDX_INT])
         );
 
     `ifdef EXT_M_ENABLE
@@ -108,7 +108,7 @@ module VX_alu_unit #(
             .clk        (clk),
             .reset      (reset),
             .execute_if (pe_execute_if[PE_IDX_MDV]),
-            .commit_if  (pe_commit_if[PE_IDX_MDV])
+            .result_if  (pe_result_if[PE_IDX_MDV])
         );
     `endif
     end
@@ -118,10 +118,10 @@ module VX_alu_unit #(
         .NUM_LANES  (NUM_LANES),
         .OUT_BUF    (PARTIAL_BW ? 3 : 0)
     ) gather_unit (
-        .clk           (clk),
-        .reset         (reset),
-        .commit_in_if  (per_block_commit_if),
-        .commit_out_if (commit_if)
+        .clk       (clk),
+        .reset     (reset),
+        .result_if (per_block_result_if),
+        .commit_if (commit_if)
     );
 
 endmodule
