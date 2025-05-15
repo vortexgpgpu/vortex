@@ -15,7 +15,7 @@
 
 `ifdef FPU_DPI
 
-module VX_fpu_dpi import VX_fpu_pkg::*; #(
+module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter NUM_LANES = 1,
     parameter TAG_WIDTH = 1,
     parameter OUT_BUF   = 0
@@ -30,9 +30,9 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
 
     input wire [TAG_WIDTH-1:0] tag_in,
 
-    input wire [`INST_FPU_BITS-1:0] op_type,
-    input wire [`INST_FMT_BITS-1:0] fmt,
-    input wire [`INST_FRM_BITS-1:0] frm,
+    input wire [INST_FPU_BITS-1:0] op_type,
+    input wire [INST_FMT_BITS-1:0] fmt,
+    input wire [INST_FRM_BITS-1:0] frm,
 
     input wire [NUM_LANES-1:0][`XLEN-1:0]  dataa,
     input wire [NUM_LANES-1:0][`XLEN-1:0]  datab,
@@ -107,18 +107,18 @@ module VX_fpu_dpi import VX_fpu_pkg::*; #(
         is_f2f    = 0;
 
         case (op_type)
-            `INST_FPU_ADD:   begin core_select = FPU_FMA; is_fadd = ~i_fmt; is_fsub = i_fmt; end
-            `INST_FPU_MADD:  begin core_select = FPU_FMA; is_fmadd = ~i_fmt; is_fmsub = i_fmt; end
-            `INST_FPU_NMADD: begin core_select = FPU_FMA; is_fnmadd = ~i_fmt; is_fnmsub = i_fmt; end
-            `INST_FPU_MUL:   begin core_select = FPU_FMA; is_fmul = 1; end
-            `INST_FPU_DIV:   begin core_select = FPU_DIVSQRT; is_div = 1; end
-            `INST_FPU_SQRT:  begin core_select = FPU_DIVSQRT; end
-            `INST_FPU_CMP:   begin core_select = FPU_NCP; is_fcmp = 1; end
-            `INST_FPU_F2I:   begin core_select = FPU_CVT; is_ftoi = 1; end
-            `INST_FPU_F2U:   begin core_select = FPU_CVT; is_ftou = 1; end
-            `INST_FPU_I2F:   begin core_select = FPU_CVT; is_itof = 1; end
-            `INST_FPU_U2F:   begin core_select = FPU_CVT; is_utof = 1; end
-            `INST_FPU_F2F:   begin core_select = FPU_CVT; is_f2f  = 1; end
+            INST_FPU_ADD:   begin core_select = FPU_FMA; is_fadd = ~i_fmt; is_fsub = i_fmt; end
+            INST_FPU_MADD:  begin core_select = FPU_FMA; is_fmadd = ~i_fmt; is_fmsub = i_fmt; end
+            INST_FPU_NMADD: begin core_select = FPU_FMA; is_fnmadd = ~i_fmt; is_fnmsub = i_fmt; end
+            INST_FPU_MUL:   begin core_select = FPU_FMA; is_fmul = 1; end
+            INST_FPU_DIV:   begin core_select = FPU_DIVSQRT; is_div = 1; end
+            INST_FPU_SQRT:  begin core_select = FPU_DIVSQRT; end
+            INST_FPU_CMP:   begin core_select = FPU_NCP; is_fcmp = 1; end
+            INST_FPU_F2I:   begin core_select = FPU_CVT; is_ftoi = 1; end
+            INST_FPU_F2U:   begin core_select = FPU_CVT; is_ftou = 1; end
+            INST_FPU_I2F:   begin core_select = FPU_CVT; is_itof = 1; end
+            INST_FPU_U2F:   begin core_select = FPU_CVT; is_utof = 1; end
+            INST_FPU_F2F:   begin core_select = FPU_CVT; is_f2f  = 1; end
             default:         begin core_select = FPU_NCP; end
         endcase
     end

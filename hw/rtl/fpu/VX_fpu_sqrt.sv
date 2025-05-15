@@ -15,7 +15,7 @@
 
 `ifdef FPU_DSP
 
-module VX_fpu_sqrt import VX_fpu_pkg::*; #(
+module VX_fpu_sqrt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter NUM_LANES = 1,
     parameter NUM_PES   = `UP(NUM_LANES /`FSQRT_PE_RATIO),
     parameter TAG_WIDTH = 1
@@ -30,7 +30,7 @@ module VX_fpu_sqrt import VX_fpu_pkg::*; #(
 
     input wire [TAG_WIDTH-1:0] tag_in,
 
-    input wire [`INST_FRM_BITS-1:0] frm,
+    input wire [INST_FRM_BITS-1:0] frm,
 
     input wire [NUM_LANES-1:0][31:0]  dataa,
     output wire [NUM_LANES-1:0][31:0] result,
@@ -43,7 +43,7 @@ module VX_fpu_sqrt import VX_fpu_pkg::*; #(
     input wire  ready_out,
     output wire valid_out
 );
-    localparam DATAW = 32 + `INST_FRM_BITS;
+    localparam DATAW = 32 + INST_FRM_BITS;
 
     wire [NUM_LANES-1:0][DATAW-1:0] data_in;
 
@@ -57,7 +57,7 @@ module VX_fpu_sqrt import VX_fpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data_in
         assign data_in[i][0  +: 32] = dataa[i];
-        assign data_in[i][32 +: `INST_FRM_BITS] = frm;
+        assign data_in[i][32 +: INST_FRM_BITS] = frm;
     end
 
     VX_pe_serializer #(
@@ -144,7 +144,7 @@ module VX_fpu_sqrt import VX_fpu_pkg::*; #(
                 pe_enable,
                 int'(0),
                 {32'hffffffff, pe_data_in[i][0 +: 32]}, // a
-                pe_data_in[0][32 +: `INST_FRM_BITS],    // frm
+                pe_data_in[0][32 +: INST_FRM_BITS],    // frm
                 r,
                 f
             );

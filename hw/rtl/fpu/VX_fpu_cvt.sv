@@ -15,7 +15,7 @@
 
 `ifdef FPU_DSP
 
-module VX_fpu_cvt import VX_fpu_pkg::*; #(
+module VX_fpu_cvt import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter NUM_LANES = 5,
     parameter NUM_PES   = `UP(NUM_LANES / `FCVT_PE_RATIO),
     parameter TAG_WIDTH = 1
@@ -30,7 +30,7 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
 
     input wire [TAG_WIDTH-1:0] tag_in,
 
-    input wire [`INST_FRM_BITS-1:0] frm,
+    input wire [INST_FRM_BITS-1:0] frm,
 
     input wire is_itof,
     input wire is_signed,
@@ -46,7 +46,7 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
     input wire  ready_out,
     output wire valid_out
 );
-    localparam DATAW = 32 + `INST_FRM_BITS + 1 + 1;
+    localparam DATAW = 32 + INST_FRM_BITS + 1 + 1;
 
     wire [NUM_LANES-1:0][DATAW-1:0] data_in;
 
@@ -60,9 +60,9 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data_in
         assign data_in[i][0  +: 32] = dataa[i];
-        assign data_in[i][32 +: `INST_FRM_BITS] = frm;
-        assign data_in[i][32 + `INST_FRM_BITS +: 1] = is_itof;
-        assign data_in[i][32 + `INST_FRM_BITS + 1 +: 1] = is_signed;
+        assign data_in[i][32 +: INST_FRM_BITS] = frm;
+        assign data_in[i][32 + INST_FRM_BITS +: 1] = is_itof;
+        assign data_in[i][32 + INST_FRM_BITS + 1 +: 1] = is_signed;
     end
 
     VX_pe_serializer #(
@@ -105,9 +105,9 @@ module VX_fpu_cvt import VX_fpu_pkg::*; #(
             .clk        (clk),
             .reset      (reset),
             .enable     (pe_enable),
-            .frm        (pe_data_in[0][32 +: `INST_FRM_BITS]),
-            .is_itof    (pe_data_in[0][32 + `INST_FRM_BITS +: 1]),
-            .is_signed  (pe_data_in[0][32 + `INST_FRM_BITS + 1 +: 1]),
+            .frm        (pe_data_in[0][32 +: INST_FRM_BITS]),
+            .is_itof    (pe_data_in[0][32 + INST_FRM_BITS +: 1]),
+            .is_signed  (pe_data_in[0][32 + INST_FRM_BITS + 1 +: 1]),
             .dataa      (pe_data_in[i][0 +: 32]),
             .result     (pe_data_out[i][0 +: 32]),
             .fflags     (pe_data_out[i][32 +: `FP_FLAGS_BITS])
