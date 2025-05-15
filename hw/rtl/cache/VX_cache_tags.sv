@@ -13,7 +13,7 @@
 
 `include "VX_cache_define.vh"
 
-module VX_cache_tags #(
+module VX_cache_tags import VX_gpu_pkg::*; #(
     // Size of cache in bytes
     parameter CACHE_SIZE    = 1024,
     // Size of line inside a bank in bytes
@@ -31,12 +31,14 @@ module VX_cache_tags #(
     input wire                          reset,
 
     // inputs
+    input wire                          stall,
     input wire                          init,
     input wire                          flush,
     input wire                          fill,
     input wire                          read,
     input wire                          write,
     input wire [`CS_LINE_SEL_BITS-1:0]  line_idx,
+    input wire [`CS_LINE_SEL_BITS-1:0]  line_idx_n,
     input wire [`CS_TAG_SEL_BITS-1:0]   line_tag,
     input wire [`CS_WAY_SEL_WIDTH-1:0]  evict_way,
 
@@ -69,41 +71,49 @@ module VX_cache_tags #(
         wire do_flush = flush && (!WRITEBACK || way_en); // flush the whole line in writethrough mode
         wire do_write = WRITEBACK && write && tag_matches[i]; // only write on tag hit
 
-        wire line_read  = read || write || (WRITEBACK && (fill || flush));
+        //wire line_read  = read || write || (WRITEBACK && (fill || flush));
         wire line_write = do_init || do_fill || do_flush || do_write;
         wire line_valid = fill || write;
 
-        wire [TAG_WIDTH-1:0] line_wdata;
-        wire [TAG_WIDTH-1:0] line_rdata;
+        wire [TAG_WIDTH-1:0] line_wdata, line_rdata;
+
+        // This module uses a Read-First block RAM with Read-During-Write hazard not supported.
+        // Fill requests are always followed by MSHR replays that hit the cache.
+        // In Writeback mode, writes requests can be followed by Fill/flush requests reading the dirty bit.
+        wire rdw_fill, rdw_write;
+        `BUFFER(rdw_fill, do_fill);
+        `BUFFER(rdw_write, do_write && (line_idx == line_idx_n));
 
         if (WRITEBACK) begin : g_wdata
             assign line_wdata = {line_valid, write, line_tag};
-            assign {read_valid[i], read_dirty[i], read_tag[i]} = line_rdata;
+            assign read_tag[i] = line_rdata[0 +: `CS_TAG_SEL_BITS];
+            assign read_dirty[i] = line_rdata[`CS_TAG_SEL_BITS] || rdw_write;
+            assign read_valid[i] = line_rdata[`CS_TAG_SEL_BITS+1];
         end else begin : g_wdata
+            `UNUSED_VAR (rdw_write)
             assign line_wdata = {line_valid, line_tag};
             assign {read_valid[i], read_tag[i]} = line_rdata;
             assign read_dirty[i] = 1'b0;
         end
 
-        VX_sp_ram #(
+        VX_dp_ram #(
             .DATAW (TAG_WIDTH),
             .SIZE  (`CS_LINES_PER_BANK),
-            .RDW_MODE ("W"),
-            .RADDR_REG (1)
+            .OUT_REG (1),
+            .RDW_MODE ("R")
         ) tag_store (
             .clk   (clk),
             .reset (reset),
-            .read  (line_read),
+            .read  (~stall),
             .write (line_write),
             .wren  (1'b1),
-            .addr  (line_idx),
+            .waddr (line_idx),
+            .raddr (line_idx_n),
             .wdata (line_wdata),
             .rdata (line_rdata)
         );
-    end
 
-    for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_tag_matches
-        assign tag_matches[i] = read_valid[i] && (line_tag == read_tag[i]);
+        assign tag_matches[i] = (read_valid[i] && (line_tag == read_tag[i])) || rdw_fill;
     end
 
 endmodule
