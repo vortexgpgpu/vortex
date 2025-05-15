@@ -15,23 +15,8 @@
 
 interface VX_operands_if import VX_gpu_pkg::*; ();
 
-    typedef struct packed {
-        logic [`UUID_WIDTH-1:0]         uuid;
-        logic [ISSUE_WIS_W-1:0]         wis;
-        logic [`NUM_THREADS-1:0]        tmask;
-        logic [`PC_BITS-1:0]            PC;
-        logic [`EX_BITS-1:0]            ex_type;
-        logic [`INST_OP_BITS-1:0]       op_type;
-        op_args_t                       op_args;
-        logic                           wb;
-        logic [`NR_BITS-1:0]            rd;
-        logic [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data;
-        logic [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data;
-        logic [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data;
-    } data_t;
-
     logic  valid;
-    data_t data;
+    operands_t data;
     logic  ready;
 
     modport master (
