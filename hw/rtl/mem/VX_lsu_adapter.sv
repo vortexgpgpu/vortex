@@ -29,7 +29,7 @@ module VX_lsu_adapter import VX_gpu_pkg::*; #(
     VX_mem_bus_if.master    mem_bus_if [NUM_LANES]
 );
     localparam REQ_ADDR_WIDTH = `MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE);
-    localparam REQ_DATA_WIDTH = 1 + DATA_SIZE + REQ_ADDR_WIDTH + `MEM_REQ_FLAGS_WIDTH + DATA_SIZE * 8;
+    localparam REQ_DATA_WIDTH = 1 + DATA_SIZE + REQ_ADDR_WIDTH + MEM_FLAGS_WIDTH + DATA_SIZE * 8;
     localparam RSP_DATA_WIDTH = DATA_SIZE * 8;
 
     // handle request unpacking

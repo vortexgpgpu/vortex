@@ -27,9 +27,6 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
     // Size of a word in bytes
     parameter WORD_SIZE         = `XLEN/8,
 
-    // Request debug identifier
-    parameter UUID_WIDTH        = 0,
-
     // Request tag size
     parameter TAG_WIDTH         = 16,
 
@@ -47,7 +44,7 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
     input  wire [NUM_REQS-1:0]                 mem_req_rw,
     input  wire [NUM_REQS-1:0][WORD_SIZE-1:0]  mem_req_byteen,
     input  wire [NUM_REQS-1:0][ADDR_WIDTH-1:0] mem_req_addr,
-    input  wire [NUM_REQS-1:0][`MEM_REQ_FLAGS_WIDTH-1:0] mem_req_flags,
+    input  wire [NUM_REQS-1:0][MEM_FLAGS_WIDTH-1:0] mem_req_flags,
     input  wire [NUM_REQS-1:0][WORD_SIZE*8-1:0] mem_req_data,
     input  wire [NUM_REQS-1:0][TAG_WIDTH-1:0]  mem_req_tag,
     output wire [NUM_REQS-1:0]                 mem_req_ready,
@@ -91,7 +88,6 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
         .NUM_BANKS  (NUM_BANKS),
         .WORD_SIZE  (WORD_SIZE),
         .ADDR_WIDTH (ADDR_WIDTH),
-        .UUID_WIDTH (UUID_WIDTH),
         .TAG_WIDTH  (TAG_WIDTH),
         .OUT_BUF    (3)
     ) local_mem (

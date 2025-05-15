@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_gbar_arb #(
+module VX_gbar_arb import VX_gpu_pkg::*; #(
     parameter NUM_REQS = 1,
     parameter OUT_BUF  = 0,
     parameter `STRING ARBITER = "R"
@@ -25,7 +25,7 @@ module VX_gbar_arb #(
     VX_gbar_bus_if.master   bus_out_if
 );
 
-    localparam REQ_DATAW = `NB_WIDTH + `NC_WIDTH + `NC_WIDTH;
+    localparam REQ_DATAW = NB_WIDTH + NC_WIDTH + NC_WIDTH;
 
     // arbitrate request
 
@@ -60,7 +60,7 @@ module VX_gbar_arb #(
     // broadcast response
 
     reg rsp_valid;
-    reg [`NB_WIDTH-1:0] rsp_data;
+    reg [NB_WIDTH-1:0] rsp_data;
 
     always @(posedge clk) begin
         if (reset) begin

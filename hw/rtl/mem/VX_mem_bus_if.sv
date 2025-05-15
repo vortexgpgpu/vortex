@@ -13,13 +13,12 @@
 
 `include "VX_define.vh"
 
-interface VX_mem_bus_if #(
+interface VX_mem_bus_if import VX_gpu_pkg::*; #(
     parameter DATA_SIZE  = 1,
-    parameter FLAGS_WIDTH= `MEM_REQ_FLAGS_WIDTH,
+    parameter FLAGS_WIDTH = MEM_FLAGS_WIDTH,
     parameter TAG_WIDTH  = 1,
     parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
-    parameter ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE),
-    parameter UUID_WIDTH = `UUID_WIDTH
+    parameter ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE)
 ) ();
 
     typedef struct packed {

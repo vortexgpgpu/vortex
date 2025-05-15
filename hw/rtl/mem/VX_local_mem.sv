@@ -29,9 +29,6 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     // Size of a word in bytes
     parameter WORD_SIZE         = `XLEN/8,
 
-    // Request debug identifier
-    parameter UUID_WIDTH        = 0,
-
     // Request tag size
     parameter TAG_WIDTH         = 16,
 
@@ -49,7 +46,6 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     VX_mem_bus_if.slave mem_bus_if [NUM_REQS]
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_PARAM (UUID_WIDTH)
 
     localparam REQ_SEL_BITS    = `CLOG2(NUM_REQS);
     localparam REQ_SEL_WIDTH   = `UP(REQ_SEL_BITS);
@@ -101,7 +97,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0]                 req_ready_in;
 
 `ifdef PERF_ENABLE
-    wire [`PERF_CTR_BITS-1:0] perf_collisions;
+    wire [PERF_CTR_BITS-1:0] perf_collisions;
 `endif
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_data_in
@@ -120,7 +116,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         .NUM_INPUTS  (NUM_REQS),
         .NUM_OUTPUTS (NUM_BANKS),
         .DATAW       (REQ_DATAW),
-        .PERF_CTR_BITS (`PERF_CTR_BITS),
+        .PERF_CTR_BITS (PERF_CTR_BITS),
         .ARBITER     ("P"),
         .OUT_BUF     (3) // output should be registered for the data_store addressing
     ) req_xbar (
@@ -270,9 +266,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     `POP_COUNT(perf_writes_per_cycle, perf_writes_per_req);
     `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_req);
 
-    reg [`PERF_CTR_BITS-1:0] perf_reads;
-    reg [`PERF_CTR_BITS-1:0] perf_writes;
-    reg [`PERF_CTR_BITS-1:0] perf_crsp_stalls;
+    reg [PERF_CTR_BITS-1:0] perf_reads;
+    reg [PERF_CTR_BITS-1:0] perf_writes;
+    reg [PERF_CTR_BITS-1:0] perf_crsp_stalls;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -280,9 +276,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             perf_writes      <= '0;
             perf_crsp_stalls <= '0;
         end else begin
-            perf_reads       <= perf_reads  + `PERF_CTR_BITS'(perf_reads_per_cycle);
-            perf_writes      <= perf_writes + `PERF_CTR_BITS'(perf_writes_per_cycle);
-            perf_crsp_stalls <= perf_crsp_stalls + `PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
+            perf_reads       <= perf_reads  + PERF_CTR_BITS'(perf_reads_per_cycle);
+            perf_writes      <= perf_writes + PERF_CTR_BITS'(perf_writes_per_cycle);
+            perf_crsp_stalls <= perf_crsp_stalls + PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
         end
     end
 
