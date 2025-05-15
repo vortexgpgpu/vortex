@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_mem_arb #(
+module VX_mem_arb import VX_gpu_pkg::*; #(
     parameter NUM_INPUTS     = 1,
     parameter NUM_OUTPUTS    = 1,
     parameter DATA_SIZE      = 1,
@@ -24,7 +24,7 @@ module VX_mem_arb #(
     parameter `STRING ARBITER = "R",
     parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
     parameter ADDR_WIDTH     = (MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE)),
-    parameter FLAGS_WIDTH    = `MEM_REQ_FLAGS_WIDTH
+    parameter FLAGS_WIDTH    = MEM_FLAGS_WIDTH
 ) (
     input wire              clk,
     input wire              reset,
@@ -36,8 +36,7 @@ module VX_mem_arb #(
     localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
     localparam REQ_DATAW    = 1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + FLAGS_WIDTH + TAG_WIDTH;
     localparam RSP_DATAW    = DATA_WIDTH + TAG_WIDTH;
-
-    `STATIC_ASSERT ((NUM_INPUTS >= NUM_OUTPUTS), ("invalid parameter: NUM_INPUTS=%0d, NUM_OUTPUTS=%0d", NUM_INPUTS, NUM_OUTPUTS));
+    localparam SEL_COUNT    = `MIN(NUM_INPUTS, NUM_OUTPUTS);
 
     wire [NUM_INPUTS-1:0]                 req_valid_in;
     wire [NUM_INPUTS-1:0][REQ_DATAW-1:0]  req_data_in;
@@ -45,7 +44,7 @@ module VX_mem_arb #(
 
     wire [NUM_OUTPUTS-1:0]                req_valid_out;
     wire [NUM_OUTPUTS-1:0][REQ_DATAW-1:0] req_data_out;
-    wire [NUM_OUTPUTS-1:0][`UP(LOG_NUM_REQS)-1:0] req_sel_out;
+    wire [SEL_COUNT-1:0][`UP(LOG_NUM_REQS)-1:0] req_sel_out;
     wire [NUM_OUTPUTS-1:0]                req_ready_out;
 
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_req_data_in
@@ -74,15 +73,6 @@ module VX_mem_arb #(
 
     for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_bus_out_if
         wire [TAG_WIDTH-1:0] req_tag_out;
-        VX_bits_insert #(
-            .N   (TAG_WIDTH),
-            .S   (LOG_NUM_REQS),
-            .POS (TAG_SEL_IDX)
-        ) bits_insert (
-            .data_in  (req_tag_out),
-            .ins_in   (req_sel_out[i]),
-            .data_out (bus_out_if[i].req_data.tag)
-        );
         assign bus_out_if[i].req_valid = req_valid_out[i];
         assign {
             bus_out_if[i].req_data.rw,
@@ -93,6 +83,21 @@ module VX_mem_arb #(
             req_tag_out
         } = req_data_out[i];
         assign req_ready_out[i] = bus_out_if[i].req_ready;
+        
+        if (NUM_INPUTS > NUM_OUTPUTS) begin : g_req_tag_sel_out
+            VX_bits_insert #(
+            .N   (TAG_WIDTH),
+            .S   (LOG_NUM_REQS),
+            .POS (TAG_SEL_IDX)
+            ) bits_insert (
+                .data_in  (req_tag_out),
+                .ins_in   (req_sel_out[i]),
+                .data_out (bus_out_if[i].req_data.tag)
+            );
+        end else begin : g_req_tag_out
+            `UNUSED_VAR (req_sel_out)
+            assign bus_out_if[i].req_data.tag = req_tag_out;
+        end
     end
 
     ///////////////////////////////////////////////////////////////////////////
@@ -105,7 +110,7 @@ module VX_mem_arb #(
     wire [NUM_OUTPUTS-1:0][RSP_DATAW-1:0] rsp_data_in;
     wire [NUM_OUTPUTS-1:0]                rsp_ready_in;
 
-    if (NUM_INPUTS > NUM_OUTPUTS) begin : g_rsp_enabled
+    if (NUM_INPUTS > NUM_OUTPUTS) begin : g_rsp_select
 
         wire [NUM_OUTPUTS-1:0][LOG_NUM_REQS-1:0] rsp_sel_in;
 
@@ -142,7 +147,7 @@ module VX_mem_arb #(
             .ready_out (rsp_ready_out)
         );
 
-    end else begin : g_passthru
+    end else begin : g_rsp_arb
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_rsp_data_in
             assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;

@@ -14,9 +14,9 @@
 `include "VX_define.vh"
 
 module VX_lmem_switch import VX_gpu_pkg::*; #(
-    parameter REQ0_OUT_BUF = 0,
-    parameter REQ1_OUT_BUF = 0,
-    parameter RSP_OUT_BUF  = 0,
+    parameter GLOBAL_OUT_BUF = 0,
+    parameter LOCAL_OUT_BUF = 0,
+    parameter RSP_OUT_BUF = 0,
     parameter `STRING ARBITER = "R"
 ) (
     input wire              clk,
@@ -25,7 +25,7 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
     VX_lsu_mem_if.master    global_out_if,
     VX_lsu_mem_if.master    local_out_if
 );
-    localparam REQ_DATAW = `NUM_LSU_LANES + 1 + `NUM_LSU_LANES * (LSU_WORD_SIZE + LSU_ADDR_WIDTH + `MEM_REQ_FLAGS_WIDTH + LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
+    localparam REQ_DATAW = `NUM_LSU_LANES + 1 + `NUM_LSU_LANES * (LSU_WORD_SIZE + LSU_ADDR_WIDTH + MEM_FLAGS_WIDTH + LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
     localparam RSP_DATAW = `NUM_LSU_LANES + `NUM_LSU_LANES * (LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
 
     wire [`NUM_LSU_LANES-1:0] is_addr_local_mask;
@@ -33,7 +33,7 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
     wire req_local_ready;
 
     for (genvar i = 0; i < `NUM_LSU_LANES; ++i) begin : g_is_addr_local_mask
-        assign is_addr_local_mask[i] = lsu_in_if.req_data.flags[i][`MEM_REQ_FLAG_LOCAL];
+        assign is_addr_local_mask[i] = lsu_in_if.req_data.flags[i][MEM_REQ_FLAG_LOCAL];
     end
 
     wire is_addr_global = | (lsu_in_if.req_data.mask & ~is_addr_local_mask);
@@ -44,8 +44,8 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
 
     VX_elastic_buffer #(
         .DATAW   (REQ_DATAW),
-        .SIZE    (`TO_OUT_BUF_SIZE(REQ0_OUT_BUF)),
-        .OUT_REG (`TO_OUT_BUF_REG(REQ0_OUT_BUF))
+        .SIZE    (`TO_OUT_BUF_SIZE(GLOBAL_OUT_BUF)),
+        .OUT_REG (`TO_OUT_BUF_REG(GLOBAL_OUT_BUF))
     ) req_global_buf (
         .clk       (clk),
         .reset     (reset),
@@ -67,8 +67,8 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
 
     VX_elastic_buffer #(
         .DATAW   (REQ_DATAW),
-        .SIZE    (`TO_OUT_BUF_SIZE(REQ1_OUT_BUF)),
-        .OUT_REG (`TO_OUT_BUF_REG(REQ1_OUT_BUF))
+        .SIZE    (`TO_OUT_BUF_SIZE(LOCAL_OUT_BUF)),
+        .OUT_REG (`TO_OUT_BUF_REG(LOCAL_OUT_BUF))
     ) req_local_buf (
         .clk       (clk),
         .reset     (reset),
