@@ -15,7 +15,7 @@
 
 `include "vortex_afu.vh"
 
-module VX_afu_wrap #(
+module VX_afu_wrap import VX_gpu_pkg::*; #(
 	parameter C_S_AXI_CTRL_ADDR_WIDTH = 8,
 	parameter C_S_AXI_CTRL_DATA_WIDTH = 32,
 	parameter C_M_AXI_MEM_ID_WIDTH    = `PLATFORM_MEMORY_ID_WIDTH,
@@ -116,9 +116,9 @@ module VX_afu_wrap #(
 	reg vx_reset = 1; // asserted at initialization
 	wire vx_busy;
 
-	wire                          dcr_wr_valid;
-	wire [`VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr;
-	wire [`VX_DCR_DATA_WIDTH-1:0] dcr_wr_data;
+	wire                         dcr_wr_valid;
+	wire [VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr;
+	wire [VX_DCR_DATA_WIDTH-1:0] dcr_wr_data;
 
 	state_e state;
 

@@ -13,7 +13,7 @@
 
 `include "VX_cache_define.vh"
 
-module VX_cache_bank #(
+module VX_cache_bank import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID= "",
     parameter BANK_ID           = 0,
 
@@ -50,14 +50,8 @@ module VX_cache_bank #(
     // Replacement policy
     parameter REPL_POLICY       = `CS_REPL_FIFO,
 
-    // Request debug identifier
-    parameter UUID_WIDTH        = 0,
-
     // core request tag size
     parameter TAG_WIDTH         = UUID_WIDTH + 1,
-
-    // core request flags
-    parameter FLAGS_WIDTH       = 0,
 
     // Core response output register
     parameter CORE_OUT_REG      = 0,
@@ -88,7 +82,7 @@ module VX_cache_bank #(
     input wire [`CS_WORD_WIDTH-1:0]     core_req_data,  // data to be written
     input wire [TAG_WIDTH-1:0]          core_req_tag,   // identifier of the request (request id)
     input wire [REQ_SEL_WIDTH-1:0]      core_req_idx,   // index of the request in the core request array
-    input wire [`UP(FLAGS_WIDTH)-1:0]   core_req_flags,
+    input wire [`UP(MEM_FLAGS_WIDTH)-1:0]   core_req_flags,
     output wire                         core_req_ready,
 
     // Core Response
@@ -105,7 +99,7 @@ module VX_cache_bank #(
     output wire [LINE_SIZE-1:0]         mem_req_byteen,
     output wire [`CS_LINE_WIDTH-1:0]    mem_req_data,
     output wire [MEM_TAG_WIDTH-1:0]     mem_req_tag,
-    output wire [`UP(FLAGS_WIDTH)-1:0]  mem_req_flags,
+    output wire [`UP(MEM_FLAGS_WIDTH)-1:0]  mem_req_flags,
     input  wire                         mem_req_ready,
 
     // Memory response
@@ -154,7 +148,7 @@ module VX_cache_bank #(
     wire [`CS_WAY_SEL_WIDTH-1:0]    way_idx_st0, way_idx_st1;
 
     wire [`CS_LINE_ADDR_WIDTH-1:0]  addr_sel, addr_st0, addr_st1;
-    wire [`CS_LINE_SEL_BITS-1:0]    line_idx_st0, line_idx_st1;
+    wire [`CS_LINE_SEL_BITS-1:0]    line_idx_sel, line_idx_st0, line_idx_st1;
     wire [`CS_TAG_SEL_BITS-1:0]     line_tag_st0, line_tag_st1;
     wire [`CS_TAG_SEL_BITS-1:0]     evict_tag_st0, evict_tag_st1;
     wire                            rw_sel, rw_st0, rw_st1;
@@ -169,7 +163,7 @@ module VX_cache_bank #(
     wire                            is_dirty_st0, is_dirty_st1;
     wire                            is_replay_st0, is_replay_st1;
     wire                            is_hit_st0, is_hit_st1;
-    wire [`UP(FLAGS_WIDTH)-1:0]     flags_sel, flags_st0, flags_st1;
+    wire [`UP(MEM_FLAGS_WIDTH)-1:0]     flags_sel, flags_st0, flags_st1;
     wire                            mshr_pending_st0, mshr_pending_st1;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_previd_st0, mshr_previd_st1;
     wire                            mshr_empty;
@@ -301,7 +295,7 @@ module VX_cache_bank #(
     wire is_replay_sel = replay_enable;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `UP(FLAGS_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + 1 + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `UP(MEM_FLAGS_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_LINE_ADDR_WIDTH + `CS_LINE_WIDTH + 1 + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -332,6 +326,7 @@ module VX_cache_bank #(
     wire do_read_st1  = valid_st1 && is_read_st1;
     wire do_write_st1 = valid_st1 && is_write_st1;
 
+    assign line_idx_sel = addr_sel[`CS_LINE_SEL_BITS-1:0];
     assign line_idx_st0 = addr_st0[`CS_LINE_SEL_BITS-1:0];
     assign line_tag_st0 = `CS_LINE_ADDR_TAG(addr_st0);
 
@@ -376,12 +371,14 @@ module VX_cache_bank #(
         .clk        (clk),
         .reset      (reset),
         // inputs
+        .stall      (pipe_stall),
         .init       (do_init_st0),
         .flush      (do_flush_st0 && ~pipe_stall),
         .fill       (do_fill_st0 && ~pipe_stall),
         .read       (do_read_st0 && ~pipe_stall),
         .write      (do_write_st0 && ~pipe_stall),
         .line_idx   (line_idx_st0),
+        .line_idx_n (line_idx_sel),
         .line_tag   (line_tag_st0),
         .evict_way  (evict_way_st0),
         // outputs
@@ -406,7 +403,7 @@ module VX_cache_bank #(
     assign mshr_id_st0 = is_replay_st0 ? replay_id_st0 : mshr_alloc_id_st0;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `UP(FLAGS_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_TAG_SEL_BITS + `CS_TAG_SEL_BITS + `CS_LINE_SEL_BITS + `CS_LINE_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `UP(MEM_FLAGS_WIDTH) + `CS_WAY_SEL_WIDTH + `CS_TAG_SEL_BITS + `CS_TAG_SEL_BITS + `CS_LINE_SEL_BITS + `CS_LINE_WIDTH + WORD_SIZE + WORD_SEL_WIDTH + REQ_SEL_WIDTH + TAG_WIDTH + MSHR_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
@@ -506,7 +503,6 @@ module VX_cache_bank #(
         .NUM_BANKS   (NUM_BANKS),
         .MSHR_SIZE   (MSHR_SIZE),
         .WRITEBACK   (WRITEBACK),
-        .UUID_WIDTH  (UUID_WIDTH),
         .DATA_WIDTH  (WORD_SEL_WIDTH + WORD_SIZE + `CS_WORD_WIDTH + TAG_WIDTH + REQ_SEL_WIDTH)
     ) cache_mshr (
         .clk            (clk),
@@ -584,7 +580,7 @@ module VX_cache_bank #(
     wire [`CS_LINE_ADDR_WIDTH-1:0] mreq_queue_addr;
     wire [MEM_TAG_WIDTH-1:0] mreq_queue_tag;
     wire mreq_queue_rw;
-    wire [`UP(FLAGS_WIDTH)-1:0] mreq_queue_flags;
+    wire [`UP(MEM_FLAGS_WIDTH)-1:0] mreq_queue_flags;
 
     wire is_fill_or_flush_st1 = is_fill_st1 || (is_flush_st1 && WRITEBACK);
     wire do_fill_or_flush_st1 = valid_st1 && is_fill_or_flush_st1;
@@ -658,7 +654,7 @@ module VX_cache_bank #(
     assign mreq_queue_flags = flags_st1;
 
     VX_fifo_queue #(
-        .DATAW    (1 + `CS_LINE_ADDR_WIDTH + LINE_SIZE + `CS_LINE_WIDTH + MEM_TAG_WIDTH + `UP(FLAGS_WIDTH)),
+        .DATAW    (1 + `CS_LINE_ADDR_WIDTH + LINE_SIZE + `CS_LINE_WIDTH + MEM_TAG_WIDTH + `UP(MEM_FLAGS_WIDTH)),
         .DEPTH    (MREQ_SIZE),
         .ALM_FULL (MREQ_SIZE - PIPELINE_STAGES),
         .OUT_REG  (MEM_OUT_REG)

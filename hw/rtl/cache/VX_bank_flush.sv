@@ -13,7 +13,7 @@
 
 `include "VX_cache_define.vh"
 
-module VX_bank_flush #(
+module VX_bank_flush import VX_gpu_pkg::*; #(
     parameter BANK_ID    = 0,
     // Size of cache in bytes
     parameter CACHE_SIZE = 1024,

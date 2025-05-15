@@ -13,7 +13,7 @@
 
 `include "vortex_afu.vh"
 
-module VX_afu_ctrl #(
+module VX_afu_ctrl import VX_gpu_pkg::*; #(
     parameter S_AXI_ADDR_WIDTH = 8,
     parameter S_AXI_DATA_WIDTH = 32
 ) (
@@ -58,8 +58,8 @@ module VX_afu_ctrl #(
 `endif
 
     output wire                         dcr_wr_valid,
-    output wire [`VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr,
-    output wire [`VX_DCR_DATA_WIDTH-1:0] dcr_wr_data
+    output wire [VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr,
+    output wire [VX_DCR_DATA_WIDTH-1:0] dcr_wr_data
 );
 
     // Address Info
@@ -437,7 +437,7 @@ module VX_afu_ctrl #(
     assign ap_ctrl_read = s_axi_r_fire && (raddr == ADDR_AP_CTRL);
 
     assign dcr_wr_valid = dcr_wr_valid_r;
-    assign dcr_wr_addr  = `VX_DCR_ADDR_WIDTH'(dcra_r);
-    assign dcr_wr_data  = `VX_DCR_DATA_WIDTH'(dcrv_r);
+    assign dcr_wr_addr  = VX_DCR_ADDR_WIDTH'(dcra_r);
+    assign dcr_wr_data  = VX_DCR_DATA_WIDTH'(dcrv_r);
 
 endmodule
