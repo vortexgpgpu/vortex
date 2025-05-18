@@ -360,6 +360,9 @@
 `ifndef NUM_GPR_BANKS
 `define NUM_GPR_BANKS   4
 `endif
+`ifndef NUM_VGPR_BANKS
+`define NUM_VGPR_BANKS  2
+`endif
 
 // Number of ALU units
 `ifndef NUM_ALU_LANES
@@ -882,6 +885,12 @@
     `define EXT_ZICOND_ENABLED 1
 `else
     `define EXT_ZICOND_ENABLED 0
+`endif
+
+`ifdef EXT_TPU_ENABLE
+    `define EXT_TPU_ENABLED 1
+`else
+    `define EXT_TPU_ENABLED 0
 `endif
 
 `define ISA_STD_A           0
