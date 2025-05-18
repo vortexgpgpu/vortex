@@ -50,7 +50,7 @@
     int err = _expr;        \
     if (err == 0)           \
       break;                \
-    printf("[SCOPE] error: '%s' returned %d!\n", #_expr, err); \
+    printf("[SCOPE] Error: '%s' returned %d!\n", #_expr, err); \
     return err;             \
   } while (false)
 
@@ -235,12 +235,12 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
   const char* json_path = getenv("SCOPE_JSON_PATH");
   std::ifstream ifs(json_path);
   if (!ifs) {
-    std::cerr << "[SCOPE] error: cannot open scope manifest file: " << json_path << std::endl;
+    std::cerr << "[SCOPE] Error: cannot open scope manifest file: " << json_path << std::endl;
     return -1;
   }
   auto json_obj = json::parse(ifs);
   if (json_obj.is_null()) {
-    std::cerr << "[SCOPE] error: invalid scope manifest file: " << json_path << std::endl;
+    std::cerr << "[SCOPE] Error: invalid scope manifest file: " << json_path << std::endl;
     return -1;
   }
 
@@ -256,7 +256,7 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
     uint64_t dev_width;
     CHECK_ERR(g_callback.registerRead(hdevice, &dev_width));
     if (width != dev_width) {
-      std::cerr << "[SCOPE] error: invalid tap #" << id << " width, actual=" << dev_width << ", expected=" << width << std::endl;
+      std::cerr << "[SCOPE] Error: invalid tap #" << id << " width, actual=" << dev_width << ", expected=" << width << std::endl;
       return 1;
     }
   }

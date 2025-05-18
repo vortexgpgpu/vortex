@@ -118,25 +118,6 @@
 `define SOCKET_SIZE `MIN(4, `NUM_CORES)
 `endif
 
-// Size of Tensor Core
-`ifndef TC_SIZE
-`define TC_SIZE 8
-`endif
-
-// Number of TCs per Warp
-`ifndef TC_NUM
-`define TC_NUM 4
-`endif
-
-`ifndef NUM_TCU_LANES
-`define NUM_TCU_LANES   `TC_NUM
-`endif
-
-`ifndef NUM_TCU_BLOCKS
-`define NUM_TCU_BLOCKS  `ISSUE_WIDTH
-`endif
-
-
 `ifdef L1_DISABLE
     `define ICACHE_DISABLE
     `define DCACHE_DISABLE

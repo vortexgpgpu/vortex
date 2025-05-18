@@ -90,7 +90,7 @@ extern int vx_upload_kernel_file(vx_device_h hdevice, const char* filename, vx_b
 
   std::ifstream ifs(filename);
   if (!ifs) {
-    std::cout << "error: " << filename << " not found" << std::endl;
+    std::cerr << "Error: " << filename << " not found" << std::endl;
     return -1;
   }
 
@@ -135,7 +135,7 @@ extern int vx_upload_file(vx_device_h hdevice, const char* filename, vx_buffer_h
 
   std::ifstream ifs(filename);
   if (!ifs) {
-    std::cout << "error: " << filename << " not found" << std::endl;
+    std::cerr << "Error: " << filename << " not found" << std::endl;
     return -1;
   }
 
