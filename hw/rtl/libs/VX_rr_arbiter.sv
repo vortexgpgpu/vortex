@@ -18,6 +18,7 @@ module VX_rr_arbiter #(
     parameter NUM_REQS = 1,
     parameter MODEL    = 1,
     parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS),
+    parameter STICKY   = 0, // hold the grant until its request is deasserted
     parameter LUT_OPT  = 0
 ) (
     input  wire                     clk,
@@ -28,17 +29,22 @@ module VX_rr_arbiter #(
     output wire                     grant_valid,
     input  wire                     grant_ready
 );
+    `STATIC_ASSERT ((STICKY == 0) || (MODEL == 1 && LUT_OPT == 0), ("Sticky is only supported in model 1"))
+
     if (NUM_REQS == 1)  begin : g_passthru
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
         `UNUSED_VAR (grant_ready)
+        `UNUSED_PARAM (STICKY)
 
         assign grant_index  = '0;
         assign grant_onehot = requests;
         assign grant_valid  = requests[0];
 
     end else if (LUT_OPT && NUM_REQS == 2)  begin : g_lut2
+
+        `UNUSED_PARAM (STICKY)
 
         reg [LOG_NUM_REQS-1:0] grant_index_w;
         reg [NUM_REQS-1:0] grant_onehot_w;
@@ -57,7 +63,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin
             if (reset) begin
                 state <= '0;
-            end else if (grant_ready) begin
+            end else if (grant_valid && grant_ready) begin
                 state <= grant_index_w;
             end
         end
@@ -67,6 +73,8 @@ module VX_rr_arbiter #(
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 3)  begin : g_lut3
+
+        `UNUSED_PARAM (STICKY)
 
         reg [LOG_NUM_REQS-1:0] grant_index_w;
         reg [NUM_REQS-1:0] grant_onehot_w;
@@ -90,7 +98,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin
             if (reset) begin
                 state <= '0;
-            end else if (grant_ready) begin
+            end else if (grant_valid && grant_ready) begin
                 state <= grant_index_w;
             end
         end
@@ -100,6 +108,8 @@ module VX_rr_arbiter #(
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 4)  begin : g_lut4
+
+        `UNUSED_PARAM (STICKY)
 
         reg [LOG_NUM_REQS-1:0] grant_index_w;
         reg [NUM_REQS-1:0] grant_onehot_w;
@@ -130,7 +140,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin
             if (reset) begin
                 state <= '0;
-            end else if (grant_ready) begin
+            end else if (grant_valid && grant_ready) begin
                 state <= grant_index_w;
             end
         end
@@ -140,6 +150,8 @@ module VX_rr_arbiter #(
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 5) begin : g_lut5
+
+        `UNUSED_PARAM (STICKY)
 
         reg [LOG_NUM_REQS-1:0] grant_index_w;
         reg [NUM_REQS-1:0] grant_onehot_w;
@@ -179,7 +191,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin
             if (reset) begin
                 state <= '0;
-            end else if (grant_ready) begin
+            end else if (grant_valid && grant_ready) begin
                 state <= grant_index_w;
             end
         end
@@ -189,6 +201,8 @@ module VX_rr_arbiter #(
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 6) begin : g_lut6
+
+        `UNUSED_PARAM (STICKY)
 
         reg [LOG_NUM_REQS-1:0] grant_index_w;
         reg [NUM_REQS-1:0] grant_onehot_w;
@@ -239,7 +253,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin
             if (reset) begin
                 state <= '0;
-            end else if (grant_ready) begin
+            end else if (grant_valid && grant_ready) begin
                 state <= grant_index_w;
             end
         end
@@ -249,6 +263,8 @@ module VX_rr_arbiter #(
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 7) begin : g_lut7
+
+        `UNUSED_PARAM (STICKY)
 
         reg [LOG_NUM_REQS-1:0] grant_index_w;
         reg [NUM_REQS-1:0] grant_onehot_w;
@@ -312,7 +328,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin
             if (reset) begin
                 state <= '0;
-            end else if (grant_ready) begin
+            end else if (grant_valid && grant_ready) begin
                 state <= grant_index_w;
             end
         end
@@ -322,6 +338,8 @@ module VX_rr_arbiter #(
         assign grant_valid  = (| requests);
 
     end else if (LUT_OPT && NUM_REQS == 8) begin : g_lut8
+
+        `UNUSED_PARAM (STICKY)
 
         reg [LOG_NUM_REQS-1:0] grant_index_w;
         reg [NUM_REQS-1:0] grant_onehot_w;
@@ -400,7 +418,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin
             if (reset) begin
                 state <= '0;
-            end else if (grant_ready) begin
+            end else if (grant_valid && grant_ready) begin
                 state <= grant_index_w;
             end
         end
@@ -434,12 +452,28 @@ module VX_rr_arbiter #(
         wire has_masked_reqs = (| masked_reqs);
         wire has_unmasked_reqs = (| requests);
 
-        assign grant_onehot = has_masked_reqs ? grant_masked : grant_unmasked;
+        reg [NUM_REQS-1:0] prev_grant;
+
+        always @(posedge clk) begin
+            if (reset) begin
+                prev_grant <= '0;
+            end else if (grant_valid && grant_ready) begin
+                prev_grant <= grant_onehot;
+            end
+        end
+
+        wire retain_grant = (STICKY != 0) && (|(prev_grant & requests));
+
+        wire [NUM_REQS-1:0] grant = has_masked_reqs ? grant_masked : grant_unmasked;
+
+        wire [NUM_REQS-1:0] grant_w = retain_grant ? prev_grant : grant;
+
+        assign grant_onehot = grant_w;
 
         always @(posedge clk) begin
 		    if (reset) begin
 				reqs_mask <= {NUM_REQS{1'b1}};
-			end else if (grant_ready) begin
+			end else if (grant_valid && grant_ready && ~retain_grant) begin
 				if (has_masked_reqs) begin
                     reqs_mask <= masked_pri_reqs;
                 end else if (has_unmasked_reqs) begin
@@ -448,15 +482,21 @@ module VX_rr_arbiter #(
 			end
 	    end
 
+        wire grant_valid_w;
+
         VX_onehot_encoder #(
             .N (NUM_REQS)
         ) onehot_encoder (
-            .data_in  (grant_onehot),
+            .data_in  (grant_w),
             .data_out (grant_index),
-            .valid_out(grant_valid)
+            .valid_out(grant_valid_w)
         );
 
+        assign grant_valid = (STICKY != 0) ? (| requests) : grant_valid_w;
+
     end else if (MODEL == 2) begin : g_model2
+
+        `UNUSED_PARAM (STICKY)
 
         reg [NUM_REQS-1:0][LOG_NUM_REQS-1:0] grant_table;
         reg [LOG_NUM_REQS-1:0] state;

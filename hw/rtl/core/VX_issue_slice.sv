@@ -28,7 +28,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 
     VX_decode_if.slave      decode_if,
     VX_writeback_if.slave   writeback_if,
-    VX_dispatch_if.master   dispatch_if [`NUM_EX_UNITS]
+    VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS]
 );
     `UNUSED_PARAM (ISSUE_ID)
 
@@ -37,7 +37,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     VX_operands_if operands_if();
 
     VX_ibuffer #(
-        .INSTANCE_ID (`SFORMATF(("%s-ibuffer", INSTANCE_ID)))
+        .INSTANCE_ID (`SFORMATF(("%s-ibuffer", INSTANCE_ID))),
+        .ISSUE_ID (ISSUE_ID)
     ) ibuffer (
         .clk            (clk),
         .reset          (reset),
@@ -49,7 +50,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
     VX_scoreboard #(
-        .INSTANCE_ID (`SFORMATF(("%s-scoreboard", INSTANCE_ID)))
+        .INSTANCE_ID (`SFORMATF(("%s-scoreboard", INSTANCE_ID))),
+        .ISSUE_ID (ISSUE_ID)
     ) scoreboard (
         .clk            (clk),
         .reset          (reset),
@@ -64,7 +66,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
     VX_operands #(
-        .INSTANCE_ID (`SFORMATF(("%s-operands", INSTANCE_ID)))
+        .INSTANCE_ID (`SFORMATF(("%s-operands", INSTANCE_ID))),
+        .ISSUE_ID (ISSUE_ID)
     ) operands (
         .clk            (clk),
         .reset          (reset),
@@ -77,7 +80,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
     VX_dispatch #(
-        .INSTANCE_ID (`SFORMATF(("%s-dispatch", INSTANCE_ID)))
+        .INSTANCE_ID (`SFORMATF(("%s-dispatch", INSTANCE_ID))),
+        .ISSUE_ID (ISSUE_ID)
     ) dispatch (
         .clk            (clk),
         .reset          (reset),
@@ -96,9 +100,9 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 2, 4, 3, (
-            `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + 1 + `NR_BITS * 4 +
-            `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `PC_BITS + `EX_BITS + `INST_OP_BITS + 1 + `NR_BITS + (3 * `XLEN) +
-            `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * `XLEN) + 1
+            UUID_WIDTH + NW_WIDTH + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + 1 + $bits(reg_idx_t) * 4 +
+            UUID_WIDTH + ISSUE_WIS_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NUM_REGS_BITS + (3 * `XLEN) +
+            UUID_WIDTH + ISSUE_WIS_W + `SIMD_WIDTH + NUM_REGS_BITS + (`SIMD_WIDTH * `XLEN) + 1
         ), {
             decode_if.valid,
             decode_if.ready,
@@ -160,18 +164,19 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (operands_if.valid && operands_if.ready) begin
-            `TRACE(1, ("%t: %s: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wis_to_wid(operands_if.data.wis, ISSUE_ID), {operands_if.data.PC, 1'b0}))
+            `TRACE(1, ("%t: %s: wid=%0d, sid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wis_to_wid(operands_if.data.wis, ISSUE_ID), operands_if.data.sid, {operands_if.data.PC, 1'b0}))
             trace_ex_type(1, operands_if.data.ex_type);
             `TRACE(1, (", op="))
             trace_ex_op(1, operands_if.data.ex_type, operands_if.data.op_type, operands_if.data.op_args);
             `TRACE(1, (", tmask=%b, wb=%b, rd=%0d, rs1_data=", operands_if.data.tmask, operands_if.data.wb, operands_if.data.rd))
-            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs1_data, `NUM_THREADS)
+            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs1_data, `SIMD_WIDTH)
             `TRACE(1, (", rs2_data="))
-            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs2_data, `NUM_THREADS)
+            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs2_data, `SIMD_WIDTH)
             `TRACE(1, (", rs3_data="))
-            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs3_data, `NUM_THREADS)
+            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs3_data, `SIMD_WIDTH)
+            `TRACE(1, (", "))
             trace_op_args(1, operands_if.data.ex_type, operands_if.data.op_type, operands_if.data.op_args);
-            `TRACE(1, (" (#%0d)\n", operands_if.data.uuid))
+            `TRACE(1, (", sop=%b, eop=%b (#%0d)\n", operands_if.data.sop, operands_if.data.eop, operands_if.data.uuid))
         end
     end
 `endif

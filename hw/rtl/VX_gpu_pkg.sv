@@ -368,7 +368,6 @@ package VX_gpu_pkg;
 ///////////////////////////////////////////////////////////////////////////////
 
     typedef struct packed {
-        logic [REG_EXT_BITS-1:0]  ext;
         logic [REG_TYPE_BITS-1:0] rtype;
         logic [RV_REGS_BITS-1:0]  id;
     } reg_idx_t;
@@ -831,7 +830,7 @@ package VX_gpu_pkg;
     endfunction
 
     function automatic logic [RV_REGS-1:0] to_reg_mask(input reg_idx_t reg_idx);
-        return ((1 << (1 << reg_idx.ext))-1) << reg_idx.id;
+        return 1 << reg_idx.id;
     endfunction
 
     ////////////////////////////////// Tracing ////////////////////////////////
@@ -844,12 +843,7 @@ package VX_gpu_pkg;
 
     task trace_reg_idx(input int level, input reg_idx_t reg_id);
         automatic  logic [NUM_REGS_BITS-1:0] reg_base = to_reg_number(reg_id);
-        if (reg_id.ext != 0) begin
-            automatic logic [NUM_REGS_BITS-1:0] reg_ext = reg_base + (1 << reg_id.ext) - 1;
-            `TRACE(level, ("%0d..%0d", reg_base, reg_ext));
-        end else begin
-            `TRACE(level, ("%0d", reg_base));
-        end
+        `TRACE(level, ("%0d", reg_id.id));
     endtask
 
     task trace_ex_type(input int level, input [EX_BITS-1:0] ex_type);

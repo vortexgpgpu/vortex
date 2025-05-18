@@ -369,18 +369,12 @@
 
 // Operand collectors
 `ifndef NUM_OPCS
-`define NUM_OPCS        4
-`endif
-`ifndef NUM_VOPCS
-`define NUM_VOPCS       1
+`define NUM_OPCS        `MIN(4, `NUM_WARPS / `ISSUE_WIDTH)
 `endif
 
 // Register File Banks
 `ifndef NUM_GPR_BANKS
-`define NUM_GPR_BANKS   `MIN(`NUM_OPCS, 16)
-`endif
-`ifndef NUM_VGPR_BANKS
-`define NUM_VGPR_BANKS  `MIN(`NUM_VOPCS, 16)
+`define NUM_GPR_BANKS   4
 `endif
 
 // Number of ALU units

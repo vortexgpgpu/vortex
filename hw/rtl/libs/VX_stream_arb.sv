@@ -18,6 +18,7 @@ module VX_stream_arb #(
     parameter NUM_INPUTS    = 1,
     parameter NUM_OUTPUTS   = 1,
     parameter DATAW         = 1,
+    parameter STICKY        = 0,   // hold the grant until its request is deasserted
     parameter `STRING ARBITER = "R",
     parameter MAX_FANOUT    = `MAX_FANOUT,
     parameter OUT_BUF       = 0,
@@ -69,6 +70,7 @@ module VX_stream_arb #(
                     .NUM_OUTPUTS (NUM_OUTPUTS),
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
+                    .STICKY      (STICKY),
                     .MAX_FANOUT  (MAX_FANOUT),
                     .OUT_BUF     (3)
                 ) fanout_slice_arb (
@@ -96,6 +98,7 @@ module VX_stream_arb #(
                 .NUM_OUTPUTS (NUM_OUTPUTS),
                 .DATAW       (DATAW2),
                 .ARBITER     (ARBITER),
+                .STICKY      (STICKY),
                 .MAX_FANOUT  (MAX_FANOUT),
                 .OUT_BUF     (OUT_BUF)
             ) fanout_join_arb (
@@ -134,7 +137,8 @@ module VX_stream_arb #(
 
             VX_generic_arbiter #(
                 .NUM_REQS (NUM_REQS),
-                .TYPE     (ARBITER)
+                .TYPE     (ARBITER),
+                .STICKY   (STICKY)
             ) arbiter (
                 .clk          (clk),
                 .reset        (reset),
@@ -213,6 +217,7 @@ module VX_stream_arb #(
                 .NUM_OUTPUTS (NUM_SLICES * NUM_INPUTS),
                 .DATAW       (DATAW),
                 .ARBITER     (ARBITER),
+                .STICKY      (STICKY),
                 .MAX_FANOUT  (MAX_FANOUT),
                 .OUT_BUF     (3)
             ) fanout_fork_arb (
@@ -243,6 +248,7 @@ module VX_stream_arb #(
                     .NUM_OUTPUTS (SLICE_SIZE),
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
+                    .STICKY      (STICKY),
                     .MAX_FANOUT  (MAX_FANOUT),
                     .OUT_BUF     (OUT_BUF)
                 ) fanout_slice_arb (
@@ -281,7 +287,8 @@ module VX_stream_arb #(
 
             VX_generic_arbiter #(
                 .NUM_REQS (NUM_REQS),
-                .TYPE     (ARBITER)
+                .TYPE     (ARBITER),
+                .STICKY   (STICKY)
             ) arbiter (
                 .clk          (clk),
                 .reset        (reset),

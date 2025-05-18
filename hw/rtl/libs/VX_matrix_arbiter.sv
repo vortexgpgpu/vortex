@@ -16,6 +16,7 @@
 `TRACING_OFF
 module VX_matrix_arbiter #(
     parameter NUM_REQS     = 1,
+    parameter STICKY       = 0, // hold the grant until its request is deasserted
     parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS)
 ) (
     input  wire                     clk,
@@ -31,6 +32,7 @@ module VX_matrix_arbiter #(
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
         `UNUSED_VAR (grant_ready)
+        `UNUSED_PARAM (STICKY)
 
         assign grant_index  = '0;
         assign grant_onehot = requests;
@@ -41,6 +43,20 @@ module VX_matrix_arbiter #(
         reg [NUM_REQS-1:1] state [NUM_REQS-1:0];
         wire [NUM_REQS-1:0] pri [NUM_REQS-1:0];
         wire [NUM_REQS-1:0] grant;
+
+        reg [NUM_REQS-1:0] prev_grant;
+
+        always @(posedge clk) begin
+            if (reset) begin
+                prev_grant <= '0;
+            end else if (grant_valid && grant_ready) begin
+                prev_grant <= grant_onehot;
+            end
+        end
+
+        wire retain_grant = (STICKY != 0) && (|(prev_grant & requests));
+
+        wire [NUM_REQS-1:0] grant_w = retain_grant ? prev_grant : grant;
 
         for (genvar r = 0; r < NUM_REQS; ++r) begin : g_pri_r
             for (genvar c = 0; c < NUM_REQS; ++c) begin : g_pri_c
@@ -63,22 +79,26 @@ module VX_matrix_arbiter #(
                 always @(posedge clk) begin
                     if (reset) begin
                         state[r][c] <= '0;
-                    end else if (grant_ready) begin
+                    end else if (grant_valid && grant_ready && ~retain_grant) begin
                         state[r][c] <= (state[r][c] || grant[c]) && ~grant[r];
                     end
                 end
             end
         end
 
-        assign grant_onehot = grant;
+        assign grant_onehot = grant_w;
+
+        wire grant_valid_w;
 
         VX_onehot_encoder #(
             .N (NUM_REQS)
         ) encoder (
-            .data_in   (grant_onehot),
+            .data_in   (grant_w),
             .data_out  (grant_index),
-            .valid_out (grant_valid)
+            .valid_out (grant_valid_w)
         );
+
+        assign grant_valid = (STICKY != 0) ? (| requests) : grant_valid_w;
     end
 
 endmodule

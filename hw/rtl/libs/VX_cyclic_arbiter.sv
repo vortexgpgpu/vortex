@@ -16,6 +16,7 @@
 `TRACING_OFF
 module VX_cyclic_arbiter #(
     parameter NUM_REQS     = 1,
+    parameter STICKY       = 0, // hold the grant until its request is deasserted
     parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS)
 ) (
     input  wire                     clk,
@@ -31,6 +32,7 @@ module VX_cyclic_arbiter #(
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
         `UNUSED_VAR (grant_ready)
+        `UNUSED_PARAM (STICKY)
 
         assign grant_index  = '0;
         assign grant_onehot = requests;
@@ -44,10 +46,24 @@ module VX_cyclic_arbiter #(
         wire [NUM_REQS-1:0] grant_onehot_w, grant_onehot_um;
         reg [LOG_NUM_REQS-1:0] grant_index_r;
 
+        reg [NUM_REQS-1:0] prev_grant;
+
+        always @(posedge clk) begin
+            if (reset) begin
+                prev_grant <= '0;
+            end else if (grant_valid && grant_ready) begin
+                prev_grant <= grant_onehot;
+            end
+        end
+
+        wire retain_grant = (STICKY != 0) && (|(prev_grant & requests));
+
+        wire [NUM_REQS-1:0] requests_w = retain_grant ? prev_grant : requests;
+
         always @(posedge clk) begin
             if (reset) begin
                 grant_index_r <= '0;
-            end else if (grant_valid && grant_ready) begin
+            end else if (grant_valid && grant_ready && ~retain_grant) begin
                 if (!IS_POW2 && grant_index == LOG_NUM_REQS'(NUM_REQS-1)) begin
                     grant_index_r <= '0;
                 end else begin
@@ -56,28 +72,31 @@ module VX_cyclic_arbiter #(
             end
         end
 
+        wire grant_valid_w;
+
         VX_priority_encoder #(
             .N (NUM_REQS)
         ) grant_sel (
-            .data_in    (requests),
+            .data_in    (requests_w),
             .onehot_out (grant_onehot_um),
             .index_out  (grant_index_um),
-            .valid_out  (grant_valid)
+            .valid_out  (grant_valid_w)
         );
 
         VX_demux #(
             .DATAW (1),
             .N (NUM_REQS)
         ) grant_decoder (
-            .sel_in   (grant_index),
+            .sel_in   (grant_index_r),
             .data_in  (1'b1),
             .data_out (grant_onehot_w)
         );
 
-        wire is_hit = requests[grant_index_r];
+        wire is_hit = requests[grant_index_r] && ~retain_grant;
 
         assign grant_index  = is_hit ? grant_index_r : grant_index_um;
         assign grant_onehot = is_hit ? grant_onehot_w : grant_onehot_um;
+        assign grant_valid  = (STICKY != 0) ? (| requests) : grant_valid_w;
 
     end
 
