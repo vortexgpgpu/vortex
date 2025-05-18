@@ -34,7 +34,7 @@ The recommended method to enable debugging is to pass the `--debug` flag to `bla
     $ ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=1
 
 A debug trace `run.log` is generated in the current directory during the program execution. The trace includes important states of the simulated processor (memory, caches, pipeline, stalls, etc..). A waveform trace `trace.vcd` is also generated in the current directory during the program execution.
-By default all library modules unde the /libs/ folder are excluded from the trace to reduce the waveform file size, you can chnage that behavoir by either explicitly commenting out `TRACING_OFF`/`TRACING_ON` inside a lib module source (e.g. VX_stream_buffer.sv) or simply enabling a full trace using the following command.
+By default all library modules unde the /libs/ folder are excluded from the trace to reduce the waveform file size, you can chnage that behavoir by either explicitly commenting out `TRACING_OFF`/`TRACING_ON` inside a lib module source (e.g. VX_stream_buffer.sv) or simply enabling a full trace by defining TRACING_ALL as follows.
 
     // Debugging the demo program with rtlsim in full tracing mode
     $ CONFIGS="-DTRACING_ALL" ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=1
