@@ -20,7 +20,7 @@
 #include <hfloats.h>
 
 #ifndef NUM_LANES
-#define NUM_LANES 8
+#define NUM_LANES 32
 #endif
 
 namespace tensor {
@@ -137,20 +137,17 @@ __attribute__((always_inline)) void fill_fragment(Frag &dst, size_t value) {
 
 template <layout_t mem_layout, typename Frag>
 __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
-  int row, col;
-  int tid = vx_thread_id();
-  map_operand_ab(tid, row, col);
   if constexpr (Frag::Use == matrix_a) {
     if constexpr (Frag::Layout == mem_layout) {
-      dst.data = vx_wldm_ad_f32(src, row, ldm);
+      dst.data = vx_wldm_ad_f32(src, ldm);
     } else {
-      dst.data = vx_wldm_at_f32(src, col, ldm);
+      dst.data = vx_wldm_at_f32(src, ldm);
     }
   } else if constexpr (Frag::Use == matrix_b) {
     if constexpr (Frag::Layout == mem_layout) {
-      dst.data = vx_wldm_bd_f32(src, row, ldm);
+      dst.data = vx_wldm_bd_f32(src, ldm);
     } else {
-      dst.data = vx_wldm_bt_f32(src, col, ldm);
+      dst.data = vx_wldm_bt_f32(src, ldm);
     }
   } else {
     static_assert(false, "Only matrix_a and matrix_b are supported!");
@@ -160,13 +157,10 @@ __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src,
 template <layout_t mem_layout, typename Frag>
 __attribute__((always_inline)) void store_matrix_sync(void *dst, const Frag &src, size_t ldm) {
   static_assert(Frag::Layout == mem_layout, "fragment layout should match memory!");
-  int row, col;
-  int tid = vx_thread_id();
-  map_operand_c(tid, row, col);
   if constexpr (Frag::Use == matrix_c) {
-    vx_wstm_f32(dst, src.data, row, col, ldm);
+    vx_wstm_f32(dst, src.data, ldm);
   } else if constexpr (Frag::Use == matrix_d) {
-    vx_wstm_f32(dst, src.data, row, col, ldm);
+    vx_wstm_f32(dst, src.data, ldm);
   } else {
     static_assert(false, "Only matrix_c or matrix_c are supported!");
   }
@@ -182,7 +176,7 @@ __attribute__((always_inline)) void mma_sync(FragD &D, const FragA &A, const Fra
   static_assert(std::is_same_v<typename FragC::Type, typename FragD::Type>, "C and D must have the same type");
 
   if constexpr (std::is_same_v<typename FragC::Type, float>
-             && std::is_same_v<typename FragA::Type, vortex::half_t>) {
+             && std::is_same_v<typename FragA::Type, float>) {
     if constexpr (FragD::Use == matrix_d) {
       D.data = vx_hmma_844_d_f16_f32(A.data, B.data, C.data);
     } else {
