@@ -79,6 +79,9 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     , warps_(arch.num_warps(), arch.num_threads())
     , barriers_(arch.num_barriers(), 0)
     , ipdom_size_(arch.num_threads()-1)
+  #ifdef EXT_TPU_ENABLE
+    , tensor_unit_(core->tensor_unit())
+  #endif
   #ifdef EXT_V_ENABLE
     , vec_unit_(core->vec_unit())
   #endif
@@ -162,7 +165,7 @@ instr_trace_t* Emulator::step() {
   if (scheduled_warp == -1)
     return nullptr;
 
-  // suspend warp until decode
+  // get scheduled warp
   auto& warp = warps_.at(scheduled_warp);
   assert(warp.tmask.any());
 

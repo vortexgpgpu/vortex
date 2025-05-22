@@ -5,7 +5,7 @@
 #include <hfloats.h>
 
 #ifndef I_TYPE
-#define I_TYPE vortex::half_t
+#define I_TYPE float
 #endif
 
 #ifndef O_TYPE

@@ -1412,6 +1412,24 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         std::abort();
       }
     } break;
+  #ifdef EXT_TPU_ENABLE
+    case 2: {
+      switch (funct3) {
+      case 0: { // HMMA844
+        trace->fu_type = FUType::TPU;
+        trace->tpu_type = TpuType::HMMA844;
+        auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
+        trace->data = trace_data;
+        uint32_t fmt = immsrc >> 2;
+        uint32_t step = immsrc & 0x3;
+        tensor_unit_->hmma844(wid, fmt, step, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
+        rd_write = true;
+      } break;
+      default:
+        std::abort();
+      }
+    } break;
+  #endif
     default:
       std::abort();
     }

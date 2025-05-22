@@ -24,6 +24,11 @@ SRCS += $(SRC_DIR)/execute.cpp $(SRC_DIR)/func_unit.cpp
 SRCS += $(SRC_DIR)/cache_sim.cpp $(SRC_DIR)/mem_sim.cpp $(SRC_DIR)/local_mem.cpp $(SRC_DIR)/mem_coalescer.cpp
 SRCS += $(SRC_DIR)/dcrs.cpp $(SRC_DIR)/types.cpp
 
+# Add TPU extension sources
+ifneq ($(findstring -DEXT_TPU_ENABLE, $(CONFIGS)),)
+  	SRCS += $(SRC_DIR)/tensor_unit.cpp
+endif
+
 # Add V extension sources
 ifneq ($(findstring -DEXT_V_ENABLE, $(CONFIGS)),)
   	SRCS += $(SRC_DIR)/voperands.cpp

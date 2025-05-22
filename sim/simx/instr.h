@@ -125,6 +125,8 @@ enum VectorAttrMask {
 
 class Instr {
 public:
+  using Ptr = std::shared_ptr<Instr>;
+
   Instr()
     : opcode_(Opcode::NONE)
     , num_rsrcs_(0)

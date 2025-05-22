@@ -39,6 +39,9 @@ Core::Core(const SimContext& ctx,
   , core_id_(core_id)
   , socket_(socket)
   , arch_(arch)
+#ifdef EXT_TPU_ENABLE
+  , tensor_unit_(TensorUnit::Create("tpu", arch, this))
+#endif
 #ifdef EXT_V_ENABLE
   , vec_unit_(VecUnit::Create("vpu", arch, this))
 #endif
@@ -136,6 +139,9 @@ Core::Core(const SimContext& ctx,
   dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_FPU_BLOCKS, NUM_FPU_LANES);
   dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_LSU_BLOCKS, NUM_LSU_LANES);
   dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_SFU_BLOCKS, NUM_SFU_LANES);
+#ifdef EXT_TPU_ENABLE
+  dispatchers_.at((int)FUType::TPU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_VPU_BLOCKS, NUM_VPU_LANES);
+#endif
 #ifdef EXT_V_ENABLE
   dispatchers_.at((int)FUType::VPU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_VPU_BLOCKS, NUM_VPU_LANES);
 #endif
@@ -145,6 +151,9 @@ Core::Core(const SimContext& ctx,
   func_units_.at((int)FUType::FPU) = SimPlatform::instance().create_object<FpuUnit>(this);
   func_units_.at((int)FUType::LSU) = SimPlatform::instance().create_object<LsuUnit>(this);
   func_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(this);
+#ifdef EXT_TPU_ENABLE
+  func_units_.at((int)FUType::TPU) = SimPlatform::instance().create_object<TpuUnit>(this);
+#endif
 #ifdef EXT_V_ENABLE
   func_units_.at((int)FUType::VPU) = SimPlatform::instance().create_object<VpuUnit>(this);
 #endif
@@ -341,6 +350,9 @@ void Core::issue() {
             default: assert(false);
             }
           } break;
+        #ifdef EXT_TPU_ENABLE
+          case FUType::TPU: ++perf_stats_.scrb_tpu; break;
+        #endif
         #ifdef EXT_V_ENABLE
           case FUType::VPU: ++perf_stats_.scrb_vpu; break;
         #endif

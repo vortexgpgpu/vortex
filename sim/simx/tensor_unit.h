@@ -22,15 +22,10 @@ class Core;
 
 class TensorUnit : public SimObject<TensorUnit> {
 public:
-	struct Config {
-		uint8_t num_ports;
-		uint8_t mac_latency;
 
-		Config()
-			: num_ports(0)
-			, mac_latency(0)
-		{}
-	};
+  struct ExeTraceData : public ITraceData {
+    using Ptr = std::shared_ptr<ExeTraceData>;
+  };
 
 	struct PerfStats {
 		uint64_t latency;
@@ -48,13 +43,20 @@ public:
   std::vector<SimPort<instr_trace_t*>> Inputs;
 	std::vector<SimPort<instr_trace_t*>> Outputs;
 
-  TensorUnit(const SimContext &ctx, const char* name, const Config& config, Core* core);
-
+  TensorUnit(const SimContext &ctx, const char* name, const Arch& arch, Core* core);
   virtual ~TensorUnit();
 
   virtual void reset();
 
   virtual void tick();
+
+	void hmma844(uint32_t wid,
+							 uint32_t fmt, uint32_t step,
+	             const std::vector<reg_data_t>& rs1_data,
+							 const std::vector<reg_data_t>& rs2_data,
+							 const std::vector<reg_data_t>& rs3_data,
+							 std::vector<reg_data_t>& rd_data,
+							 ExeTraceData* trace_data);
 
 	const PerfStats& perf_stats() const;
 

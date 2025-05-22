@@ -55,12 +55,12 @@ static const std::unordered_map<Opcode, InstType> sc_instTable = {
 };
 
 static const char* op_string(const Instr &instr) {
-  auto opcode = instr.getOpcode();
+  auto opcode   = instr.getOpcode();
   auto funct2 = instr.getFunct2();
   auto funct3 = instr.getFunct3();
   auto funct7 = instr.getFunct7();
-  auto rd     = instr.getDestReg();
-  auto rs1    = instr.getSrcReg(1);
+  auto rd       = instr.getDestReg();
+  auto rs1      = instr.getSrcReg(1);
   auto imm    = instr.getImm();
 
   switch (opcode) {
@@ -386,23 +386,29 @@ static const char* op_string(const Instr &instr) {
       default:
         std::abort();
       }
+    case 1:
+      switch (funct3) {
+      case 0: // gfx reserved
+        std::abort();
+      default:
+        std::abort();
+      }
+  #ifdef EXT_TPU_ENABLE
+    case 2:
+      switch (funct3) {
+      case 0: return "HMMA844";
+      default:
+        std::abort();
+      }
+  #endif
     default:
       std::abort();
     }
   case Opcode::EXT2:
     switch(funct3) {
-    case 0: // reserved
-    case 1: // reserved
+    case 0: // gfx reserved
+    case 1: // gfx reserved
       std::abort();
-    case 2:
-      switch (funct2) {
-      case 0: return "MMADD.u4_i32";
-      case 1: return "MMADD.u8_i32";
-      case 2: return "MMADD.f16_f32";
-      case 3: return "MMADD.bf16_f32";
-      default:
-        std::abort();
-      }
     default:
       std::abort();
     }
@@ -468,7 +474,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 }
 }
 
-std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
+Instr::Ptr Emulator::decode(uint32_t code) const {
   auto instr = std::allocate_shared<Instr>(instr_pool_);
   auto op = Opcode((code >> shift_opcode) & mask_opcode);
   instr->setOpcode(op);
@@ -574,6 +580,31 @@ std::shared_ptr<Instr> Emulator::decode(uint32_t code) const {
           std::abort();
         }
         break;
+    #ifdef EXT_TPU_ENABLE
+      case 2: {
+        switch (funct3) {
+        case 0: { // HMMA844
+          uint32_t fmt = rd;
+          uint32_t steps    = rs1 >> 1;
+          uint32_t step     = steps % 4;
+          uint32_t set      = steps / 4;
+          uint32_t rd_pair  = rs1 & 0x1;
+          uint32_t use_d    = rs2;
+          uint32_t base_rd  = (use_d ? 16 : 0) + (step * 2 + rd_pair); // C/D
+          uint32_t base_rs1 = 8  + set; // A
+          uint32_t base_rs2 = 24 + set; // B
+          uint32_t base_rs3 = 0  + step; // C
+          instr->setImm((fmt << 2) + step); // fmt + step
+          instr->setDestReg(base_rd, RegType::Float);
+          instr->addSrcReg(base_rs1, RegType::Float);
+          instr->addSrcReg(base_rs2, RegType::Float);
+          instr->addSrcReg(base_rs3, RegType::Float);
+        } break;
+        default:
+          std::abort();
+        }
+      } break;
+    #endif
       default:
         std::abort();
       }

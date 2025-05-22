@@ -13,40 +13,20 @@
 // limitations under the License.
 
 #include "tensor_unit.h"
+#include "core.h"
 
 using namespace vortex;
 
-template <typename T>
-class FMAD : public SimObject<FMAD<T>> {
-public:
-  SimPort<T> Input;
-	SimPort<T> Output;
-
-  FMAD(const SimContext &ctx, const char* name)
-    : SimObject<FMAD<T>>(ctx, name)
-    , Input(this)
-    , Output(this)
-  {}
-
-  virtual ~FMAD() {}
-
-  void reset() {
-    //--
-  }
-
-  void tick() {
-    //--
-  }
-};
-
 class TensorUnit::Impl {
 public:
-  Impl(TensorUnit* simobject, const Config& config, Core* core)
+  Impl(TensorUnit* simobject, const Arch& arch, Core* core)
     : simobject_(simobject)
-    , config_(config)
     , core_(core)
+    , arch_(arch)
     , perf_stats_()
-  {}
+  {
+    //--
+  }
 
   ~Impl() {
     // Destructor logic if needed
@@ -57,7 +37,48 @@ public:
   }
 
   void tick() {
-    // Implement the tick logic here
+    for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
+      auto& input = simobject_->Inputs.at(iw);
+      if (input.empty())
+          return;
+      auto trace = input.front();
+      int delay = 0;
+      switch (trace->tpu_type) {
+      case TpuType::HMMA844:
+        delay = 4;
+        break;
+      default:
+        std::abort();
+      }
+      simobject_->Outputs.at(iw).push(trace, 2 + delay);
+      DT(3, simobject_->name() << ": op=" << trace->tpu_type << ", " << *trace);
+      input.pop();
+    }
+  }
+
+  void hmma844(uint32_t wid,
+               uint32_t fmt, uint32_t step,
+               const std::vector<reg_data_t>& rs1_data,
+               const std::vector<reg_data_t>& rs2_data,
+               const std::vector<reg_data_t>& rs3_data,
+               std::vector<reg_data_t>& rd_data,
+               ExeTraceData* trace_data) {
+    uint32_t num_octects = arch_.num_threads() / 8;
+    uint32_t threadgroup_lane_offset = 4 * num_octects;
+    for (uint32_t i = 0; i < num_octects; ++i) {
+      std::vector<reg_data_t> octet_A(8);
+      std::vector<reg_data_t> octet_B(8);
+      std::vector<reg_data_t> octet_C(8);
+      std::vector<reg_data_t> octet_D(8);
+
+      for (uint32_t j = 0; j < 8; ++j) {
+        octet_A[j] = rs1_data[i * 8 + j];
+        octet_B[j] = rs2_data[i * 8 + j];
+        octet_C[j] = rs3_data[i * 8 + j];
+        octet_D[j] = rd_data[i * 8 + j];
+      }
+    }
+
   }
 
   const PerfStats& perf_stats() const {
@@ -66,18 +87,18 @@ public:
 
 private:
   TensorUnit*   simobject_;
-  Config        config_;
   Core*         core_;
+  Arch          arch_;
   PerfStats     perf_stats_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-TensorUnit::TensorUnit(const SimContext &ctx, const char* name, const Config& config, Core* core)
+TensorUnit::TensorUnit(const SimContext &ctx, const char* name, const Arch& arch, Core* core)
 	: SimObject<TensorUnit>(ctx, name)
-	, Inputs(config.num_ports, this)
-	, Outputs(config.num_ports, this)
-	, impl_(new Impl(this, config, core))
+	, Inputs(ISSUE_WIDTH, this)
+	, Outputs(ISSUE_WIDTH, this)
+	, impl_(new Impl(this, arch, core))
 {}
 
 TensorUnit::~TensorUnit() {
@@ -94,4 +115,14 @@ void TensorUnit::tick() {
 
 const TensorUnit::PerfStats &TensorUnit::perf_stats() const {
 	return impl_->perf_stats();
+}
+
+void TensorUnit::hmma844(uint32_t wid,
+                         uint32_t fmt, uint32_t step,
+                         const std::vector<reg_data_t>& rs1_data,
+                         const std::vector<reg_data_t>& rs2_data,
+                         const std::vector<reg_data_t>& rs3_data,
+                         std::vector<reg_data_t>& rd_data,
+                         ExeTraceData* trace_data) {
+  impl_->hmma844(wid, fmt, step, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
 }

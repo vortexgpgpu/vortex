@@ -56,11 +56,7 @@ public:
   std::vector<SimPort<instr_trace_t*>> Inputs;
   std::vector<SimPort<instr_trace_t*>> Outputs;
 
-  VecUnit(const SimContext& ctx,
-          const char* name,
-          const Arch& arch,
-          Core* core);
-
+  VecUnit(const SimContext& ctx, const char* name, const Arch& arch, Core* core);
   ~VecUnit();
 
   void reset();

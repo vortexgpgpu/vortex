@@ -127,6 +127,9 @@ enum class FUType {
   LSU,
   FPU,
   SFU,
+#ifdef EXT_TPU_ENABLE
+  TPU,
+#endif
 #ifdef EXT_V_ENABLE
   VPU,
 #endif
@@ -139,6 +142,9 @@ inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
   case FUType::LSU: os << "LSU"; break;
   case FUType::FPU: os << "FPU"; break;
   case FUType::SFU: os << "SFU"; break;
+#ifdef EXT_TPU_ENABLE
+  case FUType::TPU: os << "TPU"; break;
+#endif
 #ifdef EXT_V_ENABLE
   case FUType::VPU: os << "VPU"; break;
 #endif
@@ -279,6 +285,20 @@ inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
   case SfuType::CSRRW:  os << "CSRRW"; break;
   case SfuType::CSRRS:  os << "CSRRS"; break;
   case SfuType::CSRRC:  os << "CSRRC"; break;
+  default: assert(false);
+  }
+  return os;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+enum class TpuType {
+  HMMA844 = 0,
+};
+
+inline std::ostream &operator<<(std::ostream &os, const TpuType& type) {
+  switch (type) {
+  case TpuType::HMMA844: os << "HMMA844"; break;
   default: assert(false);
   }
   return os;

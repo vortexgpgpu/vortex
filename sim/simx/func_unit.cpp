@@ -317,6 +317,25 @@ void SfuUnit::tick() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#ifdef EXT_TPU_ENABLE
+
+TpuUnit::TpuUnit(const SimContext& ctx, Core* core)
+	: FuncUnit(ctx, core, "tpu-unit")
+{
+	// bind tensor unit
+	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
+		this->Inputs.at(iw).bind(&core_->tensor_unit()->Inputs.at(iw));
+		core_->tensor_unit()->Outputs.at(iw).bind(&this->Outputs.at(iw));
+	}
+}
+
+void TpuUnit::tick() {
+	// use tensor_unit
+}
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+
 #ifdef EXT_V_ENABLE
 
 VpuUnit::VpuUnit(const SimContext& ctx, Core* core)

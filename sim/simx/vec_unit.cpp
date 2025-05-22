@@ -96,10 +96,6 @@ public:
 
       DT(3, simobject_->name() << ": op=" << trace->vpu_type << ", " << *trace);
 
-      if (trace->eop && trace->fetch_stall) {
-        core_->resume(trace->wid);
-      }
-
       input.pop();
     }
   }

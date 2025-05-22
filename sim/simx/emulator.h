@@ -19,6 +19,10 @@
 #include <stack>
 #include <mem.h>
 #include "types.h"
+#include "instr.h"
+#ifdef EXT_TPU_ENABLE
+#include "tensor_unit.h"
+#endif
 #ifdef EXT_V_ENABLE
 #include "vec_unit.h"
 #endif
@@ -105,7 +109,7 @@ public:
 
 private:
 
-  std::shared_ptr<Instr> decode(uint32_t code) const;
+  Instr::Ptr decode(uint32_t code) const;
 
   void execute(const Instr &instr, uint32_t wid, instr_trace_t *trace);
 
@@ -145,6 +149,10 @@ private:
   uint32_t    ipdom_size_;
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
+
+#ifdef EXT_TPU_ENABLE
+  TensorUnit::Ptr tensor_unit_;
+#endif
 
 #ifdef EXT_V_ENABLE
   VecUnit::Ptr vec_unit_;

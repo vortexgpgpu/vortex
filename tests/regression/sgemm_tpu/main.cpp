@@ -192,11 +192,15 @@ int main(int argc, char *argv[]) {
 
   uint64_t NT;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &NT));
-  std::cout << "GPU warp size: " << NT << std::endl;
+  if (NT < 4) {
+    std::cout << "Error: warp size must be at least 4 threads!" << std::endl;
+    return -1;
+  }
+  std::cout << "GPU warp size: " << NT << " threads" << std::endl;
 
   uint64_t isa_flags;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-  uint32_t XlenB = 4 * VX_ISA_ARCH(isa_flags);
+  uint32_t XlenB = VX_ISA_ARCH(isa_flags) / 8;
   std::cout << "GPU XLEN: " << 8 * XlenB << std::endl;
 
   // tile format ratio
@@ -206,22 +210,22 @@ int main(int argc, char *argv[]) {
   // determine tensor tile size
   uint32_t logNT = log2(NT);
   uint32_t tileM = 4 * (1 << (logNT / 2)) * o_ratio;
-  uint32_t tileN = (logNT % 2 == 0) ? tileM / 2 : tileN;
+  uint32_t tileN = (logNT % 2 == 0) ? (tileM / 2) : tileM;
   uint32_t tileK = std::min(tileM, tileN) * i_ratio;
 
-  std::cout << "GPU tensor tileM=" << tileM << ", tileN=" << tileM << ", tileK=" << tileM << std::endl;
+  std::cout << "GPU tensor tileM=" << tileM << ", tileN=" << tileM << ", tileK=" << tileK << std::endl;
 
-  if ((M & (tileM - 1)) != 0) {
+  if ((M % tileM) != 0) {
     std::cout << "Error: M must be a multiple of tensor tileM!" << std::endl;
     return -1;
   }
 
-  if ((N & (tileN - 1)) != 0) {
+  if ((N % tileN) != 0) {
     std::cout << "Error: M must be a multiple of tensor tileN!" << std::endl;
     return -1;
   }
 
-  if ((K & (tileK - 1)) != 0) {
+  if ((K % tileK) != 0) {
     std::cout << "Error: M must be a multiple of tensor tileK!" << std::endl;
     return -1;
   }
@@ -234,8 +238,8 @@ int main(int argc, char *argv[]) {
   size_t sizeB = K * N;
   size_t sizeC = M * N;
 
-  std::cout << "input data type: " << Comparator<I_TYPE>::type_str() << std::endl;
-  std::cout << "output data type: " << Comparator<O_TYPE>::type_str() << std::endl;
+  std::cout << "input data type: " << Comparator<I_TYPE>::type_str() << " (" << sizeof(I_TYPE) << " bytes)" << std::endl;
+  std::cout << "output data type: " << Comparator<O_TYPE>::type_str() << " (" << sizeof(O_TYPE) << " bytes)" << std::endl;
   std::cout << "matrix A: " << M << "x" << K << std::endl;
   std::cout << "matrix B: " << K << "x" << N << std::endl;
   std::cout << "matrix C: " << M << "x" << N << std::endl;

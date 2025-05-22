@@ -72,6 +72,9 @@ public:
     AluType  alu_type;
     FpuType  fpu_type;
     SfuType  sfu_type;
+  #ifdef EXT_TPU_ENABLE
+    TpuType  tpu_type;
+  #endif
   #ifdef EXT_V_ENABLE
     VpuType  vpu_type;
   #endif

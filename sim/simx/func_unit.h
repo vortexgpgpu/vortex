@@ -110,6 +110,19 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#ifdef EXT_TPU_ENABLE
+
+class TpuUnit : public FuncUnit {
+public:
+	TpuUnit(const SimContext& ctx, Core*);
+
+	void tick() override;
+};
+
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+
 #ifdef EXT_V_ENABLE
 
 class VpuUnit : public FuncUnit {
