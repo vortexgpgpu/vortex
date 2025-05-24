@@ -57,28 +57,40 @@ public:
   }
 
   void hmma844(uint32_t wid,
-               uint32_t fmt, uint32_t step,
+               uint32_t fmt,
+               uint32_t step,
                const std::vector<reg_data_t>& rs1_data,
                const std::vector<reg_data_t>& rs2_data,
                const std::vector<reg_data_t>& rs3_data,
                std::vector<reg_data_t>& rd_data,
                ExeTraceData* trace_data) {
-    uint32_t num_octects = arch_.num_threads() / 8;
-    uint32_t threadgroup_lane_offset = 4 * num_octects;
-    for (uint32_t i = 0; i < num_octects; ++i) {
-      std::vector<reg_data_t> octet_A(8);
-      std::vector<reg_data_t> octet_B(8);
-      std::vector<reg_data_t> octet_C(8);
-      std::vector<reg_data_t> octet_D(8);
-
-      for (uint32_t j = 0; j < 8; ++j) {
-        octet_A[j] = rs1_data[i * 8 + j];
-        octet_B[j] = rs2_data[i * 8 + j];
-        octet_C[j] = rs3_data[i * 8 + j];
-        octet_D[j] = rd_data[i * 8 + j];
+    uint32_t num_threads = arch_.num_threads();
+    float subA[8][4];
+    float subB[4][4];
+    float acc[8][4];
+    for (int x = 0; x < 8; ++x) {
+      for (int y = 0; y < 4; ++y) {
+        subA[x][y] = rs1_data[x * 4 + y].f32;
+        acc[x][y] = rs3_data[x * 4 + y].f32;
       }
     }
-
+    int cb = step & 3;
+    int half = cb & 1;
+    int off = half * 16;
+    for (int x = 0; x < 4; ++x) {
+      for (int y = 0; y < 4; ++y) {
+        subB[x][y] = rs2_data[off + x * 4 + y].f32;
+      }
+    }
+    for (int x = 0; x < 8; ++x) {
+      for (int y = 0; y < 4; ++y) {
+        float sum = 0;
+        for (int z = 0; z < 4; ++z) {
+          sum += subA[x][z] * subB[z][y];
+        }
+        rd_data[x * 4 + y].f32 = acc[x][y] + sum;
+      }
+    }
   }
 
   const PerfStats& perf_stats() const {
@@ -118,7 +130,8 @@ const TensorUnit::PerfStats &TensorUnit::perf_stats() const {
 }
 
 void TensorUnit::hmma844(uint32_t wid,
-                         uint32_t fmt, uint32_t step,
+                         uint32_t fmt,
+                         uint32_t step,
                          const std::vector<reg_data_t>& rs1_data,
                          const std::vector<reg_data_t>& rs2_data,
                          const std::vector<reg_data_t>& rs3_data,

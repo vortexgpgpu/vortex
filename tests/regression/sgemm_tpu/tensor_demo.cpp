@@ -60,25 +60,30 @@ void load_transposed(std::array<VReg, 8> &vR, int lane, const std::array<float, 
 
 // 8×4×4 micro‑op: vd = (va @ subB) + vc
 VReg hmma_844(int step_idx, const VReg &va, const VReg &vb, const VReg &vc) {
-  float subA[8][4], acc[8][4];
-  for (int x = 0; x < 8; ++x)
+  float subA[8][4];
+  float subB[4][4];
+  float acc[8][4];
+  for (int x = 0; x < 8; ++x) {
     for (int y = 0; y < 4; ++y) {
       subA[x][y] = va.data[x * 4 + y];
       acc[x][y] = vc.data[x * 4 + y];
     }
+  }
   int cb = step_idx & 3;
   int half = cb & 1;
-  float subB[4][4];
   int off = half * 16;
-  for (int x = 0; x < 4; ++x)
-    for (int y = 0; y < 4; ++y)
+  for (int x = 0; x < 4; ++x) {
+    for (int y = 0; y < 4; ++y) {
       subB[x][y] = vb.data[off + x * 4 + y];
+    }
+  }
   VReg vd{};
   for (int x = 0; x < 8; ++x) {
     for (int y = 0; y < 4; ++y) {
       float sum = 0;
-      for (int z = 0; z < 4; ++z)
+      for (int z = 0; z < 4; ++z) {
         sum += subA[x][z] * subB[z][y];
+      }
       vd.data[x * 4 + y] = acc[x][y] + sum;
     }
   }

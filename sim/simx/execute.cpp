@@ -46,11 +46,10 @@ inline int64_t check_boxing(int64_t a) {
   return nan_box(0x7fc00000); // NaN
 }
 
-inline void read_register(std::vector<reg_data_t>& out, uint32_t src_index, const RegOpd& reg, const warp_t& warp) {
+inline void fetch_registers(std::vector<reg_data_t>& out, uint32_t src_index, const RegOpd& reg, const warp_t& warp) {
   __unused(src_index);
   uint32_t num_threads = warp.tmask.size();
-  uint32_t group_size = reg.group_size();
-  out.resize(num_threads * group_size);
+  out.resize(num_threads);
   switch (reg.type) {
   case RegType::None:
 #ifdef EXT_V_ENABLE
@@ -59,38 +58,34 @@ inline void read_register(std::vector<reg_data_t>& out, uint32_t src_index, cons
     break;
   case RegType::Integer: {
     DPH(2, "Src" << src_index << " Reg: " << reg << "={");
-    for (uint32_t g = 0; g < group_size; ++g) {
-      auto& reg_data = warp.ireg_file.at(reg.idx + g);
-      for (uint32_t t = 0; t < reg_data.size(); ++t) {
-        if (t) DPN(2, ", ");
-        if (!warp.tmask.test(t)) {
-          DPN(2, "-");
-          continue;
-        }
-        auto& value = out[g * num_threads + t];
-        value.u = reg_data.at(t);
-        DPN(2, "0x" << std::hex << value.u << std::dec);
+    auto& reg_data = warp.ireg_file.at(reg.idx);
+    for (uint32_t t = 0; t < reg_data.size(); ++t) {
+      if (t) DPN(2, ", ");
+      if (!warp.tmask.test(t)) {
+        DPN(2, "-");
+        continue;
       }
+      auto& value = out[num_threads + t];
+      value.u = reg_data.at(t);
+      DPN(2, "0x" << std::hex << value.u << std::dec);
     }
     DPN(2, "}" << std::endl);
   } break;
   case RegType::Float: {
     DPH(2, "Src" << src_index << " Reg: " << reg << "={");
-    for (uint32_t g = 0; g < group_size; ++g) {
-      auto& reg_data = warp.freg_file.at(reg.idx + g);
-      for (uint32_t t = 0; t < reg_data.size(); ++t) {
-        if (t) DPN(2, ", ");
-        if (!warp.tmask.test(t)) {
-          DPN(2, "-");
-          continue;
-        }
-        auto& value = out[g * num_threads + t];
-        value.u64 = reg_data.at(t);
-        if ((value.u64 >> 32) == 0xffffffff) {
-          DPN(2, "0x" << std::hex << value.u32 << std::dec);
-        } else {
-          DPN(2, "0x" << std::hex << value.u64 << std::dec);
-        }
+    auto& reg_data = warp.freg_file.at(reg.idx);
+    for (uint32_t t = 0; t < reg_data.size(); ++t) {
+      if (t) DPN(2, ", ");
+      if (!warp.tmask.test(t)) {
+        DPN(2, "-");
+        continue;
+      }
+      auto& value = out[num_threads + t];
+      value.u64 = reg_data.at(t);
+      if ((value.u64 >> 32) == 0xffffffff) {
+        DPN(2, "0x" << std::hex << value.u32 << std::dec);
+      } else {
+        DPN(2, "0x" << std::hex << value.u64 << std::dec);
       }
     }
     DPN(2, "}" << std::endl);
@@ -101,7 +96,7 @@ inline void read_register(std::vector<reg_data_t>& out, uint32_t src_index, cons
   }
 }
 
-void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
+instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid) {
   auto& warp = warps_.at(wid);
   assert(warp.tmask.any());
 
@@ -120,7 +115,9 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
 
   auto num_threads = arch_.num_threads();
 
-  // initialize instruction trace
+  // create instruction trace
+  auto trace_alloc = core_->trace_pool().allocate(1);
+  auto trace = new (trace_alloc) instr_trace_t(uuid, arch_);
   trace->cid      = core_->id();
   trace->wid      = wid;
   trace->PC       = warp.PC;
@@ -128,15 +125,15 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
   trace->dst_reg  = rdest;
   trace->src_regs = {rsrc0, rsrc1, rsrc2};
 
-  std::vector<reg_data_t> rd_data(num_threads * rdest.group_size());
+  std::vector<reg_data_t> rd_data(num_threads);
   std::vector<reg_data_t> rs1_data;
   std::vector<reg_data_t> rs2_data;
   std::vector<reg_data_t> rs3_data;
 
-  // load register values
-  if (rsrc0.type != RegType::None) read_register(rs1_data, 0, rsrc0, warp);
-  if (rsrc1.type != RegType::None) read_register(rs2_data, 1, rsrc1, warp);
-  if (rsrc2.type != RegType::None) read_register(rs3_data, 2, rsrc2, warp);
+  // fetch register values
+  if (rsrc0.type != RegType::None) fetch_registers(rs1_data, 0, rsrc0, warp);
+  if (rsrc1.type != RegType::None) fetch_registers(rs2_data, 1, rsrc1, warp);
+  if (rsrc2.type != RegType::None) fetch_registers(rs3_data, 2, rsrc2, warp);
 
   uint32_t thread_start = 0;
   for (; thread_start < num_threads; ++thread_start) {
@@ -1422,6 +1419,7 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
         trace->data = trace_data;
         uint32_t fmt = immsrc >> 2;
         uint32_t step = immsrc & 0x3;
+        assert(warp.tmask.count() == num_threads);
         tensor_unit_->hmma844(wid, fmt, step, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
         rd_write = true;
       } break;
@@ -1504,4 +1502,21 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       active_warps_.reset(wid);
     }
   }
+
+  DP(5, "Register state:");
+  for (uint32_t i = 0; i < MAX_NUM_REGS; ++i) {
+    DPN(5, "  %r" << std::setfill('0') << std::setw(2) << i << ':' << std::hex);
+    // Integer register file
+    for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
+      DPN(5, ' ' << std::setfill('0') << std::setw(XLEN/4) << warp.ireg_file.at(i).at(j) << std::setfill(' ') << ' ');
+    }
+    DPN(5, '|');
+    // Floating point register file
+    for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
+      DPN(5, ' ' << std::setfill('0') << std::setw(16) << warp.freg_file.at(i).at(j) << std::setfill(' ') << ' ');
+    }
+    DPN(5, std::dec << std::endl);
+  }
+
+  return trace;
 }

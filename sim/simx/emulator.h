@@ -109,9 +109,11 @@ public:
 
 private:
 
-  Instr::Ptr decode(uint32_t code) const;
+  uint32_t fetch(uint32_t wid, uint64_t uuid);
 
-  void execute(const Instr &instr, uint32_t wid, instr_trace_t *trace);
+  Instr::Ptr decode(uint32_t code, uint64_t uuid);
+
+  instr_trace_t* execute(const Instr &instr, uint32_t wid, uint64_t uuid);
 
   void icache_read(void* data, uint64_t addr, uint32_t size);
 

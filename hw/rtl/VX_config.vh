@@ -911,13 +911,15 @@
 `define ISA_EXT_L3CACHE     3
 `define ISA_EXT_LMEM        4
 `define ISA_EXT_ZICOND      5
+`define ISA_EXT_TPU         6
 
 `define MISA_EXT  (`ICACHE_ENABLED  << `ISA_EXT_ICACHE) \
                 | (`DCACHE_ENABLED  << `ISA_EXT_DCACHE) \
                 | (`L2_ENABLED      << `ISA_EXT_L2CACHE) \
                 | (`L3_ENABLED      << `ISA_EXT_L3CACHE) \
                 | (`LMEM_ENABLED    << `ISA_EXT_LMEM) \
-                | (`EXT_ZICOND_ENABLED << `ISA_EXT_ZICOND)
+                | (`EXT_ZICOND_ENABLED << `ISA_EXT_ZICOND) \
+                | (`EXT_TPU_ENABLED << `ISA_EXT_TPU) \
 
 `define MISA_STD  (`EXT_A_ENABLED <<  0) /* A - Atomic Instructions extension */ \
                 | (0 <<  1) /* B - Tentatively reserved for Bit operations extension */ \

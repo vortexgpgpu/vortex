@@ -247,7 +247,7 @@ int main(int argc, char *argv[]) {
   // set block size to warp size
   kernel_arg.grid_dim[0]  = N / tileN;
   kernel_arg.grid_dim[1]  = M / tileM;
-  kernel_arg.block_dim[0] = NT; // warp size
+  kernel_arg.block_dim[0] = NT; // warp sizeb
   kernel_arg.block_dim[1] = 1;
 
   // set matrix dimensions

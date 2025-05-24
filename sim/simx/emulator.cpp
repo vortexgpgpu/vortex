@@ -137,6 +137,17 @@ void Emulator::attach_ram(RAM* ram) {
 #endif
 }
 
+uint32_t Emulator::fetch(uint32_t wid, uint64_t uuid) {
+  auto& warp = warps_.at(wid);
+
+  DP(1, "Fetch: cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
+         << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")");
+
+  uint32_t instr_code = 0;
+  this->icache_read(&instr_code, warps_[0].PC, sizeof(uint32_t));
+  return instr_code;
+}
+
 instr_trace_t* Emulator::step() {
   int scheduled_warp = -1;
 
@@ -162,59 +173,29 @@ instr_trace_t* Emulator::step() {
       break;
     }
   }
+
   if (scheduled_warp == -1)
     return nullptr;
 
-  // get scheduled warp
-  auto& warp = warps_.at(scheduled_warp);
-  assert(warp.tmask.any());
-
-#ifndef NDEBUG
-  // generate unique universal instruction ID
-  uint32_t instr_uuid = warp.uuid++;
-  uint32_t g_wid = core_->id() * arch_.num_warps() + scheduled_warp;
-  uint64_t uuid = (uint64_t(g_wid) << 32) | instr_uuid;
-#else
   uint64_t uuid = 0;
+#ifndef NDEBUG
+  {
+    // generate unique universal instruction ID
+    auto& warp = warps_.at(scheduled_warp);
+    uint32_t instr_uuid = warp.uuid++;
+    uint32_t g_wid = core_->id() * arch_.num_warps() + scheduled_warp;
+    uuid = (uint64_t(g_wid) << 32) | instr_uuid;
+  }
 #endif
 
-  DP(1, "Fetch: cid=" << core_->id() << ", wid=" << scheduled_warp << ", tmask=" << warp.tmask
-         << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")");
-
   // Fetch
-  uint32_t instr_code = 0;
-  this->icache_read(&instr_code, warp.PC, sizeof(uint32_t));
+  auto instr_code = this->fetch(scheduled_warp, uuid);
 
   // Decode
-  auto instr = this->decode(instr_code);
-  if (!instr) {
-    std::cerr << "Error: invalid instruction 0x" << std::hex << instr_code << ", at PC=0x" << warp.PC << " (#" << std::dec << uuid << ")" << std::endl;
-    std::abort();
-  }
-
-  DP(1, "Instr 0x" << std::hex << instr_code << ": " << std::dec << *instr);
-
-  // Create trace
-  auto trace_alloc = core_->trace_pool().allocate(1);
-  auto trace = new (trace_alloc) instr_trace_t(uuid, arch_);
+  auto instr = this->decode(instr_code, uuid);
 
   // Execute
-  this->execute(*instr, scheduled_warp, trace);
-
-  DP(5, "Register state:");
-  for (uint32_t i = 0; i < MAX_NUM_REGS; ++i) {
-    DPN(5, "  %r" << std::setfill('0') << std::setw(2) << i << ':' << std::hex);
-    // Integer register file
-    for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
-      DPN(5, ' ' << std::setfill('0') << std::setw(XLEN/4) << warp.ireg_file.at(i).at(j) << std::setfill(' ') << ' ');
-    }
-    DPN(5, '|');
-    // Floating point register file
-    for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
-      DPN(5, ' ' << std::setfill('0') << std::setw(16) << warp.freg_file.at(i).at(j) << std::setfill(' ') << ' ');
-    }
-    DPN(5, std::dec << std::endl);
-  }
+  auto trace = this->execute(*instr, scheduled_warp, uuid);
 
   return trace;
 }

@@ -146,11 +146,6 @@ public:
     rdest_ = {type, destReg };
   }
 
-  void addSrcReg(uint32_t srcReg, RegType type) {
-    rsrc_[num_rsrcs_] = {type, srcReg};
-    ++num_rsrcs_;
-  }
-
   void setSrcReg(uint32_t index, uint32_t srcReg, RegType type) {
     rsrc_[index] = { type, srcReg};
     num_rsrcs_ = std::max<uint32_t>(num_rsrcs_, index+1);

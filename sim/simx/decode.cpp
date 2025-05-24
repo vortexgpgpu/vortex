@@ -474,7 +474,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 }
 }
 
-Instr::Ptr Emulator::decode(uint32_t code) const {
+Instr::Ptr Emulator::decode(uint32_t code, uint64_t uuid) {
   auto instr = std::allocate_shared<Instr>(instr_pool_);
   auto op = Opcode((code >> shift_opcode) & mask_opcode);
   instr->setOpcode(op);
@@ -511,45 +511,45 @@ Instr::Ptr Emulator::decode(uint32_t code) const {
       case 0x20: // FCVT.S.D
       case 0x21: // FCVT.D.S
         instr->setDestReg(rd, RegType::Float);
-        instr->addSrcReg(rs1, RegType::Float);
+        instr->setSrcReg(0, rs1, RegType::Float);
         break;
       case 0x2c: // FSQRT.S
       case 0x2d: // FSQRT.D
         instr->setDestReg(rd, RegType::Float);
-        instr->addSrcReg(rs1, RegType::Float);
+        instr->setSrcReg(0, rs1, RegType::Float);
         break;
       case 0x50: // FLE.S, FLT.S, FEQ.S
       case 0x51: // FLE.D, FLT.D, FEQ.D
         instr->setDestReg(rd, RegType::Integer);
-        instr->addSrcReg(rs1, RegType::Float);
-        instr->addSrcReg(rs2, RegType::Float);
+        instr->setSrcReg(0, rs1, RegType::Float);
+        instr->setSrcReg(1, rs2, RegType::Float);
         break;
       case 0x60: // FCVT.W.D, FCVT.WU.D, FCVT.L.D, FCVT.LU.D
       case 0x61: // FCVT.WU.S, FCVT.W.S, FCVT.L.S, FCVT.LU.S
         instr->setDestReg(rd, RegType::Integer);
-        instr->addSrcReg(rs1, RegType::Float);
-        instr->addSrcReg(rs2, RegType::None);
+        instr->setSrcReg(0, rs1, RegType::Float);
+        instr->setSrcReg(1, rs2, RegType::None);
         break;
       case 0x68: // FCVT.S.W, FCVT.S.WU, FCVT.S.L, FCVT.S.LU
       case 0x69: // FCVT.D.W, FCVT.D.WU, FCVT.D.L, FCVT.D.LU
         instr->setDestReg(rd, RegType::Float);
-        instr->addSrcReg(rs1, RegType::Integer);
-        instr->addSrcReg(rs2, RegType::None);
+        instr->setSrcReg(0, rs1, RegType::Integer);
+        instr->setSrcReg(1, rs2, RegType::None);
         break;
       case 0x70: // FCLASS.S, FMV.X.S
       case 0x71: // FCLASS.D, FMV.X.D
         instr->setDestReg(rd, RegType::Integer);
-        instr->addSrcReg(rs1, RegType::Float);
+        instr->setSrcReg(0, rs1, RegType::Float);
         break;
       case 0x78: // FMV.S.X
       case 0x79: // FMV.D.X
         instr->setDestReg(rd, RegType::Float);
-        instr->addSrcReg(rs1, RegType::Integer);
+        instr->setSrcReg(0, rs1, RegType::Integer);
         break;
       default:
         instr->setDestReg(rd, RegType::Float);
-        instr->addSrcReg(rs1, RegType::Float);
-        instr->addSrcReg(rs2, RegType::Float);
+        instr->setSrcReg(0, rs1, RegType::Float);
+        instr->setSrcReg(1, rs2, RegType::Float);
         break;
       }
       break;
@@ -559,22 +559,22 @@ Instr::Ptr Emulator::decode(uint32_t code) const {
         switch (funct3) {
         case 0: // TMC
         case 3: // JOIN
-          instr->addSrcReg(rs1, RegType::Integer);
+          instr->setSrcReg(0, rs1, RegType::Integer);
           break;
         case 1: // WSPAWN
         case 4: // BAR
-          instr->addSrcReg(rs1, RegType::Integer);
-          instr->addSrcReg(rs2, RegType::Integer);
+          instr->setSrcReg(0, rs1, RegType::Integer);
+          instr->setSrcReg(1, rs2, RegType::Integer);
           break;
         case 5: // PRED
           instr->setDestReg(rd, RegType::None);
-          instr->addSrcReg(rs1, RegType::Integer);
-          instr->addSrcReg(rs2, RegType::Integer);
+          instr->setSrcReg(0, rs1, RegType::Integer);
+          instr->setSrcReg(1, rs2, RegType::Integer);
           break;
         case 2: // SPLIT
           instr->setDestReg(rd, RegType::Integer);
-          instr->addSrcReg(rs1, RegType::Integer);
-          instr->addSrcReg(rs2, RegType::None);
+          instr->setSrcReg(0, rs1, RegType::Integer);
+          instr->setSrcReg(1, rs2, RegType::None);
           break;
         default:
           std::abort();
@@ -596,9 +596,9 @@ Instr::Ptr Emulator::decode(uint32_t code) const {
           uint32_t base_rs3 = 0  + step; // C
           instr->setImm((fmt << 2) + step); // fmt + step
           instr->setDestReg(base_rd, RegType::Float);
-          instr->addSrcReg(base_rs1, RegType::Float);
-          instr->addSrcReg(base_rs2, RegType::Float);
-          instr->addSrcReg(base_rs3, RegType::Float);
+          instr->setSrcReg(0, base_rs1, RegType::Float);
+          instr->setSrcReg(1, base_rs2, RegType::Float);
+          instr->setSrcReg(2, base_rs3, RegType::Float);
         } break;
         default:
           std::abort();
@@ -611,8 +611,8 @@ Instr::Ptr Emulator::decode(uint32_t code) const {
       break;
     default:
       instr->setDestReg(rd, RegType::Integer);
-      instr->addSrcReg(rs1, RegType::Integer);
-      instr->addSrcReg(rs2, RegType::Integer);
+      instr->setSrcReg(0, rs1, RegType::Integer);
+      instr->setSrcReg(1, rs2, RegType::Integer);
       break;
     }
     instr->setfunct3(funct3);
@@ -625,7 +625,7 @@ Instr::Ptr Emulator::decode(uint32_t code) const {
     case Opcode::I_W:
     case Opcode::JALR:
       instr->setDestReg(rd, RegType::Integer);
-      instr->addSrcReg(rs1, RegType::Integer);
+      instr->setSrcReg(0, rs1, RegType::Integer);
       instr->setfunct3(funct3);
       if (funct3 == 0x1 || funct3 == 0x5) {
         // Shift instructions
@@ -646,7 +646,7 @@ Instr::Ptr Emulator::decode(uint32_t code) const {
     case Opcode::L:
     case Opcode::FL: {
       instr->setDestReg(rd, (op == Opcode::FL) ? RegType::Float : RegType::Integer);
-      instr->addSrcReg(rs1, RegType::Integer);
+      instr->setSrcReg(0, rs1, RegType::Integer);
       instr->setfunct3(funct3);
       auto imm = code >> shift_rs2;
       instr->setImm(sext(imm, width_i_imm));
@@ -661,10 +661,10 @@ Instr::Ptr Emulator::decode(uint32_t code) const {
         instr->setDestReg(rd, RegType::Integer);
         instr->setfunct3(funct3);
         if (funct3 < 5) {
-          instr->addSrcReg(rs1, RegType::Integer);
+          instr->setSrcReg(0, rs1, RegType::Integer);
         } else {
           // zimm
-          instr->addSrcReg(rs1, RegType::None);
+          instr->setSrcReg(0, rs1, RegType::None);
         }
         instr->setImm(code >> shift_rs2);
       } else {
@@ -678,16 +678,16 @@ Instr::Ptr Emulator::decode(uint32_t code) const {
     }
   } break;
   case InstType::S: {
-    instr->addSrcReg(rs1, RegType::Integer);
-    instr->addSrcReg(rs2, (op == Opcode::FS) ? RegType::Float : RegType::Integer);
+    instr->setSrcReg(0, rs1, RegType::Integer);
+    instr->setSrcReg(1, rs2, (op == Opcode::FS) ? RegType::Float : RegType::Integer);
     instr->setfunct3(funct3);
     auto imm = (funct7 << width_reg) | rd;
     instr->setImm(sext(imm, width_i_imm));
   } break;
 
   case InstType::B: {
-    instr->addSrcReg(rs1, RegType::Integer);
-    instr->addSrcReg(rs2, RegType::Integer);
+    instr->setSrcReg(0, rs1, RegType::Integer);
+    instr->setSrcReg(1, rs2, RegType::Integer);
     instr->setfunct3(funct3);
     auto bit_11   = rd & 0x1;
     auto bits_4_1 = rd >> 1;
@@ -716,9 +716,9 @@ Instr::Ptr Emulator::decode(uint32_t code) const {
 
   case InstType::R4: {
     instr->setDestReg(rd, RegType::Float);
-    instr->addSrcReg(rs1, RegType::Float);
-    instr->addSrcReg(rs2, RegType::Float);
-    instr->addSrcReg(rs3, RegType::Float);
+    instr->setSrcReg(0, rs1, RegType::Float);
+    instr->setSrcReg(1, rs2, RegType::Float);
+    instr->setSrcReg(2, rs3, RegType::Float);
     instr->setfunct2(funct2);
     instr->setfunct3(funct3);
   } break;
@@ -731,50 +731,50 @@ Instr::Ptr Emulator::decode(uint32_t code) const {
       switch (funct3) {
         case 0: { // OPIVV
           instr->setDestReg(rd, RegType::Vector);
-          instr->addSrcReg(rs1, RegType::Vector);
-          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setSrcReg(0, rs1, RegType::Vector);
+          instr->setSrcReg(1, rs2, RegType::Vector);
           instr->setVmask((code >> shift_funct7) & 0x1);
           instr->setfunct6(funct6);
         } break;
         case 1: { // OPFVV
           instr->setDestReg(rd, (funct6 == 16) ? RegType::Float : RegType::Vector);
-          instr->addSrcReg(rs1, RegType::Vector);
-          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setSrcReg(0, rs1, RegType::Vector);
+          instr->setSrcReg(1, rs2, RegType::Vector);
           instr->setVmask((code >> shift_funct7) & 0x1);
           instr->setfunct6(funct6);
         } break;
         case 2: { // OPMVV
           instr->setDestReg(rd, (funct6 == 16) ? RegType::Integer : RegType::Vector);
-          instr->addSrcReg(rs1, RegType::Vector);
-          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setSrcReg(0, rs1, RegType::Vector);
+          instr->setSrcReg(1, rs2, RegType::Vector);
           instr->setVmask((code >> shift_funct7) & 0x1);
           instr->setfunct6(funct6);
         } break;
         case 3: { // OPIVI
           instr->setDestReg(rd, RegType::Vector);
-          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setSrcReg(1, rs2, RegType::Vector);
           instr->setImm(rs1);
           instr->setVmask((code >> shift_funct7) & 0x1);
           instr->setfunct6(funct6);
         } break;
         case 4: { // OPIVX
           instr->setDestReg(rd, RegType::Vector);
-          instr->addSrcReg(rs1, RegType::Integer);
-          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setSrcReg(0, rs1, RegType::Integer);
+          instr->setSrcReg(1, rs2, RegType::Vector);
           instr->setVmask((code >> shift_funct7) & 0x1);
           instr->setfunct6(funct6);
         } break;
         case 5: { // OPFVF
           instr->setDestReg(rd, RegType::Vector);
-          instr->addSrcReg(rs1, RegType::Float);
-          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setSrcReg(0, rs1, RegType::Float);
+          instr->setSrcReg(1, rs2, RegType::Vector);
           instr->setVmask((code >> shift_funct7) & 0x1);
           instr->setfunct6(funct6);
         } break;
         case 6: { // POMVX
           instr->setDestReg(rd, (funct6 == 16) ? RegType::Integer : RegType::Vector);
-          instr->addSrcReg(rs1, RegType::Integer);
-          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setSrcReg(0, rs1, RegType::Integer);
+          instr->setSrcReg(1, rs2, RegType::Vector);
           instr->setVmask((code >> shift_funct7) & 0x1);
           instr->setfunct6(funct6);
         } break;
@@ -782,8 +782,8 @@ Instr::Ptr Emulator::decode(uint32_t code) const {
           instr->setDestReg(rd, RegType::Integer);
           if ((code >> 30) == 0b10) {
             // vsetvl
-            instr->addSrcReg(rs1, RegType::Integer);
-            instr->addSrcReg(rs2, RegType::Integer);
+            instr->setSrcReg(0, rs1, RegType::Integer);
+            instr->setSrcReg(1, rs2, RegType::Integer);
           } else {
             auto zimm = (code >> shift_rs2) & mask_v_zimm;
             instr->setZimm(zimm);
@@ -792,7 +792,7 @@ Instr::Ptr Emulator::decode(uint32_t code) const {
               instr->setImm(rs1);
             } else {
               // vsetvli
-              instr->addSrcReg(rs1, RegType::Integer);
+              instr->setSrcReg(0, rs1, RegType::Integer);
             }
           }
         } break;
@@ -802,24 +802,24 @@ Instr::Ptr Emulator::decode(uint32_t code) const {
     } break;
     case Opcode::FL:
     case Opcode::FS: {
-      instr->addSrcReg(rs1, RegType::Integer);
+      instr->setSrcReg(0, rs1, RegType::Integer);
       uint32_t vmop = (code >> shift_vmop) & 0b11;
       switch (vmop) {
         case 0b00:
           instr->setVumop(rs2);
           break;
         case 0b10:
-          instr->addSrcReg(rs2, RegType::Integer);
+          instr->setSrcReg(1, rs2, RegType::Integer);
           break;
         case 0b01:
         case 0b11:
-          instr->addSrcReg(rs2, RegType::Vector);
+          instr->setSrcReg(1, rs2, RegType::Vector);
           break;
       }
       if (op == Opcode::FL) {
         instr->setDestReg(rd, RegType::Vector);
       } else {
-        instr->addSrcReg(rd, RegType::Vector);
+        instr->setSrcReg(rd, RegType::Vector);
       }
       instr->setVlsWidth(funct3);
       instr->setVmask((code >> shift_funct7) & 0x1);
@@ -835,6 +835,8 @@ Instr::Ptr Emulator::decode(uint32_t code) const {
   default:
     std::abort();
   }
+
+  DP(1, "Instr 0x" << std::hex << code << ": " << std::dec << *instr << " (#" << std::dec << uuid << ")");
 
   return instr;
 }
