@@ -203,6 +203,26 @@ public:
     return it_next;
   }
 
+  T& front() {
+    assert(head_ != nullptr);
+    return *head_->object;
+  }
+
+  const T& front() const {
+    assert(head_ != nullptr);
+    return *head_->object;
+  }
+
+  T& back() {
+    assert(tail_ != nullptr);
+    return *tail_->object;
+  }
+
+  const T& back() const {
+    assert(tail_ != nullptr);
+    return *tail_->object;
+  }
+
   void push_back(T *obj) {
     insert(iterator(tail_), obj);
   }

@@ -65,7 +65,7 @@ inline void fetch_registers(std::vector<reg_data_t>& out, uint32_t src_index, co
         DPN(2, "-");
         continue;
       }
-      auto& value = out[num_threads + t];
+      auto& value = out[t];
       value.u = reg_data.at(t);
       DPN(2, "0x" << std::hex << value.u << std::dec);
     }
@@ -80,7 +80,7 @@ inline void fetch_registers(std::vector<reg_data_t>& out, uint32_t src_index, co
         DPN(2, "-");
         continue;
       }
-      auto& value = out[num_threads + t];
+      auto& value = out[t];
       value.u64 = reg_data.at(t);
       if ((value.u64 >> 32) == 0xffffffff) {
         DPN(2, "0x" << std::hex << value.u32 << std::dec);

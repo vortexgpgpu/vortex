@@ -54,6 +54,7 @@ struct ipdom_entry_t {
 struct warp_t {
   std::vector<std::vector<Word>>    ireg_file;
   std::vector<std::vector<uint64_t>>freg_file;
+  std::deque<Instr::Ptr>            ibuffer;
   std::stack<ipdom_entry_t>         ipdom_stack;
   ThreadMask                        tmask;
   Word                              PC;
@@ -111,7 +112,7 @@ private:
 
   uint32_t fetch(uint32_t wid, uint64_t uuid);
 
-  Instr::Ptr decode(uint32_t code, uint64_t uuid);
+  void decode(uint32_t code, uint32_t wid, uint64_t uuid);
 
   instr_trace_t* execute(const Instr &instr, uint32_t wid, uint64_t uuid);
 

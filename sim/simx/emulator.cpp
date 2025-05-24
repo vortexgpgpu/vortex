@@ -139,12 +139,13 @@ void Emulator::attach_ram(RAM* ram) {
 
 uint32_t Emulator::fetch(uint32_t wid, uint64_t uuid) {
   auto& warp = warps_.at(wid);
+  __unused(uuid);
 
   DP(1, "Fetch: cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
          << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")");
 
   uint32_t instr_code = 0;
-  this->icache_read(&instr_code, warps_[0].PC, sizeof(uint32_t));
+  this->icache_read(&instr_code, warp.PC, sizeof(uint32_t));
   return instr_code;
 }
 
@@ -177,22 +178,36 @@ instr_trace_t* Emulator::step() {
   if (scheduled_warp == -1)
     return nullptr;
 
+  // get scheduled warp
+  auto& warp = warps_.at(scheduled_warp);
+  assert(warp.tmask.any());
+
   uint64_t uuid = 0;
 #ifndef NDEBUG
   {
     // generate unique universal instruction ID
-    auto& warp = warps_.at(scheduled_warp);
     uint32_t instr_uuid = warp.uuid++;
     uint32_t g_wid = core_->id() * arch_.num_warps() + scheduled_warp;
     uuid = (uint64_t(g_wid) << 32) | instr_uuid;
   }
 #endif
 
-  // Fetch
-  auto instr_code = this->fetch(scheduled_warp, uuid);
+  // fetch next instruction if ibuffer is empty
+  if (warp.ibuffer.empty()) {
+    // Fetch
+    auto instr_code = this->fetch(scheduled_warp, uuid);
 
-  // Decode
-  auto instr = this->decode(instr_code, uuid);
+    // Decode
+    this->decode(instr_code, scheduled_warp, uuid);
+  } else {
+    // we have a micro-instruction in the ibuffer
+    // adjust PC back to original (incremented in execute())
+    warp.PC -= 4;
+  }
+
+  // pop the instruction from the ibuffer
+  auto instr = warp.ibuffer.front();
+  warp.ibuffer.pop_front();
 
   // Execute
   auto trace = this->execute(*instr, scheduled_warp, uuid);

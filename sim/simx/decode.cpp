@@ -474,7 +474,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 }
 }
 
-Instr::Ptr Emulator::decode(uint32_t code, uint64_t uuid) {
+void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
   auto instr = std::allocate_shared<Instr>(instr_pool_);
   auto op = Opcode((code >> shift_opcode) & mask_opcode);
   instr->setOpcode(op);
@@ -493,7 +493,7 @@ Instr::Ptr Emulator::decode(uint32_t code, uint64_t uuid) {
   auto op_it = sc_instTable.find(op);
   if (op_it == sc_instTable.end()) {
     std::cerr << "Error: invalid opcode: 0x" << std::hex << static_cast<int>(op) << std::dec << std::endl;
-    return nullptr;
+    std::abort();
   }
 
   auto iType = op_it->second;
@@ -836,7 +836,10 @@ Instr::Ptr Emulator::decode(uint32_t code, uint64_t uuid) {
     std::abort();
   }
 
+  __unused(uuid);
   DP(1, "Instr 0x" << std::hex << code << ": " << std::dec << *instr << " (#" << std::dec << uuid << ")");
 
-  return instr;
+  // push instruction into instruction buffer
+  auto& warp = warps_.at(wid);
+  warp.ibuffer.push_back(instr);
 }
