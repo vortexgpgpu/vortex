@@ -22,7 +22,7 @@
 `define INT_TYPE int
 `endif
 
-import "DPI-C" function void dpi_imul(input logic enable, input logic is_signed_a, input logic is_signed_b, input `INT_TYPE a, input `INT_TYPE b, output `INT_TYPE resultl, output `INT_TYPE resulth);
+import "DPI-C" function void dpi_imul(input logic enable, input logic is_signed_a, input logic is_signed_b, input `INT_TYPE a, input `INT_TYPE b, input `INT_TYPE resultl, input `INT_TYPE resulth);
 import "DPI-C" function void dpi_idiv(input logic enable, input logic is_signed, input `INT_TYPE a, input `INT_TYPE b, output `INT_TYPE quotient, output `INT_TYPE remainder);
 
 import "DPI-C" function int dpi_register();
