@@ -235,7 +235,7 @@ module VX_alu_muldiv #(
     wire div_fire_in = div_valid_in && div_ready_in;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        wire [`XLEN-1:0] div_quotient, div_remainder;
+        var [`XLEN-1:0] div_quotient, div_remainder;
         always @(*) begin
             dpi_idiv (div_fire_in, is_signed_op, div_in1[i], div_in2[i], div_quotient, div_remainder);
         end
