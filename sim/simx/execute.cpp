@@ -1434,6 +1434,190 @@ void Emulator::execute(const Instr &instr, uint32_t wid, instr_trace_t *trace) {
       std::abort();
     }
   } break;
+  // case Opcode::EXT2: {
+  //   switch (func3) {
+  //   case 1:
+  //     switch (func2) {
+  //     case 0: { // CMOV
+  //       trace->fu_type = FUType::SFU;
+  //       trace->sfu_type = SfuType::CMOV;
+  //       trace->used_iregs.set(rsrc0);
+  //       trace->used_iregs.set(rsrc1);
+  //       trace->used_iregs.set(rsrc2);
+  //       for (uint32_t t = thread_start; t < num_threads; ++t) {
+  //         if (!warp.tmask.test(t))
+  //           continue;
+  //         rddata[t].i = rsdata[t][0].i ? rsdata[t][1].i : rsdata[t][2].i;
+  //       }
+  //       rd_write = true;
+  //     } break;
+  //     default:
+  //       std::abort();
+  //     }
+  //     break;
+  //   default:
+  //     std::abort();
+  //   }
+  // } break;
+    case Opcode::EXT2: {      //Vote
+    bool check;
+    bool is_neg = (func3 >= 4);
+    func3 = func3%4;
+    trace->fu_type = FUType::ALU;
+    trace->alu_type = AluType::ARITH;
+    uint32_t address = immsrc & 0xfff;
+    auto mask =  warp.ireg_file.at(0)[address];  // Same mask stored in all threads
+    trace->src_regs[0] = {RegType::Integer, rsrc0};
+    trace->src_regs[1] = {RegType::Integer, address};
+    switch (func3) {
+    case 0:{ //all
+      check = true;
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+          if (!(is_neg)){ //Predicate not negated
+            if(!(1 << 0 & rsdata[t][0].u)){ // check src predicate 
+              check = false;
+            }
+          }
+          else{
+            if(1 << 0 & rsdata[t][0].u){ // check src predicate is true in no threads
+              check = false;
+            }
+          }
+        }
+      }
+      rd_write = true;
+      for (uint32_t t = thread_start; t < num_threads; ++t) { //Write dest predicate common to all threads
+        if(check)
+          rddata[t].i = 1;
+        else
+          rddata[t].i = 0;
+      } 
+    } break;
+    case 1:{ //any
+      check = false;
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+          if (!(is_neg)){ //Predicate not negated
+            if(1 << 0 & rsdata[t][0].u){ // check src predicate 
+              check = true;
+            }
+          }
+          else{
+            if(!(1 << 0 & rsdata[t][0].u)){ // check src predicate is true in not all threads
+              check = true;
+          }
+        }
+      }
+      }
+      rd_write = true;
+      for (uint32_t t = thread_start; t < num_threads; ++t) { //Write dest predicate common to all threads
+        if(check)
+          rddata[t].i = 1;
+        else
+          rddata[t].i = 0;
+      } 
+    } break;
+    case 2:{ //uni
+      check = true;
+      bool first = true;
+      auto val = rsdata[0][0].u%2;
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+          if(first){
+            first = false;
+            val = rsdata[t][0].u%2;
+          }
+          else{
+            if(val != rsdata[t][0].u%2)
+             check = false;
+          }
+        }
+      }
+      rd_write = true;
+      for (uint32_t t = thread_start; t < num_threads; ++t) { //Write dest predicate common to all threads
+        if(check)
+          rddata[t].i = 1;
+        else
+          rddata[t].i = 0;
+      } 
+    } break;
+    case 3:{ //ballot
+      auto val = rsdata[0][0].u*0; //setting val to 0
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if((1 << t & mask) && warp.tmask.test(t)){ //Thread present in thread mask and thread active
+          val = (val << 1) + (1 << 0 & rsdata[t][0].u); //Write the t-th bit with predicate value
+        }
+        else{
+          val = (val << 1);                             // Add 0 to t-th bit if not in threadmask
+        }
+      }
+      rd_write = true;
+      for (uint32_t t = thread_start; t < num_threads; ++t) { //Write dest predicate common to all threads
+        rddata[t].i = val;
+      } 
+    } break;
+    default:{
+      std::abort();
+    } break;
+    }
+  }break;
+  case Opcode::EXT3:{     //Shfl
+    trace->fu_type = FUType::ALU;
+    trace->alu_type = AluType::ARITH;
+    uint32_t address = immsrc & 0x01f;
+    auto mask =  warp.ireg_file.at(0)[address];  // Same mask stored in all threads
+    uint32_t b = (immsrc & 0x3e0) >> 5;
+    uint32_t c_add = ((immsrc & 0xc00) >> 10) + address;
+    uint32_t lane;
+    bool p;
+    for (uint32_t t = thread_start; t < num_threads; ++t) { 
+      auto val = warp.ireg_file.at(t)[c_add];
+      auto c = val & 0x0000001f;
+      auto segmask = ((val >> 5) & 0x0000001f);
+      auto maxLane = (t & segmask) | (c & ~segmask);
+      auto minLane = (t & segmask);
+      switch (func3) {
+      case 0:{ //up
+        lane = t - b;
+        p = (lane >= maxLane);
+      }break;
+      case 1:{ //down
+        lane = t + b;
+        p = (lane <= maxLane);
+      }break;
+      case 2:{ //bfly
+        lane = t ^ b;
+        p = (lane <= maxLane);
+      }break;
+      case 3:{ //idx
+        lane = minLane | (b & ~segmask);
+        p = (lane <= maxLane);
+      }break;
+      default:{
+        std::abort();
+      } break;
+      }
+      if(!p)
+        lane = t; 
+      if((1 << t & mask) && warp.tmask.test(t) && (1 << lane & mask) && (lane < num_threads)){
+        rddata[t].i = rsdata[lane][0].u;
+        rd_write = true;
+      }
+      else if(lane >= num_threads){
+        rddata[t].i = rsdata[t][0].u;
+        rd_write = true;
+      }
+      else{
+        rddata[t].i = 0;
+        rd_write = true;
+      }
+    }
+    trace->src_regs[0] = {RegType::Integer, rsrc0};
+    trace->src_regs[1] = {RegType::Integer, address};
+    trace->src_regs[2] = {RegType::Integer, c_add};
+    
+  }break;
   case Opcode::TCU:
   { //TODO - make it data-type flexible
     uint32_t mem_bytes = 1;
