@@ -8,7 +8,7 @@ DPI_DIR := $(VORTEX_HOME)/hw/dpi
 
 SRC_DIR := $(VORTEX_HOME)/hw/unittest/$(PROJECT)
 
-CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(VORTEX_HOME)/sim/common
+CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(COMMON_DIR)
 CXXFLAGS += -I$(ROOT_DIR)/hw
 
 SRCS := $(DPI_DIR)/util_dpi.cpp

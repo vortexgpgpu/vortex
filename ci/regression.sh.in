@@ -410,6 +410,25 @@ vector()
     echo "vector tests done!"
 }
 
+tensor()
+{
+    echo "begin tensor tests..."
+
+    make -C tests/regression/sgemm_tpu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=fp32 -DOTYPE=fp32" make -C tests/regression/sgemm_tpu
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TPU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tpu
+
+    make -C tests/regression/sgemm_tpu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tpu
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TPU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tpu
+
+    make -C tests/regression/sgemm_tpu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=fp16 -DOTYPE=fp16" make -C tests/regression/sgemm_tpu
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TPU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tpu
+
+    make -C tests/regression/sgemm_tpu clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=bf16 -DOTYPE=fp32" make -C tests/regression/sgemm_tpu
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TPU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tpu
+
+    echo "tensor tests done!"
+}
+
 cupbop() {
 
     echo "begin cupbop tests..."
@@ -455,7 +474,7 @@ cupbop() {
 show_usage()
 {
     echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--all] [--h|--help]"
+    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--all] [--h|--help]"
 }
 
 declare -a tests=()
@@ -508,6 +527,9 @@ while [ "$1" != "" ]; do
         --vector )
                 tests+=("vector")
                 ;;
+        --tensor )
+                tests+=("tensor")
+                ;;
         --cupbop )
                 tests+=("cupbop")
                 ;;
@@ -527,6 +549,7 @@ while [ "$1" != "" ]; do
                 tests+=("stress")
                 tests+=("synthesis")
                 tests+=("vector")
+                tests+=("tensor")
                 tests+=("cupbop")
                 ;;
         -h | --help )

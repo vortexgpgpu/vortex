@@ -25,6 +25,10 @@
 #include "arch.h"
 #include "instr.h"
 
+#ifdef EXT_TPU_ENABLE
+#include "tensor_cfg.h"
+#endif
+
 using namespace vortex;
 
 static const std::unordered_map<Opcode, InstType> sc_instTable = {
@@ -396,7 +400,7 @@ static const char* op_string(const Instr &instr) {
   #ifdef EXT_TPU_ENABLE
     case 2:
       switch (funct3) {
-      case 0: return "HMMA844";
+      case 0: return "WMMA";
       default:
         std::abort();
       }
@@ -474,7 +478,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 }
 }
 
-void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
+void Emulator::decode(uint32_t code, uint32_t wid) {
   auto instr = std::allocate_shared<Instr>(instr_pool_);
   auto op = Opcode((code >> shift_opcode) & mask_opcode);
   instr->setOpcode(op);
@@ -583,22 +587,8 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     #ifdef EXT_TPU_ENABLE
       case 2: {
         switch (funct3) {
-        case 0: { // HMMA844
-          uint32_t fmt = rd;
-          uint32_t steps    = rs1 >> 1;
-          uint32_t step     = steps % 4;
-          uint32_t set      = steps / 4;
-          uint32_t rd_pair  = rs1 & 0x1;
-          uint32_t use_d    = rs2;
-          uint32_t base_rd  = (use_d ? 16 : 0) + (step * 2 + rd_pair); // C/D
-          uint32_t base_rs1 = 8  + set; // A
-          uint32_t base_rs2 = 24 + set; // B
-          uint32_t base_rs3 = 0  + step; // C
-          instr->setImm((fmt << 2) + step); // fmt + step
-          instr->setDestReg(base_rd, RegType::Float);
-          instr->setSrcReg(0, base_rs1, RegType::Float);
-          instr->setSrcReg(1, base_rs2, RegType::Float);
-          instr->setSrcReg(2, base_rs3, RegType::Float);
+        case 0: { // WMMA
+          // skip
         } break;
         default:
           std::abort();
@@ -836,10 +826,41 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     std::abort();
   }
 
-  __unused(uuid);
-  DP(1, "Instr 0x" << std::hex << code << ": " << std::dec << *instr << " (#" << std::dec << uuid << ")");
-
   // push instruction into instruction buffer
   auto& warp = warps_.at(wid);
-  warp.ibuffer.push_back(instr);
+
+#ifdef EXT_TPU_ENABLE
+  if (op == Opcode::EXT1 && funct7 == 0x2 && funct3 == 0x0) {
+    // WMMA micro-ops
+    namespace vt = vortex::tensor;
+    using cfg = vt::wmma_config_t<NUM_THREADS>;
+    uint32_t ra_base = 0;
+    uint32_t rb_base = (cfg::NRB == 4) ? 28 : 10;
+    uint32_t rc_base = (cfg::NRB == 4) ? 10 : 24;
+    uint32_t fmt_d = rd;
+    uint32_t fmt_s = rs1;
+    uint32_t fmt   = (fmt_d << 4) + fmt_s;
+    for (uint32_t k = 0; k < cfg::k_steps; ++k) {
+      for (uint32_t m = 0; m < cfg::m_steps; ++m) {
+        for (uint32_t n = 0; n < cfg::n_steps; ++n) {
+          uint32_t rs1  = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + k;
+          uint32_t rs2  = rb_base + (k * cfg::n_steps + n) / cfg::b_sub_blocks;
+          uint32_t rs3  = rc_base + m * cfg::n_steps + n;
+          uint32_t step = (m << 4) | n;
+          uint32_t imm  = (step << 8) | fmt;
+          auto micro_op = std::allocate_shared<Instr>(instr_pool_, *instr);
+          micro_op->setDestReg(rs3, RegType::Float);
+          micro_op->setSrcReg(0, rs1, RegType::Float);
+          micro_op->setSrcReg(1, rs2, RegType::Float);
+          micro_op->setSrcReg(2, rs3, RegType::Float);
+          micro_op->setImm(imm);
+          warp.ibuffer.push_back(micro_op);
+        }
+      }
+    }
+  } else
+#endif
+  {
+    warp.ibuffer.push_back(instr);
+  }
 }

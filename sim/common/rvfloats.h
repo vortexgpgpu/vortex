@@ -19,6 +19,20 @@
 extern "C" {
 #endif
 
+inline uint64_t nan_box(uint32_t value) {
+  return value | 0xffffffff00000000;
+}
+
+inline bool is_nan_boxed(uint64_t value) {
+  return (uint32_t(value >> 32) == 0xffffffff);
+}
+
+inline int64_t check_boxing(int64_t a) {
+  if (is_nan_boxed(a))
+    return a;
+  return nan_box(0x7fc00000); // NaN
+}
+
 uint32_t rv_fadd_s(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags);
 uint32_t rv_fsub_s(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags);
 uint32_t rv_fmul_s(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags);

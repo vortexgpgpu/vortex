@@ -11,182 +11,363 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __VX_TENSOR_H__
-#define __VX_TENSOR_H__
+#pragma once
 
-#include <stdint.h>
+#include <tensor_cfg.h>
 #include <vx_intrinsics.h>
-#include <type_traits>
-#include <hfloats.h>
 
-#ifndef NUM_LANES
-#define NUM_LANES 32
-#endif
-
+namespace vortex {
 namespace tensor {
 
-enum frag_use_t { matrix_d, matrix_a, matrix_b, matrix_c };
-enum layout_t { row_major, col_major };
-
-template <frag_use_t U, typename T, layout_t L>
-struct fragment {
-  typedef T Type;
-  static const frag_use_t Use = U;
-  static const layout_t Layout = L;
-  mf32x8_t data;
+enum mem_layout {
+  row_major,
+  col_major
 };
 
-__attribute__((always_inline)) void map_operand_ab_32lanes(int tid, int &row, int &col) {
-  int tg = tid / 4;
+namespace detail {
 
-  // A (row major)
-  // Figure 7(a) in paper
-  // row  0~ 3: threadgroups 0 and 2
-  // row  4~ 7: threadgroups 4 and 6
-  // row  8~11: threadgroups 1 and 3
-  // row 12~15: threadgroups 5 and 7
-  row = tid % 4;
-  row += (tg * 8) % 16;
-  row += (tg / 4) * 4;
-
-  // B (column major)
-  // NOTE: Matrix B mapping in Figure 7(a) is incorrect; below is the
-  // corrected mapping:
-  // col  0~ 3: threadgroups 0 and 1
-  // col  4~ 7: threadgroups 4 and 5
-  // col  8~11: threadgroups 2 and 3
-  // col 12~15: threadgroups 6 and 7
-  col = tid % 4;
-  col += ((tg % 4) / 2) * 8;
-  col += (tg / 4) * 4;
-}
-
-__attribute__((always_inline)) void map_operand_ab_8lanes(int tid, int &row, int &col) {
-  int tg = tid / 4;
-
-  // A (row major)
-  // row  0~ 3: threadgroup 0
-  // row  4~ 7: threadgroup 1
-  row = tid % 4;
-  row += tg * 4;
-
-  // B (column major)
-  // col  0~ 3: threadgroup 0
-  // col  4~ 7: threadgroup 1
-  col = tid % 4;
-  col += tg * 4;
-}
-
-__attribute__((always_inline)) void map_operand_c_32lanes(int tid, int &row, int &col) {
-  int tg = tid / 4;
-
-  // Figure 7(b), left
-  col = ((tg % 4) / 2) * 8;
-  row = (tg * 8) % 16;
-  row += (tg / 4) * 4;
-
-  // Figure 7(b), right
-  row += (tid % 4) % 2;
-  col += ((tid % 4) / 2) * 2;
-}
-
-__attribute__((always_inline)) void map_operand_c_8lanes(int tid, int &row, int &col) {
-  int tg = tid / 4;
-
-  // Figure 7(b), left
-  col = 0;
-  row = tg * 4;
-
-  // Figure 7(b), right
-  row += (tid % 4) % 2;
-  col += ((tid % 4) / 2) * 2;
-}
-
-__attribute__((always_inline)) void map_operand_ab(int tid, int &row, int &col) {
-  if constexpr (NUM_LANES == 32) {
-    map_operand_ab_32lanes(tid, row, col);
-  } else if constexpr (NUM_LANES == 8) {
-    map_operand_ab_8lanes(tid, row, col);
-  } else {
-    static_assert(NUM_LANES == 32 || NUM_LANES == 8, "NUM_LANES must be 8 or 32");
+  template <typename F, std::size_t... Is>
+  constexpr void unroll_for_impl(std::index_sequence<Is...>, F&& f) {
+    (f(std::integral_constant<std::size_t, Is>{}), ...);
   }
-}
 
-__attribute__((always_inline)) void map_operand_c(int tid, int &row, int &col) {
-  if constexpr (NUM_LANES == 32) {
-    map_operand_c_32lanes(tid, row, col);
-  } else if constexpr (NUM_LANES == 8) {
-    map_operand_c_8lanes(tid, row, col);
-  } else {
-    static_assert(NUM_LANES == 32 || NUM_LANES == 8, "NUM_LANES must be 8 or 32");
+  template <std::size_t N, typename F>
+  constexpr void unroll_for(F&& f) {
+    unroll_for_impl(std::make_index_sequence<N>{}, std::forward<F>(f));
   }
-}
 
-template <typename Frag>
-__attribute__((always_inline)) void fill_fragment(Frag &dst, size_t value) {
-  if constexpr (Frag::Use == matrix_d) {
-    dst.data = vx_wsetm_d_f32(value);
-  } else if constexpr (Frag::Use == matrix_a) {
-    dst.data = vx_wsetm_a_f32(value);
-  } else if constexpr (Frag::Use == matrix_b) {
-    dst.data = vx_wsetm_b_f32(value);
-  } else if constexpr (Frag::Use == matrix_c) {
-    dst.data = vx_wsetm_c_f32(value);
-  }
-}
+  template <typename T>
+  struct raw_unsigned {
+    using type = std::conditional_t<(sizeof(T) == 1), uint8_t,
+      std::conditional_t<(sizeof(T) == 2), uint16_t,
+        std::conditional_t<(sizeof(T) == 4), uint32_t,
+          uint64_t>>>;
+  };
+  template <typename T>
+  using raw_unsigned_t = typename raw_unsigned<T>::type;
 
-template <layout_t mem_layout, typename Frag>
-__attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
-  if constexpr (Frag::Use == matrix_a) {
-    if constexpr (Frag::Layout == mem_layout) {
-      dst.data = vx_wldm_ad_f32(src, ldm);
-    } else {
-      dst.data = vx_wldm_at_f32(src, ldm);
+  template <typename D, typename S>
+  inline __attribute__((always_inline)) D bit_fill(S src) {
+    static_assert(sizeof(D) % sizeof(S) == 0, "D must be a multiple of S in size");
+    constexpr uint32_t count = sizeof(D) / sizeof(S);
+    constexpr uint32_t bits = 8 * sizeof(S);
+    using US = raw_unsigned_t<S>;
+    using UD = raw_unsigned_t<D>;
+    auto src_u = *reinterpret_cast<const US*>(&src); // bit cast
+    auto src_d = static_cast<UD>(src_u); // zero-extend
+    UD result_u(0);
+    for (uint32_t i = 0; i < count; i++) {
+      result_u |= (src_d << (i * bits));
     }
-  } else if constexpr (Frag::Use == matrix_b) {
-    if constexpr (Frag::Layout == mem_layout) {
-      dst.data = vx_wldm_bd_f32(src, ldm);
-    } else {
-      dst.data = vx_wldm_bt_f32(src, ldm);
+    return *reinterpret_cast<const D*>(&result_u);
+  }
+
+  template <typename D, typename S>
+  inline __attribute__((always_inline)) D pack_row(const S *base, uint32_t ldm) {
+    static_assert(sizeof(D) % sizeof(S) == 0, "D must be a multiple of S in size");
+    constexpr uint32_t count = sizeof(D) / sizeof(S);
+    constexpr uint32_t bits = 8 * sizeof(S);
+    using US = raw_unsigned_t<S>;
+    using UD = raw_unsigned_t<D>;
+    UD result_u(0);
+    for (uint32_t i = 0; i < count; ++i) {
+      auto src_u = *reinterpret_cast<const US*>(base); // bit cast
+      auto src_d = static_cast<UD>(src_u); // zero-extend
+      result_u |= (src_d << (i * bits));
+      base += ldm; // move to the next row
     }
-  } else {
-    static_assert(false, "Only matrix_a and matrix_b are supported!");
+    return *reinterpret_cast<const D*>(&result_u);
   }
 }
 
-template <layout_t mem_layout, typename Frag>
-__attribute__((always_inline)) void store_matrix_sync(void *dst, const Frag &src, size_t ldm) {
-  static_assert(Frag::Layout == mem_layout, "fragment layout should match memory!");
-  if constexpr (Frag::Use == matrix_c) {
-    vx_wstm_f32(dst, src.data, ldm);
-  } else if constexpr (Frag::Use == matrix_d) {
-    vx_wstm_f32(dst, src.data, ldm);
-  } else {
-    static_assert(false, "Only matrix_c or matrix_c are supported!");
+template <uint32_t NT, // number of threads per warp
+          typename It, // input type (A,B)
+          typename Ot> // output type (C,D)
+struct wmma_context {
+private:
+  using cfg = wmma_config_t<NT>;
+
+  enum frag_use_t { matrix_a, matrix_b, accumulator };
+
+  using vreg_t = float;
+
+  template <frag_use_t U, typename T, uint32_t N>
+  struct fragment_t {
+    using Type = T;
+    static constexpr frag_use_t Use = U;
+    static constexpr uint32_t NR = N;
+    std::array<vreg_t, N> data;
+  };
+
+public:
+
+  using input_t  = typename It::dtype;
+  using output_t = typename Ot::dtype;
+
+  static constexpr uint32_t i_ratio = sizeof(vreg_t) / sizeof(input_t);
+  static constexpr uint32_t tileM = cfg::tileM;
+  static constexpr uint32_t tileN = cfg::tileN;
+  static constexpr uint32_t tileK = cfg::tileK * i_ratio;
+
+  using fragment_a   = fragment_t<matrix_a, input_t, cfg::NRA>;
+  using fragment_b   = fragment_t<matrix_b, input_t, cfg::NRB>;
+  using fragment_acc = fragment_t<accumulator, output_t, cfg::NRC>;
+
+  template <typename Frag, typename T>
+  static __attribute__((always_inline)) void fill_fragment(Frag &dst, T value) {
+    auto fill_data = detail::bit_fill<vreg_t>(value);
+    detail::unroll_for<Frag::NR>([&](auto r) {
+      vreg_t tmp;
+      __asm__ volatile("fmv.s %0, %1" : "=f"(tmp): "f"(fill_data));
+      dst.data[r] = tmp;
+    });
   }
-}
 
-template <typename FragD, typename FragA, typename FragB, typename FragC>
-__attribute__((always_inline)) void mma_sync(FragD &D, const FragA &A, const FragB &B, const FragC &C) {
-  static_assert(FragA::Use == matrix_a, "A must be matrix_a");
-  static_assert(FragB::Use == matrix_b, "B must be matrix_b");
-  static_assert(FragC::Use == matrix_c, "C must be matrix_c");
-  static_assert(FragD::Use == matrix_d || FragD::Use == matrix_c, "D must be matrix_d or matrix_c");
-  static_assert(std::is_same_v<typename FragA::Type, typename FragB::Type>, "A and B must have the same type");
-  static_assert(std::is_same_v<typename FragC::Type, typename FragD::Type>, "C and D must have the same type");
-
-  if constexpr (std::is_same_v<typename FragC::Type, float>
-             && std::is_same_v<typename FragA::Type, float>) {
-    if constexpr (FragD::Use == matrix_d) {
-      D.data = vx_hmma_844_d_f16_f32(A.data, B.data, C.data);
+  template <typename Frag, mem_layout src_layout = row_major>
+  static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
+    uint32_t lane = vx_thread_id();
+    if constexpr (Frag::Use == matrix_a) {
+      // Load row-major matrix A
+      uint32_t block_idx = (cfg::a_block_size == NT) ? 0 : (lane / cfg::a_block_size);
+      uint32_t lane_in_blk = (cfg::a_block_size == NT) ? lane : (lane % cfg::a_block_size);
+      uint32_t elem_row = lane_in_blk / cfg::tcK;
+      uint32_t elem_col = lane_in_blk % cfg::tcK;
+      if constexpr (src_layout == row_major) {
+        uint32_t m_stride = cfg::a_sub_blocks * cfg::tcM * ldm;
+        uint32_t k_stride = cfg::tcK * i_ratio;
+        auto base = reinterpret_cast<const input_t*>(src) + (block_idx * cfg::tcM + elem_row) * ldm + (elem_col * i_ratio);
+        detail::unroll_for<Frag::NR>([&](auto r) {
+          uint32_t block_m = r / cfg::k_steps;
+          uint32_t block_k = r % cfg::k_steps;
+          auto ptr = base + block_m * m_stride + block_k * k_stride;
+          assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
+          dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+        });
+      } else {
+        uint32_t m_stride = cfg::a_sub_blocks * cfg::tcM;
+        uint32_t k_stride = cfg::tcK * i_ratio * ldm;
+        auto base = reinterpret_cast<const input_t*>(src) + (elem_col * i_ratio) * ldm + (block_idx * cfg::tcM + elem_row);
+        detail::unroll_for<Frag::NR>([&](auto r) {
+          uint32_t block_m = r / cfg::k_steps;
+          uint32_t block_k = r % cfg::k_steps;
+          auto ptr = base + block_m * m_stride + block_k * k_stride;
+          if constexpr (sizeof(vreg_t) == sizeof(input_t)) {
+            dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
+          } else {
+            dst.data[r] = detail::pack_row<vreg_t>(ptr, ldm);
+          }
+        });
+      }
+    } else if constexpr (Frag::Use == matrix_b) {
+      // Load column-major matrix B
+      uint32_t block_idx = (cfg::b_block_size == NT) ? 0 : (lane / cfg::b_block_size);
+      uint32_t lane_in_blk = (cfg::b_block_size == NT) ? lane : (lane % cfg::b_block_size);
+      uint32_t elem_col = lane_in_blk / cfg::tcK;
+      uint32_t elem_row = lane_in_blk % cfg::tcK;
+      if constexpr (src_layout == row_major) {
+        uint32_t k_stride = cfg::tcK * i_ratio * ldm;
+        uint32_t n_stride = cfg::b_sub_blocks * cfg::tcN;
+        auto base = reinterpret_cast<const input_t*>(src) + (elem_row * i_ratio) * ldm + (block_idx * cfg::tcN + elem_col);
+        detail::unroll_for<Frag::NR>([&](auto r) {
+          uint32_t block_k = r / cfg::b_sub_steps;
+          uint32_t block_n = r % cfg::b_sub_steps;
+          auto ptr = base + block_k * k_stride + block_n * n_stride;
+          if constexpr (sizeof(vreg_t) == sizeof(input_t)) {
+            dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
+          } else {
+            dst.data[r] = detail::pack_row<vreg_t>(ptr, ldm);
+          }
+        });
+      } else {
+        uint32_t k_stride = cfg::tcK * i_ratio;
+        uint32_t n_stride = cfg::b_sub_blocks * cfg::tcN * ldm;
+        auto base = reinterpret_cast<const input_t*>(src) + (block_idx * cfg::tcN + elem_col) * ldm + (elem_row * i_ratio);
+        detail::unroll_for<Frag::NR>([&](auto r) {
+          uint32_t block_k = r / cfg::b_sub_steps;
+          uint32_t block_n = r % cfg::b_sub_steps;
+          auto ptr = base + block_k * k_stride + block_n * n_stride;
+          assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
+          dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+        });
+      }
     } else {
-      D.data = vx_hmma_844_c_f16_f32(A.data, B.data, C.data);
+      // Load accumulator matrix C
+      uint32_t elem_row = lane / cfg::tcN;
+      uint32_t elem_col = lane % cfg::tcN;
+      if constexpr (src_layout == row_major) {
+        uint32_t m_stride = cfg::tcM * ldm;
+        uint32_t n_stride = cfg::tcN;
+        auto base = reinterpret_cast<const output_t*>(src) + elem_row * ldm + elem_col;
+        detail::unroll_for<Frag::NR>([&](auto r) {
+          uint32_t block_m = r / cfg::n_steps;
+          uint32_t block_n = r % cfg::n_steps;
+          auto ptr = base + block_m * m_stride + block_n * n_stride;
+          if constexpr (sizeof(vreg_t) == sizeof(output_t)) {
+            dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+          } else {
+            vreg_t tmp(0);
+            *reinterpret_cast<output_t*>(&tmp) = *ptr;
+            dst.data[r] = tmp;
+          }
+        });
+      } else {
+        uint32_t m_stride = cfg::tcM;
+        uint32_t n_stride = cfg::tcN * ldm;
+        auto base = reinterpret_cast<const output_t*>(src) + elem_col * ldm + elem_row;
+        detail::unroll_for<Frag::NR>([&](auto r) {
+          uint32_t block_m = r / cfg::n_steps;
+          uint32_t block_n = r % cfg::n_steps;
+          auto ptr = base + block_m * m_stride + block_n * n_stride;
+          if constexpr (sizeof(vreg_t) == sizeof(output_t)) {
+            dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+          } else {
+            vreg_t tmp(0);
+            *reinterpret_cast<output_t*>(&tmp) = *ptr;
+            dst.data[r] = tmp;
+          }
+        });
+      }
     }
-  } else {
-    static_assert(false, "Unsupported type!");
   }
-}
 
-} // namespace wmma
+  template <typename Frag, mem_layout dst_layout = row_major>
+  static __attribute__((always_inline)) void store_matrix_sync(void *dst, const Frag &src, size_t ldm) {
+    static_assert(Frag::Use == accumulator, "only accumulator fragment can be stored");
+    uint32_t lane = vx_thread_id();
+    uint32_t elem_row = lane / cfg::tcN;
+    uint32_t elem_col = lane % cfg::tcN;
+    if constexpr (dst_layout == row_major) {
+      uint32_t m_stride = cfg::tcM * ldm;
+      uint32_t n_stride = cfg::tcN;
+      auto base = reinterpret_cast<output_t*>(dst) + elem_row * ldm + elem_col;
+      detail::unroll_for<Frag::NR>([&](auto r) {
+        uint32_t block_m = r / cfg::n_steps;
+        uint32_t block_n = r % cfg::n_steps;
+        auto ptr = base + block_m * m_stride + block_n * n_stride;
+        if constexpr (sizeof(vreg_t) == sizeof(output_t)) {
+          *reinterpret_cast<vreg_t*>(ptr) = src.data[r];
+        } else {
+          vreg_t tmp(src.data[r]);
+          *ptr = *reinterpret_cast<const output_t*>(&tmp);
+        }
+      });
+    } else {
+      uint32_t m_stride = cfg::tcM;
+      uint32_t n_stride = cfg::tcN * ldm;
+      auto base = reinterpret_cast<output_t*>(dst) + elem_col * ldm + elem_row;
+      detail::unroll_for<Frag::NR>([&](auto r) {
+        uint32_t block_m = r / cfg::n_steps;
+        uint32_t block_n = r % cfg::n_steps;
+        auto ptr = base + block_m * m_stride + block_n * n_stride;
+        if constexpr (sizeof(vreg_t) == sizeof(output_t)) {
+          *reinterpret_cast<vreg_t*>(ptr) = src.data[r];
+        } else {
+          vreg_t tmp(src.data[r]);
+          *ptr = *reinterpret_cast<const output_t*>(&tmp);
+        }
+      });
+    }
+  }
 
-#endif // __VX_TENSOR_H__
+  template <typename FragD, typename FragA, typename FragB, typename FragC>
+  static __attribute__((always_inline)) void mma_sync(FragD &fragD, const FragA &fragA, const FragB &fragB, const FragC &fragC) {
+    static_assert(FragA::Use == matrix_a, "A must be matrix_a");
+    static_assert(FragB::Use == matrix_b, "B must be matrix_b");
+    static_assert(FragC::Use == accumulator, "C must be accumulator");
+    static_assert(FragD::Use == accumulator, "D must be accumulator");
+
+    // fragA: caller-saved registers (f0-f7)
+    register float fa0 __asm__("f0")  = fragA.data[0];
+    register float fa1 __asm__("f1")  = fragA.data[1];
+    register float fa2 __asm__("f2")  = fragA.data[2];
+    register float fa3 __asm__("f3")  = fragA.data[3];
+    register float fa4 __asm__("f4")  = fragA.data[4];
+    register float fa5 __asm__("f5")  = fragA.data[5];
+    register float fa6 __asm__("f6")  = fragA.data[6];
+    register float fa7 __asm__("f7")  = fragA.data[7];
+
+    if constexpr (FragB::NR == 8) {
+      // fragB: caller-saved registers (f10-f17)
+      register float fb0 __asm__("f10") = fragB.data[0];
+      register float fb1 __asm__("f11") = fragB.data[1];
+      register float fb2 __asm__("f12") = fragB.data[2];
+      register float fb3 __asm__("f13") = fragB.data[3];
+      register float fb4 __asm__("f14") = fragB.data[4];
+      register float fb5 __asm__("f15") = fragB.data[5];
+      register float fb6 __asm__("f16") = fragB.data[6];
+      register float fb7 __asm__("f17") = fragB.data[7];
+
+      // fragC: mix of caller-saved (f28-f31) and callee-saved (f18-f21)
+      register float fc0 __asm__("f24") = fragC.data[0];
+      register float fc1 __asm__("f25") = fragC.data[1];
+      register float fc2 __asm__("f26") = fragC.data[2];
+      register float fc3 __asm__("f27") = fragC.data[3];
+      register float fc4 __asm__("f28") = fragC.data[4];
+      register float fc5 __asm__("f29") = fragC.data[5];
+      register float fc6 __asm__("f30") = fragC.data[6];
+      register float fc7 __asm__("f31") = fragC.data[7];
+
+      // Force outputs into accumulator registers
+      register float fd0 __asm__("f24");
+      register float fd1 __asm__("f25");
+      register float fd2 __asm__("f26");
+      register float fd3 __asm__("f27");
+      register float fd4 __asm__("f28");
+      register float fd5 __asm__("f29");
+      register float fd6 __asm__("f30");
+      register float fd7 __asm__("f31");
+
+      __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x0"
+        : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
+        : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id),
+          "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
+          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3), "f"(fb4), "f"(fb5), "f"(fb6), "f"(fb7),
+          "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7)
+      );
+
+      // Write results to fragD
+      fragD.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
+    } else {
+      static_assert(FragB::NR == 4, "Unsupported number of registers for FragB");
+      // fragB: caller-saved registers (f28-f31)
+      register float fb0 __asm__("f28") = fragB.data[0];
+      register float fb1 __asm__("f29") = fragB.data[1];
+      register float fb2 __asm__("f30") = fragB.data[2];
+      register float fb3 __asm__("f31") = fragB.data[3];
+
+      // fragC: mix of caller-saved (f10-f17)
+      register float fc0 __asm__("f10") = fragC.data[0];
+      register float fc1 __asm__("f11") = fragC.data[1];
+      register float fc2 __asm__("f12") = fragC.data[2];
+      register float fc3 __asm__("f13") = fragC.data[3];
+      register float fc4 __asm__("f14") = fragC.data[4];
+      register float fc5 __asm__("f15") = fragC.data[5];
+      register float fc6 __asm__("f16") = fragC.data[6];
+      register float fc7 __asm__("f17") = fragC.data[7];
+
+      // Force outputs into accumulator registers
+      register float fd0 __asm__("f10");
+      register float fd1 __asm__("f11");
+      register float fd2 __asm__("f12");
+      register float fd3 __asm__("f13");
+      register float fd4 __asm__("f14");
+      register float fd5 __asm__("f15");
+      register float fd6 __asm__("f16");
+      register float fd7 __asm__("f17");
+
+      __asm__ volatile (".insn r %[insn], 0, 2, x%[fmd], x%[fms], x0"
+        : "=f"(fd0), "=f"(fd1), "=f"(fd2), "=f"(fd3), "=f"(fd4), "=f"(fd5), "=f"(fd6), "=f"(fd7)
+        : [insn]"i"(RISCV_CUSTOM0), [fmd]"i"(Ot::id), [fms]"i"(It::id),
+          "f"(fa0), "f"(fa1), "f"(fa2), "f"(fa3), "f"(fa4), "f"(fa5), "f"(fa6), "f"(fa7),
+          "f"(fb0), "f"(fb1), "f"(fb2), "f"(fb3),
+          "f"(fc0), "f"(fc1), "f"(fc2), "f"(fc3), "f"(fc4), "f"(fc5), "f"(fc6), "f"(fc7)
+      );
+
+      // Write results to fragD
+      fragD.data = {fd0, fd1, fd2, fd3, fd4, fd5, fd6, fd7};
+    }
+  }
+};
+
+} // namespace tensor
+} // namespace vortex

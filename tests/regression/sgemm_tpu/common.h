@@ -2,20 +2,22 @@
 #define _COMMON_H_
 
 #include <stdint.h>
-#include <hfloats.h>
 
-#ifndef I_TYPE
-#define I_TYPE float
+#ifndef NUM_THREADS
+#define NUM_THREADS 4
 #endif
 
-#ifndef O_TYPE
-#define O_TYPE float
+#ifndef ITYPE
+#define ITYPE fp32
+#endif
+
+#ifndef OTYPE
+#define OTYPE fp32
 #endif
 
 typedef struct {
   uint32_t grid_dim[2];
   uint32_t block_dim[2];
-  uint32_t tileM, tileN, tileK;
   uint32_t M, N, K;
   uint64_t A_addr;
   uint64_t B_addr;

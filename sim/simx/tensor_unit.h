@@ -50,14 +50,14 @@ public:
 
   virtual void tick();
 
-	void hmma844(uint32_t wid,
-							 uint32_t fmt,
-							 uint32_t step,
-	             const std::vector<reg_data_t>& rs1_data,
-							 const std::vector<reg_data_t>& rs2_data,
-							 const std::vector<reg_data_t>& rs3_data,
-							 std::vector<reg_data_t>& rd_data,
-							 ExeTraceData* trace_data);
+	void wmma(uint32_t wid,
+			 	    uint32_t fmt,
+			 	    uint32_t step,
+	          const std::vector<reg_data_t>& rs1_data,
+					  const std::vector<reg_data_t>& rs2_data,
+					  const std::vector<reg_data_t>& rs3_data,
+					  std::vector<reg_data_t>& rd_data,
+					  ExeTraceData* trace_data);
 
 	const PerfStats& perf_stats() const;
 

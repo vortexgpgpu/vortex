@@ -141,11 +141,11 @@ uint32_t Emulator::fetch(uint32_t wid, uint64_t uuid) {
   auto& warp = warps_.at(wid);
   __unused(uuid);
 
-  DP(1, "Fetch: cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
-         << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")");
-
   uint32_t instr_code = 0;
   this->icache_read(&instr_code, warp.PC, sizeof(uint32_t));
+
+  DP(1, "Fetch: code=0x" << std::hex << instr_code << std::dec << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
+         << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")");
   return instr_code;
 }
 
@@ -197,8 +197,8 @@ instr_trace_t* Emulator::step() {
     // Fetch
     auto instr_code = this->fetch(scheduled_warp, uuid);
 
-    // Decode
-    this->decode(instr_code, scheduled_warp, uuid);
+    // decode
+    this->decode(instr_code, scheduled_warp);
   } else {
     // we have a micro-instruction in the ibuffer
     // adjust PC back to original (incremented in execute())
@@ -208,6 +208,8 @@ instr_trace_t* Emulator::step() {
   // pop the instruction from the ibuffer
   auto instr = warp.ibuffer.front();
   warp.ibuffer.pop_front();
+
+  DP(1, "Instr: " << std::dec << *instr << " (#" << std::dec << uuid << ")");
 
   // Execute
   auto trace = this->execute(*instr, scheduled_warp, uuid);

@@ -1,24 +1,75 @@
-#include <iostream>
-#include <unistd.h>
-#include <string.h>
-#include <vector>
-#include <chrono>
-#include <vortex.h>
-#include <cmath>
 #include "common.h"
-#include <hfloats.h>
+#include <chrono>
+#include <cmath>
+#include <iostream>
+#include <string.h>
+#include <unistd.h>
+#include <vector>
+#include <vortex.h>
+#include <tensor_cfg.h>
+#include "float16.h"
+#include "bfloat16.h"
+
+namespace vt = vortex::tensor;
 
 #define FLOAT_ULP 6
 
-#define RT_CHECK(_expr)                                         \
-   do {                                                         \
-     int _ret = _expr;                                          \
-     if (0 == _ret)                                             \
-       break;                                                   \
-     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);   \
-	 cleanup();			                                              \
-     exit(-1);                                                  \
-   } while (false)
+#define HALF_ULP 3
+
+#define MAX_ERRORS 100
+
+#define RT_CHECK(_expr)                                      \
+  do {                                                       \
+    int _ret = _expr;                                        \
+    if (0 == _ret)                                           \
+      break;                                                 \
+    printf("Error: '%s' returned %d!\n", #_expr, (int)_ret); \
+    cleanup();                                               \
+    exit(-1);                                                \
+  } while (false)
+
+///////////////////////////////////////////////////////////////////////////////
+
+template <typename T>
+struct native_type_impl {};
+
+template <>
+struct native_type_impl<vt::fp32> {
+  using type = float;
+};
+
+template <>
+struct native_type_impl<vt::fp16> {
+  using type = float16_t;
+};
+
+template <>
+struct native_type_impl<vt::bf16> {
+  using type = bfloat16_t;
+};
+
+template <>
+struct native_type_impl<vt::int32> {
+  using type = int32_t;
+};
+
+template <>
+struct native_type_impl<vt::int16> {
+  using type = int16_t;
+};
+
+template <>
+struct native_type_impl<vt::int8> {
+  using type = int8_t;
+};
+
+template <typename T>
+using native_type_t = typename native_type_impl<T>::type;
+
+using itype_t = native_type_t<vt::ITYPE>;
+using otype_t = native_type_t<vt::OTYPE>;
+
+using cfg = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -28,7 +79,7 @@ class Comparator {};
 template <>
 class Comparator<int8_t> {
 public:
-  static const char* type_str() {
+  static const char *type_str() {
     return "int8";
   }
   static int8_t generate() {
@@ -36,7 +87,7 @@ public:
   }
   static bool compare(int a, int b, int index, int errors) {
     if (a != b) {
-      if (errors < 100) {
+      if (errors < MAX_ERRORS) {
         printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
       }
       return false;
@@ -46,17 +97,17 @@ public:
 };
 
 template <>
-class Comparator<int> {
+class Comparator<int16_t> {
 public:
-  static const char* type_str() {
-    return "int8";
+  static const char *type_str() {
+    return "int16";
   }
-  static int generate() {
-    return (int)rand();
+  static int16_t generate() {
+    return (int16_t)rand();
   }
   static bool compare(int a, int b, int index, int errors) {
     if (a != b) {
-      if (errors < 100) {
+      if (errors < MAX_ERRORS) {
         printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
       }
       return false;
@@ -66,23 +117,60 @@ public:
 };
 
 template <>
-class Comparator<vortex::half_t> {
+class Comparator<int32_t> {
 public:
-  static const char* type_str() {
-    return "f16";
+  static const char *type_str() {
+    return "int32";
   }
-  static vortex::half_t generate() {
-    return static_cast<vortex::half_t>(float(rand()) / RAND_MAX);
+  static int32_t generate() {
+    return (int32_t)rand();
   }
-  static bool compare(float a, float b, int index, int errors) {
-    union fi_t { float f; int32_t i; };
-    fi_t fa, fb;
-    fa.f = a;
-    fb.f = b;
-    auto d = std::abs(fa.i - fb.i);
-    if (d > FLOAT_ULP) {
-      if (errors < 100) {
-        printf("*** error: [%d] expected=%f, actual=%f\n", index, b, a);
+  static bool compare(int a, int b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
+class Comparator<float16_t> {
+public:
+  static const char *type_str() {
+    return "float16";
+  }
+  static float16_t generate() {
+    return static_cast<float16_t>(float(rand()) / RAND_MAX);
+  }
+  static bool compare(float16_t a, float16_t b, int index, int errors) {
+    auto d = std::abs(a.bits - b.bits);
+    if (d > HALF_ULP) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b.bits, a.bits);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
+class Comparator<bfloat16_t> {
+public:
+  static const char *type_str() {
+    return "bfloat16";
+  }
+  static bfloat16_t generate() {
+    return static_cast<bfloat16_t>(float(rand()) / RAND_MAX);
+  }
+  static bool compare(bfloat16_t a, bfloat16_t b, int index, int errors) {
+    auto d = std::abs(a.bits - b.bits);
+    if (d > HALF_ULP) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b.bits, a.bits);
       }
       return false;
     }
@@ -93,20 +181,23 @@ public:
 template <>
 class Comparator<float> {
 public:
-  static const char* type_str() {
+  static const char *type_str() {
     return "float";
   }
-  static int generate() {
+  static float generate() {
     return static_cast<float>(rand()) / RAND_MAX;
   }
   static bool compare(float a, float b, int index, int errors) {
-    union fi_t { float f; int32_t i; };
+    union fi_t {
+      float f;
+      int32_t i;
+    };
     fi_t fa, fb;
     fa.f = a;
     fb.f = b;
     auto d = std::abs(fa.i - fb.i);
     if (d > FLOAT_ULP) {
-      if (errors < 100) {
+      if (errors < MAX_ERRORS) {
         printf("*** error: [%d] expected=%f, actual=%f\n", index, b, a);
       }
       return false;
@@ -115,22 +206,25 @@ public:
   }
 };
 
-static void matmul_cpu(O_TYPE* C, const I_TYPE* A, const I_TYPE* B, uint32_t M, uint32_t N, uint32_t K) {
+static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
-      O_TYPE sum(0);
+      otype_t sum(0);
       for (uint32_t k = 0; k < K; ++k) {
-        sum += O_TYPE(A[m*K + k] * B[k*N + n]);
+        sum = otype_t(A[m * K + k]) * otype_t(B[k * N + n]) + sum;
       }
-      C[m*N + n] = sum;
+      C[m * N + n] = sum;
     }
   }
 }
 
-const char* kernel_file = "kernel.vxbin";
-uint32_t M = 32;
-uint32_t N = 32;
-uint32_t K = 32;
+///////////////////////////////////////////////////////////////////////////////
+
+const char *kernel_file = "kernel.vxbin";
+
+uint32_t M = cfg::tileM;
+uint32_t N = cfg::tileN;
+uint32_t K = cfg::tileK;
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
@@ -140,14 +234,16 @@ vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
 kernel_arg_t kernel_arg = {};
 
+std::string last_build_options;
+
 static void show_usage() {
-   std::cout << "Vortex Test." << std::endl;
-   std::cout << "Usage: [-m: m] [-n N] [-k: K] [-h: help]" << std::endl;
+  std::cout << "Vortex Sgemm TPU Test." << std::endl;
+  std::cout << "Usage: [-m: m] [-n N] [-k: K] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "m:n:k:h")) != -1) {
+  while ((c = getopt(argc, argv, "m:n:k:i:o:h")) != -1) {
     switch (c) {
     case 'm':
       M = atoi(optarg);
@@ -192,61 +288,39 @@ int main(int argc, char *argv[]) {
 
   uint64_t NT;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &NT));
-  if (NT < 4) {
-    std::cout << "Error: warp size must be at least 4 threads!" << std::endl;
+  if (NT != NUM_THREADS) {
+    std::cout << "Error: device warp size (" << NT << ") must match NUM_THREADS=" << NUM_THREADS << "!" << std::endl;
     return -1;
   }
-  std::cout << "GPU warp size: " << NT << " threads" << std::endl;
 
-  uint64_t isa_flags;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-  uint32_t XlenB = VX_ISA_ARCH(isa_flags) / 8;
-  std::cout << "GPU XLEN: " << 8 * XlenB << std::endl;
-
-  // tile format ratio
-  uint32_t o_ratio = XlenB / sizeof(O_TYPE);
-  uint32_t i_ratio = XlenB / sizeof(I_TYPE);
-
-  // determine tensor tile size
-  uint32_t logNT = log2(NT);
-  uint32_t tileM = 4 * (1 << (logNT / 2)) * o_ratio;
-  uint32_t tileN = (logNT % 2 == 0) ? (tileM / 2) : tileM;
-  uint32_t tileK = std::min(tileM, tileN) * i_ratio;
-
-  std::cout << "GPU tensor tileM=" << tileM << ", tileN=" << tileM << ", tileK=" << tileK << std::endl;
-
-  if ((M % tileM) != 0) {
+  if ((M % cfg::tileM) != 0) {
     std::cout << "Error: M must be a multiple of tensor tileM!" << std::endl;
     return -1;
   }
 
-  if ((N % tileN) != 0) {
+  if ((N % cfg::tileN) != 0) {
     std::cout << "Error: M must be a multiple of tensor tileN!" << std::endl;
     return -1;
   }
 
-  if ((K % tileK) != 0) {
+  if ((K % cfg::tileK) != 0) {
     std::cout << "Error: M must be a multiple of tensor tileK!" << std::endl;
     return -1;
   }
-
-  kernel_arg.tileM = tileM;
-  kernel_arg.tileN = tileN;
-  kernel_arg.tileK = tileK;
 
   size_t sizeA = M * K;
   size_t sizeB = K * N;
   size_t sizeC = M * N;
 
-  std::cout << "input data type: " << Comparator<I_TYPE>::type_str() << " (" << sizeof(I_TYPE) << " bytes)" << std::endl;
-  std::cout << "output data type: " << Comparator<O_TYPE>::type_str() << " (" << sizeof(O_TYPE) << " bytes)" << std::endl;
+  std::cout << "input data type: " << Comparator<itype_t>::type_str() << " (id=" << vt::ITYPE::id << ")" << std::endl;
+  std::cout << "output data type: " << Comparator<otype_t>::type_str() << " (id=" << vt::OTYPE::id << ")" << std::endl;
   std::cout << "matrix A: " << M << "x" << K << std::endl;
   std::cout << "matrix B: " << K << "x" << N << std::endl;
   std::cout << "matrix C: " << M << "x" << N << std::endl;
 
   // set block size to warp size
-  kernel_arg.grid_dim[0]  = N / tileN;
-  kernel_arg.grid_dim[1]  = M / tileM;
+  kernel_arg.grid_dim[0] = N / cfg::tileN;
+  kernel_arg.grid_dim[1] = M / cfg::tileM;
   kernel_arg.block_dim[0] = NT; // warp sizeb
   kernel_arg.block_dim[1] = 1;
 
@@ -257,11 +331,11 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, sizeA * sizeof(I_TYPE), VX_MEM_READ, &A_buffer));
+  RT_CHECK(vx_mem_alloc(device, sizeA * sizeof(itype_t), VX_MEM_READ, &A_buffer));
   RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
-  RT_CHECK(vx_mem_alloc(device, sizeB * sizeof(I_TYPE), VX_MEM_READ, &B_buffer));
+  RT_CHECK(vx_mem_alloc(device, sizeB * sizeof(itype_t), VX_MEM_READ, &B_buffer));
   RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
-  RT_CHECK(vx_mem_alloc(device, sizeC * sizeof(O_TYPE), VX_MEM_WRITE, &C_buffer));
+  RT_CHECK(vx_mem_alloc(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
@@ -269,25 +343,25 @@ int main(int argc, char *argv[]) {
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
 
   // generate source data
-  std::vector<I_TYPE> h_A(sizeA);
-  std::vector<I_TYPE> h_B(sizeB);
+  std::vector<itype_t> h_A(sizeA);
+  std::vector<itype_t> h_B(sizeB);
   for (uint32_t i = 0; i < sizeA; ++i) {
-    h_A[i] = Comparator<I_TYPE>::generate();
+    h_A[i] = Comparator<itype_t>::generate();
   }
   for (uint32_t i = 0; i < sizeB; ++i) {
-    h_B[i] = Comparator<I_TYPE>::generate();
+    h_B[i] = Comparator<itype_t>::generate();
   }
 
   // upload matrix A buffer
   {
     std::cout << "upload matrix A buffer" << std::endl;
-    RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, sizeA * sizeof(I_TYPE)));
+    RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, sizeA * sizeof(itype_t)));
   }
 
   // upload matrix B buffer
   {
     std::cout << "upload matrix B buffer" << std::endl;
-    RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(I_TYPE)));
+    RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
   }
 
   // upload program
@@ -313,19 +387,19 @@ int main(int argc, char *argv[]) {
   printf("Elapsed time: %lg ms\n", elapsed);
 
   // download destination buffer
-  std::vector<O_TYPE> h_C(sizeC);
+  std::vector<otype_t> h_C(sizeC);
   std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, sizeC * sizeof(O_TYPE)));
+  RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, sizeC * sizeof(otype_t)));
 
   // verify result
   std::cout << "verify result" << std::endl;
   int errors = 0;
   {
-    std::vector<O_TYPE> h_ref(sizeC);
+    std::vector<otype_t> h_ref(sizeC);
     matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), M, N, K);
 
     for (uint32_t i = 0; i < h_ref.size(); ++i) {
-      if (!Comparator<O_TYPE>::compare(h_C[i], h_ref[i], i, errors)) {
+      if (!Comparator<otype_t>::compare(h_C[i], h_ref[i], i, errors)) {
         ++errors;
       }
     }

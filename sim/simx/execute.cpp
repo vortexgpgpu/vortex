@@ -32,20 +32,6 @@
 
 using namespace vortex;
 
-inline uint64_t nan_box(uint32_t value) {
-  return value | 0xffffffff00000000;
-}
-
-inline bool is_nan_boxed(uint64_t value) {
-  return (uint32_t(value >> 32) == 0xffffffff);
-}
-
-inline int64_t check_boxing(int64_t a) {
-  if (is_nan_boxed(a))
-    return a;
-  return nan_box(0x7fc00000); // NaN
-}
-
 inline void fetch_registers(std::vector<reg_data_t>& out, uint32_t src_index, const RegOpd& reg, const warp_t& warp) {
   __unused(src_index);
   uint32_t num_threads = warp.tmask.size();
@@ -1412,15 +1398,15 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid
   #ifdef EXT_TPU_ENABLE
     case 2: {
       switch (funct3) {
-      case 0: { // HMMA844
+      case 0: { // WMMA
         trace->fu_type = FUType::TPU;
-        trace->tpu_type = TpuType::HMMA844;
+        trace->tpu_type = TpuType::WMMA;
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
-        uint32_t fmt = immsrc >> 2;
-        uint32_t step = immsrc & 0x3;
         assert(warp.tmask.count() == num_threads);
-        tensor_unit_->hmma844(wid, fmt, step, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
+        uint32_t step = immsrc >> 8;
+        uint32_t fmt = immsrc & 0xff;
+        tensor_unit_->wmma(wid, fmt, step, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
         rd_write = true;
       } break;
       default:

@@ -284,12 +284,12 @@ inline std::ostream &operator<<(std::ostream &os, const SfuType& type) {
 ///////////////////////////////////////////////////////////////////////////////
 
 enum class TpuType {
-  HMMA844 = 0,
+  WMMA = 0,
 };
 
 inline std::ostream &operator<<(std::ostream &os, const TpuType& type) {
   switch (type) {
-  case TpuType::HMMA844: os << "HMMA844"; break;
+  case TpuType::WMMA: os << "WMMA"; break;
   default: assert(false);
   }
   return os;

@@ -112,7 +112,7 @@ private:
 
   uint32_t fetch(uint32_t wid, uint64_t uuid);
 
-  void decode(uint32_t code, uint32_t wid, uint64_t uuid);
+  void decode(uint32_t code, uint32_t wid);
 
   instr_trace_t* execute(const Instr &instr, uint32_t wid, uint64_t uuid);
 

@@ -2,7 +2,8 @@
 ROOT_DIR := $(realpath ../../..)
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -I$(VORTEX_HOME)/sim/common
+CXXFLAGS += -I$(COMMON_DIR)
+CXXFLAGS += $(CONFIGS)
 
 # Debugging
 ifdef DEBUG

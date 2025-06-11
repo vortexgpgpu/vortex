@@ -6,7 +6,7 @@ SRC_DIR := $(VORTEX_HOME)/runtime/simx
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I$(INC_DIR) -I../common -I$(ROOT_DIR)/hw -I$(SIM_DIR)/simx -I$(COMMON_DIR) -I$(SIM_DIR)/common
+CXXFLAGS += -I$(INC_DIR) -I../common -I$(ROOT_DIR)/hw -I$(SIM_DIR)/simx -I$(COMMON_DIR) -I$(COMMON_RT_DIR)
 CXXFLAGS += $(CONFIGS)
 CXXFLAGS += -DXLEN_$(XLEN)
 
@@ -24,11 +24,13 @@ endif
 
 PROJECT := libvortex-simx.so
 
+.PHONY: all clean force clean-driver clean-runtime
+
 all: $(DESTDIR)/$(PROJECT)
 
 driver: $(DESTDIR)/libsimx.so
 
-$(DESTDIR)/libsimx.so:
+$(DESTDIR)/libsimx.so: force
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx $(DESTDIR)/libsimx.so
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/libsimx.so

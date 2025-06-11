@@ -13,9 +13,164 @@
 // limitations under the License.
 
 #include "tensor_unit.h"
+#include "tensor_cfg.h"
+#include <softfloat_types.h>
+#include <rvfloats.h>
 #include "core.h"
 
 using namespace vortex;
+
+namespace vt = vortex::tensor;
+using cfg = vt::wmma_config_t<NUM_THREADS>;
+
+union fp32_u32_t {
+  float    f;
+  uint32_t u;
+};
+
+inline uint32_t floatToBits(float f) noexcept {
+  fp32_u32_t pun;
+  pun.f = f;
+  return pun.u;
+}
+
+inline float bitsToFloat(uint32_t u) noexcept {
+  fp32_u32_t pun;
+  pun.u = u;
+  return pun.f;
+}
+
+template <typename Ot, typename It>
+class FMA {
+public:
+  Ot operator()(const It& a, const It& b, const Ot& c) {
+    return static_cast<Ot>(a) * static_cast<Ot>(b) + c;
+  }
+};
+
+template <>
+class FMA<float, float16_t> {
+public:
+  float operator()(float16_t a, float16_t b, float c) {
+    auto xa = rv_htof_s(a.v, 0, nullptr);
+    auto xb = rv_htof_s(b.v, 0, nullptr);
+    auto xc = floatToBits(c);
+    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
+    return bitsToFloat(xd);
+  }
+};
+
+template <>
+class FMA<float16_t, float16_t> {
+public:
+  float16_t operator()(float16_t a, float16_t b, float16_t c) {
+    auto xa = rv_htof_s(a.v, 0, nullptr);
+    auto xb = rv_htof_s(b.v, 0, nullptr);
+    auto xc = rv_htof_s(c.v, 0, nullptr);
+    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
+    auto xh = rv_ftoh_s(xd, 0, nullptr);
+    return float16_t{xh};
+  }
+};
+
+template <>
+class FMA<float, bfloat16_t> {
+public:
+  float operator()(bfloat16_t a, bfloat16_t b, float c) {
+    auto xa = rv_btof_s(a.v, 0, nullptr);
+    auto xb = rv_btof_s(b.v, 0, nullptr);
+    auto xc = floatToBits(c);
+    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
+    return bitsToFloat(xd);
+  }
+};
+
+template <>
+class FMA<bfloat16_t, bfloat16_t> {
+public:
+  bfloat16_t operator()(bfloat16_t a, bfloat16_t b, bfloat16_t c) {
+    auto xa = rv_btof_s(a.v, 0, nullptr);
+    auto xb = rv_btof_s(b.v, 0, nullptr);
+    auto xc = rv_btof_s(c.v, 0, nullptr);
+    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
+    auto xh = rv_ftob_s(xd, 0, nullptr);
+    return bfloat16_t{xh};
+  }
+};
+
+template <typename Ot, typename It>
+float FEDP(const reg_data_t *a_row, const reg_data_t *b_col, float c_val) {
+  constexpr uint32_t i_ratio = sizeof(float) / sizeof(It);
+  static_assert(i_ratio * sizeof(It) == sizeof(float), "FEDP: tcK * i_ratio must be <= 32");
+DISABLE_WARNING_PUSH
+DISABLE_WARNING_STRICT_ALIASING
+  Ot acc = *reinterpret_cast<const Ot*>(&c_val);
+  for (uint32_t z = 0; z < cfg::tcK; ++z) {
+    auto a = reinterpret_cast<const It *>(&a_row[z].f32);
+    auto b = reinterpret_cast<const It *>(&b_col[z].f32);
+    for (uint32_t i = 0; i < i_ratio; ++i) {
+      acc = FMA<Ot, It>()(a[i], b[i], acc);
+    }
+  }
+  float ret(0);
+  *reinterpret_cast<Ot*>(&ret) = acc;
+DISABLE_WARNING_POP
+  return ret;
+}
+
+using PFN_FEDP = float (*)(const reg_data_t*, const reg_data_t*, float);
+
+static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
+  switch (OT) {
+  case vt::fp32::id:
+    switch (IT) {
+    case vt::fp32::id:
+      return FEDP<float, float>;
+    case vt::fp16::id:
+      return FEDP<float, float16_t>;
+    case vt::bf16::id:
+      return FEDP<float, bfloat16_t>;
+    default:
+      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
+      std::abort();
+    }
+    break;
+  case vt::fp16::id:
+    switch (IT) {
+    case vt::fp16::id:
+      return FEDP<float16_t, float16_t>;
+    default:
+      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
+      std::abort();
+    }
+    break;
+  case vt::bf16::id:
+    switch (IT) {
+    case vt::bf16::id:
+      return FEDP<bfloat16_t, bfloat16_t>;
+    default:
+      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
+      std::abort();
+    }
+    break;
+  case vt::int32::id:
+    switch (IT) {
+    case vt::int32::id:
+      return FEDP<int32_t, int32_t>;
+    case vt::int16::id:
+      return FEDP<int32_t, int16_t>;
+    case vt::int8::id:
+      return FEDP<int32_t, int8_t>;
+    default:
+      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
+      std::abort();
+    }
+    break;
+  default:
+    std::cout << "Error: unsupported output type: " << OT << "!" << std::endl;
+    std::abort();
+  }
+}
 
 class TensorUnit::Impl {
 public:
@@ -44,7 +199,7 @@ public:
       auto trace = input.front();
       int delay = 0;
       switch (trace->tpu_type) {
-      case TpuType::HMMA844:
+      case TpuType::WMMA:
         delay = 4;
         break;
       default:
@@ -56,39 +211,33 @@ public:
     }
   }
 
-  void hmma844(uint32_t wid,
-               uint32_t fmt,
-               uint32_t step,
-               const std::vector<reg_data_t>& rs1_data,
-               const std::vector<reg_data_t>& rs2_data,
-               const std::vector<reg_data_t>& rs3_data,
-               std::vector<reg_data_t>& rd_data,
-               ExeTraceData* trace_data) {
-    uint32_t num_threads = arch_.num_threads();
-    float subA[8][4];
-    float subB[4][4];
-    float acc[8][4];
-    for (int x = 0; x < 8; ++x) {
-      for (int y = 0; y < 4; ++y) {
-        subA[x][y] = rs1_data[x * 4 + y].f32;
-        acc[x][y] = rs3_data[x * 4 + y].f32;
-      }
-    }
-    int cb = step & 3;
-    int half = cb & 1;
-    int off = half * 16;
-    for (int x = 0; x < 4; ++x) {
-      for (int y = 0; y < 4; ++y) {
-        subB[x][y] = rs2_data[off + x * 4 + y].f32;
-      }
-    }
-    for (int x = 0; x < 8; ++x) {
-      for (int y = 0; y < 4; ++y) {
-        float sum = 0;
-        for (int z = 0; z < 4; ++z) {
-          sum += subA[x][z] * subB[z][y];
-        }
-        rd_data[x * 4 + y].f32 = acc[x][y] + sum;
+  void wmma(uint32_t wid,
+            uint32_t fmt,
+            uint32_t step,
+            const std::vector<reg_data_t>& rs1_data,
+            const std::vector<reg_data_t>& rs2_data,
+            const std::vector<reg_data_t>& rs3_data,
+            std::vector<reg_data_t>& rd_data,
+            ExeTraceData* trace_data) {
+    __unused(wid);
+    __unused(trace_data);
+
+    uint32_t fmt_d = fmt >> 4;
+    uint32_t fmt_s = fmt & 0xf;
+    auto fedp = select_FEDP(fmt_s, fmt_d);
+
+    uint32_t m = step >> 4;
+    uint32_t n = step & 0xf;
+    uint32_t a_off = (m % cfg::a_sub_blocks) * cfg::a_block_size;
+    uint32_t b_off = (n % cfg::b_sub_blocks) * cfg::b_block_size;
+
+    for (uint32_t i = 0; i < cfg::tcM; ++i) {
+      for (uint32_t j = 0; j < cfg::tcN; ++j) {
+        auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
+        auto b_col = rs2_data.data() + b_off + j * cfg::tcK;
+        auto c = rs3_data.at(i * cfg::tcN + j).f32;
+        auto d = fedp(a_row, b_col, c);
+        rd_data.at(i * cfg::tcN + j).u64 = nan_box(floatToBits(d));
       }
     }
   }
@@ -98,6 +247,7 @@ public:
   }
 
 private:
+
   TensorUnit*   simobject_;
   Core*         core_;
   Arch          arch_;
@@ -129,13 +279,13 @@ const TensorUnit::PerfStats &TensorUnit::perf_stats() const {
 	return impl_->perf_stats();
 }
 
-void TensorUnit::hmma844(uint32_t wid,
-                         uint32_t fmt,
-                         uint32_t step,
-                         const std::vector<reg_data_t>& rs1_data,
-                         const std::vector<reg_data_t>& rs2_data,
-                         const std::vector<reg_data_t>& rs3_data,
-                         std::vector<reg_data_t>& rd_data,
-                         ExeTraceData* trace_data) {
-  impl_->hmma844(wid, fmt, step, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
+void TensorUnit::wmma(uint32_t wid,
+                      uint32_t fmt,
+                      uint32_t step,
+                      const std::vector<reg_data_t>& rs1_data,
+                      const std::vector<reg_data_t>& rs2_data,
+                      const std::vector<reg_data_t>& rs3_data,
+                      std::vector<reg_data_t>& rd_data,
+                      ExeTraceData* trace_data) {
+  impl_->wmma(wid, fmt, step, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
 }

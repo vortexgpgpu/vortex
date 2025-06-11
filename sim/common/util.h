@@ -62,6 +62,8 @@ const char* fileExtension(const char* filepath);
   _Pragma("GCC diagnostic ignored \"-Wunused-but-set-variable\"")
 #define DISABLE_WARNING_MISSING_FIELD_INITIALIZERS \
   _Pragma("GCC diagnostic ignored \"-Wmissing-field-initializers\"")
+#define DISABLE_WARNING_STRICT_ALIASING \
+  _Pragma("GCC diagnostic ignored \"-Wstrict-aliasing\"")
 #elif defined(__clang__)
 #define DISABLE_WARNING_PUSH _Pragma("clang diagnostic push")
 #define DISABLE_WARNING_POP _Pragma("clang diagnostic pop")
@@ -75,12 +77,15 @@ const char* fileExtension(const char* filepath);
   _Pragma("clang diagnostic ignored \"-Wunused-but-set-variable\"")
 #define DISABLE_WARNING_MISSING_FIELD_INITIALIZERS \
   _Pragma("clang diagnostic ignored \"-Wmissing-field-initializers\"")
+#define DISABLE_WARNING_STRICT_ALIASING \
+  _Pragma("clang diagnostic ignored \"-Wstrict-aliasing\"")
 #else
 #define DISABLE_WARNING_PUSH
 #define DISABLE_WARNING_POP
 #define DISABLE_WARNING_UNUSED_PARAMETER
 #define DISABLE_WARNING_UNREFERENCED_FUNCTION
 #define DISABLE_WARNING_ANONYMOUS_STRUCT
+#define DISABLE_WARNING_STRICT_ALIASING
 #endif
 
 void *aligned_malloc(size_t size, size_t alignment);
