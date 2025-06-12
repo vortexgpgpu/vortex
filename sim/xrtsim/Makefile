@@ -2,6 +2,7 @@ include ../common.mk
 
 DESTDIR ?= $(CURDIR)
 
+CONFIG_FILE = $(DESTDIR)/rtlsim_config.stamp
 SRC_DIR := $(VORTEX_HOME)/sim/xrtsim
 AFU_DIR := $(RTL_DIR)/afu/xrt
 
@@ -92,7 +93,19 @@ endif
 VL_FLAGS += -DNOXRT
 CXXFLAGS += -DNOXRT
 
+# Config flags tracking
+CONFIG_HASH := $(shell echo '$(VL_FLAGS)' | md5sum | cut -d' ' -f1)
+ifneq ($(shell cat $(CONFIG_FILE) 2>/dev/null),$(CONFIG_HASH))
+.PHONY: FORCE_VL
+FORCE_VL:
+$(CONFIG_FILE): FORCE_VL
+	@mkdir -p $(@D)
+	@echo $(VL_HASH) > $@
+endif
+
 PROJECT := libxrtsim.so
+
+.PHONY: all clean
 
 all: $(DESTDIR)/$(PROJECT)
 
@@ -102,7 +115,7 @@ $(DESTDIR)/vortex.xml:
 $(DESTDIR)/scope.json: $(DESTDIR)/vortex.xml
 	$(SCRIPT_DIR)/scope.py $^ -o $@
 
-$(DESTDIR)/$(PROJECT): $(SRCS) $(SCOPE_JSON)
+$(DESTDIR)/$(PROJECT): $(SRCS) $(SCOPE_JSON) $(CONFIG_FILE)
 	verilator --build --exe $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
 clean:

@@ -1,9 +1,9 @@
 include ../common.mk
 
 DESTDIR ?= $(CURDIR)
-OBJ_DIR = $(DESTDIR)/obj
-CONFIG_FILE = $(OBJ_DIR)/config_flags
 
+OBJ_DIR = $(DESTDIR)/obj
+CONFIG_FILE = $(DESTDIR)/simx_config.stamp
 SRC_DIR = $(VORTEX_HOME)/sim/simx
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
@@ -68,9 +68,19 @@ CXXFLAGS += -MMD -MP -MF $(@:.o=.d)
 # optional: pipe through ccache if you have it
 CXX := $(if $(shell which ccache),ccache $(CXX),$(CXX))
 
+# Config flags tracking
+CONFIG_HASH := $(shell echo '$(VL_FLAGS)' | md5sum | cut -d' ' -f1)
+ifneq ($(shell cat $(CONFIG_FILE) 2>/dev/null),$(CONFIG_HASH))
+.PHONY: FORCE_VL
+FORCE_VL:
+$(CONFIG_FILE): FORCE_VL
+	@mkdir -p $(@D)
+	@echo $(CXXFLAGS) > $@
+endif
+
 PROJECT := simx
 
-.PHONY: all clean force
+.PHONY: all clean clean-lib clean-exe clean-obj
 
 all: $(DESTDIR)/$(PROJECT)
 
@@ -88,14 +98,6 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(CONFIG_FILE)
 $(MAIN_OBJ): $(SRC_DIR)/main.cpp $(CONFIG_FILE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -DSTARTUP_ADDR=0x80000000 -c $< -o $@
-
-# Config flags tracking
-$(CONFIG_FILE): force
-	@mkdir -p $(@D)
-	@test -f $@ && cp $@ $@.old || true
-	@echo "$(CXXFLAGS)" > $@.tmp
-	@diff -q $@.tmp $@.old 2>/dev/null || cp $@.tmp $@
-	@rm -f $@.tmp $@.old
 
 # Main executable
 $(DESTDIR)/$(PROJECT): $(OBJS) $(MAIN_OBJ)

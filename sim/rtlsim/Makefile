@@ -2,6 +2,7 @@ include ../common.mk
 
 DESTDIR ?= $(CURDIR)
 
+CONFIG_FILE = $(DESTDIR)/rtlsim_config.stamp
 SRC_DIR = $(VORTEX_HOME)/sim/rtlsim
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
@@ -80,15 +81,27 @@ ifdef PERF
 	CXXFLAGS += -DPERF_ENABLE
 endif
 
+# Config flags tracking
+CONFIG_HASH := $(shell echo '$(VL_FLAGS)' | md5sum | cut -d' ' -f1)
+ifneq ($(shell cat $(CONFIG_FILE) 2>/dev/null),$(CONFIG_HASH))
+.PHONY: FORCE_VL
+FORCE_VL:
+$(CONFIG_FILE): FORCE_VL
+	@mkdir -p $(@D)
+	@echo $(VL_HASH) > $@
+endif
+
 PROJECT := rtlsim
+
+.PHONY: all clean clean-lib clean-exe
 
 all: $(DESTDIR)/$(PROJECT)
 
-$(DESTDIR)/$(PROJECT): $(SRCS) $(SRC_DIR)/main.cpp
-	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS) -DSTARTUP_ADDR=0x80000000' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
+$(DESTDIR)/$(PROJECT): $(SRCS) $(SRC_DIR)/main.cpp $(CONFIG_FILE)
+	verilator --build $(VL_FLAGS) $(SRCS) $(SRC_DIR)/main.cpp -CFLAGS '$(CXXFLAGS) -DSTARTUP_ADDR=0x80000000' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
-$(DESTDIR)/lib$(PROJECT).so: $(SRCS)
-	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' --Mdir $@.obj_dir -o $@
+$(DESTDIR)/lib$(PROJECT).so: $(SRCS) $(CONFIG_FILE)
+	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
 clean-lib:
 	rm -rf $(DESTDIR)/lib$(PROJECT).so.obj_dir

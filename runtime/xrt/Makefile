@@ -45,11 +45,13 @@ ifdef CHIPSCOPE
 	CXXFLAGS += -DCHIPSCOPE
 endif
 
+.PHONY: all force driver clean-driver clean-runtime clean
+
 all: $(DESTDIR)/$(PROJECT)
 
 driver: $(DESTDIR)/libxrtsim.so
 
-$(DESTDIR)/libxrtsim.so:
+$(DESTDIR)/libxrtsim.so: force
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/xrtsim $(DESTDIR)/libxrtsim.so
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(XRTSIM)
@@ -62,5 +64,3 @@ clean-runtime:
 	rm -f $(DESTDIR)/$(PROJECT)
 
 clean: clean-driver clean-runtime
-
-.PHONY: all driver clean-driver clean-runtime clean

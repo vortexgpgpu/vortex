@@ -47,6 +47,8 @@ endif
 
 PROJECT := libvortex-opae.so
 
+.PHONY: all force driver clean-driver clean-runtime clean
+
 all: $(DESTDIR)/$(PROJECT)
 
 $(ROOT_DIR)/hw/syn/altera/opae/vortex_afu.h:
@@ -54,7 +56,7 @@ $(ROOT_DIR)/hw/syn/altera/opae/vortex_afu.h:
 
 driver: $(DESTDIR)/libopae-c-sim.so
 
-$(DESTDIR)/libopae-c-sim.so:
+$(DESTDIR)/libopae-c-sim.so: force
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/opaesim $(DESTDIR)/libopae-c-sim.so
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(BUILD_DEPS)
@@ -67,5 +69,3 @@ clean-runtime:
 	rm -f $(DESTDIR)/$(PROJECT)
 
 clean: clean-driver clean-runtime
-
-.PHONY: all driver clean-driver clean-runtime clean

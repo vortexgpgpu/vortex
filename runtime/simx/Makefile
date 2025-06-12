@@ -24,7 +24,7 @@ endif
 
 PROJECT := libvortex-simx.so
 
-.PHONY: all clean force clean-driver clean-runtime
+.PHONY: all force driver clean-driver clean-runtime clean
 
 all: $(DESTDIR)/$(PROJECT)
 
@@ -43,5 +43,3 @@ clean-runtime:
 	rm -f $(DESTDIR)/$(PROJECT)
 
 clean: clean-driver clean-runtime
-
-.PHONY: all driver clean-driver clean-runtime clean

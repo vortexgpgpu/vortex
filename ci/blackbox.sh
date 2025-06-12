@@ -19,7 +19,7 @@ ROOT_DIR=$SCRIPT_DIR/..
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: $0 [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--perf=#class] [--rebuild=#n] [--log=logfile] [--help]]"
+    echo "Usage: $0 [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--perf=#class] [--log=logfile] [--help]]"
 }
 
 show_help()
@@ -29,7 +29,6 @@ show_help()
     echo "--driver: gpu, simx, rtlsim, oape, xrt"
     echo "--app: any subfolder test under regression or opencl"
     echo "--class: 0=disable, 1=pipeline, 2=memsys"
-    echo "--rebuild: 0=disable, 1=force, 2=auto, 3=temp"
 }
 
 add_option() {
@@ -49,7 +48,6 @@ DEFAULTS() {
     HAS_ARGS=0
     PERF_CLASS=0
     CONFIGS="$CONFIGS"
-    REBUILD=2
     TEMPBUILD=0
     LOGFILE=run.log
 }
@@ -70,18 +68,11 @@ parse_args() {
             --debug=*)  DEBUG=1; DEBUG_LEVEL=${i#*=} ;;
             --scope)    SCOPE=1; ;;
             --args=*)   HAS_ARGS=1; ARGS=${i#*=} ;;
-            --rebuild=*) REBUILD=${i#*=} ;;
             --log=*)    LOGFILE=${i#*=} ;;
             --help)     show_help; exit 0 ;;
             *)          show_usage; exit 1 ;;
         esac
     done
-
-    if [ $REBUILD -eq 3 ];
-    then
-        REBUILD=1
-        TEMPBUILD=1
-    fi
 }
 
 set_driver_path() {
@@ -146,16 +137,6 @@ main() {
 
     if [ -n "$CONFIGS" ]; then
         echo "CONFIGS=$CONFIGS"
-    fi
-
-    if [ $REBUILD -ne 0 ]; then
-        BLACKBOX_CACHE=blackbox.$DRIVER.cache
-        LAST_CONFIGS=$(cat "$BLACKBOX_CACHE" 2>/dev/null || echo "")
-
-        if [ $REBUILD -eq 1 ] || [ "$CONFIGS+$DEBUG+$SCOPE" != "$LAST_CONFIGS" ]; then
-            make -j4 -C $DRIVER_PATH clean-driver > /dev/null
-            echo "$CONFIGS+$DEBUG+$SCOPE" > "$BLACKBOX_CACHE"
-        fi
     fi
 
     export VORTEX_PROFILING=$PERF_CLASS
