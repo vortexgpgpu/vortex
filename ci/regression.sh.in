@@ -43,27 +43,24 @@ isa()
     make -C tests/riscv/isa run-simx
     make -C tests/riscv/isa run-rtlsim
 
-    make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
+    CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
 
-    make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
+    CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
 
-    make -C sim/rtlsim clean && CONFIGS="-DFPU_DSP" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
+    CONFIGS="-DFPU_DSP" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
 
     if [ "$XLEN" == "64" ]
     then
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
+        CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
 
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
+        CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
 
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_DPI -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
+        CONFIGS="-DFPU_DPI -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
 
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_FPNEW -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
+        CONFIGS="-DFPU_FPNEW -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
 
-        make -C sim/rtlsim clean && CONFIGS="-DFPU_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64fx
+        CONFIGS="-DFPU_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64fx
     fi
-
-    # clean build
-    make -C sim/rtlsim clean
 
     echo "isa tests done!"
 }
@@ -126,12 +123,10 @@ opencl()
 vm(){
     echo "begin vm tests..."
 
-    make -C sim/simx clean && CONFIGS="-DVM_ENABLE" make -C sim/simx
     make -C runtime/simx clean && CONFIGS="-DVM_ENABLE" make -C runtime/simx
     make -C tests/opencl run-simx
     make -C tests/regression run-simx
 
-    make -C sim/simx clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C sim/simx
     make -C runtime/simx clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C runtime/simx
     make -C tests/opencl run-simx
     make -C tests/regression run-simx
@@ -288,8 +283,7 @@ config2()
     make -C tests/regression/dogfood clean-kernel
 
     # disabling M & F extensions
-    make -C sim/rtlsim clean && CONFIGS="-DEXT_M_DISABLE -DEXT_F_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32i
-    make -C sim/rtlsim clean
+    CONFIGS="-DEXT_M_DISABLE -DEXT_F_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32i
 
     # disabling ZICOND extension
     CONFIGS="-DEXT_ZICOND_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo
@@ -342,16 +336,13 @@ config2()
 test_csv_trace()
 {
     # test CSV trace generation
-    make -C sim/simx clean && DEBUG=3 make -C sim/simx > /dev/null
-    make -C sim/rtlsim clean && DEBUG=3 CONFIGS="-DGPR_RESET" make -C sim/rtlsim > /dev/null
+    DEBUG=3 make -C sim/simx > /dev/null
+    DEBUG=3 CONFIGS="-DGPR_RESET" make -C sim/rtlsim > /dev/null
     make -C tests/riscv/isa run-simx-32im > run_simx.log
     make -C tests/riscv/isa run-rtlsim-32im > run_rtlsim.log
     ./ci/trace_csv.py -tsimx run_simx.log -otrace_simx.csv
     ./ci/trace_csv.py -trtlsim run_rtlsim.log -otrace_rtlsim.csv
     diff trace_rtlsim.csv trace_simx.csv
-    # clean build
-    make -C sim/simx clean
-    make -C sim/rtlsim clean
 }
 
 debug()
@@ -404,7 +395,7 @@ vector()
 {
     echo "begin vector tests..."
 
-    make -C sim/simx clean && CONFIGS="-DVLEN=256 -DEXT_V_ENABLE" make -C sim/simx
+    CONFIGS="-DVLEN=256 -DEXT_V_ENABLE" make -C sim/simx
     VLEN=256 REG_TESTS=1 GEN_TESTS=0 ./tests/riscv/riscv-vector-tests/run-test.sh
 
     echo "vector tests done!"

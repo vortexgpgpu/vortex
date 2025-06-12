@@ -19,7 +19,7 @@ ROOT_DIR=$SCRIPT_DIR/..
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: $0 [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--perf=#class] [--log=logfile] [--help]]"
+    echo "Usage: $0 [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--perf=#class] [--log=logfile] [--nohup] [--help]]"
 }
 
 show_help()
@@ -29,6 +29,7 @@ show_help()
     echo "--driver: gpu, simx, rtlsim, oape, xrt"
     echo "--app: any subfolder test under regression or opencl"
     echo "--class: 0=disable, 1=pipeline, 2=memsys"
+    echo "--nohup: build and run in temp directory"
 }
 
 add_option() {
@@ -69,6 +70,7 @@ parse_args() {
             --scope)    SCOPE=1; ;;
             --args=*)   HAS_ARGS=1; ARGS=${i#*=} ;;
             --log=*)    LOGFILE=${i#*=} ;;
+            --nohup)    TEMPBUILD=1 ;;
             --help)     show_help; exit 0 ;;
             *)          show_usage; exit 1 ;;
         esac

@@ -81,19 +81,9 @@ ifdef PERF
 	CXXFLAGS += -DPERF_ENABLE
 endif
 
-# Config flags tracking
-CONFIG_HASH := $(shell echo '$(VL_FLAGS)' | md5sum | cut -d' ' -f1)
-ifneq ($(shell cat $(CONFIG_FILE) 2>/dev/null),$(CONFIG_HASH))
-.PHONY: FORCE_VL
-FORCE_VL:
-$(CONFIG_FILE): FORCE_VL
-	@mkdir -p $(@D)
-	@echo $(VL_HASH) > $@
-endif
-
 PROJECT := rtlsim
 
-.PHONY: all clean clean-lib clean-exe
+.PHONY: all force clean clean-lib clean-exe
 
 all: $(DESTDIR)/$(PROJECT)
 
@@ -102,6 +92,16 @@ $(DESTDIR)/$(PROJECT): $(SRCS) $(SRC_DIR)/main.cpp $(CONFIG_FILE)
 
 $(DESTDIR)/lib$(PROJECT).so: $(SRCS) $(CONFIG_FILE)
 	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' --Mdir $@.obj_dir -o $@
+
+# updates the timestamp when flags changed.
+$(CONFIG_FILE): force
+	@mkdir -p $(@D)
+	@printf '%s\n' "$(VL_FLAGS)" > $@.tmp
+	@if ! cmp -s $@.tmp $@; then \
+	  mv $@.tmp $@; \
+	else \
+	  rm $@.tmp; \
+	fi
 
 clean-lib:
 	rm -rf $(DESTDIR)/lib$(PROJECT).so.obj_dir

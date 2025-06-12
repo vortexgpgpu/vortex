@@ -68,24 +68,14 @@ CXXFLAGS += -MMD -MP -MF $(@:.o=.d)
 # optional: pipe through ccache if you have it
 CXX := $(if $(shell which ccache),ccache $(CXX),$(CXX))
 
-# Config flags tracking
-CONFIG_HASH := $(shell echo '$(VL_FLAGS)' | md5sum | cut -d' ' -f1)
-ifneq ($(shell cat $(CONFIG_FILE) 2>/dev/null),$(CONFIG_HASH))
-.PHONY: FORCE_VL
-FORCE_VL:
-$(CONFIG_FILE): FORCE_VL
-	@mkdir -p $(@D)
-	@echo $(CXXFLAGS) > $@
-endif
-
 PROJECT := simx
 
-.PHONY: all clean clean-lib clean-exe clean-obj
+.PHONY: all force clean clean-lib clean-exe clean-obj
 
 all: $(DESTDIR)/$(PROJECT)
 
 # build common object files
-$(OBJ_DIR)/common/%.o: $(SW_COMMON_DIR)/%.cpp
+$(OBJ_DIR)/common/%.o: $(SW_COMMON_DIR)/%.cpp $(CONFIG_FILE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
@@ -106,6 +96,16 @@ $(DESTDIR)/$(PROJECT): $(OBJS) $(MAIN_OBJ)
 # Shared library
 $(DESTDIR)/lib$(PROJECT).so: $(OBJS)
 	$(CXX) $(CXXFLAGS) $^ -shared $(LDFLAGS) -o $@
+
+# updates the timestamp when flags changed.
+$(CONFIG_FILE): force
+	@mkdir -p $(@D)
+	@printf '%s\n' "$(CXXFLAGS)" > $@.tmp
+	@if ! cmp -s $@.tmp $@; then \
+	  mv $@.tmp $@; \
+	else \
+	  rm $@.tmp; \
+	fi
 
 # include the auto-generated header deps; silences warnings if missing
 -include $(DEPS)

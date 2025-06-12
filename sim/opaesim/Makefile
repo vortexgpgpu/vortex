@@ -93,16 +93,6 @@ endif
 VL_FLAGS += -DNOPAE
 CXXFLAGS += -DNOPAE
 
-# Config flags tracking
-CONFIG_HASH := $(shell echo '$(VL_FLAGS)' | md5sum | cut -d' ' -f1)
-ifneq ($(shell cat $(CONFIG_FILE) 2>/dev/null),$(CONFIG_HASH))
-.PHONY: FORCE_VL
-FORCE_VL:
-$(CONFIG_FILE): FORCE_VL
-	@mkdir -p $(@D)
-	@echo $(VL_HASH) > $@
-endif
-
 PROJECT := libopae-c-sim.so
 
 .PHONY: all clean
@@ -120,6 +110,16 @@ $(DESTDIR)/vortex_afu.h : $(AFU_DIR)/vortex_afu.vh
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/vortex_afu.h $(SCOPE_JSON) $(CONFIG_FILE)
 	verilator --build --exe $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
+
+# updates the timestamp when flags changed.
+$(CONFIG_FILE): force
+	@mkdir -p $(@D)
+	@printf '%s\n' "$(VL_FLAGS)" > $@.tmp
+	@if ! cmp -s $@.tmp $@; then \
+	  mv $@.tmp $@; \
+	else \
+	  rm $@.tmp; \
+	fi
 
 clean:
 	rm -rf $(DESTDIR)/$(PROJECT).obj_dir
