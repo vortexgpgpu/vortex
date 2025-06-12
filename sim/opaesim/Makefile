@@ -2,6 +2,7 @@ include ../common.mk
 
 DESTDIR ?= $(CURDIR)
 
+CONFIG_FILE = $(DESTDIR)/opaesim_config.stamp
 SRC_DIR := $(VORTEX_HOME)/sim/opaesim
 AFU_DIR := $(RTL_DIR)/afu/opae
 
