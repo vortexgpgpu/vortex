@@ -55,6 +55,28 @@ extern "C" {
   void dpi_fmax(bool enable, int dst_fmt, int64_t a, int64_t b, int64_t* result, svBitVecVal* fflags);
 }
 
+inline uint64_t nan_box(uint32_t value) {
+#ifdef XLEN_64
+  return value | 0xffffffff00000000;
+#else
+  return value;
+#endif
+}
+
+inline bool is_nan_boxed(uint64_t value) {
+#ifdef XLEN_64
+  return (uint32_t(value >> 32) == 0xffffffff);
+#else
+  return true;
+#endif
+}
+
+inline int64_t check_boxing(int64_t a) {
+  if (is_nan_boxed(a))
+    return a;
+  return nan_box(0x7fc00000); // NaN
+}
+
 void dpi_fadd(bool enable, int dst_fmt, int64_t a, int64_t b, const svBitVecVal* frm, int64_t* result, svBitVecVal* fflags) {
   if (!enable)
     return;

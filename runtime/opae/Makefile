@@ -10,7 +10,7 @@ SYN_DIR := $(HW_DIR)/syn/altera/opae
 SRC_DIR := $(VORTEX_HOME)/runtime/opae
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/hw -I$(DESTDIR) -I$(COMMON_DIR) -I$(COMMON_RT_DIR)
+CXXFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/hw -I$(DESTDIR) -I$(SW_COMMON_DIR) -I$(RT_COMMON_DIR)
 CXXFLAGS += -DXLEN_$(XLEN)
 
 # Position independent code
@@ -42,7 +42,7 @@ endif
 # Enable scope logic analyzer
 ifdef SCOPE
 	CXXFLAGS += -DSCOPE
-	SRCS += $(COMMON_DIR)/scope.cpp
+	SRCS += $(SW_COMMON_DIR)/scope.cpp
 endif
 
 PROJECT := libvortex-opae.so

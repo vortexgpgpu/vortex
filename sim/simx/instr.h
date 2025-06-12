@@ -127,8 +127,8 @@ class Instr {
 public:
   using Ptr = std::shared_ptr<Instr>;
 
-  Instr()
-    : opcode_(Opcode::NONE)
+  Instr(Opcode opcode = Opcode::NONE)
+    : opcode_(opcode)
     , num_rsrcs_(0)
     , has_imm_(false)
     , imm_(0)

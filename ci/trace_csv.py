@@ -48,9 +48,9 @@ def load_config(filename):
     sys.exit(1)
 
 def parse_simx(log_lines):
+    opcode_pattern = r"Instr: ([0-9a-zA-Z_\.]+)"
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
-    instr_pattern = r"Instr (0x[0-9a-fA-F]+):"
-    opcode_pattern = r"Instr 0x[0-9a-fA-F]+: ([0-9a-zA-Z_\.]+)"
+    instr_pattern = r"code=(0x[0-9a-fA-F]+)"
     core_id_pattern = r"cid=(\d+)"
     warp_id_pattern = r"wid=(\d+)"
     tmask_pattern = r"tmask=(\d+)"
@@ -66,13 +66,13 @@ def parse_simx(log_lines):
                     entries.append(instr_data)
                 instr_data = {}
                 instr_data["lineno"] = lineno
+                instr_data["instr"] = re.search(instr_pattern, line).group(1)
                 instr_data["PC"] = re.search(pc_pattern, line).group(1)
                 instr_data["core_id"] = int(re.search(core_id_pattern, line).group(1))
                 instr_data["warp_id"] = int(re.search(warp_id_pattern, line).group(1))
                 instr_data["tmask"] = re.search(tmask_pattern, line).group(1)
                 instr_data["uuid"] = int(re.search(uuid_pattern, line).group(1))
             elif line.startswith("DEBUG Instr"):
-                instr_data["instr"] = re.search(instr_pattern, line).group(1)
                 instr_data["opcode"] = re.search(opcode_pattern, line).group(1)
             elif line.startswith("DEBUG Src"):
                 src_reg = re.search(operands_pattern, line).group(1)

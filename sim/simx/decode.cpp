@@ -479,10 +479,9 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 }
 
 void Emulator::decode(uint32_t code, uint32_t wid) {
-  auto instr = std::allocate_shared<Instr>(instr_pool_);
-  auto op = Opcode((code >> shift_opcode) & mask_opcode);
-  instr->setOpcode(op);
+  auto& warp = warps_.at(wid);
 
+  auto op = Opcode((code >> shift_opcode) & mask_opcode);
   auto funct2 = (code >> shift_funct2) & mask_funct2;
   auto funct3 = (code >> shift_funct3) & mask_funct3;
   auto funct6 = (code >> shift_funct6) & mask_funct6;
@@ -510,7 +509,10 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
   switch (iType) {
   case InstType::R:
     switch (op) {
-    case Opcode::FCI:
+    case Opcode::FCI: {
+      auto instr = std::allocate_shared<Instr>(instr_pool_, op);
+      instr->setfunct3(funct3);
+      instr->setfunct7(funct7);
       switch (funct7) {
       case 0x20: // FCVT.S.D
       case 0x21: // FCVT.D.S
@@ -556,10 +558,14 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
         instr->setSrcReg(1, rs2, RegType::Float);
         break;
       }
-      break;
-    case Opcode::EXT1:
+      warp.ibuffer.push_back(instr);
+    } break;
+    case Opcode::EXT1: {
       switch (funct7) {
-      case 0:
+      case 0: {
+        auto instr = std::allocate_shared<Instr>(instr_pool_, op);
+        instr->setfunct3(funct3);
+        instr->setfunct7(funct7);
         switch (funct3) {
         case 0: // TMC
         case 3: // JOIN
@@ -583,12 +589,40 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
         default:
           std::abort();
         }
-        break;
+        warp.ibuffer.push_back(instr);
+      } break;
     #ifdef EXT_TPU_ENABLE
       case 2: {
         switch (funct3) {
         case 0: { // WMMA
-          // skip
+          namespace vt = vortex::tensor;
+          using cfg = vt::wmma_config_t<NUM_THREADS>;
+          uint32_t ra_base = 0;
+          uint32_t rb_base = (cfg::NRB == 4) ? 28 : 10;
+          uint32_t rc_base = (cfg::NRB == 4) ? 10 : 24;
+          uint32_t fmt_d = rd;
+          uint32_t fmt_s = rs1;
+          uint32_t fmt   = (fmt_d << 4) + fmt_s;
+          for (uint32_t k = 0; k < cfg::k_steps; ++k) {
+            for (uint32_t m = 0; m < cfg::m_steps; ++m) {
+              for (uint32_t n = 0; n < cfg::n_steps; ++n) {
+                uint32_t rs1  = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + k;
+                uint32_t rs2  = rb_base + (k * cfg::n_steps + n) / cfg::b_sub_blocks;
+                uint32_t rs3  = rc_base + m * cfg::n_steps + n;
+                uint32_t step = (m << 4) | n;
+                uint32_t imm  = (step << 8) | fmt;
+                auto instr = std::allocate_shared<Instr>(instr_pool_, op);
+                instr->setfunct3(funct3);
+                instr->setfunct7(funct7);
+                instr->setDestReg(rs3, RegType::Float);
+                instr->setSrcReg(0, rs1, RegType::Float);
+                instr->setSrcReg(1, rs2, RegType::Float);
+                instr->setSrcReg(2, rs3, RegType::Float);
+                instr->setImm(imm);
+                warp.ibuffer.push_back(instr);
+              }
+            }
+          }
         } break;
         default:
           std::abort();
@@ -598,22 +632,23 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
       default:
         std::abort();
       }
-      break;
-    default:
+    } break;
+    default: {
+      auto instr = std::allocate_shared<Instr>(instr_pool_, op);
+      instr->setfunct3(funct3);
+      instr->setfunct7(funct7);
       instr->setDestReg(rd, RegType::Integer);
       instr->setSrcReg(0, rs1, RegType::Integer);
       instr->setSrcReg(1, rs2, RegType::Integer);
-      break;
-    }
-    instr->setfunct3(funct3);
-    instr->setfunct7(funct7);
-    break;
-
+      warp.ibuffer.push_back(instr);
+    } break;
+  } break;
   case InstType::I: {
     switch (op) {
     case Opcode::I:
     case Opcode::I_W:
-    case Opcode::JALR:
+    case Opcode::JALR: {
+      auto instr = std::allocate_shared<Instr>(instr_pool_, op);
       instr->setDestReg(rd, RegType::Integer);
       instr->setSrcReg(0, rs1, RegType::Integer);
       instr->setfunct3(funct3);
@@ -632,20 +667,26 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
         auto imm = code >> shift_rs2;
         instr->setImm(sext(imm, width_i_imm));
       }
-      break;
+      warp.ibuffer.push_back(instr);
+    } break;
     case Opcode::L:
     case Opcode::FL: {
+      auto instr = std::allocate_shared<Instr>(instr_pool_, op);
       instr->setDestReg(rd, (op == Opcode::FL) ? RegType::Float : RegType::Integer);
       instr->setSrcReg(0, rs1, RegType::Integer);
       instr->setfunct3(funct3);
       auto imm = code >> shift_rs2;
       instr->setImm(sext(imm, width_i_imm));
+      warp.ibuffer.push_back(instr);
     } break;
-    case Opcode::FENCE:
+    case Opcode::FENCE: {
+      auto instr = std::allocate_shared<Instr>(instr_pool_, op);
       instr->setfunct3(funct3);
       instr->setImm(code >> shift_rs2);
-      break;
-    case Opcode::SYS:
+      warp.ibuffer.push_back(instr);
+    } break;
+    case Opcode::SYS: {
+      auto instr = std::allocate_shared<Instr>(instr_pool_, op);
       if (funct3 != 0) {
         // CSR instructions
         instr->setDestReg(rd, RegType::Integer);
@@ -661,21 +702,25 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
         // ECALL/EBREACK instructions
         instr->setImm(code >> shift_rs2);
       }
-      break;
+      warp.ibuffer.push_back(instr);
+    } break;
     default:
       std::abort();
       break;
     }
   } break;
   case InstType::S: {
+    auto instr = std::allocate_shared<Instr>(instr_pool_, op);
     instr->setSrcReg(0, rs1, RegType::Integer);
     instr->setSrcReg(1, rs2, (op == Opcode::FS) ? RegType::Float : RegType::Integer);
     instr->setfunct3(funct3);
     auto imm = (funct7 << width_reg) | rd;
     instr->setImm(sext(imm, width_i_imm));
+    warp.ibuffer.push_back(instr);
   } break;
 
   case InstType::B: {
+    auto instr = std::allocate_shared<Instr>(instr_pool_, op);
     instr->setSrcReg(0, rs1, RegType::Integer);
     instr->setSrcReg(1, rs2, RegType::Integer);
     instr->setfunct3(funct3);
@@ -685,15 +730,19 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
     auto bit_12   = funct7 >> 6;
     auto imm = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
     instr->setImm(sext(imm, width_i_imm+1));
+    warp.ibuffer.push_back(instr);
   } break;
 
   case InstType::U: {
+    auto instr = std::allocate_shared<Instr>(instr_pool_, op);
     instr->setDestReg(rd, RegType::Integer);
     auto imm = (code >> shift_funct3) << shift_funct3;
     instr->setImm(imm);
+    warp.ibuffer.push_back(instr);
   } break;
 
   case InstType::J: {
+    auto instr = std::allocate_shared<Instr>(instr_pool_, op);
     instr->setDestReg(rd, RegType::Integer);
     auto unordered  = code >> shift_funct3;
     auto bits_19_12 = unordered & 0xff;
@@ -702,21 +751,25 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
     auto bit_20     = (unordered >> 19) & 0x1;
     auto imm = (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
     instr->setImm(sext(imm, width_j_imm+1));
+    warp.ibuffer.push_back(instr);
   } break;
 
   case InstType::R4: {
+    auto instr = std::allocate_shared<Instr>(instr_pool_, op);
     instr->setDestReg(rd, RegType::Float);
     instr->setSrcReg(0, rs1, RegType::Float);
     instr->setSrcReg(1, rs2, RegType::Float);
     instr->setSrcReg(2, rs3, RegType::Float);
     instr->setfunct2(funct2);
     instr->setfunct3(funct3);
+    warp.ibuffer.push_back(instr);
   } break;
 
 #ifdef EXT_V_ENABLE
   case InstType::V:
     switch (op) {
     case Opcode::VSET: {
+      auto instr = std::allocate_shared<Instr>(instr_pool_, op);
       instr->setfunct3(funct3);
       switch (funct3) {
         case 0: { // OPIVV
@@ -789,9 +842,11 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
         default:
           std::abort();
       }
+      warp.ibuffer.push_back(instr);
     } break;
     case Opcode::FL:
     case Opcode::FS: {
+      auto instr = std::allocate_shared<Instr>(instr_pool_, op);
       instr->setSrcReg(0, rs1, RegType::Integer);
       uint32_t vmop = (code >> shift_vmop) & 0b11;
       switch (vmop) {
@@ -815,6 +870,7 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
       instr->setVmask((code >> shift_funct7) & 0x1);
       instr->setVmop(vmop);
       instr->setVnf((code >> shift_vnf) & mask_funct3);
+      warp.ibuffer.push_back(instr);
     } break;
     default:
       std::abort();
@@ -824,43 +880,5 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
 
   default:
     std::abort();
-  }
-
-  // push instruction into instruction buffer
-  auto& warp = warps_.at(wid);
-
-#ifdef EXT_TPU_ENABLE
-  if (op == Opcode::EXT1 && funct7 == 0x2 && funct3 == 0x0) {
-    // WMMA micro-ops
-    namespace vt = vortex::tensor;
-    using cfg = vt::wmma_config_t<NUM_THREADS>;
-    uint32_t ra_base = 0;
-    uint32_t rb_base = (cfg::NRB == 4) ? 28 : 10;
-    uint32_t rc_base = (cfg::NRB == 4) ? 10 : 24;
-    uint32_t fmt_d = rd;
-    uint32_t fmt_s = rs1;
-    uint32_t fmt   = (fmt_d << 4) + fmt_s;
-    for (uint32_t k = 0; k < cfg::k_steps; ++k) {
-      for (uint32_t m = 0; m < cfg::m_steps; ++m) {
-        for (uint32_t n = 0; n < cfg::n_steps; ++n) {
-          uint32_t rs1  = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + k;
-          uint32_t rs2  = rb_base + (k * cfg::n_steps + n) / cfg::b_sub_blocks;
-          uint32_t rs3  = rc_base + m * cfg::n_steps + n;
-          uint32_t step = (m << 4) | n;
-          uint32_t imm  = (step << 8) | fmt;
-          auto micro_op = std::allocate_shared<Instr>(instr_pool_, *instr);
-          micro_op->setDestReg(rs3, RegType::Float);
-          micro_op->setSrcReg(0, rs1, RegType::Float);
-          micro_op->setSrcReg(1, rs2, RegType::Float);
-          micro_op->setSrcReg(2, rs3, RegType::Float);
-          micro_op->setImm(imm);
-          warp.ibuffer.push_back(micro_op);
-        }
-      }
-    }
-  } else
-#endif
-  {
-    warp.ibuffer.push_back(instr);
   }
 }

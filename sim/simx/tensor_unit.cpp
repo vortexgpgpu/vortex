@@ -40,6 +40,10 @@ inline float bitsToFloat(uint32_t u) noexcept {
   return pun.f;
 }
 
+inline uint64_t nan_box(uint32_t value) {
+  return value | 0xffffffff00000000;
+}
+
 template <typename Ot, typename It>
 class FMA {
 public:

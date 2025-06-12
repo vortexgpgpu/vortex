@@ -6,7 +6,7 @@ SRC_DIR := $(VORTEX_HOME)/runtime/simx
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I$(INC_DIR) -I../common -I$(ROOT_DIR)/hw -I$(SIM_DIR)/simx -I$(COMMON_DIR) -I$(COMMON_RT_DIR)
+CXXFLAGS += -I$(INC_DIR) -I../common -I$(ROOT_DIR)/hw -I$(SIM_DIR)/simx -I$(SW_COMMON_DIR) -I$(RT_COMMON_DIR)
 CXXFLAGS += $(CONFIGS)
 CXXFLAGS += -DXLEN_$(XLEN)
 

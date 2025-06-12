@@ -5,7 +5,7 @@ PROJECT := sgemm_tpu
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
 
-SRCS := $(SRC_DIR)/main.cpp $(COMMON_DIR)/rvfloats.cpp $(COMMON_DIR)/softfloat_ext.cpp
+SRCS := $(SRC_DIR)/main.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SW_COMMON_DIR)/softfloat_ext.cpp
 
 VX_SRCS := $(SRC_DIR)/kernel.cpp
 

@@ -5,4 +5,4 @@ SIM_DIR := $(VORTEX_HOME)/sim
 HW_DIR := $(VORTEX_HOME)/hw
 
 INC_DIR := $(VORTEX_HOME)/runtime/include
-COMMON_RT_DIR := $(VORTEX_HOME)/runtime/common
+RT_COMMON_DIR := $(VORTEX_HOME)/runtime/common

@@ -32,3 +32,5 @@ RISCV_PREFIX  ?= riscv$(XLEN)-unknown-elf
 RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)
 
 THIRD_PARTY_DIR ?= $(VORTEX_HOME)/third_party
+
+SW_COMMON_DIR ?= $(VORTEX_HOME)/sim/common
