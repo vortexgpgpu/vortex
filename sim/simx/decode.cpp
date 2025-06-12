@@ -864,7 +864,7 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
       if (op == Opcode::FL) {
         instr->setDestReg(rd, RegType::Vector);
       } else {
-        instr->setSrcReg(rd, RegType::Vector);
+        instr->setSrcReg(2, rd, RegType::Vector);
       }
       instr->setVlsWidth(funct3);
       instr->setVmask((code >> shift_funct7) & 0x1);

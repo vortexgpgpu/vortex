@@ -37,7 +37,7 @@ endif
 # Enable scope logic analyzer
 ifdef SCOPE
 	CXXFLAGS += -DSCOPE
-	SRCS += $(SW_COMMON_DIR)/scope.cpp
+	SRCS += $(RT_COMMON_DIR)/scope.cpp
 endif
 
 # Enable ILA logic analyzer
