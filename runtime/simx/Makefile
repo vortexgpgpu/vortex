@@ -2,6 +2,7 @@ include ../common.mk
 
 DESTDIR ?= $(CURDIR)/..
 
+CONFIG_FILE := $(DESTDIR)/simx_rt_config.stamp
 SRC_DIR := $(VORTEX_HOME)/runtime/simx
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
@@ -33,8 +34,18 @@ driver: $(DESTDIR)/libsimx.so
 $(DESTDIR)/libsimx.so: force
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx $(DESTDIR)/libsimx.so
 
-$(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/libsimx.so
+$(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/libsimx.so $(CONFIG_FILE)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
+
+# updates the timestamp when flags changed.
+$(CONFIG_FILE): force
+	@mkdir -p $(@D)
+	@printf '%s\n' "$(CXXFLAGS)" > $@.tmp
+	@if ! cmp -s $@.tmp $@; then \
+	  mv $@.tmp $@; \
+	else \
+	  rm $@.tmp; \
+	fi
 
 clean-driver:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx clean-lib

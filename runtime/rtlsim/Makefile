@@ -2,6 +2,7 @@ include ../common.mk
 
 DESTDIR ?= $(CURDIR)/..
 
+CONFIG_FILE := $(DESTDIR)/rtlsim_rt_config.stamp
 SRC_DIR := $(VORTEX_HOME)/runtime/rtlsim
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
@@ -37,8 +38,18 @@ driver: $(DESTDIR)/librtlsim.so
 $(DESTDIR)/librtlsim.so: force
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/rtlsim $(DESTDIR)/librtlsim.so
 
-$(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/librtlsim.so
+$(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/librtlsim.so $(CONFIG_FILE)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
+
+# updates the timestamp when flags changed.
+$(CONFIG_FILE): force
+	@mkdir -p $(@D)
+	@printf '%s\n' "$(CXXFLAGS)" > $@.tmp
+	@if ! cmp -s $@.tmp $@; then \
+	  mv $@.tmp $@; \
+	else \
+	  rm $@.tmp; \
+	fi
 
 clean-driver:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/rtlsim clean-lib

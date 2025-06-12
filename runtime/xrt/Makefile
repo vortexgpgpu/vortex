@@ -4,6 +4,7 @@ TARGET ?= xrtsim
 
 DESTDIR ?= $(CURDIR)/..
 
+CONFIG_FILE := $(DESTDIR)/xrt_config.stamp
 SRC_DIR := $(VORTEX_HOME)/runtime/xrt
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
@@ -54,8 +55,18 @@ driver: $(DESTDIR)/libxrtsim.so
 $(DESTDIR)/libxrtsim.so: force
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/xrtsim $(DESTDIR)/libxrtsim.so
 
-$(DESTDIR)/$(PROJECT): $(SRCS) $(XRTSIM)
+$(DESTDIR)/$(PROJECT): $(SRCS) $(XRTSIM) $(CONFIG_FILE)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
+
+# updates the timestamp when flags changed.
+$(CONFIG_FILE): force
+	@mkdir -p $(@D)
+	@printf '%s\n' "$(CXXFLAGS)" > $@.tmp
+	@if ! cmp -s $@.tmp $@; then \
+	  mv $@.tmp $@; \
+	else \
+	  rm $@.tmp; \
+	fi
 
 clean-driver:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/xrtsim clean
