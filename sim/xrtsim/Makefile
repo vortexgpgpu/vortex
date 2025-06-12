@@ -2,7 +2,7 @@ include ../common.mk
 
 DESTDIR ?= $(CURDIR)
 
-CONFIG_FILE = $(DESTDIR)/xrtsim_config.stamp
+CONFIG_FILE := $(DESTDIR)/xrtsim_config.stamp
 SRC_DIR := $(VORTEX_HOME)/sim/xrtsim
 AFU_DIR := $(RTL_DIR)/afu/xrt
 
@@ -95,7 +95,7 @@ CXXFLAGS += -DNOXRT
 
 PROJECT := libxrtsim.so
 
-.PHONY: all clean
+.PHONY: all force clean
 
 all: $(DESTDIR)/$(PROJECT)
 
