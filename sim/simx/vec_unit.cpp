@@ -291,6 +291,7 @@ public:
     uint32_t vmask = instr.getVmask();
     uint32_t mop = instr.getVmop();
     uint32_t vsewb = 1 << states.vtype.vsew;
+    uint32_t vs3 = instr.getSrcReg(2).idx;
     auto& vreg_file = states.vreg_file.at(tid);
     uint64_t base_addr = rs1_data.at(tid).i;
     base_addr &= 0xFFFFFFFC; // TODO: riscv-tests fix
@@ -304,7 +305,6 @@ public:
       uint32_t sumop = instr.getVumop();
       switch (sumop) {
       case 0b00000: { // vse8.v, vse16.v, vse32.v, vse64.v
-        uint32_t vs3 = instr.getSrcReg(1).idx;
         uint32_t nfields = instr.getVnf() + 1;
         uint32_t emul = states.vtype.vlmul >> 2 ? 1 : 1 << (states.vtype.vlmul & 0b11);
         assert(nfields * emul <= 8);
@@ -327,7 +327,6 @@ public:
           std::cout << "Whole vector register store - reserved value for nreg: " << nreg << std::endl;
           std::abort();
         }
-        uint32_t vs3 = instr.getSrcReg(1).idx;
         uint32_t stride = vsewb;
         uint32_t vl = nreg * (VLENB / vsewb);
 
@@ -349,8 +348,6 @@ public:
           std::cout << "vsm.v only supports EEW=8, but EEW was: " << states.vtype.vsew << std::endl;
           std::abort();
         }
-
-        uint32_t vs3 = instr.getSrcReg(1).idx;
         uint32_t vl = (states.vl + 7) / 8;
         uint32_t stride = vsewb;
 
@@ -382,7 +379,6 @@ public:
                 // vssseg7e8.v, vssseg7e16.v, vssseg7e32.v, vssseg7e64.v
                 // vssseg8e8.v, vssseg8e16.v, vssseg8e32.v, vssseg8e64.v
       WordI stride = rs2_data.at(tid).i;
-      uint32_t vs3 = instr.getSrcReg(2).idx;
       uint32_t nfields = instr.getVnf() + 1;
 
       uint32_t emul = states.vtype.vlmul >> 2 ? 1 : 1 << (states.vtype.vlmul & 0b11);
@@ -418,7 +414,6 @@ public:
                 // vsoxseg7ei8.v, vsoxseg7ei16.v, vsoxseg7ei32.v, vsoxseg7ei64.v
                 // vsoxseg8ei8.v, vsoxseg8ei16.v, vsoxseg8ei32.v, vsoxseg8ei64.v
       uint32_t vs2 = instr.getSrcReg(1).idx;
-      uint32_t vs3 = instr.getSrcReg(2).idx;
       uint32_t nfields = instr.getVnf() + 1;
       uint32_t eew = instr.getVlsWidth() & 0x3;
 
