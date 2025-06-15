@@ -99,7 +99,7 @@ PROJECT := libxrtsim.so
 
 all: $(DESTDIR)/$(PROJECT)
 
-$(DESTDIR)/vortex.xml:
+$(DESTDIR)/vortex.xml: $(CONFIG_FILE)
 	verilator --xml-only -O0 $(VL_FLAGS) $(TOP) --xml-output $@
 
 $(DESTDIR)/scope.json: $(DESTDIR)/vortex.xml

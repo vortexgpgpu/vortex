@@ -102,12 +102,12 @@ module VX_decode import VX_gpu_pkg::*; #(
     reg [INST_BR_BITS-1:0] b_type;
     always @(*) begin
         case (funct3)
-            3'h0: b_type = INST_BR_EQ;
-            3'h1: b_type = INST_BR_NE;
-            3'h4: b_type = INST_BR_LT;
-            3'h5: b_type = INST_BR_GE;
-            3'h6: b_type = INST_BR_LTU;
-            3'h7: b_type = INST_BR_GEU;
+            3'h0: b_type = INST_BR_BEQ;
+            3'h1: b_type = INST_BR_BNE;
+            3'h4: b_type = INST_BR_BLT;
+            3'h5: b_type = INST_BR_BGE;
+            3'h6: b_type = INST_BR_BLTU;
+            3'h7: b_type = INST_BR_BGEU;
             default: b_type = 'x;
         endcase
     end
@@ -375,8 +375,7 @@ module VX_decode import VX_gpu_pkg::*; #(
             INST_FCI: begin
                 ex_type = EX_FPU;
                 op_args.fpu.frm = funct3;
-                op_args.fpu.fmt[0] = funct2[0]; // float / double
-                op_args.fpu.fmt[1] = rs2[1];   // int32 / int64
+                op_args.fpu.fmt = funct2;
                 case (funct5)
                     5'b00000, // FADD
                     5'b00001, // FSUB

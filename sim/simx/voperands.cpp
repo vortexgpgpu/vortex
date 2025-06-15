@@ -91,8 +91,9 @@ void Operands::tick() {
   if (Input.empty())
     return;
   auto trace = this->Input.front();
-  if (trace->fu_type == FUType::VPU
-    || (trace->fu_type == FUType::LSU && (trace->lsu_type == LsuType::VLOAD || trace->lsu_type == LsuType::VSTORE))) {
+  if (std::get_if<VsetType>(&trace->op_type)
+   || std::get_if<VlsType>(&trace->op_type)
+   || std::get_if<VopType>(&trace->op_type)) {
     for (uint32_t i = 0; i < NUM_VOPCS; i++) {
       // skip if busy
       if (vopc_units_.at(i)->Input.full())

@@ -59,14 +59,14 @@ void VOpcUnit::tick() {
     if (trace->fu_type == FUType::VPU) {
       auto trace_data = std::dynamic_pointer_cast<VecUnit::ExeTraceData>(trace->data);
       active_PC_ = trace->PC;
-      if (trace->vpu_type != VpuType::VSET) {
+      if (trace_data->vpu_op == VpuOpType::VSET) {
         vl_counter_ = trace_data->vl;
         vlmul_counter_ = trace_data->vlmul;
       } else {
         vl_counter_ = 1;
         vlmul_counter_ = 1;
       }
-      is_reduction_ = (trace->vpu_type >= VpuType::ARITH_R);
+      is_reduction_ = (trace_data->vpu_op >= VpuOpType::ARITH_R);
       if (is_reduction_) {
         red_counter_ = (vlmul_counter_ * vl_counter_) - 1;
         wb_counter_ = (red_counter_ > 1) ? (red_counter_ - 1) : 0;
@@ -83,7 +83,7 @@ void VOpcUnit::tick() {
     if (vl_counter_ == 0) {
       // Convert to Nop
       trace->fu_type = FUType::ALU;
-      trace->alu_type = AluType::ARITH;
+      trace->op_type = AluType::ADD;
       this->Output.push(trace);
       Input.pop();
       return;
@@ -309,51 +309,53 @@ void VOpcUnit::decode(instr_trace_t* trace) {
   case FUType::LSU:
     // no conversion
     break;
-  case FUType::VPU:
+  case FUType::VPU: {
     // decode VPU instructions
-    switch (trace->vpu_type) {
-    case VpuType::VSET:
+    auto trace_data = std::dynamic_pointer_cast<VecUnit::ExeTraceData>(trace->data);
+    auto vpu_op = trace_data->vpu_op;
+    switch (vpu_op) {
+    case VpuOpType::VSET:
       // no convertion
       break;
-    case VpuType::ARITH:
-    case VpuType::ARITH_R:
+    case VpuOpType::ARITH:
+    case VpuOpType::ARITH_R:
       trace->fu_type = FUType::ALU;
-      trace->alu_type = AluType::ARITH;
+      trace->op_type = AluType::ADD;
       break;
-    case VpuType::IMUL:
+    case VpuOpType::IMUL:
       trace->fu_type = FUType::ALU;
-      trace->alu_type = AluType::IMUL;
+      trace->op_type = MdvType::MUL;
       break;
-    case VpuType::IDIV:
+    case VpuOpType::IDIV:
       trace->fu_type = FUType::ALU;
-      trace->alu_type = AluType::IDIV;
+      trace->op_type = MdvType::DIV;
       break;
-    case VpuType::FMA:
-    case VpuType::FMA_R:
+    case VpuOpType::FMA:
+    case VpuOpType::FMA_R:
       trace->fu_type = FUType::FPU;
-      trace->fpu_type = FpuType::FMA;
+      trace->op_type = FpuType::FADD;
       break;
-    case VpuType::FDIV:
+    case VpuOpType::FDIV:
       trace->fu_type = FUType::FPU;
-      trace->fpu_type = FpuType::FDIV;
+      trace->op_type = FpuType::FDIV;
       break;
-    case VpuType::FSQRT:
+    case VpuOpType::FSQRT:
       trace->fu_type = FUType::FPU;
-      trace->fpu_type = FpuType::FSQRT;
+      trace->op_type = FpuType::FSQRT;
       break;
-    case VpuType::FCVT:
+    case VpuOpType::FCVT:
       trace->fu_type = FUType::FPU;
-      trace->fpu_type = FpuType::FCVT;
+      trace->op_type = FpuType::F2I;
       break;
-    case VpuType::FNCP:
-    case VpuType::FNCP_R:
+    case VpuOpType::FNCP:
+    case VpuOpType::FNCP_R:
       trace->fu_type = FUType::FPU;
-      trace->fpu_type = FpuType::FNCP;
+      trace->op_type = FpuType::FCMP;
       break;
     default:
       assert(false);
     }
-    break;
+  } break;
   default:
     assert(false);
   }

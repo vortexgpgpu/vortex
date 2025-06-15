@@ -201,8 +201,9 @@ public:
       if (input.empty())
           return;
       auto trace = input.front();
+      auto tpu_type = std::get<TpuType>(trace->op_type);
       int delay = 0;
-      switch (trace->tpu_type) {
+      switch (tpu_type) {
       case TpuType::WMMA:
         delay = 4;
         break;
@@ -210,7 +211,7 @@ public:
         std::abort();
       }
       simobject_->Outputs.at(iw).push(trace, 2 + delay);
-      DT(3, simobject_->name() << ": op=" << trace->tpu_type << ", " << *trace);
+      DT(3, simobject_->name() << ": op=" << tpu_type << ", " << *trace);
       input.pop();
     }
   }
@@ -226,12 +227,12 @@ public:
     __unused(wid);
     __unused(trace_data);
 
-    uint32_t fmt_d = fmt >> 4;
     uint32_t fmt_s = fmt & 0xf;
+    uint32_t fmt_d = fmt >> 4;
     auto fedp = select_FEDP(fmt_s, fmt_d);
 
-    uint32_t m = step >> 4;
-    uint32_t n = step & 0xf;
+    uint32_t m = step & 0xf;
+    uint32_t n = step >> 4;
     uint32_t a_off = (m % cfg::a_sub_blocks) * cfg::a_block_size;
     uint32_t b_off = (n % cfg::b_sub_blocks) * cfg::b_block_size;
 

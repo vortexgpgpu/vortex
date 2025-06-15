@@ -34,23 +34,65 @@ void AluUnit::tick() {
 			continue;
 		auto& output = Outputs.at(iw);
 		auto trace = input.front();
-		int delay = 2;
-		switch (trace->alu_type) {
-		case AluType::ARITH:
-		case AluType::BRANCH:
-		case AluType::SYSCALL:
-			output.push(trace, 2+delay);
-			break;
-		case AluType::IMUL:
-			output.push(trace, LATENCY_IMUL+delay);
-			break;
-		case AluType::IDIV:
-			output.push(trace, XLEN+delay);
-			break;
-		default:
+		int delay = 0;
+		if (std::get_if<AluType>(&trace->op_type)) {
+			auto alu_type = std::get<AluType>(trace->op_type);
+			switch (alu_type) {
+			case AluType::LUI:
+			case AluType::AUIPC:
+			case AluType::ADD:
+			case AluType::SUB:
+			case AluType::SLL:
+			case AluType::SRL:
+			case AluType::SRA:
+			case AluType::SLT:
+			case AluType::SLTU:
+			case AluType::XOR:
+			case AluType::AND:
+			case AluType::OR:
+			case AluType::CZERO:
+				delay = 2;
+				break;
+			default:
+				std::abort();
+			}
+			DT(3, this->name() << ": op=" << alu_type << ", " << *trace);
+		} else if (std::	get_if<BrType>(&trace->op_type)) {
+			auto br_type = std::get<BrType>(trace->op_type);
+			switch (br_type) {
+			case BrType::BR:
+			case BrType::JAL:
+			case BrType::JALR:
+			case BrType::SYS:
+				delay = 2;
+				break;
+			default:
+				std::abort();
+			}
+			DT(3, this->name() << ": op=" << br_type << ", " << *trace);
+		} else if (std::get_if<MdvType>(&trace->op_type)) {
+			auto mdv_type = std::get<MdvType>(trace->op_type);
+			switch (mdv_type) {
+			case MdvType::MUL:
+			case MdvType::MULHU:
+			case MdvType::MULH:
+			case MdvType::MULHSU:
+				delay = LATENCY_IMUL+2;
+				break;
+			case MdvType::DIV:
+			case MdvType::DIVU:
+			case MdvType::REM:
+			case MdvType::REMU:
+				delay = XLEN+2;
+				break;
+			default:
+				std::abort();
+			}
+			DT(3, this->name() << ": op=" << mdv_type << ", " << *trace);
+		} else {
 			std::abort();
 		}
-		DT(3, this->name() << ": op=" << trace->alu_type << ", " << *trace);
+		output.push(trace, delay);
 		if (trace->eop && trace->fetch_stall) {
 			core_->resume(trace->wid);
 		}
@@ -69,12 +111,23 @@ void FpuUnit::tick() {
 			continue;
 		auto& output = Outputs.at(iw);
 		auto trace = input.front();
+		auto fpu_type = std::get<FpuType>(trace->op_type);
 		int delay = 2;
-		switch (trace->fpu_type) {
-		case FpuType::FNCP:
+		switch (fpu_type) {
+		case FpuType::FCMP:
+		case FpuType::FSGNJ:
+		case FpuType::FCLASS:
+		case FpuType::FMV:
+		case FpuType::FMINMAX:
 			output.push(trace, 2+delay);
 			break;
-		case FpuType::FMA:
+		case FpuType::FADD:
+		case FpuType::FSUB:
+		case FpuType::FMUL:
+		case FpuType::FMADD:
+		case FpuType::FMSUB:
+		case FpuType::FNMADD:
+		case FpuType::FNMSUB:
 			output.push(trace, LATENCY_FMA+delay);
 			break;
 		case FpuType::FDIV:
@@ -83,13 +136,15 @@ void FpuUnit::tick() {
 		case FpuType::FSQRT:
 			output.push(trace, LATENCY_FSQRT+delay);
 			break;
-		case FpuType::FCVT:
+		case FpuType::F2I:
+		case FpuType::I2F:
+		case FpuType::F2F:
 			output.push(trace, LATENCY_FCVT+delay);
 			break;
 		default:
 			std::abort();
 		}
-		DT(3,this->name() << ": op=" << trace->fpu_type << ", " << *trace);
+		DT(3,this->name() << ": op=" << fpu_type << ", " << *trace);
 		input.pop();
 	}
 }
@@ -158,9 +213,29 @@ void LsuUnit::tick() {
 		if (input.empty())
 			continue;
 
-		auto trace = input.front();
+		bool is_fence = false;
+		bool is_write = false;
 
-		if (trace->lsu_type == LsuType::FENCE) {
+		auto trace = input.front();
+		if (std::get_if<LsuType>(&trace->op_type)) {
+			auto lsu_type = std::get<LsuType>(trace->op_type);
+			is_fence = (lsu_type == LsuType::FENCE);
+			is_write = (lsu_type == LsuType::STORE);
+		} else if (std::get_if<AmoType>(&trace->op_type)) {
+			auto amp_type = std::get<AmoType>(trace->op_type);
+			is_write = (amp_type != AmoType::LR);
+		}
+	#ifdef EXT_V_ENABLE
+		else if (std::get_if<VlsType>(&trace->op_type)) {
+			auto vls_type = std::get<VlsType>(trace->op_type);
+			is_write = (vls_type == VlsType::STORE);
+		}
+	#endif // EXT_V_ENABLE
+		else {
+			std::abort();
+		}
+
+		if (is_fence) {
 			// schedule fence lock
 			state.fence_trace = trace;
 			state.fence_lock = true;
@@ -169,12 +244,6 @@ void LsuUnit::tick() {
 			input.pop();
 			continue;
 		}
-
-		bool is_write = (trace->lsu_type == LsuType::STORE)
-		#ifdef EXT_V_ENABLE
-	               || (trace->lsu_type == LsuType::VSTORE)
-		#endif
-		;
 
 		// check pending queue capacity
 		if (!is_write && state.pending_rd_reqs.full()) {
@@ -190,7 +259,7 @@ void LsuUnit::tick() {
 			pending_addrs_.clear();
 			if (trace->data) {
 			#ifdef EXT_V_ENABLE
-				if (trace->lsu_type == LsuType::VLOAD || trace->lsu_type == LsuType::VSTORE) {
+				if (std::get_if<VlsType>(&trace->op_type)) {
 					auto trace_data = std::dynamic_pointer_cast<VecUnit::MemTraceData>(trace->data);
 					for (uint32_t t = 0; t < trace_data->mem_addrs.size(); ++t) {
 						if (!trace->tmask.test(t))
@@ -275,38 +344,52 @@ void SfuUnit::tick() {
 			continue;
 		auto& output = Outputs.at(iw);
 		auto trace = input.front();
-		auto sfu_type = trace->sfu_type;
 		bool release_warp = trace->fetch_stall;
 		int delay = 2;
-		switch  (sfu_type) {
-		case SfuType::WSPAWN:
-			output.push(trace, 2+delay);
-			if (trace->eop) {
-				auto trace_data = std::dynamic_pointer_cast<SfuTraceData>(trace->data);
-				release_warp = core_->wspawn(trace_data->arg1, trace_data->arg2);
+
+		if (std::get_if<WctlType>(&trace->op_type)) {
+			auto wctl_type = std::get<WctlType>(trace->op_type);
+			switch (wctl_type) {
+			case WctlType::WSPAWN:
+				output.push(trace, 2+delay);
+				if (trace->eop) {
+					auto trace_data = std::dynamic_pointer_cast<SfuTraceData>(trace->data);
+					release_warp = core_->wspawn(trace_data->arg1, trace_data->arg2);
+				}
+				break;
+			case WctlType::TMC:
+			case WctlType::SPLIT:
+			case WctlType::JOIN:
+			case WctlType::PRED:
+				output.push(trace, 2+delay);
+				break;
+			case WctlType::BAR: {
+				output.push(trace, 2+delay);
+				if (trace->eop) {
+					auto trace_data = std::dynamic_pointer_cast<SfuTraceData>(trace->data);
+					release_warp = core_->barrier(trace_data->arg1, trace_data->arg2, trace->wid);
+				}
+			} break;
+			default:
+				std::abort();
 			}
-			break;
-		case SfuType::TMC:
-		case SfuType::SPLIT:
-		case SfuType::JOIN:
-		case SfuType::PRED:
-		case SfuType::CSRRW:
-		case SfuType::CSRRS:
-		case SfuType::CSRRC:
-			output.push(trace, 2+delay);
-			break;
-		case SfuType::BAR: {
-			output.push(trace, 2+delay);
-			if (trace->eop) {
-				auto trace_data = std::dynamic_pointer_cast<SfuTraceData>(trace->data);
-				release_warp = core_->barrier(trace_data->arg1, trace_data->arg2, trace->wid);
+			DT(3, this->name() << ": op=" << wctl_type << ", " << *trace);
+		} else if (std::get_if<CsrType>(&trace->op_type)) {
+			auto csr_type = std::get<CsrType>(trace->op_type);
+			switch  (csr_type) {
+			case CsrType::CSRRW:
+			case CsrType::CSRRS:
+			case CsrType::CSRRC:
+				output.push(trace, 2+delay);
+				break;
+			default:
+				std::abort();
 			}
-		} break;
-		default:
+			DT(3, this->name() << ": op=" << csr_type << ", " << *trace);
+		} else {
 			std::abort();
 		}
 
-		DT(3, this->name() << ": op=" << trace->sfu_type << ", " << *trace);
 		if (trace->eop && release_warp)  {
 			core_->resume(trace->wid);
 		}
@@ -314,25 +397,6 @@ void SfuUnit::tick() {
 		input.pop();
 	}
 }
-
-///////////////////////////////////////////////////////////////////////////////
-
-#ifdef EXT_TPU_ENABLE
-
-TpuUnit::TpuUnit(const SimContext& ctx, Core* core)
-	: FuncUnit(ctx, core, "tpu-unit")
-{
-	// bind tensor unit
-	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
-		this->Inputs.at(iw).bind(&core_->tensor_unit()->Inputs.at(iw));
-		core_->tensor_unit()->Outputs.at(iw).bind(&this->Outputs.at(iw));
-	}
-}
-
-void TpuUnit::tick() {
-	// use tensor_unit
-}
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -350,5 +414,24 @@ VpuUnit::VpuUnit(const SimContext& ctx, Core* core)
 
 void VpuUnit::tick() {
 	// use vec_unit
+}
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+
+#ifdef EXT_TPU_ENABLE
+
+TpuUnit::TpuUnit(const SimContext& ctx, Core* core)
+	: FuncUnit(ctx, core, "tpu-unit")
+{
+	// bind tensor unit
+	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
+		this->Inputs.at(iw).bind(&core_->tensor_unit()->Inputs.at(iw));
+		core_->tensor_unit()->Outputs.at(iw).bind(&this->Outputs.at(iw));
+	}
+}
+
+void TpuUnit::tick() {
+	// use tensor_unit
 }
 #endif

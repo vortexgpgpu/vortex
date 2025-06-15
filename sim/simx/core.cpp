@@ -337,17 +337,10 @@ void Core::issue() {
           case FUType::LSU: ++perf_stats_.scrb_lsu; break;
           case FUType::SFU: {
             ++perf_stats_.scrb_sfu;
-            switch (use.sfu_type) {
-            case SfuType::TMC:
-            case SfuType::WSPAWN:
-            case SfuType::SPLIT:
-            case SfuType::JOIN:
-            case SfuType::BAR:
-            case SfuType::PRED: ++perf_stats_.scrb_wctl; break;
-            case SfuType::CSRRW:
-            case SfuType::CSRRS:
-            case SfuType::CSRRC: ++perf_stats_.scrb_csrs; break;
-            default: assert(false);
+            if (std::get_if<WctlType>(&use.op_type)) {
+              ++perf_stats_.scrb_wctl;
+            } else if (std::get_if<CsrType>(&use.op_type)) {
+              ++perf_stats_.scrb_csrs;
             }
           } break;
         #ifdef EXT_TPU_ENABLE
@@ -432,8 +425,9 @@ void Core::commit() {
       if (pending_instrs_.size() != orig_size) {
         perf_stats_.instrs += trace->tmask.count();
       #ifdef EXT_V_ENABLE
-        if (trace->fu_type == FUType::VPU
-         || (trace->fu_type == FUType::LSU && (trace->lsu_type == LsuType::VLOAD || trace->lsu_type == LsuType::VSTORE))) {
+        if (std::get_if<VsetType>(&trace->op_type)
+         || std::get_if<VlsType>(&trace->op_type)
+         || std::get_if<VopType>(&trace->op_type)) {
           perf_stats_.vinstrs += trace->tmask.count();
         }
       #endif

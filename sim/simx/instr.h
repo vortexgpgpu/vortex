@@ -17,39 +17,39 @@
 
 namespace vortex {
 
-enum class Opcode {
-  NONE      = 0,
-  R         = 0x33,
-  L         = 0x3,
-  I         = 0x13,
-  S         = 0x23,
-  B         = 0x63,
-  LUI       = 0x37,
-  AUIPC     = 0x17,
-  JAL       = 0x6f,
-  JALR      = 0x67,
-  SYS       = 0x73,
-  FENCE     = 0x0f,
-  AMO       = 0x2f,
+enum class Opcode : uint8_t {
+  NONE      = 0b0000000,
+  R         = 0b0110011,
+  L         = 0b0000011,
+  I         = 0b0010011,
+  S         = 0b0100011,
+  B         = 0b1100011,
+  LUI       = 0b0110111,
+  AUIPC     = 0b0010111,
+  JAL       = 0b1101111,
+  JALR      = 0b1100111,
+  SYS       = 0b1110011,
+  FENCE     = 0b0001111,
+  AMO       = 0b0101111,
   // F Extension
-  FL        = 0x7,
-  FS        = 0x27,
-  FCI       = 0x53,
-  FMADD     = 0x43,
-  FMSUB     = 0x47,
-  FMNMSUB   = 0x4b,
-  FMNMADD   = 0x4f,
+  FL        = 0b0000111,
+  FS        = 0b0100111,
+  FCI       = 0b1010011,
+  FMADD     = 0b1000011,
+  FMSUB     = 0b1000111,
+  FNMSUB    = 0b1001011,
+  FNMADD    = 0b1001111,
   // RV64 Standard Extension
-  R_W       = 0x3b,
-  I_W       = 0x1b,
+  R_W       = 0b0111011,
+  I_W       = 0b0011011,
   // Vector Extension
-  VSET      = 0x57,
+  VSET      = 0b1010111,
   // Custom Extensions
-  EXT1      = 0x0b,
-  EXT2      = 0x2b,
-  EXT3      = 0x5b,
-  EXT4      = 0x7b
-};
+  EXT1      = 0b0001011,
+  EXT2      = 0b0101011,
+  EXT3      = 0b1011011,
+  EXT4      = 0b1111011
+};;
 
 enum class InstType {
   R,
@@ -67,17 +67,20 @@ enum DecodeConstants {
   width_reg   = 5,
   width_funct2= 2,
   width_funct3= 3,
+  width_funct5= 5,
   width_funct6= 6,
   width_funct7= 7,
-  width_mop   = 3,
-  width_vmask = 1,
   width_i_imm = 12,
   width_j_imm = 20,
-  width_v_zimm= 11,
-  width_v_ma  = 1,
-  width_v_ta  = 1,
-  width_v_sew = 3,
-  width_v_lmul= 3,
+  width_vmop  = 2,
+  width_vmew  = 1,
+  width_vnf   = 3,
+  width_vm    = 1,
+  width_vzimm = 11,
+  width_vma   = 1,
+  width_vta   = 1,
+  width_vsew  = 3,
+  width_vlmul = 3,
   width_aq    = 1,
   width_rl    = 1,
 
@@ -87,59 +90,66 @@ enum DecodeConstants {
   shift_rs1   = shift_funct3 + width_funct3,
   shift_rs2   = shift_rs1 + width_reg,
   shift_funct2= shift_rs2 + width_reg,
-  shift_funct7= shift_rs2 + width_reg,
+  shift_funct5= shift_funct2 + width_funct2,
+  shift_funct7= shift_funct2,
+  shift_rl    = shift_funct2,
+  shift_aq    = shift_rl + width_rl,
   shift_rs3   = shift_funct7 + width_funct2,
-  shift_vmop  = shift_funct7 + width_vmask,
-  shift_vnf   = shift_vmop + width_mop,
-  shift_funct6= shift_funct7 + width_vmask,
+  shift_vm    = shift_funct7,
+  shift_vmop  = shift_funct7 + width_vm,
+  shift_vmew  = shift_vmop + width_vmop,
+  shift_vnf   = shift_vmew + width_vmew,
+  shift_funct6= shift_funct7 + width_vm,
   shift_vset  = shift_funct7 + width_funct6,
-  shift_v_sew = width_v_lmul,
-  shift_v_ta  = shift_v_sew + width_v_sew,
-  shift_v_ma  = shift_v_ta + width_v_ta,
+  shift_vsew  = width_vlmul,
+  shift_vta   = shift_vsew + width_vsew,
+  shift_vma   = shift_vta + width_vta,
+  shift_vzimm = shift_rs2,
 
   mask_opcode = (1 << width_opcode) - 1,
   mask_reg    = (1 << width_reg)   - 1,
   mask_funct2 = (1 << width_funct2) - 1,
   mask_funct3 = (1 << width_funct3) - 1,
+  mask_funct5 = (1 << width_funct5) - 1,
   mask_funct6 = (1 << width_funct6) - 1,
   mask_funct7 = (1 << width_funct7) - 1,
+  mask_aq     = (1 << width_aq) - 1,
+  mask_rl     = (1 << width_rl) - 1,
   mask_i_imm  = (1 << width_i_imm) - 1,
   mask_j_imm  = (1 << width_j_imm) - 1,
-  mask_v_zimm = (1 << width_v_zimm) - 1,
-  mask_v_ma   = (1 << width_v_ma) - 1,
-  mask_v_ta   = (1 << width_v_ta) - 1,
-  mask_v_sew  = (1 << width_v_sew) - 1,
-  mask_v_lmul = (1 << width_v_lmul) - 1,
-};
-
-enum VectorAttrMask {
-  vattr_vlswidth = (1 << 0),
-  vattr_vmop     = (1 << 1),
-  vattr_vumop    = (1 << 2),
-  vattr_vnf      = (1 << 3),
-  vattr_vmask    = (1 << 4),
-  vattr_vs3      = (1 << 5),
-  vattr_zimm     = (1 << 6),
-  vattr_vediv    = (1 << 7)
+  mask_vmop   = (1 << width_vmop) - 1,
+  mask_vmew   = (1 << width_vmew) - 1,
+  mask_vnf    = (1 << width_vnf) - 1,
+  mask_vm     = (1 << width_vm) - 1,
+  mask_vzimm  = (1 << width_vzimm) - 1,
+  mask_vma    = (1 << width_vma) - 1,
+  mask_vta    = (1 << width_vta) - 1,
+  mask_vsew   = (1 << width_vsew) - 1,
+  mask_vlmul  = (1 << width_vlmul) - 1,
 };
 
 class Instr {
 public:
   using Ptr = std::shared_ptr<Instr>;
 
-  Instr(Opcode opcode = Opcode::NONE)
-    : opcode_(opcode)
-    , num_rsrcs_(0)
-    , has_imm_(false)
-    , imm_(0)
-    , funct2_(0)
-    , funct3_(0)
-    , funct6_(0)
-    , funct7_(0)
+  enum {
+    MAX_REG_SOURCES = 3
+  };
+
+  Instr(FUType fu_type = FUType::ALU)
+    : fu_type_(fu_type)
   {}
 
-  void setOpcode(Opcode opcode) {
-    opcode_ = opcode;
+  void setFUType(FUType fu_type) {
+    fu_type_ = fu_type;
+  }
+
+  template <typename T> void setOpType(T op_type) {
+    op_type_ = static_cast<T>(op_type);
+  }
+
+  template <typename T> void setArgs(T args) {
+    args_ = static_cast<T>(args);
   }
 
   void setDestReg(uint32_t destReg, RegType type) {
@@ -148,83 +158,25 @@ public:
 
   void setSrcReg(uint32_t index, uint32_t srcReg, RegType type) {
     rsrc_[index] = { type, srcReg};
-    num_rsrcs_ = std::max<uint32_t>(num_rsrcs_, index+1);
   }
 
-  void setImm(uint32_t imm) { has_imm_ = true; imm_ = imm; }
+  FUType getFUType() const { return fu_type_; }
 
-  void setfunct2(uint32_t funct2) { funct2_ = funct2; }
-  void setfunct3(uint32_t funct3) { funct3_ = funct3; }
-  void setfunct6(uint32_t funct6) { funct6_ = funct6; }
-  void setfunct7(uint32_t funct7) { funct7_ = funct7; }
+  OpType getOpType() const { return op_type_; }
 
-  Opcode   getOpcode() const { return opcode_; }
+  const IntrArgs& getArgs() const { return args_; }
 
-  uint32_t getNumSrcRegs() const { return num_rsrcs_; }
-  RegOpd   getSrcReg(uint32_t i) const { return rsrc_[i]; }
+  RegOpd getSrcReg(uint32_t i) const { return rsrc_[i]; }
 
-  RegOpd   getDestReg() const { return rdest_; }
-
-  bool     hasImm() const { return has_imm_; }
-  uint32_t getImm() const { return imm_; }
-
-  uint32_t getFunct2() const { return funct2_; }
-  uint32_t getFunct3() const { return funct3_; }
-  uint32_t getFunct6() const { return funct6_; }
-  uint32_t getFunct7() const { return funct7_; }
-
-#ifdef EXT_V_ENABLE
-  // Attributes for Vector instructions
-  void setVlsWidth(uint32_t width) { vlsWidth_ = width; vattr_mask_ |= vattr_vlswidth; }
-  void setVmop(uint32_t mop) { vmop_ = mop; vattr_mask_ |= vattr_vmop; }
-  void setVumop(uint32_t umop) { vumop_ = umop; vattr_mask_ |= vattr_vumop; }
-  void setVnf(uint32_t nf) { vnf_ = nf; vattr_mask_ |= vattr_vnf; }
-  void setVmask(uint32_t vmask) { vmask_ = vmask; vattr_mask_ |= vattr_vmask; }
-  void setVs3(uint32_t vs) { vs3_ = vs; vattr_mask_ |= vattr_vs3; }
-  void setZimm(uint32_t zimm) { zimm_ = zimm; vattr_mask_ |= vattr_zimm; }
-  void setVediv(uint32_t ediv) { vediv_ = 1 << ediv; vattr_mask_ |= vattr_vediv; }
-
-  uint32_t getVlsWidth() const { return vlsWidth_; }
-  uint32_t getVmop() const { return vmop_; }
-  uint32_t getVumop() const { return vumop_; }
-  uint32_t getVnf() const { return vnf_; }
-  uint32_t getVmask() const { return vmask_; }
-  uint32_t getVs3() const { return vs3_; }
-  uint32_t getZimm() const { return zimm_; }
-  uint32_t getVediv() const { return vediv_; }
-  uint32_t getVattrMask() const { return vattr_mask_; }
-  bool     hasVattrMask(VectorAttrMask mask) const { return vattr_mask_ & mask; }
-#endif
+  RegOpd getDestReg() const { return rdest_; }
 
 private:
 
-  enum {
-    MAX_REG_SOURCES = 3
-  };
-
-  Opcode   opcode_;
-  uint32_t num_rsrcs_;
-  bool     has_imm_;
+  FUType   fu_type_;
+  OpType   op_type_;
+  IntrArgs args_;
   RegOpd   rsrc_[MAX_REG_SOURCES];
   RegOpd   rdest_;
-  uint32_t imm_;
-  uint32_t funct2_;
-  uint32_t funct3_;
-  uint32_t funct6_;
-  uint32_t funct7_;
-
-#ifdef EXT_V_ENABLE
-  // Vector
-  uint32_t vmask_ = 0;
-  uint32_t vlsWidth_ = 0;
-  uint32_t vmop_ = 0;
-  uint32_t vumop_ = 0;
-  uint32_t vnf_ = 0;
-  uint32_t vs3_ = 0;
-  uint32_t zimm_ = 0;
-  uint32_t vediv_ = 0;
-  uint32_t vattr_mask_ = 0;
-#endif
 
   friend std::ostream &operator<<(std::ostream &, const Instr&);
 };

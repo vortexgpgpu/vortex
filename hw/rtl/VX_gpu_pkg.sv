@@ -211,12 +211,12 @@ package VX_gpu_pkg;
 
     ///////////////////////////////////////////////////////////////////////////
 
-    localparam INST_BR_EQ =         4'b0000;
-    localparam INST_BR_NE =         4'b0010;
-    localparam INST_BR_LTU =        4'b0100;
-    localparam INST_BR_GEU =        4'b0110;
-    localparam INST_BR_LT =         4'b0101;
-    localparam INST_BR_GE =         4'b0111;
+    localparam INST_BR_BEQ =        4'b0000;
+    localparam INST_BR_BNE =        4'b0010;
+    localparam INST_BR_BLTU =       4'b0100;
+    localparam INST_BR_BGEU =       4'b0110;
+    localparam INST_BR_BLT =        4'b0101;
+    localparam INST_BR_BGE =        4'b0111;
     localparam INST_BR_JAL =        4'b1000;
     localparam INST_BR_JALR =       4'b1001;
     localparam INST_BR_ECALL =      4'b1010;
@@ -923,12 +923,12 @@ package VX_gpu_pkg;
                 end
                 ALU_TYPE_BRANCH: begin
                     case (INST_BR_BITS'(op_type))
-                        INST_BR_EQ:    `TRACE(level, ("BEQ"))
-                        INST_BR_NE:    `TRACE(level, ("BNE"))
-                        INST_BR_LT:    `TRACE(level, ("BLT"))
-                        INST_BR_GE:    `TRACE(level, ("BGE"))
-                        INST_BR_LTU:   `TRACE(level, ("BLTU"))
-                        INST_BR_GEU:   `TRACE(level, ("BGEU"))
+                        INST_BR_BEQ:   `TRACE(level, ("BEQ"))
+                        INST_BR_BNE:   `TRACE(level, ("BNE"))
+                        INST_BR_BLT:   `TRACE(level, ("BLT"))
+                        INST_BR_BGE:   `TRACE(level, ("BGE"))
+                        INST_BR_BLTU:  `TRACE(level, ("BLTU"))
+                        INST_BR_BGEU:  `TRACE(level, ("BGEU"))
                         INST_BR_JAL:   `TRACE(level, ("JAL"))
                         INST_BR_JALR:  `TRACE(level, ("JALR"))
                         INST_BR_ECALL: `TRACE(level, ("ECALL"))
