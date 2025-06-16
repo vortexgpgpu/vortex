@@ -458,24 +458,29 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid
           if (is_w_enabled && mdvArgs.is_w) {
             auto dividen = rs1_data[t].i32;
             auto divisor = rs2_data[t].i32;
+            int32_t largest_negative = 0x80000000;
             int32_t quotient;
-            if (divisor != 0){
-              quotient = dividen / divisor;
-            } else {
+            if (divisor == 0){
               quotient = -1;
+            } else if (dividen == largest_negative && divisor == -1) {
+              quotient = dividen;
+            } else {
+              quotient = dividen / divisor;
             }
             rd_data[t].i = sext((uint64_t)quotient, 32);
           } else {
             auto dividen = rs1_data[t].i;
             auto divisor = rs2_data[t].i;
             auto largest_negative = WordI(1) << (XLEN-1);
+            WordI quotient;
             if (divisor == 0) {
-              rd_data[t].i = -1;
+              quotient = -1;
             } else if (dividen == largest_negative && divisor == -1) {
-              rd_data[t].i = dividen;
+              quotient = dividen;
             } else {
-              rd_data[t].i = dividen / divisor;
+              quotient = dividen / divisor;
             }
+            rd_data[t].i = quotient;
           }
         }
       } break;
@@ -496,11 +501,13 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid
           } else {
             auto dividen = rs1_data[t].u;
             auto divisor = rs2_data[t].u;
+            Word quotient;
             if (divisor != 0) {
-              rd_data[t].i = dividen / divisor;
+              quotient = dividen / divisor;
             } else {
-              rd_data[t].i = -1;
+              quotient = -1;
             }
+            rd_data[t].i = quotient;
           }
         }
       } break;
@@ -511,8 +518,8 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid
           if (is_w_enabled && mdvArgs.is_w) {
             auto dividen = rs1_data[t].i32;
             auto divisor = rs2_data[t].i32;
-            int32_t remainder;
             int32_t largest_negative = 0x80000000;
+            int32_t remainder;
             if (divisor == 0){
               remainder = dividen;
             } else if (dividen == largest_negative && divisor == -1) {
@@ -525,13 +532,15 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid
             auto dividen = rs1_data[t].i;
             auto divisor = rs2_data[t].i;
             auto largest_negative = WordI(1) << (XLEN-1);
+            WordI remainder;
             if (rs2_data[t].i == 0) {
-              rd_data[t].i = dividen;
+              remainder = dividen;
             } else if (dividen == largest_negative && divisor == -1) {
-              rd_data[t].i = 0;
+              remainder = 0;
             } else {
-              rd_data[t].i = dividen % divisor;
+              remainder = dividen % divisor;
             }
+            rd_data[t].i = remainder;
           }
         }
       } break;
@@ -552,11 +561,13 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid
           } else {
             auto dividen = rs1_data[t].u;
             auto divisor = rs2_data[t].u;
+            Word remainder;
             if (rs2_data[t].i != 0) {
-              rd_data[t].i = dividen % divisor;
+              remainder = dividen % divisor;
             } else {
-              rd_data[t].i = dividen;
+              remainder = dividen;
             }
+            rd_data[t].i = remainder;
           }
         }
       } break;
