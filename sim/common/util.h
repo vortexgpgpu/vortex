@@ -18,6 +18,7 @@
 #include <assert.h>
 #include <bitmanip.h>
 #include <cstdint>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <variant>
@@ -140,6 +141,8 @@ auto visit_var(Variant &&var, Fs &&...fs) {
       Visitor{std::forward<Fs>(fs)...},
       std::forward<Variant>(var));
 }
+
+std::string to_hex_str(uint32_t v);
 
 std::string resolve_file_path(const std::string &filename, const std::string &searchPaths);
 

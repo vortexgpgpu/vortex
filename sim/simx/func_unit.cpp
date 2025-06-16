@@ -228,7 +228,9 @@ void LsuUnit::tick() {
 	#ifdef EXT_V_ENABLE
 		else if (std::get_if<VlsType>(&trace->op_type)) {
 			auto vls_type = std::get<VlsType>(trace->op_type);
-			is_write = (vls_type == VlsType::STORE);
+			is_write = (vls_type == VlsType::VS
+			         || vls_type == VlsType::VSS
+							 || vls_type == VlsType::VSX);
 		}
 	#endif // EXT_V_ENABLE
 		else {

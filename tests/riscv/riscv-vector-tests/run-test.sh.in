@@ -11,6 +11,39 @@ VECTOR_TESTS_BASE_NAME=vector-tests.tar.bz2
 
 set -e
 
+# default:
+KEEP_GOING=0
+GEN_TESTS=0
+
+usage(){
+  cat <<EOF
+Usage: $0 [options] testcases ...
+  -k, --keep-going    continue running remaining testcases on failure
+  -g, --gen-tests     generate testcases instead of downloading them
+  -h, --help          show this message
+EOF
+  exit 1
+}
+
+# parse flags
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -k|--keep-going) KEEP_GOING=1; shift ;;
+    -g|--gen-tests)  GEN_TESTS=1; shift ;;
+    -h|--help)       usage ;;
+    --)              shift; break ;;
+    -*)
+      echo "Unknown option: $1"
+      usage
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+###############################################################################
+
 download_tests()
 {
     parts=$(eval echo {a..k})
@@ -85,22 +118,30 @@ for testcase in "${testcases[@]}"; do
   echo "Testcase: $testcase"
   for f in $(find "$TEST_DIR/v${VLEN}x$XLEN" -type f -name "${testcase}*"); do
     filename=$(basename "$f")
+
+    # Generate test binary and assembly dump
     "$RISCV_TOOLCHAIN_PATH/bin/riscv$XLEN-unknown-elf-objdump" -D "$f" > "$filename.dump"
     "$RISCV_TOOLCHAIN_PATH/bin/riscv$XLEN-unknown-elf-objcopy" -O binary "$f" "$filename.bin"
-    "$SCRIPT_DIR/../../../sim/simx/simx" -v "$filename.bin" > "$filename.log"
-    if [ $? -eq 0 ]; then
+
+    set +e  # Temporarily disable exit on error
+    "$SCRIPT_DIR/../../../sim/simx/simx" -v "$filename.bin"
+    sim_result=$? # Capture Simx exit status
+    set -e  # Re-enable exit on error
+
+    if [ $sim_result -eq 0 ]; then
       echo "$filename PASSED"
       let "passed+=1"
     else
       echo "$filename FAILED"
       let "failed+=1"
+      if [ $KEEP_GOING -eq 0 ]; then
+        echo "Stopping execution due to failure."
+        exit 1
+      fi
     fi
-    # REG_TESTS=1 informs the script to delete the previous binary after each vector test to save disk space
-    # Otherwise, the vector regression tests would run out of disk space eventually
-    if [ "$REG_TESTS" -eq "1" ]; then
-      cat "$filename.log"
-      rm -f "$filename.bin" "$filename.dump" "$filename.log" > /dev/null 2>&1
-    fi
+
+    # delete the generated files
+    rm -f "$filename.bin" "$filename.dump" > /dev/null 2>&1
   done
 done
 

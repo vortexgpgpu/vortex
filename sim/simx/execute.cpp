@@ -47,20 +47,31 @@ inline int64_t check_boxing(int64_t a) {
   return nan_box(0x7fc00000); // NaN
 }
 
-inline void fetch_registers(std::vector<reg_data_t>& out, uint32_t src_index, const RegOpd& reg, const warp_t& warp) {
+void Emulator::fetch_registers(std::vector<reg_data_t>& out, uint32_t wid, uint32_t src_index, const RegOpd& reg) {
   __unused(src_index);
+  auto& warp = warps_.at(wid);
   uint32_t num_threads = warp.tmask.size();
   out.resize(num_threads);
   switch (reg.type) {
   case RegType::None:
 #ifdef EXT_V_ENABLE
   case RegType::Vector:
+    DPH(2, "Src" << src_index << " Reg: " << reg << "={");
+    for (uint32_t t = 0; t < num_threads; ++t) {
+      if (t) DPN(2, ", ");
+      if (!warp.tmask.test(t)) {
+        DPN(2, "-");
+        continue;
+      }
+      DPN(2, vec_unit_->dumpRegister(wid, t, reg.idx));
+    }
+    DPN(2, "}" << std::endl);
 #endif
     break;
   case RegType::Integer: {
     DPH(2, "Src" << src_index << " Reg: " << reg << "={");
     auto& reg_data = warp.ireg_file.at(reg.idx);
-    for (uint32_t t = 0; t < reg_data.size(); ++t) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (t) DPN(2, ", ");
       if (!warp.tmask.test(t)) {
         DPN(2, "-");
@@ -75,7 +86,7 @@ inline void fetch_registers(std::vector<reg_data_t>& out, uint32_t src_index, co
   case RegType::Float: {
     DPH(2, "Src" << src_index << " Reg: " << reg << "={");
     auto& reg_data = warp.freg_file.at(reg.idx);
-    for (uint32_t t = 0; t < reg_data.size(); ++t) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (t) DPN(2, ", ");
       if (!warp.tmask.test(t)) {
         DPN(2, "-");
@@ -132,9 +143,9 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid
   std::vector<reg_data_t> rs3_data;
 
   // fetch register values
-  if (rsrc0.type != RegType::None) fetch_registers(rs1_data, 0, rsrc0, warp);
-  if (rsrc1.type != RegType::None) fetch_registers(rs2_data, 1, rsrc1, warp);
-  if (rsrc2.type != RegType::None) fetch_registers(rs3_data, 2, rsrc2, warp);
+  if (rsrc0.type != RegType::None) fetch_registers(rs1_data, wid, 0, rsrc0);
+  if (rsrc1.type != RegType::None) fetch_registers(rs2_data, wid, 1, rsrc1);
+  if (rsrc2.type != RegType::None) fetch_registers(rs3_data, wid, 2, rsrc2);
 
   uint32_t thread_start = 0;
   for (; thread_start < num_threads; ++thread_start) {
@@ -1304,7 +1315,9 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid
     },
     [&](VlsType vls_type) {
       switch (vls_type) {
-      case VlsType::LOAD: {
+      case VlsType::VL:
+      case VlsType::VLS:
+      case VlsType::VLX: {
         auto trace_data = std::make_shared<VecUnit::MemTraceData>(num_threads);
         trace->data = trace_data;
         for (uint32_t t = thread_start; t < num_threads; ++t) {
@@ -1314,7 +1327,9 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid
         }
         rd_write = true;
       } break;
-      case VlsType::STORE:{
+      case VlsType::VS:
+      case VlsType::VSS:
+      case VlsType::VSX: {
         auto trace_data = std::make_shared<VecUnit::MemTraceData>(num_threads);
         trace->data = trace_data;
         for (uint32_t t = thread_start; t < num_threads; ++t) {
@@ -1398,7 +1413,16 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid
       break;
   #ifdef EXT_V_ENABLE
     case RegType::Vector:
-      DPH(2, "Dest Reg: " << rdest << "={}" << std::endl);
+      DPH(2, "Dest Reg: " << rdest << "={");
+      for (uint32_t t = 0; t < num_threads; ++t) {
+        if (t) DPN(2, ", ");
+        if (!warp.tmask.test(t)) {
+          DPN(2, "-");
+          continue;
+        }
+        DPN(2, vec_unit_->dumpRegister(wid, t, rdest.idx));
+      }
+      DPN(2, "}" << std::endl);
       break;
   #endif
     default:

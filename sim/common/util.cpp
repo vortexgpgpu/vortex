@@ -58,3 +58,9 @@ std::string vortex::resolve_file_path(const std::string& filename, const std::st
   }
   return filename;
 }
+
+std::string vortex::to_hex_str(uint32_t v) {
+  std::ostringstream oss;
+  oss << "0x" << std::hex << v;
+  return oss.str();
+}

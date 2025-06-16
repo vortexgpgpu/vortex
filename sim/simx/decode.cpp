@@ -32,12 +32,6 @@
 
 using namespace vortex;
 
-inline std::string to_hex_str(uint32_t v) {
-  std::ostringstream oss;
-  oss << "0x" << std::hex << v;
-  return oss.str();
-}
-
 struct op_string_t {
   std::string op;
   std::string arg;
@@ -366,9 +360,9 @@ static op_string_t op_string(const Instr &instr) {
     ,[&](VsetType vset_type)-> op_string_t {
       auto vsetArgs = std::get<IntrVsetArgs>(instrArgs);
       switch (vset_type) {
-      case VsetType::VSETVLI:  return {"VSETVLI", to_hex_str(vsetArgs.zimm)};
-      case VsetType::VSETIVLI: return {"VSETIVLI", to_hex_str(vsetArgs.zimm) + ", " + to_hex_str(vsetArgs.uimm)};
-      case VsetType::VSETVL:   return {"VSETVL", ""};
+      case VsetType::VSETVLI:  return {"VSETVLI", vsetArgs.to_string(vset_type)};
+      case VsetType::VSETIVLI: return {"VSETIVLI", vsetArgs.to_string(vset_type)};
+      case VsetType::VSETVL:   return {"VSETVL", vsetArgs.to_string(vset_type)};
       default:
         std::abort();
       }
@@ -376,22 +370,64 @@ static op_string_t op_string(const Instr &instr) {
     [&](VlsType vls_type)-> op_string_t {
       auto vlsArgs = std::get<IntrVlsArgs>(instrArgs);
       switch (vls_type) {
-      case VlsType::LOAD: {
+      case VlsType::VL: {
         switch (vlsArgs.width) {
-        case 0: return {"VL8",  ""};
-        case 1: return {"VL16", ""};
-        case 2: return {"VL32", ""};
-        case 3: return {"VL64", ""};
+        case 0: return {"VL8",  vlsArgs.to_string(vls_type)};
+        case 1: return {"VL16", vlsArgs.to_string(vls_type)};
+        case 2: return {"VL32", vlsArgs.to_string(vls_type)};
+        case 3: return {"VL64", vlsArgs.to_string(vls_type)};
         default:
           std::abort();
         }
       }
-      case VlsType::STORE: {
+      case VlsType::VLS: {
         switch (vlsArgs.width) {
-        case 0: return {"VS8",  ""};
-        case 1: return {"VS16", ""};
-        case 2: return {"VS32", ""};
-        case 3: return {"VS64", ""};
+        case 0: return {"VLS8",  vlsArgs.to_string(vls_type)};
+        case 1: return {"VLS16", vlsArgs.to_string(vls_type)};
+        case 2: return {"VLS32", vlsArgs.to_string(vls_type)};
+        case 3: return {"VLS64", vlsArgs.to_string(vls_type)};
+        default:
+          std::abort();
+        }
+      }
+      case VlsType::VLX: {
+        switch (vlsArgs.width) {
+        case 0: return {"VLX8",  vlsArgs.to_string(vls_type)};
+        case 1: return {"VLX16", vlsArgs.to_string(vls_type)};
+        case 2: return {"VLX32", vlsArgs.to_string(vls_type)};
+        case 3: return {"VLX64", vlsArgs.to_string(vls_type)};
+        default:
+          std::abort();
+        }
+      }
+      case VlsType::VS: {
+        switch (vlsArgs.width) {
+        case 0: return {"VS8",  vlsArgs.to_string(vls_type)};
+        case 1: return {"VS16", vlsArgs.to_string(vls_type)};
+        case 2: return {"VS32", vlsArgs.to_string(vls_type)};
+        case 3: return {"VS64", vlsArgs.to_string(vls_type)};
+        default:
+          std::abort();
+        }
+      }
+
+      case VlsType::VSS: {
+        switch (vlsArgs.width) {
+        case 0: return {"VSS8",  vlsArgs.to_string(vls_type)};
+        case 1: return {"VSS16", vlsArgs.to_string(vls_type)};
+        case 2: return {"VSS32", vlsArgs.to_string(vls_type)};
+        case 3: return {"VSS64", vlsArgs.to_string(vls_type)};
+        default:
+          std::abort();
+        }
+      }
+
+      case VlsType::VSX: {
+        switch (vlsArgs.width) {
+        case 0: return {"VSX8",  vlsArgs.to_string(vls_type)};
+        case 1: return {"VSX16", vlsArgs.to_string(vls_type)};
+        case 2: return {"VSX32", vlsArgs.to_string(vls_type)};
+        case 3: return {"VSX64", vlsArgs.to_string(vls_type)};
         default:
           std::abort();
         }
@@ -403,13 +439,13 @@ static op_string_t op_string(const Instr &instr) {
     [&](VopType vop_type)-> op_string_t {
       auto vopArgs = std::get<IntrVopArgs>(instrArgs);
       switch (vop_type) {
-      case VopType::OPIVV: return {"OPIVV", ""};
-      case VopType::OPFVV: return {"OPFVV", ""};
-      case VopType::OPMVV: return {"OPMVV", ""};
-      case VopType::OPIVI: return {"OPIVI", to_hex_str(vopArgs.imm)};
-      case VopType::OPIVX: return {"OPIVX", ""};
-      case VopType::OPFVF: return {"OPFVF", ""};
-      case VopType::OPMVX: return {"OPMVX", ""};
+      case VopType::OPIVV: return {"OPIVV", vopArgs.to_string(vop_type)};
+      case VopType::OPFVV: return {"OPFVV", vopArgs.to_string(vop_type)};
+      case VopType::OPMVV: return {"OPMVV", vopArgs.to_string(vop_type)};
+      case VopType::OPIVI: return {"OPIVI", vopArgs.to_string(vop_type)};
+      case VopType::OPIVX: return {"OPIVX", vopArgs.to_string(vop_type)};
+      case VopType::OPFVF: return {"OPFVF", vopArgs.to_string(vop_type)};
+      case VopType::OPMVX: return {"OPMVX", vopArgs.to_string(vop_type)};
       default:
         std::abort();
       }
@@ -647,9 +683,8 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
     bool is_load = (op == Opcode::L || op == Opcode::FL);
   #ifdef EXT_V_ENABLE
     if (is_float && funct3 != 0x2 && funct3 != 0x3) {
-      auto instr = std::allocate_shared<Instr>(instr_pool_, FUType::FPU);
+      auto instr = std::allocate_shared<Instr>(instr_pool_, FUType::LSU);
       IntrVlsArgs instArgs{};
-      instArgs.mop = (code >> shift_vmop) & mask_vmop;
       instArgs.mew = (code >> shift_vmew) & mask_vmew;
       instArgs.vm = (code >> shift_vm) & mask_vm;
       instArgs.nf = (code >> shift_vnf) & mask_vnf;
@@ -662,23 +697,25 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
         std::abort();
       }
       instr->setSrcReg(0, rs1, RegType::Integer);
-      switch (instArgs.mop) {
+      auto mop = (code >> shift_vmop) & mask_vmop;
+      switch (mop) {
       case 0b00:
+        instr->setOpType(is_load ? VlsType::VL : VlsType::VS);
         instArgs.umop = rs2;
         break;
       case 0b10:
+        instr->setOpType(is_load ? VlsType::VLS : VlsType::VSS);
         instr->setSrcReg(1, rs2, RegType::Integer);
         break;
       case 0b01:
       case 0b11:
+        instr->setOpType(is_load ? VlsType::VLX : VlsType::VSX);
         instr->setSrcReg(1, rs2, RegType::Vector);
         break;
       }
       if (is_load) {
-        instr->setOpType(VlsType::LOAD);
         instr->setDestReg(rd, RegType::Vector);
       } else {
-        instr->setOpType(VlsType::STORE);
         instr->setSrcReg(2, rd, RegType::Vector);
       }
       instr->setArgs(instArgs);

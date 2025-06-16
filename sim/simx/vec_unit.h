@@ -59,6 +59,8 @@ public:
 
   void tick();
 
+  std::string dumpRegister(uint32_t wid, uint32_t tid, uint32_t reg_idx) const;
+
   bool get_csr(uint32_t addr, uint32_t wid, uint32_t tid, Word* value);
 
   bool set_csr(uint32_t addr, uint32_t wid, uint32_t tid, Word value);

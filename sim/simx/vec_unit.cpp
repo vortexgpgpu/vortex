@@ -1,6 +1,6 @@
 #include "vec_unit.h"
-#include "vec_ops.h"
 #include "core.h"
+#include "vec_ops.h"
 
 using namespace vortex;
 
@@ -32,13 +32,8 @@ using namespace vortex;
 
 class VecUnit::Impl {
 public:
-  Impl(VecUnit* simobject, const Arch& arch, Core* core)
-      : simobject_(simobject)
-      , core_(core)
-      , vpu_states_(arch.num_warps(), arch.num_threads())
-      , num_lanes_(arch.num_warps())
-      , pending_reqs_(arch.num_warps())
-  {
+  Impl(VecUnit *simobject, const Arch &arch, Core *core)
+      : simobject_(simobject), core_(core), vpu_states_(arch.num_warps(), arch.num_threads()), num_lanes_(arch.num_warps()), pending_reqs_(arch.num_warps()) {
     this->reset();
   }
 
@@ -51,9 +46,9 @@ public:
 
   void tick() {
     for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
-      auto& input = simobject_->Inputs.at(iw);
+      auto &input = simobject_->Inputs.at(iw);
       if (input.empty())
-          return;
+        return;
 
       auto trace = input.front();
       auto trace_data = std::dynamic_pointer_cast<ExeTraceData>(trace->data);
@@ -105,17 +100,17 @@ public:
   void load(const Instr &instr,
             uint32_t wid,
             uint32_t tid,
-            const std::vector<reg_data_t>& rs1_data,
-            const std::vector<reg_data_t>& rs2_data,
-            MemTraceData* trace_data) {
-    auto& states = vpu_states_.at(wid);
+            const std::vector<reg_data_t> &rs1_data,
+            const std::vector<reg_data_t> &rs2_data,
+            MemTraceData *trace_data) {
+    auto &states = vpu_states_.at(wid);
+    auto vls_type = std::get<VlsType>(instr.getOpType());
     auto lsuArgs = std::get<IntrVlsArgs>(instr.getArgs());
     uint32_t vmask = lsuArgs.vm;
     uint32_t vd = instr.getDestReg().idx;
-    uint32_t mop = lsuArgs.mop;
     uint32_t vsewb = 1 << states.vtype.vsew;
     assert(lsuArgs.width == states.vtype.vsew && "vsew and width must match!");
-    auto& vreg_file = states.vreg_file.at(tid);
+    auto &vreg_file = states.vreg_file.at(tid);
     uint64_t base_addr = rs1_data.at(tid).i;
     base_addr &= 0xFFFFFFFC; // TODO: riscv-tests fix
 
@@ -123,26 +118,26 @@ public:
     trace_data->vl = states.vl;
     trace_data->vnf = lsuArgs.nf + 1;
 
-    switch (mop) {
-    case 0b00: { // unit-stride
+    switch (vls_type) {
+    case VlsType::VL: { // unit-stride
       auto lumop = lsuArgs.umop;
       switch (lumop) {
-      case 0b00000: // vle8.v, vle16.v, vle32.v, vle64.v
-                    // vlseg2e8.v, vlseg2e16.v, vlseg2e32.v, vlseg2e64.v
-                    // vlseg3e8.v, vlseg3e16.v, vlseg3e32.v, vlseg3e64.v
-                    // vlseg4e8.v, vlseg4e16.v, vlseg4e32.v, vlseg4e64.v
-                    // vlseg5e8.v, vlseg5e16.v, vlseg5e32.v, vlseg5e64.v
-                    // vlseg6e8.v, vlseg6e16.v, vlseg6e32.v, vlseg6e64.v
-                    // vlseg7e8.v, vlseg7e16.v, vlseg7e32.v, vlseg7e64.v
-                    // vlseg8e8.v, vlseg8e16.v, vlseg8e32.v, vlseg8e64.v
-      case 0b10000:{// vle8ff.v, vle16ff.v, vle32ff.v, vle64ff.v - we do not support exceptions -> treat like regular unit stride
-                    // vlseg2e8ff.v, vlseg2e16ff.v, vlseg2e32ff.v, vlseg2e64ff.v
-                    // vlseg3e8ff.v, vlseg3e16ff.v, vlseg3e32ff.v, vlseg3e64ff.v
-                    // vlseg4e8ff.v, vlseg4e16ff.v, vlseg4e32ff.v, vlseg4e64ff.v
-                    // vlseg5e8ff.v, vlseg5e16ff.v, vlseg5e32ff.v, vlseg5e64ff.v
-                    // vlseg6e8ff.v, vlseg6e16ff.v, vlseg6e32ff.v, vlseg6e64ff.v
-                    // vlseg7e8ff.v, vlseg7e16ff.v, vlseg7e32ff.v, vlseg7e64ff.v
-                    // vlseg8e8ff.v, vlseg8e16ff.v, vlseg8e32ff.v, vlseg8e64ff.v
+      case 0b00000:   // vle8.v, vle16.v, vle32.v, vle64.v
+                      // vlseg2e8.v, vlseg2e16.v, vlseg2e32.v, vlseg2e64.v
+                      // vlseg3e8.v, vlseg3e16.v, vlseg3e32.v, vlseg3e64.v
+                      // vlseg4e8.v, vlseg4e16.v, vlseg4e32.v, vlseg4e64.v
+                      // vlseg5e8.v, vlseg5e16.v, vlseg5e32.v, vlseg5e64.v
+                      // vlseg6e8.v, vlseg6e16.v, vlseg6e32.v, vlseg6e64.v
+                      // vlseg7e8.v, vlseg7e16.v, vlseg7e32.v, vlseg7e64.v
+                      // vlseg8e8.v, vlseg8e16.v, vlseg8e32.v, vlseg8e64.v
+      case 0b10000: { // vle8ff.v, vle16ff.v, vle32ff.v, vle64ff.v - we do not support exceptions -> treat like regular unit stride
+                      // vlseg2e8ff.v, vlseg2e16ff.v, vlseg2e32ff.v, vlseg2e64ff.v
+                      // vlseg3e8ff.v, vlseg3e16ff.v, vlseg3e32ff.v, vlseg3e64ff.v
+                      // vlseg4e8ff.v, vlseg4e16ff.v, vlseg4e32ff.v, vlseg4e64ff.v
+                      // vlseg5e8ff.v, vlseg5e16ff.v, vlseg5e32ff.v, vlseg5e64ff.v
+                      // vlseg6e8ff.v, vlseg6e16ff.v, vlseg6e32ff.v, vlseg6e64ff.v
+                      // vlseg7e8ff.v, vlseg7e16ff.v, vlseg7e32ff.v, vlseg7e64ff.v
+                      // vlseg8e8ff.v, vlseg8e16ff.v, vlseg8e32ff.v, vlseg8e64ff.v
         uint32_t nfields = lsuArgs.nf + 1;
         uint32_t emul = (states.vtype.vlmul >> 2) ? 1 : (1 << (states.vtype.vlmul & 0b11));
         assert(nfields * emul <= 8);
@@ -214,14 +209,15 @@ public:
       }
       break;
     }
-    case 0b10: {// strided: vlse8.v, vlse16.v, vlse32.v, vlse64.v
-                // vlsseg2e8.v, vlsseg2e16.v, vlsseg2e32.v, vlsseg2e64.v
-                // vlsseg3e8.v, vlsseg3e16.v, vlsseg3e32.v, vlsseg3e64.v
-                // vlsseg4e8.v, vlsseg4e16.v, vlsseg4e32.v, vlsseg4e64.v
-                // vlsseg5e8.v, vlsseg5e16.v, vlsseg5e32.v, vlsseg5e64.v
-                // vlsseg6e8.v, vlsseg6e16.v, vlsseg6e32.v, vlsseg6e64.v
-                // vlsseg7e8.v, vlsseg7e16.v, vlsseg7e32.v, vlsseg7e64.v
-                // vlsseg8e8.v, vlsseg8e16.v, vlsseg8e32.v, vlsseg8e64.v
+    case VlsType::VLS: { // strided
+      // vlse8.v, vlse16.v, vlse32.v, vlse64.v
+      // vlsseg2e8.v, vlsseg2e16.v, vlsseg2e32.v, vlsseg2e64.v
+      // vlsseg3e8.v, vlsseg3e16.v, vlsseg3e32.v, vlsseg3e64.v
+      // vlsseg4e8.v, vlsseg4e16.v, vlsseg4e32.v, vlsseg4e64.v
+      // vlsseg5e8.v, vlsseg5e16.v, vlsseg5e32.v, vlsseg5e64.v
+      // vlsseg6e8.v, vlsseg6e16.v, vlsseg6e32.v, vlsseg6e64.v
+      // vlsseg7e8.v, vlsseg7e16.v, vlsseg7e32.v, vlsseg7e64.v
+      // vlsseg8e8.v, vlsseg8e16.v, vlsseg8e32.v, vlsseg8e64.v
       uint32_t nfields = lsuArgs.nf + 1;
       uint32_t emul = (states.vtype.vlmul >> 2) ? 1 : (1 << (states.vtype.vlmul & 0b11));
       assert(nfields * emul <= 8);
@@ -242,22 +238,23 @@ public:
       }
       break;
     }
-    case 0b01:  // indexed - unordered, vluxei8.v, vluxei16.v, vluxei32.v, vluxei64.v
-                // vluxseg2e8.v, vluxseg2e16.v, vluxseg2e32.v, vluxseg2e64.v
-                // vluxseg3e8.v, vluxseg3e16.v, vluxseg3e32.v, vluxseg3e64.v
-                // vluxseg4e8.v, vluxseg4e16.v, vluxseg4e32.v, vluxseg4e64.v
-                // vluxseg5e8.v, vluxseg5e16.v, vluxseg5e32.v, vluxseg5e64.v
-                // vluxseg6e8.v, vluxseg6e16.v, vluxseg6e32.v, vluxseg6e64.v
-                // vluxseg7e8.v, vluxseg7e16.v, vluxseg7e32.v, vluxseg7e64.v
-                // vluxseg8e8.v, vluxseg8e16.v, vluxseg8e32.v, vluxseg8e64.v
-    case 0b11: {// indexed - ordered, vloxei8.v, vloxei16.v, vloxei32.v, vloxei64.v
-                // vloxseg2e8.v, vloxseg2e16.v, vloxseg2e32.v, vloxseg2e64.v
-                // vloxseg3e8.v, vloxseg3e16.v, vloxseg3e32.v, vloxseg3e64.v
-                // vloxseg4e8.v, vloxseg4e16.v, vloxseg4e32.v, vloxseg4e64.v
-                // vloxseg5e8.v, vloxseg5e16.v, vloxseg5e32.v, vloxseg5e64.v
-                // vloxseg6e8.v, vloxseg6e16.v, vloxseg6e32.v, vloxseg6e64.v
-                // vloxseg7e8.v, vloxseg7e16.v, vloxseg7e32.v, vloxseg7e64.v
-                // vloxseg8e8.v, vloxseg8e16.v, vloxseg8e32.v, vloxseg8e64.v
+    case VlsType::VLX: { // indexed
+      // - unordered, vluxei8.v, vluxei16.v, vluxei32.v, vluxei64.v
+      // vluxseg2e8.v, vluxseg2e16.v, vluxseg2e32.v, vluxseg2e64.v
+      // vluxseg3e8.v, vluxseg3e16.v, vluxseg3e32.v, vluxseg3e64.v
+      // vluxseg4e8.v, vluxseg4e16.v, vluxseg4e32.v, vluxseg4e64.v
+      // vluxseg5e8.v, vluxseg5e16.v, vluxseg5e32.v, vluxseg5e64.v
+      // vluxseg6e8.v, vluxseg6e16.v, vluxseg6e32.v, vluxseg6e64.v
+      // vluxseg7e8.v, vluxseg7e16.v, vluxseg7e32.v, vluxseg7e64.v
+      // vluxseg8e8.v, vluxseg8e16.v, vluxseg8e32.v, vluxseg8e64.v
+      // indexed - ordered, vloxei8.v, vloxei16.v, vloxei32.v, vloxei64.v
+      // vloxseg2e8.v, vloxseg2e16.v, vloxseg2e32.v, vloxseg2e64.v
+      // vloxseg3e8.v, vloxseg3e16.v, vloxseg3e32.v, vloxseg3e64.v
+      // vloxseg4e8.v, vloxseg4e16.v, vloxseg4e32.v, vloxseg4e64.v
+      // vloxseg5e8.v, vloxseg5e16.v, vloxseg5e32.v, vloxseg5e64.v
+      // vloxseg6e8.v, vloxseg6e16.v, vloxseg6e32.v, vloxseg6e64.v
+      // vloxseg7e8.v, vloxseg7e16.v, vloxseg7e32.v, vloxseg7e64.v
+      // vloxseg8e8.v, vloxseg8e16.v, vloxseg8e32.v, vloxseg8e64.v
       uint32_t vs2 = instr.getSrcReg(1).idx;
       uint32_t nfields = lsuArgs.nf + 1;
       uint32_t eew = lsuArgs.width & 0x3;
@@ -280,7 +277,6 @@ public:
       break;
     }
     default:
-      std::cout << "Load vector - unsupported mop: " << mop << std::endl;
       std::abort();
     }
   }
@@ -288,17 +284,17 @@ public:
   void store(const Instr &instr,
              uint32_t wid,
              uint32_t tid,
-             const std::vector<reg_data_t>& rs1_data,
-             const std::vector<reg_data_t>& rs2_data,
-             MemTraceData* trace_data) {
-    auto& states = vpu_states_.at(wid);
+             const std::vector<reg_data_t> &rs1_data,
+             const std::vector<reg_data_t> &rs2_data,
+             MemTraceData *trace_data) {
+    auto &states = vpu_states_.at(wid);
+    auto vls_type = std::get<VlsType>(instr.getOpType());
     auto lsuArgs = std::get<IntrVlsArgs>(instr.getArgs());
     uint32_t vmask = lsuArgs.vm;
-    uint32_t mop = lsuArgs.mop;
     uint32_t vsewb = 1 << states.vtype.vsew;
     assert(lsuArgs.width == states.vtype.vsew && "vsew and width must match!");
     uint32_t vs3 = instr.getSrcReg(2).idx;
-    auto& vreg_file = states.vreg_file.at(tid);
+    auto &vreg_file = states.vreg_file.at(tid);
     uint64_t base_addr = rs1_data.at(tid).i;
     base_addr &= 0xFFFFFFFC; // TODO: riscv-tests fix
 
@@ -306,8 +302,8 @@ public:
     trace_data->vl = states.vl;
     trace_data->vnf = lsuArgs.nf + 1;
 
-    switch (mop) {
-    case 0b00: { // unit-stride
+    switch (vls_type) {
+    case VlsType::VS: { // unit-stride
       uint32_t sumop = lsuArgs.umop;
       switch (sumop) {
       case 0b00000: { // vse8.v, vse16.v, vse32.v, vse64.v
@@ -376,14 +372,15 @@ public:
       }
       break;
     }
-    case 0b10: {// strided: vsse8.v, vsse16.v, vsse32.v, vsse64.v
-                // vssseg2e8.v, vssseg2e16.v, vssseg2e32.v, vssseg2e64.v
-                // vssseg3e8.v, vssseg3e16.v, vssseg3e32.v, vssseg3e64.v
-                // vssseg4e8.v, vssseg4e16.v, vssseg4e32.v, vssseg4e64.v
-                // vssseg5e8.v, vssseg5e16.v, vssseg5e32.v, vssseg5e64.v
-                // vssseg6e8.v, vssseg6e16.v, vssseg6e32.v, vssseg6e64.v
-                // vssseg7e8.v, vssseg7e16.v, vssseg7e32.v, vssseg7e64.v
-                // vssseg8e8.v, vssseg8e16.v, vssseg8e32.v, vssseg8e64.v
+    case VlsType::VSS: { // strided:
+      // vsse8.v, vsse16.v, vsse32.v, vsse64.v
+      // vssseg2e8.v, vssseg2e16.v, vssseg2e32.v, vssseg2e64.v
+      // vssseg3e8.v, vssseg3e16.v, vssseg3e32.v, vssseg3e64.v
+      // vssseg4e8.v, vssseg4e16.v, vssseg4e32.v, vssseg4e64.v
+      // vssseg5e8.v, vssseg5e16.v, vssseg5e32.v, vssseg5e64.v
+      // vssseg6e8.v, vssseg6e16.v, vssseg6e32.v, vssseg6e64.v
+      // vssseg7e8.v, vssseg7e16.v, vssseg7e32.v, vssseg7e64.v
+      // vssseg8e8.v, vssseg8e16.v, vssseg8e32.v, vssseg8e64.v
       WordI stride = rs2_data.at(tid).i;
       uint32_t nfields = lsuArgs.nf + 1;
 
@@ -403,22 +400,23 @@ public:
       }
       break;
     }
-    case 0b01:  // indexed - unordered, vsuxei8.v, vsuxei16.v, vsuxei32.v, vsuxei64.v
-                // vsuxseg2ei8.v, vsuxseg2ei16.v, vsuxseg2ei32.v, vsuxseg2ei64.v
-                // vsuxseg3ei8.v, vsuxseg3ei16.v, vsuxseg3ei32.v, vsuxseg3ei64.v
-                // vsuxseg4ei8.v, vsuxseg4ei16.v, vsuxseg4ei32.v, vsuxseg4ei64.v
-                // vsuxseg5ei8.v, vsuxseg5ei16.v, vsuxseg5ei32.v, vsuxseg5ei64.v
-                // vsuxseg6ei8.v, vsuxseg6ei16.v, vsuxseg6ei32.v, vsuxseg6ei64.v
-                // vsuxseg7ei8.v, vsuxseg7ei16.v, vsuxseg7ei32.v, vsuxseg7ei64.v
-                // vsuxseg8ei8.v, vsuxseg8ei16.v, vsuxseg8ei32.v, vsuxseg8ei64.v
-    case 0b11: {// indexed - ordered, vsoxei8.v, vsoxei16.v, vsoxei32.v, vsoxei64.v
-                // vsoxseg2ei8.v, vsoxseg2ei16.v, vsoxseg2ei32.v, vsoxseg2ei64.v
-                // vsoxseg3ei8.v, vsoxseg3ei16.v, vsoxseg3ei32.v, vsoxseg3ei64.v
-                // vsoxseg4ei8.v, vsoxseg4ei16.v, vsoxseg4ei32.v, vsoxseg4ei64.v
-                // vsoxseg5ei8.v, vsoxseg5ei16.v, vsoxseg5ei32.v, vsoxseg5ei64.v
-                // vsoxseg6ei8.v, vsoxseg6ei16.v, vsoxseg6ei32.v, vsoxseg6ei64.v
-                // vsoxseg7ei8.v, vsoxseg7ei16.v, vsoxseg7ei32.v, vsoxseg7ei64.v
-                // vsoxseg8ei8.v, vsoxseg8ei16.v, vsoxseg8ei32.v, vsoxseg8ei64.v
+    case VlsType::VSX: { // indexed
+      // - unordered, vsuxei8.v, vsuxei16.v, vsuxei32.v, vsuxei64.v
+      // vsuxseg2ei8.v, vsuxseg2ei16.v, vsuxseg2ei32.v, vsuxseg2ei64.v
+      // vsuxseg3ei8.v, vsuxseg3ei16.v, vsuxseg3ei32.v, vsuxseg3ei64.v
+      // vsuxseg4ei8.v, vsuxseg4ei16.v, vsuxseg4ei32.v, vsuxseg4ei64.v
+      // vsuxseg5ei8.v, vsuxseg5ei16.v, vsuxseg5ei32.v, vsuxseg5ei64.v
+      // vsuxseg6ei8.v, vsuxseg6ei16.v, vsuxseg6ei32.v, vsuxseg6ei64.v
+      // vsuxseg7ei8.v, vsuxseg7ei16.v, vsuxseg7ei32.v, vsuxseg7ei64.v
+      // vsuxseg8ei8.v, vsuxseg8ei16.v, vsuxseg8ei32.v, vsuxseg8ei64.v
+      // indexed - ordered, vsoxei8.v, vsoxei16.v, vsoxei32.v, vsoxei64.v
+      // vsoxseg2ei8.v, vsoxseg2ei16.v, vsoxseg2ei32.v, vsoxseg2ei64.v
+      // vsoxseg3ei8.v, vsoxseg3ei16.v, vsoxseg3ei32.v, vsoxseg3ei64.v
+      // vsoxseg4ei8.v, vsoxseg4ei16.v, vsoxseg4ei32.v, vsoxseg4ei64.v
+      // vsoxseg5ei8.v, vsoxseg5ei16.v, vsoxseg5ei32.v, vsoxseg5ei64.v
+      // vsoxseg6ei8.v, vsoxseg6ei16.v, vsoxseg6ei32.v, vsoxseg6ei64.v
+      // vsoxseg7ei8.v, vsoxseg7ei16.v, vsoxseg7ei32.v, vsoxseg7ei64.v
+      // vsoxseg8ei8.v, vsoxseg8ei16.v, vsoxseg8ei32.v, vsoxseg8ei64.v
       uint32_t vs2 = instr.getSrcReg(1).idx;
       uint32_t nfields = lsuArgs.nf + 1;
       uint32_t eew = lsuArgs.width & 0x3;
@@ -440,17 +438,16 @@ public:
       break;
     }
     default:
-      std::cout << "Store vector - unsupported mop: " << mop << std::endl;
       std::abort();
     }
   }
 
-    void configure(const Instr &instr, uint32_t wid, uint32_t tid,
-                   const std::vector<reg_data_t>& rs1_data,
-                   const std::vector<reg_data_t>& rs2_data,
-                   std::vector<reg_data_t>& rd_data,
-                   ExeTraceData* trace_data) {
-    auto& states = vpu_states_.at(wid);
+  void configure(const Instr &instr, uint32_t wid, uint32_t tid,
+                 const std::vector<reg_data_t> &rs1_data,
+                 const std::vector<reg_data_t> &rs2_data,
+                 std::vector<reg_data_t> &rd_data,
+                 ExeTraceData *trace_data) {
+    auto &states = vpu_states_.at(wid);
     auto op_type = instr.getOpType();
     auto instrArgs = instr.getArgs();
 
@@ -461,7 +458,7 @@ public:
     auto vsetArgs = std::get<IntrVsetArgs>(instrArgs);
 
     uint32_t uimmsrc = vsetArgs.uimm;
-    uint32_t immsrc  = vsetArgs.zimm;
+    uint32_t immsrc = vsetArgs.zimm;
 
     uint32_t zimm;
     if (vset_type != VsetType::VSETVL) {
@@ -471,9 +468,9 @@ public:
     }
 
     uint32_t vlmul = zimm & mask_vlmul;
-    uint32_t vsew  = (zimm >> shift_vsew) & mask_vsew;
-    uint32_t vta   = (zimm >> shift_vta) & mask_vta;
-    uint32_t vma   = (zimm >> shift_vma) & mask_vma;
+    uint32_t vsew = (zimm >> shift_vsew) & mask_vsew;
+    uint32_t vta = (zimm >> shift_vta) & mask_vta;
+    uint32_t vma = (zimm >> shift_vma) & mask_vma;
 
     uint32_t vlmul_neg = (vlmul >> 2);
     uint32_t vlen_mul = vlmul_neg ? (VLENB >> (8 - vlmul)) : (VLENB << vlmul);
@@ -522,11 +519,11 @@ public:
   }
 
   void execute(const Instr &instr, uint32_t wid, uint32_t tid,
-               const std::vector<reg_data_t>& rs1_data,
-               std::vector<reg_data_t>& rd_data,
-               ExeTraceData* trace_data) {
-    auto& states = vpu_states_.at(wid);
-    auto& vreg_file = states.vreg_file.at(tid);
+               const std::vector<reg_data_t> &rs1_data,
+               std::vector<reg_data_t> &rd_data,
+               ExeTraceData *trace_data) {
+    auto &states = vpu_states_.at(wid);
+    auto &vreg_file = states.vreg_file.at(tid);
     auto op_type = instr.getOpType();
     auto instrArgs = instr.getArgs();
 
@@ -539,9 +536,9 @@ public:
     auto vop_type = std::get<VopType>(op_type);
     auto vopArgs = std::get<IntrVopArgs>(instrArgs);
 
-    uint32_t vmask   = vopArgs.vm;
+    uint32_t vmask = vopArgs.vm;
     uint32_t uimmsrc = vopArgs.imm;
-    uint32_t funct6  = vopArgs.funct6;
+    uint32_t funct6 = vopArgs.funct6;
     Word immsrc = sext<Word>(vopArgs.imm, width_reg);
 
     switch (vop_type) {
@@ -651,19 +648,19 @@ public:
       case 41: { // vsra.vv
         vector_op_vv<SrlSra, int8_t, int16_t, int32_t, int64_t>(vreg_file, rsrc0, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
-      case 42: { // vssrl.vv
+      case 42: {            // vssrl.vv
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vv_scale<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file, rsrc0, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
       } break;
-      case 43: { // vssra.vv
+      case 43: {            // vssra.vv
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vv_scale<SrlSra, int8_t, int16_t, int32_t, int64_t>(vreg_file, rsrc0, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
       } break;
-      case 44: { // vnsrl.wv
+      case 44: {            // vnsrl.wv
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vv_n<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file, rsrc0, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, 2, vxsat);
       } break;
-      case 45: { // vnsra.wv
+      case 45: {            // vnsra.wv
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vv_n<SrlSra, int8_t, int16_t, int32_t, int64_t>(vreg_file, rsrc0, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, 2, vxsat);
       } break;
@@ -683,11 +680,11 @@ public:
         std::cout << "Unrecognised vector - vector instruction funct6: " << funct6 << std::endl;
         std::abort();
       }
-      } break;
-      case VopType::OPFVV: { // float vector-vector
+    } break;
+    case VopType::OPFVV: { // float vector-vector
       switch (funct6) {
       case 0: { // vfadd.vv
-      vpu_op = VpuOpType::FMA;
+        vpu_op = VpuOpType::FMA;
         vector_op_vv<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(vreg_file, rsrc0, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 2: { // vfsub.vv
@@ -743,7 +740,7 @@ public:
         case 0b01: // vfwcvt.xu.f.v, vfwcvt.x.f.v, vfwcvt.f.xu.v, vfwcvt.f.x.v, vfwcvt.f.f.v, vfwcvt.rtz.xu.f.v, vfwcvt.rtz.x.f.v
           vector_op_vix_w<Fcvt, uint8_t, uint16_t, uint32_t, uint64_t>(rsrc0, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
           break;
-        case 0b10: { // vfncvt.xu.f.w, vfncvt.x.f.w, vfncvt.f.xu.w, vfncvt.f.x.w, vfncvt.f.f.w, vfncvt.rod.f.f.w, vfncvt.rtz.xu.f.w, vfncvt.rtz.x.f.w
+        case 0b10: {          // vfncvt.xu.f.w, vfncvt.x.f.w, vfncvt.f.xu.w, vfncvt.f.x.w, vfncvt.f.f.w, vfncvt.rod.f.f.w, vfncvt.rtz.xu.f.w, vfncvt.rtz.x.f.w
           uint32_t vxsat = 0; // saturation argument is unused
           vector_op_vix_n<Fcvt, uint8_t, uint16_t, uint32_t, uint64_t>(rsrc0, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
           break;
@@ -858,8 +855,8 @@ public:
         std::cout << "Unrecognised float vector - vector instruction funct6: " << funct6 << std::endl;
         std::abort();
       }
-      } break;
-      case VopType::OPMVV: { // mask vector-vector
+    } break;
+    case VopType::OPMVV: { // mask vector-vector
       switch (funct6) {
       case 0: { // vredsum.vs
         vpu_op = VpuOpType::ARITH_R;
@@ -893,19 +890,19 @@ public:
         vpu_op = VpuOpType::ARITH_R;
         vector_op_vv_red<Max, int8_t, int16_t, int32_t, int64_t>(vreg_file, rsrc0, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
-      case 8: { // vaaddu.vv
+      case 8: {             // vaaddu.vv
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vv_sat<Aadd, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(vreg_file, rsrc0, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
       } break;
-      case 9: { // vaadd.vv
+      case 9: {             // vaadd.vv
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vv_sat<Aadd, int8_t, int16_t, int32_t, int64_t, __int128_t>(vreg_file, rsrc0, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
       } break;
-      case 10: { // vasubu.vv
+      case 10: {            // vasubu.vv
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vv_sat<Asub, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(vreg_file, rsrc0, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
       } break;
-      case 11: { // vasub.vv
+      case 11: {            // vasub.vv
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vv_sat<Asub, int8_t, int16_t, int32_t, int64_t, __int128_t>(vreg_file, rsrc0, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
       } break;
@@ -1054,83 +1051,83 @@ public:
         std::cout << "Unrecognised mask vector - vector instruction funct6: " << funct6 << std::endl;
         std::abort();
       }
-      } break;
-      case VopType::OPIVI: { // vector-immmediate
+    } break;
+    case VopType::OPIVI: { // vector-immmediate
       vpu_op = VpuOpType::ARITH;
       switch (funct6) {
       case 0: { // vadd.vi
-        vector_op_vix<Add, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix<Add, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 3: { // vrsub.vi
-        vector_op_vix<Rsub, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix<Rsub, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 9: { // vand.vi
-        vector_op_vix<And, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix<And, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 10: { // vor.vi
-        vector_op_vix<Or, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix<Or, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 11: { // vxor.vi
-        vector_op_vix<Xor, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix<Xor, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 12: { // vrgather.vi
-        vector_op_vix_gather<uint8_t, uint16_t, uint32_t, uint64_t>(uimmsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, states.vlmax, vmask);
+        vector_op_vix_gather<uint8_t, uint16_t, uint32_t, uint64_t>(uimmsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, states.vlmax, vmask);
       } break;
       case 14: { // vslideup.vi
-        vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(uimmsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, 0, vmask, false);
+        vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(uimmsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, 0, vmask, false);
       } break;
       case 15: { // vslidedown.vi
-        vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(uimmsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, states.vlmax, vmask, false);
+        vector_op_vix_slide<uint8_t, uint16_t, uint32_t, uint64_t>(uimmsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, states.vlmax, vmask, false);
       } break;
       case 16: { // vadc.vim
-        vector_op_vix_carry<Adc, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl);
+        vector_op_vix_carry<Adc, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl);
       } break;
       case 17: { // vmadc.vi, vmadc.vim
-        vector_op_vix_carry_out<Madc, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix_carry_out<Madc, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
-      case 23: { // vmv.v.i
+      case 23: {     // vmv.v.i
         if (vmask) { // vmv.v.i
-          if (rsrc0 != 0) {
+          if (rsrc1 != 0) {
             std::cout << "For vmv.v.i vs2 must contain v0." << std::endl;
             std::abort();
           }
-          vector_op_vix<Mv, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+          vector_op_vix<Mv, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
         } else { // vmerge.vim
-          vector_op_vix_merge<int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+          vector_op_vix_merge<int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
         }
       } break;
       case 24: { // vmseq.vi
-        vector_op_vix_mask<Eq, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix_mask<Eq, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 25: { // vmsne.vi
-        vector_op_vix_mask<Ne, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix_mask<Ne, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 26: { // vmsltu.vi
-        vector_op_vix_mask<Lt, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix_mask<Lt, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 27: { // vmslt.vi
-        vector_op_vix_mask<Lt, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix_mask<Lt, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 28: { // vmsleu.vi
-        vector_op_vix_mask<Le, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix_mask<Le, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 29: { // vmsle.vi
-        vector_op_vix_mask<Le, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix_mask<Le, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 30: { // vmsgtu.vi
-        vector_op_vix_mask<Gt, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix_mask<Gt, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 31: { // vmsgt.vi
-        vector_op_vix_mask<Gt, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix_mask<Gt, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 32: { // vsaddu.vi
-        vector_op_vix_sat<Sadd, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask, 2, states.vxsat);
+        vector_op_vix_sat<Sadd, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, 2, states.vxsat);
       } break;
       case 33: { // vsadd.vi
-        vector_op_vix_sat<Sadd, int8_t, int16_t, int32_t, int64_t, __int128_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask, 2, states.vxsat);
+        vector_op_vix_sat<Sadd, int8_t, int16_t, int32_t, int64_t, __int128_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, 2, states.vxsat);
       } break;
       case 37: { // vsll.vi
-        vector_op_vix<Sll, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix<Sll, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 39: { // vmv1r.v, vmv2r.v, vmv4r.v, vmv8r.v
         uint32_t nreg = (immsrc & 0b111) + 1;
@@ -1140,42 +1137,42 @@ public:
         }
         uint32_t vl = (nreg * VLENB) >> states.vtype.vsew;
         trace_data->vl = vl;
-        vector_op_vv<Mv, int8_t, int16_t, int32_t, int64_t>(vreg_file, rsrc0, rsrc1, rdest, states.vtype.vsew, vl, vmask);
+        vector_op_vv<Mv, int8_t, int16_t, int32_t, int64_t>(vreg_file, rsrc1, rsrc1, rdest, states.vtype.vsew, vl, vmask);
       } break;
       case 40: { // vsrl.vi
-        vector_op_vix<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 41: { // vsra.vi
-        vector_op_vix<SrlSra, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask);
+        vector_op_vix<SrlSra, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
-      case 42: { // vssrl.vi
+      case 42: {            // vssrl.vi
         uint32_t vxsat = 0; // saturation is not relevant for this operation
-        vector_op_vix_scale<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
+        vector_op_vix_scale<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
       } break;
-      case 43: { // vssra.vi
+      case 43: {            // vssra.vi
         uint32_t vxsat = 0; // saturation is not relevant for this operation
-        vector_op_vix_scale<SrlSra, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
+        vector_op_vix_scale<SrlSra, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
       } break;
-      case 44: { // vnsrl.wi
+      case 44: {            // vnsrl.wi
         uint32_t vxsat = 0; // saturation is not relevant for this operation
-        vector_op_vix_n<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask, 2, vxsat);
+        vector_op_vix_n<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, 2, vxsat);
       } break;
-      case 45: { // vnsra.wi
+      case 45: {            // vnsra.wi
         uint32_t vxsat = 0; // saturation is not relevant for this operation
-        vector_op_vix_n<SrlSra, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask, 2, vxsat);
+        vector_op_vix_n<SrlSra, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, 2, vxsat);
       } break;
       case 46: { // vnclipu.wi
-        vector_op_vix_n<Clip, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, states.vxsat);
+        vector_op_vix_n<Clip, uint8_t, uint16_t, uint32_t, uint64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, states.vxsat);
       } break;
       case 47: { // vnclip.wi
-        vector_op_vix_n<Clip, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc0, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, states.vxsat);
+        vector_op_vix_n<Clip, int8_t, int16_t, int32_t, int64_t>(immsrc, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, states.vxsat);
       } break;
       default:
         std::cout << "Unrecognised vector - immidiate instruction funct6: " << funct6 << std::endl;
         std::abort();
       }
-      } break;
-      case VopType::OPIVX: { // vector-scalar
+    } break;
+    case VopType::OPIVX: { // vector-scalar
       vpu_op = VpuOpType::ARITH;
       auto rs1_value = rs1_data.at(tid).i;
       switch (funct6) {
@@ -1289,19 +1286,19 @@ public:
       case 41: { // vsra.vx
         vector_op_vix<SrlSra, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
-      case 42: { // vssrl.vx
+      case 42: {            // vssrl.vx
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vix_scale<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
       } break;
-      case 43: { // vssra.vx
+      case 43: {            // vssra.vx
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vix_scale<SrlSra, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
       } break;
-      case 44: { // vnsrl.wx
+      case 44: {            // vnsrl.wx
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vix_n<SrlSra, uint8_t, uint16_t, uint32_t, uint64_t>(rs1_value, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, 2, vxsat);
       } break;
-      case 45: { // vnsra.wx
+      case 45: {            // vnsra.wx
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vix_n<SrlSra, int8_t, int16_t, int32_t, int64_t>(rs1_value, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, 2, vxsat);
       } break;
@@ -1315,8 +1312,8 @@ public:
         std::cout << "Unrecognised vector - scalar instruction funct6: " << funct6 << std::endl;
         std::abort();
       }
-      } break;
-      case VopType::OPFVF: { // float vector-scalar
+    } break;
+    case VopType::OPFVF: { // float vector-scalar
       auto rs1_value = rs1_data.at(tid).i;
       switch (funct6) {
       case 0: { // vfadd.vf
@@ -1491,24 +1488,24 @@ public:
         std::cout << "Unrecognised float vector - scalar instruction funct6: " << funct6 << std::endl;
         std::abort();
       }
-      } break;
-      case VopType::OPMVX: { // vector-scalar
+    } break;
+    case VopType::OPMVX: { // vector-scalar
       vpu_op = VpuOpType::ARITH;
       auto rs1_value = rs1_data.at(tid).i;
       switch (funct6) {
-      case 8: { // vaaddu.vx
+      case 8: {             // vaaddu.vx
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vix_sat<Aadd, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(rs1_value, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
       } break;
-      case 9: { // vaadd.vx
+      case 9: {             // vaadd.vx
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vix_sat<Aadd, int8_t, int16_t, int32_t, int64_t, __int128_t>(rs1_value, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
       } break;
-      case 10: { // vasubu.vx
+      case 10: {            // vasubu.vx
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vix_sat<Asub, uint8_t, uint16_t, uint32_t, uint64_t, __uint128_t>(rs1_value, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
       } break;
-      case 11: { // vasub.vx
+      case 11: {            // vasub.vx
         uint32_t vxsat = 0; // saturation is not relevant for this operation
         vector_op_vix_sat<Asub, int8_t, int16_t, int32_t, int64_t, __int128_t>(rs1_value, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask, states.vxrm, vxsat);
       } break;
@@ -1646,8 +1643,8 @@ public:
     trace_data->vpu_op = vpu_op;
   }
 
-  bool get_csr(uint32_t addr, uint32_t wid, uint32_t tid, Word* value) {
-    __unused (tid);
+  bool get_csr(uint32_t addr, uint32_t wid, uint32_t tid, Word *value) {
+    __unused(tid);
     switch (addr) {
     case VX_CSR_VSTART:
       *value = vpu_states_.at(wid).vstart;
@@ -1659,7 +1656,7 @@ public:
       *value = vpu_states_.at(wid).vxrm;
       return true;
     case VX_CSR_VCSR:
-      *value = (vpu_states_.at(wid).vxrm << 1) |  vpu_states_.at(wid).vxsat;
+      *value = (vpu_states_.at(wid).vxrm << 1) | vpu_states_.at(wid).vxsat;
       return true;
     case VX_CSR_VL:
       *value = vpu_states_.at(wid).vl;
@@ -1675,8 +1672,8 @@ public:
     }
   }
 
-  bool set_csr(uint32_t addr,uint32_t wid, uint32_t tid, Word value) {
-    __unused (tid);
+  bool set_csr(uint32_t addr, uint32_t wid, uint32_t tid, Word value) {
+    __unused(tid);
     switch (addr) {
     case VX_CSR_VSTART:
       vpu_states_.at(wid).vstart = value;
@@ -1701,25 +1698,61 @@ public:
     }
   }
 
-  const PerfStats& perf_stats() const {
+  std::string dumpRegister(uint32_t wid, uint32_t tid, uint32_t reg_idx) const {
+    assert(wid < vpu_states_.size() && tid < vpu_states_[wid].vreg_file.size());
+    assert(reg_idx < MAX_NUM_REGS);
+    const auto &reg = vpu_states_[wid].vreg_file[tid][reg_idx];
+    uint32_t n = VLENB / XLENB;
+    std::ostringstream oss;
+    oss << "{";
+    for (uint32_t i = 0; i < n; ++i) {
+      uint64_t value = 0;
+      // Combine bytes in little-endian order
+      for (uint32_t j = 0; j < XLENB; ++j) {
+        value |= static_cast<uint64_t>(reg.at(i * XLENB + j)) << (8 * j);
+      }
+      // Print the combined value
+      oss << "0x" << std::hex << std::setfill('0');
+      switch (XLENB) {
+      case 1:
+        oss << std::setw(2) << static_cast<uint32_t>(value);
+        break;
+      case 2:
+        oss << std::setw(4) << static_cast<uint32_t>(value);
+        break;
+      case 4:
+        oss << std::setw(8) << static_cast<uint32_t>(value);
+        break;
+      case 8:
+        oss << std::setw(16) << value;
+        break;
+      }
+      if (i != n - 1) {
+        oss << ", ";
+      }
+    }
+    oss << "}";
+    return oss.str();
+  }
+
+  const PerfStats &perf_stats() const {
     return perf_stats_;
   }
 
 private:
-
   struct pending_req_t {
-    instr_trace_t* trace;
+    instr_trace_t *trace;
     uint32_t count;
   };
 
   union vtype_t {
     struct {
       uint32_t vlmul : 3; // vector register group multiplier
-      uint32_t vsew  : 3; // vector element width
-      uint32_t vta   : 1; // vector tail agnostic
-      uint32_t vma   : 1; // vector mask agnostic
-      uint32_t reserved: 23;
-      uint32_t vill  : 1; // illegal vtype
+      uint32_t vsew : 3;  // vector element width
+      uint32_t vta : 1;   // vector tail agnostic
+      uint32_t vma : 1;   // vector mask agnostic
+      uint32_t reserved : 23;
+      uint32_t vill : 1; // illegal vtype
     };
     uint32_t value;
   };
@@ -1730,55 +1763,43 @@ private:
     uint32_t vxsat;
     uint32_t vxrm;
     uint32_t vl;
-    vtype_t  vtype;
+    vtype_t vtype;
     uint32_t vlenb;
     uint32_t vlmax;
 
     vpu_states_t(uint32_t num_threads)
-      : vreg_file(num_threads, std::vector(MAX_NUM_REGS, std::vector<Byte>(VLENB, 0)))
-      , vstart(0)
-      , vxsat(0)
-      , vxrm(0)
-      , vl(0)
-      , vtype({0, 0, 0, 0, 0, 0})
-      , vlenb(VLENB)
-      , vlmax(0)
-    {}
+        : vreg_file(num_threads, std::vector(MAX_NUM_REGS, std::vector<Byte>(VLENB, 0))), vstart(0), vxsat(0), vxrm(0), vl(0), vtype({0, 0, 0, 0, 0, 0}), vlenb(VLENB), vlmax(0) {}
 
     void reset() {
-      for (auto& reg_file : this->vreg_file) {
-        for (auto& reg : reg_file) {
-          for (auto& elm : reg) {
-          #ifndef NDEBUG
+      for (auto &reg_file : this->vreg_file) {
+        for (auto &reg : reg_file) {
+          for (auto &elm : reg) {
+#ifndef NDEBUG
             elm = 0;
-          #else
+#else
             elm = std::rand();
-          #endif
+#endif
           }
         }
       }
     }
   };
 
-  VecUnit*                  simobject_;
-  Core*                     core_;
+  VecUnit *simobject_;
+  Core *core_;
   std::vector<vpu_states_t> vpu_states_;
-  uint32_t                  num_lanes_;
-  HashTable<pending_req_t>  pending_reqs_;
-  PerfStats                 perf_stats_;
+  uint32_t num_lanes_;
+  HashTable<pending_req_t> pending_reqs_;
+  PerfStats perf_stats_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-VecUnit::VecUnit(const SimContext& ctx,
-                 const char* name,
-                 const Arch& arch,
-                 Core* core)
-  : SimObject<VecUnit>(ctx, name)
-  , Inputs(ISSUE_WIDTH, this)
-	, Outputs(ISSUE_WIDTH, this)
-  , impl_(new Impl(this, arch, core))
-{}
+VecUnit::VecUnit(const SimContext &ctx,
+                 const char *name,
+                 const Arch &arch,
+                 Core *core)
+    : SimObject<VecUnit>(ctx, name), Inputs(ISSUE_WIDTH, this), Outputs(ISSUE_WIDTH, this), impl_(new Impl(this, arch, core)) {}
 
 VecUnit::~VecUnit() {
   delete impl_;
@@ -1792,7 +1813,11 @@ void VecUnit::tick() {
   impl_->tick();
 }
 
-bool VecUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid, Word* value) {
+std::string VecUnit::dumpRegister(uint32_t wid, uint32_t tid, uint32_t reg_idx) const {
+  return impl_->dumpRegister(wid, tid, reg_idx);
+}
+
+bool VecUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid, Word *value) {
   return impl_->get_csr(addr, wid, tid, value);
 }
 
@@ -1800,22 +1825,22 @@ bool VecUnit::set_csr(uint32_t addr, uint32_t wid, uint32_t tid, Word value) {
   return impl_->set_csr(addr, wid, tid, value);
 }
 
-void VecUnit::load(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, const std::vector<reg_data_t>& rs2_data, MemTraceData* trace_data) {
+void VecUnit::load(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t> &rs1_data, const std::vector<reg_data_t> &rs2_data, MemTraceData *trace_data) {
   impl_->load(instr, wid, tid, rs1_data, rs2_data, trace_data);
 }
 
-void VecUnit::store(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, const std::vector<reg_data_t>& rs2_data, MemTraceData* trace_data) {
+void VecUnit::store(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t> &rs1_data, const std::vector<reg_data_t> &rs2_data, MemTraceData *trace_data) {
   impl_->store(instr, wid, tid, rs1_data, rs2_data, trace_data);
 }
 
-void VecUnit::configure(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, const std::vector<reg_data_t>& rs2_data, std::vector<reg_data_t>& rd_data, ExeTraceData* trace_data) {
+void VecUnit::configure(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t> &rs1_data, const std::vector<reg_data_t> &rs2_data, std::vector<reg_data_t> &rd_data, ExeTraceData *trace_data) {
   impl_->configure(instr, wid, tid, rs1_data, rs2_data, rd_data, trace_data);
 }
 
-void VecUnit::execute(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t>& rs1_data, std::vector<reg_data_t>& rd_data, ExeTraceData* trace_data) {
+void VecUnit::execute(const Instr &instr, uint32_t wid, uint32_t tid, const std::vector<reg_data_t> &rs1_data, std::vector<reg_data_t> &rd_data, ExeTraceData *trace_data) {
   impl_->execute(instr, wid, tid, rs1_data, rd_data, trace_data);
 }
 
-const VecUnit::PerfStats& VecUnit::perf_stats() const {
+const VecUnit::PerfStats &VecUnit::perf_stats() const {
   return impl_->perf_stats();
 }

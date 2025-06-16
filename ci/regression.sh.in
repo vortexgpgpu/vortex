@@ -396,7 +396,7 @@ vector()
     echo "begin vector tests..."
 
     CONFIGS="-DVLEN=256 -DEXT_V_ENABLE" make -C sim/simx
-    VLEN=256 REG_TESTS=1 GEN_TESTS=0 ./tests/riscv/riscv-vector-tests/run-test.sh
+    VLEN=256 ./tests/riscv/riscv-vector-tests/run-test.sh
 
     echo "vector tests done!"
 }

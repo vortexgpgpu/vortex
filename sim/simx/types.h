@@ -435,6 +435,17 @@ enum class VsetType {
 struct IntrVsetArgs {
   uint32_t zimm: 11;
   uint32_t uimm: 5;
+
+  std::string to_string(VsetType type) const {
+    std::string str;
+    if (type != VsetType::VSETVL) {
+      str = "zimm=" + to_hex_str(zimm);
+      if (type == VsetType::VSETIVLI) {
+        str += ", uimm=" + to_hex_str(uimm);
+      }
+    }
+    return str;
+  }
 };
 
 inline std::ostream &operator<<(std::ostream &os, const VsetType& type) {
@@ -451,23 +462,41 @@ inline std::ostream &operator<<(std::ostream &os, const VsetType& type) {
 ///////////////////////////////////////////////////////////////////////////////
 
 enum class VlsType {
-  LOAD,
-  STORE
+  VL,
+  VLS,
+  VLX,
+  VS,
+  VSS,
+  VSX
 };
 
 struct IntrVlsArgs {
   uint32_t width:2;
   uint32_t umop: 5;
   uint32_t vm: 1;
-  uint32_t mop: 2;
   uint32_t mew: 1;
   uint32_t nf: 3;
+
+  std::string to_string(VlsType type) const {
+    std::string str = "width=" + std::to_string(width);
+    if (type == VlsType::VL) {
+      str +=  ", umop=" + std::to_string(umop);
+    }
+    str += ", vm=" + std::to_string(vm) +
+           ", mew=" + std::to_string(mew) +
+           ", nf=" + std::to_string(nf);
+    return str;
+  }
 };
 
 inline std::ostream &operator<<(std::ostream &os, const VlsType& type) {
   switch (type) {
-  case VlsType::LOAD:  os << "LOAD"; break;
-  case VlsType::STORE: os << "STORE"; break;
+  case VlsType::VL:  os << "VL"; break;
+  case VlsType::VLS: os << "VLS"; break;
+  case VlsType::VLX: os << "VLX"; break;
+  case VlsType::VS:  os << "VS"; break;
+  case VlsType::VSS: os << "VSS"; break;
+  case VlsType::VSX: os << "VSX"; break;
   default:
     assert(false);
   }
@@ -490,6 +519,15 @@ struct IntrVopArgs {
   uint32_t vm: 1;
   uint32_t funct6: 6;
   uint32_t imm: 5;
+
+  std::string to_string(VopType type) const {
+    std::string str = "vm=" + std::to_string(vm) +
+                      ", funct6=" + std::to_string(funct6);
+    if (type == VopType::OPIVI || type == VopType::OPIVX) {
+      str += ", imm=" + to_hex_str(imm);
+    }
+    return str;
+  }
 };
 
 inline std::ostream &operator<<(std::ostream &os, const VopType& type) {
