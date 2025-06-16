@@ -1097,24 +1097,29 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid
           this->update_fcrs(fflags, wid, t);
         }
       } break;
-      case FpuType::FMV: {
+      case FpuType::FMVXW: {
         for (uint32_t t = thread_start; t < num_threads; ++t) {
           if (!warp.tmask.test(t))
             continue;
           uint32_t fflags = 0;
-          if (instr.getDestReg().type == RegType::Integer) {
-            if (fpuArgs.is_f64) { // RV64D: FMV.X.D
-              rd_data[t].u64 = rs1_data[t].u64;
-            } else { // RV32F: FMV.X.S
-              uint32_t result = (uint32_t)rs1_data[t].u64;
-              rd_data[t].i = sext((uint64_t)result, 32);
-            }
-          } else {
-            if (fpuArgs.is_f64) { // RV64D: FMV.D.X
-              rd_data[t].u64 = rs1_data[t].i;
-            } else { // RV32F: FMV.S.X
-              rd_data[t].u64 = nan_box((uint32_t)rs1_data[t].i);
-            }
+          if (fpuArgs.is_f64) { // RV64D: FMV.X.D
+            rd_data[t].u64 = rs1_data[t].u64;
+          } else { // RV32F: FMV.X.S
+            uint32_t result = (uint32_t)rs1_data[t].u64;
+            rd_data[t].i = sext((uint64_t)result, 32);
+          }
+          this->update_fcrs(fflags, wid, t);
+        }
+      } break;
+      case FpuType::FMVWX: {
+        for (uint32_t t = thread_start; t < num_threads; ++t) {
+          if (!warp.tmask.test(t))
+            continue;
+          uint32_t fflags = 0;
+          if (fpuArgs.is_f64) { // RV64D: FMV.D.X
+            rd_data[t].u64 = rs1_data[t].i;
+          } else { // RV32F: FMV.S.X
+            rd_data[t].u64 = nan_box((uint32_t)rs1_data[t].i);
           }
           this->update_fcrs(fflags, wid, t);
         }

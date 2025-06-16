@@ -335,7 +335,8 @@ enum class FpuType {
   FCMP,
   FSGNJ,
   FCLASS,
-  FMV,
+  FMVXW,
+  FMVWX,
   FMINMAX,
 };
 
@@ -362,7 +363,8 @@ inline std::ostream &operator<<(std::ostream &os, const FpuType& type) {
   case FpuType::FCMP:   os << "FCMP"; break;
   case FpuType::FSGNJ:  os << "FSGNJ"; break;
   case FpuType::FCLASS: os << "FCLASS"; break;
-  case FpuType::FMV:    os << "FMV"; break;
+  case FpuType::FMVXW:  os << "FMVXW"; break;
+  case FpuType::FMVWX:  os << "FMVWX"; break;
   case FpuType::FMINMAX: os << "FMIN_MAX"; break;
   default:
     assert(false);

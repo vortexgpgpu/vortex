@@ -219,7 +219,8 @@ static op_string_t op_string(const Instr &instr) {
         }
       }
       case FpuType::FCLASS: return {fpuArgs.is_f64 ? "FCLASS.D":"FCLASS.S", ""};
-      case FpuType::FMV:    return {fpuArgs.is_f64 ? "FMV.D.X":"FMV.S.X", ""};
+      case FpuType::FMVXW:  return {fpuArgs.is_f64 ? "FMV.X.D":"FMV.X.S", ""};
+      case FpuType::FMVWX:  return {fpuArgs.is_f64 ? "FMV.D.X":"FMV.S.X", ""};
       case FpuType::FMINMAX: {
         switch (fpuArgs.frm) {
         case 0: return {fpuArgs.is_f64 ? "FMIN.D":"FMIN.S", ""};
@@ -878,13 +879,13 @@ void Emulator::decode(uint32_t code, uint32_t wid) {
       break;
     case 0x70: // FCLASS.S, FMV.X.S
     case 0x71: // FCLASS.D, FMV.X.D
-      instr->setOpType((funct3 != 0) ? FpuType::FCLASS : FpuType::FMV);
+      instr->setOpType((funct3 != 0) ? FpuType::FCLASS : FpuType::FMVXW);
       instr->setDestReg(rd, RegType::Integer);
       instr->setSrcReg(0, rs1, RegType::Float);
       break;
     case 0x78: // FMV.S.X
     case 0x79: // FMV.D.X
-      instr->setOpType(FpuType::FMV);
+      instr->setOpType(FpuType::FMVWX);
       instr->setDestReg(rd, RegType::Float);
       instr->setSrcReg(0, rs1, RegType::Integer);
       break;

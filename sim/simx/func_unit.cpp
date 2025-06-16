@@ -117,7 +117,8 @@ void FpuUnit::tick() {
 		case FpuType::FCMP:
 		case FpuType::FSGNJ:
 		case FpuType::FCLASS:
-		case FpuType::FMV:
+		case FpuType::FMVXW:
+		case FpuType::FMVWX:
 		case FpuType::FMINMAX:
 			output.push(trace, 2+delay);
 			break;
