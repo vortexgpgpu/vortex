@@ -79,7 +79,7 @@ Emulator::Emulator(const Arch &arch, const DCRS &dcrs, Core* core)
     , warps_(arch.num_warps(), arch.num_threads())
     , barriers_(arch.num_barriers(), 0)
     , ipdom_size_(arch.num_threads()-1)
-  #ifdef EXT_TPU_ENABLE
+  #ifdef EXT_TCU_ENABLE
     , tensor_unit_(core->tensor_unit())
   #endif
   #ifdef EXT_V_ENABLE
@@ -182,23 +182,23 @@ instr_trace_t* Emulator::step() {
   auto& warp = warps_.at(scheduled_warp);
   assert(warp.tmask.any());
 
-  uint64_t uuid = 0;
-#ifndef NDEBUG
-  {
-    // generate unique universal instruction ID
-    uint32_t instr_uuid = warp.uuid++;
-    uint32_t g_wid = core_->id() * arch_.num_warps() + scheduled_warp;
-    uuid = (uint64_t(g_wid) << 32) | instr_uuid;
-  }
-#endif
-
   // fetch next instruction if ibuffer is empty
   if (warp.ibuffer.empty()) {
+    uint64_t uuid = 0;
+  #ifndef NDEBUG
+    {
+      // generate unique universal instruction ID
+      uint32_t instr_uuid = warp.uuid++;
+      uint32_t g_wid = core_->id() * arch_.num_warps() + scheduled_warp;
+      uuid = (uint64_t(g_wid) << 32) | instr_uuid;
+    }
+  #endif
+
     // Fetch
     auto instr_code = this->fetch(scheduled_warp, uuid);
 
     // decode
-    this->decode(instr_code, scheduled_warp);
+    this->decode(instr_code, scheduled_warp, uuid);
   } else {
     // we have a micro-instruction in the ibuffer
     // adjust PC back to original (incremented in execute())
@@ -209,10 +209,8 @@ instr_trace_t* Emulator::step() {
   auto instr = warp.ibuffer.front();
   warp.ibuffer.pop_front();
 
-  DP(1, "Instr: " << std::dec << *instr << " (#" << std::dec << uuid << ")");
-
   // Execute
-  auto trace = this->execute(*instr, scheduled_warp, uuid);
+  auto trace = this->execute(*instr, scheduled_warp);
 
   return trace;
 }

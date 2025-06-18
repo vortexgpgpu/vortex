@@ -136,8 +136,9 @@ public:
     MAX_REG_SOURCES = 3
   };
 
-  Instr(FUType fu_type = FUType::ALU)
-    : fu_type_(fu_type)
+  Instr(uint64_t uuid, FUType fu_type = FUType::ALU)
+    : uuid_(uuid)
+    , fu_type_(fu_type)
   {}
 
   void setFUType(FUType fu_type) {
@@ -170,15 +171,18 @@ public:
 
   RegOpd getDestReg() const { return rdest_; }
 
+  uint64_t getUUID() const { return uuid_; }
+
 private:
 
+  uint64_t uuid_;
   FUType   fu_type_;
   OpType   op_type_;
   IntrArgs args_;
   RegOpd   rsrc_[MAX_REG_SOURCES];
   RegOpd   rdest_;
 
-  friend std::ostream &operator<<(std::ostream &, const Instr&);
+  friend std::ostream &operator<<(std::ostream &, const Instr &);
 };
 
 }

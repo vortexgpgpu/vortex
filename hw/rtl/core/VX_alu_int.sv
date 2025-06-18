@@ -59,10 +59,10 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 
     wire [INST_ALU_BITS-1:0] alu_op = INST_ALU_BITS'(execute_if.data.op_type);
     wire [INST_BR_BITS-1:0]   br_op = INST_BR_BITS'(execute_if.data.op_type);
-    wire                    is_br_op = (execute_if.data.op_args.alu.xtype == ALU_TYPE_BRANCH);
-    wire                   is_sub_op = inst_alu_is_sub(alu_op);
-    wire                   is_signed = inst_alu_signed(alu_op);
-    wire [1:0]              op_class = is_br_op ? inst_br_class(alu_op) : inst_alu_class(alu_op);
+    wire                   is_br_op = (execute_if.data.op_args.alu.xtype == ALU_TYPE_BRANCH);
+    wire                  is_sub_op = inst_alu_is_sub(alu_op);
+    wire                  is_signed = inst_alu_signed(alu_op);
+    wire [1:0]             op_class = is_br_op ? inst_br_class(alu_op) : inst_alu_class(alu_op);
 
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1 = execute_if.data.rs1_data;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2 = execute_if.data.rs2_data;

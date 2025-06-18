@@ -50,7 +50,6 @@ def load_config(filename):
 def parse_simx(log_lines):
     opcode_pattern = r"Instr: ([0-9a-zA-Z_\.]+)"
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
-    instr_pattern = r"code=(0x[0-9a-fA-F]+)"
     core_id_pattern = r"cid=(\d+)"
     warp_id_pattern = r"wid=(\d+)"
     tmask_pattern = r"tmask=(\d+)"
@@ -61,19 +60,17 @@ def parse_simx(log_lines):
     instr_data = None
     for lineno, line in enumerate(log_lines, start=1):
         try:
-            if line.startswith("DEBUG Fetch:"):
+            if line.startswith("DEBUG Instr:"):
                 if instr_data:
                     entries.append(instr_data)
                 instr_data = {}
                 instr_data["lineno"] = lineno
-                instr_data["instr"] = re.search(instr_pattern, line).group(1)
+                instr_data["opcode"] = re.search(opcode_pattern, line).group(1)
                 instr_data["PC"] = re.search(pc_pattern, line).group(1)
                 instr_data["core_id"] = int(re.search(core_id_pattern, line).group(1))
                 instr_data["warp_id"] = int(re.search(warp_id_pattern, line).group(1))
                 instr_data["tmask"] = re.search(tmask_pattern, line).group(1)
                 instr_data["uuid"] = int(re.search(uuid_pattern, line).group(1))
-            elif line.startswith("DEBUG Instr"):
-                instr_data["opcode"] = re.search(opcode_pattern, line).group(1)
             elif line.startswith("DEBUG Src"):
                 src_reg = re.search(operands_pattern, line).group(1)
                 instr_data["operands"] = (instr_data["operands"] + ', ' + src_reg) if 'operands' in instr_data else src_reg
@@ -137,9 +134,8 @@ def merge_data(trace, key, new_data,  mask):
 
 def parse_rtlsim(log_lines):
     global configs
-    line_pattern = r"\d+: cluster(\d+)-socket(\d+)-core(\d+)-(decode|issue\d+|commit):"
+    line_pattern = r"\d+:\s+cluster(\d+)-socket(\d+)-core(\d+)-(issue\d+-ibuffer|issue\d+-dispatch|commit):"
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
-    instr_pattern = r"instr=(0x[0-9a-fA-F]+)"
     ex_pattern = r"ex=([a-zA-Z]+)"
     op_pattern = r"op=([\?0-9a-zA-Z_\.]+)"
     warp_id_pattern = r"wid=(\d+)"
@@ -175,14 +171,13 @@ def parse_rtlsim(log_lines):
                 socket_id = int(line_match.group(2))
                 core_id = int(line_match.group(3))
                 stage = line_match.group(4)
-                if stage == "decode":
+                if re.match(r"issue\d+-ibuffer", stage):
                     trace = {}
                     trace["uuid"] = uuid
                     trace["PC"] = PC
                     trace["core_id"] = ((((cluster_id * num_sockets) + socket_id) * socket_size) + core_id)
                     trace["warp_id"] = warp_id
                     trace["tmask"] = reverse_binary(tmask)
-                    trace["instr"] = re.search(instr_pattern, line).group(1)
                     trace["opcode"] = re.search(op_pattern, line).group(1)
                     trace["used_rs"] = bin_to_array(reverse_binary(re.search(used_rs_pattern, line).group(1)))
                     trace["rd"] = re.search(rd_pattern, line).group(1)
@@ -190,7 +185,7 @@ def parse_rtlsim(log_lines):
                     trace["rs2"] = re.search(rs2_pattern, line).group(1)
                     trace["rs3"] = re.search(rs3_pattern, line).group(1)
                     instr_data[uuid] = trace
-                elif re.match(r"issue\d+", stage):
+                elif re.match(r"issue\d+-dispatch", stage):
                     if uuid in instr_data:
                         trace = instr_data[uuid]
                         sid = int(re.search(sid_pattern, line).group(1))
@@ -205,7 +200,7 @@ def parse_rtlsim(log_lines):
                             merge_data(trace, 'rs3_data', simd_data(re.search(rs3_data_pattern, line).group(1).split(', ')[::-1], sid, num_threads, '0x0'), src_tmask_arr)
                         trace["issued"] = True
                         instr_data[uuid] = trace
-                elif stage == "commit":
+                elif re.match(r"commit", stage):
                     if uuid in instr_data:
                         trace = instr_data[uuid]
                         if "issued" in trace:
@@ -250,7 +245,7 @@ def parse_rtlsim(log_lines):
 
 def write_csv(sublogs, csv_filename, log_type):
     with open(csv_filename, 'w', newline='') as csv_file:
-        fieldnames = ["uuid", "PC", "opcode", "instr", "core_id", "warp_id", "tmask", "destination", "operands"]
+        fieldnames = ["uuid", "PC", "opcode", "core_id", "warp_id", "tmask", "destination", "operands"]
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         writer.writeheader()
 

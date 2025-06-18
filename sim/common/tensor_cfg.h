@@ -22,41 +22,46 @@
 namespace vortex {
 namespace tensor {
 
-
-
 struct fp32 {
   using dtype = uint32_t;
   static constexpr uint32_t bits = 32;
   static constexpr uint32_t id = 0;
+  static constexpr const char* name = "fp32";
 };
 
 struct fp16 {
   using dtype = uint16_t;
   static constexpr uint32_t bits = 16;
   static constexpr uint32_t id = 1;
+  static constexpr const char* name = "fp16";
 };
+
 struct bf16 {
   using dtype = uint16_t;
   static constexpr uint32_t bits = 16;
   static constexpr uint32_t id = 2;
+  static constexpr const char* name = "bf16";
 };
 
 struct int32 {
   using dtype = uint32_t;
   static constexpr uint32_t bits = 32;
   static constexpr uint32_t id = 3;
+  static constexpr const char* name = "int32";
 };
 
 struct int16 {
   using dtype = uint16_t;
   static constexpr uint32_t bits = 16;
   static constexpr uint32_t id = 4;
+  static constexpr const char* name = "int16";
 };
 
 struct int8 {
   using dtype = uint8_t;
   static constexpr uint32_t bits = 8;
   static constexpr uint32_t id = 5;
+  static constexpr const char* name = "int8";
 };
 
 template <uint32_t NT,      // number of threads per warp
@@ -112,8 +117,8 @@ public:
   static constexpr uint32_t NRB = (xtileN * xtileK) / NT; // Number of B registers
   static constexpr uint32_t NRC = (xtileM * xtileN) / NT; // Number of C registers
 
-  static_assert(a_sub_steps != 0, "tcK is too small for tile A");
-  static_assert(b_sub_steps != 0, "tcK is too small for tile B");
+  static_assert((m_steps / a_sub_blocks) != 0, "tcK is too small for tile A");
+  static_assert((n_steps / b_sub_blocks) != 0, "tcK is too small for tile B");
 
   static_assert((xtileM * xtileK <= tile_cap), "xtileM * xtileK <= tile_cap");
   static_assert((xtileN * xtileK <= tile_cap), "xtileN * xtileK <= tile_cap");

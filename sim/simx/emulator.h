@@ -20,7 +20,7 @@
 #include <mem.h>
 #include "types.h"
 #include "instr.h"
-#ifdef EXT_TPU_ENABLE
+#ifdef EXT_TCU_ENABLE
 #include "tensor_unit.h"
 #endif
 #ifdef EXT_V_ENABLE
@@ -112,9 +112,9 @@ private:
 
   uint32_t fetch(uint32_t wid, uint64_t uuid);
 
-  void decode(uint32_t code, uint32_t wid);
+  void decode(uint32_t code, uint32_t wid, uint64_t uuid);
 
-  instr_trace_t* execute(const Instr &instr, uint32_t wid, uint64_t uuid);
+  instr_trace_t* execute(const Instr &instr, uint32_t wid);
 
   void fetch_registers(std::vector<reg_data_t>& out, uint32_t wid, uint32_t src_index, const RegOpd& reg);
 
@@ -155,7 +155,7 @@ private:
   Word        csr_mscratch_;
   wspawn_t    wspawn_;
 
-#ifdef EXT_TPU_ENABLE
+#ifdef EXT_TCU_ENABLE
   TensorUnit::Ptr tensor_unit_;
 #endif
 

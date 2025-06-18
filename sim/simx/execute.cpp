@@ -108,7 +108,7 @@ void Emulator::fetch_registers(std::vector<reg_data_t>& out, uint32_t wid, uint3
   }
 }
 
-instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid) {
+instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
   auto& warp = warps_.at(wid);
   assert(warp.tmask.any());
 
@@ -127,7 +127,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid
 
   // create instruction trace
   auto trace_alloc = core_->trace_pool().allocate(1);
-  auto trace = new (trace_alloc) instr_trace_t(uuid, arch_);
+  auto trace = new (trace_alloc) instr_trace_t(instr.getUUID(), arch_);
   trace->fu_type  = fu_type;
   trace->op_type  = op_type;
   trace->cid      = core_->id();
@@ -141,6 +141,9 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid
   std::vector<reg_data_t> rs1_data;
   std::vector<reg_data_t> rs2_data;
   std::vector<reg_data_t> rs3_data;
+
+  DP(1, "Instr: " << instr << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
+         << ", PC=0x" << std::hex << warp.PC << std::dec << "(#" << instr.getUUID() << ")");
 
   // fetch register values
   if (rsrc0.type != RegType::None) fetch_registers(rs1_data, wid, 0, rsrc0);
@@ -1369,22 +1372,22 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid, uint64_t uuid
       rd_write = true;
     }
   #endif // EXT_V_ENABLE
-  #ifdef EXT_TPU_ENABLE
-    ,[&](TpuType tpu_type) {
+  #ifdef EXT_TCU_ENABLE
+    ,[&](TpuType tcu_type) {
       auto tpuArgs = std::get<IntrTpuArgs>(instrArgs);
-      switch (tpu_type) {
+      switch (tcu_type) {
       case TpuType::WMMA: {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
         assert(warp.tmask.count() == num_threads);
-        tensor_unit_->wmma(wid, tpuArgs.fmt, tpuArgs.step, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
+        tensor_unit_->wmma(wid, tpuArgs.fmt_s, tpuArgs.fmt_d, tpuArgs.step_m, tpuArgs.step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data.get());
         rd_write = true;
       } break;
       default:
         std::abort();
       }
     }
-  #endif // EXT_TPU_ENABLE
+  #endif // EXT_TCU_ENABLE
   );
 
   if (rd_write) {

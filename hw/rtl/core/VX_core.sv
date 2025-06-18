@@ -49,6 +49,7 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_decode_if        decode_if();
     VX_sched_csr_if     sched_csr_if();
     VX_decode_sched_if  decode_sched_if();
+    VX_issue_sched_if   issue_sched_if[`ISSUE_WIDTH]();
     VX_commit_sched_if  commit_sched_if();
     VX_commit_csr_if    commit_csr_if();
     VX_branch_ctl_if    branch_ctl_if[`NUM_ALU_BLOCKS]();
@@ -104,6 +105,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .branch_ctl_if  (branch_ctl_if),
 
         .decode_sched_if(decode_sched_if),
+        .issue_sched_if (issue_sched_if),
         .commit_sched_if(commit_sched_if),
 
         .schedule_if    (schedule_if),
@@ -150,7 +152,8 @@ module VX_core import VX_gpu_pkg::*; #(
 
         .decode_if      (decode_if),
         .writeback_if   (writeback_if),
-        .dispatch_if    (dispatch_if)
+        .dispatch_if    (dispatch_if),
+        .issue_sched_if (issue_sched_if)
     );
 
     VX_execute #(

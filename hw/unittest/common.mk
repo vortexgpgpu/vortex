@@ -24,6 +24,12 @@ VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(RTL_PKGS)
 VL_FLAGS += --cc $(TOP) --top-module $(TOP)
 
+# Extract RTL directories from include directories
+RTL_DIRS := $(patsubst -I%,%,$(filter -I%,$(RTL_INCLUDE)))
+
+# Discover RTL source files from source directories
+RTL_SRCS := $(shell find $(RTL_DIRS) -type f \( -name '*.v' -o -name '*.vh' -o -name '*.sv' \))
+
 # Enable Verilator multithreaded simulation
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(mp.cpu_count())')
 VL_FLAGS += -j $(THREADS)
@@ -46,8 +52,8 @@ endif
 
 all: $(DESTDIR)/$(PROJECT)
 
-$(DESTDIR)/$(PROJECT): $(SRCS)
-	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -o ../$@
+$(DESTDIR)/$(PROJECT): $(SRCS) $(RTL_SRCS)
+	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' --MMD -o ../$@
 
 run: $(DESTDIR)/$(PROJECT)
 	$(DESTDIR)/$(PROJECT)

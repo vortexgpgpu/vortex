@@ -422,7 +422,7 @@ void VpuUnit::tick() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef EXT_TPU_ENABLE
+#ifdef EXT_TCU_ENABLE
 
 TpuUnit::TpuUnit(const SimContext& ctx, Core* core)
 	: FuncUnit(ctx, core, "tpu-unit")

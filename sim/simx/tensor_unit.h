@@ -20,6 +20,8 @@ namespace vortex {
 
 class Core;
 
+op_string_t op_string(TpuType tcu_type, IntrTpuArgs args);
+
 class TensorUnit : public SimObject<TensorUnit> {
 public:
 
@@ -51,8 +53,10 @@ public:
   virtual void tick();
 
 	void wmma(uint32_t wid,
-			 	    uint32_t fmt,
-			 	    uint32_t step,
+			 	    uint32_t fmt_s,
+						uint32_t fmt_d,
+			 	    uint32_t step_m,
+						uint32_t step_n,
 	          const std::vector<reg_data_t>& rs1_data,
 					  const std::vector<reg_data_t>& rs2_data,
 					  const std::vector<reg_data_t>& rs3_data,

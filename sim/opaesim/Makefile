@@ -14,6 +14,7 @@ CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/yaml-cpp/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/src
 CXXFLAGS += -DXLEN_$(XLEN)
+CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += -shared $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator -L$(THIRD_PARTY_DIR)/ramulator -lramulator -pthread
@@ -25,6 +26,7 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE
 DBG_TRACE_FLAGS += -DDBG_TRACE_AFU
 DBG_TRACE_FLAGS += -DDBG_TRACE_SCOPE
 DBG_TRACE_FLAGS += -DDBG_TRACE_GBAR
+DBG_TRACE_FLAGS += -DDBG_TRACE_TCU
 
 # Control logic analyzer monitors
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_AFU
@@ -49,6 +51,19 @@ endif
 RTL_INCLUDE = -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 RTL_INCLUDE += -I$(AFU_DIR) -I$(AFU_DIR)/ccip
 
+# Add V extension sources
+ifneq (,$(findstring -DEXT_V_ENABLE, $(CONFIGS)))
+	RTL_INCLUDE += -I$(RTL_DIR)/vpu
+endif
+
+# Add TCU extension sources
+ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu
+endif
+
+RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
+
 TOP = vortex_afu_shim
 
 VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic
@@ -61,7 +76,11 @@ VL_FLAGS += verilator.vlt
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(RTL_PKGS)
 
-CXXFLAGS += $(CONFIGS)
+# Extract RTL directories from include directories
+RTL_DIRS := $(patsubst -I%,%,$(filter -I%,$(RTL_INCLUDE)))
+
+# Discover RTL source files from source directories
+RTL_SRCS := $(shell find $(RTL_DIRS) -type f \( -name '*.v' -o -name '*.vh' -o -name '*.sv' \))
 
 # Enable Verilator multithreaded simulation
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(mp.cpu_count())')
@@ -109,7 +128,7 @@ $(DESTDIR)/scope.json: $(DESTDIR)/vortex.xml
 $(DESTDIR)/vortex_afu.h : $(AFU_DIR)/vortex_afu.vh
 	$(SCRIPT_DIR)/gen_config.py -i $^ -o $@
 
-$(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/vortex_afu.h $(SCOPE_JSON) $(CONFIG_FILE)
+$(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/vortex_afu.h $(SCOPE_JSON) $(CONFIG_FILE) $(RTL_SRCS)
 	verilator --build --exe $(VL_FLAGS) --cc $(TOP) --top-module $(TOP) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
 # updates the timestamp when flags changed.

@@ -69,6 +69,13 @@ union reg_data_t {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+struct op_string_t {
+  std::string op;
+  std::string arg;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 enum class RegType {
   None,
   Integer,
@@ -123,7 +130,7 @@ enum class FUType {
 #ifdef EXT_V_ENABLE
   VPU,
 #endif
-#ifdef EXT_TPU_ENABLE
+#ifdef EXT_TCU_ENABLE
   TPU,
 #endif
   Count
@@ -138,8 +145,8 @@ inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
 #ifdef EXT_V_ENABLE
   case FUType::VPU: os << "VPU"; break;
 #endif
-#ifdef EXT_TPU_ENABLE
-  case FUType::TPU: os << "TPU"; break;
+#ifdef EXT_TCU_ENABLE
+  case FUType::TPU: os << "TCU"; break;
 #endif
   default:
     assert(false);
@@ -595,8 +602,10 @@ enum class TpuType {
 };
 
 struct IntrTpuArgs {
-  uint32_t fmt  : 8;
-  uint32_t step : 8;
+  uint32_t fmt_s  : 4;
+  uint32_t fmt_d  : 4;
+  uint32_t step_m : 4;
+  uint32_t step_n : 4;
 };
 
 inline std::ostream &operator<<(std::ostream &os, const TpuType& type) {
@@ -624,7 +633,7 @@ using OpType = std::variant<
 , VlsType
 , VopType
 #endif
-#ifdef EXT_TPU_ENABLE
+#ifdef EXT_TCU_ENABLE
 , TpuType
 #endif
 >;
@@ -643,7 +652,7 @@ using IntrArgs = std::variant<
 , IntrVlsArgs
 , IntrVopArgs
 #endif
-#ifdef EXT_TPU_ENABLE
+#ifdef EXT_TCU_ENABLE
 , IntrTpuArgs
 #endif
 >;

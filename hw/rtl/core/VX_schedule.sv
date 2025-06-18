@@ -31,6 +31,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
     VX_warp_ctl_if.slave    warp_ctl_if,
     VX_branch_ctl_if.slave  branch_ctl_if [`NUM_ALU_BLOCKS],
     VX_decode_sched_if.slave decode_sched_if,
+    VX_issue_sched_if.slave issue_sched_if[`ISSUE_WIDTH],
     VX_commit_sched_if.slave commit_sched_if,
 
     // outputs
@@ -362,13 +363,17 @@ module VX_schedule import VX_gpu_pkg::*; #(
     wire [`NUM_WARPS-1:0] pending_warp_alm_empty;
 
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_pending_sizes
+
+        localparam isw = wid_to_isw(i);
+        localparam wis = wid_to_wis(i);
+
         VX_pending_size #(
             .SIZE      (4096),
             .ALM_EMPTY (1)
         ) counter (
             .clk       (clk),
             .reset     (reset),
-            .incr      (schedule_if_fire && (schedule_if.data.wid == NW_WIDTH'(i))),
+            .incr      (issue_sched_if[isw].valid && (issue_sched_if[isw].wis == wis)),
             .decr      (commit_sched_if.committed_warps[i]),
             .empty     (pending_warp_empty[i]),
             .alm_empty (pending_warp_alm_empty[i]),

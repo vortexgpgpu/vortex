@@ -13,22 +13,19 @@
 
 `include "VX_define.vh"
 
-interface VX_ibuffer_if import VX_gpu_pkg::*; ();
+interface VX_issue_sched_if import VX_gpu_pkg::*; ();
 
-    logic     valid;
-    ibuffer_t data;
-    logic     ready;
+    wire [ISSUE_WIS_W-1:0] wis;
+    wire valid;
 
     modport master (
         output valid,
-        output data,
-        input  ready
+        output wis
     );
 
     modport slave (
-        input  valid,
-        input  data,
-        output ready
+        input valid,
+        input wis
     );
 
 endinterface

@@ -145,6 +145,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     `STATIC_ASSERT($bits(lsu_args_t)  == $bits(op_args_t), ("lsu_args_t size mismatch: current=%0d, expected=%0d", $bits(lsu_args_t), $bits(op_args_t)));
     `STATIC_ASSERT($bits(csr_args_t)  == $bits(op_args_t), ("csr_args_t size mismatch: current=%0d, expected=%0d", $bits(csr_args_t), $bits(op_args_t)));
     `STATIC_ASSERT($bits(wctl_args_t) == $bits(op_args_t), ("wctl_args_t size mismatch: current=%0d, expected=%0d", $bits(wctl_args_t), $bits(op_args_t)));
+    `STATIC_ASSERT($bits(tcu_args_t) == $bits(op_args_t), ("tcu_args_t size mismatch: current=%0d, expected=%0d", $bits(tcu_args_t), $bits(op_args_t)));
 
     always @(*) begin
 
@@ -506,6 +507,23 @@ module VX_decode import VX_gpu_pkg::*; #(
                             default:;
                         endcase
                     end
+                    7'h02: begin
+                        case (funct3)
+                            3'h0: begin // WMMA
+                                ex_type = EX_TCU;
+                                op_type = INST_OP_BITS'(INST_TCU_WMMA);
+                                op_args.tcu.fmt_s  = rs1[3:0];
+                                op_args.tcu.fmt_d  = rd[3:0];
+                                op_args.tcu.step_m = '0;
+                                op_args.tcu.step_n = '0;
+                                `USED_IREG (rd);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                                `USED_IREG (rs3);
+                            end
+                            default:;
+                        endcase
+                    end
                     default:;
                 endcase
             end
@@ -542,28 +560,6 @@ module VX_decode import VX_gpu_pkg::*; #(
 
 `ifndef L1_ENABLE
     assign fetch_if.ibuf_pop = decode_if.ibuf_pop;
-`endif
-
-`ifdef DBG_TRACE_PIPELINE
-    always @(posedge clk) begin
-        if (decode_if.valid && decode_if.ready) begin
-            `TRACE(1, ("%t: %s: wid=%0d, PC=0x%0h, instr=0x%0h, ex=", $time, INSTANCE_ID, decode_if.data.wid, {decode_if.data.PC, 1'd0}, instr))
-            trace_ex_type(1, decode_if.data.ex_type);
-            `TRACE(1, (", op="))
-            trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
-            `TRACE(1, (", tmask=%b, wb=%b, used_rs=%b, rd=", decode_if.data.tmask, decode_if.data.wb, decode_if.data.used_rs))
-            trace_reg_idx(1, decode_if.data.rd);
-            `TRACE(1, (", rs1="))
-            trace_reg_idx(1, decode_if.data.rs1);
-            `TRACE(1, (", rs2="))
-            trace_reg_idx(1, decode_if.data.rs2);
-            `TRACE(1, (", rs3="))
-            trace_reg_idx(1, decode_if.data.rs3);
-            `TRACE(1, (", "))
-            trace_op_args(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
-            `TRACE(1, (" (#%0d)\n", decode_if.data.uuid))
-        end
-    end
 `endif
 
 endmodule

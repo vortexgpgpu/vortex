@@ -111,6 +111,11 @@ build_driver() {
     cmd_opts=$(add_option "$cmd_opts" "make -C $DRIVER_PATH > /dev/null")
     echo "Running: $cmd_opts"
     eval "$cmd_opts"
+    status=$?
+    if [ $status -ne 0 ]; then
+        echo "Error building driver: $DRIVER_PATH"
+        exit $status
+    fi
 }
 
 run_app() {

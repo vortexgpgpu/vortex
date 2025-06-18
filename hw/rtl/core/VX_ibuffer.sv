@@ -41,6 +41,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     assign decode_if.ready = ibuf_ready_in[decode_wis];
 
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_instr_bufs
+        VX_ibuffer_if uop_sequencer_if();
         VX_elastic_buffer #(
             .DATAW   (OUT_DATAW),
             .SIZE    (`IBUF_SIZE),
@@ -64,13 +65,20 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 decode_if.data.rs3
             }),
             .ready_in (ibuf_ready_in[w]),
-            .valid_out(ibuffer_if[w].valid),
-            .data_out (ibuffer_if[w].data),
-            .ready_out(ibuffer_if[w].ready)
+            .valid_out(uop_sequencer_if.valid),
+            .data_out (uop_sequencer_if.data),
+            .ready_out(uop_sequencer_if.ready)
         );
     `ifndef L1_ENABLE
-        assign decode_if.ibuf_pop[w] = ibuffer_if[w].valid && ibuffer_if[w].ready;
+        assign decode_if.ibuf_pop[w] = uop_sequencer_if[w].valid && uop_sequencer_if[w].ready;
     `endif
+
+        VX_uop_sequencer uop_sequencer (
+            .clk       (clk),
+            .reset     (reset),
+            .input_if  (uop_sequencer_if),
+            .output_if (ibuffer_if[w])
+        );
     end
 
 `ifdef PERF_ENABLE

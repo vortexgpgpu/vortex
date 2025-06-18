@@ -110,7 +110,7 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef EXT_TPU_ENABLE
+#ifdef EXT_TCU_ENABLE
 
 class TpuUnit : public FuncUnit {
 public:

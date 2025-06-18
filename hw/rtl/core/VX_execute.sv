@@ -86,6 +86,17 @@ module VX_execute import VX_gpu_pkg::*; #(
     );
 `endif
 
+`ifdef EXT_TCU_ENABLE
+    VX_tcu_unit #(
+        .INSTANCE_ID (`SFORMATF(("%s-tcu", INSTANCE_ID)))
+    ) tcu_unit (
+        .clk            (clk),
+        .reset          (reset),
+        .dispatch_if    (dispatch_if[EX_TCU * `ISSUE_WIDTH +: `ISSUE_WIDTH]),
+        .commit_if      (commit_if[EX_TCU * `ISSUE_WIDTH +: `ISSUE_WIDTH])
+    );
+`endif
+
     VX_sfu_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-sfu", INSTANCE_ID))),
         .CORE_ID (CORE_ID)

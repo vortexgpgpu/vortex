@@ -201,9 +201,9 @@ public:
       if (input.empty())
           return;
       auto trace = input.front();
-      auto tpu_type = std::get<TpuType>(trace->op_type);
+      auto tcu_type = std::get<TpuType>(trace->op_type);
       int delay = 0;
-      switch (tpu_type) {
+      switch (tcu_type) {
       case TpuType::WMMA:
         delay = 4;
         break;
@@ -211,14 +211,16 @@ public:
         std::abort();
       }
       simobject_->Outputs.at(iw).push(trace, 2 + delay);
-      DT(3, simobject_->name() << ": op=" << tpu_type << ", " << *trace);
+      DT(3, simobject_->name() << ": op=" << tcu_type << ", " << *trace);
       input.pop();
     }
   }
 
   void wmma(uint32_t wid,
-            uint32_t fmt,
-            uint32_t step,
+            uint32_t fmt_s,
+            uint32_t fmt_d,
+            uint32_t step_m,
+            uint32_t step_n,
             const std::vector<reg_data_t>& rs1_data,
             const std::vector<reg_data_t>& rs2_data,
             const std::vector<reg_data_t>& rs3_data,
@@ -226,23 +228,30 @@ public:
             ExeTraceData* trace_data) {
     __unused(wid);
     __unused(trace_data);
-
-    uint32_t fmt_s = fmt & 0xf;
-    uint32_t fmt_d = fmt >> 4;
     auto fedp = select_FEDP(fmt_s, fmt_d);
 
-    uint32_t m = step & 0xf;
-    uint32_t n = step >> 4;
-    uint32_t a_off = (m % cfg::a_sub_blocks) * cfg::a_block_size;
-    uint32_t b_off = (n % cfg::b_sub_blocks) * cfg::b_block_size;
+    uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
+    uint32_t b_off = (step_n % cfg::b_sub_blocks) * cfg::b_block_size;
 
     for (uint32_t i = 0; i < cfg::tcM; ++i) {
       for (uint32_t j = 0; j < cfg::tcN; ++j) {
         auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
         auto b_col = rs2_data.data() + b_off + j * cfg::tcK;
-        auto c = rs3_data.at(i * cfg::tcN + j).f32;
-        auto d = fedp(a_row, b_col, c);
-        rd_data.at(i * cfg::tcN + j).u64 = nan_box(floatToBits(d));
+        auto c_val = rs3_data.at(i * cfg::tcN + j).f32;
+        auto d_val = fedp(a_row, b_col, c_val);
+        rd_data.at(i * cfg::tcN + j).u64 = nan_box(floatToBits(d_val));
+
+        DTH(3, "FEDP: wid=" << wid << ", i=" << i << ", j=" << j << ", m=" << step_m << ", n=" << step_n << ", a_row={" << std::hex);
+        for (uint32_t q = 0; q < cfg::tcK; ++q) {
+          if (q) DTN(3, ", ");
+          DTN(3, "0x" << a_row[q].u32);
+        }
+        DTN(3, "}, b_col={");
+        for (uint32_t q = 0; q < cfg::tcK; ++q) {
+          if (q) DTN(3, ", ");
+          DTN(3, "0x" << b_col[q].u32);
+        }
+        DTN(3, "}, c_val=0x" << floatToBits(c_val) << ", d_val=0x" << floatToBits(d_val) << std::dec << std::endl);
       }
     }
   }
@@ -258,6 +267,31 @@ private:
   Arch          arch_;
   PerfStats     perf_stats_;
 };
+
+///////////////////////////////////////////////////////////////////////////////
+
+static std::string fmt_string(uint32_t fmt) {
+  switch (fmt) {
+  case vt::fp32::id:  return vt::fp32::name;
+  case vt::fp16::id:  return vt::fp16::name;
+  case vt::bf16::id:  return vt::bf16::name;
+  case vt::int32::id: return vt::int32::name;
+  case vt::int16::id: return vt::int16::name;
+  case vt::int8::id:  return vt::int8::name;
+  default:
+    std::abort();
+  }
+}
+
+op_string_t vortex::op_string(TpuType tcu_type, IntrTpuArgs args) {
+  switch (tcu_type) {
+  case TpuType::WMMA:
+    return {"WMMA." + fmt_string(args.fmt_s) + "." + fmt_string(args.fmt_d)
+             + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n), ""};
+  default:
+    std::abort();
+  }
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -285,12 +319,14 @@ const TensorUnit::PerfStats &TensorUnit::perf_stats() const {
 }
 
 void TensorUnit::wmma(uint32_t wid,
-                      uint32_t fmt,
-                      uint32_t step,
+                      uint32_t fmt_s,
+                      uint32_t fmt_d,
+                      uint32_t step_m,
+                      uint32_t step_n,
                       const std::vector<reg_data_t>& rs1_data,
                       const std::vector<reg_data_t>& rs2_data,
                       const std::vector<reg_data_t>& rs3_data,
                       std::vector<reg_data_t>& rd_data,
                       ExeTraceData* trace_data) {
-  impl_->wmma(wid, fmt, step, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
+  impl_->wmma(wid, fmt_s, fmt_d, step_m, step_n, rs1_data, rs2_data, rs3_data, rd_data, trace_data);
 }

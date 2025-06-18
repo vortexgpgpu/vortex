@@ -59,7 +59,7 @@ public:
     uint64_t scrb_sfu;
     uint64_t scrb_csrs;
     uint64_t scrb_wctl;
-  #ifdef EXT_TPU_ENABLE
+  #ifdef EXT_TCU_ENABLE
     uint64_t scrb_tpu;
   #endif
   #ifdef EXT_V_ENABLE
@@ -86,7 +86,7 @@ public:
       , scrb_sfu(0)
       , scrb_csrs(0)
       , scrb_wctl(0)
-    #ifdef EXT_TPU_ENABLE
+    #ifdef EXT_TCU_ENABLE
       , scrb_tpu(0)
     #endif
     #ifdef EXT_V_ENABLE
@@ -161,7 +161,7 @@ public:
     return emulator_.dcache_write(data, addr, size);
   }
 
-#ifdef EXT_TPU_ENABLE
+#ifdef EXT_TCU_ENABLE
   TensorUnit::Ptr& tensor_unit() {
     return tensor_unit_;
   }
@@ -194,7 +194,7 @@ private:
   Socket* socket_;
   const Arch& arch_;
 
-#ifdef EXT_TPU_ENABLE
+#ifdef EXT_TCU_ENABLE
   TensorUnit::Ptr tensor_unit_;
 #endif
 

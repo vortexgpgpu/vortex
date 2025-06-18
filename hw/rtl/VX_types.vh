@@ -100,8 +100,10 @@
 `define VX_CSR_MPM_SCRB_CSRS_H          12'hB8C
 `define VX_CSR_MPM_SCRB_WCTL            12'hB0D
 `define VX_CSR_MPM_SCRB_WCTL_H          12'hB8D
-`define VX_CSR_MPM_SCRB_VEC             12'hB13
-`define VX_CSR_MPM_SCRB_VEC_H           12'hB93
+`define VX_CSR_MPM_SCRB_VPU             12'hB13
+`define VX_CSR_MPM_SCRB_VPU_H           12'hB93
+`define VX_CSR_MPM_SCRB_TPU             12'hB14
+`define VX_CSR_MPM_SCRB_TPU_H           12'hB95
 // PERF: memory
 `define VX_CSR_MPM_IFETCHES             12'hB0E
 `define VX_CSR_MPM_IFETCHES_H           12'hB8E

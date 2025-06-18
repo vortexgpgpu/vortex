@@ -27,7 +27,8 @@ module VX_issue import VX_gpu_pkg::*; #(
 
     VX_decode_if.slave      decode_if,
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
-    VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS * `ISSUE_WIDTH]
+    VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS * `ISSUE_WIDTH],
+    VX_issue_sched_if.master issue_sched_if[`ISSUE_WIDTH]
 );
     `STATIC_ASSERT ((`ISSUE_WIDTH <= `NUM_WARPS), ("invalid parameter"))
 
@@ -76,7 +77,8 @@ module VX_issue import VX_gpu_pkg::*; #(
         `endif
             .decode_if    (slice_decode_if),
             .writeback_if (writeback_if[issue_id]),
-            .dispatch_if  (per_issue_dispatch_if)
+            .dispatch_if  (per_issue_dispatch_if),
+            .issue_sched_if(issue_sched_if[issue_id])
         );
 
         // Assign transposed dispatch_if

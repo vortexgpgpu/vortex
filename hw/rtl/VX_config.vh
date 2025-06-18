@@ -887,10 +887,10 @@
     `define EXT_ZICOND_ENABLED 0
 `endif
 
-`ifdef EXT_TPU_ENABLE
-    `define EXT_TPU_ENABLED 1
+`ifdef EXT_TCU_ENABLE
+    `define EXT_TCU_ENABLED 1
 `else
-    `define EXT_TPU_ENABLED 0
+    `define EXT_TCU_ENABLED 0
 `endif
 
 `define ISA_STD_A           0
@@ -911,7 +911,7 @@
 `define ISA_EXT_L3CACHE     3
 `define ISA_EXT_LMEM        4
 `define ISA_EXT_ZICOND      5
-`define ISA_EXT_TPU         6
+`define ISA_EXT_TCU         6
 
 `define MISA_EXT  (`ICACHE_ENABLED  << `ISA_EXT_ICACHE) \
                 | (`DCACHE_ENABLED  << `ISA_EXT_DCACHE) \
@@ -919,7 +919,7 @@
                 | (`L3_ENABLED      << `ISA_EXT_L3CACHE) \
                 | (`LMEM_ENABLED    << `ISA_EXT_LMEM) \
                 | (`EXT_ZICOND_ENABLED << `ISA_EXT_ZICOND) \
-                | (`EXT_TPU_ENABLED << `ISA_EXT_TPU) \
+                | (`EXT_TCU_ENABLED << `ISA_EXT_TCU) \
 
 `define MISA_STD  (`EXT_A_ENABLED <<  0) /* A - Atomic Instructions extension */ \
                 | (0 <<  1) /* B - Tentatively reserved for Bit operations extension */ \
