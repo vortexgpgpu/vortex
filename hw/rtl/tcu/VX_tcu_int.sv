@@ -110,7 +110,7 @@ module VX_tcu_int import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [`XLEN-1:0] c_val = execute_if.data.rs3_data[i * TCU_TC_N + j];
 
             VX_tcu_fedp_int #(
-                .DATAW (`XLEN),
+                .DATAW (32),
                 .N     (TCU_TC_K)
             ) fedp (
                 .clk   (clk),

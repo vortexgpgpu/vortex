@@ -70,7 +70,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
             .ready_out(uop_sequencer_if.ready)
         );
     `ifndef L1_ENABLE
-        assign decode_if.ibuf_pop[w] = uop_sequencer_if[w].valid && uop_sequencer_if[w].ready;
+        assign decode_if.ibuf_pop[w] = uop_sequencer_if.valid && uop_sequencer_if.ready;
     `endif
 
         VX_uop_sequencer uop_sequencer (

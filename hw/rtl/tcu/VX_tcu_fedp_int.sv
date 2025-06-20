@@ -24,16 +24,18 @@ module VX_tcu_fedp_int #(
     input  wire[2:0] fmt_s,
     input  wire[2:0] fmt_d,
 
-    input  wire [N-1:0][DATAW-1:0] a_row,
-    input  wire [N-1:0][DATAW-1:0] b_col,
-    input  wire [DATAW-1:0] c_val,
-    output wire [DATAW-1:0] d_val
+    input  wire [N-1:0][`XLEN-1:0] a_row,
+    input  wire [N-1:0][`XLEN-1:0] b_col,
+    input  wire [`XLEN-1:0] c_val,
+    output wire [`XLEN-1:0] d_val
 );
     wire [DATAW-1:0] a_row_p [0:N-1];
     wire [DATAW-1:0] b_col_p [0:N-1];
 
     wire [2:0] fmt_s_p [0:N-1];
     wire [2:0] fmt_d_p [0:N-1];
+
+    `UNUSED_VAR ({a_row, b_col, c_val});
 
     for (genvar i = 0; i < N; i++) begin: g_pipe
         VX_pipe_register #(
@@ -43,7 +45,7 @@ module VX_tcu_fedp_int #(
             .clk      (clk),
             .reset    (reset),
             .enable   (enable),
-            .data_in  (a_row[i]),
+            .data_in  (a_row[i][DATAW-1:0]),
             .data_out (a_row_p[i])
         );
         VX_pipe_register #(
@@ -53,7 +55,7 @@ module VX_tcu_fedp_int #(
             .clk      (clk),
             .reset    (reset),
             .enable   (enable),
-            .data_in  (b_col[i]),
+            .data_in  (b_col[i][DATAW-1:0]),
             .data_out (b_col_p[i])
         );
 
@@ -71,7 +73,7 @@ module VX_tcu_fedp_int #(
 
     wire [DATAW-1:0] fma_out [0:N];
 
-    assign fma_out[0] = c_val;
+    assign fma_out[0] = c_val[DATAW-1:0];
 
     for (genvar i = 0; i < N; i++) begin : g_fmas
         VX_tcu_fma_int #(
@@ -89,6 +91,6 @@ module VX_tcu_fedp_int #(
         );
     end
 
-    assign d_val = fma_out[N];
+    assign d_val = `XLEN'(fma_out[N]);
 
 endmodule

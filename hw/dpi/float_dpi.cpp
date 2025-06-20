@@ -81,7 +81,7 @@ inline bool is_nan_boxed(uint64_t value) {
 
 inline bool is_nan_boxed16(uint64_t value) {
 #ifdef XLEN_64
-  return (uint32_t(value >> 16) == 0xffffffffffff);
+  return (uint64_t(value >> 16) == 0xffffffffffff);
 #else
   return true;
 #endif
