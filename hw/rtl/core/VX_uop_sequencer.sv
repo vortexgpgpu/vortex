@@ -26,10 +26,14 @@ module VX_uop_sequencer import
 );
     ibuffer_t uop_data;
 
-    wire is_uop_input = (input_if.data.ex_type == EX_TCU && input_if.data.op_type == INST_TCU_WMMA);
+    wire is_uop_input;
     wire uop_start = input_if.valid && is_uop_input;
     wire uop_next = output_if.ready;
     wire uop_done;
+
+`ifdef EXT_TCU_ENABLE
+
+    assign is_uop_input = (input_if.data.ex_type == EX_TCU && input_if.data.op_type == INST_TCU_WMMA);
 
     VX_tcu_uops tcu_uops (
         .clk     (clk),
@@ -40,6 +44,14 @@ module VX_uop_sequencer import
         .next    (uop_next),
         .done    (uop_done)
     );
+
+`else
+
+    assign is_uop_input = 0;
+    assign uop_done = 0;
+    assign uop_data = '0;
+
+`endif
 
     reg uop_active;
 

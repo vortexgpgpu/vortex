@@ -14,9 +14,9 @@
 // Modified port of cast module from fpnew Libray
 // reference: https://github.com/pulp-platform/fpnew
 
-`include "VX_fpu_define.vh"
-
 `ifdef FPU_DSP
+
+`include "VX_fpu_define.vh"
 
 module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter LATENCY   = 1,
@@ -317,4 +317,5 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     );
 
 endmodule
+
 `endif

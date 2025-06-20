@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_slice import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
+module VX_tcu_int import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
@@ -31,6 +31,9 @@ module VX_tcu_slice import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     localparam MDATA_WIDTH = UUID_WIDTH + NW_WIDTH + PC_BITS + NUM_REGS_BITS;
 
+    localparam PIPE_LATENCY = TCU_TC_K;
+    localparam MDATA_QUEUE_DEPTH = 1 << $clog2(PIPE_LATENCY);
+
     localparam LG_A_BS = $clog2(TCU_A_BLOCK_SIZE);
     localparam LG_B_BS = $clog2(TCU_B_BLOCK_SIZE);
     localparam OFF_W   = $clog2(TCU_BLOCK_CAP);
@@ -38,11 +41,10 @@ module VX_tcu_slice import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [3:0] step_m = execute_if.data.op_args.tcu.step_m;
     wire [3:0] step_n = execute_if.data.op_args.tcu.step_n;
 
-    `UNUSED_VAR (step_m);
-    `UNUSED_VAR (step_n);
-
     wire [3:0] fmt_s = execute_if.data.op_args.tcu.fmt_s;
     wire [3:0] fmt_d = execute_if.data.op_args.tcu.fmt_d;
+
+    `UNUSED_VAR ({step_m, step_n, fmt_s, fmt_d});
 
     wire [MDATA_WIDTH-1:0] mdata_queue_din, mdata_queue_dout;
     wire mdata_queue_full;
@@ -59,8 +61,7 @@ module VX_tcu_slice import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire fedp_enable, fedp_done;
 
     // FEDP delay handling
-    reg [MAX_PIPE_LAT-1:0] fedp_delay_pipe;
-    wire [LG_MAX_PIPE_LAT-1:0] fedp_delay = get_fedp_latency(fmt_s);
+    reg [PIPE_LATENCY-1:0] fedp_delay_pipe;
     always @(posedge clk) begin
         if (reset) begin
             fedp_delay_pipe <= '0;
@@ -69,7 +70,7 @@ module VX_tcu_slice import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 fedp_delay_pipe <= fedp_delay_pipe >> 1;
             end
             if (execute_fire) begin
-                fedp_delay_pipe[fedp_delay] <= 1;
+                fedp_delay_pipe[PIPE_LATENCY-1] <= 1;
             end
         end
     end
@@ -81,7 +82,7 @@ module VX_tcu_slice import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     VX_fifo_queue #(
         .DATAW (MDATA_WIDTH),
-        .DEPTH (MAX_PIPE_LAT)
+        .DEPTH (MDATA_QUEUE_DEPTH)
     ) mdata_queue (
         .clk    (clk),
         .reset  (reset),
@@ -106,18 +107,17 @@ module VX_tcu_slice import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
             wire [TCU_TC_K-1:0][`XLEN-1:0] a_row = execute_if.data.rs1_data[a_off + i * TCU_TC_K +: TCU_TC_K];
             wire [TCU_TC_K-1:0][`XLEN-1:0] b_col = execute_if.data.rs2_data[b_off + j * TCU_TC_K +: TCU_TC_K];
-
             wire [`XLEN-1:0] c_val = execute_if.data.rs3_data[i * TCU_TC_N + j];
 
-            VX_tcu_fedp #(
+            VX_tcu_fedp_int #(
                 .DATAW (`XLEN),
                 .N     (TCU_TC_K)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
                 .enable(fedp_enable),
-                .fmt_s (fmt_s),
-                .fmt_d (fmt_d),
+                .fmt_s (fmt_s[2:0]),
+                .fmt_d (fmt_d[2:0]),
                 .a_row (a_row),
                 .b_col (b_col),
                 .c_val (c_val),

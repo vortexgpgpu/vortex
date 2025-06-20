@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_fedp #(
+module VX_tcu_fedp_int #(
     parameter DATAW = 32,
     parameter N     = 2
 ) (
@@ -21,19 +21,19 @@ module VX_tcu_fedp #(
     input  wire reset,
     input  wire enable,
 
-    input  wire[3:0] fmt_s,
-    input  wire[3:0] fmt_d,
+    input  wire[2:0] fmt_s,
+    input  wire[2:0] fmt_d,
 
     input  wire [N-1:0][DATAW-1:0] a_row,
     input  wire [N-1:0][DATAW-1:0] b_col,
     input  wire [DATAW-1:0] c_val,
     output wire [DATAW-1:0] d_val
 );
-    `UNUSED_VAR (fmt_s);
-    `UNUSED_VAR (fmt_d);
+    wire [DATAW-1:0] a_row_p [0:N-1];
+    wire [DATAW-1:0] b_col_p [0:N-1];
 
-    wire [DATAW-1:0] a_delayed [0:N-1];
-    wire [DATAW-1:0] b_delayed [0:N-1];
+    wire [2:0] fmt_s_p [0:N-1];
+    wire [2:0] fmt_d_p [0:N-1];
 
     for (genvar i = 0; i < N; i++) begin: g_pipe
         VX_pipe_register #(
@@ -44,7 +44,7 @@ module VX_tcu_fedp #(
             .reset    (reset),
             .enable   (enable),
             .data_in  (a_row[i]),
-            .data_out (a_delayed[i])
+            .data_out (a_row_p[i])
         );
         VX_pipe_register #(
             .DATAW (DATAW),
@@ -54,27 +54,41 @@ module VX_tcu_fedp #(
             .reset    (reset),
             .enable   (enable),
             .data_in  (b_col[i]),
-            .data_out (b_delayed[i])
+            .data_out (b_col_p[i])
+        );
+
+        VX_pipe_register #(
+            .DATAW (6),
+            .DEPTH (i)
+        ) fmt_pipe (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (enable),
+            .data_in  ({fmt_d, fmt_s}),
+            .data_out ({fmt_d_p[i], fmt_s_p[i]})
         );
     end
 
-    wire [DATAW-1:0] fma_out [0:N-1];
+    wire [DATAW-1:0] fma_out [0:N];
+
+    assign fma_out[0] = c_val;
 
     for (genvar i = 0; i < N; i++) begin : g_fmas
-        wire [DATAW-1:0] c_in = (i==0) ? c_val : fma_out[i-1];
         VX_tcu_fma_int #(
             .DATAW (DATAW)
         ) fma (
             .clk    (clk),
             .reset  (reset),
             .enable (enable),
-            .a      (a_delayed[i]),
-            .b      (b_delayed[i]),
-            .c      (c_in),
-            .y      (fma_out[i])
+            .fmt_s  (fmt_s_p[i]),
+            .fmt_d  (fmt_d_p[i]),
+            .a      (a_row_p[i]),
+            .b      (b_col_p[i]),
+            .c      (fma_out[i]),
+            .y      (fma_out[i+1])
         );
     end
 
-    assign d_val = fma_out[N-1];
+    assign d_val = fma_out[N];
 
 endmodule

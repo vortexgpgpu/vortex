@@ -270,23 +270,10 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static std::string fmt_string(uint32_t fmt) {
-  switch (fmt) {
-  case vt::fp32::id:  return vt::fp32::name;
-  case vt::fp16::id:  return vt::fp16::name;
-  case vt::bf16::id:  return vt::bf16::name;
-  case vt::int32::id: return vt::int32::name;
-  case vt::int16::id: return vt::int16::name;
-  case vt::int8::id:  return vt::int8::name;
-  default:
-    std::abort();
-  }
-}
-
 op_string_t vortex::op_string(TpuType tcu_type, IntrTpuArgs args) {
   switch (tcu_type) {
   case TpuType::WMMA:
-    return {"WMMA." + fmt_string(args.fmt_s) + "." + fmt_string(args.fmt_d)
+    return {"WMMA." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
              + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n), ""};
   default:
     std::abort();

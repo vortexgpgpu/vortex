@@ -41,7 +41,7 @@ extern "C" {
   void dpi_ftou(bool enable, int dst_fmt, int src_fmt, int64_t a, const svBitVecVal* frm, int64_t* result, svBitVecVal* fflags);
   void dpi_itof(bool enable, int dst_fmt, int src_fmt, int64_t a, const svBitVecVal* frm, int64_t* result, svBitVecVal* fflags);
   void dpi_utof(bool enable, int dst_fmt, int src_fmt, int64_t a, const svBitVecVal* frm, int64_t* result, svBitVecVal* fflags);
-  void dpi_f2f(bool enable, int dst_fmt, int64_t a, int64_t* result);
+  void dpi_f2f(bool enable, int dst_fmt, int src_fmt, int64_t a, int64_t* result);
 
   void dpi_fclss(bool enable, int dst_fmt, int64_t a, int64_t* result);
   void dpi_fsgnj(bool enable, int dst_fmt, int64_t a, int64_t b, int64_t* result);
@@ -63,9 +63,25 @@ inline uint64_t nan_box(uint32_t value) {
 #endif
 }
 
+inline uint64_t nan_box16(uint32_t value) {
+#ifdef XLEN_64
+  return value | 0xffffffffffff0000;
+#else
+  return value;
+#endif
+}
+
 inline bool is_nan_boxed(uint64_t value) {
 #ifdef XLEN_64
   return (uint32_t(value >> 32) == 0xffffffff);
+#else
+  return true;
+#endif
+}
+
+inline bool is_nan_boxed16(uint64_t value) {
+#ifdef XLEN_64
+  return (uint32_t(value >> 16) == 0xffffffffffff);
 #else
   return true;
 #endif
@@ -75,6 +91,12 @@ inline int64_t check_boxing(int64_t a) {
   if (is_nan_boxed(a))
     return a;
   return nan_box(0x7fc00000); // NaN
+}
+
+inline int64_t check_boxing16(int64_t a) {
+  if (is_nan_boxed16(a))
+    return a;
+  return nan_box16(0x7fc0); // NaN
 }
 
 void dpi_fadd(bool enable, int dst_fmt, int64_t a, int64_t b, const svBitVecVal* frm, int64_t* result, svBitVecVal* fflags) {
@@ -239,13 +261,54 @@ void dpi_utof(bool enable, int dst_fmt, int src_fmt, int64_t a, const svBitVecVa
   }
 }
 
-void dpi_f2f(bool enable, int dst_fmt, int64_t a, int64_t* result) {
+void dpi_f2f(bool enable, int dst_fmt, int src_fmt, int64_t a, int64_t* result) {
   if (!enable)
     return;
-  if (dst_fmt) {
-    *result = rv_ftod((int32_t)check_boxing(a));
-  } else {
-    *result = nan_box(rv_dtof(a));
+  switch (dst_fmt) {
+  case 0: // fp32
+    switch (src_fmt) {
+    case 1: // fp64
+      *result = nan_box(rv_dtof(a));
+      break;
+    case 2: // fp16
+      *result = nan_box(rv_htof_s(check_boxing16(a), 0, nullptr));
+      break;
+    case 3: // bf16
+      *result = nan_box(rv_btof_s(check_boxing16(a), 0, nullptr));
+      break;
+    default:
+      std::abort();
+    }
+    break;
+  case 1: // fp64
+    switch (src_fmt) {
+    case 0: // fp32
+      *result = rv_ftod(check_boxing(a));
+      break;
+    default:
+      std::abort();
+    }
+    break;
+  case 2: // fp16
+    switch (src_fmt) {
+    case 0: // fp32
+      *result = nan_box16(rv_ftoh_s(check_boxing(a), 0, nullptr));
+      break;
+    default:
+      std::abort();
+    }
+    break;
+  case 3: // bf16
+    switch (src_fmt) {
+    case 0: // fp32
+      *result = nan_box16(rv_ftob_s(check_boxing(a), 0, nullptr));
+      break;
+    default:
+      std::abort();
+    }
+    break;
+  default:
+    std::abort();
   }
 }
 

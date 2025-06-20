@@ -11,9 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_fpu_define.vh"
-
 `ifdef FPU_DSP
+
+`include "VX_fpu_define.vh"
 
 module VX_fpu_dsp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter NUM_LANES = 4,

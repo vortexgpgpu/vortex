@@ -402,6 +402,12 @@
 `define NUM_VPU_BLOCKS  `ISSUE_WIDTH
 `endif
 
+// Number of TCU units
+`define NUM_TCU_LANES   `NUM_THREADS
+`ifndef NUM_TCU_BLOCKS
+`define NUM_TCU_BLOCKS  `ISSUE_WIDTH
+`endif
+
 // Size of Instruction Buffer
 `ifndef IBUF_SIZE
 `define IBUF_SIZE   4
@@ -804,6 +810,22 @@
 `define L3_MEM_PORTS `MIN(`L3_NUM_BANKS, `PLATFORM_MEMORY_NUM_BANKS)
 `else
 `define L3_MEM_PORTS `MIN(L3_NUM_REQS, `PLATFORM_MEMORY_NUM_BANKS)
+`endif
+`endif
+
+// TCU Configurable Knobs /////////////////////////////////////////////////////
+
+`ifndef TCU_DSP
+`ifndef TCU_DPI
+`ifndef SYNTHESIS
+`ifndef DPI_DISABLE
+`define TCU_DPI
+`else
+`define TCU_DSP
+`endif
+`else
+`define TCU_DSP
+`endif
 `endif
 `endif
 

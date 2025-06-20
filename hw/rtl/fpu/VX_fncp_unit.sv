@@ -14,9 +14,9 @@
 // Modified port of noncomp module from fpnew Libray
 // reference: https://github.com/pulp-platform/fpnew
 
-`include "VX_fpu_define.vh"
-
 `ifdef FPU_DSP
+
+`include "VX_fpu_define.vh"
 
 module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter LATENCY  = 1,
@@ -242,4 +242,5 @@ module VX_fncp_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     assign fflags = {fflags_NV, 1'b0, 1'b0, 1'b0, 1'b0};
 
 endmodule
+
 `endif

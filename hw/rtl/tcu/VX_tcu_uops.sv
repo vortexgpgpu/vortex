@@ -117,7 +117,7 @@ module VX_tcu_uops import
                 done <= (TCU_UOPS == 1);
             end else if (busy && next) begin
                 counter <= counter + ((TCU_UOPS > 1) ? 1 : 0);
-                done <= (counter == (TCU_UOPS-2));
+                done <= (counter == CTR_W'(TCU_UOPS-2));
                 busy <= ~done;
             end
         end

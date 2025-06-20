@@ -26,12 +26,16 @@ package VX_tcu_pkg;
     localparam TCU_DP = 0;
 
     // Supported data types
-    localparam TCU_FP32_ID  = 0;
-    localparam TCU_FP16_ID  = 1;
-    localparam TCU_BF16_ID  = 2;
-    localparam TCU_INT32_ID = 3;
-    localparam TCU_INT16_ID = 4;
-    localparam TCU_INT8_ID  = 5;
+    localparam TCU_FP32_ID = 0;
+    localparam TCU_FP64_ID = 1;
+    localparam TCU_FP16_ID = 2;
+    localparam TCU_BF16_ID = 3;
+    localparam TCU_FP8_ID  = 4;
+    localparam TCU_TF32_ID = 5;
+    localparam TCU_I32_ID  = 8;
+    localparam TCU_I16_ID  = 9;
+    localparam TCU_I8_ID   = 10;
+    localparam TCU_U4_ID   = 11;
 
     // Tile dimensions
     localparam TCU_TILE_CAP = TCU_NT * TCU_NR;
@@ -78,32 +82,21 @@ package VX_tcu_pkg;
 
     localparam TCU_UOPS = TCU_M_STEPS * TCU_N_STEPS * TCU_K_STEPS;
 
-    localparam LG_MAX_PIPE_LAT = $clog2(`LATENCY_FMA + TCU_TC_K * 2);
-    localparam MAX_PIPE_LAT    = 1 << LG_MAX_PIPE_LAT;
-
-    function logic [LG_MAX_PIPE_LAT-1:0] get_fedp_latency(input logic [3:0] fmt);
-        case (fmt)
-            TCU_FP32_ID:  return `LATENCY_FMA + TCU_TC_K - 1;
-            TCU_FP16_ID:  return `LATENCY_FMA + TCU_TC_K * 2 - 1;
-            TCU_BF16_ID:  return `LATENCY_FMA + TCU_TC_K * 2 - 1;
-            TCU_INT32_ID: return TCU_TC_K - 1;
-            TCU_INT16_ID: return TCU_TC_K * 2 - 1;
-            TCU_INT8_ID:  return TCU_TC_K * 4 - 1;
-            default:      return 0;
-        endcase
-    endfunction
-
     // Tracing info
 
     task trace_fmt(input int level, input [3:0] fmt);
         case (fmt)
-            TCU_FP32_ID:  `TRACE(level, ("fp32"))
-            TCU_FP16_ID:  `TRACE(level, ("fp16"))
-            TCU_BF16_ID:  `TRACE(level, ("bf16"))
-            TCU_INT32_ID: `TRACE(level, ("int32"))
-            TCU_INT16_ID: `TRACE(level, ("int16"))
-            TCU_INT8_ID:  `TRACE(level, ("int8"))
-            default:      `TRACE(level, ("?"))
+            TCU_FP32_ID: `TRACE(level, ("fp32"))
+            TCU_FP64_ID: `TRACE(level, ("fp64"))
+            TCU_FP16_ID: `TRACE(level, ("fp16"))
+            TCU_BF16_ID: `TRACE(level, ("bf16"))
+            TCU_FP8_ID:  `TRACE(level, ("fp8"))
+            TCU_TF32_ID: `TRACE(level, ("tf32"))
+            TCU_I32_ID:  `TRACE(level, ("i32"))
+            TCU_I16_ID:  `TRACE(level, ("i16"))
+            TCU_I8_ID:   `TRACE(level, ("i8"))
+            TCU_U4_ID:   `TRACE(level, ("u4"))
+            default:     `TRACE(level, ("?"))
         endcase
     endtask
 

@@ -11,9 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_fpu_define.vh"
-
 `ifdef FPU_DSP
+
+`include "VX_fpu_define.vh"
 
 module VX_fpu_ncp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter NUM_LANES = 1,
@@ -118,4 +118,5 @@ module VX_fpu_ncp import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     `FPU_MERGE_FFLAGS(fflags, fflags_out, mask_out, NUM_LANES);
 
 endmodule
+
 `endif

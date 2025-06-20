@@ -24,45 +24,89 @@ namespace tensor {
 
 struct fp32 {
   using dtype = uint32_t;
-  static constexpr uint32_t bits = 32;
   static constexpr uint32_t id = 0;
+  static constexpr uint32_t bits = 32;
   static constexpr const char* name = "fp32";
+};
+
+struct fp64 {
+  using dtype = uint64_t;
+  static constexpr uint32_t id = 1;
+  static constexpr uint32_t bits = 64;
+  static constexpr const char* name = "fp64";
 };
 
 struct fp16 {
   using dtype = uint16_t;
+  static constexpr uint32_t id = 2;
   static constexpr uint32_t bits = 16;
-  static constexpr uint32_t id = 1;
   static constexpr const char* name = "fp16";
 };
 
 struct bf16 {
   using dtype = uint16_t;
+  static constexpr uint32_t id = 3;
   static constexpr uint32_t bits = 16;
-  static constexpr uint32_t id = 2;
   static constexpr const char* name = "bf16";
+};
+
+struct fp8 {
+  using dtype = uint8_t;
+  static constexpr uint32_t id = 4;
+  static constexpr uint32_t bits = 8;
+  static constexpr const char* name = "fp8";
+};
+
+struct tf32 {
+  using dtype = uint32_t;
+  static constexpr uint32_t id = 5;
+  static constexpr uint32_t bits = 32;
+  static constexpr const char* name = "tf32";
 };
 
 struct int32 {
   using dtype = uint32_t;
+  static constexpr uint32_t id = 8;
   static constexpr uint32_t bits = 32;
-  static constexpr uint32_t id = 3;
-  static constexpr const char* name = "int32";
+  static constexpr const char* name = "i32";
 };
 
 struct int16 {
-  using dtype = uint16_t;
+  using dtype = int16_t;
+  static constexpr uint32_t id = 9;
   static constexpr uint32_t bits = 16;
-  static constexpr uint32_t id = 4;
-  static constexpr const char* name = "int16";
+  static constexpr const char* name = "i16";
 };
 
 struct int8 {
-  using dtype = uint8_t;
+  using dtype = int8_t;
+  static constexpr uint32_t id = 10;
   static constexpr uint32_t bits = 8;
-  static constexpr uint32_t id = 5;
-  static constexpr const char* name = "int8";
+  static constexpr const char* name = "i8";
 };
+
+struct uint4 {
+  using dtype = int8_t;
+  static constexpr uint32_t id = 11;
+  static constexpr uint32_t bits = 4;
+  static constexpr const char* name = "u4";
+};
+
+inline const char* fmt_string(uint32_t fmt) {
+  switch (fmt) {
+  case fp32::id:  return fp32::name;
+  case fp64::id:  return fp64::name;
+  case fp16::id:  return fp16::name;
+  case bf16::id:  return bf16::name;
+  case fp8::id:   return fp8::name;
+  case tf32::id:  return tf32::name;
+  case int32::id: return int32::name;
+  case int16::id: return int16::name;
+  case int8::id:  return int8::name;
+  case uint4::id: return uint4::name;
+  default:        return "";
+  }
+}
 
 template <uint32_t NT,      // number of threads per warp
           typename It = fp32, // input type (A,B)
