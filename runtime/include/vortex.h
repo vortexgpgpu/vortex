@@ -48,7 +48,7 @@ typedef void* vx_buffer_h;
 #define VX_ISA_STD_N                (1ull << ISA_STD_N)
 #define VX_ISA_STD_Q                (1ull << ISA_STD_Q)
 #define VX_ISA_STD_S                (1ull << ISA_STD_S)
-#define VX_ISA_STD_U                (1ull << ISA_STD_U)
+#define VX_ISA_STD_V                (1ull << ISA_STD_V)
 #define VX_ISA_ARCH(flags)          (1ull << (((flags >> 30) & 0x3) + 4))
 #define VX_ISA_EXT_ICACHE           (1ull << (32+ISA_EXT_ICACHE))
 #define VX_ISA_EXT_DCACHE           (1ull << (32+ISA_EXT_DCACHE))

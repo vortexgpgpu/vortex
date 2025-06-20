@@ -59,12 +59,12 @@ public:
     uint64_t scrb_sfu;
     uint64_t scrb_csrs;
     uint64_t scrb_wctl;
-  #ifdef EXT_TCU_ENABLE
-    uint64_t scrb_tpu;
-  #endif
   #ifdef EXT_V_ENABLE
     uint64_t vinstrs;
     uint64_t scrb_vpu;
+  #endif
+  #ifdef EXT_TCU_ENABLE
+    uint64_t scrb_tcu;
   #endif
     uint64_t ifetches;
     uint64_t loads;
@@ -86,12 +86,12 @@ public:
       , scrb_sfu(0)
       , scrb_csrs(0)
       , scrb_wctl(0)
-    #ifdef EXT_TCU_ENABLE
-      , scrb_tpu(0)
-    #endif
     #ifdef EXT_V_ENABLE
       , vinstrs(0)
       , scrb_vpu(0)
+    #endif
+    #ifdef EXT_TCU_ENABLE
+      , scrb_tcu(0)
     #endif
       , ifetches(0)
       , loads(0)

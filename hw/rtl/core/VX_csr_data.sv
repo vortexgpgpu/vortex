@@ -218,18 +218,14 @@ import VX_fpu_pkg::*;
                         `CSR_READ_64(`VX_CSR_MPM_SCRB_ST, read_data_ro_w, pipeline_perf.issue.scb_stalls);
                         `CSR_READ_64(`VX_CSR_MPM_OPDS_ST, read_data_ro_w, pipeline_perf.issue.opd_stalls);
                         `CSR_READ_64(`VX_CSR_MPM_SCRB_ALU, read_data_ro_w, pipeline_perf.issue.units_uses[EX_ALU]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_LSU, read_data_ro_w, pipeline_perf.issue.units_uses[EX_LSU]);
+                        `CSR_READ_64(`VX_CSR_MPM_SCRB_SFU, read_data_ro_w, pipeline_perf.issue.units_uses[EX_SFU]);
                     `ifdef EXT_F_ENABLE
                         `CSR_READ_64(`VX_CSR_MPM_SCRB_FPU, read_data_ro_w, pipeline_perf.issue.units_uses[EX_FPU]);
-                    `else
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_FPU, read_data_ro_w, PERF_CTR_BITS'(0));
                     `endif
                     `ifdef EXT_TCU_ENABLE
                         `CSR_READ_64(`VX_CSR_MPM_SCRB_TCU, read_data_ro_w, pipeline_perf.issue.units_uses[EX_TCU]);
-                    `else
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_TCU, read_data_ro_w, PERF_CTR_BITS'(0));
                     `endif
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_LSU, read_data_ro_w, pipeline_perf.issue.units_uses[EX_LSU]);
-                        `CSR_READ_64(`VX_CSR_MPM_SCRB_SFU, read_data_ro_w, pipeline_perf.issue.units_uses[EX_SFU]);
                         `CSR_READ_64(`VX_CSR_MPM_SCRB_CSRS, read_data_ro_w, pipeline_perf.issue.sfu_uses[SFU_CSRS]);
                         `CSR_READ_64(`VX_CSR_MPM_SCRB_WCTL, read_data_ro_w, pipeline_perf.issue.sfu_uses[SFU_WCTL]);
                         // PERF: memory

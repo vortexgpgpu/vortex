@@ -186,6 +186,8 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t scrb_alu = 0;
   uint64_t scrb_fpu = 0;
   uint64_t scrb_lsu = 0;
+  uint64_t scrb_vpu = 0;
+  uint64_t scrb_tcu = 0;
   uint64_t scrb_csrs = 0;
   uint64_t scrb_wctl = 0;
   uint64_t ifetches = 0;
@@ -233,6 +235,9 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   bool l2cache_enable = isa_flags & VX_ISA_EXT_L2CACHE;
   bool l3cache_enable = isa_flags & VX_ISA_EXT_L3CACHE;
   bool lmem_enable    = isa_flags & VX_ISA_EXT_LMEM;
+  bool fpu_enable     = isa_flags & VX_ISA_STD_F;
+  bool vpu_enable     = isa_flags & VX_ISA_STD_V;
+  bool tcu_enable     = isa_flags & VX_ISA_EXT_TCU;
 
   auto perf_class = get_profiling_mode();
 
@@ -304,6 +309,14 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_SCRB_LSU, core_id, &scrb_lsu_per_core), {
           return err;
         });
+        uint64_t scrb_vpu_per_core;
+        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_SCRB_VPU, core_id, &scrb_vpu_per_core), {
+          return err;
+        });
+        uint64_t scrb_tcu_per_core;
+        CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_SCRB_TCU, core_id, &scrb_tcu_per_core), {
+          return err;
+        });
         uint64_t scrb_csrs_per_core;
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_SCRB_CSRS, core_id, &scrb_csrs_per_core), {
           return err;
@@ -315,21 +328,41 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         scrb_alu += scrb_alu_per_core;
         scrb_fpu += scrb_fpu_per_core;
         scrb_lsu += scrb_lsu_per_core;
+        scrb_vpu += scrb_vpu_per_core;
+        scrb_tcu += scrb_tcu_per_core;
         scrb_csrs += scrb_csrs_per_core;
         scrb_wctl += scrb_wctl_per_core;
         if (num_cores > 1) {
-          uint64_t scrb_total = scrb_alu_per_core + scrb_fpu_per_core + scrb_lsu_per_core + scrb_csrs_per_core + scrb_wctl_per_core;
+          uint64_t scrb_total = scrb_alu_per_core + scrb_lsu_per_core + scrb_csrs_per_core + scrb_wctl_per_core;
+          if (fpu_enable) {
+            scrb_total += scrb_fpu_per_core;
+          }
+          if (vpu_enable) {
+            scrb_total += scrb_vpu_per_core;
+          }
+          if (tcu_enable) {
+            scrb_total += scrb_tcu_per_core;
+          }
           int scrb_percent_per_core = calcAvgPercent(scrb_stalls_per_core, cycles_per_core);
-          fprintf(stream, "PERF: core%d: scoreboard stalls=%ld (%d%%) (alu=%d%%, fpu=%d%%, lsu=%d%%, csrs=%d%%, wctl=%d%%)\n"
-          , core_id
-          , scrb_stalls_per_core
-          , scrb_percent_per_core
-          , calcAvgPercent(scrb_alu_per_core, scrb_total)
-          , calcAvgPercent(scrb_fpu_per_core, scrb_total)
-          , calcAvgPercent(scrb_lsu_per_core, scrb_total)
-          , calcAvgPercent(scrb_csrs_per_core, scrb_total)
-          , calcAvgPercent(scrb_wctl_per_core, scrb_total)
+          fprintf(stream, "PERF: core%d: scoreboard stalls=%ld (%d%%) (alu=%d%%, lsu=%d%%, csrs=%d%%, wctl=%d%%"
+            , core_id
+            , scrb_stalls_per_core
+            , scrb_percent_per_core
+            , calcAvgPercent(scrb_alu_per_core, scrb_total)
+            , calcAvgPercent(scrb_lsu_per_core, scrb_total)
+            , calcAvgPercent(scrb_csrs_per_core, scrb_total)
+            , calcAvgPercent(scrb_wctl_per_core, scrb_total)
           );
+          if (fpu_enable) {
+            fprintf(stream, ", fpu=%d%%", calcAvgPercent(scrb_fpu_per_core, scrb_total));
+          }
+          if (vpu_enable) {
+            fprintf(stream, ", vpu=%d%%", calcAvgPercent(scrb_vpu_per_core, scrb_total));
+          }
+          if (tcu_enable) {
+            fprintf(stream, ", tcu=%d%%", calcAvgPercent(scrb_tcu_per_core, scrb_total));
+          }
+          fprintf(stream, ")\n");
         }
         scrb_stalls += scrb_stalls_per_core;
       }
@@ -579,15 +612,24 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     fprintf(stream, "PERF: scheduler idle=%ld (%d%%)\n", sched_idles, sched_idles_percent);
     fprintf(stream, "PERF: scheduler stalls=%ld (%d%%)\n", sched_stalls, sched_stalls_percent);
     fprintf(stream, "PERF: ibuffer stalls=%ld (%d%%)\n", ibuffer_stalls, ibuffer_percent);
-    fprintf(stream, "PERF: scoreboard stalls=%ld (%d%%) (alu=%d%%, fpu=%d%%, lsu=%d%%, csrs=%d%%, wctl=%d%%)\n"
+    fprintf(stream, "PERF: scoreboard stalls=%ld (%d%%) (alu=%d%%, lsu=%d%%, csrs=%d%%, wctl=%d%%"
       , scrb_stalls
       , scrb_percent
       , calcAvgPercent(scrb_alu, scrb_total)
-      , calcAvgPercent(scrb_fpu, scrb_total)
       , calcAvgPercent(scrb_lsu, scrb_total)
       , calcAvgPercent(scrb_csrs, scrb_total)
       , calcAvgPercent(scrb_wctl, scrb_total)
     );
+    if (fpu_enable) {
+      fprintf(stream, ", fpu=%d%%", calcAvgPercent(scrb_fpu, scrb_total));
+    }
+    if (vpu_enable) {
+      fprintf(stream, ", vpu=%d%%", calcAvgPercent(scrb_vpu, scrb_total));
+    }
+    if (tcu_enable) {
+      fprintf(stream, ", tcu=%d%%", calcAvgPercent(scrb_tcu, scrb_total));
+    }
+    fprintf(stream, ")\n");
     fprintf(stream, "PERF: operands stalls=%ld (%d%%)\n", opds_stalls, opds_percent);
     fprintf(stream, "PERF: ifetches=%ld\n", ifetches);
     fprintf(stream, "PERF: loads=%ld\n", loads);

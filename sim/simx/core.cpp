@@ -343,11 +343,11 @@ void Core::issue() {
               ++perf_stats_.scrb_csrs;
             }
           } break;
-        #ifdef EXT_TCU_ENABLE
-          case FUType::TPU: ++perf_stats_.scrb_tpu; break;
-        #endif
         #ifdef EXT_V_ENABLE
           case FUType::VPU: ++perf_stats_.scrb_vpu; break;
+        #endif
+        #ifdef EXT_TCU_ENABLE
+          case FUType::TPU: ++perf_stats_.scrb_tcu; break;
         #endif
           default: assert(false);
           }
