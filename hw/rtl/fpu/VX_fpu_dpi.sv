@@ -87,8 +87,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         end
     end
 
-    wire f_fmt = fmt[0];
-    wire i_fmt = fmt[1];
+    wire f_fmt = fmt[0]; // S/D format
+    wire i_fmt = fmt[1]; // W/L format
 
     always @(*) begin
         is_fadd   = 0;

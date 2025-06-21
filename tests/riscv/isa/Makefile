@@ -26,6 +26,12 @@ TESTS_64D := $(wildcard $(TEST_DIR)/rv64ud-p-*.bin)
 
 all:
 
+run-simx-32imf:
+	@for test in  $(TESTS_32I) $(TESTS_32M) $(TESTS_32F); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+
+run-simx-64imf:
+	@for test in  $(TESTS_64I) $(TESTS_64M) $(TESTS_64F); do $(SIM_DIR)/simx/simx $$test || exit 1; done
+
 run-simx-32imafd:
 	@for test in  $(TESTS_32I) $(TESTS_32M) $(TESTS_32F) $(TESTS_32D) $(TESTS_32A); do $(SIM_DIR)/simx/simx $$test || exit 1; done
 

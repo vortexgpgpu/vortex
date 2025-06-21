@@ -89,25 +89,39 @@ def reverse_binary(bin_str):
 def bin_to_array(bin_str):
     return [int(bit) for bit in bin_str]
 
-def append_reg(text, value, sep):
+def append_reg(text, reg, sep):
     if sep:
         text += ", "
-    ivalue = int(value)
-    if (ivalue >= 32):
-        text += "f" + str(ivalue % 32)
+    ireg = int(reg)
+    rtype = ireg // 32
+    rvalue = ireg % 32
+    if (rtype == 2):
+        text += "v" + str(rvalue)
+    elif (rtype == 1):
+        text += "f" + str(rvalue)
     else:
-        text += "x" + value
+        text += "x" + str(rvalue)
     sep = True
     return text, sep
 
+def reg_value(rtype, value):
+    if rtype == 1:
+        ivalue = int(value, 16)
+        ivalue32 = ivalue & 0xFFFFFFFF
+        return "0x{:08x}".format(ivalue32)
+    else:
+        return value
+
 def append_value(text, reg, value, tmask_arr, sep):
     text, sep = append_reg(text, reg, sep)
+    ireg = int(reg)
+    rtype = ireg // 32
     text += "={"
     for i in range(len(tmask_arr)):
         if i != 0:
             text += ", "
         if tmask_arr[i]:
-            text += value[i]
+            text += reg_value(rtype, value[i])
         else:
             text +="-"
     text += "}"
@@ -122,7 +136,7 @@ def simd_data(sub_array, index, count, default=0):
         new_array[start_index:start_index + size] = sub_array
     return new_array
 
-def merge_data(trace, key, new_data,  mask):
+def merge_data(trace, key, new_data, mask):
     if key in trace:
         merged_data = trace[key]
         for i in range(len(mask)):

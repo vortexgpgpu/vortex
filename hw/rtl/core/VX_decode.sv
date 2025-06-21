@@ -366,7 +366,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 ex_type = EX_FPU;
                 op_type = INST_OP_BITS'({2'b00, 1'b1, opcode[3]});
                 op_args.fpu.frm = funct3;
-                op_args.fpu.fmt[0] = funct2[0]; // float / double
+                op_args.fpu.fmt[0] = funct2[0]; // float/double
                 op_args.fpu.fmt[1] = opcode[3] ^ opcode[2]; // SUB
                 `USED_FREG (rd);
                 `USED_FREG (rs1);
@@ -376,7 +376,9 @@ module VX_decode import VX_gpu_pkg::*; #(
             INST_FCI: begin
                 ex_type = EX_FPU;
                 op_args.fpu.frm = funct3;
-                op_args.fpu.fmt = funct2;
+                op_args.fpu.fmt[0] = funct2[0]; // float/double
+                op_args.fpu.fmt[1] = rs2[1]; // CVT W/L
+
                 case (funct5)
                     5'b00000, // FADD
                     5'b00001, // FSUB

@@ -997,7 +997,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint32_t frm = this->get_fpu_rm(fpuArgs.frm, wid, t);
           uint32_t fflags = 0;
           if (fpuArgs.is_f64) {
-            switch (fpuArgs.fmt) {
+            switch (fpuArgs.cvt) {
             case 0: // RV32D: FCVT.W.D
               rd_data[t].i = sext((uint64_t)rv_ftoi_d(rs1_data[t].u64, frm, &fflags), 32);
               break;
@@ -1012,7 +1012,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
               break;
             }
           } else {
-            switch (fpuArgs.fmt) {
+            switch (fpuArgs.cvt) {
             case 0:
               // RV32F: FCVT.W.S
               rd_data[t].i = sext((uint64_t)rv_ftoi_s(check_boxing(rs1_data[t].u64), frm, &fflags), 32);
@@ -1041,7 +1041,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           uint32_t frm = this->get_fpu_rm(fpuArgs.frm, wid, t);
           uint32_t fflags = 0;
           if (fpuArgs.is_f64) {
-            switch (fpuArgs.fmt) {
+            switch (fpuArgs.cvt) {
             case 0: // RV32D: FCVT.D.W
               rd_data[t].u64 = rv_itof_d(rs1_data[t].i, frm, &fflags);
               break;
@@ -1056,7 +1056,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
               break;
             }
           } else {
-            switch (fpuArgs.fmt) {
+            switch (fpuArgs.cvt) {
             case 0: // RV32F: FCVT.S.W
               rd_data[t].u64 = nan_box(rv_itof_s(rs1_data[t].i, frm, &fflags));
               break;

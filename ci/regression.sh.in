@@ -335,13 +335,25 @@ config2()
     echo "configuration-2 tests done!"
 }
 
-test_csv_trace()
+test_csv_trace32()
 {
     # test CSV trace generation
     DEBUG=3 make -C sim/simx > /dev/null
     DEBUG=3 CONFIGS="-DGPR_RESET" make -C sim/rtlsim > /dev/null
-    make -C tests/riscv/isa run-simx-32im > run_simx.log
-    make -C tests/riscv/isa run-rtlsim-32im > run_rtlsim.log
+    make -C tests/riscv/isa run-simx-32imf > run_simx.log
+    make -C tests/riscv/isa run-rtlsim-32imf > run_rtlsim.log
+    ./ci/trace_csv.py -tsimx run_simx.log -otrace_simx.csv
+    ./ci/trace_csv.py -trtlsim run_rtlsim.log -otrace_rtlsim.csv
+    diff trace_rtlsim.csv trace_simx.csv
+}
+
+test_csv_trace64()
+{
+    # test CSV trace generation
+    DEBUG=3 make -C sim/simx > /dev/null
+    DEBUG=3 CONFIGS="-DGPR_RESET" make -C sim/rtlsim > /dev/null
+    make -C tests/riscv/isa run-simx-64imf > run_simx.log
+    make -C tests/riscv/isa run-rtlsim-64imf > run_rtlsim.log
     ./ci/trace_csv.py -tsimx run_simx.log -otrace_simx.csv
     ./ci/trace_csv.py -trtlsim run_rtlsim.log -otrace_rtlsim.csv
     diff trace_rtlsim.csv trace_simx.csv
@@ -351,7 +363,12 @@ debug()
 {
     echo "begin debugging tests..."
 
-    test_csv_trace
+    test_csv_trace32
+
+    if [ "$XLEN" == "64" ]
+    then
+        test_csv_trace64
+    fi
 
     CONFIGS="-O0" ./ci/blackbox.sh --driver=opae --app=demo --args="-n1"
     CONFIGS="-O0" ./ci/blackbox.sh --driver=xrt --app=demo --args="-n1"

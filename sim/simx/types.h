@@ -349,7 +349,7 @@ enum class FpuType {
 
 struct IntrFpuArgs {
   uint32_t frm : 3;
-  uint32_t fmt : 2;
+  uint32_t cvt : 2;
   uint32_t is_f64 : 1;
 };
 

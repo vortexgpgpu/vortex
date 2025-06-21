@@ -175,7 +175,7 @@ static op_string_t op_string(const Instr &instr) {
       case FpuType::FNMADD: return {fpuArgs.is_f64 ? "FNMADD.D":"FNMADD.S", ""};
       case FpuType::FNMSUB: return {fpuArgs.is_f64 ? "FNMSUB.D":"FNMSUB.S", ""};
       case FpuType::F2I: {
-        switch (fpuArgs.fmt) {
+        switch (fpuArgs.cvt) {
         case 0: return {fpuArgs.is_f64 ? "FCVT.W.D":"FCVT.W.S", ""};
         case 1: return {fpuArgs.is_f64 ? "FCVT.WU.D":"FCVT.WU.S", ""};
         case 2: return {fpuArgs.is_f64 ? "FCVT.L.D":"FCVT.L.S", ""};
@@ -185,7 +185,7 @@ static op_string_t op_string(const Instr &instr) {
         }
       }
       case FpuType::I2F: {
-        switch (fpuArgs.fmt) {
+        switch (fpuArgs.cvt) {
         case 0: return {fpuArgs.is_f64 ? "FCVT.D.W":"FCVT.S.W", ""};
         case 1: return {fpuArgs.is_f64 ? "FCVT.D.WU":"FCVT.S.WU", ""};
         case 2: return {fpuArgs.is_f64 ? "FCVT.D.L":"FCVT.S.L", ""};

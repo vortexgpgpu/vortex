@@ -320,64 +320,36 @@ package VX_trace_pkg;
                     end
                 end
                 INST_FPU_F2I: begin
-                    if (op_args.fpu.fmt[0]) begin
-                        if (op_args.fpu.fmt[1]) begin
-                            `TRACE(level, ("FCVT.L.D"))
-                        end else begin
-                            `TRACE(level, ("FCVT.W.D"))
-                        end
-                    end else begin
-                        if (op_args.fpu.fmt[1]) begin
-                            `TRACE(level, ("FCVT.L.S"))
-                        end else begin
-                            `TRACE(level, ("FCVT.W.S"))
-                        end
-                    end
+                    case (op_args.fpu.fmt)
+                    2'b00: `TRACE(level, ("FCVT.W.S"))
+                    2'b01: `TRACE(level, ("FCVT.W.D"))
+                    2'b10: `TRACE(level, ("FCVT.L.S"))
+                    2'b11: `TRACE(level, ("FCVT.L.D"))
+                    endcase
                 end
                 INST_FPU_F2U: begin
-                    if (op_args.fpu.fmt[0]) begin
-                        if (op_args.fpu.fmt[1]) begin
-                            `TRACE(level, ("FCVT.LU.D"))
-                        end else begin
-                            `TRACE(level, ("FCVT.WU.D"))
-                        end
-                    end else begin
-                        if (op_args.fpu.fmt[1]) begin
-                            `TRACE(level, ("FCVT.LU.S"))
-                        end else begin
-                            `TRACE(level, ("FCVT.WU.S"))
-                        end
-                    end
+                    case (op_args.fpu.fmt)
+                    2'b00: `TRACE(level, ("FCVT.WU.S"))
+                    2'b01: `TRACE(level, ("FCVT.WU.D"))
+                    2'b10: `TRACE(level, ("FCVT.LU.S"))
+                    2'b11: `TRACE(level, ("FCVT.LU.D"))
+                    endcase
                 end
                 INST_FPU_I2F: begin
-                    if (op_args.fpu.fmt[0]) begin
-                        if (op_args.fpu.fmt[1]) begin
-                            `TRACE(level, ("FCVT.D.L"))
-                        end else begin
-                            `TRACE(level, ("FCVT.D.W"))
-                        end
-                    end else begin
-                        if (op_args.fpu.fmt[1]) begin
-                            `TRACE(level, ("FCVT.S.L"))
-                        end else begin
-                            `TRACE(level, ("FCVT.S.W"))
-                        end
-                    end
+                    case (op_args.fpu.fmt)
+                    2'b00: `TRACE(level, ("FCVT.S.W"))
+                    2'b01: `TRACE(level, ("FCVT.D.W"))
+                    2'b10: `TRACE(level, ("FCVT.S.L"))
+                    2'b11: `TRACE(level, ("FCVT.D.L"))
+                    endcase
                 end
                 INST_FPU_U2F: begin
-                    if (op_args.fpu.fmt[0]) begin
-                        if (op_args.fpu.fmt[1]) begin
-                            `TRACE(level, ("FCVT.D.LU"))
-                        end else begin
-                            `TRACE(level, ("FCVT.D.WU"))
-                        end
-                    end else begin
-                        if (op_args.fpu.fmt[1]) begin
-                            `TRACE(level, ("FCVT.S.LU"))
-                        end else begin
-                            `TRACE(level, ("FCVT.S.WU"))
-                        end
-                    end
+                    case (op_args.fpu.fmt)
+                    2'b00: `TRACE(level, ("FCVT.S.WU"))
+                    2'b01: `TRACE(level, ("FCVT.D.WU"))
+                    2'b10: `TRACE(level, ("FCVT.S.LU"))
+                    2'b11: `TRACE(level, ("FCVT.D.LU"))
+                    endcase
                 end
                 INST_FPU_MISC: begin
                     if (op_args.fpu.fmt[0]) begin
