@@ -108,7 +108,7 @@ def reg_value(rtype, value):
     if rtype == 1:
         ivalue = int(value, 16)
         ivalue32 = ivalue & 0xFFFFFFFF
-        return "0x{:08x}".format(ivalue32)
+        return "0x{:x}".format(ivalue32)
     else:
         return value
 
