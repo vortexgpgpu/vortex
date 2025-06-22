@@ -366,6 +366,47 @@ package VX_gpu_pkg;
         return (op >= 6 && op <= 8);
     endfunction
 
+    /////////////////////////////// Issue parameters //////////////////////////
+
+    localparam ISSUE_ISW_BITS = `CLOG2(`ISSUE_WIDTH);
+    localparam ISSUE_ISW_W = `UP(ISSUE_ISW_BITS);
+    localparam PER_ISSUE_WARPS = `NUM_WARPS / `ISSUE_WIDTH;
+    localparam ISSUE_WIS_BITS = `CLOG2(PER_ISSUE_WARPS);
+    localparam ISSUE_WIS_W = `UP(ISSUE_WIS_BITS);
+
+    function automatic logic [NW_WIDTH-1:0] wis_to_wid(
+        input logic [ISSUE_WIS_W-1:0] wis,
+        input logic [ISSUE_ISW_W-1:0] isw
+    );
+        if (ISSUE_WIS_BITS == 0) begin
+            wis_to_wid = NW_WIDTH'(isw);
+        end else if (ISSUE_ISW_BITS == 0) begin
+            wis_to_wid = NW_WIDTH'(wis);
+        end else begin
+            wis_to_wid = NW_WIDTH'({wis, isw});
+        end
+    endfunction
+
+    function automatic logic [ISSUE_ISW_W-1:0] wid_to_isw(
+        input logic [NW_WIDTH-1:0] wid
+    );
+        if (ISSUE_ISW_BITS != 0) begin
+            wid_to_isw = wid[ISSUE_ISW_W-1:0];
+        end else begin
+            wid_to_isw = 0;
+        end
+    endfunction
+
+    function automatic logic [ISSUE_WIS_W-1:0] wid_to_wis(
+        input logic [NW_WIDTH-1:0] wid
+    );
+        if (ISSUE_WIS_BITS != 0) begin
+            wid_to_wis = ISSUE_WIS_W'(wid >> ISSUE_ISW_BITS);
+        end else begin
+            wid_to_wis = 0;
+        end
+    endfunction
+
     ///////////////////////////////////////////////////////////////////////////
 
     localparam INST_TCU_WMMA = 4'h0;
@@ -781,47 +822,6 @@ package VX_gpu_pkg;
     localparam VX_MEM_ADDR_WIDTH =      (`MEM_ADDR_WIDTH - `CLOG2(`L3_LINE_SIZE));
     localparam VX_MEM_DATA_WIDTH =      (`L3_LINE_SIZE * 8);
     localparam VX_MEM_TAG_WIDTH =       L3_MEM_TAG_WIDTH;
-
-    /////////////////////////////// Issue parameters //////////////////////////
-
-    localparam ISSUE_ISW_BITS = `CLOG2(`ISSUE_WIDTH);
-    localparam ISSUE_ISW_W = `UP(ISSUE_ISW_BITS);
-    localparam PER_ISSUE_WARPS = `NUM_WARPS / `ISSUE_WIDTH;
-    localparam ISSUE_WIS_BITS = `CLOG2(PER_ISSUE_WARPS);
-    localparam ISSUE_WIS_W = `UP(ISSUE_WIS_BITS);
-
-    function automatic logic [NW_WIDTH-1:0] wis_to_wid(
-        input logic [ISSUE_WIS_W-1:0] wis,
-        input logic [ISSUE_ISW_W-1:0] isw
-    );
-        if (ISSUE_WIS_BITS == 0) begin
-            wis_to_wid = NW_WIDTH'(isw);
-        end else if (ISSUE_ISW_BITS == 0) begin
-            wis_to_wid = NW_WIDTH'(wis);
-        end else begin
-            wis_to_wid = NW_WIDTH'({wis, isw});
-        end
-    endfunction
-
-    function automatic logic [ISSUE_ISW_W-1:0] wid_to_isw(
-        input logic [NW_WIDTH-1:0] wid
-    );
-        if (ISSUE_ISW_BITS != 0) begin
-            wid_to_isw = wid[ISSUE_ISW_W-1:0];
-        end else begin
-            wid_to_isw = 0;
-        end
-    endfunction
-
-    function automatic logic [ISSUE_WIS_W-1:0] wid_to_wis(
-        input logic [NW_WIDTH-1:0] wid
-    );
-        if (ISSUE_WIS_BITS != 0) begin
-            wid_to_wis = ISSUE_WIS_W'(wid >> ISSUE_ISW_BITS);
-        end else begin
-            wid_to_wis = 0;
-        end
-    endfunction
 
     ///////////////////////// Miscaellaneous functions ////////////////////////
 

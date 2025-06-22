@@ -14,9 +14,9 @@
 // Modified port of rouding module from fpnew Libray
 // reference: https://github.com/pulp-platform/fpnew
 
-`ifdef FPU_DSP
-
 `include "VX_fpu_define.vh"
+
+`ifdef FPU_DSP
 
 module VX_fp_rounding import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter DAT_WIDTH = 2 // Width of the abolute value, without sign bit
