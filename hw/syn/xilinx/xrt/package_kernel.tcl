@@ -76,6 +76,8 @@ set ip_files [list \
  [file normalize "${build_dir}/ip/xil_fdiv/xil_fdiv.xci"] \
  [file normalize "${build_dir}/ip/xil_fma/xil_fma.xci"] \
  [file normalize "${build_dir}/ip/xil_fsqrt/xil_fsqrt.xci"] \
+ [file normalize "${build_dir}/ip/xil_fsqrt/xil_hfmul.xci"] \
+ [file normalize "${build_dir}/ip/xil_fsqrt/xil_fadd.xci"] \
 ]
 add_files -verbose -norecurse -fileset $obj $ip_files
 

@@ -86,6 +86,18 @@ endif
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE)
 
+# Add V extension sources
+ifneq (,$(findstring -DEXT_V_ENABLE, $(CONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/vpu
+endif
+
+# Add TCU extension sources
+ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu
+endif
+
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)

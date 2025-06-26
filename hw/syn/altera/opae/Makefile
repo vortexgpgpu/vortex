@@ -67,6 +67,18 @@ endif
 RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_CACHE_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE)
 
+# Add V extension sources
+ifneq (,$(findstring -DEXT_V_ENABLE, $(CONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/vpu
+endif
+
+# Add TCU extension sources
+ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu
+endif
+
 # compilation flags
 CFLAGS += -DSYNTHESIS -DQUARTUS
 CFLAGS += -DXLEN_$(XLEN)

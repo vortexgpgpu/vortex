@@ -53,6 +53,7 @@ RTL_INCLUDE += -I$(AFU_DIR) -I$(AFU_DIR)/ccip
 
 # Add V extension sources
 ifneq (,$(findstring -DEXT_V_ENABLE, $(CONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/vpu
 endif
 
