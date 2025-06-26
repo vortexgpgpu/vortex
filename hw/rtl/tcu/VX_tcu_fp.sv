@@ -31,8 +31,27 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     localparam MDATA_WIDTH = UUID_WIDTH + NW_WIDTH + PC_BITS + NUM_REGS_BITS;
 
-    localparam PIPE_LATENCY = `LATENCY_FMA * TCU_TC_K;
-    localparam MDATA_QUEUE_DEPTH = 1 << $clog2(PIPE_LATENCY);
+`ifdef TCU_DPI
+    localparam FMUL_LATENCY = `LATENCY_IMUL;
+    localparam FADD_LATENCY = 1;
+    localparam FRND_LATENCY = 1;
+    localparam ACC_LATENCY  = $clog2(2 * TCU_TC_K) * FADD_LATENCY + FADD_LATENCY;
+    localparam FEDP_LATENCY = FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
+`elsif TCU_BHF
+    localparam FMUL_LATENCY = `LATENCY_IMUL;
+    localparam FADD_LATENCY = 1;
+    localparam FRND_LATENCY = 1;
+    localparam ACC_LATENCY  = $clog2(2 * TCU_TC_K) * FADD_LATENCY + FADD_LATENCY;
+    localparam FEDP_LATENCY = FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
+`elsif TCU_DSP
+    localparam FMUL_LATENCY = 6;
+    localparam FADD_LATENCY = 11;
+    localparam FRND_LATENCY = 0;
+    localparam ACC_LATENCY  = $clog2(2 * TCU_TC_K) * FADD_LATENCY + FADD_LATENCY;
+    localparam FEDP_LATENCY = FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
+`endif
+
+    localparam MDATA_QUEUE_DEPTH = 1 << $clog2(FEDP_LATENCY);
 
     localparam LG_A_BS = $clog2(TCU_A_BLOCK_SIZE);
     localparam LG_B_BS = $clog2(TCU_B_BLOCK_SIZE);
@@ -61,7 +80,7 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire fedp_enable, fedp_done;
 
     // FEDP delay handling
-    reg [PIPE_LATENCY-1:0] fedp_delay_pipe;
+    reg [FEDP_LATENCY-1:0] fedp_delay_pipe;
     always @(posedge clk) begin
         if (reset) begin
             fedp_delay_pipe <= '0;
@@ -70,7 +89,7 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 fedp_delay_pipe <= fedp_delay_pipe >> 1;
             end
             if (execute_fire) begin
-                fedp_delay_pipe[PIPE_LATENCY-1] <= 1;
+                fedp_delay_pipe[FEDP_LATENCY-1] <= 1;
             end
         end
     end
@@ -109,9 +128,10 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [TCU_TC_K-1:0][`XLEN-1:0] b_col = execute_if.data.rs2_data[b_off + j * TCU_TC_K +: TCU_TC_K];
             wire [`XLEN-1:0] c_val = execute_if.data.rs3_data[i * TCU_TC_N + j];
 
-            VX_tcu_fedp_fp #(
-                .DATAW (32),
-                .N     (TCU_TC_K)
+        `ifdef TCU_DPI
+            VX_tcu_fedp_dpi #(
+                .LATENCY (FEDP_LATENCY),
+                .N (TCU_TC_K)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),
@@ -123,6 +143,37 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .c_val (c_val),
                 .d_val (d_val[i][j])
             );
+        `elsif TCU_BHF
+            VX_tcu_fedp_bhf #(
+                .LATENCY (FEDP_LATENCY),
+                .N (TCU_TC_K)
+            ) fedp (
+                .clk   (clk),
+                .reset (reset),
+                .enable(fedp_enable),
+                .fmt_s (fmt_s[2:0]),
+                .fmt_d (fmt_d[2:0]),
+                .a_row (a_row),
+                .b_col (b_col),
+                .c_val (c_val),
+                .d_val (d_val[i][j])
+            );
+        `elsif TCU_DSP
+            VX_tcu_fedp_dsp #(
+                .LATENCY (FEDP_LATENCY),
+                .N (TCU_TC_K)
+            ) fedp (
+                .clk   (clk),
+                .reset (reset),
+                .enable(fedp_enable),
+                .fmt_s (fmt_s[2:0]),
+                .fmt_d (fmt_d[2:0]),
+                .a_row (a_row),
+                .b_col (b_col),
+                .c_val (c_val),
+                .d_val (d_val[i][j])
+            );
+        `endif
 
         `ifdef DBG_TRACE_TCU
             always @(posedge clk) begin

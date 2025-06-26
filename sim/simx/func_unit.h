@@ -112,9 +112,9 @@ public:
 
 #ifdef EXT_TCU_ENABLE
 
-class TpuUnit : public FuncUnit {
+class TcuUnit : public FuncUnit {
 public:
-	TpuUnit(const SimContext& ctx, Core*);
+	TcuUnit(const SimContext& ctx, Core*);
 
 	void tick() override;
 };

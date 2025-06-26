@@ -14,8 +14,8 @@
 `include "VX_define.vh"
 
 module VX_tcu_fedp_int #(
-    parameter DATAW = 32,
-    parameter N     = 2
+    parameter LATENCY = 2,
+    parameter N = 2
 ) (
     input  wire clk,
     input  wire reset,
@@ -29,68 +29,102 @@ module VX_tcu_fedp_int #(
     input  wire [`XLEN-1:0] c_val,
     output wire [`XLEN-1:0] d_val
 );
-    wire [DATAW-1:0] a_row_p [0:N-1];
-    wire [DATAW-1:0] b_col_p [0:N-1];
-
-    wire [2:0] fmt_s_p [0:N-1];
-    wire [2:0] fmt_d_p [0:N-1];
+    localparam LEVELS = $clog2(N);
+    localparam RED_LATENCY = LEVELS;
+    localparam ACC_LATENCY = RED_LATENCY + 1;
+    `STATIC_ASSERT (LATENCY == (`LATENCY_IMUL+ACC_LATENCY), ("invalid parameter!"));
 
     `UNUSED_VAR ({a_row, b_col, c_val});
+    `UNUSED_VAR (fmt_d);
 
-    for (genvar i = 0; i < N; i++) begin: g_pipe
-        VX_pipe_register #(
-            .DATAW (DATAW),
-            .DEPTH (i)
-        ) a_pipe (
-            .clk      (clk),
-            .reset    (reset),
-            .enable   (enable),
-            .data_in  (a_row[i][DATAW-1:0]),
-            .data_out (a_row_p[i])
-        );
-        VX_pipe_register #(
-            .DATAW (DATAW),
-            .DEPTH (i)
-        ) b_pipe (
-            .clk      (clk),
-            .reset    (reset),
-            .enable   (enable),
-            .data_in  (b_col[i][DATAW-1:0]),
-            .data_out (b_col_p[i])
-        );
+    wire [31:0] nult_result [N];
 
+    // multiplication stage
+    for (genvar i = 0; i < N; i++) begin : g_prod
+        reg signed [31:0] prod;
+        always @(*) begin
+            case (fmt_s)
+                3'd0: begin // int32
+                    prod = $signed(a_row[i][31:0]) * $signed(b_col[i][31:0]);
+                end
+                3'd1: begin // int16
+                    prod = ($signed(a_row[i][15:0]) * $signed(b_col[i][15:0]))
+                         + ($signed(a_row[i][31:16]) * $signed(b_col[i][31:16]));
+                end
+                3'd2: begin // int8
+                    prod = ($signed(a_row[i][7:0]) * $signed(b_col[i][7:0])
+                          + $signed(a_row[i][15:8]) * $signed(b_col[i][15:8]))
+                         + ($signed(a_row[i][23:16]) * $signed(b_col[i][23:16])
+                          + $signed(a_row[i][31:24]) * $signed(b_col[i][31:24]));
+                end
+                default: begin
+                    prod = 'x;
+                end
+            endcase
+        end
         VX_pipe_register #(
-            .DATAW (6),
-            .DEPTH (i)
-        ) fmt_pipe (
+            .DATAW (32),
+            .DEPTH (`LATENCY_IMUL)
+        ) pipe_mult (
             .clk      (clk),
             .reset    (reset),
             .enable   (enable),
-            .data_in  ({fmt_d, fmt_s}),
-            .data_out ({fmt_d_p[i], fmt_s_p[i]})
+            .data_in  (prod),
+            .data_out (nult_result[i])
         );
     end
 
-    wire [DATAW-1:0] fma_out [0:N];
+    wire [31:0] red_in [0:LEVELS] [N];
 
-    assign fma_out[0] = c_val[DATAW-1:0];
-
-    for (genvar i = 0; i < N; i++) begin : g_fmas
-        VX_tcu_fma_int #(
-            .DATAW (DATAW)
-        ) fma (
-            .clk    (clk),
-            .reset  (reset),
-            .enable (enable),
-            .fmt_s  (fmt_s_p[i]),
-            .fmt_d  (fmt_d_p[i]),
-            .a      (a_row_p[i]),
-            .b      (b_col_p[i]),
-            .c      (fma_out[i]),
-            .y      (fma_out[i+1])
-        );
+    for (genvar i = 0; i < N; i++) begin : g_red_inputs
+        assign red_in[0][i] = nult_result[i];
     end
 
-    assign d_val = `XLEN'(fma_out[N]);
+    // accumulate reduction tree
+    for (genvar lvl = 0; lvl < LEVELS; lvl++) begin : g_red_tree
+        localparam integer CURSZ = N >> lvl;
+        localparam integer OUTSZ = CURSZ >> 1;
+        for (genvar i = 0; i < OUTSZ; i++) begin : g_add
+            VX_pipe_register #(
+                .DATAW (32),
+                .DEPTH (1)
+            ) pipe_red (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (enable),
+                .data_in  (red_in[lvl][2*i+0] + red_in[lvl][2*i+1]),
+                .data_out (red_in[lvl+1][i])
+            );
+        end
+    end
+
+    wire [31:0] delayed_c;
+
+    VX_pipe_register #(
+        .DATAW (32),
+        .DEPTH (`LATENCY_IMUL + RED_LATENCY)
+    ) pipe_c (
+        .clk     (clk),
+        .reset   (reset),
+        .enable  (enable),
+        .data_in (c_val[31:0]),
+        .data_out(delayed_c)
+    );
+
+    wire [31:0] result;
+
+    // final accumulation
+    VX_pipe_register #(
+        .DATAW (32),
+        .DEPTH (1)
+    ) pipe_acc (
+        .clk     (clk),
+        .reset   (reset),
+        .enable  (enable),
+        .data_in (red_in[LEVELS][0] + delayed_c),
+        .data_out(result)
+    );
+
+    assign d_val = `XLEN'(result);
 
 endmodule

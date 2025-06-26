@@ -448,8 +448,8 @@ static op_string_t op_string(const Instr &instr) {
     }
   #endif // EXT_V_ENABLE
   #ifdef EXT_TCU_ENABLE
-    ,[&](TpuType tcu_type)-> op_string_t {
-      auto tpuArgs = std::get<IntrTpuArgs>(instrArgs);
+    ,[&](TcuType tcu_type)-> op_string_t {
+      auto tpuArgs = std::get<IntrTcuArgs>(instrArgs);
       return op_string(tcu_type, tpuArgs);
     }
   #endif // EXT_TCU_ENABLE
@@ -1044,8 +1044,8 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
               uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
               ++steps;
               auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TPU);
-              instr->setOpType(TpuType::WMMA);
-              instr->setArgs(IntrTpuArgs{fmt_s, fmt_d, m, n});
+              instr->setOpType(TcuType::WMMA);
+              instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n});
               instr->setDestReg(rs3, RegType::Float);
               instr->setSrcReg(0, rs1, RegType::Float);
               instr->setSrcReg(1, rs2, RegType::Float);

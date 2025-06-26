@@ -424,29 +424,29 @@ tensor()
 {
     echo "begin tensor tests..."
 
-    make -C tests/regression/sgemm_tpu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=fp32 -DOTYPE=fp32" make -C tests/regression/sgemm_tpu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tpu
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=fp32 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --debug=3 --log=run_simx.log
 
-    make -C tests/regression/sgemm_tpu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tpu
-    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tpu
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
 
-    make -C tests/regression/sgemm_tpu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=fp16 -DOTYPE=fp16" make -C tests/regression/sgemm_tpu
-    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tpu
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=fp16 -DOTYPE=fp16" make -C tests/regression/sgemm_tcu
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
 
-    make -C tests/regression/sgemm_tpu clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=bf16 -DOTYPE=fp32" make -C tests/regression/sgemm_tpu
-    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tpu
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=32 -DITYPE=bf16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
+    CONFIGS="-DNUM_THREADS=32 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
 
-    make -C tests/regression/sgemm_tpu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=int32 -DOTYPE=int32" make -C tests/regression/sgemm_tpu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tpu
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --debug=3 --log=run_rtlsim.log
 
-    make -C tests/regression/sgemm_tpu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tpu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tpu
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=int16 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
-    make -C tests/regression/sgemm_tpu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp32 -DOTYPE=fp32" make -C tests/regression/sgemm_tpu
-    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tpu
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
+    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE -DTCU_BHF" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
-    make -C tests/regression/sgemm_tpu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tpu
-    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tpu
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=bf16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
     echo "tensor tests done!"
 }

@@ -155,7 +155,7 @@ Core::Core(const SimContext& ctx,
   func_units_.at((int)FUType::VPU) = SimPlatform::instance().create_object<VpuUnit>(this);
 #endif
 #ifdef EXT_TCU_ENABLE
-  func_units_.at((int)FUType::TPU) = SimPlatform::instance().create_object<TpuUnit>(this);
+  func_units_.at((int)FUType::TPU) = SimPlatform::instance().create_object<TcuUnit>(this);
 #endif
 
   // bind commit arbiters

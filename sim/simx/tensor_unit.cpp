@@ -57,9 +57,15 @@ class FMA<float, float16_t> {
 public:
   float operator()(float16_t a, float16_t b, float c) {
     auto xa = rv_htof_s(a.v, 0, nullptr);
+    printf("FMA-htof: a=0x%x, xa=0x%x\n", a.v, xa);
     auto xb = rv_htof_s(b.v, 0, nullptr);
+    printf("FMA-htof: b=0x%x, xb=0x%x\n", b.v, xb);
+    auto xab = rv_fmul_s(xa, xb, 0, nullptr);
+    printf("FMA-fmul: xa=0x%x, xb=0x%x, xab=0x%x\n", xa, xb, xab);
     auto xc = floatToBits(c);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
+    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
+    printf("FMA-fadd: xab=0x%x, xc=0x%x, xd=0x%x\n", xab, xc, xd);
+    //auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
     return bitsToFloat(xd);
   }
 };
@@ -201,10 +207,10 @@ public:
       if (input.empty())
           return;
       auto trace = input.front();
-      auto tcu_type = std::get<TpuType>(trace->op_type);
+      auto tcu_type = std::get<TcuType>(trace->op_type);
       int delay = 0;
       switch (tcu_type) {
-      case TpuType::WMMA:
+      case TcuType::WMMA:
         delay = 4;
         break;
       default:
@@ -270,9 +276,9 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-op_string_t vortex::op_string(TpuType tcu_type, IntrTpuArgs args) {
+op_string_t vortex::op_string(TcuType tcu_type, IntrTcuArgs args) {
   switch (tcu_type) {
-  case TpuType::WMMA:
+  case TcuType::WMMA:
     return {"WMMA." + std::string(vt::fmt_string(args.fmt_s)) + "." + std::string(vt::fmt_string(args.fmt_d))
              + "." + std::to_string(args.step_m) + "." + std::to_string(args.step_n), ""};
   default:

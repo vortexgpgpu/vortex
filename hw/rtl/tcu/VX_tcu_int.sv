@@ -30,9 +30,8 @@ module VX_tcu_int import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID);
 
     localparam MDATA_WIDTH = UUID_WIDTH + NW_WIDTH + PC_BITS + NUM_REGS_BITS;
-
-    localparam PIPE_LATENCY = TCU_TC_K;
-    localparam MDATA_QUEUE_DEPTH = 1 << $clog2(PIPE_LATENCY);
+    localparam FEDP_LATENCY = `LATENCY_IMUL + $clog2(TCU_TC_K) + 1;
+    localparam MDATA_QUEUE_DEPTH = 1 << $clog2(FEDP_LATENCY);
 
     localparam LG_A_BS = $clog2(TCU_A_BLOCK_SIZE);
     localparam LG_B_BS = $clog2(TCU_B_BLOCK_SIZE);
@@ -61,7 +60,7 @@ module VX_tcu_int import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire fedp_enable, fedp_done;
 
     // FEDP delay handling
-    reg [PIPE_LATENCY-1:0] fedp_delay_pipe;
+    reg [FEDP_LATENCY-1:0] fedp_delay_pipe;
     always @(posedge clk) begin
         if (reset) begin
             fedp_delay_pipe <= '0;
@@ -70,7 +69,7 @@ module VX_tcu_int import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 fedp_delay_pipe <= fedp_delay_pipe >> 1;
             end
             if (execute_fire) begin
-                fedp_delay_pipe[PIPE_LATENCY-1] <= 1;
+                fedp_delay_pipe[FEDP_LATENCY-1] <= 1;
             end
         end
     end
@@ -110,8 +109,8 @@ module VX_tcu_int import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [`XLEN-1:0] c_val = execute_if.data.rs3_data[i * TCU_TC_N + j];
 
             VX_tcu_fedp_int #(
-                .DATAW (32),
-                .N     (TCU_TC_K)
+                .LATENCY (FEDP_LATENCY),
+                .N       (TCU_TC_K)
             ) fedp (
                 .clk   (clk),
                 .reset (reset),

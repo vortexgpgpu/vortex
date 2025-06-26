@@ -1373,10 +1373,10 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
     }
   #endif // EXT_V_ENABLE
   #ifdef EXT_TCU_ENABLE
-    ,[&](TpuType tcu_type) {
-      auto tpuArgs = std::get<IntrTpuArgs>(instrArgs);
+    ,[&](TcuType tcu_type) {
+      auto tpuArgs = std::get<IntrTcuArgs>(instrArgs);
       switch (tcu_type) {
-      case TpuType::WMMA: {
+      case TcuType::WMMA: {
         auto trace_data = std::make_shared<TensorUnit::ExeTraceData>();
         trace->data = trace_data;
         assert(warp.tmask.count() == num_threads);

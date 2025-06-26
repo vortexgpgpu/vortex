@@ -20,7 +20,7 @@ namespace vortex {
 
 class Core;
 
-op_string_t op_string(TpuType tcu_type, IntrTpuArgs args);
+op_string_t op_string(TcuType tcu_type, IntrTcuArgs args);
 
 class TensorUnit : public SimObject<TensorUnit> {
 public:

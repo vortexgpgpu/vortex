@@ -424,7 +424,7 @@ void VpuUnit::tick() {
 
 #ifdef EXT_TCU_ENABLE
 
-TpuUnit::TpuUnit(const SimContext& ctx, Core* core)
+TcuUnit::TcuUnit(const SimContext& ctx, Core* core)
 	: FuncUnit(ctx, core, "tpu-unit")
 {
 	// bind tensor unit
@@ -434,7 +434,7 @@ TpuUnit::TpuUnit(const SimContext& ctx, Core* core)
 	}
 }
 
-void TpuUnit::tick() {
+void TcuUnit::tick() {
 	// use tensor_unit
 }
 #endif

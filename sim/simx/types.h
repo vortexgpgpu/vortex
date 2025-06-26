@@ -597,20 +597,20 @@ inline std::ostream &operator<<(std::ostream &os, const VpuOpType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-enum class TpuType {
+enum class TcuType {
   WMMA,
 };
 
-struct IntrTpuArgs {
+struct IntrTcuArgs {
   uint32_t fmt_s  : 4;
   uint32_t fmt_d  : 4;
   uint32_t step_m : 4;
   uint32_t step_n : 4;
 };
 
-inline std::ostream &operator<<(std::ostream &os, const TpuType& type) {
+inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   switch (type) {
-  case TpuType::WMMA: os << "WMMA"; break;
+  case TcuType::WMMA: os << "WMMA"; break;
   default:
     assert(false);
   }
@@ -634,7 +634,7 @@ using OpType = std::variant<
 , VopType
 #endif
 #ifdef EXT_TCU_ENABLE
-, TpuType
+, TcuType
 #endif
 >;
 
@@ -653,7 +653,7 @@ using IntrArgs = std::variant<
 , IntrVopArgs
 #endif
 #ifdef EXT_TCU_ENABLE
-, IntrTpuArgs
+, IntrTcuArgs
 #endif
 >;
 

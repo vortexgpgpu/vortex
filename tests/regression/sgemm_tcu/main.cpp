@@ -237,7 +237,7 @@ kernel_arg_t kernel_arg = {};
 std::string last_build_options;
 
 static void show_usage() {
-  std::cout << "Vortex Sgemm TPU Test." << std::endl;
+  std::cout << "Vortex Sgemm TCU Test." << std::endl;
   std::cout << "Usage: [-m: m] [-n N] [-k: K] [-h: help]" << std::endl;
 }
 

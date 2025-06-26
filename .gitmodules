@@ -7,3 +7,6 @@
 [submodule "third_party/cvfpu"]
 	path = third_party/cvfpu
 	url = https://github.com/openhwgroup/cvfpu.git
+[submodule "third_party/hardfloat"]
+	path = third_party/hardfloat
+	url = https://github.com/bsg-external/HardFloat.git
