@@ -28,6 +28,16 @@ RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR
 RTL_INCLUDE += $(FPU_INCLUDE)
 RTL_INCLUDE += -I$(SRC_DIR)
 
+# Add V extension sources
+ifneq (,$(findstring -DEXT_V_ENABLE, $(CONFIGS)))
+	RTL_INCLUDE += -I$(RTL_DIR)/vpu
+endif
+
+# Add TCU extension sources
+ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu
+endif
+
 # compilation flags
 CFLAGS += -DNDEBUG -DSYNTHESIS -DVIVADO
 CFLAGS += $(CONFIGS)
