@@ -35,20 +35,16 @@ module VX_multiplier #(
         assign prod_w = R_WIDTH'(dataa * datab);
     end
 
-    if (LATENCY == 0) begin : g_passthru
-        assign result = prod_w;
-    end else begin : g_latency
-        reg [LATENCY-1:0][R_WIDTH-1:0] prod_r;
-        always @(posedge clk) begin
-            if (enable) begin
-                prod_r[0] <= prod_w;
-                for (integer i = 1; i < LATENCY; ++i) begin
-                    prod_r[i] <= prod_r[i-1];
-                end
-            end
-        end
-        assign result = prod_r[LATENCY-1];
-    end
+    VX_pipe_register #(
+        .WIDTH   (R_WIDTH),
+        .LATENCY (LATENCY)
+    ) pipe_reg (
+        .clk     (clk),
+        .enable  (enable),
+        .reset   (1'b0),
+        .data_in (prod_w),
+        .data_out(result)
+    );
 
 endmodule
 `TRACING_ON
