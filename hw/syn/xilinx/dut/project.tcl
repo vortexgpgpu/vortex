@@ -86,8 +86,8 @@ proc run_setup {} {
     add_files -norecurse -verbose ${ip_dir}/xil_fma/xil_fma.xci
     add_files -norecurse -verbose ${ip_dir}/xil_fdiv/xil_fdiv.xci
     add_files -norecurse -verbose ${ip_dir}/xil_fsqrt/xil_fsqrt.xci
-    add_files -norecurse -verbose ${ip_dir}/xil_fsqrt/xil_hfmul.xci
-    add_files -norecurse -verbose ${ip_dir}/xil_fsqrt/xil_fadd.xci
+    add_files -norecurse -verbose ${ip_dir}/xil_hfmul/xil_hfmul.xci
+    add_files -norecurse -verbose ${ip_dir}/xil_fadd/xil_fadd.xci
   }
 
   # Synthesis
