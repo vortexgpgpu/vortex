@@ -74,7 +74,7 @@ module VX_tcu_fedp_int #(
         );
     end
 
-    wire [31:0] red_in [0:LEVELS] [N];
+    wire [31:0] red_in [LEVELS+1][N];
 
     for (genvar i = 0; i < N; i++) begin : g_red_inputs
         assign red_in[0][i] = nult_result[i];

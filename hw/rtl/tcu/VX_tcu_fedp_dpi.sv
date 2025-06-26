@@ -95,7 +95,7 @@ module VX_tcu_fedp_dpi #(
         );
     end
 
-    wire [63:0] red_in [0:LEVELS] [TCK];
+    wire [63:0] red_in [LEVELS+1][TCK];
 
     for (genvar i = 0; i < TCK; i++) begin : g_red_inputs
       assign red_in[0][i] = nult_result[i];

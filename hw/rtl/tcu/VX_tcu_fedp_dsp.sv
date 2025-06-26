@@ -66,11 +66,11 @@ module VX_tcu_fedp_dsp #(
             .s_axis_b_tvalid     (1'b1),
             .s_axis_b_tdata      (b_col16[i]),
             `UNUSED_PIN (m_axis_result_tvalid),
-            .m_axis_result_tdata (nult_result[i+1])
+            .m_axis_result_tdata (nult_result[i])
         );
     end
 
-    wire [31:0] red_in [0:LEVELS] [TCK];
+    wire [31:0] red_in [LEVELS+1][TCK];
 
     for (genvar i = 0; i < TCK; i++) begin : g_red_inputs
         assign red_in[0][i] = nult_result[i];
@@ -88,6 +88,8 @@ module VX_tcu_fedp_dsp #(
                 .s_axis_a_tdata      (red_in[lvl][2*i+0]),
                 .s_axis_b_tvalid     (1'b1),
                 .s_axis_b_tdata      (red_in[lvl][2*i+1]),
+                .s_axis_operation_tvalid (1'b1),
+                .s_axis_operation_tdata (8'b0), // 0=add,1=subtract
                 `UNUSED_PIN (m_axis_result_tvalid),
                 .m_axis_result_tdata (red_in[lvl+1][i])
             );
@@ -118,6 +120,8 @@ module VX_tcu_fedp_dsp #(
         .s_axis_a_tdata      (red_in[LEVELS][0]),
         .s_axis_b_tvalid     (1'b1),
         .s_axis_b_tdata      (delayed_c),
+        .s_axis_operation_tvalid (1'b1),
+        .s_axis_operation_tdata (8'b0), // 0=add,1=subtract
         `UNUSED_PIN (m_axis_result_tvalid),
         .m_axis_result_tdata (result)
     );

@@ -83,7 +83,7 @@ package VX_tcu_pkg;
     localparam TCU_UOPS = TCU_M_STEPS * TCU_N_STEPS * TCU_K_STEPS;
 
     // Tracing info
-
+`ifdef SIMULATION
     task trace_fmt(input int level, input [3:0] fmt);
         case (fmt)
             TCU_FP32_ID: `TRACE(level, ("fp32"))
@@ -115,6 +115,7 @@ package VX_tcu_pkg;
             default: `TRACE(level, ("?"))
         endcase
     endtask
+`endif
 
 endpackage
 

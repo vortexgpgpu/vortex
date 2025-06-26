@@ -115,7 +115,8 @@
                         /* verilator lint_on UNUSED */
 
 `ifdef SV_DPI
-`define TRACE(level, args) dpi_trace(level, $sformatf args);
+`define TRACE(level, args) \
+    dpi_trace(level, $sformatf args);
 `else
 `define TRACE(level, args) \
     if (level <= `DEBUG_LEVEL) begin \
@@ -133,7 +134,9 @@
 `define RUNTIME_ASSERT(cond, msg)
 
 `define DEBUG_BLOCK(x)
-`define TRACE(level, args)
+`define TRACE(level, args) \
+    if (level <= `DEBUG_LEVEL) begin \
+    end
 `define SFORMATF(x) ""
 
 `define TRACING_ON
