@@ -36,8 +36,8 @@ module VX_multiplier #(
     end
 
     VX_pipe_register #(
-        .WIDTH   (R_WIDTH),
-        .LATENCY (LATENCY)
+        .DATAW (R_WIDTH),
+        .DEPTH (LATENCY)
     ) pipe_reg (
         .clk     (clk),
         .enable  (enable),
