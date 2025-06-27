@@ -32,13 +32,13 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam MDATA_WIDTH = UUID_WIDTH + NW_WIDTH + PC_BITS + NUM_REGS_BITS;
 
 `ifdef TCU_DPI
-    localparam FMUL_LATENCY = `LATENCY_IMUL;
+    localparam FMUL_LATENCY = 2;
     localparam FADD_LATENCY = 1;
     localparam FRND_LATENCY = 1;
     localparam ACC_LATENCY  = $clog2(2 * TCU_TC_K) * FADD_LATENCY + FADD_LATENCY;
     localparam FEDP_LATENCY = FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
 `elsif TCU_BHF
-    localparam FMUL_LATENCY = `LATENCY_IMUL;
+    localparam FMUL_LATENCY = 2;
     localparam FADD_LATENCY = 1;
     localparam FRND_LATENCY = 1;
     localparam ACC_LATENCY  = $clog2(2 * TCU_TC_K) * FADD_LATENCY + FADD_LATENCY;

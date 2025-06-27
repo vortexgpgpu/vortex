@@ -77,7 +77,7 @@ void AluUnit::tick() {
 			case MdvType::MULHU:
 			case MdvType::MULH:
 			case MdvType::MULHSU:
-				delay = LATENCY_IMUL+2;
+				delay = 2;
 				break;
 			case MdvType::DIV:
 			case MdvType::DIVU:

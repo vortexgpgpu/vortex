@@ -428,18 +428,6 @@
 `define LSUQ_OUT_SIZE   `MAX(`LSUQ_IN_SIZE, `LSU_LINE_SIZE / (`XLEN / 8))
 `endif
 
-`ifndef LATENCY_IMUL
-`ifdef VIVADO
-`define LATENCY_IMUL 4
-`endif
-`ifdef QUARTUS
-`define LATENCY_IMUL 3
-`endif
-`ifndef LATENCY_IMUL
-`define LATENCY_IMUL 4
-`endif
-`endif
-
 // Floating-Point Units ///////////////////////////////////////////////////////
 
 // Size of FPU Request Queue

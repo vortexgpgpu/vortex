@@ -160,6 +160,7 @@
 
 `ifdef QUARTUS
 `define MAX_FANOUT      8
+`define LATENCY_IMUL    3
 `define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
 `define USE_BLOCK_BRAM  (* ramstyle = "block" *)
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
@@ -171,6 +172,7 @@
 `define STRING          string
 `elsif VIVADO
 `define MAX_FANOUT      8
+`define LATENCY_IMUL    2
 `define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
 `define USE_BLOCK_BRAM  (* ram_style = "block" *)
 `define USE_FAST_BRAM   (* ram_style = "distributed" *)
@@ -185,6 +187,7 @@
 `endif
 `else
 `define MAX_FANOUT      8
+`define LATENCY_IMUL    2
 `define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
 `define USE_BLOCK_BRAM
 `define USE_FAST_BRAM

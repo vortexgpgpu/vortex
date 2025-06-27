@@ -31,7 +31,7 @@ module VX_tcu_fedp_dpi #(
 );
     localparam TCK = 2 * N;
     localparam LEVELS = $clog2(TCK);
-    localparam FMUL_LATENCY = `LATENCY_IMUL;
+    localparam FMUL_LATENCY = 2;
     localparam FADD_LATENCY = 1;
     localparam FRND_LATENCY = 1;
     localparam RED_LATENCY = LEVELS * FADD_LATENCY;

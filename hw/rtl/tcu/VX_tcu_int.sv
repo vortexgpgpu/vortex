@@ -29,10 +29,11 @@ module VX_tcu_int import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID);
 
-    localparam MDATA_WIDTH = UUID_WIDTH + NW_WIDTH + PC_BITS + NUM_REGS_BITS;
-    localparam MUL_LATENCY = 3;
-    localparam ADD_LATENCY = 1;
-    localparam FEDP_LATENCY = MUL_LATENCY + $clog2(TCU_TC_K) * ADD_LATENCY + ADD_LATENCY;
+    localparam MDATA_WIDTH  = UUID_WIDTH + NW_WIDTH + PC_BITS + NUM_REGS_BITS;
+    localparam MUL_LATENCY  = 2;
+    localparam ADD_LATENCY  = 1;
+    localparam ACC_LATENCY  = $clog2(TCU_TC_K) * ADD_LATENCY + ADD_LATENCY;
+    localparam FEDP_LATENCY = MUL_LATENCY + ACC_LATENCY;
     localparam PIPE_LATENCY = FEDP_LATENCY + 1;
     localparam MDATA_QUEUE_DEPTH = 1 << $clog2(PIPE_LATENCY);
 

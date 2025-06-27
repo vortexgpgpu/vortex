@@ -30,7 +30,7 @@ module VX_tcu_fedp_int #(
     output wire [`XLEN-1:0] d_val
 );
     localparam LEVELS = $clog2(N);
-    localparam MUL_LATENCY = 3;
+    localparam MUL_LATENCY = 2;
     localparam ADD_LATENCY = 1;
     localparam RED_LATENCY = LEVELS * ADD_LATENCY;
     localparam ACC_LATENCY = RED_LATENCY + ADD_LATENCY;
@@ -38,56 +38,6 @@ module VX_tcu_fedp_int #(
 
     `UNUSED_VAR ({a_row, b_col, c_val});
     `UNUSED_VAR (fmt_d);
-
-    wire [31:0] prod_i32 [N];
-    wire [31:0] prod_i16 [N];
-    wire [31:0] prod_i8 [N];
-
-    // multiplication stage
-    for (genvar i = 0; i < N; i++) begin : g_prod_i32
-        reg [31:0] prod1, prod2, prod3;
-        always @(posedge clk) begin
-            if (enable) begin
-                prod1 <= $signed(a_row[i][31:0]) * $signed(b_col[i][31:0]);
-                prod2 <= prod1;
-                prod3 <= prod2;
-            end
-        end
-        assign prod_i32[i] = prod3;
-    end
-
-    for (genvar i = 0; i < N; i++) begin : g_prod_i16
-        reg [31:0] prod1_0, prod1_1, prod2_0, prod2_1;
-        reg [31:0] sum3;
-        always @(posedge clk) begin
-            if (enable) begin
-                prod1_0 <= $signed(a_row[i][15:0]) * $signed(b_col[i][15:0]);
-                prod1_1 <= $signed(a_row[i][31:16]) * $signed(b_col[i][31:16]);
-                prod2_0 <= prod1_0;
-                prod2_1 <= prod1_1;
-                sum3    <= prod2_0 + prod2_1;
-            end
-        end
-        assign prod_i16[i] = sum3;
-    end
-
-    for (genvar i = 0; i < N; i++) begin : g_prod_i8
-        reg [16:0] prod1_0, prod1_1, prod1_2, prod1_3;
-        reg [17:0] sum2_0, sum2_1;
-        reg [18:0] sum3;
-        always @(posedge clk) begin
-            if (enable) begin
-                prod1_0 <= $signed(a_row[i][7:0]) * $signed(b_col[i][7:0]);
-                prod1_1 <= $signed(a_row[i][15:8]) * $signed(b_col[i][15:8]);
-                prod1_2 <= $signed(a_row[i][23:16]) * $signed(b_col[i][23:16]);
-                prod1_3 <= $signed(a_row[i][31:24]) * $signed(b_col[i][31:24]);
-                sum2_0  <= prod1_0 + prod1_1;
-                sum2_1  <= prod1_2 + prod1_3;
-                sum3    <= sum2_0 + sum2_1;
-            end
-        end
-        assign prod_i8[i] = 32'(sum3);
-    end
 
     wire [2:0] delayed_fmt_s;
     VX_pipe_register #(
@@ -102,13 +52,37 @@ module VX_tcu_fedp_int #(
     );
 
     wire [31:0] mult_result [N];
-    for (genvar i = 0; i < N; i++) begin : g_mul_sel
+
+    // multiplication stage
+    for (genvar i = 0; i < N; i++) begin : g_prod
+        reg [31:0] prod_i32_1, prod_i32_2;
+        reg [31:0] prod_i16_1, prod_i16_2;
+        reg [16:0] prod_i8_1a, prod_i8_1b;
+        reg [17:0] prod_i8_2;
+
+        always @(posedge clk) begin
+            if (enable) begin
+                prod_i32_1 <= $signed(a_row[i][31:0]) * $signed(b_col[i][31:0]);
+                prod_i32_2 <= prod_i32_1;
+
+                prod_i16_1 <= ($signed(a_row[i][15:0]) * $signed(b_col[i][15:0]))
+                            + ($signed(a_row[i][31:16]) * $signed(b_col[i][31:16]));
+                prod_i16_2 <= prod_i16_1;
+
+                prod_i8_1a <= ($signed(a_row[i][7:0]) * $signed(b_col[i][7:0]))
+                            + ($signed(a_row[i][15:8]) * $signed(b_col[i][15:8]));
+                prod_i8_1b <= ($signed(a_row[i][23:16]) * $signed(b_col[i][23:16]))
+                            + ($signed(a_row[i][31:24]) * $signed(b_col[i][31:24]));
+                prod_i8_2  <= prod_i8_1a + prod_i8_1b;
+            end
+        end
+
         reg [31:0] mult_sel;
         always @(*) begin
             case (delayed_fmt_s)
-            3'd0: mult_sel = prod_i32[i];
-            3'd1: mult_sel = prod_i16[i];
-            3'd2: mult_sel = prod_i8[i];
+            3'd0: mult_sel = prod_i32_2;
+            3'd1: mult_sel = prod_i16_2;
+            3'd2: mult_sel = 32'(prod_i8_2);
             default: mult_sel = 'x;
             endcase
         end
@@ -116,7 +90,6 @@ module VX_tcu_fedp_int #(
     end
 
     wire [31:0] red_in [LEVELS+1][N];
-
     for (genvar i = 0; i < N; i++) begin : g_red_inputs
         assign red_in[0][i] = mult_result[i];
     end
