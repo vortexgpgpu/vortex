@@ -50,7 +50,7 @@ public:
   static const char* type_str() {
     return "float";
   }
-  static int generate() {
+  static float generate() {
     return static_cast<float>(rand()) / RAND_MAX;
   }
   static bool compare(float a, float b, int index, int errors) {
