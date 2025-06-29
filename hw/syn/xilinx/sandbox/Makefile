@@ -1,7 +1,7 @@
 ROOT_DIR := $(realpath ../../../..)
 include $(ROOT_DIR)/config.mk
 
-DEVICE ?= xcu50-fsvh2104-2-e
+DEVICE ?= xcu55c-fsvh2892-2L-e
 
 MAX_JOBS ?= 8
 
