@@ -46,38 +46,123 @@ namespace detail {
   template <typename T>
   using raw_unsigned_t = typename raw_unsigned<T>::type;
 
-  template <typename D, typename S>
-  inline __attribute__((always_inline)) D bit_fill(S src) {
-    static_assert(sizeof(D) % sizeof(S) == 0, "D must be a multiple of S in size");
-    constexpr uint32_t count = sizeof(D) / sizeof(S);
-    constexpr uint32_t bits = 8 * sizeof(S);
-    using US = raw_unsigned_t<S>;
-    using UD = raw_unsigned_t<D>;
-    auto src_u = *reinterpret_cast<const US*>(&src); // bit cast
-    auto src_d = static_cast<UD>(src_u); // zero-extend
-    UD result_u(0);
-    for (uint32_t i = 0; i < count; i++) {
-      result_u |= (src_d << (i * bits));
-    }
-    return *reinterpret_cast<const D*>(&result_u);
-  }
+  template <typename T, typename D>
+  struct data_accessor_t {
+    using Type = typename T::dtype;
 
-  template <typename D, typename S>
-  inline __attribute__((always_inline)) D pack_row(const S *base, uint32_t ldm) {
-    static_assert(sizeof(D) % sizeof(S) == 0, "D must be a multiple of S in size");
-    constexpr uint32_t count = sizeof(D) / sizeof(S);
-    constexpr uint32_t bits = 8 * sizeof(S);
-    using US = raw_unsigned_t<S>;
-    using UD = raw_unsigned_t<D>;
-    UD result_u(0);
-    for (uint32_t i = 0; i < count; ++i) {
-      auto src_u = *reinterpret_cast<const US*>(base); // bit cast
-      auto src_d = static_cast<UD>(src_u); // zero-extend
-      result_u |= (src_d << (i * bits));
-      base += ldm; // move to the next row
+    static inline D bit_fill(Type src) {
+      static_assert(sizeof(D) % sizeof(Type) == 0, "D must be a multiple of Type in size");
+      if constexpr (std::is_same_v<Type, D>) {
+        return src; // passthrough
+      } else {
+        constexpr uint32_t count = sizeof(D) / sizeof(Type);
+        constexpr uint32_t bits = 8 * sizeof(Type);
+        using US = raw_unsigned_t<Type>;
+        using UD = raw_unsigned_t<D>;
+        auto src_u = *reinterpret_cast<const US*>(&src); // unsigned cast
+        auto src_d = static_cast<UD>(src_u); // zero-extend
+        UD result_u(0);
+        for (uint32_t i = 0; i < count; i++) {
+          result_u |= (src_d << (i * bits));
+        }
+        return *reinterpret_cast<const D*>(&result_u);
+      }
     }
-    return *reinterpret_cast<const D*>(&result_u);
-  }
+
+    static inline D pack_row(const Type *base, uint32_t /*col*/, uint32_t ldm) {
+      static_assert(sizeof(D) % sizeof(Type) == 0, "D must be a multiple of Type in size");
+      constexpr uint32_t count = sizeof(D) / sizeof(Type);
+      constexpr uint32_t bits = 8 * sizeof(Type);
+      using US = raw_unsigned_t<Type>;
+      using UD = raw_unsigned_t<D>;
+      UD result_u(0);
+      for (uint32_t i = 0; i < count; ++i) {
+        auto src_u = *reinterpret_cast<const US*>(base); // unsigned cast
+        auto src_d = static_cast<UD>(src_u); // zero-extend
+        result_u |= (src_d << (i * bits));
+        base += ldm; // next row
+      }
+      return *reinterpret_cast<const D*>(&result_u);
+    }
+  };
+
+  template <typename D>
+  struct data_accessor_t<int4, D> {
+
+    static inline D bit_fill(uint8_t src) {
+      constexpr uint32_t count = sizeof(D);
+      assert((src & 0xf0) == 0 && "src must be a 4-bit value");
+      using UD = raw_unsigned_t<D>;
+      uint8_t src_u8 = (src << 4) | src; // pack 2 nibbles
+      auto src_d = static_cast<UD>(src_u8); // zero-extend
+      UD result_u(0);
+      for (uint32_t i = 0; i < count; i++) {
+        result_u |= (src_d << (i * 8));
+      }
+      return *reinterpret_cast<const D*>(&result_u);
+    }
+
+    static inline D pack_row(const uint8_t *base, uint32_t col, uint32_t ldm) {
+      constexpr uint32_t count = sizeof(D);
+      using UD = raw_unsigned_t<D>;
+      assert(col < ldm && "col must be less than ldm");
+      uint32_t col_off = col / 2;
+      uint32_t ldm_half = ldm / 2;
+      bool col_odd = col & 0x1;
+      UD result_u(0);
+      auto ptr = base + col_off;
+      for (uint32_t i = 0; i < count; ++i) {
+        uint8_t src0_u8 = ptr[0];
+        uint8_t src1_u8 = ptr[ldm_half];
+        uint8_t src0_u4 = col_odd ? (src0_u8 >> 4) : (src0_u8 & 0xf); // 4 bits
+        uint8_t src1_u4 = col_odd ? (src1_u8 >> 4) : (src1_u8 & 0xf); // 4 bits
+        uint8_t src_u8  = (src1_u4 << 4) | src0_u4; // combine
+        auto src_d = static_cast<UD>(src_u8); // zero-extend
+        result_u |= (src_d << (i * 8));
+        ptr += ldm; // next row
+      }
+      return *reinterpret_cast<const D*>(&result_u);
+    }
+  };
+
+  template <typename D>
+  struct data_accessor_t<uint4, D> {
+
+    static inline D bit_fill(uint8_t src) {
+      constexpr uint32_t count = sizeof(D);
+      assert((src & 0xf0) == 0 && "src must be a 4-bit value");
+      using UD = raw_unsigned_t<D>;
+      uint8_t src_u8 = (src << 4) | src; // pack 2 nibbles
+      auto src_d = static_cast<UD>(src_u8); // zero-extend
+      UD result_u(0);
+      for (uint32_t i = 0; i < count; i++) {
+        result_u |= (src_d << (i * 8));
+      }
+      return *reinterpret_cast<const D*>(&result_u);
+    }
+
+    static inline D pack_row(const uint8_t *base, uint32_t col, uint32_t ldm) {
+      constexpr uint32_t count = sizeof(D);
+      using UD = raw_unsigned_t<D>;
+      assert(col < ldm && "col must be less than ldm");
+      uint32_t col_off = col / 2;
+      uint32_t row_off = ldm / 2;
+      bool col_odd = col & 0x1;
+      UD result_u(0);
+      auto ptr = base + col_off;
+      for (uint32_t i = 0; i < count; ++i) {
+        uint8_t src0_u8 = ptr[0];
+        uint8_t src1_u8 = ptr[row_off];
+        uint8_t src0_u4 = col_odd ? (src0_u8 >> 4) : (src0_u8 & 0xf); // 4 bits
+        uint8_t src1_u4 = col_odd ? (src1_u8 >> 4) : (src1_u8 & 0xf); // 4 bits
+        uint8_t src_u8  = (src1_u4 << 4) | src0_u4; // combine
+        auto src_d = static_cast<UD>(src_u8); // zero-extend
+        result_u |= (src_d << (i * 8));
+        ptr += ldm; // next row
+      }
+      return *reinterpret_cast<const D*>(&result_u);
+    }
+  };
 }
 
 template <uint32_t NT, // number of threads per warp
@@ -104,6 +189,11 @@ public:
   using input_t  = typename It::dtype;
   using output_t = typename Ot::dtype;
 
+  using input_acessor_t = detail::data_accessor_t<It, vreg_t>;
+  using output_acessor_t = detail::data_accessor_t<Ot, vreg_t>;
+
+  static constexpr uint32_t input_is_subbyte = (It::bits < 8);
+
   static constexpr uint32_t i_ratio = sizeof(vreg_t) / sizeof(input_t);
   static constexpr uint32_t tileM = cfg::tileM;
   static constexpr uint32_t tileN = cfg::tileN;
@@ -115,7 +205,12 @@ public:
 
   template <typename Frag, typename T>
   static __attribute__((always_inline)) void fill_fragment(Frag &dst, T value) {
-    auto fill_data = detail::bit_fill<vreg_t>(value);
+    vreg_t fill_data;
+    if constexpr (Frag::Use == accumulator) {
+      fill_data = output_acessor_t::bit_fill(value);
+    } else {
+      fill_data = input_acessor_t::bit_fill(value);
+    }
     detail::unroll_for<Frag::NR>([&](auto r) {
       vreg_t tmp;
       __asm__ volatile("fmv.s %0, %1" : "=f"(tmp): "f"(fill_data));
@@ -130,103 +225,105 @@ public:
       // Load row-major matrix A
       uint32_t block_idx = (cfg::a_block_size == NT) ? 0 : (lane / cfg::a_block_size);
       uint32_t lane_in_blk = (cfg::a_block_size == NT) ? lane : (lane % cfg::a_block_size);
-      uint32_t elem_row = lane_in_blk / cfg::tcK;
-      uint32_t elem_col = lane_in_blk % cfg::tcK;
-      if constexpr (src_layout == row_major) {
-        uint32_t m_stride = cfg::a_sub_blocks * cfg::tcM * ldm;
-        uint32_t k_stride = cfg::tcK * i_ratio;
-        auto base = reinterpret_cast<const input_t*>(src) + (block_idx * cfg::tcM + elem_row) * ldm + (elem_col * i_ratio);
-        detail::unroll_for<Frag::NR>([&](auto r) {
-          uint32_t block_m = r / cfg::k_steps;
-          uint32_t block_k = r % cfg::k_steps;
-          auto ptr = base + block_m * m_stride + block_k * k_stride;
-          assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
-          dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
-        });
-      } else {
-        uint32_t m_stride = cfg::a_sub_blocks * cfg::tcM;
-        uint32_t k_stride = cfg::tcK * i_ratio * ldm;
-        auto base = reinterpret_cast<const input_t*>(src) + (elem_col * i_ratio) * ldm + (block_idx * cfg::tcM + elem_row);
-        detail::unroll_for<Frag::NR>([&](auto r) {
-          uint32_t block_m = r / cfg::k_steps;
-          uint32_t block_k = r % cfg::k_steps;
-          auto ptr = base + block_m * m_stride + block_k * k_stride;
-          if constexpr (sizeof(vreg_t) == sizeof(input_t)) {
+      uint32_t block_row = (lane_in_blk / cfg::tcK) + (block_idx * cfg::tcM);
+      uint32_t block_col = (lane_in_blk % cfg::tcK) * i_ratio;
+      uint32_t m_stride  = cfg::a_sub_blocks * cfg::tcM;
+      uint32_t k_stride  = cfg::tcK * i_ratio;
+      if constexpr (src_layout == col_major) {
+        std::swap(block_row, block_col);
+      }
+      auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm;
+      if constexpr (!(src_layout == col_major && input_is_subbyte)) {
+        base += block_col;
+      }
+      detail::unroll_for<Frag::NR>([&](auto r) {
+        uint32_t block_m  = r / cfg::k_steps;
+        uint32_t block_k  = r % cfg::k_steps;
+        uint32_t elem_row = block_m * m_stride;
+        uint32_t elem_col = block_k * k_stride;
+        if constexpr (src_layout == col_major) {
+          std::swap(elem_row, elem_col);
+          auto ptr = base + elem_row * ldm;
+          if constexpr (!input_is_subbyte) {
+            ptr += elem_col;
+          }
+          if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
             dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
           } else {
-            dst.data[r] = detail::pack_row<vreg_t>(ptr, ldm);
+            dst.data[r] = input_acessor_t::pack_row(ptr, block_col + elem_col, ldm);
           }
-        });
-      }
+        } else {
+          // raw_major layout
+          auto ptr = base + elem_row * ldm + elem_col;
+          assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
+          dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+        }
+      });
     } else if constexpr (Frag::Use == matrix_b) {
       // Load column-major matrix B
       uint32_t block_idx = (cfg::b_block_size == NT) ? 0 : (lane / cfg::b_block_size);
       uint32_t lane_in_blk = (cfg::b_block_size == NT) ? lane : (lane % cfg::b_block_size);
-      uint32_t elem_col = lane_in_blk / cfg::tcK;
-      uint32_t elem_row = lane_in_blk % cfg::tcK;
-      if constexpr (src_layout == row_major) {
-        uint32_t k_stride = cfg::tcK * i_ratio * ldm;
-        uint32_t n_stride = cfg::b_sub_blocks * cfg::tcN;
-        auto base = reinterpret_cast<const input_t*>(src) + (elem_row * i_ratio) * ldm + (block_idx * cfg::tcN + elem_col);
-        detail::unroll_for<Frag::NR>([&](auto r) {
-          uint32_t block_k = r / cfg::b_sub_steps;
-          uint32_t block_n = r % cfg::b_sub_steps;
-          auto ptr = base + block_k * k_stride + block_n * n_stride;
-          if constexpr (sizeof(vreg_t) == sizeof(input_t)) {
+      uint32_t block_col = (lane_in_blk / cfg::tcK) + (block_idx * cfg::tcN);
+      uint32_t block_row = (lane_in_blk % cfg::tcK) * i_ratio;
+      uint32_t n_stride  = cfg::b_sub_blocks * cfg::tcN;
+      uint32_t k_stride  = cfg::tcK * i_ratio;
+      if constexpr (src_layout == col_major) {
+        std::swap(block_row, block_col);
+      }
+      auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm;
+      if constexpr (!(src_layout == row_major && input_is_subbyte)) {
+        base += block_col;
+      }
+      detail::unroll_for<Frag::NR>([&](auto r) {
+        uint32_t block_k = r / cfg::b_sub_steps;
+        uint32_t block_n = r % cfg::b_sub_steps;
+        uint32_t elem_row = block_k * k_stride;
+        uint32_t elem_col = block_n * n_stride;
+        if constexpr (src_layout == row_major) {
+          auto ptr = base + elem_row * ldm;
+          if constexpr (!input_is_subbyte) {
+            ptr += elem_col;
+          }
+          if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
             dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
           } else {
-            dst.data[r] = detail::pack_row<vreg_t>(ptr, ldm);
+            dst.data[r] = input_acessor_t::pack_row(ptr, block_col + elem_col, ldm);
           }
-        });
-      } else {
-        uint32_t k_stride = cfg::tcK * i_ratio;
-        uint32_t n_stride = cfg::b_sub_blocks * cfg::tcN * ldm;
-        auto base = reinterpret_cast<const input_t*>(src) + (block_idx * cfg::tcN + elem_col) * ldm + (elem_row * i_ratio);
-        detail::unroll_for<Frag::NR>([&](auto r) {
-          uint32_t block_k = r / cfg::b_sub_steps;
-          uint32_t block_n = r % cfg::b_sub_steps;
-          auto ptr = base + block_k * k_stride + block_n * n_stride;
+        } else {
+          // col_major layout
+          std::swap(elem_row, elem_col);
+          auto ptr = base + elem_row * ldm + elem_col;
           assert(reinterpret_cast<uintptr_t>(ptr) % alignof(vreg_t) == 0 && "pointer must be aligned to 4 bytes");
           dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
-        });
-      }
+        }
+      });
     } else {
       // Load accumulator matrix C
-      uint32_t elem_row = lane / cfg::tcN;
-      uint32_t elem_col = lane % cfg::tcN;
-      if constexpr (src_layout == row_major) {
-        uint32_t m_stride = cfg::tcM * ldm;
-        uint32_t n_stride = cfg::tcN;
-        auto base = reinterpret_cast<const output_t*>(src) + elem_row * ldm + elem_col;
-        detail::unroll_for<Frag::NR>([&](auto r) {
-          uint32_t block_m = r / cfg::n_steps;
-          uint32_t block_n = r % cfg::n_steps;
-          auto ptr = base + block_m * m_stride + block_n * n_stride;
-          if constexpr (sizeof(vreg_t) == sizeof(output_t)) {
-            dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
-          } else {
-            vreg_t tmp(0);
-            *reinterpret_cast<output_t*>(&tmp) = *ptr;
-            dst.data[r] = tmp;
-          }
-        });
-      } else {
-        uint32_t m_stride = cfg::tcM;
-        uint32_t n_stride = cfg::tcN * ldm;
-        auto base = reinterpret_cast<const output_t*>(src) + elem_col * ldm + elem_row;
-        detail::unroll_for<Frag::NR>([&](auto r) {
-          uint32_t block_m = r / cfg::n_steps;
-          uint32_t block_n = r % cfg::n_steps;
-          auto ptr = base + block_m * m_stride + block_n * n_stride;
-          if constexpr (sizeof(vreg_t) == sizeof(output_t)) {
-            dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
-          } else {
-            vreg_t tmp(0);
-            *reinterpret_cast<output_t*>(&tmp) = *ptr;
-            dst.data[r] = tmp;
-          }
-        });
+      uint32_t block_row = lane / cfg::tcN;
+      uint32_t block_col = lane % cfg::tcN;
+      uint32_t m_stride = cfg::tcM;
+      uint32_t n_stride = cfg::tcN;
+      if constexpr (src_layout == col_major) {
+        std::swap(block_row, block_col);
       }
+      auto base = reinterpret_cast<const output_t*>(src) + block_row * ldm + block_col;
+      detail::unroll_for<Frag::NR>([&](auto r) {
+        uint32_t block_m  = r / cfg::n_steps;
+        uint32_t block_n  = r % cfg::n_steps;
+        uint32_t elem_row = block_m * m_stride;
+        uint32_t elem_col = block_n * n_stride;
+        if constexpr (src_layout == col_major) {
+          std::swap(elem_row, elem_col);
+        }
+        auto ptr = base + elem_row * ldm + elem_col;
+        if constexpr (sizeof(vreg_t) == sizeof(output_t)) {
+          dst.data[r] = *reinterpret_cast<const vreg_t *>(ptr);
+        } else {
+          vreg_t tmp(0);
+          *reinterpret_cast<output_t*>(&tmp) = *ptr;
+          dst.data[r] = tmp;
+        }
+      });
     }
   }
 
@@ -234,39 +331,30 @@ public:
   static __attribute__((always_inline)) void store_matrix_sync(void *dst, const Frag &src, size_t ldm) {
     static_assert(Frag::Use == accumulator, "only accumulator fragment can be stored");
     uint32_t lane = vx_thread_id();
-    uint32_t elem_row = lane / cfg::tcN;
-    uint32_t elem_col = lane % cfg::tcN;
-    if constexpr (dst_layout == row_major) {
-      uint32_t m_stride = cfg::tcM * ldm;
-      uint32_t n_stride = cfg::tcN;
-      auto base = reinterpret_cast<output_t*>(dst) + elem_row * ldm + elem_col;
-      detail::unroll_for<Frag::NR>([&](auto r) {
-        uint32_t block_m = r / cfg::n_steps;
-        uint32_t block_n = r % cfg::n_steps;
-        auto ptr = base + block_m * m_stride + block_n * n_stride;
-        if constexpr (sizeof(vreg_t) == sizeof(output_t)) {
-          *reinterpret_cast<vreg_t*>(ptr) = src.data[r];
-        } else {
-          vreg_t tmp(src.data[r]);
-          *ptr = *reinterpret_cast<const output_t*>(&tmp);
-        }
-      });
-    } else {
-      uint32_t m_stride = cfg::tcM;
-      uint32_t n_stride = cfg::tcN * ldm;
-      auto base = reinterpret_cast<output_t*>(dst) + elem_col * ldm + elem_row;
-      detail::unroll_for<Frag::NR>([&](auto r) {
-        uint32_t block_m = r / cfg::n_steps;
-        uint32_t block_n = r % cfg::n_steps;
-        auto ptr = base + block_m * m_stride + block_n * n_stride;
-        if constexpr (sizeof(vreg_t) == sizeof(output_t)) {
-          *reinterpret_cast<vreg_t*>(ptr) = src.data[r];
-        } else {
-          vreg_t tmp(src.data[r]);
-          *ptr = *reinterpret_cast<const output_t*>(&tmp);
-        }
-      });
+    uint32_t block_row = lane / cfg::tcN;
+    uint32_t block_col = lane % cfg::tcN;
+    uint32_t m_stride  = cfg::tcM;
+    uint32_t n_stride  = cfg::tcN;
+    if constexpr (dst_layout == col_major) {
+      std::swap(block_row, block_col);
     }
+    auto base = reinterpret_cast<output_t*>(dst) + block_row * ldm + block_col;
+    detail::unroll_for<Frag::NR>([&](auto r) {
+      uint32_t block_m  = r / cfg::n_steps;
+      uint32_t block_n  = r % cfg::n_steps;
+      uint32_t elem_row = block_m * m_stride;
+      uint32_t elem_col = block_n * n_stride;
+      if constexpr (dst_layout == col_major) {
+        std::swap(elem_row, elem_col);
+      }
+      auto ptr = base + elem_row * ldm + elem_col;
+      if constexpr (sizeof(vreg_t) == sizeof(output_t)) {
+        *reinterpret_cast<vreg_t*>(ptr) = src.data[r];
+      } else {
+        vreg_t tmp(src.data[r]);
+        *ptr = *reinterpret_cast<const output_t*>(&tmp);
+      }
+    });
   }
 
   template <typename FragD, typename FragA, typename FragB, typename FragC>

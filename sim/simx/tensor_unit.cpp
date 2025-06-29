@@ -14,7 +14,6 @@
 
 #include "tensor_unit.h"
 #include "tensor_cfg.h"
-#include <softfloat_types.h>
 #include <rvfloats.h>
 #include "core.h"
 
@@ -23,123 +22,136 @@ using namespace vortex;
 namespace vt = vortex::tensor;
 using cfg = vt::wmma_config_t<NUM_THREADS>;
 
-union fp32_u32_t {
-  float    f;
-  uint32_t u;
-};
-
-inline uint32_t floatToBits(float f) noexcept {
-  fp32_u32_t pun;
-  pun.f = f;
-  return pun.u;
-}
-
-inline float bitsToFloat(uint32_t u) noexcept {
-  fp32_u32_t pun;
-  pun.u = u;
-  return pun.f;
-}
-
 inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;
 }
 
-template <typename Ot, typename It>
-class FMA {
-public:
-  Ot operator()(const It& a, const It& b, const Ot& c) {
-    return static_cast<Ot>(a) * static_cast<Ot>(b) + c;
+template <typename It, typename Ot>
+struct FMA {
+  using itype = typename It::dtype;
+  using otype = typename Ot::dtype;
+  static otype eval(itype a, itype b, otype c) {
+    return static_cast<otype>(a) * static_cast<otype>(b) + c;
   }
 };
 
 template <>
-class FMA<float, float16_t> {
-public:
-  float operator()(float16_t a, float16_t b, float c) {
-    auto xa = rv_htof_s(a.v, 0, nullptr);
-    printf("FMA-htof: a=0x%x, xa=0x%x\n", a.v, xa);
-    auto xb = rv_htof_s(b.v, 0, nullptr);
-    printf("FMA-htof: b=0x%x, xb=0x%x\n", b.v, xb);
-    auto xab = rv_fmul_s(xa, xb, 0, nullptr);
-    printf("FMA-fmul: xa=0x%x, xb=0x%x, xab=0x%x\n", xa, xb, xab);
-    auto xc = floatToBits(c);
+struct FMA<vt::fp16, vt::fp32> {
+  static float eval(uint16_t a, uint16_t b, float c) {
+    auto xa = rv_htof_s(a, 0, nullptr);
+    auto xb = rv_htof_s(b, 0, nullptr);
+    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
+    auto xc = bit_cast<uint32_t>(c);
     auto xd = rv_fadd_s(xab, xc, 0, nullptr);
-    printf("FMA-fadd: xab=0x%x, xc=0x%x, xd=0x%x\n", xab, xc, xd);
-    //auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    return bitsToFloat(xd);
+    return bit_cast<float>(xd);
   }
 };
 
 template <>
-class FMA<float16_t, float16_t> {
-public:
-  float16_t operator()(float16_t a, float16_t b, float16_t c) {
-    auto xa = rv_htof_s(a.v, 0, nullptr);
-    auto xb = rv_htof_s(b.v, 0, nullptr);
-    auto xc = rv_htof_s(c.v, 0, nullptr);
+struct FMA<vt::fp16, vt::fp16> {
+  static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
+    auto xa = rv_htof_s(a, 0, nullptr);
+    auto xb = rv_htof_s(b, 0, nullptr);
+    auto xc = rv_htof_s(c, 0, nullptr);
     auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
     auto xh = rv_ftoh_s(xd, 0, nullptr);
-    return float16_t{xh};
+    return xh;
   }
 };
 
 template <>
-class FMA<float, bfloat16_t> {
-public:
-  float operator()(bfloat16_t a, bfloat16_t b, float c) {
-    auto xa = rv_btof_s(a.v, 0, nullptr);
-    auto xb = rv_btof_s(b.v, 0, nullptr);
-    auto xc = floatToBits(c);
-    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    return bitsToFloat(xd);
+struct FMA<vt::bf16, vt::fp32> {
+  static float eval(uint16_t a, uint16_t b, float c) {
+    auto xa = rv_btof_s(a, 0, nullptr);
+    auto xb = rv_btof_s(b, 0, nullptr);
+    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
+    auto xc = bit_cast<uint32_t>(c);
+    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
+    return bit_cast<float>(xd);
   }
 };
 
 template <>
-class FMA<bfloat16_t, bfloat16_t> {
-public:
-  bfloat16_t operator()(bfloat16_t a, bfloat16_t b, bfloat16_t c) {
-    auto xa = rv_btof_s(a.v, 0, nullptr);
-    auto xb = rv_btof_s(b.v, 0, nullptr);
-    auto xc = rv_btof_s(c.v, 0, nullptr);
+struct FMA<vt::bf16, vt::bf16> {
+  static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
+    auto xa = rv_btof_s(a, 0, nullptr);
+    auto xb = rv_btof_s(b, 0, nullptr);
+    auto xc = rv_btof_s(c, 0, nullptr);
     auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
     auto xh = rv_ftob_s(xd, 0, nullptr);
-    return bfloat16_t{xh};
+    return xh;
   }
 };
 
-template <typename Ot, typename It>
-float FEDP(const reg_data_t *a_row, const reg_data_t *b_col, float c_val) {
-  constexpr uint32_t i_ratio = sizeof(float) / sizeof(It);
-  static_assert(i_ratio * sizeof(It) == sizeof(float), "FEDP: tcK * i_ratio must be <= 32");
-DISABLE_WARNING_PUSH
-DISABLE_WARNING_STRICT_ALIASING
-  Ot acc = *reinterpret_cast<const Ot*>(&c_val);
+template <typename It, typename Ot>
+struct FEDP {
+  using itype = typename It::dtype;
+  using otype = typename Ot::dtype;
+  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val) {
+  constexpr uint32_t i_ratio = sizeof(uint32_t) / sizeof(itype);
+  static_assert(i_ratio * sizeof(itype) == sizeof(uint32_t), "FEDP: tcK * i_ratio must be <= 32");
+  auto acc = bit_cast<otype>(c_val);
   for (uint32_t z = 0; z < cfg::tcK; ++z) {
-    auto a = reinterpret_cast<const It *>(&a_row[z].f32);
-    auto b = reinterpret_cast<const It *>(&b_col[z].f32);
+    auto a = reinterpret_cast<const itype *>(&a_row[z].u32);
+    auto b = reinterpret_cast<const itype *>(&b_col[z].u32);
     for (uint32_t i = 0; i < i_ratio; ++i) {
-      acc = FMA<Ot, It>()(a[i], b[i], acc);
+      acc = FMA<It, Ot>::eval(a[i], b[i], acc);
     }
   }
-  float ret(0);
-  *reinterpret_cast<Ot*>(&ret) = acc;
-DISABLE_WARNING_POP
-  return ret;
-}
+  return bit_cast<uint32_t>(acc);
+  }
+};
 
-using PFN_FEDP = float (*)(const reg_data_t*, const reg_data_t*, float);
+template <>
+struct FEDP<vt::int4, vt::int32>{
+  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val) {
+    auto acc = bit_cast<int32_t>(c_val);
+    for (uint32_t z = 0; z < cfg::tcK; ++z) {
+      auto a = a_row[z].u32;
+      auto b = b_col[z].u32;
+      for (uint32_t i = 0; i < 8; ++i) { // 8 * 4 bits = 32 bits
+        int32_t a_val = (a >> (i * 4)) & 0xF;
+        int32_t b_val = (b >> (i * 4)) & 0xF;
+        if (a_val & 0x8) {
+          a_val |= 0xFFFFFFF0;
+        }
+        if (b_val & 0x8) {
+          b_val |= 0xFFFFFFF0;
+        }
+        acc += a_val * b_val;
+      }
+    }
+    return bit_cast<uint32_t>(acc);
+  }
+};
+
+template <>
+struct FEDP<vt::uint4, vt::int32>{
+  static uint32_t eval(const reg_data_t *a_row, const reg_data_t *b_col, uint32_t c_val) {
+    auto acc = bit_cast<int32_t>(c_val);
+    for (uint32_t z = 0; z < cfg::tcK; ++z) {
+      auto a = a_row[z].u32;
+      auto b = b_col[z].u32;
+      for (uint32_t i = 0; i < 8; ++i) { // 8 * 4 bits = 32 bits
+        int32_t a_val = (a >> (i * 4)) & 0xF;
+        int32_t b_val = (b >> (i * 4)) & 0xF;
+        acc += a_val * b_val;
+      }
+    }
+    return bit_cast<uint32_t>(acc);
+  }
+};
+
+using PFN_FEDP = uint32_t (*)(const reg_data_t*, const reg_data_t*, uint32_t);
 
 static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
   switch (OT) {
   case vt::fp32::id:
     switch (IT) {
-    case vt::fp32::id:
-      return FEDP<float, float>;
     case vt::fp16::id:
-      return FEDP<float, float16_t>;
+      return FEDP<vt::fp16, vt::fp32>::eval;
     case vt::bf16::id:
-      return FEDP<float, bfloat16_t>;
+      return FEDP<vt::bf16, vt::fp32>::eval;
     default:
       std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
       std::abort();
@@ -148,7 +160,7 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
   case vt::fp16::id:
     switch (IT) {
     case vt::fp16::id:
-      return FEDP<float16_t, float16_t>;
+      return FEDP<vt::fp16, vt::fp16>::eval;
     default:
       std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
       std::abort();
@@ -157,7 +169,7 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
   case vt::bf16::id:
     switch (IT) {
     case vt::bf16::id:
-      return FEDP<bfloat16_t, bfloat16_t>;
+      return FEDP<vt::bf16, vt::bf16>::eval;
     default:
       std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
       std::abort();
@@ -165,12 +177,14 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
     break;
   case vt::int32::id:
     switch (IT) {
-    case vt::int32::id:
-      return FEDP<int32_t, int32_t>;
-    case vt::int16::id:
-      return FEDP<int32_t, int16_t>;
     case vt::int8::id:
-      return FEDP<int32_t, int8_t>;
+      return FEDP<vt::int8, vt::int32>::eval;
+    case vt::uint8::id:
+      return FEDP<vt::uint8, vt::int32>::eval;
+    case vt::int4::id:
+      return FEDP<vt::int4, vt::int32>::eval;
+    case vt::uint4::id:
+      return FEDP<vt::uint4, vt::int32>::eval;
     default:
       std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
       std::abort();
@@ -234,6 +248,7 @@ public:
             ExeTraceData* trace_data) {
     __unused(wid);
     __unused(trace_data);
+
     auto fedp = select_FEDP(fmt_s, fmt_d);
 
     uint32_t a_off = (step_m % cfg::a_sub_blocks) * cfg::a_block_size;
@@ -243,9 +258,9 @@ public:
       for (uint32_t j = 0; j < cfg::tcN; ++j) {
         auto a_row = rs1_data.data() + a_off + i * cfg::tcK;
         auto b_col = rs2_data.data() + b_off + j * cfg::tcK;
-        auto c_val = rs3_data.at(i * cfg::tcN + j).f32;
+        auto c_val = rs3_data.at(i * cfg::tcN + j).u32;
         auto d_val = fedp(a_row, b_col, c_val);
-        rd_data.at(i * cfg::tcN + j).u64 = nan_box(floatToBits(d_val));
+        rd_data.at(i * cfg::tcN + j).u64 = nan_box(d_val);
 
         DTH(3, "FEDP: wid=" << wid << ", i=" << i << ", j=" << j << ", m=" << step_m << ", n=" << step_n << ", a_row={" << std::hex);
         for (uint32_t q = 0; q < cfg::tcK; ++q) {
@@ -257,7 +272,7 @@ public:
           if (q) DTN(3, ", ");
           DTN(3, "0x" << b_col[q].u32);
         }
-        DTN(3, "}, c_val=0x" << floatToBits(c_val) << ", d_val=0x" << floatToBits(d_val) << std::dec << std::endl);
+        DTN(3, "}, c_val=0x" << c_val << ", d_val=0x" << d_val << std::dec << std::endl);
       }
     }
   }

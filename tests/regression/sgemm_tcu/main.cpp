@@ -7,16 +7,11 @@
 #include <vector>
 #include <vortex.h>
 #include <tensor_cfg.h>
-#include "float16.h"
-#include "bfloat16.h"
+#include <rvfloats.h>
+#include <util.h>
 
-namespace vt = vortex::tensor;
-
-#define FLOAT_ULP 6
-
-#define HALF_ULP 3
-
-#define MAX_ERRORS 100
+#define FLOAT_ULP   6
+#define MAX_ERRORS  100
 
 #define RT_CHECK(_expr)                                      \
   do {                                                       \
@@ -28,48 +23,57 @@ namespace vt = vortex::tensor;
     exit(-1);                                                \
   } while (false)
 
+using namespace vortex;
+namespace vt = tensor;
+
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
-struct native_type_impl {};
-
-template <>
-struct native_type_impl<vt::fp32> {
-  using type = float;
+struct data_accessor_t {
+  using Type = typename T::dtype;
+  static Type read(const Type *ptr, uint32_t offset) {
+    return ptr[offset];
+  }
+  static void write(Type *ptr, uint32_t offset, Type value) {
+    ptr[offset] = value;
+  }
 };
 
 template <>
-struct native_type_impl<vt::fp16> {
-  using type = float16_t;
+struct data_accessor_t<vt::int4> {
+  static uint8_t read(const uint8_t *ptr, uint32_t offset) {
+    uint32_t row_off = offset / 2;
+    bool odd = offset & 0x1;
+    uint8_t value8 = ptr[row_off];
+    return odd ? (value8 >> 4) : (value8 & 0x0f); // to nibble
+  }
+  static void write(uint8_t *ptr, uint32_t offset, int32_t value) {
+    uint32_t row_off = offset / 2;
+    bool odd = offset & 0x1;
+    uint8_t old_value = ptr[row_off];
+    uint8_t new_value = odd ? ((old_value & 0x0f) | (value << 4))
+                            : ((old_value & 0xf0) | (value & 0x0f));
+    ptr[offset/2] = new_value;
+  }
 };
 
 template <>
-struct native_type_impl<vt::bf16> {
-  using type = bfloat16_t;
+struct data_accessor_t<vt::uint4> {
+  static uint8_t read(const uint8_t *ptr, uint32_t offset) {
+    uint32_t row_off = offset / 2;
+    bool odd = offset & 0x1;
+    uint8_t value8 = ptr[row_off];
+    return odd ? (value8 >> 4) : (value8 & 0x0f); // to nibble
+  }
+  static void write(uint8_t *ptr, uint32_t offset, int32_t value) {
+    uint32_t row_off = offset / 2;
+    bool odd = offset & 0x1;
+    uint8_t old_value = ptr[row_off];
+    uint8_t new_value = odd ? ((old_value & 0x0f) | (value << 4))
+                            : ((old_value & 0xf0) | (value & 0x0f));
+    ptr[offset/2] = new_value;
+  }
 };
-
-template <>
-struct native_type_impl<vt::int32> {
-  using type = int32_t;
-};
-
-template <>
-struct native_type_impl<vt::int16> {
-  using type = int16_t;
-};
-
-template <>
-struct native_type_impl<vt::int8> {
-  using type = int8_t;
-};
-
-template <typename T>
-using native_type_t = typename native_type_impl<T>::type;
-
-using itype_t = native_type_t<vt::ITYPE>;
-using otype_t = native_type_t<vt::OTYPE>;
-
-using cfg = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -77,18 +81,15 @@ template <typename Type>
 class Comparator {};
 
 template <>
-class Comparator<int8_t> {
+class Comparator<vt::int8> {
 public:
-  static const char *type_str() {
-    return "int8";
-  }
   static int8_t generate() {
     return (int8_t)rand();
   }
-  static bool compare(int a, int b, int index, int errors) {
+  static bool compare(int8_t a, int8_t b, int index, int errors) {
     if (a != b) {
       if (errors < MAX_ERRORS) {
-        printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
       }
       return false;
     }
@@ -97,18 +98,15 @@ public:
 };
 
 template <>
-class Comparator<int16_t> {
+class Comparator<vt::uint8> {
 public:
-  static const char *type_str() {
-    return "int16";
+  static uint8_t generate() {
+    return (uint8_t)rand();
   }
-  static int16_t generate() {
-    return (int16_t)rand();
-  }
-  static bool compare(int a, int b, int index, int errors) {
+  static bool compare(uint8_t a, uint8_t b, int index, int errors) {
     if (a != b) {
       if (errors < MAX_ERRORS) {
-        printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
       }
       return false;
     }
@@ -117,18 +115,53 @@ public:
 };
 
 template <>
-class Comparator<int32_t> {
+class Comparator<vt::int4> {
 public:
-  static const char *type_str() {
-    return "int32";
+  static uint8_t generate() {
+    static int32_t ctr = 0;
+    uint8_t val = ctr & 0xf;
+    ctr++;
+    return val;
+    //return (uint8_t)rand(); // store 2 nibbles in a byte
   }
+  static bool compare(uint8_t a, uint8_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
+class Comparator<vt::uint4> {
+public:
+  static uint8_t generate() {
+    return (uint8_t)rand(); // store 2 nibbles in a byte
+  }
+  static bool compare(uint8_t a, uint8_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
+class Comparator<vt::int32> {
+public:
   static int32_t generate() {
     return (int32_t)rand();
   }
-  static bool compare(int a, int b, int index, int errors) {
+  static bool compare(int32_t a, int32_t b, int index, int errors) {
     if (a != b) {
       if (errors < MAX_ERRORS) {
-        printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
       }
       return false;
     }
@@ -137,19 +170,16 @@ public:
 };
 
 template <>
-class Comparator<float16_t> {
+class Comparator<vt::fp16> {
 public:
-  static const char *type_str() {
-    return "float16";
+  static uint16_t generate() {
+    auto fvalue = float(rand()) / RAND_MAX;
+    return rv_ftoh_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
   }
-  static float16_t generate() {
-    return static_cast<float16_t>(float(rand()) / RAND_MAX);
-  }
-  static bool compare(float16_t a, float16_t b, int index, int errors) {
-    auto d = std::abs(a.bits - b.bits);
-    if (d > HALF_ULP) {
+  static bool compare(uint16_t a, uint16_t b, int index, int errors) {
+    if (a != b) {
       if (errors < MAX_ERRORS) {
-        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b.bits, a.bits);
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
       }
       return false;
     }
@@ -158,19 +188,16 @@ public:
 };
 
 template <>
-class Comparator<bfloat16_t> {
+class Comparator<vt::bf16> {
 public:
-  static const char *type_str() {
-    return "bfloat16";
+  static uint16_t generate() {
+    auto fvalue = float(rand()) / RAND_MAX;
+    return rv_ftob_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
   }
-  static bfloat16_t generate() {
-    return static_cast<bfloat16_t>(float(rand()) / RAND_MAX);
-  }
-  static bool compare(bfloat16_t a, bfloat16_t b, int index, int errors) {
-    auto d = std::abs(a.bits - b.bits);
-    if (d > HALF_ULP) {
+  static bool compare(uint16_t a, uint16_t b, int index, int errors) {
+    if (a != b) {
       if (errors < MAX_ERRORS) {
-        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b.bits, a.bits);
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
       }
       return false;
     }
@@ -179,11 +206,8 @@ public:
 };
 
 template <>
-class Comparator<float> {
+class Comparator<vt::fp32> {
 public:
-  static const char *type_str() {
-    return "float";
-  }
   static float generate() {
     return static_cast<float>(rand()) / RAND_MAX;
   }
@@ -198,7 +222,7 @@ public:
     auto d = std::abs(fa.i - fb.i);
     if (d > FLOAT_ULP) {
       if (errors < MAX_ERRORS) {
-        printf("*** error: [%d] expected=%f, actual=%f\n", index, b, a);
+        printf("*** error: [%d] expected=%f, actual=%f\n", index, fb.f, fa.f);
       }
       return false;
     }
@@ -206,14 +230,100 @@ public:
   }
 };
 
+///////////////////////////////////////////////////////////////////////////////
+
+template <typename S, typename D>
+struct muladd_t {
+  using stype = typename S::dtype;
+  using dtype = typename D::dtype;
+  static dtype eval(stype a, stype b, dtype c) {
+    return static_cast<dtype>(a) * static_cast<dtype>(b) + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::fp16, vt::fp32> {
+  static float eval(uint16_t a, uint16_t b, float c) {
+    auto fa = bit_cast<float>(rv_htof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_htof_s(b, 0, nullptr));
+    return fa * fb + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::fp16, vt::fp16> {
+  static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
+    auto fa = bit_cast<float>(rv_htof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_htof_s(b, 0, nullptr));
+    auto fc = bit_cast<float>(rv_htof_s(c, 0, nullptr));
+    auto fd = fa * fb + fc;
+    return rv_ftoh_s(bit_cast<uint32_t>(fd), 0, nullptr);
+  }
+};
+
+template <>
+struct muladd_t<vt::bf16, vt::fp32> {
+  static float eval(uint16_t a, uint16_t b, float c) {
+    auto fa = bit_cast<float>(rv_btof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_btof_s(b, 0, nullptr));
+    return fa * fb + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::bf16, vt::bf16> {
+  static uint16_t eval(uint16_t a, uint16_t b, uint16_t c) {
+    auto fa = bit_cast<float>(rv_btof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_btof_s(b, 0, nullptr));
+    auto fc = bit_cast<float>(rv_btof_s(c, 0, nullptr));
+    auto fd = fa * fb + fc;
+    return rv_ftob_s(bit_cast<uint32_t>(fd), 0, nullptr);
+  }
+};
+
+template <>
+struct muladd_t<vt::int4, vt::int32> {
+  static int32_t eval(uint8_t a, uint8_t b, int32_t c) {
+    int32_t a_val = a & 0xF;
+    if (a & 0x8) {
+      a_val |= 0xFFFFFFF0; // sign extend
+    }
+    int32_t b_val = b & 0xF;
+    if (b & 0x8) {
+      b_val |= 0xFFFFFFF0; // sign extend
+    }
+    return a_val * b_val + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::uint4, vt::int32> {
+  static int32_t eval(uint8_t a, uint8_t b, int32_t c) {
+    int32_t a_val = a & 0xF;
+    int32_t b_val = b & 0xF;
+    return a_val * b_val + c;
+  }
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+using cfg = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
+
+using itype_t = typename vt::ITYPE::dtype;
+using otype_t = typename vt::OTYPE::dtype;
+
 static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
+  uint32_t isubbytes = 8 / vt::ITYPE::bits;
+  uint32_t KS = isubbytes ? (K * isubbytes) : K;
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
       otype_t sum(0);
-      for (uint32_t k = 0; k < K; ++k) {
-        sum = otype_t(A[m * K + k]) * otype_t(B[k * N + n]) + sum;
+      for (uint32_t k = 0; k < KS; ++k) {
+        auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
+        auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
+        sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
       }
-      C[m * N + n] = sum;
+      data_accessor_t<vt::OTYPE>::write(C, m * N + n, sum);
     }
   }
 }
@@ -312,8 +422,10 @@ int main(int argc, char *argv[]) {
   size_t sizeB = K * N;
   size_t sizeC = M * N;
 
-  std::cout << "input data type: " << Comparator<itype_t>::type_str() << " (id=" << vt::ITYPE::id << ")" << std::endl;
-  std::cout << "output data type: " << Comparator<otype_t>::type_str() << " (id=" << vt::OTYPE::id << ")" << std::endl;
+  std::cout << "input data type: " << vt::ITYPE::name << " (id=" << vt::ITYPE::id << ")" << std::endl;
+  std::cout << "output data type: " << vt::OTYPE::name << " (id=" << vt::OTYPE::id << ")" << std::endl;
+  std::cout << "WMMA Core Dimension: M=" << cfg::tcM << ", N=" << cfg::tcN << ", K=" << cfg::tcK << std::endl;
+  std::cout << "WMMA Tile Dimension: M=" << cfg::tileM << ", N=" << cfg::tileN << ", K=" << cfg::tileK << std::endl;
   std::cout << "matrix A: " << M << "x" << K << std::endl;
   std::cout << "matrix B: " << K << "x" << N << std::endl;
   std::cout << "matrix C: " << M << "x" << N << std::endl;
@@ -346,10 +458,10 @@ int main(int argc, char *argv[]) {
   std::vector<itype_t> h_A(sizeA);
   std::vector<itype_t> h_B(sizeB);
   for (uint32_t i = 0; i < sizeA; ++i) {
-    h_A[i] = Comparator<itype_t>::generate();
+    h_A[i] = Comparator<vt::ITYPE>::generate();
   }
   for (uint32_t i = 0; i < sizeB; ++i) {
-    h_B[i] = Comparator<itype_t>::generate();
+    h_B[i] = Comparator<vt::ITYPE>::generate();
   }
 
   // upload matrix A buffer
@@ -399,7 +511,7 @@ int main(int argc, char *argv[]) {
     matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), M, N, K);
 
     for (uint32_t i = 0; i < h_ref.size(); ++i) {
-      if (!Comparator<otype_t>::compare(h_C[i], h_ref[i], i, errors)) {
+      if (!Comparator<vt::OTYPE>::compare(h_C[i], h_ref[i], i, errors)) {
         ++errors;
       }
     }
@@ -410,7 +522,7 @@ int main(int argc, char *argv[]) {
   cleanup();
 
   if (errors != 0) {
-    std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
+    std::cout << "Found " << std::dec << errors << " / " << sizeC << " errors!" << std::endl;
     std::cout << "FAILED!" << std::endl;
     return errors;
   }

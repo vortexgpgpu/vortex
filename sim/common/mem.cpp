@@ -58,7 +58,7 @@ void RamMemDevice::read(void* data, uint64_t addr, uint64_t size) {
   auto addr_end = addr + size;
   if ((addr & (wordSize_-1))
    || (addr_end & (wordSize_-1))
-   || (addr_end <= contents_.size())) {
+   || (addr_end > contents_.size())) {
     std::cout << "lookup of 0x" << std::hex << (addr_end-1) << std::dec << " failed.\n";
     throw BadAddress();
   }
@@ -73,7 +73,7 @@ void RamMemDevice::write(const void* data, uint64_t addr, uint64_t size) {
   auto addr_end = addr + size;
   if ((addr & (wordSize_-1))
    || (addr_end & (wordSize_-1))
-   || (addr_end <= contents_.size())) {
+   || (addr_end > contents_.size())) {
     std::cout << "lookup of 0x" << std::hex << (addr_end-1) << std::dec << " failed.\n";
     throw BadAddress();
   }

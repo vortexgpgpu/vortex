@@ -30,6 +30,7 @@ module VX_tcu_fedp_int #(
     output wire [`XLEN-1:0] d_val
 );
     localparam LEVELS = $clog2(N);
+    localparam REDW = 18 + LEVELS + 1;
     localparam MUL_LATENCY = 2;
     localparam ADD_LATENCY = 1;
     localparam RED_LATENCY = LEVELS * ADD_LATENCY;
@@ -51,45 +52,80 @@ module VX_tcu_fedp_int #(
         .data_out(delayed_fmt_s)
     );
 
-    wire [31:0] mult_result [N];
+    wire [REDW-1:0] mult_result [N];
 
     // multiplication stage
     for (genvar i = 0; i < N; i++) begin : g_prod
-        reg [31:0] prod_i32_1, prod_i32_2;
-        reg [31:0] prod_i16_1, prod_i16_2;
         reg [16:0] prod_i8_1a, prod_i8_1b;
-        reg [17:0] prod_i8_2;
+        reg [16:0] prod_u8_1a, prod_u8_1b;
+        reg [9:0] prod_i4_1a, prod_i4_1b;
+        reg [9:0] prod_u4_1a, prod_u4_1b;
 
         always @(posedge clk) begin
             if (enable) begin
-                prod_i32_1 <= $signed(a_row[i][31:0]) * $signed(b_col[i][31:0]);
-                prod_i32_2 <= prod_i32_1;
-
-                prod_i16_1 <= ($signed(a_row[i][15:0]) * $signed(b_col[i][15:0]))
-                            + ($signed(a_row[i][31:16]) * $signed(b_col[i][31:16]));
-                prod_i16_2 <= prod_i16_1;
-
                 prod_i8_1a <= ($signed(a_row[i][7:0]) * $signed(b_col[i][7:0]))
                             + ($signed(a_row[i][15:8]) * $signed(b_col[i][15:8]));
                 prod_i8_1b <= ($signed(a_row[i][23:16]) * $signed(b_col[i][23:16]))
                             + ($signed(a_row[i][31:24]) * $signed(b_col[i][31:24]));
-                prod_i8_2  <= prod_i8_1a + prod_i8_1b;
             end
         end
 
-        reg [31:0] mult_sel;
+        always @(posedge clk) begin
+            if (enable) begin
+                prod_u8_1a <= (a_row[i][7:0] * b_col[i][7:0])
+                            + (a_row[i][15:8] * b_col[i][15:8]);
+                prod_u8_1b <= (a_row[i][23:16] * b_col[i][23:16])
+                            + (a_row[i][31:24] * b_col[i][31:24]);
+            end
+        end
+
+        always @(posedge clk) begin
+            if (enable) begin
+                prod_i4_1a <= (($signed(a_row[i][3:0]) * $signed(b_col[i][3:0])) + ($signed(a_row[i][7:4]) * $signed(b_col[i][7:4])))
+                            + (($signed(a_row[i][11:8]) * $signed(b_col[i][11:8])) + ($signed(a_row[i][15:12]) * $signed(b_col[i][15:12])));
+                prod_i4_1b <= (($signed(a_row[i][19:16]) * $signed(b_col[i][19:16])) + ($signed(a_row[i][23:20]) * $signed(b_col[i][23:20])))
+                            + (($signed(a_row[i][27:24]) * $signed(b_col[i][27:24])) + ($signed(a_row[i][31:28]) * $signed(b_col[i][31:28])));
+            end
+        end
+
+        always @(posedge clk) begin
+            if (enable) begin
+                prod_u4_1a <= ((a_row[i][3:0] * b_col[i][3:0]) + (a_row[i][7:4] * b_col[i][7:4]))
+                            + ((a_row[i][11:8] * b_col[i][11:8]) + (a_row[i][15:12] * b_col[i][15:12]));
+                prod_u4_1b <= ((a_row[i][19:16] * b_col[i][19:16]) + (a_row[i][23:20] * b_col[i][23:20]))
+                            + ((a_row[i][27:24] * b_col[i][27:24]) + (a_row[i][31:28] * b_col[i][31:28]));
+            end
+        end
+
+        wire [17:0] sum_i8 = $signed(prod_i8_1a) + $signed(prod_i8_1b);
+        wire [17:0] sum_u8 = prod_u8_1a + prod_u8_1b;
+        wire [10:0] sum_i4 = $signed(prod_i4_1a) + $signed(prod_i4_1b);
+        wire [10:0] sum_u4 = prod_u4_1a + prod_u4_1b;
+
+        reg [REDW-1:0] mult_sel;
         always @(*) begin
             case (delayed_fmt_s)
-            3'd0: mult_sel = prod_i32_2;
-            3'd1: mult_sel = prod_i16_2;
-            3'd2: mult_sel = 32'(prod_i8_2);
+            3'd1: mult_sel = REDW'($signed(sum_i8));
+            3'd2: mult_sel = REDW'(sum_u8);
+            3'd3: mult_sel = REDW'($signed(sum_i4));
+            3'd4: mult_sel = REDW'(sum_u4);
             default: mult_sel = 'x;
             endcase
         end
-        assign mult_result[i] = mult_sel;
+
+        VX_pipe_register #(
+            .DATAW (REDW),
+            .DEPTH (1)
+        ) pipe_sel (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (enable),
+            .data_in  (mult_sel),
+            .data_out (mult_result[i])
+        );
     end
 
-    wire [31:0] red_in [LEVELS+1][N];
+    wire [REDW-1:0] red_in [LEVELS+1][N];
     for (genvar i = 0; i < N; i++) begin : g_red_inputs
         assign red_in[0][i] = mult_result[i];
     end
@@ -99,14 +135,15 @@ module VX_tcu_fedp_int #(
         localparam integer CURSZ = N >> lvl;
         localparam integer OUTSZ = CURSZ >> 1;
         for (genvar i = 0; i < OUTSZ; i++) begin : g_add
+            wire [REDW-1:0] sum = red_in[lvl][2*i+0] + red_in[lvl][2*i+1];
             VX_pipe_register #(
-                .DATAW (32),
+                .DATAW (REDW),
                 .DEPTH (1)
             ) pipe_red (
                 .clk      (clk),
                 .reset    (reset),
                 .enable   (enable),
-                .data_in  (red_in[lvl][2*i+0] + red_in[lvl][2*i+1]),
+                .data_in  (sum),
                 .data_out (red_in[lvl+1][i])
             );
         end
@@ -128,6 +165,7 @@ module VX_tcu_fedp_int #(
     wire [31:0] result;
 
     // final accumulation
+    wire [31:0] acc = 32'($signed(red_in[LEVELS][0])) + delayed_c;
     VX_pipe_register #(
         .DATAW (32),
         .DEPTH (1)
@@ -135,7 +173,7 @@ module VX_tcu_fedp_int #(
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in (red_in[LEVELS][0] + delayed_c),
+        .data_in (acc),
         .data_out(result)
     );
 

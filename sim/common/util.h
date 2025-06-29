@@ -142,6 +142,14 @@ auto visit_var(Variant &&var, Fs &&...fs) {
       std::forward<Variant>(var));
 }
 
+template <typename To, typename From>
+To bit_cast(const From& src) {
+  union cast_t { From from; To to; };
+  cast_t cast{0};
+  cast.from = src;
+  return cast.to;
+}
+
 std::string to_hex_str(uint32_t v);
 
 std::string resolve_file_path(const std::string &filename, const std::string &searchPaths);
