@@ -14,7 +14,7 @@ DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/xrt
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
-KERNEL ?= fibonacci
+KERNEL ?= vecadd
 
 NCPUS := $(shell lscpu | grep "^Core(s) per socket:" | awk '{print $$4}')
 JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
@@ -70,8 +70,9 @@ run: simulate.tcl done.dcp
 	MAX_JOBS=$(JOBS) TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source simulate.tcl -tclargs project_1/project_1.xpr 50000ns
 
 open: done.dcp
-	$(VIVADO) project_1/project_1.xpr &
+	TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) project_1/project_1.xpr &
 
 clean:
 	rm -rf project_1 project1.tcl $(KERNEL).bin kernel.bin.coe
 	rm -rf .Xil *.log *.jou *.dcp *.rpt
+	
