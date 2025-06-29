@@ -2,5 +2,3 @@
 /.vscode
 *.cache
 *.code-workspace
-
-hw/syn/xilinx/xrt/*50*
