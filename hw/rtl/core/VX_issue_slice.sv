@@ -94,7 +94,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
     // notify scheduler
-    assign issue_sched_if.valid = operands_if.valid && operands_if.ready;
+    assign issue_sched_if.valid = operands_if.valid && operands_if.ready && operands_if.data.sop;
     assign issue_sched_if.wis = operands_if.data.wis;
 
 `ifdef SCOPE
