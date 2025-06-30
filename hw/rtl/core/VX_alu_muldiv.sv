@@ -27,7 +27,6 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     VX_result_if.master result_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam IMUL_LATENCY = `LATENCY_IMUL;
     localparam PID_BITS  = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH = `UP(PID_BITS);
     localparam TAG_WIDTH = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NUM_REGS_BITS + 1 + PID_WIDTH + 1 + 1;
@@ -81,7 +80,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
     VX_shift_register #(
         .DATAW  (1 + TAG_WIDTH + (NUM_LANES * `XLEN)),
-        .DEPTH  (IMUL_LATENCY),
+        .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) mul_shift_reg (
         .clk      (clk),
@@ -159,7 +158,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
             .B_WIDTH (`XLEN+1),
             .R_WIDTH (2*(`XLEN+1)),
             .SIGNED  (1),
-            .LATENCY (IMUL_LATENCY)
+            .LATENCY (`LATENCY_IMUL)
         ) multiplier (
             .clk    (clk),
             .enable (mul_ready_in),
@@ -171,7 +170,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
     VX_shift_register #(
         .DATAW  (1 + TAG_WIDTH + 1 + 1),
-        .DEPTH  (IMUL_LATENCY),
+        .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) mul_shift_reg (
         .clk(clk),
@@ -246,7 +245,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 
     VX_shift_register #(
         .DATAW  (1 + TAG_WIDTH + (NUM_LANES * `XLEN)),
-        .DEPTH  (IMUL_LATENCY),
+        .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) div_shift_reg (
         .clk(clk),

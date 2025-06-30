@@ -221,8 +221,8 @@ config1()
     # simd width
     CONFIGS="-DSIMD_WIDTH=1" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-ttrig"
     CONFIGS="-DSIMD_WIDTH=2" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-ttrig"
-    #./ci/blackbox.sh --driver=rtlsim --warps=2 --threads=32 --app=diverge
-    #CONFIGS="-DSIMD_WIDTH=32" ./ci/blackbox.sh --driver=rtlsim --warps=2 --threads=32 --app=diverge
+    ./ci/blackbox.sh --driver=rtlsim --warps=2 --threads=32 --app=sgemm
+    CONFIGS="-DSIMD_WIDTH=32" ./ci/blackbox.sh --driver=rtlsim --warps=2 --threads=32 --app=sgemm
     CONFIGS="-DSIMD_WIDTH=1" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-ttrig"
     CONFIGS="-DSIMD_WIDTH=2" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-ttrig"
 
