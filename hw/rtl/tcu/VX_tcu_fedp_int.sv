@@ -179,6 +179,11 @@ module VX_tcu_fedp_int #(
         .data_out(result)
     );
 
-    assign d_val = `XLEN'(result);
+    `ifdef XLEN_64
+        // should nan-box when writing to FP registers
+        assign d_val = {32'hffffffff, result};
+    `else
+        assign d_val = `XLEN'(result);
+    `endif
 
 endmodule
