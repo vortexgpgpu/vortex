@@ -188,7 +188,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         wire lsu_req_fire = execute_if.valid && execute_if.ready;
         `RUNTIME_ASSERT((~lsu_req_fire || ~execute_if.data.tmask[i] || req_is_fence || (full_addr[i] % (1 << inst_lsu_wsize(execute_if.data.op_type))) == 0),
             ("%t: misaligned memory access, wid=%0d, PC=0x%0h, addr=0x%0h, wsize=%0d! (#%0d)",
-                $time, execute_if.data.wid, {execute_if.data.PC, 1'b0}, full_addr[i], inst_lsu_wsize(execute_if.data.op_type), execute_if.data.uuid))
+                $time, execute_if.data.wid, to_fullPC(execute_if.data.PC), full_addr[i], inst_lsu_wsize(execute_if.data.op_type), execute_if.data.uuid))
     end
 
     // store data formatting
@@ -511,7 +511,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         end
         if (mem_req_fire) begin
             if (mem_req_rw) begin
-                `TRACE(2, ("%t: %s Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask))
+                `TRACE(2, ("%t: %s Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, to_fullPC(execute_if.data.PC), mem_req_mask))
                 `TRACE_ARRAY1D(2, "0x%h", full_addr, NUM_LANES)
                 `TRACE(2, (", flags="))
                 `TRACE_ARRAY1D(2, "%b", mem_req_flags, NUM_LANES)
@@ -519,7 +519,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                 `TRACE_ARRAY1D(2, "0x%0h", mem_req_data, NUM_LANES)
                 `TRACE(2, (", sop=%b, pid=%0d, eop=%b, tag=0x%0h (#%0d)\n", execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, mem_req_tag, execute_if.data.uuid))
             end else begin
-                `TRACE(2, ("%t: %s Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, {execute_if.data.PC, 1'b0}, mem_req_mask))
+                `TRACE(2, ("%t: %s Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, INSTANCE_ID, execute_if.data.wid, to_fullPC(execute_if.data.PC), mem_req_mask))
                 `TRACE_ARRAY1D(2, "0x%h", full_addr, NUM_LANES)
                 `TRACE(2, (", flags="))
                 `TRACE_ARRAY1D(2, "%b", mem_req_flags, NUM_LANES)
@@ -528,7 +528,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         end
         if (mem_rsp_fire) begin
             `TRACE(2, ("%t: %s Rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, pid=%0d, sop=%b, eop=%b, data=",
-                $time, INSTANCE_ID, rsp_wid, {rsp_pc, 1'b0}, mem_rsp_mask, rsp_rd, rsp_pid, mem_rsp_sop_pkt, mem_rsp_eop_pkt))
+                $time, INSTANCE_ID, rsp_wid, to_fullPC(rsp_pc), mem_rsp_mask, rsp_rd, rsp_pid, mem_rsp_sop_pkt, mem_rsp_eop_pkt))
             `TRACE_ARRAY1D(2, "0x%0h", mem_rsp_data, NUM_LANES)
             `TRACE(2, (", tag=0x%0h (#%0d)\n", mem_rsp_tag, rsp_uuid))
         end

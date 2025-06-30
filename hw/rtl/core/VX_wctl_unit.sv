@@ -148,7 +148,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     end
     assign wspawn.valid = is_wspawn;
     assign wspawn.wmask = wspawn_wmask;
-    assign wspawn.pc    = rs2_data[1 +: PC_BITS];
+    assign wspawn.pc    = from_fullPC(rs2_data);
 
     // response
 

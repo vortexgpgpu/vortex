@@ -67,7 +67,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1 = execute_if.data.rs1_data;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2 = execute_if.data.rs2_data;
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{execute_if.data.PC, 1'd0}} : alu_in1;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{to_fullPC(execute_if.data.PC)}} : alu_in1;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_br  = (execute_if.data.op_args.alu.use_imm && ~is_br_op) ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
 
@@ -139,7 +139,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [LANE_WIDTH-1:0] last_tid, last_tid_r;
     wire is_br_op_r;
 
-    assign cbr_dest = add_result[0][1 +: PC_BITS];
+    assign cbr_dest = from_fullPC(add_result[0]);
 
     if (LANE_BITS != 0) begin : g_last_tid
         VX_priority_encoder #(
@@ -180,7 +180,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire result_fire = result_if.valid && result_if.ready;
     wire br_enable = result_fire && is_br_op_r && result_if.data.eop;
     wire br_taken = ((is_br_less ? is_less : is_equal) ^ is_br_neg) | is_br_static;
-    wire [PC_BITS-1:0] br_dest = is_br_static ? br_result[1 +: PC_BITS] : cbr_dest_r;
+    wire [PC_BITS-1:0] br_dest = is_br_static ? from_fullPC(br_result) : cbr_dest_r;
     wire [NW_WIDTH-1:0] br_wid;
     `ASSIGN_BLOCKED_WID (br_wid, result_if.data.wid, BLOCK_IDX, `NUM_ALU_BLOCKS)
 
@@ -195,7 +195,8 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     );
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
-        assign result_if.data.data[i] = (is_br_op_r && is_br_static) ? {(PC_r + PC_BITS'(2)), 1'd0} : alu_result_r[i];
+        wire [`XLEN-1:0] PC_next = to_fullPC(PC_r) + `XLEN'(4);
+        assign result_if.data.data[i] = (is_br_op_r && is_br_static) ? PC_next : alu_result_r[i];
     end
 
     assign result_if.data.PC = PC_r;
@@ -204,7 +205,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     always @(posedge clk) begin
         if (br_enable) begin
             `TRACE(2, ("%t: %s branch: wid=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
-                $time, INSTANCE_ID, br_wid, {result_if.data.PC, 1'b0}, br_taken, {br_dest, 1'b0}, result_if.data.uuid))
+                $time, INSTANCE_ID, br_wid, to_fullPC(result_if.data.PC), br_taken, to_fullPC(br_dest), result_if.data.uuid))
         end
     end
 `endif

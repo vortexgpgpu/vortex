@@ -73,10 +73,10 @@ module VX_schedule import VX_gpu_pkg::*; #(
     wire schedule_if_fire = schedule_if.valid && schedule_if.ready;
 
     // branch
-    wire [`NUM_ALU_BLOCKS-1:0]                  branch_valid;
-    wire [`NUM_ALU_BLOCKS-1:0][NW_WIDTH-1:0]   branch_wid;
-    wire [`NUM_ALU_BLOCKS-1:0]                  branch_taken;
-    wire [`NUM_ALU_BLOCKS-1:0][PC_BITS-1:0]    branch_dest;
+    wire [`NUM_ALU_BLOCKS-1:0]               branch_valid;
+    wire [`NUM_ALU_BLOCKS-1:0][NW_WIDTH-1:0] branch_wid;
+    wire [`NUM_ALU_BLOCKS-1:0]               branch_taken;
+    wire [`NUM_ALU_BLOCKS-1:0][PC_BITS-1:0]  branch_dest;
     for (genvar i = 0; i < `NUM_ALU_BLOCKS; ++i) begin : g_branch_init
         assign branch_valid[i] = branch_ctl_if[i].valid;
         assign branch_wid[i]   = branch_ctl_if[i].wid;
@@ -205,7 +205,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
         // advance PC
         if (schedule_if_fire) begin
-            warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + PC_BITS'(2);
+            warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + from_fullPC(`XLEN'(4));
         end
     end
 
@@ -227,7 +227,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
             wspawn.valid    <=  0;
 
             // activate first warp
-            warp_pcs[0]     <= base_dcrs.startup_addr[1 +: PC_BITS];
+            warp_pcs[0]     <= from_fullPC(base_dcrs.startup_addr);
             active_warps[0] <= 1;
             thread_masks[0][0] <= 1;
             is_single_warp  <= 1;

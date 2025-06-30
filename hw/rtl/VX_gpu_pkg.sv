@@ -77,7 +77,23 @@ package VX_gpu_pkg;
 
     localparam STACK_SIZE = (1 << `STACK_LOG2_SIZE);
 
-	localparam PC_BITS = (`XLEN-1);
+`ifndef NDEBUG
+	localparam PC_BITS = (`XLEN-2);
+    function automatic logic [`XLEN-1:0] to_fullPC(input logic[PC_BITS-1:0] pc);
+        to_fullPC = {pc, 2'b0};
+    endfunction
+    function automatic logic [PC_BITS-1:0] from_fullPC(input logic[`XLEN-1:0] pc);
+        from_fullPC = PC_BITS'(pc >> 2);
+    endfunction
+`else
+    localparam PC_BITS = `XLEN;
+    function automatic logic [`XLEN-1:0] to_fullPC(input logic[PC_BITS-1:0] pc);
+        to_fullPC = pc;
+    endfunction
+    function automatic logic [PC_BITS-1:0] from_fullPC(input logic[`XLEN-1:0] pc);
+        from_fullPC = pc;
+    endfunction
+`endif
 
 	localparam OFFSET_BITS = 12;
 

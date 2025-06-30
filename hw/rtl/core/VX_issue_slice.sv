@@ -171,7 +171,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         localparam wid = wis_to_wid(ISSUE_WIS_W'(i), ISSUE_ID);
         always @(posedge clk) begin
             if (ibuffer_if[i].valid && ibuffer_if[i].ready) begin
-                `TRACE(1, ("%t: %s-ibuffer: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wid, {ibuffer_if[i].data.PC, 1'd0}))
+                `TRACE(1, ("%t: %s-ibuffer: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wid, to_fullPC(ibuffer_if[i].data.PC)))
                 VX_trace_pkg::trace_ex_type(1, ibuffer_if[i].data.ex_type);
                 `TRACE(1, (", op="))
                 VX_trace_pkg::trace_ex_op(1, ibuffer_if[i].data.ex_type, ibuffer_if[i].data.op_type, ibuffer_if[i].data.op_args);
@@ -192,7 +192,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
 
     always @(posedge clk) begin
         if (operands_if.valid && operands_if.ready) begin
-            `TRACE(1, ("%t: %s-dispatch: wid=%0d, sid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wis_to_wid(operands_if.data.wis, ISSUE_ID), operands_if.data.sid, {operands_if.data.PC, 1'b0}))
+            `TRACE(1, ("%t: %s-dispatch: wid=%0d, sid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wis_to_wid(operands_if.data.wis, ISSUE_ID), operands_if.data.sid, to_fullPC(operands_if.data.PC)))
             VX_trace_pkg::trace_ex_type(1, operands_if.data.ex_type);
             `TRACE(1, (", op="))
             VX_trace_pkg::trace_ex_op(1, operands_if.data.ex_type, operands_if.data.op_type, operands_if.data.op_args);
