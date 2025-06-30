@@ -121,7 +121,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign split.is_dvg     = has_then && has_else;
     assign split.then_tmask = taken_tmask;
     assign split.else_tmask = ntaken_tmask;
-    assign split.next_pc    = execute_if.data.PC + PC_BITS'(2);
+    assign split.next_pc    = execute_if.data.PC + from_fullPC(`XLEN'(4));
 
     // join
 
