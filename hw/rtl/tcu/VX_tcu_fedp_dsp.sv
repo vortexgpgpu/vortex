@@ -15,7 +15,7 @@
 
 module VX_tcu_fedp_dsp #(
     parameter LATENCY = 1,
-    parameter N = 2
+    parameter N = 1
 ) (
     input  wire clk,
     input  wire reset,
@@ -34,7 +34,7 @@ module VX_tcu_fedp_dsp #(
 
     localparam FMUL_LATENCY = 6;
     localparam FADD_LATENCY = 11;
-    localparam FRND_LATENCY = 0;
+    localparam FRND_LATENCY = 1;
 
     localparam RED_LATENCY = LEVELS * FADD_LATENCY;
     localparam ACC_LATENCY = RED_LATENCY + FADD_LATENCY;
@@ -81,7 +81,7 @@ module VX_tcu_fedp_dsp #(
         localparam integer CURSZ = TCK >> lvl;
         localparam integer OUTSZ = CURSZ >> 1;
         for (genvar i = 0; i < OUTSZ; i++) begin : g_add
-            xil_fadd fadd (
+            xil_fadd fadd_red (
                 .aclk                (clk),
                 .aclken              (enable),
                 .s_axis_a_tvalid     (1'b1),
@@ -89,7 +89,7 @@ module VX_tcu_fedp_dsp #(
                 .s_axis_b_tvalid     (1'b1),
                 .s_axis_b_tdata      (red_in[lvl][2*i+1]),
                 .s_axis_operation_tvalid (1'b1),
-                .s_axis_operation_tdata (8'b0), // 0=add,1=subtract
+                .s_axis_operation_tdata (8'b0), // 0=add
                 `UNUSED_PIN (m_axis_result_tvalid),
                 .m_axis_result_tdata (red_in[lvl+1][i])
             );
@@ -109,11 +109,10 @@ module VX_tcu_fedp_dsp #(
         .data_out(delayed_c)
     );
 
-    wire [31:0] result;
-    `UNUSED_VAR(result);
+    wire [31:0] acc;
 
-    // final accumulation + rounding
-    xil_fadd fadd (
+    // final accumulation
+    xil_fadd fadd_acc (
         .aclk                (clk),
         .aclken              (enable),
         .s_axis_a_tvalid     (1'b1),
@@ -121,9 +120,23 @@ module VX_tcu_fedp_dsp #(
         .s_axis_b_tvalid     (1'b1),
         .s_axis_b_tdata      (delayed_c),
         .s_axis_operation_tvalid (1'b1),
-        .s_axis_operation_tdata (8'b0), // 0=add,1=subtract
+        .s_axis_operation_tdata (8'b0), // 0=add
         `UNUSED_PIN (m_axis_result_tvalid),
-        .m_axis_result_tdata (result)
+        .m_axis_result_tdata (acc)
+    );
+
+     wire [31:0] result;
+    `UNUSED_VAR(result);
+
+    VX_pipe_register #(
+        .DATAW (32),
+        .DEPTH (1)
+    ) pipe_out (
+        .clk     (clk),
+        .reset   (reset),
+        .enable  (enable),
+        .data_in (acc),
+        .data_out(result)
     );
 
     assign d_val = `XLEN'(result);

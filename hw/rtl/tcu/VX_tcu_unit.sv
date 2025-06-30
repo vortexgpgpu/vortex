@@ -68,7 +68,7 @@ module VX_tcu_unit import VX_gpu_pkg::*; #(
             .PE_COUNT    (PE_COUNT),
             .NUM_LANES   (NUM_LANES),
             .ARBITER     ("R"),
-            .REQ_OUT_BUF (3),
+            .REQ_OUT_BUF (0),
             .RSP_OUT_BUF (3)
         ) pe_switch (
             .clk            (clk),

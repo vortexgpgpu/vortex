@@ -85,7 +85,8 @@ module VX_tcu_int import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     VX_fifo_queue #(
         .DATAW (MDATA_WIDTH),
-        .DEPTH (MDATA_QUEUE_DEPTH)
+        .DEPTH (MDATA_QUEUE_DEPTH),
+        .OUT_REG (1)
     ) mdata_queue (
         .clk    (clk),
         .reset  (reset),

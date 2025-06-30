@@ -15,7 +15,7 @@
 
 module VX_tcu_fedp_bhf #(
     parameter LATENCY = 1,
-    parameter N = 2
+    parameter N = 1
 ) (
     input  wire clk,
     input  wire reset,

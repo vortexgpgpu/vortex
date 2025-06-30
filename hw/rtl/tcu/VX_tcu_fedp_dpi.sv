@@ -15,7 +15,7 @@
 
 module VX_tcu_fedp_dpi #(
     parameter LATENCY = 1,
-    parameter N = 2
+    parameter N = 1
 ) (
     input  wire clk,
     input  wire reset,
@@ -34,8 +34,8 @@ module VX_tcu_fedp_dpi #(
     localparam FMUL_LATENCY = 2;
     localparam FADD_LATENCY = 1;
     localparam FRND_LATENCY = 1;
-    localparam RED_LATENCY = LEVELS * FADD_LATENCY;
-    localparam ACC_LATENCY = RED_LATENCY + FADD_LATENCY;
+    localparam RED_LATENCY  = LEVELS * FADD_LATENCY;
+    localparam ACC_LATENCY  = RED_LATENCY + FADD_LATENCY;
     `STATIC_ASSERT (LATENCY == (FMUL_LATENCY+ACC_LATENCY+FRND_LATENCY), ("invalid parameter!"));
 
     `UNUSED_VAR (reset);
@@ -68,12 +68,12 @@ module VX_tcu_fedp_dpi #(
 
         always @(*) begin
             case (fmt_s)
-                3'd2: begin // fp16
+                3'd1: begin // fp16
                     dpi_f2f(enable, int'(0), int'(2), xa, a_h);
                     dpi_f2f(enable, int'(0), int'(2), xb, b_h);
                     dpi_fmul(enable, int'(0), a_h, b_h, 3'b0, xprod, fflags);
                 end
-                3'd3: begin // bf16
+                3'd2: begin // bf16
                     dpi_f2f(enable, int'(0), int'(3), xa, a_b);
                     dpi_f2f(enable, int'(0), int'(3), xb, b_b);
                     dpi_fmul(enable, int'(0), a_b, b_b, 3'b0, xprod, fflags);

@@ -14,8 +14,8 @@
 `include "VX_define.vh"
 
 module VX_tcu_fedp_int #(
-    parameter LATENCY = 2,
-    parameter N = 2
+    parameter LATENCY = 1,
+    parameter N = 1
 ) (
     input  wire clk,
     input  wire reset,
@@ -30,7 +30,9 @@ module VX_tcu_fedp_int #(
     output wire [`XLEN-1:0] d_val
 );
     localparam LEVELS = $clog2(N);
-    localparam REDW = 18 + LEVELS + 1;
+    localparam PRODW = 18;
+    localparam PSELW = PRODW + 1; // add unsinged guard bit
+    localparam REDW  = `MAX(PRODW + LEVELS, PSELW);
     localparam MUL_LATENCY = 2;
     localparam ADD_LATENCY = 1;
     localparam RED_LATENCY = LEVELS * ADD_LATENCY;
@@ -43,7 +45,7 @@ module VX_tcu_fedp_int #(
     wire [2:0] delayed_fmt_s;
     VX_pipe_register #(
         .DATAW (3),
-        .DEPTH (MUL_LATENCY)
+        .DEPTH (MUL_LATENCY-1) // remove select stage
     ) pipe_fmt_s (
         .clk     (clk),
         .reset   (reset),
@@ -52,7 +54,7 @@ module VX_tcu_fedp_int #(
         .data_out(delayed_fmt_s)
     );
 
-    wire [REDW-1:0] mult_result [N];
+    wire [PSELW-1:0] mult_result [N];
 
     // multiplication stage
     for (genvar i = 0; i < N; i++) begin : g_prod
@@ -102,19 +104,19 @@ module VX_tcu_fedp_int #(
         wire [10:0] sum_i4 = $signed(prod_i4_1a) + $signed(prod_i4_1b);
         wire [10:0] sum_u4 = prod_u4_1a + prod_u4_1b;
 
-        reg [REDW-1:0] mult_sel;
+        reg [PSELW-1:0] mult_sel;
         always @(*) begin
             case (delayed_fmt_s)
-            3'd1: mult_sel = REDW'($signed(sum_i8));
-            3'd2: mult_sel = REDW'(sum_u8);
-            3'd3: mult_sel = REDW'($signed(sum_i4));
-            3'd4: mult_sel = REDW'(sum_u4);
+            3'd1: mult_sel = PSELW'($signed(sum_i8));
+            3'd2: mult_sel = PSELW'(sum_u8);
+            3'd3: mult_sel = PSELW'($signed(sum_i4));
+            3'd4: mult_sel = PSELW'(sum_u4);
             default: mult_sel = 'x;
             endcase
         end
 
         VX_pipe_register #(
-            .DATAW (REDW),
+            .DATAW (PSELW),
             .DEPTH (1)
         ) pipe_sel (
             .clk      (clk),
@@ -127,7 +129,7 @@ module VX_tcu_fedp_int #(
 
     wire [REDW-1:0] red_in [LEVELS+1][N];
     for (genvar i = 0; i < N; i++) begin : g_red_inputs
-        assign red_in[0][i] = mult_result[i];
+        assign red_in[0][i] = REDW'($signed(mult_result[i]));
     end
 
     // accumulate reduction tree
