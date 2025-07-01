@@ -54,7 +54,7 @@ module VX_tcu_fedp_dsp #(
         assign b_col16[2*i+1] = b_col[i][31:16];
     end
 
-    wire [31:0] nult_result [TCK];
+    wire [31:0] mult_result [TCK];
 
     // multiplication stage
     for (genvar i = 0; i < TCK; i++) begin : g_prod
@@ -66,14 +66,14 @@ module VX_tcu_fedp_dsp #(
             .s_axis_b_tvalid     (1'b1),
             .s_axis_b_tdata      (b_col16[i]),
             `UNUSED_PIN (m_axis_result_tvalid),
-            .m_axis_result_tdata (nult_result[i])
+            .m_axis_result_tdata (mult_result[i])
         );
     end
 
     wire [31:0] red_in [LEVELS+1][TCK];
 
     for (genvar i = 0; i < TCK; i++) begin : g_red_inputs
-        assign red_in[0][i] = nult_result[i];
+        assign red_in[0][i] = mult_result[i];
     end
 
     // accumulate reduction tree
@@ -139,6 +139,11 @@ module VX_tcu_fedp_dsp #(
         .data_out(result)
     );
 
-    assign d_val = `XLEN'(result);
+`ifdef XLEN_64
+    // should nan-box when writing to FP registers
+    assign d_val = {32'hffffffff, result};
+`else
+    assign d_val = result;
+`endif
 
 endmodule

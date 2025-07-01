@@ -183,7 +183,7 @@ module VX_tcu_fedp_int #(
         // should nan-box when writing to FP registers
         assign d_val = {32'hffffffff, result};
     `else
-        assign d_val = `XLEN'(result);
+        assign d_val = result;
     `endif
 
 endmodule
