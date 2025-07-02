@@ -350,7 +350,7 @@
 
 // Operand collectors
 `ifndef NUM_OPCS
-`define NUM_OPCS        `MIN(4, `NUM_WARPS / `ISSUE_WIDTH)
+`define NUM_OPCS        `UP(`NUM_WARPS / (4 * `ISSUE_WIDTH))
 `endif
 `ifndef NUM_VOPCS
 `define NUM_VOPCS       1
