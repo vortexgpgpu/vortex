@@ -32,9 +32,9 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam MDATA_WIDTH = UUID_WIDTH + NW_WIDTH + PC_BITS + NUM_REGS_BITS;
 
 `ifdef TCU_DSP
-    localparam FMUL_LATENCY = 6;
+    localparam FMUL_LATENCY = 8;
     localparam FADD_LATENCY = 11;
-    localparam FRND_LATENCY = 1;
+    localparam FRND_LATENCY = 2;
 `else
     localparam FMUL_LATENCY = 2;
     localparam FADD_LATENCY = 1;

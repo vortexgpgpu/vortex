@@ -17,6 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <VX_config.h>
 
 #ifdef __cplusplus
 extern "C" {

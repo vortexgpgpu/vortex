@@ -40,11 +40,11 @@ set_property -dict [list CONFIG.Operation_Type {Square_root} CONFIG.A_Precision_
 create_ip -name floating_point -vendor xilinx.com -library ip -version 7.1 -module_name xil_fma -dir ${ip_dir}
 set_property -dict [list CONFIG.Operation_Type {FMA} CONFIG.Add_Sub_Value {Add} CONFIG.A_Precision_Type {Single} CONFIG.Result_Precision_Type {Single} CONFIG.Has_RESULT_TREADY {false} CONFIG.C_Rate {1} CONFIG.Flow_Control {NonBlocking} CONFIG.Has_ACLKEN {true} CONFIG.C_Has_UNDERFLOW {true} CONFIG.C_Has_OVERFLOW {true} CONFIG.C_Has_INVALID_OP {true} CONFIG.C_Mult_Usage {Full_Usage}] [get_ips xil_fma]
 
-create_ip -name floating_point -vendor xilinx.com -library ip -version 7.1 -module_name xil_hfmul -dir ${ip_dir}
-set_property -dict [list CONFIG.Operation_Type {Multiply} CONFIG.A_Precision_Type {Half} CONFIG.Result_Precision_Type {Half} CONFIG.Has_RESULT_TREADY {false} CONFIG.Flow_Control {NonBlocking} CONFIG.Has_ACLKEN {true} CONFIG.C_Rate {1} CONFIG.C_Mult_Usage {Full_Usage} [get_ips xil_hfmul]
+create_ip -name floating_point -vendor xilinx.com -library ip -version 7.1 -module_name xil_fmul -dir ${ip_dir}
+set_property -dict [list CONFIG.Operation_Type {Multiply} CONFIG.A_Precision_Type {Single} CONFIG.Result_Precision_Type {Single} CONFIG.Has_RESULT_TREADY {false} CONFIG.Flow_Control {NonBlocking} CONFIG.Has_ACLKEN {true} CONFIG.C_Rate {1} CONFIG.C_Mult_Usage {Full_Usage}] [get_ips xil_fmul]
 
 create_ip -name floating_point -vendor xilinx.com -library ip -version 7.1 -module_name xil_fadd -dir ${ip_dir}
-set_property -dict [list CONFIG.Operation_Type {Add_Subtract} CONFIG.A_Precision_Type {Single} CONFIG.Result_Precision_Type {Single} CONFIG.Has_RESULT_TREADY {false} CONFIG.Flow_Control {NonBlocking} CONFIG.Has_ACLKEN {true} CONFIG.C_Rate {1} CONFIG.C_Mult_Usage {Full_Usage} [get_ips xil_fadd]
+set_property -dict [list CONFIG.Operation_Type {Add_Subtract} CONFIG.A_Precision_Type {Single} CONFIG.Result_Precision_Type {Single} CONFIG.Has_RESULT_TREADY {false} CONFIG.Flow_Control {NonBlocking} CONFIG.Has_ACLKEN {true} CONFIG.C_Rate {1} CONFIG.C_Mult_Usage {Full_Usage}] [get_ips xil_fadd]
 
 generate_target all [get_ips]
 

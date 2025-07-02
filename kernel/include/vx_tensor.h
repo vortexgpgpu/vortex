@@ -69,7 +69,7 @@ namespace detail {
       }
     }
 
-    static inline D pack_row(const Type *base, uint32_t /*col*/, uint32_t ldm) {
+    static inline D pack_row(const Type *base, uint32_t ldm) {
       static_assert(sizeof(D) % sizeof(Type) == 0, "D must be a multiple of Type in size");
       constexpr uint32_t count = sizeof(D) / sizeof(Type);
       constexpr uint32_t bits = 8 * sizeof(Type);
@@ -101,28 +101,6 @@ namespace detail {
       }
       return *reinterpret_cast<const D*>(&result_u);
     }
-
-    static inline D pack_row(const uint8_t *base, uint32_t col, uint32_t ldm) {
-      constexpr uint32_t count = sizeof(D);
-      using UD = raw_unsigned_t<D>;
-      assert(col < ldm && "col must be less than ldm");
-      uint32_t col_off = col / 2;
-      uint32_t ldm_half = ldm / 2;
-      bool col_odd = col & 0x1;
-      UD result_u(0);
-      auto ptr = base + col_off;
-      for (uint32_t i = 0; i < count; ++i) {
-        uint8_t src0_u8 = ptr[0];
-        uint8_t src1_u8 = ptr[ldm_half];
-        uint8_t src0_u4 = col_odd ? (src0_u8 >> 4) : (src0_u8 & 0xf); // 4 bits
-        uint8_t src1_u4 = col_odd ? (src1_u8 >> 4) : (src1_u8 & 0xf); // 4 bits
-        uint8_t src_u8  = (src1_u4 << 4) | src0_u4; // combine
-        auto src_d = static_cast<UD>(src_u8); // zero-extend
-        result_u |= (src_d << (i * 8));
-        ptr += ldm; // next row
-      }
-      return *reinterpret_cast<const D*>(&result_u);
-    }
   };
 
   template <typename D>
@@ -137,28 +115,6 @@ namespace detail {
       UD result_u(0);
       for (uint32_t i = 0; i < count; i++) {
         result_u |= (src_d << (i * 8));
-      }
-      return *reinterpret_cast<const D*>(&result_u);
-    }
-
-    static inline D pack_row(const uint8_t *base, uint32_t col, uint32_t ldm) {
-      constexpr uint32_t count = sizeof(D);
-      using UD = raw_unsigned_t<D>;
-      assert(col < ldm && "col must be less than ldm");
-      uint32_t col_off = col / 2;
-      uint32_t row_off = ldm / 2;
-      bool col_odd = col & 0x1;
-      UD result_u(0);
-      auto ptr = base + col_off;
-      for (uint32_t i = 0; i < count; ++i) {
-        uint8_t src0_u8 = ptr[0];
-        uint8_t src1_u8 = ptr[row_off];
-        uint8_t src0_u4 = col_odd ? (src0_u8 >> 4) : (src0_u8 & 0xf); // 4 bits
-        uint8_t src1_u4 = col_odd ? (src1_u8 >> 4) : (src1_u8 & 0xf); // 4 bits
-        uint8_t src_u8  = (src1_u4 << 4) | src0_u4; // combine
-        auto src_d = static_cast<UD>(src_u8); // zero-extend
-        result_u |= (src_d << (i * 8));
-        ptr += ldm; // next row
       }
       return *reinterpret_cast<const D*>(&result_u);
     }
@@ -218,7 +174,7 @@ public:
     });
   }
 
-  template <typename Frag, mem_layout src_layout = row_major>
+  template <mem_layout src_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
     uint32_t lane = vx_thread_id();
     if constexpr (Frag::Use == matrix_a) {
@@ -232,25 +188,20 @@ public:
       if constexpr (src_layout == col_major) {
         std::swap(block_row, block_col);
       }
-      auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm;
-      if constexpr (!(src_layout == col_major && input_is_subbyte)) {
-        base += block_col;
-      }
+      auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
       detail::unroll_for<Frag::NR>([&](auto r) {
         uint32_t block_m  = r / cfg::k_steps;
         uint32_t block_k  = r % cfg::k_steps;
         uint32_t elem_row = block_m * m_stride;
         uint32_t elem_col = block_k * k_stride;
         if constexpr (src_layout == col_major) {
+          static_assert(input_is_subbyte == false, "col_major layout is not supported for sub-byte matrix_a");
           std::swap(elem_row, elem_col);
-          auto ptr = base + elem_row * ldm;
-          if constexpr (!input_is_subbyte) {
-            ptr += elem_col;
-          }
+          auto ptr = base + elem_row * ldm + elem_col;
           if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
             dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
           } else {
-            dst.data[r] = input_acessor_t::pack_row(ptr, block_col + elem_col, ldm);
+            dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
           }
         } else {
           // raw_major layout
@@ -270,24 +221,19 @@ public:
       if constexpr (src_layout == col_major) {
         std::swap(block_row, block_col);
       }
-      auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm;
-      if constexpr (!(src_layout == row_major && input_is_subbyte)) {
-        base += block_col;
-      }
+      auto base = reinterpret_cast<const input_t*>(src) + block_row * ldm + block_col;
       detail::unroll_for<Frag::NR>([&](auto r) {
         uint32_t block_k = r / cfg::b_sub_steps;
         uint32_t block_n = r % cfg::b_sub_steps;
         uint32_t elem_row = block_k * k_stride;
         uint32_t elem_col = block_n * n_stride;
         if constexpr (src_layout == row_major) {
-          auto ptr = base + elem_row * ldm;
-          if constexpr (!input_is_subbyte) {
-            ptr += elem_col;
-          }
+          static_assert(input_is_subbyte == false, "row_major layout is not supported for sub-byte matrix_b");
+          auto ptr = base + elem_row * ldm + elem_col;
           if constexpr (sizeof(vreg_t) == sizeof(input_t) && !input_is_subbyte) {
             dst.data[r] = *reinterpret_cast<const vreg_t*>(ptr);
           } else {
-            dst.data[r] = input_acessor_t::pack_row(ptr, block_col + elem_col, ldm);
+            dst.data[r] = input_acessor_t::pack_row(ptr, ldm);
           }
         } else {
           // col_major layout
@@ -327,7 +273,7 @@ public:
     }
   }
 
-  template <typename Frag, mem_layout dst_layout = row_major>
+  template <mem_layout dst_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void store_matrix_sync(void *dst, const Frag &src, size_t ldm) {
     static_assert(Frag::Use == accumulator, "only accumulator fragment can be stored");
     uint32_t lane = vx_thread_id();

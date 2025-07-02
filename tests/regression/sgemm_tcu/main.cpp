@@ -2,16 +2,16 @@
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <rvfloats.h>
 #include <string.h>
+#include <tensor_cfg.h>
 #include <unistd.h>
+#include <util.h>
 #include <vector>
 #include <vortex.h>
-#include <tensor_cfg.h>
-#include <rvfloats.h>
-#include <util.h>
 
-#define FLOAT_ULP   6
-#define MAX_ERRORS  100
+#define FLOAT_ULP 6
+#define MAX_ERRORS 100
 
 #define RT_CHECK(_expr)                                      \
   do {                                                       \
@@ -25,6 +25,39 @@
 
 using namespace vortex;
 namespace vt = tensor;
+
+///////////////////////////////////////////////////////////////////////////////
+
+static void convert_row_to_col_major_4bit(uint8_t *dst, uint32_t width, uint32_t height, const uint8_t *src) {
+  // Calculate output size and stride
+  uint32_t out_bytes = (width * height + 1) / 2;
+  memset(dst, 0, out_bytes);
+  uint32_t dst_stride = (height + 1) / 2; // Bytes per column in output
+
+  // For each column in source (which becomes row in destination)
+  for (uint32_t c = 0; c < width; ++c) {
+    uint32_t base = c * dst_stride;
+
+    // For each row in source (which becomes column in destination)
+    for (uint32_t r = 0; r < height; r += 2) {
+      // Calculate source indices (row-major)
+      uint32_t idx_even = r * width + c;
+      uint32_t idx_odd = (r + 1) * width + c;
+
+      // Extract nibbles - consistent with data_accessor_t
+      uint8_t b_even = src[idx_even / 2];
+      uint8_t b_odd = (r + 1 < height) ? src[idx_odd / 2] : 0;
+
+      uint8_t nib_even = (idx_even & 1) ? (b_even >> 4) : (b_even & 0x0F);
+      uint8_t nib_odd = (r + 1 < height)
+                            ? ((idx_odd & 1) ? (b_odd >> 4) : (b_odd & 0x0F))
+                            : 0;
+
+      // Pack into destination: even row in low nibble, odd row in high nibble
+      dst[base + r / 2] = (nib_odd << 4) | nib_even;
+    }
+  }
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -53,7 +86,7 @@ struct data_accessor_t<vt::int4> {
     uint8_t old_value = ptr[row_off];
     uint8_t new_value = odd ? ((old_value & 0x0f) | (value << 4))
                             : ((old_value & 0xf0) | (value & 0x0f));
-    ptr[offset/2] = new_value;
+    ptr[offset / 2] = new_value;
   }
 };
 
@@ -71,7 +104,7 @@ struct data_accessor_t<vt::uint4> {
     uint8_t old_value = ptr[row_off];
     uint8_t new_value = odd ? ((old_value & 0x0f) | (value << 4))
                             : ((old_value & 0xf0) | (value & 0x0f));
-    ptr[offset/2] = new_value;
+    ptr[offset / 2] = new_value;
   }
 };
 
@@ -118,11 +151,7 @@ template <>
 class Comparator<vt::int4> {
 public:
   static uint8_t generate() {
-    static int32_t ctr = 0;
-    uint8_t val = ctr & 0xf;
-    ctr++;
-    return val;
-    //return (uint8_t)rand(); // store 2 nibbles in a byte
+    return (uint8_t)rand(); // store 2 nibbles in a byte
   }
   static bool compare(uint8_t a, uint8_t b, int index, int errors) {
     if (a != b) {
@@ -313,8 +342,8 @@ using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
 
 static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
-  uint32_t isubbytes = 8 / vt::ITYPE::bits;
-  uint32_t KS = isubbytes ? (K * isubbytes) : K;
+  uint32_t subbytes = 8 / vt::ITYPE::bits;
+  uint32_t KS = subbytes ? (K * subbytes) : K;
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
       otype_t sum(0);
@@ -332,9 +361,9 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
 
 const char *kernel_file = "kernel.vxbin";
 
-uint32_t M = cfg::tileM;
-uint32_t N = cfg::tileN;
-uint32_t K = cfg::tileK;
+uint32_t xm = 4;
+uint32_t xn = 8;
+uint32_t xk = 2;
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
@@ -356,13 +385,13 @@ static void parse_args(int argc, char **argv) {
   while ((c = getopt(argc, argv, "m:n:k:i:o:h")) != -1) {
     switch (c) {
     case 'm':
-      M = atoi(optarg);
+      xm = atoi(optarg);
       break;
     case 'n':
-      N = atoi(optarg);
+      xn = atoi(optarg);
       break;
     case 'k':
-      K = atoi(optarg);
+      xk = atoi(optarg);
       break;
     case 'h':
       show_usage();
@@ -396,12 +425,25 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
 
+  uint64_t isa_flags;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+  bool has_ext = (isa_flags & VX_ISA_EXT_TCU) != 0;
+  if (!has_ext) {
+    std::cout << "TCU extension not supported!" << std::endl;
+    cleanup();
+    return -1;
+  }
+
   uint64_t NT;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &NT));
   if (NT != NUM_THREADS) {
     std::cout << "Error: device warp size (" << NT << ") must match NUM_THREADS=" << NUM_THREADS << "!" << std::endl;
     return -1;
   }
+
+  uint32_t M = xm * cfg::tileM;
+  uint32_t N = xn * cfg::tileN;
+  uint32_t K = xk = cfg::tileK;
 
   if ((M % cfg::tileM) != 0) {
     std::cout << "Error: M must be a multiple of tensor tileM!" << std::endl;
@@ -473,7 +515,15 @@ int main(int argc, char *argv[]) {
   // upload matrix B buffer
   {
     std::cout << "upload matrix B buffer" << std::endl;
-    RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
+    if constexpr (std::is_same<vt::ITYPE, vt::int4>::value || std::is_same<vt::ITYPE, vt::uint4>::value) {
+      // sub-byte matrix B must be in col-major format
+      // we convert the 4-bit row-major to col-major here
+      std::vector<uint8_t> h_B_col(sizeB);
+      convert_row_to_col_major_4bit(h_B_col.data(), N, 2 * K, h_B.data());
+      RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB));
+    } else {
+      RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
+    }
   }
 
   // upload program
