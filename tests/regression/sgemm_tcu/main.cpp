@@ -519,7 +519,7 @@ int main(int argc, char *argv[]) {
       // sub-byte matrix B must be in col-major format
       // we convert the 4-bit row-major to col-major here
       std::vector<uint8_t> h_B_col(sizeB);
-      convert_row_to_col_major_4bit(h_B_col.data(), N, 2 * K, h_B.data());
+      convert_row_to_col_major_4bit(h_B_col.data(), N, 2 * K, (uint8_t*)h_B.data());
       RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB));
     } else {
       RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
