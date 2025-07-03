@@ -143,29 +143,29 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     // SHFL
     if (NUM_LANES > 1) begin : g_shfl
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_i
-            wire [NT_BITS-1:0] bval = alu_in2[i][0 +: NT_BITS];
-            wire [NT_BITS-1:0] cval = alu_in2[i][6 +: NT_BITS];
-            wire [NT_BITS-1:0] mask = alu_in2[i][12 +: NT_BITS];
-            wire [NT_BITS-1:0] minLane = (NT_BITS'(i) & mask);
-            wire [NT_BITS-1:0] maxLane = minLane | (cval & ~(mask));
+            wire [LANE_BITS-1:0] bval = alu_in2[i][0 +: LANE_BITS];
+            wire [LANE_BITS-1:0] cval = alu_in2[i][6 +: LANE_BITS];
+            wire [LANE_BITS-1:0] mask = alu_in2[i][12 +: LANE_BITS];
+            wire [LANE_BITS-1:0] minLane = (LANE_BITS'(i) & mask);
+            wire [LANE_BITS-1:0] maxLane = minLane | (cval & ~(mask));
 
-            wire [NT_BITS:0]   lane_up   = NT_BITS'(i) - bval;
-            wire [NT_BITS:0]   lane_down = NT_BITS'(i) + bval;
-            wire [NT_BITS-1:0] lane_bfly = NT_BITS'(i) ^ bval;
-            wire [NT_BITS-1:0] lane_idx  = minLane | (bval & ~mask);
+            wire [LANE_BITS:0]   lane_up   = LANE_BITS'(i) - bval;
+            wire [LANE_BITS:0]   lane_down = LANE_BITS'(i) + bval;
+            wire [LANE_BITS-1:0] lane_bfly = LANE_BITS'(i) ^ bval;
+            wire [LANE_BITS-1:0] lane_idx  = minLane | (bval & ~mask);
 
-            reg [NT_BITS-1:0] lane;
+            reg [LANE_BITS-1:0] lane;
             always @(*) begin
-                lane = NT_BITS'(i);
+                lane = LANE_BITS'(i);
                 case (alu_op[1:0])
                     INST_SHFL_UP: begin
                         if ($signed(lane_up) >= $signed({1'b0, minLane})) begin
-                            lane = lane_up[NT_BITS-1:0];
+                            lane = lane_up[LANE_BITS-1:0];
                         end
                     end
                     INST_SHFL_DOWN: begin
                         if (lane_down <= {1'b0, maxLane}) begin
-                            lane = lane_down[NT_BITS-1:0];
+                            lane = lane_down[LANE_BITS-1:0];
                         end
                     end
                     INST_SHFL_BFLY: begin
