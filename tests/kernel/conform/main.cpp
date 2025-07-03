@@ -4,7 +4,7 @@
 int main() {
 	int errors = 0;
 
-	/*errors += test_global_memory();
+	errors += test_global_memory();
 
 	errors += test_local_memory();
 
@@ -22,9 +22,9 @@ int main() {
 
 	errors += test_barrier();
 
-	errors += test_tls();*/
+	errors += test_tls();
 
-	//errors += test_vote();
+	errors += test_vote();
 
 	errors += test_shfl();
 

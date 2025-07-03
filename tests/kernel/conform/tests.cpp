@@ -145,7 +145,7 @@ int test_wsapwn() {
 
 int dvg_buffer[4];
 
-void __attribute__((noinline)) __attribute__((optimize("O1"))) do_divergence() {
+void __attribute__((noinline)) do_divergence() {
 	int tid = vx_thread_id();
 	int cond1 = tid < 2;
 	int sp1 = vx_split(cond1);
