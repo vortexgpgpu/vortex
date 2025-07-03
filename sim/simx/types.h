@@ -227,6 +227,48 @@ inline std::ostream &operator<<(std::ostream &os, const BrType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+enum class VoteType {
+  ALL,
+  ANY,
+  UNI,
+  BAL
+};
+
+inline std::ostream &operator<<(std::ostream &os, const VoteType& vote) {
+  switch (vote) {
+  case VoteType::ALL: os << "ALL"; break;
+  case VoteType::ANY: os << "ANY"; break;
+  case VoteType::UNI: os << "UNI"; break;
+  case VoteType::BAL: os << "BAL"; break;
+  default:
+    assert(false);
+  }
+  return os;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+enum class ShflType {
+  UP,
+  DOWN,
+  BFLY,
+  IDX
+};
+
+inline std::ostream &operator<<(std::ostream &os, const ShflType& shfl) {
+  switch (shfl) {
+  case ShflType::UP:   os << "UP"; break;
+  case ShflType::DOWN: os << "DOWN"; break;
+  case ShflType::BFLY: os << "BFLY"; break;
+  case ShflType::IDX:  os << "IDX"; break;
+  default:
+    assert(false);
+  }
+  return os;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 enum class MdvType {
   MUL,
   MULHU,
@@ -627,6 +669,8 @@ using OpType = std::variant<
 , AmoType
 , FpuType
 , CsrType
+, VoteType
+, ShflType
 , WctlType
 #ifdef EXT_V_ENABLE
 , VsetType

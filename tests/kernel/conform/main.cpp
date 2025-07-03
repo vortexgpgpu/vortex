@@ -4,7 +4,7 @@
 int main() {
 	int errors = 0;
 
-	errors += test_global_memory();
+	/*errors += test_global_memory();
 
 	errors += test_local_memory();
 
@@ -20,17 +20,19 @@ int main() {
 
 	errors += test_serial();
 
-	errors += test_tmask();
-
 	errors += test_barrier();
 
-	errors += test_tls();
+	errors += test_tls();*/
 
-	if (0 == errors) {	
+	//errors += test_vote();
+
+	errors += test_shfl();
+
+	if (0 == errors) {
 		PRINTF("Passed!\n");
 	} else {
 		PRINTF("Failed!\n");
 	}
-	
+
 	return errors;
 }

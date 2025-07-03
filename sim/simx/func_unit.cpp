@@ -57,6 +57,10 @@ void AluUnit::tick() {
 				std::abort();
 			}
 			DT(3, this->name() << ": op=" << alu_type << ", " << *trace);
+		} else if (std::get_if<VoteType>(&trace->op_type)) {
+				delay = 2;
+		} else if (std::get_if<ShflType>(&trace->op_type)) {
+				delay = 2;
 		} else if (std::	get_if<BrType>(&trace->op_type)) {
 			auto br_type = std::get<BrType>(trace->op_type);
 			switch (br_type) {

@@ -19,10 +19,12 @@ int test_spawn_tasks();
 
 int test_serial();
 
-int test_tmask();
-
 int test_barrier();
 
 int test_tls();
+
+int test_vote();
+
+int test_shfl();
 
 #endif

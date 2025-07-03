@@ -509,6 +509,18 @@ module VX_decode import VX_gpu_pkg::*; #(
                             default:;
                         endcase
                     end
+                    7'h01: begin // VOTE, SHFL
+                        ex_type = EX_ALU;
+                        op_args.alu.xtype = ALU_TYPE_OTHER;
+                        use_rd  = 1;
+                        `USED_IREG (rd);
+                        `USED_IREG (rs1);
+                        if (funct3[2]) begin
+                            `USED_IREG (rs2);
+                        end
+                        op_type = INST_OP_BITS'(funct3);
+                    end
+                `ifdef EXT_TCU_ENABLE
                     7'h02: begin
                         case (funct3)
                             3'h0: begin // WMMA
@@ -526,6 +538,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                             default:;
                         endcase
                     end
+                `endif
                     default:;
                 endcase
             end
