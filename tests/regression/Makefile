@@ -20,10 +20,6 @@ all:
 	$(MAKE) -C sgemv
 	$(MAKE) -C sgemm2
 	$(MAKE) -C madmax
-	$(MAKE) -C vecaddx
-	$(MAKE) -C sgemmx
-	$(MAKE) -C conv3x
-	$(MAKE) -C sgemm2x
 	$(MAKE) -C stencil3d
 
 run-simx:
