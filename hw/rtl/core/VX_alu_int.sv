@@ -141,45 +141,49 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     end
 
     // SHFL
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_shfl
-        wire [NT_BITS-1:0] bval = alu_in2[i][0 +: NT_BITS];
-        wire [NT_BITS-1:0] cval = alu_in2[i][6 +: NT_BITS];
-        wire [NT_BITS-1:0] mask = alu_in2[i][12 +: NT_BITS];
-        wire [NT_BITS-1:0] minLane = (NT_BITS'(i) & mask);
-        wire [NT_BITS-1:0] maxLane = minLane | (cval & ~(mask));
+    if (NUM_LANES > 1) begin : g_shfl
+        for (genvar i = 0; i < NUM_LANES; ++i) begin : g_i
+            wire [NT_BITS-1:0] bval = alu_in2[i][0 +: NT_BITS];
+            wire [NT_BITS-1:0] cval = alu_in2[i][6 +: NT_BITS];
+            wire [NT_BITS-1:0] mask = alu_in2[i][12 +: NT_BITS];
+            wire [NT_BITS-1:0] minLane = (NT_BITS'(i) & mask);
+            wire [NT_BITS-1:0] maxLane = minLane | (cval & ~(mask));
 
-        wire [NT_BITS:0]   lane_up   = NT_BITS'(i) - bval;
-        wire [NT_BITS:0]   lane_down = NT_BITS'(i) + bval;
-        wire [NT_BITS-1:0] lane_bfly = NT_BITS'(i) ^ bval;
-        wire [NT_BITS-1:0] lane_idx  = minLane | (bval & ~mask);
+            wire [NT_BITS:0]   lane_up   = NT_BITS'(i) - bval;
+            wire [NT_BITS:0]   lane_down = NT_BITS'(i) + bval;
+            wire [NT_BITS-1:0] lane_bfly = NT_BITS'(i) ^ bval;
+            wire [NT_BITS-1:0] lane_idx  = minLane | (bval & ~mask);
 
-        reg [NT_BITS-1:0] lane;
-        always @(*) begin
-            lane = NT_BITS'(i);
-            case (alu_op[1:0])
-                INST_SHFL_UP: begin
-                    if ($signed(lane_up) >= $signed({1'b0, minLane})) begin
-                        lane = lane_up[NT_BITS-1:0];
+            reg [NT_BITS-1:0] lane;
+            always @(*) begin
+                lane = NT_BITS'(i);
+                case (alu_op[1:0])
+                    INST_SHFL_UP: begin
+                        if ($signed(lane_up) >= $signed({1'b0, minLane})) begin
+                            lane = lane_up[NT_BITS-1:0];
+                        end
                     end
-                end
-                INST_SHFL_DOWN: begin
-                    if (lane_down <= {1'b0, maxLane}) begin
-                        lane = lane_down[NT_BITS-1:0];
+                    INST_SHFL_DOWN: begin
+                        if (lane_down <= {1'b0, maxLane}) begin
+                            lane = lane_down[NT_BITS-1:0];
+                        end
                     end
-                end
-                INST_SHFL_BFLY: begin
-                    if (lane_bfly <= maxLane) begin
-                        lane = lane_bfly;
+                    INST_SHFL_BFLY: begin
+                        if (lane_bfly <= maxLane) begin
+                            lane = lane_bfly;
+                        end
                     end
-                end
-                INST_SHFL_IDX: begin
-                    if (lane_idx <= maxLane) begin
-                        lane = lane_idx;
+                    INST_SHFL_IDX: begin
+                        if (lane_idx <= maxLane) begin
+                            lane = lane_idx;
+                        end
                     end
-                end
-            endcase
+                endcase
+            end
+            assign shfl_result[i] = execute_if.data.tmask[lane] ? alu_in1[lane] : alu_in1[i];
         end
-        assign shfl_result[i] = execute_if.data.tmask[lane] ? alu_in1[lane] : alu_in1[i];
+    end else begin : g_shfl_0
+        assign shfl_result[0] = alu_in1[0];
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_alu_result
