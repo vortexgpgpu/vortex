@@ -26,6 +26,7 @@
 using namespace vortex;
 namespace vt = tensor;
 
+static bool g_enable_sparse = false;
 ///////////////////////////////////////////////////////////////////////////////
 
 static void convert_row_to_col_major_4bit(uint8_t *dst, uint32_t width, uint32_t height, const uint8_t *src) {
@@ -377,12 +378,13 @@ std::string last_build_options;
 
 static void show_usage() {
   std::cout << "Vortex Sgemm TCU Test." << std::endl;
-  std::cout << "Usage: [-m: m] [-n N] [-k: K] [-h: help]" << std::endl;
+  std::cout << "Usage: [-m: m] [-n N] [-k: K] [-s] [-h: help]" << std::endl;
+  std::cout << "  -s  Enable 2:4 structured sparsity " << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "m:n:k:i:o:h")) != -1) {
+  while ((c = getopt(argc, argv, "m:n:k:i:o:hs")) != -1) {
     switch (c) {
     case 'm':
       xm = atoi(optarg);
@@ -392,6 +394,10 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'k':
       xk = atoi(optarg);
+      break;
+    case 's':
+      g_enable_sparse = true;
+      std::cout << "Sparse mode enabled (-s)" << std::endl;
       break;
     case 'h':
       show_usage();
