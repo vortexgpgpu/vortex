@@ -110,6 +110,25 @@ package VX_trace_pkg;
                         end
                     end
                 end
+                ALU_TYPE_OTHER: begin
+                    if (op_type[2]) begin
+                        case (INST_SHFL_BITS'(op_type))
+                            INST_SHFL_UP:  `TRACE(level, ("SHFL.UP"))
+                            INST_SHFL_DOWN:`TRACE(level, ("SHFL.DOWN"))
+                            INST_SHFL_BFLY:`TRACE(level, ("SHFL.BFLY"))
+                            INST_SHFL_IDX: `TRACE(level, ("SHFL.IDX"))
+                            default:       `TRACE(level, ("?"))
+                        endcase
+                    end else begin
+                        case (INST_VOTE_BITS'(op_type))
+                            INST_VOTE_ALL: `TRACE(level, ("VOTE.ALL"))
+                            INST_VOTE_ANY: `TRACE(level, ("VOTE.ANY"))
+                            INST_VOTE_UNI: `TRACE(level, ("VOTE.UNI"))
+                            INST_VOTE_BAL: `TRACE(level, ("VOTE.BAL"))
+                            default:       `TRACE(level, ("?"))
+                        endcase
+                    end
+                end
                 ALU_TYPE_BRANCH: begin
                     case (INST_BR_BITS'(op_type))
                         INST_BR_BEQ:   `TRACE(level, ("BEQ"))

@@ -513,16 +513,17 @@ int main(int argc, char *argv[]) {
   }
 
   // upload matrix B buffer
-  std::cout << "upload matrix B buffer" << std::endl;
-  if constexpr (vt::ITYPE::id == vt::int4::id
-             || vt::ITYPE::id == vt::uint4::id) {
-    // sub-byte matrix B must be in col-major format
-    // we convert the 4-bit row-major to col-major here
-    std::vector<uint8_t> h_B_col(sizeB);
-    convert_row_to_col_major_4bit(h_B_col.data(), N, 2 * K, (uint8_t*)h_B.data());
-    RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB));
-  } else {
-    RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
+  {
+    std::cout << "upload matrix B buffer" << std::endl;
+    if constexpr (std::is_same<vt::ITYPE, vt::int4>::value || std::is_same<vt::ITYPE, vt::uint4>::value) {
+      // sub-byte matrix B must be in col-major format
+      // we convert the 4-bit row-major to col-major here
+      std::vector<uint8_t> h_B_col(sizeB);
+      convert_row_to_col_major_4bit(h_B_col.data(), N, 2 * K, (uint8_t*)h_B.data());
+      RT_CHECK(vx_copy_to_dev(B_buffer, h_B_col.data(), 0, sizeB));
+    } else {
+      RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, sizeB * sizeof(itype_t)));
+    }
   }
 
   // upload program

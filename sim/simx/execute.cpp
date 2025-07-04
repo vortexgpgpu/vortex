@@ -305,6 +305,84 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       }
       rd_write = true;
     },
+    [&](VoteType vote_type) {
+      bool has_vote_true = false;
+      bool has_vote_false = false;
+      Word ballot = 0;
+      // compute votes
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!warp.tmask.test(t))
+          continue;
+        auto is_pred = rs1_data[t].i & 0x1;
+        if (is_pred) {
+          has_vote_true = true;
+          ballot |= (Word(1) << t);
+        } else {
+          has_vote_false = true;
+        }
+      }
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        switch (vote_type) {
+        case VoteType::ALL:
+          rd_data[t].i = !has_vote_false;
+          break;
+        case VoteType::ANY:
+          rd_data[t].i = has_vote_true;
+          break;
+        case VoteType::UNI:
+          rd_data[t].i = !has_vote_true || !has_vote_false;
+          break;
+        case VoteType::BAL:
+          rd_data[t].i = ballot;
+          break;
+        default:
+          std::abort();
+        }
+      }
+      rd_write = true;
+    },
+    [&](ShflType shfl_type) {
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!warp.tmask.test(t))
+          continue;
+        auto bc  = rs2_data[t].i;
+        int bval = (bc >>  0) & 0x3f;
+        int cval = (bc >>  6) & 0x3f;
+        int mask = (bc >> 12) & 0x3f;
+        int maxLane = (t & mask) | (cval & ~mask);
+        int minLane = (t & mask);
+        int lane = 0;
+        int pval = 0;
+        switch (shfl_type) {
+        case ShflType::UP: {
+          lane = t - bval;
+          pval = (lane >= minLane);
+        } break;
+        case ShflType::DOWN: {
+          lane = t + bval;
+          pval = (lane <= maxLane);
+        } break;
+        case ShflType::BFLY: {
+          lane = t ^ bval;
+          pval = (lane <= maxLane);
+        } break;
+        case ShflType::IDX: {
+          lane = minLane | (bval & ~mask);
+          pval = (lane <= maxLane);
+        } break;
+        default:
+          std::abort();
+        }
+        if (!pval)
+          lane = t;
+        if (lane < num_threads) {
+          rd_data[t].i = rs1_data[lane].i;
+        } else {
+          rd_data[t].i = rs1_data[t].i;
+        }
+      }
+      rd_write = true;
+    },
     [&](BrType br_type) {
       auto brArgs = std::get<IntrBrArgs>(instrArgs);
       Word offset = sext<Word>(brArgs.offset, 32);

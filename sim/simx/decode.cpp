@@ -116,6 +116,26 @@ static op_string_t op_string(const Instr &instr) {
         std::abort();
       }
     },
+    [&](VoteType vote_type)-> op_string_t {
+      switch (vote_type) {
+      case VoteType::ALL: return {"VOTE.ALL", ""};
+      case VoteType::ANY: return {"VOTE.ANY", ""};
+      case VoteType::UNI: return {"VOTE.UNI", ""};
+      case VoteType::BAL: return {"VOTE.BAL", ""};
+      default:
+        std::abort();
+      }
+    },
+    [&](ShflType shfl_type)-> op_string_t {
+      switch (shfl_type) {
+      case ShflType::UP:   return {"SHFL.UP", ""};
+      case ShflType::DOWN: return {"SHFL.DOWN", ""};
+      case ShflType::BFLY: return {"SHFL.BFLY", ""};
+      case ShflType::IDX:  return {"SHFL.IDX", ""};
+      default:
+        std::abort();
+      }
+    },
     [&](BrType br_type)-> op_string_t {
       auto brArgs = std::get<IntrBrArgs>(instrArgs);
       switch (br_type) {
@@ -1016,6 +1036,44 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         std::abort();
       }
       instr->setArgs(wctlArgs);
+      ibuffer.push_back(instr);
+    } break;
+    case 1: { // VOTE
+      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
+      instr->setDestReg(rd, RegType::Integer);
+      instr->setSrcReg(0, rs1, RegType::Integer);
+      switch (funct3) {
+      case 0:
+        instr->setOpType(VoteType::ALL);
+        break;
+      case 1:
+        instr->setOpType(VoteType::ANY);
+        break;
+      case 2:
+        instr->setOpType(VoteType::UNI);
+        break;
+      case 3:
+        instr->setOpType(VoteType::BAL);
+        break;
+      case 4:
+        instr->setOpType(ShflType::UP);
+        instr->setSrcReg(1, rs2, RegType::Integer);
+        break;
+      case 5:
+        instr->setOpType(ShflType::DOWN);
+        instr->setSrcReg(1, rs2, RegType::Integer);
+        break;
+      case 6:
+        instr->setOpType(ShflType::BFLY);
+        instr->setSrcReg(1, rs2, RegType::Integer);
+        break;
+      case 7:
+        instr->setOpType(ShflType::IDX);
+        instr->setSrcReg(1, rs2, RegType::Integer);
+        break;
+      default:
+        std::abort();
+      }
       ibuffer.push_back(instr);
     } break;
   #ifdef EXT_TCU_ENABLE

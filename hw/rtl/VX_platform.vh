@@ -76,6 +76,7 @@
                               /* verilator lint_off PINMISSING */ \
                               /* verilator lint_off IMPORTSTAR */ \
                               /* verilator lint_off UNSIGNED */ \
+                              /* verilator lint_off CMPCONST */ \
                               /* verilator lint_off SYMRSVDWORD */
 
 `define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */ \
@@ -88,6 +89,7 @@
                               /* verilator lint_off PINMISSING */ \
                               /* verilator lint_on IMPORTSTAR */ \
                               /* verilator lint_on UNSIGNED */ \
+                              /* verilator lint_on CMPCONST */ \
                               /* verilator lint_on SYMRSVDWORD */
 
 `define UNUSED_PARAM(x)  /* verilator lint_off UNUSED */ \
