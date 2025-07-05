@@ -48,6 +48,20 @@ endif
 ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
+
+# TCU_BHF Config & Include/Modified HardFloat source files
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu/VX_tcu_bhf
+	
+# Selective Berkeley HardFloat source files paths
+	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/addRecFN.v
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/bsg_hardfloat_pkg.sv
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_primitives.v
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_rawFN.v
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/isSigNaNRecFN.v
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/mulRecFN.v
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToFN.v
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToRecFN.v
 endif
 
 RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
@@ -74,7 +88,7 @@ VL_FLAGS += --cc $(TOP) --top-module $(TOP)
 RTL_DIRS := $(patsubst -I%,%,$(filter -I%,$(RTL_INCLUDE)))
 
 # Discover RTL source files from source directories
-RTL_SRCS := $(shell find $(RTL_DIRS) -type f \( -name '*.v' -o -name '*.vh' -o -name '*.sv' \))
+RTL_SRCS := $(shell find $(RTL_DIRS) -type f \( -name '*.v' -o -name '*.vh' -o -name '*.sv' -o -name '*.vi' \))
 
 # Enable Verilator multithreaded simulation
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(mp.cpu_count())')
