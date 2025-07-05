@@ -421,9 +421,81 @@ void cleanup() {
   }
 }
 
+struct SparseMat {
+  std::vector<itype_t> values;   // non-zeros
+  std::vector<uint8_t> meta;     // Array of row-masks: 1 byte marks the columns
+                                  // of the 4 elements in the block that are non-zero.
+                                  // e.g. 0b0101 means 2nd and 4th elements are non-zero.
+
+  uint32_t rows, cols;           // original A dims (M × K)
+};
+
+static SparseMat pruneAndCompressMatrixA(const std::vector<itype_t>& denseA,
+                                         uint32_t M, uint32_t K) {
+  SparseMat out;
+  out.rows = M;
+  out.cols = K;
+  out.values.reserve(M * K / 2); // Select 2 values every 4 values
+  out.meta.reserve(M * K / 4); // 1 byte for every 4 values
+
+  const itype_t* src = denseA.data();
+
+  for (uint32_t r = 0; r < M; ++r) {
+    for (uint32_t c = 0; c < K; c += 4) {
+      itype_t blk[4] = {src[r * K + c],
+                        src[r * K + c + 1],
+                        src[r * K + c + 2],
+                        src[r * K + c + 3]};
+
+      uint32_t idx[4] = {0, 1, 2, 3};
+      std::sort(idx, idx + 4,
+        [&](uint32_t a, uint32_t b) {
+          return std::abs((int)blk[a]) < std::abs((int)blk[b]);
+        }); //Sort the 4 elements by absolute value, ascending order
+
+      uint8_t keep0 = idx[3];
+      uint8_t keep1 = idx[2]; //idx of largest 2 elements
+        
+      out.values.push_back(blk[keep0]);
+      out.values.push_back(blk[keep1]);
+
+      uint8_t m = (1u << keep0) | (1u << keep1);  // e.g. 0b0101
+      out.meta.push_back(m);
+    }
+  }
+  return out;
+}
+
+void test_pruneA() {
+  const uint32_t M = 4, K = 8;
+  std::vector<itype_t> denseA(M * K);
+  for (auto& v : denseA) v = Comparator<vt::ITYPE>::generate();
+
+  auto spA = pruneAndCompressMatrixA(denseA, M, K);
+
+  std::vector<itype_t> recovered(M * K, 0);
+  size_t v_idx = 0, m_idx = 0;
+  for (uint32_t r = 0; r < M; ++r)
+    for (uint32_t c = 0; c < K; c += 4) {
+      uint8_t m = spA.meta[m_idx++];
+      for (uint32_t i = 0; i < 4; ++i)
+        if (m & (1u << i))
+          recovered[r * K + c + i] = spA.values[v_idx++];
+    }
+
+  for (uint32_t i = 0; i < M * K; ++i)
+    assert(recovered[i] == denseA[i] || recovered[i] == 0); //Either the value is preserved or pruned
+  std::cout << "pruneAndCompressMatrixA passed\n";
+}
+
+
 int main(int argc, char *argv[]) {
   // parse command arguments
   parse_args(argc, argv);
+
+  if(g_enable_sparse) {
+    test_pruneA(); // Test the pruning function
+  }
 
   std::srand(50);
 
