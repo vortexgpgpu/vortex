@@ -44,7 +44,7 @@ Socket::Socket(const SimContext& ctx,
     ICACHE_MEM_PORTS,       // memory ports
     false,                  // write-back
     false,                  // write response
-    (uint8_t)arch.num_warps(), // mshr size
+    ICACHE_MSHR_SIZE,       // mshr size
     2,                      // pipeline latency
   });
 

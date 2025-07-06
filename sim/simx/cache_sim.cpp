@@ -126,6 +126,31 @@ struct set_t {
 			line.reset();
 		}
 	}
+
+	int tag_lookup(uint64_t tag, int* free_line_id, int* repl_line_id) {
+		uint32_t max_cnt = 0;
+		int hit_line_id = -1;
+		*free_line_id = -1;
+		*repl_line_id = -1;
+		for (uint32_t i = 0, n = lines.size(); i < n; ++i) {
+			auto& line = lines.at(i);
+			if (max_cnt < line.lru_ctr) {
+				max_cnt = line.lru_ctr;
+				*repl_line_id = i;
+			}
+			if (line.valid) {
+				if (line.tag == tag) {
+					hit_line_id = i;
+					line.lru_ctr = 0;
+				} else {
+					++line.lru_ctr;
+				}
+			} else {
+				*free_line_id = i;
+			}
+		}
+		return hit_line_id;
+	}
 };
 
 struct bank_req_t {
@@ -184,11 +209,20 @@ public:
 		, size_(0)
 	{}
 
+	uint32_t capacity() const {
+		return entries_.size();
+	}
+
+	uint32_t size() const {
+		return size_;
+	}
+
 	bool empty() const {
 		return (0 == size_);
 	}
 
 	bool full() const {
+		assert(size_ <= entries_.size());
 		return (size_ == entries_.size());
 	}
 
@@ -218,12 +252,14 @@ public:
 				return i;
 			}
 		}
+		std::abort();
 		return -1;
 	}
 
 	mshr_entry_t& replay(uint32_t id) {
 		auto& root_entry = entries_.at(id);
 		assert(root_entry.bank_req.type == bank_req_t::Core);
+		assert(ready_reqs_ == 0);
 		// mark all related mshr entries for replay
 		for (auto& entry : entries_) {
 			if (entry.bank_req.type == bank_req_t::Core
@@ -292,6 +328,7 @@ public:
 
   void reset() {
 		perf_stats_ = CacheSim::PerfStats();
+		pending_mshr_size_ = 0;
     pending_read_reqs_ = 0;
 		pending_write_reqs_ = 0;
 		pending_fill_reqs_ = 0;
@@ -322,6 +359,7 @@ private:
 			// first: schedule MSHR replay
 			if (mshr_.has_ready_reqs()) {
 				mshr_.dequeue(&bank_req);
+				--pending_mshr_size_;
 				pipe_req_->push(bank_req);
 				break;
 			}
@@ -337,6 +375,7 @@ private:
 				line.valid  = true;
 				line.tag    = entry.bank_req.addr_tag;
 				mshr_.dequeue(&bank_req);
+				--pending_mshr_size_;
 				pipe_req_->push(bank_req);
 				mem_rsp_port.pop();
 				--pending_fill_reqs_;
@@ -346,14 +385,13 @@ private:
 			// third: schedule core request
 			if (!this->core_req_port.empty()) {
 				auto& core_req = core_req_port.front();
-
 				// check MSHR capacity
 				if ((!core_req.write || config_.write_back)
-				 && mshr_.full()) {
+				 && (pending_mshr_size_ >= mshr_.capacity())) {
 					++perf_stats_.mshr_stalls;
 					break;
 				}
-
+				++pending_mshr_size_;
 				DT(3, this->name() << "-core-req: " << core_req);
 				bank_req.type = bank_req_t::Core;
 				bank_req.cid = core_req.cid;
@@ -390,32 +428,11 @@ private:
 			}
 		} break;
 		case bank_req_t::Core: {
-			int32_t hit_line_id  = -1;
 			int32_t free_line_id = -1;
 			int32_t repl_line_id = 0;
-			uint32_t max_cnt = 0;
-
 			auto& set = sets_.at(bank_req.set_id);
-
 			// tag lookup
-			for (uint32_t i = 0, n = set.lines.size(); i < n; ++i) {
-				auto& line = set.lines.at(i);
-				if (max_cnt < line.lru_ctr) {
-					max_cnt = line.lru_ctr;
-					repl_line_id = i;
-				}
-				if (line.valid) {
-					if (line.tag == bank_req.addr_tag) {
-						hit_line_id = i;
-						line.lru_ctr = 0;
-					} else {
-						++line.lru_ctr;
-					}
-				} else {
-					free_line_id = i;
-				}
-			}
-
+			int hit_line_id = set.tag_lookup(bank_req.addr_tag, &free_line_id, &repl_line_id);
 			if (hit_line_id != -1) {
 				// Hit handling
 				if (bank_req.write) {
@@ -441,6 +458,7 @@ private:
 					this->core_rsp_port.push(core_rsp, config_.latency);
 					DT(3, this->name() << "-core-rsp: " << core_rsp);
 				}
+				--pending_mshr_size_;
 			} else {
 				// Miss handling
 				if (bank_req.write)
@@ -479,6 +497,7 @@ private:
 						this->core_rsp_port.push(core_rsp, config_.latency);
 						DT(3, this->name() << "-core-rsp: " << core_rsp);
 					}
+					--pending_mshr_size_;
 				} else {
 					// MSHR lookup
 					auto mshr_pending = mshr_.lookup(bank_req);
@@ -515,6 +534,7 @@ private:
 
   std::vector<set_t> sets_;
 	MSHR mshr_;
+	uint32_t pending_mshr_size_;
 	TFifo<bank_req_t>::Ptr pipe_req_;
 
 	CacheSim::PerfStats perf_stats_;
