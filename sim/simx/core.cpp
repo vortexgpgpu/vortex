@@ -365,12 +365,12 @@ void Core::issue() {
       auto& ibuffer = ibuffers_.at(ii);
       auto trace = ibuffer.top();
       // update scoreboard
-      DT(3, "pipeline-scoreboard: " << *trace);
+      DT(3, "pipeline-ibuffer: " << *trace);
       if (trace->wb) {
         scoreboard_.reserve(trace);
       }
       // to operand stage
-      operands_.at(iw)->Input.push(trace, 2);
+      operands_.at(iw)->Input.push(trace, 1);
       ibuffer.pop();
     }
 
@@ -449,7 +449,7 @@ bool Core::running() const {
   if (emulator_.running() || !pending_instrs_.empty()) {
   #ifndef NDEBUG
     for (auto& trace : pending_instrs_) {
-      DT(4, "pipeline-pending: " << *trace);
+      DT(5, "pipeline-pending: " << *trace);
     }
   #endif
     return true;

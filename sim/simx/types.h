@@ -1088,6 +1088,71 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+template <typename T>
+class TFifo : public SimObject<TFifo<T>> {
+public:
+  using Type = T;
+
+  TFifo(const SimContext& ctx, const char* name, uint32_t delay, uint32_t capacity = 0)
+    : SimObject<TFifo<T>>(ctx, name)
+    , bus_(this, capacity)
+    , delay_(delay) {
+  }
+
+  void reset() {
+    //--
+  }
+
+  void tick() {
+    //--
+  }
+
+  bool empty() const {
+    return bus_.empty();
+  }
+
+  bool full() const {
+    return bus_.full();
+  }
+
+  uint32_t size() const {
+    return bus_.size();
+  }
+
+  void push(const Type& value) {
+    if (bus_.full()) {
+      throw std::runtime_error("FIFO is full");
+    }
+    bus_.push(value, delay_);
+  }
+
+  Type& front() {
+    if (bus_.empty()) {
+      throw std::runtime_error("FIFO is empty");
+    }
+    return bus_.front();
+  }
+
+  const Type& front() const {
+    if (bus_.empty()) {
+      throw std::runtime_error("FIFO is empty");
+    }
+    return bus_.front();
+  }
+
+  void pop() {
+    if (bus_.empty()) {
+      throw std::runtime_error("FIFO is empty");
+    }
+    bus_.pop();
+  }
+
+private:
+  SimPort<Type> bus_;
+  uint32_t delay_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
 template <typename Type>
 class TxArbiter : public SimObject<TxArbiter<Type>> {
 public:
@@ -1309,7 +1374,8 @@ public:
     ArbiterType type,
     uint32_t num_inputs,
     uint32_t num_outputs = 1,
-    uint32_t delay = 1
+    uint32_t req_delay = 1,
+    uint32_t rsp_delay = 1
   )
     : SimObject<TxRxArbiter<Req, Rsp>>(ctx, name)
     , ReqIn(num_inputs, this)
@@ -1317,11 +1383,12 @@ public:
     , ReqOut(num_outputs, this)
     , RspOut(num_outputs, this)
     , arbiter_(nullptr)
+    , rsp_delay_(rsp_delay)
     , lg2_num_reqs_(log2ceil(num_inputs / num_outputs))
   {
     if (num_inputs != num_outputs) {
       // allocate arbiter
-      arbiter_ = ReqArb::Create(name, type, num_inputs, num_outputs, delay);
+      arbiter_ = ReqArb::Create(name, type, num_inputs, num_outputs, req_delay);
       // bind arbiter inputs and outputs
       for (uint32_t i = 0; i < num_inputs; ++i) {
         ReqIn.at(i).bind(&arbiter_->Inputs.at(i));
@@ -1370,7 +1437,7 @@ public:
         }
         uint32_t i = o * R + r;
         DT(4, this->name() << "-rsp" << o << "_" << i << ": " << in_rsp);
-        RspIn.at(i).push(in_rsp, 1);
+        RspIn.at(i).push(in_rsp, rsp_delay_);
         rsp_out.pop();
       }
     }
@@ -1380,6 +1447,7 @@ protected:
   typedef TxArbiter<Req> ReqArb;
 
   typename ReqArb::Ptr arbiter_;
+  uint32_t rsp_delay_;
   uint32_t lg2_num_reqs_;
 };
 
@@ -1404,7 +1472,8 @@ public:
     uint32_t num_inputs,
     uint32_t num_outputs,
     std::function<uint32_t(const Req& req)> output_sel,
-    uint32_t delay = 1
+    uint32_t req_delay = 1,
+    uint32_t rsp_delay = 1
   )
     : SimObject<TxRxCrossBar<Req, Rsp>>(ctx, name)
     , ReqIn(num_inputs, this)
@@ -1413,11 +1482,12 @@ public:
     , RspOut(num_outputs, this)
     , crossbar_(nullptr)
     , arbiter_(type, num_outputs)
+    , rsp_delay_(rsp_delay)
     , lg2_inputs_(log2ceil(num_inputs)) {
 
     if (num_inputs != 1 || num_outputs != 1) {
       // allocate crossbar
-      crossbar_ = ReqXbar::Create(name, num_inputs, num_outputs, output_sel, delay);
+      crossbar_ = ReqXbar::Create(name, num_inputs, num_outputs, output_sel, req_delay);
       // bind crossbar inputs and outputs
       for (uint32_t i = 0; i < num_inputs; ++i) {
         ReqIn.at(i).bind(&crossbar_->Inputs.at(i));
@@ -1476,14 +1546,17 @@ public:
           in_rsp.tag = rsp.tag >> lg2_inputs_;
         }
         DT(4, this->name() << "-rsp" << g << "_" << i << ": " << in_rsp);
-        RspIn.at(i).push(in_rsp, 1);
+        RspIn.at(i).push(in_rsp, rsp_delay_);
         rsp_out.pop();
       }
     }
   }
 
   uint64_t collisions() const {
-    return crossbar_->collisions();
+    if (crossbar_) {
+      return crossbar_->collisions();
+    }
+    return 0;
   }
 
 protected:
@@ -1491,6 +1564,7 @@ protected:
 
   typename ReqXbar::Ptr crossbar_;
   Arbiter arbiter_;
+  uint32_t rsp_delay_;
   uint32_t lg2_inputs_;
 };
 

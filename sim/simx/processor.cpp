@@ -46,7 +46,6 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
     log2ceil(L3_NUM_WAYS),    // A
     log2ceil(L3_NUM_BANKS),   // B
     XLEN,                     // address bits
-    1,                        // number of ports
     L3_NUM_REQS,              // request size
     L3_MEM_PORTS,             // memory ports
     L3_WRITEBACK,             // write-back

@@ -21,6 +21,39 @@ import inspect
 
 configs = None
 
+class PerfCounter:
+    def __init__(self, name):
+        self.name  = name
+        self.total = 0
+        self.count = 0
+        self.min   = 0
+        self.max   = 0
+        self.min_uuid = None
+        self.max_uuid = None
+
+    def update(self, uuid, value):
+        if self.count != 0:
+            if value < self.min:
+                self.min = value
+                self.min_uuid = uuid
+            if value > self.max:
+                self.max = value
+                self.max_uuid = uuid
+        else:
+            self.min = value
+            self.max = value
+            self.min_uuid = uuid
+            self.max_uuid = uuid
+        self.total = self.total + value
+        self.count = self.count + 1
+
+    def dump(self):
+        if self.count != 0:
+            avg = self.total // self.count
+        else:
+            avg = 0
+        print("{} latency: avg={}, min={} (#{}), max={} (#{})".format(self.name, avg, self.min, self.min_uuid, self.max, self.max_uuid))
+
 def parse_args():
     parser = argparse.ArgumentParser(description='CPU trace log to CSV format converter.')
     parser.add_argument('-t', '--type', default='simx', help='log type (rtlsim or simx)')
@@ -48,6 +81,7 @@ def load_config(filename):
     sys.exit(1)
 
 def parse_simx(log_lines):
+    pipeline_pattern = r"TRACE\s+(\d+): pipeline-(schedule|ibuffer|dispatch|commit):.*#(\d+)"
     opcode_pattern = r"Instr: ([0-9a-zA-Z_\.]+)"
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
     core_id_pattern = r"cid=(\d+)"
@@ -58,6 +92,12 @@ def parse_simx(log_lines):
     uuid_pattern = r"#(\d+)"
     entries = []
     instr_data = None
+    schd_ticks = {}
+    ibuf_ticks = {}
+    disp_ticks = {}
+    perf_sched = PerfCounter("Schedule")
+    perf_issue = PerfCounter("Issue")
+    perf_exec  = PerfCounter("Execute")
     for lineno, line in enumerate(log_lines, start=1):
         try:
             if line.startswith("DEBUG Instr:"):
@@ -76,11 +116,34 @@ def parse_simx(log_lines):
                 instr_data["operands"] = (instr_data["operands"] + ', ' + src_reg) if 'operands' in instr_data else src_reg
             elif line.startswith("DEBUG Dest"):
                 instr_data["destination"] = re.search(destination_pattern, line).group(1)
+            elif line.startswith("TRACE"):
+                line_match = re.search(pipeline_pattern, line)
+                if line_match:
+                    timestamp = int(line_match.group(1))
+                    stage = line_match.group(2)
+                    uuid = int(line_match.group(3))
+                    if stage == "schedule":
+                        schd_ticks[uuid] = timestamp
+                    elif stage == "ibuffer":
+                        ibuf_ticks[uuid] = timestamp
+                        cycles = timestamp - schd_ticks[uuid]
+                        perf_sched.update(uuid, cycles)
+                    elif stage == "dispatch":
+                        disp_ticks[uuid] = timestamp
+                        cycles = timestamp - ibuf_ticks[uuid]
+                        perf_issue.update(uuid, cycles)
+                    elif stage == "commit":
+                        cycles = timestamp - disp_ticks[uuid]
+                        perf_exec.update(uuid, cycles)
+
         except Exception as e:
             print("Error: {}; {}".format(e, line))
             instr_data = None
     if instr_data:
         entries.append(instr_data)
+    perf_sched.dump()
+    perf_issue.dump()
+    perf_exec.dump()
     return entries
 
 def reverse_binary(bin_str):
@@ -148,7 +211,7 @@ def merge_data(trace, key, new_data, mask):
 
 def parse_rtlsim(log_lines):
     global configs
-    line_pattern = r"\d+:\s+cluster(\d+)-socket(\d+)-core(\d+)-(issue\d+-ibuffer|issue\d+-dispatch|commit):"
+    line_pattern = r"(\d+):\s+cluster(\d+)-socket(\d+)-core(\d+)-(schedule|issue\d+-ibuffer|issue\d+-dispatch|commit):"
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
     ex_pattern = r"ex=([a-zA-Z]+)"
     op_pattern = r"op=([\?0-9a-zA-Z_\.]+)"
@@ -173,6 +236,10 @@ def parse_rtlsim(log_lines):
     socket_size = configs['socket_size']
     num_threads = configs['num_threads']
     num_sockets = (num_cores + socket_size - 1) // socket_size
+    schd_ticks = {}
+    perf_sched = PerfCounter("Schedule")
+    perf_issue = PerfCounter("Issue")
+    perf_exec  = PerfCounter("Execute")
     for lineno, line in enumerate(log_lines, start=1):
         try:
             line_match = re.search(line_pattern, line)
@@ -181,11 +248,14 @@ def parse_rtlsim(log_lines):
                 warp_id = int(re.search(warp_id_pattern, line).group(1))
                 tmask = re.search(tmask_pattern, line).group(1)
                 uuid = int(re.search(uuid_pattern, line).group(1))
-                cluster_id = int(line_match.group(1))
-                socket_id = int(line_match.group(2))
-                core_id = int(line_match.group(3))
-                stage = line_match.group(4)
-                if re.match(r"issue\d+-ibuffer", stage):
+                timestamp = int(line_match.group(1))
+                cluster_id = int(line_match.group(2))
+                socket_id = int(line_match.group(3))
+                core_id = int(line_match.group(4))
+                stage = line_match.group(5)
+                if re.match(r"schedule", stage):
+                    schd_ticks[uuid] = timestamp
+                elif re.match(r"issue\d+-ibuffer", stage):
                     trace = {}
                     trace["uuid"] = uuid
                     trace["PC"] = PC
@@ -198,7 +268,12 @@ def parse_rtlsim(log_lines):
                     trace["rs1"] = re.search(rs1_pattern, line).group(1)
                     trace["rs2"] = re.search(rs2_pattern, line).group(1)
                     trace["rs3"] = re.search(rs3_pattern, line).group(1)
+                    trace["ibuf_ticks"] = timestamp
                     instr_data[uuid] = trace
+                    if uuid in schd_ticks:
+                        ticks = schd_ticks[uuid]
+                        cycles = (timestamp - ticks + 1) // 2
+                        perf_sched.update(uuid, cycles)
                 elif re.match(r"issue\d+-dispatch", stage):
                     if uuid in instr_data:
                         trace = instr_data[uuid]
@@ -213,7 +288,10 @@ def parse_rtlsim(log_lines):
                         if used_rs[2]:
                             merge_data(trace, 'rs3_data', simd_data(re.search(rs3_data_pattern, line).group(1).split(', ')[::-1], sid, num_threads, '0x0'), src_tmask_arr)
                         trace["issued"] = True
+                        trace["issue_ticks"] = timestamp
                         instr_data[uuid] = trace
+                        cycles = (timestamp - trace["ibuf_ticks"] + 1) // 2
+                        perf_issue.update(uuid, cycles)
                 elif re.match(r"commit", stage):
                     if uuid in instr_data:
                         trace = instr_data[uuid]
@@ -245,6 +323,10 @@ def parse_rtlsim(log_lines):
                                     operands, sep = append_value(operands, trace["rs3"], trace["rs3_data"], tmask_arr, sep)
                                     del trace["rs3_data"]
                                 trace["operands"] = operands
+                                cycles = (timestamp - trace["issue_ticks"] + 1) // 2
+                                perf_exec.update(uuid, cycles)
+                                del trace["ibuf_ticks"]
+                                del trace["issue_ticks"]
                                 del trace["used_rs"]
                                 del trace["rd"]
                                 del trace["rs1"]
@@ -255,6 +337,9 @@ def parse_rtlsim(log_lines):
                                 entries.append(trace)
         except Exception as e:
             print("Error: {}; {}".format(e, line))
+    perf_sched.dump()
+    perf_issue.dump()
+    perf_exec.dump()
     return entries
 
 def write_csv(sublogs, csv_filename, log_type):

@@ -41,8 +41,6 @@ class Socket;
 class Arch;
 class DCRS;
 
-using TraceArbiter = TxArbiter<instr_trace_t*>;
-
 class Core : public SimObject<Core> {
 public:
   struct PerfStats {

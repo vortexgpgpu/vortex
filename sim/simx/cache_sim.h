@@ -28,7 +28,6 @@ public:
 		uint8_t A;              // log2 associativity
 		uint8_t B;              // log2 number of banks
 		uint8_t addr_width;     // word address bits
-		uint8_t ports_per_bank; // number of ports per bank
 		uint8_t num_inputs;     // number of inputs
 		uint8_t mem_ports;      // memory ports
 		bool    write_back;     // is write-back
@@ -43,7 +42,6 @@ public:
 		uint64_t read_misses;
 		uint64_t write_misses;
 		uint64_t evictions;
-		uint64_t pipeline_stalls;
 		uint64_t bank_stalls;
 		uint64_t mshr_stalls;
 		uint64_t mem_latency;
@@ -54,7 +52,6 @@ public:
 			, read_misses(0)
 			, write_misses(0)
 			, evictions(0)
-			, pipeline_stalls(0)
 			, bank_stalls(0)
 			, mshr_stalls(0)
 			, mem_latency(0)
@@ -66,7 +63,6 @@ public:
 			this->read_misses += rhs.read_misses;
 			this->write_misses += rhs.write_misses;
 			this->evictions += rhs.evictions;
-			this->pipeline_stalls += rhs.pipeline_stalls;
 			this->bank_stalls += rhs.bank_stalls;
 			this->mshr_stalls += rhs.mshr_stalls;
 			this->mem_latency += rhs.mem_latency;
@@ -86,7 +82,7 @@ public:
 
 	void tick();
 
-	const PerfStats& perf_stats() const;
+	PerfStats perf_stats() const;
 
 private:
 	class Impl;

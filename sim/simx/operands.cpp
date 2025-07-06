@@ -20,60 +20,63 @@ Operands::Operands(const SimContext &ctx, Core* /*core*/)
     : SimObject<Operands>(ctx, "operands")
     , Input(this)
     , Output(this)
-    , opc_units_(NUM_OPCS)
-    , gpr_unit_(GPR::Create())
-    , out_arb_(ArbiterType::RoundRobin, NUM_OPCS) {
+    , opc_units_(NUM_OPCS) {
+  static_assert(NUM_OPCS <= PER_ISSUE_WARPS, "invalid NUM_OPCS value");
   // create OPC units
   for (uint32_t i = 0; i < NUM_OPCS; i++) {
     opc_units_.at(i) = OpcUnit::Create();
   }
-  // connect OPC to GPR
-  for (uint32_t i = 0; i < NUM_OPCS; i++) {
-    opc_units_.at(i)->gpr_req_ports.bind(&gpr_unit_->ReqIn.at(i));
-    gpr_unit_->RspOut.at(i).bind(&opc_units_.at(i)->gpr_rsp_ports);
+
+  if (NUM_OPCS >= 2) {
+    char sname[100];
+    snprintf(sname, 100, "%s-rsp_arb", this->name().c_str());
+    rsp_arb_ = TraceArbiter::Create(sname, ArbiterType::RoundRobin, NUM_OPCS, 1);
+    for (uint32_t i = 0; i < NUM_OPCS; ++i) {
+      opc_units_.at(i)->Output.bind(&rsp_arb_->Inputs.at(i));
+    }
+    rsp_arb_->Outputs.at(0).bind(&this->Output);
+  } else {
+    // pass-thru
+    this->Input.bind(&opc_units_.at(0)->Input);
+    opc_units_.at(0)->Output.bind(&this->Output);
   }
-  // initialize
-  this->reset();
 }
 
-Operands::~Operands() {}
+Operands::~Operands() {
+  //--
+}
 
 void Operands::reset() {
-  out_arb_.reset();
-  total_stalls_ = 0;
+  //--
 }
 
 void Operands::tick() {
-  {
-    // process outgoing instructions
-    BitVector<> valid_set(NUM_OPCS);
-    for (uint32_t i = 0; i < NUM_OPCS; i++) {
-      valid_set.set(i, !opc_units_.at(i)->Output.empty());
-    }
-    if (valid_set.any()) {
-      uint32_t g = out_arb_.grant(valid_set);
-      auto trace = opc_units_.at(g)->Output.front();
-      this->Output.push(trace);
-      opc_units_.at(g)->Output.pop();
-      DT(3, "pipeline-operands: " << *trace);
-    }
-  }
+  if (NUM_OPCS < 2)
+    return; // pass-thru
 
-  // process incoming instructions
+  // process requests
   if (Input.empty())
     return;
   auto trace = this->Input.front();
   for (uint32_t i = 0; i < NUM_OPCS; i++) {
-    // skip if busy
-    if (opc_units_.at(i)->Input.full())
-      continue;
-    // assign instruction
-    opc_units_.at(i)->Input.push(trace);
+    uint32_t wis = trace->wid / ISSUE_WIDTH;
+    uint32_t index = wis % NUM_OPCS;
+    opc_units_.at(index)->Input.push(trace);
     Input.pop();
     break;
   }
 }
 
+uint32_t Operands::total_stalls() const {
+  uint32_t total = 0;
+  for (const auto& opc_unit : opc_units_) {
+    total += opc_unit->total_stalls();
+  }
+  return total;
+}
+
 void Operands::writeback(instr_trace_t* trace) {
-  __unused(trace);
+  uint32_t wis = trace->wid / ISSUE_WIDTH;
+  uint32_t index = wis % NUM_OPCS;
+  opc_units_.at(index)->writeback(trace);
 }

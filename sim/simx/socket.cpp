@@ -38,9 +38,8 @@ Socket::Socket(const SimContext& ctx,
     log2ceil(L1_LINE_SIZE), // L
     log2ceil(sizeof(uint32_t)), // W
     log2ceil(ICACHE_NUM_WAYS),// A
-    1,                      // B
+    log2ceil(1),            // B
     XLEN,                   // address bits
-    1,                      // number of ports
     1,                      // number of inputs
     ICACHE_MEM_PORTS,       // memory ports
     false,                  // write-back
@@ -58,7 +57,6 @@ Socket::Socket(const SimContext& ctx,
     log2ceil(DCACHE_NUM_WAYS),// A
     log2ceil(DCACHE_NUM_BANKS), // B
     XLEN,                   // address bits
-    1,                      // number of ports
     DCACHE_NUM_REQS,        // number of inputs
     L1_MEM_PORTS,           // memory ports
     DCACHE_WRITEBACK,       // write-back

@@ -14,7 +14,6 @@
 #pragma once
 
 #include "instr_trace.h"
-#include "gpr_unit.h"
 
 namespace vortex {
 
@@ -24,9 +23,6 @@ class OpcUnit : public SimObject<OpcUnit> {
 public:
   SimPort<instr_trace_t *> Input;
   SimPort<instr_trace_t *> Output;
-
-  SimPort<GprReq> gpr_req_ports;
-  SimPort<GprRsp> gpr_rsp_ports;
 
   OpcUnit(const SimContext &ctx);
   virtual ~OpcUnit();
@@ -42,8 +38,6 @@ public:
   }
 
 private:
-  uint32_t pending_rsps_ = 0;
-  bool     instr_pending_ = false;
   uint32_t total_stalls_ = 0;
 };
 

@@ -159,4 +159,6 @@ private:
   bool log_once_;
 };
 
+using TraceArbiter = TxArbiter<instr_trace_t*>;
+
 }

@@ -51,7 +51,6 @@ Cluster::Cluster(const SimContext& ctx,
     log2ceil(L2_NUM_WAYS),  // A
     log2ceil(L2_NUM_BANKS), // B
     XLEN,                   // address bits
-    1,                      // number of ports
     L2_NUM_REQS,            // request size
     L2_MEM_PORTS,           // memory ports
     L2_WRITEBACK,           // write-back
