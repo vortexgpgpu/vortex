@@ -733,7 +733,7 @@ package VX_gpu_pkg;
 
     ///////////////////////// LSU memory Parameters ///////////////////////////
 
-    localparam LSU_WORD_SIZE        = `XLEN / 8;
+    localparam LSU_WORD_SIZE        = XLENB;
     localparam LSU_ADDR_WIDTH	    = (`MEM_ADDR_WIDTH - `CLOG2(LSU_WORD_SIZE));
     localparam LSU_MEM_BATCHES      = 1;
     localparam LSU_TAG_ID_BITS      = (`CLOG2(`LSUQ_IN_SIZE) + `CLOG2(LSU_MEM_BATCHES));

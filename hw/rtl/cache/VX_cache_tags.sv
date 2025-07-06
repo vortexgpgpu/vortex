@@ -68,7 +68,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         wire way_en   = (NUM_WAYS == 1) || (evict_way == i);
         wire do_init  = init; // init all ways
         wire do_fill  = fill && way_en;
-        wire do_flush = flush && (!WRITEBACK || way_en); // flush the whole line in writethrough mode
+        wire do_flush = flush && (!WRITEBACK || way_en); // flush all ways in writethrough mode
         wire do_write = WRITEBACK && write && tag_matches[i]; // only write on tag hit
 
         //wire line_read  = read || write || (WRITEBACK && (fill || flush));

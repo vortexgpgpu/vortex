@@ -435,4 +435,12 @@ module VX_schedule import VX_gpu_pkg::*; #(
     assign sched_perf.stalls = perf_sched_stalls;
 `endif
 
+`ifdef DBG_TRACE_PIPELINE
+    always @(posedge clk) begin
+        if (schedule_fire) begin
+            `TRACE(1, ("%t: %s: wid=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_wid, to_fullPC(schedule_pc), schedule_tmask, instr_uuid))
+        end
+    end
+`endif
+
 endmodule

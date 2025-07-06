@@ -163,7 +163,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire                            is_dirty_st0, is_dirty_st1;
     wire                            is_replay_st0, is_replay_st1;
     wire                            is_hit_st0, is_hit_st1;
-    wire [`UP(MEM_FLAGS_WIDTH)-1:0]     flags_sel, flags_st0, flags_st1;
+    wire [`UP(MEM_FLAGS_WIDTH)-1:0] flags_sel, flags_st0, flags_st1;
     wire                            mshr_pending_st0, mshr_pending_st1;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_previd_st0, mshr_previd_st1;
     wire                            mshr_empty;
@@ -177,14 +177,14 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // ensure we have no pending memory request in the bank
     wire no_pending_req = ~valid_st0 && ~valid_st1 && mreq_queue_empty;
 
-    VX_bank_flush #(
+    VX_cache_flush #(
         .BANK_ID    (BANK_ID),
         .CACHE_SIZE (CACHE_SIZE),
         .LINE_SIZE  (LINE_SIZE),
         .NUM_BANKS  (NUM_BANKS),
         .NUM_WAYS   (NUM_WAYS),
         .WRITEBACK  (WRITEBACK)
-    ) flush_unit (
+    ) cache_flush (
         .clk         (clk),
         .reset       (reset),
         .flush_begin (flush_begin),

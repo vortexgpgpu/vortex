@@ -121,12 +121,12 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     wire [NUM_BANKS-1:0] per_bank_core_req_fire;
 
-    VX_cache_flush #(
+    VX_cache_init #(
         .NUM_REQS  (NUM_REQS),
         .NUM_BANKS (NUM_BANKS),
         .TAG_WIDTH (TAG_WIDTH),
         .BANK_SEL_LATENCY (`TO_OUT_BUF_REG(REQ_XBAR_BUF)) // request xbar latency
-    ) flush_unit (
+    ) cache_init (
         .clk             (clk),
         .reset           (reset),
         .core_bus_in_if  (core_bus_if),
