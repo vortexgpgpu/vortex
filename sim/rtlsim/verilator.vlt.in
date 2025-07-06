@@ -3,3 +3,13 @@
 lint_off -rule BLKANDNBLK -file "@VORTEX_HOME@/third_party/cvfpu/*"
 lint_off -rule UNOPTFLAT -file "@VORTEX_HOME@/third_party/cvfpu/*"
 lint_off -file "@VORTEX_HOME@/third_party/cvfpu/*"
+
+lint_off -rule BLKANDNBLK -file "@VORTEX_HOME@/third_party/hardfloat/*"
+lint_off -rule UNOPTFLAT -file "@VORTEX_HOME@/third_party/hardfloat/*"
+lint_off -file "@VORTEX_HOME@/third_party/hardfloat/*"
+
+lint_off -rule WIDTHEXPAND -file "@VORTEX_HOME@/hw/rtl/tcu/VX_tcu_bhf/*"
+lint_off -rule WIDTHTRUNC -file "@VORTEX_HOME@/hw/rtl/tcu/VX_tcu_bhf/*"
+lint_off -rule BLKANDNBLK -file "@VORTEX_HOME@/hw/rtl/tcu/VX_tcu_bhf/*"
+lint_off -rule UNOPTFLAT -file "@VORTEX_HOME@/hw/rtl/tcu/VX_tcu_bhf/*"
+lint_off -file "@VORTEX_HOME@/hw/rtl/tcu/VX_tcu_bhf/*"
