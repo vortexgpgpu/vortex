@@ -342,6 +342,15 @@ using cfg = vt::wmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
 
+struct SparseMat {
+  std::vector<itype_t> values;   // non-zeros
+  std::vector<uint8_t> meta;     // Array of row-masks: 1 byte marks the columns
+                                  // of the 4 elements in the block that are non-zero.
+                                  // e.g. 0b0101 means 2nd and 4th elements are non-zero.
+
+  uint32_t rows, cols;           // original A dims (M × K)
+};
+
 static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t M, uint32_t N, uint32_t K) {
   uint32_t subbytes = 8 / vt::ITYPE::bits;
   uint32_t KS = subbytes ? (K * subbytes) : K;
@@ -352,6 +361,53 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
         auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
         auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
         sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
+      }
+      data_accessor_t<vt::OTYPE>::write(C, m * N + n, sum);
+    }
+  }
+}
+
+static void matmul_cpu_sparseA(
+      otype_t*               C,      // [M × N]   output
+      const SparseMat&       A,      // sparse-A
+      const itype_t*         B,      // [K × N]   dense-B
+      uint32_t               N)      // number of columns of B/C
+{
+  const uint32_t M = A.rows;
+  const uint32_t K = A.cols;
+
+  const uint32_t subbytes = 8 / vt::ITYPE::bits;
+
+  /* --- helper lambdas to index sparse arrays by row --- */
+  auto row_values = [&](uint32_t m) {
+      return A.values.data() + m * (K / 2);   // two kept per block
+  };
+  auto row_meta   = [&](uint32_t m) {
+      return A.meta  .data() + m * (K / 4);
+  };
+
+  for (uint32_t m = 0; m < M; ++m) {
+
+    const itype_t* Avals = row_values(m);
+    const uint8_t* Ameta = row_meta  (m);
+    size_t         v_idx = 0;                 // cursor inside values[]
+
+    for (uint32_t n = 0; n < N; ++n) {
+      otype_t sum(0);
+      for (uint32_t blk = 0; blk < K; blk += 4) {
+        uint8_t mask = *(Ameta++);
+        assert(mask);              
+        for (uint32_t i = 0; i < 4; ++i) {
+          if (mask & (1u << i)) {
+            auto a_val = Avals[v_idx++];
+            uint32_t k  = blk + i;                  // logical K index
+            uint32_t kk = subbytes ? k * subbytes   // packed-layout idx
+                                   : k;
+            auto b_val = data_accessor_t<vt::ITYPE>::read(
+                            B, kk * N + n);
+            sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a_val, b_val, sum);
+          }
+        }
       }
       data_accessor_t<vt::OTYPE>::write(C, m * N + n, sum);
     }
@@ -421,14 +477,6 @@ void cleanup() {
   }
 }
 
-struct SparseMat {
-  std::vector<itype_t> values;   // non-zeros
-  std::vector<uint8_t> meta;     // Array of row-masks: 1 byte marks the columns
-                                  // of the 4 elements in the block that are non-zero.
-                                  // e.g. 0b0101 means 2nd and 4th elements are non-zero.
-
-  uint32_t rows, cols;           // original A dims (M × K)
-};
 
 static SparseMat pruneAndCompressMatrixA(const std::vector<itype_t>& denseA,
                                          uint32_t M, uint32_t K) {
