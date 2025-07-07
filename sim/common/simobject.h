@@ -226,6 +226,10 @@ protected:
   SimEventBase(uint64_t cycles) : cycles_(cycles) {}
 
   uint64_t cycles_;
+
+  LinkedListNode<SimEventBase> list_;
+
+  friend class SimPlatform;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -245,9 +249,22 @@ public:
     , pkt_(pkt)
   {}
 
+  static void* operator new(std::size_t sz) {
+    __unused (sz);
+    assert(sizeof(SimCallEvent<Pkt>) == sz);
+    return allocator_.allocate(1);
+  }
+
+  static void operator delete(void* ptr, std::size_t sz) noexcept {
+    __unused (sz);
+    assert(sizeof(SimCallEvent<Pkt>) == sz);
+    allocator_.deallocate(static_cast<SimCallEvent<Pkt>*>(ptr), 1);
+  }
+
 protected:
   Func func_;
   Pkt  pkt_;
+  static inline PoolAllocator<SimCallEvent<Pkt>, 64> allocator_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -265,9 +282,22 @@ public:
     , pkt_(pkt)
   {}
 
+  static void* operator new(std::size_t sz) {
+    __unused (sz);
+    assert(sizeof(SimPortEvent<Pkt>) == sz);
+    return allocator_.allocate(1);
+  }
+
+  static void operator delete(void* ptr, std::size_t sz) noexcept {
+    __unused (sz);
+    assert(sizeof(SimPortEvent<Pkt>) == sz);
+    allocator_.deallocate(static_cast<SimPortEvent<Pkt>*>(ptr), 1);
+  }
+
 protected:
   const SimPort<Pkt>* port_;
   Pkt pkt_;
+  static inline PoolAllocator<SimPortEvent<Pkt>, 64> allocator_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -367,53 +397,49 @@ public:
     return obj;
   }
 
-  void release_object(const SimObjectBase::Ptr& object) {
-    objects_.remove(object);
-  }
-
   template <typename Pkt>
   void schedule(const typename SimCallEvent<Pkt>::Func& callback,
                 const Pkt& pkt,
                 uint64_t delay) {
-    assert(delay != 0);
-    static PoolAllocator<SimCallEvent<Pkt>, 64> s_allocator;
-    auto evt = std::allocate_shared<SimCallEvent<Pkt>>(s_allocator, callback, pkt, cycles_ + delay);
-    events_.emplace_back(evt);
+    if (delay == 0) {
+      auto evt = new SimCallEvent<Pkt>(callback, pkt, delta_);
+      imm_events_.push_back(evt);
+      ++delta_;
+    } else {
+      auto evt = new SimCallEvent<Pkt>(callback, pkt, cycles_ + delay);
+      reg_events_.push_back(evt);
+    }
   }
 
   void reset() {
-    events_.clear();
+    assert(imm_events_.empty() && "immediate events not cleared!");
+    assert(reg_events_.empty() && "registered events not cleared!");
+    imm_events_.clear();
+    reg_events_.clear();
     for (auto& object : objects_) {
       object->do_reset();
     }
     cycles_ = 0;
+    delta_ = 0;
   }
 
   void tick() {
-    // fire events
-    auto evt_it = events_.begin();
-    auto evt_it_end = events_.end();
-    while (evt_it != evt_it_end) {
-      auto& event = *evt_it;
-      if (cycles_ >= event->cycles()) {
-        event->fire();
-        evt_it = events_.erase(evt_it);
-      } else {
-        ++evt_it;
-      }
-    }
     // execute objects
-    for (auto object : objects_) {
+    this->fire_immediate_events();
+    for (auto& object : objects_) {
       object->do_tick();
+      this->fire_immediate_events();
     }
+
     // realize objects
     for (auto it = pop_list_.begin(); it != pop_list_.end();) {
       it->do_pop();
       it = pop_list_.erase(it);
     }
     push_list_.clear();
-    // advance clock
-    ++cycles_;
+
+    // fire registered events
+    this->fire_registered_events();
   }
 
   uint64_t cycles() const {
@@ -422,7 +448,7 @@ public:
 
 private:
 
-  SimPlatform() : cycles_(0) {}
+  SimPlatform() : cycles_(0), delta_(0) {}
 
   virtual ~SimPlatform() {
     this->cleanup();
@@ -430,21 +456,27 @@ private:
 
   void cleanup() {
     objects_.clear();
-    events_.clear();
+    assert(imm_events_.empty() && "immediate events not cleared!");
+    assert(reg_events_.empty() && "registered events not cleared!");
+    imm_events_.clear();
+    reg_events_.clear();
   }
 
   template <typename Pkt>
   void schedule_push(SimPort<Pkt>* port, const Pkt& pkt, uint64_t delay) {
-    assert(delay != 0);
     if (port->capacity() != 0) {
       __assert(0 == push_list_.count(port), "cannot enqueue a port multiple times during the same cycle!");
       push_list_.push_back(port);
     }
-
     // schedule update event
-    static PoolAllocator<SimPortEvent<Pkt>, 64> s_allocator;
-    auto evt = std::allocate_shared<SimPortEvent<Pkt>>(s_allocator, port, pkt, cycles_ + delay);
-    events_.emplace_back(evt);
+    if (delay == 0) {
+      auto evt = new SimPortEvent<Pkt>(port, pkt, delta_);
+      imm_events_.push_back(evt);
+      ++delta_;
+    } else {
+      auto evt = new SimPortEvent<Pkt>(port, pkt, cycles_ + delay);
+      reg_events_.push_back(evt);
+    }
   }
 
   template <typename Pkt>
@@ -453,11 +485,47 @@ private:
     pop_list_.push_back(port);
   }
 
-  std::list<SimObjectBase::Ptr> objects_;
-  std::list<SimEventBase::Ptr> events_;
+  void fire_immediate_events() {
+    // fire all events that are scheduled for the current cycle in issue order
+    for (uint32_t delta = 0; delta < delta_; ++delta) {
+      for (auto evt_it = imm_events_.begin(), evt_it_end = imm_events_.end(); evt_it != evt_it_end;) {
+        auto event = &*evt_it;
+        if (event->cycles() == delta) {
+          event->fire();
+          evt_it = imm_events_.erase(evt_it);
+          delete event;
+        } else {
+          ++evt_it;
+        }
+      }
+    };
+    delta_ = 0;
+  }
+
+  void fire_registered_events() {
+    // advance the clock
+    ++cycles_;
+
+    // fire all events that are scheduled for the current cycle
+    for (auto evt_it = reg_events_.begin(), evt_it_end = reg_events_.end(); evt_it != evt_it_end;) {
+      auto event = &*evt_it;
+      if (event->cycles() == cycles_) {
+        event->fire();
+        evt_it = reg_events_.erase(evt_it);
+        delete event;
+      } else {
+        ++evt_it;
+      }
+    }
+  }
+
+  std::vector<SimObjectBase::Ptr> objects_;
+  LinkedList<SimEventBase, &SimEventBase::list_> reg_events_;
+  LinkedList<SimEventBase, &SimEventBase::list_> imm_events_;
   LinkedList<SimPortBase, &SimPortBase::push_list_> push_list_;
   LinkedList<SimPortBase, &SimPortBase::pop_list_> pop_list_;
   uint64_t cycles_;
+  uint32_t delta_;
 
   template <typename U> friend class SimPort;
 };

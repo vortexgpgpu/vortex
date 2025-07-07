@@ -352,9 +352,6 @@
 `ifndef NUM_OPCS
 `define NUM_OPCS        `UP(`NUM_WARPS / (4 * `ISSUE_WIDTH))
 `endif
-`ifndef NUM_VOPCS
-`define NUM_VOPCS       1
-`endif
 
 // Register File Banks
 `ifndef NUM_GPR_BANKS

@@ -39,15 +39,17 @@ void OpcUnit::tick() {
   // calculate bank conflict stalls
   for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
     for (uint32_t j = i + 1; j < NUM_SRC_REGS; ++j) {
+      if ((trace->src_regs[i].type == RegType::None)
+       || (trace->src_regs[j].type == RegType::None))
+        continue;
+      if ((trace->src_regs[i].type == RegType::Integer && trace->src_regs[i].id() == 0)
+       || (trace->src_regs[j].type == RegType::Integer && trace->src_regs[j].id() == 0))
+        continue; // skip x0
+      // bank conflict
       uint32_t bank_i = trace->src_regs[i].idx % NUM_GPR_BANKS;
       uint32_t bank_j = trace->src_regs[j].idx % NUM_GPR_BANKS;
-      if ((trace->src_regs[i].type != RegType::None)
-        && (trace->src_regs[j].type != RegType::None)
-        && (trace->src_regs[i].idx != 0)
-        && (trace->src_regs[j].idx != 0)
-        && bank_i == bank_j) {
+      if (bank_i == bank_j)
         ++stalls;
-      }
     }
   }
 

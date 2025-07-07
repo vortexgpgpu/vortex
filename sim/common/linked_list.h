@@ -37,47 +37,58 @@ public:
     return size_;
   }
 
-  class const_iterator {
-  public:
-    explicit const_iterator(LinkedListNode<T> *node) : current_(node) {}
-
-    const T &operator*() const { return *current_->object; }
-    const T *operator->() const { return current_->object; }
-    const_iterator &operator++() {
-      current_ = current_->next;
-      return *this;
-    }
-    const_iterator operator++(int) {
-      const_iterator tmp = *this;
-      ++(*this);
-      return tmp;
-    }
-    bool operator!=(const const_iterator &other) const {
-      return current_ != other.current_;
-    }
-  private:
-    LinkedListNode<T>* current_;
-    friend class LinkedList;
-  };
-
   class iterator {
   public:
     explicit iterator(LinkedListNode<T> *node) : current_(node) {}
 
     T &operator*() const { return *current_->object; }
     T *operator->() const { return current_->object; }
+
     iterator &operator++() {
       current_ = current_->next;
       return *this;
     }
+
     iterator operator++(int) {
       iterator tmp = *this;
       ++(*this);
       return tmp;
     }
+
     bool operator!=(const iterator &other) const {
       return current_ != other.current_;
     }
+
+  private:
+    LinkedListNode<T>* current_;
+    friend class LinkedList;
+  };
+
+  class const_iterator {
+  public:
+    explicit const_iterator(const LinkedListNode<T> *node)
+    : current_(const_cast<LinkedListNode<T>*>(node)) {}
+
+    const_iterator(const iterator &other) : current_(other.current_) {}
+
+    const T &operator*() const { return *current_->object; }
+    const T *operator->() const { return current_->object; }
+
+    const_iterator &operator++() {
+      current_ = current_->next;
+      return *this;
+    }
+
+    const_iterator operator++(int) {
+      const_iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+
+    bool operator!=(const const_iterator &other) const {
+      return current_ != other.current_;
+    }
+
   private:
     LinkedListNode<T>* current_;
     friend class LinkedList;
@@ -112,7 +123,10 @@ public:
 
   class const_reverse_iterator {
   public:
-    explicit const_reverse_iterator(LinkedListNode<T>* node) : current_(node) {}
+    explicit const_reverse_iterator(const LinkedListNode<T>* node)
+    : current_(const_cast<LinkedListNode<T>*>(node)) {}
+
+    const_reverse_iterator(const reverse_iterator& other) : current_(other.current_) {}
 
     const T& operator*() const { return *current_->object; }
     const T* operator->() const { return current_->object; }
@@ -203,24 +217,24 @@ public:
     return it_next;
   }
 
-  T& front() {
+  T* front() {
     assert(head_ != nullptr);
-    return *head_->object;
+    return head_->object;
   }
 
-  const T& front() const {
+  const T* front() const {
     assert(head_ != nullptr);
-    return *head_->object;
+    return head_->object;
   }
 
-  T& back() {
+  T* back() {
     assert(tail_ != nullptr);
-    return *tail_->object;
+    return tail_->object;
   }
 
-  const T& back() const {
+  const T* back() const {
     assert(tail_ != nullptr);
-    return *tail_->object;
+    return tail_->object;
   }
 
   void push_back(T *obj) {
