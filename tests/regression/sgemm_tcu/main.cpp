@@ -367,6 +367,7 @@ static void matmul_cpu(otype_t *C, const itype_t *A, const itype_t *B, uint32_t 
   }
 }
 
+/*
 static void matmul_cpu_sparseA(
       otype_t*               C,      // [M × N]   output
       const SparseMat&       A,      // sparse-A
@@ -378,7 +379,7 @@ static void matmul_cpu_sparseA(
 
   const uint32_t subbytes = 8 / vt::ITYPE::bits;
 
-  /* --- helper lambdas to index sparse arrays by row --- */
+  // --- helper lambdas to index sparse arrays by row ---
   auto row_values = [&](uint32_t m) {
       return A.values.data() + m * (K / 2);   // two kept per block
   };
@@ -396,7 +397,7 @@ static void matmul_cpu_sparseA(
       otype_t sum(0);
       for (uint32_t blk = 0; blk < K; blk += 4) {
         uint8_t mask = *(Ameta++);
-        assert(mask);              
+        assert(mask);
         for (uint32_t i = 0; i < 4; ++i) {
           if (mask & (1u << i)) {
             auto a_val = Avals[v_idx++];
@@ -412,7 +413,7 @@ static void matmul_cpu_sparseA(
       data_accessor_t<vt::OTYPE>::write(C, m * N + n, sum);
     }
   }
-}
+}*/
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -503,7 +504,7 @@ static SparseMat pruneAndCompressMatrixA(const std::vector<itype_t>& denseA,
 
       uint8_t keep0 = idx[3];
       uint8_t keep1 = idx[2]; //idx of largest 2 elements
-        
+
       out.values.push_back(blk[keep0]);
       out.values.push_back(blk[keep1]);
 
