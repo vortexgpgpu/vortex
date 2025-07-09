@@ -36,6 +36,9 @@ endif
 # Add TCU extension sources
 ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
+	RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
 endif
 
 # compilation flags
@@ -85,4 +88,4 @@ open: done.dcp
 clean:
 	rm -rf project_1 project1.tcl $(KERNEL).bin kernel.bin.coe
 	rm -rf .Xil *.log *.jou *.dcp *.rpt
-	
+

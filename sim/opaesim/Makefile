@@ -61,6 +61,17 @@ endif
 ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
+	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/fNToRecFN.v
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/addRecFN.v
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/bsg_hardfloat_pkg.sv
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_primitives.v
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_rawFN.v
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/isSigNaNRecFN.v
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/mulRecFN.v
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToFN.v
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToRecFN.v
 endif
 
 RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv

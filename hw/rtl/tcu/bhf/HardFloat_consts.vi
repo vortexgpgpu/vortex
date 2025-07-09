@@ -55,4 +55,3 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 `define flRoundOpt_subnormsAlwaysExact 2
 `define flRoundOpt_neverUnderflows     4
 `define flRoundOpt_neverOverflows      8
-

@@ -48,12 +48,9 @@ endif
 ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
 	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
-
-# TCU_BHF Config & Include/Modified HardFloat source files
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu/VX_tcu_bhf
-	
-# Selective Berkeley HardFloat source files paths
+	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
 	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/fNToRecFN.v
 	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/addRecFN.v
 	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/bsg_hardfloat_pkg.sv
 	RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_primitives.v
