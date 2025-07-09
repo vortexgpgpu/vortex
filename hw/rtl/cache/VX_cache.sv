@@ -327,7 +327,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .PERF_CTR_BITS (PERF_CTR_BITS),
         .ARBITER     ("R"),
         .OUT_BUF     (REQ_XBAR_BUF)
-    ) req_xbar (
+    ) core_req_xbar (
         .clk       (clk),
         .reset     (reset),
     `ifdef PERF_ENABLE
@@ -450,7 +450,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .NUM_OUTPUTS (NUM_REQS),
         .DATAW       (CORE_RSP_DATAW),
         .ARBITER     ("R")
-    ) rsp_xbar (
+    ) core_rsp_xbar (
         .clk       (clk),
         .reset     (reset),
         `UNUSED_PIN (collisions),

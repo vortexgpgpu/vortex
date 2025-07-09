@@ -423,7 +423,7 @@ private:
 			// send core response
 			if (!bank_req.write || config_.write_reponse) {
 				MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
-				this->core_rsp_port.push(core_rsp, config_.latency);
+				this->core_rsp_port.push(core_rsp);
 				DT(3, this->name() << "-replay: " << core_rsp);
 			}
 		} break;
@@ -445,7 +445,7 @@ private:
 						mem_req.write = true;
 						mem_req.cid   = bank_req.cid;
 						mem_req.uuid  = bank_req.uuid;
-						this->mem_req_port.push(mem_req, 1);
+						this->mem_req_port.push(mem_req);
 						DT(3, this->name() << "-writethrough: " << mem_req);
 					} else {
 						// mark line as dirty
@@ -455,7 +455,7 @@ private:
 				// send core response
 				if (!bank_req.write || config_.write_reponse) {
 					MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
-					this->core_rsp_port.push(core_rsp, config_.latency);
+					this->core_rsp_port.push(core_rsp);
 					DT(3, this->name() << "-core-rsp: " << core_rsp);
 				}
 				--pending_mshr_size_;
@@ -474,7 +474,7 @@ private:
 						mem_req.addr  = params_.mem_addr(bank_id_, bank_req.set_id, repl_line.tag);
 						mem_req.write = true;
 						mem_req.cid   = bank_req.cid;
-						this->mem_req_port.push(mem_req, 1);
+						this->mem_req_port.push(mem_req);
 						DT(3, this->name() << "-writeback: " << mem_req);
 						++perf_stats_.evictions;
 					}
@@ -488,13 +488,13 @@ private:
 						mem_req.write = true;
 						mem_req.cid   = bank_req.cid;
 						mem_req.uuid  = bank_req.uuid;
-						this->mem_req_port.push(mem_req, 1);
+						this->mem_req_port.push(mem_req);
 						DT(3, this->name() << "-writethrough: " << mem_req);
 					}
 					// send core response
 					if (config_.write_reponse) {
 						MemRsp core_rsp{bank_req.req_tag, bank_req.cid, bank_req.uuid};
-						this->core_rsp_port.push(core_rsp, config_.latency);
+						this->core_rsp_port.push(core_rsp);
 						DT(3, this->name() << "-core-rsp: " << core_rsp);
 					}
 					--pending_mshr_size_;
@@ -514,7 +514,7 @@ private:
 						mem_req.tag   = mshr_id;
 						mem_req.cid   = bank_req.cid;
 						mem_req.uuid  = bank_req.uuid;
-						this->mem_req_port.push(mem_req, 1);
+						this->mem_req_port.push(mem_req);
 						DT(3, this->name() << "-fill-req: " << mem_req);
 						++pending_fill_reqs_;
 					}
@@ -653,7 +653,7 @@ public:
 			if (bank_rsp_port.empty())
 				continue;
 			auto& core_rsp = bank_rsp_port.front();
-			simobject_->CoreRspPorts.at(req_id).push(core_rsp, 1);
+			simobject_->CoreRspPorts.at(req_id).push(core_rsp, 0);
 			DT(3, simobject_->name() << "-core-rsp: " << core_rsp);
 			bank_rsp_port.pop();
 		}
@@ -667,7 +667,7 @@ public:
 			if (core_req.type == AddrType::IO) {
 				this->processBypassRequest(core_req, req_id);
 			} else {
-				bank_core_xbar_->ReqIn.at(req_id).push(core_req, 1);
+				bank_core_xbar_->ReqIn.at(req_id).push(core_req, 0);
 			}
 			core_req_port.pop();
 		}
@@ -690,7 +690,7 @@ private:
 		uint32_t req_id = mem_rsp.tag & ((1 << params_.log2_num_inputs)-1);
 		uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
 		MemRsp core_rsp{tag, mem_rsp.cid, mem_rsp.uuid};
-		simobject_->CoreRspPorts.at(req_id).push(core_rsp, config_.latency);
+		simobject_->CoreRspPorts.at(req_id).push(core_rsp, 0);
 		DT(3, simobject_->name() << "-bypass-core-rsp: " << core_rsp);
 	}
 
@@ -700,13 +700,13 @@ private:
 			MemReq mem_req(core_req);
 			mem_req.tag = (core_req.tag << params_.log2_num_inputs) + req_id;
 			uint32_t mem_port = req_id % config_.mem_ports;
-			nc_mem_arbs_.at(mem_port)->ReqIn.at(1).push(mem_req, 1);
+			nc_mem_arbs_.at(mem_port)->ReqIn.at(1).push(mem_req, 0);
 			DT(3, simobject_->name() << "-bypass-dram-req: " << mem_req);
 		}
 
 		if (core_req.write && config_.write_reponse) {
 			MemRsp core_rsp{core_req.tag, core_req.cid, core_req.uuid};
-			simobject_->CoreRspPorts.at(req_id).push(core_rsp, 1);
+			simobject_->CoreRspPorts.at(req_id).push(core_rsp, 0);
 			DT(3, simobject_->name() << "-bypass-core-rsp: " << core_rsp);
 		}
 	}

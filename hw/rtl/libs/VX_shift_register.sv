@@ -41,7 +41,7 @@ module VX_shift_register #(
         `UNUSED_PARAM (TAP_STRIDE)
         assign data_out = data_in;
     end else begin : g_shift
-        logic [DATAW-1:0] pipe [0:DEPTH-1];
+        logic [DEPTH-1:0][DATAW-1:0] pipe;
 
         if (RESETW == DATAW) begin : g_full_reset
             for (genvar i = 0; i < DEPTH; ++i) begin : g_stages
@@ -61,6 +61,8 @@ module VX_shift_register #(
                     end else if (enable) begin
                         pipe[i][DATAW-1 : DATAW-RESETW] <= (i == 0) ? data_in[DATAW-1 : DATAW-RESETW] : pipe[i-1][DATAW-1 : DATAW-RESETW];
                     end
+                end
+                always_ff @(posedge clk) begin
                     if (enable) begin
                         pipe[i][DATAW-RESETW-1 : 0] <= (i == 0) ? data_in[DATAW-RESETW-1 : 0] : pipe[i-1][DATAW-RESETW-1 : 0];
                     end
