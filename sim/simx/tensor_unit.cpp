@@ -219,7 +219,7 @@ public:
     for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
       auto& input = simobject_->Inputs.at(iw);
       if (input.empty())
-          return;
+        continue;
       auto trace = input.front();
       auto tcu_type = std::get<TcuType>(trace->op_type);
       int delay = 0;

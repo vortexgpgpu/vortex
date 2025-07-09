@@ -29,20 +29,35 @@ module VX_shift_register #(
     input wire [DATAW-1:0]             data_in,
     output wire [NUM_TAPS-1:0][DATAW-1:0] data_out
 );
+    `STATIC_ASSERT (RESETW <= DATAW, ("invalid parameter"));
     if (DEPTH == 0) begin : g_passthru
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
         `UNUSED_VAR (enable)
+        `UNUSED_PARAM (RESETW)
         `UNUSED_PARAM (INIT_VALUE)
+        `UNUSED_PARAM (NUM_TAPS)
+        `UNUSED_PARAM (TAP_START)
+        `UNUSED_PARAM (TAP_STRIDE)
         assign data_out = data_in;
     end else begin : g_shift
         logic [DATAW-1:0] pipe [0:DEPTH-1];
 
-        if (RESETW != 0) begin : g_reset
+        if (RESETW == DATAW) begin : g_full_reset
             for (genvar i = 0; i < DEPTH; ++i) begin : g_stages
                 always_ff @(posedge clk) begin
                     if (reset) begin
-                        pipe[i][DATAW-1 -: RESETW] <= INIT_VALUE;
+                        pipe[i] <= INIT_VALUE;
+                    end else if (enable) begin
+                        pipe[i] <= (i == 0) ? data_in : pipe[i-1];
+                    end
+                end
+            end
+        end else if (RESETW != 0) begin : g_partial_reset
+            for (genvar i = 0; i < DEPTH; ++i) begin : g_stages
+                always_ff @(posedge clk) begin
+                    if (reset) begin
+                        pipe[i] <= {INIT_VALUE, pipe[i][DATAW-RESETW-1 : 0]};
                     end else if (enable) begin
                         pipe[i] <= (i == 0) ? data_in : pipe[i-1];
                     end

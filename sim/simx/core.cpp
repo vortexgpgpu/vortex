@@ -40,7 +40,7 @@ Core::Core(const SimContext& ctx,
   , socket_(socket)
   , arch_(arch)
 #ifdef EXT_TCU_ENABLE
-  , tensor_unit_(TensorUnit::Create("tpu", arch, this))
+  , tensor_unit_(TensorUnit::Create("tcu", arch, this))
 #endif
 #ifdef EXT_V_ENABLE
   , vec_unit_(VecUnit::Create("vpu", arch, this))
@@ -143,7 +143,7 @@ Core::Core(const SimContext& ctx,
   dispatchers_.at((int)FUType::VPU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_VPU_BLOCKS, NUM_VPU_LANES);
 #endif
 #ifdef EXT_TCU_ENABLE
-  dispatchers_.at((int)FUType::TPU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_TCU_BLOCKS, NUM_TCU_LANES);
+  dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(this, 2, NUM_TCU_BLOCKS, NUM_TCU_LANES);
 #endif
 
   // initialize execute units
@@ -155,7 +155,7 @@ Core::Core(const SimContext& ctx,
   func_units_.at((int)FUType::VPU) = SimPlatform::instance().create_object<VpuUnit>(this);
 #endif
 #ifdef EXT_TCU_ENABLE
-  func_units_.at((int)FUType::TPU) = SimPlatform::instance().create_object<TcuUnit>(this);
+  func_units_.at((int)FUType::TCU) = SimPlatform::instance().create_object<TcuUnit>(this);
 #endif
 
   // bind commit arbiters
@@ -310,8 +310,8 @@ void Core::issue() {
     bool has_instrs = false;
     BitVector<> ready_set(PER_ISSUE_WARPS);
     for (uint32_t w = 0; w < PER_ISSUE_WARPS; ++w) {
-      uint32_t ii = iw  * PER_ISSUE_WARPS + w;
-      auto& ibuffer = ibuffers_.at(ii);
+      uint32_t wid = w * ISSUE_WIDTH + iw;
+      auto& ibuffer = ibuffers_.at(wid);
       if (ibuffer.empty())
         continue;
       // check scoreboard
@@ -347,7 +347,7 @@ void Core::issue() {
           case FUType::VPU: ++perf_stats_.scrb_vpu; break;
         #endif
         #ifdef EXT_TCU_ENABLE
-          case FUType::TPU: ++perf_stats_.scrb_tcu; break;
+          case FUType::TCU: ++perf_stats_.scrb_tcu; break;
         #endif
           default: assert(false);
           }
@@ -360,9 +360,9 @@ void Core::issue() {
 
     if (ready_set.any()) {
       // select one instruction from ready set
-      auto g = ibuffer_arbs_.at(iw).grant(ready_set);
-      uint32_t ii = iw * PER_ISSUE_WARPS + g;
-      auto& ibuffer = ibuffers_.at(ii);
+      auto w = ibuffer_arbs_.at(iw).grant(ready_set);
+      uint32_t wid = w * ISSUE_WIDTH + iw;
+      auto& ibuffer = ibuffers_.at(wid);
       auto trace = ibuffer.top();
       // update scoreboard
       DT(3, "pipeline-ibuffer: " << *trace);

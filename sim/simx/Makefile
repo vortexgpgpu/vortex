@@ -35,7 +35,7 @@ ifneq ($(findstring -DEXT_V_ENABLE, $(CONFIGS)),)
 else
 	SRCS += $(SRC_DIR)/operands.cpp
 endif
-# Add TPU extension sources
+# Add TCU extension sources
 ifneq ($(findstring -DEXT_TCU_ENABLE, $(CONFIGS)),)
   	SRCS += $(SRC_DIR)/tensor_unit.cpp
 endif

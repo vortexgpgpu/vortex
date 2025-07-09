@@ -429,7 +429,7 @@ void VpuUnit::tick() {
 #ifdef EXT_TCU_ENABLE
 
 TcuUnit::TcuUnit(const SimContext& ctx, Core* core)
-	: FuncUnit(ctx, core, "tpu-unit")
+	: FuncUnit(ctx, core, "tcu-unit")
 {
 	// bind tensor unit
 	for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {

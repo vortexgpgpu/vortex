@@ -179,7 +179,8 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire pipe_fire_st2 = pipe_valid_st2 && pipe_ready_st2;
 
     VX_pipe_buffer #(
-        .DATAW (NUM_BANKS + META_DATAW + 1 + NUM_BANKS * (REG_REM_BITS + REQ_SEL_WIDTH))
+        .DATAW  (NUM_BANKS + META_DATAW + 1 + NUM_BANKS * (REG_REM_BITS + REQ_SEL_WIDTH)),
+        .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
@@ -204,7 +205,8 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire pipe_valid2_st1 = pipe_valid_st1 && ~has_collision_st1;
 
     VX_pipe_buffer #(
-        .DATAW (NUM_BANKS * (1 + REQ_SEL_WIDTH) + META_DATAW)
+        .DATAW  (NUM_BANKS * (1 + REQ_SEL_WIDTH) + META_DATAW),
+        .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),

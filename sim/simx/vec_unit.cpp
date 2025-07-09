@@ -48,7 +48,7 @@ public:
     for (uint32_t iw = 0; iw < ISSUE_WIDTH; ++iw) {
       auto &input = simobject_->Inputs.at(iw);
       if (input.empty())
-        return;
+        continue;
 
       auto trace = input.front();
       auto trace_data = std::dynamic_pointer_cast<ExeTraceData>(trace->data);

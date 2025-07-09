@@ -1101,7 +1101,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
               uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
               uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
               ++steps;
-              auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TPU);
+              auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
               instr->setOpType(TcuType::WMMA);
               instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n});
               instr->setDestReg(rs3, RegType::Float);
