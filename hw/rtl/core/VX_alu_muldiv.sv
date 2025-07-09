@@ -173,7 +173,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) mul_shift_reg (
-        .clk(clk),
+        .clk      (clk),
         .reset    (reset),
         .enable   (mul_ready_in),
         .data_in  ({mul_valid_in,  execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, is_mulh_in,  is_alu_w}),

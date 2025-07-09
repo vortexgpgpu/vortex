@@ -173,7 +173,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire wctl_valid = execute_fire && execute_if.data.eop;
 
     VX_pipe_register #(
-        .DATAW (1 + NW_WIDTH + WCTL_WIDTH)
+        .DATAW (1 + NW_WIDTH + WCTL_WIDTH),
+        .RESETW (1)
     ) wctl_reg (
         .clk      (clk),
         .reset    (reset),

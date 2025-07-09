@@ -30,9 +30,6 @@ module VX_pipe_register #(
         .DATAW      (DATAW),
         .RESETW     (RESETW),
         .DEPTH      (DEPTH),
-        .NUM_TAPS   (1),
-        .TAP_START  (DEPTH-1),
-        .TAP_STRIDE (1),
         .INIT_VALUE (INIT_VALUE)
     ) g_shift_register (
         .clk       (clk),

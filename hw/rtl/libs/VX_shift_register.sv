@@ -19,7 +19,7 @@ module VX_shift_register #(
     parameter RESETW     = 0,
     parameter DEPTH      = 1,
     parameter NUM_TAPS   = 1,
-    parameter TAP_START  = 0,
+    parameter TAP_START  = (DEPTH-1),
     parameter TAP_STRIDE = 1,
     parameter [`UP(RESETW)-1:0] INIT_VALUE = {`UP(RESETW){1'b0}}
 ) (
@@ -57,9 +57,12 @@ module VX_shift_register #(
             for (genvar i = 0; i < DEPTH; ++i) begin : g_stages
                 always_ff @(posedge clk) begin
                     if (reset) begin
-                        pipe[i] <= {INIT_VALUE, pipe[i][DATAW-RESETW-1 : 0]};
+                        pipe[i][DATAW-1 : DATAW-RESETW] <= INIT_VALUE;
                     end else if (enable) begin
-                        pipe[i] <= (i == 0) ? data_in : pipe[i-1];
+                        pipe[i][DATAW-1 : DATAW-RESETW] <= (i == 0) ? data_in[DATAW-1 : DATAW-RESETW] : pipe[i-1][DATAW-1 : DATAW-RESETW];
+                    end
+                    if (enable) begin
+                        pipe[i][DATAW-RESETW-1 : 0] <= (i == 0) ? data_in[DATAW-RESETW-1 : 0] : pipe[i-1][DATAW-RESETW-1 : 0];
                     end
                 end
             end

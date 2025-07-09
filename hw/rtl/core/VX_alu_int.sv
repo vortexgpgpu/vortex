@@ -265,7 +265,8 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     `ASSIGN_BLOCKED_WID (br_wid, result_if.data.wid, BLOCK_IDX, `NUM_ALU_BLOCKS)
 
     VX_pipe_register #(
-        .DATAW (1 + NW_WIDTH + 1 + PC_BITS)
+        .DATAW  (1 + NW_WIDTH + 1 + PC_BITS),
+        .RESETW (1)
     ) branch_reg (
         .clk      (clk),
         .reset    (reset),
