@@ -404,14 +404,7 @@ void Core::commit() {
     auto trace = commit_arb->Outputs.at(0).front().data;
 
     // advance to commit stage
-    auto latency = SimPlatform::instance().cycles() - trace->issue_time;
-    static uint32_t max_latency = 0;
-    if (latency > max_latency) {
-      DT(3, "pipeline-commit: latency=" << latency <<  " (max), " << *trace);
-      max_latency = latency;
-    } else {
-      DT(3, "pipeline-commit: latency=" << latency << ", " << *trace);
-    }
+    DT(3, "pipeline-commit: " << *trace);
     assert(trace->cid == core_id_);
 
     // update scoreboard
