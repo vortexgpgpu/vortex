@@ -39,7 +39,7 @@ module VX_tcu_fedp_bhf #(
     `STATIC_ASSERT (LATENCY == (FMUL_LATENCY+ACC_LATENCY+FRND_LATENCY), ("invalid parameter!"));
 
     `UNUSED_VAR (reset);
-    `UNUSED_VAR (fmt_d);
+    `UNUSED_VAR ({fmt_d, c_val});
 
     wire [TCK-1:0][15:0] a_row16;
     wire [TCK-1:0][15:0] b_col16;
@@ -105,9 +105,9 @@ module VX_tcu_fedp_bhf #(
     for (genvar lvl = 0; lvl < LEVELS; lvl++) begin : g_red_tree
         localparam integer CURSZ = TCK >> lvl;
         localparam integer OUTSZ = CURSZ >> 1;
-        
+
         wire [32:0] red_comb [OUTSZ];
-        
+
         for (genvar i = 0; i < OUTSZ; i++) begin : g_add
             VX_tcu_bhf_fp32add fp32add (
                 .enable  (enable),
