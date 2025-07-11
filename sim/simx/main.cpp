@@ -115,9 +115,9 @@ int main(int argc, char **argv) {
         return -1;
       }
     }
-#ifndef NDEBUG
+  #ifndef NDEBUG
     std::cout << "[VXDRV] START: program=" << program << std::endl;
-#endif
+  #endif
     // run simulation
   #ifdef EXT_V_ENABLE
     // vector test exitcode is a special case

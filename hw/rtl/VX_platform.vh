@@ -26,8 +26,15 @@
 
 `define STATIC_ASSERT(cond, msg) \
     /* verilator lint_off GENUNNAMED */ \
-    if (!(cond)) $error msg; \
-    /* verilator lint_on GENUNNAMED */ \
+    initial if (!(cond)) begin \
+        $error msg; \
+    end \
+    /* verilator lint_on GENUNNAMED */
+
+`define SIZE_ASSERT(s1, s2) \
+    /* verilator lint_on UNUSED */ \
+    typedef bit [((s1 == s2) ? s1 : -s1) : s2] static_assertion_at_line_`__LINE__; \
+    /* verilator lint_off UNUSED */
 
 `define ERROR(msg) \
     $error msg
@@ -131,6 +138,7 @@
 `else // SYNTHESIS
 
 `define STATIC_ASSERT(cond, msg)
+`define SIZE_ASSERT(s1, s2)
 `define ERROR(msg)                  //
 `define ASSERT(cond, msg)           //
 `define RUNTIME_ASSERT(cond, msg)

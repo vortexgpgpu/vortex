@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -41,15 +41,15 @@ module testbench;
         .vx_busy        (vx_busy)
     );
 
-    always #(`CYCLE_TIME/2) 
+    always #(`CYCLE_TIME/2)
         clk = ~clk;
-    
+
     initial begin
         clk    = 1'b0;
         resetn = 1'b0;
      #4 resetn = 1'b1;
     end
-    
+
     always @(posedge clk) begin
         if (~resetn) begin
             cycles <= 0;
@@ -75,12 +75,12 @@ module testbench;
             dcr_wr_valid  <= 0;
             dcr_wr_addr   <= 0;
             dcr_wr_data   <= 0;
-        end else begin            
+        end else begin
             case (cycles)
             1:  begin
                 dcr_wr_valid <= 1;
                 dcr_wr_addr  <= `VX_DCR_BASE_STARTUP_ADDR0;
-                dcr_wr_data  <= `STARTUP_ADDR;                    
+                dcr_wr_data  <= `STARTUP_ADDR;
             end
             2: begin
                 dcr_wr_valid <= 0;
@@ -92,7 +92,7 @@ module testbench;
             end
             default:;
             endcase
-            
+
             if (vx_running) begin
                 if (vx_busy_wait) begin
                     if (vx_busy) begin
@@ -100,16 +100,16 @@ module testbench;
                     end
                 end else begin
                     if (~vx_busy) begin
-                        vx_running <= 0;   
+                        vx_running <= 0;
                         $display("done!");
-                        $finish;           
+                        $finish;
                     end
                 end
             end else begin
                 if (vx_reset_wait && vx_reset_ctr == (`RESET_DELAY-1)) begin
                     $display("start!");
                     vx_reset_wait <= 0;
-                    vx_running    <= 1;                    
+                    vx_running    <= 1;
                     vx_busy_wait  <= 1;
                 end
             end

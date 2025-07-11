@@ -63,7 +63,7 @@ public:
         delay = 1;
         break;
       case VpuOpType::IMUL:
-        delay = 2;
+        delay = 3;
         break;
       case VpuOpType::IDIV:
         delay = XLEN;

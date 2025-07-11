@@ -41,15 +41,11 @@ package VX_gpu_pkg;
 	localparam REG_TYPES = 1;
 `endif
 
-    localparam NUM_V_REGS = 1 * RV_REGS;
-
 	localparam NUM_REGS = (REG_TYPES * RV_REGS);
 
 	localparam REG_TYPE_BITS = `LOG2UP(REG_TYPES);
 
 	localparam NUM_REGS_BITS = `CLOG2(NUM_REGS);
-
-	localparam REG_EXT_BITS = 2;
 
 	localparam DV_STACK_SIZE = `UP(`NUM_THREADS-1);
 	localparam DV_STACK_SIZEW = `UP(`CLOG2(DV_STACK_SIZE));
@@ -72,10 +68,6 @@ package VX_gpu_pkg;
 	localparam UUID_WIDTH = 1;
 `endif
 `endif
-
-    localparam IO_MPM_SIZE = (8 * 32 * `NUM_CORES * `NUM_CLUSTERS);
-
-    localparam STACK_SIZE = (1 << `STACK_LOG2_SIZE);
 
 `ifndef NDEBUG
 	localparam PC_BITS = `XLEN;
@@ -440,10 +432,14 @@ package VX_gpu_pkg;
         end
     endfunction
 
-    ///////////////////////////////////////////////////////////////////////////
+    /////////////////////////////// TENSOR UNIT ///////////////////////////////
+
+`ifdef EXT_TCU_ENABLE
 
     localparam INST_TCU_WMMA = 4'h0;
     localparam INST_TCU_BITS = 4;
+
+`endif
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -498,6 +494,8 @@ package VX_gpu_pkg;
 
     //////////////////////// instruction arguments ////////////////////////////
 
+    localparam INST_ARGS_BITS = ALU_TYPE_BITS + `XLEN + 3;
+
     typedef struct packed {
         logic use_PC;
         logic use_imm;
@@ -505,39 +503,47 @@ package VX_gpu_pkg;
         logic [ALU_TYPE_BITS-1:0] xtype;
         logic [`XLEN-1:0] imm;
     } alu_args_t;
+    `SIZE_ASSERT($bits(alu_args_t), INST_ARGS_BITS)
 
     typedef struct packed {
-        logic [($bits(alu_args_t)-INST_FRM_BITS-INST_FMT_BITS)-1:0] __padding;
+        logic [(INST_ARGS_BITS-INST_FRM_BITS-INST_FMT_BITS)-1:0] __padding;
         logic [INST_FRM_BITS-1:0] frm;
         logic [INST_FMT_BITS-1:0] fmt;
     } fpu_args_t;
+    `SIZE_ASSERT($bits(fpu_args_t), INST_ARGS_BITS)
 
     typedef struct packed {
-        logic [($bits(alu_args_t)-1-1-OFFSET_BITS)-1:0] __padding;
+        logic [(INST_ARGS_BITS-1-1-OFFSET_BITS)-1:0] __padding;
         logic is_store;
         logic is_float;
         logic [OFFSET_BITS-1:0] offset;
     } lsu_args_t;
+    `SIZE_ASSERT($bits(lsu_args_t), INST_ARGS_BITS)
 
     typedef struct packed {
-        logic [($bits(alu_args_t)-1-`VX_CSR_ADDR_BITS-5)-1:0] __padding;
+        logic [(INST_ARGS_BITS-1-`VX_CSR_ADDR_BITS-5)-1:0] __padding;
         logic use_imm;
         logic [`VX_CSR_ADDR_BITS-1:0] addr;
         logic [4:0] imm;
     } csr_args_t;
+    `SIZE_ASSERT($bits(csr_args_t), INST_ARGS_BITS)
 
     typedef struct packed {
-        logic [($bits(alu_args_t)-1)-1:0] __padding;
+        logic [(INST_ARGS_BITS-1)-1:0] __padding;
         logic is_neg;
     } wctl_args_t;
+    `SIZE_ASSERT($bits(wctl_args_t), INST_ARGS_BITS)
 
+`ifdef EXT_TCU_ENABLE
     typedef struct packed {
-        logic [($bits(alu_args_t)-16)-1:0] __padding;
+        logic [(INST_ARGS_BITS-16)-1:0] __padding;
         logic [3:0] fmt_d;
         logic [3:0] fmt_s;
         logic [3:0] step_n;
         logic [3:0] step_m;
     } tcu_args_t;
+    `SIZE_ASSERT($bits(tcu_args_t), INST_ARGS_BITS)
+`endif
 
     typedef union packed {
         alu_args_t  alu;
@@ -545,10 +551,11 @@ package VX_gpu_pkg;
         lsu_args_t  lsu;
         csr_args_t  csr;
         wctl_args_t wctl;
+    `ifdef EXT_TCU_ENABLE
         tcu_args_t  tcu;
+    `endif
     } op_args_t;
-
-    localparam INST_ARGS_BITS = $bits(op_args_t);
+    `SIZE_ASSERT($bits(op_args_t), INST_ARGS_BITS)
 
     //////////////////////////// Pipeline Data Types //////////////////////////
 
@@ -871,7 +878,7 @@ package VX_gpu_pkg;
 
     function automatic logic [NUM_REGS_BITS-1:0] to_reg_number(input reg_idx_t reg_idx);
     `ifdef EXT_F_ENABLE
-        return {reg_idx.rtype[0], reg_idx.id};
+        return {reg_idx.rtype, reg_idx.id};
     `else
         return reg_idx.id;
     `endif

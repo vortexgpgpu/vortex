@@ -16,8 +16,6 @@
 
 `include "VX_define.vh"
 
-`IGNORE_UNUSED_BEGIN
-
 package VX_trace_pkg;
 
 `ifdef SIMULATION

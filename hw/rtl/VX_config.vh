@@ -86,12 +86,8 @@
 `endif
 `endif
 
-`ifdef EXT_V_ENABLE
 `ifndef VLEN
 `define VLEN (4 * `XLEN)
-`endif
-`else
-`define VLEN `XLEN
 `endif
 
 `ifndef NUM_CLUSTERS
@@ -291,7 +287,7 @@
 `define MEM_PAGE_LOG2_SIZE (12)
 `endif
 
-// Virtual Memory Configuration ///////////////////////////////////////////////////////
+// Virtual Memory Configuration ///////////////////////////////////////////////
 `ifdef VM_ENABLE
     `ifdef XLEN_32
         `ifndef VM_ADDR_MODE
