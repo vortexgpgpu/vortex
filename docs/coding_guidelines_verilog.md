@@ -2,8 +2,6 @@
 
 Keep your code warning-free, consistent and easy to read.
 
----
-
 ## 1. Indentation
 - Use **4 spaces** per indent level.
 - **Do not** use tab characters.
@@ -14,8 +12,6 @@ if (condition) begin
 end
 ```
 
----
-
 ## 2. Naming & Style
 - **Modules**: `PascalCase` prefixed with `VX_`.
 - **Signals**: `lower_snake_case`.
@@ -25,8 +21,6 @@ end
 - **Clock name**: clk.
 - **Reset name**: reset.
 - **Comment** use `//`.
-
----
 
 ## 3. Logic Organization
 - **conditional statement** with spacing before parenthesis and begin/end
@@ -50,7 +44,6 @@ end
       ...
   end
   ```
----
 
 ## 4. Interfaces
 - **with backpressure** use `valid` and `ready` signala:
@@ -115,7 +108,6 @@ end
       `UNUSED_PIN (valid_out)
   );
   ```
----
 
 ## 6. Assertions
 - runtime macro will include always block
@@ -125,4 +117,18 @@ end
 - static assertion can check parameter or localparam
   ```verilog
   `STATIC_ASSERT(cond, ("invalid parameter: N=%0d", N))
+  ```
+
+## 7. Using `ifdef
+- Preserve indent of nested code and shift pre-processor left
+  ```verilog
+  function automatic logic [N-1:0] to_regno(input reg_t reg);
+  `ifdef EXT_V_ENABLE
+      return {reg.rtype, reg.id};
+  `elsif EXT_F_ENABLE
+      return {reg.rtype, reg.id};
+  `else
+      return reg.id;
+  `endif
+  endfunction
   ```

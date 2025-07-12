@@ -69,3 +69,17 @@ MyClass::MyClass(int a, int b)
 /// @return The computed result.
 int foo(int x);
 ```
+
+## 7. Using #ifdef
+- Preserve indent of nested code and shift pre-processor left
+```cpp
+regno_t to_regno(const reg_t& reg) {
+#if defined(EXT_V_ENABLE)
+    return {reg.rtype, reg.id};
+#elif defined(EXT_F_ENABLE)
+    return {reg.rtype, reg.id};
+#else
+    return {reg.id, 0};
+#endif
+endfunction
+```
