@@ -88,6 +88,11 @@ regression()
     make -C tests/regression run-simx
     make -C tests/regression run-rtlsim
 
+    # test kernel CTA
+    ./ci/blackbox.sh --driver=simx --app=cta --args="-x33 -y55 -z1 -a1 -b1 -c1"
+    ./ci/blackbox.sh --driver=simx --threads=32 --app=cta --args="-x1 -y1 -z1 -a3 -b5 -c7"
+    ./ci/blackbox.sh --driver=simx --threads=32 --app=cta --args="-x1 -y5 -z3 -a3 -b5 -c7"
+
     # test global barrier
     CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
     CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tgbar" --cores=2
