@@ -869,10 +869,10 @@ package VX_gpu_pkg;
         input logic [INST_OP_BITS-1:0] op_type
     );
         case (op_type)
-        INST_SFU_CSRRW,
-        INST_SFU_CSRRS,
-        INST_SFU_CSRRC: op_to_sfu_type = SFU_CSRS;
-        default: op_to_sfu_type = SFU_WCTL;
+            INST_SFU_CSRRW,
+            INST_SFU_CSRRS,
+            INST_SFU_CSRRC: op_to_sfu_type = SFU_CSRS;
+            default: op_to_sfu_type = SFU_WCTL;
         endcase
     endfunction
 

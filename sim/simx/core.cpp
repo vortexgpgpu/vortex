@@ -409,8 +409,8 @@ void Core::commit() {
 
     // update scoreboard
     if (trace->eop) {
-      operands_.at(iw)->writeback(trace);
       if (trace->wb) {
+        operands_.at(iw)->writeback(trace);
         scoreboard_.release(trace);
       }
       auto orig_size = pending_instrs_.size();
