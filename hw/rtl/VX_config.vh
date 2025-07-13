@@ -800,12 +800,15 @@
 `ifndef TCU_BHF
 `ifndef TCU_DSP
 `ifndef TCU_DPI
+`ifndef TCU_DRL
 
 `ifndef SYNTHESIS
 `ifndef DPI_DISABLE
 `define TCU_DPI
-`else
+`elsif  BHF_ENABLE
 `define TCU_BHF
+`else
+`define TCU_DRL
 `endif
 `else
 `define TCU_DSP
