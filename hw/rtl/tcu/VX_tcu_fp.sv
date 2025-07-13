@@ -164,6 +164,21 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .c_val (c_val_r),
                 .d_val (d_val[i][j])
             );
+        `elsif TCU_DRL
+            VX_tcu_fedp_drl #(
+                .LATENCY (FEDP_LATENCY),
+                .N (TCU_TC_K)
+            ) fedp (
+                .clk   (clk),
+                .reset (reset),
+                .enable(fedp_enable),
+                .fmt_s (fmt_s_r),
+                .fmt_d (fmt_d_r),
+                .a_row (a_row_r),
+                .b_col (b_col_r),
+                .c_val (c_val_r),
+                .d_val (d_val[i][j])
+            );
         `elsif TCU_DSP
             VX_tcu_fedp_dsp #(
                 .LATENCY (FEDP_LATENCY),
