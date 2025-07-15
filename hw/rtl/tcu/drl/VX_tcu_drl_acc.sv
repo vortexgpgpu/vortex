@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`define CSA_ACC_COUT
 
 module VX_tcu_drl_acc #(
     parameter N = 4
@@ -69,6 +70,29 @@ module VX_tcu_drl_acc #(
         assign signed_sig[i] = op_sign[i] ? -adj_sig[i] : adj_sig[i];
     end
 
+    //Carry-Save-Adder based significand accumulation
+    wire [25+$clog2(N)-1:0] signed_sum_sig;
+    VX_tcu_drl_CSA #(
+        .M(N),
+        .N(25)
+    ) sig_csa(
+        .Operands(signed_sig),
+        .Sum(signed_sum_sig)
+    );
+
+    //Extracting magnitude from signed result
+    wire sum_sign = signed_sum_sig[25+$clog2(N)-1];
+    wire [24+$clog2(N)-1:0] abs_sum;
+    assign abs_sum = sum_sign ? -signed_sum_sig[24+$clog2(N)-1:0] : signed_sum_sig[24+$clog2(N)-1:0];
+
+    assign signOut = sum_sign;
+    assign expOut = max_exp;
+    assign sigOut = abs_sum;
+endmodule
+
+
+/*  
+    //Alternate orignial significand accumulation version
     //Signed Tree-based reduction adder
     //Each level has wider bit-widths than required to prevent overflow
     wire signed [25+TREE_LEVELS-1:0] tree_sum[0:TREE_LEVELS] [N-1:0];
@@ -92,13 +116,4 @@ module VX_tcu_drl_acc #(
     //Signed result of summation
     wire signed [25+$clog2(N)-1:0] signed_sum_sig;
     assign signed_sum_sig = tree_sum[TREE_LEVELS][0];
-
-    //Extracting magnitude from signed result
-    wire sum_sign = signed_sum_sig[25+$clog2(N)-1];
-    wire [24+$clog2(N)-1:0] abs_sum;
-    assign abs_sum = sum_sign ? -signed_sum_sig[24+$clog2(N)-1:0] : signed_sum_sig[24+$clog2(N)-1:0];
-
-    assign signOut = sum_sign;
-    assign expOut = max_exp;
-    assign sigOut = abs_sum;
-endmodule
+*/
