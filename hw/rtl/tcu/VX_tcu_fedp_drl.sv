@@ -96,73 +96,94 @@ module VX_tcu_fedp_drl #(
     end
 
     //Accumulate reduction tree
-    wire [31:0] red_in [0:LEVELS] [TCK];
+    wire acc_sign;
+    wire [7:0] max_exp;
+    wire [24+$clog2(TCK)-1:0] acc_sig;    //23 mantissa + 1 hidden + log2(N) bits
 
-    for (genvar i = 0; i < TCK; i++) begin : g_red_init_inputs
-        assign red_in[0][i] = mult_result[i];
-    end
+    VX_tcu_drl_acc #(
+        .N(TCK)
+    ) csa_acc (
+        .fp32operands(mult_result),
+        .signOut(acc_sign),
+        .expOut(max_exp),
+        .sigOut(acc_sig)
+    );
 
-    for (genvar lvl = 0; lvl < LEVELS; lvl++) begin : g_red_tree
-        localparam integer CURSZ = TCK >> lvl;
-        localparam integer OUTSZ = CURSZ >> 1;
-        
-        wire [31:0] red_comb [OUTSZ];
-        
-        for (genvar i = 0; i < OUTSZ; i++) begin : g_add
-            VX_tcu_drl_fp32add fp32add (
-                .enable  (enable),
-                .a       (red_in[lvl][2*i+0]),
-                .b       (red_in[lvl][2*i+1]),
-                .y       (red_comb[i])
-            );
+    wire pipe_result_sign;
+    wire [7:0] pipe_max_exp;
+    wire [24+$clog2(TCK)-1:0] pipe_acc_sig;
+    
+    VX_pipe_register #(
+        .DATAW (1+8+24+$clog2(TCK)),
+        .DEPTH (RED_LATENCY)
+    ) pipe_acc (
+        .clk     (clk),
+        .reset   (reset),
+        .enable  (enable),
+        .data_in ({acc_sign, max_exp, acc_sig}),
+        .data_out({pipe_result_sign, pipe_max_exp, pipe_acc_sig})
+    );
 
-            VX_pipe_register #(
-                .DATAW (32),
-                .DEPTH (FADD_LATENCY)
-            ) pipe_red (
-                .clk      (clk),
-                .reset    (reset),
-                .enable   (enable),
-                .data_in  (red_comb[i]),
-                .data_out (red_in[lvl+1][i])
-            );
-        end
-    end
+    //Normalization of accumulated significand before final add
+    //Leading zero counter
+    wire [$clog2(24+$clog2(TCK))-1:0] lz_count;
+    VX_lzc #(
+        .N (24+$clog2(TCK))
+    ) lzc (
+        .data_in   (pipe_acc_sig),
+        .data_out  (lz_count),
+        `UNUSED_PIN(valid_out)
+    );
+
+    wire [7:0] shift_amount = 8'($clog2(TCK)) - 8'(lz_count);
+    wire [7:0] norm_exp = pipe_max_exp + shift_amount;
+    wire [24+$clog2(TCK)-1:0] shifted_acc_sig = pipe_acc_sig << lz_count;
+    wire [22:0] norm_sig = shifted_acc_sig[24+$clog2(TCK)-2 : 24+$clog2(TCK)-2-22];
+   `UNUSED_VAR (shifted_acc_sig)
+
+    wire [31:0] norm_result;
+    VX_pipe_register #(
+        .DATAW (32),
+        .DEPTH (FRND_LATENCY)
+    ) pipe_norm (
+        .clk     (clk),
+        .reset   (reset),
+        .enable  (enable),
+        .data_in ({pipe_result_sign, norm_exp, norm_sig}),
+        .data_out(norm_result)
+    );
 
     wire [31:0] delayed_c;
     VX_pipe_register #(
         .DATAW (32),
-        .DEPTH (FMUL_LATENCY + RED_LATENCY)
+        .DEPTH (FMUL_LATENCY + RED_LATENCY + FRND_LATENCY)
     ) pipe_c (
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
         .data_in (c_val[31:0]),
         .data_out(delayed_c)
-    );
+    );    
 
     wire [31:0] final_add_result;
-    wire [31:0] result;
-
-    // final accumulation
     VX_tcu_drl_fp32add final_fp32add (
         .enable  (enable),
-        .a       (red_in[LEVELS][0]),
+        .a       (norm_result),
         .b       (delayed_c),
         .y       (final_add_result)
-    );
+    );    
 
+    wire [31:0] fedp_result;
     VX_pipe_register #(
         .DATAW (32),
-        .DEPTH (FADD_LATENCY + FRND_LATENCY)
-    ) pipe_acc (
+        .DEPTH (FRND_LATENCY)
+    ) pipe_final (
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
         .data_in (final_add_result),
-        .data_out(result)
+        .data_out(fedp_result)
     );
 
-    assign d_val = `XLEN'(result);
-
+    assign d_val = `XLEN'(fedp_result);
 endmodule
