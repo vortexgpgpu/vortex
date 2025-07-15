@@ -40,7 +40,7 @@ module VX_tcu_fedp_drl #(
     `STATIC_ASSERT (LATENCY == (FMUL_LATENCY+ACC_LATENCY+FRND_LATENCY), ("invalid parameter!"));
 
     `UNUSED_VAR (reset);
-    `UNUSED_VAR (fmt_d);
+    `UNUSED_VAR ({fmt_d, c_val});
 
     wire [TCK-1:0][15:0] a_row16;
     wire [TCK-1:0][15:0] b_col16;
