@@ -38,25 +38,25 @@ extern "C" {
 
 #define csr_read(csr) ({                        \
 	size_t __r;	               		            \
-	__asm__ __volatile__ ("csrr %0, %1" : "=r" (__r) : "i" (csr) : "memory"); \
+	__asm__ __volatile__ ("csrr %0, %1" : "=r" (__r) : "i" (csr)); \
 	__r;							            \
 })
 
 #define csr_write(csr, val)	({                  \
 	size_t __v = (size_t)(val);                 \
 	if (__builtin_constant_p(val) && __v < 32)  \
-        __asm__ __volatile__ ("csrw %0, %1" :: "i" (csr), "i" (__v) : "memory");  \
+        __asm__ __volatile__ ("csrwi %0, %1" :: "i" (csr), "i" (__v));  \
     else                                        \
-        __asm__ __volatile__ ("csrw %0, %1"	:: "i" (csr), "r" (__v) : "memory");  \
+        __asm__ __volatile__ ("csrw %0, %1"	:: "i" (csr), "r" (__v));  \
 })
 
 #define csr_swap(csr, val) ({                   \
     size_t __r;                                 \
 	size_t __v = (size_t)(val);	                \
 	if (__builtin_constant_p(val) && __v < 32)  \
-        __asm__ __volatile__ ("csrrw %0, %1, %2" : "=r" (__r) : "i" (csr), "i" (__v) : "memory"); \
+        __asm__ __volatile__ ("csrrwi %0, %1, %2" : "=r" (__r) : "i" (csr), "i" (__v)); \
     else                                        \
-        __asm__ __volatile__ ("csrrw %0, %1, %2" : "=r" (__r) : "i" (csr), "r" (__v) : "memory"); \
+        __asm__ __volatile__ ("csrrw %0, %1, %2" : "=r" (__r) : "i" (csr), "r" (__v)); \
 	__r;						                \
 })
 
@@ -64,36 +64,36 @@ extern "C" {
 	size_t __r;                                 \
 	size_t __v = (size_t)(val);	                \
     if (__builtin_constant_p(val) && __v < 32)  \
-	    __asm__ __volatile__ ("csrrs %0, %1, %2" : "=r" (__r) : "i" (csr), "i" (__v) : "memory"); \
+	    __asm__ __volatile__ ("csrrsi %0, %1, %2" : "=r" (__r) : "i" (csr), "i" (__v)); \
     else                                        \
-        __asm__ __volatile__ ("csrrs %0, %1, %2" : "=r" (__r) : "i" (csr), "r" (__v) : "memory"); \
+        __asm__ __volatile__ ("csrrs %0, %1, %2" : "=r" (__r) : "i" (csr), "r" (__v)); \
 	__r;							            \
 })
 
 #define csr_set(csr, val) ({                    \
 	size_t __v = (size_t)(val);	                \
     if (__builtin_constant_p(val) && __v < 32)  \
-	    __asm__ __volatile__ ("csrs %0, %1"	:: "i" (csr), "i" (__v) : "memory");  \
+	    __asm__ __volatile__ ("csrsi %0, %1"	:: "i" (csr), "i" (__v));  \
     else                                        \
-        __asm__ __volatile__ ("csrs %0, %1"	:: "i" (csr), "r" (__v) : "memory");  \
+        __asm__ __volatile__ ("csrs %0, %1"	:: "i" (csr), "r" (__v));  \
 })
 
 #define csr_read_clear(csr, val) ({             \
 	size_t __r;                                 \
 	size_t __v = (size_t)(val);	                \
     if (__builtin_constant_p(val) && __v < 32)  \
-	    __asm__ __volatile__ ("csrrc %0, %1, %2" : "=r" (__r) : "i" (csr), "i" (__v) : "memory"); \
+	    __asm__ __volatile__ ("csrrci %0, %1, %2" : "=r" (__r) : "i" (csr), "i" (__v)); \
     else                                        \
-        __asm__ __volatile__ ("csrrc %0, %1, %2" : "=r" (__r) : "i" (csr), "r" (__v) : "memory"); \
+        __asm__ __volatile__ ("csrrc %0, %1, %2" : "=r" (__r) : "i" (csr), "r" (__v)); \
 	__r;							            \
 })
 
 #define csr_clear(csr, val)	({                  \
 	size_t __v = (size_t)(val);                 \
 	if (__builtin_constant_p(val) && __v < 32)  \
-        __asm__ __volatile__ ("csrc %0, %1" :: "i" (csr), "i" (__v) : "memory"); \
+        __asm__ __volatile__ ("csrci %0, %1" :: "i" (csr), "i" (__v)); \
     else                                        \
-        __asm__ __volatile__ ("csrc %0, %1"	:: "i" (csr), "r" (__v) : "memory"); \
+        __asm__ __volatile__ ("csrc %0, %1"	:: "i" (csr), "r" (__v)); \
 })
 
 // Set thread mask
