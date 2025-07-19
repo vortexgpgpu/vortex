@@ -84,30 +84,37 @@ endif
 endif
 endif
 
-all: $(PROJECT) kernel.vxbin kernel.dump
+# Generate lists of target files based on VX_SRCS
+VX_BASENAMES := $(basename $(notdir $(VX_SRCS)))
+VX_ELFS := $(addsuffix .elf,$(VX_BASENAMES))
+VX_VXBINS := $(addsuffix .vxbin,$(VX_BASENAMES))
+VX_DUMPS := $(addsuffix .dump,$(VX_BASENAMES))
 
-kernel.dump: kernel.elf
+all: $(PROJECT) $(VX_ELFS) $(VX_VXBINS) $(VX_DUMPS)
+
+# Pattern rules for individual kernel files
+%.dump: %.elf
 	$(VX_DP) -D $< > $@
 
-kernel.vxbin: kernel.elf
+%.vxbin: %.elf
 	OBJCOPY=$(VX_CP) $(VORTEX_HOME)/kernel/scripts/vxbin.py $< $@
 
-kernel.elf: $(VX_SRCS)
-	$(VX_CXX) $(VX_CFLAGS) $^ $(VX_LDFLAGS) -o kernel.elf
+%.elf: $(VX_SRCS)
+	$(VX_CXX) $(VX_CFLAGS) $< $(VX_LDFLAGS) -o $@
 
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-run-simx: $(PROJECT) kernel.vxbin
+run-simx: $(PROJECT) $(VX_VXBINS) $(VX_DUMPS)
 	LD_LIBRARY_PATH=$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)
 
-run-rtlsim: $(PROJECT) kernel.vxbin
+run-rtlsim: $(PROJECT) $(VX_VXBINS) $(VX_DUMPS)
 	LD_LIBRARY_PATH=$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
 
-run-opae: $(PROJECT) kernel.vxbin
+run-opae: $(PROJECT) $(VX_VXBINS) $(VX_DUMPS)
 	SCOPE_JSON_PATH=$(VORTEX_RT_PATH)/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
 
-run-xrt: $(PROJECT) kernel.vxbin
+run-xrt: $(PROJECT) $(VX_VXBINS) $(VX_DUMPS)
 ifeq ($(TARGET), hw)
 	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XRT_INI_PATH=$(VORTEX_RT_PATH)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 else ifeq ($(TARGET), hw_emu)
