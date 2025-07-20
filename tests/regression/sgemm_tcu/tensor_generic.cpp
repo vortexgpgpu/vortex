@@ -4,7 +4,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cstring>
-#include "float16.h"
+//#include "float16.h"
 
 struct int4_t {
   uint8_t data;
@@ -13,7 +13,7 @@ struct int4_t {
 using float32_t = float;
 
 #ifndef NUM_THREADS
-#define NUM_THREADS 8
+#define NUM_THREADS 32
 #endif
 
 #ifndef XLENB
@@ -21,7 +21,7 @@ using float32_t = float;
 #endif
 
 #ifndef ITYPE
-#define ITYPE int8_t
+#define ITYPE int16_t
 #endif
 
 #ifndef OTYPE
@@ -270,6 +270,16 @@ public:
     os << "}";
     return os;
   }
+};
+
+template <typename Itype>
+struct SparseMat {
+  std::vector<Itype> values;   // non-zeros
+  std::vector<uint8_t> meta;     // Array of row-masks: 1 byte marks the columns
+                                  // of the 4 elements in the block that are non-zero.
+                                  // e.g. 0b0101 means 2nd and 4th elements are non-zero.
+
+  uint32_t rows, cols;           // original A dims (M × K)
 };
 
 template <typename Config>
@@ -628,4 +638,4 @@ int main() {
 }
 
 // README
-// gcc -std=c++17 -O2 tensor_demo.cpp -lstdc++
+// gcc -std=c++17 -O2 tensor_generic.cpp -lstdc++
