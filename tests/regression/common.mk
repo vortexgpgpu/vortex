@@ -30,7 +30,7 @@ LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +zicond
 LLVM_CFLAGS += -mllvm -disable-loop-idiom-all # disable memset/memcpy loop idiom
 #LLVM_CFLAGS += -mllvm -vortex-branch-divergence=0
-#LLVM_CFLAGS += -mllvm -print-after-all
+#LLVM_CFLAGS += -mllvm -debug -mllvm -print-after-all
 #LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0/$(RISCV_PREFIX)
 #LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0
 #LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/$(RISCV_PREFIX)/9.2.0
