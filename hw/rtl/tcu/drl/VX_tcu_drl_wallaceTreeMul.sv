@@ -33,9 +33,9 @@ module VX_tcu_drl_wallaceTreeMul #(
     end
 
     VX_csa_tree #(
-        .N   (N),
-        .W   (2*N),
-        .CEN (0)
+        .N (N),
+        .W (2*N),
+        .S (2*N)
     ) pp_acc (
         .operands (pp),
         .sum (product)

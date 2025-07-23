@@ -111,9 +111,8 @@ module VX_tcu_drl_acc #(
     //Carry-Save-Adder based significand accumulation
     wire [25+$clog2(N)-1:0] signed_sum_sig;
     VX_csa_tree #(
-        .N   (N),
-        .W   (25),
-        .CEN (1)
+        .N (N),
+        .W (25)
     ) sig_csa (
         .operands (signed_sig),
         .sum (signed_sum_sig)

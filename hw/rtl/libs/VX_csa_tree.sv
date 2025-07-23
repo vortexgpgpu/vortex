@@ -17,8 +17,10 @@ module FullAdder (
     input  wire a,
     input  wire b,
     input  wire cin,
+`IGNORE_UNOPTFLAT_BEGIN
     output wire sum,
     output wire cout
+`IGNORE_UNOPTFLAT_END
 );
     assign sum = a ^ b ^ cin;
     assign cout = (a & b) | ((a ^ b) & cin);
@@ -31,76 +33,79 @@ module CSA_level #(
 ) (
     input  wire [N-1:0] a,
     input  wire [N-1:0] b,
-    input  wire [N-1:0] cin,
+    input  wire [N-1:0] c,
     output wire [N:0]   sum,
-    output wire [N:0]   cout
+    output wire [N:0]   carry
 );
     for (genvar i = 0; i < N; i++) begin : g_compress_3_2
         FullAdder FA (
             .a    (a[i]),
             .b    (b[i]),
-            .cin  (cin[i]),
+            .cin  (c[i]),
             .sum  (sum[i]),
-            .cout (cout[i+1])
+            .cout (carry[i+1])
         );
     end
-    assign cout[0] = 1'b0;
-    assign sum[N]  = 1'b0;
+
+    assign carry[0] = 1'b0;
+    assign sum[N] = 1'b0;
 
 endmodule
 
 module VX_csa_tree #(
-    parameter N   = 4,  // no. of operands
-    parameter W   = 8,  // bit-width of each operand
-    parameter CEN = 1,  // carry enable
-    parameter SW  = W + $clog2(N),
-    parameter SCW = CEN ? SW : W
+    parameter N = 4,  // Number of operands
+    parameter W = 8,  // Bit-width of each operand
+    parameter S = W + $clog2(N)  // Output width
 ) (
-    input [W-1:0]    operands [N-1:0],
-    output [SCW-1:0] sum
+    input  wire [W-1:0] operands [N-1:0],  // Input operands
+    output wire [S-1:0] sum  // Final sum output
 );
-    wire [SW-1:0] St [N-3:0];
-    wire [SW-1:0] Ct [N-3:0];
+    `STATIC_ASSERT (N >= 3, ("N must be at least 3"));
+    localparam PP_ENABLE = (S == W); // Partial product flag
+    localparam LEVELS = $clog2(N-2); // Number of levels in the CSA tree
+    localparam SUM_WIDTH = W + $clog2(N);
+
+    wire [SUM_WIDTH-1:0] St[N-3:0], Ct[N-3:0]; //2d matrix of size (N-2)x(SUM_WIDTH-1)
 
     CSA_level #(
         .N (W)
     ) CSA0 (
         .a    (operands[0]),
         .b    (operands[1]),
-        .cin  (operands[2]),
+        .c    (operands[2]),
         .sum  (St[0][W:0]),
-        .cout (Ct[0][W:0])
+        .carry(Ct[0][W:0])
     );
 
-    for (genvar i = 1; i < N-2; i++) begin : g_csa_tree
+    for (genvar i = 1; i < LEVELS; i++) begin : g_csa_tree
         CSA_level #(
             .N (W+i)
         ) CSA (
             .a    (St[i-1][W-1+i:0]),
             .b    (Ct[i-1][W-1+i:0]),
-            .cin  ({{i{1'b0}}, operands[2+i]}),
+            .c    ({{i{1'b0}}, operands[2+i]}),
             .sum  (St[i][W+i:0]),
-            .cout (Ct[i][W+i:0])
+            .carry(Ct[i][W+i:0])
         );
     end
 
-    if (CEN != 0) begin : g_cout
+    if (PP_ENABLE) begin : g_pp_adder
         VX_ks_adder #(
-            .N (SCW)
-        ) RCA0 (
-            .dataa (St[N-3]),
-            .datab (Ct[N-3]),
-            .sum   (sum[SW-2:0]),
-            .cout  (sum[SW-1])
-        );
-    end else begin : g_no_cout
-        VX_ks_adder #(
-            .N (SCW)
-        ) RCA0 (
+            .N (S)
+        ) KSA (
             .dataa (St[N-3][W-1:0]),
             .datab (Ct[N-3][W-1:0]),
             .sum   (sum),
-            `UNUSED_PIN(cout)
+            `UNUSED_PIN (cout)
+        );
+    end else begin : g_rc_adder
+        VX_ks_adder #(
+            .N (S)
+        ) RCA0 (
+            .dataa (St[N-3]),
+            .datab (Ct[N-3]),
+            .sum   (sum),
+            `UNUSED_PIN (cout)
         );
     end
 
