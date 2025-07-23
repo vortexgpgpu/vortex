@@ -12,7 +12,6 @@
 // limitations under the License.
 
 `include "VX_define.vh"
-`define CSA_ACC_COUT
 
 module VX_tcu_drl_acc #(
     parameter N = 4
@@ -38,17 +37,17 @@ module VX_tcu_drl_acc #(
     wire [7:0] tree_exp[0:TREE_LEVELS] [N-1:0];
     for (genvar i = 0; i < N; i++) begin : g_init_exp_tree
         assign tree_exp[0][i] = op_exp[i];
-    end    
+    end
     for (genvar lvl = 0; lvl < TREE_LEVELS; lvl++) begin : g_exp_tree_levels
         localparam integer CURSZ = N >> lvl;
         localparam integer OUTSZ = CURSZ >> 1;
-        
+
         for (genvar i = 0; i < OUTSZ; i++) begin : g_exp_tree_cmp
             //move higher exp val to next level
-            assign tree_exp[lvl+1][i] = (tree_exp[lvl][2*i+0] >= tree_exp[lvl][2*i+1]) ? 
+            assign tree_exp[lvl+1][i] = (tree_exp[lvl][2*i+0] >= tree_exp[lvl][2*i+1]) ?
                                         tree_exp[lvl][2*i+0] : tree_exp[lvl][2*i+1];
         end
-        
+
         //odd number handling case --> essentially c_val
         if (CURSZ % 2 == 1) begin : g_exp_odd_handle
             assign tree_exp[lvl+1][OUTSZ] = tree_exp[lvl][CURSZ-1];
@@ -72,12 +71,13 @@ module VX_tcu_drl_acc #(
 
     //Carry-Save-Adder based significand accumulation
     wire [25+$clog2(N)-1:0] signed_sum_sig;
-    VX_tcu_drl_CSA #(
-        .M(N),
-        .N(25)
-    ) sig_csa(
-        .Operands(signed_sig),
-        .Sum(signed_sum_sig)
+    VX_csa_tree #(
+        .N   (N),
+        .W   (25),
+        .CEN (1)
+    ) sig_csa (
+        .operands (signed_sig),
+        .sum (signed_sum_sig)
     );
 
     //Extracting magnitude from signed result
@@ -91,7 +91,7 @@ module VX_tcu_drl_acc #(
 endmodule
 
 
-/*  
+/*
     //Alternate orignial significand accumulation version
     //Signed Tree-based reduction adder
     //Each level has wider bit-widths than required to prevent overflow
@@ -102,12 +102,12 @@ endmodule
     for (genvar lvl = 0; lvl < TREE_LEVELS; lvl++) begin : g_sum_tree_levels
         localparam integer CURSZ = N >> lvl;
         localparam integer OUTSZ = CURSZ >> 1;
-        
+
         for (genvar i = 0; i < OUTSZ; i++) begin : g_sum_tree_add
             //add signed pairs of operands at current level
             assign tree_sum[lvl+1][i] = tree_sum[lvl][2*i+0] + tree_sum[lvl][2*i+1];
         end
-        
+
         //odd number operand handling - carry forward to next stage
         if (CURSZ % 2 == 1) begin : g_sum_odd_handle
             assign tree_sum[lvl+1][OUTSZ] = tree_sum[lvl][CURSZ-1];

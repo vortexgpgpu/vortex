@@ -38,6 +38,8 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
     localparam DATAW        = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + 1 + NUM_REGS_BITS + NUM_LANES * `XLEN + GPID_WIDTH + 1 + 1;
     localparam DATA_WIS_OFF = DATAW - (UUID_WIDTH + NW_WIDTH);
 
+     `DECL_RESULT_T (result_t, NUM_LANES);
+
     wire [BLOCK_SIZE-1:0] result_in_valid;
     wire [BLOCK_SIZE-1:0][DATAW-1:0] result_in_data;
     wire [BLOCK_SIZE-1:0] result_in_ready;
@@ -79,7 +81,7 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin: g_out_bufs
         VX_result_if #(
-            .NUM_LANES (NUM_LANES)
+            .data_t (result_t)
         ) result_tmp_if();
 
         VX_elastic_buffer #(

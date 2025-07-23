@@ -14,26 +14,8 @@
 `include "VX_define.vh"
 
 interface VX_execute_if import VX_gpu_pkg::*; #(
-    parameter NUM_LANES = `SIMD_WIDTH,
-    parameter PID_WIDTH = `LOG2UP(`NUM_THREADS / NUM_LANES)
+    parameter type data_t = logic
 );
-    typedef struct packed {
-        logic [UUID_WIDTH-1:0]          uuid;
-        logic [NW_WIDTH-1:0]            wid;
-        logic [NUM_LANES-1:0]           tmask;
-        logic [PC_BITS-1:0]             PC;
-        logic [INST_ALU_BITS-1:0]       op_type;
-        op_args_t                       op_args;
-        logic                           wb;
-        logic [NUM_REGS_BITS-1:0]       rd;
-        logic [NUM_LANES-1:0][`XLEN-1:0] rs1_data;
-        logic [NUM_LANES-1:0][`XLEN-1:0] rs2_data;
-        logic [NUM_LANES-1:0][`XLEN-1:0] rs3_data;
-        logic [PID_WIDTH-1:0]           pid;
-        logic                           sop;
-        logic                           eop;
-    } data_t;
-
     logic  valid;
     data_t data;
     logic  ready;

@@ -796,18 +796,16 @@
 
 // TCU Configurable Knobs /////////////////////////////////////////////////////
 
+`ifndef TCU_DRL
 `ifndef TCU_BHF
 `ifndef TCU_DSP
 `ifndef TCU_DPI
-`ifndef TCU_DRL
 
 `ifndef SYNTHESIS
 `ifndef DPI_DISABLE
 `define TCU_DPI
-`elsif  BHF_ENABLE
-`define TCU_BHF
 `else
-`define TCU_DRL
+`define TCU_BHF
 `endif
 `else
 `define TCU_DSP

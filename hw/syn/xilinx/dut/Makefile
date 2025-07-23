@@ -5,7 +5,7 @@ PREFIX ?= build
 
 BUILD_DIR := $(PREFIX)
 
-.PHONY: unittest scope mem_unit lmem cache fpu core issue vortex top
+.PHONY: unittest scope mem_unit lmem cache fpu tcu core issue vortex top
 
 unittest:
 	mkdir -p unittest/$(BUILD_DIR)
@@ -36,6 +36,11 @@ fpu:
 	mkdir -p fpu/$(BUILD_DIR)
 	cp fpu/Makefile fpu/$(BUILD_DIR)
 	$(MAKE) -C fpu/$(BUILD_DIR) clean && $(MAKE) -C fpu/$(BUILD_DIR) > fpu/$(BUILD_DIR)/build.log 2>&1 &
+
+tcu:
+	mkdir -p tcu/$(BUILD_DIR)
+	cp tcu/Makefile tcu/$(BUILD_DIR)
+	$(MAKE) -C tcu/$(BUILD_DIR) clean && $(MAKE) -C tcu/$(BUILD_DIR) > tcu/$(BUILD_DIR)/build.log 2>&1 &
 
 core:
 	mkdir -p core/$(BUILD_DIR)

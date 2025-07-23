@@ -13,9 +13,6 @@
 
 `include "VX_define.vh"
 
-//Partial product summation result will never exceed 2*N
-`define CSA_NO_COUT
-
 module VX_tcu_drl_wallaceTreeMul #(
     parameter N = 8
 ) (
@@ -24,19 +21,24 @@ module VX_tcu_drl_wallaceTreeMul #(
     output logic [2*N-1:0] product
 );
     wire [2*N-1:0] pp[N-1:0];    //partial products, double width (shifted)
-    
-    genvar g, h;
-    generate
-        for(g = 0; g < N; g=g+1) begin: g_pp_loop
-            for(h = 0; h < N; h=h+1) begin: g_and_loop
-                and a(pp[g][h+g], a[h], b[g]);
-            end
-            if(g != 0) begin : g_bit_fill
-                assign pp[g][g-1:0] = {g{1'b0}};    //fill lower bits with zeros
-            end
-            assign pp[g][2*N-1:N+g] = {(N-g){1'b0}};    //fill upper bits with zeros 
-        end
-    endgenerate
 
-    VX_tcu_drl_CSA #(.M(N), .N(2*N)) pp_acc(.Operands(pp), .Sum(product));
+    for (genvar g = 0; g < N; g++) begin: g_pp_loop
+        for (genvar h = 0; h < N; h++) begin: g_and_loop
+            and a(pp[g][h+g], a[h], b[g]);
+        end
+        if (g != 0) begin : g_bit_fill
+            assign pp[g][g-1:0] = {g{1'b0}};    //fill lower bits with zeros
+        end
+        assign pp[g][2*N-1:N+g] = {(N-g){1'b0}};    //fill upper bits with zeros
+    end
+
+    VX_csa_tree #(
+        .N   (N),
+        .W   (2*N),
+        .CEN (0)
+    ) pp_acc (
+        .operands (pp),
+        .sum (product)
+    );
+
 endmodule

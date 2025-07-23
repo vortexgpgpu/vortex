@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_unit import VX_gpu_pkg::*; #(
+module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
@@ -36,7 +36,7 @@ module VX_tcu_unit import VX_gpu_pkg::*; #(
     `SCOPE_IO_SWITCH (BLOCK_SIZE);
 
     VX_execute_if #(
-        .NUM_LANES (NUM_LANES)
+        .data_t (tcu_exe_t)
     ) per_block_execute_if[BLOCK_SIZE]();
 
     VX_dispatch_unit #(
@@ -51,17 +51,17 @@ module VX_tcu_unit import VX_gpu_pkg::*; #(
     );
 
     VX_result_if #(
-        .NUM_LANES (NUM_LANES)
+        .data_t (tcu_res_t)
     ) per_block_result_if[BLOCK_SIZE]();
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
 
         VX_execute_if #(
-            .NUM_LANES (NUM_LANES)
+            .data_t (tcu_exe_t)
         ) pe_execute_if[PE_COUNT]();
 
-        VX_result_if#(
-            .NUM_LANES (NUM_LANES)
+        VX_result_if #(
+            .data_t (tcu_res_t)
         ) pe_result_if[PE_COUNT]();
 
         VX_pe_switch #(

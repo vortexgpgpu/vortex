@@ -675,6 +675,22 @@ package VX_gpu_pkg;
         logic                               eop;
     } writeback_t;
 
+    typedef struct packed {
+        logic [UUID_WIDTH-1:0]              uuid;
+        logic [NW_WIDTH-1:0]                wid;
+        logic [`NUM_THREADS-1:0]            tmask;
+        logic [PC_BITS-1:0]                 PC;
+    } schedule_t;
+
+    `DECL_EXECUTE_T (alu_exe_t, `NUM_ALU_LANES);
+    `DECL_RESULT_T  (alu_res_t, `NUM_ALU_LANES);
+
+    `DECL_EXECUTE_T (lsu_exe_t, `NUM_LSU_LANES);
+    `DECL_RESULT_T (lsu_res_t, `NUM_LSU_LANES);
+
+    `DECL_EXECUTE_T (sfu_exe_t, `NUM_SFU_LANES);
+    `DECL_RESULT_T (sfu_res_t, `NUM_SFU_LANES);
+
     //////////////////////////// Perf counter types ///////////////////////////
 
     typedef struct packed {
