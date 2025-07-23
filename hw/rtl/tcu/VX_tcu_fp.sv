@@ -35,6 +35,10 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam FMUL_LATENCY = 8;
     localparam FADD_LATENCY = 11;
     localparam FRND_LATENCY = 2;
+`elsif TCU_DRL
+    localparam FMUL_LATENCY = 1;
+    localparam FADD_LATENCY = 1;
+    localparam FRND_LATENCY = 1;
 `else
     localparam FMUL_LATENCY = 2;
     localparam FADD_LATENCY = 1;
