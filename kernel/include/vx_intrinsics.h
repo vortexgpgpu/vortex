@@ -73,7 +73,7 @@ extern "C" {
 #define csr_set(csr, val) ({                    \
 	size_t __v = (size_t)(val);	                \
     if (__builtin_constant_p(val) && __v < 32)  \
-	    __asm__ __volatile__ ("csrsi %0, %1"	:: "i" (csr), "i" (__v));  \
+	    __asm__ __volatile__ ("csrsi %0, %1" :: "i" (csr), "i" (__v));  \
     else                                        \
         __asm__ __volatile__ ("csrs %0, %1"	:: "i" (csr), "r" (__v));  \
 })
