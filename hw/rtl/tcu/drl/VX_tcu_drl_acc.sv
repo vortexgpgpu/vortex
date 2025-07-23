@@ -46,8 +46,8 @@ module VX_tcu_drl_acc #(
             end else begin : g_comp
                 assign diff_mat[i][j] = {1'b0, op_exp[i]} - {1'b0, op_exp[j]};
                 assign sign_mat[i][j] = diff_mat[i][j][8];
+            end
         end
-    end
     end
 
     //Finding Max exp one-hot encoded index
@@ -64,7 +64,7 @@ module VX_tcu_drl_acc #(
             end
             assign and_left = &left_signals;
         end
-            
+
         if (i == N-1) begin : g_last
             assign or_right = 1'b0;
         end else begin : g_or_right
@@ -74,10 +74,10 @@ module VX_tcu_drl_acc #(
             end
             assign or_right = |right_signals;
         end
-            
+
         assign sel_exp[i] = and_left & (~or_right);
     end
-    
+
     //Reduction OR (Explicit MUX)
     wire [7:0] or_red[N:0];
     assign or_red[0] = 8'd0;
@@ -85,22 +85,22 @@ module VX_tcu_drl_acc #(
         assign or_red[i+1] = or_red[i] | (sel_exp[i] ? op_exp[i] : 8'd0);
     end
     wire [7:0] max_exp = or_red[N];
-    
+
     //Reusing shift amounts directly from difference matrix
     wire [7:0] shift_amounts[N-1:0];
     for (genvar i = 0; i < N; i++) begin : g_shift_extract
         wire [7:0] shift_op[N:0];
         assign shift_op[0] = 8'd0;
-        
+
         for (genvar j = 0; j < N; j++) begin : g_shift_mux
             //For case operand j is max
             wire [7:0] shift_sel = sel_exp[j] ? (-diff_mat[i][j][7:0]) : 8'd0;
             assign shift_op[j+1] = shift_op[j] | shift_sel;
         end
-        
+
         assign shift_amounts[i] = shift_op[N];
     end
-    
+
     //Aligned + signed significands
     wire signed [24:0] signed_sig[N-1:0];
     for (genvar i = 0; i < N; i++) begin : g_align_signed
@@ -111,9 +111,8 @@ module VX_tcu_drl_acc #(
     //Carry-Save-Adder based significand accumulation
     wire [25+$clog2(N)-1:0] signed_sum_sig;
     VX_csa_tree #(
-        .N   (N),
-        .W   (25),
-        .CEN (1)
+        .N (N),
+        .W (25)
     ) sig_csa (
         .operands (signed_sig),
         .sum (signed_sum_sig)
@@ -131,7 +130,7 @@ endmodule
 
 /*
         wire [23:0] adj_sig = shift_amount[3] ? 24'd0 : op_sig[i] >> shift_amount;      //reducing switching activity (power) by clamping to 0 if
-                                                                                        //input won't make a significant impact on accumulated value 
+                                                                                        //input won't make a significant impact on accumulated value
 */
 
 /*
