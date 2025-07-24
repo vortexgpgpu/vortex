@@ -37,15 +37,31 @@ module VX_tcu_drl_fp16mul (
     wire [10:0] full_mant_a = {1'b1, frac_a};
     wire [10:0] full_mant_b = {1'b1, frac_b};
     wire [21:0] product_mant; // = full_mant_a * full_mant_b; //double width signigicand mul
-    VX_tcu_drl_wallaceTreeMul #(.N(11)) wtmulfp16(.a(full_mant_a), .b(full_mant_b), .product(product_mant));
+    
+    VX_tcu_drl_wallaceTreeMul #(
+        .N(11)
+    ) wtmul_fp16 (
+        .a      (full_mant_a),
+        .b      (full_mant_b), 
+        .product(product_mant)
+    );
 
     //Partial norm for FP32 conversion
     wire normalize_shift = product_mant[21];
     wire [22:0] fp32_mantissa = normalize_shift ? {product_mant[20:0], 2'b00} : {product_mant[19:0], 3'b000};
 
     //Result Exponent Calculation   
-    wire [7:0] biased_exp = {3'b000, exp_a} + {3'b000, exp_b} + {7'd0, normalize_shift} + 8'd97; //127-30
+    wire [7:0] biased_exp; // = {3'd0, exp_a} + {3'd0, exp_b} + {7'd0, normalize_shift} + 8'd97; //127-30
     
+    VX_csa_tree #(
+        .N(4),
+        .W(8),
+        .S(8)
+    ) biasexp_fp16(
+        .operands({{3'd0, exp_a}, {3'd0, exp_b}, {7'd0, normalize_shift}, 8'd97}),
+        .sum     (biased_exp)        
+    );
+
     assign y = {result_sign, biased_exp, fp32_mantissa};
 endmodule
 
