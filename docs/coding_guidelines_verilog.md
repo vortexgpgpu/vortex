@@ -88,6 +88,8 @@ end
   ```
 
 ## 5. Handling Warnings
+Vortex uses explicit warning management i.e. we directly resolve the warning inside the code. Warnings that exist inside external code should be resolved using **Verilator.vlt** lint file. There are some code structures that Verilator's static analyzer doesn't know know to handle properly (e.g. cyclic loops in arrays) and will throw a warning, for those types of error use the corresponding warning handling macros defined in **VX_platform.vh**.
+
 - **Unused variables**
   ```verilog
   `UNUSED_VAR (a)
@@ -107,6 +109,14 @@ end
       .data_out (hit_idx),
       `UNUSED_PIN (valid_out)
   );
+  ```
+- **Other warnings**
+  ```verilog
+  // Silencing Circular Combinational Logic warning.
+  `IGNORE_UNOPTFLAT_BEGIN
+  logic [N-1:0] G [LEVELS+1];
+  logic [N-1:0] P [LEVELS+1];
+  `IGNORE_UNOPTFLAT_END
   ```
 
 ## 6. Assertions
