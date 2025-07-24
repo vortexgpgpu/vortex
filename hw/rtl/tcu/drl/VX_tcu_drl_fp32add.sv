@@ -45,8 +45,8 @@ module VX_tcu_drl_fp32add (
     wire [23:0] aligned_sig_b = exp_a_larger ? (full_sig_b >> exp_diff) : full_sig_b;
     
     //Converting to signed based on sign bits
-    wire signed [24:0] signed_sig_a = sign_a ? -aligned_sig_a : aligned_sig_a;
-    wire signed [24:0] signed_sig_b = sign_b ? -aligned_sig_b : aligned_sig_b;
+    wire signed [24:0] signed_sig_a = sign_a ? -aligned_sig_a : {1'b0, aligned_sig_a};
+    wire signed [24:0] signed_sig_b = sign_b ? -aligned_sig_b : {1'b0, aligned_sig_b};
     
     //Signed addition
     wire signed [25:0] signed_sum_sig = signed_sig_a + signed_sig_b;
