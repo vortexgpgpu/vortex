@@ -105,8 +105,8 @@ module VX_csa_tree #(
         VX_ks_adder #(
             .N (S)
         ) KSA_N (
-            .dataa (g_wire_decl[LEVELS-1].St),
-            .datab (g_wire_decl[LEVELS-1].Ct),
+            .dataa (g_wire_decl[LEVELS-1].St[S-1:0]),
+            .datab (g_wire_decl[LEVELS-1].Ct[S-1:0]),
             .sum   (sum),
             `UNUSED_PIN (cout)
         );
