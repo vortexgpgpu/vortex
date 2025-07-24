@@ -144,9 +144,9 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     wire [`NUM_LSU_BLOCKS-1:0][PERF_CTR_BITS-1:0] per_block_coalescer_misses;
     wire [PERF_CTR_BITS-1:0] coalescer_misses;
     VX_reduce_tree #(
-        .DATAW_IN (PERF_CTR_BITS),
-        .N  (`NUM_LSU_BLOCKS),
-        .OP ("+")
+        .IN_W (PERF_CTR_BITS),
+        .N    (`NUM_LSU_BLOCKS),
+        .OP   ("+")
     ) coalescer_reduce (
         .data_in  (per_block_coalescer_misses),
         .data_out (coalescer_misses)

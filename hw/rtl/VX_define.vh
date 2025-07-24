@@ -186,10 +186,10 @@
 
 `define REDUCE_TREE(__op, __out, __in, __n, __outw, __inw) \
     VX_reduce_tree #( \
-        .DTAW_IN(__inw), \
-        .DATAW_OUT(__outw), \
-        .N(__n), \
-        .OP("__op") \
+        .IN_W  (__inw), \
+        .OUT_W (__outw), \
+        .N     (__n), \
+        .OP    ("__op") \
     ) reduce`__LINE__ ( \
         .data_in(__in), \
         .data_out(__out) \
@@ -396,7 +396,11 @@
         for (genvar __i = 0; __i < (count); ++__i) begin \
             assign __reduce_add_i_field[__i] = src[__i].``field; \
         end \
-        VX_reduce_tree #(.DATAW_IN(width), .N(count), .OP("+")) __reduce_add_field ( \
+        VX_reduce_tree #( \
+            .IN_W (width), \
+            .N    (count), \
+            .OP   ("+") \
+        ) __reduce_add_field ( \
             __reduce_add_i_field, \
             __reduce_add_o_field \
         ); \

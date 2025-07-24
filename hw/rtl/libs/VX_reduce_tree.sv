@@ -15,23 +15,23 @@
 
 `TRACING_OFF
 module VX_reduce_tree #(
-    parameter DATAW_IN   = 1,
-    parameter DATAW_OUT  = DATAW_IN,
-    parameter N          = 1,
+    parameter IN_W  = 1,
+    parameter OUT_W = IN_W,
+    parameter N     = 1,
     parameter `STRING OP = "+"
 ) (
-    input wire [N-1:0][DATAW_IN-1:0] data_in,
-    output wire [DATAW_OUT-1:0]      data_out
+    input wire [N-1:0][IN_W-1:0] data_in,
+    output wire [OUT_W-1:0]      data_out
 );
     if (N == 1) begin : g_passthru
-        assign data_out = DATAW_OUT'(data_in[0]);
+        assign data_out = OUT_W'(data_in[0]);
     end else begin : g_reduce
         localparam int N_A = N / 2;
         localparam int N_B = N - N_A;
 
-        wire [N_A-1:0][DATAW_IN-1:0] in_A;
-        wire [N_B-1:0][DATAW_IN-1:0] in_B;
-        wire [DATAW_OUT-1:0] out_A, out_B;
+        wire [N_A-1:0][IN_W-1:0] in_A;
+        wire [N_B-1:0][IN_W-1:0] in_B;
+        wire [OUT_W-1:0] out_A, out_B;
 
         for (genvar i = 0; i < N_A; i++) begin : g_in_A
             assign in_A[i] = data_in[i];
@@ -42,20 +42,20 @@ module VX_reduce_tree #(
         end
 
         VX_reduce_tree #(
-            .DATAW_IN  (DATAW_IN),
-            .DATAW_OUT (DATAW_OUT),
-            .N  (N_A),
-            .OP (OP)
+            .IN_W  (IN_W),
+            .OUT_W (OUT_W),
+            .N     (N_A),
+            .OP    (OP)
         ) reduce_A (
             .data_in  (in_A),
             .data_out (out_A)
         );
 
         VX_reduce_tree #(
-            .DATAW_IN  (DATAW_IN),
-            .DATAW_OUT (DATAW_OUT),
-            .N  (N_B),
-            .OP (OP)
+            .IN_W  (IN_W),
+            .OUT_W (OUT_W),
+            .N     (N_B),
+            .OP    (OP)
         ) reduce_B (
             .data_in  (in_B),
             .data_out (out_B)

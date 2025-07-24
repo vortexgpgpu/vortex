@@ -106,9 +106,9 @@ module VX_operands import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE
     wire [PERF_CTR_BITS-1:0] perf_stalls_w;
     VX_reduce_tree #(
-        .DATAW_IN (PERF_CTR_BITS),
-        .N  (`NUM_OPCS),
-        .OP ("+")
+        .IN_W (PERF_CTR_BITS),
+        .N    (`NUM_OPCS),
+        .OP   ("+")
     ) perf_stalls_reduce (
         .data_in  (per_opc_perf_stalls),
         .data_out (perf_stalls_w)

@@ -102,10 +102,10 @@ module VX_commit import VX_gpu_pkg::*; #(
     );
 
     VX_reduce_tree #(
-        .DATAW_IN (COMMIT_SIZEW),
-        .DATAW_OUT (COMMIT_ALL_SIZEW),
-        .N  (`ISSUE_WIDTH),
-        .OP ("+")
+        .IN_W  (COMMIT_SIZEW),
+        .OUT_W (COMMIT_ALL_SIZEW),
+        .N     (`ISSUE_WIDTH),
+        .OP    ("+")
     ) commit_size_reduce (
         .data_in  (commit_size_r),
         .data_out (commit_size_all_r)
