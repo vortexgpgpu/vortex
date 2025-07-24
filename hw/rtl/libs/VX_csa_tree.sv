@@ -17,10 +17,8 @@ module FullAdder (
     input  wire a,
     input  wire b,
     input  wire cin,
-`IGNORE_UNOPTFLAT_BEGIN
     output wire sum,
     output wire cout
-`IGNORE_UNOPTFLAT_END
 );
     assign sum = a ^ b ^ cin;
     assign cout = (a & b) | ((a ^ b) & cin);
