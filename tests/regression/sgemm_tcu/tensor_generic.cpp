@@ -9,7 +9,7 @@
 #ifndef USE_SPARSE_A
 /* 0 = dense A
  * 1 = sparse A             */
-#define USE_SPARSE_A 1
+#define USE_SPARSE_A 0
 
 struct int4_t {
   uint8_t data;
@@ -22,7 +22,7 @@ using float32_t = float;
 #endif
 
 #ifndef XLENB
-#define XLENB 2
+#define XLENB 4
 #endif
 
 #ifndef ITYPE
@@ -30,7 +30,7 @@ using float32_t = float;
 #endif
 
 #ifndef OTYPE
-#define OTYPE int16_t
+#define OTYPE int32_t
 #endif
 
 #ifndef DPLEN
@@ -359,6 +359,7 @@ private:
       DBG_PRINT("  r=%u → block_m=%u block_k=%u → loads A[%u,%u] → %p → %u\n", r, block_m, block_k, row, col, base, vR[r][lane]);
     }
   }
+/*
 template <typename Itype>
 void load_A_sparse(vector_t<Vreg, NRA>& valR,
                    vector_t<Vreg, NRA>& maskR,
@@ -407,7 +408,7 @@ void load_A_sparse(vector_t<Vreg, NRA>& valR,
     valR[r][lane] = packed;
   }
 }
-
+*/
 
   void load_B(vector_t<Vreg, NRB> &vR, uint32_t lane, uint32_t ldm, const It *mdata) {
     uint32_t block_idx = lane / b_block_size;
@@ -479,13 +480,16 @@ void load_A_sparse(vector_t<Vreg, NRA>& valR,
   }
 
   Xt FEDP(const Xt *a_row, const Xt *b_col, Xt c_val) {
+    constexpr uint8_t kBmask = 0b0101;
     Ot acc(*reinterpret_cast<const Ot*>(&c_val));
     auto a = reinterpret_cast<const It *>(a_row);
     auto b = reinterpret_cast<const It *>(b_col);
-    for (uint32_t z = 0; z < tcK * i_ratio; ++z) {
+    for (uint32_t z = 0; z < tcK * i_ratio / 2; ++z) { // set /2 for sparse matrix
       auto a_val = static_cast<Ot>(a[z]);
       auto b_val = static_cast<Ot>(b[z]);
-      acc = a_val * b_val + acc;
+      if ((kBmask >> (z & 3)) & 1u) {
+        acc += a_val * b_val;
+      }
     }
     Xt ret(0);
     *reinterpret_cast<Ot*>(&ret) = acc;
@@ -777,7 +781,7 @@ SparseMat<Itype> dense_to_sparse(const std::vector<Itype>& dense,
 
 
 int main() {
-  WMMA<cfg>::unit_test_load_A_sparse();
+  //WMMA<cfg>::unit_test_load_A_sparse();
 
   WMMA<cfg> wmma;
 
@@ -802,19 +806,19 @@ int main() {
       << "NRC = " << cfg::NRC << "\n"
       ;
 
-  //wmma.init();
+  wmma.init();
 
-  //wmma.run();
+  wmma.run();
 
-  //auto err = wmma.verify();
+  auto err = wmma.verify();
 
-  //bool passed = (err < 1e-4f);
+  bool passed = (err < 1e-4f);
 
-  //std::cout << "Max abs error: " << err << "\n"
-  //          << (passed ? "PASSED!" : "FAILED!") << '\n';
+  std::cout << "Max abs error: " << err << "\n"
+            << (passed ? "PASSED!" : "FAILED!") << '\n';
 
-  //return passed ? 0 : 1;
-  return 0;
+  return passed ? 0 : 1;
+  //return 0;
 }
 
 #endif
