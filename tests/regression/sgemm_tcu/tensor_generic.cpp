@@ -482,13 +482,17 @@ void load_A_sparse(vector_t<Vreg, NRA>& valR,
   Xt FEDP(const Xt *a_row, const Xt *b_col, Xt c_val) {
     constexpr uint8_t kBmask = 0b0101;
     Ot acc(*reinterpret_cast<const Ot*>(&c_val));
-    auto a = reinterpret_cast<const It *>(a_row);
-    auto b = reinterpret_cast<const It *>(b_col);
-    for (uint32_t z = 0; z < tcK * i_ratio / 2; ++z) { // set /2 for sparse matrix
-      auto a_val = static_cast<Ot>(a[z]);
-      auto b_val = static_cast<Ot>(b[z]);
+    const It* a = reinterpret_cast<const It *>(a_row);
+    const It* b = reinterpret_cast<const It *>(b_col);
+
+    uint32_t a_idx = 0;
+
+    for (uint32_t z = 0; z < tcK * i_ratio; ++z) {
+      Ot b_val = static_cast<Ot>(b[z]);
       if ((kBmask >> (z & 3)) & 1u) {
+        Ot a_val = static_cast<Ot>(a[a_idx]);
         acc += a_val * b_val;
+        ++a_idx;
       }
     }
     Xt ret(0);
