@@ -113,3 +113,5 @@ module VX_csa_tree #(
     end
 
 endmodule
+
+`TRACING_ON

@@ -62,3 +62,5 @@ module VX_ks_adder #(
     assign cout = G[LEVELS][N-1];
 
 endmodule
+
+`TRACING_ON
