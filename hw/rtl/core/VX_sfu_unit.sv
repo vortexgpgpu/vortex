@@ -50,11 +50,11 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     localparam PE_IDX_CSRS  = 1;
 
     VX_execute_if #(
-        .NUM_LANES (NUM_LANES)
+        .data_t (sfu_exe_t)
     ) per_block_execute_if[BLOCK_SIZE]();
 
     VX_result_if #(
-        .NUM_LANES (NUM_LANES)
+        .data_t (sfu_res_t)
     ) per_block_result_if[BLOCK_SIZE]();
 
     VX_dispatch_unit #(
@@ -69,11 +69,11 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     );
 
     VX_execute_if #(
-        .NUM_LANES (NUM_LANES)
+        .data_t (sfu_exe_t)
     ) pe_execute_if[PE_COUNT]();
 
     VX_result_if#(
-        .NUM_LANES (NUM_LANES)
+        .data_t (sfu_res_t)
     ) pe_result_if[PE_COUNT]();
 
     reg [PE_SEL_BITS-1:0] pe_select;

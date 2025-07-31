@@ -44,11 +44,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     localparam TAG_WIDTH = UUID_WIDTH + TAG_ID_WIDTH;
 
     VX_result_if #(
-        .NUM_LANES (NUM_LANES)
+        .data_t (lsu_res_t)
     ) result_rsp_if();
 
     VX_result_if #(
-        .NUM_LANES (NUM_LANES)
+        .data_t (lsu_res_t)
     ) result_no_rsp_if();
 
     `UNUSED_VAR (execute_if.data.rs3_data)

@@ -34,7 +34,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     `SCOPE_IO_SWITCH (BLOCK_SIZE);
 
     VX_execute_if #(
-        .NUM_LANES (NUM_LANES)
+        .data_t (lsu_exe_t)
     ) per_block_execute_if[BLOCK_SIZE]();
 
     VX_dispatch_unit #(
@@ -49,7 +49,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     );
 
     VX_result_if #(
-        .NUM_LANES (NUM_LANES)
+        .data_t (lsu_res_t)
     ) per_block_result_if[BLOCK_SIZE]();
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks

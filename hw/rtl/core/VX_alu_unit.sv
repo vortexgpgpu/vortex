@@ -37,11 +37,11 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
     localparam PE_IDX_MDV   = PE_IDX_INT + `EXT_M_ENABLED;
 
     VX_execute_if #(
-        .NUM_LANES (NUM_LANES)
+        .data_t (alu_exe_t)
     ) per_block_execute_if[BLOCK_SIZE]();
 
     VX_result_if #(
-        .NUM_LANES (NUM_LANES)
+        .data_t (alu_res_t)
     ) per_block_result_if[BLOCK_SIZE]();
 
     VX_dispatch_unit #(
@@ -58,11 +58,11 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
 
         VX_execute_if #(
-            .NUM_LANES (NUM_LANES)
+            .data_t (alu_exe_t)
         ) pe_execute_if[PE_COUNT]();
 
         VX_result_if#(
-            .NUM_LANES (NUM_LANES)
+            .data_t (alu_res_t)
         ) pe_result_if[PE_COUNT]();
 
         reg [`UP(PE_SEL_BITS)-1:0] pe_select;

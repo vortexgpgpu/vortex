@@ -796,6 +796,7 @@
 
 // TCU Configurable Knobs /////////////////////////////////////////////////////
 
+`ifndef TCU_DRL
 `ifndef TCU_BHF
 `ifndef TCU_DSP
 `ifndef TCU_DPI
