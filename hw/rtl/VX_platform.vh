@@ -31,9 +31,9 @@
     end \
     /* verilator lint_on GENUNNAMED */
 
-`define SIZE_ASSERT(s1, s2) \
+`define PACKAGE_ASSERT(cond) \
     /* verilator lint_on UNUSED */ \
-    typedef bit [((s1 == s2) ? s1 : -s1) : s2] static_assertion_at_line_`__LINE__; \
+    typedef bit [((cond) ? 0 : -1) : 0] static_assertion_at_line_`__LINE__; \
     /* verilator lint_off UNUSED */
 
 `define ERROR(msg) \
@@ -138,7 +138,7 @@
 `else // SYNTHESIS
 
 `define STATIC_ASSERT(cond, msg)
-`define SIZE_ASSERT(s1, s2)
+`define PACKAGE_ASSERT(cond)
 `define ERROR(msg)                  //
 `define ASSERT(cond, msg)           //
 `define RUNTIME_ASSERT(cond, msg)

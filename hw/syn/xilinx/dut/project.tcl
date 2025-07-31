@@ -152,7 +152,7 @@ proc run_report {} {
   report_route_status -file route.rpt
 
   # Generate timing report
-  report_timing -nworst 100 -delay_type max -sort_by group -file timing.rpt
+  report_timing -unique_pins -nworst 100 -delay_type max -sort_by group -file timing.rpt
 
   # Generate power and drc reports
   report_power -file power.rpt
