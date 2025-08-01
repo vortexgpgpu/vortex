@@ -26,7 +26,7 @@ using float32_t = float;
 #endif
 
 #ifndef ITYPE
-#define ITYPE int16_t
+#define ITYPE int32_t
 #endif
 
 #ifndef OTYPE
@@ -359,7 +359,11 @@ private:
       DBG_PRINT("  r=%u → block_m=%u block_k=%u → loads A[%u,%u] → %p → %u\n", r, block_m, block_k, row, col, base, vR[r][lane]);
     }
   }
-/*
+
+
+//a[0],a[1] = data, a[2]=mask; 
+//NRA = 32, #ofrow = 8 #ofcol = 4
+//a[2], mask, a[6] 
 template <typename Itype>
 void load_A_sparse(vector_t<Vreg, NRA>& valR,
                    vector_t<Vreg, NRA>& maskR,
@@ -391,7 +395,7 @@ void load_A_sparse(vector_t<Vreg, NRA>& valR,
     uint32_t bit_pos     = col_phys & 3;
     uint8_t  block_mask  = meta[block_id];
     maskR[r][lane]       = Xt(block_mask);
-
+     
     // 2.4) If that bit is set, find and load the corresponding nonzero
     Itype v = 0;
     if ((block_mask >> bit_pos) & 1u) {
@@ -408,7 +412,7 @@ void load_A_sparse(vector_t<Vreg, NRA>& valR,
     valR[r][lane] = packed;
   }
 }
-*/
+
 
   void load_B(vector_t<Vreg, NRB> &vR, uint32_t lane, uint32_t ldm, const It *mdata) {
     uint32_t block_idx = lane / b_block_size;
@@ -480,16 +484,22 @@ void load_A_sparse(vector_t<Vreg, NRA>& valR,
   }
 
   Xt FEDP(const Xt *a_row, const Xt *b_col, Xt c_val) {
-    constexpr uint8_t kBmask = 0b0101;
+    //  ┌───────────┐   ┌────────────┐
+    //  │ a_row[0]  │   │   b_col[0]  │
+    //  │ a_row[1]  │   │   b_col[1]  │
+    //  │  mask     │   │   b_col[2]  │
+    //  │  wasted   │   │   b_col[3]  │
+    //  └───────────┘   └────────────┘
+    
     Ot acc(*reinterpret_cast<const Ot*>(&c_val));
     const It* a = reinterpret_cast<const It *>(a_row);
     const It* b = reinterpret_cast<const It *>(b_col);
-
+    uint8_t mask = static_cast<uint8_t>(a[2]); // Hard-coded location for tcK = 4, i_ratio = 1
     uint32_t a_idx = 0;
 
     for (uint32_t z = 0; z < tcK * i_ratio; ++z) {
       Ot b_val = static_cast<Ot>(b[z]);
-      if ((kBmask >> (z & 3)) & 1u) {
+      if ((mask >> (z & 3)) & 1u) {
         Ot a_val = static_cast<Ot>(a[a_idx]);
         acc += a_val * b_val;
         ++a_idx;
