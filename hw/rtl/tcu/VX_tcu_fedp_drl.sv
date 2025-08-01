@@ -31,12 +31,9 @@ module VX_tcu_fedp_drl #(
 );
 
     localparam TCK = 2 * N;
-    localparam LEVELS = $clog2(TCK);
-    localparam FMUL_LATENCY = 1;
-    localparam FADD_LATENCY = 1;
-    localparam FRND_LATENCY = 1;
-    localparam RED_LATENCY  = LEVELS * FADD_LATENCY;
-    localparam ACC_LATENCY  = RED_LATENCY + FADD_LATENCY;
+    localparam FMUL_LATENCY = 2;
+    localparam FRND_LATENCY = 2;
+    localparam ACC_LATENCY  = 2;
     `STATIC_ASSERT (LATENCY == (FMUL_LATENCY+ACC_LATENCY+FRND_LATENCY), ("invalid parameter!"));
 
     `UNUSED_VAR (reset);
@@ -151,7 +148,16 @@ module VX_tcu_fedp_drl #(
     wire [7:0] shift_amount = 8'($clog2(TCK+1)) - 8'(lz_count);
     wire [7:0] norm_exp = pipe_max_exp + shift_amount;
     wire [24+$clog2(TCK+1)-1:0] shifted_acc_sig = pipe_acc_sig << lz_count;
-    wire [22:0] norm_sig = shifted_acc_sig[24+$clog2(TCK+1)-2 : 24+$clog2(TCK+1)-2-22];
+
+    //RNE rounding
+    wire lsb = shifted_acc_sig[24+$clog2(TCK+1)-2-22];
+    wire guard_bit = shifted_acc_sig[24+$clog2(TCK+1)-2-23];
+    wire round_bit = shifted_acc_sig[24+$clog2(TCK+1)-2-24];
+    wire sticky_bit = |shifted_acc_sig[24+$clog2(TCK+1)-2-25:0];
+    //wire round_up = guard_bit & (round_bit | sticky_bit | lsb);   //TODO: standard RNE should've worked but doesnt?
+    wire round_up = guard_bit | (round_bit | sticky_bit | lsb);
+    
+    wire [22:0] norm_sig = shifted_acc_sig[24+$clog2(TCK+1)-2 : 24+$clog2(TCK+1)-2-22] + 23'(round_up);
    `UNUSED_VAR (shifted_acc_sig)
 
     wire [31:0] fedp_result;

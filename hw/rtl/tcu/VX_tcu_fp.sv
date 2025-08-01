@@ -31,16 +31,16 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     localparam MDATA_WIDTH = UUID_WIDTH + NW_WIDTH + PC_BITS + NUM_REGS_BITS;
 
-`ifdef TCU_DSP
-    localparam FCVT_LATENCY = 1;
+`ifdef TCU_DRL
+    localparam FMUL_LATENCY = 2;
+    localparam FRND_LATENCY = 2;
+    localparam ACC_LATENCY  = 2;
+`else
+    `ifdef TCU_DSP
     localparam FMUL_LATENCY = 8;
     localparam FADD_LATENCY = 11;
     localparam FRND_LATENCY = 2;
-`elsif TCU_DRL
-    localparam FMUL_LATENCY = 1;
-    localparam FADD_LATENCY = 1;
-    localparam FRND_LATENCY = 1;
-`else
+    `else
     localparam FMUL_LATENCY = 2;
     localparam FACC_LATENCY = 2;
     localparam FEDP_LATENCY = FMUL_LATENCY + FACC_LATENCY;
@@ -48,9 +48,11 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam FMUL_LATENCY = 2;
     localparam FADD_LATENCY = 2;
     localparam FRND_LATENCY = 1;
-    localparam FACC_LATENCY  = $clog2(2 * TCU_TC_K + 1) * (FADD_LATENCY + FRND_LATENCY);
-    localparam FEDP_LATENCY = (FMUL_LATENCY + FRND_LATENCY) + 1 + FACC_LATENCY;
+    `endif
+    localparam ACC_LATENCY  = $clog2(2 * TCU_TC_K) * FADD_LATENCY + FADD_LATENCY;
 `endif
+
+    localparam FEDP_LATENCY = FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
 
     localparam PIPE_LATENCY = FEDP_LATENCY + 1;
     localparam MDATA_QUEUE_DEPTH = 1 << $clog2(PIPE_LATENCY);

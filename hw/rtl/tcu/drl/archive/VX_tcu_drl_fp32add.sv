@@ -49,7 +49,7 @@ module VX_tcu_drl_fp32add (
     wire signed [24:0] signed_sig_b = sign_b ? -aligned_sig_b : {1'b0, aligned_sig_b};
     
     //Signed addition
-    wire signed [25:0] signed_sum_sig = signed_sig_a + signed_sig_b;
+    wire signed [25:0] signed_sum_sig = signed_sig_a ^ signed_sig_b;
     
     //Sign and magnitude extraction
     wire result_sign = signed_sum_sig[25];
