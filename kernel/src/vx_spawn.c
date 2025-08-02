@@ -62,15 +62,14 @@ static void __attribute__ ((noinline)) process_threads() {
   uint32_t warp_batches = targs->warp_batches;
 
   uint32_t start_warp_add = (warp_id < remaining_warps) ? warp_id : remaining_warps;
-  uint32_t start_warp = (warp_id * warp_batches) + start_warp_add;
+  uint32_t start_warp = warp_id * warp_batches + start_warp_add;
   uint32_t iterations = warp_batches + (warp_id < remaining_warps);
 
-  uint32_t start_task_id = targs->all_tasks_offset + (start_warp * threads_per_warp) + thread_id;
+  uint32_t start_task_id = targs->all_tasks_offset + start_warp * threads_per_warp + thread_id;
   uint32_t end_task_id = start_task_id + iterations * threads_per_warp;
 
   uint32_t gridDim_x = gridDim.x;
   uint32_t gridDim_y = gridDim.y;
-  uint32_t gridDim_xy = gridDim_x * gridDim_y;
 
   vx_kernel_func_cb callback = targs->callback;
   const void* arg = targs->arg;
