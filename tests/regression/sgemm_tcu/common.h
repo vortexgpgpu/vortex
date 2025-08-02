@@ -8,7 +8,7 @@
 #endif
 
 #ifndef ITYPE
-#define ITYPE fp32
+#define ITYPE fp16
 #endif
 
 #ifndef OTYPE

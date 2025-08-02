@@ -325,7 +325,7 @@ void Core::issue() {
             auto& use = uses.at(j);
             __unused (use);
             if (j) DTN(4, ", ");
-            DTN(4, use.reg_type << use.reg_id << "(#" << use.uuid << ")");
+            DTN(4, use.reg_type << use.reg_id << " (#" << use.uuid << ")");
           }
           DTN(4, "}, " << *trace << std::endl);
         }
