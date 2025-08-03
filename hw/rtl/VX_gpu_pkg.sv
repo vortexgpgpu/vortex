@@ -35,6 +35,9 @@ package VX_gpu_pkg;
 	localparam RV_REGS = 32;
 	localparam RV_REGS_BITS = 5;
 
+    localparam REG_TYPE_I = 0;
+    localparam REG_TYPE_F = 1;
+
 `ifdef EXT_F_ENABLE
 	localparam REG_TYPES = 2;
 `else
@@ -444,13 +447,6 @@ package VX_gpu_pkg;
     ///////////////////////////////////////////////////////////////////////////
 
     typedef struct packed {
-        logic [REG_TYPE_BITS-1:0] rtype;
-        logic [RV_REGS_BITS-1:0]  id;
-    } reg_idx_t;
-
-	localparam REG_IDX_BITS = $bits(reg_idx_t);
-
-    typedef struct packed {
         logic                    valid;
         logic [`NUM_THREADS-1:0] tmask;
     } tmc_t;
@@ -577,10 +573,10 @@ package VX_gpu_pkg;
         op_args_t                   op_args;
         logic                       wb;
         logic [NUM_SRC_OPDS-1:0]    used_rs;
-        reg_idx_t                   rd;
-        reg_idx_t                   rs1;
-        reg_idx_t                   rs2;
-        reg_idx_t                   rs3;
+        logic [NUM_REGS_BITS-1:0]   rd;
+        logic [NUM_REGS_BITS-1:0]   rs1;
+        logic [NUM_REGS_BITS-1:0]   rs2;
+        logic [NUM_REGS_BITS-1:0]   rs3;
     } decode_t;
 
     typedef struct packed {
@@ -592,10 +588,10 @@ package VX_gpu_pkg;
         op_args_t                   op_args;
         logic                       wb;
         logic [NUM_SRC_OPDS-1:0]    used_rs;
-        reg_idx_t                   rd;
-        reg_idx_t                   rs1;
-        reg_idx_t                   rs2;
-        reg_idx_t                   rs3;
+        logic [NUM_REGS_BITS-1:0]   rd;
+        logic [NUM_REGS_BITS-1:0]   rs1;
+        logic [NUM_REGS_BITS-1:0]   rs2;
+        logic [NUM_REGS_BITS-1:0]   rs3;
     } ibuffer_t;
 
     typedef struct packed {
@@ -608,10 +604,10 @@ package VX_gpu_pkg;
         op_args_t                   op_args;
         logic                       wb;
         logic [NUM_SRC_OPDS-1:0]    used_rs;
-        reg_idx_t                   rd;
-        reg_idx_t                   rs1;
-        reg_idx_t                   rs2;
-        reg_idx_t                   rs3;
+        logic [NUM_REGS_BITS-1:0]   rd;
+        logic [NUM_REGS_BITS-1:0]   rs1;
+        logic [NUM_REGS_BITS-1:0]   rs2;
+        logic [NUM_REGS_BITS-1:0]   rs3;
     } scoreboard_t;
 
     typedef struct packed {
@@ -892,16 +888,16 @@ package VX_gpu_pkg;
         endcase
     endfunction
 
-    function automatic logic [NUM_REGS_BITS-1:0] to_reg_number(input reg_idx_t reg_idx);
-    `ifdef EXT_F_ENABLE
-        return {reg_idx.rtype, reg_idx.id};
-    `else
-        return reg_idx.id;
-    `endif
+    function automatic logic [NUM_REGS_BITS-1:0] make_reg_num(input logic [REG_TYPE_BITS-1:0] rtype, logic [RV_REGS_BITS-1:0] idx);
+        return (NUM_REGS_BITS'(rtype) << RV_REGS_BITS) | NUM_REGS_BITS'(idx);
     endfunction
 
-    function automatic logic [RV_REGS-1:0] to_reg_mask(input reg_idx_t reg_idx);
-        return 1 << reg_idx.id;
+    function automatic logic [REG_TYPE_BITS-1:0] get_reg_type(input logic [NUM_REGS_BITS-1:0] reg_num);
+        return REG_TYPE_BITS'(reg_num >> RV_REGS_BITS);
+    endfunction
+
+    function automatic logic [RV_REGS_BITS-1:0] get_reg_idx(input logic [NUM_REGS_BITS-1:0] reg_num);
+        return reg_num[RV_REGS_BITS-1:0];
     endfunction
 
 endpackage
