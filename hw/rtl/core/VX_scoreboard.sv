@@ -196,9 +196,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             perf_inuse_sfu_per_cycle[w] = '0;
             for (integer i = 0; i < NUM_OPDS; ++i) begin
                 if (staging_if[w].valid && operands_busy[i]) begin
-                    perf_inuse_units_per_cycle[w][inuse_units[stg_opds[i].id]] = 1;
-                    if (inuse_units[stg_opds[i].id] == EX_SFU) begin
-                        perf_inuse_sfu_per_cycle[w][inuse_sfu[stg_opds[i].id]] = 1;
+                    perf_inuse_units_per_cycle[w][inuse_units[stg_opds[i]]] = 1;
+                    if (inuse_units[stg_opds[i]] == EX_SFU) begin
+                        perf_inuse_sfu_per_cycle[w][inuse_sfu[stg_opds[i]]] = 1;
                     end
                 end
             end
