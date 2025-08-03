@@ -22,7 +22,7 @@ module VX_tcu_uops import
     input reset,
 
     input  ibuffer_t ibuf_in,
-    output ibuffer_t ibu_out,
+    output ibuffer_t ibuf_out,
     input  wire      start,
     input  wire      next,
     output reg       done
@@ -79,30 +79,26 @@ module VX_tcu_uops import
 `endif
 
     // Output uop generation
-    assign ibu_out.uuid      = uuid;
-    assign ibu_out.tmask     = ibuf_in.tmask;
-    assign ibu_out.PC        = ibuf_in.PC;
-    assign ibu_out.ex_type   = ibuf_in.ex_type;
-    assign ibu_out.op_type   = ibuf_in.op_type;
-    assign ibu_out.op_args.tcu.fmt_s = ibuf_in.op_args.tcu.fmt_s;
-    assign ibu_out.op_args.tcu.fmt_d = ibuf_in.op_args.tcu.fmt_d;
-    assign ibu_out.op_args.tcu.step_m = 4'(m_index);
-    assign ibu_out.op_args.tcu.step_n = 4'(n_index);
-    assign ibu_out.wb        = 1;
-    assign ibu_out.used_rs   = ibuf_in.used_rs;
-    assign ibu_out.rs1.id    = rs1;
-    assign ibu_out.rs1.rtype = 1; // float
-    assign ibu_out.rs2.id    = rs2;
-    assign ibu_out.rs2.rtype = 1; // float
-    assign ibu_out.rs3.id    = rs3;
-    assign ibu_out.rs3.rtype = 1; // float
-    assign ibu_out.rd.id     = rs3;
-    assign ibu_out.rd.rtype  = 1; // float
+    assign ibuf_out.uuid      = uuid;
+    assign ibuf_out.tmask     = ibuf_in.tmask;
+    assign ibuf_out.PC        = ibuf_in.PC;
+    assign ibuf_out.ex_type   = ibuf_in.ex_type;
+    assign ibuf_out.op_type   = ibuf_in.op_type;
+    assign ibuf_out.op_args.tcu.fmt_s = ibuf_in.op_args.tcu.fmt_s;
+    assign ibuf_out.op_args.tcu.fmt_d = ibuf_in.op_args.tcu.fmt_d;
+    assign ibuf_out.op_args.tcu.step_m = 4'(m_index);
+    assign ibuf_out.op_args.tcu.step_n = 4'(n_index);
+    assign ibuf_out.wb        = 1;
+    assign ibuf_out.used_rs   = ibuf_in.used_rs;
+    assign ibuf_out.rs1       = make_reg_num(REG_TYPE_F, rs1);
+    assign ibuf_out.rs2       = make_reg_num(REG_TYPE_F, rs2);
+    assign ibuf_out.rs3       = make_reg_num(REG_TYPE_F, rs3);
+    assign ibuf_out.rd        = make_reg_num(REG_TYPE_F, rs3);
     `UNUSED_VAR (ibuf_in.wb)
-    `UNUSED_VAR (ibuf_in.rd.rtype)
-    `UNUSED_VAR (ibuf_in.rs1.rtype)
-    `UNUSED_VAR (ibuf_in.rs2.rtype)
-    `UNUSED_VAR (ibuf_in.rs3.rtype)
+    `UNUSED_VAR (ibuf_in.rd)
+    `UNUSED_VAR (ibuf_in.rs1)
+    `UNUSED_VAR (ibuf_in.rs2)
+    `UNUSED_VAR (ibuf_in.rs3)
 
     reg busy;
 
