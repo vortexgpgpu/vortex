@@ -130,7 +130,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                            && (writeback_if.data.wis == ISSUE_WIS_W'(w))
                            && writeback_if.data.eop;
 
-        reg_idx_t [NUM_OPDS-1:0] ibf_opds, stg_opds;
+        wire [NUM_OPDS-1:0] [NUM_REGS_BITS-1:0] ibf_opds, stg_opds;
         assign ibf_opds = {ibuffer_if[w].data.rs3, ibuffer_if[w].data.rs2, ibuffer_if[w].data.rs1, ibuffer_if[w].data.rd};
         assign stg_opds = {staging_if[w].data.rs3, staging_if[w].data.rs2, staging_if[w].data.rs1, staging_if[w].data.rd};
 
@@ -141,8 +141,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
         for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd_masks
             for (genvar j = 0; j < REG_TYPES; ++j) begin : g_j
-                assign ibf_opd_mask[i][j] = to_reg_mask(ibf_opds[i]) & {RV_REGS{ibf_used_rs[i] && ibf_opds[i].rtype == j}};
-                assign stg_opd_mask[i][j] = to_reg_mask(stg_opds[i]) & {RV_REGS{stg_used_rs[i] && stg_opds[i].rtype == j}};
+                assign ibf_opd_mask[i][j] = (1 << get_reg_idx(ibf_opds[i])) & {RV_REGS{ibf_used_rs[i] && get_reg_type(ibf_opds[i]) == j}};
+                assign stg_opd_mask[i][j] = (1 << get_reg_idx(stg_opds[i])) & {RV_REGS{stg_used_rs[i] && get_reg_type(stg_opds[i]) == j}};
             end
         end
 
@@ -170,7 +170,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         end
 
         for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_operands_busy
-            wire [REG_TYPE_BITS-1:0] rtype = stg_opds[i].rtype;
+            wire [REG_TYPE_BITS-1:0] rtype = get_reg_type(stg_opds[i]);
             assign operands_busy[i] = (in_use_mask[rtype] & stg_opd_mask[i][rtype]) != 0;
         end
 

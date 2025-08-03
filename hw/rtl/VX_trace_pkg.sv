@@ -26,8 +26,8 @@ package VX_trace_pkg;
     import "DPI-C" function void dpi_trace(input int level, input string format /*verilator sformat*/);
 `endif
 
-    task trace_reg_idx(input int level, input reg_idx_t reg_id);
-        `TRACE(level, ("%0d", to_reg_number(reg_id)));
+    task trace_reg_idx(input int level, input logic [NUM_REGS_BITS-1:0] reg_id);
+        `TRACE(level, ("%0d", reg_id));
     endtask
 
     task trace_ex_type(input int level, input [EX_BITS-1:0] ex_type);
