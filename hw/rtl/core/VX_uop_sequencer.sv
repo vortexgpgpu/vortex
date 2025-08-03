@@ -39,7 +39,7 @@ module VX_uop_sequencer import
         .clk     (clk),
         .reset   (reset),
         .ibuf_in (input_if.data),
-        .ibu_out (uop_data),
+        .ibuf_out(uop_data),
         .start   (uop_start),
         .next    (uop_next),
         .done    (uop_done)
