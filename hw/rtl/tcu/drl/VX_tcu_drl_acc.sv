@@ -107,7 +107,7 @@ module VX_tcu_drl_acc #(
     end
 
     //Aligned + signed significands
-    wire [24:0] signed_sig[N-1:0];
+    wire [N-1:0][24:0] signed_sig;
     for (genvar i = 0; i < N; i++) begin : g_align_signed
         wire [23:0] adj_sig = op_sig[i] >> shift_amounts[i];
         assign signed_sig[i] = op_sign[i] ? -adj_sig : {1'b0, adj_sig};

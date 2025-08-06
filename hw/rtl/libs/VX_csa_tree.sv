@@ -57,60 +57,43 @@ module VX_csa_tree #(
     parameter W = 8,  // Bit-width of each operand
     parameter S = W + $clog2(N)  // Output width
 ) (
-    input  wire [W-1:0] operands [N-1:0],  // Input operands
+    input  wire [N-1:0][W-1:0] operands,  // Input operands
     output wire [S-1:0] sum  // Final sum output
 );
     `STATIC_ASSERT (N >= 3, ("N must be at least 3"));
-    localparam PP_ENABLE = (S == W); // Partial product flag (No Cout)
-    localparam LEVELS = N-2; // Number of levels in the CSA tree
+    localparam LEVELS = N - 2; // Number of levels in the CSA tree
+    localparam WN = W + LEVELS;
 
-    // Declare wires with progressively increasing widths
-    for (genvar j = 0; j < LEVELS; j++) begin : g_wire_decl
-        wire [W+j:0] St, Ct;
-        `UNUSED_VAR({St, Ct});
-    end
+    wire [WN-1:0] St [0:LEVELS];
+    wire [WN-1:0] Ct [0:LEVELS];
 
-    CSA_level #(
-        .N (W)
-    ) CSA0 (
-        .a    (operands[0]),
-        .b    (operands[1]),
-        .c    (operands[2]),
-        .sum  (g_wire_decl[0].St),
-        .carry(g_wire_decl[0].Ct)
-    );
+    assign St[0] = WN'(operands[0]);
+    assign Ct[0] = WN'(operands[1]);
 
-    for (genvar i = 1; i < LEVELS; i++) begin : g_csa_tree
+    for (genvar i = 0; i < LEVELS; i++) begin : g_csa_tree
+        localparam WI = W + i;
+        wire [WI:0] st, ct;
         CSA_level #(
-            .N (W+i)
+            .N (WI)
         ) CSA (
-            .a    (g_wire_decl[i-1].St[W-1+i:0]),
-            .b    (g_wire_decl[i-1].Ct[W-1+i:0]),
-            .c    ({{i{1'b0}}, operands[2+i]}),
-            .sum  (g_wire_decl[i].St),
-            .carry(g_wire_decl[i].Ct)
+            .a    (WI'(St[i])),
+            .b    (WI'(Ct[i])),
+            .c    (WI'(operands[2+i])),
+            .sum  (st),
+            .carry(ct)
         );
+        assign St[i+1] = WN'(st);
+        assign Ct[i+1] = WN'(ct);
     end
 
-    if (PP_ENABLE) begin : g_pp_adder
-        VX_ks_adder #(
-            .N (S)
-        ) KSA_PP (
-            .dataa (g_wire_decl[LEVELS-1].St[W-1:0]),
-            .datab (g_wire_decl[LEVELS-1].Ct[W-1:0]),
-            .sum   (sum),
-            `UNUSED_PIN (cout)
-        );
-    end else begin : g_ks_adder
-        VX_ks_adder #(
-            .N (S)
-        ) KSA_N (
-            .dataa (g_wire_decl[LEVELS-1].St[S-1:0]),
-            .datab (g_wire_decl[LEVELS-1].Ct[S-1:0]),
-            .sum   (sum),
-            `UNUSED_PIN (cout)
-        );
-    end
+    VX_ks_adder #(
+        .N (S)
+    ) KSA (
+        .dataa (St[LEVELS][S-1:0]),
+        .datab (Ct[LEVELS][S-1:0]),
+        .sum   (sum),
+        `UNUSED_PIN (cout)
+    );
 
 endmodule
 
