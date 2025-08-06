@@ -21,7 +21,7 @@ module VX_tcu_drl_bf16mul (
 );
     // NOTE: exception handling neglected for now
     `UNUSED_VAR(enable);
-    
+
     //Extract fields from inputs
     wire sign_a = a[15];
     wire sign_b = b[15];
@@ -29,27 +29,27 @@ module VX_tcu_drl_bf16mul (
     wire [7:0] exp_b = b[14:7];
     wire [6:0] frac_a = a[6:0];
     wire [6:0] frac_b = b[6:0];
-    
+
     //Result sign
     wire result_sign = sign_a ^ sign_b;
-    
+
     //Result Mantissa Calculation
     wire [7:0] full_mant_a = {1'b1, frac_a};
     wire [7:0] full_mant_b = {1'b1, frac_b};
     wire [15:0] product_mant; // = full_mant_a * full_mant_b; //double width signigicand mul
 
-    VX_tcu_drl_wallaceTreeMul #(
-        .N(8)
+    VX_wallace_mul #(
+        .N (8)
     ) wtmul_bf16 (
-        .a      (full_mant_a),
-        .b      (full_mant_b), 
-        .product(product_mant)
+        .a (full_mant_a),
+        .b (full_mant_b),
+        .p (product_mant)
     );
 
     //Partial norm for FP32 conversion
     wire normalize_shift = product_mant[15];
     wire [22:0] fp32_mantissa = normalize_shift ? {product_mant[14:0], 8'b00000000} : {product_mant[13:0], 9'b000000000};
-    
+
     //Result Exponent Calculation
     wire [7:0] biased_exp; // = exp_a + exp_b + {7'd0, normalize_shift} - 8'd127;
     wire [7:0] neg_bias = -8'd127;
@@ -61,7 +61,7 @@ module VX_tcu_drl_bf16mul (
     ) biasexp_bf16(
         .operands({exp_a, exp_b, {7'd0, normalize_shift}, neg_bias}),
         .sum     (biased_exp)
-    );    
+    );
 
     `UNUSED_VAR(biased_exp);
 
@@ -73,7 +73,7 @@ endmodule
     //Hidden bits (implied 1)
     wire hidden_A = |exp_A; // 0 if exp_A is all zeros (denormal), 1 otherwise
     wire hidden_B = |exp_B;
-    
+
     //Exception/Special Cases
     wire A_is_zero = (~hidden_A) & (~|frac_A);
     wire B_is_zero = (~hidden_B) & (~|frac_B);
@@ -84,12 +84,12 @@ endmodule
 
     wire underflow = exp_sum[9] | (~|exp_sum[8:0]); // Underflow detected --> Negative result or 0
     wire overflow = ~(exp_sum[9]) & (exp_sum[8] | (&exp_sum[7:0])); // Overflow detected if +ve exp and exp >= 255
-    
+
     //Result selection flags
     wire result_is_nan = A_is_nan | B_is_nan | (A_is_inf & B_is_zero) | (B_is_inf & A_is_zero);
     wire result_is_inf = overflow | (A_is_inf & ~B_is_zero) | (B_is_inf & ~A_is_zero);
     wire result_is_zero = underflow | A_is_zero | B_is_zero;
-    
+
     //Final result logic
     logic [7:0] final_exp;
     logic [22:0] final_frac;

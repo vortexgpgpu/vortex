@@ -13,14 +13,15 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_drl_wallaceTreeMul #(
-    parameter N = 8
+module VX_wallace_mul #(
+    parameter N = 8,
+    parameter P = 2 * N
 ) (
-    input wire [N-1:0] a,
-    input wire [N-1:0] b,
-    output logic [2*N-1:0] product
+    input wire [N-1:0]   a,
+    input wire [N-1:0]   b,
+    output logic [P-1:0] p
 );
-    wire [2*N-1:0] pp[N-1:0];    //partial products, double width (shifted)
+    wire [N-1:0][2*N-1:0] pp;    //partial products, double width (shifted)
 
     for (genvar g = 0; g < N; g++) begin: g_pp_loop
         for (genvar h = 0; h < N; h++) begin: g_and_loop
@@ -35,10 +36,10 @@ module VX_tcu_drl_wallaceTreeMul #(
     VX_csa_tree #(
         .N (N),
         .W (2*N),
-        .S (2*N)
+        .S (P)
     ) pp_acc (
         .operands (pp),
-        .sum (product)
+        .sum (p)
     );
 
 endmodule
