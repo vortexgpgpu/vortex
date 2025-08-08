@@ -9,7 +9,7 @@
 #ifndef USE_SPARSE_A
 /* 0 = dense A
  * 1 = sparse A             */
-#define USE_SPARSE_A 0
+#define USE_SPARSE_A 1
 
 struct int4_t {
   uint8_t data;
@@ -360,58 +360,58 @@ private:
     }
   }
 
+  //The function only loads the sparse matrix Data from SparseA.
+  void load_A_sparse_data(vector_t<Vreg, NRA>& vR, uint32_t lane, uint32_t ldm, const It* SA_values){
+    uint32_t block_idx = lane / a_block_size;
+    uint32_t lane_in_block = lane % a_block_size;
+    uint32_t elem_row = lane_in_block / tcK;
+    uint32_t elem_col = lane_in_block % tcK;
+    
+    constexpr uint32_t vals_per_block = 2;        // 2:4 sparsity
+    constexpr uint32_t cols_per_block = 4;        // tcK
+    assert(lane % 4 == 0 || lane % 4 == 1);
+    for (uint32_t r = 0; r < NRA; ++r) {
+      uint32_t block_m = (r / k_steps) * a_sub_blocks + block_idx;
+      uint32_t block_k = r % k_steps;
+      uint32_t row = block_m * tcM + elem_row;
+      uint32_t col   = block_k * tcK + elem_col;
+
+      uint32_t blk_id_row = col / cols_per_block;
+      uint32_t base_idx   = row * (ldm / cols_per_block) * vals_per_block + blk_id_row * vals_per_block;
+
+      Xt packed(0);
+      
+      It v = SA_values[base_idx + elem_col];
+      std::memcpy(&packed, &v, sizeof(packed));
+
+
+      vR[r][lane] = packed;
+    }
+  }
+
+  void load_A_sparse_mask(vector_t<Vreg, NRA>& vR, uint32_t lane, uint32_t ldm, const uint8_t* SA_meta){
+    uint32_t block_idx = lane / a_block_size;
+    uint32_t lane_in_block = lane % a_block_size;
+    uint32_t elem_row = lane_in_block / tcK;
+    uint32_t elem_col = lane_in_block % tcK;
+    assert(lane % 4 == 2);
+    for (uint32_t r = 0; r < NRA; ++r) {
+      uint32_t block_m = (r / k_steps) * a_sub_blocks + block_idx;
+      uint32_t block_k = r % k_steps;
+      uint32_t row = block_m * tcM + elem_row;
+      uint32_t col = block_k * tcK + elem_col;
+
+      constexpr uint32_t vals_per_block = 2;        // 2:4 sparsity
+      constexpr uint32_t cols_per_block = 4;
+
+      uint32_t meta_idx = row * (ldm / cols_per_block) + col / cols_per_block;
+      vR[r][lane] = SA_meta[meta_idx];
+    }
+  }
 
 //a[0],a[1] = data, a[2]=mask; 
 //NRA = 32, #ofrow = 8 #ofcol = 4
 //a[2], mask, a[6] 
-template <typename Itype>
-void load_A_sparse(vector_t<Vreg, NRA>& valR,
-                   vector_t<Vreg, NRA>& maskR,
-                   uint32_t lane,
-                   uint32_t ldm,    // == tileK
-                   const SparseMat<Itype>& SA)
-{
-  // 1) Compute this lane’s position within the tcM×tcK micro‑tile
-  uint32_t block_idx     = lane / a_block_size;
-  uint32_t lane_in_block = lane % a_block_size;
-  uint32_t elem_row      = lane_in_block / tcK;
-  uint32_t elem_col      = lane_in_block % tcK;
-
-  // 2) For each A‑fragment register r
-  for (uint32_t r = 0; r < NRA; ++r) {
-    // 2.1) Global row & col indices
-    uint32_t block_m  = (r / k_steps) * a_sub_blocks + block_idx;
-    uint32_t block_k  = r % k_steps;
-    uint32_t col_reg  = block_k * tcK + elem_col;
-    uint32_t col_phys = col_reg * i_ratio;      // now == col_reg when i_ratio==1
-    uint32_t row      = block_m * tcM + elem_row;
-
-    // 2.2) Pointers into sparse metadata and values
-    const uint8_t* meta = SA.meta.data()   + row * (SA.cols / 4);
-    const Itype*   vals = SA.values.data() + row * (SA.cols / 2);
-
-    // 2.3) Load the 4‑bit block mask
-    uint32_t block_id    = col_phys >> 2;
-    uint32_t bit_pos     = col_phys & 3;
-    uint8_t  block_mask  = meta[block_id];
-    maskR[r][lane]       = Xt(block_mask);
-     
-    // 2.4) If that bit is set, find and load the corresponding nonzero
-    Itype v = 0;
-    if ((block_mask >> bit_pos) & 1u) {
-      uint32_t prefix = 0;
-      for (uint32_t b = 0; b < block_id; ++b)
-        prefix += __builtin_popcount(meta[b]);
-      prefix += __builtin_popcount(block_mask & ((1u << bit_pos) - 1u));
-      v = vals[prefix];
-    }
-
-    // 2.5) Store the element directly into the Xt register
-    Xt packed;
-    std::memcpy(&packed, &v, sizeof(packed));
-    valR[r][lane] = packed;
-  }
-}
 
 
   void load_B(vector_t<Vreg, NRB> &vR, uint32_t lane, uint32_t ldm, const It *mdata) {
@@ -555,8 +555,14 @@ void load_A_sparse(vector_t<Vreg, NRA>& valR,
 
     vector_t<Vreg, NRA> vA_mask;
     auto Sp = dense_to_sparse(fragA_to_vec(A), tileM, tileK);
-    for (uint32_t lane = 0; lane < NT; ++lane)
-        load_A_sparse(vA, vA_mask, lane, tileK, Sp);
+    //TODO: if Lane % 4 = 0 or 1, load Sparse Data; if Lane % 4 = 2, load Mask.if lane % 4 = 3, do nothing. This ensures that the latency for loadASparse is the same as the latency for loadAMask.
+    for (uint32_t lane = 0; lane < NT; ++lane){
+        if (lane % 4 == 0 || lane % 4 == 1) {
+            load_A_sparse_data(vA, lane, tileK, Sp.values.data());
+        } else if (lane % 4 == 2) {
+            load_A_sparse_mask(vA, lane, tileK, Sp.meta.data());
+        }
+    }
     #else
     for (uint32_t lane = 0; lane < NT; ++lane) {
       load_A(vA, lane, tileK, A.data());
