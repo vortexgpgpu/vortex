@@ -30,6 +30,11 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
 );
     `STATIC_ASSERT (`IS_DIVISBLE(`ISSUE_WIDTH, BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT (`IS_DIVISBLE(`SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
+
+    `DECL_EXECUTE_T (execute_t, NUM_LANES);
+    localparam IN_DATAW = $bits(dispatch_t);
+    localparam OUT_DATAW = $bits(execute_t);
+
     localparam BLOCK_SIZE_W = `LOG2UP(BLOCK_SIZE);
     localparam NUM_PACKETS  = `SIMD_WIDTH / NUM_LANES;
     localparam LPID_BITS    = `CLOG2(NUM_PACKETS);
@@ -39,12 +44,10 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
     localparam BATCH_COUNT  = `ISSUE_WIDTH / BLOCK_SIZE;
     localparam BATCH_COUNT_W= `LOG2UP(BATCH_COUNT);
     localparam ISSUE_W      = `LOG2UP(`ISSUE_WIDTH);
-    localparam IN_DATAW     = UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH + INST_OP_BITS + INST_ARGS_BITS + 1 + PC_BITS + NUM_REGS_BITS + (NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN) + 1 + 1;
-    localparam OUT_DATAW    = UUID_WIDTH + NW_WIDTH + NUM_LANES + INST_OP_BITS + INST_ARGS_BITS + 1 + PC_BITS + NUM_REGS_BITS + (NUM_SRC_OPDS * NUM_LANES * `XLEN) + GPID_WIDTH + 1 + 1;
     localparam FANOUT_ENABLE= (`SIMD_WIDTH > (MAX_FANOUT + MAX_FANOUT /2));
 
-    localparam DATA_TMASK_OFF = IN_DATAW - (UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH);
-    localparam DATA_REGS_OFF = 1 + 1;
+    localparam DATA_IN_TMASK_OFF = IN_DATAW - (UUID_WIDTH + ISSUE_WIS_W + SIMD_IDX_W + `SIMD_WIDTH);
+    localparam DATA_IN_OPDS_OFF = 1 + 1;
 
     typedef struct packed {
         logic [2:0][NUM_LANES-1:0][`XLEN-1:0] rsdata;
@@ -115,18 +118,18 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
 
         wire [ISSUE_W-1:0] issue_idx = issue_indices[block_idx];
-        wire [ISSUE_WIS_W-1:0] dispatch_wis = dispatch_data[issue_idx][DATA_TMASK_OFF + `SIMD_WIDTH + SIMD_IDX_W +: ISSUE_WIS_W];
-        wire [SIMD_IDX_W-1:0] dispatch_sid = dispatch_data[issue_idx][DATA_TMASK_OFF + `SIMD_WIDTH +: SIMD_IDX_W];
+        wire [ISSUE_WIS_W-1:0] dispatch_wis = dispatch_data[issue_idx][DATA_IN_TMASK_OFF + `SIMD_WIDTH + SIMD_IDX_W +: ISSUE_WIS_W];
+        wire [SIMD_IDX_W-1:0] dispatch_sid = dispatch_data[issue_idx][DATA_IN_TMASK_OFF + `SIMD_WIDTH +: SIMD_IDX_W];
         wire dispatch_sop = dispatch_data[issue_idx][1];
         wire dispatch_eop = dispatch_data[issue_idx][0];
 
         wire [`SIMD_WIDTH-1:0] dispatch_tmask;
         wire [2:0][`SIMD_WIDTH-1:0][`XLEN-1:0] dispatch_rsdata;
 
-        assign dispatch_tmask = dispatch_data[issue_idx][DATA_TMASK_OFF +: `SIMD_WIDTH];
-        assign dispatch_rsdata[0] = dispatch_data[issue_idx][DATA_REGS_OFF + 2 * `SIMD_WIDTH * `XLEN +: `SIMD_WIDTH * `XLEN];
-        assign dispatch_rsdata[1] = dispatch_data[issue_idx][DATA_REGS_OFF + 1 * `SIMD_WIDTH * `XLEN +: `SIMD_WIDTH * `XLEN];
-        assign dispatch_rsdata[2] = dispatch_data[issue_idx][DATA_REGS_OFF + 0 * `SIMD_WIDTH * `XLEN +: `SIMD_WIDTH * `XLEN];
+        assign dispatch_tmask = dispatch_data[issue_idx][DATA_IN_TMASK_OFF +: `SIMD_WIDTH];
+        assign dispatch_rsdata[0] = dispatch_data[issue_idx][DATA_IN_OPDS_OFF + 2 * `SIMD_WIDTH * `XLEN +: `SIMD_WIDTH * `XLEN];
+        assign dispatch_rsdata[1] = dispatch_data[issue_idx][DATA_IN_OPDS_OFF + 1 * `SIMD_WIDTH * `XLEN +: `SIMD_WIDTH * `XLEN];
+        assign dispatch_rsdata[2] = dispatch_data[issue_idx][DATA_IN_OPDS_OFF + 0 * `SIMD_WIDTH * `XLEN +: `SIMD_WIDTH * `XLEN];
 
         wire valid_p, ready_p;
 
@@ -216,7 +219,7 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
                 dispatch_data[issue_idx][IN_DATAW-1 -: UUID_WIDTH],
                 block_wid,
                 block_tmask[block_idx],
-                dispatch_data[issue_idx][DATA_TMASK_OFF-1 : (DATA_REGS_OFF + NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN)],
+                dispatch_data[issue_idx][DATA_IN_TMASK_OFF-1 : (DATA_IN_OPDS_OFF + NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN)],
                 block_rsdata[block_idx][0],
                 block_rsdata[block_idx][1],
                 block_rsdata[block_idx][2],

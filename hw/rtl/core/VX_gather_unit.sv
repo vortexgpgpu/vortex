@@ -29,16 +29,16 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
 );
     `STATIC_ASSERT (`IS_DIVISBLE(`ISSUE_WIDTH, BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT (`IS_DIVISBLE(`SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
+
+    `DECL_RESULT_T (result_t, NUM_LANES);
+
     localparam BLOCK_SIZE_W = `LOG2UP(BLOCK_SIZE);
     localparam NUM_PACKETS  = `SIMD_WIDTH / NUM_LANES;
     localparam LPID_BITS    = `CLOG2(NUM_PACKETS);
     localparam LPID_WIDTH   = `UP(LPID_BITS);
-    localparam GPID_BITS    = `CLOG2(`NUM_THREADS / NUM_LANES);
-    localparam GPID_WIDTH   = `UP(GPID_BITS);
-    localparam DATAW        = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + 1 + NUM_REGS_BITS + NUM_LANES * `XLEN + GPID_WIDTH + 1 + 1;
+    localparam DATAW        = $bits(result_t);
     localparam DATA_WIS_OFF = DATAW - (UUID_WIDTH + NW_WIDTH);
-
-     `DECL_RESULT_T (result_t, NUM_LANES);
+    localparam DATA_PID_OFF = 1 + 1;
 
     wire [BLOCK_SIZE-1:0] result_in_valid;
     wire [BLOCK_SIZE-1:0][DATAW-1:0] result_in_data;
@@ -105,10 +105,10 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
 
         if (LPID_BITS != 0) begin : g_lpid
             logic [LPID_WIDTH-1:0] lpid;
-            if (SIMD_COUNT != 1) begin : g_simd
-                assign {commit_sid_w, lpid} = result_tmp_if.data.pid;
+            if (SIMD_IDX_BITS != 0) begin : g_simd
+                assign {commit_sid_w, lpid} = (SIMD_IDX_W+LPID_WIDTH)'(result_tmp_if.data.pid);
             end else begin : g_no_simd
-                assign commit_sid_w = 0;
+                assign commit_sid_w = '0;
                 assign lpid = result_tmp_if.data.pid;
             end
             always @(*) begin
@@ -120,23 +120,19 @@ module VX_gather_unit import VX_gpu_pkg::*; #(
                 end
             end
         end else begin : g_no_lpid
-            assign commit_sid_w   = result_tmp_if.data.pid;
+            assign commit_sid_w   = SIMD_IDX_W'(result_tmp_if.data.pid);
             assign commit_tmask_w = result_tmp_if.data.tmask;
             assign commit_data_w  = result_tmp_if.data.data;
         end
 
         assign commit_if[i].valid = result_tmp_if.valid;
         assign commit_if[i].data = {
-            result_tmp_if.data.uuid,
-            result_tmp_if.data.wid,
+            result_tmp_if.data[DATAW-1:DATA_WIS_OFF],
             commit_sid_w,
             commit_tmask_w,
-            result_tmp_if.data.PC,
-            result_tmp_if.data.wb,
-            result_tmp_if.data.rd,
+            result_tmp_if.data[(DATA_WIS_OFF - NUM_LANES)-1:(DATA_PID_OFF + LPID_WIDTH + NUM_LANES * `XLEN)],
             commit_data_w,
-            result_tmp_if.data.sop,
-            result_tmp_if.data.eop
+            result_tmp_if.data[DATA_PID_OFF-1:0]
         };
         assign result_tmp_if.ready = commit_if[i].ready;
     end
