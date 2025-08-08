@@ -405,7 +405,7 @@ private:
       constexpr uint32_t cols_per_block = 4;
 
       uint32_t meta_idx = row * (ldm / cols_per_block) + col / cols_per_block;
-      vR[r][lane] = SA_meta[meta_idx];
+      vR[r][lane] = Xt(SA_meta[meta_idx]);
     }
   }
 
@@ -545,7 +545,7 @@ private:
     dbg_out << "C=" << C << "\n";
 
     // per-lane load
-    #if USE_SPARSE_A
+    #if USE_SPARSE_A == 1
     /* ---------- ❸ replace on‑the‑fly converter with a tiny helper ---- */
     auto fragA_to_vec = [&](const FragA& f){
         std::vector<It> v(tileM*tileK);
@@ -553,7 +553,6 @@ private:
         return v;
     };
 
-    vector_t<Vreg, NRA> vA_mask;
     auto Sp = dense_to_sparse(fragA_to_vec(A), tileM, tileK);
     //TODO: if Lane % 4 = 0 or 1, load Sparse Data; if Lane % 4 = 2, load Mask.if lane % 4 = 3, do nothing. This ensures that the latency for loadASparse is the same as the latency for loadAMask.
     for (uint32_t lane = 0; lane < NT; ++lane){
@@ -651,11 +650,36 @@ public:
     for (uint32_t row = 0; row < tileM; ++row) {
       for (uint32_t col = 0; col < tileN; ++col) {
         Ot sum(0);
+#if USE_SPARSE_A == 0
         for (uint32_t k = 0; k < tileK; ++k) {
           auto a = static_cast<Ot>(fragA_(row, k));
           auto b = static_cast<Ot>(fragB_(k, col));
           sum = a * b + sum;
         }
+#else
+        for (uint32_t k = 0; k < tileK; k += 4) {
+          Ot a0 = static_cast<Ot>(fragA_(row, k + 0));
+          Ot a1 = static_cast<Ot>(fragA_(row, k + 1));
+          Ot a2 = static_cast<Ot>(fragA_(row, k + 2));
+          Ot a3 = static_cast<Ot>(fragA_(row, k + 3));
+
+          uint32_t idx_big1 = 0, idx_big2 = 1;           // initial guess
+          Ot vals[4] = {a0, a1, a2, a3};
+
+          for (uint32_t i = 0; i < 4; ++i) {
+            if (vals[i] > vals[idx_big1]) {
+              idx_big2 = idx_big1;
+              idx_big1 = i;
+            } else if (vals[i] > vals[idx_big2] && i != idx_big1) {
+              idx_big2 = i;
+            }
+          }
+          auto b_big1 = static_cast<Ot>(fragB_(k + idx_big1, col));
+          auto b_big2 = static_cast<Ot>(fragB_(k + idx_big2, col));
+          sum += vals[idx_big1] * b_big1;
+          sum += vals[idx_big2] * b_big2;
+        }
+#endif
         fragRef_(row, col) = sum + fragC_(row, col);
       }
     }
@@ -690,69 +714,6 @@ public:
   void run() {
     fragD_ = mmadd(fragA_, fragB_, fragC_);
   }
-static void unit_test_load_A_sparse() {
-  // 1) Dimensions from this instantiation
-  constexpr uint32_t M = tileM;
-  constexpr uint32_t K = tileK;
-
-  // 2) Build a random dense M×K block
-  std::vector<It> dense(M * K);
-  srand(0);
-  for (auto &x : dense) {
-    x = It((rand() & 0x7fff) - (rand() & 0x7fff));
-  }
-
-  // 3) Compress it
-  auto sp = dense_to_sparse(dense, M, K);
-
-  // 4) Run both loaders on every lane
-  WMMA w;
-  vector_t<Vreg, NRA> vd{}, vs{}, ms{};
-  for (uint32_t lane = 0; lane < NT; ++lane) {
-    w.load_A        (vd, lane, K, dense.data());
-    w.load_A_sparse(vs, ms, lane, K, sp);
-  }
-
-  // 5) Verify per‑lane, per‑register
-  for (uint32_t lane = 0; lane < NT; ++lane) {
-    // figure out this lane’s micro‑tile position
-    uint32_t block_idx     = lane / a_block_size;
-    uint32_t lane_in_block = lane % a_block_size;
-    uint32_t elem_row      = lane_in_block / tcK;
-    uint32_t elem_col      = lane_in_block % tcK;
-
-    for (uint32_t r = 0; r < NRA; ++r) {
-      // global row/col in the original dense matrix
-      uint32_t block_m = (r / k_steps) * a_sub_blocks + block_idx;
-      uint32_t block_k = r % k_steps;
-      uint32_t row     = block_m * tcM + elem_row;
-      uint32_t col_reg = block_k * tcK   + elem_col;
-      uint32_t col     = col_reg;  // because i_ratio==1
-
-      // what mask bit did we keep?
-      uint8_t mask = sp.meta[row * (K/4) + (col >> 2)];
-      bool  kept = ((mask >> (col & 3)) & 1u) != 0;
-
-      // dense value at (row,col)
-      It dense_val = dense[row * K + col];
-
-      // sparse loader’s output in that slice
-      It sparse_val;
-      std::memcpy(&sparse_val, &vs[r][lane], sizeof(sparse_val));
-
-      if (kept) {
-        assert(dense_val == sparse_val
-               && "Kept element must round‑trip");
-      } else {
-        assert(sparse_val == It(0)
-               && "Dropped element must be zero");
-      }
-    }
-  }
-
-  std::cout << "[unit] load_A_sparse PASSED\n";
-}
-
 };
 
 using cfg = wmma_config_t<
@@ -807,7 +768,6 @@ SparseMat<Itype> dense_to_sparse(const std::vector<Itype>& dense,
 
 
 int main() {
-  //WMMA<cfg>::unit_test_load_A_sparse();
 
   WMMA<cfg> wmma;
 
