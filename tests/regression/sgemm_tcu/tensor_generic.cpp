@@ -494,15 +494,21 @@ void load_A_sparse(vector_t<Vreg, NRA>& valR,
     Ot acc(*reinterpret_cast<const Ot*>(&c_val));
     const It* a = reinterpret_cast<const It *>(a_row);
     const It* b = reinterpret_cast<const It *>(b_col);
-    uint8_t mask = static_cast<uint8_t>(a[2]); // Hard-coded location for tcK = 4, i_ratio = 1
+
+    assert((tcK * i_ratio) % 4 == 0 && "tcK must be a multiple of 4 for FEDP");
+    uint32_t num_blocks = (tcK * i_ratio) / 4; // Number of 4-element blocks in the K dimension
+    
     uint32_t a_idx = 0;
 
-    for (uint32_t z = 0; z < tcK * i_ratio; ++z) {
-      Ot b_val = static_cast<Ot>(b[z]);
-      if ((mask >> (z & 3)) & 1u) {
-        Ot a_val = static_cast<Ot>(a[a_idx]);
-        acc += a_val * b_val;
-        ++a_idx;
+    for(uint32_t block = 0; block < num_blocks; ++block) {
+      uint8_t mask = static_cast<uint8_t>(a[2 + block * 4]); //mask at a[2],a[6],a[10],...
+      for (uint32_t z = block * 4; z < (block + 1) * 4; ++z) {
+        Ot b_val = static_cast<Ot>(b[z]);
+        if ((mask >> (z & 3)) & 1u) {
+          Ot a_val = static_cast<Ot>(a[a_idx]);
+          acc += a_val * b_val;
+          ++a_idx;
+        }
       }
     }
     Xt ret(0);
