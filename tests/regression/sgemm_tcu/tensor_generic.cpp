@@ -9,7 +9,7 @@
 #ifndef USE_SPARSE_A
 /* 0 = dense A
  * 1 = sparse A             */
-#define USE_SPARSE_A 0
+#define USE_SPARSE_A 1
 
 struct int4_t {
   uint8_t data;
@@ -360,58 +360,58 @@ private:
     }
   }
 
+  //The function only loads the sparse matrix Data from SparseA.
+  void load_A_sparse_data(vector_t<Vreg, NRA>& vR, uint32_t lane, uint32_t ldm, const It* SA_values){
+    uint32_t block_idx = lane / a_block_size;
+    uint32_t lane_in_block = lane % a_block_size;
+    uint32_t elem_row = lane_in_block / tcK;
+    uint32_t elem_col = lane_in_block % tcK;
+    
+    constexpr uint32_t vals_per_block = 2;        // 2:4 sparsity
+    constexpr uint32_t cols_per_block = 4;        // tcK
+    assert(lane % 4 == 0 || lane % 4 == 1);
+    for (uint32_t r = 0; r < NRA; ++r) {
+      uint32_t block_m = (r / k_steps) * a_sub_blocks + block_idx;
+      uint32_t block_k = r % k_steps;
+      uint32_t row = block_m * tcM + elem_row;
+      uint32_t col   = block_k * tcK + elem_col;
+
+      uint32_t blk_id_row = col / cols_per_block;
+      uint32_t base_idx   = row * (ldm / cols_per_block) * vals_per_block + blk_id_row * vals_per_block;
+
+      Xt packed(0);
+      
+      It v = SA_values[base_idx + elem_col];
+      std::memcpy(&packed, &v, sizeof(packed));
+
+
+      vR[r][lane] = packed;
+    }
+  }
+
+  void load_A_sparse_mask(vector_t<Vreg, NRA>& vR, uint32_t lane, uint32_t ldm, const uint8_t* SA_meta){
+    uint32_t block_idx = lane / a_block_size;
+    uint32_t lane_in_block = lane % a_block_size;
+    uint32_t elem_row = lane_in_block / tcK;
+    uint32_t elem_col = lane_in_block % tcK;
+    assert(lane % 4 == 2);
+    for (uint32_t r = 0; r < NRA; ++r) {
+      uint32_t block_m = (r / k_steps) * a_sub_blocks + block_idx;
+      uint32_t block_k = r % k_steps;
+      uint32_t row = block_m * tcM + elem_row;
+      uint32_t col = block_k * tcK + elem_col;
+
+      constexpr uint32_t vals_per_block = 2;        // 2:4 sparsity
+      constexpr uint32_t cols_per_block = 4;
+
+      uint32_t meta_idx = row * (ldm / cols_per_block) + col / cols_per_block;
+      vR[r][lane] = Xt(SA_meta[meta_idx]);
+    }
+  }
 
 //a[0],a[1] = data, a[2]=mask; 
 //NRA = 32, #ofrow = 8 #ofcol = 4
 //a[2], mask, a[6] 
-template <typename Itype>
-void load_A_sparse(vector_t<Vreg, NRA>& valR,
-                   vector_t<Vreg, NRA>& maskR,
-                   uint32_t lane,
-                   uint32_t ldm,    // == tileK
-                   const SparseMat<Itype>& SA)
-{
-  // 1) Compute this lane’s position within the tcM×tcK micro‑tile
-  uint32_t block_idx     = lane / a_block_size;
-  uint32_t lane_in_block = lane % a_block_size;
-  uint32_t elem_row      = lane_in_block / tcK;
-  uint32_t elem_col      = lane_in_block % tcK;
-
-  // 2) For each A‑fragment register r
-  for (uint32_t r = 0; r < NRA; ++r) {
-    // 2.1) Global row & col indices
-    uint32_t block_m  = (r / k_steps) * a_sub_blocks + block_idx;
-    uint32_t block_k  = r % k_steps;
-    uint32_t col_reg  = block_k * tcK + elem_col;
-    uint32_t col_phys = col_reg * i_ratio;      // now == col_reg when i_ratio==1
-    uint32_t row      = block_m * tcM + elem_row;
-
-    // 2.2) Pointers into sparse metadata and values
-    const uint8_t* meta = SA.meta.data()   + row * (SA.cols / 4);
-    const Itype*   vals = SA.values.data() + row * (SA.cols / 2);
-
-    // 2.3) Load the 4‑bit block mask
-    uint32_t block_id    = col_phys >> 2;
-    uint32_t bit_pos     = col_phys & 3;
-    uint8_t  block_mask  = meta[block_id];
-    maskR[r][lane]       = Xt(block_mask);
-     
-    // 2.4) If that bit is set, find and load the corresponding nonzero
-    Itype v = 0;
-    if ((block_mask >> bit_pos) & 1u) {
-      uint32_t prefix = 0;
-      for (uint32_t b = 0; b < block_id; ++b)
-        prefix += __builtin_popcount(meta[b]);
-      prefix += __builtin_popcount(block_mask & ((1u << bit_pos) - 1u));
-      v = vals[prefix];
-    }
-
-    // 2.5) Store the element directly into the Xt register
-    Xt packed;
-    std::memcpy(&packed, &v, sizeof(packed));
-    valR[r][lane] = packed;
-  }
-}
 
 
   void load_B(vector_t<Vreg, NRB> &vR, uint32_t lane, uint32_t ldm, const It *mdata) {
@@ -494,15 +494,21 @@ void load_A_sparse(vector_t<Vreg, NRA>& valR,
     Ot acc(*reinterpret_cast<const Ot*>(&c_val));
     const It* a = reinterpret_cast<const It *>(a_row);
     const It* b = reinterpret_cast<const It *>(b_col);
-    uint8_t mask = static_cast<uint8_t>(a[2]); // Hard-coded location for tcK = 4, i_ratio = 1
+
+    assert((tcK * i_ratio) % 4 == 0 && "tcK must be a multiple of 4 for FEDP");
+    uint32_t num_blocks = (tcK * i_ratio) / 4; // Number of 4-element blocks in the K dimension
+    
     uint32_t a_idx = 0;
 
-    for (uint32_t z = 0; z < tcK * i_ratio; ++z) {
-      Ot b_val = static_cast<Ot>(b[z]);
-      if ((mask >> (z & 3)) & 1u) {
-        Ot a_val = static_cast<Ot>(a[a_idx]);
-        acc += a_val * b_val;
-        ++a_idx;
+    for(uint32_t block = 0; block < num_blocks; ++block) {
+      uint8_t mask = static_cast<uint8_t>(a[2 + block * 4]); //mask at a[2],a[6],a[10],...
+      for (uint32_t z = block * 4; z < (block + 1) * 4; ++z) {
+        Ot b_val = static_cast<Ot>(b[z]);
+        if ((mask >> (z & 3)) & 1u) {
+          Ot a_val = static_cast<Ot>(a[a_idx]);
+          acc += a_val * b_val;
+          ++a_idx;
+        }
       }
     }
     Xt ret(0);
@@ -539,7 +545,7 @@ void load_A_sparse(vector_t<Vreg, NRA>& valR,
     dbg_out << "C=" << C << "\n";
 
     // per-lane load
-    #if USE_SPARSE_A
+    #if USE_SPARSE_A == 1
     /* ---------- ❸ replace on‑the‑fly converter with a tiny helper ---- */
     auto fragA_to_vec = [&](const FragA& f){
         std::vector<It> v(tileM*tileK);
@@ -547,10 +553,15 @@ void load_A_sparse(vector_t<Vreg, NRA>& valR,
         return v;
     };
 
-    vector_t<Vreg, NRA> vA_mask;
     auto Sp = dense_to_sparse(fragA_to_vec(A), tileM, tileK);
-    for (uint32_t lane = 0; lane < NT; ++lane)
-        load_A_sparse(vA, vA_mask, lane, tileK, Sp);
+    //TODO: if Lane % 4 = 0 or 1, load Sparse Data; if Lane % 4 = 2, load Mask.if lane % 4 = 3, do nothing. This ensures that the latency for loadASparse is the same as the latency for loadAMask.
+    for (uint32_t lane = 0; lane < NT; ++lane){
+        if (lane % 4 == 0 || lane % 4 == 1) {
+            load_A_sparse_data(vA, lane, tileK, Sp.values.data());
+        } else if (lane % 4 == 2) {
+            load_A_sparse_mask(vA, lane, tileK, Sp.meta.data());
+        }
+    }
     #else
     for (uint32_t lane = 0; lane < NT; ++lane) {
       load_A(vA, lane, tileK, A.data());
@@ -639,11 +650,36 @@ public:
     for (uint32_t row = 0; row < tileM; ++row) {
       for (uint32_t col = 0; col < tileN; ++col) {
         Ot sum(0);
+#if USE_SPARSE_A == 0
         for (uint32_t k = 0; k < tileK; ++k) {
           auto a = static_cast<Ot>(fragA_(row, k));
           auto b = static_cast<Ot>(fragB_(k, col));
           sum = a * b + sum;
         }
+#else
+        for (uint32_t k = 0; k < tileK; k += 4) {
+          Ot a0 = static_cast<Ot>(fragA_(row, k + 0));
+          Ot a1 = static_cast<Ot>(fragA_(row, k + 1));
+          Ot a2 = static_cast<Ot>(fragA_(row, k + 2));
+          Ot a3 = static_cast<Ot>(fragA_(row, k + 3));
+
+          uint32_t idx_big1 = 0, idx_big2 = 1;           // initial guess
+          Ot vals[4] = {a0, a1, a2, a3};
+
+          for (uint32_t i = 0; i < 4; ++i) {
+            if (vals[i] > vals[idx_big1]) {
+              idx_big2 = idx_big1;
+              idx_big1 = i;
+            } else if (vals[i] > vals[idx_big2] && i != idx_big1) {
+              idx_big2 = i;
+            }
+          }
+          auto b_big1 = static_cast<Ot>(fragB_(k + idx_big1, col));
+          auto b_big2 = static_cast<Ot>(fragB_(k + idx_big2, col));
+          sum += vals[idx_big1] * b_big1;
+          sum += vals[idx_big2] * b_big2;
+        }
+#endif
         fragRef_(row, col) = sum + fragC_(row, col);
       }
     }
@@ -678,69 +714,6 @@ public:
   void run() {
     fragD_ = mmadd(fragA_, fragB_, fragC_);
   }
-static void unit_test_load_A_sparse() {
-  // 1) Dimensions from this instantiation
-  constexpr uint32_t M = tileM;
-  constexpr uint32_t K = tileK;
-
-  // 2) Build a random dense M×K block
-  std::vector<It> dense(M * K);
-  srand(0);
-  for (auto &x : dense) {
-    x = It((rand() & 0x7fff) - (rand() & 0x7fff));
-  }
-
-  // 3) Compress it
-  auto sp = dense_to_sparse(dense, M, K);
-
-  // 4) Run both loaders on every lane
-  WMMA w;
-  vector_t<Vreg, NRA> vd{}, vs{}, ms{};
-  for (uint32_t lane = 0; lane < NT; ++lane) {
-    w.load_A        (vd, lane, K, dense.data());
-    w.load_A_sparse(vs, ms, lane, K, sp);
-  }
-
-  // 5) Verify per‑lane, per‑register
-  for (uint32_t lane = 0; lane < NT; ++lane) {
-    // figure out this lane’s micro‑tile position
-    uint32_t block_idx     = lane / a_block_size;
-    uint32_t lane_in_block = lane % a_block_size;
-    uint32_t elem_row      = lane_in_block / tcK;
-    uint32_t elem_col      = lane_in_block % tcK;
-
-    for (uint32_t r = 0; r < NRA; ++r) {
-      // global row/col in the original dense matrix
-      uint32_t block_m = (r / k_steps) * a_sub_blocks + block_idx;
-      uint32_t block_k = r % k_steps;
-      uint32_t row     = block_m * tcM + elem_row;
-      uint32_t col_reg = block_k * tcK   + elem_col;
-      uint32_t col     = col_reg;  // because i_ratio==1
-
-      // what mask bit did we keep?
-      uint8_t mask = sp.meta[row * (K/4) + (col >> 2)];
-      bool  kept = ((mask >> (col & 3)) & 1u) != 0;
-
-      // dense value at (row,col)
-      It dense_val = dense[row * K + col];
-
-      // sparse loader’s output in that slice
-      It sparse_val;
-      std::memcpy(&sparse_val, &vs[r][lane], sizeof(sparse_val));
-
-      if (kept) {
-        assert(dense_val == sparse_val
-               && "Kept element must round‑trip");
-      } else {
-        assert(sparse_val == It(0)
-               && "Dropped element must be zero");
-      }
-    }
-  }
-
-  std::cout << "[unit] load_A_sparse PASSED\n";
-}
-
 };
 
 using cfg = wmma_config_t<
@@ -795,7 +768,6 @@ SparseMat<Itype> dense_to_sparse(const std::vector<Itype>& dense,
 
 
 int main() {
-  //WMMA<cfg>::unit_test_load_A_sparse();
 
   WMMA<cfg> wmma;
 
