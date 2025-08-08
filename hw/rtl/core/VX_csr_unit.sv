@@ -53,7 +53,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire                            csr_req_ready;
 
     wire [`VX_CSR_ADDR_BITS-1:0] csr_addr = execute_if.data.op_args.csr.addr;
-    wire [RV_REGS_BITS-1:0] csr_imm = execute_if.data.op_args.csr.imm;
+    wire [RV_REGS_BITS-1:0] csr_imm = execute_if.data.op_args.csr.imm5;
 
     wire is_fpu_csr = (csr_addr <= `VX_CSR_FCSR);
 

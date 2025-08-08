@@ -413,14 +413,14 @@ package VX_trace_pkg;
     );
         case (ex_type)
         EX_ALU: begin
-            `TRACE(level, ("use_PC=%b, use_imm=%b, imm=0x%0h", op_args.alu.use_PC, op_args.alu.use_imm, op_args.alu.imm))
+            `TRACE(level, ("use_PC=%b, use_imm=%b, imm=0x%0h", op_args.alu.use_PC, op_args.alu.use_imm, op_args.alu.imm20))
         end
         EX_LSU: begin
             `TRACE(level, ("offset=0x%0h", op_args.lsu.offset))
         end
         EX_SFU: begin
             if (inst_sfu_is_csr(op_type)) begin
-                `TRACE(level, ("addr=0x%0h, use_imm=%b, imm=0x%0h", op_args.csr.addr, op_args.csr.use_imm, op_args.csr.imm))
+                `TRACE(level, ("addr=0x%0h, use_imm=%b, imm=0x%0h", op_args.csr.addr, op_args.csr.use_imm, op_args.csr.imm5))
             end
         end
     `ifdef EXT_F_ENABLE

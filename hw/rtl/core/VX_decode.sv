@@ -13,15 +13,15 @@
 
 `include "VX_define.vh"
 
-`define USED_REG(t, x) \
+`define USED_REG(t, x, v) \
     x``_v = make_reg_num(t, ``x); \
-    use_``x = 1
+    use_``x = v
 
 `define USED_IREG(x) \
-    `USED_REG(REG_TYPE_I, ``x)
+    `USED_REG(REG_TYPE_I, ``x, 1)
 
 `define USED_FREG(x) \
-    `USED_REG(REG_TYPE_F, ``x)
+    `USED_REG(REG_TYPE_F, ``x, 1)
 
 module VX_decode import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -82,8 +82,8 @@ module VX_decode import VX_gpu_pkg::*; #(
     wire [11:0] i_imm   = is_itype_sh ? {7'b0, instr[24:20]} : u_12;
 `endif
     wire [11:0] s_imm   = {funct7, rd};
-    wire [12:0] b_imm   = {instr[31], instr[7], instr[30:25], instr[11:8], 1'b0};
-    wire [20:0] jal_imm = {instr[31], instr[19:12], instr[20], instr[30:21], 1'b0};
+    wire [11:0] b_imm   = {instr[31], instr[7], instr[30:25], instr[11:8]};
+    wire [19:0] jal_imm = {instr[31], instr[19:12], instr[20], instr[30:21]};
 
     reg [INST_ALU_BITS-1:0] r_type;
     always @(*) begin
@@ -163,7 +163,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
-                op_args.alu.imm = `SEXT(`XLEN, i_imm);
+                op_args.alu.imm20 = `SEXT(20, i_imm);
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
             end
@@ -205,7 +205,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.is_w = 1;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
-                op_args.alu.imm = `SEXT(`XLEN, iw_imm);
+                op_args.alu.imm20 = `SEXT(20, iw_imm);
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
             end
@@ -240,7 +240,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
-                op_args.alu.imm = {{`XLEN-31{ui_imm[19]}}, ui_imm[18:0], 12'(0)};
+                op_args.alu.imm20 = ui_imm;
                 `USED_IREG (rd);
             end
             INST_AUIPC: begin
@@ -250,7 +250,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 1;
                 op_args.alu.use_imm = 1;
-                op_args.alu.imm = {{`XLEN-31{ui_imm[19]}}, ui_imm[18:0], 12'(0)};
+                op_args.alu.imm20 = ui_imm;
                 `USED_IREG (rd);
             end
             INST_JAL: begin
@@ -260,7 +260,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 1;
                 op_args.alu.use_imm = 1;
-                op_args.alu.imm = `SEXT(`XLEN, jal_imm);
+                op_args.alu.imm20 = jal_imm;
                 is_wstall = 1;
                 `USED_IREG (rd);
             end
@@ -271,7 +271,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
-                op_args.alu.imm = `SEXT(`XLEN, u_12);
+                op_args.alu.imm20 = `SEXT(20, u_12);
                 is_wstall = 1;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
@@ -283,7 +283,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 1;
                 op_args.alu.use_imm = 1;
-                op_args.alu.imm = `SEXT(`XLEN, b_imm);
+                op_args.alu.imm20 = `SEXT(20, b_imm);
                 is_wstall = 1;
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
@@ -301,13 +301,10 @@ module VX_decode import VX_gpu_pkg::*; #(
                     op_type = INST_OP_BITS'(inst_sfu_csr(funct3));
                     op_args.csr.addr = u_12;
                     op_args.csr.use_imm = funct3[2];
+                    op_args.csr.imm5 = rs1;
                     is_wstall = is_fpu_csr; // only stall for FPU CSRs
                     `USED_IREG (rd);
-                    if (funct3[2]) begin
-                        op_args.csr.imm = rs1;
-                    end else begin
-                        `USED_IREG (rs1);
-                    end
+                    `USED_REG (REG_TYPE_I, rs1, ~funct3[2]);
                 end else begin
                     ex_type = EX_ALU;
                     op_type = INST_OP_BITS'(s_type);
@@ -315,7 +312,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     op_args.alu.is_w = 0;
                     op_args.alu.use_imm = 1;
                     op_args.alu.use_PC  = 1;
-                    op_args.alu.imm = `XLEN'd4;
+                    op_args.alu.imm20 = 20'd4;
                     is_wstall = 1;
                     `USED_IREG (rd);
                 end
@@ -331,7 +328,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.lsu.offset = u_12;
                 `USED_IREG (rs1);
             `ifdef EXT_F_ENABLE
-                `USED_REG (opcode[2], rd);
+                `USED_REG (opcode[2], rd, 1);
             `else
                 `USED_IREG (rd);
             `endif
@@ -347,7 +344,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.lsu.offset = s_imm;
                 `USED_IREG (rs1);
             `ifdef EXT_F_ENABLE
-                `USED_REG (opcode[2], rs2);
+                `USED_REG (opcode[2], rs2, 1);
             `else
                 `USED_IREG (rs2);
             `endif

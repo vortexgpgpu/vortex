@@ -62,6 +62,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [INST_ALU_BITS-1:0] alu_op = INST_ALU_BITS'(execute_if.data.op_type);
     wire [INST_BR_BITS-1:0]   br_op = INST_BR_BITS'(execute_if.data.op_type);
     wire                   is_br_op = (execute_if.data.op_args.alu.xtype == ALU_TYPE_BRANCH);
+    wire                  is_alu_op = (execute_if.data.op_args.alu.xtype == ALU_TYPE_ARITH);
     wire                  is_sub_op = inst_alu_is_sub(alu_op);
     wire                  is_signed = inst_alu_signed(alu_op);
     wire [1:0]             op_class = is_br_op ? inst_br_class(alu_op) : inst_alu_class(alu_op);
@@ -69,18 +70,27 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1 = execute_if.data.rs1_data;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2 = execute_if.data.rs2_data;
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{to_fullPC(execute_if.data.PC)}} : alu_in1;
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_br  = (execute_if.data.op_args.alu.use_imm && ~is_br_op) ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
+    wire is_br_jal_op = is_br_op && (br_op <= INST_BR_JAL);
+    wire is_lui_op = is_alu_op && (alu_op == INST_ALU_LUI || alu_op == INST_ALU_AUIPC);
+
+    wire [`XLEN-1:0] alu_imm = `SEXT(`XLEN, execute_if.data.op_args.alu.imm20);
+    wire [`XLEN-1:0] lui_imm = `SEXT(`XLEN, {execute_if.data.op_args.alu.imm20, 12'd0});
+    wire [`XLEN-1:0] br_imm  = `SEXT(`XLEN, {execute_if.data.op_args.alu.imm20, 1'b0});
+    wire [`XLEN-1:0] add_imm = is_lui_op ? lui_imm : (is_br_jal_op ? br_imm : alu_imm);
+
+    wire [NUM_LANES-1:0][`XLEN-1:0] add_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{to_fullPC(execute_if.data.PC)}} : alu_in1;
+    wire [NUM_LANES-1:0][`XLEN-1:0] add_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{add_imm}} : alu_in2;
+    wire [NUM_LANES-1:0][`XLEN-1:0] sub_in2_imm = (execute_if.data.op_args.alu.use_imm && ~is_br_op) ? {NUM_LANES{alu_imm}} : alu_in2;
+    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{alu_imm}} : alu_in2;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_add_result
-        assign add_result[i] = alu_in1_PC[i] + alu_in2_imm[i];
+        assign add_result[i] = add_in1_PC[i] + add_in2_imm[i];
         assign add_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] + alu_in2_imm[i][31:0]));
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_sub_result
         wire [`XLEN:0] sub_in1 = {is_signed & alu_in1[i][`XLEN-1], alu_in1[i]};
-        wire [`XLEN:0] sub_in2 = {is_signed & alu_in2_br[i][`XLEN-1], alu_in2_br[i]};
+        wire [`XLEN:0] sub_in2 = {is_signed & sub_in2_imm[i][`XLEN-1], sub_in2_imm[i]};
         assign sub_result[i]   = sub_in1 - sub_in2;
         assign sub_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] - alu_in2_imm[i][31:0]));
     end
