@@ -73,9 +73,12 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire is_br_jal_op = is_br_op && (br_op <= INST_BR_JAL);
     wire is_lui_op = is_alu_op && (alu_op == INST_ALU_LUI || alu_op == INST_ALU_AUIPC);
 
+    wire [31:0] lui_imm32 = {execute_if.data.op_args.alu.imm20, 12'd0};
+    wire [20:0] br_imm21 = {execute_if.data.op_args.alu.imm20, 1'b0};
+    
     wire [`XLEN-1:0] alu_imm = `SEXT(`XLEN, execute_if.data.op_args.alu.imm20);
-    wire [`XLEN-1:0] lui_imm = `SEXT(`XLEN, {execute_if.data.op_args.alu.imm20, 12'd0});
-    wire [`XLEN-1:0] br_imm  = `SEXT(`XLEN, {execute_if.data.op_args.alu.imm20, 1'b0});
+    wire [`XLEN-1:0] lui_imm = `SEXT(`XLEN, lui_imm32);
+    wire [`XLEN-1:0] br_imm  = `SEXT(`XLEN, br_imm21);
     wire [`XLEN-1:0] add_imm = is_lui_op ? lui_imm : (is_br_jal_op ? br_imm : alu_imm);
 
     wire [NUM_LANES-1:0][`XLEN-1:0] add_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{to_fullPC(execute_if.data.PC)}} : alu_in1;
