@@ -400,6 +400,10 @@ package VX_gpu_pkg;
     localparam ISSUE_WIS_BITS = `CLOG2(PER_ISSUE_WARPS);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS_BITS);
 
+    parameter PER_OPC_WARPS = PER_ISSUE_WARPS / `NUM_OPCS;
+    parameter PER_OPC_NW_BITS = `CLOG2(PER_OPC_WARPS);
+    parameter PER_OPC_NW_W = `UP(PER_OPC_NW_BITS);
+
     function automatic logic [NW_WIDTH-1:0] wis_to_wid(
         input logic [ISSUE_WIS_W-1:0] wis,
         input logic [ISSUE_ISW_W-1:0] isw
@@ -676,14 +680,9 @@ package VX_gpu_pkg;
         logic [PC_BITS-1:0]                 PC;
     } schedule_t;
 
-    `DECL_EXECUTE_T (alu_exe_t, `NUM_ALU_LANES);
-    `DECL_RESULT_T  (alu_res_t, `NUM_ALU_LANES);
-
-    `DECL_EXECUTE_T (lsu_exe_t, `NUM_LSU_LANES);
-    `DECL_RESULT_T (lsu_res_t, `NUM_LSU_LANES);
-
-    `DECL_EXECUTE_T (sfu_exe_t, `NUM_SFU_LANES);
-    `DECL_RESULT_T (sfu_res_t, `NUM_SFU_LANES);
+    `DECL_EXECUTE_T (alu, `NUM_ALU_LANES);
+    `DECL_EXECUTE_T (lsu, `NUM_LSU_LANES);
+    `DECL_EXECUTE_T (sfu, `NUM_SFU_LANES);
 
     //////////////////////////// Perf counter types ///////////////////////////
 

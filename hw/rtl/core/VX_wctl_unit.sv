@@ -30,9 +30,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam LANE_BITS  = `CLOG2(NUM_LANES);
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
-    localparam PID_WIDTH  = `UP(PID_BITS);
     localparam WCTL_WIDTH = $bits(tmc_t) + $bits(wspawn_t) + $bits(split_t) + $bits(join_t) + $bits(barrier_t);
-    localparam DATAW = UUID_WIDTH + NW_WIDTH+ NUM_LANES + PC_BITS + NUM_REGS_BITS + 1 + PID_WIDTH + 1 + 1 + DV_STACK_SIZEW;
 
     `UNUSED_VAR (execute_if.data.rs3_data)
 
@@ -55,7 +53,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
             .N (NUM_LANES),
             .REVERSE (1)
         ) last_tid_select (
-            .data_in (execute_if.data.tmask),
+            .data_in (execute_if.data.header.tmask),
             .index_out (last_tid),
             `UNUSED_PIN (onehot_out),
             `UNUSED_PIN (valid_out)
@@ -81,22 +79,22 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     if (PID_BITS != 0) begin : g_pid
         reg [`NUM_WARPS-1:0][2*`NUM_THREADS-1:0] tmask_table;
 
-        wire [2*`NUM_THREADS-1:0] tmask_r = tmask_table[execute_if.data.wid];
+        wire [2*`NUM_THREADS-1:0] tmask_r = tmask_table[execute_if.data.header.wid];
 
         always @(*) begin
-            {else_tmask, then_tmask} = execute_if.data.sop ? '0 : tmask_r;
-            then_tmask[execute_if.data.pid * NUM_LANES +: NUM_LANES] = taken & execute_if.data.tmask;
-            else_tmask[execute_if.data.pid * NUM_LANES +: NUM_LANES] = ~taken & execute_if.data.tmask;
+            {else_tmask, then_tmask} = execute_if.data.header.sop ? '0 : tmask_r;
+            then_tmask[execute_if.data.header.pid * NUM_LANES +: NUM_LANES] = taken & execute_if.data.header.tmask;
+            else_tmask[execute_if.data.header.pid * NUM_LANES +: NUM_LANES] = ~taken & execute_if.data.header.tmask;
         end
 
         always @(posedge clk) begin
             if (execute_if.valid) begin
-                tmask_table[execute_if.data.wid] <= {else_tmask, then_tmask};
+                tmask_table[execute_if.data.header.wid] <= {else_tmask, then_tmask};
             end
         end
     end else begin : g_no_pid
-        assign then_tmask = taken & execute_if.data.tmask;
-        assign else_tmask = ~taken & execute_if.data.tmask;
+        assign then_tmask = taken & execute_if.data.header.tmask;
+        assign else_tmask = ~taken & execute_if.data.header.tmask;
     end
 
     wire has_then = (then_tmask != 0);
@@ -121,7 +119,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign split.is_dvg     = has_then && has_else;
     assign split.then_tmask = taken_tmask;
     assign split.else_tmask = ntaken_tmask;
-    assign split.next_pc    = execute_if.data.PC + from_fullPC(`XLEN'(4));
+    assign split.next_pc    = execute_if.data.header.PC + from_fullPC(`XLEN'(4));
 
     // join
 
@@ -144,7 +142,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     wire [`NUM_WARPS-1:0] wspawn_wmask;
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_wspawn_wmask
-        assign wspawn_wmask[i] = (i < rs1_data[NW_BITS:0]) && (i != execute_if.data.wid);
+        assign wspawn_wmask[i] = (i < rs1_data[NW_BITS:0]) && (i != execute_if.data.header.wid);
     end
     assign wspawn.valid = is_wspawn;
     assign wspawn.wmask = wspawn_wmask;
@@ -152,25 +150,25 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // response
 
-    assign warp_ctl_if.dvstack_wid = execute_if.data.wid;
+    assign warp_ctl_if.dvstack_wid = execute_if.data.header.wid;
     wire [DV_STACK_SIZEW-1:0] dvstack_ptr;
 
     VX_elastic_buffer #(
-        .DATAW (DATAW),
+        .DATAW ($bits(sfu_header_t) + DV_STACK_SIZEW),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (execute_if.valid),
         .ready_in  (execute_if.ready),
-        .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, warp_ctl_if.dvstack_ptr}),
-        .data_out  ({result_if.data.uuid,  result_if.data.wid,  result_if.data.tmask,  result_if.data.PC,  result_if.data.rd,  result_if.data.wb,  result_if.data.pid,  result_if.data.sop,  result_if.data.eop,  dvstack_ptr}),
+        .data_in   ({execute_if.data.header, warp_ctl_if.dvstack_ptr}),
+        .data_out  ({result_if.data.header, dvstack_ptr}),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
     );
 
     wire execute_fire = execute_if.valid && execute_if.ready;
-    wire wctl_valid = execute_fire && execute_if.data.eop;
+    wire wctl_valid = execute_fire && execute_if.data.header.eop;
 
     VX_pipe_register #(
         .DATAW (1 + NW_WIDTH + WCTL_WIDTH),
@@ -179,8 +177,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({wctl_valid,        execute_if.data.wid, tmc,             wspawn,             split,             sjoin,             barrier}),
-        .data_out ({warp_ctl_if.valid, warp_ctl_if.wid,      warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.sjoin, warp_ctl_if.barrier})
+        .data_in  ({wctl_valid,        execute_if.data.header.wid, tmc,             wspawn,             split,             sjoin,             barrier}),
+        .data_out ({warp_ctl_if.valid, warp_ctl_if.wid,            warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.sjoin, warp_ctl_if.barrier})
     );
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result_if

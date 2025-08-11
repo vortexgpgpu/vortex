@@ -36,7 +36,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `SCOPE_IO_SWITCH (BLOCK_SIZE);
 
     VX_execute_if #(
-        .data_t (tcu_exe_t)
+        .data_t (tcu_execute_t)
     ) per_block_execute_if[BLOCK_SIZE]();
 
     VX_dispatch_unit #(
@@ -51,17 +51,17 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
 
     VX_result_if #(
-        .data_t (tcu_res_t)
+        .data_t (tcu_result_t)
     ) per_block_result_if[BLOCK_SIZE]();
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
 
         VX_execute_if #(
-            .data_t (tcu_exe_t)
+            .data_t (tcu_execute_t)
         ) pe_execute_if[PE_COUNT]();
 
         VX_result_if #(
-            .data_t (tcu_res_t)
+            .data_t (tcu_result_t)
         ) pe_result_if[PE_COUNT]();
 
         VX_pe_switch #(

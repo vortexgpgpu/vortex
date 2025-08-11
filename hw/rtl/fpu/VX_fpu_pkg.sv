@@ -38,8 +38,7 @@ package VX_fpu_pkg;
         logic NX; // 0-Inexact
     } fflags_t;
 
-    `DECL_EXECUTE_T (fpu_exe_t, `NUM_FPU_LANES);
-    `DECL_RESULT_T (fpu_res_t, `NUM_FPU_LANES);
+    `DECL_EXECUTE_T (fpu, `NUM_FPU_LANES);
 
 endpackage
 
