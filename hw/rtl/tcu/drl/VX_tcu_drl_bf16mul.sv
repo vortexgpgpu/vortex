@@ -15,11 +15,13 @@
 
 module VX_tcu_drl_bf16mul (
     input  wire enable,
-    input  wire [15:0] a, // bf16 input
+    input  wire [15:0] a,            //bf16 inputs
     input  wire [15:0] b,
-    output logic [31:0] y // fp32 output
+    output logic sign_y,             //fp32 outputs
+    output logic [7:0] raw_exp_y,
+    output logic [23:0] raw_sig_y    //includes hidden 1 bit
 );
-    // NOTE: exception handling neglected for now
+    //NOTE: exception handling neglected for now
     `UNUSED_VAR(enable);
 
     //Extract fields from inputs
@@ -31,13 +33,23 @@ module VX_tcu_drl_bf16mul (
     wire [6:0] frac_b = b[6:0];
 
     //Result sign
-    wire result_sign = sign_a ^ sign_b;
+    assign sign_y = sign_a ^ sign_b;
 
-    //Result Mantissa Calculation
+    //Raw result exponent calculation
+    wire [7:0] neg_bias = -8'd126;    //-127+1
+    VX_csa_tree #(
+        .N(3),
+        .W(8),
+        .S(8)
+    ) biasexp_bf16(
+        .operands({exp_a, exp_b, neg_bias}),
+        .sum     (raw_exp_y)
+    );
+
+    //Mantissa Calculation
     wire [7:0] full_mant_a = {1'b1, frac_a};
     wire [7:0] full_mant_b = {1'b1, frac_b};
-    wire [15:0] product_mant; // = full_mant_a * full_mant_b; //double width signigicand mul
-
+    wire [15:0] product_mant;    // = full_mant_a * full_mant_b; //double width signigicand mul
     VX_wallace_mul #(
         .N (8)
     ) wtmul_bf16 (
@@ -46,26 +58,8 @@ module VX_tcu_drl_bf16mul (
         .p (product_mant)
     );
 
-    //Partial norm for FP32 conversion
-    wire normalize_shift = product_mant[15];
-    wire [22:0] fp32_mantissa = normalize_shift ? {product_mant[14:0], 8'b00000000} : {product_mant[13:0], 9'b000000000};
-
-    //Result Exponent Calculation
-    wire [7:0] biased_exp; // = exp_a + exp_b + {7'd0, normalize_shift} - 8'd127;
-    wire [7:0] neg_bias = -8'd127;
-
-    VX_csa_tree #(
-        .N(4),
-        .W(8),
-        .S(8)
-    ) biasexp_bf16(
-        .operands({exp_a, exp_b, {7'd0, normalize_shift}, neg_bias}),
-        .sum     (biased_exp)
-    );
-
-    `UNUSED_VAR(biased_exp);
-
-    assign y = {result_sign, biased_exp[7:0], fp32_mantissa};
+    //Zero-extend raw significand (including hidden) to fp32 sig width
+    assign raw_sig_y = {product_mant, 8'h00};
 endmodule
 
 //Exception Handling logic
@@ -113,6 +107,10 @@ endmodule
             end
         endcase
     end
+
+    //Result Norm req check & Significand
+    assign norm_shift = product_mant[15];
+    assign sig_y = norm_shift ? {product_mant[14:0], 8'b00000000} : {product_mant[13:0], 9'b000000000};
 
     assign y = {result_sign, final_exp, final_frac};
 */
