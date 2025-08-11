@@ -38,9 +38,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     VX_result_if.master         result_if
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
-    localparam PID_WIDTH  = `UP(PID_BITS);
-    localparam DATAW      = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + NUM_REGS_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
+    localparam PID_BITS = `CLOG2(`NUM_THREADS / NUM_LANES);
 
     `UNUSED_VAR (execute_if.data.rs3_data)
 
@@ -58,7 +56,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     wire is_fpu_csr = (csr_addr <= `VX_CSR_FCSR);
 
     // wait for all pending instructions for current warp to complete
-    assign sched_csr_if.alm_empty_wid = execute_if.data.wid;
+    assign sched_csr_if.alm_empty_wid = execute_if.data.header.wid;
     wire no_pending_instr = sched_csr_if.alm_empty || ~is_fpu_csr;
 
     wire csr_req_valid = execute_if.valid && no_pending_instr;
@@ -96,15 +94,15 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     `endif
 
         .read_enable    (csr_req_valid && csr_rd_enable),
-        .read_uuid      (execute_if.data.uuid),
-        .read_wid       (execute_if.data.wid),
+        .read_uuid      (execute_if.data.header.uuid),
+        .read_wid       (execute_if.data.header.wid),
         .read_addr      (csr_addr),
         .read_data_ro   (csr_read_data_ro),
         .read_data_rw   (csr_read_data_rw),
 
         .write_enable   (csr_req_valid && csr_wr_enable),
-        .write_uuid     (execute_if.data.uuid),
-        .write_wid      (execute_if.data.wid),
+        .write_uuid     (execute_if.data.header.uuid),
+        .write_wid      (execute_if.data.header.wid),
         .write_addr     (csr_addr),
         .write_data     (csr_write_data)
     );
@@ -115,14 +113,14 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_wtid
         if (PID_BITS != 0) begin : g_pid
-            assign wtid[i] = `XLEN'(execute_if.data.pid * NUM_LANES + i);
+            assign wtid[i] = `XLEN'(execute_if.data.header.pid * NUM_LANES + i);
         end else begin : g_no_pid
             assign wtid[i] = `XLEN'(i);
         end
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_gtid
-        assign gtid[i] = (`XLEN'(CORE_ID) << (NW_BITS + NT_BITS)) + (`XLEN'(execute_if.data.wid) << NT_BITS) + wtid[i];
+        assign gtid[i] = (`XLEN'(CORE_ID) << (NW_BITS + NT_BITS)) + (`XLEN'(execute_if.data.header.wid) << NT_BITS) + wtid[i];
     end
 
     always @(*) begin
@@ -158,19 +156,19 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     end
 
     // unlock the warp
-    assign sched_csr_if.unlock_warp = csr_req_valid && csr_req_ready && execute_if.data.eop && is_fpu_csr;
-    assign sched_csr_if.unlock_wid = execute_if.data.wid;
+    assign sched_csr_if.unlock_warp = csr_req_valid && csr_req_ready && execute_if.data.header.eop && is_fpu_csr;
+    assign sched_csr_if.unlock_wid = execute_if.data.header.wid;
 
     VX_elastic_buffer #(
-        .DATAW (DATAW),
+        .DATAW ($bits(sfu_result_t)),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (csr_req_valid),
         .ready_in  (csr_req_ready),
-        .data_in   ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.PC, execute_if.data.rd, execute_if.data.wb, csr_read_data,       execute_if.data.pid, execute_if.data.sop, execute_if.data.eop}),
-        .data_out  ({result_if.data.uuid,  result_if.data.wid,  result_if.data.tmask,  result_if.data.PC,  result_if.data.rd,  result_if.data.wb,  result_if.data.data, result_if.data.pid,  result_if.data.sop,  result_if.data.eop}),
+        .data_in   ({execute_if.data.header, csr_read_data}),
+        .data_out  (result_if.data),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
     );

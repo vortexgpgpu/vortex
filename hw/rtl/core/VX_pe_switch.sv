@@ -29,11 +29,10 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
     VX_execute_if.master execute_out_if[PE_COUNT],
     VX_result_if .slave result_in_if[PE_COUNT]
 );
-    `DECL_EXECUTE_T (execute_t, NUM_LANES);
-    `DECL_RESULT_T (result_t, NUM_LANES);
+    `DECL_EXECUTE_T (pe, NUM_LANES);
 
-    localparam REQ_DATAW = $bits(execute_t);
-    localparam RSP_DATAW = $bits(result_t);
+    localparam REQ_DATAW = $bits(pe_execute_t);
+    localparam RSP_DATAW = $bits(pe_result_t);
 
     wire [PE_COUNT-1:0] pe_req_valid;
     wire [PE_COUNT-1:0][REQ_DATAW-1:0] pe_req_data;

@@ -44,8 +44,6 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     localparam BANK_DATA_WIDTH  = `XLEN * `SIMD_WIDTH;
     localparam BANK_DATA_SIZE   = BANK_DATA_WIDTH / 8;
 
-    localparam PER_OPC_WARPS    = PER_ISSUE_WARPS / `NUM_OPCS;
-    localparam PER_OPC_NW_BITS  = `CLOG2(PER_OPC_WARPS);
     localparam BANK_SIZE        = (NUM_REGS * SIMD_COUNT * PER_OPC_WARPS) / NUM_BANKS;
     localparam BANK_ADDR_WIDTH  = `CLOG2(BANK_SIZE);
 
@@ -236,11 +234,11 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
     wire [BANK_ADDR_WIDTH-1:0] gpr_wr_addr;
     if (SIMD_COUNT != 1) begin : g_gpr_wr_addr_sid
         wire [PER_OPC_NW_BITS + REG_REM_BITS-1:0] tmp;
-        `CONCAT(tmp, writeback_if.data.wis[ISSUE_WIS_W-1 -: PER_OPC_NW_BITS],
+        `CONCAT(tmp, writeback_if.data.wis[ISSUE_WIS_W-1 -: PER_OPC_NW_W],
               writeback_if.data.rd[NUM_REGS_BITS-1 -: REG_REM_BITS], PER_OPC_NW_BITS, REG_REM_BITS)
         assign gpr_wr_addr = {writeback_if.data.sid, tmp};
     end else begin : g_gpr_wr_addr
-        `CONCAT(gpr_wr_addr, writeback_if.data.wis[ISSUE_WIS_W-1 -: PER_OPC_NW_BITS],
+        `CONCAT(gpr_wr_addr, writeback_if.data.wis[ISSUE_WIS_W-1 -: PER_OPC_NW_W],
               writeback_if.data.rd[NUM_REGS_BITS-1 -: REG_REM_BITS], PER_OPC_NW_BITS, REG_REM_BITS)
     end
 
@@ -268,11 +266,11 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         wire [BANK_ADDR_WIDTH-1:0] gpr_rd_addr;
         if (SIMD_COUNT != 1) begin : g_gpr_rd_addr_sid
             wire [PER_OPC_NW_BITS + REG_REM_BITS-1:0] tmp;
-            `CONCAT(tmp, pipe_mdata_st1[META_DATAW-UUID_WIDTH-1 -: PER_OPC_NW_BITS],
+            `CONCAT(tmp, pipe_mdata_st1[META_DATAW-UUID_WIDTH-1 -: PER_OPC_NW_W],
                 gpr_rd_reg_st1[b], PER_OPC_NW_BITS, REG_REM_BITS)
             assign gpr_rd_addr = {pipe_mdata_st1[META_DATAW-UUID_WIDTH-ISSUE_WIS_W-1 -: SIMD_IDX_W], tmp};
         end else begin : g_gpr_rd_addr
-            `CONCAT(gpr_rd_addr, pipe_mdata_st1[META_DATAW-UUID_WIDTH-1 -: PER_OPC_NW_BITS],
+            `CONCAT(gpr_rd_addr, pipe_mdata_st1[META_DATAW-UUID_WIDTH-1 -: PER_OPC_NW_W],
                 gpr_rd_reg_st1[b], PER_OPC_NW_BITS, REG_REM_BITS)
         end
 

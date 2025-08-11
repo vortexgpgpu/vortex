@@ -31,9 +31,9 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
     `STATIC_ASSERT (`IS_DIVISBLE(`ISSUE_WIDTH, BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT (`IS_DIVISBLE(`SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
 
-    `DECL_EXECUTE_T (execute_t, NUM_LANES);
-    localparam IN_DATAW = $bits(dispatch_t);
-    localparam OUT_DATAW = $bits(execute_t);
+    `DECL_EXECUTE_T (pe, NUM_LANES);
+    localparam IN_DATAW     = $bits(dispatch_t);
+    localparam OUT_DATAW    = $bits(pe_execute_t);
 
     localparam BLOCK_SIZE_W = `LOG2UP(BLOCK_SIZE);
     localparam NUM_PACKETS  = `SIMD_WIDTH / NUM_LANES;
@@ -219,13 +219,14 @@ module VX_dispatch_unit import VX_gpu_pkg::*; #(
                 dispatch_data[issue_idx][IN_DATAW-1 -: UUID_WIDTH],
                 block_wid,
                 block_tmask[block_idx],
+                warp_pid,
+                warp_sop,
+                warp_eop,
                 dispatch_data[issue_idx][DATA_IN_TMASK_OFF-1 : (DATA_IN_OPDS_OFF + NUM_SRC_OPDS * `SIMD_WIDTH * `XLEN)],
                 block_rsdata[block_idx][0],
                 block_rsdata[block_idx][1],
-                block_rsdata[block_idx][2],
-                warp_pid,
-                warp_sop,
-                warp_eop}),
+                block_rsdata[block_idx][2]
+            }),
             .data_out  (execute_if[block_idx].data),
             .valid_out (execute_if[block_idx].valid),
             .ready_out (execute_if[block_idx].ready)

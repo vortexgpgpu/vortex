@@ -29,25 +29,16 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID);
 
-    localparam MDATA_WIDTH = UUID_WIDTH + NW_WIDTH + PC_BITS + NUM_REGS_BITS;
-
-`ifdef TCU_DRL
-    localparam FMUL_LATENCY = 2;
+`ifdef TCU_DSP
+    localparam FMUL_LATENCY = 8;
+    localparam FADD_LATENCY = 11;
     localparam FRND_LATENCY = 2;
-    localparam ACC_LATENCY  = 2;
 `else
-    `ifdef TCU_DSP
-        localparam FMUL_LATENCY = 8;
-        localparam FADD_LATENCY = 11;
-        localparam FRND_LATENCY = 2;
-    `else
-        localparam FMUL_LATENCY = 2;
-        localparam FADD_LATENCY = 1;
-        localparam FRND_LATENCY = 1;
-    `endif
-    localparam ACC_LATENCY  = $clog2(2 * TCU_TC_K) * FADD_LATENCY + FADD_LATENCY;
+    localparam FMUL_LATENCY = 2;
+    localparam FADD_LATENCY = 1;
+    localparam FRND_LATENCY = 1;
 `endif
-
+    localparam ACC_LATENCY  = $clog2(2 * TCU_TC_K) * FADD_LATENCY + FADD_LATENCY;
     localparam FEDP_LATENCY = FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
 
     localparam PIPE_LATENCY = FEDP_LATENCY + 1;
@@ -65,15 +56,7 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     `UNUSED_VAR ({step_m, step_n, fmt_s, fmt_d});
 
-    wire [MDATA_WIDTH-1:0] mdata_queue_din, mdata_queue_dout;
     wire mdata_queue_full;
-
-    assign mdata_queue_din = {
-        execute_if.data.uuid,
-        execute_if.data.wid,
-        execute_if.data.PC,
-        execute_if.data.rd
-    };
 
     wire execute_fire = execute_if.valid && execute_if.ready;
     wire result_fire = result_if.valid && result_if.ready;
@@ -100,7 +83,7 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign execute_if.ready = ~mdata_queue_full && fedp_enable;
 
     VX_fifo_queue #(
-        .DATAW (MDATA_WIDTH),
+        .DATAW ($bits(tcu_header_t)),
         .DEPTH (MDATA_QUEUE_DEPTH),
         .OUT_REG (1)
     ) mdata_queue (
@@ -108,8 +91,8 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .reset  (reset),
         .push   (execute_fire),
         .pop    (result_fire),
-        .data_in(mdata_queue_din),
-        .data_out(mdata_queue_dout),
+        .data_in(execute_if.data.header),
+        .data_out(result_if.data.header),
         `UNUSED_PIN(empty),
         `UNUSED_PIN(alm_empty),
         .full   (mdata_queue_full),
@@ -206,32 +189,20 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `ifdef DBG_TRACE_TCU
             always @(posedge clk) begin
                 if (execute_if.valid && execute_if.ready) begin
-                    `TRACE(3, ("%t: %s FEDP-enq: wid=%0d, i=%0d, j=%0d, m=%0d, n=%0d, a_row=", $time, INSTANCE_ID, execute_if.data.wid, i, j, step_m, step_n))
+                    `TRACE(3, ("%t: %s FEDP-enq: wid=%0d, i=%0d, j=%0d, m=%0d, n=%0d, a_row=", $time, INSTANCE_ID, execute_if.data.header.wid, i, j, step_m, step_n))
                     `TRACE_ARRAY1D(2, "0x%0h", a_row, TCU_TC_K)
                     `TRACE(3, (", b_col="));
                     `TRACE_ARRAY1D(2, "0x%0h", b_col, TCU_TC_K)
-                    `TRACE(3, (", c_val=0x%0h (#%0d)\n", c_val, execute_if.data.uuid));
+                    `TRACE(3, (", c_val=0x%0h (#%0d)\n", c_val, execute_if.data.header.uuid));
                 end
                 if (result_if.valid && result_if.ready) begin
-                    `TRACE(3, ("%t: %s FEDP-deq: wid=%0d, i=%0d, j=%0d, d_val=0x%0h (#%0d)\n", $time, INSTANCE_ID, result_if.data.wid, i, j, d_val[i][j], result_if.data.uuid));
+                    `TRACE(3, ("%t: %s FEDP-deq: wid=%0d, i=%0d, j=%0d, d_val=0x%0h (#%0d)\n", $time, INSTANCE_ID, result_if.data.header.wid, i, j, d_val[i][j], result_if.data.header.uuid));
                 end
             end
         `endif // DBG_TRACE_TCU
         end
     end
 
-    assign result_if.data.wb  = 1;
-    assign result_if.data.tmask = {`NUM_THREADS{1'b1}};
-    assign result_if.data.data  = d_val;
-    assign result_if.data.pid = 0;
-    assign result_if.data.sop = 1;
-    assign result_if.data.eop = 1;
-
-    assign {
-        result_if.data.uuid,
-        result_if.data.wid,
-        result_if.data.PC,
-        result_if.data.rd
-    } = mdata_queue_dout;
+    assign result_if.data.data = d_val;
 
 endmodule

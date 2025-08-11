@@ -113,8 +113,7 @@ package VX_tcu_pkg;
     endtask
 `endif
 
-    `DECL_EXECUTE_T (tcu_exe_t, `NUM_TCU_LANES);
-    `DECL_RESULT_T (tcu_res_t, `NUM_TCU_LANES);
+    `DECL_EXECUTE_T (tcu, `NUM_TCU_LANES);
 
 endpackage
 

@@ -30,10 +30,9 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 );
 
     `UNUSED_SPARAM (INSTANCE_ID)
+
     localparam LANE_BITS      = `CLOG2(NUM_LANES);
     localparam LANE_WIDTH     = `UP(LANE_BITS);
-    localparam PID_BITS       = `CLOG2(`NUM_THREADS / NUM_LANES);
-    localparam PID_WIDTH      = `UP(PID_BITS);
     localparam SHIFT_IMM_BITS = `CLOG2(`XLEN);
 
     `UNUSED_VAR (execute_if.data.rs3_data)
@@ -75,13 +74,13 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 
     wire [31:0] lui_imm32 = {execute_if.data.op_args.alu.imm20, 12'd0};
     wire [20:0] br_imm21 = {execute_if.data.op_args.alu.imm20, 1'b0};
-    
+
     wire [`XLEN-1:0] alu_imm = `SEXT(`XLEN, execute_if.data.op_args.alu.imm20);
     wire [`XLEN-1:0] lui_imm = `SEXT(`XLEN, lui_imm32);
     wire [`XLEN-1:0] br_imm  = `SEXT(`XLEN, br_imm21);
     wire [`XLEN-1:0] add_imm = is_lui_op ? lui_imm : (is_br_jal_op ? br_imm : alu_imm);
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] add_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{to_fullPC(execute_if.data.PC)}} : alu_in1;
+    wire [NUM_LANES-1:0][`XLEN-1:0] add_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{to_fullPC(execute_if.data.header.PC)}} : alu_in1;
     wire [NUM_LANES-1:0][`XLEN-1:0] add_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{add_imm}} : alu_in2;
     wire [NUM_LANES-1:0][`XLEN-1:0] sub_in2_imm = (execute_if.data.op_args.alu.use_imm && ~is_br_op) ? {NUM_LANES{alu_imm}} : alu_in2;
     wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{alu_imm}} : alu_in2;
@@ -133,8 +132,8 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [NUM_LANES-1:0] vote_true, vote_false;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_vote_calc
         wire pred = alu_in1[i][0];
-        assign vote_true[i]  = execute_if.data.tmask[i] && pred;
-        assign vote_false[i] = execute_if.data.tmask[i] && ~pred;
+        assign vote_true[i]  = execute_if.data.header.tmask[i] && pred;
+        assign vote_false[i] = execute_if.data.header.tmask[i] && ~pred;
     end
     wire has_vote_true  = (| vote_true);
     wire has_vote_false = (| vote_false);
@@ -193,7 +192,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
                     end
                 endcase
             end
-            assign shfl_result[i] = execute_if.data.tmask[lane] ? alu_in1[lane] : alu_in1[i];
+            assign shfl_result[i] = execute_if.data.header.tmask[lane] ? alu_in1[lane] : alu_in1[i];
         end
     end else begin : g_shfl_0
         assign shfl_result[0] = alu_in1[0];
@@ -226,7 +225,6 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 
     // branch
 
-    wire [PC_BITS-1:0] PC_r;
     wire [INST_BR_BITS-1:0] br_op_r;
     wire [PC_BITS-1:0] cbr_dest, cbr_dest_r;
     wire [LANE_WIDTH-1:0] last_tid, last_tid_r;
@@ -239,7 +237,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
             .N (NUM_LANES),
             .REVERSE (1)
         ) last_tid_sel (
-            .data_in (execute_if.data.tmask),
+            .data_in (execute_if.data.header.tmask),
             .index_out (last_tid),
             `UNUSED_PIN (onehot_out),
             `UNUSED_PIN (valid_out)
@@ -249,14 +247,14 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     end
 
     VX_elastic_buffer #(
-        .DATAW (UUID_WIDTH + NW_WIDTH + NUM_LANES + NUM_REGS_BITS + 1 + PID_WIDTH + 1 + 1 + (NUM_LANES * `XLEN) + PC_BITS + PC_BITS + 1 + INST_BR_BITS + LANE_WIDTH)
+        .DATAW ($bits(alu_header_t) + (NUM_LANES * `XLEN) + PC_BITS + 1 + INST_BR_BITS + LANE_WIDTH)
     ) rsp_buf (
         .clk      (clk),
         .reset    (reset),
         .valid_in (execute_if.valid),
         .ready_in (execute_if.ready),
-        .data_in  ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, alu_result,   execute_if.data.PC, cbr_dest,   is_br_op,   br_op,   last_tid}),
-        .data_out ({result_if.data.uuid,  result_if.data.wid,  result_if.data.tmask,  result_if.data.rd,  result_if.data.wb,  result_if.data.pid,  result_if.data.sop,  result_if.data.eop,  alu_result_r, PC_r,               cbr_dest_r, is_br_op_r, br_op_r, last_tid_r}),
+        .data_in  ({execute_if.data.header, alu_result,   cbr_dest,   is_br_op,   br_op,   last_tid}),
+        .data_out ({result_if.data.header,  alu_result_r, cbr_dest_r, is_br_op_r, br_op_r, last_tid_r}),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
     );
@@ -271,11 +269,11 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire is_equal = br_result[1];
 
     wire result_fire = result_if.valid && result_if.ready;
-    wire br_enable = result_fire && is_br_op_r && result_if.data.eop;
+    wire br_enable = result_fire && is_br_op_r && result_if.data.header.eop;
     wire br_taken = ((is_br_less ? is_less : is_equal) ^ is_br_neg) | is_br_static;
     wire [PC_BITS-1:0] br_dest = is_br_static ? from_fullPC(br_result) : cbr_dest_r;
     wire [NW_WIDTH-1:0] br_wid;
-    `ASSIGN_BLOCKED_WID (br_wid, result_if.data.wid, BLOCK_IDX, `NUM_ALU_BLOCKS)
+    `ASSIGN_BLOCKED_WID (br_wid, result_if.data.header.wid, BLOCK_IDX, `NUM_ALU_BLOCKS)
 
     VX_pipe_register #(
         .DATAW  (1 + NW_WIDTH + 1 + PC_BITS),
@@ -289,17 +287,17 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     );
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
-        wire [`XLEN-1:0] PC_next = to_fullPC(PC_r) + `XLEN'(4);
+    `IGNORE_UNOPTFLAT_BEGIN
+        wire [`XLEN-1:0] PC_next = to_fullPC(result_if.data.header.PC) + `XLEN'(4);
+    `IGNORE_UNOPTFLAT_END
         assign result_if.data.data[i] = (is_br_op_r && is_br_static) ? PC_next : alu_result_r[i];
     end
-
-    assign result_if.data.PC = PC_r;
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (br_enable) begin
             `TRACE(2, ("%t: %s branch: wid=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
-                $time, INSTANCE_ID, br_wid, to_fullPC(result_if.data.PC), br_taken, to_fullPC(br_dest), result_if.data.uuid))
+                $time, INSTANCE_ID, br_wid, to_fullPC(result_if.data.header.PC), br_taken, to_fullPC(br_dest), result_if.data.header.uuid))
         end
     end
 `endif
