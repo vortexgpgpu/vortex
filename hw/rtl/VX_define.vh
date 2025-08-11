@@ -146,7 +146,7 @@
         assign itf[i].rsp_data = prefix``_data[i]; \
         assign prefix``_ready[i] = itf[i].rsp_ready; \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define ITF_TO_AOS_RSP_V(prefix, itf, count, dataw) \
     wire [(count)-1:0] prefix``_valid; \
@@ -156,7 +156,7 @@
         assign prefix``_valid[i] = itf[i].rsp_valid; \
         assign prefix``_data[i] = itf[i].rsp_data; \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define AOS_TO_ITF_RSP_V(prefix, itf, count, dataw) \
     wire [(count)-1:0] prefix``_valid; \
@@ -166,7 +166,7 @@
         assign itf[i].rsp_valid = prefix``_valid[i]; \
         assign itf[i].rsp_data = prefix``_data[i]; \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define REDUCE(__op, __out, __in, __n, __outw) \
     /* verilator lint_off GENUNNAMED */ \
@@ -182,7 +182,7 @@
     end else begin \
         assign __out = (__outw)'(__in[0]); \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define REDUCE_TREE(__op, __out, __in, __n, __outw, __inw) \
     VX_reduce_tree #( \
@@ -209,13 +209,19 @@
 `define CONCAT(out, left_in, right_in, L, R) \
     /* verilator lint_off GENUNNAMED */ \
     if ((L) != 0 && (R) == 0) begin \
+        /* verilator lint_off UNUSED */ \
+        logic [$bits(right_in)-1:0] __unused = right_in; \
+        /* verilator lint_on UNUSED */ \
         assign out = left_in; \
     end else if ((L) == 0 && (R) != 0) begin \
+        /* verilator lint_off UNUSED */ \
+        logic [$bits(left_in)-1:0] __unused = left_in; \
+        /* verilator lint_on UNUSED */ \
         assign out = right_in; \
     end else if ((L) != 0 && (R) != 0) begin \
         assign out = {left_in, right_in}; \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define BUFFER_EX(dst, src, ena, resetw, latency) \
     VX_pipe_register #( \
@@ -352,7 +358,7 @@
         assign src.rsp_data.tag = dst.rsp_data.tag; \
     end \
     assign dst.rsp_ready = src.rsp_ready \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define INIT_VX_MEM_BUS_IF(itf) \
     assign itf.req_valid = 0; \
@@ -386,7 +392,7 @@
     end else begin \
         assign {dst.write_valid, dst.write_addr, dst.write_data} = {src.write_valid && ena, src.write_addr, src.write_data}; \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define PERF_COUNTER_ADD(dst, src, field, width, count, reg_enable) \
     /* verilator lint_off GENUNNAMED */ \
@@ -420,7 +426,7 @@
     end else begin \
         assign dst.``field = src[0].``field; \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define ASSIGN_BLOCKED_WID(dst, src, block_idx, block_size) \
     /* verilator lint_off GENUNNAMED */ \
@@ -433,7 +439,7 @@
     end else begin \
         assign dst = src; \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define DECL_EXECUTE_T(__name__, __lanes__) \
     typedef struct packed { \
