@@ -35,6 +35,11 @@ package VX_gpu_pkg;
 	localparam RV_REGS = 32;
 	localparam RV_REGS_BITS = 5;
 
+    localparam RV_RD  = 0;
+    localparam RV_RS1 = 1;
+    localparam RV_RS2 = 2;
+    localparam RV_RS3 = 3;
+
     localparam REG_TYPE_I = 0;
     localparam REG_TYPE_F = 1;
 

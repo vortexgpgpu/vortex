@@ -36,6 +36,26 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+`define __used_reg_rv_rd  RV_RD
+`define __used_reg_rv_rs1 RV_RS1
+`define __used_reg_rv_rs2 RV_RS2
+`define __used_reg_rv_rs3 RV_RS3
+
+`define USED_REG(t, x, v) \
+    reg_ids[`__used_reg_rv_``x]  = make_reg_num(REG_TYPE_BITS'(t), RV_REGS_BITS'(``x)); \
+    use_regs[`__used_reg_rv_``x] = v
+
+`define USED_IREG(x) \
+    `USED_REG(REG_TYPE_I, ``x, 1'b1)
+
+`define USED_FREG(x) \
+    `USED_REG(REG_TYPE_F, ``x, 1'b1)
+
+`define USED_VREG(x) \
+    `USED_REG(REG_TYPE_V, ``x, 1'b1)
+
+///////////////////////////////////////////////////////////////////////////////
+
 `define ITF_TO_AOS(prefix, itf, count, dataw) \
     wire [(count)-1:0] prefix``_valid; \
     wire [(count)-1:0][(dataw)-1:0] prefix``_data; \

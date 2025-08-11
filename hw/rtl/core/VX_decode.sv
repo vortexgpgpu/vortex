@@ -13,16 +13,6 @@
 
 `include "VX_define.vh"
 
-`define USED_REG(t, x, v) \
-    x``_v = make_reg_num(t, ``x); \
-    use_``x = v
-
-`define USED_IREG(x) \
-    `USED_REG(REG_TYPE_I, ``x, 1)
-
-`define USED_FREG(x) \
-    `USED_REG(REG_TYPE_F, ``x, 1)
-
 module VX_decode import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
@@ -46,8 +36,8 @@ module VX_decode import VX_gpu_pkg::*; #(
     reg [EX_BITS-1:0] ex_type;
     reg [INST_OP_BITS-1:0] op_type;
     op_args_t op_args;
-    reg [NUM_REGS_BITS-1:0] rd_v, rs1_v, rs2_v, rs3_v;
-    reg use_rd, use_rs1, use_rs2, use_rs3;
+    reg [NUM_SRC_OPDS:0][NUM_REGS_BITS-1:0] reg_ids;
+    reg [NUM_SRC_OPDS:0] use_regs;
     reg is_wstall;
 
     wire [31:0] instr = fetch_if.data.instr;
@@ -65,11 +55,6 @@ module VX_decode import VX_gpu_pkg::*; #(
 
     `UNUSED_VAR (funct2)
     `UNUSED_VAR (funct5)
-    `UNUSED_VAR (rs3)
-    `UNUSED_VAR (use_rd)
-    `UNUSED_VAR (use_rs1)
-    `UNUSED_VAR (use_rs2)
-    `UNUSED_VAR (use_rs3)
 
     wire is_itype_sh = funct3[0] && ~funct3[1];
     wire is_fpu_csr = (u_12 <= `VX_CSR_FCSR);
@@ -145,14 +130,8 @@ module VX_decode import VX_gpu_pkg::*; #(
         ex_type   = 'x;
         op_type   = 'x;
         op_args   = 'x;
-        rd_v      = 'x;
-        rs1_v     = 'x;
-        rs2_v     = 'x;
-        rs3_v     = 'x;
-        use_rd    = 0;
-        use_rs1   = 0;
-        use_rs2   = 0;
-        use_rs3   = 0;
+        reg_ids   = 'x;
+        use_regs  = '0;
         is_wstall = 0;
 
         case (opcode)
@@ -328,7 +307,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.lsu.offset = u_12;
                 `USED_IREG (rs1);
             `ifdef EXT_F_ENABLE
-                `USED_REG (opcode[2], rd, 1);
+                `USED_REG (opcode[2], rd, 1'b1);
             `else
                 `USED_IREG (rd);
             `endif
@@ -344,7 +323,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.lsu.offset = s_imm;
                 `USED_IREG (rs1);
             `ifdef EXT_F_ENABLE
-                `USED_REG (opcode[2], rs2, 1);
+                `USED_REG (opcode[2], rs2, 1'b1);
             `else
                 `USED_IREG (rs2);
             `endif
@@ -504,7 +483,6 @@ module VX_decode import VX_gpu_pkg::*; #(
                     7'h01: begin // VOTE, SHFL
                         ex_type = EX_ALU;
                         op_args.alu.xtype = ALU_TYPE_OTHER;
-                        use_rd  = 1;
                         `USED_IREG (rd);
                         `USED_IREG (rs1);
                         if (funct3[2]) begin
@@ -522,10 +500,10 @@ module VX_decode import VX_gpu_pkg::*; #(
                                 op_args.tcu.fmt_d  = rd[3:0];
                                 op_args.tcu.step_m = '0;
                                 op_args.tcu.step_n = '0;
-                                `USED_IREG (rd);
-                                `USED_IREG (rs1);
-                                `USED_IREG (rs2);
-                                `USED_IREG (rs3);
+                                `USED_FREG (rd);
+                                `USED_FREG (rs1);
+                                `USED_FREG (rs2);
+                                `USED_FREG (rs3);
                             end
                             default:;
                         endcase
@@ -539,9 +517,7 @@ module VX_decode import VX_gpu_pkg::*; #(
     end
 
     // disable write to integer register r0
-    wire wb = use_rd && (rd_v != 0);
-
-    wire [2:0] used_rs = {use_rs3, use_rs2, use_rs1};
+    wire wb = use_regs[RV_RD] && (reg_ids[RV_RD] != 0);
 
     VX_elastic_buffer #(
         .DATAW (OUT_DATAW),
@@ -551,7 +527,7 @@ module VX_decode import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (fetch_if.valid),
         .ready_in  (fetch_if.ready),
-        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                used_rs,                rd_v,              rs1_v,              rs2_v,              rs3_v}),
+        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                use_regs[3:1],          reg_ids[RV_RD],    reg_ids[RV_RS1],    reg_ids[RV_RS2],    reg_ids[RV_RS3]}),
         .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
         .valid_out (decode_if.valid),
         .ready_out (decode_if.ready)
