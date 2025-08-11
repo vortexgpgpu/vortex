@@ -64,7 +64,7 @@ module VX_tcu_fedp_drl #(
         .fmt_s        (fmt_s),
         .a_rows       (a_row16),
         .b_cols       (b_col16),
-        .c_val        (c_val),
+        .c_val        (c_val[31:0]),
         .mul_sign_mux (mul_signs),
         .mul_exp_mux  (mul_exps),
         .raw_max_exp  (raw_max_exp),
