@@ -167,7 +167,7 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             .reset      (reset),
 
             .valid_in   (fpu_req_valid),
-            .mask_in    (per_block_execute_if[block_idx].data.tmask),
+            .mask_in    (per_block_execute_if[block_idx].data.header.tmask),
             .op_type    (per_block_execute_if[block_idx].data.op_type),
             .fmt        (fpu_fmt),
             .frm        (fpu_req_frm),
