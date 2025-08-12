@@ -23,12 +23,12 @@ module VX_tcu_top import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // Dispatch Interface
     input wire execute_valid,
-    input tcu_exe_t execute_data,
+    input tcu_execute_t execute_data,
     output wire execute_ready,
 
     // Commit Interface
     output wire result_valid,
-    output tcu_res_t result_data,
+    output tcu_result_t result_data,
     input wire result_ready
 );
     VX_execute_if #(
