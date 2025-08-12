@@ -32,11 +32,11 @@ module VX_tcu_top import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire result_ready
 );
     VX_execute_if #(
-        .data_t (tcu_exe_t)
+        .data_t (tcu_execute_t)
     ) execute_if();
 
     VX_result_if #(
-        .data_t (tcu_res_t)
+        .data_t (tcu_result_t)
     ) result_if();
 
     assign execute_if.valid = execute_valid;

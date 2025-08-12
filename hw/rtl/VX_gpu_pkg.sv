@@ -405,9 +405,9 @@ package VX_gpu_pkg;
     localparam ISSUE_WIS_BITS = `CLOG2(PER_ISSUE_WARPS);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS_BITS);
 
-    parameter PER_OPC_WARPS = PER_ISSUE_WARPS / `NUM_OPCS;
-    parameter PER_OPC_NW_BITS = `CLOG2(PER_OPC_WARPS);
-    parameter PER_OPC_NW_W = `UP(PER_OPC_NW_BITS);
+    localparam PER_OPC_WARPS = PER_ISSUE_WARPS / `NUM_OPCS;
+    localparam PER_OPC_NW_BITS = `CLOG2(PER_OPC_WARPS);
+    localparam PER_OPC_NW_W = `UP(PER_OPC_NW_BITS);
 
     function automatic logic [NW_WIDTH-1:0] wis_to_wid(
         input logic [ISSUE_WIS_W-1:0] wis,
