@@ -133,7 +133,7 @@ int main(int argc, char *argv[]) {
   std::cout << "allocate device memory" << std::endl;
   RT_CHECK(vx_mem_alloc(device, addr_buf_size, VX_MEM_READ, &usr_test_buffer));
   RT_CHECK(vx_mem_address(usr_test_buffer, &usr_test_addr));
-  RT_CHECK(vx_mem_reserve(device, io_base_addr, addr_buf_size, VX_MEM_READ, &io_test_buffer));
+  RT_CHECK(vx_mem_reserve(device, io_base_addr, addr_buf_size, VX_MEM_READ_WRITE, &io_test_buffer));
   RT_CHECK(vx_mem_alloc(device, src_buf_size, VX_MEM_READ, &src_buffer));
   RT_CHECK(vx_mem_address(src_buffer, &kernel_arg.src_addr));
   RT_CHECK(vx_mem_alloc(device, dst_buf_size, VX_MEM_WRITE, &dst_buffer));
