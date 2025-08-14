@@ -21,15 +21,17 @@ module VX_tcu_drl_mul_exp #(
     input wire [N-2:0][15:0] a_rows,
     input wire [N-2:0][15:0] b_cols,
     input wire [31:0] c_val,
-    output logic [N-1:0] mul_sign_mux,
-    output logic [N-1:0][7:0] mul_exp_mux,
     output logic [7:0] raw_max_exp,
-    output logic [N-1:0][23:0] mul_sig_mux
+    output logic [N-1:0][24:0] sigs_out
 );
 
     wire [N-2:0] mul_sign_fp16, mul_sign_bf16, mul_sign_fp8e4m3, mul_sign_fp8e5m2;
     wire [N-2:0][7:0] mul_exp_fp16, mul_exp_bf16, mul_exp_fp8e4m3, mul_exp_fp8e5m2;
     wire [N-2:0][23:0] mul_sig_fp16, mul_sig_bf16, mul_sig_fp8e4m3, mul_sig_fp8e5m2;
+
+    logic [N-1:0] mul_sign_mux;
+    logic [N-1:0][7:0] mul_exp_mux;
+    logic [N-1:0][23:0] mul_sig_mux;
 
     for (genvar i = 0; i < N-1; i++) begin : g_prod
         // FP16 multiplication
@@ -111,12 +113,20 @@ module VX_tcu_drl_mul_exp #(
         mul_sig_mux[N-1]  = {1'b1, c_val[22:0]};
     end
 
-    //Raw maximum exponent finder (in parallel to mul)
+    //Raw maximum exponent finder (in parallel to mul) and shift amounts
+    wire [N-1:0][7:0] shift_amounts;
     VX_tcu_drl_max_exp #(
         .N(N)
     ) find_max_exp (
         .exponents (mul_exp_mux),
-        .max_exp   (raw_max_exp)
+        .max_exp   (raw_max_exp),
+        .shift_amounts (shift_amounts)
     );
+
+    //Aligned + signed significands
+    for (genvar i = 0; i < N; i++) begin : g_align_signed
+        wire [23:0] adj_sig = mul_sig_mux[i] >> shift_amounts[i];
+        assign sigs_out[i] = mul_sign_mux[i] ? -adj_sig : {1'b0, adj_sig};
+    end
 
 endmodule

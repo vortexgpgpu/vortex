@@ -31,11 +31,10 @@ module VX_tcu_fedp_drl #(
 );
 
     localparam TCK = 2 * N;
-    localparam FMUL_LATENCY = 1;
-    localparam ALGN_LATENCY = 1;
+    localparam FMUL_LATENCY = 2;
     localparam ACC_LATENCY  = 1;
     localparam FRND_LATENCY = 1;
-    `STATIC_ASSERT (LATENCY == (FMUL_LATENCY+ALGN_LATENCY+ACC_LATENCY+FRND_LATENCY), ("invalid parameter!"));
+    `STATIC_ASSERT (LATENCY == (FMUL_LATENCY+ACC_LATENCY+FRND_LATENCY), ("invalid parameter!"));
 
     `UNUSED_VAR (reset);
     `UNUSED_VAR ({fmt_d, c_val});
@@ -51,11 +50,9 @@ module VX_tcu_fedp_drl #(
         assign b_col16[2*i+1] = b_col[i][31:16];
     end
 
-    //Transprecision Mul & Max Exp
-    wire [TCK:0] mul_signs;
-    wire [TCK:0][7:0] mul_exps;
+    //Transprecision Mul & Max Exp & Align Sigs
     wire [7:0] raw_max_exp;
-    wire [TCK:0][23:0] mul_sigs;
+    wire [TCK:0][24:0] aln_sigs;
 
     VX_tcu_drl_mul_exp #(
         .N(TCK+1)
@@ -65,58 +62,26 @@ module VX_tcu_fedp_drl #(
         .a_rows       (a_row16),
         .b_cols       (b_col16),
         .c_val        (c_val[31:0]),
-        .mul_sign_mux (mul_signs),
-        .mul_exp_mux  (mul_exps),
         .raw_max_exp  (raw_max_exp),
-        .mul_sig_mux  (mul_sigs)
+        .sigs_out     (aln_sigs)
     );
 
-    //Stage 1 pipeline reg
-    wire [TCK:0] pipe_mul_signs;
-    wire [TCK:0][7:0] pipe_mul_exps;
+    //Stage 1/2 pipeline reg
     wire [7:0] pipe_raw_max_exp;
-    wire [TCK:0][23:0] pipe_mul_sigs;
-    VX_pipe_register #(
-        .DATAW ((TCK+1) + ((TCK+1)*8) + 8 + ((TCK+1)*24)),
-        .DEPTH (FMUL_LATENCY)
-    ) pipe_c (
-        .clk     (clk),
-        .reset   (reset),
-        .enable  (enable),
-        .data_in ({mul_signs, mul_exps, raw_max_exp, mul_sigs}),
-        .data_out({pipe_mul_signs, pipe_mul_exps, pipe_raw_max_exp, pipe_mul_sigs})
-    );
-
-    //Align and create signed significand
-    wire [7:0] aln_max_exp = pipe_raw_max_exp;
-    wire [24:0][TCK:0] aln_sigs;
-
-    VX_tcu_drl_align #(
-        .N(TCK+1)
-    ) align (
-        .signsIn     (pipe_mul_signs),
-        .expsIn      (pipe_mul_exps),
-        .rawMaxExpIn (pipe_raw_max_exp),
-        .sigsIn      (pipe_mul_sigs),
-        .sigsOut     (aln_sigs)
-    );
-
-    //Stage 2 pipeline reg
-    wire [7:0] pipe_aln_max_exp;
     wire [TCK:0][24:0] pipe_aln_sigs;
     VX_pipe_register #(
         .DATAW (8+((TCK+1)*25)),
-        .DEPTH (ALGN_LATENCY)
+        .DEPTH (FMUL_LATENCY)
     ) pipe_align (
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({aln_max_exp, aln_sigs}),
-        .data_out({pipe_aln_max_exp, pipe_aln_sigs})
+        .data_in ({raw_max_exp, aln_sigs}),
+        .data_out({pipe_raw_max_exp, pipe_aln_sigs})
     );
 
     //Accumulate CSA reduction tree
-    wire [7:0] acc_max_exp = pipe_aln_max_exp;
+    wire [7:0] acc_max_exp = pipe_raw_max_exp;
     wire acc_sign;
     wire [24+$clog2(TCK+1)-1:0] acc_sig;    //23 mantissa + 1 hidden + log2(N) bits
 
