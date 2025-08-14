@@ -43,11 +43,20 @@ struct bf16 {
   static constexpr const char* name = "bf16";
 };
 
-struct tf32 {
-  using dtype = uint32_t;
+//use for forward pass
+struct fp8_e4m3 {
+  using dtype = uint8_t;
   static constexpr uint32_t id = 3;
-  static constexpr uint32_t bits = 32;
-  static constexpr const char* name = "tf32";
+  static constexpr uint32_t bits = 8;
+  static constexpr const char* name = "fp8_e4m3";
+};
+
+//use for backprop
+struct fp8_e5m2 {
+  using dtype = uint8_t;
+  static constexpr uint32_t id = 4;
+  static constexpr uint32_t bits = 8;
+  static constexpr const char* name = "fp8_e5m2";
 };
 
 struct int32 {
@@ -90,7 +99,8 @@ inline const char* fmt_string(uint32_t fmt) {
   case fp32::id:  return fp32::name;
   case fp16::id:  return fp16::name;
   case bf16::id:  return bf16::name;
-  case tf32::id:  return tf32::name;
+  case fp8_e4m3::id: return fp8_e4m3::name;
+  case fp8_e5m2::id: return fp8_e5m2::name;
   case int32::id: return int32::name;
   case int8::id:  return int8::name;
   case uint8::id: return uint8::name;
