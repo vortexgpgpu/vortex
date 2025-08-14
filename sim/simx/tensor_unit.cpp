@@ -83,6 +83,54 @@ struct FMA<vt::bf16, vt::bf16> {
   }
 };
 
+template <>
+struct FMA<vt::fp8_e4m3, vt::fp32> {
+  static float eval(uint8_t a, uint8_t b, float c) {
+    auto xa = rv_e4m3tof_s(a);
+    auto xb = rv_e4m3tof_s(b);
+    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
+    auto xc = bit_cast<uint32_t>(c);
+    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
+    return bit_cast<float>(xd);
+  }
+};
+
+template <>
+struct FMA<vt::fp8_e4m3, vt::fp8_e4m3> {
+  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
+    auto xa = rv_e4m3tof_s(a);
+    auto xb = rv_e4m3tof_s(b);
+    auto xc = rv_e4m3tof_s(c);
+    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
+    auto xh = rv_ftoe4m3_s(xd);
+    return xh;
+  }
+};
+
+template <>
+struct FMA<vt::fp8_e5m2, vt::fp32> {
+  static float eval(uint8_t a, uint8_t b, float c) {
+    auto xa = rv_e5m2tof_s(a);
+    auto xb = rv_e5m2tof_s(b);
+    auto xab= rv_fmul_s(xa, xb, 0, nullptr);
+    auto xc = bit_cast<uint32_t>(c);
+    auto xd = rv_fadd_s(xab, xc, 0, nullptr);
+    return bit_cast<float>(xd);
+  }
+};
+
+template <>
+struct FMA<vt::fp8_e5m2, vt::fp8_e5m2> {
+  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
+    auto xa = rv_e5m2tof_s(a);
+    auto xb = rv_e5m2tof_s(b);
+    auto xc = rv_e5m2tof_s(c);
+    auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
+    auto xh = rv_ftoe5m2_s(xd);
+    return xh;
+  }
+};
+
 template <typename It, typename Ot>
 struct FEDP {
   using itype = typename It::dtype;
@@ -152,6 +200,10 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
       return FEDP<vt::fp16, vt::fp32>::eval;
     case vt::bf16::id:
       return FEDP<vt::bf16, vt::fp32>::eval;
+    case vt::fp8_e4m3::id:
+      return FEDP<vt::fp8_e4m3, vt::fp32>::eval;
+    case vt::fp8_e5m2::id:
+      return FEDP<vt::fp8_e5m2, vt::fp32>::eval;
     default:
       std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
       std::abort();
@@ -170,6 +222,24 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
     switch (IT) {
     case vt::bf16::id:
       return FEDP<vt::bf16, vt::bf16>::eval;
+    default:
+      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
+      std::abort();
+    }
+    break;
+  case vt::fp8_e4m3::id:
+    switch (IT) {
+    case vt::fp8_e4m3::id:
+      return FEDP<vt::fp8_e4m3, vt::fp8_e4m3>::eval;
+    default:
+      std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
+      std::abort();
+    }
+    break;
+  case vt::fp8_e5m2::id:
+    switch (IT) {
+    case vt::fp8_e5m2::id:
+      return FEDP<vt::fp8_e5m2, vt::fp8_e5m2>::eval;
     default:
       std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
       std::abort();

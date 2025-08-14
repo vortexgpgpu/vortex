@@ -441,6 +441,12 @@ tensor()
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=bf16 -DOTYPE=bf16" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
 
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp8_e4m3 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
+
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=fp8_e5m2 -DOTYPE=fp8_e5m2" make -C tests/regression/sgemm_tcu
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
+
     make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=2 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
     CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --debug=3 --log=run_rtlsim.log
 
