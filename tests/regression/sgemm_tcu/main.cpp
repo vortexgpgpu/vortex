@@ -236,27 +236,75 @@ public:
 };
 
 template <>
+class Comparator<vt::fp8_e4m3> {
+public:
+  static uint8_t generate() {
+    auto fvalue = float(rand()) / RAND_MAX;
+    return rv_ftoe4m3_s(bit_cast<uint32_t>(fvalue));
+  }
+  static bool compare(uint8_t a, uint8_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
+class Comparator<vt::fp8_e5m2> {
+public:
+  static uint8_t generate() {
+    auto fvalue = float(rand()) / RAND_MAX;
+    return rv_ftoe5m2_s(bit_cast<uint32_t>(fvalue));
+  }
+  static bool compare(uint8_t a, uint8_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
 class Comparator<vt::fp32> {
 public:
   static float generate() {
     return static_cast<float>(rand()) / RAND_MAX;
   }
   static bool compare(float a, float b, int index, int errors) {
-    union fi_t {
-      float f;
-      int32_t i;
-    };
-    fi_t fa, fb;
-    fa.f = a;
-    fb.f = b;
-    auto d = std::abs(fa.i - fb.i);
-    if (d > FLOAT_ULP) {
+    //fp8 quantization noise is too high, so we use a different threshold
+    if constexpr (std::is_same<vt::ITYPE, vt::fp8_e4m3>::value || std::is_same<vt::ITYPE, vt::fp8_e5m2>::value) {
+      auto diff = std::abs(a - b);
+      if (diff < 0.025f) {
+        return true;
+      }
       if (errors < MAX_ERRORS) {
-        printf("*** error: [%d] expected=%f, actual=%f\n", index, fb.f, fa.f);
+        printf("*** error: [%d] expected=%f, actual=%f\n", index, b, a);
       }
       return false;
+    } else {
+      union fi_t {
+        float f;
+        int32_t i;
+      };
+      fi_t fa, fb;
+      fa.f = a;
+      fb.f = b;
+      auto d = std::abs(fa.i - fb.i);
+      if (d > FLOAT_ULP) {
+        if (errors < MAX_ERRORS) {
+          printf("*** error: [%d] expected=%f, actual=%f\n", index, fb.f, fa.f);
+        }
+        return false;
+      }
+      return true;
     }
-    return true;
   }
 };
 
@@ -308,6 +356,46 @@ struct muladd_t<vt::bf16, vt::bf16> {
     auto fc = bit_cast<float>(rv_btof_s(c, 0, nullptr));
     auto fd = fa * fb + fc;
     return rv_ftob_s(bit_cast<uint32_t>(fd), 0, nullptr);
+  }
+};
+
+template <>
+struct muladd_t<vt::fp8_e4m3, vt::fp32> {
+  static float eval(uint8_t a, uint8_t b, float c) {
+    auto fa = bit_cast<float>(rv_e4m3tof_s(a));
+    auto fb = bit_cast<float>(rv_e4m3tof_s(b));
+    return fa * fb + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::fp8_e4m3, vt::fp8_e4m3> {
+  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
+    auto fa = bit_cast<float>(rv_e4m3tof_s(a));
+    auto fb = bit_cast<float>(rv_e4m3tof_s(b));
+    auto fc = bit_cast<float>(rv_e4m3tof_s(c));
+    auto fd = fa * fb + fc;
+    return rv_ftoe4m3_s(bit_cast<uint32_t>(fd));
+  }
+};
+
+template <>
+struct muladd_t<vt::fp8_e5m2, vt::fp32> {
+  static float eval(uint8_t a, uint8_t b, float c) {
+    auto fa = bit_cast<float>(rv_e5m2tof_s(a));
+    auto fb = bit_cast<float>(rv_e5m2tof_s(b));
+    return fa * fb + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::fp8_e5m2, vt::fp8_e5m2> {
+  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
+    auto fa = bit_cast<float>(rv_e5m2tof_s(a));
+    auto fb = bit_cast<float>(rv_e5m2tof_s(b));
+    auto fc = bit_cast<float>(rv_e5m2tof_s(c));
+    auto fd = fa * fb + fc;
+    return rv_ftoe5m2_s(bit_cast<uint32_t>(fd));
   }
 };
 
