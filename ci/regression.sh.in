@@ -459,6 +459,18 @@ tensor()
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_DRL" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
     CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_DSP" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
 
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp8_e4m3 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
+    #CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_DPI -DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    #CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_BHF" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_DRL" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    #CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_DSP" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+
+    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=e5m2 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
+    #CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_DPI -DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    #CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_BHF" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_DRL" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+    #CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_DSP" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
+
     echo "tensor tests done!"
 }
 
