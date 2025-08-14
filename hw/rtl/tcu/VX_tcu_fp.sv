@@ -30,11 +30,10 @@ module VX_tcu_fp import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID);
 
 `ifdef TCU_DRL
-    localparam FMUL_LATENCY = 1;
-    localparam ALIGN_LATENCY= 1;
+    localparam FMUL_LATENCY = 2;
     localparam ACC_LATENCY  = 1;
     localparam FRND_LATENCY = 1;
-    localparam FEDP_LATENCY = FMUL_LATENCY + ALIGN_LATENCY + ACC_LATENCY + FRND_LATENCY;
+    localparam FEDP_LATENCY = FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
 `elsif TCU_DSP
     localparam FMUL_LATENCY = 8;
     localparam FADD_LATENCY = 11;
