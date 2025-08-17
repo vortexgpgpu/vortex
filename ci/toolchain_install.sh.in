@@ -144,7 +144,7 @@ yosys()
     cat yosys.tar.bz2.parta* > yosys.tar.bz2
     tar -xvf yosys.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/yosys && mv yosys $TOOLDIR
-    rm -rf yosys yosys.tar.bz2* yosys
+    rm -rf yosys yosys.tar.bz2*
 }
 
 sta()
@@ -198,6 +198,7 @@ while [ "$1" != "" ]; do
                 riscv64
                 sv2v
                 yosys
+                sta
                 ;;
         -h | --help ) show_usage
                 exit
