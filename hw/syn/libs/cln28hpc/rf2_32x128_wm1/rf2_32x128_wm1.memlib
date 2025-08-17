@@ -1,0 +1,358 @@
+/* logicvision_memcomp Version: c0.1.5-EAC */
+/* common_memcomp Version: c0.1.2-EAC */
+/* lang compiler Version: 4.5.1-EAC Nov  6 2014 16:10:45 */
+//
+//       CONFIDENTIAL AND PROPRIETARY SOFTWARE OF ARM PHYSICAL IP, INC.
+//      
+//       Copyright (c) 1993 - 2019 ARM Physical IP, Inc.  All Rights Reserved.
+//      
+//       Use of this Software is subject to the terms and conditions of the
+//       applicable license agreement with ARM Physical IP, Inc.
+//       In addition, this Software is protected by patents, copyright law 
+//       and international treaties.
+//      
+//       The copyright notice(s) in this Software does not indicate actual or
+//       intended publication of this Software.
+//
+//      logicvision model for High Capacity Two Port Register File SVT MVT Compiler
+//
+//      Instance Name:              rf2_32x128_wm1
+//      Words:                      32
+//      Bits:                       128
+//      Mux:                        2
+//      Drive:                      6
+//      Write Mask:                 On
+//      Extra Margin Adjustment:    On
+//      Redundant Rows:             0
+//      Redundant Columns:          2
+//      Test Muxes                  On
+//
+//      Creation Date:  Mon Oct 14 17:01:15 2019
+//      Version: 	r0p0
+//
+//      Modeling Assumptions: 
+//
+//      Modeling Limitations: None
+//
+//      Known Bugs: None.
+//
+//      Known Work Arounds: N/A
+//
+MemoryTemplate (rf2_32x128_wm1) {
+	Algorithm : SmarchChkbvcd;
+	DataOutStage : None;
+	LogicalPorts : 1R1W;
+	BitGrouping : 1;
+	MemoryType : SRAM;
+	MinHold : 0.5;
+	OperationSet : SyncWRvcd;
+	SelectDuringWriteThru : Off;
+	ShadowRead : On;
+	ShadowWrite : On;
+   ShadowWriteOk : On;
+        TransparentMode : None;
+        ObservationLogic: On;
+        InternalScanLogic: On;
+	CellName : rf2_32x128_wm1;
+	NumberOfWords : 32;
+	AddressCounter{
+		Function (Address) {
+			LogicalAddressMap{
+				ColumnAddress[0] : Address[0];
+				RowAddress[3:0] : Address[4:1];
+			}
+		}
+		Function (ColumnAddress) {
+			CountRange [0:1];
+			}
+		Function (RowAddress) {
+			CountRange [0:15];
+		}
+	}
+	PhysicalAddressMap{
+		ColumnAddress[0] : c[0];
+		RowAddress[0] : r[0];
+		RowAddress[1] : r[1];
+		RowAddress[2] : r[2];
+		RowAddress[3] : r[3];
+	}
+	PhysicalDataMap{
+		Data[0] : NOT d[0];
+		Data[1] : NOT d[1];
+		Data[2] : NOT d[2];
+		Data[3] : NOT d[3];
+		Data[4] : NOT d[4];
+		Data[5] : NOT d[5];
+		Data[6] : NOT d[6];
+		Data[7] : NOT d[7];
+		Data[8] : NOT d[8];
+		Data[9] : NOT d[9];
+		Data[10] : NOT d[10];
+		Data[11] : NOT d[11];
+		Data[12] : NOT d[12];
+		Data[13] : NOT d[13];
+		Data[14] : NOT d[14];
+		Data[15] : NOT d[15];
+		Data[16] : NOT d[16];
+		Data[17] : NOT d[17];
+		Data[18] : NOT d[18];
+		Data[19] : NOT d[19];
+		Data[20] : NOT d[20];
+		Data[21] : NOT d[21];
+		Data[22] : NOT d[22];
+		Data[23] : NOT d[23];
+		Data[24] : NOT d[24];
+		Data[25] : NOT d[25];
+		Data[26] : NOT d[26];
+		Data[27] : NOT d[27];
+		Data[28] : NOT d[28];
+		Data[29] : NOT d[29];
+		Data[30] : NOT d[30];
+		Data[31] : NOT d[31];
+		Data[32] : NOT d[32];
+		Data[33] : NOT d[33];
+		Data[34] : NOT d[34];
+		Data[35] : NOT d[35];
+		Data[36] : NOT d[36];
+		Data[37] : NOT d[37];
+		Data[38] : NOT d[38];
+		Data[39] : NOT d[39];
+		Data[40] : NOT d[40];
+		Data[41] : NOT d[41];
+		Data[42] : NOT d[42];
+		Data[43] : NOT d[43];
+		Data[44] : NOT d[44];
+		Data[45] : NOT d[45];
+		Data[46] : NOT d[46];
+		Data[47] : NOT d[47];
+		Data[48] : NOT d[48];
+		Data[49] : NOT d[49];
+		Data[50] : NOT d[50];
+		Data[51] : NOT d[51];
+		Data[52] : NOT d[52];
+		Data[53] : NOT d[53];
+		Data[54] : NOT d[54];
+		Data[55] : NOT d[55];
+		Data[56] : NOT d[56];
+		Data[57] : NOT d[57];
+		Data[58] : NOT d[58];
+		Data[59] : NOT d[59];
+		Data[60] : NOT d[60];
+		Data[61] : NOT d[61];
+		Data[62] : NOT d[62];
+		Data[63] : NOT d[63];
+		Data[64] : d[64];
+		Data[65] : d[65];
+		Data[66] : d[66];
+		Data[67] : d[67];
+		Data[68] : d[68];
+		Data[69] : d[69];
+		Data[70] : d[70];
+		Data[71] : d[71];
+		Data[72] : d[72];
+		Data[73] : d[73];
+		Data[74] : d[74];
+		Data[75] : d[75];
+		Data[76] : d[76];
+		Data[77] : d[77];
+		Data[78] : d[78];
+		Data[79] : d[79];
+		Data[80] : d[80];
+		Data[81] : d[81];
+		Data[82] : d[82];
+		Data[83] : d[83];
+		Data[84] : d[84];
+		Data[85] : d[85];
+		Data[86] : d[86];
+		Data[87] : d[87];
+		Data[88] : d[88];
+		Data[89] : d[89];
+		Data[90] : d[90];
+		Data[91] : d[91];
+		Data[92] : d[92];
+		Data[93] : d[93];
+		Data[94] : d[94];
+		Data[95] : d[95];
+		Data[96] : d[96];
+		Data[97] : d[97];
+		Data[98] : d[98];
+		Data[99] : d[99];
+		Data[100] : d[100];
+		Data[101] : d[101];
+		Data[102] : d[102];
+		Data[103] : d[103];
+		Data[104] : d[104];
+		Data[105] : d[105];
+		Data[106] : d[106];
+		Data[107] : d[107];
+		Data[108] : d[108];
+		Data[109] : d[109];
+		Data[110] : d[110];
+		Data[111] : d[111];
+		Data[112] : d[112];
+		Data[113] : d[113];
+		Data[114] : d[114];
+		Data[115] : d[115];
+		Data[116] : d[116];
+		Data[117] : d[117];
+		Data[118] : d[118];
+		Data[119] : d[119];
+		Data[120] : d[120];
+		Data[121] : d[121];
+		Data[122] : d[122];
+		Data[123] : d[123];
+		Data[124] : d[124];
+		Data[125] : d[125];
+		Data[126] : d[126];
+		Data[127] : d[127];
+	}
+	Port (AA[4:0]) {
+		Function : Address;
+		LogicalPort : A;
+		EmbeddedTestLogic {
+			TestInput : TAA[4:0];
+			TestOutput : AYA[4:0];
+		}
+	}
+	Port (QA[127:0]) {
+		Function : Data;
+		Direction : output;
+		LogicalPort : A;
+	}
+	Port (CENA) {
+		Function : ReadEnable;
+		LogicalPort : A;
+		Polarity : ActiveLow;
+		EmbeddedTestLogic {
+			TestInput : TCENA;
+			TestOutput : CENYA;
+		}
+	}
+	Port (TENA) {
+		Function : BISTOn;
+		Direction : Input;
+		LogicalPort : A;
+		Polarity : ActiveLow;
+	}
+	Port (CLKA) {
+		Function : Clock;
+		LogicalPort : A;
+		Polarity : ActiveHigh;
+	}
+	Port (EMAA[2:0]) {
+		Function : None;
+		SafeValue : 0;
+		Direction : Input;
+		LogicalPort : A;
+		Polarity : ActiveHigh;
+	}
+	Port (EMASA) {
+		Function : None;
+		SafeValue : 0;
+		Direction : Input;
+		LogicalPort : A;
+		Polarity : ActiveHigh;
+	}
+  port (SEA){
+          Function : None;
+          Direction : Input;
+          SafeValue : 0;
+          Polarity : ActiveHigh;
+  }
+  port (SIA[1:0]){
+          Function : None;
+          Direction : Input;
+          SafeValue : 0;
+          Polarity : ActiveHigh;
+  }
+  port (SOA[1:0]){
+          Function : None;
+          Direction : Output;
+  }
+  port (DFTRAMBYP){
+          Function : ScanTest;
+          Direction : Input;
+          Polarity : ActiveHigh;
+  }
+	Port (AB[4:0]) {
+		Function : Address;
+		LogicalPort : B;
+		EmbeddedTestLogic {
+			TestInput : TAB[4:0];
+			TestOutput : AYB[4:0];
+		}
+	}
+	Port (DB[127:0]) {
+		Function : Data;
+		Direction : input;
+		LogicalPort : B;
+		EmbeddedTestLogic {
+			TestInput : TDB[127:0];
+		}
+	}
+	Port (WENB[127:0]) {
+		Function : GroupWriteEnable;
+                BitsPerWriteEnable: 1;
+		LogicalPort : B;
+		Polarity : ActiveLow;
+		EmbeddedTestLogic {
+			TestInput : TWENB[127:0];
+			TestOutput : WENYB[127:0];
+		}
+	}
+	Port (CENB) {
+		Function : WriteEnable;
+		LogicalPort : B;
+		Polarity : ActiveLow;
+		EmbeddedTestLogic {
+			TestInput : TCENB;
+			TestOutput : CENYB;
+		}
+	}
+	Port (TENB) {
+		Function : BISTOn;
+		Direction : Input;
+		LogicalPort : B;
+		Polarity : ActiveLow;
+	}
+	Port (CLKB) {
+		Function : Clock;
+		LogicalPort : B;
+		Polarity : ActiveHigh;
+	}
+	Port (EMAB[2:0]) {
+		Function : None;
+		SafeValue : 0;
+		Direction : Input;
+		LogicalPort : B;
+		Polarity : ActiveHigh;
+	}
+	Port (COLLDISN) {
+             Function : None;
+             SafeValue : 1;
+             Direction : Input;
+             Polarity : ActiveLow;
+       }
+  port (SEB){
+          Function : None;
+          Direction : Input;
+          SafeValue : 0;
+          Polarity : ActiveHigh;
+  }
+  port (SIB[1:0]){
+          Function : None;
+          Direction : Input;
+          SafeValue : 0;
+          Polarity : ActiveHigh;
+  }
+  port (SOB[1:0]){
+          Function : None;
+          Direction : Output;
+  }
+	port (RET1N){
+		Function : None;
+		Direction : Input;
+		SafeValue : 1;
+		Polarity : Activelow;
+	}
+}

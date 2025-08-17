@@ -2,8 +2,14 @@ ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
 SRC_DIR := $(VORTEX_HOME)/hw/syn/yosys
+LIB_DIR := $(VORTEX_HOME)/hw/syn/libs
 
-TOP_LEVEL_ENTITY ?= Vortex
+DEFAULT_LIB := $(LIB_DIR)/NangateOpenCellLibrary_typical.lib
+SYN_LIB_ENV := $(if $(LIB_TGT),LIB_TGT=$(LIB_TGT),$(if $(LIB_ROOT),LIB_ROOT=$(LIB_ROOT),LIB_TGT=$(DEFAULT_LIB)))
+
+BLACK_BOX_MODULES="VX_sp_ram_asic,VX_dp_ram_asic"
+
+TOP_LEVEL_ENTITY ?= VX_cache_top
 PREFIX ?= build
 
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
@@ -68,30 +74,57 @@ ifdef PERF
 	CFLAGS += -DPERF_ENABLE
 endif
 
-CFLAGS += -DSYNTHESIS -DYOSYS
+CFLAGS += -DSYNTHESIS -DASIC -DYOSYS
 CFLAGS += -DXLEN_$(XLEN)
 CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 
 # Build targets
-all: clean build
+all: timing
 
-gen-sources: $(BUILD_DIR)/sources.txt
-$(BUILD_DIR)/sources.txt:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -Csrc -Osources.txt
+gen-sources: $(BUILD_DIR)/src
+$(BUILD_DIR)/src:
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -Csrc
 
 sv2v: $(BUILD_DIR)/project.v
-$(BUILD_DIR)/project.v: gen-sources
+$(BUILD_DIR)/project.v: $(BUILD_DIR)/src
 	cd $(BUILD_DIR); $(SCRIPT_DIR)/sv2v.sh -t$(TOP_LEVEL_ENTITY) -Isrc -oproject.v
 
-build: $(BUILD_DIR)/project.v
-	cd $(BUILD_DIR); $(SRC_DIR)/synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v
+gen-sources: $(BUILD_DIR)/sources.txt
+$(BUILD_DIR)/sources.txt: $(BUILD_DIR)/project.v
+	echo $(realpath $(BUILD_DIR)/project.v) > $(BUILD_DIR)/sources.txt
+	echo $(realpath $(LIB_DIR)/VX_sp_ram_asic.v) >> $(BUILD_DIR)/sources.txt
+	echo $(realpath $(LIB_DIR)/VX_dp_ram_asic.v) >> $(BUILD_DIR)/sources.txt
 
-elaborate: $(BUILD_DIR)/project.v
-	cd $(BUILD_DIR); $(SRC_DIR)/synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v -P="elaborate"
+synthesis: $(BUILD_DIR)/sources.txt
+	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
+	SRC_FILE=sources.txt \
+	SDC_FILE=$(SRC_DIR)/project.sdc \
+	$(SYN_LIB_ENV) \
+	TOOL_DIR=$(SCRIPT_DIR) \
+	RUN_SYNTH=1 \
+	BB_MODULES=$(BLACK_BOX_MODULES) \
+	$(SRC_DIR)/run_synth.sh > build.log 2>&1 &
 
-synthesis: $(BUILD_DIR)/project.v
-	cd $(BUILD_DIR); $(SRC_DIR)/synth.sh -t$(TOP_LEVEL_ENTITY) -sproject.v -P="synthesis"
+techmap: $(BUILD_DIR)/sources.txt
+	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
+	SRC_FILE=sources.txt \
+	SDC_FILE=$(SRC_DIR)/project.sdc \
+	$(SYN_LIB_ENV) \
+	TOOL_DIR=$(SCRIPT_DIR) \
+	BB_MODULES=$(BLACK_BOX_MODULES) \
+	RUN_MAP=1 \
+	$(SRC_DIR)/run_synth.sh > build.log 2>&1 &
+
+timing: $(BUILD_DIR)/sources.txt
+	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
+	SRC_FILE=sources.txt \
+	SDC_FILE=$(SRC_DIR)/project.sdc \
+	BB_MODULES=$(BLACK_BOX_MODULES) \
+	$(SYN_LIB_ENV) \
+	TOOL_DIR=$(SCRIPT_DIR) \
+	RUN_STA=1 \
+	$(SRC_DIR)/run_synth.sh > build.log 2>&1 &
 
 clean:
 	$(RMDIR) $(BUILD_DIR)

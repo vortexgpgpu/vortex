@@ -100,6 +100,26 @@ module VX_sp_ram #(
 
 `ifdef SYNTHESIS
     localparam FORCE_BRAM = !LUTRAM && `FORCE_BRAM(SIZE, DATAW);
+`ifdef ASIC
+    if (FORCE_BRAM && (OUT_REG == 1 || RADDR_REG == 1)) begin : g_asic
+        VX_sp_ram_asic #(
+            .DATAW (DATAW),
+            .SIZE  (SIZE),
+            .WRENW (WRENW)
+        ) sp_ram_asic (
+            .clk   (clk),
+            .reset (reset),
+            .read  (read),
+            .write (write),
+            .wren  (wren),
+            .addr  (addr),
+            .wdata (wdata),
+            .rdata (rdata)
+        );
+    end else begin : g_no_asic
+`else
+    if (1) begin : g_no_asic
+`endif
     if (OUT_REG) begin : g_sync
         if (FORCE_BRAM) begin : g_bram
             if (RDW_MODE == "W") begin : g_write_first
@@ -355,6 +375,7 @@ module VX_sp_ram #(
                 end
             end
         end
+    end
     end
 `else
     // simulation

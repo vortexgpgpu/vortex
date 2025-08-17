@@ -154,6 +154,14 @@ sta()
     rm -rf sta sta.tar.bz2
 }
 
+sta()
+{
+    wget $REPOSITORY/sta/$OSVERSION/sta.tar.bz2
+    tar -xvf sta.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/sta && mv sta $TOOLDIR
+    rm -rf sta sta.tar.bz2
+}
+
 show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"

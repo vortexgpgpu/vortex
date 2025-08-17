@@ -1,0 +1,162 @@
+#
+# CONFIDENTIAL AND PROPRIETARY SOFTWARE OF ARM PHYSICAL IP, INC.
+#
+# Copyright (c) 1993 - 2019 ARM Physical IP, Inc.  All Rights Reserved.
+#
+# Use of this Software is subject to the terms and conditions of the
+# applicable license agreement with ARM Physical IP, Inc.
+# In addition, this Software is protected by patents, copyright law 
+# and international treaties.
+#
+# The copyright notice(s) in this Software does not indicate actual or
+# intended publication of this Software.
+#
+# Compiler Name: High Density Two Port Register File SVT MVT Compiler
+#
+# Creation Date: Sun Oct 20 14:34:36 2019
+#
+# Instance Options:
+#   Instance Name:                 rf2_256x128_wm1
+#   Number of Words:               256
+#   Number of Bits:                128
+#   Multiplexer Width:             2
+#   Multi-Vt selection:            BASE
+#   Frequency <MHz>:               1
+#   Activity Factor <%>:           50
+#   Pipeline:                      off
+#   Word-Write Mask:               on
+#   Word Partition Size:           1
+#   Write through:                 off
+#   Top Metal Layer:               m5-m10
+#   Power Type:                    otc
+#   Redundancy:                    off
+#   Redundant Columns:             2
+#   Redundant Rows:                0
+#   BIST MUXes:                    on
+#   Soft Error Repair (SER):       none
+#   Power Gating:                  off
+#   Back Biasing:                  off
+#   Retention:                     on
+#   Extra Margin Adjustment:       on
+#   Advanced Test Features:        off
+#   Customer Comment:              This is a memory instance
+#   Bus-notation:                  on
+#   Power Ground Rename:           vddpe:VDDPE,vddce:VDDCE,vsse:VSSE
+#   Name Case:                     upper
+#   Check Instance Name:           off
+#   Diodes:                        on
+#   Drive Strength:                6
+#   Site Definitions:              off
+#   Library Name:                  USERLIB
+#   Liberty setting:               nldm
+#
+# Compiler Versions:
+#   Memory Version:                r4p0
+#   Lang compiler Version:         4.1.6-EAC2
+#   View Name:                     avm
+#   AMCI Version:                  1.4.3-EAC
+#   avm_memcomp Version:       2.1.1-EAC
+#
+# Modeling Assumptions: N/A
+#
+# Modeling Limitations: N/A
+#
+# Known Bugs: N/A
+#
+# Known Work Arounds: N/A
+#
+rf2_256x128_wm1 {
+  MEMORY_TYPE RegFile
+  EQUIV_GATE_COUNT 36045
+  VDD_PIN VDDCE VDDPE
+  GND_PIN VSSE
+  #This file is for PROCESS FF, CORNER FF_0P99V_0P99V_125C
+  #However, RedHawk needs the process to be specified as 'PROCESS XX'
+  PROCESS XX
+  Cload 3.5e-05nF
+  VDD 0.99 0.99
+
+  state_boolean avm_into_lowpwr "(((!CLKA&CENA&TENA)|(!CLKA&TCENA&!TENA))&((!CLKB&CENB&TENB)|(!CLKB&TCENB&!TENB))&!RET1N&!DFTRAMBYP)" "!RET1N" "NA"
+  state_boolean avm_outof_lowpwr "(((!CLKA&CENA&TENA)|(!CLKA&TCENA&!TENA))&((!CLKB&CENB&TENB)|(!CLKB&TCENB&!TENB))&RET1N&!DFTRAMBYP)" "RET1N" "NA"
+  state_boolean avm_read_write "RET1N&!DFTRAMBYP&((CLKA&TENA&!CENA)|(CLKA&!TENA&!TCENA))&((CLKB&TENB&!CENB)|(CLKB&!TENB&!TCENB))" "CLKA CLKB" "NA"
+  state_boolean avm_read_desel "RET1N&!DFTRAMBYP&((CLKA&TENA&!CENA)|(CLKA&!TENA&!TCENA))&((CLKB&TENB&CENB)|(CLKB&!TENB&TCENB))" "CLKA CLKB" "NA"
+  state_boolean avm_desel_write "RET1N&!DFTRAMBYP&((CLKA&TENA&CENA)|(CLKA&!TENA&TCENA))&((CLKB&TENB&!CENB)|(CLKB&!TENB&!TCENB))" "CLKA CLKB" "NA"
+  state_boolean avm_scan_capture "((CLKA&!SEA&RET1N&DFTRAMBYP)&(CLKB&!SEB&RET1N&DFTRAMBYP))" "DFTRAMBYP" "NA"
+  state_boolean avm_scan_shift "(CLKA&SEA&RET1N&DFTRAMBYP)&(CLKB&SEB&RET1N&DFTRAMBYP)" "DFTRAMBYP" "NA"
+  state_boolean standby_trig "RET1N&((CLKA&CENA&TENA)|(CLKA&TCENA&!TENA))&((CLKB&CENB&TENB)|(CLKB&TCENB&!TENB))&!DFTRAMBYP" "CLKA CLKB" "NA"
+  state_boolean standby_ntrig "RET1N&((!CLKA&CENA&TENA)|(!CLKA&TCENA&!TENA))&((!CLKB&CENB&TENB)|(!CLKB&TCENB&!TENB))&!DFTRAMBYP" "!CLKA !CLKB" "NA"
+ 
+  Cpd avm_into_lowpwr {
+    VDDCE VSSE 1.60894e-04nF
+    VDDPE VSSE 6.29227e-04nF
+  }
+  PEAK_I avm_into_lowpwr {
+    VDDCE VSSE 4.02515mA
+    VDDPE VSSE 9.87592mA
+  }
+  Cpd avm_outof_lowpwr {
+    VDDCE VSSE 1.76983e-04nF
+    VDDPE VSSE 2.00800e-02nF
+  }
+  PEAK_I avm_outof_lowpwr {
+    VDDCE VSSE 4.42767mA
+    VDDPE VSSE 157.25220mA
+  }
+  Cpd avm_read_write {
+    VDDCE VSSE 3.67895e-04nF
+    VDDPE VSSE 1.19867e-02nF
+  }
+  PEAK_I avm_read_write {
+    VDDCE VSSE 10.77517mA
+    VDDPE VSSE 165.11481mA
+  }
+  Cpd avm_read_desel {
+    VDDCE VSSE 1.15700e-04nF
+    VDDPE VSSE 5.15571e-03nF
+  }
+  PEAK_I avm_read_desel {
+    VDDCE VSSE 3.18528mA
+    VDDPE VSSE 68.18280mA
+  }
+  Cpd avm_desel_write {
+    VDDCE VSSE 2.52195e-04nF
+    VDDPE VSSE 6.83102e-03nF
+  }
+  PEAK_I avm_desel_write {
+    VDDCE VSSE 8.13593mA
+    VDDPE VSSE 101.54025mA
+  }
+  Cpd avm_scan_capture {
+    VDDCE VSSE 8.09457e-06nF
+    VDDPE VSSE 1.07376e-02nF
+  }
+  PEAK_I avm_scan_capture {
+    VDDCE VSSE 0.43640mA
+    VDDPE VSSE 39.07064mA
+  }
+  Cpd avm_scan_shift {
+    VDDCE VSSE 8.09457e-06nF
+    VDDPE VSSE 1.07376e-02nF
+  }
+  PEAK_I avm_scan_shift {
+    VDDCE VSSE 0.43640mA
+    VDDPE VSSE 39.07064mA
+  }
+  Cpd standby_trig {
+    VDDCE VSSE 0.00000e+00nF
+    VDDPE VSSE 1.95501e-05nF
+  }
+  Cpd standby_ntrig {
+    VDDCE VSSE 0.00000e+00nF
+    VDDPE VSSE 2.17223e-05nF
+  }
+  LEAKAGE_I {
+    VDDCE VSSE 1.76745mA
+    VDDPE VSSE 2.45881mA
+  }
+  tsu 0.105188ns
+  ck2q_delay 0.580755ns
+  tr_q 0.013792ns
+  tf_q 0.015916ns
+  CHARACTERIZATION_MODE accurate
+}
