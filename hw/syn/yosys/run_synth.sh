@@ -141,7 +141,6 @@ stamp "gen-ys"
 # -------- run yosys --------
 log "yosys -l $YLOG -s $YS"
 yosys -l "$YLOG" -s "$YS"
-cat "$YLOG"
 stamp "yosys"
 
 # -------- optional OpenSTA (run_sta.tcl colocated) --------
