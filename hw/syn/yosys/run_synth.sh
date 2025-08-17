@@ -139,8 +139,8 @@ log "Writing $YS"
 stamp "gen-ys"
 
 # -------- run yosys --------
-log "yosys -l $YLOG -s $YS"
-yosys -l "$YLOG" -s "$YS"
+log "yosys -s $YS"
+yosys -s "$YS" > "$YLOG" 2>&1
 stamp "yosys"
 
 # -------- optional OpenSTA (run_sta.tcl colocated) --------
@@ -149,7 +149,6 @@ if [[ "$RUN_STA" == "1" ]]; then
   NETLIST="$NET_POST"; [[ -f "$NETLIST" ]] || NETLIST="$NET_PRE"
   log "TOP=$TOP NETLIST=$NETLIST LIB_TGT=$LIB_TGT LIB_ROOT=$LIB_ROOT SDC_FILE=$SDC_FILE RPT_DIR=$RPT_DIR sta $STA_SCRIPT"
   TOP=$TOP NETLIST="$NETLIST" LIB_TGT="$LIB_TGT" LIB_ROOT="$LIB_ROOT" SDC_FILE="$SDC_FILE" RPT_DIR="$RPT_DIR" sta "$STA_SCRIPT" > "$RPT_DIR/sta.log" 2>&1
-  cat "$RPT_DIR/sta.log"
   stamp "sta"
 fi
 
