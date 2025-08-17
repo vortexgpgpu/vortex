@@ -7,6 +7,8 @@ LIB_DIR := $(VORTEX_HOME)/hw/syn/libs
 DEFAULT_LIB := $(LIB_DIR)/NanGate_15nm_OCL.db
 SYN_LIB_ENV := $(if $(LIB_TGT),LIB_TGT=$(LIB_TGT),$(if $(LIB_ROOT),LIB_ROOT=$(LIB_ROOT),LIB_TGT=$(DEFAULT_LIB)))
 
+BLACK_BOX_MODULES="VX_sp_ram_asic,VX_dp_ram_asic"
+
 TOP_LEVEL_ENTITY ?= Vortex
 PREFIX ?= build
 
@@ -91,9 +93,10 @@ synthesis: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
+	BB_MODULES=$(BLACK_BOX_MODULES) \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
-	dc_shell -f $(SRC_DIR)/project.tcl > build.log 2>&1 &
+	dc_shell -f $(SRC_DIR)/project.tcl
 
 clean:
 	$(RMDIR) $(BUILD_DIR)
