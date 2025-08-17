@@ -48,8 +48,6 @@ CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16 -DL2_ENABLE
 CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 endif
 
-CONFIGS += -DFPU_FPNEW
-
 # include paths
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
 ifeq (,$(findstring -DEXT_F_DISABLE, $(CONFIGS)))
