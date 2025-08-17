@@ -31,7 +31,8 @@ check_gcc_version() {
 apt-get update -y
 
 # install system dependencies
-apt-get install -y build-essential valgrind libstdc++6 binutils python3 uuid-dev ccache cmake libffi8 openmpi-bin openmpi-common libopenmpi-dev
+apt-get install -y build-essential valgrind libstdc++6 binutils python3 uuid-dev ccache cmake libffi7
+apt-get install -y tcl-dev libreadline-dev
 
 # Check and install GCC 11 if necessary
 if check_gcc_version; then
