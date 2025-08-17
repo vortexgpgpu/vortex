@@ -2,7 +2,7 @@
 # Synopsys DC — Generic Synthesis (SystemVerilog) using .db libraries
 # Inputs via environment variables:
 #   TOP            : top module name (required)
-#   SOURCES_FILE   : path to sources.txt (VCS-style +incdir/+define) (required)
+#   SRC_FILE       : path to sources.txt (VCS-style +incdir/+define) (required)
 #   LIB_ROOT       : root folder to recursively discover *.db (or)
 #   LIB_TGT        : explicit target .db (optional)
 #   SDC_FILE       : constraints file (optional)
@@ -121,7 +121,7 @@ proc basename {p} { return [file tail $p] }
 
 # Setup environment
 set TOP          [getenv TOP          ""]
-set SOURCES_FILE [getenv SOURCES_FILE ""]
+set SRC_FILE [getenv SRC_FILE ""]
 set SDC_FILE     [getenv SDC_FILE     ""]
 set LIB_ROOT     [getenv LIB_ROOT     ""]
 set LIB_TGT_HINT [getenv LIB_TGT      ""]
@@ -132,15 +132,15 @@ set RPT_DIR      [file normalize [getenv RPT_DIR "./reports"]]
 
 # Validate environment
 if {$TOP eq ""}          { DIE "TOP not set" }
-if {$SOURCES_FILE eq ""} { DIE "SOURCES_FILE not set" }
-if {![file exists $SOURCES_FILE]} { DIE "SOURCES_FILE not found: $SOURCES_FILE" }
+if {$SRC_FILE eq ""} { DIE "SRC_FILE not set" }
+if {![file exists $SRC_FILE]} { DIE "SRC_FILE not found: $SRC_FILE" }
 
 # Create output directories
 file mkdir $OUT_DIR $RPT_DIR
 
 # Parse source list
 source [file join $TOOL_DIR "parse_vcs_list.tcl"]
-lassign [parse_vcs_list $SOURCES_FILE] v_files incdirs defines
+lassign [parse_vcs_list $SRC_FILE] v_files incdirs defines
 
 # Validate all source files exist
 set missing [list]

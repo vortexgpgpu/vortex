@@ -65,3 +65,6 @@ report_checks -path_delay min -digits 3 -format full_clock_expanded
 # write_sdf [file join $RPT_DIR "$TOP.sdf"]
 
 puts "STA done."
+
+# exit the application
+exit
