@@ -92,11 +92,21 @@ uint32_t rv_dtof(uint64_t a);
 uint32_t rv_dtof_r(uint64_t a, uint32_t frm);
 uint64_t rv_ftod(uint32_t a);
 
+// fp16 <--> fp32 conversions
 uint32_t rv_htof_s(uint16_t a, uint32_t frm, uint32_t* fflags);
 uint16_t rv_ftoh_s(uint32_t a, uint32_t frm, uint32_t* fflags);
 
+// bf16 <--> fp32 conversions
 uint32_t rv_btof_s(uint16_t a, uint32_t frm, uint32_t* fflags);
 uint16_t rv_ftob_s(uint32_t a, uint32_t frm, uint32_t* fflags);
+
+// fp8_e4m3 <--> fp32 conversions
+uint32_t rv_e4m3tof_s(uint8_t a);
+uint8_t rv_ftoe4m3_s(uint32_t a);
+
+// fp8_e5m2 <--> fp32 conversions
+uint32_t rv_e5m2tof_s(uint8_t a);
+uint8_t rv_ftoe5m2_s(uint32_t a);
 
 #ifdef __cplusplus
 }

@@ -17,7 +17,8 @@ module VX_tcu_drl_max_exp #(
     parameter N = 5     //include c_val count
 ) (
     input wire [N-1:0][7:0] exponents,
-    output logic [7:0] max_exp
+    output logic [7:0] max_exp,
+    output logic [N-1:0][7:0] shift_amounts
 );
 
     //Subtractor-based compare exponent tree max finder
@@ -73,6 +74,23 @@ module VX_tcu_drl_max_exp #(
         assign or_red[i+1] = or_red[i] | (sel_exp[i] ? exponents[i] : 8'd0);
     end
     assign max_exp = or_red[N];
+
+    //Reusing shift amounts directly from difference matrix
+    for (genvar i = 0; i < N; i++) begin : g_shift_extract
+
+`IGNORE_UNOPTFLAT_BEGIN
+        wire [7:0] shift_op[N:0];
+`IGNORE_UNOPTFLAT_END
+
+        assign shift_op[0] = 8'd0;
+        for (genvar j = 0; j < N; j++) begin : g_shift_mux
+            //For case operand j is max
+            wire [7:0] shift_sel = sel_exp[j] ? (-diff_mat[i][j][7:0]) : 8'd0;
+            assign shift_op[j+1] = shift_op[j] | shift_sel;
+        end
+
+        assign shift_amounts[i] = shift_op[N];
+    end
 
 endmodule
 
