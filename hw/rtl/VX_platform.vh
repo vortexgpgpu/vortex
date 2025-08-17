@@ -195,7 +195,7 @@
 `ifndef SIMULATION
     `define ASYNC_BRAM_PATCH
 `endif
-`else
+`elsif ASIC
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
 `define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
@@ -207,6 +207,18 @@
 `define PRESERVE_NET
 `define BLACKBOX_CELL
 `define STRING
+`else
+`define MAX_FANOUT      8
+`define LATENCY_IMUL    3
+`define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
+`define USE_BLOCK_BRAM
+`define USE_FAST_BRAM
+`define NO_RW_RAM_CHECK
+`define RW_RAM_CHECK
+`define DISABLE_BRAM
+`define PRESERVE_NET
+`define BLACKBOX_CELL
+`define STRING          string
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
