@@ -9,7 +9,7 @@ SYN_LIB_ENV := $(if $(LIB_TGT),LIB_TGT=$(LIB_TGT),$(if $(LIB_ROOT),LIB_ROOT=$(LI
 
 BLACK_BOX_MODULES="VX_sp_ram_asic,VX_dp_ram_asic"
 
-TOP_LEVEL_ENTITY ?= VX_cache_top
+TOP_LEVEL_ENTITY ?= Vortex
 PREFIX ?= build
 
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
@@ -100,21 +100,21 @@ synthesis: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
+	BB_MODULES=$(BLACK_BOX_MODULES) \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	RUN_SYNTH=1 \
-	BB_MODULES=$(BLACK_BOX_MODULES) \
-	$(SRC_DIR)/run_synth.sh > build.log 2>&1 &
+	$(SRC_DIR)/run_synth.sh
 
 techmap: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
+	BB_MODULES=$(BLACK_BOX_MODULES) \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
-	BB_MODULES=$(BLACK_BOX_MODULES) \
 	RUN_MAP=1 \
-	$(SRC_DIR)/run_synth.sh > build.log 2>&1 &
+	$(SRC_DIR)/run_synth.sh
 
 timing: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
@@ -124,7 +124,7 @@ timing: $(BUILD_DIR)/sources.txt
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	RUN_STA=1 \
-	$(SRC_DIR)/run_synth.sh > build.log 2>&1 &
+	$(SRC_DIR)/run_synth.sh
 
 clean:
 	$(RMDIR) $(BUILD_DIR)

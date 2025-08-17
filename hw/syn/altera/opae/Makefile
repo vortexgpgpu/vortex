@@ -18,7 +18,7 @@ IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
 BUILD_DIR := $(PREFIX)_$(DEVICE_FAMILY)_$(TARGET)_$(NUM_CORES)c
 
 ifeq ($(shell which qsub-synth),)
-	RUN_SYNTH=$(OPAE_PLATFORM_ROOT)/bin/run.sh > build.log 2>&1 &
+	RUN_SYNTH=$(OPAE_PLATFORM_ROOT)/bin/run.sh
 else
 	RUN_SYNTH=qsub-synth
 endif
@@ -150,7 +150,7 @@ endif
 
 build: ip-gen setup $(SCOPE_JSON)
 ifeq ($(TARGET), asesim)
-	make -C $(BUILD_DIR)/synth > $(BUILD_DIR)/synth/build.log 2>&1 &
+	make -C $(BUILD_DIR)/synth
 else
 	cd $(BUILD_DIR)/synth && $(RUN_SYNTH)
 endif
