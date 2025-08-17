@@ -299,7 +299,7 @@ compile_ultra -retime
 
 # ---------------- reports ----------------
 report_qor                                      > [file join $RPT_DIR "qor.rpt"]
-report_area                                     > [file join $RPT_DIR "area.rpt"]
+report_area -hier -nosplit                      > [file join $RPT_DIR "area.rpt"]
 report_timing -delay_type max -path_type full_clock -max_paths 50  > [file join $RPT_DIR "timing_max.rpt"]
 report_timing -delay_type min -path_type full_clock -max_paths 50  > [file join $RPT_DIR "timing_min.rpt"]
 report_power                                    > [file join $RPT_DIR "power_vectorless.rpt"]
