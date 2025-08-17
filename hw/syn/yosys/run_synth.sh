@@ -113,26 +113,19 @@ log "Writing $YS"
     echo "memory_map; opt"
     echo "alumacc; wreduce; share; opt"
     echo "techmap; opt"
-  else
-    echo "# RUN_SYNTH=0"
   fi
 
   printf "write_verilog -noattr -noexpr -renameprefix syn_ %q\n" "$NET_PRE"
   printf "write_json %q\n" "$JOUT"
 
   if [[ "$RUN_MAP" == "1" ]]; then
-    if [[ -n "$LIB_TGT" ]]; then
-      printf "dfflibmap -liberty %q\n" "$LIB_TGT"
-      if [[ -n "$ABC_PERIOD" ]]; then
-        printf "abc -markgroups -D %q -liberty %q\n" "$ABC_PERIOD" "$LIB_TGT"
-      else
-        printf "abc -markgroups -liberty %q\n" "$LIB_TGT"
-      fi
-      printf "stat -liberty %q\n" "$LIB_TGT"
+    printf "dfflibmap -liberty %q\n" "$LIB_TGT"
+    if [[ -n "$ABC_PERIOD" ]]; then
+      printf "abc -markgroups -D %q -liberty %q\n" "$ABC_PERIOD" "$LIB_TGT"
     else
-      echo "synth"
-      echo "stat"
+      printf "abc -markgroups -liberty %q\n" "$LIB_TGT"
     fi
+    printf "tee -o %q stat -liberty %q -top %q -width -tech cmos\n" "$RPT_DIR/stat_lib.rpt" "$LIB_TGT" "$TOP"
     printf "write_verilog -noattr -noexpr %q\n" "$NET_POST"
   fi
 } > "$YS"
@@ -148,9 +141,8 @@ if [[ "$RUN_STA" == "1" ]]; then
   STA_SCRIPT="$SCRIPT_DIR/run_sta.tcl"
   NETLIST="$NET_POST"; [[ -f "$NETLIST" ]] || NETLIST="$NET_PRE"
   log "TOP=$TOP NETLIST=$NETLIST LIB_TGT=$LIB_TGT LIB_ROOT=$LIB_ROOT SDC_FILE=$SDC_FILE RPT_DIR=$RPT_DIR sta $STA_SCRIPT"
-  TOP=$TOP NETLIST="$NETLIST" LIB_TGT="$LIB_TGT" LIB_ROOT="$LIB_ROOT" SDC_FILE="$SDC_FILE" RPT_DIR="$RPT_DIR" sta "$STA_SCRIPT"
-  #TOP=$TOP NETLIST="$NETLIST" LIB_TGT="$LIB_TGT" LIB_ROOT="$LIB_ROOT" SDC_FILE="$SDC_FILE" RPT_DIR="$RPT_DIR" sta "$STA_SCRIPT" > "$RPT_DIR/sta.log" 2>&1
-  #cat "$RPT_DIR/sta.log"
+  TOP=$TOP NETLIST="$NETLIST" LIB_TGT="$LIB_TGT" LIB_ROOT="$LIB_ROOT" SDC_FILE="$SDC_FILE" RPT_DIR="$RPT_DIR" sta "$STA_SCRIPT" > "$RPT_DIR/sta.log" 2>&1
+  cat "$RPT_DIR/sta.log"
   stamp "sta"
 fi
 

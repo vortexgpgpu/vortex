@@ -409,7 +409,7 @@ synthesis()
 {
     echo "begin synthesis tests..."
 
-    PREFIX=build_base CONFIGS="-DEXT_F_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" make -C hw/syn/yosys timing
+    make -C hw/syn/yosys
 
     echo "synthesis tests done!"
 }
