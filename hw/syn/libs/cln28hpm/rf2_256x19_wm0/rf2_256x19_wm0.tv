@@ -1,0 +1,634 @@
+/* tetramax_memcomp Version: 4.0.5-EAC3 */
+/* common_memcomp Version: 4.0.5.2-amci */
+/* lang compiler Version: 4.1.6-EAC2 Oct 30 2012 16:32:37 */
+//
+//       CONFIDENTIAL AND PROPRIETARY SOFTWARE OF ARM PHYSICAL IP, INC.
+//      
+//       Copyright (c) 1993 - 2019 ARM Physical IP, Inc.  All Rights Reserved.
+//      
+//       Use of this Software is subject to the terms and conditions of the
+//       applicable license agreement with ARM Physical IP, Inc.
+//       In addition, this Software is protected by patents, copyright law 
+//       and international treaties.
+//      
+//       The copyright notice(s) in this Software does not indicate actual or
+//       intended publication of this Software.
+//
+//      Tetramax model for High Density Two Port Register File SVT MVT Compiler
+//
+//       Instance Name:              rf2_256x19_wm0
+//       Words:                      256
+//       Bits:                       19
+//       Mux:                        2
+//       Drive:                      6
+//       Write Mask:                 Off
+//       Write Thru:                 Off
+//       Extra Margin Adjustment:    On
+//       Redundant Columns:          2
+//       Test Muxes                  On
+//       Power Gating:               Off
+//       Retention:                  On
+//       Pipeline:                   Off
+//       Read Disturb Test:	        Off
+//       
+//       Creation Date:  Sun Oct 20 14:44:19 2019
+//       Version: 	r4p0
+//
+//      Verified
+//
+//      Modeling Assumptions:
+//      This model is for use by only TetraMax ATPG tool.
+//      It is not intended to be used by any Verilog Simulator.
+//
+//      Modeling Limitations: These models have limited functionality as
+//      defined by the TetraMax modelling guidelines. These models are
+//      developed on Verilog syntax but they don't fully represent the
+//      functionality of the memory model as they are restricted by
+//      the ATPG tool. We have used fast sequential ATPG engine for verification
+//      of all the memories on recommendation from Synopsys Tetramax expert. 
+//      The models have been tested by generating the ATPG vectors and simulating them
+//      as well as running functional vectors through tetramax logical simulation engine.
+//
+//      Known Bugs: None.
+//
+//      Known Work Arounds: N/A
+//
+
+
+`timescale 1ns/1ps
+`define read_write  readx
+`celldefine
+module rf2_256x19_wm0_scanflop (Q, SI, D, SE, CLK, Xout);
+   output Q;
+   input SI, D, SE, CLK, Xout;
+   _MUX m1 (SE, D, SI, n1);
+   _MUX m2 (Xout, n1, 1'bX, n2);
+   _DFF r1 (1'b0, 1'b0, CLK, n2, Q);
+endmodule
+`endcelldefine
+`celldefine
+module rf2_256x19_wm0_bitcell (CLK, WRITE, WA, RA, D, Xout, Q);
+   input CLK, WRITE, D, Xout;
+   input [7:0] WA, RA;
+   output Q;
+ 
+   reg Q;
+   reg mem [255:0];
+   wire WRITE_ram, D_ram;
+   wire [7:0] WA_ram;
+ 
+   _MUX WRITE_MUX (Xout, WRITE, 1'bX, WRITE_ram);
+   _MUX D_mux (Xout, D, 1'bX, D_ram);
+   _MUX A0_mux (Xout, WA[0], 1'bX, WA_ram[0]);
+   _MUX A1_mux (Xout, WA[1], 1'bX, WA_ram[1]);
+   _MUX A2_mux (Xout, WA[2], 1'bX, WA_ram[2]);
+   _MUX A3_mux (Xout, WA[3], 1'bX, WA_ram[3]);
+   _MUX A4_mux (Xout, WA[4], 1'bX, WA_ram[4]);
+   _MUX A5_mux (Xout, WA[5], 1'bX, WA_ram[5]);
+   _MUX A6_mux (Xout, WA[6], 1'bX, WA_ram[6]);
+   _MUX A7_mux (Xout, WA[7], 1'bX, WA_ram[7]);
+ 
+   event WRITE_OP;
+   always @ (posedge CLK) if(WRITE_ram) begin
+      mem[WA_ram]=D_ram;
+      #0; -> WRITE_OP;
+   end
+ 
+   wire TIE1;
+   assign TIE1 = 1'b1;
+   always @ (TIE1 or RA or WRITE_OP) if(TIE1) Q=mem[RA];
+endmodule
+`endcelldefine
+`suppress_faults
+`enable_portfaults
+`ifdef POWER_PINS
+module rf2_256x19_wm0 (VDDCE, VDDPE, VSSE, CENYA, AYA, CENYB, AYB, QA, SOA, SOB, CLKA,
+    CENA, AA, CLKB, CENB, AB, DB, EMAA, EMASA, EMAB, TENA, TCENA, TAA, TENB, TCENB,
+    TAB, TDB, RET1N, SIA, SEA, DFTRAMBYP, SIB, SEB, COLLDISN);
+`else
+module rf2_256x19_wm0 (CENYA, AYA, CENYB, AYB, QA, SOA, SOB, CLKA, CENA, AA, CLKB,
+    CENB, AB, DB, EMAA, EMASA, EMAB, TENA, TCENA, TAA, TENB, TCENB, TAB, TDB, RET1N,
+    SIA, SEA, DFTRAMBYP, SIB, SEB, COLLDISN);
+`endif
+
+  output  CENYA;
+  output [7:0] AYA;
+  output  CENYB;
+  output [7:0] AYB;
+  output [18:0] QA;
+  output [1:0] SOA;
+  output [1:0] SOB;
+  input  CLKA;
+  input  CENA;
+  input [7:0] AA;
+  input  CLKB;
+  input  CENB;
+  input [7:0] AB;
+  input [18:0] DB;
+  input [2:0] EMAA;
+  input  EMASA;
+  input [2:0] EMAB;
+  input  TENA;
+  input  TCENA;
+  input [7:0] TAA;
+  input  TENB;
+  input  TCENB;
+  input [7:0] TAB;
+  input [18:0] TDB;
+  input  RET1N;
+  input [1:0] SIA;
+  input  SEA;
+  input  DFTRAMBYP;
+  input [1:0] SIB;
+  input  SEB;
+  input  COLLDISN;
+`ifdef POWER_PINS
+  inout VDDCE;
+  inout VDDPE;
+  inout VSSE;
+`endif
+   wire [1:0] BUS_SIA;
+   assign BUS_SIA[0] = SIA[0];
+   assign BUS_SIA[1] = SIA[1];
+   wire [7:0] BUS_AA;
+   assign BUS_AA = AA;
+   wire [7:0] BMUX_AA;
+   wire [7:0] BMUXSEL_AA;
+   wire BMUX_CENA;
+   wire BMUXSEL_CENA;
+   wire [18:0] INT_QA;
+   wire [18:0] READ_QA;
+  _MUX maA0 (TENA, TAA[0], BUS_AA[0], BMUX_AA[0]);
+  _MUX maselA0 (DFTRAMBYP, 1'b0, BMUX_AA[0], BMUXSEL_AA[0]);
+  buf bufmaA0(AYA[0],BMUXSEL_AA[0]);
+  _MUX maA1 (TENA, TAA[1], BUS_AA[1], BMUX_AA[1]);
+  _MUX maselA1 (DFTRAMBYP, 1'b0, BMUX_AA[1], BMUXSEL_AA[1]);
+  buf bufmaA1(AYA[1],BMUXSEL_AA[1]);
+  _MUX maA2 (TENA, TAA[2], BUS_AA[2], BMUX_AA[2]);
+  _MUX maselA2 (DFTRAMBYP, 1'b0, BMUX_AA[2], BMUXSEL_AA[2]);
+  buf bufmaA2(AYA[2],BMUXSEL_AA[2]);
+  _MUX maA3 (TENA, TAA[3], BUS_AA[3], BMUX_AA[3]);
+  _MUX maselA3 (DFTRAMBYP, 1'b0, BMUX_AA[3], BMUXSEL_AA[3]);
+  buf bufmaA3(AYA[3],BMUXSEL_AA[3]);
+  _MUX maA4 (TENA, TAA[4], BUS_AA[4], BMUX_AA[4]);
+  _MUX maselA4 (DFTRAMBYP, 1'b0, BMUX_AA[4], BMUXSEL_AA[4]);
+  buf bufmaA4(AYA[4],BMUXSEL_AA[4]);
+  _MUX maA5 (TENA, TAA[5], BUS_AA[5], BMUX_AA[5]);
+  _MUX maselA5 (DFTRAMBYP, 1'b0, BMUX_AA[5], BMUXSEL_AA[5]);
+  buf bufmaA5(AYA[5],BMUXSEL_AA[5]);
+  _MUX maA6 (TENA, TAA[6], BUS_AA[6], BMUX_AA[6]);
+  _MUX maselA6 (DFTRAMBYP, 1'b0, BMUX_AA[6], BMUXSEL_AA[6]);
+  buf bufmaA6(AYA[6],BMUXSEL_AA[6]);
+  _MUX maA7 (TENA, TAA[7], BUS_AA[7], BMUX_AA[7]);
+  _MUX maselA7 (DFTRAMBYP, 1'b0, BMUX_AA[7], BMUXSEL_AA[7]);
+  buf bufmaA7(AYA[7],BMUXSEL_AA[7]);
+
+  _MUX mcenA    (TENA, TCENA, CENA, BMUX_CENA); 
+  _MUX mcenselA    (DFTRAMBYP, 1'b0,BMUX_CENA, BMUXSEL_CENA); 
+  buf bufmcenA (CENYA, BMUXSEL_CENA);
+   wire [7:0] A_max, A_max_n, AA_m;
+   wire XoutAif, XoutAiff;
+   wire [7:1] BMUX_AA_n, EQ_A, m_AA;
+   wire [6:0] XoutAi;
+  not BMUX_AA1_n (BMUX_AA_n[1], BMUX_AA[1]);
+  not BMUX_AA2_n (BMUX_AA_n[2], BMUX_AA[2]);
+  not BMUX_AA3_n (BMUX_AA_n[3], BMUX_AA[3]);
+  not BMUX_AA4_n (BMUX_AA_n[4], BMUX_AA[4]);
+  not BMUX_AA5_n (BMUX_AA_n[5], BMUX_AA[5]);
+  not BMUX_AA6_n (BMUX_AA_n[6], BMUX_AA[6]);
+  not BMUX_AA7_n (BMUX_AA_n[7], BMUX_AA[7]);
+
+  assign A_max[0] = 1;
+  assign A_max[1] = 1;
+  assign A_max[2] = 1;
+  assign A_max[3] = 1;
+  assign A_max[4] = 1;
+  assign A_max[5] = 1;
+  assign A_max[6] = 1;
+  assign A_max[7] = 1;
+
+  not Amax0_n (A_max_n[0], A_max[0]);
+  not Amax1_n (A_max_n[1], A_max[1]);
+  not Amax2_n (A_max_n[2], A_max[2]);
+  not Amax3_n (A_max_n[3], A_max[3]);
+  not Amax4_n (A_max_n[4], A_max[4]);
+  not Amax5_n (A_max_n[5], A_max[5]);
+  not Amax6_n (A_max_n[6], A_max[6]);
+  not Amax7_n (A_max_n[7], A_max[7]);
+
+  and andBMUXAAAmax0 (AA_m[0], BMUX_AA[0], A_max_n[0]);
+  and andBMUXAAAmax1 (AA_m[1], BMUX_AA[1], A_max_n[1]);
+  and andBMUXAAAmax2 (AA_m[2], BMUX_AA[2], A_max_n[2]);
+  and andBMUXAAAmax3 (AA_m[3], BMUX_AA[3], A_max_n[3]);
+  and andBMUXAAAmax4 (AA_m[4], BMUX_AA[4], A_max_n[4]);
+  and andBMUXAAAmax5 (AA_m[5], BMUX_AA[5], A_max_n[5]);
+  and andBMUXAAAmax6 (AA_m[6], BMUX_AA[6], A_max_n[6]);
+  and andBMUXAAAmax7 (AA_m[7], BMUX_AA[7], A_max_n[7]);
+
+  and andBMUXAAAmax1_n (m_AA[1], BMUX_AA_n[1], A_max[1]);
+  and andBMUXAAAmax2_n (m_AA[2], BMUX_AA_n[2], A_max[2]);
+  and andBMUXAAAmax3_n (m_AA[3], BMUX_AA_n[3], A_max[3]);
+  and andBMUXAAAmax4_n (m_AA[4], BMUX_AA_n[4], A_max[4]);
+  and andBMUXAAAmax5_n (m_AA[5], BMUX_AA_n[5], A_max[5]);
+  and andBMUXAAAmax6_n (m_AA[6], BMUX_AA_n[6], A_max[6]);
+  and andBMUXAAAmax7_n (m_AA[7], BMUX_AA_n[7], A_max[7]);
+
+  nor norAAAmax1 (EQ_A[1], m_AA[1], AA_m[1]);
+  nor norAAAmax2 (EQ_A[2], m_AA[2], AA_m[2]);
+  nor norAAAmax3 (EQ_A[3], m_AA[3], AA_m[3]);
+  nor norAAAmax4 (EQ_A[4], m_AA[4], AA_m[4]);
+  nor norAAAmax5 (EQ_A[5], m_AA[5], AA_m[5]);
+  nor norAAAmax6 (EQ_A[6], m_AA[6], AA_m[6]);
+  nor norAAAmax7 (EQ_A[7], m_AA[7], AA_m[7]);
+
+  and XfAAAmax0 (XoutAi[0], AA_m[0], EQ_A[7], EQ_A[6], EQ_A[5], EQ_A[4], EQ_A[3], EQ_A[2], EQ_A[1]);
+  and XfAAAmax1 (XoutAi[1], AA_m[1], EQ_A[7], EQ_A[6], EQ_A[5], EQ_A[4], EQ_A[3], EQ_A[2]);
+  and XfAAAmax2 (XoutAi[2], AA_m[2], EQ_A[7], EQ_A[6], EQ_A[5], EQ_A[4], EQ_A[3]);
+  and XfAAAmax3 (XoutAi[3], AA_m[3], EQ_A[7], EQ_A[6], EQ_A[5], EQ_A[4]);
+  and XfAAAmax4 (XoutAi[4], AA_m[4], EQ_A[7], EQ_A[6], EQ_A[5]);
+  and XfAAAmax5 (XoutAi[5], AA_m[5], EQ_A[7], EQ_A[6]);
+  and XfAAAmax6 (XoutAi[6], AA_m[6], EQ_A[7]);
+  or orXfAAAmax7 (XoutAif, AA_m[7], XoutAi[0], XoutAi[1], XoutAi[2], XoutAi[3], XoutAi[4], XoutAi[5], XoutAi[6]);
+
+  wire [7:0] xDetectionAddrBusA;
+   xor addrHandleA0 (xDetectionAddrBusA[0], BMUX_AA[0], BMUX_AA[0]);
+   xor addrHandleA1 (xDetectionAddrBusA[1], BMUX_AA[1], BMUX_AA[1]);
+   xor addrHandleA2 (xDetectionAddrBusA[2], BMUX_AA[2], BMUX_AA[2]);
+   xor addrHandleA3 (xDetectionAddrBusA[3], BMUX_AA[3], BMUX_AA[3]);
+   xor addrHandleA4 (xDetectionAddrBusA[4], BMUX_AA[4], BMUX_AA[4]);
+   xor addrHandleA5 (xDetectionAddrBusA[5], BMUX_AA[5], BMUX_AA[5]);
+   xor addrHandleA6 (xDetectionAddrBusA[6], BMUX_AA[6], BMUX_AA[6]);
+   xor addrHandleA7 (xDetectionAddrBusA[7], BMUX_AA[7], BMUX_AA[7]);
+   or addrFinalA (xAddrA,xDetectionAddrBusA[0],xDetectionAddrBusA[1],xDetectionAddrBusA[2],xDetectionAddrBusA[3],xDetectionAddrBusA[4],xDetectionAddrBusA[5],xDetectionAddrBusA[6],xDetectionAddrBusA[7]);
+   or xBoundA (XoutAFinal, XoutAif, xAddrA);
+  nor scanshiftA (nscanshiftA, DFTRAMBYP, SEA);
+  and XoutaddrA (XoutaddrA, nscanshiftA, XoutAFinal);
+  or XoutAFF0 (XoutAiff, XoutaddrA, XoutA);
+
+   wire NOT_CENA;
+   not (NOT_CENA, BMUX_CENA);
+   wire NOT_DFTRAMBYP;
+   not (NOT_DFTRAMBYP, DFTRAMBYP);
+   wire [18:0] READA;
+   buf (READA[0], NOT_CENA);
+   buf (READA[1], NOT_CENA);
+   buf (READA[2], NOT_CENA);
+   buf (READA[3], NOT_CENA);
+   buf (READA[4], NOT_CENA);
+   buf (READA[5], NOT_CENA);
+   buf (READA[6], NOT_CENA);
+   buf (READA[7], NOT_CENA);
+   buf (READA[8], NOT_CENA);
+   buf (READA[9], NOT_CENA);
+   buf (READA[10], NOT_CENA);
+   buf (READA[11], NOT_CENA);
+   buf (READA[12], NOT_CENA);
+   buf (READA[13], NOT_CENA);
+   buf (READA[14], NOT_CENA);
+   buf (READA[15], NOT_CENA);
+   buf (READA[16], NOT_CENA);
+   buf (READA[17], NOT_CENA);
+   buf (READA[18], NOT_CENA);
+   xor (x_detection_CENA, BMUX_CENA, BMUX_CENA);
+   and (acendftA, x_detection_CENA, NOT_DFTRAMBYP);
+   assign XoutA = (SEA & ~DFTRAMBYP) | acendftA;
+   _MUX reA0 (READA[0], QA[0], INT_QA[0], READ_QA[0]);
+   _MUX reA1 (READA[1], QA[1], INT_QA[1], READ_QA[1]);
+   _MUX reA2 (READA[2], QA[2], INT_QA[2], READ_QA[2]);
+   _MUX reA3 (READA[3], QA[3], INT_QA[3], READ_QA[3]);
+   _MUX reA4 (READA[4], QA[4], INT_QA[4], READ_QA[4]);
+   _MUX reA5 (READA[5], QA[5], INT_QA[5], READ_QA[5]);
+   _MUX reA6 (READA[6], QA[6], INT_QA[6], READ_QA[6]);
+   _MUX reA7 (READA[7], QA[7], INT_QA[7], READ_QA[7]);
+   _MUX reA8 (READA[8], QA[8], INT_QA[8], READ_QA[8]);
+   _MUX reA9 (READA[9], QA[9], INT_QA[9], READ_QA[9]);
+   _MUX reA10 (READA[10], QA[10], INT_QA[10], READ_QA[10]);
+   _MUX reA11 (READA[11], QA[11], INT_QA[11], READ_QA[11]);
+   _MUX reA12 (READA[12], QA[12], INT_QA[12], READ_QA[12]);
+   _MUX reA13 (READA[13], QA[13], INT_QA[13], READ_QA[13]);
+   _MUX reA14 (READA[14], QA[14], INT_QA[14], READ_QA[14]);
+   _MUX reA15 (READA[15], QA[15], INT_QA[15], READ_QA[15]);
+   _MUX reA16 (READA[16], QA[16], INT_QA[16], READ_QA[16]);
+   _MUX reA17 (READA[17], QA[17], INT_QA[17], READ_QA[17]);
+   _MUX reA18 (READA[18], QA[18], INT_QA[18], READ_QA[18]);
+   wire [7:0] AAXOR;
+   xor (AAXOR[0], BMUX_AA[0], BMUX_AA[0]);
+   xor (AAXOR[1], BMUX_AA[1], BMUX_AA[1]);
+   xor (AAXOR[2], BMUX_AA[2], BMUX_AA[2]);
+   xor (AAXOR[3], BMUX_AA[3], BMUX_AA[3]);
+   xor (AAXOR[4], BMUX_AA[4], BMUX_AA[4]);
+   xor (AAXOR[5], BMUX_AA[5], BMUX_AA[5]);
+   xor (AAXOR[6], BMUX_AA[6], BMUX_AA[6]);
+   xor (AAXOR[7], BMUX_AA[7], BMUX_AA[7]);
+   wire xA_addr;
+   or (xA_addr, AAXOR[0], AAXOR[1], AAXOR[2], AAXOR[3], AAXOR[4], AAXOR[5], AAXOR[6], AAXOR[7]);
+   _MUX rxA0 (xA_addr, READ_QA[0], 1'bX, READ_QAX[0]);
+   _MUX rxA1 (xA_addr, READ_QA[1], 1'bX, READ_QAX[1]);
+   _MUX rxA2 (xA_addr, READ_QA[2], 1'bX, READ_QAX[2]);
+   _MUX rxA3 (xA_addr, READ_QA[3], 1'bX, READ_QAX[3]);
+   _MUX rxA4 (xA_addr, READ_QA[4], 1'bX, READ_QAX[4]);
+   _MUX rxA5 (xA_addr, READ_QA[5], 1'bX, READ_QAX[5]);
+   _MUX rxA6 (xA_addr, READ_QA[6], 1'bX, READ_QAX[6]);
+   _MUX rxA7 (xA_addr, READ_QA[7], 1'bX, READ_QAX[7]);
+   _MUX rxA8 (xA_addr, READ_QA[8], 1'bX, READ_QAX[8]);
+   _MUX rxA9 (xA_addr, READ_QA[9], 1'bX, READ_QAX[9]);
+   _MUX rxA10 (xA_addr, READ_QA[10], 1'bX, READ_QAX[10]);
+   _MUX rxA11 (xA_addr, READ_QA[11], 1'bX, READ_QAX[11]);
+   _MUX rxA12 (xA_addr, READ_QA[12], 1'bX, READ_QAX[12]);
+   _MUX rxA13 (xA_addr, READ_QA[13], 1'bX, READ_QAX[13]);
+   _MUX rxA14 (xA_addr, READ_QA[14], 1'bX, READ_QAX[14]);
+   _MUX rxA15 (xA_addr, READ_QA[15], 1'bX, READ_QAX[15]);
+   _MUX rxA16 (xA_addr, READ_QA[16], 1'bX, READ_QAX[16]);
+   _MUX rxA17 (xA_addr, READ_QA[17], 1'bX, READ_QAX[17]);
+   _MUX rxA18 (xA_addr, READ_QA[18], 1'bX, READ_QAX[18]);
+   _MUX mqA0 (DFTRAMBYP, READ_QAX[0], QA[1], DA_scan[0]);
+   _MUX mqA1 (DFTRAMBYP, READ_QAX[1], QA[2], DA_scan[1]);
+   _MUX mqA2 (DFTRAMBYP, READ_QAX[2], QA[3], DA_scan[2]);
+   _MUX mqA3 (DFTRAMBYP, READ_QAX[3], QA[4], DA_scan[3]);
+   _MUX mqA4 (DFTRAMBYP, READ_QAX[4], QA[5], DA_scan[4]);
+   _MUX mqA5 (DFTRAMBYP, READ_QAX[5], QA[6], DA_scan[5]);
+   _MUX mqA6 (DFTRAMBYP, READ_QAX[6], QA[7], DA_scan[6]);
+   _MUX mqA7 (DFTRAMBYP, READ_QAX[7], QA[8], DA_scan[7]);
+   _MUX mqA8 (DFTRAMBYP, READ_QAX[8], 1'b0, DA_scan[8]);
+   _MUX mqA9 (DFTRAMBYP, READ_QAX[9], 1'b0, DA_scan[9]);
+   _MUX mqA10 (DFTRAMBYP, READ_QAX[10], QA[9], DA_scan[10]);
+   _MUX mqA11 (DFTRAMBYP, READ_QAX[11], QA[10], DA_scan[11]);
+   _MUX mqA12 (DFTRAMBYP, READ_QAX[12], QA[11], DA_scan[12]);
+   _MUX mqA13 (DFTRAMBYP, READ_QAX[13], QA[12], DA_scan[13]);
+   _MUX mqA14 (DFTRAMBYP, READ_QAX[14], QA[13], DA_scan[14]);
+   _MUX mqA15 (DFTRAMBYP, READ_QAX[15], QA[14], DA_scan[15]);
+   _MUX mqA16 (DFTRAMBYP, READ_QAX[16], QA[15], DA_scan[16]);
+   _MUX mqA17 (DFTRAMBYP, READ_QAX[17], QA[16], DA_scan[17]);
+   _MUX mqA18 (DFTRAMBYP, READ_QAX[18], QA[17], DA_scan[18]);
+   rf2_256x19_wm0_scanflop uDQA0 (.CLK(CLKA), .SE(SEA), .SI(QA[1]), .D(DA_scan[0]), .Q(QA[0]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA1 (.CLK(CLKA), .SE(SEA), .SI(QA[2]), .D(DA_scan[1]), .Q(QA[1]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA2 (.CLK(CLKA), .SE(SEA), .SI(QA[3]), .D(DA_scan[2]), .Q(QA[2]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA3 (.CLK(CLKA), .SE(SEA), .SI(QA[4]), .D(DA_scan[3]), .Q(QA[3]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA4 (.CLK(CLKA), .SE(SEA), .SI(QA[5]), .D(DA_scan[4]), .Q(QA[4]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA5 (.CLK(CLKA), .SE(SEA), .SI(QA[6]), .D(DA_scan[5]), .Q(QA[5]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA6 (.CLK(CLKA), .SE(SEA), .SI(QA[7]), .D(DA_scan[6]), .Q(QA[6]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA7 (.CLK(CLKA), .SE(SEA), .SI(QA[8]), .D(DA_scan[7]), .Q(QA[7]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA8 (.CLK(CLKA), .SE(SEA), .SI(BUS_SIA[0]), .D(DA_scan[8]), .Q(QA[8]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA9 (.CLK(CLKA), .SE(SEA), .SI(BUS_SIA[1]), .D(DA_scan[9]), .Q(QA[9]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA10 (.CLK(CLKA), .SE(SEA), .SI(QA[9]), .D(DA_scan[10]), .Q(QA[10]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA11 (.CLK(CLKA), .SE(SEA), .SI(QA[10]), .D(DA_scan[11]), .Q(QA[11]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA12 (.CLK(CLKA), .SE(SEA), .SI(QA[11]), .D(DA_scan[12]), .Q(QA[12]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA13 (.CLK(CLKA), .SE(SEA), .SI(QA[12]), .D(DA_scan[13]), .Q(QA[13]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA14 (.CLK(CLKA), .SE(SEA), .SI(QA[13]), .D(DA_scan[14]), .Q(QA[14]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA15 (.CLK(CLKA), .SE(SEA), .SI(QA[14]), .D(DA_scan[15]), .Q(QA[15]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA16 (.CLK(CLKA), .SE(SEA), .SI(QA[15]), .D(DA_scan[16]), .Q(QA[16]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA17 (.CLK(CLKA), .SE(SEA), .SI(QA[16]), .D(DA_scan[17]), .Q(QA[17]), .Xout(XoutAiff));
+   rf2_256x19_wm0_scanflop uDQA18 (.CLK(CLKA), .SE(SEA), .SI(QA[17]), .D(DA_scan[18]), .Q(QA[18]), .Xout(XoutAiff));
+   assign SOA[0] = QA[0];
+   assign SOA[1] = QA[18];
+   wire [1:0] BUS_SIB;
+   assign BUS_SIB[0] = SIB[0];
+   assign BUS_SIB[1] = SIB[1];
+   wire [7:0] BUS_AB;
+   assign BUS_AB = AB;
+   wire [18:0] BUS_DB;
+  assign BUS_DB = DB;
+   wire [18:0] DB_scan;
+   wire [7:0] BMUX_AB;
+   wire [7:0] BMUXSEL_AB;
+   wire [18:0] BMUX_DB;
+   wire BMUX_CENB;
+   wire BMUXSEL_CENB;
+  _MUX maB0 (TENB, TAB[0], BUS_AB[0], BMUX_AB[0]);
+  _MUX maselB0 (DFTRAMBYP, 1'b0, BMUX_AB[0], BMUXSEL_AB[0]);
+  buf bufmaB0(AYB[0],BMUXSEL_AB[0]);
+  _MUX maB1 (TENB, TAB[1], BUS_AB[1], BMUX_AB[1]);
+  _MUX maselB1 (DFTRAMBYP, 1'b0, BMUX_AB[1], BMUXSEL_AB[1]);
+  buf bufmaB1(AYB[1],BMUXSEL_AB[1]);
+  _MUX maB2 (TENB, TAB[2], BUS_AB[2], BMUX_AB[2]);
+  _MUX maselB2 (DFTRAMBYP, 1'b0, BMUX_AB[2], BMUXSEL_AB[2]);
+  buf bufmaB2(AYB[2],BMUXSEL_AB[2]);
+  _MUX maB3 (TENB, TAB[3], BUS_AB[3], BMUX_AB[3]);
+  _MUX maselB3 (DFTRAMBYP, 1'b0, BMUX_AB[3], BMUXSEL_AB[3]);
+  buf bufmaB3(AYB[3],BMUXSEL_AB[3]);
+  _MUX maB4 (TENB, TAB[4], BUS_AB[4], BMUX_AB[4]);
+  _MUX maselB4 (DFTRAMBYP, 1'b0, BMUX_AB[4], BMUXSEL_AB[4]);
+  buf bufmaB4(AYB[4],BMUXSEL_AB[4]);
+  _MUX maB5 (TENB, TAB[5], BUS_AB[5], BMUX_AB[5]);
+  _MUX maselB5 (DFTRAMBYP, 1'b0, BMUX_AB[5], BMUXSEL_AB[5]);
+  buf bufmaB5(AYB[5],BMUXSEL_AB[5]);
+  _MUX maB6 (TENB, TAB[6], BUS_AB[6], BMUX_AB[6]);
+  _MUX maselB6 (DFTRAMBYP, 1'b0, BMUX_AB[6], BMUXSEL_AB[6]);
+  buf bufmaB6(AYB[6],BMUXSEL_AB[6]);
+  _MUX maB7 (TENB, TAB[7], BUS_AB[7], BMUX_AB[7]);
+  _MUX maselB7 (DFTRAMBYP, 1'b0, BMUX_AB[7], BMUXSEL_AB[7]);
+  buf bufmaB7(AYB[7],BMUXSEL_AB[7]);
+
+  _MUX mdB0 (TENB, TDB[0], BUS_DB[0], BMUX_DB[0]);
+  _MUX mdB1 (TENB, TDB[1], BUS_DB[1], BMUX_DB[1]);
+  _MUX mdB2 (TENB, TDB[2], BUS_DB[2], BMUX_DB[2]);
+  _MUX mdB3 (TENB, TDB[3], BUS_DB[3], BMUX_DB[3]);
+  _MUX mdB4 (TENB, TDB[4], BUS_DB[4], BMUX_DB[4]);
+  _MUX mdB5 (TENB, TDB[5], BUS_DB[5], BMUX_DB[5]);
+  _MUX mdB6 (TENB, TDB[6], BUS_DB[6], BMUX_DB[6]);
+  _MUX mdB7 (TENB, TDB[7], BUS_DB[7], BMUX_DB[7]);
+  _MUX mdB8 (TENB, TDB[8], BUS_DB[8], BMUX_DB[8]);
+  _MUX mdB9 (TENB, TDB[9], BUS_DB[9], BMUX_DB[9]);
+  _MUX mdB10 (TENB, TDB[10], BUS_DB[10], BMUX_DB[10]);
+  _MUX mdB11 (TENB, TDB[11], BUS_DB[11], BMUX_DB[11]);
+  _MUX mdB12 (TENB, TDB[12], BUS_DB[12], BMUX_DB[12]);
+  _MUX mdB13 (TENB, TDB[13], BUS_DB[13], BMUX_DB[13]);
+  _MUX mdB14 (TENB, TDB[14], BUS_DB[14], BMUX_DB[14]);
+  _MUX mdB15 (TENB, TDB[15], BUS_DB[15], BMUX_DB[15]);
+  _MUX mdB16 (TENB, TDB[16], BUS_DB[16], BMUX_DB[16]);
+  _MUX mdB17 (TENB, TDB[17], BUS_DB[17], BMUX_DB[17]);
+  _MUX mdB18 (TENB, TDB[18], BUS_DB[18], BMUX_DB[18]);
+
+  _MUX mcenB    (TENB, TCENB, CENB, BMUX_CENB); 
+  _MUX mcenselB    (DFTRAMBYP, 1'b0,BMUX_CENB, BMUXSEL_CENB); 
+  buf bufmcenB (CENYB, BMUXSEL_CENB);
+   wire [7:0] B_max, B_max_n, AB_m;
+   wire XoutBif, XoutBiff;
+   wire [7:1] BMUX_AB_n, EQ_B, m_AB;
+   wire [6:0] XoutBi;
+  not BMUX_AB1_n (BMUX_AB_n[1], BMUX_AB[1]);
+  not BMUX_AB2_n (BMUX_AB_n[2], BMUX_AB[2]);
+  not BMUX_AB3_n (BMUX_AB_n[3], BMUX_AB[3]);
+  not BMUX_AB4_n (BMUX_AB_n[4], BMUX_AB[4]);
+  not BMUX_AB5_n (BMUX_AB_n[5], BMUX_AB[5]);
+  not BMUX_AB6_n (BMUX_AB_n[6], BMUX_AB[6]);
+  not BMUX_AB7_n (BMUX_AB_n[7], BMUX_AB[7]);
+
+  assign B_max[0] = 1;
+  assign B_max[1] = 1;
+  assign B_max[2] = 1;
+  assign B_max[3] = 1;
+  assign B_max[4] = 1;
+  assign B_max[5] = 1;
+  assign B_max[6] = 1;
+  assign B_max[7] = 1;
+
+  not Bmax0_n (B_max_n[0], B_max[0]);
+  not Bmax1_n (B_max_n[1], B_max[1]);
+  not Bmax2_n (B_max_n[2], B_max[2]);
+  not Bmax3_n (B_max_n[3], B_max[3]);
+  not Bmax4_n (B_max_n[4], B_max[4]);
+  not Bmax5_n (B_max_n[5], B_max[5]);
+  not Bmax6_n (B_max_n[6], B_max[6]);
+  not Bmax7_n (B_max_n[7], B_max[7]);
+
+  and andBMUXABAmax0 (AB_m[0], BMUX_AB[0], B_max_n[0]);
+  and andBMUXABAmax1 (AB_m[1], BMUX_AB[1], B_max_n[1]);
+  and andBMUXABAmax2 (AB_m[2], BMUX_AB[2], B_max_n[2]);
+  and andBMUXABAmax3 (AB_m[3], BMUX_AB[3], B_max_n[3]);
+  and andBMUXABAmax4 (AB_m[4], BMUX_AB[4], B_max_n[4]);
+  and andBMUXABAmax5 (AB_m[5], BMUX_AB[5], B_max_n[5]);
+  and andBMUXABAmax6 (AB_m[6], BMUX_AB[6], B_max_n[6]);
+  and andBMUXABAmax7 (AB_m[7], BMUX_AB[7], B_max_n[7]);
+
+  and andBMUXABAmax1_n (m_AB[1], BMUX_AB_n[1], B_max[1]);
+  and andBMUXABAmax2_n (m_AB[2], BMUX_AB_n[2], B_max[2]);
+  and andBMUXABAmax3_n (m_AB[3], BMUX_AB_n[3], B_max[3]);
+  and andBMUXABAmax4_n (m_AB[4], BMUX_AB_n[4], B_max[4]);
+  and andBMUXABAmax5_n (m_AB[5], BMUX_AB_n[5], B_max[5]);
+  and andBMUXABAmax6_n (m_AB[6], BMUX_AB_n[6], B_max[6]);
+  and andBMUXABAmax7_n (m_AB[7], BMUX_AB_n[7], B_max[7]);
+
+  nor norABAmax1 (EQ_B[1], m_AB[1], AB_m[1]);
+  nor norABAmax2 (EQ_B[2], m_AB[2], AB_m[2]);
+  nor norABAmax3 (EQ_B[3], m_AB[3], AB_m[3]);
+  nor norABAmax4 (EQ_B[4], m_AB[4], AB_m[4]);
+  nor norABAmax5 (EQ_B[5], m_AB[5], AB_m[5]);
+  nor norABAmax6 (EQ_B[6], m_AB[6], AB_m[6]);
+  nor norABAmax7 (EQ_B[7], m_AB[7], AB_m[7]);
+
+  and XfABAmax0 (XoutBi[0], AB_m[0], EQ_B[7], EQ_B[6], EQ_B[5], EQ_B[4], EQ_B[3], EQ_B[2], EQ_B[1]);
+  and XfABAmax1 (XoutBi[1], AB_m[1], EQ_B[7], EQ_B[6], EQ_B[5], EQ_B[4], EQ_B[3], EQ_B[2]);
+  and XfABAmax2 (XoutBi[2], AB_m[2], EQ_B[7], EQ_B[6], EQ_B[5], EQ_B[4], EQ_B[3]);
+  and XfABAmax3 (XoutBi[3], AB_m[3], EQ_B[7], EQ_B[6], EQ_B[5], EQ_B[4]);
+  and XfABAmax4 (XoutBi[4], AB_m[4], EQ_B[7], EQ_B[6], EQ_B[5]);
+  and XfABAmax5 (XoutBi[5], AB_m[5], EQ_B[7], EQ_B[6]);
+  and XfABAmax6 (XoutBi[6], AB_m[6], EQ_B[7]);
+  or orXfABAmax7 (XoutBif, AB_m[7], XoutBi[0], XoutBi[1], XoutBi[2], XoutBi[3], XoutBi[4], XoutBi[5], XoutBi[6]);
+
+  wire [7:0] xDetectionAddrBusB;
+   xor addrHandleB0 (xDetectionAddrBusB[0], BMUX_AB[0], BMUX_AB[0]);
+   xor addrHandleB1 (xDetectionAddrBusB[1], BMUX_AB[1], BMUX_AB[1]);
+   xor addrHandleB2 (xDetectionAddrBusB[2], BMUX_AB[2], BMUX_AB[2]);
+   xor addrHandleB3 (xDetectionAddrBusB[3], BMUX_AB[3], BMUX_AB[3]);
+   xor addrHandleB4 (xDetectionAddrBusB[4], BMUX_AB[4], BMUX_AB[4]);
+   xor addrHandleB5 (xDetectionAddrBusB[5], BMUX_AB[5], BMUX_AB[5]);
+   xor addrHandleB6 (xDetectionAddrBusB[6], BMUX_AB[6], BMUX_AB[6]);
+   xor addrHandleB7 (xDetectionAddrBusB[7], BMUX_AB[7], BMUX_AB[7]);
+   or addrFinalB (xAddrB,xDetectionAddrBusB[0],xDetectionAddrBusB[1],xDetectionAddrBusB[2],xDetectionAddrBusB[3],xDetectionAddrBusB[4],xDetectionAddrBusB[5],xDetectionAddrBusB[6],xDetectionAddrBusB[7]);
+   or xBoundB (XoutBFinal, XoutBif, xAddrB);
+  nor scanshiftB (nscanshiftB, DFTRAMBYP, SEB);
+  and XoutaddrB (XoutaddrB, nscanshiftB, XoutBFinal);
+  or XoutBFF0 (XoutBiff, XoutaddrB, XoutB);
+
+   wire NOT_CENB;
+   not (NOT_CENB, BMUX_CENB);
+   wire NOT_DFTRAMBYP;
+   not (NOT_DFTRAMBYP, DFTRAMBYP);
+   wire [18:0] WRITEB;
+   and (WRITEB[0], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[1], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[2], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[3], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[4], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[5], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[6], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[7], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[8], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[9], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[10], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[11], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[12], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[13], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[14], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[15], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[16], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[17], NOT_DFTRAMBYP, NOT_CENB);
+   and (WRITEB[18], NOT_DFTRAMBYP, NOT_CENB);
+   rf2_256x19_wm0_bitcell memB0 (.CLK(CLKB), .WRITE(WRITEB[0]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[0]), .Xout(XoutBiff), .Q(INT_QA[0]));
+   rf2_256x19_wm0_bitcell memB1 (.CLK(CLKB), .WRITE(WRITEB[1]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[1]), .Xout(XoutBiff), .Q(INT_QA[1]));
+   rf2_256x19_wm0_bitcell memB2 (.CLK(CLKB), .WRITE(WRITEB[2]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[2]), .Xout(XoutBiff), .Q(INT_QA[2]));
+   rf2_256x19_wm0_bitcell memB3 (.CLK(CLKB), .WRITE(WRITEB[3]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[3]), .Xout(XoutBiff), .Q(INT_QA[3]));
+   rf2_256x19_wm0_bitcell memB4 (.CLK(CLKB), .WRITE(WRITEB[4]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[4]), .Xout(XoutBiff), .Q(INT_QA[4]));
+   rf2_256x19_wm0_bitcell memB5 (.CLK(CLKB), .WRITE(WRITEB[5]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[5]), .Xout(XoutBiff), .Q(INT_QA[5]));
+   rf2_256x19_wm0_bitcell memB6 (.CLK(CLKB), .WRITE(WRITEB[6]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[6]), .Xout(XoutBiff), .Q(INT_QA[6]));
+   rf2_256x19_wm0_bitcell memB7 (.CLK(CLKB), .WRITE(WRITEB[7]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[7]), .Xout(XoutBiff), .Q(INT_QA[7]));
+   rf2_256x19_wm0_bitcell memB8 (.CLK(CLKB), .WRITE(WRITEB[8]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[8]), .Xout(XoutBiff), .Q(INT_QA[8]));
+   rf2_256x19_wm0_bitcell memB9 (.CLK(CLKB), .WRITE(WRITEB[9]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[9]), .Xout(XoutBiff), .Q(INT_QA[9]));
+   rf2_256x19_wm0_bitcell memB10 (.CLK(CLKB), .WRITE(WRITEB[10]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[10]), .Xout(XoutBiff), .Q(INT_QA[10]));
+   rf2_256x19_wm0_bitcell memB11 (.CLK(CLKB), .WRITE(WRITEB[11]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[11]), .Xout(XoutBiff), .Q(INT_QA[11]));
+   rf2_256x19_wm0_bitcell memB12 (.CLK(CLKB), .WRITE(WRITEB[12]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[12]), .Xout(XoutBiff), .Q(INT_QA[12]));
+   rf2_256x19_wm0_bitcell memB13 (.CLK(CLKB), .WRITE(WRITEB[13]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[13]), .Xout(XoutBiff), .Q(INT_QA[13]));
+   rf2_256x19_wm0_bitcell memB14 (.CLK(CLKB), .WRITE(WRITEB[14]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[14]), .Xout(XoutBiff), .Q(INT_QA[14]));
+   rf2_256x19_wm0_bitcell memB15 (.CLK(CLKB), .WRITE(WRITEB[15]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[15]), .Xout(XoutBiff), .Q(INT_QA[15]));
+   rf2_256x19_wm0_bitcell memB16 (.CLK(CLKB), .WRITE(WRITEB[16]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[16]), .Xout(XoutBiff), .Q(INT_QA[16]));
+   rf2_256x19_wm0_bitcell memB17 (.CLK(CLKB), .WRITE(WRITEB[17]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[17]), .Xout(XoutBiff), .Q(INT_QA[17]));
+   rf2_256x19_wm0_bitcell memB18 (.CLK(CLKB), .WRITE(WRITEB[18]), .WA(BMUX_AB), .RA(BMUX_AA), .D(BMUX_DB[18]), .Xout(XoutBiff), .Q(INT_QA[18]));
+   xor (x_detection_CENB, BMUX_CENB, BMUX_CENB);
+   and (acendftB, x_detection_CENB, NOT_DFTRAMBYP);
+   assign XoutB = (SEB & ~DFTRAMBYP) | acendftB;
+   wire [18:0] QB_int;
+   wire [18:0] DB_hold;
+   _MUX mhB0 (BMUX_CENB, BMUX_DB[0], QB_int[0], DB_hold[0]);
+   _MUX mhB1 (BMUX_CENB, BMUX_DB[1], QB_int[1], DB_hold[1]);
+   _MUX mhB2 (BMUX_CENB, BMUX_DB[2], QB_int[2], DB_hold[2]);
+   _MUX mhB3 (BMUX_CENB, BMUX_DB[3], QB_int[3], DB_hold[3]);
+   _MUX mhB4 (BMUX_CENB, BMUX_DB[4], QB_int[4], DB_hold[4]);
+   _MUX mhB5 (BMUX_CENB, BMUX_DB[5], QB_int[5], DB_hold[5]);
+   _MUX mhB6 (BMUX_CENB, BMUX_DB[6], QB_int[6], DB_hold[6]);
+   _MUX mhB7 (BMUX_CENB, BMUX_DB[7], QB_int[7], DB_hold[7]);
+   _MUX mhB8 (BMUX_CENB, BMUX_DB[8], QB_int[8], DB_hold[8]);
+   _MUX mhB9 (BMUX_CENB, BMUX_DB[9], QB_int[9], DB_hold[9]);
+   _MUX mhB10 (BMUX_CENB, BMUX_DB[10], QB_int[10], DB_hold[10]);
+   _MUX mhB11 (BMUX_CENB, BMUX_DB[11], QB_int[11], DB_hold[11]);
+   _MUX mhB12 (BMUX_CENB, BMUX_DB[12], QB_int[12], DB_hold[12]);
+   _MUX mhB13 (BMUX_CENB, BMUX_DB[13], QB_int[13], DB_hold[13]);
+   _MUX mhB14 (BMUX_CENB, BMUX_DB[14], QB_int[14], DB_hold[14]);
+   _MUX mhB15 (BMUX_CENB, BMUX_DB[15], QB_int[15], DB_hold[15]);
+   _MUX mhB16 (BMUX_CENB, BMUX_DB[16], QB_int[16], DB_hold[16]);
+   _MUX mhB17 (BMUX_CENB, BMUX_DB[17], QB_int[17], DB_hold[17]);
+   _MUX mhB18 (BMUX_CENB, BMUX_DB[18], QB_int[18], DB_hold[18]);
+   _MUX mqB0 (DFTRAMBYP, DB_hold[0], BMUX_DB[0], DB_scan[0]);
+   _MUX mqB1 (DFTRAMBYP, DB_hold[1], BMUX_DB[1], DB_scan[1]);
+   _MUX mqB2 (DFTRAMBYP, DB_hold[2], BMUX_DB[2], DB_scan[2]);
+   _MUX mqB3 (DFTRAMBYP, DB_hold[3], BMUX_DB[3], DB_scan[3]);
+   _MUX mqB4 (DFTRAMBYP, DB_hold[4], BMUX_DB[4], DB_scan[4]);
+   _MUX mqB5 (DFTRAMBYP, DB_hold[5], BMUX_DB[5], DB_scan[5]);
+   _MUX mqB6 (DFTRAMBYP, DB_hold[6], BMUX_DB[6], DB_scan[6]);
+   _MUX mqB7 (DFTRAMBYP, DB_hold[7], BMUX_DB[7], DB_scan[7]);
+   _MUX mqB8 (DFTRAMBYP, DB_hold[8], BMUX_DB[8], DB_scan[8]);
+   _MUX mqB9 (DFTRAMBYP, DB_hold[9], BMUX_DB[9], DB_scan[9]);
+   _MUX mqB10 (DFTRAMBYP, DB_hold[10], BMUX_DB[10], DB_scan[10]);
+   _MUX mqB11 (DFTRAMBYP, DB_hold[11], BMUX_DB[11], DB_scan[11]);
+   _MUX mqB12 (DFTRAMBYP, DB_hold[12], BMUX_DB[12], DB_scan[12]);
+   _MUX mqB13 (DFTRAMBYP, DB_hold[13], BMUX_DB[13], DB_scan[13]);
+   _MUX mqB14 (DFTRAMBYP, DB_hold[14], BMUX_DB[14], DB_scan[14]);
+   _MUX mqB15 (DFTRAMBYP, DB_hold[15], BMUX_DB[15], DB_scan[15]);
+   _MUX mqB16 (DFTRAMBYP, DB_hold[16], BMUX_DB[16], DB_scan[16]);
+   _MUX mqB17 (DFTRAMBYP, DB_hold[17], BMUX_DB[17], DB_scan[17]);
+   _MUX mqB18 (DFTRAMBYP, DB_hold[18], BMUX_DB[18], DB_scan[18]);
+   rf2_256x19_wm0_scanflop uDQB0 (.CLK(CLKB), .SE(SEB), .SI(QB_int[1]), .D(DB_scan[0]), .Q(QB_int[0]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB1 (.CLK(CLKB), .SE(SEB), .SI(QB_int[2]), .D(DB_scan[1]), .Q(QB_int[1]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB2 (.CLK(CLKB), .SE(SEB), .SI(QB_int[3]), .D(DB_scan[2]), .Q(QB_int[2]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB3 (.CLK(CLKB), .SE(SEB), .SI(QB_int[4]), .D(DB_scan[3]), .Q(QB_int[3]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB4 (.CLK(CLKB), .SE(SEB), .SI(QB_int[5]), .D(DB_scan[4]), .Q(QB_int[4]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB5 (.CLK(CLKB), .SE(SEB), .SI(QB_int[6]), .D(DB_scan[5]), .Q(QB_int[5]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB6 (.CLK(CLKB), .SE(SEB), .SI(QB_int[7]), .D(DB_scan[6]), .Q(QB_int[6]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB7 (.CLK(CLKB), .SE(SEB), .SI(QB_int[8]), .D(DB_scan[7]), .Q(QB_int[7]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB8 (.CLK(CLKB), .SE(SEB), .SI(BUS_SIB[0]), .D(DB_scan[8]), .Q(QB_int[8]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB9 (.CLK(CLKB), .SE(SEB), .SI(BUS_SIB[1]), .D(DB_scan[9]), .Q(QB_int[9]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB10 (.CLK(CLKB), .SE(SEB), .SI(QB_int[9]), .D(DB_scan[10]), .Q(QB_int[10]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB11 (.CLK(CLKB), .SE(SEB), .SI(QB_int[10]), .D(DB_scan[11]), .Q(QB_int[11]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB12 (.CLK(CLKB), .SE(SEB), .SI(QB_int[11]), .D(DB_scan[12]), .Q(QB_int[12]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB13 (.CLK(CLKB), .SE(SEB), .SI(QB_int[12]), .D(DB_scan[13]), .Q(QB_int[13]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB14 (.CLK(CLKB), .SE(SEB), .SI(QB_int[13]), .D(DB_scan[14]), .Q(QB_int[14]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB15 (.CLK(CLKB), .SE(SEB), .SI(QB_int[14]), .D(DB_scan[15]), .Q(QB_int[15]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB16 (.CLK(CLKB), .SE(SEB), .SI(QB_int[15]), .D(DB_scan[16]), .Q(QB_int[16]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB17 (.CLK(CLKB), .SE(SEB), .SI(QB_int[16]), .D(DB_scan[17]), .Q(QB_int[17]), .Xout(XoutBiff));
+   rf2_256x19_wm0_scanflop uDQB18 (.CLK(CLKB), .SE(SEB), .SI(QB_int[17]), .D(DB_scan[18]), .Q(QB_int[18]), .Xout(XoutBiff));
+   assign SOB[0] = QB_int[0];
+   assign SOB[1] = QB_int[18];
+endmodule
+`undef read_write
+`disable_portfaults
+`nosuppress_faults

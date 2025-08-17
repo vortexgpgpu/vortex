@@ -1,0 +1,103 @@
+m255
+K4
+z2
+13
+!s112 1.1
+!i10d 8192
+!i10e 25
+!i10f 100
+cModel Technology
+Z0 d/nethome/lzhu308/new_work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/vsim
+T_opt
+!s110 1571528767
+V_7UfPa[jf=C_;A]OBZfl?1
+04 17 4 work rf2_32x128_wm1_tb fast 0
+=1-246e96c6651a-5daba03e-c1817-31ce
+o-quiet -auto_acc_if_foreign -work work
+Z1 tCvgOpt 0
+n@_opt
+OL;O;10.6a;65
+vdatapath_latch_rf2_32x128_wm1
+Z2 !s110 1571452808
+!i10b 1
+!s100 ]INaC9WCl@8^UmeThn]SW3
+IBVYhO=SVz2k6?d@Kom5ld2
+Z3 VDg1SIo80bB@j0V0VzS_@n1
+R0
+Z4 w1571349566
+Z5 8/home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v
+Z6 F/home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v
+L0 59
+Z7 OL;L;10.6a;65
+r1
+!s85 0
+31
+Z8 !s108 1571452808.000000
+Z9 !s107 /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v|
+Z10 !s90 -reportprogress|300|-work|work|-vopt|-stats=none|/home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v|
+!i113 0
+Z11 o-work work -L mtiAvm -L mtiRnm -L mtiOvm -L mtiUvm -L mtiUPF -L infact
+R1
+vrf2_32x128_wm1
+R2
+!i10b 1
+!s100 <lImI4^G1efnjMSXjGgZA2
+I<E?A<z^V6afIQ=`cO=ook3
+R3
+R0
+R4
+R5
+R6
+L0 2524
+R7
+r1
+!s85 0
+31
+R8
+R9
+R10
+!i113 0
+R11
+R1
+vrf2_32x128_wm1_error_injection
+R2
+!i10b 1
+!s100 XnID8LeZ35:6kV5chaeSG3
+IW13M?^Yg6nlZESCn3kNIH1
+R3
+R0
+R4
+R5
+R6
+L0 15219
+R7
+r1
+!s85 0
+31
+R8
+R9
+R10
+!i113 0
+R11
+R1
+vrf2_32x128_wm1_tb
+!s110 1571528764
+!i10b 1
+!s100 T7Kkimi8^JkY@hYg9A4S43
+I8>G;U1;5P=S6ddc=li8]50
+R3
+R0
+w1571542951
+8/home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/vsim/rf2_32x128_wm1_tb.v
+F/home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/vsim/rf2_32x128_wm1_tb.v
+L0 4
+R7
+r1
+!s85 0
+31
+!s108 1571528764.000000
+!s107 /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/vsim/rf2_32x128_wm1_tb.v|
+!s90 -reportprogress|300|-work|work|-vopt|-stats=none|/home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpc/rf2_32x128_wm1/vsim/rf2_32x128_wm1_tb.v|
+!i113 0
+R11
+R1
