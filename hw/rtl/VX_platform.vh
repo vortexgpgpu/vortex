@@ -206,7 +206,7 @@
 `define DISABLE_BRAM
 `define PRESERVE_NET
 `define BLACKBOX_CELL
-`define STRING          string
+`define STRING
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
