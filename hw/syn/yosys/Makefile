@@ -7,8 +7,6 @@ LIB_DIR := $(VORTEX_HOME)/hw/syn/libs
 DEFAULT_LIB := $(LIB_DIR)/NangateOpenCellLibrary_typical.lib
 SYN_LIB_ENV := $(if $(LIB_TGT),LIB_TGT=$(LIB_TGT),$(if $(LIB_ROOT),LIB_ROOT=$(LIB_ROOT),LIB_TGT=$(DEFAULT_LIB)))
 
-BLACK_BOX_MODULES="VX_sp_ram_asic,VX_dp_ram_asic"
-
 TOP_LEVEL_ENTITY ?= Vortex
 PREFIX ?= build
 
@@ -56,6 +54,8 @@ endif
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
 RTL_INCLUDE += $(FPU_INCLUDE)
 
+RTL_INCLUDE += -I(LIB_DIR)/no_mem
+
 # Debugging
 ifdef DEBUG
 	CFLAGS += $(DBG_TRACE_FLAGS)
@@ -84,23 +84,23 @@ all: timing
 
 gen-sources: $(BUILD_DIR)/src
 $(BUILD_DIR)/src:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -Csrc
+	$(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -C$(BUILD_DIR)/src
 
 sv2v: $(BUILD_DIR)/project.v
 $(BUILD_DIR)/project.v: $(BUILD_DIR)/src
-	cd $(BUILD_DIR); $(SCRIPT_DIR)/sv2v.sh -t$(TOP_LEVEL_ENTITY) -Isrc -oproject.v
+	$(SCRIPT_DIR)/sv2v.sh -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -o$(BUILD_DIR)/project.v
+	# Remove any $finish statements from the generated Verilog file
+	sed -r -i 's/^[[:space:]]*[$$]finish([[:space:]]*\([^;]*\))?[[:space:]]*;([[:space:]]*(\/\/.*|\/\*.*\*\/))?[[:space:]]*$$//g' $(BUILD_DIR)/project.v
+
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt: $(BUILD_DIR)/project.v
 	echo $(realpath $(BUILD_DIR)/project.v) > $(BUILD_DIR)/sources.txt
-	echo $(realpath $(LIB_DIR)/VX_sp_ram_asic.v) >> $(BUILD_DIR)/sources.txt
-	echo $(realpath $(LIB_DIR)/VX_dp_ram_asic.v) >> $(BUILD_DIR)/sources.txt
 
 synthesis: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
-	BB_MODULES=$(BLACK_BOX_MODULES) \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	RUN_SYNTH=1 \
@@ -110,7 +110,6 @@ techmap: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
-	BB_MODULES=$(BLACK_BOX_MODULES) \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	RUN_MAP=1 \
@@ -120,7 +119,6 @@ timing: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
-	BB_MODULES=$(BLACK_BOX_MODULES) \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	RUN_STA=1 \
