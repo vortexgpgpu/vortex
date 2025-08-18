@@ -7,8 +7,6 @@ LIB_DIR := $(VORTEX_HOME)/hw/syn/libs
 DEFAULT_LIB := $(LIB_DIR)/NanGate_15nm_OCL.db
 SYN_LIB_ENV := $(if $(LIB_TGT),LIB_TGT=$(LIB_TGT),$(if $(LIB_ROOT),LIB_ROOT=$(LIB_ROOT),LIB_TGT=$(DEFAULT_LIB)))
 
-BLACK_BOX_MODULES="VX_sp_ram_asic,VX_dp_ram_asic"
-
 TOP_LEVEL_ENTITY ?= Vortex
 PREFIX ?= build
 
@@ -56,6 +54,8 @@ endif
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
 RTL_INCLUDE += $(FPU_INCLUDE)
 
+RTL_INCLUDE += -I(LIB_DIR)/no_mem
+
 # Debugging
 ifdef DEBUG
 	CFLAGS += $(DBG_TRACE_FLAGS)
@@ -85,13 +85,12 @@ all: synthesis
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -Csrc -Osources.txt
+	$(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -C$(BUILD_DIR)/src -O$(BUILD_DIR)/sources.txt
 
 synthesis: $(BUILD_DIR)/sources.txt
 	cd $(BUILD_DIR); TOP=$(TOP_LEVEL_ENTITY) \
 	SRC_FILE=sources.txt \
 	SDC_FILE=$(SRC_DIR)/project.sdc \
-	BB_MODULES=$(BLACK_BOX_MODULES) \
 	$(SYN_LIB_ENV) \
 	TOOL_DIR=$(SCRIPT_DIR) \
 	dc_shell -f $(SRC_DIR)/project.tcl
