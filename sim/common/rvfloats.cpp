@@ -562,6 +562,30 @@ uint16_t rv_ftob_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return from_bfloat16_t(r);
 }
 
+uint32_t rv_e4m3tof_s(uint8_t a) {
+  float8_t f8; f8.v = a;
+  float32_t f32 = f8_to_f32(f8);
+  return f32.v;
+}
+
+uint8_t rv_ftoe4m3_s(uint32_t a) {
+  float32_t f32; f32.v = a;
+  float8_t f8 = f32_to_f8(f32);
+  return f8.v;
+}
+
+uint32_t rv_e5m2tof_s(uint8_t a) {
+  bfloat8_t bf8; bf8.v = a;
+  float32_t f32 = bf8_to_f32(bf8);
+  return f32.v;
+}
+
+uint8_t rv_ftoe5m2_s(uint32_t a) {
+  float32_t f32; f32.v = a;
+  bfloat8_t bf8 = f32_to_bf8(f32);
+  return bf8.v;
+}
+
 #ifdef __cplusplus
 }
 #endif

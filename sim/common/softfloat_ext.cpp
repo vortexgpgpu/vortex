@@ -452,6 +452,150 @@ float64_t f64_recip7(float64_t in) {
   return uA.f;
 }
 
+/* 
+SoftFloat doesn't support fp8
+These implementations do not return exception flags,
+but instead just return the exceptions' cannonical representation,
+for eg. NaN is returned as 0x7fc00000 for fp32
+Rounding mode is always set to RNE
+*/
+
+float32_t f8_to_f32(float8_t a) {
+    float32_t out;
+    uint8_t v = a.v;
+    if (v == 0) { out.v = 0; return out; }
+    
+    uint32_t sign = (v & 0x80) << 24;
+    uint32_t exp = (v >> 3) & 0xF;
+    uint32_t mant = v & 0x7;
+    
+    if (exp == 0xF) {
+        if (mant != 0) { out.v = 0x7fc00000; return out; }
+        out.v = sign | 0x7f800000; return out;
+    }
+    
+    if (exp == 0) {
+        int lz = mant ? (__builtin_clz(mant) - 29) : 32;
+        exp = 127 - 6 - lz;
+        mant = (mant << (lz + 1)) & 0x7;
+    } else {
+        exp += 127 - 7;
+    }
+    
+    out.v = sign | (exp << 23) | (mant << 20);
+    return out;
+}
+
+float8_t f32_to_f8(float32_t a) {
+    float8_t out;
+    uint32_t v = a.v;
+    if (v == 0 || (v & 0x7fffffff) == 0) { out.v = 0; return out; }
+    
+    uint8_t sign = (v >> 24) & 0x80;
+    int32_t exp = ((v >> 23) & 0xff) - 127;
+    uint32_t mant = (v >> 20) & 0x7;
+    
+    if (exp >= 8) { out.v = sign | 0x7f; return out; }
+    if (exp < -9) { out.v = sign; return out; }
+    
+    if (exp >= -6) {
+        exp += 7;
+        uint32_t round_bit = (v >> 19) & 1;
+        uint32_t sticky = v & 0x7ffff;
+        if (round_bit && (sticky || (mant & 1))) {
+            mant++;
+            if (mant > 7) {
+                mant = 0;
+                exp++;
+                if (exp >= 15) { out.v = sign | 0x7f; return out; }
+            }
+        }
+        out.v = sign | (exp << 3) | mant;
+        return out;
+    } else {
+        int shift = -6 - exp;
+        mant |= 8;
+        uint32_t round_bit = (mant >> (shift - 1)) & 1;
+        uint32_t sticky = (mant & ((1 << (shift - 1)) - 1)) || (v & 0x7ffff);
+        mant >>= shift;
+        if (round_bit && (sticky || (mant & 1))) {
+            mant++;
+            if (mant > 7) { out.v = sign | 0x8; return out; }
+        }
+        out.v = sign | mant;
+        return out;
+    }
+}
+
+float32_t bf8_to_f32(bfloat8_t a) {
+    float32_t out;
+    uint8_t v = a.v;
+    if (v == 0) { out.v = 0; return out; }
+    
+    uint32_t sign = (v & 0x80) << 24;
+    uint32_t exp = (v >> 2) & 0x1F;
+    uint32_t mant = v & 0x3;
+    
+    if (exp == 0x1F) {
+        if (mant != 0) { out.v = 0x7fc00000; return out; }
+        out.v = sign | 0x7f800000; return out;
+    }
+    
+    if (exp == 0) {
+        if (mant == 0) { out.v = sign; return out; }
+        int lz = mant == 1 ? 1 : 0;
+        exp = 127 - 14 - lz;
+        mant = (mant << (lz + 1)) & 0x3;
+    } else {
+        exp += 127 - 15;
+    }
+    
+    out.v = sign | (exp << 23) | (mant << 21);
+    return out;
+}
+
+bfloat8_t f32_to_bf8(float32_t a) {
+    bfloat8_t out;
+    uint32_t v = a.v;
+    if (v == 0 || (v & 0x7fffffff) == 0) { out.v = 0; return out; }
+    
+    uint8_t sign = (v >> 24) & 0x80;
+    int32_t exp = ((v >> 23) & 0xff) - 127;
+    uint32_t mant = (v >> 21) & 0x3;
+    
+    if (exp >= 16) { out.v = sign | 0x7c; return out; }
+    if (exp < -17) { out.v = sign; return out; }
+    
+    if (exp >= -14) {
+        exp += 15;
+        uint32_t round_bit = (v >> 20) & 1;
+        uint32_t sticky = v & 0xfffff;
+        if (round_bit && (sticky || (mant & 1))) {
+            mant++;
+            if (mant > 3) {
+                mant = 0;
+                exp++;
+                if (exp >= 31) { out.v = sign | 0x7c; return out; }
+            }
+        }
+        out.v = sign | (exp << 2) | mant;
+        return out;
+    } else {
+        int shift = -14 - exp;
+        mant |= 4;
+        if (shift > 2) { out.v = sign; return out; }
+        uint32_t round_bit = (mant >> (shift - 1)) & 1;
+        uint32_t sticky = (mant & ((1 << (shift - 1)) - 1)) || (v & 0xfffff);
+        mant >>= shift;
+        if (round_bit && (sticky || (mant & 1))) {
+            mant++;
+            if (mant > 3) { out.v = sign | 0x4; return out; }
+        }
+        out.v = sign | mant;
+        return out;
+    }
+}
+
 #ifdef __cplusplus
 }
 #endif
