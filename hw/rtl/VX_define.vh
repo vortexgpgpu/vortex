@@ -229,14 +229,8 @@
 `define CONCAT(out, left_in, right_in, L, R) \
     /* verilator lint_off GENUNNAMED */ \
     if ((L) != 0 && (R) == 0) begin \
-        /* verilator lint_off UNUSED */ \
-        logic [$bits(right_in)-1:0] __unused = right_in; \
-        /* verilator lint_on UNUSED */ \
         assign out = left_in; \
     end else if ((L) == 0 && (R) != 0) begin \
-        /* verilator lint_off UNUSED */ \
-        logic [$bits(left_in)-1:0] __unused = left_in; \
-        /* verilator lint_on UNUSED */ \
         assign out = right_in; \
     end else if ((L) != 0 && (R) != 0) begin \
         assign out = {left_in, right_in}; \
