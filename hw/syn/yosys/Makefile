@@ -89,9 +89,8 @@ $(BUILD_DIR)/src:
 sv2v: $(BUILD_DIR)/project.v
 $(BUILD_DIR)/project.v: $(BUILD_DIR)/src
 	$(SCRIPT_DIR)/sv2v.sh -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -o$(BUILD_DIR)/project.v
-	# Remove any $finish statements from the generated Verilog file
-	sed -r -i 's/^[[:space:]]*[$$]finish([[:space:]]*\([^;]*\))?[[:space:]]*;([[:space:]]*(\/\/.*|\/\*.*\*\/))?[[:space:]]*$$//g' $(BUILD_DIR)/project.v
-
+	# Remove lines starting $finish or $display from generated source
+	sed -ri '/^[[:space:]]*[$$](finish|display)/d' $(BUILD_DIR)/project.v
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt: $(BUILD_DIR)/project.v
