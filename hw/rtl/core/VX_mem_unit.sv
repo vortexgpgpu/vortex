@@ -154,7 +154,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     `BUFFER(coalescer_perf.misses, coalescer_misses);
 `endif
 
-    if ((`NUM_LSU_LANES > 1) && (LSU_WORD_SIZE != DCACHE_WORD_SIZE)) begin : g_enabled
+    if ((`NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE)) begin : g_enabled
 
         for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_coalescers
             VX_mem_coalescer #(
