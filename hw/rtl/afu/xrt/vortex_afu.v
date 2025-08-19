@@ -31,9 +31,9 @@ module vortex_afu #(
 
 	// AXI4 master interface
 `ifdef PLATFORM_MERGED_MEMORY_INTERFACE
-	`REPEAT (1, GEN_AXI_MEM, REPEAT_COMMA),
+	`MP_REPEAT (1, GEN_AXI_MEM, MP_COMMA),
 `else
-	`REPEAT (`PLATFORM_MEMORY_NUM_BANKS, GEN_AXI_MEM, REPEAT_COMMA),
+	`MP_REPEAT (`PLATFORM_MEMORY_NUM_BANKS, GEN_AXI_MEM, MP_COMMA),
 `endif
 
     // AXI4-Lite slave interface
@@ -73,9 +73,9 @@ module vortex_afu #(
 		.clk             	(ap_clk),
 		.reset           	(~ap_rst_n),
 	`ifdef PLATFORM_MERGED_MEMORY_INTERFACE
-		`REPEAT (1, AXI_MEM_ARGS, REPEAT_COMMA),
+		`MP_REPEAT (1, AXI_MEM_ARGS, MP_COMMA),
 	`else
-		`REPEAT (`PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_ARGS, REPEAT_COMMA),
+		`MP_REPEAT (`PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_ARGS, MP_COMMA),
 	`endif
 		.s_axi_ctrl_awvalid (s_axi_ctrl_awvalid),
 		.s_axi_ctrl_awready (s_axi_ctrl_awready),
