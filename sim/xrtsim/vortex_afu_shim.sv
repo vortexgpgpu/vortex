@@ -26,7 +26,7 @@ module vortex_afu_shim #(
 	input wire 									ap_rst_n,
 
     // AXI4 master interface
-    `REPEAT (`PLATFORM_MEMORY_NUM_BANKS, GEN_AXI_MEM, REPEAT_COMMA),
+    `MP_REPEAT (`PLATFORM_MEMORY_NUM_BANKS, GEN_AXI_MEM, MP_COMMA),
 
     // AXI4-Lite slave interface
     input  wire                                 s_axi_ctrl_awvalid,
@@ -61,7 +61,7 @@ module vortex_afu_shim #(
 		.clk             	(ap_clk),
 		.reset           	(~ap_rst_n),
 
-		`REPEAT (`PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_ARGS, REPEAT_COMMA),
+		`MP_REPEAT (`PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_ARGS, MP_COMMA),
 
 		.s_axi_ctrl_awvalid (s_axi_ctrl_awvalid),
 		.s_axi_ctrl_awready (s_axi_ctrl_awready),
