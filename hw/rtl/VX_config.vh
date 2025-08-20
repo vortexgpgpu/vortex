@@ -406,9 +406,9 @@
 `define IBUF_SIZE   4
 `endif
 
-// LSU line size (4-channels coalescing)
+// LSU line size
 `ifndef LSU_LINE_SIZE
-`define LSU_LINE_SIZE   `MIN(`MIN(`NUM_LSU_LANES, 4) * (`XLEN / 8), `L1_LINE_SIZE)
+`define LSU_LINE_SIZE   `MIN(`NUM_LSU_LANES * (`XLEN / 8), `L1_LINE_SIZE)
 `endif
 
 // Size of LSU Core Request Queue
