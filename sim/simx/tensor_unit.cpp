@@ -84,7 +84,7 @@ struct FMA<vt::bf16, vt::bf16> {
 };
 
 template <>
-struct FMA<vt::fp8_e4m3, vt::fp32> {
+struct FMA<vt::fp8, vt::fp32> {
   static float eval(uint8_t a, uint8_t b, float c) {
     auto xa = rv_e4m3tof_s(a);
     auto xb = rv_e4m3tof_s(b);
@@ -96,7 +96,7 @@ struct FMA<vt::fp8_e4m3, vt::fp32> {
 };
 
 template <>
-struct FMA<vt::fp8_e4m3, vt::fp8_e4m3> {
+struct FMA<vt::fp8, vt::fp8> {
   static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
     auto xa = rv_e4m3tof_s(a);
     auto xb = rv_e4m3tof_s(b);
@@ -108,7 +108,7 @@ struct FMA<vt::fp8_e4m3, vt::fp8_e4m3> {
 };
 
 template <>
-struct FMA<vt::fp8_e5m2, vt::fp32> {
+struct FMA<vt::bf8, vt::fp32> {
   static float eval(uint8_t a, uint8_t b, float c) {
     auto xa = rv_e5m2tof_s(a);
     auto xb = rv_e5m2tof_s(b);
@@ -120,7 +120,7 @@ struct FMA<vt::fp8_e5m2, vt::fp32> {
 };
 
 template <>
-struct FMA<vt::fp8_e5m2, vt::fp8_e5m2> {
+struct FMA<vt::bf8, vt::bf8> {
   static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
     auto xa = rv_e5m2tof_s(a);
     auto xb = rv_e5m2tof_s(b);
@@ -200,10 +200,10 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
       return FEDP<vt::fp16, vt::fp32>::eval;
     case vt::bf16::id:
       return FEDP<vt::bf16, vt::fp32>::eval;
-    case vt::fp8_e4m3::id:
-      return FEDP<vt::fp8_e4m3, vt::fp32>::eval;
-    case vt::fp8_e5m2::id:
-      return FEDP<vt::fp8_e5m2, vt::fp32>::eval;
+    case vt::fp8::id:
+      return FEDP<vt::fp8, vt::fp32>::eval;
+    case vt::bf8::id:
+      return FEDP<vt::bf8, vt::fp32>::eval;
     default:
       std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
       std::abort();
@@ -227,19 +227,19 @@ static PFN_FEDP select_FEDP(uint32_t IT, uint32_t OT) {
       std::abort();
     }
     break;
-  case vt::fp8_e4m3::id:
+  case vt::fp8::id:
     switch (IT) {
-    case vt::fp8_e4m3::id:
-      return FEDP<vt::fp8_e4m3, vt::fp8_e4m3>::eval;
+    case vt::fp8::id:
+      return FEDP<vt::fp8, vt::fp8>::eval;
     default:
       std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
       std::abort();
     }
     break;
-  case vt::fp8_e5m2::id:
+  case vt::bf8::id:
     switch (IT) {
-    case vt::fp8_e5m2::id:
-      return FEDP<vt::fp8_e5m2, vt::fp8_e5m2>::eval;
+    case vt::bf8::id:
+      return FEDP<vt::bf8, vt::bf8>::eval;
     default:
       std::cout << "Error: unsupported mma format: " << IT << " -> " << OT << "!" << std::endl;
       std::abort();
