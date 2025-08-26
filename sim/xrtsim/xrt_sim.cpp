@@ -77,7 +77,6 @@ double sc_time_stamp() {
   return timestamp;
 }
 
-static bool trace_enabled = false;
 static uint64_t trace_start_time = TRACE_START_TIME;
 static uint64_t trace_stop_time = TRACE_STOP_TIME;
 
@@ -85,11 +84,7 @@ bool sim_trace_enabled() {
   if (timestamp >= trace_start_time
    && timestamp < trace_stop_time)
     return true;
-  return trace_enabled;
-}
-
-void sim_trace_enable(bool enable) {
-  trace_enabled = enable;
+  return false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

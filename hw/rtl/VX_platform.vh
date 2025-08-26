@@ -14,10 +14,6 @@
 `ifndef VX_PLATFORM_VH
 `define VX_PLATFORM_VH
 
-`ifdef SV_DPI
-`include "util_dpi.vh"
-`endif
-
 `include "VX_scope.vh"
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -13,11 +13,11 @@ RTL_INCLUDE +=
 
 DBG_FLAGS += -DDEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 
-VL_FLAGS = --exe
+VL_FLAGS += --exe
 VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic
 VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO -Wno-GENUNNAMED
 VL_FLAGS += --x-initial unique --x-assign unique
-VL_FLAGS += -DSIMULATION -DSV_DPI
+VL_FLAGS += -DSIMULATION
 VL_FLAGS += $(CONFIGS)
 VL_FLAGS += $(PARAMS)
 VL_FLAGS += $(RTL_INCLUDE)
@@ -53,10 +53,10 @@ endif
 all: $(DESTDIR)/$(PROJECT)
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(RTL_SRCS)
-	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' --MMD -o ../$@
+	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --MMD -o ../$@
 
 run: $(DESTDIR)/$(PROJECT)
-	$(DESTDIR)/$(PROJECT)
+	$(DESTDIR)/$(PROJECT) $(OPTS)
 
 waves: trace.vcd
 	gtkwave -o trace.vcd

@@ -11,7 +11,6 @@ SRC_DIR := $(VORTEX_HOME)/hw/unittest/$(PROJECT)
 CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SW_COMMON_DIR)
 CXXFLAGS += -I$(ROOT_DIR)/hw
 
-SRCS := $(DPI_DIR)/util_dpi.cpp
 SRCS += $(SRC_DIR)/main.cpp
 
 DBG_TRACE_FLAGS := -DDBG_TRACE_CACHE

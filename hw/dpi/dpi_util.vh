@@ -11,8 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`ifndef UTIL_DPI_VH
-`define UTIL_DPI_VH
+`ifndef DPI_UTIL_VH
+`define DPI_UTIL_VH
 
 `ifdef XLEN_64
 `define INT_TYPE longint
@@ -20,14 +20,15 @@
 `define INT_TYPE int
 `endif
 
-import "DPI-C" function void dpi_imul(input logic enable, input logic is_signed_a, input logic is_signed_b, input `INT_TYPE a, input `INT_TYPE b, output `INT_TYPE resultl, output `INT_TYPE resulth);
-import "DPI-C" function void dpi_idiv(input logic enable, input logic is_signed, input `INT_TYPE a, input `INT_TYPE b, output `INT_TYPE quotient, output `INT_TYPE remainder);
+import "DPI-C" function void dpi_imul(input logic enable, input logic is_signed_a, input logic is_signed_b, input int a, input int b, output int resultl, output int resulth);
+import "DPI-C" function void dpi_lmul(input logic enable, input logic is_signed_a, input logic is_signed_b, input longint a, input longint b, output longint resultl, output longint resulth);
+
+import "DPI-C" function void dpi_idiv(input logic enable, input logic is_signed, input int a, input int b, output int quotient, output int remainder);
+import "DPI-C" function void dpi_ldiv(input logic enable, input logic is_signed, input longint a, input longint b, output longint quotient, output longint remainder);
 
 import "DPI-C" function int dpi_register();
 import "DPI-C" function void dpi_assert(int inst, input logic cond, input int delay);
 
 import "DPI-C" function void dpi_trace(input int level, input string format /*verilator sformat*/);
-import "DPI-C" function void dpi_trace_start();
-import "DPI-C" function void dpi_trace_stop();
 
 `endif

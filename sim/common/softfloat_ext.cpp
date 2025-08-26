@@ -36,7 +36,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "softfloat_ext.h"
 #include <../RISCV/specialize.h>
 #include <assert.h>
+#include <cmath>
+#include <cstring>
 #include <internals.h>
+#include <limits>
 #include <softfloat.h>
 #include <stdbool.h>
 
@@ -137,20 +140,20 @@ static inline uint64_t rsqrte7(uint64_t val, int e, int s, bool sub) {
   const int p = 7;
 
   static const uint8_t table[] = {
-      52,  51,  50,  48,  47,  46,  44,  43,  42,  41,  40,  39,  38,  36,  35,
-      34,  33,  32,  31,  30,  30,  29,  28,  27,  26,  25,  24,  23,  23,  22,
-      21,  20,  19,  19,  18,  17,  16,  16,  15,  14,  14,  13,  12,  12,  11,
-      10,  10,  9,   9,   8,   7,   7,   6,   6,   5,   4,   4,   3,   3,   2,
-      2,   1,   1,   0,   127, 125, 123, 121, 119, 118, 116, 114, 113, 111, 109,
-      108, 106, 105, 103, 102, 100, 99,  97,  96,  95,  93,  92,  91,  90,  88,
-      87,  86,  85,  84,  83,  82,  80,  79,  78,  77,  76,  75,  74,  73,  72,
-      71,  70,  70,  69,  68,  67,  66,  65,  64,  63,  63,  62,  61,  60,  59,
-      59,  58,  57,  56,  56,  55,  54,  53};
+      52, 51, 50, 48, 47, 46, 44, 43, 42, 41, 40, 39, 38, 36, 35,
+      34, 33, 32, 31, 30, 30, 29, 28, 27, 26, 25, 24, 23, 23, 22,
+      21, 20, 19, 19, 18, 17, 16, 16, 15, 14, 14, 13, 12, 12, 11,
+      10, 10, 9, 9, 8, 7, 7, 6, 6, 5, 4, 4, 3, 3, 2,
+      2, 1, 1, 0, 127, 125, 123, 121, 119, 118, 116, 114, 113, 111, 109,
+      108, 106, 105, 103, 102, 100, 99, 97, 96, 95, 93, 92, 91, 90, 88,
+      87, 86, 85, 84, 83, 82, 80, 79, 78, 77, 76, 75, 74, 73, 72,
+      71, 70, 70, 69, 68, 67, 66, 65, 64, 63, 63, 62, 61, 60, 59,
+      59, 58, 57, 56, 56, 55, 54, 53};
 
   if (sub) {
     while (extract64(sig, s - 1, 1) == 0)
       exp--, sig <<= 1;
-      
+
     sig = (sig << 1) & make_mask64(0, s);
   }
 
@@ -285,14 +288,14 @@ static inline uint64_t recip7(uint64_t val, int e, int s, int rm, bool sub,
 
   static const uint8_t table[] = {
       127, 125, 123, 121, 119, 117, 116, 114, 112, 110, 109, 107, 105, 104, 102,
-      100, 99,  97,  96,  94,  93,  91,  90,  88,  87,  85,  84,  83,  81,  80,
-      79,  77,  76,  75,  74,  72,  71,  70,  69,  68,  66,  65,  64,  63,  62,
-      61,  60,  59,  58,  57,  56,  55,  54,  53,  52,  51,  50,  49,  48,  47,
-      46,  45,  44,  43,  42,  41,  40,  40,  39,  38,  37,  36,  35,  35,  34,
-      33,  32,  31,  31,  30,  29,  28,  28,  27,  26,  25,  25,  24,  23,  23,
-      22,  21,  21,  20,  19,  19,  18,  17,  17,  16,  15,  15,  14,  14,  13,
-      12,  12,  11,  11,  10,  9,   9,   8,   8,   7,   7,   6,   5,   5,   4,
-      4,   3,   3,   2,   2,   1,   1,   0};
+      100, 99, 97, 96, 94, 93, 91, 90, 88, 87, 85, 84, 83, 81, 80,
+      79, 77, 76, 75, 74, 72, 71, 70, 69, 68, 66, 65, 64, 63, 62,
+      61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47,
+      46, 45, 44, 43, 42, 41, 40, 40, 39, 38, 37, 36, 35, 35, 34,
+      33, 32, 31, 31, 30, 29, 28, 28, 27, 26, 25, 25, 24, 23, 23,
+      22, 21, 21, 20, 19, 19, 18, 17, 17, 16, 15, 15, 14, 14, 13,
+      12, 12, 11, 11, 10, 9, 9, 8, 8, 7, 7, 6, 5, 5, 4,
+      4, 3, 3, 2, 2, 1, 1, 0};
 
   if (sub) {
     while (extract64(sig, s - 1, 1) == 0)
@@ -452,28 +455,421 @@ float64_t f64_recip7(float64_t in) {
   return uA.f;
 }
 
-/* 
-SoftFloat doesn't support fp8
-These implementations do not return exception flags,
-but instead just return the exceptions' cannonical representation,
-for eg. NaN is returned as 0x7fc00000 for fp32
-Rounding mode is always set to RNE
-*/
+// Convert a float to a custom floating-point format
+uint32_t cvt_f32_to_custom(float value, uint32_t exp_bits, uint32_t sig_bits,
+                           uint32_t frm, uint32_t *fflags) {
+  enum { RNE=0, RTZ=1, RDN=2, RUP=3, RMM=4 };
+  const uint32_t FLAG_NX = 1u<<0, FLAG_UF = 1u<<1, FLAG_OF = 1u<<2, FLAG_NV = 1u<<4;
 
-float32_t f8_to_f32(float8_t a) {
+  uint32_t flags = 0;
+  if (fflags) {
+    *fflags = 0;
+  }
+
+  if (exp_bits == 0 || (1u + exp_bits + sig_bits) > 32u) {
+    if (fflags) {
+      *fflags |= FLAG_NV;
+    }
+    return 0;
+  }
+
+  uint32_t bits;
+  memcpy(&bits, &value, sizeof(bits));
+  const uint32_t sign = bits >> 31;
+  const uint32_t exp_ieee = (bits >> 23) & 0xFFu;
+  const uint32_t sig_ieee = bits & 0x7FFFFFu;
+
+  const uint32_t exp_max = (1u<<exp_bits) - 1u;
+  const uint32_t exp_max_finite = exp_bits ? exp_max - 1u : 0u;
+  const uint32_t mant_mask = sig_bits ? ((1u<<sig_bits) - 1u) : 0u;
+  const uint32_t sign_shift = exp_bits + sig_bits;
+  const int32_t  bias_out = (int32_t)((1u<<(exp_bits-1u)) - 1u);
+  const int32_t  emax = bias_out;
+  const int32_t  emin = 1 - bias_out;
+
+  auto pack_custom = [&](uint32_t exp, uint32_t mant){
+    return (sign << sign_shift) | (exp << sig_bits) | (mant & mant_mask);
+  };
+
+  // NaN / Inf / Zero
+  if (exp_ieee == 0xFFu) {
+    if (sig_ieee) {
+      if ((sig_ieee & 0x400000u) == 0) {
+        flags |= FLAG_NV; // sNaN
+      }
+      if (fflags) {
+        *fflags |= flags;
+      }
+      return pack_custom(exp_max, sig_bits ? (1u<<(sig_bits-1u)) : 0u); // qNaN
+    }
+    if (fflags) {
+      *fflags |= flags;
+    }
+    return pack_custom(exp_max, 0); // Inf
+  }
+  if (exp_ieee == 0 && sig_ieee == 0) {
+    if (fflags) {
+      *fflags |= flags;
+    }
+    return pack_custom(0, 0); // ±0
+  }
+
+  // Normalize source to 24-bit (1.hidden + 23)
+  uint32_t significand;
+  int32_t  exponent;
+  if (exp_ieee) {
+    significand = (1u<<23) | sig_ieee;
+    exponent = (int32_t)exp_ieee - 127;
+  } else {
+    int lz = __builtin_clz(sig_ieee); // sig_ieee != 0 here
+    int sh = lz - 8;                  // bring leading 1 to bit 23
+    significand = sig_ieee << sh;
+    exponent = -126 - sh;
+  }
+
+  // Map precision: create (sig_bits+1) bits with hidden 1 at bit sig_bits
+  int32_t shift_amount = 23 - (int32_t)sig_bits;
+  uint64_t main = significand; // (up to) 24 bits
+  // IMPORTANT: do NOT add shift_amount to exponent (bug fix)
+  if (shift_amount > 0) {
+    uint32_t sh = (uint32_t)shift_amount;
+    uint64_t remainder = ((uint64_t)main) & ((((uint64_t)1)<<sh) - 1u);
+    uint64_t kept      = ((uint64_t)main) >> sh;
+
+    if (remainder) {
+      flags |= FLAG_NX;
+    }
+
+    uint32_t lsb    = (uint32_t)(kept & 1u);
+    uint32_t guard  = (sh>=1) ? (uint32_t)((main >> (sh-1u)) & 1u) : 0u;
+    uint32_t roundb = (sh>=2) ? (uint32_t)((main >> (sh-2u)) & 1u) : 0u;
+    uint32_t sticky = (sh>=2) ? ((remainder & ((((uint64_t)1)<<(sh-1u)) - 1u)) != 0u) : 0u;
+
+    int inc = 0;
+    switch (frm) {
+      default:
+      case RNE: inc = guard && ((roundb | sticky) || lsb); break;
+      case RTZ: inc = 0; break;
+      case RDN: inc = sign && (remainder != 0); break;
+      case RUP: inc = !sign && (remainder != 0); break;
+      case RMM: inc = guard ? 1 : 0; break;
+    }
+    if (inc) {
+      kept += 1u;
+      if (kept == (1ull<<(sig_bits+1u))) { kept >>= 1u; exponent += 1; }
+    }
+    main = kept;
+  } else if (shift_amount < 0) {
+    main <<= (uint32_t)(-shift_amount); // exact; no NX
+    // exponent unchanged
+  }
+
+  // Overflow?
+  if (exponent > emax) {
+    flags |= (FLAG_OF | FLAG_NX);
+    int to_inf =
+      (frm == RNE || frm == RMM) ? 1 :
+      (frm == RTZ) ? 0 :
+      (frm == RUP) ? (sign == 0) :
+      (frm == RDN) ? (sign == 1) : 1;
+    if (fflags) {
+      *fflags |= flags;
+    }
+    return to_inf ? pack_custom(exp_max, 0) : pack_custom(exp_max_finite, mant_mask);
+  }
+
+  // Normal?
+  if (exponent >= emin) {
+    uint32_t expf = (uint32_t)(exponent + bias_out);
+    uint32_t mant = sig_bits ? ((uint32_t)main & mant_mask) : 0u;
+    if (fflags) {
+      *fflags |= flags;
+    }
+    return pack_custom(expf, mant);
+  }
+
+  // Subnormal (E < emin): round with GRS; may promote to min-normal
+  uint32_t t = (uint32_t)(emin - exponent); // >= 1
+  uint64_t keep, disc;
+  if (t < 64u) {
+    keep = main >> t;
+    disc = main & ((((uint64_t)1) << t) - 1u);
+  } else {
+    keep = 0;
+    disc = main ? 1u : 0u;
+  }
+
+  uint32_t lsb    = sig_bits ? (uint32_t)(keep & 1u) : 0u;
+  uint32_t guard  = (t>0) ? (uint32_t)((main >> (t-1u)) & 1u) : 0u;
+  uint32_t roundb = (t>1) ? (uint32_t)((main >> (t-2u)) & 1u) : 0u;
+  uint32_t sticky = (t>1) ? ((disc & ((((uint64_t)1)<<(t-1u)) - 1u)) != 0u) : 0u;
+
+  int inc = 0;
+  switch (frm) {
+    default:
+    case RNE: inc = guard && ((roundb | sticky) || lsb); break;
+    case RTZ: inc = 0; break;
+    case RDN: inc = sign && (disc != 0); break;
+    case RUP: inc = !sign && (disc != 0); break;
+    case RMM: inc = guard ? 1 : 0; break;
+  }
+
+  uint64_t mant_sub = keep + (inc ? 1u : 0u);
+  if (disc != 0) {
+    flags |= FLAG_NX;
+  }
+
+  // Promotion to min-normal?
+  if (sig_bits && mant_sub == (1ull<<sig_bits)) {
+    if (fflags) {
+      *fflags |= flags; // NX already set if inexact
+    }
+    return pack_custom(1u, 0u);   // exp=1, mant=0
+  }
+
+  // Remain subnormal. UF only when tiny AFTER rounding and inexact.
+  if (disc != 0 && mant_sub != 0) {
+    flags |= FLAG_UF;
+  }
+
+  if (fflags) {
+    *fflags |= flags;
+  }
+  return pack_custom(0u, (uint32_t)mant_sub);
+}
+
+// Convert a custom floating-point format to float
+float cvt_custom_to_f32(uint32_t value, uint32_t exp_bits, uint32_t sig_bits,
+                        uint32_t frm, uint32_t *fflags) {
+  // RISC-V rounding modes
+  enum { RNE=0, RTZ=1, RDN=2, RUP=3, RMM=4 };
+
+  // RISC-V exception flags
+  const uint32_t FLAG_NX = 1u << 0; // inexact
+  const uint32_t FLAG_UF = 1u << 1; // underflow
+  const uint32_t FLAG_OF = 1u << 2; // overflow
+  //const uint32_t FLAG_DZ = 1u << 3; // div-by-zero
+  const uint32_t FLAG_NV = 1u << 4; // invalid
+
+  uint32_t flags = 0;
+  if (fflags) {
+    *fflags = 0;
+  }
+
+  // Validate format parameters
+  if (exp_bits == 0 || (1 + exp_bits + sig_bits) > 32) {
+    if (fflags) {
+      *fflags |= FLAG_NV;
+    }
+    return 0.0f;
+  }
+
+  // Extract components from custom format
+  const uint32_t sign = value >> (exp_bits + sig_bits);
+  const uint32_t exp_field = (value >> sig_bits) & ((1u << exp_bits) - 1);
+  const uint32_t sig_field = value & ((1u << sig_bits) - 1);
+
+  // Precompute format-specific constants
+  const uint32_t exp_max = (1u << exp_bits) - 1;
+  const int32_t bias_custom = (1 << (exp_bits - 1)) - 1;
+  const int32_t bias_ieee = 127;
+
+  // Helper to pack IEEE float
+  auto pack_float = [](uint32_t bits) -> float {
+    float result;
+    memcpy(&result, &bits, sizeof(result));
+    return result;
+  };
+
+  // Handle special cases (NaN, Infinity, Zero)
+  if (exp_field == exp_max) {
+    if (sig_field != 0) {
+      // sNaN if top mantissa bit is 0 (when present)
+      if (sig_bits > 0 && ((sig_field >> (sig_bits - 1)) & 1u) == 0) {
+        flags |= FLAG_NV;
+      }
+      if (fflags) {
+        *fflags |= flags;
+      }
+      return pack_float((sign << 31) | 0x7FC00000u); // quiet NaN
+    } else {
+      if (fflags) {
+        *fflags |= flags;
+      }
+      return pack_float((sign << 31) | 0x7F800000u); // infinity
+    }
+  }
+
+  if (exp_field == 0 && sig_field == 0) {
+    // Zero
+    if (fflags) {
+      *fflags |= flags;
+    }
+    return pack_float(sign << 31);
+  }
+
+  // Calculate unbiased exponent and 1+sig_bits significand (with hidden 1)
+  int32_t exponent;
+  uint64_t significand;
+
+  if (exp_field == 0) {
+    // Subnormal in custom: normalize
+    exponent = 1 - bias_custom;
+    significand = sig_field;
+    if (sig_field != 0) {
+      int shift = __builtin_clz(sig_field) - (32 - sig_bits);
+      significand <<= shift;
+      exponent -= shift;
+    }
+  } else {
+    // Normal in custom
+    exponent = (int32_t)exp_field - bias_custom;
+    significand = (1ull << sig_bits) | sig_field; // include hidden 1
+  }
+
+  // Convert to a 24-bit main (hidden1 + 23) aligned to float32
+  int32_t shift_amount = (int32_t)sig_bits - 23;
+  int32_t ieee_exponent = exponent + bias_ieee; // unbiased->biased (NO precision-offset)
+  uint64_t main24 = significand;                // will hold hidden1+23 bits
+  uint64_t dropped = 0;
+
+  if (shift_amount > 0) {
+    // Right shift (need rounding) to 24 bits
+    uint32_t sh = (uint32_t)shift_amount;
+    dropped = main24 & ((((uint64_t)1) << sh) - 1u);
+    main24 >>= sh;
+
+    // GRS rounding
+    uint32_t lsb    = (uint32_t)(main24 & 1u);
+    uint32_t guard  = (sh >= 1) ? (uint32_t)((significand >> (sh - 1u)) & 1u) : 0u;
+    uint32_t roundb = (sh >= 2) ? (uint32_t)((significand >> (sh - 2u)) & 1u) : 0u;
+    uint32_t sticky = (sh >= 2) ? ((dropped & ((((uint64_t)1) << (sh - 1u)) - 1u)) != 0u) : 0u;
+
+    int inc = 0;
+    switch (frm) {
+      default:
+      case RNE: inc = guard && ((roundb | sticky) || lsb); break;
+      case RTZ: inc = 0; break;
+      case RDN: inc = sign && (dropped != 0); break;
+      case RUP: inc = !sign && (dropped != 0); break;
+      case RMM: inc = guard ? 1 : 0; break;
+    }
+
+    if (inc) {
+      main24 += 1u;
+      if (main24 == (1ull << 24)) { // carry into next bit
+        main24 >>= 1u;
+        ieee_exponent += 1;         // FIX: only bump exponent on carry-out
+      }
+    }
+    if (dropped) {
+      flags |= FLAG_NX;
+    }
+  } else if (shift_amount < 0) {
+    // Left shift (exact)
+    main24 <<= (uint32_t)(-shift_amount);
+    // FIX: do NOT adjust exponent here
+  }
+  // else: already 24 bits
+
+  // Check overflow in float32
+  if (ieee_exponent >= 0xFF) {
+    flags |= FLAG_OF | FLAG_NX;
+    int produce_inf =
+      (frm == RNE || frm == RMM) ? 1 :
+      (frm == RTZ) ? 0 :
+      (frm == RUP) ? (sign == 0) :
+      (frm == RDN) ? (sign == 1) : 1;
+    uint32_t out = (sign << 31) | (0xFFu << 23) | (produce_inf ? 0u : 0x7FFFFFu);
+    if (fflags) {
+      *fflags |= flags;
+    }
+    return pack_float(out);
+  }
+
+  // Normal?
+  if (ieee_exponent > 0) {
+    // Only now drop the hidden 1 for packing
+    uint32_t mant = (uint32_t)(main24 & 0x7FFFFFu); // FIX: mask here, not earlier
+    uint32_t out  = (sign << 31) | ((uint32_t)ieee_exponent << 23) | mant;
+    if (fflags) {
+      *fflags |= flags;
+    }
+    return pack_float(out);
+  }
+
+  // Subnormal (ieee_exponent <= 0): round from full 24-bit main
+  {
+    uint32_t t = (uint32_t)(1 - ieee_exponent); // shift to exp=0
+    uint64_t keep, disc;
+    if (t < 64u) {
+      keep = main24 >> t;
+      disc = main24 & ((((uint64_t)1) << t) - 1u);
+    } else {
+      keep = 0;
+      disc = main24 ? 1u : 0u;
+    }
+
+    // GRS on subnormal
+    uint32_t lsb    = (uint32_t)(keep & 1u);
+    uint32_t guard  = (t > 0) ? (uint32_t)((main24 >> (t - 1u)) & 1u) : 0u;
+    uint32_t roundb = (t > 1) ? (uint32_t)((main24 >> (t - 2u)) & 1u) : 0u;
+    uint32_t sticky = (t > 1) ? ((disc & ((((uint64_t)1) << (t - 1u)) - 1u)) != 0u) : 0u;
+
+    int inc = 0;
+    switch (frm) {
+      default:
+      case RNE: inc = guard && ((roundb | sticky) || lsb); break;
+      case RTZ: inc = 0; break;
+      case RDN: inc = sign && (disc != 0); break;
+      case RUP: inc = !sign && (disc != 0); break;
+      case RMM: inc = guard ? 1 : 0; break;
+    }
+
+    uint64_t mant_sub = keep + (inc ? 1u : 0u);
+
+    // Promote to min-normal?
+    if (mant_sub == (1ull << 23)) {
+      uint32_t out = (sign << 31) | (1u << 23); // exp=1, mant=0
+      if (dropped || disc) {
+        flags |= FLAG_NX;
+      }
+      if (fflags) {
+        *fflags |= flags;
+      }
+      return pack_float(out);
+    }
+
+    // Stay subnormal
+    uint32_t mant = (uint32_t)mant_sub; // already no hidden 1 when exp=0
+    uint32_t out  = (sign << 31) | mant;
+    if (dropped || disc) {
+      flags |= FLAG_NX;
+      if (mant != 0) {
+        flags |= FLAG_UF; // tiny AFTER rounding and inexact
+      }
+    }
+    if (fflags) {
+      *fflags |= flags;
+    }
+    return pack_float(out);
+  }
+}
+
+float32_t f8e4m3_to_f32(float8_t a) {
     float32_t out;
     uint8_t v = a.v;
     if (v == 0) { out.v = 0; return out; }
-    
+
     uint32_t sign = (v & 0x80) << 24;
     uint32_t exp = (v >> 3) & 0xF;
     uint32_t mant = v & 0x7;
-    
+
     if (exp == 0xF) {
         if (mant != 0) { out.v = 0x7fc00000; return out; }
         out.v = sign | 0x7f800000; return out;
     }
-    
+
     if (exp == 0) {
         int lz = mant ? (__builtin_clz(mant) - 29) : 32;
         exp = 127 - 6 - lz;
@@ -481,119 +877,164 @@ float32_t f8_to_f32(float8_t a) {
     } else {
         exp += 127 - 7;
     }
-    
+
     out.v = sign | (exp << 23) | (mant << 20);
     return out;
 }
 
-float8_t f32_to_f8(float32_t a) {
-    float8_t out;
-    uint32_t v = a.v;
-    if (v == 0 || (v & 0x7fffffff) == 0) { out.v = 0; return out; }
-    
-    uint8_t sign = (v >> 24) & 0x80;
-    int32_t exp = ((v >> 23) & 0xff) - 127;
-    uint32_t mant = (v >> 20) & 0x7;
-    
-    if (exp >= 8) { out.v = sign | 0x7f; return out; }
-    if (exp < -9) { out.v = sign; return out; }
-    
-    if (exp >= -6) {
-        exp += 7;
-        uint32_t round_bit = (v >> 19) & 1;
-        uint32_t sticky = v & 0x7ffff;
-        if (round_bit && (sticky || (mant & 1))) {
-            mant++;
-            if (mant > 7) {
-                mant = 0;
-                exp++;
-                if (exp >= 15) { out.v = sign | 0x7f; return out; }
-            }
-        }
-        out.v = sign | (exp << 3) | mant;
-        return out;
-    } else {
-        int shift = -6 - exp;
-        mant |= 8;
-        uint32_t round_bit = (mant >> (shift - 1)) & 1;
-        uint32_t sticky = (mant & ((1 << (shift - 1)) - 1)) || (v & 0x7ffff);
-        mant >>= shift;
-        if (round_bit && (sticky || (mant & 1))) {
-            mant++;
-            if (mant > 7) { out.v = sign | 0x8; return out; }
-        }
-        out.v = sign | mant;
-        return out;
-    }
-}
-
-float32_t bf8_to_f32(bfloat8_t a) {
-    float32_t out;
-    uint8_t v = a.v;
-    if (v == 0) { out.v = 0; return out; }
-    
-    uint32_t sign = (v & 0x80) << 24;
-    uint32_t exp = (v >> 2) & 0x1F;
-    uint32_t mant = v & 0x3;
-    
-    if (exp == 0x1F) {
-        if (mant != 0) { out.v = 0x7fc00000; return out; }
-        out.v = sign | 0x7f800000; return out;
-    }
-    
-    if (exp == 0) {
-        if (mant == 0) { out.v = sign; return out; }
-        int lz = mant == 1 ? 1 : 0;
-        exp = 127 - 14 - lz;
-        mant = (mant << (lz + 1)) & 0x3;
-    } else {
-        exp += 127 - 15;
-    }
-    
-    out.v = sign | (exp << 23) | (mant << 21);
+float8_t f32_to_f8e4m3(float32_t a) {
+  float8_t out;
+  uint32_t v = a.v;
+  if (v == 0 || (v & 0x7fffffff) == 0) {
+    out.v = 0;
     return out;
+  }
+
+  uint8_t sign = (v >> 24) & 0x80;
+  int32_t exp = ((v >> 23) & 0xff) - 127;
+  uint32_t mant = (v >> 20) & 0x7;
+
+  if (exp >= 8) {
+    out.v = sign | 0x7f;
+    return out;
+  }
+  if (exp < -9) {
+    out.v = sign;
+    return out;
+  }
+
+  if (exp >= -6) {
+    exp += 7;
+    uint32_t round_bit = (v >> 19) & 1;
+    uint32_t sticky = v & 0x7ffff;
+    if (round_bit && (sticky || (mant & 1))) {
+      mant++;
+      if (mant > 7) {
+        mant = 0;
+        exp++;
+        if (exp >= 15) {
+          out.v = sign | 0x7f;
+          return out;
+        }
+      }
+    }
+    out.v = sign | (exp << 3) | mant;
+    return out;
+  } else {
+    int shift = -6 - exp;
+    mant |= 8;
+    uint32_t round_bit = (mant >> (shift - 1)) & 1;
+    uint32_t sticky = (mant & ((1 << (shift - 1)) - 1)) || (v & 0x7ffff);
+    mant >>= shift;
+    if (round_bit && (sticky || (mant & 1))) {
+      mant++;
+      if (mant > 7) {
+        out.v = sign | 0x8;
+        return out;
+      }
+    }
+    out.v = sign | mant;
+    return out;
+  }
 }
 
-bfloat8_t f32_to_bf8(float32_t a) {
-    bfloat8_t out;
-    uint32_t v = a.v;
-    if (v == 0 || (v & 0x7fffffff) == 0) { out.v = 0; return out; }
-    
-    uint8_t sign = (v >> 24) & 0x80;
-    int32_t exp = ((v >> 23) & 0xff) - 127;
-    uint32_t mant = (v >> 21) & 0x3;
-    
-    if (exp >= 16) { out.v = sign | 0x7c; return out; }
-    if (exp < -17) { out.v = sign; return out; }
-    
-    if (exp >= -14) {
-        exp += 15;
-        uint32_t round_bit = (v >> 20) & 1;
-        uint32_t sticky = v & 0xfffff;
-        if (round_bit && (sticky || (mant & 1))) {
-            mant++;
-            if (mant > 3) {
-                mant = 0;
-                exp++;
-                if (exp >= 31) { out.v = sign | 0x7c; return out; }
-            }
-        }
-        out.v = sign | (exp << 2) | mant;
-        return out;
-    } else {
-        int shift = -14 - exp;
-        mant |= 4;
-        if (shift > 2) { out.v = sign; return out; }
-        uint32_t round_bit = (mant >> (shift - 1)) & 1;
-        uint32_t sticky = (mant & ((1 << (shift - 1)) - 1)) || (v & 0xfffff);
-        mant >>= shift;
-        if (round_bit && (sticky || (mant & 1))) {
-            mant++;
-            if (mant > 3) { out.v = sign | 0x4; return out; }
-        }
-        out.v = sign | mant;
-        return out;
+float32_t f8e5m2_to_f32(bfloat8_t a) {
+  float32_t out;
+  uint8_t v = a.v;
+
+  if (v == 0) {
+    out.v = 0;
+    return out;
+  }
+
+  uint32_t sign = (v & 0x80) << 24;
+  uint32_t exp = (v >> 2) & 0x1F;
+  uint32_t mant = v & 0x3;
+
+  if (exp == 0x1F) {
+    if (mant != 0) {
+      out.v = 0x7fc00000;
+      return out;
     }
+    out.v = sign | 0x7f800000;
+    return out;
+  }
+
+  if (exp == 0) {
+    if (mant == 0) {
+      out.v = sign;
+      return out;
+    }
+    int lz = mant == 1 ? 1 : 0;
+    exp = 127 - 14 - lz;
+    mant = (mant << (lz + 1)) & 0x3;
+  } else {
+    exp += 127 - 15;
+  }
+
+  out.v = sign | (exp << 23) | (mant << 21);
+  return out;
+}
+
+bfloat8_t f32_to_f8e5m2(float32_t a) {
+  bfloat8_t out;
+  uint32_t v = a.v;
+
+  if (v == 0 || (v & 0x7fffffff) == 0) {
+    out.v = 0;
+    return out;
+  }
+
+  uint8_t sign = (v >> 24) & 0x80;
+  int32_t exp = ((v >> 23) & 0xff) - 127;
+  uint32_t mant = (v >> 21) & 0x3;
+
+  if (exp >= 16) {
+    out.v = sign | 0x7c;
+    return out;
+  }
+  if (exp < -17) {
+    out.v = sign;
+    return out;
+  }
+
+  if (exp >= -14) {
+    exp += 15;
+    uint32_t round_bit = (v >> 20) & 1;
+    uint32_t sticky = v & 0xfffff;
+    if (round_bit && (sticky || (mant & 1))) {
+      mant++;
+      if (mant > 3) {
+        mant = 0;
+        exp++;
+        if (exp >= 31) {
+          out.v = sign | 0x7c;
+          return out;
+        }
+      }
+    }
+    out.v = sign | (exp << 2) | mant;
+    return out;
+  } else {
+    int shift = -14 - exp;
+    mant |= 4;
+    if (shift > 2) {
+      out.v = sign;
+      return out;
+    }
+    uint32_t round_bit = (mant >> (shift - 1)) & 1;
+    uint32_t sticky = (mant & ((1 << (shift - 1)) - 1)) || (v & 0xfffff);
+    mant >>= shift;
+    if (round_bit && (sticky || (mant & 1))) {
+      mant++;
+      if (mant > 3) {
+        out.v = sign | 0x4;
+        return out;
+      }
+    }
+    out.v = sign | mant;
+    return out;
+  }
 }
 
 #ifdef __cplusplus

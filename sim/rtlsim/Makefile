@@ -65,7 +65,7 @@ endif
 RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
 
 SRCS = $(SW_COMMON_DIR)/util.cpp $(SW_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SW_COMMON_DIR)/dram_sim.cpp
-SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
+SRCS += $(DPI_DIR)/dpi_util.cpp $(DPI_DIR)/dpi_float.cpp
 SRCS += $(SRC_DIR)/processor.cpp
 
 TOP = rtlsim_shim

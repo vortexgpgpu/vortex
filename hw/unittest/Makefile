@@ -6,6 +6,7 @@ all:
 	$(MAKE) -C issue_top
 	$(MAKE) -C local_mem_top
 	$(MAKE) -C mem_unit_top
+	$(NAME) -C tcu_fedp
 
 run:
 	$(MAKE) -C generic_queue run
@@ -15,6 +16,7 @@ run:
 	$(MAKE) -C issue_top run
 	$(MAKE) -C local_mem_top run
 	$(MAKE) -C mem_unit_top run
+	$(NAME) -C tcu_fedp run
 
 clean:
 	$(MAKE) -C generic_queue clean
@@ -24,3 +26,4 @@ clean:
 	$(MAKE) -C issue_top clean
 	$(MAKE) -C local_mem_top clean
 	$(MAKE) -C mem_unit_top clean
+	$(NAME) -C tcu_fedp clean

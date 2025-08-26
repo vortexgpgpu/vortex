@@ -840,9 +840,9 @@ public:
       case 0b10011: // vfncvt.f.x.w
         return rv_ltof_s(second, vxrm, &fflags);
       case 0b10100: // vfncvt.f.f.w
-        return rv_dtof_r(second, vxrm);
+        return rv_dtof(second, vxrm, &fflags);
       case 0b10101: // vfncvt.rod.f.f.w
-        return rv_dtof_r(second, 6);
+        return rv_dtof(second, 6, &fflags);
       case 0b10110: // vfncvt.rtz.xu.f.w
         return rv_ftou_d(second, 1, &fflags);
       case 0b10111: // vfncvt.rtz.x.f.w

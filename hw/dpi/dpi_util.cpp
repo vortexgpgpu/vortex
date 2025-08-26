@@ -21,25 +21,16 @@
 #include "svdpi.h"
 #include "verilated_vpi.h"
 
-#ifdef XLEN_64
-#define iword_t   int64_t
-#define uword_t   uint64_t
-#define idword_t  __int128_t
-#define udword_t  __uint128_t
-#else
-#define iword_t   int32_t
-#define uword_t   uint32_t
-#define idword_t  int64_t
-#define udword_t  uint64_t
-#endif
-
 #ifndef DEBUG_LEVEL
 #define DEBUG_LEVEL 3
 #endif
 
 extern "C" {
-  void dpi_imul(bool enable, bool is_signed_a, bool is_signed_b, iword_t a, iword_t b, iword_t* resultl, iword_t* resulth);
-  void dpi_idiv(bool enable, bool is_signed, iword_t a, iword_t b, iword_t* quotient, iword_t* remainder);
+  void dpi_imul(bool enable, bool is_signed_a, bool is_signed_b, int32_t a, int32_t b, int32_t* resultl, int32_t* resulth);
+  void dpi_idiv(bool enable, bool is_signed, int32_t a, int32_t b, int32_t* quotient, int32_t* remainder);
+
+  void dpi_lmul(bool enable, bool is_signed_a, bool is_signed_b, int64_t a, int64_t b, int64_t* resultl, int64_t* resulth);
+  void dpi_ldiv(bool enable, bool is_signed, int64_t a, int64_t b, int64_t* quotient, int64_t* remainder);
 
   int dpi_register();
   void dpi_assert(int inst, bool cond, int delay);
@@ -48,9 +39,6 @@ extern "C" {
   void dpi_trace_start();
   void dpi_trace_stop();
 }
-
-bool sim_trace_enabled();
-void sim_trace_enable(bool enable);
 
 class ShiftRegister {
 public:
@@ -124,13 +112,13 @@ void dpi_assert(int inst, bool cond, int delay) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void dpi_imul(bool enable, bool is_signed_a, bool is_signed_b, iword_t a, iword_t b, iword_t* resultl, iword_t* resulth) {
+void dpi_imul(bool enable, bool is_signed_a, bool is_signed_b, int32_t a, int32_t b, int32_t* resultl, int32_t* resulth) {
   if (!enable)
     return;
-  udword_t first  = *(uword_t*)&a;
-  udword_t second = *(uword_t*)&b;
+  uint64_t first  = *(uint32_t*)&a;
+  uint64_t second = *(uint32_t*)&b;
 
-  udword_t mask = udword_t(-1) << (8 * sizeof(iword_t));
+  uint64_t mask = uint64_t(-1) << (8 * sizeof(int32_t));
 
   if (is_signed_a && a < 0) {
     first |= mask;
@@ -140,25 +128,52 @@ void dpi_imul(bool enable, bool is_signed_a, bool is_signed_b, iword_t a, iword_
     second |= mask;
   }
 
-  udword_t result;
+  uint64_t result;
   if (is_signed_a || is_signed_b) {
-    result = idword_t(first) * idword_t(second);
+    result = int64_t(first) * int64_t(second);
   } else {
     result = first * second;
   }
 
-  *resultl = iword_t(result);
-  *resulth = iword_t(result >> (8 * sizeof(iword_t)));
+  *resultl = int32_t(result);
+  *resulth = int32_t(result >> (8 * sizeof(int32_t)));
 }
 
-void dpi_idiv(bool enable, bool is_signed, iword_t a, iword_t b, iword_t* quotient, iword_t* remainder) {
+void dpi_lmul(bool enable, bool is_signed_a, bool is_signed_b, int64_t a, int64_t b, int64_t* resultl, int64_t* resulth) {
+  if (!enable)
+    return;
+  __uint128_t first  = *(uint64_t*)&a;
+  __uint128_t second = *(uint64_t*)&b;
+
+  __uint128_t mask = __uint128_t(-1) << (8 * sizeof(int64_t));
+
+  if (is_signed_a && a < 0) {
+    first |= mask;
+  }
+
+  if (is_signed_b && b < 0) {
+    second |= mask;
+  }
+
+  __uint128_t result;
+  if (is_signed_a || is_signed_b) {
+    result = __int128_t(first) * __int128_t(second);
+  } else {
+    result = first * second;
+  }
+
+  *resultl = int64_t(result);
+  *resulth = int64_t(result >> (8 * sizeof(int64_t)));
+}
+
+void dpi_idiv(bool enable, bool is_signed, int32_t a, int32_t b, int32_t* quotient, int32_t* remainder) {
   if (!enable)
     return;
 
-  uword_t dividen = a;
-  uword_t divisor = b;
+  uint32_t dividen = a;
+  uint32_t divisor = b;
 
-  auto inf_neg = uword_t(1) << (8 * sizeof(iword_t) - 1);
+  auto inf_neg = uint32_t(1) << (8 * sizeof(int32_t) - 1);
 
   if (is_signed) {
     if (b == 0) {
@@ -168,8 +183,39 @@ void dpi_idiv(bool enable, bool is_signed, iword_t a, iword_t b, iword_t* quotie
       *remainder = 0;
       *quotient  = dividen;
     } else {
-      *quotient  = (iword_t)dividen / (iword_t)divisor;
-      *remainder = (iword_t)dividen % (iword_t)divisor;
+      *quotient  = (int32_t)dividen / (int32_t)divisor;
+      *remainder = (int32_t)dividen % (int32_t)divisor;
+    }
+  } else {
+    if (b == 0) {
+      *quotient  = -1;
+      *remainder = dividen;
+    } else {
+      *quotient  = dividen / divisor;
+      *remainder = dividen % divisor;
+    }
+  }
+}
+
+void dpi_ldiv(bool enable, bool is_signed, int64_t a, int64_t b, int64_t* quotient, int64_t* remainder) {
+  if (!enable)
+    return;
+
+  uint64_t dividen = a;
+  uint64_t divisor = b;
+
+  auto inf_neg = uint64_t(1) << (8 * sizeof(int64_t) - 1);
+
+  if (is_signed) {
+    if (b == 0) {
+      *quotient  = -1;
+      *remainder = dividen;
+    } else if (dividen == inf_neg && divisor == -1) {
+      *remainder = 0;
+      *quotient  = dividen;
+    } else {
+      *quotient  = (int64_t)dividen / (int64_t)divisor;
+      *remainder = (int64_t)dividen % (int64_t)divisor;
     }
   } else {
     if (b == 0) {
@@ -184,6 +230,8 @@ void dpi_idiv(bool enable, bool is_signed, iword_t a, iword_t b, iword_t* quotie
 
 ///////////////////////////////////////////////////////////////////////////////
 
+bool sim_trace_enabled();
+
 void dpi_trace(int level, const char* format, ...) {
   if (level > DEBUG_LEVEL)
     return;
@@ -193,12 +241,4 @@ void dpi_trace(int level, const char* format, ...) {
 	va_start(va, format);
 	vprintf(format, va);
 	va_end(va);
-}
-
-void dpi_trace_start() {
-  sim_trace_enable(true);
-}
-
-void dpi_trace_stop() {
-  sim_trace_enable(false);
 }
