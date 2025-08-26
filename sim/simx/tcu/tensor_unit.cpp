@@ -86,8 +86,8 @@ struct FMA<vt::bf16, vt::bf16> {
 template <>
 struct FMA<vt::fp8_e4m3, vt::fp32> {
   static float eval(uint8_t a, uint8_t b, float c) {
-    auto xa = rv_e4m3tof_s(a);
-    auto xb = rv_e4m3tof_s(b);
+    auto xa = rv_e4m3tof_s(a, 0, nullptr);
+    auto xb = rv_e4m3tof_s(b, 0, nullptr);
     auto xab= rv_fmul_s(xa, xb, 0, nullptr);
     auto xc = bit_cast<uint32_t>(c);
     auto xd = rv_fadd_s(xab, xc, 0, nullptr);
@@ -98,11 +98,11 @@ struct FMA<vt::fp8_e4m3, vt::fp32> {
 template <>
 struct FMA<vt::fp8_e4m3, vt::fp8_e4m3> {
   static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
-    auto xa = rv_e4m3tof_s(a);
-    auto xb = rv_e4m3tof_s(b);
-    auto xc = rv_e4m3tof_s(c);
+    auto xa = rv_e4m3tof_s(a, 0, nullptr);
+    auto xb = rv_e4m3tof_s(b, 0, nullptr);
+    auto xc = rv_e4m3tof_s(c, 0, nullptr);
     auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftoe4m3_s(xd);
+    auto xh = rv_ftoe4m3_s(xd, 0, nullptr);
     return xh;
   }
 };
@@ -110,8 +110,8 @@ struct FMA<vt::fp8_e4m3, vt::fp8_e4m3> {
 template <>
 struct FMA<vt::fp8_e5m2, vt::fp32> {
   static float eval(uint8_t a, uint8_t b, float c) {
-    auto xa = rv_e5m2tof_s(a);
-    auto xb = rv_e5m2tof_s(b);
+    auto xa = rv_e5m2tof_s(a, 0, nullptr);
+    auto xb = rv_e5m2tof_s(b, 0, nullptr);
     auto xab= rv_fmul_s(xa, xb, 0, nullptr);
     auto xc = bit_cast<uint32_t>(c);
     auto xd = rv_fadd_s(xab, xc, 0, nullptr);
@@ -122,11 +122,11 @@ struct FMA<vt::fp8_e5m2, vt::fp32> {
 template <>
 struct FMA<vt::fp8_e5m2, vt::fp8_e5m2> {
   static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
-    auto xa = rv_e5m2tof_s(a);
-    auto xb = rv_e5m2tof_s(b);
-    auto xc = rv_e5m2tof_s(c);
+    auto xa = rv_e5m2tof_s(a, 0, nullptr);
+    auto xb = rv_e5m2tof_s(b, 0, nullptr);
+    auto xc = rv_e5m2tof_s(c, 0, nullptr);
     auto xd = rv_fmadd_s(xa, xb, xc, 0, nullptr);
-    auto xh = rv_ftoe5m2_s(xd);
+    auto xh = rv_ftoe5m2_s(xd, 0, nullptr);
     return xh;
   }
 };

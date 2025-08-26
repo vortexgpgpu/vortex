@@ -20,6 +20,10 @@ package VX_tcu_pkg;
 
     import VX_gpu_pkg::*;
 
+`ifdef SV_DPI
+    import "DPI-C" function void dpi_trace(input int level, input string format /*verilator sformat*/);
+`endif
+
     // Set configuration parameters
     localparam TCU_NT = `NUM_THREADS;
     localparam TCU_NR = 8;
