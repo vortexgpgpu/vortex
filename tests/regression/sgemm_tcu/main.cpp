@@ -240,7 +240,7 @@ class Comparator<vt::fp8_e4m3> {
 public:
   static uint8_t generate() {
     auto fvalue = float(rand()) / RAND_MAX;
-    return rv_ftoe4m3_s(bit_cast<uint32_t>(fvalue));
+    return rv_ftoe4m3_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
   }
   static bool compare(uint8_t a, uint8_t b, int index, int errors) {
     if (a != b) {
@@ -258,7 +258,7 @@ class Comparator<vt::fp8_e5m2> {
 public:
   static uint8_t generate() {
     auto fvalue = float(rand()) / RAND_MAX;
-    return rv_ftoe5m2_s(bit_cast<uint32_t>(fvalue));
+    return rv_ftoe5m2_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
   }
   static bool compare(uint8_t a, uint8_t b, int index, int errors) {
     if (a != b) {
@@ -362,8 +362,8 @@ struct muladd_t<vt::bf16, vt::bf16> {
 template <>
 struct muladd_t<vt::fp8_e4m3, vt::fp32> {
   static float eval(uint8_t a, uint8_t b, float c) {
-    auto fa = bit_cast<float>(rv_e4m3tof_s(a));
-    auto fb = bit_cast<float>(rv_e4m3tof_s(b));
+    auto fa = bit_cast<float>(rv_e4m3tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_e4m3tof_s(b, 0, nullptr));
     return fa * fb + c;
   }
 };
@@ -371,19 +371,19 @@ struct muladd_t<vt::fp8_e4m3, vt::fp32> {
 template <>
 struct muladd_t<vt::fp8_e4m3, vt::fp8_e4m3> {
   static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
-    auto fa = bit_cast<float>(rv_e4m3tof_s(a));
-    auto fb = bit_cast<float>(rv_e4m3tof_s(b));
-    auto fc = bit_cast<float>(rv_e4m3tof_s(c));
+    auto fa = bit_cast<float>(rv_e4m3tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_e4m3tof_s(b, 0, nullptr));
+    auto fc = bit_cast<float>(rv_e4m3tof_s(c, 0, nullptr));
     auto fd = fa * fb + fc;
-    return rv_ftoe4m3_s(bit_cast<uint32_t>(fd));
+    return rv_ftoe4m3_s(bit_cast<uint32_t>(fd), 0, nullptr);
   }
 };
 
 template <>
 struct muladd_t<vt::fp8_e5m2, vt::fp32> {
   static float eval(uint8_t a, uint8_t b, float c) {
-    auto fa = bit_cast<float>(rv_e5m2tof_s(a));
-    auto fb = bit_cast<float>(rv_e5m2tof_s(b));
+    auto fa = bit_cast<float>(rv_e5m2tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_e5m2tof_s(b, 0, nullptr));
     return fa * fb + c;
   }
 };
@@ -391,11 +391,11 @@ struct muladd_t<vt::fp8_e5m2, vt::fp32> {
 template <>
 struct muladd_t<vt::fp8_e5m2, vt::fp8_e5m2> {
   static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
-    auto fa = bit_cast<float>(rv_e5m2tof_s(a));
-    auto fb = bit_cast<float>(rv_e5m2tof_s(b));
-    auto fc = bit_cast<float>(rv_e5m2tof_s(c));
+    auto fa = bit_cast<float>(rv_e5m2tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_e5m2tof_s(b, 0, nullptr));
+    auto fc = bit_cast<float>(rv_e5m2tof_s(c, 0, nullptr));
     auto fd = fa * fb + fc;
-    return rv_ftoe5m2_s(bit_cast<uint32_t>(fd));
+    return rv_ftoe5m2_s(bit_cast<uint32_t>(fd), 0, nullptr);
   }
 };
 
