@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module Vortex import VX_gpu_pkg::*; (
+module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     `SCOPE_IO_DECL
 
     // Clock

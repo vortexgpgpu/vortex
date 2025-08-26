@@ -15,6 +15,8 @@
 
 `ifdef FPU_DPI
 
+`include "dpi_float.vh"
+
 module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter NUM_LANES = 1,
     parameter TAG_WIDTH = 1,
@@ -303,7 +305,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 dpi_utof (fcvt_fire, int'(f_fmt), int'(i_fmt), operands[0][i], frm, result_utof[i], fflags_utof[i]);
                 dpi_ftoi (fcvt_fire, int'(i_fmt), int'(f_fmt), operands[0][i], frm, result_ftoi[i], fflags_ftoi[i]);
                 dpi_ftou (fcvt_fire, int'(i_fmt), int'(f_fmt), operands[0][i], frm, result_ftou[i], fflags_ftou[i]);
-                dpi_f2f  (fcvt_fire, int'(f_fmt?1:0), int'(f_fmt?0:1), operands[0][i], result_f2f[i]);
+                dpi_f2f  (fcvt_fire, int'(f_fmt?1:0), int'(f_fmt?0:1), operands[0][i], FRM, result_f2f[i], fflags_ftou[i]);
 
                 result_fcvt[i] = is_itof ? result_itof[i][`XLEN-1:0] :
                                 is_utof ? result_utof[i][`XLEN-1:0] :

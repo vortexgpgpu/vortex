@@ -12,9 +12,10 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "dpi_float.vh"
 
 module VX_tcu_fedp_dpi #(
-    parameter LATENCY = 1,
+    parameter LATENCY = 0,
     parameter N = 1
 ) (
     input  wire clk,
@@ -29,43 +30,69 @@ module VX_tcu_fedp_dpi #(
     input  wire [`XLEN-1:0] c_val,
     output wire [`XLEN-1:0] d_val
 );
-    localparam FMUL_LATENCY = 2;
-    localparam FACC_LATENCY = 2;
-    localparam TOTAL_LATENCY= FMUL_LATENCY + FACC_LATENCY;
-    `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
+    localparam TCK = 2 * N;
+    localparam LEVELS = $clog2(TCK);
 
+    localparam FMUL_LATENCY = 2;
+    localparam ACC_LATENCY  = 1;
+    localparam FRND_LATENCY = 1;
+    `STATIC_ASSERT (LATENCY == 0 || LATENCY == (FMUL_LATENCY+ACC_LATENCY+FRND_LATENCY), ("invalid parameter!"));
+
+    `UNUSED_VAR (reset);
     `UNUSED_VAR ({fmt_d, c_val});
 
-    wire [31:0] nult_result [N];
+    wire [TCK-1:0][15:0] a_row16;
+    wire [TCK-1:0][15:0] b_col16;
+
+    for (genvar i = 0; i < N; i++) begin : g_unpack
+        assign a_row16[2*i]   = a_row[i][15:0];
+        assign a_row16[2*i+1] = a_row[i][31:16];
+        assign b_col16[2*i]   = b_col[i][15:0];
+        assign b_col16[2*i+1] = b_col[i][31:16];
+    end
+
+    wire [31:0] nult_result [TCK];
 
     // multiplication stage
-    for (genvar i = 0; i < N; i++) begin : g_prod
+    for (genvar i = 0; i < TCK; i++) begin : g_prod
         reg [63:0] a_f, b_f;
-        reg [63:0] xprod;
+        reg [63:0] p1_f, p2_f, p_f;
         reg [4:0] fflags;
 
-        `UNUSED_VAR({fflags, xprod[63:32]});
+        `UNUSED_VAR({fflags, p1_f, p2_f, p_f[63:32]});
 
-        always @(*) begin
+        always_latch begin
             case (fmt_s)
-            3'd1: begin // fp16
-                xprod = 64'hffffffff00000000;
-                for (int j = 0; j < 2; j++) begin
-                    dpi_f2f(enable, int'(0), int'(2), {48'hffffffffffff, a_row[i][j * 16 +: 16]}, a_f);
-                    dpi_f2f(enable, int'(0), int'(2), {48'hffffffffffff, b_col[i][j * 16 +: 16]}, b_f);
-                    dpi_fmadd(enable, int'(0), a_f, b_f, xprod, 3'b0, xprod, fflags);
+                3'd1: begin // fp16
+                    dpi_f2f(enable, int'(0), int'(2), {48'hffffffffffff, a_row16[i]}, 3'b0, a_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(2), {48'hffffffffffff, b_col16[i]}, 3'b0, b_f, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, p_f, fflags);
                 end
-            end
-            3'd2: begin // bf16
-                xprod = 64'hffffffff00000000;
-                for (int j = 0; j < 2; j++) begin
-                    dpi_f2f(enable, int'(0), int'(3), {48'hffffffffffff, a_row[i][j * 16 +: 16]}, a_f);
-                    dpi_f2f(enable, int'(0), int'(3), {48'hffffffffffff, b_col[i][j * 16 +: 16]}, b_f);
-                    dpi_fmadd(enable, int'(0), a_f, b_f, xprod, 3'b0, xprod, fflags);
+                3'd2: begin // bf16
+                    dpi_f2f(enable, int'(0), int'(3), {48'hffffffffffff, a_row16[i]}, 3'b0, a_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(3), {48'hffffffffffff, b_col16[i]}, 3'b0, b_f, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, p_f, fflags);
                 end
+                3'd3: begin // fp8
+                    dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffff, a_row16[i][0 +: 8]}, 3'b0, a_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffff, b_col16[i][0 +: 8]}, 3'b0, b_f, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, p1_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffff, a_row16[i][8 +: 8]}, 3'b0, a_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffff, b_col16[i][8 +: 8]}, 3'b0, b_f, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, p2_f, fflags);
+                    dpi_fadd(enable, int'(0), p1_f, p2_f, 3'b0, p_f, fflags);
+                end
+                3'd4: begin // bf8
+                    dpi_f2f(enable, int'(0), int'(5), {56'hffffffffffff, a_row16[i][0 +: 8]}, 3'b0, a_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(5), {56'hffffffffffff, b_col16[i][0 +: 8]}, 3'b0, b_f, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, p1_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(5), {56'hffffffffffff, a_row16[i][8 +: 8]}, 3'b0, a_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(5), {56'hffffffffffff, b_col16[i][8 +: 8]}, 3'b0, b_f, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, p2_f, fflags);
+                    dpi_fadd(enable, int'(0), p1_f, p2_f, 3'b0, p_f, fflags);
             end
             default: begin
-                xprod = 'x;
+                    p_f = 'x;
             end
             endcase
         end
@@ -77,7 +104,7 @@ module VX_tcu_fedp_dpi #(
             .clk      (clk),
             .reset    (reset),
             .enable   (enable),
-            .data_in  (xprod[31:0]),
+            .data_in  (p_f[31:0]),
             .data_out (nult_result[i])
         );
     end
@@ -95,22 +122,42 @@ module VX_tcu_fedp_dpi #(
         .data_out(delayed_c)
     );
 
+`IGNORE_UNOPTFLAT_BEGIN
+    wire [63:0] red_in [LEVELS+1][TCK];
+`IGNORE_UNOPTFLAT_END
+    for (genvar i = 0; i < TCK; i++) begin : g_red_inputs
+      assign red_in[0][i] = {32'hffffffff, nult_result[i]};
+    end
+
+    // accumulate reduction tree
+    for (genvar lvl = 0; lvl < LEVELS; lvl++) begin : g_red_tree
+        localparam integer CURSZ = TCK >> lvl;
+        localparam integer OUTSZ = CURSZ >> 1;
+        for (genvar i = 0; i < OUTSZ; i++) begin : g_add
+            reg [4:0] fflags;
+            `UNUSED_VAR(fflags);
+            reg [63:0] xsum;
+            always @(*) begin
+                dpi_fadd(enable, int'(0), red_in[lvl][2*i+0], red_in[lvl][2*i+1], 3'b0, xsum, fflags);
+            end
+            assign red_in[lvl+1][i] = xsum;
+        end
+    end
+
+    // final accumulation + rounding
     reg [63:0] xacc;
     reg [4:0] fflags;
     `UNUSED_VAR(fflags);
-
-    always_comb begin
-        xacc = 64'hffffffff00000000;
-        for (int i = 0; i < N; ++i) begin
-            dpi_fadd(enable, int'(0), {32'hffffffff, nult_result[i]}, xacc, 3'b0, xacc, fflags);
-        end
-        dpi_fadd(enable, int'(0), {32'hffffffff, delayed_c}, xacc, 3'b0, xacc, fflags);
+    `UNUSED_VAR(xacc[63:32]);
+    always @(*) begin
+        dpi_fadd(enable, int'(0), red_in[LEVELS][0], {32'hffffffff, delayed_c}, 3'b0, xacc, fflags);
     end
 
     wire [31:0] result;
+
     VX_pipe_register #(
         .DATAW (32),
-        .DEPTH (FACC_LATENCY)
+        .DEPTH (ACC_LATENCY + FRND_LATENCY)
     ) pipe_acc (
         .clk     (clk),
         .reset   (reset),

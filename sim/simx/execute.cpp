@@ -1156,11 +1156,12 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         for (uint32_t t = thread_start; t < num_threads; ++t) {
           if (!warp.tmask.test(t))
             continue;
+          uint32_t frm = this->get_fpu_rm(fpuArgs.frm, wid, t);
           uint32_t fflags = 0;
           if (fpuArgs.is_f64) {
-            rd_data[t].u64 = rv_ftod(check_boxing(rs1_data[t].u64));
+            rd_data[t].u64 = rv_ftod(check_boxing(rs1_data[t].u64), frm, &fflags);
           } else {
-            rd_data[t].u64 = nan_box(rv_dtof(rs1_data[t].u64));
+            rd_data[t].u64 = nan_box(rv_dtof(rs1_data[t].u64, frm, &fflags));
           }
           this->update_fcrs(fflags, wid, t);
         }

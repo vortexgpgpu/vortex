@@ -11,8 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`ifndef FLOAT_DPI_VH
-`define FLOAT_DPI_VH
+`ifndef DPI_FLOAT_VH
+`define DPI_FLOAT_VH
 
 import "DPI-C" function void dpi_fadd(input logic enable, input int dst_fmt, input longint a, input longint b, input bit[2:0] frm, output longint result, output bit[4:0] fflags);
 import "DPI-C" function void dpi_fsub(input logic enable, input int dst_fmt, input longint a, input longint b, input bit[2:0] frm, output longint result, output bit[4:0] fflags);
@@ -29,7 +29,7 @@ import "DPI-C" function void dpi_ftoi(input logic enable, input int dst_fmt, inp
 import "DPI-C" function void dpi_ftou(input logic enable, input int dst_fmt, input int src_fmt, input longint a, input bit[2:0] frm, output longint result, output bit[4:0] fflags);
 import "DPI-C" function void dpi_itof(input logic enable, input int dst_fmt, input int src_fmt, input longint a, input bit[2:0] frm, output longint result, output bit[4:0] fflags);
 import "DPI-C" function void dpi_utof(input logic enable, input int dst_fmt, input int src_fmt, input longint a, input bit[2:0] frm, output longint result, output bit[4:0] fflags);
-import "DPI-C" function void dpi_f2f(input logic enable, input int dst_fmt, input int src_fmt, input longint a, output longint result);
+import "DPI-C" function void dpi_f2f(input logic enable, input int dst_fmt, input int src_fmt, input longint a, input bit[2:0] frm, output longint result, output bit[4:0] fflags);
 
 import "DPI-C" function void dpi_fclss(input logic enable, input int dst_fmt, input longint a, output longint result);
 import "DPI-C" function void dpi_fsgnj(input logic enable, input int dst_fmt, input longint a, input longint b, output longint result);

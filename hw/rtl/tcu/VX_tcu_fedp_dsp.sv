@@ -95,7 +95,7 @@ module bf16_to_fp32 (
 endmodule
 
 module VX_tcu_fedp_dsp #(
-    parameter LATENCY = 1,
+    parameter LATENCY = 0,
     parameter N = 1
 ) (
     input  wire clk,
@@ -120,7 +120,9 @@ module VX_tcu_fedp_dsp #(
     localparam TOTAL_LATENCY= FCVT_LATENCY + FMUL_LATENCY + FRED_LATENCY + FADD_LATENCY;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
-    localparam C_DELAY = FCVT_LATENCY + FMUL_LATENCY + FRED_LATENCY;
+    localparam RED_LATENCY = LEVELS * FADD_LATENCY;
+    localparam ACC_LATENCY = RED_LATENCY + FADD_LATENCY;
+    `STATIC_ASSERT (LATENCY == 0 || LATENCY == (FCVT_LATENCY+FMUL_LATENCY+ACC_LATENCY+FRND_LATENCY), ("invalid parameter!"));
 
     `UNUSED_VAR ({fmt_d, c_val});
 
