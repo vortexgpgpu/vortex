@@ -24,6 +24,7 @@ PARAMS := -GN=$(NUM_REGS) -GLATENCY=4
 
 VL_FLAGS += -DSV_DPI
 
+SRCS += $(DPI_DIR)/dpi_util.cpp
 SRCS += $(DPI_DIR)/dpi_float.cpp
 SRCS += $(SW_COMMON_DIR)/softfloat_ext.cpp
 SRCS += $(SW_COMMON_DIR)/rvfloats.cpp

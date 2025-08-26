@@ -486,15 +486,13 @@ template <typename T, typename R>
 class Fadd {
 public:
   static R apply(T first, T second, R) {
-    // ignoring flags for now
     uint32_t fflags = 0;
-    // ignoring rounding mode for now
     uint32_t frm = 0;
     if (sizeof(R) == 4) {
       return rv_fadd_s(first, second, frm, &fflags);
     } else if (sizeof(R) == 8) {
-      uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first);
-      uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second);
+      uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first, frm, &fflags);
+      uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second, frm, &fflags);
       return rv_fadd_d(first_d, second_d, frm, &fflags);
     } else {
       std::cout << "Fadd only supports f32 and f64" << std::endl;
@@ -508,15 +506,13 @@ template <typename T, typename R>
 class Fsub {
 public:
   static R apply(T first, T second, R) {
-    // ignoring flags for now
     uint32_t fflags = 0;
-    // ignoring rounding mode for now
     uint32_t frm = 0;
     if (sizeof(R) == 4) {
       return rv_fsub_s(second, first, frm, &fflags);
     } else if (sizeof(R) == 8) {
-      uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first);
-      uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second);
+      uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first, frm, &fflags);
+      uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second, frm, &fflags);
       return rv_fsub_d(second_d, first_d, frm, &fflags);
     } else {
       std::cout << "Fsub only supports f32 and f64" << std::endl;
@@ -530,15 +526,13 @@ template <typename T, typename R>
 class Fmacc {
 public:
   static R apply(T first, T second, R third) {
-    // ignoring flags for now
     uint32_t fflags = 0;
-    // ignoring rounding mode for now
     uint32_t frm = 0;
     if (sizeof(R) == 4) {
       return rv_fmadd_s(first, second, third, frm, &fflags);
     } else if (sizeof(R) == 8) {
-      uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first);
-      uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second);
+      uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first, frm, &fflags);
+      uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second, frm, &fflags);
       return rv_fmadd_d(first_d, second_d, third, frm, &fflags);
     } else {
       std::cout << "Fmacc only supports f32 and f64" << std::endl;
@@ -552,15 +546,13 @@ template <typename T, typename R>
 class Fnmacc {
 public:
   static R apply(T first, T second, R third) {
-    // ignoring flags for now
     uint32_t fflags = 0;
-    // ignoring rounding mode for now
     uint32_t frm = 0;
     if (sizeof(R) == 4) {
       return rv_fnmadd_s(first, second, third, frm, &fflags);
     } else if (sizeof(R) == 8) {
-      uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first);
-      uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second);
+      uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first, frm, &fflags);
+      uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second, frm, &fflags);
       return rv_fnmadd_d(first_d, second_d, third, frm, &fflags);
     } else {
       std::cout << "Fnmacc only supports f32 and f64" << std::endl;
@@ -574,15 +566,13 @@ template <typename T, typename R>
 class Fmsac {
 public:
   static R apply(T first, T second, R third) {
-    // ignoring flags for now
     uint32_t fflags = 0;
-    // ignoring rounding mode for now
     uint32_t frm = 0;
     if (sizeof(R) == 4) {
       return rv_fmadd_s(first, second, rv_fsgnjn_s(third, third), frm, &fflags);
     } else if (sizeof(R) == 8) {
-      uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first);
-      uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second);
+      uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first, frm, &fflags);
+      uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second, frm, &fflags);
       return rv_fmadd_d(first_d, second_d, rv_fsgnjn_d(third, third), frm, &fflags);
     } else {
       std::cout << "Fmsac only supports f32 and f64" << std::endl;
@@ -596,15 +586,13 @@ template <typename T, typename R>
 class Fnmsac {
 public:
   static R apply(T first, T second, R third) {
-    // ignoring flags for now
     uint32_t fflags = 0;
-    // ignoring rounding mode for now
     uint32_t frm = 0;
     if (sizeof(R) == 4) {
       return rv_fnmadd_s(first, second, rv_fsgnjn_s(third, third), frm, &fflags);
     } else if (sizeof(R) == 8) {
-      uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first);
-      uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second);
+      uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first, frm, &fflags);
+      uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second, frm, &fflags);
       return rv_fnmadd_d(first_d, second_d, rv_fsgnjn_d(third, third), frm, &fflags);
     } else {
       std::cout << "Fnmsac only supports f32 and f64" << std::endl;
@@ -758,9 +746,7 @@ template <typename T, typename R>
 class Fcvt {
 public:
   static R apply(T first, T second, R) {
-    // ignoring flags for now
     uint32_t fflags = 0;
-    // ignoring rounding mode for now
     uint32_t frm = 0;
     if (sizeof(T) == 4) {
       switch (first) {
@@ -785,7 +771,7 @@ public:
       case 0b01011: // vfwcvt.f.x.v
         return rv_itof_d(second, frm, &fflags);
       case 0b01100: // vfwcvt.f.f.v
-        return rv_ftod(second);
+        return rv_ftod(second, frm, &fflags);
       case 0b01110: // vfwcvt.rtz.xu.f.v
         return rv_ftolu_s(second, 1, &fflags);
       case 0b01111: // vfwcvt.rtz.x.f.v
@@ -1064,15 +1050,13 @@ template <typename T, typename R>
 class Fmul {
 public:
   static R apply(T first, T second, R) {
-    // ignoring flags for now
     uint32_t fflags = 0;
-    // ignoring rounding mode for now
     uint32_t frm = 0;
     if (sizeof(R) == 4) {
       return rv_fmul_s(first, second, frm, &fflags);
     } else if (sizeof(R) == 8) {
-      uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first);
-      uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second);
+      uint64_t first_d = sizeof(T) == 8 ? first : rv_ftod(first, frm, &fflags);
+      uint64_t second_d = sizeof(T) == 8 ? second : rv_ftod(second, frm, &fflags);
       return rv_fmul_d(first_d, second_d, frm, &fflags);
     } else {
       std::cout << "Fmul only supports f32 and f64" << std::endl;
@@ -1928,10 +1912,12 @@ void vector_op_vv_wfv(VRF_t& vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint32_t
   for (uint32_t i = 0; i < vl; i++) {
     if (isMasked(vreg_file, 0, i, vmask))
       continue;
+    uint32_t fflags = 0;
+    uint32_t frm = 0;
     DT first = getVregData<DT>(vreg_file, rsrc0, i);
     DTR second = getVregData<DTR>(vreg_file, rsrc1, i);
     DTR third = getVregData<DTR>(vreg_file, rdest, i);
-    DTR result = OP<DTR, DTR>::apply(rv_ftod(first), second, third);
+    DTR result = OP<DTR, DTR>::apply(rv_ftod(first, frm, &fflags), second, third);
     DP(4, "Widening wfv " << (OP<DT, DTR>::name()) << "(" << +first << ", " << +second << ", " << +third << ")" << " = " << +result);
     setVregData<DTR>(vreg_file, rdest, i, result);
   }
@@ -2116,9 +2102,11 @@ void vector_op_vv_red_wf(VRF_t& vreg_file, uint32_t rsrc0, uint32_t rsrc1, uint3
     }
     if (isMasked(vreg_file, 0, i, vmask))
       continue;
+    uint32_t fflags = 0;
+    uint32_t frm = 0;
     DTR first = getVregData<DTR>(vreg_file, rdest, 0);
     DT second = getVregData<DT>(vreg_file, rsrc1, i);
-    DTR second_w = rv_ftod(second);
+    DTR second_w = rv_ftod(second, frm, &fflags);
     DTR result = OP<DTR, DTR>::apply(first, second_w, 0);
     DP(4, "Float widening reduction " << (OP<DTR, DTR>::name()) << "(" << +first << ", " << +second_w << ")" << " = " << +result);
     setVregData<DTR>(vreg_file, rdest, 0, result);

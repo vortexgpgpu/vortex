@@ -13,6 +13,10 @@
 
 #include "vl_simulator.h"
 
+bool sim_trace_enabled() {
+  return true;
+}
+
 int main(int argc, char **argv) {
   // Initialize Verilators variables
   Verilated::commandArgs(argc, argv);
