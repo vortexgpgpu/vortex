@@ -1456,12 +1456,16 @@ public:
       } break;
       case 52: { // vfwadd.wf
         vpu_op = VpuOpType::FMA;
-        uint64_t src1_d = rv_ftod(rs1_value);
+        uint32_t fflags = 0;
+        uint32_t frm = 0;
+        uint64_t src1_d = rv_ftod(rs1_value, frm, &fflags);
         vector_op_vix_wx<Fadd, uint8_t, uint16_t, uint32_t, uint64_t>(src1_d, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 54: { // vfwsub.wf
         vpu_op = VpuOpType::FMA;
-        uint64_t src1_d = rv_ftod(rs1_value);
+        uint32_t fflags = 0;
+        uint32_t frm = 0;
+        uint64_t src1_d = rv_ftod(rs1_value, frm, &fflags);
         vector_op_vix_wx<Fsub, uint8_t, uint16_t, uint32_t, uint64_t>(src1_d, vreg_file, rsrc1, rdest, states.vtype.vsew, states.vl, vmask);
       } break;
       case 56: { // vfwmul.vf

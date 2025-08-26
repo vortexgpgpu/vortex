@@ -8,13 +8,18 @@ DPI_DIR := $(VORTEX_HOME)/hw/dpi
 
 SRC_DIR := $(VORTEX_HOME)/hw/unittest/$(PROJECT)
 
+LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
+
 CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SW_COMMON_DIR)
+CXXFLAGS += -I/$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(ROOT_DIR)/hw
 
 VL_FLAGS += -DSV_DPI
 
 SRCS := $(DPI_DIR)/dpi_util.cpp
-SRCS := $(DPI_DIR)/dpi_float.cpp
+SRCS += $(DPI_DIR)/dpi_float.cpp
+SRCS += $(SW_COMMON_DIR)/softfloat_ext.cpp
+SRCS += $(SW_COMMON_DIR)/rvfloats.cpp
 SRCS += $(SRC_DIR)/main.cpp
 
 DBG_TRACE_FLAGS := -DDBG_TRACE_CACHE
