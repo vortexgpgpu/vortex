@@ -344,6 +344,8 @@ module VX_mem_coalescer #(
     assign misses = misses_r;
 
 `ifdef DBG_TRACE_MEM
+    import "DPI-C" function void dpi_trace(input int level, input string format /*verilator sformat*/);
+
     wire [`UP(UUID_WIDTH)-1:0] out_req_uuid;
     wire [`UP(UUID_WIDTH)-1:0] out_rsp_uuid;
 

@@ -588,6 +588,8 @@ module VX_mem_scheduler #(
     ///////////////////////////////////////////////////////////////////////////
 
 `ifdef DBG_TRACE_MEM
+    import "DPI-C" function void dpi_trace(input int level, input string format /*verilator sformat*/);
+    
     wire [`UP(UUID_WIDTH)-1:0] mem_req_dbg_uuid;
     wire [`UP(UUID_WIDTH)-1:0] mem_rsp_dbg_uuid;
     wire [`UP(UUID_WIDTH)-1:0] rsp_dbg_uuid;
