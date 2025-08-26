@@ -25,9 +25,9 @@ module VX_tcu_drl_mul_exp #(
     output logic [N-1:0][24:0] sigs_out
 );
 
-    wire [N-2:0] mul_sign_fp16, mul_sign_bf16, mul_sign_fp8e4m3, mul_sign_fp8e5m2;
-    wire [N-2:0][7:0] mul_exp_fp16, mul_exp_bf16, mul_exp_fp8e4m3, mul_exp_fp8e5m2;
-    wire [N-2:0][23:0] mul_sig_fp16, mul_sig_bf16, mul_sig_fp8e4m3, mul_sig_fp8e5m2;
+    wire [N-2:0] mul_sign_fp16, mul_sign_bf16, mul_sign_fp8, mul_sign_bf8;
+    wire [N-2:0][7:0] mul_exp_fp16, mul_exp_bf16, mul_exp_fp8, mul_exp_bf8;
+    wire [N-2:0][23:0] mul_sig_fp16, mul_sig_bf16, mul_sig_fp8, mul_sig_bf8;
 
     logic [N-1:0] mul_sign_mux;
     logic [N-1:0][7:0] mul_exp_mux;
@@ -55,23 +55,23 @@ module VX_tcu_drl_mul_exp #(
         );
 
         // FP8 E4M3 multiplication
-        VX_tcu_drl_fp8_e4m3mul fp8e4m3mul (
+        VX_tcu_drl_fp8mul fp8mul (
             .enable    (enable),
             .a         (a_rows[i]),
             .b         (b_cols[i]),
-            .sign_y    (mul_sign_fp8e4m3[i]),
-            .raw_exp_y (mul_exp_fp8e4m3[i]),
-            .raw_sig_y (mul_sig_fp8e4m3[i])
+            .sign_y    (mul_sign_fp8[i]),
+            .raw_exp_y (mul_exp_fp8[i]),
+            .raw_sig_y (mul_sig_fp8[i])
         );
 
         // FP8 E5M2 multiplication
-        VX_tcu_drl_fp8_e5m2mul fp8e5m2mul (
+        VX_tcu_drl_bf8mul bf8mul (
             .enable    (enable),
             .a         (a_rows[i]),
             .b         (b_cols[i]),
-            .sign_y    (mul_sign_fp8e5m2[i]),
-            .raw_exp_y (mul_exp_fp8e5m2[i]),
-            .raw_sig_y (mul_sig_fp8e5m2[i])
+            .sign_y    (mul_sign_bf8[i]),
+            .raw_exp_y (mul_exp_bf8[i]),
+            .raw_sig_y (mul_sig_bf8[i])
         );
 
         //Format selection
@@ -88,14 +88,14 @@ module VX_tcu_drl_mul_exp #(
                     mul_sig_mux[i]  = mul_sig_bf16[i];
                 end
                 3'd3: begin
-                    mul_sign_mux[i] = mul_sign_fp8e4m3[i];
-                    mul_exp_mux[i]  = mul_exp_fp8e4m3[i];                    
-                    mul_sig_mux[i]  = mul_sig_fp8e4m3[i];
+                    mul_sign_mux[i] = mul_sign_fp8[i];
+                    mul_exp_mux[i]  = mul_exp_fp8[i];                    
+                    mul_sig_mux[i]  = mul_sig_fp8[i];
                 end
                 3'd4: begin
-                    mul_sign_mux[i] = mul_sign_fp8e5m2[i];
-                    mul_exp_mux[i]  = mul_exp_fp8e5m2[i];                    
-                    mul_sig_mux[i]  = mul_sig_fp8e5m2[i];
+                    mul_sign_mux[i] = mul_sign_bf8[i];
+                    mul_exp_mux[i]  = mul_exp_bf8[i];                    
+                    mul_sig_mux[i]  = mul_sig_bf8[i];
                 end
                 default: begin
                     mul_sign_mux[i] = 1'bx;

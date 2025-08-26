@@ -236,7 +236,7 @@ public:
 };
 
 template <>
-class Comparator<vt::fp8_e4m3> {
+class Comparator<vt::fp8> {
 public:
   static uint8_t generate() {
     auto fvalue = float(rand()) / RAND_MAX;
@@ -254,7 +254,7 @@ public:
 };
 
 template <>
-class Comparator<vt::fp8_e5m2> {
+class Comparator<vt::bf8> {
 public:
   static uint8_t generate() {
     auto fvalue = float(rand()) / RAND_MAX;
@@ -279,7 +279,7 @@ public:
   }
   static bool compare(float a, float b, int index, int errors) {
     //fp8 quantization noise is too high, so we use a different threshold
-    if constexpr (std::is_same<vt::ITYPE, vt::fp8_e4m3>::value || std::is_same<vt::ITYPE, vt::fp8_e5m2>::value) {
+    if constexpr (std::is_same<vt::ITYPE, vt::fp8>::value || std::is_same<vt::ITYPE, vt::bf8>::value) {
       auto diff = std::abs(a - b);
       if (diff < 0.025f) {
         return true;
@@ -360,7 +360,7 @@ struct muladd_t<vt::bf16, vt::bf16> {
 };
 
 template <>
-struct muladd_t<vt::fp8_e4m3, vt::fp32> {
+struct muladd_t<vt::fp8, vt::fp32> {
   static float eval(uint8_t a, uint8_t b, float c) {
     auto fa = bit_cast<float>(rv_e4m3tof_s(a, 0, nullptr));
     auto fb = bit_cast<float>(rv_e4m3tof_s(b, 0, nullptr));
@@ -369,7 +369,7 @@ struct muladd_t<vt::fp8_e4m3, vt::fp32> {
 };
 
 template <>
-struct muladd_t<vt::fp8_e4m3, vt::fp8_e4m3> {
+struct muladd_t<vt::fp8, vt::fp8> {
   static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
     auto fa = bit_cast<float>(rv_e4m3tof_s(a, 0, nullptr));
     auto fb = bit_cast<float>(rv_e4m3tof_s(b, 0, nullptr));
@@ -380,7 +380,7 @@ struct muladd_t<vt::fp8_e4m3, vt::fp8_e4m3> {
 };
 
 template <>
-struct muladd_t<vt::fp8_e5m2, vt::fp32> {
+struct muladd_t<vt::bf8, vt::fp32> {
   static float eval(uint8_t a, uint8_t b, float c) {
     auto fa = bit_cast<float>(rv_e5m2tof_s(a, 0, nullptr));
     auto fb = bit_cast<float>(rv_e5m2tof_s(b, 0, nullptr));
@@ -389,7 +389,7 @@ struct muladd_t<vt::fp8_e5m2, vt::fp32> {
 };
 
 template <>
-struct muladd_t<vt::fp8_e5m2, vt::fp8_e5m2> {
+struct muladd_t<vt::bf8, vt::bf8> {
   static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
     auto fa = bit_cast<float>(rv_e5m2tof_s(a, 0, nullptr));
     auto fb = bit_cast<float>(rv_e5m2tof_s(b, 0, nullptr));
