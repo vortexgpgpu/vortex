@@ -18,6 +18,10 @@
 `include "VX_config.vh"
 `include "VX_types.vh"
 
+`ifdef SV_DPI
+`include "dpi_util.vh"
+`endif
+
 `ifdef ICACHE_ENABLE
     `define L1_ENABLE
 `endif
