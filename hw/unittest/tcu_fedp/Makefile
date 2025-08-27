@@ -15,12 +15,9 @@ LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 
 CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SW_COMMON_DIR)
 CXXFLAGS += -I/$(THIRD_PARTY_DIR)/softfloat/source/include
-CXXFLAGS += -I$(ROOT_DIR)/hw/tcu
-#CXXFLAGS += -I$(ROOT_DIR)/hw/tcu/drl
-#CXXFLAGS += -I$(ROOT_DIR)/hw/tcu/bhf
 
 CXXFLAGS += -DNUM_REGS=$(NUM_REGS) -DLATENCY=$(LATENCY)
-PARAMS := -GN=$(NUM_REGS) -GLATENCY=4
+PARAMS := -GN=$(NUM_REGS) -GLATENCY=$(LATENCY)
 
 VL_FLAGS += -DSV_DPI
 
@@ -32,13 +29,17 @@ SRCS += $(SRC_DIR)/main.cpp
 
 DBG_TRACE_FLAGS :=
 
-RTL_PKGS :=
-
 RTL_INCLUDE := -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
 RTL_INCLUDE += -I$(RTL_DIR)/tcu
+
+TOP := VX_tcu_fedp_dpi
+
+ifneq (,$(findstring -DTCU_DRL, $(CONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
-RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
-RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+TOP := VX_tcu_fedp_drl
+endif
+
+ifneq (,$(findstring -DTCU_BHF, $(CONFIGS)))
 RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/fNToRecFN.v
 RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/addRecFN.v
 RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/bsg_hardfloat_pkg.sv
@@ -48,14 +49,11 @@ RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/isSigNaNRecFN.v
 RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/mulRecFN.v
 RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToFN.v
 RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToRecFN.v
-
-TOP := VX_tcu_fedp_dpi
-ifneq (,$(findstring -DTCU_DRL, $(CONFIGS)))
-TOP := VX_tcu_fedp_drl
-endif
-ifneq (,$(findstring -DTCU_BHF, $(CONFIGS)))
+RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
+RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 TOP := VX_tcu_fedp_bhf
 endif
+
 ifneq (,$(findstring -DTCU_DSP, $(CONFIGS)))
 TOP := VX_tcu_fedp_dsp
 endif

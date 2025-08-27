@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 module VX_tcu_fedp_int #(
-    parameter LATENCY = 1,
+    parameter LATENCY = 0,
     parameter N = 1
 ) (
     input  wire clk,
@@ -37,7 +37,8 @@ module VX_tcu_fedp_int #(
     localparam ADD_LATENCY = 1;
     localparam RED_LATENCY = LEVELS * ADD_LATENCY;
     localparam ACC_LATENCY = RED_LATENCY + ADD_LATENCY;
-    `STATIC_ASSERT (LATENCY == (MUL_LATENCY+ACC_LATENCY), ("invalid parameter!"));
+    localparam TOTAL_LATENCY= MUL_LATENCY + ACC_LATENCY;
+    `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
     `UNUSED_VAR ({a_row, b_col, c_val});
     `UNUSED_VAR (fmt_d);

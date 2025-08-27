@@ -35,7 +35,8 @@ module VX_tcu_fedp_dpi #(
     localparam FMUL_LATENCY = 2;
     localparam ACC_LATENCY  = 1;
     localparam FRND_LATENCY = 1;
-    `STATIC_ASSERT (LATENCY == 0 || LATENCY == (FMUL_LATENCY+ACC_LATENCY+FRND_LATENCY), ("invalid parameter!"));
+    localparam TOTAL_LATENCY= FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
+    `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
     `UNUSED_VAR (reset);
     `UNUSED_VAR ({fmt_d, c_val});
