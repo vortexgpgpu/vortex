@@ -17,6 +17,7 @@ VL_FLAGS += --exe
 VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic
 VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO -Wno-GENUNNAMED
 VL_FLAGS += --x-initial unique --x-assign unique
+VL_FLAGS += verilator.vlt
 VL_FLAGS += -DSIMULATION
 VL_FLAGS += $(CONFIGS)
 VL_FLAGS += $(PARAMS)

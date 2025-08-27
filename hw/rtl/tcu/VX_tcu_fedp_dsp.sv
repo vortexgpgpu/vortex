@@ -117,10 +117,10 @@ module VX_tcu_fedp_dsp #(
     localparam FMUL_LATENCY = 8;
     localparam FADD_LATENCY = 11;
     localparam FRND_LATENCY = 1;
-
-    localparam RED_LATENCY = LEVELS * FADD_LATENCY;
-    localparam ACC_LATENCY = RED_LATENCY + FADD_LATENCY;
-    `STATIC_ASSERT (LATENCY == 0 || LATENCY == (FCVT_LATENCY+FMUL_LATENCY+ACC_LATENCY+FRND_LATENCY), ("invalid parameter!"));
+    localparam RED_LATENCY  = LEVELS * FADD_LATENCY;
+    localparam ACC_LATENCY  = RED_LATENCY + FADD_LATENCY;
+    localparam TOTAL_LATENCY= FCVT_LATENCY + FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
+    `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
     `UNUSED_VAR (reset);
     `UNUSED_VAR ({a_row, b_col, c_val});
