@@ -31,7 +31,6 @@ module VX_tcu_fedp_dpi #(
     output wire [`XLEN-1:0] d_val
 );
     localparam TCK = 2 * N;
-    localparam LEVELS = $clog2(TCK);
 
     localparam FMUL_LATENCY = 2;
     localparam ACC_LATENCY  = 1;
@@ -56,10 +55,10 @@ module VX_tcu_fedp_dpi #(
     // multiplication stage
     for (genvar i = 0; i < TCK; i++) begin : g_prod
         reg [63:0] a_f, b_f;
-        reg [63:0] p1_f, p2_f, p_f;
+        reg [63:0] p_f, p1_f, p2_f;
         reg [4:0] fflags;
 
-        `UNUSED_VAR({fflags, p1_f, p2_f, p_f[63:32]});
+        `UNUSED_VAR({fflags, p_f[63:32]});
 
         always_latch begin
             case (fmt_s)
@@ -122,39 +121,23 @@ module VX_tcu_fedp_dpi #(
         .data_out(delayed_c)
     );
 
-`IGNORE_UNOPTFLAT_BEGIN
-    wire [63:0] red_in [LEVELS+1][TCK];
-`IGNORE_UNOPTFLAT_END
-    for (genvar i = 0; i < TCK; i++) begin : g_red_inputs
-      assign red_in[0][i] = {32'hffffffff, nult_result[i]};
-    end
-
-    // accumulate reduction tree
-    for (genvar lvl = 0; lvl < LEVELS; lvl++) begin : g_red_tree
-        localparam integer CURSZ = TCK >> lvl;
-        localparam integer OUTSZ = CURSZ >> 1;
-        for (genvar i = 0; i < OUTSZ; i++) begin : g_add
-            reg [4:0] fflags;
-            `UNUSED_VAR(fflags);
-            reg [63:0] xsum;
-            always @(*) begin
-                dpi_fadd(enable, int'(0), red_in[lvl][2*i+0], red_in[lvl][2*i+1], 3'b0, xsum, fflags);
-            end
-            assign red_in[lvl+1][i] = xsum;
-        end
-    end
-
-    // final accumulation + rounding
-    reg [63:0] xacc;
+    reg [63:0] acc;
     reg [4:0] fflags;
+
     `UNUSED_VAR(fflags);
-    `UNUSED_VAR(xacc[63:32]);
-    always @(*) begin
-        dpi_fadd(enable, int'(0), red_in[LEVELS][0], {32'hffffffff, delayed_c}, 3'b0, xacc, fflags);
+    `UNUSED_VAR(acc[63:32]);
+
+    always_comb begin
+        reg [63:0] tmp, dst;
+        tmp = 64'hffffffff00000000;
+        for (int i = 0; i < TCK; ++i) begin
+            dpi_fadd(enable, int'(0), tmp, {32'hffffffff, nult_result[i]}, 3'b0, dst, fflags);
+            tmp = dst;
+        end
+        dpi_fadd(enable, int'(0), tmp, {32'hffffffff, delayed_c}, 3'b0, acc, fflags);
     end
 
     wire [31:0] result;
-
     VX_pipe_register #(
         .DATAW (32),
         .DEPTH (ACC_LATENCY + FRND_LATENCY)
@@ -162,7 +145,7 @@ module VX_tcu_fedp_dpi #(
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in (xacc[31:0]),
+        .data_in (acc[31:0]),
         .data_out(result)
     );
 
