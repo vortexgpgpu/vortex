@@ -12,45 +12,38 @@
 // limitations under the License.
 
 `include "VX_define.vh"
-`include "HardFloat_consts.vi"
 
 module VX_tcu_bhf_fmul #(
     parameter IN_EXPW  = 8,
     parameter IN_SIGW  = 24,    // Includes implicit bit
-    parameter OUT_EXPW = IN_EXPW,
-    parameter OUT_SIGW = IN_SIGW,    // Includes implicit bit
+    parameter OUT_EXPW = 8,
+    parameter OUT_SIGW = 24,    // Includes implicit bit
     parameter MUL_LATENCY = 1,
     parameter RND_LATENCY = 1,
     parameter IN_REC   = 0,     // 0: IEEE754, 1: recoded
     parameter OUT_REC  = 0,     // 0: IEEE754, 1: recoded
-    parameter IN_FECW = IN_EXPW + IN_SIGW + IN_REC,
-    parameter OUT_FECW = OUT_EXPW + OUT_SIGW + OUT_REC
+    parameter IN_RECW  = IN_EXPW + IN_SIGW + 1,
+    parameter OUT_RECW = OUT_EXPW + OUT_SIGW + 1
 ) (
     input  wire             clk,
     input  wire             reset,
     input  wire             enable,
     input  wire [2:0]       frm,
-    input  wire [IN_FECW-1:0] a,
-    input  wire [IN_FECW-1:0] b,
-    output wire [OUT_FECW-1:0] y,
-    output wire [4:0]      fflags
+    input  wire [IN_RECW-1:0] a,
+    input  wire [IN_RECW-1:0] b,
+    output logic [OUT_RECW-1:0] y,
+    output logic [4:0]      fflags
 );
-    localparam IN_RECW  = IN_EXPW + IN_SIGW + 1;
-    localparam OUT_RECW = OUT_EXPW + OUT_SIGW + 1;
-    localparam MUL_EXPW = IN_EXPW + 2;
-    localparam MUL_SIGW = IN_SIGW * 2;
-
     // Control signals
     wire control = `flControl_tininessAfterRounding; /// IEEE 754-2008
 
     wire [IN_RECW-1:0] a_rec, b_rec;
     wire s1_invalidExc, s1_isNaN, s1_isInf, s1_isZero, s1_sign;
     wire s2_invalidExc, s2_isNaN, s2_isInf, s2_isZero, s2_sign;
-    wire signed [MUL_EXPW-1:0] s1_sExp, s2_sExp;
-    wire [MUL_SIGW-1:0] s1_sig, s2_sig;
+    wire signed [(IN_EXPW+2)-1:0] s1_sExp, s2_sExp;
+    wire [(IN_SIGW*2)-1:0] s1_sig, s2_sig;
     wire [2:0] s2_frm;
-    wire [OUT_RECW-1:0] s2_y_rec;
-    wire [OUT_FECW-1:0] s2_y;
+    wire [OUT_RECW-1:0] s2_y_rec, s2_y;
     wire [4:0] s2_fflags;
 
     // Conversion to recoded format
@@ -74,6 +67,7 @@ module VX_tcu_bhf_fmul #(
             .in  (b[IN_RECW-2:0]),
             .out (b_rec)
         );
+        `UNUSED_VAR ({a[IN_RECW-1], b[IN_RECW-1]});
     end
 
     // Raw multiplication
@@ -95,7 +89,7 @@ module VX_tcu_bhf_fmul #(
     );
 
     VX_pipe_register #(
-        .DATAW (5 + MUL_EXPW + MUL_SIGW + 3),
+        .DATAW (5 + (IN_EXPW+2) + (IN_SIGW*2) + 3),
         .DEPTH (MUL_LATENCY)
     ) pipe_add (
         .clk     (clk),
@@ -108,11 +102,10 @@ module VX_tcu_bhf_fmul #(
     // Rounding
 
     roundAnyRawFNToRecFN #(
-        .inExpWidth  (MUL_EXPW-2),
-        .inSigWidth  (MUL_SIGW-1),
+        .inExpWidth  (IN_EXPW),
+        .inSigWidth  (IN_SIGW*2-1),
         .outExpWidth (OUT_EXPW),
-        .outSigWidth (OUT_SIGW),
-        .options     (0)
+        .outSigWidth (OUT_SIGW)
     ) rounding (
         .control       (control),
         .invalidExc    (s2_invalidExc),
@@ -132,18 +125,29 @@ module VX_tcu_bhf_fmul #(
 
     if (OUT_REC) begin : g_out_rec
         assign s2_y = s2_y_rec;
+
+        wire [OUT_RECW-2:0] tmp;
+        recFNToFN #(
+            .expWidth (OUT_EXPW),
+            .sigWidth (OUT_SIGW)
+        ) to_ieee (
+            .in  (s2_y_rec),
+            .out (tmp)
+        );
+        `UNUSED_VAR(tmp);
     end else begin : g_out_ieee
         recFNToFN #(
             .expWidth (OUT_EXPW),
             .sigWidth (OUT_SIGW)
         ) to_ieee (
             .in  (s2_y_rec),
-            .out (s2_y)
+            .out (s2_y[OUT_RECW-2:0])
         );
+        assign s2_y[OUT_RECW-1] = 1'b0;
     end
 
     VX_pipe_register #(
-        .DATAW (OUT_FECW + 5),
+        .DATAW (OUT_RECW + 5),
         .DEPTH (RND_LATENCY)
     ) pipe_rnd (
         .clk     (clk),

@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 module VX_tcu_fedp_bhf #(
-    parameter LATENCY = 1,
+    parameter LATENCY = 0,
     parameter N = 1
 ) (
     input  wire clk,
@@ -34,21 +34,21 @@ module VX_tcu_fedp_bhf #(
     localparam FMUL_LATENCY = 2;
     localparam FADD_LATENCY = 2;
     localparam FRND_LATENCY = 1;
-    localparam FRED_LATENCY = LEVELS * (FADD_LATENCY + FRND_LATENCY);
-    localparam TOTAL_LATENCY= (FMUL_LATENCY + FRND_LATENCY) + 1 + FRED_LATENCY + (FADD_LATENCY + FRND_LATENCY);
+    localparam RED_LATENCY  = LEVELS * (FADD_LATENCY + FRND_LATENCY);
+    localparam TOTAL_LATENCY= (FMUL_LATENCY + FRND_LATENCY) + 1 + RED_LATENCY + (FADD_LATENCY + FRND_LATENCY);
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
     localparam FMT_DELAY = FMUL_LATENCY + FRND_LATENCY;
-    localparam C_DELAY = (FMUL_LATENCY + FRND_LATENCY) + 1 + FRED_LATENCY;
+    localparam C_DELAY = (FMUL_LATENCY + FRND_LATENCY) + 1 + RED_LATENCY;
 
     `UNUSED_VAR ({fmt_d, c_val});
 
-    wire [2:0] frm = '0; // RNE rounding mode
+    wire [2:0] frm = `round_near_even;
 
-    wire [TCK-1:0][15:0] a_row16;
-    wire [TCK-1:0][15:0] b_col16;
+    wire [15:0] a_row16 [TCK];
+    wire [15:0] b_col16 [TCK];
 
-    for (genvar i = 0; i < N; i++) begin : g_unpack
+    for (genvar i = 0; i < N; i++) begin : g_unpack16
         assign a_row16[2*i]   = a_row[i][15:0];
         assign a_row16[2*i+1] = a_row[i][31:16];
         assign b_col16[2*i]   = b_col[i][15:0];
@@ -72,14 +72,14 @@ module VX_tcu_fedp_bhf #(
 
     wire [32:0] mult_result [TCK];
 
-    for (genvar i = 0; i < TCK; i++) begin : g_prod
+    for (genvar i = 0; i < TCK; i++) begin : g_multiply
+
         wire [32:0] mult_result_fp16;
         wire [32:0] mult_result_bf16;
 
-        // FP16 multiplication
         VX_tcu_bhf_fmul #(
             .IN_EXPW (5),
-            .IN_SIGW (10+1),
+            .IN_SIGW (11),
             .OUT_EXPW(8),
             .OUT_SIGW(24),
             .IN_REC  (0), // input in IEEE format
@@ -91,16 +91,15 @@ module VX_tcu_fedp_bhf #(
             .reset  (reset),
             .enable (enable),
             .frm    (frm),
-            .a      (a_row16[i]),
-            .b      (b_col16[i]),
+            .a      ({1'b0, a_row16[i]}),
+            .b      ({1'b0, b_col16[i]}),
             .y      (mult_result_fp16),
             `UNUSED_PIN(fflags)
         );
 
-        // BF16 multiplication
         VX_tcu_bhf_fmul #(
             .IN_EXPW (8),
-            .IN_SIGW (7+1),
+            .IN_SIGW (8),
             .OUT_EXPW(8),
             .OUT_SIGW(24),
             .IN_REC  (0), // input in IEEE format
@@ -112,8 +111,8 @@ module VX_tcu_fedp_bhf #(
             .reset  (reset),
             .enable (enable),
             .frm    (frm),
-            .a      (a_row16[i]),
-            .b      (b_col16[i]),
+            .a      ({1'b0, a_row16[i]}),
+            .b      ({1'b0, b_col16[i]}),
             .y      (mult_result_bf16),
             `UNUSED_PIN(fflags)
         );
@@ -123,14 +122,16 @@ module VX_tcu_fedp_bhf #(
             case(fmt_s_delayed)
                 3'd1: mult_result_mux = mult_result_fp16;
                 3'd2: mult_result_mux = mult_result_bf16;
-                default: mult_result_mux = 'x;
+                //3'd3: mult_result_mux = mult_result_fp8;
+                //3'd4: mult_result_mux = mult_result_bf8;
+                default: mult_result_mux = 33'hxxxxxxxx;
             endcase
         end
 
         VX_pipe_register #(
             .DATAW (33),
-            .DEPTH (1) // select latency
-        ) pipe_mult (
+            .DEPTH (1)
+        ) pipe_mulsel (
             .clk      (clk),
             .reset    (reset),
             .enable   (enable),
@@ -139,21 +140,21 @@ module VX_tcu_fedp_bhf #(
         );
     end
 
-    wire [32:0] red_in [0:LEVELS] [TCK];
+    // Accumulate reduction tree
 
-    for (genvar i = 0; i < TCK; i++) begin : g_red_inputs
+    wire [32:0] red_in [LEVELS+1][TCK];
+
+    for (genvar i = 0; i < TCK; i++) begin : g_red_in
         assign red_in[0][i] = mult_result[i];
     end
 
-    // Accumulate reduction tree
-    for (genvar lvl = 0; lvl < LEVELS; lvl++) begin : g_red_tree
+    for (genvar lvl = 0; lvl < LEVELS; lvl++) begin : g_accumulate
         localparam CURSZ = TCK >> lvl;
         localparam OUTSZ = CURSZ >> 1;
-
         for (genvar i = 0; i < OUTSZ; i++) begin : g_add
             VX_tcu_bhf_fadd #(
-                .IN_EXPW (8),
-                .IN_SIGW (23+1),
+                .EXPW    (8),
+                .SIGW    (24),
                 .IN_REC  (1), // input in recoded format
                 .OUT_REC (1), // output in recoded format
                 .ADD_LATENCY (FADD_LATENCY),
@@ -171,10 +172,12 @@ module VX_tcu_fedp_bhf #(
         end
     end
 
-    // Accumulation input C recoding and delay handling
+    // Final accumulation with C
 
     wire [32:0] c_rec, c_delayed;
-    wire [31:0] result;
+    wire [32:0] result;
+
+    `UNUSED_VAR (result[32]);
 
     fNToRecFN #(
         .expWidth (8),
@@ -195,10 +198,9 @@ module VX_tcu_fedp_bhf #(
         .data_out(c_delayed)
     );
 
-    // Final accumulation
     VX_tcu_bhf_fadd #(
-        .IN_EXPW (8),
-        .IN_SIGW (23+1),
+        .EXPW    (8),
+        .SIGW    (24),
         .IN_REC  (1), // input in recoded format
         .OUT_REC (0), // output in IEEE format
         .ADD_LATENCY (FADD_LATENCY),
@@ -214,6 +216,6 @@ module VX_tcu_fedp_bhf #(
         `UNUSED_PIN(fflags)
     );
 
-    assign d_val = `XLEN'(result);
+    assign d_val = `XLEN'(result[31:0]);
 
 endmodule
