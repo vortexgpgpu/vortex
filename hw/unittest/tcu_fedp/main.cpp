@@ -172,14 +172,14 @@ enum class TestResult {
     }                                                                                          \
   } while (0)
 
-void print_float(const std::string& prefix, float value, bool newline = true) {
+void print_float(const std::string& prefix, float value, bool newline = false) {
   std::cout << prefix << value << " (0x" << std::hex << bit_cast<uint32_t>(value) << ")" << std::dec;
   if (newline) {
     std::cout << std::endl;
   }
 }
 
-void print_float(const std::string& prefix, std::vector<float>& values, bool newline = true) {
+void print_float(const std::string& prefix, std::vector<float>& values, bool newline = false) {
   std::cout << prefix << "{";
   for (size_t i = 0; i < values.size(); i++) {
     if (i > 0) std::cout << ", ";
@@ -191,14 +191,14 @@ void print_float(const std::string& prefix, std::vector<float>& values, bool new
   }
 }
 
-void print_format(const std::string& prefix, uint32_t value, bool newline = true) {
+void print_format(const std::string& prefix, uint32_t value, bool newline = false) {
   std::cout << prefix << std::hex << "0x" << value << std::dec;
   if (newline) {
     std::cout << std::endl;
   }
 }
 
-void print_format(const std::string& prefix, std::vector<uint32_t>& values, bool newline = true) {
+void print_format(const std::string& prefix, std::vector<uint32_t>& values, bool newline = false) {
   std::cout << prefix << "{";
   for (size_t i = 0; i < values.size(); i++) {
     if (i > 0) std::cout << ", ";
@@ -410,15 +410,19 @@ public:
       bool c_enable = (test_idx % 3) == 2;
 
       for (int i = 0; i < total_elements; i++) {
-        a_values_float[i] = (a_enable && i == 0) ? generate_test_value(feature) : generate_test_value("normals");
-        b_values_float[i] = (b_enable && i == 0) ? generate_test_value(feature) : generate_test_value("normals");
+        float af = (a_enable && i == 0) ? generate_test_value(feature) : generate_test_value("normals");
+        float bf = (b_enable && i == 0) ? generate_test_value(feature) : generate_test_value("normals");
 
-        a_values_format[i] = cvt_f32_to_custom(a_values_float[i], config_.exp_bits, config_.sig_bits, config_.round_mode, nullptr);
-        b_values_format[i] = cvt_f32_to_custom(b_values_float[i], config_.exp_bits, config_.sig_bits, config_.round_mode, nullptr);
+        a_values_format[i] = cvt_f32_to_custom(af, config_.exp_bits, config_.sig_bits, config_.round_mode, nullptr);
+        b_values_format[i] = cvt_f32_to_custom(bf, config_.exp_bits, config_.sig_bits, config_.round_mode, nullptr);
 
         // Convert back to float to account for precision loss
         a_values_float[i] = cvt_custom_to_f32(a_values_format[i], config_.exp_bits, config_.sig_bits, config_.round_mode, nullptr);
         b_values_float[i] = cvt_custom_to_f32(b_values_format[i], config_.exp_bits, config_.sig_bits, config_.round_mode, nullptr);
+
+        /*print_float("  af=", af);
+        print_float(", bf=", bf);
+        std::cout << std::endl;*/
       }
 
       // Generate c value
@@ -455,13 +459,13 @@ public:
 
       if (!floats_approximately_equal(dut_result, expected, config_.exp_bits, config_.sig_bits)) {
         std::cout << "Test " << feature << ":" << test_idx << " failed:" << std::endl;
-        print_float("  af_values=", a_values_float);
-        print_format("  ax_values=", a_values_format);
-        print_float("  bf_values=", b_values_float);
-        print_format("  bx_values=", b_values_format);
-        print_float("  c_value=", c_value_float);
-        print_float("  Expected=", expected);
-        print_float("  Actual=", dut_result);
+        print_float("  af_values=", a_values_float, true);
+        print_format("  ax_values=", a_values_format, true);
+        print_float("  bf_values=", b_values_float, true);
+        print_format("  bx_values=", b_values_format, true);
+        print_float("  c_value=", c_value_float, true);
+        print_float("  Expected=", expected, true);
+        print_float("  Actual=", dut_result, true);
         return TestResult::FAILED;
       }
 
