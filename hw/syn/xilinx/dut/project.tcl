@@ -71,6 +71,10 @@ proc run_setup {} {
   # Create project
   create_project $project_name $project_name -force -part $device_part
 
+  # Set high-performance strategies to enable retiming
+  set_property strategy "Flow_PerfOptimized_High" [get_runs synth_1]
+  set_property strategy "Performance_Explore" [get_runs impl_1]
+
   # Add constrains file
   read_xdc $xdc_file
 
@@ -153,6 +157,18 @@ proc run_report {} {
 
   # Generate timing report
   report_timing -unique_pins -nworst 100 -delay_type max -sort_by group -file timing.rpt
+
+  # Generate clock utilization report to see register usage
+  report_clock_utilization -file clock_utilization.rpt
+
+  # Generate methodology reports to check for any issues
+  report_methodology -file methodology.rpt
+
+  # Generate a high fanout net report which can show retiming effects
+  report_high_fanout_nets -fanout_greater_than 100 -max_nets 50 -file high_fanout_nets.rpt
+
+  # Generate detailed RAM report
+  report_ram_utilization -detail -file ram_utilization_detailed.rpt
 
   # Generate power and drc reports
   report_power -file power.rpt
