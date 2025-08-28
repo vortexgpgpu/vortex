@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "HardFloat_consts.vi"
 
 module VX_tcu_fedp_bhf #(
     parameter LATENCY = 0,
@@ -31,8 +32,8 @@ module VX_tcu_fedp_bhf #(
 );
     localparam TCK = 2 * N;
     localparam LEVELS = $clog2(TCK);
-    localparam FMUL_LATENCY = 2;
-    localparam FADD_LATENCY = 2;
+    localparam FMUL_LATENCY = 1;
+    localparam FADD_LATENCY = 1;
     localparam FRND_LATENCY = 1;
     localparam RED_LATENCY  = LEVELS * (FADD_LATENCY + FRND_LATENCY);
     localparam TOTAL_LATENCY= (FMUL_LATENCY + FRND_LATENCY) + 1 + RED_LATENCY + (FADD_LATENCY + FRND_LATENCY);
@@ -76,6 +77,53 @@ module VX_tcu_fedp_bhf #(
 
         wire [32:0] mult_result_fp16;
         wire [32:0] mult_result_bf16;
+
+        wire [32:0] mult_result_fp8;
+        wire [32:0] mult_result_bf8;
+
+        VX_tcu_bhf_fp8mul #(
+            .IN_EXPW (4),
+            .IN_SIGW (4),
+            .OUT_EXPW(8),
+            .OUT_SIGW(24),
+            .IN_REC  (0), // input in IEEE format
+            .OUT_REC (1), // output in recoded format
+            .MUL_LATENCY (FMUL_LATENCY),
+            .RND_LATENCY (FRND_LATENCY)
+        ) fp8_mul (
+            .clk    (clk),
+            .reset  (reset),
+            .enable (enable),
+            .frm    (frm),
+            .a0     ({1'b0, a_row16[i][0 +: 8]}),
+            .b0     ({1'b0, b_col16[i][0 +: 8]}),
+            .a1     ({1'b0, a_row16[i][8 +: 8]}),
+            .b1     ({1'b0, b_col16[i][8 +: 8]}),
+            .y      (mult_result_fp8),
+            `UNUSED_PIN(fflags)
+        );
+
+        VX_tcu_bhf_fp8mul #(
+            .IN_EXPW (5),
+            .IN_SIGW (3),
+            .OUT_EXPW(8),
+            .OUT_SIGW(24),
+            .IN_REC  (0), // input in IEEE format
+            .OUT_REC (1), // output in recoded format
+            .MUL_LATENCY (FMUL_LATENCY),
+            .RND_LATENCY (FRND_LATENCY)
+        ) bf8_mul (
+            .clk    (clk),
+            .reset  (reset),
+            .enable (enable),
+            .frm    (frm),
+            .a0     ({1'b0, a_row16[i][0 +: 8]}),
+            .b0     ({1'b0, b_col16[i][0 +: 8]}),
+            .a1     ({1'b0, a_row16[i][8 +: 8]}),
+            .b1     ({1'b0, b_col16[i][8 +: 8]}),
+            .y      (mult_result_bf8),
+            `UNUSED_PIN(fflags)
+        );
 
         VX_tcu_bhf_fmul #(
             .IN_EXPW (5),
@@ -122,9 +170,9 @@ module VX_tcu_fedp_bhf #(
             case(fmt_s_delayed)
                 3'd1: mult_result_mux = mult_result_fp16;
                 3'd2: mult_result_mux = mult_result_bf16;
-                //3'd3: mult_result_mux = mult_result_fp8;
-                //3'd4: mult_result_mux = mult_result_bf8;
-                default: mult_result_mux = 33'hxxxxxxxx;
+                3'd3: mult_result_mux = mult_result_fp8;
+                3'd4: mult_result_mux = mult_result_bf8;
+                default: mult_result_mux = 'x;
             endcase
         end
 
@@ -153,8 +201,8 @@ module VX_tcu_fedp_bhf #(
         localparam OUTSZ = CURSZ >> 1;
         for (genvar i = 0; i < OUTSZ; i++) begin : g_add
             VX_tcu_bhf_fadd #(
-                .EXPW    (8),
-                .SIGW    (24),
+                .IN_EXPW (8),
+                .IN_SIGW (24),
                 .IN_REC  (1), // input in recoded format
                 .OUT_REC (1), // output in recoded format
                 .ADD_LATENCY (FADD_LATENCY),
@@ -199,8 +247,8 @@ module VX_tcu_fedp_bhf #(
     );
 
     VX_tcu_bhf_fadd #(
-        .EXPW    (8),
-        .SIGW    (24),
+        .IN_EXPW (8),
+        .IN_SIGW (24),
         .IN_REC  (1), // input in recoded format
         .OUT_REC (0), // output in IEEE format
         .ADD_LATENCY (FADD_LATENCY),

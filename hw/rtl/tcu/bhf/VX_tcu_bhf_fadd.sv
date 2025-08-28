@@ -12,36 +12,43 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "HardFloat_consts.vi"
 
 module VX_tcu_bhf_fadd #(
-    parameter EXPW = 8,
-    parameter SIGW = 24,    // Includes implicit bit
+    parameter IN_EXPW = 8,
+    parameter IN_SIGW = 24,    // Includes implicit bit
+    parameter OUT_EXPW = IN_EXPW,
+    parameter OUT_SIGW = IN_SIGW,    // Includes implicit bit
     parameter ADD_LATENCY = 1,
     parameter RND_LATENCY = 1,
     parameter IN_REC = 0,   // 0: IEEE754, 1: recoded
     parameter OUT_REC = 0,  // 0: IEEE754, 1: recoded
-    parameter RECW = EXPW + SIGW + 1
+    parameter IN_RECW = IN_EXPW + IN_SIGW + 1,
+    parameter OUT_RECW = OUT_EXPW + OUT_SIGW + 1
 ) (
     input  wire             clk,
     input  wire             reset,
     input  wire             enable,
     input  wire [2:0]       frm,
-    input  wire [RECW-1:0]  a,
-    input  wire [RECW-1:0]  b,
-    output logic [RECW-1:0] y,
+    input  wire [IN_RECW-1:0] a,
+    input  wire [IN_RECW-1:0] b,
+    output logic [OUT_RECW-1:0] y,
     output logic [4:0]      fflags
 );
+    localparam ADD_EXPW = IN_EXPW+2;
+    localparam ADD_SIGW = IN_SIGW+3;
+
     // Control signals
     wire control = `flControl_tininessAfterRounding; /// IEEE 754-2008
     wire subOp = 1'b0; // addition
 
-    wire [RECW-1:0] a_rec, b_rec;
+    wire [IN_RECW-1:0] a_rec, b_rec;
     wire s1_invalidExc, s1_isNaN, s1_isInf, s1_isZero, s1_sign;
     wire s2_invalidExc, s2_isNaN, s2_isInf, s2_isZero, s2_sign;
-    wire [(EXPW+2)-1:0] s1_sExp, s2_sExp;
-    wire [(SIGW+3)-1:0] s1_sig, s2_sig;
+    wire signed [ADD_EXPW-1:0] s1_sExp, s2_sExp;
+    wire [ADD_SIGW-1:0] s1_sig, s2_sig;
     wire [2:0] s2_frm;
-    wire [RECW-1:0] s2_y_rec, s2_y;
+    wire [OUT_RECW-1:0] s2_y_rec, s2_y;
     wire [4:0] s2_fflags;
 
     // Conversion to recoded format
@@ -51,28 +58,28 @@ module VX_tcu_bhf_fadd #(
         assign b_rec = b;
     end else begin : g_in_ieee
         fNToRecFN #(
-            .expWidth (EXPW),
-            .sigWidth (SIGW)
+            .expWidth (IN_EXPW),
+            .sigWidth (IN_SIGW)
         ) from_ieee_a (
-            .in  (a[RECW-2:0]),
+            .in  (a[IN_RECW-2:0]),
             .out (a_rec)
         );
 
         fNToRecFN #(
-            .expWidth (EXPW),
-            .sigWidth (SIGW)
+            .expWidth (IN_EXPW),
+            .sigWidth (IN_SIGW)
         ) from_ieee_b (
-            .in  (b[RECW-2:0]),
+            .in  (b[IN_RECW-2:0]),
             .out (b_rec)
         );
-        `UNUSED_VAR ({a[RECW-1], b[RECW-1]});
+        `UNUSED_VAR ({a[IN_RECW-1], b[IN_RECW-1]});
     end
 
     // Raw addition
 
     addRecFNToRaw #(
-        .expWidth (EXPW),
-        .sigWidth (SIGW)
+        .expWidth (IN_EXPW),
+        .sigWidth (IN_SIGW)
     ) adder (
         .control      (control),
         .subOp        (subOp),
@@ -89,7 +96,7 @@ module VX_tcu_bhf_fadd #(
     );
 
     VX_pipe_register #(
-        .DATAW (5 + (EXPW+2) + (SIGW+3) + 3),
+        .DATAW (5 + ADD_EXPW + ADD_SIGW + 3),
         .DEPTH (ADD_LATENCY)
     ) pipe_add (
         .clk     (clk),
@@ -101,9 +108,12 @@ module VX_tcu_bhf_fadd #(
 
     // Rounding
 
-    roundRawFNToRecFN #(
-        .expWidth (EXPW),
-        .sigWidth (SIGW)
+    roundAnyRawFNToRecFN #(
+        .inExpWidth  (ADD_EXPW-2),
+        .inSigWidth  (ADD_SIGW-1),
+        .outExpWidth (OUT_EXPW),
+        .outSigWidth (OUT_SIGW),
+        .options     (0)
     ) rounding (
         .control       (control),
         .invalidExc    (s2_invalidExc),
@@ -125,17 +135,17 @@ module VX_tcu_bhf_fadd #(
         assign s2_y = s2_y_rec;
     end else begin : g_out_ieee
         recFNToFN #(
-            .expWidth (EXPW),
-            .sigWidth (SIGW)
+            .expWidth (OUT_EXPW),
+            .sigWidth (OUT_SIGW)
         ) to_ieee (
             .in  (s2_y_rec),
-            .out (s2_y[RECW-2:0])
+            .out (s2_y[OUT_RECW-2:0])
         );
-        assign s2_y[RECW-1] = 1'b0;
+        assign s2_y[OUT_RECW-1] = 1'b0;
     end
 
     VX_pipe_register #(
-        .DATAW (RECW + 5),
+        .DATAW (OUT_RECW + 5),
         .DEPTH (RND_LATENCY)
     ) pipe_rnd (
         .clk     (clk),
