@@ -12,12 +12,13 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "HardFloat_consts.vi"
 
 module VX_tcu_bhf_fmul #(
     parameter IN_EXPW  = 8,
     parameter IN_SIGW  = 24,    // Includes implicit bit
-    parameter OUT_EXPW = 8,
-    parameter OUT_SIGW = 24,    // Includes implicit bit
+    parameter OUT_EXPW = IN_EXPW,
+    parameter OUT_SIGW = IN_SIGW,    // Includes implicit bit
     parameter MUL_LATENCY = 1,
     parameter RND_LATENCY = 1,
     parameter IN_REC   = 0,     // 0: IEEE754, 1: recoded
@@ -34,14 +35,17 @@ module VX_tcu_bhf_fmul #(
     output logic [OUT_RECW-1:0] y,
     output logic [4:0]      fflags
 );
+    localparam MUL_EXPW = IN_EXPW+2;
+    localparam MUL_SIGW = IN_SIGW*2;
+
     // Control signals
     wire control = `flControl_tininessAfterRounding; /// IEEE 754-2008
 
     wire [IN_RECW-1:0] a_rec, b_rec;
     wire s1_invalidExc, s1_isNaN, s1_isInf, s1_isZero, s1_sign;
     wire s2_invalidExc, s2_isNaN, s2_isInf, s2_isZero, s2_sign;
-    wire signed [(IN_EXPW+2)-1:0] s1_sExp, s2_sExp;
-    wire [(IN_SIGW*2)-1:0] s1_sig, s2_sig;
+    wire signed [MUL_EXPW-1:0] s1_sExp, s2_sExp;
+    wire [MUL_SIGW-1:0] s1_sig, s2_sig;
     wire [2:0] s2_frm;
     wire [OUT_RECW-1:0] s2_y_rec, s2_y;
     wire [4:0] s2_fflags;
@@ -89,7 +93,7 @@ module VX_tcu_bhf_fmul #(
     );
 
     VX_pipe_register #(
-        .DATAW (5 + (IN_EXPW+2) + (IN_SIGW*2) + 3),
+        .DATAW (5 + MUL_EXPW + MUL_SIGW + 3),
         .DEPTH (MUL_LATENCY)
     ) pipe_add (
         .clk     (clk),
@@ -102,10 +106,11 @@ module VX_tcu_bhf_fmul #(
     // Rounding
 
     roundAnyRawFNToRecFN #(
-        .inExpWidth  (IN_EXPW),
-        .inSigWidth  (IN_SIGW*2-1),
+        .inExpWidth  (MUL_EXPW-2),
+        .inSigWidth  (MUL_SIGW-1),
         .outExpWidth (OUT_EXPW),
-        .outSigWidth (OUT_SIGW)
+        .outSigWidth (OUT_SIGW),
+        .options     (0)
     ) rounding (
         .control       (control),
         .invalidExc    (s2_invalidExc),

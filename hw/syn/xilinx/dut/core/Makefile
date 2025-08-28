@@ -21,13 +21,13 @@ endif
 
 # Add TCU extension sources
 ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu
+RTL_INCLUDE += -I$(RTL_DIR)/tcu
 ifneq (,$(findstring -DTCU_DRL, $(CONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/drl
 endif
 ifneq (,$(findstring -DTCU_BHF, $(CONFIGS)))
 RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
+RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
 endif
-	RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
-	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
 endif

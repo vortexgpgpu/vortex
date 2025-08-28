@@ -350,8 +350,12 @@ private:
 
 public:
   Testbench(const TestConfig &cfg)
-      : config_(cfg), cycle_count_(0), timestamp_(0), rng_(config_.random_seed),
-        normal_dist_(-1.0f, 1.0f), bits_dist_(0, 0xFFFFFFFF) {
+    : config_(cfg)
+    , cycle_count_(0)
+    , timestamp_(0)
+    , rng_(config_.random_seed)
+    , normal_dist_(-1.0f, 1.0f)
+    , bits_dist_(0, 0xFFFFFFFF) {
     Verilated::traceEverOn(config_.enable_tracing);
     dut_ = std::make_unique<MODULE>();
 

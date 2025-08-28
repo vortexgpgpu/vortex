@@ -42,6 +42,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <limits>
 #include <softfloat.h>
 #include <stdbool.h>
+#include <util.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -859,15 +861,17 @@ float cvt_custom_to_f32(uint32_t value, uint32_t exp_bits, uint32_t sig_bits,
 float32_t f8e4m3_to_f32(float8_t a) {
   uint32_t fflags = 0;
   auto out = cvt_custom_to_f32(a.v, 4, 3, softfloat_roundingMode, &fflags);
+  //printf("f8e4m3_to_f32: 0x%x -> %f\n", a.v, out);
   softfloat_exceptionFlags |= fflags;
   float32_t res;
-  res.v = out;
+  res.v = vortex::bit_cast<uint32_t>(out);
   return res;
 }
 
 float8_t f32_to_f8e4m3(float32_t a) {
   uint32_t fflags = 0;
-  auto out = cvt_f32_to_custom(a.v, 4, 3, softfloat_roundingMode, &fflags);
+  auto out = cvt_f32_to_custom(vortex::bit_cast<float>(a.v), 4, 3, softfloat_roundingMode, &fflags);
+  //printf("f32_to_f8e4m3: %f -> 0x%x\n", *(float*)&a.v, out);
   softfloat_exceptionFlags |= fflags;
   float8_t res;
   res.v = out & 0xff;
@@ -877,15 +881,17 @@ float8_t f32_to_f8e4m3(float32_t a) {
 float32_t f8e5m2_to_f32(bfloat8_t a) {
   uint32_t fflags = 0;
   auto out = cvt_custom_to_f32(a.v, 5, 2, softfloat_roundingMode, &fflags);
+  //printf("f8e5m2_to_f32: 0x%x -> %f\n", a.v, out);
   softfloat_exceptionFlags |= fflags;
   float32_t res;
-  res.v = out;
+  res.v = vortex::bit_cast<uint32_t>(out);
   return res;
 }
 
 bfloat8_t f32_to_f8e5m2(float32_t a) {
   uint32_t fflags = 0;
-  auto out = cvt_f32_to_custom(a.v, 5, 2, softfloat_roundingMode, &fflags);
+  auto out = cvt_f32_to_custom(vortex::bit_cast<float>(a.v), 5, 2, softfloat_roundingMode, &fflags);
+  //printf("f32_to_f8e5m2: %f -> 0x%x\n", *(float*)&a.v, out);
   softfloat_exceptionFlags |= fflags;
   bfloat8_t res;
   res.v = out & 0xff;
