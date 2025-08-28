@@ -294,8 +294,9 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t [NUM_LANES-1:0] fflags_utof;
         fflags_t [NUM_LANES-1:0] fflags_ftoi;
         fflags_t [NUM_LANES-1:0] fflags_ftou;
+        fflags_t [NUM_LANES-1:0] fflags_f2f;
 
-        wire fcvt_valid = (valid_in && core_select == FPU_CVT);
+        wire fcvt_valid = valid_in && (core_select == FPU_CVT);
         wire fcvt_ready = per_core_ready_out[FPU_CVT] || ~per_core_valid_out[FPU_CVT];
         wire fcvt_fire  = fcvt_valid && fcvt_ready;
 
@@ -305,20 +306,21 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 dpi_utof (fcvt_fire, int'(f_fmt), int'(i_fmt), operands[0][i], frm, result_utof[i], fflags_utof[i]);
                 dpi_ftoi (fcvt_fire, int'(i_fmt), int'(f_fmt), operands[0][i], frm, result_ftoi[i], fflags_ftoi[i]);
                 dpi_ftou (fcvt_fire, int'(i_fmt), int'(f_fmt), operands[0][i], frm, result_ftou[i], fflags_ftou[i]);
-                dpi_f2f  (fcvt_fire, int'(f_fmt?1:0), int'(f_fmt?0:1), operands[0][i], frm, result_f2f[i], fflags_ftou[i]);
+                dpi_f2f  (fcvt_fire, int'(f_fmt?1:0), int'(f_fmt?0:1), operands[0][i], frm, result_f2f[i], fflags_f2f[i]);
 
                 result_fcvt[i] = is_itof ? result_itof[i][`XLEN-1:0] :
-                                is_utof ? result_utof[i][`XLEN-1:0] :
-                                is_ftoi ? result_ftoi[i][`XLEN-1:0] :
-                                is_ftou ? result_ftou[i][`XLEN-1:0] :
-                                is_f2f  ? result_f2f[i][`XLEN-1:0] :
+                                 is_utof ? result_utof[i][`XLEN-1:0] :
+                                 is_ftoi ? result_ftoi[i][`XLEN-1:0] :
+                                 is_ftou ? result_ftou[i][`XLEN-1:0] :
+                                 is_f2f  ? result_f2f[i][`XLEN-1:0] :
                                         '0;
 
                 fflags_fcvt[i] = is_itof ? fflags_itof[i] :
-                                is_utof ? fflags_utof[i] :
-                                is_ftoi ? fflags_ftoi[i] :
-                                is_ftou ? fflags_ftou[i] :
-                                       '0;
+                                 is_utof ? fflags_utof[i] :
+                                 is_ftoi ? fflags_ftoi[i] :
+                                 is_ftou ? fflags_ftou[i] :
+                                 is_f2f  ? fflags_f2f[i] :
+                                        '0;
             end
         end
 
