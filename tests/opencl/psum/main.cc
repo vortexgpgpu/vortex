@@ -95,8 +95,11 @@ static void cleanup() {
   if (kernel_bin) free(kernel_bin);
 }
 
-size_t size = 16;
-size_t local_size = 8;
+// update for vortex divergence paper
+// size_t size = 16;
+// size_t local_size = 8;
+size_t size = 1024;
+size_t local_size = 256;
 
 static void show_usage() {
   printf("Usage: [-n size] [-l local size] [-h: help]\n");

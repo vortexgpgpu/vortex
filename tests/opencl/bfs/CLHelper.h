@@ -692,6 +692,9 @@ void _clInvokeKernel(int kernel_id, int work_items,
         work_items + (work_group_size - (work_items % work_group_size));
   size_t local_work_size[] = {work_group_size, 1};
   size_t global_work_size[] = {work_items, 1};
+  
+  printf("global_work_size=%d, local_work_size=%d\n", work_items,work_group_size);
+
   oclHandles.cl_status = clEnqueueNDRangeKernel(
       oclHandles.queue, oclHandles.kernel[kernel_id], work_dim, 0,
       global_work_size, local_work_size, 0, 0, NULL);

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+#There are three datasets:
+
+#./euler3d ../../data/cfd/fvcorr.domn.097K   0
+#./euler3d ../../data/cfd/fvcorr.domn.193K   
+#./euler3d ../../data/cfd/missile.domn.0.2M  
+
+#replace euler3d with other CFD programs
+
+
+for i in `seq 1 1`; do
+#  ./euler3d ../../data/cfd/fvcorr.domn.097K -t gpu -d 0
+#  ./euler3d ../../data/cfd/fvcorr.domn.097K 1
+  ./euler3d.out ../../data/cfd/missile.domn.0.2M -p 1 -d 0
+done

@@ -12,6 +12,8 @@ kernel.cl: $(SRC_DIR)/kernel.cl
 
 KERNEL_SRCS := kernel.cl
 
-OPTS ?= -f -n16
+# update for vortex divergence paper
+#OPTS ?= -f -n16
+OPTS ?= -f -n1024
 
 include ../common.mk

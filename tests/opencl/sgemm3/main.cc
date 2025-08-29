@@ -139,8 +139,11 @@ static void cleanup() {
   if (kernel_bin) free(kernel_bin);
 }
 
-uint32_t size = 16;
-uint32_t tile_size = 4;
+// update for vortex divergence paper
+// uint32_t size = 16;
+// uint32_t tile_size = 4;
+uint32_t size = 32;
+uint32_t tile_size = 16;
 
 static void show_usage() {
   printf("Usage: [-n size] [-t tile size] [-h: help]\n");

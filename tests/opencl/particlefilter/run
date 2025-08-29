@@ -1,0 +1,4 @@
+#./OCL_particlefilter_naive -x 128 -y 128 -z 10 -np 10000
+./OCL_particlefilter_double -x 128 -y 128 -z 10 -np 400000
+./OCL_particlefilter_single -x 128 -y 128 -z 10 -np 400000
+cat ./output.txt

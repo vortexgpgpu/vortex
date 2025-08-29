@@ -1,0 +1,10 @@
+gen_input will genearte the input matrix with given dimension. Running it in
+following way:
+
+./gen_input [matrix_dimension]
+
+e.g.:
+./gen_input 32
+will generate the input matrix of 32x32. The ouput contains three files:
+${matrix_dim}.dat, l-${matrix_dim}.dat, u-${matrix_dim}.dat. In the above
+example, the output should be 32.dat, l-32.dat, u-32.dat .

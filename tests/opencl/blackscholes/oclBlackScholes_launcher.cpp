@@ -143,8 +143,10 @@ extern "C" void BlackScholes(
     shrCheckError(ciErrNum, CL_SUCCESS);
 
     //Run the kernel
-    size_t globalWorkSize = 128;//60 * 1024;
-    size_t localWorkSize = 1;//128;
+    size_t globalWorkSize = 8*512; //128;//60 * 1024;
+    size_t localWorkSize = 512; //1;//128;
+    printf("globalWorkSize=%d, localWorkSize=%d optionCount=%d\n", globalWorkSize,localWorkSize, optionCount);
+
     ciErrNum = clEnqueueNDRangeKernel(cqCommandQueue, ckBlackScholes, 1, NULL, &globalWorkSize, &localWorkSize, 0, NULL, NULL);
     shrCheckError(ciErrNum, CL_SUCCESS);
 }

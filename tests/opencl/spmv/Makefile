@@ -15,6 +15,8 @@ kernel.cl: $(SRC_DIR)/kernel.cl
 KERNEL_SRCS := kernel.cl
 
 # Usage: -i matrix_file,vector_file [-o output_file]
-OPTS ?= -i $(SRC_DIR)/1138_bus.mtx,$(SRC_DIR)/1138_bus.vec
+# update for vortex divergence paper
+#OPTS ?= -i $(SRC_DIR)/1138_bus.mtx,$(SRC_DIR)/1138_bus.vec
+OPTS ?= -i $(SRC_DIR)/Dubcova3.mtx,$(SRC_DIR)/Dubcova3.vec
 
 include ../common.mk

@@ -171,8 +171,9 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,
   // 3. Determine block sizes
   size_t globalWorksizeFan1[1] = {size};
   size_t globalWorksizeFan2[2] = {size, size};
-  size_t localWorksizeFan1[1] = {1};
-  size_t localWorksizeFan2[2] = {1, 1};
+  // update for vortex divergence paper
+  size_t localWorksizeFan1[1] = {16};
+  size_t localWorksizeFan2[2] = {16, 16};
 
   int t;
   // 4. Setup and Run kernels
@@ -186,6 +187,8 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,
     argchk |= clSetKernelArg(fan1_kernel, 4, sizeof(int), (void *)&t);
 
     cl_errChk(argchk, "ERROR in Setting Fan1 kernel args", true);
+
+    printf("globalWorkSize[0]=%zu, localWorkSize[0]=%zu\n", globalWorksizeFan1[0], localWorksizeFan1[0]);
 
     // launch kernel
     error =
@@ -210,6 +213,8 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,
     argchk |= clSetKernelArg(fan2_kernel, 4, sizeof(int), (void *)&t);
 
     cl_errChk(argchk, "ERROR in Setting Fan2 kernel args", true);
+
+    printf("globalWorkSize[0]=%zu, globalWorkSize[1]=%zu, localWorkSize[0]=%zu, localWorkSize[1]=%zu\n", globalWorksizeFan2[0], globalWorksizeFan2[1], localWorksizeFan2[0], localWorksizeFan2[1]);
 
     // launch kernel
     error =

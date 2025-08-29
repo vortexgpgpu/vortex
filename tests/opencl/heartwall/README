@@ -1,0 +1,9 @@
+******Adjustable work group size*****
+USAGE:
+make clean
+make KERNEL_DIM="-DRD_WG_SIZE_0=256"
+
+######OUTPUT FOR VALIDATION########
+USAGE:
+make clean
+make OUTPUT=Y

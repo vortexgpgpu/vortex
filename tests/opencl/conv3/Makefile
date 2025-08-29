@@ -12,6 +12,6 @@ kernel.cl: $(SRC_DIR)/kernel.cl
 
 KERNEL_SRCS := kernel.cl
 
-OPTS ?= -n32
+OPTS ?= -n256
 
 include ../common.mk

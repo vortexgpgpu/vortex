@@ -1,0 +1,98 @@
+//========================================================================================================================================================================================================200
+//	INFORMATION
+//========================================================================================================================================================================================================200
+
+//======================================================================================================================================================150
+//	UPDATE
+//======================================================================================================================================================150
+
+//	2006.03 Rob Janiczek
+//		--creation of prototype version
+//	2006.03 Drew Gilliam
+//		--rewriting of prototype version into current version
+//		--got rid of multiple function calls, all code in a single function (for speed)
+//		--code cleanup & commenting
+//		--code optimization efforts   
+//	2006.04 Drew Gilliam
+//		--added diffusion coefficent saturation on [0,1]
+//	2009.07 Lukasz G. Szafaryn
+//		-- converted from C to CUDA
+//	2009.12 Lukasz G. Szafaryn
+//		-- reading from image, command line inputs
+//	2010.01 Lukasz G. Szafaryn
+//		-- arranged, commented
+//	2012.05 Lukasz G. Szafaryn
+//		-- arranged
+//	2012.05 Lukasz G. Szafaryn
+//		-- converted from CUDA to OpenCL
+
+//======================================================================================================================================================150
+//	DESCRIPTION
+//======================================================================================================================================================150
+
+	// The Heart Wall application tracks the movement of a mouse heart over a sequence of 104 609x590 ultrasound images to record response to the stimulus.
+	// In its initial stage, the program performs image processing operations on the first image to detect initial, partial shapes of inner and outer heart walls.
+	// These operations include: edge detection, SRAD despeckling (also part of Rodinia suite), morphological transformation and dilation. In order to reconstruct
+	// approximated full shapes of heart walls, the program generates ellipses that are superimposed over the image and sampled to mark points on the heart walls
+	// (Hough Search). In its final stage (Heart Wall Tracking presented here), program tracks movement of surfaces by detecting the movement of image areas under
+	// sample points as the shapes of the heart walls change throughout the sequence of images.
+
+	// SRAD is one of the first stages of the Heart Wall application. SRAD (Speckle Reducing Anisotropic Diffusion) is a diffusion method for ultrasonic and radar imaging
+	// applications based on partial differential equations (PDEs). It is used to remove locally correlated noise, known as speckles, without destroying important image
+	// features. SRAD consists of several pieces of work: image extraction, continuous iterations over the image (preparation, reduction, statistics, computation 1 and
+	// computation 2) and image compression. The sequential dependency between all of these stages requires synchronization after each stage (because each stage
+	// operates on the entire image).
+
+//======================================================================================================================================================150
+//	PAPERS
+//======================================================================================================================================================150
+
+	// L. G. Szafaryn, K. Skadron, and J. J. Saucerman. "Experiences Accelerating MATLAB Systems Biology Applications." In Proceedings of the Workshop on Biomedicine
+	// in Computing: Systems, Architectures, and Circuits (BiC) 2009, in conjunction with the 36th IEEE/ACM International Symposium on Computer Architecture (ISCA),
+	// June 2009. <http://www.cs.virginia.edu/~skadron/Papers/BiC09.pdf>
+
+	// Y. Yu, S. Acton, Speckle reducing anisotropic diffusion, IEEE Transactions on Image Processing 11(11)(2002) 1260-1270.
+	// <http://people.virginia.edu/~sc5nf/01097762.pdf>
+
+//======================================================================================================================================================150
+//	DOWNLOAD
+//======================================================================================================================================================150
+
+	// Rodinia Benchmark Suite page
+
+//======================================================================================================================================================150
+//	IMPLEMENTATION-SPECIFIC DESCRIPTION (OpenCL)
+//======================================================================================================================================================150
+
+	// This is the OpenCL version of SRAD code.
+
+	// In OpenCL version of this application, each stage is a separate kernel (due to synchronization requirements) that operates on data already residing in GPU memory.
+	// In order to improve GPU performance, data was transferred to GPU at the beginning of the code and then transferred back to CPU after all of the computation stages
+	// were completed in GPU. Some of the kernels use GPU shared memory for additional improvement in performance. Speedup achievable with OpenCL version depends on
+	// the image size (up to the point where GPU saturates).
+
+//======================================================================================================================================================150
+//	RUNNING THIS CODE
+//======================================================================================================================================================150
+
+	// Input image is generated by expanding the original image (image.pgm) via concatenating its parts. The original image needs to be located in the same folder as source files.
+
+	// The following are the command parameters to the application:
+
+	// 1) Number of iterations. Needs to be integer > 0.
+	// 2) Saturation coefficient. Needs to be float > 0.
+	// 3) Number of rows in the input image. Needs to be integer > 0.
+	// 4) Number of columns in the input image. Needs to be integer > 0.
+
+	// Example:
+	// a.out 100 0.5 1000 1000
+
+	// Running a.out without parameters will default to the parameters shown in the line above.
+
+//======================================================================================================================================================150
+//	End
+//======================================================================================================================================================150
+
+//========================================================================================================================================================================================================200
+//	End
+//========================================================================================================================================================================================================200

@@ -181,7 +181,7 @@ int main (int argc, char **argv) {
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
   size_t global_size[2] = {size, size};
-  size_t local_size[2] = {1, 1};
+  size_t local_size[2] = {32, 16};
 
   // Set kernel arguments
   CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&o_memobj));
@@ -217,6 +217,9 @@ int main (int argc, char **argv) {
   CL_CHECK(clEnqueueWriteBuffer(commandQueue, w_memobj, CL_TRUE, 0, w_nbytes, h_w.data(), 0, NULL, NULL));
 
   printf("Execute the kernel\n");
+  printf("global_size=(%zu, %zu), local_size=(%zu, %zu)\n",
+         global_size[0], global_size[1], local_size[0], local_size[1]);
+
   auto time_start = std::chrono::high_resolution_clock::now();
   CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 2, NULL, global_size, local_size, 0, NULL, NULL));
   CL_CHECK(clFinish(commandQueue));

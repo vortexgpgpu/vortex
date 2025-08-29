@@ -21,6 +21,9 @@ kernel.cl: $(SRC_DIR)/kernel.cl
 KERNEL_SRCS := kernel.cl lbm_macros.h layout_config.h
 
 # Usage: #iter [-i input_file] [-o output_file]
-OPTS ?= 1 -i $(SRC_DIR)/32_32_8_ldc.of
+# update for vortex divergence paper
+#OPTS ?= 1 -i $(SRC_DIR)/32_32_8_ldc.of
+OPTS ?= 1 -i $(SRC_DIR)/64_64_32_ldc.of
+#OPTS ?= 1 -i $(SRC_DIR)/120_120_150_ldc.of
 
 include ../common.mk

@@ -1,0 +1,10 @@
+
+Streamcluster implemented in OpenCL.
+
+compilation options:
+(1) release: normal version;
+(2) errmsg: output error message to help debugging;
+(3) ptx: generate ptx code;
+(4) res:	output the usage of resources, like shared memory, etc.
+
+

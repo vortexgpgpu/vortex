@@ -225,7 +225,9 @@ int main (int argc, char **argv) {
 
   size_t global_offset[2] = {0, 0};
   size_t global_work_size[2] = {size, size};
-  size_t local_work_size[2] = {1, 1};
+  // update for vortex divergence paper
+  size_t local_work_size[2] = {16, 16};
+  //size_t local_work_size[2] = {1, 1};
 
   // Creating command queue
   commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));

@@ -167,8 +167,9 @@ int main (int argc, char **argv) {
   CL_CHECK(clEnqueueWriteBuffer(commandQueue, a_memobj, CL_TRUE, 0, nbytes, h_a, 0, NULL, NULL));
 
   printf("Execute the kernel\n");
+  // update for vortex divergence paper
   size_t global_work_size[1] = {size};
-  size_t local_work_size[1] = {1};
+  size_t local_work_size[1] = {256}; // {1}; 
   auto time_start = std::chrono::high_resolution_clock::now();
   CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, global_work_size, local_work_size, 0, NULL, NULL));
   CL_CHECK(clFinish(commandQueue));

@@ -1,0 +1,5 @@
+ex_particle_OCL_naive_seq.o: \
+ /nethome/hpu8/vortex/tests/opencl/particlefilter/ex_particle_OCL_naive_seq.cpp \
+ /software/vortex-toolchain-2024-08-09/pocl/include/CL/cl.h \
+ /software/vortex-toolchain-2024-08-09/pocl/include/CL/cl_version.h \
+ /software/vortex-toolchain-2024-08-09/pocl/include/CL/cl_platform.h

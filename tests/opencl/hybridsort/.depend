@@ -1,0 +1,17 @@
+bucketsort.o: /nethome/hpu8/vortex/tests/opencl/hybridsort/bucketsort.c \
+ /software/vortex-toolchain-2024-08-09/pocl/include/CL/cl.h \
+ /software/vortex-toolchain-2024-08-09/pocl/include/CL/cl_version.h \
+ /software/vortex-toolchain-2024-08-09/pocl/include/CL/cl_platform.h \
+ /nethome/hpu8/vortex/tests/opencl/hybridsort/bucketsort.h
+mergesort.o: /nethome/hpu8/vortex/tests/opencl/hybridsort/mergesort.c \
+ /software/vortex-toolchain-2024-08-09/pocl/include/CL/cl.h \
+ /software/vortex-toolchain-2024-08-09/pocl/include/CL/cl_version.h \
+ /software/vortex-toolchain-2024-08-09/pocl/include/CL/cl_platform.h \
+ /nethome/hpu8/vortex/tests/opencl/hybridsort/mergesort.h \
+ /nethome/hpu8/vortex/tests/opencl/hybridsort/bucketsort.h
+hybridsort.o: /nethome/hpu8/vortex/tests/opencl/hybridsort/hybridsort.c \
+ /software/vortex-toolchain-2024-08-09/pocl/include/CL/cl.h \
+ /software/vortex-toolchain-2024-08-09/pocl/include/CL/cl_version.h \
+ /software/vortex-toolchain-2024-08-09/pocl/include/CL/cl_platform.h \
+ /nethome/hpu8/vortex/tests/opencl/hybridsort/bucketsort.h \
+ /nethome/hpu8/vortex/tests/opencl/hybridsort/mergesort.h

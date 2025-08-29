@@ -1,0 +1,8 @@
+******Adjustable work group size*****
+The kernel has square shape 
+RD_WG_SIZE_0 or RD_WG_SIZE_0_0 describe one dimension 
+The actually dimension = RD_WG_SIZE_0 * RD_WG_SIZE_0
+
+USAGE:
+make clean
+make KERNEL_DIM="-DRD_WG_SIZE_0=16"

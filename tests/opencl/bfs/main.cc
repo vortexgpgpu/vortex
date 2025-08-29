@@ -15,7 +15,10 @@
 #include "CLHelper.h"
 #include "util.h"
 
-#define MAX_THREADS_PER_BLOCK 16
+//#define MAX_THREADS_PER_BLOCK 16
+// update for vortex divergence paper
+#define MAX_THREADS_PER_BLOCK 512
+
 
 // Structure to hold a node information
 struct Node {
@@ -122,6 +125,7 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
       _clSetArgs(kernel_id, kernel_idx++, &no_of_nodes, sizeof(int));
 
       // int work_items = no_of_nodes;
+      printf("kernel idx %d\n", kernel_id);
       _clInvokeKernel(kernel_id, no_of_nodes, work_group_size);
 
       //--kernel 1
@@ -134,6 +138,7 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
       _clSetArgs(kernel_id, kernel_idx++, &no_of_nodes, sizeof(int));
 
       // work_items = no_of_nodes;
+      printf("kernel idx %d\n", kernel_id);
       _clInvokeKernel(kernel_id, no_of_nodes, work_group_size);
 
       _clMemcpyD2H(d_over, sizeof(char), &h_over);
@@ -204,7 +209,7 @@ int main(int argc, char *argv[]) {
       return 0;
     }
 
-    printf("Reading File completed!\n");
+    printf("Reading File completed!??\n");
 
     int source = 0;
 
@@ -264,6 +269,7 @@ int main(int argc, char *argv[]) {
     h_cost_ref[source] = 0;
     //---------------------------------------------------------
     //--gpu entry
+    printf("Start traversing the tree on GPU\n");
     run_bfs_gpu(no_of_nodes, h_graph_nodes, edge_list_size, h_graph_edges,
                 h_graph_mask, h_updating_graph_mask, h_graph_visited, h_cost);
     //---------------------------------------------------------

@@ -181,7 +181,7 @@ void MAIN_parseCommandLine(int nArgs, char *arg[], MAIN_Param *param,
              param->obstacleFilename, (int)fileStat.st_size,
              SIZE_X * SIZE_Y * SIZE_Z + (SIZE_Y + 1) * SIZE_Z);
       exit(1);
-    }
+    } 
   } else
     param->obstacleFilename = NULL;
 

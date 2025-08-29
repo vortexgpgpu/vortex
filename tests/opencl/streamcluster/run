@@ -1,0 +1,8 @@
+#./streamcluster 10 20 16 2048000 204800 1000 none output.txt 1
+
+for ((  i = 1, j=1;  i <= 1;  i++, j=j*2  ))
+do
+  #echo `expr $j \* 10240` `expr $j \* 1024`
+  #./sc_gpu 10 20 16 `expr $j \* 10240` `expr $j \* 1024` 1000 none output.txt 1
+  ./streamcluster 10 20 256 65536 65536 1000 none output.txt 1 -t gpu -d 0
+done
