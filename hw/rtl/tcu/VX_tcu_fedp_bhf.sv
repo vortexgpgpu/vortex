@@ -32,8 +32,8 @@ module VX_tcu_fedp_bhf #(
 );
     localparam TCK = 2 * N;
     localparam LEVELS = $clog2(TCK);
-    localparam FMUL_LATENCY = 1;
-    localparam FADD_LATENCY = 1;
+    localparam FMUL_LATENCY = 2;
+    localparam FADD_LATENCY = 2;
     localparam FRND_LATENCY = 1;
     localparam RED_LATENCY  = LEVELS * (FADD_LATENCY + FRND_LATENCY);
     localparam TOTAL_LATENCY= (FMUL_LATENCY + FRND_LATENCY) + 1 + RED_LATENCY + (FADD_LATENCY + FRND_LATENCY);
@@ -95,10 +95,10 @@ module VX_tcu_fedp_bhf #(
             .reset  (reset),
             .enable (enable),
             .frm    (frm),
-            .a0     ({1'b0, a_row16[i][0 +: 8]}),
-            .b0     ({1'b0, b_col16[i][0 +: 8]}),
-            .a1     ({1'b0, a_row16[i][8 +: 8]}),
-            .b1     ({1'b0, b_col16[i][8 +: 8]}),
+            .a0     (a_row16[i][0 +: 8]),
+            .b0     (b_col16[i][0 +: 8]),
+            .a1     (a_row16[i][8 +: 8]),
+            .b1     (b_col16[i][8 +: 8]),
             .y      (mult_result_fp8),
             `UNUSED_PIN(fflags)
         );
@@ -117,10 +117,10 @@ module VX_tcu_fedp_bhf #(
             .reset  (reset),
             .enable (enable),
             .frm    (frm),
-            .a0     ({1'b0, a_row16[i][0 +: 8]}),
-            .b0     ({1'b0, b_col16[i][0 +: 8]}),
-            .a1     ({1'b0, a_row16[i][8 +: 8]}),
-            .b1     ({1'b0, b_col16[i][8 +: 8]}),
+            .a0     (a_row16[i][0 +: 8]),
+            .b0     (b_col16[i][0 +: 8]),
+            .a1     (a_row16[i][8 +: 8]),
+            .b1     (b_col16[i][8 +: 8]),
             .y      (mult_result_bf8),
             `UNUSED_PIN(fflags)
         );
@@ -139,8 +139,8 @@ module VX_tcu_fedp_bhf #(
             .reset  (reset),
             .enable (enable),
             .frm    (frm),
-            .a      ({1'b0, a_row16[i]}),
-            .b      ({1'b0, b_col16[i]}),
+            .a      (a_row16[i]),
+            .b      (b_col16[i]),
             .y      (mult_result_fp16),
             `UNUSED_PIN(fflags)
         );
@@ -159,8 +159,8 @@ module VX_tcu_fedp_bhf #(
             .reset  (reset),
             .enable (enable),
             .frm    (frm),
-            .a      ({1'b0, a_row16[i]}),
-            .b      ({1'b0, b_col16[i]}),
+            .a      (a_row16[i]),
+            .b      (b_col16[i]),
             .y      (mult_result_bf16),
             `UNUSED_PIN(fflags)
         );
@@ -223,9 +223,7 @@ module VX_tcu_fedp_bhf #(
     // Final accumulation with C
 
     wire [32:0] c_rec, c_delayed;
-    wire [32:0] result;
-
-    `UNUSED_VAR (result[32]);
+    wire [31:0] result;
 
     fNToRecFN #(
         .expWidth (8),
@@ -264,6 +262,6 @@ module VX_tcu_fedp_bhf #(
         `UNUSED_PIN(fflags)
     );
 
-    assign d_val = `XLEN'(result[31:0]);
+    assign d_val = `XLEN'(result);
 
 endmodule

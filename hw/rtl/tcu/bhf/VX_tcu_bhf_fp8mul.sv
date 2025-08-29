@@ -23,22 +23,22 @@ module VX_tcu_bhf_fp8mul #(
     parameter RND_LATENCY = 1,
     parameter IN_REC   = 0,     // 0: IEEE754, 1: recoded
     parameter OUT_REC  = 0,     // 0: IEEE754, 1: recoded
-    parameter IN_RECW  = IN_EXPW + IN_SIGW + 1,
-    parameter OUT_RECW = OUT_EXPW + OUT_SIGW + 1
+    parameter IN_FECW = IN_EXPW + IN_SIGW + IN_REC,
+    parameter OUT_FECW = OUT_EXPW + OUT_SIGW + OUT_REC
 ) (
     input  wire             clk,
     input  wire             reset,
     input  wire             enable,
     input  wire [2:0]       frm,
-    input  wire [IN_RECW-1:0] a0,
-    input  wire [IN_RECW-1:0] b0,
-    input  wire [IN_RECW-1:0] a1,
-    input  wire [IN_RECW-1:0] b1,
-    output logic [OUT_RECW-1:0] y,
+    input  wire [IN_FECW-1:0] a0,
+    input  wire [IN_FECW-1:0] b0,
+    input  wire [IN_FECW-1:0] a1,
+    input  wire [IN_FECW-1:0] b1,
+    output logic [OUT_FECW-1:0] y,
     output logic [4:0]      fflags
 );
-    localparam MUL_EXPW = IN_EXPW+2;
-    localparam MUL_SIGW = IN_SIGW*2;
+    localparam MUL_EXPW = IN_EXPW + 1;
+    localparam MUL_SIGW = IN_SIGW * 2 + 1;
     localparam MUL_RECW = MUL_EXPW + MUL_SIGW + 1;
 
     wire [MUL_RECW-1:0] y0, y1;
