@@ -476,22 +476,22 @@ tensor()
 
     # test fp16
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --ext=5 --sig=10 --no-infinities --no-nans
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_BHF" LATENCY=9 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --ext=5 --sig=10 --no-infinities --no-nans
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_BHF" LATENCY=13 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --ext=5 --sig=10 --no-infinities --no-nans
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=1 --ext=5 --sig=10 --no-infinities --no-nans
 
     # test bf16
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --ext=8 --sig=7 --no-infinities --no-nans
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_BHF" LATENCY=9 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --ext=8 --sig=7 --no-infinities --no-nans
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_BHF" LATENCY=13 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --ext=8 --sig=7 --no-infinities --no-nans
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=2 --ext=8 --sig=7 --no-infinities --no-nans
 
     # test fp8_e4m3
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --ext=4 --sig=3 --no-infinities --no-nans
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_BHF" LATENCY=9 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --ext=4 --sig=3 --no-infinities --no-nans
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_BHF" LATENCY=13 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --ext=4 --sig=3 --no-infinities --no-nans
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=3 --ext=4 --sig=3 --no-infinities --no-nans
 
     # test fp8_e5m2
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DPI" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --ext=5 --sig=2 --no-infinities --no-nans
-    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_BHF" LATENCY=9 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --ext=5 --sig=2 --no-infinities --no-nans
+    make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_BHF" LATENCY=13 make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --ext=5 --sig=2 --no-infinities --no-nans
     make -C hw/unittest/tcu_fedp clean && CONFIGS="-DTCU_DRL" make -C hw/unittest/tcu_fedp && hw/unittest/tcu_fedp/tcu_fedp --fmt=4 --ext=5 --sig=2 --no-infinities --no-nans
 
     echo "tensor tests done!"
