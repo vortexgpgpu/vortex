@@ -98,60 +98,60 @@ extern "C" {
 
 // Set thread mask
 inline void vx_tmc(int thread_mask) {
-    __asm__ volatile (".insn r %0, 0, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0), "r"(thread_mask));
+    __asm__ volatile (".insn r %0, 0, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0), "r"(thread_mask) : "memory");
 }
 
 // disable all threads in the current warp
 inline void vx_tmc_zero() {
-    __asm__ volatile (".insn r %0, 0, 0, x0, x0, x0" :: "i"(RISCV_CUSTOM0));
+    __asm__ volatile (".insn r %0, 0, 0, x0, x0, x0" :: "i"(RISCV_CUSTOM0) : "memory");
 }
 
 // switch execution to single thread0
 inline void vx_tmc_one() {
     __asm__ volatile (
         "li a0, 1\n\t"  // Load immediate value 1 into a0 (x10) register
-        ".insn r %0, 0, 0, x0, a0, x0" :: "i"(RISCV_CUSTOM0) : "a0"
+        ".insn r %0, 0, 0, x0, a0, x0" :: "i"(RISCV_CUSTOM0) : "a0", "memory"
     );
 }
 
 // Set thread predicate
 inline void vx_pred(int condition, int thread_mask) {
-    __asm__ volatile (".insn r %0, 5, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(condition), "r"(thread_mask));
+    __asm__ volatile (".insn r %0, 5, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(condition), "r"(thread_mask) : "memory");
 }
 
 // Set thread not predicate
 inline void vx_pred_n(int condition, int thread_mask) {
-    __asm__ volatile (".insn r %0, 5, 0, x1, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(condition), "r"(thread_mask));
+    __asm__ volatile (".insn r %0, 5, 0, x1, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(condition), "r"(thread_mask) : "memory");
 }
 
 // Spawn warps
 typedef void (*vx_wspawn_pfn)();
 inline void vx_wspawn(int num_warps, vx_wspawn_pfn func_ptr) {
-    __asm__ volatile (".insn r %0, 1, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(num_warps), "r"(func_ptr));
+    __asm__ volatile (".insn r %0, 1, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(num_warps), "r"(func_ptr) : "memory");
 }
 
 // Split on a predicate
 inline int vx_split(int predicate) {
     int ret;
-    __asm__ volatile (".insn r %1, 2, 0, %0, %2, x0" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate));
+    __asm__ volatile (".insn r %1, 2, 0, %0, %2, x0" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate) : "memory");
     return ret;
 }
 
 // Split on a not predicate
 inline int vx_split_n(int predicate) {
     int ret;
-    __asm__ volatile (".insn r %1, 2, 0, %0, %2, x1" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate));
+    __asm__ volatile (".insn r %1, 2, 0, %0, %2, x1" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(predicate) : "memory");
     return ret;
 }
 
 // Join
 inline void vx_join(int stack_ptr) {
-    __asm__ volatile (".insn r %0, 3, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0), "r"(stack_ptr));
+    __asm__ volatile (".insn r %0, 3, 0, x0, %1, x0" :: "i"(RISCV_CUSTOM0), "r"(stack_ptr) : "memory");
 }
 
 // Warp Barrier
 inline void vx_barrier(int barried_id, int num_warps) {
-    __asm__ volatile (".insn r %0, 4, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barried_id), "r"(num_warps));
+    __asm__ volatile (".insn r %0, 4, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barried_id), "r"(num_warps) : "memory");
 }
 
 // Return current thread identifier
