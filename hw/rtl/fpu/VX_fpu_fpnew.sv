@@ -176,8 +176,7 @@ module VX_fpu_fpnew
         fpnew_top #(
             .Features       (FPU_FEATURES),
             .Implementation (FPU_IMPLEMENTATION),
-            .TagType        (logic[(TAG_WIDTH+1)-1:0]),
-            .DivSqrtSel     (fpnew_pkg::PULP)
+            .TagType        (logic[(TAG_WIDTH+1)-1:0])
         ) fpnew_core (
             .clk_i          (clk),
             .rst_ni         (~reset),
