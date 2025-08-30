@@ -278,9 +278,10 @@ public:
     return static_cast<float>(rand()) / RAND_MAX;
   }
   static bool compare(float a, float b, int index, int errors) {
-    //fp8 quantization noise is too high, so we use a different threshold
+    //fp8/bf8 quantization noise is too high, so we use a different threshold
+    //fp8 machine epsilon = 0.125, bf8 machine epsilon = 0.25 (so 0.025 is within reasonable limits) 
     if constexpr (std::is_same<vt::ITYPE, vt::fp8>::value || std::is_same<vt::ITYPE, vt::bf8>::value) {
-      auto diff = std::abs(a - b);
+      auto diff = std::abs((a - b)/b);    //relative error tolerance
       if (diff < 0.025f) {
         return true;
       }

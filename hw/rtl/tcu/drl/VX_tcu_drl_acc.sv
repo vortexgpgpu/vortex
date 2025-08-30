@@ -17,25 +17,22 @@ module VX_tcu_drl_acc #(
     parameter N = 5         //include c_val count
 ) (
     input  wire [N-1:0][24:0] sigsIn,
-    output logic signOut,
-    output logic [24+$clog2(N)-1:0] sigOut
+    output logic [25+$clog2(N):0] sigOut,
+    output logic [N-2:0] signOuts
 );
 
     //Carry-Save-Adder based significand accumulation
-    wire [25+$clog2(N)-1:0] signed_sum_sig;
     VX_csa_tree #(
         .N (N),
         .W (25)
     ) sig_csa (
         .operands (sigsIn),
-        .sum (signed_sum_sig)
+        .sum  (sigOut[25+$clog2(N)-1:0]),
+        .cout (sigOut[25+$clog2(N)])
     );
 
-    //Extracting magnitude from signed result
-    wire sum_sign = signed_sum_sig[25+$clog2(N)-1];
-    wire [24+$clog2(N)-1:0] abs_sum;
-    assign abs_sum = sum_sign ? -signed_sum_sig[24+$clog2(N)-1:0] : signed_sum_sig[24+$clog2(N)-1:0];
-
-    assign signOut = sum_sign;
-    assign sigOut = abs_sum;
+    for (genvar i = 0; i < N-1; i++) begin : g_signs
+        assign signOuts[i] = sigsIn[i][24];
+    end
+    
 endmodule

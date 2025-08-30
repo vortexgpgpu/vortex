@@ -21,8 +21,8 @@ module VX_tcu_fedp_drl #(
     input  wire reset,
     input  wire enable,
 
-    input  wire [2:0] fmt_s,
-    input  wire [2:0] fmt_d,
+    input  wire [3:0] fmt_s,
+    input  wire [3:0] fmt_d,
 
     input  wire [N-1:0][`XLEN-1:0] a_row,
     input  wire [N-1:0][`XLEN-1:0] b_col,
@@ -54,6 +54,8 @@ module VX_tcu_fedp_drl #(
     //Transprecision Mul & Max Exp & Align Sigs
     wire [7:0] raw_max_exp;
     wire [TCK:0][24:0] aln_sigs;
+    wire [6:0] hi_c = c_val[31:25];   //c_val[24:0] acc is taken care of in acc stage
+    wire fmt_sel = fmt_s[3];
 
     VX_tcu_drl_mul_exp #(
         .N(TCK+1)
@@ -70,56 +72,64 @@ module VX_tcu_fedp_drl #(
     //Stage 1/2 pipeline reg
     wire [7:0] pipe_raw_max_exp;
     wire [TCK:0][24:0] pipe_aln_sigs;
+    wire [6:0] pipe_hi_c;
+    wire pipe_fmt_sel;
     VX_pipe_register #(
-        .DATAW (8+((TCK+1)*25)),
+        .DATAW (8+((TCK+1)*25)+7+1),
         .DEPTH (FMUL_LATENCY)
     ) pipe_align (
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({raw_max_exp, aln_sigs}),
-        .data_out({pipe_raw_max_exp, pipe_aln_sigs})
+        .data_in ({raw_max_exp, aln_sigs, hi_c, fmt_sel}),
+        .data_out({pipe_raw_max_exp, pipe_aln_sigs, pipe_hi_c, pipe_fmt_sel})
     );
 
     //Accumulate CSA reduction tree
     wire [7:0] acc_max_exp = pipe_raw_max_exp;
-    wire acc_sign;
-    wire [24+$clog2(TCK+1)-1:0] acc_sig;    //23 mantissa + 1 hidden + log2(N) bits
-
+    wire [6:0] acc_hi_c = pipe_hi_c;
+    wire acc_fmt_sel = pipe_fmt_sel;
+    wire [25+$clog2(TCK+1):0] acc_sig;    //23 mantissa + 1 hidden + 1 sign + log2(N) bits
+    wire [TCK-1:0] sigs_sign;    //sign bits of all operands (for int math)
+    
     VX_tcu_drl_acc #(
         .N(TCK+1)
     ) csa_acc (
-        .sigsIn  (pipe_aln_sigs),
-        .signOut (acc_sign),
-        .sigOut  (acc_sig)
+        .sigsIn   (pipe_aln_sigs),
+        .sigOut   (acc_sig),
+        .signOuts (sigs_sign)
     );
 
     //Stage 3 pipeline reg
-    wire pipe_acc_sign;
     wire [7:0] pipe_acc_max_exp;
-    wire [24+$clog2(TCK+1)-1:0] pipe_acc_sig;
+    wire [6:0] pipe_acc_hi_c;
+    wire pipe_acc_fmt_sel;
+    wire [25+$clog2(TCK+1):0] pipe_acc_sig;
+    wire [TCK-1:0] pipe_sigs_sign;
     VX_pipe_register #(
-        .DATAW (1+8+24+$clog2(TCK+1)),
+        .DATAW (8+25+$clog2(TCK+1)+1+7+1+TCK),
         .DEPTH (ACC_LATENCY)
     ) pipe_acc (
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({acc_sign, acc_max_exp, acc_sig}),
-        .data_out({pipe_acc_sign, pipe_acc_max_exp, pipe_acc_sig})
+        .data_in ({acc_max_exp, acc_sig, acc_hi_c, acc_fmt_sel, sigs_sign}),
+        .data_out({pipe_acc_max_exp, pipe_acc_sig, pipe_acc_hi_c, pipe_acc_fmt_sel, pipe_sigs_sign})
     );
 
-    //Normalization and RNE of accumulated significand
-    wire [7:0] norm_exp;
-    wire [22:0] rounded_sig;
+    //Normalization and RNE of accumulated significand for FP
+    //Final upper 7-bit addition for INT
+    wire [31:0] final_result;
 
     VX_tcu_drl_norm_round #(
         .N(TCK+1)
     ) norm_round (
         .max_exp     (pipe_acc_max_exp),
         .acc_sig     (pipe_acc_sig),
-        .norm_exp    (norm_exp),
-        .rounded_sig (rounded_sig)
+        .hi_c        (pipe_acc_hi_c),
+        .sigSigns    (pipe_sigs_sign),
+        .fmt_sel     (pipe_acc_fmt_sel),
+        .result      (final_result)
     );
 
     //Stage 4 pipeline reg
@@ -131,7 +141,7 @@ module VX_tcu_fedp_drl #(
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({pipe_acc_sign, norm_exp, rounded_sig}),
+        .data_in (final_result),
         .data_out(fedp_result)
     );
 

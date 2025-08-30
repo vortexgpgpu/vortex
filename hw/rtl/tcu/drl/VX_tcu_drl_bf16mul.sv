@@ -43,7 +43,8 @@ module VX_tcu_drl_bf16mul (
         .S(8)
     ) biasexp_bf16(
         .operands({exp_a, exp_b, neg_bias}),
-        .sum     (raw_exp_y)
+        .sum     (raw_exp_y),
+        `UNUSED_PIN (cout)
     );
 
     //Mantissa Calculation

@@ -58,7 +58,8 @@ module VX_csa_tree #(
     parameter S = W + $clog2(N)  // Output width
 ) (
     input  wire [N-1:0][W-1:0] operands,  // Input operands
-    output wire [S-1:0] sum  // Final sum output
+    output wire [S-1:0] sum,  // Final sum output
+    output wire cout
 );
     `STATIC_ASSERT (N >= 3, ("N must be at least 3"));
     localparam LEVELS = N - 2; // Number of levels in the CSA tree
@@ -92,7 +93,7 @@ module VX_csa_tree #(
         .dataa (St[LEVELS][S-1:0]),
         .datab (Ct[LEVELS][S-1:0]),
         .sum   (sum),
-        `UNUSED_PIN (cout)
+        .cout  (cout)
     );
 
 endmodule

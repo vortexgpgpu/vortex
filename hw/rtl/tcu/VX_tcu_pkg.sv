@@ -31,6 +31,7 @@ package VX_tcu_pkg;
     localparam TCU_BF16_ID = 2;
     localparam TCU_FP8_ID  = 3;
     localparam TCU_BF8_ID  = 4;
+    //leave space for mxfp8/6/4 and tf32 tutorial?
     localparam TCU_I32_ID  = 8;
     localparam TCU_I8_ID   = 9;
     localparam TCU_U8_ID   = 10;
