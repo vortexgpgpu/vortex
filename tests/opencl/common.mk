@@ -30,7 +30,16 @@ VX_CFLAGS  += -O3 -mcmodel=medany --sysroot=$(RISCV_SYSROOT) --gcc-toolchain=$(R
 VX_CFLAGS  += -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 VX_CFLAGS  += -I$(ROOT_DIR)/hw -I$(VORTEX_HOME)/kernel/include -DXLEN_$(XLEN) -DNDEBUG
 VX_CFLAGS  += -Xclang -target-feature -Xclang +vortex
+#VX_CFLAGS  += -Xclang -target-feature -Xclang +zicond
+
+
+DIVERGENCE_OPT_LEVEL := $(if $(VORTEX_DIVERGENCE_OPT_LEVEL),$(VORTEX_DIVERGENCE_OPT_LEVEL),8)
+$(info [INFO] DIVERGENCE_OPT_LEVEL is $(DIVERGENCE_OPT_LEVEL))
+
+ifeq ($(shell test $(DIVERGENCE_OPT_LEVEL) -ge 5 && echo true), true)
 VX_CFLAGS  += -Xclang -target-feature -Xclang +zicond
+endif
+
 VX_CFLAGS  += -mllvm -disable-loop-idiom-all	# disable memset/memcpy loop replacement
 #VX_CFLAGS += -mllvm -vortex-branch-divergence=0
 #VX_CFLAGS += -mllvm -print-after-all
