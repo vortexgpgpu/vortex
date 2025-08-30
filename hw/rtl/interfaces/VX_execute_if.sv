@@ -18,6 +18,7 @@ interface VX_execute_if import VX_gpu_pkg::*; #(
 );
     logic  valid;
     data_t data;
+    `UNUSED_VAR(data);
     logic  ready;
 
     modport master (

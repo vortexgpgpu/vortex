@@ -29,7 +29,6 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 );
     localparam BLOCK_SIZE = `NUM_TCU_BLOCKS;
     localparam NUM_LANES  = `NUM_TCU_LANES;
-    localparam PE_COUNT   = 2;
 
     `STATIC_ASSERT (BLOCK_SIZE == `ISSUE_WIDTH, ("must be full issue execution"));
     `STATIC_ASSERT (NUM_LANES == `NUM_THREADS, ("must be full warp execution"));
@@ -55,49 +54,14 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     ) per_block_result_if[BLOCK_SIZE]();
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
-
-        VX_execute_if #(
-            .data_t (tcu_execute_t)
-        ) pe_execute_if[PE_COUNT]();
-
-        VX_result_if #(
-            .data_t (tcu_result_t)
-        ) pe_result_if[PE_COUNT]();
-
-        VX_pe_switch #(
-            .PE_COUNT    (PE_COUNT),
-            .NUM_LANES   (NUM_LANES),
-            .ARBITER     ("R"),
-            .REQ_OUT_BUF (0),
-            .RSP_OUT_BUF (3)
-        ) pe_switch (
-            .clk            (clk),
-            .reset          (reset),
-            .pe_sel         (per_block_execute_if[block_idx].data.op_args.tcu.fmt_s[3]),
-            .execute_in_if  (per_block_execute_if[block_idx]),
-            .result_out_if  (per_block_result_if[block_idx]),
-            .execute_out_if (pe_execute_if),
-            .result_in_if   (pe_result_if)
-        );
-
-        VX_tcu_fp #(
-            .INSTANCE_ID (`SFORMATF(("%s-fp%0d", INSTANCE_ID, block_idx)))
-        ) tcu_fp (
+        VX_tcu_fused #(
+            .INSTANCE_ID (`SFORMATF(("%s-fused%0d", INSTANCE_ID, block_idx)))
+        ) tcu_fused (
             `SCOPE_IO_BIND (block_idx)
             .clk        (clk),
             .reset      (reset),
-            .execute_if (pe_execute_if[0]),
-            .result_if  (pe_result_if[0])
-        );
-
-        VX_tcu_int #(
-            .INSTANCE_ID (`SFORMATF(("%s-int%0d", INSTANCE_ID, block_idx)))
-        ) tcu_int (
-            `SCOPE_IO_BIND (block_idx)
-            .clk        (clk),
-            .reset      (reset),
-            .execute_if (pe_execute_if[1]),
-            .result_if  (pe_result_if[1])
+            .execute_if (per_block_execute_if[block_idx]),
+            .result_if  (per_block_result_if[block_idx])
         );
     end
 

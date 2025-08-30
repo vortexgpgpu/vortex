@@ -39,7 +39,8 @@ module VX_wallace_mul #(
         .S (P)
     ) pp_acc (
         .operands (pp),
-        .sum (p)
+        .sum (p),
+        `UNUSED_PIN (cout)
     );
 
 endmodule
