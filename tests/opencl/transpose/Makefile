@@ -12,8 +12,7 @@ kernel.cl: $(SRC_DIR)/kernel.cl
 
 KERNEL_SRCS := kernel.cl
 
-OPTS ?= -width=128 -height=128
-
+OPTS ?= -width=1024 -height=1024
 #CXXFLAGS += -D_DEBUG
 
 include ../common.mk

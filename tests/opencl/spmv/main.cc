@@ -291,15 +291,18 @@ int main(int argc, char **argv) {
 
   pb_SwitchToTimer(&timers, pb_TimerID_COMPUTE);
 
-  size_t grid = nzcnt_len * pad;
   // update for vortex divergence paper
   //size_t block = 1;
-  size_t block = 32;
+  size_t block = 512;
+
+  size_t grid = nzcnt_len * pad;
+  grid = (grid + block - 1) / block * block;
+
 
 
   /*compute_active_thread(&block, &grid, nzcnt_len, pad, clDeviceProp.major,
                         clDeviceProp.minor, clDeviceProp.multiProcessorCount);*/
-  printf("grid size=%ld, block size=%ld, dim=%d\n", grid, block, dim);
+  printf("global size=%ld, local size=%ld, dim=%d\n", grid, block, dim);
 
   clStatus = clSetKernelArg(clKernel, 0, sizeof(cl_mem), &d_Ax_vector);
   CHECK_ERROR("clSetKernelArg")

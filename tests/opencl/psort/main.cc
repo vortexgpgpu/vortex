@@ -148,17 +148,7 @@ int main (int argc, char **argv) {
   h_c = (int*)malloc(nbytes);
 
   // Generate input values
-  for (int i = 0; i < size; ++i) {
-    if (float_enable) {
-      float value = sinf(i)*sinf(i);
-      ((float*)h_a)[i] = value;
-      printf("*** [%d]: %f\n", i, value);
-    } else {
-      int value = size*sinf(i);
-      h_a[i] = value;
-      printf("*** [%d]: %d\n", i, value);
-    }
-  }
+
 
   // Creating command queue
   commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));
@@ -170,6 +160,10 @@ int main (int argc, char **argv) {
   // update for vortex divergence paper
   size_t global_work_size[1] = {size};
   size_t local_work_size[1] = {256}; // {1}; 
+  printf("global work size: %d\n", (int)global_work_size[0]);
+  printf("local work size: %d\n", (int)local_work_size[0]);
+
+
   auto time_start = std::chrono::high_resolution_clock::now();
   CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, global_work_size, local_work_size, 0, NULL, NULL));
   CL_CHECK(clFinish(commandQueue));
@@ -181,15 +175,7 @@ int main (int argc, char **argv) {
   CL_CHECK(clEnqueueReadBuffer(commandQueue, c_memobj, CL_TRUE, 0, nbytes, h_c, 0, NULL, NULL));
 
   printf("Verify result\n");
-  for (int i = 0; i < size; ++i) {
-    if (float_enable) {
-      float value = ((float*)h_c)[i];
-      printf("*** [%d]: %f\n", i, value);
-    } else {
-      int value = h_c[i];
-      printf("*** [%d]: %d\n", i, value);
-    }
-  }
+
   int errors = 0;
   for (int i = 0; i < size; ++i) {
     int pos = 0;
@@ -200,12 +186,15 @@ int main (int argc, char **argv) {
         pos += (cur < ref) || (cur == ref && j < i);
       }
       float value = ((float*)h_c)[pos];
-      if (value != ref) {
+      
+      if (!((std::isnan(value) && std::isnan(ref)) || (value == ref)) && value != ref) {
         if (errors < 100) {
-          printf("*** error: [%d] expected=%f, actual=%f\n", pos, ref, value);
+          printf("*** error 1: [%d] expected=%f, actual=%f\n", pos, ref, value);
         }
         ++errors;
       }
+
+
     } else {
       int ref = h_a[i];
       for (int j = 0; j < size; ++j) {
@@ -215,7 +204,7 @@ int main (int argc, char **argv) {
       int value = h_c[pos];
       if (value != ref) {
         if (errors < 100) {
-          printf("*** error: [%d] expected=%d, actual=%d\n", pos, ref, value);
+          printf("*** error 2: [%d] expected=%d, actual=%d\n", pos, ref, value);
         }
         ++errors;
       }

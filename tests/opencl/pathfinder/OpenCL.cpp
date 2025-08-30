@@ -68,6 +68,7 @@ void OpenCL::launch(string toLaunch)
 {
 	cl_event event;
 	// Launch the kernel (or at least enqueue it).
+	printf("global work size: %d, local work size: %d\n", (int)gwsize, (int)lwsize);
 	ret = clEnqueueNDRangeKernel(command_queue, 
 	                             kernelArray[toLaunch],
 	                             1,
@@ -108,7 +109,7 @@ void OpenCL::createKernel(string kernelName)
 	
 	// Get the kernel work group size.
 	// clGetKernelWorkGroupInfo(kernelArray[kernelName], device_id[device_id_inuse], CL_KERNEL_WORK_GROUP_SIZE, sizeof(size_t), &lwsize, NULL);
-	lwsize = 16; // vortex
+	lwsize = 32; // vortex
 	if (lwsize == 0)
 	{
 		cout << "Error: clGetKernelWorkGroupInfo() returned a max work group size of zero!" << endl;

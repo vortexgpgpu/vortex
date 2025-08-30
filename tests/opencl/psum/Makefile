@@ -14,6 +14,6 @@ KERNEL_SRCS := kernel.cl
 
 # update for vortex divergence paper
 #OPTS ?= -n16
-OPTS ?= -n1024
+OPTS ?= -n65536
 
 include ../common.mk

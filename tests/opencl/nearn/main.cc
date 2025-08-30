@@ -121,11 +121,15 @@ float *OpenClFindNearestNeighbors(cl_context context, int numRecords,
 
   // 4. enqueue kernel
   size_t globalWorkSize[1];
-  size_t localWorkSize[1] = {1};
+  size_t localWorkSize[1] = {512};
   globalWorkSize[0] = numRecords;
-  if (numRecords % 64)
-    globalWorkSize[0] += 64 - (numRecords % 64);
+  if (numRecords % 512)
+    globalWorkSize[0] += 512 - (numRecords % 512);
   // printf("Global Work Size: %zu\n",globalWorkSize[0]);
+
+    printf("globalWorkSize: %d\n", (int)globalWorkSize[0]);
+    printf("localWorkSize: %d\n", (int)localWorkSize[0]);
+
 
   error = clEnqueueNDRangeKernel(command_queue, NN_kernel, 1, 0, globalWorkSize,
                                  localWorkSize, 0, NULL, &kernelEvent);

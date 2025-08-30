@@ -288,6 +288,10 @@ int main(int argc, char** argv) {
 	int t;
 	for(t=0;t<iteration;t++)
 	{
+		printf("iteration %d\n",t);
+		printf("global size[0]=%ld, global size[1]=%ld, global size[2]=%ld\n",grid[0],grid[1],grid[2]);
+		printf("local size[0]=%ld, local size[1]=%ld, local size[2]=%ld\n",block[0],block[1],block[2]);
+		
 		clStatus = clEnqueueNDRangeKernel(clCommandQueue,clKernel,3,NULL,grid,block,0,NULL,NULL);
     //printf("iteration %d\n",t)
 		CHECK_ERROR("clEnqueueNDRangeKernel")

@@ -237,6 +237,9 @@ int main (int argc, char **argv) {
   CL_CHECK(clEnqueueWriteBuffer(commandQueue, b_memobj, CL_TRUE, 0, nbytes, h_b.data(), 0, NULL, NULL));
 
   printf("Execute the kernel\n");
+  printf("Global work size: %zu x %zu\n", global_work_size[0], global_work_size[1]);
+  printf("Local work size: %zu x %zu\n", local_work_size[0], local_work_size[1]);
+  
   auto time_start = std::chrono::high_resolution_clock::now();
   CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 2, global_offset, global_work_size, local_work_size, 0, NULL, NULL));
   CL_CHECK(clFinish(commandQueue));

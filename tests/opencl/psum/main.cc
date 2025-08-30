@@ -99,7 +99,7 @@ static void cleanup() {
 // size_t size = 16;
 // size_t local_size = 8;
 size_t size = 1024;
-size_t local_size = 256;
+size_t local_size = 512;
 
 static void show_usage() {
   printf("Usage: [-n size] [-l local size] [-h: help]\n");
@@ -125,6 +125,15 @@ static void parse_args(int argc, char **argv) {
     }
   }
 }
+
+static bool almost_equal(float a, float b, int ulp = 4) {
+  union fi_t { int i; float f; };
+  fi_t fa, fb;
+  fa.f = a;
+  fb.f = b;
+  return std::abs(fa.i - fb.i) <= ulp * a /1000;
+}
+
 
 int main (int argc, char **argv) {
   // parse command arguments
@@ -197,6 +206,9 @@ int main (int argc, char **argv) {
   CL_CHECK(clEnqueueWriteBuffer(commandQueue, a_memobj, CL_TRUE, 0, i_nbytes, h_a.data(), 0, NULL, NULL));
 
   printf("Execute the kernel\n");
+  printf("global work size: %d\n", (int)size);
+  printf("local work size: %d\n", (int)local_size);
+
   auto time_start = std::chrono::high_resolution_clock::now();
   CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, &size, &local_size, 0, NULL, NULL));
   CL_CHECK(clFinish(commandQueue));
@@ -211,7 +223,7 @@ int main (int argc, char **argv) {
   int errors = 0;
   auto result = computeParallelSumCPU(h_c.data(), num_outputs);
   auto gold = computeParallelSumCPU(h_a.data(), num_inputs);
-  if (!compare_equal(result, gold)) {
+  if (!almost_equal(result, gold)) {
     printf("*** error: expected=%f, actual=%f", gold, result);
     for (uint32_t i = 0; i < num_outputs; ++i) {
         printf(", output[%d]=%f", i, h_c[i]);

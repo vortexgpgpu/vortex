@@ -18,7 +18,8 @@ lud_kernel.cl: $(SRC_DIR)/lud_kernel.cl
 KERNEL_SRCS := lud_kernel.cl common.h
 
 # Usage: ./lud [-s matrix_size] [-v] [-i input_file]
-# OPTS ?= -s 1024 -v
+#OPTS ?= -s 1024 -v
 OPTS ?= -s 128
+
 
 include ../common.mk

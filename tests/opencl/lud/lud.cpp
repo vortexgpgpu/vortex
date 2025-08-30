@@ -35,8 +35,8 @@
 #elif defined(RD_WG_SIZE)
         #define BLOCK_SIZE RD_WG_SIZE
 #else
-        // #define BLOCK_SIZE 16
-        #define BLOCK_SIZE 4 // vortex
+        #define BLOCK_SIZE 16
+        //#define BLOCK_SIZE 4 // vortex
 #endif
 
  double gettime() {
@@ -255,6 +255,9 @@ main ( int argc, char *argv[] )
 	  size_t global_work1[3]  = {BLOCK_SIZE, 1, 1};
 	  size_t local_work1[3]  = {BLOCK_SIZE, 1, 1};
 	   
+		printf("global: %d, %d\n", (int)global_work1[0], (int)global_work1[1]);
+		printf("local: %d, %d\n", (int)local_work1[0], (int)local_work1[1]);
+
 	  err = clEnqueueNDRangeKernel(cmd_queue, diagnal, 2, NULL, global_work1, local_work1, 0, 0, 0);
 	  if(err != CL_SUCCESS) { printf("ERROR:  diagnal clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }	
 	  
@@ -268,6 +271,10 @@ main ( int argc, char *argv[] )
 	  size_t global_work2[3] = {BLOCK_SIZE * 2 * ((matrix_dim-i)/BLOCK_SIZE-1), 1, 1};
 	  size_t local_work2[3]  = {BLOCK_SIZE * 2, 1, 1};
 	  
+	  printf("global: %d, %d\n", (int)global_work2[0], (int)global_work2[1]);
+	  printf("local: %d, %d\n", (int)local_work2[0], (int)local_work2[1]);
+
+	  
 	  err = clEnqueueNDRangeKernel(cmd_queue, perimeter, 2, NULL, global_work2, local_work2, 0, 0, 0);
 	  if(err != CL_SUCCESS) { printf("ERROR:  perimeter clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }	
 	  
@@ -280,6 +287,9 @@ main ( int argc, char *argv[] )
 	  size_t global_work3[3] = {BLOCK_SIZE * ((matrix_dim-i)/BLOCK_SIZE-1), BLOCK_SIZE * ((matrix_dim-i)/BLOCK_SIZE-1), 1};
 	  size_t local_work3[3] = {BLOCK_SIZE, BLOCK_SIZE, 1};
 
+	printf("global: %d, %d\n", (int)global_work3[0], (int)global_work3[1]);
+	printf("local: %d, %d\n", (int)local_work3[0], (int)local_work3[1]);
+
 	  err = clEnqueueNDRangeKernel(cmd_queue, internal, 2, NULL, global_work3, local_work3, 0, 0, 0);
 	  if(err != CL_SUCCESS) { printf("ERROR:  internal clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }	
 	}
@@ -290,6 +300,9 @@ main ( int argc, char *argv[] )
       
 	size_t global_work1[3]  = {BLOCK_SIZE, 1, 1};
 	size_t local_work1[3]  = {BLOCK_SIZE, 1, 1};
+	printf("global: %d, %d\n", (int)global_work1[0], (int)global_work1[1]);
+	printf("local: %d, %d\n", (int)local_work1[0], (int)local_work1[1]);
+
 	err = clEnqueueNDRangeKernel(cmd_queue, diagnal, 2, NULL, global_work1, local_work1, 0, 0, 0);
 	if(err != CL_SUCCESS) { printf("ERROR:  diagnal clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }	
 	

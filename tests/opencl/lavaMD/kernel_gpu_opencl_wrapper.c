@@ -252,6 +252,8 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 	global_work_size[0] = dim_cpu.number_boxes * local_work_size[0];
 
 	printf("# of blocks = %d, # of threads/block = %d (ensure that device can handle)\n", global_work_size[0]/local_work_size[0], local_work_size[0]);
+	printf("global_work_size: %d\n", (int)global_work_size[0]);
+	printf("local_work_size: %d\n", (int)local_work_size[0]);
 
 	time1 = get_time();
 

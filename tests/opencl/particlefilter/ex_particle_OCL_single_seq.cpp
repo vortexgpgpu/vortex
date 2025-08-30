@@ -786,6 +786,8 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
         clSetKernelArg(kernel_likelihood, 19, threads_per_block * sizeof (float), NULL);
 
         //KERNEL FUNCTION CALL
+        printf("global_work[0]=%d, local_work[0]=%d, num_blocks=%d\n",global_work[0], local_work[0], num_blocks);
+
         err = clEnqueueNDRangeKernel(cmd_queue, kernel_likelihood, 1, NULL, global_work, local_work, 0, 0, 0);
         clFinish(cmd_queue);
         if (err != CL_SUCCESS) {
@@ -799,6 +801,7 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
         clSetKernelArg(kernel_sum, 1, sizeof (cl_int), (void*) &Nparticles);
 
         //KERNEL FUNCTION CALL
+        printf("global_work[0]=%d, local_work[0]=%d, num_blocks=%d\n",global_work[0], local_work[0], num_blocks);
         err = clEnqueueNDRangeKernel(cmd_queue, kernel_sum, 1, NULL, global_work, local_work, 0, 0, 0);
         clFinish(cmd_queue);
         if (err != CL_SUCCESS) {
@@ -818,6 +821,7 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
         clSetKernelArg(kernel_normalize_weights, 5, sizeof (void *), (void*) &seed_GPU);
 
         //KERNEL FUNCTION CALL
+        printf("global_work[0]=%d, local_work[0]=%d, num_blocks=%d\n",global_work[0], local_work[0], num_blocks);
         err = clEnqueueNDRangeKernel(cmd_queue, kernel_normalize_weights, 1, NULL, global_work, local_work, 0, 0, 0);
         clFinish(cmd_queue);
         if (err != CL_SUCCESS) {

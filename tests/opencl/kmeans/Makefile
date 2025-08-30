@@ -13,6 +13,6 @@ kernel.cl: $(SRC_DIR)/kernel.cl
 KERNEL_SRCS := kernel.cl
 
 # usage: -f<features> -p<points>
-OPTS ?= -f100 -p100
+OPTS ?= -f64 -p65536
 
 include ../common.mk

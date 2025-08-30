@@ -221,7 +221,7 @@ int main(int argc, char **argv) {
 
   size_t global_offset[2]    = {1, 1};
   size_t global_work_size[2] = {size - 2, size - 2};
-  size_t local_work_size[2]  = {1, 1}; // {size-2,1}
+  size_t local_work_size[2]  = {size - 2, 1}; // {size-2,1}
 
   printf("enqueue write buffer\n");
   std::vector<float> ref_vec(size * size);
@@ -268,6 +268,9 @@ int main(int argc, char **argv) {
   }
 
   printf("enqueue kernel\n");
+  printf("global work size: %d x %d\n", (int)global_work_size[0], (int)global_work_size[1]);
+  printf("local work size: %d x %d\n", (int)local_work_size[0], (int)local_work_size[1]);
+
   auto time_start = std::chrono::high_resolution_clock::now();
   CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 2, global_offset, global_work_size, local_work_size, 0, NULL, NULL));
   CL_CHECK(clFinish(queue));

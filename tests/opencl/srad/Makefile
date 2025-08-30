@@ -23,7 +23,7 @@ image.pgm: $(SRC_DIR)/image.pgm
 
 KERNEL_SRCS := kernel_gpu_opencl.cl main.h image.pgm
 
-# OPTS ?= 100 0.5 502 458
+#OPTS ?= 100 0.5 502 458
 OPTS ?= 10 0.2 50 45
 
 include ../common.mk

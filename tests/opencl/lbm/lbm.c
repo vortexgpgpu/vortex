@@ -38,6 +38,10 @@ void OpenCL_LBM_performStreamCollide( const OpenCL_Param* prm, cl_mem srcGrid, c
 
 	size_t dimBlock[3] = {SIZE_X,1,1};
 	size_t dimGrid[3] = {SIZE_X*SIZE_Y,SIZE_Z,1};
+
+	printf("global: %d, %d\n", (int)dimGrid[0], (int)dimGrid[1]);
+	printf("local: %d, %d\n", (int)dimBlock[0], (int)dimBlock[1]);
+	
 	clStatus = clEnqueueNDRangeKernel(prm->clCommandQueue,prm->clKernel,3,NULL,dimGrid,dimBlock,0,NULL,NULL); 
 	CHECK_ERROR("clEnqueueNDRangeKernel") 	
 	

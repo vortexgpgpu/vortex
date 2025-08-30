@@ -20,11 +20,11 @@
 /* capacitance fitting factor	*/
 #define FACTOR_CHIP	0.5
 
-// #define WG_SIZE_X (64)
-// #define WG_SIZE_Y (4)
-// vortex
-#define WG_SIZE_X (4)
+#define WG_SIZE_X (64)
 #define WG_SIZE_Y (4)
+// vortex
+//#define WG_SIZE_X (4)
+//#define WG_SIZE_Y (4)
 float t_chip      = 0.0005;
 float chip_height = 0.016;
 float chip_width  = 0.016;

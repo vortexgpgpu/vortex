@@ -554,6 +554,7 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 	//====================================================================================================100
 	//	launch kernel
 	//====================================================================================================100
+	printf("global size=%zu, local size=%zu\n", global_work_size[0], local_work_size[0]);
 
 	error = clEnqueueNDRangeKernel(	command_queue, 
 									extract_kernel, 
@@ -845,6 +846,7 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 		//====================================================================================================100
 		// Prepare kernel
 		//====================================================================================================100
+		printf("global size=%zu, local size=%zu\n", global_work_size[0], local_work_size[0]);
 
 		// launch kernel
 		error = clEnqueueNDRangeKernel(	command_queue, 
@@ -899,6 +901,7 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 				fatal_CL(error, __LINE__);
 
 			// launch kernel
+			printf("reduce global size=%zu, local size=%zu\n", global_work_size2[0], local_work_size[0]);
 			error = clEnqueueNDRangeKernel(	command_queue, 
 											reduce_kernel, 
 											1, 
@@ -980,6 +983,7 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 			fatal_CL(error, __LINE__);
 
 		// launch kernel
+		printf("srad global size=%zu, local size=%zu\n", global_work_size[0], local_work_size[0]);
 		error = clEnqueueNDRangeKernel(	command_queue, 
 										srad_kernel, 
 										1, 
@@ -1002,6 +1006,7 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 		//====================================================================================================100
 
 		// launch kernel
+		printf("srad2 global size=%zu, local size=%zu\n", global_work_size[0], local_work_size[0]);
 		error = clEnqueueNDRangeKernel(	command_queue, 
 										srad2_kernel, 
 										1, 
@@ -1051,7 +1056,7 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 	//====================================================================================================100
 	// launch kernel
 	//====================================================================================================100
-
+	printf("global size=%zu, local size=%zu\n", global_work_size[0], local_work_size[0]);
 	error = clEnqueueNDRangeKernel(	command_queue, 
 									compress_kernel, 
 									1, 
