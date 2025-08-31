@@ -43,9 +43,9 @@ module VX_tcu_top import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign execute_if.data = execute_data;
     assign execute_ready = execute_if.ready;
 
-    VX_tcu_fp #(
+    VX_tcu_core #(
         .INSTANCE_ID (INSTANCE_ID)
-    ) tcu_unit (
+    ) tcu_core (
         `SCOPE_IO_BIND (0)
         .clk        (clk),
         .reset      (reset),

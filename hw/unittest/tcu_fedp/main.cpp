@@ -40,6 +40,7 @@
 #include <random>
 #include <sstream>
 #include <vector>
+#include <bitmanip.h>
 #include "softfloat_ext.h"
 
 bool sim_trace_enabled() {
@@ -81,39 +82,67 @@ bit_cast(const From &src) noexcept {
   return dst;
 }
 
-enum RoundingMode {
-  RNE=0,
-  RTZ=1,
-  RDN=2,
-  RUP=3,
-  RMM=4
+enum class RoundingMode {
+  RNE = 0,
+  RTZ = 1,
+  RDN = 2,
+  RUP = 3,
+  RMM = 4
 };
 
 // Convert RoundingMode to std::string
-std::string to_string(RoundingMode mode) {
-  switch (mode) {
-    case RNE: return "RNE";
-    case RTZ: return "RTZ";
-    case RDN: return "RDN";
-    case RUP: return "RUP";
-    case RMM: return "RMM";
+std::string frm_to_string(RoundingMode frm) {
+  switch (frm) {
+    case RoundingMode::RNE: return "RNE";
+    case RoundingMode::RTZ: return "RTZ";
+    case RoundingMode::RDN: return "RDN";
+    case RoundingMode::RUP: return "RUP";
+    case RoundingMode::RMM: return "RMM";
     default: return "UNKNOWN";
   }
 }
 
 // Convert std::string to RoundingMode
-RoundingMode from_string(const std::string &mode_str) {
-  if (mode_str == "RNE") return RNE;
-  if (mode_str == "RTZ") return RTZ;
-  if (mode_str == "RDN") return RDN;
-  if (mode_str == "RUP") return RUP;
-  if (mode_str == "RMM") return RMM;
-  throw std::invalid_argument("Invalid RoundingMode string: " + mode_str);
+RoundingMode frm_from_string(const std::string &frm_str) {
+  if (frm_str == "RNE") return RoundingMode::RNE;
+  if (frm_str == "RTZ") return RoundingMode::RTZ;
+  if (frm_str == "RDN") return RoundingMode::RDN;
+  if (frm_str == "RUP") return RoundingMode::RUP;
+  if (frm_str == "RMM") return RoundingMode::RMM;
+  throw std::invalid_argument("Invalid RoundingMode: " + frm_str);
+}
+
+// initialize default fp format based on format code
+void init_default_fp_format(uint32_t fmt, int *exp_bits, int *sig_bits) {
+  switch (fmt) {
+    case 0: // fp32
+      *exp_bits = 8;
+      *sig_bits = 23;
+      break;
+    case 1: // fp16
+      *exp_bits = 5;
+      *sig_bits = 10;
+      break;
+    case 2: // bf16
+      *exp_bits = 8;
+      *sig_bits = 7;
+      break;
+    case 3: // fp8 (E4M3)
+      *exp_bits = 4;
+      *sig_bits = 3;
+      break;
+    case 4: // bf8 (E5M2)
+      *exp_bits = 5;
+      *sig_bits = 2;
+      break;
+    default:
+      break;
+  }
 }
 
 // Test configuration
 struct TestConfig {
-  uint64_t max_cycles = 10000;
+  uint64_t max_cycles = 1000;
   bool enable_tracing = true;
   uint64_t trace_start = 0;
   uint64_t trace_end = 100;
@@ -126,9 +155,9 @@ struct TestConfig {
       {"infinities", true},
       {"nans", true},
       {"subnormals", true}};
-  int exp_bits = 8;               // Exponent bits
-  int sig_bits = 23;              // Significand bits
-  RoundingMode round_mode = RNE;  // Rounding mode
+  int exp_bits = 0; // Exponent bits
+  int sig_bits = 0; // Significand bits
+  RoundingMode frm = RoundingMode::RNE; // Rounding mode
   uint32_t num_tests = 100;       // Number of tests per feature
 };
 
@@ -143,43 +172,26 @@ std::ostream &operator<<(std::ostream &os, const TestConfig &config) {
      << ", fmt_d: " << config.fmt_d
      << ", exp_bits: " << config.exp_bits
      << ", sig_bits: " << config.sig_bits
-     << ", round_mode: " << to_string(config.round_mode)
+     << ", frm: " << frm_to_string(config.frm)
      << ", num_tests: " << config.num_tests
      << ", test_features: {";
   int i = 0;
-  for (const auto &feature : config.test_features) {
+  for (const auto &f : config.test_features) {
     if (i++ > 0) os << ", ";
-    os << feature.first << ": " << (feature.second ? "true" : "false");
+    os << f.first << ": " << (f.second ? "true" : "false");
   }
   os << "}}";
   return os;
 }
 
-// Test result enumeration
-enum class TestResult {
-  PASSED,
-  FAILED,
-  TIMEOUT
-};
-
-// Assertion macro with better error reporting
-#define TEST_ASSERT(condition, message)                                                        \
-  do {                                                                                         \
-    if (!(condition)) {                                                                        \
-      std::cout << "FAILED at cycle " << cycle_count_ << ": " << message << std::endl;         \
-      std::cout << "    " << #condition << " in " << __FILE__ << ":" << __LINE__ << std::endl; \
-      return TestResult::FAILED;                                                               \
-    }                                                                                          \
-  } while (0)
-
-void print_float(const std::string& prefix, float value, bool newline = false) {
+static void print_float(const std::string& prefix, float value, bool newline = false) {
   std::cout << prefix << value << " (0x" << std::hex << bit_cast<uint32_t>(value) << ")" << std::dec;
   if (newline) {
     std::cout << std::endl;
   }
 }
 
-void print_float(const std::string& prefix, std::vector<float>& values, bool newline = false) {
+static void print_float(const std::string& prefix, std::vector<float>& values, bool newline = false) {
   std::cout << prefix << "{";
   for (size_t i = 0; i < values.size(); i++) {
     if (i > 0) std::cout << ", ";
@@ -191,14 +203,14 @@ void print_float(const std::string& prefix, std::vector<float>& values, bool new
   }
 }
 
-void print_format(const std::string& prefix, uint32_t value, bool newline = false) {
+static void print_format(const std::string& prefix, uint32_t value, bool newline = false) {
   std::cout << prefix << std::hex << "0x" << value << std::dec;
   if (newline) {
     std::cout << std::endl;
   }
 }
 
-void print_format(const std::string& prefix, std::vector<uint32_t>& values, bool newline = false) {
+static void print_format(const std::string& prefix, std::vector<uint32_t>& values, bool newline = false) {
   std::cout << prefix << "{";
   for (size_t i = 0; i < values.size(); i++) {
     if (i > 0) std::cout << ", ";
@@ -210,9 +222,108 @@ void print_format(const std::string& prefix, std::vector<uint32_t>& values, bool
   }
 }
 
-inline int calculate_elements_width(int exp_bits, int sig_bits) {
+static int float_fmt_width(int exp_bits, int sig_bits) {
   int element_bits = 1 + exp_bits + sig_bits;
   return 8 * ((element_bits + 7) / 8);
+}
+
+static int int_fmt_width(int fmt) {
+  switch (fmt) {
+  case 8:  return 32; // int32
+  case 9:  return 8;  // int8
+  case 10: return 8;  // uint8
+  case 11: return 4;  // int4
+  case 12: return 4;  // uint4
+  default:
+    std::cerr << "Unsupported integer format: " << fmt << std::endl;
+    std::abort();
+  }
+}
+
+static int int_fmt_sign(int fmt) {
+  switch (fmt) {
+  case 8:  return true;  // int32
+  case 9:  return true;  // int8
+  case 10: return false; // uint8
+  case 11: return true;  // int4
+  case 12: return false; // uint4
+  default:
+    std::cerr << "Unsupported integer format: " << fmt << std::endl;
+    std::abort();
+  }
+}
+
+static void pack_elements(const std::vector<uint32_t> &elements, int element_bits, int num_words, uint32_t *packed) {
+  int elements_per_word = 32 / element_bits;
+  int elements_mask = (1 << element_bits) - 1;
+
+  for (int i = 0; i < num_words; i++) {
+    uint32_t tmp(0);
+    for (int j = 0; j < elements_per_word; j++) {
+      int elem_idx = i * elements_per_word + j;
+      assert(elem_idx < elements.size());
+      tmp |= (elements[elem_idx] & elements_mask) << (j * element_bits);
+    }
+    packed[i] = tmp;
+  }
+}
+
+// Calculate expected fp dot product
+static float calculate_fp_dot_product(const std::vector<float> &a_values,
+                                      const std::vector<float> &b_values,
+                                      float c_value) {
+  float result(c_value);
+  for (size_t i = 0; i < a_values.size(); i++) {
+    result += a_values[i] * b_values[i];
+  }
+  return result;
+}
+
+// Calculate expected int dot product
+static int32_t calculate_int_dot_product(const std::vector<uint32_t> &a_values,
+                                         const std::vector<uint32_t> &b_values,
+                                         int32_t c_value) {
+  int32_t result(c_value);
+  for (size_t i = 0; i < a_values.size(); i++) {
+    result += int32_t(a_values[i]) * int32_t(b_values[i]);
+  }
+  return result;
+}
+
+// Check if two floats are approximately equal
+static bool approximately_equal(float a, float b, int exp_bits, int sig_bits) {
+  // Handle NaN
+  if (std::isnan(a) && std::isnan(b))
+    return true;
+
+  // Handle infinity
+  if (std::isinf(a) && std::isinf(b))
+    return std::signbit(a) == std::signbit(b);
+
+  // Generalize epsilon calculation based on format precision
+  float epsilon;
+  int total_bits = 1 + exp_bits + sig_bits;
+  if (total_bits <= 8) {
+    epsilon = 0.1f; // Very low precision formats
+  } else if (total_bits <= 16) {
+    epsilon = 0.01f; // Low precision formats
+  } else if (total_bits <= 24) {
+    epsilon = 0.001f; // Medium precision formats
+  } else {
+    epsilon = 0.0001f; // High precision formats
+  }
+
+  // Check for approximate equality
+  if (std::abs(a - b) < epsilon)
+    return true;
+
+  // Check for relative error for larger numbers
+  if (std::abs(a) > 1.0f || std::abs(b) > 1.0f) {
+    float relative_error = std::abs(a - b) / std::max(std::abs(a), std::abs(b));
+    return relative_error < epsilon;
+  }
+
+  return false;
 }
 
 // Floating-point dot product testbench
@@ -226,30 +337,27 @@ private:
   uint64_t cycle_count_;
   uint64_t timestamp_;
   std::mt19937 rng_;
-  std::uniform_real_distribution<float> normal_dist_;
-  std::uniform_int_distribution<uint32_t> bits_dist_;
 
   // Clock generation
   void tick() {
     dut_->clk = 0;
     dut_->eval();
-#ifdef VCD_OUTPUT
-    if (config_.enable_tracing && timestamp_ >= config_.trace_start && timestamp_ < config_.trace_end) {
+  #ifdef VCD_OUTPUT
+    if (config_.enable_tracing && (timestamp_ >= config_.trace_start) && (timestamp_ < config_.trace_end)) {
       trace_->dump(timestamp_);
     }
-#endif
-    timestamp_++;
+  #endif
+    ++timestamp_;
 
     dut_->clk = 1;
     dut_->eval();
-#ifdef VCD_OUTPUT
-    if (config_.enable_tracing && timestamp_ >= config_.trace_start && timestamp_ < config_.trace_end) {
+  #ifdef VCD_OUTPUT
+    if (config_.enable_tracing && (timestamp_ >= config_.trace_start) && (timestamp_ < config_.trace_end)) {
       trace_->dump(timestamp_);
     }
-#endif
-    timestamp_++;
-
-    cycle_count_++;
+  #endif
+    ++timestamp_;
+    ++cycle_count_;
   }
 
   // Reset the DUT
@@ -260,32 +368,56 @@ private:
     dut_->reset = 0;
   }
 
-  // Pack elements into XLEN words based on format
-  void pack_elements(const std::vector<uint32_t> &elements, int exp_bits, int sig_bits, int num_words, uint32_t *packed) {
-    int element_bits = calculate_elements_width(exp_bits, sig_bits);
-    int elements_per_word = 32 / element_bits;
-    int elements_mask = (1 << element_bits) - 1;
+  // Generate fp value for a specific feature
+  uint32_t generate_int_value(bool is_signed, int element_bits, int index) {
+    uint32_t mask = (element_bits < 32) ? ((1u << element_bits) - 1u) : 0xFFFFFFFFu;
+    std::uniform_int_distribution<uint32_t> int_dist(0, mask);
 
-    for (int i = 0; i < num_words; i++) {
-      uint32_t tmp(0);
-      for (int j = 0; j < elements_per_word; j++) {
-        int elem_idx = i * elements_per_word + j;
-        assert(elem_idx < elements.size());
-        tmp |= (elements[elem_idx] & elements_mask) << (j * element_bits);
+    uint32_t value;
+    if (index == -1) {
+      value = int_dist(rng_);
+    } else {
+      switch (index) {
+      case 0: // zero
+        value = 0;
+        break;
+      case 1: // min
+        if (is_signed) {
+            value = (element_bits < 32) ? (1u << (element_bits-1)) : 0x80000000u;
+        } else {
+            value = 0;
+        }
+        break;
+      case 2: // max
+        if (is_signed) {
+            value = (element_bits < 32) ? ((1u << (element_bits-1))-1u) : 0x7FFFFFFFu;
+        } else {
+            value = mask;
+        }
+        break;
+      default:
+        value = int_dist(rng_);
+        break;
       }
-      packed[i] = tmp;
     }
+
+    if (is_signed) {
+      value = vortex::sext<int32_t>(value, element_bits);
+    }
+    return value;
   }
 
-  // Generate test value for a specific feature
-  float generate_test_value(const std::string &feature) {
+  // Generate fp value for a specific feature
+  float generate_fp_value(const std::string &feature) {
+    static std::uniform_real_distribution<float> normal_dist(-1.0f, 1.0f);
+    static std::uniform_int_distribution<uint32_t> bits_dist(0, 0xFFFFFFFF);
     if (feature == "zeros") {
       return 0.0f;
     } else if (feature == "normals") {
-      return normal_dist_(rng_) * 100.0f;
+      return normal_dist(rng_) * 100.0f;
     } else if (feature == "subnormals") {
       // Generate a subnormal value
-      uint32_t subnormal_bits = bits_dist_(rng_) & 0x007FFFFF; // Subnormal bit pattern
+      uint32_t subnormal_bits = bits_dist(rng_) & 0x007FFFFF; // Subnormal bit pattern
       float result;
       std::memcpy(&result, &subnormal_bits, sizeof(float));
       return result;
@@ -300,65 +432,14 @@ private:
     return 0.0f;
   }
 
-  // Calculate expected dot product
-  float calculate_expected_dot_product(const std::vector<float> &a_values,
-                                       const std::vector<float> &b_values,
-                                       float c_value) {
-    float result(0.0f);
-    for (size_t i = 0; i < a_values.size(); i++) {
-      result += a_values[i] * b_values[i];
-    }
-    result += c_value;
-    return result;
-  }
-
-  // Check if two floats are approximately equal
-  bool floats_approximately_equal(float a, float b, int exp_bits, int sig_bits) {
-    // Handle NaN
-    if (std::isnan(a) && std::isnan(b))
-      return true;
-
-    // Handle infinity
-    if (std::isinf(a) && std::isinf(b))
-      return std::signbit(a) == std::signbit(b);
-
-    // Generalize epsilon calculation based on format precision
-    float epsilon;
-    int total_bits = 1 + exp_bits + sig_bits;
-    if (total_bits <= 8) {
-      epsilon = 0.1f; // Very low precision formats
-    } else if (total_bits <= 16) {
-      epsilon = 0.01f; // Low precision formats
-    } else if (total_bits <= 24) {
-      epsilon = 0.001f; // Medium precision formats
-    } else {
-      epsilon = 0.0001f; // High precision formats
-    }
-
-    // Check for approximate equality
-    if (std::abs(a - b) < epsilon)
-      return true;
-
-    // Check for relative error for larger numbers
-    if (std::abs(a) > 1.0f || std::abs(b) > 1.0f) {
-      float relative_error = std::abs(a - b) / std::max(std::abs(a), std::abs(b));
-      return relative_error < epsilon;
-    }
-
-    return false;
-  }
-
 public:
   Testbench(const TestConfig &cfg)
     : config_(cfg)
     , cycle_count_(0)
     , timestamp_(0)
-    , rng_(config_.random_seed)
-    , normal_dist_(-1.0f, 1.0f)
-    , bits_dist_(0, 0xFFFFFFFF) {
+    , rng_(config_.random_seed) {
     Verilated::traceEverOn(config_.enable_tracing);
     dut_ = std::make_unique<MODULE>();
-
 #ifdef VCD_OUTPUT
     if (config_.enable_tracing) {
       trace_ = std::make_unique<VerilatedVcdC>();
@@ -366,7 +447,6 @@ public:
       trace_->open("trace.vcd");
     }
 #endif
-
     // Initialize inputs
     dut_->clk = 0;
     dut_->reset = 0;
@@ -378,8 +458,6 @@ public:
       WRITE_WDATA(dut_->b_col, i, 0);
     }
     dut_->c_val = 0;
-
-    reset();
   }
 
   ~Testbench() {
@@ -390,21 +468,89 @@ public:
 #endif
   }
 
-  // Test a specific feature
-  TestResult test_feature(const std::string &feature) {
-    std::cout << "Testing with feature: " << feature << std::endl;
+  bool test_integers() {
+    std::cout << "Testing integer format" << std::endl;
 
     // Calculate how many elements we can fit in NUM_REGS XLEN words
-    int elements_per_word = 32 / calculate_elements_width(config_.exp_bits, config_.sig_bits);
+    bool is_signed = int_fmt_sign(config_.fmt_s);
+    int element_bits = int_fmt_width(config_.fmt_s);
+    int elements_per_word = 32 / element_bits;
     int total_elements = NUM_REGS * elements_per_word;
 
     std::cout << "  elements_per_word=" << elements_per_word << ", total_elements=" << total_elements << std::endl;
 
     for (int test_idx = 0; test_idx < config_.num_tests; test_idx++) {
-      if (cycle_count_ >= config_.max_cycles) {
-        return TestResult::TIMEOUT;
+      // Generate test vectors
+      std::vector<uint32_t> a_values(total_elements), b_values(total_elements);
+
+      bool a_enable = (test_idx % 3) == 0;
+      bool b_enable = (test_idx % 3) == 1;
+      bool c_enable = (test_idx % 3) == 2;
+
+      for (int i = 0; i < total_elements; i++) {
+        a_values[i] = (a_enable && i == 0) ? generate_int_value(is_signed, element_bits, test_idx) : generate_int_value(is_signed, element_bits, -1);
+        a_values[i] = (b_enable && i == 0) ? generate_int_value(is_signed, element_bits, test_idx) : generate_int_value(is_signed, element_bits, -1);
       }
 
+      // Generate c value
+      int32_t c_value = c_enable ? generate_int_value(true, 32, test_idx) : generate_int_value(true, 32, -1);
+
+      // Pack into XLEN words
+      uint32_t a_packed[NUM_REGS], b_packed[NUM_REGS];
+      pack_elements(a_values, element_bits, NUM_REGS, a_packed);
+      pack_elements(b_values, element_bits, NUM_REGS, b_packed);
+
+      // Apply to DUT
+      for (int i = 0; i < NUM_REGS; i++) {
+        WRITE_WDATA(dut_->a_row, i, a_packed[i]);
+        WRITE_WDATA(dut_->b_col, i, b_packed[i]);
+      }
+      dut_->c_val = c_value;
+      dut_->fmt_s = config_.fmt_s;
+      dut_->enable = 1;
+
+      // Run for latency cycles
+      for (int i = 0; i < LATENCY; i++) {
+        tick();
+      }
+
+      // Check result
+      int32_t dut_result = dut_->d_val;
+
+      // Calculate expected result
+      int32_t expected = calculate_int_dot_product(a_values, b_values, c_value);
+
+      if (dut_result != expected) {
+        std::cout << "Test:" << test_idx << " failed:" << std::endl;
+        print_format("  a_values=", a_values, true);
+        print_format("  b_values=", b_values, true);
+        print_format("  c_value=", c_value, true);
+        print_format("  expected=", expected, true);
+        print_format("  actual=", dut_result, true);
+        return false;
+      }
+
+      // Add one idle cycles between tests
+      dut_->enable = 0;
+      tick();
+    }
+
+    std::cout << "  " << config_.num_tests << " tests passed" << std::endl;
+    return true;
+  }
+
+  // Test a specific fp feature
+  bool test_fp_feature(const std::string &feature) {
+    std::cout << "Testing floating-point feature: " << feature << std::endl;
+
+    // Calculate how many elements we can fit in NUM_REGS XLEN words
+    int element_bits = float_fmt_width(config_.exp_bits, config_.sig_bits);
+    int elements_per_word = 32 / element_bits;
+    int total_elements = NUM_REGS * elements_per_word;
+
+    std::cout << "  elements_per_word=" << elements_per_word << ", total_elements=" << total_elements << std::endl;
+
+    for (int test_idx = 0; test_idx < config_.num_tests; test_idx++) {
       // Generate test vectors
       std::vector<float> a_values_float(total_elements), b_values_float(total_elements);
       std::vector<uint32_t> a_values_format(total_elements), b_values_format(total_elements);
@@ -414,15 +560,15 @@ public:
       bool c_enable = (test_idx % 3) == 2;
 
       for (int i = 0; i < total_elements; i++) {
-        float af = (a_enable && i == 0) ? generate_test_value(feature) : generate_test_value("normals");
-        float bf = (b_enable && i == 0) ? generate_test_value(feature) : generate_test_value("normals");
+        float af = (a_enable && i == 0) ? generate_fp_value(feature) : generate_fp_value("normals");
+        float bf = (b_enable && i == 0) ? generate_fp_value(feature) : generate_fp_value("normals");
 
-        a_values_format[i] = cvt_f32_to_custom(af, config_.exp_bits, config_.sig_bits, config_.round_mode, nullptr);
-        b_values_format[i] = cvt_f32_to_custom(bf, config_.exp_bits, config_.sig_bits, config_.round_mode, nullptr);
+        a_values_format[i] = cvt_f32_to_custom(af, config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
+        b_values_format[i] = cvt_f32_to_custom(bf, config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
 
         // Convert back to float to account for precision loss
-        a_values_float[i] = cvt_custom_to_f32(a_values_format[i], config_.exp_bits, config_.sig_bits, config_.round_mode, nullptr);
-        b_values_float[i] = cvt_custom_to_f32(b_values_format[i], config_.exp_bits, config_.sig_bits, config_.round_mode, nullptr);
+        a_values_float[i] = cvt_custom_to_f32(a_values_format[i], config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
+        b_values_float[i] = cvt_custom_to_f32(b_values_format[i], config_.exp_bits, config_.sig_bits, (int)config_.frm, nullptr);
 
         /*print_float("  af=", af);
         print_float(", bf=", bf);
@@ -430,14 +576,14 @@ public:
       }
 
       // Generate c value
-      float c_value_float = c_enable ? generate_test_value(feature) : generate_test_value("normals");
+      float c_value_float = c_enable ? generate_fp_value(feature) : generate_fp_value("normals");
       uint32_t c_value_bits;
       std::memcpy(&c_value_bits, &c_value_float, sizeof(float));
 
       // Pack into XLEN words
       uint32_t a_packed[NUM_REGS], b_packed[NUM_REGS];
-      pack_elements(a_values_format, config_.exp_bits, config_.sig_bits, NUM_REGS, a_packed);
-      pack_elements(b_values_format, config_.exp_bits, config_.sig_bits, NUM_REGS, b_packed);
+      pack_elements(a_values_format, element_bits, NUM_REGS, a_packed);
+      pack_elements(b_values_format, element_bits, NUM_REGS, b_packed);
 
       // Apply to DUT
       for (int i = 0; i < NUM_REGS; i++) {
@@ -459,50 +605,60 @@ public:
       std::memcpy(&dut_result, &dut_result_bits, sizeof(float));
 
       // Calculate expected result
-      float expected = calculate_expected_dot_product(a_values_float, b_values_float, c_value_float);
+      float expected = calculate_fp_dot_product(a_values_float, b_values_float, c_value_float);
 
-      if (!floats_approximately_equal(dut_result, expected, config_.exp_bits, config_.sig_bits)) {
+      bool passed = approximately_equal(dut_result, expected, config_.exp_bits, config_.sig_bits);
+      if (!passed) {
         std::cout << "Test " << feature << ":" << test_idx << " failed:" << std::endl;
         print_float("  af_values=", a_values_float, true);
         print_format("  ax_values=", a_values_format, true);
         print_float("  bf_values=", b_values_float, true);
         print_format("  bx_values=", b_values_format, true);
         print_float("  c_value=", c_value_float, true);
-        print_float("  Expected=", expected, true);
-        print_float("  Actual=", dut_result, true);
-        return TestResult::FAILED;
+        print_float("  expected=", expected, true);
+        print_float("  actual=", dut_result, true);
+        return false;
       }
 
-      // Add a few idle cycles between tests
+      // Add one idle cycles between tests
       dut_->enable = 0;
-      tick();
       tick();
     }
 
     std::cout << "  " << config_.num_tests << " tests passed" << std::endl;
-    return TestResult::PASSED;
+    return true;
   }
 
   // Run all tests based on configuration
-  TestResult run_tests() {
-    std::vector<std::string> features_to_test;
-    for (const auto &feature : config_.test_features) {
-      if (feature.second) {
-        features_to_test.push_back(feature.first);
-      }
-    }
+  bool run_tests() {
 
-    for (const auto &feature : features_to_test) {
-      reset();
-      TestResult result = test_feature(feature);
-      if (result != TestResult::PASSED) {
-        return result;
+    // reset device under test
+    this->reset();
+
+    if (config_.fmt_s >= 8) {
+      // test integer formats
+      if (!test_integers()) {
+        return false;
+      }
+    } else {
+      // test floating-point formats
+      std::vector<std::string> features_to_test;
+      for (const auto &feature : config_.test_features) {
+        if (feature.second) {
+          features_to_test.push_back(feature.first);
+        }
+      }
+
+      for (const auto &feature : features_to_test) {
+        if (!test_fp_feature(feature)) {
+          return false;
+        }
       }
     }
 
     std::cout << "All tests PASSED!" << std::endl;
     std::cout << "Simulation completed in " << cycle_count_ << " cycles" << std::endl;
-    return TestResult::PASSED;
+    return true;
   }
 };
 
@@ -531,7 +687,7 @@ TestConfig parse_args(int argc, char **argv) {
     } else if (arg.substr(0, 6) == "--sig=") {
       config_.sig_bits = std::stoi(arg.substr(6));
     } else if (arg.substr(0, 6) == "--rnd=") {
-      config_.round_mode = from_string(arg.substr(6));
+      config_.frm = frm_from_string(arg.substr(6));
     } else if (arg == "--tests" && i + 1 < argc) {
       config_.num_tests = std::stoul(argv[++i]);
     } else if (arg == "--seed" && i + 1 < argc) {
@@ -556,6 +712,31 @@ TestConfig parse_args(int argc, char **argv) {
     }
   }
 
+  if (config_.fmt_s >= 8) {
+    // Integer formats
+    if (config_.exp_bits != 0 || config_.sig_bits != 0) {
+      std::cerr << "Error: Exponent and significand bits should not be set for integer formats" << std::endl;
+      exit(1);
+    }
+  } else {
+    // Floating-point formats
+    if (config_.exp_bits == 0 && config_.sig_bits == 0) {
+      init_default_fp_format(config_.fmt_s, &config_.exp_bits, &config_.sig_bits);
+    }
+
+    // Validate parameters
+    int total_bits = 1 + config_.exp_bits + config_.sig_bits;
+    if (total_bits > 32) {
+      std::cout << "Error: Total bits (1 + exp_bits + sig_bits) cannot exceed 32" << std::endl;
+       exit(1);
+    }
+    if (32 % total_bits != 0) {
+      std::cout << "Warning: Element size " << total_bits << " doesn't evenly divide 32 bits" << std::endl;
+      std::cout << "This may result in unused bits in the packed words" << std::endl;
+      exit(1);
+    }
+  }
+
   return config_;
 }
 
@@ -567,29 +748,11 @@ int main(int argc, char **argv) {
   TestConfig config = parse_args(argc, argv);
   std::cout << "Using configuration: " << config << std::endl;
 
-  int total_bits = 1 + config.exp_bits + config.sig_bits;
-
-  // Validate parameters
-  if (total_bits > 32) {
-    std::cout << "Error: Total bits (1 + exp_bits + sig_bits) cannot exceed 32" << std::endl;
-    return 1;
-  }
-
-  if (32 % total_bits != 0) {
-    std::cout << "Warning: Element size " << total_bits << " doesn't evenly divide 32 bits" << std::endl;
-    std::cout << "This may result in unused bits in the packed words" << std::endl;
-  }
-
   // Create and run testbench
   Testbench testbench(config);
-  TestResult result = testbench.run_tests();
-
-  // Return appropriate exit code
-  if (result == TestResult::PASSED) {
-    std::cout << "--- TEST PASSED ---" << std::endl;
-    return 0;
-  } else {
-    std::cout << "--- TEST FAILED ---" << std::endl;
+  if (!testbench.run_tests()) {
     return 1;
   }
+
+  return 0;
 }

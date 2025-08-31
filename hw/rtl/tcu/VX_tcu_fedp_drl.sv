@@ -37,7 +37,6 @@ module VX_tcu_fedp_drl #(
     localparam TOTAL_LATENCY= FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
-    `UNUSED_VAR (reset);
     `UNUSED_VAR ({fmt_d, c_val});
 
     //Unpack two 16-bit elements from every 32-bit register
@@ -91,7 +90,7 @@ module VX_tcu_fedp_drl #(
     wire acc_fmt_sel = pipe_fmt_sel;
     wire [25+$clog2(TCK+1):0] acc_sig;    //23 mantissa + 1 hidden + 1 sign + log2(N) bits
     wire [TCK-1:0] sigs_sign;    //sign bits of all operands (for int math)
-    
+
     VX_tcu_drl_acc #(
         .N(TCK+1)
     ) csa_acc (

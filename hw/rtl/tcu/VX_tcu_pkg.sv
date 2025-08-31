@@ -25,13 +25,13 @@ package VX_tcu_pkg;
     localparam TCU_NR = 8;
     localparam TCU_DP = 0;
 
-    // Supported data types
+    // Supported floating-point types
     localparam TCU_FP32_ID = 0;
     localparam TCU_FP16_ID = 1;
     localparam TCU_BF16_ID = 2;
     localparam TCU_FP8_ID  = 3;
     localparam TCU_BF8_ID  = 4;
-    //leave space for mxfp8/6/4 and tf32 tutorial?
+    // Supported integer-point types
     localparam TCU_I32_ID  = 8;
     localparam TCU_I8_ID   = 9;
     localparam TCU_U8_ID   = 10;
