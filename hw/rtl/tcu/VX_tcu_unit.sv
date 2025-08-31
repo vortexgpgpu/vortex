@@ -54,7 +54,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     ) per_block_result_if[BLOCK_SIZE]();
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
-        VX_tcu_fused #(
+        VX_tcu_core #(
             .INSTANCE_ID (`SFORMATF(("%s-fused%0d", INSTANCE_ID, block_idx)))
         ) tcu_fused (
             `SCOPE_IO_BIND (block_idx)

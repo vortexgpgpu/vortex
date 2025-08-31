@@ -102,8 +102,8 @@ module VX_tcu_fedp_dsp #(
     input  wire reset,
     input  wire enable,
 
-    input  wire[2:0] fmt_s,
-    input  wire[2:0] fmt_d,
+    input  wire[3:0] fmt_s,
+    input  wire[3:0] fmt_d,
 
     input  wire [N-1:0][`XLEN-1:0] a_row,
     input  wire [N-1:0][`XLEN-1:0] b_col,
@@ -122,9 +122,7 @@ module VX_tcu_fedp_dsp #(
     localparam TOTAL_LATENCY= FCVT_LATENCY + FMUL_LATENCY + ACC_LATENCY + FRND_LATENCY;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
-    `UNUSED_VAR (reset);
-    `UNUSED_VAR ({a_row, b_col, c_val});
-    `UNUSED_VAR (fmt_d);
+    `UNUSED_VAR ({fmt_s[3], fmt_d, c_val});
 
     wire [TCK-1:0][15:0] a_row16, b_col16;
 
@@ -166,12 +164,12 @@ module VX_tcu_fedp_dsp #(
         reg [31:0] a_row_sel, a_col_sel;
 
         always @(*) begin
-            case (fmt_s)
-            3'd1: begin // fp16
+            case (fmt_s[2:0])
+            3'b001: begin // fp16
                 a_row_sel = a_row_fp16;
                 a_col_sel = b_col_fp16;
             end
-            3'd2: begin // bf16
+            3'b010: begin // bf16
                 a_row_sel = a_row_bf16;
                 a_col_sel = b_col_bf16;
             end

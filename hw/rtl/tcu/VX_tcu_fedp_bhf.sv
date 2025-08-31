@@ -22,8 +22,8 @@ module VX_tcu_fedp_bhf #(
     input  wire reset,
     input  wire enable,
 
-    input  wire[2:0] fmt_s,
-    input  wire[2:0] fmt_d,
+    input  wire[3:0] fmt_s,
+    input  wire[3:0] fmt_d,
 
     input  wire [N-1:0][`XLEN-1:0] a_row,
     input  wire [N-1:0][`XLEN-1:0] b_col,
@@ -42,7 +42,7 @@ module VX_tcu_fedp_bhf #(
     localparam FMT_DELAY = FMUL_LATENCY + FRND_LATENCY;
     localparam C_DELAY = (FMUL_LATENCY + FRND_LATENCY) + 1 + RED_LATENCY;
 
-    `UNUSED_VAR ({fmt_d, c_val});
+    `UNUSED_VAR ({fmt_s[3], fmt_d, c_val});
 
     wire [2:0] frm = `round_near_even;
 
@@ -67,7 +67,7 @@ module VX_tcu_fedp_bhf #(
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in (fmt_s),
+        .data_in (fmt_s[2:0]),
         .data_out(fmt_s_delayed)
     );
 

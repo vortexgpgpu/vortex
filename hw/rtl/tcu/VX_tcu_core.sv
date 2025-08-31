@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module VX_tcu_fused import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
+module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
@@ -120,13 +120,12 @@ module VX_tcu_fused import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [`XLEN-1:0] c_val = execute_if.data.rs3_data[i * TCU_TC_N + j];
 
             wire [3:0] fmt_s_r, fmt_d_r;
-            `UNUSED_VAR ({fmt_s_r, fmt_d_r});    //dpi, bhf, dsp use fmt_s[2:0] only for now
             wire [TCU_TC_K-1:0][`XLEN-1:0] a_row_r, b_col_r;
             wire [`XLEN-1:0] c_val_r;
 
             `BUFFER_EX (
-                {a_row_r, b_col_r, c_val_r, fmt_s_r,    fmt_d_r},
-                {a_row,   b_col,   c_val,   fmt_s,      fmt_d},
+                {a_row_r, b_col_r, c_val_r, fmt_s_r, fmt_d_r},
+                {a_row,   b_col,   c_val,   fmt_s,   fmt_d},
                 fedp_enable,
                 0, // resetw
                 1  // depth
@@ -140,8 +139,8 @@ module VX_tcu_fused import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .clk   (clk),
                 .reset (reset),
                 .enable(fedp_enable),
-                .fmt_s (fmt_s_r[2:0]),   //fp support only for now
-                .fmt_d (fmt_d_r[2:0]),
+                .fmt_s (fmt_s_r),
+                .fmt_d (fmt_d_r),
                 .a_row (a_row_r),
                 .b_col (b_col_r),
                 .c_val (c_val_r),
@@ -155,8 +154,8 @@ module VX_tcu_fused import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .clk   (clk),
                 .reset (reset),
                 .enable(fedp_enable),
-                .fmt_s (fmt_s_r[2:0]),    //fp support only for now
-                .fmt_d (fmt_d_r[2:0]),
+                .fmt_s (fmt_s_r),
+                .fmt_d (fmt_d_r),
                 .a_row (a_row_r),
                 .b_col (b_col_r),
                 .c_val (c_val_r),
@@ -185,8 +184,8 @@ module VX_tcu_fused import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .clk   (clk),
                 .reset (reset),
                 .enable(fedp_enable),
-                .fmt_s (fmt_s_r[2:0]),    //fp support only for now
-                .fmt_d (fmt_d_r[2:0]),
+                .fmt_s (fmt_s_r),
+                .fmt_d (fmt_d_r),
                 .a_row (a_row_r),
                 .b_col (b_col_r),
                 .c_val (c_val_r),
