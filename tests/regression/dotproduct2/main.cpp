@@ -127,6 +127,14 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
 
+  uint64_t NT;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &NT));
+  if (NT != NUM_THREADS) {
+    std::cout << "Error: device warp size (" << NT << ") must match NUM_THREADS=" << NUM_THREADS << "!" << std::endl;
+    cleanup();
+    return -1;
+  }
+
   uint32_t num_points = size;
   uint32_t buf_size = num_points * sizeof(TYPE);
 
@@ -139,6 +147,12 @@ int main(int argc, char *argv[]) {
 
   std::cout << "threads per block: " << threadsPerBlock << std::endl;
   std::cout << "blocks per grid: " << blocksPerGrid << std::endl;
+
+  if (num_points != (blocksPerGrid * threadsPerBlock)) {
+    std::cout << "Warning: number of points is not a multiple of threads per block!" << std::endl;
+    cleanup();
+    return -1;
+  }
 
   kernel_arg.num_points = num_points;
   kernel_arg.block_dim[0] = threadsPerBlock;
@@ -215,7 +229,7 @@ int main(int argc, char *argv[]) {
   if (!Comparator<TYPE>::compare(cur, ref, 0, errors)) {
     ++errors;
   }
-  
+
   // cleanup
   std::cout << "cleanup" << std::endl;
   cleanup();
